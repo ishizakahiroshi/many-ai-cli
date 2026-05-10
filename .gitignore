@@ -14,7 +14,7 @@
 .env.*
 .DS_Store
 Thumbs.db
-.claude/settings.json
+.claude/
 *.local.md
 *.local.json
 docs/local/

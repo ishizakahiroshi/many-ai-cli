@@ -177,7 +177,7 @@
   "quick_model_tooltip": "/model を入力欄にセット",
   "attach_clear_tooltip": "サムネイルをクリア",
   "about_title": "このアプリについて",
-  "about_version": "バージョン v0.1.1 [Hub UI]",
+  "about_version": "バージョン {version} [Hub UI]",
   "about_description": "複数の AI コーディング CLI の承認操作・進捗監視を 1 画面の Web UI で一元管理するツールです。すべての処理はローカルで完結します。",
   "about_app_license": "アプリのライセンス",
   "about_license_text": "AI-CLI-HUB は MIT License で配布しています。Copyright (c) 2026 Hiroshi Ishizaka (ishizakahiroshi).",

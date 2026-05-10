@@ -98,6 +98,7 @@ type Server struct {
 	httpSrv     *http.Server
 	devMode     bool   // --dev: web/ をファイルシステムから直接サーブ（再コンパイル不要）
 	hubCWD      string // serve 起動時の os.Getwd() を保存
+	version     string // main.version (ldflags 経由) を保持し /api/info で返す
 	parentShell string
 
 	mu       sync.Mutex
@@ -130,13 +131,14 @@ const (
 	defaultInitRows = 50
 )
 
-func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool) (*Server, error) {
+func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version string) (*Server, error) {
 	hubCWD, _ := os.Getwd()
 	s := &Server{
 		cfg:           cfg,
 		logger:        logger,
 		devMode:       devMode,
 		hubCWD:        hubCWD,
+		version:       version,
 		parentShell:   wrapper.DetectShell(),
 		sessions:      map[int]*session{},
 		wrappers:      map[int]*websocket.Conn{},
@@ -951,7 +953,10 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"cwd": s.hubCWD})
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"cwd":     s.hubCWD,
+		"version": s.version,
+	})
 }
 
 func (s *Server) handleKillAll(w http.ResponseWriter, r *http.Request) {
