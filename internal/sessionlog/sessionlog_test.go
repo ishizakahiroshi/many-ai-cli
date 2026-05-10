@@ -1,6 +1,7 @@
 package sessionlog
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -10,7 +11,7 @@ func TestBaseName(t *testing.T) {
 	meta := Metadata{
 		SessionID: 12,
 		Provider:  "claude",
-		CWD:       `C:\dev\ai-cli-hub`,
+		CWD:       filepath.Join("anywhere", "ai-cli-hub"),
 		StartedAt: time.Date(2026, 5, 10, 9, 15, 32, 0, time.Local),
 	}
 	got := BaseName(meta)
