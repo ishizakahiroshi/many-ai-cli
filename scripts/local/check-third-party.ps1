@@ -20,6 +20,16 @@ try {
   $targetHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
   $tmpHash = (Get-FileHash -LiteralPath $tmp -Algorithm SHA256).Hash
   if ($targetHash -ne $tmpHash) {
+    Write-Host "----- Diff between repo notices and freshly generated notices -----"
+    Write-Host "repo : $target ($targetHash, $((Get-Item -LiteralPath $target).Length) bytes)"
+    Write-Host "fresh: $tmp ($tmpHash, $((Get-Item -LiteralPath $tmp).Length) bytes)"
+    $repoLines = Get-Content -LiteralPath $target
+    $freshLines = Get-Content -LiteralPath $tmp
+    $diff = Compare-Object -ReferenceObject $repoLines -DifferenceObject $freshLines | Select-Object -First 40
+    if ($diff) {
+      $diff | Format-Table -AutoSize | Out-String | Write-Host
+    }
+    Write-Host "----- End of diff -----"
     Write-Error "THIRD_PARTY_NOTICES.md is outdated. Run scripts/local/gen-third-party-notices.ps1 and commit the result."
     exit 1
   }
