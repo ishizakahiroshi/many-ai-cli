@@ -1,6 +1,6 @@
 # ai-cli-hub リリース手順
 
-> 最終更新: 2026-05-11(月) 04:30:00
+> 最終更新: 2026-05-11(月) 04:29:46
 
 この手順は GitHub Actions の `Release` workflow と GoReleaser で GitHub Releases を作成するための運用メモ。
 
@@ -112,6 +112,35 @@ goreleaser check
 ```powershell
 .\scripts\local\check-third-party.ps1
 ```
+
+## CHANGELOG.md の更新
+
+`CHANGELOG.md` はリリース毎に手動で 1 節を追記する。Keep a Changelog 形式に揃え、`[Unreleased]` セクションに溜めていた変更を新バージョンの節として確定させる。最低限のフォーマット：
+
+```markdown
+## [0.1.x] - YYYY-MM-DD
+
+### Added
+- 新機能 / 設計変更
+
+### Fixed
+- バグ修正
+
+### Changed
+- 既存挙動の変更（互換性に影響しうるもの）
+
+### Removed
+- 削除した機能 / API（あれば）
+```
+
+末尾の compare リンクも更新する：
+
+```markdown
+[Unreleased]: https://github.com/ishizakahiroshi/ai-cli-hub/compare/v0.1.x...HEAD
+[0.1.x]: https://github.com/ishizakahiroshi/ai-cli-hub/releases/tag/v0.1.x
+```
+
+GoReleaser は別途 commit message から auto-generated changelog を Release ページに付ける（`.goreleaser.yaml` の `changelog` 設定）。`CHANGELOG.md` は人間が読むもの、auto-generated は forensics 用の commit list、と用途を分けて運用する。
 
 ## Validate workflow が green であることの事前確認
 
