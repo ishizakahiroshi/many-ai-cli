@@ -76,6 +76,10 @@ try {
         $rows.Add("")
         $rows.Add("````text")
         $content = Get-Content -LiteralPath $file.FullName -Raw
+        # Normalize line endings so the generator produces identical output
+        # regardless of how the module cache stored the LICENSE file (LF on
+        # fresh CI checkouts, CRLF on long-lived dev machines).
+        $content = $content -replace "`r`n", "`n" -replace "`r", "`n"
         $rows.Add($content.TrimEnd())
         $rows.Add("````")
       }
@@ -83,7 +87,12 @@ try {
   }
 
   $resolvedOutputPath = if ([System.IO.Path]::IsPathRooted($OutputPath)) { $OutputPath } else { Join-Path $repoRoot $OutputPath }
-  [System.IO.File]::WriteAllLines($resolvedOutputPath, $rows)
+  # Use explicit LF so that the file content is byte-identical between
+  # Windows dev machines and Linux/Windows CI runners. WriteAllLines uses
+  # Environment.NewLine which would otherwise vary per OS.
+  $text = ($rows -join "`n") + "`n"
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($resolvedOutputPath, $text, $utf8NoBom)
   Write-Host "Generated $OutputPath"
 }
 finally {
