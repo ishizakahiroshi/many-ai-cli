@@ -1,6 +1,6 @@
 # ai-cli-hub リリース手順
 
-> 最終更新: 2026-05-11(月) 03:01:46
+> 最終更新: 2026-05-11(月) 04:02:03
 
 この手順は GitHub Actions の `Release` workflow と GoReleaser で GitHub Releases を作成するための運用メモ。
 
@@ -63,6 +63,22 @@ goreleaser check
 ```
 
 ローカルに `goreleaser` がない場合は、GitHub Actions 側で初めて検出される設定ミスが残る可能性がある。リリース直前だけでも入れて確認するのが望ましい。
+
+`THIRD_PARTY_NOTICES.md` を更新する Go 依存変更があった場合は、`scripts/local/check-third-party.ps1` がローカルで通ることも確認する。CI 上で fail させてリリース工程をブロックさせない。
+
+```powershell
+.\scripts\local\check-third-party.ps1
+```
+
+## Validate workflow が green であることの事前確認
+
+タグを打つ前に、`main` 上の最新コミットに対する `Validate` workflow が green であることを必ず確認する。Validate fail のままタグを打つと、`Release` workflow（goreleaser）は test を呼ばず通ってしまうため、test fail を抱えたバイナリが公開される事故になる。
+
+```powershell
+gh run list --repo ishizakahiroshi/ai-cli-hub --workflow=Validate --limit 1
+```
+
+ステータスが `success` であることを確認してからタグを打つ。`failure` のままなら、まず Validate を直してから次に進むこと。
 
 ## コミットと push
 
@@ -150,6 +166,62 @@ Get-FileHash .\ai-cli-hub.exe -Algorithm SHA256
 - 公開後に利用者が取得した可能性がある場合は、同じタグを差し替えず、次のパッチバージョンを作る
 
 原則として、公開済みタグの force push や成果物差し替えは避ける。
+
+### 同一タグを使い回せる条件と手順
+
+利用者にまだ取得されていない、かつ Release が draft / 撤回直後である場合に限り、同じタグを使い回して出し直す手段が取れる。判断材料は次の通り。
+
+- リポジトリの star / fork / clone traffic が 0
+- Release が `draft: true` のまま、または `gh release delete` 直後で公開実績がない
+- リリース直後で時間が経っていない（数十分以内）
+
+上記が満たされない場合は、同じタグの再利用はせず、原因を直したうえで `v0.1.2` 等の次のパッチで出すこと。
+
+#### 撤回 + 出し直しの実コマンド
+
+進行中の Release run があればキャンセルする。
+
+```powershell
+gh run list --repo ishizakahiroshi/ai-cli-hub --workflow=Release --status=in_progress --limit 5
+gh run cancel <run-id> --repo ishizakahiroshi/ai-cli-hub
+```
+
+draft / 公開直後の Release を削除する（`--cleanup-tag` でリモートタグも一緒に消える）。
+
+```powershell
+gh release delete v0.1.1 --repo ishizakahiroshi/ai-cli-hub --yes --cleanup-tag
+```
+
+`--cleanup-tag` で消えなかった場合や、Release が無くてタグだけ残っている場合はタグを個別に削除する。
+
+```powershell
+git push origin :refs/tags/v0.1.1
+git tag -d v0.1.1
+```
+
+原因コミットを追加 → Validate green を確認 → 同タグを再付与 → push、で再度 Release workflow が起動する。
+
+## Line ending（CRLF / LF）の運用注意
+
+`.gitattributes` で `THIRD_PARTY_NOTICES.md` と `web/src/vendor/THIRD_PARTY_LICENSES.txt` は `eol=lf` 固定にしてある。Windows ローカルでは Git for Windows の `core.autocrlf=true` が一般的なため、何もしないと worktree が CRLF 化されて、`scripts/local/gen-third-party-notices.ps1` の LF 出力と byte-level で一致せず CI が fail する。
+
+新たに「自動生成」で repo 配下に置くテキストを追加するときは、次のいずれかを必ず満たす。
+
+- 生成器側で改行を LF に正規化して書き出す（`scripts/local/gen-third-party-notices.ps1` の `WriteAllText` + LF 結合パターンを参照）
+- `.gitattributes` で `<path> text eol=lf` を追記する
+
+PowerShell スクリプト（`*.ps1`）は逆に CRLF に固定している。Windows 上で読みやすさを保つため。
+
+## CI で使っている Actions の更新
+
+GitHub の `windows-latest` / `ubuntu-latest` runner は、Node.js 20 ベースの actions に対して deprecation 警告を出している（2026-06-02 以降は Node.js 24 強制、2026-09-16 で Node.js 20 削除）。リリース workflow が触る次の actions は、上限期限までに新メジャーへ更新するか、`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` を環境変数で付ける。
+
+- `actions/checkout@v4`
+- `actions/setup-go@v5`
+- `goreleaser/goreleaser-action@v6`
+- `sigstore/cosign-installer@v3`
+
+更新時は `Validate` workflow を先に当て、test と third-party チェックが green であることを確認してから `Release` workflow も追従させる。
 
 ## 配布対象を変更する場合
 
