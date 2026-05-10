@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI-CLI-HUB</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/vendor/xterm.min.css">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <h1><img src="/icon.svg" alt="AI-CLI-HUB" class="header-icon">AI-CLI-HUB</h1>
+    <div id="summary" data-i18n="loading">...</div>
+    <button id="reconnect-btn" hidden>↺ <span data-i18n="reconnect">reconnect</span></button>
+    <button id="shutdown-btn" data-i18n-tooltip="shutdown_tooltip">⏻</button>
+    <button id="settings-btn" data-i18n="settings">Settings</button>
+  </header>
+
+  <div id="settings-panel" hidden>
+    <div class="settings-header">
+      <img src="/icon.svg" class="settings-app-icon" alt="">
+      <div>
+        <div class="settings-app-name">AI-CLI-HUB</div>
+        <div class="settings-app-version">v0.1.1 [Hub UI]</div>
+      </div>
+      <div class="settings-header-actions">
+        <button id="settings-reset-btn" class="settings-header-btn" data-i18n="settings_reset">リセット</button>
+        <button id="settings-save-btn" class="settings-header-btn" data-i18n="settings_save">保存</button>
+        <button id="settings-close-btn" class="settings-header-btn settings-header-btn-close" data-i18n="settings_close" data-i18n-tooltip="settings_close">×</button>
+      </div>
+    </div>
+    <div class="settings-body">
+      <details class="settings-section" data-section="general">
+        <summary class="settings-section-title"><span data-i18n="settings_general">General</span></summary>
+        <div class="settings-section-body">
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_language">Language</span>
+            <select id="lang-select" class="settings-select">
+              <option value="ja">日本語</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_theme">Theme</span>
+            <select id="theme-select" class="settings-select">
+              <option value="dark">Dark</option>
+              <option value="blue">Blue</option>
+              <option value="light">Light</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_fontsize">Font size</span>
+            <select id="fontsize-select" class="settings-select">
+              <option value="large" data-i18n="fontsize_large">Large</option>
+              <option value="medium" data-i18n="fontsize_medium">Medium</option>
+              <option value="small" data-i18n="fontsize_small">Small</option>
+            </select>
+          </div>
+        </div>
+      </details>
+      <details class="settings-section" data-section="session">
+        <summary class="settings-section-title"><span data-i18n="settings_session">Session</span></summary>
+        <div class="settings-section-body">
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_idle_timeout">Idle timeout (min)</span>
+            <input type="number" id="idle-timeout-min" min="0" max="1440" class="settings-input-number">
+          </div>
+          <div class="settings-note" data-i18n="settings_idle_timeout_desc">0 = never. AI sessions are terminated after this many minutes with no browser connected.</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_reconnect_grace">Hub crash grace (min)</span>
+            <input type="number" id="reconnect-grace-min" min="0" max="1440" class="settings-input-number">
+          </div>
+          <div class="settings-note" data-i18n="settings_reconnect_grace_desc">0 = disable reconnect. How long wrappers wait for the Hub to come back after a crash before terminating their PTY. Applies to NEW sessions only — running sessions keep the value at the time they were spawned.</div>
+        </div>
+      </details>
+      <details class="settings-section" data-section="log">
+        <summary class="settings-section-title"><span data-i18n="settings_log">Log Settings</span><button id="log-dir-btn" class="log-dir-btn" data-i18n-tooltip="loading">📁</button></summary>
+        <div class="settings-section-body">
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_file_log">File log</span>
+            <input type="checkbox" id="log-enabled" class="settings-checkbox">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_max_size">Max (MB)</span>
+            <input type="number" id="log-max-size" min="1" max="1000" class="settings-input-number">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_max_backups">Backups</span>
+            <input type="number" id="log-max-backups" min="0" max="100" class="settings-input-number">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_attach_folder">Attach folder</span>
+            <button id="attach-dir-btn" class="log-dir-btn" data-i18n-tooltip="loading">📁</button>
+          </div>
+          <div class="settings-note" data-i18n="settings_applies_on_restart">Applied on next start</div>
+        </div>
+      </details>
+      <details class="settings-section" data-section="approval-hub">
+        <summary class="settings-section-title"><span data-i18n="settings_approval_hub">Hub 承認ボタン機能</span></summary>
+        <div class="settings-section-body">
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_approval_toggle">承認ボタン</span>
+            <label class="approval-toggle">
+              <input type="checkbox" id="approval-toggle-input">
+              <span class="approval-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_approval_auto_switch">承認待ちへ自動移動</span>
+            <label class="approval-toggle">
+              <input type="checkbox" id="approval-auto-switch-input">
+              <span class="approval-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-note" data-i18n="settings_approval_auto_switch_desc">承認待ちが出たセッションへ自動で移動します。現在のセッションが承認中の場合は完了まで移動しません。</div>
+          <div class="settings-note" data-i18n="settings_approval_hub_desc">AI の承認を Hub UI のボタンで操作できます。</div>
+        </div>
+      </details>
+      <details class="settings-section" data-section="approval-patterns">
+        <summary class="settings-section-title"><span data-i18n="settings_approval_patterns_title">承認検出パターン</span></summary>
+        <div class="settings-section-body">
+          <div class="settings-note" data-i18n="settings_approval_patterns_desc">Hub UI が承認 UI を検出するための文言。CLI のメッセージが変わったり、誤検出する場合に調整できます。</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_approval_patterns_provider">対象</span>
+            <select id="approval-patterns-provider" class="settings-select">
+              <option value="claude" data-i18n="settings_approval_patterns_claude">Claude Code</option>
+              <option value="codex" data-i18n="settings_approval_patterns_codex">Codex</option>
+              <option value="common" data-i18n="settings_approval_patterns_common">共通</option>
+            </select>
+          </div>
+          <ul id="approval-patterns-list" class="approval-patterns-list"></ul>
+          <div class="approval-patterns-add-row">
+            <input type="text" id="approval-patterns-input" class="settings-input-text" data-i18n-placeholder="settings_approval_patterns_add_placeholder" placeholder="新しい文言">
+            <button id="approval-patterns-add-btn" class="settings-link-btn" data-i18n="settings_approval_patterns_add">追加</button>
+          </div>
+          <div class="settings-row">
+            <button id="approval-patterns-reset-btn" class="settings-link-btn" data-i18n="settings_approval_patterns_reset">デフォルトに戻す</button>
+          </div>
+        </div>
+      </details>
+      <details class="settings-section" data-section="trigger">
+        <summary class="settings-section-title"><span data-i18n="settings_trigger_title">自動送信トリガー</span></summary>
+        <div class="settings-section-body">
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_trigger_toggle">自動送信</span>
+            <label class="approval-toggle">
+              <input type="checkbox" id="trigger-enabled">
+              <span class="approval-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row" id="trigger-phrase-row">
+            <span class="settings-label" data-i18n="settings_trigger_phrase">フレーズ</span>
+            <input type="text" id="trigger-phrase-input" class="settings-input-text">
+          </div>
+        </div>
+      </details>
+      <details class="settings-section" data-section="notify-sound">
+        <summary class="settings-section-title"><span data-i18n="settings_notify_sound">通知音</span></summary>
+        <div class="settings-section-body">
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_notify_sound_toggle">通知音</span>
+            <label class="approval-toggle">
+              <input type="checkbox" id="notify-sound-enabled">
+              <span class="approval-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row" id="notify-sound-type-row">
+            <span class="settings-label" data-i18n="settings_notify_sound_type">音源</span>
+            <select id="notify-sound-type" class="settings-select">
+              <option value="default" data-i18n="settings_notify_sound_default">デフォルト (beep)</option>
+              <option value="custom" data-i18n="settings_notify_sound_custom">カスタム</option>
+            </select>
+          </div>
+          <div class="settings-row" id="notify-sound-custom-row">
+            <span class="settings-label" data-i18n="settings_notify_sound_file">ファイル</span>
+            <button id="notify-sound-browse-btn" class="settings-link-btn" data-i18n="settings_notify_sound_browse">選択...</button>
+            <span id="notify-sound-filename" class="settings-note"></span>
+            <input type="file" id="notify-sound-file" accept="audio/*" style="display:none">
+          </div>
+          <div class="settings-row">
+            <button id="notify-sound-test-btn" class="settings-link-btn" data-i18n="settings_notify_sound_test">テスト再生</button>
+          </div>
+        </div>
+      </details>
+      <details class="settings-section" data-section="quick-cmd">
+        <summary class="settings-section-title"><span data-i18n="settings_quick_cmd_title">クイックコマンド</span></summary>
+        <div class="settings-section-body">
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_quick_cmd_1">コマンド 1</span>
+            <select id="quick-cmd-1" class="settings-select">
+              <option value="/clear">/clear</option>
+              <option value="/model">/model</option>
+              <option value="/help">/help</option>
+              <option value="/status">/status</option>
+              <option value="/usage">/usage</option>
+              <option value="/review">/review</option>
+              <option value="/compact">/compact</option>
+              <option value="/config">/config</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_quick_cmd_2">コマンド 2</span>
+            <select id="quick-cmd-2" class="settings-select">
+              <option value="/model">/model</option>
+              <option value="/clear">/clear</option>
+              <option value="/help">/help</option>
+              <option value="/status">/status</option>
+              <option value="/usage">/usage</option>
+              <option value="/review">/review</option>
+              <option value="/compact">/compact</option>
+              <option value="/config">/config</option>
+            </select>
+          </div>
+        </div>
+      </details>
+      <details class="settings-section" data-section="slash-src">
+        <summary class="settings-section-title"><span data-i18n="settings_slash_src_title">スラッシュコマンドソース</span></summary>
+        <div class="settings-section-body">
+          <div class="settings-note" data-i18n="settings_slash_src_note">公式ドキュメントから自動取得します。必要な場合だけ URL を上書きしてください。</div>
+          <div class="settings-row">
+            <span class="settings-label">Claude Code</span>
+            <input type="text" id="slash-src-claude" class="settings-input-url" placeholder="Default official source">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Codex CLI</span>
+            <input type="text" id="slash-src-codex" class="settings-input-url" placeholder="Default official source">
+          </div>
+          <div class="settings-row">
+            <button id="slash-src-save-btn" class="slash-src-save-btn" data-i18n="settings_slash_src_save">保存</button>
+          </div>
+        </div>
+      </details>
+      <div class="settings-footer">
+        <button class="settings-link-btn" id="settings-readme-btn" data-i18n="settings_readme_btn">README</button>
+        <button class="settings-link-btn" id="settings-licenses-btn" data-i18n="settings_about_btn">About &amp; Licenses</button>
+      </div>
+    </div>
+  </div>
+  <div id="app">
+    <aside id="session-list">
+      <div id="new-session-bar">
+        <button id="new-session-btn" data-i18n="new_session">+ New Session</button>
+        <button id="kill-all-btn" data-i18n-tooltip="kill_all_tooltip">⏹</button>
+      </div>
+      <div id="new-session-panel" hidden>
+        <div class="new-session-form">
+          <div class="spawn-provider-row">
+            <span id="spawn-provider-icon"></span>
+            <select id="spawn-provider" class="spawn-select">
+              <option value="claude">Claude Code</option>
+              <option value="codex">Codex CLI</option>
+            </select>
+          </div>
+          <div class="spawn-cwd-row">
+            <div class="cwd-combobox">
+              <input type="text" id="spawn-cwd" class="spawn-input" data-i18n-placeholder="spawn_cwd_placeholder" autocomplete="off">
+              <ul id="spawn-cwd-dropdown" class="cwd-dropdown" hidden></ul>
+            </div>
+            <button id="spawn-cwd-browse" class="spawn-btn-browse" type="button" data-i18n-tooltip="spawn_cwd_browse_tooltip">📁</button>
+          </div>
+          <!-- label input (optional) -->
+          <input type="text" id="spawn-label" class="spawn-input" data-i18n-placeholder="spawn_label_placeholder">
+          <!-- model input (shared between providers) -->
+          <input type="text" id="spawn-model" class="spawn-input" data-i18n-placeholder="spawn_model_placeholder">
+
+          <!-- Claude-only options -->
+          <div id="spawn-claude-opts">
+            <button id="spawn-claude-model-btn" class="spawn-btn-browse" type="button" data-i18n="spawn_claude_model_btn">Claude /model</button>
+            <select id="spawn-permission-mode" class="spawn-select">
+              <option value="default" data-i18n="spawn_permission_default">Approval mode: Default</option>
+              <option value="plan" data-i18n="spawn_permission_plan">plan (confirm before changes)</option>
+              <option value="acceptEdits" data-i18n="spawn_permission_accept_edits">acceptEdits (auto-allow edits only)</option>
+              <option value="auto" data-i18n="spawn_permission_auto">auto (auto-allow safe operations)</option>
+              <option value="bypassPermissions" data-i18n="spawn_permission_bypass">⚠ bypassPermissions (skip all)</option>
+            </select>
+          </div>
+
+          <!-- Codex-only options -->
+          <div id="spawn-codex-opts" hidden>
+            <button id="spawn-codex-model-btn" class="spawn-btn-browse" type="button" data-i18n="spawn_codex_model_btn">Codex /model</button>
+            <select id="spawn-sandbox" class="spawn-select">
+              <option value="workspace-write" data-i18n="spawn_sandbox_workspace">sandbox: workspace-write (default)</option>
+              <option value="read-only" data-i18n="spawn_sandbox_readonly">read-only (read only)</option>
+              <option value="danger-full-access" data-i18n="spawn_sandbox_full">⚠ danger-full-access (unrestricted)</option>
+            </select>
+            <select id="spawn-ask-approval" class="spawn-select">
+              <option value="on-request" data-i18n="spawn_approval_on_request">approval: on-request (default)</option>
+              <option value="untrusted" data-i18n="spawn_approval_untrusted">untrusted (confirm untrusted only)</option>
+              <option value="never" data-i18n="spawn_approval_never">⚠ never (no approval)</option>
+            </select>
+          </div>
+          <div class="new-session-actions">
+            <button id="spawn-cancel-btn" class="spawn-btn-cancel" data-i18n="spawn_cancel">Cancel</button>
+            <button id="spawn-launch-btn" class="spawn-btn-launch" data-i18n="spawn_launch">Launch</button>
+          </div>
+        </div>
+      </div>
+      <div id="sessions"></div>
+    </aside>
+    <div id="sidebar-resizer"></div>
+    <div id="terminal-wrapper">
+      <div id="terminal-area-wrapper">
+        <div id="terminal-area"></div>
+        <div id="terminal-readonly-badge"><span data-i18n="terminal_output">Terminal Output</span><span id="terminal-shell-info"></span></div>
+        <button id="scroll-to-top-btn" data-i18n-tooltip="scroll_to_top_tooltip" data-i18n="scroll_to_top" hidden>↑ Top</button>
+        <button id="scroll-to-bottom-btn" data-i18n-tooltip="scroll_to_bottom_tooltip" data-i18n="scroll_to_bottom" hidden>↓ Bottom</button>
+      </div>
+      <div id="tool-outputs-panel" hidden>
+        <div class="tool-outputs-header">
+          <span><span data-i18n="tool_outputs">Tool Outputs</span> <span id="tool-outputs-count"></span></span>
+          <div class="tool-outputs-btns">
+            <button id="tool-outputs-collapse" title="折りたたむ">▼</button>
+            <button id="tool-outputs-clear" title="閉じる">✕</button>
+          </div>
+        </div>
+        <div id="tool-outputs-list"></div>
+      </div>
+      <div id="action-bar"></div>
+      <div id="multi-question-banner" hidden data-i18n="multi_question_banner"></div>
+      <div id="input-bar-outer">
+        <div id="slash-menu" hidden></div>
+        <div id="slash-picker" hidden>
+          <div class="slash-picker-header">
+            <span id="slash-picker-title" class="slash-picker-provider-name"></span>
+            <span id="slash-picker-time" class="slash-picker-time"></span>
+            <button id="slash-picker-refresh" class="slash-picker-icon-btn" data-i18n-tooltip="slash_picker_refresh_tooltip">⟳</button>
+            <button id="slash-picker-close" class="slash-picker-icon-btn">✕</button>
+          </div>
+          <input type="text" id="slash-picker-search" class="slash-picker-search" data-i18n-placeholder="slash_picker_search_placeholder">
+          <div id="slash-picker-list" class="slash-picker-list"></div>
+        </div>
+        <div id="voice-bar" hidden>
+          <canvas id="voice-waveform" class="voice-waveform"></canvas>
+          <button id="voice-cancel-btn" class="voice-action-btn voice-cancel-btn" data-i18n-tooltip="voice_cancel_tooltip">✕</button>
+          <button id="voice-confirm-btn" class="voice-action-btn voice-confirm-btn" data-i18n-tooltip="voice_confirm_tooltip">✓</button>
+        </div>
+        <div id="input-bar">
+          <div id="input-area">
+            <div id="paste-chips"></div>
+            <textarea id="input" rows="1" data-i18n-placeholder="input_placeholder"></textarea>
+          </div>
+          <button id="send-btn" data-i18n="send">Send</button>
+          <button id="voice-btn" hidden>🎤</button>
+          <button id="quick-clear-btn" class="quick-cmd-btn" data-i18n-tooltip="quick_clear_tooltip">/clear</button>
+          <button id="quick-model-btn" class="quick-cmd-btn" data-i18n-tooltip="quick_model_tooltip">/model</button>
+          <button id="slash-picker-btn" class="quick-cmd-btn" data-i18n-tooltip="slash_picker_tooltip">/ ▾</button>
+        </div>
+        <div id="attach-panel">
+          <div id="attach-drop-zone">
+            <span data-i18n="attach_hint">Paste or D&amp;D file</span>
+            <span class="attach-sub" data-i18n="attach_sub">(Click to select file)</span>
+          </div>
+          <input type="file" id="attach-file-input" accept="image/*" multiple style="display:none">
+          <div id="attach-thumbnails"></div>
+          <button id="attach-clear-btn" data-i18n-tooltip="attach_clear_tooltip" hidden>✕</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="about-panel" hidden>
+    <div class="about-dialog">
+      <div class="about-title-bar">
+        <span class="about-title" data-i18n="about_title">About this app</span>
+        <button id="about-close-btn" class="about-x-btn">✕</button>
+      </div>
+      <div class="about-content">
+        <section class="about-section">
+          <p class="about-app-name">AI-CLI-HUB</p>
+          <p class="about-version" data-i18n="about_version">Version v0.1.1 [Hub UI]</p>
+          <p class="about-description" data-i18n="about_description">A tool to centrally manage approval operations and progress monitoring for multiple AI coding CLIs in one web UI. All processing is done locally.</p>
+        </section>
+        <section class="about-section">
+          <h3 class="about-heading" data-i18n="about_app_license">App License</h3>
+          <p class="about-license-text" data-i18n="about_license_text">AI-CLI-HUB is distributed under the MIT License. Copyright (c) 2026 Hiroshi Ishizaka (ishizakahiroshi).</p>
+        </section>
+        <section class="about-section">
+          <h3 class="about-heading" data-i18n="about_oss_title">Included Open Source Software</h3>
+          <ul class="about-oss-list">
+            <li class="about-oss-section" data-i18n="about_oss_section_frontend">Web Frontend</li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://github.com/xtermjs/xterm.js/releases/tag/5.3.0" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">xterm.js 5.3.0</p>
+                <p class="about-oss-desc" data-i18n="about_oss_xterm_desc">MIT License. Used as the terminal emulator.</p>
+              </a>
+            </li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://github.com/xtermjs/xterm.js/releases" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">xterm-addon-fit 0.8.0</p>
+                <p class="about-oss-desc" data-i18n="about_oss_fit_desc">MIT License. Used for automatic terminal size adjustment.</p>
+              </a>
+            </li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://github.com/xtermjs/xterm.js/releases" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">xterm-addon-unicode11 0.8.0</p>
+                <p class="about-oss-desc" data-i18n="about_oss_unicode_desc">MIT License. Used for Unicode 11 character width support.</p>
+              </a>
+            </li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://github.com/xtermjs/xterm.js/releases" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">xterm-addon-web-links 0.9.0</p>
+                <p class="about-oss-desc" data-i18n="about_oss_links_desc">MIT License. Used for URL link detection in terminal.</p>
+              </a>
+            </li>
+            <li class="about-oss-section" data-i18n="about_oss_section_backend">Go Backend</li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://github.com/creack/pty" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">creack/pty 1.1.21</p>
+                <p class="about-oss-desc" data-i18n="about_oss_pty_desc">MIT License. Used for PTY control on Unix.</p>
+              </a>
+            </li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://github.com/aymanbagabas/go-pty" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">aymanbagabas/go-pty 0.2.2</p>
+                <p class="about-oss-desc" data-i18n="about_oss_gopty_desc">MIT License. Used for PTY control on Windows (ConPTY).</p>
+              </a>
+            </li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://pkg.go.dev/golang.org/x/net" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">golang.org/x/net v0.24.0</p>
+                <p class="about-oss-desc" data-i18n="about_oss_gonet_desc">BSD-3-Clause License. Used for WebSocket.</p>
+              </a>
+            </li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://pkg.go.dev/golang.org/x/term" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">golang.org/x/term v0.42.0</p>
+                <p class="about-oss-desc" data-i18n="about_oss_goterm_desc">BSD-3-Clause License. Used for terminal control.</p>
+              </a>
+            </li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://pkg.go.dev/golang.org/x/crypto" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">golang.org/x/crypto v0.22.0</p>
+                <p class="about-oss-desc" data-i18n="about_oss_gocrypto_desc">BSD-3-Clause License. (indirect dependency)</p>
+              </a>
+            </li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://pkg.go.dev/golang.org/x/sys" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">golang.org/x/sys v0.43.0</p>
+                <p class="about-oss-desc" data-i18n="about_oss_gosys_desc">BSD-3-Clause License. (indirect dependency)</p>
+              </a>
+            </li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://github.com/natefinch/lumberjack" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">gopkg.in/natefinch/lumberjack.v2 2.2.1</p>
+                <p class="about-oss-desc" data-i18n="about_oss_lumberjack_desc">MIT License. Used for log rotation.</p>
+              </a>
+            </li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://github.com/go-yaml/yaml" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">gopkg.in/yaml.v3 3.0.1</p>
+                <p class="about-oss-desc" data-i18n="about_oss_yaml_desc">MIT + Apache-2.0 License. Used for parsing YAML configuration.</p>
+              </a>
+            </li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://github.com/u-root/u-root" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">github.com/u-root/u-root 0.11.0</p>
+                <p class="about-oss-desc" data-i18n="about_oss_uroot_desc">BSD-3-Clause License. (indirect dependency)</p>
+              </a>
+            </li>
+          </ul>
+          <p class="about-license-note"><span data-i18n="about_license_note_pre">Full license text is in the repository </span><a href="https://github.com/ishizakahiroshi/ai-cli-hub/blob/main/LICENSE" target="_blank" rel="noopener" class="about-link">LICENSE</a><span> / </span><a href="https://github.com/ishizakahiroshi/ai-cli-hub/blob/main/web/src/vendor/THIRD_PARTY_LICENSES.txt" target="_blank" rel="noopener" class="about-link">THIRD_PARTY_LICENSES.txt</a><span data-i18n="about_license_note_suffix">.</span></p>
+        </section>
+        <section class="about-section">
+          <h3 class="about-heading" data-i18n="about_github">GitHub</h3>
+          <div class="about-github-btns">
+            <a href="https://github.com/ishizakahiroshi/ai-cli-hub" target="_blank" rel="noopener" class="about-gh-btn" data-i18n="about_repo">Repository</a>
+            <a href="https://github.com/ishizakahiroshi/ai-cli-hub/releases" target="_blank" rel="noopener" class="about-gh-btn" data-i18n="about_releases">Releases</a>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+  <div id="model-picker-overlay" hidden></div>
+
+  <script src="/vendor/xterm.min.js"></script>
+  <script src="/vendor/xterm-addon-fit.min.js"></script>
+  <script src="/vendor/xterm-addon-unicode11.min.js"></script>
+  <script src="/vendor/xterm-addon-web-links.min.js"></script>
+  <script src="/i18n.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

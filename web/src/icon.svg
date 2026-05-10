@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="104" fill="#111111"/>
+
+  <!-- terminal window -->
+  <rect x="78" y="112" width="356" height="278" rx="34"
+        fill="#1A1A1A" stroke="#FFD600" stroke-width="16"/>
+
+  <!-- window dots -->
+  <circle cx="132" cy="158" r="11" fill="#FFD600"/>
+  <circle cx="166" cy="158" r="11" fill="#FFD600"/>
+  <circle cx="200" cy="158" r="11" fill="#FFD600"/>
+
+  <!-- separator -->
+  <line x1="88" y1="196" x2="424" y2="196" stroke="#3A3A3A" stroke-width="6"/>
+
+  <!-- big CLI text -->
+  <text x="256" y="318"
+        text-anchor="middle"
+        font-family="Consolas, Menlo, Monaco, monospace"
+        font-size="116"
+        font-weight="900"
+        fill="#FFFFFF"
+        letter-spacing="-6">CLI</text>
+
+  <!-- agent connection line -->
+  <g stroke="#FFD600" stroke-width="9" fill="none" stroke-linecap="round">
+    <circle cx="132" cy="424" r="16" fill="#111111"/>
+    <circle cx="256" cy="424" r="16" fill="#111111"/>
+    <circle cx="380" cy="424" r="16" fill="#111111"/>
+    <path d="M148 424 H240 M272 424 H364"/>
+  </g>
+</svg>
