@@ -1,4 +1,4 @@
-console.log('[ai-cli-hub] app.js build=2026-05-10-fix-voice-recognition');
+console.log('[ai-cli-hub] app.js build=2026-05-11-clear-approval-marker-tail');
 
 // ---- トースト通知 ----
 let _toastTimer = null;
@@ -589,6 +589,31 @@ function applyLang(lang) {
 
 const token = new URLSearchParams(location.search).get('token');
 
+// ---- バージョン表示（single source: main.version → /api/info → ここ） ----
+(async () => {
+  try {
+    const res = await fetch(`/api/info?token=${token}`);
+    if (!res.ok) return;
+    const info = await res.json();
+    const ver = 'v' + (info.version || 'dev');
+    const apply = () => {
+      const settingsEl = document.querySelector('.settings-app-version');
+      if (settingsEl) settingsEl.textContent = ver + ' [Hub UI]';
+      const aboutEl = document.querySelector('.about-version');
+      if (aboutEl) {
+        aboutEl.textContent = (typeof window.t === 'function')
+          ? window.t('about_version', { version: ver })
+          : ver + ' [Hub UI]';
+      }
+    };
+    if (typeof window.t === 'function') {
+      apply();
+    } else {
+      document.addEventListener('i18n-ready', apply, { once: true });
+    }
+  } catch (_) {}
+})();
+
 // ---- 承認検出パターン編集 UI ----
 (function () {
   const providerEl = document.getElementById('approval-patterns-provider');
@@ -1108,6 +1133,8 @@ const hubMarkerBytePatterns = [
   new TextEncoder().encode('[AI-CLI-HUB]'),
   new TextEncoder().encode('[/AI-CLI-HUB]'),
 ];
+const hubMarkerEndBytes = hubMarkerBytePatterns[1];
+const eraseDisplayBelowBytes = new TextEncoder().encode('\x1b[J');
 
 function bytesStartWith(bytes, offset, pattern) {
   if (offset + pattern.length > bytes.length) return false;
@@ -1142,6 +1169,9 @@ function filterHubMarkersForDisplay(id, bytes) {
     const marker = hubMarkerBytePatterns.find(pattern => bytesStartWith(combined, i, pattern));
     if (marker) {
       i += marker.length;
+      if (marker === hubMarkerEndBytes) {
+        for (const b of eraseDisplayBelowBytes) out.push(b);
+      }
       continue;
     }
     if (isPossibleMarkerPrefix(combined, i)) break;

@@ -177,7 +177,7 @@
   "quick_model_tooltip": "Set /model in input field",
   "attach_clear_tooltip": "Clear thumbnails",
   "about_title": "About this app",
-  "about_version": "Version v0.1.1 [Hub UI]",
+  "about_version": "Version {version} [Hub UI]",
   "about_description": "A tool to centrally manage approval operations and progress monitoring for multiple AI coding CLIs in one web UI. All processing is done locally.",
   "about_app_license": "App License",
   "about_license_text": "AI-CLI-HUB is distributed under the MIT License. Copyright (c) 2026 Hiroshi Ishizaka (ishizakahiroshi).",

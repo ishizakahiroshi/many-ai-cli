@@ -1,6 +1,6 @@
 # ai-cli-hub リリース手順
 
-> 最終更新: 2026-05-11(月) 04:02:03
+> 最終更新: 2026-05-11(月) 04:30:00
 
 この手順は GitHub Actions の `Release` workflow と GoReleaser で GitHub Releases を作成するための運用メモ。
 
@@ -35,16 +35,59 @@ git status --short
 
 未コミット変更がある場合は、リリースに含めるものだけをコミットする。意図しない変更が混ざっている状態でタグを打たない。
 
-バージョン表記を確認する。
+バージョン表記の確認：v0.1.2 以降は **single source of truth** 化されているため、ファイル間で grep して付け合わせる必要は無い。詳細は次節「バージョン文字列の single source 設計」を参照。
 
-- `winres/winres.json`
-- `web/src/index.html`
-- `web/src/i18n/ja.json`
-- `web/src/i18n/en.json`
-- `README.md`
-- `README.ja.md`
+ただし v0.1.2 時点では一部のメタデータは依然として手動 bump 対象なので、リリース前に確認すること。
 
-v0.1.1 のように Windows のみ実機検証済みで、Linux / macOS は未検証のまま出す場合は、README の検証状況と `.goreleaser.yaml` のビルド対象が矛盾していないことを確認する。
+v0.1.2 時点で「タグ → 自動追従」になっているもの：
+
+- Go バイナリの内蔵バージョン文字列（`main.version`、ldflags 注入）
+- Web UI 上のバージョン表示（`/api/info` 経由で runtime fetch）
+- GitHub Releases 上の zip 名と SHA256SUMS（GoReleaser がタグから生成）
+
+v0.1.2 時点で「手動 bump が必要」なもの（次の release で自動化候補）：
+
+- `winres/winres.json`（Windows .exe の Properties に出る ファイル/プロダクトバージョン）
+- `cmd/ai-cli-hub/rsrc_windows_*.syso`（`go-winres make` で `winres.json` から再生成）
+- `README.md` / `README.ja.md`（asset URL の version 部分）
+- `docs/v0.1.x-ai-cli-hub-design.md` / `CLAUDE.md`（記述上の参照）
+
+Linux / macOS が未検証のまま出す場合は、README の検証状況と `.goreleaser.yaml` のビルド対象が矛盾していないことを確認する。
+
+## バージョン文字列の single source 設計
+
+v0.1.2 時点での設計：
+
+```
+git tag v0.1.2  ── push ──┐
+                          │
+                  goreleaser がタグから "0.1.2" を取り出す
+                          │
+                          ├── ldflags: -X main.version=0.1.2
+                          │      └─ Go バイナリ内蔵
+                          │            └─ /api/info の "version" フィールド
+                          │                  └─ Web UI が runtime fetch して表示
+                          │
+                          └── archive 名: ai-cli-hub-0.1.2-{os}-{arch}.zip
+                                └─ SHA256SUMS と一緒に Release page へ
+```
+
+**実装場所**
+
+- `cmd/ai-cli-hub/main.go`: `var version = "dev"`（package-level、ldflags の注入先）
+- `.goreleaser.yaml`: `builds.[].ldflags` に `-X main.version={{.Version}}` を追加
+- `internal/hub/server.go`: `NewServer` のシグネチャに `version string` を追加し、`/api/info` JSON に含める
+- `web/src/app.js`: 起動時に `/api/info` を fetch、`.settings-app-version` と `.about-version` に値を流し込む
+- `web/src/i18n/{ja,en}.json` の `about_version`: 版番号を含む文字列ではなく `"Version {0} [Hub UI]"` のような placeholder に
+- `web/src/index.html`: 版番号を直接書かず、空 or skeleton（runtime で書き換え）
+
+**手動 bump がまだ必要な場所（次回 release までに自動化候補）**
+
+- `winres/winres.json` → `cmd/ai-cli-hub/rsrc_windows_*.syso`：`go-winres` がリポジトリ committed の `.syso` を生成。CI で `goreleaser release` の前に `go-winres make --in winres/winres.json --product-version=...` を走らせる pre-build step を入れれば自動化できる
+- `README.md` / `README.ja.md`：asset の URL に `0.1.2` が含まれている部分。GitHub Releases の "Latest" link を使う形に切り替えれば固定版番号は消せる
+- `docs/v0.1.x-ai-cli-hub-design.md` / `CLAUDE.md`：プロセ的な参照は手動。CHANGELOG 系へリンクする形へ切り替える検討
+
+これらは v0.1.3 以降で対応していく。
 
 ## ローカル検証
 

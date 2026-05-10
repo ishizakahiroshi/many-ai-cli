@@ -17,6 +17,12 @@ import (
 	"ai-cli-hub/internal/wrapper"
 )
 
+// version はリリースビルド時に goreleaser の ldflags
+// (-X main.version={{.Version}}) で git タグから注入される。
+// これがバイナリ・Web UI・Windows メタデータ越しでバージョンを参照する
+// single source of truth。
+var version = "dev"
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -35,7 +41,7 @@ func run(args []string) error {
 			return nil
 		}
 		logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-		s, err := hub.NewServer(cfg, logger, false)
+		s, err := hub.NewServer(cfg, logger, false, version)
 		if err != nil {
 			return err
 		}
@@ -65,7 +71,7 @@ func run(args []string) error {
 			cfg.Hub.Port = *port
 		}
 		logger = hublog.NewFileLogger(cfg.Hub.LogDir, cfg.Log, *debug, *dev)
-		s, err := hub.NewServer(cfg, logger, *dev)
+		s, err := hub.NewServer(cfg, logger, *dev, version)
 		if err != nil {
 			return err
 		}
