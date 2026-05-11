@@ -32,3 +32,10 @@ func TestSanitizeFilePart(t *testing.T) {
 		t.Fatalf("expected 80 chars, got %d", len(got))
 	}
 }
+
+func TestStripANSIRemovesOSCAndCSI(t *testing.T) {
+	in := "\x1b]0;title\x07hello \x1b[31mred\x1b[0m"
+	if got := StripANSI(in); got != "hello red" {
+		t.Fatalf("unexpected strip result: %q", got)
+	}
+}

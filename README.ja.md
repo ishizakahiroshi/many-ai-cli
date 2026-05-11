@@ -1,5 +1,7 @@
 # ai-cli-hub
 
+![ai-cli-hub ダッシュボード](assets/readme-dashboard.jpg)
+
 複数の AI コーディング CLI（Claude Code / Codex CLI）を並列で動かすときの、**承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理する**ツール。
 
 > **ローカル優先設計** — Hub UI は `127.0.0.1` のみにバインド。`ai-cli-hub` 自身はテレメトリを送信しません（slash command 一覧の GitHub 取得・wrap 対象 CLI のベンダー API 通信については「[セキュリティ](#セキュリティ)」セクション参照）。

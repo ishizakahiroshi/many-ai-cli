@@ -411,7 +411,17 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   padding: 4px 14px;
   align-items: center;
 }
-.approval-patterns-add-row input { flex: 1; }
+.approval-patterns-add-row input {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+.approval-patterns-add-row .settings-link-btn {
+  flex: 0 0 auto;
+  width: auto;
+  padding: 2px 10px;
+  text-align: center;
+}
 
 /* ---- 承認ボタントグル ---- */
 .approval-toggle { position: relative; display: inline-block; width: 38px; height: 20px; flex-shrink: 0; }
@@ -1577,6 +1587,31 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 @keyframes voice-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }
+}
+
+/* ウェイクワードボタン */
+#voice-wakeword-btn {
+  background: transparent;
+  color: var(--muted-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+#voice-wakeword-btn:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+#voice-wakeword-btn.standby {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: #3b82f6;
+  color: #3b82f6;
+  animation: wakeword-pulse 2s ease-in-out infinite;
+}
+@keyframes wakeword-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 /* 音声入力バー（入力欄の上にホバー表示） */

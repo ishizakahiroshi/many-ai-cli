@@ -16,6 +16,7 @@ import (
 	"ai-cli-hub/internal/config"
 	"ai-cli-hub/internal/hub"
 	hublog "ai-cli-hub/internal/log"
+	"ai-cli-hub/internal/sessionlog"
 	"ai-cli-hub/internal/shell"
 	"ai-cli-hub/internal/wrapper"
 )
@@ -152,6 +153,26 @@ func run(args []string) error {
 		return hub.PrintStatus(cfg)
 	case "stop":
 		return hub.Stop(cfg)
+	case "log-clean":
+		fs := flag.NewFlagSet("log-clean", flag.ContinueOnError)
+		out := fs.String("o", "", "output transcript path")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 1 {
+			return errors.New("log-clean <session.jsonl> [-o transcript.txt]")
+		}
+		jsonlPath := fs.Arg(0)
+		outPath := *out
+		if outPath == "" {
+			ext := filepath.Ext(jsonlPath)
+			outPath = strings.TrimSuffix(jsonlPath, ext) + ".txt"
+		}
+		if err := sessionlog.WriteTranscriptFile(jsonlPath, outPath); err != nil {
+			return err
+		}
+		fmt.Println(outPath)
+		return nil
 	case "shell-init":
 		fmt.Print(shell.InitScript())
 		return nil
@@ -170,6 +191,6 @@ func run(args []string) error {
 }
 
 func usage() error {
-	fmt.Println("ai-cli-hub <serve|wrap|claude|codex|gemini|shell-init|stop|status>")
+	fmt.Println("ai-cli-hub <serve|wrap|claude|codex|gemini|shell-init|stop|status|log-clean>")
 	return nil
 }

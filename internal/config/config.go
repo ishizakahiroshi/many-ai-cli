@@ -110,6 +110,7 @@ func LoadOrCreate() (*Config, error) {
 func defaultConfig(home string) *Config {
 	cfg := &Config{}
 	cfg.Hub.Port = 47777
+	cfg.Hub.OpenBrowser = true
 	cfg.Hub.AutoShutdown = true
 	cfg.Hub.LogDir = filepath.Join(home, ".ai-cli-hub", "logs")
 	cfg.Hub.IdleTimeoutMin = 60

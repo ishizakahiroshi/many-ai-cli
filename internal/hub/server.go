@@ -303,8 +303,7 @@ func (s *Server) OpenBrowser() error {
 // OpenBrowserForConfig opens the browser to the Hub URL without needing a running Server.
 func OpenBrowserForConfig(cfg *config.Config) error {
 	url := fmt.Sprintf("http://127.0.0.1:%d/?token=%s", cfg.Hub.Port, cfg.Token)
-	cmd := exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	return cmd.Start()
+	return browserCommand(url).Start()
 }
 
 // IsRunning returns true if a Hub is already listening at the configured address.

@@ -149,6 +149,36 @@
           </div>
         </div>
       </details>
+      <details class="settings-section" data-section="voice">
+        <summary class="settings-section-title"><span data-i18n="settings_voice_title">音声入力</span></summary>
+        <div class="settings-section-body">
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_voice_grace">終了検知の待ち時間</span>
+            <select id="voice-grace-select" class="settings-select">
+              <option value="0">0</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
+            <span class="settings-note" data-i18n="settings_voice_grace_unit">秒</span>
+          </div>
+          <div class="settings-note" data-i18n="settings_voice_grace_desc">無音で自動終了した後、直近の発話から指定秒数以内なら認識を継続します。0 で即終了（現状の挙動）。</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_voice_wakeword">ウェイクワードモード</span>
+            <label class="approval-toggle">
+              <input type="checkbox" id="wakeword-enabled">
+              <span class="approval-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row" id="wakeword-phrase-row">
+            <span class="settings-label" data-i18n="settings_voice_wakeword_phrase">ウェイクワード</span>
+            <input type="text" id="wakeword-phrase-input" class="settings-input-text">
+          </div>
+          <div class="settings-note" data-i18n="settings_voice_wakeword_desc">マイクを常時待機させ、このフレーズを発話したときだけ音声入力を開始します。</div>
+        </div>
+      </details>
       <details class="settings-section" data-section="trigger">
         <summary class="settings-section-title"><span data-i18n="settings_trigger_title">自動送信トリガー</span></summary>
         <div class="settings-section-body">
@@ -369,6 +399,7 @@
           </div>
           <button id="send-btn" data-i18n="send">Send</button>
           <button id="voice-btn" hidden>🎤</button>
+          <button id="voice-wakeword-btn" hidden>🎧</button>
           <button id="quick-clear-btn" class="quick-cmd-btn" data-i18n-tooltip="quick_clear_tooltip">/clear</button>
           <button id="quick-model-btn" class="quick-cmd-btn" data-i18n-tooltip="quick_model_tooltip">/model</button>
           <button id="slash-picker-btn" class="quick-cmd-btn" data-i18n-tooltip="slash_picker_tooltip">/ ▾</button>
