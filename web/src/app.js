@@ -2564,18 +2564,23 @@ function sendResize(sessionId, cols, rows) {
   }
 }
 
+function canFitTerminal(t) {
+  return !!(t && t.container && t.container.isConnected && t.term && t.term.element && t.term.element.isConnected);
+}
+
 let lastDevicePixelRatio = window.devicePixelRatio || 1;
 
 function refitAllTerminals(refreshRows = false) {
-  terminals.forEach(({ term, fitAddon }, id) => {
-    const prevCols = term.cols;
-    const prevRows = term.rows;
-    fitAddon.fit();
-    if (refreshRows && term.rows > 0) {
-      term.refresh(0, term.rows - 1);
+  terminals.forEach((t, id) => {
+    if (!canFitTerminal(t)) return;
+    const prevCols = t.term.cols;
+    const prevRows = t.term.rows;
+    t.fitAddon.fit();
+    if (refreshRows && t.term.rows > 0) {
+      t.term.refresh(0, t.term.rows - 1);
     }
-    if (term.cols !== prevCols || term.rows !== prevRows) {
-      sendResize(id, term.cols, term.rows);
+    if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
+      sendResize(id, t.term.cols, t.term.rows);
     }
   });
 }
@@ -4156,9 +4161,14 @@ function openLightbox(src) {
     try { localStorage.setItem(STORAGE_KEY, w); } catch (_) {}
     renderSessionList();
     // ターミナルの幅変化に追従
-    terminals.forEach(({ term, fitAddon }, id) => {
-      fitAddon.fit();
-      sendResize(id, term.cols, term.rows);
+    terminals.forEach((t, id) => {
+      if (!canFitTerminal(t)) return;
+      const prevCols = t.term.cols;
+      const prevRows = t.term.rows;
+      t.fitAddon.fit();
+      if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
+        sendResize(id, t.term.cols, t.term.rows);
+      }
     });
   }
 
