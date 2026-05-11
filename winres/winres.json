@@ -9,7 +9,7 @@
       "0409": {
         "identity": {
           "name": "ai-cli-hub",
-          "version": "0.1.2.0"
+          "version": "0.1.3.0"
         },
         "description": "",
         "minimum-os": "win7",
@@ -33,22 +33,22 @@
     "#1": {
       "0000": {
         "fixed": {
-          "file_version": "0.1.2.0",
-          "product_version": "0.1.2.0"
+          "file_version": "0.1.3.0",
+          "product_version": "0.1.3.0"
         },
         "info": {
           "0409": {
             "Comments": "",
             "CompanyName": "",
             "FileDescription": "AI-CLI-HUB",
-            "FileVersion": "0.1.2",
+            "FileVersion": "0.1.3",
             "InternalName": "ai-cli-hub",
             "LegalCopyright": "",
             "LegalTrademarks": "",
             "OriginalFilename": "ai-cli-hub.exe",
             "PrivateBuild": "",
             "ProductName": "AI-CLI-HUB",
-            "ProductVersion": "0.1.2",
+            "ProductVersion": "0.1.3",
             "SpecialBuild": ""
           }
         }
