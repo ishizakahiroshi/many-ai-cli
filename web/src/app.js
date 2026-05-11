@@ -2974,6 +2974,7 @@ let _faviconCanvas = null;
 let _faviconCtx = null;
 let _faviconBaseImg = null;
 let _faviconBaseLoaded = false;
+let _faviconPendingCount = 0;
 
 let _titleBlinkInterval = null;
 let _titleBlinkState = false;
@@ -3004,18 +3005,14 @@ function initFaviconCanvas() {
   _faviconCanvas.height = 32;
   _faviconCtx = _faviconCanvas.getContext('2d');
   _faviconBaseImg = new Image();
-  _faviconBaseImg.onload = () => { _faviconBaseLoaded = true; };
+  _faviconBaseImg.onload = () => {
+    _faviconBaseLoaded = true;
+    drawFavicon(_faviconPendingCount);
+  };
   _faviconBaseImg.src = '/icon.svg';
 }
 
-function updateTabNotification(pendingCount) {
-  if (pendingCount > 0) {
-    startTitleBlink(pendingCount);
-  } else {
-    stopTitleBlink();
-    document.title = 'AI-CLI-HUB';
-  }
-
+function drawFavicon(pendingCount) {
   initFaviconCanvas();
   const ctx = _faviconCtx;
   const SIZE = 32;
@@ -3040,6 +3037,19 @@ function updateTabNotification(pendingCount) {
   if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
   link.type = 'image/png';
   link.href = _faviconCanvas.toDataURL('image/png');
+}
+
+function updateTabNotification(pendingCount) {
+  _faviconPendingCount = pendingCount;
+
+  if (pendingCount > 0) {
+    startTitleBlink(pendingCount);
+  } else {
+    stopTitleBlink();
+    document.title = 'AI-CLI-HUB';
+  }
+
+  drawFavicon(pendingCount);
 }
 
 function render() {
@@ -4146,10 +4156,6 @@ function openLightbox(src) {
 
   let animFrame = null;
   let wavePhase = 0;
-  let mediaStream = null;
-  let analyserNode = null;
-  let analyserData = null;
-  let analyserSource = null;
   let waveformRaf = null;
 
   const BAR_COUNT = 22;
@@ -4197,57 +4203,9 @@ function openLightbox(src) {
   }
 
   function animLoop() {
-    if (analyserNode && analyserData) {
-      analyserNode.getByteFrequencyData(analyserData);
-      drawBars(analyserData);
-    } else {
-      drawBars(null);
-    }
+    drawBars(null);
     wavePhase += 0.28;
     animFrame = requestAnimationFrame(animLoop);
-  }
-
-  function stopLiveWaveInput() {
-    try {
-      if (analyserSource) analyserSource.disconnect();
-    } catch (_) {}
-    analyserSource = null;
-    analyserNode = null;
-    analyserData = null;
-    if (mediaStream) {
-      for (const tr of mediaStream.getTracks()) {
-        try { tr.stop(); } catch (_) {}
-      }
-    }
-    mediaStream = null;
-  }
-
-  async function startLiveWaveInput() {
-    stopLiveWaveInput();
-    if (!navigator.mediaDevices?.getUserMedia) return false;
-    try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      const ac = _getAudioCtx();
-      if (ac.state === 'suspended') {
-        try { await ac.resume(); } catch (_) {}
-      }
-      analyserNode = ac.createAnalyser();
-      analyserNode.fftSize = 256;
-      analyserNode.smoothingTimeConstant = 0.82;
-      analyserSource = ac.createMediaStreamSource(mediaStream);
-      analyserSource.connect(analyserNode);
-      analyserData = new Uint8Array(analyserNode.frequencyBinCount);
-      return true;
-    } catch (_) {
-      stopLiveWaveInput();
-      return false;
-    }
   }
 
   function startWaveform() {
@@ -4260,17 +4218,14 @@ function openLightbox(src) {
   function stopWaveform() {
     cancelAnimationFrame(animFrame);
     animFrame = null;
-    stopLiveWaveInput();
   }
 
-  async function showVoiceBar() {
+  function showVoiceBar() {
     voiceBar.hidden = false;
     waveformRaf = requestAnimationFrame(() => {
       resizeCanvas();
       waveformRaf = null;
     });
-    await startLiveWaveInput();
-    if (!isRecording) return;
     startWaveform();
   }
 
@@ -4338,7 +4293,7 @@ function openLightbox(src) {
     voiceActive = true;
     btn.classList.add('recording');
     btn.dataset.tooltip = t('voice_recording');
-    void showVoiceBar();
+    showVoiceBar();
   });
 
   recognition.addEventListener('result', (e) => {
