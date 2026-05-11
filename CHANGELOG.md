@@ -10,6 +10,11 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Added
+- Documented the current Windows distribution limitation: release binaries are
+  not Authenticode-signed yet, so Windows 11 Smart App Control may block
+  `ai-cli-hub.exe` on PCs where that protection is enabled.
+
 ## [0.1.3] - 2026-05-11
 
 ### Fixed
