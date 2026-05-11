@@ -37,7 +37,7 @@ type vsFixedFileInfo struct {
 }
 
 const processQueryLimitedInformation = 0x1000
-const parentShellEnv = "AI_CLI_HUB_PARENT_SHELL"
+const parentShellEnv = "ANY_AI_CLI_PARENT_SHELL"
 
 // processExeFullPath は PID からプロセスのフルパスを返す。
 func processExeFullPath(pid uint32) string {
@@ -110,9 +110,9 @@ func shellVersionSuffix(exe string, pid uint32) string {
 }
 
 // DetectShell は起動元シェルの種別を返す。
-// AI_CLI_HUB_PARENT_SHELL がセットされている場合はその値を最優先で返す。
+// ANY_AI_CLI_PARENT_SHELL がセットされている場合はその値を最優先で返す。
 // CreateToolhelp32Snapshot で親プロセスの exe 名を取得し、フレンドリー名に変換する。
-// /api/spawn 経由で起動した場合は直親が ai-cli-hub.exe になるため、その場合はさらに祖父プロセスを参照する。
+// /api/spawn 経由で起動した場合は直親が any-ai-cli.exe になるため、その場合はさらに祖父プロセスを参照する。
 func DetectShell() string {
 	if v := strings.TrimSpace(os.Getenv(parentShellEnv)); v != "" {
 		return v
@@ -201,7 +201,7 @@ func knownWindowsShellName(exe string) (string, bool) {
 
 func shouldSkipWindowsShellProcess(exe string) bool {
 	switch strings.ToLower(exe) {
-	case "ai-cli-hub.exe",
+	case "any-ai-cli.exe",
 		"explorer.exe",
 		"windowsterminal.exe",
 		"wt.exe",

@@ -1,4 +1,4 @@
-# Agent Entry Point (ai-cli-hub)
+# Agent Entry Point (any-ai-cli)
 
 This repository's operational guidance is maintained in `CLAUDE.md`.
 
@@ -10,7 +10,7 @@ This repository's operational guidance is maintained in `CLAUDE.md`.
   - `./CLAUDE/operations.md` — Git, commit messages, output rules
   - `./CLAUDE/deployment.md` — cross-compile build & distribution
   - `./CLAUDE/windows_setup.md` — Windows dev environment specifics
-- Design (source of truth): `./docs/ai-cli-hub-design-v0.1.0.md`
+- Design (source of truth): `./docs/any-ai-cli-design-v0.1.0.md`
 - Local/private additions (if present): `./CLAUDE.local.md`
 - Codex-specific SSH/local notes: `./AGENTS.local.md`
 

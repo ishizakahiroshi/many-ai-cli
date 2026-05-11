@@ -8,7 +8,7 @@ import (
 )
 
 // 承認 trigger phrase のデフォルト値。Hub 初回起動時にユーザー設定ディレクトリ
-// (~/.ai-cli-hub/approval-patterns/) に書き出す。既存ファイルがあれば
+// (~/.any-ai-cli/approval-patterns/) に書き出す。既存ファイルがあれば
 // ユーザー編集を尊重して上書きしない。リセットしたい場合はファイルを削除すれば
 // 次回起動で再生成される。
 //
@@ -44,7 +44,7 @@ var defaultApprovalPatterns = map[string][]string{
 
 func approvalPatternsDir() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".ai-cli-hub", "approval-patterns")
+	return filepath.Join(home, ".any-ai-cli", "approval-patterns")
 }
 
 // SyncApprovalPatterns はデフォルトパターンをユーザー設定ディレクトリに展開する。

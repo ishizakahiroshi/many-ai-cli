@@ -1,10 +1,10 @@
-# ai-cli-hub
+# any-ai-cli
 
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Go](https://img.shields.io/badge/go-1.22+-blue)
 
-![ai-cli-hub dashboard](assets/readme-dashboard.jpg)
+![any-ai-cli dashboard](assets/readme-dashboard.jpg)
 
 A local web dashboard to manage multiple AI coding CLIs (Claude Code / Codex CLI) from a single screen — approvals, monitoring, and terminal in one place.
 
@@ -14,15 +14,15 @@ A local web dashboard to manage multiple AI coding CLIs (Claude Code / Codex CLI
 
 ## Quick Download
 
-Get the latest release from [GitHub Releases](https://github.com/ishizakahiroshi/ai-cli-hub/releases/latest).
+Get the latest release from [GitHub Releases](https://github.com/ishizakahiroshi/any-ai-cli/releases/latest).
 
 | Platform | Download |
 |----------|----------|
-| Windows  | `ai-cli-hub-windows-amd64.exe` |
-| macOS    | `ai-cli-hub-darwin-amd64` / `ai-cli-hub-darwin-arm64` |
-| Linux    | `ai-cli-hub-linux-amd64` |
+| Windows  | `any-ai-cli-windows-amd64.exe` |
+| macOS    | `any-ai-cli-darwin-amd64` / `any-ai-cli-darwin-arm64` |
+| Linux    | `any-ai-cli-linux-amd64` |
 
-> Settings and logs are stored in `~/.ai-cli-hub/` (created on first run).
+> Settings and logs are stored in `~/.any-ai-cli/` (created on first run).
 > Session logs contain user input and AI output. Treat them as sensitive data.
 
 ### Platform Verification for v0.1.3
@@ -47,7 +47,7 @@ Please use at your own discretion and report any issues.
 cosign verify-blob \
   --certificate SHA256SUMS.txt.pem \
   --signature SHA256SUMS.txt.sig \
-  --certificate-identity-regexp "https://github.com/ishizakahiroshi/ai-cli-hub/.github/workflows/release.yml@refs/tags/v.*" \
+  --certificate-identity-regexp "https://github.com/ishizakahiroshi/any-ai-cli/.github/workflows/release.yml@refs/tags/v.*" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   SHA256SUMS.txt
 ```
@@ -69,7 +69,7 @@ sha256sum -c SHA256SUMS.txt
 - **Multi-session view** — switch between multiple AI CLI sessions in one tab
 - **Spawn new sessions** from the UI (`/api/spawn`)
 - **Language switching** (English / Japanese)
-- **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `ai-cli-hub` itself
+- **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `any-ai-cli` itself
 
 ---
 
@@ -77,8 +77,8 @@ sha256sum -c SHA256SUMS.txt
 
 The normal flow: launch the binary, then drive everything from the browser. You do not need to run any CLI command yourself.
 
-1. Download `ai-cli-hub.exe` (or the macOS / Linux binary) from the table above
-2. **Double-click `ai-cli-hub.exe`** (or run `ai-cli-hub` with no arguments)
+1. Download `any-ai-cli.exe` (or the macOS / Linux binary) from the table above
+2. **Double-click `any-ai-cli.exe`** (or run `any-ai-cli` with no arguments)
    - The Hub starts and your browser opens automatically at `http://127.0.0.1:47777/?token=<token>`
    - If a Hub is already running, your browser is reopened against the existing instance
 3. In the Hub UI, click **"+ New Session"** to launch a Claude Code / Codex CLI session
@@ -89,7 +89,7 @@ Sessions can be created, monitored, and approved entirely from the Hub UI; you d
 > **⚠ About the console window**
 > Double-clicking the binary opens a console window alongside the browser. **That console *is* the Hub server process** — closing it with `×` terminates the Hub. If it gets in the way, **minimize** it instead of closing it.
 > If the Hub does go down (whether by `×`, a crash, or a manual restart), running AI sessions wait up to **60 minutes** for the Hub to come back before terminating themselves (configurable in `config.yaml` up to 24 hours — extend it for long-running autonomous tasks). A Web UI bug or restart will not silently kill your work. See [Shutdown, zombie protection & Hub crash resilience](#shutdown-zombie-protection--hub-crash-resilience) for details.
-> To stop the Hub intentionally, use the `⏻` button in the top-right of the Hub UI, or run `ai-cli-hub stop` from another terminal.
+> To stop the Hub intentionally, use the `⏻` button in the top-right of the Hub UI, or run `any-ai-cli stop` from another terminal.
 
 ---
 
@@ -100,38 +100,38 @@ If you prefer driving things from a shell — for scripting, shell integration, 
 ### Option A: provider as a subcommand
 
 ```bash
-ai-cli-hub claude      # auto-starts Hub in the background if not running, then launches Claude
-ai-cli-hub codex       # same
+any-ai-cli claude      # auto-starts Hub in the background if not running, then launches Claude
+any-ai-cli codex       # same
 ```
 
-You do not need to run `ai-cli-hub serve` first.
+You do not need to run `any-ai-cli serve` first.
 
 ### Option B: `wrap` subcommand (for debugging)
 
 ```bash
-ai-cli-hub wrap claude
-ai-cli-hub wrap codex
+any-ai-cli wrap claude
+any-ai-cli wrap codex
 ```
 
 Functionally identical to Option A; useful when you want to be explicit about the wrapper layer.
 
-### Option C: transparent mode (`AI_CLI_HUB_AUTO`)
+### Option C: transparent mode (`ANY_AI_CLI_AUTO`)
 
 Initialize the shell once, then your normal `claude` / `codex` commands transparently go through the wrapper.
 
-> `ai-cli-hub shell-init` emits **POSIX shell (bash / zsh) only** function definitions. There is no PowerShell snippet — see below for a manual alternative.
+> `any-ai-cli shell-init` emits **POSIX shell (bash / zsh) only** function definitions. There is no PowerShell snippet — see below for a manual alternative.
 
 ```bash
 # Run once per shell startup (bash / zsh)
-eval "$(ai-cli-hub shell-init)"
+eval "$(any-ai-cli shell-init)"
 
 # Turn on per-session — only the shells where you opt in are wrapped
-export AI_CLI_HUB_AUTO=1
+export ANY_AI_CLI_AUTO=1
 claude    # → goes through the wrapper, auto-starts Hub if needed
 codex     # → same
 ```
 
-Without `AI_CLI_HUB_AUTO=1`, `claude` / `codex` behave exactly as the original commands. No global `.bashrc` modification.
+Without `ANY_AI_CLI_AUTO=1`, `claude` / `codex` behave exactly as the original commands. No global `.bashrc` modification.
 
 #### OS-specific automation examples
 
@@ -140,39 +140,39 @@ Without `AI_CLI_HUB_AUTO=1`, `claude` / `codex` behave exactly as the original c
 Add the following to your `$PROFILE` (since `shell-init` does not support PowerShell, the functions are defined directly):
 
 ```powershell
-if ($env:AI_CLI_HUB_AUTO -eq '1') {
-    function claude { ai-cli-hub claude @args }
-    function codex  { ai-cli-hub codex  @args }
+if ($env:ANY_AI_CLI_AUTO -eq '1') {
+    function claude { any-ai-cli claude @args }
+    function codex  { any-ai-cli codex  @args }
 }
 ```
 
-Set `AI_CLI_HUB_AUTO=1` on a specific Windows Terminal profile to enable transparent mode only in that tab:
+Set `ANY_AI_CLI_AUTO=1` on a specific Windows Terminal profile to enable transparent mode only in that tab:
 
 ```jsonc
 {
   "name": "AI Watch",
   "commandline": "pwsh.exe -NoExit",
-  "environment": { "AI_CLI_HUB_AUTO": "1" }
+  "environment": { "ANY_AI_CLI_AUTO": "1" }
 }
 ```
 
 **iTerm2 (macOS)**
 
-- Profiles → Environment → Variables: `AI_CLI_HUB_AUTO=1`
-- Profiles → General → Send text at start: `eval "$(ai-cli-hub shell-init)"`
+- Profiles → Environment → Variables: `ANY_AI_CLI_AUTO=1`
+- Profiles → General → Send text at start: `eval "$(any-ai-cli shell-init)"`
 
 **tmux (all OSes)**
 
 ```bash
 # ~/.tmux.conf
-set-option -g default-command "AI_CLI_HUB_AUTO=1 bash -c 'eval \"$(ai-cli-hub shell-init)\"; exec bash'"
+set-option -g default-command "ANY_AI_CLI_AUTO=1 bash -c 'eval \"$(any-ai-cli shell-init)\"; exec bash'"
 ```
 
 ---
 
 ## Settings
 
-Settings are stored in `~/.ai-cli-hub/config.yaml` (auto-created on first run).
+Settings are stored in `~/.any-ai-cli/config.yaml` (auto-created on first run).
 
 | Key | Description | Default |
 |-----|-------------|---------|
@@ -187,10 +187,10 @@ Settings are stored in `~/.ai-cli-hub/config.yaml` (auto-created on first run).
 Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 
 ```
-┌─ AI-CLI-HUB  [1][0][6] │ ● Claude:2  ● Codex:5         [⏻] [Settings] ─┐
+┌─ ANY-AI-CLI  [1][0][6] │ ● Claude:2  ● Codex:5         [⏻] [Settings] ─┐
 ├──────────────────────────┬──────────────────────────────────────────────┤
-│ [+ New Session]          │ ● Codex  cwd: C:\dev\ai-cli-hub  [↑ to top] │
-│ 📁 ai-cli-hub  [1][0][6] │ Terminal output — Windows PowerShell         │
+│ [+ New Session]          │ ● Codex  cwd: C:\dev\any-ai-cli  [↑ to top] │
+│ 📁 any-ai-cli  [1][0][6] │ Terminal output — Windows PowerShell         │
 │ ─────────────────────── │                                              │
 │ ★ #7 ● Codex  Running × │   (xterm.js terminal output)                │
 │    Last: 00:11:57       │                                              │
@@ -272,12 +272,12 @@ When the wrapper's WebSocket to the Hub drops, the wrapper **probes the Hub's HT
 
 > **Why**: this lets you recover from a Hub-side bug, panic, or manual restart without losing your AI session — as long as the Hub comes back within the grace window. For long-running autonomous tasks (multi-hour agent loops), bump `wrapper_reconnect_grace_sec` up to e.g. 12 h (`43200`). Cases where the user *meant* to stop (dismiss, "stop everything", browser closed and forgotten) still terminate sessions promptly.
 
-Configuration knobs in `~/.ai-cli-hub/config.yaml`:
+Configuration knobs in `~/.any-ai-cli/config.yaml`:
 
 - `hub.wrapper_reconnect_grace_sec` — `0` disables reconnect (legacy "kill immediately" behavior). Range `0`–`86400` seconds (up to 24 h). Default `3600` (60 min). Also editable in Settings (in minutes). **Applies to new sessions only** — running sessions keep the value they were spawned with.
 - `hub.idle_timeout_min` — how long the Hub keeps wrappers alive when no UI is connected. `0` disables. Range `0`–`1440` minutes. Also editable in Settings.
 
-For a clean shutdown, prefer the `⏻` button in the Hub UI top-right or `ai-cli-hub stop`; closing the console window now leaves wrappers waiting for the Hub to come back rather than killing them right away.
+For a clean shutdown, prefer the `⏻` button in the Hub UI top-right or `any-ai-cli stop`; closing the console window now leaves wrappers waiting for the Hub to come back rather than killing them right away.
 
 ---
 
@@ -285,7 +285,7 @@ For a clean shutdown, prefer the `⏻` button in the Hub UI top-right or `ai-cli
 
 ```
 AI CLI (claude / codex)
-    └─ ai-cli-hub wrap  <── PTY wrapper
+    └─ any-ai-cli wrap  <── PTY wrapper
            │ WebSocket
     ┌──────▼──────┐
     │  Hub Server │  127.0.0.1:47777
@@ -302,9 +302,9 @@ The Hub server acts as a relay between PTY sessions and the browser UI. Each AI 
 
 | Type | Path | Content |
 |---|---|---|
-| Hub log | `~/.ai-cli-hub/logs/hub.log` | Hub server runtime logs (rotated by lumberjack; configured via the `log:` section) |
-| Session raw log | `~/.ai-cli-hub/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.log` | Raw PTY stream for each wrapped session (includes ANSI sequences) |
-| Session history | `~/.ai-cli-hub/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.jsonl` | Structured session events (`session_start`, `user_input`, `pty_output`, `attach`, `session_end`, `session_dismiss`) |
+| Hub log | `~/.any-ai-cli/logs/hub.log` | Hub server runtime logs (rotated by lumberjack; configured via the `log:` section) |
+| Session raw log | `~/.any-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.log` | Raw PTY stream for each wrapped session (includes ANSI sequences) |
+| Session history | `~/.any-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.jsonl` | Structured session events (`session_start`, `user_input`, `pty_output`, `attach`, `session_end`, `session_dismiss`) |
 
 The Hub UI log-path button copies the log directory path to your clipboard.
 
@@ -314,18 +314,18 @@ The Hub UI log-path button copies the log directory path to your clipboard.
 
 - The Hub HTTP/WebSocket server binds to `127.0.0.1` only — external hosts cannot reach it directly
 - Random token in URL prevents unauthorized local access
-- `ai-cli-hub` itself sends no telemetry or usage data to any service
+- `any-ai-cli` itself sends no telemetry or usage data to any service
 
 ### Outbound network traffic
 
-`ai-cli-hub` is local-first, but the following outbound HTTPS requests can occur and you should be aware of them:
+`any-ai-cli` is local-first, but the following outbound HTTPS requests can occur and you should be aware of them:
 
-- **Slash command list (Hub itself)** — When the slash command picker is opened, the Hub fetches a markdown file from `https://raw.githubusercontent.com/ishizakahiroshi/ai-cli-hub/main/resources/slash-commands/{claude,codex}.md` and caches it for 24 hours. The source URL can be changed (or pointed to a local file path) in **Settings → Slash command sources**.
-- **Wrapped CLI traffic (the CLIs themselves)** — The CLIs you wrap (Claude Code, Codex CLI) talk directly to their respective vendor APIs (Anthropic, OpenAI) over HTTPS. `ai-cli-hub` only relays PTY I/O via local WebSocket; it does not intercept, log, or proxy these API requests. Whatever network behavior the underlying CLI has applies as-is.
+- **Slash command list (Hub itself)** — When the slash command picker is opened, the Hub fetches a markdown file from `https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/{claude,codex}.md` and caches it for 24 hours. The source URL can be changed (or pointed to a local file path) in **Settings → Slash command sources**.
+- **Wrapped CLI traffic (the CLIs themselves)** — The CLIs you wrap (Claude Code, Codex CLI) talk directly to their respective vendor APIs (Anthropic, OpenAI) over HTTPS. `any-ai-cli` only relays PTY I/O via local WebSocket; it does not intercept, log, or proxy these API requests. Whatever network behavior the underlying CLI has applies as-is.
 
 ### ⚠️ Important: Localhost-only by design
 
-`ai-cli-hub` is designed to run on the **same machine** as your browser. Do **not**:
+`any-ai-cli` is designed to run on the **same machine** as your browser. Do **not**:
 
 - Run `serve` on a remote server (VPS / cloud) and connect to it from another host
 - Modify the bind address to anything other than `127.0.0.1` (e.g. `0.0.0.0`, LAN IP)
@@ -341,18 +341,18 @@ The Hub UI exposes APIs that perform host-level actions (e.g. `/api/open-dir` op
 Requires Go 1.22+.
 
 ```bash
-git clone https://github.com/ishizakahiroshi/ai-cli-hub.git
-cd ai-cli-hub
-go build -o ai-cli-hub ./cmd/ai-cli-hub
+git clone https://github.com/ishizakahiroshi/any-ai-cli.git
+cd any-ai-cli
+go build -o any-ai-cli ./cmd/any-ai-cli
 ```
 
 #### Cross-compilation
 
 ```bash
-GOOS=windows GOARCH=amd64 go build -o dist/ai-cli-hub-windows-amd64.exe ./cmd/ai-cli-hub
-GOOS=darwin  GOARCH=amd64 go build -o dist/ai-cli-hub-darwin-amd64      ./cmd/ai-cli-hub
-GOOS=darwin  GOARCH=arm64 go build -o dist/ai-cli-hub-darwin-arm64      ./cmd/ai-cli-hub
-GOOS=linux   GOARCH=amd64 go build -o dist/ai-cli-hub-linux-amd64       ./cmd/ai-cli-hub
+GOOS=windows GOARCH=amd64 go build -o dist/any-ai-cli-windows-amd64.exe ./cmd/any-ai-cli
+GOOS=darwin  GOARCH=amd64 go build -o dist/any-ai-cli-darwin-amd64      ./cmd/any-ai-cli
+GOOS=darwin  GOARCH=arm64 go build -o dist/any-ai-cli-darwin-arm64      ./cmd/any-ai-cli
+GOOS=linux   GOARCH=amd64 go build -o dist/any-ai-cli-linux-amd64       ./cmd/any-ai-cli
 ```
 
 ---

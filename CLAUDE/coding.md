@@ -1,8 +1,8 @@
-# ai-cli-hub コーディング規約
+# any-ai-cli コーディング規約
 
 > 最終更新: 2026-05-11(月) 15:20:15
 
-`ai-cli-hub` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ Vue 3 フロント（`go:embed`）。設計書: [../docs/ai-cli-hub-design-v0.1.0.md](../docs/ai-cli-hub-design-v0.1.0.md)
+`any-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ Vue 3 フロント（`go:embed`）。設計書: [../docs/any-ai-cli-design-v0.1.0.md](../docs/any-ai-cli-design-v0.1.0.md)
 
 ## 言語別コーディング規約
 
@@ -37,12 +37,12 @@
 
 | ディレクトリ | 役割 |
 |---|---|
-| `cmd/ai-cli-hub/` | サブコマンドディスパッチ（`serve` / `wrap` / `shell-init` / `stop` / `status`）のみ。ロジックは `internal/` |
+| `cmd/any-ai-cli/` | サブコマンドディスパッチ（`serve` / `wrap` / `shell-init` / `stop` / `status`）のみ。ロジックは `internal/` |
 | `internal/hub/` | HTTP サーバ・WebSocket・セッション管理・承認キュー |
 | `internal/wrapper/` | PTY ラップ・出力監視・承認検出・Hub への送信 |
 | `internal/shell/` | `shell-init` 出力（bash/zsh/PowerShell 用シェル関数） |
 | `internal/proto/` | WebSocket メッセージの Go 構造体定義（`type:"register"` 等） |
-| `internal/config/` | YAML 読み込み・デフォルト生成（`~/.ai-cli-hub/config.yaml`） |
+| `internal/config/` | YAML 読み込み・デフォルト生成（`~/.any-ai-cli/config.yaml`） |
 | `internal/log/` | 構造化ログ（JSONL）+ PTY 生ログの書き出し |
 | `web/` | Vue 3 フロントソース。`web/dist/` がビルド成果物（`go:embed` 対象） |
 
@@ -62,7 +62,7 @@
 
 - **バインドは `127.0.0.1` 固定。`0.0.0.0` / 外部 IP へバインドしない**
 - **トークンなしのリクエストは 401 で弾く**（`?token=` または `Authorization: Bearer` どちらか）
-- **永続シェル設定（`.bashrc` / `.zshrc` / PowerShell プロファイル）を改変しない**。透過化は `AI_HUB_AUTO=1` + `eval "$(ai-cli-hub shell-init)"` のオプトインのみ
+- **永続シェル設定（`.bashrc` / `.zshrc` / PowerShell プロファイル）を改変しない**。透過化は `AI_HUB_AUTO=1` + `eval "$(any-ai-cli shell-init)"` のオプトインのみ
 - **CLI プロセスを孤児化しない**（ラッパー終了時は子 CLI にもシグナル伝播）
 - **PTY の生バイト列を WS の JSON にそのまま入れない**（base64 エンコード）
 
@@ -85,7 +85,7 @@
 - **入力サニタイズ:** PTY からの出力は ANSI 除去後にパターンマッチ。コマンドパス文字列はバリデーション
 - **トークン生成:** `crypto/rand` で 32 byte 以上の乱数を base64 化
 - **CSRF:** WebSocket は同一オリジン制限 + トークン検証で保護
-- **設定ファイル権限:** `~/.ai-cli-hub/config.yaml` は本人読み書きのみ（Unix: `0600`）
+- **設定ファイル権限:** `~/.any-ai-cli/config.yaml` は本人読み書きのみ（Unix: `0600`）
 - **ログ書き込み:** PII やシークレットを含む承認内容は `risk:high` のときマスクする方針（実装時に詳細決定）
 
 ## テスト方針
@@ -94,7 +94,7 @@
 - **Vue:** Vitest（コンポーネント単体）+ Playwright（E2E、Hub 起動 → モックラッパー → UI 操作の通しテスト）
 - **手動検証:** 4 ペイン（Claude × 2 / Codex × 2）並列起動 + Hub UI を別画面で常時表示、設計書 §9 のレイアウト通りに動くか確認
 
-## ai-cli-hub 固有の禁止事項
+## any-ai-cli 固有の禁止事項
 
 - 既存の `claude` / `codex` バイナリを PATH 上で乗っ取らない（`gemini` は wrap 対象外につき関与しない）
 - グローバルな環境変数（システム環境）を書き換えない

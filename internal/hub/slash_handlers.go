@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"ai-cli-hub/internal/config"
+	"any-ai-cli/internal/config"
 )
 
 func (s *Server) invalidateSlashCache(provider string) {

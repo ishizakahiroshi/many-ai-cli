@@ -1,4 +1,4 @@
-# ai-cli-hub リポジトリ整理ルール
+# any-ai-cli リポジトリ整理ルール
 
 > 最終更新: 2026-05-11(月) 03:05:23
 
@@ -21,14 +21,14 @@
 - `README.md`, `README.ja.md`, `LICENSE`, `THIRD_PARTY_NOTICES.md`
 - `go.mod`, `go.sum`, `Makefile`
 
-Windows リソース用の `cmd/ai-cli-hub/rsrc_windows_*.syso` は、GitHub Actions 上の Windows 向けビルドでも使うため Git 管理する。
+Windows リソース用の `cmd/any-ai-cli/rsrc_windows_*.syso` は、GitHub Actions 上の Windows 向けビルドでも使うため Git 管理する。
 
 ## GitHub に上げないもの
 
 以下はローカル専用、または生成物なので Git 管理しない。
 
 - `dist/`: ローカルビルド成果物
-- root 直下の `ai-cli-hub.exe`: ローカル実行・検証用バイナリ
+- root 直下の `any-ai-cli.exe`: ローカル実行・検証用バイナリ
 - root 直下の `rsrc_windows_*.syso`: 誤って root に生成された Windows リソース
 - `docs/local/`: ローカル計画、作業ログ、非公開メモ
 - `*.local.md`, `*.local.json`: 端末固有・非公開設定
@@ -43,7 +43,7 @@ Windows リソース用の `cmd/ai-cli-hub/rsrc_windows_*.syso` は、GitHub Act
 
 GitHub Releases の成果物は、ローカルの `dist/` をアップロードしない。タグ push 後に GitHub Actions 上で GoReleaser が新しくビルドして添付する。
 
-そのため、ローカルの `dist/` はいつ消してもよい検証用ディレクトリとして扱う。ただし `dist/ai-cli-hub.exe` を起動中の場合は削除できないため、Hub を止めてから掃除する。
+そのため、ローカルの `dist/` はいつ消してもよい検証用ディレクトリとして扱う。ただし `dist/any-ai-cli.exe` を起動中の場合は削除できないため、Hub を止めてから掃除する。
 
 ## リリース前チェック
 
@@ -60,7 +60,7 @@ git ls-files "*.local.md" "*.local.json"
 - `docs/local/` は `!! docs/local/` として ignore 済み
 - `git ls-files docs/local` は空
 - `*.local.md` / `*.local.json` は Git 管理されていない
-- `dist/` と root の `ai-cli-hub.exe` は `!!` として ignore 済み
+- `dist/` と root の `any-ai-cli.exe` は `!!` として ignore 済み
 
 大きいファイルを確認したい場合:
 
@@ -77,13 +77,13 @@ Get-ChildItem -Recurse -Force -File |
 
 ```powershell
 Remove-Item -LiteralPath .\dist -Recurse -Force
-Remove-Item -LiteralPath .\ai-cli-hub.exe -Force
+Remove-Item -LiteralPath .\any-ai-cli.exe -Force
 ```
 
-`dist/ai-cli-hub.exe` が使用中で削除できない場合は、Hub を停止してから再実行する。
+`dist/any-ai-cli.exe` が使用中で削除できない場合は、Hub を停止してから再実行する。
 
 ```powershell
-Get-Process ai-cli-hub | Select-Object Id,ProcessName,Path
+Get-Process any-ai-cli | Select-Object Id,ProcessName,Path
 ```
 
 公開済み・共有済みのタグや Release 成果物は、掃除目的で差し替えない。問題があれば次のパッチバージョンで出し直す。

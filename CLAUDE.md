@@ -1,4 +1,4 @@
-# ai-cli-hub 開発ガイド
+# any-ai-cli 開発ガイド
 
 > 最終更新: 2026-05-11(月) 12:34:50
 
@@ -6,13 +6,13 @@
 
 ## プロジェクト概要
 
-**ai-cli-hub** — 複数のAIコーディングCLI（Claude Code / Codex CLI）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。単一 Go バイナリ（Hub 常駐 + ラッパー機能）+ ブラウザ UI（xterm.js / Vanilla JS）。
+**any-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。単一 Go バイナリ（Hub 常駐 + ラッパー機能）+ ブラウザ UI（xterm.js / Vanilla JS）。
 
-> **Gemini CLI は wrap 対象外**（2026-05-06 決定 / 利用規約上の制約）。詳細は [docs/v0.1.x-ai-cli-hub-design.md](docs/v0.1.x-ai-cli-hub-design.md) 冒頭「スコープ更新ログ」参照。
+> **Gemini CLI は wrap 対象外**（2026-05-06 決定 / 利用規約上の制約）。詳細は [docs/v0.1.x-any-ai-cli-design.md](docs/v0.1.x-any-ai-cli-design.md) 冒頭「スコープ更新ログ」参照。
 
 **現状**: v0.1.3 を最新パッチとして公開予定（v0.1.1 が初回正式リリース、v0.1.0 は試験扱い）。v0.1.2 でバージョン文字列を ldflags + `/api/info` 経由の single source of truth に再設計し、v0.1.3 で Codex 承認検出と音声入力まわりを改善。設計書はソースコードを正本として更新済み。
 
-**設計書（正本）**: [docs/v0.1.x-ai-cli-hub-design.md](docs/v0.1.x-ai-cli-hub-design.md)
+**設計書（正本）**: [docs/v0.1.x-any-ai-cli-design.md](docs/v0.1.x-any-ai-cli-design.md)
 
 > 全AI共通ルール（言語・確認・質問フォーマット・ターン終端の出力ルール・スクリーンショット規約等）は `C:\Users\admin\.claude\CLAUDE.md` を正本とする。Claude Code は自動ロード、Codex 等他AIは `AGENTS.md` 経由で参照。
 
@@ -20,8 +20,8 @@
 
 v0.1.3 までに以下がすべて実装済み：
 
-- `ai-cli-hub serve` で Hub が起動する
-- `ai-cli-hub claude` / `codex` が Hub 未起動時に自動起動し接続する
+- `any-ai-cli serve` で Hub が起動する
+- `any-ai-cli claude` / `codex` が Hub 未起動時に自動起動し接続する
 - Hub UI に xterm.js でPTY出力がリアルタイム表示される
 - xterm.js バッファスキャンで承認待ちを検出し action-bar を表示する
 - Hub UI の選択結果を PTY へ返送する
@@ -34,16 +34,16 @@ v0.1.3 までに以下がすべて実装済み：
 
 | 項目 | 値 |
 |------|------|
-| プロダクト名 | `ai-cli-hub` |
-| バイナリ名 | `ai-cli-hub`（Windows: `ai-cli-hub.exe`） |
+| プロダクト名 | `any-ai-cli` |
+| バイナリ名 | `any-ai-cli`（Windows: `any-ai-cli.exe`） |
 | サブコマンド | `serve` / `wrap <provider>` / `shell-init` / `stop` / `status` |
 | Hub URL | `http://127.0.0.1:47777/?token=<random>` |
-| 設定ファイル | `~/.ai-cli-hub/config.yaml`（Win: `%USERPROFILE%\.ai-cli-hub\config.yaml`） |
-| ログ | `~/.ai-cli-hub/logs/sessions/<provider>_<日時>_<folder>_s<id>.log/.jsonl`（PTY生ログ + イベント履歴JSONL） |
-| 透過化環境変数 | `AI_CLI_HUB_AUTO=1` |
+| 設定ファイル | `~/.any-ai-cli/config.yaml`（Win: `%USERPROFILE%\.any-ai-cli\config.yaml`） |
+| ログ | `~/.any-ai-cli/logs/sessions/<provider>_<日時>_<folder>_s<id>.log/.jsonl`（PTY生ログ + イベント履歴JSONL） |
+| 透過化環境変数 | `ANY_AI_CLI_AUTO=1` |
 | Provider | `claude` / `codex`（`gemini` は対象外、上記スコープ更新参照） |
 
-> プロジェクトディレクトリは `c:\dev\ai-cli-hub\`。md 内の参照は `ai-cli-hub` に統一。
+> プロジェクトディレクトリは `c:\dev\any-ai-cli\`。md 内の参照は `any-ai-cli` に統一。
 
 ## 技術スタック
 
@@ -59,11 +59,11 @@ v0.1.3 までに以下がすべて実装済み：
 
 ## ディレクトリ構成（実際）
 
-設計書 `docs/v0.1.x-ai-cli-hub-design.md` を参照。
+設計書 `docs/v0.1.x-any-ai-cli-design.md` を参照。
 
 ```
-ai-cli-hub/
-├─ cmd/ai-cli-hub/main.go    # 単一バイナリのエントリポイント
+any-ai-cli/
+├─ cmd/any-ai-cli/main.go    # 単一バイナリのエントリポイント
 ├─ internal/
 │  ├─ hub/        # HTTP+WS / セッション管理 / attach処理 / spawn
 │  ├─ wrapper/    # PTYラッパー / PTY実装（OS別）/ attach inject
@@ -81,15 +81,15 @@ ai-cli-hub/
 - **OS固有コードは build tag で分離**（例: `pty_unix.go` / `pty_windows.go`）
 - **パス操作は `filepath.Join` / `os.UserHomeDir`**（`/` ハードコード禁止）
 - **改行・PTY 動作の差異**は `internal/wrapper/` で吸収し、上位層は OS 非依存に保つ
-- **設定・ログのデフォルトディレクトリ**は全 OS 共通の `~/.ai-cli-hub/`（Windows でも `%USERPROFILE%\.ai-cli-hub\` で同じ意味）
+- **設定・ログのデフォルトディレクトリ**は全 OS 共通の `~/.any-ai-cli/`（Windows でも `%USERPROFILE%\.any-ai-cli\` で同じ意味）
 
 ## ローカルサーバの設計上の制約
 
 - **バインドは `127.0.0.1` 固定**（外部公開しない）
 - **デフォルトポート 47777**（衝突時は 47778, 47779… と自動探索）
 - **ランダムトークンを起動時生成し URL に付与**（`?token=xxx`）
-- **外部公開しない**（`127.0.0.1` 固定）。`ai-cli-hub` 自身はテレメトリを送信しないが、スラッシュコマンド一覧取得で GitHub へ HTTPS 通信する場合がある（README のセキュリティ節参照）
-- **`.bashrc` 等への永続書き込みなし**（透過化は環境変数 + `eval "$(ai-cli-hub shell-init)"` のオプトイン方式のみ）
+- **外部公開しない**（`127.0.0.1` 固定）。`any-ai-cli` 自身はテレメトリを送信しないが、スラッシュコマンド一覧取得で GitHub へ HTTPS 通信する場合がある（README のセキュリティ節参照）
+- **`.bashrc` 等への永続書き込みなし**（透過化は環境変数 + `eval "$(any-ai-cli shell-init)"` のオプトイン方式のみ）
 
 ## 詳細ガイド（タスク種別ベース）
 
@@ -112,7 +112,7 @@ ai-cli-hub/
 
 | 項目 | パス |
 |------|------|
-| 設計書 v0.1.x（現行・正本） | [docs/v0.1.x-ai-cli-hub-design.md](docs/v0.1.x-ai-cli-hub-design.md) |
+| 設計書 v0.1.x（現行・正本） | [docs/v0.1.x-any-ai-cli-design.md](docs/v0.1.x-any-ai-cli-design.md) |
 | 設計書 v1（履歴） | [docs/local/archive/cli-popup-design-v1.md](docs/local/archive/cli-popup-design-v1.md) |
 | Codex 用補足 | [AGENTS.md](AGENTS.md) / [AGENTS.local.md](AGENTS.local.md) |
-| Gemini 用補足 | [GEMINI.md](GEMINI.md)（**ai-cli-hub の wrap 対象外**。本リポジトリで Gemini CLI を開発補助に使う場合の手引きとして残置） |
+| Gemini 用補足 | [GEMINI.md](GEMINI.md)（**any-ai-cli の wrap 対象外**。本リポジトリで Gemini CLI を開発補助に使う場合の手引きとして残置） |

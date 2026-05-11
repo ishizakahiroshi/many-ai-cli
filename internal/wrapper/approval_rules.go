@@ -9,54 +9,54 @@ import (
 	"strings"
 )
 
-const claudeImportLine = "@~/.ai-cli-hub/approval-rules.md"
-const codexBlockStart  = "<!-- ai-cli-hub:approval-rules -->"
-const codexBlockEnd    = "<!-- /ai-cli-hub:approval-rules -->"
+const claudeImportLine = "@~/.any-ai-cli/approval-rules.md"
+const codexBlockStart  = "<!-- any-ai-cli:approval-rules -->"
+const codexBlockEnd    = "<!-- /any-ai-cli:approval-rules -->"
 const rulesVersion     = "2"
 
 var rulesFileContent = strings.Join([]string{
 	"<!-- version: 2 -->",
-	"## ai-cli-hub Approval Format",
+	"## any-ai-cli Approval Format",
 	"",
-	"**このセッションが ai-cli-hub Hub 管理下かどうかを最初に確認してください。**",
+	"**このセッションが any-ai-cli Hub 管理下かどうかを最初に確認してください。**",
 	"",
 	"確認方法：",
-	"- PowerShell: `$env:AI_CLI_HUB`",
-	"- bash/zsh: `echo $AI_CLI_HUB`",
+	"- PowerShell: `$env:ANY_AI_CLI`",
+	"- bash/zsh: `echo $ANY_AI_CLI`",
 	"",
-	"`AI_CLI_HUB=1` の場合のみ、以下の [AI-CLI-HUB] マーカーを使用してください。",
+	"`ANY_AI_CLI=1` の場合のみ、以下の [ANY-AI-CLI] マーカーを使用してください。",
 	"未設定・空の場合はマーカーなしでプレーンテキストで出力してください。",
 	"（このチェックはセッション内で1回だけ行い、結果を記憶してください）",
 	"",
 	"- YES/NO:",
-	"  [AI-CLI-HUB]",
+	"  [ANY-AI-CLI]",
 	"  question? (Y:1/N:0)",
-	"  [/AI-CLI-HUB]",
+	"  [/ANY-AI-CLI]",
 	"",
 	"- 番号付き選択肢:",
-	"  [AI-CLI-HUB]",
+	"  [ANY-AI-CLI]",
 	"  question?",
 	"  1. Option A (Recommended)",
 	"  2. Option B",
 	"  N. User specifies",
-	"  [/AI-CLI-HUB]",
+	"  [/ANY-AI-CLI]",
 	"",
 	"  - Option 1 は必ず推奨選択肢とし (Recommended) を末尾に付ける",
 	"  - 最後の選択肢は必ず「N. User specifies」",
-	"- [AI-CLI-HUB] マーカーは確認・承認の質問にのみ使用する",
+	"- [ANY-AI-CLI] マーカーは確認・承認の質問にのみ使用する",
 	"",
 }, "\n")
 
-// centralRulesPath は ~/.ai-cli-hub/approval-rules.md のパスを返す
+// centralRulesPath は ~/.any-ai-cli/approval-rules.md のパスを返す
 func centralRulesPath() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".ai-cli-hub", "approval-rules.md")
+	return filepath.Join(home, ".any-ai-cli", "approval-rules.md")
 }
 
-// CentralRulesDir は ~/.ai-cli-hub/ ディレクトリのパスを返す
+// CentralRulesDir は ~/.any-ai-cli/ ディレクトリのパスを返す
 func CentralRulesDir() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".ai-cli-hub")
+	return filepath.Join(home, ".any-ai-cli")
 }
 
 // SyncRulesFile はバージョンを確認し、不一致または不存在なら最新内容で上書きする

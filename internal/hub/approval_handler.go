@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"ai-cli-hub/internal/config"
-	"ai-cli-hub/internal/wrapper"
+	"any-ai-cli/internal/config"
+	"any-ai-cli/internal/wrapper"
 )
 
 // globalRulePaths はグローバルな Claude/Codex ルールファイルのパスを返す

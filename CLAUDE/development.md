@@ -1,4 +1,4 @@
-# ai-cli-hub 実装規約・context分割・AI作業モデル
+# any-ai-cli 実装規約・context分割・AI作業モデル
 
 > 最終更新: 2026-05-07(木) 19:24:03
 
@@ -33,7 +33,7 @@
 - **停止条件は次の3つのみ：**
   1. plan 記載と矛盾する破壊的変更が必要になった
   2. 外部依存の致命的障害（ビルド不能・PTY ライブラリの不適合など plan 内で解決不能）
-  3. 重大なテスト退行・設計書（`docs/ai-cli-hub-design-v0.1.0.md`）と矛盾する実装が必要になった
+  3. 重大なテスト退行・設計書（`docs/any-ai-cli-design-v0.1.0.md`）と矛盾する実装が必要になった
 - 上記以外（軽微な迷い・選択肢の優劣判断・命名揺れ等）は plan 記載 or 既存実装に倣って自走する。確認に倒さない
 - **subagent 種別の使い分け：** 実装は `general-purpose`、設計検討が必要なら `Plan`、軽い調査は `Explore` を使い分ける
 - **親 → ユーザーへの最終報告**はグローバル `~/.claude/CLAUDE.md` の「ターン終端の出力ルール」（変更ファイル／稼働モデル／次のアクション）に従う（subagent → 親への内部報告である3点軽量報告とは別物）
@@ -66,7 +66,7 @@
 - 依存関係がある変更（後工程が前工程の成果物に依存）は別contextに分ける
 - 調査・設計と実装は原則として分けない（同一contextで完結させる）
 
-**ai-cli-hub 固有の分割例：**
+**any-ai-cli 固有の分割例：**
 - C1: `internal/proto/messages.go` 定義（Hub・ラッパー・UI が依存）
 - C2: `internal/hub/server.go` HTTP+WS 起動 [C1 完了後]
 - C3: `internal/wrapper/wrapper.go` PTY ラップ + 接続 [C1 完了後、C2 と並列OK]

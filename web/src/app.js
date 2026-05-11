@@ -1,4 +1,4 @@
-console.log('[ai-cli-hub] app.js build=2026-05-11-plain-yes-no-approval');
+console.log('[any-ai-cli] app.js build=2026-05-11-plain-yes-no-approval');
 
 // ---- トースト通知 ----
 let _toastTimer = null;
@@ -557,7 +557,7 @@ function applyLang(lang) {
   document.getElementById('settings-readme-btn').addEventListener('click', () => {
     const file = window.__lang === 'ja' ? 'README.ja.md' : 'README.md';
     window.open(
-      'https://github.com/ishizakahiroshi/ai-cli-hub/blob/main/' + file,
+      'https://github.com/ishizakahiroshi/any-ai-cli/blob/main/' + file,
       '_blank', 'noopener,noreferrer'
     );
   });
@@ -1033,7 +1033,7 @@ document.getElementById('reconnect-btn').addEventListener('click', async () => {
   } catch (_) {
     btn.textContent = '↺ ' + (t('reconnect') || '再接続');
     btn.disabled = false;
-    document.getElementById('summary').textContent = t('hub_stopped') || 'Hub停止中 — ai-cli-hub serve で再起動してください';
+    document.getElementById('summary').textContent = t('hub_stopped') || 'Hub停止中 — any-ai-cli serve で再起動してください';
   }
 });
 
@@ -1270,8 +1270,8 @@ document.getElementById('scroll-to-bottom-btn')?.addEventListener('click', () =>
 });
 
 const hubMarkerBytePatterns = [
-  new TextEncoder().encode('[AI-CLI-HUB]'),
-  new TextEncoder().encode('[/AI-CLI-HUB]'),
+  new TextEncoder().encode('[ANY-AI-CLI]'),
+  new TextEncoder().encode('[/ANY-AI-CLI]'),
 ];
 const hubMarkerEndBytes = hubMarkerBytePatterns[1];
 const eraseDisplayBelowBytes = new TextEncoder().encode('\x1b[J');
@@ -1385,7 +1385,7 @@ function setMultiQuestionBannerVisible(visible) {
 
 // ---- 承認検出 (xterm.js バッファスキャン) ----
 
-// provider 別の承認 trigger phrase は ~/.ai-cli-hub/approval-patterns/{provider}.json に外出し。
+// provider 別の承認 trigger phrase は ~/.any-ai-cli/approval-patterns/{provider}.json に外出し。
 // Hub 起動時にデフォルトをユーザー設定ディレクトリに展開（既存ファイルは尊重）し、
 // HTTP 経由で配信する。ユーザーが直接編集して文言を追加・調整できる。
 // claude / codex は英語固定（Anthropic/OpenAI が国際化していない）、common は多言語混在。
@@ -1510,7 +1510,7 @@ function trackApprovalHintFromChunk(id, bytes) {
     return;
   }
 
-  // フォーマットベース検出（優先）: [AI-CLI-HUB] マーカーがあれば即確定
+  // フォーマットベース検出（優先）: [ANY-AI-CLI] マーカーがあれば即確定
   const markerOpts = extractHubMarkerApproval(lines);
   if (markerOpts) {
     // doSend でテキスト送信済みの承認が Ink 再描画で再検出された場合はスキップ
@@ -1651,7 +1651,7 @@ function scheduleApprovalCheck(id) {
   approvalCheckTimer = setTimeout(() => detectApproval(id), 300);
 }
 
-// extractHubMarkerApproval は [AI-CLI-HUB]...[/AI-CLI-HUB] マーカーベースの承認を検出する。
+// extractHubMarkerApproval は [ANY-AI-CLI]...[/ANY-AI-CLI] マーカーベースの承認を検出する。
 // 検出した場合は options 配列を返し、検出できなければ null を返す。
 function hasYesNoApprovalMarker(text) {
   return /\(Y:1\/N:0\)/.test(String(text || ''));
@@ -1667,7 +1667,7 @@ function looksLikeYesNoQuestion(text) {
 function extractHubMarkerApproval(lines) {
   const searchStart = Math.max(0, lines.length - 40);
   const recentText = lines.slice(searchStart).join('\n');
-  const blockRe = /\[AI-CLI-HUB\]([\s\S]*?)\[\/AI-CLI-HUB\]/g;
+  const blockRe = /\[ANY-AI-CLI\]([\s\S]*?)\[\/ANY-AI-CLI\]/g;
   let match;
   let lastBlock = null;
   while ((match = blockRe.exec(recentText)) !== null) {
@@ -1683,13 +1683,13 @@ function extractHubMarkerApproval(lines) {
 
   for (let i = lines.length - 1; i >= searchStart; i--) {
     const line = lines[i];
-    // Single-line: [AI-CLI-HUB] content [/AI-CLI-HUB]
-    if (/\[AI-CLI-HUB\]/.test(line) && /\[\/AI-CLI-HUB\]/.test(line)) {
-      const inner = line.replace(/^[\s\S]*?\[AI-CLI-HUB\]/, '').replace(/\[\/AI-CLI-HUB\][\s\S]*$/, '').trim();
+    // Single-line: [ANY-AI-CLI] content [/ANY-AI-CLI]
+    if (/\[ANY-AI-CLI\]/.test(line) && /\[\/ANY-AI-CLI\]/.test(line)) {
+      const inner = line.replace(/^[\s\S]*?\[ANY-AI-CLI\]/, '').replace(/\[\/ANY-AI-CLI\][\s\S]*$/, '').trim();
       return _parseHubBlock([inner]);
     }
-    if (/\[\/AI-CLI-HUB\]/.test(line) && closeIdx === -1) { closeIdx = i; continue; }
-    if (/\[AI-CLI-HUB\]/.test(line) && closeIdx !== -1) { openIdx = i; break; }
+    if (/\[\/ANY-AI-CLI\]/.test(line) && closeIdx === -1) { closeIdx = i; continue; }
+    if (/\[ANY-AI-CLI\]/.test(line) && closeIdx !== -1) { openIdx = i; break; }
   }
 
   if (openIdx === -1 || closeIdx === -1) return null;
@@ -1698,19 +1698,19 @@ function extractHubMarkerApproval(lines) {
 }
 
 // AGENTS.md の確認フォーマットに従った素の Yes/No 質問を検出する。
-// [AI-CLI-HUB] マーカーが無い場合でも、質問文中に `(Y:1/N:0)` があれば Hub ボタン化する。
+// [ANY-AI-CLI] マーカーが無い場合でも、質問文中に `(Y:1/N:0)` があれば Hub ボタン化する。
 function extractPlainYesNoApproval(lines) {
   const searchStart = Math.max(0, lines.length - 20);
   const recentLines = lines.slice(searchStart).map(line => String(line || '').trim()).filter(Boolean);
   for (let i = lines.length - 1; i >= searchStart; i--) {
     const line = String(lines[i] || '').trim();
     if (!line) continue;
-    if (/\[AI-CLI-HUB\]|\[\/AI-CLI-HUB\]/.test(line)) continue;
+    if (/\[ANY-AI-CLI\]|\[\/ANY-AI-CLI\]/.test(line)) continue;
     // TUI redraw/status text can be appended after the marker on the same logical line.
     if (looksLikeYesNoQuestion(line)) return _yesNoApprovalOptions();
   }
   const recentText = recentLines.join('\n');
-  if (!/\[AI-CLI-HUB\]|\[\/AI-CLI-HUB\]/.test(recentText) && looksLikeYesNoQuestion(recentText)) {
+  if (!/\[ANY-AI-CLI\]|\[\/ANY-AI-CLI\]/.test(recentText) && looksLikeYesNoQuestion(recentText)) {
     return _yesNoApprovalOptions();
   }
   return null;
@@ -1846,8 +1846,8 @@ function detectApproval(id) {
     }
   }
 
-  // [AI-CLI-HUB] マーカー検出: xterm バッファではなく pendingTextTail を使う。
-  // xterm バッファは回答済みの古い [AI-CLI-HUB] ブロックを保持し続けるため、
+  // [ANY-AI-CLI] マーカー検出: xterm バッファではなく pendingTextTail を使う。
+  // xterm バッファは回答済みの古い [ANY-AI-CLI] ブロックを保持し続けるため、
   // suppress 期間が切れると再検出・再表示されてしまう。
   // pendingTextTail は hideActionBar でクリアされるが、Ink 再描画で同一内容が
   // 再び入ることがあるため approvalConsumedSig で二重表示を防ぐ。
@@ -2115,7 +2115,7 @@ function sendChoice(sessionId, targetNum) {
   hideActionBar(sessionId);
   // PTY エコーバックによる誤再表示を 2 秒間抑制
   approvalSuppressUntil.set(sessionId, Date.now() + 2000);
-  // suppress 解除後に pendingTextTail を再スキャン（suppress 中に届いた [AI-CLI-HUB] ブロックを検出するため）
+  // suppress 解除後に pendingTextTail を再スキャン（suppress 中に届いた [ANY-AI-CLI] ブロックを検出するため）
   setTimeout(() => {
     detectApproval(sessionId);
     maybeAutoSwitchToNextApproval();
@@ -3217,7 +3217,7 @@ function startTitleBlink(pendingCount) {
   _titleBlinkState = true;
   _titleBlinkInterval = setInterval(() => {
     _titleBlinkState = !_titleBlinkState;
-    document.title = _titleBlinkState ? `(${_titleBlinkCount}) AI-CLI-HUB` : 'AI-CLI-HUB';
+    document.title = _titleBlinkState ? `(${_titleBlinkCount}) ANY-AI-CLI` : 'ANY-AI-CLI';
   }, 800);
 }
 
@@ -3276,7 +3276,7 @@ function updateTabNotification(pendingCount) {
     startTitleBlink(pendingCount);
   } else {
     stopTitleBlink();
-    document.title = 'AI-CLI-HUB';
+    document.title = 'ANY-AI-CLI';
   }
 
   drawFavicon(pendingCount);
@@ -4154,7 +4154,7 @@ function openLightbox(src) {
   }
 
   (function () {
-    const KEY = 'ai-cli-hub.settings-section-state';
+    const KEY = 'any-ai-cli.settings-section-state';
     let state = {};
     try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (_) { state = {}; }
     document.querySelectorAll('.settings-section[data-section]').forEach((el) => {

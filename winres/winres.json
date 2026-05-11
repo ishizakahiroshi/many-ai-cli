@@ -1,14 +1,14 @@
 {
   "RT_GROUP_ICON": {
     "#1": {
-      "0000": "../assets/ai-cli-hub.ico"
+      "0000": "../assets/any-ai-cli.ico"
     }
   },
   "RT_MANIFEST": {
     "#1": {
       "0409": {
         "identity": {
-          "name": "ai-cli-hub",
+          "name": "any-ai-cli",
           "version": "0.1.3.0"
         },
         "description": "",
@@ -40,14 +40,14 @@
           "0409": {
             "Comments": "",
             "CompanyName": "",
-            "FileDescription": "AI-CLI-HUB",
+            "FileDescription": "ANY-AI-CLI",
             "FileVersion": "0.1.3",
-            "InternalName": "ai-cli-hub",
+            "InternalName": "any-ai-cli",
             "LegalCopyright": "",
             "LegalTrademarks": "",
-            "OriginalFilename": "ai-cli-hub.exe",
+            "OriginalFilename": "any-ai-cli.exe",
             "PrivateBuild": "",
-            "ProductName": "AI-CLI-HUB",
+            "ProductName": "ANY-AI-CLI",
             "ProductVersion": "0.1.3",
             "SpecialBuild": ""
           }
