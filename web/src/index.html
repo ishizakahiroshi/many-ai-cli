@@ -13,6 +13,16 @@
     <h1><img src="/icon.svg" alt="AI-CLI-HUB" class="header-icon">AI-CLI-HUB</h1>
     <div id="summary" data-i18n="loading">...</div>
     <button id="reconnect-btn" hidden>↺ <span data-i18n="reconnect">reconnect</span></button>
+    <nav class="usage-links" aria-label="AI usage links">
+      <a id="usage-link-claude" class="usage-link usage-link--claude" href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">
+        <svg class="usage-link-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="#FFF7ED" stroke="#F97316" stroke-width="2"/></svg>
+        <span data-i18n="settings_claude_usage_btn">Claude usage</span>
+      </a>
+      <a id="usage-link-codex" class="usage-link usage-link--codex" href="https://chatgpt.com/codex/cloud/settings/analytics#usage" target="_blank" rel="noopener noreferrer">
+        <svg class="usage-link-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="#EFF6FF" stroke="#3B82F6" stroke-width="2"/></svg>
+        <span data-i18n="settings_codex_usage_btn">Codex usage</span>
+      </a>
+    </nav>
     <button id="shutdown-btn" data-i18n-tooltip="shutdown_tooltip">⏻</button>
     <button id="settings-btn" data-i18n="settings">Settings</button>
   </header>
@@ -64,12 +74,12 @@
         <div class="settings-section-body">
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_idle_timeout">Idle timeout (min)</span>
-            <input type="number" id="idle-timeout-min" min="0" max="1440" class="settings-input-number">
+            <input type="number" id="idle-timeout-min" min="0" max="1440" value="60" class="settings-input-number">
           </div>
           <div class="settings-note" data-i18n="settings_idle_timeout_desc">0 = never. AI sessions are terminated after this many minutes with no browser connected.</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_reconnect_grace">Hub crash grace (min)</span>
-            <input type="number" id="reconnect-grace-min" min="0" max="1440" class="settings-input-number">
+            <input type="number" id="reconnect-grace-min" min="0" max="1440" value="60" class="settings-input-number">
           </div>
           <div class="settings-note" data-i18n="settings_reconnect_grace_desc">0 = disable reconnect. How long wrappers wait for the Hub to come back after a crash before terminating their PTY. Applies to NEW sessions only — running sessions keep the value at the time they were spawned.</div>
         </div>
@@ -211,6 +221,23 @@
               <option value="/compact">/compact</option>
               <option value="/config">/config</option>
             </select>
+          </div>
+        </div>
+      </details>
+      <details class="settings-section" data-section="usage-links">
+        <summary class="settings-section-title"><span data-i18n="settings_usage_links_title">Usage Links</span></summary>
+        <div class="settings-section-body">
+          <div class="settings-note" data-i18n="settings_usage_links_desc">Header usage links. Leave blank to use the default URL.</div>
+          <div class="settings-row">
+            <span class="settings-label">Claude</span>
+            <input type="text" id="usage-link-claude-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_claude_placeholder" placeholder="Default Claude usage URL">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Codex</span>
+            <input type="text" id="usage-link-codex-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_codex_placeholder" placeholder="Default Codex usage URL">
+          </div>
+          <div class="settings-row">
+            <button id="usage-links-reset-btn" class="slash-src-save-btn" data-i18n="settings_usage_links_reset">デフォルトに戻す</button>
           </div>
         </div>
       </details>

@@ -140,6 +140,36 @@ header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; back
 #reconnect-btn:hover { background: var(--accent); color: var(--bg); }
 #reconnect-btn[hidden] { display: none; }
 .header-icon { width: 32px; height: 32px; vertical-align: middle; margin-right: 8px; }
+.usage-links {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.usage-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  height: 26px;
+  padding: 3px 9px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.usage-link:hover {
+  color: var(--text);
+  border-color: var(--line-soft);
+  background: var(--accent-soft);
+}
+.usage-link-icon {
+  flex-shrink: 0;
+}
 
 /* シャットダウン・設定ボタン共通 */
 #shutdown-btn,
@@ -152,7 +182,6 @@ header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; back
   font-family: inherit;
 }
 #shutdown-btn {
-  margin-left: auto;
   margin-right: 4px;
   padding: 3px 8px;
   font-size: 1rem;
@@ -165,6 +194,11 @@ header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; back
   white-space: nowrap;
 }
 #settings-btn:hover { color: var(--text); border-color: var(--line-soft); }
+
+@media (max-width: 720px) {
+  .usage-link span { display: none; }
+  .usage-link { width: 28px; padding: 3px 5px; justify-content: center; }
+}
 
 /* 設定パネル */
 #settings-panel {
@@ -262,6 +296,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; back
   text-align: left;
   cursor: pointer;
   font-family: inherit;
+  text-decoration: none;
 }
 .settings-link-btn:hover { background: var(--accent-soft); color: var(--text); }
 
@@ -422,6 +457,7 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 .card-provider-icon { flex-shrink: 0; vertical-align: middle; margin-right: 2px; }
 .card-display-name { flex-shrink: 0; font-size: 0.82rem; color: var(--muted); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
 .card-model { flex-shrink: 1; font-size: 0.72rem; color: var(--muted-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; margin-left: 2px; }
+.card-branch { flex-shrink: 1; min-width: 0; max-width: 34%; color: var(--green-text); background: color-mix(in srgb, var(--green-bg) 35%, transparent); border: 1px solid color-mix(in srgb, var(--green-text) 30%, transparent); border-radius: 4px; padding: 1px 5px; font-size: 0.68rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 2px; }
 .card-project { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; margin-left: 4px; }
 .card-meta-row { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
 .card-last-output { flex-shrink: 0; font-size: 0.72rem; color: var(--muted-2); margin-left: 2px; }
