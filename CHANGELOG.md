@@ -10,6 +10,24 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-05-11
+
+### Fixed
+- Codex approval prompts that follow the repository-standard plain
+  `(Y:1/N:0)` format are now detected even when they are not wrapped in
+  `[AI-CLI-HUB]` markers, so the Hub action bar appears for those
+  confirmations.
+- The favicon approval badge redraws after the base icon finishes loading,
+  preventing missed pending-count indicators during initial page load.
+- Voice input no longer opens a second live microphone stream just to animate
+  the waveform, avoiding conflicts with the browser Speech Recognition
+  microphone capture.
+
+### Changed
+- Local `dev` builds now derive the displayed version from the nearest Git tag
+  when run from the repository, while release builds still use the GoReleaser
+  `main.version` ldflags value as the source of truth.
+
 ## [0.1.2] - 2026-05-11
 
 ### Added
@@ -75,6 +93,7 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.1.x-ai-cli-hub-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/ai-cli-hub/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/ishizakahiroshi/ai-cli-hub/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/ishizakahiroshi/ai-cli-hub/releases/tag/v0.1.3
 [0.1.2]: https://github.com/ishizakahiroshi/ai-cli-hub/releases/tag/v0.1.2
 [0.1.1]: https://github.com/ishizakahiroshi/ai-cli-hub/releases/tag/v0.1.1

@@ -1,4 +1,4 @@
-console.log('[ai-cli-hub] app.js build=2026-05-11-clear-approval-marker-tail');
+console.log('[ai-cli-hub] app.js build=2026-05-11-plain-yes-no-approval');
 
 // ---- トースト通知 ----
 let _toastTimer = null;
@@ -1396,6 +1396,27 @@ function trackApprovalHintFromChunk(id, bytes) {
     return;
   }
 
+  const plainYesNoOpts = extractPlainYesNoApproval(lines);
+  if (plainYesNoOpts) {
+    const consumed = approvalConsumedSig.get(id);
+    const sig = JSON.stringify(plainYesNoOpts.map(o => o.num + ':' + o.label));
+    if (consumed === sig) {
+      const prev = approvalConsumedSigDeleteTimer.get(id);
+      if (prev) clearTimeout(prev);
+      approvalConsumedSigDeleteTimer.set(id, setTimeout(() => {
+        approvalConsumedSig.delete(id);
+        approvalConsumedSigDeleteTimer.delete(id);
+      }, 5000));
+      return;
+    }
+    const prevTimer = approvalConsumedSigDeleteTimer.get(id);
+    if (prevTimer) { clearTimeout(prevTimer); approvalConsumedSigDeleteTimer.delete(id); }
+    approvalConsumedSig.delete(id);
+    approvalRawOptionsCache.set(id, plainYesNoOpts);
+    scheduleApprovalHintConfirm(id, plainYesNoOpts);
+    return;
+  }
+
   // フォールバック検出（既存）
   let extraction = extractApprovalOptions(lines);
   const options = extraction.options;
@@ -1514,19 +1535,37 @@ function extractHubMarkerApproval(lines) {
   return _parseHubBlock(inner, yesNoRe);
 }
 
+// AGENTS.md の確認フォーマットに従った素の Yes/No 質問を検出する。
+// [AI-CLI-HUB] マーカーが無い場合でも `(Y:1/N:0)` が末尾にあれば Hub ボタン化する。
+function extractPlainYesNoApproval(lines) {
+  const yesNoRe = /\(Y:1\/N:0\)\s*$/;
+  const searchStart = Math.max(0, lines.length - 20);
+  for (let i = lines.length - 1; i >= searchStart; i--) {
+    const line = String(lines[i] || '').trim();
+    if (!line) continue;
+    if (/\[AI-CLI-HUB\]|\[\/AI-CLI-HUB\]/.test(line)) return null;
+    if (yesNoRe.test(line)) return _yesNoApprovalOptions();
+  }
+  return null;
+}
+
 function _parseHubBlock(lines, yesNoRe) {
   const text = lines.join('\n');
   if (yesNoRe.test(text)) {
-    return [
-      { num: 1, label: 'Yes (1)', isCurrent: true, preserveOrder: true },
-      { num: 0, label: 'No (0)', isCurrent: false, preserveOrder: true },
-    ];
+    return _yesNoApprovalOptions();
   }
   const opts = lines
     .map(l => l.match(/^\s*(\d+)\.\s*(.+?)\s*$/))
     .filter(Boolean)
     .map(m => ({ num: parseInt(m[1], 10), label: m[2].trim(), isCurrent: false }));
   return opts.length > 0 ? opts : null;
+}
+
+function _yesNoApprovalOptions() {
+  return [
+    { num: 1, label: 'Yes (1)', isCurrent: true, preserveOrder: true },
+    { num: 0, label: 'No (0)', isCurrent: false, preserveOrder: true },
+  ];
 }
 
 function approvalContextLines(lines, cluster, margin = 5) {
@@ -1657,6 +1696,24 @@ function detectApproval(id) {
       if (prevTimer2) { clearTimeout(prevTimer2); approvalConsumedSigDeleteTimer.delete(id); }
       approvalConsumedSig.delete(id);
       showActionBar(bar, id, markerOpts, false);
+      if (!approvalVisibleCache.get(id)) {
+        cancelApprovalHintConfirm(id);
+        approvalVisibleCache.set(id, true);
+        enqueueApprovalAutoSwitch(id);
+        ws.send(JSON.stringify({ type: 'session_hint', session_id: id, approval_visible: true }));
+      }
+      return;
+    }
+
+    const plainYesNoOpts = extractPlainYesNoApproval(pendingLines);
+    if (plainYesNoOpts) {
+      const consumed = approvalConsumedSig.get(id);
+      const sig = JSON.stringify(plainYesNoOpts.map(o => o.num + ':' + o.label));
+      if (consumed === sig) return;
+      const prevTimer2 = approvalConsumedSigDeleteTimer.get(id);
+      if (prevTimer2) { clearTimeout(prevTimer2); approvalConsumedSigDeleteTimer.delete(id); }
+      approvalConsumedSig.delete(id);
+      showActionBar(bar, id, plainYesNoOpts, false);
       if (!approvalVisibleCache.get(id)) {
         cancelApprovalHintConfirm(id);
         approvalVisibleCache.set(id, true);
@@ -2974,6 +3031,7 @@ let _faviconCanvas = null;
 let _faviconCtx = null;
 let _faviconBaseImg = null;
 let _faviconBaseLoaded = false;
+let _faviconPendingCount = 0;
 
 let _titleBlinkInterval = null;
 let _titleBlinkState = false;
@@ -3004,18 +3062,14 @@ function initFaviconCanvas() {
   _faviconCanvas.height = 32;
   _faviconCtx = _faviconCanvas.getContext('2d');
   _faviconBaseImg = new Image();
-  _faviconBaseImg.onload = () => { _faviconBaseLoaded = true; };
+  _faviconBaseImg.onload = () => {
+    _faviconBaseLoaded = true;
+    drawFavicon(_faviconPendingCount);
+  };
   _faviconBaseImg.src = '/icon.svg';
 }
 
-function updateTabNotification(pendingCount) {
-  if (pendingCount > 0) {
-    startTitleBlink(pendingCount);
-  } else {
-    stopTitleBlink();
-    document.title = 'AI-CLI-HUB';
-  }
-
+function drawFavicon(pendingCount) {
   initFaviconCanvas();
   const ctx = _faviconCtx;
   const SIZE = 32;
@@ -3040,6 +3094,19 @@ function updateTabNotification(pendingCount) {
   if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
   link.type = 'image/png';
   link.href = _faviconCanvas.toDataURL('image/png');
+}
+
+function updateTabNotification(pendingCount) {
+  _faviconPendingCount = pendingCount;
+
+  if (pendingCount > 0) {
+    startTitleBlink(pendingCount);
+  } else {
+    stopTitleBlink();
+    document.title = 'AI-CLI-HUB';
+  }
+
+  drawFavicon(pendingCount);
 }
 
 function render() {
@@ -4146,10 +4213,6 @@ function openLightbox(src) {
 
   let animFrame = null;
   let wavePhase = 0;
-  let mediaStream = null;
-  let analyserNode = null;
-  let analyserData = null;
-  let analyserSource = null;
   let waveformRaf = null;
 
   const BAR_COUNT = 22;
@@ -4197,57 +4260,9 @@ function openLightbox(src) {
   }
 
   function animLoop() {
-    if (analyserNode && analyserData) {
-      analyserNode.getByteFrequencyData(analyserData);
-      drawBars(analyserData);
-    } else {
-      drawBars(null);
-    }
+    drawBars(null);
     wavePhase += 0.28;
     animFrame = requestAnimationFrame(animLoop);
-  }
-
-  function stopLiveWaveInput() {
-    try {
-      if (analyserSource) analyserSource.disconnect();
-    } catch (_) {}
-    analyserSource = null;
-    analyserNode = null;
-    analyserData = null;
-    if (mediaStream) {
-      for (const tr of mediaStream.getTracks()) {
-        try { tr.stop(); } catch (_) {}
-      }
-    }
-    mediaStream = null;
-  }
-
-  async function startLiveWaveInput() {
-    stopLiveWaveInput();
-    if (!navigator.mediaDevices?.getUserMedia) return false;
-    try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      const ac = _getAudioCtx();
-      if (ac.state === 'suspended') {
-        try { await ac.resume(); } catch (_) {}
-      }
-      analyserNode = ac.createAnalyser();
-      analyserNode.fftSize = 256;
-      analyserNode.smoothingTimeConstant = 0.82;
-      analyserSource = ac.createMediaStreamSource(mediaStream);
-      analyserSource.connect(analyserNode);
-      analyserData = new Uint8Array(analyserNode.frequencyBinCount);
-      return true;
-    } catch (_) {
-      stopLiveWaveInput();
-      return false;
-    }
   }
 
   function startWaveform() {
@@ -4260,17 +4275,14 @@ function openLightbox(src) {
   function stopWaveform() {
     cancelAnimationFrame(animFrame);
     animFrame = null;
-    stopLiveWaveInput();
   }
 
-  async function showVoiceBar() {
+  function showVoiceBar() {
     voiceBar.hidden = false;
     waveformRaf = requestAnimationFrame(() => {
       resizeCanvas();
       waveformRaf = null;
     });
-    await startLiveWaveInput();
-    if (!isRecording) return;
     startWaveform();
   }
 
@@ -4338,7 +4350,7 @@ function openLightbox(src) {
     voiceActive = true;
     btn.classList.add('recording');
     btn.dataset.tooltip = t('voice_recording');
-    void showVoiceBar();
+    showVoiceBar();
   });
 
   recognition.addEventListener('result', (e) => {
