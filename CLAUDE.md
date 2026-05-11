@@ -1,6 +1,6 @@
 # ai-cli-hub 開発ガイド
 
-> 最終更新: 2026-05-11(月) 03:07:52
+> 最終更新: 2026-05-11(月) 12:34:50
 
 > 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。
 
@@ -10,15 +10,15 @@
 
 > **Gemini CLI は wrap 対象外**（2026-05-06 決定 / 利用規約上の制約）。詳細は [docs/v0.1.x-ai-cli-hub-design.md](docs/v0.1.x-ai-cli-hub-design.md) 冒頭「スコープ更新ログ」参照。
 
-**現状**: v0.1.2 を最新パッチとして公開済み（v0.1.1 が初回正式リリース、v0.1.0 は試験扱い）。v0.1.2 でバージョン文字列を ldflags + `/api/info` 経由の single source of truth に再設計。設計書はソースコードを正本として更新済み。
+**現状**: v0.1.3 を最新パッチとして公開予定（v0.1.1 が初回正式リリース、v0.1.0 は試験扱い）。v0.1.2 でバージョン文字列を ldflags + `/api/info` 経由の single source of truth に再設計し、v0.1.3 で Codex 承認検出と音声入力まわりを改善。設計書はソースコードを正本として更新済み。
 
 **設計書（正本）**: [docs/v0.1.x-ai-cli-hub-design.md](docs/v0.1.x-ai-cli-hub-design.md)
 
 > 全AI共通ルール（言語・確認・質問フォーマット・ターン終端の出力ルール・スクリーンショット規約等）は `C:\Users\admin\.claude\CLAUDE.md` を正本とする。Claude Code は自動ロード、Codex 等他AIは `AGENTS.md` 経由で参照。
 
-## 現在の実装状態（v0.1.2）
+## 現在の実装状態（v0.1.3）
 
-v0.1.2 までに以下がすべて実装済み：
+v0.1.3 までに以下がすべて実装済み：
 
 - `ai-cli-hub serve` で Hub が起動する
 - `ai-cli-hub claude` / `codex` が Hub 未起動時に自動起動し接続する
