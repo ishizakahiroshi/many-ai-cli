@@ -1,21 +1,30 @@
 # Changelog
 
-All notable changes to **ai-cli-hub** are documented in this file.
+All notable changes to **any-ai-cli** are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Release artifacts are published at
-<https://github.com/ishizakahiroshi/ai-cli-hub/releases>.
+<https://github.com/ishizakahiroshi/any-ai-cli/releases>.
 
 ## [Unreleased]
+
+### Changed
+- **Project renamed from `ai-cli-hub` to `any-ai-cli`** to better reflect the
+  goal of supporting arbitrary AI CLI tools (beyond Claude Code and Codex CLI).
+  Affected names: binary (`any-ai-cli`), Go module path (`any-ai-cli`),
+  environment variable (`ANY_AI_CLI_AUTO`), config directory
+  (`~/.any-ai-cli/`), action-bar marker (`[ANY-AI-CLI]`). Existing v0.1.x
+  users will need to migrate `~/.ai-cli-hub/` to `~/.any-ai-cli/` and update
+  any shell init blocks (`eval "$(any-ai-cli shell-init)"`).
 
 ## [0.1.3] - 2026-05-11
 
 ### Fixed
 - Codex approval prompts that follow the repository-standard plain
   `(Y:1/N:0)` format are now detected even when they are not wrapped in
-  `[AI-CLI-HUB]` markers, so the Hub action bar appears for those
+  `[ANY-AI-CLI]` markers, so the Hub action bar appears for those
   confirmations.
 - The favicon approval badge redraws after the base icon finishes loading,
   preventing missed pending-count indicators during initial page load.
@@ -31,7 +40,7 @@ Release artifacts are published at
 ## [0.1.2] - 2026-05-11
 
 ### Added
-- **Single source of truth for the version string.** `cmd/ai-cli-hub/main.go`
+- **Single source of truth for the version string.** `cmd/any-ai-cli/main.go`
   declares `var version = "dev"`, populated at release-build time by GoReleaser
   via `-X main.version={{.Version}}`. The Hub server returns it from
   `/api/info`, and the Web UI fetches it on load to render in the settings
@@ -43,7 +52,7 @@ Release artifacts are published at
 
 ### Fixed
 - Hub marker filter emits `\x1b[J` (erase-display-below) after a
-  `[/AI-CLI-HUB]` end marker, so prompt remnants below the action-bar marker
+  `[/ANY-AI-CLI]` end marker, so prompt remnants below the action-bar marker
   are cleared instead of leaving stale glyphs behind.
 - `TestBaseName` is OS-neutral via `filepath.Join` instead of a hard-coded
   Windows path. Linux CI runners no longer fail because `\` is treated as a
@@ -60,7 +69,7 @@ Release artifacts are published at
 - `.gitignore` ignores the entire `.claude/` directory (was only filtering
   `settings.json`), since `worktrees/` and `scheduled_tasks.lock` are also
   per-developer state.
-- `winres/winres.json` and the regenerated `cmd/ai-cli-hub/rsrc_windows_*.syso`
+- `winres/winres.json` and the regenerated `cmd/any-ai-cli/rsrc_windows_*.syso`
   reflect 0.1.2, so the Windows .exe Properties dialog matches the runtime
   version.
 
@@ -71,7 +80,7 @@ was never published; its commit history was rewritten away during v0.1.1
 preparation, so v0.1.1 is the earliest version visible on GitHub.
 
 ### Added
-- Hub server (`ai-cli-hub serve`) with xterm.js Web UI:
+- Hub server (`any-ai-cli serve`) with xterm.js Web UI:
   - Live PTY output streaming.
   - Action-bar approval detection from xterm.js buffer scans.
   - Approval response routed back to PTY; Hub UI dismisses the action-bar
@@ -80,7 +89,7 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
   - Slash-command capture for Claude Code (Ctrl+O folded sections).
   - Session spawn from `/api/spawn`.
   - Approval pattern editor and approval-rules opt-in.
-- Wrapper subcommands `ai-cli-hub claude` / `ai-cli-hub codex` that
+- Wrapper subcommands `any-ai-cli claude` / `any-ai-cli codex` that
   auto-launch the Hub when not already running and connect to it.
 - GoReleaser distribution for Windows / Linux / macOS (amd64) and
   macOS (arm64). Single Go binary per platform.
@@ -91,9 +100,9 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Real-environment verification: Windows. Linux/macOS builds are produced
   but not deeply validated.
 - Gemini CLI is intentionally out of scope for wrapping; see
-  `docs/v0.1.x-ai-cli-hub-design.md` for the rationale.
+  `docs/v0.1.x-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/ai-cli-hub/compare/v0.1.3...HEAD
-[0.1.3]: https://github.com/ishizakahiroshi/ai-cli-hub/releases/tag/v0.1.3
-[0.1.2]: https://github.com/ishizakahiroshi/ai-cli-hub/releases/tag/v0.1.2
-[0.1.1]: https://github.com/ishizakahiroshi/ai-cli-hub/releases/tag/v0.1.1
+[Unreleased]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/ishizakahiroshi/any-ai-cli/releases/tag/v0.1.3
+[0.1.2]: https://github.com/ishizakahiroshi/any-ai-cli/releases/tag/v0.1.2
+[0.1.1]: https://github.com/ishizakahiroshi/any-ai-cli/releases/tag/v0.1.1

@@ -1,4 +1,4 @@
-# Gemini Entry Point (ai-cli-hub)
+# Gemini Entry Point (any-ai-cli)
 
 > 最終更新: 2026-05-07(木) 19:24:03
 
@@ -12,7 +12,7 @@
   - `./CLAUDE/operations.md` — Git, commit messages, output rules
   - `./CLAUDE/deployment.md` — cross-compile build & distribution
   - `./CLAUDE/windows_setup.md` — Windows dev environment specifics
-- Design (source of truth): `./docs/ai-cli-hub-design-v0.1.0.md`
+- Design (source of truth): `./docs/any-ai-cli-design-v0.1.0.md`
 - Local/private additions (if present): `./CLAUDE.local.md`
 
 ガイドが衝突したときは `CLAUDE.md` を優先。
@@ -21,4 +21,4 @@
 
 - **本リポジトリでは Gemini CLI を wrap 対象外とした**（2026-05-06 決定 / ToS グレーゾーンのため）。
 - 詳細: [docs/provider_tos_review.md](docs/provider_tos_review.md)
-- 本リポジトリ自体は `ai-cli-hub`（Claude Code / Codex 向け承認ハブ）の開発リポジトリであり、開発補助に Gemini CLI を使う場合の手引きとして本ファイルを残置している。
+- 本リポジトリ自体は `any-ai-cli`（Claude Code / Codex 向け承認ハブ）の開発リポジトリであり、開発補助に Gemini CLI を使う場合の手引きとして本ファイルを残置している。

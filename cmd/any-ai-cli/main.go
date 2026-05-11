@@ -13,12 +13,12 @@ import (
 	"strings"
 	"syscall"
 
-	"ai-cli-hub/internal/config"
-	"ai-cli-hub/internal/hub"
-	hublog "ai-cli-hub/internal/log"
-	"ai-cli-hub/internal/sessionlog"
-	"ai-cli-hub/internal/shell"
-	"ai-cli-hub/internal/wrapper"
+	"any-ai-cli/internal/config"
+	"any-ai-cli/internal/hub"
+	hublog "any-ai-cli/internal/log"
+	"any-ai-cli/internal/sessionlog"
+	"any-ai-cli/internal/shell"
+	"any-ai-cli/internal/wrapper"
 )
 
 // version はリリースビルド時に goreleaser の ldflags
@@ -81,7 +81,7 @@ func repoRoot(dir string) string {
 		data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
 		if err == nil {
 			for _, line := range strings.Split(string(data), "\n") {
-				if strings.TrimSpace(line) == "module ai-cli-hub" {
+				if strings.TrimSpace(line) == "module any-ai-cli" {
 					return dir
 				}
 			}
@@ -191,6 +191,6 @@ func run(args []string) error {
 }
 
 func usage() error {
-	fmt.Println("ai-cli-hub <serve|wrap|claude|codex|gemini|shell-init|stop|status|log-clean>")
+	fmt.Println("any-ai-cli <serve|wrap|claude|codex|gemini|shell-init|stop|status|log-clean>")
 	return nil
 }

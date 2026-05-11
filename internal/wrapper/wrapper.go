@@ -15,9 +15,9 @@ import (
 	"sync"
 	"time"
 
-	"ai-cli-hub/internal/config"
-	"ai-cli-hub/internal/proto"
-	"ai-cli-hub/internal/sessionlog"
+	"any-ai-cli/internal/config"
+	"any-ai-cli/internal/proto"
+	"any-ai-cli/internal/sessionlog"
 	"golang.org/x/net/websocket"
 	"golang.org/x/term"
 )
@@ -83,7 +83,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		return err
 	}
 	sessionID := reg.SessionID
-	setConsoleTitle(fmt.Sprintf("ai-cli-hub [#%d:%s]", sessionID, provider))
+	setConsoleTitle(fmt.Sprintf("any-ai-cli [#%d:%s]", sessionID, provider))
 	setConsoleIcon()
 	initCols, initRows := reg.Cols, reg.Rows
 	if initCols <= 0 || initRows <= 0 {

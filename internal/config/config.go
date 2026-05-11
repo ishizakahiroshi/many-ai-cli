@@ -33,8 +33,8 @@ type SlashCmdSources struct {
 
 const (
 	LegacyClaudeSlashCmdSource  = "https://code.claude.com/docs/en/commands.md"
-	DefaultClaudeSlashCmdSource = "https://raw.githubusercontent.com/ishizakahiroshi/ai-cli-hub/main/resources/slash-commands/claude.md"
-	DefaultCodexSlashCmdSource  = "https://raw.githubusercontent.com/ishizakahiroshi/ai-cli-hub/main/resources/slash-commands/codex.md"
+	DefaultClaudeSlashCmdSource = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/claude.md"
+	DefaultCodexSlashCmdSource  = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/codex.md"
 )
 
 func DefaultSlashCmdSources() SlashCmdSources {
@@ -81,7 +81,7 @@ func LoadOrCreate() (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("home dir: %w", err)
 	}
-	dir := filepath.Join(home, ".ai-cli-hub")
+	dir := filepath.Join(home, ".any-ai-cli")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func defaultConfig(home string) *Config {
 	cfg.Hub.Port = 47777
 	cfg.Hub.OpenBrowser = true
 	cfg.Hub.AutoShutdown = true
-	cfg.Hub.LogDir = filepath.Join(home, ".ai-cli-hub", "logs")
+	cfg.Hub.LogDir = filepath.Join(home, ".any-ai-cli", "logs")
 	cfg.Hub.IdleTimeoutMin = 60
 	cfg.Hub.WrapperReconnectGraceSec = 3600
 	cfg.Log.Enabled = true
@@ -130,7 +130,7 @@ func Save(cfg *Config) error {
 	if err != nil {
 		return fmt.Errorf("home dir: %w", err)
 	}
-	path := filepath.Join(home, ".ai-cli-hub", "config.yaml")
+	path := filepath.Join(home, ".any-ai-cli", "config.yaml")
 	out, err := yaml.Marshal(cfg)
 	if err != nil {
 		return err

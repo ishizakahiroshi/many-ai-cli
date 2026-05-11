@@ -19,12 +19,12 @@ import (
 	"sync"
 	"time"
 
-	"ai-cli-hub/internal/attach"
-	"ai-cli-hub/internal/config"
-	"ai-cli-hub/internal/proto"
-	"ai-cli-hub/internal/sessionlog"
-	"ai-cli-hub/internal/wrapper"
-	"ai-cli-hub/web"
+	"any-ai-cli/internal/attach"
+	"any-ai-cli/internal/config"
+	"any-ai-cli/internal/proto"
+	"any-ai-cli/internal/sessionlog"
+	"any-ai-cli/internal/wrapper"
+	"any-ai-cli/web"
 	"golang.org/x/net/websocket"
 )
 
@@ -187,7 +187,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		}
 		staticHandler = http.FileServer(http.FS(subFS))
 	}
-	// 承認パターン JSON はユーザー設定ディレクトリ ~/.ai-cli-hub/approval-patterns/
+	// 承認パターン JSON はユーザー設定ディレクトリ ~/.any-ai-cli/approval-patterns/
 	// から配信する（ユーザーが編集可能）。初回起動時にデフォルトを書き出す。
 	if err := SyncApprovalPatterns(); err != nil {
 		logger.Warn("sync approval patterns failed", "err", err)
@@ -232,7 +232,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.stopFunc = cancel
 	s.stopMu.Unlock()
 
-	pidPath := filepath.Join(os.TempDir(), "ai-cli-hub.pid")
+	pidPath := filepath.Join(os.TempDir(), "any-ai-cli.pid")
 	killStalePid(pidPath)
 
 	ln, err := net.Listen("tcp", s.httpSrv.Addr)
@@ -240,10 +240,10 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 	_ = os.WriteFile(pidPath, []byte(fmt.Sprintf("%d", os.Getpid())), 0o644)
-	setConsoleTitle("ai-cli-hub [hub]")
+	setConsoleTitle("any-ai-cli [hub]")
 	setConsoleIcon()
-	s.logger.Info("AI-CLI-HUB started", "url", fmt.Sprintf("http://%s/?token=%s", s.httpSrv.Addr, s.cfg.Token))
-	fmt.Printf("AI-CLI-HUB started: http://%s/?token=%s\n", s.httpSrv.Addr, s.cfg.Token)
+	s.logger.Info("ANY-AI-CLI started", "url", fmt.Sprintf("http://%s/?token=%s", s.httpSrv.Addr, s.cfg.Token))
+	fmt.Printf("ANY-AI-CLI started: http://%s/?token=%s\n", s.httpSrv.Addr, s.cfg.Token)
 	if s.cfg.Approval.Enabled {
 		s.injectApprovalRules()
 	}
@@ -276,7 +276,7 @@ func (s *Server) cleanAttachments() {
 	if err != nil {
 		return
 	}
-	attachDir := filepath.Join(home, ".ai-cli-hub", "attachments")
+	attachDir := filepath.Join(home, ".any-ai-cli", "attachments")
 	if err := attach.CleanOld(attachDir, 7); err != nil {
 		s.logger.Warn("attach cleanup failed", "err", err)
 	}
@@ -749,13 +749,13 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 			}
 			s.mu.Unlock()
 
-			// attachments ディレクトリは ~/.ai-cli-hub/attachments
+			// attachments ディレクトリは ~/.any-ai-cli/attachments
 			homeDir, err := os.UserHomeDir()
 			if err != nil {
 				s.logger.Warn("attach_request: os.UserHomeDir failed", "err", err)
 				continue
 			}
-			attachDir := filepath.Join(homeDir, ".ai-cli-hub", "attachments")
+			attachDir := filepath.Join(homeDir, ".any-ai-cli", "attachments")
 
 			savedPath, inject, err := attach.Save(attachDir, m.SessionID, provider, imgData, m.Filename)
 			if err != nil {
@@ -1205,9 +1205,9 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	}
 	cmd := exec.Command(exe, wrapArgs...)
 	cmd.Dir = cwd
-	cmd.Env = append(os.Environ(), "AI_CLI_HUB=1")
+	cmd.Env = append(os.Environ(), "ANY_AI_CLI=1")
 	if s.parentShell != "" {
-		cmd.Env = append(cmd.Env, "AI_CLI_HUB_PARENT_SHELL="+s.parentShell)
+		cmd.Env = append(cmd.Env, "ANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}
 	setCmdSysProcAttr(cmd)
 	if err := cmd.Start(); err != nil {
@@ -1303,7 +1303,7 @@ func (s *Server) handleAttach(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "home dir error", http.StatusInternalServerError)
 		return
 	}
-	attachDir := filepath.Join(homeDir, ".ai-cli-hub", "attachments")
+	attachDir := filepath.Join(homeDir, ".any-ai-cli", "attachments")
 	savedPath, inject, err := attach.Save(attachDir, sessionID, provider, data, header.Filename)
 	if err != nil {
 		http.Error(w, "save error: "+err.Error(), http.StatusInternalServerError)
@@ -1420,7 +1420,7 @@ func (s *Server) handleOpenDir(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "home dir unavailable", http.StatusInternalServerError)
 			return
 		}
-		target = filepath.Join(home, ".ai-cli-hub", "attachments")
+		target = filepath.Join(home, ".any-ai-cli", "attachments")
 	default:
 		http.Error(w, "unknown kind", http.StatusBadRequest)
 		return
@@ -1454,7 +1454,7 @@ func (s *Server) handleLogConfig(w http.ResponseWriter, r *http.Request) {
 		logDir := s.cfg.Hub.LogDir
 		s.mu.Unlock()
 		home, _ := os.UserHomeDir()
-		attachDir := filepath.Join(home, ".ai-cli-hub", "attachments")
+		attachDir := filepath.Join(home, ".any-ai-cli", "attachments")
 		type logConfigResp struct {
 			config.LogConfig
 			LogDir    string `json:"log_dir"`
@@ -1638,7 +1638,7 @@ func (s *Server) handleApprovalPatternsItem(w http.ResponseWriter, r *http.Reque
 }
 
 func Stop(cfg *config.Config) error {
-	pidPath := filepath.Join(os.TempDir(), "ai-cli-hub.pid")
+	pidPath := filepath.Join(os.TempDir(), "any-ai-cli.pid")
 	b, err := os.ReadFile(pidPath)
 	if err != nil {
 		return fmt.Errorf("hub pid not found")

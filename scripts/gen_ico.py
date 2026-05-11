@@ -103,7 +103,7 @@ def render(size: int) -> Image.Image:
 if __name__ == "__main__":
     import os
 
-    out = os.path.join(os.path.dirname(__file__), "..", "assets", "ai-cli-hub.ico")
+    out = os.path.join(os.path.dirname(__file__), "..", "assets", "any-ai-cli.ico")
     src = render(512)
     src.save(
         out,

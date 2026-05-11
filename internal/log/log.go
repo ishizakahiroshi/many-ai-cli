@@ -8,7 +8,7 @@ import (
 
 	"gopkg.in/natefinch/lumberjack.v2"
 
-	"ai-cli-hub/internal/config"
+	"any-ai-cli/internal/config"
 )
 
 // NewFileLogger はファイル出力付き slog.Logger を返す。

@@ -1,11 +1,11 @@
 version: 2
 
-project_name: ai-cli-hub
+project_name: any-ai-cli
 
 builds:
-  - id: ai-cli-hub
-    main: ./cmd/ai-cli-hub
-    binary: ai-cli-hub
+  - id: any-ai-cli
+    main: ./cmd/any-ai-cli
+    binary: any-ai-cli
     goos:
       - windows
       - linux

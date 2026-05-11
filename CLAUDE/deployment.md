@@ -1,10 +1,10 @@
-# ai-cli-hub ビルド・配布・デプロイ
+# any-ai-cli ビルド・配布・デプロイ
 
 > 最終更新: 2026-05-07(木) 19:24:03
 
-`ai-cli-hub` は **Go 単一バイナリ + go:embed フロント** の構成。サーバーへのデプロイは無し（ユーザー PC にバイナリを置くだけ）。
+`any-ai-cli` は **Go 単一バイナリ + go:embed フロント** の構成。サーバーへのデプロイは無し（ユーザー PC にバイナリを置くだけ）。
 
-設計書: [../docs/ai-cli-hub-design-v0.1.0.md §4・§17](../docs/ai-cli-hub-design-v0.1.0.md)
+設計書: [../docs/any-ai-cli-design-v0.1.0.md §4・§17](../docs/any-ai-cli-design-v0.1.0.md)
 
 ## ビルド前提
 
@@ -27,16 +27,16 @@ cd ..
 
 ```bash
 # Windows (x86_64)
-GOOS=windows GOARCH=amd64 go build -o dist/win/ai-cli-hub.exe ./cmd/ai-cli-hub
+GOOS=windows GOARCH=amd64 go build -o dist/win/any-ai-cli.exe ./cmd/any-ai-cli
 
 # macOS (Intel)
-GOOS=darwin GOARCH=amd64 go build -o dist/mac/ai-cli-hub ./cmd/ai-cli-hub
+GOOS=darwin GOARCH=amd64 go build -o dist/mac/any-ai-cli ./cmd/any-ai-cli
 
 # macOS (Apple Silicon)
-GOOS=darwin GOARCH=arm64 go build -o dist/mac-arm/ai-cli-hub ./cmd/ai-cli-hub
+GOOS=darwin GOARCH=arm64 go build -o dist/mac-arm/any-ai-cli ./cmd/any-ai-cli
 
 # Linux (x86_64)
-GOOS=linux GOARCH=amd64 go build -o dist/linux/ai-cli-hub ./cmd/ai-cli-hub
+GOOS=linux GOARCH=amd64 go build -o dist/linux/any-ai-cli ./cmd/any-ai-cli
 ```
 
 ### CGO の扱い
@@ -51,12 +51,12 @@ GOOS=linux GOARCH=amd64 go build -o dist/linux/ai-cli-hub ./cmd/ai-cli-hub
 
 ```bash
 # Git Bash
-GOOS=windows GOARCH=amd64 go build -o ai-cli-hub.exe ./cmd/ai-cli-hub
+GOOS=windows GOARCH=amd64 go build -o any-ai-cli.exe ./cmd/any-ai-cli
 ```
 
 ```powershell
 # PowerShell
-$env:GOOS="windows"; $env:GOARCH="amd64"; go build -o ai-cli-hub.exe ./cmd/ai-cli-hub
+$env:GOOS="windows"; $env:GOARCH="amd64"; go build -o any-ai-cli.exe ./cmd/any-ai-cli
 ```
 
 詳細な Windows 開発環境は `windows_setup.md` を参照。
@@ -66,15 +66,15 @@ $env:GOOS="windows"; $env:GOARCH="amd64"; go build -o ai-cli-hub.exe ./cmd/ai-cl
 ### v0.1〜v0.3 の手動配布（暫定）
 
 手動でビルド成果物を共有：
-- Windows: `ai-cli-hub.exe` を `%LOCALAPPDATA%\Programs\ai-cli-hub\` に配置 → PATH 追加
-- macOS: `ai-cli-hub` を `/usr/local/bin/` または `~/bin/` に配置
+- Windows: `any-ai-cli.exe` を `%LOCALAPPDATA%\Programs\any-ai-cli\` に配置 → PATH 追加
+- macOS: `any-ai-cli` を `/usr/local/bin/` または `~/bin/` に配置
 - Linux: 同上
 
 ### v0.4+ の CI/CD 配布（予定）
 
 - GitHub Actions で OS 別バイナリビルド + リリースタグ自動生成
-- `goreleaser` または手書きワークフローで `dist/{win,mac,mac-arm,linux}/ai-cli-hub` をリリース成果物として添付
-- 自動更新機能（`ai-cli-hub update`）は MVP では作らない
+- `goreleaser` または手書きワークフローで `dist/{win,mac,mac-arm,linux}/any-ai-cli` をリリース成果物として添付
+- 自動更新機能（`any-ai-cli update`）は MVP では作らない
 
 ## go:embed の運用
 
@@ -86,9 +86,9 @@ $env:GOOS="windows"; $env:GOARCH="amd64"; go build -o ai-cli-hub.exe ./cmd/ai-cl
 
 | 種別 | 全 OS 共通の表記 | 実体 |
 |---|---|---|
-| 設定 | `~/.ai-cli-hub/config.yaml` | Win: `%USERPROFILE%\.ai-cli-hub\config.yaml` |
-| ログ（JSONL） | `~/.ai-cli-hub/logs/YYYYMMDD.jsonl` | 同上 |
-| PTY ログ | `~/.ai-cli-hub/logs/sessions/<id>.log` | 同上 |
+| 設定 | `~/.any-ai-cli/config.yaml` | Win: `%USERPROFILE%\.any-ai-cli\config.yaml` |
+| ログ（JSONL） | `~/.any-ai-cli/logs/YYYYMMDD.jsonl` | 同上 |
+| PTY ログ | `~/.any-ai-cli/logs/sessions/<id>.log` | 同上 |
 
 `os.UserHomeDir()` を使い、`/` ハードコードを避けること。
 
@@ -98,8 +98,8 @@ $env:GOOS="windows"; $env:GOARCH="amd64"; go build -o ai-cli-hub.exe ./cmd/ai-cl
 1. cd web && pnpm run build    # web/dist/ を生成
 2. cd .. && go build ./...     # 全パッケージのビルド確認
 3. go test ./...               # 単体テスト
-4. ./ai-cli-hub serve          # Hub 起動
-5. （別ターミナルで）./ai-cli-hub wrap claude    # ラッパー起動
+4. ./any-ai-cli serve          # Hub 起動
+5. （別ターミナルで）./any-ai-cli wrap claude    # ラッパー起動
 6. ブラウザで http://127.0.0.1:47777/?token=... を開いて動作確認
 ```
 
@@ -108,22 +108,22 @@ UI 確認は実機ブラウザで実施。Hub UI のレイアウトは設計書 
 ## サブコマンド一覧（実装時参照）
 
 ```
-ai-cli-hub serve [--open] [--port N]
+any-ai-cli serve [--open] [--port N]
     Hub単体を起動
 
-ai-cli-hub wrap <provider> [args...]
+any-ai-cli wrap <provider> [args...]
     ラッパーとしてCLIを起動
 
-ai-cli-hub shell-init
+any-ai-cli shell-init
     シェル統合用のスクリプトを標準出力へ
-    eval "$(ai-cli-hub shell-init)" で取り込む
+    eval "$(any-ai-cli shell-init)" で取り込む
 
-ai-cli-hub stop
+any-ai-cli stop
     動作中のHubを停止
 
-ai-cli-hub status
+any-ai-cli status
     Hubの状態確認・接続中セッション数
 
-ai-cli-hub --version / -v
-ai-cli-hub --help / -h
+any-ai-cli --version / -v
+any-ai-cli --help / -h
 ```

@@ -14,10 +14,10 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ProjectRoot = Split-Path $PSScriptRoot -Parent
-$ExePath     = Join-Path $ProjectRoot 'ai-cli-hub.exe'
+$ExePath     = Join-Path $ProjectRoot 'any-ai-cli.exe'
 
 if (-not (Test-Path $ExePath)) {
-    Write-Error "ai-cli-hub.exe が見つかりません: $ExePath`n先に 'go build ./cmd/ai-cli-hub' を実行してください"
+    Write-Error "any-ai-cli.exe が見つかりません: $ExePath`n先に 'go build ./cmd/any-ai-cli' を実行してください"
 }
 
 # ---- WebSocket ヘルパー ----------------------------------------
@@ -71,7 +71,7 @@ if ($alreadyRunning) {
 }
 
 # config.yaml からトークンを取得
-$configPath = Join-Path $env:USERPROFILE '.ai-cli-hub\config.yaml'
+$configPath = Join-Path $env:USERPROFILE '.any-ai-cli\config.yaml'
 $token = (Get-Content $configPath | Where-Object { $_ -match '^token:' }) -replace '^token:\s*', ''
 if (-not $token) { throw "トークンを config.yaml から取得できませんでした: $configPath" }
 Write-Host "[INFO] token=${token}"
