@@ -23,7 +23,9 @@ type Metadata struct {
 var (
 	invalidFileChars = regexp.MustCompile(`[<>:"/\\|?*]`)
 	spaceRun         = regexp.MustCompile(`\s+`)
+	oscRE            = regexp.MustCompile(`\x1b\][^\x07]*(?:\x07|\x1b\\)`)
 	ansiRE           = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
+	ansiSimpleRE     = regexp.MustCompile(`\x1b[@-_]`)
 )
 
 func BaseName(meta Metadata) string {
@@ -67,7 +69,9 @@ func SanitizeFilePart(s string) string {
 }
 
 func StripANSI(s string) string {
-	return ansiRE.ReplaceAllString(s, "")
+	s = oscRE.ReplaceAllString(s, "")
+	s = ansiRE.ReplaceAllString(s, "")
+	return ansiSimpleRE.ReplaceAllString(s, "")
 }
 
 func EncodeBase64(data []byte) string {

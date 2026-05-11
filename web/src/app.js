@@ -2,6 +2,22 @@ console.log('[ai-cli-hub] app.js build=2026-05-11-plain-yes-no-approval');
 
 // ---- トースト通知 ----
 let _toastTimer = null;
+function getToastAnchorRect(anchor) {
+  if (!anchor) return null;
+  if (typeof anchor.getBoundingClientRect === 'function') {
+    return anchor.getBoundingClientRect();
+  }
+  if (typeof anchor.clientX === 'number' && typeof anchor.clientY === 'number') {
+    return {
+      left: anchor.clientX,
+      right: anchor.clientX,
+      top: anchor.clientY,
+      height: 0,
+    };
+  }
+  return null;
+}
+
 function showToast(msg, anchor) {
   let el = document.getElementById('toast');
   if (!el) {
@@ -10,14 +26,15 @@ function showToast(msg, anchor) {
     document.body.appendChild(el);
   }
   el.textContent = msg;
-  if (anchor) {
-    const r = anchor.getBoundingClientRect();
-    el.style.top = (r.top + r.height / 2) + 'px';
+  const r = getToastAnchorRect(anchor);
+  if (r) {
+    const margin = 8;
+    const y = Math.min(Math.max(r.top + r.height / 2, margin), window.innerHeight - margin);
+    el.style.top = y + 'px';
     el.style.bottom = 'auto';
     el.classList.add('toast--anchored');
     // 右側に置けるか確認し、はみ出す場合は anchor の左側に表示
     el.style.left = (r.right + 6) + 'px';
-    const margin = 8;
     const w = el.offsetWidth;
     if (r.right + 6 + w > window.innerWidth - margin) {
       el.style.left = Math.max(margin, r.left - 6 - w) + 'px';
@@ -170,6 +187,11 @@ const STORAGE_QUICK_CMD_1_KEY          = 'ai_cli_hub_quick_cmd_1';
 const STORAGE_QUICK_CMD_2_KEY          = 'ai_cli_hub_quick_cmd_2';
 const STORAGE_USAGE_LINK_CLAUDE_KEY    = 'ai_cli_hub_usage_link_claude';
 const STORAGE_USAGE_LINK_CODEX_KEY     = 'ai_cli_hub_usage_link_codex';
+const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds';
+const DEFAULT_VOICE_GRACE_SEC          = 2;
+const STORAGE_WAKE_WORD_ENABLED_KEY    = 'ai_cli_hub_wake_word_enabled';
+const STORAGE_WAKE_WORD_PHRASE_KEY     = 'ai_cli_hub_wake_word_phrase';
+const DEFAULT_WAKE_WORD_PHRASE         = '音声入力実施';
 const CWD_HISTORY_MAX               = 10;
 
 const DEFAULT_USAGE_LINKS = {
@@ -560,6 +582,19 @@ function applyLang(lang) {
   });
 })();
 
+// ---- 音声入力 終了検知 待ち時間 設定 ----
+(function () {
+  const sel = document.getElementById('voice-grace-select');
+  if (!sel) return;
+  const saved = localStorage.getItem(STORAGE_VOICE_GRACE_KEY);
+  const v = saved == null ? DEFAULT_VOICE_GRACE_SEC : parseInt(saved, 10);
+  const clamped = Number.isFinite(v) ? Math.max(0, Math.min(5, v)) : DEFAULT_VOICE_GRACE_SEC;
+  sel.value = String(clamped);
+  sel.addEventListener('change', () => {
+    try { localStorage.setItem(STORAGE_VOICE_GRACE_KEY, sel.value); } catch (_) {}
+  });
+})();
+
 // ---- トリガーフレーズ設定 ----
 (function () {
   const enabledEl    = document.getElementById('trigger-enabled');
@@ -578,6 +613,26 @@ function applyLang(lang) {
   enabledEl.checked = localStorage.getItem(STORAGE_TRIGGER_ENABLED_KEY) === '1';
   phraseRow.hidden = !enabledEl.checked;
   phraseInputEl.value = localStorage.getItem(STORAGE_TRIGGER_PHRASE_KEY) || '';
+})();
+
+// ---- ウェイクワード設定 ----
+(function () {
+  const enabledEl = document.getElementById('wakeword-enabled');
+  const phraseRow = document.getElementById('wakeword-phrase-row');
+  const phraseEl  = document.getElementById('wakeword-phrase-input');
+  if (!enabledEl) return;
+
+  enabledEl.addEventListener('change', () => {
+    phraseRow.hidden = !enabledEl.checked;
+    try { localStorage.setItem(STORAGE_WAKE_WORD_ENABLED_KEY, enabledEl.checked ? '1' : '0'); } catch (_) {}
+  });
+  phraseEl.addEventListener('input', () => {
+    try { localStorage.setItem(STORAGE_WAKE_WORD_PHRASE_KEY, phraseEl.value); } catch (_) {}
+  });
+
+  enabledEl.checked = localStorage.getItem(STORAGE_WAKE_WORD_ENABLED_KEY) === '1';
+  phraseRow.hidden = !enabledEl.checked;
+  phraseEl.value = localStorage.getItem(STORAGE_WAKE_WORD_PHRASE_KEY) ?? DEFAULT_WAKE_WORD_PHRASE;
 })();
 
 // ---- 通知音設定 ----
@@ -812,6 +867,16 @@ const multiQuestionVisibleCache = new Map(); // sessionId → bool（Claude Code
 const approvalRawOptionsCache = new Map(); // sessionId → [{num, label, isCurrent}]
 const approvalConsumedSig = new Map(); // sessionId → 消費済み承認の署名（doSend でテキスト送信した場合の再表示防止）
 const approvalConsumedSigDeleteTimer = new Map(); // sessionId → timer（sig を debounce 型で削除するためのタイマー）
+const APPROVAL_PENDING_TEXT_TAIL_LIMIT = 12000;
+
+// 承認選択肢の sig を計算。Ink の再描画やスクロールバック残骸による
+// label の微妙な差異（前後空白、空白の重複、truncate 位置）を吸収するため normalize する。
+function approvalSig(options) {
+  return JSON.stringify((options || []).map(o => {
+    const lbl = String(o.label || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+    return `${o.num}:${lbl}`;
+  }));
+}
 const approvalHintConfirmTimers = new Map(); // sessionId → timer（生バイト検出を短時間 debounce してチカチカを防ぐ）
 const toolOutputs = new Map(); // sessionId → [{uid, lines, ts}]
 const sessionInputState = new Map(); // sessionId → { inputValue, pastedTextsData, pendingAttachFiles, thumbsFragment }
@@ -1152,7 +1217,7 @@ function whenLayoutReady(id, container) {
     container.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       const sel = t.term.getSelection();
-      if (sel) copyCleanText(sel, container).catch(() => {});
+      if (sel) copyCleanText(sel, e).catch(() => {});
     });
   } else {
     requestAnimationFrame(() => whenLayoutReady(id, container));
@@ -1370,13 +1435,13 @@ function cancelApprovalHintConfirm(id) {
 
 function scheduleApprovalHintConfirm(id, options) {
   if (!options || options.length === 0) return;
-  const sig = JSON.stringify(options.map(o => o.num + ':' + o.label));
+  const sig = approvalSig(options);
   cancelApprovalHintConfirm(id);
   approvalHintConfirmTimers.set(id, setTimeout(() => {
     approvalHintConfirmTimers.delete(id);
     const cached = approvalRawOptionsCache.get(id);
     if (!cached || cached.length === 0) return;
-    const cachedSig = JSON.stringify(cached.map(o => o.num + ':' + o.label));
+    const cachedSig = approvalSig(cached);
     if (cachedSig !== sig) return;
     if (approvalVisibleCache.get(id)) return;
     approvalVisibleCache.set(id, true);
@@ -1409,7 +1474,7 @@ function trackApprovalHintFromChunk(id, bytes) {
   if (!t) return;
   const provider = sessions.get(id)?.provider;
   const text = new TextDecoder('utf-8').decode(bytes);
-  t.pendingTextTail = (t.pendingTextTail + text).slice(-3000);
+  t.pendingTextTail = (t.pendingTextTail + text).slice(-APPROVAL_PENDING_TEXT_TAIL_LIMIT);
 
   // sendChoice 直後の誤再表示を抑制
   const suppressUntil = approvalSuppressUntil.get(id);
@@ -1450,7 +1515,7 @@ function trackApprovalHintFromChunk(id, bytes) {
   if (markerOpts) {
     // doSend でテキスト送信済みの承認が Ink 再描画で再検出された場合はスキップ
     const consumed = approvalConsumedSig.get(id);
-    const sig = JSON.stringify(markerOpts.map(o => o.num + ':' + o.label));
+    const sig = approvalSig(markerOpts);
     if (consumed === sig) {
       // Ink 再描画で同一ブロックが再送されている — タイマーをリセットして
       // ブロックが届かなくなるまで sig を保持し続ける（debounce 型削除）
@@ -1474,7 +1539,7 @@ function trackApprovalHintFromChunk(id, bytes) {
   const plainYesNoOpts = extractPlainYesNoApproval(lines);
   if (plainYesNoOpts) {
     const consumed = approvalConsumedSig.get(id);
-    const sig = JSON.stringify(plainYesNoOpts.map(o => o.num + ':' + o.label));
+    const sig = approvalSig(plainYesNoOpts);
     if (consumed === sig) {
       const prev = approvalConsumedSigDeleteTimer.get(id);
       if (prev) clearTimeout(prev);
@@ -1515,7 +1580,7 @@ function trackApprovalHintFromChunk(id, bytes) {
       contextSourceLines = bufferTail;
       contextCluster = bufExtraction.cluster;
     }
-    // option 1 が pendingTextTail から欠落している場合（3000 字制限）に補完
+    // option 1 が pendingTextTail から欠落している場合（保持上限）に補完
     if (options.length >= 1 && !options.some(o => o.num === 1)) {
       const maxNum = Math.max(...options.map(o => o.num));
       if (bufOpts.length > 0 && Math.max(...bufOpts.map(o => o.num)) === maxNum) {
@@ -1551,7 +1616,7 @@ function trackApprovalHintFromChunk(id, bytes) {
   // フォールバック検出で再抽出されるケースを抑止する（marker 検出と同じ debounce 戦略）。
   if (nowVisible) {
     const consumed = approvalConsumedSig.get(id);
-    const sig = JSON.stringify(options.map(o => o.num + ':' + o.label));
+    const sig = approvalSig(options);
     if (consumed === sig) {
       const prev = approvalConsumedSigDeleteTimer.get(id);
       if (prev) clearTimeout(prev);
@@ -1588,8 +1653,18 @@ function scheduleApprovalCheck(id) {
 
 // extractHubMarkerApproval は [AI-CLI-HUB]...[/AI-CLI-HUB] マーカーベースの承認を検出する。
 // 検出した場合は options 配列を返し、検出できなければ null を返す。
+function hasYesNoApprovalMarker(text) {
+  return /\(Y:1\/N:0\)/.test(String(text || ''));
+}
+
+function looksLikeYesNoQuestion(text) {
+  const s = String(text || '');
+  if (!hasYesNoApprovalMarker(s)) return false;
+  const before = s.slice(0, s.lastIndexOf('(Y:1/N:0)'));
+  return /[?？]\s*$/.test(before.trim()) || /[?？]/.test(before.slice(-120));
+}
+
 function extractHubMarkerApproval(lines) {
-  const yesNoRe = /\(Y:1\/N:0\)\s*$/;
   const searchStart = Math.max(0, lines.length - 40);
   const recentText = lines.slice(searchStart).join('\n');
   const blockRe = /\[AI-CLI-HUB\]([\s\S]*?)\[\/AI-CLI-HUB\]/g;
@@ -1600,7 +1675,7 @@ function extractHubMarkerApproval(lines) {
   }
   if (lastBlock !== null) {
     const inner = lastBlock.split('\n').map(l => l.trim()).filter(Boolean);
-    return _parseHubBlock(inner, yesNoRe);
+    return _parseHubBlock(inner);
   }
 
   let closeIdx = -1;
@@ -1611,7 +1686,7 @@ function extractHubMarkerApproval(lines) {
     // Single-line: [AI-CLI-HUB] content [/AI-CLI-HUB]
     if (/\[AI-CLI-HUB\]/.test(line) && /\[\/AI-CLI-HUB\]/.test(line)) {
       const inner = line.replace(/^[\s\S]*?\[AI-CLI-HUB\]/, '').replace(/\[\/AI-CLI-HUB\][\s\S]*$/, '').trim();
-      return _parseHubBlock([inner], yesNoRe);
+      return _parseHubBlock([inner]);
     }
     if (/\[\/AI-CLI-HUB\]/.test(line) && closeIdx === -1) { closeIdx = i; continue; }
     if (/\[AI-CLI-HUB\]/.test(line) && closeIdx !== -1) { openIdx = i; break; }
@@ -1619,26 +1694,31 @@ function extractHubMarkerApproval(lines) {
 
   if (openIdx === -1 || closeIdx === -1) return null;
   const inner = lines.slice(openIdx + 1, closeIdx).map(l => l.trim()).filter(Boolean);
-  return _parseHubBlock(inner, yesNoRe);
+  return _parseHubBlock(inner);
 }
 
 // AGENTS.md の確認フォーマットに従った素の Yes/No 質問を検出する。
-// [AI-CLI-HUB] マーカーが無い場合でも `(Y:1/N:0)` が末尾にあれば Hub ボタン化する。
+// [AI-CLI-HUB] マーカーが無い場合でも、質問文中に `(Y:1/N:0)` があれば Hub ボタン化する。
 function extractPlainYesNoApproval(lines) {
-  const yesNoRe = /\(Y:1\/N:0\)\s*$/;
   const searchStart = Math.max(0, lines.length - 20);
+  const recentLines = lines.slice(searchStart).map(line => String(line || '').trim()).filter(Boolean);
   for (let i = lines.length - 1; i >= searchStart; i--) {
     const line = String(lines[i] || '').trim();
     if (!line) continue;
     if (/\[AI-CLI-HUB\]|\[\/AI-CLI-HUB\]/.test(line)) continue;
-    if (yesNoRe.test(line)) return _yesNoApprovalOptions();
+    // TUI redraw/status text can be appended after the marker on the same logical line.
+    if (looksLikeYesNoQuestion(line)) return _yesNoApprovalOptions();
+  }
+  const recentText = recentLines.join('\n');
+  if (!/\[AI-CLI-HUB\]|\[\/AI-CLI-HUB\]/.test(recentText) && looksLikeYesNoQuestion(recentText)) {
+    return _yesNoApprovalOptions();
   }
   return null;
 }
 
-function _parseHubBlock(lines, yesNoRe) {
+function _parseHubBlock(lines) {
   const text = lines.join('\n');
-  if (yesNoRe.test(text)) {
+  if (hasYesNoApprovalMarker(text)) {
     return _yesNoApprovalOptions();
   }
   const opts = lines
@@ -1777,7 +1857,7 @@ function detectApproval(id) {
     const markerOpts = extractHubMarkerApproval(pendingLines);
     if (markerOpts) {
       const consumed = approvalConsumedSig.get(id);
-      const sig = JSON.stringify(markerOpts.map(o => o.num + ':' + o.label));
+      const sig = approvalSig(markerOpts);
       if (consumed === sig) return; // 消費済み承認の再表示をスキップ（タイマーは trackApprovalHintFromChunk 側で管理）
       const prevTimer2 = approvalConsumedSigDeleteTimer.get(id);
       if (prevTimer2) { clearTimeout(prevTimer2); approvalConsumedSigDeleteTimer.delete(id); }
@@ -1795,7 +1875,7 @@ function detectApproval(id) {
     const plainYesNoOpts = extractPlainYesNoApproval(pendingLines);
     if (plainYesNoOpts) {
       const consumed = approvalConsumedSig.get(id);
-      const sig = JSON.stringify(plainYesNoOpts.map(o => o.num + ':' + o.label));
+      const sig = approvalSig(plainYesNoOpts);
       if (consumed === sig) return;
       const prevTimer2 = approvalConsumedSigDeleteTimer.get(id);
       if (prevTimer2) { clearTimeout(prevTimer2); approvalConsumedSigDeleteTimer.delete(id); }
@@ -1842,7 +1922,7 @@ function detectApproval(id) {
     }
   }
 
-  // pendingTextTail は 3000 字制限のため option 1 が欠落することがある。
+  // pendingTextTail は保持上限があるため option 1 が欠落することがある。
   // 2択プロンプト（Yes/No）では option 2 だけ pendingTextTail に入り options.length=1 のまま
   // 補完が発動しないケースも含め、option 1 が未検出なら常に xterm バッファで補完する。
   if (t && t.pendingTextTail && options.length >= 1 && !options.some(o => o.num === 1)) {
@@ -1887,7 +1967,7 @@ function detectApproval(id) {
   // フォールバック検出で再抽出されるケースを抑止する（marker 検出と同じ debounce 戦略）。
   if (hasPrompt) {
     const consumed = approvalConsumedSig.get(id);
-    const sig = JSON.stringify(options.map(o => o.num + ':' + o.label));
+    const sig = approvalSig(options);
     if (consumed === sig) {
       const prev = approvalConsumedSigDeleteTimer.get(id);
       if (prev) clearTimeout(prev);
@@ -2031,7 +2111,7 @@ function sendChoice(sessionId, targetNum) {
   sendText(sessionId, `${targetNum}\r`);
   // doSend と同様に消費済み署名を記録（Ink 再描画による同一ブロックの再検出・再表示を防ぐ）
   const prevOpts = approvalRawOptionsCache.get(sessionId);
-  if (prevOpts) approvalConsumedSig.set(sessionId, JSON.stringify(prevOpts.map(o => o.num + ':' + o.label)));
+  if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
   hideActionBar(sessionId);
   // PTY エコーバックによる誤再表示を 2 秒間抑制
   approvalSuppressUntil.set(sessionId, Date.now() + 2000);
@@ -2288,7 +2368,7 @@ async function doSend(sessionId) {
   // テキスト送信で承認ポップアップをバイパスした場合、Ink 再描画による
   // 同一選択肢の再検出・再表示を防ぐため消費済み署名を保存する
   const prevOpts = approvalRawOptionsCache.get(sessionId);
-  if (prevOpts) approvalConsumedSig.set(sessionId, JSON.stringify(prevOpts.map(o => o.num + ':' + o.label)));
+  if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
   hideActionBar(sessionId);
   // PTY エコーバックによる誤再表示を抑制（sendChoice と同様）
   approvalSuppressUntil.set(sessionId, Date.now() + 2000);
@@ -3217,7 +3297,7 @@ function render() {
 
   const PROVIDER_LABELS = { claude: 'Claude', codex: 'Codex' };
   const providerParts = Object.entries(connByProvider)
-    .map(([p, n]) => `<span class="summary-provider-chip">${providerIconHtml(p)}<span>${PROVIDER_LABELS[p] || p}:${n}</span></span>`)
+    .map(([p, n]) => `<span class="summary-provider-chip">${providerIconHtml(p)}<span>${PROVIDER_LABELS[p] || p} : ${n}</span></span>`)
     .join('');
 
   const summaryWaitingBlinkClass = stateCounts.waiting > 0 ? ' status-chip--blink' : '';
@@ -4150,6 +4230,8 @@ function openLightbox(src) {
     try {
       localStorage.setItem(STORAGE_TRIGGER_ENABLED_KEY, '0');
       localStorage.setItem(STORAGE_TRIGGER_PHRASE_KEY, '');
+      localStorage.setItem(STORAGE_WAKE_WORD_ENABLED_KEY, '0');
+      localStorage.setItem(STORAGE_WAKE_WORD_PHRASE_KEY, DEFAULT_WAKE_WORD_PHRASE);
       localStorage.setItem(STORAGE_NOTIFY_SOUND_ENABLED_KEY, '0');
       localStorage.setItem(STORAGE_NOTIFY_SOUND_TYPE_KEY, 'default');
       localStorage.removeItem(STORAGE_NOTIFY_SOUND_CUSTOM_KEY);
@@ -4158,6 +4240,7 @@ function openLightbox(src) {
       localStorage.setItem(STORAGE_QUICK_CMD_2_KEY, DEFAULT_QUICK_CMD_2);
       localStorage.removeItem(STORAGE_USAGE_LINK_CLAUDE_KEY);
       localStorage.removeItem(STORAGE_USAGE_LINK_CODEX_KEY);
+      localStorage.setItem(STORAGE_VOICE_GRACE_KEY, String(DEFAULT_VOICE_GRACE_SEC));
     } catch (_) {}
 
     const triggerEnabled = document.getElementById('trigger-enabled');
@@ -4166,6 +4249,13 @@ function openLightbox(src) {
     if (triggerEnabled) triggerEnabled.checked = false;
     if (triggerPhrase) triggerPhrase.value = '';
     if (triggerRow) triggerRow.hidden = true;
+
+    const wakeWordEnabled = document.getElementById('wakeword-enabled');
+    const wakeWordPhrase  = document.getElementById('wakeword-phrase-input');
+    const wakeWordRow     = document.getElementById('wakeword-phrase-row');
+    if (wakeWordEnabled) wakeWordEnabled.checked = false;
+    if (wakeWordPhrase) wakeWordPhrase.value = DEFAULT_WAKE_WORD_PHRASE;
+    if (wakeWordRow) wakeWordRow.hidden = true;
 
     const soundEnabledEl  = document.getElementById('notify-sound-enabled');
     const soundTypeEl     = document.getElementById('notify-sound-type');
@@ -4184,6 +4274,9 @@ function openLightbox(src) {
     const quickCmd2El = document.getElementById('quick-cmd-2');
     if (quickCmd1El) quickCmd1El.value = DEFAULT_QUICK_CMD_1;
     if (quickCmd2El) quickCmd2El.value = DEFAULT_QUICK_CMD_2;
+
+    const voiceGraceEl = document.getElementById('voice-grace-select');
+    if (voiceGraceEl) voiceGraceEl.value = String(DEFAULT_VOICE_GRACE_SEC);
 
     const approvalAutoSwitchInput = document.getElementById('approval-auto-switch-input');
     if (approvalAutoSwitchInput) approvalAutoSwitchInput.checked = false;
@@ -4311,6 +4404,7 @@ function openLightbox(src) {
   recognition.maxAlternatives = 1;
 
   let isRecording  = false;
+  let isStarting   = false;
   let interimStart = 0;
   let preVoiceText = '';
 
@@ -4318,11 +4412,65 @@ function openLightbox(src) {
   let wavePhase = 0;
   let waveformRaf = null;
 
-  const BAR_COUNT = 22;
+  // 発話強度 (0..1)。soundstart/speechstart で上がり、無音で下がる。
+  // result イベントで一時的にキックすることで「話している瞬間」が視覚的に伝わる。
+  let voiceIntensity = 0;
+  let voiceIntensityTarget = 0;
+  let lastInterimLen = 0;
+  let lastKickAt = 0;
+
+  // 自動 restart 用フラグ群
+  // 設定値 grace 秒以内に最後の result が出ていれば、Chrome の auto-end 後に recognition.start() を再呼び出しして発話を継続させる。
+  let userIntendedStop = false;   // ✓/✕/Esc/トリガーフレーズ/致命エラー等で停止 (auto-restart を抑止)
+  let restartTimer = null;
+  let isAutoRestarting = false;   // 直後の 'start' イベントが自動 restart 由来かを判定
+  let lastResultAt = 0;           // 最終 result イベント時刻 (performance.now())
+
+  function getVoiceGraceSec() {
+    const raw = localStorage.getItem(STORAGE_VOICE_GRACE_KEY);
+    const v = raw == null ? DEFAULT_VOICE_GRACE_SEC : parseInt(raw, 10);
+    return Number.isFinite(v) ? Math.max(0, Math.min(5, v)) : DEFAULT_VOICE_GRACE_SEC;
+  }
+  function clearRestartTimer() {
+    if (restartTimer) {
+      clearTimeout(restartTimer);
+      restartTimer = null;
+    }
+  }
+
+  const BAR_COUNT = 48;
 
   function getLang() {
     const lang = localStorage.getItem(STORAGE_LANG_KEY) || 'ja';
     return lang === 'ja' ? 'ja-JP' : 'en-US';
+  }
+
+  function formatVoiceError(key, code) {
+    const msg = t(key);
+    if (!code) return msg;
+    return msg.replace('{code}', code);
+  }
+
+  function normalizeVoiceErrorCode(error) {
+    const raw = typeof error === 'string' ? error : (error?.error || error?.name || error?.message || '');
+    return String(raw || 'unknown').trim() || 'unknown';
+  }
+
+  function showVoiceError(error, anchor) {
+    const code = normalizeVoiceErrorCode(error);
+    if (code === 'not-allowed' || code === 'permission-denied') {
+      showToast(t('voice_error_permission'), anchor);
+    } else if (code === 'audio-capture') {
+      showToast(t('voice_error_audio_capture'), anchor);
+    } else if (code === 'network') {
+      showToast(t('voice_error_network'), anchor);
+    } else if (code === 'service-not-allowed') {
+      showToast(t('voice_error_service'), anchor);
+    } else if (code === 'language-not-supported') {
+      showToast(t('voice_error_language'), anchor);
+    } else {
+      showToast(formatVoiceError('voice_error_detail', code), anchor);
+    }
   }
 
   function resizeCanvas() {
@@ -4333,25 +4481,37 @@ function openLightbox(src) {
     }
   }
 
-  function drawBars(freqData) {
+  function drawBars() {
     const ctx2d = canvas.getContext('2d');
     if (!ctx2d) return;
     const W = canvas.width;
     const H = canvas.height;
     ctx2d.clearRect(0, 0, W, H);
-    const barW = Math.max(3, Math.floor(W / (BAR_COUNT * 2.2)));
+    const barW = Math.max(2, Math.floor(W / (BAR_COUNT * 1.8)));
     const gap  = (W - BAR_COUNT * barW) / (BAR_COUNT + 1);
+    // 強度を滑らかに追従させる (1フレームあたり線形補間)
+    voiceIntensity += (voiceIntensityTarget - voiceIntensity) * 0.18;
+    // 発話キックの減衰
+    const sinceKick = (performance.now() - lastKickAt) / 1000;
+    const kick = Math.max(0, 1 - sinceKick * 3);
+    const active = Math.min(1, voiceIntensity + kick * 0.6);
+
     for (let i = 0; i < BAR_COUNT; i++) {
-      let v;
-      if (freqData) {
-        v = freqData[Math.floor(i * freqData.length / BAR_COUNT / 3)] / 255;
-      } else {
-        v = Math.sin(wavePhase + i * 0.55) * 0.15 + 0.2;
-      }
-      const barH = Math.max(barW, v * H * 0.88);
+      // 複数の正弦波 + 擬似ノイズで「波形っぽい」分布を作る
+      const phase = wavePhase + i * 0.42;
+      const lo = Math.sin(phase) * 0.5 + 0.5;
+      const hi = Math.sin(phase * 2.7 + i * 0.13) * 0.5 + 0.5;
+      const rnd = (Math.sin(phase * 7.3 + i) + 1) * 0.5;
+      const wave = (lo * 0.4 + hi * 0.4 + rnd * 0.2);
+      // active が低いときは静止に近い小振幅、active が高いほど振幅・コントラスト増
+      const baseAmp = 0.08;
+      const dynAmp  = 0.92 * active;
+      const v = baseAmp + wave * dynAmp;
+
+      const barH = Math.max(barW, v * H * 0.92);
       const x = gap + i * (barW + gap);
       const y = (H - barH) / 2;
-      ctx2d.fillStyle = `rgba(59,130,246,${Math.min(1, 0.3 + v * 0.9)})`;
+      ctx2d.fillStyle = `rgba(59,130,246,${Math.min(1, 0.35 + v * 0.85)})`;
       if (ctx2d.roundRect) {
         ctx2d.beginPath();
         ctx2d.roundRect(x, y, barW, barH, barW / 2);
@@ -4363,8 +4523,9 @@ function openLightbox(src) {
   }
 
   function animLoop() {
-    drawBars(null);
-    wavePhase += 0.28;
+    drawBars();
+    // active が高いほど波が早く動く (見た目の躍動感)
+    wavePhase += 0.18 + voiceIntensity * 0.35;
     animFrame = requestAnimationFrame(animLoop);
   }
 
@@ -4372,6 +4533,10 @@ function openLightbox(src) {
     resizeCanvas();
     cancelAnimationFrame(animFrame);
     wavePhase = 0;
+    voiceIntensity = 0;
+    voiceIntensityTarget = 0.05;
+    lastInterimLen = 0;
+    lastKickAt = 0;
     animFrame = requestAnimationFrame(animLoop);
   }
 
@@ -4400,12 +4565,16 @@ function openLightbox(src) {
 
   let forceCleanupTimer = null;
   function forceCleanup() {
+    userIntendedStop = true;
+    clearRestartTimer();
+    isStarting = false;
     isRecording = false;
     voiceActive = false;
     btn.classList.remove('recording');
     btn.dataset.tooltip = t('voice_tooltip');
     hideVoiceBar();
     setTimeout(() => inputEl.focus(), 0);
+    document.dispatchEvent(new CustomEvent('voiceinput:stopped'));
   }
   function scheduleForceCleanup() {
     clearTimeout(forceCleanupTimer);
@@ -4419,24 +4588,35 @@ function openLightbox(src) {
   }
 
   btn.addEventListener('click', () => {
-    if (isRecording) {
+    if (isRecording || isStarting) {
+      userIntendedStop = true;
+      clearRestartTimer();
       try { recognition.abort(); } catch (_) {}
       scheduleForceCleanup();
       return;
     }
+    userIntendedStop = false;
+    isAutoRestarting = false;
+    // result が一度も来ていない状態を表すセンチネル。
+    // クリック直後に Chrome が end を返すケース（権限プロンプト直後・無音タイムアウト等）で
+    // 誤って auto-restart ループに入らないよう、ここでは 0 にしておき end ハンドラで判別する。
+    lastResultAt = 0;
     recognition.lang = getLang();
     preVoiceText = inputEl.value;
     interimStart = inputEl.value.length;
+    isStarting = true;
     try {
       recognition.start();
     } catch (err) {
       forceCleanup();
-      showToast(t('voice_error'));
+      showVoiceError(err, btn);
       console.error('SpeechRecognition start failed:', err);
     }
   });
 
   cancelBtn.addEventListener('click', () => {
+    userIntendedStop = true;
+    clearRestartTimer();
     inputEl.value = preVoiceText;
     autoExpand();
     try { recognition.abort(); } catch (_) {}
@@ -4444,28 +4624,51 @@ function openLightbox(src) {
   });
 
   confirmBtn.addEventListener('click', () => {
+    userIntendedStop = true;
+    clearRestartTimer();
     try { recognition.stop(); } catch (_) {}
     scheduleForceCleanup();
   });
 
   recognition.addEventListener('start', () => {
+    isStarting = false;
     isRecording = true;
     voiceActive = true;
     btn.classList.add('recording');
     btn.dataset.tooltip = t('voice_recording');
-    showVoiceBar();
+    // 自動 restart 時は既にバーが表示中で intensity リセットも不要
+    if (!isAutoRestarting) {
+      showVoiceBar();
+    }
+    isAutoRestarting = false;
   });
+
+  recognition.addEventListener('audiostart', () => { voiceIntensityTarget = 0.15; });
+  recognition.addEventListener('soundstart', () => { voiceIntensityTarget = 0.55; lastKickAt = performance.now(); });
+  recognition.addEventListener('speechstart', () => { voiceIntensityTarget = 0.9;  lastKickAt = performance.now(); });
+  recognition.addEventListener('speechend',   () => { voiceIntensityTarget = 0.25; });
+  recognition.addEventListener('soundend',    () => { voiceIntensityTarget = 0.08; });
+  recognition.addEventListener('audioend',    () => { voiceIntensityTarget = 0.03; });
 
   recognition.addEventListener('result', (e) => {
     const result = e.results[e.resultIndex];
     if (!result) return;
     const transcript = result[0].transcript;
+    // interim 結果が伸びた = 今まさに発話中、を視覚化するキック
+    if (transcript.length > lastInterimLen) {
+      lastKickAt = performance.now();
+      voiceIntensityTarget = Math.max(voiceIntensityTarget, 0.85);
+    }
+    lastInterimLen = result.isFinal ? 0 : transcript.length;
+    lastResultAt = performance.now();
     inputEl.value = inputEl.value.slice(0, interimStart) + transcript;
     if (result.isFinal) {
       inputEl.value += ' ';
       interimStart = inputEl.value.length;
       const _tp = getActiveTriggerPhrase();
       if (_tp && activeSessionId !== null && textEndsWithTriggerPhrase(buildSendText(), _tp)) {
+        userIntendedStop = true;
+        clearRestartTimer();
         recognition.stop();
         doSend(activeSessionId);
         return;
@@ -4477,28 +4680,42 @@ function openLightbox(src) {
 
   recognition.addEventListener('end', () => {
     cancelForceCleanup();
-    isRecording = false;
-    voiceActive = false;
-    btn.classList.remove('recording');
-    btn.dataset.tooltip = t('voice_tooltip');
-    hideVoiceBar();
-    setTimeout(() => inputEl.focus(), 0);
+    isStarting = false;
+    const grace = getVoiceGraceSec();
+    const hasResult = lastResultAt > 0;
+    const sinceLastResult = hasResult ? (performance.now() - lastResultAt) / 1000 : Infinity;
+    if (!userIntendedStop && grace > 0 && isRecording && hasResult && sinceLastResult < grace) {
+      // 直近の発話から grace 秒以内なので、短い間隔で recognition を再開して継続させる
+      clearRestartTimer();
+      restartTimer = setTimeout(() => {
+        restartTimer = null;
+        if (!isRecording || userIntendedStop) return;
+        isAutoRestarting = true;
+        try {
+          recognition.start();
+        } catch (err) {
+          isAutoRestarting = false;
+          console.warn('SpeechRecognition auto-restart failed:', err);
+          forceCleanup();
+        }
+      }, 120);
+      return;
+    }
+    forceCleanup();
   });
 
   recognition.addEventListener('error', (e) => {
     console.warn('SpeechRecognition error:', e.error, e.message || '');
-    cancelForceCleanup();
-    isRecording = false;
-    voiceActive = false;
-    btn.classList.remove('recording');
-    btn.dataset.tooltip = t('voice_tooltip');
-    hideVoiceBar();
-    if (e.error === 'not-allowed') showToast(t('voice_error_permission'));
-    else if (e.error === 'audio-capture') showToast(t('voice_error_audio_capture'));
-    else if (e.error === 'network') showToast(t('voice_error_network'));
-    else if (e.error === 'service-not-allowed') showToast(t('voice_error_service'));
-    else if (e.error === 'language-not-supported') showToast(t('voice_error_language'));
-    else if (e.error !== 'no-speech' && e.error !== 'aborted') showToast(t('voice_error'));
+    isStarting = false;
+    // 致命系エラーは auto-restart 抑止 (繰り返してもまた失敗するため)。
+    // 'no-speech' と 'aborted' はソフトエラーで、'end' イベントが判定する。
+    const fatalErrors = ['not-allowed', 'permission-denied', 'audio-capture', 'network', 'service-not-allowed', 'language-not-supported'];
+    if (fatalErrors.includes(e.error)) {
+      userIntendedStop = true;
+      clearRestartTimer();
+    }
+    if (e.error !== 'no-speech' && e.error !== 'aborted') showVoiceError(e, btn);
+    // クリーンアップは 'end' イベントに任せる (auto-restart 判定の単一窓口にするため)
   });
 
   document.addEventListener('keydown', (e) => {
@@ -4514,6 +4731,133 @@ function openLightbox(src) {
   });
   window.addEventListener('resize', () => {
     if (isRecording) resizeCanvas();
+  });
+})();
+
+// ---- ウェイクワード検出 ----
+(function () {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return;
+  const isChromium = navigator.userAgentData?.brands?.some(b => /Chromium/.test(b.brand))
+    ?? /Chrome\//.test(navigator.userAgent);
+  if (!isChromium) return;
+
+  const wakeBtn  = document.getElementById('voice-wakeword-btn');
+  const voiceBtn = document.getElementById('voice-btn');
+  if (!wakeBtn || !voiceBtn) return;
+
+  wakeBtn.hidden = false;
+  wakeBtn.dataset.tooltip = t('voice_wakeword_tooltip');
+
+  let isActive    = false;
+  let isListening = false;
+  let isStarting  = false;
+  let restartTimer = null;
+
+  function getWakePhrase() {
+    if (localStorage.getItem(STORAGE_WAKE_WORD_ENABLED_KEY) !== '1') return '';
+    return (localStorage.getItem(STORAGE_WAKE_WORD_PHRASE_KEY) ?? DEFAULT_WAKE_WORD_PHRASE).trim();
+  }
+
+  function getLang() {
+    const lang = localStorage.getItem(STORAGE_LANG_KEY) || 'ja';
+    return lang === 'ja' ? 'ja-JP' : 'en-US';
+  }
+
+  const hw = new SpeechRecognition();
+  hw.interimResults = true;
+  hw.continuous = false;
+  hw.maxAlternatives = 1;
+
+  function startHotword() {
+    if (isListening || isStarting || voiceActive) return;
+    isStarting = true;
+    hw.lang = getLang();
+    try { hw.start(); } catch (err) {
+      isStarting = false;
+      console.warn('Wake word recognition start failed:', err);
+    }
+  }
+
+  function stopHotword() {
+    clearTimeout(restartTimer);
+    restartTimer = null;
+    try { hw.abort(); } catch (_) {}
+  }
+
+  function deactivate() {
+    isActive = false;
+    stopHotword();
+    wakeBtn.classList.remove('standby');
+    wakeBtn.dataset.tooltip = t('voice_wakeword_tooltip');
+  }
+
+  function activate() {
+    isActive = true;
+    wakeBtn.classList.add('standby');
+    wakeBtn.dataset.tooltip = t('voice_wakeword_listening');
+    startHotword();
+  }
+
+  hw.addEventListener('start', () => {
+    isStarting = false;
+    isListening = true;
+  });
+
+  hw.addEventListener('result', (e) => {
+    const phrase = normalizeTriggerMatchText(getWakePhrase());
+    if (!phrase) return;
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const raw = e.results[i][0].transcript;
+      if (normalizeTriggerMatchText(raw).includes(phrase)) {
+        stopHotword();
+        if (!voiceActive) voiceBtn.click();
+        return;
+      }
+    }
+  });
+
+  hw.addEventListener('end', () => {
+    isListening = false;
+    isStarting = false;
+    if (!isActive) return;
+    if (voiceActive) return; // voiceinput:stopped で再アーム
+    clearTimeout(restartTimer);
+    restartTimer = setTimeout(() => {
+      restartTimer = null;
+      if (isActive && !voiceActive) startHotword();
+    }, 250);
+  });
+
+  hw.addEventListener('error', (e) => {
+    isStarting = false;
+    const fatal = ['not-allowed', 'permission-denied', 'audio-capture', 'network', 'service-not-allowed', 'language-not-supported'];
+    if (fatal.includes(e.error)) {
+      deactivate();
+      showVoiceError(e, wakeBtn);
+    }
+  });
+
+  // メイン録音終了後にホットワード監視を再アーム
+  document.addEventListener('voiceinput:stopped', () => {
+    if (!isActive || isListening || isStarting) return;
+    clearTimeout(restartTimer);
+    restartTimer = setTimeout(() => {
+      restartTimer = null;
+      if (isActive) startHotword();
+    }, 300);
+  });
+
+  wakeBtn.addEventListener('click', () => {
+    if (isActive) deactivate();
+    else activate();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.altKey && e.code === 'KeyW' && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      wakeBtn.click();
+    }
   });
 })();
 

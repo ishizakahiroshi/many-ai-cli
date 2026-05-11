@@ -30,6 +30,8 @@ archives:
     name_template: "{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     files:
       - README.md
+      - README.ja.md
+      - CHANGELOG.md
       - LICENSE
       - THIRD_PARTY_NOTICES.md
       - web/src/vendor/THIRD_PARTY_LICENSES.txt

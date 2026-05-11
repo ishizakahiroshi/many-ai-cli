@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Go](https://img.shields.io/badge/go-1.22+-blue)
 
-<!-- TODO: Add screenshot here -->
+![ai-cli-hub dashboard](assets/readme-dashboard.jpg)
 
 A local web dashboard to manage multiple AI coding CLIs (Claude Code / Codex CLI) from a single screen — approvals, monitoring, and terminal in one place.
 
