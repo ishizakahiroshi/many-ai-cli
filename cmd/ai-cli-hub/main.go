@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 
 	"ai-cli-hub/internal/config"
@@ -30,6 +33,66 @@ func main() {
 	}
 }
 
+func displayVersion() string {
+	v := strings.TrimSpace(version)
+	if v != "" && v != "dev" {
+		return strings.TrimPrefix(v, "v")
+	}
+	for _, dir := range versionSourceDirs() {
+		if tag := gitTagVersion(dir); tag != "" {
+			return tag
+		}
+	}
+	return "dev"
+}
+
+func versionSourceDirs() []string {
+	var dirs []string
+	if exe, err := os.Executable(); err == nil {
+		dirs = append(dirs, filepath.Dir(exe))
+	}
+	if wd, err := os.Getwd(); err == nil {
+		dirs = append(dirs, wd)
+	}
+	return dirs
+}
+
+func gitTagVersion(dir string) string {
+	root := repoRoot(dir)
+	if root == "" {
+		return ""
+	}
+	cmd := exec.Command("git", "describe", "--tags", "--abbrev=0")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	tag := strings.TrimPrefix(strings.TrimSpace(string(out)), "v")
+	if tag == "" {
+		return ""
+	}
+	return tag
+}
+
+func repoRoot(dir string) string {
+	for {
+		data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+		if err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				if strings.TrimSpace(line) == "module ai-cli-hub" {
+					return dir
+				}
+			}
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
 func run(args []string) error {
 	if len(args) == 0 {
 		cfg, err := config.LoadOrCreate()
@@ -41,7 +104,7 @@ func run(args []string) error {
 			return nil
 		}
 		logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-		s, err := hub.NewServer(cfg, logger, false, version)
+		s, err := hub.NewServer(cfg, logger, false, displayVersion())
 		if err != nil {
 			return err
 		}
@@ -71,7 +134,7 @@ func run(args []string) error {
 			cfg.Hub.Port = *port
 		}
 		logger = hublog.NewFileLogger(cfg.Hub.LogDir, cfg.Log, *debug, *dev)
-		s, err := hub.NewServer(cfg, logger, *dev, version)
+		s, err := hub.NewServer(cfg, logger, *dev, displayVersion())
 		if err != nil {
 			return err
 		}
