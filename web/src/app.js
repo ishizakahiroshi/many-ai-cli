@@ -1,4 +1,4 @@
-console.log('[ai-cli-hub] app.js build=2026-05-11-clear-approval-marker-tail');
+console.log('[ai-cli-hub] app.js build=2026-05-11-plain-yes-no-approval');
 
 // ---- トースト通知 ----
 let _toastTimer = null;
@@ -1396,6 +1396,27 @@ function trackApprovalHintFromChunk(id, bytes) {
     return;
   }
 
+  const plainYesNoOpts = extractPlainYesNoApproval(lines);
+  if (plainYesNoOpts) {
+    const consumed = approvalConsumedSig.get(id);
+    const sig = JSON.stringify(plainYesNoOpts.map(o => o.num + ':' + o.label));
+    if (consumed === sig) {
+      const prev = approvalConsumedSigDeleteTimer.get(id);
+      if (prev) clearTimeout(prev);
+      approvalConsumedSigDeleteTimer.set(id, setTimeout(() => {
+        approvalConsumedSig.delete(id);
+        approvalConsumedSigDeleteTimer.delete(id);
+      }, 5000));
+      return;
+    }
+    const prevTimer = approvalConsumedSigDeleteTimer.get(id);
+    if (prevTimer) { clearTimeout(prevTimer); approvalConsumedSigDeleteTimer.delete(id); }
+    approvalConsumedSig.delete(id);
+    approvalRawOptionsCache.set(id, plainYesNoOpts);
+    scheduleApprovalHintConfirm(id, plainYesNoOpts);
+    return;
+  }
+
   // フォールバック検出（既存）
   let extraction = extractApprovalOptions(lines);
   const options = extraction.options;
@@ -1514,19 +1535,37 @@ function extractHubMarkerApproval(lines) {
   return _parseHubBlock(inner, yesNoRe);
 }
 
+// AGENTS.md の確認フォーマットに従った素の Yes/No 質問を検出する。
+// [AI-CLI-HUB] マーカーが無い場合でも `(Y:1/N:0)` が末尾にあれば Hub ボタン化する。
+function extractPlainYesNoApproval(lines) {
+  const yesNoRe = /\(Y:1\/N:0\)\s*$/;
+  const searchStart = Math.max(0, lines.length - 20);
+  for (let i = lines.length - 1; i >= searchStart; i--) {
+    const line = String(lines[i] || '').trim();
+    if (!line) continue;
+    if (/\[AI-CLI-HUB\]|\[\/AI-CLI-HUB\]/.test(line)) return null;
+    if (yesNoRe.test(line)) return _yesNoApprovalOptions();
+  }
+  return null;
+}
+
 function _parseHubBlock(lines, yesNoRe) {
   const text = lines.join('\n');
   if (yesNoRe.test(text)) {
-    return [
-      { num: 1, label: 'Yes (1)', isCurrent: true, preserveOrder: true },
-      { num: 0, label: 'No (0)', isCurrent: false, preserveOrder: true },
-    ];
+    return _yesNoApprovalOptions();
   }
   const opts = lines
     .map(l => l.match(/^\s*(\d+)\.\s*(.+?)\s*$/))
     .filter(Boolean)
     .map(m => ({ num: parseInt(m[1], 10), label: m[2].trim(), isCurrent: false }));
   return opts.length > 0 ? opts : null;
+}
+
+function _yesNoApprovalOptions() {
+  return [
+    { num: 1, label: 'Yes (1)', isCurrent: true, preserveOrder: true },
+    { num: 0, label: 'No (0)', isCurrent: false, preserveOrder: true },
+  ];
 }
 
 function approvalContextLines(lines, cluster, margin = 5) {
@@ -1657,6 +1696,24 @@ function detectApproval(id) {
       if (prevTimer2) { clearTimeout(prevTimer2); approvalConsumedSigDeleteTimer.delete(id); }
       approvalConsumedSig.delete(id);
       showActionBar(bar, id, markerOpts, false);
+      if (!approvalVisibleCache.get(id)) {
+        cancelApprovalHintConfirm(id);
+        approvalVisibleCache.set(id, true);
+        enqueueApprovalAutoSwitch(id);
+        ws.send(JSON.stringify({ type: 'session_hint', session_id: id, approval_visible: true }));
+      }
+      return;
+    }
+
+    const plainYesNoOpts = extractPlainYesNoApproval(pendingLines);
+    if (plainYesNoOpts) {
+      const consumed = approvalConsumedSig.get(id);
+      const sig = JSON.stringify(plainYesNoOpts.map(o => o.num + ':' + o.label));
+      if (consumed === sig) return;
+      const prevTimer2 = approvalConsumedSigDeleteTimer.get(id);
+      if (prevTimer2) { clearTimeout(prevTimer2); approvalConsumedSigDeleteTimer.delete(id); }
+      approvalConsumedSig.delete(id);
+      showActionBar(bar, id, plainYesNoOpts, false);
       if (!approvalVisibleCache.get(id)) {
         cancelApprovalHintConfirm(id);
         approvalVisibleCache.set(id, true);
