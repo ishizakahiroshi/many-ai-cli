@@ -25,12 +25,12 @@ Get the latest release from [GitHub Releases](https://github.com/ishizakahiroshi
 > Settings and logs are stored in `~/.ai-cli-hub/` (created on first run).
 > Session logs contain user input and AI output. Treat them as sensitive data.
 
-### Platform Verification for v0.1.2
+### Platform Verification for v0.1.3
 
 - Verified in real environment: Windows
 - Not yet verified in real environment: Linux, macOS
 
-Linux/macOS builds are expected to work, but they have not been fully validated in real environments for v0.1.2.
+Linux/macOS builds are expected to work, but they have not been fully validated in real environments for v0.1.3.
 Please use at your own discretion and report any issues.
 
 ### Verify Release Artifacts (Checksum + Signature)

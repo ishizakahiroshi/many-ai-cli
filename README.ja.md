@@ -44,12 +44,12 @@ Terminal pane #1              Terminal pane #2
 | ブラウザ | Chrome / Edge / Firefox / Safari |
 | AI CLI | Claude Code、Codex CLI（別途インストール済みであること） |
 
-### v0.1.2 の検証状況
+### v0.1.3 の検証状況
 
 - 実機で動作検証済み: Windows
 - 実機で未検証: Linux / macOS
 
-Linux / macOS でも動作する想定ですが、v0.1.2 時点では実機での十分な検証は未実施です。
+Linux / macOS でも動作する想定ですが、v0.1.3 時点では実機での十分な検証は未実施です。
 ご利用の際はご了承ください。問題があれば Issue で報告してください。
 
 ---
