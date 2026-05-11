@@ -16,6 +16,7 @@ type Message struct {
 	Provider  string `json:"provider,omitempty"`
 	Display   string `json:"display_name,omitempty"`
 	CWD       string `json:"cwd,omitempty"`
+	Branch    string `json:"branch"`
 	PID       int    `json:"pid,omitempty"`
 	Shell     string `json:"shell,omitempty"`
 	Version   string `json:"version,omitempty"`

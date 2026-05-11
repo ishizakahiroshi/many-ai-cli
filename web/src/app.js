@@ -168,7 +168,14 @@ const STORAGE_NOTIFY_SOUND_CUSTOM_KEY  = 'ai_cli_hub_notify_sound_custom';
 const STORAGE_APPROVAL_AUTO_SWITCH_KEY = 'ai_cli_hub_approval_auto_switch';
 const STORAGE_QUICK_CMD_1_KEY          = 'ai_cli_hub_quick_cmd_1';
 const STORAGE_QUICK_CMD_2_KEY          = 'ai_cli_hub_quick_cmd_2';
+const STORAGE_USAGE_LINK_CLAUDE_KEY    = 'ai_cli_hub_usage_link_claude';
+const STORAGE_USAGE_LINK_CODEX_KEY     = 'ai_cli_hub_usage_link_codex';
 const CWD_HISTORY_MAX               = 10;
+
+const DEFAULT_USAGE_LINKS = {
+  claude: 'https://claude.ai/settings/usage',
+  codex: 'https://chatgpt.com/codex/cloud/settings/analytics#usage',
+};
 
 const FONTSIZE_MAP = { large: 15, medium: 13, small: 11 };
 
@@ -234,6 +241,60 @@ function stripTrailingTriggerPhrase(text, triggerPhrase) {
 
 function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function normalizeHttpUrl(value, fallback = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return fallback;
+  try {
+    const url = new URL(raw);
+    if (url.protocol === 'https:' || url.protocol === 'http:') return url.href;
+  } catch (_) {}
+  return fallback;
+}
+
+function getUsageLinkUrl(provider) {
+  const key = provider === 'claude' ? STORAGE_USAGE_LINK_CLAUDE_KEY : STORAGE_USAGE_LINK_CODEX_KEY;
+  return normalizeHttpUrl(localStorage.getItem(key), DEFAULT_USAGE_LINKS[provider]);
+}
+
+function applyUsageLinks() {
+  const claudeLink = document.getElementById('usage-link-claude');
+  const codexLink = document.getElementById('usage-link-codex');
+  if (claudeLink) claudeLink.href = getUsageLinkUrl('claude');
+  if (codexLink) codexLink.href = getUsageLinkUrl('codex');
+}
+
+function loadUsageLinkSettings() {
+  const claudeInput = document.getElementById('usage-link-claude-url');
+  const codexInput = document.getElementById('usage-link-codex-url');
+  if (claudeInput) claudeInput.value = localStorage.getItem(STORAGE_USAGE_LINK_CLAUDE_KEY) || '';
+  if (codexInput) codexInput.value = localStorage.getItem(STORAGE_USAGE_LINK_CODEX_KEY) || '';
+  applyUsageLinks();
+}
+
+function saveUsageLinkSettings() {
+  const claudeInput = document.getElementById('usage-link-claude-url');
+  const codexInput = document.getElementById('usage-link-codex-url');
+  const pairs = [
+    [claudeInput, STORAGE_USAGE_LINK_CLAUDE_KEY],
+    [codexInput, STORAGE_USAGE_LINK_CODEX_KEY],
+  ];
+  for (const [input, key] of pairs) {
+    if (!input) continue;
+    const raw = input.value.trim();
+    const normalized = normalizeHttpUrl(raw, '');
+    try {
+      if (normalized) {
+        localStorage.setItem(key, normalized);
+        input.value = normalized;
+      } else {
+        localStorage.removeItem(key);
+        input.value = '';
+      }
+    } catch (_) {}
+  }
+  applyUsageLinks();
 }
 
 function appConfirm({ title, message, confirmText, cancelText, kind = 'default' }) {
@@ -403,6 +464,7 @@ function applyLang(lang) {
 (function () {
   applyTheme(localStorage.getItem(STORAGE_THEME_KEY) || 'dark');
   applyLang(localStorage.getItem(STORAGE_LANG_KEY) || 'ja');
+  applyUsageLinks();
 
   const panel      = document.getElementById('settings-panel');
   const btn        = document.getElementById('settings-btn');
@@ -413,6 +475,7 @@ function applyLang(lang) {
   const saveBtn    = document.getElementById('settings-save-btn');
   const closeBtn   = document.getElementById('settings-close-btn');
   const licensesBtn = document.getElementById('settings-licenses-btn');
+  const usageLinksResetBtn = document.getElementById('usage-links-reset-btn');
 
   fontsizeEl.value = localStorage.getItem(STORAGE_FONTSIZE_KEY) || 'medium';
 
@@ -480,6 +543,17 @@ function applyLang(lang) {
     panel.hidden = true;
     aboutPanel.hidden = false;
   });
+  if (usageLinksResetBtn) {
+    usageLinksResetBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      try {
+        localStorage.removeItem(STORAGE_USAGE_LINK_CLAUDE_KEY);
+        localStorage.removeItem(STORAGE_USAGE_LINK_CODEX_KEY);
+      } catch (_) {}
+      loadUsageLinkSettings();
+      showToast(t('settings_usage_links_reset_done'), usageLinksResetBtn);
+    });
+  }
   aboutCloseBtn.addEventListener('click', () => { aboutPanel.hidden = true; });
   aboutPanel.addEventListener('click', (e) => {
     if (e.target === aboutPanel) aboutPanel.hidden = true;
@@ -938,6 +1012,7 @@ ws.onmessage = (ev) => {
     if (m.provider)        cur.provider        = m.provider;
     if (m.display_name)    cur.display_name    = m.display_name;
     if (m.cwd)             cur.cwd             = m.cwd;
+    if (m.branch !== undefined) cur.branch      = m.branch;
     if (m.label !== undefined) cur.label       = m.label;
     if (m.shell)           cur.shell           = m.shell;
     if (m.state)           cur.state           = m.state;
@@ -1516,6 +1591,18 @@ function scheduleApprovalCheck(id) {
 function extractHubMarkerApproval(lines) {
   const yesNoRe = /\(Y:1\/N:0\)\s*$/;
   const searchStart = Math.max(0, lines.length - 40);
+  const recentText = lines.slice(searchStart).join('\n');
+  const blockRe = /\[AI-CLI-HUB\]([\s\S]*?)\[\/AI-CLI-HUB\]/g;
+  let match;
+  let lastBlock = null;
+  while ((match = blockRe.exec(recentText)) !== null) {
+    lastBlock = match[1];
+  }
+  if (lastBlock !== null) {
+    const inner = lastBlock.split('\n').map(l => l.trim()).filter(Boolean);
+    return _parseHubBlock(inner, yesNoRe);
+  }
+
   let closeIdx = -1;
   let openIdx = -1;
 
@@ -1523,7 +1610,7 @@ function extractHubMarkerApproval(lines) {
     const line = lines[i];
     // Single-line: [AI-CLI-HUB] content [/AI-CLI-HUB]
     if (/\[AI-CLI-HUB\]/.test(line) && /\[\/AI-CLI-HUB\]/.test(line)) {
-      const inner = line.replace(/\[\/AI-CLI-HUB\]/g, '').replace(/\[AI-CLI-HUB\]/g, '').trim();
+      const inner = line.replace(/^[\s\S]*?\[AI-CLI-HUB\]/, '').replace(/\[\/AI-CLI-HUB\][\s\S]*$/, '').trim();
       return _parseHubBlock([inner], yesNoRe);
     }
     if (/\[\/AI-CLI-HUB\]/.test(line) && closeIdx === -1) { closeIdx = i; continue; }
@@ -1543,7 +1630,7 @@ function extractPlainYesNoApproval(lines) {
   for (let i = lines.length - 1; i >= searchStart; i--) {
     const line = String(lines[i] || '').trim();
     if (!line) continue;
-    if (/\[AI-CLI-HUB\]|\[\/AI-CLI-HUB\]/.test(line)) return null;
+    if (/\[AI-CLI-HUB\]|\[\/AI-CLI-HUB\]/.test(line)) continue;
     if (yesNoRe.test(line)) return _yesNoApprovalOptions();
   }
   return null;
@@ -2943,8 +3030,9 @@ function renderSessionList() {
       const metaRow = `<div class="card-meta-row"><span class="badge ${state}">${label}</span>${sessionLabel}${msgHtml}</div>`;
       c.dataset.sessionId = s.id;
       const modelBadge = s.model ? ` <span class="card-model">${escapeHtml(s.model)}</span>` : '';
+      const branchBadge = s.branch ? ` <span class="card-branch" data-tooltip="${escapeHtml(s.branch)}">${escapeHtml(s.branch)}</span>` : '';
       c.innerHTML =
-        `<div class="card-title-row"><b>#${s.id}</b> ${providerIconHtml(s.provider)} <span class="card-display-name">${escapeHtml(s.display_name || s.provider || '')}</span>${modelBadge}${startedAtHtml}${lastOutHtml}</div>` +
+        `<div class="card-title-row"><b>#${s.id}</b> ${providerIconHtml(s.provider)} <span class="card-display-name">${escapeHtml(s.display_name || s.provider || '')}</span>${modelBadge}${branchBadge}${startedAtHtml}${lastOutHtml}</div>` +
         metaRow;
 
       const actions = document.createElement('div');
@@ -4051,6 +4139,7 @@ function openLightbox(src) {
     await saveReconnectGrace();
     await saveLogConfig();
     await saveSlashCmdSources();
+    saveUsageLinkSettings();
   };
 
   window.__settingsResetAll = async () => {
@@ -4067,6 +4156,8 @@ function openLightbox(src) {
       localStorage.setItem(STORAGE_APPROVAL_AUTO_SWITCH_KEY, '0');
       localStorage.setItem(STORAGE_QUICK_CMD_1_KEY, DEFAULT_QUICK_CMD_1);
       localStorage.setItem(STORAGE_QUICK_CMD_2_KEY, DEFAULT_QUICK_CMD_2);
+      localStorage.removeItem(STORAGE_USAGE_LINK_CLAUDE_KEY);
+      localStorage.removeItem(STORAGE_USAGE_LINK_CODEX_KEY);
     } catch (_) {}
 
     const triggerEnabled = document.getElementById('trigger-enabled');
@@ -4118,6 +4209,7 @@ function openLightbox(src) {
     const slashCodexEl = document.getElementById('slash-src-codex');
     if (slashClaudeEl) slashClaudeEl.value = '';
     if (slashCodexEl) slashCodexEl.value = '';
+    loadUsageLinkSettings();
 
     await window.__settingsSaveAll();
     await loadApprovalSettings();
@@ -4131,6 +4223,7 @@ function openLightbox(src) {
       loadLogConfig();
       loadApprovalSettings();
       loadSlashCmdSources();
+      loadUsageLinkSettings();
     }
   });
 

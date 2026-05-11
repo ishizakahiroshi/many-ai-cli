@@ -33,10 +33,12 @@ import (
 // maxPTYBuf: UI 再接続時リプレイ用の PTY バッファ上限（セッションごと）。
 // uiPingInterval: UI WebSocket keepalive ping の送信間隔。
 const (
-	idleAfter      = 500 * time.Millisecond
-	tickerInterval = 200 * time.Millisecond
-	maxPTYBuf      = 512 * 1024 // 512 KB
-	uiPingInterval = 30 * time.Second
+	idleAfter           = 500 * time.Millisecond
+	tickerInterval      = 200 * time.Millisecond
+	maxPTYBuf           = 512 * 1024 // 512 KB
+	uiPingInterval      = 30 * time.Second
+	branchLookupTimeout = 250 * time.Millisecond
+	branchRefreshAfter  = 2 * time.Second
 )
 
 // session の State は次のいずれか:
@@ -56,6 +58,7 @@ type session struct {
 	Provider     string `json:"provider"`
 	Display      string `json:"display_name"`
 	CWD          string `json:"cwd"`
+	Branch       string `json:"branch,omitempty"`
 	Label        string `json:"label,omitempty"` // UI カード 3 行目に【ラベル】として表示
 	Model        string `json:"model,omitempty"` // 使用モデル名; UI カード表示用
 	Shell        string `json:"shell,omitempty"`
@@ -68,6 +71,7 @@ type session struct {
 	// JSON 外: 状態評価用
 	lastOutputAt    time.Time // idleAfter 計算用。LastOutputAt と同期して更新する
 	approvalVisible bool
+	branchCheckedAt time.Time
 
 	// JSON 外: UI 再接続時リプレイ用リングバッファ（末尾 maxPTYBuf bytes）
 	ptyBuf []byte
@@ -90,6 +94,31 @@ func (s *session) idleStateName() string {
 		return "waiting"
 	}
 	return "standby"
+}
+
+func gitBranch(cwd string) string {
+	if strings.TrimSpace(cwd) == "" {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), branchLookupTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "-C", cwd, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		return ""
+	}
+	branch := strings.TrimSpace(string(out))
+	if branch != "HEAD" {
+		return branch
+	}
+	out, err = exec.CommandContext(ctx, "git", "-C", cwd, "rev-parse", "--short", "HEAD").Output()
+	if err != nil {
+		return ""
+	}
+	hash := strings.TrimSpace(string(out))
+	if hash == "" {
+		return ""
+	}
+	return "detached:" + hash
 }
 
 type Server struct {
@@ -222,11 +251,15 @@ func (s *Server) Run(ctx context.Context) error {
 	go s.cleanAttachments()
 	go func() {
 		<-runCtx.Done()
-		s.killAllWrappers()
 		if s.cfg.Approval.Enabled {
 			s.removeApprovalRules()
 		}
-		_ = s.httpSrv.Shutdown(context.Background())
+		// Stop the Hub server without marking wrapper sessions as intentionally
+		// disconnected. Closing the HTTP server drops WS connections after the
+		// listener is gone, so wrappers treat this as Hub-down and enter their
+		// reconnect grace period. Explicit session termination still goes through
+		// /api/kill-all, dismiss, or idle-timeout.
+		_ = s.httpSrv.Close()
 		_ = os.Remove(pidPath)
 	}()
 	err = s.httpSrv.Serve(ln)
@@ -343,6 +376,7 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 
 func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	startedAt := time.Now()
+	branch := gitBranch(reg.CWD)
 	s.mu.Lock()
 	s.nextID++
 	id := s.nextID
@@ -362,18 +396,20 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 
 	s.mu.Lock()
 	ses := &session{
-		ID:        id,
-		Provider:  reg.Provider,
-		Display:   reg.Display,
-		CWD:       reg.CWD,
-		Label:     reg.Label,
-		Model:     reg.Model,
-		Shell:     reg.Shell,
-		State:     "standby",
-		StartedAt: startedAt.Format(time.RFC3339),
-		LogPath:   rawLogPath,
-		JSONLPath: jsonlPath,
-		History:   history,
+		ID:              id,
+		Provider:        reg.Provider,
+		Display:         reg.Display,
+		CWD:             reg.CWD,
+		Branch:          branch,
+		Label:           reg.Label,
+		Model:           reg.Model,
+		Shell:           reg.Shell,
+		State:           "standby",
+		StartedAt:       startedAt.Format(time.RFC3339),
+		branchCheckedAt: startedAt,
+		LogPath:         rawLogPath,
+		JSONLPath:       jsonlPath,
+		History:         history,
 	}
 	s.sessions[id] = ses
 	s.wrappers[id] = conn
@@ -390,13 +426,14 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	ses.lastCols, ses.lastRows = initCols, initRows
 	s.mu.Unlock()
 	_ = websocket.JSON.Send(conn, proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath})
-	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Label: reg.Label, Model: reg.Model, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt})
+	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Branch: branch, Label: reg.Label, Model: reg.Model, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt})
 	s.writeHistory(id, map[string]any{
 		"ts":         startedAt.Format(time.RFC3339),
 		"type":       "session_start",
 		"session_id": id,
 		"provider":   reg.Provider,
 		"cwd":        reg.CWD,
+		"branch":     branch,
 		"label":      reg.Label,
 		"model":      reg.Model,
 		"shell":      reg.Shell,
@@ -421,6 +458,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	} else {
 		startedAtText = startedAt.Format(time.RFC3339)
 	}
+	branch := gitBranch(req.CWD)
 
 	replay, err := base64.StdEncoding.DecodeString(req.ReplayB64)
 	if err != nil {
@@ -463,23 +501,25 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		lastOutputAt = now.Format(time.RFC3339)
 	}
 	s.sessions[acceptedID] = &session{
-		ID:           acceptedID,
-		Provider:     req.Provider,
-		Display:      req.Display,
-		CWD:          req.CWD,
-		Label:        req.Label,
-		Model:        req.Model,
-		Shell:        req.Shell,
-		State:        "running",
-		LastOutputAt: lastOutputAt,
-		StartedAt:    startedAtText,
-		lastOutputAt: lastOutputAtTime,
-		ptyBuf:       replay,
-		lastCols:     req.Cols,
-		lastRows:     req.Rows,
-		LogPath:      rawLogPath,
-		JSONLPath:    jsonlPath,
-		History:      history,
+		ID:              acceptedID,
+		Provider:        req.Provider,
+		Display:         req.Display,
+		CWD:             req.CWD,
+		Branch:          branch,
+		Label:           req.Label,
+		Model:           req.Model,
+		Shell:           req.Shell,
+		State:           "running",
+		LastOutputAt:    lastOutputAt,
+		StartedAt:       startedAtText,
+		lastOutputAt:    lastOutputAtTime,
+		branchCheckedAt: now,
+		ptyBuf:          replay,
+		lastCols:        req.Cols,
+		lastRows:        req.Rows,
+		LogPath:         rawLogPath,
+		JSONLPath:       jsonlPath,
+		History:         history,
 	}
 	s.wrappers[acceptedID] = conn
 	if s.nextID < acceptedID {
@@ -490,7 +530,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		_ = oldHistory.Close()
 	}
 	_ = websocket.JSON.Send(conn, proto.Message{Type: "reattach_ack", SessionID: acceptedID})
-	s.broadcast(proto.Message{Type: "session_update", SessionID: acceptedID, Provider: req.Provider, Display: req.Display, CWD: req.CWD, Label: req.Label, Model: req.Model, Shell: req.Shell, State: "running", LastOutputAt: lastOutputAt, StartedAt: startedAtText})
+	s.broadcast(proto.Message{Type: "session_update", SessionID: acceptedID, Provider: req.Provider, Display: req.Display, CWD: req.CWD, Branch: branch, Label: req.Label, Model: req.Model, Shell: req.Shell, State: "running", LastOutputAt: lastOutputAt, StartedAt: startedAtText})
 	s.writeHistory(acceptedID, map[string]any{
 		"ts":             now.Format(time.RFC3339),
 		"type":           "session_reattach",
@@ -498,6 +538,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		"old_session_id": req.SessionID,
 		"provider":       req.Provider,
 		"cwd":            req.CWD,
+		"branch":         branch,
 		"label":          req.Label,
 		"model":          req.Model,
 		"shell":          req.Shell,
@@ -626,7 +667,7 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 					// /clear でセッション概要をリセット（次の入力が新しい概要になる）
 					ses.FirstMessage = ""
 					ses.LastMessage = ""
-					msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Label: ses.Label, Model: ses.Model, State: ses.State, LastOutputAt: ses.LastOutputAt}
+					msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, State: ses.State, LastOutputAt: ses.LastOutputAt}
 					firstMsgBroadcast = &msg
 				} else if text != "" {
 					if ses.FirstMessage == "" {
@@ -636,7 +677,7 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 					if !isDigitsOnly(text) {
 						ses.LastMessage = text
 					}
-					msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Label: ses.Label, Model: ses.Model, State: ses.State, LastOutputAt: ses.LastOutputAt, FirstMessage: ses.FirstMessage, LastMessage: ses.LastMessage}
+					msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, State: ses.State, LastOutputAt: ses.LastOutputAt, FirstMessage: ses.FirstMessage, LastMessage: ses.LastMessage}
 					firstMsgBroadcast = &msg
 				}
 			}
@@ -773,10 +814,10 @@ func (s *Server) markRunning(id int) {
 	if changed {
 		ses.State = "running"
 	}
-	provider, display, cwd, label, model, lastOutputAt := ses.Provider, ses.Display, ses.CWD, ses.Label, ses.Model, ses.LastOutputAt
+	provider, display, cwd, branch, label, model, lastOutputAt := ses.Provider, ses.Display, ses.CWD, ses.Branch, ses.Label, ses.Model, ses.LastOutputAt
 	s.mu.Unlock()
 	if changed {
-		s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: provider, Display: display, CWD: cwd, Label: label, Model: model, State: "running", LastOutputAt: lastOutputAt})
+		s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: provider, Display: display, CWD: cwd, Branch: branch, Label: label, Model: model, State: "running", LastOutputAt: lastOutputAt})
 	}
 }
 
@@ -807,13 +848,23 @@ func (s *Server) evaluateIdle() {
 		provider     string
 		display      string
 		cwd          string
+		branch       string
 		label        string
 		model        string
 		state        string
 		lastOutputAt string
 	}
+	type branchCheck struct {
+		id  int
+		cwd string
+	}
 	var changes []change
+	var branchChecks []branchCheck
 	for id, ses := range s.sessions {
+		if now.Sub(ses.branchCheckedAt) >= branchRefreshAfter {
+			ses.branchCheckedAt = now
+			branchChecks = append(branchChecks, branchCheck{id: id, cwd: ses.CWD})
+		}
 		var newState string
 		switch ses.State {
 		case "running":
@@ -829,13 +880,44 @@ func (s *Server) evaluateIdle() {
 		}
 		if newState != "" && newState != ses.State {
 			ses.State = newState
-			changes = append(changes, change{id: id, provider: ses.Provider, display: ses.Display, cwd: ses.CWD, label: ses.Label, model: ses.Model, state: newState, lastOutputAt: ses.LastOutputAt})
+			changes = append(changes, change{id: id, provider: ses.Provider, display: ses.Display, cwd: ses.CWD, branch: ses.Branch, label: ses.Label, model: ses.Model, state: newState, lastOutputAt: ses.LastOutputAt})
 		}
 	}
 	s.mu.Unlock()
 	for _, c := range changes {
-		s.broadcast(proto.Message{Type: "session_update", SessionID: c.id, Provider: c.provider, Display: c.display, CWD: c.cwd, Label: c.label, Model: c.model, State: c.state, LastOutputAt: c.lastOutputAt})
+		s.broadcast(proto.Message{Type: "session_update", SessionID: c.id, Provider: c.provider, Display: c.display, CWD: c.cwd, Branch: c.branch, Label: c.label, Model: c.model, State: c.state, LastOutputAt: c.lastOutputAt})
 	}
+	for _, bc := range branchChecks {
+		s.refreshBranch(bc.id, bc.cwd)
+	}
+}
+
+func (s *Server) refreshBranch(id int, cwd string) {
+	branch := gitBranch(cwd)
+	s.mu.Lock()
+	ses := s.sessions[id]
+	if ses == nil || ses.CWD != cwd || ses.Branch == branch {
+		s.mu.Unlock()
+		return
+	}
+	ses.Branch = branch
+	msg := proto.Message{
+		Type:         "session_update",
+		SessionID:    id,
+		Provider:     ses.Provider,
+		Display:      ses.Display,
+		CWD:          ses.CWD,
+		Branch:       ses.Branch,
+		Label:        ses.Label,
+		Model:        ses.Model,
+		State:        ses.State,
+		LastOutputAt: ses.LastOutputAt,
+		StartedAt:    ses.StartedAt,
+		FirstMessage: ses.FirstMessage,
+		LastMessage:  ses.LastMessage,
+	}
+	s.mu.Unlock()
+	s.broadcast(msg)
 }
 
 func (s *Server) addUI(c *websocket.Conn) {
