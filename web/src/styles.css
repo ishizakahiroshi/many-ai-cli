@@ -314,6 +314,13 @@ header {
   padding: 7px 14px;
 }
 .settings-label { font-size: 0.85rem; color: var(--text); white-space: nowrap; flex-shrink: 0; }
+.settings-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 
 .settings-select {
   background: var(--bg);
@@ -347,6 +354,18 @@ header {
   text-decoration: none;
 }
 .settings-link-btn:hover { background: var(--accent-soft); color: var(--text); }
+.settings-inline-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  text-align: center;
+  white-space: nowrap;
+}
 
 .settings-section { border-top: 1px solid var(--line); }
 .settings-section:first-of-type { border-top: none; }

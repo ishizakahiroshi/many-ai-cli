@@ -12,17 +12,25 @@ import (
 const claudeImportLine = "@~/.any-ai-cli/approval-rules.md"
 const codexBlockStart  = "<!-- any-ai-cli:approval-rules -->"
 const codexBlockEnd    = "<!-- /any-ai-cli:approval-rules -->"
-const rulesVersion     = "2"
+const rulesVersion     = "3"
 
 var rulesFileContent = strings.Join([]string{
-	"<!-- version: 2 -->",
+	"<!-- version: 3 -->",
 	"## any-ai-cli Approval Format",
 	"",
 	"**このセッションが any-ai-cli Hub 管理下かどうかを最初に確認してください。**",
 	"",
-	"確認方法：",
-	"- PowerShell: `$env:ANY_AI_CLI`",
-	"- bash/zsh: `echo $ANY_AI_CLI`",
+	"確認方法（**OS と使用するツールに応じて構文を選ぶ**）：",
+	"",
+	"- macOS / Linux: `Bash` ツールで `echo \"$ANY_AI_CLI\"`",
+	"- Windows (PowerShell ネイティブ): `PowerShell` ツールで `$env:ANY_AI_CLI`",
+	"- Windows (Git Bash / WSL / Cygwin): `Bash` ツールで `echo \"$ANY_AI_CLI\"`",
+	"",
+	"⚠️ **取り違え注意**：",
+	"- `Bash` ツールに `$env:ANY_AI_CLI` を渡すと `:ANY_AI_CLI: command not found`（exit 127）で失敗する。bash では `$env` が空に展開され、残った `:ANY_AI_CLI` がコマンドとして実行されるため。",
+	"- `PowerShell` ツールに `echo $ANY_AI_CLI` を渡すと、`$ANY_AI_CLI` は PowerShell では未定義の変数として空文字に展開され、値が取得できない。",
+	"- macOS / Linux には PowerShell が標準で入っていないので `PowerShell` ツールは選ばない。",
+	"- 失敗したらツールを切り替えて再試行すること（落としてセッションを止めない）。",
 	"",
 	"`ANY_AI_CLI=1` の場合のみ、以下の [ANY-AI-CLI] マーカーを使用してください。",
 	"未設定・空の場合はマーカーなしでプレーンテキストで出力してください。",

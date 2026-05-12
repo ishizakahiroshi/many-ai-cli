@@ -7,25 +7,73 @@ import (
 
 const repositoryURL = "https://github.com/ishizakahiroshi/any-ai-cli"
 
+const (
+	ansiReset        = "\x1b[0m"
+	ansiBold         = "\x1b[1m"
+	ansiBlink        = "\x1b[5m"
+	ansiBrightOrange = "\x1b[38;5;208m"
+	ansiLogoFill     = "\x1b[97m"
+	ansiLogoOutline  = "\x1b[38;5;226m"
+)
+
 func startupBanner(version, addr, token string) string {
 	hubBase := "http://" + addr
 	hubURL := hubBase + "/?token=" + token
 	versionLabel := formatVersionLabel(version)
+	warning := ansiBold + ansiBlink + ansiBrightOrange + "注意: この画面は Web UI と連結しています。閉じないでください。" + ansiReset
 
-	lines := []string{
+	logoLines := []string{
 		" █████╗ ███╗   ██╗██╗   ██╗       █████╗ ██╗",
 		"██╔══██╗████╗  ██║╚██╗ ██╔╝      ██╔══██╗██║",
 		"███████║██╔██╗ ██║ ╚████╔╝ █████╗███████║██║",
 		"██╔══██║██║╚██╗██║  ╚██╔╝  ╚════╝██╔══██║██║",
 		"██║  ██║██║ ╚████║   ██║         ██║  ██║██║",
 		"╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝         ╚═╝  ╚═╝╚═╝",
+	}
+	lines := make([]string, 0, len(logoLines)+7)
+	for _, line := range logoLines {
+		lines = append(lines, colorizeLogoLine(line))
+	}
+	lines = append(lines,
 		"",
 		fmt.Sprintf("Claude Code / Codex wrapper     %s", versionLabel),
 		fmt.Sprintf("GitHub: %s", repositoryURL),
 		fmt.Sprintf("WebUI:  %s", hubBase),
 		fmt.Sprintf("Open:   %s", hubURL),
-	}
+		"",
+		warning,
+	)
 	return strings.Join(lines, "\n") + "\n"
+}
+
+func colorizeLogoLine(line string) string {
+	var b strings.Builder
+	current := ""
+	for _, r := range line {
+		var next string
+		switch r {
+		case '█':
+			next = ansiLogoFill
+		case '╗', '╔', '╝', '╚', '║', '═':
+			next = ansiLogoOutline
+		default:
+			next = ""
+		}
+		if next != current {
+			if current != "" {
+				b.WriteString(ansiReset)
+			}
+			if next != "" {
+				b.WriteString(next)
+			}
+			current = next
+		}
+		b.WriteRune(r)
+	}
+	if current != "" {
+		b.WriteString(ansiReset)
+	}
+	return b.String()
 }
 
 func formatVersionLabel(version string) string {

@@ -253,6 +253,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	go s.stateTicker(runCtx)
 	go s.cleanAttachments()
+	go s.cleanSpawnLogs()
 	go func() {
 		<-runCtx.Done()
 		if s.cfg.Approval.Enabled {
@@ -271,6 +272,31 @@ func (s *Server) Run(ctx context.Context) error {
 		return nil
 	}
 	return err
+}
+
+// cleanSpawnLogs removes wrap-process spawn logs (logs/spawn/*.log) older than 7 days.
+// These files capture stdout/stderr of each spawned wrap process for trouble-shooting
+// (especially GUI-launched Hub where stderr is otherwise lost). One file per spawn is
+// kept short-term to debug startup failures; trimming on Hub start prevents accumulation.
+func (s *Server) cleanSpawnLogs() {
+	dir := filepath.Join(s.cfg.Hub.LogDir, "spawn")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-7 * 24 * time.Hour)
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
 }
 
 // cleanAttachments removes attachment files older than 7 days and then prunes
@@ -1186,43 +1212,107 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	}
 	cmd := exec.Command(exe, wrapArgs...)
 	cmd.Dir = cwd
-	cmd.Env = append(os.Environ(), "ANY_AI_CLI=1")
+	cmd.Env = append(sanitizeEnv(os.Environ()), "ANY_AI_CLI=1")
 	if s.parentShell != "" {
 		cmd.Env = append(cmd.Env, "ANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}
 	// Windows ConPTY (go-pty) は wrap プロセスの std handles が未設定だと
-	// claude.exe / codex の起動に失敗してすぐ disconnect する。os.DevNull を
-	// 明示的にバインドして安定動作させる (Unix では /dev/null 相当)。
-	var devNull *os.File
+	// claude.exe / codex の起動に失敗してすぐ disconnect する。stdin は
+	// os.DevNull、stdout/stderr は spawn ごとのログファイルに明示的にバインド
+	// する。GUI から起動された Hub (コンソール無し) でも子プロセスの起動
+	// 失敗時の panic / エラーメッセージを観測できるようにするため、
+	// stdout/stderr は破棄せずファイルに残す。
+	var stdinNull, spawnLog *os.File
 	if f, devErr := os.OpenFile(os.DevNull, os.O_RDWR, 0); devErr == nil {
-		devNull = f
-		cmd.Stdin = devNull
-		cmd.Stdout = devNull
-		cmd.Stderr = devNull
+		stdinNull = f
+		cmd.Stdin = stdinNull
 	} else {
-		s.logger.Warn("spawn: failed to open os.DevNull", "err", devErr)
+		s.logger.Warn("spawn: failed to open os.DevNull for stdin", "err", devErr)
+	}
+	spawnLogPath := filepath.Join(s.cfg.Hub.LogDir, "spawn",
+		fmt.Sprintf("%s-%s.log", body.Provider, time.Now().Format("20060102-150405.000")))
+	if err := os.MkdirAll(filepath.Dir(spawnLogPath), 0o755); err == nil {
+		if f, logErr := os.OpenFile(spawnLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); logErr == nil {
+			spawnLog = f
+			cmd.Stdout = spawnLog
+			cmd.Stderr = spawnLog
+		} else {
+			s.logger.Warn("spawn: failed to create spawn log file", "path", spawnLogPath, "err", logErr)
+		}
 	}
 	setCmdSysProcAttr(cmd)
 	if err := cmd.Start(); err != nil {
-		if devNull != nil {
-			_ = devNull.Close()
+		if stdinNull != nil {
+			_ = stdinNull.Close()
+		}
+		if spawnLog != nil {
+			_ = spawnLog.Close()
 		}
 		http.Error(w, "spawn error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.logger.Info("spawn: wrap process started",
+		"provider", body.Provider, "pid", cmd.Process.Pid, "spawn_log", spawnLogPath)
 	if resolvedModel != "" {
 		if err := s.setLastModel(body.Provider, resolvedModel); err != nil {
 			s.logger.Warn("failed to save last model", "provider", body.Provider, "error", err)
 		}
 	}
 	go func() {
-		_ = cmd.Wait()
-		if devNull != nil {
-			_ = devNull.Close()
+		waitErr := cmd.Wait()
+		exitCode := 0
+		if cmd.ProcessState != nil {
+			exitCode = cmd.ProcessState.ExitCode()
+		}
+		s.logger.Info("spawn: wrap process exited",
+			"provider", body.Provider, "exit_code", exitCode, "wait_err", fmt.Sprintf("%v", waitErr))
+		if stdinNull != nil {
+			_ = stdinNull.Close()
+		}
+		if spawnLog != nil {
+			_ = spawnLog.Close()
 		}
 	}()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+}
+
+// sanitizeEnv は子プロセスへ渡す環境変数列の PATH (Windows では "Path" / "PATH" の
+// 大小無視) から連続セミコロンによる空エントリを除去する。
+//
+// Windows ではユーザー Path に `;;` のような空エントリが混ざっていると、MSIX/UWP
+// アプリ (例: WindowsApps 経由の OneCommander 等) から起動された子プロセスへ env を
+// 継承する過程で **最初の空エントリ以降が打ち切られる** ケースがある。これが起きると
+// 後段に並ぶ `.local\bin` 等のディレクトリが見えなくなり、wrap プロセス内の
+// `exec.LookPath("claude")` が失敗 → セッションが即 disconnect する。
+//
+// any-ai-cli 自身は spawn 直前に env を sanitize することで、永続 Path のゴミを
+// ユーザーが気づかなくても claude / codex が見える状態を保証する。
+func sanitizeEnv(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		eq := strings.IndexByte(kv, '=')
+		if eq <= 0 {
+			out = append(out, kv)
+			continue
+		}
+		key := kv[:eq]
+		if !strings.EqualFold(key, "Path") {
+			out = append(out, kv)
+			continue
+		}
+		raw := kv[eq+1:]
+		parts := strings.Split(raw, string(os.PathListSeparator))
+		cleaned := make([]string, 0, len(parts))
+		for _, p := range parts {
+			if strings.TrimSpace(p) == "" {
+				continue
+			}
+			cleaned = append(cleaned, p)
+		}
+		out = append(out, key+"="+strings.Join(cleaned, string(os.PathListSeparator)))
+	}
+	return out
 }
 
 func (s *Server) getLastModel(provider string) string {
