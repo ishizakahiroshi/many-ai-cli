@@ -247,7 +247,7 @@ func (s *Server) Run(ctx context.Context) error {
 	setConsoleTitle("any-ai-cli [hub]")
 	setConsoleIcon()
 	s.logger.Info("ANY-AI-CLI started", "url", fmt.Sprintf("http://%s/?token=%s", s.httpSrv.Addr, s.cfg.Token))
-	fmt.Printf("ANY-AI-CLI started: http://%s/?token=%s\n", s.httpSrv.Addr, s.cfg.Token)
+	fmt.Print(startupBanner(s.version, s.httpSrv.Addr, s.cfg.Token))
 	if s.cfg.Approval.Enabled {
 		s.injectApprovalRules()
 	}
@@ -1190,8 +1190,23 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if s.parentShell != "" {
 		cmd.Env = append(cmd.Env, "ANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}
+	// Windows ConPTY (go-pty) は wrap プロセスの std handles が未設定だと
+	// claude.exe / codex の起動に失敗してすぐ disconnect する。os.DevNull を
+	// 明示的にバインドして安定動作させる (Unix では /dev/null 相当)。
+	var devNull *os.File
+	if f, devErr := os.OpenFile(os.DevNull, os.O_RDWR, 0); devErr == nil {
+		devNull = f
+		cmd.Stdin = devNull
+		cmd.Stdout = devNull
+		cmd.Stderr = devNull
+	} else {
+		s.logger.Warn("spawn: failed to open os.DevNull", "err", devErr)
+	}
 	setCmdSysProcAttr(cmd)
 	if err := cmd.Start(); err != nil {
+		if devNull != nil {
+			_ = devNull.Close()
+		}
 		http.Error(w, "spawn error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1200,7 +1215,12 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 			s.logger.Warn("failed to save last model", "provider", body.Provider, "error", err)
 		}
 	}
-	go func() { _ = cmd.Wait() }()
+	go func() {
+		_ = cmd.Wait()
+		if devNull != nil {
+			_ = devNull.Close()
+		}
+	}()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
