@@ -104,7 +104,9 @@ func run(args []string) error {
 			_ = hub.OpenBrowserForConfig(cfg)
 			return nil
 		}
-		logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+		// GUI から引数なしで起動された場合でも hub.log にイベントが残るよう
+		// FileLogger を使う (stderr が NUL のため stderr 単独だと観測不能になる)。
+		logger := hublog.NewFileLogger(cfg.Hub.LogDir, cfg.Log, false, false)
 		s, err := hub.NewServer(cfg, logger, false, displayVersion())
 		if err != nil {
 			return err

@@ -232,10 +232,13 @@
         <div class="settings-section-body">
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_notify_sound_toggle">通知音</span>
-            <label class="approval-toggle">
-              <input type="checkbox" id="notify-sound-enabled">
-              <span class="approval-toggle-slider"></span>
-            </label>
+            <div class="settings-row-actions notify-sound-actions">
+              <button id="notify-sound-test-btn" class="settings-link-btn settings-inline-btn" data-i18n="settings_notify_sound_test">テスト再生</button>
+              <label class="approval-toggle">
+                <input type="checkbox" id="notify-sound-enabled">
+                <span class="approval-toggle-slider"></span>
+              </label>
+            </div>
           </div>
           <div class="settings-row" id="notify-sound-type-row">
             <span class="settings-label" data-i18n="settings_notify_sound_type">音源</span>
@@ -249,9 +252,6 @@
             <button id="notify-sound-browse-btn" class="settings-link-btn" data-i18n="settings_notify_sound_browse">選択...</button>
             <span id="notify-sound-filename" class="settings-note"></span>
             <input type="file" id="notify-sound-file" accept="audio/*" style="display:none">
-          </div>
-          <div class="settings-row">
-            <button id="notify-sound-test-btn" class="settings-link-btn" data-i18n="settings_notify_sound_test">テスト再生</button>
           </div>
         </div>
       </details>

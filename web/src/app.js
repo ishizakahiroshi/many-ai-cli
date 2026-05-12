@@ -3340,6 +3340,29 @@ function switchSessionByTab(shift) {
   }
 }
 
+function jumpToSessionByIndex(n) {
+  const all = getOrderedSessions();
+  const target = all[n - 1];
+  if (!target) return;
+  activateSession(target.id);
+  requestAnimationFrame(() => {
+    const card = document.querySelector(`.card[data-session-id="${target.id}"]`);
+    card?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  });
+}
+
+document.addEventListener('keydown', (e) => {
+  if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  const n = parseInt(e.key, 10);
+  if (!(n >= 1 && n <= 9)) return;
+  const active = document.activeElement;
+  const tag = active?.tagName;
+  const isOtherInput = (tag === 'INPUT' || tag === 'TEXTAREA') && active.id !== 'input-el';
+  if (isOtherInput) return;
+  e.preventDefault();
+  jumpToSessionByIndex(n);
+});
+
 let _sessionListClickDelegated = false;
 let _sessionCardPointerDown = null;
 
