@@ -455,7 +455,8 @@ function filterFirstMessage(text) {
 }
 
 function applyTheme(theme) {
-  const t = (theme === 'dark' || theme === 'blue' || theme === 'light') ? theme : 'dark';
+  // 'blue' は廃止済み。既存設定が 'blue' の場合は 'dark' にフォールバック
+  const t = (theme === 'dark' || theme === 'light') ? theme : 'dark';
   document.documentElement.setAttribute('data-theme', t);
   const sel = document.getElementById('theme-select');
   if (sel) sel.value = t;
@@ -875,11 +876,24 @@ const APPROVAL_PENDING_TEXT_TAIL_LIMIT = 12000;
 
 // 承認選択肢の sig を計算。Ink の再描画やスクロールバック残骸による
 // label の微妙な差異（前後空白、空白の重複、truncate 位置）を吸収するため normalize する。
+// (Y:1/N:0) Yes/No プロンプトはどれも同じ label を持つため、_ctx に質問文ハッシュを
+// 載せて区別する（連続する別質問が同一 sig で誤抑制されないように）。
 function approvalSig(options) {
   return JSON.stringify((options || []).map(o => {
     const lbl = String(o.label || '').trim().replace(/\s+/g, ' ').slice(0, 80);
-    return `${o.num}:${lbl}`;
+    const ctx = o && o._ctx ? `|${o._ctx}` : '';
+    return `${o.num}:${lbl}${ctx}`;
   }));
+}
+
+// シンプルな文字列ハッシュ (djb2)。承認質問文の同一性判定に使う。
+function _approvalCtxHash(s) {
+  const text = String(s || '').replace(/\s+/g, ' ').trim();
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) {
+    h = (((h << 5) + h) + text.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(36);
 }
 const approvalHintConfirmTimers = new Map(); // sessionId → timer（生バイト検出を短時間 debounce してチカチカを防ぐ）
 const toolOutputs = new Map(); // sessionId → [{uid, lines, ts}]
@@ -1068,7 +1082,14 @@ ws.onmessage = (ev) => {
 
   if (m.type === 'snapshot') {
     const arr = typeof m.sessions === 'string' ? JSON.parse(m.sessions) : m.sessions;
-    (arr || []).forEach(s => { sessions.set(s.id, s); addToSessionOrder(s.id); });
+    (arr || []).forEach(s => {
+      if (s.state === 'completed') {
+        requestSessionDismiss(s.id);
+        return;
+      }
+      sessions.set(s.id, s);
+      addToSessionOrder(s.id);
+    });
     document.getElementById('summary').textContent = t('connected') || '接続済み';
     renderSessionList();
     checkApprovalOnStartup();
@@ -1076,6 +1097,11 @@ ws.onmessage = (ev) => {
       _elapsedTimerInterval = setInterval(() => renderSessionList(), 1000);
     }
   } else if (m.type === 'session_update') {
+    if (m.state === 'completed') {
+      requestSessionDismiss(m.session_id);
+      removeLocalSession(m.session_id);
+      return;
+    }
     const isNew = !sessions.has(m.session_id);
     const cur = sessions.get(m.session_id) || { id: m.session_id };
     if (m.provider)        cur.provider        = m.provider;
@@ -1097,6 +1123,11 @@ ws.onmessage = (ev) => {
       activateSession(m.session_id);
     }
   } else if (m.type === 'session_end') {
+    if ((m.state || 'disconnected') === 'completed') {
+      requestSessionDismiss(m.session_id);
+      removeLocalSession(m.session_id);
+      return;
+    }
     const s = sessions.get(m.session_id);
     if (s) s.state = m.state || 'disconnected';
     cancelApprovalHintConfirm(m.session_id);
@@ -1106,7 +1137,7 @@ ws.onmessage = (ev) => {
     }
     removeApprovalAutoSwitchTarget(m.session_id);
     maybeAutoSwitchToNextApproval();
-    const deadStates = ['completed', 'error', 'disconnected'];
+    const deadStates = ['error', 'disconnected'];
     if (deadStates.includes(m.state) && !autoDismissTimers.has(m.session_id)) {
       const timer = setTimeout(() => {
         autoDismissTimers.delete(m.session_id);
@@ -1460,7 +1491,7 @@ function ensureTerminal(id) {
     term.loadAddon(u11);
     term.unicode.activeVersion = '11';
   }
-  terminals.set(id, { term, fitAddon, container: null, pendingChunks: [], pendingTextTail: '', markerFilterCarry: new Uint8Array(0), autoScroll: true, everAttached: false });
+  terminals.set(id, { term, fitAddon, container: null, pendingChunks: [], pendingTextTail: '', markerFilterCarry: new Uint8Array(0), autoScroll: true, stickToBottomOnNextFit: false, everAttached: false });
 }
 
 function attachTerminal(id) {
@@ -1551,7 +1582,8 @@ function isTerminalAtBottom(t) {
 }
 
 function fitTerminalPreservingBottom(t, id) {
-  const shouldStickToBottom = !!(t && (t.autoScroll || isTerminalAtBottom(t)));
+  const shouldStickToBottom = !!(t && (t.autoScroll || t.stickToBottomOnNextFit || isTerminalAtBottom(t)));
+  if (t) t.stickToBottomOnNextFit = false;
   t.fitAddon.fit();
   if (shouldStickToBottom) {
     t.autoScroll = true;
@@ -1573,6 +1605,27 @@ function forceTerminalToBottomAfterLayout(id) {
   requestAnimationFrame(() => {
     forceTerminalToBottom(id);
     requestAnimationFrame(() => forceTerminalToBottom(id));
+  });
+}
+
+function refitActiveTerminalAfterLayout(stickToBottom) {
+  if (activeSessionId === null) return;
+  const id = activeSessionId;
+  const t = terminals.get(id);
+  if (!canFitTerminal(t)) return;
+  if (stickToBottom) {
+    t.autoScroll = true;
+    t.stickToBottomOnNextFit = true;
+  }
+  requestAnimationFrame(() => {
+    if (activeSessionId !== id || !canFitTerminal(t)) return;
+    const prevCols = t.term.cols;
+    const prevRows = t.term.rows;
+    fitTerminalPreservingBottom(t, id);
+    if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
+      sendResize(id, t.term.cols, t.term.rows);
+    }
+    if (stickToBottom) forceTerminalToBottomAfterLayout(id);
   });
 }
 
@@ -1949,8 +2002,8 @@ function trackApprovalHintFromChunk(id, bytes) {
   const hasApprovalLikeLabel = options.some((opt) => approvalLabelRe.test(opt.label));
   const isHubChoice = isHubChoicePrompt(contextLines, options);
   const approvalNear = hasCursorOption &&
-    ((hasApprovalLikeLabel && (hasUserSpecifies || contextLines.some((line) => matchProviderApprovalTrigger(provider, line)))) || isHubChoice);
-  const hasChoiceMenuHint = hasCursorOption && options.length > 0 && contextLines.some((line) => matchProviderApprovalTrigger(provider, line));
+    ((hasApprovalLikeLabel && (hasUserSpecifies || contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)))) || isHubChoice);
+  const hasChoiceMenuHint = hasCursorOption && options.length > 0 && contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line));
   const nowVisible = (options.length > 0 && approvalNear) || hasChoiceMenuHint;
 
   // doSend / sendChoice で消費済みの選択肢が xterm scanBuffer に残っているため
@@ -2005,6 +2058,15 @@ function looksLikeYesNoQuestion(text) {
   return /[?？]\s*$/.test(before.trim()) || /[?？]/.test(before.slice(-120));
 }
 
+// (Y:1/N:0) 直前の質問本文を sig 用 ctx として抽出する。
+// 同一プロンプト再描画時に hash が変わらないよう、Ink ノイズが乗りにくい部分を選ぶ。
+function _yesNoCtxFromText(text) {
+  const s = String(text || '');
+  const idx = s.lastIndexOf('(Y:1/N:0)');
+  const before = idx >= 0 ? s.slice(0, idx) : s;
+  return before.slice(-200);
+}
+
 function extractHubMarkerApproval(lines) {
   const searchStart = Math.max(0, lines.length - 40);
   const recentText = lines.slice(searchStart).join('\n');
@@ -2048,11 +2110,11 @@ function extractPlainYesNoApproval(lines) {
     if (!line) continue;
     if (/\[ANY-AI-CLI\]|\[\/ANY-AI-CLI\]/.test(line)) continue;
     // TUI redraw/status text can be appended after the marker on the same logical line.
-    if (looksLikeYesNoQuestion(line)) return _yesNoApprovalOptions();
+    if (looksLikeYesNoQuestion(line)) return _yesNoApprovalOptions(_yesNoCtxFromText(line));
   }
   const recentText = recentLines.join('\n');
   if (!/\[ANY-AI-CLI\]|\[\/ANY-AI-CLI\]/.test(recentText) && looksLikeYesNoQuestion(recentText)) {
-    return _yesNoApprovalOptions();
+    return _yesNoApprovalOptions(_yesNoCtxFromText(recentText));
   }
   return null;
 }
@@ -2060,7 +2122,7 @@ function extractPlainYesNoApproval(lines) {
 function _parseHubBlock(lines) {
   const text = lines.join('\n');
   if (hasYesNoApprovalMarker(text)) {
-    return _yesNoApprovalOptions();
+    return _yesNoApprovalOptions(_yesNoCtxFromText(text));
   }
   const opts = lines
     .map(l => l.match(/^\s*(\d+)\.\s*(.+?)\s*$/))
@@ -2069,16 +2131,28 @@ function _parseHubBlock(lines) {
   return opts.length > 0 ? opts : null;
 }
 
-function _yesNoApprovalOptions() {
+function _yesNoApprovalOptions(ctxText) {
+  const ctx = ctxText ? _approvalCtxHash(ctxText) : '';
   return [
-    { num: 1, label: 'Yes (1)', isCurrent: true, preserveOrder: true },
-    { num: 0, label: 'No (0)', isCurrent: false, preserveOrder: true },
+    { num: 1, label: 'Yes (1)', isCurrent: true, preserveOrder: true, _ctx: ctx },
+    { num: 0, label: 'No (0)', isCurrent: false, preserveOrder: true, _ctx: ctx },
   ];
 }
 
-function approvalContextLines(lines, cluster, margin = 5) {
+function approvalContextLines(lines, cluster, margin = 10) {
   if (!cluster) return lines;
   return lines.slice(Math.max(0, cluster.start - margin), Math.min(lines.length, cluster.end + margin + 1));
+}
+
+function matchNativeApprovalTrigger(line) {
+  if (!line) return false;
+  const lower = String(line).toLowerCase();
+  return lower.includes('requires approval') ||
+    lower.includes('would you like to run the following command') ||
+    lower.includes('would you like to run') ||
+    lower.includes('do you want to proceed?') ||
+    lower.includes('this command requires approval') ||
+    lower.includes('press enter to confirm');
 }
 
 function extractApprovalOptions(tail) {
@@ -2289,9 +2363,9 @@ function detectApproval(id) {
   const hasApprovalLikeLabel = options.some((opt) => approvalLabelRe.test(opt.label));
   const isHubChoice = isHubChoicePrompt(contextLines, options);
   const approvalNear = (hasApprovalLikeLabel &&
-    (hasUserSpecifies || contextLines.some((line) => matchProviderApprovalTrigger(provider, line)))) || isHubChoice;
+    (hasUserSpecifies || contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)))) || isHubChoice;
   const hasApproval = options.length > 0 && approvalNear && hasCursorOption;
-  const hasChoiceMenu = hasCursorOption && options.length > 0 && contextLines.some((line) => matchProviderApprovalTrigger(provider, line));
+  const hasChoiceMenu = hasCursorOption && options.length > 0 && contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line));
   const hasPrompt = hasApproval || hasChoiceMenu;
 
   // 折りたたみ（クランチ）を検出
@@ -2404,6 +2478,14 @@ function showActionBar(bar, sessionId, options, showExpand) {
   bar.innerHTML = '';
   const t = sessionId === activeSessionId ? terminals.get(sessionId) : null;
   const shouldStickToBottom = !!(t && (t.autoScroll || isTerminalAtBottom(t)));
+
+  // "⚠ Approval needed" ラベル
+  if (options.length > 0) {
+    const label = document.createElement('span');
+    label.className = 'action-bar-label';
+    label.textContent = '⚠ Approval needed';
+    bar.appendChild(label);
+  }
 
   // "Yes, and" 系（セッション全体許可）が存在する場合はそちらを推奨（橙色）にする
   const hasSessionAllow = options.some(o => /during this session|allow.*session|yes.*allow/i.test(o.label));
@@ -2624,8 +2706,11 @@ const pastedTexts = []; // [{id, text, lineCount}]
 let pasteCounter = 0;
 
 function autoExpand() {
+  const t = activeSessionId === null ? null : terminals.get(activeSessionId);
+  const shouldStickToBottom = !!(t && (t.autoScroll || isTerminalAtBottom(t)));
   inputEl.style.height = 'auto';
   inputEl.style.height = Math.min(inputEl.scrollHeight, Math.floor(window.innerHeight * 0.3)) + 'px';
+  refitActiveTerminalAfterLayout(shouldStickToBottom);
 }
 
 function renderPasteChips() {
@@ -3033,9 +3118,15 @@ function sendText(sessionId, text) {
   ws.send(JSON.stringify({ type: 'pty_input', session_id: sessionId, text }));
 }
 
+function requestSessionDismiss(id) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'session_dismiss', session_id: id }));
+  }
+}
+
 function dismissSession(id) {
   if (!sessions.has(id)) return;
-  ws.send(JSON.stringify({ type: 'session_dismiss', session_id: id }));
+  requestSessionDismiss(id);
 }
 
 function removeLocalSession(id) {
@@ -3441,7 +3532,8 @@ function renderSessionList() {
     groupSessions.forEach(s => {
       const c = document.createElement('div');
       const state = s.state || 'standby';
-      c.className = 'card' + (state === 'waiting' ? ' waiting' : '') + (s.id === activeSessionId ? ' active' : '');
+      const stateClass = (state === 'running' || state === 'waiting') ? ` ${state}` : '';
+      c.className = 'card' + stateClass + (s.id === activeSessionId ? ' active' : '');
       c.tabIndex = isCollapsed ? -1 : 0;
       const label = stateLabel(state);
       const lastOut = formatLastOutputAt(s.last_output_at);
@@ -3453,12 +3545,14 @@ function renderSessionList() {
       const msgHtml = filteredMsg
         ? `<span class="card-msg" data-tooltip="${escapeHtml(filteredMsg)}">${escapeHtml(filteredMsg)}</span>`
         : `<span class="card-msg"></span>`;
+      const providerName = s.provider === 'claude' ? 'Claude' : s.provider === 'codex' ? 'Codex' : (s.provider || '');
+      const providerChipHtml = providerName ? `<span class="card-provider-chip ${s.provider || ''}">${providerName}</span>` : '';
       const metaRow = `<div class="card-meta-row"><span class="badge ${state}">${label}</span>${sessionLabel}${msgHtml}</div>`;
       c.dataset.sessionId = s.id;
       const modelBadge = s.model ? ` <span class="card-model">${escapeHtml(s.model)}</span>` : '';
       const branchBadge = s.branch ? ` <span class="card-branch" data-tooltip="${escapeHtml(s.branch)}">${escapeHtml(s.branch)}</span>` : '';
       c.innerHTML =
-        `<div class="card-title-row"><b>#${s.id}</b> ${providerIconHtml(s.provider)} <span class="card-display-name">${escapeHtml(s.display_name || s.provider || '')}</span>${modelBadge}${branchBadge}${startedAtHtml}${lastOutHtml}</div>` +
+        `<div class="card-title-row"><b>#${s.id}</b> ${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${branchBadge}${startedAtHtml}${lastOutHtml}</div>` +
         metaRow;
 
       const actions = document.createElement('div');
@@ -3643,14 +3737,20 @@ function render() {
 
   const PROVIDER_LABELS = { claude: 'Claude', codex: 'Codex' };
   const providerParts = Object.entries(connByProvider)
-    .map(([p, n]) => `<span class="summary-provider-chip">${providerIconHtml(p)}<span>${PROVIDER_LABELS[p] || p} : ${n}</span></span>`)
+    .map(([p, n]) => `<span class="summary-provider-chip">${providerIconHtml(p)}<span class="summary-provider-name ${p}">${PROVIDER_LABELS[p] || p}</span><span class="summary-provider-count">: ${n}</span></span>`)
     .join('');
 
-  const summaryWaitingBlinkClass = stateCounts.waiting > 0 ? ' status-chip--blink' : '';
-  let summary =
-    `<span class="status-chip status-chip--running">${stateCounts.running}</span>` +
-    `<span class="status-chip status-chip--waiting${summaryWaitingBlinkClass}">${stateCounts.waiting}</span>` +
-    `<span class="status-chip status-chip--standby">${stateCounts.standby}</span>`;
+  const waitingBlinkClass = stateCounts.waiting > 0 ? ' status-chip--blink' : '';
+  let summary = '';
+  if (stateCounts.running > 0) {
+    summary += `<span class="session-chip running"><span class="chip-dot"></span>${stateCounts.running} running</span>`;
+  }
+  if (stateCounts.waiting > 0) {
+    summary += `<span class="session-chip waiting${waitingBlinkClass}"><span class="chip-dot"></span>${stateCounts.waiting} waiting</span>`;
+  }
+  if (stateCounts.standby > 0) {
+    summary += `<span class="session-chip standby"><span class="chip-dot"></span>${stateCounts.standby} standby</span>`;
+  }
   if (providerParts) summary += `<span class="summary-sep">|</span>${providerParts}`;
   document.getElementById('summary').innerHTML = summary;
   updateTabNotification(totalWaiting);
@@ -4856,6 +4956,7 @@ function openLightbox(src) {
       showToast(formatVoiceError('voice_error_detail', code), anchor);
     }
   }
+  window._showVoiceRecognitionError = showVoiceError;
 
   function resizeCanvas() {
     const r = canvas.getBoundingClientRect();
@@ -4930,21 +5031,27 @@ function openLightbox(src) {
   }
 
   function showVoiceBar() {
+    const t = activeSessionId === null ? null : terminals.get(activeSessionId);
+    const shouldStickToBottom = !!(t && (t.autoScroll || isTerminalAtBottom(t)));
     voiceBar.hidden = false;
     waveformRaf = requestAnimationFrame(() => {
       resizeCanvas();
       waveformRaf = null;
     });
     startWaveform();
+    refitActiveTerminalAfterLayout(shouldStickToBottom);
   }
 
   function hideVoiceBar() {
+    const t = activeSessionId === null ? null : terminals.get(activeSessionId);
+    const shouldStickToBottom = !!(t && (t.autoScroll || isTerminalAtBottom(t)));
     if (waveformRaf) {
       cancelAnimationFrame(waveformRaf);
       waveformRaf = null;
     }
     stopWaveform();
     voiceBar.hidden = true;
+    refitActiveTerminalAfterLayout(shouldStickToBottom);
   }
 
   function setVoiceAudioActive(active) {
@@ -4958,6 +5065,7 @@ function openLightbox(src) {
     userIntendedStop = true;
     clearSilenceTimer();
     clearRestartTimer();
+    clearBeginRetryTimer();
     isStarting = false;
     isRecording = false;
     voiceActive = false;
@@ -4979,39 +5087,74 @@ function openLightbox(src) {
     forceCleanupTimer = null;
   }
 
-  btn.addEventListener('click', () => {
-    if (isRecording || isStarting) {
-      userIntendedStop = true;
-      clearSilenceTimer();
-      clearRestartTimer();
-      try { recognition.abort(); } catch (_) {}
-      scheduleForceCleanup();
-      return;
+  let beginRetryTimer = null;
+  function clearBeginRetryTimer() {
+    if (beginRetryTimer) {
+      clearTimeout(beginRetryTimer);
+      beginRetryTimer = null;
     }
+  }
+
+  function beginVoiceRecognition(retryCount = 0) {
+    clearBeginRetryTimer();
     userIntendedStop = false;
-    clearSilenceTimer();
-    isAutoRestarting = false;
-    // result が一度も来ていない状態を表すセンチネル。
-    // クリック直後に Chrome が end を返すケース（権限プロンプト直後・無音タイムアウト等）で
-    // 誤って auto-restart ループに入らないよう、ここでは 0 にしておき end ハンドラで判別する。
-    lastResultAt = 0;
+    if (retryCount === 0) {
+      clearSilenceTimer();
+      isAutoRestarting = false;
+      // result が一度も来ていない状態を表すセンチネル。
+      // クリック直後に Chrome が end を返すケース（権限プロンプト直後・無音タイムアウト等）で
+      // 誤って auto-restart ループに入らないよう、ここでは 0 にしておき end ハンドラで判別する。
+      lastResultAt = 0;
+      preVoiceText = inputEl.value;
+      interimStart = inputEl.value.length;
+    }
     recognition.lang = getLang();
-    preVoiceText = inputEl.value;
-    interimStart = inputEl.value.length;
     isStarting = true;
     try {
       recognition.start();
     } catch (err) {
+      isStarting = false;
+      // InvalidStateError: 直前のセッション (voice 本体 / wakeword hw) が
+      // まだ完全に終了しておらず Chrome の認識サービスが transient 状態。
+      // abort で確実に止めてから短いバックオフで再試行する。
+      const isInvalidState = err && (err.name === 'InvalidStateError' || /already started/i.test(err.message || ''));
+      if (isInvalidState && retryCount < 4) {
+        try { recognition.abort(); } catch (_) {}
+        const delay = 200 + retryCount * 200;
+        beginRetryTimer = setTimeout(() => {
+          beginRetryTimer = null;
+          if (userIntendedStop || isRecording) return;
+          beginVoiceRecognition(retryCount + 1);
+        }, delay);
+        return;
+      }
       forceCleanup();
       showVoiceError(err, btn);
       console.error('SpeechRecognition start failed:', err);
     }
+  }
+
+  btn.addEventListener('click', () => {
+    if (isRecording || isStarting || beginRetryTimer) {
+      userIntendedStop = true;
+      clearSilenceTimer();
+      clearRestartTimer();
+      clearBeginRetryTimer();
+      try { recognition.abort(); } catch (_) {}
+      scheduleForceCleanup();
+      return;
+    }
+    if (typeof window._stopWakewordForVoiceInput === 'function') {
+      window._stopWakewordForVoiceInput();
+    }
+    beginVoiceRecognition();
   });
 
   cancelBtn.addEventListener('click', () => {
     userIntendedStop = true;
     clearSilenceTimer();
     clearRestartTimer();
+    clearBeginRetryTimer();
     inputEl.value = preVoiceText;
     autoExpand();
     try { recognition.abort(); } catch (_) {}
@@ -5022,6 +5165,7 @@ function openLightbox(src) {
     userIntendedStop = true;
     clearSilenceTimer();
     clearRestartTimer();
+    clearBeginRetryTimer();
     try { recognition.stop(); } catch (_) {}
     scheduleForceCleanup();
   });
@@ -5215,6 +5359,15 @@ function openLightbox(src) {
     try { hw.abort(); } catch (_) {}
   }
 
+  function stopHotwordForVoiceInput() {
+    const wasActive = isListening || isStarting;
+    stopHotword();
+    isListening = false;
+    isStarting = false;
+    updateMicChip();
+    return wasActive;
+  }
+
   function updateMicChip() {
     const chip = document.getElementById('mic-status-chip');
     if (!chip) return;
@@ -5290,7 +5443,7 @@ function openLightbox(src) {
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const raw = e.results[i][0].transcript;
       if (normalizeTriggerMatchText(raw).includes(phrase)) {
-        stopHotword();
+        stopHotwordForVoiceInput();
         if (!voiceActive) voiceBtn.click();
         return;
       }
@@ -5318,7 +5471,11 @@ function openLightbox(src) {
       updateGlobalBtn();
       updateSessionBtn();
       updateMicChip();
-      showVoiceError(e, globalBtn);
+      if (typeof window._showVoiceRecognitionError === 'function') {
+        window._showVoiceRecognitionError(e, globalBtn);
+      } else {
+        showToast(t('voice_error_detail').replace('{code}', e.error || 'unknown'), globalBtn);
+      }
     }
   });
 
@@ -5413,6 +5570,7 @@ function openLightbox(src) {
 
   window._wakewordGlobalActive = () => isGlobalActive;
   window._wakewordSessionActive = (id) => sessionWakeMap.get(id) || false;
+  window._stopWakewordForVoiceInput = stopHotwordForVoiceInput;
 })();
 
 // ---- スラッシュコマンドピッカー ----

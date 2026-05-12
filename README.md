@@ -323,6 +323,25 @@ The Hub UI log-path button copies the log directory path to your clipboard.
 - **Slash command list (Hub itself)** — When the slash command picker is opened, the Hub fetches a markdown file from `https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/{claude,codex}.md` and caches it for 24 hours. The source URL can be changed (or pointed to a local file path) in **Settings → Slash command sources**.
 - **Wrapped CLI traffic (the CLIs themselves)** — The CLIs you wrap (Claude Code, Codex CLI) talk directly to their respective vendor APIs (Anthropic, OpenAI) over HTTPS. `any-ai-cli` only relays PTY I/O via local WebSocket; it does not intercept, log, or proxy these API requests. Whatever network behavior the underlying CLI has applies as-is.
 
+### ⚠️ Data retention by wrapped CLIs
+
+`any-ai-cli` does not collect or transmit your data, but **the CLIs it wraps do** — and each vendor's data-handling rules differ. Because the Hub only relays PTY I/O, the wrapped CLI's policy applies to you **as-is**.
+
+The table below summarizes each vendor's stance as of 2026. Always verify the current terms before use.
+
+| CLI / Backend | Used for model training by default? | Opt-out / controls | Retention |
+|---|---|---|---|
+| **Claude Code** (Anthropic Commercial Terms: API / Claude for Work / Enterprise / Education / Gov) | **No** — excluded by default under commercial terms | No opt-out needed; Zero Data Retention available via enterprise agreement | API logs up to 30 days, reduced to **7-day auto-delete** after 2025-09-14 |
+| **Codex CLI** (OpenAI: via ChatGPT Plus / Pro / Business plans) | **Possibly** — content from ChatGPT plans can be used for training | "Do not train on my content" toggle in the privacy portal; separate "allow training on full environments" control in Codex Settings | Abuse-monitoring logs up to 30 days; ZDR / Modified Abuse Monitoring available |
+| **GitHub Copilot CLI** (GitHub: Product Specific Terms, March 2026) | **Yes** — prompts are retained and used to fine-tune your private model | No explicit opt-out documented (verify current terms) | Not specified |
+
+### ⚠️ Terms-of-service change risk
+
+Wrapped-CLI vendors may change their terms — including restricting or prohibiting third-party wrapper / automation access — at any time. If that happens, using the CLI through `any-ai-cli` could become a terms violation.
+
+- Recent precedent: Google began enforcing a ToS clause in 2026 that forbids accessing Gemini Code Assist through third-party wrappers, resulting in `403 ToS` account bans for tools like OpenClaw / OpenCode / Antigravity. For this reason, **Gemini CLI is intentionally out of scope** for `any-ai-cli`.
+- The same risk applies to every CLI in the table above. **Support for any wrapped CLI may be discontinued without notice** if its vendor restricts third-party automation. It is your responsibility to review each CLI's current terms before use.
+
 ### ⚠️ Important: Localhost-only by design
 
 `any-ai-cli` is designed to run on the **same machine** as your browser. Do **not**:

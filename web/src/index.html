@@ -10,23 +10,30 @@
 </head>
 <body>
   <header>
-    <h1><img src="/icon.svg" alt="ANY-AI-CLI" class="header-icon">ANY-AI-CLI</h1>
+    <div class="header-logo">
+      <img class="header-logo-icon" src="/icon.svg" alt="">
+      <span>ANY-AI-CLI</span>
+    </div>
+    <div class="header-sep"></div>
     <div id="summary" data-i18n="loading">...</div>
     <button id="reconnect-btn" hidden>↺ <span data-i18n="reconnect">reconnect</span></button>
     <nav class="usage-links" aria-label="AI usage links">
       <a id="usage-link-claude" class="usage-link usage-link--claude" href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">
-        <svg class="usage-link-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="#FFF7ED" stroke="#F97316" stroke-width="2"/></svg>
+        <svg class="usage-link-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="#FFF7ED" stroke="#F97316" stroke-width="2"/></svg>
         <span data-i18n="settings_claude_usage_btn">Claude usage</span>
       </a>
       <a id="usage-link-codex" class="usage-link usage-link--codex" href="https://chatgpt.com/codex/cloud/settings/analytics#usage" target="_blank" rel="noopener noreferrer">
-        <svg class="usage-link-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="#EFF6FF" stroke="#3B82F6" stroke-width="2"/></svg>
+        <svg class="usage-link-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="#EFF6FF" stroke="#3B82F6" stroke-width="2"/></svg>
         <span data-i18n="settings_codex_usage_btn">Codex usage</span>
       </a>
     </nav>
     <button id="global-wakeword-btn" hidden>🎧</button>
     <span id="mic-status-chip" class="status-chip" hidden></span>
     <button id="shutdown-btn" data-i18n-tooltip="shutdown_tooltip">⏻</button>
-    <button id="settings-btn" data-i18n="settings">Settings</button>
+    <button id="settings-btn">
+      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span data-i18n="settings">Settings</span>
+    </button>
   </header>
 
   <div id="settings-panel" hidden>
@@ -57,7 +64,6 @@
             <span class="settings-label" data-i18n="settings_theme">Theme</span>
             <select id="theme-select" class="settings-select">
               <option value="dark">Dark</option>
-              <option value="blue">Blue</option>
               <option value="light">Light</option>
             </select>
           </div>
@@ -324,7 +330,12 @@
     <aside id="session-list">
       <div id="new-session-bar">
         <button id="new-session-btn" data-i18n="new_session">+ New Session</button>
-        <button id="kill-all-btn" data-i18n-tooltip="kill_all_tooltip">⏹</button>
+        <button id="kill-all-btn" data-i18n-tooltip="kill_all_tooltip" aria-label="Terminate all sessions">
+          <svg class="kill-all-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
+            <rect x="9" y="9" width="6" height="6" rx="1.2" fill="currentColor"/>
+          </svg>
+        </button>
       </div>
       <div id="new-session-panel" hidden>
         <div class="new-session-form">
@@ -382,6 +393,7 @@
       <div id="sessions"></div>
     </aside>
     <div id="sidebar-resizer"></div>
+    <div id="terminal-column">
     <div id="terminal-wrapper">
       <div id="terminal-area-wrapper">
         <div id="terminal-area"></div>
@@ -419,16 +431,20 @@
           <button id="voice-confirm-btn" class="voice-action-btn voice-confirm-btn" data-i18n-tooltip="voice_confirm_tooltip">✓</button>
         </div>
         <div id="input-bar">
-          <div id="input-area">
-            <div id="paste-chips"></div>
-            <textarea id="input" rows="1" data-i18n-placeholder="input_placeholder"></textarea>
+          <div id="input-wrap">
+            <div id="input-area">
+              <div id="paste-chips"></div>
+              <textarea id="input" rows="1" data-i18n-placeholder="input_placeholder"></textarea>
+            </div>
+            <div id="input-tools">
+              <button id="send-btn" title="Send" aria-label="Send">➤</button>
+              <button id="voice-btn" hidden>🎤</button>
+              <button id="voice-wakeword-btn" hidden>🎧</button>
+              <button id="quick-clear-btn" class="quick-cmd-btn" data-i18n-tooltip="quick_clear_tooltip">/clear</button>
+              <button id="quick-model-btn" class="quick-cmd-btn" data-i18n-tooltip="quick_model_tooltip">/model</button>
+              <button id="slash-picker-btn" class="quick-cmd-btn" data-i18n-tooltip="slash_picker_tooltip">/ ▾</button>
+            </div>
           </div>
-          <button id="send-btn" data-i18n="send">Send</button>
-          <button id="voice-btn" hidden>🎤</button>
-          <button id="voice-wakeword-btn" hidden>🎧</button>
-          <button id="quick-clear-btn" class="quick-cmd-btn" data-i18n-tooltip="quick_clear_tooltip">/clear</button>
-          <button id="quick-model-btn" class="quick-cmd-btn" data-i18n-tooltip="quick_model_tooltip">/model</button>
-          <button id="slash-picker-btn" class="quick-cmd-btn" data-i18n-tooltip="slash_picker_tooltip">/ ▾</button>
         </div>
         <div id="attach-panel">
           <div id="attach-drop-zone">
@@ -441,6 +457,7 @@
         </div>
       </div>
     </div>
+    </div><!-- /#terminal-column -->
   </div>
   <div id="about-panel" hidden>
     <div class="about-dialog">

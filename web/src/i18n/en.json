@@ -36,7 +36,6 @@
   "state_standby": "Standby",
   "state_running": "Running",
   "state_waiting": "Pending",
-  "state_completed": "Completed",
   "state_error": "Error",
   "state_disconnected": "Disconnected",
   "tool_outputs_count": "{n} items",
