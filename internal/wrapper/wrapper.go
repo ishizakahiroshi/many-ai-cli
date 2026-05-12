@@ -214,13 +214,24 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 					if len(m.Data) > 0 {
 						data := m.Data
 						if provider == "claude" && len(data) > 1 && data[0] == '@' {
-							// inject (@path\r) の後に続くテキストがある場合、ピッカー確定後に
-							// テキストが届くよう分割送信する。一括送信だとピッカー確定直後の
-							// テキスト末尾 \r が「送信」ではなく「改行」として処理されてしまう。
+							// 旧形式の inject (@path\rtext\r) は互換のため分割する。
+							// 新形式 (@path text\r) は画像参照と本文を同じ入力行に残し、最後の Enter だけ分離する。
 							if idx := bytes.IndexByte(data, '\r'); idx >= 0 && idx < len(data)-1 {
 								_, _ = ps.Write(data[:idx+1])
 								time.Sleep(150 * time.Millisecond)
-								_, _ = ps.Write(data[idx+1:])
+								// ConPTY fix: text\r を1チャンクで書くと \r が Enter でなく改行扱いになる場合がある
+								rest := data[idx+1:]
+								if len(rest) > 1 && rest[len(rest)-1] == '\r' {
+									_, _ = ps.Write(rest[:len(rest)-1])
+									time.Sleep(20 * time.Millisecond)
+									_, _ = ps.Write(rest[len(rest)-1:])
+								} else {
+									_, _ = ps.Write(rest)
+								}
+							} else if len(data) > 1 && data[len(data)-1] == '\r' {
+								_, _ = ps.Write(data[:len(data)-1])
+								time.Sleep(20 * time.Millisecond)
+								_, _ = ps.Write(data[len(data)-1:])
 							} else {
 								_, _ = ps.Write(data)
 							}

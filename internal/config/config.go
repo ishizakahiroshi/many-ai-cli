@@ -73,6 +73,8 @@ type Config struct {
 	} `yaml:"spawn,omitempty" json:"spawn,omitempty"`
 	Approval        ApprovalConfig  `yaml:"approval,omitempty"`
 	SlashCmdSources SlashCmdSources `yaml:"slash_cmd_sources,omitempty" json:"slash_cmd_sources,omitempty"`
+	FileOpenApp     string          `yaml:"file_open_app,omitempty"`
+	TerminalApp     string          `yaml:"terminal_app,omitempty"`
 	Token           string          `yaml:"token"`
 }
 

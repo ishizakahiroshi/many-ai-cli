@@ -14,7 +14,7 @@ func TestSave(t *testing.T) {
 		wantPrefix string
 		wantSuffix string
 	}{
-		{provider: "claude", wantPrefix: "@", wantSuffix: "\r"},
+		{provider: "claude", wantPrefix: "@", wantSuffix: " "},
 		{provider: "codex", wantPrefix: "@", wantSuffix: " "},
 	}
 

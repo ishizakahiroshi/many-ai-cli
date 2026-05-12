@@ -80,9 +80,6 @@ type session struct {
 	lastCols int
 	lastRows int
 
-	// JSON 外: 次の pty_input 送信時に先頭に結合する inject 文字列（画像添付用）
-	pendingInject string
-
 	// JSON 外: セッション履歴（JSONL）
 	LogPath   string
 	JSONLPath string
@@ -207,6 +204,13 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/info", s.handleInfo)
 	mux.HandleFunc("/api/spawn", s.handleSpawn)
 	mux.HandleFunc("/api/pick-directory", s.handlePickDirectory)
+	mux.HandleFunc("/api/pick-file", s.handlePickFile)
+	mux.HandleFunc("/api/open-file", s.handleOpenFile)
+	mux.HandleFunc("/api/open-default-file", s.handleOpenDefaultFile)
+	mux.HandleFunc("/api/open-folder", s.handleOpenFolder)
+	mux.HandleFunc("/api/open-terminal", s.handleOpenTerminal)
+	mux.HandleFunc("/api/file-open-app", s.handleFileOpenApp)
+	mux.HandleFunc("/api/terminal-app", s.handleTerminalApp)
 	mux.HandleFunc("/api/kill-all", s.handleKillAll)
 	mux.HandleFunc("/api/shutdown", s.handleShutdown)
 	mux.HandleFunc("/api/log-config", s.handleLogConfig)
@@ -652,13 +656,7 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 			s.mu.Lock()
 			wc := s.wrappers[m.SessionID]
 			ses := s.sessions[m.SessionID]
-			// pendingInject は Codex 等の provider が使用（Claude は attach_request 時に直送）
-			inject := ""
-			if ses != nil && ses.pendingInject != "" {
-				inject = ses.pendingInject
-				ses.pendingInject = ""
-			}
-			combined := inject + m.Text
+			combined := m.Text
 			var firstMsgBroadcast *proto.Message
 			if ses != nil && strings.HasSuffix(m.Text, "\r") {
 				text := strings.TrimRight(m.Text, "\r\n")
@@ -685,11 +683,10 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 				_ = websocket.JSON.Send(wc, proto.Message{Type: "pty_input", SessionID: m.SessionID, Data: []byte(combined)})
 			}
 			s.writeHistory(m.SessionID, map[string]any{
-				"ts":                  time.Now().Format(time.RFC3339),
-				"type":                "user_input",
-				"session_id":          m.SessionID,
-				"text":                m.Text,
-				"combined_has_inject": inject != "",
+				"ts":         time.Now().Format(time.RFC3339),
+				"type":       "user_input",
+				"session_id": m.SessionID,
+				"text":       m.Text,
 			})
 			if firstMsgBroadcast != nil {
 				s.broadcast(*firstMsgBroadcast)
@@ -757,7 +754,7 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 			}
 			attachDir := filepath.Join(homeDir, ".any-ai-cli", "attachments")
 
-			savedPath, inject, err := attach.Save(attachDir, m.SessionID, provider, imgData, m.Filename)
+			savedPath, _, err := attach.Save(attachDir, m.SessionID, provider, imgData, m.Filename)
 			if err != nil {
 				s.logger.Warn("attach_request: Save failed", "session_id", m.SessionID, "err", err)
 				continue
@@ -771,22 +768,6 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 				"filename":   m.Filename,
 				"provider":   provider,
 			})
-
-			// claude は attach_file メッセージで wrapper へ直送し、後続の pty_input と
-			// 1 チャンク化されないようにする（picker 確定の \r が「送信」扱いされて
-			// 画像とテキストが別投稿に分裂するのを防ぐ）。codex 等は従来どおり pendingInject。
-			s.mu.Lock()
-			wc := s.wrappers[m.SessionID]
-			useDirect := provider == "claude" && wc != nil
-			if !useDirect {
-				if ses := s.sessions[m.SessionID]; ses != nil {
-					ses.pendingInject += inject
-				}
-			}
-			s.mu.Unlock()
-			if useDirect {
-				_ = websocket.JSON.Send(wc, proto.Message{Type: "attach_file", SessionID: m.SessionID, Inject: inject})
-			}
 		}
 	}
 }
@@ -1318,22 +1299,8 @@ func (s *Server) handleAttach(w http.ResponseWriter, r *http.Request) {
 		"filename":   header.Filename,
 		"provider":   provider,
 	})
-	// claude は attach_file メッセージで wrapper へ直送（pendingInject 経由だと
-	// 後続の pty_input と 1 チャンク化されて picker 確定の \r が送信扱いになる）。
-	s.mu.Lock()
-	wc := s.wrappers[sessionID]
-	useDirect := provider == "claude" && wc != nil
-	if !useDirect {
-		if ses := s.sessions[sessionID]; ses != nil {
-			ses.pendingInject += inject
-		}
-	}
-	s.mu.Unlock()
-	if useDirect {
-		_ = websocket.JSON.Send(wc, proto.Message{Type: "attach_file", SessionID: sessionID, Inject: inject})
-	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "inject": inject})
 }
 
 func (s *Server) handlePickDirectory(w http.ResponseWriter, r *http.Request) {
@@ -1374,14 +1341,17 @@ func PrintStatus(cfg *config.Config) error {
 	return nil
 }
 
-// handleOpenDir opens a directory in the OS file manager (explorer / Finder / xdg-open).
+// handleOpenDir opens a directory or reveals a file in the OS file manager.
 //
 // Security:
 //   - token required
 //   - request must come from a loopback address (defense-in-depth on top of the
 //     127.0.0.1 bind that NewServer already enforces)
-//   - only the configured log_dir or attach_dir is permitted; arbitrary paths are
-//     rejected so an XSS in the UI cannot turn this into "open any folder"
+//   - kind "log"/"attach": only the configured log_dir or attach_dir is permitted;
+//     arbitrary paths are rejected so an XSS in the UI cannot turn this into "open any folder"
+//   - kind "path": arbitrary absolute paths are permitted; risk is accepted because
+//     token auth + loopback-only binding limits exposure, and the operation is "reveal
+//     in folder" (not "execute"), which has limited blast radius
 func (s *Server) handleOpenDir(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("token") != s.cfg.Token {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -1402,10 +1372,24 @@ func (s *Server) handleOpenDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Kind string `json:"kind"` // "log" or "attach"
+		Kind string `json:"kind"` // "log", "attach", or "path"
+		Path string `json:"path"` // kind=="path" のみ使用
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if body.Kind == "path" {
+		if !filepath.IsAbs(body.Path) {
+			http.Error(w, "path must be absolute", http.StatusBadRequest)
+			return
+		}
+		if err := openRevealNative(body.Path); err != nil {
+			http.Error(w, "open failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "path": body.Path})
 		return
 	}
 	var target string
@@ -1670,6 +1654,212 @@ func killStalePid(pidPath string) {
 		_ = p.Kill()
 	}
 	_ = os.Remove(pidPath)
+}
+
+func (s *Server) handlePickFile(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("token") != s.cfg.Token {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	filterExe := r.URL.Query().Get("filter") == "exe"
+	path, err := pickFileNative(filterExe)
+	if err != nil {
+		http.Error(w, "pick error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if path == "" {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false})
+		return
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "path": path})
+}
+
+func (s *Server) handleOpenFile(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("token") != s.cfg.Token {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Path == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	s.mu.Lock()
+	app := s.cfg.FileOpenApp
+	s.mu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	if err := openFileNative(body.Path, app); err != nil {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
+func (s *Server) handleOpenDefaultFile(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("token") != s.cfg.Token {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Path == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := openFileNative(body.Path, ""); err != nil {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
+func (s *Server) handleOpenFolder(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("token") != s.cfg.Token {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Path == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	dir := filepath.Dir(body.Path)
+	w.Header().Set("Content-Type", "application/json")
+	if err := openDirNative(dir); err != nil {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
+func (s *Server) handleOpenTerminal(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("token") != s.cfg.Token {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Path == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	s.mu.Lock()
+	app := s.cfg.TerminalApp
+	s.mu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	if err := openTerminalNative(body.Path, app); err != nil {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
+func (s *Server) handleFileOpenApp(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("token") != s.cfg.Token {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	switch r.Method {
+	case http.MethodGet:
+		s.mu.Lock()
+		app := s.cfg.FileOpenApp
+		s.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"file_open_app":           app,
+			"effective_file_open_app": effectiveFileOpenAppDescription(app),
+		})
+	case http.MethodPost:
+		var body struct {
+			FileOpenApp string `json:"file_open_app"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		s.mu.Lock()
+		s.cfg.FileOpenApp = strings.TrimSpace(body.FileOpenApp)
+		s.mu.Unlock()
+		if err := config.Save(s.cfg); err != nil {
+			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":                      true,
+			"file_open_app":           s.cfg.FileOpenApp,
+			"effective_file_open_app": effectiveFileOpenAppDescription(s.cfg.FileOpenApp),
+		})
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleTerminalApp(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("token") != s.cfg.Token {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	switch r.Method {
+	case http.MethodGet:
+		s.mu.Lock()
+		app := s.cfg.TerminalApp
+		s.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"terminal_app":           app,
+			"effective_terminal_app": effectiveTerminalAppDescription(app),
+		})
+	case http.MethodPost:
+		var body struct {
+			TerminalApp string `json:"terminal_app"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		s.mu.Lock()
+		s.cfg.TerminalApp = strings.TrimSpace(body.TerminalApp)
+		s.mu.Unlock()
+		if err := config.Save(s.cfg); err != nil {
+			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":                     true,
+			"terminal_app":           s.cfg.TerminalApp,
+			"effective_terminal_app": effectiveTerminalAppDescription(s.cfg.TerminalApp),
+		})
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
 func isDigitsOnly(s string) bool {

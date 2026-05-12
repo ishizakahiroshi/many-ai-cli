@@ -465,11 +465,11 @@ function applyTheme(theme) {
 function applyFontSize(size) {
   const s = FONTSIZE_MAP[size] ? size : 'medium';
   const px = FONTSIZE_MAP[s];
-  terminals.forEach(({ term, fitAddon }, id) => {
-    term.options.fontSize = px;
+  terminals.forEach((t, id) => {
+    t.term.options.fontSize = px;
     requestAnimationFrame(() => {
-      fitAddon.fit();
-      sendResize(id, term.cols, term.rows);
+      fitTerminalPreservingBottom(t, id);
+      sendResize(id, t.term.cols, t.term.rows);
     });
   });
   const sel = document.getElementById('fontsize-select');
@@ -518,6 +518,9 @@ function applyLang(lang) {
     if (!panel.hidden && !panel.contains(e.target)) {
       panel.hidden = true;
       maybeAutoSwitchToNextApproval();
+    }
+    if (pathPopupEl && !pathPopupEl.hidden && !pathPopupEl.contains(e.target)) {
+      pathPopupEl.hidden = true;
     }
   });
 
@@ -625,6 +628,7 @@ function applyLang(lang) {
   enabledEl.addEventListener('change', () => {
     phraseRow.hidden = !enabledEl.checked;
     try { localStorage.setItem(STORAGE_WAKE_WORD_ENABLED_KEY, enabledEl.checked ? '1' : '0'); } catch (_) {}
+    document.dispatchEvent(new CustomEvent('wakewordsettings:changed'));
   });
   phraseEl.addEventListener('input', () => {
     try { localStorage.setItem(STORAGE_WAKE_WORD_PHRASE_KEY, phraseEl.value); } catch (_) {}
@@ -1117,6 +1121,252 @@ ws.onmessage = (ev) => {
   render();
 };
 
+// ---- ターミナルパスリンクポップアップ ----
+
+let pathPopupEl = null;
+let pathPopupHideTimer = null;
+
+function getOrCreatePathPopup() {
+  if (pathPopupEl) return pathPopupEl;
+  pathPopupEl = document.createElement('div');
+  pathPopupEl.id = 'path-link-popup';
+  pathPopupEl.className = 'path-link-popup';
+  pathPopupEl.addEventListener('mouseenter', () => {
+    if (pathPopupHideTimer) { clearTimeout(pathPopupHideTimer); pathPopupHideTimer = null; }
+  });
+  pathPopupEl.addEventListener('mouseleave', () => { scheduleHidePathPopup(); });
+  document.body.appendChild(pathPopupEl);
+  return pathPopupEl;
+}
+
+function scheduleHidePathPopup() {
+  if (pathPopupHideTimer) clearTimeout(pathPopupHideTimer);
+  pathPopupHideTimer = setTimeout(() => {
+    if (pathPopupEl) pathPopupEl.hidden = true;
+    pathPopupHideTimer = null;
+  }, 300);
+}
+
+async function copyPathText(text, anchor) {
+  if (!text) return;
+  await navigator.clipboard.writeText(text);
+  showToast(t('copied_to_clipboard'), anchor);
+}
+
+function isImagePath(filePath) {
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(String(filePath || '').trim());
+}
+
+function isTextPath(filePath) {
+  const path = String(filePath || '').trim();
+  if (/(^|[\\/])(Dockerfile|Makefile|README|LICENSE|CHANGELOG|NOTICE)$/i.test(path)) return true;
+  return /\.(txt|md|markdown|rst|log|json|jsonl|yaml|yml|toml|ini|cfg|conf|env|csv|tsv|xml|html?|css|scss|sass|less|js|mjs|cjs|jsx|ts|tsx|vue|go|rs|py|rb|php|java|kt|kts|c|cc|cpp|cxx|h|hh|hpp|cs|sh|bash|zsh|fish|ps1|psm1|bat|cmd|sql|graphql|gql|proto|diff|patch|gitignore|gitattributes|editorconfig)$/i.test(path);
+}
+
+function getPathOpenItem(filePath) {
+  if (isImagePath(filePath)) {
+    return { icon: '🖼️', key: 'link_open_image', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error') };
+  }
+  if (isTextPath(filePath)) {
+    return { icon: '📝', key: 'link_open_text', action: () => callOpenApi('/api/open-file', filePath) };
+  }
+  return { icon: '📄', key: 'link_open_file', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error') };
+}
+
+function showPathPopup(filePath, clientX, clientY, sessionId) {
+  const popup = getOrCreatePathPopup();
+  popup.innerHTML = '';
+  popup.hidden = false;
+
+  const items = [
+    getPathOpenItem(filePath),
+    { icon: '📁', key: 'link_open_folder', action: () => callOpenApi('/api/open-folder', filePath) },
+    { icon: '💻', key: 'link_open_terminal', action: () => {
+      const dir = dirnameForPath(filePath) || sessions.get(sessionId)?.cwd || filePath;
+      callOpenApi('/api/open-terminal', dir);
+    }},
+    { icon: '📋', key: 'link_copy_path', action: (anchor) => {
+      return copyPathText(filePath, anchor).catch(() => {});
+    }},
+    { icon: '📋', key: 'link_copy_rel_path', action: (anchor) => {
+      const ses = sessions.get(sessionId);
+      const cwd = ses?.cwd || '';
+      const rel = cwd ? computeRelPath(cwd, filePath) : filePath;
+      return copyPathText(rel, anchor).catch(() => {});
+    }},
+  ];
+
+  for (const item of items) {
+    const btn = document.createElement('button');
+    btn.className = 'path-link-popup-item';
+    btn.textContent = item.icon + ' ' + t(item.key);
+    btn.addEventListener('click', () => {
+      Promise.resolve(item.action(btn)).finally(() => {
+        popup.hidden = true;
+      });
+    });
+    popup.appendChild(btn);
+  }
+
+  // 位置調整: 画面端からはみ出さないようにする
+  popup.style.left = '0';
+  popup.style.top = '0';
+  document.body.appendChild(popup);
+  const rect = popup.getBoundingClientRect();
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let left = clientX + 8;
+  let top = clientY + 8;
+  if (left + rect.width > vw - 8) left = clientX - rect.width - 8;
+  if (top + rect.height > vh - 8) top = clientY - rect.height - 8;
+  popup.style.left = Math.max(4, left) + 'px';
+  popup.style.top = Math.max(4, top) + 'px';
+}
+
+async function callOpenApi(endpoint, path, errorKey = 'link_open_error') {
+  try {
+    const res = await fetch(`${endpoint}?token=${encodeURIComponent(token)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (!data.ok) showToast(data.error ? `${t(errorKey)}: ${data.error}` : t(errorKey));
+    } else {
+      showToast(t(errorKey));
+    }
+  } catch (_) { showToast(t(errorKey)); }
+}
+
+function dirnameForPath(filePath) {
+  const normalized = String(filePath || '').replace(/[\\/]+$/, '');
+  const slash = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
+  if (slash <= 0) return '';
+  if (/^[A-Za-z]:[\\/]?[^\\/]*$/.test(normalized)) return normalized.slice(0, slash + 1);
+  return normalized.slice(0, slash);
+}
+
+function computeRelPath(from, to) {
+  // OS セパレータを / に正規化
+  const sep = to.includes('\\') ? '\\' : '/';
+  const fromParts = from.replace(/\\/g, '/').split('/').filter(Boolean);
+  const toParts = to.replace(/\\/g, '/').split('/').filter(Boolean);
+  let common = 0;
+  while (common < fromParts.length && common < toParts.length && fromParts[common] === toParts[common]) common++;
+  const ups = fromParts.length - common;
+  const rel = [...Array(ups).fill('..'), ...toParts.slice(common)].join(sep);
+  return rel || '.';
+}
+
+function trimTerminalPathCandidate(path) {
+  let text = String(path || '').trim().replace(/[,;'"<>]+$/, '');
+  if (/^[A-Za-z]:[\\/]/.test(text)) text = trimWindowsPathCandidate(text);
+  return text;
+}
+
+function trimWindowsPathCandidate(path) {
+  let text = String(path || '');
+  text = text.replace(/([\\/])\s+.*$/, '$1');
+  text = text.replace(/(\.[a-zA-Z0-9]{1,15})\s*[\u3040-\u30ff\u3400-\u9fff\uff00-\uffef\u4e00-\u9fff].*$/u, '$1');
+  text = text.replace(/\s+[\u3040-\u30ff\u3400-\u9fff\uff00-\uffef].*$/u, '');
+  text = text.replace(/\s+[A-Za-z]$/, '');
+  return text.replace(/[,;'"<>]+$/, '');
+}
+
+function isAbsolutePath(path) {
+  return /^[A-Za-z]:[\\/]/.test(path) || path.startsWith('/');
+}
+
+function joinPath(base, rel) {
+  if (!base || !rel) return rel || base || '';
+  const sep = base.includes('\\') ? '\\' : '/';
+  const baseNorm = base.replace(/[\\/]+$/, '');
+  return normalizePathSegments(baseNorm + sep + rel.replace(/^[\\/]+/, '').replace(/[\\/]/g, sep), sep);
+}
+
+function normalizePathSegments(path, sep) {
+  const drive = /^[A-Za-z]:/.test(path) ? path.slice(0, 2) : '';
+  const rest = drive ? path.slice(2) : path;
+  const rooted = rest.startsWith(sep);
+  const parts = rest.split(/[\\/]+/);
+  const out = [];
+  for (const part of parts) {
+    if (!part || part === '.') continue;
+    if (part === '..' && out.length > 0 && out[out.length - 1] !== '..') out.pop();
+    else if (part !== '..' || !rooted) out.push(part);
+  }
+  return drive + (rooted ? sep : '') + out.join(sep);
+}
+
+function resolveTerminalPathCandidate(path, sessionId) {
+  const cleaned = trimTerminalPathCandidate(path);
+  if (!cleaned) return '';
+  if (isAbsolutePath(cleaned)) return cleaned;
+  const cwd = sessions.get(sessionId)?.cwd || '';
+  if (!cwd) return cleaned;
+  return joinPath(cwd, cleaned);
+}
+
+const ABS_WIN_PATH_RE = /([A-Za-z]:\\(?:(?!\s+[A-Za-z]:\\)[^\x00-\x1f<>:"|?*])+)/g;
+const ABS_UNIX_PATH_RE = /(\/[^\x00-\x1f"'<>`]+\/[^\x00-\x1f"'<>`]*)/g;
+const REL_PATH_RE = /(^|[\s([{"'`])((?:\.{1,2}[\\/]|[A-Za-z0-9_.-]+[\\/])(?:[^\s\x00-\x1f"'<>`|]+[\\/])*[^\s\x00-\x1f"'<>`|]+)/g;
+
+function findPathCandidates(text) {
+  const candidates = [];
+  for (const re of [ABS_WIN_PATH_RE, ABS_UNIX_PATH_RE]) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const pathStr = trimTerminalPathCandidate(m[1]);
+      if (pathStr.length >= 3) candidates.push({ start: m.index, end: m.index + pathStr.length, text: pathStr });
+    }
+  }
+  REL_PATH_RE.lastIndex = 0;
+  let m;
+  while ((m = REL_PATH_RE.exec(text)) !== null) {
+    const pathStr = trimTerminalPathCandidate(m[2]);
+    if (pathStr.length >= 3) candidates.push({ start: m.index + m[1].length, end: m.index + m[1].length + pathStr.length, text: pathStr });
+  }
+  candidates.sort((a, b) => a.start - b.start || b.end - a.end);
+  const out = [];
+  for (const c of candidates) {
+    if (out.some(x => c.start < x.end && c.end > x.start)) continue;
+    out.push(c);
+  }
+  return out;
+}
+
+function appendLinkedText(container, text, sessionId) {
+  const candidates = findPathCandidates(text);
+  if (candidates.length === 0) {
+    container.textContent = text;
+    return;
+  }
+  container.textContent = '';
+  let pos = 0;
+  for (const c of candidates) {
+    if (c.start > pos) container.appendChild(document.createTextNode(text.slice(pos, c.start)));
+    const resolvedPath = resolveTerminalPathCandidate(c.text, sessionId);
+    const link = document.createElement('span');
+    link.className = 'tool-output-path-link';
+    link.textContent = c.text;
+    link.tabIndex = 0;
+    link.addEventListener('mouseenter', (e) => showPathPopup(resolvedPath, e.clientX, e.clientY, sessionId));
+    link.addEventListener('mouseleave', () => scheduleHidePathPopup());
+    link.addEventListener('click', (e) => showPathPopup(resolvedPath, e.clientX, e.clientY, sessionId));
+    link.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        const r = link.getBoundingClientRect();
+        showPathPopup(resolvedPath, r.left, r.bottom, sessionId);
+      }
+    });
+    container.appendChild(link);
+    pos = c.end;
+  }
+  if (pos < text.length) container.appendChild(document.createTextNode(text.slice(pos)));
+}
+
 // ---- xterm.js 管理 ----
 
 function ensureTerminal(id) {
@@ -1147,6 +1397,64 @@ function ensureTerminal(id) {
     });
     term.loadAddon(webLinks);
   }
+  term.registerLinkProvider({
+    provideLinks(y, callback) {
+      const line = term.buffer.active.getLine(y - 1);
+      if (!line) { callback([]); return; }
+      const text = line.translateToString(true);
+
+      // charIndex → cellX マッピング（全角文字対応）
+      const cellMap = [];
+      for (let x = 0; x < line.length; x++) {
+        const cell = line.getCell(x);
+        if (cell && cell.getWidth() !== 0) cellMap.push(x);
+      }
+      const toX = (ci) => (cellMap[ci] ?? ci) + 1;
+      const toEndX = (ci) => (cellMap[ci] ?? ci) + 1;
+
+      const links = [];
+      const occupiedRanges = [];
+      const overlapsExistingLink = (start, end) => occupiedRanges.some(r => start <= r.end && end >= r.start);
+      const addPathLink = (rawPath, startCI) => {
+        const pathStr = trimTerminalPathCandidate(rawPath);
+        if (pathStr.length < 3) return;
+        const endCI = startCI + pathStr.length - 1;
+        if (overlapsExistingLink(startCI, endCI)) return;
+        occupiedRanges.push({ start: startCI, end: endCI });
+        const capturedPath = resolveTerminalPathCandidate(pathStr, id);
+        links.push({
+          range: { start: { x: toX(startCI), y }, end: { x: toEndX(endCI), y } },
+          text: pathStr,
+          hover(event, _text) {
+            showPathPopup(capturedPath, event.clientX, event.clientY, id);
+          },
+          leave() {
+            scheduleHidePathPopup();
+          },
+          activate(_event, _text) {
+            // クリックでポップアップが閉じていた場合は再表示
+            showPathPopup(capturedPath, _event.clientX, _event.clientY, id);
+          }
+        });
+      };
+
+      for (const re of [ABS_WIN_PATH_RE, ABS_UNIX_PATH_RE]) {
+        re.lastIndex = 0;
+        let m;
+        while ((m = re.exec(text)) !== null) {
+          addPathLink(m[1], m.index);
+        }
+      }
+      let m;
+      REL_PATH_RE.lastIndex = 0;
+      while ((m = REL_PATH_RE.exec(text)) !== null) {
+        const rawPath = m[2];
+        const startCI = m.index + m[1].length;
+        addPathLink(rawPath, startCI);
+      }
+      callback(links);
+    }
+  });
   if (typeof Unicode11Addon !== 'undefined') {
     const u11 = new Unicode11Addon.Unicode11Addon();
     term.loadAddon(u11);
@@ -1172,7 +1480,7 @@ function attachTerminal(id) {
       flushPending(id);
       const prevCols = t.term.cols;
       const prevRows = t.term.rows;
-      t.fitAddon.fit();
+      fitTerminalPreservingBottom(t, id);
       // 寸法が実際に変わった場合のみ送信（不要な SIGWINCH → 再描画 → 空白行挿入を防ぐ）
       if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
         sendResize(id, t.term.cols, t.term.rows);
@@ -1194,15 +1502,16 @@ function whenLayoutReady(id, container) {
   if (!t) return;
   if (container.clientWidth > 0 && container.clientHeight > 0) {
     t.term.open(container);
-    t.fitAddon.fit();
+    fitTerminalPreservingBottom(t, id);
     t.term.onScroll(() => {
       const buf = t.term.buffer.active;
       const atBottom = buf.viewportY + t.term.rows >= buf.length;
       if (atBottom) {
         t.autoScroll = true;
         if (id === activeSessionId) updateScrollLockBtn(false);
-      } else if (id === activeSessionId) {
-        updateScrollLockBtn(!t.autoScroll);
+      } else {
+        t.autoScroll = false;
+        if (id === activeSessionId) updateScrollLockBtn(true);
       }
     });
     container.addEventListener('wheel', (e) => {
@@ -1233,6 +1542,38 @@ function flushPending(id) {
   t.pendingChunks = [];
   t.term.scrollToBottom();
   scheduleApprovalCheck(id);
+}
+
+function isTerminalAtBottom(t) {
+  if (!t || !t.term || !t.term.buffer) return true;
+  const buf = t.term.buffer.active;
+  return buf.viewportY + t.term.rows >= buf.length;
+}
+
+function fitTerminalPreservingBottom(t, id) {
+  const shouldStickToBottom = !!(t && (t.autoScroll || isTerminalAtBottom(t)));
+  t.fitAddon.fit();
+  if (shouldStickToBottom) {
+    t.autoScroll = true;
+    t.term.scrollToBottom();
+    if (id === activeSessionId) updateScrollLockBtn(false);
+  }
+}
+
+function forceTerminalToBottom(id) {
+  const t = terminals.get(id);
+  if (!t || !t.term) return;
+  t.autoScroll = true;
+  t.term.scrollToBottom();
+  if (id === activeSessionId) updateScrollLockBtn(false);
+}
+
+function forceTerminalToBottomAfterLayout(id) {
+  forceTerminalToBottom(id);
+  requestAnimationFrame(() => {
+    forceTerminalToBottom(id);
+    requestAnimationFrame(() => forceTerminalToBottom(id));
+  });
 }
 
 function updateScrollLockBtn(locked) {
@@ -2061,6 +2402,8 @@ function normalizeActionOptions(options) {
 function showActionBar(bar, sessionId, options, showExpand) {
   options = normalizeActionOptions(options);
   bar.innerHTML = '';
+  const t = sessionId === activeSessionId ? terminals.get(sessionId) : null;
+  const shouldStickToBottom = !!(t && (t.autoScroll || isTerminalAtBottom(t)));
 
   // "Yes, and" 系（セッション全体許可）が存在する場合はそちらを推奨（橙色）にする
   const hasSessionAllow = options.some(o => /during this session|allow.*session|yes.*allow/i.test(o.label));
@@ -2104,6 +2447,9 @@ function showActionBar(bar, sessionId, options, showExpand) {
   bar.appendChild(closeBtn);
 
   bar.classList.add('visible');
+  if (shouldStickToBottom) {
+    forceTerminalToBottomAfterLayout(sessionId);
+  }
 }
 
 function sendChoice(sessionId, targetNum) {
@@ -2260,7 +2606,7 @@ function renderToolOutputs(id) {
 
     const pre = document.createElement('pre');
     pre.className = 'tool-output-content';
-    pre.textContent = out.lines.join('\n');
+    appendLinkedText(pre, out.lines.join('\n'), id);
     body.appendChild(pre);
     item.appendChild(body);
 
@@ -2345,14 +2691,8 @@ function clearInput() {
 }
 
 async function doSend(sessionId) {
-  const hadAttach = pendingAttachFiles.length > 0;
-  await flushPendingAttach(sessionId);
-  if (hadAttach) {
-    // claude の picker が attach_file の \r を確定処理するまで待ってから text\r を送る。
-    // ここで待たないと picker 確定前に text\r が届き、\r が「送信」扱いになって
-    // 画像とテキストが別投稿に分裂する。
-    await new Promise(r => setTimeout(r, 80));
-  }
+  const injects = await flushPendingAttach(sessionId);
+  const injectPrefix = injects.join('');
   let rawText = buildSendText();
   // トリガーフレーズを末尾から除去（PTY・AI には送らない）
   const _tp = getActiveTriggerPhrase();
@@ -2360,9 +2700,17 @@ async function doSend(sessionId) {
     rawText = stripTrailingTriggerPhrase(rawText, _tp);
   }
   // 改行を含む場合はブラケットペーストモードでラップ（\n が途中 Enter と解釈されるのを防ぐ）
-  const textToSend = rawText.includes('\n')
-    ? '\x1b[200~' + rawText + '\x1b[201~\r'
-    : rawText + '\r';
+  // ブラケットペーストはテキスト部分のみに適用し、injectPrefix は前置する
+  let textPart;
+  if (rawText === '' && injectPrefix !== '') {
+    // 画像のみ（テキストなし）: inject 末尾の \r or スペースで確定済み → 追加の \r で送信
+    textPart = '\r';
+  } else if (rawText.includes('\n')) {
+    textPart = '\x1b[200~' + rawText + '\x1b[201~\r';
+  } else {
+    textPart = rawText + '\r';
+  }
+  const textToSend = injectPrefix + textPart;
   clearInput();
   hideSlashMenu();
   // テキスト送信で承認ポップアップをバイパスした場合、Ink 再描画による
@@ -2742,7 +3090,7 @@ function refitAllTerminals(refreshRows = false) {
     if (!canFitTerminal(t)) return;
     const prevCols = t.term.cols;
     const prevRows = t.term.rows;
-    t.fitAddon.fit();
+    fitTerminalPreservingBottom(t, id);
     if (refreshRows && t.term.rows > 0) {
       t.term.refresh(0, t.term.rows - 1);
     }
@@ -2758,7 +3106,7 @@ const resizeObserver = new ResizeObserver(() => {
   if (!t || !t.container) return;
   const prevCols = t.term.cols;
   const prevRows = t.term.rows;
-  t.fitAddon.fit();
+  fitTerminalPreservingBottom(t, activeSessionId);
   if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
     sendResize(activeSessionId, t.term.cols, t.term.rows);
   }
@@ -2778,6 +3126,7 @@ window.addEventListener('resize', () => {
 // ただし設定パネルが開いている間、またはテキスト選択操作中はフォーカスを奪わない
 let suppressFocusReclaim = false;
 let voiceActive = false;
+let voiceAudioActive = false;
 function isInteractiveFocusTarget(target) {
   if (!(target instanceof Element)) return false;
   return !!target.closest([
@@ -2850,6 +3199,7 @@ function activateSession(id) {
   renderToolOutputs(id);
   updateShellBadge(id);
   inputEl.focus();
+  if (typeof window._wakewordSessionChanged === 'function') window._wakewordSessionChanged();
 }
 
 function updateShellBadge(id) {
@@ -2937,8 +3287,6 @@ function renderSessionList() {
       if (!isNaN(id)) activateSession(id);
     });
   }
-  const sidebarEl = document.getElementById('session-list');
-  const isSidebarCollapsed = !!sidebarEl && sidebarEl.getBoundingClientRect().width <= SIDEBAR_COLLAPSED_WIDTH_THRESHOLD;
   root.innerHTML = '';
   if (sessions.size === 0) {
     const p = document.createElement('div');
@@ -3099,10 +3447,8 @@ function renderSessionList() {
       const lastOut = formatLastOutputAt(s.last_output_at);
       const filteredMsg = filterFirstMessage(s.last_message || s.first_message || '');
       const cwdStr = s.cwd || '';
-      const lastOutHtml = lastOut
-        ? `<span class="card-last-output">${isSidebarCollapsed ? 'L:' : t('last_output')}${lastOut}</span>`
-        : '';
-      const startedAtHtml = s.started_at ? `<span class="card-started-at">${formatStartedAt(s.started_at)}</span>` : '';
+      const lastOutHtml = lastOut ? `<span class="card-last-output">L[${lastOut}]</span>` : '';
+      const startedAtHtml = s.started_at ? `<span class="card-started-at">T${formatStartedAt(s.started_at)}</span>` : '';
       const sessionLabel = s.label ? `<span class="card-label">[${escapeHtml(s.label)}]</span>` : '';
       const msgHtml = filteredMsg
         ? `<span class="card-msg" data-tooltip="${escapeHtml(filteredMsg)}">${escapeHtml(filteredMsg)}</span>`
@@ -3532,8 +3878,9 @@ function arrayBufferToBase64(buf) {
 }
 
 async function flushPendingAttach(sessionId) {
-  if (pendingAttachFiles.length === 0) return;
+  if (pendingAttachFiles.length === 0) return [];
   const toSend = pendingAttachFiles.splice(0);
+  const injects = [];
   for (const { buf, filename, wrapper } of toSend) {
     try {
       const formData = new FormData();
@@ -3542,12 +3889,22 @@ async function flushPendingAttach(sessionId) {
         `/api/attach?token=${encodeURIComponent(token)}&session_id=${encodeURIComponent(sessionId)}`,
         { method: 'POST', body: formData }
       );
-      if (!res.ok) showToast(`Attachment failed: HTTP ${res.status}`);
+      if (!res.ok) {
+        showToast(`Attachment failed: HTTP ${res.status}`);
+      } else {
+        try {
+          const data = await res.json();
+          if (data && data.inject) injects.push(data.inject);
+        } catch (_) {
+          showToast('Attachment response parse failed');
+        }
+      }
     } catch (_) {
       showToast('Attachment send failed');
     }
     if (wrapper) setTimeout(() => { wrapper.remove(); updateAttachClearBtn(); }, 1000);
   }
+  return injects;
 }
 
 function addAttachThumbnail(file, onRemove) {
@@ -4256,6 +4613,7 @@ function openLightbox(src) {
     if (wakeWordEnabled) wakeWordEnabled.checked = false;
     if (wakeWordPhrase) wakeWordPhrase.value = DEFAULT_WAKE_WORD_PHRASE;
     if (wakeWordRow) wakeWordRow.hidden = true;
+    document.dispatchEvent(new CustomEvent('wakewordsettings:changed'));
 
     const soundEnabledEl  = document.getElementById('notify-sound-enabled');
     const soundTypeEl     = document.getElementById('notify-sound-type');
@@ -4276,7 +4634,10 @@ function openLightbox(src) {
     if (quickCmd2El) quickCmd2El.value = DEFAULT_QUICK_CMD_2;
 
     const voiceGraceEl = document.getElementById('voice-grace-select');
-    if (voiceGraceEl) voiceGraceEl.value = String(DEFAULT_VOICE_GRACE_SEC);
+    if (voiceGraceEl) {
+      voiceGraceEl.value = String(DEFAULT_VOICE_GRACE_SEC);
+      try { localStorage.setItem(STORAGE_VOICE_GRACE_KEY, String(DEFAULT_VOICE_GRACE_SEC)); } catch (_) {}
+    }
 
     const approvalAutoSwitchInput = document.getElementById('approval-auto-switch-input');
     if (approvalAutoSwitchInput) approvalAutoSwitchInput.checked = false;
@@ -4303,6 +4664,11 @@ function openLightbox(src) {
     if (slashClaudeEl) slashClaudeEl.value = '';
     if (slashCodexEl) slashCodexEl.value = '';
     loadUsageLinkSettings();
+
+    const foAppEl = document.getElementById('settings-file-open-app');
+    const termAppEl = document.getElementById('settings-terminal-app');
+    if (foAppEl) foAppEl.value = '';
+    if (termAppEl) termAppEl.value = '';
 
     await window.__settingsSaveAll();
     await loadApprovalSettings();
@@ -4351,7 +4717,7 @@ function openLightbox(src) {
       if (!canFitTerminal(t)) return;
       const prevCols = t.term.cols;
       const prevRows = t.term.rows;
-      t.fitAddon.fit();
+      fitTerminalPreservingBottom(t, id);
       if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
         sendResize(id, t.term.cols, t.term.rows);
       }
@@ -4425,6 +4791,7 @@ function openLightbox(src) {
   let restartTimer = null;
   let isAutoRestarting = false;   // 直後の 'start' イベントが自動 restart 由来かを判定
   let lastResultAt = 0;           // 最終 result イベント時刻 (performance.now())
+  let silenceStopTimer = null;
 
   function getVoiceGraceSec() {
     const raw = localStorage.getItem(STORAGE_VOICE_GRACE_KEY);
@@ -4436,6 +4803,23 @@ function openLightbox(src) {
       clearTimeout(restartTimer);
       restartTimer = null;
     }
+  }
+  function clearSilenceTimer() {
+    clearTimeout(silenceStopTimer);
+    silenceStopTimer = null;
+  }
+  function resetSilenceTimer() {
+    clearSilenceTimer();
+    const grace = getVoiceGraceSec();
+    if (grace <= 0 || !isRecording || userIntendedStop) return;
+    silenceStopTimer = setTimeout(() => {
+      silenceStopTimer = null;
+      if (!isRecording || userIntendedStop) return;
+      userIntendedStop = true;
+      clearRestartTimer();
+      try { recognition.abort(); } catch (_) {}
+      scheduleForceCleanup();
+    }, grace * 1000);
   }
 
   const BAR_COUNT = 48;
@@ -4563,13 +4947,21 @@ function openLightbox(src) {
     voiceBar.hidden = true;
   }
 
+  function setVoiceAudioActive(active) {
+    if (voiceAudioActive === active) return;
+    voiceAudioActive = active;
+    document.dispatchEvent(new CustomEvent('voiceinput:statechanged'));
+  }
+
   let forceCleanupTimer = null;
   function forceCleanup() {
     userIntendedStop = true;
+    clearSilenceTimer();
     clearRestartTimer();
     isStarting = false;
     isRecording = false;
     voiceActive = false;
+    setVoiceAudioActive(false);
     btn.classList.remove('recording');
     btn.dataset.tooltip = t('voice_tooltip');
     hideVoiceBar();
@@ -4579,7 +4971,7 @@ function openLightbox(src) {
   function scheduleForceCleanup() {
     clearTimeout(forceCleanupTimer);
     forceCleanupTimer = setTimeout(() => {
-      if (isRecording) forceCleanup();
+      if (isRecording || isStarting || voiceActive) forceCleanup();
     }, 1500);
   }
   function cancelForceCleanup() {
@@ -4590,12 +4982,14 @@ function openLightbox(src) {
   btn.addEventListener('click', () => {
     if (isRecording || isStarting) {
       userIntendedStop = true;
+      clearSilenceTimer();
       clearRestartTimer();
       try { recognition.abort(); } catch (_) {}
       scheduleForceCleanup();
       return;
     }
     userIntendedStop = false;
+    clearSilenceTimer();
     isAutoRestarting = false;
     // result が一度も来ていない状態を表すセンチネル。
     // クリック直後に Chrome が end を返すケース（権限プロンプト直後・無音タイムアウト等）で
@@ -4616,6 +5010,7 @@ function openLightbox(src) {
 
   cancelBtn.addEventListener('click', () => {
     userIntendedStop = true;
+    clearSilenceTimer();
     clearRestartTimer();
     inputEl.value = preVoiceText;
     autoExpand();
@@ -4625,6 +5020,7 @@ function openLightbox(src) {
 
   confirmBtn.addEventListener('click', () => {
     userIntendedStop = true;
+    clearSilenceTimer();
     clearRestartTimer();
     try { recognition.stop(); } catch (_) {}
     scheduleForceCleanup();
@@ -4636,19 +5032,27 @@ function openLightbox(src) {
     voiceActive = true;
     btn.classList.add('recording');
     btn.dataset.tooltip = t('voice_recording');
+    document.dispatchEvent(new CustomEvent('voiceinput:started'));
     // 自動 restart 時は既にバーが表示中で intensity リセットも不要
     if (!isAutoRestarting) {
       showVoiceBar();
     }
     isAutoRestarting = false;
+    resetSilenceTimer();
   });
 
-  recognition.addEventListener('audiostart', () => { voiceIntensityTarget = 0.15; });
+  recognition.addEventListener('audiostart', () => {
+    setVoiceAudioActive(true);
+    voiceIntensityTarget = 0.15;
+  });
   recognition.addEventListener('soundstart', () => { voiceIntensityTarget = 0.55; lastKickAt = performance.now(); });
   recognition.addEventListener('speechstart', () => { voiceIntensityTarget = 0.9;  lastKickAt = performance.now(); });
   recognition.addEventListener('speechend',   () => { voiceIntensityTarget = 0.25; });
   recognition.addEventListener('soundend',    () => { voiceIntensityTarget = 0.08; });
-  recognition.addEventListener('audioend',    () => { voiceIntensityTarget = 0.03; });
+  recognition.addEventListener('audioend',    () => {
+    setVoiceAudioActive(false);
+    voiceIntensityTarget = 0.03;
+  });
 
   recognition.addEventListener('result', (e) => {
     const result = e.results[e.resultIndex];
@@ -4661,6 +5065,7 @@ function openLightbox(src) {
     }
     lastInterimLen = result.isFinal ? 0 : transcript.length;
     lastResultAt = performance.now();
+    resetSilenceTimer();
     inputEl.value = inputEl.value.slice(0, interimStart) + transcript;
     if (result.isFinal) {
       inputEl.value += ' ';
@@ -4668,6 +5073,7 @@ function openLightbox(src) {
       const _tp = getActiveTriggerPhrase();
       if (_tp && activeSessionId !== null && textEndsWithTriggerPhrase(buildSendText(), _tp)) {
         userIntendedStop = true;
+        clearSilenceTimer();
         clearRestartTimer();
         recognition.stop();
         doSend(activeSessionId);
@@ -4681,6 +5087,7 @@ function openLightbox(src) {
   recognition.addEventListener('end', () => {
     cancelForceCleanup();
     isStarting = false;
+    setVoiceAudioActive(false);
     const grace = getVoiceGraceSec();
     const hasResult = lastResultAt > 0;
     const sinceLastResult = hasResult ? (performance.now() - lastResultAt) / 1000 : Infinity;
@@ -4707,11 +5114,13 @@ function openLightbox(src) {
   recognition.addEventListener('error', (e) => {
     console.warn('SpeechRecognition error:', e.error, e.message || '');
     isStarting = false;
+    setVoiceAudioActive(false);
     // 致命系エラーは auto-restart 抑止 (繰り返してもまた失敗するため)。
     // 'no-speech' と 'aborted' はソフトエラーで、'end' イベントが判定する。
     const fatalErrors = ['not-allowed', 'permission-denied', 'audio-capture', 'network', 'service-not-allowed', 'language-not-supported'];
     if (fatalErrors.includes(e.error)) {
       userIntendedStop = true;
+      clearSilenceTimer();
       clearRestartTimer();
     }
     if (e.error !== 'no-speech' && e.error !== 'aborted') showVoiceError(e, btn);
@@ -4734,7 +5143,7 @@ function openLightbox(src) {
   });
 })();
 
-// ---- ウェイクワード検出 ----
+// ---- ウェイクワード検出（グローバルトグル＋セッション個別トグル＋入力欄ホバー起動） ----
 (function () {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) return;
@@ -4742,21 +5151,37 @@ function openLightbox(src) {
     ?? /Chrome\//.test(navigator.userAgent);
   if (!isChromium) return;
 
-  const wakeBtn  = document.getElementById('voice-wakeword-btn');
-  const voiceBtn = document.getElementById('voice-btn');
-  if (!wakeBtn || !voiceBtn) return;
+  const globalBtn  = document.getElementById('global-wakeword-btn');
+  const sessionBtn = document.getElementById('voice-wakeword-btn');
+  const voiceBtn   = document.getElementById('voice-btn');
+  const inputBar   = document.getElementById('input-bar');
+  if (!globalBtn || !sessionBtn || !voiceBtn || !inputBar) return;
 
-  wakeBtn.hidden = false;
-  wakeBtn.dataset.tooltip = t('voice_wakeword_tooltip');
+  globalBtn.hidden  = false;
+  sessionBtn.hidden = false;
+  globalBtn.dataset.tooltip  = t('voice_wakeword_tooltip');
+  sessionBtn.dataset.tooltip = t('voice_wakeword_session_tooltip');
 
-  let isActive    = false;
-  let isListening = false;
-  let isStarting  = false;
-  let restartTimer = null;
+  // セッション個別の ON/OFF 状態 (sessionId -> boolean)
+  const sessionWakeMap = new Map();
+
+  let isGlobalActive = false;  // ヘッダーボタンの状態
+  let isHovered      = false;  // マウスが #input-bar 上にあるか
+  let isListening    = false;
+  let isStarting     = false;
+  let restartTimer   = null;
+
+  function sessionActive() {
+    return activeSessionId !== null && (sessionWakeMap.get(activeSessionId) || false);
+  }
 
   function getWakePhrase() {
     if (localStorage.getItem(STORAGE_WAKE_WORD_ENABLED_KEY) !== '1') return '';
     return (localStorage.getItem(STORAGE_WAKE_WORD_PHRASE_KEY) ?? DEFAULT_WAKE_WORD_PHRASE).trim();
+  }
+
+  function isWakewordEnabled() {
+    return localStorage.getItem(STORAGE_WAKE_WORD_ENABLED_KEY) === '1';
   }
 
   function getLang() {
@@ -4769,8 +5194,13 @@ function openLightbox(src) {
   hw.continuous = false;
   hw.maxAlternatives = 1;
 
+  // グローバル ON または 当該セッション個別 ON、かつ入力欄ホバー中
+  function canListen() {
+    return isWakewordEnabled() && (isGlobalActive || sessionActive()) && isHovered && !voiceActive;
+  }
+
   function startHotword() {
-    if (isListening || isStarting || voiceActive) return;
+    if (!canListen() || isListening || isStarting) return;
     isStarting = true;
     hw.lang = getLang();
     try { hw.start(); } catch (err) {
@@ -4785,23 +5215,73 @@ function openLightbox(src) {
     try { hw.abort(); } catch (_) {}
   }
 
-  function deactivate() {
-    isActive = false;
-    stopHotword();
-    wakeBtn.classList.remove('standby');
-    wakeBtn.dataset.tooltip = t('voice_wakeword_tooltip');
+  function updateMicChip() {
+    const chip = document.getElementById('mic-status-chip');
+    if (!chip) return;
+    const hasVoiceRecordingClass = voiceBtn.classList.contains('recording');
+    const isVoiceRecording = voiceActive && voiceAudioActive && hasVoiceRecordingClass;
+    if (voiceActive && !hasVoiceRecordingClass) voiceActive = false;
+    const wakeEnabled = isWakewordEnabled();
+    const wakeActive = wakeEnabled && (isGlobalActive || sessionActive());
+    if (isVoiceRecording) {
+      chip.hidden = false;
+      chip.className = 'status-chip status-chip--running status-chip--blink';
+      chip.textContent = t('mic_chip_recording');
+    } else if (wakeActive && isListening) {
+      chip.hidden = false;
+      chip.className = 'status-chip status-chip--running status-chip--blink';
+      chip.textContent = t('mic_chip_listening');
+    } else if (wakeActive) {
+      chip.hidden = false;
+      chip.className = 'status-chip status-chip--standby';
+      chip.textContent = t('mic_chip_standby');
+    } else {
+      chip.hidden = true;
+      chip.textContent = '';
+    }
   }
 
-  function activate() {
-    isActive = true;
-    wakeBtn.classList.add('standby');
-    wakeBtn.dataset.tooltip = t('voice_wakeword_listening');
-    startHotword();
+  function updateGlobalBtn() {
+    if (!isWakewordEnabled()) {
+      globalBtn.classList.remove('standby', 'listening');
+      globalBtn.dataset.tooltip = t('voice_wakeword_tooltip');
+    } else if (!isGlobalActive) {
+      globalBtn.classList.remove('standby', 'listening');
+      globalBtn.dataset.tooltip = t('voice_wakeword_tooltip');
+    } else if (isHovered) {
+      globalBtn.classList.add('standby', 'listening');
+      globalBtn.dataset.tooltip = t('voice_wakeword_listening');
+    } else {
+      globalBtn.classList.add('standby');
+      globalBtn.classList.remove('listening');
+      globalBtn.dataset.tooltip = t('voice_wakeword_armed');
+    }
+    updateMicChip();
+    updateSessionBtn();
+    renderSessionList();
+  }
+
+  function updateSessionBtn() {
+    const on = sessionActive();
+    const effectiveOn = isWakewordEnabled() && (on || isGlobalActive);
+    if (effectiveOn && isHovered) {
+      sessionBtn.classList.add('standby', 'listening');
+      sessionBtn.dataset.tooltip = t('voice_wakeword_listening');
+    } else if (effectiveOn) {
+      sessionBtn.classList.add('standby');
+      sessionBtn.classList.remove('listening');
+      sessionBtn.dataset.tooltip = t(on ? 'voice_wakeword_session_armed' : 'voice_wakeword_armed');
+    } else {
+      sessionBtn.classList.remove('standby', 'listening');
+      sessionBtn.dataset.tooltip = t('voice_wakeword_session_tooltip');
+    }
+    updateMicChip();
   }
 
   hw.addEventListener('start', () => {
     isStarting = false;
     isListening = true;
+    updateMicChip();
   });
 
   hw.addEventListener('result', (e) => {
@@ -4820,12 +5300,12 @@ function openLightbox(src) {
   hw.addEventListener('end', () => {
     isListening = false;
     isStarting = false;
-    if (!isActive) return;
-    if (voiceActive) return; // voiceinput:stopped で再アーム
+    updateMicChip();
+    if (!canListen()) return;
     clearTimeout(restartTimer);
     restartTimer = setTimeout(() => {
       restartTimer = null;
-      if (isActive && !voiceActive) startHotword();
+      if (canListen()) startHotword();
     }, 250);
   });
 
@@ -4833,32 +5313,106 @@ function openLightbox(src) {
     isStarting = false;
     const fatal = ['not-allowed', 'permission-denied', 'audio-capture', 'network', 'service-not-allowed', 'language-not-supported'];
     if (fatal.includes(e.error)) {
-      deactivate();
-      showVoiceError(e, wakeBtn);
+      isGlobalActive = false;
+      if (activeSessionId !== null) sessionWakeMap.set(activeSessionId, false);
+      updateGlobalBtn();
+      updateSessionBtn();
+      updateMicChip();
+      showVoiceError(e, globalBtn);
     }
   });
 
-  // メイン録音終了後にホットワード監視を再アーム
+  // メイン録音終了後にホットワード監視を再アーム（hover 中かつ ON のセッションのみ）
   document.addEventListener('voiceinput:stopped', () => {
-    if (!isActive || isListening || isStarting) return;
+    updateMicChip();
+    if (!canListen() || isListening || isStarting) return;
     clearTimeout(restartTimer);
     restartTimer = setTimeout(() => {
       restartTimer = null;
-      if (isActive) startHotword();
+      if (canListen()) startHotword();
     }, 300);
   });
 
-  wakeBtn.addEventListener('click', () => {
-    if (isActive) deactivate();
-    else activate();
+  document.addEventListener('voiceinput:started', () => { updateMicChip(); });
+  document.addEventListener('voiceinput:statechanged', () => { updateMicChip(); });
+
+  // マウスが入力欄に入ったら認識開始、出たら停止
+  inputBar.addEventListener('mouseenter', () => {
+    isHovered = true;
+    updateGlobalBtn();
+    updateSessionBtn();
+    if (canListen() && !voiceActive) startHotword();
   });
+
+  inputBar.addEventListener('mouseleave', () => {
+    isHovered = false;
+    updateGlobalBtn();
+    updateSessionBtn();
+    stopHotword();
+  });
+
+  // ヘッダーのグローバルボタン
+  globalBtn.addEventListener('click', () => {
+    if (!isWakewordEnabled()) {
+      isGlobalActive = false;
+      sessionWakeMap.clear();
+      updateGlobalBtn();
+      stopHotword();
+      return;
+    }
+    isGlobalActive = !isGlobalActive;
+    updateGlobalBtn();
+    if (isGlobalActive && isHovered && !voiceActive) startHotword();
+    if (!isGlobalActive && !sessionActive()) stopHotword();
+  });
+
+  // 入力バーのセッション個別ボタン
+  sessionBtn.addEventListener('click', () => {
+    if (activeSessionId === null) return;
+    if (!isWakewordEnabled()) {
+      sessionWakeMap.set(activeSessionId, false);
+      updateSessionBtn();
+      stopHotword();
+      return;
+    }
+    const cur = sessionWakeMap.get(activeSessionId) || false;
+    sessionWakeMap.set(activeSessionId, !cur);
+    updateGlobalBtn();
+    if (!cur && isHovered && !voiceActive) startHotword();
+    if (cur && !isGlobalActive) stopHotword();
+  });
+
+  // セッション切り替え時にセッションボタンの状態を反映（activateSession から呼ばれる）
+  window._wakewordSessionChanged = () => {
+    updateGlobalBtn();
+    if (isHovered) {
+      if (canListen() && !isListening && !isStarting) startHotword();
+      else if (!canListen()) stopHotword();
+    }
+  };
+
+  document.addEventListener('wakewordsettings:changed', () => {
+    if (!isWakewordEnabled()) {
+      isGlobalActive = false;
+      sessionWakeMap.clear();
+      stopHotword();
+    }
+    updateGlobalBtn();
+    updateSessionBtn();
+    updateMicChip();
+  });
+
+  updateGlobalBtn();
 
   document.addEventListener('keydown', (e) => {
     if (e.altKey && e.code === 'KeyW' && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
-      wakeBtn.click();
+      globalBtn.click();
     }
   });
+
+  window._wakewordGlobalActive = () => isGlobalActive;
+  window._wakewordSessionActive = (id) => sessionWakeMap.get(id) || false;
 })();
 
 // ---- スラッシュコマンドピッカー ----
@@ -5016,4 +5570,115 @@ async function loadSlashCmdSources() {
       if (resp.ok) showToast(t('settings_slash_src_saved'), saveBtn);
     } catch (_) {}
   });
+})();
+
+// ---- ファイルリンク設定 ----
+(function () {
+  const fileOpenAppEl     = document.getElementById('settings-file-open-app');
+  const fileOpenBrowseBtn = document.getElementById('settings-file-open-app-browse');
+  const fileOpenEffectiveEl = document.getElementById('settings-file-open-app-effective');
+  const terminalAppEl     = document.getElementById('settings-terminal-app');
+  const terminalBrowseBtn = document.getElementById('settings-terminal-app-browse');
+  const terminalEffectiveEl = document.getElementById('settings-terminal-app-effective');
+  if (!fileOpenAppEl) return;
+
+  function renderEffectiveCommand(el, value) {
+    if (!el) return;
+    el.textContent = value ? `${t('settings_effective_command')}: ${value}` : '';
+  }
+
+  async function loadFileOpenApp() {
+    try {
+      const res = await fetch(`/api/file-open-app?token=${token}`);
+      if (!res.ok) return;
+      const cfg = await res.json();
+      fileOpenAppEl.value = cfg.file_open_app || '';
+      renderEffectiveCommand(fileOpenEffectiveEl, cfg.effective_file_open_app);
+    } catch (_) {}
+  }
+
+  async function saveFileOpenApp() {
+    try {
+      const res = await fetch(`/api/file-open-app?token=${token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_open_app: fileOpenAppEl.value.trim() }),
+      });
+      if (res.ok) {
+        const cfg = await res.json();
+        renderEffectiveCommand(fileOpenEffectiveEl, cfg.effective_file_open_app);
+      }
+    } catch (_) {}
+  }
+
+  async function loadTerminalApp() {
+    try {
+      const res = await fetch(`/api/terminal-app?token=${token}`);
+      if (!res.ok) return;
+      const cfg = await res.json();
+      terminalAppEl.value = cfg.terminal_app || '';
+      renderEffectiveCommand(terminalEffectiveEl, cfg.effective_terminal_app);
+    } catch (_) {}
+  }
+
+  async function saveTerminalApp() {
+    try {
+      const res = await fetch(`/api/terminal-app?token=${token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ terminal_app: terminalAppEl.value.trim() }),
+      });
+      if (res.ok) {
+        const cfg = await res.json();
+        renderEffectiveCommand(terminalEffectiveEl, cfg.effective_terminal_app);
+      }
+    } catch (_) {}
+  }
+
+  if (fileOpenBrowseBtn) {
+    fileOpenBrowseBtn.addEventListener('click', async () => {
+      fileOpenBrowseBtn.disabled = true;
+      try {
+        const res = await fetch(`/api/pick-file?filter=exe&token=${token}`, { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.ok && data.path) fileOpenAppEl.value = data.path;
+        }
+      } catch (_) {}
+      finally { fileOpenBrowseBtn.disabled = false; }
+    });
+  }
+
+  if (terminalBrowseBtn) {
+    terminalBrowseBtn.addEventListener('click', async () => {
+      terminalBrowseBtn.disabled = true;
+      try {
+        const res = await fetch(`/api/pick-file?filter=exe&token=${token}`, { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.ok && data.path) terminalAppEl.value = data.path;
+        }
+      } catch (_) {}
+      finally { terminalBrowseBtn.disabled = false; }
+    });
+  }
+
+  // __settingsSaveAll フックにチェーンで登録
+  const origSave = window.__settingsSaveAll;
+  window.__settingsSaveAll = async () => {
+    if (origSave) await origSave();
+    await saveFileOpenApp();
+    await saveTerminalApp();
+  };
+
+  // 設定パネルを開いたときのロード
+  const settingsBtn = document.getElementById('settings-btn');
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', () => {
+      if (!document.getElementById('settings-panel').hidden) {
+        loadFileOpenApp();
+        loadTerminalApp();
+      }
+    });
+  }
 })();
