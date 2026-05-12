@@ -56,8 +56,7 @@ type Message struct {
 	// LastMessage: セッション内で最後に確定されたユーザー入力（UI カード表示用）。
 	LastMessage string `json:"last_message,omitempty"`
 
-	// attach_file: Hub → wrapper。保存済み画像の絶対パスと PTY 注入文字列。
-	Path   string `json:"path,omitempty"`
+	// Inject: attach_file (deprecated) で使用していた PTY 注入文字列。wrapper 側との互換性のため残置。
 	Inject string `json:"inject,omitempty"`
 
 	// attach_request: UI → Hub。ファイルバイナリを base64 エンコードした文字列。

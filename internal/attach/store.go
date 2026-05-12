@@ -47,8 +47,9 @@ func Save(baseDir string, sessionID int, provider string, data []byte, filename 
 
 	switch provider {
 	case "claude":
-		// \r でピッカーを閉じてファイル確定させる。次の pty_input の \r がメッセージ送信に使われる
-		inject = "@" + abs + "\r"
+		// Claude Code は @path 直後の Enter を画像だけの送信として処理することがある。
+		// 本文と同じ入力行に残すため、Codex と同じく空白で区切る。
+		inject = "@" + abs + " "
 	case "codex":
 		inject = "@" + filepath.ToSlash(abs) + " "
 	default:
