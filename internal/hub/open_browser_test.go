@@ -10,6 +10,9 @@ import (
 func TestBrowserCommandUsesPlatformLauncher(t *testing.T) {
 	const url = "http://127.0.0.1:47777/?token=test"
 
+	t.Setenv("WSL_INTEROP", "")
+	t.Setenv("WSL_DISTRO_NAME", "")
+
 	cmd := browserCommand(url)
 	name := strings.ToLower(filepath.Base(cmd.Path))
 
@@ -35,5 +38,24 @@ func TestBrowserCommandUsesPlatformLauncher(t *testing.T) {
 		if len(cmd.Args) != 2 || cmd.Args[1] != url {
 			t.Fatalf("browserCommand args = %#v", cmd.Args)
 		}
+	}
+}
+
+func TestBrowserCommandUnderWSLUsesExplorer(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("WSL detection only applies to the linux build")
+	}
+	const url = "http://127.0.0.1:47777/?token=test"
+
+	t.Setenv("WSL_INTEROP", "")
+	t.Setenv("WSL_DISTRO_NAME", "Ubuntu")
+
+	cmd := browserCommand(url)
+	name := strings.ToLower(filepath.Base(cmd.Path))
+	if name != "explorer.exe" {
+		t.Fatalf("browserCommand under WSL path = %q, want explorer.exe", cmd.Path)
+	}
+	if len(cmd.Args) != 2 || cmd.Args[1] != url {
+		t.Fatalf("browserCommand under WSL args = %#v", cmd.Args)
 	}
 }
