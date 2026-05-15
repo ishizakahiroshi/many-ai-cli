@@ -62,4 +62,8 @@ type Message struct {
 	// attach_request: UI → Hub。ファイルバイナリを base64 エンコードした文字列。
 	ImageData string `json:"image_data,omitempty"`
 	Filename  string `json:"filename,omitempty"` // 元ファイル名（拡張子の決定に使用）
+
+	// approval_patterns_updated: Hub → UI。リモート fetch で公式パターンに差分があった
+	// 場合に通知する。Providers には差分があった provider 名のみが入る。
+	Providers []string `json:"providers,omitempty"`
 }

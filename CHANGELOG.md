@@ -10,6 +10,38 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Added
+- **Remote sync + profile system for approval detection patterns.** Approval
+  trigger phrases are now fetched from
+  `resources/approval-patterns/{claude,codex,common}.md` on GitHub at Hub
+  startup (24h TTL — refreshed on next restart). Each provider has two
+  profiles, **official** (read-only, kept in sync with the remote md) and
+  **custom** (user-editable). The Settings panel adds a Profile dropdown
+  and a "Copy from official" button; the previous "Reset to defaults"
+  button has been removed (switch back to the official profile instead).
+  When the official profile changes via remote sync, a toast notifies the
+  UI (`approval_patterns_updated` WS event). New endpoints:
+  `GET/POST /api/approval-patterns/profile`,
+  `POST /api/approval-patterns/copy-official`. New config keys:
+  `approval_pattern_sources` (per-provider source URL override) and
+  `approval_profiles` (per-provider active profile). On-disk layout in
+  `~/.any-ai-cli/approval-patterns/` becomes
+  `<provider>.{official,custom}.json`; legacy `<provider>.json` is migrated
+  to `<provider>.custom.json` on first startup and continues to be written
+  as a mirror of the active profile for backwards compatibility.
+- **Batch approval UI for multi-question prompts.** AI can now place multiple
+  questions inside a single `[ANY-AI-CLI]` block (each with its own numbered
+  options); the Hub action-bar renders them as a vertical stack with
+  per-section selection buttons, a progress counter, a "Clear" button, and a
+  "Submit all" button. Keyboard: digit keys select the option for the focused
+  section and auto-advance; Tab / Shift+Tab / ←/→ move between sections; Space
+  advances to the next section; Enter submits when every section is selected.
+  On submit, the choices are concatenated into a space-separated digit string
+  (e.g. `1 2 1 3`) followed by `\r` and sent directly to the PTY, so the AI
+  can recover each answer with a simple `split()`. The single-question
+  format and Y/N format are unchanged. approval-rules.md is bumped to
+  version 4 to advertise the new block layout to AI sessions.
+
 ### Changed
 - **Internal identifiers renamed from `docs` to `files`** (no user-visible
   behavior change). The `📁 files` button (formerly `📁 docs`) and surrounding

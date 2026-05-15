@@ -749,120 +749,231 @@ const token = new URLSearchParams(location.search).get('token');
 })();
 
 // ---- 承認検出パターン編集 UI ----
-(function () {
+window.approvalPatternsUI = (function () {
   const providerEl = document.getElementById('approval-patterns-provider');
+  const profileEl = document.getElementById('approval-patterns-profile');
   const listEl = document.getElementById('approval-patterns-list');
   const inputEl = document.getElementById('approval-patterns-input');
   const addBtn = document.getElementById('approval-patterns-add-btn');
-  const resetBtn = document.getElementById('approval-patterns-reset-btn');
-  if (!providerEl || !listEl || !inputEl || !addBtn || !resetBtn) return;
+  const copyOfficialBtn = document.getElementById('approval-patterns-copy-official-btn');
+  const readonlyNote = document.getElementById('approval-patterns-readonly-note');
+  if (!providerEl || !profileEl || !listEl || !inputEl || !addBtn || !copyOfficialBtn) return null;
 
-  const cache = { claude: [], codex: [], common: [] };
+  // プロファイル別のキャッシュ。{ claude: { official: [], custom: [] }, ... }
+  const cache = {
+    claude: { official: [], custom: [] },
+    codex:  { official: [], custom: [] },
+    common: { official: [], custom: [] },
+  };
+  // アクティブプロファイル設定（サーバ側 ApprovalProfiles と同期）
+  let activeProfiles = { claude: 'official', codex: 'official', common: 'official' };
+
+  function currentProvider() { return providerEl.value; }
+  function currentProfile() { return profileEl.value; }
+  function isReadonly() { return currentProfile() === 'official'; }
+
+  async function loadActive() {
+    try {
+      const profRes = await fetch(`/api/approval-patterns/profile?token=${token}`);
+      if (profRes.ok) {
+        const p = await profRes.json();
+        activeProfiles = {
+          claude: p.claude || 'official',
+          codex:  p.codex  || 'official',
+          common: p.common || 'official',
+        };
+      }
+    } catch (e) {
+      console.warn('approval profiles load failed', e);
+    }
+    try {
+      const res = await fetch(`/api/approval-patterns?token=${token}`);
+      if (res.ok) {
+        const data = await res.json();
+        const norm = arr => (Array.isArray(arr) ? arr : []).map(s => String(s).toLowerCase()).filter(Boolean);
+        providerApprovalTriggers.claude = norm(data.claude);
+        providerApprovalTriggers.codex  = norm(data.codex);
+        providerApprovalTriggers.common = norm(data.common);
+      }
+    } catch (e) {
+      console.warn('approval patterns load failed', e);
+    }
+  }
+
+  async function fetchProfileList(provider, profile) {
+    try {
+      const res = await fetch(`approval-patterns/${provider}.${profile}.json`);
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  async function loadProvider(provider) {
+    const [official, custom] = await Promise.all([
+      fetchProfileList(provider, 'official'),
+      fetchProfileList(provider, 'custom'),
+    ]);
+    cache[provider].official = Array.isArray(official) ? official : [];
+    cache[provider].custom = Array.isArray(custom) ? custom : [];
+  }
 
   async function loadAll() {
     try {
-      const res = await fetch(`/api/approval-patterns?token=${token}`);
-      if (!res.ok) throw new Error('http ' + res.status);
-      const data = await res.json();
-      for (const k of Object.keys(cache)) cache[k] = Array.isArray(data[k]) ? data[k] : [];
+      await loadActive();
+      await Promise.all(Object.keys(cache).map(loadProvider));
+      profileEl.value = activeProfiles[currentProvider()] || 'official';
       render();
-      // フロント側のキャッシュも更新（検出ロジックが即時に新パターンを使えるように）
-      const norm = arr => arr.map(s => String(s).toLowerCase()).filter(Boolean);
-      providerApprovalTriggers.claude = norm(cache.claude);
-      providerApprovalTriggers.codex  = norm(cache.codex);
-      providerApprovalTriggers.common = norm(cache.common);
     } catch (e) {
-      console.warn('approval patterns load failed', e);
+      console.warn('approval patterns init failed', e);
       showToast(t('settings_approval_patterns_load_failed'));
     }
   }
 
   function render() {
-    const provider = providerEl.value;
-    const list = cache[provider] || [];
+    const provider = currentProvider();
+    const profile = currentProfile();
+    const list = (cache[provider] && cache[provider][profile]) || [];
+    const readonly = isReadonly();
+
     listEl.innerHTML = '';
+    listEl.classList.toggle('is-readonly', readonly);
     for (let i = 0; i < list.length; i++) {
       const li = document.createElement('li');
       const span = document.createElement('span');
       span.className = 'pattern-text';
       span.textContent = list[i];
-      const rm = document.createElement('button');
-      rm.className = 'pattern-remove';
-      rm.textContent = '✕';
-      rm.title = t('settings_approval_patterns_remove');
-      rm.addEventListener('click', () => removeAt(i));
       li.appendChild(span);
-      li.appendChild(rm);
+      if (!readonly) {
+        const rm = document.createElement('button');
+        rm.className = 'pattern-remove';
+        rm.textContent = '✕';
+        rm.title = t('settings_approval_patterns_remove');
+        rm.addEventListener('click', () => removeAt(i));
+        li.appendChild(rm);
+      }
       listEl.appendChild(li);
     }
+
+    inputEl.disabled = readonly;
+    addBtn.disabled = readonly;
+    if (readonlyNote) readonlyNote.classList.toggle('is-visible', readonly);
+    copyOfficialBtn.style.display = readonly ? 'none' : '';
   }
 
-  async function save(provider) {
+  async function saveCustom(provider) {
     try {
       const res = await fetch(`/api/approval-patterns/${provider}?token=${token}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cache[provider]),
+        body: JSON.stringify(cache[provider].custom),
       });
       if (!res.ok) throw new Error('http ' + res.status);
-      const norm = arr => arr.map(s => String(s).toLowerCase()).filter(Boolean);
-      providerApprovalTriggers[provider] = norm(cache[provider]);
+      if (activeProfiles[provider] === 'custom') {
+        const norm = arr => arr.map(s => String(s).toLowerCase()).filter(Boolean);
+        providerApprovalTriggers[provider] = norm(cache[provider].custom);
+      }
       showToast(t('settings_approval_patterns_saved'));
     } catch (e) {
       console.warn('approval patterns save failed', e);
       showToast(t('settings_approval_patterns_save_failed'));
-      // 失敗時は再ロードして整合性を回復
       await loadAll();
     }
   }
 
   function addPattern() {
+    if (isReadonly()) return;
     const text = inputEl.value.trim();
     if (!text) return;
-    const provider = providerEl.value;
-    if (cache[provider].includes(text)) {
+    const provider = currentProvider();
+    if (cache[provider].custom.includes(text)) {
       inputEl.value = '';
       return;
     }
-    cache[provider] = [...cache[provider], text];
+    cache[provider].custom = [...cache[provider].custom, text];
     inputEl.value = '';
     render();
-    save(provider);
+    saveCustom(provider);
   }
 
   function removeAt(idx) {
-    const provider = providerEl.value;
-    cache[provider] = cache[provider].filter((_, i) => i !== idx);
+    if (isReadonly()) return;
+    const provider = currentProvider();
+    cache[provider].custom = cache[provider].custom.filter((_, i) => i !== idx);
     render();
-    save(provider);
+    saveCustom(provider);
   }
 
-  async function resetCurrent() {
-    const provider = providerEl.value;
-    const ok = await appConfirm({
-      title: t('settings_approval_patterns_reset'),
-      message: t('settings_approval_patterns_reset_confirm'),
-      confirmText: t('settings_approval_patterns_reset'),
-      kind: 'warn',
-    });
-    if (!ok) return;
+  async function switchProfile() {
+    const provider = currentProvider();
+    const profile = currentProfile();
+    if (activeProfiles[provider] === profile) {
+      render();
+      return;
+    }
     try {
-      const res = await fetch(`/api/approval-patterns/${provider}/reset?token=${token}`, { method: 'POST' });
+      const res = await fetch(`/api/approval-patterns/profile?token=${token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, profile }),
+      });
       if (!res.ok) throw new Error('http ' + res.status);
-      showToast(t('settings_approval_patterns_reset_done'));
-      await loadAll();
+      activeProfiles[provider] = profile;
+      const list = (cache[provider] && cache[provider][profile]) || [];
+      const norm = arr => arr.map(s => String(s).toLowerCase()).filter(Boolean);
+      providerApprovalTriggers[provider] = norm(list);
+      render();
     } catch (e) {
-      console.warn('approval patterns reset failed', e);
+      console.warn('approval profile switch failed', e);
+      showToast(t('settings_approval_patterns_save_failed'));
+      profileEl.value = activeProfiles[provider] || 'official';
+    }
+  }
+
+  async function copyFromOfficial() {
+    if (isReadonly()) return;
+    const provider = currentProvider();
+    try {
+      const res = await fetch(`/api/approval-patterns/copy-official?token=${token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider }),
+      });
+      if (!res.ok) throw new Error('http ' + res.status);
+      await loadProvider(provider);
+      render();
+      showToast(t('settings_approval_patterns_saved'));
+    } catch (e) {
+      console.warn('approval copy-official failed', e);
       showToast(t('settings_approval_patterns_save_failed'));
     }
   }
 
-  providerEl.addEventListener('change', render);
+  providerEl.addEventListener('change', () => {
+    profileEl.value = activeProfiles[currentProvider()] || 'official';
+    render();
+  });
+  profileEl.addEventListener('change', switchProfile);
   addBtn.addEventListener('click', addPattern);
   inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addPattern(); } });
-  resetBtn.addEventListener('click', resetCurrent);
+  copyOfficialBtn.addEventListener('click', copyFromOfficial);
 
   loadAll();
+
+  return {
+    async onOfficialUpdated(providers) {
+      if (!Array.isArray(providers) || providers.length === 0) return;
+      await Promise.all(providers.map(p => cache[p] ? loadProvider(p) : Promise.resolve()));
+      for (const p of providers) {
+        if (activeProfiles[p] === 'official') {
+          const norm = arr => arr.map(s => String(s).toLowerCase()).filter(Boolean);
+          providerApprovalTriggers[p] = norm(cache[p].official);
+        }
+      }
+      render();
+    },
+  };
 })();
 
 const sessions = new Map();
@@ -870,8 +981,10 @@ const terminals = new Map(); // sessionId -> { term, fitAddon, container, pendin
 const approvalVisibleCache = new Map();
 const multiQuestionVisibleCache = new Map(); // sessionId → bool（Claude Code AskUserQuestion 等の複数質問 UI が画面に出ているか）
 const sequentialChoiceCache = new Map(); // sessionId → { sig, prompts, answers, index }
-const approvalRawOptionsCache = new Map(); // sessionId → [{num, label, isCurrent}]
+const approvalRawOptionsCache = new Map(); // sessionId → [{num, label, isCurrent}] または [{num, title, options}, ...]（バッチ承認）
 const approvalConsumedSig = new Map(); // sessionId → 消費済み承認の署名（doSend でテキスト送信した場合の再表示防止）
+const batchSelections = new Map(); // sessionId → number[]（セクションごとの選択番号、未選択は null）
+let batchFocusIdx = -1; // 現在フォーカス中のバッチセクション index（-1: 未フォーカス / 範囲外）
 const approvalConsumedSigDeleteTimer = new Map(); // sessionId → timer（sig を debounce 型で削除するためのタイマー）
 const APPROVAL_PENDING_TEXT_TAIL_LIMIT = 12000;
 
@@ -880,6 +993,13 @@ const APPROVAL_PENDING_TEXT_TAIL_LIMIT = 12000;
 // (Y:1/N:0) Yes/No プロンプトはどれも同じ label を持つため、_ctx に質問文ハッシュを
 // 載せて区別する（連続する別質問が同一 sig で誤抑制されないように）。
 function approvalSig(options) {
+  if (isBatchOptions(options)) {
+    return JSON.stringify(options.map(s => ({
+      n: s.num,
+      t: String(s.title || '').replace(/\s+/g, ' ').slice(0, 80),
+      o: (s.options || []).map(o => `${o.num}:${String(o.label || '').trim().replace(/\s+/g, ' ').slice(0, 80)}`),
+    })));
+  }
   return JSON.stringify((options || []).map(o => {
     const lbl = String(o.label || '').trim().replace(/\s+/g, ' ').slice(0, 80);
     const ctx = o && o._ctx ? `|${o._ctx}` : '';
@@ -1103,6 +1223,14 @@ ws.onmessage = (ev) => {
     return;
   }
 
+  if (m.type === 'approval_patterns_updated') {
+    showToast(t('toast_approval_patterns_updated'));
+    if (window.approvalPatternsUI && typeof window.approvalPatternsUI.onOfficialUpdated === 'function') {
+      window.approvalPatternsUI.onOfficialUpdated(Array.isArray(m.providers) ? m.providers : []);
+    }
+    return;
+  }
+
   if (m.type === 'snapshot') {
     const arr = typeof m.sessions === 'string' ? JSON.parse(m.sessions) : m.sessions;
     (arr || []).forEach(s => {
@@ -1270,6 +1398,7 @@ function showPathPopup(filePath, clientX, clientY, sessionId) {
       const rel = cwd ? computeRelPath(cwd, filePath) : filePath;
       return copyPathText(rel, anchor).catch(() => {});
     }},
+    { icon: '✏️', key: 'link_rename', action: () => renameFileViaApi(filePath, sessionId) },
   );
 
   for (const item of items) {
@@ -1296,6 +1425,40 @@ function showPathPopup(filePath, clientX, clientY, sessionId) {
   if (top + rect.height > vh - 8) top = clientY - rect.height - 8;
   popup.style.left = Math.max(4, left) + 'px';
   popup.style.top = Math.max(4, top) + 'px';
+}
+
+function basenameForPath(filePath) {
+  const normalized = String(filePath || '').replace(/[\\/]+$/, '');
+  const slash = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
+  return slash >= 0 ? normalized.slice(slash + 1) : normalized;
+}
+
+async function renameFileViaApi(filePath, sessionId) {
+  const current = basenameForPath(filePath);
+  const input = window.prompt(t('link_rename_prompt') || 'Enter new file name', current);
+  if (input == null) return;
+  const newName = input.trim();
+  if (!newName || newName === current) return;
+  try {
+    const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
+    const url = `/api/files-rename?token=${encodeURIComponent(token)}${sessionQs}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ src: filePath, newName }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      const msg = (data && data.error) ? data.error : ('HTTP ' + res.status);
+      showToast(`${t('link_rename_failed') || 'Failed to rename'}: ${msg}`);
+      return;
+    }
+    window.dispatchEvent(new CustomEvent('any-ai-cli:files-changed', {
+      detail: { kind: 'rename', oldAbs: filePath, newAbs: data.newAbs },
+    }));
+  } catch (err) {
+    showToast(`${t('link_rename_failed') || 'Failed to rename'}: ${String(err)}`);
+  }
 }
 
 async function callOpenApi(endpoint, path, errorKey = 'link_open_error') {
@@ -1395,6 +1558,17 @@ const ABS_WIN_PATH_RE = /([A-Za-z]:\\(?:(?!\s+[A-Za-z]:\\)[^\x00-\x1f<>:"|?*])+)
 const ABS_UNIX_PATH_RE = /(\/[^\s\/\x00-\x1f"'<>`|]+(?:\/[^\s\/\x00-\x1f"'<>`|]*)*)/g;
 const REL_PATH_RE = /(^|[\s([{"'`])((?:\.{1,2}[\\/]|[A-Za-z0-9_.-]+[\\/])(?:[^\s\x00-\x1f"'<>`|]+[\\/])*[^\s\x00-\x1f"'<>`|]+)/g;
 
+// `Y/N` / `1/2` / `bash/zsh` 等を誤検出しないための post-filter。
+// 受理条件: `./` `../` 始まり、またはセパレータ 2 個以上、または末尾拡張子あり。
+function isLikelyRelPath(path) {
+  if (!path) return false;
+  if (/^\.{1,2}[\\/]/.test(path)) return true;
+  const sepCount = (path.match(/[\\/]/g) || []).length;
+  if (sepCount >= 2) return true;
+  if (/\.[a-zA-Z0-9]{1,15}$/.test(path)) return true;
+  return false;
+}
+
 function isTerminalPathStartBoundary(text, start) {
   if (start <= 0) return true;
   return /[\s([{"'`]/.test(text[start - 1] || '');
@@ -1415,7 +1589,9 @@ function findPathCandidates(text) {
   let m;
   while ((m = REL_PATH_RE.exec(text)) !== null) {
     const pathStr = trimTerminalPathCandidate(m[2]);
-    if (pathStr.length >= 3) candidates.push({ start: m.index + m[1].length, end: m.index + m[1].length + pathStr.length, text: pathStr });
+    if (pathStr.length < 3) continue;
+    if (!isLikelyRelPath(pathStr)) continue;
+    candidates.push({ start: m.index + m[1].length, end: m.index + m[1].length + pathStr.length, text: pathStr });
   }
   candidates.sort((a, b) => a.start - b.start || b.end - a.end);
   const out = [];
@@ -1441,8 +1617,6 @@ function appendLinkedText(container, text, sessionId) {
     link.className = 'tool-output-path-link';
     link.textContent = c.text;
     link.tabIndex = 0;
-    link.addEventListener('mouseenter', (e) => showPathPopup(resolvedPath, e.clientX, e.clientY, sessionId));
-    link.addEventListener('mouseleave', () => scheduleHidePathPopup());
     link.addEventListener('click', (e) => showPathPopup(resolvedPath, e.clientX, e.clientY, sessionId));
     link.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -1515,14 +1689,14 @@ function ensureTerminal(id) {
         links.push({
           range: { start: { x: toX(startCI), y }, end: { x: toEndX(endCI), y } },
           text: pathStr,
-          hover(event, _text) {
-            showPathPopup(capturedPath, event.clientX, event.clientY, id);
+          hover() {
+            // ホバーではポップアップを開かない（クリック起動のみ）。
+            // xterm のリンク下線表示は維持される。
           },
           leave() {
             scheduleHidePathPopup();
           },
           activate(_event, _text) {
-            // クリックでポップアップが閉じていた場合は再表示
             showPathPopup(capturedPath, _event.clientX, _event.clientY, id);
           }
         });
@@ -1540,6 +1714,8 @@ function ensureTerminal(id) {
       REL_PATH_RE.lastIndex = 0;
       while ((m = REL_PATH_RE.exec(text)) !== null) {
         const rawPath = m[2];
+        const trimmed = trimTerminalPathCandidate(rawPath);
+        if (!isLikelyRelPath(trimmed)) continue;
         const startCI = m.index + m[1].length;
         addPathLink(rawPath, startCI);
       }
@@ -1716,6 +1892,10 @@ function scrollTerminalToBottomSoon(id) {
     if (!terminals.has(id)) return;
     const tNext = terminals.get(id);
     if (!tNext || !tNext.term) return;
+    // If the user wheels up immediately after a session-card switch, onScroll /
+    // the document wheel handler flips autoScroll to false before this RAF runs.
+    // Respect that intent instead of snapping back to bottom on the next frame.
+    if (!tNext.autoScroll) return;
     tNext.autoScroll = true;
     tNext.term.scrollToBottom();
     if (id === activeSessionId) updateScrollLockBtn(false);
@@ -2337,16 +2517,46 @@ function extractPlainYesNoApproval(lines) {
   return null;
 }
 
+// バッチ承認の戻り値判定: 要素が { options: [...] } を持つ場合は複数質問形式。
+function isBatchOptions(value) {
+  return Array.isArray(value) && value.length > 0 &&
+    value[0] && Array.isArray(value[0].options);
+}
+
 function _parseHubBlock(lines) {
   const text = lines.join('\n');
   if (hasYesNoApprovalMarker(text)) {
     return _yesNoApprovalOptions(_yesNoCtxFromText(text));
   }
-  const opts = lines
-    .map(l => l.match(/^\s*(\d+)\.\s*(.+?)\s*$/))
-    .filter(Boolean)
-    .map(m => ({ num: parseInt(m[1], 10), label: m[2].trim(), isCurrent: false }));
-  return opts.length > 0 ? opts : null;
+  // セクション分割: 行頭が `<数字><空白><テキスト>` の行を見出し（質問）、
+  // `<数字>.<空白><テキスト>` の行を選択肢として解釈する。
+  // 見出しは「数字直後にピリオドが無い」点で選択肢と区別される。
+  const sections = [];
+  const looseOpts = [];
+  let cur = null;
+  const optionRe = /^(\d+)\.\s*(.+?)\s*$/;
+  const headingRe = /^(\d+)\s+(.+?)\s*$/;
+  for (const raw of lines) {
+    const line = String(raw || '').trim();
+    if (!line) continue;
+    const om = line.match(optionRe);
+    if (om) {
+      const opt = { num: parseInt(om[1], 10), label: om[2].trim(), isCurrent: false };
+      if (cur) cur.options.push(opt);
+      else looseOpts.push(opt);
+      continue;
+    }
+    const hm = line.match(headingRe);
+    if (hm) {
+      cur = { num: parseInt(hm[1], 10), title: hm[2].trim(), options: [] };
+      sections.push(cur);
+      continue;
+    }
+  }
+  const filledSections = sections.filter(s => s.options.length > 0);
+  if (filledSections.length >= 2) return filledSections;
+  if (filledSections.length === 1) return filledSections[0].options;
+  return looseOpts.length > 0 ? looseOpts : null;
 }
 
 function _yesNoApprovalOptions(ctxText) {
@@ -2370,7 +2580,10 @@ function matchNativeApprovalTrigger(line) {
     lower.includes('would you like to run') ||
     lower.includes('do you want to proceed?') ||
     lower.includes('this command requires approval') ||
-    lower.includes('press enter to confirm');
+    lower.includes('press enter to confirm') ||
+    lower.includes('enter to select') ||
+    lower.includes('↑/↓ to navigate') ||
+    lower.includes('esc to cancel');
 }
 
 function extractApprovalOptions(tail) {
@@ -2699,11 +2912,13 @@ function setActionBarFocus(idx) {
 
 function hideActionBar(id) {
   const bar = document.getElementById('action-bar');
-  if (bar) { bar.classList.remove('visible'); bar.innerHTML = ''; }
+  if (bar) { bar.classList.remove('visible', 'batch'); bar.innerHTML = ''; }
   // 差分スキップ用キャッシュをリセット（次回 showActionBar が同一シグネチャでも再描画されるように）
   lastActionBarRender.sessionId = null;
   lastActionBarRender.sig = null;
   actionBarFocusIdx = -1;
+  batchFocusIdx = -1;
+  if (id !== undefined) batchSelections.delete(id);
   if (id !== undefined) {
     cancelApprovalHintConfirm(id);
     clearSequentialChoiceState(id);
@@ -2767,6 +2982,10 @@ function normalizeActionOptions(options) {
 }
 
 function showActionBar(bar, sessionId, options, showExpand) {
+  if (isBatchOptions(options)) {
+    showBatchActionBar(bar, sessionId, options);
+    return;
+  }
   options = normalizeActionOptions(options);
   // 注意: 局所変数名 `t` は window.t（i18n 翻訳関数）と衝突するため使わない。
   // `term` にすることで本関数末尾の t('expand_btn') 等が正しく i18n を参照できる。
@@ -2792,6 +3011,10 @@ function showActionBar(bar, sessionId, options, showExpand) {
   lastActionBarRender.sessionId = sessionId;
   lastActionBarRender.sig = sig;
   bar.innerHTML = '';
+  // バッチ→単一質問の遷移で残留する .batch クラスと選択状態を取り除く（縦スタック CSS の誤適用と
+  // 後続バッチへの古いセレクション持ち越しを防ぐ）。
+  bar.classList.remove('batch');
+  batchSelections.delete(sessionId);
 
   // "⚠ Approval needed" ラベル
   if (options.length > 0) {
@@ -2852,6 +3075,190 @@ function showActionBar(bar, sessionId, options, showExpand) {
   if (shouldStickToBottom) {
     scrollTerminalToBottomSoon(sessionId);
   }
+}
+
+function showBatchActionBar(bar, sessionId, sections) {
+  const term = sessionId === activeSessionId ? terminals.get(sessionId) : null;
+  const shouldStickToBottom = !!(term && (term.autoScroll || isTerminalAtBottom(term)));
+
+  // セクション数が変わったら選択状態をリセット（前回の sectionA→sectionB セレクションが残らないように）
+  let selections = batchSelections.get(sessionId);
+  if (!selections || selections.length !== sections.length) {
+    selections = new Array(sections.length).fill(null);
+    batchSelections.set(sessionId, selections);
+    if (batchFocusIdx < 0 || batchFocusIdx >= sections.length) batchFocusIdx = 0;
+  }
+
+  const sig = JSON.stringify({
+    s: sessionId,
+    mode: 'batch',
+    sects: sections.map(sec => ({
+      n: sec.num,
+      t: sec.title,
+      o: (sec.options || []).map(o => ({ n: o.num, l: o.label, c: !!o.isCurrent })),
+    })),
+    sel: selections,
+    f: batchFocusIdx,
+    v: bar.classList.contains('visible'),
+  });
+  if (lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig) {
+    if (shouldStickToBottom) scrollTerminalToBottomSoon(sessionId);
+    return;
+  }
+  lastActionBarRender.sessionId = sessionId;
+  lastActionBarRender.sig = sig;
+  bar.innerHTML = '';
+  bar.classList.add('batch');
+
+  const label = document.createElement('span');
+  label.className = 'action-bar-label';
+  label.textContent = t('approval_batch_label', { n: sections.length });
+  bar.appendChild(label);
+
+  sections.forEach((sec, idx) => {
+    const sectionEl = document.createElement('div');
+    sectionEl.className = 'action-section';
+    if (idx === batchFocusIdx) sectionEl.classList.add('focused');
+    sectionEl.dataset.idx = String(idx);
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'action-section-title';
+    titleEl.textContent = `${sec.num}. ${sec.title}`;
+    titleEl.title = sec.title;
+    sectionEl.appendChild(titleEl);
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'action-section-buttons';
+    (sec.options || []).forEach((opt) => {
+      const btn = document.createElement('button');
+      let cls = 'action-btn batch-option';
+      if (opt.isCurrent) cls += ' current';
+      if (selections[idx] === opt.num) cls += ' selected';
+      btn.className = cls;
+      btn.textContent = `${opt.num}. ${opt.label}`;
+      btn.title = `${opt.num}. ${opt.label}`;
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        selectBatchOption(sessionId, idx, opt.num);
+      };
+      btnRow.appendChild(btn);
+    });
+    sectionEl.appendChild(btnRow);
+    bar.appendChild(sectionEl);
+  });
+
+  const footer = document.createElement('div');
+  footer.className = 'action-bar-footer';
+
+  const progress = document.createElement('span');
+  progress.className = 'action-bar-progress';
+  const done = selections.filter(v => v != null).length;
+  progress.textContent = t('approval_batch_progress', { done, total: sections.length });
+  footer.appendChild(progress);
+
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'action-clear-btn';
+  clearBtn.textContent = t('approval_batch_clear');
+  clearBtn.onclick = (e) => {
+    e.stopPropagation();
+    clearBatchSelections(sessionId);
+  };
+  footer.appendChild(clearBtn);
+
+  const submitBtn = document.createElement('button');
+  submitBtn.className = 'action-submit-btn';
+  submitBtn.textContent = t('approval_batch_submit');
+  submitBtn.disabled = !selections.every(v => v != null);
+  submitBtn.onclick = (e) => {
+    e.stopPropagation();
+    sendBatchChoices(sessionId);
+  };
+  footer.appendChild(submitBtn);
+
+  const closeBatchBtn = document.createElement('button');
+  closeBatchBtn.className = 'action-dismiss-btn';
+  closeBatchBtn.textContent = '✕';
+  closeBatchBtn.title = t('dismiss_title');
+  closeBatchBtn.onclick = (e) => {
+    e.stopPropagation();
+    hideActionBar(sessionId);
+    approvalSuppressUntil.set(sessionId, Date.now() + 60000);
+  };
+  footer.appendChild(closeBatchBtn);
+
+  bar.appendChild(footer);
+  bar.classList.add('visible');
+  if (shouldStickToBottom) scrollTerminalToBottomSoon(sessionId);
+}
+
+function selectBatchOption(sessionId, sectionIdx, optionNum) {
+  const selections = batchSelections.get(sessionId);
+  if (!selections) return;
+  selections[sectionIdx] = optionNum;
+  const cached = approvalRawOptionsCache.get(sessionId);
+  if (isBatchOptions(cached)) {
+    // 自動前進: 末尾セクションを選んだら -1（無効化）して Enter で送信可能にする
+    batchFocusIdx = sectionIdx + 1 < cached.length ? sectionIdx + 1 : -1;
+    const bar = document.getElementById('action-bar');
+    if (bar) showBatchActionBar(bar, sessionId, cached);
+  }
+  setTimeout(() => inputEl.focus(), 0);
+}
+
+function clearBatchSelections(sessionId) {
+  const cached = approvalRawOptionsCache.get(sessionId);
+  if (!isBatchOptions(cached)) return;
+  batchSelections.set(sessionId, new Array(cached.length).fill(null));
+  batchFocusIdx = 0;
+  const bar = document.getElementById('action-bar');
+  if (bar) showBatchActionBar(bar, sessionId, cached);
+  setTimeout(() => inputEl.focus(), 0);
+}
+
+function sendBatchChoices(sessionId) {
+  const selections = batchSelections.get(sessionId);
+  if (!selections || selections.length === 0 || selections.some(v => v == null)) return;
+  const text = selections.join(' ');
+  const prevOpts = approvalRawOptionsCache.get(sessionId);
+  if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
+  sendText(sessionId, `${text}\r`);
+  hideActionBar(sessionId);
+  approvalSuppressUntil.set(sessionId, Date.now() + 2000);
+  batchSelections.delete(sessionId);
+  setTimeout(() => {
+    detectApproval(sessionId);
+    maybeAutoSwitchToNextApproval();
+  }, 2050);
+  setTimeout(() => inputEl.focus(), 0);
+}
+
+function isBatchActionBarVisible() {
+  const bar = document.getElementById('action-bar');
+  return !!(bar && bar.classList.contains('visible') && bar.classList.contains('batch'));
+}
+
+function moveBatchFocus(delta) {
+  if (activeSessionId === null) return false;
+  const cached = approvalRawOptionsCache.get(activeSessionId);
+  if (!isBatchOptions(cached) || cached.length === 0) return false;
+  const n = cached.length;
+  const start = batchFocusIdx < 0 ? (delta > 0 ? -1 : n) : batchFocusIdx;
+  batchFocusIdx = ((start + delta) % n + n) % n;
+  const bar = document.getElementById('action-bar');
+  if (bar) showBatchActionBar(bar, activeSessionId, cached);
+  return true;
+}
+
+function handleBatchNumberKey(sessionId, num) {
+  const cached = approvalRawOptionsCache.get(sessionId);
+  if (!isBatchOptions(cached)) return false;
+  if (batchFocusIdx < 0 || batchFocusIdx >= cached.length) return false;
+  const section = cached[batchFocusIdx];
+  if (!section) return false;
+  const opt = (section.options || []).find(o => o.num === num);
+  if (!opt) return false;
+  selectBatchOption(sessionId, batchFocusIdx, num);
+  return true;
 }
 
 function sendChoice(sessionId, targetNum) {
@@ -3370,6 +3777,32 @@ inputEl.addEventListener('keydown', (e) => {
 
   if (activeSessionId === null) return;
 
+  // バッチ承認モード（複数質問の一括回答）の専用キー処理。
+  // 入力が空のときのみ作動し、通常の文字入力・IME と競合しないようにする。
+  if (inputEl.value === '' && !e.isComposing && isBatchActionBarVisible()) {
+    if (e.key === 'Tab' && slashMenuEl.hidden) {
+      moveBatchFocus(e.shiftKey ? -1 : 1);
+      e.preventDefault(); return;
+    }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      moveBatchFocus(e.key === 'ArrowRight' ? 1 : -1);
+      e.preventDefault(); return;
+    }
+    if (e.key === ' ') {
+      moveBatchFocus(1);
+      e.preventDefault(); return;
+    }
+    if (/^[0-9]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (handleBatchNumberKey(activeSessionId, parseInt(e.key, 10))) {
+        e.preventDefault(); return;
+      }
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      sendBatchChoices(activeSessionId);
+      e.preventDefault(); return;
+    }
+  }
+
   // Tab でセッション切り替え（スラッシュメニューが閉じているとき）
   if (e.key === 'Tab' && !e.isComposing && slashMenuEl.hidden) {
     switchSessionByTab(e.shiftKey);
@@ -3518,6 +3951,7 @@ function removeLocalSession(id) {
   removeApprovalAutoSwitchTarget(id);
   approvalRawOptionsCache.delete(id);
   approvalConsumedSig.delete(id);
+  batchSelections.delete(id);
   clearSequentialChoiceState(id);
   cancelApprovalHintConfirm(id);
   approvalSuppressUntil.delete(id);
@@ -3724,7 +4158,7 @@ function switchSessionByTab(shift) {
     : (currentIdx + 1) % all.length;
   activateSession(all[nextIdx].id);
   const bar = document.getElementById('action-bar');
-  if (bar && bar.classList.contains('visible')) {
+  if (bar && bar.classList.contains('visible') && !bar.classList.contains('batch')) {
     setActionBarFocus(0);
   } else {
     actionBarFocusIdx = -1;
@@ -6620,6 +7054,7 @@ const FilesTabManager = (function () {
       for (const entry of entries) {
         if (!entry.root) continue;
         // 現在の Hub の許可ルート外なら復元しない（ゾンビタブ防止）。
+        // また items が空（.md が一切無い）の場合も復元しない（"死骸タブ" 防止）。
         // localStorage は残すので、対象プロジェクトで Hub を起動し直せば次回自動復活する。
         try {
           const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
@@ -6632,6 +7067,10 @@ const FilesTabManager = (function () {
           const probeData = await probeRes.json();
           if (!probeData.exists) {
             console.info('[FilesTabManager] skip restoring tab (root not found):', entry.root);
+            continue;
+          }
+          if (!Array.isArray(probeData.items) || probeData.items.length === 0) {
+            console.info('[FilesTabManager] skip restoring tab (no files under root):', entry.root);
             continue;
           }
         } catch (err) {
@@ -6887,7 +7326,8 @@ const FilesTreeView = (function () {
   }
 
   function isPreviewable(name) {
-    return /\.(md|txt)$/i.test(name);
+    // /api/files-content の許可リストと一致する isTextPath を再利用。
+    return typeof isTextPath === 'function' ? isTextPath(name) : /\.(md|txt)$/i.test(name);
   }
 
   function renderTree(treeRoot, opts) {
@@ -7222,10 +7662,16 @@ const FilesTreeView = (function () {
         const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
         const url = `/api/files-list?root=${encodeURIComponent(filesRoot)}&token=${encodeURIComponent(token)}${sessionQs}`;
         const res = await fetch(url);
-        if (!res.ok) { treeArea.innerHTML = `<div class="files-tree-error">${escapeHtml('HTTP ' + res.status)}</div>`; return; }
+        if (!res.ok) { treeArea.innerHTML = `<div class="files-tree-error">${escapeHtml('HTTP ' + res.status)} — ${escapeHtml(filesRoot)}</div>`; return; }
         const data = await res.json();
-        if (!data.exists) { treeArea.innerHTML = `<div class="files-tree-error">${escapeHtml(t('files_tree_not_found') || 'Directory not found')}</div>`; return; }
-        currentTree = buildTree(data.items || []);
+        if (!data.exists) { treeArea.innerHTML = `<div class="files-tree-error">${escapeHtml(t('files_tree_not_found') || 'Directory not found')} — ${escapeHtml(filesRoot)}</div>`; return; }
+        const items = data.items || [];
+        if (items.length === 0) {
+          treeArea.innerHTML = `<div class="files-tree-error">${escapeHtml(t('files_tree_empty') || 'No files found')}<br><small>${escapeHtml(filesRoot)}</small></div>`;
+          currentTree = buildTree(items);
+          return;
+        }
+        currentTree = buildTree(items);
         renderAndMount(currentTree, filterText);
       } catch (err) {
         treeArea.innerHTML = `<div class="files-tree-error">${escapeHtml(String(err))}</div>`;
@@ -7264,6 +7710,17 @@ const FilesTreeView = (function () {
       }
     });
 
+    // ファイル変更（rename 等）を受けてツリーを再読み込み
+    const filesChangedHandler = (e) => {
+      const detail = (e && e.detail) || {};
+      if (detail.kind === 'rename' && selectedAbsPath && detail.oldAbs && detail.newAbs
+          && pathsEqualCI(selectedAbsPath, detail.oldAbs)) {
+        selectedAbsPath = detail.newAbs;
+      }
+      loadTree();
+    };
+    window.addEventListener('any-ai-cli:files-changed', filesChangedHandler);
+
     // 初回ロード
     loadTree();
 
@@ -7274,9 +7731,16 @@ const FilesTreeView = (function () {
         highlightSelected(absPath);
       },
     };
+    containerEl._filesTreeCleanup = () => {
+      window.removeEventListener('any-ai-cli:files-changed', filesChangedHandler);
+    };
   }
 
   function unbind(containerEl) {
+    if (typeof containerEl._filesTreeCleanup === 'function') {
+      try { containerEl._filesTreeCleanup(); } catch (_) {}
+    }
+    delete containerEl._filesTreeCleanup;
     containerEl.innerHTML = '';
     delete containerEl._filesTree;
   }

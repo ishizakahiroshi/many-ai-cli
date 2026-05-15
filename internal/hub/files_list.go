@@ -32,11 +32,22 @@ type filesListResp struct {
 }
 
 const (
-	filesMaxDepth   = 6
-	filesMaxItems   = 500
+	filesMaxDepth   = 8
+	filesMaxItems   = 2000
 	filesMaxReadLen = 32 * 1024 // 32 KiB
 	filesSummaryLen = 200
 )
+
+// 走査時にスキップする重量級ディレクトリ（隠しディレクトリは別途 "." 接頭辞で除外）。
+var filesSkipDirs = map[string]bool{
+	"node_modules": true,
+	"vendor":       true,
+	"target":       true,
+	"dist":         true,
+	"build":        true,
+	"out":          true,
+	"__pycache__":  true,
+}
 
 // handleFilesList は GET /api/files-list を処理する。
 // ?session=<id> でセッション cwd を使用、省略時は Hub 起動時 cwd。
@@ -111,7 +122,8 @@ func (s *Server) handleFilesList(w http.ResponseWriter, r *http.Request) {
 }
 
 // walkFilesLocal は filesRoot 以下を再帰走査し filesListItem スライスを返す。
-// 件数上限 500・深さ上限 6・隠しディレクトリスキップ・シンボリックリンク非追跡。
+// 件数上限 2000・深さ上限 8・隠しディレクトリ + filesSkipDirs スキップ・シンボリックリンク非追跡。
+// 全ファイル対象（拡張子フィルタなし）。summary は text 系ファイルのみ抽出。
 // mtime 降順ソート済み。
 func walkFilesLocal(filesRoot, cwd string) ([]filesListItem, bool) {
 	var items []filesListItem
@@ -128,8 +140,11 @@ func walkFilesLocal(filesRoot, cwd string) ([]filesListItem, bool) {
 		}
 		for _, e := range entries {
 			name := e.Name()
-			// 隠しディレクトリをスキップ
+			// 隠しエントリ（. 始まり）と重量級ディレクトリをスキップ
 			if strings.HasPrefix(name, ".") {
+				continue
+			}
+			if e.IsDir() && filesSkipDirs[name] {
 				continue
 			}
 			fullPath := filepath.Join(dir, name)
@@ -141,11 +156,6 @@ func walkFilesLocal(filesRoot, cwd string) ([]filesListItem, bool) {
 
 			// シンボリックリンクは追跡しない
 			if e.Type()&os.ModeSymlink != 0 {
-				continue
-			}
-
-			// .md のみ対象
-			if !strings.EqualFold(filepath.Ext(name), ".md") {
 				continue
 			}
 
@@ -165,7 +175,11 @@ func walkFilesLocal(filesRoot, cwd string) ([]filesListItem, bool) {
 				relPath = fullPath
 			}
 
-			summary := extractFileSummary(fullPath)
+			// summary は text 系ファイルだけ抽出（バイナリは無意味なのでスキップ）
+			var summary string
+			if isTextFile(fullPath) {
+				summary = extractFileSummary(fullPath)
+			}
 
 			items = append(items, filesListItem{
 				Path:    fullPath,
