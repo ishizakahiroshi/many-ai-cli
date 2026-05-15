@@ -1955,6 +1955,7 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 .files-preview-search-count { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
 .files-preview-body {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 0;
 }
