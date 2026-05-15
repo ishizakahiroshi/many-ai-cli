@@ -13,14 +13,14 @@ func TestStartupBannerIncludesProductDetails(t *testing.T) {
 		"GitHub: https://github.com/ishizakahiroshi/any-ai-cli",
 		"WebUI:  http://127.0.0.1:47777",
 		"Open:   http://127.0.0.1:47777/?token=abc123",
-		"注意: この画面は Web UI と連結しています。閉じないでください。",
+		"WARNING: This window is connected to the Web UI. Do not close it.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("startupBanner() missing %q in:\n%s", want, got)
 		}
 	}
 
-	for _, want := range []string{ansiBold, ansiBlink, ansiBrightOrange, ansiReset} {
+	for _, want := range []string{ansiBold, ansiReverse, ansiBrightOrange, ansiReset} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("startupBanner() missing ANSI code %q in:\n%s", want, got)
 		}

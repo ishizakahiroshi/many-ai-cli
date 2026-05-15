@@ -10,7 +10,7 @@ const repositoryURL = "https://github.com/ishizakahiroshi/any-ai-cli"
 const (
 	ansiReset        = "\x1b[0m"
 	ansiBold         = "\x1b[1m"
-	ansiBlink        = "\x1b[5m"
+	ansiReverse      = "\x1b[7m"
 	ansiBrightOrange = "\x1b[38;5;208m"
 	ansiLogoFill     = "\x1b[97m"
 	ansiLogoOutline  = "\x1b[38;5;226m"
@@ -20,7 +20,7 @@ func startupBanner(version, addr, token string) string {
 	hubBase := "http://" + addr
 	hubURL := hubBase + "/?token=" + token
 	versionLabel := formatVersionLabel(version)
-	warning := ansiBold + ansiBlink + ansiBrightOrange + "注意: この画面は Web UI と連結しています。閉じないでください。" + ansiReset
+	warning := ansiBold + ansiReverse + ansiBrightOrange + " WARNING: This window is connected to the Web UI. Do not close it. " + ansiReset
 
 	logoLines := []string{
 		" █████╗ ███╗   ██╗██╗   ██╗       █████╗ ██╗",

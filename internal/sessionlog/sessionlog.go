@@ -48,6 +48,15 @@ func Paths(logDir string, meta Metadata) (rawLogPath string, jsonlPath string) {
 	return filepath.Join(dir, base+".log"), filepath.Join(dir, base+".jsonl")
 }
 
+// TranscriptPath は jsonlPath（...jsonl）に対応するクリーンテキスト（...txt）のパスを返す。
+// 拡張子が .jsonl でない場合は jsonlPath にそのまま .txt を付け足す（呼び出し側の責任）。
+func TranscriptPath(jsonlPath string) string {
+	if strings.HasSuffix(jsonlPath, ".jsonl") {
+		return strings.TrimSuffix(jsonlPath, ".jsonl") + ".txt"
+	}
+	return jsonlPath + ".txt"
+}
+
 func SanitizeFilePart(s string) string {
 	s = strings.TrimSpace(s)
 	s = invalidFileChars.ReplaceAllString(s, "_")

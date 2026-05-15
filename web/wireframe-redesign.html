@@ -462,6 +462,13 @@ body {
 .tab:hover .tab-x { opacity: 0.5; }
 .tab-x:hover { opacity: 1 !important; background: var(--bg3); }
 
+.tab-spacer { flex: 1; }
+.tab-utility {
+  border-left: 1px solid var(--border);
+  border-right: none;
+}
+.tab-utility.active::after { background: var(--green); }
+
 /* ターミナル本体 */
 .terminal-area {
   flex: 1;
@@ -497,6 +504,93 @@ body {
   padding: 2px 7px;
   backdrop-filter: blur(6px);
   pointer-events: none;
+}
+
+/* 履歴ライン表示の実装イメージ */
+.history-panel {
+  flex: 1;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0b0e16;
+  font-family: "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+}
+.history-panel.active { display: flex; }
+.history-toolbar {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(19,23,38,0.72);
+  color: var(--fg2);
+  font-size: 0.72rem;
+}
+.history-toolbar strong { color: var(--fg0); font-weight: 600; }
+.history-toolbar .lane-pill {
+  color: var(--green);
+  border: 1px solid rgba(52,211,153,0.35);
+  background: rgba(52,211,153,0.08);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.history-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 14px 18px;
+}
+.history-row {
+  display: grid;
+  grid-template-columns: 170px 210px 1fr;
+  min-height: 34px;
+  align-items: center;
+  border-bottom: 1px solid rgba(255,255,255,0.035);
+}
+.history-time {
+  color: var(--fg2);
+  font-size: 0.72rem;
+}
+.history-graph {
+  width: 190px;
+  height: 34px;
+  overflow: visible;
+}
+.history-label {
+  min-width: 0;
+  color: var(--fg1);
+  font-size: 0.76rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.history-label strong {
+  color: var(--fg0);
+  font-weight: 600;
+}
+.history-label .tag {
+  color: var(--accent-text);
+  margin-left: 8px;
+}
+.lane-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.82;
+}
+.lane-dot {
+  stroke: #0b0e16;
+  stroke-width: 2;
+}
+
+.content[data-active-view="history"] .terminal-area,
+.content[data-active-view="history"] .action-bar,
+.content[data-active-view="history"] .input-section {
+  display: none;
+}
+.content[data-active-view="history"] .history-panel {
+  display: flex;
 }
 
 /* ============================================================
@@ -758,15 +852,6 @@ body {
   </div>
   <div class="header-spacer"></div>
   <div class="header-actions">
-    <button class="hbtn">
-      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="#fb923c" stroke-width="2"/></svg>
-      Claude usage
-    </button>
-    <button class="hbtn">
-      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="#60a5fa" stroke-width="2"/></svg>
-      Codex usage
-    </button>
-    <div class="header-sep"></div>
     <button class="hbtn-icon" title="Shutdown">⏻</button>
     <button class="hbtn" title="Settings">
       <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor" opacity="0.6"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
@@ -867,7 +952,7 @@ body {
         Claude / feature/auth
         <button class="tab-x">✕</button>
       </div>
-      <div class="tab active">
+      <div class="tab active" data-view="terminal">
         <span class="tab-dot" style="background:var(--accent)"></span>
         Claude / main · refactor
         <button class="tab-x">✕</button>
@@ -876,6 +961,11 @@ body {
         <span class="tab-dot" style="background:var(--state-running)"></span>
         Codex / develop
         <button class="tab-x">✕</button>
+      </div>
+      <div class="tab-spacer"></div>
+      <div class="tab tab-utility" data-view="history">
+        <span class="tab-dot" style="background:var(--green)"></span>
+        History lines
       </div>
     </div>
 
@@ -904,6 +994,106 @@ body {
       <pre class="t-line"><span class="t-green t-bold">✓</span> <span class="t-dim">No type errors found</span></pre>
       <pre class="t-line"> </pre>
       <pre class="t-line t-dim">claude&gt; <span style="animation:blink 1s infinite">█</span></pre>
+    </div>
+
+    <!-- Git履歴ラインの表示イメージ：10レーン程度ならSVGで十分軽い -->
+    <div class="history-panel" aria-label="Git history line preview">
+      <div class="history-toolbar">
+        <strong>Git history</strong>
+        <span class="lane-pill">10 lanes max</span>
+        <span>branch / merge / parallel work lines preview</span>
+      </div>
+      <div class="history-scroll">
+        <div class="history-row">
+          <div class="history-time">2026-05-14 17:40</div>
+          <svg class="history-graph" viewBox="0 0 190 34" aria-hidden="true">
+            <path class="lane-line" d="M10 0 V34" stroke="#fb923c"/>
+            <path class="lane-line" d="M30 0 V34" stroke="#60a5fa"/>
+            <path class="lane-line" d="M50 0 V34" stroke="#34d399"/>
+            <path class="lane-line" d="M70 0 V34" stroke="#a78bfa"/>
+            <circle class="lane-dot" cx="10" cy="17" r="5" fill="#fb923c"/>
+          </svg>
+          <div class="history-label"><strong>main</strong> update docs tab layout <span class="tag">HEAD</span></div>
+        </div>
+        <div class="history-row">
+          <div class="history-time">2026-05-14 17:28</div>
+          <svg class="history-graph" viewBox="0 0 190 34" aria-hidden="true">
+            <path class="lane-line" d="M10 0 V17 C10 23 18 28 30 34" stroke="#fb923c"/>
+            <path class="lane-line" d="M30 0 V34" stroke="#60a5fa"/>
+            <path class="lane-line" d="M50 0 V34" stroke="#34d399"/>
+            <path class="lane-line" d="M70 0 V34" stroke="#a78bfa"/>
+            <circle class="lane-dot" cx="10" cy="17" r="5" fill="#fb923c"/>
+          </svg>
+          <div class="history-label"><strong>main</strong> merge history-line prototype</div>
+        </div>
+        <div class="history-row">
+          <div class="history-time">2026-05-14 16:55</div>
+          <svg class="history-graph" viewBox="0 0 190 34" aria-hidden="true">
+            <path class="lane-line" d="M30 0 V34" stroke="#60a5fa"/>
+            <path class="lane-line" d="M50 0 V34" stroke="#34d399"/>
+            <path class="lane-line" d="M70 0 V34" stroke="#a78bfa"/>
+            <path class="lane-line" d="M90 0 V34" stroke="#f472b6"/>
+            <circle class="lane-dot" cx="30" cy="17" r="5" fill="#60a5fa"/>
+          </svg>
+          <div class="history-label"><strong>feature/history</strong> draw branch lanes with SVG</div>
+        </div>
+        <div class="history-row">
+          <div class="history-time">2026-05-14 16:20</div>
+          <svg class="history-graph" viewBox="0 0 190 34" aria-hidden="true">
+            <path class="lane-line" d="M30 0 V34" stroke="#60a5fa"/>
+            <path class="lane-line" d="M50 0 V34" stroke="#34d399"/>
+            <path class="lane-line" d="M70 0 V17 C70 23 82 29 90 34" stroke="#a78bfa"/>
+            <path class="lane-line" d="M90 0 V34" stroke="#f472b6"/>
+            <circle class="lane-dot" cx="70" cy="17" r="5" fill="#a78bfa"/>
+          </svg>
+          <div class="history-label"><strong>docs</strong> split preview pane rendering</div>
+        </div>
+        <div class="history-row">
+          <div class="history-time">2026-05-14 15:48</div>
+          <svg class="history-graph" viewBox="0 0 190 34" aria-hidden="true">
+            <path class="lane-line" d="M30 0 V34" stroke="#60a5fa"/>
+            <path class="lane-line" d="M50 0 V34" stroke="#34d399"/>
+            <path class="lane-line" d="M90 0 V34" stroke="#f472b6"/>
+            <path class="lane-line" d="M110 0 V34" stroke="#facc15"/>
+            <circle class="lane-dot" cx="50" cy="17" r="5" fill="#34d399"/>
+          </svg>
+          <div class="history-label"><strong>codex/develop</strong> adjust approval bar behavior</div>
+        </div>
+        <div class="history-row">
+          <div class="history-time">2026-05-14 14:31</div>
+          <svg class="history-graph" viewBox="0 0 190 34" aria-hidden="true">
+            <path class="lane-line" d="M30 0 V34" stroke="#60a5fa"/>
+            <path class="lane-line" d="M50 0 V34" stroke="#34d399"/>
+            <path class="lane-line" d="M90 0 V34" stroke="#f472b6"/>
+            <path class="lane-line" d="M110 0 V17 C110 23 124 29 130 34" stroke="#facc15"/>
+            <path class="lane-line" d="M130 0 V34" stroke="#38bdf8"/>
+            <circle class="lane-dot" cx="110" cy="17" r="5" fill="#facc15"/>
+          </svg>
+          <div class="history-label"><strong>voice</strong> wakeword option polish</div>
+        </div>
+        <div class="history-row">
+          <div class="history-time">2026-05-14 13:59</div>
+          <svg class="history-graph" viewBox="0 0 190 34" aria-hidden="true">
+            <path class="lane-line" d="M30 0 V17 C30 23 38 29 50 34" stroke="#60a5fa"/>
+            <path class="lane-line" d="M50 0 V34" stroke="#34d399"/>
+            <path class="lane-line" d="M90 0 V34" stroke="#f472b6"/>
+            <path class="lane-line" d="M130 0 V34" stroke="#38bdf8"/>
+            <circle class="lane-dot" cx="30" cy="17" r="5" fill="#60a5fa"/>
+          </svg>
+          <div class="history-label"><strong>feature/docs</strong> merge file tree navigation</div>
+        </div>
+        <div class="history-row">
+          <div class="history-time">2026-05-14 12:44</div>
+          <svg class="history-graph" viewBox="0 0 190 34" aria-hidden="true">
+            <path class="lane-line" d="M50 0 V34" stroke="#34d399"/>
+            <path class="lane-line" d="M90 0 V34" stroke="#f472b6"/>
+            <path class="lane-line" d="M130 0 V34" stroke="#38bdf8"/>
+            <path class="lane-line" d="M150 0 V34" stroke="#c084fc"/>
+            <circle class="lane-dot" cx="150" cy="17" r="5" fill="#c084fc"/>
+          </svg>
+          <div class="history-label"><strong>experiment</strong> keep tenth lane available</div>
+        </div>
+      </div>
     </div>
 
     <!-- 承認バー（展開状態） -->
@@ -961,6 +1151,18 @@ body {
 <style>
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 </style>
+<script>
+  document.querySelectorAll('.tab-bar .tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const view = tab.dataset.view || 'terminal';
+      const content = tab.closest('.content');
+      if (!content) return;
+      content.dataset.activeView = view;
+      tab.parentElement.querySelectorAll('.tab').forEach((el) => el.classList.remove('active'));
+      tab.classList.add('active');
+    });
+  });
+</script>
 
 </body>
 </html>

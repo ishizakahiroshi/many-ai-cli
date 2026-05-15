@@ -7,6 +7,7 @@
 | `/config` | Open CLI configuration. | Review or change project/user config values. |
 | `/cost` | Show token and cost usage. | Check recent usage impact while iterating. |
 | `/doctor` | Run environment diagnostics. | Troubleshoot local setup and runtime issues. |
+| `/goal` | Set a completion condition and auto-continue turns until it is met. | Let Claude keep working across turns toward a stated goal (use `/goal clear` to cancel). |
 | `/help` | Show help. | Check available commands and usage. |
 | `/init` | Initialize `CLAUDE.md` guidance. | Bootstrap project instructions for Claude Code. |
 | `/login` | Sign in to Claude services. | Authenticate the CLI in a new environment. |

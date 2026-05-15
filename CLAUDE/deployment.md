@@ -1,6 +1,6 @@
 # any-ai-cli ビルド・配布・デプロイ
 
-> 最終更新: 2026-05-07(木) 19:24:03
+> 最終更新: 2026-05-14(木) 08:55:00
 
 `any-ai-cli` は **Go 単一バイナリ + go:embed フロント** の構成。サーバーへのデプロイは無し（ユーザー PC にバイナリを置くだけ）。
 
@@ -47,17 +47,25 @@ GOOS=linux GOARCH=amd64 go build -o dist/linux/any-ai-cli ./cmd/any-ai-cli
 
 ### Windows での開発フロー
 
-ローカル PC（Windows 11）で開発し、ビルドは Git Bash (MSYS2) または PowerShell から行う：
+**ローカルビルドは原則 `make build` を使う**。`go build` を素で叩くと `go-winres` がスキップされて、`cmd/any-ai-cli/rsrc_windows_*.syso`（アプリアイコン等の Windows リソース）が古いまま `dist/any-ai-cli.exe` に embed される。
 
 ```bash
-# Git Bash
-GOOS=windows GOARCH=amd64 go build -o any-ai-cli.exe ./cmd/any-ai-cli
+# 推奨: Makefile 経由（go-winres make → go build）
+make build
+# 出力: dist/any-ai-cli.exe
 ```
 
-```powershell
-# PowerShell
-$env:GOOS="windows"; $env:GOARCH="amd64"; go build -o any-ai-cli.exe ./cmd/any-ai-cli
-```
+`make build` は以下を順に実行する：
+
+1. `go-winres make --out cmd/any-ai-cli/rsrc` — `winres/winres.json` からアイコン/バージョン情報を含む `.syso` リソースを生成
+2. `go build -o dist/any-ai-cli.exe ./cmd/any-ai-cli` — 直前で生成した `.syso` を自動取り込み、`web/src/` を `go:embed` した単一バイナリを `dist/` に出力
+
+直接 `go build` を叩いてよいケース：
+
+- 急ぎの動作確認で **アイコン/バージョン情報の更新が不要**と分かっているとき
+- `winres/winres.json` を編集していないとき
+
+それ以外（特にリリース手前・ユーザーに配布する `dist/` を作るとき）は必ず `make build` を使うこと。クロスコンパイル（macOS / Linux 向け）は下記「Go バイナリビルド（クロスコンパイル）」のコマンドを使い、`go-winres` は Windows 専用なのでスキップする。
 
 詳細な Windows 開発環境は `windows_setup.md` を参照。
 
