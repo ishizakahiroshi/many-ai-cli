@@ -1093,9 +1093,7 @@ ws.onmessage = (ev) => {
     // sidebar の状態が "保留中" に追従しない。
     if (isActive || t.everAttached) {
       writePTYChunk(id, t.term, bytes, isActive ? () => {
-        // ユーザー wheel up 直後（ガード期間中）は autoScroll が一時 true に再セットされていても
-        // スクロールアップ意図を尊重して最下部へ吸わない。
-        if (t.autoScroll && !isWithinUserScrollUpGuard(t)) t.term.scrollToBottom();
+        if (t.autoScroll) t.term.scrollToBottom();
       } : undefined);
     } else {
       t.pendingChunks.push(bytes);
@@ -1553,7 +1551,7 @@ function ensureTerminal(id) {
     term.loadAddon(u11);
     term.unicode.activeVersion = '11';
   }
-  terminals.set(id, { term, fitAddon, container: null, pendingChunks: [], pendingTextTail: '', markerFilterCarry: new Uint8Array(0), autoScroll: true, stickToBottomOnNextFit: false, everAttached: false, userScrolledUpAt: 0 });
+  terminals.set(id, { term, fitAddon, container: null, pendingChunks: [], pendingTextTail: '', markerFilterCarry: new Uint8Array(0), autoScroll: true, everAttached: false });
 }
 
 function attachTerminal(id) {
@@ -1561,44 +1559,6 @@ function attachTerminal(id) {
   if (!area) return;
   const t = terminals.get(id);
   if (!t) return;
-  // xterm container の wheel リスナは container 内（≒キャンバス上）でしか発火しない。
-  // セッション切替直後は inputEl.focus() でマウス視線が入力欄付近に移り、その上で wheel
-  // しても #terminal-area-wrapper 外のため何も起きず「画面が固定」と感じる事象が起きる。
-  // よって最上位 #terminal-wrapper に wheel を仕込み、xterm container 外の wheel は
-  // term.scrollLines で xterm 本体を直接スクロールさせる。
-  const termWrapper = document.getElementById('terminal-wrapper');
-  const inputElForWheel = document.getElementById('input');
-  if (termWrapper && !termWrapper._wheelBound) {
-    termWrapper._wheelBound = true;
-    termWrapper.addEventListener('wheel', (e) => {
-      if (activeSessionId === null) return;
-      const tActive = terminals.get(activeSessionId);
-      if (!tActive || !tActive.term) return;
-      // xterm container 内は xterm 自身が wheel を処理する（二重スクロール防止）。
-      // autoScroll の切替は line 1584 の container 上リスナで行われる。
-      if (tActive.container && tActive.container.contains(e.target)) return;
-      // textarea が複数行で自前スクロール可能なら textarea を優先。
-      if (inputElForWheel && inputElForWheel.contains(e.target)
-          && inputElForWheel.scrollHeight > inputElForWheel.clientHeight + 1) {
-        return;
-      }
-      // alternate screen buffer（Codex の TUI 等）では scrollLines が効かないため、
-      // PgUp/PgDn を PTY へ送って TUI 側にスクロールを委ねる。
-      if (forwardWheelToAltBuffer(activeSessionId, tActive, e.deltaY)) return;
-      const lineHeight = 24;
-      const lines = Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY) / lineHeight));
-      try { tActive.term.scrollLines(lines); } catch (_) {}
-      if (e.deltaY < 0) {
-        tActive.autoScroll = false;
-        // forceTerminalToBottom / onFlush の "無条件再追従" によって直後に巻き戻されるのを抑止する。
-        // セッション切替→inputEl.focus() 直後の 2 段 RAF（forceTerminalToBottomAfterLayout）と
-        // 継続中の PTY ストリームの両方をガードする。
-        tActive.userScrolledUpAt = performance.now();
-        updateScrollLockBtn(true);
-      }
-      // 下方向 wheel が最下部に達した場合は onScroll で autoScroll=true へ復帰する。
-    }, { passive: true });
-  }
   if (t.container) {
     area.innerHTML = '';
     area.appendChild(t.container);
@@ -1635,27 +1595,10 @@ function whenLayoutReady(id, container) {
     t.term.open(container);
     fitTerminalPreservingBottom(t, id);
     t.term.onScroll(() => {
-      const buf = t.term.buffer.active;
-      const atBottom = buf.viewportY + t.term.rows >= buf.length;
-      if (atBottom) {
-        t.autoScroll = true;
-        t.userScrolledUpAt = 0;
-        if (id === activeSessionId) updateScrollLockBtn(false);
-      } else {
-        t.autoScroll = false;
-        if (id === activeSessionId) updateScrollLockBtn(true);
-      }
+      const atBottom = isTerminalAtBottom(t);
+      t.autoScroll = atBottom;
+      if (id === activeSessionId) updateScrollLockBtn(!atBottom);
     });
-    container.addEventListener('wheel', (e) => {
-      // alt buffer 中は xterm 内 wheel も scrollLines が no-op になるため、
-      // ここで PgUp/PgDn を PTY 側へ転送し、autoScroll 操作は skip する。
-      if (forwardWheelToAltBuffer(id, t, e.deltaY)) return;
-      if (e.deltaY < 0) {
-        t.autoScroll = false;
-        t.userScrolledUpAt = performance.now();
-        if (id === activeSessionId) updateScrollLockBtn(true);
-      }
-    }, { passive: true });
     flushPending(id);
     t.everAttached = true;
     sendResize(id, t.term.cols, t.term.rows);
@@ -1675,7 +1618,7 @@ function flushPending(id) {
   const chunks = t.pendingChunks;
   t.pendingChunks = [];
   if (chunks.length === 0) {
-    if (!isWithinUserScrollUpGuard(t)) t.term.scrollToBottom();
+    if (t.autoScroll) t.term.scrollToBottom();
     scheduleApprovalCheck(id);
     return;
   }
@@ -1685,7 +1628,7 @@ function flushPending(id) {
   for (let i = 0; i < chunks.length; i++) {
     const isLast = i === chunks.length - 1;
     writePTYChunk(id, t.term, chunks[i], isLast ? () => {
-      if (!isWithinUserScrollUpGuard(t)) t.term.scrollToBottom();
+      if (t.autoScroll) t.term.scrollToBottom();
       scheduleApprovalCheck(id);
     } : undefined);
   }
@@ -1699,28 +1642,17 @@ function isTerminalAtBottom(t) {
 
 function fitTerminalPreservingBottom(t, id) {
   if (!canFitTerminal(t)) return;
-  const shouldStickToBottom = !!(t && (t.autoScroll || t.stickToBottomOnNextFit || isTerminalAtBottom(t)));
-  if (t) t.stickToBottomOnNextFit = false;
+  const wasAtBottom = isTerminalAtBottom(t);
   t.fitAddon.fit();
-  if (shouldStickToBottom && !isWithinUserScrollUpGuard(t)) {
+  if (wasAtBottom) {
     t.autoScroll = true;
     t.term.scrollToBottom();
     if (id === activeSessionId) updateScrollLockBtn(false);
   }
 }
 
-// 直前にユーザーが wheel up したセッションでは "無条件追従" を一時的に止める。
-// セッションカード切替の forceTerminalToBottomAfterLayout（2段RAF）や、
-// 継続する PTY ストリームの onFlush による snap-back を抑止するためのガード。
-const USER_SCROLL_UP_GUARD_MS = 800;
-function isWithinUserScrollUpGuard(t) {
-  if (!t || !t.userScrolledUpAt) return false;
-  return (performance.now() - t.userScrolledUpAt) < USER_SCROLL_UP_GUARD_MS;
-}
-
 // xterm が alternate screen buffer（TUI モード, Codex 等）に居るかを判定。
 // alt buffer は scrollback を持たないため term.scrollLines は no-op となり、
-// 修正①〜⑥の wheel 経路はすべてこのバッファでは履歴を遡れない。
 function isAlternateBuffer(t) {
   if (!t || !t.term || !t.term.buffer) return false;
   const active = t.term.buffer.active;
@@ -1741,27 +1673,52 @@ function forwardWheelToAltBuffer(sessionId, t, deltaY) {
   return true;
 }
 
-// セッションカード切替直後はマウスポインタが `#session-list` 上に残ったままになりがちで、
-// その状態で wheel すると `#session-list` と `#terminal-wrapper` は兄弟要素のため
-// `#terminal-wrapper` のリスナにバブリングせずターミナルが固まって見える。
-// 切替時刻を記録し、グレース期間中の session-list 上 wheel をアクティブターミナルへ転送する。
-const POST_SWITCH_WHEEL_GRACE_MS = 1500;
-let _activeSessionSwitchedAt = 0;
+function isWheelTargetExcluded(target) {
+  if (!(target instanceof Element)) return true;
+  if (document.body && !document.body.contains(target)) return true;
+  const input = document.getElementById('input');
+  if (input && input.contains(target) && input.scrollHeight > input.clientHeight + 1) {
+    return true;
+  }
+  if (target.closest('.card-actions')) return true;
+  if (target.closest('[data-wheel-native]')) return true;
+  return false;
+}
 
-function forceTerminalToBottom(id) {
+document.addEventListener('wheel', (e) => {
+  if (activeSessionId === null) return;
+  const t = terminals.get(activeSessionId);
+  if (!t || !t.term) return;
+  if (isWheelTargetExcluded(e.target)) return;
+
+  if (forwardWheelToAltBuffer(activeSessionId, t, e.deltaY)) {
+    e.preventDefault();
+    return;
+  }
+
+  if (t.container && t.container.contains(e.target)) return;
+
+  const lineHeight = 24;
+  const lines = Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY) / lineHeight));
+  try { t.term.scrollLines(lines); } catch (_) {}
+  t.autoScroll = isTerminalAtBottom(t);
+  if (activeSessionId !== null) updateScrollLockBtn(!t.autoScroll);
+  e.preventDefault();
+}, { passive: false });
+
+function scrollTerminalToBottomSoon(id) {
   const t = terminals.get(id);
   if (!t || !t.term) return;
-  if (isWithinUserScrollUpGuard(t)) return;
   t.autoScroll = true;
   t.term.scrollToBottom();
   if (id === activeSessionId) updateScrollLockBtn(false);
-}
-
-function forceTerminalToBottomAfterLayout(id) {
-  forceTerminalToBottom(id);
   requestAnimationFrame(() => {
-    forceTerminalToBottom(id);
-    requestAnimationFrame(() => forceTerminalToBottom(id));
+    if (!terminals.has(id)) return;
+    const tNext = terminals.get(id);
+    if (!tNext || !tNext.term) return;
+    tNext.autoScroll = true;
+    tNext.term.scrollToBottom();
+    if (id === activeSessionId) updateScrollLockBtn(false);
   });
 }
 
@@ -1772,7 +1729,6 @@ function refitActiveTerminalAfterLayout(stickToBottom) {
   if (!canFitTerminal(t)) return;
   if (stickToBottom) {
     t.autoScroll = true;
-    t.stickToBottomOnNextFit = true;
   }
   requestAnimationFrame(() => {
     if (activeSessionId !== id || !canFitTerminal(t)) return;
@@ -1782,7 +1738,7 @@ function refitActiveTerminalAfterLayout(stickToBottom) {
     if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
       sendResize(id, t.term.cols, t.term.rows);
     }
-    if (stickToBottom) forceTerminalToBottomAfterLayout(id);
+    if (stickToBottom) scrollTerminalToBottomSoon(id);
   });
 }
 
@@ -1813,9 +1769,7 @@ document.getElementById('scroll-to-bottom-btn')?.addEventListener('click', () =>
   const t = terminals.get(activeSessionId);
   if (!t) return;
   t.autoScroll = true;
-  t.userScrolledUpAt = 0;
   t.term.scrollToBottom();
-  updateScrollLockBtn(false);
 });
 
 const hubMarkerBytePatterns = [
@@ -2781,11 +2735,10 @@ function hideActionBar(id) {
     }, 10000));
     // action-bar 消失でターミナル領域の高さが拡張されるため、追従中なら最下部へ再スナップする。
     // showActionBar が plan_approval-bar-scroll-resnap.md で同等の処理を持つので、その対称ケース。
-    // wheel up ガード中は forceTerminalToBottom 内でガードが効くため、ユーザー意図を上書きしない。
     if (wasVisible && id === activeSessionId) {
       const term = terminals.get(id);
       const shouldStickToBottom = !!(term && (term.autoScroll || isTerminalAtBottom(term)));
-      if (shouldStickToBottom) forceTerminalToBottomAfterLayout(id);
+      if (shouldStickToBottom) scrollTerminalToBottomSoon(id);
     }
     maybeAutoSwitchToNextApproval();
   }
@@ -2833,7 +2786,7 @@ function showActionBar(bar, sessionId, options, showExpand) {
   if (lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig) {
     // 承認検出は PTY write / ResizeObserver / セッション自動切替と同時に走ることがある。
     // DOM 再描画をスキップする場合でも、追従中なら最下部への再スナップは省略しない。
-    if (shouldStickToBottom) forceTerminalToBottomAfterLayout(sessionId);
+    if (shouldStickToBottom) scrollTerminalToBottomSoon(sessionId);
     return;
   }
   lastActionBarRender.sessionId = sessionId;
@@ -2897,7 +2850,7 @@ function showActionBar(bar, sessionId, options, showExpand) {
 
   bar.classList.add('visible');
   if (shouldStickToBottom) {
-    forceTerminalToBottomAfterLayout(sessionId);
+    scrollTerminalToBottomSoon(sessionId);
   }
 }
 
@@ -3527,19 +3480,10 @@ function sendSubmittedText(sessionId, text) {
   // 送信操作は最新出力を見たい意図なので、スクロールアップ中でも最下部へ戻して追従を再開する
   const t = terminals.get(sessionId);
   if (t) {
-    // wheel up ガード（USER_SCROLL_UP_GUARD_MS = 800ms）が立ったまま送信されると、
-    // forceTerminalToBottom / onFlush / fitTerminalPreservingBottom が no-op になり、
-    // 送信直後のレイアウト変化（clearInput の height='auto' / hideActionBar）で
-    // viewport が一瞬上にジャンプしたまま戻らない事象が起きる。
-    // 送信操作は「最新を見たい」意図なのでガードを明示解除する。
-    t.userScrolledUpAt = 0;
     t.autoScroll = true;
     try { t.term.scrollToBottom(); } catch (_) {}
     if (sessionId === activeSessionId) updateScrollLockBtn(false);
-    // hideActionBar / clearInput によるレイアウト変化（action-bar 消失・入力欄縮小）の後に
-    // ResizeObserver が fit() を呼ぶタイミング次第で最下部判定を取りこぼし、最上部に寄って
-    // 見えることがあるため、showActionBar と対称に 2 段 RAF で再スナップする。
-    if (sessionId === activeSessionId) forceTerminalToBottomAfterLayout(sessionId);
+    if (sessionId === activeSessionId) scrollTerminalToBottomSoon(sessionId);
   }
   sendText(sessionId, text);
 }
@@ -3717,18 +3661,10 @@ function activateSession(id) {
     saveInputStateFor(activeSessionId);
   }
   activeSessionId = id;
-  _activeSessionSwitchedAt = performance.now();
-  // 新セッションを必ず最下部追従で開く。fitTerminalPreservingBottom や
-  // refitActiveTerminalAfterLayout の評価より前にリセットする必要がある。
-  // 同時に userScrolledUpAt ガードもクリア（カード明示切替は「最新を見たい」意図）。
-  const tNext = terminals.get(id);
-  if (tNext) {
-    tNext.autoScroll = true;
-    tNext.userScrolledUpAt = 0;
-  }
   restoreInputStateFor(id);
   ensureTerminal(id);
   attachTerminal(id);
+  scrollTerminalToBottomSoon(id);
   updateScrollLockBtn();
   setMultiQuestionBannerVisible(!!multiQuestionVisibleCache.get(id));
   detectApproval(id);
@@ -3859,35 +3795,6 @@ function renderSessionList() {
       const id = parseInt(card.dataset.sessionId, 10);
       if (!isNaN(id)) activateSession(id);
     });
-    // セッション切替直後（グレース期間中）、`#session-list` 上の wheel をアクティブターミナルへ転送する。
-    // 兄弟要素のため `#terminal-wrapper` の wheel リスナにバブリングしない問題への対策。
-    const sessionListEl = document.getElementById('session-list');
-    if (sessionListEl && !sessionListEl._wheelForwardBound) {
-      sessionListEl._wheelForwardBound = true;
-      sessionListEl.addEventListener('wheel', (e) => {
-        const withinGrace = _activeSessionSwitchedAt
-          && (performance.now() - _activeSessionSwitchedAt) < POST_SWITCH_WHEEL_GRACE_MS;
-        if (!withinGrace) return;
-        if (activeSessionId === null) return;
-        const tActive = terminals.get(activeSessionId);
-        if (!tActive || !tActive.term) return;
-        // alt buffer なら PgUp/PgDn を PTY 側へ転送し session-list 自身の縦スクロールを抑止。
-        if (forwardWheelToAltBuffer(activeSessionId, tActive, e.deltaY)) {
-          e.preventDefault();
-          return;
-        }
-        const lineHeight = 24;
-        const lines = Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY) / lineHeight));
-        try { tActive.term.scrollLines(lines); } catch (_) {}
-        if (e.deltaY < 0) {
-          tActive.autoScroll = false;
-          tActive.userScrolledUpAt = performance.now();
-          updateScrollLockBtn(true);
-        }
-        // session-list 自身の縦スクロールが同時に動かないよう既定動作を抑止する。
-        e.preventDefault();
-      }, { passive: false });
-    }
   }
   root.innerHTML = '';
   if (sessions.size === 0) {
