@@ -12,10 +12,10 @@ import (
 const claudeImportLine = "@~/.any-ai-cli/approval-rules.md"
 const codexBlockStart  = "<!-- any-ai-cli:approval-rules -->"
 const codexBlockEnd    = "<!-- /any-ai-cli:approval-rules -->"
-const rulesVersion     = "3"
+const rulesVersion     = "4"
 
 var rulesFileContent = strings.Join([]string{
-	"<!-- version: 3 -->",
+	"<!-- version: 4 -->",
 	"## any-ai-cli Approval Format",
 	"",
 	"**このセッションが any-ai-cli Hub 管理下かどうかを最初に確認してください。**",
@@ -51,6 +51,24 @@ var rulesFileContent = strings.Join([]string{
 	"",
 	"  - Option 1 は必ず推奨選択肢とし (Recommended) を末尾に付ける",
 	"  - 最後の選択肢は必ず「N. User specifies」",
+	"",
+	"- 複数質問（一括確認、上限 N=8 推奨）:",
+	"  [ANY-AI-CLI]",
+	"  1 question1?",
+	"   1. Option A (Recommended)",
+	"   2. Option B",
+	"   N. User specifies",
+	"  2 question2?",
+	"   1. Option A (Recommended)",
+	"   2. Option B",
+	"   N. User specifies",
+	"  [/ANY-AI-CLI]",
+	"",
+	"  - 1 ブロックに 2 件以上の質問を並べる場合のみこの形式を使う",
+	"  - 質問の見出し番号は 1, 2, 3 ... の連番。プレフィックス（Q1: / C1: 等）は付けない",
+	"  - 各質問の選択肢行は 1 文字以上インデントする（見出し番号と区別するため）",
+	"  - ユーザーの回答は空白区切りの数字列で返ってくる（例: 1 2 1 3）。各数値は質問順に対応する",
+	"",
 	"- [ANY-AI-CLI] マーカーは確認・承認の質問にのみ使用する",
 	"",
 }, "\n")

@@ -186,8 +186,10 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		staticHandler = http.FileServer(http.FS(subFS))
 	}
 	// 承認パターン JSON はユーザー設定ディレクトリ ~/.any-ai-cli/approval-patterns/
-	// から配信する（ユーザーが編集可能）。初回起動時にデフォルトを書き出す。
-	if err := SyncApprovalPatterns(); err != nil {
+	// から配信する。official / custom の 2 プロファイル管理で、旧 <provider>.json は
+	// 初回起動時に <provider>.custom.json へマイグレートする。フロント既存ロード経路
+	// との互換のためアクティブプロファイル内容を <provider>.json にミラーする。
+	if err := SyncApprovalPatterns(cfg.ApprovalProfiles); err != nil {
 		logger.Warn("sync approval patterns failed", "err", err)
 	}
 	approvalPatternsHandler := http.StripPrefix("/approval-patterns/",
@@ -232,6 +234,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/files-content", s.handleFilesContent)
 	mux.HandleFunc("/api/files-roots", s.handleFilesRoots)
 	mux.HandleFunc("/api/files-move", s.handleFilesMove)
+	mux.HandleFunc("/api/files-rename", s.handleFilesRename)
 	s.httpSrv = &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Handler: mux}
 	return s, nil
 }
@@ -261,6 +264,7 @@ func (s *Server) Run(ctx context.Context) error {
 	go s.cleanAttachments()
 	go s.cleanSpawnLogs()
 	go s.recoverTranscripts()
+	go s.approvalPatternsRemoteSync(runCtx)
 	go func() {
 		<-runCtx.Done()
 		if s.cfg.Approval.Enabled {
@@ -1805,7 +1809,10 @@ func (s *Server) handleApprovalPatterns(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	patterns, err := ReadApprovalPatterns()
+	s.mu.Lock()
+	profiles := s.cfg.ApprovalProfiles
+	s.mu.Unlock()
+	patterns, err := ReadActiveApprovalPatterns(profiles)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -1820,22 +1827,18 @@ func (s *Server) handleApprovalPatternsItem(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	rest := strings.TrimPrefix(r.URL.Path, "/api/approval-patterns/")
+	switch rest {
+	case "profile":
+		s.handleApprovalProfile(w, r)
+		return
+	case "copy-official":
+		s.handleApprovalCopyOfficial(w, r)
+		return
+	}
 	parts := strings.SplitN(rest, "/", 2)
 	provider := parts[0]
 	if provider == "" || !IsKnownApprovalProvider(provider) {
 		http.Error(w, "unknown provider", http.StatusNotFound)
-		return
-	}
-	if len(parts) == 2 && parts[1] == "reset" {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		if err := ResetApprovalPatterns(provider); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if r.Method != http.MethodPut {
@@ -1854,11 +1857,90 @@ func (s *Server) handleApprovalPatternsItem(w http.ResponseWriter, r *http.Reque
 			cleaned = append(cleaned, v)
 		}
 	}
-	if err := WriteApprovalPatterns(provider, cleaned); err != nil {
+	if err := WriteCustomApprovalPatterns(provider, cleaned); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.refreshActiveMirror()
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleApprovalProfile は GET でアクティブプロファイル一覧、POST で切替を行う。
+// POST body: {"provider":"claude","profile":"official"|"custom"}
+func (s *Server) handleApprovalProfile(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.mu.Lock()
+		profiles := config.EffectiveApprovalProfiles(s.cfg.ApprovalProfiles)
+		s.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(profiles)
+	case http.MethodPost:
+		var body struct {
+			Provider string `json:"provider"`
+			Profile  string `json:"profile"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		if !IsKnownApprovalProvider(body.Provider) {
+			http.Error(w, "unknown provider", http.StatusBadRequest)
+			return
+		}
+		profile := config.ApprovalProfileName(body.Profile)
+		if !IsValidApprovalProfile(profile) {
+			http.Error(w, "invalid profile", http.StatusBadRequest)
+			return
+		}
+		s.mu.Lock()
+		s.cfg.ApprovalProfiles = config.EffectiveApprovalProfiles(s.cfg.ApprovalProfiles).WithProvider(body.Provider, profile)
+		s.mu.Unlock()
+		if err := config.Save(s.cfg); err != nil {
+			s.logger.Warn("save config failed", "err", err)
+		}
+		s.refreshActiveMirror()
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleApprovalCopyOfficial は official → custom コピーを行う。
+// POST body: {"provider":"claude"}
+func (s *Server) handleApprovalCopyOfficial(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Provider string `json:"provider"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !IsKnownApprovalProvider(body.Provider) {
+		http.Error(w, "unknown provider", http.StatusBadRequest)
+		return
+	}
+	if err := CopyOfficialToCustom(body.Provider); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.refreshActiveMirror()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// refreshActiveMirror はアクティブプロファイル内容を <provider>.json に再書き出しする。
+// プロファイル切替・custom 上書き・official 更新後に呼ぶ。失敗時は warn ログのみ。
+func (s *Server) refreshActiveMirror() {
+	s.mu.Lock()
+	profiles := s.cfg.ApprovalProfiles
+	s.mu.Unlock()
+	if err := RefreshActiveMirrors(profiles); err != nil {
+		s.logger.Warn("refresh approval pattern mirrors failed", "err", err)
+	}
 }
 
 func Stop(cfg *config.Config) error {

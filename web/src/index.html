@@ -148,13 +148,21 @@
               <option value="common" data-i18n="settings_approval_patterns_common">共通</option>
             </select>
           </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_approval_patterns_profile">プロファイル</span>
+            <select id="approval-patterns-profile" class="settings-select">
+              <option value="official" data-i18n="settings_approval_patterns_profile_official">公式</option>
+              <option value="custom" data-i18n="settings_approval_patterns_profile_custom">カスタム</option>
+            </select>
+          </div>
+          <div class="settings-note approval-patterns-readonly-note" id="approval-patterns-readonly-note" data-i18n="settings_approval_patterns_official_readonly">公式プロファイルは読み取り専用です。</div>
           <ul id="approval-patterns-list" class="approval-patterns-list"></ul>
           <div class="approval-patterns-add-row">
             <input type="text" id="approval-patterns-input" class="settings-input-text" data-i18n-placeholder="settings_approval_patterns_add_placeholder" placeholder="新しい文言">
             <button id="approval-patterns-add-btn" class="settings-link-btn" data-i18n="settings_approval_patterns_add">追加</button>
           </div>
           <div class="settings-row">
-            <button id="approval-patterns-reset-btn" class="settings-link-btn" data-i18n="settings_approval_patterns_reset">デフォルトに戻す</button>
+            <button id="approval-patterns-copy-official-btn" class="settings-link-btn" data-i18n="settings_approval_patterns_copy_official">公式からコピー</button>
           </div>
         </div>
       </details>
@@ -522,6 +530,12 @@
                 <p class="about-oss-desc" data-i18n="about_oss_dompurify_desc">Apache-2.0 OR MPL-2.0 License. Used to sanitize HTML rendered by the files preview.</p>
               </a>
             </li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://github.com/highlightjs/highlight.js/releases/tag/11.10.0" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">highlight.js 11.10.0</p>
+                <p class="about-oss-desc" data-i18n="about_oss_highlight_desc">BSD-3-Clause License. Used for syntax highlighting in the files preview.</p>
+              </a>
+            </li>
             <li class="about-oss-section" data-i18n="about_oss_section_backend">Go Backend</li>
             <li class="about-oss-item">
               <a class="about-oss-link" href="https://github.com/creack/pty" target="_blank" rel="noopener noreferrer">
@@ -578,7 +592,7 @@
               </a>
             </li>
           </ul>
-          <p class="about-license-note"><span data-i18n="about_license_note_pre">Full license text is in the repository </span><a href="https://github.com/ishizakahiroshi/any-ai-cli/blob/main/LICENSE" target="_blank" rel="noopener" class="about-link">LICENSE</a><span> / </span><a href="https://github.com/ishizakahiroshi/any-ai-cli/blob/main/web/src/vendor/THIRD_PARTY_LICENSES.txt" target="_blank" rel="noopener" class="about-link">THIRD_PARTY_LICENSES.txt</a><span data-i18n="about_license_note_suffix">.</span></p>
+          <p class="about-license-note"><span data-i18n="about_license_note_pre">Full license text is in the repository </span><a href="https://github.com/ishizakahiroshi/any-ai-cli/blob/main/LICENSE" target="_blank" rel="noopener" class="about-link">LICENSE</a><span> / </span><a href="https://github.com/ishizakahiroshi/any-ai-cli/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener" class="about-link">THIRD_PARTY_NOTICES.md</a><span> / </span><a href="https://github.com/ishizakahiroshi/any-ai-cli/blob/main/web/src/vendor/THIRD_PARTY_LICENSES.txt" target="_blank" rel="noopener" class="about-link">THIRD_PARTY_LICENSES.txt</a><span data-i18n="about_license_note_suffix">.</span></p>
         </section>
         <section class="about-section">
           <h3 class="about-heading" data-i18n="about_github">GitHub</h3>
