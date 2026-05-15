@@ -45,7 +45,7 @@ func (s *Server) injectApprovalRules() {
 		if err := wrapper.InjectRules(provider, path); err != nil {
 			s.logger.Warn("inject rules failed", "provider", provider, "path", path, "err", err)
 		} else {
-			s.logger.Info("inject rules ok", "provider", provider, "path", path)
+			s.logger.Debug("inject rules ok", "provider", provider, "path", path)
 		}
 	}
 }

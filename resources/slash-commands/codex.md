@@ -14,5 +14,6 @@
 | `/status` | Open status and settings information. | Check version, model, account, connectivity, and active settings. |
 | `/clear` | Clear the current conversation context. | Start fresh without leaving the session. |
 | `/compact` | Summarize and compact the conversation. | Free context while preserving important state. |
+| `/goal` | Set a completion condition and auto-continue turns until it is met. | Let Codex keep working across turns toward a stated goal (use `/goal clear` to cancel). |
 | `/resume` | Resume a previous conversation. | Continue an earlier session. |
 | `/help` | Show help. | Find available commands and usage hints. |

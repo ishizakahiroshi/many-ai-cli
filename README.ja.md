@@ -409,8 +409,29 @@ pwsh scripts/test_attach.ps1 -KeepHub # Hub を起動したままにする
 | Hub ログ | `~/.any-ai-cli/logs/hub.log` | Hub サーバの動作ログ（lumberjack でローテーション。設定は `log:` セクション参照） |
 | セッション生ログ | `~/.any-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.log` | 各 wrap セッションの PTY 生ログ（ANSI 含む） |
 | セッション履歴 | `~/.any-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.jsonl` | セッションイベント履歴（`session_start` / `user_input` / `pty_output` / `attach` / `session_end` / `session_dismiss`） |
+| クリーン transcript | `~/.any-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.txt` | 人間が読めるテキスト版（ANSI / スピナー / 制御コードを除去）。セッション終了時に自動生成。Hub クラッシュ等で生成漏れがあった場合は次回 `serve` 起動時に補完される |
 
 Hub UI のログパスボタンでログディレクトリのパスをクリップボードにコピーできます。
+
+---
+
+## トラブルシュート
+
+### spawn 直後にセッションカードが `切断` 表示になる (Windows + pnpm 導入版 CLI)
+
+`pnpm add -g` で Claude Code / Codex CLI を入れている場合、Hub UI からの spawn 直後にカードが `切断` 表示になり、PTY 生ログが 0 バイトのままになることがあります。カードには `理由: codex が PATH に見つかりません` のような短い理由表示も付きます。
+
+Hub は起動時に親シェルの `PATH` スナップショットを継承します。Hub を立ち上げたシェルで `PNPM_HOME` が export されていなかった場合、永続 USER `Path` に書かれた `%PNPM_HOME%\bin` を Windows がプロセス起動時に展開できず、pnpm bin が PATH から事実上脱落します。これにより wrap サブプロセス内の `exec.LookPath("codex")` が失敗します。
+
+**回復手順:**
+
+1. `any-ai-cli stop` で Hub を停止
+2. `$env:PNPM_HOME` が解決される対話 PowerShell を開く（`$env:PATH -split ';' | Select-String pnpm` で確認）
+3. その PowerShell から `any-ai-cli claude`（または `codex`）を実行 — Hub が新しい PATH スナップショットで再生成されます
+
+各 spawn の診断情報は `~/.any-ai-cli/logs/spawn/<provider>-<timestamp>.log` に出力されます（解決後の PATH エントリ数・検出されたパッケージマネージャ一覧・`executable file not found` 検知時の対処ヒントを含む）。
+
+> **v0.1.4 以降:** Hub は spawn 直前に USER `Path` の `%VAR%` 形式エントリを再展開します（`HKCU\Environment` を読み、`%LOCALAPPDATA%\pnpm` が実在する場合はそれを fallback として埋める）。通常はこの手動再起動は不要ですが、再展開でも解決できなかった場合の保険として上記手順を残しています。
 
 ---
 

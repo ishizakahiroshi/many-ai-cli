@@ -1,6 +1,6 @@
 # any-ai-cli 開発ガイド
 
-> 最終更新: 2026-05-11(月) 12:34:50
+> 最終更新: 2026-05-14(木) — 作業運用ルール（ビルド・実行は人手）追記
 
 > 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。
 
@@ -39,7 +39,7 @@ v0.1.3 までに以下がすべて実装済み：
 | サブコマンド | `serve` / `wrap <provider>` / `shell-init` / `stop` / `status` |
 | Hub URL | `http://127.0.0.1:47777/?token=<random>` |
 | 設定ファイル | `~/.any-ai-cli/config.yaml`（Win: `%USERPROFILE%\.any-ai-cli\config.yaml`） |
-| ログ | `~/.any-ai-cli/logs/sessions/<provider>_<日時>_<folder>_s<id>.log/.jsonl`（PTY生ログ + イベント履歴JSONL） |
+| ログ | `~/.any-ai-cli/logs/sessions/<provider>_<日時>_<folder>_s<id>.log/.jsonl/.txt`（PTY生ログ + イベント履歴JSONL + クリーンテキスト） |
 | 透過化環境変数 | `ANY_AI_CLI_AUTO=1` |
 | Provider | `claude` / `codex`（`gemini` は対象外、上記スコープ更新参照） |
 
@@ -90,6 +90,13 @@ any-ai-cli/
 - **ランダムトークンを起動時生成し URL に付与**（`?token=xxx`）
 - **外部公開しない**（`127.0.0.1` 固定）。`any-ai-cli` 自身はテレメトリを送信しないが、スラッシュコマンド一覧取得で GitHub へ HTTPS 通信する場合がある（README のセキュリティ節参照）
 - **`.bashrc` 等への永続書き込みなし**（透過化は環境変数 + `eval "$(any-ai-cli shell-init)"` のオプトイン方式のみ）
+
+## 作業運用ルール（AI 共通）
+
+- **ビルド・実行・Hub 起動・ブラウザリロードは全てユーザーが行う**。AI からは提案しない・確認質問もしない。
+  - 例外: ユーザーが明示的に「ビルドして」「`go build` 走らせて」等と指示した場合のみ。
+  - 対象コマンド: `go build` / `go run` / `make` / `any-ai-cli serve` / `any-ai-cli stop` / Hub プロセスの起動・終了・再起動・ブラウザリロード等。
+  - 完了報告では「再ビルドしますか？」のような提案を出さず、コード変更の要約だけ伝える。
 
 ## 詳細ガイド（タスク種別ベース）
 

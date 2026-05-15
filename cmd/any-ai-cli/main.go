@@ -104,9 +104,11 @@ func run(args []string) error {
 			_ = hub.OpenBrowserForConfig(cfg)
 			return nil
 		}
-		// GUI から引数なしで起動された場合でも hub.log にイベントが残るよう
-		// FileLogger を使う (stderr が NUL のため stderr 単独だと観測不能になる)。
-		logger := hublog.NewFileLogger(cfg.Hub.LogDir, cfg.Log, false, false)
+		// Windows GUI ランチャから引数なしで起動された場合でも hub.log にイベントが
+		// 残るよう FileLogger を使う。wrap 経由で auto-spawn された場合は
+		// CREATE_NEW_CONSOLE で新規コンソールが割り当てられるので、stderr 出力も
+		// banner と同じ「Hub 専用ターミナル」に表示される。
+		logger := hublog.NewFileLogger(cfg.Hub.LogDir, cfg.Log, false, true)
 		s, err := hub.NewServer(cfg, logger, false, displayVersion())
 		if err != nil {
 			return err
@@ -136,7 +138,10 @@ func run(args []string) error {
 		if *port > 0 {
 			cfg.Hub.Port = *port
 		}
-		logger = hublog.NewFileLogger(cfg.Hub.LogDir, cfg.Log, *debug, *dev)
+		// serve 起動時は常に stderr にも slog を流す。
+		// Hub 用コンソール（CREATE_NEW_CONSOLE で割り当てられた窓 or 直接起動された
+		// シェル）でリアルタイムに動作状況を確認するため。
+		logger = hublog.NewFileLogger(cfg.Hub.LogDir, cfg.Log, *debug, true)
 		s, err := hub.NewServer(cfg, logger, *dev, displayVersion())
 		if err != nil {
 			return err

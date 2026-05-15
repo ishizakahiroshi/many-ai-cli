@@ -6,6 +6,7 @@
   <title>ANY-AI-CLI</title>
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/vendor/xterm.min.css">
+  <link rel="stylesheet" href="/vendor/hljs-github-dark.min.css">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -394,6 +395,10 @@
     </aside>
     <div id="sidebar-resizer"></div>
     <div id="terminal-column">
+    <!-- v2: Main area tab bar -->
+    <div id="main-tab-bar">
+      <div id="main-tab-list"></div>
+    </div>
     <div id="terminal-wrapper">
       <div id="terminal-area-wrapper">
         <div id="terminal-area"></div>
@@ -457,6 +462,8 @@
         </div>
       </div>
     </div>
+    <!-- v2: Files tab content areas (hidden by default, shown when a Files tab is active) -->
+    <div id="files-tab-contents"></div>
     </div><!-- /#terminal-column -->
   </div>
   <div id="about-panel" hidden>
@@ -501,6 +508,18 @@
               <a class="about-oss-link" href="https://github.com/xtermjs/xterm.js/releases" target="_blank" rel="noopener noreferrer">
                 <p class="about-oss-name">xterm-addon-web-links 0.9.0</p>
                 <p class="about-oss-desc" data-i18n="about_oss_links_desc">MIT License. Used for URL link detection in terminal.</p>
+              </a>
+            </li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://github.com/markedjs/marked/releases/tag/v12.0.2" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">marked 12.0.2</p>
+                <p class="about-oss-desc" data-i18n="about_oss_marked_desc">MIT License. Used as the Markdown parser for the files preview.</p>
+              </a>
+            </li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://github.com/cure53/DOMPurify/releases/tag/3.4.1" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">DOMPurify 3.4.1</p>
+                <p class="about-oss-desc" data-i18n="about_oss_dompurify_desc">Apache-2.0 OR MPL-2.0 License. Used to sanitize HTML rendered by the files preview.</p>
               </a>
             </li>
             <li class="about-oss-section" data-i18n="about_oss_section_backend">Go Backend</li>
@@ -577,6 +596,9 @@
   <script src="/vendor/xterm-addon-fit.min.js"></script>
   <script src="/vendor/xterm-addon-unicode11.min.js"></script>
   <script src="/vendor/xterm-addon-web-links.min.js"></script>
+  <script src="/vendor/marked.min.js"></script>
+  <script src="/vendor/purify.min.js"></script>
+  <script src="/vendor/highlight.min.js"></script>
   <script src="/i18n.js"></script>
   <script src="/app.js"></script>
 </body>

@@ -67,6 +67,7 @@ type session struct {
 	StartedAt    string `json:"started_at,omitempty"`     // ISO 8601; UI カード「起動時刻」用
 	FirstMessage string `json:"first_message,omitempty"`  // 最初の確定入力; UI カード表示用
 	LastMessage  string `json:"last_message,omitempty"`   // 最新の確定入力; UI カード表示用
+	EndReason    string `json:"end_reason,omitempty"`     // session_end の reason コード（例: "exec_not_found"）。UI 側で i18n 翻訳して表示
 
 	// JSON 外: 状態評価用
 	lastOutputAt    time.Time // idleAfter 計算用。LastOutputAt と同期して更新する
@@ -204,6 +205,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/info", s.handleInfo)
 	mux.HandleFunc("/api/spawn", s.handleSpawn)
 	mux.HandleFunc("/api/pick-directory", s.handlePickDirectory)
+	mux.HandleFunc("/api/path-exists", s.handlePathExists)
 	mux.HandleFunc("/api/pick-file", s.handlePickFile)
 	mux.HandleFunc("/api/open-file", s.handleOpenFile)
 	mux.HandleFunc("/api/open-default-file", s.handleOpenDefaultFile)
@@ -226,6 +228,10 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/slash-commands", s.handleSlashCommands)
 	mux.HandleFunc("/api/approval-patterns", s.handleApprovalPatterns)
 	mux.HandleFunc("/api/approval-patterns/", s.handleApprovalPatternsItem)
+	mux.HandleFunc("/api/files-list", s.handleFilesList)
+	mux.HandleFunc("/api/files-content", s.handleFilesContent)
+	mux.HandleFunc("/api/files-roots", s.handleFilesRoots)
+	mux.HandleFunc("/api/files-move", s.handleFilesMove)
 	s.httpSrv = &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Handler: mux}
 	return s, nil
 }
@@ -244,7 +250,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 	_ = os.WriteFile(pidPath, []byte(fmt.Sprintf("%d", os.Getpid())), 0o644)
-	setConsoleTitle("any-ai-cli [hub]")
+	setConsoleTitle("any-ai-cli [hub] - DO NOT CLOSE")
 	setConsoleIcon()
 	s.logger.Info("ANY-AI-CLI started", "url", fmt.Sprintf("http://%s/?token=%s", s.httpSrv.Addr, s.cfg.Token))
 	fmt.Print(startupBanner(s.version, s.httpSrv.Addr, s.cfg.Token))
@@ -254,6 +260,7 @@ func (s *Server) Run(ctx context.Context) error {
 	go s.stateTicker(runCtx)
 	go s.cleanAttachments()
 	go s.cleanSpawnLogs()
+	go s.recoverTranscripts()
 	go func() {
 		<-runCtx.Done()
 		if s.cfg.Approval.Enabled {
@@ -272,6 +279,37 @@ func (s *Server) Run(ctx context.Context) error {
 		return nil
 	}
 	return err
+}
+
+// recoverTranscripts は logs/sessions/*.jsonl のうち、対応する .txt が
+// 無い、もしくは .jsonl より古いものを遡って WriteTranscriptFile で生成する。
+// Hub クラッシュ等で wrapperMessageLoop の終了処理を通れず .txt が作成
+// されなかった場合の救済（通常運用では Close 直後に .txt が生成される）。
+func (s *Server) recoverTranscripts() {
+	dir := filepath.Join(s.cfg.Hub.LogDir, "sessions")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
+			continue
+		}
+		jsonlPath := filepath.Join(dir, e.Name())
+		txtPath := sessionlog.TranscriptPath(jsonlPath)
+		jsonlInfo, statErr := os.Stat(jsonlPath)
+		if statErr != nil {
+			continue
+		}
+		if txtInfo, err := os.Stat(txtPath); err == nil {
+			if !txtInfo.ModTime().Before(jsonlInfo.ModTime()) {
+				continue
+			}
+		}
+		if err := sessionlog.WriteTranscriptFile(jsonlPath, txtPath); err != nil {
+			s.logger.Warn("transcript recovery failed", "path", txtPath, "err", err)
+		}
+	}
 }
 
 // cleanSpawnLogs removes wrap-process spawn logs (logs/spawn/*.log) older than 7 days.
@@ -455,6 +493,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	ses.lastCols, ses.lastRows = initCols, initRows
 	s.mu.Unlock()
 	_ = websocket.JSON.Send(conn, proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath})
+	s.logger.Info("session registered", "id", id, "provider", reg.Provider, "cwd", reg.CWD, "pid", reg.PID)
 	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Branch: branch, Label: reg.Label, Model: reg.Model, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt})
 	s.writeHistory(id, map[string]any{
 		"ts":         startedAt.Format(time.RFC3339),
@@ -581,7 +620,7 @@ func (s *Server) wrapperMessageLoop(conn *websocket.Conn, id int) {
 	for {
 		var m proto.Message
 		if err := websocket.JSON.Receive(conn, &m); err != nil {
-			s.logger.Info("wrapper WS closed", "session_id", id, "err", err)
+			s.logger.Debug("wrapper WS closed", "session_id", id, "err", err)
 			break
 		}
 		m.SessionID = id
@@ -605,17 +644,24 @@ func (s *Server) wrapperMessageLoop(conn *websocket.Conn, id int) {
 			s.broadcast(m)
 			s.markRunning(id)
 		case "session_end":
-			s.writeHistory(id, map[string]any{
+			histEvent := map[string]any{
 				"ts":         time.Now().Format(time.RFC3339),
 				"type":       "session_end",
 				"session_id": id,
 				"state":      m.State,
 				"exit_code":  m.ExitCode,
-			})
+			}
+			if m.Reason != "" {
+				histEvent["reason"] = m.Reason
+			}
+			s.writeHistory(id, histEvent)
 			if m.State == "completed" || m.State == "error" {
 				s.mu.Lock()
 				if cur := s.sessions[id]; cur != nil {
 					cur.State = m.State
+					if m.Reason != "" {
+						cur.EndReason = m.Reason
+					}
 				}
 				s.mu.Unlock()
 			}
@@ -626,31 +672,45 @@ func (s *Server) wrapperMessageLoop(conn *websocket.Conn, id int) {
 	s.mu.Lock()
 	delete(s.wrappers, id)
 	var historyToClose *sessionlog.Writer
+	var jsonlPathForTranscript string
 	if cur := s.sessions[id]; cur != nil && cur.State != "completed" && cur.State != "error" {
 		cur.State = "disconnected"
 	}
 	endState := "disconnected"
+	endReason := ""
 	if cur := s.sessions[id]; cur != nil {
 		endState = cur.State
 		historyToClose = cur.History
 		cur.History = nil
+		jsonlPathForTranscript = cur.JSONLPath
+		endReason = cur.EndReason
 	}
 	s.mu.Unlock()
 	if endState == "disconnected" {
 		if historyToClose != nil {
-			_ = historyToClose.Event(map[string]any{
+			ev := map[string]any{
 				"ts":         time.Now().Format(time.RFC3339),
 				"type":       "session_end",
 				"session_id": id,
 				"state":      endState,
 				"exit_code":  0,
-			})
+			}
+			if endReason != "" {
+				ev["reason"] = endReason
+			}
+			_ = historyToClose.Event(ev)
 		}
 	}
 	if historyToClose != nil {
 		_ = historyToClose.Close()
 	}
-	s.broadcast(proto.Message{Type: "session_end", SessionID: id, State: endState})
+	if jsonlPathForTranscript != "" {
+		transcriptPath := sessionlog.TranscriptPath(jsonlPathForTranscript)
+		if err := sessionlog.WriteTranscriptFile(jsonlPathForTranscript, transcriptPath); err != nil {
+			s.logger.Warn("transcript generation failed", "session_id", id, "path", transcriptPath, "err", err)
+		}
+	}
+	s.broadcast(proto.Message{Type: "session_end", SessionID: id, State: endState, Reason: endReason})
 }
 
 func (s *Server) uiLoop(conn *websocket.Conn) {
@@ -929,17 +989,25 @@ func (s *Server) refreshBranch(id int, cwd string) {
 func (s *Server) addUI(c *websocket.Conn) {
 	s.mu.Lock()
 	s.uis[c] = struct{}{}
+	count := len(s.uis)
 	s.stopIdleTimerLocked()
 	s.mu.Unlock()
+	s.logger.Info("UI connected", "ui_count", count)
 }
 
 func (s *Server) removeUI(c *websocket.Conn) {
 	s.mu.Lock()
+	if _, ok := s.uis[c]; !ok {
+		s.mu.Unlock()
+		return
+	}
 	delete(s.uis, c)
-	if len(s.uis) == 0 {
+	count := len(s.uis)
+	if count == 0 {
 		s.startIdleTimerLocked()
 	}
 	s.mu.Unlock()
+	s.logger.Info("UI disconnected", "ui_count", count)
 }
 
 func (s *Server) startIdleTimerLocked() {
@@ -1083,9 +1151,28 @@ func (s *Server) handleShutdown(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.logger.Info("shutdown requested via UI")
+	s.broadcastHubShutdown("ui_shutdown")
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 	go s.requestStop()
+}
+
+// broadcastHubShutdown は接続中の全 wrapper に hub_shutdown を通知し、
+// 「これは Hub クラッシュではなく意図的シャットダウンだ」ことを伝える。
+// 通知を受けた wrapper は reconnect grace に入らず ensureHub を呼ばないので、
+// CREATE_NEW_CONSOLE による Hub 復活ターミナル窓のポップアップが発生しない。
+func (s *Server) broadcastHubShutdown(reason string) {
+	s.mu.Lock()
+	conns := make([]*websocket.Conn, 0, len(s.wrappers))
+	for _, conn := range s.wrappers {
+		conns = append(conns, conn)
+	}
+	s.mu.Unlock()
+	msg := proto.Message{Type: "hub_shutdown", Reason: reason}
+	for _, conn := range conns {
+		_ = conn.SetWriteDeadline(time.Now().Add(500 * time.Millisecond))
+		_ = websocket.JSON.Send(conn, msg)
+	}
 }
 
 func (s *Server) requestStop() {
@@ -1251,7 +1338,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "spawn error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.logger.Info("spawn: wrap process started",
+	s.logger.Debug("spawn: wrap process started",
 		"provider", body.Provider, "pid", cmd.Process.Pid, "spawn_log", spawnLogPath)
 	if resolvedModel != "" {
 		if err := s.setLastModel(body.Provider, resolvedModel); err != nil {
@@ -1264,7 +1351,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		if cmd.ProcessState != nil {
 			exitCode = cmd.ProcessState.ExitCode()
 		}
-		s.logger.Info("spawn: wrap process exited",
+		s.logger.Debug("spawn: wrap process exited",
 			"provider", body.Provider, "exit_code", exitCode, "wait_err", fmt.Sprintf("%v", waitErr))
 		if stdinNull != nil {
 			_ = stdinNull.Close()
@@ -1278,13 +1365,20 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 }
 
 // sanitizeEnv は子プロセスへ渡す環境変数列の PATH (Windows では "Path" / "PATH" の
-// 大小無視) から連続セミコロンによる空エントリを除去する。
+// 大小無視) を整える:
+//   - 連続セミコロンによる空エントリを除去する。
+//   - Windows のみ `%VAR%` 形式の未展開エントリを spawn 直前に再展開する
+//     (`expandPathEntries`)。
 //
 // Windows ではユーザー Path に `;;` のような空エントリが混ざっていると、MSIX/UWP
 // アプリ (例: WindowsApps 経由の OneCommander 等) から起動された子プロセスへ env を
 // 継承する過程で **最初の空エントリ以降が打ち切られる** ケースがある。これが起きると
 // 後段に並ぶ `.local\bin` 等のディレクトリが見えなくなり、wrap プロセス内の
 // `exec.LookPath("claude")` が失敗 → セッションが即 disconnect する。
+//
+// 同様に pnpm setup が永続 USER PATH へ `%PNPM_HOME%\bin` を書き込む方式の場合、
+// Hub プロセス起動時に `PNPM_HOME` が未 export だと REG_EXPAND_SZ が展開できず
+// pnpm bin のエントリが脱落する。spawn 直前に再展開することで救済する。
 //
 // any-ai-cli 自身は spawn 直前に env を sanitize することで、永続 Path のゴミを
 // ユーザーが気づかなくても claude / codex が見える状態を保証する。
@@ -1303,6 +1397,7 @@ func sanitizeEnv(env []string) []string {
 		}
 		raw := kv[eq+1:]
 		parts := strings.Split(raw, string(os.PathListSeparator))
+		parts = expandPathEntries(parts)
 		cleaned := make([]string, 0, len(parts))
 		for _, p := range parts {
 			if strings.TrimSpace(p) == "" {
@@ -1433,6 +1528,41 @@ func (s *Server) handlePickDirectory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "path": path})
+}
+
+// handlePathExists は UI の cwd 入力欄/履歴ドロップダウン向けに、複数パスが
+// 「実在するディレクトリ」かをまとめて判定して返す。
+// POST {"paths": ["C:\\dev\\foo", ...]} → {"results": {"C:\\dev\\foo": true, ...}}
+//
+// Spawn 時の Cmd.Dir に渡すと Windows では存在しないディレクトリで
+// CreateProcess が ERROR_DIRECTORY を返して分かりにくいので、事前に弾く用途。
+func (s *Server) handlePathExists(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("token") != s.cfg.Token {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Paths []string `json:"paths"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	results := make(map[string]bool, len(body.Paths))
+	for _, p := range body.Paths {
+		if p == "" {
+			results[p] = false
+			continue
+		}
+		info, err := os.Stat(p)
+		results[p] = err == nil && info.IsDir()
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"results": results})
 }
 
 func PrintStatus(cfg *config.Config) error {

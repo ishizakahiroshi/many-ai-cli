@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"any-ai-cli/internal/config"
@@ -119,6 +120,19 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 
 	ps, err := startProcess(provider, providerArgs, cwd, initCols, initRows)
 	if err != nil {
+		// Hub 側の spawn ログ (~/.any-ai-cli/logs/spawn/<provider>-<ts>.log) に
+		// 何が起きたかを残し、Hub UI のセッションカード「Disconnected」表示に
+		// 「reason: provider not found in PATH」等を 1 行付けるための reason
+		// コードを session_end で送る。生のスタックトレースは UI に流さない。
+		diagnoseStartFailure(os.Stderr, provider, providerArgs, err)
+		reason := classifyStartFailure(err)
+		_ = websocket.JSON.Send(conn, proto.Message{
+			Type:      "session_end",
+			SessionID: sessionID,
+			State:     "error",
+			ExitCode:  1,
+			Reason:    reason,
+		})
 		_ = conn.Close()
 		return err
 	}
@@ -177,6 +191,13 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	done := make(chan struct{})
 	var doneOnce sync.Once
 	closeDone := func() { doneOnce.Do(func() { close(done) }) }
+
+	// hub_shutdown を受信したら立つフラグ。意図的シャットダウンと判定し、
+	// reconnect supervisor は probeHubAlive と ensureHub を skip して直接
+	// grace 期間に入る。PTY は kill しない（= ユーザーが手動で Hub を再起動
+	// したら reattach で復活、新コンソール窓ポップアップも発生しない）。
+	// 再接続成功時に false に戻す。
+	var intentionalShutdown atomic.Bool
 
 	reconnectCh := make(chan struct{}, 1)
 	notifyReconnect := func() {
@@ -258,6 +279,12 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 					if err := HandleAttach(m, ps); err != nil {
 						logger.Warn("attach inject failed", "err", err)
 					}
+				case "hub_shutdown":
+					logger.Info("hub_shutdown received — skipping reconnect and ensureHub", "session_id", getSID(), "reason", m.Reason)
+					intentionalShutdown.Store(true)
+					clearConn(c)
+					notifyReconnect()
+					return
 				}
 			}
 		}()
@@ -268,6 +295,8 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// from Hub crash (Hub HTTP unreachable). The former kills PTY immediately
 	// (preserving dismiss / kill-all / idle-timeout UX); the latter waits for
 	// the configured grace period for Hub to come back, then re-registers.
+	// hub_shutdown 受信（= UI からの Hub のみ停止）は intentional フラグ経由
+	// の特別経路で、PTY は kill せず grace 期間中の手動 Hub 再起動を待つ。
 	go func() {
 		for {
 			select {
@@ -275,7 +304,8 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 				return
 			case <-reconnectCh:
 			}
-			if probeHubAlive(cfg) {
+			intentional := intentionalShutdown.Load()
+			if !intentional && probeHubAlive(cfg) {
 				logger.Info("hub still alive after WS close — treating as intentional disconnect", "session_id", getSID())
 				_ = ps.Close()
 				closeDone()
@@ -288,7 +318,11 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 				closeDone()
 				return
 			}
-			logger.Info("hub appears down — entering reconnect grace period", "session_id", getSID(), "grace_sec", int(grace/time.Second))
+			if intentional {
+				logger.Info("intentional hub shutdown — waiting for manual hub restart within grace period", "session_id", getSID(), "grace_sec", int(grace/time.Second))
+			} else {
+				logger.Info("hub appears down — entering reconnect grace period", "session_id", getSID(), "grace_sec", int(grace/time.Second))
+			}
 			deadline := time.Now().Add(grace)
 			reconnected := false
 			for !reconnected {
@@ -307,9 +341,11 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 				if w, h, err := term.GetSize(int(os.Stdin.Fd())); err == nil && w > 0 && h > 0 {
 					cols, rows = w, h
 				}
-				if err := ensureHub(cfg); err != nil {
-					logger.Debug("ensure hub during reconnect failed", "err", err)
-					continue
+				if !intentionalShutdown.Load() {
+					if err := ensureHub(cfg); err != nil {
+						logger.Debug("ensure hub during reconnect failed", "err", err)
+						continue
+					}
 				}
 				newConn, newSID, err := dialAndReattach(cfg, getSID(), provider, display, cwd, *label, *model, startedAtText, rawLogPath, jsonlPath, cols, rows, snapshotReplay())
 				if err != nil {
@@ -325,6 +361,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 				logger.Info("wrapper reconnected to hub", "old_sid", getSID(), "new_sid", newSID)
 				swapConn(newConn, newSID)
 				startReceiveLoop(newConn)
+				intentionalShutdown.Store(false)
 				reconnected = true
 			}
 		}
@@ -467,7 +504,7 @@ func ensureHub(cfg *config.Config) error {
 		return err
 	}
 	serve := exec.Command(exe, "serve")
-	serve.Stdout, serve.Stderr = os.Stdout, os.Stderr
+	prepareHubSpawn(serve)
 	if err := serve.Start(); err != nil {
 		return err
 	}
