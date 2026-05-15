@@ -869,6 +869,7 @@ const sessions = new Map();
 const terminals = new Map(); // sessionId -> { term, fitAddon, container, pendingChunks, pendingTextTail, markerFilterCarry }
 const approvalVisibleCache = new Map();
 const multiQuestionVisibleCache = new Map(); // sessionId → bool（Claude Code AskUserQuestion 等の複数質問 UI が画面に出ているか）
+const sequentialChoiceCache = new Map(); // sessionId → { sig, prompts, answers, index }
 const approvalRawOptionsCache = new Map(); // sessionId → [{num, label, isCurrent}]
 const approvalConsumedSig = new Map(); // sessionId → 消費済み承認の署名（doSend でテキスト送信した場合の再表示防止）
 const approvalConsumedSigDeleteTimer = new Map(); // sessionId → timer（sig を debounce 型で削除するためのタイマー）
@@ -894,6 +895,10 @@ function _approvalCtxHash(s) {
     h = (((h << 5) + h) + text.charCodeAt(i)) | 0;
   }
   return (h >>> 0).toString(36);
+}
+
+function sequentialChoiceSig(prompts) {
+  return _approvalCtxHash((prompts || []).map(p => `${p.key}:${p.question}:${p.options.map(o => `${o.num}.${o.label}`).join('|')}`).join('\n'));
 }
 const approvalHintConfirmTimers = new Map(); // sessionId → timer（生バイト検出を短時間 debounce してチカチカを防ぐ）
 const toolOutputs = new Map(); // sessionId → [{uid, lines, ts}]
@@ -1901,6 +1906,7 @@ function scanBuffer(id) {
 const reviewAnswersRe = /Review your answers/i;
 const readyToSubmitAnswersRe = /Ready to submit your answers/i;
 const tabBoxMarkerRe = /[◻□☐✓☑]/; // ◻ □ ☐ ✓ ☑
+const sequentialQuestionHeaderRe = /^\s*([A-Z]{1,3}\d{1,3}|Q\d{1,3}|問\d{1,3})\s*[:：]\s*(.+?)\s*$/i;
 
 function isMultiQuestionPrompt(lines) {
   for (const line of lines) {
@@ -1925,6 +1931,91 @@ function setMultiQuestionBannerVisible(visible) {
   } else {
     banner.hidden = true;
   }
+}
+
+function extractSequentialChoicePrompts(lines) {
+  const prompts = [];
+  let current = null;
+  const recent = (lines || []).slice(-80).map(line => String(line || '').trimEnd());
+  for (const rawLine of recent) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (/\[ANY-AI-CLI\]|\[\/ANY-AI-CLI\]/.test(line)) return null;
+
+    const hm = line.match(sequentialQuestionHeaderRe);
+    if (hm) {
+      if (current && current.options.length >= 2) prompts.push(current);
+      current = {
+        key: hm[1].trim(),
+        question: hm[2].trim(),
+        options: [],
+      };
+      continue;
+    }
+
+    if (!current) continue;
+    const om = line.match(/^\s*(\d{1,2})\.\s*(.+?)\s*$/);
+    if (om) {
+      current.options.push({
+        num: parseInt(om[1], 10),
+        label: om[2].trim(),
+        isCurrent: current.options.length === 0,
+      });
+      continue;
+    }
+    if (/^\s*N\.\s*(User specifies|その他指定)/i.test(line)) continue;
+
+    // 選択肢群の後に説明文へ戻ったら、この質問ブロックはいったん閉じる。
+    if (current.options.length > 0 && !/^\s{2,}/.test(rawLine)) {
+      if (current.options.length >= 2) prompts.push(current);
+      current = null;
+    }
+  }
+  if (current && current.options.length >= 2) prompts.push(current);
+
+  const unique = [];
+  const seen = new Set();
+  for (const prompt of prompts) {
+    const key = `${prompt.key}:${prompt.question}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    prompt.options.sort((a, b) => a.num - b.num);
+    unique.push(prompt);
+  }
+  return unique.length >= 2 ? unique : null;
+}
+
+function getSequentialChoiceState(id, prompts) {
+  if (!prompts || prompts.length < 2) return null;
+  const sig = sequentialChoiceSig(prompts);
+  let state = sequentialChoiceCache.get(id);
+  if (!state || state.sig !== sig) {
+    state = { sig, prompts, answers: new Map(), index: 0 };
+    sequentialChoiceCache.set(id, state);
+  } else {
+    state.prompts = prompts;
+  }
+  while (state.index < state.prompts.length && state.answers.has(state.prompts[state.index].key)) {
+    state.index++;
+  }
+  return state.index < state.prompts.length ? state : null;
+}
+
+function sequentialChoiceOptionsForState(state) {
+  if (!state) return [];
+  const prompt = state.prompts[state.index];
+  const question = `${prompt.key}: ${prompt.question}`;
+  return prompt.options.map((opt, idx) => ({
+    ...opt,
+    isCurrent: idx === 0,
+    _sequentialChoice: true,
+    _sequentialKey: prompt.key,
+    _sequentialQuestion: question,
+  }));
+}
+
+function clearSequentialChoiceState(id) {
+  sequentialChoiceCache.delete(id);
 }
 
 // ---- 承認検出 (xterm.js バッファスキャン) ----
@@ -2105,6 +2196,16 @@ function trackApprovalHintFromChunk(id, bytes) {
     return;
   }
 
+  const seqPrompts = extractSequentialChoicePrompts(multiQContext);
+  const seqState = getSequentialChoiceState(id, seqPrompts);
+  if (seqState) {
+    const seqOpts = sequentialChoiceOptionsForState(seqState);
+    approvalRawOptionsCache.set(id, seqOpts);
+    scheduleApprovalHintConfirm(id, seqOpts);
+    return;
+  }
+  if (!seqPrompts) clearSequentialChoiceState(id);
+
   // フォールバック検出（既存）
   let extraction = extractApprovalOptions(lines);
   const options = extraction.options;
@@ -2115,7 +2216,16 @@ function trackApprovalHintFromChunk(id, bytes) {
   // Ink/Codex のカーソル位置制御による再描画は pendingTextTail を行分割しても
   // カーソル付き選択肢を取り出せないため、xterm 解釈済みのバッファのほうが
   // より正確に行構造とカーソル位置を保持している。
-  if (t && t.everAttached) {
+  // ただし scanBuffer は履歴を保持し続けるため、承認解決後の応答チャンクで
+  // 古い選択肢が再検出される（approvalConsumedSig は label 差異で抑止が外れる）。
+  // pendingTextTail に承認系の手がかりが無く、かつ既に visible でも無い場合は scanBuffer を見ない。
+  const pendingHasApprovalHint = lines.some(line =>
+    userSpecifiesRe.test(line) ||
+    recommendedChoiceRe.test(line) ||
+    matchProviderApprovalTrigger(provider, line) ||
+    matchNativeApprovalTrigger(line));
+  const allowBufferFallback = approvalVisibleCache.get(id) || options.length > 0 || pendingHasApprovalHint;
+  if (t && t.everAttached && allowBufferFallback) {
     const visibleRows = t.term?.rows || 40;
     const bufferTail = scanBuffer(id).slice(-Math.max(120, visibleRows + 60));
     const bufExtraction = extractApprovalOptions(bufferTail);
@@ -2478,6 +2588,24 @@ function detectApproval(id) {
     }
   }
 
+  const seqLines = (t?.pendingTextTail || '').split(/\r\n|\r|\n/).slice(-80).map(l => stripAnsi(l))
+    .concat(scanBuffer(id).slice(-80));
+  const seqPrompts = extractSequentialChoicePrompts(seqLines);
+  const seqState = getSequentialChoiceState(id, seqPrompts);
+  if (seqState) {
+    const seqOpts = sequentialChoiceOptionsForState(seqState);
+    approvalRawOptionsCache.set(id, seqOpts);
+    showActionBar(bar, id, seqOpts, false);
+    if (!approvalVisibleCache.get(id)) {
+      cancelApprovalHintConfirm(id);
+      approvalVisibleCache.set(id, true);
+      enqueueApprovalAutoSwitch(id);
+      ws.send(JSON.stringify({ type: 'session_hint', session_id: id, approval_visible: true }));
+    }
+    return;
+  }
+  if (!seqPrompts) clearSequentialChoiceState(id);
+
   // フォールバック検出: pendingTextTail を使う（scanBuffer は履歴を保持するため
   // hideActionBar 後も古い選択肢を再検出してしまう）
   const tail = (t ? t.pendingTextTail || '' : '').split(/\r\n|\r|\n/).slice(-120).map(l => stripAnsi(l));
@@ -2495,7 +2623,16 @@ function detectApproval(id) {
   // pendingTextTail の split で全テキストが1行に連結されて options が空になるか、
   // "Yes2.No" のように選択肢が連結されて1行に結合されることがある（concat artifact）。
   // xterm バッファ（行分割済み）がより多くの選択肢を持つ場合はそちらを優先する。
-  if (t && t.pendingTextTail) {
+  // ただし scanBuffer は履歴を保持し続けるため、承認解決後の応答チャンクで
+  // 古い選択肢が再検出される（approvalConsumedSig は label 差異で抑止が外れる）。
+  // pendingTextTail に承認系の手がかりが無く、かつ既に visible でも無い場合は scanBuffer を見ない。
+  const pendingHasApprovalHint = tail.some(line =>
+    userSpecifiesRe.test(line) ||
+    recommendedChoiceRe.test(line) ||
+    matchProviderApprovalTrigger(provider, line) ||
+    matchNativeApprovalTrigger(line));
+  const allowBufferFallback = approvalVisibleCache.get(id) || options.length > 0 || pendingHasApprovalHint;
+  if (t && t.pendingTextTail && allowBufferFallback) {
     const bufExtraction = extractApprovalOptions(bufferTail);
     const bufOpts = bufExtraction.options;
     const pendingHasCursor = options.some(o => o.isCurrent);
@@ -2615,6 +2752,7 @@ function hideActionBar(id) {
   actionBarFocusIdx = -1;
   if (id !== undefined) {
     cancelApprovalHintConfirm(id);
+    clearSequentialChoiceState(id);
     const wasVisible = !!approvalVisibleCache.get(id);
     if (wasVisible) {
       approvalVisibleCache.set(id, false);
@@ -2706,7 +2844,12 @@ function showActionBar(bar, sessionId, options, showExpand) {
   if (options.length > 0) {
     const label = document.createElement('span');
     label.className = 'action-bar-label';
-    label.textContent = '⚠ Approval needed';
+    const sequentialQuestion = options.find(o => o && o._sequentialQuestion)?._sequentialQuestion;
+    label.textContent = sequentialQuestion ? `⚠ ${sequentialQuestion}` : '⚠ Approval needed';
+    if (sequentialQuestion) {
+      label.classList.add('sequential-question-label');
+      label.title = sequentialQuestion;
+    }
     bar.appendChild(label);
   }
 
@@ -2759,6 +2902,41 @@ function showActionBar(bar, sessionId, options, showExpand) {
 }
 
 function sendChoice(sessionId, targetNum) {
+  const seqState = sequentialChoiceCache.get(sessionId);
+  if (seqState && seqState.index < seqState.prompts.length) {
+    const prompt = seqState.prompts[seqState.index];
+    seqState.answers.set(prompt.key, targetNum);
+    seqState.index++;
+    while (seqState.index < seqState.prompts.length && seqState.answers.has(seqState.prompts[seqState.index].key)) {
+      seqState.index++;
+    }
+
+    const bar = document.getElementById('action-bar');
+    if (seqState.index < seqState.prompts.length && bar) {
+      const nextOpts = sequentialChoiceOptionsForState(seqState);
+      approvalRawOptionsCache.set(sessionId, nextOpts);
+      showActionBar(bar, sessionId, nextOpts, false);
+      setTimeout(() => inputEl.focus(), 0);
+      return;
+    }
+
+    const response = seqState.prompts
+      .map(p => `${p.key}: ${seqState.answers.get(p.key)}`)
+      .join('\n') + '\r';
+    clearSequentialChoiceState(sessionId);
+    const prevOpts = approvalRawOptionsCache.get(sessionId);
+    if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
+    sendText(sessionId, response);
+    hideActionBar(sessionId);
+    approvalSuppressUntil.set(sessionId, Date.now() + 2000);
+    setTimeout(() => {
+      detectApproval(sessionId);
+      maybeAutoSwitchToNextApproval();
+    }, 2050);
+    setTimeout(() => inputEl.focus(), 0);
+    return;
+  }
+
   // 矢印移動ではなく番号直接入力で確定する（誤選択防止）
   sendText(sessionId, `${targetNum}\r`);
   // doSend と同様に消費済み署名を記録（Ink 再描画による同一ブロックの再検出・再表示を防ぐ）
@@ -3396,6 +3574,7 @@ function removeLocalSession(id) {
   removeApprovalAutoSwitchTarget(id);
   approvalRawOptionsCache.delete(id);
   approvalConsumedSig.delete(id);
+  clearSequentialChoiceState(id);
   cancelApprovalHintConfirm(id);
   approvalSuppressUntil.delete(id);
   cleanupSessionInputState(id);
