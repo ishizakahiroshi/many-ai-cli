@@ -1858,9 +1858,19 @@ function isWheelTargetExcluded(target) {
   }
   if (target.closest('.card-actions')) return true;
   if (target.closest('[data-wheel-native]')) return true;
+  // ファイルタブ（ツリー / プレビュー）はネイティブの wheel スクロールを使う。
+  // これを除外しないと document レベルのリスナーがターミナルへ転送して preventDefault してしまい、
+  // プレビューのスクロールが効かなくなる。
+  if (target.closest('#files-tab-contents')) return true;
   return false;
 }
 
+// xterm のネイティブ wheel は viewport.scrollTop を直接書き換える → scroll イベント →
+// scrollLines という非同期チェーンを経て初めて BufferService.isUserScrolling=true になる。
+// この間に PTY 出力が来ると、内部 scroll() が `isUserScrolling || (ydisp = ybase)` で
+// 強制的に最下部に戻してしまう（= AI 実行中に wheel up しても戻されるバグの正体）。
+// → capture phase で wheel を奪い、scrollLines() を同期で呼んで isUserScrolling を
+//    確実に立ててから xterm に伝播させない。マウス位置による分岐は不要。
 document.addEventListener('wheel', (e) => {
   if (activeSessionId === null) return;
   const t = terminals.get(activeSessionId);
@@ -1869,10 +1879,9 @@ document.addEventListener('wheel', (e) => {
 
   if (forwardWheelToAltBuffer(activeSessionId, t, e.deltaY)) {
     e.preventDefault();
+    e.stopPropagation();
     return;
   }
-
-  if (t.container && t.container.contains(e.target)) return;
 
   const lineHeight = 24;
   const lines = Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY) / lineHeight));
@@ -1880,7 +1889,8 @@ document.addEventListener('wheel', (e) => {
   t.autoScroll = isTerminalAtBottom(t);
   if (activeSessionId !== null) updateScrollLockBtn(!t.autoScroll);
   e.preventDefault();
-}, { passive: false });
+  e.stopPropagation();
+}, { passive: false, capture: true });
 
 function scrollTerminalToBottomSoon(id) {
   const t = terminals.get(id);
@@ -2399,9 +2409,11 @@ function trackApprovalHintFromChunk(id, bytes) {
   const approvalLabelRe = /\b(yes|no|allow|deny|proceed|abort|don[''']t ask|cancel)\b/i;
   const hasApprovalLikeLabel = options.some((opt) => approvalLabelRe.test(opt.label));
   const isHubChoice = isHubChoicePrompt(contextLines, options);
-  const approvalNear = hasCursorOption &&
+  const hasNativePromptHint = contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line));
+  const isCodexShortcutMenu = provider === 'codex' && options.some(o => o._sendText) && hasNativePromptHint;
+  const approvalNear = (hasCursorOption || isCodexShortcutMenu) &&
     ((hasApprovalLikeLabel && (hasUserSpecifies || contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)))) || isHubChoice);
-  const hasChoiceMenuHint = hasCursorOption && options.length > 0 && contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line));
+  const hasChoiceMenuHint = (hasCursorOption || isCodexShortcutMenu) && options.length > 0 && hasNativePromptHint;
   const nowVisible = (options.length > 0 && approvalNear) || hasChoiceMenuHint;
 
   // doSend / sendChoice で消費済みの選択肢が xterm scanBuffer に残っているため
@@ -2567,6 +2579,25 @@ function _yesNoApprovalOptions(ctxText) {
   ];
 }
 
+function codexShortcutSendText(label) {
+  const m = String(label || '').match(/\((y|p|n|esc|escape)\)\s*$/i);
+  if (!m) return null;
+  const key = m[1].toLowerCase();
+  if (key === 'esc' || key === 'escape') return '\x1b';
+  return key;
+}
+
+function buildApprovalOption(numText, labelText, isCurrent) {
+  const label = String(labelText || '').trim()
+    .replace(/\s{2,}.*$/, '')
+    .replace(/\s*\d+\.\s*[A-Za-z].*$/, '')
+    .trim();
+  const opt = { num: parseInt(numText, 10), label, isCurrent: !!isCurrent };
+  const sendText = codexShortcutSendText(label);
+  if (sendText) opt._sendText = sendText;
+  return opt;
+}
+
 function approvalContextLines(lines, cluster, margin = 10) {
   if (!cluster) return lines;
   return lines.slice(Math.max(0, cluster.start - margin), Math.min(lines.length, cluster.end + margin + 1));
@@ -2590,8 +2621,12 @@ function extractApprovalOptions(tail) {
   const options = [];
   let clusterStart = -1;
   let clusterEnd = -1;
-  let lastOptionIdx = -1;
-  const maxGap = 4;
+  let seenOption = false;
+  let blankGap = 0;
+  // 空行は Codex の選択肢間に挟まる Ink 再描画ノイズ対策で最大 4 行まで許容する。
+  // 非空行（番号付き選択肢でない）に当たったら即終端（無関係な箇条書き / 過去出力 / コードブロック内の `1.` を吸い込んで
+  // approvalSig が揺らぎ、approvalConsumedSig の抑止が外れて action-bar がチラつく事故を防ぐ）。
+  const maxBlankGap = 4;
   // ドット必須にして `462           const m = ...` のような差分行番号を誤検出しないようにする。
   // `2.Yes` 形式（ドット直後にスペース無し）は `\s*` が 0 個マッチでカバーする。
   // 番号上限は 1〜99（実用的な承認メニューは ≤ 9 個。Codex 等で 2 桁が出てもカバー）。
@@ -2599,23 +2634,29 @@ function extractApprovalOptions(tail) {
     const line = tail[i];
     const cm = line.match(/^\s*[>❯›❱]\s*(\d{1,2})\.\s*(.+?)\s*$/);
     if (cm) {
-      if (lastOptionIdx !== -1 && lastOptionIdx - i > maxGap) break;
-      options.unshift({ num: parseInt(cm[1], 10), label: cm[2].trim().replace(/\s{2,}.*$/, '').replace(/\s*\d+\.\s*[A-Za-z].*$/, '').trim(), isCurrent: true });
+      options.unshift(buildApprovalOption(cm[1], cm[2], true));
       if (clusterEnd === -1) clusterEnd = i;
       clusterStart = i;
-      lastOptionIdx = i;
+      seenOption = true;
+      blankGap = 0;
       continue;
     }
     const om = line.match(/^\s*(\d{1,2})\.\s*(.+?)\s*$/);
     if (om) {
-      if (lastOptionIdx !== -1 && lastOptionIdx - i > maxGap) break;
-      options.unshift({ num: parseInt(om[1], 10), label: om[2].trim().replace(/\s{2,}.*$/, '').replace(/\s*\d+\.\s*[A-Za-z].*$/, '').trim(), isCurrent: false });
+      options.unshift(buildApprovalOption(om[1], om[2], false));
       if (clusterEnd === -1) clusterEnd = i;
       clusterStart = i;
-      lastOptionIdx = i;
+      seenOption = true;
+      blankGap = 0;
       continue;
     }
-    if (lastOptionIdx !== -1 && lastOptionIdx - i > maxGap) break;
+    if (!seenOption) continue;
+    if (!String(line || '').trim()) {
+      blankGap++;
+      if (blankGap > maxBlankGap) break;
+      continue;
+    }
+    break;
   }
   if (options.length === 0) return { options: [], cluster: null };
   const nums = options.map(opt => opt.num);
@@ -2838,10 +2879,12 @@ function detectApproval(id) {
   const approvalLabelRe = /\b(yes|no|allow|deny|proceed|abort|don[''']t ask|cancel)\b/i;
   const hasApprovalLikeLabel = options.some((opt) => approvalLabelRe.test(opt.label));
   const isHubChoice = isHubChoicePrompt(contextLines, options);
+  const hasNativePromptHint = contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line));
+  const isCodexShortcutMenu = provider === 'codex' && options.some(o => o._sendText) && hasNativePromptHint;
   const approvalNear = (hasApprovalLikeLabel &&
-    (hasUserSpecifies || contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)))) || isHubChoice;
-  const hasApproval = options.length > 0 && approvalNear && hasCursorOption;
-  const hasChoiceMenu = hasCursorOption && options.length > 0 && contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line));
+    (hasUserSpecifies || hasNativePromptHint)) || isHubChoice || isCodexShortcutMenu;
+  const hasApproval = options.length > 0 && approvalNear && (hasCursorOption || isCodexShortcutMenu);
+  const hasChoiceMenu = (hasCursorOption || isCodexShortcutMenu) && options.length > 0 && hasNativePromptHint;
   const hasPrompt = hasApproval || hasChoiceMenu;
 
   // 折りたたみ（クランチ）を検出
@@ -3298,9 +3341,14 @@ function sendChoice(sessionId, targetNum) {
   }
 
   // 矢印移動ではなく番号直接入力で確定する（誤選択防止）
-  sendText(sessionId, `${targetNum}\r`);
+  const cachedOpts = approvalRawOptionsCache.get(sessionId);
+  const targetOpt = Array.isArray(cachedOpts) && !isBatchOptions(cachedOpts)
+    ? cachedOpts.find(o => o && o.num === targetNum)
+    : null;
+  const choiceText = targetOpt && targetOpt._sendText ? targetOpt._sendText : `${targetNum}\r`;
+  sendText(sessionId, choiceText);
   // doSend と同様に消費済み署名を記録（Ink 再描画による同一ブロックの再検出・再表示を防ぐ）
-  const prevOpts = approvalRawOptionsCache.get(sessionId);
+  const prevOpts = cachedOpts;
   if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
   hideActionBar(sessionId);
   // PTY エコーバックによる誤再表示を 2 秒間抑制
@@ -7048,16 +7096,25 @@ const FilesTabManager = (function () {
       if (!Array.isArray(entries)) continue;
       // gitRoot に対応するセッションを探す（cwd が gitRoot で始まるもの）
       const matchedSession = sessions.find(s => s.cwd && (s.cwd === gitRoot || s.cwd.startsWith(gitRoot)));
-      const sessionId  = matchedSession ? matchedSession.id : null;
-      const projectKey = matchedSession ? matchedSession.project : null;
+      // 対応するセッションが無い場合は復元しない。
+      // セッションが無いまま Hub の cwd と localStorage の root が重なると、
+      // probe が偶然通って `..` だけのゴーストタブが復元されてしまうため。
+      // localStorage は残すので、対象セッションを spawn し直した次回起動で自動復活する。
+      if (!matchedSession) {
+        console.info('[FilesTabManager] skip restoring tabs for', gitRoot, '(no matching session)');
+        continue;
+      }
+      const sessionId  = matchedSession.id;
+      const projectKey = matchedSession.project;
 
       for (const entry of entries) {
         if (!entry.root) continue;
         // 現在の Hub の許可ルート外なら復元しない（ゾンビタブ防止）。
         // また items が空（.md が一切無い）の場合も復元しない（"死骸タブ" 防止）。
-        // localStorage は残すので、対象プロジェクトで Hub を起動し直せば次回自動復活する。
+        // 加えて全エントリの rel が `..` で始まる場合（filesRoot がセッション cwd の外側）も復元しない。
+        // → tree が `..` 1 個だけで中身を確認できないため。
         try {
-          const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
+          const sessionQs = `&session=${encodeURIComponent(sessionId)}`;
           const probeUrl = `/api/files-list?root=${encodeURIComponent(entry.root)}&token=${encodeURIComponent(token)}${sessionQs}`;
           const probeRes = await fetch(probeUrl);
           if (!probeRes.ok) {
@@ -7071,6 +7128,14 @@ const FilesTabManager = (function () {
           }
           if (!Array.isArray(probeData.items) || probeData.items.length === 0) {
             console.info('[FilesTabManager] skip restoring tab (no files under root):', entry.root);
+            continue;
+          }
+          const allOutsideCwd = probeData.items.every(it => {
+            const rel = String(it && it.rel || '').replace(/\\/g, '/');
+            return rel.startsWith('../') || rel === '..';
+          });
+          if (allOutsideCwd) {
+            console.info('[FilesTabManager] skip restoring tab (root outside session cwd):', entry.root);
             continue;
           }
         } catch (err) {
