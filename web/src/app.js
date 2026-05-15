@@ -4330,7 +4330,7 @@ function renderSessionList() {
     header.appendChild(chevron);
 
     const nameSpan = document.createElement('span');
-    nameSpan.textContent = '📁 ' + projectDisplayName;
+    nameSpan.textContent = projectDisplayName;
     header.appendChild(nameSpan);
 
     // v2: files ボタン（__no_project__ 以外のプロジェクトにのみ表示）
