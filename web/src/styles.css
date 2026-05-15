@@ -723,6 +723,12 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   margin-right: 0;
   margin-bottom: 2px;
 }
+.action-bar-label.sequential-question-label {
+  letter-spacing: 0;
+  text-transform: none;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
 
 #multi-question-banner {
   display: block;
