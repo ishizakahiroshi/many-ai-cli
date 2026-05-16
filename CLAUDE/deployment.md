@@ -1,6 +1,6 @@
 # any-ai-cli ビルド・配布・デプロイ
 
-> 最終更新: 2026-05-14(木) 08:55:00
+> 最終更新: 2026-05-16(土) 10:42:34
 
 `any-ai-cli` は **Go 単一バイナリ + go:embed フロント** の構成。サーバーへのデプロイは無し（ユーザー PC にバイナリを置くだけ）。
 
@@ -49,23 +49,45 @@ GOOS=linux GOARCH=amd64 go build -o dist/linux/any-ai-cli ./cmd/any-ai-cli
 
 **ローカルビルドは原則 `make build` を使う**。`go build` を素で叩くと `go-winres` がスキップされて、`cmd/any-ai-cli/rsrc_windows_*.syso`（アプリアイコン等の Windows リソース）が古いまま `dist/any-ai-cli.exe` に embed される。
 
+#### Makefile ターゲット一覧（v0.1.3 時点）
+
+種類が増えてきたのでここに集約する。**他所に分散させない**。
+
+| ターゲット | 出力物 / 動作 | 使う場面 |
+|---|---|---|
+| `make build` | 下 4 つ（windows + wsl-launcher + linux + deploy-wsl）を順に実行 | 通常はこれ 1 本。Windows.exe・WSL ランチャー・Linux ELF を作って WSL 側へ自動転送まで完了する |
+| `make build-windows` | `dist/any-ai-cli.exe` | Windows 本体だけ作り直したいとき（go-winres → go build） |
+| `make build-wsl-launcher` | `dist/any-ai-cli-wsl.exe` | WSL ランチャー（`winres/winres-wsl.json` のアイコン付き）だけ作り直したいとき |
+| `make build-linux` | `dist/linux/any-ai-cli` | Linux ELF（`CGO_ENABLED=0 GOOS=linux GOARCH=amd64`）だけ作り直したいとき |
+| `make deploy-wsl` | `dist/linux/any-ai-cli` → WSL `~/.local/bin/any-ai-cli`（cp + chmod +x） | Linux バイナリだけ作り直した後、WSL に再転送だけしたいとき。中身は `scripts/deploy-wsl.ps1` |
+| `make run` | `build-windows` 後に `dist/any-ai-cli.exe serve` | ローカルで Hub をすぐ立ち上げたいとき |
+| `make clean` | `dist/` 配下と `cmd/*/rsrc_windows_*.syso` を削除 | リソース埋め込みを作り直したいとき |
+
 ```bash
-# 推奨: Makefile 経由（go-winres make → go build）
+# 通常はこれだけ
 make build
-# 出力: dist/any-ai-cli.exe
+# 出力: dist/any-ai-cli.exe / dist/any-ai-cli-wsl.exe / dist/linux/any-ai-cli
+# 加えて WSL ~/.local/bin/any-ai-cli が最新に差し替わる
 ```
 
-`make build` は以下を順に実行する：
+#### `make deploy-wsl` の中身
 
-1. `go-winres make --out cmd/any-ai-cli/rsrc` — `winres/winres.json` からアイコン/バージョン情報を含む `.syso` リソースを生成
-2. `go build -o dist/any-ai-cli.exe ./cmd/any-ai-cli` — 直前で生成した `.syso` を自動取り込み、`web/src/` を `go:embed` した単一バイナリを `dist/` に出力
+`scripts/deploy-wsl.ps1` が以下をやる：
 
-直接 `go build` を叩いてよいケース：
+1. `dist/linux/any-ai-cli` を `/mnt/c/...` 形式に変換
+2. `wsl -d Ubuntu -- bash -c 'mkdir -p ~/.local/bin && cp ... && chmod +x ...'`
+3. `ls -la` と `--version` で反映を確認
+
+引数で上書き可能：`.\scripts\deploy-wsl.ps1 -Distro Ubuntu -Dest '~/.local/bin/any-ai-cli'`
+
+実行中の Hub プロセスがあっても上書き可（Linux は inode 差し替え）。**ただし新バイナリは Hub 再起動まで有効にならない**点に注意。
+
+#### 直接 `go build` を叩いてよいケース
 
 - 急ぎの動作確認で **アイコン/バージョン情報の更新が不要**と分かっているとき
-- `winres/winres.json` を編集していないとき
+- `winres/winres.json` / `winres/winres-wsl.json` を編集していないとき
 
-それ以外（特にリリース手前・ユーザーに配布する `dist/` を作るとき）は必ず `make build` を使うこと。クロスコンパイル（macOS / Linux 向け）は下記「Go バイナリビルド（クロスコンパイル）」のコマンドを使い、`go-winres` は Windows 専用なのでスキップする。
+それ以外（特にリリース手前・ユーザーに配布する `dist/` を作るとき）は必ず `make build` を使うこと。クロスコンパイル（macOS 向け）は下記「Go バイナリビルド（クロスコンパイル）」のコマンドを使い、`go-winres` は Windows 専用なのでスキップする。
 
 詳細な Windows 開発環境は `windows_setup.md` を参照。
 

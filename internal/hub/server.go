@@ -235,6 +235,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/files-roots", s.handleFilesRoots)
 	mux.HandleFunc("/api/files-move", s.handleFilesMove)
 	mux.HandleFunc("/api/files-rename", s.handleFilesRename)
+	mux.HandleFunc("/api/git-log", s.handleGitLog)
+	mux.HandleFunc("/api/git-show", s.handleGitShow)
+	mux.HandleFunc("/api/git-refs", s.handleGitRefs)
 	mux.HandleFunc("/api/user-prefs/notify-sound-custom", s.handleUserPrefsNotifySoundCustom)
 	mux.HandleFunc("/api/user-prefs", s.handleUserPrefs)
 	s.httpSrv = &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Handler: mux}

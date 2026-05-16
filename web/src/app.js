@@ -1,4 +1,4 @@
-console.log('[any-ai-cli] app.js build=2026-05-15-voice-hw-end-await');
+console.log('[any-ai-cli] app.js build=2026-05-16-voice-leading-space');
 
 // ---- トースト通知 ----
 let _toastTimer = null;
@@ -52,6 +52,13 @@ function showToast(msg, anchor) {
 
 // i18n ロード前のフォールバック（i18n.js が window.t を上書きするまでキーをそのまま返す）
 if (typeof window.t !== 'function') window.t = (key) => key;
+
+// i18n フォールバックヘルパ: t() がキー文字列をそのまま返した（未登録）場合に
+// fallback を返す。t()自体は key を確実に返す仕様なので、簡易判定で問題ない。
+function ti18n(key, fallback, vars) {
+  const v = window.t ? window.t(key, vars) : key;
+  return (v === key && fallback != null) ? fallback : v;
+}
 
 // ---- Hub 承認ボタン機能 オプトイントースト ----
 let _approvalAlertChecked = false;
@@ -185,13 +192,25 @@ const STORAGE_NOTIFY_SOUND_CUSTOM_KEY  = 'ai_cli_hub_notify_sound_custom';
 const STORAGE_APPROVAL_AUTO_SWITCH_KEY = 'ai_cli_hub_approval_auto_switch';
 const STORAGE_QUICK_CMD_1_KEY          = 'ai_cli_hub_quick_cmd_1';
 const STORAGE_QUICK_CMD_2_KEY          = 'ai_cli_hub_quick_cmd_2';
+const STORAGE_TOOLS_LEFT_KEY           = 'ai_cli_hub_tools_left';
 const STORAGE_USAGE_LINK_CLAUDE_KEY    = 'ai_cli_hub_usage_link_claude';
 const STORAGE_USAGE_LINK_CODEX_KEY     = 'ai_cli_hub_usage_link_codex';
 const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds';
 const DEFAULT_VOICE_GRACE_SEC          = 0;
 const STORAGE_WAKE_WORD_ENABLED_KEY    = 'ai_cli_hub_wake_word_enabled';
 const STORAGE_WAKE_WORD_PHRASE_KEY     = 'ai_cli_hub_wake_word_phrase';
-const DEFAULT_WAKE_WORD_PHRASE         = '音声入力実施';
+const DEFAULT_WAKE_WORD_PHRASE_JA      = 'サウンドスタート';
+const DEFAULT_WAKE_WORD_PHRASE_EN      = 'SoundStart';
+const DEFAULT_TRIGGER_PHRASE_JA        = 'サウンドエンド';
+const DEFAULT_TRIGGER_PHRASE_EN        = 'SoundEnd';
+function getDefaultWakeWordPhrase() {
+  const lang = (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_LANG_KEY)) || 'ja';
+  return lang === 'en' ? DEFAULT_WAKE_WORD_PHRASE_EN : DEFAULT_WAKE_WORD_PHRASE_JA;
+}
+function getDefaultTriggerPhrase() {
+  const lang = (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_LANG_KEY)) || 'ja';
+  return lang === 'en' ? DEFAULT_TRIGGER_PHRASE_EN : DEFAULT_TRIGGER_PHRASE_JA;
+}
 const CWD_HISTORY_MAX               = 10;
 
 const DEFAULT_USAGE_LINKS = {
@@ -232,6 +251,23 @@ const _USER_PREFS_PATH_TO_LS = {
   'spawn.defaults':            [STORAGE_SPAWN_KEY,                 JSON.stringify],
 };
 
+const _USER_PREFS_STRING_PATHS = new Set([
+  'trigger.phrase',
+  'notify_sound.type',
+  'voice.wake_word_phrase',
+  'quick_cmds.cmd1',
+  'quick_cmds.cmd2',
+  'usage_links.claude',
+  'usage_links.codex',
+]);
+const _USER_PREFS_STRING_ARRAY_PATHS = new Set([
+  'favorites',
+  'session_order',
+  'group_order',
+  'project_favorites',
+  'cwd_history',
+]);
+
 // ドット区切りパスでオブジェクトの深いフィールドを設定する
 function _setNestedValue(obj, path, value) {
   const keys = path.split('.');
@@ -241,6 +277,46 @@ function _setNestedValue(obj, path, value) {
     cur = cur[keys[i]];
   }
   cur[keys[keys.length - 1]] = value;
+}
+
+function _parseStoredUserPref(path, raw) {
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
+
+  if (path.endsWith('.enabled') || path === 'voice.wake_word_enabled' || path === 'approval.auto_switch') {
+    return { ok: true, value: raw === '1' || raw === 'true' || parsed === true };
+  }
+  if (path === 'voice.grace_seconds') {
+    const n = parseInt(String(parsed), 10);
+    return { ok: true, value: Number.isFinite(n) ? Math.max(0, n) : 0 };
+  }
+  if (_USER_PREFS_STRING_PATHS.has(path)) {
+    return { ok: true, value: parsed == null ? '' : String(parsed) };
+  }
+  if (_USER_PREFS_STRING_ARRAY_PATHS.has(path)) {
+    if (!Array.isArray(parsed)) return { ok: false };
+    return { ok: true, value: parsed.filter((v) => typeof v === 'string') };
+  }
+  if (path === 'spawn.defaults') {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ok: false };
+    const value = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (typeof k === 'string' && typeof v === 'string') value[k] = v;
+    }
+    return { ok: true, value };
+  }
+  return { ok: true, value: parsed };
+}
+
+function _mergeStoredUserPrefs(current) {
+  for (const [path, [lsKey, _]] of Object.entries(_USER_PREFS_PATH_TO_LS)) {
+    const raw = localStorage.getItem(lsKey);
+    if (raw == null) continue;
+    const parsed = _parseStoredUserPref(path, raw);
+    if (!parsed.ok) continue;
+    _setNestedValue(current, path, parsed.value);
+  }
+  return current;
 }
 
 // PUT debounce タイマー
@@ -274,19 +350,7 @@ function _scheduleUserPrefsPut() {
       if (!getRes.ok) throw _userPrefsHttpError('GET', getRes);
       const current = await getRes.json();
       // localStorage の最新値を current にマージ
-      for (const [path, [lsKey, _]] of Object.entries(_USER_PREFS_PATH_TO_LS)) {
-        const raw = localStorage.getItem(lsKey);
-        if (raw == null) continue;
-        let parsed;
-        try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
-        // bool キー (enabled 系 + auto_switch) は '1'/'0' → boolean に変換
-        if (path.endsWith('.enabled') || path === 'voice.wake_word_enabled' || path === 'approval.auto_switch') {
-          parsed = raw === '1' || raw === true;
-        } else if (path === 'voice.grace_seconds') {
-          parsed = parseInt(raw, 10) || 0;
-        }
-        _setNestedValue(current, path, parsed);
-      }
+      _mergeStoredUserPrefs(current);
       const putRes = await fetch(`/api/user-prefs?token=${tk}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -361,14 +425,9 @@ async function migrateLocalstoragePrefsToServer() {
       const raw = localStorage.getItem(lsKey);
       if (raw == null) continue;
       hasAny = true;
-      let parsed;
-      try { parsed = JSON.parse(raw); } catch (_e) { parsed = raw; }
-      if (path.endsWith('.enabled') || path === 'voice.wake_word_enabled' || path === 'approval.auto_switch') {
-        parsed = raw === '1' || raw === true;
-      } else if (path === 'voice.grace_seconds') {
-        parsed = parseInt(raw, 10) || 0;
-      }
-      _setNestedValue(merged, path, parsed);
+      const parsed = _parseStoredUserPref(path, raw);
+      if (!parsed.ok) continue;
+      _setNestedValue(merged, path, parsed.value);
     }
     if (!hasAny) return;
     merged.migrated_from_localstorage = true;
@@ -425,15 +484,15 @@ function playNotificationSound() {
 
 function getActiveTriggerPhrase() {
   if (localStorage.getItem(STORAGE_TRIGGER_ENABLED_KEY) !== '1') return '';
-  return (localStorage.getItem(STORAGE_TRIGGER_PHRASE_KEY) || '').trim();
+  return (localStorage.getItem(STORAGE_TRIGGER_PHRASE_KEY) ?? getDefaultTriggerPhrase()).trim();
 }
 
 function normalizeTriggerMatchText(text) {
   return String(text || '')
     .normalize('NFKC')
-    .replace(/[\s\u3000]+$/g, '')
-    .replace(/[。．.!！?？、,，]+$/g, '')
-    .replace(/[\s\u3000]+$/g, '');
+    .toLowerCase()
+    .replace(/[\s\u3000]+/g, '')
+    .replace(/[。．.!！?？、,，]+$/g, '');
 }
 
 function textEndsWithTriggerPhrase(text, triggerPhrase) {
@@ -446,10 +505,13 @@ function stripTrailingTriggerPhrase(text, triggerPhrase) {
   const original = String(text || '');
   const tp = normalizeTriggerMatchText(triggerPhrase);
   if (!tp) return original;
-  let normalized = normalizeTriggerMatchText(original);
-  if (!normalized.endsWith(tp)) return original;
-  normalized = normalized.slice(0, normalized.length - tp.length);
-  return normalized.trimEnd();
+  if (!normalizeTriggerMatchText(original).endsWith(tp)) return original;
+  for (let i = 0; i <= original.length; i++) {
+    if (normalizeTriggerMatchText(original.slice(i)) === tp) {
+      return original.slice(0, i).replace(/[\s\u3000]+$/g, '');
+    }
+  }
+  return original;
 }
 
 function escapeHtml(str) {
@@ -809,7 +871,7 @@ function applyLang(lang) {
 
   enabledEl.checked = localStorage.getItem(STORAGE_TRIGGER_ENABLED_KEY) === '1';
   phraseRow.hidden = !enabledEl.checked;
-  phraseInputEl.value = localStorage.getItem(STORAGE_TRIGGER_PHRASE_KEY) || '';
+  phraseInputEl.value = localStorage.getItem(STORAGE_TRIGGER_PHRASE_KEY) ?? getDefaultTriggerPhrase();
 })();
 
 // ---- ウェイクワード設定 ----
@@ -830,7 +892,7 @@ function applyLang(lang) {
 
   enabledEl.checked = localStorage.getItem(STORAGE_WAKE_WORD_ENABLED_KEY) === '1';
   phraseRow.hidden = !enabledEl.checked;
-  phraseEl.value = localStorage.getItem(STORAGE_WAKE_WORD_PHRASE_KEY) ?? DEFAULT_WAKE_WORD_PHRASE;
+  phraseEl.value = localStorage.getItem(STORAGE_WAKE_WORD_PHRASE_KEY) ?? getDefaultWakeWordPhrase();
 })();
 
 // ---- 通知音設定 ----
@@ -2097,11 +2159,33 @@ function isWheelTargetExcluded(target) {
   }
   if (target.closest('.card-actions')) return true;
   if (target.closest('[data-wheel-native]')) return true;
+  if (target.closest('#settings-panel')) return true;
   // ファイルタブ（ツリー / プレビュー）はネイティブの wheel スクロールを使う。
   // これを除外しないと document レベルのリスナーがターミナルへ転送して preventDefault してしまい、
   // プレビューのスクロールが効かなくなる。
   if (target.closest('#files-tab-contents')) return true;
   return false;
+}
+
+function routeWheelToOpenSettingsPanel(e) {
+  const panel = document.getElementById('settings-panel');
+  if (!panel || panel.hidden) return false;
+  const body = panel.querySelector('.settings-body');
+  if (!body) return false;
+
+  if (e.target instanceof Element && body.contains(e.target)) {
+    return false;
+  }
+
+  const unit = e.deltaMode === WheelEvent.DOM_DELTA_LINE
+    ? 24
+    : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
+      ? Math.max(1, body.clientHeight)
+      : 1;
+  body.scrollTop += e.deltaY * unit;
+  e.preventDefault();
+  e.stopPropagation();
+  return true;
 }
 
 // xterm のネイティブ wheel は viewport.scrollTop を直接書き換える → scroll イベント →
@@ -2111,6 +2195,7 @@ function isWheelTargetExcluded(target) {
 // → capture phase で wheel を奪い、scrollLines() を同期で呼んで isUserScrolling を
 //    確実に立ててから xterm に伝播させない。マウス位置による分岐は不要。
 document.addEventListener('wheel', (e) => {
+  if (routeWheelToOpenSettingsPanel(e)) return;
   if (activeSessionId === null) return;
   const t = terminals.get(activeSessionId);
   if (!t || !t.term) return;
@@ -2255,8 +2340,63 @@ function filterHubMarkersForDisplay(id, bytes) {
   return new Uint8Array(out);
 }
 
+function asciiBytes(str) {
+  const bytes = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xff;
+  return bytes;
+}
+
+function filterReverseVideoForDisplay(id, bytes) {
+  const t = terminals.get(id);
+  if (!t) return bytes;
+  const carry = t.reverseVideoFilterCarry || new Uint8Array(0);
+  const combined = new Uint8Array(carry.length + bytes.length);
+  combined.set(carry, 0);
+  combined.set(bytes, carry.length);
+
+  const out = [];
+  let i = 0;
+  while (i < combined.length) {
+    if (combined[i] !== 0x1b) {
+      out.push(combined[i]);
+      i++;
+      continue;
+    }
+    if (i + 1 >= combined.length) break;
+    if (combined[i + 1] !== 0x5b) {
+      out.push(combined[i]);
+      i++;
+      continue;
+    }
+
+    let j = i + 2;
+    while (j < combined.length && !(combined[j] >= 0x40 && combined[j] <= 0x7e)) j++;
+    if (j >= combined.length) break;
+    if (combined[j] !== 0x6d) {
+      for (let k = i; k <= j; k++) out.push(combined[k]);
+      i = j + 1;
+      continue;
+    }
+
+    const params = Array.from(combined.slice(i + 2, j), b => String.fromCharCode(b)).join('');
+    const parts = params.split(';');
+    const hasReverse = parts.includes('7');
+    const hasReverseOff = parts.includes('27');
+    const filtered = parts.filter(p => p !== '7' && p !== '27');
+    if (hasReverse) filtered.push('48', '5', '238');
+    if (hasReverseOff) filtered.push('49');
+    if (filtered.length > 0) {
+      for (const b of asciiBytes(`\x1b[${filtered.join(';')}m`)) out.push(b);
+    }
+    i = j + 1;
+  }
+
+  t.reverseVideoFilterCarry = combined.slice(i);
+  return new Uint8Array(out);
+}
+
 function writePTYChunk(id, term, bytes, onFlush) {
-  const displayBytes = filterHubMarkersForDisplay(id, bytes);
+  const displayBytes = filterReverseVideoForDisplay(id, filterHubMarkersForDisplay(id, bytes));
   if (displayBytes.length === 0) {
     if (onFlush) onFlush();
     return;
@@ -2472,7 +2612,7 @@ function scheduleApprovalHintConfirm(id, options) {
     // 既に approvalVisible=true でも action-bar を最新オプションに張り替える。
     if (id === activeSessionId) {
       const bar = document.getElementById('action-bar');
-      if (bar) showActionBar(bar, id, cached, false);
+      if (bar) showActionBar(bar, id, cached, false, !wasVisible);
     }
   }, 350));
 }
@@ -2607,10 +2747,15 @@ function trackApprovalHintFromChunk(id, bytes) {
     recommendedChoiceRe.test(line) ||
     matchProviderApprovalTrigger(provider, line) ||
     matchNativeApprovalTrigger(line));
-  const allowBufferFallback = approvalVisibleCache.get(id) || options.length > 0 || pendingHasApprovalHint;
+  const visibleRows = t?.term?.rows || 40;
+  const bufferTail = t && t.everAttached ? scanBuffer(id).slice(-Math.max(120, visibleRows + 60)) : [];
+  const bufferHasApprovalHint = bufferTail.some(line =>
+    userSpecifiesRe.test(line) ||
+    recommendedChoiceRe.test(line) ||
+    matchProviderApprovalTrigger(provider, line) ||
+    matchNativeApprovalTrigger(line));
+  const allowBufferFallback = approvalVisibleCache.get(id) || options.length > 0 || pendingHasApprovalHint || bufferHasApprovalHint;
   if (t && t.everAttached && allowBufferFallback) {
-    const visibleRows = t.term?.rows || 40;
-    const bufferTail = scanBuffer(id).slice(-Math.max(120, visibleRows + 60));
     const bufExtraction = extractApprovalOptions(bufferTail);
     const bufOpts = bufExtraction.options;
     const pendingHasCursor = options.some(o => o.isCurrent);
@@ -3006,8 +3151,9 @@ function detectApproval(id) {
       const prevTimer2 = approvalConsumedSigDeleteTimer.get(id);
       if (prevTimer2) { clearTimeout(prevTimer2); approvalConsumedSigDeleteTimer.delete(id); }
       approvalConsumedSig.delete(id);
-      showActionBar(bar, id, markerOpts, false);
-      if (!approvalVisibleCache.get(id)) {
+      const wasVisible = !!approvalVisibleCache.get(id);
+      showActionBar(bar, id, markerOpts, false, !wasVisible);
+      if (!wasVisible) {
         cancelApprovalHintConfirm(id);
         approvalVisibleCache.set(id, true);
         enqueueApprovalAutoSwitch(id);
@@ -3024,8 +3170,9 @@ function detectApproval(id) {
       const prevTimer2 = approvalConsumedSigDeleteTimer.get(id);
       if (prevTimer2) { clearTimeout(prevTimer2); approvalConsumedSigDeleteTimer.delete(id); }
       approvalConsumedSig.delete(id);
-      showActionBar(bar, id, plainYesNoOpts, false);
-      if (!approvalVisibleCache.get(id)) {
+      const wasVisible = !!approvalVisibleCache.get(id);
+      showActionBar(bar, id, plainYesNoOpts, false, !wasVisible);
+      if (!wasVisible) {
         cancelApprovalHintConfirm(id);
         approvalVisibleCache.set(id, true);
         enqueueApprovalAutoSwitch(id);
@@ -3042,8 +3189,9 @@ function detectApproval(id) {
   if (seqState) {
     const seqOpts = sequentialChoiceOptionsForState(seqState);
     approvalRawOptionsCache.set(id, seqOpts);
-    showActionBar(bar, id, seqOpts, false);
-    if (!approvalVisibleCache.get(id)) {
+    const wasVisible = !!approvalVisibleCache.get(id);
+    showActionBar(bar, id, seqOpts, false, !wasVisible);
+    if (!wasVisible) {
       cancelApprovalHintConfirm(id);
       approvalVisibleCache.set(id, true);
       enqueueApprovalAutoSwitch(id);
@@ -3078,8 +3226,13 @@ function detectApproval(id) {
     recommendedChoiceRe.test(line) ||
     matchProviderApprovalTrigger(provider, line) ||
     matchNativeApprovalTrigger(line));
-  const allowBufferFallback = approvalVisibleCache.get(id) || options.length > 0 || pendingHasApprovalHint;
-  if (t && t.pendingTextTail && allowBufferFallback) {
+  const bufferHasApprovalHint = bufferTail.some(line =>
+    userSpecifiesRe.test(line) ||
+    recommendedChoiceRe.test(line) ||
+    matchProviderApprovalTrigger(provider, line) ||
+    matchNativeApprovalTrigger(line));
+  const allowBufferFallback = approvalVisibleCache.get(id) || options.length > 0 || pendingHasApprovalHint || bufferHasApprovalHint;
+  if (t && allowBufferFallback) {
     const bufExtraction = extractApprovalOptions(bufferTail);
     const bufOpts = bufExtraction.options;
     const pendingHasCursor = options.some(o => o.isCurrent);
@@ -3096,7 +3249,7 @@ function detectApproval(id) {
   // pendingTextTail は保持上限があるため option 1 が欠落することがある。
   // 2択プロンプト（Yes/No）では option 2 だけ pendingTextTail に入り options.length=1 のまま
   // 補完が発動しないケースも含め、option 1 が未検出なら常に xterm バッファで補完する。
-  if (t && t.pendingTextTail && options.length >= 1 && !options.some(o => o.num === 1)) {
+  if (t && options.length >= 1 && !options.some(o => o.num === 1)) {
     const maxNum = Math.max(...options.map(o => o.num));
     const bufExtraction = extractApprovalOptions(bufferTail);
     const bufOpts = bufExtraction.options;
@@ -3166,7 +3319,8 @@ function detectApproval(id) {
   }
 
   // 承認プロンプト表示中は展開ボタンを出さない（ctrl+o が承認 UI に届いて誤動作するのを防ぐ）
-  showActionBar(bar, id, hasPrompt ? options : [], crunch.found && !hasPrompt);
+  const wasVisibleBeforeShow = !!approvalVisibleCache.get(id);
+  showActionBar(bar, id, hasPrompt ? options : [], crunch.found && !hasPrompt, hasPrompt && !wasVisibleBeforeShow);
 
   // session_hint: 承認 UI の可視状態を Hub に通知
   const nowVisible = hasPrompt;
@@ -3263,16 +3417,16 @@ function normalizeActionOptions(options) {
   return normalized.sort((a, b) => a.num - b.num);
 }
 
-function showActionBar(bar, sessionId, options, showExpand) {
+function showActionBar(bar, sessionId, options, showExpand, forceStickToBottom = false) {
   if (isBatchOptions(options)) {
-    showBatchActionBar(bar, sessionId, options);
+    showBatchActionBar(bar, sessionId, options, forceStickToBottom);
     return;
   }
   options = normalizeActionOptions(options);
   // 注意: 局所変数名 `t` は window.t（i18n 翻訳関数）と衝突するため使わない。
   // `term` にすることで本関数末尾の t('expand_btn') 等が正しく i18n を参照できる。
   const term = sessionId === activeSessionId ? terminals.get(sessionId) : null;
-  const shouldStickToBottom = !!(term && (term.autoScroll || isTerminalAtBottom(term)));
+  const shouldStickToBottom = !!(term && (forceStickToBottom || term.autoScroll || isTerminalAtBottom(term)));
 
   // 差分スキップ: 前回描画と同一シグネチャなら DOM を再構築しない（点滅防止）。
   // detectApproval は scheduleApprovalCheck 経由で 300ms ごとに走るため、
@@ -3359,9 +3513,9 @@ function showActionBar(bar, sessionId, options, showExpand) {
   }
 }
 
-function showBatchActionBar(bar, sessionId, sections) {
+function showBatchActionBar(bar, sessionId, sections, forceStickToBottom = false) {
   const term = sessionId === activeSessionId ? terminals.get(sessionId) : null;
-  const shouldStickToBottom = !!(term && (term.autoScroll || isTerminalAtBottom(term)));
+  const shouldStickToBottom = !!(term && (forceStickToBottom || term.autoScroll || isTerminalAtBottom(term)));
 
   // セクション数が変わったら選択状態をリセット（前回の sectionA→sectionB セレクションが残らないように）
   let selections = batchSelections.get(sessionId);
@@ -4153,6 +4307,20 @@ inputEl.addEventListener('keydown', (e) => {
   }
 });
 
+// ツール群 左右切替ボタン
+(function initToolsFlip() {
+  const wrap = document.getElementById('input-wrap');
+  const btn = document.getElementById('tools-flip-btn');
+  if (!wrap || !btn) return;
+  if (localStorage.getItem(STORAGE_TOOLS_LEFT_KEY) === '1') {
+    wrap.classList.add('tools-left');
+  }
+  btn.addEventListener('click', () => {
+    const isLeft = wrap.classList.toggle('tools-left');
+    localStorage.setItem(STORAGE_TOOLS_LEFT_KEY, isLeft ? '1' : '0');
+  });
+})();
+
 document.getElementById('send-btn').addEventListener('mousedown', () => {
   // クリック時に IME が確定中の場合、compositionend 後に送信するよう予約
   if (isComposing) pendingSend = true;
@@ -4226,6 +4394,9 @@ function dismissSession(id) {
 function removeLocalSession(id) {
   const timer = autoDismissTimers.get(id);
   if (timer) { clearTimeout(timer); autoDismissTimers.delete(id); }
+  // sessions.delete より前に git/files タブの付け替えを試みる
+  // （onSessionRemoved 内で sessionsRef を引いて代替を探すため、削除前の方が探しやすい）
+  try { FilesTabManager.onSessionRemoved(id); } catch (_) {}
   sessions.delete(id);
   removeFromSessionOrder(id);
   const t = terminals.get(id);
@@ -4489,7 +4660,7 @@ function renderSessionList() {
     root.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       const card = e.target.closest('.card');
-      if (!card || e.target.closest('.card-actions')) {
+      if (!card || e.target.closest('.card-actions') || e.target.closest('.card-branch')) {
         _sessionCardPointerDown = null;
         return;
       }
@@ -4504,7 +4675,7 @@ function renderSessionList() {
       _sessionCardPointerDown = null;
       if (!down || isNaN(down.id)) return;
       const card = e.target.closest('.card');
-      if (!card || e.target.closest('.card-actions')) return;
+      if (!card || e.target.closest('.card-actions') || e.target.closest('.card-branch')) return;
       const id = parseInt(card.dataset.sessionId, 10);
       if (id !== down.id) return;
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
@@ -4513,8 +4684,49 @@ function renderSessionList() {
     root.addEventListener('click', (e) => {
       const card = e.target.closest('.card');
       if (!card || e.target.closest('.card-actions')) return;
+      // branch バッジクリックは git タブ open（stopPropagation 役）
+      const branchEl = e.target.closest('.card-branch');
+      if (branchEl) {
+        e.stopPropagation();
+        if (branchEl.getAttribute('data-disabled') === 'true') return;
+        const sid = parseInt(branchEl.dataset.sid, 10);
+        if (isNaN(sid)) return;
+        const sess = sessions.get(sid);
+        if (!sess) return;
+        const gr = sess.git_root || sess.cwd || '';
+        if (!gr) return;
+        activateSession(sid);
+        FilesTabManager.openGitTab(sid, gr, sess.branch || '');
+        return;
+      }
       const id = parseInt(card.dataset.sessionId, 10);
       if (!isNaN(id)) activateSession(id);
+    });
+    // branch バッジのキーボード操作 (Enter / Space)
+    root.addEventListener('keydown', (e) => {
+      const branchEl = e.target.closest && e.target.closest('.card-branch');
+      if (!branchEl) return;
+      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (branchEl.getAttribute('data-disabled') === 'true') return;
+      const sid = parseInt(branchEl.dataset.sid, 10);
+      if (isNaN(sid)) return;
+      const sess = sessions.get(sid);
+      if (!sess) return;
+      const gr = sess.git_root || sess.cwd || '';
+      if (!gr) return;
+      activateSession(sid);
+      FilesTabManager.openGitTab(sid, gr, sess.branch || '');
+    });
+    // カード右クリック context menu
+    root.addEventListener('contextmenu', (e) => {
+      const card = e.target.closest('.card');
+      if (!card) return;
+      const id = parseInt(card.dataset.sessionId, 10);
+      if (isNaN(id)) return;
+      e.preventDefault();
+      openCardCtxMenu(e.clientX, e.clientY, id);
     });
   }
   root.innerHTML = '';
@@ -4721,8 +4933,24 @@ function renderSessionList() {
       const metaRow = `<div class="card-meta-row"><span class="badge ${state}">${label}</span>${reasonHtml}${sessionLabel}${msgHtml}</div>`;
       c.dataset.sessionId = s.id;
       const modelBadge = s.model ? ` <span class="card-model">${escapeHtml(s.model)}</span>` : '';
-      const branchBadge = s.branch ? ` <span class="card-branch" data-tooltip="${escapeHtml(s.branch)}">${escapeHtml(s.branch)}</span>` : '';
+      const branchStr = s.branch || '';
+      const branchTip = branchStr
+        ? ti18n('card_branch_tooltip', `Open Git view (${branchStr})`, { branch: branchStr })
+        : ti18n('card_branch_disabled_tooltip', 'No git repository');
+      const branchDisabledAttr = branchStr ? '' : ' data-disabled="true"';
+      // 空 branch でも常に span を表示（git 外であることが分かるよう "(no git)" を表示）
+      const branchLabel = branchStr || ti18n('card_branch_no_git', '(no git)');
+      const branchBadge = ` <span class="card-branch" role="button" tabindex="0" data-sid="${s.id}"${branchDisabledAttr} data-tooltip="${escapeHtml(branchTip)}" aria-label="${escapeHtml(branchTip)}">${escapeHtml(branchLabel)}</span>`;
+      // open マーカー
+      const sessGitRoot = s.git_root || s.cwd || '';
+      const hasGit = sessGitRoot && FilesTabManager.hasGitTabForRoot(sessGitRoot);
+      const hasFiles = sessGitRoot && FilesTabManager.hasFilesTabForRoot(sessGitRoot);
+      const markersArr = [];
+      if (hasGit)   markersArr.push(`<span class="open-marker git" title="${escapeHtml(ti18n('open_marker_git_tooltip', 'Git タブが open 中'))}">⎇</span>`);
+      if (hasFiles) markersArr.push(`<span class="open-marker files" title="${escapeHtml(ti18n('open_marker_files_tooltip', 'Files タブが open 中'))}">📁</span>`);
+      const openMarkersHtml = markersArr.length ? `<div class="card-open-markers">${markersArr.join('')}</div>` : '';
       c.innerHTML =
+        openMarkersHtml +
         `<div class="card-title-row"><b>#${s.id}</b> ${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${branchBadge}${startedAtHtml}${lastOutHtml}</div>` +
         metaRow;
 
@@ -5947,9 +6175,9 @@ function openLightbox(src) {
     window.setLang('ja');
 
     setUserPref('trigger.enabled', false);
-    setUserPref('trigger.phrase', '');
+    setUserPref('trigger.phrase', getDefaultTriggerPhrase());
     setUserPref('voice.wake_word_enabled', false);
-    setUserPref('voice.wake_word_phrase', DEFAULT_WAKE_WORD_PHRASE);
+    setUserPref('voice.wake_word_phrase', getDefaultWakeWordPhrase());
     setUserPref('notify_sound.enabled', false);
     setUserPref('notify_sound.type', 'default');
     try { localStorage.removeItem(STORAGE_NOTIFY_SOUND_CUSTOM_KEY); } catch (_) {}
@@ -5964,14 +6192,14 @@ function openLightbox(src) {
     const triggerPhrase  = document.getElementById('trigger-phrase-input');
     const triggerRow     = document.getElementById('trigger-phrase-row');
     if (triggerEnabled) triggerEnabled.checked = false;
-    if (triggerPhrase) triggerPhrase.value = '';
+    if (triggerPhrase) triggerPhrase.value = getDefaultTriggerPhrase();
     if (triggerRow) triggerRow.hidden = true;
 
     const wakeWordEnabled = document.getElementById('wakeword-enabled');
     const wakeWordPhrase  = document.getElementById('wakeword-phrase-input');
     const wakeWordRow     = document.getElementById('wakeword-phrase-row');
     if (wakeWordEnabled) wakeWordEnabled.checked = false;
-    if (wakeWordPhrase) wakeWordPhrase.value = DEFAULT_WAKE_WORD_PHRASE;
+    if (wakeWordPhrase) wakeWordPhrase.value = getDefaultWakeWordPhrase();
     if (wakeWordRow) wakeWordRow.hidden = true;
     document.dispatchEvent(new CustomEvent('wakewordsettings:changed'));
 
@@ -6378,6 +6606,11 @@ function openLightbox(src) {
       // 誤って auto-restart ループに入らないよう、ここでは 0 にしておき end ハンドラで判別する。
       lastResultAt = 0;
       preVoiceText = inputEl.value;
+      // 既存テキストの末尾が空白/改行でない場合、認識結果との連結を防ぐため
+      // 半角スペースを 1 つ挟む。preVoiceText 自体は変えずキャンセル復元に使う。
+      if (preVoiceText.length > 0 && !/\s$/.test(preVoiceText)) {
+        inputEl.value = preVoiceText + ' ';
+      }
       interimStart = inputEl.value.length;
     }
     recognition.lang = getLang();
@@ -6606,7 +6839,7 @@ function openLightbox(src) {
 
   function getWakePhrase() {
     if (localStorage.getItem(STORAGE_WAKE_WORD_ENABLED_KEY) !== '1') return '';
-    return (localStorage.getItem(STORAGE_WAKE_WORD_PHRASE_KEY) ?? DEFAULT_WAKE_WORD_PHRASE).trim();
+    return (localStorage.getItem(STORAGE_WAKE_WORD_PHRASE_KEY) ?? getDefaultWakeWordPhrase()).trim();
   }
 
   function isWakewordEnabled() {
@@ -7081,21 +7314,50 @@ const FilesTabManager = (function () {
   if (!tabList || !tabBar || !terminalWrapper || !filesContents) {
     return {
       openFilesTab: () => null,
+      openGitTab: () => null,
       closeFilesTab: () => {},
+      closeMainTab: () => {},
       switchToSessionView: () => {},
       updateSessionTabLabel: () => {},
       restoreFromLocalStorage: () => {},
+      hasGitTabForRoot: () => false,
+      hasFilesTabForRoot: () => false,
+      onSessionRemoved: () => {},
+      getSessionsRef: () => null,
+      setSessionsRef: () => {},
     };
   }
 
-  // タブデータ構造: { id, type: 'session'|'files', label, sessionId?, filesRoot?, gitRoot?, el, contentEl }
+  // タブデータ構造: { id, type/kind: 'session'|'files'|'git', label, sessionId?, filesRoot?, gitRoot?, viewRef?, projectName?, el, contentEl }
+  // - kind は新エイリアス（'session'|'files'|'git'）。type は後方互換で残置（'files' のみ既存ロジック互換に使う）。
   let tabs = [];
   let activeTabId = null;
   let sessionTabEl = null;  // セッションタブ（常に1枚）
 
-  // ─── LS 読み書き ───────────────────────────────────────────────────────
-  function lsLoad() {
+  // 外部から渡される sessions(Map) への参照（restore / 付け替えで使う）。
+  // app.js 上部の `let sessions = new Map()` を直接参照できないので setter で受け取る。
+  let sessionsRef = null;
+  function setSessionsRef(map) { sessionsRef = map; }
+  function getSessionsRef() { return sessionsRef; }
+
+  // ─── LS 読み書き（schema v2: { v:2, files: {gitRoot:[...]}, git: [...] }） ─────
+  function lsLoadRaw() {
     try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch (_) { return {}; }
+  }
+  function lsLoad() {
+    const raw = lsLoadRaw();
+    // v1（旧形式: gitRoot→entries[] のフラット map）→ v2 への一度きり migration
+    if (!raw || typeof raw !== 'object') return { v: 2, files: {}, git: [] };
+    if (raw.v === 2 && raw.files && Array.isArray(raw.git)) return raw;
+    // v1 とみなす（{gitRoot: [{root, openedFile}, ...], ...} 直下に gitRoot キー）
+    const files = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (k === 'v' || k === 'files' || k === 'git') continue;
+      if (Array.isArray(v)) files[k] = v;
+    }
+    const migrated = { v: 2, files, git: [] };
+    try { localStorage.setItem(LS_KEY, JSON.stringify(migrated)); } catch (_) {}
+    return migrated;
   }
   function lsSave(data) {
     try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch (_) {}
@@ -7103,28 +7365,57 @@ const FilesTabManager = (function () {
   function lsAddTab(gitRoot, filesRoot) {
     if (!gitRoot) return;
     const data = lsLoad();
-    if (!data[gitRoot]) data[gitRoot] = [];
+    if (!data.files[gitRoot]) data.files[gitRoot] = [];
     // 同じ root が既にある場合は重複しない
-    if (!data[gitRoot].some(e => e.root === filesRoot)) {
-      data[gitRoot].push({ root: filesRoot, openedFile: null });
+    if (!data.files[gitRoot].some(e => e.root === filesRoot)) {
+      data.files[gitRoot].push({ root: filesRoot, openedFile: null });
     }
     lsSave(data);
   }
   function lsRemoveTab(gitRoot, filesRoot) {
     if (!gitRoot) return;
     const data = lsLoad();
-    if (!data[gitRoot]) return;
-    data[gitRoot] = data[gitRoot].filter(e => e.root !== filesRoot);
-    if (data[gitRoot].length === 0) delete data[gitRoot];
+    if (!data.files[gitRoot]) return;
+    data.files[gitRoot] = data.files[gitRoot].filter(e => e.root !== filesRoot);
+    if (data.files[gitRoot].length === 0) delete data.files[gitRoot];
     lsSave(data);
   }
   /** ファイル選択時に呼ぶ用の公開関数 */
   function lsUpdateOpenedFile(gitRoot, filesRoot, filePath) {
     if (!gitRoot) return;
     const data = lsLoad();
-    if (!data[gitRoot]) return;
-    const entry = data[gitRoot].find(e => e.root === filesRoot);
+    if (!data.files[gitRoot]) return;
+    const entry = data.files[gitRoot].find(e => e.root === filesRoot);
     if (entry) { entry.openedFile = filePath; lsSave(data); }
+  }
+
+  // ─── git タブ用 LS ─────────────────────────────────────────────────────
+  function lsAddGitTab(gitRoot, projectName, viewRef) {
+    if (!gitRoot) return;
+    const data = lsLoad();
+    if (!Array.isArray(data.git)) data.git = [];
+    const existing = data.git.find(e => e.gitRoot === gitRoot);
+    if (existing) {
+      existing.projectName = projectName || existing.projectName;
+      existing.viewRef = viewRef || existing.viewRef || '';
+    } else {
+      data.git.push({ gitRoot, projectName: projectName || '', viewRef: viewRef || '' });
+    }
+    lsSave(data);
+  }
+  function lsRemoveGitTab(gitRoot) {
+    if (!gitRoot) return;
+    const data = lsLoad();
+    if (!Array.isArray(data.git)) return;
+    data.git = data.git.filter(e => e.gitRoot !== gitRoot);
+    lsSave(data);
+  }
+  function lsUpdateGitViewRef(gitRoot, viewRef) {
+    if (!gitRoot) return;
+    const data = lsLoad();
+    if (!Array.isArray(data.git)) return;
+    const entry = data.git.find(e => e.gitRoot === gitRoot);
+    if (entry) { entry.viewRef = viewRef || ''; lsSave(data); }
   }
 
   // ─── DOM ──────────────────────────────────────────────────────────────
@@ -7177,9 +7468,10 @@ const FilesTabManager = (function () {
   function openFilesTab(sessionId, projectKey, filesRoot, gitRoot) {
     ensureSessionTab();
     showTabBar();
+    ensureAddTabButton();
 
     // 同じ root のタブが既にあればそちらをアクティブに
-    const existing = tabs.find(t => t.type === 'files' && t.filesRoot === filesRoot);
+    const existing = tabs.find(t => (t.kind || t.type) === 'files' && t.filesRoot === filesRoot);
     if (existing) {
       setActive(existing.id);
       return existing.id;
@@ -7235,13 +7527,14 @@ const FilesTabManager = (function () {
     // ツリーペイン幅をリストア + リサイザー配線
     setupFilesTreeResizer(contentEl);
 
-    const tabObj = { id, type: 'files', label, sessionId, filesRoot, gitRoot, projectKey, el: tabBtn, contentEl };
+    const tabObj = { id, kind: 'files', type: 'files', label, sessionId, filesRoot, gitRoot, projectKey, el: tabBtn, contentEl };
     tabs.push(tabObj);
 
     // localStorage に保存
     if (gitRoot) lsAddTab(gitRoot, filesRoot);
 
     setActive(id);
+    notifyTabStateChanged();
     return id;
   }
 
@@ -7293,31 +7586,315 @@ const FilesTabManager = (function () {
   }
 
   function closeFilesTab(id) {
+    // backward-compat alias. kind 別の cleanup は closeMainTab に統合済み。
+    return closeMainTab(id);
+  }
+
+  function closeMainTab(id) {
     const idx = tabs.findIndex(t => t.id === id);
     if (idx === -1) return;
     const tabObj = tabs[idx];
     // DOM 削除
-    tabObj.el.remove();
-    tabObj.contentEl.remove();
+    try { tabObj.el.remove(); } catch (_) {}
+    try { tabObj.contentEl.remove(); } catch (_) {}
     tabs.splice(idx, 1);
-    // LS から削除
-    if (tabObj.gitRoot) lsRemoveTab(tabObj.gitRoot, tabObj.filesRoot);
+    // kind 別の cleanup
+    const kind = tabObj.kind || tabObj.type;
+    if (kind === 'files') {
+      if (tabObj.gitRoot) lsRemoveTab(tabObj.gitRoot, tabObj.filesRoot);
+    } else if (kind === 'git') {
+      if (tabObj.gitRoot) lsRemoveGitTab(tabObj.gitRoot);
+      // GitGraphView インスタンスがあれば dispose
+      try {
+        if (tabObj.gitView && typeof tabObj.gitView.dispose === 'function') {
+          tabObj.gitView.dispose();
+        }
+      } catch (_) {}
+    }
     // アクティブだったら session ビューに戻る
     if (activeTabId === id) {
       switchToSessionView();
     }
-    // タブが Files タブだけゼロになったらタブバーを隠す（セッションタブのみ）
+    // タブが Files/Git タブだけゼロになったらタブバーを隠す（セッションタブのみ）
     if (tabs.length === 0) {
       // セッションタブも不要なら消す
       if (sessionTabEl) { sessionTabEl.remove(); sessionTabEl = null; }
+      removeAddTabButton();
       tabBar.style.display = 'none';
     }
+    // カードの open マーカー再描画
+    notifyTabStateChanged();
   }
 
   function switchToSessionView() {
     ensureSessionTab();
     showTabBar();
     setActive('session');
+  }
+
+  // ─── + ボタン (タブバー右端) ───────────────────────────────────────────
+  let addTabBtn = null;
+  function ensureAddTabButton() {
+    if (addTabBtn) return;
+    addTabBtn = document.createElement('button');
+    addTabBtn.className = 'main-tab-add-btn';
+    addTabBtn.type = 'button';
+    addTabBtn.textContent = '+';
+    addTabBtn.title = ti18n('main_tab_add_tooltip', 'Add tab');
+    addTabBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openAddTabMenu(addTabBtn.getBoundingClientRect());
+    });
+    tabList.appendChild(addTabBtn);
+  }
+  function removeAddTabButton() {
+    if (addTabBtn) { try { addTabBtn.remove(); } catch (_) {} addTabBtn = null; }
+  }
+
+  // ─── + ボタン → 簡易ドロップダウンメニュー ───────────────────────────
+  let addTabMenuEl = null;
+  function openAddTabMenu(anchorRect) {
+    closeAddTabMenu();
+    const menu = document.createElement('div');
+    menu.className = 'main-tab-add-menu open';
+    const sessId = (typeof activeSessionId !== 'undefined') ? activeSessionId : null;
+    menu.innerHTML =
+      `<button data-act="add-git" type="button"><span class="ico">⎇</span><span>${escapeHtml(ti18n('add_git_tab', 'Add Git tab'))}</span></button>` +
+      `<button data-act="add-files" type="button"><span class="ico">📁</span><span>${escapeHtml(ti18n('add_files_tab', 'Add Files tab'))}</span></button>`;
+    document.body.appendChild(menu);
+    const r = menu.getBoundingClientRect();
+    const x = Math.min(anchorRect.left, window.innerWidth - r.width - 4);
+    const y = Math.min(anchorRect.bottom + 2, window.innerHeight - r.height - 4);
+    menu.style.left = x + 'px';
+    menu.style.top  = y + 'px';
+    addTabMenuEl = menu;
+    menu.querySelectorAll('button').forEach(b => {
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const act = b.dataset.act;
+        closeAddTabMenu();
+        if (sessId == null) return;
+        const sess = sessionsRef ? sessionsRef.get(sessId) : null;
+        if (!sess) return;
+        if (act === 'add-git') {
+          const gr = sess.git_root || sess.cwd || '';
+          if (!gr) return;
+          openGitTab(sessId, gr, sess.branch || '');
+        } else if (act === 'add-files') {
+          const gr = sess.git_root || sess.cwd || '';
+          const pk = sess.project || (gr ? gr.split(/[\\/]/).filter(Boolean).pop() : '__no_project__');
+          if (!gr) return;
+          openFilesTab(sessId, pk, gr, gr);
+        }
+      });
+    });
+  }
+  function closeAddTabMenu() {
+    if (addTabMenuEl) { try { addTabMenuEl.remove(); } catch (_) {} addTabMenuEl = null; }
+  }
+  document.addEventListener('mousedown', (e) => {
+    if (addTabMenuEl && !e.target.closest('.main-tab-add-menu') && !e.target.closest('.main-tab-add-btn')) {
+      closeAddTabMenu();
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && addTabMenuEl) closeAddTabMenu();
+  });
+
+  // ─── git タブを開く ────────────────────────────────────────────────────
+  function openGitTab(sessionId, gitRoot, branch) {
+    if (!gitRoot) return null;
+    ensureSessionTab();
+    showTabBar();
+    ensureAddTabButton();
+
+    // 同 gitRoot の git タブがあれば activate + view ref 更新
+    const existing = tabs.find(t => (t.kind || t.type) === 'git' && t.gitRoot === gitRoot);
+    if (existing) {
+      const newRef = branch || existing.viewRef || '';
+      existing.viewRef = newRef;
+      // セッションが渡されていればそちらに付け替え
+      if (sessionId != null) existing.sessionId = sessionId;
+      // タブラベルの ref 部分を更新
+      try {
+        const refSpan = existing.el.querySelector('.ref');
+        if (refSpan) refSpan.textContent = newRef ? `(${newRef})` : '';
+      } catch (_) {}
+      if (existing.gitRoot) lsUpdateGitViewRef(existing.gitRoot, newRef);
+      setActive(existing.id);
+      notifyTabStateChanged();
+      return existing.id;
+    }
+
+    // 新規作成
+    const id = makeid();
+    // projectName 推定
+    let projectName = '';
+    if (sessionsRef && sessionId != null) {
+      const s = sessionsRef.get(sessionId);
+      if (s) projectName = s.project || '';
+    }
+    if (!projectName) {
+      projectName = (gitRoot || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || gitRoot;
+    }
+
+    const tabBtn = document.createElement('button');
+    tabBtn.className = 'main-tab main-tab-git';
+    tabBtn.dataset.tabId = id;
+    tabBtn.type = 'button';
+
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'icon';
+    iconSpan.textContent = '⎇';
+    tabBtn.appendChild(iconSpan);
+
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = ' git: ' + projectName + ' ';
+    tabBtn.appendChild(labelSpan);
+
+    const refSpan = document.createElement('span');
+    refSpan.className = 'ref';
+    refSpan.textContent = branch ? `(${branch})` : '';
+    tabBtn.appendChild(refSpan);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'main-tab-close';
+    closeBtn.type = 'button';
+    closeBtn.textContent = '×';
+    closeBtn.title = (typeof t === 'function' ? t('files_tab_close_tooltip') : 'Close');
+    closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeMainTab(id); });
+    tabBtn.appendChild(closeBtn);
+
+    tabBtn.addEventListener('click', () => setActive(id));
+
+    // + ボタンが既にあるならその前に挿入
+    if (addTabBtn && addTabBtn.parentNode === tabList) {
+      tabList.insertBefore(tabBtn, addTabBtn);
+    } else {
+      tabList.appendChild(tabBtn);
+    }
+
+    // コンテンツ DOM
+    const contentEl = document.createElement('div');
+    contentEl.className = 'git-tab-content';
+    contentEl.dataset.tabId = id;
+    contentEl.dataset.gitRoot = gitRoot;
+    contentEl.dataset.sessionId = sessionId != null ? String(sessionId) : '';
+    // session 不明時の警告ヘッダ
+    const warnHtml = (sessionId == null)
+      ? `<div class="git-tab-placeholder-warning" data-git-no-session>${escapeHtml(ti18n('git_tab_no_session_warning', 'session: なし (元セッション削除済)'))}</div>`
+      : '';
+    contentEl.innerHTML = warnHtml +
+      `<div class="git-tab-placeholder-body" data-git-placeholder-body>${escapeHtml(ti18n('git_tab_loading', 'Loading Git view...'))}</div>`;
+    filesContents.appendChild(contentEl);
+
+    const tabObj = {
+      id, kind: 'git', type: 'git',
+      label: 'git: ' + projectName,
+      sessionId: sessionId != null ? sessionId : null,
+      gitRoot, viewRef: branch || '', projectName,
+      el: tabBtn, contentEl,
+      gitView: null,
+    };
+    tabs.push(tabObj);
+
+    // GitGraphView インスタンス化（クラスが存在する場合のみ）
+    try {
+      if (typeof window.GitGraphView === 'function' && sessionId != null) {
+        // placeholder を消してから GitGraphView をマウント
+        const body = contentEl.querySelector('[data-git-placeholder-body]');
+        if (body) body.remove();
+        tabObj.gitView = new window.GitGraphView(contentEl, {
+          sessionId,
+          gitRoot,
+          viewRef: branch || '',
+        });
+      }
+    } catch (err) {
+      console.warn('[FilesTabManager] GitGraphView mount failed:', err);
+    }
+
+    // LS 保存
+    lsAddGitTab(gitRoot, projectName, branch || '');
+
+    setActive(id);
+    notifyTabStateChanged();
+    return id;
+  }
+
+  // ─── カード open マーカー再描画通知 ───────────────────────────────────
+  // 外部で listen する用。renderSessionList を直接呼ぶと循環するため
+  // setTimeout で非同期化。
+  function notifyTabStateChanged() {
+    try {
+      if (typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('files-tab-state-changed'));
+      }
+    } catch (_) {}
+  }
+
+  // ─── 同 gitRoot のタブ存在チェック（カードマーカー用） ───────────────
+  function hasGitTabForRoot(gitRoot) {
+    if (!gitRoot) return false;
+    return tabs.some(t => (t.kind || t.type) === 'git' && t.gitRoot === gitRoot);
+  }
+  function hasFilesTabForRoot(gitRoot) {
+    if (!gitRoot) return false;
+    return tabs.some(t => (t.kind || t.type) === 'files' && t.gitRoot === gitRoot);
+  }
+
+  // ─── セッション削除イベント: 紐づきタブを別セッションに付け替え ────
+  function onSessionRemoved(removedSessionId) {
+    if (!sessionsRef) return;
+    let mutated = false;
+    for (const tab of tabs) {
+      if (tab.sessionId !== removedSessionId) continue;
+      const kind = tab.kind || tab.type;
+      if (kind !== 'git' && kind !== 'files') continue;
+      // 同 gitRoot の別セッションを探す
+      let candidate = null;
+      if (tab.gitRoot && sessionsRef) {
+        for (const s of sessionsRef.values()) {
+          if (s.id === removedSessionId) continue;
+          const gr = s.git_root || s.cwd || '';
+          if (gr === tab.gitRoot || (gr && tab.gitRoot && gr.startsWith(tab.gitRoot))) {
+            candidate = s;
+            break;
+          }
+        }
+      }
+      if (candidate) {
+        tab.sessionId = candidate.id;
+        if (tab.contentEl) tab.contentEl.dataset.sessionId = String(candidate.id);
+        mutated = true;
+        // git タブの警告ヘッダがあれば除去
+        if (kind === 'git') {
+          const warn = tab.contentEl.querySelector('[data-git-no-session]');
+          if (warn) warn.remove();
+        }
+      } else {
+        // 付け替え不可
+        if (kind === 'git') {
+          tab.sessionId = null;
+          if (tab.contentEl) {
+            tab.contentEl.dataset.sessionId = '';
+            // 警告ヘッダがなければ追加
+            if (!tab.contentEl.querySelector('[data-git-no-session]')) {
+              const warn = document.createElement('div');
+              warn.className = 'git-tab-placeholder-warning';
+              warn.setAttribute('data-git-no-session', '');
+              warn.textContent = ti18n('git_tab_no_session_warning', 'session: なし (元セッション削除済)');
+              tab.contentEl.insertBefore(warn, tab.contentEl.firstChild);
+            }
+          }
+          mutated = true;
+        } else if (kind === 'files') {
+          // files タブはセッションがないと操作不能なので閉じる
+          closeMainTab(tab.id);
+        }
+      }
+    }
+    if (mutated) notifyTabStateChanged();
   }
 
   function updateSessionTabLabel(label) {
@@ -7337,7 +7914,25 @@ const FilesTabManager = (function () {
     }
 
     const data = lsLoad();
-    for (const [gitRoot, entries] of Object.entries(data)) {
+    // ─ git タブ復元（先に開いておくと files タブと順序が安定する）─────
+    if (Array.isArray(data.git)) {
+      for (const entry of data.git) {
+        if (!entry || !entry.gitRoot) continue;
+        const matched = sessions.find(s => {
+          const gr = s.git_root || s.cwd || '';
+          return gr === entry.gitRoot || (gr && gr.startsWith(entry.gitRoot));
+        });
+        if (matched) {
+          openGitTab(matched.id, entry.gitRoot, entry.viewRef || matched.branch || '');
+        } else {
+          // セッション未発見: sessionId=null で復元
+          openGitTab(null, entry.gitRoot, entry.viewRef || '');
+        }
+      }
+    }
+    // ─ files タブ復元（既存ロジック維持）─────────────────────────
+    const filesMap = data.files || {};
+    for (const [gitRoot, entries] of Object.entries(filesMap)) {
       if (!Array.isArray(entries)) continue;
       // gitRoot に対応するセッションを探す（cwd が gitRoot で始まるもの）
       const matchedSession = sessions.find(s => s.cwd && (s.cwd === gitRoot || s.cwd.startsWith(gitRoot)));
@@ -7435,16 +8030,126 @@ const FilesTabManager = (function () {
   return {
     openFilesTab,
     openFilesTabAtFile,
+    openGitTab,
     closeFilesTab,
+    closeMainTab,
     switchToSessionView,
     updateSessionTabLabel,
     restoreFromLocalStorage,
     lsUpdateOpenedFile,
+    hasGitTabForRoot,
+    hasFilesTabForRoot,
+    onSessionRemoved,
+    setSessionsRef,
+    getSessionsRef,
   };
 })();
 
 // Hub 起動時に localStorage からタブを復元
+FilesTabManager.setSessionsRef(sessions);
 FilesTabManager.restoreFromLocalStorage();
+
+// ─── カード右クリックメニュー (Open Git / Files / Activate / Copy ID) ───
+let _cardCtxMenuEl = null;
+let _cardCtxSid    = null;
+function openCardCtxMenu(x, y, sid) {
+  closeCardCtxMenu();
+  _cardCtxSid = sid;
+  const menu = document.createElement('div');
+  menu.className = 'card-ctx-menu open';
+  menu.id = 'card-ctx-menu';
+  const labelOpenGit   = ti18n('ctx_open_git',   'Open Git View');
+  const labelOpenFiles = ti18n('ctx_open_files', 'Open Files Tab');
+  const labelActivate  = ti18n('ctx_activate',   'Activate Session');
+  const labelCopyId    = ti18n('ctx_copy_id',    'Copy session ID');
+  menu.innerHTML =
+    `<button type="button" data-action="open-git"><span class="ico">⎇</span><span>${escapeHtml(labelOpenGit)}</span><span class="kbd">Ctrl+Shift+G</span></button>` +
+    `<button type="button" data-action="open-files"><span class="ico">📁</span><span>${escapeHtml(labelOpenFiles)}</span><span class="kbd">Ctrl+Shift+F</span></button>` +
+    `<div class="card-ctx-sep"></div>` +
+    `<button type="button" data-action="activate"><span class="ico">→</span><span>${escapeHtml(labelActivate)}</span></button>` +
+    `<button type="button" data-action="copy-id"><span class="ico">#</span><span>${escapeHtml(labelCopyId)}</span></button>`;
+  document.body.appendChild(menu);
+  const r = menu.getBoundingClientRect();
+  const px = Math.min(x, window.innerWidth  - r.width  - 4);
+  const py = Math.min(y, window.innerHeight - r.height - 4);
+  menu.style.left = Math.max(0, px) + 'px';
+  menu.style.top  = Math.max(0, py) + 'px';
+  _cardCtxMenuEl = menu;
+  menu.querySelectorAll('button').forEach(b => {
+    b.addEventListener('click', () => {
+      const action = b.dataset.action;
+      const id = _cardCtxSid;
+      closeCardCtxMenu();
+      const sess = sessions.get(id);
+      if (!sess) return;
+      if (action === 'open-git') {
+        const gr = sess.git_root || sess.cwd || '';
+        if (!gr) return;
+        FilesTabManager.openGitTab(id, gr, sess.branch || '');
+      } else if (action === 'open-files') {
+        const gr = sess.git_root || sess.cwd || '';
+        const pk = sess.project || (gr ? gr.split(/[\\/]/).filter(Boolean).pop() : '__no_project__');
+        if (!gr) return;
+        FilesTabManager.openFilesTab(id, pk, gr, gr);
+      } else if (action === 'activate') {
+        activateSession(id);
+        FilesTabManager.switchToSessionView();
+      } else if (action === 'copy-id') {
+        try { navigator.clipboard && navigator.clipboard.writeText(String(id)); } catch (_) {}
+      }
+    });
+  });
+}
+function closeCardCtxMenu() {
+  if (_cardCtxMenuEl) { try { _cardCtxMenuEl.remove(); } catch (_) {} _cardCtxMenuEl = null; }
+  _cardCtxSid = null;
+}
+document.addEventListener('mousedown', (e) => {
+  if (_cardCtxMenuEl && !e.target.closest('#card-ctx-menu')) {
+    closeCardCtxMenu();
+  }
+});
+window.addEventListener('blur', () => closeCardCtxMenu());
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && _cardCtxMenuEl) closeCardCtxMenu();
+});
+document.addEventListener('scroll', () => closeCardCtxMenu(), true);
+
+// ─── Ctrl+Shift+G / Ctrl+Shift+F グローバルショートカット ──────────────
+document.addEventListener('keydown', (e) => {
+  // IME 中や input/textarea にフォーカス中は素通しはしない（Ctrl+Shift 系は通常衝突しないため発火可）
+  if (!e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return;
+  const k = e.key;
+  if (k === 'G' || k === 'g') {
+    const sid = activeSessionId;
+    if (sid == null) return;
+    const sess = sessions.get(sid);
+    if (!sess) return;
+    const gr = sess.git_root || sess.cwd || '';
+    if (!gr) return;
+    e.preventDefault();
+    e.stopPropagation();
+    FilesTabManager.openGitTab(sid, gr, sess.branch || '');
+  } else if (k === 'F' || k === 'f') {
+    const sid = activeSessionId;
+    if (sid == null) return;
+    const sess = sessions.get(sid);
+    if (!sess) return;
+    const gr = sess.git_root || sess.cwd || '';
+    if (!gr) return;
+    const pk = sess.project || (gr ? gr.split(/[\\/]/).filter(Boolean).pop() : '__no_project__');
+    e.preventDefault();
+    e.stopPropagation();
+    FilesTabManager.openFilesTab(sid, pk, gr, gr);
+  }
+});
+
+// ─── タブ状態変化でカード再描画 (open マーカー反映) ────────────────────
+window.addEventListener('files-tab-state-changed', () => {
+  try {
+    if (typeof renderSessionList === 'function') renderSessionList();
+  } catch (_) {}
+});
 
 // ---- ファイルリンク設定 ----
 (function () {
@@ -8700,4 +9405,1000 @@ const FilesPreview = (function () {
     }
   });
   observer.observe(filesContents, { childList: true });
+})();
+
+// ============================================================
+// GitGraphView (C3) — git タブ contentEl 配下に SVG ブランチグラフ /
+// コミット一覧 / 上下 split 詳細パネル / ref ドロップダウン /
+// Copy 右クリックメニュー を描画する。
+//
+// 親 plan : docs/local/plan_git_graph_view.md
+// 子 plan : docs/local/plan_git_graph_view_c3_graph_view.md
+// mock   : docs/local/mockup-git-graph.html
+//
+// API:
+//   GET /api/git-log?session&token&ref&limit&skip
+//   GET /api/git-show?session&token&hash
+//   GET /api/git-refs?session&token
+// ============================================================
+(function setupGitGraphView() {
+  const LANE_W = 16;
+  const LANE_X0 = 12;
+  const ROW_H  = 30;
+  const DOT_R  = 4.5;
+  const LANE_COLORS = ['lane-1', 'lane-2', 'lane-3', 'lane-4'];
+  const PAGE_LIMIT = 100;
+
+  function _esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+  function _shortHash(h) { return (h || '').slice(0, 8); }
+  function _laneX(idx) { return LANE_X0 + idx * LANE_W; }
+  function _laneColor(idx) {
+    return LANE_COLORS[((idx % LANE_COLORS.length) + LANE_COLORS.length) % LANE_COLORS.length];
+  }
+  function _gt(key, fallback) {
+    if (typeof window.t === 'function') {
+      const v = window.t(key);
+      if (v && v !== key) return v;
+    }
+    return fallback != null ? fallback : key;
+  }
+  function _toast(title, body) {
+    if (typeof window.showToast === 'function') {
+      const msg = body ? `${title}: ${body}` : title;
+      const one = msg.replace(/\n/g, ' ↵ ');
+      window.showToast(one.length > 120 ? one.slice(0, 120) + '…' : one);
+    }
+  }
+  function _formatDate(iso) {
+    if (!iso) return '';
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return iso;
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ` +
+             `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    } catch (_) { return iso; }
+  }
+  function _copyText(text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).catch(() => {});
+        return;
+      }
+    } catch (_) {}
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    } catch (_) {}
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // lane allocation
+  //   activeLanes[i] = "次に出現したら閉じたい hash" もしくは null
+  //   行を上から順に走査:
+  //     - その行の hash がアクティブな lane で待たれていればそこに dot
+  //     - 待たれていなければ新規 lane に割当
+  //     - parents[0] はその lane を継続。parents[1..] は別 lane を新規確保
+  // ─────────────────────────────────────────────────────────
+  function computeGraph(commits) {
+    const activeLanes = [];
+    const laneColors = [];
+
+    function allocLane(color) {
+      for (let i = 0; i < activeLanes.length; i++) {
+        if (activeLanes[i] == null) {
+          activeLanes[i] = '__pending__';
+          laneColors[i] = color || laneColors[i] || _laneColor(i);
+          return i;
+        }
+      }
+      activeLanes.push('__pending__');
+      laneColors.push(color || _laneColor(activeLanes.length - 1));
+      return activeLanes.length - 1;
+    }
+
+    const rows = [];
+    for (const c of commits) {
+      const hash = c.hash;
+      let myLane = -1;
+      const incoming = []; // 自分を待っていた他 lane (merge 入線元)
+      for (let i = 0; i < activeLanes.length; i++) {
+        if (activeLanes[i] === hash) {
+          if (myLane < 0) myLane = i;
+          else {
+            incoming.push({ x: i, color: laneColors[i] || _laneColor(i) });
+            activeLanes[i] = null;
+          }
+        }
+      }
+      if (myLane < 0) {
+        myLane = allocLane();
+      }
+
+      const parents = c.parents || [];
+      const isMerge = parents.length >= 2;
+
+      // 描画用 lanes (現在の activeLanes スナップショット)
+      const drawLanes = [];
+      for (let i = 0; i < activeLanes.length; i++) {
+        if (i === myLane) {
+          drawLanes.push({
+            x: i,
+            type: isMerge ? 'merge' : 'dot',
+            color: laneColors[i] || _laneColor(i),
+            inFrom: isMerge ? incoming.slice() : undefined,
+          });
+        } else if (activeLanes[i] != null && activeLanes[i] !== '__pending__') {
+          drawLanes.push({
+            x: i,
+            type: 'line',
+            color: laneColors[i] || _laneColor(i),
+          });
+        }
+      }
+
+      // parents 展開
+      if (parents.length === 0) {
+        activeLanes[myLane] = null;
+      } else {
+        activeLanes[myLane] = parents[0];
+        const baseColor = laneColors[myLane] || _laneColor(myLane);
+        const mergeExtra = [];
+        for (let pi = 1; pi < parents.length; pi++) {
+          const ln = allocLane();
+          // 追加 parent lane の色: 元 lane と区別するため新色
+          const cc = _laneColor(ln);
+          laneColors[ln] = cc;
+          activeLanes[ln] = parents[pi];
+          mergeExtra.push({ x: ln, color: cc });
+          drawLanes.push({ x: ln, type: 'line', color: cc });
+        }
+        // merge dot に追加 parent の入線も付与（mock の inFrom と同等）
+        if (isMerge) {
+          const me = drawLanes.find(l => l.x === myLane);
+          if (me) {
+            const fromArr = (me.inFrom || []).slice();
+            me.inFrom = fromArr.concat(mergeExtra);
+          }
+          // base color を残す
+          if (laneColors[myLane] == null) laneColors[myLane] = baseColor;
+        }
+      }
+
+      rows.push({ hashLane: myLane, lanes: drawLanes });
+    }
+    return rows;
+  }
+
+  function renderGraphSvg(row) {
+    if (!row) return '';
+    const lanes = row.lanes || [];
+    const maxX = lanes.reduce((m, l) => Math.max(m, l.x), 0);
+    const w = Math.max(110, _laneX(maxX + 1) + 6);
+    const h = ROW_H;
+    const parts = [];
+    for (const lane of lanes) {
+      const x = _laneX(lane.x);
+      const color = `var(--${lane.color})`;
+      if (lane.type === 'line') {
+        parts.push(`<line x1="${x}" y1="0" x2="${x}" y2="${h}" stroke="${color}" stroke-width="2"/>`);
+      } else if (lane.type === 'dot') {
+        parts.push(`<line x1="${x}" y1="0" x2="${x}" y2="${h}" stroke="${color}" stroke-width="2"/>`);
+        parts.push(`<circle cx="${x}" cy="${h/2}" r="${DOT_R}" fill="${color}" stroke="var(--bg)" stroke-width="1.5"/>`);
+      } else if (lane.type === 'merge') {
+        parts.push(`<line x1="${x}" y1="0" x2="${x}" y2="${h}" stroke="${color}" stroke-width="2"/>`);
+        for (const inc of (lane.inFrom || [])) {
+          const xi = _laneX(inc.x);
+          const ic = `var(--${inc.color})`;
+          parts.push(`<path d="M ${xi} 0 C ${xi} ${h*0.55}, ${x} ${h*0.45}, ${x} ${h/2}" stroke="${ic}" stroke-width="2" fill="none"/>`);
+        }
+        const s = DOT_R + 0.5;
+        parts.push(
+          `<rect x="${x - s}" y="${h/2 - s}" width="${s*2}" height="${s*2}" ` +
+          `transform="rotate(45 ${x} ${h/2})" ` +
+          `fill="${color}" stroke="var(--bg)" stroke-width="1.5"/>`
+        );
+      }
+    }
+    return `<svg width="${w}" height="${h}">${parts.join('')}</svg>`;
+  }
+
+  function renderRefsInline(refs, headHash, commitHash) {
+    if (!refs || !refs.length) return '';
+    return refs.map(r => {
+      const kind = (r.kind || 'local').toLowerCase();
+      const name = _esc(r.name || '');
+      const isHead = (headHash && commitHash && headHash === commitHash &&
+                      (kind === 'local' || kind === 'head'));
+      if (isHead) return `<span class="ref-chip head">${name}</span>`;
+      if (kind === 'remote') return `<span class="ref-chip remote">${name}</span>`;
+      if (kind === 'tag')    return `<span class="ref-chip tag">${name}</span>`;
+      return `<span class="ref-chip local">${name}</span>`;
+    }).join('');
+  }
+
+  function splitSubject(subject) {
+    const m = (subject || '').match(/^([a-zA-Z0-9_-]+:)\s+(.*)$/);
+    if (m) return { prefix: m[1], rest: m[2] };
+    return { prefix: '', rest: subject || '' };
+  }
+
+  // ─── Copy 右クリックメニュー (全 git タブ共有) ─────────────
+  let _ctxMenuEl = null;
+  let _ctxTarget = null;
+  let _ctxTargetEl = null;
+  let _ctxGithubBase = '';
+
+  function _ensureCtxMenu() {
+    if (_ctxMenuEl) return _ctxMenuEl;
+    const m = document.createElement('div');
+    m.className = 'git-ctx-menu';
+    m.innerHTML = `
+      <div class="ctx-header" data-ctx-header>commit</div>
+      <button data-action="copy-short"><span class="ctx-icon">#</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_short', 'Copy short hash'))}</span><span class="ctx-hint" data-hint-short></span></button>
+      <button data-action="copy-full"><span class="ctx-icon">⎘</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_full', 'Copy full hash'))}</span><span class="ctx-hint" data-hint-full></span></button>
+      <div class="ctx-sep"></div>
+      <button data-action="copy-subject"><span class="ctx-icon">✎</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_subject', 'Copy subject'))}</span></button>
+      <button data-action="copy-message"><span class="ctx-icon">¶</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_message', 'Copy message (subject + body)'))}</span></button>
+      <button data-action="copy-hash-subject"><span class="ctx-icon">⇋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_hash_subject', 'Copy hash + subject'))}</span></button>
+      <div class="ctx-sep"></div>
+      <button data-action="copy-github-url" data-ctx-gh><span class="ctx-icon">↗</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_github', 'Copy GitHub link'))}</span><span class="ctx-hint" data-hint-gh></span></button>
+    `;
+    document.body.appendChild(m);
+    m.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn || btn.disabled || !_ctxTarget) return;
+      _ctxCopy(btn.dataset.action, _ctxTarget);
+      _closeCtxMenu();
+    });
+    document.addEventListener('click', (e) => {
+      if (!_ctxMenuEl) return;
+      if (!_ctxMenuEl.contains(e.target)) _closeCtxMenu();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') _closeCtxMenu();
+    });
+    window.addEventListener('blur', _closeCtxMenu);
+    _ctxMenuEl = m;
+    return m;
+  }
+
+  function _openCtxMenu(x, y, commit, rowEl, githubBase) {
+    const m = _ensureCtxMenu();
+    _ctxTarget = commit;
+    _ctxGithubBase = githubBase || '';
+    if (_ctxTargetEl) _ctxTargetEl.classList.remove('context');
+    _ctxTargetEl = rowEl;
+    if (rowEl) rowEl.classList.add('context');
+
+    m.querySelector('[data-ctx-header]').textContent =
+      `${_shortHash(commit.hash)}  ${commit.author_name || ''}`;
+    m.querySelector('[data-hint-short]').textContent = _shortHash(commit.hash);
+    m.querySelector('[data-hint-full]').textContent  = (commit.hash || '').slice(0, 14) + '…';
+    const ghBtn  = m.querySelector('[data-ctx-gh]');
+    const ghHint = m.querySelector('[data-hint-gh]');
+    if (_ctxGithubBase) {
+      ghBtn.disabled = false;
+      ghHint.textContent = 'github.com/…';
+    } else {
+      ghBtn.disabled = true;
+      ghHint.textContent = '';
+    }
+    m.classList.add('open');
+    const r = m.getBoundingClientRect();
+    const maxX = window.innerWidth  - r.width  - 4;
+    const maxY = window.innerHeight - r.height - 4;
+    m.style.left = Math.max(0, Math.min(x, maxX)) + 'px';
+    m.style.top  = Math.max(0, Math.min(y, maxY)) + 'px';
+  }
+  function _closeCtxMenu() {
+    if (!_ctxMenuEl) return;
+    _ctxMenuEl.classList.remove('open');
+    if (_ctxTargetEl) { _ctxTargetEl.classList.remove('context'); _ctxTargetEl = null; }
+    _ctxTarget = null;
+  }
+  function _ctxCopy(action, c) {
+    const sub = splitSubject(c.subject);
+    const subjectFull = (sub.prefix ? sub.prefix + ' ' : '') + sub.rest;
+    let value = ''; let title = '';
+    switch (action) {
+      case 'copy-short':
+        value = _shortHash(c.hash); title = _gt('git_ctx_copy_short', 'Copy short hash'); break;
+      case 'copy-full':
+        value = c.hash || ''; title = _gt('git_ctx_copy_full', 'Copy full hash'); break;
+      case 'copy-subject':
+        value = subjectFull; title = _gt('git_ctx_copy_subject', 'Copy subject'); break;
+      case 'copy-message':
+        value = subjectFull + (c.body ? '\n\n' + c.body : '');
+        title = _gt('git_ctx_copy_message', 'Copy message'); break;
+      case 'copy-hash-subject':
+        value = `${_shortHash(c.hash)} ${subjectFull}`;
+        title = _gt('git_ctx_copy_hash_subject', 'Copy hash + subject'); break;
+      case 'copy-github-url':
+        if (!_ctxGithubBase) return;
+        value = `${_ctxGithubBase.replace(/\/$/, '')}/commit/${c.hash}`;
+        title = _gt('git_ctx_copy_github', 'Copy GitHub link'); break;
+    }
+    _copyText(value);
+    _toast(title, value);
+  }
+
+  // ───────────────────────────────────────────────────────
+  // GitGraphView クラス本体
+  // ───────────────────────────────────────────────────────
+  class GitGraphView {
+    constructor(containerEl, opts) {
+      this.container = containerEl;
+      this.opts = opts || {};
+      this.sessionId = this.opts.sessionId;
+      this.gitRoot   = this.opts.gitRoot || '';
+      this.viewRef   = this.opts.viewRef || 'HEAD';
+
+      this.token = new URLSearchParams(location.search).get('token') || '';
+
+      this.commits = [];
+      this.filteredCommits = [];
+      this.graphRows = [];
+      this.skip = 0;
+      this.hasMore = false;
+      this.headHash = '';
+      this.sessionBranch = '';
+      this.refs = [];
+      this.githubUrl = '';
+      this.selectedHash = null;
+      this.selectedShow = null;
+      this.activeTab = 'info';
+      this.panelHeight = 340;
+      this.filterText = '';
+      this.loading = false;
+
+      this.els = {};
+      this._renderShell();
+      this._refDropdownOpen = false;
+
+      this._docClickHandler = (e) => {
+        if (!this._refDropdownOpen) return;
+        if (this.els.refDropdown && this.els.refDropdown.contains(e.target)) return;
+        if (this.els.viewRefBtn && this.els.viewRefBtn.contains(e.target)) return;
+        this._closeRefDropdown();
+      };
+      this._docKeyHandler = (e) => {
+        if (e.key === 'Escape' && this._refDropdownOpen) this._closeRefDropdown();
+      };
+      document.addEventListener('click', this._docClickHandler);
+      document.addEventListener('keydown', this._docKeyHandler);
+
+      this.load().catch(err => this._showError(err && err.message ? err.message : String(err)));
+    }
+
+    _renderShell() {
+      const c = this.container;
+      const root = document.createElement('div');
+      root.className = 'git-graph-root';
+      root.innerHTML = `
+        <div class="git-graph-header">
+          <div class="git-graph-title">⎇ Git</div>
+          <div class="git-graph-repo" data-repo>${_esc(this.gitRoot)}</div>
+          <button class="view-ref-btn" data-view-ref-btn>
+            <span data-view-ref-label>${_esc(this.viewRef || 'HEAD')}</span>
+            <span class="chev">▾</span>
+          </button>
+          <div class="session-head-chip" data-session-head-chip style="display:none">session HEAD: <span data-session-head-label></span></div>
+          <div class="git-graph-spacer"></div>
+          <div class="git-graph-count" data-count>${_esc(_gt('git_view_loading', 'loading...'))}</div>
+          <button class="git-icon-btn" data-refresh-btn title="${_esc(_gt('git_view_refresh', 'Refresh'))}">↻</button>
+          <button class="git-icon-btn" data-loadmore-btn title="${_esc(_gt('git_view_load_more', 'Load 100 more'))}">+${PAGE_LIMIT}</button>
+        </div>
+
+        <div class="git-graph-toolbar">
+          <input type="search" data-filter placeholder="${_esc(_gt('git_view_filter_placeholder', 'subject / author / hash filter'))}">
+          <div class="filter-group">
+            <button class="git-icon-btn" data-toggle="HEAD" title="HEAD">HEAD</button>
+            <button class="git-icon-btn" data-toggle="--all" title="--all">all</button>
+          </div>
+        </div>
+
+        <div class="git-graph-split">
+          <div class="git-graph-log-table" data-log-table>
+            <div class="git-graph-loading">${_esc(_gt('git_view_loading', 'Loading...'))}</div>
+          </div>
+          <div class="split-divider" data-divider title="${_esc(_gt('git_view_divider_tip', 'Drag to resize'))}"></div>
+          <div class="detail-panel" data-detail-panel>
+            <div class="detail-tabbar">
+              <button class="detail-tab active" data-tab="info">${_esc(_gt('git_view_tab_info', 'INFORMATION'))}</button>
+              <button class="detail-tab" data-tab="changes">${_esc(_gt('git_view_tab_changes', 'CHANGES'))}</button>
+              <button class="detail-tab" data-tab="files">${_esc(_gt('git_view_tab_files', 'FILES'))}</button>
+              <div class="detail-tab-spacer"></div>
+              <div class="detail-tab-meta" data-detail-meta>—</div>
+              <button class="detail-close" data-detail-close title="${_esc(_gt('git_view_detail_close', 'Close'))}">✕</button>
+            </div>
+            <div class="detail-content" data-detail-content>
+              <div class="detail-empty">${_esc(_gt('git_view_select_row_hint', 'Click a row to see commit detail'))}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ref-dropdown" data-ref-dropdown>
+          <div class="ref-dropdown-search">
+            <input type="search" data-ref-filter placeholder="${_esc(_gt('git_view_ref_filter_placeholder', 'Search branches / tags...'))}">
+          </div>
+          <div class="ref-list" data-ref-list></div>
+        </div>
+      `;
+      c.appendChild(root);
+
+      this.els.root          = root;
+      this.els.repo          = root.querySelector('[data-repo]');
+      this.els.viewRefBtn    = root.querySelector('[data-view-ref-btn]');
+      this.els.viewRefLabel  = root.querySelector('[data-view-ref-label]');
+      this.els.sessionHeadChip  = root.querySelector('[data-session-head-chip]');
+      this.els.sessionHeadLabel = root.querySelector('[data-session-head-label]');
+      this.els.count         = root.querySelector('[data-count]');
+      this.els.refreshBtn    = root.querySelector('[data-refresh-btn]');
+      this.els.loadmoreBtn   = root.querySelector('[data-loadmore-btn]');
+      this.els.filter        = root.querySelector('[data-filter]');
+      this.els.toggles       = root.querySelectorAll('.filter-group [data-toggle]');
+      this.els.logTable      = root.querySelector('[data-log-table]');
+      this.els.divider       = root.querySelector('[data-divider]');
+      this.els.detailPanel   = root.querySelector('[data-detail-panel]');
+      this.els.detailMeta    = root.querySelector('[data-detail-meta]');
+      this.els.detailContent = root.querySelector('[data-detail-content]');
+      this.els.detailClose   = root.querySelector('[data-detail-close]');
+      this.els.detailTabs    = root.querySelectorAll('.detail-tab[data-tab]');
+      this.els.refDropdown   = root.querySelector('[data-ref-dropdown]');
+      this.els.refFilter     = root.querySelector('[data-ref-filter]');
+      this.els.refList       = root.querySelector('[data-ref-list]');
+
+      this.els.refreshBtn.addEventListener('click', () => this.refresh());
+      this.els.loadmoreBtn.addEventListener('click', () => this.loadMore());
+      this.els.filter.addEventListener('input', (e) => {
+        this.filterText = e.target.value || '';
+        this._renderLogTable();
+      });
+      this.els.toggles.forEach(btn => {
+        btn.addEventListener('click', () => this.setViewRef(btn.dataset.toggle));
+      });
+      this.els.viewRefBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this._refDropdownOpen) this._closeRefDropdown();
+        else this._openRefDropdown();
+      });
+      this.els.refFilter.addEventListener('input', (e) => {
+        this._renderRefList(e.target.value || '');
+      });
+      this.els.detailClose.addEventListener('click', () => this._toggleDetailPanel());
+      this.els.detailTabs.forEach(tabBtn => {
+        tabBtn.addEventListener('click', () => {
+          this.activeTab = tabBtn.dataset.tab;
+          this._syncDetailTabs();
+          if (this.selectedShow) this._renderDetailContent();
+        });
+      });
+
+      this._setupDividerDrag();
+      this._syncToggleButtons();
+      this._updateViewRefHeader();
+    }
+
+    async load() {
+      this.skip = 0;
+      this.commits = [];
+      this._showLoading();
+      const refsPromise = this._fetchRefs();
+      await this._fetchLog({ append: false });
+      await refsPromise;
+      this._renderLogTable();
+      if (!this.selectedHash && this.commits.length) {
+        const head = this.commits.find(c => c.hash === this.headHash) || this.commits[0];
+        if (head) this.selectCommit(head.hash).catch(() => {});
+      }
+    }
+
+    async loadMore() {
+      if (this.loading || !this.hasMore) return;
+      this.skip = this.commits.length;
+      await this._fetchLog({ append: true });
+      this._renderLogTable();
+    }
+
+    async refresh() {
+      this.skip = 0;
+      this.commits = [];
+      this.selectedHash = null;
+      this.selectedShow = null;
+      this._showLoading();
+      await Promise.all([this._fetchLog({ append: false }), this._fetchRefs()]);
+      this._renderLogTable();
+      this._renderDetailEmpty();
+    }
+
+    async selectCommit(hash) {
+      if (!hash) return;
+      this.selectedHash = hash;
+      this._highlightSelected();
+      try {
+        const data = await this._fetchShow(hash);
+        if (!data || data.ok === false) {
+          this._renderDetailError(data && data.detail ? data.detail : 'git-show failed');
+          return;
+        }
+        this.selectedShow = data;
+        const panel = this.els.detailPanel;
+        if (panel.classList.contains('collapsed')) {
+          panel.classList.remove('collapsed');
+          panel.style.height = (this.panelHeight || 340) + 'px';
+        }
+        this._renderDetailContent();
+      } catch (err) {
+        this._renderDetailError(err && err.message ? err.message : String(err));
+      }
+    }
+
+    setViewRef(ref) {
+      if (!ref) return;
+      this.viewRef = ref;
+      this._updateViewRefHeader();
+      this._syncToggleButtons();
+      this.refresh().catch(err => this._showError(err && err.message ? err.message : String(err)));
+    }
+
+    dispose() {
+      try { document.removeEventListener('click', this._docClickHandler); } catch (_) {}
+      try { document.removeEventListener('keydown', this._docKeyHandler); } catch (_) {}
+      try { this.container.innerHTML = ''; } catch (_) {}
+    }
+
+    async _fetchLog({ append }) {
+      this.loading = true;
+      try {
+        const params = new URLSearchParams({
+          session: String(this.sessionId),
+          token: this.token,
+          ref: this.viewRef || 'HEAD',
+          limit: String(PAGE_LIMIT),
+          skip: String(this.skip),
+        });
+        const res = await fetch(`/api/git-log?${params.toString()}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) {
+          throw new Error(data && data.detail ? data.detail : `HTTP ${res.status}`);
+        }
+        if (!append) this.commits = [];
+        const got = Array.isArray(data.commits) ? data.commits : [];
+        this.commits = this.commits.concat(got);
+        this.headHash      = data.head_hash || '';
+        this.sessionBranch = data.branch || '';
+        this.hasMore       = !!data.has_more;
+        if (data.git_root && !this.gitRoot) {
+          this.gitRoot = data.git_root;
+          if (this.els.repo) this.els.repo.textContent = this.gitRoot;
+        }
+      } catch (err) {
+        if (!append) this._showError(err.message || String(err));
+        throw err;
+      } finally {
+        this.loading = false;
+      }
+    }
+
+    async _fetchRefs() {
+      try {
+        const params = new URLSearchParams({
+          session: String(this.sessionId),
+          token: this.token,
+        });
+        const res = await fetch(`/api/git-refs?${params.toString()}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) return;
+        this.refs = Array.isArray(data.refs) ? data.refs : [];
+        this.githubUrl = data.github_url || '';
+        if (data.head) this.sessionBranch = data.head;
+        this._updateViewRefHeader();
+      } catch (_) { /* noop */ }
+    }
+
+    async _fetchShow(hash) {
+      const params = new URLSearchParams({
+        session: String(this.sessionId),
+        token: this.token,
+        hash,
+      });
+      const res = await fetch(`/api/git-show?${params.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data && data.detail ? data.detail : `HTTP ${res.status}`);
+      return data;
+    }
+
+    _showLoading() {
+      this.els.logTable.innerHTML =
+        `<div class="git-graph-loading">${_esc(_gt('git_view_loading', 'Loading...'))}</div>`;
+      if (this.els.count) this.els.count.textContent = _gt('git_view_loading', 'Loading...');
+    }
+    _showError(msg) {
+      this.els.logTable.innerHTML =
+        `<div class="git-graph-error">${_esc(msg)}</div>`;
+      if (this.els.count) this.els.count.textContent = '—';
+    }
+
+    _filterCommits() {
+      const f = (this.filterText || '').trim().toLowerCase();
+      if (!f) return this.commits.slice();
+      return this.commits.filter(c =>
+        (c.subject || '').toLowerCase().includes(f)
+        || (c.author_name || '').toLowerCase().includes(f)
+        || (c.author_email || '').toLowerCase().includes(f)
+        || (c.hash || '').toLowerCase().includes(f)
+        || (c.short_hash || '').toLowerCase().includes(f)
+      );
+    }
+
+    _renderLogTable() {
+      const list = this._filterCommits();
+      this.filteredCommits = list;
+      this.graphRows = computeGraph(list);
+
+      if (!list.length) {
+        this.els.logTable.innerHTML =
+          `<div class="git-graph-loading">${_esc(_gt('git_view_no_commits', 'No commits'))}</div>`;
+      } else {
+        const html = list.map((c, i) => {
+          const row = this.graphRows[i] || { lanes: [] };
+          const sub = splitSubject(c.subject);
+          const isHead = (this.headHash && c.hash === this.headHash);
+          const refsHtml = renderRefsInline(c.refs, this.headHash, c.hash);
+          return `
+            <div class="log-row${isHead ? ' head' : ''}${this.selectedHash === c.hash ? ' selected' : ''}" data-hash="${_esc(c.hash)}">
+              <div class="col-graph">${renderGraphSvg(row)}</div>
+              <div class="col-refs">${refsHtml}</div>
+              <div class="col-subject">${sub.prefix ? `<span class="prefix">${_esc(sub.prefix)}</span>` : ''}${_esc(sub.rest)}</div>
+              <div class="col-author">${_esc(c.author_name || '')}</div>
+              <div class="col-hash-wrap"><span class="col-hash">${_esc(c.short_hash || _shortHash(c.hash))}</span></div>
+              <div class="col-date">${_esc(_formatDate(c.author_date))}</div>
+            </div>
+          `;
+        }).join('');
+        this.els.logTable.innerHTML = html;
+        this.els.logTable.querySelectorAll('.log-row').forEach(el => {
+          el.addEventListener('click', () => {
+            const h = el.dataset.hash;
+            this.selectCommit(h).catch(() => {});
+          });
+          el.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            const h = el.dataset.hash;
+            const c = this.commits.find(x => x.hash === h);
+            if (c) _openCtxMenu(e.clientX, e.clientY, c, el, this.githubUrl);
+          });
+        });
+        this.els.logTable.onscroll = () => _closeCtxMenu();
+      }
+
+      const total = this.commits.length;
+      const fcount = list.length;
+      const filtered = (this.filterText || '').trim() !== '';
+      if (this.els.count) {
+        if (filtered) {
+          this.els.count.textContent = `${fcount}/${total} commits (filtered)`;
+        } else {
+          this.els.count.textContent = `${total} commits${this.hasMore ? ' · has more' : ''}`;
+        }
+      }
+      if (this.els.loadmoreBtn) this.els.loadmoreBtn.disabled = !this.hasMore || filtered;
+    }
+
+    _highlightSelected() {
+      if (!this.els.logTable) return;
+      this.els.logTable.querySelectorAll('.log-row.selected').forEach(el => el.classList.remove('selected'));
+      if (this.selectedHash) {
+        const sel = this.els.logTable.querySelector(`.log-row[data-hash="${CSS.escape(this.selectedHash)}"]`);
+        if (sel) sel.classList.add('selected');
+      }
+    }
+
+    _renderDetailEmpty() {
+      this.els.detailMeta.textContent = '—';
+      this.els.detailContent.innerHTML =
+        `<div class="detail-empty">${_esc(_gt('git_view_select_row_hint', 'Click a row to see commit detail'))}</div>`;
+    }
+    _renderDetailError(msg) {
+      this.els.detailContent.innerHTML =
+        `<div class="git-graph-error">${_esc(msg)}</div>`;
+    }
+    _toggleDetailPanel() {
+      const p = this.els.detailPanel;
+      if (p.classList.contains('collapsed')) {
+        p.classList.remove('collapsed');
+        p.style.height = (this.panelHeight || 340) + 'px';
+      } else {
+        const h = p.getBoundingClientRect().height;
+        if (h > 60) this.panelHeight = h;
+        p.classList.add('collapsed');
+      }
+    }
+    _syncDetailTabs() {
+      this.els.detailTabs.forEach(t => {
+        t.classList.toggle('active', t.dataset.tab === this.activeTab);
+      });
+    }
+    _renderDetailContent() {
+      const c = this.selectedShow;
+      if (!c) { this._renderDetailEmpty(); return; }
+      this.els.detailMeta.textContent =
+        `${_shortHash(c.hash)} · ${c.author_name || ''} · ${_formatDate(c.author_date)}`;
+      if (this.activeTab === 'info')         this.els.detailContent.innerHTML = this._renderInfoTab(c);
+      else if (this.activeTab === 'changes') this.els.detailContent.innerHTML = this._renderChangesTab(c);
+      else if (this.activeTab === 'files')   this.els.detailContent.innerHTML = this._renderFilesTab(c);
+      this._wireDetailLinks(c);
+    }
+
+    _renderInfoTab(c) {
+      const sub = splitSubject(c.subject);
+      const subjectFull = (sub.prefix ? sub.prefix + ' ' : '') + sub.rest;
+      const initial = ((c.author_name || '?')[0] || '?').toUpperCase();
+      const parents = Array.isArray(c.parents) ? c.parents : [];
+      const refs = c.refs || [];
+      const refsHtml = refs.length
+        ? renderRefsInline(refs, this.headHash, c.hash)
+        : `<span style="color:var(--muted);font-size:11.5px">—</span>`;
+      const files = Array.isArray(c.files) ? c.files : [];
+      const filesSection = files.length
+        ? `<div class="info-label">FILES</div><div class="info-value">${files.map(f => `
+            <div class="file-row" data-file-action="changes" data-path="${_esc(f.path)}">
+              <span class="file-status ${_esc(f.status || 'M')}">${_esc(f.status || 'M')}</span>
+              <span class="file-path">${_esc(f.path || '')}</span>
+              <span class="file-stat-add">+${f.added || 0}</span>
+              <span class="file-stat-del">-${f.removed || 0}</span>
+            </div>`).join('')}</div>`
+        : `<div class="info-label">FILES</div><div class="info-value" style="color:var(--muted);font-size:11.5px">—</div>`;
+
+      const ghDisabled = this.githubUrl ? '' : 'disabled';
+      const bodyHtml = c.body
+        ? _esc(c.body)
+        : `<span style="color:var(--muted);font-size:11.5px">${_esc(_gt('git_view_no_body', '(no body)'))}</span>`;
+
+      return `
+        <div class="info-grid">
+          <div class="info-label">AUTHOR</div>
+          <div class="info-value info-author">
+            <div class="info-avatar">${_esc(initial)}</div>
+            <div>
+              <div><span class="info-author-name">${_esc(c.author_name || '')}</span><span class="info-author-email">${_esc(c.author_email || '')}</span></div>
+              <div class="info-author-date">${_esc(_formatDate(c.author_date))}</div>
+            </div>
+          </div>
+
+          <div class="info-label">SHA</div>
+          <div class="info-value info-sha">
+            <span class="info-sha-value">${_esc(c.hash || '')}</span>
+            <button class="info-mini-btn" data-action="copy-full">⎘ Copy</button>
+            <button class="info-mini-btn" data-action="copy-github-url" ${ghDisabled}>↗ GH</button>
+          </div>
+
+          <div class="info-label">PARENTS</div>
+          <div class="info-value">${parents.length
+            ? parents.map(p => `<span class="info-parent-link" data-parent="${_esc(p)}">${_esc(_shortHash(p))}</span>`).join('')
+            : `<span style="color:var(--muted);font-size:11.5px">(root commit)</span>`}</div>
+
+          <div class="info-label">REFS</div>
+          <div class="info-value">${refsHtml}</div>
+
+          <div class="info-label">MESSAGE</div>
+          <div class="info-value"><div class="info-message"><span class="subject">${_esc(subjectFull)}</span>${bodyHtml}</div></div>
+
+          ${filesSection}
+        </div>
+      `;
+    }
+
+    _renderFilesTab(c) {
+      const files = Array.isArray(c.files) ? c.files : [];
+      if (!files.length) return `<div class="detail-empty">${_esc(_gt('git_view_no_files', 'No file changes'))}</div>`;
+      return files.map(f => `
+        <div class="file-row" data-file-action="changes" data-path="${_esc(f.path)}">
+          <span class="file-status ${_esc(f.status || 'M')}">${_esc(f.status || 'M')}</span>
+          <span class="file-path">${_esc(f.path || '')}</span>
+          <span class="file-stat-add">+${f.added || 0}</span>
+          <span class="file-stat-del">-${f.removed || 0}</span>
+        </div>
+      `).join('');
+    }
+
+    _renderChangesTab(c) {
+      const files = Array.isArray(c.files) ? c.files : [];
+      if (!files.length) return `<div class="detail-empty">${_esc(_gt('git_view_no_diff', 'No diff'))}</div>`;
+      return files.map(f => {
+        const diff = (f.diff || '').split('\n').map(line => {
+          let cls = 'ctx';
+          if (line.startsWith('@@'))      cls = 'hunk';
+          else if (line.startsWith('+++') || line.startsWith('---')) cls = 'ctx';
+          else if (line.startsWith('+'))  cls = 'add';
+          else if (line.startsWith('-'))  cls = 'del';
+          return `<span class="diff-line ${cls}">${_esc(line) || ' '}</span>`;
+        }).join('');
+        return `
+          <div class="diff-file">
+            <div class="diff-file-header">
+              <span class="file-status ${_esc(f.status || 'M')}" style="width:16px;height:16px;font-size:10px">${_esc(f.status || 'M')}</span>
+              <span style="flex:1">${_esc(f.path || '')}</span>
+              <span class="file-stat-add">+${f.added || 0}</span>
+              <span class="file-stat-del">-${f.removed || 0}</span>
+            </div>
+            <div class="diff-body">${diff}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    _wireDetailLinks(c) {
+      const content = this.els.detailContent;
+      const ghBase = this.githubUrl;
+      content.querySelectorAll('[data-action]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          _ctxGithubBase = ghBase;
+          _ctxCopy(btn.dataset.action, c);
+        });
+      });
+      content.querySelectorAll('[data-parent]').forEach(link => {
+        link.addEventListener('click', () => this._jumpToCommit(link.dataset.parent));
+      });
+      content.querySelectorAll("[data-file-action='changes']").forEach(row => {
+        row.addEventListener('click', () => {
+          this.activeTab = 'changes';
+          this._syncDetailTabs();
+          this._renderDetailContent();
+        });
+      });
+    }
+
+    _jumpToCommit(hash) {
+      const target = this.commits.find(x => x.hash === hash);
+      if (!target) {
+        _toast(_gt('git_view_parent_not_in_list', 'Parent commit not in list'),
+               `${_shortHash(hash)}`);
+        return;
+      }
+      const el = this.els.logTable.querySelector(`.log-row[data-hash="${CSS.escape(hash)}"]`);
+      if (el) {
+        this.selectCommit(hash).catch(() => {});
+        try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
+      }
+    }
+
+    _setupDividerDrag() {
+      const divider = this.els.divider;
+      const panel   = this.els.detailPanel;
+      let startY = 0, startH = 0, dragging = false;
+      const onMove = (e) => {
+        if (!dragging) return;
+        const dy = startY - e.clientY;
+        const newH = Math.max(0, Math.min(window.innerHeight - 180, startH + dy));
+        panel.style.height = newH + 'px';
+        if (newH > 60) {
+          panel.classList.remove('collapsed');
+          this.panelHeight = newH;
+        }
+      };
+      const onUp = () => {
+        if (!dragging) return;
+        dragging = false;
+        divider.classList.remove('dragging');
+        document.body.style.cursor = '';
+        if (parseInt(panel.style.height || '0', 10) < 40) {
+          panel.classList.add('collapsed');
+        }
+      };
+      divider.addEventListener('mousedown', (e) => {
+        dragging = true;
+        startY = e.clientY;
+        startH = panel.getBoundingClientRect().height;
+        divider.classList.add('dragging');
+        document.body.style.cursor = 'row-resize';
+        e.preventDefault();
+      });
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    }
+
+    _syncToggleButtons() {
+      const v = this.viewRef;
+      this.els.toggles.forEach(b => {
+        const target = b.dataset.toggle;
+        b.classList.toggle('active', target === v);
+      });
+    }
+
+    _openRefDropdown() {
+      const dd = this.els.refDropdown;
+      const btn = this.els.viewRefBtn;
+      const r = btn.getBoundingClientRect();
+      dd.style.left = r.left + 'px';
+      dd.style.top  = (r.bottom + 4) + 'px';
+      dd.classList.add('open');
+      this._refDropdownOpen = true;
+      this._renderRefList('');
+      if (this.els.refFilter) {
+        this.els.refFilter.value = '';
+        setTimeout(() => { try { this.els.refFilter.focus(); } catch (_) {} }, 0);
+      }
+    }
+    _closeRefDropdown() {
+      this.els.refDropdown.classList.remove('open');
+      this._refDropdownOpen = false;
+    }
+    _renderRefList(filter) {
+      const f = (filter || '').trim().toLowerCase();
+      const KIND_ICON = { local: '⎇', remote: '↑', tag: '🏷', special: '★' };
+      const special = [
+        { kind: 'special', name: 'HEAD',  hash: '' },
+        { kind: 'special', name: '--all', hash: '' },
+      ];
+      const grouped = { local: [], remote: [], tag: [] };
+      for (const r of (this.refs || [])) {
+        const k = (r.kind || 'local').toLowerCase();
+        if (k === 'head') continue;
+        if (grouped[k]) grouped[k].push(r);
+      }
+      const sections = [
+        { kind: 'special', label: _gt('git_view_ref_section_special', 'Special'), items: special },
+        { kind: 'local',   label: _gt('git_view_ref_section_local',   'Local branches'), items: grouped.local },
+        { kind: 'remote',  label: _gt('git_view_ref_section_remote',  'Remote branches'), items: grouped.remote },
+        { kind: 'tag',     label: _gt('git_view_ref_section_tag',     'Tags'), items: grouped.tag },
+      ];
+      const matches = (r) => !f || (r.name || '').toLowerCase().includes(f);
+
+      const html = sections.map(sec => {
+        const items = sec.items.filter(matches);
+        if (!items.length) return '';
+        return `<div class="ref-section">${_esc(sec.label)}</div>` + items.map(r => {
+          const isActive = (r.name === this.viewRef);
+          return `
+            <div class="ref-item${isActive ? ' active' : ''}" data-ref="${_esc(r.name)}">
+              <span class="ref-check">${isActive ? '✓' : ''}</span>
+              <span class="ref-name ${_esc(r.kind || 'local')}"><span class="ico">${_esc(KIND_ICON[r.kind] || '?')}</span>${_esc(r.name)}</span>
+              ${r.hash ? `<span class="ref-hash">${_esc(_shortHash(r.hash))}</span>` : '<span></span>'}
+            </div>
+          `;
+        }).join('');
+      }).join('');
+
+      this.els.refList.innerHTML = html ||
+        `<div class="ref-section" style="opacity:0.6">${_esc(_gt('git_view_ref_no_match', 'No match'))}</div>`;
+      this.els.refList.querySelectorAll('.ref-item').forEach(el => {
+        el.addEventListener('click', () => {
+          this._closeRefDropdown();
+          this.setViewRef(el.dataset.ref);
+        });
+      });
+    }
+
+    _updateViewRefHeader() {
+      const label = this.els.viewRefLabel;
+      const btn   = this.els.viewRefBtn;
+      const chip  = this.els.sessionHeadChip;
+      const chipLabel = this.els.sessionHeadLabel;
+      if (!label || !btn || !chip) return;
+
+      const displayName = (this.viewRef === 'HEAD') ? (this.sessionBranch || 'HEAD') : this.viewRef;
+      label.textContent = displayName;
+
+      const sessionHead = this.sessionBranch || '';
+      const diverged = (this.viewRef !== 'HEAD' &&
+                        this.viewRef !== sessionHead &&
+                        this.viewRef !== '--all' &&
+                        sessionHead !== '');
+      btn.classList.toggle('diverged', diverged);
+      chip.style.display = diverged ? '' : 'none';
+      if (chipLabel) chipLabel.textContent = sessionHead;
+    }
+  }
+
+  window.GitGraphView = GitGraphView;
 })();
