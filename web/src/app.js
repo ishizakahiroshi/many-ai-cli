@@ -188,7 +188,7 @@ const STORAGE_QUICK_CMD_2_KEY          = 'ai_cli_hub_quick_cmd_2';
 const STORAGE_USAGE_LINK_CLAUDE_KEY    = 'ai_cli_hub_usage_link_claude';
 const STORAGE_USAGE_LINK_CODEX_KEY     = 'ai_cli_hub_usage_link_codex';
 const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds';
-const DEFAULT_VOICE_GRACE_SEC          = 2;
+const DEFAULT_VOICE_GRACE_SEC          = 0;
 const STORAGE_WAKE_WORD_ENABLED_KEY    = 'ai_cli_hub_wake_word_enabled';
 const STORAGE_WAKE_WORD_PHRASE_KEY     = 'ai_cli_hub_wake_word_phrase';
 const DEFAULT_WAKE_WORD_PHRASE         = '音声入力実施';
@@ -201,6 +201,196 @@ const DEFAULT_USAGE_LINKS = {
 
 const FONTSIZE_MAP = { large: 15, medium: 13, small: 11 };
 
+// ---- user-prefs サーバ同期 ----
+// setUserPref(path, value)
+//   path: ドット区切りの user_prefs パス（例: 'voice.wake_word_phrase'）
+//   value: 任意の JSON 値
+//   - 対応 localStorage キーに書く
+//   - サーバへ 200ms debounced PUT（取得→パス更新→PUT 全体置換）
+//   - PUT 失敗時は console.warn + トースト。localStorage は保持する
+
+const _USER_PREFS_PATH_TO_LS = {
+  'trigger.enabled':           [STORAGE_TRIGGER_ENABLED_KEY,       (v) => v ? '1' : '0'],
+  'trigger.phrase':            [STORAGE_TRIGGER_PHRASE_KEY,         String],
+  'notify_sound.enabled':      [STORAGE_NOTIFY_SOUND_ENABLED_KEY,  (v) => v ? '1' : '0'],
+  'notify_sound.type':         [STORAGE_NOTIFY_SOUND_TYPE_KEY,     String],
+  // notify_sound.custom_file はサーバ上のファイルパスのため localStorage へはミラーしない
+  // （カスタム音はサーバ API /api/user-prefs/notify-sound-custom 経由で再生する）
+  'voice.grace_seconds':       [STORAGE_VOICE_GRACE_KEY,           String],
+  'voice.wake_word_enabled':   [STORAGE_WAKE_WORD_ENABLED_KEY,     (v) => v ? '1' : '0'],
+  'voice.wake_word_phrase':    [STORAGE_WAKE_WORD_PHRASE_KEY,      String],
+  'quick_cmds.cmd1':           [STORAGE_QUICK_CMD_1_KEY,           String],
+  'quick_cmds.cmd2':           [STORAGE_QUICK_CMD_2_KEY,           String],
+  'usage_links.claude':        [STORAGE_USAGE_LINK_CLAUDE_KEY,     String],
+  'usage_links.codex':         [STORAGE_USAGE_LINK_CODEX_KEY,      String],
+  'favorites':                 [STORAGE_FAVORITES_KEY,             JSON.stringify],
+  'session_order':             [STORAGE_ORDER_KEY,                 JSON.stringify],
+  'group_order':               [STORAGE_GROUP_ORDER_KEY,           JSON.stringify],
+  'project_favorites':         [STORAGE_PROJECT_FAVORITES_KEY,     JSON.stringify],
+  'cwd_history':               [STORAGE_CWD_HISTORY_KEY,           JSON.stringify],
+  'approval.auto_switch':      [STORAGE_APPROVAL_AUTO_SWITCH_KEY,  (v) => v ? '1' : '0'],
+  'spawn.defaults':            [STORAGE_SPAWN_KEY,                 JSON.stringify],
+};
+
+// ドット区切りパスでオブジェクトの深いフィールドを設定する
+function _setNestedValue(obj, path, value) {
+  const keys = path.split('.');
+  let cur = obj;
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (cur[keys[i]] == null || typeof cur[keys[i]] !== 'object') cur[keys[i]] = {};
+    cur = cur[keys[i]];
+  }
+  cur[keys[keys.length - 1]] = value;
+}
+
+// PUT debounce タイマー
+let _userPrefsDebounceTimer = null;
+
+function _userPrefsSaveErrorMessage(err) {
+  const tfn = typeof window.t === 'function' ? window.t : (key) => key;
+  if (err && typeof err.status === 'number') {
+    if (err.status === 401) return tfn('user_prefs_save_failed_unauthorized');
+    if (err.status >= 500) return tfn('user_prefs_save_failed_server', { status: String(err.status) });
+    return tfn('user_prefs_save_failed_http', { status: String(err.status) });
+  }
+  return tfn('user_prefs_save_failed_network');
+}
+
+function _userPrefsHttpError(phase, res) {
+  const err = new Error(`${phase} /api/user-prefs ${res.status}`);
+  err.phase = phase;
+  err.status = res.status;
+  return err;
+}
+
+function _scheduleUserPrefsPut() {
+  clearTimeout(_userPrefsDebounceTimer);
+  _userPrefsDebounceTimer = setTimeout(async () => {
+    const tk = new URLSearchParams(location.search).get('token');
+    if (!tk) return;
+    try {
+      // 現在のサーバ値を取得してからパッチ適用し全体置換
+      const getRes = await fetch(`/api/user-prefs?token=${tk}`);
+      if (!getRes.ok) throw _userPrefsHttpError('GET', getRes);
+      const current = await getRes.json();
+      // localStorage の最新値を current にマージ
+      for (const [path, [lsKey, _]] of Object.entries(_USER_PREFS_PATH_TO_LS)) {
+        const raw = localStorage.getItem(lsKey);
+        if (raw == null) continue;
+        let parsed;
+        try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
+        // bool キー (enabled 系 + auto_switch) は '1'/'0' → boolean に変換
+        if (path.endsWith('.enabled') || path === 'voice.wake_word_enabled' || path === 'approval.auto_switch') {
+          parsed = raw === '1' || raw === true;
+        } else if (path === 'voice.grace_seconds') {
+          parsed = parseInt(raw, 10) || 0;
+        }
+        _setNestedValue(current, path, parsed);
+      }
+      const putRes = await fetch(`/api/user-prefs?token=${tk}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(current),
+      });
+      if (!putRes.ok) throw _userPrefsHttpError('PUT', putRes);
+    } catch (e) {
+      console.warn('[user-prefs] PUT failed:', e);
+      showToast(_userPrefsSaveErrorMessage(e));
+    }
+  }, 200);
+}
+
+function setUserPref(path, value) {
+  // 1. localStorage に書く
+  const entry = _USER_PREFS_PATH_TO_LS[path];
+  if (entry) {
+    const [lsKey, serialize] = entry;
+    try {
+      const serialized = serialize(value);
+      if (serialized == null || serialized === 'null') {
+        localStorage.removeItem(lsKey);
+      } else {
+        localStorage.setItem(lsKey, serialized);
+      }
+    } catch (_) {}
+  }
+  // 2. サーバへ debounced PUT
+  _scheduleUserPrefsPut();
+}
+
+// サーバから user_prefs を取得して localStorage にミラーする（起動時 1 回）
+async function _mirrorUserPrefsFromServer() {
+  const tk = new URLSearchParams(location.search).get('token');
+  if (!tk) return null;
+  try {
+    const res = await fetch(`/api/user-prefs?token=${tk}`);
+    if (!res.ok) return null;
+    const prefs = await res.json();
+    // 各フィールドを localStorage にミラー（既存値を上書き）
+    for (const [path, [lsKey, serialize]] of Object.entries(_USER_PREFS_PATH_TO_LS)) {
+      const keys = path.split('.');
+      let val = prefs;
+      for (const k of keys) { if (val == null) break; val = val[k]; }
+      if (val == null) continue;
+      try {
+        const serialized = serialize(val);
+        if (serialized != null && serialized !== 'null') {
+          localStorage.setItem(lsKey, serialized);
+        }
+      } catch (_) {}
+    }
+    return prefs;
+  } catch (_) {
+    return null;
+  }
+}
+
+// 移行: localStorage 既存値 → サーバ（初回のみ）
+async function migrateLocalstoragePrefsToServer() {
+  const tk = new URLSearchParams(location.search).get('token');
+  if (!tk) return;
+  try {
+    const res = await fetch(`/api/user-prefs?token=${tk}`);
+    if (!res.ok) return;
+    const prefs = await res.json();
+    if (prefs.migrated_from_localstorage) return; // 移行済み
+    // localStorage に何か値があれば移行
+    let hasAny = false;
+    const merged = prefs;
+    for (const [path, [lsKey, _]] of Object.entries(_USER_PREFS_PATH_TO_LS)) {
+      const raw = localStorage.getItem(lsKey);
+      if (raw == null) continue;
+      hasAny = true;
+      let parsed;
+      try { parsed = JSON.parse(raw); } catch (_e) { parsed = raw; }
+      if (path.endsWith('.enabled') || path === 'voice.wake_word_enabled' || path === 'approval.auto_switch') {
+        parsed = raw === '1' || raw === true;
+      } else if (path === 'voice.grace_seconds') {
+        parsed = parseInt(raw, 10) || 0;
+      }
+      _setNestedValue(merged, path, parsed);
+    }
+    if (!hasAny) return;
+    merged.migrated_from_localstorage = true;
+    await fetch(`/api/user-prefs?token=${tk}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(merged),
+    });
+    console.info('[user-prefs] migrated from localStorage to server');
+  } catch (e) {
+    console.warn('[user-prefs] migration failed:', e);
+  }
+}
+
+// 起動時実行: サーバからミラー → 移行チェック
+(async () => {
+  const serverPrefs = await _mirrorUserPrefsFromServer();
+  if (serverPrefs && !serverPrefs.migrated_from_localstorage) {
+    await migrateLocalstoragePrefsToServer();
+  }
+})();
+
 // ---- 通知音 ----
 let _audioCtx = null;
 function _getAudioCtx() {
@@ -212,9 +402,10 @@ function playNotificationSound() {
   if (localStorage.getItem(STORAGE_NOTIFY_SOUND_ENABLED_KEY) !== '1') return;
   const type = localStorage.getItem(STORAGE_NOTIFY_SOUND_TYPE_KEY) || 'default';
   if (type === 'custom') {
-    const dataUrl = localStorage.getItem(STORAGE_NOTIFY_SOUND_CUSTOM_KEY);
-    if (dataUrl) {
-      try { new Audio(dataUrl).play().catch(() => {}); return; } catch (_) {}
+    const tk = new URLSearchParams(location.search).get('token');
+    const customUrl = tk ? `/api/user-prefs/notify-sound-custom?token=${tk}` : null;
+    if (customUrl) {
+      try { new Audio(customUrl).play().catch(() => {}); return; } catch (_) {}
     }
   }
   try {
@@ -299,22 +490,21 @@ function saveUsageLinkSettings() {
   const claudeInput = document.getElementById('usage-link-claude-url');
   const codexInput = document.getElementById('usage-link-codex-url');
   const pairs = [
-    [claudeInput, STORAGE_USAGE_LINK_CLAUDE_KEY],
-    [codexInput, STORAGE_USAGE_LINK_CODEX_KEY],
+    [claudeInput, 'usage_links.claude', STORAGE_USAGE_LINK_CLAUDE_KEY],
+    [codexInput,  'usage_links.codex',  STORAGE_USAGE_LINK_CODEX_KEY],
   ];
-  for (const [input, key] of pairs) {
+  for (const [input, prefPath, key] of pairs) {
     if (!input) continue;
     const raw = input.value.trim();
     const normalized = normalizeHttpUrl(raw, '');
-    try {
-      if (normalized) {
-        localStorage.setItem(key, normalized);
-        input.value = normalized;
-      } else {
-        localStorage.removeItem(key);
-        input.value = '';
-      }
-    } catch (_) {}
+    if (normalized) {
+      setUserPref(prefPath, normalized);
+      input.value = normalized;
+    } else {
+      try { localStorage.removeItem(key); } catch (_) {}
+      setUserPref(prefPath, '');
+      input.value = '';
+    }
   }
   applyUsageLinks();
 }
@@ -572,10 +762,8 @@ function applyLang(lang) {
   if (usageLinksResetBtn) {
     usageLinksResetBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      try {
-        localStorage.removeItem(STORAGE_USAGE_LINK_CLAUDE_KEY);
-        localStorage.removeItem(STORAGE_USAGE_LINK_CODEX_KEY);
-      } catch (_) {}
+      setUserPref('usage_links.claude', '');
+      setUserPref('usage_links.codex', '');
       loadUsageLinkSettings();
       showToast(t('settings_usage_links_reset_done'), usageLinksResetBtn);
     });
@@ -590,12 +778,17 @@ function applyLang(lang) {
 (function () {
   const sel = document.getElementById('voice-grace-select');
   if (!sel) return;
+  try {
+    if (localStorage.getItem(STORAGE_VOICE_GRACE_KEY) === '2') {
+      localStorage.removeItem(STORAGE_VOICE_GRACE_KEY);
+    }
+  } catch (_) {}
   const saved = localStorage.getItem(STORAGE_VOICE_GRACE_KEY);
   const v = saved == null ? DEFAULT_VOICE_GRACE_SEC : parseInt(saved, 10);
   const clamped = Number.isFinite(v) ? Math.max(0, Math.min(5, v)) : DEFAULT_VOICE_GRACE_SEC;
   sel.value = String(clamped);
   sel.addEventListener('change', () => {
-    try { localStorage.setItem(STORAGE_VOICE_GRACE_KEY, sel.value); } catch (_) {}
+    setUserPref('voice.grace_seconds', parseInt(sel.value, 10) || 0);
   });
 })();
 
@@ -608,10 +801,10 @@ function applyLang(lang) {
 
   enabledEl.addEventListener('change', () => {
     phraseRow.hidden = !enabledEl.checked;
-    try { localStorage.setItem(STORAGE_TRIGGER_ENABLED_KEY, enabledEl.checked ? '1' : '0'); } catch (_) {}
+    setUserPref('trigger.enabled', enabledEl.checked);
   });
   phraseInputEl.addEventListener('input', () => {
-    try { localStorage.setItem(STORAGE_TRIGGER_PHRASE_KEY, phraseInputEl.value); } catch (_) {}
+    setUserPref('trigger.phrase', phraseInputEl.value);
   });
 
   enabledEl.checked = localStorage.getItem(STORAGE_TRIGGER_ENABLED_KEY) === '1';
@@ -628,11 +821,11 @@ function applyLang(lang) {
 
   enabledEl.addEventListener('change', () => {
     phraseRow.hidden = !enabledEl.checked;
-    try { localStorage.setItem(STORAGE_WAKE_WORD_ENABLED_KEY, enabledEl.checked ? '1' : '0'); } catch (_) {}
+    setUserPref('voice.wake_word_enabled', enabledEl.checked);
     document.dispatchEvent(new CustomEvent('wakewordsettings:changed'));
   });
   phraseEl.addEventListener('input', () => {
-    try { localStorage.setItem(STORAGE_WAKE_WORD_PHRASE_KEY, phraseEl.value); } catch (_) {}
+    setUserPref('voice.wake_word_phrase', phraseEl.value);
   });
 
   enabledEl.checked = localStorage.getItem(STORAGE_WAKE_WORD_ENABLED_KEY) === '1';
@@ -658,12 +851,12 @@ function applyLang(lang) {
   }
 
   soundEnabledEl.addEventListener('change', () => {
-    try { localStorage.setItem(STORAGE_NOTIFY_SOUND_ENABLED_KEY, soundEnabledEl.checked ? '1' : '0'); } catch (_) {}
+    setUserPref('notify_sound.enabled', soundEnabledEl.checked);
     updateSoundVisibility();
   });
 
   soundTypeEl.addEventListener('change', () => {
-    try { localStorage.setItem(STORAGE_NOTIFY_SOUND_TYPE_KEY, soundTypeEl.value); } catch (_) {}
+    setUserPref('notify_sound.type', soundTypeEl.value);
     updateSoundVisibility();
   });
 
@@ -672,14 +865,31 @@ function applyLang(lang) {
   soundFileEl.addEventListener('change', () => {
     const file = soundFileEl.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
+    // バイナリをサーバに PUT（dataURL ではなく binary 送信）
+    const uploadCustomSound = async (f) => {
+      const tk = new URLSearchParams(location.search).get('token');
       try {
-        localStorage.setItem(STORAGE_NOTIFY_SOUND_CUSTOM_KEY, e.target.result);
-        soundFilenameEl.textContent = file.name;
-      } catch (_) { showToast(t('notify_sound_storage_error')); }
+        const buf = await f.arrayBuffer();
+        const putRes = await fetch(`/api/user-prefs/notify-sound-custom?token=${tk}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': f.type || 'application/octet-stream' },
+          body: buf,
+        });
+        if (!putRes.ok) throw new Error(`PUT notify-sound-custom ${putRes.status}`);
+        // custom_file フラグをサーバ側で設定済みのため type を custom にする
+        setUserPref('notify_sound.type', 'custom');
+        soundTypeEl.value = 'custom';
+        soundFilenameEl.textContent = f.name;
+        // localStorage にはファイル名だけ記録（dataURL は不要）
+        try { localStorage.setItem(STORAGE_NOTIFY_SOUND_CUSTOM_KEY, f.name); } catch (_) {}
+        showToast(typeof window.t === 'function' ? t('user_prefs_notify_sound_set') : 'Custom sound set.');
+        updateSoundVisibility();
+      } catch (e) {
+        console.warn('[user-prefs] notify-sound upload failed:', e);
+        showToast(typeof window.t === 'function' ? t('user_prefs_notify_sound_upload_failed') : 'Custom sound upload failed.');
+      }
     };
-    reader.readAsDataURL(file);
+    uploadCustomSound(file);
   });
 
   soundTestBtn.addEventListener('click', () => {
@@ -692,7 +902,7 @@ function applyLang(lang) {
   soundEnabledEl.checked = localStorage.getItem(STORAGE_NOTIFY_SOUND_ENABLED_KEY) === '1';
   soundTypeEl.value      = localStorage.getItem(STORAGE_NOTIFY_SOUND_TYPE_KEY) || 'default';
   const savedCustom = localStorage.getItem(STORAGE_NOTIFY_SOUND_CUSTOM_KEY);
-  if (savedCustom) soundFilenameEl.textContent = t('notify_sound_file_set');
+  if (savedCustom) soundFilenameEl.textContent = savedCustom.startsWith('data:') ? t('notify_sound_file_set') : savedCustom;
   updateSoundVisibility();
 })();
 
@@ -709,35 +919,55 @@ function applyLang(lang) {
   quickCmd1El.addEventListener('change', () => {
     const value = sanitizeQuickCommand(quickCmd1El.value, DEFAULT_QUICK_CMD_1);
     quickCmd1El.value = value;
-    try { localStorage.setItem(STORAGE_QUICK_CMD_1_KEY, value); } catch (_) {}
+    setUserPref('quick_cmds.cmd1', value);
     refreshQuickCommandButtons();
   });
 
   quickCmd2El.addEventListener('change', () => {
     const value = sanitizeQuickCommand(quickCmd2El.value, DEFAULT_QUICK_CMD_2);
     quickCmd2El.value = value;
-    try { localStorage.setItem(STORAGE_QUICK_CMD_2_KEY, value); } catch (_) {}
+    setUserPref('quick_cmds.cmd2', value);
     refreshQuickCommandButtons();
   });
 })();
 
 const token = new URLSearchParams(location.search).get('token');
 
-// ---- バージョン表示（single source: main.version → /api/info → ここ） ----
+// ---- Hub 情報表示（single source: main.version / runtime → /api/info → ここ） ----
 (async () => {
   try {
     const res = await fetch(`/api/info?token=${token}`);
     if (!res.ok) return;
     const info = await res.json();
     const ver = 'v' + (info.version || 'dev');
+    const runtimeMode = info.runtime_mode || '';
+    const runtimeLabel = () => {
+      if (typeof window.t !== 'function') return info.runtime_label || runtimeMode;
+      const key = `runtime_${String(runtimeMode).replace(/-/g, '_')}`;
+      const translated = window.t(key);
+      return translated && translated !== key ? translated : (info.runtime_label || runtimeMode);
+    };
     const apply = () => {
+      const runtime = runtimeLabel();
+      const badgeEl = document.getElementById('runtime-badge');
+      if (badgeEl && runtime) {
+        badgeEl.textContent = runtime;
+        badgeEl.hidden = false;
+        badgeEl.dataset.mode = runtimeMode;
+      }
       const settingsEl = document.querySelector('.settings-app-version');
-      if (settingsEl) settingsEl.textContent = ver + ' [Hub UI]';
+      if (settingsEl) settingsEl.textContent = runtime ? `${ver} [Hub UI] - ${runtime}` : ver + ' [Hub UI]';
       const aboutEl = document.querySelector('.about-version');
       if (aboutEl) {
         aboutEl.textContent = (typeof window.t === 'function')
           ? window.t('about_version', { version: ver })
           : ver + ' [Hub UI]';
+      }
+      const aboutRuntimeEl = document.querySelector('.about-runtime');
+      if (aboutRuntimeEl) {
+        aboutRuntimeEl.textContent = runtime
+          ? (typeof window.t === 'function' ? window.t('about_runtime', { runtime }) : `Runtime: ${runtime}`)
+          : '';
       }
     };
     if (typeof window.t === 'function') {
@@ -1055,19 +1285,19 @@ let groupOrder = JSON.parse(localStorage.getItem(STORAGE_GROUP_ORDER_KEY) || '[]
 const collapsedGroups = new Set();
 
 function saveFavorites() {
-  localStorage.setItem(STORAGE_FAVORITES_KEY, JSON.stringify(favorites));
+  setUserPref('favorites', favorites);
 }
 
 function saveProjectFavorites() {
-  localStorage.setItem(STORAGE_PROJECT_FAVORITES_KEY, JSON.stringify(projectFavorites));
+  setUserPref('project_favorites', projectFavorites);
 }
 
 function saveGroupOrder() {
-  localStorage.setItem(STORAGE_GROUP_ORDER_KEY, JSON.stringify(groupOrder));
+  setUserPref('group_order', groupOrder);
 }
 
 function saveSessionOrder() {
-  localStorage.setItem(STORAGE_ORDER_KEY, JSON.stringify(sessionOrder));
+  setUserPref('session_order', sessionOrder);
 }
 
 function addToSessionOrder(id, forceToFront = false) {
@@ -1486,6 +1716,15 @@ function dirnameForPath(filePath) {
 }
 
 function computeRelPath(from, to) {
+  // 異なるファイルシステム間（Windows ドライブ ↔ Unix ルート、ドライブ違い、UNC 等）は
+  // 相対化不能なので絶対パスをそのまま返す。
+  const fromDrive = /^([A-Za-z]:)[\\/]/.exec(from);
+  const toDrive = /^([A-Za-z]:)[\\/]/.exec(to);
+  const fromUnix = from.startsWith('/');
+  const toUnix = to.startsWith('/');
+  if (!!fromDrive !== !!toDrive) return to;
+  if (fromDrive && toDrive && fromDrive[1].toUpperCase() !== toDrive[1].toUpperCase()) return to;
+  if (fromUnix !== toUnix && !fromDrive && !toDrive) return to;
   // OS セパレータを / に正規化
   const sep = to.includes('\\') ? '\\' : '/';
   const fromParts = from.replace(/\\/g, '/').split('/').filter(Boolean);
@@ -5073,7 +5312,7 @@ function openLightbox(src) {
   }
 
   function saveSpawnSettings(obj) {
-    try { localStorage.setItem(STORAGE_SPAWN_KEY, JSON.stringify(obj)); } catch (_) {}
+    setUserPref('spawn.defaults', obj);
   }
 
   function loadCwdHistory() {
@@ -5085,12 +5324,12 @@ function openLightbox(src) {
     const hist = loadCwdHistory().filter(v => v !== cwd);
     hist.unshift(cwd);
     if (hist.length > CWD_HISTORY_MAX) hist.length = CWD_HISTORY_MAX;
-    try { localStorage.setItem(STORAGE_CWD_HISTORY_KEY, JSON.stringify(hist)); } catch (_) {}
+    setUserPref('cwd_history', hist);
   }
 
   function deleteCwdHistoryItem(cwd) {
     const hist = loadCwdHistory().filter(v => v !== cwd);
-    try { localStorage.setItem(STORAGE_CWD_HISTORY_KEY, JSON.stringify(hist)); } catch (_) {}
+    setUserPref('cwd_history', hist);
   }
 
   function renderCwdDropdown(filter) {
@@ -5212,8 +5451,15 @@ function openLightbox(src) {
             spawnCwdInput.value = data.path;
             refreshCwdInputStatus();
           }
+        } else {
+          // Non-2xx (typically 500 when no native folder picker is available,
+          // e.g. Linux without zenity/kdialog). Surface the server message so
+          // the click isn't silently ignored.
+          let msg = '';
+          try { msg = (await res.text()).trim(); } catch (_) {}
+          showToast(msg ? `${t('link_open_error')}: ${msg}` : t('link_open_error'));
         }
-      } catch (_) {}
+      } catch (_) { showToast(t('link_open_error')); }
       finally { spawnCwdBrowse.disabled = false; }
     });
   }
@@ -5653,7 +5899,7 @@ function openLightbox(src) {
   if (approvalAutoSwitchInput) {
     approvalAutoSwitchInput.checked = localStorage.getItem(STORAGE_APPROVAL_AUTO_SWITCH_KEY) === '1';
     approvalAutoSwitchInput.addEventListener('change', () => {
-      try { localStorage.setItem(STORAGE_APPROVAL_AUTO_SWITCH_KEY, approvalAutoSwitchInput.checked ? '1' : '0'); } catch (_) {}
+      setUserPref('approval.auto_switch', approvalAutoSwitchInput.checked);
       if (approvalAutoSwitchInput.checked) maybeAutoSwitchToNextApproval();
     });
   }
@@ -5700,21 +5946,19 @@ function openLightbox(src) {
     applyFontSize('medium');
     window.setLang('ja');
 
-    try {
-      localStorage.setItem(STORAGE_TRIGGER_ENABLED_KEY, '0');
-      localStorage.setItem(STORAGE_TRIGGER_PHRASE_KEY, '');
-      localStorage.setItem(STORAGE_WAKE_WORD_ENABLED_KEY, '0');
-      localStorage.setItem(STORAGE_WAKE_WORD_PHRASE_KEY, DEFAULT_WAKE_WORD_PHRASE);
-      localStorage.setItem(STORAGE_NOTIFY_SOUND_ENABLED_KEY, '0');
-      localStorage.setItem(STORAGE_NOTIFY_SOUND_TYPE_KEY, 'default');
-      localStorage.removeItem(STORAGE_NOTIFY_SOUND_CUSTOM_KEY);
-      localStorage.setItem(STORAGE_APPROVAL_AUTO_SWITCH_KEY, '0');
-      localStorage.setItem(STORAGE_QUICK_CMD_1_KEY, DEFAULT_QUICK_CMD_1);
-      localStorage.setItem(STORAGE_QUICK_CMD_2_KEY, DEFAULT_QUICK_CMD_2);
-      localStorage.removeItem(STORAGE_USAGE_LINK_CLAUDE_KEY);
-      localStorage.removeItem(STORAGE_USAGE_LINK_CODEX_KEY);
-      localStorage.setItem(STORAGE_VOICE_GRACE_KEY, String(DEFAULT_VOICE_GRACE_SEC));
-    } catch (_) {}
+    setUserPref('trigger.enabled', false);
+    setUserPref('trigger.phrase', '');
+    setUserPref('voice.wake_word_enabled', false);
+    setUserPref('voice.wake_word_phrase', DEFAULT_WAKE_WORD_PHRASE);
+    setUserPref('notify_sound.enabled', false);
+    setUserPref('notify_sound.type', 'default');
+    try { localStorage.removeItem(STORAGE_NOTIFY_SOUND_CUSTOM_KEY); } catch (_) {}
+    setUserPref('approval.auto_switch', false);
+    setUserPref('quick_cmds.cmd1', DEFAULT_QUICK_CMD_1);
+    setUserPref('quick_cmds.cmd2', DEFAULT_QUICK_CMD_2);
+    setUserPref('usage_links.claude', '');
+    setUserPref('usage_links.codex', '');
+    setUserPref('voice.grace_seconds', DEFAULT_VOICE_GRACE_SEC);
 
     const triggerEnabled = document.getElementById('trigger-enabled');
     const triggerPhrase  = document.getElementById('trigger-phrase-input');
@@ -5752,7 +5996,6 @@ function openLightbox(src) {
     const voiceGraceEl = document.getElementById('voice-grace-select');
     if (voiceGraceEl) {
       voiceGraceEl.value = String(DEFAULT_VOICE_GRACE_SEC);
-      try { localStorage.setItem(STORAGE_VOICE_GRACE_KEY, String(DEFAULT_VOICE_GRACE_SEC)); } catch (_) {}
     }
 
     const approvalAutoSwitchInput = document.getElementById('approval-auto-switch-input');
@@ -6944,9 +7187,11 @@ const FilesTabManager = (function () {
 
     const id = makeid();
     const displayName = projectKey && projectKey !== '__no_project__' ? projectKey : filesRoot;
-    // タブラベルは "📁 <projectName>/<開いたディレクトリの basename>" 形式。
+    // タブラベルは通常 "📁 <projectName>/<開いたディレクトリの basename>"。
+    // プロジェクト直下を開いた場合は projectName と basename が同じなので片方だけ表示する。
     const rootBase = (filesRoot || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || filesRoot || '';
-    const label = '📁 ' + displayName + '/' + rootBase;
+    const sameDisplay = String(displayName).toLowerCase() === String(rootBase).toLowerCase();
+    const label = '📁 ' + (sameDisplay ? displayName : displayName + '/' + rootBase);
 
     // タブボタン DOM
     const tabBtn = document.createElement('button');
@@ -7409,8 +7654,10 @@ const FilesTreeView = (function () {
       return false;
     }
 
-    function makeNode(node, depth) {
-      if (filterLower && !nodeMatchesFilter(node)) return null;
+    // ancestorMatch=true なら、祖先 dir 名がフィルタにヒット済みなので
+    // 自身および配下は無条件で表示する（dir 名検索時の期待動作）。
+    function makeNode(node, depth, ancestorMatch) {
+      if (filterLower && !ancestorMatch && !nodeMatchesFilter(node)) return null;
 
       const item = document.createElement('div');
       item.className = 'files-tree-item';
@@ -7459,9 +7706,13 @@ const FilesTreeView = (function () {
         item.addEventListener('click', (e) => { e.stopPropagation(); toggle(); });
         item.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); if (onContextMenu) onContextMenu(e, node); });
 
-        const childList = filterLower ? node.children.filter(nodeMatchesFilter) : node.children;
+        const dirNameMatches = !!filterLower && node.name.toLowerCase().includes(filterLower);
+        const childAncestorMatch = ancestorMatch || dirNameMatches;
+        const childList = (filterLower && !childAncestorMatch)
+          ? node.children.filter(nodeMatchesFilter)
+          : node.children;
         for (const child of childList) {
-          const childEl = makeNode(child, depth + 1);
+          const childEl = makeNode(child, depth + 1, childAncestorMatch);
           if (childEl) childrenEl.appendChild(childEl);
         }
         item.appendChild(childrenEl);
@@ -7492,7 +7743,7 @@ const FilesTreeView = (function () {
     const container = document.createElement('div');
     container.className = 'files-tree-root';
     for (const child of treeRoot.children) {
-      const el = makeNode(child, 0);
+      const el = makeNode(child, 0, false);
       if (el) container.appendChild(el);
     }
     return container;

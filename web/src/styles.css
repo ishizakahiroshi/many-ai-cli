@@ -299,6 +299,27 @@ header {
 .settings-app-icon { width: 32px; height: 32px; flex-shrink: 0; }
 .settings-app-name { font-size: 0.9rem; font-weight: bold; color: var(--text); }
 .settings-app-version { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+.runtime-badge {
+  flex: 0 0 auto;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 7px;
+  color: var(--text);
+  background: var(--panel);
+  font-size: 0.72rem;
+}
+.runtime-badge[data-mode="windows-wsl"] {
+  border-color: rgba(56, 189, 248, 0.45);
+  color: #7dd3fc;
+}
+.runtime-badge[data-mode="windows-native"] {
+  border-color: rgba(96, 165, 250, 0.45);
+  color: #93c5fd;
+}
 
 .settings-body {
   padding: 6px 0 2px;
@@ -1426,7 +1447,8 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 .about-section:last-child { border-bottom: none; }
 
 .about-app-name { font-weight: bold; font-size: 0.95rem; color: var(--text); margin: 0 0 2px; }
-.about-version { font-size: 0.8rem; color: var(--muted); margin: 0 0 6px; }
+.about-version { font-size: 0.8rem; color: var(--muted); margin: 0 0 4px; }
+.about-runtime { font-size: 0.8rem; color: var(--text); margin: 0 0 6px; }
 .about-description { font-size: 0.82rem; color: var(--muted); margin: 0; line-height: 1.6; }
 .about-heading { font-size: 0.8rem; color: var(--muted); margin: 0 0 6px; font-weight: normal; }
 .about-license-text { font-size: 0.82rem; color: var(--text); margin: 0; line-height: 1.6; }

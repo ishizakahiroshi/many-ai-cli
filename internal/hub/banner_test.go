@@ -10,6 +10,7 @@ func TestStartupBannerIncludesProductDetails(t *testing.T) {
 
 	for _, want := range []string{
 		"Claude Code / Codex wrapper     v0.1.3",
+		"Runtime: ",
 		"GitHub: https://github.com/ishizakahiroshi/any-ai-cli",
 		"WebUI:  http://127.0.0.1:47777",
 		"Open:   http://127.0.0.1:47777/?token=abc123",

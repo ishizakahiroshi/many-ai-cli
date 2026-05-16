@@ -180,6 +180,22 @@ Settings are stored in `~/.any-ai-cli/config.yaml` (auto-created on first run).
 | `language` | UI language (`en` or `ja`) | `en` |
 | `auto_open_browser` | Auto-open browser on Hub start | `true` |
 
+### Where settings are saved
+
+Settings are split into three categories:
+
+| Category | Examples | Storage |
+|---|---|---|
+| **D1: UI display state** (per-device is natural) | theme, font size, language, sidebar width | Browser **localStorage** |
+| **D2: User feature settings** (shared across devices / ports) | voice, wake word, trigger, notification sound, approval auto-switch, quick commands, usage links, favorites, session order, spawn defaults | `~/.any-ai-cli/config.yaml` under `user_prefs:`, read/written via `GET/PUT /api/user-prefs` |
+| **D3: Server operation settings** | hub port, log config, approval enable/disable, slash command sources, approval pattern sources, token | `~/.any-ai-cli/config.yaml` (direct edit or dedicated Settings UI) |
+
+D2 settings survive port changes (e.g. the WSL launcher shifting from 47777 to 47877) because they are stored server-side rather than in per-origin localStorage.
+
+On first load the browser mirrors D2 values from the server. Subsequent changes are written to both localStorage (as a cache) and the server simultaneously. Any existing localStorage values are pushed to the server automatically on first run.
+
+Custom notification sounds are stored as a binary file at `~/.any-ai-cli/notify_sound_custom.bin`, with the MIME type recorded in `user_prefs.notify_sound.custom_mime`.
+
 ---
 
 ## Hub UI

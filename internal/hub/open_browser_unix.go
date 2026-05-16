@@ -3,17 +3,14 @@
 package hub
 
 import (
-	"os"
 	"os/exec"
+
+	"any-ai-cli/internal/wslutil"
 )
 
 func browserCommand(url string) *exec.Cmd {
-	if isWSL() {
+	if wslutil.IsWindowsLauncherMode() {
 		return exec.Command("explorer.exe", url)
 	}
 	return exec.Command("xdg-open", url)
-}
-
-func isWSL() bool {
-	return os.Getenv("WSL_INTEROP") != "" || os.Getenv("WSL_DISTRO_NAME") != ""
 }

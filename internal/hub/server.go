@@ -235,6 +235,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/files-roots", s.handleFilesRoots)
 	mux.HandleFunc("/api/files-move", s.handleFilesMove)
 	mux.HandleFunc("/api/files-rename", s.handleFilesRename)
+	mux.HandleFunc("/api/user-prefs/notify-sound-custom", s.handleUserPrefsNotifySoundCustom)
+	mux.HandleFunc("/api/user-prefs", s.handleUserPrefs)
 	s.httpSrv = &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Handler: mux}
 	return s, nil
 }
@@ -1113,9 +1115,12 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"cwd":     s.hubCWD,
-		"version": s.version,
+	mode := runtimeMode()
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"cwd":           s.hubCWD,
+		"version":       s.version,
+		"runtime_mode":  mode,
+		"runtime_label": runtimeLabel(mode),
 	})
 }
 
@@ -1417,18 +1422,18 @@ func sanitizeEnv(env []string) []string {
 func (s *Server) getLastModel(provider string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.cfg.Spawn.LastModel == nil {
-		s.cfg.Spawn.LastModel = map[string]string{}
+	if s.cfg.UserPrefs.Spawn.LastModel == nil {
+		s.cfg.UserPrefs.Spawn.LastModel = map[string]string{}
 	}
-	return strings.TrimSpace(s.cfg.Spawn.LastModel[provider])
+	return strings.TrimSpace(s.cfg.UserPrefs.Spawn.LastModel[provider])
 }
 
 func (s *Server) setLastModel(provider, model string) error {
 	s.mu.Lock()
-	if s.cfg.Spawn.LastModel == nil {
-		s.cfg.Spawn.LastModel = map[string]string{}
+	if s.cfg.UserPrefs.Spawn.LastModel == nil {
+		s.cfg.UserPrefs.Spawn.LastModel = map[string]string{}
 	}
-	s.cfg.Spawn.LastModel[provider] = model
+	s.cfg.UserPrefs.Spawn.LastModel[provider] = model
 	s.mu.Unlock()
 	return config.Save(s.cfg)
 }

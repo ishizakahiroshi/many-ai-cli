@@ -18,7 +18,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -38,6 +37,12 @@ const (
 // might appear on the same line in some terminals.
 var hubURLRe = regexp.MustCompile(`http://127\.0\.0\.1:\d+/\?token=[0-9a-fA-F]+`)
 
+var (
+	kernel32            = syscall.NewLazyDLL("kernel32.dll")
+	procSetConsoleCP    = kernel32.NewProc("SetConsoleCP")
+	procSetConsoleOutCP = kernel32.NewProc("SetConsoleOutputCP")
+)
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -46,6 +51,8 @@ func main() {
 }
 
 func run() error {
+	configureConsoleUTF8()
+
 	fs := flag.NewFlagSet("any-ai-cli-wsl", flag.ContinueOnError)
 	distro := fs.String("distro", "", "WSL distribution name (defaults to wsl.exe's default distro)")
 	binary := fs.String("binary", "any-ai-cli", "any-ai-cli binary name inside WSL (must be on PATH)")
@@ -71,13 +78,20 @@ func run() error {
 	if *cwd != "" {
 		wslArgs = append(wslArgs, "--cd", *cwd)
 	}
-	// Invoke through `bash -lc` so PATH resolution honors the user's login
-	// shell setup. Without this, `wsl.exe -- any-ai-cli ...` runs with a
-	// minimal PATH that does not include user-local install dirs like
-	// ~/.local/bin or ~/bin, even though `which any-ai-cli` works in an
-	// interactive shell.
-	shellCmd := fmt.Sprintf("exec %s serve --port %d", shellQuote(*binary), chosenPort)
-	wslArgs = append(wslArgs, "--", "bash", "-lc", shellCmd)
+	// Invoke through `bash -ilc` (login + interactive). Login alone is not
+	// enough on a default Ubuntu setup: ~/.bashrc returns early for
+	// non-interactive shells, skipping pnpm/nvm/cargo PATH setup at its
+	// tail. The symptom is that `which codex` then resolves to the
+	// Windows-side pnpm shim surfaced via WSL interop, which fails inside
+	// WSL because `node` is not installed there. Adding -i bypasses that
+	// early-return guard so the user's real PATH is in effect.
+	// ANY_AI_CLI_WSL_LAUNCHER marks "the user is reaching the WSL Hub from
+	// Windows via this launcher", so the Linux-side serve can default log_dir
+	// to the Windows %USERPROFILE% (so the Hub UI's open-folder buttons land
+	// in plain C:\Users\... instead of \\wsl$\... UNC). A bare `any-ai-cli
+	// serve` inside WSL (without this launcher) stays purely Linux-side.
+	shellCmd := fmt.Sprintf("export ANY_AI_CLI_WSL_LAUNCHER=1; exec %s serve --port %d", shellQuote(*binary), chosenPort)
+	wslArgs = append(wslArgs, "--", "bash", "-ilc", shellCmd)
 
 	cmd := exec.Command("wsl.exe", wslArgs...)
 	stdout, err := cmd.StdoutPipe()
@@ -152,6 +166,12 @@ func run() error {
 	return nil
 }
 
+func configureConsoleUTF8() {
+	const cpUTF8 = 65001
+	_, _, _ = procSetConsoleCP.Call(cpUTF8)
+	_, _, _ = procSetConsoleOutCP.Call(cpUTF8)
+}
+
 // openBrowser launches the Windows default browser at url.
 // Uses `cmd /c start "" <url>` which is the documented stable way to invoke
 // the user's registered URL handler. The empty "" is start's window-title
@@ -161,8 +181,8 @@ func openBrowser(url string) error {
 }
 
 // shellQuote wraps s in single quotes for safe POSIX shell expansion via
-// `bash -lc '...'`. Embedded single quotes are escaped using the classic
-// `'\''` close/quote/reopen idiom.
+// `bash -lc '...'`. Embedded single quotes use the POSIX
+// close/quote/reopen idiom.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
