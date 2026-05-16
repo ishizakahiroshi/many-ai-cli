@@ -11,6 +11,20 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- セッションカードの branch バッジクリックで読み取り専用の Git ビューを開けるようにした（メインタブとして独立寿命、Hub 再起動で復元）
+- 詳細パネル (INFORMATION / CHANGES / FILES) で commit の author/message/parents/refs/変更ファイル/diff を 1 画面表示
+- 表示対象 ref の切替（local / remote / tag / `--all`）— checkout は行わない安全な読み取り専用切替
+- 行右クリックで Copy メニュー（short/full hash, subject, message, hash + subject, GitHub link）
+- カード右クリックメニュー（Open Git View / Open Files Tab / Activate Session / Copy session ID）
+- キーボードショートカット: `Ctrl+Shift+G` で現セッションの Git タブ、`Ctrl+Shift+F` で Files タブを open
+- カード右上の open 中マーカー（⎇ = Git タブ open 中、📁 = Files タブ open 中）
+
+### Backend
+- `GET /api/git-log?ref=<ref>&limit=<n>&skip=<n>` 新設
+- `GET /api/git-show?hash=<full>` 新設（diff は 1 ファイル 256KB 上限で truncate）
+- `GET /api/git-refs` 新設
+
+### Added
 - **Remote sync + profile system for approval detection patterns.** Approval
   trigger phrases are now fetched from
   `resources/approval-patterns/{claude,codex,common}.md` on GitHub at Hub

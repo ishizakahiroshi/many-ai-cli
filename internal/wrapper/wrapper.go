@@ -374,6 +374,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		if n > 0 {
 			chunk := make([]byte, n)
 			copy(chunk, buf[:n])
+			chunk = repairMojibakeUTF8(chunk)
 			if lf != nil {
 				_, _ = lf.Write(chunk)
 			}

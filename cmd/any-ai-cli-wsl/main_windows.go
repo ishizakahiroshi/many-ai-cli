@@ -22,6 +22,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unsafe"
 )
 
 const (
@@ -41,6 +42,22 @@ var (
 	kernel32            = syscall.NewLazyDLL("kernel32.dll")
 	procSetConsoleCP    = kernel32.NewProc("SetConsoleCP")
 	procSetConsoleOutCP = kernel32.NewProc("SetConsoleOutputCP")
+	procGetStdHandle    = kernel32.NewProc("GetStdHandle")
+	procGetConsoleMode  = kernel32.NewProc("GetConsoleMode")
+	procSetConsoleMode  = kernel32.NewProc("SetConsoleMode")
+)
+
+const (
+	// Win32 STD_OUTPUT_HANDLE / STD_ERROR_HANDLE — DWORD-cast of -11 / -12.
+	stdOutputHandle = uint32(0xFFFFFFF5)
+	stdErrorHandle  = uint32(0xFFFFFFF4)
+
+	// SetConsoleMode flags. We make sure PROCESSED_OUTPUT (so "\n" expands to
+	// CRLF) and VIRTUAL_TERMINAL_PROCESSING (so ANSI color escapes work) are
+	// both on; their states are independent and both matter for the banner.
+	enableProcessedOutput           = 0x0001
+	enableWrapAtEOLOutput           = 0x0002
+	enableVirtualTerminalProcessing = 0x0004
 )
 
 func main() {
@@ -128,7 +145,12 @@ func run() error {
 		s.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 		for s.Scan() {
 			line := s.Text()
-			fmt.Fprintln(w, line)
+			// The Linux-side serve writes LF-only line breaks (Go's
+			// fmt.Println behavior). Belt-and-braces with the SetConsoleMode
+			// call above: emit explicit CRLF here so the banner renders
+			// correctly even if some other process (or a future Windows
+			// build) re-disables PROCESSED_OUTPUT on this console.
+			_, _ = io.WriteString(w, line+"\r\n")
 			if match := hubURLRe.FindString(line); match != "" {
 				select {
 				case urlFound <- match:
@@ -170,6 +192,34 @@ func configureConsoleUTF8() {
 	const cpUTF8 = 65001
 	_, _, _ = procSetConsoleCP.Call(cpUTF8)
 	_, _, _ = procSetConsoleOutCP.Call(cpUTF8)
+	ensureConsoleOutputMode(stdOutputHandle)
+	ensureConsoleOutputMode(stdErrorHandle)
+}
+
+// ensureConsoleOutputMode forces PROCESSED_OUTPUT and VT_PROCESSING on for the
+// given std handle. Without PROCESSED_OUTPUT the Hub banner's "\n" line breaks
+// only emit LF; cursor moves down without returning to column 0, and the next
+// line is rendered starting at the previous line's right edge (the ASCII art
+// "slides diagonally" and "Claude Code / Codex wrapper" stacks onto the logo's
+// last row). Without VT_PROCESSING the ANSI color escapes in the banner are
+// printed as raw text, blowing up apparent line width. Both modes are
+// independent — we OR them in rather than overwriting, so any existing flags
+// (line wrap, etc.) survive.
+func ensureConsoleOutputMode(stdHandleID uint32) {
+	h, _, _ := procGetStdHandle.Call(uintptr(int32(stdHandleID)))
+	if h == 0 || h == uintptr(^uintptr(0)) {
+		return
+	}
+	var mode uint32
+	r, _, _ := procGetConsoleMode.Call(h, uintptr(unsafe.Pointer(&mode)))
+	if r == 0 {
+		return
+	}
+	newMode := mode | enableProcessedOutput | enableVirtualTerminalProcessing | enableWrapAtEOLOutput
+	if newMode == mode {
+		return
+	}
+	_, _, _ = procSetConsoleMode.Call(h, uintptr(newMode))
 }
 
 // openBrowser launches the Windows default browser at url.
