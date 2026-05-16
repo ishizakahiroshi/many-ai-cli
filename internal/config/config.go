@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
+
+	"any-ai-cli/internal/wslutil"
 )
 
 // LogConfig はファイルローテーションロギングの設定。
@@ -164,6 +166,68 @@ func (p ApprovalProfiles) WithProvider(provider string, name ApprovalProfileName
 	return p
 }
 
+// UserPrefsNotifySound は通知音の設定。
+type UserPrefsNotifySound struct {
+	Enabled    bool   `yaml:"enabled,omitempty"     json:"enabled,omitempty"`
+	Type       string `yaml:"type,omitempty"        json:"type,omitempty"`
+	CustomFile string `yaml:"custom_file,omitempty" json:"custom_file,omitempty"`
+	CustomMime string `yaml:"custom_mime,omitempty" json:"custom_mime,omitempty"`
+}
+
+// UserPrefsTrigger はトリガーフレーズの設定。
+type UserPrefsTrigger struct {
+	Enabled bool   `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	Phrase  string `yaml:"phrase,omitempty"  json:"phrase,omitempty"`
+}
+
+// UserPrefsApproval は承認関連のユーザー設定。
+type UserPrefsApproval struct {
+	AutoSwitch bool `yaml:"auto_switch,omitempty" json:"auto_switch,omitempty"`
+}
+
+// UserPrefsQuickCmds はクイックコマンドの設定。
+type UserPrefsQuickCmds struct {
+	Cmd1 string `yaml:"cmd1,omitempty" json:"cmd1,omitempty"`
+	Cmd2 string `yaml:"cmd2,omitempty" json:"cmd2,omitempty"`
+}
+
+// UserPrefsUsageLinks は使用量リンクの設定。
+type UserPrefsUsageLinks struct {
+	Claude string `yaml:"claude,omitempty" json:"claude,omitempty"`
+	Codex  string `yaml:"codex,omitempty"  json:"codex,omitempty"`
+}
+
+// UserPrefsVoice は音声入力の設定。
+type UserPrefsVoice struct {
+	GraceSeconds    int    `yaml:"grace_seconds,omitempty"    json:"grace_seconds,omitempty"`
+	WakeWordEnabled bool   `yaml:"wake_word_enabled,omitempty" json:"wake_word_enabled,omitempty"`
+	WakeWordPhrase  string `yaml:"wake_word_phrase,omitempty"  json:"wake_word_phrase,omitempty"`
+}
+
+// UserPrefsSpawn はセッション起動のデフォルト設定。
+type UserPrefsSpawn struct {
+	Defaults  map[string]string `yaml:"defaults,omitempty"   json:"defaults,omitempty"`
+	LastModel map[string]string `yaml:"last_model,omitempty" json:"last_model,omitempty"`
+}
+
+// UserPrefs はサーバ側（config.yaml: user_prefs:）に保存するユーザー機能設定。
+// 端末・ポート横断で共有する D2 分類の設定を全て保持する。
+type UserPrefs struct {
+	Trigger         UserPrefsTrigger    `yaml:"trigger,omitempty"      json:"trigger,omitempty"`
+	NotifySound     UserPrefsNotifySound `yaml:"notify_sound,omitempty" json:"notify_sound,omitempty"`
+	Approval        UserPrefsApproval   `yaml:"approval,omitempty"     json:"approval,omitempty"`
+	QuickCmds       UserPrefsQuickCmds  `yaml:"quick_cmds,omitempty"   json:"quick_cmds,omitempty"`
+	UsageLinks      UserPrefsUsageLinks `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
+	Voice           UserPrefsVoice      `yaml:"voice,omitempty"        json:"voice,omitempty"`
+	Favorites       []string            `yaml:"favorites,omitempty"        json:"favorites,omitempty"`
+	SessionOrder    []string            `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
+	GroupOrder      []string            `yaml:"group_order,omitempty"      json:"group_order,omitempty"`
+	ProjectFavorites []string           `yaml:"project_favorites,omitempty" json:"project_favorites,omitempty"`
+	CwdHistory      []string            `yaml:"cwd_history,omitempty"      json:"cwd_history,omitempty"`
+	Spawn           UserPrefsSpawn      `yaml:"spawn,omitempty"            json:"spawn,omitempty"`
+	MigratedFromLocalstorage bool       `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
+}
+
 type Config struct {
 	Hub struct {
 		Port                     int    `yaml:"port"`
@@ -184,6 +248,7 @@ type Config struct {
 	FileOpenApp            string                 `yaml:"file_open_app,omitempty"`
 	TerminalApp            string                 `yaml:"terminal_app,omitempty"`
 	Token                  string                 `yaml:"token"`
+	UserPrefs              UserPrefs              `yaml:"user_prefs,omitempty" json:"user_prefs,omitempty"`
 }
 
 func LoadOrCreate() (*Config, error) {
@@ -210,8 +275,21 @@ func LoadOrCreate() (*Config, error) {
 	if cfg.Token == "" {
 		cfg.Token = randomToken()
 	}
-	if cfg.Spawn.LastModel == nil {
-		cfg.Spawn.LastModel = map[string]string{}
+	// 旧 cfg.Spawn.LastModel → UserPrefs.Spawn.LastModel へ移行
+	// 読み込み時に旧位置に値があり新位置が空なら移送し、旧位置を空にする
+	if cfg.Spawn.LastModel != nil {
+		if cfg.UserPrefs.Spawn.LastModel == nil {
+			cfg.UserPrefs.Spawn.LastModel = map[string]string{}
+		}
+		for k, v := range cfg.Spawn.LastModel {
+			if v != "" && cfg.UserPrefs.Spawn.LastModel[k] == "" {
+				cfg.UserPrefs.Spawn.LastModel[k] = v
+			}
+		}
+		cfg.Spawn.LastModel = nil
+	}
+	if cfg.UserPrefs.Spawn.LastModel == nil {
+		cfg.UserPrefs.Spawn.LastModel = map[string]string{}
 	}
 	cfg.SlashCmdSources = EffectiveSlashCmdSources(cfg.SlashCmdSources)
 	cfg.ApprovalPatternSources = EffectiveApprovalPatternSources(cfg.ApprovalPatternSources)
@@ -224,14 +302,25 @@ func defaultConfig(home string) *Config {
 	cfg.Hub.Port = 47777
 	cfg.Hub.OpenBrowser = true
 	cfg.Hub.AutoShutdown = true
-	cfg.Hub.LogDir = filepath.Join(home, ".any-ai-cli", "logs")
+	// When invoked via the any-ai-cli-wsl.exe Windows launcher (and only then —
+	// not for plain `any-ai-cli serve` inside a WSL shell), place logs under the
+	// Windows %USERPROFILE% so the Hub UI's open-folder button resolves to a
+	// plain C:\Users\... path that Windows Explorer can open directly. A bare
+	// WSL session is treated as pure-Linux and keeps logs under Linux $HOME.
+	logHome := home
+	if wslutil.IsWindowsLauncherMode() {
+		if winHome := wslutil.WindowsHomeAsUnix(); winHome != "" {
+			logHome = winHome
+		}
+	}
+	cfg.Hub.LogDir = filepath.Join(logHome, ".any-ai-cli", "logs")
 	cfg.Hub.IdleTimeoutMin = 60
 	cfg.Hub.WrapperReconnectGraceSec = 3600
 	cfg.Log.Enabled = true
 	cfg.Log.MaxSizeMB = 10
 	cfg.Log.MaxBackups = 3
 	cfg.Log.Compress = false
-	cfg.Spawn.LastModel = map[string]string{}
+	cfg.UserPrefs = UserPrefs{}
 	cfg.SlashCmdSources = DefaultSlashCmdSources()
 	cfg.ApprovalPatternSources = DefaultApprovalPatternSources()
 	cfg.ApprovalProfiles = DefaultApprovalProfiles()
