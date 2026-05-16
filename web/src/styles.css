@@ -165,7 +165,10 @@ header {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow: hidden;
 }
 .session-chip {
   display: inline-flex;
@@ -215,6 +218,7 @@ header {
 .usage-menu {
   position: relative;
   display: inline-block;
+  margin-left: auto;
 }
 .usage-menu-btn {
   display: inline-flex;
@@ -249,10 +253,8 @@ header {
   transform: rotate(180deg);
 }
 .usage-dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: 200;
+  position: fixed;
+  z-index: 1300;
   min-width: 160px;
   background: var(--bg-elev, #1e2330);
   border: 1px solid var(--line);
@@ -260,6 +262,7 @@ header {
   box-shadow: 0 8px 20px rgba(0,0,0,0.4);
   overflow: hidden;
 }
+.usage-dropdown[hidden] { display: none !important; }
 .usage-dropdown-header {
   padding: 7px 12px 5px;
   font-size: 0.65rem;
@@ -677,6 +680,10 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 .card-started-at { flex-shrink: 0; font-size: 0.72rem; color: var(--muted-2); margin-left: 3px; }
 .card-provider-icon { flex-shrink: 0; vertical-align: middle; margin-right: 2px; }
 .card-model { flex-shrink: 1; font-size: 0.72rem; color: var(--muted-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; margin-left: 2px; }
+/* Ollama バックエンドを使うセッションのモデルバッジ。○ + モデル名、幅が狭いと ellipsis 省略しつつ ○ は常時表示。 */
+.card-model.card-model--ollama { display: inline-flex; align-items: center; gap: 3px; cursor: default; min-width: 0; }
+.card-model.card-model--ollama svg.card-provider-icon { width: 10px; height: 10px; flex-shrink: 0; margin-right: 0; }
+.card-model.card-model--ollama .card-model-text { min-width: 0; flex-shrink: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-branch { flex-shrink: 1; min-width: 0; max-width: 34%; color: var(--green-text); background: color-mix(in srgb, var(--green-bg) 35%, transparent); border: 1px solid color-mix(in srgb, var(--green-text) 30%, transparent); border-radius: 4px; padding: 1px 5px; font-size: 0.68rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 2px; cursor: pointer; user-select: none; transition: background 0.15s, transform 0.05s, color 0.15s; font-family: Consolas, monospace; }
 .card-branch:hover { background: color-mix(in srgb, var(--green-text) 22%, transparent); color: var(--text); }
 .card-branch:active { transform: scale(0.96); }
@@ -1219,6 +1226,13 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   transition: color 0.12s, background 0.12s;
 }
 .quick-cmd-btn:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+.quick-cmd-btn:disabled,
+.quick-cmd-btn[disabled] {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.quick-cmd-btn:disabled:hover { background: transparent; color: var(--muted-2); }
 #quick-clear-btn,
 #quick-model-btn,
 #slash-picker-btn {
@@ -1807,6 +1821,7 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 .spawn-model-row { display: flex; gap: 4px; align-items: center; }
 .spawn-model-row > .spawn-input { flex: 1; }
 #spawn-model-refresh.is-loading { opacity: 0.5; pointer-events: none; }
+.spawn-model-clear { min-width: 26px; padding-left: 0; padding-right: 0; }
 .spawn-btn-browse { flex-shrink: 0; background: transparent; border: 1px solid var(--line); color: var(--fg); border-radius: 4px; padding: 3px 7px; cursor: pointer; font-size: 0.85rem; line-height: 1; }
 .spawn-btn-browse:hover { background: var(--bg-elev2); }
 .spawn-btn-browse:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -2740,13 +2755,22 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   50%       { opacity: 0.6; }
 }
 .summary-sep { color: var(--line-soft); align-self: center; font-size: 0.9rem; padding: 0 2px; }
-.summary-provider-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 0.78rem; color: var(--text); }
+.summary-provider-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 0.78rem; color: var(--text); white-space: nowrap; flex-shrink: 0; }
+.summary-provider-chip .card-provider-icon { flex-shrink: 0; }
+.summary-provider-chip .compact-hide { display: inline-flex; align-items: center; gap: 4px; }
+.summary-provider-chip .compact-count { display: none; color: var(--muted); font-size: 0.78rem; }
 .summary-provider-name { display: inline-flex; align-items: center; font-size: 0.7rem; font-weight: 700; padding: 1px 6px; border-radius: 4px; letter-spacing: 0.04em; }
 .summary-provider-name.claude    { color: #fb923c; background: rgba(251,146,60,0.12); }
 .summary-provider-name.codex     { color: #60a5fa; background: rgba(96,165,250,0.12); }
 .summary-provider-name.ollama    { color: #C4973A; background: rgba(196,151,58,0.12); }
 .summary-provider-name.opencode  { color: #A855F7; background: rgba(168,85,247,0.12); }
 .summary-provider-count { color: var(--muted); font-size: 0.78rem; }
+.summary-ollama-model { font-size: 0.7rem; color: var(--muted-2); white-space: nowrap; }
+
+/* compact モード: ResizeObserver で #summary がオーバーフローしたとき付与される。
+   provider chip のテキスト部を隠し、カウント数字のみ残す。tooltip で内容補完。 */
+#summary.summary--compact .summary-provider-chip .compact-hide  { display: none; }
+#summary.summary--compact .summary-provider-chip .compact-count { display: inline; }
 
 /* 音声入力ボタン */
 #voice-btn {

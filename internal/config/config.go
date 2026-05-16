@@ -41,6 +41,8 @@ const (
 
 const DefaultUsageLinkSource = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/usage-links/defaults.json"
 
+const DefaultModelsSource = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/models/defaults.json"
+
 func DefaultSlashCmdSources() SlashCmdSources {
 	return SlashCmdSources{
 		Claude: DefaultClaudeSlashCmdSource,

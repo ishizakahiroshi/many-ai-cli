@@ -62,6 +62,7 @@ type session struct {
 	Branch       string `json:"branch,omitempty"`
 	Label        string `json:"label,omitempty"` // UI カード 3 行目に【ラベル】として表示
 	Model        string `json:"model,omitempty"` // 使用モデル名; UI カード表示用
+	Route        string `json:"route,omitempty"` // 接続経路（"ollama" 等）; UI で Ollama バックエンドの識別に使用
 	Shell        string `json:"shell,omitempty"`
 	State        string `json:"state"`
 	LastOutputAt string `json:"last_output_at,omitempty"` // ISO 8601; UI カード「最終応答時刻」用
@@ -93,6 +94,20 @@ func (s *session) idleStateName() string {
 		return "waiting"
 	}
 	return "standby"
+}
+
+// resolveRoute は provider + model から route を推定する。
+// spawn API では body.Route が明示指定されるが、wrapper の register/reattach
+// 経路には route 情報が無いため、ここで RouteForModel と同等の推定を行う。
+func (s *Server) resolveRoute(provider, model string) string {
+	if strings.TrimSpace(model) == "" {
+		return ""
+	}
+	s.mu.Lock()
+	localCfg := append([]config.LocalModel(nil), s.cfg.LocalModels...)
+	s.mu.Unlock()
+	known := collectOllamaModelIDs(s.modelsCache, localCfg)
+	return RouteForModel(provider, model, known)
 }
 
 func gitBranch(cwd string) string {
@@ -140,7 +155,8 @@ type Server struct {
 
 	usageLinkCache *usageLinkCache
 
-	modelsCache *modelsCache
+	modelsCache       *modelsCache
+	modelsRemoteCache *modelsRemoteCache
 
 	lastUICols int
 	lastUIRows int
@@ -167,6 +183,10 @@ const (
 // 例: "└  Set model to Haiku 4.5" → "Haiku 4.5"
 var reSetModelTo = regexp.MustCompile(`Set model to ([^\r\n]+)`)
 
+// reCodexModelChanged は Codex CLI の /model コマンド出力からモデル名を抽出する。
+// 例: "• Model changed to gpt-5.5 medium" → "gpt-5.5 medium"
+var reCodexModelChanged = regexp.MustCompile(`Model changed to ([^\r\n]+)`)
+
 func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version string) (*Server, error) {
 	hubCWD, _ := os.Getwd()
 	s := &Server{
@@ -180,8 +200,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		wrappers:      map[int]*websocket.Conn{},
 		uis:           map[*websocket.Conn]struct{}{},
 		slashCmdCache:  map[string]*slashCmdCacheEntry{},
-		usageLinkCache: &usageLinkCache{},
-		modelsCache:    &modelsCache{},
+		usageLinkCache:    &usageLinkCache{},
+		modelsCache:       &modelsCache{},
+		modelsRemoteCache: &modelsRemoteCache{},
 	}
 	if devMode {
 		logger.Info("dev mode: serving web assets from ./web/src/")
@@ -486,6 +507,10 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		s.logger.Warn("session history create failed", "path", jsonlPath, "err", histErr)
 	}
 
+	regRoute := strings.TrimSpace(reg.Route)
+	if regRoute == "" {
+		regRoute = s.resolveRoute(reg.Provider, reg.Model)
+	}
 	s.mu.Lock()
 	ses := &session{
 		ID:              id,
@@ -495,6 +520,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		Branch:          branch,
 		Label:           reg.Label,
 		Model:           reg.Model,
+		Route:           regRoute,
 		Shell:           reg.Shell,
 		State:           "standby",
 		StartedAt:       startedAt.Format(time.RFC3339),
@@ -519,7 +545,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	s.mu.Unlock()
 	_ = websocket.JSON.Send(conn, proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath})
 	s.logger.Info("session registered", "id", id, "provider", reg.Provider, "cwd", reg.CWD, "pid", reg.PID)
-	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Branch: branch, Label: reg.Label, Model: reg.Model, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt})
+	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Branch: branch, Label: reg.Label, Model: reg.Model, Route: regRoute, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt})
 	s.writeHistory(id, map[string]any{
 		"ts":         startedAt.Format(time.RFC3339),
 		"type":       "session_start",
@@ -576,6 +602,10 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		s.logger.Warn("session history append failed", "path", jsonlPath, "err", histErr)
 	}
 
+	reqRoute := strings.TrimSpace(req.Route)
+	if reqRoute == "" {
+		reqRoute = s.resolveRoute(req.Provider, req.Model)
+	}
 	s.mu.Lock()
 	acceptedID := req.SessionID
 	if s.wrappers[acceptedID] != nil {
@@ -601,6 +631,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		Branch:          branch,
 		Label:           req.Label,
 		Model:           req.Model,
+		Route:           reqRoute,
 		Shell:           req.Shell,
 		State:           "running",
 		LastOutputAt:    lastOutputAt,
@@ -623,7 +654,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		_ = oldHistory.Close()
 	}
 	_ = websocket.JSON.Send(conn, proto.Message{Type: "reattach_ack", SessionID: acceptedID})
-	s.broadcast(proto.Message{Type: "session_update", SessionID: acceptedID, Provider: req.Provider, Display: req.Display, CWD: req.CWD, Branch: branch, Label: req.Label, Model: req.Model, Shell: req.Shell, State: "running", LastOutputAt: lastOutputAt, StartedAt: startedAtText})
+	s.broadcast(proto.Message{Type: "session_update", SessionID: acceptedID, Provider: req.Provider, Display: req.Display, CWD: req.CWD, Branch: branch, Label: req.Label, Model: req.Model, Route: reqRoute, Shell: req.Shell, State: "running", LastOutputAt: lastOutputAt, StartedAt: startedAtText})
 	s.writeHistory(acceptedID, map[string]any{
 		"ts":             now.Format(time.RFC3339),
 		"type":           "session_reattach",
@@ -739,12 +770,29 @@ func (s *Server) wrapperMessageLoop(conn *websocket.Conn, id int) {
 	s.broadcast(proto.Message{Type: "session_end", SessionID: id, State: endState, Reason: endReason})
 }
 
-// detectModelChange は PTY 出力から「Set model to <name>」を検出し、
+// detectModelChange は PTY 出力からモデル変更を検出し、
 // セッションの Model フィールドを更新して UI に session_update を送る。
-// Claude Code の /model コマンド出力を対象とする。
+// Claude Code の "Set model to <name>" / Codex CLI の "Model changed to <name>" を対象とする。
 func (s *Server) detectModelChange(id int, data []byte) {
 	text := sessionlog.StripANSI(string(data))
-	match := reSetModelTo.FindStringSubmatch(text)
+	s.mu.Lock()
+	ses := s.sessions[id]
+	if ses == nil {
+		s.mu.Unlock()
+		return
+	}
+	provider := ses.Provider
+	s.mu.Unlock()
+
+	var match []string
+	switch provider {
+	case "claude":
+		match = reSetModelTo.FindStringSubmatch(text)
+	case "codex":
+		match = reCodexModelChanged.FindStringSubmatch(text)
+	default:
+		return
+	}
 	if match == nil {
 		return
 	}
@@ -752,13 +800,15 @@ func (s *Server) detectModelChange(id int, data []byte) {
 	if newModel == "" {
 		return
 	}
+	newRoute := s.resolveRoute(provider, newModel)
 	s.mu.Lock()
-	ses := s.sessions[id]
-	if ses == nil || ses.Provider != "claude" || ses.Model == newModel {
+	ses = s.sessions[id]
+	if ses == nil || ses.Model == newModel {
 		s.mu.Unlock()
 		return
 	}
 	ses.Model = newModel
+	ses.Route = newRoute
 	update := proto.Message{
 		Type:         "session_update",
 		SessionID:    id,
@@ -768,6 +818,7 @@ func (s *Server) detectModelChange(id int, data []byte) {
 		Branch:       ses.Branch,
 		Label:        ses.Label,
 		Model:        ses.Model,
+		Route:        ses.Route,
 		State:        ses.State,
 		LastOutputAt: ses.LastOutputAt,
 		FirstMessage: ses.FirstMessage,
@@ -814,7 +865,7 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 					// /clear でセッション概要をリセット（次の入力が新しい概要になる）
 					ses.FirstMessage = ""
 					ses.LastMessage = ""
-					msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, State: ses.State, LastOutputAt: ses.LastOutputAt}
+					msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt}
 					firstMsgBroadcast = &msg
 				} else if text != "" {
 					if ses.FirstMessage == "" {
@@ -824,7 +875,7 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 					if !isDigitsOnly(text) {
 						ses.LastMessage = text
 					}
-					msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, State: ses.State, LastOutputAt: ses.LastOutputAt, FirstMessage: ses.FirstMessage, LastMessage: ses.LastMessage}
+					msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt, FirstMessage: ses.FirstMessage, LastMessage: ses.LastMessage}
 					firstMsgBroadcast = &msg
 				}
 			}
@@ -944,10 +995,10 @@ func (s *Server) markRunning(id int) {
 	if changed {
 		ses.State = "running"
 	}
-	provider, display, cwd, branch, label, model, lastOutputAt := ses.Provider, ses.Display, ses.CWD, ses.Branch, ses.Label, ses.Model, ses.LastOutputAt
+	provider, display, cwd, branch, label, model, route, lastOutputAt := ses.Provider, ses.Display, ses.CWD, ses.Branch, ses.Label, ses.Model, ses.Route, ses.LastOutputAt
 	s.mu.Unlock()
 	if changed {
-		s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: provider, Display: display, CWD: cwd, Branch: branch, Label: label, Model: model, State: "running", LastOutputAt: lastOutputAt})
+		s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: provider, Display: display, CWD: cwd, Branch: branch, Label: label, Model: model, Route: route, State: "running", LastOutputAt: lastOutputAt})
 	}
 }
 
@@ -981,6 +1032,7 @@ func (s *Server) evaluateIdle() {
 		branch       string
 		label        string
 		model        string
+		route        string
 		state        string
 		lastOutputAt string
 	}
@@ -1010,12 +1062,12 @@ func (s *Server) evaluateIdle() {
 		}
 		if newState != "" && newState != ses.State {
 			ses.State = newState
-			changes = append(changes, change{id: id, provider: ses.Provider, display: ses.Display, cwd: ses.CWD, branch: ses.Branch, label: ses.Label, model: ses.Model, state: newState, lastOutputAt: ses.LastOutputAt})
+			changes = append(changes, change{id: id, provider: ses.Provider, display: ses.Display, cwd: ses.CWD, branch: ses.Branch, label: ses.Label, model: ses.Model, route: ses.Route, state: newState, lastOutputAt: ses.LastOutputAt})
 		}
 	}
 	s.mu.Unlock()
 	for _, c := range changes {
-		s.broadcast(proto.Message{Type: "session_update", SessionID: c.id, Provider: c.provider, Display: c.display, CWD: c.cwd, Branch: c.branch, Label: c.label, Model: c.model, State: c.state, LastOutputAt: c.lastOutputAt})
+		s.broadcast(proto.Message{Type: "session_update", SessionID: c.id, Provider: c.provider, Display: c.display, CWD: c.cwd, Branch: c.branch, Label: c.label, Model: c.model, Route: c.route, State: c.state, LastOutputAt: c.lastOutputAt})
 	}
 	for _, bc := range branchChecks {
 		s.refreshBranch(bc.id, bc.cwd)
@@ -1040,6 +1092,7 @@ func (s *Server) refreshBranch(id int, cwd string) {
 		Branch:       ses.Branch,
 		Label:        ses.Label,
 		Model:        ses.Model,
+		Route:        ses.Route,
 		State:        ses.State,
 		LastOutputAt: ses.LastOutputAt,
 		StartedAt:    ses.StartedAt,

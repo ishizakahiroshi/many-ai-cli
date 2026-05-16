@@ -66,29 +66,9 @@ type modelsCache struct {
 	local *ollamaTagsCacheEntry
 }
 
-// hardcoded model lists for Anthropic / OpenAI.
-// 直接 fetch すべき公式 API が無いため固定。新モデル追加時はここを更新する。
-var (
-	anthropicModels = []Model{
-		{ID: "claude-opus-4-7", Label: "Claude Opus 4.7"},
-		{ID: "claude-sonnet-4-6", Label: "Claude Sonnet 4.6"},
-		{ID: "claude-haiku-4-5", Label: "Claude Haiku 4.5"},
-		{ID: "claude-sonnet-4-5", Label: "Claude Sonnet 4.5"},
-		{ID: "claude-3-7-sonnet-latest", Label: "Claude 3.7 Sonnet"},
-		{ID: "claude-3-5-sonnet-latest", Label: "Claude 3.5 Sonnet"},
-		{ID: "claude-3-5-haiku-latest", Label: "Claude 3.5 Haiku"},
-	}
-	openaiModels = []Model{
-		{ID: "gpt-5", Label: "GPT-5"},
-		{ID: "gpt-5-codex", Label: "GPT-5 Codex"},
-		{ID: "gpt-5-mini", Label: "GPT-5 mini"},
-		{ID: "gpt-4o", Label: "GPT-4o"},
-		{ID: "gpt-4o-mini", Label: "GPT-4o mini"},
-		{ID: "o3", Label: "o3"},
-		{ID: "o3-mini", Label: "o3 mini"},
-		{ID: "o1", Label: "o1"},
-	}
-)
+// Anthropic / OpenAI のモデル一覧は GitHub の resources/models/defaults.json から
+// 24h TTL で取得する（fetch 失敗時は models_remote_fetch.go の hardcodedModelsDefaults にフォールバック）。
+// slash-commands / approval-patterns / usage-links と同じ仕組みで、リビルド不要・トークン消費 0 で更新できる。
 
 // fetchOllamaTags は指定 URL から `/api/tags` を取得して models 列に変換する。
 func fetchOllamaTags(url string, timeout time.Duration) ([]Model, error) {
@@ -173,11 +153,21 @@ func (c *modelsCache) invalidate() {
 	c.mu.Unlock()
 }
 
-// buildModelsResponse は Anthropic / OpenAI（ハードコード）/ Ollama Cloud / Local を
+// buildModelsResponse は Anthropic / OpenAI（GitHub fetch + 24h キャッシュ）/ Ollama Cloud / Local を
 // 集約して /api/models のレスポンス body を作る。
-func buildModelsResponse(cache *modelsCache, localConfig []config.LocalModel, force bool) ModelsResponse {
+func buildModelsResponse(cache *modelsCache, remote *modelsRemoteCache, remoteSource string, localConfig []config.LocalModel, force bool) ModelsResponse {
+	if force && remote != nil {
+		remote.invalidate()
+	}
+	defaults := hardcodedModelsDefaults
+	if remote != nil {
+		defaults = remote.get(remoteSource)
+	}
+
 	resp := ModelsResponse{
 		Sources: map[string]string{
+			"anthropic":           remoteSource,
+			"openai":              remoteSource,
 			"ollama_cloud":        ollamaCloudURL,
 			"ollama_local":        ollamaLocalURL,
 			"local_models_config": "~/.any-ai-cli/config.yaml#local_models",
@@ -185,20 +175,20 @@ func buildModelsResponse(cache *modelsCache, localConfig []config.LocalModel, fo
 	}
 	var newest time.Time
 
-	// Anthropic（ハードコード）
+	// Anthropic（GitHub fetch / fallback ハードコード）
 	resp.Groups = append(resp.Groups, ModelGroup{
 		Label:    "Anthropic",
 		Provider: "claude",
 		Route:    RouteAnthropic,
-		Models:   append([]Model{}, anthropicModels...),
+		Models:   append([]Model{}, defaults.Anthropic...),
 	})
 
-	// OpenAI（ハードコード）
+	// OpenAI（GitHub fetch / fallback ハードコード）
 	resp.Groups = append(resp.Groups, ModelGroup{
 		Label:    "OpenAI",
 		Provider: "codex",
 		Route:    RouteOpenAI,
-		Models:   append([]Model{}, openaiModels...),
+		Models:   append([]Model{}, defaults.OpenAI...),
 	})
 
 	// Ollama Cloud
