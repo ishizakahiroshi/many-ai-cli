@@ -11,6 +11,8 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- Git タブから working tree の全変更を `git add -A` → `git commit` で commit できる `Commit all` 導線を追加
+- Commit all モーダルで subject/body 編集、Review 後の二段階確認、commit message 生成、成功 toast と Git log refresh に対応
 - セッションカードの branch バッジクリックで読み取り専用の Git ビューを開けるようにした（メインタブとして独立寿命、Hub 再起動で復元）
 - 詳細パネル (INFORMATION / CHANGES / FILES) で commit の author/message/parents/refs/変更ファイル/diff を 1 画面表示
 - 表示対象 ref の切替（local / remote / tag / `--all`）— checkout は行わない安全な読み取り専用切替
@@ -20,6 +22,9 @@ Release artifacts are published at
 - カード右上の open 中マーカー（⎇ = Git タブ open 中、📁 = Files タブ open 中）
 
 ### Backend
+- `GET /api/git-status` 新設（working tree の変更ファイル一覧と summary を返す）
+- `POST /api/git-commit-all` 新設（token と Review 済み UI 操作を前提に `git add -A` → `git commit` のみ実行）
+- `POST /api/git-commit-message` 新設（現在の差分 summary から subject/body 候補を返す）
 - `GET /api/git-log?ref=<ref>&limit=<n>&skip=<n>` 新設
 - `GET /api/git-show?hash=<full>` 新設（diff は 1 ファイル 256KB 上限で truncate）
 - `GET /api/git-refs` 新設

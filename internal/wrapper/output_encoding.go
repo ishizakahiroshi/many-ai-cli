@@ -61,6 +61,8 @@ func encodeWindows1252(s string) ([]byte, bool) {
 		switch {
 		case r <= 0x7f:
 			out = append(out, byte(r))
+		case r >= 0x80 && r <= 0x9f:
+			out = append(out, byte(r))
 		case r >= 0xa0 && r <= 0xff:
 			out = append(out, byte(r))
 		default:

@@ -2202,11 +2202,13 @@ document.addEventListener('wheel', (e) => {
   if (isWheelTargetExcluded(e.target)) return;
 
   if (forwardWheelToAltBuffer(activeSessionId, t, e.deltaY)) {
+    markTerminalManualScrollIntent();
     e.preventDefault();
     e.stopPropagation();
     return;
   }
 
+  markTerminalManualScrollIntent();
   const lineHeight = 24;
   const lines = Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY) / lineHeight));
   try { t.term.scrollLines(lines); } catch (_) {}
@@ -2216,24 +2218,92 @@ document.addEventListener('wheel', (e) => {
   e.stopPropagation();
 }, { passive: false, capture: true });
 
-function scrollTerminalToBottomSoon(id) {
+let lastTerminalManualScrollAt = 0;
+
+function markTerminalManualScrollIntent() {
+  lastTerminalManualScrollAt = Date.now();
+}
+
+function scrollTerminalToBottomSoon(id, opts = {}) {
   const t = terminals.get(id);
   if (!t || !t.term) return;
-  t.autoScroll = true;
-  t.term.scrollToBottom();
-  if (id === activeSessionId) updateScrollLockBtn(false);
-  requestAnimationFrame(() => {
+  const force = !!opts.force;
+  const passes = Math.max(1, opts.passes || 1);
+  const startedAt = opts.startedAt || Date.now();
+
+  const snap = () => {
     if (!terminals.has(id)) return;
     const tNext = terminals.get(id);
     if (!tNext || !tNext.term) return;
-    // If the user wheels up immediately after a session-card switch, onScroll /
-    // the document wheel handler flips autoScroll to false before this RAF runs.
-    // Respect that intent instead of snapping back to bottom on the next frame.
-    if (!tNext.autoScroll) return;
+    if (force && lastTerminalManualScrollAt > startedAt) return;
+    if (!force && !tNext.autoScroll) return;
     tNext.autoScroll = true;
     tNext.term.scrollToBottom();
     if (id === activeSessionId) updateScrollLockBtn(false);
+  };
+
+  snap();
+  let remaining = passes;
+  const scheduleNext = () => {
+    if (remaining <= 0) return;
+    remaining--;
+    requestAnimationFrame(() => {
+      snap();
+      scheduleNext();
+    });
+  };
+  scheduleNext();
+}
+
+function refitAndStickTerminalToBottomSoon(id, opts = {}) {
+  if (id !== activeSessionId) return;
+  const passes = Math.max(1, opts.passes || 4);
+  const force = !!opts.force;
+  const startedAt = opts.startedAt || Date.now();
+
+  const run = () => {
+    if (id !== activeSessionId) return;
+    if (force && lastTerminalManualScrollAt > startedAt) return;
+    const t = terminals.get(id);
+    if (!canFitTerminal(t)) return;
+    const prevCols = t.term.cols;
+    const prevRows = t.term.rows;
+    t.autoScroll = true;
+    fitTerminalPreservingBottom(t, id);
+    if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
+      sendResize(id, t.term.cols, t.term.rows);
+    }
+    scrollTerminalToBottomSoon(id, { force, passes: 1, startedAt });
+  };
+
+  requestAnimationFrame(() => {
+    run();
+    let remaining = passes - 1;
+    const next = () => {
+      if (remaining <= 0) return;
+      remaining--;
+      requestAnimationFrame(() => {
+        run();
+        next();
+      });
+    };
+    next();
   });
+}
+
+function refitAndStickTerminalToBottomAfterLayoutSettles(id, opts = {}) {
+  const startedAt = opts.startedAt || Date.now();
+  const force = !!opts.force;
+  const passes = opts.passes || 4;
+  const delays = opts.delays || [0, 80, 220];
+
+  for (const delay of delays) {
+    setTimeout(() => {
+      if (activeSessionId !== id) return;
+      if (force && lastTerminalManualScrollAt > startedAt) return;
+      refitAndStickTerminalToBottomSoon(id, { force, passes, startedAt });
+    }, delay);
+  }
 }
 
 function refitActiveTerminalAfterLayout(stickToBottom) {
@@ -2273,6 +2343,7 @@ document.getElementById('scroll-to-top-btn')?.addEventListener('click', () => {
   if (activeSessionId === null) return;
   const t = terminals.get(activeSessionId);
   if (!t) return;
+  markTerminalManualScrollIntent();
   t.autoScroll = false;
   t.term.scrollToTop();
   updateScrollLockBtn(true);
@@ -3441,7 +3512,7 @@ function showActionBar(bar, sessionId, options, showExpand, forceStickToBottom =
   if (lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig) {
     // 承認検出は PTY write / ResizeObserver / セッション自動切替と同時に走ることがある。
     // DOM 再描画をスキップする場合でも、追従中なら最下部への再スナップは省略しない。
-    if (shouldStickToBottom) scrollTerminalToBottomSoon(sessionId);
+    if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
     return;
   }
   lastActionBarRender.sessionId = sessionId;
@@ -3509,7 +3580,7 @@ function showActionBar(bar, sessionId, options, showExpand, forceStickToBottom =
 
   bar.classList.add('visible');
   if (shouldStickToBottom) {
-    scrollTerminalToBottomSoon(sessionId);
+    refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
   }
 }
 
@@ -3538,7 +3609,7 @@ function showBatchActionBar(bar, sessionId, sections, forceStickToBottom = false
     v: bar.classList.contains('visible'),
   });
   if (lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig) {
-    if (shouldStickToBottom) scrollTerminalToBottomSoon(sessionId);
+    if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
     return;
   }
   lastActionBarRender.sessionId = sessionId;
@@ -3624,7 +3695,7 @@ function showBatchActionBar(bar, sessionId, sections, forceStickToBottom = false
 
   bar.appendChild(footer);
   bar.classList.add('visible');
-  if (shouldStickToBottom) scrollTerminalToBottomSoon(sessionId);
+  if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
 }
 
 function selectBatchOption(sessionId, sectionIdx, optionNum) {
@@ -4311,12 +4382,33 @@ inputEl.addEventListener('keydown', (e) => {
 (function initToolsFlip() {
   const wrap = document.getElementById('input-wrap');
   const btn = document.getElementById('tools-flip-btn');
-  if (!wrap || !btn) return;
-  if (localStorage.getItem(STORAGE_TOOLS_LEFT_KEY) === '1') {
-    wrap.classList.add('tools-left');
-  }
+  const inputArea = document.getElementById('input-area');
+  const inputTools = document.getElementById('input-tools');
+  if (!wrap || !btn || !inputArea || !inputTools) return;
+
+  const applyToolsPosition = (isLeft) => {
+    wrap.classList.toggle('tools-left', isLeft);
+    if (isLeft) {
+      wrap.append(btn, inputTools);
+      const voiceBtn = document.getElementById('voice-btn');
+      const sendBtn = document.getElementById('send-btn');
+      if (voiceBtn) wrap.append(voiceBtn);
+      if (sendBtn) wrap.append(sendBtn);
+      wrap.append(inputArea);
+    } else {
+      const voiceBtn = document.getElementById('voice-btn');
+      const sendBtn = document.getElementById('send-btn');
+      wrap.append(inputArea);
+      if (sendBtn) wrap.append(sendBtn);
+      if (voiceBtn) wrap.append(voiceBtn);
+      wrap.append(inputTools, btn);
+    }
+  };
+
+  applyToolsPosition(localStorage.getItem(STORAGE_TOOLS_LEFT_KEY) === '1');
   btn.addEventListener('click', () => {
-    const isLeft = wrap.classList.toggle('tools-left');
+    const isLeft = !wrap.classList.contains('tools-left');
+    applyToolsPosition(isLeft);
     localStorage.setItem(STORAGE_TOOLS_LEFT_KEY, isLeft ? '1' : '0');
   });
 })();
@@ -4554,9 +4646,11 @@ function activateSession(id) {
   }
   activeSessionId = id;
   restoreInputStateFor(id);
+  // files/git 表示からセッションカードへ戻る場合、先にターミナルを表示してから
+  // attach/fit/detect しないと、承認 UI 検出と最下部スナップが hidden レイアウトを基準に走る。
+  FilesTabManager.switchToSessionView();
   ensureTerminal(id);
   attachTerminal(id);
-  scrollTerminalToBottomSoon(id);
   updateScrollLockBtn();
   setMultiQuestionBannerVisible(!!multiQuestionVisibleCache.get(id));
   detectApproval(id);
@@ -4565,8 +4659,6 @@ function activateSession(id) {
   updateShellBadge(id);
   inputEl.focus();
   if (typeof window._wakewordSessionChanged === 'function') window._wakewordSessionChanged();
-  // v2: セッション切替時にターミナルビューへ戻す
-  FilesTabManager.switchToSessionView();
   const sessionInfo = sessions.get(id);
   if (sessionInfo) {
     const label = sessionInfo.label
@@ -4574,6 +4666,18 @@ function activateSession(id) {
       : `#${id}`;
     FilesTabManager.updateSessionTabLabel(label);
   }
+  const switchStartedAt = Date.now();
+  scrollTerminalToBottomSoon(id, { force: true, passes: 4, startedAt: switchStartedAt });
+  requestAnimationFrame(() => {
+    if (activeSessionId !== id) return;
+    detectApproval(id);
+    refitAndStickTerminalToBottomSoon(id, { force: true, passes: 4, startedAt: switchStartedAt });
+  });
+  refitAndStickTerminalToBottomAfterLayoutSettles(id, {
+    force: true,
+    passes: 4,
+    startedAt: switchStartedAt,
+  });
 }
 
 function updateShellBadge(id) {
@@ -4943,11 +5047,10 @@ function renderSessionList() {
       const branchBadge = ` <span class="card-branch" role="button" tabindex="0" data-sid="${s.id}"${branchDisabledAttr} data-tooltip="${escapeHtml(branchTip)}" aria-label="${escapeHtml(branchTip)}">${escapeHtml(branchLabel)}</span>`;
       // open マーカー
       const sessGitRoot = s.git_root || s.cwd || '';
-      const hasGit = sessGitRoot && FilesTabManager.hasGitTabForRoot(sessGitRoot);
       const hasFiles = sessGitRoot && FilesTabManager.hasFilesTabForRoot(sessGitRoot);
       const markersArr = [];
-      if (hasGit)   markersArr.push(`<span class="open-marker git" title="${escapeHtml(ti18n('open_marker_git_tooltip', 'Git タブが open 中'))}">⎇</span>`);
       if (hasFiles) markersArr.push(`<span class="open-marker files" title="${escapeHtml(ti18n('open_marker_files_tooltip', 'Files タブが open 中'))}">📁</span>`);
+      if (markersArr.length) c.classList.add('has-open-markers');
       const openMarkersHtml = markersArr.length ? `<div class="card-open-markers">${markersArr.join('')}</div>` : '';
       c.innerHTML =
         openMarkersHtml +
@@ -7447,7 +7550,7 @@ const FilesTabManager = (function () {
     if (isSession) {
       terminalWrapper.style.display = '';
       filesContents.classList.remove('visible');
-      filesContents.querySelectorAll('.files-tab-content').forEach(el => el.classList.remove('active'));
+      filesContents.querySelectorAll('.files-tab-content, .git-tab-content').forEach(el => el.classList.remove('active'));
       // display:none で隠れていた間に ResizeObserver が 0 幅で fit() を呼んでいる可能性があるため、
       // 表示復帰後にレイアウト確定を待って refit する。これをしないと xterm の cols が極小のまま残り、
       // 文字が縦に細く折り返される（depth padding 修正と同系統の "MD で出した narrow 表示" 事象）。
@@ -7457,7 +7560,7 @@ const FilesTabManager = (function () {
     } else {
       terminalWrapper.style.display = 'none';
       filesContents.classList.add('visible');
-      filesContents.querySelectorAll('.files-tab-content').forEach(el => {
+      filesContents.querySelectorAll('.files-tab-content, .git-tab-content').forEach(el => {
         el.classList.toggle('active', el.dataset.tabId === tabId);
       });
     }
@@ -7721,6 +7824,11 @@ const FilesTabManager = (function () {
         if (refSpan) refSpan.textContent = newRef ? `(${newRef})` : '';
       } catch (_) {}
       if (existing.gitRoot) lsUpdateGitViewRef(existing.gitRoot, newRef);
+      try {
+        if (existing.gitView && typeof existing.gitView.setViewRef === 'function' && newRef) {
+          existing.gitView.setViewRef(newRef);
+        }
+      } catch (_) {}
       setActive(existing.id);
       notifyTabStateChanged();
       return existing.id;
@@ -7916,6 +8024,7 @@ const FilesTabManager = (function () {
     const data = lsLoad();
     // ─ git タブ復元（先に開いておくと files タブと順序が安定する）─────
     if (Array.isArray(data.git)) {
+      const restorableGitTabs = [];
       for (const entry of data.git) {
         if (!entry || !entry.gitRoot) continue;
         const matched = sessions.find(s => {
@@ -7923,11 +8032,13 @@ const FilesTabManager = (function () {
           return gr === entry.gitRoot || (gr && gr.startsWith(entry.gitRoot));
         });
         if (matched) {
+          restorableGitTabs.push(entry);
           openGitTab(matched.id, entry.gitRoot, entry.viewRef || matched.branch || '');
-        } else {
-          // セッション未発見: sessionId=null で復元
-          openGitTab(null, entry.gitRoot, entry.viewRef || '');
         }
+      }
+      if (restorableGitTabs.length !== data.git.length) {
+        data.git = restorableGitTabs;
+        lsSave(data);
       }
     }
     // ─ files タブ復元（既存ロジック維持）─────────────────────────
@@ -9630,6 +9741,10 @@ const FilesPreview = (function () {
     if (m) return { prefix: m[1], rest: m[2] };
     return { prefix: '', rest: subject || '' };
   }
+  function statusClass(status) {
+    const s = String(status || 'M').slice(0, 1).toUpperCase();
+    return /^[A-Z]$/.test(s) ? s : 'U';
+  }
 
   // ─── Copy 右クリックメニュー (全 git タブ共有) ─────────────
   let _ctxMenuEl = null;
@@ -9759,6 +9874,16 @@ const FilesPreview = (function () {
       this.panelHeight = 340;
       this.filterText = '';
       this.loading = false;
+      this.workingTree = null;
+      this.commitModalState = {
+        open: false,
+        reviewed: false,
+        busy: false,
+        generating: false,
+        error: '',
+        subject: '',
+        body: '',
+      };
 
       this.els = {};
       this._renderShell();
@@ -9793,9 +9918,11 @@ const FilesPreview = (function () {
           </button>
           <div class="session-head-chip" data-session-head-chip style="display:none">session HEAD: <span data-session-head-label></span></div>
           <div class="git-graph-spacer"></div>
+          <div class="git-working-count" data-working-count>—</div>
           <div class="git-graph-count" data-count>${_esc(_gt('git_view_loading', 'loading...'))}</div>
           <button class="git-icon-btn" data-refresh-btn title="${_esc(_gt('git_view_refresh', 'Refresh'))}">↻</button>
           <button class="git-icon-btn" data-loadmore-btn title="${_esc(_gt('git_view_load_more', 'Load 100 more'))}">+${PAGE_LIMIT}</button>
+          <button class="git-commit-all-btn" data-commit-all-btn disabled>${_esc(_gt('git_commit_all', 'Commit all'))}</button>
         </div>
 
         <div class="git-graph-toolbar">
@@ -9805,6 +9932,8 @@ const FilesPreview = (function () {
             <button class="git-icon-btn" data-toggle="--all" title="--all">all</button>
           </div>
         </div>
+
+        <div class="git-working-preview" data-working-preview></div>
 
         <div class="git-graph-split">
           <div class="git-graph-log-table" data-log-table>
@@ -9832,6 +9961,39 @@ const FilesPreview = (function () {
           </div>
           <div class="ref-list" data-ref-list></div>
         </div>
+
+        <div class="git-commit-modal-backdrop" data-commit-modal hidden>
+          <div class="git-commit-modal" role="dialog" aria-modal="true">
+            <div class="git-commit-modal-head">
+              <div>
+                <div class="git-commit-modal-title">${_esc(_gt('git_commit_all', 'Commit all'))}</div>
+                <div class="git-commit-modal-sub" data-commit-summary>—</div>
+              </div>
+              <button class="git-commit-close" data-commit-close title="${_esc(_gt('git_view_detail_close', 'Close'))}">✕</button>
+            </div>
+            <div class="git-commit-warning">${_esc(_gt('git_commit_no_push_warning', 'Only git add -A and git commit are run. Push is not run.'))}</div>
+            <label class="git-commit-field">
+              <span>${_esc(_gt('git_commit_subject', 'Commit message subject'))}</span>
+              <input type="text" data-commit-subject maxlength="200">
+            </label>
+            <label class="git-commit-field">
+              <span>${_esc(_gt('git_commit_body', 'Optional body'))}</span>
+              <textarea data-commit-body rows="6"></textarea>
+            </label>
+            <div class="git-commit-review" data-commit-review-box hidden>
+              ${_esc(_gt('git_commit_review_ready', 'Review complete. Commit will include all current working tree changes.'))}
+            </div>
+            <div class="git-commit-hint" data-commit-hint hidden></div>
+            <div class="git-commit-error" data-commit-error hidden></div>
+            <div class="git-commit-actions">
+              <button class="git-secondary-btn" data-commit-generate>${_esc(_gt('git_commit_generate_message', 'Generate'))}</button>
+              <div class="git-commit-action-spacer"></div>
+              <button class="git-secondary-btn" data-commit-cancel>${_esc(_gt('confirm_cancel', 'Cancel'))}</button>
+              <button class="git-secondary-btn" data-commit-review>${_esc(_gt('git_commit_review', 'Review'))}</button>
+              <button class="git-commit-run-btn" data-commit-run disabled>${_esc(_gt('git_commit_commit', 'Commit'))}</button>
+            </div>
+          </div>
+        </div>
       `;
       c.appendChild(root);
 
@@ -9842,9 +10004,12 @@ const FilesPreview = (function () {
       this.els.sessionHeadChip  = root.querySelector('[data-session-head-chip]');
       this.els.sessionHeadLabel = root.querySelector('[data-session-head-label]');
       this.els.count         = root.querySelector('[data-count]');
+      this.els.workingCount  = root.querySelector('[data-working-count]');
       this.els.refreshBtn    = root.querySelector('[data-refresh-btn]');
       this.els.loadmoreBtn   = root.querySelector('[data-loadmore-btn]');
+      this.els.commitAllBtn  = root.querySelector('[data-commit-all-btn]');
       this.els.filter        = root.querySelector('[data-filter]');
+      this.els.workingPreview = root.querySelector('[data-working-preview]');
       this.els.toggles       = root.querySelectorAll('.filter-group [data-toggle]');
       this.els.logTable      = root.querySelector('[data-log-table]');
       this.els.divider       = root.querySelector('[data-divider]');
@@ -9856,9 +10021,22 @@ const FilesPreview = (function () {
       this.els.refDropdown   = root.querySelector('[data-ref-dropdown]');
       this.els.refFilter     = root.querySelector('[data-ref-filter]');
       this.els.refList       = root.querySelector('[data-ref-list]');
+      this.els.commitModal   = root.querySelector('[data-commit-modal]');
+      this.els.commitSummary = root.querySelector('[data-commit-summary]');
+      this.els.commitClose   = root.querySelector('[data-commit-close]');
+      this.els.commitCancel  = root.querySelector('[data-commit-cancel]');
+      this.els.commitSubject = root.querySelector('[data-commit-subject]');
+      this.els.commitBody    = root.querySelector('[data-commit-body]');
+      this.els.commitGenerate = root.querySelector('[data-commit-generate]');
+      this.els.commitReview  = root.querySelector('[data-commit-review]');
+      this.els.commitRun     = root.querySelector('[data-commit-run]');
+      this.els.commitReviewBox = root.querySelector('[data-commit-review-box]');
+      this.els.commitHint    = root.querySelector('[data-commit-hint]');
+      this.els.commitError   = root.querySelector('[data-commit-error]');
 
       this.els.refreshBtn.addEventListener('click', () => this.refresh());
       this.els.loadmoreBtn.addEventListener('click', () => this.loadMore());
+      this.els.commitAllBtn.addEventListener('click', () => this._openCommitModal());
       this.els.filter.addEventListener('input', (e) => {
         this.filterText = e.target.value || '';
         this._renderLogTable();
@@ -9875,6 +10053,24 @@ const FilesPreview = (function () {
         this._renderRefList(e.target.value || '');
       });
       this.els.detailClose.addEventListener('click', () => this._toggleDetailPanel());
+      this.els.commitClose.addEventListener('click', () => this._closeCommitModal());
+      this.els.commitCancel.addEventListener('click', () => this._closeCommitModal());
+      this.els.commitModal.addEventListener('click', (e) => {
+        if (e.target === this.els.commitModal) this._closeCommitModal();
+      });
+      this.els.commitSubject.addEventListener('input', () => {
+        this.commitModalState.subject = this.els.commitSubject.value;
+        this.commitModalState.reviewed = false;
+        this._renderCommitModalState();
+      });
+      this.els.commitBody.addEventListener('input', () => {
+        this.commitModalState.body = this.els.commitBody.value;
+        this.commitModalState.reviewed = false;
+        this._renderCommitModalState();
+      });
+      this.els.commitGenerate.addEventListener('click', () => this._generateCommitMessage());
+      this.els.commitReview.addEventListener('click', () => this._reviewCommitMessage());
+      this.els.commitRun.addEventListener('click', () => this._commitAll());
       this.els.detailTabs.forEach(tabBtn => {
         tabBtn.addEventListener('click', () => {
           this.activeTab = tabBtn.dataset.tab;
@@ -9893,9 +10089,12 @@ const FilesPreview = (function () {
       this.commits = [];
       this._showLoading();
       const refsPromise = this._fetchRefs();
+      const statusPromise = this._fetchStatus();
       await this._fetchLog({ append: false });
       await refsPromise;
+      await statusPromise;
       this._renderLogTable();
+      this._renderWorkingTreePreview();
       if (!this.selectedHash && this.commits.length) {
         const head = this.commits.find(c => c.hash === this.headHash) || this.commits[0];
         if (head) this.selectCommit(head.hash).catch(() => {});
@@ -9915,8 +10114,9 @@ const FilesPreview = (function () {
       this.selectedHash = null;
       this.selectedShow = null;
       this._showLoading();
-      await Promise.all([this._fetchLog({ append: false }), this._fetchRefs()]);
+      await Promise.all([this._fetchLog({ append: false }), this._fetchRefs(), this._fetchStatus()]);
       this._renderLogTable();
+      this._renderWorkingTreePreview();
       this._renderDetailEmpty();
     }
 
@@ -10005,6 +10205,31 @@ const FilesPreview = (function () {
       } catch (_) { /* noop */ }
     }
 
+    async _fetchStatus() {
+      try {
+        const params = new URLSearchParams({
+          session: String(this.sessionId),
+          token: this.token,
+        });
+        const res = await fetch(`/api/git-status?${params.toString()}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) {
+          this.workingTree = null;
+          this._renderWorkingTreePreview();
+          return;
+        }
+        this.workingTree = data;
+        if (data.git_root && !this.gitRoot) {
+          this.gitRoot = data.git_root;
+          if (this.els.repo) this.els.repo.textContent = this.gitRoot;
+        }
+      } catch (_) {
+        this.workingTree = null;
+      } finally {
+        this._renderWorkingTreePreview();
+      }
+    }
+
     async _fetchShow(hash) {
       const params = new URLSearchParams({
         session: String(this.sessionId),
@@ -10015,6 +10240,195 @@ const FilesPreview = (function () {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data && data.detail ? data.detail : `HTTP ${res.status}`);
       return data;
+    }
+
+    _renderWorkingTreePreview() {
+      const wt = this.workingTree;
+      const files = wt && Array.isArray(wt.files) ? wt.files : [];
+      const changed = wt && wt.summary ? wt.summary.files_changed || files.length : files.length;
+      if (this.els.workingCount) {
+        this.els.workingCount.textContent = changed
+          ? _gt('git_commit_changed_count', '{n} files changed').replace('{n}', String(changed))
+          : _gt('git_commit_no_changes', 'No changes');
+      }
+      if (this.els.commitAllBtn) {
+        this.els.commitAllBtn.disabled = !changed;
+      }
+      if (!this.els.workingPreview) return;
+      if (!changed) {
+        this.els.workingPreview.innerHTML = `
+          <div class="git-working-preview-empty">${_esc(_gt('git_commit_no_changes', 'No changes'))}</div>
+        `;
+        return;
+      }
+      const summary = wt.summary || {};
+      const max = 8;
+      const rows = files.slice(0, max).map(f => {
+        const added = f.added == null ? '' : `<span class="file-stat-add">+${f.added || 0}</span>`;
+        const removed = f.removed == null ? '' : `<span class="file-stat-del">-${f.removed || 0}</span>`;
+        return `
+          <div class="git-working-file-row">
+            <span class="file-status ${_esc(statusClass(f.status))}">${_esc(f.status || 'M')}</span>
+            <span class="file-path">${_esc(f.path || '')}</span>
+            ${added}${removed}
+          </div>
+        `;
+      }).join('');
+      const more = files.length > max
+        ? `<div class="git-working-more">+${files.length - max} ${_esc(_gt('git_commit_more_files', 'more files'))}</div>`
+        : '';
+      this.els.workingPreview.innerHTML = `
+        <div class="git-working-preview-head">
+          <span>${_esc(_gt('git_commit_working_tree_preview', 'Working tree preview'))}</span>
+          <span class="git-working-summary">${changed} files · +${summary.added || 0} -${summary.removed || 0}</span>
+        </div>
+        <div class="git-working-files">${rows}${more}</div>
+      `;
+    }
+
+    _openCommitModal() {
+      if (!this.workingTree || !this.workingTree.has_changes) return;
+      this.commitModalState = {
+        open: true,
+        reviewed: false,
+        busy: false,
+        generating: false,
+        error: '',
+        subject: '',
+        body: '',
+      };
+      this._renderCommitModalState();
+      this.els.commitModal.hidden = false;
+      setTimeout(() => { try { this.els.commitSubject.focus(); } catch (_) {} }, 0);
+    }
+
+    _closeCommitModal() {
+      this.commitModalState.open = false;
+      this.els.commitModal.hidden = true;
+    }
+
+    _renderCommitModalState() {
+      const st = this.commitModalState;
+      const wt = this.workingTree || {};
+      const summary = wt.summary || {};
+      if (this.els.commitSummary) {
+        const repo = wt.repo_name || this.gitRoot || '';
+        const branch = wt.branch || this.sessionBranch || 'HEAD';
+        this.els.commitSummary.textContent =
+          `${repo} · ${branch} · ${summary.files_changed || 0} files`;
+      }
+      if (this.els.commitSubject && this.els.commitSubject.value !== st.subject) {
+        this.els.commitSubject.value = st.subject;
+      }
+      if (this.els.commitBody && this.els.commitBody.value !== st.body) {
+        this.els.commitBody.value = st.body;
+      }
+      const hasSubject = (st.subject || '').trim() !== '';
+      this.els.commitReview.disabled = !hasSubject || st.busy || st.generating;
+      this.els.commitRun.disabled = !hasSubject || !st.reviewed || st.busy || st.generating;
+      this.els.commitRun.title = !hasSubject
+        ? _gt('git_commit_disabled_no_subject', 'Enter a subject first.')
+        : (!st.reviewed ? _gt('git_commit_disabled_needs_review', 'Press Review to enable Commit.') : '');
+      this.els.commitReview.classList.toggle('primary', hasSubject && !st.reviewed && !st.busy && !st.generating);
+      this.els.commitGenerate.disabled = st.busy || st.generating;
+      this.els.commitSubject.disabled = st.busy;
+      this.els.commitBody.disabled = st.busy;
+      this.els.commitReviewBox.hidden = !st.reviewed;
+      if (this.els.commitHint) {
+        const showHint = hasSubject && !st.reviewed && !st.busy && !st.generating;
+        this.els.commitHint.hidden = !showHint;
+        this.els.commitHint.textContent = showHint
+          ? _gt('git_commit_review_required_hint', 'Press Review to enable Commit.')
+          : '';
+      }
+      if (st.error) {
+        this.els.commitError.hidden = false;
+        this.els.commitError.textContent = st.error;
+      } else {
+        this.els.commitError.hidden = true;
+        this.els.commitError.textContent = '';
+      }
+      this.els.commitGenerate.textContent = st.generating
+        ? _gt('git_commit_generating', 'Generating...')
+        : _gt('git_commit_generate_message', 'Generate');
+      this.els.commitRun.textContent = st.busy
+        ? _gt('git_commit_committing', 'Committing...')
+        : _gt('git_commit_commit', 'Commit');
+    }
+
+    async _generateCommitMessage() {
+      const st = this.commitModalState;
+      st.generating = true;
+      st.error = '';
+      this._renderCommitModalState();
+      try {
+        const res = await fetch('/api/git-commit-message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session: this.sessionId,
+            token: this.token,
+            mode: 'generate',
+            language: (localStorage.getItem(STORAGE_LANG_KEY) || 'ja').startsWith('en') ? 'en' : 'ja',
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) {
+          throw new Error(data && data.detail ? data.detail : `HTTP ${res.status}`);
+        }
+        st.subject = data.subject || '';
+        st.body = data.body || '';
+        st.reviewed = false;
+      } catch (err) {
+        st.error = err && err.message ? err.message : String(err);
+      } finally {
+        st.generating = false;
+        this._renderCommitModalState();
+      }
+    }
+
+    _reviewCommitMessage() {
+      const st = this.commitModalState;
+      st.subject = this.els.commitSubject.value || '';
+      st.body = this.els.commitBody.value || '';
+      st.error = '';
+      st.reviewed = st.subject.trim() !== '';
+      this._renderCommitModalState();
+    }
+
+    async _commitAll() {
+      const st = this.commitModalState;
+      if (!st.reviewed || !(st.subject || '').trim()) return;
+      st.busy = true;
+      st.error = '';
+      this._renderCommitModalState();
+      try {
+        const res = await fetch('/api/git-commit-all', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session: this.sessionId,
+            token: this.token,
+            subject: st.subject,
+            body: st.body,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) {
+          const msg = data && data.error === 'commit_identity_missing'
+            ? _gt('git_commit_identity_missing', 'Git user.name / user.email is not configured.')
+            : (data && data.detail ? data.detail : `HTTP ${res.status}`);
+          throw new Error(msg);
+        }
+        this._closeCommitModal();
+        _toast(_gt('git_commit_created', 'Commit created'), `${data.short_hash || ''} ${data.subject || ''}`.trim());
+        await this.refresh();
+      } catch (err) {
+        st.error = err && err.message ? err.message : String(err);
+      } finally {
+        st.busy = false;
+        this._renderCommitModalState();
+      }
     }
 
     _showLoading() {
