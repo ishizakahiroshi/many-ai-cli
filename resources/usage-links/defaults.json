@@ -1,0 +1,6 @@
+{
+  "claude":   "https://claude.ai/settings/usage",
+  "codex":    "https://chatgpt.com/codex/cloud/settings/analytics#usage",
+  "ollama":   "https://ollama.com/settings",
+  "opencode": ""
+}

@@ -39,6 +39,8 @@ const (
 	DefaultCodexSlashCmdSource  = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/codex.md"
 )
 
+const DefaultUsageLinkSource = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/usage-links/defaults.json"
+
 func DefaultSlashCmdSources() SlashCmdSources {
 	return SlashCmdSources{
 		Claude: DefaultClaudeSlashCmdSource,

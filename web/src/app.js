@@ -195,6 +195,8 @@ const STORAGE_QUICK_CMD_2_KEY          = 'ai_cli_hub_quick_cmd_2';
 const STORAGE_TOOLS_LEFT_KEY           = 'ai_cli_hub_tools_left';
 const STORAGE_USAGE_LINK_CLAUDE_KEY    = 'ai_cli_hub_usage_link_claude';
 const STORAGE_USAGE_LINK_CODEX_KEY     = 'ai_cli_hub_usage_link_codex';
+const STORAGE_USAGE_LINK_OLLAMA_KEY    = 'ai_cli_hub_usage_link_ollama';
+const STORAGE_USAGE_LINK_OPENCODE_KEY  = 'ai_cli_hub_usage_link_opencode';
 const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds';
 const DEFAULT_VOICE_GRACE_SEC          = 0;
 const STORAGE_WAKE_WORD_ENABLED_KEY    = 'ai_cli_hub_wake_word_enabled';
@@ -214,8 +216,10 @@ function getDefaultTriggerPhrase() {
 const CWD_HISTORY_MAX               = 10;
 
 const DEFAULT_USAGE_LINKS = {
-  claude: 'https://claude.ai/settings/usage',
-  codex: 'https://chatgpt.com/codex/cloud/settings/analytics#usage',
+  claude:   'https://claude.ai/settings/usage',
+  codex:    'https://chatgpt.com/codex/cloud/settings/analytics#usage',
+  ollama:   'https://ollama.com/settings',
+  opencode: '',
 };
 
 const FONTSIZE_MAP = { large: 15, medium: 13, small: 11 };
@@ -242,6 +246,8 @@ const _USER_PREFS_PATH_TO_LS = {
   'quick_cmds.cmd2':           [STORAGE_QUICK_CMD_2_KEY,           String],
   'usage_links.claude':        [STORAGE_USAGE_LINK_CLAUDE_KEY,     String],
   'usage_links.codex':         [STORAGE_USAGE_LINK_CODEX_KEY,      String],
+  'usage_links.ollama':        [STORAGE_USAGE_LINK_OLLAMA_KEY,     String],
+  'usage_links.opencode':      [STORAGE_USAGE_LINK_OPENCODE_KEY,   String],
   'favorites':                 [STORAGE_FAVORITES_KEY,             JSON.stringify],
   'session_order':             [STORAGE_ORDER_KEY,                 JSON.stringify],
   'group_order':               [STORAGE_GROUP_ORDER_KEY,           JSON.stringify],
@@ -259,6 +265,8 @@ const _USER_PREFS_STRING_PATHS = new Set([
   'quick_cmds.cmd2',
   'usage_links.claude',
   'usage_links.codex',
+  'usage_links.ollama',
+  'usage_links.opencode',
 ]);
 const _USER_PREFS_STRING_ARRAY_PATHS = new Set([
   'favorites',
@@ -529,33 +537,47 @@ function normalizeHttpUrl(value, fallback = '') {
 }
 
 function getUsageLinkUrl(provider) {
-  const key = provider === 'claude' ? STORAGE_USAGE_LINK_CLAUDE_KEY : STORAGE_USAGE_LINK_CODEX_KEY;
-  return normalizeHttpUrl(localStorage.getItem(key), DEFAULT_USAGE_LINKS[provider]);
+  const keyMap = {
+    claude:   STORAGE_USAGE_LINK_CLAUDE_KEY,
+    codex:    STORAGE_USAGE_LINK_CODEX_KEY,
+    ollama:   STORAGE_USAGE_LINK_OLLAMA_KEY,
+    opencode: STORAGE_USAGE_LINK_OPENCODE_KEY,
+  };
+  const key = keyMap[provider];
+  if (!key) return DEFAULT_USAGE_LINKS[provider] || '#';
+  return normalizeHttpUrl(localStorage.getItem(key), DEFAULT_USAGE_LINKS[provider] || '') || '#';
 }
 
 function applyUsageLinks() {
-  const claudeLink = document.getElementById('usage-link-claude');
-  const codexLink = document.getElementById('usage-link-codex');
-  if (claudeLink) claudeLink.href = getUsageLinkUrl('claude');
-  if (codexLink) codexLink.href = getUsageLinkUrl('codex');
+  for (const p of ['claude', 'codex', 'ollama', 'opencode']) {
+    const el = document.getElementById(`usage-link-${p}`);
+    if (el) el.href = getUsageLinkUrl(p);
+  }
 }
 
 function loadUsageLinkSettings() {
-  const claudeInput = document.getElementById('usage-link-claude-url');
-  const codexInput = document.getElementById('usage-link-codex-url');
-  if (claudeInput) claudeInput.value = localStorage.getItem(STORAGE_USAGE_LINK_CLAUDE_KEY) || '';
-  if (codexInput) codexInput.value = localStorage.getItem(STORAGE_USAGE_LINK_CODEX_KEY) || '';
+  const keyMap = {
+    claude:   STORAGE_USAGE_LINK_CLAUDE_KEY,
+    codex:    STORAGE_USAGE_LINK_CODEX_KEY,
+    ollama:   STORAGE_USAGE_LINK_OLLAMA_KEY,
+    opencode: STORAGE_USAGE_LINK_OPENCODE_KEY,
+  };
+  for (const [p, k] of Object.entries(keyMap)) {
+    const el = document.getElementById(`usage-link-${p}-url`);
+    if (el) el.value = localStorage.getItem(k) || '';
+  }
   applyUsageLinks();
 }
 
 function saveUsageLinkSettings() {
-  const claudeInput = document.getElementById('usage-link-claude-url');
-  const codexInput = document.getElementById('usage-link-codex-url');
   const pairs = [
-    [claudeInput, 'usage_links.claude', STORAGE_USAGE_LINK_CLAUDE_KEY],
-    [codexInput,  'usage_links.codex',  STORAGE_USAGE_LINK_CODEX_KEY],
+    ['claude',   'usage_links.claude',   STORAGE_USAGE_LINK_CLAUDE_KEY],
+    ['codex',    'usage_links.codex',    STORAGE_USAGE_LINK_CODEX_KEY],
+    ['ollama',   'usage_links.ollama',   STORAGE_USAGE_LINK_OLLAMA_KEY],
+    ['opencode', 'usage_links.opencode', STORAGE_USAGE_LINK_OPENCODE_KEY],
   ];
-  for (const [input, prefPath, key] of pairs) {
+  for (const [p, prefPath, key] of pairs) {
+    const input = document.getElementById(`usage-link-${p}-url`);
     if (!input) continue;
     const raw = input.value.trim();
     const normalized = normalizeHttpUrl(raw, '');
@@ -569,6 +591,33 @@ function saveUsageLinkSettings() {
     }
   }
   applyUsageLinks();
+}
+
+function initUsageDropdown() {
+  const btn      = document.getElementById('usage-menu-btn');
+  const dropdown = document.getElementById('usage-dropdown');
+  if (!btn || !dropdown) return;
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = !dropdown.hidden;
+    dropdown.hidden = isOpen;
+    btn.setAttribute('aria-expanded', String(!isOpen));
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!dropdown.hidden && !btn.contains(e.target) && !dropdown.contains(e.target)) {
+      dropdown.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !dropdown.hidden) {
+      dropdown.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+    }
+  });
 }
 
 function appConfirm({ title, message, confirmText, cancelText, kind = 'default' }) {
@@ -740,6 +789,7 @@ function applyLang(lang) {
   applyTheme(localStorage.getItem(STORAGE_THEME_KEY) || 'dark');
   applyLang(localStorage.getItem(STORAGE_LANG_KEY) || 'ja');
   applyUsageLinks();
+  initUsageDropdown();
 
   const panel      = document.getElementById('settings-panel');
   const btn        = document.getElementById('settings-btn');
@@ -826,6 +876,8 @@ function applyLang(lang) {
       e.stopPropagation();
       setUserPref('usage_links.claude', '');
       setUserPref('usage_links.codex', '');
+      setUserPref('usage_links.ollama', '');
+      setUserPref('usage_links.opencode', '');
       loadUsageLinkSettings();
       showToast(t('settings_usage_links_reset_done'), usageLinksResetBtn);
     });
@@ -994,6 +1046,21 @@ function applyLang(lang) {
 })();
 
 const token = new URLSearchParams(location.search).get('token');
+
+// usage-link デフォルトをリモート（GitHub バック）から取得して更新。
+// 失敗時は DEFAULT_USAGE_LINKS のハードコード値をそのまま使う。
+(async () => {
+  if (!token) return;
+  try {
+    const res = await fetch(`/api/usage-link-defaults?token=${token}`);
+    if (!res.ok) return;
+    const d = await res.json();
+    for (const k of ['claude', 'codex', 'ollama', 'opencode']) {
+      if (typeof d[k] === 'string') DEFAULT_USAGE_LINKS[k] = d[k];
+    }
+    applyUsageLinks();
+  } catch (_) {}
+})();
 
 // ---- Hub 情報表示（single source: main.version / runtime → /api/info → ここ） ----
 (async () => {
@@ -4715,11 +4782,19 @@ function stateLabel(state) {
 }
 
 function providerIconHtml(provider) {
+  const base = `class="card-provider-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"`;
+  const txt  = `text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif"`;
   if (provider === 'claude') {
-    return `<svg class="card-provider-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="#FFF7ED" stroke="#F97316" stroke-width="2"/></svg>`;
+    return `<svg ${base}><circle cx="8" cy="8" r="6" fill="#FFF7ED" stroke="#F97316" stroke-width="2"/><text x="8" y="8" ${txt} fill="#F97316">C</text></svg>`;
   }
   if (provider === 'codex') {
-    return `<svg class="card-provider-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="#EFF6FF" stroke="#3B82F6" stroke-width="2"/></svg>`;
+    return `<svg ${base}><circle cx="8" cy="8" r="6" fill="#EFF6FF" stroke="#3B82F6" stroke-width="2"/><text x="8" y="8" ${txt} fill="#3B82F6">X</text></svg>`;
+  }
+  if (provider === 'ollama') {
+    return `<svg ${base}><rect x="1" y="1" width="14" height="14" rx="3" fill="#FDF6E3" stroke="#C4973A" stroke-width="2"/><text x="8" y="8" ${txt} fill="#C4973A">O</text></svg>`;
+  }
+  if (provider === 'opencode') {
+    return `<svg ${base}><rect x="1" y="1" width="14" height="14" rx="3" fill="#FAF5FF" stroke="#A855F7" stroke-width="2"/><text x="8" y="8" ${txt} fill="#A855F7">O</text></svg>`;
   }
   return '';
 }
@@ -5256,7 +5331,7 @@ function render() {
   });
   const totalWaiting = stateCounts.waiting;
 
-  const PROVIDER_LABELS = { claude: 'Claude', codex: 'Codex' };
+  const PROVIDER_LABELS = { claude: 'Claude', codex: 'Codex', ollama: 'Ollama', opencode: 'OpenCode' };
   const providerParts = Object.entries(connByProvider)
     .map(([p, n]) => `<span class="summary-provider-chip">${providerIconHtml(p)}<span class="summary-provider-name ${p}">${PROVIDER_LABELS[p] || p}</span><span class="summary-provider-count">: ${n}</span></span>`)
     .join('');
@@ -5739,6 +5814,31 @@ function openLightbox(src) {
   });
   updateSpawnProviderIcon();
 
+  // フォーカス時に入力値を一時クリアして datalist の全候補を表示し、
+  // 未選択のまま離れたら元の値を復元する。
+  let _savedModelValue = '';
+  let _modelInputDirty = false;
+  spawnModelInput.addEventListener('focus', () => {
+    _savedModelValue = spawnModelInput.value;
+    _modelInputDirty = false;
+    spawnModelInput.value = '';
+  });
+  spawnModelInput.addEventListener('input', () => {
+    _modelInputDirty = true;
+  });
+  spawnModelInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      _modelInputDirty = false;
+      spawnModelInput.value = _savedModelValue;
+      spawnModelInput.blur();
+    }
+  });
+  spawnModelInput.addEventListener('blur', () => {
+    if (!_modelInputDirty) {
+      spawnModelInput.value = _savedModelValue;
+    }
+  });
+
   function loadSpawnSettings() {
     try {
       const s = JSON.parse(localStorage.getItem(STORAGE_SPAWN_KEY) || '{}');
@@ -5986,7 +6086,7 @@ function openLightbox(src) {
         <div class="model-picker-title">${escapeHtml(t(opts.titleKey))}</div>
         <div class="model-picker-current">${escapeHtml(t('model_current', { model: display }))}</div>
         <label class="model-picker-note">${escapeHtml(t('model_candidate'))}</label>
-        <input class="model-picker-input" id="model-candidate-input" type="text" value="${escapeHtml(currentModel || '')}">
+        <input class="model-picker-input" id="model-candidate-input" type="text" list="spawn-model-datalist" value="${escapeHtml(currentModel || '')}">
         <div class="model-picker-note">${escapeHtml(t('model_summary'))}</div>
         <div class="model-picker-note">- ${escapeHtml(t('model_summary_cost'))}</div>
         <div class="model-picker-note">- ${escapeHtml(t(opts.permSummaryKey))}</div>
@@ -6413,6 +6513,8 @@ function openLightbox(src) {
     setUserPref('quick_cmds.cmd2', DEFAULT_QUICK_CMD_2);
     setUserPref('usage_links.claude', '');
     setUserPref('usage_links.codex', '');
+    setUserPref('usage_links.ollama', '');
+    setUserPref('usage_links.opencode', '');
     setUserPref('voice.grace_seconds', DEFAULT_VOICE_GRACE_SEC);
 
     const triggerEnabled = document.getElementById('trigger-enabled');
