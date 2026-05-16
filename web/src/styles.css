@@ -211,37 +211,80 @@ header {
 #reconnect-btn:hover { background: var(--accent); color: var(--bg); }
 #reconnect-btn[hidden] { display: none; }
 .header-icon { width: 32px; height: 32px; vertical-align: middle; margin-right: 8px; }
-.usage-links {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
+/* Usage ドロップダウンメニュー */
+.usage-menu {
+  position: relative;
+  display: inline-block;
 }
-.usage-link {
+.usage-menu-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-width: 0;
   height: 26px;
   padding: 3px 9px;
   color: var(--muted);
+  background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
   font-size: 0.72rem;
+  font-family: inherit;
   line-height: 1;
-  text-decoration: none;
   white-space: nowrap;
+  cursor: pointer;
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
-.usage-link:hover {
+.usage-menu-btn:hover,
+.usage-menu-btn[aria-expanded="true"] {
   color: var(--text);
   border-color: var(--line);
   background: var(--bg-elev);
 }
-.usage-link-icon {
+.usage-menu-icon { flex-shrink: 0; }
+.usage-menu-chevron {
   flex-shrink: 0;
+  opacity: 0.55;
+  transition: transform 0.15s;
 }
+.usage-menu-btn[aria-expanded="true"] .usage-menu-chevron {
+  transform: rotate(180deg);
+}
+.usage-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 200;
+  min-width: 160px;
+  background: var(--bg-elev, #1e2330);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+  overflow: hidden;
+}
+.usage-dropdown-header {
+  padding: 7px 12px 5px;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted-2, #666);
+  border-bottom: 1px solid var(--line);
+}
+.usage-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 0.75rem;
+  color: var(--text-soft, var(--muted));
+  text-decoration: none;
+  transition: background 0.1s, color 0.1s;
+}
+.usage-dropdown-item:hover {
+  background: var(--bg-hover, rgba(255,255,255,0.06));
+  color: var(--text);
+}
+.usage-item-icon { flex-shrink: 0; }
+.usage-item-name { flex: 1; }
+.usage-item-ext  { flex-shrink: 0; opacity: 0.35; }
 
 /* シャットダウン・設定ボタン共通 */
 #shutdown-btn,
@@ -271,8 +314,8 @@ header {
 #settings-btn:hover { color: var(--text); border-color: var(--line); background: var(--bg-elev); }
 
 @media (max-width: 720px) {
-  .usage-link span { display: none; }
-  .usage-link { width: 28px; padding: 3px 5px; justify-content: center; }
+  .usage-menu-btn span { display: none; }
+  .usage-menu-btn { padding: 3px 6px; }
 }
 
 /* 設定パネル */
@@ -801,8 +844,10 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   letter-spacing: 0.04em;
   flex-shrink: 0;
 }
-.card-provider-chip.claude { color: #fb923c; background: rgba(251,146,60,0.12); }
-.card-provider-chip.codex  { color: #60a5fa; background: rgba(96,165,250,0.12); }
+.card-provider-chip.claude    { color: #fb923c; background: rgba(251,146,60,0.12); }
+.card-provider-chip.codex     { color: #60a5fa; background: rgba(96,165,250,0.12); }
+.card-provider-chip.ollama    { color: #C4973A; background: rgba(196,151,58,0.12); }
+.card-provider-chip.opencode  { color: #A855F7; background: rgba(168,85,247,0.12); }
 
 /* バッジ */
 .badge { display: inline-block; padding: 2px 6px; font-size: 0.64rem; font-weight: bold; border-radius: 20px; }
@@ -2697,8 +2742,10 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 .summary-sep { color: var(--line-soft); align-self: center; font-size: 0.9rem; padding: 0 2px; }
 .summary-provider-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 0.78rem; color: var(--text); }
 .summary-provider-name { display: inline-flex; align-items: center; font-size: 0.7rem; font-weight: 700; padding: 1px 6px; border-radius: 4px; letter-spacing: 0.04em; }
-.summary-provider-name.claude { color: #fb923c; background: rgba(251,146,60,0.12); }
-.summary-provider-name.codex  { color: #60a5fa; background: rgba(96,165,250,0.12); }
+.summary-provider-name.claude    { color: #fb923c; background: rgba(251,146,60,0.12); }
+.summary-provider-name.codex     { color: #60a5fa; background: rgba(96,165,250,0.12); }
+.summary-provider-name.ollama    { color: #C4973A; background: rgba(196,151,58,0.12); }
+.summary-provider-name.opencode  { color: #A855F7; background: rgba(168,85,247,0.12); }
 .summary-provider-count { color: var(--muted); font-size: 0.78rem; }
 
 /* 音声入力ボタン */

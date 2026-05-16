@@ -132,3 +132,20 @@ func writeSlashCmdsResp(w http.ResponseWriter, entry *slashCmdCacheEntry) {
 		"source_url": entry.sourceURL,
 	})
 }
+
+// handleUsageLinkDefaults は全 provider の usage リンクデフォルト URL を返す。
+// GitHub の resources/usage-links/defaults.json から TTL 24h でキャッシュして提供し、
+// 取得失敗時はハードコード値にフォールバックする。
+func (s *Server) handleUsageLinkDefaults(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("token") != s.cfg.Token {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	defaults := s.usageLinkCache.get(config.DefaultUsageLinkSource)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(defaults)
+}

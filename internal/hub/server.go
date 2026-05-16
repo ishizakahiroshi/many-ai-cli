@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -137,6 +138,8 @@ type Server struct {
 	slashCmdMu    sync.Mutex
 	slashCmdCache map[string]*slashCmdCacheEntry // key: provider
 
+	usageLinkCache *usageLinkCache
+
 	modelsCache *modelsCache
 
 	lastUICols int
@@ -160,6 +163,10 @@ const (
 	defaultInitRows = 50
 )
 
+// reSetModelTo は Claude Code の /model コマンド出力からモデル名を抽出する。
+// 例: "└  Set model to Haiku 4.5" → "Haiku 4.5"
+var reSetModelTo = regexp.MustCompile(`Set model to ([^\r\n]+)`)
+
 func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version string) (*Server, error) {
 	hubCWD, _ := os.Getwd()
 	s := &Server{
@@ -172,8 +179,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		sessions:      map[int]*session{},
 		wrappers:      map[int]*websocket.Conn{},
 		uis:           map[*websocket.Conn]struct{}{},
-		slashCmdCache: map[string]*slashCmdCacheEntry{},
-		modelsCache:   &modelsCache{},
+		slashCmdCache:  map[string]*slashCmdCacheEntry{},
+		usageLinkCache: &usageLinkCache{},
+		modelsCache:    &modelsCache{},
 	}
 	if devMode {
 		logger.Info("dev mode: serving web assets from ./web/src/")
@@ -231,6 +239,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/attach", s.handleAttach)
 	mux.HandleFunc("/api/slash-cmd-sources", s.handleSlashCmdSources)
 	mux.HandleFunc("/api/slash-commands", s.handleSlashCommands)
+	mux.HandleFunc("/api/usage-link-defaults", s.handleUsageLinkDefaults)
 	mux.HandleFunc("/api/models", s.handleModels)
 	mux.HandleFunc("/api/approval-patterns", s.handleApprovalPatterns)
 	mux.HandleFunc("/api/approval-patterns/", s.handleApprovalPatternsItem)
@@ -659,6 +668,7 @@ func (s *Server) wrapperMessageLoop(conn *websocket.Conn, id int) {
 			s.mu.Unlock()
 			s.broadcast(m)
 			s.markRunning(id)
+			s.detectModelChange(id, m.Data)
 		case "session_end":
 			histEvent := map[string]any{
 				"ts":         time.Now().Format(time.RFC3339),
@@ -727,6 +737,44 @@ func (s *Server) wrapperMessageLoop(conn *websocket.Conn, id int) {
 		}
 	}
 	s.broadcast(proto.Message{Type: "session_end", SessionID: id, State: endState, Reason: endReason})
+}
+
+// detectModelChange は PTY 出力から「Set model to <name>」を検出し、
+// セッションの Model フィールドを更新して UI に session_update を送る。
+// Claude Code の /model コマンド出力を対象とする。
+func (s *Server) detectModelChange(id int, data []byte) {
+	text := sessionlog.StripANSI(string(data))
+	match := reSetModelTo.FindStringSubmatch(text)
+	if match == nil {
+		return
+	}
+	newModel := strings.TrimSpace(match[1])
+	if newModel == "" {
+		return
+	}
+	s.mu.Lock()
+	ses := s.sessions[id]
+	if ses == nil || ses.Provider != "claude" || ses.Model == newModel {
+		s.mu.Unlock()
+		return
+	}
+	ses.Model = newModel
+	update := proto.Message{
+		Type:         "session_update",
+		SessionID:    id,
+		Provider:     ses.Provider,
+		Display:      ses.Display,
+		CWD:          ses.CWD,
+		Branch:       ses.Branch,
+		Label:        ses.Label,
+		Model:        ses.Model,
+		State:        ses.State,
+		LastOutputAt: ses.LastOutputAt,
+		FirstMessage: ses.FirstMessage,
+		LastMessage:  ses.LastMessage,
+	}
+	s.mu.Unlock()
+	s.broadcast(update)
 }
 
 func (s *Server) uiLoop(conn *websocket.Conn) {
@@ -1321,12 +1369,6 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 			wrapArgs = append(wrapArgs, "--ask-for-approval", body.AskForApproval)
 		}
 	}
-	cmd := exec.Command(exe, wrapArgs...)
-	cmd.Dir = cwd
-	cmd.Env = append(sanitizeEnv(os.Environ()), "ANY_AI_CLI=1")
-	if s.parentShell != "" {
-		cmd.Env = append(cmd.Env, "ANY_AI_CLI_PARENT_SHELL="+s.parentShell)
-	}
 	// route が未指定の場合は model 名から推定する。Anthropic / OpenAI の
 	// 既定 route は env 注入を行わない（ユーザー shell の値を継承）。
 	effectiveRoute := body.Route
@@ -1336,6 +1378,18 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		s.mu.Unlock()
 		known := collectOllamaModelIDs(s.modelsCache, localCfg)
 		effectiveRoute = RouteForModel(body.Provider, resolvedModel, known)
+	}
+	// Codex CLI は env (OPENAI_BASE_URL 等) だけでは provider を切り替えず、
+	// CLI 引数 --oss / --profile で OSS (Ollama) provider に切替える設計。
+	// route=ollama のときに --oss を渡さないと OpenAI 純正へ向かい認証エラーで落ちる。
+	if body.Provider == "codex" && effectiveRoute == RouteOllama {
+		wrapArgs = append(wrapArgs, "--codex-oss")
+	}
+	cmd := exec.Command(exe, wrapArgs...)
+	cmd.Dir = cwd
+	cmd.Env = append(sanitizeEnv(os.Environ()), "ANY_AI_CLI=1")
+	if s.parentShell != "" {
+		cmd.Env = append(cmd.Env, "ANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}
 	if envPreset := EnvPresetFor(body.Provider, effectiveRoute); len(envPreset) > 0 {
 		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)

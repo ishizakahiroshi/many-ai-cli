@@ -46,6 +46,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	permissionMode := fs.String("permission-mode", "", "claude permission mode")
 	sandbox := fs.String("sandbox", "", "codex sandbox mode")
 	askForApproval := fs.String("ask-for-approval", "", "codex ask-for-approval")
+	codexOSS := fs.Bool("codex-oss", false, "codex: use --oss to route via local Ollama daemon")
 	_ = fs.Parse(args)
 	providerArgs := fs.Args()
 
@@ -60,6 +61,9 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 			extra = append(extra, "--permission-mode", *permissionMode)
 		}
 	case "codex":
+		if *codexOSS {
+			extra = append(extra, "--oss")
+		}
 		if *sandbox != "" {
 			extra = append(extra, "--sandbox", *sandbox)
 		}
