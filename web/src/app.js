@@ -598,25 +598,50 @@ function initUsageDropdown() {
   const dropdown = document.getElementById('usage-dropdown');
   if (!btn || !dropdown) return;
 
+  // header に backdrop-filter があり新しい stacking context が作られるため、
+  // dropdown が body 配下にないと z-index が効かず本体側に隠れる。body 直下へ移す。
+  if (dropdown.parentElement !== document.body) {
+    document.body.appendChild(dropdown);
+  }
+
+  const positionDropdown = () => {
+    const rect = btn.getBoundingClientRect();
+    const margin = 6;
+    dropdown.style.top = `${Math.min(rect.bottom + 4, window.innerHeight - margin)}px`;
+    dropdown.style.right = `${Math.max(margin, window.innerWidth - rect.right)}px`;
+  };
+
+  const closeDropdown = () => {
+    dropdown.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+  };
+
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
     const isOpen = !dropdown.hidden;
-    dropdown.hidden = isOpen;
-    btn.setAttribute('aria-expanded', String(!isOpen));
+    if (isOpen) {
+      closeDropdown();
+      return;
+    }
+    positionDropdown();
+    dropdown.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
   });
 
   document.addEventListener('click', (e) => {
     if (!dropdown.hidden && !btn.contains(e.target) && !dropdown.contains(e.target)) {
-      dropdown.hidden = true;
-      btn.setAttribute('aria-expanded', 'false');
+      closeDropdown();
     }
   });
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !dropdown.hidden) {
-      dropdown.hidden = true;
-      btn.setAttribute('aria-expanded', 'false');
+      closeDropdown();
     }
+  });
+
+  window.addEventListener('resize', () => {
+    if (!dropdown.hidden) positionDropdown();
   });
 }
 
@@ -1637,6 +1662,7 @@ ws.onmessage = (ev) => {
     if (m.first_message)   cur.first_message   = m.first_message;
     if (m.last_message)    cur.last_message    = m.last_message;
     if (m.model !== undefined) cur.model       = m.model;
+    if (m.route !== undefined) cur.route       = m.route;
     sessions.set(m.session_id, cur);
     addToSessionOrder(m.session_id, isNew);
     if (isNew && pendingAutoSwitch) {
@@ -3167,18 +3193,30 @@ function extractApprovalOptions(tail) {
   let clusterEnd = -1;
   let seenOption = false;
   let blankGap = 0;
+  // Codex の長い選択肢ラベルがターミナル幅で wrap した場合、継続行は番号で始まらない
+  // インデント付き非空行として残る。末尾走査でこれに当たると以前は break して
+  // option 2 以降を取りこぼしていた（例: "2. Yes, and don't ask again ...yyyy-MM- / dd"), ...(p)"）。
+  // 末尾走査で番号行より先に現れる継続行を pendingContinuation に積み、直後の番号行 label に結合する。
+  let pendingContinuation = [];
   // 空行は Codex の選択肢間に挟まる Ink 再描画ノイズ対策で最大 4 行まで許容する。
-  // 非空行（番号付き選択肢でない）に当たったら即終端（無関係な箇条書き / 過去出力 / コードブロック内の `1.` を吸い込んで
-  // approvalSig が揺らぎ、approvalConsumedSig の抑止が外れて action-bar がチラつく事故を防ぐ）。
+  // 番号付きでもインデント継続行でもない非空行に当たったら即終端（無関係な箇条書き / 過去出力 /
+  // コードブロック内の `1.` を吸い込んで approvalSig が揺らぎ、approvalConsumedSig の抑止が外れて
+  // action-bar がチラつく事故を防ぐ）。
   const maxBlankGap = 4;
   // ドット必須にして `462           const m = ...` のような差分行番号を誤検出しないようにする。
   // `2.Yes` 形式（ドット直後にスペース無し）は `\s*` が 0 個マッチでカバーする。
   // 番号上限は 1〜99（実用的な承認メニューは ≤ 9 個。Codex 等で 2 桁が出てもカバー）。
+  const consumeContinuations = (label) => {
+    if (pendingContinuation.length === 0) return label;
+    const suffix = pendingContinuation.slice().reverse().join(' ');
+    pendingContinuation = [];
+    return `${label} ${suffix}`.replace(/\s+/g, ' ').trim();
+  };
   for (let i = tail.length - 1; i >= 0; i--) {
     const line = tail[i];
     const cm = line.match(/^\s*[>❯›❱]\s*(\d{1,2})\.\s*(.+?)\s*$/);
     if (cm) {
-      options.unshift(buildApprovalOption(cm[1], cm[2], true));
+      options.unshift(buildApprovalOption(cm[1], consumeContinuations(cm[2]), true));
       if (clusterEnd === -1) clusterEnd = i;
       clusterStart = i;
       seenOption = true;
@@ -3187,7 +3225,7 @@ function extractApprovalOptions(tail) {
     }
     const om = line.match(/^\s*(\d{1,2})\.\s*(.+?)\s*$/);
     if (om) {
-      options.unshift(buildApprovalOption(om[1], om[2], false));
+      options.unshift(buildApprovalOption(om[1], consumeContinuations(om[2]), false));
       if (clusterEnd === -1) clusterEnd = i;
       clusterStart = i;
       seenOption = true;
@@ -3198,6 +3236,14 @@ function extractApprovalOptions(tail) {
     if (!String(line || '').trim()) {
       blankGap++;
       if (blankGap > maxBlankGap) break;
+      // 空行を挟んだら継続行扱いを切る（別クラスタに飛ばないようにする）。
+      pendingContinuation = [];
+      continue;
+    }
+    // 番号で始まらない非空行: 先頭インデントがあれば直前 option の wrap continuation とみなす。
+    // インデント無しの行は無関係な過去出力なので break で打ち切る。
+    if (blankGap === 0 && /^\s+\S/.test(line)) {
+      pendingContinuation.push(line.trim());
       continue;
     }
     break;
@@ -4551,8 +4597,17 @@ function sendSubmittedText(sessionId, text) {
   if (t) {
     t.autoScroll = true;
     try { t.term.scrollToBottom(); } catch (_) {}
-    if (sessionId === activeSessionId) updateScrollLockBtn(false);
-    if (sessionId === activeSessionId) scrollTerminalToBottomSoon(sessionId);
+    if (sessionId === activeSessionId) {
+      updateScrollLockBtn(false);
+      // 承認バー表示中に送信すると、hideActionBar による action-bar 消失 + clearInput +
+      // PTY echo back + Codex TUI の再描画が連続で走る。単発 RAF の scrollTerminalToBottomSoon
+      // では onScroll で autoScroll=false に倒れた後の再描画フレームで viewport が上へズレ、
+      // 最悪スクロールバック先頭まで戻る。force + 複数 delay の fit+snap で
+      // レイアウト確定後（~220ms 内）まで最下部に張り付かせる。
+      const startedAt = Date.now();
+      scrollTerminalToBottomSoon(sessionId, { force: true, passes: 4, startedAt });
+      refitAndStickTerminalToBottomAfterLayoutSettles(sessionId, { force: true, startedAt });
+    }
   }
   sendText(sessionId, text);
 }
@@ -4746,6 +4801,7 @@ function activateSession(id) {
   renderSessionList();
   renderToolOutputs(id);
   updateShellBadge(id);
+  updateQuickCmdButtons(id);
   inputEl.focus();
   if (typeof window._wakewordSessionChanged === 'function') window._wakewordSessionChanged();
   const sessionInfo = sessions.get(id);
@@ -4775,6 +4831,24 @@ function updateShellBadge(id) {
   const s = id !== null ? sessions.get(id) : null;
   const shell = s?.shell || '';
   el.textContent = shell ? ' · ' + shell : '';
+}
+
+// provider 別の quick コマンドボタン制御。
+// Ollama REPL は `/model` を持たず（近いのは `/load`）、Hub 側のスラッシュピッカーも
+// Claude/Codex 専用候補で構成されているため、Ollama セッションでは両方を非活性化する。
+// `/clear` は Ollama REPL にも実在し意味も一致するため活性のまま残す。
+function updateQuickCmdButtons(id) {
+  const s = id !== null ? sessions.get(id) : null;
+  const provider = s?.provider || '';
+  const isOllama = provider === 'ollama';
+  const modelBtn  = document.getElementById('quick-model-btn');
+  const pickerBtn = document.getElementById('slash-picker-btn');
+  for (const btn of [modelBtn, pickerBtn]) {
+    if (!btn) continue;
+    btn.disabled = isOllama;
+    if (isOllama) btn.setAttribute('aria-disabled', 'true');
+    else btn.removeAttribute('aria-disabled');
+  }
 }
 
 function stateLabel(state) {
@@ -5133,7 +5207,16 @@ function renderSessionList() {
         : '';
       const metaRow = `<div class="card-meta-row"><span class="badge ${state}">${label}</span>${reasonHtml}${sessionLabel}${msgHtml}</div>`;
       c.dataset.sessionId = s.id;
-      const modelBadge = s.model ? ` <span class="card-model">${escapeHtml(s.model)}</span>` : '';
+      const isOllamaBackedSess = (s.route === 'ollama');
+      let modelBadge = '';
+      if (s.model) {
+        if (isOllamaBackedSess) {
+          const tip = `Ollama · ${s.model}`;
+          modelBadge = ` <span class="card-model card-model--ollama" data-tooltip="${escapeHtml(tip)}">${providerIconHtml('ollama')}<span class="card-model-text">${escapeHtml(s.model)}</span></span>`;
+        } else {
+          modelBadge = ` <span class="card-model">${escapeHtml(s.model)}</span>`;
+        }
+      }
       const branchStr = s.branch || '';
       const branchTip = branchStr
         ? ti18n('card_branch_tooltip', `Open Git view (${branchStr})`, { branch: branchStr })
@@ -5318,12 +5401,40 @@ function updateTabNotification(pendingCount) {
   drawFavicon(pendingCount);
 }
 
+let _summaryResizeObserver = null;
+function ensureSummaryResizeObserver() {
+  if (_summaryResizeObserver) return;
+  const el = document.getElementById('summary');
+  if (!el) return;
+  _summaryResizeObserver = new ResizeObserver(() => updateSummaryCompactMode());
+  _summaryResizeObserver.observe(el);
+  const parent = el.parentElement;
+  if (parent) _summaryResizeObserver.observe(parent);
+}
+
+function updateSummaryCompactMode() {
+  const el = document.getElementById('summary');
+  if (!el) return;
+  // scrollWidth > clientWidth は #summary が flex-wrap:nowrap + overflow:hidden の前提でのみ意味を持つ。
+  el.classList.remove('summary--compact');
+  const overflow = el.scrollWidth > el.clientWidth + 1;
+  if (overflow) el.classList.add('summary--compact');
+}
+
 function render() {
   const stateCounts = { running: 0, waiting: 0, standby: 0 };
-  const connByProvider = {};
+  // groupKey -> { provider, model, isOllamaBacked, count }
+  // Ollama backend sessions are split per-model so each model gets its own chip.
+  const providerGroups = new Map();
   sessions.forEach(s => {
-    const p = s.provider || 'unknown';
-    connByProvider[p] = (connByProvider[p] || 0) + 1;
+    const provider = s.provider || 'unknown';
+    const route = s.route || '';
+    const model = s.model || '';
+    const isOllamaBacked = route === 'ollama';
+    const key = isOllamaBacked ? `ollama::${model}` : provider;
+    const g = providerGroups.get(key);
+    if (g) g.count++;
+    else providerGroups.set(key, { provider, model, isOllamaBacked, count: 1 });
     const st = s.state || 'standby';
     if (st === 'running') stateCounts.running++;
     else if (st === 'waiting') stateCounts.waiting++;
@@ -5332,9 +5443,27 @@ function render() {
   const totalWaiting = stateCounts.waiting;
 
   const PROVIDER_LABELS = { claude: 'Claude', codex: 'Codex', ollama: 'Ollama', opencode: 'OpenCode' };
-  const providerParts = Object.entries(connByProvider)
-    .map(([p, n]) => `<span class="summary-provider-chip">${providerIconHtml(p)}<span class="summary-provider-name ${p}">${PROVIDER_LABELS[p] || p}</span><span class="summary-provider-count">: ${n}</span></span>`)
-    .join('');
+  const PROVIDER_ORDER = { claude: 0, ollama: 1, codex: 2, opencode: 3 };
+  const sortedGroups = Array.from(providerGroups.values()).sort((a, b) => {
+    const ka = a.isOllamaBacked ? 'ollama' : a.provider;
+    const kb = b.isOllamaBacked ? 'ollama' : b.provider;
+    const oa = ka in PROVIDER_ORDER ? PROVIDER_ORDER[ka] : 99;
+    const ob = kb in PROVIDER_ORDER ? PROVIDER_ORDER[kb] : 99;
+    if (oa !== ob) return oa - ob;
+    return (a.model || '').localeCompare(b.model || '');
+  });
+  const providerParts = sortedGroups.map(g => {
+    if (g.isOllamaBacked) {
+      const label = PROVIDER_LABELS.ollama;
+      const modelHtml = g.model ? `<span class="summary-ollama-model">${escapeHtml(g.model)}</span>` : '';
+      const tip = g.model ? `Ollama · ${g.model} : ${g.count}` : `Ollama : ${g.count}`;
+      return `<span class="summary-provider-chip" data-tooltip="${escapeHtml(tip)}">${providerIconHtml('ollama')}<span class="compact-hide"><span class="summary-provider-name ollama">${label}</span>${modelHtml}<span class="summary-provider-count">: ${g.count}</span></span><span class="compact-count">${g.count}</span></span>`;
+    }
+    const provider = g.provider;
+    const label = PROVIDER_LABELS[provider] || provider;
+    const tip = `${label} : ${g.count}`;
+    return `<span class="summary-provider-chip" data-tooltip="${escapeHtml(tip)}">${providerIconHtml(provider)}<span class="compact-hide"><span class="summary-provider-name ${provider}">${label}</span><span class="summary-provider-count">: ${g.count}</span></span><span class="compact-count">${g.count}</span></span>`;
+  }).join('');
 
   let summary = '';
   if (stateCounts.running > 0) {
@@ -5348,6 +5477,8 @@ function render() {
   }
   if (providerParts) summary += `<span class="summary-sep">|</span>${providerParts}`;
   document.getElementById('summary').innerHTML = summary;
+  ensureSummaryResizeObserver();
+  updateSummaryCompactMode();
   updateTabNotification(totalWaiting);
 
   if (activeSessionId === null && sessions.size > 0) {
@@ -5698,6 +5829,7 @@ function openLightbox(src) {
   const spawnClaudeModelBtn = document.getElementById('spawn-claude-model-btn');
   const spawnModelInput = document.getElementById('spawn-model');
   const spawnModelDatalist = document.getElementById('spawn-model-datalist');
+  const spawnModelClearBtn = document.getElementById('spawn-model-clear');
   const spawnModelRefreshBtn = document.getElementById('spawn-model-refresh');
   let codexModelSelection = null;
   let claudeModelSelection = null;
@@ -5720,6 +5852,58 @@ function openLightbox(src) {
     }
   }
 
+  function getModelGroupsForProvider(provider) {
+    if (!Array.isArray(spawnModelGroups)) return [];
+    const groups = spawnModelGroups.filter(g => g && Array.isArray(g.models) && (!g.provider || g.provider === provider));
+    groups.sort((a, b) => {
+      const rank = (g) => {
+        if (g.provider === provider) return 0;
+        if (g.label === 'Ollama Cloud') return 1;
+        if (g.label === 'Ollama Local') return 2;
+        return 3;
+      };
+      return rank(a) - rank(b);
+    });
+    return groups;
+  }
+
+  function groupHasModel(group, model) {
+    return !!group?.models?.some(m => m && m.id === model);
+  }
+
+  function isModelCompatibleWithProvider(provider, model) {
+    const m = (model || '').trim();
+    if (!m || !Array.isArray(spawnModelGroups)) return true;
+    let known = false;
+    for (const g of spawnModelGroups) {
+      if (!groupHasModel(g, m)) continue;
+      known = true;
+      if (!g.provider || g.provider === provider) return true;
+    }
+    return !known;
+  }
+
+  function clearModelSelectionState() {
+    codexModelSelection = null;
+    claudeModelSelection = null;
+  }
+
+  function syncModelClearButton() {
+    if (spawnModelClearBtn) spawnModelClearBtn.hidden = !spawnModelInput.value.trim();
+  }
+
+  function setSpawnModelValue(value) {
+    spawnModelInput.value = value || '';
+    syncModelClearButton();
+  }
+
+  function clearIncompatibleModelForProvider(provider) {
+    if (!isModelCompatibleWithProvider(provider, spawnModelInput.value)) {
+      setSpawnModelValue('');
+      clearModelSelectionState();
+    }
+  }
+
   function populateModelDatalist() {
     if (!spawnModelDatalist) return;
     spawnModelDatalist.innerHTML = '';
@@ -5727,21 +5911,7 @@ function openLightbox(src) {
     const currentProvider = spawnProviderEl.value;
     // 並び順: 同 provider 専用 → Ollama Cloud → Ollama Local。
     // 他 provider 専用は非表示。Ollama 系は provider="" で両 provider に表示する。
-    const ordered = [];
-    for (const g of spawnModelGroups) {
-      if (g.provider && g.provider !== currentProvider) continue;
-      ordered.push(g);
-    }
-    ordered.sort((a, b) => {
-      const rank = (g) => {
-        if (g.provider === currentProvider) return 0;
-        if (g.label === 'Ollama Cloud') return 1;
-        if (g.label === 'Ollama Local') return 2;
-        return 3;
-      };
-      return rank(a) - rank(b);
-    });
-    for (const g of ordered) {
+    for (const g of getModelGroupsForProvider(currentProvider)) {
       for (const m of g.models) {
         const opt = document.createElement('option');
         opt.value = m.id;
@@ -5759,7 +5929,10 @@ function openLightbox(src) {
   function resolveRoute(provider, model) {
     const m = (model || '').trim();
     if (!m) return '';
-    if (spawnModelRouteMap.has(m)) return spawnModelRouteMap.get(m);
+    for (const g of getModelGroupsForProvider(provider)) {
+      if (groupHasModel(g, m)) return g.route || '';
+    }
+    if (spawnModelRouteMap.has(m) && isModelCompatibleWithProvider(provider, m)) return spawnModelRouteMap.get(m);
     if (m.includes(':cloud')) return 'ollama';
     if (provider === 'claude') return 'anthropic';
     if (provider === 'codex')  return 'openai';
@@ -5778,6 +5951,7 @@ function openLightbox(src) {
         spawnModelGroups = Array.isArray(data.groups) ? data.groups : [];
         rebuildModelRouteMap(spawnModelGroups);
         populateModelDatalist();
+        clearIncompatibleModelForProvider(spawnProviderEl.value);
         return data;
       } finally {
         spawnModelFetchInFlight = null;
@@ -5811,6 +5985,7 @@ function openLightbox(src) {
     if (p !== 'codex')  codexModelSelection  = null;
     if (p !== 'claude') claudeModelSelection = null;
     populateModelDatalist();
+    clearIncompatibleModelForProvider(p);
   });
   updateSpawnProviderIcon();
 
@@ -5825,19 +6000,28 @@ function openLightbox(src) {
   });
   spawnModelInput.addEventListener('input', () => {
     _modelInputDirty = true;
+    clearModelSelectionState();
+    syncModelClearButton();
   });
   spawnModelInput.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       _modelInputDirty = false;
-      spawnModelInput.value = _savedModelValue;
+      setSpawnModelValue(_savedModelValue);
       spawnModelInput.blur();
     }
   });
   spawnModelInput.addEventListener('blur', () => {
     if (!_modelInputDirty) {
-      spawnModelInput.value = _savedModelValue;
+      setSpawnModelValue(_savedModelValue);
     }
   });
+  if (spawnModelClearBtn) {
+    spawnModelClearBtn.addEventListener('click', () => {
+      setSpawnModelValue('');
+      clearModelSelectionState();
+      spawnModelInput.focus();
+    });
+  }
 
   function loadSpawnSettings() {
     try {
@@ -5849,7 +6033,7 @@ function openLightbox(src) {
         document.getElementById('spawn-codex-opts').hidden  = (p !== 'codex');
       }
       if (s.cwd)              spawnCwdInput.value = s.cwd;
-      if (s.model !== undefined) document.getElementById('spawn-model').value = s.model;
+      if (s.model !== undefined) setSpawnModelValue(s.model);
       if (s.permission_mode)  document.getElementById('spawn-permission-mode').value = s.permission_mode;
       if (s.sandbox)          document.getElementById('spawn-sandbox').value = s.sandbox;
       if (s.ask_for_approval) document.getElementById('spawn-ask-approval').value = s.ask_for_approval;
@@ -6146,6 +6330,7 @@ function openLightbox(src) {
   }
 
   function openCodexModelModal() {
+    populateModelDatalist();
     const currentModel = (spawnModelInput.value || '').trim();
     const sandbox = document.getElementById('spawn-sandbox').value;
     const approval = document.getElementById('spawn-ask-approval').value;
@@ -6157,6 +6342,7 @@ function openLightbox(src) {
   }
 
   function openClaudeModelModal() {
+    populateModelDatalist();
     const currentModel = (spawnModelInput.value || '').trim();
     const permMode = document.getElementById('spawn-permission-mode').value;
     return openModelModal(
@@ -6170,7 +6356,7 @@ function openLightbox(src) {
     spawnCodexModelBtn.addEventListener('click', async () => {
       const picked = await openCodexModelModal();
       if (!picked) return;
-      spawnModelInput.value = picked.model;
+      setSpawnModelValue(picked.model);
       codexModelSelection = picked;
     });
   }
@@ -6179,7 +6365,7 @@ function openLightbox(src) {
     spawnClaudeModelBtn.addEventListener('click', async () => {
       const picked = await openClaudeModelModal();
       if (!picked) return;
-      spawnModelInput.value = picked.model;
+      setSpawnModelValue(picked.model);
       claudeModelSelection = picked;
     });
   }
@@ -6191,6 +6377,13 @@ function openLightbox(src) {
     try {
       const model = spawnModelInput.value.trim();
       const label = document.getElementById('spawn-label').value.trim();
+      if (model && !isModelCompatibleWithProvider(provider, model)) {
+        setSpawnModelValue('');
+        clearModelSelectionState();
+        showToast(t('spawn_model_provider_mismatch'));
+        spawnLaunchBtn.disabled = false;
+        return;
+      }
       const route = resolveRoute(provider, model);
       const bodyObj = { provider, cwd, model, label };
       if (route) bodyObj.route = route;

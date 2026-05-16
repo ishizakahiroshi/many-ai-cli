@@ -47,7 +47,7 @@ type Message struct {
 	// Label: セッション識別用の任意ラベル（UI カード 3 行目に【ラベル】として表示）。
 	Label string `json:"label,omitempty"`
 
-	// Model: 使用モデル名（例: "claude-sonnet-4-5", "gpt-4o"）。UI カードに表示する。
+	// Model: 使用モデル名（例: "claude-sonnet-4-5", "gpt-5.5"）。UI カードに表示する。
 	Model string `json:"model,omitempty"`
 
 	// Route: spawn 時に明示された接続経路（"anthropic" / "openai" / "ollama"）。

@@ -26,7 +26,7 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	localCfg := append([]config.LocalModel(nil), s.cfg.LocalModels...)
 	s.mu.Unlock()
-	resp := buildModelsResponse(s.modelsCache, localCfg, force)
+	resp := buildModelsResponse(s.modelsCache, s.modelsRemoteCache, config.DefaultModelsSource, localCfg, force)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
 }
