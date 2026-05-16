@@ -2892,7 +2892,18 @@ function trackApprovalHintFromChunk(id, bytes) {
     approvalRawOptionsCache.set(id, options);
   } else {
     cancelApprovalHintConfirm(id);
-    approvalRawOptionsCache.delete(id);
+    // approvalVisibleCache=true の間（= Hub marker / plainYesNo / フォールバックいずれかで
+    // 既に承認 UI を表示中）は cache を保護する。Claude Code の thinking スピナー
+    // ("Worked for Xs") 等で pendingTextTail がローテートし `(Y:1/N:0)` 行が末尾 20-40 行
+    // から押し出されると、フォールバック検出が「実行内容: 1. ... 2. ..." 等の番号付き本文を
+    // 拾うが承認ラベルが無いため nowVisible=false になる。ここで cache を削除すると
+    // detectApproval の復元経路 (action-bar 消失防止) が動かず、action-bar が
+    // 表示・非表示を高頻度で繰り返す（画面チカチカ）症状になる。
+    // sendChoice / doSend / hideActionBar の経路では確実に cache.delete されるため
+    // この保護は安全（解決済み承認の残留は起きない）。
+    if (!approvalVisibleCache.get(id)) {
+      approvalRawOptionsCache.delete(id);
+    }
   }
 
   // true への遷移は短時間 debounce してから送信する。PTY 生バイト上だけの一瞬の誤検出で
@@ -3223,6 +3234,7 @@ function detectApproval(id) {
       const prevTimer2 = approvalConsumedSigDeleteTimer.get(id);
       if (prevTimer2) { clearTimeout(prevTimer2); approvalConsumedSigDeleteTimer.delete(id); }
       approvalConsumedSig.delete(id);
+      approvalRawOptionsCache.set(id, markerOpts);
       const wasVisible = !!approvalVisibleCache.get(id);
       showActionBar(bar, id, markerOpts, false, !wasVisible);
       if (!wasVisible) {
@@ -3242,6 +3254,7 @@ function detectApproval(id) {
       const prevTimer2 = approvalConsumedSigDeleteTimer.get(id);
       if (prevTimer2) { clearTimeout(prevTimer2); approvalConsumedSigDeleteTimer.delete(id); }
       approvalConsumedSig.delete(id);
+      approvalRawOptionsCache.set(id, plainYesNoOpts);
       const wasVisible = !!approvalVisibleCache.get(id);
       showActionBar(bar, id, plainYesNoOpts, false, !wasVisible);
       if (!wasVisible) {
