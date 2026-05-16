@@ -228,6 +228,14 @@ type UserPrefs struct {
 	MigratedFromLocalstorage bool       `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
 }
 
+// LocalModel は config.yaml の local_models セクションに手書きで追記される
+// ローカル LLM の 1 件。Ollama daemon `/api/tags` で取得した一覧と merge して
+// /api/models の "Ollama Local" グループに表示する。
+type LocalModel struct {
+	ID    string `yaml:"id"             json:"id"`
+	Label string `yaml:"label,omitempty" json:"label,omitempty"`
+}
+
 type Config struct {
 	Hub struct {
 		Port                     int    `yaml:"port"`
@@ -248,6 +256,7 @@ type Config struct {
 	FileOpenApp            string                 `yaml:"file_open_app,omitempty"`
 	TerminalApp            string                 `yaml:"terminal_app,omitempty"`
 	Token                  string                 `yaml:"token"`
+	LocalModels            []LocalModel           `yaml:"local_models,omitempty" json:"local_models,omitempty"`
 	UserPrefs              UserPrefs              `yaml:"user_prefs,omitempty" json:"user_prefs,omitempty"`
 }
 

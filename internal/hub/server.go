@@ -137,6 +137,8 @@ type Server struct {
 	slashCmdMu    sync.Mutex
 	slashCmdCache map[string]*slashCmdCacheEntry // key: provider
 
+	modelsCache *modelsCache
+
 	lastUICols int
 	lastUIRows int
 	idleTimer  *time.Timer
@@ -171,6 +173,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		wrappers:      map[int]*websocket.Conn{},
 		uis:           map[*websocket.Conn]struct{}{},
 		slashCmdCache: map[string]*slashCmdCacheEntry{},
+		modelsCache:   &modelsCache{},
 	}
 	if devMode {
 		logger.Info("dev mode: serving web assets from ./web/src/")
@@ -228,6 +231,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/attach", s.handleAttach)
 	mux.HandleFunc("/api/slash-cmd-sources", s.handleSlashCmdSources)
 	mux.HandleFunc("/api/slash-commands", s.handleSlashCommands)
+	mux.HandleFunc("/api/models", s.handleModels)
 	mux.HandleFunc("/api/approval-patterns", s.handleApprovalPatterns)
 	mux.HandleFunc("/api/approval-patterns/", s.handleApprovalPatternsItem)
 	mux.HandleFunc("/api/files-list", s.handleFilesList)
@@ -1219,6 +1223,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		PermissionMode string `json:"permission_mode"`
 		Sandbox        string `json:"sandbox"`
 		AskForApproval string `json:"ask_for_approval"`
+		Route          string `json:"route"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
@@ -1243,6 +1248,10 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	}
 	if !validPermModes[body.PermissionMode] || !validSandboxes[body.Sandbox] || !validApprovals[body.AskForApproval] || !validModelSelection[body.ModelSelection] {
 		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if !validRoute(body.Route) {
+		http.Error(w, "invalid route", http.StatusBadRequest)
 		return
 	}
 	cwd := body.CWD
@@ -1317,6 +1326,21 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	cmd.Env = append(sanitizeEnv(os.Environ()), "ANY_AI_CLI=1")
 	if s.parentShell != "" {
 		cmd.Env = append(cmd.Env, "ANY_AI_CLI_PARENT_SHELL="+s.parentShell)
+	}
+	// route が未指定の場合は model 名から推定する。Anthropic / OpenAI の
+	// 既定 route は env 注入を行わない（ユーザー shell の値を継承）。
+	effectiveRoute := body.Route
+	if effectiveRoute == "" {
+		s.mu.Lock()
+		localCfg := append([]config.LocalModel(nil), s.cfg.LocalModels...)
+		s.mu.Unlock()
+		known := collectOllamaModelIDs(s.modelsCache, localCfg)
+		effectiveRoute = RouteForModel(body.Provider, resolvedModel, known)
+	}
+	if envPreset := EnvPresetFor(body.Provider, effectiveRoute); len(envPreset) > 0 {
+		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
+		s.logger.Debug("spawn: env preset applied",
+			"provider", body.Provider, "route", effectiveRoute, "keys", envKeyList(envPreset))
 	}
 	// Windows ConPTY (go-pty) は wrap プロセスの std handles が未設定だと
 	// claude.exe / codex の起動に失敗してすぐ disconnect する。stdin は

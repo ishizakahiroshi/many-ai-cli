@@ -73,6 +73,7 @@ sha256sum -c SHA256SUMS.txt
 - **Voice input + wake word** — dictate prompts, continue through short pauses, and optionally start dictation by phrase (Chrome / Edge)
 - **Multi-session view** — switch between multiple AI CLI sessions in one tab
 - **Spawn new sessions** from the UI (`/api/spawn`)
+- **Model picker with Ollama routing** — pick Anthropic / OpenAI / Ollama Cloud / Ollama Local models from the spawn form; the Hub auto-injects the right `ANTHROPIC_*` / `OPENAI_*` env vars per session, no shell setup required
 - **WSL launcher** — `any-ai-cli-wsl.exe` starts the Hub inside WSL and opens the Windows browser
 - **Language switching** (English / Japanese)
 - **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `any-ai-cli` itself

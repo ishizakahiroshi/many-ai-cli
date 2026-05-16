@@ -1018,14 +1018,12 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 }
 .action-clear-btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); }
 .action-submit-btn {
-  margin-left: auto;
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
 }
 .action-submit-btn:hover:not(:disabled) { filter: brightness(1.1); }
 .action-submit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-#action-bar.batch .action-dismiss-btn { margin-left: 0; }
 
 /* 入力バー外枠 */
 #input-bar-outer { position: relative; flex-shrink: 0; }
@@ -1761,6 +1759,9 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 .spawn-provider-row .spawn-select { flex: 1; }
 .spawn-cwd-row { display: flex; gap: 4px; align-items: center; }
 .spawn-cwd-row > .spawn-input { flex: 1; }
+.spawn-model-row { display: flex; gap: 4px; align-items: center; }
+.spawn-model-row > .spawn-input { flex: 1; }
+#spawn-model-refresh.is-loading { opacity: 0.5; pointer-events: none; }
 .spawn-btn-browse { flex-shrink: 0; background: transparent; border: 1px solid var(--line); color: var(--fg); border-radius: 4px; padding: 3px 7px; cursor: pointer; font-size: 0.85rem; line-height: 1; }
 .spawn-btn-browse:hover { background: var(--bg-elev2); }
 .spawn-btn-browse:disabled { opacity: 0.4; cursor: not-allowed; }

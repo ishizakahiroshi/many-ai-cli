@@ -48,6 +48,7 @@ Terminal pane #1              Terminal pane #2
 - **画像添付**: 画像の paste / D&D からローカル保存し、セッションへパスを inject
 - **音声入力 + ウェイクワード**: Chrome / Edge の Speech Recognition API で入力し、任意フレーズで音声入力を開始
 - **複数セッション管理**: 1つの Hub UI で複数 AI CLI セッションを切り替え
+- **モデルピッカー + Ollama route 自動切替**: spawn フォームから Anthropic / OpenAI / Ollama Cloud / Ollama Local のモデルを選択でき、Hub が必要な `ANTHROPIC_*` / `OPENAI_*` 環境変数をセッションごとに自動注入（shell での事前設定不要）
 - **WSL ランチャー**: `any-ai-cli-wsl.exe` で WSL 内の Hub を起動し、Windows ブラウザから操作
 - **ローカル限定**: Hub は `127.0.0.1` のみに bind。`any-ai-cli` 自身はテレメトリを送信しません
 

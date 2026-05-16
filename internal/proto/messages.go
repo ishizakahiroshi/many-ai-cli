@@ -50,6 +50,10 @@ type Message struct {
 	// Model: 使用モデル名（例: "claude-sonnet-4-5", "gpt-4o"）。UI カードに表示する。
 	Model string `json:"model,omitempty"`
 
+	// Route: spawn 時に明示された接続経路（"anthropic" / "openai" / "ollama"）。
+	// env preset 注入に使う。未指定なら model 名から推定する。
+	Route string `json:"route,omitempty"`
+
 	// FirstMessage: セッション内で最初に確定されたユーザー入力（UI カード表示用）。
 	FirstMessage string `json:"first_message,omitempty"`
 
