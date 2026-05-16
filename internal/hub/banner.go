@@ -65,6 +65,17 @@ func startupBanner(version, addr, token string) string {
 		fmt.Sprintf("GitHub: %s", repositoryURL),
 		fmt.Sprintf("WebUI:  %s", hubBase),
 		fmt.Sprintf("Open:   %s", hubURL),
+	)
+	if wslutil.IsWSL() {
+		// WSL2 auto-forwards 127.0.0.1 between Windows and the WSL guest, so
+		// the same URL works from a Windows-side browser. Show it explicitly
+		// with the "localhost" form so users running `any-ai-cli serve` inside
+		// WSL know they don't need to start a Linux-side browser — the Hub UI
+		// is reachable from Windows as-is.
+		winURL := strings.Replace(hubURL, "127.0.0.1", "localhost", 1)
+		lines = append(lines, fmt.Sprintf("From Windows: %s", winURL))
+	}
+	lines = append(lines,
 		"",
 		warning,
 	)

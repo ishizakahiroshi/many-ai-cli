@@ -65,7 +65,7 @@ func (s *Server) handleGitShow(w http.ResponseWriter, r *http.Request) {
 
 	_, cwd, err := s.resolveGitRoot(sid)
 	if err != nil {
-		writeGitErrorFromResolve(w, err)
+		writeGitErrorFromResolve(w, sid, err)
 		return
 	}
 

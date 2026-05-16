@@ -211,12 +211,13 @@ func parseDecorate(decorate string) []gitRef {
 }
 
 // writeGitErrorFromResolve は resolveGitRoot が返したエラーを適切な JSON エラーに変換する。
-func writeGitErrorFromResolve(w http.ResponseWriter, err error) {
+// sid を detail に含めることで「どのセッションが見つからなかったか」を UI / ログから追える。
+func writeGitErrorFromResolve(w http.ResponseWriter, sid int, err error) {
 	switch {
 	case errors.Is(err, errBadSession):
-		writeGitError(w, http.StatusBadRequest, "bad_session", "session not found")
+		writeGitError(w, http.StatusBadRequest, "bad_session", fmt.Sprintf("session not found (sid=%d)", sid))
 	case errors.Is(err, errNoCWD):
-		writeGitError(w, http.StatusBadRequest, "no_cwd", "session has no cwd")
+		writeGitError(w, http.StatusBadRequest, "no_cwd", fmt.Sprintf("session has no cwd (sid=%d)", sid))
 	case errors.Is(err, errNotGitRepo):
 		writeGitError(w, http.StatusBadRequest, "not_git_repo", err.Error())
 	default:

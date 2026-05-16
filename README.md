@@ -25,12 +25,13 @@ Get the latest release from [GitHub Releases](https://github.com/ishizakahiroshi
 > Settings and logs are stored in `~/.any-ai-cli/` (created on first run).
 > Session logs contain user input and AI output. Treat them as sensitive data.
 
-### Platform Verification for v0.1.3
+### Platform Verification for v0.2.0
 
 - Verified in real environment: Windows
-- Not yet verified in real environment: Linux, macOS
+- WSL workflow supported through the Windows launcher: `any-ai-cli-wsl.exe`
+- Not yet fully verified in real environment: native Linux, native macOS
 
-Linux/macOS builds are expected to work, but they have not been fully validated in real environments for v0.1.3.
+Linux/macOS builds are expected to work, but they have not been fully validated in real environments for v0.2.0.
 Please use at your own discretion and report any issues.
 
 ### Verify Release Artifacts (Checksum + Signature)
@@ -63,11 +64,16 @@ sha256sum -c SHA256SUMS.txt
 ## Features
 
 - **Unified approval panel** — approve/reject Claude Code and Codex CLI prompts from the browser
+- **Batch approvals** — answer multiple numbered questions from one action bar and submit them together
 - **Real-time PTY output** via xterm.js over WebSocket
+- **Files tab** — browse project files, preview Markdown/code, copy paths, rename, and move files from the Hub
+- **Git view** — inspect branch history, commit details, changed files, and diffs without checking out refs
+- **Commit all** — stage all current working-tree changes and create a local commit after an explicit review step
 - **Image attach** — paste or drag-and-drop images into the terminal session
-- **Voice input** — speak your prompt using the browser's Speech Recognition API (Chrome / Edge)
+- **Voice input + wake word** — dictate prompts, continue through short pauses, and optionally start dictation by phrase (Chrome / Edge)
 - **Multi-session view** — switch between multiple AI CLI sessions in one tab
 - **Spawn new sessions** from the UI (`/api/spawn`)
+- **WSL launcher** — `any-ai-cli-wsl.exe` starts the Hub inside WSL and opens the Windows browser
 - **Language switching** (English / Japanese)
 - **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `any-ai-cli` itself
 
@@ -90,6 +96,16 @@ Sessions can be created, monitored, and approved entirely from the Hub UI; you d
 > Double-clicking the binary opens a console window alongside the browser. **That console *is* the Hub server process** — closing it with `×` terminates the Hub. If it gets in the way, **minimize** it instead of closing it.
 > If the Hub does go down (whether by `×`, a crash, or a manual restart), running AI sessions wait up to **60 minutes** for the Hub to come back before terminating themselves (configurable in `config.yaml` up to 24 hours — extend it for long-running autonomous tasks). A Web UI bug or restart will not silently kill your work. See [Shutdown, zombie protection & Hub crash resilience](#shutdown-zombie-protection--hub-crash-resilience) for details.
 > To stop the Hub intentionally, use the `⏻` button in the top-right of the Hub UI, or run `any-ai-cli stop` from another terminal.
+
+### Windows + WSL launcher
+
+If your AI CLI tools live inside WSL, use the separate Windows launcher:
+
+```powershell
+any-ai-cli-wsl.exe
+```
+
+It starts `any-ai-cli serve` inside WSL, opens the Hub URL in the Windows browser, and keeps Windows file/folder actions usable from the Hub. By default it starts in the WSL home directory; pass `--cwd /path/in/wsl` to choose another WSL working directory.
 
 ---
 
@@ -178,7 +194,10 @@ Settings are stored in `~/.any-ai-cli/config.yaml` (auto-created on first run).
 |-----|-------------|---------|
 | `port` | Hub port | `47777` |
 | `language` | UI language (`en` or `ja`) | `en` |
-| `auto_open_browser` | Auto-open browser on Hub start | `true` |
+| `hub.open_browser` | Auto-open browser on Hub start | `false` in generated config; `--open` or no-argument launch opens it |
+| `hub.wrapper_reconnect_grace_sec` | How long wrapped sessions wait for a crashed/restarted Hub to return | `3600` |
+| `approval_pattern_sources` | Remote or local sources for official approval trigger patterns | GitHub raw URLs |
+| `approval_profiles` | Active approval pattern profile per provider (`official` or `custom`) | `official` |
 
 ### Where settings are saved
 
@@ -232,25 +251,32 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
   - Right edge: `⏻` (stop the Hub) and `Settings` (language, theme, timeouts, log dir, etc.).
 - **Left sidebar (session list)**
   - Top: `+ New Session` button (opens the spawn dialog).
-  - Sessions are grouped by **project folder** (the directory where the wrapper was launched). Each group shows its own session-count chips.
-  - Each session card: `★` (favorite) / `×` (close) / provider-colored dot + ID + state badge (Running / Standby / Waiting / Completed / Error / Disconnected) / last response time / one-line preview of recent output.
+  - Sessions are grouped by **project folder** (the directory where the wrapper was launched). Each group shows its own session-count chips and a Files entry.
+  - Each session card: `★` (favorite) / `×` (close) / provider-colored dot + ID + state badge (Running / Standby / Waiting / Completed / Error / Disconnected) / branch badge when Git is available / last response time / one-line preview of recent output.
+  - Right-click a card to open the Git view, open the Files tab, activate the session, or copy the session ID.
   - Completed and errored sessions stay in the list until you click `×`.
 - **Right pane (terminal + input)**
   - Top bar: active session's provider and cwd, plus `↑ to top` to scroll the PTY buffer back to the start.
   - Center: PTY output rendered live with xterm.js.
   - Bottom: multi-line input box, attach / send buttons, slash-command picker (`/clear`, `/model`, `/`), and the auto-mode toggle hint `shift+tab`.
-- **Approval action bar**: appears above the input when an approval is pending. Click a button, or focus with `←` / `→` and press `Enter`.
+- **Tabs**: terminal sessions, Files tabs, and Git tabs share the main area and can be restored after restart.
+- **Approval action bar**: appears above the input when an approval is pending. Single prompts use buttons; multi-question prompts render stacked choices with "Submit all".
+- **Files tab**: left tree + right preview for project files. Markdown/code can be previewed, paths can be copied, and file move/rename actions are available from the context menu.
+- **Git tab**: read-only commit log, ref selector, commit detail, changed files, diff preview, copy actions, and a guarded Commit all modal for local commits.
 - **Sync with terminal input**: if you resolve the prompt by typing `y` / `n` directly in the terminal, the action bar disappears automatically.
 - **Image attach**: paste or drag-and-drop into the attach area; the file is materialized locally and a path reference is injected into the PTY on send.
 
 ### Usage notes
 
-- **Approval**: When an AI CLI requires approval, an action bar appears above the input. Click the button or navigate with `←` / `→` and confirm with `Enter`.
+- **Approval**: When an AI CLI requires approval, an action bar appears above the input. Click the button or navigate with `←` / `→` and confirm with `Enter`. For multi-question approvals, select each section and submit them together.
+- **Files**: Click the project group's Files entry or right-click a session card → Open Files Tab. Preview files in the right pane and use the context menu for copy/open/move/rename actions.
+- **Git**: Click a branch badge or press `Ctrl+Shift+G` to open the Git view for the current session. Commit all stages the whole working tree with `git add -A`, then runs `git commit` only after Review.
 - **Terminal input**: Type directly in the input field and press `Enter` to send. Use `Shift+Enter` for a newline.
 - **Image attach**: Paste (`Ctrl+V`) or drag-and-drop an image onto the attach area to inject a local file path reference into the session.
 - **Voice input**: Click the 🎤 button or press `Alt+V` to start voice input. Click again or press `Alt+V` to stop. Transcribed text is inserted into the input field.
   - Requires Chrome or Edge (uses the browser's built-in Speech Recognition API).
   - Microphone permission must be granted on first use.
+  - Settings include end-of-speech wait and wake word mode. Wake word standby can be global or session-scoped.
 - **Auto-submit trigger**: In Settings → Auto-submit trigger, enable the toggle and set a phrase (e.g. `send`). When voice recognition finishes with that phrase, the input is sent automatically. Also works with typed text.
 - **Spawn**: Click **+ New Session** to start a new AI CLI session from the browser.
 
@@ -264,6 +290,9 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 | `←` / `→` | Move focus between action bar buttons (when action bar is visible and input is empty) |
 | `Enter` | Click focused action bar button |
 | `Alt+V` | Toggle voice input on/off |
+| `Alt+W` | Toggle global wake word standby |
+| `Ctrl+Shift+G` | Open the Git tab for the current session |
+| `Ctrl+Shift+F` | Open the Files tab for the current session |
 | `Ctrl+V` | Paste image into attach area |
 | `Ctrl+C` | Send SIGINT to PTY (or copy selected text) |
 | `Ctrl+D` | Send EOF to PTY |
@@ -325,6 +354,12 @@ The Hub server acts as a relay between PTY sessions and the browser UI. Each AI 
 
 The Hub UI log-path button copies the log directory path to your clipboard.
 
+You can also regenerate a clean transcript manually:
+
+```bash
+any-ai-cli log-clean ~/.any-ai-cli/logs/sessions/<session>.jsonl -o transcript.txt
+```
+
 ---
 
 ## Troubleshooting
@@ -343,7 +378,7 @@ The Hub inherits the `PATH` snapshot of the shell that launched it. If that shel
 
 Hub diagnostics for each spawn are written to `~/.any-ai-cli/logs/spawn/<provider>-<timestamp>.log` and include the resolved `PATH`, detected package managers, and an explicit hint when `executable file not found` is the underlying cause.
 
-> **v0.1.4 and later:** The Hub re-expands `%VAR%`-style entries in the inherited USER `Path` just before spawning a wrap process (reading `HKCU\Environment` and falling back to `%LOCALAPPDATA%\pnpm` when the directory exists), so this manual restart is normally no longer needed. The recovery procedure above remains as a fallback when the fix cannot resolve the variable.
+> **v0.2.0 and later:** The Hub re-expands `%VAR%`-style entries in the inherited USER `Path` just before spawning a wrap process (reading `HKCU\Environment` and falling back to `%LOCALAPPDATA%\pnpm` when the directory exists), so this manual restart is normally no longer needed. The recovery procedure above remains as a fallback when the fix cannot resolve the variable.
 
 ---
 
@@ -358,6 +393,7 @@ Hub diagnostics for each spawn are written to `~/.any-ai-cli/logs/spawn/<provide
 `any-ai-cli` is local-first, but the following outbound HTTPS requests can occur and you should be aware of them:
 
 - **Slash command list (Hub itself)** — When the slash command picker is opened, the Hub fetches a markdown file from `https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/{claude,codex}.md` and caches it for 24 hours. The source URL can be changed (or pointed to a local file path) in **Settings → Slash command sources**.
+- **Approval pattern list (Hub itself)** — On Hub startup, the official approval detection patterns can be fetched from `https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/{claude,codex,common}.md` and cached for 24 hours. The source URLs can be overridden in config.
 - **Wrapped CLI traffic (the CLIs themselves)** — The CLIs you wrap (Claude Code, Codex CLI) talk directly to their respective vendor APIs (Anthropic, OpenAI) over HTTPS. `any-ai-cli` only relays PTY I/O via local WebSocket; it does not intercept, log, or proxy these API requests. Whatever network behavior the underlying CLI has applies as-is.
 
 ### ⚠️ Data retention by wrapped CLIs

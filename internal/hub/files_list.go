@@ -18,6 +18,7 @@ type filesListItem struct {
 	Path    string    `json:"path"`
 	Rel     string    `json:"rel"`
 	Name    string    `json:"name"`
+	Type    string    `json:"type,omitempty"`
 	Size    int64     `json:"size"`
 	Mtime   time.Time `json:"mtime"`
 	Summary string    `json:"summary"`
@@ -123,7 +124,7 @@ func (s *Server) handleFilesList(w http.ResponseWriter, r *http.Request) {
 
 // walkFilesLocal は filesRoot 以下を再帰走査し filesListItem スライスを返す。
 // 件数上限 2000・深さ上限 8・隠しディレクトリ + filesSkipDirs スキップ・シンボリックリンク非追跡。
-// 全ファイル対象（拡張子フィルタなし）。summary は text 系ファイルのみ抽出。
+// 全ファイル・ディレクトリ対象（拡張子フィルタなし）。summary は text 系ファイルのみ抽出。
 // mtime 降順ソート済み。
 func walkFilesLocal(filesRoot, cwd string) ([]filesListItem, bool) {
 	var items []filesListItem
@@ -149,7 +150,29 @@ func walkFilesLocal(filesRoot, cwd string) ([]filesListItem, bool) {
 			}
 			fullPath := filepath.Join(dir, name)
 
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+
+			relPath, err := filepath.Rel(cwd, fullPath)
+			if err != nil {
+				relPath = fullPath
+			}
+
 			if e.IsDir() {
+				if len(items) >= filesMaxItems {
+					truncated = true
+					return
+				}
+				items = append(items, filesListItem{
+					Path:  fullPath,
+					Rel:   relPath,
+					Name:  name,
+					Type:  "dir",
+					Size:  info.Size(),
+					Mtime: info.ModTime(),
+				})
 				walk(fullPath, depth+1)
 				continue
 			}
@@ -165,16 +188,6 @@ func walkFilesLocal(filesRoot, cwd string) ([]filesListItem, bool) {
 				return
 			}
 
-			info, err := e.Info()
-			if err != nil {
-				continue
-			}
-
-			relPath, err := filepath.Rel(cwd, fullPath)
-			if err != nil {
-				relPath = fullPath
-			}
-
 			// summary は text 系ファイルだけ抽出（バイナリは無意味なのでスキップ）
 			var summary string
 			if isTextFile(fullPath) {
@@ -185,6 +198,7 @@ func walkFilesLocal(filesRoot, cwd string) ([]filesListItem, bool) {
 				Path:    fullPath,
 				Rel:     relPath,
 				Name:    name,
+				Type:    "file",
 				Size:    info.Size(),
 				Mtime:   info.ModTime(),
 				Summary: summary,

@@ -82,7 +82,7 @@ func (s *Server) handleGitLog(w http.ResponseWriter, r *http.Request) {
 
 	gitRoot, cwd, err := s.resolveGitRoot(sid)
 	if err != nil {
-		writeGitErrorFromResolve(w, err)
+		writeGitErrorFromResolve(w, sid, err)
 		return
 	}
 
