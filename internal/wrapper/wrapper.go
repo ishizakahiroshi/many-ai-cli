@@ -291,10 +291,14 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	}
 	startReceiveLoop(conn)
 
-	// Reconnect supervisor: distinguishes intentional close (Hub HTTP alive)
-	// from Hub crash (Hub HTTP unreachable). The former kills PTY immediately
-	// (preserving dismiss / kill-all / idle-timeout UX); the latter waits for
-	// the configured grace period for Hub to come back, then re-registers.
+	// Reconnect supervisor: distinguishes intentional session close (Hub HTTP
+	// alive) from Hub process exit (Hub HTTP unreachable). The former kills PTY
+	// immediately (preserving dismiss / kill-all / idle-timeout UX). For a Hub
+	// process exit, auto_shutdown=true treats closing the Hub terminal as the end
+	// of all wrapped sessions. When auto_shutdown=false, wrappers wait for a
+	// manual Hub restart during the configured grace period, but never spawn a
+	// replacement Hub on their own; otherwise closing the Hub terminal revives the
+	// Windows console and Web UI unexpectedly.
 	// hub_shutdown 受信（= UI からの Hub のみ停止）は intentional フラグ経由
 	// の特別経路で、PTY は kill せず grace 期間中の手動 Hub 再起動を待つ。
 	go func() {
@@ -307,6 +311,12 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 			intentional := intentionalShutdown.Load()
 			if !intentional && probeHubAlive(cfg) {
 				logger.Info("hub still alive after WS close — treating as intentional disconnect", "session_id", getSID())
+				_ = ps.Close()
+				closeDone()
+				return
+			}
+			if !intentional && cfg.Hub.AutoShutdown {
+				logger.Info("hub is down and auto_shutdown is enabled; terminating PTY", "session_id", getSID())
 				_ = ps.Close()
 				closeDone()
 				return
@@ -340,12 +350,6 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 				cols, rows := 0, 0
 				if w, h, err := term.GetSize(int(os.Stdin.Fd())); err == nil && w > 0 && h > 0 {
 					cols, rows = w, h
-				}
-				if !intentionalShutdown.Load() {
-					if err := ensureHub(cfg); err != nil {
-						logger.Debug("ensure hub during reconnect failed", "err", err)
-						continue
-					}
 				}
 				newConn, newSID, err := dialAndReattach(cfg, getSID(), provider, display, cwd, *label, *model, startedAtText, rawLogPath, jsonlPath, cols, rows, snapshotReplay())
 				if err != nil {

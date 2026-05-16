@@ -89,9 +89,12 @@ func (s *Server) resolveGitRoot(sid int) (gitRoot, cwd string, err error) {
 }
 
 var (
-	errBadSession = errors.New("bad_session")
-	errNoCWD      = errors.New("no_cwd")
-	errNotGitRepo = errors.New("not_git_repo")
+	errBadSession       = errors.New("bad_session")
+	errNoCWD            = errors.New("no_cwd")
+	errNotGitRepo       = errors.New("not_git_repo")
+	errCommitIdentity   = errors.New("commit_identity_missing")
+	errNoChanges        = errors.New("no_changes")
+	errBadCommitMessage = errors.New("bad_commit_message")
 )
 
 // runGit は `git -C <cwd> <args...>` を実行し stdout を返す。
@@ -110,6 +113,51 @@ func runGit(ctx context.Context, cwd string, args ...string) ([]byte, error) {
 		return out, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
 	return out, nil
+}
+
+// runGitCombined は stdout/stderr をまとめて返す。commit のように失敗理由が stderr
+// に出るコマンドで、UI に見せる detail を失わないために使う。
+func runGitCombined(ctx context.Context, cwd string, args ...string) ([]byte, error) {
+	full := append([]string{"-C", cwd}, args...)
+	cmd := exec.CommandContext(ctx, "git", full...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return out, fmt.Errorf("git %s: %s", strings.Join(args, " "), strings.TrimSpace(string(out)))
+	}
+	return out, nil
+}
+
+func sanitizeCommitMessage(s string, maxLen int) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	s = strings.TrimSpace(s)
+	if maxLen > 0 && len(s) > maxLen {
+		s = s[:maxLen]
+		s = strings.TrimSpace(s)
+	}
+	return s
+}
+
+func classifyGitCommitError(err error) (code string, status int) {
+	if err == nil {
+		return "", http.StatusOK
+	}
+	msg := strings.ToLower(err.Error())
+	switch {
+	case errors.Is(err, errCommitIdentity),
+		strings.Contains(msg, "author identity unknown"),
+		strings.Contains(msg, "please tell me who you are"),
+		strings.Contains(msg, "unable to auto-detect email address"):
+		return "commit_identity_missing", http.StatusBadRequest
+	case errors.Is(err, errNoChanges):
+		return "no_changes", http.StatusBadRequest
+	case strings.Contains(msg, "nothing to commit"):
+		return "no_changes", http.StatusBadRequest
+	case errors.Is(err, errBadCommitMessage):
+		return "bad_request", http.StatusBadRequest
+	default:
+		return "git_command_failed", http.StatusInternalServerError
+	}
 }
 
 // gitRef は decorate / for-each-ref / for git-log・git-show・git-refs 共通の ref エントリ。
