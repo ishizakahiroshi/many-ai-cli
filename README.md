@@ -70,7 +70,7 @@ sha256sum -c SHA256SUMS.txt
 - **Git view** — inspect branch history, commit details, changed files, and diffs without checking out refs
 - **Commit all** — stage all current working-tree changes and create a local commit after an explicit review step
 - **Image attach** — paste or drag-and-drop images into the terminal session
-- **Voice input + wake word** — dictate prompts, continue through short pauses, and optionally start dictation by phrase (Chrome / Edge)
+- **Voice input** — dictate prompts and continue through short pauses (Chrome / Edge)
 - **Multi-session view** — switch between multiple AI CLI sessions in one tab
 - **Spawn new sessions** from the UI (`/api/spawn`)
 - **Model picker with Ollama routing** — pick Anthropic / OpenAI / Ollama Cloud / Ollama Local models from the spawn form; the Hub auto-injects the right `ANTHROPIC_*` / `OPENAI_*` env vars per session, no shell setup required
@@ -207,7 +207,7 @@ Settings are split into three categories:
 | Category | Examples | Storage |
 |---|---|---|
 | **D1: UI display state** (per-device is natural) | theme, font size, language, sidebar width | Browser **localStorage** |
-| **D2: User feature settings** (shared across devices / ports) | voice, wake word, trigger, notification sound, approval auto-switch, quick commands, usage links, favorites, session order, spawn defaults | `~/.any-ai-cli/config.yaml` under `user_prefs:`, read/written via `GET/PUT /api/user-prefs` |
+| **D2: User feature settings** (shared across devices / ports) | voice, trigger, notification sound, approval auto-switch, quick commands, usage links, favorites, session order, spawn defaults | `~/.any-ai-cli/config.yaml` under `user_prefs:`, read/written via `GET/PUT /api/user-prefs` |
 | **D3: Server operation settings** | hub port, log config, approval enable/disable, slash command sources, approval pattern sources, token | `~/.any-ai-cli/config.yaml` (direct edit or dedicated Settings UI) |
 
 D2 settings survive port changes (e.g. the WSL launcher shifting from 47777 to 47877) because they are stored server-side rather than in per-origin localStorage.
@@ -277,7 +277,7 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 - **Voice input**: Click the 🎤 button or press `Alt+V` to start voice input. Click again or press `Alt+V` to stop. Transcribed text is inserted into the input field.
   - Requires Chrome or Edge (uses the browser's built-in Speech Recognition API).
   - Microphone permission must be granted on first use.
-  - Settings include end-of-speech wait and wake word mode. Wake word standby can be global or session-scoped.
+  - Settings include end-of-speech wait time.
 - **Auto-submit trigger**: In Settings → Auto-submit trigger, enable the toggle and set a phrase (e.g. `send`). When voice recognition finishes with that phrase, the input is sent automatically. Also works with typed text.
 - **Spawn**: Click **+ New Session** to start a new AI CLI session from the browser.
 
@@ -291,7 +291,6 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 | `←` / `→` | Move focus between action bar buttons (when action bar is visible and input is empty) |
 | `Enter` | Click focused action bar button |
 | `Alt+V` | Toggle voice input on/off |
-| `Alt+W` | Toggle global wake word standby |
 | `Ctrl+Shift+G` | Open the Git tab for the current session |
 | `Ctrl+Shift+F` | Open the Files tab for the current session |
 | `Ctrl+V` | Paste image into attach area |
