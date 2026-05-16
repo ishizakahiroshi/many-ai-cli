@@ -601,7 +601,6 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 
 /* セッションカード */
 .card { position: relative; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 10px; padding: 9px 42px 9px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; overflow: hidden; }
-.card.has-open-markers { padding-right: 86px; }
 .card:hover { border-color: var(--line-soft); background: var(--bg-deep); }
 .card.waiting { border-color: rgba(245,158,11,0.35); }
 .card.active {
@@ -641,36 +640,6 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 .card-branch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .card-branch[data-disabled="true"] { color: var(--muted); background: var(--bg-deep); border-color: var(--line); cursor: not-allowed; opacity: 0.6; }
 .card-branch[data-disabled="true"]:hover { background: var(--bg-deep); color: var(--muted); }
-
-/* カード右上の open 中マーカー (Files タブ) */
-.card-open-markers {
-  position: absolute;
-  top: 30px;
-  right: 58px;
-  display: flex;
-  gap: 3px;
-  pointer-events: none;
-  z-index: 1;
-}
-.open-marker {
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10.5px;
-  font-weight: 700;
-  line-height: 1;
-  font-family: Consolas, monospace;
-  pointer-events: auto;
-  cursor: help;
-}
-.open-marker.files {
-  color: var(--accent-text);
-  background: var(--accent-soft);
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-}
 
 /* カード右クリック context menu */
 .card-ctx-menu {
@@ -2319,6 +2288,18 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   margin: 0;
   padding: 12px;
 }
+/* hljs テーマ側の pre code.hljs { padding:1em } / .hljs { background:#0d1117 } と
+   .files-preview-raw の padding:12px が重ならないよう、内側 code はリセットする。
+   トークン色 (.hljs-keyword 等) は子セレクタなので維持される。 */
+.files-preview-raw > code.hljs {
+  display: block;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
+/* ダークテーマ時はコードプレビュー本体に GitHub Dark の地色を当て、
+   markdown プレビューの pre と見た目を揃える */
+[data-theme="dark"] pre.files-preview-raw { background: #0d1117; color: #e6edf3; }
 .files-preview-loading, .files-preview-error {
   color: var(--muted);
   font-size: 0.78rem;
@@ -2395,6 +2376,55 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
    除外し、各トークン (.hljs-keyword 等) の色を上書きしないようにする */
 [data-theme="dark"] .files-preview-md-body pre { background: #0d1117; color: #e6edf3; }
 [data-theme="dark"] .files-preview-md-body pre code:not(.hljs) { color: #e6edf3; }
+
+/* ライトテーマ用 hljs（GitHub Light 相当）。
+   vendored の hljs-github-dark.min.css は全テーマで読み込まれるが、
+   [data-theme="light"] スコープを足すことで特異度勝負で上書きする。
+   pre 背景はダークの 0d1117 → ライトでは f6f8fa（GitHub の地色）。 */
+[data-theme="light"] pre.files-preview-raw,
+[data-theme="light"] .files-preview-md-body pre { background: #f6f8fa; color: #24292f; }
+[data-theme="light"] .files-preview-md-body pre code:not(.hljs) { color: #24292f; }
+[data-theme="light"] .hljs { color: #24292f; background: #f6f8fa; }
+[data-theme="light"] .hljs-doctag,
+[data-theme="light"] .hljs-keyword,
+[data-theme="light"] .hljs-meta .hljs-keyword,
+[data-theme="light"] .hljs-template-tag,
+[data-theme="light"] .hljs-template-variable,
+[data-theme="light"] .hljs-type,
+[data-theme="light"] .hljs-variable.language_ { color: #cf222e; }
+[data-theme="light"] .hljs-title,
+[data-theme="light"] .hljs-title.class_,
+[data-theme="light"] .hljs-title.class_.inherited__,
+[data-theme="light"] .hljs-title.function_ { color: #8250df; }
+[data-theme="light"] .hljs-attr,
+[data-theme="light"] .hljs-attribute,
+[data-theme="light"] .hljs-literal,
+[data-theme="light"] .hljs-meta,
+[data-theme="light"] .hljs-number,
+[data-theme="light"] .hljs-operator,
+[data-theme="light"] .hljs-selector-attr,
+[data-theme="light"] .hljs-selector-class,
+[data-theme="light"] .hljs-selector-id,
+[data-theme="light"] .hljs-variable { color: #0550ae; }
+[data-theme="light"] .hljs-meta .hljs-string,
+[data-theme="light"] .hljs-regexp,
+[data-theme="light"] .hljs-string { color: #0a3069; }
+[data-theme="light"] .hljs-built_in,
+[data-theme="light"] .hljs-symbol { color: #953800; }
+[data-theme="light"] .hljs-code,
+[data-theme="light"] .hljs-comment,
+[data-theme="light"] .hljs-formula { color: #6e7781; }
+[data-theme="light"] .hljs-name,
+[data-theme="light"] .hljs-quote,
+[data-theme="light"] .hljs-selector-pseudo,
+[data-theme="light"] .hljs-selector-tag { color: #116329; }
+[data-theme="light"] .hljs-subst { color: #24292f; }
+[data-theme="light"] .hljs-section { color: #0550ae; font-weight: 700; }
+[data-theme="light"] .hljs-bullet { color: #735c0f; }
+[data-theme="light"] .hljs-emphasis { color: #24292f; font-style: italic; }
+[data-theme="light"] .hljs-strong { color: #24292f; font-weight: 700; }
+[data-theme="light"] .hljs-addition { color: #116329; background-color: #dafbe1; }
+[data-theme="light"] .hljs-deletion { color: #82071e; background-color: #ffebe9; }
 
 .spawn-btn-cancel {
   background: transparent;
@@ -3605,6 +3635,15 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   border: 1px solid color-mix(in srgb, var(--warn) 42%, transparent);
   background: color-mix(in srgb, var(--warn) 12%, transparent);
   color: var(--warn);
+  border-radius: 4px;
+  font-size: 12px;
+}
+.git-commit-generate-note {
+  margin: 8px 16px 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--muted);
   border-radius: 4px;
   font-size: 12px;
 }

@@ -3663,15 +3663,6 @@ function showBatchActionBar(bar, sessionId, sections, forceStickToBottom = false
   progress.textContent = t('approval_batch_progress', { done, total: sections.length });
   footer.appendChild(progress);
 
-  const clearBtn = document.createElement('button');
-  clearBtn.className = 'action-clear-btn';
-  clearBtn.textContent = t('approval_batch_clear');
-  clearBtn.onclick = (e) => {
-    e.stopPropagation();
-    clearBatchSelections(sessionId);
-  };
-  footer.appendChild(clearBtn);
-
   const submitBtn = document.createElement('button');
   submitBtn.className = 'action-submit-btn';
   submitBtn.textContent = t('approval_batch_submit');
@@ -3681,6 +3672,15 @@ function showBatchActionBar(bar, sessionId, sections, forceStickToBottom = false
     sendBatchChoices(sessionId);
   };
   footer.appendChild(submitBtn);
+
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'action-clear-btn';
+  clearBtn.textContent = t('approval_batch_clear');
+  clearBtn.onclick = (e) => {
+    e.stopPropagation();
+    clearBatchSelections(sessionId);
+  };
+  footer.appendChild(clearBtn);
 
   const closeBatchBtn = document.createElement('button');
   closeBatchBtn.className = 'action-dismiss-btn';
@@ -5045,15 +5045,7 @@ function renderSessionList() {
       // 空 branch でも常に span を表示（git 外であることが分かるよう "(no git)" を表示）
       const branchLabel = branchStr || ti18n('card_branch_no_git', '(no git)');
       const branchBadge = ` <span class="card-branch" role="button" tabindex="0" data-sid="${s.id}"${branchDisabledAttr} data-tooltip="${escapeHtml(branchTip)}" aria-label="${escapeHtml(branchTip)}">${escapeHtml(branchLabel)}</span>`;
-      // open マーカー
-      const sessGitRoot = s.git_root || s.cwd || '';
-      const hasFiles = sessGitRoot && FilesTabManager.hasFilesTabForRoot(sessGitRoot);
-      const markersArr = [];
-      if (hasFiles) markersArr.push(`<span class="open-marker files" title="${escapeHtml(ti18n('open_marker_files_tooltip', 'Files タブが open 中'))}">📁</span>`);
-      if (markersArr.length) c.classList.add('has-open-markers');
-      const openMarkersHtml = markersArr.length ? `<div class="card-open-markers">${markersArr.join('')}</div>` : '';
       c.innerHTML =
-        openMarkersHtml +
         `<div class="card-title-row"><b>#${s.id}</b> ${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${branchBadge}${startedAtHtml}${lastOutHtml}</div>` +
         metaRow;
 
@@ -7523,6 +7515,36 @@ const FilesTabManager = (function () {
 
   // ─── DOM ──────────────────────────────────────────────────────────────
   function makeid() { return 'dtab-' + Math.random().toString(36).slice(2, 9); }
+  function currentSessionId() {
+    return (typeof activeSessionId !== 'undefined') ? activeSessionId : null;
+  }
+  function sameSessionId(a, b) {
+    if (a == null || b == null) return a == null && b == null;
+    return String(a) === String(b);
+  }
+  function sessionTabPrefix(sessionId) {
+    return sessionId != null ? `#${sessionId} ` : '';
+  }
+  function updateTabLabelPrefix(tab, newSid) {
+    if (!tab || !tab.labelEl) return;
+    const cur = tab.labelEl.textContent || '';
+    const stripped = cur.replace(/^#\d+\s+/, '');
+    tab.labelEl.textContent = sessionTabPrefix(newSid) + stripped;
+  }
+  function isVisibleInCurrentSession(tab) {
+    return sameSessionId(tab.sessionId, currentSessionId());
+  }
+  function refreshVisibleTabs() {
+    tabs.forEach(tab => {
+      const visible = isVisibleInCurrentSession(tab);
+      if (tab.el) tab.el.hidden = !visible;
+      if (tab.contentEl && !visible) tab.contentEl.classList.remove('active');
+    });
+    const active = tabs.find(tab => tab.id === activeTabId);
+    if (active && !isVisibleInCurrentSession(active)) {
+      activeTabId = 'session';
+    }
+  }
 
   function ensureSessionTab() {
     if (sessionTabEl) return;
@@ -7532,7 +7554,15 @@ const FilesTabManager = (function () {
     sessionTabEl.textContent = t('files_tab_session_label');
     sessionTabEl.addEventListener('click', () => switchToSessionView());
     tabList.insertBefore(sessionTabEl, tabList.firstChild);
+    placeAddTabButtonAfterSessionTab();
     activeTabId = 'session';
+  }
+
+  function placeAddTabButtonAfterSessionTab() {
+    if (!addTabBtn || !sessionTabEl || sessionTabEl.parentNode !== tabList) return;
+    if (addTabBtn.parentNode !== tabList || addTabBtn.previousSibling !== sessionTabEl) {
+      tabList.insertBefore(addTabBtn, sessionTabEl.nextSibling);
+    }
   }
 
   function showTabBar() {
@@ -7540,6 +7570,11 @@ const FilesTabManager = (function () {
   }
 
   function setActive(tabId) {
+    refreshVisibleTabs();
+    const targetTab = tabs.find(tab => tab.id === tabId);
+    if (targetTab && !isVisibleInCurrentSession(targetTab)) {
+      tabId = 'session';
+    }
     activeTabId = tabId;
     // タブボタン
     tabList.querySelectorAll('.main-tab').forEach(el => {
@@ -7574,7 +7609,7 @@ const FilesTabManager = (function () {
     ensureAddTabButton();
 
     // 同じ root のタブが既にあればそちらをアクティブに
-    const existing = tabs.find(t => (t.kind || t.type) === 'files' && t.filesRoot === filesRoot);
+    const existing = tabs.find(t => (t.kind || t.type) === 'files' && sameSessionId(t.sessionId, sessionId) && t.filesRoot === filesRoot);
     if (existing) {
       setActive(existing.id);
       return existing.id;
@@ -7586,7 +7621,7 @@ const FilesTabManager = (function () {
     // プロジェクト直下を開いた場合は projectName と basename が同じなので片方だけ表示する。
     const rootBase = (filesRoot || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || filesRoot || '';
     const sameDisplay = String(displayName).toLowerCase() === String(rootBase).toLowerCase();
-    const label = '📁 ' + (sameDisplay ? displayName : displayName + '/' + rootBase);
+    const label = sessionTabPrefix(sessionId) + 'Files: ' + (sameDisplay ? displayName : displayName + '/' + rootBase);
 
     // タブボタン DOM
     const tabBtn = document.createElement('button');
@@ -7594,6 +7629,7 @@ const FilesTabManager = (function () {
     tabBtn.dataset.tabId = id;
 
     const labelSpan = document.createElement('span');
+    labelSpan.dataset.tabLabel = '1';
     labelSpan.textContent = label;
     tabBtn.appendChild(labelSpan);
 
@@ -7630,7 +7666,7 @@ const FilesTabManager = (function () {
     // ツリーペイン幅をリストア + リサイザー配線
     setupFilesTreeResizer(contentEl);
 
-    const tabObj = { id, kind: 'files', type: 'files', label, sessionId, filesRoot, gitRoot, projectKey, el: tabBtn, contentEl };
+    const tabObj = { id, kind: 'files', type: 'files', label, sessionId, filesRoot, gitRoot, projectKey, el: tabBtn, contentEl, labelEl: labelSpan };
     tabs.push(tabObj);
 
     // localStorage に保存
@@ -7732,6 +7768,7 @@ const FilesTabManager = (function () {
   function switchToSessionView() {
     ensureSessionTab();
     showTabBar();
+    refreshVisibleTabs();
     setActive('session');
   }
 
@@ -7748,7 +7785,7 @@ const FilesTabManager = (function () {
       e.stopPropagation();
       openAddTabMenu(addTabBtn.getBoundingClientRect());
     });
-    tabList.appendChild(addTabBtn);
+    placeAddTabButtonAfterSessionTab();
   }
   function removeAddTabButton() {
     if (addTabBtn) { try { addTabBtn.remove(); } catch (_) {} addTabBtn = null; }
@@ -7812,7 +7849,7 @@ const FilesTabManager = (function () {
     ensureAddTabButton();
 
     // 同 gitRoot の git タブがあれば activate + view ref 更新
-    const existing = tabs.find(t => (t.kind || t.type) === 'git' && t.gitRoot === gitRoot);
+    const existing = tabs.find(t => (t.kind || t.type) === 'git' && sameSessionId(t.sessionId, sessionId) && t.gitRoot === gitRoot);
     if (existing) {
       const newRef = branch || existing.viewRef || '';
       existing.viewRef = newRef;
@@ -7857,7 +7894,8 @@ const FilesTabManager = (function () {
     tabBtn.appendChild(iconSpan);
 
     const labelSpan = document.createElement('span');
-    labelSpan.textContent = ' git: ' + projectName + ' ';
+    labelSpan.dataset.tabLabel = '1';
+    labelSpan.textContent = sessionTabPrefix(sessionId) + 'Git: ' + projectName + ' ';
     tabBtn.appendChild(labelSpan);
 
     const refSpan = document.createElement('span');
@@ -7875,12 +7913,7 @@ const FilesTabManager = (function () {
 
     tabBtn.addEventListener('click', () => setActive(id));
 
-    // + ボタンが既にあるならその前に挿入
-    if (addTabBtn && addTabBtn.parentNode === tabList) {
-      tabList.insertBefore(tabBtn, addTabBtn);
-    } else {
-      tabList.appendChild(tabBtn);
-    }
+    tabList.appendChild(tabBtn);
 
     // コンテンツ DOM
     const contentEl = document.createElement('div');
@@ -7901,7 +7934,7 @@ const FilesTabManager = (function () {
       label: 'git: ' + projectName,
       sessionId: sessionId != null ? sessionId : null,
       gitRoot, viewRef: branch || '', projectName,
-      el: tabBtn, contentEl,
+      el: tabBtn, contentEl, labelEl: labelSpan,
       gitView: null,
     };
     tabs.push(tabObj);
@@ -7944,11 +7977,13 @@ const FilesTabManager = (function () {
   // ─── 同 gitRoot のタブ存在チェック（カードマーカー用） ───────────────
   function hasGitTabForRoot(gitRoot) {
     if (!gitRoot) return false;
-    return tabs.some(t => (t.kind || t.type) === 'git' && t.gitRoot === gitRoot);
+    const sessionId = arguments.length >= 2 ? arguments[1] : undefined;
+    return tabs.some(t => (t.kind || t.type) === 'git' && t.gitRoot === gitRoot && (sessionId === undefined || sameSessionId(t.sessionId, sessionId)));
   }
   function hasFilesTabForRoot(gitRoot) {
     if (!gitRoot) return false;
-    return tabs.some(t => (t.kind || t.type) === 'files' && t.gitRoot === gitRoot);
+    const sessionId = arguments.length >= 2 ? arguments[1] : undefined;
+    return tabs.some(t => (t.kind || t.type) === 'files' && t.gitRoot === gitRoot && (sessionId === undefined || sameSessionId(t.sessionId, sessionId)));
   }
 
   // ─── セッション削除イベント: 紐づきタブを別セッションに付け替え ────
@@ -7974,16 +8009,23 @@ const FilesTabManager = (function () {
       if (candidate) {
         tab.sessionId = candidate.id;
         if (tab.contentEl) tab.contentEl.dataset.sessionId = String(candidate.id);
+        updateTabLabelPrefix(tab, candidate.id);
         mutated = true;
-        // git タブの警告ヘッダがあれば除去
+        // git タブの警告ヘッダがあれば除去 + GitGraphView の sessionId 同期
         if (kind === 'git') {
           const warn = tab.contentEl.querySelector('[data-git-no-session]');
           if (warn) warn.remove();
+          try {
+            if (tab.gitView && typeof tab.gitView.setSessionId === 'function') {
+              tab.gitView.setSessionId(candidate.id);
+            }
+          } catch (_) {}
         }
       } else {
         // 付け替え不可
         if (kind === 'git') {
           tab.sessionId = null;
+          updateTabLabelPrefix(tab, null);
           if (tab.contentEl) {
             tab.contentEl.dataset.sessionId = '';
             // 警告ヘッダがなければ追加
@@ -8399,9 +8441,8 @@ const FilesTreeView = (function () {
   const expandedSet = loadExpandedSet();
 
   /** items[] を { name, relPath, absPath, type:'file'|'dir', children:[] } ツリーに変換 */
-  // API (/api/files-list) は { path, rel, name, size, mtime, summary } のフラットなファイル一覧を返す。
-  // ディレクトリ要素は含まれないので、ここで rel パスから階層を再構築する。
-  // ディレクトリの absPath は、最初の子ファイルの absPath から逆算して埋める（D&D の移動先解決に使用）。
+  // API (/api/files-list) は { path, rel, name, type, size, mtime, summary } のフラットな一覧を返す。
+  // 古いレスポンスやファイル由来の親ディレクトリも扱えるよう、存在しない親 dir はここで補完する。
   function buildTree(items) {
     const root = { children: [] };
     const nodes = {};
@@ -8433,9 +8474,20 @@ const FilesTreeView = (function () {
         }
         parent = nodes[key];
       }
-      const node = { name: parts[parts.length - 1], relPath, absPath, type: 'file', children: [] };
-      nodes[relPath] = node;
-      parent.children.push(node);
+      const itemType = item.type === 'dir' ? 'dir' : 'file';
+      if (itemType === 'dir') {
+        if (!nodes[relPath]) {
+          const node = { name: parts[parts.length - 1], relPath, absPath, type: 'dir', children: [] };
+          nodes[relPath] = node;
+          parent.children.push(node);
+        } else if (!nodes[relPath].absPath && absPath) {
+          nodes[relPath].absPath = absPath;
+        }
+      } else {
+        const node = { name: parts[parts.length - 1], relPath, absPath, type: 'file', children: [] };
+        nodes[relPath] = node;
+        parent.children.push(node);
+      }
     }
     // 各階層でディレクトリ先行・名前順に並べ替え
     function sortChildren(n) {
@@ -8887,6 +8939,64 @@ const FilesTreeView = (function () {
  * unbind(containerEl)
  */
 const FilesPreview = (function () {
+
+  /** ファイル拡張子 → highlight.js 言語名のマップ（小文字で照合） */
+  function detectHljsLangFromPath(absPath) {
+    const m = /\.([A-Za-z0-9_+-]+)$/.exec(absPath || '');
+    if (!m) return '';
+    const ext = m[1].toLowerCase();
+    const map = {
+      js: 'javascript', mjs: 'javascript', cjs: 'javascript',
+      ts: 'typescript', tsx: 'typescript', jsx: 'javascript',
+      go: 'go', py: 'python', rb: 'ruby', rs: 'rust',
+      html: 'xml', htm: 'xml', xml: 'xml', svg: 'xml',
+      css: 'css', scss: 'scss', less: 'less',
+      json: 'json', yaml: 'yaml', yml: 'yaml', toml: 'ini', ini: 'ini',
+      sh: 'bash', bash: 'bash', zsh: 'bash', ps1: 'powershell',
+      c: 'c', h: 'c', cpp: 'cpp', hpp: 'cpp', cc: 'cpp', cs: 'csharp',
+      java: 'java', kt: 'kotlin', swift: 'swift',
+      sql: 'sql', dockerfile: 'dockerfile', makefile: 'makefile',
+      md: 'markdown',
+    };
+    return map[ext] || '';
+  }
+
+  /**
+   * ソースコード文字列を hljs で色付けして <pre><code class="hljs"> を返す。
+   * - 拡張子 → 言語マップで明示判定し、未対応なら highlightAuto にフォールバック
+   * - 巨大ファイル（>=200KB）は重いので自動判定をスキップしプレーン表示
+   * - hljs 未ロード時 / 例外時もプレーンで安全に表示する
+   */
+  function renderSourceToPre(content, absPath) {
+    const pre = document.createElement('pre');
+    pre.className = 'files-preview-raw';
+    const code = document.createElement('code');
+    const lang = detectHljsLangFromPath(absPath);
+    let html = '';
+    if (typeof hljs !== 'undefined') {
+      try {
+        if (lang && hljs.getLanguage(lang)) {
+          html = hljs.highlight(content, { language: lang, ignoreIllegals: true }).value;
+          code.className = 'hljs language-' + lang;
+        } else if (content.length < 200000) {
+          const auto = hljs.highlightAuto(content);
+          html = auto.value;
+          code.className = 'hljs' + (auto.language ? ' language-' + auto.language : '');
+        } else {
+          html = escapeHtml(content);
+          code.className = 'hljs';
+        }
+      } catch (_) {
+        html = escapeHtml(content);
+        code.className = 'hljs';
+      }
+    } else {
+      html = escapeHtml(content);
+    }
+    code.innerHTML = html;
+    pre.appendChild(code);
+    return pre;
+  }
 
   /** marked で Markdown → HTML 変換し、DOMPurify でサニタイズ */
   function renderMarkdown(content, baseDir, onLinkClick) {
@@ -9343,10 +9453,7 @@ const FilesPreview = (function () {
           warn.textContent = t('files_preview_truncated_warn') || '⚠ File truncated (>1MiB). Showing partial content.';
           contentEl.innerHTML = '';
           contentEl.appendChild(warn);
-          const pre = document.createElement('pre');
-          pre.className = 'files-preview-raw';
-          pre.textContent = content;
-          contentEl.appendChild(pre);
+          contentEl.appendChild(renderSourceToPre(content, absPath));
           addCodeCopyButtons(contentEl);
         } else if (isMd) {
           const html = renderMarkdown(content, absPath, null);
@@ -9375,12 +9482,9 @@ const FilesPreview = (function () {
             });
           });
         } else {
-          // .txt など
-          const pre = document.createElement('pre');
-          pre.className = 'files-preview-raw';
-          pre.textContent = content;
+          // .txt など — hljs.highlightAuto で自動判定（巨大ファイルはプレーン）
           contentEl.innerHTML = '';
-          contentEl.appendChild(pre);
+          contentEl.appendChild(renderSourceToPre(content, absPath));
           addCodeCopyButtons(contentEl);
         }
         bodyEl.scrollTop = 0;
@@ -9972,6 +10076,7 @@ const FilesPreview = (function () {
               <button class="git-commit-close" data-commit-close title="${_esc(_gt('git_view_detail_close', 'Close'))}">✕</button>
             </div>
             <div class="git-commit-warning">${_esc(_gt('git_commit_no_push_warning', 'Only git add -A and git commit are run. Push is not run.'))}</div>
+            <div class="git-commit-generate-note">${_esc(_gt('git_commit_generate_note', 'Generate checks the diff with the current AI agent and fills in a draft commit message. Review it before committing.'))}</div>
             <label class="git-commit-field">
               <span>${_esc(_gt('git_commit_subject', 'Commit message subject'))}</span>
               <input type="text" data-commit-subject maxlength="200">
@@ -10150,6 +10255,15 @@ const FilesPreview = (function () {
       this.refresh().catch(err => this._showError(err && err.message ? err.message : String(err)));
     }
 
+    setSessionId(newSid) {
+      if (newSid == null) return;
+      if (String(this.sessionId) === String(newSid)) return;
+      this.sessionId = newSid;
+      this.selectedHash = null;
+      this.selectedShow = null;
+      this.load().catch(err => this._showError(err && err.message ? err.message : String(err)));
+    }
+
     dispose() {
       try { document.removeEventListener('click', this._docClickHandler); } catch (_) {}
       try { document.removeEventListener('keydown', this._docKeyHandler); } catch (_) {}
@@ -10299,6 +10413,10 @@ const FilesPreview = (function () {
       };
       this._renderCommitModalState();
       this.els.commitModal.hidden = false;
+      _toast(
+        _gt('git_commit_all', 'Commit all'),
+        _gt('git_commit_open_toast', 'Commit all will stage all current working tree changes with git add -A, then commit them. Push is not run.')
+      );
       setTimeout(() => { try { this.els.commitSubject.focus(); } catch (_) {} }, 0);
     }
 

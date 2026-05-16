@@ -88,6 +88,14 @@ func run() error {
 		chosenPort = pickPort()
 	}
 
+	// WSL2 interop does not propagate SIGHUP from the Windows side, so when
+	// wsl.exe dies (Ctrl+C / launcher exit / parent close) the Linux-side
+	// any-ai-cli serve process keeps running with closed stdio pipes — an
+	// orphan that holds the Hub port and prevents subsequent launcher runs
+	// from binding. Pkill it on launcher exit, scoped to *this* launcher's
+	// --port so concurrent serve sessions on other ports survive.
+	defer cleanupWSLOrphans(*distro, chosenPort)
+
 	var wslArgs []string
 	if *distro != "" {
 		wslArgs = append(wslArgs, "-d", *distro)
@@ -220,6 +228,29 @@ func ensureConsoleOutputMode(stdHandleID uint32) {
 		return
 	}
 	_, _, _ = procSetConsoleMode.Call(h, uintptr(newMode))
+}
+
+// cleanupWSLOrphans terminates the WSL-side any-ai-cli serve process this
+// launcher started. WSL2 interop does not propagate SIGHUP/SIGTERM from the
+// Windows side, so the Linux serve survives wsl.exe getting killed and
+// continues to hold the Hub port. We match on the exact --port the launcher
+// used so we don't kill unrelated serve sessions running on other ports.
+//
+// Best-effort: pkill exits 1 when nothing matched (the typical success path
+// when the serve already exited cleanly), so we ignore the return entirely.
+// A 5s timeout guards against wsl.exe being hung or shutdown-in-progress —
+// we'd rather exit the launcher than block forever on cleanup.
+func cleanupWSLOrphans(distro string, port int) {
+	var args []string
+	if distro != "" {
+		args = append(args, "-d", distro)
+	}
+	pattern := fmt.Sprintf("any-ai-cli serve --port %d", port)
+	args = append(args, "--", "pkill", "-f", pattern)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = exec.CommandContext(ctx, "wsl.exe", args...).Run()
 }
 
 // openBrowser launches the Windows default browser at url.

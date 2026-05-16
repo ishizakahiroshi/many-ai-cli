@@ -68,7 +68,7 @@ func (s *Server) handleGitCommitAll(w http.ResponseWriter, r *http.Request) {
 	}
 	gitRoot, cwd, err := s.resolveGitRoot(req.Session)
 	if err != nil {
-		writeGitErrorFromResolve(w, err)
+		writeGitErrorFromResolve(w, req.Session, err)
 		return
 	}
 
@@ -141,7 +141,7 @@ func (s *Server) handleGitCommitMessage(w http.ResponseWriter, r *http.Request) 
 	}
 	_, cwd, err := s.resolveGitRoot(req.Session)
 	if err != nil {
-		writeGitErrorFromResolve(w, err)
+		writeGitErrorFromResolve(w, req.Session, err)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), gitCommandTimeout)

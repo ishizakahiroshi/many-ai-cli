@@ -10,88 +10,51 @@ Release artifacts are published at
 
 ## [Unreleased]
 
-### Added
-- Git タブから working tree の全変更を `git add -A` → `git commit` で commit できる `Commit all` 導線を追加
-- Commit all モーダルで subject/body 編集、Review 後の二段階確認、commit message 生成、成功 toast と Git log refresh に対応
-- セッションカードの branch バッジクリックで読み取り専用の Git ビューを開けるようにした（メインタブとして独立寿命、Hub 再起動で復元）
-- 詳細パネル (INFORMATION / CHANGES / FILES) で commit の author/message/parents/refs/変更ファイル/diff を 1 画面表示
-- 表示対象 ref の切替（local / remote / tag / `--all`）— checkout は行わない安全な読み取り専用切替
-- 行右クリックで Copy メニュー（short/full hash, subject, message, hash + subject, GitHub link）
-- カード右クリックメニュー（Open Git View / Open Files Tab / Activate Session / Copy session ID）
-- キーボードショートカット: `Ctrl+Shift+G` で現セッションの Git タブ、`Ctrl+Shift+F` で Files タブを open
-- カード右上の open 中マーカー（⎇ = Git タブ open 中、📁 = Files タブ open 中）
-
-### Backend
-- `GET /api/git-status` 新設（working tree の変更ファイル一覧と summary を返す）
-- `POST /api/git-commit-all` 新設（token と Review 済み UI 操作を前提に `git add -A` → `git commit` のみ実行）
-- `POST /api/git-commit-message` 新設（現在の差分 summary から subject/body 候補を返す）
-- `GET /api/git-log?ref=<ref>&limit=<n>&skip=<n>` 新設
-- `GET /api/git-show?hash=<full>` 新設（diff は 1 ファイル 256KB 上限で truncate）
-- `GET /api/git-refs` 新設
+## [0.2.0] - 2026-05-16
 
 ### Added
-- **Remote sync + profile system for approval detection patterns.** Approval
-  trigger phrases are now fetched from
-  `resources/approval-patterns/{claude,codex,common}.md` on GitHub at Hub
-  startup (24h TTL — refreshed on next restart). Each provider has two
-  profiles, **official** (read-only, kept in sync with the remote md) and
-  **custom** (user-editable). The Settings panel adds a Profile dropdown
-  and a "Copy from official" button; the previous "Reset to defaults"
-  button has been removed (switch back to the official profile instead).
-  When the official profile changes via remote sync, a toast notifies the
-  UI (`approval_patterns_updated` WS event). New endpoints:
-  `GET/POST /api/approval-patterns/profile`,
-  `POST /api/approval-patterns/copy-official`. New config keys:
-  `approval_pattern_sources` (per-provider source URL override) and
-  `approval_profiles` (per-provider active profile). On-disk layout in
-  `~/.any-ai-cli/approval-patterns/` becomes
-  `<provider>.{official,custom}.json`; legacy `<provider>.json` is migrated
-  to `<provider>.custom.json` on first startup and continues to be written
-  as a mirror of the active profile for backwards compatibility.
-- **Batch approval UI for multi-question prompts.** AI can now place multiple
-  questions inside a single `[ANY-AI-CLI]` block (each with its own numbered
-  options); the Hub action-bar renders them as a vertical stack with
-  per-section selection buttons, a progress counter, a "Clear" button, and a
-  "Submit all" button. Keyboard: digit keys select the option for the focused
-  section and auto-advance; Tab / Shift+Tab / ←/→ move between sections; Space
-  advances to the next section; Enter submits when every section is selected.
-  On submit, the choices are concatenated into a space-separated digit string
-  (e.g. `1 2 1 3`) followed by `\r` and sent directly to the PTY, so the AI
-  can recover each answer with a simple `split()`. The single-question
-  format and Y/N format are unchanged. approval-rules.md is bumped to
-  version 4 to advertise the new block layout to AI sessions.
+- **Files tab.** Project groups now open a persistent Files tab with a
+  2-pane file tree and Markdown/code preview. Text preview uses vendored
+  `marked.js`, `DOMPurify`, and highlight.js, with context actions for opening,
+  copying paths, moving files, and renaming files. Existing tabs are restored
+  per project after Hub restart.
+- **Read-only Git view.** Clicking a session card's branch badge opens a Git
+  tab with commit history, commit details, changed files, truncated diffs, ref
+  switching (local / remote / tag / `--all`), row context-copy actions, and
+  tab restore.
+- **Commit all from the Hub.** The Git tab can stage all working-tree changes
+  with `git add -A` and create a local commit after a Review step. The modal
+  supports subject/body editing and commit-message generation. Push is never
+  run by this action.
+- **Multi-question approval action bar.** A single `[ANY-AI-CLI]` approval block
+  can contain multiple numbered questions. The Hub renders them as stacked
+  choices with progress, clear, keyboard navigation, and "Submit all"; selected
+  answers are sent back to the PTY as a space-separated digit string.
+- **Approval pattern profiles with remote sync.** Approval trigger phrases are
+  fetched from `resources/approval-patterns/{claude,codex,common}.md` on
+  GitHub at Hub startup (24h TTL). Each provider now has an `official`
+  read-only profile and a user-editable `custom` profile, with Settings UI to
+  switch profiles and copy official patterns into custom.
+- **Server-side user preferences.** Voice, wake word, notification sound,
+  approval auto-switch, quick commands, usage links, favorites, session order,
+  and spawn defaults are stored under `user_prefs:` in
+  `~/.any-ai-cli/config.yaml` via `GET/PUT /api/user-prefs`, so they survive
+  port changes and WSL launcher use.
+- **Wake word voice mode.** The Hub can keep speech recognition in standby and
+  start voice input when the configured phrase is spoken, either globally or
+  for the current session.
+- **WSL launcher.** A new Windows-only `any-ai-cli-wsl.exe` starts
+  `any-ai-cli serve` inside WSL, chooses a Windows-side-safe port when needed,
+  opens the Windows browser, sets `ANY_AI_CLI_WSL_LAUNCHER=1`, and cleans up
+  WSL-side orphan `serve` processes on launcher exit.
+- **Clean transcript command.** `any-ai-cli log-clean <session.jsonl>
+  [-o transcript.txt]` generates the same ANSI/control-code-stripped transcript
+  format that the Hub writes automatically on session end.
 
 ### Changed
-- **Internal identifiers renamed from `docs` to `files`** (no user-visible
-  behavior change). The `📁 files` button (formerly `📁 docs`) and surrounding
-  UI labels were already updated in a prior session; this change aligns the
-  internal codebase with the UI. Affected: HTTP API paths
-  (`/api/docs-list` → `/api/files-list`, plus `-content` / `-roots` / `-move`),
-  Go handler / type / constant names (`handleDocs*` → `handleFiles*`,
-  `docsListItem` → `filesListItem`, etc.), JS class names
-  (`DocsTabManager` → `FilesTabManager` etc.), HTML id / CSS class /
-  `data-docs-*` attributes, i18n keys (`docs_*` → `files_*`), and
-  `localStorage` keys (`any-ai-cli.docs.tabs` → `any-ai-cli.files.tabs`,
-  `any_ai_cli_docs_tree_width` → `any_ai_cli_files_tree_width`; one-shot
-  migration is performed on first load so existing tab state and tree pane
-  width carry over).
-
-### Added
-- **Docs browser v2: tabbed 2-pane viewer.** The header "📄 Documents" button
-  and flat dropdown list (v1) are replaced with a full 2-pane viewer:
-  1. Entry point moved from the global header to each project group row in the
-     left sidebar as a `📁 docs` link, so the target project is unambiguous.
-  2. A small modal lets users pick the docs root per project (auto-detects
-     `docs/` under the git root; falls back to a custom-path input).
-  3. The main area gains a tab bar so terminal sessions and one or more Docs
-     tabs co-exist and are switchable without losing context.
-  4. Each Docs tab shows a left file/folder tree and a right Markdown preview
-     panel (rendered via vendored `marked.js`, sanitized with `DOMPurify`,
-     read-only).
-  Previously opened tabs are persisted to `localStorage` per git-root and
-  restored automatically when the Hub restarts.
-
-### Changed
+- **Internal docs browser names were renamed to Files.** Public API paths moved
+  from `/api/docs-*` to `/api/files-*`, with one-shot browser storage migration
+  from old docs keys to files keys.
 - **Hub auto-spawn now opens a dedicated console window on Windows.** When a
   wrap command (`any-ai-cli claude` / `codex` / `wrap <provider>`) auto-starts
   the Hub via `ensureHub`, the spawned `any-ai-cli serve` process is now
@@ -108,13 +71,34 @@ Release artifacts are published at
   was dropped because Windows Terminal / ConPTY / VS Code integrated
   terminals ignore it; the warning now uses Bold + Reverse Video + Bright
   Orange so it stands out as an orange highlight bar on any terminal.
-- **Project renamed from `ai-cli-hub` to `any-ai-cli`** to better reflect the
-  goal of supporting arbitrary AI CLI tools (beyond Claude Code and Codex CLI).
-  Affected names: binary (`any-ai-cli`), Go module path (`any-ai-cli`),
-  environment variable (`ANY_AI_CLI_AUTO`), config directory
-  (`~/.any-ai-cli/`), action-bar marker (`[ANY-AI-CLI]`). Existing v0.1.x
-  users will need to migrate `~/.ai-cli-hub/` to `~/.any-ai-cli/` and update
-  any shell init blocks (`eval "$(any-ai-cli shell-init)"`).
+- Terminal auto-follow and wheel scrolling were simplified around the
+  xterm.js bottom state, reducing snap-back after submit, approval resolution,
+  and session switches.
+- UI terminology, i18n keys, localStorage keys, and CSS classes now consistently
+  use "files" rather than "docs" for the project file browser.
+
+### Fixed
+- Codex and Claude approval detection now catches additional native prompt
+  shapes, including free-form numbered choices and Codex approval prompts that
+  appear while the terminal is not already scrolled to the bottom.
+- Approval bars clear more reliably after direct terminal input, session
+  switching, `/clear`, and action submission.
+- File preview scrolling, empty tree messages, search filtering of child nodes,
+  parent-git-root selection, restored orphan tabs, and cross-filesystem
+  relative-path copy behavior were corrected.
+- Windows GUI-spawned Claude/Codex sessions no longer disconnect immediately
+  when inherited PATH entries are stale, empty, or contain `%VAR%`-style user
+  path segments such as `%PNPM_HOME%\bin`.
+- WSL integration fixes include folder picking through Windows dialogs,
+  opening WSL files/directories with Windows handlers, defaulting launcher logs
+  to the Windows user profile when launched from `any-ai-cli-wsl.exe`, and
+  correct banner/logo rendering with East Asian width and console mode handling.
+- Voice input fixes include avoiding competing microphone captures, waiting for
+  wake word recognition to release the microphone before starting dictation,
+  normalizing trigger phrases, and surfacing save-error details for user
+  preferences.
+- Reverse-video terminal output no longer becomes unreadable white blocks in
+  the Hub terminal theme.
 
 ## [0.1.3] - 2026-05-11
 
@@ -199,7 +183,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.1.x-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/ishizakahiroshi/any-ai-cli/releases/tag/v0.1.3
 [0.1.2]: https://github.com/ishizakahiroshi/any-ai-cli/releases/tag/v0.1.2
 [0.1.1]: https://github.com/ishizakahiroshi/any-ai-cli/releases/tag/v0.1.1
