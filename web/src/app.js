@@ -1,4 +1,4 @@
-console.log('[any-ai-cli] app.js build=2026-05-16-voice-sr-recreate-7');
+console.log('[any-ai-cli] app.js build=2026-05-16-wakeword-disabled');
 
 // ---- トースト通知 ----
 let _toastTimer = null;
@@ -1363,6 +1363,15 @@ function saveSessionOrder() {
   setUserPref('session_order', sessionOrder);
 }
 
+// cwd からプロジェクトキーを派生する。
+// renderSessionList のグループ化（末尾セグメント）と同じ規則で揃え、
+// FilesTabManager の可視性判定（curSess.project 参照）が一貫して機能するようにする。
+function deriveProjectKeyFromCwd(cwd) {
+  if (!cwd) return '';
+  const name = String(cwd).replace(/\\/g, '/').split('/').filter(p => p.length > 0).pop() || '';
+  return name;
+}
+
 function addToSessionOrder(id, forceToFront = false) {
   const idx = sessionOrder.indexOf(id);
   if (idx !== -1) {
@@ -1531,6 +1540,7 @@ ws.onmessage = (ev) => {
         requestSessionDismiss(s.id);
         return;
       }
+      s.project = deriveProjectKeyFromCwd(s.cwd);
       sessions.set(s.id, s);
       addToSessionOrder(s.id);
     });
@@ -1550,7 +1560,7 @@ ws.onmessage = (ev) => {
     const cur = sessions.get(m.session_id) || { id: m.session_id };
     if (m.provider)        cur.provider        = m.provider;
     if (m.display_name)    cur.display_name    = m.display_name;
-    if (m.cwd)             cur.cwd             = m.cwd;
+    if (m.cwd)            { cur.cwd = m.cwd; cur.project = deriveProjectKeyFromCwd(m.cwd); }
     if (m.branch !== undefined) cur.branch      = m.branch;
     if (m.label !== undefined) cur.label       = m.label;
     if (m.shell)           cur.shell           = m.shell;
@@ -6988,7 +6998,9 @@ function openLightbox(src) {
     if (!_isCurrentRecognitionEvent(e)) return;
     setVoiceAudioActive(true);
     voiceIntensityTarget = 0.15;
-    armNoResultWatchdog();
+    // audiostart は無音テストでも発火するため、ここで watchdog を arm すると
+    // 「黙っていただけ」でも 4.5 秒後にマイク取り合い疑いトーストが誤発火する。
+    // soundstart / speechstart（実際に音や発話が検出されたとき）でだけ arm する。
   });
   _onRecognition('soundstart', (e) => {
     if (!_isCurrentRecognitionEvent(e)) return;
@@ -7124,6 +7136,10 @@ function openLightbox(src) {
 
 // ---- ウェイクワード検出（グローバルトグル＋セッション個別トグル＋入力欄ホバー起動） ----
 (function () {
+  // ウェイクワード機能は無効化中（UI も非表示）。
+  // recreate-1〜7 で繰り返した stuck の発火点はほぼ全て hw (このウェイクワード SR インスタンス) 側だった。
+  // 復活が必要なら本 return と index.html / isWakewordEnabled() の改修を併せて戻す。
+  return;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) return;
   const isChromium = navigator.userAgentData?.brands?.some(b => /Chromium/.test(b.brand))
@@ -8771,10 +8787,13 @@ const FilesTreeView = (function () {
       return aRel.localeCompare(bRel);
     });
     for (const item of sorted) {
-      const relPath = item.rel || '';
+      const rawRel = item.rel || '';
       const absPath = item.path || '';
-      if (!relPath) continue;
-      const parts = relPath.replace(/\\/g, '/').split('/');
+      if (!rawRel) continue;
+      // Windows の API レスポンスは '\' 区切り。nodes[] キーを全て '/' 区切りに揃えることで
+      // 親 dir 補完キー（'/' 区切り）と自エントリ登録キーの不整合による重複ノードを防ぐ。
+      const relPath = rawRel.replace(/\\/g, '/');
+      const parts = relPath.split('/');
       // OS のパス区切り文字を absPath から推定（Windows なら \\、それ以外は /）
       const sep = absPath.indexOf('\\') >= 0 ? '\\' : '/';
       const absParts = absPath.split(/[\\/]/);
