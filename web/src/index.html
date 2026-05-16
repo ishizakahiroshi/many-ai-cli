@@ -366,7 +366,16 @@
           <!-- label input (optional) -->
           <input type="text" id="spawn-label" class="spawn-input" data-i18n-placeholder="spawn_label_placeholder">
           <!-- model input (shared between providers) -->
-          <input type="text" id="spawn-model" class="spawn-input" data-i18n-placeholder="spawn_model_placeholder">
+          <div class="spawn-model-row">
+            <input type="text" id="spawn-model" class="spawn-input"
+                   list="spawn-model-datalist"
+                   data-i18n-placeholder="spawn_model_placeholder"
+                   autocomplete="off">
+            <button id="spawn-model-refresh" class="spawn-btn-browse" type="button"
+                    data-i18n-tooltip="spawn_model_refresh_tooltip"
+                    aria-label="Refresh model list">↻</button>
+          </div>
+          <datalist id="spawn-model-datalist"></datalist>
 
           <!-- Claude-only options -->
           <div id="spawn-claude-opts">

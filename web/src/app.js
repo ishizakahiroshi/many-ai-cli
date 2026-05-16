@@ -1,4 +1,4 @@
-console.log('[any-ai-cli] app.js build=2026-05-16-send-skip-fix');
+console.log('[any-ai-cli] app.js build=2026-05-16-voice-sr-recreate-7');
 
 // ---- トースト通知 ----
 let _toastTimer = null;
@@ -5612,8 +5612,108 @@ function openLightbox(src) {
   const spawnCodexModelBtn = document.getElementById('spawn-codex-model-btn');
   const spawnClaudeModelBtn = document.getElementById('spawn-claude-model-btn');
   const spawnModelInput = document.getElementById('spawn-model');
+  const spawnModelDatalist = document.getElementById('spawn-model-datalist');
+  const spawnModelRefreshBtn = document.getElementById('spawn-model-refresh');
   let codexModelSelection = null;
   let claudeModelSelection = null;
+
+  // /api/models から取得した groups の最新キャッシュ。
+  // populateModelDatalist と resolveRoute で共有する。
+  let spawnModelGroups = null;
+  // model id → route の即時参照 Map。
+  const spawnModelRouteMap = new Map();
+  let spawnModelFetchInFlight = null;
+
+  function rebuildModelRouteMap(groups) {
+    spawnModelRouteMap.clear();
+    if (!Array.isArray(groups)) return;
+    for (const g of groups) {
+      if (!g || !Array.isArray(g.models)) continue;
+      for (const m of g.models) {
+        if (m && m.id) spawnModelRouteMap.set(m.id, g.route || '');
+      }
+    }
+  }
+
+  function populateModelDatalist() {
+    if (!spawnModelDatalist) return;
+    spawnModelDatalist.innerHTML = '';
+    if (!Array.isArray(spawnModelGroups)) return;
+    const currentProvider = spawnProviderEl.value;
+    // 並び順: 同 provider 専用 → Ollama Cloud → Ollama Local。
+    // 他 provider 専用は非表示。Ollama 系は provider="" で両 provider に表示する。
+    const ordered = [];
+    for (const g of spawnModelGroups) {
+      if (g.provider && g.provider !== currentProvider) continue;
+      ordered.push(g);
+    }
+    ordered.sort((a, b) => {
+      const rank = (g) => {
+        if (g.provider === currentProvider) return 0;
+        if (g.label === 'Ollama Cloud') return 1;
+        if (g.label === 'Ollama Local') return 2;
+        return 3;
+      };
+      return rank(a) - rank(b);
+    });
+    for (const g of ordered) {
+      for (const m of g.models) {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        // <option label> はブラウザ実装差があるため、フォールバックとして
+        // text content にも同じ表記を入れる。
+        const label = `[${g.label}] ${m.label || m.id}`;
+        opt.setAttribute('label', label);
+        opt.textContent = label;
+        opt.dataset.route = g.route || '';
+        spawnModelDatalist.appendChild(opt);
+      }
+    }
+  }
+
+  function resolveRoute(provider, model) {
+    const m = (model || '').trim();
+    if (!m) return '';
+    if (spawnModelRouteMap.has(m)) return spawnModelRouteMap.get(m);
+    if (m.includes(':cloud')) return 'ollama';
+    if (provider === 'claude') return 'anthropic';
+    if (provider === 'codex')  return 'openai';
+    return '';
+  }
+
+  async function fetchModelGroups(force) {
+    if (spawnModelFetchInFlight) return spawnModelFetchInFlight;
+    const method = force ? 'POST' : 'GET';
+    const url = `/api/models?token=${token}`;
+    const p = (async () => {
+      try {
+        const res = await fetch(url, { method });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        spawnModelGroups = Array.isArray(data.groups) ? data.groups : [];
+        rebuildModelRouteMap(spawnModelGroups);
+        populateModelDatalist();
+        return data;
+      } finally {
+        spawnModelFetchInFlight = null;
+      }
+    })();
+    spawnModelFetchInFlight = p;
+    return p;
+  }
+
+  if (spawnModelRefreshBtn) {
+    spawnModelRefreshBtn.addEventListener('click', async () => {
+      spawnModelRefreshBtn.classList.add('is-loading');
+      try {
+        await fetchModelGroups(true);
+      } catch (_) {
+        alert(t('spawn_model_fetch_failed'));
+      } finally {
+        spawnModelRefreshBtn.classList.remove('is-loading');
+      }
+    });
+  }
 
   function updateSpawnProviderIcon() {
     if (spawnProviderIcon) spawnProviderIcon.innerHTML = providerIconHtml(spawnProviderEl.value);
@@ -5625,6 +5725,7 @@ function openLightbox(src) {
     document.getElementById('spawn-codex-opts').hidden  = (p !== 'codex');
     if (p !== 'codex')  codexModelSelection  = null;
     if (p !== 'claude') claudeModelSelection = null;
+    populateModelDatalist();
   });
   updateSpawnProviderIcon();
 
@@ -5771,6 +5872,13 @@ function openLightbox(src) {
     updateSpawnProviderIcon();
     spawnCwdInput.focus();
     refreshCwdInputStatus();
+    // モデル一覧を初回または stale なら裏で取得して datalist を埋める。
+    // 失敗しても UI 起動はブロックしない（手入力で従来通り）。
+    if (!spawnModelGroups) {
+      fetchModelGroups(false).catch(() => {});
+    } else {
+      populateModelDatalist();
+    }
   });
 
   spawnCancelBtn.addEventListener('click', () => { newSessionPanel.hidden = true; });
@@ -5973,7 +6081,9 @@ function openLightbox(src) {
     try {
       const model = spawnModelInput.value.trim();
       const label = document.getElementById('spawn-label').value.trim();
+      const route = resolveRoute(provider, model);
       const bodyObj = { provider, cwd, model, label };
+      if (route) bodyObj.route = route;
       if (provider === 'claude') {
         const picked = claudeModelSelection;
         const permMode = document.getElementById('spawn-permission-mode').value;
@@ -6689,6 +6799,34 @@ function openLightbox(src) {
     document.dispatchEvent(new CustomEvent('voiceinput:statechanged'));
   }
 
+  // ---- no-result watchdog ----
+  // audiostart/soundstart/speechstart は届くのに result イベントが一向に来ない
+  // (= hw 等の別 SpeechRecognition と mic を奪い合って分配済み) 状態を検出して
+  // 自動復旧する。recreate-5 まで「次回のため hw を fresh に保つ」対策は入れたが、
+  // 今まさに stuck な録音セッションを救う経路が無く、ユーザーが ✕/✓ を押すまで
+  // 波形だけが残る状況が再発していた。
+  const NO_RESULT_WATCHDOG_MS = 4500;
+  let noResultWatchdog = null;
+  function armNoResultWatchdog() {
+    clearTimeout(noResultWatchdog);
+    noResultWatchdog = setTimeout(() => {
+      noResultWatchdog = null;
+      console.warn('SpeechRecognition: audio active but no result for', NO_RESULT_WATCHDOG_MS, 'ms — forcing recovery');
+      userIntendedStop = true;
+      clearSilenceTimer();
+      clearRestartTimer();
+      _recreateRecognition();
+      forceCleanup();
+      showToast(t('voice_error_no_result'), btn);
+    }, NO_RESULT_WATCHDOG_MS);
+  }
+  function clearNoResultWatchdog() {
+    if (noResultWatchdog) {
+      clearTimeout(noResultWatchdog);
+      noResultWatchdog = null;
+    }
+  }
+
   let forceCleanupTimer = null;
   function forceCleanup() {
     clearTimeout(forceCleanupTimer);
@@ -6698,6 +6836,7 @@ function openLightbox(src) {
     clearSilenceTimer();
     clearRestartTimer();
     clearBeginRetryTimer();
+    clearNoResultWatchdog();
     isStarting = false;
     isRecording = false;
     voiceActive = false;
@@ -6787,6 +6926,12 @@ function openLightbox(src) {
     }
     // hw.abort() で hw.end が遅延発火しても再起動を抑止するため、abort 前にフラグを立てる
     voiceIntent = true;
+    // 録音開始のたびに recognition を fresh インスタンスに差し替える。
+    // recreate-5 までは hw 側だけ毎回作り直していたが、recognition 側を使い回していたため
+    // Chrome 内部で半固着した状態 (=「.start() は通るが result が届かない」) を持ち越し、
+    // 「波形は出るがテキストが入らない」症状の根本原因として残っていた。
+    // hw 側と同じく毎回 new SpeechRecognition() で開始する。
+    _recreateRecognition();
     let stopPromise = null;
     if (typeof window._stopWakewordForVoiceInput === 'function') {
       const ret = window._stopWakewordForVoiceInput();
@@ -6843,16 +6988,19 @@ function openLightbox(src) {
     if (!_isCurrentRecognitionEvent(e)) return;
     setVoiceAudioActive(true);
     voiceIntensityTarget = 0.15;
+    armNoResultWatchdog();
   });
   _onRecognition('soundstart', (e) => {
     if (!_isCurrentRecognitionEvent(e)) return;
     voiceIntensityTarget = 0.55;
     lastKickAt = performance.now();
+    armNoResultWatchdog();
   });
   _onRecognition('speechstart', (e) => {
     if (!_isCurrentRecognitionEvent(e)) return;
     voiceIntensityTarget = 0.9;
     lastKickAt = performance.now();
+    armNoResultWatchdog();
   });
   _onRecognition('speechend', (e) => {
     if (!_isCurrentRecognitionEvent(e)) return;
@@ -6866,10 +7014,12 @@ function openLightbox(src) {
     if (!_isCurrentRecognitionEvent(e)) return;
     setVoiceAudioActive(false);
     voiceIntensityTarget = 0.03;
+    clearNoResultWatchdog();
   });
 
   _onRecognition('result', (e) => {
     if (!_isCurrentRecognitionEvent(e)) return;
+    clearNoResultWatchdog();
     const result = e.results[e.resultIndex];
     if (!result) return;
     const transcript = result[0].transcript;
@@ -6902,6 +7052,7 @@ function openLightbox(src) {
   _onRecognition('end', (e) => {
     if (!_isCurrentRecognitionEvent(e)) return;
     cancelForceCleanup();
+    clearNoResultWatchdog();
     isStarting = false;
     setVoiceAudioActive(false);
     const grace = getVoiceGraceSec();
@@ -6930,6 +7081,7 @@ function openLightbox(src) {
   _onRecognition('error', (e) => {
     if (!_isCurrentRecognitionEvent(e)) return;
     console.warn('SpeechRecognition error:', e.error, e.message || '');
+    clearNoResultWatchdog();
     isStarting = false;
     setVoiceAudioActive(false);
     // 'aborted' は Chrome が 'end' を返さないことがあるため、その場で終了扱いにする。
@@ -7083,22 +7235,26 @@ function openLightbox(src) {
       stopHotword();
       isListening = false;
       isStarting = false;
+      // 早期 return 経路でも hw を必ず作り直す。
+      // hw.error: 'aborted' などで isListening/isStarting が false に戻った直後でも、
+      // Chrome 内部の SpeechRecognition は state="started" のまま固着している可能性があり、
+      // その状態で recognition.start() しても audiostart は通るが result が届かない。
+      _recreateHotword();
       updateMicChip();
       return Promise.resolve(false);
     }
     return new Promise((resolve) => {
       let settled = false;
-      let timedOut = false;
       const finish = () => {
         if (settled) return;
         settled = true;
         hw.removeEventListener('end', onEnd);
         isListening = false;
         isStarting = false;
-        // セーフティタイマで強制 resolve した場合、hw は stuck（abort() 無視・end 未着）と
-        // 判断してインスタンスを捨てる。残しておくと次の recognition.start() と
-        // マイクを奪い合い、「audiostart は来るが result が届かない」症状になる。
-        if (timedOut) _recreateHotword();
+        // end が来たケースでも hw を作り直す。end が届いた = mic 解放完了 とは限らず、
+        // Chrome 内部で半解放状態のまま次の recognition.start() に持ち越すと
+        // 「波形は出るがテキストが入らない」症状が再発するため、毎回 fresh な hw を用意する。
+        _recreateHotword();
         updateMicChip();
         // Chrome のマイクキャプチャ解放を待つ短い余裕（経験則: 50ms）。
         setTimeout(() => resolve(true), 50);
@@ -7107,7 +7263,7 @@ function openLightbox(src) {
       hw.addEventListener('end', onEnd);
       stopHotword();
       // セーフティ: 500ms 経っても end が来なければ強制 resolve（壊れた状態でブロックしない）。
-      setTimeout(() => { timedOut = true; finish(); }, 500);
+      setTimeout(finish, 500);
     });
   }
 
@@ -7211,6 +7367,17 @@ function openLightbox(src) {
   _onHotword('error', (e) => {
     if (!_isCurrentHotwordEvent(e)) return;
     isStarting = false;
+    // 'aborted' は Chrome 側で SpeechRecognition が stuck になる代表的な起点。
+    // abort() / stop() 後の追い掛けや、recognition.start() が mic を奪った結果として発生し、
+    // この後 'end' が届かないケースがある。stuck な hw が mic を掴んだままになると
+    // 直後の recognition.start() で「波形は出るが result が届かない」症状になるため、
+    // 即座にインスタンスを捨てる。次回 startHotword() は fresh な hw で開始される。
+    if (e.error === 'aborted') {
+      isListening = false;
+      _recreateHotword();
+      updateMicChip();
+      return;
+    }
     const fatal = ['not-allowed', 'permission-denied', 'audio-capture', 'network', 'service-not-allowed', 'language-not-supported'];
     if (fatal.includes(e.error)) {
       isGlobalActive = false;
@@ -7637,8 +7804,22 @@ const FilesTabManager = (function () {
     const stripped = cur.replace(/^#\d+\s+/, '');
     tab.labelEl.textContent = sessionTabPrefix(newSid) + stripped;
   }
+  // タブの可視性判定:
+  // - 同一セッションのタブは常に可視
+  // - プロジェクトキーが取れる場合は、現セッションと同じプロジェクトに属するタブも可視
+  //   （プロジェクト単位で files/git タブを共有するため）
+  // - プロジェクトが '__no_project__' / 空 のセッション同士はプロジェクト共有しない
   function isVisibleInCurrentSession(tab) {
-    return sameSessionId(tab.sessionId, currentSessionId());
+    const curSid = currentSessionId();
+    if (sameSessionId(tab.sessionId, curSid)) return true;
+    const tabPk = tab.projectKey;
+    if (!tabPk || tabPk === '__no_project__') return false;
+    if (curSid == null || !sessionsRef) return false;
+    const curSess = sessionsRef.get(curSid);
+    if (!curSess) return false;
+    const curPk = curSess.project || '';
+    if (!curPk || curPk === '__no_project__') return false;
+    return tabPk === curPk;
   }
   function refreshVisibleTabs() {
     tabs.forEach(tab => {
@@ -7660,7 +7841,7 @@ const FilesTabManager = (function () {
     sessionTabEl.textContent = t('files_tab_session_label');
     sessionTabEl.addEventListener('click', () => switchToSessionView());
     tabList.insertBefore(sessionTabEl, tabList.firstChild);
-    placeAddTabButtonAfterSessionTab();
+    ensureAddTabButton();
     activeTabId = 'session';
   }
 
@@ -7714,9 +7895,23 @@ const FilesTabManager = (function () {
     showTabBar();
     ensureAddTabButton();
 
-    // 同じ root のタブが既にあればそちらをアクティブに
-    const existing = tabs.find(t => (t.kind || t.type) === 'files' && sameSessionId(t.sessionId, sessionId) && t.filesRoot === filesRoot);
+    // 同じ root のタブが既にあればそちらをアクティブに。
+    // プロジェクト共有: 同じ projectKey（__no_project__ 除く）& 同じ filesRoot を再利用。
+    // プロジェクト不明セッションは従来通り sessionId 一致のみ。
+    const hasProject = projectKey && projectKey !== '__no_project__';
+    const existing = tabs.find(t => {
+      if ((t.kind || t.type) !== 'files') return false;
+      if (t.filesRoot !== filesRoot) return false;
+      if (hasProject) return t.projectKey === projectKey;
+      return sameSessionId(t.sessionId, sessionId);
+    });
     if (existing) {
+      // 別セッションで作られたタブをアクティブセッションへ付け替え（API 呼び出しが現セッションに紐づくよう）
+      if (sessionId != null && !sameSessionId(existing.sessionId, sessionId)) {
+        existing.sessionId = sessionId;
+        if (existing.contentEl) existing.contentEl.dataset.sessionId = String(sessionId);
+        updateTabLabelPrefix(existing, sessionId);
+      }
       setActive(existing.id);
       return existing.id;
     }
@@ -7860,13 +8055,8 @@ const FilesTabManager = (function () {
     if (activeTabId === id) {
       switchToSessionView();
     }
-    // タブが Files/Git タブだけゼロになったらタブバーを隠す（セッションタブのみ）
-    if (tabs.length === 0) {
-      // セッションタブも不要なら消す
-      if (sessionTabEl) { sessionTabEl.remove(); sessionTabEl = null; }
-      removeAddTabButton();
-      tabBar.style.display = 'none';
-    }
+    // Files/Git タブが 0 になってもセッションタブと + ボタンは残す
+    // （+ ボタンから次の Files/Git タブを開けるようにするため）
     // カードの open マーカー再描画
     notifyTabStateChanged();
   }
@@ -7954,13 +8144,38 @@ const FilesTabManager = (function () {
     showTabBar();
     ensureAddTabButton();
 
+    // 渡された sessionId からプロジェクトキーを引き、プロジェクト単位でタブを共有する。
+    // プロジェクト不明（__no_project__/空）の場合は従来通り sessionId 一致のみ。
+    let projectKey = '';
+    if (sessionsRef && sessionId != null) {
+      const s = sessionsRef.get(sessionId);
+      if (s) projectKey = s.project || '';
+    }
+    const hasProject = projectKey && projectKey !== '__no_project__';
+
     // 同 gitRoot の git タブがあれば activate + view ref 更新
-    const existing = tabs.find(t => (t.kind || t.type) === 'git' && sameSessionId(t.sessionId, sessionId) && t.gitRoot === gitRoot);
+    const existing = tabs.find(t => {
+      if ((t.kind || t.type) !== 'git') return false;
+      if (t.gitRoot !== gitRoot) return false;
+      if (hasProject) return t.projectKey === projectKey;
+      return sameSessionId(t.sessionId, sessionId);
+    });
     if (existing) {
       const newRef = branch || existing.viewRef || '';
       existing.viewRef = newRef;
-      // セッションが渡されていればそちらに付け替え
-      if (sessionId != null) existing.sessionId = sessionId;
+      // セッションが渡されていればそちらに付け替え（ラベル prefix も追従）
+      if (sessionId != null && !sameSessionId(existing.sessionId, sessionId)) {
+        existing.sessionId = sessionId;
+        if (existing.contentEl) existing.contentEl.dataset.sessionId = String(sessionId);
+        updateTabLabelPrefix(existing, sessionId);
+        try {
+          if (existing.gitView && typeof existing.gitView.setSessionId === 'function') {
+            existing.gitView.setSessionId(sessionId);
+          }
+        } catch (_) {}
+      } else if (sessionId != null) {
+        existing.sessionId = sessionId;
+      }
       // タブラベルの ref 部分を更新
       try {
         const refSpan = existing.el.querySelector('.ref');
@@ -7979,12 +8194,8 @@ const FilesTabManager = (function () {
 
     // 新規作成
     const id = makeid();
-    // projectName 推定
-    let projectName = '';
-    if (sessionsRef && sessionId != null) {
-      const s = sessionsRef.get(sessionId);
-      if (s) projectName = s.project || '';
-    }
+    // projectName 推定: project キーがあればそれを使う。無ければ gitRoot の basename
+    let projectName = hasProject ? projectKey : '';
     if (!projectName) {
       projectName = (gitRoot || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || gitRoot;
     }
@@ -8040,6 +8251,7 @@ const FilesTabManager = (function () {
       label: 'git: ' + projectName,
       sessionId: sessionId != null ? sessionId : null,
       gitRoot, viewRef: branch || '', projectName,
+      projectKey: hasProject ? projectKey : '',
       el: tabBtn, contentEl, labelEl: labelSpan,
       gitView: null,
     };
