@@ -1,4 +1,4 @@
-console.log('[any-ai-cli] app.js build=2026-05-16-voice-leading-space');
+console.log('[any-ai-cli] app.js build=2026-05-16-send-skip-fix');
 
 // ---- トースト通知 ----
 let _toastTimer = null;
@@ -1324,7 +1324,8 @@ let activeSessionId = null;
 let isComposing = false;       // IMEコンポジション状態
 let pendingSend = false;       // IME確定後に送信するフラグ
 let composeEndSendTimer = null; // compositionend が doSend をスケジュール済みの場合のタイマーID
-let composeEndSent = false;    // compositionend タイマーが既に doSend を実行済みの場合のフラグ
+let lastDoSendAt = 0;          // 直前の doSend 実行時刻（二重送信防止の短時間ガード用）
+const DOUBLE_SEND_GUARD_MS = 100;
 const SIDEBAR_COLLAPSED_WIDTH_THRESHOLD = 180;
 let expandCapturePending = false;
 // action-bar の点滅防止用
@@ -4050,6 +4051,7 @@ function clearInput() {
 }
 
 async function doSend(sessionId) {
+  lastDoSendAt = Date.now();
   const injects = await flushPendingAttach(sessionId);
   const injectPrefix = injects.join('');
   let rawText = buildSendText();
@@ -4226,7 +4228,7 @@ function scrollSlashIntoView() {
 }
 
 inputEl.addEventListener('input', () => {
-  autoExpand(); updateSlashMenu(); composeEndSent = false;
+  autoExpand(); updateSlashMenu();
   if (!isComposing) {
     const _tp = getActiveTriggerPhrase();
     if (_tp && activeSessionId !== null && textEndsWithTriggerPhrase(buildSendText(), _tp)) {
@@ -4235,7 +4237,7 @@ inputEl.addEventListener('input', () => {
   }
 });
 inputEl.addEventListener('blur', () => setTimeout(hideSlashMenu, 150));
-inputEl.addEventListener('compositionstart', () => { isComposing = true; composeEndSent = false; });
+inputEl.addEventListener('compositionstart', () => { isComposing = true; });
 inputEl.addEventListener('compositionend', () => {
   isComposing = false;
   // 自動送信トリガー: input イベントは IME 環境/ブラウザによって compositionend より
@@ -4249,7 +4251,6 @@ inputEl.addEventListener('compositionend', () => {
       clearTimeout(composeEndSendTimer);
       composeEndSendTimer = null;
     }
-    composeEndSent = true;
     doSend(activeSessionId);
     return;
   }
@@ -4258,7 +4259,6 @@ inputEl.addEventListener('compositionend', () => {
     composeEndSendTimer = setTimeout(() => {
       composeEndSendTimer = null;
       if (activeSessionId === null) return;
-      composeEndSent = true;
       doSend(activeSessionId);
     }, 0);
   }
@@ -4372,7 +4372,6 @@ inputEl.addEventListener('keydown', (e) => {
       composeEndSendTimer = null;
     }
     pendingSend = false;
-    composeEndSent = false;
     doSend(activeSessionId);
     e.preventDefault();
   }
@@ -4420,8 +4419,8 @@ document.getElementById('send-btn').addEventListener('mousedown', () => {
 document.getElementById('send-btn').addEventListener('click', () => {
   if (activeSessionId === null) return;
   if (isComposing) return; // compositionend 側で処理する
-  // compositionend タイマーが既に発火して doSend を実行済みの場合はスキップ（二重送信防止）
-  if (composeEndSent) { composeEndSent = false; return; }
+  // 直前 (DOUBLE_SEND_GUARD_MS) に doSend 済み → autosend 等の直後 click を取り込む二重送信防止
+  if (Date.now() - lastDoSendAt < DOUBLE_SEND_GUARD_MS) return;
   if (composeEndSendTimer !== null) {
     // compositionend が既に doSend をスケジュール済み → タイマーキャンセルして直接実行（二重送信防止）
     clearTimeout(composeEndSendTimer);
@@ -6446,10 +6445,36 @@ function openLightbox(src) {
   btn.hidden = false;
   btn.dataset.tooltip = t('voice_tooltip');
 
-  const recognition = new SpeechRecognition();
-  recognition.interimResults = true;
-  recognition.continuous = false;
-  recognition.maxAlternatives = 1;
+  // Chrome の SpeechRecognition は 'aborted' などで内部 stuck 状態に陥ると、
+  // 同じインスタンスへの .start() / .abort() / .stop() では復旧不可能になる。
+  // 復旧手段は new SpeechRecognition() で作り直すしかないため、
+  // リスナーを配列に控えておいて再アタッチできるようにしておく。
+  let recognition;
+  const _recognitionListeners = [];
+  function _onRecognition(eventName, handler) {
+    _recognitionListeners.push([eventName, handler]);
+    recognition.addEventListener(eventName, handler);
+  }
+  function _configureRecognition(rec) {
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.maxAlternatives = 1;
+    rec.lang = getLang();
+  }
+  function _recreateRecognition() {
+    const oldRecognition = recognition;
+    recognition = new SpeechRecognition();
+    _configureRecognition(recognition);
+    for (const [name, fn] of _recognitionListeners) {
+      recognition.addEventListener(name, fn);
+    }
+    try { oldRecognition.abort(); } catch (_) {}
+  }
+  function _isCurrentRecognitionEvent(e) {
+    return !e || !e.currentTarget || e.currentTarget === recognition;
+  }
+  recognition = new SpeechRecognition();
+  _configureRecognition(recognition);
 
   let isRecording  = false;
   let isStarting   = false;
@@ -6653,6 +6678,8 @@ function openLightbox(src) {
 
   let forceCleanupTimer = null;
   function forceCleanup() {
+    clearTimeout(forceCleanupTimer);
+    forceCleanupTimer = null;
     userIntendedStop = true;
     voiceIntent = false;
     clearSilenceTimer();
@@ -6714,13 +6741,14 @@ function openLightbox(src) {
       recognition.start();
     } catch (err) {
       isStarting = false;
-      // InvalidStateError: 直前のセッション (voice 本体 / wakeword hw) が
-      // まだ完全に終了しておらず Chrome の認識サービスが transient 状態。
-      // abort で確実に止めてから短いバックオフで再試行する。
+      // InvalidStateError: SpeechRecognition インスタンスが内部 stuck 状態
+      // （直前セッションの 'aborted' で Chrome 側の state が "started" のまま固着、等）。
+      // 過去は abort+バックオフで凌ごうとしていたが、stuck 状態の inst には abort が効かず
+      // 何度リトライしても同じエラーになる。インスタンス作り直しが唯一の復旧手段。
       const isInvalidState = err && (err.name === 'InvalidStateError' || /already started/i.test(err.message || ''));
-      if (isInvalidState && retryCount < 4) {
-        try { recognition.abort(); } catch (_) {}
-        const delay = 200 + retryCount * 200;
+      if (isInvalidState && retryCount < 2) {
+        _recreateRecognition();
+        const delay = 150;
         beginRetryTimer = setTimeout(() => {
           beginRetryTimer = null;
           if (userIntendedStop || isRecording) return;
@@ -6736,12 +6764,12 @@ function openLightbox(src) {
 
   btn.addEventListener('click', () => {
     if (isRecording || isStarting || beginRetryTimer) {
-      userIntendedStop = true;
-      clearSilenceTimer();
-      clearRestartTimer();
-      clearBeginRetryTimer();
+      // stuck 状態だと recognition.abort() が無視されて 'end' イベントも来ないので、
+      // scheduleForceCleanup (1500ms 後) ではユーザーから「ボタンが効かない」ように見える。
+      // 即時 forceCleanup + 次回起動時の保険として _recreateRecognition を呼ぶ。
       try { recognition.abort(); } catch (_) {}
-      scheduleForceCleanup();
+      _recreateRecognition();
+      forceCleanup();
       return;
     }
     // hw.abort() で hw.end が遅延発火しても再起動を抑止するため、abort 前にフラグを立てる
@@ -6764,26 +6792,26 @@ function openLightbox(src) {
   });
 
   cancelBtn.addEventListener('click', () => {
-    userIntendedStop = true;
-    clearSilenceTimer();
-    clearRestartTimer();
-    clearBeginRetryTimer();
     inputEl.value = preVoiceText;
     autoExpand();
+    // stuck 状態だと abort が無視されて 'end' イベントが届かず、
+    // scheduleForceCleanup の 1500ms 後の条件チェックでしか voice-bar が消えない (= UX 上「ボタン無反応」に見える)。
+    // インスタンスを作り直して stuck を持ち越さず、即時に forceCleanup で voice-bar を畳む。
     try { recognition.abort(); } catch (_) {}
-    scheduleForceCleanup();
+    _recreateRecognition();
+    forceCleanup();
   });
 
   confirmBtn.addEventListener('click', () => {
-    userIntendedStop = true;
-    clearSilenceTimer();
-    clearRestartTimer();
-    clearBeginRetryTimer();
+    // stuck 状態では stop() も無視されるため、即時 forceCleanup で voice-bar を畳む。
+    // 入力欄には interim 結果がそのまま残るので「確定」相当の挙動になる。
     try { recognition.stop(); } catch (_) {}
-    scheduleForceCleanup();
+    _recreateRecognition();
+    forceCleanup();
   });
 
-  recognition.addEventListener('start', () => {
+  _onRecognition('start', (e) => {
+    if (!_isCurrentRecognitionEvent(e)) return;
     isStarting = false;
     isRecording = true;
     voiceActive = true;
@@ -6798,20 +6826,37 @@ function openLightbox(src) {
     resetSilenceTimer();
   });
 
-  recognition.addEventListener('audiostart', () => {
+  _onRecognition('audiostart', (e) => {
+    if (!_isCurrentRecognitionEvent(e)) return;
     setVoiceAudioActive(true);
     voiceIntensityTarget = 0.15;
   });
-  recognition.addEventListener('soundstart', () => { voiceIntensityTarget = 0.55; lastKickAt = performance.now(); });
-  recognition.addEventListener('speechstart', () => { voiceIntensityTarget = 0.9;  lastKickAt = performance.now(); });
-  recognition.addEventListener('speechend',   () => { voiceIntensityTarget = 0.25; });
-  recognition.addEventListener('soundend',    () => { voiceIntensityTarget = 0.08; });
-  recognition.addEventListener('audioend',    () => {
+  _onRecognition('soundstart', (e) => {
+    if (!_isCurrentRecognitionEvent(e)) return;
+    voiceIntensityTarget = 0.55;
+    lastKickAt = performance.now();
+  });
+  _onRecognition('speechstart', (e) => {
+    if (!_isCurrentRecognitionEvent(e)) return;
+    voiceIntensityTarget = 0.9;
+    lastKickAt = performance.now();
+  });
+  _onRecognition('speechend', (e) => {
+    if (!_isCurrentRecognitionEvent(e)) return;
+    voiceIntensityTarget = 0.25;
+  });
+  _onRecognition('soundend', (e) => {
+    if (!_isCurrentRecognitionEvent(e)) return;
+    voiceIntensityTarget = 0.08;
+  });
+  _onRecognition('audioend', (e) => {
+    if (!_isCurrentRecognitionEvent(e)) return;
     setVoiceAudioActive(false);
     voiceIntensityTarget = 0.03;
   });
 
-  recognition.addEventListener('result', (e) => {
+  _onRecognition('result', (e) => {
+    if (!_isCurrentRecognitionEvent(e)) return;
     const result = e.results[e.resultIndex];
     if (!result) return;
     const transcript = result[0].transcript;
@@ -6841,7 +6886,8 @@ function openLightbox(src) {
     updateSlashMenu();
   });
 
-  recognition.addEventListener('end', () => {
+  _onRecognition('end', (e) => {
+    if (!_isCurrentRecognitionEvent(e)) return;
     cancelForceCleanup();
     isStarting = false;
     setVoiceAudioActive(false);
@@ -6868,12 +6914,23 @@ function openLightbox(src) {
     forceCleanup();
   });
 
-  recognition.addEventListener('error', (e) => {
+  _onRecognition('error', (e) => {
+    if (!_isCurrentRecognitionEvent(e)) return;
     console.warn('SpeechRecognition error:', e.error, e.message || '');
     isStarting = false;
     setVoiceAudioActive(false);
+    // 'aborted' は Chrome が 'end' を返さないことがあるため、その場で終了扱いにする。
+    // 同時にインスタンスを作り直し、次回起動へ stuck 状態を持ち越さない。
+    if (e.error === 'aborted') {
+      userIntendedStop = true;
+      clearSilenceTimer();
+      clearRestartTimer();
+      _recreateRecognition();
+      forceCleanup();
+      return;
+    }
     // 致命系エラーは auto-restart 抑止 (繰り返してもまた失敗するため)。
-    // 'no-speech' と 'aborted' はソフトエラーで、'end' イベントが判定する。
+    // 'no-speech' はソフトエラーで、'end' イベントが判定する。
     const fatalErrors = ['not-allowed', 'permission-denied', 'audio-capture', 'network', 'service-not-allowed', 'language-not-supported'];
     if (fatalErrors.includes(e.error)) {
       userIntendedStop = true;
@@ -6946,10 +7003,37 @@ function openLightbox(src) {
     return lang === 'ja' ? 'ja-JP' : 'en-US';
   }
 
-  const hw = new SpeechRecognition();
-  hw.interimResults = true;
-  hw.continuous = false;
-  hw.maxAlternatives = 1;
+  // hw も recognition と同じく `'aborted'` 後に内部 state が "started" のまま固着し、
+  // abort() / stop() が無視される stuck 状態に陥ることがある。stuck だと hw.end が
+  // 来ない → stopHotwordForVoiceInput が 500ms セーフティで強制 resolve → そのまま
+  // recognition.start() が走り、hw がマイクを掴んだままなので audiostart は来るが
+  // result が届かない（「波形は動くがテキストが入らない」二次再発の根本原因）。
+  // recognition 側と同じく差し替え可能にし、stuck を疑う経路で破棄する。
+  let hw;
+  const _hotwordListeners = [];
+  function _onHotword(eventName, handler) {
+    _hotwordListeners.push([eventName, handler]);
+    hw.addEventListener(eventName, handler);
+  }
+  function _configureHotword(rec) {
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.maxAlternatives = 1;
+  }
+  function _recreateHotword() {
+    const oldHotword = hw;
+    hw = new SpeechRecognition();
+    _configureHotword(hw);
+    for (const [name, fn] of _hotwordListeners) {
+      hw.addEventListener(name, fn);
+    }
+    try { oldHotword.abort(); } catch (_) {}
+  }
+  function _isCurrentHotwordEvent(e) {
+    return !e || !e.currentTarget || e.currentTarget === hw;
+  }
+  hw = new SpeechRecognition();
+  _configureHotword(hw);
 
   // グローバル ON または 当該セッション個別 ON、かつ入力欄ホバー中
   // voiceIntent: 音声入力ボタン押下直後〜recognition.start 成功までの「これから録音」の意思表示。
@@ -6991,12 +7075,17 @@ function openLightbox(src) {
     }
     return new Promise((resolve) => {
       let settled = false;
+      let timedOut = false;
       const finish = () => {
         if (settled) return;
         settled = true;
         hw.removeEventListener('end', onEnd);
         isListening = false;
         isStarting = false;
+        // セーフティタイマで強制 resolve した場合、hw は stuck（abort() 無視・end 未着）と
+        // 判断してインスタンスを捨てる。残しておくと次の recognition.start() と
+        // マイクを奪い合い、「audiostart は来るが result が届かない」症状になる。
+        if (timedOut) _recreateHotword();
         updateMicChip();
         // Chrome のマイクキャプチャ解放を待つ短い余裕（経験則: 50ms）。
         setTimeout(() => resolve(true), 50);
@@ -7005,7 +7094,7 @@ function openLightbox(src) {
       hw.addEventListener('end', onEnd);
       stopHotword();
       // セーフティ: 500ms 経っても end が来なければ強制 resolve（壊れた状態でブロックしない）。
-      setTimeout(finish, 500);
+      setTimeout(() => { timedOut = true; finish(); }, 500);
     });
   }
 
@@ -7072,13 +7161,15 @@ function openLightbox(src) {
     updateMicChip();
   }
 
-  hw.addEventListener('start', () => {
+  _onHotword('start', (e) => {
+    if (!_isCurrentHotwordEvent(e)) return;
     isStarting = false;
     isListening = true;
     updateMicChip();
   });
 
-  hw.addEventListener('result', (e) => {
+  _onHotword('result', (e) => {
+    if (!_isCurrentHotwordEvent(e)) return;
     const phrase = normalizeTriggerMatchText(getWakePhrase());
     if (!phrase) return;
     for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -7091,7 +7182,8 @@ function openLightbox(src) {
     }
   });
 
-  hw.addEventListener('end', () => {
+  _onHotword('end', (e) => {
+    if (!_isCurrentHotwordEvent(e)) return;
     isListening = false;
     isStarting = false;
     updateMicChip();
@@ -7103,7 +7195,8 @@ function openLightbox(src) {
     }, 250);
   });
 
-  hw.addEventListener('error', (e) => {
+  _onHotword('error', (e) => {
+    if (!_isCurrentHotwordEvent(e)) return;
     isStarting = false;
     const fatal = ['not-allowed', 'permission-denied', 'audio-capture', 'network', 'service-not-allowed', 'language-not-supported'];
     if (fatal.includes(e.error)) {

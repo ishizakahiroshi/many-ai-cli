@@ -1872,6 +1872,7 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   transition: color 0.15s, border-bottom-color 0.15s;
 }
 .main-tab:hover { color: var(--text); }
+.main-tab[hidden] { display: none !important; }
 .main-tab.active {
   color: var(--accent-text);
   border-bottom-color: var(--accent);
