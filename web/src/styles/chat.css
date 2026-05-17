@@ -1,0 +1,523 @@
+/* Extracted from styles.css. Imported by /styles.css. */
+
+/* Chat history view */
+/* =========================================================================
+ * C3: チャット履歴ペイン (吹き出しレンダリング)
+ * 既存スタイルとの衝突を避けるため、すべて #chat-pane 配下にスコープする。
+ * モック docs/local/chat-history-tab-mock.html のセレクタを統合。
+ * ========================================================================= */
+#chat-pane .chat-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: #0f1320;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+#chat-pane .chat-filter-bar[hidden] { display: none !important; }
+
+#chat-pane .chat-timeline {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #0a0c14;
+  min-height: 0;
+}
+#chat-pane .chat-pane-empty[hidden] { display: none !important; }
+#chat-pane.has-messages > .chat-pane-empty { display: none; }
+#chat-pane.has-messages > .chat-timeline { display: flex; }
+#chat-pane:not(.has-messages) > .chat-timeline { display: none; }
+
+#chat-pane .msg {
+  display: flex;
+  gap: 10px;
+  max-width: 100%;
+  align-items: flex-start;
+  position: relative;
+}
+#chat-pane .msg.user { flex-direction: row-reverse; }
+#chat-pane .msg.system { justify-content: center; }
+
+#chat-pane .msg-number {
+  position: absolute;
+  top: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #3f4859;
+  font-family: "Cascadia Code", Consolas, monospace;
+}
+#chat-pane .msg.ai .msg-number { left: 44px; }
+#chat-pane .msg.user .msg-number { right: 44px; }
+#chat-pane .msg.system .msg-number { left: 0; }
+
+#chat-pane .avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+#chat-pane .avatar.user { background: #6366f1; }
+#chat-pane .avatar.ai svg.card-provider-icon { margin-right: 0; }
+
+#chat-pane .bubble-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 75%;
+  min-width: 0;
+  position: relative;
+}
+#chat-pane .msg.user .bubble-wrap { align-items: flex-end; }
+
+#chat-pane .bubble-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: #4a5568;
+  padding: 0 4px;
+  flex-wrap: wrap;
+}
+#chat-pane .bubble-meta .name { color: #8892b4; font-weight: 600; }
+#chat-pane .bubble-meta .stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #6b7280;
+}
+#chat-pane .bubble-meta .stat b { color: #94a3b8; font-weight: 600; }
+
+#chat-pane .bubble {
+  padding: 8px 12px;
+  border-radius: 14px;
+  font-size: var(--chat-font-size);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid transparent;
+  position: relative;
+  transform-origin: center;
+}
+#chat-pane .bubble.bubble-dock-spring { transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1); }
+#chat-pane .bubble.user-text {
+  background: rgba(99,102,241,0.15);
+  border-color: rgba(99,102,241,0.3);
+  color: #e2e8f0;
+  border-bottom-right-radius: 4px;
+}
+#chat-pane .bubble.ai-text {
+  background: #1a1f2e;
+  border-color: rgba(255,255,255,0.06);
+  color: #cbd5e1;
+  border-bottom-left-radius: 4px;
+}
+#chat-pane .bubble-content { display: block; }
+
+#chat-pane .bubble code,
+#chat-pane .code-inline {
+  background: rgba(0,0,0,0.3);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  color: #f9a8d4;
+}
+
+/* clickable file path links (要素 #4) — C4 で右クリック挙動を付与 */
+#chat-pane .path-link {
+  background: rgba(99,102,241,0.15);
+  color: #a5b4fc;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(99,102,241,0.3);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: none;
+  word-break: break-all;
+}
+#chat-pane .path-link:hover {
+  background: rgba(99,102,241,0.25);
+  color: #c7d2fe;
+}
+#chat-pane .url-link {
+  color: #93c5fd;
+  text-decoration: underline;
+  cursor: pointer;
+  word-break: break-all;
+}
+#chat-pane .url-link:hover { color: #bfdbfe; }
+
+/* tool call collapse (要素 #6) */
+#chat-pane .tool-call {
+  margin-top: 6px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  background: rgba(0,0,0,0.25);
+  overflow: hidden;
+}
+#chat-pane .tool-call-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 11px;
+  color: #cbd5e1;
+  user-select: none;
+}
+#chat-pane .tool-call-header:hover { background: rgba(255,255,255,0.03); }
+#chat-pane .tool-call-header .caret {
+  width: 12px;
+  text-align: center;
+  font-size: 10px;
+  transition: transform 0.15s;
+  display: inline-block;
+}
+#chat-pane .tool-call.open .tool-call-header .caret { transform: rotate(90deg); }
+#chat-pane .tool-call-header .tname {
+  font-family: "Cascadia Code", Consolas, monospace;
+  color: #fbbf24;
+  font-weight: 700;
+}
+#chat-pane .tool-call-header .tdesc {
+  color: #8892b4;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#chat-pane .tool-call-header .tstat {
+  color: #6b7280;
+  font-size: 10px;
+}
+#chat-pane .tool-call-body {
+  display: none;
+  padding: 8px 10px;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  color: #cbd5e1;
+  white-space: pre;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  background: #0a0d15;
+  max-height: 200px;
+  overflow: auto;
+}
+#chat-pane .tool-call.open .tool-call-body { display: block; }
+
+/* attached images / thumbs */
+#chat-pane .attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+#chat-pane .thumb {
+  width: 84px;
+  height: 84px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #1e293b, #334155);
+  border: 1px solid rgba(255,255,255,0.08);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  color: #6b7280;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+#chat-pane .thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+#chat-pane .thumb .icn {
+  font-size: 22px;
+  opacity: 0.5;
+}
+#chat-pane .thumb .fname {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  padding: 3px 5px;
+  background: rgba(0,0,0,0.55);
+  color: #cbd5e1;
+  font-size: 9px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* approval entry (system center) */
+#chat-pane .bubble.approval {
+  background: rgba(245,158,11,0.06);
+  border: 1px dashed rgba(245,158,11,0.35);
+  color: #fde68a;
+  font-size: 12px;
+  border-radius: 10px;
+  padding: 8px 12px;
+  max-width: 560px;
+}
+#chat-pane .bubble.approval .ttl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+#chat-pane .bubble.approval .ans {
+  margin-top: 4px;
+  color: #86efac;
+  font-size: 11px;
+}
+
+/* =========================================================================
+ * C4: 補助機能 (子 plan plan_chat-history-subview_c4_extras.md)
+ * - 子 C2: 吹き出し hover アクション / raw リンク / raw モーダル
+ * - 子 C3: 検索 + フィルタチップ
+ * - 子 C4: ミニマップ + キーボード focus 強調
+ * ========================================================================= */
+
+/* 吹き出し hover アクション群 (msg-action-copy / msg-action-collapse) */
+#chat-pane .bubble-actions {
+  position: absolute;
+  bottom: 5px;
+  right: 6px;
+  display: none;
+  gap: 3px;
+  z-index: 2;
+}
+#chat-pane .bubble:hover .bubble-actions { display: inline-flex; }
+#chat-pane .msg-action {
+  width: 26px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: #1a1f2e;
+  color: #94a3b8;
+  font-size: 11px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+#chat-pane .msg-action:hover { background: #232a3d; color: #e2e8f0; }
+#chat-pane .msg-action.copied { color: #86efac; }
+
+/* D16: 📄 raw リンク */
+#chat-pane .bubble-raw-link {
+  margin-top: 2px;
+  padding: 0 4px;
+  font-size: 10px;
+  color: #4a5568;
+  cursor: pointer;
+  user-select: none;
+  align-self: flex-start;
+}
+#chat-pane .msg.user .bubble-raw-link { align-self: flex-end; }
+#chat-pane .bubble-raw-link:hover { color: #94a3b8; }
+
+/* 折りたたみされた吹き出し */
+#chat-pane .bubble.collapsed .bubble-content {
+  max-height: 60px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, #000 60%, transparent);
+          mask-image: linear-gradient(180deg, #000 60%, transparent);
+}
+
+/* raw モーダル */
+.chat-raw-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  z-index: 9999;
+}
+.chat-raw-modal {
+  width: min(720px, 90vw);
+  height: min(70vh, 600px);
+  background: #0f1320;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.chat-raw-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  background: #1a1f2e;
+}
+.chat-raw-modal-title {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8f0;
+  font-family: "Cascadia Code", Consolas, monospace;
+}
+.chat-raw-modal-btn {
+  width: 28px;
+  height: 24px;
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: #0f1320;
+  color: #cbd5e1;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+}
+.chat-raw-modal-btn:hover { background: #232a3d; color: #e2e8f0; }
+.chat-raw-modal-body {
+  flex: 1;
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  color: #cbd5e1;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #0a0c14;
+}
+
+/* フィルタチップ + 検索 input */
+#chat-pane .chat-filter-bar {
+  flex-wrap: wrap;
+  max-height: 86px;
+  overflow: hidden;
+}
+#chat-pane .filter-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: transparent;
+  color: #8892b4;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+#chat-pane .filter-chip:hover {
+  border-color: rgba(255,255,255,0.2);
+  color: #cbd5e1;
+}
+#chat-pane .filter-chip.active {
+  border-color: rgba(139,92,246,0.4);
+  background: rgba(139,92,246,0.12);
+  color: #c4b5fd;
+}
+#chat-pane .filter-chip .count {
+  font-size: 10px;
+  opacity: 0.7;
+}
+#chat-pane .chat-filter-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 340px;
+  min-width: 0;
+}
+#chat-pane .chat-filter-actions .icon-btn {
+  flex: 0 0 auto;
+}
+#chat-pane .chat-search-input {
+  margin-left: 0;
+  flex: 1 1 150px;
+  min-width: 96px;
+  max-width: 220px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  background: #0a0d15;
+  color: #e2e8f0;
+  font-size: 12px;
+  outline: none;
+}
+#chat-pane .chat-search-input::placeholder { color: #4a5568; }
+#chat-pane .chat-search-input:focus { border-color: rgba(139,92,246,0.5); }
+
+/* 検索結果ハイライト */
+#chat-pane mark.chat-search-mark {
+  background: rgba(251, 191, 36, 0.4);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+#chat-pane .msg.search-current .bubble {
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.6);
+}
+#chat-pane .msg.msg-focus .bubble {
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.7);
+}
+
+/* ミニマップ */
+#chat-pane .chat-timeline {
+  padding-right: 46px; /* minimap 用余白 */
+}
+#chat-pane .minimap {
+  position: absolute;
+  top: 52px;
+  bottom: 10px;
+  right: 0;
+  width: 32px;
+  background: rgba(15, 19, 32, 0.85);
+  border-radius: 6px;
+  padding: 6px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  z-index: 3;
+  border: 1px solid rgba(255,255,255,0.05);
+  pointer-events: auto;
+}
+#chat-pane:not(.has-messages) .minimap { display: none; }
+#chat-pane .mm-tick {
+  flex: 1;
+  min-height: 4px;
+  border-radius: 2px;
+  cursor: pointer;
+  opacity: 0.55;
+  position: relative;
+  transition: flex-grow 0.08s ease, opacity 0.15s;
+}
+#chat-pane .mm-tick:hover { opacity: 1; }
+#chat-pane .mm-tick::after {
+  content: attr(data-label);
+  position: absolute;
+  right: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #1a1f2e;
+  color: #e2e8f0;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+#chat-pane .mm-tick:hover::after { opacity: 1; }
+#chat-pane .mm-user { background: #6366f1; }
+#chat-pane .mm-ai { background: #475569; }
+#chat-pane .mm-system { background: #f59e0b; }
+#chat-pane .mm-current { outline: 2px solid #c4b5fd; opacity: 1; }

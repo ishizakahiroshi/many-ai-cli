@@ -1,0 +1,239 @@
+/* Extracted from styles.css. Imported by /styles.css. */
+
+/* Approval action bar */
+/* 承認ボタンバー */
+#action-bar {
+  display: none;
+  position: relative;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-elev);
+  border-top: 1px solid var(--line);
+  border-left: 3px solid transparent;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  align-items: flex-start;
+  max-height: 40vh;
+  overflow-y: auto;
+  transition: border-color 0.15s, background 0.15s;
+}
+#action-bar.visible { display: flex; border-left-color: var(--warn); background: rgba(245,158,11,0.04); }
+
+.action-bar-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--warn-text);
+  flex-shrink: 0;
+  flex-basis: 100%;
+  margin-right: 0;
+  margin-bottom: 2px;
+}
+.action-bar-label.sequential-question-label {
+  letter-spacing: 0;
+  text-transform: none;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+#multi-question-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-elev);
+  border-top: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  color: var(--text);
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+#multi-question-banner[hidden] { display: none; }
+.multi-question-banner-text {
+  flex: 1 1 auto;
+  white-space: pre-wrap;
+}
+.multi-question-banner-close {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid var(--line-soft);
+  color: var(--text);
+  cursor: pointer;
+  padding: 2px 8px;
+  font-size: 0.875rem;
+  line-height: 1.2;
+  border-radius: 3px;
+  margin-left: 8px;
+}
+.multi-question-banner-close:hover {
+  background: var(--bg-hover, rgba(255,255,255,0.05));
+}
+
+.action-btn {
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  padding: 5px 14px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  font-family: inherit;
+  max-width: 100%;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.action-btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); }
+.action-btn.current { border-color: rgba(99,102,241,0.45); background: var(--accent-glow); color: var(--accent-text); }
+.action-btn.current:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.action-btn.permanent { border-color: rgba(245,158,11,0.4); background: var(--warn-bg); color: var(--warn-text); }
+.action-btn.permanent:hover { background: var(--warn); color: var(--bg); }
+.action-btn.session-allow { border-color: rgba(245,158,11,0.4); background: var(--warn-bg); color: var(--warn-text); }
+.action-btn.session-allow:hover { background: var(--warn); color: var(--bg); }
+.action-btn.kbd-focus { box-shadow: 0 0 0 2px var(--text); }
+
+/* バッチ承認（複数質問の一括回答） */
+#action-bar.batch { flex-direction: column; align-items: stretch; max-height: 60vh; }
+#action-bar.batch .action-bar-label { margin-bottom: 4px; }
+
+.action-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  margin: 2px 0;
+}
+.action-section.focused {
+  background: var(--accent-soft);
+  border-color: rgba(99,102,241,0.45);
+}
+.action-section-title {
+  font-size: 0.85rem;
+  color: var(--text);
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.action-section-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.action-btn.batch-option.selected {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+.action-btn.batch-option.selected:hover { background: var(--accent); color: #fff; }
+
+.action-bar-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+.action-bar-progress { font-size: 0.8rem; color: var(--muted-2); }
+.action-clear-btn,
+.action-submit-btn {
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  padding: 5px 14px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s, border-color 0.12s, color 0.12s, opacity 0.12s;
+}
+.action-clear-btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); }
+.action-submit-btn {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.action-submit-btn:hover:not(:disabled) { filter: brightness(1.1); }
+.action-submit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+
+/* Approval dismiss button */
+/* 承認UI閉じボタン（action-bar 右端） */
+.action-dismiss-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted-2);
+  cursor: pointer;
+  font-size: 0.875rem;
+  padding: 4px 8px;
+  line-height: 1;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+}
+
+/* Approval opt-in toast */
+/* ---- Hub 承認ボタン オプトイントースト ---- */
+#approval-toast {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.approval-toast-dialog {
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 20px 22px;
+  font-size: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  max-width: 420px;
+  line-height: 1.6;
+}
+.approval-toast-msg { margin: 0; }
+.approval-toast-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.approval-toast-btn {
+  flex-shrink: 0;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 16px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.approval-toast-btn:hover:not(:disabled) { opacity: 0.85; }
+.approval-toast-btn:disabled { opacity: 0.5; cursor: default; }
+.approval-toast-btn-dismiss {
+  flex-shrink: 0;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.approval-toast-btn-dismiss:hover { color: var(--text); border-color: var(--line-soft); }

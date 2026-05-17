@@ -1,0 +1,173 @@
+/* Extracted from styles.css. Imported by /styles.css. */
+
+/* Voice input */
+/* 音声入力ボタン */
+#voice-btn {
+  background: transparent;
+  color: var(--muted-2);
+  border: none;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+#voice-btn:hover { background: rgba(255,255,255,0.08); color: var(--accent); }
+#voice-btn.recording {
+  background: rgba(220, 38, 38, 0.12);
+  color: #ef4444;
+  animation: voice-pulse 1.2s ease-in-out infinite;
+}
+@keyframes voice-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* グローバルウェイクワードボタン（ヘッダー） */
+#global-wakeword-btn {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+#global-wakeword-btn:hover { color: var(--accent-text); border-color: var(--accent); }
+#global-wakeword-btn.standby {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: #3b82f6;
+  color: #3b82f6;
+  animation: wakeword-pulse 2s ease-in-out infinite;
+}
+#global-wakeword-btn.standby.listening {
+  background: rgba(59, 130, 246, 0.28);
+  animation: wakeword-pulse 2s ease-in-out infinite;
+}
+@keyframes wakeword-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+/* 入力クリアボタン: テキストがあるときだけ visible にする */
+#input-clear-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  flex-shrink: 0;
+  transition: opacity 0.15s, background 0.12s, color 0.12s;
+}
+#input-clear-btn.has-text {
+  opacity: 1;
+  pointer-events: auto;
+}
+#input-clear-btn:hover {
+  background: rgba(239,68,68,0.15);
+  color: #f87171;
+}
+
+/* ウェイクワードボタン（入力バー内・旧来） */
+#voice-wakeword-btn {
+  background: transparent;
+  color: var(--muted-2);
+  border: none;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+#voice-wakeword-btn:hover { background: rgba(255,255,255,0.08); color: var(--accent); }
+#voice-wakeword-btn.standby {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: #3b82f6;
+  color: #3b82f6;
+  animation: wakeword-pulse 2s ease-in-out infinite;
+}
+
+/* 音声入力バー（入力欄の上にホバー表示） */
+#voice-bar {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  z-index: 120;
+  width: min(520px, calc(100% - 20px));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+}
+#voice-bar[hidden] { display: none !important; }
+.voice-waveform {
+  flex: 1;
+  height: 36px;
+  min-width: 180px;
+  display: block;
+  border-radius: 6px;
+  background: var(--bg-deep);
+}
+.voice-action-btn {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1.5px solid;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.1s;
+}
+.voice-action-btn:active { transform: scale(0.92); }
+.voice-cancel-btn { border-color: #ef4444; color: #ef4444; background: rgba(220,38,38,0.08); }
+.voice-cancel-btn:hover { background: rgba(220,38,38,0.2); }
+.voice-confirm-btn { border-color: var(--green); color: var(--green); background: rgba(34,197,94,0.08); }
+.voice-confirm-btn:hover { background: rgba(34,197,94,0.2); }
+
+/* audioend 後、Chrome サーバー応答待ち中の視覚フィードバック */
+@keyframes voice-processing-pulse {
+  0%, 100% { border-color: rgba(96,165,250,0.25); }
+  50%       { border-color: rgba(96,165,250,0.75); }
+}
+#voice-bar.voice-processing {
+  animation: voice-processing-pulse 1.4s ease-in-out infinite;
+}
+#voice-bar.voice-processing .voice-waveform {
+  opacity: 0.3;
+}
+#voice-bar.voice-processing::after {
+  content: '認識中...';
+  position: absolute;
+  left: 10px;
+  right: 80px;
+  top: 50%;
+  transform: translateY(-50%);
+  text-align: center;
+  font-size: 12px;
+  color: var(--fg-muted, #9ca3af);
+  pointer-events: none;
+}
