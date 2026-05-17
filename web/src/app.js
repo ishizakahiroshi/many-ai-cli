@@ -628,11 +628,15 @@ function initUsageDropdown() {
     btn.setAttribute('aria-expanded', 'true');
   });
 
-  document.addEventListener('click', (e) => {
-    if (!dropdown.hidden && !btn.contains(e.target) && !dropdown.contains(e.target)) {
-      closeDropdown();
-    }
-  });
+  // xterm 等で stopPropagation されると bubble phase の document リスナーまで届かないため、
+   // capture phase の mousedown / touchstart で拾って確実に閉じる。
+   const onOutsidePointer = (e) => {
+     if (dropdown.hidden) return;
+     if (btn.contains(e.target) || dropdown.contains(e.target)) return;
+     closeDropdown();
+   };
+   document.addEventListener('mousedown',  onOutsidePointer, true);
+   document.addEventListener('touchstart', onOutsidePointer, true);
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !dropdown.hidden) {
@@ -4180,6 +4184,16 @@ function buildSendText() {
   return parts.join('\n');
 }
 
+// Ollama route で起動したセッションでは Claude Code / Codex 側の /model コマンドが
+// spawn 時固定の env (ANTHROPIC_BASE_URL=http://localhost:11434 等) と整合しないため
+// 純正モデルに切替えるとエラーになる。行頭 /model 入力は送信前にブロックする。
+function isOllamaModelCommandBlocked(sessionId, text) {
+  const s = sessions.get(sessionId);
+  if (!s || s.route !== 'ollama') return false;
+  const trimmed = String(text || '').replace(/^[\s\x00-\x1f]+/, '');
+  return /^\/model(\b|\s|$)/i.test(trimmed);
+}
+
 function clearInput() {
   inputEl.value = '';
   inputEl.style.height = 'auto';
@@ -4187,6 +4201,11 @@ function clearInput() {
 }
 
 async function doSend(sessionId) {
+  // Ollama route セッションで /model 始まりはブロック（spawn 時固定 env と不整合のため）
+  if (isOllamaModelCommandBlocked(sessionId, buildSendText())) {
+    showToast(t('toast_model_blocked_on_ollama'));
+    return;
+  }
   lastDoSendAt = Date.now();
   const injects = await flushPendingAttach(sessionId);
   const injectPrefix = injects.join('');
@@ -4577,6 +4596,11 @@ document.getElementById('quick-model-btn').addEventListener('click', () => {
 });
 
 function sendQuickCommand(sessionId, cmd) {
+  // Ollama route セッションで /model 始まりはブロック（quick-model-btn 経由含む）
+  if (isOllamaModelCommandBlocked(sessionId, cmd)) {
+    showToast(t('toast_model_blocked_on_ollama'));
+    return;
+  }
   // doSend / sendChoice と同様に承認 UI 状態を Hub と同期する。
   // /clear 等で画面がリセットされた後も approvalVisibleCache=true が残ると、
   // セッションカードの "Pending" バッジが消えなくなる。
@@ -5183,11 +5207,8 @@ function renderSessionList() {
       c.className = 'card' + stateClass + (s.id === activeSessionId ? ' active' : '');
       c.tabIndex = isCollapsed ? -1 : 0;
       const label = stateLabel(state);
-      const lastOut = formatLastOutputAt(s.last_output_at);
       const filteredMsg = filterFirstMessage(s.last_message || s.first_message || '');
       const cwdStr = s.cwd || '';
-      const lastOutHtml = lastOut ? `<span class="card-last-output">L[${lastOut}]</span>` : '';
-      const startedAtHtml = s.started_at ? `<span class="card-started-at">T${formatStartedAt(s.started_at)}</span>` : '';
       const sessionLabel = s.label ? `<span class="card-label">[${escapeHtml(s.label)}]</span>` : '';
       const msgHtml = filteredMsg
         ? `<span class="card-msg" data-tooltip="${escapeHtml(filteredMsg)}">${escapeHtml(filteredMsg)}</span>`
@@ -5210,12 +5231,10 @@ function renderSessionList() {
       const isOllamaBackedSess = (s.route === 'ollama');
       let modelBadge = '';
       if (s.model) {
-        if (isOllamaBackedSess) {
-          const tip = `Ollama · ${s.model}`;
-          modelBadge = ` <span class="card-model card-model--ollama" data-tooltip="${escapeHtml(tip)}">${providerIconHtml('ollama')}<span class="card-model-text">${escapeHtml(s.model)}</span></span>`;
-        } else {
-          modelBadge = ` <span class="card-model">${escapeHtml(s.model)}</span>`;
-        }
+        const badgeProviderKey = isOllamaBackedSess ? 'ollama' : (s.provider || '');
+        const badgeProviderLabel = isOllamaBackedSess ? 'Ollama' : providerName;
+        const tip = badgeProviderLabel ? `${badgeProviderLabel} · ${s.model}` : s.model;
+        modelBadge = ` <span class="card-model card-model--with-icon" data-tooltip="${escapeHtml(tip)}">${providerIconHtml(badgeProviderKey)}<span class="card-model-text">${escapeHtml(s.model)}</span></span>`;
       }
       const branchStr = s.branch || '';
       const branchTip = branchStr
@@ -5226,7 +5245,7 @@ function renderSessionList() {
       const branchLabel = branchStr || ti18n('card_branch_no_git', '(no git)');
       const branchBadge = ` <span class="card-branch" role="button" tabindex="0" data-sid="${s.id}"${branchDisabledAttr} data-tooltip="${escapeHtml(branchTip)}" aria-label="${escapeHtml(branchTip)}">${escapeHtml(branchLabel)}</span>`;
       c.innerHTML =
-        `<div class="card-title-row"><b>#${s.id}</b> ${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${branchBadge}${startedAtHtml}${lastOutHtml}</div>` +
+        `<div class="card-title-row"><b>#${s.id}</b> ${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${branchBadge}</div>` +
         metaRow;
 
       const actions = document.createElement('div');
@@ -5315,6 +5334,37 @@ function renderSessionList() {
     const max = scrollEl.scrollHeight - scrollEl.clientHeight;
     scrollEl.scrollTop = Math.max(0, Math.min(prevScrollTop, max));
   }
+
+  updateMainTabStatus();
+}
+
+function updateMainTabStatus() {
+  const wrap = document.getElementById('main-tab-status');
+  if (!wrap) return;
+  const sess = sessions.get(activeSessionId);
+  if (!sess) {
+    wrap.hidden = true;
+    return;
+  }
+  const runtimeStr = sess.started_at ? formatStartedAt(sess.started_at) : '';
+  const lastStr = sess.last_output_at ? formatLastOutputAt(sess.last_output_at) : '';
+  if (!runtimeStr && !lastStr) {
+    wrap.hidden = true;
+    return;
+  }
+  const runtimeLabel = (typeof window.t === 'function') ? window.t('main_tab_runtime_label') : 'Runtime';
+  const lastLabel = (typeof window.t === 'function') ? window.t('main_tab_last_label') : 'Last';
+  const runtimeEl = wrap.querySelector('.main-tab-status-runtime');
+  const lastEl = wrap.querySelector('.main-tab-status-last');
+  if (runtimeEl) {
+    runtimeEl.textContent = runtimeStr ? `${runtimeLabel} ${runtimeStr}` : '';
+    runtimeEl.hidden = !runtimeStr;
+  }
+  if (lastEl) {
+    lastEl.textContent = lastStr ? `${lastLabel} [${lastStr}]` : '';
+    lastEl.hidden = !lastStr;
+  }
+  wrap.hidden = false;
 }
 
 // ---- タブ通知（保留バッジ） ----
@@ -5904,6 +5954,18 @@ function openLightbox(src) {
     }
   }
 
+  // dialog open 時、復元された model が Ollama route なら空にする。
+  // 残しておくとそのまま spawn 実行で env 焼き付け → /model blocked の罠を踏むため、
+  // Ollama は毎回明示的に選び直す運用に倒す（saveSpawnSettings 側でも保存しない）。
+  function clearOllamaModelDefault() {
+    const m = spawnModelInput.value.trim();
+    if (!m) return;
+    if (resolveRoute(spawnProviderEl.value, m) === 'ollama') {
+      setSpawnModelValue('');
+      clearModelSelectionState();
+    }
+  }
+
   function populateModelDatalist() {
     if (!spawnModelDatalist) return;
     spawnModelDatalist.innerHTML = '';
@@ -5952,6 +6014,7 @@ function openLightbox(src) {
         rebuildModelRouteMap(spawnModelGroups);
         populateModelDatalist();
         clearIncompatibleModelForProvider(spawnProviderEl.value);
+        clearOllamaModelDefault();
         return data;
       } finally {
         spawnModelFetchInFlight = null;
@@ -6172,6 +6235,7 @@ function openLightbox(src) {
       fetchModelGroups(false).catch(() => {});
     } else {
       populateModelDatalist();
+      clearOllamaModelDefault();
     }
   });
 
@@ -6445,10 +6509,16 @@ function openLightbox(src) {
       });
       if (res.ok) {
         saveCwdHistory(cwd);
+        // Ollama route のモデルは default として保存しない。
+        // 残すと次回 spawn dialog で Ollama モデルが pre-fill されたまま起動 →
+        // spawn 時 env (ANTHROPIC_BASE_URL=localhost:11434 等) が焼き付き、
+        // そのセッション内で /model が blocked になる罠を踏むため。
+        // Claude/Codex の純正モデル選択は引き続き sticky に残す。
+        const persistedModel = route === 'ollama' ? '' : model;
         saveSpawnSettings({
           provider,
           cwd,
-          model,
+          model: persistedModel,
           ...(provider === 'claude' ? { permission_mode: bodyObj.permission_mode } : {}),
           ...(provider === 'codex'  ? { sandbox: bodyObj.sandbox, ask_for_approval: bodyObj.ask_for_approval } : {}),
         });

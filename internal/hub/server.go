@@ -1378,6 +1378,13 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 			mode = "auto"
 		}
 		currentModel := s.getLastModel("claude")
+		// Ollama route のモデルは fallback として復活させない。
+		// 残すと model 空欄の spawn で前回の Ollama モデルが --model に注入され、
+		// route=ollama と判定されて ANTHROPIC_BASE_URL=localhost:11434 が焼き付く。
+		// その結果 Claude 単独起動のつもりが Ollama 経由になる罠を踏むため。
+		if currentModel != "" && s.resolveRoute("claude", currentModel) == RouteOllama {
+			currentModel = ""
+		}
 		if resolvedModel == "" {
 			resolvedModel = currentModel
 		}
@@ -1401,6 +1408,10 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 			mode = "auto"
 		}
 		currentModel := s.getLastModel("codex")
+		// Ollama route のモデルは fallback として復活させない（claude 側と同じ理由）。
+		if currentModel != "" && s.resolveRoute("codex", currentModel) == RouteOllama {
+			currentModel = ""
+		}
 		if resolvedModel == "" {
 			resolvedModel = currentModel
 		}
@@ -1486,7 +1497,11 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	}
 	s.logger.Debug("spawn: wrap process started",
 		"provider", body.Provider, "pid", cmd.Process.Pid, "spawn_log", spawnLogPath)
-	if resolvedModel != "" {
+	// Ollama route のモデルは last_model に保存しない。
+	// 残すと model 空欄の次回 spawn で fallback として再選択され、
+	// Claude/Codex の純正起動のつもりが Ollama 経由になる罠を踏むため。
+	// 純正 (anthropic/openai) のモデル選択は引き続き sticky に保存する。
+	if resolvedModel != "" && effectiveRoute != RouteOllama {
 		if err := s.setLastModel(body.Provider, resolvedModel); err != nil {
 			s.logger.Warn("failed to save last model", "provider", body.Provider, "error", err)
 		}

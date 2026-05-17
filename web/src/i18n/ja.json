@@ -1,5 +1,7 @@
 {
   "loading": "読み込み中...",
+  "main_tab_runtime_label": "実行",
+  "main_tab_last_label": "最終",
   "terminal_output": "ターミナル出力",
   "tool_outputs": "ツール出力",
   "clear": "クリア",
@@ -130,6 +132,7 @@
   "settings_approval_patterns_save_failed": "保存に失敗しました",
   "settings_approval_patterns_saved": "保存しました",
   "toast_approval_patterns_updated": "承認検出パターン (公式) が更新されました",
+  "toast_model_blocked_on_ollama": "Ollama で起動中のセッションでは /model を実行できません。モデルを変えたい場合は新しいセッションを起動してください。",
   "notify_sound_storage_error": "ファイルが大きすぎます（localStorage 容量超過）",
   "user_prefs_save_failed": "設定の保存に失敗しました（サーバ未到達）。変更はローカルに保持されています。",
   "user_prefs_save_failed_unauthorized": "設定の保存に失敗しました（認証トークンが古い可能性があります）。タブを開き直してください。変更はローカルに保持されています。",
@@ -159,6 +162,7 @@
   "spawn_model_placeholder": "モデル（省略可）",
   "spawn_model_clear_tooltip": "モデル指定を消去",
   "spawn_model_refresh_tooltip": "モデル一覧を再取得",
+  "spawn_model_discover_tooltip": "Ollama Cloud モデル一覧を開く（外部）",
   "spawn_model_fetch_failed": "モデル一覧の取得に失敗しました",
   "spawn_model_provider_mismatch": "選択中のプロバイダーでは使えないモデルです。",
   "spawn_permission_default": "承認モード: デフォルト",
