@@ -2,6 +2,7 @@ package hub
 
 import (
 	"encoding/json"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -53,6 +54,60 @@ func isTextFile(absPath string) bool {
 	return previewableTextBasenames[base]
 }
 
+var previewableImageExtensions = map[string]bool{
+	".png": true, ".jpg": true, ".jpeg": true, ".gif": true,
+	".webp": true, ".bmp": true, ".svg": true,
+}
+
+var previewableVideoExtensions = map[string]bool{
+	".mp4": true, ".webm": true, ".ogv": true, ".mov": true, ".m4v": true,
+}
+
+func isImageFile(absPath string) bool {
+	ext := strings.ToLower(filepath.Ext(absPath))
+	return previewableImageExtensions[ext]
+}
+
+func isMediaFile(absPath string) bool {
+	ext := strings.ToLower(filepath.Ext(absPath))
+	return previewableImageExtensions[ext] || previewableVideoExtensions[ext]
+}
+
+func (s *Server) resolveAllowedFilePath(r *http.Request) (string, error) {
+	pathParam := r.URL.Query().Get("path")
+	if pathParam == "" {
+		return "", httpError{status: http.StatusBadRequest, msg: "path parameter is required"}
+	}
+	if !filepath.IsAbs(pathParam) {
+		return "", httpError{status: http.StatusBadRequest, msg: "path must be an absolute path"}
+	}
+
+	cwd := s.hubCWD
+	if sidStr := r.URL.Query().Get("session"); sidStr != "" {
+		if sid, err := strconv.Atoi(sidStr); err == nil {
+			s.mu.Lock()
+			if ses := s.sessions[sid]; ses != nil {
+				cwd = ses.CWD
+			}
+			s.mu.Unlock()
+		}
+	}
+
+	gitRoot := findGitRoot(cwd)
+	allowed, err := isPathUnderAllowedRoots(pathParam, cwd, gitRoot)
+	if err != nil || !allowed {
+		return "", httpError{status: http.StatusForbidden, msg: "forbidden: path is outside allowed roots"}
+	}
+	return pathParam, nil
+}
+
+type httpError struct {
+	status int
+	msg    string
+}
+
+func (e httpError) Error() string { return e.msg }
+
 // handleFilesContent は GET /api/files-content を処理する。
 // ?path=<absPath>&token=<token> 必須。
 // ?session=<id> で検証スコープを指定（省略時: Hub cwd）。
@@ -66,38 +121,18 @@ func (s *Server) handleFilesContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pathParam := r.URL.Query().Get("path")
-	if pathParam == "" {
-		http.Error(w, "path parameter is required", http.StatusBadRequest)
-		return
-	}
-	if !filepath.IsAbs(pathParam) {
-		http.Error(w, "path must be an absolute path", http.StatusBadRequest)
+	pathParam, err := s.resolveAllowedFilePath(r)
+	if err != nil {
+		if he, ok := err.(httpError); ok {
+			http.Error(w, he.msg, he.status)
+			return
+		}
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	if !isTextFile(pathParam) {
 		http.Error(w, "forbidden: not a previewable text file", http.StatusForbidden)
-		return
-	}
-
-	// cwd の決定: ?session=<id> があればそのセッションの CWD を使用
-	cwd := s.hubCWD
-	if sidStr := r.URL.Query().Get("session"); sidStr != "" {
-		if sid, err := strconv.Atoi(sidStr); err == nil {
-			s.mu.Lock()
-			if ses := s.sessions[sid]; ses != nil {
-				cwd = ses.CWD
-			}
-			s.mu.Unlock()
-		}
-	}
-
-	// 許可ルートの確定
-	gitRoot := findGitRoot(cwd)
-	allowed, err := isPathUnderAllowedRoots(pathParam, cwd, gitRoot)
-	if err != nil || !allowed {
-		http.Error(w, "forbidden: path is outside allowed roots", http.StatusForbidden)
 		return
 	}
 
@@ -142,4 +177,58 @@ func (s *Server) handleFilesContent(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// handleFilesAsset は GET /api/files-asset を処理する。
+// Files タブ内のメディアプレビュー用。許可ルート内の画像/動画ファイルだけを配信する。
+func (s *Server) handleFilesAsset(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("token") != s.cfg.Token {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	pathParam, err := s.resolveAllowedFilePath(r)
+	if err != nil {
+		if he, ok := err.(httpError); ok {
+			http.Error(w, he.msg, he.status)
+			return
+		}
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if !isMediaFile(pathParam) {
+		http.Error(w, "forbidden: not a previewable media file", http.StatusForbidden)
+		return
+	}
+
+	info, err := os.Stat(pathParam)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if info.IsDir() {
+		http.Error(w, "path is a directory", http.StatusBadRequest)
+		return
+	}
+
+	f, err := os.Open(pathParam)
+	if err != nil {
+		http.Error(w, "cannot open file", http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	if ct := mime.TypeByExtension(strings.ToLower(filepath.Ext(pathParam))); ct != "" {
+		w.Header().Set("Content-Type", ct)
+	}
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	http.ServeContent(w, r, filepath.Base(pathParam), info.ModTime(), f)
 }
