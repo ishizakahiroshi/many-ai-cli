@@ -1651,7 +1651,8 @@ function chatHistoryCommitOutput(sid) {
   const stripped = stripAnsiBasic(raw);
   if (!stripped.trim()) return;
   // spinner / progress 文字のみのチャンクは無視（例: Codex が出力する "•"）
-  if (/^[\r\n•◦⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]+$/.test(stripped)) return;
+  // stripped.trim() で前後の空白・タブを除いた上で判定（"• " など末尾スペース付きを取りこぼさないため）
+  if (/^[•◦⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏\r\n]+$/.test(stripped.trim())) return;
   // 起動バナー混入防止: 何もインタラクションがない状態（メッセージ0件）の間は AI 出力を記録しない。
   // role:'user' 限定では承認ボタン回答（role:'system'）後も AI 出力が記録されないため msgs.length で判定する。
   const msgs = chatHistory.get(sid);
@@ -4971,21 +4972,19 @@ inputEl.addEventListener('keydown', (e) => {
 
   const applyToolsPosition = (isLeft) => {
     wrap.classList.toggle('tools-left', isLeft);
+    const voiceBtn = document.getElementById('voice-btn');
+    const sendBtn = document.getElementById('send-btn');
     if (isLeft) {
       wrap.append(btn, inputTools);
-      const voiceBtn = document.getElementById('voice-btn');
-      const sendBtn = document.getElementById('send-btn');
+      wrap.append(inputArea);
       if (voiceBtn) wrap.append(voiceBtn);
       if (inputClearBtn) wrap.append(inputClearBtn);
       if (sendBtn) wrap.append(sendBtn);
-      wrap.append(inputArea);
     } else {
-      const voiceBtn = document.getElementById('voice-btn');
-      const sendBtn = document.getElementById('send-btn');
       wrap.append(inputArea);
+      if (voiceBtn) wrap.append(voiceBtn);
       if (inputClearBtn) wrap.append(inputClearBtn);
       if (sendBtn) wrap.append(sendBtn);
-      if (voiceBtn) wrap.append(voiceBtn);
       wrap.append(inputTools, btn);
     }
   };
@@ -7480,8 +7479,13 @@ function openLightbox(src, opts = {}) {
   btn.dataset.tooltip = t('voice_tooltip');
 
   // [VOICE-DBG] inputEl.value の全代入を追跡（voice IIFE スコープ内のみ）
-  const _dbgInputDescriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
-    || Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+  // inputEl が textarea か input かで native descriptor の所属 prototype が異なる。
+  // INPUT の setter を TEXTAREA に call すると "Illegal invocation" を投げるため、
+  // inputEl の実コンストラクタの prototype から引く。
+  const _dbgInputProto = (inputEl instanceof HTMLTextAreaElement)
+    ? HTMLTextAreaElement.prototype
+    : HTMLInputElement.prototype;
+  const _dbgInputDescriptor = Object.getOwnPropertyDescriptor(_dbgInputProto, 'value');
   if (_dbgInputDescriptor) {
     Object.defineProperty(inputEl, 'value', {
       get() { return _dbgInputDescriptor.get.call(this); },
@@ -7951,6 +7955,10 @@ function openLightbox(src, opts = {}) {
     console.log('[VOICE-DBG] SR:soundend isCurrent=', _isCurrentRecognitionEvent(e));
     if (!_isCurrentRecognitionEvent(e)) return;
     voiceIntensityTarget = 0.08;
+    // soundend 以降は Chrome がサーバ応答待ちなので、長い猶予に更新する。
+    // speechstart で張った 4500ms のままだと「発話時間 + サーバ応答時間」が
+    // 合計 4.5 秒を超えた瞬間に watchdog が誤発火し、result 到着前に abort される。
+    armNoResultWatchdog(AUDIOSTART_NO_RESULT_WATCHDOG_MS);
   });
   _onRecognition('audioend', (e) => {
     console.log('[VOICE-DBG] SR:audioend isCurrent=', _isCurrentRecognitionEvent(e));
@@ -13830,4 +13838,3 @@ const FilesPreview = (function () {
   });
   chatPane.addEventListener('mouseleave', resetDock);
 })();
-
