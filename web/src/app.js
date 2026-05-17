@@ -4976,15 +4976,15 @@ inputEl.addEventListener('keydown', (e) => {
     const sendBtn = document.getElementById('send-btn');
     if (isLeft) {
       wrap.append(btn, inputTools);
-      wrap.append(inputArea);
       if (voiceBtn) wrap.append(voiceBtn);
-      if (inputClearBtn) wrap.append(inputClearBtn);
       if (sendBtn) wrap.append(sendBtn);
+      if (inputClearBtn) wrap.append(inputClearBtn);
+      wrap.append(inputArea);
     } else {
       wrap.append(inputArea);
-      if (voiceBtn) wrap.append(voiceBtn);
       if (inputClearBtn) wrap.append(inputClearBtn);
       if (sendBtn) wrap.append(sendBtn);
+      if (voiceBtn) wrap.append(voiceBtn);
       wrap.append(inputTools, btn);
     }
   };
@@ -7463,7 +7463,6 @@ function openLightbox(src, opts = {}) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) return;
 
-  // Chrome / Edge (Chromium) のみ表示。Safari の webkitSpeechRecognition は動作不安定のため除外。
   const isChromium = navigator.userAgentData?.brands?.some(b => /Chromium/.test(b.brand))
     ?? /Chrome\//.test(navigator.userAgent);
   if (!isChromium) return;
@@ -7478,65 +7477,16 @@ function openLightbox(src, opts = {}) {
   btn.hidden = false;
   btn.dataset.tooltip = t('voice_tooltip');
 
-  // [VOICE-DBG] inputEl.value の全代入を追跡（voice IIFE スコープ内のみ）
-  // inputEl が textarea か input かで native descriptor の所属 prototype が異なる。
-  // INPUT の setter を TEXTAREA に call すると "Illegal invocation" を投げるため、
-  // inputEl の実コンストラクタの prototype から引く。
-  const _dbgInputProto = (inputEl instanceof HTMLTextAreaElement)
-    ? HTMLTextAreaElement.prototype
-    : HTMLInputElement.prototype;
-  const _dbgInputDescriptor = Object.getOwnPropertyDescriptor(_dbgInputProto, 'value');
-  if (_dbgInputDescriptor) {
-    Object.defineProperty(inputEl, 'value', {
-      get() { return _dbgInputDescriptor.get.call(this); },
-      set(v) {
-        const caller = new Error().stack.split('\n')[2]?.trim() ?? '?';
-        console.log('[VOICE-DBG] inputEl.value SET', JSON.stringify(String(v).slice(0, 120)), '←', caller);
-        _dbgInputDescriptor.set.call(this, v);
-      },
-      configurable: true,
-    });
-    console.log('[VOICE-DBG] inputEl.value watcher installed');
+  let recognition = new SpeechRecognition();
+  function configureRecognition() {
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.maxAlternatives = 1;
+    recognition.lang = getLang();
   }
-
-  // Chrome の SpeechRecognition は 'aborted' などで内部 stuck 状態に陥ると、
-  // 同じインスタンスへの .start() / .abort() / .stop() では復旧不可能になる。
-  // 復旧手段は new SpeechRecognition() で作り直すしかないため、
-  // リスナーを配列に控えておいて再アタッチできるようにしておく。
-  let recognition;
-  const _recognitionListeners = [];
-  function _onRecognition(eventName, handler) {
-    _recognitionListeners.push([eventName, handler]);
-    recognition.addEventListener(eventName, handler);
-  }
-  function _configureRecognition(rec) {
-    rec.interimResults = true;
-    rec.continuous = false;
-    rec.maxAlternatives = 1;
-    rec.lang = getLang();
-  }
-  function _recreateRecognition() {
-    console.log('[VOICE-DBG] _recreateRecognition 開始');
-    const oldRecognition = recognition;
-    recognition = new SpeechRecognition();
-    _configureRecognition(recognition);
-    for (const [name, fn] of _recognitionListeners) {
-      recognition.addEventListener(name, fn);
-    }
-    try { oldRecognition.abort(); console.log('[VOICE-DBG] oldRecognition.abort() 完了'); } catch (e) { console.warn('[VOICE-DBG] oldRecognition.abort() 例外:', e); }
-  }
-  function _isCurrentRecognitionEvent(e) {
-    return !e || !e.currentTarget || e.currentTarget === recognition;
-  }
-  recognition = new SpeechRecognition();
-  _configureRecognition(recognition);
+  configureRecognition();
 
   let isRecording  = false;
-  let isStarting   = false;
-  // ウェイクワード IIFE への排他フラグ。
-  // btn.click 直後（hw.abort() 前）に true にして、`hw.end` で走る再起動タイマーを抑止する。
-  // forceCleanup() で false に戻す（録音失敗・正常終了・キャンセル共通の出口）。
-  let voiceIntent  = false;
   let interimStart = 0;
   let preVoiceText = '';
 
@@ -7544,49 +7494,10 @@ function openLightbox(src, opts = {}) {
   let wavePhase = 0;
   let waveformRaf = null;
 
-  // 発話強度 (0..1)。soundstart/speechstart で上がり、無音で下がる。
-  // result イベントで一時的にキックすることで「話している瞬間」が視覚的に伝わる。
   let voiceIntensity = 0;
   let voiceIntensityTarget = 0;
   let lastInterimLen = 0;
   let lastKickAt = 0;
-
-  // 自動 restart 用フラグ群
-  // 設定値 grace 秒以内に最後の result が出ていれば、Chrome の auto-end 後に recognition.start() を再呼び出しして発話を継続させる。
-  let userIntendedStop = false;   // ✓/✕/Esc/トリガーフレーズ/致命エラー等で停止 (auto-restart を抑止)
-  let restartTimer = null;
-  let isAutoRestarting = false;   // 直後の 'start' イベントが自動 restart 由来かを判定
-  let lastResultAt = 0;           // 最終 result イベント時刻 (performance.now())
-  let silenceStopTimer = null;
-
-  function getVoiceGraceSec() {
-    const raw = localStorage.getItem(STORAGE_VOICE_GRACE_KEY);
-    const v = raw == null ? DEFAULT_VOICE_GRACE_SEC : parseInt(raw, 10);
-    return Number.isFinite(v) ? Math.max(0, Math.min(5, v)) : DEFAULT_VOICE_GRACE_SEC;
-  }
-  function clearRestartTimer() {
-    if (restartTimer) {
-      clearTimeout(restartTimer);
-      restartTimer = null;
-    }
-  }
-  function clearSilenceTimer() {
-    clearTimeout(silenceStopTimer);
-    silenceStopTimer = null;
-  }
-  function resetSilenceTimer() {
-    clearSilenceTimer();
-    const grace = getVoiceGraceSec();
-    if (grace <= 0 || !isRecording || userIntendedStop) return;
-    silenceStopTimer = setTimeout(() => {
-      silenceStopTimer = null;
-      if (!isRecording || userIntendedStop) return;
-      userIntendedStop = true;
-      clearRestartTimer();
-      try { recognition.abort(); } catch (_) {}
-      scheduleForceCleanup();
-    }, grace * 1000);
-  }
 
   const BAR_COUNT = 48;
 
@@ -7622,9 +7533,6 @@ function openLightbox(src, opts = {}) {
       showToast(formatVoiceError('voice_error_detail', code), anchor);
     }
   }
-  window._showVoiceRecognitionError = showVoiceError;
-  window._voiceIntentActive = () => voiceIntent;
-
   function resizeCanvas() {
     const r = canvas.getBoundingClientRect();
     if (r.width > 0) {
@@ -7731,335 +7639,120 @@ function openLightbox(src, opts = {}) {
     document.dispatchEvent(new CustomEvent('voiceinput:statechanged'));
   }
 
-  // ---- no-result watchdog ----
-  // audiostart/soundstart/speechstart は届くのに result イベントが一向に来ない
-  // (= hw 等の別 SpeechRecognition と mic を奪い合って分配済み) 状態を検出して
-  // 自動復旧する。recreate-5 まで「次回のため hw を fresh に保つ」対策は入れたが、
-  // 今まさに stuck な録音セッションを救う経路が無く、ユーザーが ✕/✓ を押すまで
-  // 波形だけが残る状況が再発していた。
-  const NO_RESULT_WATCHDOG_MS = 4500;
-  const AUDIOSTART_NO_RESULT_WATCHDOG_MS = 8000;
-  let noResultWatchdog = null;
-  function armNoResultWatchdog(timeoutMs = NO_RESULT_WATCHDOG_MS) {
-    console.log('[VOICE-DBG] armNoResultWatchdog', timeoutMs, 'ms, inputEl.value=', JSON.stringify(inputEl.value.slice(0, 60)));
-    clearTimeout(noResultWatchdog);
-    noResultWatchdog = setTimeout(() => {
-      noResultWatchdog = null;
-      console.warn('[VOICE-DBG] watchdog 発火! timeoutMs=', timeoutMs, 'inputEl.value=', JSON.stringify(inputEl.value.slice(0, 80)));
-      console.warn('SpeechRecognition: audio active but no result for', timeoutMs, 'ms - forcing recovery');
-      userIntendedStop = true;
-      clearSilenceTimer();
-      clearRestartTimer();
-      _recreateRecognition();
-      forceCleanup();
-      showToast(t('voice_error_no_result'), btn);
-    }, timeoutMs);
-  }
-  function clearNoResultWatchdog() {
-    if (noResultWatchdog) {
-      clearTimeout(noResultWatchdog);
-      noResultWatchdog = null;
-    }
-  }
-
-  let forceCleanupTimer = null;
-  function forceCleanup() {
-    console.log('[VOICE-DBG] forceCleanup 開始 isRecording=', isRecording, 'isStarting=', isStarting, 'voiceActive=', voiceActive, 'inputEl.value=', JSON.stringify(inputEl.value.slice(0, 80)));
-    clearTimeout(forceCleanupTimer);
-    forceCleanupTimer = null;
-    userIntendedStop = true;
-    voiceIntent = false;
-    clearSilenceTimer();
-    clearRestartTimer();
-    clearBeginRetryTimer();
-    clearNoResultWatchdog();
-    isStarting = false;
+  function stopVoice() {
+    if (!isRecording) return;
     isRecording = false;
     voiceActive = false;
     setVoiceAudioActive(false);
     btn.classList.remove('recording');
     btn.dataset.tooltip = t('voice_tooltip');
+    voiceBar.classList.remove('voice-processing');
     hideVoiceBar();
     setTimeout(() => inputEl.focus(), 0);
     document.dispatchEvent(new CustomEvent('voiceinput:stopped'));
-  }
-  function scheduleForceCleanup() {
-    clearTimeout(forceCleanupTimer);
-    forceCleanupTimer = setTimeout(() => {
-      // voiceIntent も判定対象に入れる: retry 中（recognition.start が未成功）に
-      // マイクボタン 2 度押しで停止扱いになった場合、他フラグは全て false でも
-      // voiceIntent だけ true で残り、wakeword IIFE が再起動できなくなる。
-      if (isRecording || isStarting || voiceActive || voiceIntent) forceCleanup();
-    }, 1500);
-  }
-  function cancelForceCleanup() {
-    clearTimeout(forceCleanupTimer);
-    forceCleanupTimer = null;
+    // 次回のためにインスタンス作り直し（Chrome stuck 対策）
+    recognition = new SpeechRecognition();
+    configureRecognition();
+    attachHandlers();
   }
 
-  let beginRetryTimer = null;
-  function clearBeginRetryTimer() {
-    if (beginRetryTimer) {
-      clearTimeout(beginRetryTimer);
-      beginRetryTimer = null;
-    }
-  }
+  function attachHandlers() {
+    recognition.onstart = () => {
+      isRecording = true;
+      voiceActive = true;
+      setVoiceAudioActive(true);
+      btn.classList.add('recording');
+      btn.dataset.tooltip = t('voice_recording');
+      voiceIntensityTarget = 0.15;
+      showVoiceBar();
+      document.dispatchEvent(new CustomEvent('voiceinput:started'));
+    };
 
-  function beginVoiceRecognition(retryCount = 0) {
-    console.log('[VOICE-DBG] beginVoiceRecognition retryCount=', retryCount, 'inputEl.value=', JSON.stringify(inputEl.value.slice(0, 60)));
-    clearBeginRetryTimer();
-    userIntendedStop = false;
-    if (retryCount === 0) {
-      clearSilenceTimer();
-      isAutoRestarting = false;
-      // result が一度も来ていない状態を表すセンチネル。
-      // クリック直後に Chrome が end を返すケース（権限プロンプト直後・無音タイムアウト等）で
-      // 誤って auto-restart ループに入らないよう、ここでは 0 にしておき end ハンドラで判別する。
-      lastResultAt = 0;
-      preVoiceText = inputEl.value;
-      // 既存テキストの末尾が空白/改行でない場合、認識結果との連結を防ぐため
-      // 半角スペースを 1 つ挟む。preVoiceText 自体は変えずキャンセル復元に使う。
-      if (preVoiceText.length > 0 && !/\s$/.test(preVoiceText)) {
-        inputEl.value = preVoiceText + ' ';
-        updateInputClearButton();
+    recognition.onsoundstart = () => {
+      voiceIntensityTarget = 0.55;
+      lastKickAt = performance.now();
+    };
+
+    recognition.onspeechstart = () => {
+      voiceIntensityTarget = 0.9;
+      lastKickAt = performance.now();
+    };
+
+    recognition.onspeechend = () => {
+      voiceIntensityTarget = 0.25;
+    };
+
+    recognition.onaudioend = () => {
+      setVoiceAudioActive(false);
+      voiceIntensityTarget = 0.03;
+      voiceBar.classList.add('voice-processing');
+    };
+
+    recognition.onresult = (e) => {
+      voiceBar.classList.remove('voice-processing');
+      const result = e.results[e.resultIndex];
+      if (!result) return;
+      const transcript = result[0].transcript;
+      if (transcript.length > lastInterimLen) {
+        lastKickAt = performance.now();
+        voiceIntensityTarget = Math.max(voiceIntensityTarget, 0.85);
       }
-      interimStart = inputEl.value.length;
+      lastInterimLen = result.isFinal ? 0 : transcript.length;
+      inputEl.value = inputEl.value.slice(0, interimStart) + transcript;
+      if (result.isFinal) {
+        inputEl.value += ' ';
+        interimStart = inputEl.value.length;
+        const _tp = getActiveTriggerPhrase();
+        if (_tp && activeSessionId !== null && textEndsWithTriggerPhrase(buildSendText(), _tp)) {
+          recognition.stop();
+          doSend(activeSessionId);
+          return;
+        }
+      }
+      autoExpand();
+      updateSlashMenu();
+    };
+
+    recognition.onend = () => {
+      stopVoice();
+    };
+
+    recognition.onerror = (e) => {
+      if (e.error !== 'no-speech' && e.error !== 'aborted') {
+        showVoiceError(e, btn);
+      }
+      stopVoice();
+    };
+  }
+  attachHandlers();
+
+  btn.addEventListener('click', () => {
+    if (isRecording) {
+      try { recognition.abort(); } catch (_) {}
+      return;
     }
+    preVoiceText = inputEl.value;
+    if (preVoiceText.length > 0 && !/\s$/.test(preVoiceText)) {
+      inputEl.value = preVoiceText + ' ';
+      updateInputClearButton();
+    }
+    interimStart = inputEl.value.length;
     recognition.lang = getLang();
-    isStarting = true;
     try {
       recognition.start();
     } catch (err) {
-      isStarting = false;
-      // InvalidStateError: SpeechRecognition インスタンスが内部 stuck 状態
-      // （直前セッションの 'aborted' で Chrome 側の state が "started" のまま固着、等）。
-      // 過去は abort+バックオフで凌ごうとしていたが、stuck 状態の inst には abort が効かず
-      // 何度リトライしても同じエラーになる。インスタンス作り直しが唯一の復旧手段。
-      const isInvalidState = err && (err.name === 'InvalidStateError' || /already started/i.test(err.message || ''));
-      if (isInvalidState && retryCount < 2) {
-        _recreateRecognition();
-        const delay = 150;
-        beginRetryTimer = setTimeout(() => {
-          beginRetryTimer = null;
-          if (userIntendedStop || isRecording) return;
-          beginVoiceRecognition(retryCount + 1);
-        }, delay);
-        return;
-      }
-      forceCleanup();
       showVoiceError(err, btn);
-      console.error('SpeechRecognition start failed:', err);
-    }
-  }
-
-  btn.addEventListener('click', () => {
-    if (isRecording || isStarting || beginRetryTimer) {
-      // stuck 状態だと recognition.abort() が無視されて 'end' イベントも来ないので、
-      // scheduleForceCleanup (1500ms 後) ではユーザーから「ボタンが効かない」ように見える。
-      // 即時 forceCleanup + 次回起動時の保険として _recreateRecognition を呼ぶ。
-      try { recognition.abort(); } catch (_) {}
-      _recreateRecognition();
-      forceCleanup();
-      return;
-    }
-    // hw.abort() で hw.end が遅延発火しても再起動を抑止するため、abort 前にフラグを立てる
-    voiceIntent = true;
-    // 録音開始のたびに recognition を fresh インスタンスに差し替える。
-    // recreate-5 までは hw 側だけ毎回作り直していたが、recognition 側を使い回していたため
-    // Chrome 内部で半固着した状態 (=「.start() は通るが result が届かない」) を持ち越し、
-    // 「波形は出るがテキストが入らない」症状の根本原因として残っていた。
-    // hw 側と同じく毎回 new SpeechRecognition() で開始する。
-    _recreateRecognition();
-    let stopPromise = null;
-    if (typeof window._stopWakewordForVoiceInput === 'function') {
-      const ret = window._stopWakewordForVoiceInput();
-      if (ret && typeof ret.then === 'function') stopPromise = ret;
-    }
-    if (stopPromise) {
-      // hw のマイク解放後に start することで、Chrome のマイク取り合いで result イベントが
-      // 届かなくなる症状（波形は出るが入力欄にテキストが入らない）を回避する。
-      stopPromise.then(() => {
-        if (!voiceIntent) return; // 既にキャンセルされた場合はスキップ
-        beginVoiceRecognition();
-      });
-    } else {
-      beginVoiceRecognition();
     }
   });
 
   cancelBtn.addEventListener('click', () => {
     inputEl.value = preVoiceText;
     autoExpand();
-    // stuck 状態だと abort が無視されて 'end' イベントが届かず、
-    // scheduleForceCleanup の 1500ms 後の条件チェックでしか voice-bar が消えない (= UX 上「ボタン無反応」に見える)。
-    // インスタンスを作り直して stuck を持ち越さず、即時に forceCleanup で voice-bar を畳む。
     try { recognition.abort(); } catch (_) {}
-    _recreateRecognition();
-    forceCleanup();
   });
 
   confirmBtn.addEventListener('click', () => {
-    // stuck 状態では stop() も無視されるため、即時 forceCleanup で voice-bar を畳む。
-    // 入力欄には interim 結果がそのまま残るので「確定」相当の挙動になる。
     try { recognition.stop(); } catch (_) {}
-    _recreateRecognition();
-    forceCleanup();
-  });
-
-  _onRecognition('start', (e) => {
-    console.log('[VOICE-DBG] SR:start isCurrent=', _isCurrentRecognitionEvent(e));
-    if (!_isCurrentRecognitionEvent(e)) return;
-    isStarting = false;
-    isRecording = true;
-    voiceActive = true;
-    btn.classList.add('recording');
-    btn.dataset.tooltip = t('voice_recording');
-    document.dispatchEvent(new CustomEvent('voiceinput:started'));
-    // 自動 restart 時は既にバーが表示中で intensity リセットも不要
-    if (!isAutoRestarting) {
-      showVoiceBar();
-    }
-    isAutoRestarting = false;
-    resetSilenceTimer();
-  });
-
-  _onRecognition('audiostart', (e) => {
-    console.log('[VOICE-DBG] SR:audiostart isCurrent=', _isCurrentRecognitionEvent(e));
-    if (!_isCurrentRecognitionEvent(e)) return;
-    setVoiceAudioActive(true);
-    voiceIntensityTarget = 0.15;
-    // audiostart だけ来て soundstart/result が来ない Chrome stuck もあるため、
-    // 長めの保険だけ arm する。実発話が検出されたら sound/speech 側で短い watchdog に更新される。
-    armNoResultWatchdog(AUDIOSTART_NO_RESULT_WATCHDOG_MS);
-  });
-  _onRecognition('soundstart', (e) => {
-    console.log('[VOICE-DBG] SR:soundstart isCurrent=', _isCurrentRecognitionEvent(e));
-    if (!_isCurrentRecognitionEvent(e)) return;
-    voiceIntensityTarget = 0.55;
-    lastKickAt = performance.now();
-    armNoResultWatchdog();
-  });
-  _onRecognition('speechstart', (e) => {
-    console.log('[VOICE-DBG] SR:speechstart isCurrent=', _isCurrentRecognitionEvent(e));
-    if (!_isCurrentRecognitionEvent(e)) return;
-    voiceIntensityTarget = 0.9;
-    lastKickAt = performance.now();
-    armNoResultWatchdog();
-  });
-  _onRecognition('speechend', (e) => {
-    console.log('[VOICE-DBG] SR:speechend isCurrent=', _isCurrentRecognitionEvent(e));
-    if (!_isCurrentRecognitionEvent(e)) return;
-    voiceIntensityTarget = 0.25;
-  });
-  _onRecognition('soundend', (e) => {
-    console.log('[VOICE-DBG] SR:soundend isCurrent=', _isCurrentRecognitionEvent(e));
-    if (!_isCurrentRecognitionEvent(e)) return;
-    voiceIntensityTarget = 0.08;
-    // soundend 以降は Chrome がサーバ応答待ちなので、長い猶予に更新する。
-    // speechstart で張った 4500ms のままだと「発話時間 + サーバ応答時間」が
-    // 合計 4.5 秒を超えた瞬間に watchdog が誤発火し、result 到着前に abort される。
-    armNoResultWatchdog(AUDIOSTART_NO_RESULT_WATCHDOG_MS);
-  });
-  _onRecognition('audioend', (e) => {
-    console.log('[VOICE-DBG] SR:audioend isCurrent=', _isCurrentRecognitionEvent(e));
-    if (!_isCurrentRecognitionEvent(e)) return;
-    setVoiceAudioActive(false);
-    voiceIntensityTarget = 0.03;
-    clearNoResultWatchdog();
-  });
-
-  _onRecognition('result', (e) => {
-    console.log('[VOICE-DBG] SR:result isCurrent=', _isCurrentRecognitionEvent(e), 'resultIndex=', e.resultIndex);
-    if (!_isCurrentRecognitionEvent(e)) return;
-    clearNoResultWatchdog();
-    const result = e.results[e.resultIndex];
-    if (!result) return;
-    const transcript = result[0].transcript;
-    console.log('[VOICE-DBG] SR:result transcript=', JSON.stringify(transcript), 'isFinal=', result.isFinal, 'interimStart=', interimStart, 'inputEl.value(before)=', JSON.stringify(inputEl.value.slice(0, 80)));
-    // interim 結果が伸びた = 今まさに発話中、を視覚化するキック
-    if (transcript.length > lastInterimLen) {
-      lastKickAt = performance.now();
-      voiceIntensityTarget = Math.max(voiceIntensityTarget, 0.85);
-    }
-    lastInterimLen = result.isFinal ? 0 : transcript.length;
-    lastResultAt = performance.now();
-    resetSilenceTimer();
-    inputEl.value = inputEl.value.slice(0, interimStart) + transcript;
-    if (result.isFinal) {
-      inputEl.value += ' ';
-      interimStart = inputEl.value.length;
-      const _tp = getActiveTriggerPhrase();
-      if (_tp && activeSessionId !== null && textEndsWithTriggerPhrase(buildSendText(), _tp)) {
-        userIntendedStop = true;
-        clearSilenceTimer();
-        clearRestartTimer();
-        recognition.stop();
-        doSend(activeSessionId);
-        return;
-      }
-    }
-    autoExpand();
-    updateSlashMenu();
-  });
-
-  _onRecognition('end', (e) => {
-    console.log('[VOICE-DBG] SR:end isCurrent=', _isCurrentRecognitionEvent(e), 'userIntendedStop=', userIntendedStop, 'isRecording=', isRecording, 'lastResultAt=', lastResultAt, 'inputEl.value=', JSON.stringify(inputEl.value.slice(0, 80)));
-    if (!_isCurrentRecognitionEvent(e)) return;
-    cancelForceCleanup();
-    clearNoResultWatchdog();
-    isStarting = false;
-    setVoiceAudioActive(false);
-    const grace = getVoiceGraceSec();
-    const hasResult = lastResultAt > 0;
-    const sinceLastResult = hasResult ? (performance.now() - lastResultAt) / 1000 : Infinity;
-    console.log('[VOICE-DBG] SR:end grace=', grace, 'hasResult=', hasResult, 'sinceLastResult=', sinceLastResult.toFixed(2));
-    if (!userIntendedStop && grace > 0 && isRecording && hasResult && sinceLastResult < grace) {
-      // 直近の発話から grace 秒以内なので、短い間隔で recognition を再開して継続させる
-      clearRestartTimer();
-      restartTimer = setTimeout(() => {
-        restartTimer = null;
-        if (!isRecording || userIntendedStop) return;
-        isAutoRestarting = true;
-        try {
-          recognition.start();
-        } catch (err) {
-          isAutoRestarting = false;
-          console.warn('SpeechRecognition auto-restart failed:', err);
-          forceCleanup();
-        }
-      }, 120);
-      return;
-    }
-    forceCleanup();
-  });
-
-  _onRecognition('error', (e) => {
-    console.log('[VOICE-DBG] SR:error isCurrent=', _isCurrentRecognitionEvent(e), 'error=', e.error, 'message=', e.message || '');
-    if (!_isCurrentRecognitionEvent(e)) return;
-    console.warn('SpeechRecognition error:', e.error, e.message || '');
-    clearNoResultWatchdog();
-    isStarting = false;
-    setVoiceAudioActive(false);
-    // 'aborted' は Chrome が 'end' を返さないことがあるため、その場で終了扱いにする。
-    // 同時にインスタンスを作り直し、次回起動へ stuck 状態を持ち越さない。
-    if (e.error === 'aborted') {
-      userIntendedStop = true;
-      clearSilenceTimer();
-      clearRestartTimer();
-      _recreateRecognition();
-      forceCleanup();
-      return;
-    }
-    // 致命系エラーは auto-restart 抑止 (繰り返してもまた失敗するため)。
-    // 'no-speech' はソフトエラーで、'end' イベントが判定する。
-    const fatalErrors = ['not-allowed', 'permission-denied', 'audio-capture', 'network', 'service-not-allowed', 'language-not-supported'];
-    if (fatalErrors.includes(e.error)) {
-      userIntendedStop = true;
-      clearSilenceTimer();
-      clearRestartTimer();
-    }
-    if (e.error !== 'no-speech' && e.error !== 'aborted') showVoiceError(e, btn);
-    // クリーンアップは 'end' イベントに任せる (auto-restart 判定の単一窓口にするため)
   });
 
   document.addEventListener('keydown', (e) => {
@@ -8073,6 +7766,7 @@ function openLightbox(src, opts = {}) {
       btn.click();
     }
   });
+
   window.addEventListener('resize', () => {
     if (isRecording) resizeCanvas();
   });
@@ -10526,7 +10220,7 @@ if (typeof window !== 'undefined') {
       { key: 'all',      label: ti18n('chat_filter_all', 'すべて') },
       { key: 'user',     label: '📝 ' + ti18n('chat_filter_user', '入力') },
       { key: 'ai',       label: '🤖 ' + ti18n('chat_filter_ai', 'AI出力') },
-      { key: 'image',    label: '🖼 ' + ti18n('chat_filter_image', '画像') },
+      { key: 'attach',   label: '📎 ' + ti18n('chat_filter_attach', '添付') },
       { key: 'approval', label: '⚠ ' + ti18n('chat_filter_approval', '承認') },
     ];
     for (const c of chips) {
@@ -10556,6 +10250,8 @@ if (typeof window !== 'undefined') {
             : _activeFilters.has(x.dataset.kind));
         });
         applyFilterAndSearch();
+        const tl = chatTimeline();
+        if (tl) tl.scrollTop = 0;
       });
       bar.appendChild(b);
     }
@@ -10617,7 +10313,7 @@ if (typeof window !== 'undefined') {
     const role = el.dataset.role || '';
     const kind = el.dataset.kind || '';
     if (role === 'system' || kind === 'approval') return 'approval';
-    if (kind === 'attach') return 'image';
+    if (kind === 'attach') return 'attach';
     if (role === 'user') return 'user';
     if (role === 'ai') return 'ai';
     return 'other';
@@ -10801,8 +10497,7 @@ if (typeof window !== 'undefined') {
   function setupMinimapMagnification(mm) {
     if (_mmMagCleanup) { _mmMagCleanup(); _mmMagCleanup = null; }
     if (!mm) return;
-    const BASE = 4;
-    const MAX_ADD = 26;
+    const MAX_ADD = 4;
     const SIGMA = 36;
     function onMove(e) {
       const rect = mm.getBoundingClientRect();
@@ -10813,15 +10508,13 @@ if (typeof window !== 'undefined') {
         const center = tkRect.top - rect.top + tkRect.height / 2;
         const dist = Math.abs(mouseY - center);
         const extra = MAX_ADD * Math.exp(-(dist * dist) / (2 * SIGMA * SIGMA));
-        tk.style.height = (BASE + extra).toFixed(1) + 'px';
-        tk.style.flex = 'none';
+        tk.style.flexGrow = (1 + extra).toFixed(2);
       }
     }
     function onLeave() {
       const ticks = mm.querySelectorAll('.mm-tick');
       for (const tk of ticks) {
-        tk.style.height = '';
-        tk.style.flex = '';
+        tk.style.flexGrow = '';
       }
     }
     mm.addEventListener('mousemove', onMove);

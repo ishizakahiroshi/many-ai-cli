@@ -470,9 +470,11 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 			s.lastUICols, s.lastUIRows = m.Cols, m.Rows
 			s.mu.Unlock()
 		}
-		s.addUI(conn)
+		historyItems := s.addUIWithHistory(conn)
 		s.sendSnapshot(conn)
-		s.sendPTYHistory(conn)
+		for _, item := range historyItems {
+			_ = websocket.JSON.Send(conn, item)
+		}
 		ctx, cancel := context.WithCancel(context.Background())
 		go s.pingLoop(ctx, conn)
 		s.uiLoop(conn)
@@ -1113,13 +1115,29 @@ func (s *Server) refreshBranch(id int, cwd string) {
 	s.broadcast(msg)
 }
 
-func (s *Server) addUI(c *websocket.Conn) {
+// addUIWithHistory atomically registers c in the broadcast set and captures a
+// snapshot of every session's ptyBuf at the same instant, then returns those
+// snapshots as ready-to-send messages. Callers must send the returned messages
+// to c after this call; any PTY data arriving after the lock is released is
+// delivered via broadcast, so the snapshot and live stream do not overlap.
+func (s *Server) addUIWithHistory(c *websocket.Conn) []proto.Message {
+	var items []proto.Message
 	s.mu.Lock()
 	s.uis[c] = struct{}{}
-	count := len(s.uis)
 	s.stopIdleTimerLocked()
+	for id, ses := range s.sessions {
+		if len(ses.ptyBuf) > 0 {
+			buf := make([]byte, len(ses.ptyBuf))
+			copy(buf, ses.ptyBuf)
+			items = append(items, proto.Message{Type: "pty_data", SessionID: id, Data: buf})
+			ses.lastCols = 0
+			ses.lastRows = 0
+		}
+	}
+	count := len(s.uis)
 	s.mu.Unlock()
 	s.logger.Info("UI connected", "ui_count", count)
+	return items
 }
 
 func (s *Server) removeUI(c *websocket.Conn) {
@@ -1190,30 +1208,6 @@ func (s *Server) sendSnapshot(c *websocket.Conn) {
 	_ = websocket.JSON.Send(c, map[string]any{"type": "snapshot", "sessions": json.RawMessage(b)})
 }
 
-// sendPTYHistory は UI 再接続時に各セッションの PTY バッファをリプレイする。
-// 履歴を送るセッションは lastCols/lastRows をリセットし、UI が続けて送る
-// pty_resize がスキップされないようにする（TUI 全画面再描画を促すため）。
-func (s *Server) sendPTYHistory(c *websocket.Conn) {
-	s.mu.Lock()
-	type item struct {
-		id  int
-		buf []byte
-	}
-	var items []item
-	for id, ses := range s.sessions {
-		if len(ses.ptyBuf) > 0 {
-			buf := make([]byte, len(ses.ptyBuf))
-			copy(buf, ses.ptyBuf)
-			items = append(items, item{id: id, buf: buf})
-			ses.lastCols = 0
-			ses.lastRows = 0
-		}
-	}
-	s.mu.Unlock()
-	for _, it := range items {
-		_ = websocket.JSON.Send(c, proto.Message{Type: "pty_data", SessionID: it.id, Data: it.buf})
-	}
-}
 
 func (s *Server) broadcast(m any) {
 	s.mu.Lock()
