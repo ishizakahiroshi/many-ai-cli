@@ -203,6 +203,7 @@
   "scroll_to_top": "↑ 最上部へ",
   "scroll_to_bottom_tooltip": "最下部へスクロール（自動スクロール再開）",
   "scroll_to_bottom": "↓ 最下部へ",
+  "input_clear_tooltip": "入力をクリア",
   "quick_clear_tooltip": "/clear を送信",
   "quick_model_tooltip": "/model を入力欄にセット",
   "attach_clear_tooltip": "サムネイルをクリア",

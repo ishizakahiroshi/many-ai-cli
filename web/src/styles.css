@@ -110,6 +110,9 @@
 /* ============================================================
    ベーススタイル
    ============================================================ */
+/* hidden 属性が display:flex 等に上書きされないよう明示的に非表示にする */
+[hidden] { display: none !important; }
+
 *, *::before, *::after { box-sizing: border-box; }
 html, body { overflow: hidden; }
 body { font-family: "Segoe UI", sans-serif; margin: 0; background: var(--bg); color: var(--text); }
@@ -2845,6 +2848,26 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 @keyframes wakeword-pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.6; }
+}
+
+/* 入力クリアボタン: テキストがあるときだけ visible にする */
+#input-clear-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  flex-shrink: 0;
+  transition: opacity 0.15s, background 0.12s, color 0.12s;
+}
+#input-clear-btn.has-text {
+  opacity: 1;
+  pointer-events: auto;
+}
+#input-clear-btn:hover {
+  background: rgba(239,68,68,0.15);
+  color: #f87171;
 }
 
 /* ウェイクワードボタン（入力バー内・旧来） */

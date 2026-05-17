@@ -4114,6 +4114,7 @@ function renderToolOutputs(id) {
 // ---- 入力バー ----
 
 const inputEl = document.getElementById('input');
+const inputClearBtn = document.getElementById('input-clear-btn');
 const pasteChipsEl = document.getElementById('paste-chips');
 
 // ペースト折りたたみ状態
@@ -4125,7 +4126,12 @@ function autoExpand() {
   const shouldStickToBottom = !!(t && (t.autoScroll || isTerminalAtBottom(t)));
   inputEl.style.height = 'auto';
   inputEl.style.height = Math.min(inputEl.scrollHeight, Math.floor(window.innerHeight * 0.3)) + 'px';
+  updateInputClearButton();
   refitActiveTerminalAfterLayout(shouldStickToBottom);
+}
+
+function updateInputClearButton() {
+  inputClearBtn?.classList.toggle('has-text', inputEl.value.length > 0);
 }
 
 function renderPasteChips() {
@@ -4197,6 +4203,7 @@ function isOllamaModelCommandBlocked(sessionId, text) {
 function clearInput() {
   inputEl.value = '';
   inputEl.style.height = 'auto';
+  updateInputClearButton();
   clearAllPastes();
 }
 
@@ -4257,6 +4264,7 @@ function saveInputStateFor(id) {
   });
   inputEl.value = '';
   inputEl.style.height = 'auto';
+  updateInputClearButton();
   pastedTexts.length = 0;
   pendingAttachFiles.length = 0;
 }
@@ -4384,6 +4392,7 @@ function scrollSlashIntoView() {
 
 inputEl.addEventListener('input', () => {
   autoExpand(); updateSlashMenu();
+  updateInputClearButton();
   if (!isComposing) {
     const _tp = getActiveTriggerPhrase();
     if (_tp && activeSessionId !== null && textEndsWithTriggerPhrase(buildSendText(), _tp)) {
@@ -4495,6 +4504,7 @@ inputEl.addEventListener('keydown', (e) => {
     if (inputEl.value !== '' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown')) return;
     sendText(activeSessionId, specialKeys[e.key]);
     inputEl.value = ''; // TUI 操作中の誤入力を流さないようにクリア
+    updateInputClearButton();
     e.preventDefault(); return;
   }
   if (e.ctrlKey && e.key === 'c') {
@@ -4547,12 +4557,14 @@ inputEl.addEventListener('keydown', (e) => {
       const voiceBtn = document.getElementById('voice-btn');
       const sendBtn = document.getElementById('send-btn');
       if (voiceBtn) wrap.append(voiceBtn);
+      if (inputClearBtn) wrap.append(inputClearBtn);
       if (sendBtn) wrap.append(sendBtn);
       wrap.append(inputArea);
     } else {
       const voiceBtn = document.getElementById('voice-btn');
       const sendBtn = document.getElementById('send-btn');
       wrap.append(inputArea);
+      if (inputClearBtn) wrap.append(inputClearBtn);
       if (sendBtn) wrap.append(sendBtn);
       if (voiceBtn) wrap.append(voiceBtn);
       wrap.append(inputTools, btn);
@@ -4566,6 +4578,13 @@ inputEl.addEventListener('keydown', (e) => {
     localStorage.setItem(STORAGE_TOOLS_LEFT_KEY, isLeft ? '1' : '0');
   });
 })();
+
+inputClearBtn?.addEventListener('click', () => {
+  inputEl.value = '';
+  autoExpand();
+  updateInputClearButton();
+  inputEl.focus();
+});
 
 document.getElementById('send-btn').addEventListener('mousedown', () => {
   // クリック時に IME が確定中の場合、compositionend 後に送信するよう予約
@@ -7259,6 +7278,7 @@ function openLightbox(src) {
       // 半角スペースを 1 つ挟む。preVoiceText 自体は変えずキャンセル復元に使う。
       if (preVoiceText.length > 0 && !/\s$/.test(preVoiceText)) {
         inputEl.value = preVoiceText + ' ';
+        updateInputClearButton();
       }
       interimStart = inputEl.value.length;
     }
