@@ -1176,6 +1176,10 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   color: var(--muted);
   border: 1px dashed var(--line-soft);
   opacity: 0.7;
+  flex: 0 0 28px;
+  min-width: 28px;
+  align-self: flex-end;
+  line-height: 1;
 }
 #tools-flip-btn:hover { opacity: 1; color: var(--text); }
 
