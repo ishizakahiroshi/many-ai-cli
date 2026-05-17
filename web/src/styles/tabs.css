@@ -1,0 +1,212 @@
+/* Extracted from styles.css. Imported by /styles.css. */
+
+/* Unified tabs and display area */
+/* ---- v2 Files tab system ---- */
+
+/* project-group files button */
+.project-group-files-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.4;
+  opacity: 0.7;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+}
+.project-group-files-btn:hover { opacity: 1; color: var(--accent-text); border-color: var(--accent); }
+
+/* C2: 統合タブバー (unified-tab-bar) — 1段固定, 5 タブ + utility */
+#unified-tab-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+  height: 36px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--line);
+  padding: 0 8px;
+  overflow-x: auto;
+  min-height: 0;
+}
+/* D11: セッション情報チップ (左端) */
+.session-info-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  margin-right: 4px;
+  height: 100%;
+  border-right: 1px solid var(--line);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.session-info-chip[hidden] { display: none !important; }
+.session-info-chip .sid {
+  color: var(--text);
+  font-weight: 700;
+  font-family: "Cascadia Code", Consolas, monospace;
+}
+/* 表示モード系タブ */
+.view-tab {
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  position: relative;
+  font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.view-tab.active {
+  color: var(--accent-text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.view-tab:hover:not(.active) { color: var(--text); }
+.view-tab .badge {
+  display: inline-flex;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent-text);
+  font-size: 0.62rem;
+  font-weight: 700;
+  align-items: center;
+  justify-content: center;
+}
+/* Files/Git lazy (未取得) — dim 表示 */
+.view-tab.lazy { color: color-mix(in srgb, var(--muted) 60%, transparent); }
+.view-tab.lazy::after {
+  content: "·";
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  color: color-mix(in srgb, var(--muted) 60%, transparent);
+  font-size: 16px;
+  line-height: 1;
+}
+.view-tab.lazy.loaded::after { content: ""; }
+.view-tab.lazy:hover { color: var(--muted); }
+.view-tab.lazy.active { color: var(--accent-text); }
+/* C5: 表示モード固定 (soft lock) — 🔒 を疑似要素で付与 */
+.view-tab.locked-mode::before {
+  content: "🔒";
+  font-size: 0.7rem;
+  margin-right: 4px;
+  opacity: 0.85;
+}
+.view-tab-right {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+#unified-tab-bar .icon-btn {
+  height: 26px;
+  align-self: center;
+  padding: 0 9px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+}
+#unified-tab-bar .icon-btn:hover { background: var(--bg-elev2, var(--bg-deep)); color: var(--text); }
+#chat-pane .chat-filter-bar .icon-btn {
+  height: 26px;
+  align-self: center;
+  padding: 0 9px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+}
+#chat-pane .chat-filter-bar .icon-btn:hover { background: var(--bg-elev2, var(--bg-deep)); color: var(--text); }
+
+/* C2: display-area — モード切替で grid を変える */
+#display-area {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+#display-area.mode-terminal { grid-template-columns: minmax(0, 1fr); }
+#display-area.mode-chat     { grid-template-columns: minmax(0, 1fr); }
+#display-area.mode-split    { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+#display-area.mode-files    { grid-template-columns: minmax(0, 1fr); }
+#display-area.mode-git      { grid-template-columns: minmax(0, 1fr); }
+
+/* ペイン表示制御 (active モードに対応する pane だけ display) */
+#display-area > #terminal-wrapper,
+#display-area > #chat-pane,
+#display-area > #files-pane,
+#display-area > #git-pane { display: none; min-width: 0; min-height: 0; overflow: hidden; }
+#display-area.mode-terminal > #terminal-wrapper { display: flex; }
+#display-area.mode-chat     > #chat-pane        { display: flex; height: 100%; }
+#display-area.mode-split    > #terminal-wrapper { display: flex; }
+#display-area.mode-split    > #chat-pane        { display: flex; height: 100%; }
+#display-area.mode-files    > #files-pane       { display: flex; }
+#display-area.mode-git      > #files-pane        { display: flex; }
+#display-area.mode-split > #terminal-wrapper { border-right: 1px solid var(--line); }
+
+#chat-pane { flex-direction: column; background: var(--bg-deep); position: relative; }
+.chat-pane-empty {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  color: var(--muted-2);
+  font-size: 0.85rem;
+}
+
+#files-pane, #git-pane {
+  flex-direction: column;
+  background: var(--bg-deep);
+}
+/* files-pane 内の files-tab-contents は flex で広げる */
+#files-pane > #files-tab-contents {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* main tab bar (旧) — FilesTabManager の状態保持用に DOM は残るが視覚的には非表示 */
+#main-tab-bar { display: none !important; }
+#main-tab-bar[hidden] { display: none !important; }
+#main-tab-list {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 0 4px;
+  flex: 1;
+  min-width: 0;
+}
+#main-tab-list[hidden] { display: none !important; }
+/* D12: #main-tab-status は統合バー内に移植。位置スタイルだけ調整 */
