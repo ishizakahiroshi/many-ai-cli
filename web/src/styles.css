@@ -281,6 +281,7 @@ header {
   text-decoration: none;
   transition: background 0.1s, color 0.1s;
 }
+.usage-dropdown-item[hidden] { display: none !important; }
 .usage-dropdown-item:hover {
   background: var(--bg-hover, rgba(255,255,255,0.06));
   color: var(--text);
@@ -416,6 +417,7 @@ header {
   gap: 6px 8px;
   padding: 7px 14px;
 }
+.settings-row[hidden] { display: none !important; }
 .settings-label { font-size: 0.85rem; color: var(--text); white-space: nowrap; flex-shrink: 0; }
 .settings-row-actions {
   display: flex;
@@ -680,10 +682,10 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 .card-started-at { flex-shrink: 0; font-size: 0.72rem; color: var(--muted-2); margin-left: 3px; }
 .card-provider-icon { flex-shrink: 0; vertical-align: middle; margin-right: 2px; }
 .card-model { flex-shrink: 1; font-size: 0.72rem; color: var(--muted-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; margin-left: 2px; }
-/* Ollama バックエンドを使うセッションのモデルバッジ。○ + モデル名、幅が狭いと ellipsis 省略しつつ ○ は常時表示。 */
-.card-model.card-model--ollama { display: inline-flex; align-items: center; gap: 3px; cursor: default; min-width: 0; }
-.card-model.card-model--ollama svg.card-provider-icon { width: 10px; height: 10px; flex-shrink: 0; margin-right: 0; }
-.card-model.card-model--ollama .card-model-text { min-width: 0; flex-shrink: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* モデルバッジ（Claude/Codex/Ollama 共通）。アイコン + モデル名。幅が狭いと ellipsis 省略しつつアイコンは常時表示。ホバーで provider · model のツールチップ。 */
+.card-model.card-model--with-icon { display: inline-flex; align-items: center; gap: 3px; cursor: default; min-width: 0; }
+.card-model.card-model--with-icon svg.card-provider-icon { width: 10px; height: 10px; flex-shrink: 0; margin-right: 0; }
+.card-model.card-model--with-icon .card-model-text { min-width: 0; flex-shrink: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-branch { flex-shrink: 1; min-width: 0; max-width: 34%; color: var(--green-text); background: color-mix(in srgb, var(--green-bg) 35%, transparent); border: 1px solid color-mix(in srgb, var(--green-text) 30%, transparent); border-radius: 4px; padding: 1px 5px; font-size: 0.68rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 2px; cursor: pointer; user-select: none; transition: background 0.15s, transform 0.05s, color 0.15s; font-family: Consolas, monospace; }
 .card-branch:hover { background: color-mix(in srgb, var(--green-text) 22%, transparent); color: var(--text); }
 .card-branch:active { transform: scale(0.96); }
@@ -1822,6 +1824,7 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 .spawn-model-row > .spawn-input { flex: 1; }
 #spawn-model-refresh.is-loading { opacity: 0.5; pointer-events: none; }
 .spawn-model-clear { min-width: 26px; padding-left: 0; padding-right: 0; }
+.spawn-model-discover { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
 .spawn-btn-browse { flex-shrink: 0; background: transparent; border: 1px solid var(--line); color: var(--fg); border-radius: 4px; padding: 3px 7px; cursor: pointer; font-size: 0.85rem; line-height: 1; }
 .spawn-btn-browse:hover { background: var(--bg-elev2); }
 .spawn-btn-browse:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -1911,7 +1914,22 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   align-items: stretch;
   gap: 0;
   padding: 0 4px;
+  flex: 1;
+  min-width: 0;
 }
+#main-tab-status {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  font-size: 0.78rem;
+  color: var(--muted-2);
+  white-space: nowrap;
+}
+#main-tab-status[hidden] { display: none !important; }
+.main-tab-status-runtime,
+.main-tab-status-last { white-space: nowrap; }
 .main-tab {
   display: flex;
   align-items: center;

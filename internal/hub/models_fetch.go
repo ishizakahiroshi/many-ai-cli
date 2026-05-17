@@ -13,9 +13,11 @@ import (
 )
 
 // Model は /api/models response の 1 件分。
+// RemoteHost は内部判定用（cloud alias か否か）で、JSON 出力には含めない。
 type Model struct {
-	ID    string `json:"id"`
-	Label string `json:"label,omitempty"`
+	ID         string `json:"id"`
+	Label      string `json:"label,omitempty"`
+	RemoteHost string `json:"-"`
 }
 
 // ModelGroup は同じ route / provider に属するモデル群。
@@ -39,17 +41,18 @@ type ModelsResponse struct {
 }
 
 const (
-	ollamaCloudCacheTTL = 24 * time.Hour
 	ollamaLocalCacheTTL = 60 * time.Second
-	ollamaCloudURL      = "https://ollama.com/api/tags"
 	ollamaLocalURL      = "http://localhost:11434/api/tags"
 )
 
 // ollamaTagsResponse は `/api/tags` の最低限のレスポンス構造。
+// remote_host が非空のエントリは cloud にプロキシされる pull 済み alias
+// （例: `gemma4:31b-cloud` の `remote_host` は `https://ollama.com:443`）。
 type ollamaTagsResponse struct {
 	Models []struct {
-		Name  string `json:"name"`
-		Model string `json:"model"`
+		Name       string `json:"name"`
+		Model      string `json:"model"`
+		RemoteHost string `json:"remote_host"`
 	} `json:"models"`
 }
 
@@ -59,10 +62,11 @@ type ollamaTagsCacheEntry struct {
 	err       error
 }
 
-// modelsCache は Ollama Cloud / Local の `/api/tags` 取得結果を保持する。
+// modelsCache は Ollama Local `/api/tags` 取得結果を保持する。
+// cloud 側のカタログは外部 fetch せず、ローカル daemon の remote_host で判定するため
+// 専用のキャッシュは持たない。
 type modelsCache struct {
 	mu    sync.Mutex
-	cloud *ollamaTagsCacheEntry
 	local *ollamaTagsCacheEntry
 }
 
@@ -100,29 +104,9 @@ func fetchOllamaTags(url string, timeout time.Duration) ([]Model, error) {
 			continue
 		}
 		seen[id] = true
-		out = append(out, Model{ID: id, Label: id})
+		out = append(out, Model{ID: id, Label: id, RemoteHost: strings.TrimSpace(m.RemoteHost)})
 	}
 	return out, nil
-}
-
-// getOllamaCloud はキャッシュ済みの cloud モデル一覧を返す。期限切れ or force 時に refresh。
-func (c *modelsCache) getOllamaCloud(force bool) (models []Model, fetchedAt time.Time, err error) {
-	c.mu.Lock()
-	entry := c.cloud
-	c.mu.Unlock()
-	if !force && entry != nil && time.Since(entry.fetchedAt) < ollamaCloudCacheTTL {
-		return entry.models, entry.fetchedAt, entry.err
-	}
-	models, err = fetchOllamaTags(ollamaCloudURL, 15*time.Second)
-	newEntry := &ollamaTagsCacheEntry{
-		models:    models,
-		fetchedAt: time.Now(),
-		err:       err,
-	}
-	c.mu.Lock()
-	c.cloud = newEntry
-	c.mu.Unlock()
-	return models, newEntry.fetchedAt, err
 }
 
 // getOllamaLocal はキャッシュ済みのローカル daemon モデル一覧を返す。
@@ -145,16 +129,22 @@ func (c *modelsCache) getOllamaLocal(force bool) (models []Model, fetchedAt time
 	return models, newEntry.fetchedAt, err
 }
 
-// invalidate は cloud / local 両キャッシュを削除する。
+// invalidate はローカルキャッシュを削除する。
 func (c *modelsCache) invalidate() {
 	c.mu.Lock()
-	c.cloud = nil
 	c.local = nil
 	c.mu.Unlock()
 }
 
-// buildModelsResponse は Anthropic / OpenAI（GitHub fetch + 24h キャッシュ）/ Ollama Cloud / Local を
-// 集約して /api/models のレスポンス body を作る。
+// buildModelsResponse は Anthropic / OpenAI（GitHub fetch + 24h キャッシュ）と
+// ローカル daemon の `/api/tags` を集約して /api/models のレスポンス body を作る。
+//
+// Ollama 系の Cloud / Local 分離は **ローカル daemon が返す `remote_host` フィールド**で判定する:
+//   - `remote_host` 非空 → cloud にプロキシされる pull 済み alias → `[Ollama Cloud]` グループ
+//   - `remote_host` 空    → 真のローカルモデル                     → `[Ollama Local]` グループ
+//
+// この設計により「daemon が知らない catalog 名」が選択肢に出ない（= 選んだら必ず呼べる）。
+// 新規 cloud モデルの発見は UI 側の外部リンク（https://ollama.com/search?c=cloud）に任せる。
 func buildModelsResponse(cache *modelsCache, remote *modelsRemoteCache, remoteSource string, localConfig []config.LocalModel, force bool) ModelsResponse {
 	if force && remote != nil {
 		remote.invalidate()
@@ -168,7 +158,6 @@ func buildModelsResponse(cache *modelsCache, remote *modelsRemoteCache, remoteSo
 		Sources: map[string]string{
 			"anthropic":           remoteSource,
 			"openai":              remoteSource,
-			"ollama_cloud":        ollamaCloudURL,
 			"ollama_local":        ollamaLocalURL,
 			"local_models_config": "~/.any-ai-cli/config.yaml#local_models",
 		},
@@ -191,26 +180,33 @@ func buildModelsResponse(cache *modelsCache, remote *modelsRemoteCache, remoteSo
 		Models:   append([]Model{}, defaults.OpenAI...),
 	})
 
-	// Ollama Cloud
-	cloudModels, cloudAt, cloudErr := cache.getOllamaCloud(force)
-	if cloudErr != nil {
-		resp.Warnings = append(resp.Warnings, "ollama_cloud_fetch_failed")
-	} else if len(cloudModels) > 0 {
+	// Ollama Local daemon の /api/tags を 1 度だけ取得し、remote_host で 2 分割する
+	localAll, localAt, localErr := cache.getOllamaLocal(force)
+	var cloudFromDaemon, trulyLocal []Model
+	for _, m := range localAll {
+		if m.RemoteHost != "" {
+			cloudFromDaemon = append(cloudFromDaemon, m)
+		} else {
+			trulyLocal = append(trulyLocal, m)
+		}
+	}
+
+	// Ollama Cloud（pull 済み alias のみ）
+	if len(cloudFromDaemon) > 0 {
 		resp.Groups = append(resp.Groups, ModelGroup{
 			Label:    "Ollama Cloud",
 			Provider: "",
 			Route:    RouteOllama,
-			Models:   cloudModels,
+			Models:   cloudFromDaemon,
 		})
-		if cloudAt.After(newest) {
-			newest = cloudAt
+		if localAt.After(newest) {
+			newest = localAt
 		}
 	}
 
-	// Ollama Local（daemon + config.yaml の merge）
-	localModels, localAt, localErr := cache.getOllamaLocal(force)
-	merged := mergeLocalModels(localModels, localConfig)
-	if localErr != nil && len(merged) == 0 {
+	// Ollama Local（真のローカル + config.yaml `local_models:` を merge）
+	merged := mergeLocalModels(trulyLocal, localConfig)
+	if localErr != nil && len(merged) == 0 && len(cloudFromDaemon) == 0 {
 		// daemon オフライン + config 由来も無い場合のみ warnings + 省略
 		resp.Warnings = append(resp.Warnings, "ollama_daemon_unreachable")
 	} else if len(merged) > 0 {
@@ -265,18 +261,15 @@ func mergeLocalModels(daemon []Model, configList []config.LocalModel) []Model {
 
 // collectOllamaModelIDs は cache から既知の Ollama Cloud / Local の ID 集合を作る。
 // spawn API での route 推定に使う。force=false で stale でも返す（spawn ホットパスを止めない）。
+//
+// ローカル daemon が返す全モデル（cloud alias 含む）を見るので、`gemma4:31b-cloud` のような
+// pull 済みの cloud alias 名も Ollama route と判定される。
 func collectOllamaModelIDs(cache *modelsCache, localConfig []config.LocalModel) map[string]bool {
 	out := map[string]bool{}
 	if cache != nil {
 		cache.mu.Lock()
-		cloud := cache.cloud
 		local := cache.local
 		cache.mu.Unlock()
-		if cloud != nil {
-			for _, m := range cloud.models {
-				out[m.ID] = true
-			}
-		}
 		if local != nil {
 			for _, m := range local.models {
 				out[m.ID] = true

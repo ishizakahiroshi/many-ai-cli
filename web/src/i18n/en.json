@@ -1,5 +1,7 @@
 {
   "loading": "Loading...",
+  "main_tab_runtime_label": "Runtime",
+  "main_tab_last_label": "Last",
   "terminal_output": "Terminal Output",
   "tool_outputs": "Tool Outputs",
   "clear": "Clear",
@@ -130,6 +132,7 @@
   "settings_approval_patterns_save_failed": "Save failed",
   "settings_approval_patterns_saved": "Saved",
   "toast_approval_patterns_updated": "Approval patterns (official) updated",
+  "toast_model_blocked_on_ollama": "/model is disabled for sessions launched on Ollama. Start a new session to switch models.",
   "notify_sound_storage_error": "File too large (localStorage quota exceeded)",
   "user_prefs_save_failed": "Settings save failed (server unreachable). Changes saved locally.",
   "user_prefs_save_failed_unauthorized": "Settings save failed (stale auth token). Reopen this tab. Changes saved locally.",
@@ -159,6 +162,7 @@
   "spawn_model_placeholder": "Model (optional)",
   "spawn_model_clear_tooltip": "Clear model",
   "spawn_model_refresh_tooltip": "Refresh model list",
+  "spawn_model_discover_tooltip": "Browse Ollama Cloud models (external)",
   "spawn_model_fetch_failed": "Failed to fetch model list",
   "spawn_model_provider_mismatch": "This model is not available for the selected provider.",
   "spawn_permission_default": "Approval mode: Default",
