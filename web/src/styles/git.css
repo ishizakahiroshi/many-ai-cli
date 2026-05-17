@@ -22,6 +22,10 @@
   font-size: 0.78rem;
 }
 .git-tab-placeholder-body {
+  padding: 7px 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
 
 /* Git graph view */
 .git-graph-root {

@@ -6349,7 +6349,6 @@ if (typeof window !== 'undefined') {
       collBtn.textContent = bubble.classList.contains('collapsed') ? '+' : '–';
     });
     acts.appendChild(collBtn);
-    bubble.appendChild(acts);
 
     // raw リンク (📄 raw)
     const rawWrap = document.createElement('div');
@@ -6361,7 +6360,13 @@ if (typeof window !== 'undefined') {
       e.stopPropagation();
       openRawModal(msg);
     });
-    bw.appendChild(rawWrap);
+
+    // actions と raw リンクを同じ行に並べる footer
+    const footer = document.createElement('div');
+    footer.className = 'bubble-footer';
+    footer.appendChild(acts);
+    footer.appendChild(rawWrap);
+    bw.appendChild(footer);
   };
 
   // raw モーダル

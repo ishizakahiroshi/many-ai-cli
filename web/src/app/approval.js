@@ -4,6 +4,11 @@
 // Pure parsing lives in approval-parser.js. This file orchestrates terminal
 // tails/buffers and delegates cache/DOM/Hub side effects to approval-ui.js.
 
+function isUserSpecifiesText(text) {
+  const re = globalThis.approvalParser && globalThis.approvalParser.userSpecifiesRe;
+  return !!(re && re.test(String(text || '')));
+}
+
 function getSequentialChoiceState(id, prompts) {
   if (!prompts || prompts.length < 2) return null;
   const sig = sequentialChoiceSig(prompts);
@@ -257,7 +262,7 @@ function trackApprovalHintFromChunk(id, bytes) {
 
   markHubChoiceDefault(options, contextLines);
   const lastOpt = options[options.length - 1];
-  const hasUserSpecifies = (lastOpt && userSpecifiesRe.test(lastOpt.label)) || contextLines.some(line => userSpecifiesRe.test(line));
+  const hasUserSpecifies = (lastOpt && isUserSpecifiesText(lastOpt.label)) || contextLines.some(line => isUserSpecifiesText(line));
   // Ink UI は常に選択中の項目に > / ❯ カーソルを付ける（isCurrent: true）。
   // カーソル付き選択肢がない場合は AI の通常応答の箇条書きとみなして無視する。
   const hasCursorOption = options.some(o => o.isCurrent);
@@ -528,7 +533,7 @@ function detectApproval(id) {
   const contextLines = approvalContextLines(contextSourceLines, contextCluster);
   markHubChoiceDefault(options, contextLines);
   const lastOpt = options[options.length - 1];
-  const hasUserSpecifies = (lastOpt && userSpecifiesRe.test(lastOpt.label)) || contextLines.some(line => userSpecifiesRe.test(line));
+  const hasUserSpecifies = (lastOpt && isUserSpecifiesText(lastOpt.label)) || contextLines.some(line => isUserSpecifiesText(line));
   const hasCursorOption = options.some(o => o.isCurrent);
   const approvalLabelRe = /\b(yes|no|allow|deny|proceed|abort|don[''']t ask|cancel)\b/i;
   const hasApprovalLikeLabel = options.some((opt) => approvalLabelRe.test(opt.label));
