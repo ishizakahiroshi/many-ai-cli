@@ -5,10 +5,12 @@
     {"id": "claude-haiku-4-5",         "label": "Claude Haiku 4.5"},
     {"id": "claude-sonnet-4-5",        "label": "Claude Sonnet 4.5"},
     {"id": "claude-3-7-sonnet-latest", "label": "Claude 3.7 Sonnet"},
-    {"id": "claude-3-5-sonnet-latest", "label": "Claude 3.5 Sonnet"},
-    {"id": "claude-3-5-haiku-latest",  "label": "Claude 3.5 Haiku"}
+    {"id": "claude-3-5-sonnet-latest", "label": "Claude 3.5 Sonnet"}
   ],
   "openai": [
-    {"id": "gpt-5.5", "label": "GPT-5.5"}
+    {"id": "gpt-5.5",      "label": "GPT-5.5"},
+    {"id": "gpt-5.4",      "label": "GPT-5.4"},
+    {"id": "gpt-5.4-mini", "label": "GPT-5.4 mini"},
+    {"id": "gpt-5.4-nano", "label": "GPT-5.4 nano"}
   ]
 }

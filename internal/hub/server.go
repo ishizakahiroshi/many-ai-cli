@@ -84,9 +84,9 @@ type session struct {
 	lastRows int
 
 	// JSON 外: セッション履歴（JSONL）
-	LogPath   string
-	JSONLPath string
-	History   *sessionlog.Writer
+	LogPath   string             `json:"log_path,omitempty"`
+	JSONLPath string             `json:"jsonl_path,omitempty"`
+	History   *sessionlog.Writer `json:"-"`
 }
 
 func (s *session) idleStateName() string {
@@ -190,16 +190,16 @@ var reCodexModelChanged = regexp.MustCompile(`Model changed to ([^\r\n]+)`)
 func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version string) (*Server, error) {
 	hubCWD, _ := os.Getwd()
 	s := &Server{
-		cfg:           cfg,
-		logger:        logger,
-		devMode:       devMode,
-		hubCWD:        hubCWD,
-		version:       version,
-		parentShell:   wrapper.DetectShell(),
-		sessions:      map[int]*session{},
-		wrappers:      map[int]*websocket.Conn{},
-		uis:           map[*websocket.Conn]struct{}{},
-		slashCmdCache:  map[string]*slashCmdCacheEntry{},
+		cfg:               cfg,
+		logger:            logger,
+		devMode:           devMode,
+		hubCWD:            hubCWD,
+		version:           version,
+		parentShell:       wrapper.DetectShell(),
+		sessions:          map[int]*session{},
+		wrappers:          map[int]*websocket.Conn{},
+		uis:               map[*websocket.Conn]struct{}{},
+		slashCmdCache:     map[string]*slashCmdCacheEntry{},
 		usageLinkCache:    &usageLinkCache{},
 		modelsCache:       &modelsCache{},
 		modelsRemoteCache: &modelsRemoteCache{},
@@ -253,6 +253,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/open-dir", s.handleOpenDir)
 	mux.HandleFunc("/api/idle-timeout", s.handleIdleTimeout)
 	mux.HandleFunc("/api/reconnect-grace", s.handleReconnectGrace)
+	mux.HandleFunc("/api/encoding-check", s.handleEncodingCheck)
 	mux.HandleFunc("/api/approval/status", s.handleApprovalStatus)
 	mux.HandleFunc("/api/approval/enable", s.handleApprovalEnable)
 	mux.HandleFunc("/api/approval/disable", s.handleApprovalDisable)
@@ -545,7 +546,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	s.mu.Unlock()
 	_ = websocket.JSON.Send(conn, proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath})
 	s.logger.Info("session registered", "id", id, "provider", reg.Provider, "cwd", reg.CWD, "pid", reg.PID)
-	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Branch: branch, Label: reg.Label, Model: reg.Model, Route: regRoute, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt})
+	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Branch: branch, Label: reg.Label, Model: reg.Model, Route: regRoute, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath})
 	s.writeHistory(id, map[string]any{
 		"ts":         startedAt.Format(time.RFC3339),
 		"type":       "session_start",
@@ -654,7 +655,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		_ = oldHistory.Close()
 	}
 	_ = websocket.JSON.Send(conn, proto.Message{Type: "reattach_ack", SessionID: acceptedID})
-	s.broadcast(proto.Message{Type: "session_update", SessionID: acceptedID, Provider: req.Provider, Display: req.Display, CWD: req.CWD, Branch: branch, Label: req.Label, Model: req.Model, Route: reqRoute, Shell: req.Shell, State: "running", LastOutputAt: lastOutputAt, StartedAt: startedAtText})
+	s.broadcast(proto.Message{Type: "session_update", SessionID: acceptedID, Provider: req.Provider, Display: req.Display, CWD: req.CWD, Branch: branch, Label: req.Label, Model: req.Model, Route: reqRoute, Shell: req.Shell, State: "running", LastOutputAt: lastOutputAt, StartedAt: startedAtText, LogPath: rawLogPath, JSONLPath: jsonlPath})
 	s.writeHistory(acceptedID, map[string]any{
 		"ts":             now.Format(time.RFC3339),
 		"type":           "session_reattach",
@@ -904,8 +905,10 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 			wc := s.wrappers[m.SessionID]
 			_, exists := s.sessions[m.SessionID]
 			var historyToClose *sessionlog.Writer
+			var jsonlPathForTranscript string
 			if exists {
 				historyToClose = s.sessions[m.SessionID].History
+				jsonlPathForTranscript = s.sessions[m.SessionID].JSONLPath
 				s.sessions[m.SessionID].History = nil
 				delete(s.sessions, m.SessionID)
 				delete(s.wrappers, m.SessionID)
@@ -926,6 +929,12 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 			}
 			if historyToClose != nil {
 				_ = historyToClose.Close()
+			}
+			if jsonlPathForTranscript != "" {
+				transcriptPath := sessionlog.TranscriptPath(jsonlPathForTranscript)
+				if err := sessionlog.WriteTranscriptFile(jsonlPathForTranscript, transcriptPath); err != nil {
+					s.logger.Warn("transcript generation failed", "session_id", m.SessionID, "path", transcriptPath, "err", err)
+				}
 			}
 			s.broadcast(proto.Message{Type: "session_removed", SessionID: m.SessionID})
 		case "attach_request":
@@ -1325,6 +1334,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		Sandbox        string `json:"sandbox"`
 		AskForApproval string `json:"ask_for_approval"`
 		Route          string `json:"route"`
+		Utf8Session    bool   `json:"utf8_session"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
@@ -1448,6 +1458,9 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	// route=ollama のときに --oss を渡さないと OpenAI 純正へ向かい認証エラーで落ちる。
 	if body.Provider == "codex" && effectiveRoute == RouteOllama {
 		wrapArgs = append(wrapArgs, "--codex-oss")
+	}
+	if body.Utf8Session {
+		wrapArgs = append(wrapArgs, "--utf8")
 	}
 	cmd := exec.Command(exe, wrapArgs...)
 	cmd.Dir = cwd
@@ -1666,7 +1679,12 @@ func (s *Server) handleAttach(w http.ResponseWriter, r *http.Request) {
 		"provider":   provider,
 	})
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "inject": inject})
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":         true,
+		"inject":     inject,
+		"saved_path": savedPath,
+		"filename":   header.Filename,
+	})
 }
 
 func (s *Server) handlePickDirectory(w http.ResponseWriter, r *http.Request) {

@@ -108,6 +108,16 @@
               <option value="small" data-i18n="fontsize_small">Small</option>
             </select>
           </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_locked_mode_label">表示モードを固定</span>
+            <select id="locked-mode-select" class="settings-select">
+              <option value="" data-i18n="settings_locked_mode_none">自由切替</option>
+              <option value="terminal" data-i18n="settings_locked_mode_terminal">ターミナル</option>
+              <option value="chat" data-i18n="settings_locked_mode_chat">チャット履歴</option>
+              <option value="split" data-i18n="settings_locked_mode_split">分割</option>
+            </select>
+          </div>
+          <div class="settings-note" data-i18n="settings_locked_mode_desc">新規セッション/リロード時に選択したモードで開きます。途中で切替えることは可能です。</div>
         </div>
       </details>
       <details class="settings-section" data-section="session">
@@ -148,7 +158,7 @@
         </div>
       </details>
       <details class="settings-section" data-section="approval-hub">
-        <summary class="settings-section-title"><span data-i18n="settings_approval_hub">Hub 承認ボタン機能</span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_approval_hub">承認ボタン機能</span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_approval_toggle">承認ボタン</span>
@@ -165,13 +175,13 @@
             </label>
           </div>
           <div class="settings-note" data-i18n="settings_approval_auto_switch_desc">承認待ちが出たセッションへ自動で移動します。現在のセッションが承認中の場合は完了まで移動しません。</div>
-          <div class="settings-note" data-i18n="settings_approval_hub_desc">AI の承認を Hub UI のボタンで操作できます。</div>
+          <div class="settings-note" data-i18n="settings_approval_hub_desc">AI の承認を画面のボタンで操作できます。</div>
         </div>
       </details>
       <details class="settings-section" data-section="approval-patterns">
         <summary class="settings-section-title"><span data-i18n="settings_approval_patterns_title">承認検出パターン</span></summary>
         <div class="settings-section-body">
-          <div class="settings-note" data-i18n="settings_approval_patterns_desc">Hub UI が承認 UI を検出するための文言。CLI のメッセージが変わったり、誤検出する場合に調整できます。</div>
+          <div class="settings-note" data-i18n="settings_approval_patterns_desc">承認 UI を検出するための文言。CLI のメッセージが変わったり、誤検出する場合に調整できます。</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_approval_patterns_provider">対象</span>
             <select id="approval-patterns-provider" class="settings-select">
@@ -463,14 +473,25 @@
     </aside>
     <div id="sidebar-resizer"></div>
     <div id="terminal-column">
-    <!-- v2: Main area tab bar -->
-    <div id="main-tab-bar">
-      <div id="main-tab-list"></div>
-      <div id="main-tab-status" hidden>
+    <!-- C2: 統合タブバー (1段固定, 5タブ + utility) -->
+    <div id="unified-tab-bar">
+      <!-- D11: セッション情報チップ (セッションカードと同じ provider chip + model + status) -->
+      <span class="session-info-chip" id="session-info-chip" hidden></span>
+      <button class="view-tab active" data-tab="terminal" type="button"><span>🖥</span> <span data-i18n="tab_terminal">ターミナル</span></button>
+      <button class="view-tab" data-tab="chat" type="button"><span>💬</span> <span data-i18n="tab_chat">チャット履歴</span> <span class="badge" id="chat-count-badge">0</span></button>
+      <button class="view-tab" data-tab="split" type="button"><span>⇿</span> <span data-i18n="tab_split">分割</span></button>
+      <button class="view-tab lazy" data-tab="files" type="button" data-i18n-tooltip="tab_files_lazy_tooltip"><span>📁</span> <span data-i18n="tab_files">Files</span></button>
+      <button class="view-tab lazy" data-tab="git" type="button" data-i18n-tooltip="tab_git_lazy_tooltip"><span>⎇</span> <span data-i18n="tab_git">Git</span></button>
+      <!-- D12: 既存 #main-tab-status を統合バー右側へ移植 -->
+      <span id="main-tab-status" class="tab-status" hidden>
         <span class="main-tab-status-runtime"></span>
         <span class="main-tab-status-last"></span>
-      </div>
+      </span>
+      <!-- 旧 #main-tab-bar / #main-tab-list: FilesTabManager の DOM 状態保持用に残置(非表示) -->
+      <div id="main-tab-bar" hidden><div id="main-tab-list"></div></div>
     </div>
+    <!-- C2: display-area (タブ切替で中身が入れ替わる範囲) -->
+    <div id="display-area" class="mode-terminal">
     <div id="terminal-wrapper">
       <div id="terminal-area-wrapper">
         <div id="terminal-area"></div>
@@ -488,9 +509,23 @@
         </div>
         <div id="tool-outputs-list"></div>
       </div>
-      <div id="action-bar"></div>
-      <div id="multi-question-banner" hidden data-i18n="multi_question_banner"></div>
-      <div id="input-bar-outer">
+    </div>
+    <!-- C3: チャット履歴ペイン (C4 で filter-bar の中身が埋まる) -->
+    <div id="chat-pane">
+      <div class="chat-filter-bar" hidden><!-- C4 で実装 --></div>
+      <div class="chat-timeline" data-sid=""></div>
+      <div class="chat-pane-empty" data-i18n="tab_chat_empty">履歴はまだありません</div>
+    </div>
+    <!-- v2: Files tab content areas (lazy fetch on first click) -->
+    <div id="files-pane">
+      <div id="files-tab-contents"></div>
+    </div>
+    <div id="git-pane"></div>
+    </div><!-- /#display-area -->
+    <!-- D7/D8: 共有 action-bar (display-area 外, input の上) -->
+    <div id="action-bar"></div>
+    <div id="multi-question-banner" hidden data-i18n="multi_question_banner"></div>
+    <div id="input-bar-outer">
         <div id="slash-menu" hidden></div>
         <div id="slash-picker" hidden>
           <div class="slash-picker-header">
@@ -541,9 +576,6 @@
           <button id="attach-clear-btn" data-i18n-tooltip="attach_clear_tooltip" hidden>✕</button>
         </div>
       </div>
-    </div>
-    <!-- v2: Files tab content areas (hidden by default, shown when a Files tab is active) -->
-    <div id="files-tab-contents"></div>
     </div><!-- /#terminal-column -->
   </div>
   <div id="about-panel" hidden>

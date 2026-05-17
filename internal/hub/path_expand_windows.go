@@ -21,22 +21,28 @@ import (
 //  3. `PNPM_HOME` に限り `%LOCALAPPDATA%\pnpm` を fallback（ディレクトリ実在チェック付き）
 //
 // いずれでも展開できなかったエントリは元のまま温存する（破壊しない）。
-// Machine PATH の再読込はしない（副作用が大きいため USER PATH 由来の
-// `%VAR%` 再展開のみに限定）。
 //
-// 仕上げに HKCU\Environment\Path を REG_EXPAND_SZ 生値で読み、
-// プロセス起動時に `%VAR%` 未解決で **完全に脱落** したエントリも救済する。
-// 一部の Windows ビルドでは未解決の `%VAR%` がプロセス env の PATH 文字列に
-// literal として残らないため、プロセス PATH を見ているだけでは復元できない
-// ケースが現実に存在する (例: pnpm setup 後に PNPM_HOME 未 export な GUI 親
-// から立ち上げた Hub)。
+// 仕上げに以下を順に append する（既に PATH に乗っているものは大小無視で重複排除）:
+//   - HKCU\Environment\Path をレジストリ生値で読み、プロセス env から脱落した
+//     エントリを救済する（`%VAR%` 未解決で完全脱落するケースに加え、空エントリ
+//     以降が打ち切られたケースも救う）
+//   - HKLM\...\Session Manager\Environment\Path も同様に救済
+//   - provider CLI の典型インストール先（pnpm / npm / scoop / .local/bin）を
+//     実在チェック付きで append
+//
+// これにより「ターミナルで claude が動くのに Hub UI からの spawn だけ
+// `exec.LookPath` が失敗する」状況を、ユーザー設定変更なしで救う。
 func expandPathEntries(entries []string) []string {
 	cache := map[string]string{}
 	out := make([]string, 0, len(entries))
 	seen := map[string]bool{}
 	add := func(p string) {
+		k := pathKey(p)
+		if k == "" || seen[k] {
+			return
+		}
 		out = append(out, p)
-		seen[strings.ToLower(p)] = true
+		seen[k] = true
 	}
 	for _, raw := range entries {
 		if !strings.Contains(raw, "%") {
@@ -50,36 +56,47 @@ func expandPathEntries(entries []string) []string {
 		}
 		add(expanded)
 	}
-	for _, recovered := range recoverDroppedUserPathEntries(seen, cache) {
+	for _, recovered := range readRegistryPathEntries(readUserEnvFromRegistry, cache) {
 		add(recovered)
+	}
+	for _, recovered := range readRegistryPathEntries(readMachineEnvFromRegistry, cache) {
+		add(recovered)
+	}
+	for _, fb := range providerFallbackDirs(cache) {
+		add(fb)
 	}
 	return out
 }
 
-// recoverDroppedUserPathEntries は HKCU\Environment\Path を生で読み、
-// `%VAR%` を含むエントリのうち展開できて、かつまだ PATH に無いものを返す。
-// `%VAR%` を含まないエントリは Windows が起動時に既に PATH に乗せている
-// 想定なので追加しない (重複防止)。読み取り失敗時は空。
-func recoverDroppedUserPathEntries(seen map[string]bool, cache map[string]string) []string {
-	raw := readUserEnvFromRegistry("Path")
+// pathKey は PATH エントリの重複検出用キーを返す。大文字小文字無視＋末尾区切り
+// 文字無視で、`C:\Foo\` と `c:\foo` を同一とみなす。
+func pathKey(p string) string {
+	trimmed := strings.TrimRight(p, `\/`)
+	return strings.ToLower(trimmed)
+}
+
+// readRegistryPathEntries はレジストリ Path 値を読み、エントリごとに分割して
+// `%VAR%` を展開した結果を返す。読み取り失敗・未解決エントリは黙ってスキップ。
+// 重複排除や seen 管理は呼び出し側 (add クロージャ) に任せる。
+func readRegistryPathEntries(read func(string) string, cache map[string]string) []string {
+	raw := read("Path")
 	if raw == "" {
 		return nil
 	}
 	var out []string
 	for _, entry := range strings.Split(raw, string(os.PathListSeparator)) {
 		entry = strings.TrimSpace(entry)
-		if entry == "" || !strings.Contains(entry, "%") {
+		if entry == "" {
 			continue
 		}
-		expanded, ok := expandWinVarRefs(entry, cache)
-		if !ok {
-			continue
+		if strings.Contains(entry, "%") {
+			expanded, ok := expandWinVarRefs(entry, cache)
+			if !ok {
+				continue
+			}
+			entry = expanded
 		}
-		if seen[strings.ToLower(expanded)] {
-			continue
-		}
-		out = append(out, expanded)
-		seen[strings.ToLower(expanded)] = true
+		out = append(out, entry)
 	}
 	return out
 }
@@ -163,4 +180,59 @@ func defaultReadUserEnvFromRegistry(name string) string {
 		return ""
 	}
 	return v
+}
+
+// readMachineEnvFromRegistry はテストから差し替え可能。
+// HKLM\System\CurrentControlSet\Control\Session Manager\Environment は
+// Machine 全体の環境変数（システム PATH 等）を保持する標準ロケーション。
+var readMachineEnvFromRegistry = defaultReadMachineEnvFromRegistry
+
+func defaultReadMachineEnvFromRegistry(name string) string {
+	k, err := registry.OpenKey(
+		registry.LOCAL_MACHINE,
+		`System\CurrentControlSet\Control\Session Manager\Environment`,
+		registry.QUERY_VALUE,
+	)
+	if err != nil {
+		return ""
+	}
+	defer k.Close()
+	v, _, err := k.GetStringValue(name)
+	if err != nil {
+		return ""
+	}
+	return v
+}
+
+// providerFallbackDirs はテストから差し替え可能。provider CLI の典型
+// インストール先のうち、実在するものを返す（PATH に追加する候補）。
+var providerFallbackDirs = defaultProviderFallbackDirs
+
+// defaultProviderFallbackDirs は、claude / codex 等の Node 系 CLI が
+// インストールされがちな bin ディレクトリのうち、実在するものを列挙する。
+// レジストリ / プロセス PATH のどちらにも乗っていないケースを救うための
+// 最終 fallback。
+func defaultProviderFallbackDirs(cache map[string]string) []string {
+	var candidates []string
+	if la, ok := resolveWinEnvVar("LOCALAPPDATA", cache); ok {
+		candidates = append(candidates, filepath.Join(la, "pnpm"))
+	}
+	if ap, ok := resolveWinEnvVar("APPDATA", cache); ok {
+		candidates = append(candidates, filepath.Join(ap, "npm"))
+	}
+	if up, ok := resolveWinEnvVar("USERPROFILE", cache); ok {
+		candidates = append(candidates,
+			filepath.Join(up, "scoop", "shims"),
+			filepath.Join(up, ".local", "bin"),
+		)
+	}
+	var out []string
+	for _, c := range candidates {
+		st, err := os.Stat(c)
+		if err != nil || !st.IsDir() {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
 }
