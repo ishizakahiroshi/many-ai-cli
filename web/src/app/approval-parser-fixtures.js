@@ -28,6 +28,8 @@ function detectFallback(provider, lines, matcher) {
 
 function run() {
   const triggerMatcher = (_provider, line) => /requires approval|would you like to run/i.test(String(line || ''));
+  assert.equal(parser.userSpecifiesRe.test('User specifies'), true);
+  assert.equal(parser.userSpecifiesRe.test('その他指定'), true);
 
   const hub = parser.extractHubMarkerApproval([
     '[ANY-AI-CLI]',

@@ -371,6 +371,7 @@
     markHubChoiceDefault,
     matchNativeApprovalTrigger,
     hasApprovalLikeLabel,
+    userSpecifiesRe,
   };
 
   root.approvalParser = api;
