@@ -267,6 +267,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/approval-patterns/", s.handleApprovalPatternsItem)
 	mux.HandleFunc("/api/files-list", s.handleFilesList)
 	mux.HandleFunc("/api/files-content", s.handleFilesContent)
+	mux.HandleFunc("/api/files-asset", s.handleFilesAsset)
 	mux.HandleFunc("/api/files-roots", s.handleFilesRoots)
 	mux.HandleFunc("/api/files-move", s.handleFilesMove)
 	mux.HandleFunc("/api/files-rename", s.handleFilesRename)

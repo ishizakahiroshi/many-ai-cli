@@ -1,4 +1,4 @@
-console.log('[any-ai-cli] app.js build=2026-05-17-wheel-position-routing');
+console.log('[any-ai-cli] app.js build=2026-05-17-voice-debug-log');
 
 // ---- トースト通知 ----
 let _toastTimer = null;
@@ -1650,6 +1650,8 @@ function chatHistoryCommitOutput(sid) {
   // 純粋な制御文字のみのチャンク（プロンプト再描画等）は無視
   const stripped = stripAnsiBasic(raw);
   if (!stripped.trim()) return;
+  // spinner / progress 文字のみのチャンクは無視（例: Codex が出力する "•"）
+  if (/^[\r\n•◦⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]+$/.test(stripped)) return;
   // 起動バナー混入防止: 何もインタラクションがない状態（メッセージ0件）の間は AI 出力を記録しない。
   // role:'user' 限定では承認ボタン回答（role:'system'）後も AI 出力が記録されないため msgs.length で判定する。
   const msgs = chatHistory.get(sid);
@@ -2021,6 +2023,14 @@ function isImagePath(filePath) {
   return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(String(filePath || '').trim());
 }
 
+function isVideoPath(filePath) {
+  return /\.(mp4|webm|ogv|mov|m4v)$/i.test(String(filePath || '').trim());
+}
+
+function isMediaPath(filePath) {
+  return isImagePath(filePath) || isVideoPath(filePath);
+}
+
 function isTextPath(filePath) {
   const path = String(filePath || '').trim();
   if (/(^|[\\/])(Dockerfile|Makefile|README|LICENSE|CHANGELOG|NOTICE)$/i.test(path)) return true;
@@ -2029,10 +2039,18 @@ function isTextPath(filePath) {
 
 // ANY-AI-CLI 内蔵プレビューが扱える拡張子（バックエンド /api/files-content の許可リストと一致させること）
 function isAnyAiCliPreviewable(filePath) {
-  return isTextPath(filePath);
+  return isTextPath(filePath) || isMediaPath(filePath);
+}
+
+function getFilesAssetUrl(absPath, sessionId) {
+  const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
+  return `/api/files-asset?path=${encodeURIComponent(absPath)}&token=${encodeURIComponent(token)}${sessionQs}`;
 }
 
 function getPathOpenItem(filePath) {
+  if (isVideoPath(filePath)) {
+    return { icon: '🎞️', key: 'link_open_file', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error') };
+  }
   if (isImagePath(filePath)) {
     return { icon: '🖼️', key: 'link_open_image', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error') };
   }
@@ -6332,19 +6350,30 @@ function addFileChip(file, onRemove) {
   return wrapper;
 }
 
-function openLightbox(src) {
+function openLightbox(src, opts = {}) {
   const overlay = document.createElement('div');
   overlay.id = 'image-lightbox';
-  const img = document.createElement('img');
-  img.src = src;
-  overlay.appendChild(img);
+  const isVideo = opts.type === 'video';
+  const media = document.createElement(isVideo ? 'video' : 'img');
+  if (isVideo) {
+    media.controls = true;
+    media.autoplay = true;
+    media.playsInline = true;
+  }
+  media.src = src;
+  overlay.appendChild(media);
   document.body.appendChild(overlay);
   const close = () => {
+    if (isVideo) {
+      try { media.pause(); } catch (_) {}
+    }
     overlay.remove();
     document.removeEventListener('keydown', onKey);
   };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
-  overlay.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
   document.addEventListener('keydown', onKey);
 }
 
@@ -7450,6 +7479,22 @@ function openLightbox(src) {
   btn.hidden = false;
   btn.dataset.tooltip = t('voice_tooltip');
 
+  // [VOICE-DBG] inputEl.value の全代入を追跡（voice IIFE スコープ内のみ）
+  const _dbgInputDescriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
+    || Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+  if (_dbgInputDescriptor) {
+    Object.defineProperty(inputEl, 'value', {
+      get() { return _dbgInputDescriptor.get.call(this); },
+      set(v) {
+        const caller = new Error().stack.split('\n')[2]?.trim() ?? '?';
+        console.log('[VOICE-DBG] inputEl.value SET', JSON.stringify(String(v).slice(0, 120)), '←', caller);
+        _dbgInputDescriptor.set.call(this, v);
+      },
+      configurable: true,
+    });
+    console.log('[VOICE-DBG] inputEl.value watcher installed');
+  }
+
   // Chrome の SpeechRecognition は 'aborted' などで内部 stuck 状態に陥ると、
   // 同じインスタンスへの .start() / .abort() / .stop() では復旧不可能になる。
   // 復旧手段は new SpeechRecognition() で作り直すしかないため、
@@ -7467,13 +7512,14 @@ function openLightbox(src) {
     rec.lang = getLang();
   }
   function _recreateRecognition() {
+    console.log('[VOICE-DBG] _recreateRecognition 開始');
     const oldRecognition = recognition;
     recognition = new SpeechRecognition();
     _configureRecognition(recognition);
     for (const [name, fn] of _recognitionListeners) {
       recognition.addEventListener(name, fn);
     }
-    try { oldRecognition.abort(); } catch (_) {}
+    try { oldRecognition.abort(); console.log('[VOICE-DBG] oldRecognition.abort() 完了'); } catch (e) { console.warn('[VOICE-DBG] oldRecognition.abort() 例外:', e); }
   }
   function _isCurrentRecognitionEvent(e) {
     return !e || !e.currentTarget || e.currentTarget === recognition;
@@ -7691,9 +7737,11 @@ function openLightbox(src) {
   const AUDIOSTART_NO_RESULT_WATCHDOG_MS = 8000;
   let noResultWatchdog = null;
   function armNoResultWatchdog(timeoutMs = NO_RESULT_WATCHDOG_MS) {
+    console.log('[VOICE-DBG] armNoResultWatchdog', timeoutMs, 'ms, inputEl.value=', JSON.stringify(inputEl.value.slice(0, 60)));
     clearTimeout(noResultWatchdog);
     noResultWatchdog = setTimeout(() => {
       noResultWatchdog = null;
+      console.warn('[VOICE-DBG] watchdog 発火! timeoutMs=', timeoutMs, 'inputEl.value=', JSON.stringify(inputEl.value.slice(0, 80)));
       console.warn('SpeechRecognition: audio active but no result for', timeoutMs, 'ms - forcing recovery');
       userIntendedStop = true;
       clearSilenceTimer();
@@ -7701,7 +7749,7 @@ function openLightbox(src) {
       _recreateRecognition();
       forceCleanup();
       showToast(t('voice_error_no_result'), btn);
-    }, NO_RESULT_WATCHDOG_MS);
+    }, timeoutMs);
   }
   function clearNoResultWatchdog() {
     if (noResultWatchdog) {
@@ -7712,6 +7760,7 @@ function openLightbox(src) {
 
   let forceCleanupTimer = null;
   function forceCleanup() {
+    console.log('[VOICE-DBG] forceCleanup 開始 isRecording=', isRecording, 'isStarting=', isStarting, 'voiceActive=', voiceActive, 'inputEl.value=', JSON.stringify(inputEl.value.slice(0, 80)));
     clearTimeout(forceCleanupTimer);
     forceCleanupTimer = null;
     userIntendedStop = true;
@@ -7753,6 +7802,7 @@ function openLightbox(src) {
   }
 
   function beginVoiceRecognition(retryCount = 0) {
+    console.log('[VOICE-DBG] beginVoiceRecognition retryCount=', retryCount, 'inputEl.value=', JSON.stringify(inputEl.value.slice(0, 60)));
     clearBeginRetryTimer();
     userIntendedStop = false;
     if (retryCount === 0) {
@@ -7853,6 +7903,7 @@ function openLightbox(src) {
   });
 
   _onRecognition('start', (e) => {
+    console.log('[VOICE-DBG] SR:start isCurrent=', _isCurrentRecognitionEvent(e));
     if (!_isCurrentRecognitionEvent(e)) return;
     isStarting = false;
     isRecording = true;
@@ -7869,6 +7920,7 @@ function openLightbox(src) {
   });
 
   _onRecognition('audiostart', (e) => {
+    console.log('[VOICE-DBG] SR:audiostart isCurrent=', _isCurrentRecognitionEvent(e));
     if (!_isCurrentRecognitionEvent(e)) return;
     setVoiceAudioActive(true);
     voiceIntensityTarget = 0.15;
@@ -7877,26 +7929,31 @@ function openLightbox(src) {
     armNoResultWatchdog(AUDIOSTART_NO_RESULT_WATCHDOG_MS);
   });
   _onRecognition('soundstart', (e) => {
+    console.log('[VOICE-DBG] SR:soundstart isCurrent=', _isCurrentRecognitionEvent(e));
     if (!_isCurrentRecognitionEvent(e)) return;
     voiceIntensityTarget = 0.55;
     lastKickAt = performance.now();
     armNoResultWatchdog();
   });
   _onRecognition('speechstart', (e) => {
+    console.log('[VOICE-DBG] SR:speechstart isCurrent=', _isCurrentRecognitionEvent(e));
     if (!_isCurrentRecognitionEvent(e)) return;
     voiceIntensityTarget = 0.9;
     lastKickAt = performance.now();
     armNoResultWatchdog();
   });
   _onRecognition('speechend', (e) => {
+    console.log('[VOICE-DBG] SR:speechend isCurrent=', _isCurrentRecognitionEvent(e));
     if (!_isCurrentRecognitionEvent(e)) return;
     voiceIntensityTarget = 0.25;
   });
   _onRecognition('soundend', (e) => {
+    console.log('[VOICE-DBG] SR:soundend isCurrent=', _isCurrentRecognitionEvent(e));
     if (!_isCurrentRecognitionEvent(e)) return;
     voiceIntensityTarget = 0.08;
   });
   _onRecognition('audioend', (e) => {
+    console.log('[VOICE-DBG] SR:audioend isCurrent=', _isCurrentRecognitionEvent(e));
     if (!_isCurrentRecognitionEvent(e)) return;
     setVoiceAudioActive(false);
     voiceIntensityTarget = 0.03;
@@ -7904,11 +7961,13 @@ function openLightbox(src) {
   });
 
   _onRecognition('result', (e) => {
+    console.log('[VOICE-DBG] SR:result isCurrent=', _isCurrentRecognitionEvent(e), 'resultIndex=', e.resultIndex);
     if (!_isCurrentRecognitionEvent(e)) return;
     clearNoResultWatchdog();
     const result = e.results[e.resultIndex];
     if (!result) return;
     const transcript = result[0].transcript;
+    console.log('[VOICE-DBG] SR:result transcript=', JSON.stringify(transcript), 'isFinal=', result.isFinal, 'interimStart=', interimStart, 'inputEl.value(before)=', JSON.stringify(inputEl.value.slice(0, 80)));
     // interim 結果が伸びた = 今まさに発話中、を視覚化するキック
     if (transcript.length > lastInterimLen) {
       lastKickAt = performance.now();
@@ -7936,6 +7995,7 @@ function openLightbox(src) {
   });
 
   _onRecognition('end', (e) => {
+    console.log('[VOICE-DBG] SR:end isCurrent=', _isCurrentRecognitionEvent(e), 'userIntendedStop=', userIntendedStop, 'isRecording=', isRecording, 'lastResultAt=', lastResultAt, 'inputEl.value=', JSON.stringify(inputEl.value.slice(0, 80)));
     if (!_isCurrentRecognitionEvent(e)) return;
     cancelForceCleanup();
     clearNoResultWatchdog();
@@ -7944,6 +8004,7 @@ function openLightbox(src) {
     const grace = getVoiceGraceSec();
     const hasResult = lastResultAt > 0;
     const sinceLastResult = hasResult ? (performance.now() - lastResultAt) / 1000 : Infinity;
+    console.log('[VOICE-DBG] SR:end grace=', grace, 'hasResult=', hasResult, 'sinceLastResult=', sinceLastResult.toFixed(2));
     if (!userIntendedStop && grace > 0 && isRecording && hasResult && sinceLastResult < grace) {
       // 直近の発話から grace 秒以内なので、短い間隔で recognition を再開して継続させる
       clearRestartTimer();
@@ -7965,6 +8026,7 @@ function openLightbox(src) {
   });
 
   _onRecognition('error', (e) => {
+    console.log('[VOICE-DBG] SR:error isCurrent=', _isCurrentRecognitionEvent(e), 'error=', e.error, 'message=', e.message || '');
     if (!_isCurrentRecognitionEvent(e)) return;
     console.warn('SpeechRecognition error:', e.error, e.message || '');
     clearNoResultWatchdog();
@@ -10438,7 +10500,7 @@ if (typeof window !== 'undefined') {
   // =====================================================================
   // 子 C3: 検索 + フィルタチップ (.chat-filter-bar 内容構築)
   // =====================================================================
-  let _filterKind = 'all'; // 'all' | 'user' | 'ai' | 'image' | 'approval'
+  let _activeFilters = new Set(); // empty = show all
   let _searchQuery = '';
   let _searchHits = []; // [el, el, ...] 表示順
   let _searchCursor = -1;
@@ -10462,7 +10524,7 @@ if (typeof window !== 'undefined') {
     for (const c of chips) {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'filter-chip' + (c.key === _filterKind ? ' active' : '');
+      b.className = 'filter-chip' + (c.key === 'all' ? ' active' : '');
       b.dataset.kind = c.key;
       b.innerHTML = '';
       const lab = document.createElement('span');
@@ -10474,8 +10536,17 @@ if (typeof window !== 'undefined') {
       b.appendChild(lab);
       b.appendChild(count);
       b.addEventListener('click', () => {
-        _filterKind = c.key;
-        bar.querySelectorAll('.filter-chip').forEach(x => x.classList.toggle('active', x.dataset.kind === _filterKind));
+        if (c.key === 'all') {
+          _activeFilters.clear();
+        } else {
+          if (_activeFilters.has(c.key)) _activeFilters.delete(c.key);
+          else _activeFilters.add(c.key);
+        }
+        bar.querySelectorAll('.filter-chip').forEach(x => {
+          x.classList.toggle('active', x.dataset.kind === 'all'
+            ? _activeFilters.size === 0
+            : _activeFilters.has(x.dataset.kind));
+        });
         applyFilterAndSearch();
       });
       bar.appendChild(b);
@@ -10558,7 +10629,7 @@ if (typeof window !== 'undefined') {
       counts.all++;
       if (counts[cat] != null) counts[cat]++;
       // フィルタ
-      const filterOk = (_filterKind === 'all') || (cat === _filterKind);
+      const filterOk = _activeFilters.size === 0 || _activeFilters.has(cat);
       // 検索 (テキスト含有判定 + <mark> 化)
       // mark を毎回剥がして再適用
       unmarkInside(el);
@@ -11102,6 +11173,29 @@ const FilesTreeView = (function () {
   }
   const expandedSet = loadExpandedSet();
 
+  // hover preview の状態は renderTree の外（IIFE スコープ）で管理する。
+  // renderTree は再描画のたびに呼ばれるため、ローカル変数にすると古い preview が
+  // document.body に残り続け、2つの popup が切り替わる「チカチカ」現象が起きる。
+  let hoverPreviewEl = null;
+  let hoverPreviewTimer = null;
+
+  function hideHoverPreview() {
+    if (hoverPreviewTimer) { clearTimeout(hoverPreviewTimer); hoverPreviewTimer = null; }
+    if (hoverPreviewEl) { hoverPreviewEl.remove(); hoverPreviewEl = null; }
+  }
+
+  function positionHoverPreview(e) {
+    if (!hoverPreviewEl) return;
+    const margin = 12;
+    const rect = hoverPreviewEl.getBoundingClientRect();
+    let left = e.clientX + 14;
+    let top = e.clientY + 14;
+    if (left + rect.width + margin > window.innerWidth) left = e.clientX - rect.width - 14;
+    if (top + rect.height + margin > window.innerHeight) top = window.innerHeight - rect.height - margin;
+    hoverPreviewEl.style.left = Math.max(margin, left) + 'px';
+    hoverPreviewEl.style.top = Math.max(margin, top) + 'px';
+  }
+
   /** items[] を { name, relPath, absPath, type:'file'|'dir', children:[] } ツリーに変換 */
   // API (/api/files-list) は { path, rel, name, type, size, mtime, summary } のフラットな一覧を返す。
   // 古いレスポンスやファイル由来の親ディレクトリも扱えるよう、存在しない親 dir はここで補完する。
@@ -11170,13 +11264,54 @@ const FilesTreeView = (function () {
 
   function isPreviewable(name) {
     // /api/files-content の許可リストと一致する isTextPath を再利用。
-    return typeof isTextPath === 'function' ? isTextPath(name) : /\.(md|txt)$/i.test(name);
+    return typeof isAnyAiCliPreviewable === 'function'
+      ? isAnyAiCliPreviewable(name)
+      : /\.(md|txt|png|jpe?g|gif|webp|bmp|svg)$/i.test(name);
+  }
+
+  function isImagePreviewable(name) {
+    return typeof isImagePath === 'function' ? isImagePath(name) : /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name);
+  }
+
+  function isVideoPreviewable(name) {
+    return typeof isVideoPath === 'function' ? isVideoPath(name) : /\.(mp4|webm|ogv|mov|m4v)$/i.test(name);
   }
 
   function renderTree(treeRoot, opts) {
-    const { onFileSelect, onContextMenu, filterText, filesRoot } = opts;
+    const { onFileSelect, onContextMenu, filterText, filesRoot, sessionId } = opts;
     const filterLower = (filterText || '').toLowerCase();
     const rootKey = filesRoot || '';
+    // renderTree 呼び出し時に前回の hover preview を必ず消す（複数残留防止）
+    hideHoverPreview();
+
+    function showHoverPreview(node, e) {
+      hideHoverPreview();
+      if (!node.absPath || (!isImagePreviewable(node.name) && !isVideoPreviewable(node.name))) return;
+      hoverPreviewTimer = setTimeout(() => {
+        const preview = document.createElement('div');
+        preview.className = 'files-image-hover-preview';
+        preview.dataset.filesSkipSearch = '1';
+        const src = getFilesAssetUrl(node.absPath, sessionId || '');
+        if (isVideoPreviewable(node.name)) {
+          const video = document.createElement('video');
+          video.muted = true;
+          video.loop = true;
+          video.playsInline = true;
+          video.preload = 'metadata';
+          video.src = src;
+          preview.appendChild(video);
+          video.play().catch(() => {});
+        } else {
+          const img = document.createElement('img');
+          img.alt = node.name;
+          img.src = src;
+          preview.appendChild(img);
+        }
+        document.body.appendChild(preview);
+        hoverPreviewEl = preview;
+        positionHoverPreview(e);
+      }, 180);
+    }
 
     function nodeMatchesFilter(node) {
       if (!filterLower) return true;
@@ -11254,7 +11389,7 @@ const FilesTreeView = (function () {
         // file
         const icon = document.createElement('span');
         icon.className = 'files-tree-file-icon';
-        icon.textContent = isPreviewable(node.name) ? '📄' : '📃';
+        icon.textContent = isVideoPreviewable(node.name) ? '🎞️' : (isImagePreviewable(node.name) ? '🖼️' : (isPreviewable(node.name) ? '📄' : '📃'));
         label.appendChild(icon);
         const nameSpan = document.createElement('span');
         nameSpan.className = 'files-tree-name';
@@ -11264,6 +11399,12 @@ const FilesTreeView = (function () {
 
         if (isPreviewable(node.name)) {
           item.classList.add('files-tree-file--previewable');
+          if (isImagePreviewable(node.name) || isVideoPreviewable(node.name)) {
+            item.classList.add('files-tree-file--image');
+            item.addEventListener('mouseenter', (e) => showHoverPreview(node, e));
+            item.addEventListener('mousemove', positionHoverPreview);
+            item.addEventListener('mouseleave', hideHoverPreview);
+          }
           item.addEventListener('click', (e) => { e.stopPropagation(); if (onFileSelect) onFileSelect(node); });
         } else {
           item.classList.add('files-tree-file--other');
@@ -11491,6 +11632,7 @@ const FilesTreeView = (function () {
       const el = renderTree(tree, {
         filterText: filter,
         filesRoot,
+        sessionId,
         onFileSelect: (node) => {
           selectedAbsPath = node.absPath;
           highlightSelected(selectedAbsPath);
@@ -12100,6 +12242,45 @@ const FilesPreview = (function () {
       searchBar.hidden = true;
       searchInput.value = '';
 
+      if (isMediaPath(absPath)) {
+        const mediaUrl = getFilesAssetUrl(absPath, sessionId || '');
+        const wrap = document.createElement('div');
+        wrap.className = 'files-preview-image-wrap';
+        wrap.dataset.filesSkipSearch = '1';
+        let media;
+        if (isVideoPath(absPath)) {
+          media = document.createElement('video');
+          media.className = 'files-preview-image files-preview-video';
+          media.controls = true;
+          media.preload = 'metadata';
+          media.playsInline = true;
+          media.src = mediaUrl;
+          media.addEventListener('dblclick', () => openLightbox(mediaUrl, { type: 'video' }));
+          const modalBtn = document.createElement('button');
+          modalBtn.type = 'button';
+          modalBtn.className = 'files-preview-media-modal-btn';
+          modalBtn.title = 'Open video';
+          modalBtn.textContent = '⛶';
+          modalBtn.addEventListener('click', () => openLightbox(mediaUrl, { type: 'video' }));
+          wrap.appendChild(modalBtn);
+        } else {
+          media = document.createElement('img');
+          media.className = 'files-preview-image';
+          media.alt = relPath || absPath;
+          media.src = mediaUrl;
+          media.addEventListener('click', () => openLightbox(mediaUrl));
+        }
+        const caption = document.createElement('div');
+        caption.className = 'files-preview-image-caption';
+        caption.textContent = relPath || absPath;
+        wrap.appendChild(media);
+        wrap.appendChild(caption);
+        contentEl.innerHTML = '';
+        contentEl.appendChild(wrap);
+        bodyEl.scrollTop = 0;
+        return;
+      }
+
       try {
         const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
         const url = `/api/files-content?path=${encodeURIComponent(absPath)}&token=${encodeURIComponent(token)}${sessionQs}`;
@@ -12189,6 +12370,7 @@ const FilesPreview = (function () {
         const dispPath = relPath || absPath;
         setBreadcrumb(dispPath, absPath);
         [openEditorBtn, openFolderBtn, copyPathBtn, searchBtn, reloadBtn, closeBtn].forEach(b => { b.disabled = false; });
+        searchBtn.disabled = isMediaPath(absPath);
         loadFile(absPath, relPath);
       },
     };
@@ -13599,3 +13781,53 @@ const FilesPreview = (function () {
 
   window.GitGraphView = GitGraphView;
 })();
+
+// ---- Chat bubble Dock effect (mouse-proximity magnification) ----
+(function initChatBubbleDockEffect() {
+  const chatPane = document.getElementById('chat-pane');
+  if (!chatPane) return;
+
+  const MAX_SCALE = 1.07;
+  const RADIUS    = 130; // px
+
+  function bellScale(dist) {
+    if (dist >= RADIUS) return 1;
+    const t = 1 - dist / RADIUS;
+    return 1 + (MAX_SCALE - 1) * t * t;
+  }
+
+  let rafId = null;
+  let lastTimeline = null;
+
+  function applyDock(mouseY) {
+    const timeline = chatPane.querySelector('.chat-timeline');
+    if (!timeline) return;
+    lastTimeline = timeline;
+    timeline.querySelectorAll('.bubble').forEach(b => {
+      b.classList.remove('bubble-dock-spring');
+      const rect  = b.getBoundingClientRect();
+      const cy    = rect.top + rect.height / 2;
+      const scale = bellScale(Math.abs(mouseY - cy));
+      b.style.transform = scale > 1.001 ? `scale(${scale.toFixed(4)})` : '';
+      b.style.zIndex    = scale > 1.01  ? String(Math.round(scale * 100)) : '';
+    });
+  }
+
+  function resetDock() {
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    const timeline = lastTimeline || chatPane.querySelector('.chat-timeline');
+    if (!timeline) return;
+    timeline.querySelectorAll('.bubble').forEach(b => {
+      b.classList.add('bubble-dock-spring');
+      b.style.transform = '';
+      b.style.zIndex    = '';
+    });
+  }
+
+  chatPane.addEventListener('mousemove', e => {
+    if (rafId) return;
+    rafId = requestAnimationFrame(() => { rafId = null; applyDock(e.clientY); });
+  });
+  chatPane.addEventListener('mouseleave', resetDock);
+})();
+

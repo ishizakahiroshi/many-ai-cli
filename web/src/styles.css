@@ -1769,7 +1769,7 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 }
 .about-gh-btn:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); }
 
-/* 画像ライトボックス */
+/* メディアライトボックス */
 #image-lightbox {
   position: fixed;
   inset: 0;
@@ -1780,12 +1780,17 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   z-index: 2000;
   cursor: zoom-out;
 }
-#image-lightbox img {
+#image-lightbox img,
+#image-lightbox video {
   max-width: 90vw;
   max-height: 90vh;
   object-fit: contain;
   border-radius: 6px;
   box-shadow: 0 0 60px rgba(0, 0, 0, 0.9);
+}
+#image-lightbox video {
+  background: #000;
+  cursor: default;
 }
 
 /* 新規セッションバー */
@@ -2338,6 +2343,9 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   line-height: 1;
 }
 .files-tree-file-icon { font-size: 0.75rem; flex-shrink: 0; }
+.files-tree-file--image > .files-tree-label {
+  cursor: zoom-in;
+}
 .files-tree-name {
   font-size: 0.78rem;
   color: var(--text);
@@ -2365,6 +2373,27 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 .files-tree-area--drop-target {
   outline: 1px dashed var(--accent-text, #6e8eff);
   outline-offset: -3px;
+}
+.files-image-hover-preview {
+  position: fixed;
+  z-index: 2200;
+  max-width: min(420px, 46vw);
+  max-height: min(320px, 46vh);
+  padding: 6px;
+  background: color-mix(in srgb, var(--bg-elev) 94%, transparent);
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 6px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.48);
+  pointer-events: none;
+}
+.files-image-hover-preview img,
+.files-image-hover-preview video {
+  display: block;
+  max-width: calc(min(420px, 46vw) - 12px);
+  max-height: calc(min(320px, 46vh) - 12px);
+  object-fit: contain;
+  border-radius: 4px;
+  background: #000;
 }
 
 /* ──────────────────────────────────────────────
@@ -2589,6 +2618,54 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   padding: 16px 12px;
 }
 .files-preview-error { color: var(--danger); }
+.files-preview-image-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 100%;
+  padding: 12px;
+}
+.files-preview-image {
+  max-width: 100%;
+  max-height: calc(100vh - 220px);
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  cursor: zoom-in;
+}
+.files-preview-video {
+  background: #000;
+  cursor: default;
+}
+.files-preview-media-modal-btn {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 1;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 4px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
+  cursor: pointer;
+}
+.files-preview-media-modal-btn:hover {
+  background: var(--bg-elev2);
+}
+.files-preview-image-caption {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-family: Consolas, monospace;
+}
 
 /* コードブロックのコピーボタン (Markdown / raw 共通) */
 .files-preview-code-wrapper {
@@ -4171,7 +4248,9 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   word-break: break-word;
   border: 1px solid transparent;
   position: relative;
+  transform-origin: center;
 }
+#chat-pane .bubble.bubble-dock-spring { transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1); }
 #chat-pane .bubble.user-text {
   background: rgba(99,102,241,0.15);
   border-color: rgba(99,102,241,0.3);
