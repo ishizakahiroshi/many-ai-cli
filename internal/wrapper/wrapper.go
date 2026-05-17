@@ -47,6 +47,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	sandbox := fs.String("sandbox", "", "codex sandbox mode")
 	askForApproval := fs.String("ask-for-approval", "", "codex ask-for-approval")
 	codexOSS := fs.Bool("codex-oss", false, "codex: use --oss to route via local Ollama daemon")
+	utf8Session := fs.Bool("utf8", false, "set UTF-8 console encoding for this session (Windows only)")
 	_ = fs.Parse(args)
 	providerArgs := fs.Args()
 
@@ -122,6 +123,9 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		defer lf.Close()
 	}
 
+	if *utf8Session {
+		applyUTF8Session()
+	}
 	ps, err := startProcess(provider, providerArgs, cwd, initCols, initRows)
 	if err != nil {
 		// Hub 側の spawn ログ (~/.any-ai-cli/logs/spawn/<provider>-<ts>.log) に

@@ -34,10 +34,12 @@ var hardcodedModelsDefaults = modelsDefaults{
 		{ID: "claude-sonnet-4-5", Label: "Claude Sonnet 4.5"},
 		{ID: "claude-3-7-sonnet-latest", Label: "Claude 3.7 Sonnet"},
 		{ID: "claude-3-5-sonnet-latest", Label: "Claude 3.5 Sonnet"},
-		{ID: "claude-3-5-haiku-latest", Label: "Claude 3.5 Haiku"},
 	},
 	OpenAI: []Model{
 		{ID: "gpt-5.5", Label: "GPT-5.5"},
+		{ID: "gpt-5.4", Label: "GPT-5.4"},
+		{ID: "gpt-5.4-mini", Label: "GPT-5.4 mini"},
+		{ID: "gpt-5.4-nano", Label: "GPT-5.4 nano"},
 	},
 }
 
@@ -53,9 +55,10 @@ func (c *modelsRemoteCache) get(sourceURL string) modelsDefaults {
 	if err != nil {
 		return hardcodedModelsDefaults
 	}
-	c.data = &fetched
+	merged := mergeModelsDefaults(fetched, hardcodedModelsDefaults)
+	c.data = &merged
 	c.fetchedAt = time.Now()
-	return fetched
+	return merged
 }
 
 // invalidate は次回 get で必ず再 fetch されるようキャッシュを破棄する。
@@ -85,4 +88,31 @@ func fetchModelsDefaults(sourceURL string) (modelsDefaults, error) {
 		return modelsDefaults{}, err
 	}
 	return d, nil
+}
+
+func mergeModelsDefaults(preferred, fallback modelsDefaults) modelsDefaults {
+	return modelsDefaults{
+		Anthropic: mergeModelList(preferred.Anthropic, fallback.Anthropic),
+		OpenAI:    mergeModelList(preferred.OpenAI, fallback.OpenAI),
+	}
+}
+
+func mergeModelList(preferred, fallback []Model) []Model {
+	out := make([]Model, 0, len(preferred)+len(fallback))
+	seen := map[string]bool{}
+	for _, m := range preferred {
+		if m.ID == "" || seen[m.ID] {
+			continue
+		}
+		seen[m.ID] = true
+		out = append(out, m)
+	}
+	for _, m := range fallback {
+		if m.ID == "" || seen[m.ID] {
+			continue
+		}
+		seen[m.ID] = true
+		out = append(out, m)
+	}
+	return out
 }

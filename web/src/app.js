@@ -1,4 +1,4 @@
-console.log('[any-ai-cli] app.js build=2026-05-16-wakeword-disabled');
+console.log('[any-ai-cli] app.js build=2026-05-17-wheel-position-routing');
 
 // ---- トースト通知 ----
 let _toastTimer = null;
@@ -198,6 +198,7 @@ const STORAGE_USAGE_LINK_CODEX_KEY     = 'ai_cli_hub_usage_link_codex';
 const STORAGE_USAGE_LINK_OLLAMA_KEY    = 'ai_cli_hub_usage_link_ollama';
 const STORAGE_USAGE_LINK_OPENCODE_KEY  = 'ai_cli_hub_usage_link_opencode';
 const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds';
+const STORAGE_DISPLAY_LOCKED_MODE_KEY  = 'ai_cli_hub_display_locked_mode';
 const DEFAULT_VOICE_GRACE_SEC          = 0;
 const STORAGE_WAKE_WORD_ENABLED_KEY    = 'ai_cli_hub_wake_word_enabled';
 const STORAGE_WAKE_WORD_PHRASE_KEY     = 'ai_cli_hub_wake_word_phrase';
@@ -255,6 +256,7 @@ const _USER_PREFS_PATH_TO_LS = {
   'cwd_history':               [STORAGE_CWD_HISTORY_KEY,           JSON.stringify],
   'approval.auto_switch':      [STORAGE_APPROVAL_AUTO_SWITCH_KEY,  (v) => v ? '1' : '0'],
   'spawn.defaults':            [STORAGE_SPAWN_KEY,                 JSON.stringify],
+  'display.locked_mode':       [STORAGE_DISPLAY_LOCKED_MODE_KEY,   (v) => (v == null || v === '') ? '' : String(v)],
 };
 
 const _USER_PREFS_STRING_PATHS = new Set([
@@ -267,6 +269,7 @@ const _USER_PREFS_STRING_PATHS = new Set([
   'usage_links.codex',
   'usage_links.ollama',
   'usage_links.opencode',
+  'display.locked_mode',
 ]);
 const _USER_PREFS_STRING_ARRAY_PATHS = new Set([
   'favorites',
@@ -695,6 +698,61 @@ function appConfirm({ title, message, confirmText, cancelText, kind = 'default' 
   });
 }
 
+// Ollama エンコーディング警告ダイアログ（3 択）
+// 戻り値: 'utf8' | 'continue' | null（キャンセル）
+function appConfirmOllamaEncoding() {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById('model-picker-overlay');
+    if (!overlay) {
+      // フォールバック: confirm で代替（プレーン環境）
+      if (window.confirm(t('ollama_encoding_warn_message'))) {
+        resolve('utf8');
+      } else {
+        resolve('continue');
+      }
+      return;
+    }
+
+    const close = (value) => {
+      overlay.removeEventListener('click', onOverlayClick);
+      document.removeEventListener('keydown', onKeyDown);
+      overlay.hidden = true;
+      overlay.innerHTML = '';
+      resolve(value);
+    };
+    const onOverlayClick = (e) => {
+      if (e.target === overlay) close(null);
+    };
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') close(null);
+    };
+
+    overlay.innerHTML = '';
+    overlay.hidden = false;
+
+    const dialog = document.createElement('div');
+    dialog.className = 'confirm-dialog confirm-dialog--warn';
+    dialog.innerHTML = `
+      <div class="confirm-icon" aria-hidden="true">⚠</div>
+      <div class="confirm-body">
+        <div class="confirm-title">${escapeHtml(t('ollama_encoding_warn_title'))}</div>
+        <div class="confirm-message">${escapeHtml(t('ollama_encoding_warn_message'))}</div>
+      </div>
+      <div class="confirm-actions ollama-encoding-actions">
+        <button class="confirm-btn" id="ollama-enc-continue">${escapeHtml(t('ollama_encoding_continue'))}</button>
+        <button class="confirm-btn primary" id="ollama-enc-utf8">${escapeHtml(t('ollama_encoding_utf8_session'))}</button>
+      </div>
+    `;
+    overlay.appendChild(dialog);
+
+    document.getElementById('ollama-enc-continue').addEventListener('click', () => close('continue'));
+    document.getElementById('ollama-enc-utf8').addEventListener('click',    () => close('utf8'));
+    overlay.addEventListener('click', onOverlayClick);
+    document.addEventListener('keydown', onKeyDown);
+    document.getElementById('ollama-enc-utf8').focus();
+  });
+}
+
 function appConfirmShutdown() {
   return new Promise((resolve) => {
     const overlay = document.getElementById('model-picker-overlay');
@@ -796,13 +854,18 @@ function applyTheme(theme) {
 function applyFontSize(size) {
   const s = FONTSIZE_MAP[size] ? size : 'medium';
   const px = FONTSIZE_MAP[s];
-  terminals.forEach((t, id) => {
-    t.term.options.fontSize = px;
-    requestAnimationFrame(() => {
-      fitTerminalPreservingBottom(t, id);
-      sendResize(id, t.term.cols, t.term.rows);
+  document.documentElement.style.setProperty('--chat-font-size', px + 'px');
+  // terminals は const なので初期 IIFE 呼び出し時点では TDZ。
+  // TDZ では typeof も ReferenceError を投げるため try/catch で守る。初期呼び出し時は terminals 自体未初期化なので何もしないで OK。
+  try {
+    terminals.forEach((t, id) => {
+      t.term.options.fontSize = px;
+      requestAnimationFrame(() => {
+        fitTerminalPreservingBottom(t, id);
+        sendResize(id, t.term.cols, t.term.rows);
+      });
     });
-  });
+  } catch (_) {}
   const sel = document.getElementById('fontsize-select');
   if (sel) sel.value = s;
   try { localStorage.setItem(STORAGE_FONTSIZE_KEY, s); } catch (_) {}
@@ -816,6 +879,7 @@ function applyLang(lang) {
 
 (function () {
   applyTheme(localStorage.getItem(STORAGE_THEME_KEY) || 'dark');
+  applyFontSize(localStorage.getItem(STORAGE_FONTSIZE_KEY) || 'medium');
   applyLang(localStorage.getItem(STORAGE_LANG_KEY) || 'ja');
   applyUsageLinks();
   initUsageDropdown();
@@ -914,6 +978,22 @@ function applyLang(lang) {
   aboutCloseBtn.addEventListener('click', () => { aboutPanel.hidden = true; });
   aboutPanel.addEventListener('click', (e) => {
     if (e.target === aboutPanel) aboutPanel.hidden = true;
+  });
+})();
+
+// ---- C5: 表示モード固定 (soft lock) 設定 ----
+(function () {
+  const sel = document.getElementById('locked-mode-select');
+  if (!sel) return;
+  // 初期値読み込み (localStorage → '' / 'terminal' / 'chat' / 'split')
+  const initial = (typeof getDisplayLockedMode === 'function') ? getDisplayLockedMode() : '';
+  sel.value = initial || '';
+  sel.addEventListener('change', () => {
+    const v = sel.value;
+    // 空文字 = 自由切替 (lock 解除)。STORAGE 側は '' で正常に削除される
+    setUserPref('display.locked_mode', v === '' ? '' : v);
+    // 🔒 アイコンの即時反映 (現在開いているセッションのモードは触らない / L2 soft lock)
+    if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
   });
 })();
 
@@ -1368,6 +1448,7 @@ const sessions = new Map();
 const terminals = new Map(); // sessionId -> { term, fitAddon, container, pendingChunks, pendingTextTail, markerFilterCarry }
 const approvalVisibleCache = new Map();
 const multiQuestionVisibleCache = new Map(); // sessionId → bool（Claude Code AskUserQuestion 等の複数質問 UI が画面に出ているか）
+const multiQuestionDismissedCache = new Map(); // sessionId → bool（banner の ✕ ボタンで誤検出を手動 dismiss した状態。次の PTY 送信でクリア）
 const sequentialChoiceCache = new Map(); // sessionId → { sig, prompts, answers, index }
 const approvalRawOptionsCache = new Map(); // sessionId → [{num, label, isCurrent}] または [{num, title, options}, ...]（バッチ承認）
 const approvalConsumedSig = new Map(); // sessionId → 消費済み承認の署名（doSend でテキスト送信した場合の再表示防止）
@@ -1411,6 +1492,194 @@ function sequentialChoiceSig(prompts) {
 const approvalHintConfirmTimers = new Map(); // sessionId → timer（生バイト検出を短時間 debounce してチカチカを防ぐ）
 const toolOutputs = new Map(); // sessionId → [{uid, lines, ts}]
 const sessionInputState = new Map(); // sessionId → { inputValue, pastedTextsData, pendingAttachFiles, thumbsFragment }
+
+// =========================================================================
+// chatHistory store (plan_chat-history-subview.md §C1)
+//
+// セッションごとのチャット履歴を保持する in-memory store。
+// C2 (タブ切替) / C3 (吹き出しレンダラ) が購読して描画する。
+//
+// メッセージ shape:
+//   { id, ts, role, kind, rawText, normalizedText, attachments, tool, meta }
+//   role  : 'user' | 'ai' | 'system'
+//   kind  : 'text' | 'attach' | 'approval' | 'tool'
+//   rawText        : 生 PTY テキスト（StripANSI 適用済み / D16: raw 切替用）
+//   normalizedText : 軽い正規化を適用したレンダリング用テキスト (D15)
+//   attachments    : kind='attach' のとき [{path?, filename?, kind:'image'|'file'}]
+//   tool           : kind='tool' のとき { name, args, ... }（C3 で扱う）
+//   meta           : 任意の付随情報（approval の question/answer など）
+//
+// API:
+//   pushMessage(sid, msg)    : メッセージを追加し subscriber 通知
+//   getMessages(sid)         : メッセージ配列の浅いコピーを取得
+//   subscribe(sid, cb)       : 変化通知購読 (unsubscribe 関数を返す)
+//   onSessionRemoved(sid)    : ストア + subscriber を破棄
+// =========================================================================
+
+const chatHistory = new Map();              // sid → Message[]
+const chatHistorySubs = new Map();          // sid → Set<callback>
+const chatHistoryIdSeq = new Map();         // sid → 次に振る連番 (1 始まり)
+const chatHistoryOutputBuffers = new Map(); // sid → { rawChunks:[], commitTimer, lastTs }
+const CHAT_HISTORY_OUTPUT_QUIESCE_MS = 800; // PTY 出力の静止時間（これを超えたら 1 メッセージ commit）
+
+// ANSI エスケープシーケンスを取り除く軽量ヘルパ。
+// 完全な StripANSI 実装ではなく、表示用 normalized 生成と raw 用の最低限の整形に使う。
+// 制御文字や CSI / OSC を概ね除去できれば C3 に渡す材料としては十分。
+function stripAnsiBasic(s) {
+  if (!s) return '';
+  // CSI: ESC [ ... letter
+  // OSC: ESC ] ... BEL or ESC \\
+  // その他の ESC + 1 文字
+  return s
+    .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1b[PX^_][^\x1b]*\x1b\\/g, '')
+    .replace(/\x1b[()][0-9A-Za-z]/g, '')
+    .replace(/\x1b[=>]/g, '')
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
+}
+
+// D15: 軽い正規化（行頭末 trim / prompt prefix 除去 / 連続空行圧縮）。
+// コードブロック内（```...```）の trim はあえてしない。
+function normalizeChatText(raw) {
+  if (!raw) return '';
+  // [ANY-AI-CLI]...[/ANY-AI-CLI] ブロックを除去（承認マーカーはチャット履歴に表示しない）
+  let s = raw.replace(/\[ANY-AI-CLI\][\s\S]*?\[\/ANY-AI-CLI\]/g, '');
+  const lines = s.split(/\r?\n/);
+  const out = [];
+  let inFence = false;
+  let blankRun = 0;
+  for (let line of lines) {
+    if (/^\s*```/.test(line)) inFence = !inFence;
+    if (!inFence) {
+      // prompt prefix 除去（行頭のみ）
+      line = line.replace(/^[\s]*[▌>$#]\s?/, '');
+      line = line.replace(/\s+$/, '');
+    }
+    if (!inFence && line.trim() === '') {
+      blankRun++;
+      if (blankRun <= 1) out.push('');
+    } else {
+      blankRun = 0;
+      out.push(line);
+    }
+  }
+  return out.join('\n').replace(/^\n+|\n+$/g, '');
+}
+
+function chatHistoryNextId(sid) {
+  const next = (chatHistoryIdSeq.get(sid) || 0) + 1;
+  chatHistoryIdSeq.set(sid, next);
+  return next;
+}
+
+function chatHistoryNotify(sid, msg) {
+  const subs = chatHistorySubs.get(sid);
+  if (!subs || subs.size === 0) return;
+  for (const cb of subs) {
+    try { cb(msg, getMessages(sid)); }
+    catch (err) { console.warn('[chatHistory] subscriber error', err); }
+  }
+}
+
+function pushMessage(sid, msg) {
+  if (sid === null || sid === undefined) return null;
+  if (!chatHistory.has(sid)) chatHistory.set(sid, []);
+  const arr = chatHistory.get(sid);
+  const raw = msg.rawText != null ? msg.rawText : (msg.text != null ? msg.text : '');
+  const normalized = msg.normalizedText != null
+    ? msg.normalizedText
+    : normalizeChatText(raw);
+  const entry = {
+    id: chatHistoryNextId(sid),
+    ts: msg.ts || Date.now(),
+    role: msg.role || 'system',
+    kind: msg.kind || 'text',
+    rawText: raw,
+    normalizedText: normalized,
+    attachments: Array.isArray(msg.attachments) ? msg.attachments.slice() : null,
+    tool: msg.tool || null,
+    meta: msg.meta || null,
+  };
+  arr.push(entry);
+  chatHistoryNotify(sid, entry);
+  return entry;
+}
+
+function getMessages(sid) {
+  const arr = chatHistory.get(sid);
+  return arr ? arr.slice() : [];
+}
+
+function subscribeChatHistory(sid, cb) {
+  if (typeof cb !== 'function') return () => {};
+  if (!chatHistorySubs.has(sid)) chatHistorySubs.set(sid, new Set());
+  const subs = chatHistorySubs.get(sid);
+  subs.add(cb);
+  return () => {
+    const cur = chatHistorySubs.get(sid);
+    if (cur) {
+      cur.delete(cb);
+      if (cur.size === 0) chatHistorySubs.delete(sid);
+    }
+  };
+}
+
+// PTY 出力は流量が多くターン境界も曖昧なので、「静止 N ms で 1 メッセージ commit」
+// の単純なバッファリングで一旦 store に push する（細かい AI ターン分割は C3 担当）。
+function chatHistoryAppendOutput(sid, raw) {
+  if (sid === null || sid === undefined || !raw) return;
+  let buf = chatHistoryOutputBuffers.get(sid);
+  if (!buf) {
+    buf = { rawChunks: [], commitTimer: null, lastTs: 0 };
+    chatHistoryOutputBuffers.set(sid, buf);
+  }
+  buf.rawChunks.push(raw);
+  buf.lastTs = Date.now();
+  if (buf.commitTimer) clearTimeout(buf.commitTimer);
+  buf.commitTimer = setTimeout(() => chatHistoryCommitOutput(sid), CHAT_HISTORY_OUTPUT_QUIESCE_MS);
+}
+
+function chatHistoryCommitOutput(sid) {
+  const buf = chatHistoryOutputBuffers.get(sid);
+  if (!buf) return;
+  if (buf.commitTimer) { clearTimeout(buf.commitTimer); buf.commitTimer = null; }
+  if (buf.rawChunks.length === 0) return;
+  const raw = buf.rawChunks.join('');
+  buf.rawChunks.length = 0;
+  // 純粋な制御文字のみのチャンク（プロンプト再描画等）は無視
+  const stripped = stripAnsiBasic(raw);
+  if (!stripped.trim()) return;
+  // 起動バナー混入防止: 何もインタラクションがない状態（メッセージ0件）の間は AI 出力を記録しない。
+  // role:'user' 限定では承認ボタン回答（role:'system'）後も AI 出力が記録されないため msgs.length で判定する。
+  const msgs = chatHistory.get(sid);
+  if (!msgs || msgs.length === 0) return;
+  pushMessage(sid, {
+    role: 'ai',
+    kind: 'text',
+    rawText: stripped,
+    // normalizedText は pushMessage 側で生成
+  });
+}
+
+function onChatHistorySessionRemoved(sid) {
+  const buf = chatHistoryOutputBuffers.get(sid);
+  if (buf && buf.commitTimer) clearTimeout(buf.commitTimer);
+  chatHistoryOutputBuffers.delete(sid);
+  chatHistory.delete(sid);
+  chatHistorySubs.delete(sid);
+  chatHistoryIdSeq.delete(sid);
+}
+
+// C2/C3 から（および将来の拡張用に）window 経由でも触れるよう公開
+if (typeof window !== 'undefined') {
+  window.chatHistoryAPI = {
+    getMessages,
+    subscribe: subscribeChatHistory,
+    push: pushMessage,
+  };
+}
+
 const autoDismissTimers = new Map(); // sessionId → timer
 const approvalSuppressUntil = new Map(); // sessionId → timestamp (sendChoice 後の誤再表示を抑制)
 const approvalAutoSwitchQueue = [];
@@ -1618,6 +1887,12 @@ ws.onmessage = (ev) => {
     }
     trackApprovalHintFromChunk(id, bytes);
     if (isActive) scheduleApprovalCheck(id);
+    // chatHistory: PTY 出力を AI ターンとしてバッファし、静止 N ms で 1 メッセージ commit
+    // (細かい AI ターン境界判定は C3 担当 / 本 C1 では「とりあえず store に積む」優先)
+    try {
+      const textChunk = utf8Decoder.decode(bytes, { stream: true });
+      chatHistoryAppendOutput(id, textChunk);
+    } catch (_) {}
     return;
   }
 
@@ -1637,6 +1912,8 @@ ws.onmessage = (ev) => {
         return;
       }
       s.project = deriveProjectKeyFromCwd(s.cwd);
+      if (s.LogPath && !s.log_path) s.log_path = s.LogPath;
+      if (s.JSONLPath && !s.jsonl_path) s.jsonl_path = s.JSONLPath;
       sessions.set(s.id, s);
       addToSessionOrder(s.id);
     });
@@ -1665,6 +1942,8 @@ ws.onmessage = (ev) => {
     if (m.started_at)      cur.started_at      = m.started_at;
     if (m.first_message)   cur.first_message   = m.first_message;
     if (m.last_message)    cur.last_message    = m.last_message;
+    if (m.log_path)        cur.log_path        = m.log_path;
+    if (m.jsonl_path)      cur.jsonl_path      = m.jsonl_path;
     if (m.model !== undefined) cur.model       = m.model;
     if (m.route !== undefined) cur.route       = m.route;
     sessions.set(m.session_id, cur);
@@ -1907,7 +2186,7 @@ function computeRelPath(from, to) {
 }
 
 function trimTerminalPathCandidate(path) {
-  let text = String(path || '').trim().replace(/[,;'"<>\])}]+$/, '');
+  let text = String(path || '').trim().replace(/(?:\s*[,;:'"<>\])}]+)+$/, '');
   if (/^[A-Za-z]:[\\/]/.test(text)) text = trimWindowsPathCandidate(text);
   text = stripTerminalLineSuffix(text);
   return text;
@@ -1919,7 +2198,7 @@ function trimWindowsPathCandidate(path) {
   text = text.replace(/(\.[a-zA-Z0-9]{1,15})\s*[\u3040-\u30ff\u3400-\u9fff\uff00-\uffef\u4e00-\u9fff].*$/u, '$1');
   text = text.replace(/\s+[\u3040-\u30ff\u3400-\u9fff\uff00-\uffef].*$/u, '');
   text = text.replace(/\s+[A-Za-z]$/, '');
-  return text.replace(/[,;'"<>\])}]+$/, '');
+  return text.replace(/(?:\s*[,;:'"<>\])}]+)+$/, '');
 }
 
 function stripTerminalLineSuffix(path) {
@@ -1961,7 +2240,9 @@ function resolveTerminalPathCandidate(path, sessionId) {
   return joinPath(cwd, cleaned);
 }
 
-const ABS_WIN_PATH_RE = /([A-Za-z]:\\(?:(?!\s+[A-Za-z]:\\)[^\x00-\x1f<>:"|?*])+)/g;
+// Windows drive paths can appear with either backslashes or forward slashes
+// in terminal output, e.g. C:\dev\app.go or C:/Users/me/.claude/CLAUDE.md.
+const ABS_WIN_PATH_RE = /([A-Za-z]:[\\/](?:(?!\s+[A-Za-z]:[\\/])[^\x00-\x1f<>:"|?*])+)/g;
 // 空白を挟んだ説明文中の区切り（例: "hljs / highlight / prism"）を
 // Unix 絶対パスとして誤検出しないよう、セグメント内の空白は許可しない。
 const ABS_UNIX_PATH_RE = /(\/[^\s\/\x00-\x1f"'<>`|]+(?:\/[^\s\/\x00-\x1f"'<>`|]*)*)/g;
@@ -2304,6 +2585,30 @@ function routeWheelToOpenSettingsPanel(e) {
 //    確実に立ててから xterm に伝播させない。マウス位置による分岐は不要。
 document.addEventListener('wheel', (e) => {
   if (routeWheelToOpenSettingsPanel(e)) return;
+
+  // マウスがチャット履歴ペイン上にある場合: 最近傍のスクロール可能要素へ明示スクロール
+  if (e.target instanceof Element && e.target.closest('#chat-pane')) {
+    let scrollEl = null;
+    let el = e.target;
+    while (el && el.id !== 'chat-pane') {
+      const ov = window.getComputedStyle(el).overflowY;
+      if ((ov === 'auto' || ov === 'scroll') && el.scrollHeight > el.clientHeight) {
+        scrollEl = el;
+        break;
+      }
+      el = el.parentElement;
+    }
+    if (!scrollEl) scrollEl = document.querySelector('#chat-pane .chat-timeline');
+    if (scrollEl) {
+      const unit = e.deltaMode === WheelEvent.DOM_DELTA_LINE ? 24
+        : e.deltaMode === WheelEvent.DOM_DELTA_PAGE ? Math.max(1, scrollEl.clientHeight) : 1;
+      scrollEl.scrollTop += e.deltaY * unit;
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    return;
+  }
+
   if (activeSessionId === null) return;
   const t = terminals.get(activeSessionId);
   if (!t || !t.term) return;
@@ -2628,7 +2933,31 @@ function setMultiQuestionBannerVisible(visible) {
   const banner = document.getElementById('multi-question-banner');
   if (!banner) return;
   if (visible) {
-    banner.textContent = t('multi_question_banner');
+    // text + close button を組み立てる（誤検出時にユーザーが手動 dismiss できるよう ✕ を付ける）
+    banner.innerHTML = '';
+    const msg = document.createElement('span');
+    msg.className = 'multi-question-banner-text';
+    msg.textContent = t('multi_question_banner');
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'multi-question-banner-close';
+    closeBtn.textContent = '✕';
+    closeBtn.title = t('multi_question_banner_close_tooltip') || 'Dismiss';
+    closeBtn.addEventListener('click', () => {
+      const id = activeSessionId;
+      if (!id) { banner.hidden = true; return; }
+      multiQuestionDismissedCache.set(id, true);
+      multiQuestionVisibleCache.delete(id);
+      banner.hidden = true;
+      // approvalVisibleCache が banner 専用に立てられていた場合は戻す
+      if (approvalVisibleCache.get(id) && !(approvalRawOptionsCache.get(id)?.length > 0)) {
+        approvalVisibleCache.set(id, false);
+        removeApprovalAutoSwitchTarget(id);
+        ws.send(JSON.stringify({ type: 'session_hint', session_id: id, approval_visible: false }));
+      }
+    });
+    banner.appendChild(msg);
+    banner.appendChild(closeBtn);
     banner.hidden = false;
   } else {
     banner.hidden = true;
@@ -2833,22 +3162,31 @@ function trackApprovalHintFromChunk(id, bytes) {
     multiQContext = lines.concat(scanBuffer(id).slice(-40));
   }
   if (isMultiQuestionPrompt(multiQContext)) {
-    cancelApprovalHintConfirm(id);
-    approvalRawOptionsCache.delete(id);
-    if (!multiQuestionVisibleCache.get(id)) {
-      multiQuestionVisibleCache.set(id, true);
-      if (id === activeSessionId) setMultiQuestionBannerVisible(true);
-      // 待機通知を Hub と同期（auto-switch とサウンドは action-bar と同等の扱い）
-      if (!approvalVisibleCache.get(id)) {
-        approvalVisibleCache.set(id, true);
-        enqueueApprovalAutoSwitch(id);
-        playNotificationSound();
-        ws.send(JSON.stringify({ type: 'session_hint', session_id: id, approval_visible: true }));
+    // ユーザーが ✕ で手動 dismiss した場合は再表示しない（誤検出を尊重）
+    const dismissed = multiQuestionDismissedCache.get(id);
+    // regular approval が確認済みなら false positive として扱い、multiQuestion 検出を完全にスキップする。
+    // xterm scrollback に前回 AskUserQuestion の「Review your answers」等が残ると誤検出し、
+    // ここで cache を削除すると detectApproval の H9 救済が機能せずチカチカする。
+    // sendChoice / doSend 経路では確実に cache.delete されるため、この保護は安全。
+    const hasCachedApproval = approvalVisibleCache.get(id) && (approvalRawOptionsCache.get(id)?.length > 0);
+    if (!dismissed && !hasCachedApproval) {
+      cancelApprovalHintConfirm(id);
+      approvalRawOptionsCache.delete(id);
+      if (!multiQuestionVisibleCache.get(id)) {
+        multiQuestionVisibleCache.set(id, true);
+        if (id === activeSessionId) setMultiQuestionBannerVisible(true);
+        // 待機通知を Hub と同期（auto-switch とサウンドは action-bar と同等の扱い）
+        if (!approvalVisibleCache.get(id)) {
+          approvalVisibleCache.set(id, true);
+          enqueueApprovalAutoSwitch(id);
+          playNotificationSound();
+          ws.send(JSON.stringify({ type: 'session_hint', session_id: id, approval_visible: true }));
+        }
+      } else if (id === activeSessionId) {
+        setMultiQuestionBannerVisible(true);
       }
-    } else if (id === activeSessionId) {
-      setMultiQuestionBannerVisible(true);
+      return;
     }
-    return;
   }
 
   // フォーマットベース検出（優先）: [ANY-AI-CLI] マーカーがあれば即確定
@@ -3320,29 +3658,48 @@ function detectApproval(id) {
   const mqLines = (tEarly?.pendingTextTail || '').split(/\r\n|\r|\n/).slice(-40).map(l => stripAnsi(l))
     .concat(scanBuffer(id).slice(-40));
   if (isMultiQuestionPrompt(mqLines)) {
-    // action-bar は出さない（誤誘導防止）
-    bar.classList.remove('visible');
-    bar.innerHTML = '';
-    actionBarFocusIdx = -1;
-    if (!multiQuestionVisibleCache.get(id)) {
-      multiQuestionVisibleCache.set(id, true);
-      if (!approvalVisibleCache.get(id)) {
-        approvalVisibleCache.set(id, true);
-        enqueueApprovalAutoSwitch(id);
-        ws.send(JSON.stringify({ type: 'session_hint', session_id: id, approval_visible: true }));
+    // 確認済みの regular approval がある場合は false positive として扱い、
+    // action-bar を消さず通常の承認検出にフォールスルーする。
+    // xterm scrollback に前回 AskUserQuestion の残骸が残ると誤検出しチカチカする。
+    // また ✕ で手動 dismiss された場合も再表示しない。
+    const hasCachedApproval = approvalVisibleCache.get(id) && (approvalRawOptionsCache.get(id)?.length > 0);
+    const dismissed = multiQuestionDismissedCache.get(id);
+    if (!hasCachedApproval && !dismissed) {
+      // action-bar は出さない（誤誘導防止）
+      bar.classList.remove('visible');
+      bar.innerHTML = '';
+      actionBarFocusIdx = -1;
+      if (!multiQuestionVisibleCache.get(id)) {
+        multiQuestionVisibleCache.set(id, true);
+        if (!approvalVisibleCache.get(id)) {
+          approvalVisibleCache.set(id, true);
+          enqueueApprovalAutoSwitch(id);
+          ws.send(JSON.stringify({ type: 'session_hint', session_id: id, approval_visible: true }));
+        }
       }
+      if (id === activeSessionId) setMultiQuestionBannerVisible(true);
+      return;
     }
-    if (id === activeSessionId) setMultiQuestionBannerVisible(true);
-    return;
-  }
-  if (multiQuestionVisibleCache.get(id)) {
+    // false positive: 残存 multiQuestionVisibleCache があれば除去して
+    // transition path が後で approvalVisibleCache を誤クリアしないようにする
+    if (multiQuestionVisibleCache.get(id)) {
+      multiQuestionVisibleCache.delete(id);
+      if (id === activeSessionId) setMultiQuestionBannerVisible(false);
+    }
+    // fall through to regular approval detection
+  } else if (multiQuestionVisibleCache.get(id)) {
+    // multiQ が genuinely 終了した: transition path で approvalVisibleCache を false に戻す
     multiQuestionVisibleCache.delete(id);
+    multiQuestionDismissedCache.delete(id);
     if (id === activeSessionId) setMultiQuestionBannerVisible(false);
     if (approvalVisibleCache.get(id)) {
       approvalVisibleCache.set(id, false);
       removeApprovalAutoSwitchTarget(id);
       ws.send(JSON.stringify({ type: 'session_hint', session_id: id, approval_visible: false }));
     }
+  } else {
+    // 検出側もマッチしない & state も無い: dismissed フラグもクリア（次の本物に備える）
+    multiQuestionDismissedCache.delete(id);
   }
 
   // [ANY-AI-CLI] マーカー検出: xterm バッファではなく pendingTextTail を使う。
@@ -3639,6 +3996,8 @@ function showActionBar(bar, sessionId, options, showExpand, forceStickToBottom =
   // `term` にすることで本関数末尾の t('expand_btn') 等が正しく i18n を参照できる。
   const term = sessionId === activeSessionId ? terminals.get(sessionId) : null;
   const shouldStickToBottom = !!(term && (forceStickToBottom || term.autoScroll || isTerminalAtBottom(term)));
+  const chatTl = getChatTimelineEl();
+  const chatWasAtBottom = chatTl ? chatPaneAtBottom(chatTl) : false;
 
   // 差分スキップ: 前回描画と同一シグネチャなら DOM を再構築しない（点滅防止）。
   // detectApproval は scheduleApprovalCheck 経由で 300ms ごとに走るため、
@@ -3654,6 +4013,7 @@ function showActionBar(bar, sessionId, options, showExpand, forceStickToBottom =
     // 承認検出は PTY write / ResizeObserver / セッション自動切替と同時に走ることがある。
     // DOM 再描画をスキップする場合でも、追従中なら最下部への再スナップは省略しない。
     if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
+    if (chatWasAtBottom && chatTl) requestAnimationFrame(() => scrollChatPaneToBottom(chatTl));
     return;
   }
   lastActionBarRender.sessionId = sessionId;
@@ -3723,11 +4083,14 @@ function showActionBar(bar, sessionId, options, showExpand, forceStickToBottom =
   if (shouldStickToBottom) {
     refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
   }
+  if (chatWasAtBottom && chatTl) requestAnimationFrame(() => scrollChatPaneToBottom(chatTl));
 }
 
 function showBatchActionBar(bar, sessionId, sections, forceStickToBottom = false) {
   const term = sessionId === activeSessionId ? terminals.get(sessionId) : null;
   const shouldStickToBottom = !!(term && (forceStickToBottom || term.autoScroll || isTerminalAtBottom(term)));
+  const chatTlB = getChatTimelineEl();
+  const chatWasAtBottomB = chatTlB ? chatPaneAtBottom(chatTlB) : false;
 
   // セクション数が変わったら選択状態をリセット（前回の sectionA→sectionB セレクションが残らないように）
   let selections = batchSelections.get(sessionId);
@@ -3751,6 +4114,7 @@ function showBatchActionBar(bar, sessionId, sections, forceStickToBottom = false
   });
   if (lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig) {
     if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
+    if (chatWasAtBottomB && chatTlB) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlB));
     return;
   }
   lastActionBarRender.sessionId = sessionId;
@@ -3837,6 +4201,7 @@ function showBatchActionBar(bar, sessionId, sections, forceStickToBottom = false
   bar.appendChild(footer);
   bar.classList.add('visible');
   if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
+  if (chatWasAtBottomB && chatTlB) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlB));
 }
 
 function selectBatchOption(sessionId, sectionIdx, optionNum) {
@@ -3931,9 +4296,25 @@ function sendChoice(sessionId, targetNum) {
     const response = seqState.prompts
       .map(p => `${p.key}: ${seqState.answers.get(p.key)}`)
       .join('\n') + '\r';
+    // chatHistory: 複数質問への一括回答を system/approval として push
+    chatHistoryCommitOutput(sessionId);
+    pushMessage(sessionId, {
+      role: 'system',
+      kind: 'approval',
+      rawText: response.replace(/\r$/, ''),
+      meta: {
+        kind: 'batch',
+        answers: seqState.prompts.map(p => ({
+          key: p.key,
+          question: p.question,
+          answer: seqState.answers.get(p.key),
+        })),
+      },
+    });
     clearSequentialChoiceState(sessionId);
     const prevOpts = approvalRawOptionsCache.get(sessionId);
     if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
+    multiQuestionDismissedCache.delete(sessionId);
     sendText(sessionId, response);
     hideActionBar(sessionId);
     approvalSuppressUntil.set(sessionId, Date.now() + 2000);
@@ -3951,6 +4332,18 @@ function sendChoice(sessionId, targetNum) {
     ? cachedOpts.find(o => o && o.num === targetNum)
     : null;
   const choiceText = targetOpt && targetOpt._sendText ? targetOpt._sendText : `${targetNum}\r`;
+  // chatHistory: 単問への回答を system/approval として push
+  chatHistoryCommitOutput(sessionId);
+  pushMessage(sessionId, {
+    role: 'system',
+    kind: 'approval',
+    rawText: targetOpt ? (targetOpt.label || `#${targetNum}`) : `#${targetNum}`,
+    meta: {
+      kind: 'single',
+      answer: targetNum,
+      label: targetOpt ? (targetOpt.label || null) : null,
+    },
+  });
   sendText(sessionId, choiceText);
   // doSend と同様に消費済み署名を記録（Ink 再描画による同一ブロックの再検出・再表示を防ぐ）
   const prevOpts = cachedOpts;
@@ -4236,6 +4629,8 @@ async function doSend(sessionId) {
   const textToSend = injectPrefix + textPart;
   clearInput();
   hideSlashMenu();
+  // 送信したら次のプロンプトは別物の可能性があるため dismiss フラグをクリア
+  multiQuestionDismissedCache.delete(sessionId);
   // テキスト送信で承認ポップアップをバイパスした場合、Ink 再描画による
   // 同一選択肢の再検出・再表示を防ぐため消費済み署名を保存する
   const prevOpts = approvalRawOptionsCache.get(sessionId);
@@ -4247,6 +4642,12 @@ async function doSend(sessionId) {
     detectApproval(sessionId);
     maybeAutoSwitchToNextApproval();
   }, 2050);
+  // chatHistory: ユーザー送信は AI ターンの境界。
+  // まず蓄積中の AI 出力チャンクを即 commit してから user 入力を push する。
+  chatHistoryCommitOutput(sessionId);
+  if (rawText && rawText !== '') {
+    pushMessage(sessionId, { role: 'user', kind: 'text', rawText });
+  }
   sendSubmittedText(sessionId, textToSend);
 }
 
@@ -4676,6 +5077,10 @@ function removeLocalSession(id) {
   // sessions.delete より前に git/files タブの付け替えを試みる
   // （onSessionRemoved 内で sessionsRef を引いて代替を探すため、削除前の方が探しやすい）
   try { FilesTabManager.onSessionRemoved(id); } catch (_) {}
+  // C1/C2: チャット履歴 store とビューモード state をクリーンアップ
+  try { if (typeof onChatHistorySessionRemoved === 'function') onChatHistorySessionRemoved(id); } catch (_) {}
+  try { if (typeof sessionViewMode !== 'undefined') sessionViewMode.delete(id); } catch (_) {}
+  try { if (typeof sessionLazyLoaded !== 'undefined') sessionLazyLoaded.delete(id); } catch (_) {}
   sessions.delete(id);
   removeFromSessionOrder(id);
   const t = terminals.get(id);
@@ -4685,6 +5090,7 @@ function removeLocalSession(id) {
   if (multiQuestionVisibleCache.delete(id) && id === activeSessionId) {
     setMultiQuestionBannerVisible(false);
   }
+  multiQuestionDismissedCache.delete(id);
   removeApprovalAutoSwitchTarget(id);
   approvalRawOptionsCache.delete(id);
   approvalConsumedSig.delete(id);
@@ -4693,6 +5099,7 @@ function removeLocalSession(id) {
   cancelApprovalHintConfirm(id);
   approvalSuppressUntil.delete(id);
   cleanupSessionInputState(id);
+  onChatHistorySessionRemoved(id);
   if (activeSessionId === id) {
     activeSessionId = null;
     const area = document.getElementById('terminal-area');
@@ -4845,6 +5252,10 @@ function activateSession(id) {
   renderToolOutputs(id);
   updateShellBadge(id);
   updateQuickCmdButtons(id);
+  // C2: D11 セッション情報チップ更新 + D13 セッション毎モード復元 + チャット件数バッジ購読
+  if (typeof renderSessionInfoChip === 'function') renderSessionInfoChip();
+  if (typeof applyActiveSessionViewMode === 'function') applyActiveSessionViewMode();
+  if (typeof rewireChatHistorySub === 'function') rewireChatHistorySub(id);
   inputEl.focus();
   if (typeof window._wakewordSessionChanged === 'function') window._wakewordSessionChanged();
   const sessionInfo = sessions.get(id);
@@ -4898,8 +5309,8 @@ function stateLabel(state) {
   return t('state_' + state) || state;
 }
 
-function providerIconHtml(provider) {
-  const base = `class="card-provider-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"`;
+function providerIconHtml(provider, size = 16) {
+  const base = `class="card-provider-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="${size}" height="${size}" aria-hidden="true"`;
   const txt  = `text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif"`;
   if (provider === 'claude') {
     return `<svg ${base}><circle cx="8" cy="8" r="6" fill="#FFF7ED" stroke="#F97316" stroke-width="2"/><text x="8" y="8" ${txt} fill="#F97316">C</text></svg>`;
@@ -4913,7 +5324,8 @@ function providerIconHtml(provider) {
   if (provider === 'opencode') {
     return `<svg ${base}><rect x="1" y="1" width="14" height="14" rx="3" fill="#FAF5FF" stroke="#A855F7" stroke-width="2"/><text x="8" y="8" ${txt} fill="#A855F7">O</text></svg>`;
   }
-  return '';
+  const letter = (provider || '?')[0].toUpperCase();
+  return `<svg ${base}><circle cx="8" cy="8" r="6" fill="#F3F4F6" stroke="#6B7280" stroke-width="2"/><text x="8" y="8" ${txt} fill="#6B7280">${letter}</text></svg>`;
 }
 
 function getOrderedSessions() {
@@ -5358,6 +5770,8 @@ function renderSessionList() {
 }
 
 function updateMainTabStatus() {
+  // D11: セッション情報チップも同タイミングで更新 (state badge を反映)
+  if (typeof renderSessionInfoChip === 'function') renderSessionInfoChip();
   const wrap = document.getElementById('main-tab-status');
   if (!wrap) return;
   const sess = sessions.get(activeSessionId);
@@ -5693,6 +6107,36 @@ if (terminalWrapper) {
   });
 }
 
+// チャット履歴ペインへの D&D
+const chatPane = document.getElementById('chat-pane');
+if (chatPane) {
+  let chatDragCounter = 0;
+  chatPane.addEventListener('dragenter', (e) => {
+    if (!e.dataTransfer?.types.includes('Files')) return;
+    e.preventDefault();
+    if (++chatDragCounter === 1) chatPane.classList.add('drag-active');
+  });
+  chatPane.addEventListener('dragleave', () => {
+    if (--chatDragCounter <= 0) {
+      chatDragCounter = 0;
+      chatPane.classList.remove('drag-active');
+    }
+  });
+  chatPane.addEventListener('dragover', (e) => {
+    if (e.dataTransfer?.types.includes('Files')) e.preventDefault();
+  });
+  chatPane.addEventListener('drop', (e) => {
+    e.preventDefault();
+    chatDragCounter = 0;
+    chatPane.classList.remove('drag-active');
+    if (activeSessionId === null) return;
+    for (const file of e.dataTransfer?.files ?? []) {
+      if (isImageFile(file)) stageAttach(file);
+      else stageFileAttach(file);
+    }
+  });
+}
+
 async function stageAttach(file) {
   const normalized = await normalizeAttachImage(file);
   const buf = await normalized.arrayBuffer();
@@ -5776,6 +6220,8 @@ async function flushPendingAttach(sessionId) {
   if (pendingAttachFiles.length === 0) return [];
   const toSend = pendingAttachFiles.splice(0);
   const injects = [];
+  // chatHistory 用: 送信に成功した添付の情報を集める
+  const historyAttachments = [];
   for (const { buf, filename, wrapper } of toSend) {
     try {
       const formData = new FormData();
@@ -5790,6 +6236,15 @@ async function flushPendingAttach(sessionId) {
         try {
           const data = await res.json();
           if (data && data.inject) injects.push(data.inject);
+          const attachKind = /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(filename || '') ? 'image' : 'file';
+          const blob = new Blob([buf]);
+          historyAttachments.push({
+            filename: filename || '',
+            byteLength: (buf && buf.byteLength) || 0,
+            kind: attachKind,
+            path: data && data.saved_path ? data.saved_path : null,
+            url: attachKind === 'image' ? URL.createObjectURL(blob) : null,
+          });
         } catch (_) {
           showToast('Attachment response parse failed');
         }
@@ -5798,6 +6253,15 @@ async function flushPendingAttach(sessionId) {
       showToast('Attachment send failed');
     }
     if (wrapper) setTimeout(() => { wrapper.remove(); updateAttachClearBtn(); }, 1000);
+  }
+  // chatHistory: attach を user/attach として 1 メッセージにまとめて push
+  if (historyAttachments.length > 0) {
+    pushMessage(sessionId, {
+      role: 'user',
+      kind: 'attach',
+      attachments: historyAttachments,
+      rawText: '',
+    });
   }
   return injects;
 }
@@ -6270,6 +6734,8 @@ function openLightbox(src) {
           if (data.ok && data.path) {
             spawnCwdInput.value = data.path;
             refreshCwdInputStatus();
+            spawnCwdInput.focus();
+            renderCwdDropdown('');
           }
         } else {
           // Non-2xx (typically 500 when no native folder picker is available,
@@ -6284,6 +6750,7 @@ function openLightbox(src) {
     });
   }
   spawnCwdInput.addEventListener('focus', () => { renderCwdDropdown(''); refreshCwdInputStatus(); });
+  spawnCwdInput.addEventListener('click', () => { renderCwdDropdown(''); });
   spawnCwdInput.addEventListener('input', () => { renderCwdDropdown(spawnCwdInput.value.trim()); scheduleCwdInputCheck(); });
   spawnCwdInput.addEventListener('blur',  () => setTimeout(() => { cwdDropdown.hidden = true; }, 150));
   spawnCwdInput.addEventListener('keydown', (e) => {
@@ -6468,7 +6935,28 @@ function openLightbox(src) {
         return;
       }
       const route = resolveRoute(provider, model);
+
+      // Ollama route の場合: Windows + PowerShell + 非 UTF-8 環境を検出して警告
+      let utf8Session = false;
+      if (route === 'ollama') {
+        try {
+          const encRes = await fetch(`/api/encoding-check?token=${token}`);
+          if (encRes.ok) {
+            const encData = await encRes.json();
+            if (encData.is_windows && encData.is_powershell && !encData.is_utf8) {
+              const choice = await appConfirmOllamaEncoding();
+              if (choice === null) {
+                spawnLaunchBtn.disabled = false;
+                return;
+              }
+              utf8Session = (choice === 'utf8');
+            }
+          }
+        } catch (_) {}
+      }
+
       const bodyObj = { provider, cwd, model, label };
+      if (utf8Session) bodyObj.utf8_session = true;
       if (route) bodyObj.route = route;
       if (provider === 'claude') {
         const picked = claudeModelSelection;
@@ -7200,12 +7688,13 @@ function openLightbox(src) {
   // 今まさに stuck な録音セッションを救う経路が無く、ユーザーが ✕/✓ を押すまで
   // 波形だけが残る状況が再発していた。
   const NO_RESULT_WATCHDOG_MS = 4500;
+  const AUDIOSTART_NO_RESULT_WATCHDOG_MS = 8000;
   let noResultWatchdog = null;
-  function armNoResultWatchdog() {
+  function armNoResultWatchdog(timeoutMs = NO_RESULT_WATCHDOG_MS) {
     clearTimeout(noResultWatchdog);
     noResultWatchdog = setTimeout(() => {
       noResultWatchdog = null;
-      console.warn('SpeechRecognition: audio active but no result for', NO_RESULT_WATCHDOG_MS, 'ms — forcing recovery');
+      console.warn('SpeechRecognition: audio active but no result for', timeoutMs, 'ms - forcing recovery');
       userIntendedStop = true;
       clearSilenceTimer();
       clearRestartTimer();
@@ -7383,9 +7872,9 @@ function openLightbox(src) {
     if (!_isCurrentRecognitionEvent(e)) return;
     setVoiceAudioActive(true);
     voiceIntensityTarget = 0.15;
-    // audiostart は無音テストでも発火するため、ここで watchdog を arm すると
-    // 「黙っていただけ」でも 4.5 秒後にマイク取り合い疑いトーストが誤発火する。
-    // soundstart / speechstart（実際に音や発話が検出されたとき）でだけ arm する。
+    // audiostart だけ来て soundstart/result が来ない Chrome stuck もあるため、
+    // 長めの保険だけ arm する。実発話が検出されたら sound/speech 側で短い watchdog に更新される。
+    armNoResultWatchdog(AUDIOSTART_NO_RESULT_WATCHDOG_MS);
   });
   _onRecognition('soundstart', (e) => {
     if (!_isCurrentRecognitionEvent(e)) return;
@@ -8270,8 +8759,10 @@ const FilesTabManager = (function () {
     });
     // コンテンツ
     const isSession = (tabId === 'session');
+    // C2: 統合タブバー導入後は display-area mode クラスで visibility を制御するため、
+    // terminalWrapper.style.display は触らず、常に '' に保つ。
+    terminalWrapper.style.display = '';
     if (isSession) {
-      terminalWrapper.style.display = '';
       filesContents.classList.remove('visible');
       filesContents.querySelectorAll('.files-tab-content, .git-tab-content').forEach(el => el.classList.remove('active'));
       // display:none で隠れていた間に ResizeObserver が 0 幅で fit() を呼んでいる可能性があるため、
@@ -8281,11 +8772,24 @@ const FilesTabManager = (function () {
         refitActiveTerminalAfterLayout(true);
       }
     } else {
-      terminalWrapper.style.display = 'none';
       filesContents.classList.add('visible');
       filesContents.querySelectorAll('.files-tab-content, .git-tab-content').forEach(el => {
         el.classList.toggle('active', el.dataset.tabId === tabId);
       });
+      // C2: 外部から openFilesTab / openGitTab が呼ばれた場合は統合タブバーも追随
+      if (targetTab) {
+        const kind = targetTab.kind || targetTab.type;
+        if (kind === 'files' || kind === 'git') {
+          if (typeof window !== 'undefined' && typeof window.setActiveTab === 'function') {
+            const sid = (typeof activeSessionId !== 'undefined') ? activeSessionId : null;
+            if (sid !== null && sid !== undefined) {
+              if (typeof markTabLazyLoaded === 'function') markTabLazyLoaded(sid, kind);
+              if (typeof refreshLazyTabClasses === 'function') refreshLazyTabClasses(sid);
+              window.setActiveTab(sid, kind);
+            }
+          }
+        }
+      }
     }
   }
 
@@ -8917,9 +9421,1448 @@ const FilesTabManager = (function () {
   };
 })();
 
-// Hub 起動時に localStorage からタブを復元
+// Hub 起動時に localStorage からタブ状態を読み込む準備だけ行う。
+// Files/Git 本体は統合タブの初回クリックまで復元・fetch しない。
 FilesTabManager.setSessionsRef(sessions);
-FilesTabManager.restoreFromLocalStorage();
+
+// ─── C2: 統合タブバー (setActiveTab) ───────────────────────────────────
+// セッション毎の表示モード (D13: in-memory, リロードで初期化)
+const sessionViewMode = new Map(); // sid -> 'terminal' | 'chat' | 'split' | 'files' | 'git'
+// Files/Git の遅延ロード状態 (sid -> Set<'files'|'git'>)
+const sessionLazyLoaded = new Map();
+
+const VALID_TAB_NAMES = new Set(['terminal', 'chat', 'split', 'files', 'git']);
+// C5: lock の対象モード (Files/Git は lock 対象外: D10 の lazy 読み込みと相性が悪い)
+const LOCKABLE_MODES = new Set(['terminal', 'chat', 'split']);
+
+// C5: 「表示モードを固定」設定値の取得 ('' / 'terminal' / 'chat' / 'split')
+function getDisplayLockedMode() {
+  try {
+    const raw = localStorage.getItem(STORAGE_DISPLAY_LOCKED_MODE_KEY);
+    if (!raw) return '';
+    if (LOCKABLE_MODES.has(raw)) return raw;
+  } catch (_) {}
+  return '';
+}
+
+function getSessionViewMode(sid) {
+  if (sid === null || sid === undefined) return 'terminal';
+  // C5: セッション未登録 (新規 spawn / リロード後の初回) は lock 値を初期モードとして適用
+  if (!sessionViewMode.has(sid)) {
+    const lock = getDisplayLockedMode();
+    if (lock && LOCKABLE_MODES.has(lock)) return lock;
+    return 'terminal';
+  }
+  return sessionViewMode.get(sid) || 'terminal';
+}
+
+function isTabLazyLoaded(sid, name) {
+  const set = sessionLazyLoaded.get(sid);
+  return !!(set && set.has(name));
+}
+
+function markTabLazyLoaded(sid, name) {
+  if (!sessionLazyLoaded.has(sid)) sessionLazyLoaded.set(sid, new Set());
+  sessionLazyLoaded.get(sid).add(name);
+}
+
+// C5: lock 値に対応するタブにのみ .locked-mode を付与 (🔒 表示)
+function refreshLockedModeTabClasses() {
+  const lock = getDisplayLockedMode();
+  document.querySelectorAll('#unified-tab-bar .view-tab').forEach(btn => {
+    const isLocked = !!lock && btn.dataset.tab === lock;
+    btn.classList.toggle('locked-mode', isLocked);
+  });
+}
+
+// C5: lock 中にユーザーが別タブへ切替えた時、セッションごとに 5 分クールダウン付きでトースト
+const _lockedModeToastLastTs = new Map(); // sid -> ts(ms)
+const LOCKED_MODE_TOAST_COOLDOWN_MS = 5 * 60 * 1000;
+
+function maybeFireLockedModeToast(sid, requestedMode) {
+  const lock = getDisplayLockedMode();
+  if (!lock) return;
+  if (!LOCKABLE_MODES.has(requestedMode)) return;
+  if (requestedMode === lock) return;
+  if (sid === null || sid === undefined) return;
+  const now = Date.now();
+  const last = _lockedModeToastLastTs.get(sid) || 0;
+  if (now - last < LOCKED_MODE_TOAST_COOLDOWN_MS) return;
+  _lockedModeToastLastTs.set(sid, now);
+  const tfn = (typeof window.t === 'function') ? window.t : ((k) => k);
+  const modeLabel = tfn('settings_locked_mode_' + lock);
+  showToast(tfn('toast_locked_mode_switched', { mode: modeLabel }));
+}
+
+// Files/Git のうち、現セッションでまだ未取得のものは .lazy クラスを付け直す
+function refreshLazyTabClasses(sid) {
+  const filesBtn = document.querySelector('#unified-tab-bar .view-tab[data-tab="files"]');
+  const gitBtn   = document.querySelector('#unified-tab-bar .view-tab[data-tab="git"]');
+  if (filesBtn) {
+    const loaded = isTabLazyLoaded(sid, 'files');
+    filesBtn.classList.toggle('lazy', !loaded);
+    filesBtn.classList.toggle('loaded', loaded);
+  }
+  if (gitBtn) {
+    const loaded = isTabLazyLoaded(sid, 'git');
+    gitBtn.classList.toggle('lazy', !loaded);
+    gitBtn.classList.toggle('loaded', loaded);
+  }
+}
+
+// D11: タブバー左端のセッション情報チップを描画 (セッションカード相当)
+function renderSessionInfoChip() {
+  const chip = document.getElementById('session-info-chip');
+  if (!chip) return;
+  const sid = activeSessionId;
+  const s = (sid !== null && sid !== undefined) ? sessions.get(sid) : null;
+  if (!s) {
+    chip.hidden = true;
+    chip.innerHTML = '';
+    return;
+  }
+  chip.hidden = false;
+  const providerName = s.provider === 'claude' ? 'Claude'
+                     : s.provider === 'codex'  ? 'Codex'
+                     : s.provider === 'ollama' ? 'Ollama'
+                     : s.provider === 'opencode' ? 'OpenCode'
+                     : (s.provider || '');
+  const providerChipHtml = providerName
+    ? `<span class="card-provider-chip ${s.provider || ''}">${escapeHtml(providerName)}</span>`
+    : '';
+  const isOllamaBackedSess = (s.route === 'ollama');
+  let modelBadge = '';
+  if (s.model) {
+    const badgeProviderKey = isOllamaBackedSess ? 'ollama' : (s.provider || '');
+    const badgeProviderLabel = isOllamaBackedSess ? 'Ollama' : providerName;
+    const tip = badgeProviderLabel ? `${badgeProviderLabel} · ${s.model}` : s.model;
+    modelBadge = ` <span class="card-model card-model--with-icon" data-tooltip="${escapeHtml(tip)}">${providerIconHtml(badgeProviderKey)}<span class="card-model-text">${escapeHtml(s.model)}</span></span>`;
+  }
+  const state = s.state || 'standby';
+  const stateLbl = (typeof stateLabel === 'function') ? stateLabel(state) : state;
+  chip.innerHTML =
+    `<span class="sid">#${s.id}</span>` +
+    `${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}` +
+    ` <span class="badge ${state}">${escapeHtml(stateLbl)}</span>`;
+}
+
+// D12: チャット件数バッジ更新
+function updateChatCountBadge() {
+  const badge = document.getElementById('chat-count-badge');
+  if (!badge) return;
+  const sid = activeSessionId;
+  let n = 0;
+  if (sid !== null && sid !== undefined) {
+    try {
+      const msgs = (typeof getMessages === 'function') ? getMessages(sid) : [];
+      n = Array.isArray(msgs) ? msgs.length : 0;
+    } catch (_) {}
+  }
+  badge.textContent = String(n);
+  badge.hidden = (n === 0);
+}
+
+// C2 公開 API: タブを切り替える
+let _setActiveTabRecursion = false;
+function setActiveTab(sid, name) {
+  if (!VALID_TAB_NAMES.has(name)) return;
+  const targetSid = (sid !== null && sid !== undefined) ? sid : activeSessionId;
+  if (targetSid === null || targetSid === undefined) return;
+
+  // セッション毎モードを保存 (D13)
+  sessionViewMode.set(targetSid, name);
+
+  // 現セッションへの切替でなければ DOM 反映は不要 (アクティブ化時に反映される)
+  if (targetSid !== activeSessionId) return;
+
+  const area = document.getElementById('display-area');
+  if (!area) return;
+  area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git');
+  area.classList.add('mode-' + name);
+
+  // タブボタンの active 切替
+  document.querySelectorAll('#unified-tab-bar .view-tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === name);
+  });
+
+  // D10: Files/Git は初回クリックで FilesTabManager に開かせる
+  // FilesTabManager.setActive が再帰的に setActiveTab を呼ぶため再帰防止フラグで守る
+  if ((name === 'files' || name === 'git') && !_setActiveTabRecursion) {
+    _setActiveTabRecursion = true;
+    try { handleLazyTabOpen(targetSid, name); }
+    finally { _setActiveTabRecursion = false; }
+  }
+
+  // xterm のリサイズ (D6): terminal/split に切り替えたときは refit
+  if (name === 'terminal' || name === 'split') {
+    if (typeof refitActiveTerminalAfterLayout === 'function') {
+      refitActiveTerminalAfterLayout(true);
+    }
+  }
+
+  // FilesTabManager は内部状態として terminalWrapper.style.display を弄っていたため、
+  // 統合バー導入後はインラインスタイルを除去して CSS (display-area mode) に任せる
+  const termWrap = document.getElementById('terminal-wrapper');
+  if (termWrap) termWrap.style.display = '';
+
+  // C5: lock 値に対応するタブに 🔒 を付け直す (DOM 更新後)
+  if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
+}
+
+// D10: Files/Git タブを初回クリックで開く (および既ロード時の再アクティブ化)
+// openFilesTab / openGitTab は idempotent (既存タブがあれば再利用) なので、
+// セッション切替で .active が外れた files/git pane の再表示にも兼用する。
+function handleLazyTabOpen(sid, name) {
+  const sess = sessions.get(sid);
+  if (!sess) return;
+  const gr = sess.git_root || sess.cwd || '';
+  if (!gr) {
+    // git_root / cwd が無いので開けない。lazy のまま
+    return;
+  }
+  try {
+    if (name === 'files') {
+      const pk = sess.project || deriveProjectKeyFromCwd(gr);
+      FilesTabManager.openFilesTab(sid, pk, gr, gr);
+    } else if (name === 'git') {
+      FilesTabManager.openGitTab(sid, gr, sess.branch || '');
+    }
+    markTabLazyLoaded(sid, name);
+    refreshLazyTabClasses(sid);
+  } catch (e) {
+    console.warn('[setActiveTab] lazy open failed:', name, e);
+  }
+}
+
+// 既存 switchToSessionView() (FilesTabManager 内) は #main-tab-bar の DOM 操作を行う。
+// 統合バー導入後は setActiveTab(sid, 'terminal') への薄いラッパーとして使う。
+function switchToTerminalView() {
+  if (activeSessionId !== null && activeSessionId !== undefined) {
+    setActiveTab(activeSessionId, 'terminal');
+  }
+}
+
+// ─── タブボタンのクリックハンドラ配線 ───
+(function wireUnifiedTabBar() {
+  const bar = document.getElementById('unified-tab-bar');
+  if (!bar) return;
+  bar.querySelectorAll('.view-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const name = btn.dataset.tab;
+      if (!VALID_TAB_NAMES.has(name)) return;
+      setActiveTab(activeSessionId, name);
+      // C5: lock 中に lock 値以外へ切替えたら、セッションごと 5 分クールダウンでトースト
+      if (typeof maybeFireLockedModeToast === 'function') {
+        maybeFireLockedModeToast(activeSessionId, name);
+      }
+    });
+  });
+  // C5: 初期 🔒 反映 (起動時に lock 値が設定済みなら該当タブへ付与)
+  if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
+})();
+
+// 新規セッション/アクティブ切替時に display-area のモードを復元
+function applyActiveSessionViewMode() {
+  if (activeSessionId === null || activeSessionId === undefined) return;
+  const mode = getSessionViewMode(activeSessionId);
+  refreshLazyTabClasses(activeSessionId);
+  setActiveTab(activeSessionId, mode);
+}
+
+// チャット履歴の購読: バッジ更新用 (アクティブセッションだけ)
+let _activeChatSubUnsub = null;
+function rewireChatHistorySub(sid) {
+  if (_activeChatSubUnsub) { try { _activeChatSubUnsub(); } catch (_) {} _activeChatSubUnsub = null; }
+  if (sid === null || sid === undefined) return;
+  if (typeof window === 'undefined' || !window.chatHistoryAPI || typeof window.chatHistoryAPI.subscribe !== 'function') return;
+  _activeChatSubUnsub = window.chatHistoryAPI.subscribe(sid, (msg) => {
+    if (sid !== activeSessionId) return;
+    updateChatCountBadge();
+    // C3: chat-pane が現在マウント中のセッションなら増分追加
+    if (_chatPaneMountedSid === sid && msg) {
+      appendMessage(sid, msg);
+    }
+  });
+  updateChatCountBadge();
+}
+
+if (typeof window !== 'undefined') {
+  window.setActiveTab = setActiveTab;
+}
+
+// =========================================================================
+// C3: チャット履歴メッセージレンダリング本体
+// docs/local/plan_chat-history-subview.md §C3
+//
+// 主要関数:
+//   mountChatPaneForSession(sid)     — chat-pane を再構築
+//   appendMessage(sid, msg)           — 1 件 append (新規メッセージのみ)
+//   renderMessageBubble(msg, opts)    — DOM 要素を返す
+//   renderInlineText(text)            — path / URL / inline-code → DOM 変換
+//   parseToolCallsFromOutput(text, provider) — provider 別ツール呼び出し抽出
+// =========================================================================
+
+let _chatPaneMountedSid = null;
+
+function getChatPaneEl() {
+  return document.getElementById('chat-pane');
+}
+
+function getChatTimelineEl() {
+  const pane = getChatPaneEl();
+  if (!pane) return null;
+  return pane.querySelector('.chat-timeline');
+}
+
+function chatPaneAtBottom(timeline) {
+  if (!timeline) return true;
+  const remain = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight;
+  return remain < 60;
+}
+
+function scrollChatPaneToBottom(timeline) {
+  if (!timeline) return;
+  timeline.scrollTop = timeline.scrollHeight;
+}
+
+function getAiDisplayName(provider) {
+  switch (provider) {
+    case 'claude':   return ti18n('chat_ai_name_claude', 'Claude');
+    case 'codex':    return ti18n('chat_ai_name_codex', 'Codex');
+    case 'ollama':   return ti18n('chat_ai_name_ollama', 'Ollama');
+    case 'opencode': return ti18n('chat_ai_name_opencode', 'OpenCode');
+    default: return provider ? String(provider) : 'AI';
+  }
+}
+
+function getAiAvatarLetter(provider) {
+  switch (provider) {
+    case 'claude':   return 'C';
+    case 'codex':    return 'X';
+    case 'ollama':   return 'O';
+    case 'opencode': return 'P';
+    default: return 'A';
+  }
+}
+
+function getUserAvatarLetter() {
+  const lang = (document.documentElement.lang || '').toLowerCase();
+  return lang.startsWith('ja') ? 'あ' : 'Y';
+}
+
+function formatTimestamp(ts) {
+  const d = (ts instanceof Date) ? ts : new Date(ts);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function formatMsgNumber(id) {
+  const n = Math.max(1, Number(id) || 1);
+  return '#' + String(n).padStart(3, '0');
+}
+
+// テキスト中の URL / ファイルパス / インラインコード を DOM に変換する。
+// 戻り値は DocumentFragment（または Node 配列を返さず単体 Node にする）。
+function renderInlineText(text) {
+  const frag = document.createDocumentFragment();
+  if (!text) return frag;
+  const src = String(text);
+
+  // 全体を順次トークナイズ:
+  //   - ``` で囲まれたコードブロックは行内ではここでは扱わず、上位 (renderMessageBody) で処理する
+  //   - インラインコード `...` を最優先で切り出す
+  //   - URL (http(s)://)
+  //   - ファイルパス候補（拡張子付き、または絶対パス、または ./ ../ で始まるもの）
+  //
+  // 単一 regex で全パターン候補を OR して、マッチ位置順に処理する。
+  //
+  // 注: 簡易実装。括弧やカンマ等の終端で誤検出する可能性はあるが、C4 で
+  // 右クリック時にユーザーが手動で paste 修正可能。
+
+  // インラインコードを最初に抽出（バッククォート内は path/URL 検出をしない）
+  const codeRe = /`([^`\n]+?)`/g;
+  const tokens = []; // {kind:'code'|'plain', text, raw?}
+  let idx = 0;
+  let m;
+  while ((m = codeRe.exec(src)) !== null) {
+    if (m.index > idx) tokens.push({ kind: 'plain', text: src.slice(idx, m.index) });
+    tokens.push({ kind: 'code', text: m[1] });
+    idx = m.index + m[0].length;
+  }
+  if (idx < src.length) tokens.push({ kind: 'plain', text: src.slice(idx) });
+
+  for (const tk of tokens) {
+    if (tk.kind === 'code') {
+      const el = document.createElement('span');
+      el.className = 'code-inline';
+      el.textContent = tk.text;
+      frag.appendChild(el);
+      continue;
+    }
+    // plain: URL / path を抽出
+    _appendPlainWithLinks(frag, tk.text);
+  }
+  return frag;
+}
+
+// プレーンテキストから URL とファイルパスを抽出し、frag に追加する。
+function _appendPlainWithLinks(frag, text) {
+  if (!text) return;
+  // URL: http(s)://...
+  // path 候補:
+  //   - 絶対パス Unix: /usr/... (ただしコードブロック外)
+  //   - 絶対パス Windows: C:\... or C:/...
+  //   - 相対パス: ./xxx ../xxx
+  //   - 拡張子付き相対: foo/bar.ext または bar.ext (拡張子に絞る)
+  //
+  // 安全側: 末尾の句読点 ,.;:!?) を除外する。
+
+  // 単一の包括 regex
+  const re = /(https?:\/\/[^\s<>"'`)\]]+)|((?:[a-zA-Z]:[\\/]|[.]{1,2}[\\/]|\/)[^\s<>"'`)\]]+)|([\w][\w\-/\\.]*\.[a-zA-Z]{1,8}\b)/g;
+  let last = 0;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+    let token = m[0];
+    // 末尾の句読点を分離
+    let trail = '';
+    while (token.length > 0 && /[.,;:!?)\]\}>]/.test(token[token.length - 1])) {
+      trail = token[token.length - 1] + trail;
+      token = token.slice(0, -1);
+    }
+    if (!token) {
+      frag.appendChild(document.createTextNode(m[0]));
+      last = m.index + m[0].length;
+      continue;
+    }
+    if (m[1]) {
+      // URL
+      const a = document.createElement('a');
+      a.className = 'url-link';
+      a.href = token;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = token;
+      frag.appendChild(a);
+    } else {
+      // path
+      const span = document.createElement('span');
+      span.className = 'path-link';
+      span.dataset.path = token;
+      span.textContent = token;
+      frag.appendChild(span);
+    }
+    if (trail) frag.appendChild(document.createTextNode(trail));
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+}
+
+// PTY output からツール呼び出しを抽出する（provider 別の簡易版）。
+// Claude フォーマット: 行頭の `● ToolName(args)` を検出。
+// Codex / 他: 同様パターンを暫定で適用（誤マッチは v2 で改善）。
+//
+// 戻り値: [{ name, args, body }, ...]  body は次のツール呼び出しまでの本文（任意）。
+function parseToolCallsFromOutput(text, _provider) {
+  const calls = [];
+  if (!text) return calls;
+  const lines = String(text).split(/\r?\n/);
+  const re = /^[\s•●○●○]*●\s+([A-Z][A-Za-z0-9_]*)\s*\(([^\n]*)\)\s*$/;
+  let cur = null;
+  for (const line of lines) {
+    const m = line.match(re);
+    if (m) {
+      if (cur) calls.push(cur);
+      cur = { name: m[1], args: m[2] || '', body: '' };
+    } else if (cur) {
+      // body 候補: " ⎿  ..." のような Claude のツール結果行を取り込む
+      // ただし不確実なので最大 12 行までに抑える
+      const bodyLines = cur.body ? cur.body.split('\n') : [];
+      if (bodyLines.length < 12) {
+        cur.body = cur.body ? cur.body + '\n' + line : line;
+      }
+    }
+  }
+  if (cur) calls.push(cur);
+  return calls;
+}
+
+// AI メッセージ本文からツール呼び出し行を取り除いた残りテキストを返す。
+function stripToolCallLines(text) {
+  if (!text) return '';
+  const lines = String(text).split(/\r?\n/);
+  const out = [];
+  const re = /^[\s•●○●○]*●\s+([A-Z][A-Za-z0-9_]*)\s*\([^\n]*\)\s*$/;
+  let skipping = false;
+  for (const line of lines) {
+    if (re.test(line)) { skipping = true; continue; }
+    if (skipping) {
+      // ⎿ で始まる結果行はツール呼び出しの一部とみなしてスキップ
+      if (/^\s*⎿/.test(line)) continue;
+      skipping = false;
+    }
+    out.push(line);
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// 1 メッセージの DOM を構築する。
+function renderMessageBubble(sid, msg) {
+  const sess = (typeof sessions !== 'undefined' && sessions) ? sessions.get(sid) : null;
+  const provider = (sess && sess.provider) || 'claude';
+  const role = msg.role || 'system';
+  const kind = msg.kind || 'text';
+
+  const wrapEl = document.createElement('div');
+  wrapEl.className = 'msg ' + role;
+  wrapEl.dataset.msgId = String(msg.id);
+  wrapEl.dataset.role = role;
+  wrapEl.dataset.kind = kind;
+
+  // メッセージ番号
+  const numEl = document.createElement('span');
+  numEl.className = 'msg-number';
+  numEl.textContent = formatMsgNumber(msg.id);
+  wrapEl.appendChild(numEl);
+
+  if (role === 'system') {
+    // system/approval: 中央寄せのバブル単体
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble approval';
+    const ttl = document.createElement('div');
+    ttl.className = 'ttl';
+    const icon = document.createElement('span');
+    icon.textContent = '⚠';
+    ttl.appendChild(icon);
+    const title = document.createElement('span');
+    title.textContent = ti18n('chat_system_approval_title', '承認待ち');
+    ttl.appendChild(title);
+    bubble.appendChild(ttl);
+
+    // 質問本文（meta.kind === 'batch' なら複数質問、'single' なら単問）
+    const meta = msg.meta || {};
+    if (meta.kind === 'batch' && Array.isArray(meta.answers)) {
+      for (const ans of meta.answers) {
+        const line = document.createElement('div');
+        line.appendChild(renderInlineText(String(ans.question || '')));
+        bubble.appendChild(line);
+      }
+    } else if (msg.rawText) {
+      const line = document.createElement('div');
+      line.appendChild(renderInlineText(msg.normalizedText || msg.rawText));
+      bubble.appendChild(line);
+    }
+
+    // 回答ライン
+    const ans = document.createElement('div');
+    ans.className = 'ans';
+    let answerStr = '';
+    if (meta.kind === 'single') {
+      answerStr = meta.label ? `${meta.answer}. ${meta.label}` : String(meta.answer || msg.rawText || '');
+    } else if (meta.kind === 'batch' && Array.isArray(meta.answers)) {
+      answerStr = meta.answers.map(a => `${a.key}: ${a.answer}`).join(', ');
+    } else {
+      answerStr = msg.normalizedText || msg.rawText || '';
+    }
+    const timeStr = formatTimestamp(msg.ts);
+    ans.textContent = ti18n('chat_approval_answered_by', `→ ${answerStr} (${timeStr} にあなたが承認)`, {
+      answer: answerStr,
+      time: timeStr,
+    });
+    bubble.appendChild(ans);
+
+    wrapEl.appendChild(bubble);
+    return wrapEl;
+  }
+
+  // user / ai 共通: avatar + bubble-wrap
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar ' + (role === 'user' ? 'user' : ('ai ' + provider));
+  if (role === 'user') {
+    avatar.textContent = getUserAvatarLetter();
+  } else {
+    avatar.innerHTML = providerIconHtml(provider, 30);
+  }
+  wrapEl.appendChild(avatar);
+
+  const bw = document.createElement('div');
+  bw.className = 'bubble-wrap';
+
+  // meta line
+  const metaEl = document.createElement('div');
+  metaEl.className = 'bubble-meta';
+  const ts = formatTimestamp(msg.ts);
+  if (role === 'user') {
+    metaEl.textContent = `${ts} · ${ti18n('chat_user', 'あなた')}`;
+  } else {
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'name';
+    nameSpan.textContent = getAiDisplayName(provider);
+    metaEl.appendChild(nameSpan);
+    metaEl.appendChild(document.createTextNode(' · ' + ts));
+    // AI メッセージのトークン・所要時間（meta 経由 or tool 経由）
+    const tool = msg.tool || {};
+    const m = msg.meta || {};
+    const elapsed = (typeof m.elapsed_ms === 'number') ? m.elapsed_ms
+                  : (typeof tool.elapsed_ms === 'number' ? tool.elapsed_ms : null);
+    if (elapsed != null) {
+      const s = document.createElement('span');
+      s.className = 'stat';
+      const sec = (elapsed / 1000).toFixed(1) + 's';
+      s.innerHTML = `⏱ <b>${escapeHtml(sec)}</b>`;
+      metaEl.appendChild(s);
+    }
+    const tokIn  = (m.tokens_in  != null) ? m.tokens_in  : (tool.tokens_in  != null ? tool.tokens_in  : null);
+    const tokOut = (m.tokens_out != null) ? m.tokens_out : (tool.tokens_out != null ? tool.tokens_out : null);
+    if (tokIn != null || tokOut != null) {
+      const s = document.createElement('span');
+      s.className = 'stat';
+      const inStr  = tokIn  != null ? Number(tokIn).toLocaleString()  : '–';
+      const outStr = tokOut != null ? Number(tokOut).toLocaleString() : '–';
+      s.innerHTML = `🪙 in <b>${escapeHtml(inStr)}</b> / out <b>${escapeHtml(outStr)}</b>`;
+      metaEl.appendChild(s);
+    }
+  }
+  bw.appendChild(metaEl);
+
+  // bubble 本体
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble ' + (role === 'user' ? 'user-text' : 'ai-text');
+
+  const content = document.createElement('div');
+  content.className = 'bubble-content';
+
+  if (kind === 'attach') {
+    // attach メッセージはテキスト無し or 短い rawText のみ
+    const txt = msg.normalizedText || msg.rawText || '';
+    if (txt) {
+      content.appendChild(renderInlineText(txt));
+    } else {
+      // 添付のみの場合、placeholder テキスト
+      const n = Array.isArray(msg.attachments) ? msg.attachments.length : 0;
+      content.textContent = ti18n('chat_attachment_count', `${n} 件の添付`, { n });
+    }
+  } else if (role === 'ai') {
+    // AI: ツール呼び出しを抽出してから本文を表示
+    const raw = msg.normalizedText || msg.rawText || '';
+    const cleanText = stripToolCallLines(raw);
+    if (cleanText) content.appendChild(renderInlineText(cleanText));
+    bubble.appendChild(content);
+    const toolCalls = parseToolCallsFromOutput(raw, provider);
+    for (const tc of toolCalls) {
+      bubble.appendChild(renderToolCall(tc));
+    }
+  } else {
+    // user/text
+    const raw = msg.normalizedText || msg.rawText || '';
+    content.appendChild(renderInlineText(raw));
+  }
+
+  if (kind !== 'ai' && bubble.childNodes.length === 0) bubble.appendChild(content);
+  if (role !== 'ai' || kind === 'attach') {
+    // ai 以外は content をまだ append していない
+    if (!bubble.contains(content)) bubble.appendChild(content);
+  }
+
+  bw.appendChild(bubble);
+
+  // attachments
+  if (Array.isArray(msg.attachments) && msg.attachments.length > 0) {
+    const ats = document.createElement('div');
+    ats.className = 'attachments';
+    for (const a of msg.attachments) {
+      const thumb = document.createElement('div');
+      thumb.className = 'thumb';
+      if (a.url) {
+        const img = document.createElement('img');
+        img.src = a.url;
+        img.alt = a.filename || '';
+        img.style.cursor = 'pointer';
+        img.addEventListener('click', () => openLightbox(img.src));
+        thumb.appendChild(img);
+      } else {
+        const icn = document.createElement('span');
+        icn.className = 'icn';
+        icn.textContent = (a.kind === 'image') ? '🖼' : '📄';
+        thumb.appendChild(icn);
+      }
+      const fname = document.createElement('span');
+      fname.className = 'fname';
+      fname.textContent = a.filename || '';
+      thumb.appendChild(fname);
+      ats.appendChild(thumb);
+    }
+    bw.appendChild(ats);
+  }
+
+  // C4: hover action buttons (copy / collapse) と raw link を注入
+  if (typeof window !== 'undefined' && typeof window._chatC4DecorateBubble === 'function') {
+    try { window._chatC4DecorateBubble(wrapEl, bw, bubble, msg); } catch (_) {}
+  }
+
+  wrapEl.appendChild(bw);
+  return wrapEl;
+}
+
+function renderToolCall(tc) {
+  const wrap = document.createElement('div');
+  wrap.className = 'tool-call';
+
+  const header = document.createElement('div');
+  header.className = 'tool-call-header';
+  const caret = document.createElement('span');
+  caret.className = 'caret';
+  caret.textContent = '▶';
+  header.appendChild(caret);
+
+  const tname = document.createElement('span');
+  tname.className = 'tname';
+  tname.textContent = tc.name || 'Tool';
+  header.appendChild(tname);
+
+  const tdesc = document.createElement('span');
+  tdesc.className = 'tdesc';
+  tdesc.textContent = tc.args || '';
+  header.appendChild(tdesc);
+
+  if (tc.stat) {
+    const stat = document.createElement('span');
+    stat.className = 'tstat';
+    stat.textContent = tc.stat;
+    header.appendChild(stat);
+  }
+
+  header.addEventListener('click', () => {
+    wrap.classList.toggle('open');
+  });
+  wrap.appendChild(header);
+
+  const body = document.createElement('div');
+  body.className = 'tool-call-body';
+  body.textContent = tc.body || '';
+  wrap.appendChild(body);
+
+  return wrap;
+}
+
+function updateChatPaneEmptyState(sid) {
+  const pane = getChatPaneEl();
+  if (!pane) return;
+  let count = 0;
+  try {
+    const msgs = (typeof getMessages === 'function') ? getMessages(sid) : [];
+    count = Array.isArray(msgs) ? msgs.length : 0;
+  } catch (_) {}
+  pane.classList.toggle('has-messages', count > 0);
+}
+
+// アクティブセッションの chat-pane を完全再構築する。
+// セッション切替時 / モード切替で chat 系に入ったときに呼ぶ。
+function mountChatPaneForSession(sid) {
+  const pane = getChatPaneEl();
+  const timeline = getChatTimelineEl();
+  if (!pane || !timeline) return;
+  // タイムラインを空にして再構築
+  while (timeline.firstChild) timeline.removeChild(timeline.firstChild);
+  timeline.dataset.sid = sid != null ? String(sid) : '';
+  _chatPaneMountedSid = (sid !== null && sid !== undefined) ? sid : null;
+  if (sid === null || sid === undefined) {
+    updateChatPaneEmptyState(sid);
+    return;
+  }
+  let msgs = [];
+  try { msgs = getMessages(sid) || []; } catch (_) {}
+  const frag = document.createDocumentFragment();
+  for (const m of msgs) {
+    frag.appendChild(renderMessageBubble(sid, m));
+  }
+  timeline.appendChild(frag);
+  updateChatPaneEmptyState(sid);
+  // C4: filter/search/minimap を再構築
+  if (typeof window !== 'undefined' && typeof window._chatC4OnRemount === 'function') {
+    try { window._chatC4OnRemount(sid); } catch (_) {}
+  }
+  // 末尾追従
+  requestAnimationFrame(() => scrollChatPaneToBottom(timeline));
+}
+
+// 1 メッセージの増分追加。subscribe コールバックから呼ばれる。
+function appendMessage(sid, msg) {
+  if (sid !== _chatPaneMountedSid) return;
+  const timeline = getChatTimelineEl();
+  if (!timeline) return;
+  const wasAtBottom = chatPaneAtBottom(timeline);
+  // 既に同 id がある場合は skip（重複防止）
+  if (timeline.querySelector(`.msg[data-msg-id="${CSS.escape(String(msg.id))}"]`)) return;
+  timeline.appendChild(renderMessageBubble(sid, msg));
+  updateChatPaneEmptyState(sid);
+  // C4: 増分のフィルタ/検索/ミニマップ更新
+  if (typeof window !== 'undefined' && typeof window._chatC4OnAppend === 'function') {
+    try { window._chatC4OnAppend(sid, msg); } catch (_) {}
+  }
+  if (wasAtBottom) requestAnimationFrame(() => scrollChatPaneToBottom(timeline));
+}
+
+// setActiveTab が chat/split に切り替わるタイミングで chat-pane の中身を保証する。
+// 既存 setActiveTab を wrap せず、毎回 mountChatPaneForSession を呼ぶ。
+// setActiveTab 自体は C2 のままに保ち、本ファイル末尾で chat/split に切り替わったときの
+// 副作用としてマウントを行う薄いラッパーを追加する。
+const _originalSetActiveTab_C3 = setActiveTab;
+setActiveTab = function (sid, name) {
+  const ret = _originalSetActiveTab_C3.call(this, sid, name);
+  try {
+    const targetSid = (sid !== null && sid !== undefined) ? sid : activeSessionId;
+    if (targetSid !== null && targetSid !== undefined &&
+        targetSid === activeSessionId &&
+        (name === 'chat' || name === 'split')) {
+      // 既に同 sid でマウント済みなら差分のみ。違う sid なら再構築。
+      if (_chatPaneMountedSid !== targetSid) {
+        mountChatPaneForSession(targetSid);
+      } else {
+        // 念のためスクロール末尾追従
+        const tl = getChatTimelineEl();
+        if (tl) requestAnimationFrame(() => scrollChatPaneToBottom(tl));
+      }
+    }
+  } catch (e) {
+    console.warn('[mountChatPaneForSession] failed:', e);
+  }
+  return ret;
+};
+if (typeof window !== 'undefined') {
+  window.setActiveTab = setActiveTab;
+  window.mountChatPaneForSession = mountChatPaneForSession;
+  window.appendChatMessage = appendMessage;
+}
+
+// =========================================================================
+// C4: チャット履歴の補助機能 (子 plan plan_chat-history-subview_c4_extras.md)
+//   - 子 C1: .path-link 右クリックメニュー (showPathPopup 流用)
+//   - 子 C2: 吹き出し hover アクション (コピー / 折りたたみ / raw)
+//            #btn-expand-all / #btn-collapse-all / #btn-raw-log 本実装
+//   - 子 C3: 検索 (Ctrl+F) + フィルタチップ
+//   - 子 C4: ミニマップ + J/K/Esc キーボード操作
+// =========================================================================
+(function initC4ChatExtras() {
+  // ---- DOM ヘルパ ---------------------------------------------------------
+  function chatPane() { return document.getElementById('chat-pane'); }
+  function chatTimeline() {
+    const p = chatPane();
+    return p ? p.querySelector('.chat-timeline') : null;
+  }
+  function isChatVisible() {
+    const p = chatPane();
+    if (!p) return false;
+    // hidden 属性 / 親 display:none を考慮
+    if (p.hidden) return false;
+    const rect = p.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+  function activeMode() {
+    const da = document.getElementById('display-area');
+    if (!da) return null;
+    if (da.classList.contains('mode-chat')) return 'chat';
+    if (da.classList.contains('mode-split')) return 'split';
+    if (da.classList.contains('mode-terminal')) return 'terminal';
+    if (da.classList.contains('mode-files')) return 'files';
+    if (da.classList.contains('mode-git')) return 'git';
+    return null;
+  }
+
+  // =====================================================================
+  // 子 C1: .path-link 右クリックメニュー
+  // =====================================================================
+  document.addEventListener('contextmenu', (e) => {
+    const link = e.target.closest && e.target.closest('#chat-pane .path-link');
+    if (!link) return;
+    const p = link.dataset.path || link.textContent || '';
+    if (!p) return;
+    e.preventDefault();
+    e.stopPropagation();
+    // 既存ターミナルの showPathPopup を再利用
+    if (typeof showPathPopup === 'function') {
+      try { showPathPopup(p, e.clientX, e.clientY, activeSessionId); } catch (_) {}
+    }
+  }, true);
+
+  // 左クリックでも popup を出す (ターミナル既存挙動と揃える)
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest && e.target.closest('#chat-pane .path-link');
+    if (!link) return;
+    const p = link.dataset.path || link.textContent || '';
+    if (!p) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof showPathPopup === 'function') {
+      try { showPathPopup(p, e.clientX, e.clientY, activeSessionId); } catch (_) {}
+    }
+  });
+
+  // =====================================================================
+  // 子 C2: 吹き出し hover アクション (.bubble-actions)
+  // =====================================================================
+  // renderMessageBubble の最後で呼ばれる装飾フック
+  window._chatC4DecorateBubble = function (wrapEl, bw, bubble, msg) {
+    const role = (msg && msg.role) || 'system';
+    if (role === 'system') return;
+    // hover アクション群
+    const acts = document.createElement('div');
+    acts.className = 'bubble-actions';
+    // copy ボタン
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'msg-action msg-action-copy';
+    copyBtn.title = ti18n('chat_copy_btn', 'コピー');
+    copyBtn.textContent = '📋';
+    copyBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const text = (msg && (msg.normalizedText || msg.rawText)) || (bubble && bubble.textContent) || '';
+      try {
+        navigator.clipboard.writeText(text);
+        const prev = copyBtn.textContent;
+        copyBtn.textContent = '✓';
+        copyBtn.classList.add('copied');
+        setTimeout(() => { copyBtn.textContent = prev; copyBtn.classList.remove('copied'); }, 1000);
+      } catch (_) {}
+    });
+    acts.appendChild(copyBtn);
+    // 折りたたみボタン (bubble に .collapsed クラス)
+    const collBtn = document.createElement('button');
+    collBtn.type = 'button';
+    collBtn.className = 'msg-action msg-action-collapse';
+    collBtn.title = ti18n('chat_collapse_btn', '折りたたみ');
+    collBtn.textContent = '–';
+    collBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      bubble.classList.toggle('collapsed');
+      collBtn.textContent = bubble.classList.contains('collapsed') ? '+' : '–';
+    });
+    acts.appendChild(collBtn);
+    bubble.appendChild(acts);
+
+    // raw リンク (📄 raw)
+    const rawWrap = document.createElement('div');
+    rawWrap.className = 'bubble-raw-link';
+    rawWrap.textContent = '📄 raw';
+    rawWrap.title = ti18n('chat_raw_modal_title', '生 PTY テキスト');
+    rawWrap.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openRawModal(msg);
+    });
+    bw.appendChild(rawWrap);
+  };
+
+  // raw モーダル
+  let _rawModalEl = null;
+  function openRawModal(msg) {
+    closeRawModal();
+    const overlay = document.createElement('div');
+    overlay.className = 'chat-raw-modal-overlay';
+    const dlg = document.createElement('div');
+    dlg.className = 'chat-raw-modal';
+    const head = document.createElement('div');
+    head.className = 'chat-raw-modal-head';
+    const title = document.createElement('span');
+    title.className = 'chat-raw-modal-title';
+    title.textContent = ti18n('chat_raw_modal_title', '生 PTY テキスト') + ' ' + (msg && msg.id != null ? '#' + String(msg.id).padStart(3, '0') : '');
+    head.appendChild(title);
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'chat-raw-modal-btn';
+    copyBtn.textContent = '📋';
+    copyBtn.title = ti18n('chat_copy_btn', 'コピー');
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'chat-raw-modal-btn chat-raw-modal-close';
+    closeBtn.textContent = '✕';
+    head.appendChild(copyBtn);
+    head.appendChild(closeBtn);
+    dlg.appendChild(head);
+    const body = document.createElement('pre');
+    body.className = 'chat-raw-modal-body';
+    body.textContent = (msg && (msg.rawText || msg.normalizedText)) || '';
+    dlg.appendChild(body);
+    overlay.appendChild(dlg);
+    document.body.appendChild(overlay);
+    _rawModalEl = overlay;
+    closeBtn.addEventListener('click', closeRawModal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeRawModal(); });
+    copyBtn.addEventListener('click', () => {
+      try {
+        navigator.clipboard.writeText(body.textContent || '');
+        copyBtn.textContent = '✓';
+        setTimeout(() => { copyBtn.textContent = '📋'; }, 1000);
+      } catch (_) {}
+    });
+  }
+  function closeRawModal() {
+    if (_rawModalEl) { try { _rawModalEl.remove(); } catch (_) {} _rawModalEl = null; }
+  }
+
+  // ---- 全展開 / 全折りたたみ / 生ログ (buildFilterBar から呼ぶ) ----------
+  function expandAllTools() {
+    const p = chatPane();
+    if (!p) return;
+    p.querySelectorAll('.tool-call').forEach(tc => tc.classList.add('open'));
+  }
+  function collapseAllTools() {
+    const p = chatPane();
+    if (!p) return;
+    p.querySelectorAll('.tool-call').forEach(tc => tc.classList.remove('open'));
+  }
+  async function openRawLog() {
+    try {
+      const sess = activeSessionId != null ? sessions.get(activeSessionId) : null;
+      const targetPath = sess && (sess.jsonl_path || sess.log_path || sess.JSONLPath || sess.LogPath);
+      if (!targetPath) {
+        showToast(ti18n('chat_raw_log_open_failed', '生ログを開けませんでした'));
+        return;
+      }
+      const res = await fetch(`/api/open-dir?token=${encodeURIComponent(token)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'path', path: targetPath }),
+      });
+      if (!res.ok) {
+        showToast(ti18n('chat_raw_log_open_failed', '生ログを開けませんでした'));
+      }
+    } catch (_) {
+      showToast(ti18n('chat_raw_log_open_failed', '生ログを開けませんでした'));
+    }
+  }
+
+  // =====================================================================
+  // 子 C3: 検索 + フィルタチップ (.chat-filter-bar 内容構築)
+  // =====================================================================
+  let _filterKind = 'all'; // 'all' | 'user' | 'ai' | 'image' | 'approval'
+  let _searchQuery = '';
+  let _searchHits = []; // [el, el, ...] 表示順
+  let _searchCursor = -1;
+
+  function buildFilterBar() {
+    const pane = chatPane();
+    if (!pane) return;
+    const bar = pane.querySelector('.chat-filter-bar');
+    if (!bar) return;
+    if (bar.dataset.c4Built === '1') return;
+    bar.dataset.c4Built = '1';
+    bar.hidden = false;
+
+    const chips = [
+      { key: 'all',      label: ti18n('chat_filter_all', 'すべて') },
+      { key: 'user',     label: '📝 ' + ti18n('chat_filter_user', '入力') },
+      { key: 'ai',       label: '🤖 ' + ti18n('chat_filter_ai', 'AI出力') },
+      { key: 'image',    label: '🖼 ' + ti18n('chat_filter_image', '画像') },
+      { key: 'approval', label: '⚠ ' + ti18n('chat_filter_approval', '承認') },
+    ];
+    for (const c of chips) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'filter-chip' + (c.key === _filterKind ? ' active' : '');
+      b.dataset.kind = c.key;
+      b.innerHTML = '';
+      const lab = document.createElement('span');
+      lab.className = 'filter-chip-label';
+      lab.textContent = c.label;
+      const count = document.createElement('span');
+      count.className = 'count';
+      count.textContent = '0';
+      b.appendChild(lab);
+      b.appendChild(count);
+      b.addEventListener('click', () => {
+        _filterKind = c.key;
+        bar.querySelectorAll('.filter-chip').forEach(x => x.classList.toggle('active', x.dataset.kind === _filterKind));
+        applyFilterAndSearch();
+      });
+      bar.appendChild(b);
+    }
+
+    // 全展開 / 全折りたたみ / 生ログ / 検索を同じ行グループにまとめる。
+    const actionGroup = document.createElement('div');
+    actionGroup.className = 'chat-filter-actions';
+
+    // 全展開 / 全折りたたみ / 生ログ (承認チップの右隣)
+    const iconBtnDefs = [
+      { id: 'btn-expand-all',   icon: '⊞', label: ti18n('btn_expand_all', '全展開'),       tip: ti18n('btn_expand_all_tooltip', '全てのツール呼び出しを展開'),       fn: () => expandAllTools() },
+      { id: 'btn-collapse-all', icon: '⊟', label: ti18n('btn_collapse_all', '全折りたたみ'), tip: ti18n('btn_collapse_all_tooltip', '全てのツール呼び出しを折りたたみ'), fn: () => collapseAllTools() },
+      { id: 'btn-raw-log',      icon: '📄', label: ti18n('btn_raw_log', '生ログ'),           tip: ti18n('btn_raw_log_tooltip', '生ログを開く'),                       fn: () => openRawLog() },
+    ];
+    for (const def of iconBtnDefs) {
+      const ib = document.createElement('button');
+      ib.id = def.id;
+      ib.type = 'button';
+      ib.className = 'icon-btn';
+      ib.dataset.tooltip = def.tip;
+      ib.innerHTML = `<span>${def.icon}</span><span>${def.label}</span>`;
+      ib.addEventListener('click', (e) => { e.preventDefault(); def.fn(); });
+      actionGroup.appendChild(ib);
+    }
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'chat-search-input';
+    input.placeholder = ti18n('chat_search_placeholder', '履歴を検索 (Ctrl+F)');
+    input.addEventListener('input', () => {
+      _searchQuery = input.value || '';
+      applyFilterAndSearch();
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (e.shiftKey) jumpSearch(-1); else jumpSearch(+1);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        input.value = '';
+        _searchQuery = '';
+        applyFilterAndSearch();
+        input.blur();
+      }
+    });
+    actionGroup.appendChild(input);
+    bar.appendChild(actionGroup);
+    bar._searchInput = input;
+  }
+
+  function getFilterBarInput() {
+    const pane = chatPane();
+    if (!pane) return null;
+    const bar = pane.querySelector('.chat-filter-bar');
+    return (bar && bar._searchInput) ? bar._searchInput : null;
+  }
+
+  function classifyMsgEl(el) {
+    const role = el.dataset.role || '';
+    const kind = el.dataset.kind || '';
+    if (role === 'system' || kind === 'approval') return 'approval';
+    if (kind === 'attach') return 'image';
+    if (role === 'user') return 'user';
+    if (role === 'ai') return 'ai';
+    return 'other';
+  }
+
+  function applyFilterAndSearch() {
+    const tl = chatTimeline();
+    const pane = chatPane();
+    if (!tl || !pane) return;
+    const bar = pane.querySelector('.chat-filter-bar');
+    const counts = { all: 0, user: 0, ai: 0, image: 0, approval: 0 };
+    const q = String(_searchQuery || '').toLowerCase();
+    _searchHits = [];
+    const msgs = tl.querySelectorAll('.msg');
+    msgs.forEach(el => {
+      const cat = classifyMsgEl(el);
+      counts.all++;
+      if (counts[cat] != null) counts[cat]++;
+      // フィルタ
+      const filterOk = (_filterKind === 'all') || (cat === _filterKind);
+      // 検索 (テキスト含有判定 + <mark> 化)
+      // mark を毎回剥がして再適用
+      unmarkInside(el);
+      let searchOk = true;
+      if (q) {
+        const text = (el.textContent || '').toLowerCase();
+        searchOk = text.indexOf(q) >= 0;
+        if (searchOk) {
+          highlightInside(el, q);
+          _searchHits.push(el);
+        }
+      }
+      el.classList.toggle('search-hit', !!(q && searchOk));
+      el.style.display = (filterOk && searchOk) ? '' : 'none';
+    });
+    // counts 反映
+    if (bar) {
+      bar.querySelectorAll('.filter-chip').forEach(b => {
+        const k = b.dataset.kind;
+        const c = b.querySelector('.count');
+        if (c) c.textContent = String(counts[k] != null ? counts[k] : 0);
+      });
+    }
+    // 検索カーソルリセット
+    _searchCursor = (_searchHits.length > 0) ? 0 : -1;
+    if (_searchCursor >= 0) markSearchCurrent();
+    // ミニマップ更新
+    rebuildMinimap();
+  }
+
+  function unmarkInside(root) {
+    // mark タグを外して元のテキストに戻す
+    const marks = root.querySelectorAll('mark.chat-search-mark');
+    marks.forEach(m => {
+      const tx = document.createTextNode(m.textContent || '');
+      m.parentNode.replaceChild(tx, m);
+    });
+    // 連続テキストを正規化
+    root.normalize();
+  }
+  function highlightInside(root, query) {
+    if (!query) return;
+    const q = query.toLowerCase();
+    // テキストノードのみを対象に置換 (script, style, mark 内はスキップ)
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const p = node.parentNode;
+        if (!p) return NodeFilter.FILTER_REJECT;
+        if (p.nodeName === 'MARK' || p.nodeName === 'SCRIPT' || p.nodeName === 'STYLE') return NodeFilter.FILTER_REJECT;
+        if (!node.nodeValue) return NodeFilter.FILTER_REJECT;
+        if (node.nodeValue.toLowerCase().indexOf(q) < 0) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    const targets = [];
+    let n;
+    while ((n = walker.nextNode())) targets.push(n);
+    for (const tn of targets) {
+      const text = tn.nodeValue;
+      const lower = text.toLowerCase();
+      let idx = 0;
+      const frag = document.createDocumentFragment();
+      let pos = 0;
+      while ((idx = lower.indexOf(q, pos)) !== -1) {
+        if (idx > pos) frag.appendChild(document.createTextNode(text.slice(pos, idx)));
+        const mk = document.createElement('mark');
+        mk.className = 'chat-search-mark';
+        mk.textContent = text.slice(idx, idx + q.length);
+        frag.appendChild(mk);
+        pos = idx + q.length;
+      }
+      if (pos < text.length) frag.appendChild(document.createTextNode(text.slice(pos)));
+      tn.parentNode.replaceChild(frag, tn);
+    }
+  }
+  function markSearchCurrent() {
+    const tl = chatTimeline();
+    if (!tl) return;
+    tl.querySelectorAll('.msg.search-current').forEach(el => el.classList.remove('search-current'));
+    if (_searchCursor >= 0 && _searchCursor < _searchHits.length) {
+      const el = _searchHits[_searchCursor];
+      el.classList.add('search-current');
+      try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
+    }
+  }
+  function jumpSearch(delta) {
+    if (_searchHits.length === 0) return;
+    _searchCursor = (_searchCursor + delta + _searchHits.length) % _searchHits.length;
+    markSearchCurrent();
+  }
+
+  // =====================================================================
+  // 子 C4: ミニマップ
+  // =====================================================================
+  function ensureMinimap() {
+    const pane = chatPane();
+    if (!pane) return null;
+    let mm = pane.querySelector('.minimap');
+    if (!mm) {
+      mm = document.createElement('div');
+      mm.className = 'minimap';
+      mm.title = ti18n('chat_minimap_title', 'メッセージへジャンプ');
+      pane.appendChild(mm);
+    }
+    return mm;
+  }
+  function rebuildMinimap() {
+    const mm = ensureMinimap();
+    const tl = chatTimeline();
+    if (!mm || !tl) return;
+    while (mm.firstChild) mm.removeChild(mm.firstChild);
+    const msgs = Array.from(tl.querySelectorAll('.msg')).filter(el => el.style.display !== 'none');
+    for (const el of msgs) {
+      const t = document.createElement('div');
+      t.className = 'mm-tick';
+      const cat = classifyMsgEl(el);
+      if (cat === 'user') t.classList.add('mm-user');
+      else if (cat === 'ai') t.classList.add('mm-ai');
+      else t.classList.add('mm-system');
+      const id = el.dataset.msgId || '?';
+      const role = el.dataset.role || '';
+      const rawText = (el.querySelector('.bubble-content')?.innerText || '').trim().replace(/\s+/g, ' ');
+      const preview = rawText.length > 15 ? rawText.slice(0, 15) + '…' : rawText;
+      t.dataset.label = preview || `#${String(id).padStart(3, '0')} ${role}`;
+      t.addEventListener('click', () => {
+        try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
+      });
+      // 紐付け
+      t._linkedMsg = el;
+      mm.appendChild(t);
+    }
+    setupMinimapObserver();
+    setupMinimapMagnification(mm);
+  }
+  let _mmObserver = null;
+  function setupMinimapObserver() {
+    if (_mmObserver) { try { _mmObserver.disconnect(); } catch (_) {} _mmObserver = null; }
+    const tl = chatTimeline();
+    const mm = ensureMinimap();
+    if (!tl || !mm) return;
+    const ticks = Array.from(mm.querySelectorAll('.mm-tick'));
+    const map = new Map();
+    for (const tk of ticks) if (tk._linkedMsg) map.set(tk._linkedMsg, tk);
+    _mmObserver = new IntersectionObserver((entries) => {
+      // ビューポート中央付近にあるメッセージを current に
+      let bestEl = null;
+      let bestRatio = 0;
+      for (const ent of entries) {
+        if (ent.intersectionRatio > bestRatio) {
+          bestRatio = ent.intersectionRatio;
+          bestEl = ent.target;
+        }
+      }
+      // 全 tick から current 解除
+      for (const tk of ticks) tk.classList.remove('mm-current');
+      if (bestEl && map.has(bestEl)) map.get(bestEl).classList.add('mm-current');
+    }, { root: tl, threshold: [0, 0.25, 0.5, 0.75, 1] });
+    for (const el of map.keys()) _mmObserver.observe(el);
+  }
+  let _mmMagCleanup = null;
+  function setupMinimapMagnification(mm) {
+    if (_mmMagCleanup) { _mmMagCleanup(); _mmMagCleanup = null; }
+    if (!mm) return;
+    const BASE = 4;
+    const MAX_ADD = 26;
+    const SIGMA = 36;
+    function onMove(e) {
+      const rect = mm.getBoundingClientRect();
+      const mouseY = e.clientY - rect.top;
+      const ticks = mm.querySelectorAll('.mm-tick');
+      for (const tk of ticks) {
+        const tkRect = tk.getBoundingClientRect();
+        const center = tkRect.top - rect.top + tkRect.height / 2;
+        const dist = Math.abs(mouseY - center);
+        const extra = MAX_ADD * Math.exp(-(dist * dist) / (2 * SIGMA * SIGMA));
+        tk.style.height = (BASE + extra).toFixed(1) + 'px';
+        tk.style.flex = 'none';
+      }
+    }
+    function onLeave() {
+      const ticks = mm.querySelectorAll('.mm-tick');
+      for (const tk of ticks) {
+        tk.style.height = '';
+        tk.style.flex = '';
+      }
+    }
+    mm.addEventListener('mousemove', onMove);
+    mm.addEventListener('mouseleave', onLeave);
+    _mmMagCleanup = () => {
+      mm.removeEventListener('mousemove', onMove);
+      mm.removeEventListener('mouseleave', onLeave);
+    };
+  }
+
+  // =====================================================================
+  // 子 C4: J / K / Esc キーボード操作
+  // =====================================================================
+  function getVisibleMessages() {
+    const tl = chatTimeline();
+    if (!tl) return [];
+    return Array.from(tl.querySelectorAll('.msg')).filter(el => el.style.display !== 'none');
+  }
+  function getFocusedMessageIndex(list) {
+    // .search-current 優先、無ければビューポート中央に最も近いもの
+    if (list.length === 0) return -1;
+    const idx = list.findIndex(el => el.classList.contains('msg-focus'));
+    if (idx >= 0) return idx;
+    const idxS = list.findIndex(el => el.classList.contains('search-current'));
+    if (idxS >= 0) return idxS;
+    const tl = chatTimeline();
+    if (!tl) return 0;
+    const center = tl.scrollTop + tl.clientHeight / 2;
+    let best = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < list.length; i++) {
+      const r = list[i];
+      const mid = r.offsetTop + r.offsetHeight / 2;
+      const d = Math.abs(mid - center);
+      if (d < bestDist) { bestDist = d; best = i; }
+    }
+    return best;
+  }
+  function focusMessage(el) {
+    const tl = chatTimeline();
+    if (!tl || !el) return;
+    tl.querySelectorAll('.msg.msg-focus').forEach(x => x.classList.remove('msg-focus'));
+    el.classList.add('msg-focus');
+    try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
+  }
+
+  document.addEventListener('keydown', (e) => {
+    // モーダル open 時の Esc
+    if (e.key === 'Escape' && _rawModalEl) { e.preventDefault(); closeRawModal(); return; }
+
+    // テキスト入力中は J/K/Ctrl+F は素通し (ただし検索 input への Ctrl+F フォーカスは許可)
+    const ae = document.activeElement;
+    const inSearch = !!(ae && ae.classList && ae.classList.contains('chat-search-input'));
+    const inOtherInput = !!(ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA') && !inSearch);
+
+    // Ctrl+F: chat タブ表示中なら検索 input にフォーカス
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+      if (!isChatVisible()) return;
+      const mode = activeMode();
+      if (mode !== 'chat' && mode !== 'split') return;
+      const inp = getFilterBarInput();
+      if (!inp) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try { inp.focus(); inp.select && inp.select(); } catch (_) {}
+      return;
+    }
+
+    // J / K: chat タブのみ。検索 input / IME / 通常 input にフォーカスがあるときは無効
+    if (e.key === 'j' || e.key === 'J' || e.key === 'k' || e.key === 'K') {
+      if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+      if (inSearch || inOtherInput) return;
+      if (!isChatVisible()) return;
+      const mode = activeMode();
+      // terminal モードは xterm 優先 (J/K を介入しない)
+      if (mode === 'terminal' || mode === 'files' || mode === 'git') return;
+      const list = getVisibleMessages();
+      if (list.length === 0) return;
+      const cur = getFocusedMessageIndex(list);
+      let next;
+      if (e.key === 'j' || e.key === 'J') next = Math.min(list.length - 1, cur + 1);
+      else next = Math.max(0, cur - 1);
+      e.preventDefault();
+      e.stopPropagation();
+      focusMessage(list[next]);
+      return;
+    }
+
+    // Esc: 検索クリア (chat タブ表示中のみ)
+    if (e.key === 'Escape') {
+      if (!isChatVisible()) return;
+      const mode = activeMode();
+      if (mode !== 'chat' && mode !== 'split') return;
+      const inp = getFilterBarInput();
+      if (inp && (inp.value !== '' || _searchQuery !== '')) {
+        e.preventDefault();
+        inp.value = '';
+        _searchQuery = '';
+        applyFilterAndSearch();
+        return;
+      }
+    }
+  });
+
+  // =====================================================================
+  // ライフサイクルフック: mount / append でフィルタ・ミニマップを更新
+  // =====================================================================
+  window._chatC4OnRemount = function (_sid) {
+    buildFilterBar();
+    applyFilterAndSearch();
+    rebuildMinimap();
+  };
+  window._chatC4OnAppend = function (_sid, _msg) {
+    // 1 件追加。フィルタ・検索を最新の状態に再適用 (count・hit 配列の更新)
+    applyFilterAndSearch();
+  };
+
+  // 初回マウント済みの場合に備えて初期化を試みる
+  try { buildFilterBar(); } catch (_) {}
+})();
 
 // ─── カード右クリックメニュー (Open Git / Files / Activate / Copy ID) ───
 let _cardCtxMenuEl = null;
