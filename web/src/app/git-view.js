@@ -403,6 +403,7 @@
           <div class="git-graph-spacer"></div>
           <div class="git-working-count" data-working-count>—</div>
           <div class="git-graph-count" data-count>${_esc(_gt('git_view_loading', 'loading...'))}</div>
+          <button class="git-icon-btn" data-fetch-btn title="${_esc(_gt('git_view_fetch', 'Fetch'))}">↓ fetch</button>
           <button class="git-icon-btn" data-refresh-btn title="${_esc(_gt('git_view_refresh', 'Refresh'))}">↻</button>
           <button class="git-icon-btn" data-loadmore-btn title="${_esc(_gt('git_view_load_more', 'Load 100 more'))}">+${PAGE_LIMIT}</button>
           <button class="git-commit-all-btn" data-commit-all-btn disabled>${_esc(_gt('git_commit_all', 'Commit all'))}</button>
@@ -489,6 +490,7 @@
       this.els.sessionHeadLabel = root.querySelector('[data-session-head-label]');
       this.els.count         = root.querySelector('[data-count]');
       this.els.workingCount  = root.querySelector('[data-working-count]');
+      this.els.fetchBtn      = root.querySelector('[data-fetch-btn]');
       this.els.refreshBtn    = root.querySelector('[data-refresh-btn]');
       this.els.loadmoreBtn   = root.querySelector('[data-loadmore-btn]');
       this.els.commitAllBtn  = root.querySelector('[data-commit-all-btn]');
@@ -518,6 +520,7 @@
       this.els.commitHint    = root.querySelector('[data-commit-hint]');
       this.els.commitError   = root.querySelector('[data-commit-error]');
 
+      this.els.fetchBtn.addEventListener('click', () => this._gitFetch());
       this.els.refreshBtn.addEventListener('click', () => this.refresh());
       this.els.loadmoreBtn.addEventListener('click', () => this.loadMore());
       this.els.commitAllBtn.addEventListener('click', () => this._openCommitModal());
@@ -891,6 +894,34 @@
       st.error = '';
       st.reviewed = st.subject.trim() !== '';
       this._renderCommitModalState();
+    }
+
+    async _gitFetch() {
+      const btn = this.els.fetchBtn;
+      if (btn.disabled) return;
+      btn.disabled = true;
+      const origText = btn.textContent;
+      btn.textContent = '…';
+      try {
+        const res = await fetch('/api/git-fetch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session: this.sessionId, token: this.token }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) {
+          const detail = data && data.detail ? data.detail : `HTTP ${res.status}`;
+          _toast(_gt('git_fetch_failed', 'Fetch failed'), detail);
+          return;
+        }
+        _toast(_gt('git_fetch_done', 'Fetch complete'), '');
+        await this.refresh();
+      } catch (err) {
+        _toast(_gt('git_fetch_failed', 'Fetch failed'), err && err.message ? err.message : String(err));
+      } finally {
+        btn.textContent = origText;
+        btn.disabled = false;
+      }
     }
 
     async _commitAll() {

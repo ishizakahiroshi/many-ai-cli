@@ -6708,7 +6708,7 @@ if (typeof window !== 'undefined') {
       const preview = rawText.length > 15 ? rawText.slice(0, 15) + '…' : rawText;
       t.dataset.label = preview || `#${String(id).padStart(3, '0')} ${role}`;
       t.addEventListener('click', () => {
-        try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
+        try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
       });
       // 紐付け
       t._linkedMsg = el;
