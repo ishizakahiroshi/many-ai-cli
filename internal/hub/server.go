@@ -40,6 +40,11 @@ const (
 	uiPingInterval      = 30 * time.Second
 	branchLookupTimeout = 250 * time.Millisecond
 	branchRefreshAfter  = 2 * time.Second
+
+	// OSC シーケンスをユーザーターン境界マーカーとして ptyBuf に注入する。
+	// xterm.js はこのシーケンスを画面に表示しない。
+	// 47777 は Hub のデフォルトポートを namespace として流用。
+	chatHistoryUserTurnMarker = "\x1b]47777;user-turn\x07"
 )
 
 // session の State は次のいずれか:
@@ -858,6 +863,7 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 			ses := s.sessions[m.SessionID]
 			combined := m.Text
 			var firstMsgBroadcast *proto.Message
+			var injectMarker bool
 			if ses != nil && strings.HasSuffix(m.Text, "\r") {
 				text := strings.TrimRight(m.Text, "\r\n")
 				if text == "/clear" {
@@ -876,9 +882,19 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 					}
 					msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt, FirstMessage: ses.FirstMessage, LastMessage: ses.LastMessage}
 					firstMsgBroadcast = &msg
+					// ユーザーターン境界マーカーを ptyBuf に注入する
+					marker := []byte(chatHistoryUserTurnMarker)
+					ses.ptyBuf = append(ses.ptyBuf, marker...)
+					if len(ses.ptyBuf) > maxPTYBuf {
+						ses.ptyBuf = ses.ptyBuf[len(ses.ptyBuf)-maxPTYBuf:]
+					}
+					injectMarker = true
 				}
 			}
 			s.mu.Unlock()
+			if injectMarker {
+				s.broadcast(proto.Message{Type: "pty_data", SessionID: m.SessionID, Data: []byte(chatHistoryUserTurnMarker)})
+			}
 			if wc != nil {
 				_ = websocket.JSON.Send(wc, proto.Message{Type: "pty_input", SessionID: m.SessionID, Data: []byte(combined)})
 			}

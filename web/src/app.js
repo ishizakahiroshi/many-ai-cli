@@ -1519,8 +1519,9 @@ const sessionInputState = new Map(); // sessionId → { inputValue, pastedTextsD
 const chatHistory = new Map();              // sid → Message[]
 const chatHistorySubs = new Map();          // sid → Set<callback>
 const chatHistoryIdSeq = new Map();         // sid → 次に振る連番 (1 始まり)
-const chatHistoryOutputBuffers = new Map(); // sid → { rawChunks:[], commitTimer, lastTs }
-const CHAT_HISTORY_OUTPUT_QUIESCE_MS = 800; // PTY 出力の静止時間（これを超えたら 1 メッセージ commit）
+const chatHistoryOutputBuffers = new Map(); // sid → { rawChunks:[], lastTs }
+// Go 側 chatHistoryUserTurnMarker と一致させること
+const CHAT_HISTORY_USER_TURN_MARKER = "\x1b]47777;user-turn\x07";
 
 // ANSI エスケープシーケンスを取り除く軽量ヘルパ。
 // 完全な StripANSI 実装ではなく、表示用 normalized 生成と raw 用の最低限の整形に使う。
@@ -1625,25 +1626,21 @@ function subscribeChatHistory(sid, cb) {
   };
 }
 
-// PTY 出力は流量が多くターン境界も曖昧なので、「静止 N ms で 1 メッセージ commit」
-// の単純なバッファリングで一旦 store に push する（細かい AI ターン分割は C3 担当）。
+// PTY 出力をバッファする。コミットのトリガーはマーカー検出のみ（静止タイマーなし）。
 function chatHistoryAppendOutput(sid, raw) {
   if (sid === null || sid === undefined || !raw) return;
   let buf = chatHistoryOutputBuffers.get(sid);
   if (!buf) {
-    buf = { rawChunks: [], commitTimer: null, lastTs: 0 };
+    buf = { rawChunks: [], lastTs: 0 };
     chatHistoryOutputBuffers.set(sid, buf);
   }
   buf.rawChunks.push(raw);
   buf.lastTs = Date.now();
-  if (buf.commitTimer) clearTimeout(buf.commitTimer);
-  buf.commitTimer = setTimeout(() => chatHistoryCommitOutput(sid), CHAT_HISTORY_OUTPUT_QUIESCE_MS);
 }
 
 function chatHistoryCommitOutput(sid) {
   const buf = chatHistoryOutputBuffers.get(sid);
   if (!buf) return;
-  if (buf.commitTimer) { clearTimeout(buf.commitTimer); buf.commitTimer = null; }
   if (buf.rawChunks.length === 0) return;
   const raw = buf.rawChunks.join('');
   buf.rawChunks.length = 0;
@@ -1665,9 +1662,20 @@ function chatHistoryCommitOutput(sid) {
   });
 }
 
+// マーカー検出専用の commit。msgs.length === 0 の場合はリプレイの先頭マーカーとみなし、
+// 起動バナーをバッファから捨てつつ空の user エントリを1件積んで以降の commit を解放する。
+function chatHistoryCommitOutputOrSeed(sid) {
+  const msgs = chatHistory.get(sid);
+  if (!msgs || msgs.length === 0) {
+    const buf = chatHistoryOutputBuffers.get(sid);
+    if (buf) buf.rawChunks.length = 0;
+    pushMessage(sid, { role: 'user', kind: 'text', rawText: '' });
+    return;
+  }
+  chatHistoryCommitOutput(sid);
+}
+
 function onChatHistorySessionRemoved(sid) {
-  const buf = chatHistoryOutputBuffers.get(sid);
-  if (buf && buf.commitTimer) clearTimeout(buf.commitTimer);
   chatHistoryOutputBuffers.delete(sid);
   chatHistory.delete(sid);
   chatHistorySubs.delete(sid);
@@ -1687,6 +1695,7 @@ const autoDismissTimers = new Map(); // sessionId → timer
 const approvalSuppressUntil = new Map(); // sessionId → timestamp (sendChoice 後の誤再表示を抑制)
 const approvalAutoSwitchQueue = [];
 const utf8Decoder = new TextDecoder('utf-8');
+const utf8Encoder = new TextEncoder();
 
 let activeSessionId = null;
 let isComposing = false;       // IMEコンポジション状態
@@ -1877,25 +1886,43 @@ ws.onmessage = (ev) => {
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
     const isActive = id === activeSessionId;
+
+    // マーカーを先にデコードして検出し、xterm.js / スキャナにはマーカー除去済みバイトを渡す
+    let textChunk = '';
+    let xtermBytes = bytes;
+    let hasMarker = false;
+    try {
+      textChunk = utf8Decoder.decode(bytes, { stream: true });
+      if (textChunk.includes(CHAT_HISTORY_USER_TURN_MARKER)) {
+        hasMarker = true;
+        xtermBytes = utf8Encoder.encode(textChunk.split(CHAT_HISTORY_USER_TURN_MARKER).join(''));
+      }
+    } catch (_) {}
+
     // 一度 attach 済みのセッションでは、非アクティブ中も xterm へライブ書き込みする。
     // pendingChunks に貯めるだけだと scanBuffer が古いままで、
     // 承認 UI（カーソル位置制御による再描画）が他カード閲覧中に検出できず
     // sidebar の状態が "保留中" に追従しない。
     if (isActive || t.everAttached) {
-      writePTYChunk(id, t.term, bytes, isActive ? () => {
+      writePTYChunk(id, t.term, xtermBytes, isActive ? () => {
         if (t.autoScroll) t.term.scrollToBottom();
       } : undefined);
     } else {
-      t.pendingChunks.push(bytes);
+      t.pendingChunks.push(xtermBytes);
     }
-    trackApprovalHintFromChunk(id, bytes);
+    trackApprovalHintFromChunk(id, xtermBytes);
     if (isActive) scheduleApprovalCheck(id);
-    // chatHistory: PTY 出力を AI ターンとしてバッファし、静止 N ms で 1 メッセージ commit
-    // (細かい AI ターン境界判定は C3 担当 / 本 C1 では「とりあえず store に積む」優先)
-    try {
-      const textChunk = utf8Decoder.decode(bytes, { stream: true });
+
+    // chatHistory: マーカー検出でターン境界を確定し AI 出力を commit する
+    if (hasMarker) {
+      const parts = textChunk.split(CHAT_HISTORY_USER_TURN_MARKER);
+      for (let i = 0; i < parts.length; i++) {
+        if (parts[i]) chatHistoryAppendOutput(id, parts[i]);
+        if (i < parts.length - 1) chatHistoryCommitOutputOrSeed(id);
+      }
+    } else if (textChunk) {
       chatHistoryAppendOutput(id, textChunk);
-    } catch (_) {}
+    }
     return;
   }
 
@@ -3760,6 +3787,15 @@ if (clearOutputsBtn) {
 
 // ---- セッション管理 ----
 
+function updateSessionListActiveCard(id) {
+  const root = document.getElementById('sessions');
+  if (!root) return;
+  root.querySelectorAll('.card').forEach(card => {
+    const cid = parseInt(card.dataset.sessionId, 10);
+    card.classList.toggle('active', cid === id);
+  });
+}
+
 function activateSession(id) {
   if (activeSessionId !== null && activeSessionId !== id) {
     saveInputStateFor(activeSessionId);
@@ -3774,7 +3810,7 @@ function activateSession(id) {
   updateScrollLockBtn();
   setMultiQuestionBannerVisible(!!multiQuestionVisibleCache.get(id));
   detectApproval(id);
-  renderSessionList();
+  updateSessionListActiveCard(id);
   renderToolOutputs(id);
   updateShellBadge(id);
   updateQuickCmdButtons(id);
