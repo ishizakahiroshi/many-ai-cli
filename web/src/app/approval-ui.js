@@ -44,6 +44,7 @@
     lastActionBarRender.sig = null;
     actionBarFocusIdx = -1;
     batchFocusIdx = -1;
+    if (activeSessionId != null) actionBarShownAt.delete(activeSessionId);
   }
 
   function setMultiQuestionBannerVisible(visible) {
