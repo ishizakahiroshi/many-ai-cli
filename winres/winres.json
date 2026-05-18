@@ -38,12 +38,12 @@
         },
         "info": {
           "0409": {
-            "Comments": "",
-            "CompanyName": "",
+            "Comments": "Local web dashboard for managing multiple AI coding CLIs. https://github.com/ishizakahiroshi/any-ai-cli",
+            "CompanyName": "Hiroshi Ishizaka",
             "FileDescription": "ANY-AI-CLI",
             "FileVersion": "0.1.3",
             "InternalName": "any-ai-cli",
-            "LegalCopyright": "",
+            "LegalCopyright": "Copyright (c) 2026 Hiroshi Ishizaka. MIT License.",
             "LegalTrademarks": "",
             "OriginalFilename": "any-ai-cli.exe",
             "PrivateBuild": "",

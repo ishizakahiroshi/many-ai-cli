@@ -74,14 +74,14 @@ try {
         $rows.Add("")
         $rows.Add("#### $($file.Name)")
         $rows.Add("")
-        $rows.Add("````text")
+        $rows.Add("``````text")
         $content = Get-Content -LiteralPath $file.FullName -Raw
         # Normalize line endings so the generator produces identical output
         # regardless of how the module cache stored the LICENSE file (LF on
         # fresh CI checkouts, CRLF on long-lived dev machines).
         $content = $content -replace "`r`n", "`n" -replace "`r", "`n"
         $rows.Add($content.TrimEnd())
-        $rows.Add("````")
+        $rows.Add("``````")
       }
     }
   }

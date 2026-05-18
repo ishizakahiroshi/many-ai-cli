@@ -87,12 +87,20 @@
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 .action-btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); }
-.action-btn.current { border-color: rgba(99,102,241,0.45); background: var(--accent-glow); color: var(--accent-text); }
-.action-btn.current:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
-.action-btn.permanent { border-color: rgba(245,158,11,0.4); background: var(--warn-bg); color: var(--warn-text); }
-.action-btn.permanent:hover { background: var(--warn); color: var(--bg); }
-.action-btn.session-allow { border-color: rgba(245,158,11,0.4); background: var(--warn-bg); color: var(--warn-text); }
-.action-btn.session-allow:hover { background: var(--warn); color: var(--bg); }
+.action-btn.current,
+.action-btn.permanent,
+.action-btn.session-allow {
+  background: var(--bg-elev);
+  color: var(--text);
+  border-color: var(--line-soft);
+}
+.action-btn.current:hover,
+.action-btn.permanent:hover,
+.action-btn.session-allow:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--text);
+  border-color: rgba(255,255,255,0.2);
+}
 .action-btn.kbd-focus { box-shadow: 0 0 0 2px var(--text); }
 
 /* バッチ承認（複数質問の一括回答） */
@@ -125,11 +133,12 @@
   gap: 6px;
 }
 .action-btn.batch-option.selected {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #fff;
+  border-color: var(--line-soft);
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--text);
 }
-.action-btn.batch-option.selected:hover { background: var(--accent); color: #fff; }
+.action-btn.batch-option.selected:hover { background: rgba(255,255,255,0.08); color: var(--text); }
 
 .action-bar-footer {
   display: flex;

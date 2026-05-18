@@ -248,7 +248,7 @@
       lower.includes('would you like to run') ||
       lower.includes('do you want to proceed?') ||
       lower.includes('this command requires approval') ||
-      lower.includes('press enter to confirm') ||
+      (lower.includes('press enter to confirm') && !lower.includes('esc to go back')) ||
       lower.includes('enter to select') ||
       lower.includes('↑/↓ to navigate') ||
       lower.includes('esc to cancel');

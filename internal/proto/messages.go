@@ -70,4 +70,9 @@ type Message struct {
 	// approval_patterns_updated: Hub → UI。リモート fetch で公式パターンに差分があった
 	// 場合に通知する。Providers には差分があった provider 名のみが入る。
 	Providers []string `json:"providers,omitempty"`
+
+	// UIActiveSessionID: UI register 時に UI 側が現在表示中のセッション ID を伝える。
+	// Hub は replay 時にアクティブセッションは全量、非アクティブは末尾に絞って送信する。
+	// 0 の場合はアクティブセッション不明として扱う。
+	UIActiveSessionID int `json:"ui_active_session_id,omitempty"`
 }

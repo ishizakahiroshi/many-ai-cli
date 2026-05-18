@@ -100,13 +100,99 @@ Sessions can be created, monitored, and approved entirely from the Hub UI; you d
 
 ### Windows + WSL launcher
 
-If your AI CLI tools live inside WSL, use the separate Windows launcher:
+If your AI CLI tools live inside WSL, use the separate Windows launcher `any-ai-cli-wsl.exe`.
+
+#### How it works
+
+`any-ai-cli-wsl.exe` is a thin Windows-side launcher. When you run it, it calls `wsl.exe` internally to start the Linux binary (`any-ai-cli serve`) inside WSL. As soon as the Linux side prints the Hub URL to stdout, the Windows default browser opens automatically.
+
+```
+any-ai-cli-wsl.exe  (Windows side)
+    └─ wsl.exe -- bash -ilc "any-ai-cli serve --port XXXXX"
+                                 │
+                            Linux binary starts the Hub
+                                 │
+                        Hub URL printed to stdout
+                                 │
+                        Windows browser opens automatically
+```
+
+It launches the shell with `bash -ilc` (login + interactive), so `~/.bashrc` entries — including `nvm`, `pnpm`, `cargo`, etc. — are fully loaded and in `PATH`.
+
+#### Setup — two binaries, two locations
+
+The WSL launcher requires binaries in **both** Windows and WSL.
+
+**① Windows side: `any-ai-cli-wsl.exe`**
+
+Download `any-ai-cli-wsl-windows-amd64.exe` from the releases page and place it somewhere on the Windows `PATH`.
+
+```powershell
+# Option A: ~/AppData/Local/Microsoft/WindowsApps/ (already on PATH)
+Move-Item any-ai-cli-wsl-windows-amd64.exe "$env:LOCALAPPDATA\Microsoft\WindowsApps\any-ai-cli-wsl.exe"
+
+# Option B: any directory already on your PATH
+Move-Item any-ai-cli-wsl-windows-amd64.exe "C:\tools\any-ai-cli-wsl.exe"
+```
+
+**② WSL side: `any-ai-cli` (Linux binary)**
+
+Download `any-ai-cli-linux-amd64` from the releases page and place it somewhere on the WSL `PATH`.
+
+```bash
+# Using ~/.local/bin (per-user, no sudo required)
+mkdir -p ~/.local/bin
+mv any-ai-cli-linux-amd64 ~/.local/bin/any-ai-cli
+chmod +x ~/.local/bin/any-ai-cli
+
+# Verify ~/.local/bin is on PATH
+echo $PATH | grep -q "$HOME/.local/bin" && echo "OK" || echo "Add ~/.local/bin to PATH"
+```
+
+If `~/.local/bin` is not on your `PATH`, add it to `~/.bashrc`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Or, to install system-wide (requires sudo):
+
+```bash
+sudo mv any-ai-cli-linux-amd64 /usr/local/bin/any-ai-cli
+sudo chmod +x /usr/local/bin/any-ai-cli
+```
+
+Verify inside WSL:
+
+```bash
+any-ai-cli --version
+```
+
+#### Launch
+
+Once both binaries are in place, run the launcher from Windows:
 
 ```powershell
 any-ai-cli-wsl.exe
 ```
 
-It starts `any-ai-cli serve` inside WSL, opens the Hub URL in the Windows browser, and keeps Windows file/folder actions usable from the Hub. By default it starts in the WSL home directory; pass `--cwd /path/in/wsl` to choose another WSL working directory.
+The Hub starts inside WSL and your Windows default browser opens automatically.
+
+#### Options
+
+| Flag | Default | Description |
+|---|---|---|
+| `--cwd <path>` | `~` (WSL home) | Working directory inside WSL |
+| `--distro <name>` | wsl.exe default distro | WSL distribution name (see `wsl -l`) |
+| `--binary <name>` | `any-ai-cli` | Binary name to look up inside WSL |
+| `--port <n>` | auto | Hub port (auto-selected to avoid Windows-side collisions) |
+
+```powershell
+# Example: specify a distro and working directory
+any-ai-cli-wsl.exe --distro Ubuntu-22.04 --cwd /home/user/projects/my-app
+```
+
+If a port collision is detected on the Windows side (e.g. `any-ai-cli.exe` already holds 47777), the launcher picks the next available port automatically.
 
 ---
 
@@ -454,6 +540,12 @@ GOOS=linux   GOARCH=amd64 go build -o dist/any-ai-cli-linux-amd64       ./cmd/an
 MIT — see [LICENSE](LICENSE) for details.
 
 Third-party dependency notices are provided in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and the vendored/browser-side license texts are provided in [web/src/vendor/THIRD_PARTY_LICENSES.txt](web/src/vendor/THIRD_PARTY_LICENSES.txt).
+
+---
+
+## Not Official / No Affiliation
+
+`any-ai-cli` is a third-party, community-maintained tool. It is **not affiliated with, endorsed by, or officially supported by Anthropic, OpenAI, GitHub, or Ollama**. All trademarks — including "Claude", "Claude Code", "Codex", "ChatGPT", "GitHub Copilot", "Ollama", and "Gemini" — are the property of their respective owners and are used here only for descriptive and interoperability purposes.
 
 ---
 

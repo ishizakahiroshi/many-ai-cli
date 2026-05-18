@@ -21,7 +21,8 @@ function detectFallback(provider, lines, matcher) {
     (parser.linesHaveHint(provider, contextLines, matcher) || hasNativePromptHint)) ||
     parser.isHubChoicePrompt(contextLines, options) ||
     isCodexShortcutMenu;
-  return options.length > 0 && approvalNear && (hasCursor || isCodexShortcutMenu)
+  const hasChoiceMenu = hasCursor && options.length > 0 && hasNativePromptHint;
+  return (options.length > 0 && approvalNear && (hasCursor || isCodexShortcutMenu)) || hasChoiceMenu
     ? options
     : [];
 }
@@ -86,6 +87,32 @@ function run() {
   ]);
   assert.equal(parser.isBatchOptions(batch), true);
   assert.equal(batch.length, 2);
+
+  const japaneseBatch = parser.extractHubMarkerApproval([
+    '[ANY-AI-CLI]',
+    '',
+    '1 次のうちどれが好きですか？',
+    '',
+    '  1.たこ',
+    '',
+    '  2.いか',
+    '',
+    '  3.えび',
+    '',
+    '2 次のうちどれが好きですか？',
+    '',
+    '  1.白米',
+    '',
+    '  2.パン',
+    '',
+    '  3.うどん',
+    '',
+    '[/ANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isBatchOptions(japaneseBatch), true);
+  assert.equal(japaneseBatch.length, 2);
+  assert.deepEqual(labels(japaneseBatch[0].options), ['たこ', 'いか', 'えび']);
+  assert.deepEqual(labels(japaneseBatch[1].options), ['白米', 'パン', 'うどん']);
 
   const numberedList = [
     'Implementation notes:',
