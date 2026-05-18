@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -73,6 +75,14 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		}
 	}
 	providerArgs = append(extra, providerArgs...)
+
+	// Hub にスポーンされた場合、起動中の Hub ポートが ANY_AI_CLI_HUB_PORT で渡される。
+	// config.yaml のポートより優先して使い、wrapper が別 Hub を勝手に起動するのを防ぐ。
+	if portStr := os.Getenv("ANY_AI_CLI_HUB_PORT"); portStr != "" {
+		if port, err2 := strconv.Atoi(portStr); err2 == nil && port > 0 {
+			cfg.Hub.Port = port
+		}
+	}
 
 	if err := ensureHub(cfg); err != nil {
 		return err
@@ -505,6 +515,12 @@ func probeHubAlive(cfg *config.Config) bool {
 }
 
 func ensureHub(cfg *config.Config) error {
+	// Hub にスポーンされた場合（ANY_AI_CLI=1）、Hub は既に動いている。
+	// 新 Hub を起動すると PID ファイル経由で実際の Hub が kill される危険があるため
+	// プローブと起動を一切スキップする。
+	if os.Getenv("ANY_AI_CLI") == "1" {
+		return nil
+	}
 	u := fmt.Sprintf("http://127.0.0.1:%d/?token=%s", cfg.Hub.Port, cfg.Token)
 	if resp, err := http.Get(u); err == nil {
 		defer resp.Body.Close()
@@ -512,17 +528,34 @@ func ensureHub(cfg *config.Config) error {
 			return nil
 		}
 	}
+	// 設定ポートが WSL 側 Hub など別プロセスに使用されている場合に備え、
+	// 実際にバインドできるポートを確認してから Hub を起動する。
+	// cfg.Hub.Port を更新することで後続の dialAndRegister も正しいポートを使う。
+	cfg.Hub.Port = findFreePort(cfg.Hub.Port)
 	exe, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	serve := exec.Command(exe, "serve")
+	serve := exec.Command(exe, "serve", "--port", strconv.Itoa(cfg.Hub.Port))
 	prepareHubSpawn(serve)
 	if err := serve.Start(); err != nil {
 		return err
 	}
 	time.Sleep(800 * time.Millisecond)
 	return nil
+}
+
+// findFreePort は preferred ポートから順に 127.0.0.1 でバインドできる最初のポートを返す。
+// preferred が空いていればそのまま返す。100 ポート試してすべて塞がれていたら preferred を返す。
+func findFreePort(preferred int) int {
+	for p := preferred; p < preferred+100; p++ {
+		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p))
+		if err == nil {
+			_ = ln.Close()
+			return p
+		}
+	}
+	return preferred
 }
 
 type processSession interface {

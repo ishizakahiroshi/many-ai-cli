@@ -148,13 +148,100 @@ GOOS=linux   GOARCH=amd64 go build -o dist/linux/any-ai-cli      ./cmd/any-ai-cl
 
 ### Windows + WSL ランチャー
 
-Claude Code / Codex CLI を WSL 側に入れている場合は、Windows 用の別ランチャーを使えます。
+Claude Code / Codex CLI を WSL 側に入れている場合は、Windows 用の別ランチャー `any-ai-cli-wsl.exe` を使います。
+
+#### 仕組み
+
+`any-ai-cli-wsl.exe` は Windows 側に置く薄いランチャーです。起動すると内部で `wsl.exe` を呼び出し、WSL 内の Linux バイナリ（`any-ai-cli serve`）を立ち上げます。Linux 側が Hub URL を標準出力へ出力した時点で Windows の既定ブラウザが自動的に開きます。
+
+```
+any-ai-cli-wsl.exe  (Windows 側)
+    └─ wsl.exe -- bash -ilc "any-ai-cli serve --port XXXXX"
+                                 │
+                            Linux バイナリが Hub を起動
+                                 │
+                        Hub URL をコンソールへ出力
+                                 │
+                        Windows ブラウザが自動で開く
+```
+
+WSL 内では `bash -ilc`（ログインシェル + インタラクティブ）で起動するため、`~/.bashrc` に書かれた `nvm` / `pnpm` / `cargo` 等の PATH 設定がそのまま有効になります。
+
+#### セットアップ（2 か所へのバイナリ配置）
+
+WSL ランチャーを使うには **Windows 側** と **WSL 側** の両方にバイナリを置く必要があります。
+
+**① Windows 側: `any-ai-cli-wsl.exe`**
+
+リリースページから `any-ai-cli-wsl-windows-amd64.exe` をダウンロードし、Windows の PATH が通っている場所に置きます。
+
+```powershell
+# 例 A: ~/AppData/Local/Microsoft/WindowsApps/（既に PATH が通っている）
+Move-Item any-ai-cli-wsl-windows-amd64.exe "$env:LOCALAPPDATA\Microsoft\WindowsApps\any-ai-cli-wsl.exe"
+
+# 例 B: 任意の PATH 済みディレクトリ
+Move-Item any-ai-cli-wsl-windows-amd64.exe "C:\tools\any-ai-cli-wsl.exe"
+```
+
+**② WSL 側: `any-ai-cli`（Linux バイナリ）**
+
+リリースページから `any-ai-cli-linux-amd64` をダウンロードし、WSL 内の PATH が通っている場所に置きます。
+
+```bash
+# ~/.local/bin を使う場合（ユーザーローカル、sudo 不要）
+mkdir -p ~/.local/bin
+mv any-ai-cli-linux-amd64 ~/.local/bin/any-ai-cli
+chmod +x ~/.local/bin/any-ai-cli
+
+# ~/.local/bin が PATH に含まれているか確認
+echo $PATH | grep -q "$HOME/.local/bin" && echo "OK" || echo "~/.local/bin を PATH に追加してください"
+```
+
+`~/.local/bin` が PATH に入っていない場合は `~/.bashrc` に追記します。
+
+```bash
+# ~/.bashrc に追記
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+システム全体に置く場合（sudo 必要）:
+
+```bash
+sudo mv any-ai-cli-linux-amd64 /usr/local/bin/any-ai-cli
+sudo chmod +x /usr/local/bin/any-ai-cli
+```
+
+WSL 内で動作確認:
+
+```bash
+any-ai-cli --version
+```
+
+#### 起動
+
+配置後は Windows 側から実行するだけです。
 
 ```powershell
 any-ai-cli-wsl.exe
 ```
 
-WSL 内で `any-ai-cli serve` を起動し、Hub URL を Windows 側の既定ブラウザで開きます。Windows 側でポート衝突している場合は安全なポートを選び、Hub からのファイル / フォルダを開く操作も Windows の Explorer 側へつなぎます。既定の作業ディレクトリは WSL のホームです。変更する場合は `--cwd /path/in/wsl` を渡します。
+WSL 内で Hub が起動し、Windows の既定ブラウザが自動で開きます。
+
+#### オプション
+
+| フラグ | デフォルト | 説明 |
+|---|---|---|
+| `--cwd <path>` | `~`（WSL ホーム） | WSL 内の作業ディレクトリ |
+| `--distro <name>` | wsl.exe の既定ディストリビューション | 使用する WSL ディストリビューション名（`wsl -l` で確認） |
+| `--binary <name>` | `any-ai-cli` | WSL 内のバイナリ名 |
+| `--port <n>` | 自動選択 | Hub のポート（Windows 側の衝突を避けて自動選択） |
+
+```powershell
+# 例: ディストリビューションと作業ディレクトリを指定
+any-ai-cli-wsl.exe --distro Ubuntu-22.04 --cwd /home/user/projects/my-app
+```
+
+Windows 側でポートが衝突している場合（`any-ai-cli.exe` がすでに 47777 を使用中など）、ランチャーは空きポートを自動的に選択します。
 
 ---
 
@@ -535,3 +622,15 @@ Hub UI には「ログフォルダを OS のファイルマネージャで開く
 MIT
 
 第三者依存の通知は [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)、vendored/browser 側のライセンス本文は [web/src/vendor/THIRD_PARTY_LICENSES.txt](web/src/vendor/THIRD_PARTY_LICENSES.txt) に記載しています。
+
+---
+
+## 関連性について（非公式）
+
+`any-ai-cli` は第三者によるコミュニティメンテナンスのツールです。**Anthropic / OpenAI / GitHub / Ollama のいずれによっても公認・公式サポートされていません**。「Claude」「Claude Code」「Codex」「ChatGPT」「GitHub Copilot」「Ollama」「Gemini」等の名称・商標は各社の所有物であり、本プロジェクトでは説明・相互運用の目的でのみ言及しています。
+
+---
+
+## 免責事項
+
+本ツールはいかなる保証もなく「現状のまま」提供されます。利用にあたってはご自身の責任において行ってください。

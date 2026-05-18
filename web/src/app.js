@@ -1520,6 +1520,7 @@ const chatHistory = new Map();              // sid → Message[]
 const chatHistorySubs = new Map();          // sid → Set<callback>
 const chatHistoryIdSeq = new Map();         // sid → 次に振る連番 (1 始まり)
 const chatHistoryOutputBuffers = new Map(); // sid → { rawChunks:[], lastTs }
+const chatHistoryAutoCommitTimers = new Map(); // sid → timerId
 // Go 側 chatHistoryUserTurnMarker と一致させること
 const CHAT_HISTORY_USER_TURN_MARKER = "\x1b]47777;user-turn\x07";
 
@@ -1626,7 +1627,6 @@ function subscribeChatHistory(sid, cb) {
   };
 }
 
-// PTY 出力をバッファする。コミットのトリガーはマーカー検出のみ（静止タイマーなし）。
 function chatHistoryAppendOutput(sid, raw) {
   if (sid === null || sid === undefined || !raw) return;
   let buf = chatHistoryOutputBuffers.get(sid);
@@ -1636,9 +1636,18 @@ function chatHistoryAppendOutput(sid, raw) {
   }
   buf.rawChunks.push(raw);
   buf.lastTs = Date.now();
+  // PTY 出力が 1.5 秒止まったら自動コミット（AI 返答完了後に手動で次の入力を待たずに表示）
+  const existing = chatHistoryAutoCommitTimers.get(sid);
+  if (existing) clearTimeout(existing);
+  chatHistoryAutoCommitTimers.set(sid, setTimeout(() => {
+    chatHistoryAutoCommitTimers.delete(sid);
+    chatHistoryCommitOutput(sid);
+  }, 1500));
 }
 
 function chatHistoryCommitOutput(sid) {
+  const t = chatHistoryAutoCommitTimers.get(sid);
+  if (t) { clearTimeout(t); chatHistoryAutoCommitTimers.delete(sid); }
   const buf = chatHistoryOutputBuffers.get(sid);
   if (!buf) return;
   if (buf.rawChunks.length === 0) return;
@@ -1676,6 +1685,8 @@ function chatHistoryCommitOutputOrSeed(sid) {
 }
 
 function onChatHistorySessionRemoved(sid) {
+  const t = chatHistoryAutoCommitTimers.get(sid);
+  if (t) { clearTimeout(t); chatHistoryAutoCommitTimers.delete(sid); }
   chatHistoryOutputBuffers.delete(sid);
   chatHistory.delete(sid);
   chatHistorySubs.delete(sid);
@@ -1858,7 +1869,7 @@ ws.onopen = () => {
   const ch = area ? area.clientHeight : 0;
   const cols = cw >= 120 ? Math.floor(cw / 7.5) : 200;
   const rows = ch >= 80  ? Math.floor(ch / 16)  : 50;
-  ws.send(JSON.stringify({ type: 'register', role: 'ui', token, cols, rows }));
+  ws.send(JSON.stringify({ type: 'register', role: 'ui', token, cols, rows, ui_active_session_id: activeSessionId || 0 }));
 };
 
 document.getElementById('reconnect-btn').addEventListener('click', async () => {
@@ -1900,15 +1911,15 @@ ws.onmessage = (ev) => {
       }
     } catch (_) {}
 
-    // 一度 attach 済みのセッションでは、非アクティブ中も xterm へライブ書き込みする。
-    // pendingChunks に貯めるだけだと scanBuffer が古いままで、
-    // 承認 UI（カーソル位置制御による再描画）が他カード閲覧中に検出できず
-    // sidebar の状態が "保留中" に追従しない。
-    if (isActive || t.everAttached) {
-      writePTYChunk(id, t.term, xtermBytes, isActive ? () => {
+    if (isActive) {
+      writePTYChunk(id, t.term, xtermBytes, () => {
         if (t.autoScroll) t.term.scrollToBottom();
-      } : undefined);
+      });
     } else {
+      // 非アクティブセッションは everAttached に関わらず pendingChunks に溜める。
+      // 承認検出は scanBuffer ではなく pendingTextTail ベースで行うため、
+      // xterm のライブ書き込みを非アクティブ中は止めてよい。
+      // セッション切替時に attachTerminal → flushPending で一括 xterm 書き込みする。
       t.pendingChunks.push(xtermBytes);
     }
     trackApprovalHintFromChunk(id, xtermBytes);
@@ -1952,7 +1963,7 @@ ws.onmessage = (ev) => {
     renderSessionList();
     checkApprovalOnStartup();
     if (!_elapsedTimerInterval) {
-      _elapsedTimerInterval = setInterval(() => renderSessionList(), 1000);
+      _elapsedTimerInterval = setInterval(() => updateMainTabStatus(), 1000);
     }
   } else if (m.type === 'session_update') {
     if (m.state === 'completed') {
@@ -2971,12 +2982,13 @@ function writePTYChunk(id, term, bytes, onFlush) {
 
 // ---- バッファスキャン共通 ----
 
-function scanBuffer(id) {
+function scanBuffer(id, limit) {
   const t = terminals.get(id);
   if (!t || !t.term.buffer) return [];
   const buf = t.term.buffer.active;
+  const start = (limit != null) ? Math.max(0, buf.length - limit) : 0;
   const lines = [];
-  for (let i = 0; i < buf.length; i++) {
+  for (let i = start; i < buf.length; i++) {
     lines.push(buf.getLine(i)?.translateToString(true) || '');
   }
   return lines;
@@ -3620,6 +3632,16 @@ function sendQuickCommand(sessionId, cmd) {
     maybeAutoSwitchToNextApproval();
   }, 2050);
   sendSubmittedText(sessionId, `${cmd}\r`);
+  focusInputForTerminalKeys();
+}
+
+function focusInputForTerminalKeys() {
+  if (activeSessionId === null || document.activeElement === inputEl) return;
+  try {
+    inputEl.focus({ preventScroll: true });
+  } catch (_) {
+    inputEl.focus();
+  }
 }
 
 function sendSubmittedText(sessionId, text) {
@@ -4676,15 +4698,13 @@ if (terminalWrapper) {
     setTimeout(() => { if (!xt?.term.hasSelection()) inputEl.focus(); }, 50);
   });
 
-  let dragCounter = 0;
   terminalWrapper.addEventListener('dragenter', (e) => {
     if (!e.dataTransfer?.types.includes('Files')) return;
     e.preventDefault();
-    if (++dragCounter === 1) terminalWrapper.classList.add('drag-active');
+    terminalWrapper.classList.add('drag-active');
   });
-  terminalWrapper.addEventListener('dragleave', () => {
-    if (--dragCounter <= 0) {
-      dragCounter = 0;
+  terminalWrapper.addEventListener('dragleave', (e) => {
+    if (!terminalWrapper.contains(e.relatedTarget)) {
       terminalWrapper.classList.remove('drag-active');
     }
   });
@@ -4693,7 +4713,6 @@ if (terminalWrapper) {
   });
   terminalWrapper.addEventListener('drop', (e) => {
     e.preventDefault();
-    dragCounter = 0;
     terminalWrapper.classList.remove('drag-active');
     if (activeSessionId === null) return;
     for (const file of e.dataTransfer?.files ?? []) {
@@ -4706,15 +4725,13 @@ if (terminalWrapper) {
 // チャット履歴ペインへの D&D
 const chatPane = document.getElementById('chat-pane');
 if (chatPane) {
-  let chatDragCounter = 0;
   chatPane.addEventListener('dragenter', (e) => {
     if (!e.dataTransfer?.types.includes('Files')) return;
     e.preventDefault();
-    if (++chatDragCounter === 1) chatPane.classList.add('drag-active');
+    chatPane.classList.add('drag-active');
   });
-  chatPane.addEventListener('dragleave', () => {
-    if (--chatDragCounter <= 0) {
-      chatDragCounter = 0;
+  chatPane.addEventListener('dragleave', (e) => {
+    if (!chatPane.contains(e.relatedTarget)) {
       chatPane.classList.remove('drag-active');
     }
   });
@@ -4723,7 +4740,6 @@ if (chatPane) {
   });
   chatPane.addEventListener('drop', (e) => {
     e.preventDefault();
-    chatDragCounter = 0;
     chatPane.classList.remove('drag-active');
     if (activeSessionId === null) return;
     for (const file of e.dataTransfer?.files ?? []) {

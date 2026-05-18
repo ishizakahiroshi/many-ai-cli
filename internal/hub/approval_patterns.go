@@ -31,12 +31,6 @@ var defaultApprovalPatterns = map[string][]string{
 		"do you want to proceed?",
 		"would you like to run the following command",
 		"would you like to run",
-		"select model and effort",
-		"select model",
-		"press enter to confirm",
-		"esc to go back",
-		"↑/↓ to change",
-		"arrow keys",
 		"permission",
 	},
 	"common": {

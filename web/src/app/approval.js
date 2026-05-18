@@ -89,6 +89,19 @@ function cancelApprovalHintConfirm(id) {
   }
 }
 
+const approvalSuppressRescanTimers = new Map();
+
+function scheduleApprovalSuppressRescan(id, suppressUntil) {
+  const prev = approvalSuppressRescanTimers.get(id);
+  if (prev) clearTimeout(prev);
+  const delay = Math.max(0, suppressUntil - Date.now()) + 30;
+  approvalSuppressRescanTimers.set(id, setTimeout(() => {
+    approvalSuppressRescanTimers.delete(id);
+    detectApproval(id);
+    maybeAutoSwitchToNextApproval();
+  }, delay));
+}
+
 function scheduleApprovalHintConfirm(id, options) {
   if (!options || options.length === 0) return;
   const sig = approvalSig(options);
@@ -121,7 +134,10 @@ function trackApprovalHintFromChunk(id, bytes) {
 
   // sendChoice 直後の誤再表示を抑制
   const suppressUntil = approvalSuppressUntil.get(id);
-  if (suppressUntil && Date.now() < suppressUntil) return;
+  if (suppressUntil && Date.now() < suppressUntil) {
+    scheduleApprovalSuppressRescan(id, suppressUntil);
+    return;
+  }
   approvalSuppressUntil.delete(id);
 
   const rawLines = t.pendingTextTail.split(/\r\n|\r|\n/).slice(-40);
@@ -131,8 +147,11 @@ function trackApprovalHintFromChunk(id, bytes) {
   // 検出したら通常の承認検出をスキップする。スクロールバック残骸での誤検出を避けるため
   // ターミナル末尾 40 行に限定する（AskUserQuestion UI は通常 ~20 行以内に収まる）。
   let multiQContext = lines;
-  if (t && t.everAttached) {
-    multiQContext = lines.concat(scanBuffer(id).slice(-40));
+  // scanBuffer は active セッションか、pending に承認/multiQ ヒントがある場合のみ呼ぶ。
+  // 非アクティブセッションの全チャンクに対して scanBuffer を走らせると多セッション時の CPU 負荷が増大する。
+  const pendingHasMultiQHint = isMultiQuestionPrompt(lines) || approvalLinesHaveHint(provider, lines);
+  if (t && t.everAttached && (id === activeSessionId || pendingHasMultiQHint)) {
+    multiQContext = lines.concat(scanBuffer(id, 40));
   }
   if (isMultiQuestionPrompt(multiQContext)) {
     // ユーザーが ✕ で手動 dismiss した場合は再表示しない（誤検出を尊重）
@@ -230,10 +249,12 @@ function trackApprovalHintFromChunk(id, bytes) {
   // 古い選択肢が再検出される（approvalConsumedSig は label 差異で抑止が外れる）。
   // pendingTextTail に承認系の手がかりが無く、かつ既に visible でも無い場合は scanBuffer を見ない。
   const pendingHasApprovalHint = approvalLinesHaveHint(provider, lines);
+  // allowBufferFallback を先に計算し、条件が揃った場合のみ scanBuffer を呼ぶ。
+  // 全チャンク毎に scanBuffer を走らせると多セッション時の JS 処理負荷が増大するため、
+  // 手がかりがない場合はスキップする。
+  const allowBufferFallback = approvalVisibleCache.get(id) || options.length > 0 || pendingHasApprovalHint;
   const visibleRows = t?.term?.rows || 40;
-  const bufferTail = t && t.everAttached ? scanBuffer(id).slice(-Math.max(120, visibleRows + 60)) : [];
-  const bufferHasApprovalHint = approvalLinesHaveHint(provider, bufferTail);
-  const allowBufferFallback = approvalVisibleCache.get(id) || options.length > 0 || pendingHasApprovalHint || bufferHasApprovalHint;
+  const bufferTail = (t && t.everAttached && allowBufferFallback) ? scanBuffer(id, Math.max(120, visibleRows + 60)) : [];
   if (t && t.everAttached && allowBufferFallback) {
     const bufExtraction = extractApprovalOptions(bufferTail);
     const bufOpts = bufExtraction.options;
@@ -272,7 +293,7 @@ function trackApprovalHintFromChunk(id, bytes) {
   const approvalLabelRe = /\b(yes|no|allow|deny|proceed|abort|don[''']t ask|cancel)\b/i;
   const hasApprovalLikeLabel = options.some((opt) => approvalLabelRe.test(opt.label));
   const isHubChoice = isHubChoicePrompt(contextLines, options);
-  const hasNativePromptHint = contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line));
+  const hasNativePromptHint = contextLines.some((line) => !String(line || '').toLowerCase().includes('esc to go back') && (matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)));
   const isCodexShortcutMenu = provider === 'codex' && options.some(o => o._sendText) && hasNativePromptHint;
   const approvalNear = (hasCursorOption || isCodexShortcutMenu) &&
     ((hasApprovalLikeLabel && (hasUserSpecifies || contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)))) || isHubChoice);
@@ -364,7 +385,10 @@ function detectCrunch(id) {
 function detectApproval(id) {
   // sendChoice 直後の誤再表示を抑制
   const suppressUntil = approvalSuppressUntil.get(id);
-  if (suppressUntil && Date.now() < suppressUntil) return;
+  if (suppressUntil && Date.now() < suppressUntil) {
+    scheduleApprovalSuppressRescan(id, suppressUntil);
+    return;
+  }
   approvalSuppressUntil.delete(id);
 
   const provider = sessions.get(id)?.provider;
@@ -373,8 +397,11 @@ function detectApproval(id) {
 
   const tEarly = terminals.get(id);
   // 複数質問 UI（AskUserQuestion 等）の判定を最優先。末尾 40 行に限定して scrollback 残骸を除外。
-  const mqLines = (tEarly?.pendingTextTail || '').split(/\r\n|\r|\n/).slice(-40).map(l => stripAnsi(l))
-    .concat(scanBuffer(id).slice(-40));
+  // scanBuffer は active セッションのみ（非アクティブは pendingTextTail の末尾で代替）。
+  const mqPending = (tEarly?.pendingTextTail || '').split(/\r\n|\r|\n/).slice(-40).map(l => stripAnsi(l));
+  const mqLines = (tEarly?.everAttached && id === activeSessionId)
+    ? mqPending.concat(scanBuffer(id).slice(-40))
+    : mqPending;
   if (isMultiQuestionPrompt(mqLines)) {
     // 確認済みの regular approval がある場合は false positive として扱い、
     // action-bar を消さず通常の承認検出にフォールスルーする。
@@ -459,8 +486,11 @@ function detectApproval(id) {
     }
   }
 
-  const seqLines = (t?.pendingTextTail || '').split(/\r\n|\r|\n/).slice(-80).map(l => stripAnsi(l))
-    .concat(scanBuffer(id).slice(-80));
+  // scanBuffer は active セッションのみ（非アクティブは pendingTextTail の末尾で代替）。
+  const seqPending = (t?.pendingTextTail || '').split(/\r\n|\r|\n/).slice(-80).map(l => stripAnsi(l));
+  const seqLines = (t?.everAttached && id === activeSessionId)
+    ? seqPending.concat(scanBuffer(id).slice(-80))
+    : seqPending;
   const seqPrompts = extractSequentialChoicePrompts(seqLines);
   const seqState = getSequentialChoiceState(id, seqPrompts);
   if (seqState) {
@@ -487,8 +517,6 @@ function detectApproval(id) {
   let contextCluster = extraction.cluster;
   // ターミナル高さぶんの空白行 + 余裕60行を確保（ダイアログが画面上部にある場合に備える）
   const visibleRows = t?.term?.rows || 40;
-  const bufferTail = scanBuffer(id).slice(-Math.max(120, visibleRows + 60));
-
   // Ink.js（Claude Code）はカーソル位置制御シーケンスで各行を描画するため \r\n がなく、
   // pendingTextTail の split で全テキストが1行に連結されて options が空になるか、
   // "Yes2.No" のように選択肢が連結されて1行に結合されることがある（concat artifact）。
@@ -496,10 +524,13 @@ function detectApproval(id) {
   // ただし scanBuffer は履歴を保持し続けるため、承認解決後の応答チャンクで
   // 古い選択肢が再検出される（approvalConsumedSig は label 差異で抑止が外れる）。
   // pendingTextTail に承認系の手がかりが無く、かつ既に visible でも無い場合は scanBuffer を見ない。
+  // active セッションのみ scanBuffer を呼ぶ（非アクティブは pendingTextTail で代替）。
   const pendingHasApprovalHint = approvalLinesHaveHint(provider, tail);
-  const bufferHasApprovalHint = approvalLinesHaveHint(provider, bufferTail);
-  const allowBufferFallback = approvalVisibleCache.get(id) || options.length > 0 || pendingHasApprovalHint || bufferHasApprovalHint;
-  if (t && allowBufferFallback) {
+  const allowBufferFallback = approvalVisibleCache.get(id) || options.length > 0 || pendingHasApprovalHint;
+  const bufferTail = (t && allowBufferFallback && id === activeSessionId)
+    ? scanBuffer(id).slice(-Math.max(120, visibleRows + 60))
+    : [];
+  if (t && bufferTail.length > 0) {
     const bufExtraction = extractApprovalOptions(bufferTail);
     const bufOpts = bufExtraction.options;
     const pendingHasCursor = options.some(o => o.isCurrent);
@@ -538,7 +569,7 @@ function detectApproval(id) {
   const approvalLabelRe = /\b(yes|no|allow|deny|proceed|abort|don[''']t ask|cancel)\b/i;
   const hasApprovalLikeLabel = options.some((opt) => approvalLabelRe.test(opt.label));
   const isHubChoice = isHubChoicePrompt(contextLines, options);
-  const hasNativePromptHint = contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line));
+  const hasNativePromptHint = contextLines.some((line) => !String(line || '').toLowerCase().includes('esc to go back') && (matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)));
   const isCodexShortcutMenu = provider === 'codex' && options.some(o => o._sendText) && hasNativePromptHint;
   const approvalNear = (hasApprovalLikeLabel &&
     (hasUserSpecifies || hasNativePromptHint)) || isHubChoice || isCodexShortcutMenu;
@@ -731,7 +762,7 @@ function showActionBar(bar, sessionId, options, showExpand, forceStickToBottom =
     bar.appendChild(label);
   }
 
-  // "Yes, and" 系（セッション全体許可）が存在する場合はそちらを推奨（橙色）にする
+  // "Yes, and" 系（セッション全体許可）が存在する場合はそちらを推奨扱いにする
   const hasSessionAllow = options.some(o => /during this session|allow.*session|yes.*allow/i.test(o.label));
 
   // 選択肢ボタン（左側）

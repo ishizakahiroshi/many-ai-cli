@@ -113,7 +113,7 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		_ = s.OpenBrowser()
+		s.SetAutoOpenBrowser(true)
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 		return s.Run(ctx)
@@ -147,7 +147,7 @@ func run(args []string) error {
 			return err
 		}
 		if *open {
-			_ = s.OpenBrowser()
+			s.SetAutoOpenBrowser(true)
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()

@@ -156,7 +156,8 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	}
 	cmd := exec.Command(exe, wrapArgs...)
 	cmd.Dir = cwd
-	cmd.Env = append(sanitizeEnv(os.Environ()), "ANY_AI_CLI=1")
+	cmd.Env = append(sanitizeEnv(os.Environ()), "ANY_AI_CLI=1",
+		fmt.Sprintf("ANY_AI_CLI_HUB_PORT=%d", s.cfg.Hub.Port))
 	if s.parentShell != "" {
 		cmd.Env = append(cmd.Env, "ANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}

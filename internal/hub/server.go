@@ -37,6 +37,7 @@ const (
 	idleAfter           = 500 * time.Millisecond
 	tickerInterval      = 200 * time.Millisecond
 	maxPTYBuf           = 512 * 1024 // 512 KB
+	replayTailForNonActive = 64 * 1024  // 64 KB: 非アクティブセッションの UI 接続時 replay 上限
 	uiPingInterval      = 30 * time.Second
 	branchLookupTimeout = 250 * time.Millisecond
 	branchRefreshAfter  = 2 * time.Second
@@ -169,6 +170,8 @@ type Server struct {
 
 	stopMu   sync.Mutex
 	stopFunc context.CancelFunc
+
+	autoOpenBrowser bool
 }
 
 const (
@@ -292,15 +295,33 @@ func (s *Server) Run(ctx context.Context) error {
 	pidPath := filepath.Join(os.TempDir(), "any-ai-cli.pid")
 	killStalePid(pidPath)
 
-	ln, err := net.Listen("tcp", s.httpSrv.Addr)
-	if err != nil {
-		return err
+	// 設定ポートが使用中の場合（例: WSL 側 Hub が先に起動済み）は空きポートへ自動移行する。
+	var ln net.Listener
+	basePort := s.cfg.Hub.Port
+	for p := basePort; p < basePort+100; p++ {
+		addr := fmt.Sprintf("127.0.0.1:%d", p)
+		var e error
+		ln, e = net.Listen("tcp", addr)
+		if e == nil {
+			if p != basePort {
+				s.httpSrv.Addr = addr
+				s.cfg.Hub.Port = p
+				s.logger.Info("preferred port in use, using alternative port", "from", basePort, "to", p)
+			}
+			break
+		}
+	}
+	if ln == nil {
+		return fmt.Errorf("no available port found in range %d-%d", basePort, basePort+99)
 	}
 	_ = os.WriteFile(pidPath, []byte(fmt.Sprintf("%d", os.Getpid())), 0o644)
 	setConsoleTitle("any-ai-cli [hub] - DO NOT CLOSE")
 	setConsoleIcon()
 	s.logger.Info("ANY-AI-CLI started", "url", fmt.Sprintf("http://%s/?token=%s", s.httpSrv.Addr, s.cfg.Token))
 	fmt.Print(startupBanner(s.version, s.httpSrv.Addr, s.cfg.Token))
+	if s.autoOpenBrowser {
+		_ = s.OpenBrowser()
+	}
 	if s.cfg.Approval.Enabled {
 		s.injectApprovalRules()
 	}
@@ -322,7 +343,7 @@ func (s *Server) Run(ctx context.Context) error {
 		_ = s.httpSrv.Close()
 		_ = os.Remove(pidPath)
 	}()
-	err = s.httpSrv.Serve(ln)
+	err := s.httpSrv.Serve(ln)
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}
@@ -416,6 +437,12 @@ func (s *Server) OpenBrowser() error {
 	return OpenBrowserForConfig(s.cfg)
 }
 
+// SetAutoOpenBrowser を true にすると Run() がバインド後にブラウザを自動で開く。
+// ポートスキャンで実際のポートが確定してから開くため、引数なし起動や serve --open で使う。
+func (s *Server) SetAutoOpenBrowser(v bool) {
+	s.autoOpenBrowser = v
+}
+
 // OpenBrowserForConfig opens the browser to the Hub URL without needing a running Server.
 func OpenBrowserForConfig(cfg *config.Config) error {
 	url := fmt.Sprintf("http://127.0.0.1:%d/?token=%s", cfg.Hub.Port, cfg.Token)
@@ -470,7 +497,7 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 			s.lastUICols, s.lastUIRows = m.Cols, m.Rows
 			s.mu.Unlock()
 		}
-		historyItems := s.addUIWithHistory(conn)
+		historyItems := s.addUIWithHistory(conn, m.UIActiveSessionID)
 		s.sendSnapshot(conn)
 		for _, item := range historyItems {
 			_ = websocket.JSON.Send(conn, item)
@@ -1131,23 +1158,30 @@ func (s *Server) refreshBranch(id int, cwd string) {
 // snapshots as ready-to-send messages. Callers must send the returned messages
 // to c after this call; any PTY data arriving after the lock is released is
 // delivered via broadcast, so the snapshot and live stream do not overlap.
-func (s *Server) addUIWithHistory(c *websocket.Conn) []proto.Message {
+// activeSessionID は UI が現在表示中のセッション ID。このセッションは全量 replay し、
+// 他は replayTailForNonActive バイトの tail のみ送信する（UI 接続時のメモリ・帯域削減）。
+func (s *Server) addUIWithHistory(c *websocket.Conn, activeSessionID int) []proto.Message {
 	var items []proto.Message
 	s.mu.Lock()
 	s.uis[c] = struct{}{}
 	s.stopIdleTimerLocked()
 	for id, ses := range s.sessions {
-		if len(ses.ptyBuf) > 0 {
-			buf := make([]byte, len(ses.ptyBuf))
-			copy(buf, ses.ptyBuf)
-			items = append(items, proto.Message{Type: "pty_data", SessionID: id, Data: buf})
-			ses.lastCols = 0
-			ses.lastRows = 0
+		if len(ses.ptyBuf) == 0 {
+			continue
 		}
+		raw := ses.ptyBuf
+		if id != activeSessionID && len(raw) > replayTailForNonActive {
+			raw = raw[len(raw)-replayTailForNonActive:]
+		}
+		buf := make([]byte, len(raw))
+		copy(buf, raw)
+		items = append(items, proto.Message{Type: "pty_data", SessionID: id, Data: buf})
+		ses.lastCols = 0
+		ses.lastRows = 0
 	}
 	count := len(s.uis)
 	s.mu.Unlock()
-	s.logger.Info("UI connected", "ui_count", count)
+	s.logger.Info("UI connected", "ui_count", count, "active_session", activeSessionID)
 	return items
 }
 
