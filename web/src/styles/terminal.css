@@ -26,7 +26,7 @@
 }
 
 /* xterm.js エリア（ターミナルは常に暗背景） */
-#terminal-area-wrapper { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden; }
+#terminal-area-wrapper { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: clip; }
 #terminal-area { width: 100%; height: 100%; min-width: 0; background: #0d1117; position: relative; overflow: hidden; }
 
 /* ターミナルスクロール補助ボタン */
@@ -75,19 +75,18 @@
 .xterm { height: 100%; }
 .xterm-viewport {
   overflow-y: scroll !important;
-  scrollbar-width: auto;
+  scrollbar-width: thin;
   scrollbar-color: #4f5bd5 #172033;
 }
 .xterm-viewport::-webkit-scrollbar {
-  width: 12px;
+  width: 6px;
 }
 .xterm-viewport::-webkit-scrollbar-track {
   background: #172033;
 }
 .xterm-viewport::-webkit-scrollbar-thumb {
   background: #4f5bd5;
-  border: 2px solid #172033;
-  border-radius: 8px;
+  border-radius: 4px;
 }
 .xterm-viewport::-webkit-scrollbar-thumb:hover {
   background: #6b74ff;
