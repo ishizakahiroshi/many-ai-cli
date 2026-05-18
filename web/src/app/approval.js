@@ -618,6 +618,7 @@ function hideActionBar(id) {
   lastActionBarRender.sig = null;
   actionBarFocusIdx = -1;
   batchFocusIdx = -1;
+  if (id !== undefined) actionBarShownAt.delete(id);
   if (id !== undefined) batchSelections.delete(id);
   if (id !== undefined) {
     cancelApprovalHintConfirm(id);
@@ -773,6 +774,7 @@ function showActionBar(bar, sessionId, options, showExpand, forceStickToBottom =
   bar.appendChild(closeBtn);
 
   bar.classList.add('visible');
+  actionBarShownAt.set(sessionId, Date.now());
   if (shouldStickToBottom) {
     refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
   }
@@ -893,6 +895,7 @@ function showBatchActionBar(bar, sessionId, sections, forceStickToBottom = false
 
   bar.appendChild(footer);
   bar.classList.add('visible');
+  actionBarShownAt.set(sessionId, Date.now());
   if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
   if (chatWasAtBottomB && chatTlB) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlB));
 }
@@ -927,14 +930,14 @@ function sendBatchChoices(sessionId) {
   const text = selections.join(' ');
   const prevOpts = approvalRawOptionsCache.get(sessionId);
   if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
-  sendText(sessionId, `${text}\r`);
+  sendSubmittedText(sessionId, `${text}\r`);
   hideActionBar(sessionId);
-  approvalSuppressUntil.set(sessionId, Date.now() + 2000);
+  approvalSuppressUntil.set(sessionId, Date.now() + 400);
   batchSelections.delete(sessionId);
   setTimeout(() => {
     detectApproval(sessionId);
     maybeAutoSwitchToNextApproval();
-  }, 2050);
+  }, 450);
   setTimeout(() => inputEl.focus(), 0);
 }
 
@@ -1008,13 +1011,13 @@ function sendChoice(sessionId, targetNum) {
     const prevOpts = approvalRawOptionsCache.get(sessionId);
     if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
     multiQuestionDismissedCache.delete(sessionId);
-    sendText(sessionId, response);
+    sendSubmittedText(sessionId, response);
     hideActionBar(sessionId);
-    approvalSuppressUntil.set(sessionId, Date.now() + 2000);
+    approvalSuppressUntil.set(sessionId, Date.now() + 400);
     setTimeout(() => {
       detectApproval(sessionId);
       maybeAutoSwitchToNextApproval();
-    }, 2050);
+    }, 450);
     setTimeout(() => inputEl.focus(), 0);
     return;
   }
@@ -1037,18 +1040,18 @@ function sendChoice(sessionId, targetNum) {
       label: targetOpt ? (targetOpt.label || null) : null,
     },
   });
-  sendText(sessionId, choiceText);
+  sendSubmittedText(sessionId, choiceText);
   // doSend と同様に消費済み署名を記録（Ink 再描画による同一ブロックの再検出・再表示を防ぐ）
   const prevOpts = cachedOpts;
   if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
   hideActionBar(sessionId);
-  // PTY エコーバックによる誤再表示を 2 秒間抑制
-  approvalSuppressUntil.set(sessionId, Date.now() + 2000);
-  // suppress 解除後に pendingTextTail を再スキャン（suppress 中に届いた [ANY-AI-CLI] ブロックを検出するため）
+  // PTY エコーバックによる誤再表示を短時間抑制（approvalConsumedSig が同一選択肢の再検出を防ぐため短くてよい）
+  approvalSuppressUntil.set(sessionId, Date.now() + 400);
+  // suppress 解除後に pendingTextTail を再スキャン（suppress 中に届いた次の承認を検出するため）
   setTimeout(() => {
     detectApproval(sessionId);
     maybeAutoSwitchToNextApproval();
-  }, 2050);
+  }, 450);
   setTimeout(() => inputEl.focus(), 0);
 }
 

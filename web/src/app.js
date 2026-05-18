@@ -1717,6 +1717,7 @@ let dragSrcGroupKey = null;
 let pendingAutoSwitch = false;
 let actionBarFocusIdx = -1;
 let approvalAutoSwitchInProgress = false;
+const actionBarShownAt = new Map(); // sessionId -> timestamp(ms), Enter即確定ガード用
 
 let favorites = JSON.parse(localStorage.getItem(STORAGE_FAVORITES_KEY) || '[]');
 let projectFavorites = JSON.parse(localStorage.getItem(STORAGE_PROJECT_FAVORITES_KEY) || '[]');
@@ -2399,18 +2400,47 @@ function ensureTerminal(id) {
   }
   term.registerLinkProvider({
     provideLinks(y, callback) {
-      const line = term.buffer.active.getLine(y - 1);
-      if (!line) { callback([]); return; }
-      const text = line.translateToString(true);
+      const buf = term.buffer.active;
+      const thisLine = buf.getLine(y - 1);
+      if (!thisLine) { callback([]); return; }
 
-      // charIndex → cellX マッピング（全角文字対応）
-      const cellMap = [];
-      for (let x = 0; x < line.length; x++) {
-        const cell = line.getCell(x);
-        if (cell && cell.getWidth() !== 0) cellMap.push(x);
+      // wrapped 継続行は先頭行側で処理済みなので空を返す
+      if (thisLine.isWrapped) { callback([]); return; }
+
+      // 論理行を構成する物理行（この行 + 後続の wrapped 継続行）を収集する
+      const buildCellMap = (line) => {
+        const cm = [];
+        for (let x = 0; x < line.length; x++) {
+          const cell = line.getCell(x);
+          if (cell && cell.getWidth() !== 0) cm.push(x);
+        }
+        return cm;
+      };
+      const physRows = [{ y1: y, text: thisLine.translateToString(true), cellMap: buildCellMap(thisLine) }];
+      let peek = y; // getLine は 0-based。peek=y は 1-based の y+1 行目
+      while (true) {
+        const next = buf.getLine(peek);
+        if (!next || !next.isWrapped) break;
+        physRows.push({ y1: peek + 1, text: next.translateToString(true), cellMap: buildCellMap(next) });
+        peek++;
       }
-      const toX = (ci) => (cellMap[ci] ?? ci) + 1;
-      const toEndX = (ci) => (cellMap[ci] ?? ci) + 1;
+
+      // 行テキストを結合し、各行の開始オフセットを記録する
+      const rowOffsets = [];
+      let off = 0;
+      for (const r of physRows) { rowOffsets.push(off); off += r.text.length; }
+      const combined = physRows.map(r => r.text).join('');
+
+      // combined 上の charIndex → xterm の { x (1-based), y (1-based) }
+      const ciToXY = (ci) => {
+        let ri = physRows.length - 1;
+        for (let i = 0; i < physRows.length - 1; i++) {
+          if (ci < rowOffsets[i + 1]) { ri = i; break; }
+        }
+        const r = physRows[ri];
+        const charInRow = ci - rowOffsets[ri];
+        return { x: (r.cellMap[charInRow] ?? charInRow) + 1, y: r.y1 };
+      };
 
       const links = [];
       const occupiedRanges = [];
@@ -2422,8 +2452,10 @@ function ensureTerminal(id) {
         if (overlapsExistingLink(startCI, endCI)) return;
         occupiedRanges.push({ start: startCI, end: endCI });
         const capturedPath = resolveTerminalPathCandidate(pathStr, id);
+        const startPos = ciToXY(startCI);
+        const endPos = ciToXY(endCI);
         links.push({
-          range: { start: { x: toX(startCI), y }, end: { x: toEndX(endCI), y } },
+          range: { start: startPos, end: endPos },
           text: pathStr,
           hover() {
             // ホバーではポップアップを開かない（クリック起動のみ）。
@@ -2441,19 +2473,18 @@ function ensureTerminal(id) {
       for (const re of [ABS_WIN_PATH_RE, ABS_UNIX_PATH_RE]) {
         re.lastIndex = 0;
         let m;
-        while ((m = re.exec(text)) !== null) {
-          if (re === ABS_UNIX_PATH_RE && !isTerminalPathStartBoundary(text, m.index)) continue;
+        while ((m = re.exec(combined)) !== null) {
+          if (re === ABS_UNIX_PATH_RE && !isTerminalPathStartBoundary(combined, m.index)) continue;
           addPathLink(m[1], m.index);
         }
       }
       let m;
       REL_PATH_RE.lastIndex = 0;
-      while ((m = REL_PATH_RE.exec(text)) !== null) {
+      while ((m = REL_PATH_RE.exec(combined)) !== null) {
         const rawPath = m[2];
         const trimmed = trimTerminalPathCandidate(rawPath);
         if (!isLikelyRelPath(trimmed)) continue;
-        const startCI = m.index + m[1].length;
-        addPathLink(rawPath, startCI);
+        addPathLink(rawPath, m.index + m[1].length);
       }
       callback(links);
     }
@@ -3483,6 +3514,9 @@ inputEl.addEventListener('keydown', (e) => {
     // action-bar 表示中かつ入力が空 → フォーカス中ボタン（未指定なら先頭）を実行
     const bar = document.getElementById('action-bar');
     if (bar && bar.classList.contains('visible') && inputEl.value.trim() === '') {
+      const shownAt = actionBarShownAt.get(activeSessionId) || 0;
+      // /model 送信直後の Enter が action-bar 初期選択を即確定してしまう事故を防ぐ。
+      if (Date.now() - shownAt < 300) { e.preventDefault(); return; }
       const btns = getActionBarButtons();
       const targetBtn = actionBarFocusIdx >= 0 ? btns[actionBarFocusIdx] : btns[0];
       if (targetBtn) { targetBtn.click(); e.preventDefault(); return; }
