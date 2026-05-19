@@ -1859,6 +1859,8 @@ const CRUNCH_LATCH_MS = 800;
 let _elapsedTimerInterval = null;
 let dragSrcId = null;
 let dragSrcGroupKey = null;
+let dragOverCardEl = null;
+let dragOverGroupEl = null;
 let pendingAutoSwitch = false;
 let actionBarFocusIdx = -1;
 let approvalAutoSwitchInProgress = false;
@@ -3380,6 +3382,10 @@ async function doSend(sessionId) {
   if (rawText && rawText !== '') {
     pushMessage(sessionId, { role: 'user', kind: 'text', rawText });
   }
+  if (sessionId === activeSessionId) {
+    // 送信後は新しいターンを見る意図なので、chat/split 側もレイアウト確定まで末尾へ張り付かせる。
+    scrollChatPaneToBottomSoon({ passes: 4, startedAt: Date.now() });
+  }
   sendSubmittedText(sessionId, textToSend);
 }
 
@@ -4233,13 +4239,15 @@ function renderSessionList() {
   });
 
   // ピン留め優先、その中で groupOrder に従ってソート（未登録キーは末尾）
+  const _projectFavIdx = new Map(projectFavorites.map((k, i) => [k, i]));
+  const _groupOrderIdx = new Map(groupOrder.map((k, i) => [k, i]));
   const sortedGroupKeys = [...groups.keys()].sort((a, b) => {
-    const aPin = projectFavorites.includes(a);
-    const bPin = projectFavorites.includes(b);
+    const aPin = _projectFavIdx.has(a);
+    const bPin = _projectFavIdx.has(b);
     if (aPin !== bPin) return aPin ? -1 : 1;
-    if (aPin && bPin) return projectFavorites.indexOf(a) - projectFavorites.indexOf(b);
-    const ai = groupOrder.indexOf(a);
-    const bi = groupOrder.indexOf(b);
+    if (aPin && bPin) return _projectFavIdx.get(a) - _projectFavIdx.get(b);
+    const ai = _groupOrderIdx.has(a) ? _groupOrderIdx.get(a) : -1;
+    const bi = _groupOrderIdx.has(b) ? _groupOrderIdx.get(b) : -1;
     if (ai === -1 && bi === -1) return 0;
     if (ai === -1) return 1;
     if (bi === -1) return -1;
@@ -4350,14 +4358,18 @@ function renderSessionList() {
     });
     header.addEventListener('dragend', () => {
       dragSrcGroupKey = null;
-      root.querySelectorAll('.project-group').forEach(el => el.classList.remove('dragging', 'drag-over'));
+      if (dragOverGroupEl) { dragOverGroupEl.classList.remove('drag-over'); dragOverGroupEl = null; }
+      root.querySelectorAll('.project-group').forEach(el => el.classList.remove('dragging'));
     });
     groupEl.addEventListener('dragover', (e) => {
       if (!dragSrcGroupKey || dragSrcGroupKey === key) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      root.querySelectorAll('.project-group').forEach(el => el.classList.remove('drag-over'));
-      groupEl.classList.add('drag-over');
+      if (dragOverGroupEl !== groupEl) {
+        if (dragOverGroupEl) dragOverGroupEl.classList.remove('drag-over');
+        dragOverGroupEl = groupEl;
+        groupEl.classList.add('drag-over');
+      }
     });
     groupEl.addEventListener('dragleave', (e) => {
       if (!groupEl.contains(e.relatedTarget)) groupEl.classList.remove('drag-over');
@@ -4467,7 +4479,7 @@ function renderSessionList() {
       });
       c.addEventListener('dragend', () => {
         c.classList.remove('dragging');
-        root.querySelectorAll('.card').forEach(el => el.classList.remove('drag-over'));
+        if (dragOverCardEl) { dragOverCardEl.classList.remove('drag-over'); dragOverCardEl = null; }
         setTimeout(() => inputEl.focus(), 0);
       });
       c.addEventListener('dragover', (e) => {
@@ -4477,8 +4489,11 @@ function renderSessionList() {
         if (favorites.includes(dragSrcId) !== favorites.includes(s.id)) { e.dataTransfer.dropEffect = 'none'; return; }
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
-        root.querySelectorAll('.card').forEach(el => el.classList.remove('drag-over'));
-        c.classList.add('drag-over');
+        if (dragOverCardEl !== c) {
+          if (dragOverCardEl) dragOverCardEl.classList.remove('drag-over');
+          dragOverCardEl = c;
+          c.classList.add('drag-over');
+        }
       });
       c.addEventListener('dragleave', () => { c.classList.remove('drag-over'); });
       c.addEventListener('drop', (e) => {
@@ -5953,6 +5968,21 @@ function scrollChatPaneToBottom(timeline) {
   timeline.scrollTop = timeline.scrollHeight;
 }
 
+function scrollChatPaneToBottomSoon(opts = {}) {
+  const passes = Math.max(1, Number(opts.passes) || 1);
+  const startedAt = opts.startedAt || Date.now();
+  const run = (n) => {
+    const timeline = getChatTimelineEl();
+    if (timeline) scrollChatPaneToBottom(timeline);
+    if (n + 1 >= passes) return;
+    const elapsed = Date.now() - startedAt;
+    const delay = n === 0 ? 16 : Math.min(120, 24 + n * 32);
+    if (elapsed + delay > 320) return;
+    setTimeout(() => requestAnimationFrame(() => run(n + 1)), delay);
+  };
+  requestAnimationFrame(() => run(0));
+}
+
 function getAiDisplayName(provider) {
   switch (provider) {
     case 'claude':   return ti18n('chat_ai_name_claude', 'Claude');
@@ -6426,7 +6456,7 @@ function mountChatPaneForSession(sid) {
     try { window._chatC4OnRemount(sid); } catch (_) {}
   }
   // 末尾追従
-  requestAnimationFrame(() => scrollChatPaneToBottom(timeline));
+  scrollChatPaneToBottomSoon({ passes: 2 });
 }
 
 // 1 メッセージの増分追加。subscribe コールバックから呼ばれる。
@@ -6443,7 +6473,7 @@ function appendMessage(sid, msg) {
   if (typeof window !== 'undefined' && typeof window._chatC4OnAppend === 'function') {
     try { window._chatC4OnAppend(sid, msg); } catch (_) {}
   }
-  if (wasAtBottom) requestAnimationFrame(() => scrollChatPaneToBottom(timeline));
+  if (wasAtBottom) scrollChatPaneToBottomSoon({ passes: 2 });
 }
 
 // setActiveTab が chat/split に切り替わるタイミングで chat-pane の中身を保証する。
