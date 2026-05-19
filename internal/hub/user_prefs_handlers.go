@@ -19,6 +19,65 @@ func notifySoundCustomPath() (string, error) {
 	return filepath.Join(home, ".any-ai-cli", "notify_sound_custom.bin"), nil
 }
 
+// avatarUploadPath はアップロードされたアバター画像の保存パスを返す。
+func avatarUploadPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".any-ai-cli", "user_avatar.bin"), nil
+}
+
+// handleUserPrefsAvatarUpload は PUT / DELETE /api/user-prefs/avatar を処理する。
+// PUT: バイナリ画像を保存し UserPrefs.Avatar をローカルパスに設定する。
+// DELETE: UserPrefs.Avatar を空にする。
+func (s *Server) handleUserPrefsAvatarUpload(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("token") != s.cfg.Token {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	switch r.Method {
+	case http.MethodPut:
+		path, err := avatarUploadPath()
+		if err != nil {
+			http.Error(w, "home dir error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "read body error: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			http.Error(w, "write error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		s.mu.Lock()
+		s.cfg.UserPrefs.Avatar = path
+		s.mu.Unlock()
+		if err := config.Save(s.cfg); err != nil {
+			s.logger.Warn("save config failed", "err", err)
+			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	case http.MethodDelete:
+		s.mu.Lock()
+		s.cfg.UserPrefs.Avatar = ""
+		s.mu.Unlock()
+		if err := config.Save(s.cfg); err != nil {
+			s.logger.Warn("save config failed", "err", err)
+			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
 // handleUserPrefs は GET / PUT /api/user-prefs を処理する。
 func (s *Server) handleUserPrefs(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("token") != s.cfg.Token {

@@ -120,6 +120,31 @@
           <div class="settings-note" data-i18n="settings_locked_mode_desc">新規セッション/リロード時に選択したモードで開きます。途中で切替えることは可能です。</div>
         </div>
       </details>
+      <details class="settings-section" data-section="appearance">
+        <summary class="settings-section-title"><span data-i18n="settings_appearance">外観</span></summary>
+        <div class="settings-section-body">
+          <div class="settings-row settings-avatar-preview-row">
+            <div id="settings-avatar-preview" class="settings-avatar-circle"></div>
+            <span id="settings-avatar-status" class="settings-avatar-status"></span>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_display_name">表示名</span>
+            <input type="text" id="display-name-input" class="settings-input-text">
+          </div>
+          <div class="settings-note" data-i18n="settings_display_name_desc">未入力時はシステムのユーザー名から自動取得します。イニシャル丸のテキストに反映されます。</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_avatar_url">アイコン画像</span>
+            <input type="text" id="avatar-url-input" class="settings-input-text settings-avatar-url-input">
+            <button id="avatar-url-apply-btn" class="settings-link-btn settings-inline-btn" data-i18n="settings_avatar_apply">適用</button>
+          </div>
+          <div class="settings-note" data-i18n="settings_avatar_url_desc">ローカルパスまたは URL。未設定・読み込み失敗時はイニシャル丸を表示します。</div>
+          <div class="settings-row">
+            <button id="avatar-file-btn" class="settings-inline-btn" data-i18n="settings_avatar_file_select">ファイルを選択</button>
+            <button id="avatar-clear-btn" class="settings-inline-btn" data-i18n="settings_avatar_clear">クリア</button>
+            <input type="file" id="avatar-file-input" accept="image/png,image/jpeg,image/webp" style="display:none">
+          </div>
+        </div>
+      </details>
       <details class="settings-section" data-section="session">
         <summary class="settings-section-title"><span data-i18n="settings_session">Session</span></summary>
         <div class="settings-section-body">
