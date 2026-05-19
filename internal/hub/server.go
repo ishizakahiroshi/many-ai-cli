@@ -239,6 +239,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.Handle("/approval-patterns/", approvalPatternsHandler)
 	mux.Handle("/ws", websocket.Handler(s.handleWS))
 	mux.HandleFunc("/api/info", s.handleInfo)
+	mux.HandleFunc("/api/avatar", s.handleAvatar)
 	mux.HandleFunc("/api/spawn", s.handleSpawn)
 	mux.HandleFunc("/api/pick-directory", s.handlePickDirectory)
 	mux.HandleFunc("/api/path-exists", s.handlePathExists)
@@ -281,6 +282,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/git-commit-message", s.handleGitCommitMessage)
 	mux.HandleFunc("/api/git-fetch", s.handleGitFetch)
 	mux.HandleFunc("/api/user-prefs/notify-sound-custom", s.handleUserPrefsNotifySoundCustom)
+	mux.HandleFunc("/api/user-prefs/avatar", s.handleUserPrefsAvatarUpload)
 	mux.HandleFunc("/api/user-prefs", s.handleUserPrefs)
 	s.httpSrv = &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Handler: mux}
 	return s, nil
@@ -1275,12 +1277,49 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	mode := runtimeMode()
+
+	userAvatar := s.cfg.UserPrefs.Avatar
+	if userAvatar != "" && !strings.HasPrefix(userAvatar, "http://") && !strings.HasPrefix(userAvatar, "https://") {
+		userAvatar = fmt.Sprintf("/api/avatar?token=%s", s.cfg.Token)
+	}
+	userDisplayName := s.cfg.UserPrefs.DisplayName
+	if userDisplayName == "" {
+		if v := os.Getenv("USERNAME"); v != "" {
+			userDisplayName = v
+		} else {
+			userDisplayName = os.Getenv("USER")
+		}
+	}
+
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"cwd":           s.hubCWD,
-		"version":       s.version,
-		"runtime_mode":  mode,
-		"runtime_label": runtimeLabel(mode),
+		"cwd":             s.hubCWD,
+		"version":         s.version,
+		"runtime_mode":    mode,
+		"runtime_label":   runtimeLabel(mode),
+		"userAvatar":      userAvatar,
+		"userDisplayName": userDisplayName,
 	})
+}
+
+func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("token") != s.cfg.Token {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	path := s.cfg.UserPrefs.Avatar
+	if path == "" || strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		http.NotFound(w, r)
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	ct := http.DetectContentType(data)
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Cache-Control", "max-age=3600")
+	_, _ = w.Write(data)
 }
 
 func (s *Server) handleKillAll(w http.ResponseWriter, r *http.Request) {

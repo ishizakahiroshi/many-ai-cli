@@ -1,5 +1,8 @@
 console.log('[any-ai-cli] app.js build=2026-05-18-voice-dbg');
 
+let _userAvatarUrl = '';
+let _userDisplayName = '';
+
 // ---- トースト通知 ----
 let _toastTimer = null;
 function getToastAnchorRect(anchor) {
@@ -1154,6 +1157,134 @@ function applyLang(lang) {
   });
 })();
 
+// ---- アバター・表示名設定 ----
+(function () {
+  const previewEl   = document.getElementById('settings-avatar-preview');
+  const statusEl    = document.getElementById('settings-avatar-status');
+  const nameInputEl = document.getElementById('display-name-input');
+  const urlInputEl  = document.getElementById('avatar-url-input');
+  const applyBtn    = document.getElementById('avatar-url-apply-btn');
+  const fileBtn     = document.getElementById('avatar-file-btn');
+  const fileInputEl = document.getElementById('avatar-file-input');
+  const clearBtn    = document.getElementById('avatar-clear-btn');
+  if (!previewEl) return;
+
+  function getInitialLetter(name) {
+    if (name) return [...name][0].toUpperCase();
+    return (document.documentElement.lang || '').startsWith('ja') ? 'あ' : 'Y';
+  }
+
+  function updatePreview(avatarUrl, displayName) {
+    previewEl.innerHTML = '';
+    if (avatarUrl) {
+      const img = document.createElement('img');
+      img.src = avatarUrl;
+      img.alt = getInitialLetter(displayName);
+      img.onload = () => {
+        statusEl.textContent = typeof window.t === 'function' ? t('settings_avatar_loaded') : '画像を読み込み済み';
+        statusEl.className = 'settings-avatar-status ok';
+      };
+      img.onerror = () => {
+        img.remove();
+        previewEl.textContent = getInitialLetter(displayName);
+        statusEl.textContent = typeof window.t === 'function' ? t('settings_avatar_load_failed') : '読み込み失敗';
+        statusEl.className = 'settings-avatar-status err';
+      };
+      previewEl.appendChild(img);
+      statusEl.textContent = '';
+      statusEl.className = 'settings-avatar-status';
+    } else {
+      previewEl.textContent = getInitialLetter(displayName);
+      statusEl.textContent = '';
+      statusEl.className = 'settings-avatar-status';
+    }
+  }
+
+  async function patchServerPref(path, value) {
+    const tk = new URLSearchParams(location.search).get('token');
+    if (!tk) return;
+    try {
+      const getRes = await fetch(`/api/user-prefs?token=${tk}`);
+      if (!getRes.ok) throw new Error(`GET ${getRes.status}`);
+      const prefs = await getRes.json();
+      _setNestedValue(prefs, path, value);
+      const putRes = await fetch(`/api/user-prefs?token=${tk}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(prefs),
+      });
+      if (!putRes.ok) throw new Error(`PUT ${putRes.status}`);
+    } catch (e) {
+      console.warn('[user-prefs] patch failed:', e);
+      showToast(typeof window.t === 'function' ? t('user_prefs_save_failed_network') : '設定の保存に失敗しました');
+    }
+  }
+
+  function initFromGlobals() {
+    nameInputEl.value = _userDisplayName || '';
+    const isLocalFile = _userAvatarUrl && _userAvatarUrl.startsWith('/api/avatar');
+    urlInputEl.value = isLocalFile ? '' : (_userAvatarUrl || '');
+    updatePreview(_userAvatarUrl, _userDisplayName);
+  }
+
+  document.addEventListener('user-info-ready', initFromGlobals, { once: true });
+  const sectionEl = document.querySelector('.settings-section[data-section="appearance"]');
+  if (sectionEl) {
+    sectionEl.addEventListener('toggle', () => { if (sectionEl.open) initFromGlobals(); });
+  }
+
+  let _nameDebounce = null;
+  nameInputEl.addEventListener('input', () => {
+    clearTimeout(_nameDebounce);
+    _nameDebounce = setTimeout(async () => {
+      const val = nameInputEl.value;
+      _userDisplayName = val;
+      updatePreview(_userAvatarUrl, _userDisplayName);
+      await patchServerPref('display_name', val);
+    }, 500);
+  });
+
+  applyBtn.addEventListener('click', async () => {
+    const url = urlInputEl.value.trim();
+    _userAvatarUrl = url;
+    updatePreview(url, _userDisplayName);
+    await patchServerPref('avatar', url);
+  });
+
+  fileBtn.addEventListener('click', () => fileInputEl.click());
+
+  fileInputEl.addEventListener('change', async () => {
+    const file = fileInputEl.files[0];
+    if (!file) return;
+    const tk = new URLSearchParams(location.search).get('token');
+    try {
+      const buf = await file.arrayBuffer();
+      const res = await fetch(`/api/user-prefs/avatar?token=${tk}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        body: buf,
+      });
+      if (!res.ok) throw new Error(`PUT avatar ${res.status}`);
+      // キャッシュバスター付きで更新
+      _userAvatarUrl = `/api/avatar?token=${tk}`;
+      urlInputEl.value = '';
+      updatePreview(`/api/avatar?token=${tk}&t=${Date.now()}`, _userDisplayName);
+      showToast(typeof window.t === 'function' ? t('settings_avatar_file_set') : 'アイコン画像を設定しました');
+    } catch (e) {
+      console.warn('[user-prefs] avatar upload failed:', e);
+      showToast(typeof window.t === 'function' ? t('settings_avatar_upload_failed') : '画像のアップロードに失敗しました');
+    }
+    fileInputEl.value = '';
+  });
+
+  clearBtn.addEventListener('click', async () => {
+    urlInputEl.value = '';
+    _userAvatarUrl = '';
+    updatePreview('', _userDisplayName);
+    await patchServerPref('avatar', '');
+  });
+})();
+
 const token = new URLSearchParams(location.search).get('token');
 
 // usage-link デフォルトをリモート（GitHub バック）から取得して更新。
@@ -1177,6 +1308,9 @@ const token = new URLSearchParams(location.search).get('token');
     const res = await fetch(`/api/info?token=${token}`);
     if (!res.ok) return;
     const info = await res.json();
+    _userAvatarUrl = info.userAvatar || '';
+    _userDisplayName = info.userDisplayName || '';
+    document.dispatchEvent(new CustomEvent('user-info-ready'));
     const ver = 'v' + (info.version || 'dev');
     const runtimeMode = info.runtime_mode || '';
     const runtimeLabel = () => {
@@ -5840,6 +5974,9 @@ function getAiAvatarLetter(provider) {
 }
 
 function getUserAvatarLetter() {
+  if (_userDisplayName) {
+    return [..._userDisplayName][0].toUpperCase();
+  }
   const lang = (document.documentElement.lang || '').toLowerCase();
   return lang.startsWith('ja') ? 'あ' : 'Y';
 }
@@ -6074,7 +6211,18 @@ function renderMessageBubble(sid, msg) {
   const avatar = document.createElement('div');
   avatar.className = 'avatar ' + (role === 'user' ? 'user' : ('ai ' + provider));
   if (role === 'user') {
-    avatar.textContent = getUserAvatarLetter();
+    if (_userAvatarUrl) {
+      const img = document.createElement('img');
+      img.src = _userAvatarUrl;
+      img.alt = getUserAvatarLetter();
+      img.onerror = () => {
+        img.remove();
+        avatar.textContent = getUserAvatarLetter();
+      };
+      avatar.appendChild(img);
+    } else {
+      avatar.textContent = getUserAvatarLetter();
+    }
   } else {
     avatar.innerHTML = providerIconHtml(provider, 30);
   }

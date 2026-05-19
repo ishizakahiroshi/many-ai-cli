@@ -230,6 +230,8 @@ type UserPrefs struct {
 	CwdHistory      []string            `yaml:"cwd_history,omitempty"      json:"cwd_history,omitempty"`
 	Spawn           UserPrefsSpawn      `yaml:"spawn,omitempty"            json:"spawn,omitempty"`
 	MigratedFromLocalstorage bool       `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
+	Avatar          string              `yaml:"avatar,omitempty"       json:"avatar,omitempty"`
+	DisplayName     string              `yaml:"display_name,omitempty" json:"display_name,omitempty"`
 }
 
 // LocalModel は config.yaml の local_models セクションに手書きで追記される
