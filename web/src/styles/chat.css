@@ -51,7 +51,7 @@
   font-family: "Cascadia Code", Consolas, monospace;
 }
 #chat-pane .msg.ai .msg-number { left: 44px; }
-#chat-pane .msg.user .msg-number { right: 44px; }
+#chat-pane .msg.user .msg-number { right: auto; left: 4px; }
 #chat-pane .msg.system .msg-number { left: 0; }
 
 #chat-pane .avatar {

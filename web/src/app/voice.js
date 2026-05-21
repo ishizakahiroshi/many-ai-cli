@@ -4,17 +4,156 @@
 // ---- 音声入力 ----
 (function () {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) return;
-
   const isChromium = navigator.userAgentData?.brands?.some(b => /Chromium/.test(b.brand))
     ?? /Chrome\//.test(navigator.userAgent);
-  if (!isChromium) return;
 
   const btn        = document.getElementById('voice-btn');
   const voiceBar   = document.getElementById('voice-bar');
   const canvas     = document.getElementById('voice-waveform');
   const cancelBtn  = document.getElementById('voice-cancel-btn');
   const confirmBtn = document.getElementById('voice-confirm-btn');
+  const diagRunBtn = document.getElementById('voice-diagnostic-run-btn');
+  const diagCopyBtn = document.getElementById('voice-diagnostic-copy-btn');
+  const diagProfileSpecificBtn = document.getElementById('voice-diagnostic-profile-specific-btn');
+  const diagStatusEl = document.getElementById('voice-diagnostic-status');
+  const diagGuideEl = document.getElementById('voice-diagnostic-guide');
+
+  const VOICE_DIAG_EVENT_LIMIT = 80;
+  const VOICE_DIAG_STUCK_MS = 20000;
+  const voiceDiagEvents = [];
+  let voiceDiagStatus = SpeechRecognition && isChromium ? 'idle' : 'unsupported';
+  let voiceDiagLastDetail = '';
+  let voiceDiagSeq = 0;
+
+  function diagText(key, fallback) {
+    const v = typeof window.t === 'function' ? window.t(key) : key;
+    return v && v !== key ? v : fallback;
+  }
+
+  function pushVoiceDiagEvent(recognitionId, event, detail) {
+    const item = {
+      timestamp: new Date().toISOString(),
+      recognitionId: recognitionId == null ? null : recognitionId,
+      event,
+      error: detail?.error || null,
+      message: detail?.message || null,
+      hasResult: !!detail?.hasResult,
+      transcriptLength: Number.isFinite(detail?.transcriptLength) ? detail.transcriptLength : 0,
+    };
+    voiceDiagEvents.push(item);
+    while (voiceDiagEvents.length > VOICE_DIAG_EVENT_LIMIT) voiceDiagEvents.shift();
+    return item;
+  }
+
+  function voiceDiagClass(status) {
+    if (status === 'healthy') return 'ok';
+    if (status === 'permission_denied' || status === 'audio_capture_failed' || status === 'speech_service_failed') return 'err';
+    if (status === 'profile_or_stt_stuck_suspected' || status === 'normal_profile_specific' || status === 'no_result') return 'warn';
+    return '';
+  }
+
+  function shouldShowRecoveryGuide(status) {
+    return status === 'profile_or_stt_stuck_suspected' || status === 'normal_profile_specific';
+  }
+
+  function renderRecoveryGuide() {
+    if (!diagGuideEl) return;
+    diagGuideEl.innerHTML = '';
+    if (!shouldShowRecoveryGuide(voiceDiagStatus)) {
+      diagGuideEl.hidden = true;
+      return;
+    }
+    const title = document.createElement('div');
+    title.className = 'voice-diagnostic-guide-title';
+    title.textContent = diagText('voice_diag_guide_title', 'Recovery guide');
+    const list = document.createElement('ol');
+    for (let i = 1; i <= 6; i++) {
+      const li = document.createElement('li');
+      const text = diagText('voice_diag_guide_' + i, '');
+      if (text.includes('chrome://settings/content/all?searchSubpage=127.0.0.1')) {
+        const [before, after] = text.split('chrome://settings/content/all?searchSubpage=127.0.0.1');
+        li.appendChild(document.createTextNode(before));
+        const code = document.createElement('code');
+        code.textContent = 'chrome://settings/content/all?searchSubpage=127.0.0.1';
+        li.appendChild(code);
+        li.appendChild(document.createTextNode(after || ''));
+      } else {
+        li.textContent = text;
+      }
+      list.appendChild(li);
+    }
+    diagGuideEl.appendChild(title);
+    diagGuideEl.appendChild(list);
+    diagGuideEl.hidden = false;
+  }
+
+  function setVoiceDiagStatus(status, detail) {
+    voiceDiagStatus = status;
+    voiceDiagLastDetail = detail || '';
+    if (diagStatusEl) {
+      const key = 'voice_diag_' + status;
+      const fallback = status.replace(/_/g, ' ');
+      diagStatusEl.textContent = diagText(key, fallback) + (detail ? ' ' + detail : '');
+      diagStatusEl.className = 'voice-diagnostic-status ' + voiceDiagClass(status);
+    }
+    renderRecoveryGuide();
+    document.dispatchEvent(new CustomEvent('voiceinput:diagnostic', {
+      detail: { status, message: voiceDiagLastDetail, events: voiceDiagEvents.slice() },
+    }));
+  }
+
+  function classifyVoiceError(error) {
+    if (error === 'not-allowed' || error === 'permission-denied') return 'permission_denied';
+    if (error === 'audio-capture') return 'audio_capture_failed';
+    if (error === 'network' || error === 'service-not-allowed') return 'speech_service_failed';
+    if (error === 'no-speech') return 'no_result';
+    return 'speech_service_failed';
+  }
+
+  function createVoiceDiagReport() {
+    const uaData = navigator.userAgentData ? {
+      brands: navigator.userAgentData.brands,
+      mobile: navigator.userAgentData.mobile,
+      platform: navigator.userAgentData.platform,
+    } : null;
+    return {
+      generatedAt: new Date().toISOString(),
+      appVersion: document.querySelector('.settings-app-version')?.textContent || null,
+      userAgent: navigator.userAgent,
+      userAgentData: uaData,
+      origin: location.origin,
+      isLocalOrigin: /^https?:\/\/127\.0\.0\.1(?::\d+)?$/.test(location.origin),
+      speechRecognitionSupported: !!SpeechRecognition,
+      chromiumDetected: !!isChromium,
+      status: voiceDiagStatus,
+      message: voiceDiagLastDetail,
+      events: voiceDiagEvents.slice(),
+    };
+  }
+
+  async function copyVoiceDiagReport(anchor) {
+    const text = JSON.stringify(createVoiceDiagReport(), null, 2);
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(diagText('voice_diag_copied', 'Voice diagnostics log copied'), anchor);
+    } catch (err) {
+      showToast(diagText('voice_diag_copy_failed', 'Failed to copy voice diagnostics log'), anchor);
+    }
+  }
+
+  window.__anyAiCliVoiceDiagnostics = {
+    getStatus: () => voiceDiagStatus,
+    getEvents: () => voiceDiagEvents.slice(),
+    getReport: createVoiceDiagReport,
+    markNormalProfileSpecific: () => setVoiceDiagStatus('normal_profile_specific'),
+  };
+
+  if (!SpeechRecognition || !isChromium) {
+    setVoiceDiagStatus('unsupported');
+    if (diagRunBtn) diagRunBtn.disabled = true;
+    if (diagCopyBtn) diagCopyBtn.addEventListener('click', () => copyVoiceDiagReport(diagCopyBtn));
+    return;
+  }
   if (!btn || !voiceBar || !canvas) return;
 
   btn.hidden = false;
@@ -31,10 +170,109 @@
   }
   configureRecognition();
   console.log('[VOICE-DBG] init #' + recognition._dbgId);
+  setVoiceDiagStatus('idle');
+
+  function configureDiagnosticRecognition(rec) {
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.maxAlternatives = 1;
+    rec.lang = getLang();
+  }
+
+  function runVoiceDiagnostic() {
+    if (!SpeechRecognition) {
+      setVoiceDiagStatus('unsupported');
+      return;
+    }
+    if (isRecording) {
+      try { recognition.abort(); } catch (_) {}
+      stopVoice();
+    }
+    const diag = new SpeechRecognition();
+    const diagId = 'diag-' + (++voiceDiagSeq);
+    let settled = false;
+    let sawResult = false;
+    let sawError = false;
+    let stuckTimer = null;
+    let hardTimer = null;
+    configureDiagnosticRecognition(diag);
+
+    function clearTimers() {
+      clearTimeout(stuckTimer);
+      clearTimeout(hardTimer);
+      stuckTimer = null;
+      hardTimer = null;
+    }
+    function finish(status, detail) {
+      if (settled) return;
+      settled = true;
+      clearTimers();
+      setVoiceAudioActive(false);
+      setVoiceDiagStatus(status, detail);
+      try { diag.abort(); } catch (_) {}
+    }
+    function event(name, detail) {
+      pushVoiceDiagEvent(diagId, name, detail || {});
+    }
+
+    setVoiceDiagStatus('running');
+    event('click');
+    hardTimer = setTimeout(() => {
+      event('diagnostic-timeout', { message: 'no terminal event within hard timeout' });
+      finish('profile_or_stt_stuck_suspected');
+    }, VOICE_DIAG_STUCK_MS + 10000);
+
+    diag.onstart = () => {
+      event('start');
+      setVoiceAudioActive(true);
+    };
+    diag.onaudiostart = () => event('audiostart');
+    diag.onsoundstart = () => event('soundstart');
+    diag.onspeechstart = () => event('speechstart');
+    diag.onspeechend = () => event('speechend');
+    diag.onsoundend = () => event('soundend');
+    diag.onaudioend = () => {
+      event('audioend');
+      setVoiceAudioActive(false);
+      stuckTimer = setTimeout(() => {
+        event('stuck-timeout', { message: 'audioend without result/end/error' });
+        finish('profile_or_stt_stuck_suspected');
+      }, VOICE_DIAG_STUCK_MS);
+    };
+    diag.onresult = (e) => {
+      const result = e.results[e.resultIndex];
+      const text = result?.[0]?.transcript || '';
+      sawResult = true;
+      event('result', { hasResult: true, transcriptLength: text.length });
+      finish('healthy');
+    };
+    diag.onnomatch = () => event('nomatch');
+    diag.onerror = (e) => {
+      sawError = true;
+      const error = normalizeVoiceErrorCode(e);
+      event('error', { error, message: e.message || null });
+      finish(classifyVoiceError(error), e.message || '');
+    };
+    diag.onend = () => {
+      event('end');
+      if (!sawResult && !sawError) finish('no_result');
+    };
+
+    try {
+      diag.start();
+    } catch (err) {
+      const error = normalizeVoiceErrorCode(err);
+      event('start-error', { error, message: err?.message || null });
+      finish(classifyVoiceError(error), err?.message || '');
+    }
+  }
+  window.__anyAiCliVoiceDiagnostics.run = runVoiceDiagnostic;
+  window.__anyAiCliVoiceDiagnostics.copy = () => copyVoiceDiagReport(diagCopyBtn || btn);
 
   let isRecording  = false;
   let interimStart = 0;
   let preVoiceText = '';
+  let audioendStuckTimer = null;
 
   let animFrame = null;
   let wavePhase = 0;
@@ -187,6 +425,9 @@
 
   function stopVoice() {
     console.log('[VOICE-DBG] stopVoice() current#' + recognition._dbgId + ' isRecording=' + isRecording);
+    pushVoiceDiagEvent(recognition._dbgId, 'stopVoice', { message: 'manual or terminal stop' });
+    clearTimeout(audioendStuckTimer);
+    audioendStuckTimer = null;
     if (!isRecording) return;
     isRecording = false;
     voiceActive = false;
@@ -209,6 +450,7 @@
     const myId = recognition._dbgId;
     recognition.onstart = () => {
       console.log('[VOICE-DBG] #' + myId + ' onstart');
+      pushVoiceDiagEvent(myId, 'start');
       isRecording = true;
       voiceActive = true;
       setVoiceAudioActive(true);
@@ -221,43 +463,57 @@
 
     recognition.onaudiostart = () => {
       console.log('[VOICE-DBG] #' + myId + ' onaudiostart');
+      pushVoiceDiagEvent(myId, 'audiostart');
     };
 
     recognition.onsoundstart = () => {
       console.log('[VOICE-DBG] #' + myId + ' onsoundstart');
+      pushVoiceDiagEvent(myId, 'soundstart');
       voiceIntensityTarget = 0.55;
       lastKickAt = performance.now();
     };
 
     recognition.onspeechstart = () => {
       console.log('[VOICE-DBG] #' + myId + ' onspeechstart');
+      pushVoiceDiagEvent(myId, 'speechstart');
       voiceIntensityTarget = 0.9;
       lastKickAt = performance.now();
     };
 
     recognition.onspeechend = () => {
       console.log('[VOICE-DBG] #' + myId + ' onspeechend');
+      pushVoiceDiagEvent(myId, 'speechend');
       voiceIntensityTarget = 0.25;
     };
 
     recognition.onsoundend = () => {
       console.log('[VOICE-DBG] #' + myId + ' onsoundend');
+      pushVoiceDiagEvent(myId, 'soundend');
     };
 
     recognition.onaudioend = () => {
       console.log('[VOICE-DBG] #' + myId + ' onaudioend');
+      pushVoiceDiagEvent(myId, 'audioend');
       setVoiceAudioActive(false);
       voiceIntensityTarget = 0.03;
       voiceBar.classList.add('voice-processing');
+      clearTimeout(audioendStuckTimer);
+      audioendStuckTimer = setTimeout(() => {
+        pushVoiceDiagEvent(myId, 'stuck-timeout', { message: 'audioend without result/end/error' });
+        setVoiceDiagStatus('profile_or_stt_stuck_suspected');
+      }, VOICE_DIAG_STUCK_MS);
     };
 
     recognition.onresult = (e) => {
+      clearTimeout(audioendStuckTimer);
+      audioendStuckTimer = null;
       const _r = e.results[e.resultIndex];
-      console.log('[VOICE-DBG] #' + myId + ' onresult tr=' + JSON.stringify(_r ? _r[0].transcript : '') + ' final=' + (_r ? _r.isFinal : '?'));
+      console.log('[VOICE-DBG] #' + myId + ' onresult len=' + (_r && _r[0] ? _r[0].transcript.length : 0) + ' final=' + (_r ? _r.isFinal : '?'));
       voiceBar.classList.remove('voice-processing');
       const result = e.results[e.resultIndex];
       if (!result) return;
       const transcript = result[0].transcript;
+      pushVoiceDiagEvent(myId, 'result', { hasResult: true, transcriptLength: transcript.length });
       if (transcript.length > lastInterimLen) {
         lastKickAt = performance.now();
         voiceIntensityTarget = Math.max(voiceIntensityTarget, 0.85);
@@ -280,15 +536,22 @@
 
     recognition.onnomatch = () => {
       console.log('[VOICE-DBG] #' + myId + ' onnomatch');
+      pushVoiceDiagEvent(myId, 'nomatch');
     };
 
     recognition.onend = () => {
       console.log('[VOICE-DBG] #' + myId + ' onend');
+      clearTimeout(audioendStuckTimer);
+      audioendStuckTimer = null;
+      pushVoiceDiagEvent(myId, 'end');
       stopVoice();
     };
 
     recognition.onerror = (e) => {
       console.log('[VOICE-DBG] #' + myId + ' onerror error=' + e.error + ' msg=' + (e.message || ''));
+      clearTimeout(audioendStuckTimer);
+      audioendStuckTimer = null;
+      pushVoiceDiagEvent(myId, 'error', { error: e.error || null, message: e.message || null });
       if (e.error !== 'no-speech' && e.error !== 'aborted') {
         showVoiceError(e, btn);
       }
@@ -299,6 +562,7 @@
 
   btn.addEventListener('click', () => {
     console.log('[VOICE-DBG] btn.click current#' + recognition._dbgId + ' isRecording=' + isRecording);
+    pushVoiceDiagEvent(recognition._dbgId, 'click');
     if (isRecording) {
       try { recognition.abort(); } catch (_) {}
       stopVoice();
@@ -333,6 +597,21 @@
     try { recognition.stop(); } catch (_) {}
     stopVoice();
   });
+
+  if (diagRunBtn) {
+    diagRunBtn.addEventListener('click', () => runVoiceDiagnostic());
+  }
+  if (diagCopyBtn) {
+    diagCopyBtn.addEventListener('click', () => copyVoiceDiagReport(diagCopyBtn));
+  }
+  if (diagProfileSpecificBtn) {
+    diagProfileSpecificBtn.addEventListener('click', () => {
+      pushVoiceDiagEvent(null, 'normal-profile-specific-confirmed', {
+        message: 'user confirmed Incognito or a new profile works',
+      });
+      setVoiceDiagStatus('normal_profile_specific');
+    });
+  }
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && isRecording) {
