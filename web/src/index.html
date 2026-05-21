@@ -249,6 +249,18 @@
             <span class="settings-note" data-i18n="settings_voice_grace_unit">秒</span>
           </div>
           <div class="settings-note" data-i18n="settings_voice_grace_desc">無音で自動終了した後、直近の発話から指定秒数以内なら認識を継続します。0 で即終了（現状の挙動）。</div>
+          <div class="voice-diagnostics-panel" id="voice-diagnostics-panel">
+            <div class="voice-diagnostics-head">
+              <span class="settings-label" data-i18n="voice_diag_title">音声入力診断</span>
+              <div class="voice-diagnostics-actions">
+                <button id="voice-diagnostic-run-btn" class="settings-link-btn settings-inline-btn" data-i18n="voice_diag_run">診断</button>
+                <button id="voice-diagnostic-profile-specific-btn" class="settings-link-btn settings-inline-btn" data-i18n="voice_diag_profile_specific">シークレット/新規プロファイルでは動いた</button>
+                <button id="voice-diagnostic-copy-btn" class="settings-link-btn settings-inline-btn" data-i18n="voice_diag_copy">ログをコピー</button>
+              </div>
+            </div>
+            <div id="voice-diagnostic-status" class="voice-diagnostic-status" data-i18n="voice_diag_idle">未実行</div>
+            <div id="voice-diagnostic-guide" class="voice-diagnostic-guide" hidden></div>
+          </div>
           <!-- ウェイクワード機能は無効化中。app.js の wakeword IIFE 早期 return と対で隠す。
                復活時はこの hidden を外し、app.js 側 (build=...-wakeword-disabled 周辺) も合わせて戻す。 -->
           <div id="wakeword-settings-group" hidden>

@@ -317,7 +317,21 @@ function trackApprovalHintFromChunk(id, bytes) {
   }
 
   if (nowVisible) {
-    approvalUiAdapter.cacheApprovalOptions(id, options);
+    // Anti-flicker: 表示中の承認と異なる選択肢が検出されたときはキャッシュを更新しない。
+    // Codex の Ink 再描画で pendingTextTail に部分的・交互のオプションが混入する問題への対処。
+    // 切り替えは detectApproval の安定性ガード（700ms）が担う。
+    const wasVisible = approvalVisibleCache.get(id);
+    const existingCached = wasVisible && approvalRawOptionsCache.get(id);
+    const skipCacheUpdate = !!(
+      wasVisible &&
+      existingCached && existingCached.length > 0 &&
+      !isBatchOptions(existingCached) &&
+      !isBatchOptions(options) &&
+      approvalSig(existingCached) !== approvalSig(options)
+    );
+    if (!skipCacheUpdate) {
+      approvalUiAdapter.cacheApprovalOptions(id, options);
+    }
   } else {
     cancelApprovalHintConfirm(id);
     // approvalVisibleCache=true の間（= Hub marker / plainYesNo / フォールバックいずれかで
@@ -616,6 +630,36 @@ function detectApproval(id) {
     }
   }
 
+  // Anti-flicker: 既に別の選択肢を表示中の場合、700ms 安定して検出されるまで切り替えを保留する。
+  // Codex の Ink 再描画で pendingTextTail に複数レンダリング状態が混入し、
+  // extractApprovalOptions が poll ごとに異なる選択肢を返すことでチカチカする問題への対処。
+  if (hasPrompt && !isBatchOptions(options) && approvalVisibleCache.get(id)) {
+    const existingCached = approvalRawOptionsCache.get(id);
+    if (existingCached && existingCached.length > 0 && !isBatchOptions(existingCached)) {
+      const newSig = approvalSig(options);
+      const oldSig = approvalSig(existingCached);
+      if (newSig !== oldSig) {
+        const candidate = approvalSwitchCandidates.get(id);
+        if (!candidate || candidate.sig !== newSig) {
+          approvalSwitchCandidates.set(id, { sig: newSig, options: options.slice(), firstSeenAt: Date.now() });
+          showActionBar(bar, id, existingCached, crunch.found && !hasPrompt, false);
+          return;
+        }
+        if (Date.now() - candidate.firstSeenAt < 700) {
+          showActionBar(bar, id, existingCached, crunch.found && !hasPrompt, false);
+          return;
+        }
+        // 700ms 安定 — 新しい選択肢に切り替える
+        approvalSwitchCandidates.delete(id);
+        approvalUiAdapter.cacheApprovalOptions(id, options);
+      } else {
+        approvalSwitchCandidates.delete(id);
+      }
+    } else {
+      approvalSwitchCandidates.delete(id);
+    }
+  }
+
   // 承認プロンプト表示中は展開ボタンを出さない（ctrl+o が承認 UI に届いて誤動作するのを防ぐ）
   const wasVisibleBeforeShow = !!approvalVisibleCache.get(id);
   showActionBar(bar, id, hasPrompt ? options : [], crunch.found && !hasPrompt, hasPrompt && !wasVisibleBeforeShow);
@@ -653,6 +697,7 @@ function hideActionBar(id) {
   if (id !== undefined) batchSelections.delete(id);
   if (id !== undefined) {
     cancelApprovalHintConfirm(id);
+    approvalSwitchCandidates.delete(id);
     clearSequentialChoiceState(id);
     const wasVisible = !!approvalVisibleCache.get(id);
     if (wasVisible) {
@@ -958,8 +1003,20 @@ function clearBatchSelections(sessionId) {
 function sendBatchChoices(sessionId) {
   const selections = batchSelections.get(sessionId);
   if (!selections || selections.length === 0 || selections.some(v => v == null)) return;
-  const text = selections.join(' ');
   const prevOpts = approvalRawOptionsCache.get(sessionId);
+  let text;
+  if (isBatchOptions(prevOpts) && prevOpts.length === selections.length) {
+    // エージェントがグローバル連番（Q2が3,4等）を使った場合でも、
+    // 各セクション内の1-based位置に変換して送信する（仕様は各質問1始まり）。
+    const localPositions = selections.map((sel, idx) => {
+      const opts = prevOpts[idx]?.options || [];
+      const pos = opts.findIndex(o => o.num === sel);
+      return pos >= 0 ? pos + 1 : sel;
+    });
+    text = localPositions.join(' ');
+  } else {
+    text = selections.join(' ');
+  }
   if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
   sendSubmittedText(sessionId, `${text}\r`);
   hideActionBar(sessionId);

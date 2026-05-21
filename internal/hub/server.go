@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -1173,7 +1174,18 @@ func (s *Server) addUIWithHistory(c *websocket.Conn, activeSessionID int) []prot
 		}
 		raw := ses.ptyBuf
 		if id != activeSessionID && len(raw) > replayTailForNonActive {
-			raw = raw[len(raw)-replayTailForNonActive:]
+			tail := raw[len(raw)-replayTailForNonActive:]
+			marker := []byte(chatHistoryUserTurnMarker)
+			if !bytes.Contains(tail, marker) {
+				// 64KB 末尾にマーカーがない場合、最後のマーカー位置まで遡って含める
+				if lastIdx := bytes.LastIndex(raw, marker); lastIdx >= 0 {
+					raw = raw[lastIdx:]
+				} else {
+					raw = tail
+				}
+			} else {
+				raw = tail
+			}
 		}
 		buf := make([]byte, len(raw))
 		copy(buf, raw)

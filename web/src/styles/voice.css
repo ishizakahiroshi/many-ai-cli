@@ -171,3 +171,60 @@
   color: var(--fg-muted, #9ca3af);
   pointer-events: none;
 }
+
+.voice-diagnostics-panel {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+.voice-diagnostics-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.voice-diagnostics-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.voice-diagnostic-status {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.voice-diagnostic-status.ok { color: var(--green-text); }
+.voice-diagnostic-status.warn { color: var(--warn-text); }
+.voice-diagnostic-status.err { color: var(--danger); }
+.voice-diagnostic-guide {
+  margin-top: 10px;
+  padding: 10px;
+  border-left: 3px solid var(--warn);
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.voice-diagnostic-guide-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.voice-diagnostic-guide ol {
+  margin: 6px 0 0 18px;
+  padding: 0;
+}
+.voice-diagnostic-guide li {
+  margin: 4px 0;
+}
+.voice-diagnostic-guide code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--accent-text);
+}

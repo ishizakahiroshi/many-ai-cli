@@ -384,6 +384,18 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 | `Ctrl+D` | Send EOF to PTY |
 | `Ctrl+O` | Expand Claude Code folded content |
 
+### Voice Input Troubleshooting
+
+If voice input stops responding (button press has no effect, or the microphone picks up audio but no text appears):
+
+1. **Fully restart Chrome** (close all windows and relaunch). Chrome's internal Speech Recognition state can get stuck and a full restart clears it — this is the most common fix.
+2. If that doesn't help, paste `chrome://settings/content/all?searchSubpage=127.0.0.1` into the address bar, reset the microphone permission for `127.0.0.1`, and allow it again.
+3. If it still fails, delete all site data for `127.0.0.1` from the same page.
+
+> If voice input works in Incognito with the same Hub URL, the issue is in your normal Chrome profile's internal state. The steps above will recover it.
+
+Use **Settings → Voice → Diagnose** to identify the problem and copy a diagnostic log.
+
 ---
 
 ## Shutdown, zombie protection & Hub crash resilience

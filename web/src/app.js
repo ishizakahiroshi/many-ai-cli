@@ -1589,6 +1589,7 @@ const approvalConsumedSig = new Map(); // sessionId → 消費済み承認の署
 const batchSelections = new Map(); // sessionId → number[]（セクションごとの選択番号、未選択は null）
 let batchFocusIdx = -1; // 現在フォーカス中のバッチセクション index（-1: 未フォーカス / 範囲外）
 const approvalConsumedSigDeleteTimer = new Map(); // sessionId → timer（sig を debounce 型で削除するためのタイマー）
+const approvalSwitchCandidates = new Map(); // sessionId → { sig, options, firstSeenAt }（表示中の承認と異なる選択肢が検出されたときの安定性チェック用）
 const APPROVAL_PENDING_TEXT_TAIL_LIMIT = 12000;
 
 // 承認選択肢の sig を計算。Ink の再描画やスクロールバック残骸による
@@ -2057,6 +2058,13 @@ ws.onmessage = (ev) => {
       // xterm のライブ書き込みを非アクティブ中は止めてよい。
       // セッション切替時に attachTerminal → flushPending で一括 xterm 書き込みする。
       t.pendingChunks.push(xtermBytes);
+      t.pendingTotalBytes = (t.pendingTotalBytes || 0) + xtermBytes.length;
+      // 非アクティブ中の蓄積が大きすぎると切り替え時のフラッシュが重くなるため末尾100KBを上限とする
+      const PENDING_MAX = 100_000;
+      while (t.pendingTotalBytes > PENDING_MAX && t.pendingChunks.length > 1) {
+        t.pendingTotalBytes -= t.pendingChunks[0].length;
+        t.pendingChunks.shift();
+      }
     }
     trackApprovalHintFromChunk(id, xtermBytes);
     if (isActive) scheduleApprovalCheck(id);
@@ -2707,6 +2715,7 @@ function flushPending(id) {
   if (!t) return;
   const chunks = t.pendingChunks;
   t.pendingChunks = [];
+  t.pendingTotalBytes = 0;
   if (chunks.length === 0) {
     if (t.autoScroll) t.term.scrollToBottom();
     scheduleApprovalCheck(id);
@@ -2732,7 +2741,7 @@ function isTerminalAtBottom(t) {
 
 function fitTerminalPreservingBottom(t, id) {
   if (!canFitTerminal(t)) return;
-  const wasAtBottom = isTerminalAtBottom(t);
+  const wasAtBottom = isTerminalAtBottom(t) || t.autoScroll;
   t.fitAddon.fit();
   if (wasAtBottom) {
     t.autoScroll = true;
@@ -6266,7 +6275,11 @@ function renderMessageBubble(sid, msg) {
   metaEl.className = 'bubble-meta';
   const ts = formatTimestamp(msg.ts);
   if (role === 'user') {
-    metaEl.textContent = `${ts} · ${ti18n('chat_user', 'あなた')}`;
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'name';
+    nameSpan.textContent = _userDisplayName || ti18n('chat_user', 'あなた');
+    metaEl.appendChild(document.createTextNode(ts + ' · '));
+    metaEl.appendChild(nameSpan);
   } else {
     const nameSpan = document.createElement('span');
     nameSpan.className = 'name';
