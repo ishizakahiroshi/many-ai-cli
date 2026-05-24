@@ -149,6 +149,7 @@
   cursor: pointer;
   text-decoration: none;
   word-break: break-all;
+  margin-right: 0.25em;
   /* 折り返し時に各行フラグメントを独立したバッジとして装飾 */
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;

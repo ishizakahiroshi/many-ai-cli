@@ -2322,13 +2322,14 @@ function getPathOpenItem(filePath) {
   return { icon: '📄', key: 'link_open_file', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error') };
 }
 
-function showPathPopup(filePath, clientX, clientY, sessionId) {
+function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 'file') {
   const popup = getOrCreatePathPopup();
   popup.innerHTML = '';
   popup.hidden = false;
 
   const items = [];
-  if (isAnyAiCliPreviewable(filePath)) {
+  const isDir = pathType === 'dir';
+  if (!isDir && isAnyAiCliPreviewable(filePath)) {
     items.push({
       icon: '📖',
       key: 'link_open_any_ai_cli',
@@ -2341,11 +2342,16 @@ function showPathPopup(filePath, clientX, clientY, sessionId) {
       },
     });
   }
+  if (!isDir) {
+    items.push(getPathOpenItem(filePath));
+  }
   items.push(
-    getPathOpenItem(filePath),
-    { icon: '📁', key: 'link_open_folder', action: () => callOpenApi('/api/open-folder', filePath) },
+    { icon: '📁', key: 'link_open_folder', action: () => {
+      if (isDir) return callOpenApi('/api/open-default-file', filePath, 'link_open_default_error');
+      return callOpenApi('/api/open-folder', filePath);
+    }},
     { icon: '💻', key: 'link_open_terminal', action: () => {
-      const dir = dirnameForPath(filePath) || sessions.get(sessionId)?.cwd || filePath;
+      const dir = isDir ? filePath : (dirnameForPath(filePath) || sessions.get(sessionId)?.cwd || filePath);
       callOpenApi('/api/open-terminal', dir);
     }},
     { icon: '📋', key: 'link_copy_path', action: (anchor) => {
@@ -2357,8 +2363,13 @@ function showPathPopup(filePath, clientX, clientY, sessionId) {
       const rel = cwd ? computeRelPath(cwd, filePath) : filePath;
       return copyPathText(rel, anchor).catch(() => {});
     }},
-    { icon: '✏️', key: 'link_rename', action: () => renameFileViaApi(filePath, sessionId) },
   );
+  if (isDir) {
+    items.push(
+      { icon: '✏️', key: 'link_rename', action: () => renameFileViaApi(filePath, sessionId) },
+      { icon: '🗑️', key: 'link_delete_dir', action: () => deleteDirViaApi(filePath, sessionId) },
+    );
+  }
 
   for (const item of items) {
     const btn = document.createElement('button');
@@ -2522,11 +2533,11 @@ function resolveTerminalPathCandidate(path, sessionId) {
 
 // Windows drive paths can appear with either backslashes or forward slashes
 // in terminal output, e.g. C:\dev\app.go or C:/Users/me/.claude/CLAUDE.md.
-const ABS_WIN_PATH_RE = /([A-Za-z]:[\\/](?:(?!\s+[A-Za-z]:[\\/])[^\x00-\x1f<>:"|?*])+)/g;
+const ABS_WIN_PATH_RE = /([A-Za-z]:[\\/](?:(?!\s+[A-Za-z]:[\\/])[^\x00-\x1f<>:"|?*(])+)/g;
 // 空白を挟んだ説明文中の区切り（例: "hljs / highlight / prism"）を
 // Unix 絶対パスとして誤検出しないよう、セグメント内の空白は許可しない。
-const ABS_UNIX_PATH_RE = /(\/[^\s\/\x00-\x1f"'<>`|]+(?:\/[^\s\/\x00-\x1f"'<>`|]*)*)/g;
-const REL_PATH_RE = /(^|[\s([{"'`])((?:\.{1,2}[\\/]|[A-Za-z0-9_.-]+[\\/])(?:[^\s\x00-\x1f"'<>`|]+[\\/])*[^\s\x00-\x1f"'<>`|]+)/g;
+const ABS_UNIX_PATH_RE = /(\/[^\s\/\x00-\x1f"'<>`|(]+(?:\/[^\s\/\x00-\x1f"'<>`|(]*)*)/g;
+const REL_PATH_RE = /(^|[\s([{"'`])((?:\.{1,2}[\\/]|[A-Za-z0-9_.-]+[\\/])(?:[^\s\x00-\x1f"'<>`|(]+[\\/])*[^\s\x00-\x1f"'<>`|(]+)/g;
 
 // `Y/N` / `1/2` / `bash/zsh` 等を誤検出しないための post-filter。
 // 受理条件: `./` `../` 始まり、またはセパレータ 2 個以上、または末尾拡張子あり。
@@ -2611,7 +2622,7 @@ function ensureTerminal(id) {
     scrollback: 5000,
     // xterm はセル幅ベースで描画するため、絵文字フォント混在でグリフが巨大化/崩れする環境がある。
     // 端末領域は等幅フォントのみを使い、見た目の安定性を優先する。
-    fontFamily: '"Cascadia Mono", "Cascadia Code", "BIZ UDゴシック", "MS Gothic", Consolas, "Courier New", monospace',
+    fontFamily: '"MS Gothic", "BIZ UDGothic", "BIZ UDゴシック", "Segoe UI Symbol", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace',
     fontSize: FONTSIZE_MAP[localStorage.getItem(STORAGE_FONTSIZE_KEY)] || 13,
     // 一部フォントで大文字上端がクリップされるため、行高を少し広げて回避する。
     lineHeight: 1.25,
@@ -2637,10 +2648,21 @@ function ensureTerminal(id) {
       const thisLine = buf.getLine(y - 1);
       if (!thisLine) { callback([]); return; }
 
-      // wrapped 継続行は先頭行側で処理済みなので空を返す
-      if (thisLine.isWrapped) { callback([]); return; }
+      // wrapped 継続行の場合、先頭物理行まで遡って論理行全体を処理する
+      let startY = y;
+      let startLine = thisLine;
+      if (thisLine.isWrapped) {
+        let cur = y - 1;
+        while (cur > 0) {
+          const candidate = buf.getLine(cur - 1);
+          if (!candidate) break;
+          if (!candidate.isWrapped) { startY = cur; startLine = candidate; break; }
+          cur--;
+        }
+        if (startY === y) { callback([]); return; }
+      }
 
-      // 論理行を構成する物理行（この行 + 後続の wrapped 継続行）を収集する
+      // 論理行を構成する物理行（先頭行 + 後続の wrapped 継続行）を収集する
       const buildCellMap = (line) => {
         const cm = [];
         for (let x = 0; x < line.length; x++) {
@@ -2649,8 +2671,8 @@ function ensureTerminal(id) {
         }
         return cm;
       };
-      const physRows = [{ y1: y, text: thisLine.translateToString(true), cellMap: buildCellMap(thisLine) }];
-      let peek = y; // getLine は 0-based。peek=y は 1-based の y+1 行目
+      const physRows = [{ y1: startY, text: startLine.translateToString(true), cellMap: buildCellMap(startLine) }];
+      let peek = startY; // getLine は 0-based。peek=startY は 1-based の startY+1 行目
       while (true) {
         const next = buf.getLine(peek);
         if (!next || !next.isWrapped) break;
@@ -2770,11 +2792,14 @@ function whenLayoutReady(id, container) {
   if (container.clientWidth > 0 && container.clientHeight > 0) {
     t.term.open(container);
     fitTerminalPreservingBottom(t, id);
-    t.term.onScroll(() => {
-      const atBottom = isTerminalAtBottom(t);
-      t.autoScroll = atBottom;
-      if (id === activeSessionId) updateScrollLockBtn(!atBottom);
-    });
+    if (!t.scrollHandlerInstalled) {
+      t.scrollHandlerInstalled = true;
+      t.scrollDisposable = t.term.onScroll(() => {
+        const atBottom = isTerminalAtBottom(t);
+        t.autoScroll = atBottom;
+        if (id === activeSessionId) updateScrollLockBtn(!atBottom);
+      });
+    }
     flushPending(id);
     t.everAttached = true;
     sendResize(id, t.term.cols, t.term.rows);
@@ -2808,6 +2833,32 @@ function flushPending(id) {
       if (t.autoScroll) t.term.scrollToBottom();
       scheduleApprovalCheck(id);
     } : undefined);
+  }
+}
+
+async function deleteDirViaApi(filePath, sessionId) {
+  const name = basenameForPath(filePath);
+  const message = (t('link_delete_dir_confirm') || 'Delete this folder and all contents?').replace('{name}', name);
+  if (!window.confirm(message)) return;
+  try {
+    const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
+    const url = `/api/files-delete-dir?token=${encodeURIComponent(token)}${sessionQs}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ src: filePath }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      const msg = (data && data.error) ? data.error : ('HTTP ' + res.status);
+      showToast(`${t('link_delete_dir_failed') || 'Failed to delete folder'}: ${msg}`);
+      return;
+    }
+    window.dispatchEvent(new CustomEvent('any-ai-cli:files-changed', {
+      detail: { kind: 'delete-dir', oldAbs: filePath },
+    }));
+  } catch (err) {
+    showToast(`${t('link_delete_dir_failed') || 'Failed to delete folder'}: ${String(err)}`);
   }
 }
 
@@ -6490,6 +6541,11 @@ if (typeof window !== 'undefined') {
   window.getTerminalEntry = function (id) { return terminals.get(id); };
   window.sendResize = sendResize;
   window.markTerminalManualScrollIntent = markTerminalManualScrollIntent;
+  window.updateScrollLockBtn = updateScrollLockBtn;
+  Object.defineProperty(window, 'activeSessionId', {
+    configurable: true,
+    get() { return activeSessionId; },
+  });
 }
 
 // ─── C4: approvalUiAdapter.setApprovalVisible をラップしてマルチペインバッジを同期 ───
@@ -6530,6 +6586,10 @@ function clearBuffer(session) {
   if (!t || !t.term) return;
   try { t.term.clear(); } catch (_) {}
   try { t.term.options.scrollback = MULTI_SCROLLBACK(); } catch (_) {}
+  if (session.id !== undefined) {
+    resetChatHistoryForSession(session.id);
+    if (typeof mountChatPaneForSession === 'function') mountChatPaneForSession(session.id);
+  }
 }
 
 
@@ -6704,7 +6764,7 @@ function _appendPlainWithLinks(frag, text) {
   // 安全側: 末尾の句読点 ,.;:!?) を除外する。
 
   // 単一の包括 regex
-  const re = /(https?:\/\/[^\s<>"'`)\]]+)|((?:[a-zA-Z]:[\\/]|[.]{1,2}[\\/]|\/)[^\s<>"'`)\]]+)|([\w][\w\-/\\.]*\.[a-zA-Z]{1,8}\b)/g;
+  const re = /(https?:\/\/[^\s<>"'`)\]]+)|((?:[a-zA-Z]:[\\/]|[.]{1,2}[\\/]|\/)[^\s<>"'`(\]]+)|([\w][\w\-/\\.]*\.[a-zA-Z]{1,8}\b)/g;
   let last = 0;
   let m;
   while ((m = re.exec(text)) !== null) {

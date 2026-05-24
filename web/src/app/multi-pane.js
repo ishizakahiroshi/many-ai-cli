@@ -366,10 +366,65 @@ class MultiPaneManager {
       }
       t.autoScroll = false;
       t.term.scrollToTop();
+      this._syncViewportToBuffer(t, { top: true });
       return;
     }
     t.autoScroll = true;
+    this._scrollToBottomAndSync(t);
+  }
+
+  _terminalIsAtBottom(t) {
+    if (!t || !t.term || !t.term.buffer) return true;
+    const buf = t.term.buffer.active;
+    return !buf || (buf.viewportY + t.term.rows >= buf.length);
+  }
+
+  _ensureScrollHandler(t, sessionId) {
+    if (!t || !t.term || t.scrollHandlerInstalled || typeof t.term.onScroll !== 'function') return;
+    t.scrollHandlerInstalled = true;
+    t.scrollDisposable = t.term.onScroll(() => {
+      const atBottom = this._terminalIsAtBottom(t);
+      t.autoScroll = atBottom;
+      if (
+        sessionId === window.activeSessionId &&
+        typeof window.updateScrollLockBtn === 'function'
+      ) {
+        window.updateScrollLockBtn(!atBottom);
+      }
+      this._syncViewportToBuffer(t);
+    });
+  }
+
+  _scrollToBottomAndSync(t) {
+    if (!t || !t.term) return;
     t.term.scrollToBottom();
+    this._syncViewportToBuffer(t, { bottom: true });
+    requestAnimationFrame(() => this._syncViewportToBuffer(t, { bottom: true }));
+  }
+
+  _syncViewportToBuffer(t, opts = {}) {
+    if (!t || !t.term || !t.container || !t.term.buffer) return;
+    const vp = t.container.querySelector('.xterm-viewport');
+    const buf = t.term.buffer.active;
+    if (!vp || !buf) return;
+
+    const maxScrollTop = Math.max(0, vp.scrollHeight - vp.clientHeight);
+    let targetScrollTop;
+    if (opts.bottom) {
+      targetScrollTop = maxScrollTop;
+    } else if (opts.top) {
+      targetScrollTop = 0;
+    } else {
+      const maxViewportY = Math.max(0, buf.length - t.term.rows);
+      const viewportY = Math.max(0, Math.min(buf.viewportY || 0, maxViewportY));
+      targetScrollTop = maxViewportY > 0
+        ? Math.round((viewportY / maxViewportY) * maxScrollTop)
+        : 0;
+    }
+
+    if (Number.isFinite(targetScrollTop)) {
+      vp.scrollTop = targetScrollTop;
+    }
   }
 
   _t(key, fallback) {
@@ -482,6 +537,7 @@ class MultiPaneManager {
     const t = window.getTerminalEntry ? window.getTerminalEntry(session.id)
             : (window.terminals ? window.terminals.get(session.id) : null);
     if (!t || !t.term) return;
+    this._ensureScrollHandler(t, session.id);
 
     if (t.container) {
       // 既に open 済み: container を termArea に移動する
@@ -491,14 +547,10 @@ class MultiPaneManager {
         // 次フレームでスクロール位置を xterm 内部状態に合わせて再同期する
         requestAnimationFrame(() => {
           if (t.autoScroll) {
-            t.term.scrollToBottom();
+            this._scrollToBottomAndSync(t);
           } else {
             // autoScroll=false（ユーザーが上にスクロール中）の場合は viewportY に合わせる
-            const vp = t.container && t.container.querySelector('.xterm-viewport');
-            const buf = t.term.buffer && t.term.buffer.active;
-            if (vp && buf && vp.scrollHeight > 0) {
-              vp.scrollTop = buf.viewportY * (vp.scrollHeight / Math.max(buf.length, 1));
-            }
+            this._syncViewportToBuffer(t);
           }
         });
       }
@@ -520,6 +572,7 @@ class MultiPaneManager {
           }
           this._installResizeObserver(slotEl, termArea, t, session.id);
           this._fitTerminalInSlot(termArea, t, session.id);
+          if (t.autoScroll) this._scrollToBottomAndSync(t);
         }
       });
       return;
@@ -553,7 +606,9 @@ class MultiPaneManager {
       t.fitAddon.fit();
       if (wasAtBottom) {
         t.autoScroll = true;
-        t.term.scrollToBottom();
+        this._scrollToBottomAndSync(t);
+      } else {
+        this._syncViewportToBuffer(t);
       }
       if (
         (t.term.cols !== prevCols || t.term.rows !== prevRows) &&
