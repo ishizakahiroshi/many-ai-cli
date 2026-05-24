@@ -4316,6 +4316,17 @@ function activateSessionForMultiPane(id) {
   }
   activeSessionId = id;
   restoreInputStateFor(id);
+  const t = terminals.get(id);
+  if (t) {
+    t.autoScroll = true;
+    const switchStartedAt = Date.now();
+    scrollTerminalToBottomSoon(id, { force: true, passes: 4, startedAt: switchStartedAt });
+    refitAndStickTerminalToBottomAfterLayoutSettles(id, {
+      force: true,
+      passes: 4,
+      startedAt: switchStartedAt,
+    });
+  }
   // 承認 UI をフォーカスセッション向きに更新
   setMultiQuestionBannerVisible(!!multiQuestionVisibleCache.get(id));
   detectApproval(id);
