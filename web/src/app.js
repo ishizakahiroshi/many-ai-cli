@@ -1,5 +1,3 @@
-console.log('[any-ai-cli] app.js build=2026-05-18-voice-dbg');
-
 let _userAvatarUrl = '';
 let _userDisplayName = '';
 

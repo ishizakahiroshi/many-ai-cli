@@ -1710,8 +1710,14 @@ const FilesPreview = (function () {
 
     // marked の renderer をカスタマイズしてリンク処理を差し替え
     const renderer = new marked.Renderer();
-    renderer.link = ({ href, title, tokens }) => {
-      const text = tokens ? tokens.map(t => t.raw || '').join('') : (href || '');
+    renderer.link = (href, title, text) => {
+      if (href && typeof href === 'object') {
+        const token = href;
+        href = token.href || '';
+        title = token.title || '';
+        text = token.tokens ? token.tokens.map(t => t.raw || '').join('') : (token.text || href || '');
+      }
+      text = text || href || '';
       const safeHref = escapeHtml(href || '');
       const safeText = escapeHtml(text);
       const safeTitle = title ? ` title="${escapeHtml(title)}"` : '';

@@ -169,7 +169,6 @@
     recognition.lang = getLang();
   }
   configureRecognition();
-  console.log('[VOICE-DBG] init #' + recognition._dbgId);
   setVoiceDiagStatus('idle');
 
   function configureDiagnosticRecognition(rec) {
@@ -424,7 +423,6 @@
   }
 
   function stopVoice() {
-    console.log('[VOICE-DBG] stopVoice() current#' + recognition._dbgId + ' isRecording=' + isRecording);
     pushVoiceDiagEvent(recognition._dbgId, 'stopVoice', { message: 'manual or terminal stop' });
     clearTimeout(audioendStuckTimer);
     audioendStuckTimer = null;
@@ -443,13 +441,11 @@
     recognition._dbgId = ++dbgSeq;
     configureRecognition();
     attachHandlers();
-    console.log('[VOICE-DBG] stopVoice() created next #' + recognition._dbgId);
   }
 
   function attachHandlers() {
     const myId = recognition._dbgId;
     recognition.onstart = () => {
-      console.log('[VOICE-DBG] #' + myId + ' onstart');
       pushVoiceDiagEvent(myId, 'start');
       isRecording = true;
       voiceActive = true;
@@ -462,37 +458,31 @@
     };
 
     recognition.onaudiostart = () => {
-      console.log('[VOICE-DBG] #' + myId + ' onaudiostart');
       pushVoiceDiagEvent(myId, 'audiostart');
     };
 
     recognition.onsoundstart = () => {
-      console.log('[VOICE-DBG] #' + myId + ' onsoundstart');
       pushVoiceDiagEvent(myId, 'soundstart');
       voiceIntensityTarget = 0.55;
       lastKickAt = performance.now();
     };
 
     recognition.onspeechstart = () => {
-      console.log('[VOICE-DBG] #' + myId + ' onspeechstart');
       pushVoiceDiagEvent(myId, 'speechstart');
       voiceIntensityTarget = 0.9;
       lastKickAt = performance.now();
     };
 
     recognition.onspeechend = () => {
-      console.log('[VOICE-DBG] #' + myId + ' onspeechend');
       pushVoiceDiagEvent(myId, 'speechend');
       voiceIntensityTarget = 0.25;
     };
 
     recognition.onsoundend = () => {
-      console.log('[VOICE-DBG] #' + myId + ' onsoundend');
       pushVoiceDiagEvent(myId, 'soundend');
     };
 
     recognition.onaudioend = () => {
-      console.log('[VOICE-DBG] #' + myId + ' onaudioend');
       pushVoiceDiagEvent(myId, 'audioend');
       setVoiceAudioActive(false);
       voiceIntensityTarget = 0.03;
@@ -507,8 +497,6 @@
     recognition.onresult = (e) => {
       clearTimeout(audioendStuckTimer);
       audioendStuckTimer = null;
-      const _r = e.results[e.resultIndex];
-      console.log('[VOICE-DBG] #' + myId + ' onresult len=' + (_r && _r[0] ? _r[0].transcript.length : 0) + ' final=' + (_r ? _r.isFinal : '?'));
       voiceBar.classList.remove('voice-processing');
       const result = e.results[e.resultIndex];
       if (!result) return;
@@ -535,12 +523,10 @@
     };
 
     recognition.onnomatch = () => {
-      console.log('[VOICE-DBG] #' + myId + ' onnomatch');
       pushVoiceDiagEvent(myId, 'nomatch');
     };
 
     recognition.onend = () => {
-      console.log('[VOICE-DBG] #' + myId + ' onend');
       clearTimeout(audioendStuckTimer);
       audioendStuckTimer = null;
       pushVoiceDiagEvent(myId, 'end');
@@ -548,7 +534,6 @@
     };
 
     recognition.onerror = (e) => {
-      console.log('[VOICE-DBG] #' + myId + ' onerror error=' + e.error + ' msg=' + (e.message || ''));
       clearTimeout(audioendStuckTimer);
       audioendStuckTimer = null;
       pushVoiceDiagEvent(myId, 'error', { error: e.error || null, message: e.message || null });
@@ -561,7 +546,6 @@
   attachHandlers();
 
   btn.addEventListener('click', () => {
-    console.log('[VOICE-DBG] btn.click current#' + recognition._dbgId + ' isRecording=' + isRecording);
     pushVoiceDiagEvent(recognition._dbgId, 'click');
     if (isRecording) {
       try { recognition.abort(); } catch (_) {}
@@ -576,16 +560,13 @@
     interimStart = inputEl.value.length;
     recognition.lang = getLang();
     try {
-      console.log('[VOICE-DBG] calling recognition.start() on #' + recognition._dbgId);
       recognition.start();
     } catch (err) {
-      console.log('[VOICE-DBG] recognition.start() threw:', err);
       showVoiceError(err, btn);
     }
   });
 
   cancelBtn.addEventListener('click', () => {
-    console.log('[VOICE-DBG] cancelBtn.click current#' + recognition._dbgId);
     inputEl.value = preVoiceText;
     autoExpand();
     try { recognition.abort(); } catch (_) {}
@@ -593,7 +574,6 @@
   });
 
   confirmBtn.addEventListener('click', () => {
-    console.log('[VOICE-DBG] confirmBtn.click current#' + recognition._dbgId);
     try { recognition.stop(); } catch (_) {}
     stopVoice();
   });

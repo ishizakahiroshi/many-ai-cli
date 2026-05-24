@@ -1,8 +1,8 @@
 # any-ai-cli コーディング規約
 
-> 最終更新: 2026-05-11(月) 15:20:15
+> 最終更新: 2026-05-24(日) 17:01:04
 
-`any-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ Vue 3 フロント（`go:embed`）。設計書: [../docs/any-ai-cli-design-v0.1.0.md](../docs/any-ai-cli-design-v0.1.0.md)
+`any-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ Vue 3 フロント（`go:embed`）。設計書: [../docs/v0.2.0-any-ai-cli-design.md](../docs/v0.2.0-any-ai-cli-design.md)
 
 ## 言語別コーディング規約
 

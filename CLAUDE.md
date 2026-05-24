@@ -1,6 +1,6 @@
 # any-ai-cli 開発ガイド
 
-> 最終更新: 2026-05-14(木) — 作業運用ルール（ビルド・実行は人手）追記
+> 最終更新: 2026-05-24(日) 17:01:04 — v0.2.0 リリース前の参照・状態を更新
 
 > 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。
 
@@ -8,17 +8,17 @@
 
 **any-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。単一 Go バイナリ（Hub 常駐 + ラッパー機能）+ ブラウザ UI（xterm.js / Vanilla JS）。
 
-> **Gemini CLI は wrap 対象外**（2026-05-06 決定 / 利用規約上の制約）。詳細は [docs/v0.1.x-any-ai-cli-design.md](docs/v0.1.x-any-ai-cli-design.md) 冒頭「スコープ更新ログ」参照。
+> **Gemini CLI は wrap 対象外**（2026-05-06 決定 / 利用規約上の制約）。詳細は [docs/v0.2.0-any-ai-cli-design.md](docs/v0.2.0-any-ai-cli-design.md) 冒頭「スコープ更新ログ」参照。
 
-**現状**: v0.1.3 を最新パッチとして公開予定（v0.1.1 が初回正式リリース、v0.1.0 は試験扱い）。v0.1.2 でバージョン文字列を ldflags + `/api/info` 経由の single source of truth に再設計し、v0.1.3 で Codex 承認検出と音声入力まわりを改善。設計書はソースコードを正本として更新済み。
+**現状**: v0.2.0 を公開予定（v0.1.1 が初回正式リリース、v0.1.0 は試験扱い）。v0.1.2 でバージョン文字列を ldflags + `/api/info` 経由の single source of truth に再設計し、v0.2.0 で WSL ランチャー、Files/Git/Chat/Split/Multi、Commit all、Ollama routing、サーバ側ユーザー設定を追加。設計書はソースコードを正本として更新済み。
 
-**設計書（正本）**: [docs/v0.1.x-any-ai-cli-design.md](docs/v0.1.x-any-ai-cli-design.md)
+**設計書（正本）**: [docs/v0.2.0-any-ai-cli-design.md](docs/v0.2.0-any-ai-cli-design.md)
 
 > 全AI共通ルール（言語・確認・質問フォーマット・ターン終端の出力ルール・スクリーンショット規約等）は `C:\Users\admin\.claude\CLAUDE.md` を正本とする。Claude Code は自動ロード、Codex 等他AIは `AGENTS.md` 経由で参照。
 
-## 現在の実装状態（v0.1.3）
+## 現在の実装状態（v0.2.0）
 
-v0.1.3 までに以下がすべて実装済み：
+v0.2.0 までに以下がすべて実装済み：
 
 - `any-ai-cli serve` で Hub が起動する
 - `any-ai-cli claude` / `codex` が Hub 未起動時に自動起動し接続する
@@ -59,7 +59,7 @@ v0.1.3 までに以下がすべて実装済み：
 
 ## ディレクトリ構成（実際）
 
-設計書 `docs/v0.1.x-any-ai-cli-design.md` を参照。
+設計書 `docs/v0.2.0-any-ai-cli-design.md` を参照。
 
 ```
 any-ai-cli/
@@ -119,7 +119,7 @@ any-ai-cli/
 
 | 項目 | パス |
 |------|------|
-| 設計書 v0.1.x（現行・正本） | [docs/v0.1.x-any-ai-cli-design.md](docs/v0.1.x-any-ai-cli-design.md) |
+| 設計書 v0.2.0（現行・正本） | [docs/v0.2.0-any-ai-cli-design.md](docs/v0.2.0-any-ai-cli-design.md) |
 | 設計書 v1（履歴） | [docs/local/archive/cli-popup-design-v1.md](docs/local/archive/cli-popup-design-v1.md) |
 | Codex 用補足 | [AGENTS.md](AGENTS.md) / [AGENTS.local.md](AGENTS.local.md) |
 | Gemini 用補足 | [GEMINI.md](GEMINI.md)（**any-ai-cli の wrap 対象外**。本リポジトリで Gemini CLI を開発補助に使う場合の手引きとして残置） |
