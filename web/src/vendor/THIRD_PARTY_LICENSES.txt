@@ -140,6 +140,7 @@ https://github.com/highlightjs/highlight.js
 Version: 11.10.0
 License: BSD-3-Clause
 
+Copyright (c) 2006-2024 Josh Goebel <hello@joshgoebel.com> and other contributors.
 Copyright (c) 2006, Ivan Sagalaev.
 All rights reserved.
 

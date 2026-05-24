@@ -1,10 +1,10 @@
 # any-ai-cli ビルド・配布・デプロイ
 
-> 最終更新: 2026-05-16(土) 10:42:34
+> 最終更新: 2026-05-24(日) 17:01:04
 
 `any-ai-cli` は **Go 単一バイナリ + go:embed フロント** の構成。サーバーへのデプロイは無し（ユーザー PC にバイナリを置くだけ）。
 
-設計書: [../docs/any-ai-cli-design-v0.1.0.md §4・§17](../docs/any-ai-cli-design-v0.1.0.md)
+設計書: [../docs/v0.2.0-any-ai-cli-design.md §4・§17](../docs/v0.2.0-any-ai-cli-design.md)
 
 ## ビルド前提
 
@@ -49,7 +49,7 @@ GOOS=linux GOARCH=amd64 go build -o dist/linux/any-ai-cli ./cmd/any-ai-cli
 
 **ローカルビルドは原則 `make build` を使う**。`go build` を素で叩くと `go-winres` がスキップされて、`cmd/any-ai-cli/rsrc_windows_*.syso`（アプリアイコン等の Windows リソース）が古いまま `dist/any-ai-cli.exe` に embed される。
 
-#### Makefile ターゲット一覧（v0.1.3 時点）
+#### Makefile ターゲット一覧（v0.2.0 時点）
 
 種類が増えてきたのでここに集約する。**他所に分散させない**。
 

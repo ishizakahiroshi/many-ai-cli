@@ -18,9 +18,9 @@ Get the latest release from [GitHub Releases](https://github.com/ishizakahiroshi
 
 | Platform | Download |
 |----------|----------|
-| Windows  | `any-ai-cli-windows-amd64.exe` |
-| macOS    | `any-ai-cli-darwin-amd64` / `any-ai-cli-darwin-arm64` |
-| Linux    | `any-ai-cli-linux-amd64` |
+| Windows  | `any-ai-cli-<version>-windows-amd64.zip` |
+| macOS    | `any-ai-cli-<version>-darwin-amd64.zip` / `any-ai-cli-<version>-darwin-arm64.zip` |
+| Linux    | `any-ai-cli-<version>-linux-amd64.zip` |
 
 > Settings and logs are stored in `~/.any-ai-cli/` (created on first run).
 > Session logs contain user input and AI output. Treat them as sensitive data.
@@ -66,15 +66,19 @@ sha256sum -c SHA256SUMS.txt
 - **Unified approval panel** — approve/reject Claude Code and Codex CLI prompts from the browser
 - **Batch approvals** — answer multiple numbered questions from one action bar and submit them together
 - **Real-time PTY output** via xterm.js over WebSocket
+- **Chat history and split view** — read a bubble-style conversation history, search/filter it, or keep it beside the live terminal
+- **Multi-pane tab** — watch multiple live sessions at once in a configurable grid
 - **Files tab** — browse project files, preview Markdown/code, copy paths, rename, and move files from the Hub
 - **Git view** — inspect branch history, commit details, changed files, and diffs without checking out refs
 - **Commit all** — stage all current working-tree changes and create a local commit after an explicit review step
-- **Image attach** — paste or drag-and-drop images into the terminal session
+- **File and image attach** — paste or drag-and-drop images and files into the terminal session
 - **Voice input** — dictate prompts and continue through short pauses (Chrome / Edge)
-- **Multi-session view** — switch between multiple AI CLI sessions in one tab
+- **Approval pattern profiles** — keep official remote-synced trigger phrases separate from local custom edits
+- **Server-side user preferences** — keep voice, notification, favorites, session order, spawn defaults, and avatar settings in `config.yaml`
 - **Spawn new sessions** from the UI (`/api/spawn`)
 - **Model picker with Ollama routing** — pick Anthropic / OpenAI / Ollama Cloud / Ollama Local models from the spawn form; the Hub auto-injects the right `ANTHROPIC_*` / `OPENAI_*` env vars per session, no shell setup required
 - **WSL launcher** — `any-ai-cli-wsl.exe` starts the Hub inside WSL and opens the Windows browser
+- **Clean transcript generation** — write readable `.txt` transcripts automatically, or regenerate them with `log-clean`
 - **Language switching** (English / Japanese)
 - **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `any-ai-cli` itself
 
@@ -84,7 +88,7 @@ sha256sum -c SHA256SUMS.txt
 
 The normal flow: launch the binary, then drive everything from the browser. You do not need to run any CLI command yourself.
 
-1. Download `any-ai-cli.exe` (or the macOS / Linux binary) from the table above
+1. Download and extract the zip for your platform from the table above
 2. **Double-click `any-ai-cli.exe`** (or run `any-ai-cli` with no arguments)
    - The Hub starts and your browser opens automatically at `http://127.0.0.1:47777/?token=<token>`
    - If a Hub is already running, your browser is reopened against the existing instance
@@ -125,24 +129,28 @@ The WSL launcher requires binaries in **both** Windows and WSL.
 
 **① Windows side: `any-ai-cli-wsl.exe`**
 
-Download `any-ai-cli-wsl-windows-amd64.exe` from the releases page and place it somewhere on the Windows `PATH`.
+Download `any-ai-cli-<version>-windows-amd64.zip` from the releases page, extract `any-ai-cli-wsl.exe`, and place it somewhere on the Windows `PATH`.
 
 ```powershell
+Expand-Archive any-ai-cli-<version>-windows-amd64.zip -DestinationPath .\any-ai-cli-windows
+
 # Option A: ~/AppData/Local/Microsoft/WindowsApps/ (already on PATH)
-Move-Item any-ai-cli-wsl-windows-amd64.exe "$env:LOCALAPPDATA\Microsoft\WindowsApps\any-ai-cli-wsl.exe"
+Move-Item .\any-ai-cli-windows\any-ai-cli-wsl.exe "$env:LOCALAPPDATA\Microsoft\WindowsApps\any-ai-cli-wsl.exe"
 
 # Option B: any directory already on your PATH
-Move-Item any-ai-cli-wsl-windows-amd64.exe "C:\tools\any-ai-cli-wsl.exe"
+Move-Item .\any-ai-cli-windows\any-ai-cli-wsl.exe "C:\tools\any-ai-cli-wsl.exe"
 ```
 
 **② WSL side: `any-ai-cli` (Linux binary)**
 
-Download `any-ai-cli-linux-amd64` from the releases page and place it somewhere on the WSL `PATH`.
+Download `any-ai-cli-<version>-linux-amd64.zip` from the releases page, extract `any-ai-cli`, and place it somewhere on the WSL `PATH`.
 
 ```bash
+unzip any-ai-cli-<version>-linux-amd64.zip
+
 # Using ~/.local/bin (per-user, no sudo required)
 mkdir -p ~/.local/bin
-mv any-ai-cli-linux-amd64 ~/.local/bin/any-ai-cli
+mv any-ai-cli ~/.local/bin/any-ai-cli
 chmod +x ~/.local/bin/any-ai-cli
 
 # Verify ~/.local/bin is on PATH
@@ -158,7 +166,7 @@ export PATH="$HOME/.local/bin:$PATH"
 Or, to install system-wide (requires sudo):
 
 ```bash
-sudo mv any-ai-cli-linux-amd64 /usr/local/bin/any-ai-cli
+sudo mv any-ai-cli /usr/local/bin/any-ai-cli
 sudo chmod +x /usr/local/bin/any-ai-cli
 ```
 
@@ -346,20 +354,23 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
   - Top bar: active session's provider and cwd, plus `↑ to top` to scroll the PTY buffer back to the start.
   - Center: PTY output rendered live with xterm.js.
   - Bottom: multi-line input box, attach / send buttons, slash-command picker (`/clear`, `/model`, `/`), and the auto-mode toggle hint `shift+tab`.
-- **Tabs**: terminal sessions, Files tabs, and Git tabs share the main area and can be restored after restart.
+- **Tabs**: Terminal, Chat, Split, Multi, Files, and Git tabs share the main area. Files and Git tabs are loaded lazily and can be restored after restart.
+- **Chat / Split**: chat view extracts user turns, AI output, approvals, and attachments from the live PTY stream. Split view keeps chat history beside the terminal.
+- **Multi tab**: shows several sessions in a grid and routes focus, input, resize, and approval UI to the active pane.
 - **Approval action bar**: appears above the input when an approval is pending. Single prompts use buttons; multi-question prompts render stacked choices with "Submit all".
 - **Files tab**: left tree + right preview for project files. Markdown/code can be previewed, paths can be copied, and file move/rename actions are available from the context menu.
 - **Git tab**: read-only commit log, ref selector, commit detail, changed files, diff preview, copy actions, and a guarded Commit all modal for local commits.
 - **Sync with terminal input**: if you resolve the prompt by typing `y` / `n` directly in the terminal, the action bar disappears automatically.
-- **Image attach**: paste or drag-and-drop into the attach area; the file is materialized locally and a path reference is injected into the PTY on send.
+- **File and image attach**: paste or drag-and-drop into the attach area; the file is materialized locally and a path reference is injected into the PTY on send.
 
 ### Usage notes
 
 - **Approval**: When an AI CLI requires approval, an action bar appears above the input. Click the button or navigate with `←` / `→` and confirm with `Enter`. For multi-question approvals, select each section and submit them together.
+- **Chat / Split / Multi**: Use the unified tab bar to switch from the terminal to conversation history, side-by-side history, or a multi-session grid.
 - **Files**: Click the project group's Files entry or right-click a session card → Open Files Tab. Preview files in the right pane and use the context menu for copy/open/move/rename actions.
 - **Git**: Click a branch badge or press `Ctrl+Shift+G` to open the Git view for the current session. Commit all stages the whole working tree with `git add -A`, then runs `git commit` only after Review.
 - **Terminal input**: Type directly in the input field and press `Enter` to send. Use `Shift+Enter` for a newline.
-- **Image attach**: Paste (`Ctrl+V`) or drag-and-drop an image onto the attach area to inject a local file path reference into the session.
+- **File and image attach**: Paste (`Ctrl+V`) or drag-and-drop a file onto the attach area to inject a local file path reference into the session.
 - **Voice input**: Click the 🎤 button or press `Alt+V` to start voice input. Click again or press `Alt+V` to stop. Transcribed text is inserted into the input field.
   - Requires Chrome or Edge (uses the browser's built-in Speech Recognition API).
   - Microphone permission must be granted on first use.

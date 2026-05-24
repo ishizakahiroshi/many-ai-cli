@@ -23,6 +23,17 @@ builds:
     ldflags:
       - -s -w
       - -X main.version={{ .Version }}
+  - id: any-ai-cli-wsl
+    main: ./cmd/any-ai-cli-wsl
+    binary: any-ai-cli-wsl
+    goos:
+      - windows
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
 
 archives:
   - id: default

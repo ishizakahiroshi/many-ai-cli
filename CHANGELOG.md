@@ -26,6 +26,10 @@ Release artifacts are published at
   with `git add -A` and create a local commit after a Review step. The modal
   supports subject/body editing and commit-message generation. Push is never
   run by this action.
+- **Chat history, split view, and multi-pane monitoring.** The unified tab bar
+  now includes Terminal / Chat / Split / Multi / Files / Git. Chat history is
+  built from the live PTY stream, Split keeps it beside the terminal, and Multi
+  can show several sessions in a grid.
 - **Multi-question approval action bar.** A single `[ANY-AI-CLI]` approval block
   can contain multiple numbered questions. The Hub renders them as stacked
   choices with progress, clear, keyboard navigation, and "Submit all"; selected
@@ -35,14 +39,13 @@ Release artifacts are published at
   GitHub at Hub startup (24h TTL). Each provider now has an `official`
   read-only profile and a user-editable `custom` profile, with Settings UI to
   switch profiles and copy official patterns into custom.
-- **Server-side user preferences.** Voice, wake word, notification sound,
+- **Server-side user preferences.** Voice, notification sound, avatar,
   approval auto-switch, quick commands, usage links, favorites, session order,
   and spawn defaults are stored under `user_prefs:` in
   `~/.any-ai-cli/config.yaml` via `GET/PUT /api/user-prefs`, so they survive
   port changes and WSL launcher use.
-- **Wake word voice mode.** The Hub can keep speech recognition in standby and
-  start voice input when the configured phrase is spoken, either globally or
-  for the current session.
+- **User avatar customization.** The chat view can show a configured user icon
+  or display-name initial, stored through server-side user preferences.
 - **WSL launcher.** A new Windows-only `any-ai-cli-wsl.exe` starts
   `any-ai-cli serve` inside WSL, chooses a Windows-side-safe port when needed,
   opens the Windows browser, sets `ANY_AI_CLI_WSL_LAUNCHER=1`, and cleans up
@@ -93,10 +96,9 @@ Release artifacts are published at
   opening WSL files/directories with Windows handlers, defaulting launcher logs
   to the Windows user profile when launched from `any-ai-cli-wsl.exe`, and
   correct banner/logo rendering with East Asian width and console mode handling.
-- Voice input fixes include avoiding competing microphone captures, waiting for
-  wake word recognition to release the microphone before starting dictation,
-  normalizing trigger phrases, and surfacing save-error details for user
-  preferences.
+- Voice input fixes include avoiding competing microphone captures, normalizing
+  trigger phrases, adding a diagnostic panel, and surfacing save-error details
+  for user preferences. Wake-word code remains hidden/disabled in v0.2.0.
 - Reverse-video terminal output no longer becomes unreadable white blocks in
   the Hub terminal theme.
 
