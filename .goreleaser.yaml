@@ -38,6 +38,9 @@ builds:
 archives:
   - id: default
     format: zip
+    # Windows だけ any-ai-cli.exe + any-ai-cli-wsl.exe の 2 本、他 OS は 1 本。
+    # platform 間でバイナリ数が異なる構成を許可する。
+    allow_different_binary_count: true
     name_template: "{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     files:
       - README.md
