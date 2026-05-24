@@ -402,6 +402,36 @@ class MultiPaneManager {
     requestAnimationFrame(() => this._syncViewportToBuffer(t, { bottom: true }));
   }
 
+  _shouldForceBottomOnAttach(session) {
+    return String(session && session.provider || '').toLowerCase() === 'codex';
+  }
+
+  _stickToBottomSoon(t, opts = {}) {
+    if (!t || !t.term) return;
+    const force = !!opts.force;
+    let remaining = Math.max(1, opts.passes || 4);
+    if (force) t.autoScroll = true;
+    const snap = () => {
+      if (!t || !t.term) return;
+      if (!force && !t.autoScroll) return;
+      if (force) t.autoScroll = true;
+      this._scrollToBottomAndSync(t);
+    };
+    const next = () => {
+      if (remaining <= 0) return;
+      remaining--;
+      requestAnimationFrame(() => {
+        snap();
+        next();
+      });
+    };
+    snap();
+    next();
+    for (const delay of [80, 220]) {
+      setTimeout(snap, delay);
+    }
+  }
+
   _syncViewportToBuffer(t, opts = {}) {
     if (!t || !t.term || !t.container || !t.term.buffer) return;
     const vp = t.container.querySelector('.xterm-viewport');
@@ -537,6 +567,8 @@ class MultiPaneManager {
     const t = window.getTerminalEntry ? window.getTerminalEntry(session.id)
             : (window.terminals ? window.terminals.get(session.id) : null);
     if (!t || !t.term) return;
+    const forceBottom = this._shouldForceBottomOnAttach(session);
+    if (forceBottom) t.autoScroll = true;
     this._ensureScrollHandler(t, session.id);
 
     if (t.container) {
@@ -546,7 +578,8 @@ class MultiPaneManager {
         // DOM 移動で .xterm-viewport の scrollTop がブラウザにリセットされるため、
         // 次フレームでスクロール位置を xterm 内部状態に合わせて再同期する
         requestAnimationFrame(() => {
-          if (t.autoScroll) {
+          if (forceBottom || t.autoScroll) {
+            if (forceBottom) t.autoScroll = true;
             this._scrollToBottomAndSync(t);
           } else {
             // autoScroll=false（ユーザーが上にスクロール中）の場合は viewportY に合わせる
@@ -572,7 +605,8 @@ class MultiPaneManager {
           }
           this._installResizeObserver(slotEl, termArea, t, session.id);
           this._fitTerminalInSlot(termArea, t, session.id);
-          if (t.autoScroll) this._scrollToBottomAndSync(t);
+          if (forceBottom) this._stickToBottomSoon(t, { force: true, passes: 4 });
+          else if (t.autoScroll) this._scrollToBottomAndSync(t);
         }
       });
       return;
@@ -584,6 +618,7 @@ class MultiPaneManager {
 
     this._installResizeObserver(slotEl, termArea, t, session.id);
     this._fitTerminalInSlot(termArea, t, session.id);
+    if (forceBottom) this._stickToBottomSoon(t, { force: true, passes: 4 });
   }
 
   // ResizeObserver でペインリサイズ時に自動フィット
