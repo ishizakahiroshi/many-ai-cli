@@ -41,7 +41,10 @@ archives:
     # Windows だけ any-ai-cli.exe + any-ai-cli-wsl.exe の 2 本、他 OS は 1 本。
     # platform 間でバイナリ数が異なる構成を許可する。
     allow_different_binary_count: true
-    name_template: "{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    # エンドユーザー向けに OS/arch 名を分かりやすく:
+    #   darwin/amd64 -> macos-intel, darwin/arm64 -> macos-apple-silicon
+    #   windows/amd64 -> windows-x64, linux/amd64 -> linux-x64
+    name_template: '{{ .ProjectName }}-{{ .Version }}-{{ if eq .Os "darwin" }}macos{{ else }}{{ .Os }}{{ end }}-{{ if eq .Os "darwin" }}{{ if eq .Arch "amd64" }}intel{{ else if eq .Arch "arm64" }}apple-silicon{{ else }}{{ .Arch }}{{ end }}{{ else }}{{ if eq .Arch "amd64" }}x64{{ else }}{{ .Arch }}{{ end }}{{ end }}'
     files:
       - README.md
       - README.ja.md

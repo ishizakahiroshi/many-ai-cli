@@ -18,9 +18,10 @@ Get the latest release from [GitHub Releases](https://github.com/ishizakahiroshi
 
 | Platform | Download |
 |----------|----------|
-| Windows  | `any-ai-cli-<version>-windows-amd64.zip` |
-| macOS    | `any-ai-cli-<version>-darwin-amd64.zip` / `any-ai-cli-<version>-darwin-arm64.zip` |
-| Linux    | `any-ai-cli-<version>-linux-amd64.zip` |
+| Windows (x64) | `any-ai-cli-<version>-windows-x64.zip` |
+| macOS (Intel) | `any-ai-cli-<version>-macos-intel.zip` |
+| macOS (Apple Silicon) | `any-ai-cli-<version>-macos-apple-silicon.zip` |
+| Linux (x64) | `any-ai-cli-<version>-linux-x64.zip` |
 
 > Settings and logs are stored in `~/.any-ai-cli/` (created on first run).
 > Session logs contain user input and AI output. Treat them as sensitive data.
@@ -136,10 +137,10 @@ The WSL launcher requires binaries in **both** Windows and WSL.
 
 **① Windows side: `any-ai-cli-wsl.exe`**
 
-Download `any-ai-cli-<version>-windows-amd64.zip` from the releases page, extract `any-ai-cli-wsl.exe`, and place it somewhere on the Windows `PATH`.
+Download `any-ai-cli-<version>-windows-x64.zip` from the releases page, extract `any-ai-cli-wsl.exe`, and place it somewhere on the Windows `PATH`.
 
 ```powershell
-Expand-Archive any-ai-cli-<version>-windows-amd64.zip -DestinationPath .\any-ai-cli-windows
+Expand-Archive any-ai-cli-<version>-windows-x64.zip -DestinationPath .\any-ai-cli-windows
 
 # Option A: ~/AppData/Local/Microsoft/WindowsApps/ (already on PATH)
 Move-Item .\any-ai-cli-windows\any-ai-cli-wsl.exe "$env:LOCALAPPDATA\Microsoft\WindowsApps\any-ai-cli-wsl.exe"
@@ -150,10 +151,10 @@ Move-Item .\any-ai-cli-windows\any-ai-cli-wsl.exe "C:\tools\any-ai-cli-wsl.exe"
 
 **② WSL side: `any-ai-cli` (Linux binary)**
 
-Download `any-ai-cli-<version>-linux-amd64.zip` from the releases page, extract `any-ai-cli`, and place it somewhere on the WSL `PATH`.
+Download `any-ai-cli-<version>-linux-x64.zip` from the releases page, extract `any-ai-cli`, and place it somewhere on the WSL `PATH`.
 
 ```bash
-unzip any-ai-cli-<version>-linux-amd64.zip
+unzip any-ai-cli-<version>-linux-x64.zip
 
 # Using ~/.local/bin (per-user, no sudo required)
 mkdir -p ~/.local/bin

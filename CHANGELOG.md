@@ -10,6 +10,14 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-05-24
+
+### Changed
+- Release archive names are now easier to read for end users: `windows-x64`,
+  `linux-x64`, `macos-intel`, and `macos-apple-silicon` replace the previous
+  `windows-amd64` / `linux-amd64` / `darwin-amd64` / `darwin-arm64` names.
+  README download tables and WSL install instructions were updated to match.
+
 ## [0.2.0] - 2026-05-24
 
 ### Added
@@ -206,7 +214,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/ishizakahiroshi/any-ai-cli/releases/tag/v0.1.3
 [0.1.2]: https://github.com/ishizakahiroshi/any-ai-cli/releases/tag/v0.1.2
