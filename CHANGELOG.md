@@ -10,7 +10,7 @@ Release artifacts are published at
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-05-16
+## [0.2.0] - 2026-05-24
 
 ### Added
 - **Files tab.** Project groups now open a persistent Files tab with a
@@ -55,6 +55,10 @@ Release artifacts are published at
   format that the Hub writes automatically on session end.
 
 ### Changed
+- **Release artifacts now match the documented install flow.** The Windows
+  GoReleaser zip now includes both `any-ai-cli.exe` and the WSL launcher
+  `any-ai-cli-wsl.exe`; README install instructions now refer to the actual
+  zip artifacts rather than standalone executable names.
 - **Internal docs browser names were renamed to Files.** Public API paths moved
   from `/api/docs-*` to `/api/files-*`, with one-shot browser storage migration
   from old docs keys to files keys.
@@ -81,6 +85,20 @@ Release artifacts are published at
   use "files" rather than "docs" for the project file browser.
 
 ### Fixed
+- Release metadata was aligned for v0.2.0: Windows resource JSON and regenerated
+  `.syso` files now report `0.2.0` / `0.2.0.0` instead of the stale v0.1.3
+  values in the Windows Properties dialog.
+- Files tab Markdown preview links render again with the vendored marked v12
+  renderer signature. Relative Markdown/text links now keep their visible text
+  and are routed through the Files preview link handlers.
+- Release-build console noise was removed from the Web UI by dropping the
+  leftover app build marker and voice-input `[VOICE-DBG]` logs while keeping
+  the in-app voice diagnostic event history.
+- Browser-side third-party license notices now include the current highlight.js
+  copyright line from the vendored header.
+- Release guidance no longer points at the missing `docs/any-ai-cli-design-v0.1.0.md`
+  file; agent and release docs now use `docs/v0.2.0-any-ai-cli-design.md` as the
+  current design source of truth.
 - Codex and Claude approval detection now catches additional native prompt
   shapes, including free-form numbered choices and Codex approval prompts that
   appear while the terminal is not already scrolled to the bottom.
@@ -183,7 +201,7 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Real-environment verification: Windows. Linux/macOS builds are produced
   but not deeply validated.
 - Gemini CLI is intentionally out of scope for wrapping; see
-  `docs/v0.1.x-any-ai-cli-design.md` for the rationale.
+  `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
 [Unreleased]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.1.3...v0.2.0
