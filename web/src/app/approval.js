@@ -1119,9 +1119,9 @@ function sendBatchChoices(sessionId) {
       const pos = opts.findIndex(o => o.num === sel);
       return pos >= 0 ? pos + 1 : sel;
     });
-    text = localPositions.join(' ');
+    text = localPositions.map((pos, idx) => `${idx + 1} ${pos}`).join('\n');
   } else {
-    text = selections.join(' ');
+    text = selections.map((sel, idx) => `${idx + 1} ${sel}`).join('\n');
   }
   if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
   sendApprovalConsumed(sessionId, prevOpts, text);

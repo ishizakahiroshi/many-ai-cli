@@ -1452,7 +1452,7 @@ const FilesTreeView = (function () {
           }
         },
         onContextMenu: (e, node) => {
-          if (node.absPath) showPathPopup(node.absPath, e.clientX, e.clientY, sessionId || '');
+          if (node.absPath) showPathPopup(node.absPath, e.clientX, e.clientY, sessionId || '', node.type || 'file');
         },
       });
       treeArea.innerHTML = '';

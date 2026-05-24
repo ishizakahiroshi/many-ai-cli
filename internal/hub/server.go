@@ -284,6 +284,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/files-roots", s.handleFilesRoots)
 	mux.HandleFunc("/api/files-move", s.handleFilesMove)
 	mux.HandleFunc("/api/files-rename", s.handleFilesRename)
+	mux.HandleFunc("/api/files-delete-dir", s.handleFilesDeleteDir)
 	mux.HandleFunc("/api/git-log", s.handleGitLog)
 	mux.HandleFunc("/api/git-show", s.handleGitShow)
 	mux.HandleFunc("/api/git-refs", s.handleGitRefs)
