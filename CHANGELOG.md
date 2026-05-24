@@ -83,6 +83,9 @@ Release artifacts are published at
   and session switches.
 - UI terminology, i18n keys, localStorage keys, and CSS classes now consistently
   use "files" rather than "docs" for the project file browser.
+- Documented the Windows distribution limitation: release binaries are not
+  Authenticode-signed yet, so Windows 11 Smart App Control may block
+  `any-ai-cli.exe` on PCs where that protection is enabled.
 
 ### Fixed
 - Release metadata was aligned for v0.2.0: Windows resource JSON and regenerated

@@ -25,6 +25,13 @@ Get the latest release from [GitHub Releases](https://github.com/ishizakahiroshi
 > Settings and logs are stored in `~/.any-ai-cli/` (created on first run).
 > Session logs contain user input and AI output. Treat them as sensitive data.
 
+### Windows Smart App Control Notice
+
+The Windows release binary is not currently Authenticode-signed. On Windows 11
+PCs where Smart App Control is enabled, Windows may block `any-ai-cli.exe` as an
+untrusted app. This is separate from checksum verification: `SHA256SUMS.txt` is
+signed for release integrity, but the `.exe` itself is not code-signed.
+
 ### Platform Verification for v0.2.0
 
 - Verified in real environment: Windows
