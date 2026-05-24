@@ -1,6 +1,6 @@
 # any-ai-cli リリース手順
 
-> 最終更新: 2026-05-24(日) 17:01:04
+> 最終更新: 2026-05-24(日) 17:25:11 — runtime-served resources（slash-commands 等）の差分確認手順を追記
 
 この手順は GitHub Actions の `Release` workflow と GoReleaser で GitHub Releases を作成するための運用メモ。
 
@@ -88,6 +88,47 @@ git tag v0.1.2  ── push ──┐
 - `docs/v0.2.0-any-ai-cli-design.md` / `CLAUDE.md`：プロセ的な参照は手動。CHANGELOG 系へリンクする形へ切り替える検討
 
 これらは v0.2.0 以降も必要に応じて自動化を検討する。
+
+## スラッシュコマンド等 runtime-served resources の差分確認
+
+`resources/` 配下の以下は、リリースのタグやバイナリとは独立に、実行時に GitHub の `main` ブランチから raw fetch される（リビルド不要・トークン消費 0 で更新できる仕組み。実装は `internal/config/config.go` の `Default*Source` と `internal/hub/slash_cmd_fetch.go` 等を参照）。
+
+- `resources/slash-commands/claude.md` / `codex.md`
+- `resources/approval-patterns/claude.md` / `codex.md` / `common.md`
+- `resources/usage-links/defaults.json`
+- `resources/models/defaults.json`
+
+取得元はいずれも `https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/...`。つまり **`main` に push した瞬間、全ユーザーの取得元が切り替わる**（Hub 側 24h キャッシュ TTL の範囲で順次反映）。バイナリの version とは無関係に live に効くため、リリース commit を `main` に入れる前に、ローカル作業ツリーと GitHub `main` 公開分の差分を必ず確認する。
+
+スラッシュコマンドの差分確認（PowerShell）:
+
+```powershell
+foreach ($p in 'claude','codex') {
+  $remote = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/$p.md"
+  $gh = (Invoke-WebRequest -UseBasicParsing $remote).Content
+  $local = Get-Content -Raw "resources/slash-commands/$p.md"
+  if ($gh -eq $local) { "$p : 差分なし" }
+  else { "$p : 差分あり"; Compare-Object ($gh -split "`n") ($local -split "`n") }
+}
+```
+
+bash の場合:
+
+```bash
+for p in claude codex; do
+  curl -s "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/$p.md" -o "/tmp/gh_$p.md"
+  diff "/tmp/gh_$p.md" "resources/slash-commands/$p.md" && echo "$p: 差分なし"
+done
+```
+
+判断:
+
+- 差分が出た行が今回のリリースで意図して入れたものか確認する（新コマンドの追加 / 削除 / 説明文の更新など）。
+- 意図した差分なら、リリース commit に含めて `main` を push すれば公開と同時に live 反映される。
+- 意図しない差分（手元の編集ミス・revert 漏れ）なら、push 前に解消する。
+- approval-patterns / usage-links / models も同じ仕組みなので、それらを変更した release では同じ要領で差分確認する。
+
+なお develop 上で先行して編集している場合、ブランチ運用上は `main` への merge 時点で初めて公開されるため、develop の作業ツリーと `main` 公開分が食い違うのは正常（リリースで解消される）。
 
 ## ローカル検証
 

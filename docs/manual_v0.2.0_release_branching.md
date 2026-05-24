@@ -73,6 +73,11 @@ git describe --tags --always --dirty
 詳細は `docs/manual_release.md` の「タグを打つ前の確認」と
 「CHANGELOG.md の更新」を参照。
 
+`main` に入れる前に、`docs/manual_release.md` の
+「スラッシュコマンド等 runtime-served resources の差分確認」を実施する。
+`resources/` 配下は `main` への push と同時に全ユーザーへ live 反映されるため、
+ローカル作業ツリーと GitHub `main` 公開分の差分が意図したものか確認しておく。
+
 主な確認対象:
 
 - `CHANGELOG.md`
