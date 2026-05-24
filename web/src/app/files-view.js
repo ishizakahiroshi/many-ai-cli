@@ -1023,7 +1023,7 @@ const FilesTreeView = (function () {
   }
 
   function renderTree(treeRoot, opts) {
-    const { onFileSelect, onContextMenu, filterText, filesRoot, sessionId } = opts;
+    const { onFileClick, onContextMenu, filterText, filesRoot, sessionId } = opts;
     const filterLower = (filterText || '').toLowerCase();
     const rootKey = filesRoot || '';
     // renderTree 呼び出し時に前回の hover preview を必ず消す（複数残留防止）
@@ -1150,10 +1150,10 @@ const FilesTreeView = (function () {
             item.addEventListener('mousemove', positionHoverPreview);
             item.addEventListener('mouseleave', hideHoverPreview);
           }
-          item.addEventListener('click', (e) => { e.stopPropagation(); if (onFileSelect) onFileSelect(node); });
         } else {
           item.classList.add('files-tree-file--other');
         }
+        item.addEventListener('click', (e) => { e.stopPropagation(); if (onFileClick) onFileClick(e, node); });
         item.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); if (onContextMenu) onContextMenu(e, node); });
         return item;
       }
@@ -1194,6 +1194,12 @@ const FilesTreeView = (function () {
     searchBtn.title = t('files_tree_search_tooltip') || 'Search';
     searchBtn.textContent = '🔍';
 
+    const moveBtn = document.createElement('button');
+    moveBtn.className = 'files-tree-toolbar-btn';
+    moveBtn.title = t('files_tree_move_tooltip') || 'Move selected';
+    moveBtn.textContent = '↗';
+    moveBtn.disabled = true;
+
     const closeTabBtn = document.createElement('button');
     closeTabBtn.className = 'files-tree-toolbar-btn';
     closeTabBtn.title = t('files_tree_close_tab_tooltip') || 'Close tab';
@@ -1202,6 +1208,7 @@ const FilesTreeView = (function () {
     toolbar.appendChild(reloadBtn);
     toolbar.appendChild(openFolderBtn);
     toolbar.appendChild(searchBtn);
+    toolbar.appendChild(moveBtn);
 
     // 検索インプット（初期非表示）
     const searchWrap = document.createElement('div');
@@ -1232,19 +1239,18 @@ const FilesTreeView = (function () {
     containerEl.appendChild(treeArea);
 
     let currentTree = null;
-    let selectedAbsPath = null;
+    let selectedAbsPaths = new Set();
+    let lastClickedAbsPath = null;
     let filterText = '';
-    // D&D: ドラッグ中のソース（{ absPath, type }）と現在のドロップ強調先 element
-    let draggingSrc = null;
+    // D&D: ドラッグ中のソース一覧と代表 ({ absPath, type })、ドロップ強調先 element
+    let draggingSrcs = [];
+    let draggingRep = null;
     let hoverDropEl = null;
 
-    function highlightSelected(absPath) {
-      const all = treeArea.querySelectorAll('.files-tree-item');
-      all.forEach(el => el.classList.remove('files-tree-item--selected'));
-      if (absPath) {
-        const found = treeArea.querySelector(`.files-tree-item[data-abs-path="${CSS.escape(absPath)}"]`);
-        if (found) found.classList.add('files-tree-item--selected');
-      }
+    function highlightSelected() {
+      treeArea.querySelectorAll('.files-tree-item').forEach(el => {
+        el.classList.toggle('files-tree-item--selected', selectedAbsPaths.has(el.dataset.absPath || ''));
+      });
     }
 
     // ──── D&D ヘルパー ────
@@ -1291,23 +1297,23 @@ const FilesTreeView = (function () {
     // 与えられた dragover/drop イベントから「ドロップ先ディレクトリの絶対パス」と該当 element を解決する。
     // 戻り値: { el, dirAbs } or null（無効なドロップ先）
     function resolveDropTarget(e) {
-      if (!draggingSrc) return null;
+      if (!draggingRep) return null;
       const dirItem = e.target.closest && e.target.closest('.files-tree-dir');
       if (dirItem) {
         const dirAbs = dirItem.dataset.absPath || '';
         if (!dirAbs) return null;
         // 自身への移動禁止
-        if (pathsEqualCI(dirAbs, draggingSrc.absPath)) return null;
+        if (pathsEqualCI(dirAbs, draggingRep.absPath)) return null;
         // dir をその子孫に入れる移動禁止
-        if (draggingSrc.type === 'dir' && isUnderPath(dirAbs, draggingSrc.absPath)) return null;
-        // 同一親ディレクトリへの移動は no-op
-        if (pathsEqualCI(dirAbs, dirnameOf(draggingSrc.absPath))) return null;
+        if (draggingRep.type === 'dir' && isUnderPath(dirAbs, draggingRep.absPath)) return null;
+        // 単一 src のときのみ同一親への no-op を拒否
+        if (draggingSrcs.length === 1 && pathsEqualCI(dirAbs, dirnameOf(draggingRep.absPath))) return null;
         return { el: dirItem, dirAbs };
       }
       // ディレクトリ要素外（ツリーのルート領域）に落とした場合は filesRoot へ
       if (!filesRoot) return null;
-      if (pathsEqualCI(filesRoot, dirnameOf(draggingSrc.absPath))) return null;
-      if (draggingSrc.type === 'dir' && (pathsEqualCI(filesRoot, draggingSrc.absPath) || isUnderPath(filesRoot, draggingSrc.absPath))) return null;
+      if (draggingSrcs.length === 1 && pathsEqualCI(filesRoot, dirnameOf(draggingRep.absPath))) return null;
+      if (draggingRep.type === 'dir' && (pathsEqualCI(filesRoot, draggingRep.absPath) || isUnderPath(filesRoot, draggingRep.absPath))) return null;
       return { el: treeArea, dirAbs: filesRoot };
     }
 
@@ -1315,17 +1321,21 @@ const FilesTreeView = (function () {
     treeArea.addEventListener('dragstart', (e) => {
       const item = e.target.closest && e.target.closest('.files-tree-item');
       if (!item || !item.dataset.absPath) { return; }
-      draggingSrc = { absPath: item.dataset.absPath, type: item.dataset.type || 'file' };
+      const srcAbsPath = item.dataset.absPath;
+      const srcType = item.dataset.type || 'file';
+      draggingRep = { absPath: srcAbsPath, type: srcType };
+      draggingSrcs = selectedAbsPaths.has(srcAbsPath) ? [...selectedAbsPaths] : [srcAbsPath];
       item.classList.add('files-tree-item--dragging');
       try {
         e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', draggingSrc.absPath);
+        e.dataTransfer.setData('text/plain', srcAbsPath);
       } catch (_) {}
     });
     treeArea.addEventListener('dragend', (e) => {
       const item = e.target.closest && e.target.closest('.files-tree-item');
       if (item) item.classList.remove('files-tree-item--dragging');
-      draggingSrc = null;
+      draggingSrcs = [];
+      draggingRep = null;
       clearDropHighlight();
     });
     treeArea.addEventListener('dragover', (e) => {
@@ -1341,31 +1351,55 @@ const FilesTreeView = (function () {
         clearDropHighlight();
       }
     });
+    // C2: 多ファイル移動の共通ロジック。失敗メッセージ配列を返す（空なら全件成功）。
+    async function moveFiles(srcs, dstDir) {
+      const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
+      const url = `/api/files-move?token=${encodeURIComponent(token)}${sessionQs}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ srcs, dstDir }),
+      });
+      if (!res.ok) {
+        return [`HTTP ${res.status}`];
+      }
+      const data = await res.json();
+      const errors = [];
+      const moveResults = Array.isArray(data.results) ? data.results : [];
+      if (!data || !data.ok) {
+        for (const r of moveResults) {
+          if (r && r.error) errors.push((r.src || '?') + ': ' + r.error);
+        }
+        if (errors.length === 0) errors.push((data && data.error) || '?');
+        return errors;
+      }
+      for (let i = 0; i < moveResults.length; i++) {
+        const r = moveResults[i];
+        if (r && r.newAbs && selectedAbsPaths.has(r.src || srcs[i])) {
+          selectedAbsPaths.delete(r.src || srcs[i]);
+          selectedAbsPaths.add(r.newAbs);
+        }
+      }
+      if (moveResults.length === 0 && data.newAbs && srcs.length === 1 && selectedAbsPaths.has(srcs[0])) {
+        selectedAbsPaths.delete(srcs[0]);
+        selectedAbsPaths.add(data.newAbs);
+      }
+      return errors;
+    }
+
     treeArea.addEventListener('drop', async (e) => {
       const target = resolveDropTarget(e);
       clearDropHighlight();
-      if (!target || !draggingSrc) return;
+      if (!target || draggingSrcs.length === 0) return;
       e.preventDefault();
-      const src = draggingSrc.absPath;
+      const srcs = [...draggingSrcs];
       const dstDir = target.dirAbs;
-      draggingSrc = null;
+      draggingSrcs = [];
+      draggingRep = null;
       try {
-        const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
-        const url = `/api/files-move?token=${encodeURIComponent(token)}${sessionQs}`;
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ src, dstDir }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.ok) {
-          const msg = (data && data.error) ? data.error : ('HTTP ' + res.status);
-          alert((t('files_tree_move_failed') || 'Move failed') + ': ' + msg);
-          return;
-        }
-        // 移動後にプレビュー中のファイルが追従できるよう selectedAbsPath を更新
-        if (selectedAbsPath && pathsEqualCI(selectedAbsPath, src) && data.newAbs) {
-          selectedAbsPath = data.newAbs;
+        const errors = await moveFiles(srcs, dstDir);
+        if (errors.length > 0) {
+          alert((t('files_tree_move_failed') || 'Move failed') + ':\n' + errors.join('\n'));
         }
         await loadTree();
       } catch (err) {
@@ -1378,10 +1412,44 @@ const FilesTreeView = (function () {
         filterText: filter,
         filesRoot,
         sessionId,
-        onFileSelect: (node) => {
-          selectedAbsPath = node.absPath;
-          highlightSelected(selectedAbsPath);
-          if (onFileSelect) onFileSelect(node);
+        onFileClick: (e, node) => {
+          const isCtrl = e.ctrlKey || e.metaKey;
+          const isShift = e.shiftKey;
+          if (!isCtrl && !isShift) {
+            selectedAbsPaths.clear();
+            if (node.absPath) selectedAbsPaths.add(node.absPath);
+            lastClickedAbsPath = node.absPath || null;
+            highlightSelected();
+            updateMoveBtn();
+            if (isPreviewable(node.name) && onFileSelect) onFileSelect(node);
+          } else if (isCtrl) {
+            if (node.absPath) {
+              if (selectedAbsPaths.has(node.absPath)) selectedAbsPaths.delete(node.absPath);
+              else selectedAbsPaths.add(node.absPath);
+            }
+            lastClickedAbsPath = node.absPath || null;
+            highlightSelected();
+            updateMoveBtn();
+          } else {
+            if (node.absPath) {
+              const allFileEls = Array.from(treeArea.querySelectorAll('.files-tree-item[data-type="file"]'));
+              const allPaths = allFileEls.map(el => el.dataset.absPath || '').filter(Boolean);
+              const lastIdx = lastClickedAbsPath ? allPaths.indexOf(lastClickedAbsPath) : -1;
+              const curIdx = allPaths.indexOf(node.absPath);
+              if (lastIdx >= 0 && curIdx >= 0) {
+                const lo = Math.min(lastIdx, curIdx);
+                const hi = Math.max(lastIdx, curIdx);
+                for (let i = lo; i <= hi; i++) {
+                  if (allPaths[i]) selectedAbsPaths.add(allPaths[i]);
+                }
+              } else {
+                selectedAbsPaths.add(node.absPath);
+              }
+              lastClickedAbsPath = node.absPath;
+              highlightSelected();
+              updateMoveBtn();
+            }
+          }
         },
         onContextMenu: (e, node) => {
           if (node.absPath) showPathPopup(node.absPath, e.clientX, e.clientY, sessionId || '');
@@ -1389,7 +1457,7 @@ const FilesTreeView = (function () {
       });
       treeArea.innerHTML = '';
       treeArea.appendChild(el);
-      if (selectedAbsPath) highlightSelected(selectedAbsPath);
+      highlightSelected();
     }
 
     async function loadTree() {
@@ -1413,6 +1481,89 @@ const FilesTreeView = (function () {
         treeArea.innerHTML = `<div class="files-tree-error">${escapeHtml(String(err))}</div>`;
       }
     }
+
+    function updateMoveBtn() {
+      moveBtn.disabled = selectedAbsPaths.size === 0;
+    }
+
+    function openMoveDialog() {
+      if (!currentTree || selectedAbsPaths.size === 0) return;
+      const dialog = document.createElement('dialog');
+      dialog.className = 'files-move-dialog';
+
+      const titleEl = document.createElement('p');
+      titleEl.className = 'files-move-dialog-title';
+      titleEl.textContent = (t('files_move_dialog_title') || 'Move {n} item(s) to folder…')
+        .replace('{n}', String(selectedAbsPaths.size));
+      dialog.appendChild(titleEl);
+
+      const listEl = document.createElement('div');
+      listEl.className = 'files-move-dialog-list';
+      let dialogSelectedDir = null;
+      let confirmBtn;
+
+      function makeDialogDir(node, depth) {
+        const item = document.createElement('div');
+        item.className = 'files-move-dialog-dir';
+        item.style.paddingLeft = (depth * 14 + 6) + 'px';
+        item.textContent = '📁 ' + node.name;
+        if (node.absPath) {
+          item.dataset.absPath = node.absPath;
+          item.addEventListener('click', () => {
+            listEl.querySelectorAll('.files-move-dialog-dir--selected')
+              .forEach(el => el.classList.remove('files-move-dialog-dir--selected'));
+            item.classList.add('files-move-dialog-dir--selected');
+            dialogSelectedDir = node.absPath;
+            if (confirmBtn) confirmBtn.disabled = false;
+          });
+        }
+        listEl.appendChild(item);
+        for (const child of node.children || []) {
+          if (child.type === 'dir') makeDialogDir(child, depth + 1);
+        }
+      }
+
+      for (const child of currentTree.children) {
+        if (child.type === 'dir') makeDialogDir(child, 0);
+      }
+      dialog.appendChild(listEl);
+
+      const btnRow = document.createElement('div');
+      btnRow.className = 'files-move-dialog-buttons';
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = t('files_move_dialog_cancel') || 'Cancel';
+      cancelBtn.addEventListener('click', () => dialog.close());
+      confirmBtn = document.createElement('button');
+      confirmBtn.textContent = t('files_move_dialog_confirm') || 'Move';
+      confirmBtn.className = 'files-move-dialog-confirm';
+      confirmBtn.disabled = true;
+      confirmBtn.addEventListener('click', async () => {
+        if (!dialogSelectedDir) return;
+        const srcs = [...selectedAbsPaths];
+        dialog.close();
+        try {
+          const errors = await moveFiles(srcs, dialogSelectedDir);
+          if (errors.length > 0) {
+            alert((t('files_tree_move_failed') || 'Move failed') + ':\n' + errors.join('\n'));
+          }
+          selectedAbsPaths.clear();
+          updateMoveBtn();
+          highlightSelected();
+          await loadTree();
+        } catch (err) {
+          alert((t('files_tree_move_failed') || 'Move failed') + ': ' + String(err));
+        }
+      });
+      btnRow.appendChild(cancelBtn);
+      btnRow.appendChild(confirmBtn);
+      dialog.appendChild(btnRow);
+
+      document.body.appendChild(dialog);
+      dialog.showModal();
+      dialog.addEventListener('close', () => dialog.remove());
+    }
+
+    moveBtn.addEventListener('click', () => openMoveDialog());
 
     reloadBtn.addEventListener('click', () => loadTree());
 
@@ -1449,9 +1600,10 @@ const FilesTreeView = (function () {
     // ファイル変更（rename 等）を受けてツリーを再読み込み
     const filesChangedHandler = (e) => {
       const detail = (e && e.detail) || {};
-      if (detail.kind === 'rename' && selectedAbsPath && detail.oldAbs && detail.newAbs
-          && pathsEqualCI(selectedAbsPath, detail.oldAbs)) {
-        selectedAbsPath = detail.newAbs;
+      if (detail.kind === 'rename' && detail.oldAbs && detail.newAbs
+          && selectedAbsPaths.has(detail.oldAbs)) {
+        selectedAbsPaths.delete(detail.oldAbs);
+        selectedAbsPaths.add(detail.newAbs);
       }
       loadTree();
     };
@@ -1463,8 +1615,10 @@ const FilesTreeView = (function () {
     // 外部から "ファイルを選択済み状態にする" 用
     containerEl._filesTree = {
       selectFile: (absPath) => {
-        selectedAbsPath = absPath;
-        highlightSelected(absPath);
+        selectedAbsPaths.clear();
+        if (absPath) selectedAbsPaths.add(absPath);
+        lastClickedAbsPath = absPath || null;
+        highlightSelected();
       },
     };
     containerEl._filesTreeCleanup = () => {

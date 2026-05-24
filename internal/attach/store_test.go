@@ -3,6 +3,7 @@ package attach
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -53,6 +54,52 @@ func TestSave(t *testing.T) {
 				t.Errorf("inject %q does not contain path %q", inject, path)
 			}
 		})
+	}
+}
+
+func TestSaveDoesNotOverwriteRepeatedAttachments(t *testing.T) {
+	baseDir := t.TempDir()
+
+	firstPath, _, err := Save(baseDir, 42, "codex", []byte("first"), "note.txt")
+	if err != nil {
+		t.Fatalf("Save first: %v", err)
+	}
+	secondPath, _, err := Save(baseDir, 42, "codex", []byte("second"), "note.txt")
+	if err != nil {
+		t.Fatalf("Save second: %v", err)
+	}
+
+	if firstPath == secondPath {
+		t.Fatalf("repeated attachments used the same path: %s", firstPath)
+	}
+
+	firstData, err := os.ReadFile(firstPath)
+	if err != nil {
+		t.Fatalf("ReadFile first: %v", err)
+	}
+	secondData, err := os.ReadFile(secondPath)
+	if err != nil {
+		t.Fatalf("ReadFile second: %v", err)
+	}
+	if string(firstData) != "first" {
+		t.Fatalf("first attachment was overwritten: got %q", string(firstData))
+	}
+	if string(secondData) != "second" {
+		t.Fatalf("second attachment content mismatch: got %q", string(secondData))
+	}
+}
+
+func TestSaveUsesTimestampWithNanosecondsInFilename(t *testing.T) {
+	baseDir := t.TempDir()
+
+	path, _, err := Save(baseDir, 42, "codex", []byte("data"), "note.txt")
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	name := filepath.Base(path)
+	if !regexp.MustCompile(`^\d{14}_\d{9}\.txt$`).MatchString(name) {
+		t.Fatalf("saved filename %q does not match timestamp_nanoseconds format", name)
 	}
 }
 

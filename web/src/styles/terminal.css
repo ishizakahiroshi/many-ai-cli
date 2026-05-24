@@ -31,7 +31,8 @@
 
 /* ターミナルスクロール補助ボタン */
 #scroll-to-top-btn,
-#scroll-to-bottom-btn {
+#scroll-to-bottom-btn,
+.terminal-scroll-btn {
   position: absolute;
   right: 14px;
   z-index: 20;
@@ -45,14 +46,17 @@
   backdrop-filter: blur(4px);
   transition: background 0.15s, color 0.15s;
 }
-#scroll-to-top-btn {
+#scroll-to-top-btn,
+.pane-scroll-top {
   top: 34px;
 }
-#scroll-to-bottom-btn {
+#scroll-to-bottom-btn,
+.pane-scroll-bottom {
   bottom: 10px;
 }
 #scroll-to-top-btn:hover,
-#scroll-to-bottom-btn:hover {
+#scroll-to-bottom-btn:hover,
+.terminal-scroll-btn:hover {
   background: #3b82f6;
   color: #fff;
 }

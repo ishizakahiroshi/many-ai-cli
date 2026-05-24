@@ -1,5 +1,155 @@
 /* Extracted from styles.css. Imported by /styles.css. */
 
+/* ── マルチビュー グリッド ── */
+#multi-view {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+  background: var(--line);
+  overflow: hidden;
+  min-height: 0;
+  /* JS が --pane-cols / --pane-rows をセット */
+  grid-template-columns: repeat(var(--pane-cols, 2), minmax(0, 1fr));
+  grid-template-rows:    repeat(var(--pane-rows, 2), minmax(0, 1fr));
+}
+
+/* ── ペイン ── */
+.pane-slot {
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  overflow: hidden; min-width: 0; min-height: 0;
+}
+.pane-slot.focused { box-shadow: inset 0 0 0 2px var(--accent); z-index: 1; }
+/* 非フォーカスペインを dim して、アクティブを際立たせる */
+.pane-slot:not(.focused):not(.empty) .pane-header { opacity: 0.5; }
+.pane-slot:not(.focused):not(.empty) .pane-terminal-area { opacity: 0.6; }
+/* フォーカスペインのヘッダーを accent 色で強調 */
+.pane-slot.focused .pane-header {
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-elev));
+  border-bottom-color: var(--accent);
+}
+.pane-slot.focused .ph-sid { color: var(--accent); }
+.pane-slot.focused .ph-dir { color: var(--text); }
+.pane-slot.empty {
+  align-items: center; justify-content: center; flex-direction: column; gap: 4px;
+  background: var(--bg-deep); border: 1px dashed var(--line);
+  color: var(--muted); font-size: 0.75rem; cursor: default;
+}
+.pane-slot .pane-header {
+  flex-shrink: 0; height: 24px; background: var(--bg-elev);
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; padding: 0 6px; gap: 5px; min-width: 0;
+}
+.pane-slot .pane-terminal-area { flex: 1; overflow: hidden; position: relative; }
+.pane-slot .pane-scroll-top { top: 10px; }
+.pane-slot .pane-scroll-bottom { bottom: 10px; }
+/* C2段階: xterm なしのプレースホルダ */
+.pane-slot .pane-placeholder {
+  padding: 8px; font-size: 0.75rem; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ── ペインヘッダ要素 ── */
+.pane-slot .sc-provider {
+  flex-shrink: 0; width: 14px; height: 14px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.55rem; font-weight: bold; font-family: sans-serif;
+}
+.pane-slot .sc-provider.claude { background: #FFF7ED; color: #F97316; border: 1px solid #F97316; }
+.pane-slot .sc-provider.codex  { background: #EFF6FF; color: #3B82F6; border: 1px solid #3B82F6; }
+.pane-slot .sc-provider.ollama { background: #FDF6E3; color: #C4973A; border: 1px solid #C4973A; }
+.pane-slot .ph-sid {
+  flex-shrink: 0; font-size: 0.68rem; font-weight: bold; font-family: monospace;
+  color: var(--accent-text);
+}
+.pane-slot .ph-dir {
+  flex: 1; min-width: 0; font-size: 0.68rem; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pane-slot .ph-badge {
+  flex-shrink: 0; font-size: 0.65rem; padding: 0 3px;
+}
+.pane-slot .ph-badge.running  { color: var(--green,  #22c55e); }
+.pane-slot .ph-badge.waiting  { color: var(--yellow, #eab308); }
+.pane-slot .ph-badge.standby  { color: var(--muted); }
+.pane-slot .ph-badge.error    { color: var(--red,    #ef4444); }
+/* ✕ 閉じるボタン: ペインヘッダ右端、hover時のみ表示 */
+.pane-slot .ph-close {
+  flex-shrink: 0; width: 16px; height: 16px; border-radius: 3px;
+  background: transparent; border: none; color: var(--muted);
+  cursor: pointer; font-size: 0.6rem;
+  opacity: 0; transition: opacity 0.1s, background 0.1s;
+  margin-left: auto;
+}
+.pane-slot:hover .ph-close { opacity: 1; }
+.pane-slot .ph-close:hover { background: rgba(244,63,94,0.2); color: var(--danger); }
+
+/* 承認待ちペインの強調（薄黄アウトライン） */
+.pane-slot.waiting-approval { outline: 1px solid rgba(250,204,21,0.4); }
+
+/* ── ペイン数によるフォントスケール ── */
+/* JS が body に .pane-fs-normal / .pane-fs-small / .pane-fs-tiny を付与 */
+.pane-fs-normal .pane-slot .xterm { --xterm-font-size: 11px; }
+.pane-fs-small  .pane-slot .xterm { --xterm-font-size: 9.5px; }
+.pane-fs-tiny   .pane-slot .xterm { --xterm-font-size: 8px; }
+
+/* ── マルチタブ内のレイアウトバッジ ── */
+.multi-layout-badge {
+  font-size: 0.62rem; padding: 1px 5px; border-radius: 3px;
+  background: rgba(91,124,246,0.2); color: var(--accent-text);
+  margin-left: 3px;
+}
+
+/* ── グリッドピッカー（マルチタブに紐づくポップアップ） ── */
+#grid-picker-popup {
+  position: fixed;
+  /* JS で getBoundingClientRect() によりビューポート基準座標をセット */
+  top: 0;
+  left: 0;
+  background: var(--bg-elev); border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.5); z-index: 200;
+  display: flex; flex-direction: column; gap: 8px; min-width: 240px;
+}
+/* hidden 解除後は display:flex で開く（.open クラス or hidden 属性の除去で制御） */
+#grid-picker-popup[hidden] { display: none !important; }
+
+.picker-title {
+  font-size: 0.72rem; color: var(--muted); white-space: nowrap;
+}
+.picker-grid {
+  display: grid;
+  /* 6列×3行 = 最大18ペイン */
+  grid-template-columns: repeat(6, 32px);
+  grid-template-rows: repeat(3, 26px);
+  gap: 3px;
+}
+.picker-cell {
+  border-radius: 4px; border: 1px solid var(--line);
+  background: var(--bg-deep); cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+.picker-cell.hovered  { background: rgba(91,124,246,0.25); border-color: var(--accent); }
+.picker-cell.selected { background: rgba(91,124,246,0.4);  border-color: var(--accent); }
+
+#picker-hover-label {
+  font-size: 0.72rem; color: var(--muted); min-height: 1em;
+}
+
+.picker-presets {
+  display: flex; flex-wrap: wrap; gap: 4px;
+}
+.picker-preset-btn {
+  padding: 2px 8px; border-radius: 4px;
+  background: var(--bg-deep); border: 1px solid var(--line);
+  color: var(--muted); font-size: 0.7rem; cursor: pointer;
+  font-family: inherit;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+.picker-preset-btn:hover { background: rgba(91,124,246,0.2); border-color: var(--accent); color: var(--accent-text); }
+
+/* タブバーに position:relative を付与 */
+#unified-tab-bar { position: relative; }
+
 /* Unified tabs and display area */
 /* ---- v2 Files tab system ---- */
 

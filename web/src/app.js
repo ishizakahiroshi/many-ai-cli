@@ -1585,6 +1585,7 @@ const multiQuestionVisibleCache = new Map(); // sessionId → bool（Claude Code
 const multiQuestionDismissedCache = new Map(); // sessionId → bool（banner の ✕ ボタンで誤検出を手動 dismiss した状態。次の PTY 送信でクリア）
 const sequentialChoiceCache = new Map(); // sessionId → { sig, prompts, answers, index }
 const approvalRawOptionsCache = new Map(); // sessionId → [{num, label, isCurrent}] または [{num, title, options}, ...]（バッチ承認）
+const approvalSourceCache = new Map(); // sessionId → { source, sig, kind, detectedAt }（Go native 等の表示元）
 const approvalConsumedSig = new Map(); // sessionId → 消費済み承認の署名（doSend でテキスト送信した場合の再表示防止）
 const batchSelections = new Map(); // sessionId → number[]（セクションごとの選択番号、未選択は null）
 let batchFocusIdx = -1; // 現在フォーカス中のバッチセクション index（-1: 未フォーカス / 範囲外）
@@ -1828,6 +1829,25 @@ function onChatHistorySessionRemoved(sid) {
   chatHistoryIdSeq.delete(sid);
 }
 
+function resetChatHistoryForSession(sid) {
+  const t = chatHistoryAutoCommitTimers.get(sid);
+  if (t) { clearTimeout(t); chatHistoryAutoCommitTimers.delete(sid); }
+  chatHistoryOutputBuffers.delete(sid);
+  chatHistory.delete(sid);
+  chatHistoryIdSeq.delete(sid);
+  chatHistoryNotify(sid, null);
+}
+
+function resetAllChatHistory() {
+  const ids = new Set([
+    ...chatHistory.keys(),
+    ...chatHistoryOutputBuffers.keys(),
+    ...chatHistoryAutoCommitTimers.keys(),
+    ...sessions.keys(),
+  ]);
+  ids.forEach(id => resetChatHistoryForSession(id));
+}
+
 // C2/C3 から（および将来の拡張用に）window 経由でも触れるよう公開
 if (typeof window !== 'undefined') {
   window.chatHistoryAPI = {
@@ -1861,6 +1881,16 @@ let _elapsedTimerInterval = null;
 let dragSrcId = null;
 let dragSrcGroupKey = null;
 let dragOverCardEl = null;
+
+function isSessionLiveRenderedInMultiPane(id) {
+  const multiView = document.getElementById('multi-view');
+  const mgr = window.multiPaneManager;
+  if (!multiView || multiView.hidden || !mgr || !Array.isArray(mgr.slots)) return false;
+  const t = terminals.get(id);
+  if (!t || !t.everAttached || !t.container || !t.container.isConnected) return false;
+  if (!multiView.contains(t.container)) return false;
+  return mgr.slots.some(slot => slot && slot.session && slot.session.id === id);
+}
 let dragOverGroupEl = null;
 let pendingAutoSwitch = false;
 let actionBarFocusIdx = -1;
@@ -1903,7 +1933,13 @@ function addToSessionOrder(id, forceToFront = false) {
   if (idx !== -1) {
     if (forceToFront) { sessionOrder.splice(idx, 1); sessionOrder.unshift(id); }
   } else {
-    sessionOrder.unshift(id);
+    // C5: 新規セッションは非★グループの末尾スロットに入るよう末尾追加（push）。
+    // forceToFront=true の場合のみ先頭追加（非新規の既存セッション再登録用）。
+    if (forceToFront) {
+      sessionOrder.unshift(id);
+    } else {
+      sessionOrder.push(id);
+    }
   }
 }
 
@@ -1924,6 +1960,13 @@ function isCurrentSessionHoldingApprovalFocus() {
 function removeApprovalAutoSwitchTarget(sessionId) {
   for (let i = approvalAutoSwitchQueue.length - 1; i >= 0; i--) {
     if (approvalAutoSwitchQueue[i] === sessionId) approvalAutoSwitchQueue.splice(i, 1);
+  }
+  // C4: 承認解決時にマルチペインバッジをセッション state に合わせて更新
+  const mgr = window.multiPaneManager;
+  if (mgr && typeof mgr.updateSlotBadge === 'function') {
+    const s = sessions.get(sessionId);
+    const badgeStatus = (s && s.state === 'running') ? 'running' : 'standby';
+    mgr.updateSlotBadge(sessionId, badgeStatus);
   }
 }
 
@@ -1960,6 +2003,11 @@ function enqueueApprovalAutoSwitch(sessionId) {
   if (!sessions.has(sessionId)) return;
   if (!approvalAutoSwitchQueue.includes(sessionId)) {
     approvalAutoSwitchQueue.push(sessionId);
+  }
+  // C4: 承認待ちになったときマルチペインバッジを 'waiting' に更新
+  const mgr = window.multiPaneManager;
+  if (mgr && typeof mgr.updateSlotBadge === 'function') {
+    mgr.updateSlotBadge(sessionId, 'waiting');
   }
   maybeAutoSwitchToNextApproval();
 }
@@ -2035,6 +2083,7 @@ ws.onmessage = (ev) => {
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
     const isActive = id === activeSessionId;
+    const isLiveRendered = isActive || isSessionLiveRenderedInMultiPane(id);
 
     // マーカーを先にデコードして検出し、xterm.js / スキャナにはマーカー除去済みバイトを渡す
     let textChunk = '';
@@ -2048,7 +2097,7 @@ ws.onmessage = (ev) => {
       }
     } catch (_) {}
 
-    if (isActive) {
+    if (isLiveRendered) {
       writePTYChunk(id, t.term, xtermBytes, () => {
         if (t.autoScroll) t.term.scrollToBottom();
       });
@@ -2067,7 +2116,7 @@ ws.onmessage = (ev) => {
       }
     }
     trackApprovalHintFromChunk(id, xtermBytes);
-    if (isActive) scheduleApprovalCheck(id);
+    if (isLiveRendered) scheduleApprovalCheck(id);
 
     // chatHistory: マーカー検出でターン境界を確定し AI 出力を commit する
     if (hasMarker) {
@@ -2087,6 +2136,23 @@ ws.onmessage = (ev) => {
     if (window.approvalPatternsUI && typeof window.approvalPatternsUI.onOfficialUpdated === 'function') {
       window.approvalPatternsUI.onOfficialUpdated(Array.isArray(m.providers) ? m.providers : []);
     }
+    return;
+  }
+
+  if (m.type === 'approval_detected') {
+    handleGoApprovalDetected(m);
+    return;
+  }
+
+  if (m.type === 'approval_cleared') {
+    handleGoApprovalCleared(m);
+    return;
+  }
+
+  if (m.type === 'session_history_reset') {
+    if (m.session_id) resetLocalSessionHistory(m.session_id);
+    else resetAllLocalSessionHistory();
+    showToast(t('session_history_reset_done'));
     return;
   }
 
@@ -2133,7 +2199,19 @@ ws.onmessage = (ev) => {
     if (m.model !== undefined) cur.model       = m.model;
     if (m.route !== undefined) cur.route       = m.route;
     sessions.set(m.session_id, cur);
-    addToSessionOrder(m.session_id, isNew);
+    // C4: セッション state 変化をマルチペインバッジに反映
+    if (m.state) {
+      const mgr = window.multiPaneManager;
+      if (mgr && typeof mgr.updateSlotBadge === 'function') {
+        const badgeStatus = m.state === 'waiting' ? 'waiting'
+                          : m.state === 'running' ? 'running'
+                          : 'standby';
+        mgr.updateSlotBadge(m.session_id, badgeStatus);
+      }
+    }
+    // C5: 新規セッションは非★グループ末尾（forceToFront=false）
+    // 既存セッションの再登録（isNew=false）は位置を変えない
+    addToSessionOrder(m.session_id, false);
     if (isNew && pendingAutoSwitch) {
       pendingAutoSwitch = false;
       activateSession(m.session_id);
@@ -2649,7 +2727,7 @@ function ensureTerminal(id) {
     term.loadAddon(u11);
     term.unicode.activeVersion = '11';
   }
-  terminals.set(id, { term, fitAddon, container: null, pendingChunks: [], pendingTextTail: '', markerFilterCarry: new Uint8Array(0), autoScroll: true, everAttached: false });
+  terminals.set(id, { term, fitAddon, container: null, pendingChunks: [], pendingTextTail: '', markerFilterCarry: new Uint8Array(0), screenClearSeqCarry: new Uint8Array(0), autoScroll: true, everAttached: false });
 }
 
 function attachTerminal(id) {
@@ -2733,6 +2811,8 @@ function flushPending(id) {
   }
 }
 
+window.flushPendingTerminalChunks = flushPending;
+
 function isTerminalAtBottom(t) {
   if (!t || !t.term || !t.term.buffer) return true;
   const buf = t.term.buffer.active;
@@ -2810,12 +2890,31 @@ function routeWheelToOpenSettingsPanel(e) {
   return true;
 }
 
+function getWheelTargetSessionId(target) {
+  if (!(target instanceof Element)) return activeSessionId;
+
+  const multiView = document.getElementById('multi-view');
+  const mgr = window.multiPaneManager;
+  if (multiView && !multiView.hidden && mgr) {
+    const slotEl = target.closest('.pane-slot');
+    if (slotEl && multiView.contains(slotEl)) {
+      const idx = parseInt(slotEl.dataset.slotIdx || '', 10);
+      const session = Number.isInteger(idx) && mgr.slots ? mgr.slots[idx]?.session : null;
+      if (session && session.id !== undefined && terminals.has(session.id)) {
+        return session.id;
+      }
+    }
+  }
+
+  return activeSessionId;
+}
+
 // xterm のネイティブ wheel は viewport.scrollTop を直接書き換える → scroll イベント →
 // scrollLines という非同期チェーンを経て初めて BufferService.isUserScrolling=true になる。
 // この間に PTY 出力が来ると、内部 scroll() が `isUserScrolling || (ydisp = ybase)` で
 // 強制的に最下部に戻してしまう（= AI 実行中に wheel up しても戻されるバグの正体）。
 // → capture phase で wheel を奪い、scrollLines() を同期で呼んで isUserScrolling を
-//    確実に立ててから xterm に伝播させない。マウス位置による分岐は不要。
+//    確実に立ててから xterm に伝播させない。
 document.addEventListener('wheel', (e) => {
   if (routeWheelToOpenSettingsPanel(e)) return;
 
@@ -2842,12 +2941,13 @@ document.addEventListener('wheel', (e) => {
     return;
   }
 
-  if (activeSessionId === null) return;
-  const t = terminals.get(activeSessionId);
+  const targetSessionId = getWheelTargetSessionId(e.target);
+  if (targetSessionId === null || targetSessionId === undefined) return;
+  const t = terminals.get(targetSessionId);
   if (!t || !t.term) return;
   if (isWheelTargetExcluded(e.target)) return;
 
-  if (forwardWheelToAltBuffer(activeSessionId, t, e.deltaY)) {
+  if (forwardWheelToAltBuffer(targetSessionId, t, e.deltaY)) {
     markTerminalManualScrollIntent();
     e.preventDefault();
     e.stopPropagation();
@@ -2859,7 +2959,7 @@ document.addEventListener('wheel', (e) => {
   const lines = Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY) / lineHeight));
   try { t.term.scrollLines(lines); } catch (_) {}
   t.autoScroll = isTerminalAtBottom(t);
-  if (activeSessionId !== null) updateScrollLockBtn(!t.autoScroll);
+  if (targetSessionId === activeSessionId) updateScrollLockBtn(!t.autoScroll);
   e.preventDefault();
   e.stopPropagation();
 }, { passive: false, capture: true });
@@ -2952,6 +3052,19 @@ function refitAndStickTerminalToBottomAfterLayoutSettles(id, opts = {}) {
   }
 }
 
+function revealApprovalPromptForSession(id) {
+  if (id === null || id === undefined) return;
+  if (!approvalVisibleCache.get(id) && !(approvalRawOptionsCache.get(id)?.length > 0)) return;
+  const startedAt = Date.now();
+  scrollTerminalToBottomSoon(id, { force: true, passes: 4, startedAt });
+  refitAndStickTerminalToBottomSoon(id, { force: true, passes: 4, startedAt });
+  refitAndStickTerminalToBottomAfterLayoutSettles(id, {
+    force: true,
+    passes: 4,
+    startedAt,
+  });
+}
+
 function refitActiveTerminalAfterLayout(stickToBottom) {
   if (activeSessionId === null) return;
   const id = activeSessionId;
@@ -3009,6 +3122,16 @@ const hubMarkerBytePatterns = [
 ];
 const hubMarkerEndBytes = hubMarkerBytePatterns[1];
 const eraseDisplayBelowBytes = new TextEncoder().encode('\x1b[J');
+const screenClearSeqBytePatterns = [
+  asciiBytes('\x1b[2J'),
+  asciiBytes('\x1b[3J'),
+  asciiBytes('\x1b[H'),
+  asciiBytes('\x1b[0;0H'),
+  asciiBytes('\x1b[1;1H'),
+  asciiBytes('\x1b[?1049h'),
+  asciiBytes('\x1b[?1049l'),
+];
+const screenClearSeqCarryLength = Math.max(...screenClearSeqBytePatterns.map(pattern => pattern.length)) - 1;
 
 function bytesStartWith(bytes, offset, pattern) {
   if (offset + pattern.length > bytes.length) return false;
@@ -3112,17 +3235,47 @@ function filterReverseVideoForDisplay(id, bytes) {
   return new Uint8Array(out);
 }
 
+function detectScreenClearSeqForAutoScroll(id, bytes) {
+  const t = terminals.get(id);
+  if (!t || !bytes || bytes.length === 0) return false;
+  const carry = t.screenClearSeqCarry || new Uint8Array(0);
+  const combined = new Uint8Array(carry.length + bytes.length);
+  combined.set(carry, 0);
+  combined.set(bytes, carry.length);
+
+  let found = false;
+  for (let i = 0; i < combined.length && !found; i++) {
+    found = screenClearSeqBytePatterns.some(pattern => bytesStartWith(combined, i, pattern));
+  }
+
+  const carryStart = Math.max(0, combined.length - screenClearSeqCarryLength);
+  t.screenClearSeqCarry = combined.slice(carryStart);
+  return found;
+}
+
+function snapToBottomAfterScreenClear(id) {
+  const t = terminals.get(id);
+  if (!t || !t.autoScroll) return;
+  t.term.scrollToBottom();
+  if (id === activeSessionId) updateScrollLockBtn(false);
+}
+
 function writePTYChunk(id, term, bytes, onFlush) {
+  const hasScreenClearSeq = detectScreenClearSeqForAutoScroll(id, bytes);
   const displayBytes = filterReverseVideoForDisplay(id, filterHubMarkersForDisplay(id, bytes));
-  if (displayBytes.length === 0) {
+  const wrappedFlush = () => {
+    if (hasScreenClearSeq) snapToBottomAfterScreenClear(id);
     if (onFlush) onFlush();
+  };
+  if (displayBytes.length === 0) {
+    wrappedFlush();
     return;
   }
   if (typeof term.writeUtf8 === 'function') {
-    term.writeUtf8(displayBytes, onFlush);
+    term.writeUtf8(displayBytes, wrappedFlush);
     return;
   }
-  term.write(utf8Decoder.decode(displayBytes, { stream: true }), onFlush);
+  term.write(utf8Decoder.decode(displayBytes, { stream: true }), wrappedFlush);
 }
 
 // ---- バッファスキャン共通 ----
@@ -3378,6 +3531,9 @@ async function doSend(sessionId) {
   // 同一選択肢の再検出・再表示を防ぐため消費済み署名を保存する
   const prevOpts = approvalRawOptionsCache.get(sessionId);
   if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
+  if (typeof maybeSendDirectApprovalConsumed === 'function') {
+    maybeSendDirectApprovalConsumed(sessionId, rawText, textToSend);
+  }
   hideActionBar(sessionId);
   // PTY エコーバックによる誤再表示を抑制（sendChoice と同様）
   approvalSuppressUntil.set(sessionId, Date.now() + 2000);
@@ -3829,9 +3985,102 @@ function dismissSession(id) {
   requestSessionDismiss(id);
 }
 
+function requestSessionHistoryReset(id) {
+  if (!sessions.has(id)) return;
+  if (!confirm(t('session_history_reset_confirm'))) return;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'session_history_reset', session_id: id }));
+  } else {
+    resetLocalSessionHistory(id);
+    showToast(t('session_history_reset_done'));
+  }
+}
+
+function resetTerminalHistoryForSession(id) {
+  const t = terminals.get(id);
+  if (!t) return;
+  t.pendingChunks = [];
+  t.pendingTotalBytes = 0;
+  t.pendingTextTail = '';
+  t.markerFilterCarry = new Uint8Array(0);
+  t.screenClearSeqCarry = new Uint8Array(0);
+  t.autoScroll = true;
+  try { t.term.clear(); } catch (_) {}
+  try { t.term.scrollToBottom(); } catch (_) {}
+}
+
+function resetAllLocalSessionHistory() {
+  sessions.forEach(s => {
+    s.first_message = '';
+    s.last_message = '';
+  });
+  terminals.forEach((_t, id) => resetTerminalHistoryForSession(id));
+  toolOutputs.clear();
+  approvalVisibleCache.clear();
+  multiQuestionVisibleCache.clear();
+  multiQuestionDismissedCache.clear();
+  sequentialChoiceCache.clear();
+  approvalRawOptionsCache.clear();
+  approvalSourceCache.clear();
+  approvalConsumedSigDeleteTimer.forEach(t => clearTimeout(t));
+  approvalConsumedSigDeleteTimer.clear();
+  approvalConsumedSig.clear();
+  approvalSwitchCandidates.clear();
+  batchSelections.clear();
+  approvalSuppressUntil.clear();
+  approvalAutoSwitchQueue.length = 0;
+  resetAllChatHistory();
+  hideActionBar(undefined);
+  setMultiQuestionBannerVisible(false);
+  if (activeSessionId !== null) {
+    renderToolOutputs(activeSessionId);
+    updateChatCountBadge();
+    if (typeof mountChatPaneForSession === 'function') mountChatPaneForSession(activeSessionId);
+  }
+  renderSessionList();
+}
+
+function resetLocalSessionHistory(id) {
+  const s = sessions.get(id);
+  if (s) {
+    s.first_message = '';
+    s.last_message = '';
+  }
+  resetTerminalHistoryForSession(id);
+  toolOutputs.delete(id);
+  approvalVisibleCache.delete(id);
+  if (multiQuestionVisibleCache.delete(id) && id === activeSessionId) {
+    setMultiQuestionBannerVisible(false);
+  }
+  multiQuestionDismissedCache.delete(id);
+  clearSequentialChoiceState(id);
+  approvalRawOptionsCache.delete(id);
+  approvalSourceCache.delete(id);
+  const sigTimer = approvalConsumedSigDeleteTimer.get(id);
+  if (sigTimer) clearTimeout(sigTimer);
+  approvalConsumedSigDeleteTimer.delete(id);
+  approvalConsumedSig.delete(id);
+  approvalSwitchCandidates.delete(id);
+  batchSelections.delete(id);
+  approvalSuppressUntil.delete(id);
+  removeApprovalAutoSwitchTarget(id);
+  resetChatHistoryForSession(id);
+  if (id === activeSessionId) {
+    hideActionBar(undefined);
+    renderToolOutputs(id);
+    updateChatCountBadge();
+    if (typeof mountChatPaneForSession === 'function') mountChatPaneForSession(id);
+  }
+  renderSessionList();
+}
+
 function removeLocalSession(id) {
   const timer = autoDismissTimers.get(id);
   if (timer) { clearTimeout(timer); autoDismissTimers.delete(id); }
+  try {
+    const mgr = window.multiPaneManager;
+    if (mgr && typeof mgr.onSessionRemoved === 'function') mgr.onSessionRemoved(id);
+  } catch (_) {}
   // sessions.delete より前に git/files タブの付け替えを試みる
   // （onSessionRemoved 内で sessionsRef を引いて代替を探すため、削除前の方が探しやすい）
   try { FilesTabManager.onSessionRemoved(id); } catch (_) {}
@@ -3851,6 +4100,7 @@ function removeLocalSession(id) {
   multiQuestionDismissedCache.delete(id);
   removeApprovalAutoSwitchTarget(id);
   approvalRawOptionsCache.delete(id);
+  approvalSourceCache.delete(id);
   approvalConsumedSig.delete(id);
   batchSelections.delete(id);
   clearSequentialChoiceState(id);
@@ -4001,7 +4251,59 @@ function updateSessionListActiveCard(id) {
   });
 }
 
+// C4: focusSlot → activateSession → focusSlot の無限ループ防止フラグ
+let _multiPaneFocusSyncing = false;
+
+/**
+ * C4: マルチペインのフォーカス切替用の軽量版 activateSession。
+ * シングルビュー固有の処理（ensureTerminal / attachTerminal / FilesTabManager 等）は
+ * 行わず、activeSessionId の更新と承認 UI 検出・サイドバー更新のみ実施する。
+ * multi-pane.js の focusSlot() から呼ばれる。
+ */
+function activateSessionForMultiPane(id) {
+  if (activeSessionId !== null && activeSessionId !== id) {
+    saveInputStateFor(activeSessionId);
+  }
+  activeSessionId = id;
+  restoreInputStateFor(id);
+  // 承認 UI をフォーカスセッション向きに更新
+  setMultiQuestionBannerVisible(!!multiQuestionVisibleCache.get(id));
+  detectApproval(id);
+  revealApprovalPromptForSession(id);
+  // サイドバーのアクティブカードを更新
+  updateSessionListActiveCard(id);
+  // チャット件数バッジ・セッション情報チップも更新
+  if (typeof updateChatCountBadge === 'function') updateChatCountBadge();
+  if (typeof renderSessionInfoChip === 'function') renderSessionInfoChip();
+}
+// multi-pane.js から参照できるよう window に公開
+window.activateSessionForMultiPane = activateSessionForMultiPane;
+
 function activateSession(id) {
+  // C4: マルチタブが開いているとき、外部からの activateSession 呼び出し（承認自動移動等）は
+  // 軽量版にリダイレクトし、シングルビュー固有の処理（attachTerminal 等）を実行しない。
+  // _multiPaneFocusSyncing フラグが立っているときは再帰防止のためスキップ。
+  if (!_multiPaneFocusSyncing) {
+    const multiView = document.getElementById('multi-view');
+    const mgr = window.multiPaneManager;
+    if (multiView && !multiView.hidden && mgr) {
+      // フォーカス対象スロットのインデックスを探す
+      const slotIdx = mgr.slots.findIndex(s => s && s.session && s.session.id === id);
+      _multiPaneFocusSyncing = true;
+      try {
+        if (slotIdx >= 0) {
+          // スロットが見つかった: フォーカスを移動（DOM + activeSessionId 更新）
+          mgr.focusSlot(slotIdx);
+        } else {
+          // スロット外のセッション（表示数超過）: activeSessionId のみ更新
+          activateSessionForMultiPane(id);
+        }
+      } finally {
+        _multiPaneFocusSyncing = false;
+      }
+      return;
+    }
+  }
   if (activeSessionId !== null && activeSessionId !== id) {
     saveInputStateFor(activeSessionId);
   }
@@ -4143,6 +4445,26 @@ document.addEventListener('keydown', (e) => {
   jumpToSessionByIndex(n);
 });
 
+// ─── C5: セッションカードクリック — マルチタブ時のフォーカス切替 ──────────
+function onSessionCardActivate(id) {
+  const multiView = document.getElementById('multi-view');
+  const isMultiOpen = multiView && !multiView.hidden;
+  if (isMultiOpen) {
+    // マルチタブが開いているとき: スロット内セッションへのフォーカス移動
+    const mgr = window.multiPaneManager;
+    if (mgr) {
+      const slotIdx = mgr.slots.findIndex(slot => slot && slot.session && slot.session.id === id);
+      if (slotIdx >= 0) {
+        mgr.focusSlot(slotIdx);
+      }
+      // スロット外（表示数超過）のセッションは何もしない
+    }
+    return;
+  }
+  // シングルビュー: 既存の動作
+  activateSession(id);
+}
+
 let _sessionListClickDelegated = false;
 let _sessionCardPointerDown = null;
 
@@ -4176,7 +4498,7 @@ function renderSessionList() {
       const id = parseInt(card.dataset.sessionId, 10);
       if (id !== down.id) return;
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
-      if (moved <= 8) activateSession(id);
+      if (moved <= 8) onSessionCardActivate(id);
     });
     root.addEventListener('click', (e) => {
       const card = e.target.closest('.card');
@@ -4197,7 +4519,7 @@ function renderSessionList() {
         return;
       }
       const id = parseInt(card.dataset.sessionId, 10);
-      if (!isNaN(id)) activateSession(id);
+      if (!isNaN(id)) onSessionCardActivate(id);
     });
     // branch バッジのキーボード操作 (Enter / Space)
     root.addEventListener('keydown', (e) => {
@@ -4467,10 +4789,28 @@ function renderSessionList() {
         const idx = favorites.indexOf(s.id);
         if (idx !== -1) { favorites.splice(idx, 1); } else { favorites.push(s.id); }
         saveFavorites();
+        // C5: マルチタブが開いているときはペインスロット順も更新
+        // render() → renderSessionList() の再帰を防ぐため _c5SidebarUpdating フラグを立てておく
+        const _mv = document.getElementById('multi-view');
+        if (_mv && !_mv.hidden && window.multiPaneManager) {
+          window._c5SidebarUpdating = true;
+          try { window.multiPaneManager.render(); }
+          finally { window._c5SidebarUpdating = false; }
+        }
         renderSessionList();
       };
       actions.appendChild(starBtn);
 
+
+      const resetBtn = document.createElement('button');
+      resetBtn.className = 'session-history-reset-btn';
+      resetBtn.textContent = '↺';
+      resetBtn.title = t('session_history_reset_tooltip');
+      resetBtn.onclick = (e) => {
+        e.stopPropagation();
+        requestSessionHistoryReset(s.id);
+      };
+      actions.appendChild(resetBtn);
 
       const xBtn = document.createElement('button');
       xBtn.className = 'dismiss-btn';
@@ -4488,47 +4828,123 @@ function renderSessionList() {
       });
       c.addEventListener('dragend', () => {
         c.classList.remove('dragging');
-        if (dragOverCardEl) { dragOverCardEl.classList.remove('drag-over'); dragOverCardEl = null; }
+        if (dragOverCardEl) {
+          dragOverCardEl.classList.remove('drag-over', 'drop-before', 'drop-after');
+          dragOverCardEl = null;
+        }
         setTimeout(() => inputEl.focus(), 0);
       });
       c.addEventListener('dragover', (e) => {
         if (dragSrcGroupKey) { e.dataTransfer.dropEffect = 'none'; return; }
         if (!dragSrcId || dragSrcId === s.id) return;
-        // グループ跨ぎは禁止（★→☆ / ☆→★）
-        if (favorites.includes(dragSrcId) !== favorites.includes(s.id)) { e.dataTransfer.dropEffect = 'none'; return; }
+        // C5: グループ跨ぎドロップを許可（★→非★ / 非★→★ の自動切替）
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         if (dragOverCardEl !== c) {
-          if (dragOverCardEl) dragOverCardEl.classList.remove('drag-over');
+          if (dragOverCardEl) dragOverCardEl.classList.remove('drag-over', 'drop-before', 'drop-after');
           dragOverCardEl = c;
-          c.classList.add('drag-over');
         }
+        // C5: 上半分 → drop-before、下半分 → drop-after
+        const rect = c.getBoundingClientRect();
+        const pos = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+        c.classList.remove('drag-over', 'drop-before', 'drop-after');
+        c.classList.add(pos === 'before' ? 'drop-before' : 'drop-after');
       });
-      c.addEventListener('dragleave', () => { c.classList.remove('drag-over'); });
+      c.addEventListener('dragleave', () => {
+        c.classList.remove('drag-over', 'drop-before', 'drop-after');
+      });
       c.addEventListener('drop', (e) => {
         e.preventDefault();
-        c.classList.remove('drag-over');
+        c.classList.remove('drag-over', 'drop-before', 'drop-after');
         if (!dragSrcId || dragSrcId === s.id) return;
-        if (favorites.includes(dragSrcId) !== favorites.includes(s.id)) return;
         const srcId = dragSrcId;
         dragSrcId = null;
-        if (favorites.includes(srcId)) {
-          const srcIdx = favorites.indexOf(srcId);
-          const dstIdx = favorites.indexOf(s.id);
-          favorites.splice(srcIdx, 1);
-          favorites.splice(dstIdx, 0, srcId);
-          saveFavorites();
+        // C5: ドロップ位置（上半分=before / 下半分=after）を判定
+        const rect = c.getBoundingClientRect();
+        const dropAfter = e.clientY >= rect.top + rect.height / 2;
+        const srcIsStarred = favorites.includes(srcId);
+        const dstIsStarred = favorites.includes(s.id);
+        if (srcIsStarred === dstIsStarred) {
+          // 同一グループ内の並び替え
+          if (srcIsStarred) {
+            const srcIdx = favorites.indexOf(srcId);
+            let dstIdx = favorites.indexOf(s.id);
+            favorites.splice(srcIdx, 1);
+            // srcIdx 削除後に dstIdx がずれる場合を補正
+            if (srcIdx < dstIdx) dstIdx--;
+            const insertAt = dropAfter ? dstIdx + 1 : dstIdx;
+            favorites.splice(insertAt, 0, srcId);
+            saveFavorites();
+          } else {
+            if (!sessionOrder.includes(srcId)) sessionOrder.push(srcId);
+            if (!sessionOrder.includes(s.id)) sessionOrder.push(s.id);
+            const srcIdx = sessionOrder.indexOf(srcId);
+            let dstIdx = sessionOrder.indexOf(s.id);
+            sessionOrder.splice(srcIdx, 1);
+            if (srcIdx < dstIdx) dstIdx--;
+            const insertAt = dropAfter ? dstIdx + 1 : dstIdx;
+            sessionOrder.splice(insertAt, 0, srcId);
+            saveSessionOrder();
+          }
         } else {
-          if (!sessionOrder.includes(srcId)) sessionOrder.push(srcId);
-          if (!sessionOrder.includes(s.id)) sessionOrder.push(s.id);
-          const srcIdx = sessionOrder.indexOf(srcId);
-          const dstIdx = sessionOrder.indexOf(s.id);
-          sessionOrder.splice(srcIdx, 1);
-          sessionOrder.splice(dstIdx, 0, srcId);
-          saveSessionOrder();
+          // C5: グループ跨ぎ → ★/非★ を自動切替
+          if (srcIsStarred) {
+            // ★ → 非★グループ: favorites から除外し、sessionOrder の dstId 位置に挿入
+            const favIdx = favorites.indexOf(srcId);
+            if (favIdx !== -1) favorites.splice(favIdx, 1);
+            saveFavorites();
+            if (!sessionOrder.includes(srcId)) sessionOrder.push(srcId);
+            if (!sessionOrder.includes(s.id)) sessionOrder.push(s.id);
+            const srcSoIdx = sessionOrder.indexOf(srcId);
+            let dstSoIdx = sessionOrder.indexOf(s.id);
+            sessionOrder.splice(srcSoIdx, 1);
+            if (srcSoIdx < dstSoIdx) dstSoIdx--;
+            const insertAt = dropAfter ? dstSoIdx + 1 : dstSoIdx;
+            sessionOrder.splice(insertAt, 0, srcId);
+            saveSessionOrder();
+          } else {
+            // 非★ → ★グループ: favorites の dstId 位置に挿入し、sessionOrder から除外
+            const soIdx = sessionOrder.indexOf(srcId);
+            if (soIdx !== -1) sessionOrder.splice(soIdx, 1);
+            saveSessionOrder();
+            let dstFavIdx = favorites.indexOf(s.id);
+            const insertAt = dropAfter ? dstFavIdx + 1 : dstFavIdx;
+            if (dstFavIdx !== -1) {
+              favorites.splice(insertAt, 0, srcId);
+            } else {
+              favorites.push(srcId);
+            }
+            saveFavorites();
+          }
+        }
+        // C5: マルチタブが開いているときはペインスロット順も更新
+        // render() → renderSessionList() の再帰を防ぐため _c5SidebarUpdating フラグを立てておく
+        const _mv = document.getElementById('multi-view');
+        if (_mv && !_mv.hidden && window.multiPaneManager) {
+          window._c5SidebarUpdating = true;
+          try { window.multiPaneManager.render(); }
+          finally { window._c5SidebarUpdating = false; }
         }
         renderSessionList();
       });
+
+      // C5: マルチタブが開いているとき、スロット内セッションに P<n> バッジを追加
+      const multiView = document.getElementById('multi-view');
+      const isMultiOpen = multiView && !multiView.hidden;
+      if (isMultiOpen) {
+        const mgr = window.multiPaneManager;
+        if (mgr && mgr.slots) {
+          const slotIdx = mgr.slots.findIndex(slot => slot && slot.session && slot.session.id === s.id);
+          if (slotIdx >= 0) {
+            c.classList.add('in-pane');
+            // スロット番号バッジ（P1 〜 P18）
+            const paneBadge = document.createElement('span');
+            paneBadge.className = 'sc-pane-badge';
+            paneBadge.textContent = `P${slotIdx + 1}`;
+            c.appendChild(paneBadge);
+          }
+        }
+      }
 
       body.appendChild(c);
     });
@@ -4537,12 +4953,59 @@ function renderSessionList() {
     root.appendChild(groupEl);
   });
 
+  // C5: ★/非★ グループ区切りラベルをサイドバーに追加
+  // （プロジェクトグループ化の後で、全体の先頭付近に挿入する）
+  _addSidebarGroupLabels(root);
+
   if (scrollEl) {
     const max = scrollEl.scrollHeight - scrollEl.clientHeight;
     scrollEl.scrollTop = Math.max(0, Math.min(prevScrollTop, max));
   }
 
   updateMainTabStatus();
+}
+
+// C5: ★/非★ グループ区切りラベルをサイドバー（#sessions）に挿入する。
+// renderSessionList() 後に呼ばれる。favorites に含まれるセッションを持つグループの
+// カードに .is-favorite-group クラスを付け、最初の非★グループの直前に区切りを挿入する。
+function _addSidebarGroupLabels(root) {
+  if (!root) return;
+  const hasAnyFav = favorites.length > 0 && Array.from(sessions.keys()).some(id => favorites.includes(id));
+  if (!hasAnyFav) return;
+  // 全 .card を走査して最初の非★カードの直前に区切りを挿入する。
+  // プロジェクトグループ構造の中に挿入するため、最初の非★セッションを含む
+  // .project-group-body を特定して、その直前（project-group 要素）の直前に区切りを置く。
+  const cards = root.querySelectorAll('.card');
+  let firstNonFavCard = null;
+  let firstFavCard = null;
+  for (const card of cards) {
+    const sid = parseInt(card.dataset.sessionId, 10);
+    if (isNaN(sid)) continue;
+    if (favorites.includes(sid)) {
+      if (!firstFavCard) firstFavCard = card;
+    } else {
+      if (!firstNonFavCard) firstNonFavCard = card;
+    }
+  }
+  if (!firstFavCard || !firstNonFavCard) return;
+
+  // ★グループラベル: #sessions の最初の子要素の直前に挿入
+  const firstChild = root.firstElementChild;
+  if (firstChild) {
+    const starLabel = document.createElement('div');
+    starLabel.className = 'sidebar-group-label';
+    starLabel.textContent = '★ ' + (window.t ? window.t('sidebar_favorites', 'Favorites') : 'Favorites');
+    root.insertBefore(starLabel, firstChild);
+  }
+
+  // 非★グループラベル: 最初の非★カードの所属する .project-group の直前に挿入
+  const nonFavGroup = firstNonFavCard.closest('.project-group');
+  if (nonFavGroup) {
+    const otherLabel = document.createElement('div');
+    otherLabel.className = 'sidebar-group-label';
+    otherLabel.textContent = window.t ? window.t('sidebar_others', 'Others') : 'Others';
+    root.insertBefore(otherLabel, nonFavGroup);
+  }
 }
 
 function updateMainTabStatus() {
@@ -4745,6 +5208,14 @@ function render() {
     return;
   }
   renderSessionList();
+  // C5: マルチタブが開いているときはペインスロット配列も更新
+  // （セッション削除などで slots が古くなった場合に P<n> バッジと整合させる）
+  const _mv5 = document.getElementById('multi-view');
+  if (_mv5 && !_mv5.hidden && window.multiPaneManager && !window._c5SidebarUpdating) {
+    window._c5SidebarUpdating = true;
+    try { window.multiPaneManager.render(); }
+    finally { window._c5SidebarUpdating = false; }
+  }
 }
 
 // ---- ファイル転送 (attach) ----
@@ -5683,7 +6154,7 @@ const sessionViewMode = new Map(); // sid -> 'terminal' | 'chat' | 'split' | 'fi
 // Files/Git の遅延ロード状態 (sid -> Set<'files'|'git'>)
 const sessionLazyLoaded = new Map();
 
-const VALID_TAB_NAMES = new Set(['terminal', 'chat', 'split', 'files', 'git']);
+const VALID_TAB_NAMES = new Set(['terminal', 'chat', 'split', 'files', 'git', 'multi']);
 // C5: lock の対象モード (Files/Git は lock 対象外: D10 の lazy 読み込みと相性が悪い)
 const LOCKABLE_MODES = new Set(['terminal', 'chat', 'split']);
 
@@ -5818,6 +6289,37 @@ function updateChatCountBadge() {
 let _setActiveTabRecursion = false;
 function setActiveTab(sid, name) {
   if (!VALID_TAB_NAMES.has(name)) return;
+
+  // マルチタブはセッション非依存のビュー: セッションなしでも動作させる
+  if (name === 'multi') {
+    const area = document.getElementById('display-area');
+    if (!area) return;
+    const multiView = document.getElementById('multi-view');
+    const mgr = window.multiPaneManager;
+    area.hidden = true;
+    if (multiView) multiView.hidden = false;
+    // scrollback を縮小（全セッション）
+    const scrollbackMulti = MULTI_SCROLLBACK();
+    sessions.forEach(s => {
+      const t = terminals.get(s.id);
+      if (t && t.term) { try { t.term.options.scrollback = scrollbackMulti; } catch (_) {} }
+    });
+    // render() → attachToSlot() で xterm をペインにアタッチ
+    if (mgr) mgr.render();
+    document.querySelectorAll('#unified-tab-bar .view-tab').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === 'multi');
+    });
+    if (mgr && mgr.picker) mgr.picker.toggle();
+    // C4: 最後にフォーカスしていたスロットを復元 → activeSessionId を同期
+    if (mgr) {
+      const restoreIdx = (mgr.focusedIdx >= 0 && mgr.focusedIdx < mgr.slots.length)
+        ? mgr.focusedIdx : 0;
+      mgr.focusSlot(restoreIdx);
+    }
+    if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
+    return;
+  }
+
   const targetSid = (sid !== null && sid !== undefined) ? sid : activeSessionId;
   if (targetSid === null || targetSid === undefined) return;
 
@@ -5829,6 +6331,31 @@ function setActiveTab(sid, name) {
 
   const area = document.getElementById('display-area');
   if (!area) return;
+  const multiView = document.getElementById('multi-view');
+  const mgr = window.multiPaneManager;
+
+  // ── 他タブへ切替: マルチビューを閉じる ──
+  const prevMultiOpen = (multiView && !multiView.hidden);
+  if (multiView) multiView.hidden = true;
+  if (mgr && mgr.picker) mgr.picker.hide();
+  // C3: マルチを離れたとき全スロットを detach し、アクティブセッションを #terminal-area に戻す
+  if (prevMultiOpen) {
+    // 全スロットを detach（xterm の container を宙ぶらりんに）
+    if (mgr) mgr.teardown();
+    // scrollback を標準値に戻す
+    sessions.forEach(s => {
+      const t = terminals.get(s.id);
+      if (t && t.term) {
+        try { t.term.options.scrollback = 1000; } catch (_) {}
+      }
+    });
+    // アクティブセッションの xterm を #terminal-area に再アタッチ
+    if (activeSessionId !== null && activeSessionId !== undefined) {
+      attachTerminal(activeSessionId);
+    }
+  }
+  area.hidden = false;
+
   area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git');
   area.classList.add('mode-' + name);
 
@@ -5940,7 +6467,95 @@ function rewireChatHistorySub(sid) {
 
 if (typeof window !== 'undefined') {
   window.setActiveTab = setActiveTab;
+  // C5: renderSessionList を multi-pane.js から呼び出せるよう公開（P<n> バッジ更新用）
+  window.renderSessionList = renderSessionList;
+  // getSortedSessions: multi-pane.js から呼び出せるよう公開
+  // C5: ★グループ（favorites）を先頭に、非★グループ（sessionOrder 順）を後に並べる
+  // sessions は app.js スコープの const なのでここで window に公開する
+  window.getSortedSessions = function () {
+    // ★グループ: favorites 配列の順序で並ぶ
+    const starredList = favorites
+      .filter(id => sessions.has(id))
+      .map(id => sessions.get(id));
+    // 非★グループ: sessionOrder の順序で並ぶ（favorites に含まれないもの）
+    const orderedIds = sessionOrder.filter(id => sessions.has(id) && !favorites.includes(id));
+    // sessionOrder に含まれていないセッション（新規など）は末尾に追加
+    sessions.forEach((s) => {
+      if (!favorites.includes(s.id) && !orderedIds.includes(s.id)) orderedIds.push(s.id);
+    });
+    const nonStarredList = orderedIds.map(id => sessions.get(id));
+    return [...starredList, ...nonStarredList];
+  };
+  // C3: multi-pane.js の attachToSlot から terminals / sendResize にアクセスするための公開
+  window.getTerminalEntry = function (id) { return terminals.get(id); };
+  window.sendResize = sendResize;
+  window.markTerminalManualScrollIntent = markTerminalManualScrollIntent;
 }
+
+// ─── C4: approvalUiAdapter.setApprovalVisible をラップしてマルチペインバッジを同期 ───
+// approval-ui.js は app.js より後にロードされるため、window.load 後にラップする。
+// これにより setApprovalVisible(id, true/false) が呼ばれるたびにバッジが更新される。
+window.addEventListener('load', function () {
+  const adapter = window.approvalUiAdapter;
+  if (!adapter || typeof adapter.setApprovalVisible !== 'function' || adapter._c4wrapped) return;
+  const orig = adapter.setApprovalVisible;
+  adapter.setApprovalVisible = function (id, visible, options) {
+    const result = orig.call(this, id, visible, options);
+    // マルチペインのバッジを更新（'waiting' または 'running'/'idle' に切り替え）
+    const mgr = window.multiPaneManager;
+    if (mgr && typeof mgr.updateSlotBadge === 'function') {
+      if (visible) {
+        mgr.updateSlotBadge(id, 'waiting');
+      } else {
+        const s = sessions.get(id);
+        const badgeStatus = (s && s.state === 'running') ? 'running' : 'standby';
+        mgr.updateSlotBadge(id, badgeStatus);
+      }
+    }
+    return result;
+  };
+  adapter._c4wrapped = true;
+});
+
+// ─── C2: バッファクリア機能 ──────────────────────────────────
+// マルチモード時の scrollback 上限（localStorage で変更可能）
+function MULTI_SCROLLBACK() {
+  return parseInt(localStorage.getItem('multiScrollback') ?? '150', 10);
+}
+
+function clearBuffer(session) {
+  if (!session) return;
+  // session はセッションオブジェクト。term は terminals Map から取得
+  const t = session.id !== undefined ? terminals.get(session.id) : null;
+  if (!t || !t.term) return;
+  try { t.term.clear(); } catch (_) {}
+  try { t.term.options.scrollback = MULTI_SCROLLBACK(); } catch (_) {}
+}
+
+
+(function wireBufClearBtn() {
+  const btn = document.getElementById('buf-clear-btn');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    // マルチモードのとき: フォーカスペインの _targetSession を使う
+    const mgr = window.multiPaneManager;
+    const multiView = document.getElementById('multi-view');
+    const isMultiOpen = multiView && !multiView.hidden;
+    if (isMultiOpen && btn._targetSession) {
+      clearBuffer(btn._targetSession);
+    } else if (isMultiOpen && mgr) {
+      // フォーカス未設定の場合は focusedIdx のセッションを使う
+      const slot = mgr.slots && mgr.slots[mgr.focusedIdx];
+      if (slot && slot.session) clearBuffer(slot.session);
+    } else {
+      // シングルモード: activeSession
+      if (activeSessionId !== null && activeSessionId !== undefined) {
+        const s = sessions.get(activeSessionId);
+        if (s) clearBuffer(s);
+      }
+    }
+  });
+})();
 
 // =========================================================================
 // C3: チャット履歴メッセージレンダリング本体
@@ -6954,9 +7569,35 @@ if (typeof window !== 'undefined') {
   // =====================================================================
   // 子 C4: ミニマップ
   // =====================================================================
+  let _filterBarResizeObserver = null;
+  function syncMinimapOffset() {
+    const pane = chatPane();
+    if (!pane) return;
+    const bar = pane.querySelector('.chat-filter-bar');
+    const h = (bar && !bar.hidden) ? Math.ceil(bar.getBoundingClientRect().height) : 0;
+    pane.style.setProperty('--chat-filter-bar-height', h + 'px');
+  }
+  function observeFilterBarForMinimap() {
+    const pane = chatPane();
+    if (!pane) return;
+    const bar = pane.querySelector('.chat-filter-bar');
+    if (!bar || bar.dataset.minimapResizeObserved === '1') {
+      syncMinimapOffset();
+      return;
+    }
+    bar.dataset.minimapResizeObserved = '1';
+    syncMinimapOffset();
+    if (typeof ResizeObserver !== 'undefined') {
+      if (!_filterBarResizeObserver) {
+        _filterBarResizeObserver = new ResizeObserver(() => syncMinimapOffset());
+      }
+      _filterBarResizeObserver.observe(bar);
+    }
+  }
   function ensureMinimap() {
     const pane = chatPane();
     if (!pane) return null;
+    observeFilterBarForMinimap();
     let mm = pane.querySelector('.minimap');
     if (!mm) {
       mm = document.createElement('div');

@@ -338,6 +338,9 @@
   "settings_idle_timeout_desc": "0 = never. AI sessions are terminated after this many minutes with no browser connected.",
   "settings_reconnect_grace": "Hub crash grace (min)",
   "settings_reconnect_grace_desc": "0 = disable reconnect. How long the wrapper keeps claude/codex alive while waiting for the Hub to come back after a crash. Terminates the PTY if the Hub does not return. Applies to NEW sessions only — running sessions keep the value they were spawned with.",
+  "session_history_reset_tooltip": "Reset display history for this session",
+  "session_history_reset_confirm": "Reset display history for this session? The running AI session will not be stopped.",
+  "session_history_reset_done": "Display history reset",
   "settings_file_open_title": "File Links",
   "settings_file_open_desc": "Text files open with the configured app; images and other files open with the OS default app.",
   "settings_file_open_app": "App to open text",
@@ -494,6 +497,8 @@
   "tab_split": "Split",
   "tab_files": "Files",
   "tab_git": "Git",
+  "tab_multi": "Multi",
+  "buf_clear_tooltip": "Clear buffer (erase scrollback)",
   "tab_chat_empty": "No history yet",
   "tab_files_lazy_tooltip": "Click to load (not fetched)",
   "tab_git_lazy_tooltip": "Click to load (not fetched)",
@@ -538,5 +543,7 @@
   "ollama_encoding_warn_title": "Encoding Warning",
   "ollama_encoding_warn_message": "PowerShell input encoding is not UTF-8. Japanese input to Ollama CLI may be garbled. Switch to UTF-8 for this session?",
   "ollama_encoding_utf8_session": "Use UTF-8 for this session",
-  "ollama_encoding_continue": "Continue anyway"
+  "ollama_encoding_continue": "Continue anyway",
+  "sidebar_favorites": "Favorites",
+  "sidebar_others": "Others"
 }

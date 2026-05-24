@@ -23,10 +23,13 @@
 
   function cacheApprovalOptions(id, options) {
     approvalRawOptionsCache.set(id, options);
+    const source = Array.isArray(options) && options[0] && options[0]._approvalSource;
+    if (source !== 'go_vt') approvalSourceCache.delete(id);
   }
 
   function clearApprovalOptions(id) {
     approvalRawOptionsCache.delete(id);
+    approvalSourceCache.delete(id);
   }
 
   function showOptions(bar, id, options, showExpand = false, forceStickToBottom = false) {

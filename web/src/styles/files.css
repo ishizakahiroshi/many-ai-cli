@@ -218,6 +218,73 @@
   background: #000;
 }
 
+/* ─── 複数選択移動ダイアログ ─────────────────────── */
+.files-move-dialog {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 0;
+  min-width: 260px;
+  max-width: 420px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+.files-move-dialog::backdrop {
+  background: rgba(0,0,0,0.4);
+}
+.files-move-dialog-title {
+  font-size: 0.85em;
+  color: var(--text-dim);
+  margin: 10px 12px 4px;
+}
+.files-move-dialog-list {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 80px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 4px 0;
+}
+.files-move-dialog-dir {
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 0.85em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.files-move-dialog-dir:hover { background: var(--bg-elev2); }
+.files-move-dialog-dir--selected {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.files-move-dialog-dir--selected:hover {
+  background: color-mix(in srgb, var(--accent) 36%, transparent);
+}
+.files-move-dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px 12px;
+}
+.files-move-dialog-buttons button {
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.85em;
+}
+.files-move-dialog-buttons button:hover { background: var(--bg-elev2); }
+.files-move-dialog-confirm:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-text, #fff);
+  border-color: var(--accent);
+}
+.files-move-dialog-confirm:disabled { opacity: 0.45; cursor: default; }
+
 /* ──────────────────────────────────────────────
    FilesPreview (右ペイン)
 ────────────────────────────────────────────── */

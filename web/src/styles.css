@@ -685,7 +685,8 @@ header {
 .dismiss-btn:hover { color: var(--danger); }
 
 /* お気に入りボタン */
-.star-btn {
+.star-btn,
+.session-history-reset-btn {
   position: static;
   background: none;
   appearance: none;
@@ -704,6 +705,7 @@ header {
 }
 .star-btn.starred { color: var(--warn); }
 .star-btn:hover { color: var(--warn); }
+.session-history-reset-btn:hover { color: var(--accent-text); }
 
 /* ドラッグ状態 */
 .card.dragging { opacity: 0.4; cursor: grabbing; }
@@ -1101,4 +1103,52 @@ header {
   }
 }
 
-/* moved to /styles/chat.css */
+/* ============================================================
+   C5: サイドバー並び替え + ★お気に入り
+   - 親 plan: docs/local/plan_multi-session-split.md §C5
+   ============================================================ */
+
+/* P<n> バッジ: スロット内セッションのカード右上に表示 */
+.sc-pane-badge {
+  font-size: 0.58rem;
+  color: var(--green);
+  font-weight: 700;
+  float: right;
+  margin-left: 4px;
+  letter-spacing: 0.03em;
+}
+
+/* スロット内セッションのカード */
+.card.in-pane {
+  border-left: 2px solid var(--green);
+}
+
+/* ドロップインジケータ（挿入位置の横線） */
+.card.drop-before { border-top: 2px solid var(--accent) !important; }
+.card.drop-after  { border-bottom: 2px solid var(--accent) !important; }
+
+/* ドラッグハンドル（左端 ::before） */
+.card[draggable=true]::before {
+  content: "⠿";
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 0.65rem;
+  opacity: 0;
+  transition: opacity 0.1s;
+  cursor: grab;
+  pointer-events: none;
+}
+.card[draggable=true]:hover::before { opacity: 0.5; }
+
+/* ★/非★ グループの区切りラベル */
+.sidebar-group-label {
+  font-size: 0.6rem;
+  color: var(--muted);
+  padding: 4px 8px 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  user-select: none;
+}

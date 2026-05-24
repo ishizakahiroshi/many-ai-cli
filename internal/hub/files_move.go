@@ -5,35 +5,189 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 )
 
 // filesMoveReq は POST /api/files-move のリクエスト body。
-//   - Src: 移動対象（ファイル or ディレクトリ）の絶対パス
-//   - DstDir: 移動先ディレクトリの絶対パス（最終パスは filepath.Join(DstDir, filepath.Base(Src))）
+//   - Src/DstDir: 単ファイルモード（後方互換）
+//   - Srcs/DstDir: 多ファイルモード（Srcs が空でない場合に優先）
 type filesMoveReq struct {
+	Src    string   `json:"src"`
+	DstDir string   `json:"dstDir"`
+	Srcs   []string `json:"srcs"`
+}
+
+type fileMoveResult struct {
 	Src    string `json:"src"`
-	DstDir string `json:"dstDir"`
+	NewAbs string `json:"newAbs,omitempty"`
+	Error  string `json:"error,omitempty"`
 }
 
 type filesMoveResp struct {
-	OK     bool   `json:"ok"`
-	Error  string `json:"error,omitempty"`
-	NewAbs string `json:"newAbs,omitempty"`
+	OK      bool             `json:"ok"`
+	Error   string           `json:"error,omitempty"`
+	NewAbs  string           `json:"newAbs,omitempty"`  // 単ファイル後方互換
+	Results []fileMoveResult `json:"results,omitempty"` // 多ファイル時
+}
+
+type fileMovePlan struct {
+	SrcClean string
+	NewPath  string
+	SrcInfo  os.FileInfo
+}
+
+// processSingleMove は src → dstDir への移動を実行する。
+// dstDir は呼び出し元で検証済みであること（存在・ディレクトリ・allowed roots）。
+func (s *Server) processSingleMove(src, dstDir, cwd, gitRoot string) fileMoveResult {
+	plan, res := s.planSingleMove(src, filepath.Clean(dstDir), cwd, gitRoot)
+	if res.Error != "" {
+		return res
+	}
+	if err := os.Rename(plan.SrcClean, plan.NewPath); err != nil {
+		return fileMoveResult{Src: src, Error: "rename failed: " + err.Error()}
+	}
+	return fileMoveResult{Src: src, NewAbs: plan.NewPath}
+}
+
+func (s *Server) planSingleMove(src, dstDirClean, cwd, gitRoot string) (fileMovePlan, fileMoveResult) {
+	if src == "" {
+		return fileMovePlan{}, fileMoveResult{Src: src, Error: "src is required"}
+	}
+	if !filepath.IsAbs(src) {
+		return fileMovePlan{}, fileMoveResult{Src: src, Error: "src must be an absolute path"}
+	}
+	if ok, _ := isPathUnderAllowedRoots(src, cwd, gitRoot); !ok {
+		return fileMovePlan{}, fileMoveResult{Src: src, Error: "forbidden: src is outside allowed roots"}
+	}
+	srcClean := filepath.Clean(src)
+
+	srcInfo, err := os.Lstat(srcClean)
+	if err != nil {
+		return fileMovePlan{}, fileMoveResult{Src: src, Error: "src not found: " + err.Error()}
+	}
+	srcParent := filepath.Dir(srcClean)
+	if pathsEqual(srcParent, dstDirClean) {
+		return fileMovePlan{}, fileMoveResult{Src: src, Error: "src is already in dstDir"}
+	}
+	if srcInfo.IsDir() {
+		if pathsEqual(srcClean, dstDirClean) || isUnder(dstDirClean, srcClean) {
+			return fileMovePlan{}, fileMoveResult{Src: src, Error: "cannot move a directory into itself or its descendant"}
+		}
+	}
+	newPath := filepath.Join(dstDirClean, filepath.Base(srcClean))
+	if _, err := os.Lstat(newPath); err == nil {
+		return fileMovePlan{}, fileMoveResult{Src: src, Error: "target already exists: " + newPath}
+	} else if !os.IsNotExist(err) {
+		return fileMovePlan{}, fileMoveResult{Src: src, Error: "target check failed: " + err.Error()}
+	}
+	return fileMovePlan{SrcClean: srcClean, NewPath: newPath, SrcInfo: srcInfo}, fileMoveResult{Src: src}
+}
+
+func (s *Server) processMultiMove(srcs []string, dstDirClean, cwd, gitRoot string) filesMoveResp {
+	results := make([]fileMoveResult, len(srcs))
+	plans := make([]fileMovePlan, len(srcs))
+	allOK := true
+	srcSeen := map[string]int{}
+	targetSeen := map[string]int{}
+
+	for i, src := range srcs {
+		results[i].Src = src
+		plan, res := s.planSingleMove(src, dstDirClean, cwd, gitRoot)
+		plans[i] = plan
+		if res.Error != "" {
+			results[i].Error = res.Error
+			allOK = false
+			continue
+		}
+		srcKey := movePathKey(plan.SrcClean)
+		if prev, ok := srcSeen[srcKey]; ok {
+			results[i].Error = "duplicate source path"
+			if results[prev].Error == "" {
+				results[prev].Error = "duplicate source path"
+			}
+			allOK = false
+		} else {
+			srcSeen[srcKey] = i
+		}
+		targetKey := movePathKey(plan.NewPath)
+		if prev, ok := targetSeen[targetKey]; ok {
+			results[i].Error = "multiple sources would overwrite the same target: " + plan.NewPath
+			if results[prev].Error == "" {
+				results[prev].Error = "multiple sources would overwrite the same target: " + plan.NewPath
+			}
+			allOK = false
+		} else {
+			targetSeen[targetKey] = i
+		}
+	}
+
+	for i := range plans {
+		if plans[i].SrcClean == "" || !plans[i].SrcInfo.IsDir() {
+			continue
+		}
+		for j := range plans {
+			if i == j || plans[j].SrcClean == "" {
+				continue
+			}
+			if !pathsEqual(plans[i].SrcClean, plans[j].SrcClean) && isUnder(plans[j].SrcClean, plans[i].SrcClean) {
+				if results[i].Error == "" {
+					results[i].Error = "cannot move a directory together with one of its descendants"
+				}
+				if results[j].Error == "" {
+					results[j].Error = "cannot move a path together with its ancestor directory"
+				}
+				allOK = false
+			}
+		}
+	}
+
+	if !allOK {
+		return filesMoveResp{OK: false, Error: "move preflight failed", Results: results}
+	}
+
+	completed := make([]fileMovePlan, 0, len(plans))
+	for i, plan := range plans {
+		if err := os.Rename(plan.SrcClean, plan.NewPath); err != nil {
+			results[i].Error = "rename failed: " + err.Error()
+			rollbackErrs := rollbackMoves(completed)
+			errMsg := results[i].Error
+			if len(rollbackErrs) > 0 {
+				errMsg += "; rollback failed: " + strings.Join(rollbackErrs, "; ")
+			}
+			return filesMoveResp{OK: false, Error: errMsg, Results: results}
+		}
+		completed = append(completed, plan)
+	}
+	for i, plan := range plans {
+		results[i].NewAbs = plan.NewPath
+	}
+
+	return filesMoveResp{OK: true, Results: results}
+}
+
+func rollbackMoves(plans []fileMovePlan) []string {
+	errs := []string{}
+	for i := len(plans) - 1; i >= 0; i-- {
+		plan := plans[i]
+		if err := os.Rename(plan.NewPath, plan.SrcClean); err != nil {
+			errs = append(errs, plan.NewPath+" -> "+plan.SrcClean+": "+err.Error())
+		}
+	}
+	return errs
+}
+
+func movePathKey(path string) string {
+	cleaned := filepath.Clean(path)
+	if runtime.GOOS == "windows" {
+		return strings.ToLower(cleaned)
+	}
+	return cleaned
 }
 
 // handleFilesMove は POST /api/files-move を処理する。
-// src を dstDir 配下へ os.Rename で移動する。
-// 検証:
-//  1. token
-//  2. method (POST)
-//  3. 両パスが絶対
-//  4. src 存在、dstDir 存在＆ディレクトリ
-//  5. 両パスが allowed roots（cwd または gitRoot）配下
-//  6. src と dstDir が同一ディレクトリでない（no-op 拒否）
-//  7. dstDir が src 自身または src の配下でない（自己への移動禁止）
-//  8. 移動先（dstDir/basename(src)）が既存でない（上書き禁止）
+// 単ファイルモード（src/dstDir）と多ファイルモード（srcs/dstDir）の両方をサポートする。
 func (s *Server) handleFilesMove(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("token") != s.cfg.Token {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -51,14 +205,6 @@ func (s *Server) handleFilesMove(w http.ResponseWriter, r *http.Request) {
 		writeMoveErr(w, "bad request: "+err.Error())
 		return
 	}
-	if req.Src == "" || req.DstDir == "" {
-		writeMoveErr(w, "src and dstDir are required")
-		return
-	}
-	if !filepath.IsAbs(req.Src) || !filepath.IsAbs(req.DstDir) {
-		writeMoveErr(w, "src and dstDir must be absolute paths")
-		return
-	}
 
 	// cwd の決定: ?session=<id> があればそのセッションの CWD を使用
 	cwd := s.hubCWD
@@ -73,24 +219,20 @@ func (s *Server) handleFilesMove(w http.ResponseWriter, r *http.Request) {
 	}
 	gitRoot := findGitRoot(cwd)
 
-	// allowed roots 配下チェック
-	if ok, _ := isPathUnderAllowedRoots(req.Src, cwd, gitRoot); !ok {
-		writeMoveErr(w, "forbidden: src is outside allowed roots")
+	// dstDir の共通バリデーション
+	if req.DstDir == "" {
+		writeMoveErr(w, "dstDir is required")
+		return
+	}
+	if !filepath.IsAbs(req.DstDir) {
+		writeMoveErr(w, "dstDir must be an absolute path")
 		return
 	}
 	if ok, _ := isPathUnderAllowedRoots(req.DstDir, cwd, gitRoot); !ok {
 		writeMoveErr(w, "forbidden: dstDir is outside allowed roots")
 		return
 	}
-
-	srcClean := filepath.Clean(req.Src)
 	dstDirClean := filepath.Clean(req.DstDir)
-
-	srcInfo, err := os.Lstat(srcClean)
-	if err != nil {
-		writeMoveErr(w, "src not found: "+err.Error())
-		return
-	}
 	dstDirInfo, err := os.Stat(dstDirClean)
 	if err != nil {
 		writeMoveErr(w, "dstDir not found: "+err.Error())
@@ -101,33 +243,23 @@ func (s *Server) handleFilesMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 同一ディレクトリへの no-op
-	srcParent := filepath.Dir(srcClean)
-	if pathsEqual(srcParent, dstDirClean) {
-		writeMoveErr(w, "src is already in dstDir")
+	// 多ファイルモード (Srcs)
+	if len(req.Srcs) > 0 {
+		_ = json.NewEncoder(w).Encode(s.processMultiMove(req.Srcs, dstDirClean, cwd, gitRoot))
 		return
 	}
 
-	// src 自身または src の配下に dstDir を入れようとする操作を禁止
-	if srcInfo.IsDir() {
-		if pathsEqual(srcClean, dstDirClean) || isUnder(dstDirClean, srcClean) {
-			writeMoveErr(w, "cannot move a directory into itself or its descendant")
-			return
-		}
-	}
-
-	newPath := filepath.Join(dstDirClean, filepath.Base(srcClean))
-	if _, err := os.Lstat(newPath); err == nil {
-		writeMoveErr(w, "target already exists: "+newPath)
+	// 単ファイルモード（後方互換）
+	if req.Src == "" {
+		writeMoveErr(w, "src or srcs is required")
 		return
 	}
-
-	if err := os.Rename(srcClean, newPath); err != nil {
-		writeMoveErr(w, "rename failed: "+err.Error())
+	res := s.processSingleMove(req.Src, req.DstDir, cwd, gitRoot)
+	if res.Error != "" {
+		writeMoveErr(w, res.Error)
 		return
 	}
-
-	_ = json.NewEncoder(w).Encode(filesMoveResp{OK: true, NewAbs: newPath})
+	_ = json.NewEncoder(w).Encode(filesMoveResp{OK: true, NewAbs: res.NewAbs})
 }
 
 func writeMoveErr(w http.ResponseWriter, msg string) {
