@@ -515,6 +515,7 @@
       <!-- D11: セッション情報チップ (セッションカードと同じ provider chip + model + status) -->
       <span class="session-info-chip" id="session-info-chip" hidden></span>
       <button class="view-tab active" data-tab="terminal" type="button"><span>🖥</span> <span data-i18n="tab_terminal">ターミナル</span></button>
+      <button class="view-tab" data-tab="multi" id="tab-multi" type="button"><span>⊞</span> <span data-i18n="tab_multi">マルチ</span><span class="multi-layout-badge" id="multi-tab-layout-badge">2×2</span></button>
       <button class="view-tab" data-tab="chat" type="button"><span>💬</span> <span data-i18n="tab_chat">チャット履歴</span> <span class="badge" id="chat-count-badge">0</span></button>
       <button class="view-tab" data-tab="split" type="button"><span>⇿</span> <span data-i18n="tab_split">分割</span></button>
       <button class="view-tab lazy" data-tab="files" type="button" data-i18n-tooltip="tab_files_lazy_tooltip"><span>📁</span> <span data-i18n="tab_files">Files</span></button>
@@ -526,6 +527,15 @@
       </span>
       <!-- 旧 #main-tab-bar / #main-tab-list: FilesTabManager の DOM 状態保持用に残置(非表示) -->
       <div id="main-tab-bar" hidden><div id="main-tab-list"></div></div>
+    </div>
+    <!-- グリッドピッカードロップダウン（position:fixed でタブバー外に配置） -->
+    <div id="grid-picker-popup" hidden>
+      <div class="picker-title">レイアウトを選択</div>
+      <div class="picker-grid" id="picker-grid"><!-- JS で 6×3 セル生成 --></div>
+      <div id="picker-hover-label"></div>
+      <div class="picker-presets">
+        <!-- JS で 2/4/6/9/12/18 プリセットボタン生成 -->
+      </div>
     </div>
     <!-- C2: display-area (タブ切替で中身が入れ替わる範囲) -->
     <div id="display-area" class="mode-terminal">
@@ -559,6 +569,10 @@
     </div>
     <div id="git-pane"></div>
     </div><!-- /#display-area -->
+    <!-- マルチビューコンテナ（#display-area の兄弟, マルチタブ選択時のみ表示） -->
+    <div id="multi-view" hidden>
+      <!-- JS で .pane-slot を動的生成 -->
+    </div>
     <!-- D7/D8: 共有 action-bar (display-area 外, input の上) -->
     <div id="action-bar"></div>
     <div id="multi-question-banner" hidden data-i18n="multi_question_banner"></div>
@@ -600,6 +614,7 @@
               <button id="quick-clear-btn" class="quick-cmd-btn" data-i18n-tooltip="quick_clear_tooltip">/clear</button>
               <button id="quick-model-btn" class="quick-cmd-btn" data-i18n-tooltip="quick_model_tooltip">/model</button>
               <button id="slash-picker-btn" class="quick-cmd-btn" data-i18n-tooltip="slash_picker_tooltip">/ ▾</button>
+              <button id="buf-clear-btn" class="quick-cmd-btn" data-i18n-tooltip="buf_clear_tooltip">⌫</button>
             </div>
           </div>
         </div>
@@ -756,6 +771,7 @@
   <script src="/vendor/purify.min.js"></script>
   <script src="/vendor/highlight.min.js"></script>
   <script src="/i18n.js"></script>
+  <script src="/app/multi-pane.js"></script>
   <script src="/app.js"></script>
   <script src="/app/approval-parser.js"></script>
   <script src="/app/approval-ui.js"></script>

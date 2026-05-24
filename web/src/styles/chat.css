@@ -149,6 +149,9 @@
   cursor: pointer;
   text-decoration: none;
   word-break: break-all;
+  /* 折り返し時に各行フラグメントを独立したバッジとして装飾 */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 #chat-pane .path-link:hover {
   background: rgba(99,102,241,0.25);
@@ -302,10 +305,9 @@
 }
 #chat-pane .msg.user .bubble-footer { justify-content: flex-end; }
 #chat-pane .bubble-actions {
-  display: none;
+  display: inline-flex;
   gap: 3px;
 }
-#chat-pane .bubble-wrap:hover .bubble-actions { display: inline-flex; }
 #chat-pane .msg-action {
   width: 26px;
   height: 22px;
@@ -474,17 +476,17 @@
 
 /* ミニマップ */
 #chat-pane .chat-timeline {
-  padding-right: 46px; /* minimap 用余白 */
+  padding-right: 30px; /* minimap 用余白 */
 }
 #chat-pane .minimap {
   position: absolute;
-  top: 52px;
+  top: calc(var(--chat-filter-bar-height, 52px) + 8px);
   bottom: 10px;
-  right: 0;
-  width: 32px;
+  right: 6px;
+  width: 16px;
   background: rgba(15, 19, 32, 0.85);
-  border-radius: 6px;
-  padding: 6px 4px;
+  border-radius: 5px;
+  padding: 5px 3px;
   display: flex;
   flex-direction: column;
   gap: 3px;

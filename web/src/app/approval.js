@@ -235,6 +235,10 @@ function trackApprovalHintFromChunk(id, bytes) {
   }
   if (!seqPrompts) clearSequentialChoiceState(id);
 
+  if (isGoNativeApprovalActive(id)) {
+    return;
+  }
+
   // フォールバック検出（既存）
   let extraction = extractApprovalOptions(lines);
   const options = extraction.options;
@@ -362,6 +366,99 @@ function trackApprovalHintFromChunk(id, bytes) {
 function scheduleApprovalCheck(id) {
   if (approvalCheckTimer) clearTimeout(approvalCheckTimer);
   approvalCheckTimer = setTimeout(() => detectApproval(id), 300);
+}
+
+function normalizeGoApprovalOptions(rawOptions) {
+  return (Array.isArray(rawOptions) ? rawOptions : [])
+    .map((opt) => ({
+      num: Number(opt.num),
+      label: String(opt.label || '').trim(),
+      isCurrent: !!opt.is_current,
+      preserveOrder: !!opt.preserve_order,
+      _sendText: opt.send_text || undefined,
+    }))
+    .filter((opt) => Number.isFinite(opt.num) && opt.label);
+}
+
+function isGoNativeApprovalActive(id) {
+  const src = approvalSourceCache.get(id);
+  return !!(src && src.source === 'go_vt' && approvalVisibleCache.get(id));
+}
+
+function handleGoApprovalDetected(message) {
+  const id = message && message.session_id;
+  if (!id) return;
+  const options = normalizeGoApprovalOptions(message.approval_options);
+  if (options.length === 0) return;
+  const sig = String(message.approval_sig || approvalSig(options));
+  options.forEach((opt) => {
+    opt._approvalSource = 'go_vt';
+    opt._approvalSig = sig;
+  });
+
+  cancelApprovalHintConfirm(id);
+  approvalSwitchCandidates.delete(id);
+  approvalConsumedSig.delete(id);
+  approvalUiAdapter.cacheApprovalOptions(id, options);
+  approvalSourceCache.set(id, {
+    source: 'go_vt',
+    sig,
+    kind: message.approval_kind || 'native',
+    detectedAt: message.detected_at || '',
+  });
+
+  const wasVisible = !!approvalVisibleCache.get(id);
+  approvalUiAdapter.setApprovalVisible(id, true, { sound: !wasVisible });
+  if (id === activeSessionId) {
+    const bar = document.getElementById('action-bar');
+    if (bar) approvalUiAdapter.showOptions(bar, id, options, false, !wasVisible);
+  }
+}
+
+function handleGoApprovalCleared(message) {
+  const id = message && message.session_id;
+  if (!id) return;
+  const src = approvalSourceCache.get(id);
+  if (!src || src.source !== 'go_vt') return;
+  if (message.approval_sig && src.sig && message.approval_sig !== src.sig) return;
+  approvalSourceCache.delete(id);
+  approvalUiAdapter.clearApprovalOptions(id);
+  approvalSwitchCandidates.delete(id);
+  cancelApprovalHintConfirm(id);
+  if (approvalVisibleCache.get(id)) {
+    approvalUiAdapter.setApprovalVisible(id, false);
+  }
+  if (id === activeSessionId) {
+    hideActionBar(id);
+  }
+}
+
+function sendApprovalConsumed(sessionId, options, sentText) {
+  const src = approvalSourceCache.get(sessionId);
+  if (!src || src.source !== 'go_vt' || !src.sig) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({
+    type: 'approval_consumed',
+    session_id: sessionId,
+    approval_sig: src.sig,
+    approval_source: 'go_vt',
+    sent_text: sentText || '',
+  }));
+  if (options) approvalConsumedSig.set(sessionId, approvalSig(options));
+}
+
+function maybeSendDirectApprovalConsumed(sessionId, rawText, sentText) {
+  const src = approvalSourceCache.get(sessionId);
+  if (!src || src.source !== 'go_vt') return;
+  const cached = approvalRawOptionsCache.get(sessionId);
+  if (!Array.isArray(cached) || isBatchOptions(cached)) return;
+  const trimmed = String(rawText || '').trim();
+  const matched = cached.find((opt) => {
+    if (!opt) return false;
+    const optSend = opt._sendText || `${opt.num}`;
+    return trimmed === String(opt.num) || trimmed === String(optSend).trim();
+  });
+  if (matched) sendApprovalConsumed(sessionId, cached, sentText);
 }
 
 // ---- クランチ（折りたたみ）検出 ----
@@ -519,6 +616,14 @@ function detectApproval(id) {
     return;
   }
   if (!seqPrompts) clearSequentialChoiceState(id);
+
+  if (isGoNativeApprovalActive(id)) {
+    const cached = approvalRawOptionsCache.get(id);
+    if (cached && cached.length > 0) {
+      approvalUiAdapter.showOptions(bar, id, cached, false);
+      return;
+    }
+  }
 
   // フォールバック検出: pendingTextTail を使う（scanBuffer は履歴を保持するため
   // hideActionBar 後も古い選択肢を再検出してしまう）
@@ -710,6 +815,7 @@ function hideActionBar(id) {
     // （H9: 非対称スタック対策 — plan_action-bar-not-showing.md §7.1）
     if (wasVisible) {
       approvalUiAdapter.clearApprovalOptions(id);
+      approvalSourceCache.delete(id);
       const t = terminals.get(id);
       if (t) t.pendingTextTail = '';
     }
@@ -1018,6 +1124,7 @@ function sendBatchChoices(sessionId) {
     text = selections.join(' ');
   }
   if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
+  sendApprovalConsumed(sessionId, prevOpts, text);
   sendSubmittedText(sessionId, `${text}\r`);
   hideActionBar(sessionId);
   approvalSuppressUntil.set(sessionId, Date.now() + 400);
@@ -1128,10 +1235,11 @@ function sendChoice(sessionId, targetNum) {
       label: targetOpt ? (targetOpt.label || null) : null,
     },
   });
-  sendSubmittedText(sessionId, choiceText);
   // doSend と同様に消費済み署名を記録（Ink 再描画による同一ブロックの再検出・再表示を防ぐ）
   const prevOpts = cachedOpts;
   if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
+  sendApprovalConsumed(sessionId, prevOpts, choiceText);
+  sendSubmittedText(sessionId, choiceText);
   hideActionBar(sessionId);
   // PTY エコーバックによる誤再表示を短時間抑制（approvalConsumedSig が同一選択肢の再検出を防ぐため短くてよい）
   approvalSuppressUntil.set(sessionId, Date.now() + 400);

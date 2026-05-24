@@ -37,6 +37,18 @@ type Message struct {
 	// session_hint で UI 側から送る「承認 UI が可視」フラグ。
 	ApprovalVisible bool `json:"approval_visible,omitempty"`
 
+	// approval_detected / approval_cleared / approval_consumed:
+	// Go 側 VT バッファから検出した native approval prompt の通知と、
+	// UI 側で回答済みになった prompt の再検出抑止に使う。
+	ApprovalSig      string           `json:"approval_sig,omitempty"`
+	ApprovalKind     string           `json:"approval_kind,omitempty"`
+	ApprovalSource   string           `json:"approval_source,omitempty"`
+	ApprovalQuestion string           `json:"approval_question,omitempty"`
+	ApprovalContext  string           `json:"approval_context,omitempty"`
+	ApprovalOptions  []ApprovalOption `json:"approval_options,omitempty"`
+	SentText         string           `json:"sent_text,omitempty"`
+	DetectedAt       string           `json:"detected_at,omitempty"`
+
 	// LastOutputAt: PTY 出力が最後に届いた時刻（ISO 8601 / RFC 3339）。
 	// session_update で standby/waiting 遷移時に付与し、UI カードに「最終応答時刻」として表示する。
 	LastOutputAt string `json:"last_output_at,omitempty"`
@@ -75,4 +87,12 @@ type Message struct {
 	// Hub は replay 時にアクティブセッションは全量、非アクティブは末尾に絞って送信する。
 	// 0 の場合はアクティブセッション不明として扱う。
 	UIActiveSessionID int `json:"ui_active_session_id,omitempty"`
+}
+
+type ApprovalOption struct {
+	Num           int    `json:"num,omitempty"`
+	Label         string `json:"label,omitempty"`
+	IsCurrent     bool   `json:"is_current,omitempty"`
+	SendText      string `json:"send_text,omitempty"`
+	PreserveOrder bool   `json:"preserve_order,omitempty"`
 }

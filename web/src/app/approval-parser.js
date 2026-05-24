@@ -315,6 +315,7 @@
       seen.add(key);
       return true;
     });
+    if (uniqueOptions.length < 2) return { options: [], cluster: null };
     return {
       options: uniqueOptions,
       cluster: { start: clusterStart, end: clusterEnd },

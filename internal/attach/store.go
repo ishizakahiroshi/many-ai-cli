@@ -24,7 +24,7 @@ func detectExt(data []byte) string {
 	}
 }
 
-// Save writes data to baseDir/<sessionID>/<YYYYMMDDHHmmss><ext> and returns
+// Save writes data to baseDir/<sessionID>/<YYYYMMDDHHmmss_NNNNNNNNN><ext> and returns
 // the absolute file path and a provider-specific inject string.
 // filename is the original file name; its extension takes priority over magic-byte detection.
 func Save(baseDir string, sessionID int, provider string, data []byte, filename string) (path, inject string, err error) {
@@ -38,11 +38,32 @@ func Save(baseDir string, sessionID int, provider string, data []byte, filename 
 		ext = detectExt(data)
 	}
 
-	savedName := time.Now().Format("20060102150405") + ext
-	abs := filepath.Join(dir, savedName)
-
-	if err = os.WriteFile(abs, data, 0o600); err != nil {
-		return "", "", fmt.Errorf("attach.Save: write %s: %w", abs, err)
+	now := time.Now()
+	baseName := fmt.Sprintf("%s_%09d", now.Format("20060102150405"), now.Nanosecond())
+	var abs string
+	for i := 0; ; i++ {
+		savedName := baseName + ext
+		if i > 0 {
+			savedName = fmt.Sprintf("%s_%d%s", baseName, i, ext)
+		}
+		abs = filepath.Join(dir, savedName)
+		f, openErr := os.OpenFile(abs, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if os.IsExist(openErr) {
+			continue
+		}
+		if openErr != nil {
+			return "", "", fmt.Errorf("attach.Save: create %s: %w", abs, openErr)
+		}
+		if _, err = f.Write(data); err != nil {
+			_ = f.Close()
+			_ = os.Remove(abs)
+			return "", "", fmt.Errorf("attach.Save: write %s: %w", abs, err)
+		}
+		if err = f.Close(); err != nil {
+			_ = os.Remove(abs)
+			return "", "", fmt.Errorf("attach.Save: close %s: %w", abs, err)
+		}
+		break
 	}
 
 	switch provider {

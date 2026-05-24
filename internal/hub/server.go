@@ -35,13 +35,15 @@ import (
 // maxPTYBuf: UI 再接続時リプレイ用の PTY バッファ上限（セッションごと）。
 // uiPingInterval: UI WebSocket keepalive ping の送信間隔。
 const (
-	idleAfter           = 500 * time.Millisecond
-	tickerInterval      = 200 * time.Millisecond
-	maxPTYBuf           = 512 * 1024 // 512 KB
+	idleAfter              = 500 * time.Millisecond
+	tickerInterval         = 200 * time.Millisecond
+	maxPTYBuf              = 512 * 1024 // 512 KB
 	replayTailForNonActive = 64 * 1024  // 64 KB: 非アクティブセッションの UI 接続時 replay 上限
-	uiPingInterval      = 30 * time.Second
-	branchLookupTimeout = 250 * time.Millisecond
-	branchRefreshAfter  = 2 * time.Second
+	uiPingInterval         = 30 * time.Second
+	branchLookupTimeout    = 250 * time.Millisecond
+	branchRefreshAfter     = 2 * time.Second
+	vtResizeDebounce       = 200 * time.Millisecond
+	approvalConsumedTTL    = 10 * time.Second
 
 	// OSC シーケンスをユーザーターン境界マーカーとして ptyBuf に注入する。
 	// xterm.js はこのシーケンスを画面に表示しない。
@@ -85,6 +87,13 @@ type session struct {
 
 	// JSON 外: UI 再接続時リプレイ用リングバッファ（末尾 maxPTYBuf bytes）
 	ptyBuf []byte
+
+	// JSON 外: Go 側 native approval 検出用 VT バッファ。
+	vt                       *vtBuffer
+	vtResizeDebounceUntil    time.Time
+	nativeApprovalSig        string
+	nativeApprovalConsumed   string
+	nativeApprovalConsumedAt time.Time
 
 	// JSON 外: wrapper に最後に送った PTY サイズ（同サイズの resize を skip して不要な SIGWINCH を防ぐ）
 	lastCols int
@@ -576,6 +585,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	}
 	s.mu.Lock()
 	ses.lastCols, ses.lastRows = initCols, initRows
+	ses.vt = newVTBuffer(initCols, initRows)
 	s.mu.Unlock()
 	_ = websocket.JSON.Send(conn, proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath})
 	s.logger.Info("session registered", "id", id, "provider", reg.Provider, "cwd", reg.CWD, "pid", reg.PID)
@@ -673,11 +683,15 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		lastOutputAt:    lastOutputAtTime,
 		branchCheckedAt: now,
 		ptyBuf:          replay,
+		vt:              newVTBuffer(req.Cols, req.Rows),
 		lastCols:        req.Cols,
 		lastRows:        req.Rows,
 		LogPath:         rawLogPath,
 		JSONLPath:       jsonlPath,
 		History:         history,
+	}
+	if s.sessions[acceptedID].vt != nil && len(replay) > 0 {
+		s.sessions[acceptedID].vt.Write(replay)
 	}
 	s.wrappers[acceptedID] = conn
 	if s.nextID < acceptedID {
@@ -723,15 +737,28 @@ func (s *Server) wrapperMessageLoop(conn *websocket.Conn, id int) {
 				"data_b64":   sessionlog.EncodeBase64(m.Data),
 				"text":       sessionlog.StripANSI(string(m.Data)),
 			})
+			var provider string
+			var vtLines []string
+			var debounceUntil time.Time
 			s.mu.Lock()
 			if ses := s.sessions[id]; ses != nil {
 				ses.ptyBuf = append(ses.ptyBuf, m.Data...)
 				if len(ses.ptyBuf) > maxPTYBuf {
 					ses.ptyBuf = ses.ptyBuf[len(ses.ptyBuf)-maxPTYBuf:]
 				}
+				if ses.vt == nil {
+					ses.vt = newVTBuffer(ses.lastCols, ses.lastRows)
+				}
+				ses.vt.Write(m.Data)
+				vtLines = ses.vt.TailLines(120)
+				provider = ses.Provider
+				debounceUntil = ses.vtResizeDebounceUntil
 			}
 			s.mu.Unlock()
 			s.broadcast(m)
+			if provider != "" && time.Now().After(debounceUntil) {
+				s.handleNativeApprovalDetection(id, detectNativeApproval(provider, vtLines))
+			}
 			s.markRunning(id)
 			s.detectModelChange(id, m.Data)
 		case "session_end":
@@ -802,6 +829,92 @@ func (s *Server) wrapperMessageLoop(conn *websocket.Conn, id int) {
 		}
 	}
 	s.broadcast(proto.Message{Type: "session_end", SessionID: id, State: endState, Reason: endReason})
+}
+
+func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval) {
+	now := time.Now()
+	var msg *proto.Message
+	s.mu.Lock()
+	ses := s.sessions[id]
+	if ses == nil {
+		s.mu.Unlock()
+		return
+	}
+	if now.Before(ses.vtResizeDebounceUntil) {
+		s.mu.Unlock()
+		return
+	}
+	if approval == nil {
+		if ses.nativeApprovalSig != "" {
+			sig := ses.nativeApprovalSig
+			ses.nativeApprovalSig = ""
+			msg = &proto.Message{
+				Type:           "approval_cleared",
+				SessionID:      id,
+				Provider:       ses.Provider,
+				ApprovalSig:    sig,
+				ApprovalSource: approvalSourceGoVT,
+			}
+		}
+		s.mu.Unlock()
+		if msg != nil {
+			s.broadcast(*msg)
+		}
+		return
+	}
+	if ses.nativeApprovalConsumed == approval.Sig && now.Sub(ses.nativeApprovalConsumedAt) < approvalConsumedTTL {
+		s.mu.Unlock()
+		return
+	}
+	if ses.nativeApprovalSig != approval.Sig {
+		ses.nativeApprovalSig = approval.Sig
+		msg = &proto.Message{
+			Type:             "approval_detected",
+			SessionID:        id,
+			Provider:         ses.Provider,
+			ApprovalSig:      approval.Sig,
+			ApprovalKind:     approval.Kind,
+			ApprovalSource:   approvalSourceGoVT,
+			ApprovalQuestion: approval.Question,
+			ApprovalContext:  approval.Context,
+			ApprovalOptions:  approval.Options,
+			DetectedAt:       now.Format(time.RFC3339),
+		}
+	}
+	s.mu.Unlock()
+	if msg != nil {
+		s.broadcast(*msg)
+	}
+}
+
+func (s *Server) markNativeApprovalConsumed(m proto.Message) {
+	if m.SessionID <= 0 || m.ApprovalSig == "" {
+		return
+	}
+	now := time.Now()
+	var clearMsg *proto.Message
+	s.mu.Lock()
+	ses := s.sessions[m.SessionID]
+	if ses == nil {
+		s.mu.Unlock()
+		return
+	}
+	ses.nativeApprovalConsumed = m.ApprovalSig
+	ses.nativeApprovalConsumedAt = now
+	if ses.nativeApprovalSig == m.ApprovalSig {
+		ses.nativeApprovalSig = ""
+		clearMsg = &proto.Message{
+			Type:           "approval_cleared",
+			SessionID:      m.SessionID,
+			Provider:       ses.Provider,
+			ApprovalSig:    m.ApprovalSig,
+			ApprovalSource: approvalSourceGoVT,
+		}
+	}
+	s.mu.Unlock()
+	if clearMsg != nil {
+		s.broadcast(*clearMsg)
+	}
 }
 
 // detectModelChange は PTY 出力からモデル変更を検出し、
@@ -879,6 +992,12 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 				skip := ses != nil && ses.lastCols == m.Cols && ses.lastRows == m.Rows
 				if ses != nil && !skip {
 					ses.lastCols, ses.lastRows = m.Cols, m.Rows
+					if ses.vt == nil {
+						ses.vt = newVTBuffer(m.Cols, m.Rows)
+					} else {
+						ses.vt.Resize(m.Cols, m.Rows)
+					}
+					ses.vtResizeDebounceUntil = time.Now().Add(vtResizeDebounce)
 				}
 				wc := s.wrappers[m.SessionID]
 				s.mu.Unlock()
@@ -944,6 +1063,50 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 				ses.approvalVisible = m.ApprovalVisible
 			}
 			s.mu.Unlock()
+		case "approval_consumed":
+			s.markNativeApprovalConsumed(m)
+		case "session_history_reset":
+			s.mu.Lock()
+			ids := make([]int, 0, 1)
+			updates := make([]proto.Message, 0, 1)
+			resetOne := func(id int, ses *session) {
+				if ses == nil {
+					return
+				}
+				ses.ptyBuf = nil
+				ses.FirstMessage = ""
+				ses.LastMessage = ""
+				if ses.vt != nil {
+					ses.vt.Reset()
+				}
+				ses.nativeApprovalSig = ""
+				ses.nativeApprovalConsumed = ""
+				ses.nativeApprovalConsumedAt = time.Time{}
+				ids = append(ids, id)
+				updates = append(updates, proto.Message{Type: "session_update", SessionID: id, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt, StartedAt: ses.StartedAt})
+			}
+			if m.SessionID > 0 {
+				resetOne(m.SessionID, s.sessions[m.SessionID])
+			} else {
+				for id, ses := range s.sessions {
+					resetOne(id, ses)
+				}
+			}
+			s.mu.Unlock()
+			for _, id := range ids {
+				s.writeHistory(id, map[string]any{
+					"ts":         time.Now().Format(time.RFC3339),
+					"type":       "session_history_reset",
+					"session_id": id,
+				})
+			}
+			if m.SessionID > 0 && len(ids) == 0 {
+				continue
+			}
+			s.broadcast(proto.Message{Type: "session_history_reset", SessionID: m.SessionID})
+			for _, update := range updates {
+				s.broadcast(update)
+			}
 		case "session_dismiss":
 			s.mu.Lock()
 			wc := s.wrappers[m.SessionID]
