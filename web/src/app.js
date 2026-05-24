@@ -1626,6 +1626,7 @@ function sequentialChoiceSig(prompts) {
   return _approvalCtxHash((prompts || []).map(p => `${p.key}:${p.question}:${p.options.map(o => `${o.num}.${o.label}`).join('|')}`).join('\n'));
 }
 const approvalHintConfirmTimers = new Map(); // sessionId → timer（生バイト検出を短時間 debounce してチカチカを防ぐ）
+const approvalHintConfirmTrusted = new Map(); // sessionId → true: marker/plainYesNo 由来の信頼性の高い検出（fallback に上書きさせない）
 const toolOutputs = new Map(); // sessionId → [{uid, lines, ts}]
 const sessionInputState = new Map(); // sessionId → { inputValue, pastedTextsData, pendingAttachFiles, thumbsFragment }
 
