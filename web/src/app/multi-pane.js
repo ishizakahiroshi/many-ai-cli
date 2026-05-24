@@ -325,8 +325,8 @@ class MultiPaneManager {
 
   /** 通常ターミナルと同じスクロール補助ボタンをペイン内に生成 */
   _addScrollButtons(termArea, session) {
-    const topBtn = this._buildScrollButton('top', 'scroll_to_top', '↑ Top', 'scroll_to_top_tooltip', 'Scroll to top');
-    const bottomBtn = this._buildScrollButton('bottom', 'scroll_to_bottom', '↓ Bottom', 'scroll_to_bottom_tooltip', 'Scroll to bottom');
+    const topBtn = this._buildScrollButton('top', 'scroll_to_top', '↑ up', 'scroll_to_top_tooltip', 'up');
+    const bottomBtn = this._buildScrollButton('bottom', 'scroll_to_bottom', '↓ down', 'scroll_to_bottom_tooltip', 'down');
 
     topBtn.addEventListener('click', (e) => {
       e.preventDefault();
