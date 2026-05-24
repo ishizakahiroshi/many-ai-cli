@@ -8,10 +8,11 @@ $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\.." )).Path
 Push-Location $repoRoot
 try {
-  $moduleLines = go list -m all
-  if (-not $moduleLines) {
-    throw "go list -m all returned no modules"
+  $modJson = go mod edit -json | ConvertFrom-Json
+  if (-not $modJson -or -not $modJson.Require) {
+    throw "go mod edit -json returned no requires"
   }
+  $moduleLines = $modJson.Require | ForEach-Object { "$($_.Path) $($_.Version)" }
 
   $rows = New-Object System.Collections.Generic.List[string]
   $details = New-Object System.Collections.Generic.List[object]

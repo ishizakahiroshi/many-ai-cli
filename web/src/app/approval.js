@@ -79,13 +79,14 @@ function matchProviderApprovalTrigger(provider, line) {
   return false;
 }
 
-let approvalCheckTimer = null;
+const approvalCheckTimers = new Map(); // セッション別タイマー（マルチペインで単一タイマーに上書きされる問題を解消）
 
 function cancelApprovalHintConfirm(id) {
   const timer = approvalHintConfirmTimers.get(id);
   if (timer) {
     clearTimeout(timer);
     approvalHintConfirmTimers.delete(id);
+    approvalHintConfirmTrusted.delete(id);
   }
 }
 
@@ -108,6 +109,7 @@ function scheduleApprovalHintConfirm(id, options) {
   cancelApprovalHintConfirm(id);
   approvalHintConfirmTimers.set(id, setTimeout(() => {
     approvalHintConfirmTimers.delete(id);
+    approvalHintConfirmTrusted.delete(id);
     const cached = approvalRawOptionsCache.get(id);
     if (!cached || cached.length === 0) return;
     const cachedSig = approvalSig(cached);
@@ -200,6 +202,7 @@ function trackApprovalHintFromChunk(id, bytes) {
     if (prevTimer) { clearTimeout(prevTimer); approvalConsumedSigDeleteTimer.delete(id); }
     approvalConsumedSig.delete(id);
     approvalUiAdapter.cacheApprovalOptions(id, markerOpts);
+    approvalHintConfirmTrusted.set(id, true); // 信頼できる検出としてマーク: fallback による cancel/clear を防ぐ
     scheduleApprovalHintConfirm(id, markerOpts);
     return;
   }
@@ -221,6 +224,7 @@ function trackApprovalHintFromChunk(id, bytes) {
     if (prevTimer) { clearTimeout(prevTimer); approvalConsumedSigDeleteTimer.delete(id); }
     approvalConsumedSig.delete(id);
     approvalUiAdapter.cacheApprovalOptions(id, plainYesNoOpts);
+    approvalHintConfirmTrusted.set(id, true); // 信頼できる検出としてマーク
     scheduleApprovalHintConfirm(id, plainYesNoOpts);
     return;
   }
@@ -337,7 +341,15 @@ function trackApprovalHintFromChunk(id, bytes) {
       approvalUiAdapter.cacheApprovalOptions(id, options);
     }
   } else {
-    cancelApprovalHintConfirm(id);
+    // 信頼できる検出（marker / plainYesNo）の confirm タイマーが pending の間は
+    // cancel も cache 削除も行わない。マルチペインで非アクティブセッションに後続の
+    // PTY チャンクが届き fallback 検出が nowVisible=false になっても、350ms タイマーが
+    // 発火して approvalVisibleCache をセットするまでキャッシュを守る。
+    // approvalVisibleCache=true になった後は既存の保護（下の if 条件）が引き継ぐ。
+    const isTrustedPending = approvalHintConfirmTrusted.get(id);
+    if (!isTrustedPending) {
+      cancelApprovalHintConfirm(id);
+    }
     // approvalVisibleCache=true の間（= Hub marker / plainYesNo / フォールバックいずれかで
     // 既に承認 UI を表示中）は cache を保護する。Claude Code の thinking スピナー
     // ("Worked for Xs") 等で pendingTextTail がローテートし `(Y:1/N:0)` 行が末尾 20-40 行
@@ -347,7 +359,7 @@ function trackApprovalHintFromChunk(id, bytes) {
     // 表示・非表示を高頻度で繰り返す（画面チカチカ）症状になる。
     // sendChoice / doSend / hideActionBar の経路では確実に cache.delete されるため
     // この保護は安全（解決済み承認の残留は起きない）。
-    if (!approvalVisibleCache.get(id)) {
+    if (!approvalVisibleCache.get(id) && !isTrustedPending) {
       approvalUiAdapter.clearApprovalOptions(id);
     }
   }
@@ -364,8 +376,15 @@ function trackApprovalHintFromChunk(id, bytes) {
 }
 
 function scheduleApprovalCheck(id) {
-  if (approvalCheckTimer) clearTimeout(approvalCheckTimer);
-  approvalCheckTimer = setTimeout(() => detectApproval(id), 300);
+  // セッション別タイマーを使い、マルチペインで他セッションの呼び出しに上書きされないようにする。
+  // detectApproval はグローバル action-bar を操作するためアクティブセッション専用。
+  // 非アクティブセッションの状態は trackApprovalHintFromChunk + approvalHintConfirmTrusted が管理する。
+  const prev = approvalCheckTimers.get(id);
+  if (prev) clearTimeout(prev);
+  approvalCheckTimers.set(id, setTimeout(() => {
+    approvalCheckTimers.delete(id);
+    if (id === activeSessionId) detectApproval(id);
+  }, 300));
 }
 
 function normalizeGoApprovalOptions(rawOptions) {
