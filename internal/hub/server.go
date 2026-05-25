@@ -1083,203 +1083,258 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 		}
 		switch m.Type {
 		case "pty_resize":
-			if m.Cols > 0 && m.Rows > 0 {
-				s.mu.Lock()
-				s.lastUICols, s.lastUIRows = m.Cols, m.Rows
-				ses := s.sessions[m.SessionID]
-				skip := ses != nil && ses.lastCols == m.Cols && ses.lastRows == m.Rows
-				if ses != nil && !skip {
-					ses.lastCols, ses.lastRows = m.Cols, m.Rows
-					if ses.vt == nil {
-						ses.vt = newVTBuffer(m.Cols, m.Rows)
-					} else {
-						ses.vt.Resize(m.Cols, m.Rows)
-					}
-					ses.vtResizeDebounceUntil = time.Now().Add(vtResizeDebounce)
-				}
-				wc := s.wrappers[m.SessionID]
-				s.mu.Unlock()
-				if wc != nil && !skip {
-					_ = websocket.JSON.Send(wc, m)
-				}
-			}
+			s.handleResize(m)
 		case "pty_input":
-			// UI から Text フィールドで受け取り、wrapper には Data ([]byte) に変換して転送
-			s.mu.Lock()
-			wc := s.wrappers[m.SessionID]
-			ses := s.sessions[m.SessionID]
-			combined := m.Text
-			var firstMsgBroadcast *proto.Message
-			var injectMarker bool
-			if ses != nil && strings.HasSuffix(m.Text, "\r") {
-				text := strings.TrimRight(m.Text, "\r\n")
-				if text == "/clear" {
-					// /clear でセッション概要をリセット（次の入力が新しい概要になる）
-					ses.FirstMessage = ""
-					ses.LastMessage = ""
-					msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt}
-					firstMsgBroadcast = &msg
-				} else if text != "" {
-					if ses.FirstMessage == "" {
-						ses.FirstMessage = text
-					}
-					// 数字のみ（選択肢番号）は LastMessage を更新しない
-					if !isDigitsOnly(text) {
-						ses.LastMessage = text
-					}
-					msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt, FirstMessage: ses.FirstMessage, LastMessage: ses.LastMessage}
-					firstMsgBroadcast = &msg
-					// ユーザーターン境界マーカーを ptyBuf に注入する
-					marker := []byte(chatHistoryUserTurnMarker)
-					ses.ptyBuf = append(ses.ptyBuf, marker...)
-					if len(ses.ptyBuf) > maxPTYBuf {
-						ses.ptyBuf = ses.ptyBuf[len(ses.ptyBuf)-maxPTYBuf:]
-					}
-					injectMarker = true
-				}
-			}
-			s.mu.Unlock()
-			if injectMarker {
-				s.broadcast(proto.Message{Type: "pty_data", SessionID: m.SessionID, Data: []byte(chatHistoryUserTurnMarker)})
-			}
-			if wc != nil {
-				_ = websocket.JSON.Send(wc, proto.Message{Type: "pty_input", SessionID: m.SessionID, Data: []byte(combined)})
-			}
-			s.writeHistory(m.SessionID, map[string]any{
-				"ts":         time.Now().Format(time.RFC3339),
-				"type":       "user_input",
-				"session_id": m.SessionID,
-				"text":       m.Text,
-			})
-			if firstMsgBroadcast != nil {
-				s.broadcast(*firstMsgBroadcast)
-			}
+			s.handleInput(m)
 		case "session_hint":
-			s.mu.Lock()
-			ses := s.sessions[m.SessionID]
-			if ses != nil {
-				ses.approvalVisible = m.ApprovalVisible
-			}
-			s.mu.Unlock()
+			s.handleHint(m)
 		case "approval_consumed":
-			s.markNativeApprovalConsumed(m)
+			s.handleConsumed(m)
 		case "session_history_reset":
-			s.mu.Lock()
-			ids := make([]int, 0, 1)
-			updates := make([]proto.Message, 0, 1)
-			resetOne := func(id int, ses *session) {
-				if ses == nil {
-					return
-				}
-				ses.ptyBuf = nil
-				ses.FirstMessage = ""
-				ses.LastMessage = ""
-				if ses.vt != nil {
-					ses.vt.Reset()
-				}
-				ses.nativeApprovalSig = ""
-				ses.nativeApprovalConsumed = ""
-				ses.nativeApprovalConsumedAt = time.Time{}
-				ids = append(ids, id)
-				updates = append(updates, proto.Message{Type: "session_update", SessionID: id, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt, StartedAt: ses.StartedAt})
-			}
-			if m.SessionID > 0 {
-				resetOne(m.SessionID, s.sessions[m.SessionID])
-			} else {
-				for id, ses := range s.sessions {
-					resetOne(id, ses)
-				}
-			}
-			s.mu.Unlock()
-			for _, id := range ids {
-				s.writeHistory(id, map[string]any{
-					"ts":         time.Now().Format(time.RFC3339),
-					"type":       "session_history_reset",
-					"session_id": id,
-				})
-			}
-			if m.SessionID > 0 && len(ids) == 0 {
+			if skip := s.handleHistoryReset(m); skip {
 				continue
-			}
-			s.broadcast(proto.Message{Type: "session_history_reset", SessionID: m.SessionID})
-			for _, update := range updates {
-				s.broadcast(update)
 			}
 		case "session_dismiss":
-			s.mu.Lock()
-			wc := s.wrappers[m.SessionID]
-			_, exists := s.sessions[m.SessionID]
-			var historyToClose *sessionlog.Writer
-			var jsonlPathForTranscript string
-			if exists {
-				historyToClose = s.sessions[m.SessionID].History
-				jsonlPathForTranscript = s.sessions[m.SessionID].JSONLPath
-				s.sessions[m.SessionID].History = nil
-				delete(s.sessions, m.SessionID)
-				delete(s.wrappers, m.SessionID)
-			}
-			s.mu.Unlock()
-			if !exists {
+			if skip := s.handleDismiss(m); skip {
 				continue
 			}
-			if historyToClose != nil {
-				_ = historyToClose.Event(map[string]any{
-					"ts":         time.Now().Format(time.RFC3339),
-					"type":       "session_dismiss",
-					"session_id": m.SessionID,
-				})
-			}
-			if wc != nil {
-				wc.Close()
-			}
-			if historyToClose != nil {
-				_ = historyToClose.Close()
-			}
-			s.finalizeTranscript(m.SessionID, jsonlPathForTranscript)
-			s.broadcast(proto.Message{Type: "session_removed", SessionID: m.SessionID})
 		case "attach_request":
-			if m.ImageData == "" {
-				s.logger.Warn("attach_request: missing image_data", "session_id", m.SessionID)
+			if skip := s.handleAttachRequest(m); skip {
 				continue
 			}
-			imgData, err := base64.StdEncoding.DecodeString(m.ImageData)
-			if err != nil {
-				s.logger.Warn("attach_request: failed to decode base64", "session_id", m.SessionID, "err", err)
-				continue
-			}
-
-			// セッション情報（provider）を mutex 保護で取得
-			s.mu.Lock()
-			var provider string
-			if ses := s.sessions[m.SessionID]; ses != nil {
-				provider = ses.Provider
-			}
-			s.mu.Unlock()
-
-			// attachments ディレクトリは ~/.any-ai-cli/attachments
-			homeDir, err := os.UserHomeDir()
-			if err != nil {
-				s.logger.Warn("attach_request: os.UserHomeDir failed", "err", err)
-				continue
-			}
-			attachDir := filepath.Join(homeDir, ".any-ai-cli", "attachments")
-
-			savedPath, _, err := attach.Save(attachDir, m.SessionID, provider, imgData, m.Filename)
-			if err != nil {
-				s.logger.Warn("attach_request: Save failed", "session_id", m.SessionID, "err", err)
-				continue
-			}
-			s.logger.Info("attach saved", "session_id", m.SessionID, "path", savedPath)
-			s.writeHistory(m.SessionID, map[string]any{
-				"ts":         time.Now().Format(time.RFC3339),
-				"type":       "attach",
-				"session_id": m.SessionID,
-				"path":       savedPath,
-				"filename":   m.Filename,
-				"provider":   provider,
-			})
 		}
 	}
+}
+
+// handleResize は pty_resize メッセージを処理する。
+// UI 側の端末サイズ変更を受け、セッションの VT バッファをリサイズして wrapper へ転送する。
+func (s *Server) handleResize(m proto.Message) {
+	if m.Cols <= 0 || m.Rows <= 0 {
+		return
+	}
+	s.mu.Lock()
+	s.lastUICols, s.lastUIRows = m.Cols, m.Rows
+	ses := s.sessions[m.SessionID]
+	skip := ses != nil && ses.lastCols == m.Cols && ses.lastRows == m.Rows
+	if ses != nil && !skip {
+		ses.lastCols, ses.lastRows = m.Cols, m.Rows
+		if ses.vt == nil {
+			ses.vt = newVTBuffer(m.Cols, m.Rows)
+		} else {
+			ses.vt.Resize(m.Cols, m.Rows)
+		}
+		ses.vtResizeDebounceUntil = time.Now().Add(vtResizeDebounce)
+	}
+	wc := s.wrappers[m.SessionID]
+	s.mu.Unlock()
+	if wc != nil && !skip {
+		_ = websocket.JSON.Send(wc, m)
+	}
+}
+
+// handleInput は pty_input メッセージを処理する。
+// UI から Text フィールドで受け取り、wrapper には Data ([]byte) に変換して転送する。
+// Enter 確定時はセッション概要（FirstMessage/LastMessage）を更新し、
+// ユーザーターン境界マーカーを ptyBuf に注入する。
+func (s *Server) handleInput(m proto.Message) {
+	s.mu.Lock()
+	wc := s.wrappers[m.SessionID]
+	ses := s.sessions[m.SessionID]
+	combined := m.Text
+	var firstMsgBroadcast *proto.Message
+	var injectMarker bool
+	if ses != nil && strings.HasSuffix(m.Text, "\r") {
+		text := strings.TrimRight(m.Text, "\r\n")
+		if text == "/clear" {
+			// /clear でセッション概要をリセット（次の入力が新しい概要になる）
+			ses.FirstMessage = ""
+			ses.LastMessage = ""
+			msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt}
+			firstMsgBroadcast = &msg
+		} else if text != "" {
+			if ses.FirstMessage == "" {
+				ses.FirstMessage = text
+			}
+			// 数字のみ（選択肢番号）は LastMessage を更新しない
+			if !isDigitsOnly(text) {
+				ses.LastMessage = text
+			}
+			msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt, FirstMessage: ses.FirstMessage, LastMessage: ses.LastMessage}
+			firstMsgBroadcast = &msg
+			// ユーザーターン境界マーカーを ptyBuf に注入する
+			marker := []byte(chatHistoryUserTurnMarker)
+			ses.ptyBuf = append(ses.ptyBuf, marker...)
+			if len(ses.ptyBuf) > maxPTYBuf {
+				ses.ptyBuf = ses.ptyBuf[len(ses.ptyBuf)-maxPTYBuf:]
+			}
+			injectMarker = true
+		}
+	}
+	s.mu.Unlock()
+	if injectMarker {
+		s.broadcast(proto.Message{Type: "pty_data", SessionID: m.SessionID, Data: []byte(chatHistoryUserTurnMarker)})
+	}
+	if wc != nil {
+		_ = websocket.JSON.Send(wc, proto.Message{Type: "pty_input", SessionID: m.SessionID, Data: []byte(combined)})
+	}
+	s.writeHistory(m.SessionID, map[string]any{
+		"ts":         time.Now().Format(time.RFC3339),
+		"type":       "user_input",
+		"session_id": m.SessionID,
+		"text":       m.Text,
+	})
+	if firstMsgBroadcast != nil {
+		s.broadcast(*firstMsgBroadcast)
+	}
+}
+
+// handleHint は session_hint メッセージを処理する。
+// UI が xterm.js バッファをスキャンして判定した approval_visible を受け取り、
+// セッションの approvalVisible フィールドを更新する。
+func (s *Server) handleHint(m proto.Message) {
+	s.mu.Lock()
+	ses := s.sessions[m.SessionID]
+	if ses != nil {
+		ses.approvalVisible = m.ApprovalVisible
+	}
+	s.mu.Unlock()
+}
+
+// handleConsumed は approval_consumed メッセージを処理する。
+func (s *Server) handleConsumed(m proto.Message) {
+	s.markNativeApprovalConsumed(m)
+}
+
+// handleHistoryReset は session_history_reset メッセージを処理する。
+// 戻り値が true の場合、呼び出し元の uiLoop は当該ターンを continue する。
+func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
+	s.mu.Lock()
+	ids := make([]int, 0, 1)
+	updates := make([]proto.Message, 0, 1)
+	resetOne := func(id int, ses *session) {
+		if ses == nil {
+			return
+		}
+		ses.ptyBuf = nil
+		ses.FirstMessage = ""
+		ses.LastMessage = ""
+		if ses.vt != nil {
+			ses.vt.Reset()
+		}
+		ses.nativeApprovalSig = ""
+		ses.nativeApprovalConsumed = ""
+		ses.nativeApprovalConsumedAt = time.Time{}
+		ids = append(ids, id)
+		updates = append(updates, proto.Message{Type: "session_update", SessionID: id, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt, StartedAt: ses.StartedAt})
+	}
+	if m.SessionID > 0 {
+		resetOne(m.SessionID, s.sessions[m.SessionID])
+	} else {
+		for id, ses := range s.sessions {
+			resetOne(id, ses)
+		}
+	}
+	s.mu.Unlock()
+	for _, id := range ids {
+		s.writeHistory(id, map[string]any{
+			"ts":         time.Now().Format(time.RFC3339),
+			"type":       "session_history_reset",
+			"session_id": id,
+		})
+	}
+	if m.SessionID > 0 && len(ids) == 0 {
+		return true
+	}
+	s.broadcast(proto.Message{Type: "session_history_reset", SessionID: m.SessionID})
+	for _, update := range updates {
+		s.broadcast(update)
+	}
+	return false
+}
+
+// handleDismiss は session_dismiss メッセージを処理する。
+// セッションを削除し、JSONL を閉じてトランスクリプトを生成する。
+// 戻り値が true の場合、呼び出し元の uiLoop は当該ターンを continue する。
+func (s *Server) handleDismiss(m proto.Message) (skip bool) {
+	s.mu.Lock()
+	wc := s.wrappers[m.SessionID]
+	_, exists := s.sessions[m.SessionID]
+	var historyToClose *sessionlog.Writer
+	var jsonlPathForTranscript string
+	if exists {
+		historyToClose = s.sessions[m.SessionID].History
+		jsonlPathForTranscript = s.sessions[m.SessionID].JSONLPath
+		s.sessions[m.SessionID].History = nil
+		delete(s.sessions, m.SessionID)
+		delete(s.wrappers, m.SessionID)
+	}
+	s.mu.Unlock()
+	if !exists {
+		return true
+	}
+	if historyToClose != nil {
+		_ = historyToClose.Event(map[string]any{
+			"ts":         time.Now().Format(time.RFC3339),
+			"type":       "session_dismiss",
+			"session_id": m.SessionID,
+		})
+	}
+	if wc != nil {
+		wc.Close()
+	}
+	if historyToClose != nil {
+		_ = historyToClose.Close()
+	}
+	s.finalizeTranscript(m.SessionID, jsonlPathForTranscript)
+	s.broadcast(proto.Message{Type: "session_removed", SessionID: m.SessionID})
+	return false
+}
+
+// handleAttachRequest は attach_request メッセージを処理する。
+// base64 デコード、ファイル保存、履歴記録を行う。
+// 戻り値が true の場合、呼び出し元の uiLoop は当該ターンを continue する。
+func (s *Server) handleAttachRequest(m proto.Message) (skip bool) {
+	if m.ImageData == "" {
+		s.logger.Warn("attach_request: missing image_data", "session_id", m.SessionID)
+		return true
+	}
+	imgData, err := base64.StdEncoding.DecodeString(m.ImageData)
+	if err != nil {
+		s.logger.Warn("attach_request: failed to decode base64", "session_id", m.SessionID, "err", err)
+		return true
+	}
+
+	// セッション情報（provider）を mutex 保護で取得
+	s.mu.Lock()
+	var provider string
+	if ses := s.sessions[m.SessionID]; ses != nil {
+		provider = ses.Provider
+	}
+	s.mu.Unlock()
+
+	// attachments ディレクトリは ~/.any-ai-cli/attachments
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		s.logger.Warn("attach_request: os.UserHomeDir failed", "err", err)
+		return true
+	}
+	attachDir := filepath.Join(homeDir, ".any-ai-cli", "attachments")
+
+	savedPath, _, err := attach.Save(attachDir, m.SessionID, provider, imgData, m.Filename)
+	if err != nil {
+		s.logger.Warn("attach_request: Save failed", "session_id", m.SessionID, "err", err)
+		return true
+	}
+	s.logger.Info("attach saved", "session_id", m.SessionID, "path", savedPath)
+	s.writeHistory(m.SessionID, map[string]any{
+		"ts":         time.Now().Format(time.RFC3339),
+		"type":       "attach",
+		"session_id": m.SessionID,
+		"path":       savedPath,
+		"filename":   m.Filename,
+		"provider":   provider,
+	})
+	return false
 }
 
 // markRunning は PTY 出力受信時に呼ばれ、状態を running に更新して

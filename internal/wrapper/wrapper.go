@@ -41,6 +41,229 @@ func reconnectGrace(cfg *config.Config) time.Duration {
 	return time.Duration(sec) * time.Second
 }
 
+// wrapperSession は接続状態（現在の WS conn / session ID）を管理する。
+// reconnect 時に conn と sid が入れ替わるため、stateMu で保護する。
+type wrapperSession struct {
+	stateMu     sync.Mutex
+	sendMu      sync.Mutex // websocket.JSON.Send の直列化
+	currentConn *websocket.Conn
+	currentSID  int
+}
+
+func newWrapperSession(conn *websocket.Conn, sid int) *wrapperSession {
+	return &wrapperSession{currentConn: conn, currentSID: sid}
+}
+
+func (ws *wrapperSession) getConn() *websocket.Conn {
+	ws.stateMu.Lock()
+	defer ws.stateMu.Unlock()
+	return ws.currentConn
+}
+
+func (ws *wrapperSession) getSID() int {
+	ws.stateMu.Lock()
+	defer ws.stateMu.Unlock()
+	return ws.currentSID
+}
+
+// sendMsg は現在の conn にメッセージを送信する。
+// 複数 goroutine から呼んでも sendMu で直列化される。
+func (ws *wrapperSession) sendMsg(m proto.Message) {
+	c := ws.getConn()
+	if c == nil {
+		return
+	}
+	ws.sendMu.Lock()
+	defer ws.sendMu.Unlock()
+	// Re-check conn identity under sendMu: a reconnect may have swapped it.
+	if cur := ws.getConn(); cur != c {
+		return
+	}
+	_ = websocket.JSON.Send(c, m)
+}
+
+func (ws *wrapperSession) swapConn(c *websocket.Conn, sid int) {
+	ws.stateMu.Lock()
+	defer ws.stateMu.Unlock()
+	if ws.currentConn != nil && ws.currentConn != c {
+		_ = ws.currentConn.Close()
+	}
+	ws.currentConn = c
+	if sid > 0 {
+		ws.currentSID = sid
+	}
+}
+
+func (ws *wrapperSession) clearConn(broken *websocket.Conn) {
+	ws.stateMu.Lock()
+	defer ws.stateMu.Unlock()
+	if ws.currentConn == broken {
+		_ = ws.currentConn.Close()
+		ws.currentConn = nil
+	}
+}
+
+// reconnectSupervisor は Hub WS 切断後の再接続ロジックを担う。
+// intentional / auto_shutdown / grace の 3 分岐を管理する。
+type reconnectSupervisor struct {
+	cfg                *config.Config
+	logger             *slog.Logger
+	ws                 *wrapperSession
+	ps                 processSession
+	provider           string
+	display            string
+	cwd                string
+	label              string
+	model              string
+	startedAtText      string
+	rawLogPath         string
+	jsonlPath          string
+	intentional        *atomic.Bool
+	done               <-chan struct{}
+	closeDone          func()
+	reconnectCh        <-chan struct{}
+	startReceiveLoop   func(c *websocket.Conn)
+	snapshotReplay     func() []byte
+	// probeHub はテスト時に差し替えられる。nil の場合は probeHubAlive を使う。
+	probeHub           func(cfg *config.Config) bool
+}
+
+// run は reconnect supervisor のメインループ。goroutine として起動する。
+func (r *reconnectSupervisor) run() {
+	probe := r.probeHub
+	if probe == nil {
+		probe = probeHubAlive
+	}
+	for {
+		select {
+		case <-r.done:
+			return
+		case <-r.reconnectCh:
+		}
+		intentional := r.intentional.Load()
+		if !intentional && probe(r.cfg) {
+			r.logger.Info("hub still alive after WS close — treating as intentional disconnect", "session_id", r.ws.getSID())
+			_ = r.ps.Close()
+			r.closeDone()
+			return
+		}
+		if !intentional && r.cfg.Hub.AutoShutdown {
+			r.logger.Info("hub is down and auto_shutdown is enabled; terminating PTY", "session_id", r.ws.getSID())
+			_ = r.ps.Close()
+			r.closeDone()
+			return
+		}
+		grace := reconnectGrace(r.cfg)
+		if grace <= 0 {
+			r.logger.Info("reconnect grace disabled — terminating PTY", "session_id", r.ws.getSID())
+			_ = r.ps.Close()
+			r.closeDone()
+			return
+		}
+		if intentional {
+			r.logger.Info("intentional hub shutdown — waiting for manual hub restart within grace period", "session_id", r.ws.getSID(), "grace_sec", int(grace/time.Second))
+		} else {
+			r.logger.Info("hub appears down — entering reconnect grace period", "session_id", r.ws.getSID(), "grace_sec", int(grace/time.Second))
+		}
+		deadline := time.Now().Add(grace)
+		reconnected := false
+		for !reconnected {
+			if time.Now().After(deadline) {
+				r.logger.Info("reconnect grace expired — terminating PTY", "session_id", r.ws.getSID())
+				_ = r.ps.Close()
+				r.closeDone()
+				return
+			}
+			select {
+			case <-r.done:
+				return
+			case <-time.After(reconnectDialInterval):
+			}
+			cols, rows := 0, 0
+			if w, h, err := term.GetSize(int(os.Stdin.Fd())); err == nil && w > 0 && h > 0 {
+				cols, rows = w, h
+			}
+			newConn, newSID, err := dialAndReattach(r.cfg, r.ws.getSID(), r.provider, r.display, r.cwd, r.label, r.model, r.startedAtText, r.rawLogPath, r.jsonlPath, cols, rows, r.snapshotReplay())
+			if err != nil {
+				r.logger.Debug("reconnect attempt failed", "err", err)
+				continue
+			}
+			if newSID == 0 {
+				r.logger.Warn("hub rejected reattach — terminating PTY", "session_id", r.ws.getSID())
+				_ = r.ps.Close()
+				r.closeDone()
+				return
+			}
+			r.logger.Info("wrapper reconnected to hub", "old_sid", r.ws.getSID(), "new_sid", newSID)
+			r.ws.swapConn(newConn, newSID)
+			r.startReceiveLoop(newConn)
+			r.intentional.Store(false)
+			reconnected = true
+		}
+	}
+}
+
+// ptyPump は PTY 出力を読み出し、Hub WS へ pty_data として送信し続ける。
+// ストリーム終端まで読み切ったら closeDone を呼んで done を閉じる。
+// 戻り値は ps.Wait() で使う waitErr。
+func ptyPump(
+	ps processSession,
+	lf *os.File,
+	rawMaxBytes int64,
+	ws *wrapperSession,
+	appendReplay func([]byte),
+	closeDone func(),
+) {
+	var rawWritten int64
+	var carry []byte
+	buf := make([]byte, 4096)
+	for {
+		n, readErr := ps.Read(buf)
+		if n > 0 {
+			raw := make([]byte, n)
+			copy(raw, buf[:n])
+			var out []byte
+			out, carry = pumpChunk(carry, raw)
+			if len(out) > 0 {
+				out = repairMojibakeUTF8(out)
+				if lf != nil && (rawMaxBytes <= 0 || rawWritten < rawMaxBytes) {
+					_, _ = lf.Write(out)
+					rawWritten += int64(len(out))
+				}
+				appendReplay(out)
+				ws.sendMsg(proto.Message{Type: "pty_data", SessionID: ws.getSID(), Data: out})
+			}
+		}
+		if readErr != nil {
+			break
+		}
+	}
+	// Flush any remaining carry bytes (e.g. incomplete sequence at end of stream).
+	if len(carry) > 0 {
+		flushed := repairMojibakeUTF8(carry)
+		if lf != nil && (rawMaxBytes <= 0 || rawWritten < rawMaxBytes) {
+			_, _ = lf.Write(flushed)
+		}
+		appendReplay(flushed)
+		ws.sendMsg(proto.Message{Type: "pty_data", SessionID: ws.getSID(), Data: flushed})
+	}
+	closeDone()
+}
+
+// writeWithTrailingEnter は data を PTY へ書き込む。
+// ConPTY の制約として、text+\r を1チャンクで書くと \r が Enter でなく改行として
+// 処理される場合があるため、末尾の \r を delay 分だけ遅延させて別チャンクで送る。
+// data が1バイト以下、または末尾が \r でない場合はそのまま書き込む。
+func writeWithTrailingEnter(ps processSession, data []byte, delay time.Duration) {
+	if len(data) > 1 && data[len(data)-1] == '\r' {
+		_, _ = ps.Write(data[:len(data)-1])
+		time.Sleep(delay)
+		_, _ = ps.Write(data[len(data)-1:])
+	} else {
+		_, _ = ps.Write(data)
+	}
+}
+
 func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string) error {
 	fs := flag.NewFlagSet("wrap", flag.ContinueOnError)
 	label := fs.String("label", "", "session label shown in UI card")
@@ -156,49 +379,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	}
 	defer ps.Close()
 
-	// Shared mutable state (current conn / session id rotate on reconnect)
-	var (
-		stateMu     sync.Mutex
-		sendMu      sync.Mutex // serialises websocket.JSON.Send calls to the current conn
-		currentConn = conn
-		currentSID  = sessionID
-	)
-	getConn := func() *websocket.Conn { stateMu.Lock(); defer stateMu.Unlock(); return currentConn }
-	getSID := func() int { stateMu.Lock(); defer stateMu.Unlock(); return currentSID }
-	// sendMsg sends m to the current conn under sendMu so that concurrent
-	// goroutines (PTY output loop, session_end sender) never interleave frames.
-	sendMsg := func(m proto.Message) {
-		c := getConn()
-		if c == nil {
-			return
-		}
-		sendMu.Lock()
-		defer sendMu.Unlock()
-		// Re-check conn identity under sendMu: a reconnect may have swapped it.
-		if cur := getConn(); cur != c {
-			return
-		}
-		_ = websocket.JSON.Send(c, m)
-	}
-	swapConn := func(c *websocket.Conn, sid int) {
-		stateMu.Lock()
-		defer stateMu.Unlock()
-		if currentConn != nil && currentConn != c {
-			_ = currentConn.Close()
-		}
-		currentConn = c
-		if sid > 0 {
-			currentSID = sid
-		}
-	}
-	clearConn := func(broken *websocket.Conn) {
-		stateMu.Lock()
-		defer stateMu.Unlock()
-		if currentConn == broken {
-			_ = currentConn.Close()
-			currentConn = nil
-		}
-	}
+	wses := newWrapperSession(conn, sessionID)
 
 	// Recent PTY output buffer: replayed to UI after a successful reconnect so
 	// the new session card has context for what happened during the gap.
@@ -246,8 +427,8 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
-					logger.Error("hub-to-wrapper goroutine panic", "session_id", getSID(), "recover", r)
-					clearConn(c)
+					logger.Error("hub-to-wrapper goroutine panic", "session_id", wses.getSID(), "recover", r)
+					wses.clearConn(c)
 					notifyReconnect()
 				}
 			}()
@@ -259,8 +440,8 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 						return
 					default:
 					}
-					logger.Info("hub WS read failed", "session_id", getSID(), "err", err)
-					clearConn(c)
+					logger.Info("hub WS read failed", "session_id", wses.getSID(), "err", err)
+					wses.clearConn(c)
 					notifyReconnect()
 					return
 				}
@@ -272,35 +453,22 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 							// 旧形式の inject (@path\rtext\r) は互換のため分割する。
 							// 新形式 (@path text\r) は画像参照と本文を同じ入力行に残し、最後の Enter だけ分離する。
 							if idx := bytes.IndexByte(data, '\r'); idx >= 0 && idx < len(data)-1 {
-								_, _ = ps.Write(data[:idx+1])
-								time.Sleep(150 * time.Millisecond)
+								writeWithTrailingEnter(ps, data[:idx+1], 150*time.Millisecond)
 								// ConPTY fix: text\r を1チャンクで書くと \r が Enter でなく改行扱いになる場合がある
 								rest := data[idx+1:]
-								if len(rest) > 1 && rest[len(rest)-1] == '\r' {
-									_, _ = ps.Write(rest[:len(rest)-1])
-									time.Sleep(20 * time.Millisecond)
-									_, _ = ps.Write(rest[len(rest)-1:])
-								} else {
-									_, _ = ps.Write(rest)
-								}
-							} else if len(data) > 1 && data[len(data)-1] == '\r' {
-								_, _ = ps.Write(data[:len(data)-1])
-								time.Sleep(20 * time.Millisecond)
-								_, _ = ps.Write(data[len(data)-1:])
+								writeWithTrailingEnter(ps, rest, 20*time.Millisecond)
 							} else {
-								_, _ = ps.Write(data)
+								writeWithTrailingEnter(ps, data, 20*time.Millisecond)
 							}
 						} else if len(data) > 1 && data[len(data)-1] == '\r' {
 							// Windows ConPTY では text+\r を1チャンクで書き込むと
 							// \r が Enter ではなく改行として処理される場合がある。
 							// Codex は入力反映直後の Enter を取りこぼすことがあるため長めに待つ。
-							_, _ = ps.Write(data[:len(data)-1])
+							delay := 20 * time.Millisecond
 							if provider == "codex" {
-								time.Sleep(180 * time.Millisecond)
-							} else {
-								time.Sleep(20 * time.Millisecond)
+								delay = 180 * time.Millisecond
 							}
-							_, _ = ps.Write(data[len(data)-1:])
+							writeWithTrailingEnter(ps, data, delay)
 						} else {
 							_, _ = ps.Write(data)
 						}
@@ -314,9 +482,9 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 						logger.Warn("attach inject failed", "err", err)
 					}
 				case "hub_shutdown":
-					logger.Info("hub_shutdown received — skipping reconnect and ensureHub", "session_id", getSID(), "reason", m.Reason)
+					logger.Info("hub_shutdown received — skipping reconnect and ensureHub", "session_id", wses.getSID(), "reason", m.Reason)
 					intentionalShutdown.Store(true)
-					clearConn(c)
+					wses.clearConn(c)
 					notifyReconnect()
 					return
 				}
@@ -335,126 +503,45 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// Windows console and Web UI unexpectedly.
 	// hub_shutdown 受信（= UI からの Hub のみ停止）は intentional フラグ経由
 	// の特別経路で、PTY は kill せず grace 期間中の手動 Hub 再起動を待つ。
-	go func() {
-		for {
-			select {
-			case <-done:
-				return
-			case <-reconnectCh:
-			}
-			intentional := intentionalShutdown.Load()
-			if !intentional && probeHubAlive(cfg) {
-				logger.Info("hub still alive after WS close — treating as intentional disconnect", "session_id", getSID())
-				_ = ps.Close()
-				closeDone()
-				return
-			}
-			if !intentional && cfg.Hub.AutoShutdown {
-				logger.Info("hub is down and auto_shutdown is enabled; terminating PTY", "session_id", getSID())
-				_ = ps.Close()
-				closeDone()
-				return
-			}
-			grace := reconnectGrace(cfg)
-			if grace <= 0 {
-				logger.Info("reconnect grace disabled — terminating PTY", "session_id", getSID())
-				_ = ps.Close()
-				closeDone()
-				return
-			}
-			if intentional {
-				logger.Info("intentional hub shutdown — waiting for manual hub restart within grace period", "session_id", getSID(), "grace_sec", int(grace/time.Second))
-			} else {
-				logger.Info("hub appears down — entering reconnect grace period", "session_id", getSID(), "grace_sec", int(grace/time.Second))
-			}
-			deadline := time.Now().Add(grace)
-			reconnected := false
-			for !reconnected {
-				if time.Now().After(deadline) {
-					logger.Info("reconnect grace expired — terminating PTY", "session_id", getSID())
-					_ = ps.Close()
-					closeDone()
-					return
-				}
-				select {
-				case <-done:
-					return
-				case <-time.After(reconnectDialInterval):
-				}
-				cols, rows := 0, 0
-				if w, h, err := term.GetSize(int(os.Stdin.Fd())); err == nil && w > 0 && h > 0 {
-					cols, rows = w, h
-				}
-				newConn, newSID, err := dialAndReattach(cfg, getSID(), provider, display, cwd, *label, *model, startedAtText, rawLogPath, jsonlPath, cols, rows, snapshotReplay())
-				if err != nil {
-					logger.Debug("reconnect attempt failed", "err", err)
-					continue
-				}
-				if newSID == 0 {
-					logger.Warn("hub rejected reattach — terminating PTY", "session_id", getSID())
-					_ = ps.Close()
-					closeDone()
-					return
-				}
-				logger.Info("wrapper reconnected to hub", "old_sid", getSID(), "new_sid", newSID)
-				swapConn(newConn, newSID)
-				startReceiveLoop(newConn)
-				intentionalShutdown.Store(false)
-				reconnected = true
-			}
-		}
-	}()
+	sup := &reconnectSupervisor{
+		cfg:              cfg,
+		logger:           logger,
+		ws:               wses,
+		ps:               ps,
+		provider:         provider,
+		display:          display,
+		cwd:              cwd,
+		label:            *label,
+		model:            *model,
+		startedAtText:    startedAtText,
+		rawLogPath:       rawLogPath,
+		jsonlPath:        jsonlPath,
+		intentional:      &intentionalShutdown,
+		done:             done,
+		closeDone:        closeDone,
+		reconnectCh:      reconnectCh,
+		startReceiveLoop: startReceiveLoop,
+		snapshotReplay:   snapshotReplay,
+	}
+	go sup.run()
 
 	// PTY 出力 → Hub WS (pty_data)
 	// carry holds an incomplete UTF-8 sequence from the previous read that must
 	// be prepended to the next chunk before decoding (pumpChunk handles this).
 	rawMaxBytes := int64(cfg.Log.SessionMaxSizeMB) * 1024 * 1024
-	var rawWritten int64
-	var carry []byte
-	buf := make([]byte, 4096)
-	for {
-		n, readErr := ps.Read(buf)
-		if n > 0 {
-			raw := make([]byte, n)
-			copy(raw, buf[:n])
-			var out []byte
-			out, carry = pumpChunk(carry, raw)
-			if len(out) > 0 {
-				out = repairMojibakeUTF8(out)
-				if lf != nil && (rawMaxBytes <= 0 || rawWritten < rawMaxBytes) {
-					_, _ = lf.Write(out)
-					rawWritten += int64(len(out))
-				}
-				appendReplay(out)
-				sendMsg(proto.Message{Type: "pty_data", SessionID: getSID(), Data: out})
-			}
-		}
-		if readErr != nil {
-			break
-		}
-	}
-	// Flush any remaining carry bytes (e.g. incomplete sequence at end of stream).
-	if len(carry) > 0 {
-		flushed := repairMojibakeUTF8(carry)
-		if lf != nil && (rawMaxBytes <= 0 || rawWritten < rawMaxBytes) {
-			_, _ = lf.Write(flushed)
-		}
-		appendReplay(flushed)
-		sendMsg(proto.Message{Type: "pty_data", SessionID: getSID(), Data: flushed})
-	}
-	closeDone()
+	ptyPump(ps, lf, rawMaxBytes, wses, appendReplay, closeDone)
 
 	waitErr := ps.Wait()
 	state, code := "completed", 0
 	if waitErr != nil {
 		state, code = "error", 1
 	}
-	sendMsg(proto.Message{Type: "session_end", SessionID: getSID(), State: state, ExitCode: code})
+	wses.sendMsg(proto.Message{Type: "session_end", SessionID: wses.getSID(), State: state, ExitCode: code})
 	// Close the current conn after the final message is sent.
-	if c := getConn(); c != nil {
+	if c := wses.getConn(); c != nil {
 		_ = c.Close()
 	}
-	logger.Info("wrapper exit", "session_id", getSID(), "state", state)
+	logger.Info("wrapper exit", "session_id", wses.getSID(), "state", state)
 	return waitErr
 }
 
