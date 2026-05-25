@@ -4,9 +4,20 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
-
-	"any-ai-cli/internal/config"
 )
+
+// checkOpenPathAllowed は open 系ハンドラで path が allowed-roots 配下かを検証する。
+// 許可外のパスは 403 を返す。
+func (s *Server) checkOpenPathAllowed(w http.ResponseWriter, path string) bool {
+	cwd := s.hubCWD
+	gitRoot := findGitRoot(cwd)
+	allowed, err := isPathUnderAllowedRoots(path, cwd, gitRoot)
+	if err != nil || !allowed {
+		http.Error(w, "forbidden: path is outside allowed roots", http.StatusForbidden)
+		return false
+	}
+	return true
+}
 
 func (s *Server) handleOpenFile(w http.ResponseWriter, r *http.Request) {
 	if !s.requireToken(w, r) || !requireMethod(w, r, http.MethodPost) {
@@ -20,6 +31,9 @@ func (s *Server) handleOpenFile(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Path == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if !s.checkOpenPathAllowed(w, body.Path) {
 		return
 	}
 	s.mu.Lock()
@@ -46,6 +60,9 @@ func (s *Server) handleOpenDefaultFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	if !s.checkOpenPathAllowed(w, body.Path) {
+		return
+	}
 	if err := openFileNative(body.Path, ""); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -65,6 +82,9 @@ func (s *Server) handleOpenFolder(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Path == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if !s.checkOpenPathAllowed(w, body.Path) {
 		return
 	}
 	dir := filepath.Dir(body.Path)
@@ -87,6 +107,9 @@ func (s *Server) handleOpenTerminal(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Path == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if !s.checkOpenPathAllowed(w, body.Path) {
 		return
 	}
 	s.mu.Lock()
@@ -122,7 +145,7 @@ func (s *Server) handleFileOpenApp(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		s.cfg.FileOpenApp = strings.TrimSpace(body.FileOpenApp)
 		s.mu.Unlock()
-		if err := config.Save(s.cfg); err != nil {
+		if err := s.persistConfig(); err != nil {
 			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -159,7 +182,7 @@ func (s *Server) handleTerminalApp(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		s.cfg.TerminalApp = strings.TrimSpace(body.TerminalApp)
 		s.mu.Unlock()
-		if err := config.Save(s.cfg); err != nil {
+		if err := s.persistConfig(); err != nil {
 			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
 			return
 		}

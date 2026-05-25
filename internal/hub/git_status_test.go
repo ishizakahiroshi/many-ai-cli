@@ -42,6 +42,30 @@ func TestApplyWorkingTreeNumstat(t *testing.T) {
 	}
 }
 
+func TestParseAheadBehind(t *testing.T) {
+	cases := []struct {
+		raw           string
+		ahead, behind int
+		ok            bool
+	}{
+		{"0\t0\n", 0, 0, true},
+		{"3\t2\n", 2, 3, true}, // behind=3, ahead=2
+		{"5\t0", 0, 5, true},
+		{"0\t4", 4, 0, true},
+		{"", 0, 0, false},
+		{"abc\t1", 0, 0, false},
+		{"1", 0, 0, false},
+		{"1\t2\t3", 0, 0, false},
+	}
+	for _, c := range cases {
+		a, b, ok := parseAheadBehind(c.raw)
+		if a != c.ahead || b != c.behind || ok != c.ok {
+			t.Fatalf("parseAheadBehind(%q) = (%d, %d, %v), want (%d, %d, %v)",
+				c.raw, a, b, ok, c.ahead, c.behind, c.ok)
+		}
+	}
+}
+
 func TestSuggestCommitMessage(t *testing.T) {
 	subject, body := suggestCommitMessage([]gitStatusFile{
 		{Status: "M", Path: "web/src/app.js"},

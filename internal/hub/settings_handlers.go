@@ -2,7 +2,6 @@ package hub
 
 import (
 	"net/http"
-	"os"
 	"path/filepath"
 
 	"any-ai-cli/internal/config"
@@ -18,8 +17,8 @@ func (s *Server) handleLogConfig(w http.ResponseWriter, r *http.Request) {
 		logCfg := s.cfg.Log
 		logDir := s.cfg.Hub.LogDir
 		s.mu.Unlock()
-		home, _ := os.UserHomeDir()
-		attachDir := filepath.Join(home, ".any-ai-cli", "attachments")
+		cfgDir, _ := config.Dir()
+		attachDir := filepath.Join(cfgDir, "attachments")
 		type logConfigResp struct {
 			config.LogConfig
 			LogDir    string `json:"log_dir"`
@@ -41,10 +40,20 @@ func (s *Server) handleLogConfig(w http.ResponseWriter, r *http.Request) {
 		} else if body.MaxBackups > 100 {
 			body.MaxBackups = 100
 		}
+		if body.SessionRetentionDays < 0 {
+			body.SessionRetentionDays = 0
+		} else if body.SessionRetentionDays > 365 {
+			body.SessionRetentionDays = 365
+		}
+		if body.SessionMaxSizeMB < 0 {
+			body.SessionMaxSizeMB = 0
+		} else if body.SessionMaxSizeMB > 10000 {
+			body.SessionMaxSizeMB = 10000
+		}
 		s.mu.Lock()
 		s.cfg.Log = body
 		s.mu.Unlock()
-		if err := config.Save(s.cfg); err != nil {
+		if err := s.persistConfig(); err != nil {
 			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -84,7 +93,7 @@ func (s *Server) handleIdleTimeout(w http.ResponseWriter, r *http.Request) {
 			s.startIdleTimerLocked()
 		}
 		s.mu.Unlock()
-		if err := config.Save(s.cfg); err != nil {
+		if err := s.persistConfig(); err != nil {
 			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -118,7 +127,7 @@ func (s *Server) handleReconnectGrace(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		s.cfg.Hub.WrapperReconnectGraceSec = body.WrapperReconnectGraceSec
 		s.mu.Unlock()
-		if err := config.Save(s.cfg); err != nil {
+		if err := s.persistConfig(); err != nil {
 			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
 			return
 		}

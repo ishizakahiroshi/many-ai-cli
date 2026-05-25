@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 )
 
@@ -189,8 +188,7 @@ func movePathKey(path string) string {
 // handleFilesMove は POST /api/files-move を処理する。
 // 単ファイルモード（src/dstDir）と多ファイルモード（srcs/dstDir）の両方をサポートする。
 func (s *Server) handleFilesMove(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -207,16 +205,7 @@ func (s *Server) handleFilesMove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// cwd の決定: ?session=<id> があればそのセッションの CWD を使用
-	cwd := s.hubCWD
-	if sidStr := r.URL.Query().Get("session"); sidStr != "" {
-		if sid, err := strconv.Atoi(sidStr); err == nil {
-			s.mu.Lock()
-			if ses := s.sessions[sid]; ses != nil {
-				cwd = ses.CWD
-			}
-			s.mu.Unlock()
-		}
-	}
+	cwd := s.cwdForRequest(r)
 	gitRoot := findGitRoot(cwd)
 
 	// dstDir の共通バリデーション

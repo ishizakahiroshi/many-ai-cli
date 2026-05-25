@@ -59,8 +59,8 @@ func (b *vtBuffer) Resize(cols, rows int) {
 		}
 	}
 	if b.cells != nil {
-		copyRows := minInt(rows, b.rows)
-		copyCols := minInt(cols, b.cols)
+		copyRows := min(rows, b.rows)
+		copyCols := min(cols, b.cols)
 		for r := 0; r < copyRows; r++ {
 			copy(next[r][:copyCols], b.cells[r][:copyCols])
 		}
@@ -337,9 +337,3 @@ func clampInt(v, lo, hi int) int {
 	return v
 }
 
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

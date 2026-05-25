@@ -13,6 +13,22 @@ import (
 
 const approvalSourceGoVT = "go_vt"
 
+// 承認検出のチューニング定数。
+// approvalRecentLines: detectNativeApproval に渡す末尾行数の上限。
+//   TailLines(vtTailLinesForApproval) と組み合わせて使う。
+//   TailLines が 120 行取得し、そのうち末尾 90 行を有効な承認候補として扱う。
+//   90 行は承認プロンプトが含まれる最大の行数（余白込み）の経験値。
+// vtTailLinesForApproval: VT バッファから取り出す末尾行数（server.go と対応）。
+const (
+	approvalRecentLines       = 90
+	vtTailLinesForApproval    = 120
+	approvalMaxOptions        = 12
+	approvalContextBefore     = 12
+	approvalContextAfter      = 6
+	approvalOptionGapLimit    = 4
+	approvalOptionNumMaxLabel = 20
+)
+
 type nativeApproval struct {
 	Sig      string
 	Kind     string
@@ -27,7 +43,7 @@ var (
 )
 
 func detectNativeApproval(provider string, lines []string) *nativeApproval {
-	recent := compactRecentLines(lines, 90)
+	recent := compactRecentLines(lines, approvalRecentLines)
 	if len(recent) == 0 {
 		return nil
 	}
@@ -35,8 +51,8 @@ func detectNativeApproval(provider string, lines []string) *nativeApproval {
 	if len(opts) == 0 {
 		return nil
 	}
-	contextStart := maxInt(0, start-12)
-	contextEnd := minInt(len(recent), end+6)
+	contextStart := max(0, start-approvalContextBefore)
+	contextEnd := min(len(recent), end+approvalContextAfter)
 	contextLines := recent[contextStart:contextEnd]
 	context := strings.Join(contextLines, "\n")
 	question := nativeApprovalQuestion(contextLines, start-contextStart)
@@ -87,7 +103,7 @@ func extractNativeApprovalOptions(provider string, lines []string) ([]proto.Appr
 	bestStart, bestEnd := 0, 0
 	curStart := 0
 	for i := 1; i < len(parsed); i++ {
-		if parsed[i].idx-parsed[i-1].idx > 4 {
+		if parsed[i].idx-parsed[i-1].idx > approvalOptionGapLimit {
 			if i-curStart >= bestEnd-bestStart+1 {
 				bestStart, bestEnd = curStart, i-1
 			}
@@ -112,7 +128,7 @@ func extractNativeApprovalOptions(provider string, lines []string) ([]proto.Appr
 		seen[key] = struct{}{}
 		opts = append(opts, item.opt)
 	}
-	if len(opts) < 2 || len(opts) > 12 {
+	if len(opts) < 2 || len(opts) > approvalMaxOptions {
 		return nil, -1, -1
 	}
 	if !approvalOptionsHaveCursor(opts) && !approvalOptionsHaveSendText(opts) {
@@ -130,7 +146,7 @@ func parseNativeApprovalOption(provider, line string) (proto.ApprovalOption, boo
 	if m := numberedApprovalLineRe.FindStringSubmatch(trimmed); m != nil {
 		n, _ := strconv.Atoi(m[2])
 		label := cleanNativeApprovalLabel(m[3])
-		if label == "" || n > 20 {
+		if label == "" || n > approvalOptionNumMaxLabel {
 			return proto.ApprovalOption{}, false
 		}
 		opt := proto.ApprovalOption{
@@ -281,9 +297,3 @@ func nativeApprovalSig(provider string, approval *nativeApproval) string {
 	return hex.EncodeToString(sum[:])[:16]
 }
 
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}

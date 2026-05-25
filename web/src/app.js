@@ -258,6 +258,9 @@ const _USER_PREFS_PATH_TO_LS = {
   'approval.auto_switch':      [STORAGE_APPROVAL_AUTO_SWITCH_KEY,  (v) => v ? '1' : '0'],
   'spawn.defaults':            [STORAGE_SPAWN_KEY,                 JSON.stringify],
   'display.locked_mode':       [STORAGE_DISPLAY_LOCKED_MODE_KEY,   (v) => (v == null || v === '') ? '' : String(v)],
+  'display.theme':             [STORAGE_THEME_KEY,                 String],
+  'display.font_size':         [STORAGE_FONTSIZE_KEY,              String],
+  'display.lang':              [STORAGE_LANG_KEY,                  String],
 };
 
 const _USER_PREFS_STRING_PATHS = new Set([
@@ -271,6 +274,9 @@ const _USER_PREFS_STRING_PATHS = new Set([
   'usage_links.ollama',
   'usage_links.opencode',
   'display.locked_mode',
+  'display.theme',
+  'display.font_size',
+  'display.lang',
 ]);
 const _USER_PREFS_STRING_ARRAY_PATHS = new Set([
   'favorites',
@@ -351,24 +357,30 @@ function _userPrefsHttpError(phase, res) {
   return err;
 }
 
+// _putUserPrefsNow は localStorage の最新値をサーバへ即時（awaited）反映する。
+// 言語変更時の location.reload() 前や reset 完了時など、debounce を待てない場面で使う。
+async function _putUserPrefsNow() {
+  const tk = new URLSearchParams(location.search).get('token');
+  if (!tk) return;
+  // 現在のサーバ値を取得してからパッチ適用し全体置換
+  const getRes = await fetch(`/api/user-prefs?token=${tk}`);
+  if (!getRes.ok) throw _userPrefsHttpError('GET', getRes);
+  const current = await getRes.json();
+  // localStorage の最新値を current にマージ
+  _mergeStoredUserPrefs(current);
+  const putRes = await fetch(`/api/user-prefs?token=${tk}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(current),
+  });
+  if (!putRes.ok) throw _userPrefsHttpError('PUT', putRes);
+}
+
 function _scheduleUserPrefsPut() {
   clearTimeout(_userPrefsDebounceTimer);
   _userPrefsDebounceTimer = setTimeout(async () => {
-    const tk = new URLSearchParams(location.search).get('token');
-    if (!tk) return;
     try {
-      // 現在のサーバ値を取得してからパッチ適用し全体置換
-      const getRes = await fetch(`/api/user-prefs?token=${tk}`);
-      if (!getRes.ok) throw _userPrefsHttpError('GET', getRes);
-      const current = await getRes.json();
-      // localStorage の最新値を current にマージ
-      _mergeStoredUserPrefs(current);
-      const putRes = await fetch(`/api/user-prefs?token=${tk}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(current),
-      });
-      if (!putRes.ok) throw _userPrefsHttpError('PUT', putRes);
+      await _putUserPrefsNow();
     } catch (e) {
       console.warn('[user-prefs] PUT failed:', e);
       showToast(_userPrefsSaveErrorMessage(e));
@@ -459,6 +471,22 @@ async function migrateLocalstoragePrefsToServer() {
   const serverPrefs = await _mirrorUserPrefsFromServer();
   if (serverPrefs && !serverPrefs.migrated_from_localstorage) {
     await migrateLocalstoragePrefsToServer();
+  } else if (serverPrefs) {
+    // 既に移行済みのユーザー向けバックフィル: 後から user_prefs に追加した
+    // display.theme/font_size/lang がサーバに無く localStorage にだけある場合、
+    // 一度だけサーバへ移送する（setUserPref の debounce PUT で永続化）。
+    const disp = serverPrefs.display || {};
+    for (const [path, lsKey] of [
+      ['display.theme',     STORAGE_THEME_KEY],
+      ['display.font_size', STORAGE_FONTSIZE_KEY],
+      ['display.lang',      STORAGE_LANG_KEY],
+    ]) {
+      const field = path.split('.')[1];
+      const lsVal = localStorage.getItem(lsKey);
+      if (lsVal != null && (disp[field] == null || disp[field] === '')) {
+        setUserPref(path, lsVal);
+      }
+    }
   }
 })();
 
@@ -527,7 +555,7 @@ function stripTrailingTriggerPhrase(text, triggerPhrase) {
 }
 
 function escapeHtml(str) {
-  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function normalizeHttpUrl(value, fallback = '') {
@@ -844,8 +872,8 @@ function filterFirstMessage(text) {
 }
 
 function applyTheme(theme) {
-  // 'blue' は廃止済み。既存設定が 'blue' の場合は 'dark' にフォールバック
-  const t = (theme === 'dark' || theme === 'light') ? theme : 'dark';
+  // 'blue' は廃止済み。既存設定が 'blue' の場合は既定テーマにフォールバック
+  const t = (theme === 'dark' || theme === 'light') ? theme : 'light';
   document.documentElement.setAttribute('data-theme', t);
   const sel = document.getElementById('theme-select');
   if (sel) sel.value = t;
@@ -879,7 +907,7 @@ function applyLang(lang) {
 }
 
 (function () {
-  applyTheme(localStorage.getItem(STORAGE_THEME_KEY) || 'dark');
+  applyTheme(localStorage.getItem(STORAGE_THEME_KEY) || 'light');
   applyFontSize(localStorage.getItem(STORAGE_FONTSIZE_KEY) || 'medium');
   applyLang(localStorage.getItem(STORAGE_LANG_KEY) || 'ja');
   applyUsageLinks();
@@ -921,9 +949,15 @@ function applyLang(lang) {
     }
   });
 
-  themeEl.addEventListener('change',    () => applyTheme(themeEl.value));
-  fontsizeEl.addEventListener('change', () => applyFontSize(fontsizeEl.value));
-  langEl.addEventListener('change',     () => window.setLang(langEl.value));
+  themeEl.addEventListener('change',    () => { applyTheme(themeEl.value); setUserPref('display.theme', themeEl.value); });
+  fontsizeEl.addEventListener('change', () => { applyFontSize(fontsizeEl.value); setUserPref('display.font_size', fontsizeEl.value); });
+  langEl.addEventListener('change',     async () => {
+    // setLang は即 location.reload() するため、debounce を待たず同期 PUT で確実に永続化する。
+    // 永続化しないとリロード後に mirror が旧サーバ値で localStorage を上書きし、言語が巻き戻る。
+    setUserPref('display.lang', langEl.value);
+    try { await _putUserPrefsNow(); } catch (_) {}
+    window.setLang(langEl.value);
+  });
   if (saveBtn) {
     saveBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -1832,6 +1866,17 @@ function resetChatHistoryForSession(sid) {
   const t = chatHistoryAutoCommitTimers.get(sid);
   if (t) { clearTimeout(t); chatHistoryAutoCommitTimers.delete(sid); }
   chatHistoryOutputBuffers.delete(sid);
+  // attach メッセージの object URL を解放する
+  const msgs = chatHistory.get(sid);
+  if (msgs) {
+    for (const msg of msgs) {
+      if (msg.kind === 'attach' && Array.isArray(msg.attachments)) {
+        for (const a of msg.attachments) {
+          if (a.url && a.url.startsWith('blob:')) { try { URL.revokeObjectURL(a.url); } catch (_) {} }
+        }
+      }
+    }
+  }
   chatHistory.delete(sid);
   chatHistoryIdSeq.delete(sid);
   chatHistoryNotify(sid, null);
@@ -2016,30 +2061,13 @@ document.addEventListener('i18n-ready', () => {
   renderSessionList();
 });
 
-const ws = new WebSocket(`ws://${location.host}/ws`);
-ws.onerror = () => { document.getElementById('summary').textContent = t('ws_error'); };
-ws.onclose = (e) => {
-  document.getElementById('summary').textContent = t('ws_close', { code: e.code });
-  const nsBtn = document.getElementById('new-session-btn');
-  if (nsBtn) { nsBtn.disabled = true; document.getElementById('new-session-panel').hidden = true; }
-  document.getElementById('reconnect-btn').hidden = false;
-  sessions.clear();
-  autoDismissTimers.forEach(t => clearTimeout(t));
-  autoDismissTimers.clear();
-  activeSessionId = null;
-  updateShellBadge(null);
-  updateTabNotification(0);
-  const area = document.getElementById('terminal-area');
-  if (area) area.innerHTML = '';
-  hideActionBar(undefined);
-  renderSessionList();
-};
+// ---- WebSocket 自動再接続（指数バックオフ） ----
+let ws = null;
+let _wsIntentionalClose = false; // ページ遷移など意図的クローズ時は再接続しない
+let _wsRetryDelay = 500; // 初期バックオフ ms
+const _wsRetryMax = 10000; // 上限 ms
 
-ws.onopen = () => {
-  document.getElementById('summary').textContent = t('registering');
-  const nsBtn = document.getElementById('new-session-btn');
-  if (nsBtn) nsBtn.disabled = false;
-  document.getElementById('reconnect-btn').hidden = true;
+function _sendRegister() {
   const area = document.getElementById('terminal-area');
   // clientWidth/Height が「ゼロではないが極小（レイアウト未確定 / 親が
   // display:none 直後など）」のときに `0 || 200` のフォールバックが効かず、
@@ -2054,25 +2082,49 @@ ws.onopen = () => {
   const cols = cw >= 120 ? Math.floor(cw / 7.5) : 200;
   const rows = ch >= 80  ? Math.floor(ch / 16)  : 50;
   ws.send(JSON.stringify({ type: 'register', role: 'ui', token, cols, rows, ui_active_session_id: activeSessionId || 0 }));
-};
+}
 
-document.getElementById('reconnect-btn').addEventListener('click', async () => {
-  const btn = document.getElementById('reconnect-btn');
-  btn.disabled = true;
-  btn.textContent = t('reconnect_checking') || '確認中...';
-  try {
-    // トークン不要の疎通確認（401でも「Hub起動中」と判断）
-    await fetch('/', { signal: AbortSignal.timeout(2000) });
-    location.reload();
-  } catch (_) {
-    btn.textContent = '↺ ' + (t('reconnect') || '再接続');
-    btn.disabled = false;
-    document.getElementById('summary').textContent = t('hub_stopped') || 'Hub停止中 — any-ai-cli serve で再起動してください';
-  }
-});
-
-ws.onmessage = (ev) => {
-  const m = JSON.parse(ev.data);
+function _connectWs() {
+  const _ws = new WebSocket(`ws://${location.host}/ws`);
+  ws = _ws;
+  _ws.onerror = () => { document.getElementById('summary').textContent = t('ws_error'); };
+  _ws.onclose = (e) => {
+    if (_elapsedTimerInterval) { clearInterval(_elapsedTimerInterval); _elapsedTimerInterval = null; }
+    sessions.clear();
+    autoDismissTimers.forEach(t => clearTimeout(t));
+    autoDismissTimers.clear();
+    activeSessionId = null;
+    updateShellBadge(null);
+    updateTabNotification(0);
+    const area = document.getElementById('terminal-area');
+    if (area) area.innerHTML = '';
+    hideActionBar(undefined);
+    renderSessionList();
+    if (_wsIntentionalClose) return;
+    // 指数バックオフで自動再接続
+    document.getElementById('summary').textContent = t('ws_close', { code: e.code });
+    const nsBtn = document.getElementById('new-session-btn');
+    if (nsBtn) { nsBtn.disabled = true; document.getElementById('new-session-panel').hidden = true; }
+    document.getElementById('reconnect-btn').hidden = false;
+    const jitter = Math.random() * 200;
+    const delay = Math.min(_wsRetryMax, _wsRetryDelay) + jitter;
+    _wsRetryDelay = Math.min(_wsRetryMax, _wsRetryDelay * 2);
+    setTimeout(() => {
+      if (_wsIntentionalClose) return;
+      _connectWs();
+    }, delay);
+  };
+  _ws.onopen = () => {
+    _wsRetryDelay = 500; // 再接続成功でバックオフリセット
+    document.getElementById('summary').textContent = t('registering');
+    const nsBtn = document.getElementById('new-session-btn');
+    if (nsBtn) nsBtn.disabled = false;
+    document.getElementById('reconnect-btn').hidden = true;
+    _sendRegister();
+  };
+  _ws.onmessage = (ev) => {
+    let m;
+    try { m = JSON.parse(ev.data); } catch { return; }
 
   if (m.type === 'pty_data') {
     const id = m.session_id;
@@ -2246,7 +2298,26 @@ ws.onmessage = (ev) => {
   }
 
   render();
-};
+  }; // end _ws.onmessage
+} // end _connectWs
+
+document.getElementById('reconnect-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('reconnect-btn');
+  btn.disabled = true;
+  btn.textContent = t('reconnect_checking') || '確認中...';
+  try {
+    // トークン不要の疎通確認（401でも「Hub起動中」と判断）
+    await fetch('/', { signal: AbortSignal.timeout(2000) });
+    location.reload();
+  } catch (_) {
+    btn.textContent = '↺ ' + (t('reconnect') || '再接続');
+    btn.disabled = false;
+    document.getElementById('summary').textContent = t('hub_stopped') || 'Hub停止中 — any-ai-cli serve で再起動してください';
+  }
+});
+
+// WS 初回接続
+_connectWs();
 
 // ---- ターミナルパスリンクポップアップ ----
 
@@ -3368,7 +3439,9 @@ function formatLastOutputAt(isoStr) {
                   d.getDate() === now.getDate();
   const time = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
   if (sameDay) return time;
-  const DOW = JSON.parse(t('dow'));
+  let DOW;
+  try { DOW = JSON.parse(t('dow')); }
+  catch { DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; }
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}(${DOW[d.getDay()]}) ${time}`;
 }
 
@@ -3708,7 +3781,14 @@ function renderSlashMenu() {
   slashItems.forEach((item, i) => {
     const div = document.createElement('div');
     div.className = 'slash-item' + (i === slashIndex ? ' selected' : '');
-    div.innerHTML = `<span class="slash-cmd">${item.cmd}</span><span class="slash-desc">${item.desc}</span>`;
+    const cmdSpan = document.createElement('span');
+    cmdSpan.className = 'slash-cmd';
+    cmdSpan.textContent = item.cmd;
+    const descSpan = document.createElement('span');
+    descSpan.className = 'slash-desc';
+    descSpan.textContent = item.desc;
+    div.appendChild(cmdSpan);
+    div.appendChild(descSpan);
     div.addEventListener('mousedown', (e) => { e.preventDefault(); selectSlashItem(i); });
     slashMenuEl.appendChild(div);
   });
@@ -4207,16 +4287,22 @@ function refitAllTerminals(refreshRows = false) {
   });
 }
 
+let _resizeRafPending = false;
 const resizeObserver = new ResizeObserver(() => {
-  if (activeSessionId === null) return;
-  const t = terminals.get(activeSessionId);
-  if (!canFitTerminal(t)) return;
-  const prevCols = t.term.cols;
-  const prevRows = t.term.rows;
-  fitTerminalPreservingBottom(t, activeSessionId);
-  if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
-    sendResize(activeSessionId, t.term.cols, t.term.rows);
-  }
+  if (_resizeRafPending) return;
+  _resizeRafPending = true;
+  requestAnimationFrame(() => {
+    _resizeRafPending = false;
+    if (activeSessionId === null) return;
+    const t = terminals.get(activeSessionId);
+    if (!canFitTerminal(t)) return;
+    const prevCols = t.term.cols;
+    const prevRows = t.term.rows;
+    fitTerminalPreservingBottom(t, activeSessionId);
+    if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
+      sendResize(activeSessionId, t.term.cols, t.term.rows);
+    }
+  });
 });
 
 const termArea = document.getElementById('terminal-area');
@@ -4998,11 +5084,6 @@ function renderSessionList() {
           const slotIdx = mgr.slots.findIndex(slot => slot && slot.session && slot.session.id === s.id);
           if (slotIdx >= 0) {
             c.classList.add('in-pane');
-            // スロット番号バッジ（P1 〜 P18）
-            const paneBadge = document.createElement('span');
-            paneBadge.className = 'sc-pane-badge';
-            paneBadge.textContent = `P${slotIdx + 1}`;
-            c.appendChild(paneBadge);
           }
         }
       }
@@ -5708,9 +5789,11 @@ function openLightbox(src, opts = {}) {
 (function () {
   const idleTimeoutEl     = document.getElementById('idle-timeout-min');
   const reconnectGraceEl  = document.getElementById('reconnect-grace-min');
-  const logEnabledEl      = document.getElementById('log-enabled');
-  const logMaxSizeEl      = document.getElementById('log-max-size');
-  const logMaxBackupsEl   = document.getElementById('log-max-backups');
+  const logEnabledEl               = document.getElementById('log-enabled');
+  const logMaxSizeEl               = document.getElementById('log-max-size');
+  const logMaxBackupsEl            = document.getElementById('log-max-backups');
+  const logSessionRetentionDaysEl  = document.getElementById('log-session-retention-days');
+  const logSessionMaxSizeEl        = document.getElementById('log-session-max-size');
 
   async function loadIdleTimeout() {
     if (!idleTimeoutEl) return;
@@ -5769,6 +5852,8 @@ function openLightbox(src, opts = {}) {
       logEnabledEl.checked  = cfg.enabled;
       logMaxSizeEl.value    = cfg.max_size_mb;
       logMaxBackupsEl.value = cfg.max_backups;
+      if (logSessionRetentionDaysEl) logSessionRetentionDaysEl.value = cfg.session_retention_days ?? 7;
+      if (logSessionMaxSizeEl) logSessionMaxSizeEl.value = cfg.session_max_size_mb ?? 50;
       const logDirBtn = document.getElementById('log-dir-btn');
       if (logDirBtn && cfg.log_dir) {
         logDirBtn.dataset.tooltip = cfg.log_dir;
@@ -5853,10 +5938,12 @@ function openLightbox(src, opts = {}) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          enabled:      logEnabledEl.checked,
-          max_size_mb:  parseInt(logMaxSizeEl.value, 10) || 10,
-          max_backups:  parseInt(logMaxBackupsEl.value, 10) || 3,
-          compress:     false,
+          enabled:                 logEnabledEl.checked,
+          max_size_mb:             parseInt(logMaxSizeEl.value, 10) || 10,
+          max_backups:             parseInt(logMaxBackupsEl.value, 10) || 3,
+          compress:                false,
+          session_retention_days:  parseInt(logSessionRetentionDaysEl?.value ?? '7', 10) || 7,
+          session_max_size_mb:     parseInt(logSessionMaxSizeEl?.value ?? '50', 10),
         }),
       });
     } catch (_) {}
@@ -5885,9 +5972,12 @@ function openLightbox(src, opts = {}) {
   };
 
   window.__settingsResetAll = async () => {
-    applyTheme('dark');
+    applyTheme('light');
     applyFontSize('medium');
-    window.setLang('ja');
+    applyLang('ja');
+    setUserPref('display.theme', 'light');
+    setUserPref('display.font_size', 'medium');
+    setUserPref('display.lang', 'ja');
 
     setUserPref('trigger.enabled', false);
     setUserPref('trigger.phrase', getDefaultTriggerPhrase());
@@ -5956,6 +6046,10 @@ function openLightbox(src, opts = {}) {
     if (logEnabledEl) logEnabledEl.checked = true;
     if (logMaxSizeEl) logMaxSizeEl.value = '10';
     if (logMaxBackupsEl) logMaxBackupsEl.value = '3';
+    const logSessionRetentionDaysEl2 = document.getElementById('log-session-retention-days');
+    if (logSessionRetentionDaysEl2) logSessionRetentionDaysEl2.value = '7';
+    const logSessionMaxSizeEl2 = document.getElementById('log-session-max-size');
+    if (logSessionMaxSizeEl2) logSessionMaxSizeEl2.value = '50';
 
     const approvalToggleInput = document.getElementById('approval-toggle-input');
     if (approvalToggleInput) {
@@ -5976,6 +6070,12 @@ function openLightbox(src, opts = {}) {
 
     await window.__settingsSaveAll();
     await loadApprovalSettings();
+    // theme/font_size/lang を含む user_prefs をサーバへ確実に反映してからリロードする。
+    // リロードしないと i18n（言語）が再描画されず、また mirror が旧サーバ値で
+    // localStorage を上書きしてリセットが巻き戻るため、flush 後に reload する。
+    // （従来は先頭の setLang が即リロードして reset 本体が途中で中断していた点も解消）
+    try { await _putUserPrefsNow(); } catch (_) {}
+    location.reload();
   };
 
   // 設定パネルが開かれたときにログ設定を読み込む
@@ -5995,6 +6095,8 @@ function openLightbox(src, opts = {}) {
   logEnabledEl.addEventListener('change', saveLogConfig);
   logMaxSizeEl.addEventListener('change', saveLogConfig);
   logMaxBackupsEl.addEventListener('change', saveLogConfig);
+  if (logSessionRetentionDaysEl) logSessionRetentionDaysEl.addEventListener('change', saveLogConfig);
+  if (logSessionMaxSizeEl) logSessionMaxSizeEl.addEventListener('change', saveLogConfig);
 })();
 
 (function () {

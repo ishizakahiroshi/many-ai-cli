@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -35,8 +34,7 @@ type filesRenameResp struct {
 //  7. newName が src の現在の basename と異なる（no-op 拒否）
 //  8. 移動先（同ディレクトリ/newName）が既存でない（上書き禁止）
 func (s *Server) handleFilesRename(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -65,16 +63,7 @@ func (s *Server) handleFilesRename(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// cwd の決定: ?session=<id> があればそのセッションの CWD を使用
-	cwd := s.hubCWD
-	if sidStr := r.URL.Query().Get("session"); sidStr != "" {
-		if sid, err := strconv.Atoi(sidStr); err == nil {
-			s.mu.Lock()
-			if ses := s.sessions[sid]; ses != nil {
-				cwd = ses.CWD
-			}
-			s.mu.Unlock()
-		}
-	}
+	cwd := s.cwdForRequest(r)
 	gitRoot := findGitRoot(cwd)
 
 	srcClean := filepath.Clean(req.Src)

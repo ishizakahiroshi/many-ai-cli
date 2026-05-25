@@ -19,8 +19,7 @@ type gitRefsResp struct {
 // handleGitRefs は GET /api/git-refs を処理する。
 // クエリ: session, token
 func (s *Server) handleGitRefs(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodGet {

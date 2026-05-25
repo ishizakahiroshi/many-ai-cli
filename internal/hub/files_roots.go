@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 )
 
 // filesRootsCandidate は /api/files-roots の候補エントリ。
@@ -24,8 +23,7 @@ type filesRootsResp struct {
 // handleFilesRoots は GET /api/files-roots を処理する。
 // ?session=<id>&token=<token> 必須（session は省略可: Hub cwd を使用）。
 func (s *Server) handleFilesRoots(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodGet {
@@ -34,16 +32,7 @@ func (s *Server) handleFilesRoots(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// cwd の決定: ?session=<id> があればそのセッションの CWD を使用
-	cwd := s.hubCWD
-	if sidStr := r.URL.Query().Get("session"); sidStr != "" {
-		if sid, err := strconv.Atoi(sidStr); err == nil {
-			s.mu.Lock()
-			if ses := s.sessions[sid]; ses != nil {
-				cwd = ses.CWD
-			}
-			s.mu.Unlock()
-		}
-	}
+	cwd := s.cwdForRequest(r)
 
 	// git ルートを検出（ピュア Go 実装: .git ディレクトリを親方向に探索）
 	gitRoot := findGitRoot(cwd)

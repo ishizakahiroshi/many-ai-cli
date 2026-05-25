@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -55,8 +54,7 @@ var filesSkipDirs = map[string]bool{
 // ?root=<absPath> で列挙起点を指定（省略時: <cwd>/docs/local）。
 // ?token=<token> 必須。
 func (s *Server) handleFilesList(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodGet {
@@ -65,16 +63,7 @@ func (s *Server) handleFilesList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// cwd の決定: ?session=<id> があればそのセッションの CWD を使用
-	cwd := s.hubCWD
-	if sidStr := r.URL.Query().Get("session"); sidStr != "" {
-		if sid, err := strconv.Atoi(sidStr); err == nil {
-			s.mu.Lock()
-			if ses := s.sessions[sid]; ses != nil {
-				cwd = ses.CWD
-			}
-			s.mu.Unlock()
-		}
-	}
+	cwd := s.cwdForRequest(r)
 
 	// ?root=<absPath> の処理
 	var filesRoot string
@@ -438,22 +427,37 @@ func findGitRoot(dir string) string {
 	return dir
 }
 
+// evalSymlinksViaSelf は path を EvalSymlinks で解決する。
+// path 自体が存在しない場合は親ディレクトリを解決して basename を付け直す
+//（move/rename/delete のように「これから作るパス」の symlink 脱出を防ぐため）。
+// 解決できない場合は cleaned のまま返し、ok=false を返す。
+func evalSymlinksViaSelf(cleaned string) (resolved string, ok bool) {
+	if r, err := filepath.EvalSymlinks(cleaned); err == nil {
+		return r, true
+	}
+	// 自身が未存在の場合: 親を解決して basename を付け直す
+	parent := filepath.Dir(cleaned)
+	base := filepath.Base(cleaned)
+	if rp, err := filepath.EvalSymlinks(parent); err == nil {
+		return filepath.Join(rp, base), true
+	}
+	return cleaned, false
+}
+
 // isPathUnderAllowedRoots は target パスが allowedRoots のいずれかの配下にあるか検証する。
 // path traversal 防止のため:
 //  1. filepath.Clean で正規化
-//  2. os.Stat で存在確認（存在しなくてもパス文字列レベルで検証）
-//  3. filepath.EvalSymlinks で解決（パスが存在する場合）
-//  4. filepath.Rel で配下確認
-//  5. Windows のドライブレター比較は strings.EqualFold
+//  2. filepath.EvalSymlinks で自身または親を解決（symlink 経由の脱出を塞ぐ）
+//  3. 判定は resolved ベースに統一（cleaned フォールバックは使わない）
+//  4. 解決できない場合は拒否寄り（ok=false）
 func isPathUnderAllowedRoots(target string, allowedRoots ...string) (bool, error) {
 	cleaned := filepath.Clean(target)
 
-	// シンボリックリンクを解決（存在する場合のみ）
-	resolved := cleaned
-	if _, err := os.Stat(cleaned); err == nil {
-		if r, err := filepath.EvalSymlinks(cleaned); err == nil {
-			resolved = r
-		}
+	// symlink を解決（対象が未存在でも親経由で解決する）
+	resolved, ok := evalSymlinksViaSelf(cleaned)
+	if !ok {
+		// 完全に解決できない場合は cleaned で判定（移動先の新規ファイル等）
+		resolved = cleaned
 	}
 
 	for _, root := range allowedRoots {
@@ -461,15 +465,10 @@ func isPathUnderAllowedRoots(target string, allowedRoots ...string) (bool, error
 			continue
 		}
 		cleanedRoot := filepath.Clean(root)
-		resolvedRoot := cleanedRoot
-		if _, err := os.Stat(cleanedRoot); err == nil {
-			if r, err := filepath.EvalSymlinks(cleanedRoot); err == nil {
-				resolvedRoot = r
-			}
-		}
+		resolvedRoot, _ := evalSymlinksViaSelf(cleanedRoot)
 
-		// Windows のドライブレター違いをケースインセンシティブで比較
-		if isUnder(resolved, resolvedRoot) || isUnder(cleaned, cleanedRoot) {
+		// resolved ベースのみで判定（cleaned フォールバックは使わない）
+		if isUnder(resolved, resolvedRoot) {
 			return true, nil
 		}
 	}
@@ -486,7 +485,15 @@ func isUnder(target, base string) bool {
 	base = filepath.Clean(base)
 	target = filepath.Clean(target)
 
-	rel, err := filepath.Rel(base, target)
+	// Windows: ケースインセンシティブ比較のため両辺を小文字化してから Rel
+	cmpBase := base
+	cmpTarget := target
+	if isWindowsPath(base) || isWindowsPath(target) {
+		cmpBase = strings.ToLower(base)
+		cmpTarget = strings.ToLower(target)
+	}
+
+	rel, err := filepath.Rel(cmpBase, cmpTarget)
 	if err != nil {
 		return false
 	}
@@ -496,10 +503,14 @@ func isUnder(target, base string) bool {
 	}
 
 	// Windows: ドライブレター違いの場合 Rel が絶対パスを返すことがある
-	// その場合は EqualFold でドライブレター一致確認
 	if filepath.IsAbs(rel) {
 		return false
 	}
 
 	return true
+}
+
+// isWindowsPath は path が Windows ドライブレター形式（例: C:\...）かを判定する。
+func isWindowsPath(path string) bool {
+	return len(path) >= 2 && path[1] == ':'
 }

@@ -545,6 +545,40 @@ The Hub UI exposes APIs that perform host-level actions (e.g. `/api/open-dir` op
 
 ---
 
+## Uninstall
+
+Since `any-ai-cli` is a single binary you download and run directly (no installer), uninstalling is done by running the binary with the `uninstall` subcommand from wherever you placed it.
+
+**Windows** — run from the folder containing `any-ai-cli.exe`:
+
+```powershell
+.\any-ai-cli.exe uninstall          # removes settings and logs (~/.any-ai-cli/)
+.\any-ai-cli.exe uninstall --purge  # also removes the binary itself
+```
+
+**macOS / Linux / WSL** — run from the folder containing `any-ai-cli`:
+
+```bash
+./any-ai-cli uninstall          # removes settings and logs (~/.any-ai-cli/)
+./any-ai-cli uninstall --purge  # also removes the binary itself
+```
+
+You will be shown exactly what will be deleted and asked to confirm before anything is removed.
+
+| Option | What is removed |
+|---|---|
+| (none) | `~/.any-ai-cli/` (config, logs, attachments). The binary path is printed — delete it manually. |
+| `--purge` | Everything above, plus the binary itself. |
+
+**Manual removal** — if you prefer to delete files by hand:
+
+1. Delete `~/.any-ai-cli/` (Windows: `%USERPROFILE%\.any-ai-cli\`)
+2. Delete the binary (`any-ai-cli.exe` / `any-ai-cli`)
+
+> **Browser data is not cleared.** `uninstall` cannot reach your browser's storage. Most settings (theme, language, font size, favorites, quick commands, etc.) live server-side under `~/.any-ai-cli/` and are removed, but per-browser display state kept in `localStorage` (files-tree expansion, pane layout, scrollback size) remains. To clear it, open the tab where the Hub was running, press `F12`, and run `localStorage.clear()` in the console.
+
+---
+
 ## Build from Source
 
 Requires Go 1.22+.

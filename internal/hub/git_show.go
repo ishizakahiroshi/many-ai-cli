@@ -42,8 +42,7 @@ const (
 // handleGitShow は GET /api/git-show を処理する。
 // クエリ: session, token, hash
 func (s *Server) handleGitShow(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodGet {
@@ -62,6 +61,10 @@ func (s *Server) handleGitShow(w http.ResponseWriter, r *http.Request) {
 		writeGitError(w, http.StatusBadRequest, "bad_request", "hash is required")
 		return
 	}
+	if !validRevision(hash) {
+		writeGitError(w, http.StatusBadRequest, "bad_request", "invalid hash format")
+		return
+	}
 
 	_, cwd, err := s.resolveGitRoot(sid)
 	if err != nil {
@@ -72,11 +75,11 @@ func (s *Server) handleGitShow(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), gitCommandTimeout)
 	defer cancel()
 
-	// 1) commit メタ取得
+	// 1) commit メタ取得（hash の後に -- を置いてファイルパスと明示的に区切る）
 	metaOut, err := runGit(ctx, cwd, "show", "-s", "--decorate=short",
-		"--pretty=format:"+gitShowMetaFormat, hash)
+		"--pretty=format:"+gitShowMetaFormat, hash, "--")
 	if err != nil {
-		writeGitError(w, http.StatusInternalServerError, "git_command_failed", err.Error())
+		writeGitError(w, http.StatusInternalServerError, "git_command_failed", sanitizeGitErrMsg(err))
 		return
 	}
 	meta, perr := parseGitShowMeta(string(metaOut))
@@ -86,15 +89,15 @@ func (s *Server) handleGitShow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2) ファイル一覧 (status + path)
-	nameOut, err := runGit(ctx, cwd, "show", "--name-status", "--pretty=format:", hash)
+	nameOut, err := runGit(ctx, cwd, "show", "--name-status", "--pretty=format:", hash, "--")
 	if err != nil {
-		writeGitError(w, http.StatusInternalServerError, "git_command_failed", err.Error())
+		writeGitError(w, http.StatusInternalServerError, "git_command_failed", sanitizeGitErrMsg(err))
 		return
 	}
 	files := parseNameStatus(string(nameOut))
 
 	// 3) numstat で added/removed
-	numOut, err := runGit(ctx, cwd, "show", "--numstat", "--pretty=format:", hash)
+	numOut, err := runGit(ctx, cwd, "show", "--numstat", "--pretty=format:", hash, "--")
 	if err == nil {
 		applyNumstat(files, string(numOut))
 	}
@@ -222,6 +225,38 @@ func parseNameStatus(raw string) []gitShowFile {
 	return files
 }
 
+// numstatEntry は parseNumstatRaw の 1 件。
+type numstatEntry struct{ added, removed int }
+
+// parseNumstatRaw は `--numstat` 出力を path → (added, removed) マップにパースする。
+// バイナリファイルの "-" は 0 として扱う。rename / copy の "{old => new}" 形式は
+// new path 側を採用する。git_status の applyWorkingTreeNumstat と git_show の
+// applyNumstat で共有する。
+func parseNumstatRaw(raw string) map[string]numstatEntry {
+	m := map[string]numstatEntry{}
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if line == "" {
+			continue
+		}
+		fields := strings.SplitN(line, "\t", 3)
+		if len(fields) < 3 {
+			continue
+		}
+		added, _ := strconv.Atoi(fields[0])   // "-" は 0 として扱う（バイナリ）
+		removed, _ := strconv.Atoi(fields[1]) //nolint:mnd
+		path := fields[2]
+		// "old => new" / "{a => b}/x" 形式は new path 側を採用するため右辺優先
+		if idx := strings.LastIndex(path, " => "); idx >= 0 {
+			path = strings.TrimSpace(path[idx+4:])
+			path = strings.TrimRight(path, "}")
+			path = strings.TrimSpace(path)
+		}
+		m[path] = numstatEntry{added: added, removed: removed}
+	}
+	return m
+}
+
 // applyNumstat は `git show --numstat --pretty=format:` の出力で
 // files[i].Added / Removed を埋める。path 一致で照合。
 //
@@ -232,29 +267,7 @@ func parseNameStatus(raw string) []gitShowFile {
 //	-\t-\tbinary.png
 //	0\t0\tsrc/old.go => src/new.go    (rename の場合)
 func applyNumstat(files []gitShowFile, raw string) {
-	// path → (added, removed) map
-	type stat struct{ added, removed int }
-	m := map[string]stat{}
-	for _, line := range strings.Split(raw, "\n") {
-		line = strings.TrimRight(line, "\r")
-		if line == "" {
-			continue
-		}
-		fields := strings.SplitN(line, "\t", 3)
-		if len(fields) < 3 {
-			continue
-		}
-		added, _ := strconv.Atoi(fields[0]) // "-" は 0 として扱う（バイナリ）
-		removed, _ := strconv.Atoi(fields[1])
-		path := fields[2]
-		// "old => new" / "{a => b}/x" 形式は new path 側を採用するため右辺優先
-		if idx := strings.LastIndex(path, " => "); idx >= 0 {
-			path = strings.TrimSpace(path[idx+4:])
-			path = strings.TrimRight(path, "}")
-			path = strings.TrimSpace(path)
-		}
-		m[path] = stat{added: added, removed: removed}
-	}
+	m := parseNumstatRaw(raw)
 	for i := range files {
 		if v, ok := m[files[i].Path]; ok {
 			files[i].Added = v.added

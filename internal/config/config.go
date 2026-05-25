@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -12,12 +13,32 @@ import (
 	"any-ai-cli/internal/wslutil"
 )
 
+// Dir は ~/.any-ai-cli ディレクトリのパスを返す。
+func Dir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("home dir: %w", err)
+	}
+	return filepath.Join(home, ".any-ai-cli"), nil
+}
+
+// Path は ~/.any-ai-cli/config.yaml のパスを返す。
+func Path() (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "config.yaml"), nil
+}
+
 // LogConfig はファイルローテーションロギングの設定。
 type LogConfig struct {
-	Enabled    bool `yaml:"enabled" json:"enabled"`
-	MaxSizeMB  int  `yaml:"max_size_mb" json:"max_size_mb"`
-	MaxBackups int  `yaml:"max_backups" json:"max_backups"`
-	Compress   bool `yaml:"compress" json:"compress"`
+	Enabled              bool `yaml:"enabled" json:"enabled"`
+	MaxSizeMB            int  `yaml:"max_size_mb" json:"max_size_mb"`
+	MaxBackups           int  `yaml:"max_backups" json:"max_backups"`
+	Compress             bool `yaml:"compress" json:"compress"`
+	SessionRetentionDays int  `yaml:"session_retention_days" json:"session_retention_days"`
+	SessionMaxSizeMB     int  `yaml:"session_max_size_mb" json:"session_max_size_mb"`
 }
 
 // ApprovalConfig は Hub 承認ボタン機能の設定。
@@ -214,6 +235,16 @@ type UserPrefsSpawn struct {
 	LastModel map[string]string `yaml:"last_model,omitempty" json:"last_model,omitempty"`
 }
 
+// UserPrefsDisplay は表示まわりのユーザー設定（端末横断で共有する分）。
+// theme / font_size / lang は従来 localStorage のみだったがサーバへ移行した。
+// locked_mode はクライアントが従来から送っていたが収容先が無く取りこぼしていた分。
+type UserPrefsDisplay struct {
+	Theme      string `yaml:"theme,omitempty"       json:"theme,omitempty"`
+	FontSize   string `yaml:"font_size,omitempty"   json:"font_size,omitempty"`
+	Lang       string `yaml:"lang,omitempty"        json:"lang,omitempty"`
+	LockedMode string `yaml:"locked_mode,omitempty" json:"locked_mode,omitempty"`
+}
+
 // UserPrefs はサーバ側（config.yaml: user_prefs:）に保存するユーザー機能設定。
 // 端末・ポート横断で共有する D2 分類の設定を全て保持する。
 type UserPrefs struct {
@@ -229,6 +260,7 @@ type UserPrefs struct {
 	ProjectFavorites []string           `yaml:"project_favorites,omitempty" json:"project_favorites,omitempty"`
 	CwdHistory      []string            `yaml:"cwd_history,omitempty"      json:"cwd_history,omitempty"`
 	Spawn           UserPrefsSpawn      `yaml:"spawn,omitempty"            json:"spawn,omitempty"`
+	Display         UserPrefsDisplay    `yaml:"display,omitempty"          json:"display,omitempty"`
 	MigratedFromLocalstorage bool       `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
 	Avatar          string              `yaml:"avatar,omitempty"       json:"avatar,omitempty"`
 	DisplayName     string              `yaml:"display_name,omitempty" json:"display_name,omitempty"`
@@ -277,15 +309,36 @@ func LoadOrCreate() (*Config, error) {
 	}
 	path := filepath.Join(dir, "config.yaml")
 	cfg := defaultConfig(home)
-	if b, err := os.ReadFile(path); err == nil {
+
+	b, readErr := os.ReadFile(path)
+	switch {
+	case readErr == nil:
 		if err := yaml.Unmarshal(b, cfg); err != nil {
-			return nil, err
+			// 破損: .bak へ退避してデフォルト設定で起動継続
+			bak := path + ".bak"
+			_ = os.WriteFile(bak, b, 0o600)
+			slog.Warn("config parse failed; backed up and regenerating",
+				"bak", bak, "err", err)
+			cfg = defaultConfig(home)
+			out, mErr := yaml.Marshal(cfg)
+			if mErr != nil {
+				return nil, fmt.Errorf("marshal default config: %w", mErr)
+			}
+			if err := os.WriteFile(path, out, 0o600); err != nil {
+				return nil, fmt.Errorf("write default config: %w", err)
+			}
 		}
-	} else {
-		out, _ := yaml.Marshal(cfg)
+	case os.IsNotExist(readErr):
+		out, mErr := yaml.Marshal(cfg)
+		if mErr != nil {
+			return nil, fmt.Errorf("marshal default config: %w", mErr)
+		}
 		if err := os.WriteFile(path, out, 0o600); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("write default config: %w", err)
 		}
+	default:
+		// 権限・I/O エラーは隠さず返す（既存設定を握り潰さない）
+		return nil, fmt.Errorf("read config: %w", readErr)
 	}
 	if cfg.Token == "" {
 		cfg.Token = randomToken()
@@ -335,6 +388,8 @@ func defaultConfig(home string) *Config {
 	cfg.Log.MaxSizeMB = 10
 	cfg.Log.MaxBackups = 3
 	cfg.Log.Compress = false
+	cfg.Log.SessionRetentionDays = 7
+	cfg.Log.SessionMaxSizeMB = 50
 	cfg.UserPrefs = UserPrefs{}
 	cfg.SlashCmdSources = DefaultSlashCmdSources()
 	cfg.ApprovalPatternSources = DefaultApprovalPatternSources()
@@ -344,16 +399,101 @@ func defaultConfig(home string) *Config {
 }
 
 func Save(cfg *Config) error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("home dir: %w", err)
-	}
-	path := filepath.Join(home, ".any-ai-cli", "config.yaml")
-	out, err := yaml.Marshal(cfg)
+	dir, err := Dir()
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, out, 0o600)
+	path := filepath.Join(dir, "config.yaml")
+	out, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+	// atomic write: temp ファイルを同一ディレクトリに作成して Rename で差し替える。
+	// 同一ボリューム内の Rename はほぼ atomic であり、書き込み中断でも既存 config.yaml を破損しない。
+	tmp, err := os.CreateTemp(dir, "config-*.yaml.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp config: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName) // Rename 成功後は no-op
+	if _, err := tmp.Write(out); err != nil {
+		tmp.Close()
+		return fmt.Errorf("write temp config: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return fmt.Errorf("sync temp config: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp config: %w", err)
+	}
+	if err := os.Chmod(tmpName, 0o600); err != nil {
+		return fmt.Errorf("chmod temp config: %w", err)
+	}
+	return os.Rename(tmpName, path)
+}
+
+// Clone returns a deep copy of cfg safe to pass to Save without holding s.mu.
+// map and slice fields are individually copied to prevent concurrent map
+// iteration/write panics during yaml.Marshal.
+func (cfg *Config) Clone() *Config {
+	c := *cfg // shallow copy of all scalar/struct fields
+
+	// Deep-copy map fields
+	if cfg.Spawn.LastModel != nil {
+		m := make(map[string]string, len(cfg.Spawn.LastModel))
+		for k, v := range cfg.Spawn.LastModel {
+			m[k] = v
+		}
+		c.Spawn.LastModel = m
+	}
+	if cfg.UserPrefs.Spawn.LastModel != nil {
+		m := make(map[string]string, len(cfg.UserPrefs.Spawn.LastModel))
+		for k, v := range cfg.UserPrefs.Spawn.LastModel {
+			m[k] = v
+		}
+		c.UserPrefs.Spawn.LastModel = m
+	}
+	if cfg.UserPrefs.Spawn.Defaults != nil {
+		m := make(map[string]string, len(cfg.UserPrefs.Spawn.Defaults))
+		for k, v := range cfg.UserPrefs.Spawn.Defaults {
+			m[k] = v
+		}
+		c.UserPrefs.Spawn.Defaults = m
+	}
+
+	// Deep-copy slice fields
+	if cfg.LocalModels != nil {
+		s := make([]LocalModel, len(cfg.LocalModels))
+		copy(s, cfg.LocalModels)
+		c.LocalModels = s
+	}
+	if cfg.UserPrefs.Favorites != nil {
+		s := make([]string, len(cfg.UserPrefs.Favorites))
+		copy(s, cfg.UserPrefs.Favorites)
+		c.UserPrefs.Favorites = s
+	}
+	if cfg.UserPrefs.SessionOrder != nil {
+		s := make([]string, len(cfg.UserPrefs.SessionOrder))
+		copy(s, cfg.UserPrefs.SessionOrder)
+		c.UserPrefs.SessionOrder = s
+	}
+	if cfg.UserPrefs.GroupOrder != nil {
+		s := make([]string, len(cfg.UserPrefs.GroupOrder))
+		copy(s, cfg.UserPrefs.GroupOrder)
+		c.UserPrefs.GroupOrder = s
+	}
+	if cfg.UserPrefs.ProjectFavorites != nil {
+		s := make([]string, len(cfg.UserPrefs.ProjectFavorites))
+		copy(s, cfg.UserPrefs.ProjectFavorites)
+		c.UserPrefs.ProjectFavorites = s
+	}
+	if cfg.UserPrefs.CwdHistory != nil {
+		s := make([]string, len(cfg.UserPrefs.CwdHistory))
+		copy(s, cfg.UserPrefs.CwdHistory)
+		c.UserPrefs.CwdHistory = s
+	}
+	return &c
 }
 
 func randomToken() string {

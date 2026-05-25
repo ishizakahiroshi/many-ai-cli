@@ -16,8 +16,7 @@ func (s *Server) invalidateSlashCache(provider string) {
 
 // handleSlashCmdSources は provider ごとのソース URL を GET/POST で管理する。
 func (s *Server) handleSlashCmdSources(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -43,7 +42,7 @@ func (s *Server) handleSlashCmdSources(w http.ResponseWriter, r *http.Request) {
 		if body.Codex != prev.Codex {
 			s.invalidateSlashCache("codex")
 		}
-		if err := config.Save(s.cfg); err != nil {
+		if err := s.persistConfig(); err != nil {
 			http.Error(w, "save failed", http.StatusInternalServerError)
 			return
 		}
@@ -57,8 +56,7 @@ func (s *Server) handleSlashCmdSources(w http.ResponseWriter, r *http.Request) {
 // GET: キャッシュがあれば返す（24h TTL）、なければ fetch。
 // POST: キャッシュを強制リフレッシュ。
 func (s *Server) handleSlashCommands(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
@@ -137,8 +135,7 @@ func writeSlashCmdsResp(w http.ResponseWriter, entry *slashCmdCacheEntry) {
 // GitHub の resources/usage-links/defaults.json から TTL 24h でキャッシュして提供し、
 // 取得失敗時はハードコード値にフォールバックする。
 func (s *Server) handleUsageLinkDefaults(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodGet {

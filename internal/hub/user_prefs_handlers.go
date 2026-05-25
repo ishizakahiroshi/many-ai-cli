@@ -12,28 +12,27 @@ import (
 
 // notifySoundCustomPath はカスタム通知音のバイナリファイルパスを返す。
 func notifySoundCustomPath() (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := config.Dir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".any-ai-cli", "notify_sound_custom.bin"), nil
+	return filepath.Join(dir, "notify_sound_custom.bin"), nil
 }
 
 // avatarUploadPath はアップロードされたアバター画像の保存パスを返す。
 func avatarUploadPath() (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := config.Dir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".any-ai-cli", "user_avatar.bin"), nil
+	return filepath.Join(dir, "user_avatar.bin"), nil
 }
 
 // handleUserPrefsAvatarUpload は PUT / DELETE /api/user-prefs/avatar を処理する。
 // PUT: バイナリ画像を保存し UserPrefs.Avatar をローカルパスに設定する。
 // DELETE: UserPrefs.Avatar を空にする。
 func (s *Server) handleUserPrefsAvatarUpload(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	switch r.Method {
@@ -43,6 +42,7 @@ func (s *Server) handleUserPrefsAvatarUpload(w http.ResponseWriter, r *http.Requ
 			http.Error(w, "home dir error: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, avatarMaxBytes)
 		data, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "read body error: "+err.Error(), http.StatusBadRequest)
@@ -55,7 +55,7 @@ func (s *Server) handleUserPrefsAvatarUpload(w http.ResponseWriter, r *http.Requ
 		s.mu.Lock()
 		s.cfg.UserPrefs.Avatar = path
 		s.mu.Unlock()
-		if err := config.Save(s.cfg); err != nil {
+		if err := s.persistConfig(); err != nil {
 			s.logger.Warn("save config failed", "err", err)
 			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -66,7 +66,7 @@ func (s *Server) handleUserPrefsAvatarUpload(w http.ResponseWriter, r *http.Requ
 		s.mu.Lock()
 		s.cfg.UserPrefs.Avatar = ""
 		s.mu.Unlock()
-		if err := config.Save(s.cfg); err != nil {
+		if err := s.persistConfig(); err != nil {
 			s.logger.Warn("save config failed", "err", err)
 			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -80,8 +80,7 @@ func (s *Server) handleUserPrefsAvatarUpload(w http.ResponseWriter, r *http.Requ
 
 // handleUserPrefs は GET / PUT /api/user-prefs を処理する。
 func (s *Server) handleUserPrefs(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	switch r.Method {
@@ -111,7 +110,7 @@ func (s *Server) handleUserPrefsPut(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.cfg.UserPrefs = prefs
 	s.mu.Unlock()
-	if err := config.Save(s.cfg); err != nil {
+	if err := s.persistConfig(); err != nil {
 		s.logger.Warn("save config failed", "err", err)
 		http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -125,8 +124,7 @@ func (s *Server) handleUserPrefsPut(w http.ResponseWriter, r *http.Request) {
 
 // handleUserPrefsNotifySoundCustom は GET / PUT /api/user-prefs/notify-sound-custom を処理する。
 func (s *Server) handleUserPrefsNotifySoundCustom(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	switch r.Method {
@@ -170,6 +168,7 @@ func (s *Server) handleUserPrefsNotifySoundCustomPut(w http.ResponseWriter, r *h
 		http.Error(w, "home dir error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, notifySoundMaxBytes)
 	data, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "read body error: "+err.Error(), http.StatusBadRequest)
@@ -187,7 +186,7 @@ func (s *Server) handleUserPrefsNotifySoundCustomPut(w http.ResponseWriter, r *h
 	s.cfg.UserPrefs.NotifySound.CustomFile = path
 	s.cfg.UserPrefs.NotifySound.CustomMime = mime
 	s.mu.Unlock()
-	if err := config.Save(s.cfg); err != nil {
+	if err := s.persistConfig(); err != nil {
 		s.logger.Warn("save config failed", "err", err)
 		http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
 		return
