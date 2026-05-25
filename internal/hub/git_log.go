@@ -45,8 +45,7 @@ const (
 // クエリ: session, token, ref (default=HEAD), limit (default=100), skip (default=0)
 // ref=--all は `git log --all` として扱う。
 func (s *Server) handleGitLog(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodGet {
@@ -63,6 +62,11 @@ func (s *Server) handleGitLog(w http.ResponseWriter, r *http.Request) {
 	ref := strings.TrimSpace(q.Get("ref"))
 	if ref == "" {
 		ref = "HEAD"
+	}
+	// ref=--all は特別扱い（git log --all）。それ以外は revision 形式チェック。
+	if ref != "--all" && !validRevision(ref) {
+		writeGitError(w, http.StatusBadRequest, "bad_request", "invalid ref format")
+		return
 	}
 	limit := gitLogDefaultLimit
 	if v := q.Get("limit"); v != "" {
@@ -104,12 +108,13 @@ func (s *Server) handleGitLog(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// git log 実行
+	// git log 実行（-- で revision とファイルパス境界を明示）
 	args := []string{"log"}
 	if ref == "--all" {
 		args = append(args, "--all")
 	} else {
-		args = append(args, ref)
+		// -- を前に置いて ref をオプションと誤解させない
+		args = append(args, ref, "--")
 	}
 	args = append(args,
 		"--max-count="+strconv.Itoa(limit),
@@ -120,7 +125,7 @@ func (s *Server) handleGitLog(w http.ResponseWriter, r *http.Request) {
 	)
 	out, err := runGit(ctx, cwd, args...)
 	if err != nil {
-		writeGitError(w, http.StatusInternalServerError, "git_command_failed", err.Error())
+		writeGitError(w, http.StatusInternalServerError, "git_command_failed", sanitizeGitErrMsg(err))
 		return
 	}
 
@@ -132,7 +137,7 @@ func (s *Server) handleGitLog(w http.ResponseWriter, r *http.Request) {
 	if ref == "--all" {
 		countArgs = append(countArgs, "--all")
 	} else {
-		countArgs = append(countArgs, ref)
+		countArgs = append(countArgs, ref, "--")
 	}
 	if cntOut, cerr := runGit(ctx, cwd, countArgs...); cerr == nil {
 		if total, perr := strconv.Atoi(strings.TrimSpace(string(cntOut))); perr == nil {

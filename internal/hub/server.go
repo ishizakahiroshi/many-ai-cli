@@ -151,6 +151,29 @@ func gitBranch(cwd string) string {
 	return "detached:" + hash
 }
 
+// uiConn wraps a single UI WebSocket connection and serialises all outbound
+// frames via sendMu so concurrent goroutines (broadcast, pingLoop, sendSnapshot,
+// history replay) never interleave partial frames on the same connection.
+// closeOnce guarantees conn.Close is called at most once regardless of how
+// many goroutines detect a dead connection simultaneously.
+type uiConn struct {
+	ws        *websocket.Conn
+	sendMu    sync.Mutex
+	closeOnce sync.Once
+}
+
+func newUIConn(ws *websocket.Conn) *uiConn { return &uiConn{ws: ws} }
+
+func (c *uiConn) send(m any) error {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	return websocket.JSON.Send(c.ws, m)
+}
+
+func (c *uiConn) close() {
+	c.closeOnce.Do(func() { _ = c.ws.Close() })
+}
+
 type Server struct {
 	cfg         *config.Config
 	logger      *slog.Logger
@@ -164,7 +187,7 @@ type Server struct {
 	nextID   int
 	sessions map[int]*session
 	wrappers map[int]*websocket.Conn
-	uis      map[*websocket.Conn]struct{}
+	uis      map[*websocket.Conn]*uiConn
 
 	slashCmdMu    sync.Mutex
 	slashCmdCache map[string]*slashCmdCacheEntry // key: provider
@@ -177,6 +200,7 @@ type Server struct {
 	lastUICols int
 	lastUIRows int
 	idleTimer  *time.Timer
+	idleGen    uint64 // incremented on each startIdleTimerLocked / stopIdleTimerLocked to invalidate stale callbacks
 
 	stopMu   sync.Mutex
 	stopFunc context.CancelFunc
@@ -208,7 +232,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		parentShell:       wrapper.DetectShell(),
 		sessions:          map[int]*session{},
 		wrappers:          map[int]*websocket.Conn{},
-		uis:               map[*websocket.Conn]struct{}{},
+		uis:               map[*websocket.Conn]*uiConn{},
 		slashCmdCache:     map[string]*slashCmdCacheEntry{},
 		usageLinkCache:    &usageLinkCache{},
 		modelsCache:       &modelsCache{},
@@ -247,7 +271,10 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.Handle("/i18n/", staticHandler)
 	mux.Handle("/vendor/", staticHandler)
 	mux.Handle("/approval-patterns/", approvalPatternsHandler)
-	mux.Handle("/ws", websocket.Handler(s.handleWS))
+	mux.Handle("/ws", websocket.Server{
+		Handshake: s.wsHandshake,
+		Handler:   s.handleWS,
+	})
 	mux.HandleFunc("/api/info", s.handleInfo)
 	mux.HandleFunc("/api/avatar", s.handleAvatar)
 	mux.HandleFunc("/api/spawn", s.handleSpawn)
@@ -292,6 +319,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/git-commit-all", s.handleGitCommitAll)
 	mux.HandleFunc("/api/git-commit-message", s.handleGitCommitMessage)
 	mux.HandleFunc("/api/git-fetch", s.handleGitFetch)
+	mux.HandleFunc("/api/git-pull", s.handleGitPull)
 	mux.HandleFunc("/api/user-prefs/notify-sound-custom", s.handleUserPrefsNotifySoundCustom)
 	mux.HandleFunc("/api/user-prefs/avatar", s.handleUserPrefsAvatarUpload)
 	mux.HandleFunc("/api/user-prefs", s.handleUserPrefs)
@@ -341,6 +369,7 @@ func (s *Server) Run(ctx context.Context) error {
 	go s.stateTicker(runCtx)
 	go s.cleanAttachments()
 	go s.cleanSpawnLogs()
+	go s.cleanSessionLogs()
 	go s.recoverTranscripts()
 	go s.approvalPatternsRemoteSync(runCtx)
 	go func() {
@@ -419,6 +448,36 @@ func (s *Server) cleanSpawnLogs() {
 	}
 }
 
+// cleanSessionLogs removes session log triplets (.log / .jsonl / .txt) in
+// logs/sessions/ that are older than cfg.Log.SessionRetentionDays days.
+// A retention of 0 disables cleanup; negative values are treated as 0.
+func (s *Server) cleanSessionLogs() {
+	s.mu.Lock()
+	days := s.cfg.Log.SessionRetentionDays
+	s.mu.Unlock()
+	if days <= 0 {
+		return
+	}
+	dir := filepath.Join(s.cfg.Hub.LogDir, "sessions")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-time.Duration(days) * 24 * time.Hour)
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
+}
+
 // cleanAttachments removes attachment files older than 7 days and then prunes
 // any session directories that are now empty.
 func (s *Server) cleanAttachments() {
@@ -475,8 +534,7 @@ func IsRunning(cfg *config.Config) bool {
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	var b []byte
@@ -495,6 +553,31 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(b)
 }
 
+// wsHandshake は WebSocket ハンドシェイク時に Origin を検証する。
+// 許可: http://127.0.0.1:<port> / http://localhost:<port> / Origin ヘッダ無し（ラッパー等 CLI 由来）。
+// 不一致は handshake エラーで拒否する。
+func (s *Server) wsHandshake(cfg *websocket.Config, req *http.Request) error {
+	origin := req.Header.Get("Origin")
+	if origin == "" {
+		// CLI / ラッパー由来の接続は Origin を持たないため許可する。
+		return nil
+	}
+	s.mu.Lock()
+	port := s.cfg.Hub.Port
+	s.mu.Unlock()
+	portStr := strconv.Itoa(port)
+	allowed := []string{
+		"http://127.0.0.1:" + portStr,
+		"http://localhost:" + portStr,
+	}
+	for _, a := range allowed {
+		if origin == a {
+			return nil
+		}
+	}
+	return fmt.Errorf("origin not allowed: %s", origin)
+}
+
 func (s *Server) handleWS(conn *websocket.Conn) {
 	defer conn.Close()
 	var m proto.Message
@@ -510,13 +593,13 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 			s.lastUICols, s.lastUIRows = m.Cols, m.Rows
 			s.mu.Unlock()
 		}
-		historyItems := s.addUIWithHistory(conn, m.UIActiveSessionID)
-		s.sendSnapshot(conn)
+		uc, historyItems := s.addUIWithHistory(conn, m.UIActiveSessionID)
+		s.sendSnapshot(uc)
 		for _, item := range historyItems {
-			_ = websocket.JSON.Send(conn, item)
+			_ = uc.send(item)
 		}
 		ctx, cancel := context.WithCancel(context.Background())
-		go s.pingLoop(ctx, conn)
+		go s.pingLoop(ctx, uc)
 		s.uiLoop(conn)
 		cancel()
 		return
@@ -546,7 +629,10 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		CWD:       reg.CWD,
 		StartedAt: startedAt,
 	})
-	history, histErr := sessionlog.NewJSONLWriter(jsonlPath)
+	s.mu.Lock()
+	jsonlMaxBytes := int64(s.cfg.Log.SessionMaxSizeMB) * 1024 * 1024
+	s.mu.Unlock()
+	history, histErr := sessionlog.NewJSONLWriter(jsonlPath, jsonlMaxBytes)
 	if histErr != nil {
 		s.logger.Warn("session history create failed", "path", jsonlPath, "err", histErr)
 	}
@@ -642,7 +728,10 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 			StartedAt: startedAt,
 		})
 	}
-	history, histErr := sessionlog.NewJSONLWriterAppend(jsonlPath)
+	s.mu.Lock()
+	jsonlMaxBytesReattach := int64(s.cfg.Log.SessionMaxSizeMB) * 1024 * 1024
+	s.mu.Unlock()
+	history, histErr := sessionlog.NewJSONLWriterAppend(jsonlPath, jsonlMaxBytesReattach)
 	if histErr != nil {
 		s.logger.Warn("session history append failed", "path", jsonlPath, "err", histErr)
 	}
@@ -721,6 +810,19 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	s.wrapperMessageLoop(conn, acceptedID)
 }
 
+// finalizeTranscript は JSONL パスからトランスクリプトファイルを生成する。
+// wrapperMessageLoop と session_dismiss の 2 箇所で同一の transcript 生成コードが
+// 重複していたため、ここに集約する。
+func (s *Server) finalizeTranscript(id int, jsonlPath string) {
+	if jsonlPath == "" {
+		return
+	}
+	transcriptPath := sessionlog.TranscriptPath(jsonlPath)
+	if err := sessionlog.WriteTranscriptFile(jsonlPath, transcriptPath); err != nil {
+		s.logger.Warn("transcript generation failed", "session_id", id, "path", transcriptPath, "err", err)
+	}
+}
+
 func (s *Server) wrapperMessageLoop(conn *websocket.Conn, id int) {
 	for {
 		var m proto.Message
@@ -735,8 +837,8 @@ func (s *Server) wrapperMessageLoop(conn *websocket.Conn, id int) {
 				"ts":         time.Now().Format(time.RFC3339),
 				"type":       "pty_output",
 				"session_id": id,
-				"data_b64":   sessionlog.EncodeBase64(m.Data),
-				"text":       sessionlog.StripANSI(string(m.Data)),
+				"data_b64":   sessionlog.EncodeBase64([]byte(sessionlog.MaskSecrets(string(m.Data)))),
+				"text":       sessionlog.MaskSecrets(sessionlog.StripANSI(string(m.Data))),
 			})
 			var provider string
 			var vtLines []string
@@ -751,7 +853,7 @@ func (s *Server) wrapperMessageLoop(conn *websocket.Conn, id int) {
 					ses.vt = newVTBuffer(ses.lastCols, ses.lastRows)
 				}
 				ses.vt.Write(m.Data)
-				vtLines = ses.vt.TailLines(120)
+				vtLines = ses.vt.TailLines(vtTailLinesForApproval)
 				provider = ses.Provider
 				debounceUntil = ses.vtResizeDebounceUntil
 			}
@@ -823,12 +925,7 @@ func (s *Server) wrapperMessageLoop(conn *websocket.Conn, id int) {
 	if historyToClose != nil {
 		_ = historyToClose.Close()
 	}
-	if jsonlPathForTranscript != "" {
-		transcriptPath := sessionlog.TranscriptPath(jsonlPathForTranscript)
-		if err := sessionlog.WriteTranscriptFile(jsonlPathForTranscript, transcriptPath); err != nil {
-			s.logger.Warn("transcript generation failed", "session_id", id, "path", transcriptPath, "err", err)
-		}
-	}
+	s.finalizeTranscript(id, jsonlPathForTranscript)
 	s.broadcast(proto.Message{Type: "session_end", SessionID: id, State: endState, Reason: endReason})
 }
 
@@ -1138,12 +1235,7 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 			if historyToClose != nil {
 				_ = historyToClose.Close()
 			}
-			if jsonlPathForTranscript != "" {
-				transcriptPath := sessionlog.TranscriptPath(jsonlPathForTranscript)
-				if err := sessionlog.WriteTranscriptFile(jsonlPathForTranscript, transcriptPath); err != nil {
-					s.logger.Warn("transcript generation failed", "session_id", m.SessionID, "path", transcriptPath, "err", err)
-				}
-			}
+			s.finalizeTranscript(m.SessionID, jsonlPathForTranscript)
 			s.broadcast(proto.Message{Type: "session_removed", SessionID: m.SessionID})
 		case "attach_request":
 			if m.ImageData == "" {
@@ -1327,10 +1419,11 @@ func (s *Server) refreshBranch(id int, cwd string) {
 // delivered via broadcast, so the snapshot and live stream do not overlap.
 // activeSessionID は UI が現在表示中のセッション ID。このセッションは全量 replay し、
 // 他は replayTailForNonActive バイトの tail のみ送信する（UI 接続時のメモリ・帯域削減）。
-func (s *Server) addUIWithHistory(c *websocket.Conn, activeSessionID int) []proto.Message {
+func (s *Server) addUIWithHistory(c *websocket.Conn, activeSessionID int) (*uiConn, []proto.Message) {
 	var items []proto.Message
 	s.mu.Lock()
-	s.uis[c] = struct{}{}
+	uc := newUIConn(c)
+	s.uis[c] = uc
 	s.stopIdleTimerLocked()
 	for id, ses := range s.sessions {
 		if len(ses.ptyBuf) == 0 {
@@ -1360,12 +1453,13 @@ func (s *Server) addUIWithHistory(c *websocket.Conn, activeSessionID int) []prot
 	count := len(s.uis)
 	s.mu.Unlock()
 	s.logger.Info("UI connected", "ui_count", count, "active_session", activeSessionID)
-	return items
+	return uc, items
 }
 
 func (s *Server) removeUI(c *websocket.Conn) {
 	s.mu.Lock()
-	if _, ok := s.uis[c]; !ok {
+	uc, ok := s.uis[c]
+	if !ok {
 		s.mu.Unlock()
 		return
 	}
@@ -1375,6 +1469,9 @@ func (s *Server) removeUI(c *websocket.Conn) {
 		s.startIdleTimerLocked()
 	}
 	s.mu.Unlock()
+	// Ensure the underlying TCP connection is closed so that any goroutine
+	// blocked on Receive (e.g. uiLoop) unblocks and exits.
+	uc.close()
 	s.logger.Info("UI disconnected", "ui_count", count)
 }
 
@@ -1383,13 +1480,21 @@ func (s *Server) startIdleTimerLocked() {
 	if min <= 0 || s.idleTimer != nil {
 		return
 	}
+	s.idleGen++
+	gen := s.idleGen
 	d := time.Duration(min) * time.Minute
 	s.idleTimer = time.AfterFunc(d, func() {
-		s.logger.Info("idle timeout reached, killing all wrappers", "minutes", min)
-		s.killAllWrappers()
 		s.mu.Lock()
+		if s.idleGen != gen {
+			// A newer timer was started (UI reconnected) or the timer was
+			// stopped; skip the kill to avoid evicting a just-reconnected UI.
+			s.mu.Unlock()
+			return
+		}
 		s.idleTimer = nil
 		s.mu.Unlock()
+		s.logger.Info("idle timeout reached, killing all wrappers", "minutes", min)
+		s.killAllWrappers()
 	})
 }
 
@@ -1397,13 +1502,14 @@ func (s *Server) stopIdleTimerLocked() {
 	if s.idleTimer == nil {
 		return
 	}
+	s.idleGen++ // invalidate any in-flight AfterFunc callback
 	s.idleTimer.Stop()
 	s.idleTimer = nil
 }
 
 // pingLoop は uiPingInterval ごとに UI WebSocket へ JSON ping を送り続ける。
 // keepalive として機能し、dead connection を検出したら s.uis から除去して終了する。
-func (s *Server) pingLoop(ctx context.Context, conn *websocket.Conn) {
+func (s *Server) pingLoop(ctx context.Context, uc *uiConn) {
 	t := time.NewTicker(uiPingInterval)
 	defer t.Stop()
 	for {
@@ -1411,16 +1517,16 @@ func (s *Server) pingLoop(ctx context.Context, conn *websocket.Conn) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if err := websocket.JSON.Send(conn, map[string]string{"type": "ping"}); err != nil {
+			if err := uc.send(map[string]string{"type": "ping"}); err != nil {
 				s.logger.Warn("ping failed, removing dead UI connection", "err", err)
-				s.removeUI(conn)
+				s.removeUI(uc.ws)
 				return
 			}
 		}
 	}
 }
 
-func (s *Server) sendSnapshot(c *websocket.Conn) {
+func (s *Server) sendSnapshot(uc *uiConn) {
 	s.mu.Lock()
 	list := make([]*session, 0, len(s.sessions))
 	for _, ses := range s.sessions {
@@ -1428,27 +1534,26 @@ func (s *Server) sendSnapshot(c *websocket.Conn) {
 	}
 	s.mu.Unlock()
 	b, _ := json.Marshal(list)
-	_ = websocket.JSON.Send(c, map[string]any{"type": "snapshot", "sessions": json.RawMessage(b)})
+	_ = uc.send(map[string]any{"type": "snapshot", "sessions": json.RawMessage(b)})
 }
 
 func (s *Server) broadcast(m any) {
 	s.mu.Lock()
-	conns := make([]*websocket.Conn, 0, len(s.uis))
-	for c := range s.uis {
-		conns = append(conns, c)
+	ucs := make([]*uiConn, 0, len(s.uis))
+	for _, uc := range s.uis {
+		ucs = append(ucs, uc)
 	}
 	s.mu.Unlock()
-	for _, c := range conns {
-		if err := websocket.JSON.Send(c, m); err != nil {
+	for _, uc := range ucs {
+		if err := uc.send(m); err != nil {
 			s.logger.Warn("broadcast: UI send failed, removing dead connection", "err", err)
-			s.removeUI(c)
+			s.removeUI(uc.ws)
 		}
 	}
 }
 
 func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1478,8 +1583,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	path := s.cfg.UserPrefs.Avatar
@@ -1487,7 +1591,18 @@ func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	data, err := os.ReadFile(path)
+	// パストラバーサル防止: avatar は固定ディレクトリ（~/.any-ai-cli/）配下のみ許可する。
+	allowedDir, err := config.Dir()
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	cleanPath := filepath.Clean(path)
+	if ok, _ := isPathUnderAllowedRoots(cleanPath, allowedDir); !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	data, err := os.ReadFile(cleanPath)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -1503,8 +1618,7 @@ func (s *Server) handleKillAll(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	s.killAllWrappers()
@@ -1529,8 +1643,7 @@ func (s *Server) handleShutdown(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	s.logger.Info("shutdown requested via UI")
@@ -1568,13 +1681,22 @@ func (s *Server) requestStop() {
 	}
 }
 
+// persistConfig takes a snapshot of s.cfg under s.mu and saves it to disk
+// outside the lock to avoid holding s.mu during file I/O and to prevent
+// concurrent map iteration/write panics in yaml.Marshal.
+func (s *Server) persistConfig() error {
+	s.mu.Lock()
+	snap := s.cfg.Clone()
+	s.mu.Unlock()
+	return config.Save(snap)
+}
+
 func (s *Server) handleAttach(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
@@ -1637,8 +1759,7 @@ func (s *Server) handleAttach(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePickDirectory(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -1665,8 +1786,7 @@ func (s *Server) handlePickDirectory(w http.ResponseWriter, r *http.Request) {
 // Spawn 時の Cmd.Dir に渡すと Windows では存在しないディレクトリで
 // CreateProcess が ERROR_DIRECTORY を返して分かりにくいので、事前に弾く用途。
 func (s *Server) handlePathExists(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -1721,8 +1841,7 @@ func PrintStatus(cfg *config.Config) error {
 //     token auth + loopback-only binding limits exposure, and the operation is "reveal
 //     in folder" (not "execute"), which has limited blast radius
 func (s *Server) handleOpenDir(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -1794,8 +1913,7 @@ func (s *Server) handleOpenDir(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleApprovalPatterns(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodGet {
@@ -1815,8 +1933,7 @@ func (s *Server) handleApprovalPatterns(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleApprovalPatternsItem(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	rest := strings.TrimPrefix(r.URL.Path, "/api/approval-patterns/")
@@ -1889,7 +2006,7 @@ func (s *Server) handleApprovalProfile(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		s.cfg.ApprovalProfiles = config.EffectiveApprovalProfiles(s.cfg.ApprovalProfiles).WithProvider(body.Provider, profile)
 		s.mu.Unlock()
-		if err := config.Save(s.cfg); err != nil {
+		if err := s.persistConfig(); err != nil {
 			s.logger.Warn("save config failed", "err", err)
 		}
 		s.refreshActiveMirror()
@@ -1972,8 +2089,7 @@ func killStalePid(pidPath string) {
 }
 
 func (s *Server) handlePickFile(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodPost {

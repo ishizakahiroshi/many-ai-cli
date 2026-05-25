@@ -13,6 +13,42 @@ import (
 	"unicode"
 )
 
+// secretPatterns は PTY 出力から既知の秘密文字列を伏字化するパターン一覧。
+// ヒューリスティックなので過剰マスクは許容し、取りこぼしは残る前提。
+var secretPatterns = []*regexp.Regexp{
+	// 汎用 API キー変数への代入 / 出力: ANTHROPIC_API_KEY=sk-... など
+	regexp.MustCompile(`(?i)([A-Z_]*API_KEY=)\S+`),
+	// Anthropic / OpenAI トークン: sk-ant-... / sk-...
+	regexp.MustCompile(`sk-(?:ant-)?[A-Za-z0-9_\-]{20,}`),
+	// GitHub Personal Access Token: ghp_ / github_pat_
+	regexp.MustCompile(`(?:ghp_|github_pat_)[A-Za-z0-9_]{20,}`),
+	// Bearer トークン
+	regexp.MustCompile(`(?i)(Bearer )\S{8,}`),
+	// AWS アクセスキー
+	regexp.MustCompile(`(?:AKIA|ASIA|AROA)[A-Z0-9]{16}`),
+}
+
+// MaskSecrets は s 中の既知の秘密パターンを "***" に置換して返す。
+// ANSI エスケープを含む生 PTY 文字列にそのまま適用してよい（可視文字列範囲に限定されるため誤爆は最小限）。
+func MaskSecrets(s string) string {
+	for _, re := range secretPatterns {
+		// Bearer など prefix を持つパターンはキャプチャグループ 1 を残す
+		if re.NumSubexp() >= 1 {
+			s = re.ReplaceAllStringFunc(s, func(m string) string {
+				sub := re.FindStringSubmatchIndex(m)
+				if len(sub) >= 4 && sub[2] >= 0 {
+					prefix := m[:sub[3]-sub[2]] // group[1] の文字数分
+					return prefix + "***"
+				}
+				return "***"
+			})
+		} else {
+			s = re.ReplaceAllString(s, "***")
+		}
+	}
+	return s
+}
+
 type Metadata struct {
 	SessionID int
 	Provider  string
@@ -88,11 +124,16 @@ func EncodeBase64(data []byte) string {
 }
 
 type Writer struct {
-	mu sync.Mutex
-	f  *os.File
+	mu        sync.Mutex
+	f         *os.File
+	written   int64
+	maxBytes  int64
+	truncated bool // true = log_truncated マーカーを書き済み
 }
 
-func NewJSONLWriter(path string) (*Writer, error) {
+// NewJSONLWriter は新規ファイルを作成して Writer を返す。
+// maxBytes > 0 の場合、累積書き込みバイト数がその値に達すると以降の書き込みを no-op にする。
+func NewJSONLWriter(path string, maxBytes int64) (*Writer, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
@@ -100,10 +141,13 @@ func NewJSONLWriter(path string) (*Writer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Writer{f: f}, nil
+	return &Writer{f: f, maxBytes: maxBytes}, nil
 }
 
-func NewJSONLWriterAppend(path string) (*Writer, error) {
+// NewJSONLWriterAppend は既存ファイルに追記する Writer を返す。
+// maxBytes > 0 の場合、累積書き込みバイト数がその値に達すると以降の書き込みを no-op にする。
+// 追記時は既存ファイルサイズをカウンタの初期値とする。
+func NewJSONLWriterAppend(path string, maxBytes int64) (*Writer, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
@@ -111,23 +155,81 @@ func NewJSONLWriterAppend(path string) (*Writer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Writer{f: f}, nil
+	var written int64
+	if info, err := f.Stat(); err == nil {
+		written = info.Size()
+	}
+	return &Writer{f: f, written: written, maxBytes: maxBytes}, nil
 }
 
+// writeLine は JSON marshal 済みのイベントを改行付きでファイルに書く。
+// 書き込み失敗時はファイルハンドルを閉じ、以降の書き込みを無効化する（フェイルセーフ）。
+// mu は呼び出し側で保持していること。
+func (w *Writer) writeLine(line []byte) error {
+	if _, err := w.f.Write(line); err != nil {
+		// 書き込み失敗 → ハンドルを閉じて以降を停止
+		_ = w.f.Close()
+		w.f = nil
+		return err
+	}
+	w.written += int64(len(line))
+	return nil
+}
+
+// Event は event を JSONL 形式でファイルに書く。
+// サイズ上限到達時は log_truncated マーカーを一度だけ書いてから no-op になる。
+// ただし type:"session_end" のイベントは上限後も例外的に書き込む。
 func (w *Writer) Event(event any) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.f == nil {
 		return os.ErrClosed
 	}
+
 	b, err := json.Marshal(event)
 	if err != nil {
 		return err
 	}
-	if _, err := w.f.Write(append(b, '\n')); err != nil {
-		return err
+	line := append(b, '\n')
+
+	if w.maxBytes > 0 && w.written >= w.maxBytes {
+		// 上限到達済み: truncated マーカーを一度だけ書く
+		if !w.truncated {
+			w.truncated = true
+			marker, _ := json.Marshal(map[string]any{
+				"type": "log_truncated",
+				"at":   time.Now().UTC().Format(time.RFC3339),
+			})
+			markerLine := append(marker, '\n')
+			_ = w.writeLine(markerLine) // エラーは無視（ベストエフォート）
+		}
+		// session_end は上限後も例外書き込み
+		if isSessionEndEvent(event) {
+			return w.writeLine(line)
+		}
+		return nil
 	}
-	return nil
+
+	return w.writeLine(line)
+}
+
+// isSessionEndEvent は event が session_end タイプか判定する。
+func isSessionEndEvent(event any) bool {
+	type typer interface{ getType() string }
+	// map[string]any の場合
+	if m, ok := event.(map[string]any); ok {
+		return m["type"] == "session_end"
+	}
+	// json.Marshal して確認（重い処理だが session_end は低頻度）
+	b, err := json.Marshal(event)
+	if err != nil {
+		return false
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return false
+	}
+	return m["type"] == "session_end"
 }
 
 func (w *Writer) Close() error {

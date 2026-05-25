@@ -18,6 +18,7 @@ import (
 	hublog "any-ai-cli/internal/log"
 	"any-ai-cli/internal/sessionlog"
 	"any-ai-cli/internal/shell"
+	"any-ai-cli/internal/uninstall"
 	"any-ai-cli/internal/wrapper"
 )
 
@@ -180,6 +181,17 @@ func run(args []string) error {
 		}
 		fmt.Println(outPath)
 		return nil
+	case "uninstall":
+		fs := flag.NewFlagSet("uninstall", flag.ContinueOnError)
+		purge := fs.Bool("purge", false, "バイナリ本体も削除する")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if hub.IsRunning(cfg) {
+			fmt.Println("Hub を停止中...")
+			_ = hub.Stop(cfg)
+		}
+		return uninstall.Run(*purge)
 	case "shell-init":
 		fmt.Print(shell.InitScript())
 		return nil
@@ -188,7 +200,7 @@ func run(args []string) error {
 			return errors.New("wrap <provider>")
 		}
 		return wrapper.Run(cfg, logger, args[1], args[2:])
-	case "claude", "codex", "gemini":
+	case "claude", "codex":
 		return wrapper.Run(cfg, logger, cmd, args[1:])
 	case "-h", "--help", "help":
 		return usage()
@@ -198,6 +210,6 @@ func run(args []string) error {
 }
 
 func usage() error {
-	fmt.Println("any-ai-cli <serve|wrap|claude|codex|gemini|shell-init|stop|status|log-clean>")
+	fmt.Println("any-ai-cli <serve|wrap|claude|codex|shell-init|stop|status|log-clean|uninstall>")
 	return nil
 }

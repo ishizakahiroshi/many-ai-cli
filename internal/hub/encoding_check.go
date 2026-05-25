@@ -20,8 +20,7 @@ func isPowerShellShell(shell string) bool {
 }
 
 func (s *Server) handleEncodingCheck(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	result := checkEncoding(s.parentShell)

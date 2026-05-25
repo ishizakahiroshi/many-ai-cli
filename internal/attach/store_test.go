@@ -92,13 +92,15 @@ func TestSaveDoesNotOverwriteRepeatedAttachments(t *testing.T) {
 func TestSaveUsesTimestampWithNanosecondsInFilename(t *testing.T) {
 	baseDir := t.TempDir()
 
-	path, _, err := Save(baseDir, 42, "codex", []byte("data"), "note.txt")
+	// .png は allowlist に含まれるので拡張子がそのまま使われる
+	path, _, err := Save(baseDir, 42, "codex", []byte("data"), "note.png")
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
 	name := filepath.Base(path)
-	if !regexp.MustCompile(`^\d{14}_\d{9}\.txt$`).MatchString(name) {
+	// 拡張子は allowlist に含まれるもの（.png 等）か magic-byte 判定結果
+	if !regexp.MustCompile(`^\d{14}_\d{9}\.[a-z]+$`).MatchString(name) {
 		t.Fatalf("saved filename %q does not match timestamp_nanoseconds format", name)
 	}
 }
@@ -136,5 +138,62 @@ func TestCleanOld(t *testing.T) {
 	// recent file must still exist
 	if _, err := os.Stat(recentPath); err != nil {
 		t.Errorf("recent file %s should still exist: %v", recentPath, err)
+	}
+}
+
+// TestCleanOldRemovesEmptySessionDirs は古いファイルが削除されて空になったサブディレクトリが
+// CleanOld によって削除されることを確認する。
+func TestCleanOldRemovesEmptySessionDirs(t *testing.T) {
+	baseDir := t.TempDir()
+
+	// セッション 99 のファイルを作成して古い mtime に書き換え
+	path, _, err := Save(baseDir, 99, "claude", []byte("old"), "")
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	old := time.Now().Add(-8 * 24 * time.Hour)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatalf("Chtimes: %v", err)
+	}
+
+	if err := CleanOld(baseDir, 7); err != nil {
+		t.Fatalf("CleanOld: %v", err)
+	}
+
+	// ファイルが消えたセッションディレクトリも消えているはず
+	sessionDir := filepath.Join(baseDir, "99")
+	if _, err := os.Stat(sessionDir); !os.IsNotExist(err) {
+		t.Errorf("expected empty session dir %s to be removed", sessionDir)
+	}
+}
+
+// TestSaveExtAllowlist は allowlist 外の拡張子が magic-byte 判定に差し替えられることを確認する。
+func TestSaveExtAllowlist(t *testing.T) {
+	baseDir := t.TempDir()
+
+	// PNG magic bytes を持つが拡張子が .exe のファイル
+	pngData := []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}
+	savedPath, _, err := Save(baseDir, 1, "claude", pngData, "evil.exe")
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	ext := strings.ToLower(filepath.Ext(savedPath))
+	if ext != ".png" {
+		t.Fatalf("expected .png from magic-byte detection, got %q", ext)
+	}
+}
+
+// TestSaveExtAllowlistAllowed は allowlist 内の拡張子がそのまま使われることを確認する。
+func TestSaveExtAllowlistAllowed(t *testing.T) {
+	baseDir := t.TempDir()
+
+	// .webp として保存
+	savedPath, _, err := Save(baseDir, 1, "claude", []byte("webp-data"), "image.webp")
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	ext := strings.ToLower(filepath.Ext(savedPath))
+	if ext != ".webp" {
+		t.Fatalf("expected .webp, got %q", ext)
 	}
 }

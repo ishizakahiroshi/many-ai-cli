@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"any-ai-cli/internal/config"
 	"any-ai-cli/internal/wrapper"
 )
 
@@ -59,8 +58,7 @@ func (s *Server) removeApprovalRules() {
 }
 
 func (s *Server) handleApprovalStatus(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	s.mu.Lock()
@@ -79,8 +77,7 @@ func (s *Server) handleApprovalEnable(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	s.mu.Lock()
@@ -88,7 +85,7 @@ func (s *Server) handleApprovalEnable(w http.ResponseWriter, r *http.Request) {
 	s.cfg.Approval.FirstLaunchShown = true
 	s.mu.Unlock()
 	s.injectApprovalRules()
-	if err := config.Save(s.cfg); err != nil {
+	if err := s.persistConfig(); err != nil {
 		s.logger.Warn("save config failed", "err", err)
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -100,15 +97,14 @@ func (s *Server) handleApprovalDisable(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	s.mu.Lock()
 	s.cfg.Approval.Enabled = false
 	s.mu.Unlock()
 	s.removeApprovalRules()
-	if err := config.Save(s.cfg); err != nil {
+	if err := s.persistConfig(); err != nil {
 		s.logger.Warn("save config failed", "err", err)
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -121,14 +117,13 @@ func (s *Server) handleApprovalDismiss(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	s.mu.Lock()
 	s.cfg.Approval.FirstLaunchShown = true
 	s.mu.Unlock()
-	if err := config.Save(s.cfg); err != nil {
+	if err := s.persistConfig(); err != nil {
 		s.logger.Warn("save config failed", "err", err)
 	}
 	w.WriteHeader(http.StatusNoContent)

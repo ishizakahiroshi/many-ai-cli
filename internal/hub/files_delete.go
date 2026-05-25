@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 )
 
 // filesDeleteDirReq は POST /api/files-delete-dir のリクエスト body。
@@ -22,8 +21,7 @@ type filesDeleteDirResp struct {
 // handleFilesDeleteDir は POST /api/files-delete-dir を処理する。
 // ディレクトリだけを削除対象にし、ファイル・シンボリックリンク・許可ルート自身は拒否する。
 func (s *Server) handleFilesDeleteDir(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -47,16 +45,7 @@ func (s *Server) handleFilesDeleteDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cwd := s.hubCWD
-	if sidStr := r.URL.Query().Get("session"); sidStr != "" {
-		if sid, err := strconv.Atoi(sidStr); err == nil {
-			s.mu.Lock()
-			if ses := s.sessions[sid]; ses != nil {
-				cwd = ses.CWD
-			}
-			s.mu.Unlock()
-		}
-	}
+	cwd := s.cwdForRequest(r)
 	gitRoot := findGitRoot(cwd)
 
 	srcClean := filepath.Clean(req.Src)

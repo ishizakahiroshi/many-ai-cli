@@ -96,8 +96,8 @@
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_theme">Theme</span>
             <select id="theme-select" class="settings-select">
-              <option value="dark">Dark</option>
               <option value="light">Light</option>
+              <option value="dark">Dark</option>
             </select>
           </div>
           <div class="settings-row">
@@ -174,6 +174,14 @@
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_max_backups">Backups</span>
             <input type="number" id="log-max-backups" min="0" max="100" class="settings-input-number">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_session_retention">Session retention (days)</span>
+            <input type="number" id="log-session-retention-days" min="0" max="365" class="settings-input-number">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_session_max_size">Session log max size (MB)</span>
+            <input type="number" id="log-session-max-size" min="0" max="10000" class="settings-input-number">
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_attach_folder">Attach folder</span>

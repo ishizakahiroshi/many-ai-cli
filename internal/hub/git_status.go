@@ -23,19 +23,21 @@ type gitStatusSummary struct {
 }
 
 type gitStatusResp struct {
-	OK         bool             `json:"ok"`
-	GitRoot    string           `json:"git_root"`
-	RepoName   string           `json:"repo_name"`
-	Branch     string           `json:"branch"`
-	HeadHash   string           `json:"head_hash"`
-	HasChanges bool             `json:"has_changes"`
-	Files      []gitStatusFile  `json:"files"`
-	Summary    gitStatusSummary `json:"summary"`
+	OK          bool             `json:"ok"`
+	GitRoot     string           `json:"git_root"`
+	RepoName    string           `json:"repo_name"`
+	Branch      string           `json:"branch"`
+	HeadHash    string           `json:"head_hash"`
+	HasChanges  bool             `json:"has_changes"`
+	Ahead       int              `json:"ahead"`
+	Behind      int              `json:"behind"`
+	HasUpstream bool             `json:"has_upstream"`
+	Files       []gitStatusFile  `json:"files"`
+	Summary     gitStatusSummary `json:"summary"`
 }
 
 func (s *Server) handleGitStatus(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodGet {
@@ -85,15 +87,27 @@ func (s *Server) handleGitStatus(w http.ResponseWriter, r *http.Request) {
 		headHash = strings.TrimSpace(string(out))
 	}
 
+	// upstream（追跡ブランチ）との ahead/behind を取得する。
+	// upstream 未設定の場合 rev-list はエラーになるので HasUpstream:false のまま。
+	ahead, behind, hasUpstream := 0, 0, false
+	if out, aerr := runGit(ctx, cwd, "rev-list", "--left-right", "--count", "@{upstream}...HEAD"); aerr == nil {
+		if a, b, ok := parseAheadBehind(string(out)); ok {
+			ahead, behind, hasUpstream = a, b, true
+		}
+	}
+
 	resp := gitStatusResp{
-		OK:         true,
-		GitRoot:    gitRoot,
-		RepoName:   filepath.Base(gitRoot),
-		Branch:     branch,
-		HeadHash:   headHash,
-		HasChanges: len(files) > 0,
-		Files:      files,
-		Summary:    summary,
+		OK:          true,
+		GitRoot:     gitRoot,
+		RepoName:    filepath.Base(gitRoot),
+		Branch:      branch,
+		HeadHash:    headHash,
+		HasChanges:  len(files) > 0,
+		Ahead:       ahead,
+		Behind:      behind,
+		HasUpstream: hasUpstream,
+		Files:       files,
+		Summary:     summary,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
@@ -138,24 +152,16 @@ func parseGitStatusPorcelainZ(raw string) []gitStatusFile {
 }
 
 func applyWorkingTreeNumstat(files []gitStatusFile, raw string) {
-	type stat struct{ added, removed int }
-	stats := map[string]stat{}
-	for _, line := range strings.Split(raw, "\n") {
-		line = strings.TrimRight(line, "\r")
-		if line == "" {
-			continue
-		}
-		fields := strings.SplitN(line, "\t", 3)
-		if len(fields) < 3 {
-			continue
-		}
-		added, _ := strconv.Atoi(fields[0])
-		removed, _ := strconv.Atoi(fields[1])
-		path := normalizeNumstatPath(fields[2])
-		stats[path] = stat{added: added, removed: removed}
-	}
+	// parseNumstatRaw は git_show.go で定義された共通パーサ。
+	// git_status 側では path が normalizeNumstatPath で正規化されるため、
+	// マップ構築後に同じ正規化を適用して照合する。
+	stats := parseNumstatRaw(raw)
 	for i := range files {
-		if st, ok := stats[files[i].Path]; ok {
+		normalized := normalizeNumstatPath(files[i].Path)
+		if st, ok := stats[normalized]; ok {
+			files[i].Added = intPtr(st.added)
+			files[i].Removed = intPtr(st.removed)
+		} else if st, ok := stats[files[i].Path]; ok {
 			files[i].Added = intPtr(st.added)
 			files[i].Removed = intPtr(st.removed)
 		}
@@ -184,3 +190,23 @@ func summarizeGitStatusFiles(files []gitStatusFile) gitStatusSummary {
 }
 
 func intPtr(v int) *int { return &v }
+
+// parseAheadBehind は `git rev-list --left-right --count @{upstream}...HEAD`
+// の出力（"<behind>\t<ahead>"）をパースする。
+//
+// left  側 = @{upstream} にあって HEAD に無いコミット数 = behind
+// right 側 = HEAD にあって @{upstream} に無いコミット数 = ahead
+//
+// 期待形式に合わない（upstream 未設定でエラー出力が混じる等）場合は ok=false。
+func parseAheadBehind(raw string) (ahead, behind int, ok bool) {
+	fields := strings.Fields(strings.TrimSpace(raw))
+	if len(fields) != 2 {
+		return 0, 0, false
+	}
+	b, err1 := strconv.Atoi(fields[0])
+	a, err2 := strconv.Atoi(fields[1])
+	if err1 != nil || err2 != nil {
+		return 0, 0, false
+	}
+	return a, b, true
+}

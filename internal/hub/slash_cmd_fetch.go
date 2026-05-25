@@ -3,7 +3,6 @@ package hub
 import (
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"regexp"
 	"strings"
@@ -84,25 +83,41 @@ func fetchAndParseSlashCmds(source string) ([]SlashCmd, error) {
 	return parseSlashCmdsFromMarkdown(string(body)), nil
 }
 
+const slashCmdLocalMaxBytes = 2 << 20 // 2MB
+
 func readSlashCmdSource(source string) ([]byte, error) {
 	if source == "" {
 		return nil, fmt.Errorf("source is empty")
 	}
 	if !strings.HasPrefix(source, "http://") && !strings.HasPrefix(source, "https://") {
-		return os.ReadFile(source)
+		// ローカルファイル: サイズ上限 + ディレクトリ/デバイス拒否
+		info, err := os.Stat(source)
+		if err != nil {
+			return nil, fmt.Errorf("stat %s: %w", source, err)
+		}
+		if !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("source %s is not a regular file", source)
+		}
+		f, err := os.Open(source)
+		if err != nil {
+			return nil, fmt.Errorf("open %s: %w", source, err)
+		}
+		defer f.Close()
+		return io.ReadAll(io.LimitReader(f, slashCmdLocalMaxBytes))
 	}
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := newExternalHTTPClient(15 * time.Second)
 	resp, err := client.Get(source)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// エラーページを読み捨てて早期リターン（ボディは読まない）
+		return nil, fmt.Errorf("fetch %s: %s", source, resp.Status)
+	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20)) // 2MB
 	if err != nil {
 		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("fetch %s: %s", source, resp.Status)
 	}
 	return body, nil
 }

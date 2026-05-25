@@ -2,10 +2,21 @@ package attach
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
+
+// allowedExts は添付ファイルとして許可する拡張子の allowlist（小文字）。
+var allowedExts = map[string]bool{
+	".png":  true,
+	".jpg":  true,
+	".jpeg": true,
+	".webp": true,
+	".gif":  true,
+}
 
 // detectExt returns the file extension for img based on magic bytes.
 // Falls back to ".png" for unknown or unsupported formats.
@@ -33,8 +44,9 @@ func Save(baseDir string, sessionID int, provider string, data []byte, filename 
 		return "", "", fmt.Errorf("attach.Save: mkdir %s: %w", dir, err)
 	}
 
-	ext := filepath.Ext(filename)
-	if ext == "" {
+	// 拡張子を allowlist で検証し、allowlist 外なら magic-byte 判定にフォールバック
+	ext := strings.ToLower(filepath.Ext(filename))
+	if ext == "" || !allowedExts[ext] {
 		ext = detectExt(data)
 	}
 
@@ -81,19 +93,55 @@ func Save(baseDir string, sessionID int, provider string, data []byte, filename 
 	return abs, inject, nil
 }
 
-// CleanOld removes files under baseDir whose mtime is older than retentionDays.
+// CleanOld removes files under baseDir whose mtime is older than retentionDays,
+// then removes empty session subdirectories.
+// Individual removal failures are logged and skipped; a single failure does not abort the walk.
 func CleanOld(baseDir string, retentionDays int) error {
 	cutoff := time.Now().AddDate(0, 0, -retentionDays)
 
-	return filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
+	// 1パス目: 古いファイルを削除（失敗はログして継続）
+	if err := filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
+			slog.Debug("attach.CleanOld: walk error", "path", path, "err", err)
+			return nil // walk を止めない
+		}
+		if info.IsDir() {
 			return nil
 		}
-		if !info.IsDir() && info.ModTime().Before(cutoff) {
+		if info.ModTime().Before(cutoff) {
 			if removeErr := os.Remove(path); removeErr != nil {
-				return fmt.Errorf("attach.CleanOld: remove %s: %w", path, removeErr)
+				slog.Debug("attach.CleanOld: remove failed", "path", path, "err", removeErr)
+				// walk を止めない（return nil）
 			}
 		}
 		return nil
-	})
+	}); err != nil {
+		return fmt.Errorf("attach.CleanOld: walk %s: %w", baseDir, err)
+	}
+
+	// 2パス目: 空になったセッションサブディレクトリを削除
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("attach.CleanOld: readdir %s: %w", baseDir, err)
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		subDir := filepath.Join(baseDir, e.Name())
+		children, readErr := os.ReadDir(subDir)
+		if readErr != nil {
+			slog.Debug("attach.CleanOld: readdir failed", "path", subDir, "err", readErr)
+			continue
+		}
+		if len(children) == 0 {
+			if removeErr := os.Remove(subDir); removeErr != nil {
+				slog.Debug("attach.CleanOld: remove dir failed", "path", subDir, "err", removeErr)
+			}
+		}
+	}
+	return nil
 }

@@ -88,7 +88,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		return err
 	}
 	cwd, _ := os.Getwd()
-	display := map[string]string{"claude": "Claude", "codex": "Codex", "gemini": "Gemini CLI"}[provider]
+	display := map[string]string{"claude": "Claude", "codex": "Codex"}[provider]
 	termCols, termRows := 0, 0
 	if w, h, err := term.GetSize(int(os.Stdin.Fd())); err == nil && w > 0 && h > 0 {
 		termCols, termRows = w, h
@@ -159,11 +159,27 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// Shared mutable state (current conn / session id rotate on reconnect)
 	var (
 		stateMu     sync.Mutex
+		sendMu      sync.Mutex // serialises websocket.JSON.Send calls to the current conn
 		currentConn = conn
 		currentSID  = sessionID
 	)
 	getConn := func() *websocket.Conn { stateMu.Lock(); defer stateMu.Unlock(); return currentConn }
 	getSID := func() int { stateMu.Lock(); defer stateMu.Unlock(); return currentSID }
+	// sendMsg sends m to the current conn under sendMu so that concurrent
+	// goroutines (PTY output loop, session_end sender) never interleave frames.
+	sendMsg := func(m proto.Message) {
+		c := getConn()
+		if c == nil {
+			return
+		}
+		sendMu.Lock()
+		defer sendMu.Unlock()
+		// Re-check conn identity under sendMu: a reconnect may have swapped it.
+		if cur := getConn(); cur != c {
+			return
+		}
+		_ = websocket.JSON.Send(c, m)
+	}
 	swapConn := func(c *websocket.Conn, sid int) {
 		stateMu.Lock()
 		defer stateMu.Unlock()
@@ -390,24 +406,41 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	}()
 
 	// PTY 出力 → Hub WS (pty_data)
+	// carry holds an incomplete UTF-8 sequence from the previous read that must
+	// be prepended to the next chunk before decoding (pumpChunk handles this).
+	rawMaxBytes := int64(cfg.Log.SessionMaxSizeMB) * 1024 * 1024
+	var rawWritten int64
+	var carry []byte
 	buf := make([]byte, 4096)
 	for {
 		n, readErr := ps.Read(buf)
 		if n > 0 {
-			chunk := make([]byte, n)
-			copy(chunk, buf[:n])
-			chunk = repairMojibakeUTF8(chunk)
-			if lf != nil {
-				_, _ = lf.Write(chunk)
-			}
-			appendReplay(chunk)
-			if c := getConn(); c != nil {
-				_ = websocket.JSON.Send(c, proto.Message{Type: "pty_data", SessionID: getSID(), Data: chunk})
+			raw := make([]byte, n)
+			copy(raw, buf[:n])
+			var out []byte
+			out, carry = pumpChunk(carry, raw)
+			if len(out) > 0 {
+				out = repairMojibakeUTF8(out)
+				if lf != nil && (rawMaxBytes <= 0 || rawWritten < rawMaxBytes) {
+					_, _ = lf.Write(out)
+					rawWritten += int64(len(out))
+				}
+				appendReplay(out)
+				sendMsg(proto.Message{Type: "pty_data", SessionID: getSID(), Data: out})
 			}
 		}
 		if readErr != nil {
 			break
 		}
+	}
+	// Flush any remaining carry bytes (e.g. incomplete sequence at end of stream).
+	if len(carry) > 0 {
+		flushed := repairMojibakeUTF8(carry)
+		if lf != nil && (rawMaxBytes <= 0 || rawWritten < rawMaxBytes) {
+			_, _ = lf.Write(flushed)
+		}
+		appendReplay(flushed)
+		sendMsg(proto.Message{Type: "pty_data", SessionID: getSID(), Data: flushed})
 	}
 	closeDone()
 
@@ -416,8 +449,9 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	if waitErr != nil {
 		state, code = "error", 1
 	}
+	sendMsg(proto.Message{Type: "session_end", SessionID: getSID(), State: state, ExitCode: code})
+	// Close the current conn after the final message is sent.
 	if c := getConn(); c != nil {
-		_ = websocket.JSON.Send(c, proto.Message{Type: "session_end", SessionID: getSID(), State: state, ExitCode: code})
 		_ = c.Close()
 	}
 	logger.Info("wrapper exit", "session_id", getSID(), "state", state)

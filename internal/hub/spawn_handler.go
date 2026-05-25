@@ -60,7 +60,25 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	cwd := body.CWD
 	if cwd == "" {
 		cwd = s.hubCWD
+	} else {
+		// cwd が実在するディレクトリであることを確認する。
+		info, statErr := os.Stat(cwd)
+		if statErr != nil || !info.IsDir() {
+			http.Error(w, "cwd does not exist or is not a directory", http.StatusBadRequest)
+			return
+		}
 	}
+
+	// model / label の先頭 "-" はフラグ偽装を防ぐために禁止する。
+	if strings.HasPrefix(body.Model, "-") {
+		http.Error(w, "invalid model value", http.StatusBadRequest)
+		return
+	}
+	if strings.HasPrefix(body.Label, "-") {
+		http.Error(w, "invalid label value", http.StatusBadRequest)
+		return
+	}
+
 	exe, err := os.Executable()
 	if err != nil {
 		http.Error(w, "executable error: "+err.Error(), http.StatusInternalServerError)
@@ -70,7 +88,8 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	resolvedModel := strings.TrimSpace(body.Model)
 
 	if body.Label != "" {
-		wrapArgs = append(wrapArgs, "--label", body.Label)
+		// --label=value 形式で渡す（空白区切りだと value が次フラグに化ける可能性がある）。
+		wrapArgs = append(wrapArgs, "--label="+body.Label)
 	}
 
 	switch body.Provider {
@@ -246,5 +265,5 @@ func (s *Server) setLastModel(provider, model string) error {
 	}
 	s.cfg.UserPrefs.Spawn.LastModel[provider] = model
 	s.mu.Unlock()
-	return config.Save(s.cfg)
+	return s.persistConfig()
 }

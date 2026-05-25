@@ -73,6 +73,25 @@ func isMediaFile(absPath string) bool {
 	return previewableImageExtensions[ext] || previewableVideoExtensions[ext]
 }
 
+// cwdForRequest は ?session=<id> パラメータが指定されている場合、そのセッションの CWD を返す。
+// 指定がない場合は Hub 起動時の hubCWD を返す。
+// files_list / files_content / files_move / files_rename / files_delete / files_roots の
+// 各ハンドラで同一のロジックが重複していたため、ここに集約する。
+func (s *Server) cwdForRequest(r *http.Request) string {
+	if sidStr := r.URL.Query().Get("session"); sidStr != "" {
+		if sid, err := strconv.Atoi(sidStr); err == nil {
+			s.mu.Lock()
+			if ses := s.sessions[sid]; ses != nil {
+				cwd := ses.CWD
+				s.mu.Unlock()
+				return cwd
+			}
+			s.mu.Unlock()
+		}
+	}
+	return s.hubCWD
+}
+
 func (s *Server) resolveAllowedFilePath(r *http.Request) (string, error) {
 	pathParam := r.URL.Query().Get("path")
 	if pathParam == "" {
@@ -82,16 +101,7 @@ func (s *Server) resolveAllowedFilePath(r *http.Request) (string, error) {
 		return "", httpError{status: http.StatusBadRequest, msg: "path must be an absolute path"}
 	}
 
-	cwd := s.hubCWD
-	if sidStr := r.URL.Query().Get("session"); sidStr != "" {
-		if sid, err := strconv.Atoi(sidStr); err == nil {
-			s.mu.Lock()
-			if ses := s.sessions[sid]; ses != nil {
-				cwd = ses.CWD
-			}
-			s.mu.Unlock()
-		}
-	}
+	cwd := s.cwdForRequest(r)
 
 	gitRoot := findGitRoot(cwd)
 	allowed, err := isPathUnderAllowedRoots(pathParam, cwd, gitRoot)
@@ -112,8 +122,7 @@ func (e httpError) Error() string { return e.msg }
 // ?path=<absPath>&token=<token> 必須。
 // ?session=<id> で検証スコープを指定（省略時: Hub cwd）。
 func (s *Server) handleFilesContent(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodGet {
@@ -182,8 +191,7 @@ func (s *Server) handleFilesContent(w http.ResponseWriter, r *http.Request) {
 // handleFilesAsset は GET /api/files-asset を処理する。
 // Files タブ内のメディアプレビュー用。許可ルート内の画像/動画ファイルだけを配信する。
 func (s *Server) handleFilesAsset(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodGet {

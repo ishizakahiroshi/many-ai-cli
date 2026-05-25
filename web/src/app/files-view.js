@@ -1577,9 +1577,14 @@ const FilesTreeView = (function () {
       else { searchInput.value = ''; filterText = ''; if (currentTree) renderAndMount(currentTree, ''); }
     });
 
+    let _searchDebounceTimer = null;
     searchInput.addEventListener('input', () => {
       filterText = searchInput.value.trim();
-      if (currentTree) renderAndMount(currentTree, filterText);
+      if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
+      _searchDebounceTimer = setTimeout(() => {
+        _searchDebounceTimer = null;
+        if (currentTree) renderAndMount(currentTree, filterText);
+      }, 150);
     });
 
     searchClearBtn.addEventListener('click', () => {
@@ -1784,6 +1789,9 @@ const FilesPreview = (function () {
       html = DOMPurify.sanitize(html, {
         ADD_ATTR: ['target', 'data-files-rel-link', 'data-files-path-link', 'data-files-skip-search'],
       });
+    } else {
+      // fail-closed: サニタイザ不在なら HTML を描画せずプレーンテキストで返す
+      return `<pre class="files-preview-plain">${escapeHtml(content)}</pre>`;
     }
     return html;
   }
@@ -2106,7 +2114,14 @@ const FilesPreview = (function () {
       searchCountEl.textContent = `${idx + 1}/${highlightMatches.length}`;
     }
 
-    searchInput.addEventListener('input', () => applySearch(searchInput.value));
+    let _previewSearchDebounceTimer = null;
+    searchInput.addEventListener('input', () => {
+      if (_previewSearchDebounceTimer) clearTimeout(_previewSearchDebounceTimer);
+      _previewSearchDebounceTimer = setTimeout(() => {
+        _previewSearchDebounceTimer = null;
+        applySearch(searchInput.value);
+      }, 150);
+    });
     searchPrevBtn.addEventListener('click', () => {
       if (!highlightMatches.length) return;
       highlightIndex = (highlightIndex - 1 + highlightMatches.length) % highlightMatches.length;

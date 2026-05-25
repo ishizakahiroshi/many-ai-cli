@@ -1,10 +1,248 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"gopkg.in/yaml.v3"
+)
 
 func TestDefaultConfigOpensBrowser(t *testing.T) {
 	cfg := defaultConfig(t.TempDir())
 	if !cfg.Hub.OpenBrowser {
 		t.Fatal("defaultConfig().Hub.OpenBrowser = false, want true")
+	}
+}
+
+// TestSaveAtomicWrite は Save が atomic write（temp + Rename）を使うことを確認する。
+// 書き込み後に temp ファイルが残っていないこと、内容が一致することを検証する。
+func TestSaveAtomicWrite(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".any-ai-cli")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// HOME を一時ディレクトリにすり替えて Save を実行する
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	cfg := defaultConfig(home)
+	cfg.Token = "test-token-atomic"
+	if err := Save(cfg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// config.yaml が存在すること
+	path := filepath.Join(dir, "config.yaml")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("config.yaml not found: %v", err)
+	}
+
+	// temp ファイルが残っていないこと
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".yaml.tmp") {
+			t.Errorf("temp file left behind: %s", e.Name())
+		}
+	}
+
+	// round-trip: 読み戻した設定が一致すること
+	cfg2 := defaultConfig(home)
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := unmarshalYAML(b, cfg2); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if cfg2.Token != cfg.Token {
+		t.Errorf("token mismatch: got %q, want %q", cfg2.Token, cfg.Token)
+	}
+}
+
+// TestLoadOrCreateNotExist はファイルが存在しない場合に新規作成されることを確認する。
+func TestLoadOrCreateNotExist(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	cfg, err := LoadOrCreate()
+	if err != nil {
+		t.Fatalf("LoadOrCreate: %v", err)
+	}
+	if cfg.Token == "" {
+		t.Error("token should be non-empty for new config")
+	}
+
+	// config.yaml が生成されていること
+	path := filepath.Join(home, ".any-ai-cli", "config.yaml")
+	if _, statErr := os.Stat(path); statErr != nil {
+		t.Errorf("config.yaml not created: %v", statErr)
+	}
+}
+
+// TestLoadOrCreateCorruptedFile は破損 YAML の場合に .bak が生成され、デフォルト設定で起動できることを確認する。
+func TestLoadOrCreateCorruptedFile(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".any-ai-cli")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "config.yaml")
+	bak := path + ".bak"
+
+	// 破損 YAML を書き込む（yaml.v3 が確実にパースエラーを返す形式）
+	corruptContent := "\t\tinvalid yaml content"
+	if err := os.WriteFile(path, []byte(corruptContent), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	cfg, err := LoadOrCreate()
+	if err != nil {
+		t.Fatalf("LoadOrCreate should succeed on corrupt config, got: %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("cfg should not be nil")
+	}
+
+	// .bak が生成されていること
+	if _, statErr := os.Stat(bak); statErr != nil {
+		t.Errorf(".bak not created: %v", statErr)
+	}
+
+	// .bak の内容が元の破損データであること
+	bakData, err := os.ReadFile(bak)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(bakData) != corruptContent {
+		t.Errorf(".bak content mismatch: got %q", string(bakData))
+	}
+}
+
+// TestLoadOrCreatePermissionError は読み取り権限のないファイルで権限エラーが返ることを確認する。
+// Windows では chmod 000 が機能しないためスキップする。
+func TestLoadOrCreatePermissionError(t *testing.T) {
+	if os.Getenv("OS") == "Windows_NT" {
+		t.Skip("chmod 000 not reliable on Windows")
+	}
+	// UID 0（root）では chmod が無意味なのでスキップ
+	if os.Getuid() == 0 {
+		t.Skip("running as root; permission test not meaningful")
+	}
+
+	home := t.TempDir()
+	dir := filepath.Join(home, ".any-ai-cli")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "config.yaml")
+
+	if err := os.WriteFile(path, []byte("token: abc\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// 読み取り禁止
+	if err := os.Chmod(path, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(path, 0o600) //nolint:errcheck
+
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	_, err := LoadOrCreate()
+	if err == nil {
+		t.Fatal("LoadOrCreate should return error for unreadable config")
+	}
+	if !strings.Contains(err.Error(), "read config:") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// unmarshalYAML は yaml.Unmarshal のパッケージ内ヘルパ（テスト用）。
+func unmarshalYAML(b []byte, v interface{}) error {
+	return yaml.Unmarshal(b, v)
+}
+
+// TestLoadOrCreate_SpawnMigration は旧 cfg.Spawn.LastModel → UserPrefs.Spawn.LastModel
+// への移行ロジックを確認する。
+func TestLoadOrCreate_SpawnMigration(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".any-ai-cli")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// 旧形式（spawn.last_model に値がある）の config.yaml を書き込む
+	oldYAML := `token: "old-migration-token"
+spawn:
+  last_model:
+    claude: "claude-opus-4"
+`
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(oldYAML), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	cfg, err := LoadOrCreate()
+	if err != nil {
+		t.Fatalf("LoadOrCreate: %v", err)
+	}
+
+	// user_prefs.spawn.last_model に移行されていること
+	if cfg.UserPrefs.Spawn.LastModel["claude"] != "claude-opus-4" {
+		t.Errorf("UserPrefs.Spawn.LastModel[claude] = %q, want %q",
+			cfg.UserPrefs.Spawn.LastModel["claude"], "claude-opus-4")
+	}
+	// 旧フィールドがクリアされていること
+	if len(cfg.Spawn.LastModel) != 0 {
+		t.Errorf("cfg.Spawn.LastModel should be nil after migration, got %v", cfg.Spawn.LastModel)
+	}
+}
+
+// TestSaveRoundTrip は Save → LoadOrCreate の round-trip で設定が一致することを確認する。
+func TestSaveRoundTrip(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	// 初回作成
+	cfg1, err := LoadOrCreate()
+	if err != nil {
+		t.Fatalf("LoadOrCreate (first): %v", err)
+	}
+	cfg1.Token = "roundtrip-token"
+	cfg1.UserPrefs.Display.Theme = "dark"
+	cfg1.UserPrefs.Spawn.LastModel = map[string]string{"claude": "claude-sonnet-4"}
+
+	if err := Save(cfg1); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// 再読み込み
+	cfg2, err := LoadOrCreate()
+	if err != nil {
+		t.Fatalf("LoadOrCreate (second): %v", err)
+	}
+	if cfg2.Token != cfg1.Token {
+		t.Errorf("Token: got %q, want %q", cfg2.Token, cfg1.Token)
+	}
+	if cfg2.UserPrefs.Display.Theme != "dark" {
+		t.Errorf("Theme: got %q, want %q", cfg2.UserPrefs.Display.Theme, "dark")
+	}
+	if cfg2.UserPrefs.Spawn.LastModel["claude"] != "claude-sonnet-4" {
+		t.Errorf("LastModel[claude]: got %q, want %q",
+			cfg2.UserPrefs.Spawn.LastModel["claude"], "claude-sonnet-4")
 	}
 }

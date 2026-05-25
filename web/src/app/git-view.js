@@ -404,6 +404,7 @@
           <div class="git-working-count" data-working-count>—</div>
           <div class="git-graph-count" data-count>${_esc(_gt('git_view_loading', 'loading...'))}</div>
           <button class="git-icon-btn" data-fetch-btn title="${_esc(_gt('git_view_fetch', 'Fetch'))}">↓ fetch</button>
+          <button class="git-icon-btn" data-pull-btn title="${_esc(_gt('git_view_pull', 'Pull (fast-forward)'))}" disabled>↧ pull</button>
           <button class="git-icon-btn" data-refresh-btn title="${_esc(_gt('git_view_refresh', 'Refresh'))}">↻</button>
           <button class="git-icon-btn" data-loadmore-btn title="${_esc(_gt('git_view_load_more', 'Load 100 more'))}">+${PAGE_LIMIT}</button>
           <button class="git-commit-all-btn" data-commit-all-btn disabled>${_esc(_gt('git_commit_all', 'Commit all'))}</button>
@@ -491,6 +492,7 @@
       this.els.count         = root.querySelector('[data-count]');
       this.els.workingCount  = root.querySelector('[data-working-count]');
       this.els.fetchBtn      = root.querySelector('[data-fetch-btn]');
+      this.els.pullBtn       = root.querySelector('[data-pull-btn]');
       this.els.refreshBtn    = root.querySelector('[data-refresh-btn]');
       this.els.loadmoreBtn   = root.querySelector('[data-loadmore-btn]');
       this.els.commitAllBtn  = root.querySelector('[data-commit-all-btn]');
@@ -521,6 +523,7 @@
       this.els.commitError   = root.querySelector('[data-commit-error]');
 
       this.els.fetchBtn.addEventListener('click', () => this._gitFetch());
+      this.els.pullBtn.addEventListener('click', () => this._gitPull());
       this.els.refreshBtn.addEventListener('click', () => this.refresh());
       this.els.loadmoreBtn.addEventListener('click', () => this.loadMore());
       this.els.commitAllBtn.addEventListener('click', () => this._openCommitModal());
@@ -750,6 +753,7 @@
       if (this.els.commitAllBtn) {
         this.els.commitAllBtn.disabled = !changed;
       }
+      this._updatePullButton();
       if (!this.els.workingPreview) return;
       if (!changed) {
         this.els.workingPreview.innerHTML = `
@@ -921,6 +925,60 @@
       } finally {
         btn.textContent = origText;
         btn.disabled = false;
+      }
+    }
+
+    async _gitPull() {
+      const btn = this.els.pullBtn;
+      if (!btn || btn.disabled) return;
+      // 実行中は _updatePullButton にラベルを上書きさせない（'…' を保持する）
+      btn.dataset.busy = '1';
+      btn.disabled = true;
+      btn.textContent = '…';
+      try {
+        const res = await fetch('/api/git-pull', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session: this.sessionId, token: this.token }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) {
+          const detail = data && data.detail ? data.detail : `HTTP ${res.status}`;
+          if (data && data.error === 'not_fast_forward') {
+            _toast(_gt('git_pull_diverged', 'Branch has diverged — manual merge needed'), detail);
+          } else {
+            _toast(_gt('git_pull_failed', 'Pull failed'), detail);
+          }
+          return;
+        }
+        _toast(_gt('git_pull_done', 'Pull complete'), '');
+        await this.refresh();
+      } catch (err) {
+        _toast(_gt('git_pull_failed', 'Pull failed'), err && err.message ? err.message : String(err));
+      } finally {
+        delete btn.dataset.busy;
+        this._updatePullButton();
+      }
+    }
+
+    // _updatePullButton は workingTree の ahead/behind 状態から pull ボタンの
+    // ラベル・活性・強調を更新する。behind>0 のときのみ活性化し「↧ N」を表示する。
+    _updatePullButton() {
+      const btn = this.els.pullBtn;
+      if (!btn) return;
+      if (btn.dataset.busy === '1') return; // 実行中は '…' を保持
+      const wt = this.workingTree;
+      const behind = wt && Number.isFinite(wt.behind) ? wt.behind : 0;
+      const hasUpstream = !!(wt && wt.has_upstream);
+      btn.title = _gt('git_view_pull', 'Pull (fast-forward)');
+      if (hasUpstream && behind > 0) {
+        btn.textContent = `↧ ${behind}`;
+        btn.disabled = false;
+        btn.classList.add('git-behind');
+      } else {
+        btn.textContent = '↧ pull';
+        btn.disabled = true;
+        btn.classList.remove('git-behind');
       }
     }
 
@@ -1217,9 +1275,8 @@
     _setupDividerDrag() {
       const divider = this.els.divider;
       const panel   = this.els.detailPanel;
-      let startY = 0, startH = 0, dragging = false;
+      let startY = 0, startH = 0;
       const onMove = (e) => {
-        if (!dragging) return;
         const dy = startY - e.clientY;
         const newH = Math.max(0, Math.min(window.innerHeight - 180, startH + dy));
         panel.style.height = newH + 'px';
@@ -1229,8 +1286,8 @@
         }
       };
       const onUp = () => {
-        if (!dragging) return;
-        dragging = false;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
         divider.classList.remove('dragging');
         document.body.style.cursor = '';
         if (parseInt(panel.style.height || '0', 10) < 40) {
@@ -1238,15 +1295,14 @@
         }
       };
       divider.addEventListener('mousedown', (e) => {
-        dragging = true;
         startY = e.clientY;
         startH = panel.getBoundingClientRect().height;
         divider.classList.add('dragging');
         document.body.style.cursor = 'row-resize';
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
         e.preventDefault();
       });
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
     }
 
     _syncToggleButtons() {

@@ -1,0 +1,206 @@
+package hub
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	"any-ai-cli/internal/config"
+	"log/slog"
+)
+
+// newSecTestServer は token="tok"、hubCWD=<tmp> の最小 Server を生成する。
+func newSecTestServer(t *testing.T, cwd string) *Server {
+	t.Helper()
+	cfg := &config.Config{}
+	cfg.Token = "tok"
+	cfg.Hub.Port = 47777
+	s := &Server{
+		cfg:      cfg,
+		logger:   slog.Default(),
+		hubCWD:   cwd,
+		sessions: map[int]*session{},
+	}
+	return s
+}
+
+// --- C7: requireToken（定数時間比較） ---
+
+func TestRequireToken_Valid(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/?token=tok", nil)
+	w := httptest.NewRecorder()
+	if !s.requireToken(w, req) {
+		t.Fatal("expected valid token to pass")
+	}
+}
+
+func TestRequireToken_Invalid(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/?token=bad", nil)
+	w := httptest.NewRecorder()
+	if s.requireToken(w, req) {
+		t.Fatal("expected invalid token to fail")
+	}
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestRequireToken_Empty(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+	if s.requireToken(w, req) {
+		t.Fatal("expected empty token to fail")
+	}
+}
+
+// --- C3: validRevision ---
+
+func TestValidRevision(t *testing.T) {
+	cases := []struct {
+		input string
+		want  bool
+	}{
+		// 正常ケース
+		{"abc123", true},
+		{"HEAD", true},
+		{"develop", true},
+		{"origin/main", true},
+		{"feature/foo-bar", true},
+		{"v1.0.3", true},
+		{"abcdef1234567890", true},
+		// 異常ケース: 先頭 "-"
+		{"-x", false},
+		{"--output=evil", false},
+		{"-", false},
+		// 空文字
+		{"", false},
+		// 不正文字
+		{"ab;cd", false},
+		{"ab cd", false},
+		{"ab\x00cd", false},
+		{"ab`cd", false},
+		{"ab$cd", false},
+	}
+	for _, c := range cases {
+		got := validRevision(c.input)
+		if got != c.want {
+			t.Errorf("validRevision(%q) = %v, want %v", c.input, got, c.want)
+		}
+	}
+}
+
+// --- C6: isPathUnderAllowedRoots / isUnder ---
+
+func TestIsPathUnderAllowedRoots_Basic(t *testing.T) {
+	tmp := t.TempDir()
+	sub := filepath.Join(tmp, "sub", "dir")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	ok, err := isPathUnderAllowedRoots(sub, tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("expected sub to be under tmp")
+	}
+}
+
+func TestIsPathUnderAllowedRoots_Outside(t *testing.T) {
+	tmp := t.TempDir()
+	outside := t.TempDir()
+	sub := filepath.Join(outside, "evil")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	ok, err := isPathUnderAllowedRoots(sub, tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("expected outside path to be rejected")
+	}
+}
+
+func TestIsPathUnderAllowedRoots_DotDotEscape(t *testing.T) {
+	tmp := t.TempDir()
+	// path traversal: tmp/sub/../../etc
+	traversal := filepath.Join(tmp, "sub", "..", "..", "etc")
+	ok, err := isPathUnderAllowedRoots(traversal, tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatalf("expected ../ escape to be rejected: path=%s, root=%s", traversal, tmp)
+	}
+}
+
+func TestIsPathUnderAllowedRoots_NonexistentChild(t *testing.T) {
+	tmp := t.TempDir()
+	// 存在しない子パスも配下なら許可
+	child := filepath.Join(tmp, "new_file.txt")
+
+	ok, err := isPathUnderAllowedRoots(child, tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("expected nonexistent child to be under tmp")
+	}
+}
+
+func TestIsUnder_CaseSensitivity(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows-only test")
+	}
+	// Windows: 大文字小文字違いでも配下と認識されるべき
+	base := `C:\Users\test`
+	target := `C:\users\TEST\sub`
+	if !isUnder(target, base) {
+		t.Fatalf("expected case-insensitive match on Windows: target=%s, base=%s", target, base)
+	}
+}
+
+// --- C7: sanitizeGitErrMsg ---
+
+func TestSanitizeGitErrMsg_PathInStderr(t *testing.T) {
+	err := &sanitizeGitTestErr{msg: `git show abc: fatal: /home/user/.any-ai-cli/repo: not a git repo`}
+	got := sanitizeGitErrMsg(err)
+	if got == "" {
+		t.Fatal("expected non-empty sanitized message")
+	}
+	// 生の絶対パスが出力に含まれていないこと
+	if containsPath(got) {
+		t.Fatalf("sanitized message should not contain absolute path: %q", got)
+	}
+}
+
+func TestSanitizeGitErrMsg_SafeMessage(t *testing.T) {
+	err := &sanitizeGitTestErr{msg: `git log HEAD: exit status 128`}
+	got := sanitizeGitErrMsg(err)
+	// パス・URL を含まない場合はそのまま返す
+	if got != `git log HEAD: exit status 128` {
+		t.Fatalf("expected safe message to pass through, got: %q", got)
+	}
+}
+
+type sanitizeGitTestErr struct{ msg string }
+
+func (e *sanitizeGitTestErr) Error() string { return e.msg }
+
+func containsPath(s string) bool {
+	for _, ch := range s {
+		if ch == '/' || ch == '\\' {
+			return true
+		}
+	}
+	return false
+}

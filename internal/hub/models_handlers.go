@@ -11,8 +11,7 @@ import (
 //   - GET  : キャッシュ尊重（Cloud 24h / Local 60s）
 //   - POST : 両キャッシュを invalidate して再取得
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.requireToken(w, r) {
 		return
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {

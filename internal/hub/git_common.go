@@ -7,10 +7,43 @@ import (
 	"fmt"
 	"net/http"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// revPattern は git revision（hash / ブランチ名 / タグ名）として許可する文字を定義する。
+// 英数字・ドット・スラッシュ・アンダースコア・ハイフンのみ許可。
+// 先頭 "-" はオプションと紛らわしいため rejectedする。
+var revPattern = regexp.MustCompile(`^[0-9A-Za-z._/\-]+$`)
+
+// validRevision は s が git revision として安全かを検証する。
+// 空文字・先頭 "-"・許可外文字があれば false を返す。
+func validRevision(s string) bool {
+	return s != "" && !strings.HasPrefix(s, "-") && revPattern.MatchString(s)
+}
+
+// sanitizeGitErrMsg は git コマンドエラーから UI に返す文字列を生成する。
+// 生 stderr（絶対パス・リモート URL 等）を UI レスポンスに載せない。
+// 詳細は呼び出し元で slog に記録する。
+func sanitizeGitErrMsg(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	// "git <args>: <stderr>" 形式から引数部分だけ返す（stderr 側を除去）
+	if idx := strings.Index(msg, ": "); idx >= 0 {
+		cmd := msg[:idx]
+		// パス・URL っぽい文字列が含まれる場合は汎用メッセージに差し替え
+		after := msg[idx+2:]
+		if strings.ContainsAny(after, `/\`) || strings.Contains(after, "://") {
+			return cmd + ": git command failed"
+		}
+		return msg
+	}
+	return "git command failed"
+}
 
 // gitCommandTimeout は /api/git-* で発行する全 git コマンドの上限時間。
 // 5s 以内に返らない場合はキャンセルされ git_command_failed を返す。

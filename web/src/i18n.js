@@ -2,6 +2,7 @@
   const stored = localStorage.getItem('ai_cli_hub_lang');
   const lang = stored || (navigator.language || 'ja').slice(0, 2);
   window.__lang = ['ja', 'en'].includes(lang) ? lang : 'ja';
+  document.documentElement.lang = window.__lang;
 
   const res = await fetch('/i18n/' + window.__lang + '.json');
   const dict = await res.json();

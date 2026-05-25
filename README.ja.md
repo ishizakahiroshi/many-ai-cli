@@ -139,6 +139,40 @@ GOOS=linux   GOARCH=amd64 go build -o dist/linux/any-ai-cli      ./cmd/any-ai-cl
 
 ---
 
+## アンインストール
+
+`any-ai-cli` はインストーラなしの単体バイナリです。アンインストールは、バイナリを置いたフォルダで `uninstall` サブコマンドを実行します。
+
+**Windows** — `any-ai-cli.exe` を置いたフォルダで実行:
+
+```powershell
+.\any-ai-cli.exe uninstall          # 設定・ログ（~/.any-ai-cli/）を削除
+.\any-ai-cli.exe uninstall --purge  # 上記 + バイナリ本体も削除
+```
+
+**macOS / Linux / WSL** — `any-ai-cli` を置いたフォルダで実行:
+
+```bash
+./any-ai-cli uninstall          # 設定・ログ（~/.any-ai-cli/）を削除
+./any-ai-cli uninstall --purge  # 上記 + バイナリ本体も削除
+```
+
+削除対象が表示され、確認後に実行されます。
+
+| オプション | 削除されるもの |
+|---|---|
+| (なし) | `~/.any-ai-cli/`（設定・ログ・添付ファイル）。バイナリのパスを表示するので手動で削除してください |
+| `--purge` | 上記 + バイナリ本体 |
+
+**手動で削除する場合**
+
+1. `~/.any-ai-cli/`（Windows: `%USERPROFILE%\.any-ai-cli\`）を削除
+2. ダウンロードしたバイナリ（`any-ai-cli.exe` / `any-ai-cli`）を削除
+
+> **ブラウザのデータは削除されません。** `uninstall` はブラウザのストレージに触れられません。大半の設定（テーマ・言語・フォントサイズ・お気に入り・クイックコマンド等）はサーバ側 `~/.any-ai-cli/` に保存されているため削除されますが、端末ごとの表示状態（ファイルツリーの開閉・ペインのレイアウト・スクロールバック量）は `localStorage` に残ります。消去するには Hub を開いていたタブで `F12` を押し、コンソールで `localStorage.clear()` を実行してください。
+
+---
+
 ## クイックスタート（推奨）
 
 通常はこれだけです。CLI を直接叩く必要はありません。
@@ -349,6 +383,7 @@ set-option -g default-command "ANY_AI_CLI_AUTO=1 bash -c 'eval \"$(any-ai-cli sh
 | `status` | Hub の起動状態を表示 |
 | `stop` | Hub を停止 |
 | `log-clean <session.jsonl>` | セッション履歴からクリーン transcript を生成 |
+| `uninstall [--purge]` | 設定・ログを削除してアンインストール。`--purge` でバイナリ本体も削除 |
 
 ---
 

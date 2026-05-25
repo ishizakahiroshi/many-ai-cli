@@ -139,11 +139,6 @@ func DetectShell() string {
 	return fallbackShellWindows()
 }
 
-func parentProcessExe(ppid uint32) string {
-	exe, _ := processExeAndParent(ppid)
-	return exe
-}
-
 // processExeAndParent は pid に対応するプロセスの exe 名と親 PID を返す。
 func processExeAndParent(pid uint32) (exe string, ppid uint32) {
 	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
