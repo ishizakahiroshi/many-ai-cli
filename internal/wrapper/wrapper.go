@@ -548,7 +548,11 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 // dialAndRegister opens a WS to the Hub and performs the register handshake.
 func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model string, termCols, termRows int) (*websocket.Conn, proto.Message, error) {
 	wsURL := url.URL{Scheme: "ws", Host: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Path: "/ws"}
-	conn, err := websocket.Dial(wsURL.String(), "", "http://127.0.0.1/")
+	// Origin はサーバの wsHandshake 許可リスト（http://127.0.0.1:<port>）に一致させる。
+	// websocket.Dial は内部で url.ParseRequestURI(origin) を呼ぶため空文字は不可（empty url エラー）。
+	// 末尾スラッシュ付き・ポートなしの "http://127.0.0.1/" だと許可リストに一致せず bad status。
+	origin := fmt.Sprintf("http://127.0.0.1:%d", cfg.Hub.Port)
+	conn, err := websocket.Dial(wsURL.String(), "", origin)
 	if err != nil {
 		return nil, proto.Message{}, err
 	}
@@ -579,7 +583,9 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model st
 
 func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, label, model, startedAt, rawLogPath, jsonlPath string, termCols, termRows int, replay []byte) (*websocket.Conn, int, error) {
 	wsURL := url.URL{Scheme: "ws", Host: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Path: "/ws"}
-	conn, err := websocket.Dial(wsURL.String(), "", "http://127.0.0.1/")
+	// Origin はポート付きで許可リストに一致させる（理由は dialAndRegister のコメント参照）。
+	origin := fmt.Sprintf("http://127.0.0.1:%d", cfg.Hub.Port)
+	conn, err := websocket.Dial(wsURL.String(), "", origin)
 	if err != nil {
 		return nil, 0, err
 	}

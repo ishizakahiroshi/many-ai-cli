@@ -485,7 +485,17 @@ function refreshQuickCommandButtons() {
 // @attachment と先頭スラッシュコマンドを除外してカード表示用テキストを返す
 function filterFirstMessage(text) {
   if (!text) return '';
-  const trimmed = text.trim();
+  const cleaned = text
+    // CSI エスケープシーケンス（ESC [ ... 終端）を除去。ブラケットペースト ESC[200~ / ESC[201~ もここで消える
+    .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
+    // OSC / その他 ESC + 1 文字シーケンス（ESC D など）を除去
+    .replace(/\x1b[\]P^_X][\s\S]*?(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1b./g, '')
+    // ESC が剥がれてマーカーの数値部だけ残ったケース（[200~ / [201~）の残骸を除去
+    .replace(/\[20[01]~/g, '')
+    // 残存する C0 制御文字を除去
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
+  const trimmed = cleaned.trim();
   if (trimmed.startsWith('/')) return '';
   return trimmed.replace(/@\S+/g, '').replace(/\s+/g, ' ').trim();
 }

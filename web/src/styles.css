@@ -118,6 +118,16 @@
   unicode-range: U+1F000-U+1F9FF, U+1FA00-U+1FAFF, U+FE00-U+FE0F, U+200D, U+20E3;
 }
 
+/* 丸数字・ローマ数字（East Asian Ambiguous 幅）を半角字形の等幅フォントで描く。
+   MS Gothic はこれらを全角グリフで描くため、xterm が確保する 1 セル枠と衝突して
+   隣の文字と重なる（潰れる）。この範囲だけ半角字形を持つ欧文等幅へ振り分けて回避する。
+   罫線（U+2500-257F）は Claude Code の TUI が多用するため対象外。 */
+@font-face {
+  font-family: 'TerminalNarrowNum';
+  src: local('Cascadia Mono'), local('Cascadia Code'), local('Consolas'), local('Courier New');
+  unicode-range: U+2160-217F, U+2460-24FF;
+}
+
 /* ============================================================
    ベーススタイル
    ============================================================ */

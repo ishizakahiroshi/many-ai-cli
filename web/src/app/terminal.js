@@ -10,7 +10,9 @@ function ensureTerminal(id) {
     scrollback: 5000,
     // xterm はセル幅ベースで描画するため、絵文字フォント混在でグリフが巨大化/崩れする環境がある。
     // 端末領域は等幅フォントのみを使い、見た目の安定性を優先する。
-    fontFamily: '"MS Gothic", "BIZ UDGothic", "BIZ UDゴシック", "Segoe UI Symbol", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace',
+    // 'TerminalNarrowNum'（styles.css 定義）を先頭に置き、丸数字・ローマ数字だけを
+    // 半角字形の等幅フォントへ振り分ける。範囲外の文字はスキップされ "MS Gothic" 以降に落ちる。
+    fontFamily: '"TerminalNarrowNum", "MS Gothic", "BIZ UDGothic", "BIZ UDゴシック", "Segoe UI Symbol", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace',
     fontSize: FONTSIZE_MAP[localStorage.getItem(STORAGE_FONTSIZE_KEY)] || 13,
     // 一部フォントで大文字上端がクリップされるため、行高を少し広げて回避する。
     lineHeight: 1.25,
