@@ -566,10 +566,11 @@ function detectApproval(id) {
     if (approvalVisibleCache.get(id)) {
       approvalUiAdapter.setApprovalVisible(id, false);
     }
-  } else {
-    // 検出側もマッチしない & state も無い: dismissed フラグもクリア（次の本物に備える）
-    multiQuestionDismissedCache.delete(id);
   }
+  // 検出側もマッチしない & state も無い場合でも dismissed フラグはここでクリアしない。
+  // Ink の全画面再描画で誤検出元の行が末尾40行の窓を出入りすると、ここでクリアすると
+  // ✕ で dismiss しても窓への再入で banner が即復活してしまう（バツボタンが効かない）。
+  // dismissed は送信時（doSend）と一括回答確定時に確実にクリアされるため、それで十分。
 
   // [ANY-AI-CLI] マーカー検出: xterm バッファではなく pendingTextTail を使う。
   // xterm バッファは回答済みの古い [ANY-AI-CLI] ブロックを保持し続けるため、

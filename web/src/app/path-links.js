@@ -229,6 +229,9 @@ function computeRelPath(from, to) {
 
 function trimTerminalPathCandidate(path) {
   let text = String(path || '').trim().replace(/(?:\s*[,;:'"<>\])}]+)+$/, '');
+  // 拡張子の直後に全角/日本語が続く場合はそこで切る（相対パス・Unix 絶対パスにも適用）。
+  // Windows 絶対パスは下の trimWindowsPathCandidate で同等処理を行う。
+  text = text.replace(/(\.[a-zA-Z0-9]{1,15})\s*[぀-ヿ㐀-鿿＀-￯一-鿿].*$/u, '$1');
   if (/^[A-Za-z]:[\\/]/.test(text)) text = trimWindowsPathCandidate(text);
   text = stripTerminalLineSuffix(text);
   return text;
