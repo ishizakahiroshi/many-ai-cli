@@ -1,7 +1,6 @@
 package hub
 
 import (
-	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -19,6 +18,7 @@ type filesRenameReq struct {
 type filesRenameResp struct {
 	OK     bool   `json:"ok"`
 	Error  string `json:"error,omitempty"`
+	Detail string `json:"detail,omitempty"`
 	NewAbs string `json:"newAbs,omitempty"`
 }
 
@@ -34,31 +34,24 @@ type filesRenameResp struct {
 //  7. newName が src の現在の basename と異なる（no-op 拒否）
 //  8. 移動先（同ディレクトリ/newName）が既存でない（上書き禁止）
 func (s *Server) handleFilesRename(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
+	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
 
 	var req filesRenameReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeRenameErr(w, "bad request: "+err.Error())
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	if req.Src == "" || req.NewName == "" {
-		writeRenameErr(w, "src and newName are required")
+		writeRenameErr(w, http.StatusBadRequest, "bad_request", "src and newName are required")
 		return
 	}
 	if !filepath.IsAbs(req.Src) {
-		writeRenameErr(w, "src must be an absolute path")
+		writeRenameErr(w, http.StatusBadRequest, "bad_request", "src must be an absolute path")
 		return
 	}
 	if !isSafeBasename(req.NewName) {
-		writeRenameErr(w, "newName must be a plain file name without path separators")
+		writeRenameErr(w, http.StatusBadRequest, "bad_request", "newName must be a plain file name without path separators")
 		return
 	}
 
@@ -68,41 +61,41 @@ func (s *Server) handleFilesRename(w http.ResponseWriter, r *http.Request) {
 
 	srcClean := filepath.Clean(req.Src)
 	if ok, _ := isPathUnderAllowedRoots(srcClean, cwd, gitRoot); !ok {
-		writeRenameErr(w, "forbidden: src is outside allowed roots")
+		writeRenameErr(w, http.StatusForbidden, "forbidden", "src is outside allowed roots")
 		return
 	}
 
 	info, err := os.Lstat(srcClean)
 	if err != nil {
-		writeRenameErr(w, "src not found: "+err.Error())
+		writeRenameErr(w, http.StatusNotFound, "not_found", errorDetail("src not found", err))
 		return
 	}
 	if !info.IsDir() {
-		writeRenameErr(w, "src must be a directory")
+		writeRenameErr(w, http.StatusBadRequest, "bad_request", "src must be a directory")
 		return
 	}
 
 	if req.NewName == filepath.Base(srcClean) {
-		writeRenameErr(w, "newName is identical to current name")
+		writeRenameErr(w, http.StatusConflict, "conflict", "newName is identical to current name")
 		return
 	}
 
 	newPath := filepath.Join(filepath.Dir(srcClean), req.NewName)
 	if _, err := os.Lstat(newPath); err == nil {
-		writeRenameErr(w, "target already exists: "+newPath)
+		writeRenameErr(w, http.StatusConflict, "conflict", "target already exists: "+newPath)
 		return
 	}
 
 	if err := os.Rename(srcClean, newPath); err != nil {
-		writeRenameErr(w, "rename failed: "+err.Error())
+		writeRenameErr(w, http.StatusInternalServerError, "rename_failed", errorDetail("rename failed", err))
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(filesRenameResp{OK: true, NewAbs: newPath})
+	writeJSON(w, filesRenameResp{OK: true, NewAbs: newPath})
 }
 
-func writeRenameErr(w http.ResponseWriter, msg string) {
-	_ = json.NewEncoder(w).Encode(filesRenameResp{OK: false, Error: msg})
+func writeRenameErr(w http.ResponseWriter, status int, code, detail string) {
+	writeJSONStatus(w, status, filesRenameResp{OK: false, Error: code, Detail: detail})
 }
 
 // isSafeBasename は name が path separator や ".." を含まない単純な basename か検証する。

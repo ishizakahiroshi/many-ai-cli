@@ -24,9 +24,9 @@ func newTestServer() *Server {
 		wrappers:          map[int]*websocket.Conn{},
 		uis:               map[*websocket.Conn]*uiConn{},
 		slashCmdCache:     map[string]*slashCmdCacheEntry{},
-		usageLinkCache:    &usageLinkCache{},
+		usageLinkCache:    newUsageLinkCache(),
 		modelsCache:       &modelsCache{},
-		modelsRemoteCache: &modelsRemoteCache{},
+		modelsRemoteCache: newModelsRemoteCache(),
 	}
 }
 
@@ -37,9 +37,9 @@ func registerTestSession(s *Server, id int, provider string) *session {
 		Provider: provider,
 		State:    "running",
 	}
-	s.mu.Lock()
+	s.sessionsMu.Lock()
 	s.sessions[id] = ses
-	s.mu.Unlock()
+	s.sessionsMu.Unlock()
 	return ses
 }
 
@@ -56,9 +56,9 @@ func TestHandleNativeApprovalDetection_NewApproval(t *testing.T) {
 	}
 	s.handleNativeApprovalDetection(1, approval)
 
-	s.mu.Lock()
+	s.sessionsMu.Lock()
 	got := s.sessions[1].nativeApprovalSig
-	s.mu.Unlock()
+	s.sessionsMu.Unlock()
 	if got != "sig-abc" {
 		t.Fatalf("nativeApprovalSig = %q, want %q", got, "sig-abc")
 	}
@@ -75,9 +75,9 @@ func TestHandleNativeApprovalDetection_SameSigNoRepeat(t *testing.T) {
 	approval := &nativeApproval{Sig: "sig-dup", Kind: "native"}
 	s.handleNativeApprovalDetection(2, approval)
 
-	s.mu.Lock()
+	s.sessionsMu.Lock()
 	got := s.sessions[2].nativeApprovalSig
-	s.mu.Unlock()
+	s.sessionsMu.Unlock()
 	if got != "sig-dup" {
 		t.Fatalf("nativeApprovalSig = %q, want %q", got, "sig-dup")
 	}
@@ -91,9 +91,9 @@ func TestHandleNativeApprovalDetection_ClearOnNil(t *testing.T) {
 
 	s.handleNativeApprovalDetection(3, nil)
 
-	s.mu.Lock()
+	s.sessionsMu.Lock()
 	got := s.sessions[3].nativeApprovalSig
-	s.mu.Unlock()
+	s.sessionsMu.Unlock()
 	if got != "" {
 		t.Fatalf("nativeApprovalSig = %q after clear, want empty", got)
 	}
@@ -110,9 +110,9 @@ func TestHandleNativeApprovalDetection_ConsumedTTL(t *testing.T) {
 	approval := &nativeApproval{Sig: "sig-consumed", Kind: "native"}
 	s.handleNativeApprovalDetection(4, approval)
 
-	s.mu.Lock()
+	s.sessionsMu.Lock()
 	got := s.sessions[4].nativeApprovalSig
-	s.mu.Unlock()
+	s.sessionsMu.Unlock()
 	// TTL 内なので sig がセットされていないこと
 	if got != "" {
 		t.Fatalf("nativeApprovalSig = %q, want empty (TTL suppression)", got)
@@ -129,9 +129,9 @@ func TestHandleNativeApprovalDetection_ResizeDebounceSkip(t *testing.T) {
 	approval := &nativeApproval{Sig: "sig-resize", Kind: "native"}
 	s.handleNativeApprovalDetection(5, approval)
 
-	s.mu.Lock()
+	s.sessionsMu.Lock()
 	got := s.sessions[5].nativeApprovalSig
-	s.mu.Unlock()
+	s.sessionsMu.Unlock()
 	if got != "" {
 		t.Fatalf("nativeApprovalSig = %q, want empty (debounce skip)", got)
 	}
@@ -149,10 +149,10 @@ func TestMarkNativeApprovalConsumed(t *testing.T) {
 		ApprovalSig: "sig-to-consume",
 	})
 
-	s.mu.Lock()
+	s.sessionsMu.Lock()
 	consumed := s.sessions[6].nativeApprovalConsumed
 	sig := s.sessions[6].nativeApprovalSig
-	s.mu.Unlock()
+	s.sessionsMu.Unlock()
 	if consumed != "sig-to-consume" {
 		t.Fatalf("nativeApprovalConsumed = %q, want %q", consumed, "sig-to-consume")
 	}
@@ -174,9 +174,9 @@ func TestMarkNativeApprovalConsumed_SigMismatch(t *testing.T) {
 		ApprovalSig: "sig-B", // 別の sig
 	})
 
-	s.mu.Lock()
+	s.sessionsMu.Lock()
 	sig := s.sessions[7].nativeApprovalSig
-	s.mu.Unlock()
+	s.sessionsMu.Unlock()
 	if sig != "sig-A" {
 		t.Fatalf("nativeApprovalSig = %q, want %q (mismatch should not clear)", sig, "sig-A")
 	}
@@ -192,9 +192,9 @@ func TestEvaluateIdle_RunningToWaiting(t *testing.T) {
 
 	s.evaluateIdle()
 
-	s.mu.Lock()
+	s.sessionsMu.Lock()
 	state := s.sessions[10].State
-	s.mu.Unlock()
+	s.sessionsMu.Unlock()
 	if state != "waiting" {
 		t.Fatalf("state = %q, want %q", state, "waiting")
 	}
@@ -210,9 +210,9 @@ func TestEvaluateIdle_RunningToStandby(t *testing.T) {
 
 	s.evaluateIdle()
 
-	s.mu.Lock()
+	s.sessionsMu.Lock()
 	state := s.sessions[11].State
-	s.mu.Unlock()
+	s.sessionsMu.Unlock()
 	if state != "standby" {
 		t.Fatalf("state = %q, want %q", state, "standby")
 	}
@@ -228,9 +228,9 @@ func TestEvaluateIdle_WaitingToStandby(t *testing.T) {
 
 	s.evaluateIdle()
 
-	s.mu.Lock()
+	s.sessionsMu.Lock()
 	state := s.sessions[12].State
-	s.mu.Unlock()
+	s.sessionsMu.Unlock()
 	if state != "standby" {
 		t.Fatalf("state = %q, want %q", state, "standby")
 	}
@@ -245,9 +245,9 @@ func TestEvaluateIdle_NoChangeWhenRunningRecent(t *testing.T) {
 
 	s.evaluateIdle()
 
-	s.mu.Lock()
+	s.sessionsMu.Lock()
 	state := s.sessions[13].State
-	s.mu.Unlock()
+	s.sessionsMu.Unlock()
 	if state != "running" {
 		t.Fatalf("state = %q, want %q (no change expected)", state, "running")
 	}

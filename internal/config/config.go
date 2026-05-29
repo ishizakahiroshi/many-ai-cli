@@ -289,6 +289,10 @@ type Config struct {
 	} `yaml:"spawn,omitempty" json:"spawn,omitempty"`
 	Approval               ApprovalConfig         `yaml:"approval,omitempty"`
 	SlashCmdSources        SlashCmdSources        `yaml:"slash_cmd_sources,omitempty" json:"slash_cmd_sources,omitempty"`
+	// ModelsSource は /api/models のモデル defaults 取得元 URL を上書きする。
+	// 空なら DefaultModelsSource を使う（slash_cmd_sources 等と同じく config 上書き可能にし、
+	// 他の remote source だけ config 化されていない非対称を解消する）。
+	ModelsSource           string                 `yaml:"models_source,omitempty" json:"models_source,omitempty"`
 	ApprovalPatternSources ApprovalPatternSources `yaml:"approval_pattern_sources,omitempty" json:"approval_pattern_sources,omitempty"`
 	ApprovalProfiles       ApprovalProfiles       `yaml:"approval_profiles,omitempty"        json:"approval_profiles,omitempty"`
 	FileOpenApp            string                 `yaml:"file_open_app,omitempty"`
@@ -316,7 +320,9 @@ func LoadOrCreate() (*Config, error) {
 		if err := yaml.Unmarshal(b, cfg); err != nil {
 			// 破損: .bak へ退避してデフォルト設定で起動継続
 			bak := path + ".bak"
-			_ = os.WriteFile(bak, b, 0o600)
+			if bakErr := os.WriteFile(bak, b, 0o600); bakErr != nil {
+				return nil, fmt.Errorf("backup invalid config: %w", bakErr)
+			}
 			slog.Warn("config parse failed; backed up and regenerating",
 				"bak", bak, "err", err)
 			cfg = defaultConfig(home)

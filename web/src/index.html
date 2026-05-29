@@ -771,6 +771,27 @@
   </div>
   <div id="model-picker-overlay" hidden></div>
 
+  <!--
+    classic-script 読込順の契約（C9: implicit-script-order-coupling の明文化）
+
+    これらは ES module ではなく classic script のため、トップレベルの const/let/function は
+    ページ共有のグローバルスコープに入り、後続スクリプトから参照できる。順序が意味を持つのは
+    「ロード時にトップレベルで即時実行される処理」が依存先より後に来る必要がある点。
+    並び替える場合は以下の依存契約を壊さないこと（中期: ESM 化で import 依存に置換予定）。
+
+      1. vendor/*            — 依存なし。最初に読む（xterm, marked, purify, highlight）。
+      2. i18n.js             — window.t() を使う全 UI コードより前。
+      3. app/util.js         — 共通ヘルパ。多数が依存。
+      4. app/user-prefs.js   — setUserPref 等。state.js より前。
+      5. app/state.js        — グローバル状態（sessions / favorites / sessionOrder /
+                               orderSessions など）の正本。以降の全モジュールの前提。
+      6. app/multi-pane.js   — window.multiPaneManager を生成。app.js より前。
+      7. app.js              — コア初期化。
+      8. app/session-list.js 〜 files-view.js — ドメインロジック。
+         - approval は parser → ui → approval の順（後者が前者の API に依存）。
+         - chat-history.js は session-list.js（orderSessions 経由の整列）後に読む。
+         - git-view.js は files-view.js（window.GitGraphView 参照）より前。
+  -->
   <script src="/vendor/xterm.min.js"></script>
   <script src="/vendor/xterm-addon-fit.min.js"></script>
   <script src="/vendor/xterm-addon-unicode11.min.js"></script>

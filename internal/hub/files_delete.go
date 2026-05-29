@@ -1,7 +1,6 @@
 package hub
 
 import (
-	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,34 +13,28 @@ type filesDeleteDirReq struct {
 }
 
 type filesDeleteDirResp struct {
-	OK    bool   `json:"ok"`
-	Error string `json:"error,omitempty"`
+	OK     bool   `json:"ok"`
+	Error  string `json:"error,omitempty"`
+	Detail string `json:"detail,omitempty"`
 }
 
 // handleFilesDeleteDir は POST /api/files-delete-dir を処理する。
 // ディレクトリだけを削除対象にし、ファイル・シンボリックリンク・許可ルート自身は拒否する。
 func (s *Server) handleFilesDeleteDir(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
+	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
 
 	var req filesDeleteDirReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeDeleteDirErr(w, "bad request: "+err.Error())
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	if req.Src == "" {
-		writeDeleteDirErr(w, "src is required")
+		writeDeleteDirErr(w, http.StatusBadRequest, "bad_request", "src is required")
 		return
 	}
 	if !filepath.IsAbs(req.Src) {
-		writeDeleteDirErr(w, "src must be an absolute path")
+		writeDeleteDirErr(w, http.StatusBadRequest, "bad_request", "src must be an absolute path")
 		return
 	}
 
@@ -50,32 +43,32 @@ func (s *Server) handleFilesDeleteDir(w http.ResponseWriter, r *http.Request) {
 
 	srcClean := filepath.Clean(req.Src)
 	if ok, _ := isPathUnderAllowedRoots(srcClean, cwd, gitRoot); !ok {
-		writeDeleteDirErr(w, "forbidden: src is outside allowed roots")
+		writeDeleteDirErr(w, http.StatusForbidden, "forbidden", "src is outside allowed roots")
 		return
 	}
 	if pathsEqual(srcClean, cwd) || pathsEqual(srcClean, gitRoot) {
-		writeDeleteDirErr(w, "refusing to delete an allowed root directory")
+		writeDeleteDirErr(w, http.StatusConflict, "conflict", "refusing to delete an allowed root directory")
 		return
 	}
 
 	info, err := os.Lstat(srcClean)
 	if err != nil {
-		writeDeleteDirErr(w, "src not found: "+err.Error())
+		writeDeleteDirErr(w, http.StatusNotFound, "not_found", errorDetail("src not found", err))
 		return
 	}
 	if !info.IsDir() {
-		writeDeleteDirErr(w, "src must be a directory")
+		writeDeleteDirErr(w, http.StatusBadRequest, "bad_request", "src must be a directory")
 		return
 	}
 
 	if err := os.RemoveAll(srcClean); err != nil {
-		writeDeleteDirErr(w, "delete failed: "+err.Error())
+		writeDeleteDirErr(w, http.StatusInternalServerError, "delete_failed", errorDetail("delete failed", err))
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(filesDeleteDirResp{OK: true})
+	writeJSON(w, filesDeleteDirResp{OK: true})
 }
 
-func writeDeleteDirErr(w http.ResponseWriter, msg string) {
-	_ = json.NewEncoder(w).Encode(filesDeleteDirResp{OK: false, Error: msg})
+func writeDeleteDirErr(w http.ResponseWriter, status int, code, detail string) {
+	writeJSONStatus(w, status, filesDeleteDirResp{OK: false, Error: code, Detail: detail})
 }

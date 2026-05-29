@@ -1,0 +1,7 @@
+{
+  "name": "any-ai-cli-web",
+  "private": true,
+  "scripts": {
+    "test": "node --test src/app/approval-parser-fixtures.js"
+  }
+}

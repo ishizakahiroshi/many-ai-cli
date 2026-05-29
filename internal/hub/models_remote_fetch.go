@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"sync"
 	"time"
 )
 
@@ -13,13 +12,6 @@ import (
 type modelsDefaults struct {
 	Anthropic []Model `json:"anthropic"`
 	OpenAI    []Model `json:"openai"`
-}
-
-type modelsRemoteCache struct {
-	mu          sync.Mutex
-	data        *modelsDefaults
-	fetchedAt   time.Time
-	failedAt    time.Time // 最後に fetch に失敗した時刻（負キャッシュ用）
 }
 
 const (
@@ -46,47 +38,22 @@ var hardcodedModelsDefaults = modelsDefaults{
 	},
 }
 
-// get は TTL 内ならキャッシュを返し、期限切れなら sourceURL から再取得する。
-// 取得失敗時はハードコード値を返し、失敗時刻を記録して負 TTL 内は再試行しない。
-func (c *modelsRemoteCache) get(sourceURL string) modelsDefaults {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	// 成功キャッシュが有効
-	if c.data != nil && time.Since(c.fetchedAt) < modelsRemoteCacheTTL {
-		return *c.data
+// newModelsRemoteCache は GitHub のモデル defaults を扱う TTL キャッシュを生成する。
+// fetch 成功値は格納前にハードコード値とマージする（リモートに無い既知モデルを補う）。
+func newModelsRemoteCache() *ttlCache[modelsDefaults] {
+	return &ttlCache[modelsDefaults]{
+		ttl:         modelsRemoteCacheTTL,
+		negativeTTL: modelsRemoteNegativeTTL,
+		fallback:    hardcodedModelsDefaults,
+		fetch:       fetchModelsDefaults,
+		transform: func(fetched modelsDefaults) modelsDefaults {
+			return mergeModelsDefaults(fetched, hardcodedModelsDefaults)
+		},
 	}
-	// 負キャッシュが有効（失敗後の再試行抑制）
-	if !c.failedAt.IsZero() && time.Since(c.failedAt) < modelsRemoteNegativeTTL {
-		if c.data != nil {
-			return *c.data
-		}
-		return hardcodedModelsDefaults
-	}
-	fetched, err := fetchModelsDefaults(sourceURL)
-	if err != nil {
-		c.failedAt = time.Now() // 負 TTL 開始
-		if c.data != nil {
-			return *c.data // 直近成功値があればそちらを返す
-		}
-		return hardcodedModelsDefaults
-	}
-	merged := mergeModelsDefaults(fetched, hardcodedModelsDefaults)
-	c.data = &merged
-	c.fetchedAt = time.Now()
-	c.failedAt = time.Time{} // 負キャッシュをリセット
-	return merged
-}
-
-// invalidate は次回 get で必ず再 fetch されるようキャッシュを破棄する。
-func (c *modelsRemoteCache) invalidate() {
-	c.mu.Lock()
-	c.data = nil
-	c.fetchedAt = time.Time{}
-	c.mu.Unlock()
 }
 
 func fetchModelsDefaults(sourceURL string) (modelsDefaults, error) {
-	client := newExternalHTTPClient(10 * time.Second)
+	client := makeExternalHTTPClient(10 * time.Second)
 	resp, err := client.Get(sourceURL)
 	if err != nil {
 		return modelsDefaults{}, err

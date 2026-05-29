@@ -1,7 +1,6 @@
 package hub
 
 import (
-	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -54,11 +53,7 @@ var filesSkipDirs = map[string]bool{
 // ?root=<absPath> で列挙起点を指定（省略時: <cwd>/docs/local）。
 // ?token=<token> 必須。
 func (s *Server) handleFilesList(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
-		return
-	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !s.guard(w, r, http.MethodGet) {
 		return
 	}
 
@@ -70,7 +65,7 @@ func (s *Server) handleFilesList(w http.ResponseWriter, r *http.Request) {
 	if rootParam := r.URL.Query().Get("root"); rootParam != "" {
 		// 絶対パスのみ受け付ける
 		if !filepath.IsAbs(rootParam) {
-			http.Error(w, "root must be an absolute path", http.StatusBadRequest)
+			writeJSONError(w, http.StatusBadRequest, "bad_request", "root must be an absolute path")
 			return
 		}
 		// git ルートを検出して許可範囲を確定
@@ -78,7 +73,7 @@ func (s *Server) handleFilesList(w http.ResponseWriter, r *http.Request) {
 		// path traversal 防止: 許可ルートは cwd または gitRoot
 		allowed, err := isPathUnderAllowedRoots(rootParam, cwd, gitRoot)
 		if err != nil || !allowed {
-			http.Error(w, "forbidden: path is outside allowed roots", http.StatusForbidden)
+			writeJSONError(w, http.StatusForbidden, "forbidden", "path is outside allowed roots")
 			return
 		}
 		filesRoot = rootParam
@@ -86,12 +81,10 @@ func (s *Server) handleFilesList(w http.ResponseWriter, r *http.Request) {
 		filesRoot = filepath.Join(cwd, "docs", "local")
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-
 	// ルートが存在しない場合
 	info, err := os.Stat(filesRoot)
 	if err != nil || !info.IsDir() {
-		_ = json.NewEncoder(w).Encode(filesListResp{
+		writeJSON(w, filesListResp{
 			Root:      filesRoot,
 			Exists:    false,
 			Truncated: false,
@@ -108,7 +101,7 @@ func (s *Server) handleFilesList(w http.ResponseWriter, r *http.Request) {
 		Truncated: truncated,
 		Items:     items,
 	}
-	_ = json.NewEncoder(w).Encode(resp)
+	writeJSON(w, resp)
 }
 
 // walkFilesLocal は filesRoot 以下を再帰走査し filesListItem スライスを返す。

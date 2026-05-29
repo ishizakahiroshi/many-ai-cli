@@ -8,15 +8,15 @@ import (
 )
 
 func (s *Server) handleLogConfig(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
+	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
 		return
 	}
 	switch r.Method {
 	case http.MethodGet:
-		s.mu.Lock()
+		s.cfgMu.Lock()
 		logCfg := s.cfg.Log
 		logDir := s.cfg.Hub.LogDir
-		s.mu.Unlock()
+		s.cfgMu.Unlock()
 		cfgDir, _ := config.Dir()
 		attachDir := filepath.Join(cfgDir, "attachments")
 		type logConfigResp struct {
@@ -50,27 +50,25 @@ func (s *Server) handleLogConfig(w http.ResponseWriter, r *http.Request) {
 		} else if body.SessionMaxSizeMB > 10000 {
 			body.SessionMaxSizeMB = 10000
 		}
-		s.mu.Lock()
+		s.cfgMu.Lock()
 		s.cfg.Log = body
-		s.mu.Unlock()
+		s.cfgMu.Unlock()
 		if err := s.persistConfig(); err != nil {
-			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
+			writeJSONError(w, http.StatusInternalServerError, "save_failed", errorDetail("save failed", err))
 			return
 		}
 		writeJSON(w, map[string]bool{"ok": true})
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 func (s *Server) handleIdleTimeout(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
+	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
 		return
 	}
 	switch r.Method {
 	case http.MethodGet:
-		s.mu.Lock()
+		s.cfgMu.Lock()
 		min := s.cfg.Hub.IdleTimeoutMin
-		s.mu.Unlock()
+		s.cfgMu.Unlock()
 		writeJSON(w, map[string]int{"idle_timeout_min": min})
 	case http.MethodPost:
 		var body struct {
@@ -84,33 +82,33 @@ func (s *Server) handleIdleTimeout(w http.ResponseWriter, r *http.Request) {
 		} else if body.IdleTimeoutMin > 1440 {
 			body.IdleTimeoutMin = 1440
 		}
-		s.mu.Lock()
+		s.cfgMu.Lock()
 		s.cfg.Hub.IdleTimeoutMin = body.IdleTimeoutMin
-		if len(s.uis) > 0 {
-			s.stopIdleTimerLocked()
-		} else {
-			s.stopIdleTimerLocked()
-			s.startIdleTimerLocked()
+		s.cfgMu.Unlock()
+		// タイマーは一旦止めて新しい閾値で再構成する。UI 接続中はカウントダウン
+		// しないため再開しない（接続が無いときだけ再始動する）。
+		s.sessionsMu.Lock()
+		s.stopIdleTimerLocked()
+		if len(s.uis) == 0 {
+			s.startIdleTimerLocked(body.IdleTimeoutMin)
 		}
-		s.mu.Unlock()
+		s.sessionsMu.Unlock()
 		if err := s.persistConfig(); err != nil {
-			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
+			writeJSONError(w, http.StatusInternalServerError, "save_failed", errorDetail("save failed", err))
 			return
 		}
 		writeJSON(w, map[string]bool{"ok": true})
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 func (s *Server) handleReconnectGrace(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
+	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
 		return
 	}
 	switch r.Method {
 	case http.MethodGet:
-		s.mu.Lock()
+		s.cfgMu.Lock()
 		sec := s.cfg.Hub.WrapperReconnectGraceSec
-		s.mu.Unlock()
+		s.cfgMu.Unlock()
 		writeJSON(w, map[string]int{"wrapper_reconnect_grace_sec": sec})
 	case http.MethodPost:
 		var body struct {
@@ -124,15 +122,13 @@ func (s *Server) handleReconnectGrace(w http.ResponseWriter, r *http.Request) {
 		} else if body.WrapperReconnectGraceSec > 86400 {
 			body.WrapperReconnectGraceSec = 86400
 		}
-		s.mu.Lock()
+		s.cfgMu.Lock()
 		s.cfg.Hub.WrapperReconnectGraceSec = body.WrapperReconnectGraceSec
-		s.mu.Unlock()
+		s.cfgMu.Unlock()
 		if err := s.persistConfig(); err != nil {
-			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
+			writeJSONError(w, http.StatusInternalServerError, "save_failed", errorDetail("save failed", err))
 			return
 		}
 		writeJSON(w, map[string]bool{"ok": true})
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }

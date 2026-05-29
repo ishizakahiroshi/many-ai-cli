@@ -1,7 +1,6 @@
 package hub
 
 import (
-	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -27,6 +26,7 @@ type fileMoveResult struct {
 type filesMoveResp struct {
 	OK      bool             `json:"ok"`
 	Error   string           `json:"error,omitempty"`
+	Detail  string           `json:"detail,omitempty"`
 	NewAbs  string           `json:"newAbs,omitempty"`  // 単ファイル後方互換
 	Results []fileMoveResult `json:"results,omitempty"` // 多ファイル時
 }
@@ -143,7 +143,7 @@ func (s *Server) processMultiMove(srcs []string, dstDirClean, cwd, gitRoot strin
 	}
 
 	if !allOK {
-		return filesMoveResp{OK: false, Error: "move preflight failed", Results: results}
+		return filesMoveResp{OK: false, Error: "move_preflight_failed", Detail: "move preflight failed", Results: results}
 	}
 
 	completed := make([]fileMovePlan, 0, len(plans))
@@ -155,7 +155,7 @@ func (s *Server) processMultiMove(srcs []string, dstDirClean, cwd, gitRoot strin
 			if len(rollbackErrs) > 0 {
 				errMsg += "; rollback failed: " + strings.Join(rollbackErrs, "; ")
 			}
-			return filesMoveResp{OK: false, Error: errMsg, Results: results}
+			return filesMoveResp{OK: false, Error: "rename_failed", Detail: errMsg, Results: results}
 		}
 		completed = append(completed, plan)
 	}
@@ -188,19 +188,12 @@ func movePathKey(path string) string {
 // handleFilesMove は POST /api/files-move を処理する。
 // 単ファイルモード（src/dstDir）と多ファイルモード（srcs/dstDir）の両方をサポートする。
 func (s *Server) handleFilesMove(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
+	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
 
 	var req filesMoveReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeMoveErr(w, "bad request: "+err.Error())
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 
@@ -210,49 +203,75 @@ func (s *Server) handleFilesMove(w http.ResponseWriter, r *http.Request) {
 
 	// dstDir の共通バリデーション
 	if req.DstDir == "" {
-		writeMoveErr(w, "dstDir is required")
+		writeMoveErr(w, http.StatusBadRequest, "bad_request", "dstDir is required")
 		return
 	}
 	if !filepath.IsAbs(req.DstDir) {
-		writeMoveErr(w, "dstDir must be an absolute path")
+		writeMoveErr(w, http.StatusBadRequest, "bad_request", "dstDir must be an absolute path")
 		return
 	}
 	if ok, _ := isPathUnderAllowedRoots(req.DstDir, cwd, gitRoot); !ok {
-		writeMoveErr(w, "forbidden: dstDir is outside allowed roots")
+		writeMoveErr(w, http.StatusForbidden, "forbidden", "dstDir is outside allowed roots")
 		return
 	}
 	dstDirClean := filepath.Clean(req.DstDir)
 	dstDirInfo, err := os.Stat(dstDirClean)
 	if err != nil {
-		writeMoveErr(w, "dstDir not found: "+err.Error())
+		writeMoveErr(w, http.StatusNotFound, "not_found", errorDetail("dstDir not found", err))
 		return
 	}
 	if !dstDirInfo.IsDir() {
-		writeMoveErr(w, "dstDir is not a directory")
+		writeMoveErr(w, http.StatusBadRequest, "bad_request", "dstDir is not a directory")
 		return
 	}
 
 	// 多ファイルモード (Srcs)
 	if len(req.Srcs) > 0 {
-		_ = json.NewEncoder(w).Encode(s.processMultiMove(req.Srcs, dstDirClean, cwd, gitRoot))
+		resp := s.processMultiMove(req.Srcs, dstDirClean, cwd, gitRoot)
+		if !resp.OK {
+			writeJSONStatus(w, http.StatusBadRequest, resp)
+			return
+		}
+		writeJSON(w, resp)
 		return
 	}
 
 	// 単ファイルモード（後方互換）
 	if req.Src == "" {
-		writeMoveErr(w, "src or srcs is required")
+		writeMoveErr(w, http.StatusBadRequest, "bad_request", "src or srcs is required")
 		return
 	}
 	res := s.processSingleMove(req.Src, req.DstDir, cwd, gitRoot)
 	if res.Error != "" {
-		writeMoveErr(w, res.Error)
+		status, code := fileOperationErrorStatus(res.Error)
+		writeMoveErr(w, status, code, res.Error)
 		return
 	}
-	_ = json.NewEncoder(w).Encode(filesMoveResp{OK: true, NewAbs: res.NewAbs})
+	writeJSON(w, filesMoveResp{OK: true, NewAbs: res.NewAbs})
 }
 
-func writeMoveErr(w http.ResponseWriter, msg string) {
-	_ = json.NewEncoder(w).Encode(filesMoveResp{OK: false, Error: msg})
+func writeMoveErr(w http.ResponseWriter, status int, code, detail string) {
+	writeJSONStatus(w, status, filesMoveResp{OK: false, Error: code, Detail: detail})
+}
+
+func fileOperationErrorStatus(msg string) (int, string) {
+	low := strings.ToLower(msg)
+	switch {
+	case strings.Contains(low, "forbidden"):
+		return http.StatusForbidden, "forbidden"
+	case strings.Contains(low, "not found"):
+		return http.StatusNotFound, "not_found"
+	case strings.Contains(low, "already exists"),
+		strings.Contains(low, "already in"),
+		strings.Contains(low, "duplicate"),
+		strings.Contains(low, "overwrite"),
+		strings.Contains(low, "descendant"):
+		return http.StatusConflict, "conflict"
+	case strings.Contains(low, "failed"):
+		return http.StatusInternalServerError, "operation_failed"
+	default:
+		return http.StatusBadRequest, "bad_request"
+	}
 }
 
 // pathsEqual は 2 つのパスを Clean したうえで比較する。

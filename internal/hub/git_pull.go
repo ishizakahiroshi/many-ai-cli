@@ -2,7 +2,6 @@ package hub
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -24,17 +23,11 @@ type gitPullResp struct {
 // リモート追跡ブランチの内容を fast-forward でローカルブランチへ追従させる
 // （git pull --ff-only）。分岐していて ff 不可の場合はマージコミットを作らず失敗を返す。
 func (s *Server) handleGitPull(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
 	var req gitPullReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeGitError(w, http.StatusBadRequest, "bad_request", "invalid json")
-		return
-	}
-	if req.Token != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	sid := req.Session
@@ -49,11 +42,11 @@ func (s *Server) handleGitPull(w http.ResponseWriter, r *http.Request) {
 	out, runErr := runGitCombined(ctx, cwd, "pull", "--ff-only")
 	if runErr != nil {
 		code, status := classifyGitPullError(string(out))
-		writeGitError(w, status, code, strings.TrimSpace(string(out)))
+		s.logger.Warn("git pull failed", "session_id", sid, "err", runErr, "output", string(out))
+		writeGitError(w, status, code, sanitizeGitErrMsg(runErr))
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(gitPullResp{OK: true, Output: string(out)})
+	writeJSON(w, gitPullResp{OK: true, Output: string(out)})
 }
 
 // classifyGitPullError は git pull --ff-only の combined output から

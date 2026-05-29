@@ -1,4 +1,5 @@
 const assert = require('assert/strict');
+const test = require('node:test');
 const parser = require('./approval-parser.js');
 
 function labels(options) {
@@ -27,7 +28,7 @@ function detectFallback(provider, lines, matcher) {
     : [];
 }
 
-function run() {
+test('approval parser fixtures', () => {
   const triggerMatcher = (_provider, line) => /requires approval|would you like to run/i.test(String(line || ''));
   assert.equal(parser.userSpecifiesRe.test('User specifies'), true);
   assert.equal(parser.userSpecifiesRe.test('その他指定'), true);
@@ -135,7 +136,4 @@ function run() {
     '[/ANY-AI-CLI]',
   ]);
   assert.equal(parser.approvalSig(chunkPath), parser.approvalSig(bufferPath));
-}
-
-run();
-console.log('approval-parser fixtures passed');
+});

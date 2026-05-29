@@ -16,7 +16,7 @@ type Message struct {
 	Provider  string `json:"provider,omitempty"`
 	Display   string `json:"display_name,omitempty"`
 	CWD       string `json:"cwd,omitempty"`
-	Branch    string `json:"branch"`
+	Branch    string `json:"branch,omitempty"`
 	PID       int    `json:"pid,omitempty"`
 	Shell     string `json:"shell,omitempty"`
 	Version   string `json:"version,omitempty"`
@@ -72,7 +72,13 @@ type Message struct {
 	// LastMessage: セッション内で最後に確定されたユーザー入力（UI カード表示用）。
 	LastMessage string `json:"last_message,omitempty"`
 
-	// Inject: attach_file (deprecated) で使用していた PTY 注入文字列。wrapper 側との互換性のため残置。
+	// Inject: attach_file (deprecated) で使用していた PTY 注入文字列。
+	//
+	// Deprecated: 現行の attach フローは Hub 側で attach.Save → PTY へ直接 inject する
+	// 経路に一本化済みで、この field を読む生きた経路は存在しない。旧バージョンの
+	// wrapper から register/reattach 時に送られてきても無害に無視できるよう、
+	// proto 互換性のためだけに残置している。新規コードからは参照しないこと。
+	// 互換ウィンドウ経過後（旧 wrapper が出回らなくなった時点）に削除予定。
 	Inject string `json:"inject,omitempty"`
 
 	// attach_request: UI → Hub。ファイルバイナリを base64 エンコードした文字列。
@@ -90,7 +96,7 @@ type Message struct {
 }
 
 type ApprovalOption struct {
-	Num           int    `json:"num,omitempty"`
+	Num           int    `json:"num"`
 	Label         string `json:"label,omitempty"`
 	IsCurrent     bool   `json:"is_current,omitempty"`
 	SendText      string `json:"send_text,omitempty"`

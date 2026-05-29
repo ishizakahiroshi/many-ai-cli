@@ -28,6 +28,7 @@ func callRename(t *testing.T, s *Server, src, newName string) (int, filesRenameR
 	t.Helper()
 	body, _ := json.Marshal(filesRenameReq{Src: src, NewName: newName})
 	req := httptest.NewRequest(http.MethodPost, "/api/files-rename?token=tok", bytes.NewReader(body))
+	req.Host = "127.0.0.1:47777"
 	w := httptest.NewRecorder()
 	s.handleFilesRename(w, req)
 	var resp filesRenameResp
@@ -44,11 +45,11 @@ func TestFilesRename_RejectFile(t *testing.T) {
 
 	s := newTestRenameServer(t, tmp)
 	code, resp := callRename(t, s, src, "new.md")
-	if code != http.StatusOK || resp.OK {
+	if code != http.StatusBadRequest || resp.OK {
 		t.Fatalf("expected error, got code=%d resp=%+v", code, resp)
 	}
-	if !strings.Contains(resp.Error, "directory") {
-		t.Fatalf("unexpected error: %q", resp.Error)
+	if resp.Error != "bad_request" || !strings.Contains(resp.Detail, "directory") {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
 	}
 }
 
@@ -77,11 +78,11 @@ func TestFilesRename_RejectSameName(t *testing.T) {
 
 	s := newTestRenameServer(t, tmp)
 	code, resp := callRename(t, s, src, "foo")
-	if code != http.StatusOK || resp.OK {
+	if code != http.StatusConflict || resp.OK {
 		t.Fatalf("expected error, got code=%d resp=%+v", code, resp)
 	}
-	if !strings.Contains(resp.Error, "identical") {
-		t.Fatalf("unexpected error: %q", resp.Error)
+	if resp.Error != "conflict" || !strings.Contains(resp.Detail, "identical") {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
 	}
 }
 
@@ -94,11 +95,11 @@ func TestFilesRename_RejectOverwrite(t *testing.T) {
 
 	s := newTestRenameServer(t, tmp)
 	code, resp := callRename(t, s, src, "new")
-	if code != http.StatusOK || resp.OK {
+	if code != http.StatusConflict || resp.OK {
 		t.Fatalf("expected error, got code=%d resp=%+v", code, resp)
 	}
-	if !strings.Contains(resp.Error, "already exists") {
-		t.Fatalf("unexpected error: %q", resp.Error)
+	if resp.Error != "conflict" || !strings.Contains(resp.Detail, "already exists") {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
 	}
 }
 
@@ -110,7 +111,7 @@ func TestFilesRename_RejectSeparatorInName(t *testing.T) {
 	for _, bad := range []string{"a/b.md", `a\b.md`, "..", ".", "", "C:bad"} {
 		s := newTestRenameServer(t, tmp)
 		code, resp := callRename(t, s, src, bad)
-		if code != http.StatusOK || resp.OK {
+		if code != http.StatusBadRequest || resp.OK {
 			t.Fatalf("expected error for %q, got code=%d resp=%+v", bad, code, resp)
 		}
 	}
@@ -124,11 +125,11 @@ func TestFilesRename_RejectOutsideAllowedRoot(t *testing.T) {
 
 	s := newTestRenameServer(t, tmp)
 	code, resp := callRename(t, s, src, "bar.md")
-	if code != http.StatusOK || resp.OK {
+	if code != http.StatusForbidden || resp.OK {
 		t.Fatalf("expected error, got code=%d resp=%+v", code, resp)
 	}
-	if !strings.Contains(resp.Error, "forbidden") {
-		t.Fatalf("unexpected error: %q", resp.Error)
+	if resp.Error != "forbidden" {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
 	}
 }
 
@@ -148,10 +149,10 @@ func TestFilesRename_RejectNonAbsolute(t *testing.T) {
 	tmp := t.TempDir()
 	s := newTestRenameServer(t, tmp)
 	code, resp := callRename(t, s, "foo.md", "bar.md")
-	if code != http.StatusOK || resp.OK {
+	if code != http.StatusBadRequest || resp.OK {
 		t.Fatalf("expected error, got code=%d resp=%+v", code, resp)
 	}
-	if !strings.Contains(resp.Error, "absolute") {
-		t.Fatalf("unexpected error: %q", resp.Error)
+	if resp.Error != "bad_request" || !strings.Contains(resp.Detail, "absolute") {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
 	}
 }

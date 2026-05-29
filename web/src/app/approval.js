@@ -127,11 +127,11 @@ function scheduleApprovalHintConfirm(id, options) {
   }, 350));
 }
 
-function trackApprovalHintFromChunk(id, bytes) {
+function trackApprovalHintFromChunk(id, bytes, decodedText) {
   const t = terminals.get(id);
   if (!t) return;
   const provider = sessions.get(id)?.provider;
-  const text = new TextDecoder('utf-8').decode(bytes);
+  const text = decodedText !== undefined ? decodedText : (t.textDecoder || utf8Decoder).decode(bytes, { stream: true });
   t.pendingTextTail = (t.pendingTextTail + text).slice(-APPROVAL_PENDING_TEXT_TAIL_LIMIT);
 
   // sendChoice 直後の誤再表示を抑制

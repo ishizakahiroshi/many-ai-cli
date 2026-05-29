@@ -5,10 +5,18 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 )
+
+func useExternalHTTPClientForTest(t *testing.T, client *http.Client) {
+	t.Helper()
+	prev := makeExternalHTTPClient
+	makeExternalHTTPClient = func(time.Duration) *http.Client { return client }
+	t.Cleanup(func() { makeExternalHTTPClient = prev })
+}
 
 // --- C2: リダイレクト検証 ---
 
@@ -37,15 +45,39 @@ func TestNewExternalHTTPClientBlocksHTTPRedirect(t *testing.T) {
 	}
 }
 
+func TestNewExternalHTTPClientBlocksInitialHTTP(t *testing.T) {
+	client := newExternalHTTPClient(5 * time.Second)
+	resp, err := client.Get("http://example.com/resource.md")
+	if resp != nil {
+		resp.Body.Close()
+	}
+	if err == nil {
+		t.Fatal("expected error for initial non-https request, got nil")
+	}
+}
+
+func TestNewExternalHTTPClientBlocksPrivateIPLiteral(t *testing.T) {
+	client := newExternalHTTPClient(5 * time.Second)
+	resp, err := client.Get("https://127.0.0.1/resource.md")
+	if resp != nil {
+		resp.Body.Close()
+	}
+	if err == nil {
+		t.Fatal("expected error for private network host, got nil")
+	}
+}
+
 func TestNewExternalHTTPClientBlocksTooManyRedirects(t *testing.T) {
 	var count int32
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var ts *httptest.Server
+	ts = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&count, 1)
-		http.Redirect(w, r, r.URL.String(), http.StatusFound)
+		http.Redirect(w, r, ts.URL, http.StatusFound)
 	}))
 	defer ts.Close()
 
 	client := newExternalHTTPClient(5 * time.Second)
+	client.Transport = ts.Client().Transport
 	resp, err := client.Get(ts.URL)
 	if resp != nil {
 		resp.Body.Close()
@@ -63,6 +95,7 @@ func TestFetchModelsDefaultsRejectsNon2xx(t *testing.T) {
 		// ボディは書かない（読まれないことを確認するため）
 	}))
 	defer ts.Close()
+	useExternalHTTPClientForTest(t, ts.Client())
 
 	_, err := fetchModelsDefaults(ts.URL)
 	if err == nil {
@@ -75,6 +108,7 @@ func TestFetchUsageLinkDefaultsRejectsNon2xx(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer ts.Close()
+	useExternalHTTPClientForTest(t, ts.Client())
 
 	_, err := fetchUsageLinkDefaults(ts.URL)
 	if err == nil {
@@ -91,8 +125,9 @@ func TestModelsRemoteCacheNegativeTTL(t *testing.T) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer ts.Close()
+	useExternalHTTPClientForTest(t, ts.Client())
 
-	cache := &modelsRemoteCache{}
+	cache := newModelsRemoteCache()
 
 	// 1 回目: fetch 試行 → 失敗
 	_ = cache.get(ts.URL)
@@ -114,8 +149,9 @@ func TestUsageLinkCacheNegativeTTL(t *testing.T) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer ts.Close()
+	useExternalHTTPClientForTest(t, ts.Client())
 
-	cache := &usageLinkCache{}
+	cache := newUsageLinkCache()
 
 	_ = cache.get(ts.URL)
 	if n := atomic.LoadInt32(&fetchCount); n != 1 {
@@ -145,8 +181,9 @@ func TestModelsRemoteCacheNegativeTTLResetOnSuccess(t *testing.T) {
 		w.Write(b)
 	}))
 	defer ts.Close()
+	useExternalHTTPClientForTest(t, ts.Client())
 
-	cache := &modelsRemoteCache{}
+	cache := newModelsRemoteCache()
 
 	// 失敗 → 負 TTL 開始
 	cache.get(ts.URL)
@@ -175,8 +212,8 @@ func TestModelsRemoteCacheNegativeTTLResetOnSuccess(t *testing.T) {
 // --- ローカル fetch サイズ上限（C6） ---
 
 func TestReadSlashCmdSourceLocalFileSizeLimit(t *testing.T) {
-	dir := t.TempDir()
-	path := dir + "/big.md"
+	dir := testConfigDir(t)
+	path := filepath.Join(dir, "big.md")
 	// slashCmdLocalMaxBytes + 1 バイトのファイルを作成
 	data := make([]byte, slashCmdLocalMaxBytes+1)
 	for i := range data {
@@ -197,10 +234,9 @@ func TestReadSlashCmdSourceLocalFileSizeLimit(t *testing.T) {
 }
 
 func TestReadSlashCmdSourceRejectsDirectory(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	_, err := readSlashCmdSource(dir)
 	if err == nil {
 		t.Fatal("expected error for directory source, got nil")
 	}
 }
-

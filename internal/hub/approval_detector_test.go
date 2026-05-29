@@ -1,6 +1,14 @@
 package hub
 
-import "testing"
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"strings"
+	"testing"
+
+	"any-ai-cli/internal/proto"
+)
 
 func TestDetectNativeApprovalClaude(t *testing.T) {
 	lines := []string{
@@ -66,5 +74,160 @@ func TestDetectNativeApprovalFalsePositiveNumberedList(t *testing.T) {
 	}
 	if got := detectNativeApproval("claude", lines); got != nil {
 		t.Fatalf("detectNativeApproval = %+v, want nil", got)
+	}
+}
+
+func TestDetectNativeApprovalFromANSIGolden(t *testing.T) {
+	raw, err := os.ReadFile("testdata/approval_codex_shortcut_ansi.ansi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = bytes.ReplaceAll(raw, []byte(`\x1b`), []byte{0x1b})
+	raw = bytes.ReplaceAll(raw, []byte("\n"), []byte("\r\n"))
+
+	vt := newVTBuffer(120, 30)
+	vt.Write(raw)
+	got := detectNativeApproval("codex", vt.TailLines(vtTailLinesForApproval))
+	if got == nil {
+		t.Fatal("detectNativeApproval returned nil")
+	}
+	if got.Question != "Run: rm -rf ./tmp" {
+		t.Fatalf("question = %q", got.Question)
+	}
+	if got.Kind != "native_codex_shortcut" {
+		t.Fatalf("kind = %q", got.Kind)
+	}
+	if len(got.Options) != 4 {
+		t.Fatalf("options len = %d", len(got.Options))
+	}
+	if got.Options[0].SendText != "y" || !got.Options[0].IsCurrent {
+		t.Fatalf("first option = %+v", got.Options[0])
+	}
+	if got.Options[3].SendText != "\x1b" {
+		t.Fatalf("cancel send_text = %q", got.Options[3].SendText)
+	}
+}
+
+func TestExtractNativeApprovalOptionsBranches(t *testing.T) {
+	t.Run("chooses longest cluster after gap", func(t *testing.T) {
+		lines := []string{
+			"❯ 1. Old allow",
+			"  2. Old deny",
+			"",
+			"",
+			"",
+			"",
+			"",
+			"  1. Allow once",
+			"❯ 2. Allow for this session",
+			"  3. No",
+		}
+		opts, start, end := extractNativeApprovalOptions("claude", lines)
+		if len(opts) != 3 || start != 7 || end != 9 {
+			t.Fatalf("opts/start/end = %d/%d/%d, want 3/7/9 (%+v)", len(opts), start, end, opts)
+		}
+	})
+
+	t.Run("rejects menu without cursor or send text", func(t *testing.T) {
+		lines := []string{
+			"  1. Yes, allow once",
+			"  2. No",
+		}
+		opts, _, _ := extractNativeApprovalOptions("claude", lines)
+		if opts != nil {
+			t.Fatalf("opts = %+v, want nil", opts)
+		}
+	})
+
+	t.Run("accepts codex shortcut send text without cursor", func(t *testing.T) {
+		lines := []string{
+			"  Yes (y)",
+			"  Yes, and don't ask again for this command (p)",
+			"  No (n)",
+		}
+		opts, _, _ := extractNativeApprovalOptions("codex", lines)
+		if len(opts) != 3 {
+			t.Fatalf("opts len = %d, want 3 (%+v)", len(opts), opts)
+		}
+		if opts[0].SendText != "y" || opts[1].SendText != "p" || opts[2].SendText != "n" {
+			t.Fatalf("send_text values = %+v", opts)
+		}
+	})
+
+	t.Run("rejects option count above cap", func(t *testing.T) {
+		lines := make([]string, 0, approvalMaxOptions+1)
+		for i := 1; i <= approvalMaxOptions+1; i++ {
+			prefix := "  "
+			if i == 1 {
+				prefix = "❯ "
+			}
+			lines = append(lines, fmt.Sprintf("%s%d. Allow", prefix, i))
+		}
+		opts, _, _ := extractNativeApprovalOptions("claude", lines)
+		if opts != nil {
+			t.Fatalf("opts = %+v, want nil", opts)
+		}
+	})
+
+	t.Run("trims box drawing around option labels", func(t *testing.T) {
+		lines := []string{
+			"│ ❯ 1. Yes, allow once │",
+			"│   2. No │",
+		}
+		opts, _, _ := extractNativeApprovalOptions("claude", lines)
+		if len(opts) != 2 {
+			t.Fatalf("opts len = %d, want 2 (%+v)", len(opts), opts)
+		}
+		if opts[0].Label != "Yes, allow once" || opts[1].Label != "No" {
+			t.Fatalf("labels = %q / %q", opts[0].Label, opts[1].Label)
+		}
+	})
+}
+
+func TestNativeApprovalLooksValid(t *testing.T) {
+	claudeOpts := []proto.ApprovalOption{
+		{Label: "Yes, allow once", IsCurrent: true},
+		{Label: "No"},
+	}
+	if !nativeApprovalLooksValid("claude", []string{"Allow tool: Bash"}, claudeOpts) {
+		t.Fatal("claude approval with hint and approval labels should be valid")
+	}
+	if nativeApprovalLooksValid("claude", []string{"Implementation plan:"}, claudeOpts) {
+		t.Fatal("claude approval without hint should be invalid")
+	}
+
+	codexOpts := []proto.ApprovalOption{
+		{Label: "Run command (y)", SendText: "y"},
+		{Label: "Cancel (esc)", SendText: "\x1b"},
+	}
+	if !nativeApprovalLooksValid("codex", []string{"This command requires approval"}, codexOpts) {
+		t.Fatal("codex shortcut with native hint should be valid")
+	}
+	if nativeApprovalLooksValid("codex", []string{"Choose a branch"}, codexOpts) {
+		t.Fatal("codex shortcut without hint should be invalid")
+	}
+}
+
+func TestDetectNativeApprovalUsesRecentLineLimit(t *testing.T) {
+	lines := []string{
+		"Allow tool: Bash",
+		"❯ 1. Yes, allow once",
+		"  2. No",
+	}
+	for len(lines) <= approvalRecentLines {
+		lines = append(lines, "filler")
+	}
+	if got := detectNativeApproval("claude", lines); got != nil {
+		t.Fatalf("old approval outside recent limit should be ignored: %+v", got)
+	}
+}
+
+func TestCleanNativeApprovalLabelCompactsWhitespace(t *testing.T) {
+	got := cleanNativeApprovalLabel(" │  Yes,\t allow   once  │ ")
+	if got != "Yes, allow once" {
+		t.Fatalf("clean label = %q", got)
+	}
+	if strings.TrimSpace(got) != got {
+		t.Fatalf("clean label has outer whitespace: %q", got)
 	}
 }

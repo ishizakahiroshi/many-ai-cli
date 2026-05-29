@@ -751,9 +751,29 @@ function resetLocalSessionHistory(id) {
   renderSessionList();
 }
 
+function clearSessionTimerEntry(timerMap, id) {
+  if (!timerMap || typeof timerMap.get !== 'function' || typeof timerMap.delete !== 'function') return;
+  const timer = timerMap.get(id);
+  if (timer) clearTimeout(timer);
+  timerMap.delete(id);
+}
+
+function cleanupRemovedSessionState(id) {
+  try { clearSessionTimerEntry(approvalCheckTimers, id); } catch (_) {}
+  try { clearSessionTimerEntry(approvalSuppressRescanTimers, id); } catch (_) {}
+  try { if (typeof crunchLatch !== 'undefined') crunchLatch.delete(id); } catch (_) {}
+  try {
+    const sigTimer = approvalConsumedSigDeleteTimer.get(id);
+    if (sigTimer) clearTimeout(sigTimer);
+    approvalConsumedSigDeleteTimer.delete(id);
+  } catch (_) {}
+  try { if (typeof window._wakewordSessionRemoved === 'function') window._wakewordSessionRemoved(id); } catch (_) {}
+}
+
 function removeLocalSession(id) {
   const timer = autoDismissTimers.get(id);
   if (timer) { clearTimeout(timer); autoDismissTimers.delete(id); }
+  cleanupRemovedSessionState(id);
   try {
     const mgr = window.multiPaneManager;
     if (mgr && typeof mgr.onSessionRemoved === 'function') mgr.onSessionRemoved(id);

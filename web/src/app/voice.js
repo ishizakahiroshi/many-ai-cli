@@ -953,6 +953,14 @@
       else if (!canListen()) stopHotword();
     }
   };
+  window._wakewordSessionRemoved = (id) => {
+    const wasSessionActive = sessionWakeMap.get(id) || false;
+    sessionWakeMap.delete(id);
+    updateGlobalBtn();
+    updateSessionBtn();
+    updateMicChip();
+    if (activeSessionId === id && wasSessionActive && !isGlobalActive) stopHotword();
+  };
 
   document.addEventListener('wakewordsettings:changed', () => {
     if (!isWakewordEnabled()) {

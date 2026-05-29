@@ -1,5 +1,7 @@
 **/dist/
-/rsrc_windows_*.syso
+# winres が生成する Windows リソース。リリース時に goreleaser の before hooks で
+# タグ版数から都度再生成する運用に切り替えたため、どの階層のものも追跡しない。
+rsrc_windows_*.syso
 *.exe
 *.exe~
 *.log
@@ -8,8 +10,14 @@
 *.bak
 *.orig
 *.rej
+# .txt はセッショントランスクリプト等の生成物が多いため既定で無視するが、
+# 追跡したい .txt（vendor ライセンス・テスト用ゴールデン・配信 resources）は
+# 明示的に許可する。全無視 + 単一ホワイトリストだと将来の testdata 等が
+# 黙って脱落するため、ディレクトリ単位の許可を併用する。
 *.txt
 !web/src/vendor/THIRD_PARTY_LICENSES.txt
+!**/testdata/**
+!resources/**
 .env
 .env.*
 .DS_Store

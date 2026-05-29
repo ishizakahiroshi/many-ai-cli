@@ -1361,7 +1361,8 @@ const FilesTreeView = (function () {
         body: JSON.stringify({ srcs, dstDir }),
       });
       if (!res.ok) {
-        return [`HTTP ${res.status}`];
+        const data = await res.json().catch(() => ({}));
+        return [data.detail || data.error || `HTTP ${res.status}`];
       }
       const data = await res.json();
       const errors = [];
@@ -1370,7 +1371,7 @@ const FilesTreeView = (function () {
         for (const r of moveResults) {
           if (r && r.error) errors.push((r.src || '?') + ': ' + r.error);
         }
-        if (errors.length === 0) errors.push((data && data.error) || '?');
+        if (errors.length === 0) errors.push((data && (data.detail || data.error)) || '?');
         return errors;
       }
       for (let i = 0; i < moveResults.length; i++) {
@@ -1709,9 +1710,17 @@ const FilesPreview = (function () {
     return pre;
   }
 
+  let markedBaseConfigured = false;
+  function ensureMarkedBaseConfigured() {
+    if (markedBaseConfigured || typeof marked === 'undefined' || typeof marked.use !== 'function') return;
+    marked.use({ gfm: true, breaks: false });
+    markedBaseConfigured = true;
+  }
+
   /** marked で Markdown → HTML 変換し、DOMPurify でサニタイズ */
   function renderMarkdown(content, baseDir, onLinkClick) {
     if (typeof marked === 'undefined') return `<pre>${escapeHtml(content)}</pre>`;
+    ensureMarkedBaseConfigured();
 
     // marked の renderer をカスタマイズしてリンク処理を差し替え
     const renderer = new marked.Renderer();
@@ -1775,14 +1784,8 @@ const FilesPreview = (function () {
       return `<pre><code class="hljs${langClass}">${body}</code></pre>`;
     };
 
-    marked.use({
-      renderer,
-      gfm: true,
-      breaks: false,
-    });
-
     let html;
-    try { html = marked.parse(content); } catch (_) { return `<pre>${escapeHtml(content)}</pre>`; }
+    try { html = marked.parse(content, { renderer, gfm: true, breaks: false }); } catch (_) { return `<pre>${escapeHtml(content)}</pre>`; }
     // DOMPurify でサニタイズ（href/src スキームは markdown プレビューで開く相対リンク/data-* も許容したいので
     // 既定の許可リストで十分。許可外スキームの a[href] は DOMPurify が落とす）
     if (typeof DOMPurify !== 'undefined') {

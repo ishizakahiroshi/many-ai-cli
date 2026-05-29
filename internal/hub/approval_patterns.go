@@ -3,8 +3,10 @@ package hub
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"any-ai-cli/internal/config"
 )
@@ -117,7 +119,6 @@ func SyncApprovalPatterns(profiles config.ApprovalProfiles) error {
 				return err
 			}
 		}
-		_ = customExists // 静的解析よけ（custom 不在のままでも OK）
 		if err := writeActiveMirror(provider, profiles.For(provider)); err != nil {
 			return err
 		}
@@ -243,4 +244,137 @@ func writePatternFile(path string, patterns []string) error {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
+}
+
+func (s *Server) handleApprovalPatterns(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodGet) {
+		return
+	}
+	s.cfgMu.Lock()
+	profiles := s.cfg.ApprovalProfiles
+	s.cfgMu.Unlock()
+	patterns, err := ReadActiveApprovalPatterns(profiles)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "read_failed", err.Error())
+		return
+	}
+	writeJSON(w, patterns)
+}
+
+func (s *Server) handleApprovalPatternsItem(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r) {
+		return
+	}
+	rest := strings.TrimPrefix(r.URL.Path, "/api/approval-patterns/")
+	switch rest {
+	case "profile":
+		s.handleApprovalProfile(w, r)
+		return
+	case "copy-official":
+		s.handleApprovalCopyOfficial(w, r)
+		return
+	}
+	parts := strings.SplitN(rest, "/", 2)
+	provider := parts[0]
+	if provider == "" || !IsKnownApprovalProvider(provider) {
+		writeJSONError(w, http.StatusNotFound, "not_found", "unknown provider")
+		return
+	}
+	if !requireMethod(w, r, http.MethodPut) {
+		return
+	}
+	var list []string
+	if err := json.NewDecoder(r.Body).Decode(&list); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("bad request", err))
+		return
+	}
+	cleaned := make([]string, 0, len(list))
+	for _, item := range list {
+		v := strings.TrimSpace(item)
+		if v != "" {
+			cleaned = append(cleaned, v)
+		}
+	}
+	if err := WriteCustomApprovalPatterns(provider, cleaned); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "write_failed", err.Error())
+		return
+	}
+	s.refreshActiveMirror()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleApprovalProfile は GET でアクティブプロファイル一覧、POST で切替を行う。
+// POST body: {"provider":"claude","profile":"official"|"custom"}
+func (s *Server) handleApprovalProfile(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.cfgMu.Lock()
+		profiles := config.EffectiveApprovalProfiles(s.cfg.ApprovalProfiles)
+		s.cfgMu.Unlock()
+		writeJSON(w, profiles)
+	case http.MethodPost:
+		var body struct {
+			Provider string `json:"provider"`
+			Profile  string `json:"profile"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("bad request", err))
+			return
+		}
+		if !IsKnownApprovalProvider(body.Provider) {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", "unknown provider")
+			return
+		}
+		profile := config.ApprovalProfileName(body.Profile)
+		if !IsValidApprovalProfile(profile) {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid profile")
+			return
+		}
+		s.cfgMu.Lock()
+		s.cfg.ApprovalProfiles = config.EffectiveApprovalProfiles(s.cfg.ApprovalProfiles).WithProvider(body.Provider, profile)
+		s.cfgMu.Unlock()
+		if err := s.persistConfig(); err != nil {
+			s.logger.Warn("save config failed", "err", err)
+		}
+		s.refreshActiveMirror()
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+	}
+}
+
+// handleApprovalCopyOfficial は official → custom コピーを行う。
+// POST body: {"provider":"claude"}
+func (s *Server) handleApprovalCopyOfficial(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var body struct {
+		Provider string `json:"provider"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("bad request", err))
+		return
+	}
+	if !IsKnownApprovalProvider(body.Provider) {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "unknown provider")
+		return
+	}
+	if err := CopyOfficialToCustom(body.Provider); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "copy_failed", err.Error())
+		return
+	}
+	s.refreshActiveMirror()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// refreshActiveMirror はアクティブプロファイル内容を <provider>.json に再書き出しする。
+// プロファイル切替・custom 上書き・official 更新後に呼ぶ。失敗時は warn ログのみ。
+func (s *Server) refreshActiveMirror() {
+	s.cfgMu.Lock()
+	profiles := s.cfg.ApprovalProfiles
+	s.cfgMu.Unlock()
+	if err := RefreshActiveMirrors(profiles); err != nil {
+		s.logger.Warn("refresh approval pattern mirrors failed", "err", err)
+	}
 }

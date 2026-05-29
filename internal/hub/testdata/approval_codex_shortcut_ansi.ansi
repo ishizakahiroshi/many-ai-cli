@@ -1,0 +1,7 @@
+\x1b[2J\x1b[HThis command requires approval
+Run: rm -rf ./tmp
+
+\x1b[7m❯ Yes (y)\x1b[0m
+  Yes, and don't ask again for this command (p)
+  No (n)
+  Cancel (esc)

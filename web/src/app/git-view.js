@@ -866,7 +866,7 @@
       st.error = '';
       this._renderCommitModalState();
       try {
-        const res = await fetch('/api/git-commit-message', {
+        const res = await fetch(`/api/git-commit-message?token=${encodeURIComponent(this.token)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -907,7 +907,7 @@
       const origText = btn.textContent;
       btn.textContent = '…';
       try {
-        const res = await fetch('/api/git-fetch', {
+        const res = await fetch(`/api/git-fetch?token=${encodeURIComponent(this.token)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ session: this.sessionId, token: this.token }),
@@ -936,7 +936,7 @@
       btn.disabled = true;
       btn.textContent = '…';
       try {
-        const res = await fetch('/api/git-pull', {
+        const res = await fetch(`/api/git-pull?token=${encodeURIComponent(this.token)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ session: this.sessionId, token: this.token }),
@@ -989,7 +989,7 @@
       st.error = '';
       this._renderCommitModalState();
       try {
-        const res = await fetch('/api/git-commit-all', {
+        const res = await fetch(`/api/git-commit-all?token=${encodeURIComponent(this.token)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

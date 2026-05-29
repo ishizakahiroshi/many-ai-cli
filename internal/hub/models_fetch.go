@@ -66,8 +66,13 @@ type ollamaTagsCacheEntry struct {
 // cloud 側のカタログは外部 fetch せず、ローカル daemon の remote_host で判定するため
 // 専用のキャッシュは持たない。
 type modelsCache struct {
-	mu    sync.Mutex
-	local *ollamaTagsCacheEntry
+	mu         sync.Mutex
+	local      *ollamaTagsCacheEntry
+	localFetch *ollamaTagsFetch
+}
+
+type ollamaTagsFetch struct {
+	done chan struct{}
 }
 
 // Anthropic / OpenAI のモデル一覧は GitHub の resources/models/defaults.json から
@@ -111,11 +116,24 @@ func fetchOllamaTags(url string, timeout time.Duration) ([]Model, error) {
 
 // getOllamaLocal はキャッシュ済みのローカル daemon モデル一覧を返す。
 func (c *modelsCache) getOllamaLocal(force bool) (models []Model, fetchedAt time.Time, err error) {
-	c.mu.Lock()
-	entry := c.local
-	c.mu.Unlock()
-	if !force && entry != nil && time.Since(entry.fetchedAt) < ollamaLocalCacheTTL {
-		return entry.models, entry.fetchedAt, entry.err
+	var inFlight *ollamaTagsFetch
+	for {
+		c.mu.Lock()
+		entry := c.local
+		if !force && entry != nil && time.Since(entry.fetchedAt) < ollamaLocalCacheTTL {
+			c.mu.Unlock()
+			return entry.models, entry.fetchedAt, entry.err
+		}
+		if c.localFetch == nil {
+			inFlight = &ollamaTagsFetch{done: make(chan struct{})}
+			c.localFetch = inFlight
+			c.mu.Unlock()
+			break
+		}
+		wait := c.localFetch.done
+		c.mu.Unlock()
+		<-wait
+		force = false
 	}
 	models, err = fetchOllamaTags(ollamaLocalURL, 3*time.Second)
 	newEntry := &ollamaTagsCacheEntry{
@@ -125,6 +143,10 @@ func (c *modelsCache) getOllamaLocal(force bool) (models []Model, fetchedAt time
 	}
 	c.mu.Lock()
 	c.local = newEntry
+	if c.localFetch == inFlight {
+		close(c.localFetch.done)
+		c.localFetch = nil
+	}
 	c.mu.Unlock()
 	return models, newEntry.fetchedAt, err
 }
@@ -145,7 +167,7 @@ func (c *modelsCache) invalidate() {
 //
 // この設計により「daemon が知らない catalog 名」が選択肢に出ない（= 選んだら必ず呼べる）。
 // 新規 cloud モデルの発見は UI 側の外部リンク（https://ollama.com/search?c=cloud）に任せる。
-func buildModelsResponse(cache *modelsCache, remote *modelsRemoteCache, remoteSource string, localConfig []config.LocalModel, force bool) ModelsResponse {
+func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], remoteSource string, localConfig []config.LocalModel, force bool) ModelsResponse {
 	if force && remote != nil {
 		remote.invalidate()
 	}

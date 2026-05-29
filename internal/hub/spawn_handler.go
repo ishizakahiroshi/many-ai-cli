@@ -13,7 +13,7 @@ import (
 )
 
 func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
-	if !requireMethod(w, r, http.MethodPost) || !s.requireToken(w, r) {
+	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
 	var body struct {
@@ -33,7 +33,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Provider != "claude" && body.Provider != "codex" {
-		http.Error(w, "invalid provider", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
 		return
 	}
 	validPermModes := map[string]bool{
@@ -50,11 +50,11 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		"": true, "auto": true, "explicit": true, "required": true,
 	}
 	if !validPermModes[body.PermissionMode] || !validSandboxes[body.Sandbox] || !validApprovals[body.AskForApproval] || !validModelSelection[body.ModelSelection] {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "bad request")
 		return
 	}
 	if !validRoute(body.Route) {
-		http.Error(w, "invalid route", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid route")
 		return
 	}
 	cwd := body.CWD
@@ -64,24 +64,24 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		// cwd が実在するディレクトリであることを確認する。
 		info, statErr := os.Stat(cwd)
 		if statErr != nil || !info.IsDir() {
-			http.Error(w, "cwd does not exist or is not a directory", http.StatusBadRequest)
+			writeJSONError(w, http.StatusBadRequest, "bad_request", "cwd does not exist or is not a directory")
 			return
 		}
 	}
 
 	// model / label の先頭 "-" はフラグ偽装を防ぐために禁止する。
 	if strings.HasPrefix(body.Model, "-") {
-		http.Error(w, "invalid model value", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid model value")
 		return
 	}
 	if strings.HasPrefix(body.Label, "-") {
-		http.Error(w, "invalid label value", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid label value")
 		return
 	}
 
 	exe, err := os.Executable()
 	if err != nil {
-		http.Error(w, "executable error: "+err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "executable_error", errorDetail("executable error", err))
 		return
 	}
 	wrapArgs := []string{"wrap", body.Provider}
@@ -114,7 +114,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 			mode = "required"
 		}
 		if mode == "required" && !body.RiskConfirmed {
-			http.Error(w, "risk confirmation required", http.StatusBadRequest)
+			writeJSONError(w, http.StatusBadRequest, "risk_confirmation_required", "risk confirmation required")
 			return
 		}
 		if resolvedModel != "" {
@@ -141,7 +141,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 			mode = "required"
 		}
 		if mode == "required" && !body.RiskConfirmed {
-			http.Error(w, "risk confirmation required", http.StatusBadRequest)
+			writeJSONError(w, http.StatusBadRequest, "risk_confirmation_required", "risk confirmation required")
 			return
 		}
 		if resolvedModel != "" {
@@ -158,9 +158,9 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	// 既定 route は env 注入を行わない（ユーザー shell の値を継承）。
 	effectiveRoute := body.Route
 	if effectiveRoute == "" {
-		s.mu.Lock()
+		s.cfgMu.Lock()
 		localCfg := append([]config.LocalModel(nil), s.cfg.LocalModels...)
-		s.mu.Unlock()
+		s.cfgMu.Unlock()
 		known := collectOllamaModelIDs(s.modelsCache, localCfg)
 		effectiveRoute = RouteForModel(body.Provider, resolvedModel, known)
 	}
@@ -173,10 +173,11 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if body.Utf8Session {
 		wrapArgs = append(wrapArgs, "--utf8")
 	}
+	hubPort := s.currentHubPort()
 	cmd := exec.Command(exe, wrapArgs...)
 	cmd.Dir = cwd
 	cmd.Env = append(sanitizeEnv(os.Environ()), "ANY_AI_CLI=1",
-		fmt.Sprintf("ANY_AI_CLI_HUB_PORT=%d", s.cfg.Hub.Port))
+		fmt.Sprintf("ANY_AI_CLI_HUB_PORT=%d", hubPort))
 	if s.parentShell != "" {
 		cmd.Env = append(cmd.Env, "ANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}
@@ -217,7 +218,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		if spawnLog != nil {
 			_ = spawnLog.Close()
 		}
-		http.Error(w, "spawn error: "+err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "spawn_error", errorDetail("spawn error", err))
 		return
 	}
 	s.logger.Debug("spawn: wrap process started",
@@ -231,7 +232,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 			s.logger.Warn("failed to save last model", "provider", body.Provider, "error", err)
 		}
 	}
-	go func() {
+	s.safeGo("spawn_wait", func() {
 		waitErr := cmd.Wait()
 		exitCode := 0
 		if cmd.ProcessState != nil {
@@ -245,13 +246,13 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		if spawnLog != nil {
 			_ = spawnLog.Close()
 		}
-	}()
+	})
 	writeJSON(w, map[string]bool{"ok": true})
 }
 
 func (s *Server) getLastModel(provider string) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.cfgMu.Lock()
+	defer s.cfgMu.Unlock()
 	if s.cfg.UserPrefs.Spawn.LastModel == nil {
 		s.cfg.UserPrefs.Spawn.LastModel = map[string]string{}
 	}
@@ -259,11 +260,11 @@ func (s *Server) getLastModel(provider string) string {
 }
 
 func (s *Server) setLastModel(provider, model string) error {
-	s.mu.Lock()
+	s.cfgMu.Lock()
 	if s.cfg.UserPrefs.Spawn.LastModel == nil {
 		s.cfg.UserPrefs.Spawn.LastModel = map[string]string{}
 	}
 	s.cfg.UserPrefs.Spawn.LastModel[provider] = model
-	s.mu.Unlock()
+	s.cfgMu.Unlock()
 	return s.persistConfig()
 }

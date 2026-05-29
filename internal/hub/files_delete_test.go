@@ -15,6 +15,7 @@ func callDeleteDir(t *testing.T, s *Server, src string) (int, filesDeleteDirResp
 	t.Helper()
 	body, _ := json.Marshal(filesDeleteDirReq{Src: src})
 	req := httptest.NewRequest(http.MethodPost, "/api/files-delete-dir?token=tok", bytes.NewReader(body))
+	req.Host = "127.0.0.1:47777"
 	w := httptest.NewRecorder()
 	s.handleFilesDeleteDir(w, req)
 	var resp filesDeleteDirResp
@@ -51,11 +52,11 @@ func TestFilesDeleteDir_RejectFile(t *testing.T) {
 
 	s := newTestRenameServer(t, tmp)
 	code, resp := callDeleteDir(t, s, src)
-	if code != http.StatusOK || resp.OK {
+	if code != http.StatusBadRequest || resp.OK {
 		t.Fatalf("expected error, got code=%d resp=%+v", code, resp)
 	}
-	if !strings.Contains(resp.Error, "directory") {
-		t.Fatalf("unexpected error: %q", resp.Error)
+	if resp.Error != "bad_request" || !strings.Contains(resp.Detail, "directory") {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
 	}
 }
 
@@ -63,11 +64,11 @@ func TestFilesDeleteDir_RejectAllowedRoot(t *testing.T) {
 	tmp := t.TempDir()
 	s := newTestRenameServer(t, tmp)
 	code, resp := callDeleteDir(t, s, tmp)
-	if code != http.StatusOK || resp.OK {
+	if code != http.StatusConflict || resp.OK {
 		t.Fatalf("expected error, got code=%d resp=%+v", code, resp)
 	}
-	if !strings.Contains(resp.Error, "allowed root") {
-		t.Fatalf("unexpected error: %q", resp.Error)
+	if resp.Error != "conflict" || !strings.Contains(resp.Detail, "allowed root") {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
 	}
 }
 
@@ -81,10 +82,10 @@ func TestFilesDeleteDir_RejectOutsideAllowedRoot(t *testing.T) {
 
 	s := newTestRenameServer(t, tmp)
 	code, resp := callDeleteDir(t, s, src)
-	if code != http.StatusOK || resp.OK {
+	if code != http.StatusForbidden || resp.OK {
 		t.Fatalf("expected error, got code=%d resp=%+v", code, resp)
 	}
-	if !strings.Contains(resp.Error, "forbidden") {
-		t.Fatalf("unexpected error: %q", resp.Error)
+	if resp.Error != "forbidden" {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
 	}
 }

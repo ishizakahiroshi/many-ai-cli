@@ -1,10 +1,6 @@
 package hub
 
-import (
-	"os"
-	"path/filepath"
-	"testing"
-)
+import "testing"
 
 func TestParseApprovalPatternsBasic(t *testing.T) {
 	text := "# Claude Approval Patterns\n" +
@@ -88,13 +84,10 @@ func TestParseApprovalPatternsUTF8(t *testing.T) {
 }
 
 func TestFetchAndParseApprovalPatternsFromLocalFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "claude.md")
 	text := "# Claude Approval Patterns\n\n" +
 		"- `do you want to`\n" +
 		"- `esc to cancel`\n"
-	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	path := writeTestConfigSourceFile(t, "claude.md", text)
 	got, err := fetchAndParseApprovalPatterns(path)
 	if err != nil {
 		t.Fatal(err)

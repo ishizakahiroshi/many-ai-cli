@@ -2,7 +2,6 @@ package hub
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -49,25 +48,10 @@ func sanitizeGitErrMsg(err error) string {
 // 5s 以内に返らない場合はキャンセルされ git_command_failed を返す。
 const gitCommandTimeout = 5 * time.Second
 
-// gitErrorResp は git API の共通エラー JSON 形式。
-//
-//	{"ok": false, "error": "<code>", "detail": "<msg>"}
-type gitErrorResp struct {
-	OK     bool   `json:"ok"`
-	Error  string `json:"error"`
-	Detail string `json:"detail,omitempty"`
-}
-
 // writeGitError は git API のエラーレスポンスを書き出す。
 // status は HTTP ステータスコード（400/404/500 等）。
 func writeGitError(w http.ResponseWriter, status int, code, detail string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(gitErrorResp{
-		OK:     false,
-		Error:  code,
-		Detail: detail,
-	})
+	writeJSONError(w, status, code, detail)
 }
 
 // parseSessionID は ?session= クエリを int に変換する。
@@ -93,14 +77,14 @@ func parseSessionID(raw string) (int, bool) {
 //
 // err は内部判別用に標準 error を返す。呼び出し側で errors.Is で分類する。
 func (s *Server) resolveGitRoot(sid int) (gitRoot, cwd string, err error) {
-	s.mu.Lock()
+	s.sessionsMu.Lock()
 	ses := s.sessions[sid]
 	if ses == nil {
-		s.mu.Unlock()
+		s.sessionsMu.Unlock()
 		return "", "", errBadSession
 	}
 	cwd = ses.CWD
-	s.mu.Unlock()
+	s.sessionsMu.Unlock()
 
 	if strings.TrimSpace(cwd) == "" {
 		return "", "", errNoCWD
@@ -252,8 +236,8 @@ func writeGitErrorFromResolve(w http.ResponseWriter, sid int, err error) {
 	case errors.Is(err, errNoCWD):
 		writeGitError(w, http.StatusBadRequest, "no_cwd", fmt.Sprintf("session has no cwd (sid=%d)", sid))
 	case errors.Is(err, errNotGitRepo):
-		writeGitError(w, http.StatusBadRequest, "not_git_repo", err.Error())
+		writeGitError(w, http.StatusBadRequest, "not_git_repo", sanitizeGitErrMsg(err))
 	default:
-		writeGitError(w, http.StatusInternalServerError, "git_command_failed", err.Error())
+		writeGitError(w, http.StatusInternalServerError, "git_command_failed", sanitizeGitErrMsg(err))
 	}
 }

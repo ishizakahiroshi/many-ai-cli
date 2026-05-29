@@ -2,12 +2,17 @@
 
 // ---- xterm.js 管理 ----
 
+const TERMINAL_SCROLLBACK_LINES = 2000;
+const TERMINAL_PENDING_MAX_BYTES = 100_000;
+const TERMINAL_PENDING_FLUSH_MAX_CHUNKS = 8;
+const TERMINAL_PENDING_FLUSH_MAX_BYTES = 24_000;
+
 function ensureTerminal(id) {
   if (terminals.has(id)) return;
   const provider = sessions.get(id)?.provider;
   const term = new Terminal({
     cursorBlink: false,
-    scrollback: 5000,
+    scrollback: TERMINAL_SCROLLBACK_LINES,
     // xterm はセル幅ベースで描画するため、絵文字フォント混在でグリフが巨大化/崩れする環境がある。
     // 端末領域は等幅フォントのみを使い、見た目の安定性を優先する。
     // 'TerminalNarrowNum'（styles.css 定義）を先頭に置き、丸数字・ローマ数字だけを
@@ -139,7 +144,21 @@ function ensureTerminal(id) {
     term.loadAddon(u11);
     term.unicode.activeVersion = '11';
   }
-  terminals.set(id, { term, fitAddon, container: null, pendingChunks: [], pendingTextTail: '', markerFilterCarry: new Uint8Array(0), screenClearSeqCarry: new Uint8Array(0), autoScroll: true, everAttached: false });
+  terminals.set(id, {
+    term,
+    fitAddon,
+    container: null,
+    pendingChunks: [],
+    pendingTotalBytes: 0,
+    pendingFlushActive: false,
+    pendingFlushSeq: 0,
+    pendingTextTail: '',
+    textDecoder: new TextDecoder('utf-8'),
+    markerFilterCarry: new Uint8Array(0),
+    screenClearSeqCarry: new Uint8Array(0),
+    autoScroll: true,
+    everAttached: false,
+  });
 }
 
 function attachTerminal(id) {
@@ -203,6 +222,17 @@ function whenLayoutReady(id, container) {
   }
 }
 
+function queuePendingTerminalChunk(id, bytes) {
+  const t = terminals.get(id);
+  if (!t || !bytes) return;
+  t.pendingChunks.push(bytes);
+  t.pendingTotalBytes = (t.pendingTotalBytes || 0) + bytes.length;
+  while (t.pendingTotalBytes > TERMINAL_PENDING_MAX_BYTES && t.pendingChunks.length > 1) {
+    t.pendingTotalBytes -= t.pendingChunks[0].length;
+    t.pendingChunks.shift();
+  }
+}
+
 function flushPending(id) {
   const t = terminals.get(id);
   if (!t) return;
@@ -214,16 +244,44 @@ function flushPending(id) {
     scheduleApprovalCheck(id);
     return;
   }
-  // writeUtf8 の onFlush は xterm 内部キューが drain した後に発火する。
-  // 同期で scrollToBottom してしまうと未反映の行ぶん viewport が上に取り残されるため、
-  // 最後の chunk の onFlush 内で最下部固定する。
-  for (let i = 0; i < chunks.length; i++) {
-    const isLast = i === chunks.length - 1;
-    writePTYChunk(id, t.term, chunks[i], isLast ? () => {
-      if (t.autoScroll) t.term.scrollToBottom();
-      scheduleApprovalCheck(id);
-    } : undefined);
-  }
+  const seq = (t.pendingFlushSeq || 0) + 1;
+  t.pendingFlushSeq = seq;
+  t.pendingFlushActive = true;
+  let i = 0;
+
+  const finish = () => {
+    const latest = terminals.get(id);
+    if (!latest || latest.pendingFlushSeq !== seq) return;
+    latest.pendingFlushActive = false;
+    if (latest.pendingChunks.length > 0) {
+      requestAnimationFrame(() => flushPending(id));
+      return;
+    }
+    if (latest.autoScroll) latest.term.scrollToBottom();
+    scheduleApprovalCheck(id);
+  };
+
+  const writeBatch = () => {
+    const latest = terminals.get(id);
+    if (!latest || latest.pendingFlushSeq !== seq) return;
+    let writtenChunks = 0;
+    let writtenBytes = 0;
+    while (i < chunks.length &&
+           writtenChunks < TERMINAL_PENDING_FLUSH_MAX_CHUNKS &&
+           writtenBytes < TERMINAL_PENDING_FLUSH_MAX_BYTES) {
+      const chunk = chunks[i];
+      const isLast = i === chunks.length - 1;
+      i++;
+      writtenChunks++;
+      writtenBytes += chunk.length;
+      writePTYChunk(id, latest.term, chunk, isLast ? finish : undefined);
+    }
+    if (i < chunks.length) {
+      requestAnimationFrame(writeBatch);
+    }
+  };
+
+  requestAnimationFrame(writeBatch);
 }
 
 window.flushPendingTerminalChunks = flushPending;

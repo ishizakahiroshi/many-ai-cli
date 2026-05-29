@@ -17,10 +17,10 @@ import (
 //
 // 仕様: 24h TTL（次回 Hub 再起動まで再取得しない）。手動更新 API はとりあえず提供しない。
 func (s *Server) approvalPatternsRemoteSync(ctx context.Context) {
-	s.mu.Lock()
+	s.cfgMu.Lock()
 	sources := config.EffectiveApprovalPatternSources(s.cfg.ApprovalPatternSources)
 	profiles := s.cfg.ApprovalProfiles
-	s.mu.Unlock()
+	s.cfgMu.Unlock()
 
 	type fetchResult struct {
 		provider string
@@ -30,7 +30,8 @@ func (s *Server) approvalPatternsRemoteSync(ctx context.Context) {
 
 	results := make(chan fetchResult, len(KnownApprovalProviders()))
 	for _, provider := range KnownApprovalProviders() {
-		go func(p string) {
+		p := provider
+		s.safeGo("approval_patterns_fetch_"+p, func() {
 			url := approvalSourceFor(sources, p)
 			if url == "" {
 				results <- fetchResult{provider: p, err: nil, patterns: nil}
@@ -38,7 +39,7 @@ func (s *Server) approvalPatternsRemoteSync(ctx context.Context) {
 			}
 			pats, err := fetchAndParseApprovalPatterns(url)
 			results <- fetchResult{provider: p, patterns: pats, err: err}
-		}(provider)
+		})
 	}
 
 	timeout := time.NewTimer(30 * time.Second)
