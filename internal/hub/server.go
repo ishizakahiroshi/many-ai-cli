@@ -344,6 +344,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		http.FileServer(http.Dir(approvalPatternsDir())))
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleIndex)
+	mux.Handle("/app-entry.js", staticHandler)
 	mux.Handle("/app.js", staticHandler)
 	mux.Handle("/app/", staticHandler)
 	mux.Handle("/styles.css", staticHandler)

@@ -1,8 +1,21 @@
+// --- ESM imports (generated) ---
+import { t } from '../i18n.js';
+import { escapeHtml, formatLastOutputAt, formatStartedAt, ti18n } from './util.js';
+import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, favorites, groupOrder, multiQuestionVisibleCache, orderSessions, projectFavorites, saveFavorites, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, terminals } from './state.js';
+import { dismissSession, inputEl, renderToolOutputs, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor } from '../app.js';
+import { attachTerminal, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, updateScrollLockBtn } from './terminal.js';
+import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, renderSessionInfoChip, updateChatCountBadge } from './settings.js';
+import { syncElapsedTimer } from './ws-client.js';
+import { setMultiQuestionBannerVisible } from './approval-ui.js';
+import { detectApproval, setActionBarFocus } from './approval.js';
+import { rewireChatHistorySub } from './chat-history.js';
+import { FilesTabManager } from './files-view.js';
+
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
 // ---- セッション管理 ----
 
-function updateSessionListActiveCard(id) {
+export function updateSessionListActiveCard(id) {
   const root = document.getElementById('sessions');
   if (!root) return;
   root.querySelectorAll('.card').forEach(card => {
@@ -12,7 +25,7 @@ function updateSessionListActiveCard(id) {
 }
 
 // C4: focusSlot → activateSession → focusSlot の無限ループ防止フラグ
-let _multiPaneFocusSyncing = false;
+export let _multiPaneFocusSyncing = false;
 
 /**
  * C4: マルチペインのフォーカス切替用の軽量版 activateSession。
@@ -20,11 +33,11 @@ let _multiPaneFocusSyncing = false;
  * 行わず、activeSessionId の更新と承認 UI 検出・サイドバー更新のみ実施する。
  * multi-pane.js の focusSlot() から呼ばれる。
  */
-function activateSessionForMultiPane(id) {
+export function activateSessionForMultiPane(id) {
   if (activeSessionId !== null && activeSessionId !== id) {
     saveInputStateFor(activeSessionId);
   }
-  activeSessionId = id;
+  set_activeSessionId(id);
   restoreInputStateFor(id);
   const t = terminals.get(id);
   if (t) {
@@ -51,7 +64,7 @@ function activateSessionForMultiPane(id) {
 // multi-pane.js から参照できるよう window に公開
 window.activateSessionForMultiPane = activateSessionForMultiPane;
 
-function activateSession(id) {
+export function activateSession(id) {
   // C4: マルチタブが開いているとき、外部からの activateSession 呼び出し（承認自動移動等）は
   // 軽量版にリダイレクトし、シングルビュー固有の処理（attachTerminal 等）を実行しない。
   // _multiPaneFocusSyncing フラグが立っているときは再帰防止のためスキップ。
@@ -79,7 +92,7 @@ function activateSession(id) {
   if (activeSessionId !== null && activeSessionId !== id) {
     saveInputStateFor(activeSessionId);
   }
-  activeSessionId = id;
+  set_activeSessionId(id);
   restoreInputStateFor(id);
   // files/git 表示からセッションカードへ戻る場合、先にターミナルを表示してから
   // attach/fit/detect しないと、承認 UI 検出と最下部スナップが hidden レイアウトを基準に走る。
@@ -121,7 +134,7 @@ function activateSession(id) {
   });
 }
 
-function updateShellBadge(id) {
+export function updateShellBadge(id) {
   const el = document.getElementById('terminal-shell-info');
   if (!el) return;
   const s = id !== null ? sessions.get(id) : null;
@@ -133,7 +146,7 @@ function updateShellBadge(id) {
 // Ollama REPL は `/model` を持たず（近いのは `/load`）、Hub 側のスラッシュピッカーも
 // Claude/Codex 専用候補で構成されているため、Ollama セッションでは両方を非活性化する。
 // `/clear` は Ollama REPL にも実在し意味も一致するため活性のまま残す。
-function updateQuickCmdButtons(id) {
+export function updateQuickCmdButtons(id) {
   const s = id !== null ? sessions.get(id) : null;
   const provider = s?.provider || '';
   const isOllama = provider === 'ollama';
@@ -147,11 +160,11 @@ function updateQuickCmdButtons(id) {
   }
 }
 
-function stateLabel(state) {
+export function stateLabel(state) {
   return t('state_' + state) || state;
 }
 
-function providerIconHtml(provider, size = 16) {
+export function providerIconHtml(provider, size = 16) {
   const base = `class="card-provider-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="${size}" height="${size}" aria-hidden="true"`;
   const txt  = `text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif"`;
   if (provider === 'claude') {
@@ -171,11 +184,11 @@ function providerIconHtml(provider, size = 16) {
 }
 
 // C9: 整列ロジックは state.js の orderSessions に集約。getOrderedSessions は後方互換の薄い委譲。
-function getOrderedSessions() {
+export function getOrderedSessions() {
   return orderSessions();
 }
 
-function switchSessionByTab(shift) {
+export function switchSessionByTab(shift) {
   if (sessions.size <= 1) return;
   const all = getOrderedSessions();
   const currentIdx = all.findIndex(s => s.id === activeSessionId);
@@ -188,11 +201,11 @@ function switchSessionByTab(shift) {
   if (bar && bar.classList.contains('visible') && !bar.classList.contains('batch')) {
     setActionBarFocus(0);
   } else {
-    actionBarFocusIdx = -1;
+    set_actionBarFocusIdx(-1);
   }
 }
 
-function jumpToSessionByIndex(n) {
+export function jumpToSessionByIndex(n) {
   const all = getOrderedSessions();
   const target = all[n - 1];
   if (!target) return;
@@ -216,7 +229,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ─── C5: セッションカードクリック — マルチタブ時のフォーカス切替 ──────────
-function onSessionCardActivate(id) {
+export function onSessionCardActivate(id) {
   const multiView = document.getElementById('multi-view');
   const isMultiOpen = multiView && !multiView.hidden;
   if (isMultiOpen) {
@@ -235,10 +248,10 @@ function onSessionCardActivate(id) {
   activateSession(id);
 }
 
-let _sessionListClickDelegated = false;
-let _sessionCardPointerDown = null;
+export let _sessionListClickDelegated = false;
+export let _sessionCardPointerDown = null;
 
-function renderSessionList() {
+export function renderSessionList() {
   const root = document.getElementById('sessions');
   const scrollEl = document.getElementById('session-list');
   // innerHTML クリアで scrollTop が 0 に戻るのを防ぐ。経過時間更新の 1Hz 再描画や
@@ -451,15 +464,15 @@ function renderSessionList() {
     // グループD&D
     header.draggable = true;
     header.addEventListener('dragstart', (e) => {
-      dragSrcGroupKey = key;
-      dragSrcId = null;
+      set_dragSrcGroupKey(key);
+      set_dragSrcId(null);
       groupEl.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
       e.stopPropagation();
     });
     header.addEventListener('dragend', () => {
-      dragSrcGroupKey = null;
-      if (dragOverGroupEl) { dragOverGroupEl.classList.remove('drag-over'); dragOverGroupEl = null; }
+      set_dragSrcGroupKey(null);
+      if (dragOverGroupEl) { dragOverGroupEl.classList.remove('drag-over'); set_dragOverGroupEl(null); }
       root.querySelectorAll('.project-group').forEach(el => el.classList.remove('dragging'));
     });
     groupEl.addEventListener('dragover', (e) => {
@@ -468,7 +481,7 @@ function renderSessionList() {
       e.dataTransfer.dropEffect = 'move';
       if (dragOverGroupEl !== groupEl) {
         if (dragOverGroupEl) dragOverGroupEl.classList.remove('drag-over');
-        dragOverGroupEl = groupEl;
+        set_dragOverGroupEl(groupEl);
         groupEl.classList.add('drag-over');
       }
     });
@@ -480,8 +493,8 @@ function renderSessionList() {
       groupEl.classList.remove('drag-over');
       if (!dragSrcGroupKey || dragSrcGroupKey === key) return;
       const srcKey = dragSrcGroupKey;
-      dragSrcGroupKey = null;
-      if (!groupOrder.length) groupOrder = [...sortedGroupKeys];
+      set_dragSrcGroupKey(null);
+      if (!groupOrder.length) set_groupOrder([...sortedGroupKeys]);
       sortedGroupKeys.forEach(k => { if (!groupOrder.includes(k)) groupOrder.push(k); });
       const srcIdx = groupOrder.indexOf(srcKey);
       const dstIdx = groupOrder.indexOf(key);
@@ -592,7 +605,7 @@ function renderSessionList() {
       // D&Dドラッグ順序変更
       c.draggable = true;
       c.addEventListener('dragstart', (e) => {
-        dragSrcId = s.id;
+        set_dragSrcId(s.id);
         c.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
       });
@@ -600,7 +613,7 @@ function renderSessionList() {
         c.classList.remove('dragging');
         if (dragOverCardEl) {
           dragOverCardEl.classList.remove('drag-over', 'drop-before', 'drop-after');
-          dragOverCardEl = null;
+          set_dragOverCardEl(null);
         }
         setTimeout(() => inputEl.focus(), 0);
       });
@@ -612,7 +625,7 @@ function renderSessionList() {
         e.dataTransfer.dropEffect = 'move';
         if (dragOverCardEl !== c) {
           if (dragOverCardEl) dragOverCardEl.classList.remove('drag-over', 'drop-before', 'drop-after');
-          dragOverCardEl = c;
+          set_dragOverCardEl(c);
         }
         // C5: 上半分 → drop-before、下半分 → drop-after
         const rect = c.getBoundingClientRect();
@@ -628,7 +641,7 @@ function renderSessionList() {
         c.classList.remove('drag-over', 'drop-before', 'drop-after');
         if (!dragSrcId || dragSrcId === s.id) return;
         const srcId = dragSrcId;
-        dragSrcId = null;
+        set_dragSrcId(null);
         // C5: ドロップ位置（上半分=before / 下半分=after）を判定
         const rect = c.getBoundingClientRect();
         const dropAfter = e.clientY >= rect.top + rect.height / 2;
@@ -733,7 +746,7 @@ function renderSessionList() {
 // C5: ★/非★ グループ区切りラベルをサイドバー（#sessions）に挿入する。
 // renderSessionList() 後に呼ばれる。favorites に含まれるセッションを持つグループの
 // カードに .is-favorite-group クラスを付け、最初の非★グループの直前に区切りを挿入する。
-function _addSidebarGroupLabels(root) {
+export function _addSidebarGroupLabels(root) {
   if (!root) return;
   const hasAnyFav = favorites.length > 0 && Array.from(sessions.keys()).some(id => favorites.includes(id));
   if (!hasAnyFav) return;
@@ -773,7 +786,7 @@ function _addSidebarGroupLabels(root) {
   }
 }
 
-function updateMainTabStatus() {
+export function updateMainTabStatus() {
   // D11: セッション情報チップも同タイミングで更新 (state badge を反映)
   if (typeof renderSessionInfoChip === 'function') renderSessionInfoChip();
   const wrap = document.getElementById('main-tab-status');
@@ -806,18 +819,18 @@ function updateMainTabStatus() {
 
 // ---- タブ通知（保留バッジ） ----
 
-let _faviconCanvas = null;
-let _faviconCtx = null;
-let _faviconBaseImg = null;
-let _faviconBaseLoaded = false;
-let _faviconPendingCount = 0;
-let _faviconRenderedPendingCount = null;
+export let _faviconCanvas = null;
+export let _faviconCtx = null;
+export let _faviconBaseImg = null;
+export let _faviconBaseLoaded = false;
+export let _faviconPendingCount = 0;
+export let _faviconRenderedPendingCount = null;
 
-let _titleBlinkInterval = null;
-let _titleBlinkState = false;
-let _titleBlinkCount = 0;
+export let _titleBlinkInterval = null;
+export let _titleBlinkState = false;
+export let _titleBlinkCount = 0;
 
-function startTitleBlink(pendingCount) {
+export function startTitleBlink(pendingCount) {
   if (_titleBlinkInterval && _titleBlinkCount === pendingCount) return;
   stopTitleBlink();
   _titleBlinkCount = pendingCount;
@@ -828,14 +841,14 @@ function startTitleBlink(pendingCount) {
   }, 800);
 }
 
-function stopTitleBlink() {
+export function stopTitleBlink() {
   if (_titleBlinkInterval) {
     clearInterval(_titleBlinkInterval);
     _titleBlinkInterval = null;
   }
 }
 
-function initFaviconCanvas() {
+export function initFaviconCanvas() {
   if (_faviconCanvas) return;
   _faviconCanvas = document.createElement('canvas');
   _faviconCanvas.width = 32;
@@ -849,7 +862,7 @@ function initFaviconCanvas() {
   _faviconBaseImg.src = '/icon.svg';
 }
 
-function drawFavicon(pendingCount, force = false) {
+export function drawFavicon(pendingCount, force = false) {
   initFaviconCanvas();
   if (!force && _faviconRenderedPendingCount === pendingCount) return;
   const ctx = _faviconCtx;
@@ -878,7 +891,7 @@ function drawFavicon(pendingCount, force = false) {
   _faviconRenderedPendingCount = pendingCount;
 }
 
-function updateTabNotification(pendingCount) {
+export function updateTabNotification(pendingCount) {
   const faviconChanged = _faviconPendingCount !== pendingCount;
   _faviconPendingCount = pendingCount;
 
@@ -892,8 +905,8 @@ function updateTabNotification(pendingCount) {
   if (faviconChanged) drawFavicon(pendingCount);
 }
 
-let _summaryResizeObserver = null;
-function ensureSummaryResizeObserver() {
+export let _summaryResizeObserver = null;
+export function ensureSummaryResizeObserver() {
   if (_summaryResizeObserver) return;
   const el = document.getElementById('summary');
   if (!el) return;
@@ -903,7 +916,7 @@ function ensureSummaryResizeObserver() {
   if (parent) _summaryResizeObserver.observe(parent);
 }
 
-function updateSummaryCompactMode() {
+export function updateSummaryCompactMode() {
   const el = document.getElementById('summary');
   if (!el) return;
   // scrollWidth > clientWidth は #summary が flex-wrap:nowrap + overflow:hidden の前提でのみ意味を持つ。
@@ -912,7 +925,7 @@ function updateSummaryCompactMode() {
   if (overflow) el.classList.add('summary--compact');
 }
 
-function renderSummaryAndNotifications() {
+export function renderSummaryAndNotifications() {
   const stateCounts = { running: 0, waiting: 0, standby: 0 };
   // groupKey -> { provider, model, isOllamaBacked, count }
   // Ollama backend sessions are split per-model so each model gets its own chip.
@@ -973,7 +986,7 @@ function renderSummaryAndNotifications() {
   updateTabNotification(totalWaiting);
 }
 
-function sessionProjectKey(s) {
+export function sessionProjectKey(s) {
   const cwdStr = s?.cwd || '';
   const name = cwdStr
     ? cwdStr.replace(/\\/g, '/').split('/').filter(p => p.length > 0).pop() || ''
@@ -981,7 +994,7 @@ function sessionProjectKey(s) {
   return name || '__no_project__';
 }
 
-function updateProjectGroupStatusChipsForSession(s) {
+export function updateProjectGroupStatusChipsForSession(s) {
   const root = document.getElementById('sessions');
   if (!root || !s) return false;
   const key = sessionProjectKey(s);
@@ -1005,7 +1018,7 @@ function updateProjectGroupStatusChipsForSession(s) {
   return true;
 }
 
-function updateSessionCardStateInPlace(id) {
+export function updateSessionCardStateInPlace(id) {
   const root = document.getElementById('sessions');
   const s = sessions.get(id);
   if (!root || !s) return false;
@@ -1024,7 +1037,7 @@ function updateSessionCardStateInPlace(id) {
   return true;
 }
 
-function renderSessionStateUpdate(id) {
+export function renderSessionStateUpdate(id) {
   renderSummaryAndNotifications();
   const updated = updateSessionCardStateInPlace(id);
   updateMainTabStatus();
@@ -1032,7 +1045,7 @@ function renderSessionStateUpdate(id) {
   return updated;
 }
 
-function render() {
+export function render() {
   renderSummaryAndNotifications();
 
   // C9: 初回アクティブ化の早期 return を明示。まだアクティブセッションが無く候補が

@@ -1,5 +1,21 @@
-let _userAvatarUrl = '';
-let _userDisplayName = '';
+// --- ESM imports (generated) ---
+import { t } from './i18n.js';
+import { copyCleanText, showToast, token } from './app/util.js';
+import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref } from './app/user-prefs.js';
+import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, crunchLatch, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals, toolOutputs } from './app/state.js';
+import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
+import { appendLinkedText } from './app/path-links.js';
+import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, scrollTerminalToBottomSoon, sendResize, updateScrollLockBtn } from './app/terminal.js';
+import { DEFAULT_QUICK_CMD_1, DEFAULT_QUICK_CMD_2, appConfirm, appConfirmShutdown, applyFontSize, applyLang, applyTheme, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
+import { ws } from './app/ws-client.js';
+import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
+import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, hideActionBar, isBatchActionBarVisible, maybeSendDirectApprovalConsumed, moveBatchFocus, sendBatchChoices, setActionBarFocus } from './app/approval.js';
+import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
+import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn } from './app/attachments.js';
+import { FilesTabManager } from './app/files-view.js';
+
+export let _userAvatarUrl = '';
+export let _userDisplayName = '';
 
 // i18n ロード前のフォールバック（i18n.js が window.t を上書きするまでキーをそのまま返す）
 if (typeof window.t !== 'function') window.t = (key) => key;
@@ -19,7 +35,7 @@ document.addEventListener('i18n-ready', () => {
 // moved to /app/approval.js
 
 
-function renderToolOutputs(id) {
+export function renderToolOutputs(id) {
   const panel = document.getElementById('tool-outputs-panel');
   const list = document.getElementById('tool-outputs-list');
   const countEl = document.getElementById('tool-outputs-count');
@@ -72,15 +88,15 @@ function renderToolOutputs(id) {
 
 // ---- 入力バー ----
 
-const inputEl = document.getElementById('input');
-const inputClearBtn = document.getElementById('input-clear-btn');
-const pasteChipsEl = document.getElementById('paste-chips');
+export const inputEl = document.getElementById('input');
+export const inputClearBtn = document.getElementById('input-clear-btn');
+export const pasteChipsEl = document.getElementById('paste-chips');
 
 // ペースト折りたたみ状態
-const pastedTexts = []; // [{id, text, lineCount}]
-let pasteCounter = 0;
+export const pastedTexts = []; // [{id, text, lineCount}]
+export let pasteCounter = 0;
 
-function autoExpand() {
+export function autoExpand() {
   const t = activeSessionId === null ? null : terminals.get(activeSessionId);
   const shouldStickToBottom = !!(t && (t.autoScroll || isTerminalAtBottom(t)));
   inputEl.style.height = 'auto';
@@ -89,11 +105,11 @@ function autoExpand() {
   refitActiveTerminalAfterLayout(shouldStickToBottom);
 }
 
-function updateInputClearButton() {
+export function updateInputClearButton() {
   inputClearBtn?.classList.toggle('has-text', inputEl.value.length > 0);
 }
 
-function renderPasteChips() {
+export function renderPasteChips() {
   if (!pasteChipsEl) return;
   pasteChipsEl.innerHTML = '';
   pastedTexts.forEach((pt, idx) => {
@@ -123,7 +139,7 @@ function renderPasteChips() {
   });
 }
 
-function expandPasteChip(idx) {
+export function expandPasteChip(idx) {
   const pt = pastedTexts[idx];
   if (!pt) return;
   inputEl.value = pt.text + (inputEl.value ? '\n' + inputEl.value : '');
@@ -133,17 +149,17 @@ function expandPasteChip(idx) {
   inputEl.focus();
 }
 
-function removePasteChip(idx) {
+export function removePasteChip(idx) {
   pastedTexts.splice(idx, 1);
   renderPasteChips();
 }
 
-function clearAllPastes() {
+export function clearAllPastes() {
   pastedTexts.length = 0;
   renderPasteChips();
 }
 
-function buildSendText() {
+export function buildSendText() {
   const parts = pastedTexts.map(pt => pt.text);
   if (inputEl.value) parts.push(inputEl.value);
   return parts.join('\n');
@@ -152,27 +168,27 @@ function buildSendText() {
 // Ollama route で起動したセッションでは Claude Code / Codex 側の /model コマンドが
 // spawn 時固定の env (ANTHROPIC_BASE_URL=http://localhost:11434 等) と整合しないため
 // 純正モデルに切替えるとエラーになる。行頭 /model 入力は送信前にブロックする。
-function isOllamaModelCommandBlocked(sessionId, text) {
+export function isOllamaModelCommandBlocked(sessionId, text) {
   const s = sessions.get(sessionId);
   if (!s || s.route !== 'ollama') return false;
   const trimmed = String(text || '').replace(/^[\s\x00-\x1f]+/, '');
   return /^\/model(\b|\s|$)/i.test(trimmed);
 }
 
-function clearInput() {
+export function clearInput() {
   inputEl.value = '';
   inputEl.style.height = 'auto';
   updateInputClearButton();
   clearAllPastes();
 }
 
-async function doSend(sessionId) {
+export async function doSend(sessionId) {
   // Ollama route セッションで /model 始まりはブロック（spawn 時固定 env と不整合のため）
   if (isOllamaModelCommandBlocked(sessionId, buildSendText())) {
     showToast(t('toast_model_blocked_on_ollama'));
     return;
   }
-  lastDoSendAt = Date.now();
+  set_lastDoSendAt(Date.now());
   const injects = await flushPendingAttach(sessionId);
   const injectPrefix = injects.join('');
   let rawText = buildSendText();
@@ -224,7 +240,7 @@ async function doSend(sessionId) {
   sendSubmittedText(sessionId, textToSend);
 }
 
-function saveInputStateFor(id) {
+export function saveInputStateFor(id) {
   if (id === null) return;
   const frag = document.createDocumentFragment();
   if (attachThumbnails) {
@@ -243,7 +259,7 @@ function saveInputStateFor(id) {
   pendingAttachFiles.length = 0;
 }
 
-function restoreInputStateFor(id) {
+export function restoreInputStateFor(id) {
   const state = sessionInputState.get(id);
   if (state) {
     inputEl.value = state.inputValue;
@@ -267,7 +283,7 @@ function restoreInputStateFor(id) {
   updateAttachClearBtn();
 }
 
-function cleanupSessionInputState(id) {
+export function cleanupSessionInputState(id) {
   const state = sessionInputState.get(id);
   if (!state) return;
   if (state.thumbsFragment) {
@@ -278,7 +294,7 @@ function cleanupSessionInputState(id) {
   sessionInputState.delete(id);
 }
 
-const specialKeys = {
+export const specialKeys = {
   'ArrowUp':    '\x1b[A',
   'ArrowDown':  '\x1b[B',
   'ArrowRight': '\x1b[C',
@@ -288,7 +304,7 @@ const specialKeys = {
 
 // ---- スラッシュコマンドメニュー ----
 
-function getSlashCommands() {
+export function getSlashCommands() {
   return [
     { cmd: '/clear',    desc: t('slash_clear') },
     { cmd: '/compact',  desc: t('slash_compact') },
@@ -308,11 +324,11 @@ function getSlashCommands() {
   ];
 }
 
-const slashMenuEl = document.getElementById('slash-menu');
-let slashItems = [];
-let slashIndex = -1;
+export const slashMenuEl = document.getElementById('slash-menu');
+export let slashItems = [];
+export let slashIndex = -1;
 
-function updateSlashMenu() {
+export function updateSlashMenu() {
   const val = inputEl.value;
   if (!val.startsWith('/')) { hideSlashMenu(); return; }
   const filtered = getSlashCommands().filter(c => c.cmd.startsWith(val));
@@ -323,7 +339,7 @@ function updateSlashMenu() {
   renderSlashMenu();
 }
 
-function renderSlashMenu() {
+export function renderSlashMenu() {
   slashMenuEl.innerHTML = '';
   slashItems.forEach((item, i) => {
     const div = document.createElement('div');
@@ -343,13 +359,13 @@ function renderSlashMenu() {
   scrollSlashIntoView();
 }
 
-function hideSlashMenu() {
+export function hideSlashMenu() {
   slashMenuEl.hidden = true;
   slashItems = [];
   slashIndex = -1;
 }
 
-function selectSlashItem(i) {
+export function selectSlashItem(i) {
   if (i < 0 || i >= slashItems.length) return;
   const cmd = slashItems[i].cmd;
   // /clear と /model はクイック実行用途のため、候補選択時に即送信する
@@ -366,7 +382,7 @@ function selectSlashItem(i) {
   inputEl.focus();
 }
 
-function scrollSlashIntoView() {
+export function scrollSlashIntoView() {
   const items = slashMenuEl.querySelectorAll('.slash-item');
   if (items[slashIndex]) items[slashIndex].scrollIntoView({ block: 'nearest' });
 }
@@ -382,30 +398,30 @@ inputEl.addEventListener('input', () => {
   }
 });
 inputEl.addEventListener('blur', () => setTimeout(hideSlashMenu, 150));
-inputEl.addEventListener('compositionstart', () => { isComposing = true; });
+inputEl.addEventListener('compositionstart', () => { set_isComposing(true); });
 inputEl.addEventListener('compositionend', () => {
-  isComposing = false;
+  set_isComposing(false);
   // 自動送信トリガー: input イベントは IME 環境/ブラウザによって compositionend より
   // 前または最中にしか発火せず、isComposing=true で autosend がスキップされてしまう。
   // ここで末尾チェックして発火させる。input ハンドラ側でもチェックされるが、
   // doSend 後は inputEl.value='' になるので二重送信しない。
   const _tp = getActiveTriggerPhrase();
   if (_tp && activeSessionId !== null && textEndsWithTriggerPhrase(buildSendText(), _tp)) {
-    pendingSend = false;
+    set_pendingSend(false);
     if (composeEndSendTimer !== null) {
       clearTimeout(composeEndSendTimer);
-      composeEndSendTimer = null;
+      set_composeEndSendTimer(null);
     }
     doSend(activeSessionId);
     return;
   }
   if (pendingSend) {
-    pendingSend = false;
-    composeEndSendTimer = setTimeout(() => {
-      composeEndSendTimer = null;
+    set_pendingSend(false);
+    set_composeEndSendTimer(setTimeout(() => {
+      set_composeEndSendTimer(null);
       if (activeSessionId === null) return;
       doSend(activeSessionId);
-    }, 0);
+    }, 0));
   }
 });
 
@@ -472,7 +488,7 @@ inputEl.addEventListener('keydown', (e) => {
     if (bar && bar.classList.contains('visible')) {
       const btns = getActionBarButtons();
       if (btns.length > 0) {
-        if (actionBarFocusIdx < 0) actionBarFocusIdx = 0;
+        if (actionBarFocusIdx < 0) set_actionBarFocusIdx(0);
         const delta = e.key === 'ArrowRight' ? 1 : -1;
         setActionBarFocus((actionBarFocusIdx + delta + btns.length) % btns.length);
         e.preventDefault(); return;
@@ -503,7 +519,7 @@ inputEl.addEventListener('keydown', (e) => {
   // ctrl+o: Claude Code の折りたたみ展開（ターミナル直接操作と同等）
   if (e.ctrlKey && e.key === 'o') { sendText(activeSessionId, '\x0f'); e.preventDefault(); return; }
   if (e.key === 'Enter') {
-    if (e.isComposing || isComposing) { pendingSend = true; return; } // IME確定後に送信
+    if (e.isComposing || isComposing) { set_pendingSend(true); return; } // IME確定後に送信
     if (e.shiftKey) { autoExpand(); return; } // Shift+Enter: 改行
     // action-bar 表示中かつ入力が空 → フォーカス中ボタン（未指定なら先頭）を実行
     const bar = document.getElementById('action-bar');
@@ -518,9 +534,9 @@ inputEl.addEventListener('keydown', (e) => {
     // compositionend が既に doSend をスケジュール済みの場合はキャンセル（二重送信防止）
     if (composeEndSendTimer !== null) {
       clearTimeout(composeEndSendTimer);
-      composeEndSendTimer = null;
+      set_composeEndSendTimer(null);
     }
-    pendingSend = false;
+    set_pendingSend(false);
     doSend(activeSessionId);
     e.preventDefault();
   }
@@ -570,7 +586,7 @@ inputClearBtn?.addEventListener('click', () => {
 
 document.getElementById('send-btn').addEventListener('mousedown', () => {
   // クリック時に IME が確定中の場合、compositionend 後に送信するよう予約
-  if (isComposing) pendingSend = true;
+  if (isComposing) set_pendingSend(true);
 });
 document.getElementById('send-btn').addEventListener('click', () => {
   if (activeSessionId === null) return;
@@ -580,9 +596,9 @@ document.getElementById('send-btn').addEventListener('click', () => {
   if (composeEndSendTimer !== null) {
     // compositionend が既に doSend をスケジュール済み → タイマーキャンセルして直接実行（二重送信防止）
     clearTimeout(composeEndSendTimer);
-    composeEndSendTimer = null;
+    set_composeEndSendTimer(null);
   }
-  pendingSend = false;
+  set_pendingSend(false);
   doSend(activeSessionId);
 });
 
@@ -596,7 +612,7 @@ document.getElementById('quick-model-btn').addEventListener('click', () => {
   sendQuickCommand(activeSessionId, getQuickCommand(2));
 });
 
-function sendQuickCommand(sessionId, cmd) {
+export function sendQuickCommand(sessionId, cmd) {
   // Ollama route セッションで /model 始まりはブロック（quick-model-btn 経由含む）
   if (isOllamaModelCommandBlocked(sessionId, cmd)) {
     showToast(t('toast_model_blocked_on_ollama'));
@@ -617,7 +633,7 @@ function sendQuickCommand(sessionId, cmd) {
   focusInputForTerminalKeys();
 }
 
-function focusInputForTerminalKeys() {
+export function focusInputForTerminalKeys() {
   if (activeSessionId === null || document.activeElement === inputEl) return;
   try {
     inputEl.focus({ preventScroll: true });
@@ -626,7 +642,7 @@ function focusInputForTerminalKeys() {
   }
 }
 
-function sendSubmittedText(sessionId, text) {
+export function sendSubmittedText(sessionId, text) {
   // 送信操作は最新出力を見たい意図なので、スクロールアップ中でも最下部へ戻して追従を再開する
   const t = terminals.get(sessionId);
   if (t) {
@@ -647,22 +663,22 @@ function sendSubmittedText(sessionId, text) {
   sendText(sessionId, text);
 }
 
-function sendText(sessionId, text) {
+export function sendText(sessionId, text) {
   ws.send(JSON.stringify({ type: 'pty_input', session_id: sessionId, text }));
 }
 
-function requestSessionDismiss(id) {
+export function requestSessionDismiss(id) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'session_dismiss', session_id: id }));
   }
 }
 
-function dismissSession(id) {
+export function dismissSession(id) {
   if (!sessions.has(id)) return;
   requestSessionDismiss(id);
 }
 
-function requestSessionHistoryReset(id) {
+export function requestSessionHistoryReset(id) {
   if (!sessions.has(id)) return;
   if (!confirm(t('session_history_reset_confirm'))) return;
   if (ws && ws.readyState === WebSocket.OPEN) {
@@ -673,7 +689,7 @@ function requestSessionHistoryReset(id) {
   }
 }
 
-function resetTerminalHistoryForSession(id) {
+export function resetTerminalHistoryForSession(id) {
   const t = terminals.get(id);
   if (!t) return;
   t.pendingChunks = [];
@@ -686,7 +702,7 @@ function resetTerminalHistoryForSession(id) {
   try { t.term.scrollToBottom(); } catch (_) {}
 }
 
-function resetAllLocalSessionHistory() {
+export function resetAllLocalSessionHistory() {
   sessions.forEach(s => {
     s.first_message = '';
     s.last_message = '';
@@ -717,7 +733,7 @@ function resetAllLocalSessionHistory() {
   renderSessionList();
 }
 
-function resetLocalSessionHistory(id) {
+export function resetLocalSessionHistory(id) {
   const s = sessions.get(id);
   if (s) {
     s.first_message = '';
@@ -751,14 +767,14 @@ function resetLocalSessionHistory(id) {
   renderSessionList();
 }
 
-function clearSessionTimerEntry(timerMap, id) {
+export function clearSessionTimerEntry(timerMap, id) {
   if (!timerMap || typeof timerMap.get !== 'function' || typeof timerMap.delete !== 'function') return;
   const timer = timerMap.get(id);
   if (timer) clearTimeout(timer);
   timerMap.delete(id);
 }
 
-function cleanupRemovedSessionState(id) {
+export function cleanupRemovedSessionState(id) {
   try { clearSessionTimerEntry(approvalCheckTimers, id); } catch (_) {}
   try { clearSessionTimerEntry(approvalSuppressRescanTimers, id); } catch (_) {}
   try { if (typeof crunchLatch !== 'undefined') crunchLatch.delete(id); } catch (_) {}
@@ -770,7 +786,7 @@ function cleanupRemovedSessionState(id) {
   try { if (typeof window._wakewordSessionRemoved === 'function') window._wakewordSessionRemoved(id); } catch (_) {}
 }
 
-function removeLocalSession(id) {
+export function removeLocalSession(id) {
   const timer = autoDismissTimers.get(id);
   if (timer) { clearTimeout(timer); autoDismissTimers.delete(id); }
   cleanupRemovedSessionState(id);
@@ -806,7 +822,7 @@ function removeLocalSession(id) {
   cleanupSessionInputState(id);
   onChatHistorySessionRemoved(id);
   if (activeSessionId === id) {
-    activeSessionId = null;
+    set_activeSessionId(null);
     const area = document.getElementById('terminal-area');
     if (area) area.innerHTML = '';
     hideActionBar(undefined);
@@ -823,10 +839,10 @@ function removeLocalSession(id) {
 
 // セッション選択中は inputEl からフォーカスが外れたら即座に戻す
 // ただし設定パネルが開いている間、またはテキスト選択操作中はフォーカスを奪わない
-let suppressFocusReclaim = false;
-let voiceActive = false;
-let voiceAudioActive = false;
-function isInteractiveFocusTarget(target) {
+export let suppressFocusReclaim = false;
+export let voiceActive = false;
+export let voiceAudioActive = false;
+export function isInteractiveFocusTarget(target) {
   if (!(target instanceof Element)) return false;
   return !!target.closest([
     'button',
@@ -862,7 +878,7 @@ inputEl.addEventListener('blur', (e) => {
 
 // ---- ツール出力パネル 折りたたみ / 閉じるボタン ----
 
-const collapseOutputsBtn = document.getElementById('tool-outputs-collapse');
+export const collapseOutputsBtn = document.getElementById('tool-outputs-collapse');
 if (collapseOutputsBtn) {
   collapseOutputsBtn.addEventListener('click', () => {
     const panel = document.getElementById('tool-outputs-panel');
@@ -872,7 +888,7 @@ if (collapseOutputsBtn) {
   });
 }
 
-const clearOutputsBtn = document.getElementById('tool-outputs-clear');
+export const clearOutputsBtn = document.getElementById('tool-outputs-clear');
 if (clearOutputsBtn) {
   clearOutputsBtn.addEventListener('click', () => {
     if (activeSessionId !== null) {
@@ -1422,3 +1438,13 @@ if (clearOutputsBtn) {
 
 // moved to /app/git-view.js
 
+
+// --- ESM cross-module setters (generated) ---
+export function set__userAvatarUrl(v) { _userAvatarUrl = v; }
+export function set__userDisplayName(v) { _userDisplayName = v; }
+export function set_pasteCounter(v) { pasteCounter = v; }
+export function set_voiceActive(v) { voiceActive = v; }
+export function set_voiceAudioActive(v) { voiceAudioActive = v; }
+
+// --- ESM window-interop publish (generated; preserves dynamic window.* lookups) ---
+window.dismissSession = dismissSession;

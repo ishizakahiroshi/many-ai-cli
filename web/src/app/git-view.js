@@ -1,3 +1,7 @@
+// --- ESM imports (generated) ---
+import { token } from './util.js';
+import { STORAGE_LANG_KEY } from './user-prefs.js';
+
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
 // ---- Git graph view ----
