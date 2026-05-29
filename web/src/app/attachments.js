@@ -1,19 +1,26 @@
+// --- ESM imports (generated) ---
+import { t } from '../i18n.js';
+import { showToast, token } from './util.js';
+import { activeSessionId, terminals } from './state.js';
+import { inputEl, isInteractiveFocusTarget, pasteCounter, pastedTexts, renderPasteChips, set_pasteCounter } from '../app.js';
+import { pushMessage } from './chat-history.js';
+
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
 // ---- ファイル転送 (attach) ----
 
-const attachDropZone = document.getElementById('attach-drop-zone');
-const attachFileInput = document.getElementById('attach-file-input');
-const attachThumbnails = document.getElementById('attach-thumbnails');
-const attachClearBtn = document.getElementById('attach-clear-btn');
-const pendingAttachFiles = []; // {buf, filename, entry, wrapper} — ステージング済み未送信ファイル
-const MAX_ATTACH_BYTES = 8 * 1024 * 1024;
+export const attachDropZone = document.getElementById('attach-drop-zone');
+export const attachFileInput = document.getElementById('attach-file-input');
+export const attachThumbnails = document.getElementById('attach-thumbnails');
+export const attachClearBtn = document.getElementById('attach-clear-btn');
+export const pendingAttachFiles = []; // {buf, filename, entry, wrapper} — ステージング済み未送信ファイル
+export const MAX_ATTACH_BYTES = 8 * 1024 * 1024;
 
-function isImageFile(file) {
+export function isImageFile(file) {
   return file.type.startsWith('image/');
 }
 
-function updateAttachClearBtn() {
+export function updateAttachClearBtn() {
   if (!attachClearBtn || !attachThumbnails) return;
   attachClearBtn.hidden = attachThumbnails.querySelectorAll('.attach-thumb-wrapper').length === 0;
 }
@@ -55,7 +62,7 @@ window.addEventListener('paste', (e) => {
     if (lines.length > 4 || text.length > 300) {
       e.preventDefault();
       if (pastedTexts.length >= 3) pastedTexts.shift();
-      pasteCounter++;
+      set_pasteCounter(pasteCounter + 1);
       pastedTexts.push({ id: pasteCounter, text, lineCount: lines.length });
       renderPasteChips();
     }
@@ -91,7 +98,7 @@ if (attachFileInput) {
 }
 
 // セッション内どこでもD&D（terminal-wrapper全体）
-const terminalWrapper = document.getElementById('terminal-wrapper');
+export const terminalWrapper = document.getElementById('terminal-wrapper');
 if (terminalWrapper) {
   terminalWrapper.addEventListener('click', (e) => {
     if (activeSessionId === null) return;
@@ -134,7 +141,7 @@ if (terminalWrapper) {
 }
 
 // チャット履歴ペインへの D&D
-const chatPane = document.getElementById('chat-pane');
+export const chatPane = document.getElementById('chat-pane');
 if (chatPane) {
   chatPane.addEventListener('dragenter', (e) => {
     if (!e.dataTransfer?.types.includes('Files')) return;
@@ -160,7 +167,7 @@ if (chatPane) {
   });
 }
 
-async function stageAttach(file) {
+export async function stageAttach(file) {
   const normalized = await normalizeAttachImage(file);
   const buf = await normalized.arrayBuffer();
   if (buf.byteLength > MAX_ATTACH_BYTES) {
@@ -176,7 +183,7 @@ async function stageAttach(file) {
   pendingAttachFiles.push({ buf, filename: normalized.name || '', entry, wrapper });
 }
 
-async function stageFileAttach(file) {
+export async function stageFileAttach(file) {
   const buf = await file.arrayBuffer();
   if (buf.byteLength > MAX_ATTACH_BYTES) {
     showToast(`Attachment too large: ${(buf.byteLength / (1024 * 1024)).toFixed(1)}MB (max 8MB)`);
@@ -193,7 +200,7 @@ async function stageFileAttach(file) {
 
 // Claude 側の画像処理失敗を避けるため、長辺を抑えて標準JPEGへ再エンコードする。
 // 変換に失敗した場合は元ファイルをそのまま使う。
-async function normalizeAttachImage(file) {
+export async function normalizeAttachImage(file) {
   try {
     const maxEdge = 1568;
     const bmp = await createImageBitmap(file);
@@ -226,7 +233,7 @@ async function normalizeAttachImage(file) {
   }
 }
 
-function arrayBufferToBase64(buf) {
+export function arrayBufferToBase64(buf) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -239,7 +246,7 @@ function arrayBufferToBase64(buf) {
   });
 }
 
-async function flushPendingAttach(sessionId) {
+export async function flushPendingAttach(sessionId) {
   if (pendingAttachFiles.length === 0) return [];
   const toSend = pendingAttachFiles.splice(0);
   const injects = [];
@@ -289,7 +296,7 @@ async function flushPendingAttach(sessionId) {
   return injects;
 }
 
-function addAttachThumbnail(file, onRemove) {
+export function addAttachThumbnail(file, onRemove) {
   if (!attachThumbnails) return;
   const url = URL.createObjectURL(file);
 
@@ -327,7 +334,7 @@ function addAttachThumbnail(file, onRemove) {
   return wrapper;
 }
 
-function addFileChip(file, onRemove) {
+export function addFileChip(file, onRemove) {
   if (!attachThumbnails) return;
   const wrapper = document.createElement('div');
   wrapper.className = 'attach-thumb-wrapper attach-file-chip';
@@ -355,7 +362,7 @@ function addFileChip(file, onRemove) {
   return wrapper;
 }
 
-function openLightbox(src, opts = {}) {
+export function openLightbox(src, opts = {}) {
   const overlay = document.createElement('div');
   overlay.id = 'image-lightbox';
   const isVideo = opts.type === 'video';

@@ -1,0 +1,21 @@
+// ESM entry point (generated). Imports modules in original load order for side effects.
+import './i18n.js';
+import './app/util.js';
+import './app/user-prefs.js';
+import './app/state.js';
+import './app/multi-pane.js';
+import './app.js';
+import './app/session-list.js';
+import './app/path-links.js';
+import './app/terminal.js';
+import './app/settings.js';
+import './app/ws-client.js';
+import './app/approval-parser.js';
+import './app/approval-ui.js';
+import './app/approval.js';
+import './app/chat-history.js';
+import './app/attachments.js';
+import './app/spawn-panel.js';
+import './app/voice.js';
+import './app/git-view.js';
+import './app/files-view.js';

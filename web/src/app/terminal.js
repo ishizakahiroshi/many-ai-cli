@@ -1,13 +1,22 @@
+// --- ESM imports (generated) ---
+import { copyCleanText } from './util.js';
+import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
+import { activeSessionId, approvalRawOptionsCache, approvalVisibleCache, sessions, terminals, utf8Decoder } from './state.js';
+import { sendText } from '../app.js';
+import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerminalPathStartBoundary, resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup, trimTerminalPathCandidate } from './path-links.js';
+import { ws } from './ws-client.js';
+import { scheduleApprovalCheck } from './approval.js';
+
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
 // ---- xterm.js 管理 ----
 
-const TERMINAL_SCROLLBACK_LINES = 2000;
-const TERMINAL_PENDING_MAX_BYTES = 100_000;
-const TERMINAL_PENDING_FLUSH_MAX_CHUNKS = 8;
-const TERMINAL_PENDING_FLUSH_MAX_BYTES = 24_000;
+export const TERMINAL_SCROLLBACK_LINES = 2000;
+export const TERMINAL_PENDING_MAX_BYTES = 100_000;
+export const TERMINAL_PENDING_FLUSH_MAX_CHUNKS = 8;
+export const TERMINAL_PENDING_FLUSH_MAX_BYTES = 24_000;
 
-function ensureTerminal(id) {
+export function ensureTerminal(id) {
   if (terminals.has(id)) return;
   const provider = sessions.get(id)?.provider;
   const term = new Terminal({
@@ -161,7 +170,7 @@ function ensureTerminal(id) {
   });
 }
 
-function attachTerminal(id) {
+export function attachTerminal(id) {
   const area = document.getElementById('terminal-area');
   if (!area) return;
   const t = terminals.get(id);
@@ -195,7 +204,7 @@ function attachTerminal(id) {
   whenLayoutReady(id, container);
 }
 
-function whenLayoutReady(id, container) {
+export function whenLayoutReady(id, container) {
   const t = terminals.get(id);
   if (!t) return;
   if (container.clientWidth > 0 && container.clientHeight > 0) {
@@ -222,7 +231,7 @@ function whenLayoutReady(id, container) {
   }
 }
 
-function queuePendingTerminalChunk(id, bytes) {
+export function queuePendingTerminalChunk(id, bytes) {
   const t = terminals.get(id);
   if (!t || !bytes) return;
   t.pendingChunks.push(bytes);
@@ -233,7 +242,7 @@ function queuePendingTerminalChunk(id, bytes) {
   }
 }
 
-function flushPending(id) {
+export function flushPending(id) {
   const t = terminals.get(id);
   if (!t) return;
   const chunks = t.pendingChunks;
@@ -286,13 +295,13 @@ function flushPending(id) {
 
 window.flushPendingTerminalChunks = flushPending;
 
-function isTerminalAtBottom(t) {
+export function isTerminalAtBottom(t) {
   if (!t || !t.term || !t.term.buffer) return true;
   const buf = t.term.buffer.active;
   return buf.viewportY + t.term.rows >= buf.length;
 }
 
-function fitTerminalPreservingBottom(t, id) {
+export function fitTerminalPreservingBottom(t, id) {
   if (!canFitTerminal(t)) return;
   const wasAtBottom = isTerminalAtBottom(t) || t.autoScroll;
   t.fitAddon.fit();
@@ -305,7 +314,7 @@ function fitTerminalPreservingBottom(t, id) {
 
 // xterm が alternate screen buffer（TUI モード, Codex 等）に居るかを判定。
 // alt buffer は scrollback を持たないため term.scrollLines は no-op となり、
-function isAlternateBuffer(t) {
+export function isAlternateBuffer(t) {
   if (!t || !t.term || !t.term.buffer) return false;
   const active = t.term.buffer.active;
   return !!(active && active.type === 'alternate');
@@ -314,7 +323,7 @@ function isAlternateBuffer(t) {
 // alt buffer 中の wheel は PTY 側アプリ（Codex の TUI 等）に PgUp/PgDn として転送する。
 // 戻り値: 転送した場合 true（呼び元はそれ以降の autoScroll 操作等をスキップ）。
 // mouse tracking が ON の場合は xterm が wheel を mouse escape として送るため二重送信を避ける。
-function forwardWheelToAltBuffer(sessionId, t, deltaY) {
+export function forwardWheelToAltBuffer(sessionId, t, deltaY) {
   if (!isAlternateBuffer(t)) return false;
   try {
     const mode = t.term.modes && t.term.modes.mouseTrackingMode;
@@ -325,7 +334,7 @@ function forwardWheelToAltBuffer(sessionId, t, deltaY) {
   return true;
 }
 
-function isWheelTargetExcluded(target) {
+export function isWheelTargetExcluded(target) {
   if (!(target instanceof Element)) return true;
   if (document.body && !document.body.contains(target)) return true;
   const input = document.getElementById('input');
@@ -342,7 +351,7 @@ function isWheelTargetExcluded(target) {
   return false;
 }
 
-function routeWheelToOpenSettingsPanel(e) {
+export function routeWheelToOpenSettingsPanel(e) {
   const panel = document.getElementById('settings-panel');
   if (!panel || panel.hidden) return false;
   const body = panel.querySelector('.settings-body');
@@ -363,7 +372,7 @@ function routeWheelToOpenSettingsPanel(e) {
   return true;
 }
 
-function getWheelTargetSessionId(target) {
+export function getWheelTargetSessionId(target) {
   if (!(target instanceof Element)) return activeSessionId;
 
   const multiView = document.getElementById('multi-view');
@@ -437,13 +446,13 @@ document.addEventListener('wheel', (e) => {
   e.stopPropagation();
 }, { passive: false, capture: true });
 
-let lastTerminalManualScrollAt = 0;
+export let lastTerminalManualScrollAt = 0;
 
-function markTerminalManualScrollIntent() {
+export function markTerminalManualScrollIntent() {
   lastTerminalManualScrollAt = Date.now();
 }
 
-function scrollTerminalToBottomSoon(id, opts = {}) {
+export function scrollTerminalToBottomSoon(id, opts = {}) {
   const t = terminals.get(id);
   if (!t || !t.term) return;
   const force = !!opts.force;
@@ -474,7 +483,7 @@ function scrollTerminalToBottomSoon(id, opts = {}) {
   scheduleNext();
 }
 
-function refitAndStickTerminalToBottomSoon(id, opts = {}) {
+export function refitAndStickTerminalToBottomSoon(id, opts = {}) {
   if (id !== activeSessionId) return;
   const passes = Math.max(1, opts.passes || 4);
   const force = !!opts.force;
@@ -510,7 +519,7 @@ function refitAndStickTerminalToBottomSoon(id, opts = {}) {
   });
 }
 
-function refitAndStickTerminalToBottomAfterLayoutSettles(id, opts = {}) {
+export function refitAndStickTerminalToBottomAfterLayoutSettles(id, opts = {}) {
   const startedAt = opts.startedAt || Date.now();
   const force = !!opts.force;
   const passes = opts.passes || 4;
@@ -525,7 +534,7 @@ function refitAndStickTerminalToBottomAfterLayoutSettles(id, opts = {}) {
   }
 }
 
-function revealApprovalPromptForSession(id) {
+export function revealApprovalPromptForSession(id) {
   if (id === null || id === undefined) return;
   if (!approvalVisibleCache.get(id) && !(approvalRawOptionsCache.get(id)?.length > 0)) return;
   const startedAt = Date.now();
@@ -538,7 +547,7 @@ function revealApprovalPromptForSession(id) {
   });
 }
 
-function refitActiveTerminalAfterLayout(stickToBottom) {
+export function refitActiveTerminalAfterLayout(stickToBottom) {
   if (activeSessionId === null) return;
   const id = activeSessionId;
   const t = terminals.get(id);
@@ -558,7 +567,7 @@ function refitActiveTerminalAfterLayout(stickToBottom) {
   });
 }
 
-function updateScrollLockBtn(_locked) {
+export function updateScrollLockBtn(_locked) {
   // ボタンはアクティブセッションがある間は常時表示する。
   // 以前は viewportY で「最上部/最下部判定して hidden」していたが、
   // xterm の onScroll は viewportY が動いた時しか発火せず、
@@ -589,13 +598,13 @@ document.getElementById('scroll-to-bottom-btn')?.addEventListener('click', () =>
   t.term.scrollToBottom();
 });
 
-const hubMarkerBytePatterns = [
+export const hubMarkerBytePatterns = [
   new TextEncoder().encode('[ANY-AI-CLI]'),
   new TextEncoder().encode('[/ANY-AI-CLI]'),
 ];
-const hubMarkerEndBytes = hubMarkerBytePatterns[1];
-const eraseDisplayBelowBytes = new TextEncoder().encode('\x1b[J');
-const screenClearSeqBytePatterns = [
+export const hubMarkerEndBytes = hubMarkerBytePatterns[1];
+export const eraseDisplayBelowBytes = new TextEncoder().encode('\x1b[J');
+export const screenClearSeqBytePatterns = [
   asciiBytes('\x1b[2J'),
   asciiBytes('\x1b[3J'),
   asciiBytes('\x1b[H'),
@@ -604,9 +613,9 @@ const screenClearSeqBytePatterns = [
   asciiBytes('\x1b[?1049h'),
   asciiBytes('\x1b[?1049l'),
 ];
-const screenClearSeqCarryLength = Math.max(...screenClearSeqBytePatterns.map(pattern => pattern.length)) - 1;
+export const screenClearSeqCarryLength = Math.max(...screenClearSeqBytePatterns.map(pattern => pattern.length)) - 1;
 
-function bytesStartWith(bytes, offset, pattern) {
+export function bytesStartWith(bytes, offset, pattern) {
   if (offset + pattern.length > bytes.length) return false;
   for (let i = 0; i < pattern.length; i++) {
     if (bytes[offset + i] !== pattern[i]) return false;
@@ -614,7 +623,7 @@ function bytesStartWith(bytes, offset, pattern) {
   return true;
 }
 
-function isPossibleMarkerPrefix(bytes, offset) {
+export function isPossibleMarkerPrefix(bytes, offset) {
   const remaining = bytes.length - offset;
   return hubMarkerBytePatterns.some((pattern) => {
     if (remaining >= pattern.length) return false;
@@ -625,7 +634,7 @@ function isPossibleMarkerPrefix(bytes, offset) {
   });
 }
 
-function filterHubMarkersForDisplay(id, bytes) {
+export function filterHubMarkersForDisplay(id, bytes) {
   const t = terminals.get(id);
   if (!t) return bytes;
   const carry = t.markerFilterCarry || new Uint8Array(0);
@@ -653,13 +662,13 @@ function filterHubMarkersForDisplay(id, bytes) {
   return new Uint8Array(out);
 }
 
-function asciiBytes(str) {
+export function asciiBytes(str) {
   const bytes = new Uint8Array(str.length);
   for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xff;
   return bytes;
 }
 
-function filterReverseVideoForDisplay(id, bytes) {
+export function filterReverseVideoForDisplay(id, bytes) {
   const t = terminals.get(id);
   if (!t) return bytes;
   const carry = t.reverseVideoFilterCarry || new Uint8Array(0);
@@ -708,7 +717,7 @@ function filterReverseVideoForDisplay(id, bytes) {
   return new Uint8Array(out);
 }
 
-function detectScreenClearSeqForAutoScroll(id, bytes) {
+export function detectScreenClearSeqForAutoScroll(id, bytes) {
   const t = terminals.get(id);
   if (!t || !bytes || bytes.length === 0) return false;
   const carry = t.screenClearSeqCarry || new Uint8Array(0);
@@ -726,14 +735,14 @@ function detectScreenClearSeqForAutoScroll(id, bytes) {
   return found;
 }
 
-function snapToBottomAfterScreenClear(id) {
+export function snapToBottomAfterScreenClear(id) {
   const t = terminals.get(id);
   if (!t || !t.autoScroll) return;
   t.term.scrollToBottom();
   if (id === activeSessionId) updateScrollLockBtn(false);
 }
 
-function writePTYChunk(id, term, bytes, onFlush) {
+export function writePTYChunk(id, term, bytes, onFlush) {
   const hasScreenClearSeq = detectScreenClearSeqForAutoScroll(id, bytes);
   const displayBytes = filterReverseVideoForDisplay(id, filterHubMarkersForDisplay(id, bytes));
   const wrappedFlush = () => {
@@ -753,7 +762,7 @@ function writePTYChunk(id, term, bytes, onFlush) {
 
 // ---- バッファスキャン共通 ----
 
-function scanBuffer(id, limit) {
+export function scanBuffer(id, limit) {
   const t = terminals.get(id);
   if (!t || !t.term.buffer) return [];
   const buf = t.term.buffer.active;
@@ -767,13 +776,13 @@ function scanBuffer(id, limit) {
 
 // ---- resize ----
 
-function sendResize(sessionId, cols, rows) {
+export function sendResize(sessionId, cols, rows) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'pty_resize', session_id: sessionId, cols, rows }));
   }
 }
 
-function canFitTerminal(t) {
+export function canFitTerminal(t) {
   if (!t || !t.container || !t.container.isConnected) return false;
   if (!t.term || !t.term.element || !t.term.element.isConnected) return false;
   // display:none などで非表示状態だと offsetParent が null になり、幅も 0 になる。
@@ -782,9 +791,9 @@ function canFitTerminal(t) {
   return true;
 }
 
-let lastDevicePixelRatio = window.devicePixelRatio || 1;
+export let lastDevicePixelRatio = window.devicePixelRatio || 1;
 
-function refitAllTerminals(refreshRows = false) {
+export function refitAllTerminals(refreshRows = false) {
   terminals.forEach((t, id) => {
     if (!canFitTerminal(t)) return;
     const prevCols = t.term.cols;
@@ -799,8 +808,8 @@ function refitAllTerminals(refreshRows = false) {
   });
 }
 
-let _resizeRafPending = false;
-const resizeObserver = new ResizeObserver(() => {
+export let _resizeRafPending = false;
+export const resizeObserver = new ResizeObserver(() => {
   if (_resizeRafPending) return;
   _resizeRafPending = true;
   requestAnimationFrame(() => {
@@ -817,7 +826,7 @@ const resizeObserver = new ResizeObserver(() => {
   });
 });
 
-const termArea = document.getElementById('terminal-area');
+export const termArea = document.getElementById('terminal-area');
 if (termArea) resizeObserver.observe(termArea);
 
 window.addEventListener('resize', () => {

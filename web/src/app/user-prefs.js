@@ -1,56 +1,59 @@
+// --- ESM imports (generated) ---
+import { showToast } from './util.js';
+
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
 // ---- 設定パネル ----
 
-const STORAGE_THEME_KEY      = 'ai_cli_hub_theme';
-const STORAGE_FONTSIZE_KEY   = 'ai_cli_hub_fontsize';
-const STORAGE_LANG_KEY       = 'ai_cli_hub_lang';
-const STORAGE_FAVORITES_KEY         = 'ai_cli_hub_favorites';
-const STORAGE_ORDER_KEY             = 'ai_cli_hub_session_order';
-const STORAGE_GROUP_ORDER_KEY       = 'ai_cli_hub_group_order';
-const STORAGE_PROJECT_FAVORITES_KEY = 'ai_cli_hub_project_favorites';
-const STORAGE_SPAWN_KEY             = 'ai_cli_hub_spawn_settings';
-const STORAGE_CWD_HISTORY_KEY       = 'ai_cli_hub_cwd_history';
-const STORAGE_TRIGGER_ENABLED_KEY      = 'ai_cli_hub_trigger_enabled';
-const STORAGE_TRIGGER_PHRASE_KEY       = 'ai_cli_hub_trigger_phrase';
-const STORAGE_NOTIFY_SOUND_ENABLED_KEY = 'ai_cli_hub_notify_sound_enabled';
-const STORAGE_NOTIFY_SOUND_TYPE_KEY    = 'ai_cli_hub_notify_sound_type';
-const STORAGE_NOTIFY_SOUND_CUSTOM_KEY  = 'ai_cli_hub_notify_sound_custom';
-const STORAGE_APPROVAL_AUTO_SWITCH_KEY = 'ai_cli_hub_approval_auto_switch';
-const STORAGE_QUICK_CMD_1_KEY          = 'ai_cli_hub_quick_cmd_1';
-const STORAGE_QUICK_CMD_2_KEY          = 'ai_cli_hub_quick_cmd_2';
-const STORAGE_TOOLS_LEFT_KEY           = 'ai_cli_hub_tools_left';
-const STORAGE_USAGE_LINK_CLAUDE_KEY    = 'ai_cli_hub_usage_link_claude';
-const STORAGE_USAGE_LINK_CODEX_KEY     = 'ai_cli_hub_usage_link_codex';
-const STORAGE_USAGE_LINK_OLLAMA_KEY    = 'ai_cli_hub_usage_link_ollama';
-const STORAGE_USAGE_LINK_OPENCODE_KEY  = 'ai_cli_hub_usage_link_opencode';
-const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds';
-const STORAGE_DISPLAY_LOCKED_MODE_KEY  = 'ai_cli_hub_display_locked_mode';
-const DEFAULT_VOICE_GRACE_SEC          = 0;
-const STORAGE_WAKE_WORD_ENABLED_KEY    = 'ai_cli_hub_wake_word_enabled';
-const STORAGE_WAKE_WORD_PHRASE_KEY     = 'ai_cli_hub_wake_word_phrase';
-const DEFAULT_WAKE_WORD_PHRASE_JA      = 'サウンドスタート';
-const DEFAULT_WAKE_WORD_PHRASE_EN      = 'SoundStart';
-const DEFAULT_TRIGGER_PHRASE_JA        = 'サウンドエンド';
-const DEFAULT_TRIGGER_PHRASE_EN        = 'SoundEnd';
-function getDefaultWakeWordPhrase() {
+export const STORAGE_THEME_KEY      = 'ai_cli_hub_theme';
+export const STORAGE_FONTSIZE_KEY   = 'ai_cli_hub_fontsize';
+export const STORAGE_LANG_KEY       = 'ai_cli_hub_lang';
+export const STORAGE_FAVORITES_KEY         = 'ai_cli_hub_favorites';
+export const STORAGE_ORDER_KEY             = 'ai_cli_hub_session_order';
+export const STORAGE_GROUP_ORDER_KEY       = 'ai_cli_hub_group_order';
+export const STORAGE_PROJECT_FAVORITES_KEY = 'ai_cli_hub_project_favorites';
+export const STORAGE_SPAWN_KEY             = 'ai_cli_hub_spawn_settings';
+export const STORAGE_CWD_HISTORY_KEY       = 'ai_cli_hub_cwd_history';
+export const STORAGE_TRIGGER_ENABLED_KEY      = 'ai_cli_hub_trigger_enabled';
+export const STORAGE_TRIGGER_PHRASE_KEY       = 'ai_cli_hub_trigger_phrase';
+export const STORAGE_NOTIFY_SOUND_ENABLED_KEY = 'ai_cli_hub_notify_sound_enabled';
+export const STORAGE_NOTIFY_SOUND_TYPE_KEY    = 'ai_cli_hub_notify_sound_type';
+export const STORAGE_NOTIFY_SOUND_CUSTOM_KEY  = 'ai_cli_hub_notify_sound_custom';
+export const STORAGE_APPROVAL_AUTO_SWITCH_KEY = 'ai_cli_hub_approval_auto_switch';
+export const STORAGE_QUICK_CMD_1_KEY          = 'ai_cli_hub_quick_cmd_1';
+export const STORAGE_QUICK_CMD_2_KEY          = 'ai_cli_hub_quick_cmd_2';
+export const STORAGE_TOOLS_LEFT_KEY           = 'ai_cli_hub_tools_left';
+export const STORAGE_USAGE_LINK_CLAUDE_KEY    = 'ai_cli_hub_usage_link_claude';
+export const STORAGE_USAGE_LINK_CODEX_KEY     = 'ai_cli_hub_usage_link_codex';
+export const STORAGE_USAGE_LINK_OLLAMA_KEY    = 'ai_cli_hub_usage_link_ollama';
+export const STORAGE_USAGE_LINK_OPENCODE_KEY  = 'ai_cli_hub_usage_link_opencode';
+export const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds';
+export const STORAGE_DISPLAY_LOCKED_MODE_KEY  = 'ai_cli_hub_display_locked_mode';
+export const DEFAULT_VOICE_GRACE_SEC          = 0;
+export const STORAGE_WAKE_WORD_ENABLED_KEY    = 'ai_cli_hub_wake_word_enabled';
+export const STORAGE_WAKE_WORD_PHRASE_KEY     = 'ai_cli_hub_wake_word_phrase';
+export const DEFAULT_WAKE_WORD_PHRASE_JA      = 'サウンドスタート';
+export const DEFAULT_WAKE_WORD_PHRASE_EN      = 'SoundStart';
+export const DEFAULT_TRIGGER_PHRASE_JA        = 'サウンドエンド';
+export const DEFAULT_TRIGGER_PHRASE_EN        = 'SoundEnd';
+export function getDefaultWakeWordPhrase() {
   const lang = (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_LANG_KEY)) || 'ja';
   return lang === 'en' ? DEFAULT_WAKE_WORD_PHRASE_EN : DEFAULT_WAKE_WORD_PHRASE_JA;
 }
-function getDefaultTriggerPhrase() {
+export function getDefaultTriggerPhrase() {
   const lang = (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_LANG_KEY)) || 'ja';
   return lang === 'en' ? DEFAULT_TRIGGER_PHRASE_EN : DEFAULT_TRIGGER_PHRASE_JA;
 }
-const CWD_HISTORY_MAX               = 10;
+export const CWD_HISTORY_MAX               = 10;
 
-const DEFAULT_USAGE_LINKS = {
+export const DEFAULT_USAGE_LINKS = {
   claude:   'https://claude.ai/settings/usage',
   codex:    'https://chatgpt.com/codex/cloud/settings/analytics#usage',
   ollama:   'https://ollama.com/settings',
   opencode: '',
 };
 
-const FONTSIZE_MAP = { large: 15, medium: 13, small: 11 };
+export const FONTSIZE_MAP = { large: 15, medium: 13, small: 11 };
 
 // ---- user-prefs サーバ同期 ----
 // setUserPref(path, value)
@@ -60,7 +63,7 @@ const FONTSIZE_MAP = { large: 15, medium: 13, small: 11 };
 //   - サーバへ 200ms debounced PUT（取得→パス更新→PUT 全体置換）
 //   - PUT 失敗時は console.warn + トースト。localStorage は保持する
 
-const _USER_PREFS_PATH_TO_LS = {
+export const _USER_PREFS_PATH_TO_LS = {
   'trigger.enabled':           [STORAGE_TRIGGER_ENABLED_KEY,       (v) => v ? '1' : '0'],
   'trigger.phrase':            [STORAGE_TRIGGER_PHRASE_KEY,         String],
   'notify_sound.enabled':      [STORAGE_NOTIFY_SOUND_ENABLED_KEY,  (v) => v ? '1' : '0'],
@@ -89,7 +92,7 @@ const _USER_PREFS_PATH_TO_LS = {
   'display.lang':              [STORAGE_LANG_KEY,                  String],
 };
 
-const _USER_PREFS_STRING_PATHS = new Set([
+export const _USER_PREFS_STRING_PATHS = new Set([
   'trigger.phrase',
   'notify_sound.type',
   'voice.wake_word_phrase',
@@ -104,7 +107,7 @@ const _USER_PREFS_STRING_PATHS = new Set([
   'display.font_size',
   'display.lang',
 ]);
-const _USER_PREFS_STRING_ARRAY_PATHS = new Set([
+export const _USER_PREFS_STRING_ARRAY_PATHS = new Set([
   'favorites',
   'session_order',
   'group_order',
@@ -113,7 +116,7 @@ const _USER_PREFS_STRING_ARRAY_PATHS = new Set([
 ]);
 
 // ドット区切りパスでオブジェクトの深いフィールドを設定する
-function _setNestedValue(obj, path, value) {
+export function _setNestedValue(obj, path, value) {
   const keys = path.split('.');
   let cur = obj;
   for (let i = 0; i < keys.length - 1; i++) {
@@ -123,7 +126,7 @@ function _setNestedValue(obj, path, value) {
   cur[keys[keys.length - 1]] = value;
 }
 
-function _parseStoredUserPref(path, raw) {
+export function _parseStoredUserPref(path, raw) {
   let parsed;
   try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
 
@@ -152,7 +155,7 @@ function _parseStoredUserPref(path, raw) {
   return { ok: true, value: parsed };
 }
 
-function _mergeStoredUserPrefs(current) {
+export function _mergeStoredUserPrefs(current) {
   for (const [path, [lsKey, _]] of Object.entries(_USER_PREFS_PATH_TO_LS)) {
     const raw = localStorage.getItem(lsKey);
     if (raw == null) continue;
@@ -164,9 +167,9 @@ function _mergeStoredUserPrefs(current) {
 }
 
 // PUT debounce タイマー
-let _userPrefsDebounceTimer = null;
+export let _userPrefsDebounceTimer = null;
 
-function _userPrefsSaveErrorMessage(err) {
+export function _userPrefsSaveErrorMessage(err) {
   const tfn = typeof window.t === 'function' ? window.t : (key) => key;
   if (err && typeof err.status === 'number') {
     if (err.status === 401) return tfn('user_prefs_save_failed_unauthorized');
@@ -176,7 +179,7 @@ function _userPrefsSaveErrorMessage(err) {
   return tfn('user_prefs_save_failed_network');
 }
 
-function _userPrefsHttpError(phase, res) {
+export function _userPrefsHttpError(phase, res) {
   const err = new Error(`${phase} /api/user-prefs ${res.status}`);
   err.phase = phase;
   err.status = res.status;
@@ -185,7 +188,7 @@ function _userPrefsHttpError(phase, res) {
 
 // _putUserPrefsNow は localStorage の最新値をサーバへ即時（awaited）反映する。
 // 言語変更時の location.reload() 前や reset 完了時など、debounce を待てない場面で使う。
-async function _putUserPrefsNow() {
+export async function _putUserPrefsNow() {
   const tk = new URLSearchParams(location.search).get('token');
   if (!tk) return;
   // 現在のサーバ値を取得してからパッチ適用し全体置換
@@ -202,7 +205,7 @@ async function _putUserPrefsNow() {
   if (!putRes.ok) throw _userPrefsHttpError('PUT', putRes);
 }
 
-function _scheduleUserPrefsPut() {
+export function _scheduleUserPrefsPut() {
   clearTimeout(_userPrefsDebounceTimer);
   _userPrefsDebounceTimer = setTimeout(async () => {
     try {
@@ -214,7 +217,7 @@ function _scheduleUserPrefsPut() {
   }, 200);
 }
 
-function setUserPref(path, value) {
+export function setUserPref(path, value) {
   // 1. localStorage に書く
   const entry = _USER_PREFS_PATH_TO_LS[path];
   if (entry) {
@@ -233,7 +236,7 @@ function setUserPref(path, value) {
 }
 
 // サーバから user_prefs を取得して localStorage にミラーする（起動時 1 回）
-async function _mirrorUserPrefsFromServer() {
+export async function _mirrorUserPrefsFromServer() {
   const tk = new URLSearchParams(location.search).get('token');
   if (!tk) return null;
   try {
@@ -260,7 +263,7 @@ async function _mirrorUserPrefsFromServer() {
 }
 
 // 移行: localStorage 既存値 → サーバ（初回のみ）
-async function migrateLocalstoragePrefsToServer() {
+export async function migrateLocalstoragePrefsToServer() {
   const tk = new URLSearchParams(location.search).get('token');
   if (!tk) return;
   try {

@@ -1,3 +1,13 @@
+// --- ESM imports (generated) ---
+import { t } from '../i18n.js';
+import { showToast } from './util.js';
+import { STORAGE_LANG_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, getDefaultWakeWordPhrase } from './user-prefs.js';
+import { activeSessionId, terminals } from './state.js';
+import { autoExpand, buildSendText, doSend, inputEl, set_voiceActive, set_voiceAudioActive, updateInputClearButton, updateSlashMenu, voiceActive, voiceAudioActive } from '../app.js';
+import { renderSessionList } from './session-list.js';
+import { isTerminalAtBottom, refitActiveTerminalAfterLayout } from './terminal.js';
+import { getActiveTriggerPhrase, normalizeTriggerMatchText, textEndsWithTriggerPhrase } from './settings.js';
+
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
 // ---- 音声入力 / ウェイクワード ----
@@ -418,7 +428,7 @@
 
   function setVoiceAudioActive(active) {
     if (voiceAudioActive === active) return;
-    voiceAudioActive = active;
+    set_voiceAudioActive(active);
     document.dispatchEvent(new CustomEvent('voiceinput:statechanged'));
   }
 
@@ -428,7 +438,7 @@
     audioendStuckTimer = null;
     if (!isRecording) return;
     isRecording = false;
-    voiceActive = false;
+    set_voiceActive(false);
     setVoiceAudioActive(false);
     btn.classList.remove('recording');
     btn.dataset.tooltip = t('voice_tooltip');
@@ -448,7 +458,7 @@
     recognition.onstart = () => {
       pushVoiceDiagEvent(myId, 'start');
       isRecording = true;
-      voiceActive = true;
+      set_voiceActive(true);
       setVoiceAudioActive(true);
       btn.classList.add('recording');
       btn.dataset.tooltip = t('voice_recording');
@@ -764,7 +774,7 @@
     if (!chip) return;
     const hasVoiceRecordingClass = voiceBtn.classList.contains('recording');
     const isVoiceRecording = voiceActive && voiceAudioActive && hasVoiceRecordingClass;
-    if (voiceActive && !hasVoiceRecordingClass) voiceActive = false;
+    if (voiceActive && !hasVoiceRecordingClass) set_voiceActive(false);
     const wakeEnabled = isWakewordEnabled();
     const wakeActive = wakeEnabled && (isGlobalActive || sessionActive());
     if (isVoiceRecording) {

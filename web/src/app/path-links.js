@@ -1,11 +1,17 @@
+// --- ESM imports (generated) ---
+import { t } from '../i18n.js';
+import { showToast, token } from './util.js';
+import { sessions } from './state.js';
+import { FilesTabManager } from './files-view.js';
+
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
 // ---- ターミナルパスリンクポップアップ ----
 
-let pathPopupEl = null;
-let pathPopupHideTimer = null;
+export let pathPopupEl = null;
+export let pathPopupHideTimer = null;
 
-function getOrCreatePathPopup() {
+export function getOrCreatePathPopup() {
   if (pathPopupEl) return pathPopupEl;
   pathPopupEl = document.createElement('div');
   pathPopupEl.id = 'path-link-popup';
@@ -18,7 +24,7 @@ function getOrCreatePathPopup() {
   return pathPopupEl;
 }
 
-function scheduleHidePathPopup() {
+export function scheduleHidePathPopup() {
   if (pathPopupHideTimer) clearTimeout(pathPopupHideTimer);
   pathPopupHideTimer = setTimeout(() => {
     if (pathPopupEl) pathPopupEl.hidden = true;
@@ -26,41 +32,41 @@ function scheduleHidePathPopup() {
   }, 300);
 }
 
-async function copyPathText(text, anchor) {
+export async function copyPathText(text, anchor) {
   if (!text) return;
   await navigator.clipboard.writeText(text);
   showToast(t('copied_to_clipboard'), anchor);
 }
 
-function isImagePath(filePath) {
+export function isImagePath(filePath) {
   return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(String(filePath || '').trim());
 }
 
-function isVideoPath(filePath) {
+export function isVideoPath(filePath) {
   return /\.(mp4|webm|ogv|mov|m4v)$/i.test(String(filePath || '').trim());
 }
 
-function isMediaPath(filePath) {
+export function isMediaPath(filePath) {
   return isImagePath(filePath) || isVideoPath(filePath);
 }
 
-function isTextPath(filePath) {
+export function isTextPath(filePath) {
   const path = String(filePath || '').trim();
   if (/(^|[\\/])(Dockerfile|Makefile|README|LICENSE|CHANGELOG|NOTICE)$/i.test(path)) return true;
   return /\.(txt|md|markdown|rst|log|json|jsonl|yaml|yml|toml|ini|cfg|conf|env|csv|tsv|xml|html?|css|scss|sass|less|js|mjs|cjs|jsx|ts|tsx|vue|go|rs|py|rb|php|java|kt|kts|c|cc|cpp|cxx|h|hh|hpp|cs|sh|bash|zsh|fish|ps1|psm1|bat|cmd|sql|graphql|gql|proto|diff|patch|gitignore|gitattributes|editorconfig)$/i.test(path);
 }
 
 // ANY-AI-CLI 内蔵プレビューが扱える拡張子（バックエンド /api/files-content の許可リストと一致させること）
-function isAnyAiCliPreviewable(filePath) {
+export function isAnyAiCliPreviewable(filePath) {
   return isTextPath(filePath) || isMediaPath(filePath);
 }
 
-function getFilesAssetUrl(absPath, sessionId) {
+export function getFilesAssetUrl(absPath, sessionId) {
   const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
   return `/api/files-asset?path=${encodeURIComponent(absPath)}&token=${encodeURIComponent(token)}${sessionQs}`;
 }
 
-function getPathOpenItem(filePath) {
+export function getPathOpenItem(filePath) {
   if (isVideoPath(filePath)) {
     return { icon: '🎞️', key: 'link_open_file', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error') };
   }
@@ -73,7 +79,7 @@ function getPathOpenItem(filePath) {
   return { icon: '📄', key: 'link_open_file', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error') };
 }
 
-function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 'file') {
+export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 'file') {
   const popup = getOrCreatePathPopup();
   popup.innerHTML = '';
   popup.hidden = false;
@@ -147,13 +153,13 @@ function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 'file')
   popup.style.top = Math.max(4, top) + 'px';
 }
 
-function basenameForPath(filePath) {
+export function basenameForPath(filePath) {
   const normalized = String(filePath || '').replace(/[\\/]+$/, '');
   const slash = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
   return slash >= 0 ? normalized.slice(slash + 1) : normalized;
 }
 
-async function renameFileViaApi(filePath, sessionId) {
+export async function renameFileViaApi(filePath, sessionId) {
   const current = basenameForPath(filePath);
   const input = window.prompt(t('link_rename_prompt') || 'Enter new file name', current);
   if (input == null) return;
@@ -181,7 +187,7 @@ async function renameFileViaApi(filePath, sessionId) {
   }
 }
 
-async function callOpenApi(endpoint, path, errorKey = 'link_open_error') {
+export async function callOpenApi(endpoint, path, errorKey = 'link_open_error') {
   try {
     const res = await fetch(`${endpoint}?token=${encodeURIComponent(token)}`, {
       method: 'POST',
@@ -202,7 +208,7 @@ async function callOpenApi(endpoint, path, errorKey = 'link_open_error') {
   } catch (_) { showToast(t(errorKey)); }
 }
 
-function dirnameForPath(filePath) {
+export function dirnameForPath(filePath) {
   const normalized = String(filePath || '').replace(/[\\/]+$/, '');
   const slash = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
   if (slash <= 0) return '';
@@ -210,7 +216,7 @@ function dirnameForPath(filePath) {
   return normalized.slice(0, slash);
 }
 
-function computeRelPath(from, to) {
+export function computeRelPath(from, to) {
   // 異なるファイルシステム間（Windows ドライブ ↔ Unix ルート、ドライブ違い、UNC 等）は
   // 相対化不能なので絶対パスをそのまま返す。
   const fromDrive = /^([A-Za-z]:)[\\/]/.exec(from);
@@ -231,7 +237,7 @@ function computeRelPath(from, to) {
   return rel || '.';
 }
 
-function trimTerminalPathCandidate(path) {
+export function trimTerminalPathCandidate(path) {
   let text = String(path || '').trim().replace(/(?:\s*[,;:'"<>\])}]+)+$/, '');
   // 拡張子の直後に全角/日本語が続く場合はそこで切る（相対パス・Unix 絶対パスにも適用）。
   // Windows 絶対パスは下の trimWindowsPathCandidate で同等処理を行う。
@@ -241,7 +247,7 @@ function trimTerminalPathCandidate(path) {
   return text;
 }
 
-function trimWindowsPathCandidate(path) {
+export function trimWindowsPathCandidate(path) {
   let text = String(path || '');
   text = text.replace(/([\\/])\s+.*$/, '$1');
   text = text.replace(/(\.[a-zA-Z0-9]{1,15})\s*[぀-ヿ㐀-鿿＀-￯一-鿿].*$/u, '$1');
@@ -250,23 +256,23 @@ function trimWindowsPathCandidate(path) {
   return text.replace(/(?:\s*[,;:'"<>\])}]+)+$/, '');
 }
 
-function stripTerminalLineSuffix(path) {
+export function stripTerminalLineSuffix(path) {
   const text = String(path || '');
   return text.replace(/([^\s:]):\d+(?::\d+)?$/, '$1');
 }
 
-function isAbsolutePath(path) {
+export function isAbsolutePath(path) {
   return /^[A-Za-z]:[\\/]/.test(path) || path.startsWith('/');
 }
 
-function joinPath(base, rel) {
+export function joinPath(base, rel) {
   if (!base || !rel) return rel || base || '';
   const sep = base.includes('\\') ? '\\' : '/';
   const baseNorm = base.replace(/[\\/]+$/, '');
   return normalizePathSegments(baseNorm + sep + rel.replace(/^[\\/]+/, '').replace(/[\\/]/g, sep), sep);
 }
 
-function normalizePathSegments(path, sep) {
+export function normalizePathSegments(path, sep) {
   const drive = /^[A-Za-z]:/.test(path) ? path.slice(0, 2) : '';
   const rest = drive ? path.slice(2) : path;
   const rooted = rest.startsWith(sep);
@@ -280,7 +286,7 @@ function normalizePathSegments(path, sep) {
   return drive + (rooted ? sep : '') + out.join(sep);
 }
 
-function resolveTerminalPathCandidate(path, sessionId) {
+export function resolveTerminalPathCandidate(path, sessionId) {
   const cleaned = trimTerminalPathCandidate(path);
   if (!cleaned) return '';
   if (isAbsolutePath(cleaned)) return cleaned;
@@ -291,15 +297,15 @@ function resolveTerminalPathCandidate(path, sessionId) {
 
 // Windows drive paths can appear with either backslashes or forward slashes
 // in terminal output, e.g. C:\dev\app.go or C:/Users/me/.claude/CLAUDE.md.
-const ABS_WIN_PATH_RE = /([A-Za-z]:[\\/](?:(?!\s+[A-Za-z]:[\\/])[^\x00-\x1f<>:"|?*(])+)/g;
+export const ABS_WIN_PATH_RE = /([A-Za-z]:[\\/](?:(?!\s+[A-Za-z]:[\\/])[^\x00-\x1f<>:"|?*(])+)/g;
 // 空白を挟んだ説明文中の区切り（例: "hljs / highlight / prism"）を
 // Unix 絶対パスとして誤検出しないよう、セグメント内の空白は許可しない。
-const ABS_UNIX_PATH_RE = /(\/[^\s\/\x00-\x1f"'<>`|(]+(?:\/[^\s\/\x00-\x1f"'<>`|(]*)*)/g;
-const REL_PATH_RE = /(^|[\s([{"'`])((?:\.{1,2}[\\/]|[A-Za-z0-9_.-]+[\\/])(?:[^\s\x00-\x1f"'<>`|(]+[\\/])*[^\s\x00-\x1f"'<>`|(]+)/g;
+export const ABS_UNIX_PATH_RE = /(\/[^\s\/\x00-\x1f"'<>`|(]+(?:\/[^\s\/\x00-\x1f"'<>`|(]*)*)/g;
+export const REL_PATH_RE = /(^|[\s([{"'`])((?:\.{1,2}[\\/]|[A-Za-z0-9_.-]+[\\/])(?:[^\s\x00-\x1f"'<>`|(]+[\\/])*[^\s\x00-\x1f"'<>`|(]+)/g;
 
 // `Y/N` / `1/2` / `bash/zsh` 等を誤検出しないための post-filter。
 // 受理条件: `./` `../` 始まり、またはセパレータ 2 個以上、または末尾拡張子あり。
-function isLikelyRelPath(path) {
+export function isLikelyRelPath(path) {
   if (!path) return false;
   if (/^\.{1,2}[\\/]/.test(path)) return true;
   const sepCount = (path.match(/[\\/]/g) || []).length;
@@ -308,12 +314,12 @@ function isLikelyRelPath(path) {
   return false;
 }
 
-function isTerminalPathStartBoundary(text, start) {
+export function isTerminalPathStartBoundary(text, start) {
   if (start <= 0) return true;
   return /[\s([{"'`]/.test(text[start - 1] || '');
 }
 
-function findPathCandidates(text) {
+export function findPathCandidates(text) {
   const candidates = [];
   for (const re of [ABS_WIN_PATH_RE, ABS_UNIX_PATH_RE]) {
     re.lastIndex = 0;
@@ -341,7 +347,7 @@ function findPathCandidates(text) {
   return out;
 }
 
-function appendLinkedText(container, text, sessionId) {
+export function appendLinkedText(container, text, sessionId) {
   const candidates = findPathCandidates(text);
   if (candidates.length === 0) {
     container.textContent = text;
@@ -370,7 +376,7 @@ function appendLinkedText(container, text, sessionId) {
   if (pos < text.length) container.appendChild(document.createTextNode(text.slice(pos)));
 }
 
-async function deleteDirViaApi(filePath, sessionId) {
+export async function deleteDirViaApi(filePath, sessionId) {
   const name = basenameForPath(filePath);
   const message = (t('link_delete_dir_confirm') || 'Delete this folder and all contents?').replace('{name}', name);
   if (!window.confirm(message)) return;

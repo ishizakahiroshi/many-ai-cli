@@ -1,3 +1,12 @@
+// --- ESM imports (generated) ---
+import { t } from '../i18n.js';
+import { escapeHtml, showToast, ti18n, token } from './util.js';
+import { activeSessionId, sessions } from './state.js';
+import { callOpenApi, computeRelPath, copyPathText, getFilesAssetUrl, isAnyAiCliPreviewable, isImagePath, isMediaPath, isVideoPath, showPathPopup } from './path-links.js';
+import { refitActiveTerminalAfterLayout } from './terminal.js';
+import { markTabLazyLoaded, refreshLazyTabClasses } from './settings.js';
+import { openLightbox, terminalWrapper } from './attachments.js';
+
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
 // ---- Files tab manager ----
@@ -29,7 +38,7 @@
  * - updateSessionTabLabel(label) ← セッション切替時にセッションタブの表示名を更新
  * - restoreFromLocalStorage()  ← 起動時に呼ぶ
  */
-const FilesTabManager = (function () {
+export const FilesTabManager = (function () {
   const LS_KEY = 'any-ai-cli.files.tabs';
   const tabList = document.getElementById('main-tab-list');
   const tabBar  = document.getElementById('main-tab-bar');
@@ -890,7 +899,11 @@ const FilesTabManager = (function () {
 
 // Hub 起動時に localStorage からタブ状態を読み込む準備だけ行う。
 // Files/Git 本体は統合タブの初回クリックまで復元・fetch しない。
-FilesTabManager.setSessionsRef(sessions);
+// NOTE: state.js → session-list.js → files-view.js の循環 import により、本モジュールは
+// state.js の本体評価より前に評価される。トップレベルで `sessions` を直接読むと TDZ
+// (Cannot access 'sessions' before initialization) になるため、評価完了後のマイクロタスク
+// に遅延する。sessionsRef の実利用は Files タブ初回クリック以降なので遅延しても影響しない。
+queueMicrotask(() => { FilesTabManager.setSessionsRef(sessions); });
 
 // ---- Files tree / preview ----
 // ---- v2: Files ビュー本体 ----
@@ -900,7 +913,7 @@ FilesTabManager.setSessionsRef(sessions);
  * bind(containerEl, { filesRoot, sessionId, gitRoot, onFileSelect })
  * unbind(containerEl)
  */
-const FilesTreeView = (function () {
+export const FilesTreeView = (function () {
 
   // ディレクトリの開閉状態を localStorage に保存する。
   // 既定は「全て折りたたみ」。展開済みのキー（filesRoot + "::" + relPath）のみを Set に持つ。
@@ -1650,7 +1663,7 @@ const FilesTreeView = (function () {
  * showFile(containerEl, { absPath, relPath })
  * unbind(containerEl)
  */
-const FilesPreview = (function () {
+export const FilesPreview = (function () {
 
   /** ファイル拡張子 → highlight.js 言語名のマップ（小文字で照合） */
   function detectHljsLangFromPath(absPath) {

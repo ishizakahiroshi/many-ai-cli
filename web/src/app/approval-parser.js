@@ -383,3 +383,10 @@
     module.exports = api;
   }
 })(typeof window !== 'undefined' ? window : globalThis);
+
+// --- ESM re-exports from the IIFE-published approval parser API (generated) ---
+const __esmRoot = (typeof window !== 'undefined') ? window : globalThis;
+export const approvalParser = __esmRoot.approvalParser;
+export const {
+  lineHasHint, linesHaveHint, approvalLineHasHint, approvalLinesHaveHint, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, extractApprovalOptions, approvalContextLines, isBatchOptions, isMultiQuestionPrompt, isHubChoicePrompt, markHubChoiceDefault, matchNativeApprovalTrigger, hasApprovalLikeLabel, userSpecifiesRe,
+} = __esmRoot.approvalParser;

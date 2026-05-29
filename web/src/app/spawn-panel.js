@@ -1,3 +1,11 @@
+// --- ESM imports (generated) ---
+import { t } from '../i18n.js';
+import { escapeHtml, showToast, token } from './util.js';
+import { CWD_HISTORY_MAX, STORAGE_CWD_HISTORY_KEY, STORAGE_SPAWN_KEY, setUserPref } from './user-prefs.js';
+import { set_pendingAutoSwitch } from './state.js';
+import { providerIconHtml } from './session-list.js';
+import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
+
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
 // ---- 新規セッション spawn panel ----
@@ -686,7 +694,7 @@
         codexModelSelection  = null;
         claudeModelSelection = null;
         newSessionPanel.hidden = true;
-        pendingAutoSwitch = true;
+        set_pendingAutoSwitch(true);
       } else {
         alert(t('spawn_failed') + await res.text());
       }

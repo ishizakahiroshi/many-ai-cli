@@ -1,6 +1,6 @@
-const assert = require('assert/strict');
-const test = require('node:test');
-const parser = require('./approval-parser.js');
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { approvalParser as parser } from './approval-parser.js';
 
 function labels(options) {
   return (options || []).map(o => o.label);

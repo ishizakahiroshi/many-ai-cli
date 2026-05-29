@@ -1,15 +1,26 @@
+// --- ESM imports (generated) ---
+import { t } from '../i18n.js';
+import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, CRUNCH_LATCH_MS, actionBarShownAt, activeSessionId, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchFocusIdx, batchSelections, crunchLatch, expandCapturePending, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionVisibleCache, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, terminals, toolOutputs, utf8Decoder } from './state.js';
+import { inputEl, renderToolOutputs, sendSubmittedText, sendText } from '../app.js';
+import { isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon } from './terminal.js';
+import { stripAnsi } from './settings.js';
+import { ws } from './ws-client.js';
+import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, hasApprovalLikeLabel, isBatchOptions, isHubChoicePrompt, isMultiQuestionPrompt, markHubChoiceDefault, matchNativeApprovalTrigger } from './approval-parser.js';
+import { approvalUiAdapter, setMultiQuestionBannerVisible } from './approval-ui.js';
+import { chatHistoryCommitOutput, chatPaneAtBottom, getChatTimelineEl, pushMessage, scrollChatPaneToBottom } from './chat-history.js';
+
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
 // ---- 承認検出 / action-bar ----
 // Pure parsing lives in approval-parser.js. This file orchestrates terminal
 // tails/buffers and delegates cache/DOM/Hub side effects to approval-ui.js.
 
-function isUserSpecifiesText(text) {
+export function isUserSpecifiesText(text) {
   const re = globalThis.approvalParser && globalThis.approvalParser.userSpecifiesRe;
   return !!(re && re.test(String(text || '')));
 }
 
-function getSequentialChoiceState(id, prompts) {
+export function getSequentialChoiceState(id, prompts) {
   if (!prompts || prompts.length < 2) return null;
   const sig = sequentialChoiceSig(prompts);
   let state = sequentialChoiceCache.get(id);
@@ -25,7 +36,7 @@ function getSequentialChoiceState(id, prompts) {
   return state.index < state.prompts.length ? state : null;
 }
 
-function sequentialChoiceOptionsForState(state) {
+export function sequentialChoiceOptionsForState(state) {
   if (!state) return [];
   const prompt = state.prompts[state.index];
   const question = `${prompt.key}: ${prompt.question}`;
@@ -38,7 +49,7 @@ function sequentialChoiceOptionsForState(state) {
   }));
 }
 
-function clearSequentialChoiceState(id) {
+export function clearSequentialChoiceState(id) {
   sequentialChoiceCache.delete(id);
 }
 
@@ -48,7 +59,7 @@ function clearSequentialChoiceState(id) {
 // Hub 起動時にデフォルトをユーザー設定ディレクトリに展開（既存ファイルは尊重）し、
 // HTTP 経由で配信する。ユーザーが直接編集して文言を追加・調整できる。
 // claude / codex は英語固定（Anthropic/OpenAI が国際化していない）、common は多言語混在。
-const providerApprovalTriggers = { claude: [], codex: [], common: [] };
+export const providerApprovalTriggers = { claude: [], codex: [], common: [] };
 
 (async function loadApprovalPatterns() {
   const fetchJson = async (name) => {
@@ -70,7 +81,7 @@ const providerApprovalTriggers = { claude: [], codex: [], common: [] };
   providerApprovalTriggers.common = norm(common);
 })();
 
-function matchProviderApprovalTrigger(provider, line) {
+export function matchProviderApprovalTrigger(provider, line) {
   if (!line) return false;
   const lower = String(line).toLowerCase();
   const list = providerApprovalTriggers[provider] || [];
@@ -79,9 +90,9 @@ function matchProviderApprovalTrigger(provider, line) {
   return false;
 }
 
-const approvalCheckTimers = new Map(); // セッション別タイマー（マルチペインで単一タイマーに上書きされる問題を解消）
+export const approvalCheckTimers = new Map(); // セッション別タイマー（マルチペインで単一タイマーに上書きされる問題を解消）
 
-function cancelApprovalHintConfirm(id) {
+export function cancelApprovalHintConfirm(id) {
   const timer = approvalHintConfirmTimers.get(id);
   if (timer) {
     clearTimeout(timer);
@@ -90,9 +101,9 @@ function cancelApprovalHintConfirm(id) {
   }
 }
 
-const approvalSuppressRescanTimers = new Map();
+export const approvalSuppressRescanTimers = new Map();
 
-function scheduleApprovalSuppressRescan(id, suppressUntil) {
+export function scheduleApprovalSuppressRescan(id, suppressUntil) {
   const prev = approvalSuppressRescanTimers.get(id);
   if (prev) clearTimeout(prev);
   const delay = Math.max(0, suppressUntil - Date.now()) + 30;
@@ -103,7 +114,7 @@ function scheduleApprovalSuppressRescan(id, suppressUntil) {
   }, delay));
 }
 
-function scheduleApprovalHintConfirm(id, options) {
+export function scheduleApprovalHintConfirm(id, options) {
   if (!options || options.length === 0) return;
   const sig = approvalSig(options);
   cancelApprovalHintConfirm(id);
@@ -127,7 +138,7 @@ function scheduleApprovalHintConfirm(id, options) {
   }, 350));
 }
 
-function trackApprovalHintFromChunk(id, bytes, decodedText) {
+export function trackApprovalHintFromChunk(id, bytes, decodedText) {
   const t = terminals.get(id);
   if (!t) return;
   const provider = sessions.get(id)?.provider;
@@ -375,7 +386,7 @@ function trackApprovalHintFromChunk(id, bytes, decodedText) {
   // false への遷移はアクティブ時の detectApproval/hideActionBar で確定させる。
 }
 
-function scheduleApprovalCheck(id) {
+export function scheduleApprovalCheck(id) {
   // セッション別タイマーを使い、マルチペインで他セッションの呼び出しに上書きされないようにする。
   // detectApproval はグローバル action-bar を操作するためアクティブセッション専用。
   // 非アクティブセッションの状態は trackApprovalHintFromChunk + approvalHintConfirmTrusted が管理する。
@@ -387,7 +398,7 @@ function scheduleApprovalCheck(id) {
   }, 300));
 }
 
-function normalizeGoApprovalOptions(rawOptions) {
+export function normalizeGoApprovalOptions(rawOptions) {
   return (Array.isArray(rawOptions) ? rawOptions : [])
     .map((opt) => ({
       num: Number(opt.num),
@@ -399,12 +410,12 @@ function normalizeGoApprovalOptions(rawOptions) {
     .filter((opt) => Number.isFinite(opt.num) && opt.label);
 }
 
-function isGoNativeApprovalActive(id) {
+export function isGoNativeApprovalActive(id) {
   const src = approvalSourceCache.get(id);
   return !!(src && src.source === 'go_vt' && approvalVisibleCache.get(id));
 }
 
-function handleGoApprovalDetected(message) {
+export function handleGoApprovalDetected(message) {
   const id = message && message.session_id;
   if (!id) return;
   const options = normalizeGoApprovalOptions(message.approval_options);
@@ -434,7 +445,7 @@ function handleGoApprovalDetected(message) {
   }
 }
 
-function handleGoApprovalCleared(message) {
+export function handleGoApprovalCleared(message) {
   const id = message && message.session_id;
   if (!id) return;
   const src = approvalSourceCache.get(id);
@@ -452,7 +463,7 @@ function handleGoApprovalCleared(message) {
   }
 }
 
-function sendApprovalConsumed(sessionId, options, sentText) {
+export function sendApprovalConsumed(sessionId, options, sentText) {
   const src = approvalSourceCache.get(sessionId);
   if (!src || src.source !== 'go_vt' || !src.sig) return;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -466,7 +477,7 @@ function sendApprovalConsumed(sessionId, options, sentText) {
   if (options) approvalConsumedSig.set(sessionId, approvalSig(options));
 }
 
-function maybeSendDirectApprovalConsumed(sessionId, rawText, sentText) {
+export function maybeSendDirectApprovalConsumed(sessionId, rawText, sentText) {
   const src = approvalSourceCache.get(sessionId);
   if (!src || src.source !== 'go_vt') return;
   const cached = approvalRawOptionsCache.get(sessionId);
@@ -482,7 +493,7 @@ function maybeSendDirectApprovalConsumed(sessionId, rawText, sentText) {
 
 // ---- クランチ（折りたたみ）検出 ----
 
-function detectCrunch(id) {
+export function detectCrunch(id) {
   // ライブ TUI 描画領域（baseY 〜 baseY+rows-1）のみを対象にする。
   // scanBuffer はスクロールバック全体を返すため、`/clear` 後も古い
   // "(ctrl+o to expand)" 行を拾って展開ボタンが残るバグの原因になっていた。
@@ -512,7 +523,7 @@ function detectCrunch(id) {
   return { found: false, count: 0 };
 }
 
-function detectApproval(id) {
+export function detectApproval(id) {
   // sendChoice 直後の誤再表示を抑制
   const suppressUntil = approvalSuppressUntil.get(id);
   if (suppressUntil && Date.now() < suppressUntil) {
@@ -797,7 +808,7 @@ function detectApproval(id) {
   }
 }
 
-function getActionBarButtons() {
+export function getActionBarButtons() {
   const bar = document.getElementById('action-bar');
   if (!bar) return [];
   // expand-btn は除外: クランチ展開のみで action-bar が visible のとき Enter/←→ が
@@ -805,19 +816,19 @@ function getActionBarButtons() {
   return Array.from(bar.querySelectorAll('.action-btn:not(.expand-btn)'));
 }
 
-function setActionBarFocus(idx) {
-  actionBarFocusIdx = idx;
+export function setActionBarFocus(idx) {
+  set_actionBarFocusIdx(idx);
   getActionBarButtons().forEach((btn, i) => btn.classList.toggle('kbd-focus', i === idx));
 }
 
-function hideActionBar(id) {
+export function hideActionBar(id) {
   const bar = document.getElementById('action-bar');
   if (bar) { bar.classList.remove('visible', 'batch'); bar.innerHTML = ''; }
   // 差分スキップ用キャッシュをリセット（次回 showActionBar が同一シグネチャでも再描画されるように）
   lastActionBarRender.sessionId = null;
   lastActionBarRender.sig = null;
-  actionBarFocusIdx = -1;
-  batchFocusIdx = -1;
+  set_actionBarFocusIdx(-1);
+  set_batchFocusIdx(-1);
   if (id !== undefined) actionBarShownAt.delete(id);
   if (id !== undefined) batchSelections.delete(id);
   if (id !== undefined) {
@@ -860,7 +871,7 @@ function hideActionBar(id) {
   }
 }
 
-function normalizeActionOptions(options) {
+export function normalizeActionOptions(options) {
   const byNum = new Map();
   for (const opt of options || []) {
     if (!opt || typeof opt.num !== 'number') continue;
@@ -882,7 +893,7 @@ function normalizeActionOptions(options) {
   return normalized.sort((a, b) => a.num - b.num);
 }
 
-function showActionBar(bar, sessionId, options, showExpand, forceStickToBottom = false) {
+export function showActionBar(bar, sessionId, options, showExpand, forceStickToBottom = false) {
   if (isBatchOptions(options)) {
     showBatchActionBar(bar, sessionId, options, forceStickToBottom);
     return;
@@ -983,7 +994,7 @@ function showActionBar(bar, sessionId, options, showExpand, forceStickToBottom =
   if (chatWasAtBottom && chatTl) requestAnimationFrame(() => scrollChatPaneToBottom(chatTl));
 }
 
-function showBatchActionBar(bar, sessionId, sections, forceStickToBottom = false) {
+export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom = false) {
   const term = sessionId === activeSessionId ? terminals.get(sessionId) : null;
   const shouldStickToBottom = !!(term && (forceStickToBottom || term.autoScroll || isTerminalAtBottom(term)));
   const chatTlB = getChatTimelineEl();
@@ -994,7 +1005,7 @@ function showBatchActionBar(bar, sessionId, sections, forceStickToBottom = false
   if (!selections || selections.length !== sections.length) {
     selections = new Array(sections.length).fill(null);
     batchSelections.set(sessionId, selections);
-    if (batchFocusIdx < 0 || batchFocusIdx >= sections.length) batchFocusIdx = 0;
+    if (batchFocusIdx < 0 || batchFocusIdx >= sections.length) set_batchFocusIdx(0);
   }
 
   const sig = JSON.stringify({
@@ -1102,31 +1113,31 @@ function showBatchActionBar(bar, sessionId, sections, forceStickToBottom = false
   if (chatWasAtBottomB && chatTlB) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlB));
 }
 
-function selectBatchOption(sessionId, sectionIdx, optionNum) {
+export function selectBatchOption(sessionId, sectionIdx, optionNum) {
   const selections = batchSelections.get(sessionId);
   if (!selections) return;
   selections[sectionIdx] = optionNum;
   const cached = approvalRawOptionsCache.get(sessionId);
   if (isBatchOptions(cached)) {
     // 自動前進: 末尾セクションを選んだら -1（無効化）して Enter で送信可能にする
-    batchFocusIdx = sectionIdx + 1 < cached.length ? sectionIdx + 1 : -1;
+    set_batchFocusIdx(sectionIdx + 1 < cached.length ? sectionIdx + 1 : -1);
     const bar = document.getElementById('action-bar');
     if (bar) showBatchActionBar(bar, sessionId, cached);
   }
   setTimeout(() => inputEl.focus(), 0);
 }
 
-function clearBatchSelections(sessionId) {
+export function clearBatchSelections(sessionId) {
   const cached = approvalRawOptionsCache.get(sessionId);
   if (!isBatchOptions(cached)) return;
   batchSelections.set(sessionId, new Array(cached.length).fill(null));
-  batchFocusIdx = 0;
+  set_batchFocusIdx(0);
   const bar = document.getElementById('action-bar');
   if (bar) showBatchActionBar(bar, sessionId, cached);
   setTimeout(() => inputEl.focus(), 0);
 }
 
-function sendBatchChoices(sessionId) {
+export function sendBatchChoices(sessionId) {
   const selections = batchSelections.get(sessionId);
   if (!selections || selections.length === 0 || selections.some(v => v == null)) return;
   const prevOpts = approvalRawOptionsCache.get(sessionId);
@@ -1156,24 +1167,24 @@ function sendBatchChoices(sessionId) {
   setTimeout(() => inputEl.focus(), 0);
 }
 
-function isBatchActionBarVisible() {
+export function isBatchActionBarVisible() {
   const bar = document.getElementById('action-bar');
   return !!(bar && bar.classList.contains('visible') && bar.classList.contains('batch'));
 }
 
-function moveBatchFocus(delta) {
+export function moveBatchFocus(delta) {
   if (activeSessionId === null) return false;
   const cached = approvalRawOptionsCache.get(activeSessionId);
   if (!isBatchOptions(cached) || cached.length === 0) return false;
   const n = cached.length;
   const start = batchFocusIdx < 0 ? (delta > 0 ? -1 : n) : batchFocusIdx;
-  batchFocusIdx = ((start + delta) % n + n) % n;
+  set_batchFocusIdx(((start + delta) % n + n) % n);
   const bar = document.getElementById('action-bar');
   if (bar) showBatchActionBar(bar, activeSessionId, cached);
   return true;
 }
 
-function handleBatchNumberKey(sessionId, num) {
+export function handleBatchNumberKey(sessionId, num) {
   const cached = approvalRawOptionsCache.get(sessionId);
   if (!isBatchOptions(cached)) return false;
   if (batchFocusIdx < 0 || batchFocusIdx >= cached.length) return false;
@@ -1185,7 +1196,7 @@ function handleBatchNumberKey(sessionId, num) {
   return true;
 }
 
-function sendChoice(sessionId, targetNum) {
+export function sendChoice(sessionId, targetNum) {
   const seqState = sequentialChoiceCache.get(sessionId);
   if (seqState && seqState.index < seqState.prompts.length) {
     const prompt = seqState.prompts[seqState.index];
@@ -1273,7 +1284,7 @@ function sendChoice(sessionId, targetNum) {
 
 // ---- 展開キャプチャ ----
 
-function handleExpandClick(id) {
+export function handleExpandClick(id) {
   if (expandCapturePending) return;
   expandCapturePending = true;
 
@@ -1305,7 +1316,10 @@ function handleExpandClick(id) {
   }, 800);
 }
 
-function formatDateTime(d) {
+export function formatDateTime(d) {
   const p = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
+
+// --- ESM window-interop publish (generated; preserves dynamic window.* lookups) ---
+window.matchProviderApprovalTrigger = matchProviderApprovalTrigger;

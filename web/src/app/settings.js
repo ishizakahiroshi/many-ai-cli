@@ -1,9 +1,22 @@
+// --- ESM imports (generated) ---
+import { t } from '../i18n.js';
+import { escapeHtml, showToast, ti18n, token } from './util.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref } from './user-prefs.js';
+import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
+import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
+import { activateSession, providerIconHtml, render, renderSessionList, stateLabel } from './session-list.js';
+import { pathPopupEl } from './path-links.js';
+import { attachTerminal, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, sendResize } from './terminal.js';
+import { providerApprovalTriggers } from './approval.js';
+import { MULTI_SCROLLBACK, getMessages } from './chat-history.js';
+import { FilesTabManager } from './files-view.js';
+
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
 // ---- Hub 承認ボタン機能 オプトイントースト ----
-let _approvalAlertChecked = false;
+export let _approvalAlertChecked = false;
 
-async function checkApprovalOnStartup() {
+export async function checkApprovalOnStartup() {
   if (_approvalAlertChecked) return;
   _approvalAlertChecked = true;
   try {
@@ -16,7 +29,7 @@ async function checkApprovalOnStartup() {
   } catch (_) {}
 }
 
-function showApprovalToast() {
+export function showApprovalToast() {
   if (document.getElementById('approval-toast')) return;
   const el = document.createElement('div');
   el.id = 'approval-toast';
@@ -65,12 +78,12 @@ function showApprovalToast() {
   yesBtn.focus();
 }
 
-function updateApprovalToggle(enabled) {
+export function updateApprovalToggle(enabled) {
   const toggle = document.getElementById('approval-toggle-input');
   if (toggle) toggle.checked = enabled;
 }
 
-async function loadApprovalSettings() {
+export async function loadApprovalSettings() {
   try {
     const res = await fetch(`/api/approval/status?token=${token}`);
     if (!res.ok) return;
@@ -114,13 +127,13 @@ async function loadApprovalSettings() {
 })();
 
 // ---- 通知音 ----
-let _audioCtx = null;
-function _getAudioCtx() {
+export let _audioCtx = null;
+export function _getAudioCtx() {
   if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   return _audioCtx;
 }
 
-function playNotificationSound() {
+export function playNotificationSound() {
   if (localStorage.getItem(STORAGE_NOTIFY_SOUND_ENABLED_KEY) !== '1') return;
   const type = localStorage.getItem(STORAGE_NOTIFY_SOUND_TYPE_KEY) || 'default';
   if (type === 'custom') {
@@ -145,12 +158,12 @@ function playNotificationSound() {
   } catch (_) {}
 }
 
-function getActiveTriggerPhrase() {
+export function getActiveTriggerPhrase() {
   if (localStorage.getItem(STORAGE_TRIGGER_ENABLED_KEY) !== '1') return '';
   return (localStorage.getItem(STORAGE_TRIGGER_PHRASE_KEY) ?? getDefaultTriggerPhrase()).trim();
 }
 
-function normalizeTriggerMatchText(text) {
+export function normalizeTriggerMatchText(text) {
   return String(text || '')
     .normalize('NFKC')
     .toLowerCase()
@@ -158,13 +171,13 @@ function normalizeTriggerMatchText(text) {
     .replace(/[。．.!！?？、,，]+$/g, '');
 }
 
-function textEndsWithTriggerPhrase(text, triggerPhrase) {
+export function textEndsWithTriggerPhrase(text, triggerPhrase) {
   const tp = normalizeTriggerMatchText(triggerPhrase);
   if (!tp) return false;
   return normalizeTriggerMatchText(text).endsWith(tp);
 }
 
-function stripTrailingTriggerPhrase(text, triggerPhrase) {
+export function stripTrailingTriggerPhrase(text, triggerPhrase) {
   const original = String(text || '');
   const tp = normalizeTriggerMatchText(triggerPhrase);
   if (!tp) return original;
@@ -177,7 +190,7 @@ function stripTrailingTriggerPhrase(text, triggerPhrase) {
   return original;
 }
 
-function normalizeHttpUrl(value, fallback = '') {
+export function normalizeHttpUrl(value, fallback = '') {
   const raw = String(value || '').trim();
   if (!raw) return fallback;
   try {
@@ -187,7 +200,7 @@ function normalizeHttpUrl(value, fallback = '') {
   return fallback;
 }
 
-function getUsageLinkUrl(provider) {
+export function getUsageLinkUrl(provider) {
   const keyMap = {
     claude:   STORAGE_USAGE_LINK_CLAUDE_KEY,
     codex:    STORAGE_USAGE_LINK_CODEX_KEY,
@@ -199,14 +212,14 @@ function getUsageLinkUrl(provider) {
   return normalizeHttpUrl(localStorage.getItem(key), DEFAULT_USAGE_LINKS[provider] || '') || '#';
 }
 
-function applyUsageLinks() {
+export function applyUsageLinks() {
   for (const p of ['claude', 'codex', 'ollama', 'opencode']) {
     const el = document.getElementById(`usage-link-${p}`);
     if (el) el.href = getUsageLinkUrl(p);
   }
 }
 
-function loadUsageLinkSettings() {
+export function loadUsageLinkSettings() {
   const keyMap = {
     claude:   STORAGE_USAGE_LINK_CLAUDE_KEY,
     codex:    STORAGE_USAGE_LINK_CODEX_KEY,
@@ -220,7 +233,7 @@ function loadUsageLinkSettings() {
   applyUsageLinks();
 }
 
-function saveUsageLinkSettings() {
+export function saveUsageLinkSettings() {
   const pairs = [
     ['claude',   'usage_links.claude',   STORAGE_USAGE_LINK_CLAUDE_KEY],
     ['codex',    'usage_links.codex',    STORAGE_USAGE_LINK_CODEX_KEY],
@@ -244,7 +257,7 @@ function saveUsageLinkSettings() {
   applyUsageLinks();
 }
 
-function initUsageDropdown() {
+export function initUsageDropdown() {
   const btn      = document.getElementById('usage-menu-btn');
   const dropdown = document.getElementById('usage-dropdown');
   if (!btn || !dropdown) return;
@@ -300,7 +313,7 @@ function initUsageDropdown() {
   });
 }
 
-function appConfirm({ title, message, confirmText, cancelText, kind = 'default' }) {
+export function appConfirm({ title, message, confirmText, cancelText, kind = 'default' }) {
   return new Promise((resolve) => {
     const overlay = document.getElementById('model-picker-overlay');
     if (!overlay) { resolve(window.confirm(message)); return; }
@@ -348,7 +361,7 @@ function appConfirm({ title, message, confirmText, cancelText, kind = 'default' 
 
 // Ollama エンコーディング警告ダイアログ（3 択）
 // 戻り値: 'utf8' | 'continue' | null（キャンセル）
-function appConfirmOllamaEncoding() {
+export function appConfirmOllamaEncoding() {
   return new Promise((resolve) => {
     const overlay = document.getElementById('model-picker-overlay');
     if (!overlay) {
@@ -401,7 +414,7 @@ function appConfirmOllamaEncoding() {
   });
 }
 
-function appConfirmShutdown() {
+export function appConfirmShutdown() {
   return new Promise((resolve) => {
     const overlay = document.getElementById('model-picker-overlay');
     if (!overlay) { resolve(window.confirm(t('shutdown_confirm')) ? 'shutdown' : null); return; }
@@ -447,21 +460,21 @@ function appConfirmShutdown() {
   });
 }
 
-function stripAnsi(str) {
+export function stripAnsi(str) {
   return str.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\x1b[^[]/g, '');
 }
 
-const DEFAULT_QUICK_CMD_1 = '/clear';
-const DEFAULT_QUICK_CMD_2 = '/model';
-const ALLOWED_QUICK_COMMANDS = new Set([
+export const DEFAULT_QUICK_CMD_1 = '/clear';
+export const DEFAULT_QUICK_CMD_2 = '/model';
+export const ALLOWED_QUICK_COMMANDS = new Set([
   '/clear', '/model', '/help', '/status', '/usage', '/review', '/compact', '/config',
 ]);
 
-function sanitizeQuickCommand(cmd, fallback) {
+export function sanitizeQuickCommand(cmd, fallback) {
   return ALLOWED_QUICK_COMMANDS.has(cmd) ? cmd : fallback;
 }
 
-function getQuickCommand(slot) {
+export function getQuickCommand(slot) {
   if (slot === 1) {
     const saved = localStorage.getItem(STORAGE_QUICK_CMD_1_KEY) || DEFAULT_QUICK_CMD_1;
     return sanitizeQuickCommand(saved, DEFAULT_QUICK_CMD_1);
@@ -470,7 +483,7 @@ function getQuickCommand(slot) {
   return sanitizeQuickCommand(saved, DEFAULT_QUICK_CMD_2);
 }
 
-function refreshQuickCommandButtons() {
+export function refreshQuickCommandButtons() {
   const btn1 = document.getElementById('quick-clear-btn');
   const btn2 = document.getElementById('quick-model-btn');
   if (!btn1 || !btn2) return;
@@ -483,7 +496,7 @@ function refreshQuickCommandButtons() {
 }
 
 // @attachment と先頭スラッシュコマンドを除外してカード表示用テキストを返す
-function filterFirstMessage(text) {
+export function filterFirstMessage(text) {
   if (!text) return '';
   const cleaned = text
     // CSI エスケープシーケンス（ESC [ ... 終端）を除去。ブラケットペースト ESC[200~ / ESC[201~ もここで消える
@@ -500,7 +513,7 @@ function filterFirstMessage(text) {
   return trimmed.replace(/@\S+/g, '').replace(/\s+/g, ' ').trim();
 }
 
-function applyTheme(theme) {
+export function applyTheme(theme) {
   // 'blue' は廃止済み。既存設定が 'blue' の場合は既定テーマにフォールバック
   const t = (theme === 'dark' || theme === 'light') ? theme : 'light';
   document.documentElement.setAttribute('data-theme', t);
@@ -509,7 +522,7 @@ function applyTheme(theme) {
   try { localStorage.setItem(STORAGE_THEME_KEY, t); } catch (_) {}
 }
 
-function applyFontSize(size) {
+export function applyFontSize(size) {
   const s = FONTSIZE_MAP[size] ? size : 'medium';
   const px = FONTSIZE_MAP[s];
   document.documentElement.style.setProperty('--chat-font-size', px + 'px');
@@ -529,7 +542,7 @@ function applyFontSize(size) {
   try { localStorage.setItem(STORAGE_FONTSIZE_KEY, s); } catch (_) {}
 }
 
-function applyLang(lang) {
+export function applyLang(lang) {
   const l = (lang === 'ja' || lang === 'en') ? lang : 'ja';
   const sel = document.getElementById('lang-select');
   if (sel) sel.value = l;
@@ -899,7 +912,7 @@ function applyLang(lang) {
     clearTimeout(_nameDebounce);
     _nameDebounce = setTimeout(async () => {
       const val = nameInputEl.value;
-      _userDisplayName = val;
+      set__userDisplayName(val);
       updatePreview(_userAvatarUrl, _userDisplayName);
       await patchServerPref('display_name', val);
     }, 500);
@@ -907,7 +920,7 @@ function applyLang(lang) {
 
   applyBtn.addEventListener('click', async () => {
     const url = urlInputEl.value.trim();
-    _userAvatarUrl = url;
+    set__userAvatarUrl(url);
     updatePreview(url, _userDisplayName);
     await patchServerPref('avatar', url);
   });
@@ -927,7 +940,7 @@ function applyLang(lang) {
       });
       if (!res.ok) throw new Error(`PUT avatar ${res.status}`);
       // キャッシュバスター付きで更新
-      _userAvatarUrl = `/api/avatar?token=${tk}`;
+      set__userAvatarUrl(`/api/avatar?token=${tk}`);
       urlInputEl.value = '';
       updatePreview(`/api/avatar?token=${tk}&t=${Date.now()}`, _userDisplayName);
       showToast(typeof window.t === 'function' ? t('settings_avatar_file_set') : 'アイコン画像を設定しました');
@@ -940,13 +953,13 @@ function applyLang(lang) {
 
   clearBtn.addEventListener('click', async () => {
     urlInputEl.value = '';
-    _userAvatarUrl = '';
+    set__userAvatarUrl('');
     updatePreview('', _userDisplayName);
     await patchServerPref('avatar', '');
   });
 })();
 
-const token = new URLSearchParams(location.search).get('token');
+// token moved to app/util.js (ESM shared export)
 
 // usage-link デフォルトをリモート（GitHub バック）から取得して更新。
 // 失敗時は DEFAULT_USAGE_LINKS のハードコード値をそのまま使う。
@@ -969,8 +982,8 @@ const token = new URLSearchParams(location.search).get('token');
     const res = await fetch(`/api/info?token=${token}`);
     if (!res.ok) return;
     const info = await res.json();
-    _userAvatarUrl = info.userAvatar || '';
-    _userDisplayName = info.userDisplayName || '';
+    set__userAvatarUrl(info.userAvatar || '');
+    set__userDisplayName(info.userDisplayName || '');
     document.dispatchEvent(new CustomEvent('user-info-ready'));
     const ver = 'v' + (info.version || 'dev');
     const runtimeMode = info.runtime_mode || '';
@@ -1240,7 +1253,7 @@ window.approvalPatternsUI = (function () {
 })();
 
 // ---- スラッシュコマンドソース設定 ----
-async function loadSlashCmdSources() {
+export async function loadSlashCmdSources() {
   const claudeEl = document.getElementById('slash-src-claude');
   const codexEl  = document.getElementById('slash-src-codex');
   if (!claudeEl || !codexEl) return;
@@ -1276,16 +1289,16 @@ async function loadSlashCmdSources() {
 
 // ─── C2: 統合タブバー (setActiveTab) ───────────────────────────────────
 // セッション毎の表示モード (D13: in-memory, リロードで初期化)
-const sessionViewMode = new Map(); // sid -> 'terminal' | 'chat' | 'split' | 'files' | 'git'
+export const sessionViewMode = new Map(); // sid -> 'terminal' | 'chat' | 'split' | 'files' | 'git'
 // Files/Git の遅延ロード状態 (sid -> Set<'files'|'git'>)
-const sessionLazyLoaded = new Map();
+export const sessionLazyLoaded = new Map();
 
-const VALID_TAB_NAMES = new Set(['terminal', 'chat', 'split', 'files', 'git', 'multi']);
+export const VALID_TAB_NAMES = new Set(['terminal', 'chat', 'split', 'files', 'git', 'multi']);
 // C5: lock の対象モード (Files/Git は lock 対象外: D10 の lazy 読み込みと相性が悪い)
-const LOCKABLE_MODES = new Set(['terminal', 'chat', 'split']);
+export const LOCKABLE_MODES = new Set(['terminal', 'chat', 'split']);
 
 // C5: 「表示モードを固定」設定値の取得 ('' / 'terminal' / 'chat' / 'split')
-function getDisplayLockedMode() {
+export function getDisplayLockedMode() {
   try {
     const raw = localStorage.getItem(STORAGE_DISPLAY_LOCKED_MODE_KEY);
     if (!raw) return '';
@@ -1294,7 +1307,7 @@ function getDisplayLockedMode() {
   return '';
 }
 
-function getSessionViewMode(sid) {
+export function getSessionViewMode(sid) {
   if (sid === null || sid === undefined) return 'terminal';
   // C5: セッション未登録 (新規 spawn / リロード後の初回) は lock 値を初期モードとして適用
   if (!sessionViewMode.has(sid)) {
@@ -1305,18 +1318,18 @@ function getSessionViewMode(sid) {
   return sessionViewMode.get(sid) || 'terminal';
 }
 
-function isTabLazyLoaded(sid, name) {
+export function isTabLazyLoaded(sid, name) {
   const set = sessionLazyLoaded.get(sid);
   return !!(set && set.has(name));
 }
 
-function markTabLazyLoaded(sid, name) {
+export function markTabLazyLoaded(sid, name) {
   if (!sessionLazyLoaded.has(sid)) sessionLazyLoaded.set(sid, new Set());
   sessionLazyLoaded.get(sid).add(name);
 }
 
 // C5: lock 値に対応するタブにのみ .locked-mode を付与 (🔒 表示)
-function refreshLockedModeTabClasses() {
+export function refreshLockedModeTabClasses() {
   const lock = getDisplayLockedMode();
   document.querySelectorAll('#unified-tab-bar .view-tab').forEach(btn => {
     const isLocked = !!lock && btn.dataset.tab === lock;
@@ -1325,10 +1338,10 @@ function refreshLockedModeTabClasses() {
 }
 
 // C5: lock 中にユーザーが別タブへ切替えた時、セッションごとに 5 分クールダウン付きでトースト
-const _lockedModeToastLastTs = new Map(); // sid -> ts(ms)
-const LOCKED_MODE_TOAST_COOLDOWN_MS = 5 * 60 * 1000;
+export const _lockedModeToastLastTs = new Map(); // sid -> ts(ms)
+export const LOCKED_MODE_TOAST_COOLDOWN_MS = 5 * 60 * 1000;
 
-function maybeFireLockedModeToast(sid, requestedMode) {
+export function maybeFireLockedModeToast(sid, requestedMode) {
   const lock = getDisplayLockedMode();
   if (!lock) return;
   if (!LOCKABLE_MODES.has(requestedMode)) return;
@@ -1344,7 +1357,7 @@ function maybeFireLockedModeToast(sid, requestedMode) {
 }
 
 // Files/Git のうち、現セッションでまだ未取得のものは .lazy クラスを付け直す
-function refreshLazyTabClasses(sid) {
+export function refreshLazyTabClasses(sid) {
   const filesBtn = document.querySelector('#unified-tab-bar .view-tab[data-tab="files"]');
   const gitBtn   = document.querySelector('#unified-tab-bar .view-tab[data-tab="git"]');
   if (filesBtn) {
@@ -1360,7 +1373,7 @@ function refreshLazyTabClasses(sid) {
 }
 
 // D11: タブバー左端のセッション情報チップを描画 (セッションカード相当)
-function renderSessionInfoChip() {
+export function renderSessionInfoChip() {
   const chip = document.getElementById('session-info-chip');
   if (!chip) return;
   const sid = activeSessionId;
@@ -1396,7 +1409,7 @@ function renderSessionInfoChip() {
 }
 
 // D12: チャット件数バッジ更新
-function updateChatCountBadge() {
+export function updateChatCountBadge() {
   const badge = document.getElementById('chat-count-badge');
   if (!badge) return;
   const sid = activeSessionId;
@@ -1412,8 +1425,8 @@ function updateChatCountBadge() {
 }
 
 // C2 公開 API: タブを切り替える
-let _setActiveTabRecursion = false;
-function setActiveTab(sid, name) {
+export let _setActiveTabRecursion = false;
+export function setActiveTab(sid, name) {
   if (!VALID_TAB_NAMES.has(name)) return;
 
   // マルチタブはセッション非依存のビュー: セッションなしでも動作させる
@@ -1517,7 +1530,7 @@ function setActiveTab(sid, name) {
 // D10: Files/Git タブを初回クリックで開く (および既ロード時の再アクティブ化)
 // openFilesTab / openGitTab は idempotent (既存タブがあれば再利用) なので、
 // セッション切替で .active が外れた files/git pane の再表示にも兼用する。
-function handleLazyTabOpen(sid, name) {
+export function handleLazyTabOpen(sid, name) {
   const sess = sessions.get(sid);
   if (!sess) return;
   const gr = sess.git_root || sess.cwd || '';
@@ -1541,7 +1554,7 @@ function handleLazyTabOpen(sid, name) {
 
 // 既存 switchToSessionView() (FilesTabManager 内) は #main-tab-bar の DOM 操作を行う。
 // 統合バー導入後は setActiveTab(sid, 'terminal') への薄いラッパーとして使う。
-function switchToTerminalView() {
+export function switchToTerminalView() {
   if (activeSessionId !== null && activeSessionId !== undefined) {
     setActiveTab(activeSessionId, 'terminal');
   }
@@ -1567,7 +1580,7 @@ function switchToTerminalView() {
 })();
 
 // 新規セッション/アクティブ切替時に display-area のモードを復元
-function applyActiveSessionViewMode() {
+export function applyActiveSessionViewMode() {
   if (activeSessionId === null || activeSessionId === undefined) return;
   const mode = getSessionViewMode(activeSessionId);
   refreshLazyTabClasses(activeSessionId);
@@ -1576,9 +1589,9 @@ function applyActiveSessionViewMode() {
 
 
 // ─── カード右クリックメニュー (Open Git / Files / Activate / Copy ID) ───
-let _cardCtxMenuEl = null;
-let _cardCtxSid    = null;
-function openCardCtxMenu(x, y, sid) {
+export let _cardCtxMenuEl = null;
+export let _cardCtxSid    = null;
+export function openCardCtxMenu(x, y, sid) {
   closeCardCtxMenu();
   _cardCtxSid = sid;
   const menu = document.createElement('div');
@@ -1626,7 +1639,7 @@ function openCardCtxMenu(x, y, sid) {
     });
   });
 }
-function closeCardCtxMenu() {
+export function closeCardCtxMenu() {
   if (_cardCtxMenuEl) { try { _cardCtxMenuEl.remove(); } catch (_) {} _cardCtxMenuEl = null; }
   _cardCtxSid = null;
 }

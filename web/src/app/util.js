@@ -1,8 +1,14 @@
+// --- ESM imports (generated) ---
+import { t } from '../i18n.js';
+
+// --- ESM shared token (generated; moved from settings.js) ---
+export const token = new URLSearchParams(location.search).get('token');
+
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
 // ---- トースト通知 ----
-let _toastTimer = null;
-function getToastAnchorRect(anchor) {
+export let _toastTimer = null;
+export function getToastAnchorRect(anchor) {
   if (!anchor) return null;
   if (typeof anchor.getBoundingClientRect === 'function') {
     return anchor.getBoundingClientRect();
@@ -18,7 +24,7 @@ function getToastAnchorRect(anchor) {
   return null;
 }
 
-function showToast(msg, anchor) {
+export function showToast(msg, anchor) {
   let el = document.getElementById('toast');
   if (!el) {
     el = document.createElement('div');
@@ -52,16 +58,16 @@ function showToast(msg, anchor) {
 
 // i18n フォールバックヘルパ: t() がキー文字列をそのまま返した（未登録）場合に
 // fallback を返す。t()自体は key を確実に返す仕様なので、簡易判定で問題ない。
-function ti18n(key, fallback, vars) {
+export function ti18n(key, fallback, vars) {
   const v = window.t ? window.t(key, vars) : key;
   return (v === key && fallback != null) ? fallback : v;
 }
 
-function escapeHtml(str) {
+export function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-function formatStartedAt(isoStr) {
+export function formatStartedAt(isoStr) {
   if (!isoStr) return '';
   const d = new Date(isoStr);
   if (isNaN(d.getTime())) return '';
@@ -73,7 +79,7 @@ function formatStartedAt(isoStr) {
   return h > 0 ? `[${h}:${p(m)}:${p(s)}]` : `[${p(m)}:${p(s)}]`;
 }
 
-function formatLastOutputAt(isoStr) {
+export function formatLastOutputAt(isoStr) {
   if (!isoStr) return '';
   const d = new Date(isoStr);
   if (isNaN(d.getTime())) return '';
@@ -90,7 +96,7 @@ function formatLastOutputAt(isoStr) {
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}(${DOW[d.getDay()]}) ${time}`;
 }
 
-function cleanCopiedText(linesOrText) {
+export function cleanCopiedText(linesOrText) {
   const lines = Array.isArray(linesOrText)
     ? linesOrText.slice()
     : String(linesOrText || '').replace(/\r\n?/g, '\n').split('\n');
@@ -110,9 +116,12 @@ function cleanCopiedText(linesOrText) {
     .join('\n');
 }
 
-async function copyCleanText(linesOrText, anchor) {
+export async function copyCleanText(linesOrText, anchor) {
   const text = cleanCopiedText(linesOrText);
   if (!text) return;
   await navigator.clipboard.writeText(text);
   showToast(t('copied_to_clipboard'), anchor);
 }
+
+// --- ESM window-interop publish (generated; preserves dynamic window.* lookups) ---
+window.showToast = showToast;

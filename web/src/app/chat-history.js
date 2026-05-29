@@ -1,6 +1,16 @@
+// --- ESM imports (generated) ---
+import { escapeHtml, showToast, ti18n, token } from './util.js';
+import { activeSessionId, chatHistory, chatHistoryAutoCommitTimers, chatHistoryIdSeq, chatHistoryOutputBuffers, chatHistorySubs, sessions, terminals } from './state.js';
+import { _userAvatarUrl, _userDisplayName } from '../app.js';
+import { providerIconHtml, renderSessionList } from './session-list.js';
+import { showPathPopup } from './path-links.js';
+import { markTerminalManualScrollIntent, sendResize, updateScrollLockBtn } from './terminal.js';
+import { setActiveTab, updateChatCountBadge } from './settings.js';
+import { chatPane, openLightbox } from './attachments.js';
+
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
-function stripAnsiBasic(s) {
+export function stripAnsiBasic(s) {
   if (!s) return '';
   // CSI: ESC [ ... letter
   // OSC: ESC ] ... BEL or ESC \\
@@ -16,7 +26,7 @@ function stripAnsiBasic(s) {
 
 // D15: 軽い正規化（行頭末 trim / prompt prefix 除去 / 連続空行圧縮）。
 // コードブロック内（```...```）の trim はあえてしない。
-function normalizeChatText(raw) {
+export function normalizeChatText(raw) {
   if (!raw) return '';
   // [ANY-AI-CLI]...[/ANY-AI-CLI] ブロックを除去（承認マーカーはチャット履歴に表示しない）
   let s = raw.replace(/\[ANY-AI-CLI\][\s\S]*?\[\/ANY-AI-CLI\]/g, '');
@@ -42,13 +52,13 @@ function normalizeChatText(raw) {
   return out.join('\n').replace(/^\n+|\n+$/g, '');
 }
 
-function chatHistoryNextId(sid) {
+export function chatHistoryNextId(sid) {
   const next = (chatHistoryIdSeq.get(sid) || 0) + 1;
   chatHistoryIdSeq.set(sid, next);
   return next;
 }
 
-function chatHistoryNotify(sid, msg) {
+export function chatHistoryNotify(sid, msg) {
   const subs = chatHistorySubs.get(sid);
   if (!subs || subs.size === 0) return;
   for (const cb of subs) {
@@ -57,7 +67,7 @@ function chatHistoryNotify(sid, msg) {
   }
 }
 
-function pushMessage(sid, msg) {
+export function pushMessage(sid, msg) {
   if (sid === null || sid === undefined) return null;
   if (!chatHistory.has(sid)) chatHistory.set(sid, []);
   const arr = chatHistory.get(sid);
@@ -81,12 +91,12 @@ function pushMessage(sid, msg) {
   return entry;
 }
 
-function getMessages(sid) {
+export function getMessages(sid) {
   const arr = chatHistory.get(sid);
   return arr ? arr.slice() : [];
 }
 
-function subscribeChatHistory(sid, cb) {
+export function subscribeChatHistory(sid, cb) {
   if (typeof cb !== 'function') return () => {};
   if (!chatHistorySubs.has(sid)) chatHistorySubs.set(sid, new Set());
   const subs = chatHistorySubs.get(sid);
@@ -100,7 +110,7 @@ function subscribeChatHistory(sid, cb) {
   };
 }
 
-function chatHistoryAppendOutput(sid, raw) {
+export function chatHistoryAppendOutput(sid, raw) {
   if (sid === null || sid === undefined || !raw) return;
   let buf = chatHistoryOutputBuffers.get(sid);
   if (!buf) {
@@ -118,7 +128,7 @@ function chatHistoryAppendOutput(sid, raw) {
   }, 1500));
 }
 
-function chatHistoryCommitOutput(sid) {
+export function chatHistoryCommitOutput(sid) {
   const t = chatHistoryAutoCommitTimers.get(sid);
   if (t) { clearTimeout(t); chatHistoryAutoCommitTimers.delete(sid); }
   const buf = chatHistoryOutputBuffers.get(sid);
@@ -146,7 +156,7 @@ function chatHistoryCommitOutput(sid) {
 
 // マーカー検出専用の commit。msgs.length === 0 の場合はリプレイの先頭マーカーとみなし、
 // 起動バナーをバッファから捨てつつ空の user エントリを1件積んで以降の commit を解放する。
-function chatHistoryCommitOutputOrSeed(sid) {
+export function chatHistoryCommitOutputOrSeed(sid) {
   const msgs = chatHistory.get(sid);
   if (!msgs || msgs.length === 0) {
     const buf = chatHistoryOutputBuffers.get(sid);
@@ -157,7 +167,7 @@ function chatHistoryCommitOutputOrSeed(sid) {
   chatHistoryCommitOutput(sid);
 }
 
-function revokeChatHistoryAttachmentURLs(sid) {
+export function revokeChatHistoryAttachmentURLs(sid) {
   const msgs = chatHistory.get(sid);
   if (msgs) {
     for (const msg of msgs) {
@@ -174,7 +184,7 @@ function revokeChatHistoryAttachmentURLs(sid) {
   }
 }
 
-function onChatHistorySessionRemoved(sid) {
+export function onChatHistorySessionRemoved(sid) {
   const t = chatHistoryAutoCommitTimers.get(sid);
   if (t) { clearTimeout(t); chatHistoryAutoCommitTimers.delete(sid); }
   chatHistoryOutputBuffers.delete(sid);
@@ -188,7 +198,7 @@ function onChatHistorySessionRemoved(sid) {
   }
 }
 
-function resetChatHistoryForSession(sid) {
+export function resetChatHistoryForSession(sid) {
   const t = chatHistoryAutoCommitTimers.get(sid);
   if (t) { clearTimeout(t); chatHistoryAutoCommitTimers.delete(sid); }
   chatHistoryOutputBuffers.delete(sid);
@@ -199,7 +209,7 @@ function resetChatHistoryForSession(sid) {
   chatHistoryNotify(sid, null);
 }
 
-function resetAllChatHistory() {
+export function resetAllChatHistory() {
   const ids = new Set([
     ...chatHistory.keys(),
     ...chatHistoryOutputBuffers.keys(),
@@ -219,8 +229,8 @@ if (typeof window !== 'undefined') {
 }
 
 // チャット履歴の購読: バッジ更新用 (アクティブセッションだけ)
-let _activeChatSubUnsub = null;
-function rewireChatHistorySub(sid) {
+export let _activeChatSubUnsub = null;
+export function rewireChatHistorySub(sid) {
   if (_activeChatSubUnsub) { try { _activeChatSubUnsub(); } catch (_) {} _activeChatSubUnsub = null; }
   if (sid === null || sid === undefined) return;
   if (typeof window === 'undefined' || !window.chatHistoryAPI || typeof window.chatHistoryAPI.subscribe !== 'function') return;
@@ -279,11 +289,11 @@ window.addEventListener('load', function () {
 
 // ─── C2: バッファクリア機能 ──────────────────────────────────
 // マルチモード時の scrollback 上限（localStorage で変更可能）
-function MULTI_SCROLLBACK() {
+export function MULTI_SCROLLBACK() {
   return parseInt(localStorage.getItem('multiScrollback') ?? '150', 10);
 }
 
-function clearBuffer(session) {
+export function clearBuffer(session) {
   if (!session) return;
   // session はセッションオブジェクト。term は terminals Map から取得
   const t = session.id !== undefined ? terminals.get(session.id) : null;
@@ -333,31 +343,31 @@ function clearBuffer(session) {
 //   parseToolCallsFromOutput(text, provider) — provider 別ツール呼び出し抽出
 // =========================================================================
 
-let _chatPaneMountedSid = null;
-let _chatPaneRenderedMessageIds = new Set();
+export let _chatPaneMountedSid = null;
+export let _chatPaneRenderedMessageIds = new Set();
 
-function getChatPaneEl() {
+export function getChatPaneEl() {
   return document.getElementById('chat-pane');
 }
 
-function getChatTimelineEl() {
+export function getChatTimelineEl() {
   const pane = getChatPaneEl();
   if (!pane) return null;
   return pane.querySelector('.chat-timeline');
 }
 
-function chatPaneAtBottom(timeline) {
+export function chatPaneAtBottom(timeline) {
   if (!timeline) return true;
   const remain = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight;
   return remain < 60;
 }
 
-function scrollChatPaneToBottom(timeline) {
+export function scrollChatPaneToBottom(timeline) {
   if (!timeline) return;
   timeline.scrollTop = timeline.scrollHeight;
 }
 
-function scrollChatPaneToBottomSoon(opts = {}) {
+export function scrollChatPaneToBottomSoon(opts = {}) {
   const passes = Math.max(1, Number(opts.passes) || 1);
   const startedAt = opts.startedAt || Date.now();
   const run = (n) => {
@@ -372,7 +382,7 @@ function scrollChatPaneToBottomSoon(opts = {}) {
   requestAnimationFrame(() => run(0));
 }
 
-function getAiDisplayName(provider) {
+export function getAiDisplayName(provider) {
   switch (provider) {
     case 'claude':   return ti18n('chat_ai_name_claude', 'Claude');
     case 'codex':    return ti18n('chat_ai_name_codex', 'Codex');
@@ -382,7 +392,7 @@ function getAiDisplayName(provider) {
   }
 }
 
-function getAiAvatarLetter(provider) {
+export function getAiAvatarLetter(provider) {
   switch (provider) {
     case 'claude':   return 'C';
     case 'codex':    return 'X';
@@ -392,7 +402,7 @@ function getAiAvatarLetter(provider) {
   }
 }
 
-function getUserAvatarLetter() {
+export function getUserAvatarLetter() {
   if (_userDisplayName) {
     return [..._userDisplayName][0].toUpperCase();
   }
@@ -400,21 +410,21 @@ function getUserAvatarLetter() {
   return lang.startsWith('ja') ? 'あ' : 'Y';
 }
 
-function formatTimestamp(ts) {
+export function formatTimestamp(ts) {
   const d = (ts instanceof Date) ? ts : new Date(ts);
   if (Number.isNaN(d.getTime())) return '';
   const pad = (n) => String(n).padStart(2, '0');
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-function formatMsgNumber(id) {
+export function formatMsgNumber(id) {
   const n = Math.max(1, Number(id) || 1);
   return '#' + String(n).padStart(3, '0');
 }
 
 // テキスト中の URL / ファイルパス / インラインコード を DOM に変換する。
 // 戻り値は DocumentFragment（または Node 配列を返さず単体 Node にする）。
-function renderInlineText(text) {
+export function renderInlineText(text) {
   const frag = document.createDocumentFragment();
   if (!text) return frag;
   const src = String(text);
@@ -457,7 +467,7 @@ function renderInlineText(text) {
 }
 
 // プレーンテキストから URL とファイルパスを抽出し、frag に追加する。
-function _appendPlainWithLinks(frag, text) {
+export function _appendPlainWithLinks(frag, text) {
   if (!text) return;
   // URL: http(s)://...
   // path 候補:
@@ -514,7 +524,7 @@ function _appendPlainWithLinks(frag, text) {
 // Codex / 他: 同様パターンを暫定で適用（誤マッチは v2 で改善）。
 //
 // 戻り値: [{ name, args, body }, ...]  body は次のツール呼び出しまでの本文（任意）。
-function parseToolCallsFromOutput(text, _provider) {
+export function parseToolCallsFromOutput(text, _provider) {
   const calls = [];
   if (!text) return calls;
   const lines = String(text).split(/\r?\n/);
@@ -539,7 +549,7 @@ function parseToolCallsFromOutput(text, _provider) {
 }
 
 // AI メッセージ本文からツール呼び出し行を取り除いた残りテキストを返す。
-function stripToolCallLines(text) {
+export function stripToolCallLines(text) {
   if (!text) return '';
   const lines = String(text).split(/\r?\n/);
   const out = [];
@@ -558,7 +568,7 @@ function stripToolCallLines(text) {
 }
 
 // 1 メッセージの DOM を構築する。
-function renderMessageBubble(sid, msg) {
+export function renderMessageBubble(sid, msg) {
   const sess = (typeof sessions !== 'undefined' && sessions) ? sessions.get(sid) : null;
   const provider = (sess && sess.provider) || 'claude';
   const role = msg.role || 'system';
@@ -773,7 +783,7 @@ function renderMessageBubble(sid, msg) {
   return wrapEl;
 }
 
-function renderToolCall(tc) {
+export function renderToolCall(tc) {
   const wrap = document.createElement('div');
   wrap.className = 'tool-call';
 
@@ -814,7 +824,7 @@ function renderToolCall(tc) {
   return wrap;
 }
 
-function updateChatPaneEmptyState(sid) {
+export function updateChatPaneEmptyState(sid) {
   const pane = getChatPaneEl();
   if (!pane) return;
   let count = 0;
@@ -827,7 +837,7 @@ function updateChatPaneEmptyState(sid) {
 
 // アクティブセッションの chat-pane を完全再構築する。
 // セッション切替時 / モード切替で chat 系に入ったときに呼ぶ。
-function mountChatPaneForSession(sid) {
+export function mountChatPaneForSession(sid) {
   const pane = getChatPaneEl();
   const timeline = getChatTimelineEl();
   if (!pane || !timeline) return;
@@ -858,7 +868,7 @@ function mountChatPaneForSession(sid) {
 }
 
 // 1 メッセージの増分追加。subscribe コールバックから呼ばれる。
-function appendMessage(sid, msg) {
+export function appendMessage(sid, msg) {
   if (sid !== _chatPaneMountedSid) return;
   const timeline = getChatTimelineEl();
   if (!timeline) return;
@@ -880,8 +890,11 @@ function appendMessage(sid, msg) {
 // 既存 setActiveTab を wrap せず、毎回 mountChatPaneForSession を呼ぶ。
 // setActiveTab 自体は C2 のままに保ち、本ファイル末尾で chat/split に切り替わったときの
 // 副作用としてマウントを行う薄いラッパーを追加する。
-const _originalSetActiveTab_C3 = setActiveTab;
-setActiveTab = function (sid, name) {
+export const _originalSetActiveTab_C3 = setActiveTab;
+// NOTE: setActiveTab は settings.js からの import バインディング（読み取り専用）のため
+// 直接再代入できない（ESM 化で `Assignment to constant variable` になる）。
+// wrapper を別のローカル変数に保持し、window.setActiveTab 経由で全呼び出し元へ反映する。
+const _wrappedSetActiveTab_C3 = function (sid, name) {
   const ret = _originalSetActiveTab_C3.call(this, sid, name);
   try {
     const targetSid = (sid !== null && sid !== undefined) ? sid : activeSessionId;
@@ -903,7 +916,7 @@ setActiveTab = function (sid, name) {
   return ret;
 };
 if (typeof window !== 'undefined') {
-  window.setActiveTab = setActiveTab;
+  window.setActiveTab = _wrappedSetActiveTab_C3;
   window.mountChatPaneForSession = mountChatPaneForSession;
   window.appendChatMessage = appendMessage;
 }

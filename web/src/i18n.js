@@ -1,3 +1,7 @@
+// --- ESM late-bound i18n wrappers (generated; window.t is set by the IIFE below at runtime) ---
+export function t(...args) { return (typeof window.t === 'function') ? window.t(...args) : args[0]; }
+export function setLang(v) { return (typeof window.setLang === 'function') ? window.setLang(v) : undefined; }
+
 (async () => {
   const stored = localStorage.getItem('ai_cli_hub_lang');
   const lang = stored || (navigator.language || 'ja').slice(0, 2);

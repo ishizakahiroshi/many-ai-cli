@@ -1,29 +1,41 @@
+// --- ESM imports (generated) ---
+import { t } from '../i18n.js';
+import { showToast, token } from './util.js';
+import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, approvalVisibleCache, autoDismissTimers, deriveProjectKeyFromCwd, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, multiQuestionVisibleCache, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
+import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLocalSessionHistory, resetLocalSessionHistory } from '../app.js';
+import { activateSession, render, renderSessionList, renderSessionStateUpdate, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
+import { ensureTerminal, queuePendingTerminalChunk, writePTYChunk } from './terminal.js';
+import { checkApprovalOnStartup } from './settings.js';
+import { setMultiQuestionBannerVisible } from './approval-ui.js';
+import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, hideActionBar, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
+import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed } from './chat-history.js';
+
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
 // ---- WebSocket 自動再接続（指数バックオフ） ----
-let ws = null;
-let _wsIntentionalClose = false; // ページ遷移など意図的クローズ時は再接続しない
-let _wsRetryDelay = 500; // 初期バックオフ ms
-const _wsRetryMax = 10000; // 上限 ms
+export let ws = null;
+export let _wsIntentionalClose = false; // ページ遷移など意図的クローズ時は再接続しない
+export let _wsRetryDelay = 500; // 初期バックオフ ms
+export const _wsRetryMax = 10000; // 上限 ms
 
-function syncElapsedTimer() {
+export function syncElapsedTimer() {
   const shouldRun = !!(ws && ws.readyState === WebSocket.OPEN && activeSessionId !== null && !document.hidden);
   if (shouldRun) {
     if (!_elapsedTimerInterval) {
-      _elapsedTimerInterval = setInterval(() => updateMainTabStatus(), 1000);
+      set__elapsedTimerInterval(setInterval(() => updateMainTabStatus(), 1000));
     }
     updateMainTabStatus();
     return;
   }
   if (_elapsedTimerInterval) {
     clearInterval(_elapsedTimerInterval);
-    _elapsedTimerInterval = null;
+    set__elapsedTimerInterval(null);
   }
 }
 
 document.addEventListener('visibilitychange', syncElapsedTimer);
 
-function _sendRegister() {
+export function _sendRegister() {
   const area = document.getElementById('terminal-area');
   // clientWidth/Height が「ゼロではないが極小（レイアウト未確定 / 親が
   // display:none 直後など）」のときに `0 || 200` のフォールバックが効かず、
@@ -40,7 +52,7 @@ function _sendRegister() {
   ws.send(JSON.stringify({ type: 'register', role: 'ui', token, cols, rows, ui_active_session_id: activeSessionId || 0 }));
 }
 
-function sessionLayoutSnapshot(s) {
+export function sessionLayoutSnapshot(s) {
   if (!s) return '';
   return [
     s.provider || '',
@@ -61,16 +73,16 @@ function sessionLayoutSnapshot(s) {
   ].join('\x1f');
 }
 
-function _connectWs() {
+export function _connectWs() {
   const _ws = new WebSocket(`ws://${location.host}/ws`);
   ws = _ws;
   _ws.onerror = () => { document.getElementById('summary').textContent = t('ws_error'); };
   _ws.onclose = (e) => {
-    if (_elapsedTimerInterval) { clearInterval(_elapsedTimerInterval); _elapsedTimerInterval = null; }
+    if (_elapsedTimerInterval) { clearInterval(_elapsedTimerInterval); set__elapsedTimerInterval(null); }
     sessions.clear();
     autoDismissTimers.forEach(t => clearTimeout(t));
     autoDismissTimers.clear();
-    activeSessionId = null;
+    set_activeSessionId(null);
     updateShellBadge(null);
     updateTabNotification(0);
     const area = document.getElementById('terminal-area');
@@ -238,7 +250,7 @@ function _connectWs() {
     // 既存セッションの再登録（isNew=false）は位置を変えない
     addToSessionOrder(m.session_id, false);
     if (isNew && pendingAutoSwitch) {
-      pendingAutoSwitch = false;
+      set_pendingAutoSwitch(false);
       activateSession(m.session_id);
     }
   } else if (m.type === 'session_end') {

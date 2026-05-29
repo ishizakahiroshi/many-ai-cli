@@ -1,10 +1,15 @@
+// --- ESM imports (generated) ---
+import { inputEl } from '../app.js';
+import { render } from './session-list.js';
+import { termArea } from './terminal.js';
+
 // multi-pane.js — MultiPaneManager + GridPicker (C3: xterm マルチインスタンス + WS ルーティング)
 // index.html で app.js より前に読み込む
 
 'use strict';
 
 // ─── GridPicker ────────────────────────────────────────────────
-class GridPicker {
+export class GridPicker {
   constructor(manager) {
     this.manager = manager;
     this.popup   = document.getElementById('grid-picker-popup');
@@ -151,7 +156,7 @@ class GridPicker {
 }
 
 // ─── MultiPaneManager ──────────────────────────────────────────
-class MultiPaneManager {
+export class MultiPaneManager {
   constructor() {
     // localStorage から復元（デフォルト 2×2）
     const saved = this._loadLayout();

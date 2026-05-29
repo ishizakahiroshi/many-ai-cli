@@ -1,3 +1,10 @@
+// --- ESM imports (generated) ---
+import { t } from '../i18n.js';
+import { actionBarShownAt, activeSessionId, approvalRawOptionsCache, approvalSourceCache, approvalVisibleCache, enqueueApprovalAutoSwitch, lastActionBarRender, multiQuestionDismissedCache, multiQuestionVisibleCache, removeApprovalAutoSwitchTarget, set_actionBarFocusIdx, set_batchFocusIdx } from './state.js';
+import { playNotificationSound } from './settings.js';
+import { ws } from './ws-client.js';
+import { showActionBar } from './approval.js';
+
 // UI/cache adapter for approval detection. Parser code must not depend on this.
 (function (root) {
   'use strict';
@@ -45,8 +52,8 @@
     }
     lastActionBarRender.sessionId = null;
     lastActionBarRender.sig = null;
-    actionBarFocusIdx = -1;
-    batchFocusIdx = -1;
+    set_actionBarFocusIdx(-1);
+    set_batchFocusIdx(-1);
     if (activeSessionId != null) actionBarShownAt.delete(activeSessionId);
   }
 
@@ -94,3 +101,8 @@
   root.approvalUiAdapter = api;
   root.setMultiQuestionBannerVisible = setMultiQuestionBannerVisible;
 })(typeof window !== 'undefined' ? window : globalThis);
+
+// --- ESM re-exports from the IIFE-published approval UI adapter (generated) ---
+const __esmRoot = (typeof window !== 'undefined') ? window : globalThis;
+export const approvalUiAdapter = __esmRoot.approvalUiAdapter;
+export const setMultiQuestionBannerVisible = __esmRoot.setMultiQuestionBannerVisible;
