@@ -2,7 +2,6 @@ package hub
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,7 +9,7 @@ import (
 
 // gitShowFile は /api/git-show の各ファイル diff エントリ。
 type gitShowFile struct {
-	Status  string `json:"status"`  // A / M / D / R / C / T 等
+	Status  string `json:"status"` // A / M / D / R / C / T 等
 	Path    string `json:"path"`
 	Added   int    `json:"added"`
 	Removed int    `json:"removed"`
@@ -42,11 +41,7 @@ const (
 // handleGitShow は GET /api/git-show を処理する。
 // クエリ: session, token, hash
 func (s *Server) handleGitShow(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
-		return
-	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !s.guard(w, r, http.MethodGet) {
 		return
 	}
 
@@ -79,6 +74,7 @@ func (s *Server) handleGitShow(w http.ResponseWriter, r *http.Request) {
 	metaOut, err := runGit(ctx, cwd, "show", "-s", "--decorate=short",
 		"--pretty=format:"+gitShowMetaFormat, hash, "--")
 	if err != nil {
+		s.logger.Warn("git show metadata failed", "session_id", sid, "err", err)
 		writeGitError(w, http.StatusInternalServerError, "git_command_failed", sanitizeGitErrMsg(err))
 		return
 	}
@@ -91,6 +87,7 @@ func (s *Server) handleGitShow(w http.ResponseWriter, r *http.Request) {
 	// 2) ファイル一覧 (status + path)
 	nameOut, err := runGit(ctx, cwd, "show", "--name-status", "--pretty=format:", hash, "--")
 	if err != nil {
+		s.logger.Warn("git show names failed", "session_id", sid, "err", err)
 		writeGitError(w, http.StatusInternalServerError, "git_command_failed", sanitizeGitErrMsg(err))
 		return
 	}
@@ -131,8 +128,7 @@ func (s *Server) handleGitShow(w http.ResponseWriter, r *http.Request) {
 		Refs:        meta.refs,
 		Files:       files,
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	writeJSON(w, resp)
 }
 
 type gitShowMeta struct {

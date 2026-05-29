@@ -46,6 +46,7 @@ function activateSessionForMultiPane(id) {
   // チャット件数バッジ・セッション情報チップも更新
   if (typeof updateChatCountBadge === 'function') updateChatCountBadge();
   if (typeof renderSessionInfoChip === 'function') renderSessionInfoChip();
+  if (typeof syncElapsedTimer === 'function') syncElapsedTimer();
 }
 // multi-pane.js から参照できるよう window に公開
 window.activateSessionForMultiPane = activateSessionForMultiPane;
@@ -105,6 +106,7 @@ function activateSession(id) {
       : `#${id}`;
     FilesTabManager.updateSessionTabLabel(label);
   }
+  if (typeof syncElapsedTimer === 'function') syncElapsedTimer();
   const switchStartedAt = Date.now();
   scrollTerminalToBottomSoon(id, { force: true, passes: 4, startedAt: switchStartedAt });
   requestAnimationFrame(() => {
@@ -168,12 +170,9 @@ function providerIconHtml(provider, size = 16) {
   return `<svg ${base}><circle cx="8" cy="8" r="6" fill="#F3F4F6" stroke="#6B7280" stroke-width="2"/><text x="8" y="8" ${txt} fill="#6B7280">${letter}</text></svg>`;
 }
 
+// C9: 整列ロジックは state.js の orderSessions に集約。getOrderedSessions は後方互換の薄い委譲。
 function getOrderedSessions() {
-  const ordered = sessionOrder.filter(id => sessions.has(id)).map(id => sessions.get(id));
-  sessions.forEach((s) => { if (!sessionOrder.includes(s.id)) ordered.push(s); });
-  const starred = favorites.filter(id => sessions.has(id)).map(id => sessions.get(id));
-  const unstarred = ordered.filter(s => !favorites.includes(s.id));
-  return [...starred, ...unstarred];
+  return orderSessions();
 }
 
 function switchSessionByTab(shift) {
@@ -210,7 +209,7 @@ document.addEventListener('keydown', (e) => {
   if (!(n >= 1 && n <= 9)) return;
   const active = document.activeElement;
   const tag = active?.tagName;
-  const isOtherInput = (tag === 'INPUT' || tag === 'TEXTAREA') && active.id !== 'input-el';
+  const isOtherInput = (tag === 'INPUT' || tag === 'TEXTAREA') && active.id !== 'input';
   if (isOtherInput) return;
   e.preventDefault();
   jumpToSessionByIndex(n);
@@ -812,6 +811,7 @@ let _faviconCtx = null;
 let _faviconBaseImg = null;
 let _faviconBaseLoaded = false;
 let _faviconPendingCount = 0;
+let _faviconRenderedPendingCount = null;
 
 let _titleBlinkInterval = null;
 let _titleBlinkState = false;
@@ -844,13 +844,14 @@ function initFaviconCanvas() {
   _faviconBaseImg = new Image();
   _faviconBaseImg.onload = () => {
     _faviconBaseLoaded = true;
-    drawFavicon(_faviconPendingCount);
+    drawFavicon(_faviconPendingCount, true);
   };
   _faviconBaseImg.src = '/icon.svg';
 }
 
-function drawFavicon(pendingCount) {
+function drawFavicon(pendingCount, force = false) {
   initFaviconCanvas();
+  if (!force && _faviconRenderedPendingCount === pendingCount) return;
   const ctx = _faviconCtx;
   const SIZE = 32;
   ctx.clearRect(0, 0, SIZE, SIZE);
@@ -874,9 +875,11 @@ function drawFavicon(pendingCount) {
   if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
   link.type = 'image/png';
   link.href = _faviconCanvas.toDataURL('image/png');
+  _faviconRenderedPendingCount = pendingCount;
 }
 
 function updateTabNotification(pendingCount) {
+  const faviconChanged = _faviconPendingCount !== pendingCount;
   _faviconPendingCount = pendingCount;
 
   if (pendingCount > 0) {
@@ -886,7 +889,7 @@ function updateTabNotification(pendingCount) {
     document.title = 'ANY-AI-CLI';
   }
 
-  drawFavicon(pendingCount);
+  if (faviconChanged) drawFavicon(pendingCount);
 }
 
 let _summaryResizeObserver = null;
@@ -909,7 +912,7 @@ function updateSummaryCompactMode() {
   if (overflow) el.classList.add('summary--compact');
 }
 
-function render() {
+function renderSummaryAndNotifications() {
   const stateCounts = { running: 0, waiting: 0, standby: 0 };
   // groupKey -> { provider, model, isOllamaBacked, count }
   // Ollama backend sessions are split per-model so each model gets its own chip.
@@ -968,7 +971,75 @@ function render() {
   ensureSummaryResizeObserver();
   updateSummaryCompactMode();
   updateTabNotification(totalWaiting);
+}
 
+function sessionProjectKey(s) {
+  const cwdStr = s?.cwd || '';
+  const name = cwdStr
+    ? cwdStr.replace(/\\/g, '/').split('/').filter(p => p.length > 0).pop() || ''
+    : '';
+  return name || '__no_project__';
+}
+
+function updateProjectGroupStatusChipsForSession(s) {
+  const root = document.getElementById('sessions');
+  if (!root || !s) return false;
+  const key = sessionProjectKey(s);
+  const header = root.querySelector(`.project-group-header[data-project="${CSS.escape(key)}"]`);
+  const chipsEl = header ? header.querySelector('.group-status-chips') : null;
+  if (!chipsEl) return false;
+  const groupSessions = getOrderedSessions().filter(sess => sessionProjectKey(sess) === key);
+  const counts = { running: 0, waiting: 0, standby: 0 };
+  groupSessions.forEach(sess => {
+    const state = sess.state || 'standby';
+    if (state === 'running') counts.running++;
+    else if (state === 'waiting') counts.waiting++;
+    else counts.standby++;
+  });
+  const running = chipsEl.querySelector('.status-chip--running');
+  const waiting = chipsEl.querySelector('.status-chip--waiting');
+  const standby = chipsEl.querySelector('.status-chip--standby');
+  if (running) running.textContent = String(counts.running);
+  if (waiting) waiting.textContent = String(counts.waiting);
+  if (standby) standby.textContent = String(counts.standby);
+  return true;
+}
+
+function updateSessionCardStateInPlace(id) {
+  const root = document.getElementById('sessions');
+  const s = sessions.get(id);
+  if (!root || !s) return false;
+  const card = root.querySelector(`.card[data-session-id="${CSS.escape(String(id))}"]`);
+  if (!card) return false;
+  const state = s.state || 'standby';
+  card.classList.toggle('running', state === 'running');
+  card.classList.toggle('waiting', state === 'waiting');
+  card.classList.toggle('active', id === activeSessionId);
+  const badge = card.querySelector('.badge');
+  if (badge) {
+    badge.className = `badge ${state}`;
+    badge.textContent = stateLabel(state);
+  }
+  updateProjectGroupStatusChipsForSession(s);
+  return true;
+}
+
+function renderSessionStateUpdate(id) {
+  renderSummaryAndNotifications();
+  const updated = updateSessionCardStateInPlace(id);
+  updateMainTabStatus();
+  if (typeof syncElapsedTimer === 'function') syncElapsedTimer();
+  return updated;
+}
+
+function render() {
+  renderSummaryAndNotifications();
+
+  // C9: 初回アクティブ化の早期 return を明示。まだアクティブセッションが無く候補が
+  // 現れた場合、最初のセッションをアクティブ化してこのパスを終える。activateSession()
+  // 自身がアクティブカード描画（updateSessionListActiveCard）まで行うため、ここで
+  // renderSessionList() は呼ばない（フル描画は次の render() 呼び出しで追従する）。
+  // activateSession() は render() を再帰呼び出ししない（DOM を直接更新する）点に注意。
   if (activeSessionId === null && sessions.size > 0) {
     activateSession(sessions.keys().next().value);
     return;
@@ -982,4 +1053,5 @@ function render() {
     try { window.multiPaneManager.render(); }
     finally { window._c5SidebarUpdating = false; }
   }
+  if (typeof syncElapsedTimer === 'function') syncElapsedTimer();
 }

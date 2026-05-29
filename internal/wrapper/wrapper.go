@@ -29,6 +29,9 @@ const (
 	reconnectDialInterval = 2 * time.Second
 	replayBufferLimit     = 64 * 1024 // bytes of recent PTY output to replay on reconnect
 	hubProbeTimeout       = 1 * time.Second
+	hubStartupTimeout     = 10 * time.Second
+	hubStartupPoll        = 100 * time.Millisecond
+	processCloseGrace     = 2 * time.Second
 )
 
 // reconnectGrace returns the wrapper's grace period before giving up after Hub crash.
@@ -69,63 +72,97 @@ func (ws *wrapperSession) getSID() int {
 // sendMsg は現在の conn にメッセージを送信する。
 // 複数 goroutine から呼んでも sendMu で直列化される。
 func (ws *wrapperSession) sendMsg(m proto.Message) {
-	c := ws.getConn()
-	if c == nil {
-		return
-	}
 	ws.sendMu.Lock()
 	defer ws.sendMu.Unlock()
-	// Re-check conn identity under sendMu: a reconnect may have swapped it.
-	if cur := ws.getConn(); cur != c {
+
+	ws.stateMu.Lock()
+	c := ws.currentConn
+	ws.stateMu.Unlock()
+	if c == nil {
 		return
 	}
 	_ = websocket.JSON.Send(c, m)
 }
 
 func (ws *wrapperSession) swapConn(c *websocket.Conn, sid int) {
+	ws.sendMu.Lock()
+	defer ws.sendMu.Unlock()
+
+	var old *websocket.Conn
 	ws.stateMu.Lock()
-	defer ws.stateMu.Unlock()
 	if ws.currentConn != nil && ws.currentConn != c {
-		_ = ws.currentConn.Close()
+		old = ws.currentConn
 	}
 	ws.currentConn = c
 	if sid > 0 {
 		ws.currentSID = sid
 	}
+	ws.stateMu.Unlock()
+	if old != nil {
+		_ = old.Close()
+	}
 }
 
 func (ws *wrapperSession) clearConn(broken *websocket.Conn) {
+	ws.closeCurrentConn(broken)
+}
+
+func (ws *wrapperSession) closeCurrentConn(c *websocket.Conn) {
+	if c == nil {
+		return
+	}
+	ws.sendMu.Lock()
+	defer ws.sendMu.Unlock()
+
+	var closeConn *websocket.Conn
 	ws.stateMu.Lock()
-	defer ws.stateMu.Unlock()
-	if ws.currentConn == broken {
-		_ = ws.currentConn.Close()
+	if ws.currentConn == c {
+		closeConn = ws.currentConn
 		ws.currentConn = nil
+	}
+	ws.stateMu.Unlock()
+	if closeConn != nil {
+		_ = closeConn.Close()
+	}
+}
+
+func (ws *wrapperSession) closeAnyConn() {
+	ws.sendMu.Lock()
+	defer ws.sendMu.Unlock()
+
+	var old *websocket.Conn
+	ws.stateMu.Lock()
+	old = ws.currentConn
+	ws.currentConn = nil
+	ws.stateMu.Unlock()
+	if old != nil {
+		_ = old.Close()
 	}
 }
 
 // reconnectSupervisor は Hub WS 切断後の再接続ロジックを担う。
 // intentional / auto_shutdown / grace の 3 分岐を管理する。
 type reconnectSupervisor struct {
-	cfg                *config.Config
-	logger             *slog.Logger
-	ws                 *wrapperSession
-	ps                 processSession
-	provider           string
-	display            string
-	cwd                string
-	label              string
-	model              string
-	startedAtText      string
-	rawLogPath         string
-	jsonlPath          string
-	intentional        *atomic.Bool
-	done               <-chan struct{}
-	closeDone          func()
-	reconnectCh        <-chan struct{}
-	startReceiveLoop   func(c *websocket.Conn)
-	snapshotReplay     func() []byte
+	cfg              *config.Config
+	logger           *slog.Logger
+	ws               *wrapperSession
+	ps               processSession
+	provider         string
+	display          string
+	cwd              string
+	label            string
+	model            string
+	startedAtText    string
+	rawLogPath       string
+	jsonlPath        string
+	intentional      *atomic.Bool
+	done             <-chan struct{}
+	closeDone        func()
+	reconnectCh      <-chan struct{}
+	startReceiveLoop func(c *websocket.Conn)
+	snapshotReplay   func() []byte
 	// probeHub はテスト時に差し替えられる。nil の場合は probeHubAlive を使う。
-	probeHub           func(cfg *config.Config) bool
+	probeHub func(cfg *config.Config) bool
 }
 
 // run は reconnect supervisor のメインループ。goroutine として起動する。
@@ -254,14 +291,29 @@ func ptyPump(
 // ConPTY の制約として、text+\r を1チャンクで書くと \r が Enter でなく改行として
 // 処理される場合があるため、末尾の \r を delay 分だけ遅延させて別チャンクで送る。
 // data が1バイト以下、または末尾が \r でない場合はそのまま書き込む。
-func writeWithTrailingEnter(ps processSession, data []byte, delay time.Duration) {
-	if len(data) > 1 && data[len(data)-1] == '\r' {
-		_, _ = ps.Write(data[:len(data)-1])
-		time.Sleep(delay)
-		_, _ = ps.Write(data[len(data)-1:])
-	} else {
-		_, _ = ps.Write(data)
+func logPTYWriteError(logger *slog.Logger, sessionID int, op string, err error) {
+	if err != nil && logger != nil {
+		logger.Warn("pty write failed", "session_id", sessionID, "op", op, "err", err)
 	}
+}
+
+func writePTY(ps processSession, data []byte) error {
+	if len(data) == 0 {
+		return nil
+	}
+	_, err := ps.Write(data)
+	return err
+}
+
+func writeWithTrailingEnter(ps processSession, data []byte, delay time.Duration) error {
+	if len(data) > 1 && data[len(data)-1] == '\r' {
+		if err := writePTY(ps, data[:len(data)-1]); err != nil {
+			return err
+		}
+		time.Sleep(delay)
+		return writePTY(ps, data[len(data)-1:])
+	}
+	return writePTY(ps, data)
 }
 
 func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string) error {
@@ -453,12 +505,18 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 							// 旧形式の inject (@path\rtext\r) は互換のため分割する。
 							// 新形式 (@path text\r) は画像参照と本文を同じ入力行に残し、最後の Enter だけ分離する。
 							if idx := bytes.IndexByte(data, '\r'); idx >= 0 && idx < len(data)-1 {
-								writeWithTrailingEnter(ps, data[:idx+1], 150*time.Millisecond)
+								if err := writeWithTrailingEnter(ps, data[:idx+1], 150*time.Millisecond); err != nil {
+									logPTYWriteError(logger, wses.getSID(), "inject_path", err)
+								}
 								// ConPTY fix: text\r を1チャンクで書くと \r が Enter でなく改行扱いになる場合がある
 								rest := data[idx+1:]
-								writeWithTrailingEnter(ps, rest, 20*time.Millisecond)
+								if err := writeWithTrailingEnter(ps, rest, 20*time.Millisecond); err != nil {
+									logPTYWriteError(logger, wses.getSID(), "inject_text", err)
+								}
 							} else {
-								writeWithTrailingEnter(ps, data, 20*time.Millisecond)
+								if err := writeWithTrailingEnter(ps, data, 20*time.Millisecond); err != nil {
+									logPTYWriteError(logger, wses.getSID(), "inject", err)
+								}
 							}
 						} else if len(data) > 1 && data[len(data)-1] == '\r' {
 							// Windows ConPTY では text+\r を1チャンクで書き込むと
@@ -468,9 +526,13 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 							if provider == "codex" {
 								delay = 180 * time.Millisecond
 							}
-							writeWithTrailingEnter(ps, data, delay)
+							if err := writeWithTrailingEnter(ps, data, delay); err != nil {
+								logPTYWriteError(logger, wses.getSID(), "input_enter", err)
+							}
 						} else {
-							_, _ = ps.Write(data)
+							if err := writePTY(ps, data); err != nil {
+								logPTYWriteError(logger, wses.getSID(), "input", err)
+							}
 						}
 					}
 				case "pty_resize":
@@ -538,9 +600,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	}
 	wses.sendMsg(proto.Message{Type: "session_end", SessionID: wses.getSID(), State: state, ExitCode: code})
 	// Close the current conn after the final message is sent.
-	if c := wses.getConn(); c != nil {
-		_ = c.Close()
-	}
+	wses.closeAnyConn()
 	logger.Info("wrapper exit", "session_id", wses.getSID(), "state", state)
 	return waitErr
 }
@@ -641,6 +701,19 @@ func probeHubAlive(cfg *config.Config) bool {
 	return resp.StatusCode == http.StatusOK
 }
 
+func waitForHubReady(cfg *config.Config, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if probeHubAlive(cfg) {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(hubStartupPoll)
+	}
+}
+
 func ensureHub(cfg *config.Config) error {
 	// Hub にスポーンされた場合（ANY_AI_CLI=1）、Hub は既に動いている。
 	// 新 Hub を起動すると PID ファイル経由で実際の Hub が kill される危険があるため
@@ -648,12 +721,8 @@ func ensureHub(cfg *config.Config) error {
 	if os.Getenv("ANY_AI_CLI") == "1" {
 		return nil
 	}
-	u := fmt.Sprintf("http://127.0.0.1:%d/?token=%s", cfg.Hub.Port, cfg.Token)
-	if resp, err := http.Get(u); err == nil {
-		defer resp.Body.Close()
-		if resp.StatusCode == http.StatusOK {
-			return nil
-		}
+	if probeHubAlive(cfg) {
+		return nil
 	}
 	// 設定ポートが WSL 側 Hub など別プロセスに使用されている場合に備え、
 	// 実際にバインドできるポートを確認してから Hub を起動する。
@@ -668,7 +737,9 @@ func ensureHub(cfg *config.Config) error {
 	if err := serve.Start(); err != nil {
 		return err
 	}
-	time.Sleep(800 * time.Millisecond)
+	if !waitForHubReady(cfg, hubStartupTimeout) {
+		return fmt.Errorf("hub did not become ready on port %d within %s", cfg.Hub.Port, hubStartupTimeout)
+	}
 	return nil
 }
 

@@ -4,7 +4,13 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net"
 	"net/http"
+	"net/netip"
+	"net/url"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -16,28 +22,103 @@ const (
 )
 
 // newExternalHTTPClient は外部リソース取得用の http.Client を返す。
+// - 初回リクエストを含め https 以外は拒否
+// - IP リテラルが loopback/private/link-local の場合は拒否
 // - リダイレクトは最大 3 回まで
 // - https 以外へのリダイレクトは拒否（スキームダウングレード防止）
 func newExternalHTTPClient(timeout time.Duration) *http.Client {
 	return &http.Client{
-		Timeout: timeout,
+		Timeout:   timeout,
+		Transport: externalHTTPTransport{base: http.DefaultTransport},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 3 {
 				return errors.New("too many redirects")
 			}
-			if req.URL.Scheme != "https" {
-				return errors.New("non-https redirect blocked")
+			if err := validateExternalHTTPSURL(req.URL); err != nil {
+				return err
 			}
 			return nil
 		},
 	}
 }
 
+var makeExternalHTTPClient = newExternalHTTPClient
+
+type externalHTTPTransport struct {
+	base http.RoundTripper
+}
+
+func (t externalHTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if err := validateExternalHTTPSURL(req.URL); err != nil {
+		return nil, err
+	}
+	base := t.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base.RoundTrip(req)
+}
+
+func validateExternalHTTPSURL(u *url.URL) error {
+	if u == nil {
+		return errors.New("missing request URL")
+	}
+	if strings.ToLower(u.Scheme) != "https" {
+		return errors.New("non-https request blocked")
+	}
+	if isBlockedNetworkHost(u.Hostname()) {
+		return errors.New("private network host blocked")
+	}
+	return nil
+}
+
+func isBlockedNetworkHost(host string) bool {
+	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
+	if i := strings.LastIndex(host, "%"); i >= 0 {
+		host = host[:i]
+	}
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	addr = addr.Unmap()
+	return addr.IsUnspecified() ||
+		addr.IsLoopback() ||
+		addr.IsPrivate() ||
+		addr.IsLinkLocalUnicast() ||
+		addr.IsLinkLocalMulticast() ||
+		addr.IsMulticast()
+}
+
+func validToken(got, want string) bool {
+	if got == "" || want == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
+}
+
+func requestToken(r *http.Request) string {
+	if got := r.URL.Query().Get("token"); got != "" {
+		return got
+	}
+	auth := strings.TrimSpace(r.Header.Get("Authorization"))
+	if token, ok := strings.CutPrefix(auth, "Bearer "); ok {
+		return strings.TrimSpace(token)
+	}
+	return ""
+}
+
 func (s *Server) requireToken(w http.ResponseWriter, r *http.Request) bool {
-	// crypto/subtle.ConstantTimeCompare でタイミング攻撃を防ぐ。
-	got := r.URL.Query().Get("token")
-	if subtle.ConstantTimeCompare([]byte(got), []byte(s.cfg.Token)) != 1 {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !validToken(requestToken(r), s.cfg.Token) {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
+		return false
+	}
+	return true
+}
+
+func (s *Server) requireProvidedToken(w http.ResponseWriter, got string) bool {
+	if !validToken(got, s.cfg.Token) {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
 		return false
 	}
 	return true
@@ -45,21 +126,142 @@ func (s *Server) requireToken(w http.ResponseWriter, r *http.Request) bool {
 
 func requireMethod(w http.ResponseWriter, r *http.Request, method string) bool {
 	if r.Method != method {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return false
 	}
 	return true
 }
 
+func requireMethodOneOf(w http.ResponseWriter, r *http.Request, methods ...string) bool {
+	for _, method := range methods {
+		if r.Method == method {
+			return true
+		}
+	}
+	writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+	return false
+}
+
+func (s *Server) guard(w http.ResponseWriter, r *http.Request, methods ...string) bool {
+	if !s.requireToken(w, r) {
+		return false
+	}
+	if len(methods) > 0 && !requireMethodOneOf(w, r, methods...) {
+		return false
+	}
+	if methodRequiresHostCheck(r.Method) && !s.requireAllowedHost(w, r) {
+		return false
+	}
+	return true
+}
+
+func methodRequiresHostCheck(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return false
+	default:
+		return true
+	}
+}
+
+func (s *Server) requireAllowedHost(w http.ResponseWriter, r *http.Request) bool {
+	s.cfgMu.Lock()
+	port := s.cfg.Hub.Port
+	s.cfgMu.Unlock()
+	if isAllowedHubHost(r.Host, port) {
+		return true
+	}
+	writeJSONError(w, http.StatusForbidden, "forbidden", "host not allowed")
+	return false
+}
+
+func isAllowedHubHost(hostport string, port int) bool {
+	hostport = strings.TrimSpace(hostport)
+	if hostport == "" {
+		return port <= 0
+	}
+	host, rawPort, err := net.SplitHostPort(hostport)
+	if err != nil {
+		host = strings.Trim(hostport, "[]")
+		rawPort = ""
+	}
+	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
+	if host != "127.0.0.1" && host != "localhost" && host != "::1" {
+		return false
+	}
+	if port <= 0 || rawPort == "" {
+		return true
+	}
+	gotPort, err := strconv.Atoi(rawPort)
+	return err == nil && gotPort == port
+}
+
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid json")
 		return false
 	}
 	return true
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
+	writeJSONStatus(w, http.StatusOK, v)
+}
+
+func writeJSONStatus(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
+	if status != http.StatusOK {
+		w.WriteHeader(status)
+	}
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+type httpErrorResp struct {
+	OK     bool   `json:"ok"`
+	Error  string `json:"error"`
+	Detail string `json:"detail,omitempty"`
+}
+
+func writeJSONError(w http.ResponseWriter, status int, code, detail string) {
+	if code == "" {
+		code = "error"
+	}
+	if detail == "" {
+		detail = http.StatusText(status)
+	}
+	writeJSONStatus(w, status, httpErrorResp{
+		OK:     false,
+		Error:  code,
+		Detail: detail,
+	})
+}
+
+func httpErrorCode(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "bad_request"
+	case http.StatusUnauthorized:
+		return "unauthorized"
+	case http.StatusForbidden:
+		return "forbidden"
+	case http.StatusNotFound:
+		return "not_found"
+	case http.StatusMethodNotAllowed:
+		return "method_not_allowed"
+	default:
+		if status >= 500 {
+			return "internal_error"
+		}
+		return "error"
+	}
+}
+
+func errorDetail(prefix string, err error) string {
+	if err == nil {
+		return prefix
+	}
+	if prefix == "" {
+		return err.Error()
+	}
+	return fmt.Sprintf("%s: %v", prefix, err)
 }

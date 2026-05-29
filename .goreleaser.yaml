@@ -2,6 +2,19 @@ version: 2
 
 project_name: any-ai-cli
 
+# Windows リソース (.syso) はタグ版数で都度生成する。git に commit 済みの
+# .syso に依存せず、リリースごとに {{.Version}} を winres に焼き込むことで
+# exe のファイルプロパティ (FileVersion/ProductVersion) をタグへ自動追従させる。
+# 前提:
+#   - .syso は .gitignore 済み・git 追跡外（追跡したままだと生成でツリーが汚れ
+#     goreleaser のクリーンツリー検証に失敗する）。
+#   - go-winres は before hooks で都度 install するため CI に事前準備は不要。
+before:
+  hooks:
+    - go install github.com/tc-hib/go-winres@latest
+    - go-winres make --in winres/winres.json --out cmd/any-ai-cli/rsrc --product-version={{ .Version }} --file-version={{ .Version }}
+    - go-winres make --in winres/winres-wsl.json --out cmd/any-ai-cli-wsl/rsrc --product-version={{ .Version }} --file-version={{ .Version }}
+
 builds:
   - id: any-ai-cli
     main: ./cmd/any-ai-cli
@@ -37,7 +50,7 @@ builds:
 
 archives:
   - id: default
-    format: zip
+    formats: [zip]
     # Windows だけ any-ai-cli.exe + any-ai-cli-wsl.exe の 2 本、他 OS は 1 本。
     # platform 間でバイナリ数が異なる構成を許可する。
     allow_different_binary_count: true

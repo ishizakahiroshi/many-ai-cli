@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/creack/pty"
 )
@@ -16,15 +17,17 @@ type ptyProcess struct {
 	f         *os.File
 	cmd       *exec.Cmd
 	closeOnce sync.Once
+	waitOnce  sync.Once
+	waitDone  chan struct{}
+	waitErr   error
 }
 
 func (p *ptyProcess) Read(b []byte) (int, error)  { return p.f.Read(b) }
 func (p *ptyProcess) Write(b []byte) (int, error) { return p.f.Write(b) }
 
-// Close is idempotent: the first call signals the child process (SIGTERM then
-// SIGKILL) and closes the PTY master file descriptor. Subsequent calls are
-// no-ops. This prevents double-close panics when multiple goroutines (reconnect
-// supervisor, PTY output loop) both attempt shutdown.
+// Close is idempotent: the first call asks the child to exit, closes the PTY
+// master, then escalates to SIGKILL only if Wait does not complete within the
+// grace period. Subsequent calls are no-ops.
 func (p *ptyProcess) Close() error {
 	var err error
 	p.closeOnce.Do(func() {
@@ -34,8 +37,18 @@ func (p *ptyProcess) Close() error {
 			_ = p.cmd.Process.Signal(syscall.SIGTERM)
 		}
 		err = p.f.Close()
-		if p.cmd != nil && p.cmd.Process != nil {
-			_ = p.cmd.Process.Kill()
+
+		done := make(chan struct{})
+		go func() {
+			_ = p.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(processCloseGrace):
+			if p.cmd != nil && p.cmd.Process != nil {
+				_ = p.cmd.Process.Kill()
+			}
 		}
 	})
 	return err
@@ -43,7 +56,16 @@ func (p *ptyProcess) Close() error {
 
 // Wait waits for the child process to exit. Kill errors (process already gone)
 // are expected and can be safely ignored by callers.
-func (p *ptyProcess) Wait() error { return p.cmd.Wait() }
+func (p *ptyProcess) Wait() error {
+	p.waitOnce.Do(func() {
+		defer close(p.waitDone)
+		if p.cmd != nil {
+			p.waitErr = p.cmd.Wait()
+		}
+	})
+	<-p.waitDone
+	return p.waitErr
+}
 
 func (p *ptyProcess) Resize(cols, rows uint16) error {
 	return pty.Setsize(p.f, &pty.Winsize{Rows: rows, Cols: cols})
@@ -65,5 +87,5 @@ func startProcess(provider string, args []string, cwd string, cols, rows int) (p
 	if err != nil {
 		return nil, fmt.Errorf("pty start %s: %w", provider, err)
 	}
-	return &ptyProcess{f: f, cmd: cmd}, nil
+	return &ptyProcess{f: f, cmd: cmd, waitDone: make(chan struct{})}, nil
 }

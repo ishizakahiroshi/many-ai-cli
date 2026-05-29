@@ -157,13 +157,35 @@ function chatHistoryCommitOutputOrSeed(sid) {
   chatHistoryCommitOutput(sid);
 }
 
+function revokeChatHistoryAttachmentURLs(sid) {
+  const msgs = chatHistory.get(sid);
+  if (msgs) {
+    for (const msg of msgs) {
+      if (msg.kind === 'attach' && Array.isArray(msg.attachments)) {
+        for (const a of msg.attachments) {
+          if (a.url && a.url.startsWith('blob:')) {
+            try { URL.revokeObjectURL(a.url); } catch (_) {}
+            a.revoked = true;
+            a.url = null;
+          }
+        }
+      }
+    }
+  }
+}
+
 function onChatHistorySessionRemoved(sid) {
   const t = chatHistoryAutoCommitTimers.get(sid);
   if (t) { clearTimeout(t); chatHistoryAutoCommitTimers.delete(sid); }
   chatHistoryOutputBuffers.delete(sid);
+  revokeChatHistoryAttachmentURLs(sid);
   chatHistory.delete(sid);
   chatHistorySubs.delete(sid);
   chatHistoryIdSeq.delete(sid);
+  if (_chatPaneMountedSid === sid) {
+    _chatPaneMountedSid = null;
+    _chatPaneRenderedMessageIds = new Set();
+  }
 }
 
 function resetChatHistoryForSession(sid) {
@@ -171,16 +193,7 @@ function resetChatHistoryForSession(sid) {
   if (t) { clearTimeout(t); chatHistoryAutoCommitTimers.delete(sid); }
   chatHistoryOutputBuffers.delete(sid);
   // attach メッセージの object URL を解放する
-  const msgs = chatHistory.get(sid);
-  if (msgs) {
-    for (const msg of msgs) {
-      if (msg.kind === 'attach' && Array.isArray(msg.attachments)) {
-        for (const a of msg.attachments) {
-          if (a.url && a.url.startsWith('blob:')) { try { URL.revokeObjectURL(a.url); } catch (_) {} }
-        }
-      }
-    }
-  }
+  revokeChatHistoryAttachmentURLs(sid);
   chatHistory.delete(sid);
   chatHistoryIdSeq.delete(sid);
   chatHistoryNotify(sid, null);
@@ -226,23 +239,8 @@ if (typeof window !== 'undefined') {
   window.setActiveTab = setActiveTab;
   // C5: renderSessionList を multi-pane.js から呼び出せるよう公開（P<n> バッジ更新用）
   window.renderSessionList = renderSessionList;
-  // getSortedSessions: multi-pane.js から呼び出せるよう公開
-  // C5: ★グループ（favorites）を先頭に、非★グループ（sessionOrder 順）を後に並べる
-  // sessions は app.js スコープの const なのでここで window に公開する
-  window.getSortedSessions = function () {
-    // ★グループ: favorites 配列の順序で並ぶ
-    const starredList = favorites
-      .filter(id => sessions.has(id))
-      .map(id => sessions.get(id));
-    // 非★グループ: sessionOrder の順序で並ぶ（favorites に含まれないもの）
-    const orderedIds = sessionOrder.filter(id => sessions.has(id) && !favorites.includes(id));
-    // sessionOrder に含まれていないセッション（新規など）は末尾に追加
-    sessions.forEach((s) => {
-      if (!favorites.includes(s.id) && !orderedIds.includes(s.id)) orderedIds.push(s.id);
-    });
-    const nonStarredList = orderedIds.map(id => sessions.get(id));
-    return [...starredList, ...nonStarredList];
-  };
+  // C9: getSortedSessions の整列ロジックは state.js の orderSessions に集約済み
+  // （window.getSortedSessions エイリアスも state.js で定義）。
   // C3: multi-pane.js の attachToSlot から terminals / sendResize にアクセスするための公開
   window.getTerminalEntry = function (id) { return terminals.get(id); };
   window.sendResize = sendResize;
@@ -336,6 +334,7 @@ function clearBuffer(session) {
 // =========================================================================
 
 let _chatPaneMountedSid = null;
+let _chatPaneRenderedMessageIds = new Set();
 
 function getChatPaneEl() {
   return document.getElementById('chat-pane');
@@ -745,7 +744,10 @@ function renderMessageBubble(sid, msg) {
         img.src = a.url;
         img.alt = a.filename || '';
         img.style.cursor = 'pointer';
-        img.addEventListener('click', () => openLightbox(img.src));
+        img.addEventListener('click', () => {
+          if (!a.url || a.revoked) return;
+          openLightbox(a.url);
+        });
         thumb.appendChild(img);
       } else {
         const icn = document.createElement('span');
@@ -833,6 +835,7 @@ function mountChatPaneForSession(sid) {
   while (timeline.firstChild) timeline.removeChild(timeline.firstChild);
   timeline.dataset.sid = sid != null ? String(sid) : '';
   _chatPaneMountedSid = (sid !== null && sid !== undefined) ? sid : null;
+  _chatPaneRenderedMessageIds = new Set();
   if (sid === null || sid === undefined) {
     updateChatPaneEmptyState(sid);
     return;
@@ -841,6 +844,7 @@ function mountChatPaneForSession(sid) {
   try { msgs = getMessages(sid) || []; } catch (_) {}
   const frag = document.createDocumentFragment();
   for (const m of msgs) {
+    _chatPaneRenderedMessageIds.add(String(m.id));
     frag.appendChild(renderMessageBubble(sid, m));
   }
   timeline.appendChild(frag);
@@ -860,7 +864,9 @@ function appendMessage(sid, msg) {
   if (!timeline) return;
   const wasAtBottom = chatPaneAtBottom(timeline);
   // 既に同 id がある場合は skip（重複防止）
-  if (timeline.querySelector(`.msg[data-msg-id="${CSS.escape(String(msg.id))}"]`)) return;
+  const msgId = String(msg.id);
+  if (_chatPaneRenderedMessageIds.has(msgId)) return;
+  _chatPaneRenderedMessageIds.add(msgId);
   timeline.appendChild(renderMessageBubble(sid, msg));
   updateChatPaneEmptyState(sid);
   // C4: 増分のフィルタ/検索/ミニマップ更新
@@ -1231,7 +1237,7 @@ if (typeof window !== 'undefined') {
     const pane = chatPane();
     if (!tl || !pane) return;
     const bar = pane.querySelector('.chat-filter-bar');
-    const counts = { all: 0, user: 0, ai: 0, image: 0, approval: 0 };
+    const counts = { all: 0, user: 0, ai: 0, attach: 0, approval: 0 };
     const q = String(_searchQuery || '').toLowerCase();
     _searchHits = [];
     const msgs = tl.querySelectorAll('.msg');

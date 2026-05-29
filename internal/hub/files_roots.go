@@ -1,7 +1,6 @@
 package hub
 
 import (
-	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -23,11 +22,7 @@ type filesRootsResp struct {
 // handleFilesRoots は GET /api/files-roots を処理する。
 // ?session=<id>&token=<token> 必須（session は省略可: Hub cwd を使用）。
 func (s *Server) handleFilesRoots(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
-		return
-	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !s.guard(w, r, http.MethodGet) {
 		return
 	}
 
@@ -45,8 +40,7 @@ func (s *Server) handleFilesRoots(w http.ResponseWriter, r *http.Request) {
 		Candidates: candidates,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	writeJSON(w, resp)
 }
 
 // buildFilesCandidates は gitRoot 直下の標準的なファイルディレクトリを候補として返す。

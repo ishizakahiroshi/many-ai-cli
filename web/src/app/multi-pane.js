@@ -717,25 +717,9 @@ class MultiPaneManager {
 }
 
 // ─── グローバル公開 ────────────────────────────────────────────
-// C5: app.js の favorites/sessionOrder ベースで ★グループ先頭・非★グループ後に並べる関数。
-// app.js のロード後に app.js 内の定義で上書きされる（app.js はこのファイルより後にロード）。
-// このフォールバックは app.js ロード前の呼び出しに備えたもの。
-window.getSortedSessions = function () {
-  if (typeof sessions === 'undefined') return [];
-  // favorites / sessionOrder が未定義の場合は id 昇順にフォールバック
-  if (typeof favorites === 'undefined' || typeof sessionOrder === 'undefined') {
-    return Array.from(sessions.values()).sort((a, b) => a.id - b.id);
-  }
-  const starredList = favorites
-    .filter(id => sessions.has(id))
-    .map(id => sessions.get(id));
-  const orderedIds = sessionOrder.filter(id => sessions.has(id) && !favorites.includes(id));
-  sessions.forEach((s) => {
-    if (!favorites.includes(s.id) && !orderedIds.includes(s.id)) orderedIds.push(s.id);
-  });
-  const nonStarredList = orderedIds.map(id => sessions.get(id));
-  return [...starredList, ...nonStarredList];
-};
+// C9: getSortedSessions のフォールバック定義は撤去。整列ロジックは state.js の
+// orderSessions に集約され、state.js は本ファイルより前にロードされるため
+// window.getSortedSessions は常に解決される（state.js でエイリアス定義済み）。
 
 // スクリプトは </body> 直前に配置されるため DOM は既に存在する。
 // app.js より前に読み込まれるため、ここでインスタンスを生成して window に公開する。

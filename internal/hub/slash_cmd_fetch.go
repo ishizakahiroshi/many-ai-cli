@@ -3,10 +3,14 @@ package hub
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
+
+	"any-ai-cli/internal/config"
 )
 
 // SlashCmd はスラッシュコマンドの名前と説明。
@@ -42,6 +46,10 @@ var (
 	// 残った半端な括弧／角括弧の組
 	mdStrayBracketRe = regexp.MustCompile(`\[[^\]]*\]|\([^)]*\)`)
 	wsRe             = regexp.MustCompile(`\s+`)
+
+	slashCmdRemoteHostAllowlist = map[string]bool{
+		"raw.githubusercontent.com": true,
+	}
 )
 
 // cleanDescMarkdown は description から markdown 装飾を除去してプレーン化する。
@@ -85,11 +93,58 @@ func fetchAndParseSlashCmds(source string) ([]SlashCmd, error) {
 
 const slashCmdLocalMaxBytes = 2 << 20 // 2MB
 
+func validateSlashCmdSource(source string) error {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return nil
+	}
+	if strings.Contains(source, "://") {
+		u, err := url.Parse(source)
+		if err != nil || u.Hostname() == "" {
+			return fmt.Errorf("invalid URL")
+		}
+		if strings.ToLower(u.Scheme) != "https" {
+			return fmt.Errorf("URL scheme must be https")
+		}
+		host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+		if isBlockedNetworkHost(host) {
+			return fmt.Errorf("URL host is not allowed")
+		}
+		if !slashCmdRemoteHostAllowlist[host] {
+			return fmt.Errorf("URL host %q is not allowed", host)
+		}
+		if u.User != nil {
+			return fmt.Errorf("URL credentials are not allowed")
+		}
+		return nil
+	}
+
+	if !filepath.IsAbs(source) {
+		return fmt.Errorf("local source path must be absolute")
+	}
+	cfgDir, err := config.Dir()
+	if err != nil {
+		return err
+	}
+	allowed, err := isPathUnderAllowedRoots(source, cfgDir)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return fmt.Errorf("local source path must be under %s", cfgDir)
+	}
+	return nil
+}
+
 func readSlashCmdSource(source string) ([]byte, error) {
+	source = strings.TrimSpace(source)
 	if source == "" {
 		return nil, fmt.Errorf("source is empty")
 	}
-	if !strings.HasPrefix(source, "http://") && !strings.HasPrefix(source, "https://") {
+	if err := validateSlashCmdSource(source); err != nil {
+		return nil, err
+	}
+	if !strings.Contains(source, "://") {
 		// ローカルファイル: サイズ上限 + ディレクトリ/デバイス拒否
 		info, err := os.Stat(source)
 		if err != nil {
@@ -105,7 +160,7 @@ func readSlashCmdSource(source string) ([]byte, error) {
 		defer f.Close()
 		return io.ReadAll(io.LimitReader(f, slashCmdLocalMaxBytes))
 	}
-	client := newExternalHTTPClient(15 * time.Second)
+	client := makeExternalHTTPClient(15 * time.Second)
 	resp, err := client.Get(source)
 	if err != nil {
 		return nil, err

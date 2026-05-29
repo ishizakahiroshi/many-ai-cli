@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	gopty "github.com/aymanbagabas/go-pty"
 )
@@ -17,20 +18,32 @@ type conPtyProcess struct {
 	pty       gopty.Pty
 	cmd       *gopty.Cmd
 	closeOnce sync.Once
+	waitOnce  sync.Once
+	waitDone  chan struct{}
+	waitErr   error
 }
 
 func (p *conPtyProcess) Read(b []byte) (int, error)  { return p.pty.Read(b) }
 func (p *conPtyProcess) Write(b []byte) (int, error) { return p.pty.Write(b) }
 
-// Close is idempotent: the first call closes the PTY master and kills the child
-// process; subsequent calls are no-ops. This prevents double-kill errors when
-// the reconnect supervisor and the PTY output loop both try to shut down.
+// Close is idempotent: the first call closes the PTY master, then kills the
+// child only if Wait does not complete within the grace period.
 func (p *conPtyProcess) Close() error {
 	var err error
 	p.closeOnce.Do(func() {
 		err = p.pty.Close()
-		if p.cmd != nil && p.cmd.Process != nil {
-			_ = p.cmd.Process.Kill()
+
+		done := make(chan struct{})
+		go func() {
+			_ = p.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(processCloseGrace):
+			if p.cmd != nil && p.cmd.Process != nil {
+				_ = p.cmd.Process.Kill()
+			}
 		}
 	})
 	return err
@@ -38,7 +51,16 @@ func (p *conPtyProcess) Close() error {
 
 // Wait waits for the child process to exit. Errors from Kill (e.g. process
 // already exited) are expected and can be safely ignored by callers.
-func (p *conPtyProcess) Wait() error { return p.cmd.Wait() }
+func (p *conPtyProcess) Wait() error {
+	p.waitOnce.Do(func() {
+		defer close(p.waitDone)
+		if p.cmd != nil {
+			p.waitErr = p.cmd.Wait()
+		}
+	})
+	<-p.waitDone
+	return p.waitErr
+}
 func (p *conPtyProcess) Resize(cols, rows uint16) error {
 	return p.pty.Resize(int(cols), int(rows))
 }
@@ -65,7 +87,7 @@ func startProcess(provider string, args []string, cwd string, cols, rows int) (p
 		return nil, fmt.Errorf("start %s: %w", provider, err)
 	}
 
-	return &conPtyProcess{pty: pt, cmd: cmd}, nil
+	return &conPtyProcess{pty: pt, cmd: cmd, waitDone: make(chan struct{})}, nil
 }
 
 func resolveCmd(provider string, args []string) (string, []string) {

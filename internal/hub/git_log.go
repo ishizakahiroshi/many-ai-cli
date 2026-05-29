@@ -2,7 +2,6 @@ package hub
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -45,11 +44,7 @@ const (
 // クエリ: session, token, ref (default=HEAD), limit (default=100), skip (default=0)
 // ref=--all は `git log --all` として扱う。
 func (s *Server) handleGitLog(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
-		return
-	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !s.guard(w, r, http.MethodGet) {
 		return
 	}
 
@@ -125,6 +120,7 @@ func (s *Server) handleGitLog(w http.ResponseWriter, r *http.Request) {
 	)
 	out, err := runGit(ctx, cwd, args...)
 	if err != nil {
+		s.logger.Warn("git log failed", "session_id", sid, "err", err)
 		writeGitError(w, http.StatusInternalServerError, "git_command_failed", sanitizeGitErrMsg(err))
 		return
 	}
@@ -155,8 +151,7 @@ func (s *Server) handleGitLog(w http.ResponseWriter, r *http.Request) {
 		Skip:     skip,
 		HasMore:  hasMore,
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	writeJSON(w, resp)
 }
 
 // parseGitLog は gitLogPrettyFormat 出力をパースして gitLogCommit スライスを返す。

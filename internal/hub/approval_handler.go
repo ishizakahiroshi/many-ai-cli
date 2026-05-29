@@ -1,7 +1,6 @@
 package hub
 
 import (
-	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -58,71 +57,56 @@ func (s *Server) removeApprovalRules() {
 }
 
 func (s *Server) handleApprovalStatus(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
+	if !s.guard(w, r, http.MethodGet) {
 		return
 	}
-	s.mu.Lock()
+	s.cfgMu.Lock()
 	enabled := s.cfg.Approval.Enabled
 	firstLaunchShown := s.cfg.Approval.FirstLaunchShown
-	s.mu.Unlock()
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]bool{
+	s.cfgMu.Unlock()
+	writeJSON(w, map[string]bool{
 		"enabled":            enabled,
 		"first_launch_shown": firstLaunchShown,
 	})
 }
 
 func (s *Server) handleApprovalEnable(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
-	if !s.requireToken(w, r) {
-		return
-	}
-	s.mu.Lock()
+	s.cfgMu.Lock()
 	s.cfg.Approval.Enabled = true
 	s.cfg.Approval.FirstLaunchShown = true
-	s.mu.Unlock()
+	s.cfgMu.Unlock()
 	s.injectApprovalRules()
 	if err := s.persistConfig(); err != nil {
 		s.logger.Warn("save config failed", "err", err)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	writeJSON(w, map[string]bool{"ok": true})
 }
 
 func (s *Server) handleApprovalDisable(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
-	if !s.requireToken(w, r) {
-		return
-	}
-	s.mu.Lock()
+	s.cfgMu.Lock()
 	s.cfg.Approval.Enabled = false
-	s.mu.Unlock()
+	s.cfgMu.Unlock()
 	s.removeApprovalRules()
 	if err := s.persistConfig(); err != nil {
 		s.logger.Warn("save config failed", "err", err)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	writeJSON(w, map[string]bool{"ok": true})
 }
 
 // handleApprovalDismiss は初回トーストを「後で」で閉じた際に first_launch_shown をマークする
 func (s *Server) handleApprovalDismiss(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
-	if !s.requireToken(w, r) {
-		return
-	}
-	s.mu.Lock()
+	s.cfgMu.Lock()
 	s.cfg.Approval.FirstLaunchShown = true
-	s.mu.Unlock()
+	s.cfgMu.Unlock()
 	if err := s.persistConfig(); err != nil {
 		s.logger.Warn("save config failed", "err", err)
 	}

@@ -26,10 +26,8 @@ func DetectShell() string {
 
 	switch runtime.GOOS {
 	case "linux":
-		if b, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", ppid)); err == nil {
-			if name := strings.TrimSpace(string(b)); name != "" {
-				return name
-			}
+		if name := detectLinuxParentShell(ppid); name != "" {
+			return name
 		}
 	case "darwin":
 		out, err := exec.Command("ps", "-p", strconv.Itoa(ppid), "-o", "comm=").Output()
@@ -47,4 +45,24 @@ func DetectShell() string {
 		return filepath.Base(shell)
 	}
 	return ""
+}
+
+func detectLinuxParentShell(ppid int) string {
+	var comm string
+	if b, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", ppid)); err == nil {
+		comm = strings.TrimLeft(strings.TrimSpace(string(b)), "-")
+		if comm != "" && len(comm) < 15 {
+			return comm
+		}
+	}
+	if b, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", ppid)); err == nil {
+		parts := strings.Split(string(b), "\x00")
+		if len(parts) > 0 {
+			name := strings.TrimLeft(filepath.Base(parts[0]), "-")
+			if name != "" {
+				return name
+			}
+		}
+	}
+	return comm
 }

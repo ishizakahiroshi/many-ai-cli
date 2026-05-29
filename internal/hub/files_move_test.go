@@ -31,6 +31,7 @@ func callMove(t *testing.T, s *Server, src, dstDir string) (int, filesMoveResp) 
 	t.Helper()
 	body, _ := json.Marshal(filesMoveReq{Src: src, DstDir: dstDir})
 	req := httptest.NewRequest(http.MethodPost, "/api/files-move?token=tok", bytes.NewReader(body))
+	req.Host = "127.0.0.1:47777"
 	w := httptest.NewRecorder()
 	s.handleFilesMove(w, req)
 	var resp filesMoveResp
@@ -43,6 +44,7 @@ func callMoveMulti(t *testing.T, s *Server, srcs []string, dstDir string) (int, 
 	t.Helper()
 	body, _ := json.Marshal(filesMoveReq{Srcs: srcs, DstDir: dstDir})
 	req := httptest.NewRequest(http.MethodPost, "/api/files-move?token=tok", bytes.NewReader(body))
+	req.Host = "127.0.0.1:47777"
 	w := httptest.NewRecorder()
 	s.handleFilesMove(w, req)
 	var resp filesMoveResp
@@ -90,11 +92,11 @@ func TestFilesMove_RejectSameDir(t *testing.T) {
 	}
 	s := newTestMoveServer(t, tmp)
 	code, resp := callMove(t, s, src, tmp)
-	if code != http.StatusOK || resp.OK {
+	if code != http.StatusConflict || resp.OK {
 		t.Fatalf("expected error, got code=%d resp=%+v", code, resp)
 	}
-	if !strings.Contains(resp.Error, "already in") {
-		t.Fatalf("unexpected error: %q", resp.Error)
+	if resp.Error != "conflict" || !strings.Contains(resp.Detail, "already in") {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
 	}
 }
 
@@ -111,11 +113,11 @@ func TestFilesMove_RejectOverwrite(t *testing.T) {
 
 	s := newTestMoveServer(t, tmp)
 	code, resp := callMove(t, s, src, subB)
-	if code != http.StatusOK || resp.OK {
+	if code != http.StatusConflict || resp.OK {
 		t.Fatalf("expected error, got code=%d resp=%+v", code, resp)
 	}
-	if !strings.Contains(resp.Error, "already exists") {
-		t.Fatalf("unexpected error: %q", resp.Error)
+	if resp.Error != "conflict" || !strings.Contains(resp.Detail, "already exists") {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
 	}
 }
 
@@ -127,11 +129,11 @@ func TestFilesMove_RejectDirIntoDescendant(t *testing.T) {
 
 	s := newTestMoveServer(t, tmp)
 	code, resp := callMove(t, s, parent, child)
-	if code != http.StatusOK || resp.OK {
+	if code != http.StatusConflict || resp.OK {
 		t.Fatalf("expected error, got code=%d resp=%+v", code, resp)
 	}
-	if !strings.Contains(resp.Error, "into itself") {
-		t.Fatalf("unexpected error: %q", resp.Error)
+	if resp.Error != "conflict" || !strings.Contains(resp.Detail, "into itself") {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
 	}
 }
 
@@ -145,11 +147,11 @@ func TestFilesMove_RejectOutsideAllowedRoot(t *testing.T) {
 
 	s := newTestMoveServer(t, tmp)
 	code, resp := callMove(t, s, src, dstDir)
-	if code != http.StatusOK || resp.OK {
+	if code != http.StatusForbidden || resp.OK {
 		t.Fatalf("expected error, got code=%d resp=%+v", code, resp)
 	}
-	if !strings.Contains(resp.Error, "forbidden") {
-		t.Fatalf("unexpected error: %q", resp.Error)
+	if resp.Error != "forbidden" {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
 	}
 }
 
@@ -206,7 +208,7 @@ func TestFilesMove_Multi_PreflightFailureDoesNotMoveAnyFile(t *testing.T) {
 
 	s := newTestMoveServer(t, tmp)
 	code, resp := callMoveMulti(t, s, []string{f1, f2}, subB)
-	if code != http.StatusOK || resp.OK {
+	if code != http.StatusBadRequest || resp.OK {
 		t.Fatalf("expected partial-fail (ok=false), got code=%d resp=%+v", code, resp)
 	}
 	if len(resp.Results) != 2 {
@@ -241,7 +243,7 @@ func TestFilesMove_Multi_RejectDuplicateTargetBeforeMoving(t *testing.T) {
 
 	s := newTestMoveServer(t, tmp)
 	code, resp := callMoveMulti(t, s, []string{f1, f2}, subB)
-	if code != http.StatusOK || resp.OK {
+	if code != http.StatusBadRequest || resp.OK {
 		t.Fatalf("expected duplicate-target failure, got code=%d resp=%+v", code, resp)
 	}
 	if len(resp.Results) != 2 || resp.Results[0].Error == "" || resp.Results[1].Error == "" {
@@ -269,7 +271,7 @@ func TestFilesMove_Multi_RejectAncestorAndDescendantBeforeMoving(t *testing.T) {
 
 	s := newTestMoveServer(t, tmp)
 	code, resp := callMoveMulti(t, s, []string{parent, child}, subB)
-	if code != http.StatusOK || resp.OK {
+	if code != http.StatusBadRequest || resp.OK {
 		t.Fatalf("expected ancestor-descendant failure, got code=%d resp=%+v", code, resp)
 	}
 	if len(resp.Results) != 2 || resp.Results[0].Error == "" || resp.Results[1].Error == "" {

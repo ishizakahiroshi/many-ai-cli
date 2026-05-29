@@ -137,7 +137,6 @@ function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 'file')
   // 位置調整: 画面端からはみ出さないようにする
   popup.style.left = '0';
   popup.style.top = '0';
-  document.body.appendChild(popup);
   const rect = popup.getBoundingClientRect();
   const vw = window.innerWidth, vh = window.innerHeight;
   let left = clientX + 8;
@@ -170,7 +169,7 @@ async function renameFileViaApi(filePath, sessionId) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) {
-      const msg = (data && data.error) ? data.error : ('HTTP ' + res.status);
+      const msg = (data && (data.detail || data.error)) ? (data.detail || data.error) : ('HTTP ' + res.status);
       showToast(`${t('link_rename_failed') || 'Failed to rename'}: ${msg}`);
       return;
     }
@@ -191,9 +190,14 @@ async function callOpenApi(endpoint, path, errorKey = 'link_open_error') {
     });
     if (res.ok) {
       const data = await res.json();
-      if (!data.ok) showToast(data.error ? `${t(errorKey)}: ${data.error}` : t(errorKey));
+      if (!data.ok) {
+        const msg = data.detail || data.error;
+        showToast(msg ? `${t(errorKey)}: ${msg}` : t(errorKey));
+      }
     } else {
-      showToast(t(errorKey));
+      const data = await res.json().catch(() => ({}));
+      const msg = data.detail || data.error;
+      showToast(msg ? `${t(errorKey)}: ${msg}` : t(errorKey));
     }
   } catch (_) { showToast(t(errorKey)); }
 }
@@ -248,7 +252,7 @@ function trimWindowsPathCandidate(path) {
 
 function stripTerminalLineSuffix(path) {
   const text = String(path || '');
-  return text.replace(/(\.[A-Za-z0-9]{1,15}):\d+(?::\d+)?$/, '$1');
+  return text.replace(/([^\s:]):\d+(?::\d+)?$/, '$1');
 }
 
 function isAbsolutePath(path) {
@@ -380,7 +384,7 @@ async function deleteDirViaApi(filePath, sessionId) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) {
-      const msg = (data && data.error) ? data.error : ('HTTP ' + res.status);
+      const msg = (data && (data.detail || data.error)) ? (data.detail || data.error) : ('HTTP ' + res.status);
       showToast(`${t('link_delete_dir_failed') || 'Failed to delete folder'}: ${msg}`);
       return;
     }

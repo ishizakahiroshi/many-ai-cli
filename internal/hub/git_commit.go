@@ -2,7 +2,6 @@ package hub
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -43,17 +42,11 @@ type gitCommitMessageResp struct {
 }
 
 func (s *Server) handleGitCommitAll(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
 	var req gitCommitAllReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeGitError(w, http.StatusBadRequest, "bad_request", "invalid json")
-		return
-	}
-	if req.Token != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	subject := sanitizeCommitMessage(req.Subject, gitCommitSubjectMaxLen)
@@ -77,7 +70,8 @@ func (s *Server) handleGitCommitAll(w http.ResponseWriter, r *http.Request) {
 
 	statusOut, err := runGit(ctx, cwd, "status", "--short", "--porcelain=v1", "-z")
 	if err != nil {
-		writeGitError(w, http.StatusInternalServerError, "git_command_failed", err.Error())
+		s.logger.Warn("git status failed before commit", "session_id", req.Session, "err", err)
+		writeGitError(w, http.StatusInternalServerError, "git_command_failed", sanitizeGitErrMsg(err))
 		return
 	}
 	filesChanged := len(parseGitStatusPorcelainZ(string(statusOut)))
@@ -87,7 +81,8 @@ func (s *Server) handleGitCommitAll(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := runGitCombined(ctx, gitRoot, "add", "-A"); err != nil {
 		code, status := classifyGitCommitError(err)
-		writeGitError(w, status, code, err.Error())
+		s.logger.Warn("git add failed before commit", "session_id", req.Session, "err", err)
+		writeGitError(w, status, code, sanitizeGitErrMsg(err))
 		return
 	}
 	if _, err := runGit(ctx, gitRoot, "diff", "--cached", "--quiet"); err == nil {
@@ -100,7 +95,8 @@ func (s *Server) handleGitCommitAll(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := runGitCombined(ctx, gitRoot, args...); err != nil {
 		code, status := classifyGitCommitError(err)
-		writeGitError(w, status, code, err.Error())
+		s.logger.Warn("git commit failed", "session_id", req.Session, "err", err)
+		writeGitError(w, status, code, sanitizeGitErrMsg(err))
 		return
 	}
 	hash := ""
@@ -111,8 +107,7 @@ func (s *Server) handleGitCommitAll(w http.ResponseWriter, r *http.Request) {
 	if out, err := runGit(ctx, gitRoot, "rev-parse", "--short", "HEAD"); err == nil {
 		shortHash = strings.TrimSpace(string(out))
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(gitCommitAllResp{
+	writeJSON(w, gitCommitAllResp{
 		OK:           true,
 		Hash:         hash,
 		ShortHash:    shortHash,
@@ -122,17 +117,11 @@ func (s *Server) handleGitCommitAll(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGitCommitMessage(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
 	var req gitCommitMessageReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeGitError(w, http.StatusBadRequest, "bad_request", "invalid json")
-		return
-	}
-	if req.Token != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	if req.Session <= 0 {
@@ -149,7 +138,8 @@ func (s *Server) handleGitCommitMessage(w http.ResponseWriter, r *http.Request) 
 
 	statusOut, err := runGit(ctx, cwd, "status", "--short", "--porcelain=v1", "-z")
 	if err != nil {
-		writeGitError(w, http.StatusInternalServerError, "git_command_failed", err.Error())
+		s.logger.Warn("git status failed before commit message", "session_id", req.Session, "err", err)
+		writeGitError(w, http.StatusInternalServerError, "git_command_failed", sanitizeGitErrMsg(err))
 		return
 	}
 	files := parseGitStatusPorcelainZ(string(statusOut))
@@ -170,8 +160,7 @@ func (s *Server) handleGitCommitMessage(w http.ResponseWriter, r *http.Request) 
 	}
 
 	subject, body := suggestCommitMessage(files, stat, diffNotice, req.Language)
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(gitCommitMessageResp{
+	writeJSON(w, gitCommitMessageResp{
 		OK:      true,
 		Subject: subject,
 		Body:    body,

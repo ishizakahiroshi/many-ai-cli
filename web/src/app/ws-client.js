@@ -6,6 +6,23 @@ let _wsIntentionalClose = false; // ページ遷移など意図的クローズ�
 let _wsRetryDelay = 500; // 初期バックオフ ms
 const _wsRetryMax = 10000; // 上限 ms
 
+function syncElapsedTimer() {
+  const shouldRun = !!(ws && ws.readyState === WebSocket.OPEN && activeSessionId !== null && !document.hidden);
+  if (shouldRun) {
+    if (!_elapsedTimerInterval) {
+      _elapsedTimerInterval = setInterval(() => updateMainTabStatus(), 1000);
+    }
+    updateMainTabStatus();
+    return;
+  }
+  if (_elapsedTimerInterval) {
+    clearInterval(_elapsedTimerInterval);
+    _elapsedTimerInterval = null;
+  }
+}
+
+document.addEventListener('visibilitychange', syncElapsedTimer);
+
 function _sendRegister() {
   const area = document.getElementById('terminal-area');
   // clientWidth/Height が「ゼロではないが極小（レイアウト未確定 / 親が
@@ -21,6 +38,27 @@ function _sendRegister() {
   const cols = cw >= 120 ? Math.floor(cw / 7.5) : 200;
   const rows = ch >= 80  ? Math.floor(ch / 16)  : 50;
   ws.send(JSON.stringify({ type: 'register', role: 'ui', token, cols, rows, ui_active_session_id: activeSessionId || 0 }));
+}
+
+function sessionLayoutSnapshot(s) {
+  if (!s) return '';
+  return [
+    s.provider || '',
+    s.display_name || '',
+    s.cwd || '',
+    s.project || '',
+    s.branch || '',
+    s.label || '',
+    s.shell || '',
+    s.started_at || '',
+    s.first_message || '',
+    s.last_message || '',
+    s.log_path || '',
+    s.jsonl_path || '',
+    s.model || '',
+    s.route || '',
+    s.end_reason || '',
+  ].join('\x1f');
 }
 
 function _connectWs() {
@@ -64,6 +102,7 @@ function _connectWs() {
   _ws.onmessage = (ev) => {
     let m;
     try { m = JSON.parse(ev.data); } catch { return; }
+    let fastRenderSessionId = null;
 
   if (m.type === 'pty_data') {
     const id = m.session_id;
@@ -77,17 +116,20 @@ function _connectWs() {
 
     // マーカーを先にデコードして検出し、xterm.js / スキャナにはマーカー除去済みバイトを渡す
     let textChunk = '';
+    let approvalTextChunk = '';
     let xtermBytes = bytes;
     let hasMarker = false;
     try {
-      textChunk = utf8Decoder.decode(bytes, { stream: true });
+      textChunk = (t.textDecoder || utf8Decoder).decode(bytes, { stream: true });
+      approvalTextChunk = textChunk;
       if (textChunk.includes(CHAT_HISTORY_USER_TURN_MARKER)) {
         hasMarker = true;
-        xtermBytes = utf8Encoder.encode(textChunk.split(CHAT_HISTORY_USER_TURN_MARKER).join(''));
+        approvalTextChunk = textChunk.split(CHAT_HISTORY_USER_TURN_MARKER).join('');
+        xtermBytes = utf8Encoder.encode(approvalTextChunk);
       }
     } catch (_) {}
 
-    if (isLiveRendered) {
+    if (isLiveRendered && !t.pendingFlushActive) {
       writePTYChunk(id, t.term, xtermBytes, () => {
         if (t.autoScroll) t.term.scrollToBottom();
       });
@@ -96,16 +138,9 @@ function _connectWs() {
       // 承認検出は scanBuffer ではなく pendingTextTail ベースで行うため、
       // xterm のライブ書き込みを非アクティブ中は止めてよい。
       // セッション切替時に attachTerminal → flushPending で一括 xterm 書き込みする。
-      t.pendingChunks.push(xtermBytes);
-      t.pendingTotalBytes = (t.pendingTotalBytes || 0) + xtermBytes.length;
-      // 非アクティブ中の蓄積が大きすぎると切り替え時のフラッシュが重くなるため末尾100KBを上限とする
-      const PENDING_MAX = 100_000;
-      while (t.pendingTotalBytes > PENDING_MAX && t.pendingChunks.length > 1) {
-        t.pendingTotalBytes -= t.pendingChunks[0].length;
-        t.pendingChunks.shift();
-      }
+      queuePendingTerminalChunk(id, xtermBytes);
     }
-    trackApprovalHintFromChunk(id, xtermBytes);
+    trackApprovalHintFromChunk(id, xtermBytes, approvalTextChunk);
     if (isLiveRendered) scheduleApprovalCheck(id);
 
     // chatHistory: マーカー検出でターン境界を確定し AI 出力を commit する
@@ -154,17 +189,13 @@ function _connectWs() {
         return;
       }
       s.project = deriveProjectKeyFromCwd(s.cwd);
-      if (s.LogPath && !s.log_path) s.log_path = s.LogPath;
-      if (s.JSONLPath && !s.jsonl_path) s.jsonl_path = s.JSONLPath;
       sessions.set(s.id, s);
       addToSessionOrder(s.id);
     });
     document.getElementById('summary').textContent = t('connected') || '接続済み';
     renderSessionList();
     checkApprovalOnStartup();
-    if (!_elapsedTimerInterval) {
-      _elapsedTimerInterval = setInterval(() => updateMainTabStatus(), 1000);
-    }
+    syncElapsedTimer();
   } else if (m.type === 'session_update') {
     if (m.state === 'completed') {
       requestSessionDismiss(m.session_id);
@@ -173,6 +204,7 @@ function _connectWs() {
     }
     const isNew = !sessions.has(m.session_id);
     const cur = sessions.get(m.session_id) || { id: m.session_id };
+    const beforeLayout = sessionLayoutSnapshot(cur);
     if (m.provider)        cur.provider        = m.provider;
     if (m.display_name)    cur.display_name    = m.display_name;
     if (m.cwd)            { cur.cwd = m.cwd; cur.project = deriveProjectKeyFromCwd(m.cwd); }
@@ -189,6 +221,9 @@ function _connectWs() {
     if (m.model !== undefined) cur.model       = m.model;
     if (m.route !== undefined) cur.route       = m.route;
     sessions.set(m.session_id, cur);
+    if (!isNew && beforeLayout === sessionLayoutSnapshot(cur) && (m.state || m.last_output_at)) {
+      fastRenderSessionId = m.session_id;
+    }
     // C4: セッション state 変化をマルチペインバッジに反映
     if (m.state) {
       const mgr = window.multiPaneManager;
@@ -236,6 +271,7 @@ function _connectWs() {
     removeLocalSession(m.session_id);
   }
 
+  if (fastRenderSessionId !== null && renderSessionStateUpdate(fastRenderSessionId)) return;
   render();
   }; // end _ws.onmessage
 } // end _connectWs

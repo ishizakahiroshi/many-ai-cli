@@ -2,7 +2,6 @@ package hub
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"time"
 )
@@ -22,17 +21,11 @@ type gitFetchResp struct {
 // handleGitFetch は POST /api/git-fetch を処理する。
 // リモートから最新を取得する（git fetch）。
 func (s *Server) handleGitFetch(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
 	var req gitFetchReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeGitError(w, http.StatusBadRequest, "bad_request", "invalid json")
-		return
-	}
-	if req.Token != s.cfg.Token {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	sid := req.Session
@@ -45,10 +38,10 @@ func (s *Server) handleGitFetch(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitFetchTimeout)
 	defer cancel()
 	out, runErr := runGitCombined(ctx, cwd, "fetch")
-	w.Header().Set("Content-Type", "application/json")
 	if runErr != nil {
-		writeGitError(w, http.StatusInternalServerError, "git_command_failed", runErr.Error())
+		s.logger.Warn("git fetch failed", "session_id", sid, "err", runErr, "output", string(out))
+		writeGitError(w, http.StatusInternalServerError, "git_command_failed", sanitizeGitErrMsg(runErr))
 		return
 	}
-	_ = json.NewEncoder(w).Encode(gitFetchResp{OK: true, Output: string(out)})
+	writeJSON(w, gitFetchResp{OK: true, Output: string(out)})
 }

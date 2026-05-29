@@ -15,7 +15,7 @@ const codexBlockEnd    = "<!-- /any-ai-cli:approval-rules -->"
 const rulesVersion     = "4"
 
 var rulesFileContent = strings.Join([]string{
-	"<!-- version: 4 -->",
+	fmt.Sprintf("<!-- version: %s -->", rulesVersion),
 	"## any-ai-cli Approval Format",
 	"",
 	"**このセッションが any-ai-cli Hub 管理下かどうかを最初に確認してください。**",

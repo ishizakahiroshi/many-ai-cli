@@ -1,7 +1,6 @@
 package hub
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 )
@@ -20,10 +19,9 @@ func isPowerShellShell(shell string) bool {
 }
 
 func (s *Server) handleEncodingCheck(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
+	if !s.guard(w, r, http.MethodGet) {
 		return
 	}
 	result := checkEncoding(s.parentShell)
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(result)
+	writeJSON(w, result)
 }

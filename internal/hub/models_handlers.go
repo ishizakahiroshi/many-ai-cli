@@ -1,7 +1,6 @@
 package hub
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"any-ai-cli/internal/config"
@@ -11,21 +10,20 @@ import (
 //   - GET  : キャッシュ尊重（Cloud 24h / Local 60s）
 //   - POST : 両キャッシュを invalidate して再取得
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
-		return
-	}
-	if r.Method != http.MethodGet && r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
 		return
 	}
 	force := r.Method == http.MethodPost
 	if force {
 		s.modelsCache.invalidate()
 	}
-	s.mu.Lock()
+	s.cfgMu.Lock()
 	localCfg := append([]config.LocalModel(nil), s.cfg.LocalModels...)
-	s.mu.Unlock()
-	resp := buildModelsResponse(s.modelsCache, s.modelsRemoteCache, config.DefaultModelsSource, localCfg, force)
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	source := s.cfg.ModelsSource
+	s.cfgMu.Unlock()
+	if source == "" {
+		source = config.DefaultModelsSource
+	}
+	resp := buildModelsResponse(s.modelsCache, s.modelsRemoteCache, source, localCfg, force)
+	writeJSON(w, resp)
 }

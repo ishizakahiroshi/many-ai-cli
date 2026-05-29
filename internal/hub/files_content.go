@@ -1,7 +1,7 @@
 package hub
 
 import (
-	"encoding/json"
+	"io"
 	"mime"
 	"net/http"
 	"os"
@@ -56,7 +56,7 @@ func isTextFile(absPath string) bool {
 
 var previewableImageExtensions = map[string]bool{
 	".png": true, ".jpg": true, ".jpeg": true, ".gif": true,
-	".webp": true, ".bmp": true, ".svg": true,
+	".webp": true, ".bmp": true,
 }
 
 var previewableVideoExtensions = map[string]bool{
@@ -80,13 +80,13 @@ func isMediaFile(absPath string) bool {
 func (s *Server) cwdForRequest(r *http.Request) string {
 	if sidStr := r.URL.Query().Get("session"); sidStr != "" {
 		if sid, err := strconv.Atoi(sidStr); err == nil {
-			s.mu.Lock()
+			s.sessionsMu.Lock()
 			if ses := s.sessions[sid]; ses != nil {
 				cwd := ses.CWD
-				s.mu.Unlock()
+				s.sessionsMu.Unlock()
 				return cwd
 			}
-			s.mu.Unlock()
+			s.sessionsMu.Unlock()
 		}
 	}
 	return s.hubCWD
@@ -122,26 +122,22 @@ func (e httpError) Error() string { return e.msg }
 // ?path=<absPath>&token=<token> 必須。
 // ?session=<id> で検証スコープを指定（省略時: Hub cwd）。
 func (s *Server) handleFilesContent(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
-		return
-	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !s.guard(w, r, http.MethodGet) {
 		return
 	}
 
 	pathParam, err := s.resolveAllowedFilePath(r)
 	if err != nil {
 		if he, ok := err.(httpError); ok {
-			http.Error(w, he.msg, he.status)
+			writeJSONError(w, he.status, httpErrorCode(he.status), he.msg)
 			return
 		}
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "internal_error", "internal server error")
 		return
 	}
 
 	if !isTextFile(pathParam) {
-		http.Error(w, "forbidden: not a previewable text file", http.StatusForbidden)
+		writeJSONError(w, http.StatusForbidden, "forbidden", "not a previewable text file")
 		return
 	}
 
@@ -149,87 +145,84 @@ func (s *Server) handleFilesContent(w http.ResponseWriter, r *http.Request) {
 	info, err := os.Stat(pathParam)
 	if err != nil {
 		if os.IsNotExist(err) {
-			http.Error(w, "not found", http.StatusNotFound)
+			writeJSONError(w, http.StatusNotFound, "not_found", "not found")
 			return
 		}
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "internal_error", "internal server error")
 		return
 	}
 	if info.IsDir() {
-		http.Error(w, "path is a directory", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "path is a directory")
 		return
 	}
 
 	// ファイル読み込み（上限 1 MiB）
 	f, err := os.Open(pathParam)
 	if err != nil {
-		http.Error(w, "cannot open file", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "open_failed", "cannot open file")
 		return
 	}
 	defer f.Close()
 
-	buf := make([]byte, filesContentMaxSize+1)
-	n, _ := f.Read(buf)
-	truncated := false
-	if n > filesContentMaxSize {
-		n = filesContentMaxSize
-		truncated = true
+	buf, err := io.ReadAll(io.LimitReader(f, filesContentMaxSize+1))
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "read_failed", "cannot read file")
+		return
+	}
+	truncated := len(buf) > filesContentMaxSize
+	if truncated {
+		buf = buf[:filesContentMaxSize]
 	}
 
 	resp := filesContentResp{
 		Path:      pathParam,
 		Size:      info.Size(),
 		Mtime:     info.ModTime(),
-		Content:   string(buf[:n]),
+		Content:   string(buf),
 		Truncated: truncated,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	writeJSON(w, resp)
 }
 
 // handleFilesAsset は GET /api/files-asset を処理する。
 // Files タブ内のメディアプレビュー用。許可ルート内の画像/動画ファイルだけを配信する。
 func (s *Server) handleFilesAsset(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
-		return
-	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !s.guard(w, r, http.MethodGet) {
 		return
 	}
 
 	pathParam, err := s.resolveAllowedFilePath(r)
 	if err != nil {
 		if he, ok := err.(httpError); ok {
-			http.Error(w, he.msg, he.status)
+			writeJSONError(w, he.status, httpErrorCode(he.status), he.msg)
 			return
 		}
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "internal_error", "internal server error")
 		return
 	}
 	if !isMediaFile(pathParam) {
-		http.Error(w, "forbidden: not a previewable media file", http.StatusForbidden)
+		writeJSONError(w, http.StatusForbidden, "forbidden", "not a previewable media file")
 		return
 	}
 
 	info, err := os.Stat(pathParam)
 	if err != nil {
 		if os.IsNotExist(err) {
-			http.Error(w, "not found", http.StatusNotFound)
+			writeJSONError(w, http.StatusNotFound, "not_found", "not found")
 			return
 		}
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "internal_error", "internal server error")
 		return
 	}
 	if info.IsDir() {
-		http.Error(w, "path is a directory", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "path is a directory")
 		return
 	}
 
 	f, err := os.Open(pathParam)
 	if err != nil {
-		http.Error(w, "cannot open file", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "open_failed", "cannot open file")
 		return
 	}
 	defer f.Close()

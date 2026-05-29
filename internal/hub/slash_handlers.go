@@ -1,8 +1,8 @@
 package hub
 
 import (
-	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"any-ai-cli/internal/config"
@@ -16,26 +16,34 @@ func (s *Server) invalidateSlashCache(provider string) {
 
 // handleSlashCmdSources は provider ごとのソース URL を GET/POST で管理する。
 func (s *Server) handleSlashCmdSources(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
+	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
 	switch r.Method {
 	case http.MethodGet:
-		s.mu.Lock()
+		s.cfgMu.Lock()
 		src := config.EffectiveSlashCmdSources(s.cfg.SlashCmdSources)
-		s.mu.Unlock()
-		_ = json.NewEncoder(w).Encode(src)
+		s.cfgMu.Unlock()
+		writeJSON(w, src)
 	case http.MethodPost:
 		var body config.SlashCmdSources
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "bad request", http.StatusBadRequest)
+		if !decodeJSON(w, r, &body) {
 			return
 		}
-		s.mu.Lock()
+		body.Claude = strings.TrimSpace(body.Claude)
+		body.Codex = strings.TrimSpace(body.Codex)
+		if err := validateSlashCmdSource(body.Claude); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("invalid claude source", err))
+			return
+		}
+		if err := validateSlashCmdSource(body.Codex); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("invalid codex source", err))
+			return
+		}
+		s.cfgMu.Lock()
 		prev := s.cfg.SlashCmdSources
 		s.cfg.SlashCmdSources = body
-		s.mu.Unlock()
+		s.cfgMu.Unlock()
 		if body.Claude != prev.Claude {
 			s.invalidateSlashCache("claude")
 		}
@@ -43,12 +51,10 @@ func (s *Server) handleSlashCmdSources(w http.ResponseWriter, r *http.Request) {
 			s.invalidateSlashCache("codex")
 		}
 		if err := s.persistConfig(); err != nil {
-			http.Error(w, "save failed", http.StatusInternalServerError)
+			writeJSONError(w, http.StatusInternalServerError, "save_failed", "save failed")
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		writeJSON(w, map[string]bool{"ok": true})
 	}
 }
 
@@ -56,17 +62,13 @@ func (s *Server) handleSlashCmdSources(w http.ResponseWriter, r *http.Request) {
 // GET: キャッシュがあれば返す（24h TTL）、なければ fetch。
 // POST: キャッシュを強制リフレッシュ。
 func (s *Server) handleSlashCommands(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
-		return
-	}
-	if r.Method != http.MethodGet && r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
 		return
 	}
 
 	provider := r.URL.Query().Get("provider")
 	if provider != "claude" && provider != "codex" {
-		http.Error(w, "invalid provider", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
 		return
 	}
 
@@ -77,12 +79,11 @@ func (s *Server) handleSlashCommands(w http.ResponseWriter, r *http.Request) {
 	s.slashCmdMu.Unlock()
 
 	if !forceRefresh && entry != nil && time.Since(entry.fetchedAt) < slashCmdCacheTTL {
-		w.Header().Set("Content-Type", "application/json")
 		writeSlashCmdsResp(w, entry)
 		return
 	}
 
-	s.mu.Lock()
+	s.cfgMu.Lock()
 	src := config.EffectiveSlashCmdSources(s.cfg.SlashCmdSources)
 	var sourceURL string
 	switch provider {
@@ -91,10 +92,10 @@ func (s *Server) handleSlashCommands(w http.ResponseWriter, r *http.Request) {
 	case "codex":
 		sourceURL = src.Codex
 	}
-	s.mu.Unlock()
+	s.cfgMu.Unlock()
 
 	if sourceURL == "" {
-		http.Error(w, "source URL not configured", http.StatusNotFound)
+		writeJSONError(w, http.StatusNotFound, "not_found", "source URL not configured")
 		return
 	}
 
@@ -102,11 +103,10 @@ func (s *Server) handleSlashCommands(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.logger.Warn("slash cmd fetch failed", "provider", provider, "err", err)
 		if entry != nil {
-			w.Header().Set("Content-Type", "application/json")
 			writeSlashCmdsResp(w, entry)
 			return
 		}
-		http.Error(w, "fetch failed: "+err.Error(), http.StatusBadGateway)
+		writeJSONError(w, http.StatusBadGateway, "fetch_failed", errorDetail("fetch failed", err))
 		return
 	}
 
@@ -119,12 +119,11 @@ func (s *Server) handleSlashCommands(w http.ResponseWriter, r *http.Request) {
 	s.slashCmdCache[provider] = newEntry
 	s.slashCmdMu.Unlock()
 
-	w.Header().Set("Content-Type", "application/json")
 	writeSlashCmdsResp(w, newEntry)
 }
 
 func writeSlashCmdsResp(w http.ResponseWriter, entry *slashCmdCacheEntry) {
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, map[string]any{
 		"cmds":       entry.cmds,
 		"fetched_at": entry.fetchedAt.UTC().Format(time.RFC3339),
 		"source_url": entry.sourceURL,
@@ -135,14 +134,9 @@ func writeSlashCmdsResp(w http.ResponseWriter, entry *slashCmdCacheEntry) {
 // GitHub の resources/usage-links/defaults.json から TTL 24h でキャッシュして提供し、
 // 取得失敗時はハードコード値にフォールバックする。
 func (s *Server) handleUsageLinkDefaults(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
-		return
-	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !s.guard(w, r, http.MethodGet) {
 		return
 	}
 	defaults := s.usageLinkCache.get(config.DefaultUsageLinkSource)
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(defaults)
+	writeJSON(w, defaults)
 }

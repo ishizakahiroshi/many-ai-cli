@@ -2,7 +2,6 @@ package hub
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -19,11 +18,7 @@ type gitRefsResp struct {
 // handleGitRefs は GET /api/git-refs を処理する。
 // クエリ: session, token
 func (s *Server) handleGitRefs(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
-		return
-	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !s.guard(w, r, http.MethodGet) {
 		return
 	}
 
@@ -46,7 +41,8 @@ func (s *Server) handleGitRefs(w http.ResponseWriter, r *http.Request) {
 	out, err := runGit(ctx, cwd, "for-each-ref",
 		"--format=%(refname)%09%(objectname:short)")
 	if err != nil {
-		writeGitError(w, http.StatusInternalServerError, "git_command_failed", err.Error())
+		s.logger.Warn("git refs failed", "session_id", sid, "err", err)
+		writeGitError(w, http.StatusInternalServerError, "git_command_failed", sanitizeGitErrMsg(err))
 		return
 	}
 	refs := parseForEachRef(string(out))
@@ -77,8 +73,7 @@ func (s *Server) handleGitRefs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	writeJSON(w, resp)
 }
 
 // parseForEachRef は `git for-each-ref --format="%(refname)\t%(objectname:short)"` 出力をパースする。

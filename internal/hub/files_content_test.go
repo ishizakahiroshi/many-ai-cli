@@ -33,6 +33,14 @@ func callFilesContent(t *testing.T, s *Server, path string) (int, string, filesC
 	return w.Code, body, resp
 }
 
+func callFilesAsset(t *testing.T, s *Server, path string) (int, string) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/files-asset?token=tok&path="+url.QueryEscape(path), nil)
+	w := httptest.NewRecorder()
+	s.handleFilesAsset(w, req)
+	return w.Code, w.Body.String()
+}
+
 func TestIsTextFile(t *testing.T) {
 	cases := map[string]bool{
 		"main.go":        true,
@@ -93,6 +101,23 @@ func TestHandleFilesContent_RejectsBinaryExtension(t *testing.T) {
 		t.Fatalf("expected 403, got %d", code)
 	}
 	if !strings.Contains(body, "not a previewable text file") {
+		t.Fatalf("unexpected body: %q", body)
+	}
+}
+
+func TestHandleFilesAsset_RejectsSVG(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "preview.svg")
+	if err := os.WriteFile(path, []byte(`<svg><script>alert(1)</script></svg>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newTestFilesContentServer(tmp)
+	code, body := callFilesAsset(t, s, path)
+	if code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", code)
+	}
+	if !strings.Contains(body, "not a previewable media file") {
 		t.Fatalf("unexpected body: %q", body)
 	}
 }

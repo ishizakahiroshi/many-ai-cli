@@ -5,5 +5,9 @@ package web
 
 import "embed"
 
-//go:embed src
+// all: 接頭辞により、ドット/アンダースコア始まりのファイル（.gitkeep など）も
+// 取りこぼさず embed する。これが無いと将来そうした名前のアセットが追加されても
+// バイナリに含まれず、実行時に見つからない事故になる。
+//
+//go:embed all:src
 var FS embed.FS

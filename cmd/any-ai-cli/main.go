@@ -127,6 +127,12 @@ func run(args []string) error {
 
 	cmd := args[0]
 	switch cmd {
+	case "version", "--version", "-v":
+		// deploy-wsl.ps1 など外部スクリプトが `any-ai-cli --version` /
+		// `any-ai-cli version` で版数を取得できるようにする。
+		// 出力は displayVersion() に一本化（ldflags 注入値 → git タグの順）。
+		fmt.Println(displayVersion())
+		return nil
 	case "serve":
 		fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 		open := fs.Bool("open", false, "open browser")
@@ -210,6 +216,6 @@ func run(args []string) error {
 }
 
 func usage() error {
-	fmt.Println("any-ai-cli <serve|wrap|claude|codex|shell-init|stop|status|log-clean|uninstall>")
+	fmt.Println("any-ai-cli <serve|wrap|claude|codex|shell-init|stop|status|log-clean|uninstall|version>")
 	return nil
 }

@@ -174,6 +174,28 @@ function removeFromSessionOrder(id) {
   if (idx !== -1) { sessionOrder.splice(idx, 1); saveSessionOrder(); }
 }
 
+// orderSessions は全モジュール共通のセッション整列ロジック（C9: 旧 getSortedSessions /
+// getOrderedSessions / multi-pane フォールバックの三重定義を 1 つに集約）。
+// ★（favorites 配列順）を先頭に、非★（sessionOrder 順、未登録セッションは末尾）を後に並べる。
+// sessions / favorites / sessionOrder 未定義時は空配列または id 昇順へフォールバックする
+// （旧 multi-pane.js の防御的フォールバックを継承）。
+function orderSessions() {
+  if (typeof sessions === 'undefined') return [];
+  if (typeof favorites === 'undefined' || typeof sessionOrder === 'undefined') {
+    return Array.from(sessions.values()).sort((a, b) => a.id - b.id);
+  }
+  const starredList = favorites.filter(id => sessions.has(id)).map(id => sessions.get(id));
+  const orderedIds = sessionOrder.filter(id => sessions.has(id) && !favorites.includes(id));
+  sessions.forEach((s) => {
+    if (!favorites.includes(s.id) && !orderedIds.includes(s.id)) orderedIds.push(s.id);
+  });
+  const nonStarredList = orderedIds.map(id => sessions.get(id));
+  return [...starredList, ...nonStarredList];
+}
+window.orderSessions = orderSessions;
+// 後方互換エイリアス: multi-pane.js など window.getSortedSessions 参照箇所のために残す。
+window.getSortedSessions = orderSessions;
+
 function isApprovalAutoSwitchEnabled() {
   return localStorage.getItem(STORAGE_APPROVAL_AUTO_SWITCH_KEY) === '1';
 }
