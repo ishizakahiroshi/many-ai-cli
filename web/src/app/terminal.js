@@ -560,10 +560,25 @@ export function refitActiveTerminalAfterLayout(stickToBottom) {
     const prevCols = t.term.cols;
     const prevRows = t.term.rows;
     fitTerminalPreservingBottom(t, id);
-    if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
+    const dimsChanged = t.term.cols !== prevCols || t.term.rows !== prevRows;
+    if (dimsChanged) {
       sendResize(id, t.term.cols, t.term.rows);
     }
-    if (stickToBottom) scrollTerminalToBottomSoon(id);
+    if (stickToBottom) {
+      scrollTerminalToBottomSoon(id);
+      // 入力欄の改行（Shift+Enter）等で寸法が変わると、Codex の Ink TUI が
+      // SIGWINCH を受けて全画面を再描画し、スクリーンクリア系シーケンス
+      // （\x1b[2J / \x1b[3J / \x1b[H 等）で viewportY を最上部へ落とす。
+      // この再描画は上の単発スナップより遅れて届き、その際 onScroll が
+      // autoScroll=false に倒すため snapToBottomAfterScreenClear も効かず、
+      // ターミナルが最上部に張り付いてしまう。寸法が変わったときだけ、
+      // レイアウト確定後に force 付きで数フレーム追従し直して取りこぼしを
+      // 防ぐ（手動スクロール中は force 側が lastTerminalManualScrollAt を
+      // 見て中断するため、上にスクロール中の表示位置は維持される）。
+      if (dimsChanged) {
+        refitAndStickTerminalToBottomAfterLayoutSettles(id, { force: true, startedAt: Date.now() });
+      }
+    }
   });
 }
 
