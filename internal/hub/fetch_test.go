@@ -1,7 +1,10 @@
 package hub
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -64,6 +67,22 @@ func TestNewExternalHTTPClientBlocksPrivateIPLiteral(t *testing.T) {
 	}
 	if err == nil {
 		t.Fatal("expected error for private network host, got nil")
+	}
+}
+
+func TestPrivateNetworkBlockingDialContextBlocksResolvedLoopback(t *testing.T) {
+	called := false
+	dial := privateNetworkBlockingDialContext(func(context.Context, string, string) (net.Conn, error) {
+		called = true
+		return nil, errors.New("dial should not be called")
+	})
+
+	_, err := dial(context.Background(), "tcp", "localhost:443")
+	if err == nil {
+		t.Fatal("expected error for localhost resolving to loopback")
+	}
+	if called {
+		t.Fatal("wrapped dialer should not be called for blocked hosts")
 	}
 }
 

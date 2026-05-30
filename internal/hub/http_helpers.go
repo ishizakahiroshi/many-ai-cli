@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,8 @@ const (
 	avatarMaxBytes = 5 * 1024 * 1024
 	// notifySoundMaxBytes は通知音アップロードの最大サイズ（2 MB）。
 	notifySoundMaxBytes = 2 * 1024 * 1024
+	// jsonBodyMaxBytes keeps local JSON endpoints from accepting unbounded bodies.
+	jsonBodyMaxBytes = 1 * 1024 * 1024
 )
 
 // newExternalHTTPClient は外部リソース取得用の http.Client を返す。
@@ -27,9 +30,15 @@ const (
 // - リダイレクトは最大 3 回まで
 // - https 以外へのリダイレクトは拒否（スキームダウングレード防止）
 func newExternalHTTPClient(timeout time.Duration) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	dialer := &net.Dialer{
+		Timeout:   timeout,
+		KeepAlive: 30 * time.Second,
+	}
+	transport.DialContext = privateNetworkBlockingDialContext(dialer.DialContext)
 	return &http.Client{
 		Timeout:   timeout,
-		Transport: externalHTTPTransport{base: http.DefaultTransport},
+		Transport: externalHTTPTransport{base: transport},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 3 {
 				return errors.New("too many redirects")
@@ -43,6 +52,27 @@ func newExternalHTTPClient(timeout time.Duration) *http.Client {
 }
 
 var makeExternalHTTPClient = newExternalHTTPClient
+
+type dialContextFunc func(ctx context.Context, network, address string) (net.Conn, error)
+
+func privateNetworkBlockingDialContext(next dialContextFunc) dialContextFunc {
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, _, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, err
+		}
+		ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+		if err != nil {
+			return nil, err
+		}
+		for _, ip := range ips {
+			if isBlockedNetworkHost(ip.IP.String()) {
+				return nil, errors.New("private network host blocked")
+			}
+		}
+		return next(ctx, network, address)
+	}
+}
 
 type externalHTTPTransport struct {
 	base http.RoundTripper
@@ -197,7 +227,8 @@ func isAllowedHubHost(hostport string, port int) bool {
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
-	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, jsonBodyMaxBytes))
+	if err := dec.Decode(dst); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid json")
 		return false
 	}

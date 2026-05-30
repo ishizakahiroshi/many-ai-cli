@@ -399,8 +399,8 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 			StartedAt: startedAt,
 		})
 	}
-	_ = os.MkdirAll(filepath.Dir(rawLogPath), 0o755)
-	lf, err := os.Create(rawLogPath)
+	_ = os.MkdirAll(filepath.Dir(rawLogPath), sessionlog.PrivateDirMode)
+	lf, err := os.OpenFile(rawLogPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, sessionlog.PrivateFileMode)
 	if err != nil {
 		logger.Warn("session raw log create failed", "session_id", sessionID, "path", rawLogPath, "err", err)
 	}

@@ -131,13 +131,20 @@ type Writer struct {
 	truncated bool // true = log_truncated マーカーを書き済み
 }
 
+const (
+	// PrivateDirMode / PrivateFileMode are used for PTY/session logs because
+	// raw terminal output can contain credentials or local project details.
+	PrivateDirMode  os.FileMode = 0o700
+	PrivateFileMode os.FileMode = 0o600
+)
+
 // NewJSONLWriter は新規ファイルを作成して Writer を返す。
 // maxBytes > 0 の場合、累積書き込みバイト数がその値に達すると以降の書き込みを no-op にする。
 func NewJSONLWriter(path string, maxBytes int64) (*Writer, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), PrivateDirMode); err != nil {
 		return nil, err
 	}
-	f, err := os.Create(path)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, PrivateFileMode)
 	if err != nil {
 		return nil, err
 	}
@@ -148,10 +155,10 @@ func NewJSONLWriter(path string, maxBytes int64) (*Writer, error) {
 // maxBytes > 0 の場合、累積書き込みバイト数がその値に達すると以降の書き込みを no-op にする。
 // 追記時は既存ファイルサイズをカウンタの初期値とする。
 func NewJSONLWriterAppend(path string, maxBytes int64) (*Writer, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), PrivateDirMode); err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, PrivateFileMode)
 	if err != nil {
 		return nil, err
 	}

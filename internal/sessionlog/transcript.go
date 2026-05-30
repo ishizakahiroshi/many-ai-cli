@@ -52,7 +52,7 @@ func WriteTranscriptFile(jsonlPath, outPath string) error {
 	}
 	defer in.Close()
 
-	out, err := os.Create(outPath)
+	out, err := os.OpenFile(outPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, PrivateFileMode)
 	if err != nil {
 		return err
 	}

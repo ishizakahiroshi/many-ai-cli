@@ -127,8 +127,9 @@ func (s *Server) handleFileOpenApp(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSON(w, r, &body) {
 			return
 		}
+		app := strings.TrimSpace(body.FileOpenApp)
 		s.cfgMu.Lock()
-		s.cfg.FileOpenApp = strings.TrimSpace(body.FileOpenApp)
+		s.cfg.FileOpenApp = app
 		s.cfgMu.Unlock()
 		if err := s.persistConfig(); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "save_failed", errorDetail("save failed", err))
@@ -136,8 +137,8 @@ func (s *Server) handleFileOpenApp(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, map[string]any{
 			"ok":                      true,
-			"file_open_app":           s.cfg.FileOpenApp,
-			"effective_file_open_app": effectiveFileOpenAppDescription(s.cfg.FileOpenApp),
+			"file_open_app":           app,
+			"effective_file_open_app": effectiveFileOpenAppDescription(app),
 		})
 	}
 }
@@ -162,8 +163,9 @@ func (s *Server) handleTerminalApp(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSON(w, r, &body) {
 			return
 		}
+		app := strings.TrimSpace(body.TerminalApp)
 		s.cfgMu.Lock()
-		s.cfg.TerminalApp = strings.TrimSpace(body.TerminalApp)
+		s.cfg.TerminalApp = app
 		s.cfgMu.Unlock()
 		if err := s.persistConfig(); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "save_failed", errorDetail("save failed", err))
@@ -171,8 +173,8 @@ func (s *Server) handleTerminalApp(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, map[string]any{
 			"ok":                     true,
-			"terminal_app":           s.cfg.TerminalApp,
-			"effective_terminal_app": effectiveTerminalAppDescription(s.cfg.TerminalApp),
+			"terminal_app":           app,
+			"effective_terminal_app": effectiveTerminalAppDescription(app),
 		})
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"any-ai-cli/internal/config"
+	"any-ai-cli/internal/sessionlog"
 )
 
 func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
@@ -201,8 +202,8 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	}
 	spawnLogPath := filepath.Join(s.cfg.Hub.LogDir, "spawn",
 		fmt.Sprintf("%s-%s.log", body.Provider, time.Now().Format("20060102-150405.000")))
-	if err := os.MkdirAll(filepath.Dir(spawnLogPath), 0o755); err == nil {
-		if f, logErr := os.OpenFile(spawnLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); logErr == nil {
+	if err := os.MkdirAll(filepath.Dir(spawnLogPath), sessionlog.PrivateDirMode); err == nil {
+		if f, logErr := os.OpenFile(spawnLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, sessionlog.PrivateFileMode); logErr == nil {
 			spawnLog = f
 			cmd.Stdout = spawnLog
 			cmd.Stderr = spawnLog

@@ -130,6 +130,18 @@ func TestRequireToken_Empty(t *testing.T) {
 	}
 }
 
+func TestDecodeJSONRejectsOversizedBody(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat(" ", jsonBodyMaxBytes+1)))
+	w := httptest.NewRecorder()
+	var dst map[string]any
+	if decodeJSON(w, req, &dst) {
+		t.Fatal("expected oversized JSON body to fail")
+	}
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
 func TestSecurityHeadersMiddleware(t *testing.T) {
 	handler := withSecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
