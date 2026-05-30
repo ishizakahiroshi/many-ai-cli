@@ -19,6 +19,97 @@
 }
 #action-bar.visible { display: flex; border-left-color: var(--warn); background: rgba(245,158,11,0.04); }
 
+#approval-queue-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--muted);
+  padding: 5px 8px;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+#approval-queue-btn.has-pending {
+  color: var(--warn-text);
+  border-color: color-mix(in srgb, var(--warn-text) 40%, transparent);
+  background: color-mix(in srgb, var(--warn-bg) 18%, transparent);
+}
+#approval-queue-count {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--bg-elev2);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+#approval-queue-btn.has-pending #approval-queue-count {
+  background: var(--warn);
+  color: #111;
+}
+#approval-queue-panel {
+  position: fixed;
+  top: 46px;
+  right: 12px;
+  z-index: 1300;
+  width: min(420px, calc(100vw - 24px));
+  max-height: min(520px, calc(100vh - 72px));
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  box-shadow: 0 14px 34px rgba(0,0,0,0.35);
+}
+#approval-queue-panel[hidden] { display: none !important; }
+.approval-queue-head {
+  position: sticky;
+  top: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+  font-weight: 700;
+  font-size: 0.86rem;
+}
+.approval-queue-empty {
+  padding: 14px 12px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.approval-queue-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.approval-queue-item:hover,
+.approval-queue-item.active {
+  background: color-mix(in srgb, var(--warn-bg) 16%, transparent);
+}
+.approval-queue-item-main {
+  font-weight: 700;
+  font-size: 0.84rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.approval-queue-item-sub {
+  color: var(--muted);
+  font-size: 0.76rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .action-bar-label {
   font-size: 0.7rem;
   font-weight: 700;

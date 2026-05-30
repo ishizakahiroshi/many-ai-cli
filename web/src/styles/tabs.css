@@ -313,18 +313,21 @@
 #display-area.mode-split    { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 #display-area.mode-files    { grid-template-columns: minmax(0, 1fr); }
 #display-area.mode-git      { grid-template-columns: minmax(0, 1fr); }
+#display-area.mode-workbench { grid-template-columns: minmax(0, 1fr); }
 
 /* ペイン表示制御 (active モードに対応する pane だけ display) */
 #display-area > #terminal-wrapper,
 #display-area > #chat-pane,
 #display-area > #files-pane,
-#display-area > #git-pane { display: none; min-width: 0; min-height: 0; overflow: hidden; }
+#display-area > #git-pane,
+#display-area > #workbench-pane { display: none; min-width: 0; min-height: 0; overflow: hidden; }
 #display-area.mode-terminal > #terminal-wrapper { display: flex; }
 #display-area.mode-chat     > #chat-pane        { display: flex; height: 100%; }
 #display-area.mode-split    > #terminal-wrapper { display: flex; }
 #display-area.mode-split    > #chat-pane        { display: flex; height: 100%; }
 #display-area.mode-files    > #files-pane       { display: flex; }
 #display-area.mode-git      > #files-pane        { display: flex; }
+#display-area.mode-workbench > #workbench-pane   { display: flex; }
 #display-area.mode-split > #terminal-wrapper { border-right: 1px solid var(--line); }
 
 #chat-pane { flex-direction: column; background: var(--bg-deep); position: relative; }

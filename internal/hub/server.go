@@ -25,6 +25,7 @@ import (
 	"any-ai-cli/internal/config"
 	"any-ai-cli/internal/proto"
 	"any-ai-cli/internal/sessionlog"
+	"any-ai-cli/internal/sessionstore"
 	"any-ai-cli/internal/wrapper"
 	"any-ai-cli/web"
 	"golang.org/x/net/websocket"
@@ -104,6 +105,7 @@ type session struct {
 	lastRows int
 
 	// JSON 外: セッション履歴（JSONL）
+	StoreID   int64              `json:"-"`
 	LogPath   string             `json:"log_path,omitempty"`
 	JSONLPath string             `json:"jsonl_path,omitempty"`
 	History   *sessionlog.Writer `json:"-"`
@@ -204,6 +206,7 @@ type Server struct {
 
 	modelsCache       *modelsCache
 	modelsRemoteCache *ttlCache[modelsDefaults]
+	sessionStore      *sessionstore.Store
 	logMaintenanceMu  sync.Mutex
 
 	branchRefreshMu       sync.Mutex
@@ -320,6 +323,11 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		branchRefreshSem:      make(chan struct{}, branchRefreshWorkers),
 		branchRefreshInFlight: map[string]struct{}{},
 	}
+	if store, err := sessionstore.OpenForLogDir(cfg.Hub.LogDir); err != nil {
+		logger.Warn("sqlite session store disabled", "err", err)
+	} else {
+		s.sessionStore = store
+	}
 	if devMode {
 		logger.Info("dev mode: serving web assets from ./web/src/")
 	}
@@ -373,6 +381,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/kill-all", s.handleKillAll)
 	mux.HandleFunc("/api/shutdown", s.handleShutdown)
 	mux.HandleFunc("/api/log-config", s.handleLogConfig)
+	mux.HandleFunc("/api/session-chat", s.handleSessionChat)
+	mux.HandleFunc("/api/session-search", s.handleSessionSearch)
 	mux.HandleFunc("/api/open-dir", s.handleOpenDir)
 	mux.HandleFunc("/api/idle-timeout", s.handleIdleTimeout)
 	mux.HandleFunc("/api/reconnect-grace", s.handleReconnectGrace)
@@ -406,6 +416,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/user-prefs/notify-sound-custom", s.handleUserPrefsNotifySoundCustom)
 	mux.HandleFunc("/api/user-prefs/avatar", s.handleUserPrefsAvatarUpload)
 	mux.HandleFunc("/api/user-prefs", s.handleUserPrefs)
+	s.registerWorkbenchRoutes(mux)
 	s.httpSrv = &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Handler: withSecurityHeaders(mux)}
 	return s, nil
 }
@@ -483,6 +494,9 @@ func (s *Server) Run(ctx context.Context) error {
 		// reconnect grace period. Explicit session termination still goes through
 		// /api/kill-all, dismiss, or idle-timeout.
 		_ = s.httpSrv.Close()
+		if s.sessionStore != nil {
+			_ = s.sessionStore.Close()
+		}
 		_ = os.Remove(pidPath)
 	})
 	err := s.httpSrv.Serve(ln)
@@ -625,9 +639,32 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	if regRoute == "" {
 		regRoute = s.resolveRoute(reg.Provider, reg.Model)
 	}
+	var storeID int64
+	if s.sessionStore != nil {
+		var storeErr error
+		storeID, storeErr = s.sessionStore.StartSession(sessionstore.SessionStart{
+			LiveSessionID: id,
+			Provider:      reg.Provider,
+			Display:       reg.Display,
+			CWD:           reg.CWD,
+			Branch:        branch,
+			Label:         reg.Label,
+			Model:         reg.Model,
+			Route:         regRoute,
+			Shell:         reg.Shell,
+			State:         "standby",
+			StartedAt:     startedAt.Format(time.RFC3339),
+			LogPath:       rawLogPath,
+			JSONLPath:     jsonlPath,
+		})
+		if storeErr != nil {
+			s.logger.Warn("sqlite session start failed", "session_id", id, "err", storeErr)
+		}
+	}
 	s.sessionsMu.Lock()
 	ses := &session{
 		ID:              id,
+		StoreID:         storeID,
 		Provider:        reg.Provider,
 		Display:         reg.Display,
 		CWD:             reg.CWD,
@@ -724,11 +761,54 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	if reqRoute == "" {
 		reqRoute = s.resolveRoute(req.Provider, req.Model)
 	}
+	var storeID int64
+	if s.sessionStore != nil {
+		var storeErr error
+		storeID, storeErr = s.sessionStore.StartSession(sessionstore.SessionStart{
+			LiveSessionID: req.SessionID,
+			Provider:      req.Provider,
+			Display:       req.Display,
+			CWD:           req.CWD,
+			Branch:        branch,
+			Label:         req.Label,
+			Model:         req.Model,
+			Route:         reqRoute,
+			Shell:         req.Shell,
+			State:         "running",
+			StartedAt:     startedAtText,
+			LogPath:       rawLogPath,
+			JSONLPath:     jsonlPath,
+		})
+		if storeErr != nil {
+			s.logger.Warn("sqlite session reattach failed", "session_id", req.SessionID, "err", storeErr)
+		}
+	}
 	s.sessionsMu.Lock()
 	acceptedID := req.SessionID
 	if s.wrappers[acceptedID] != nil {
 		s.nextID++
 		acceptedID = s.nextID
+	}
+	if acceptedID != req.SessionID && s.sessionStore != nil {
+		var storeErr error
+		storeID, storeErr = s.sessionStore.StartSession(sessionstore.SessionStart{
+			LiveSessionID: acceptedID,
+			Provider:      req.Provider,
+			Display:       req.Display,
+			CWD:           req.CWD,
+			Branch:        branch,
+			Label:         req.Label,
+			Model:         req.Model,
+			Route:         reqRoute,
+			Shell:         req.Shell,
+			State:         "running",
+			StartedAt:     startedAtText,
+			LogPath:       rawLogPath,
+			JSONLPath:     jsonlPath,
+		})
+		if storeErr != nil {
+			s.logger.Warn("sqlite session reattach renumber failed", "session_id", acceptedID, "err", storeErr)
+		}
 	}
 	var oldHistory *sessionlog.Writer
 	if cur := s.sessions[acceptedID]; cur != nil {
@@ -743,6 +823,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	}
 	s.sessions[acceptedID] = &session{
 		ID:              acceptedID,
+		StoreID:         storeID,
 		Provider:        req.Provider,
 		Display:         req.Display,
 		CWD:             req.CWD,
@@ -910,6 +991,9 @@ func (s *Server) wrapperMessageLoop(conn *websocket.Conn, id int) {
 	if historyToClose != nil {
 		_ = historyToClose.Close()
 	}
+	if s.sessionStore != nil {
+		s.sessionStore.EndSession(id, endState, endReason, time.Now())
+	}
 	s.finalizeTranscript(id, jsonlPathForTranscript)
 	s.broadcast(proto.Message{Type: "session_end", SessionID: id, State: endState, Reason: endReason})
 }
@@ -966,6 +1050,9 @@ func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval)
 	}
 	s.sessionsMu.Unlock()
 	if msg != nil {
+		if s.sessionStore != nil && msg.Type == "approval_detected" {
+			s.sessionStore.StoreApprovalDetected(id, approval.Sig, approvalSourceGoVT, approval.Kind, approval.Question, approval.Context, approval.Options, now)
+		}
 		s.broadcast(*msg)
 	}
 }
@@ -995,6 +1082,9 @@ func (s *Server) markNativeApprovalConsumed(m proto.Message) {
 		}
 	}
 	s.sessionsMu.Unlock()
+	if s.sessionStore != nil {
+		s.sessionStore.StoreApprovalConsumed(m.SessionID, m.ApprovalSig, m.SentText, now)
+	}
 	if clearMsg != nil {
 		s.broadcast(*clearMsg)
 	}
@@ -1274,6 +1364,9 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 	}
 	s.sessionsMu.Unlock()
 	for _, id := range ids {
+		if s.sessionStore != nil {
+			s.sessionStore.ClearSessionHistory(id)
+		}
 		s.writeHistory(id, map[string]any{
 			"ts":         time.Now().Format(time.RFC3339),
 			"type":       "session_history_reset",
@@ -1316,6 +1409,14 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 			"type":       "session_dismiss",
 			"session_id": m.SessionID,
 		})
+	}
+	if s.sessionStore != nil {
+		_ = s.sessionStore.StoreEvent(m.SessionID, map[string]any{
+			"ts":         time.Now().Format(time.RFC3339),
+			"type":       "session_dismiss",
+			"session_id": m.SessionID,
+		})
+		s.sessionStore.EndSession(m.SessionID, "dismissed", "", time.Now())
 	}
 	if wc != nil {
 		wc.Close()
@@ -1401,6 +1502,9 @@ func (s *Server) markRunning(id int) {
 	if changed {
 		s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: provider, Display: display, CWD: cwd, Branch: branch, Label: label, Model: model, Route: route, State: "running", LastOutputAt: lastOutputAt})
 	}
+	if s.sessionStore != nil {
+		s.sessionStore.UpdateSessionState(id, "running", lastOutputAt)
+	}
 }
 
 // stateTicker は idleAfter 経過後の running → waiting 遷移を担う。
@@ -1465,6 +1569,9 @@ func (s *Server) evaluateIdle() {
 	s.sessionsMu.Unlock()
 	for _, c := range changes {
 		s.broadcast(proto.Message{Type: "session_update", SessionID: c.id, Provider: c.provider, Display: c.display, CWD: c.cwd, Branch: c.branch, Label: c.label, Model: c.model, Route: c.route, State: c.state, LastOutputAt: c.lastOutputAt})
+		if s.sessionStore != nil {
+			s.sessionStore.UpdateSessionState(c.id, c.state, c.lastOutputAt)
+		}
 	}
 	s.queueBranchRefreshes(branchChecks)
 }
@@ -1716,10 +1823,14 @@ func (s *Server) writeHistory(sessionID int, event map[string]any) {
 		w = ses.History
 	}
 	s.sessionsMu.Unlock()
-	if w == nil {
-		return
+	if w != nil {
+		if err := w.Event(event); err != nil {
+			s.logger.Warn("session history write failed", "session_id", sessionID, "err", err)
+		}
 	}
-	if err := w.Event(event); err != nil {
-		s.logger.Warn("session history write failed", "session_id", sessionID, "err", err)
+	if s.sessionStore != nil {
+		if err := s.sessionStore.StoreEvent(sessionID, event); err != nil {
+			s.logger.Warn("sqlite session event write failed", "session_id", sessionID, "err", err)
+		}
 	}
 }

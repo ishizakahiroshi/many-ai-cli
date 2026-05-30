@@ -2,7 +2,7 @@
 import { escapeHtml, showToast, ti18n, token } from './util.js';
 import { activeSessionId, chatHistory, chatHistoryAutoCommitTimers, chatHistoryIdSeq, chatHistoryOutputBuffers, chatHistorySubs, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName } from '../app.js';
-import { providerIconHtml, renderSessionList } from './session-list.js';
+import { activateSession, providerIconHtml, renderSessionList } from './session-list.js';
 import { showPathPopup } from './path-links.js';
 import { markTerminalManualScrollIntent, sendResize, updateScrollLockBtn } from './terminal.js';
 import { setActiveTab, updateChatCountBadge } from './settings.js';
@@ -94,6 +94,61 @@ export function pushMessage(sid, msg) {
 export function getMessages(sid) {
   const arr = chatHistory.get(sid);
   return arr ? arr.slice() : [];
+}
+
+const chatHistoryStoreRestored = new Set();
+const chatHistoryStoreInflight = new Set();
+
+function hasMeaningfulLocalChat(sid) {
+  const arr = chatHistory.get(sid);
+  if (!arr || arr.length === 0) return false;
+  if (arr.length === 1 && arr[0].role === 'user' && !String(arr[0].rawText || arr[0].normalizedText || '').trim()) {
+    return false;
+  }
+  return true;
+}
+
+export async function restoreChatHistoryFromStore(sid, opts = {}) {
+  if (sid === null || sid === undefined) return false;
+  if (chatHistoryStoreInflight.has(sid)) return false;
+  if (!opts.force && chatHistoryStoreRestored.has(sid)) return false;
+  if (!opts.force && hasMeaningfulLocalChat(sid)) return false;
+  chatHistoryStoreInflight.add(sid);
+  try {
+    const res = await fetch(`/api/session-chat?token=${encodeURIComponent(token)}&session_id=${encodeURIComponent(sid)}&limit=500`);
+    if (!res.ok) return false;
+    const data = await res.json();
+    const messages = Array.isArray(data.messages) ? data.messages : [];
+    if (messages.length === 0) {
+      chatHistoryStoreRestored.add(sid);
+      return false;
+    }
+    const t = chatHistoryAutoCommitTimers.get(sid);
+    if (t) { clearTimeout(t); chatHistoryAutoCommitTimers.delete(sid); }
+    chatHistoryOutputBuffers.delete(sid);
+    revokeChatHistoryAttachmentURLs(sid);
+    chatHistory.delete(sid);
+    chatHistoryIdSeq.delete(sid);
+    for (const m of messages) {
+      pushMessage(sid, {
+        ts: m.ts || Date.now(),
+        role: m.role || 'system',
+        kind: m.kind || 'text',
+        rawText: m.rawText || m.raw_text || m.text || '',
+        normalizedText: m.normalizedText || m.normalized_text || '',
+        attachments: Array.isArray(m.attachments) ? m.attachments : null,
+        meta: m.meta || null,
+      });
+    }
+    chatHistoryStoreRestored.add(sid);
+    updateChatCountBadge();
+    return true;
+  } catch (err) {
+    console.warn('[chatHistory] restore from sqlite failed', err);
+    return false;
+  } finally {
+    chatHistoryStoreInflight.delete(sid);
+  }
 }
 
 export function subscribeChatHistory(sid, cb) {
@@ -850,6 +905,11 @@ export function mountChatPaneForSession(sid) {
     updateChatPaneEmptyState(sid);
     return;
   }
+  if (!chatHistoryStoreRestored.has(sid) && !hasMeaningfulLocalChat(sid)) {
+    restoreChatHistoryFromStore(sid).then((restored) => {
+      if (restored && _chatPaneMountedSid === sid) mountChatPaneForSession(sid);
+    });
+  }
   let msgs = [];
   try { msgs = getMessages(sid) || []; } catch (_) {}
   const frag = document.createDocumentFragment();
@@ -1125,6 +1185,102 @@ if (typeof window !== 'undefined') {
     }
   }
 
+  async function restoreCurrentChatFromStore() {
+    if (activeSessionId == null) return;
+    const restored = await restoreChatHistoryFromStore(activeSessionId, { force: true });
+    if (restored) {
+      mountChatPaneForSession(activeSessionId);
+      showToast(ti18n('chat_db_restore_done', 'SQLite からチャット履歴を復元しました'));
+    } else {
+      showToast(ti18n('chat_db_restore_empty', '復元できる履歴はありません'));
+    }
+  }
+
+  function ensureGlobalSearchBox() {
+    const pane = chatPane();
+    if (!pane) return null;
+    let box = pane.querySelector('.chat-global-search-results');
+    if (!box) {
+      box = document.createElement('div');
+      box.className = 'chat-global-search-results';
+      const bar = pane.querySelector('.chat-filter-bar');
+      if (bar && bar.parentNode) bar.parentNode.insertBefore(box, bar.nextSibling);
+      else pane.insertBefore(box, pane.firstChild);
+    }
+    return box;
+  }
+
+  async function runGlobalSearchFromBar() {
+    const q = String(_searchQuery || getFilterBarInput()?.value || '').trim();
+    if (!q) {
+      showToast(ti18n('chat_global_search_needs_query', '検索語を入力してください'));
+      return;
+    }
+    const box = ensureGlobalSearchBox();
+    if (box) {
+      box.hidden = false;
+      box.innerHTML = '<div class="chat-global-search-head">検索中...</div>';
+    }
+    try {
+      const res = await fetch(`/api/session-search?token=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}&limit=30`);
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data = await res.json();
+      renderGlobalSearchResults(q, Array.isArray(data.results) ? data.results : []);
+    } catch (err) {
+      console.warn('[chatHistory] global search failed', err);
+      if (box) box.innerHTML = '<div class="chat-global-search-head">横断検索に失敗しました</div>';
+    }
+  }
+
+  function renderGlobalSearchResults(query, results) {
+    const box = ensureGlobalSearchBox();
+    if (!box) return;
+    box.hidden = false;
+    box.innerHTML = '';
+    const head = document.createElement('div');
+    head.className = 'chat-global-search-head';
+    const title = document.createElement('span');
+    title.textContent = `横断検索: ${query} (${results.length})`;
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.textContent = '閉じる';
+    close.addEventListener('click', () => { box.hidden = true; });
+    head.appendChild(title);
+    head.appendChild(close);
+    box.appendChild(head);
+
+    if (results.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'chat-global-search-empty';
+      empty.textContent = '一致する履歴はありません';
+      box.appendChild(empty);
+      return;
+    }
+    for (const r of results) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'chat-global-search-item';
+      const meta = document.createElement('span');
+      meta.className = 'chat-global-search-meta';
+      const folder = String(r.cwd || '').replace(/\\/g, '/').split('/').filter(Boolean).pop() || r.cwd || '';
+      meta.textContent = `${r.provider || 'ai'} #${r.session_id || '?'} ${folder} ${r.branch ? '[' + r.branch + ']' : ''}`;
+      const body = document.createElement('span');
+      body.className = 'chat-global-search-snippet';
+      body.textContent = r.snippet || r.text || '';
+      item.appendChild(meta);
+      item.appendChild(body);
+      item.addEventListener('click', async () => {
+        if (r.session_id && sessions.has(r.session_id)) {
+          activateSession(r.session_id);
+          await restoreChatHistoryFromStore(r.session_id, { force: false });
+          window.setActiveTab && window.setActiveTab('chat');
+          mountChatPaneForSession(r.session_id);
+        }
+      });
+      box.appendChild(item);
+    }
+  }
+
   // =====================================================================
   // 子 C3: 検索 + フィルタチップ (.chat-filter-bar 内容構築)
   // =====================================================================
@@ -1191,6 +1347,8 @@ if (typeof window !== 'undefined') {
       { id: 'btn-expand-all',   icon: '⊞', label: ti18n('btn_expand_all', '全展開'),       tip: ti18n('btn_expand_all_tooltip', '全てのツール呼び出しを展開'),       fn: () => expandAllTools() },
       { id: 'btn-collapse-all', icon: '⊟', label: ti18n('btn_collapse_all', '全折りたたみ'), tip: ti18n('btn_collapse_all_tooltip', '全てのツール呼び出しを折りたたみ'), fn: () => collapseAllTools() },
       { id: 'btn-raw-log',      icon: '📄', label: ti18n('btn_raw_log', '生ログ'),           tip: ti18n('btn_raw_log_tooltip', '生ログを開く'),                       fn: () => openRawLog() },
+      { id: 'btn-db-restore',   icon: '↺', label: ti18n('btn_db_restore', 'DB復元'),         tip: ti18n('btn_db_restore_tooltip', 'SQLite からチャット履歴を復元'),      fn: () => restoreCurrentChatFromStore() },
+      { id: 'btn-global-search', icon: '⌕', label: ti18n('btn_global_search', '横断'),       tip: ti18n('btn_global_search_tooltip', 'SQLite の全セッション履歴を検索'), fn: () => runGlobalSearchFromBar() },
     ];
     for (const def of iconBtnDefs) {
       const ib = document.createElement('button');
