@@ -113,6 +113,15 @@ export let dragSrcId = null;
 export let dragSrcGroupKey = null;
 export let dragOverCardEl = null;
 
+function readStorageArray(key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || '[]');
+    return Array.isArray(value) ? value : [];
+  } catch (_) {
+    return [];
+  }
+}
+
 export function isSessionLiveRenderedInMultiPane(id) {
   const multiView = document.getElementById('multi-view');
   const mgr = window.multiPaneManager;
@@ -128,10 +137,10 @@ export let actionBarFocusIdx = -1;
 export let approvalAutoSwitchInProgress = false;
 export const actionBarShownAt = new Map(); // sessionId -> timestamp(ms), Enter即確定ガード用
 
-export let favorites = JSON.parse(localStorage.getItem(STORAGE_FAVORITES_KEY) || '[]');
-export let projectFavorites = JSON.parse(localStorage.getItem(STORAGE_PROJECT_FAVORITES_KEY) || '[]');
-export let sessionOrder = JSON.parse(localStorage.getItem(STORAGE_ORDER_KEY) || '[]');
-export let groupOrder = JSON.parse(localStorage.getItem(STORAGE_GROUP_ORDER_KEY) || '[]');
+export let favorites = readStorageArray(STORAGE_FAVORITES_KEY);
+export let projectFavorites = readStorageArray(STORAGE_PROJECT_FAVORITES_KEY);
+export let sessionOrder = readStorageArray(STORAGE_ORDER_KEY);
+export let groupOrder = readStorageArray(STORAGE_GROUP_ORDER_KEY);
 export const collapsedGroups = new Set();
 
 export function saveFavorites() {

@@ -1,7 +1,6 @@
 package hub
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -185,8 +184,7 @@ func (s *Server) handlePathExists(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Paths []string `json:"paths"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid json")
+	if !decodeJSON(w, r, &body) {
 		return
 	}
 	allowedCandidates := s.pathExistsAllowedCandidates()
@@ -268,8 +266,7 @@ func (s *Server) handleOpenDir(w http.ResponseWriter, r *http.Request) {
 		Kind string `json:"kind"` // "log", "attach", or "path"
 		Path string `json:"path"` // kind=="path" のみ使用
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid json")
+	if !decodeJSON(w, r, &body) {
 		return
 	}
 	if body.Kind == "path" {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -88,6 +89,59 @@ func TestWriterSizeCap(t *testing.T) {
 	}
 	if strings.Contains(string(data), `"n":"2"`) {
 		t.Fatal("second event should have been blocked by size cap")
+	}
+}
+
+func TestNewJSONLWriterUsesPrivatePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not report POSIX mode bits reliably")
+	}
+	dir := filepath.Join(t.TempDir(), "logs", "sessions")
+	path := filepath.Join(dir, "test.jsonl")
+
+	w, err := NewJSONLWriter(path, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	dirInfo, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := dirInfo.Mode().Perm(); got != PrivateDirMode {
+		t.Fatalf("dir mode = %#o, want %#o", got, PrivateDirMode)
+	}
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fileInfo.Mode().Perm(); got != PrivateFileMode {
+		t.Fatalf("file mode = %#o, want %#o", got, PrivateFileMode)
+	}
+}
+
+func TestWriteTranscriptFileUsesPrivatePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not report POSIX mode bits reliably")
+	}
+	dir := t.TempDir()
+	jsonlPath := filepath.Join(dir, "session.jsonl")
+	outPath := filepath.Join(dir, "session.txt")
+	if err := os.WriteFile(jsonlPath, []byte(`{"type":"session_end","state":"completed"}`+"\n"), PrivateFileMode); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteTranscriptFile(jsonlPath, outPath); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != PrivateFileMode {
+		t.Fatalf("transcript mode = %#o, want %#o", got, PrivateFileMode)
 	}
 }
 

@@ -284,8 +284,7 @@ func (s *Server) handleApprovalPatternsItem(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	var list []string
-	if err := json.NewDecoder(r.Body).Decode(&list); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("bad request", err))
+	if !decodeJSON(w, r, &list) {
 		return
 	}
 	cleaned := make([]string, 0, len(list))
@@ -317,8 +316,7 @@ func (s *Server) handleApprovalProfile(w http.ResponseWriter, r *http.Request) {
 			Provider string `json:"provider"`
 			Profile  string `json:"profile"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("bad request", err))
+		if !decodeJSON(w, r, &body) {
 			return
 		}
 		if !IsKnownApprovalProvider(body.Provider) {
@@ -352,8 +350,7 @@ func (s *Server) handleApprovalCopyOfficial(w http.ResponseWriter, r *http.Reque
 	var body struct {
 		Provider string `json:"provider"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("bad request", err))
+	if !decodeJSON(w, r, &body) {
 		return
 	}
 	if !IsKnownApprovalProvider(body.Provider) {
