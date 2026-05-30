@@ -88,6 +88,11 @@ func (s *Server) cleanSessionLogs() {
 		return
 	}
 	cutoff := time.Now().Add(-time.Duration(days) * 24 * time.Hour)
+	if s.sessionStore != nil {
+		if err := s.sessionStore.PruneOlderThan(cutoff); err != nil {
+			s.logger.Warn("sqlite session store cleanup failed", "err", err)
+		}
+	}
 	for _, e := range entries {
 		if e.IsDir() {
 			continue

@@ -528,11 +528,17 @@
       <button class="view-tab" data-tab="split" type="button"><span>⇿</span> <span data-i18n="tab_split">分割</span></button>
       <button class="view-tab lazy" data-tab="files" type="button" data-i18n-tooltip="tab_files_lazy_tooltip"><span>📁</span> <span data-i18n="tab_files">Files</span></button>
       <button class="view-tab lazy" data-tab="git" type="button" data-i18n-tooltip="tab_git_lazy_tooltip"><span>⎇</span> <span data-i18n="tab_git">Git</span></button>
+      <button class="view-tab" data-tab="workbench" type="button"><span>▣</span> <span>Workbench</span></button>
       <!-- D12: 既存 #main-tab-status を統合バー右側へ移植 -->
       <span id="main-tab-status" class="tab-status" hidden>
         <span class="main-tab-status-runtime"></span>
         <span class="main-tab-status-last"></span>
       </span>
+      <button id="approval-queue-btn" type="button" aria-expanded="false">
+        <span data-i18n="approval_queue_btn">承認</span>
+        <span id="approval-queue-count">0</span>
+      </button>
+      <div id="approval-queue-panel" hidden></div>
       <!-- 旧 #main-tab-bar / #main-tab-list: FilesTabManager の DOM 状態保持用に残置(非表示) -->
       <div id="main-tab-bar" hidden><div id="main-tab-list"></div></div>
     </div>
@@ -576,6 +582,7 @@
       <div id="files-tab-contents"></div>
     </div>
     <div id="git-pane"></div>
+    <div id="workbench-pane"></div>
     </div><!-- /#display-area -->
     <!-- マルチビューコンテナ（#display-area の兄弟, マルチタブ選択時のみ表示） -->
     <div id="multi-view" hidden>

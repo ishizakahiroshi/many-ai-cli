@@ -1,0 +1,53 @@
+package hub
+
+import (
+	"net/http"
+	"strconv"
+	"strings"
+)
+
+func (s *Server) handleSessionChat(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodGet) {
+		return
+	}
+	if s.sessionStore == nil {
+		writeJSON(w, map[string]any{"ok": true, "messages": []any{}})
+		return
+	}
+	id, _ := strconv.Atoi(r.URL.Query().Get("session_id"))
+	if id <= 0 {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "session_id required")
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	messages, err := s.sessionStore.ChatMessagesByLiveSession(id, limit)
+	if err != nil {
+		s.logger.Warn("session chat restore failed", "session_id", id, "err", err)
+		writeJSONError(w, http.StatusInternalServerError, "session_chat_failed", "failed to restore chat")
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "messages": messages})
+}
+
+func (s *Server) handleSessionSearch(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodGet) {
+		return
+	}
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		writeJSON(w, map[string]any{"ok": true, "results": []any{}})
+		return
+	}
+	if s.sessionStore == nil {
+		writeJSON(w, map[string]any{"ok": true, "results": []any{}})
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	results, err := s.sessionStore.SearchMessages(q, limit)
+	if err != nil {
+		s.logger.Warn("session search failed", "query", q, "err", err)
+		writeJSONError(w, http.StatusInternalServerError, "session_search_failed", "failed to search sessions")
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "results": results})
+}

@@ -9,6 +9,13 @@ import { showActionBar } from './approval.js';
 (function (root) {
   'use strict';
 
+  function notifyApprovalQueue() {
+    try {
+      if (typeof root.updateApprovalQueue === 'function') root.updateApprovalQueue();
+      root.dispatchEvent(new CustomEvent('approval-queue-updated'));
+    } catch (_) {}
+  }
+
   function sendSessionHint(id, visible) {
     ws.send(JSON.stringify({ type: 'session_hint', session_id: id, approval_visible: !!visible }));
   }
@@ -25,6 +32,7 @@ import { showActionBar } from './approval.js';
       removeApprovalAutoSwitchTarget(id);
     }
     sendSessionHint(id, next);
+    notifyApprovalQueue();
     return wasVisible;
   }
 
@@ -32,11 +40,13 @@ import { showActionBar } from './approval.js';
     approvalRawOptionsCache.set(id, options);
     const source = Array.isArray(options) && options[0] && options[0]._approvalSource;
     if (source !== 'go_vt') approvalSourceCache.delete(id);
+    notifyApprovalQueue();
   }
 
   function clearApprovalOptions(id) {
     approvalRawOptionsCache.delete(id);
     approvalSourceCache.delete(id);
+    notifyApprovalQueue();
   }
 
   function showOptions(bar, id, options, showExpand = false, forceStickToBottom = false) {
@@ -55,6 +65,7 @@ import { showActionBar } from './approval.js';
     set_actionBarFocusIdx(-1);
     set_batchFocusIdx(-1);
     if (activeSessionId != null) actionBarShownAt.delete(activeSessionId);
+    notifyApprovalQueue();
   }
 
   function setMultiQuestionBannerVisible(visible) {
