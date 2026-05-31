@@ -1143,19 +1143,12 @@ export function sendBatchChoices(sessionId) {
   const selections = batchSelections.get(sessionId);
   if (!selections || selections.length === 0 || selections.some(v => v == null)) return;
   const prevOpts = approvalRawOptionsCache.get(sessionId);
-  let text;
-  if (isBatchOptions(prevOpts) && prevOpts.length === selections.length) {
-    // エージェントがグローバル連番（Q2が3,4等）を使った場合でも、
-    // 各セクション内の1-based位置に変換して送信する（仕様は各質問1始まり）。
-    const localPositions = selections.map((sel, idx) => {
-      const opts = prevOpts[idx]?.options || [];
-      const pos = opts.findIndex(o => o.num === sel);
-      return pos >= 0 ? pos + 1 : sel;
-    });
-    text = localPositions.map((pos, idx) => `${idx + 1} ${pos}`).join('\n');
-  } else {
-    text = selections.map((sel, idx) => `${idx + 1} ${sel}`).join('\n');
-  }
+  // 各行「質問番号 選択肢番号」で送る。選択肢番号はエージェントが提示した実番号
+  // （ボタン表示と一致）をそのまま使い、1始まり位置への変換は行わない。
+  // エージェントがグローバル連番（Q2が3,4等）を使った場合に変換すると、
+  // 提示番号（3,4）と回答番号（1,2）がずれ、表示・回答・エージェント解釈の
+  // 三者が食い違う。実番号を返せば、正しく1始まりのエージェントでも結果は同じ。
+  const text = selections.map((sel, idx) => `${idx + 1} ${sel}`).join('\n');
   if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
   sendApprovalConsumed(sessionId, prevOpts, text);
   sendSubmittedText(sessionId, `${text}\r`);
