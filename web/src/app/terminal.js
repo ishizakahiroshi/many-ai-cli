@@ -24,9 +24,9 @@ export function ensureTerminal(id) {
     scrollback: TERMINAL_SCROLLBACK_LINES,
     // xterm はセル幅ベースで描画するため、絵文字フォント混在でグリフが巨大化/崩れする環境がある。
     // 端末領域は等幅フォントのみを使い、見た目の安定性を優先する。
-    // 'TerminalNarrowNum'（styles.css 定義）を先頭に置き、丸数字・ローマ数字だけを
-    // 半角字形の等幅フォントへ振り分ける。範囲外の文字はスキップされ "MS Gothic" 以降に落ちる。
-    fontFamily: '"TerminalNarrowNum", "MS Gothic", "BIZ UDGothic", "BIZ UDゴシック", "Segoe UI Symbol", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace',
+    // 丸数字・ローマ数字（East Asian Ambiguous 幅）は "MS Gothic" 等の全角グリフで描き、
+    // xterm 側の wcwidth を width=2 に上書きして 2 セル枠へ収める（下の unicode 設定を参照）。
+    fontFamily: '"MS Gothic", "BIZ UDGothic", "BIZ UDゴシック", "Segoe UI Symbol", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace',
     fontSize: FONTSIZE_MAP[localStorage.getItem(STORAGE_FONTSIZE_KEY)] || 13,
     // 一部フォントで大文字上端がクリップされるため、行高を少し広げて回避する。
     lineHeight: 1.25,
@@ -152,6 +152,24 @@ export function ensureTerminal(id) {
     const u11 = new Unicode11Addon.Unicode11Addon();
     term.loadAddon(u11);
     term.unicode.activeVersion = '11';
+    // 丸数字(U+2460-24FF)・ローマ数字(U+2160-217F)は East Asian Ambiguous 幅。
+    // unicode11 はこれらを width=1 と判定するが、MS Gothic 等は全角グリフで描くため
+    // 1 セル枠からはみ出して隣の文字と重なる。これらだけ width=2 に上書きし、
+    // 全角グリフを 2 セル枠へぴったり収める。
+    // 幅テーブルは unicode11 本体を流用する（捕捉用ダミーへ activate して provider を取り出す）。
+    let v11 = null;
+    try {
+      new Unicode11Addon.Unicode11Addon().activate({ unicode: { register(p) { v11 = p; } } });
+    } catch (_) { /* 捕捉失敗時は version '11' のまま（重なりは残るが描画は維持） */ }
+    if (v11 && typeof v11.wcwidth === 'function') {
+      const isAmbiguousWide = (cp) =>
+        (cp >= 0x2160 && cp <= 0x217F) || (cp >= 0x2460 && cp <= 0x24FF);
+      term.unicode.register({
+        version: '11-aacli',
+        wcwidth(cp) { return isAmbiguousWide(cp) ? 2 : v11.wcwidth(cp); },
+      });
+      term.unicode.activeVersion = '11-aacli';
+    }
   }
   terminals.set(id, {
     term,
