@@ -202,6 +202,9 @@ type Server struct {
 	slashCmdMu    sync.Mutex
 	slashCmdCache map[string]*slashCmdCacheEntry // key: provider
 
+	approvalRulesMu     sync.Mutex
+	approvalRuleTargets map[string]approvalRuleTarget // key: normalized path
+
 	usageLinkCache *ttlCache[UsageLinkDefaults]
 
 	modelsCache       *modelsCache
@@ -282,6 +285,12 @@ var (
 		[]byte("Approval"),
 		[]byte("requires approval"),
 		[]byte("Requires approval"),
+		[]byte("requires permission"),
+		[]byte("Requires permission"),
+		[]byte("permission"),
+		[]byte("Permission"),
+		[]byte("confirm"),
+		[]byte("Confirm"),
 		[]byte("allow"),
 		[]byte("Allow"),
 		[]byte("deny"),
@@ -317,6 +326,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		wrappers:              map[int]*websocket.Conn{},
 		uis:                   map[*websocket.Conn]*uiConn{},
 		slashCmdCache:         map[string]*slashCmdCacheEntry{},
+		approvalRuleTargets:   map[string]approvalRuleTarget{},
 		usageLinkCache:        newUsageLinkCache(),
 		modelsCache:           &modelsCache{},
 		modelsRemoteCache:     newModelsRemoteCache(),
@@ -383,6 +393,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/log-config", s.handleLogConfig)
 	mux.HandleFunc("/api/session-chat", s.handleSessionChat)
 	mux.HandleFunc("/api/session-search", s.handleSessionSearch)
+	mux.HandleFunc("/api/session-store/reset", s.handleSessionStoreReset)
 	mux.HandleFunc("/api/open-dir", s.handleOpenDir)
 	mux.HandleFunc("/api/idle-timeout", s.handleIdleTimeout)
 	mux.HandleFunc("/api/reconnect-grace", s.handleReconnectGrace)
@@ -695,6 +706,9 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	ses.lastCols, ses.lastRows = initCols, initRows
 	ses.vt = newVTBuffer(initCols, initRows)
 	s.sessionsMu.Unlock()
+	if s.approvalRulesEnabled() {
+		s.injectApprovalRules()
+	}
 	_ = websocket.JSON.Send(conn, proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath})
 	s.logger.Info("session registered", "id", id, "provider", reg.Provider, "cwd", reg.CWD, "pid", reg.PID)
 	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Branch: branch, Label: reg.Label, Model: reg.Model, Route: regRoute, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath})
@@ -856,6 +870,9 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	if oldHistory != nil {
 		_ = oldHistory.Close()
 	}
+	if s.approvalRulesEnabled() {
+		s.injectApprovalRules()
+	}
 	_ = websocket.JSON.Send(conn, proto.Message{Type: "reattach_ack", SessionID: acceptedID})
 	s.broadcast(proto.Message{Type: "session_update", SessionID: acceptedID, Provider: req.Provider, Display: req.Display, CWD: req.CWD, Branch: branch, Label: req.Label, Model: req.Model, Route: reqRoute, Shell: req.Shell, State: "running", LastOutputAt: lastOutputAt, StartedAt: startedAtText, LogPath: rawLogPath, JSONLPath: jsonlPath})
 	s.writeHistory(acceptedID, map[string]any{
@@ -960,6 +977,7 @@ func (s *Server) wrapperMessageLoop(conn *websocket.Conn, id int) {
 	delete(s.wrappers, id)
 	var historyToClose *sessionlog.Writer
 	var jsonlPathForTranscript string
+	var endedProvider, endedCWD string
 	if cur := s.sessions[id]; cur != nil && cur.State != "completed" && cur.State != "error" {
 		cur.State = "disconnected"
 	}
@@ -971,6 +989,8 @@ func (s *Server) wrapperMessageLoop(conn *websocket.Conn, id int) {
 		cur.History = nil
 		jsonlPathForTranscript = cur.JSONLPath
 		endReason = cur.EndReason
+		endedProvider = cur.Provider
+		endedCWD = cur.CWD
 	}
 	s.sessionsMu.Unlock()
 	if endState == "disconnected" {
@@ -994,6 +1014,7 @@ func (s *Server) wrapperMessageLoop(conn *websocket.Conn, id int) {
 	if s.sessionStore != nil {
 		s.sessionStore.EndSession(id, endState, endReason, time.Now())
 	}
+	s.removeInactiveApprovalRules(providerApprovalRuleTargets(endedProvider, endedCWD))
 	s.finalizeTranscript(id, jsonlPathForTranscript)
 	s.broadcast(proto.Message{Type: "session_end", SessionID: id, State: endState, Reason: endReason})
 }
@@ -1392,10 +1413,14 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	_, exists := s.sessions[m.SessionID]
 	var historyToClose *sessionlog.Writer
 	var jsonlPathForTranscript string
+	var endedProvider, endedCWD string
 	if exists {
-		historyToClose = s.sessions[m.SessionID].History
-		jsonlPathForTranscript = s.sessions[m.SessionID].JSONLPath
-		s.sessions[m.SessionID].History = nil
+		ses := s.sessions[m.SessionID]
+		historyToClose = ses.History
+		jsonlPathForTranscript = ses.JSONLPath
+		endedProvider = ses.Provider
+		endedCWD = ses.CWD
+		ses.History = nil
 		delete(s.sessions, m.SessionID)
 		delete(s.wrappers, m.SessionID)
 	}
@@ -1424,6 +1449,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	if historyToClose != nil {
 		_ = historyToClose.Close()
 	}
+	s.removeInactiveApprovalRules(providerApprovalRuleTargets(endedProvider, endedCWD))
 	s.finalizeTranscript(m.SessionID, jsonlPathForTranscript)
 	s.broadcast(proto.Message{Type: "session_removed", SessionID: m.SessionID})
 	return false

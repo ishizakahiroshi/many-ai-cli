@@ -17,13 +17,13 @@ function detectFallback(provider, lines, matcher) {
   parser.markHubChoiceDefault(options, contextLines);
   const hasCursor = options.some(o => o.isCurrent);
   const hasNativePromptHint = contextLines.some(line => matcher(provider, line) || parser.matchNativeApprovalTrigger(line));
-  const isCodexShortcutMenu = provider === 'codex' && options.some(o => o._sendText) && hasNativePromptHint;
+  const isShortcutApprovalMenu = (provider === 'codex' || provider === 'copilot' || provider === 'cursor-agent') && options.some(o => o._sendText) && hasNativePromptHint;
   const approvalNear = (parser.hasApprovalLikeLabel(options) &&
     (parser.linesHaveHint(provider, contextLines, matcher) || hasNativePromptHint)) ||
     parser.isHubChoicePrompt(contextLines, options) ||
-    isCodexShortcutMenu;
+    isShortcutApprovalMenu;
   const hasChoiceMenu = hasCursor && options.length > 0 && hasNativePromptHint;
-  return (options.length > 0 && approvalNear && (hasCursor || isCodexShortcutMenu)) || hasChoiceMenu
+  return (options.length > 0 && approvalNear && (hasCursor || isShortcutApprovalMenu)) || hasChoiceMenu
     ? options
     : [];
 }
@@ -59,6 +59,37 @@ test('approval parser fixtures', () => {
   assert.equal(codex[0]._sendText, 'y');
   assert.equal(codex[1]._sendText, 'p');
   assert.equal(codex[2]._sendText, 'n');
+
+  const copilotLines = [
+    'Permission required',
+    '> 1. Allow once (y)',
+    '  2. Deny once (n)',
+    '  3. Allow all similar for this session (!)',
+    '  4. Show details (?)',
+  ];
+  const copilot = detectFallback('copilot', copilotLines, triggerMatcher);
+  assert.deepEqual(numbers(copilot), [1, 2, 3, 4]);
+  assert.equal(copilot[0]._sendText, 'y');
+  assert.equal(copilot[1]._sendText, 'n');
+  assert.equal(copilot[2]._sendText, '!');
+  assert.equal(copilot[3]._sendText, '?');
+
+  // cursor-agent 実機 UI（キー表記のみのメニュー: (y)/(tab)/(shift+tab)/(esc or n)）は
+  // Go バックエンドの native 検出（go_vt 経路）で処理する。ここでは fallback パーサが
+  // cursor-agent を shortcut-menu provider として扱う汎用挙動（番号付きバリアント）のみ検証する。
+  const cursorAgentLines = [
+    'Permission required',
+    '> 1. Allow once (y)',
+    '  2. Deny once (n)',
+    '  3. Allow all similar for this session (!)',
+    '  4. Show details (?)',
+  ];
+  const cursorAgent = detectFallback('cursor-agent', cursorAgentLines, triggerMatcher);
+  assert.deepEqual(numbers(cursorAgent), [1, 2, 3, 4]);
+  assert.equal(cursorAgent[0]._sendText, 'y');
+  assert.equal(cursorAgent[1]._sendText, 'n');
+  assert.equal(cursorAgent[2]._sendText, '!');
+  assert.equal(cursorAgent[3]._sendText, '?');
 
   const seq = parser.extractSequentialChoicePrompts([
     'Q1: Choose branch',
@@ -114,6 +145,32 @@ test('approval parser fixtures', () => {
   assert.equal(japaneseBatch.length, 2);
   assert.deepEqual(labels(japaneseBatch[0].options), ['たこ', 'いか', 'えび']);
   assert.deepEqual(labels(japaneseBatch[1].options), ['白米', 'パン', 'うどん']);
+
+  // TUI 再描画で改行が抜け、次の質問見出しが直前の行へ連結されたケースの回帰。
+  // 「N. User specifies」を区切りに再分割し、3 質問へ正しく復元できること。
+  const glued = parser.extractHubMarkerApproval([
+    '[ANY-AI-CLI]',
+    '1 マーカー指示の配置先は？',
+    '1. AGENTS.md に1ブロック集約',
+    '2. provider固有ファイルに分離（cursor=.cursor/rules/） N. User specifies 2 共有ブロックの削除タイミングは？',
+    '3. 参照管理',
+    '4. 常駐',
+    'N. User specifies 3 今回の進め方は？',
+    '5. まずplanに整理',
+    '6. そのまま実装',
+    'N. User specifies',
+    '[/ANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isBatchOptions(glued), true);
+  assert.equal(glued.length, 3);
+  assert.deepEqual(glued.map(s => s.title), [
+    'マーカー指示の配置先は？',
+    '共有ブロックの削除タイミングは？',
+    '今回の進め方は？',
+  ]);
+  assert.deepEqual(numbers(glued[0].options), [1, 2]);
+  assert.deepEqual(numbers(glued[1].options), [3, 4]);
+  assert.deepEqual(numbers(glued[2].options), [5, 6]);
 
   const numberedList = [
     'Implementation notes:',

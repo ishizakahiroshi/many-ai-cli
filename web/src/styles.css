@@ -47,6 +47,15 @@
   --perm-bg:             #2e1065;
   --perm-text:           #d8b4fe;
 
+  /* プロバイダ識別色（チップ/タブ/アイコン共通の単一定義）
+     色を変えるときはこの6変数だけ編集すれば全箇所に反映される */
+  --prov-claude:         #fb923c;
+  --prov-codex:          #60a5fa;
+  --prov-copilot:        #7c3aed;
+  --prov-ollama:         #c4973a;
+  --prov-opencode:       #22c55e;
+  --prov-cursor-agent:   #94a3b8;
+
   /* Git graph lane colors (dark) */
   --lane-1:              #38bdf8;  /* 青系: HEAD/develop/main 系の主軸 */
   --lane-2:              #f87171;  /* 赤系: feature/hotfix */
@@ -552,6 +561,33 @@ header {
 }
 .card-dir-icon:hover { opacity: 1; }
 
+/* ============================================================
+   プロバイダ識別色ユーティリティ
+   実色は :root の --prov-* で定義。ここでは各使用箇所をローカル
+   変数 --prov に橋渡しし、背景/塗りは color-mix で派生させる。
+   ============================================================ */
+.card-provider-chip.claude,   .summary-provider-name.claude,   .pane-slot .sc-provider.claude,   .prov-shape.claude,   .prov-letter.claude   { --prov: var(--prov-claude); }
+.card-provider-chip.codex,    .summary-provider-name.codex,    .pane-slot .sc-provider.codex,    .prov-shape.codex,    .prov-letter.codex    { --prov: var(--prov-codex); }
+.card-provider-chip.copilot,  .summary-provider-name.copilot,  .pane-slot .sc-provider.copilot,  .prov-shape.copilot,  .prov-letter.copilot  { --prov: var(--prov-copilot); }
+.card-provider-chip.ollama,   .summary-provider-name.ollama,   .pane-slot .sc-provider.ollama,   .prov-shape.ollama,   .prov-letter.ollama   { --prov: var(--prov-ollama); }
+.card-provider-chip.opencode, .summary-provider-name.opencode, .pane-slot .sc-provider.opencode, .prov-shape.opencode, .prov-letter.opencode { --prov: var(--prov-opencode); }
+.card-provider-chip.cursor-agent, .summary-provider-name.cursor-agent, .pane-slot .sc-provider.cursor-agent, .prov-shape.cursor-agent, .prov-letter.cursor-agent { --prov: var(--prov-cursor-agent); }
+
+/* チップ（プロバイダーチップ / サマリ名）: メイン色文字 + 12%背景 */
+.card-provider-chip, .summary-provider-name {
+  color: var(--prov);
+  background: color-mix(in srgb, var(--prov) 12%, transparent);
+}
+/* タブ内バッジ: 淡色塗り + メイン色の文字/枠（サイズ等は tabs.css 側） */
+.pane-slot .sc-provider {
+  background: color-mix(in srgb, var(--prov) 10%, white);
+  color: var(--prov);
+  border: 1px solid var(--prov);
+}
+/* SVGアイコン: 淡色塗り + メイン色の線/文字（未知プロバイダはグレー） */
+.prov-shape  { fill: color-mix(in srgb, var(--prov, #6b7280) 10%, white); stroke: var(--prov, #6b7280); }
+.prov-letter { fill: var(--prov, #6b7280); }
+
 /* プロバイダーチップ */
 .card-provider-chip {
   display: inline-flex;
@@ -563,10 +599,6 @@ header {
   letter-spacing: 0.04em;
   flex-shrink: 0;
 }
-.card-provider-chip.claude    { color: #fb923c; background: rgba(251,146,60,0.12); }
-.card-provider-chip.codex     { color: #60a5fa; background: rgba(96,165,250,0.12); }
-.card-provider-chip.ollama    { color: #C4973A; background: rgba(196,151,58,0.12); }
-.card-provider-chip.opencode  { color: #A855F7; background: rgba(168,85,247,0.12); }
 
 /* バッジ */
 .badge { display: inline-block; padding: 2px 6px; font-size: 0.64rem; font-weight: bold; border-radius: 20px; }
@@ -1084,10 +1116,7 @@ header {
 .summary-provider-chip .compact-hide { display: inline-flex; align-items: center; gap: 4px; }
 .summary-provider-chip .compact-count { display: none; color: var(--muted); font-size: 0.78rem; }
 .summary-provider-name { display: inline-flex; align-items: center; font-size: 0.7rem; font-weight: 700; padding: 1px 6px; border-radius: 4px; letter-spacing: 0.04em; }
-.summary-provider-name.claude    { color: #fb923c; background: rgba(251,146,60,0.12); }
-.summary-provider-name.codex     { color: #60a5fa; background: rgba(96,165,250,0.12); }
-.summary-provider-name.ollama    { color: #C4973A; background: rgba(196,151,58,0.12); }
-.summary-provider-name.opencode  { color: #A855F7; background: rgba(168,85,247,0.12); }
+/* プロバイダ別の color/background はプロバイダ識別色ユーティリティで適用 */
 .summary-provider-count { color: var(--muted); font-size: 0.78rem; }
 .summary-ollama-model { font-size: 0.7rem; color: var(--muted-2); white-space: nowrap; }
 

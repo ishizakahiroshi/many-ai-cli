@@ -314,6 +314,8 @@ func (s *Server) handleWorkbenchDiagnostics(w http.ResponseWriter, r *http.Reque
 		{"git", []string{"--version"}},
 		{"claude", []string{"--version"}},
 		{"codex", []string{"--version"}},
+		{"copilot", []string{"--version"}},
+		{"cursor-agent", []string{"--version"}},
 		{"ollama", []string{"--version"}},
 	}
 	out := make([]check, 0, len(commands))

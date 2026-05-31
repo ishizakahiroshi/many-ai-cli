@@ -48,6 +48,12 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 
   function getModelGroupsForProvider(provider) {
     if (!Array.isArray(spawnModelGroups)) return [];
+    if (provider === 'copilot') {
+      return spawnModelGroups.filter(g => g && g.provider === 'copilot' && Array.isArray(g.models));
+    }
+    if (provider === 'cursor-agent') {
+      return spawnModelGroups.filter(g => g && g.provider === 'cursor-agent' && Array.isArray(g.models));
+    }
     const groups = spawnModelGroups.filter(g => g && Array.isArray(g.models) && (!g.provider || g.provider === provider));
     groups.sort((a, b) => {
       const rank = (g) => {
@@ -135,6 +141,12 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   function resolveRoute(provider, model) {
     const m = (model || '').trim();
     if (!m) return '';
+    if (provider === 'copilot') {
+      return '';
+    }
+    if (provider === 'cursor-agent') {
+      return '';
+    }
     for (const g of getModelGroupsForProvider(provider)) {
       if (groupHasModel(g, m)) return g.route || '';
     }
@@ -189,6 +201,14 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     const p = spawnProviderEl.value;
     document.getElementById('spawn-claude-opts').hidden = (p !== 'claude');
     document.getElementById('spawn-codex-opts').hidden  = (p !== 'codex');
+    const claudeNote = document.getElementById('spawn-claude-note');
+    const codexNote = document.getElementById('spawn-codex-note');
+    const copilotNote = document.getElementById('spawn-copilot-note');
+    const cursorAgentNote = document.getElementById('spawn-cursor-agent-note');
+    if (claudeNote) claudeNote.hidden = (p !== 'claude');
+    if (codexNote) codexNote.hidden = (p !== 'codex');
+    if (copilotNote) copilotNote.hidden = (p !== 'copilot');
+    if (cursorAgentNote) cursorAgentNote.hidden = (p !== 'cursor-agent');
     if (p !== 'codex')  codexModelSelection  = null;
     if (p !== 'claude') claudeModelSelection = null;
     populateModelDatalist();
@@ -238,6 +258,14 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         const p = s.provider;
         document.getElementById('spawn-claude-opts').hidden = (p !== 'claude');
         document.getElementById('spawn-codex-opts').hidden  = (p !== 'codex');
+        const claudeNote = document.getElementById('spawn-claude-note');
+        const codexNote = document.getElementById('spawn-codex-note');
+        const copilotNote = document.getElementById('spawn-copilot-note');
+        const cursorAgentNote = document.getElementById('spawn-cursor-agent-note');
+        if (claudeNote) claudeNote.hidden = (p !== 'claude');
+        if (codexNote) codexNote.hidden = (p !== 'codex');
+        if (copilotNote) copilotNote.hidden = (p !== 'copilot');
+        if (cursorAgentNote) cursorAgentNote.hidden = (p !== 'cursor-agent');
       }
       if (s.cwd)              spawnCwdInput.value = s.cwd;
       if (s.model !== undefined) setSpawnModelValue(s.model);

@@ -33,7 +33,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	if body.Provider != "claude" && body.Provider != "codex" {
+	if body.Provider != "claude" && body.Provider != "codex" && body.Provider != "copilot" && body.Provider != "cursor-agent" {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
 		return
 	}
@@ -153,6 +153,14 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		}
 		if body.AskForApproval != "" {
 			wrapArgs = append(wrapArgs, "--ask-for-approval", body.AskForApproval)
+		}
+	case "copilot":
+		if resolvedModel != "" {
+			wrapArgs = append(wrapArgs, "--model", resolvedModel)
+		}
+	case "cursor-agent":
+		if resolvedModel != "" {
+			wrapArgs = append(wrapArgs, "--model", resolvedModel)
 		}
 	}
 	// route が未指定の場合は model 名から推定する。Anthropic / OpenAI の

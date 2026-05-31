@@ -55,9 +55,7 @@
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 0.55rem; font-weight: bold; font-family: sans-serif;
 }
-.pane-slot .sc-provider.claude { background: #FFF7ED; color: #F97316; border: 1px solid #F97316; }
-.pane-slot .sc-provider.codex  { background: #EFF6FF; color: #3B82F6; border: 1px solid #3B82F6; }
-.pane-slot .sc-provider.ollama { background: #FDF6E3; color: #C4973A; border: 1px solid #C4973A; }
+/* プロバイダ別の background/color/border は styles.css のプロバイダ識別色ユーティリティで適用 */
 .pane-slot .ph-sid {
   flex-shrink: 0; font-size: 0.68rem; font-weight: bold; font-family: monospace;
   color: var(--accent-text);

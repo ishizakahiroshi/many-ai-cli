@@ -1,59 +1,291 @@
 package hub
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	"any-ai-cli/internal/wrapper"
 )
 
-// globalRulePaths はグローバルな Claude/Codex ルールファイルのパスを返す
-func globalRulePaths() map[string]string {
+type approvalRuleMode string
+
+const (
+	approvalRuleModeClaudeImport approvalRuleMode = "claude_import"
+	approvalRuleModeSharedBlock  approvalRuleMode = "shared_block"
+)
+
+type approvalRuleTarget struct {
+	Path      string
+	Providers []string
+	Mode      approvalRuleMode
+}
+
+func (t approvalRuleTarget) wrapperProvider() string {
+	if t.Mode == approvalRuleModeClaudeImport {
+		return "claude"
+	}
+	return "codex"
+}
+
+func approvalTargetKey(path string) string {
+	key := filepath.Clean(path)
+	if runtime.GOOS == "windows" {
+		key = strings.ToLower(key)
+	}
+	return key
+}
+
+func mergeApprovalRuleTargets(targets []approvalRuleTarget) []approvalRuleTarget {
+	byKey := make(map[string]approvalRuleTarget, len(targets))
+	order := make([]string, 0, len(targets))
+	for _, target := range targets {
+		if strings.TrimSpace(target.Path) == "" {
+			continue
+		}
+		target.Path = filepath.Clean(target.Path)
+		key := approvalTargetKey(target.Path)
+		existing, ok := byKey[key]
+		if !ok {
+			target.Providers = uniqueProviders(target.Providers)
+			byKey[key] = target
+			order = append(order, key)
+			continue
+		}
+		existing.Providers = uniqueProviders(append(existing.Providers, target.Providers...))
+		byKey[key] = existing
+	}
+	out := make([]approvalRuleTarget, 0, len(order))
+	for _, key := range order {
+		out = append(out, byKey[key])
+	}
+	return out
+}
+
+func uniqueProviders(providers []string) []string {
+	seen := make(map[string]struct{}, len(providers))
+	for _, provider := range providers {
+		provider = strings.TrimSpace(provider)
+		if provider == "" {
+			continue
+		}
+		seen[provider] = struct{}{}
+	}
+	order := []string{"claude", "codex", "copilot", "cursor-agent"}
+	out := make([]string, 0, len(seen))
+	for _, provider := range order {
+		if _, ok := seen[provider]; ok {
+			out = append(out, provider)
+			delete(seen, provider)
+		}
+	}
+	for _, provider := range providers {
+		provider = strings.TrimSpace(provider)
+		if _, ok := seen[provider]; ok {
+			out = append(out, provider)
+			delete(seen, provider)
+		}
+	}
+	return out
+}
+
+func instructionRootForCWD(cwd string) string {
+	cwd = strings.TrimSpace(cwd)
+	if cwd == "" {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), branchLookupTimeout)
+	defer cancel()
+	if out, err := runGit(ctx, cwd, "rev-parse", "--show-toplevel"); err == nil {
+		if root := strings.TrimSpace(string(out)); root != "" {
+			return filepath.Clean(root)
+		}
+	}
+	if abs, err := filepath.Abs(cwd); err == nil {
+		return filepath.Clean(abs)
+	}
+	return filepath.Clean(cwd)
+}
+
+func providerApprovalRuleTargets(provider, cwd string) []approvalRuleTarget {
+	home, _ := os.UserHomeDir()
+	switch provider {
+	case "claude":
+		return []approvalRuleTarget{{
+			Path:      filepath.Join(home, ".claude", "CLAUDE.md"),
+			Providers: []string{"claude"},
+			Mode:      approvalRuleModeClaudeImport,
+		}}
+	case "codex", "copilot", "cursor-agent":
+		root := instructionRootForCWD(cwd)
+		if root == "" {
+			return nil
+		}
+		return []approvalRuleTarget{{
+			Path:      filepath.Join(root, "AGENTS.md"),
+			Providers: []string{provider},
+			Mode:      approvalRuleModeSharedBlock,
+		}}
+	default:
+		return nil
+	}
+}
+
+func legacyApprovalRuleTargets() []approvalRuleTarget {
 	home, _ := os.UserHomeDir()
 	codexHome := os.Getenv("CODEX_HOME")
 	if codexHome == "" {
 		codexHome = filepath.Join(home, ".codex")
 	}
-	return map[string]string{
-		"claude": filepath.Join(home, ".claude", "CLAUDE.md"),
-		"codex":  filepath.Join(codexHome, "AGENTS.md"),
+	return []approvalRuleTarget{{
+		Path:      filepath.Join(codexHome, "AGENTS.md"),
+		Providers: []string{"codex"},
+		Mode:      approvalRuleModeSharedBlock,
+	}}
+}
+
+func (s *Server) approvalRulesEnabled() bool {
+	s.cfgMu.Lock()
+	defer s.cfgMu.Unlock()
+	return s.cfg.Approval.Enabled
+}
+
+func (s *Server) activeApprovalRuleTargets() []approvalRuleTarget {
+	type snap struct {
+		provider string
+		cwd      string
+	}
+	s.sessionsMu.Lock()
+	snaps := make([]snap, 0, len(s.sessions))
+	for id, ses := range s.sessions {
+		if ses == nil || s.wrappers[id] == nil {
+			continue
+		}
+		if ses.State == "completed" || ses.State == "error" || ses.State == "disconnected" {
+			continue
+		}
+		snaps = append(snaps, snap{provider: ses.Provider, cwd: ses.CWD})
+	}
+	s.sessionsMu.Unlock()
+
+	targets := make([]approvalRuleTarget, 0, len(snaps))
+	for _, snap := range snaps {
+		targets = append(targets, providerApprovalRuleTargets(snap.provider, snap.cwd)...)
+	}
+	return mergeApprovalRuleTargets(targets)
+}
+
+func (s *Server) rememberApprovalTargets(targets []approvalRuleTarget) {
+	if len(targets) == 0 {
+		return
+	}
+	s.approvalRulesMu.Lock()
+	defer s.approvalRulesMu.Unlock()
+	if s.approvalRuleTargets == nil {
+		s.approvalRuleTargets = map[string]approvalRuleTarget{}
+	}
+	for _, target := range mergeApprovalRuleTargets(targets) {
+		key := approvalTargetKey(target.Path)
+		if existing, ok := s.approvalRuleTargets[key]; ok {
+			existing.Providers = uniqueProviders(append(existing.Providers, target.Providers...))
+			s.approvalRuleTargets[key] = existing
+			continue
+		}
+		s.approvalRuleTargets[key] = target
 	}
 }
 
-func (s *Server) injectApprovalRules() {
+func (s *Server) knownApprovalTargets() []approvalRuleTarget {
+	s.approvalRulesMu.Lock()
+	defer s.approvalRulesMu.Unlock()
+	targets := make([]approvalRuleTarget, 0, len(s.approvalRuleTargets))
+	for _, target := range s.approvalRuleTargets {
+		targets = append(targets, target)
+	}
+	return mergeApprovalRuleTargets(targets)
+}
+
+func (s *Server) forgetApprovalTargets(targets []approvalRuleTarget) {
+	if len(targets) == 0 {
+		return
+	}
+	s.approvalRulesMu.Lock()
+	defer s.approvalRulesMu.Unlock()
+	for _, target := range targets {
+		delete(s.approvalRuleTargets, approvalTargetKey(target.Path))
+	}
+}
+
+func (s *Server) injectApprovalTargets(targets []approvalRuleTarget) {
+	targets = mergeApprovalRuleTargets(targets)
+	if len(targets) == 0 {
+		return
+	}
 	if err := wrapper.SyncRulesFile(); err != nil {
 		s.logger.Warn("sync rules file failed", "err", err)
 		return
 	}
-	for provider, path := range globalRulePaths() {
-		if _, err := os.Stat(path); os.IsNotExist(err) {
+	var injected []approvalRuleTarget
+	for _, target := range targets {
+		provider := target.wrapperProvider()
+		if err := wrapper.InjectRules(provider, target.Path); err != nil {
+			s.logger.Warn("inject rules failed", "providers", strings.Join(target.Providers, ","), "path", target.Path, "err", err)
 			continue
 		}
-		var already bool
-		switch provider {
-		case "claude":
-			already, _ = wrapper.ScanClaudeConfigured(path)
-		case "codex":
-			already, _ = wrapper.ScanCodexConfigured(path)
-		}
-		if already {
-			continue
-		}
-		if err := wrapper.InjectRules(provider, path); err != nil {
-			s.logger.Warn("inject rules failed", "provider", provider, "path", path, "err", err)
-		} else {
-			s.logger.Debug("inject rules ok", "provider", provider, "path", path)
-		}
+		s.logger.Debug("inject rules ok", "providers", strings.Join(target.Providers, ","), "path", target.Path)
+		injected = append(injected, target)
 	}
+	s.rememberApprovalTargets(injected)
+}
+
+func (s *Server) removeApprovalTargets(targets []approvalRuleTarget) {
+	targets = mergeApprovalRuleTargets(targets)
+	if len(targets) == 0 {
+		return
+	}
+	var removed []approvalRuleTarget
+	for _, target := range targets {
+		provider := target.wrapperProvider()
+		if err := wrapper.RemoveRules(provider, target.Path); err != nil {
+			s.logger.Warn("remove rules failed", "providers", strings.Join(target.Providers, ","), "path", target.Path, "err", err)
+			continue
+		}
+		removed = append(removed, target)
+	}
+	s.forgetApprovalTargets(removed)
+}
+
+func (s *Server) injectApprovalRules() {
+	s.injectApprovalTargets(s.activeApprovalRuleTargets())
 }
 
 func (s *Server) removeApprovalRules() {
-	for provider, path := range globalRulePaths() {
-		if err := wrapper.RemoveRules(provider, path); err != nil {
-			s.logger.Warn("remove rules failed", "provider", provider, "path", path, "err", err)
-		}
+	targets := append(s.knownApprovalTargets(), s.activeApprovalRuleTargets()...)
+	targets = append(targets, legacyApprovalRuleTargets()...)
+	s.removeApprovalTargets(targets)
+}
+
+func (s *Server) removeInactiveApprovalRules(candidates []approvalRuleTarget) {
+	candidates = append(candidates, s.knownApprovalTargets()...)
+	if len(candidates) == 0 {
+		return
 	}
+	active := s.activeApprovalRuleTargets()
+	activeKeys := make(map[string]struct{}, len(active))
+	for _, target := range active {
+		activeKeys[approvalTargetKey(target.Path)] = struct{}{}
+	}
+	var removable []approvalRuleTarget
+	for _, target := range mergeApprovalRuleTargets(candidates) {
+		if _, ok := activeKeys[approvalTargetKey(target.Path)]; ok {
+			continue
+		}
+		removable = append(removable, target)
+	}
+	s.removeApprovalTargets(removable)
 }
 
 func (s *Server) handleApprovalStatus(w http.ResponseWriter, r *http.Request) {

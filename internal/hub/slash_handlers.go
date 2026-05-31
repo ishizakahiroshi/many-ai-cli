@@ -32,12 +32,22 @@ func (s *Server) handleSlashCmdSources(w http.ResponseWriter, r *http.Request) {
 		}
 		body.Claude = strings.TrimSpace(body.Claude)
 		body.Codex = strings.TrimSpace(body.Codex)
+		body.Copilot = strings.TrimSpace(body.Copilot)
+		body.CursorAgent = strings.TrimSpace(body.CursorAgent)
 		if err := validateSlashCmdSource(body.Claude); err != nil {
 			writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("invalid claude source", err))
 			return
 		}
 		if err := validateSlashCmdSource(body.Codex); err != nil {
 			writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("invalid codex source", err))
+			return
+		}
+		if err := validateSlashCmdSource(body.Copilot); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("invalid copilot source", err))
+			return
+		}
+		if err := validateSlashCmdSource(body.CursorAgent); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("invalid cursor-agent source", err))
 			return
 		}
 		s.cfgMu.Lock()
@@ -49,6 +59,12 @@ func (s *Server) handleSlashCmdSources(w http.ResponseWriter, r *http.Request) {
 		}
 		if body.Codex != prev.Codex {
 			s.invalidateSlashCache("codex")
+		}
+		if body.Copilot != prev.Copilot {
+			s.invalidateSlashCache("copilot")
+		}
+		if body.CursorAgent != prev.CursorAgent {
+			s.invalidateSlashCache("cursor-agent")
 		}
 		if err := s.persistConfig(); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "save_failed", "save failed")
@@ -67,7 +83,7 @@ func (s *Server) handleSlashCommands(w http.ResponseWriter, r *http.Request) {
 	}
 
 	provider := r.URL.Query().Get("provider")
-	if provider != "claude" && provider != "codex" {
+	if provider != "claude" && provider != "codex" && provider != "copilot" && provider != "cursor-agent" {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
 		return
 	}
@@ -91,6 +107,10 @@ func (s *Server) handleSlashCommands(w http.ResponseWriter, r *http.Request) {
 		sourceURL = src.Claude
 	case "codex":
 		sourceURL = src.Codex
+	case "copilot":
+		sourceURL = src.Copilot
+	case "cursor-agent":
+		sourceURL = src.CursorAgent
 	}
 	s.cfgMu.Unlock()
 

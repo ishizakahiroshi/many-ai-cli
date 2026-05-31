@@ -168,19 +168,25 @@ export function providerIconHtml(provider, size = 16) {
   const base = `class="card-provider-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="${size}" height="${size}" aria-hidden="true"`;
   const txt  = `text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif"`;
   if (provider === 'claude') {
-    return `<svg ${base}><circle cx="8" cy="8" r="6" fill="#FFF7ED" stroke="#F97316" stroke-width="2"/><text x="8" y="8" ${txt} fill="#F97316">C</text></svg>`;
+    return `<svg ${base}><circle class="prov-shape claude" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter claude" x="8" y="8" ${txt}>C</text></svg>`;
   }
   if (provider === 'codex') {
-    return `<svg ${base}><circle cx="8" cy="8" r="6" fill="#EFF6FF" stroke="#3B82F6" stroke-width="2"/><text x="8" y="8" ${txt} fill="#3B82F6">X</text></svg>`;
+    return `<svg ${base}><circle class="prov-shape codex" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter codex" x="8" y="8" ${txt}>X</text></svg>`;
+  }
+  if (provider === 'copilot') {
+    return `<svg ${base}><circle class="prov-shape copilot" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter copilot" x="8" y="8" ${txt}>P</text></svg>`;
+  }
+  if (provider === 'cursor-agent') {
+    return `<svg ${base}><circle class="prov-shape cursor-agent" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter cursor-agent" x="8" y="8" ${txt}>r</text></svg>`;
   }
   if (provider === 'ollama') {
-    return `<svg ${base}><rect x="1" y="1" width="14" height="14" rx="3" fill="#FDF6E3" stroke="#C4973A" stroke-width="2"/><text x="8" y="8" ${txt} fill="#C4973A">O</text></svg>`;
+    return `<svg ${base}><rect class="prov-shape ollama" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter ollama" x="8" y="8" ${txt}>O</text></svg>`;
   }
   if (provider === 'opencode') {
-    return `<svg ${base}><rect x="1" y="1" width="14" height="14" rx="3" fill="#FAF5FF" stroke="#A855F7" stroke-width="2"/><text x="8" y="8" ${txt} fill="#A855F7">O</text></svg>`;
+    return `<svg ${base}><rect class="prov-shape opencode" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter opencode" x="8" y="8" ${txt}>O</text></svg>`;
   }
   const letter = (provider || '?')[0].toUpperCase();
-  return `<svg ${base}><circle cx="8" cy="8" r="6" fill="#F3F4F6" stroke="#6B7280" stroke-width="2"/><text x="8" y="8" ${txt} fill="#6B7280">${letter}</text></svg>`;
+  return `<svg ${base}><circle class="prov-shape" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter" x="8" y="8" ${txt}>${letter}</text></svg>`;
 }
 
 // C9: 整列ロジックは state.js の orderSessions に集約。getOrderedSessions は後方互換の薄い委譲。
@@ -522,7 +528,7 @@ export function renderSessionList() {
       const msgHtml = filteredMsg
         ? `<span class="card-msg" data-tooltip="${escapeHtml(filteredMsg)}">${escapeHtml(filteredMsg)}</span>`
         : `<span class="card-msg"></span>`;
-      const providerName = s.provider === 'claude' ? 'Claude' : s.provider === 'codex' ? 'Codex' : (s.provider || '');
+      const providerName = s.provider === 'claude' ? 'Claude' : s.provider === 'codex' ? 'Codex' : s.provider === 'copilot' ? 'Copilot' : s.provider === 'cursor-agent' ? 'Cursor Agent' : (s.provider || '');
       const providerChipHtml = providerName ? `<span class="card-provider-chip ${s.provider || ''}">${providerName}</span>` : '';
       const isDeadState = state === 'error' || state === 'disconnected';
       let reasonText = '';
@@ -946,8 +952,8 @@ export function renderSummaryAndNotifications() {
   });
   const totalWaiting = stateCounts.waiting;
 
-  const PROVIDER_LABELS = { claude: 'Claude', codex: 'Codex', ollama: 'Ollama', opencode: 'OpenCode' };
-  const PROVIDER_ORDER = { claude: 0, ollama: 1, codex: 2, opencode: 3 };
+  const PROVIDER_LABELS = { claude: 'Claude', codex: 'Codex', copilot: 'Copilot', 'cursor-agent': 'Cursor Agent', ollama: 'Ollama', opencode: 'OpenCode' };
+  const PROVIDER_ORDER = { claude: 0, ollama: 1, codex: 2, copilot: 3, opencode: 4, 'cursor-agent': 5 };
   const sortedGroups = Array.from(providerGroups.values()).sort((a, b) => {
     const ka = a.isOllamaBacked ? 'ollama' : a.provider;
     const kb = b.isOllamaBacked ? 'ollama' : b.provider;

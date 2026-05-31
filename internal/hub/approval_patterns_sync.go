@@ -107,6 +107,10 @@ func approvalSourceFor(src config.ApprovalPatternSources, provider string) strin
 		return src.Claude
 	case "codex":
 		return src.Codex
+	case "copilot":
+		return src.Copilot
+	case "cursor-agent":
+		return src.CursorAgent
 	case "common":
 		return src.Common
 	}

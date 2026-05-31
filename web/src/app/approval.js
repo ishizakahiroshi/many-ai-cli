@@ -59,7 +59,7 @@ export function clearSequentialChoiceState(id) {
 // Hub 起動時にデフォルトをユーザー設定ディレクトリに展開（既存ファイルは尊重）し、
 // HTTP 経由で配信する。ユーザーが直接編集して文言を追加・調整できる。
 // claude / codex は英語固定（Anthropic/OpenAI が国際化していない）、common は多言語混在。
-export const providerApprovalTriggers = { claude: [], codex: [], common: [] };
+export const providerApprovalTriggers = { claude: [], codex: [], copilot: [], 'cursor-agent': [], common: [] };
 
 (async function loadApprovalPatterns() {
   const fetchJson = async (name) => {
@@ -72,12 +72,14 @@ export const providerApprovalTriggers = { claude: [], codex: [], common: [] };
       return [];
     }
   };
-  const [claude, codex, common] = await Promise.all([
-    fetchJson('claude'), fetchJson('codex'), fetchJson('common'),
+  const [claude, codex, copilot, cursorAgent, common] = await Promise.all([
+    fetchJson('claude'), fetchJson('codex'), fetchJson('copilot'), fetchJson('cursor-agent'), fetchJson('common'),
   ]);
   const norm = arr => (Array.isArray(arr) ? arr : []).map(s => String(s).toLowerCase()).filter(Boolean);
   providerApprovalTriggers.claude = norm(claude);
   providerApprovalTriggers.codex  = norm(codex);
+  providerApprovalTriggers.copilot = norm(copilot);
+  providerApprovalTriggers['cursor-agent'] = norm(cursorAgent);
   providerApprovalTriggers.common = norm(common);
 })();
 
@@ -309,14 +311,14 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
   // 実際のCLI承認プロンプトは yes/no/allow/deny/proceed 等を含む。
   // Claude の通常回答（「パネル幅拡大...」等）との誤検出を防ぐため、
   // ラベル内容が承認系のときのみ approvalNear を評価する。
-  const approvalLabelRe = /\b(yes|no|allow|deny|proceed|abort|don[''']t ask|cancel)\b/i;
+  const approvalLabelRe = /\b(yes|no|allow|deny|proceed|abort|don[''']t ask|cancel|once|always|permission|confirm|details)\b/i;
   const hasApprovalLikeLabel = options.some((opt) => approvalLabelRe.test(opt.label));
   const isHubChoice = isHubChoicePrompt(contextLines, options);
   const hasNativePromptHint = contextLines.some((line) => !String(line || '').toLowerCase().includes('esc to go back') && (matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)));
-  const isCodexShortcutMenu = provider === 'codex' && options.some(o => o._sendText) && hasNativePromptHint;
-  const approvalNear = (hasCursorOption || isCodexShortcutMenu) &&
+  const isShortcutApprovalMenu = (provider === 'codex' || provider === 'copilot' || provider === 'cursor-agent') && options.some(o => o._sendText) && hasNativePromptHint;
+  const approvalNear = (hasCursorOption || isShortcutApprovalMenu) &&
     ((hasApprovalLikeLabel && (hasUserSpecifies || contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)))) || isHubChoice);
-  const hasChoiceMenuHint = (hasCursorOption || isCodexShortcutMenu) && options.length > 0 && hasNativePromptHint;
+  const hasChoiceMenuHint = (hasCursorOption || isShortcutApprovalMenu) && options.length > 0 && hasNativePromptHint;
   const nowVisible = (options.length > 0 && approvalNear) || hasChoiceMenuHint;
 
   // doSend / sendChoice で消費済みの選択肢が xterm scanBuffer に残っているため
@@ -337,7 +339,7 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
 
   if (nowVisible) {
     // Anti-flicker: 表示中の承認と異なる選択肢が検出されたときはキャッシュを更新しない。
-    // Codex の Ink 再描画で pendingTextTail に部分的・交互のオプションが混入する問題への対処。
+    // Codex/Copilot の TUI 再描画で pendingTextTail に部分的・交互のオプションが混入する問題への対処。
     // 切り替えは detectApproval の安定性ガード（700ms）が担う。
     const wasVisible = approvalVisibleCache.get(id);
     const existingCached = wasVisible && approvalRawOptionsCache.get(id);
@@ -720,11 +722,11 @@ export function detectApproval(id) {
   const hasApprovalLikeLabel = options.some((opt) => approvalLabelRe.test(opt.label));
   const isHubChoice = isHubChoicePrompt(contextLines, options);
   const hasNativePromptHint = contextLines.some((line) => !String(line || '').toLowerCase().includes('esc to go back') && (matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)));
-  const isCodexShortcutMenu = provider === 'codex' && options.some(o => o._sendText) && hasNativePromptHint;
+  const isShortcutApprovalMenu = (provider === 'codex' || provider === 'copilot' || provider === 'cursor-agent') && options.some(o => o._sendText) && hasNativePromptHint;
   const approvalNear = (hasApprovalLikeLabel &&
-    (hasUserSpecifies || hasNativePromptHint)) || isHubChoice || isCodexShortcutMenu;
-  const hasApproval = options.length > 0 && approvalNear && (hasCursorOption || isCodexShortcutMenu);
-  const hasChoiceMenu = (hasCursorOption || isCodexShortcutMenu) && options.length > 0 && hasNativePromptHint;
+    (hasUserSpecifies || hasNativePromptHint)) || isHubChoice || isShortcutApprovalMenu;
+  const hasApproval = options.length > 0 && approvalNear && (hasCursorOption || isShortcutApprovalMenu);
+  const hasChoiceMenu = (hasCursorOption || isShortcutApprovalMenu) && options.length > 0 && hasNativePromptHint;
   const hasPrompt = hasApproval || hasChoiceMenu;
 
   // 折りたたみ（クランチ）を検出

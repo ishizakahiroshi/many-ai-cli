@@ -16,6 +16,62 @@ func TestDefaultConfigOpensBrowser(t *testing.T) {
 	}
 }
 
+func TestProviderDefaultsIncludeCopilot(t *testing.T) {
+	slash := DefaultSlashCmdSources()
+	if slash.Copilot == "" || !strings.Contains(slash.Copilot, "/copilot.md") {
+		t.Fatalf("DefaultSlashCmdSources().Copilot = %q", slash.Copilot)
+	}
+	effSlash := EffectiveSlashCmdSources(SlashCmdSources{})
+	if effSlash.Copilot != slash.Copilot {
+		t.Fatalf("EffectiveSlashCmdSources().Copilot = %q, want %q", effSlash.Copilot, slash.Copilot)
+	}
+
+	patterns := DefaultApprovalPatternSources()
+	if patterns.Copilot == "" || !strings.Contains(patterns.Copilot, "/copilot.md") {
+		t.Fatalf("DefaultApprovalPatternSources().Copilot = %q", patterns.Copilot)
+	}
+	effPatterns := EffectiveApprovalPatternSources(ApprovalPatternSources{})
+	if effPatterns.Copilot != patterns.Copilot {
+		t.Fatalf("EffectiveApprovalPatternSources().Copilot = %q, want %q", effPatterns.Copilot, patterns.Copilot)
+	}
+
+	profiles := EffectiveApprovalProfiles(ApprovalProfiles{})
+	if profiles.For("copilot") != ApprovalProfileOfficial {
+		t.Fatalf("profiles.For(copilot) = %q", profiles.For("copilot"))
+	}
+	if got := profiles.WithProvider("copilot", ApprovalProfileCustom).For("copilot"); got != ApprovalProfileCustom {
+		t.Fatalf("WithProvider(copilot, custom).For(copilot) = %q", got)
+	}
+}
+
+func TestProviderDefaultsIncludeCursorAgent(t *testing.T) {
+	slash := DefaultSlashCmdSources()
+	if slash.CursorAgent == "" || !strings.Contains(slash.CursorAgent, "/cursor-agent.md") {
+		t.Fatalf("DefaultSlashCmdSources().CursorAgent = %q", slash.CursorAgent)
+	}
+	effSlash := EffectiveSlashCmdSources(SlashCmdSources{})
+	if effSlash.CursorAgent != slash.CursorAgent {
+		t.Fatalf("EffectiveSlashCmdSources().CursorAgent = %q, want %q", effSlash.CursorAgent, slash.CursorAgent)
+	}
+
+	patterns := DefaultApprovalPatternSources()
+	if patterns.CursorAgent == "" || !strings.Contains(patterns.CursorAgent, "/cursor-agent.md") {
+		t.Fatalf("DefaultApprovalPatternSources().CursorAgent = %q", patterns.CursorAgent)
+	}
+	effPatterns := EffectiveApprovalPatternSources(ApprovalPatternSources{})
+	if effPatterns.CursorAgent != patterns.CursorAgent {
+		t.Fatalf("EffectiveApprovalPatternSources().CursorAgent = %q, want %q", effPatterns.CursorAgent, patterns.CursorAgent)
+	}
+
+	profiles := EffectiveApprovalProfiles(ApprovalProfiles{})
+	if profiles.For("cursor-agent") != ApprovalProfileOfficial {
+		t.Fatalf("profiles.For(cursor-agent) = %q", profiles.For("cursor-agent"))
+	}
+	if got := profiles.WithProvider("cursor-agent", ApprovalProfileCustom).For("cursor-agent"); got != ApprovalProfileCustom {
+		t.Fatalf("WithProvider(cursor-agent, custom).For(cursor-agent) = %q", got)
+	}
+}
+
 // TestSaveAtomicWrite は Save が atomic write（temp + Rename）を使うことを確認する。
 // 書き込み後に temp ファイルが残っていないこと、内容が一致することを検証する。
 func TestSaveAtomicWrite(t *testing.T) {

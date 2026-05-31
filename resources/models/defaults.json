@@ -1,5 +1,6 @@
 {
   "anthropic": [
+    {"id": "claude-opus-4-8",          "label": "Claude Opus 4.8"},
     {"id": "claude-opus-4-7",          "label": "Claude Opus 4.7"},
     {"id": "claude-sonnet-4-6",        "label": "Claude Sonnet 4.6"},
     {"id": "claude-haiku-4-5",         "label": "Claude Haiku 4.5"},
@@ -12,5 +13,45 @@
     {"id": "gpt-5.4",      "label": "GPT-5.4"},
     {"id": "gpt-5.4-mini", "label": "GPT-5.4 mini"},
     {"id": "gpt-5.4-nano", "label": "GPT-5.4 nano"}
+  ],
+  "copilot": [
+    {"id": "claude-sonnet-4.6", "label": "Claude Sonnet 4.6"},
+    {"id": "claude-sonnet-4.5", "label": "Claude Sonnet 4.5"},
+    {"id": "claude-opus-4.8",   "label": "Claude Opus 4.8"},
+    {"id": "claude-opus-4.7",   "label": "Claude Opus 4.7"},
+    {"id": "claude-opus-4.6",   "label": "Claude Opus 4.6"},
+    {"id": "claude-haiku-4.5",  "label": "Claude Haiku 4.5"},
+    {"id": "gpt-5.5",           "label": "GPT-5.5"},
+    {"id": "gpt-5.4",           "label": "GPT-5.4"},
+    {"id": "gpt-5.4-mini",      "label": "GPT-5.4 mini"},
+    {"id": "gpt-5.3-codex",     "label": "GPT-5.3-Codex"},
+    {"id": "gpt-5-mini",        "label": "GPT-5 mini"},
+    {"id": "gemini-3.5-flash",  "label": "Gemini 3.5 Flash"},
+    {"id": "gemini-3.1-pro",    "label": "Gemini 3.1 Pro"},
+    {"id": "gemini-3-flash",    "label": "Gemini 3 Flash"},
+    {"id": "gemini-2.5-pro",    "label": "Gemini 2.5 Pro"}
+  ],
+  "cursor-agent": [
+    {"id": "auto",                          "label": "Auto"},
+    {"id": "composer-2.5",                  "label": "Composer 2.5"},
+    {"id": "composer-2.5-fast",             "label": "Composer 2.5 Fast"},
+    {"id": "claude-opus-4-8-high",          "label": "Opus 4.8 1M"},
+    {"id": "claude-opus-4-8-thinking-high", "label": "Opus 4.8 1M Thinking"},
+    {"id": "claude-opus-4-7-xhigh",         "label": "Opus 4.7 1M"},
+    {"id": "claude-4.6-opus-high",          "label": "Opus 4.6 1M"},
+    {"id": "claude-4.5-opus-high",          "label": "Opus 4.5"},
+    {"id": "claude-4.6-sonnet-medium",      "label": "Sonnet 4.6 1M"},
+    {"id": "claude-4.5-sonnet",             "label": "Sonnet 4.5"},
+    {"id": "claude-4-sonnet",               "label": "Sonnet 4"},
+    {"id": "gpt-5.5-medium",                "label": "GPT-5.5 1M"},
+    {"id": "gpt-5.4-medium",                "label": "GPT-5.4 1M"},
+    {"id": "gpt-5.3-codex",                 "label": "Codex 5.3"},
+    {"id": "gpt-5.2",                       "label": "GPT-5.2"},
+    {"id": "gpt-5.1",                       "label": "GPT-5.1"},
+    {"id": "gpt-5-mini",                    "label": "GPT-5 Mini"},
+    {"id": "gemini-3.1-pro",                "label": "Gemini 3.1 Pro"},
+    {"id": "gemini-3.5-flash",              "label": "Gemini 3.5 Flash"},
+    {"id": "grok-4.3",                      "label": "Grok 4.3 1M"},
+    {"id": "kimi-k2.5",                     "label": "Kimi K2.5"}
   ]
 }

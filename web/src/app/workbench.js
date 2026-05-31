@@ -178,7 +178,6 @@ function card(kind, title, desc, body) {
     <section class="wb-card wb-card-${kind}">
       <div class="wb-card-head">
         <h3>${escapeHtml(title)}</h3>
-        <span>実装済み</span>
       </div>
       <p>${escapeHtml(desc)}</p>
       ${body}
@@ -504,4 +503,3 @@ window.addEventListener('workbench-opened', initWorkbench);
 if (pane) {
   initWorkbench();
 }
-

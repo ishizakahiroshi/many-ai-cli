@@ -65,6 +65,72 @@ func TestDetectNativeApprovalCodexShortcut(t *testing.T) {
 	}
 }
 
+func TestDetectNativeApprovalCopilotShortcut(t *testing.T) {
+	lines := []string{
+		"Permission required",
+		"Run: git status",
+		"",
+		"❯ Allow once (y)",
+		"  Deny once (n)",
+		"  Allow all similar for this session (!)",
+		"  Deny all similar for this session (#)",
+		"  Show details (?)",
+	}
+	got := detectNativeApproval("copilot", lines)
+	if got == nil {
+		t.Fatal("detectNativeApproval returned nil")
+	}
+	if got.Kind != "native_copilot_shortcut" {
+		t.Fatalf("kind = %q", got.Kind)
+	}
+	if len(got.Options) != 5 {
+		t.Fatalf("options len = %d", len(got.Options))
+	}
+	wantSend := []string{"y", "n", "!", "#", "?"}
+	for i, want := range wantSend {
+		if got.Options[i].SendText != want {
+			t.Fatalf("option %d send_text = %q, want %q (%+v)", i+1, got.Options[i].SendText, want, got.Options)
+		}
+	}
+	if got.Options[3].Num != 4 || got.Options[4].Num != 5 {
+		t.Fatalf("copilot option nums = %+v", got.Options)
+	}
+}
+
+func TestDetectNativeApprovalCursorAgentShortcut(t *testing.T) {
+	// 実機 UI（スクリーンショットより）。番号付きではなくキー表記のみのメニュー。
+	lines := []string{
+		"Run this command?",
+		`Not in allowlist: Get-Date -Format "yyyy-MM-dd HH:mm:ss (dddd)"`,
+		" - Run (once) (y)",
+		"    Add Shell(Get-Date) to allowlist? (tab)",
+		"    Auto-run everything (shift+tab)",
+		"    Skip (esc or n)",
+	}
+	got := detectNativeApproval("cursor-agent", lines)
+	if got == nil {
+		t.Fatal("detectNativeApproval returned nil")
+	}
+	if got.Kind != "native_cursor_agent_shortcut" {
+		t.Fatalf("kind = %q", got.Kind)
+	}
+	if len(got.Options) != 4 {
+		t.Fatalf("options len = %d (%+v)", len(got.Options), got.Options)
+	}
+	wantSend := []string{"y", "\t", "\x1b[Z", "\x1b"}
+	for i, want := range wantSend {
+		if got.Options[i].SendText != want {
+			t.Fatalf("option %d send_text = %q, want %q (%+v)", i+1, got.Options[i].SendText, want, got.Options)
+		}
+	}
+	if !got.Options[0].IsCurrent {
+		t.Fatalf("option 1 should be current (selected): %+v", got.Options[0])
+	}
+	if got.Options[0].Label != "Run (once) (y)" || got.Options[1].Label != "Add Shell(Get-Date) to allowlist? (tab)" {
+		t.Fatalf("cursor-agent labels = %q / %q", got.Options[0].Label, got.Options[1].Label)
+	}
+}
+
 func TestDetectNativeApprovalFalsePositiveNumberedList(t *testing.T) {
 	lines := []string{
 		"Implementation plan:",
@@ -154,6 +220,21 @@ func TestExtractNativeApprovalOptionsBranches(t *testing.T) {
 		}
 	})
 
+	t.Run("accepts copilot shortcut send text without cursor", func(t *testing.T) {
+		lines := []string{
+			"  Allow once (y)",
+			"  Deny once (n)",
+			"  Allow all similar for this session (!)",
+		}
+		opts, _, _ := extractNativeApprovalOptions("copilot", lines)
+		if len(opts) != 3 {
+			t.Fatalf("opts len = %d, want 3 (%+v)", len(opts), opts)
+		}
+		if opts[0].SendText != "y" || opts[1].SendText != "n" || opts[2].SendText != "!" {
+			t.Fatalf("send_text values = %+v", opts)
+		}
+	})
+
 	t.Run("rejects option count above cap", func(t *testing.T) {
 		lines := make([]string, 0, approvalMaxOptions+1)
 		for i := 1; i <= approvalMaxOptions+1; i++ {
@@ -205,6 +286,28 @@ func TestNativeApprovalLooksValid(t *testing.T) {
 	}
 	if nativeApprovalLooksValid("codex", []string{"Choose a branch"}, codexOpts) {
 		t.Fatal("codex shortcut without hint should be invalid")
+	}
+
+	copilotOpts := []proto.ApprovalOption{
+		{Label: "Allow once (y)", SendText: "y"},
+		{Label: "Deny once (n)", SendText: "n"},
+	}
+	if !nativeApprovalLooksValid("copilot", []string{"Permission required"}, copilotOpts) {
+		t.Fatal("copilot shortcut with native hint should be valid")
+	}
+	if nativeApprovalLooksValid("copilot", []string{"Choose a branch"}, copilotOpts) {
+		t.Fatal("copilot shortcut without hint should be invalid")
+	}
+
+	cursorAgentOpts := []proto.ApprovalOption{
+		{Label: "Allow once (y)", SendText: "y"},
+		{Label: "Deny once (n)", SendText: "n"},
+	}
+	if !nativeApprovalLooksValid("cursor-agent", []string{"Permission required"}, cursorAgentOpts) {
+		t.Fatal("cursor-agent shortcut with native hint should be valid")
+	}
+	if nativeApprovalLooksValid("cursor-agent", []string{"Choose a branch"}, cursorAgentOpts) {
+		t.Fatal("cursor-agent shortcut without hint should be invalid")
 	}
 }
 

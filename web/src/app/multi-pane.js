@@ -286,6 +286,8 @@ export class MultiPaneManager {
     provBadge.className = `sc-provider ${session.provider || ''}`;
     provBadge.textContent = session.provider === 'claude' ? 'C'
                           : session.provider === 'codex'  ? 'X'
+                          : session.provider === 'copilot' ? 'P'
+                          : session.provider === 'cursor-agent' ? 'r'
                           : session.provider === 'ollama' ? 'O'
                           : (session.provider || '?')[0].toUpperCase();
     header.appendChild(provBadge);

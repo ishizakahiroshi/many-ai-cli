@@ -91,10 +91,23 @@ func startProcess(provider string, args []string, cwd string, cols, rows int) (p
 }
 
 func resolveCmd(provider string, args []string) (string, []string) {
+	if provider == "copilot" {
+		if exePath, err := exec.LookPath("copilot"); err == nil {
+			return resolveExecutablePath(exePath, args)
+		}
+		if exePath, err := exec.LookPath("gh"); err == nil {
+			return resolveExecutablePath(exePath, copilotViaGhArgs(args))
+		}
+		return provider, args
+	}
 	exePath, err := exec.LookPath(provider)
 	if err != nil {
 		return provider, args
 	}
+	return resolveExecutablePath(exePath, args)
+}
+
+func resolveExecutablePath(exePath string, args []string) (string, []string) {
 	exePath = sanitizeExecutablePath(exePath)
 	lower := strings.ToLower(exePath)
 	if strings.HasSuffix(lower, ".cmd") || strings.HasSuffix(lower, ".ps1") || filepath.Ext(lower) == "" {

@@ -363,7 +363,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		return err
 	}
 	cwd, _ := os.Getwd()
-	display := map[string]string{"claude": "Claude", "codex": "Codex"}[provider]
+	display := map[string]string{"claude": "Claude", "codex": "Codex", "copilot": "GitHub Copilot", "cursor-agent": "Cursor Agent"}[provider]
 	termCols, termRows := 0, 0
 	if w, h, err := term.GetSize(int(os.Stdin.Fd())); err == nil && w > 0 && h > 0 {
 		termCols, termRows = w, h

@@ -10,9 +10,9 @@ import (
 )
 
 const claudeImportLine = "@~/.any-ai-cli/approval-rules.md"
-const codexBlockStart  = "<!-- any-ai-cli:approval-rules -->"
-const codexBlockEnd    = "<!-- /any-ai-cli:approval-rules -->"
-const rulesVersion     = "4"
+const sharedBlockStart = "<!-- any-ai-cli:approval-rules -->"
+const sharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
+const rulesVersion = "4"
 
 var rulesFileContent = strings.Join([]string{
 	fmt.Sprintf("<!-- version: %s -->", rulesVersion),
@@ -105,6 +105,15 @@ func SyncRulesFile() error {
 	return os.WriteFile(path, []byte(rulesFileContent), 0o644)
 }
 
+func providerUsesSharedBlock(provider string) bool {
+	switch provider {
+	case "codex", "copilot", "cursor-agent":
+		return true
+	default:
+		return false
+	}
+}
+
 // ScanClaudeConfigured は CLAUDE.md に claudeImportLine が含まれているか確認する
 func ScanClaudeConfigured(path string) (bool, error) {
 	f, err := os.Open(path)
@@ -121,8 +130,8 @@ func ScanClaudeConfigured(path string) (bool, error) {
 	return false, nil
 }
 
-// ScanCodexConfigured は AGENTS.md に codexBlockStart が含まれているか確認する
-func ScanCodexConfigured(path string) (bool, error) {
+// ScanSharedBlockConfigured は AGENTS.md 等に共有ブロックが含まれているか確認する
+func ScanSharedBlockConfigured(path string) (bool, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return false, err
@@ -130,16 +139,36 @@ func ScanCodexConfigured(path string) (bool, error) {
 	defer f.Close()
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		if strings.TrimSpace(scanner.Text()) == codexBlockStart {
+		if strings.TrimSpace(scanner.Text()) == sharedBlockStart {
 			return true, nil
 		}
 	}
 	return false, nil
 }
 
+// ScanCodexConfigured は後方互換用。共有ブロック方式の検出を行う。
+func ScanCodexConfigured(path string) (bool, error) {
+	return ScanSharedBlockConfigured(path)
+}
+
+// ScanRulesConfigured は provider に対応する注入済みマーカーを検出する。
+func ScanRulesConfigured(provider, path string) (bool, error) {
+	switch {
+	case provider == "claude":
+		return ScanClaudeConfigured(path)
+	case providerUsesSharedBlock(provider):
+		return ScanSharedBlockConfigured(path)
+	default:
+		return false, fmt.Errorf("unknown provider: %s", provider)
+	}
+}
+
 // appendClaudeImport は CLAUDE.md の末尾に claudeImportLine を追記する
 func appendClaudeImport(path string) error {
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", path, err)
 	}
@@ -148,19 +177,22 @@ func appendClaudeImport(path string) error {
 	return err
 }
 
-// appendCodexBlock は AGENTS.md の末尾に中央ファイルの内容をブロックとして追記する
-func appendCodexBlock(path string) error {
+// appendSharedBlock は AGENTS.md 等の末尾に中央ファイルの内容をブロックとして追記する
+func appendSharedBlock(path string) error {
 	centralContent, err := os.ReadFile(centralRulesPath())
 	if err != nil {
 		return fmt.Errorf("read central rules: %w", err)
 	}
 	block := strings.Join([]string{
-		codexBlockStart,
+		sharedBlockStart,
 		strings.TrimSpace(string(centralContent)),
-		codexBlockEnd,
+		sharedBlockEnd,
 		"",
 	}, "\n")
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", path, err)
 	}
@@ -169,16 +201,28 @@ func appendCodexBlock(path string) error {
 	return err
 }
 
+// appendCodexBlock は後方互換用。共有ブロック方式で追記する。
+func appendCodexBlock(path string) error {
+	return appendSharedBlock(path)
+}
+
 // InjectRules はファイルに承認ルールを注入する
 func InjectRules(provider, path string) error {
 	if err := SyncRulesFile(); err != nil {
 		return fmt.Errorf("sync rules file: %w", err)
 	}
-	switch provider {
-	case "claude":
+	already, err := ScanRulesConfigured(provider, path)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("scan %s: %w", path, err)
+	}
+	if already {
+		return nil
+	}
+	switch {
+	case provider == "claude":
 		return appendClaudeImport(path)
-	case "codex":
-		return appendCodexBlock(path)
+	case providerUsesSharedBlock(provider):
+		return appendSharedBlock(path)
 	default:
 		return fmt.Errorf("unknown provider: %s", provider)
 	}
@@ -194,8 +238,8 @@ func RemoveRules(provider, path string) error {
 		return fmt.Errorf("read %s: %w", path, err)
 	}
 	var newContent string
-	switch provider {
-	case "claude":
+	switch {
+	case provider == "claude":
 		var kept []string
 		for _, line := range strings.Split(string(content), "\n") {
 			if strings.TrimSpace(line) != claudeImportLine {
@@ -203,11 +247,14 @@ func RemoveRules(provider, path string) error {
 			}
 		}
 		newContent = strings.Join(kept, "\n")
-	case "codex":
-		blockRe := regexp.MustCompile(`(?s)\n?` + regexp.QuoteMeta(codexBlockStart) + `.*?` + regexp.QuoteMeta(codexBlockEnd) + `\n?`)
+	case providerUsesSharedBlock(provider):
+		blockRe := regexp.MustCompile(`(?s)\n?` + regexp.QuoteMeta(sharedBlockStart) + `.*?` + regexp.QuoteMeta(sharedBlockEnd) + `\n?`)
 		newContent = blockRe.ReplaceAllString(string(content), "")
 	default:
 		return fmt.Errorf("unknown provider: %s", provider)
+	}
+	if newContent == string(content) {
+		return nil
 	}
 	return os.WriteFile(path, []byte(newContent), 0o644)
 }

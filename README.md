@@ -71,7 +71,7 @@ sha256sum -c SHA256SUMS.txt
 
 ## Features
 
-- **Unified approval panel** — approve/reject Claude Code and Codex CLI prompts from the browser
+- **Unified approval panel** — approve/reject Claude Code, Codex CLI, GitHub Copilot CLI, and Cursor Agent CLI prompts from the browser
 - **Batch approvals** — answer multiple numbered questions from one action bar and submit them together
 - **Real-time PTY output** via xterm.js over WebSocket
 - **Chat history and split view** — read a bubble-style conversation history, search/filter it, or keep it beside the live terminal
@@ -221,6 +221,8 @@ If you prefer driving things from a shell — for scripting, shell integration, 
 ```bash
 any-ai-cli claude      # auto-starts Hub in the background if not running, then launches Claude
 any-ai-cli codex       # same
+any-ai-cli copilot     # same, using the installed GitHub Copilot CLI
+any-ai-cli cursor-agent # same, using the installed Cursor Agent CLI
 ```
 
 You do not need to run `any-ai-cli serve` first.
@@ -230,13 +232,15 @@ You do not need to run `any-ai-cli serve` first.
 ```bash
 any-ai-cli wrap claude
 any-ai-cli wrap codex
+any-ai-cli wrap copilot
+any-ai-cli wrap cursor-agent
 ```
 
 Functionally identical to Option A; useful when you want to be explicit about the wrapper layer.
 
 ### Option C: transparent mode (`ANY_AI_CLI_AUTO`)
 
-Initialize the shell once, then your normal `claude` / `codex` commands transparently go through the wrapper.
+Initialize the shell once, then your normal `claude` / `codex` / `copilot` / `cursor-agent` commands transparently go through the wrapper.
 
 > `any-ai-cli shell-init` emits **POSIX shell (bash / zsh) only** function definitions. There is no PowerShell snippet — see below for a manual alternative.
 
@@ -248,9 +252,15 @@ eval "$(any-ai-cli shell-init)"
 export ANY_AI_CLI_AUTO=1
 claude    # → goes through the wrapper, auto-starts Hub if needed
 codex     # → same
+copilot   # → same
+cursor-agent # → same
 ```
 
-Without `ANY_AI_CLI_AUTO=1`, `claude` / `codex` behave exactly as the original commands. No global `.bashrc` modification.
+Without `ANY_AI_CLI_AUTO=1`, `claude` / `codex` / `copilot` / `cursor-agent` behave exactly as the original commands. No global `.bashrc` modification.
+
+GitHub Copilot support only wraps the official installed CLI in a PTY. `any-ai-cli` does not read, store, or proxy GitHub OAuth tokens, PATs, or Copilot credentials.
+
+Cursor Agent support only wraps the official installed `cursor-agent` CLI in a PTY (it assumes you are already signed in). `any-ai-cli` does not read, store, or proxy Cursor session tokens or credentials.
 
 #### OS-specific automation examples
 
@@ -262,6 +272,8 @@ Add the following to your `$PROFILE` (since `shell-init` does not support PowerS
 if ($env:ANY_AI_CLI_AUTO -eq '1') {
     function claude { any-ai-cli claude @args }
     function codex  { any-ai-cli codex  @args }
+    function copilot { any-ai-cli copilot @args }
+    function cursor-agent { any-ai-cli cursor-agent @args }
 }
 ```
 
@@ -350,7 +362,7 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 ### Layout
 
 - **Header**
-  - Status summary chips `[running][waiting][standby]` (the waiting chip blinks when > 0) and per-provider connection counts `Claude:N / Codex:N`.
+  - Status summary chips `[running][waiting][standby]` (the waiting chip blinks when > 0) and per-provider connection counts such as `Claude:N / Codex:N / Copilot:N / Cursor Agent:N`.
   - Right edge: `⏻` (stop the Hub) and `Settings` (language, theme, timeouts, log dir, etc.).
 - **Left sidebar (session list)**
   - Top: `+ New Session` button (opens the spawn dialog).
@@ -428,7 +440,7 @@ When the wrapper's WebSocket to the Hub drops, the wrapper **probes the Hub's HT
 
 | Scenario | Wrapper behavior |
 |---|---|
-| **Intentional disconnect** — UI `×` (dismiss), "stop everything", or idle-timeout fired<br>(Hub HTTP responds normally) | Kill the PTY child (`claude` / `codex`) **immediately**. No grace period. |
+| **Intentional disconnect** — UI `×` (dismiss), "stop everything", or idle-timeout fired<br>(Hub HTTP responds normally) | Kill the PTY child (`claude` / `codex` / `copilot` / `cursor-agent`) **immediately**. No grace period. |
 | **Hub crash / `.exe` console closed**<br>(Hub HTTP unreachable) | Retry dial+register every 2 s for up to `wrapper_reconnect_grace_sec` (default **3600 s = 60 min**).<br>　• If Hub comes back: re-register as a new session, replay the last 64 KB of PTY output to the UI, and resume.<br>　• If the grace expires with Hub still down: kill the PTY. |
 | **Browser closed but Hub still running** (no UI connected) | After `idle_timeout_min` minutes (default 60), the Hub force-disconnects every wrapper, which is then handled as the "intentional disconnect" row above. |
 
@@ -446,7 +458,7 @@ For a clean shutdown, prefer the `⏻` button in the Hub UI top-right or `any-ai
 ## Architecture
 
 ```
-AI CLI (claude / codex)
+AI CLI (claude / codex / copilot / cursor-agent)
     └─ any-ai-cli wrap  <── PTY wrapper
            │ WebSocket
     ┌──────▼──────┐
@@ -483,15 +495,15 @@ any-ai-cli log-clean ~/.any-ai-cli/logs/sessions/<session>.jsonl -o transcript.t
 
 ### Session card shows `Disconnected` immediately after spawn (Windows + pnpm-installed CLI)
 
-If you installed Claude Code or Codex CLI via `pnpm add -g`, the Hub may fail to spawn it with the session card flipping to `Disconnected` within a second and a 0-byte raw log. The card now also shows a short reason such as `reason: codex not found in PATH`.
+If you installed Claude Code, Codex CLI, or another wrapped CLI via a package manager, the Hub may fail to spawn it with the session card flipping to `Disconnected` within a second and a 0-byte raw log. The card now also shows a short reason such as `reason: codex not found in PATH`.
 
-The Hub inherits the `PATH` snapshot of the shell that launched it. If that shell did not have `PNPM_HOME` exported, the persistent `%PNPM_HOME%\bin` entry in your USER `Path` is not expanded by Windows at process start and the pnpm bin directory effectively drops out — so `exec.LookPath("codex")` inside the wrap subprocess fails.
+The Hub inherits the `PATH` snapshot of the shell that launched it. If that shell did not have `PNPM_HOME` exported, the persistent `%PNPM_HOME%\bin` entry in your USER `Path` is not expanded by Windows at process start and the pnpm bin directory effectively drops out — so `exec.LookPath("<provider>")` inside the wrap subprocess fails.
 
 **To recover:**
 
 1. `any-ai-cli stop`
 2. Open an interactive PowerShell where `$env:PNPM_HOME` resolves correctly (verify with `$env:PATH -split ';' | Select-String pnpm`).
-3. From that shell, run `any-ai-cli claude` (or `codex`) — the Hub will be re-spawned with the fresh `PATH` snapshot.
+3. From that shell, run `any-ai-cli claude`, `any-ai-cli codex`, `any-ai-cli copilot`, or `any-ai-cli cursor-agent` — the Hub will be re-spawned with the fresh `PATH` snapshot.
 
 Hub diagnostics for each spawn are written to `~/.any-ai-cli/logs/spawn/<provider>-<timestamp>.log` and include the resolved `PATH`, detected package managers, and an explicit hint when `executable file not found` is the underlying cause.
 
@@ -505,13 +517,17 @@ Hub diagnostics for each spawn are written to `~/.any-ai-cli/logs/spawn/<provide
 - Random token in URL prevents unauthorized local access
 - `any-ai-cli` itself sends no telemetry or usage data to any service
 
+### Local instruction file writes
+
+When **Approval Buttons** is enabled, `any-ai-cli` writes only its marked approval-rules block to AI instruction files for active wrapped sessions: `~/.claude/CLAUDE.md` for Claude Code and the project instruction root `AGENTS.md` for Codex, GitHub Copilot, and Cursor Agent. The block is idempotent and is removed when the last active wrapped session using that file ends, when Approval Buttons is disabled, or when the Hub stops.
+
 ### Outbound network traffic
 
 `any-ai-cli` is local-first, but the following outbound HTTPS requests can occur and you should be aware of them:
 
-- **Slash command list (Hub itself)** — When the slash command picker is opened, the Hub fetches a markdown file from `https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/{claude,codex}.md` and caches it for 24 hours. The source URL can be changed (or pointed to a local file path) in **Settings → Slash command sources**.
-- **Approval pattern list (Hub itself)** — On Hub startup, the official approval detection patterns can be fetched from `https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/{claude,codex,common}.md` and cached for 24 hours. The source URLs can be overridden in config.
-- **Wrapped CLI traffic (the CLIs themselves)** — The CLIs you wrap (Claude Code, Codex CLI) talk directly to their respective vendor APIs (Anthropic, OpenAI) over HTTPS. `any-ai-cli` only relays PTY I/O via local WebSocket; it does not intercept, log, or proxy these API requests. Whatever network behavior the underlying CLI has applies as-is.
+- **Slash command list (Hub itself)** — When the slash command picker is opened, the Hub fetches a markdown file from `https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent}.md` and caches it for 24 hours. The source URL can be changed (or pointed to a local file path) in **Settings → Slash command sources**.
+- **Approval pattern list (Hub itself)** — On Hub startup, the official approval detection patterns can be fetched from `https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,common}.md` and cached for 24 hours. The source URLs can be overridden in config.
+- **Wrapped CLI traffic (the CLIs themselves)** — The CLIs you wrap (Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI) talk directly to their respective vendor APIs (Anthropic, OpenAI, GitHub, Cursor) over HTTPS. `any-ai-cli` only relays PTY I/O via local WebSocket; it does not intercept, log, or proxy these API requests. Whatever network behavior the underlying CLI has applies as-is.
 
 ### ⚠️ Data retention by wrapped CLIs
 
@@ -524,6 +540,7 @@ The table below summarizes each vendor's stance as of 2026. Always verify the cu
 | **Claude Code** (Anthropic Commercial Terms: API / Claude for Work / Enterprise / Education / Gov) | **No** — excluded by default under commercial terms | No opt-out needed; Zero Data Retention available via enterprise agreement | API logs up to 30 days, reduced to **7-day auto-delete** after 2025-09-14 |
 | **Codex CLI** (OpenAI: via ChatGPT Plus / Pro / Business plans) | **Possibly** — content from ChatGPT plans can be used for training | "Do not train on my content" toggle in the privacy portal; separate "allow training on full environments" control in Codex Settings | Abuse-monitoring logs up to 30 days; ZDR / Modified Abuse Monitoring available |
 | **GitHub Copilot CLI** (GitHub: Product Specific Terms, March 2026) | **Yes** — prompts are retained and used to fine-tune your private model | No explicit opt-out documented (verify current terms) | Not specified |
+| **Cursor Agent CLI** (Cursor) | Verify current terms | Verify current terms | Verify current terms |
 
 ### ⚠️ Terms-of-service change risk
 
@@ -610,7 +627,7 @@ Third-party dependency notices are provided in [THIRD_PARTY_NOTICES.md](THIRD_PA
 
 ## Not Official / No Affiliation
 
-`any-ai-cli` is a third-party, community-maintained tool. It is **not affiliated with, endorsed by, or officially supported by Anthropic, OpenAI, GitHub, or Ollama**. All trademarks — including "Claude", "Claude Code", "Codex", "ChatGPT", "GitHub Copilot", "Ollama", and "Gemini" — are the property of their respective owners and are used here only for descriptive and interoperability purposes.
+`any-ai-cli` is a third-party, community-maintained tool. It is **not affiliated with, endorsed by, or officially supported by Anthropic, OpenAI, GitHub, Cursor, or Ollama**. All trademarks — including "Claude", "Claude Code", "Codex", "ChatGPT", "GitHub Copilot", "Cursor", "Cursor Agent", "Ollama", and "Gemini" — are the property of their respective owners and are used here only for descriptive and interoperability purposes.
 
 ---
 
