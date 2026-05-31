@@ -35,6 +35,26 @@ var defaultApprovalPatterns = map[string][]string{
 		"would you like to run",
 		"permission",
 	},
+	"copilot": {
+		"permission required",
+		"permissions required",
+		"requires permission",
+		"requires confirmation",
+		"prompts for user confirmation",
+		"allow all similar",
+		"deny all similar",
+	},
+	// cursor-agent 実機 UI（コマンド allowlist 確認ダイアログ）の文言を正とする。
+	"cursor-agent": {
+		"run this command?",
+		"not in allowlist",
+		"allowlist",
+		"auto-run everything",
+		"skip (esc or n)",
+		"permission required",
+		"requires permission",
+		"requires confirmation",
+	},
 	"common": {
 		"would you like to",
 		"この操作を許可",
@@ -46,7 +66,7 @@ var defaultApprovalPatterns = map[string][]string{
 
 // KnownApprovalProviders は承認パターンを管理する provider 名一覧（順序固定）。
 func KnownApprovalProviders() []string {
-	return []string{"claude", "codex", "common"}
+	return []string{"claude", "codex", "copilot", "cursor-agent", "common"}
 }
 
 // IsKnownApprovalProvider は provider 名が管理対象か判定する。

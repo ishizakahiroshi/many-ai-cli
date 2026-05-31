@@ -50,14 +50,18 @@ type ApprovalConfig struct {
 // SlashCmdSources は provider ごとのスラッシュコマンド取得元。
 // URL またはローカルの .md/.txt パスを指定できる。
 type SlashCmdSources struct {
-	Claude string `yaml:"claude" json:"claude"`
-	Codex  string `yaml:"codex"  json:"codex"`
+	Claude      string `yaml:"claude"  json:"claude"`
+	Codex       string `yaml:"codex"   json:"codex"`
+	Copilot     string `yaml:"copilot" json:"copilot"`
+	CursorAgent string `yaml:"cursor-agent" json:"cursor-agent"`
 }
 
 const (
-	LegacyClaudeSlashCmdSource  = "https://code.claude.com/docs/en/commands.md"
-	DefaultClaudeSlashCmdSource = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/claude.md"
-	DefaultCodexSlashCmdSource  = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/codex.md"
+	LegacyClaudeSlashCmdSource       = "https://code.claude.com/docs/en/commands.md"
+	DefaultClaudeSlashCmdSource      = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/claude.md"
+	DefaultCodexSlashCmdSource       = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/codex.md"
+	DefaultCopilotSlashCmdSource     = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/copilot.md"
+	DefaultCursorAgentSlashCmdSource = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/cursor-agent.md"
 )
 
 const DefaultUsageLinkSource = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/usage-links/defaults.json"
@@ -66,8 +70,10 @@ const DefaultModelsSource = "https://raw.githubusercontent.com/ishizakahiroshi/a
 
 func DefaultSlashCmdSources() SlashCmdSources {
 	return SlashCmdSources{
-		Claude: DefaultClaudeSlashCmdSource,
-		Codex:  DefaultCodexSlashCmdSource,
+		Claude:      DefaultClaudeSlashCmdSource,
+		Codex:       DefaultCodexSlashCmdSource,
+		Copilot:     DefaultCopilotSlashCmdSource,
+		CursorAgent: DefaultCursorAgentSlashCmdSource,
 	}
 }
 
@@ -82,28 +88,40 @@ func EffectiveSlashCmdSources(src SlashCmdSources) SlashCmdSources {
 	if src.Codex == "" {
 		src.Codex = defaults.Codex
 	}
+	if src.Copilot == "" {
+		src.Copilot = defaults.Copilot
+	}
+	if src.CursorAgent == "" {
+		src.CursorAgent = defaults.CursorAgent
+	}
 	return src
 }
 
 // ApprovalPatternSources は provider ごとのリモート md 取得元。
 // SlashCmdSources と同じ構造で、空文字なら Default*ApprovalPatternSource を使う。
 type ApprovalPatternSources struct {
-	Claude string `yaml:"claude,omitempty" json:"claude,omitempty"`
-	Codex  string `yaml:"codex,omitempty"  json:"codex,omitempty"`
-	Common string `yaml:"common,omitempty" json:"common,omitempty"`
+	Claude      string `yaml:"claude,omitempty"  json:"claude,omitempty"`
+	Codex       string `yaml:"codex,omitempty"   json:"codex,omitempty"`
+	Copilot     string `yaml:"copilot,omitempty" json:"copilot,omitempty"`
+	CursorAgent string `yaml:"cursor-agent,omitempty" json:"cursor-agent,omitempty"`
+	Common      string `yaml:"common,omitempty"  json:"common,omitempty"`
 }
 
 const (
-	DefaultClaudeApprovalPatternSource = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/claude.md"
-	DefaultCodexApprovalPatternSource  = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/codex.md"
-	DefaultCommonApprovalPatternSource = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/common.md"
+	DefaultClaudeApprovalPatternSource      = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/claude.md"
+	DefaultCodexApprovalPatternSource       = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/codex.md"
+	DefaultCopilotApprovalPatternSource     = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/copilot.md"
+	DefaultCursorAgentApprovalPatternSource = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/cursor-agent.md"
+	DefaultCommonApprovalPatternSource      = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/common.md"
 )
 
 func DefaultApprovalPatternSources() ApprovalPatternSources {
 	return ApprovalPatternSources{
-		Claude: DefaultClaudeApprovalPatternSource,
-		Codex:  DefaultCodexApprovalPatternSource,
-		Common: DefaultCommonApprovalPatternSource,
+		Claude:      DefaultClaudeApprovalPatternSource,
+		Codex:       DefaultCodexApprovalPatternSource,
+		Copilot:     DefaultCopilotApprovalPatternSource,
+		CursorAgent: DefaultCursorAgentApprovalPatternSource,
+		Common:      DefaultCommonApprovalPatternSource,
 	}
 }
 
@@ -114,6 +132,12 @@ func EffectiveApprovalPatternSources(src ApprovalPatternSources) ApprovalPattern
 	}
 	if src.Codex == "" {
 		src.Codex = defaults.Codex
+	}
+	if src.Copilot == "" {
+		src.Copilot = defaults.Copilot
+	}
+	if src.CursorAgent == "" {
+		src.CursorAgent = defaults.CursorAgent
 	}
 	if src.Common == "" {
 		src.Common = defaults.Common
@@ -131,17 +155,21 @@ const (
 
 // ApprovalProfiles は provider ごとのアクティブプロファイル。
 type ApprovalProfiles struct {
-	Claude ApprovalProfileName `yaml:"claude,omitempty" json:"claude,omitempty"`
-	Codex  ApprovalProfileName `yaml:"codex,omitempty"  json:"codex,omitempty"`
-	Common ApprovalProfileName `yaml:"common,omitempty" json:"common,omitempty"`
+	Claude      ApprovalProfileName `yaml:"claude,omitempty"  json:"claude,omitempty"`
+	Codex       ApprovalProfileName `yaml:"codex,omitempty"   json:"codex,omitempty"`
+	Copilot     ApprovalProfileName `yaml:"copilot,omitempty" json:"copilot,omitempty"`
+	CursorAgent ApprovalProfileName `yaml:"cursor-agent,omitempty" json:"cursor-agent,omitempty"`
+	Common      ApprovalProfileName `yaml:"common,omitempty"  json:"common,omitempty"`
 }
 
 // DefaultApprovalProfiles は新規ユーザー向けデフォルト（全 provider official）。
 func DefaultApprovalProfiles() ApprovalProfiles {
 	return ApprovalProfiles{
-		Claude: ApprovalProfileOfficial,
-		Codex:  ApprovalProfileOfficial,
-		Common: ApprovalProfileOfficial,
+		Claude:      ApprovalProfileOfficial,
+		Codex:       ApprovalProfileOfficial,
+		Copilot:     ApprovalProfileOfficial,
+		CursorAgent: ApprovalProfileOfficial,
+		Common:      ApprovalProfileOfficial,
 	}
 }
 
@@ -152,6 +180,12 @@ func EffectiveApprovalProfiles(p ApprovalProfiles) ApprovalProfiles {
 	}
 	if p.Codex == "" {
 		p.Codex = ApprovalProfileOfficial
+	}
+	if p.Copilot == "" {
+		p.Copilot = ApprovalProfileOfficial
+	}
+	if p.CursorAgent == "" {
+		p.CursorAgent = ApprovalProfileOfficial
 	}
 	if p.Common == "" {
 		p.Common = ApprovalProfileOfficial
@@ -170,6 +204,14 @@ func (p ApprovalProfiles) For(provider string) ApprovalProfileName {
 		if p.Codex != "" {
 			return p.Codex
 		}
+	case "copilot":
+		if p.Copilot != "" {
+			return p.Copilot
+		}
+	case "cursor-agent":
+		if p.CursorAgent != "" {
+			return p.CursorAgent
+		}
 	case "common":
 		if p.Common != "" {
 			return p.Common
@@ -185,6 +227,10 @@ func (p ApprovalProfiles) WithProvider(provider string, name ApprovalProfileName
 		p.Claude = name
 	case "codex":
 		p.Codex = name
+	case "copilot":
+		p.Copilot = name
+	case "cursor-agent":
+		p.CursorAgent = name
 	case "common":
 		p.Common = name
 	}
@@ -218,8 +264,10 @@ type UserPrefsQuickCmds struct {
 
 // UserPrefsUsageLinks は使用量リンクの設定。
 type UserPrefsUsageLinks struct {
-	Claude string `yaml:"claude,omitempty" json:"claude,omitempty"`
-	Codex  string `yaml:"codex,omitempty"  json:"codex,omitempty"`
+	Claude      string `yaml:"claude,omitempty"  json:"claude,omitempty"`
+	Codex       string `yaml:"codex,omitempty"   json:"codex,omitempty"`
+	Copilot     string `yaml:"copilot,omitempty" json:"copilot,omitempty"`
+	CursorAgent string `yaml:"cursor-agent,omitempty" json:"cursor-agent,omitempty"`
 }
 
 // UserPrefsVoice は音声入力の設定。
@@ -248,22 +296,22 @@ type UserPrefsDisplay struct {
 // UserPrefs はサーバ側（config.yaml: user_prefs:）に保存するユーザー機能設定。
 // 端末・ポート横断で共有する D2 分類の設定を全て保持する。
 type UserPrefs struct {
-	Trigger         UserPrefsTrigger    `yaml:"trigger,omitempty"      json:"trigger,omitempty"`
-	NotifySound     UserPrefsNotifySound `yaml:"notify_sound,omitempty" json:"notify_sound,omitempty"`
-	Approval        UserPrefsApproval   `yaml:"approval,omitempty"     json:"approval,omitempty"`
-	QuickCmds       UserPrefsQuickCmds  `yaml:"quick_cmds,omitempty"   json:"quick_cmds,omitempty"`
-	UsageLinks      UserPrefsUsageLinks `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
-	Voice           UserPrefsVoice      `yaml:"voice,omitempty"        json:"voice,omitempty"`
-	Favorites       []string            `yaml:"favorites,omitempty"        json:"favorites,omitempty"`
-	SessionOrder    []string            `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
-	GroupOrder      []string            `yaml:"group_order,omitempty"      json:"group_order,omitempty"`
-	ProjectFavorites []string           `yaml:"project_favorites,omitempty" json:"project_favorites,omitempty"`
-	CwdHistory      []string            `yaml:"cwd_history,omitempty"      json:"cwd_history,omitempty"`
-	Spawn           UserPrefsSpawn      `yaml:"spawn,omitempty"            json:"spawn,omitempty"`
-	Display         UserPrefsDisplay    `yaml:"display,omitempty"          json:"display,omitempty"`
-	MigratedFromLocalstorage bool       `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
-	Avatar          string              `yaml:"avatar,omitempty"       json:"avatar,omitempty"`
-	DisplayName     string              `yaml:"display_name,omitempty" json:"display_name,omitempty"`
+	Trigger                  UserPrefsTrigger     `yaml:"trigger,omitempty"      json:"trigger,omitempty"`
+	NotifySound              UserPrefsNotifySound `yaml:"notify_sound,omitempty" json:"notify_sound,omitempty"`
+	Approval                 UserPrefsApproval    `yaml:"approval,omitempty"     json:"approval,omitempty"`
+	QuickCmds                UserPrefsQuickCmds   `yaml:"quick_cmds,omitempty"   json:"quick_cmds,omitempty"`
+	UsageLinks               UserPrefsUsageLinks  `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
+	Voice                    UserPrefsVoice       `yaml:"voice,omitempty"        json:"voice,omitempty"`
+	Favorites                []string             `yaml:"favorites,omitempty"        json:"favorites,omitempty"`
+	SessionOrder             []string             `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
+	GroupOrder               []string             `yaml:"group_order,omitempty"      json:"group_order,omitempty"`
+	ProjectFavorites         []string             `yaml:"project_favorites,omitempty" json:"project_favorites,omitempty"`
+	CwdHistory               []string             `yaml:"cwd_history,omitempty"      json:"cwd_history,omitempty"`
+	Spawn                    UserPrefsSpawn       `yaml:"spawn,omitempty"            json:"spawn,omitempty"`
+	Display                  UserPrefsDisplay     `yaml:"display,omitempty"          json:"display,omitempty"`
+	MigratedFromLocalstorage bool                 `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
+	Avatar                   string               `yaml:"avatar,omitempty"       json:"avatar,omitempty"`
+	DisplayName              string               `yaml:"display_name,omitempty" json:"display_name,omitempty"`
 }
 
 // LocalModel は config.yaml の local_models セクションに手書きで追記される
@@ -287,8 +335,8 @@ type Config struct {
 	Spawn struct {
 		LastModel map[string]string `yaml:"last_model,omitempty" json:"last_model,omitempty"`
 	} `yaml:"spawn,omitempty" json:"spawn,omitempty"`
-	Approval               ApprovalConfig         `yaml:"approval,omitempty"`
-	SlashCmdSources        SlashCmdSources        `yaml:"slash_cmd_sources,omitempty" json:"slash_cmd_sources,omitempty"`
+	Approval        ApprovalConfig  `yaml:"approval,omitempty"`
+	SlashCmdSources SlashCmdSources `yaml:"slash_cmd_sources,omitempty" json:"slash_cmd_sources,omitempty"`
 	// ModelsSource は /api/models のモデル defaults 取得元 URL を上書きする。
 	// 空なら DefaultModelsSource を使う（slash_cmd_sources 等と同じく config 上書き可能にし、
 	// 他の remote source だけ config 化されていない非対称を解消する）。

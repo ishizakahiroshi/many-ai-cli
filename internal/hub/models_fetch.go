@@ -202,6 +202,28 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 		Models:   append([]Model{}, defaults.OpenAI...),
 	})
 
+	// GitHub Copilot（GitHub fetch / fallback ハードコード）
+	// Route は空: copilot は env 注入せず `copilot --model <id>` へ素通しする。
+	if len(defaults.Copilot) > 0 {
+		resp.Groups = append(resp.Groups, ModelGroup{
+			Label:    "GitHub Copilot",
+			Provider: "copilot",
+			Route:    "",
+			Models:   append([]Model{}, defaults.Copilot...),
+		})
+	}
+
+	// Cursor Agent（GitHub fetch / fallback ハードコード）
+	// Route は空: cursor-agent は env 注入せず `cursor-agent --model <id>` へ素通しする。
+	if len(defaults.CursorAgent) > 0 {
+		resp.Groups = append(resp.Groups, ModelGroup{
+			Label:    "Cursor Agent",
+			Provider: "cursor-agent",
+			Route:    "",
+			Models:   append([]Model{}, defaults.CursorAgent...),
+		})
+	}
+
 	// Ollama Local daemon の /api/tags を 1 度だけ取得し、remote_host で 2 分割する
 	localAll, localAt, localErr := cache.getOllamaLocal(force)
 	var cloudFromDaemon, trulyLocal []Model

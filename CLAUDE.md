@@ -1,6 +1,6 @@
 # any-ai-cli 開発ガイド
 
-> 最終更新: 2026-05-24(日) 17:01:04 — v0.2.0 リリース前の参照・状態を更新
+> 最終更新: 2026-05-31(日) 14:25:08 — v0.2.0 リリース前の参照・状態を更新
 
 > 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。
 
@@ -21,9 +21,10 @@
 v0.2.0 までに以下がすべて実装済み：
 
 - `any-ai-cli serve` で Hub が起動する
-- `any-ai-cli claude` / `codex` が Hub 未起動時に自動起動し接続する
+- `any-ai-cli claude` / `codex` / `copilot` / `cursor-agent` が Hub 未起動時に自動起動し接続する
 - Hub UI に xterm.js でPTY出力がリアルタイム表示される
 - xterm.js バッファスキャンで承認待ちを検出し action-bar を表示する
+- 承認マーカー指示を Claude / Codex / Copilot / Cursor Agent の instruction file へ冪等注入し、active session 参照が0になったファイルから削除する
 - Hub UI の選択結果を PTY へ返送する
 - ターミナル直接入力で承認が解決された場合、action-bar を消す
 - Claude Code の折りたたみ展開キャプチャ（ctrl+o）が動作する

@@ -9,10 +9,12 @@ import (
 
 // UsageLinkDefaults は provider ごとの usage リンクデフォルト URL。
 type UsageLinkDefaults struct {
-	Claude   string `json:"claude"`
-	Codex    string `json:"codex"`
-	Ollama   string `json:"ollama"`
-	OpenCode string `json:"opencode"`
+	Claude      string `json:"claude"`
+	Codex       string `json:"codex"`
+	Copilot     string `json:"copilot"`
+	CursorAgent string `json:"cursor-agent"`
+	Ollama      string `json:"ollama"`
+	OpenCode    string `json:"opencode"`
 }
 
 const (
@@ -23,10 +25,12 @@ const (
 // hardcodedUsageLinkDefaults は GitHub fetch 失敗時のフォールバック値。
 // app.js の DEFAULT_USAGE_LINKS と同じ値に揃えておく。
 var hardcodedUsageLinkDefaults = UsageLinkDefaults{
-	Claude:   "https://claude.ai/settings/usage",
-	Codex:    "https://chatgpt.com/codex/cloud/settings/analytics#usage",
-	Ollama:   "https://ollama.com/settings",
-	OpenCode: "",
+	Claude:      "https://claude.ai/settings/usage",
+	Codex:       "https://chatgpt.com/codex/cloud/settings/analytics#usage",
+	Copilot:     "https://github.com/settings/billing",
+	CursorAgent: "https://cursor.com/dashboard",
+	Ollama:      "https://ollama.com/settings",
+	OpenCode:    "",
 }
 
 // newUsageLinkCache は usage リンクデフォルトの TTL キャッシュを生成する。

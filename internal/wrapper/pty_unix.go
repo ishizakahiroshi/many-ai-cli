@@ -72,7 +72,8 @@ func (p *ptyProcess) Resize(cols, rows uint16) error {
 }
 
 func startProcess(provider string, args []string, cwd string, cols, rows int) (processSession, error) {
-	cmd := exec.Command(provider, args...)
+	cmdName, cmdArgs := resolveCmd(provider, args)
+	cmd := exec.Command(cmdName, cmdArgs...)
 	cmd.Dir = cwd
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor", "ANY_AI_CLI=1")
 	var (
@@ -88,4 +89,20 @@ func startProcess(provider string, args []string, cwd string, cols, rows int) (p
 		return nil, fmt.Errorf("pty start %s: %w", provider, err)
 	}
 	return &ptyProcess{f: f, cmd: cmd, waitDone: make(chan struct{})}, nil
+}
+
+func resolveCmd(provider string, args []string) (string, []string) {
+	if provider == "copilot" {
+		if path, err := exec.LookPath("copilot"); err == nil {
+			return path, args
+		}
+		if path, err := exec.LookPath("gh"); err == nil {
+			return path, copilotViaGhArgs(args)
+		}
+		return provider, args
+	}
+	if path, err := exec.LookPath(provider); err == nil {
+		return path, args
+	}
+	return provider, args
 }

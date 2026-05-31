@@ -75,17 +75,6 @@
   font-size: 0.9rem;
 }
 
-.wb-card-head span {
-  flex-shrink: 0;
-  border-radius: 999px;
-  padding: 2px 8px;
-  background: color-mix(in srgb, var(--green-bg) 35%, transparent);
-  border: 1px solid color-mix(in srgb, var(--green-text) 35%, transparent);
-  color: var(--green-text);
-  font-size: 0.65rem;
-  font-weight: 700;
-}
-
 .wb-card input,
 .wb-card select,
 .wb-card textarea,

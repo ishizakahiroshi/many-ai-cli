@@ -408,6 +408,19 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   color: var(--text);
   cursor: pointer;
 }
+.settings-danger-btn {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger-bg) 55%, transparent);
+}
+.settings-danger-btn:hover {
+  background: var(--danger-bg-hover);
+  color: var(--danger);
+}
+.settings-danger-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
 .confirm-btn:hover { border-color: var(--line-soft); background: var(--bg-elev); }
 .confirm-btn.primary {
   border-color: var(--danger);

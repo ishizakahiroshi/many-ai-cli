@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, showToast, ti18n, token } from './util.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref } from './user-prefs.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, providerIconHtml, render, renderSessionList, stateLabel } from './session-list.js';
@@ -204,6 +204,8 @@ export function getUsageLinkUrl(provider) {
   const keyMap = {
     claude:   STORAGE_USAGE_LINK_CLAUDE_KEY,
     codex:    STORAGE_USAGE_LINK_CODEX_KEY,
+    copilot:  STORAGE_USAGE_LINK_COPILOT_KEY,
+    'cursor-agent': STORAGE_USAGE_LINK_CURSOR_AGENT_KEY,
     ollama:   STORAGE_USAGE_LINK_OLLAMA_KEY,
     opencode: STORAGE_USAGE_LINK_OPENCODE_KEY,
   };
@@ -213,7 +215,7 @@ export function getUsageLinkUrl(provider) {
 }
 
 export function applyUsageLinks() {
-  for (const p of ['claude', 'codex', 'ollama', 'opencode']) {
+  for (const p of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'opencode']) {
     const el = document.getElementById(`usage-link-${p}`);
     if (el) el.href = getUsageLinkUrl(p);
   }
@@ -223,6 +225,8 @@ export function loadUsageLinkSettings() {
   const keyMap = {
     claude:   STORAGE_USAGE_LINK_CLAUDE_KEY,
     codex:    STORAGE_USAGE_LINK_CODEX_KEY,
+    copilot:  STORAGE_USAGE_LINK_COPILOT_KEY,
+    'cursor-agent': STORAGE_USAGE_LINK_CURSOR_AGENT_KEY,
     ollama:   STORAGE_USAGE_LINK_OLLAMA_KEY,
     opencode: STORAGE_USAGE_LINK_OPENCODE_KEY,
   };
@@ -237,6 +241,8 @@ export function saveUsageLinkSettings() {
   const pairs = [
     ['claude',   'usage_links.claude',   STORAGE_USAGE_LINK_CLAUDE_KEY],
     ['codex',    'usage_links.codex',    STORAGE_USAGE_LINK_CODEX_KEY],
+    ['copilot',  'usage_links.copilot',  STORAGE_USAGE_LINK_COPILOT_KEY],
+    ['cursor-agent', 'usage_links.cursor-agent', STORAGE_USAGE_LINK_CURSOR_AGENT_KEY],
     ['ollama',   'usage_links.ollama',   STORAGE_USAGE_LINK_OLLAMA_KEY],
     ['opencode', 'usage_links.opencode', STORAGE_USAGE_LINK_OPENCODE_KEY],
   ];
@@ -646,6 +652,8 @@ export function applyLang(lang) {
       e.stopPropagation();
       setUserPref('usage_links.claude', '');
       setUserPref('usage_links.codex', '');
+      setUserPref('usage_links.copilot', '');
+      setUserPref('usage_links.cursor-agent', '');
       setUserPref('usage_links.ollama', '');
       setUserPref('usage_links.opencode', '');
       loadUsageLinkSettings();
@@ -969,8 +977,10 @@ export function applyLang(lang) {
     const res = await fetch(`/api/usage-link-defaults?token=${token}`);
     if (!res.ok) return;
     const d = await res.json();
-    for (const k of ['claude', 'codex', 'ollama', 'opencode']) {
-      if (typeof d[k] === 'string') DEFAULT_USAGE_LINKS[k] = d[k];
+    for (const k of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'opencode']) {
+      // 空文字は無視（GitHub 側が古くキーを欠く場合に空で返るため、
+      // ローカルの正しいデフォルト値を潰さない）
+      if (typeof d[k] === 'string' && d[k] !== '') DEFAULT_USAGE_LINKS[k] = d[k];
     }
     applyUsageLinks();
   } catch (_) {}
@@ -1039,10 +1049,12 @@ window.approvalPatternsUI = (function () {
   const cache = {
     claude: { official: [], custom: [] },
     codex:  { official: [], custom: [] },
+    copilot: { official: [], custom: [] },
+    'cursor-agent': { official: [], custom: [] },
     common: { official: [], custom: [] },
   };
   // アクティブプロファイル設定（サーバ側 ApprovalProfiles と同期）
-  let activeProfiles = { claude: 'official', codex: 'official', common: 'official' };
+  let activeProfiles = { claude: 'official', codex: 'official', copilot: 'official', 'cursor-agent': 'official', common: 'official' };
 
   function currentProvider() { return providerEl.value; }
   function currentProfile() { return profileEl.value; }
@@ -1056,6 +1068,8 @@ window.approvalPatternsUI = (function () {
         activeProfiles = {
           claude: p.claude || 'official',
           codex:  p.codex  || 'official',
+          copilot: p.copilot || 'official',
+          'cursor-agent': p['cursor-agent'] || 'official',
           common: p.common || 'official',
         };
       }
@@ -1069,6 +1083,8 @@ window.approvalPatternsUI = (function () {
         const norm = arr => (Array.isArray(arr) ? arr : []).map(s => String(s).toLowerCase()).filter(Boolean);
         providerApprovalTriggers.claude = norm(data.claude);
         providerApprovalTriggers.codex  = norm(data.codex);
+        providerApprovalTriggers.copilot = norm(data.copilot);
+        providerApprovalTriggers['cursor-agent'] = norm(data['cursor-agent']);
         providerApprovalTriggers.common = norm(data.common);
       }
     } catch (e) {
@@ -1256,13 +1272,17 @@ window.approvalPatternsUI = (function () {
 export async function loadSlashCmdSources() {
   const claudeEl = document.getElementById('slash-src-claude');
   const codexEl  = document.getElementById('slash-src-codex');
-  if (!claudeEl || !codexEl) return;
+  const copilotEl = document.getElementById('slash-src-copilot');
+  const cursorAgentEl = document.getElementById('slash-src-cursor-agent');
+  if (!claudeEl || !codexEl || !copilotEl) return;
   try {
     const resp = await fetch(`/api/slash-cmd-sources?token=${token}`);
     if (!resp.ok) return;
     const data = await resp.json();
     claudeEl.value = data.claude || '';
     codexEl.value  = data.codex  || '';
+    copilotEl.value = data.copilot || '';
+    if (cursorAgentEl) cursorAgentEl.value = data['cursor-agent'] || '';
   } catch (_) {}
 }
 
@@ -1273,6 +1293,8 @@ export async function loadSlashCmdSources() {
     const body = {
       claude: (document.getElementById('slash-src-claude')?.value || '').trim(),
       codex:  (document.getElementById('slash-src-codex')?.value  || '').trim(),
+      copilot: (document.getElementById('slash-src-copilot')?.value || '').trim(),
+      'cursor-agent': (document.getElementById('slash-src-cursor-agent')?.value || '').trim(),
     };
     try {
       const resp = await fetch(`/api/slash-cmd-sources?token=${token}`, {
@@ -1386,6 +1408,8 @@ export function renderSessionInfoChip() {
   chip.hidden = false;
   const providerName = s.provider === 'claude' ? 'Claude'
                      : s.provider === 'codex'  ? 'Codex'
+                     : s.provider === 'copilot' ? 'Copilot'
+                     : s.provider === 'cursor-agent' ? 'Cursor Agent'
                      : s.provider === 'ollama' ? 'Ollama'
                      : s.provider === 'opencode' ? 'OpenCode'
                      : (s.provider || '');

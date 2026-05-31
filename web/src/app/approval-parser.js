@@ -9,7 +9,7 @@
   const userSpecifiesRe = /user specifies|その他指定/i;
   const hubChoiceQuestionRe = /どれで進めますか|どれで進める|どちらで進め|どの選択肢|選択してください|how would you like to proceed|which option/i;
   const recommendedChoiceRe = /\(recommended\)|（recommended）|推奨/i;
-  const approvalLabelRe = /\b(yes|no|allow|deny|proceed|abort|don[''']t ask|cancel)\b/i;
+  const approvalLabelRe = /\b(yes|no|allow|deny|proceed|abort|don[''']t ask|cancel|once|always|permission|confirm|details)\b/i;
 
   function isMultiQuestionPrompt(lines) {
     for (const line of lines || []) {
@@ -183,7 +183,32 @@
     return null;
   }
 
-  function parseHubBlock(lines) {
+  // Ink 等の TUI 再描画では、画面幅を超える長い選択肢が折り返される際に
+  // 実際の改行コードが入らず、次の質問見出し行が直前の行へ連結されることがある。
+  // 連結されると見出しが行頭でなくなり、parseHubBlock が新しい質問と認識できず
+  // 2つの質問が1つに合体する（一括承認パネルの件数・ボタン文字列が壊れる）。
+  // 各質問末尾の「N. User specifies」を区切りアンカーとして、行内に埋もれた
+  // 「N行」および後続の見出しを元の行構造へ再分割する。
+  function ungluedMarkerLines(lines) {
+    // 「N. User specifies / その他指定」を区切りアンカーにする（行頭・行中問わず）。
+    // \b 直前判定で "PLAN." 等の語中 N は誤マッチしない。
+    const splitRe = /\s*\b(N\.[ \t]*(?:User specifies|その他指定))\b\s*/i;
+    const out = [];
+    const expand = (line) => {
+      const m = line.match(splitRe);
+      if (!m) { out.push(line); return; }
+      const before = line.slice(0, m.index).trim();         // 連結されていた選択肢/本文
+      const after = line.slice(m.index + m[0].length).trim(); // 後続の見出し等
+      if (before) out.push(before);
+      out.push(m[1]);                                        // N. User specifies
+      if (after) expand(after);                             // 後続をさらに分割
+    };
+    for (const raw of (lines || [])) expand(String(raw || ''));
+    return out;
+  }
+
+  function parseHubBlock(rawLines) {
+    const lines = ungluedMarkerLines(rawLines);
     const text = lines.join('\n');
     if (hasYesNoApprovalMarker(text)) {
       return yesNoApprovalOptions(yesNoCtxFromText(text));
@@ -216,8 +241,8 @@
     return looseOpts.length > 0 ? looseOpts : null;
   }
 
-  function codexShortcutSendText(label) {
-    const m = String(label || '').match(/\((y|p|n|esc|escape)\)\s*$/i);
+  function shortcutSendText(label) {
+    const m = String(label || '').match(/\((y|p|n|!|#|\?|esc|escape)\)\s*$/i);
     if (!m) return null;
     const key = m[1].toLowerCase();
     if (key === 'esc' || key === 'escape') return '\x1b';
@@ -230,7 +255,7 @@
       .replace(/\s*\d+\.\s*[A-Za-z].*$/, '')
       .trim();
     const opt = { num: parseInt(numText, 10), label, isCurrent: !!isCurrent };
-    const sendText = codexShortcutSendText(label);
+    const sendText = shortcutSendText(label);
     if (sendText) opt._sendText = sendText;
     return opt;
   }
@@ -248,6 +273,13 @@
       lower.includes('would you like to run') ||
       lower.includes('do you want to proceed?') ||
       lower.includes('this command requires approval') ||
+      lower.includes('permission required') ||
+      lower.includes('permissions required') ||
+      lower.includes('requires permission') ||
+      lower.includes('requires confirmation') ||
+      lower.includes('prompts for user confirmation') ||
+      lower.includes('allow all similar') ||
+      lower.includes('deny all similar') ||
       (lower.includes('press enter to confirm') && !lower.includes('esc to go back')) ||
       lower.includes('enter to select') ||
       lower.includes('↑/↓ to navigate') ||

@@ -128,6 +128,15 @@ type UsageSummary struct {
 	Providers     []UsageBucket `json:"providers"`
 }
 
+type ResetResult struct {
+	Sessions    int `json:"sessions"`
+	Events      int `json:"events"`
+	Messages    int `json:"messages"`
+	Approvals   int `json:"approvals"`
+	Attachments int `json:"attachments"`
+	Preserved   int `json:"preserved_sessions"`
+}
+
 func OpenForLogDir(logDir string) (*Store, error) {
 	base := filepath.Dir(filepath.Clean(logDir))
 	if base == "." || base == string(filepath.Separator) {
@@ -714,6 +723,91 @@ func (s *Store) PruneOlderThan(cutoff time.Time) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions
 		WHERE ended_at IS NOT NULL AND ended_at < ?`, cutoff.Format(time.RFC3339))
 	return err
+}
+
+func (s *Store) ResetHistory(preserveLiveIDs []int) (ResetResult, error) {
+	var out ResetResult
+	if s == nil || s.db == nil {
+		return out, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return out, err
+	}
+	defer tx.Rollback()
+
+	for _, table := range []struct {
+		name string
+		dst  *int
+	}{
+		{"sessions", &out.Sessions},
+		{"events", &out.Events},
+		{"messages", &out.Messages},
+		{"approvals", &out.Approvals},
+		{"attachments", &out.Attachments},
+	} {
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+table.name).Scan(table.dst); err != nil {
+			return out, err
+		}
+	}
+	preserveSet := make(map[int]bool, len(preserveLiveIDs))
+	for _, id := range preserveLiveIDs {
+		if id > 0 {
+			preserveSet[id] = true
+		}
+	}
+	preserved := make([]int64, 0, len(preserveSet))
+	for id := range preserveSet {
+		var dbID int64
+		err := tx.QueryRowContext(ctx, `SELECT id FROM sessions WHERE live_session_id=? ORDER BY id DESC LIMIT 1`, id).Scan(&dbID)
+		if err == nil && dbID > 0 {
+			preserved = append(preserved, dbID)
+		} else if err != nil && err != sql.ErrNoRows {
+			return out, err
+		}
+	}
+	out.Preserved = len(preserved)
+
+	if s.ftsEnabled {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM messages_fts`); err != nil {
+			return out, err
+		}
+	}
+	if len(preserved) == 0 {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM sessions`); err != nil {
+			return out, err
+		}
+		return out, tx.Commit()
+	}
+
+	placeholders := make([]string, len(preserved))
+	args := make([]any, len(preserved))
+	for i, id := range preserved {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	inClause := strings.Join(placeholders, ",")
+	for _, table := range []string{"events", "messages", "approvals", "attachments"} {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE session_id IN (`+inClause+`)`, args...); err != nil {
+			return out, err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE id NOT IN (`+inClause+`)`, args...); err != nil {
+		return out, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE sessions SET
+		first_message=NULL,
+		last_message=NULL,
+		title=NULL,
+		tags_json=NULL,
+		summary=NULL,
+		updated_at=?
+		WHERE id IN (`+inClause+`)`, append([]any{time.Now().Format(time.RFC3339)}, args...)...); err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
 }
 
 func (s *Store) storeMessageForEvent(ctx context.Context, tx *sql.Tx, sessionID int64, ts, typ string, event map[string]any, payload []byte) error {

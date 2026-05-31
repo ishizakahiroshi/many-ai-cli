@@ -1058,6 +1058,36 @@ if (clearOutputsBtn) {
     });
   }
 
+  const sessionStoreResetBtn = document.getElementById('session-store-reset-btn');
+  if (sessionStoreResetBtn) {
+    sessionStoreResetBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const ok = await appConfirm({
+        title: t('settings_history_reset_confirm_title'),
+        message: t('settings_history_reset_confirm_message'),
+        confirmText: t('settings_history_reset_confirm_run'),
+        cancelText: t('confirm_cancel'),
+        kind: 'danger',
+      });
+      if (!ok) return;
+      sessionStoreResetBtn.disabled = true;
+      try {
+        const res = await fetch(`/api/session-store/reset?token=${token}`, { method: 'POST' });
+        if (!res.ok) {
+          showToast(t('settings_history_reset_failed'), sessionStoreResetBtn);
+          return;
+        }
+        resetAllLocalSessionHistory();
+        showToast(t('settings_history_reset_done'), sessionStoreResetBtn);
+        window.dispatchEvent(new CustomEvent('workbench-session-store-reset'));
+      } catch (_) {
+        showToast(t('settings_history_reset_failed'), sessionStoreResetBtn);
+      } finally {
+        sessionStoreResetBtn.disabled = false;
+      }
+    });
+  }
+
   (function () {
     const KEY = 'any-ai-cli.settings-section-state';
     let state = {};
@@ -1111,6 +1141,8 @@ if (clearOutputsBtn) {
     const body = {
       claude: (document.getElementById('slash-src-claude')?.value || '').trim(),
       codex:  (document.getElementById('slash-src-codex')?.value  || '').trim(),
+      copilot: (document.getElementById('slash-src-copilot')?.value || '').trim(),
+      'cursor-agent': (document.getElementById('slash-src-cursor-agent')?.value || '').trim(),
     };
     try {
       await fetch(`/api/slash-cmd-sources?token=${token}`, {
@@ -1149,6 +1181,8 @@ if (clearOutputsBtn) {
     setUserPref('quick_cmds.cmd2', DEFAULT_QUICK_CMD_2);
     setUserPref('usage_links.claude', '');
     setUserPref('usage_links.codex', '');
+    setUserPref('usage_links.copilot', '');
+    setUserPref('usage_links.cursor-agent', '');
     setUserPref('usage_links.ollama', '');
     setUserPref('usage_links.opencode', '');
     setUserPref('voice.grace_seconds', DEFAULT_VOICE_GRACE_SEC);
@@ -1217,8 +1251,12 @@ if (clearOutputsBtn) {
 
     const slashClaudeEl = document.getElementById('slash-src-claude');
     const slashCodexEl = document.getElementById('slash-src-codex');
+    const slashCopilotEl = document.getElementById('slash-src-copilot');
+    const slashCursorAgentEl = document.getElementById('slash-src-cursor-agent');
     if (slashClaudeEl) slashClaudeEl.value = '';
     if (slashCodexEl) slashCodexEl.value = '';
+    if (slashCopilotEl) slashCopilotEl.value = '';
+    if (slashCursorAgentEl) slashCursorAgentEl.value = '';
     loadUsageLinkSettings();
 
     const foAppEl = document.getElementById('settings-file-open-app');
@@ -1359,7 +1397,10 @@ if (clearOutputsBtn) {
   async function openPicker(provider, forceRefresh) {
     pickerProvider = provider;
     pickerEl.hidden = false;
-    titleEl.textContent = provider === 'claude' ? 'Claude Code' : 'Codex CLI';
+    titleEl.textContent = provider === 'claude' ? 'Claude Code'
+                        : provider === 'copilot' ? 'GitHub Copilot'
+                        : provider === 'cursor-agent' ? 'Cursor Agent'
+                        : 'Codex CLI';
     timeEl.textContent  = '';
     listEl.innerHTML = `<div class="slash-picker-status">${t('slash_picker_loading')}</div>`;
     searchEl.value = '';

@@ -15,9 +15,11 @@ const approvalSourceGoVT = "go_vt"
 
 // 承認検出のチューニング定数。
 // approvalRecentLines: detectNativeApproval に渡す末尾行数の上限。
-//   TailLines(vtTailLinesForApproval) と組み合わせて使う。
-//   TailLines が 120 行取得し、そのうち末尾 90 行を有効な承認候補として扱う。
-//   90 行は承認プロンプトが含まれる最大の行数（余白込み）の経験値。
+//
+//	TailLines(vtTailLinesForApproval) と組み合わせて使う。
+//	TailLines が 120 行取得し、そのうち末尾 90 行を有効な承認候補として扱う。
+//	90 行は承認プロンプトが含まれる最大の行数（余白込み）の経験値。
+//
 // vtTailLinesForApproval: VT バッファから取り出す末尾行数（server.go と対応）。
 const (
 	approvalRecentLines       = 90
@@ -39,7 +41,10 @@ type nativeApproval struct {
 
 var (
 	numberedApprovalLineRe = regexp.MustCompile(`^\s*([>❯›❱])?\s*(\d{1,2})\.\s*(.+?)\s*$`)
-	codexShortcutLineRe    = regexp.MustCompile(`^\s*([>❯›❱])?\s*(.+?)\s+\((y|p|n|esc|escape)\)\s*$`)
+	shortcutApprovalLineRe = regexp.MustCompile(`^\s*([>❯›❱])?\s*(.+?)\s+\((y|p|n|!|#|\?|esc|escape)\)\s*$`)
+	// cursor-agent の承認メニューはキー表記が多様（(y) / (tab) / (shift+tab) / (esc or n)）。
+	// 末尾の (...) を緩く取り出し、cursorAgentKeyBinding で既知キーのみ採用する。
+	cursorAgentShortcutLineRe = regexp.MustCompile(`^\s*([-*•>❯›❱])?\s*(.+?)\s+\(([^()]+)\)\s*$`)
 )
 
 func detectNativeApproval(provider string, lines []string) *nativeApproval {
@@ -62,6 +67,10 @@ func detectNativeApproval(provider string, lines []string) *nativeApproval {
 	kind := "native"
 	if provider == "codex" && approvalOptionsHaveSendText(opts) {
 		kind = "native_codex_shortcut"
+	} else if provider == "copilot" && approvalOptionsHaveSendText(opts) {
+		kind = "native_copilot_shortcut"
+	} else if provider == "cursor-agent" && approvalOptionsHaveSendText(opts) {
+		kind = "native_cursor_agent_shortcut"
 	}
 	approval := &nativeApproval{
 		Kind:     kind,
@@ -154,20 +163,23 @@ func parseNativeApprovalOption(provider, line string) (proto.ApprovalOption, boo
 			Label:     label,
 			IsCurrent: m[1] != "",
 		}
-		if sendText := codexShortcutSendText(label); provider == "codex" && sendText != "" {
+		if sendText := approvalShortcutSendText(provider, label); sendText != "" {
 			opt.SendText = sendText
 			opt.PreserveOrder = true
 		}
 		return opt, true
 	}
-	if provider == "codex" {
-		if m := codexShortcutLineRe.FindStringSubmatch(trimmed); m != nil {
+	if provider == "cursor-agent" {
+		return parseCursorAgentShortcutOption(trimmed)
+	}
+	if providerSupportsShortcutApproval(provider) {
+		if m := shortcutApprovalLineRe.FindStringSubmatch(trimmed); m != nil {
 			key := strings.ToLower(m[3])
 			opt := proto.ApprovalOption{
-				Num:           codexShortcutNum(key),
+				Num:           approvalShortcutNum(provider, key),
 				Label:         cleanNativeApprovalLabel(fmt.Sprintf("%s (%s)", m[2], m[3])),
 				IsCurrent:     m[1] != "",
-				SendText:      codexShortcutSendText(key),
+				SendText:      approvalShortcutSendText(provider, key),
 				PreserveOrder: true,
 			}
 			if opt.SendText != "" && opt.Label != "" {
@@ -178,6 +190,65 @@ func parseNativeApprovalOption(provider, line string) (proto.ApprovalOption, boo
 	return proto.ApprovalOption{}, false
 }
 
+// parseCursorAgentShortcutOption は cursor-agent の承認メニュー 1 行をパースする。
+// 実機 UI 例:
+//
+//	Run this command?
+//	Not in allowlist: <command>
+//	 - Run (once) (y)
+//	    Add Shell(<cmd>) to allowlist? (tab)
+//	    Auto-run everything (shift+tab)
+//	    Skip (esc or n)
+func parseCursorAgentShortcutOption(line string) (proto.ApprovalOption, bool) {
+	m := cursorAgentShortcutLineRe.FindStringSubmatch(line)
+	if m == nil {
+		return proto.ApprovalOption{}, false
+	}
+	keyRaw := strings.TrimSpace(m[3])
+	sendText, num := cursorAgentKeyBinding(keyRaw)
+	if sendText == "" {
+		return proto.ApprovalOption{}, false
+	}
+	label := cleanNativeApprovalLabel(fmt.Sprintf("%s (%s)", m[2], keyRaw))
+	if label == "" {
+		return proto.ApprovalOption{}, false
+	}
+	return proto.ApprovalOption{
+		Num:           num,
+		Label:         label,
+		IsCurrent:     isCursorAgentCurrentMarker(m[1]),
+		SendText:      sendText,
+		PreserveOrder: true,
+	}, true
+}
+
+// cursorAgentKeyBinding は cursor-agent のキー表記を PTY 送信バイトと表示番号に変換する。
+// 既知キー以外は sendText="" を返し、呼び出し側で承認オプションから除外させる
+// （末尾が "(...)" の無関係な行を誤って拾わないためのフィルタを兼ねる）。
+func cursorAgentKeyBinding(key string) (sendText string, num int) {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "y":
+		return "y", 1
+	case "tab":
+		return "\t", 2
+	case "shift+tab", "shift + tab":
+		return "\x1b[Z", 3
+	case "esc or n", "n or esc", "esc", "escape":
+		return "\x1b", 4
+	case "n":
+		return "n", 4
+	}
+	return "", 0
+}
+
+func isCursorAgentCurrentMarker(prefix string) bool {
+	switch prefix {
+	case ">", "❯", "›", "❱", "-", "*", "•":
+		return true
+	}
+	return false
+}
+
 func cleanNativeApprovalLabel(label string) string {
 	label = strings.TrimSpace(label)
 	label = strings.Trim(label, "│┃")
@@ -185,31 +256,67 @@ func cleanNativeApprovalLabel(label string) string {
 	return strings.TrimSpace(label)
 }
 
-func codexShortcutNum(key string) int {
+func providerSupportsShortcutApproval(provider string) bool {
+	return provider == "codex" || provider == "copilot" || provider == "cursor-agent"
+}
+
+func approvalShortcutNum(provider, key string) int {
 	switch strings.ToLower(key) {
 	case "y":
 		return 1
 	case "p":
+		if provider != "codex" {
+			return 0
+		}
 		return 2
 	case "n":
+		if provider == "copilot" || provider == "cursor-agent" {
+			return 2
+		}
 		return 3
+	case "!":
+		if provider == "copilot" || provider == "cursor-agent" {
+			return 3
+		}
+	case "#":
+		if provider == "copilot" || provider == "cursor-agent" {
+			return 4
+		}
+	case "?":
+		if provider == "copilot" || provider == "cursor-agent" {
+			return 5
+		}
 	case "esc", "escape":
+		if provider == "copilot" || provider == "cursor-agent" {
+			return 6
+		}
 		return 4
-	default:
-		return 0
 	}
+	return 0
 }
 
-func codexShortcutSendText(label string) string {
+func approvalShortcutSendText(provider, label string) string {
+	if !providerSupportsShortcutApproval(provider) {
+		return ""
+	}
 	lower := strings.ToLower(strings.TrimSpace(label))
 	if lower == "y" || strings.HasSuffix(lower, "(y)") {
 		return "y"
 	}
-	if lower == "p" || strings.HasSuffix(lower, "(p)") {
+	if provider == "codex" && (lower == "p" || strings.HasSuffix(lower, "(p)")) {
 		return "p"
 	}
 	if lower == "n" || strings.HasSuffix(lower, "(n)") {
 		return "n"
+	}
+	if (provider == "copilot" || provider == "cursor-agent") && (lower == "!" || strings.HasSuffix(lower, "(!)")) {
+		return "!"
+	}
+	if (provider == "copilot" || provider == "cursor-agent") && (lower == "#" || strings.HasSuffix(lower, "(#)")) {
+		return "#"
+	}
+	if (provider == "copilot" || provider == "cursor-agent") && (lower == "?" || strings.HasSuffix(lower, "(?)")) {
+		return "?"
 	}
 	if lower == "esc" || lower == "escape" || strings.HasSuffix(lower, "(esc)") || strings.HasSuffix(lower, "(escape)") {
 		return "\x1b"
@@ -234,11 +341,23 @@ func nativeApprovalLooksValid(provider string, contextLines []string, opts []pro
 		strings.Contains(context, "allow tool") ||
 		strings.Contains(context, "allow this") ||
 		strings.Contains(context, "requires approval") ||
+		strings.Contains(context, "requires permission") ||
+		strings.Contains(context, "requires confirmation") ||
+		strings.Contains(context, "permission required") ||
+		strings.Contains(context, "permissions required") ||
+		strings.Contains(context, "user confirmation") ||
 		strings.Contains(context, "would you like to run") ||
 		strings.Contains(context, "do you want to proceed") ||
 		strings.Contains(context, "press enter to confirm") ||
 		strings.Contains(context, "enter to select") ||
 		strings.Contains(context, "esc to cancel")
+	// cursor-agent 実機 UI 特有のヒント（"Run this command?" / "Not in allowlist:" /
+	// "Add ... to allowlist?" / "Auto-run everything"）を追加で許容する。
+	if provider == "cursor-agent" && !hasHint {
+		hasHint = strings.Contains(context, "allowlist") ||
+			strings.Contains(context, "run this command") ||
+			strings.Contains(context, "auto-run")
+	}
 	hasApprovalLabel := false
 	for _, opt := range opts {
 		lower := strings.ToLower(opt.Label)
@@ -246,6 +365,10 @@ func nativeApprovalLooksValid(provider string, contextLines []string, opts []pro
 			strings.Contains(lower, "no") ||
 			strings.Contains(lower, "allow") ||
 			strings.Contains(lower, "deny") ||
+			strings.Contains(lower, "once") ||
+			strings.Contains(lower, "always") ||
+			strings.Contains(lower, "all similar") ||
+			strings.Contains(lower, "details") ||
 			strings.Contains(lower, "proceed") ||
 			strings.Contains(lower, "cancel") ||
 			strings.Contains(lower, "don't ask") ||
@@ -257,7 +380,7 @@ func nativeApprovalLooksValid(provider string, contextLines []string, opts []pro
 			break
 		}
 	}
-	if provider == "codex" && approvalOptionsHaveSendText(opts) {
+	if providerSupportsShortcutApproval(provider) && approvalOptionsHaveSendText(opts) {
 		return hasHint
 	}
 	return hasHint && hasApprovalLabel
@@ -296,4 +419,3 @@ func nativeApprovalSig(provider string, approval *nativeApproval) string {
 	sum := sha1.Sum([]byte(b.String()))
 	return hex.EncodeToString(sum[:])[:16]
 }
-

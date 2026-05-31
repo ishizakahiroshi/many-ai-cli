@@ -120,7 +120,11 @@ export async function restoreChatHistoryFromStore(sid, opts = {}) {
     const data = await res.json();
     const messages = Array.isArray(data.messages) ? data.messages : [];
     if (messages.length === 0) {
-      chatHistoryStoreRestored.add(sid);
+      // DB がまだ空のタイミングで照会すると 0 件が返る。ここで「復元済み」と
+      // 記録してしまうと、その後 DB に履歴が蓄積されても二度と読み直さず、
+      // チャット履歴タブが「履歴はまだありません」のままになる（DB復元ボタン
+      // を押すまで解消しない）。0 件のときは印を付けず、次回の mount/開封で
+      // 再照会できるようにする。
       return false;
     }
     const t = chatHistoryAutoCommitTimers.get(sid);
@@ -441,6 +445,8 @@ export function getAiDisplayName(provider) {
   switch (provider) {
     case 'claude':   return ti18n('chat_ai_name_claude', 'Claude');
     case 'codex':    return ti18n('chat_ai_name_codex', 'Codex');
+    case 'copilot':  return ti18n('chat_ai_name_copilot', 'Copilot');
+    case 'cursor-agent': return ti18n('chat_ai_name_cursor_agent', 'Cursor Agent');
     case 'ollama':   return ti18n('chat_ai_name_ollama', 'Ollama');
     case 'opencode': return ti18n('chat_ai_name_opencode', 'OpenCode');
     default: return provider ? String(provider) : 'AI';
@@ -451,6 +457,7 @@ export function getAiAvatarLetter(provider) {
   switch (provider) {
     case 'claude':   return 'C';
     case 'codex':    return 'X';
+    case 'cursor-agent': return 'r';
     case 'ollama':   return 'O';
     case 'opencode': return 'P';
     default: return 'A';

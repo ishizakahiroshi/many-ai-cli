@@ -25,6 +25,8 @@ export const STORAGE_QUICK_CMD_2_KEY          = 'ai_cli_hub_quick_cmd_2';
 export const STORAGE_TOOLS_LEFT_KEY           = 'ai_cli_hub_tools_left';
 export const STORAGE_USAGE_LINK_CLAUDE_KEY    = 'ai_cli_hub_usage_link_claude';
 export const STORAGE_USAGE_LINK_CODEX_KEY     = 'ai_cli_hub_usage_link_codex';
+export const STORAGE_USAGE_LINK_COPILOT_KEY   = 'ai_cli_hub_usage_link_copilot';
+export const STORAGE_USAGE_LINK_CURSOR_AGENT_KEY = 'ai_cli_hub_usage_link_cursor_agent';
 export const STORAGE_USAGE_LINK_OLLAMA_KEY    = 'ai_cli_hub_usage_link_ollama';
 export const STORAGE_USAGE_LINK_OPENCODE_KEY  = 'ai_cli_hub_usage_link_opencode';
 export const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds';
@@ -49,6 +51,8 @@ export const CWD_HISTORY_MAX               = 10;
 export const DEFAULT_USAGE_LINKS = {
   claude:   'https://claude.ai/settings/usage',
   codex:    'https://chatgpt.com/codex/cloud/settings/analytics#usage',
+  copilot:  'https://github.com/settings/billing',
+  'cursor-agent': 'https://cursor.com/dashboard',
   ollama:   'https://ollama.com/settings',
   opencode: '',
 };
@@ -77,6 +81,8 @@ export const _USER_PREFS_PATH_TO_LS = {
   'quick_cmds.cmd2':           [STORAGE_QUICK_CMD_2_KEY,           String],
   'usage_links.claude':        [STORAGE_USAGE_LINK_CLAUDE_KEY,     String],
   'usage_links.codex':         [STORAGE_USAGE_LINK_CODEX_KEY,      String],
+  'usage_links.copilot':       [STORAGE_USAGE_LINK_COPILOT_KEY,    String],
+  'usage_links.cursor-agent':  [STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, String],
   'usage_links.ollama':        [STORAGE_USAGE_LINK_OLLAMA_KEY,     String],
   'usage_links.opencode':      [STORAGE_USAGE_LINK_OPENCODE_KEY,   String],
   'favorites':                 [STORAGE_FAVORITES_KEY,             JSON.stringify],
@@ -100,6 +106,8 @@ export const _USER_PREFS_STRING_PATHS = new Set([
   'quick_cmds.cmd2',
   'usage_links.claude',
   'usage_links.codex',
+  'usage_links.copilot',
+  'usage_links.cursor-agent',
   'usage_links.ollama',
   'usage_links.opencode',
   'display.locked_mode',

@@ -21,17 +21,21 @@
     <button id="reconnect-btn" hidden>↺ <span data-i18n="reconnect">reconnect</span></button>
     <div class="usage-menu" id="usage-menu">
       <button class="usage-menu-btn" id="usage-menu-btn" aria-haspopup="true" aria-expanded="false">
-        <svg class="usage-menu-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 14" width="30" height="14" aria-hidden="true">
-          <circle cx="5" cy="7" r="4.5" fill="#FFF7ED" stroke="#F97316" stroke-width="1.6"/>
-          <text x="5" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif" fill="#F97316">C</text>
-          <circle cx="15" cy="7" r="4.5" fill="#EFF6FF" stroke="#3B82F6" stroke-width="1.6"/>
-          <text x="15" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif" fill="#3B82F6">X</text>
+        <svg class="usage-menu-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 14" width="50" height="14" aria-hidden="true">
+          <circle class="prov-shape claude" cx="5" cy="7" r="4.5" stroke-width="1.6"/>
+          <text class="prov-letter claude" x="5" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">C</text>
+          <circle class="prov-shape codex" cx="15" cy="7" r="4.5" stroke-width="1.6"/>
+          <text class="prov-letter codex" x="15" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">X</text>
+          <circle class="prov-shape copilot" cx="25" cy="7" r="4.5" stroke-width="1.6"/>
+          <text class="prov-letter copilot" x="25" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">P</text>
+          <circle class="prov-shape cursor-agent" cx="35" cy="7" r="4.5" stroke-width="1.6"/>
+          <text class="prov-letter cursor-agent" x="35" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">r</text>
           <g style="display:none">
-            <circle cx="25" cy="7" r="4.5" fill="#FAF5FF" stroke="#A855F7" stroke-width="1.6"/>
-            <text x="25" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif" fill="#A855F7">O</text>
+            <circle class="prov-shape opencode" cx="45" cy="7" r="4.5" stroke-width="1.6"/>
+            <text class="prov-letter opencode" x="45" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
           </g>
-          <rect x="20.5" y="2.5" width="9" height="9" rx="2" fill="#FDF6E3" stroke="#C4973A" stroke-width="1.6"/>
-          <text x="25" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif" fill="#C4973A">O</text>
+          <rect class="prov-shape ollama" x="40.5" y="2.5" width="9" height="9" rx="2" stroke-width="1.6"/>
+          <text class="prov-letter ollama" x="45" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
         </svg>
         <span data-i18n="usage_menu_btn">Usage</span>
         <svg class="usage-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -39,22 +43,32 @@
       <div class="usage-dropdown" id="usage-dropdown" hidden>
         <div class="usage-dropdown-header" data-i18n="usage_dropdown_header">AI Usage Links</div>
         <a id="usage-link-claude" class="usage-dropdown-item" href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="#FFF7ED" stroke="#F97316" stroke-width="2"/><text x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif" fill="#F97316">C</text></svg>
+          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape claude" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter claude" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">C</text></svg>
           <span class="usage-item-name">Claude</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
         <a id="usage-link-codex" class="usage-dropdown-item" href="https://chatgpt.com/codex/cloud/settings/analytics#usage" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="#EFF6FF" stroke="#3B82F6" stroke-width="2"/><text x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif" fill="#3B82F6">X</text></svg>
+          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape codex" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter codex" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">X</text></svg>
           <span class="usage-item-name">Codex</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
+        <a id="usage-link-copilot" class="usage-dropdown-item" href="https://github.com/settings/billing" target="_blank" rel="noopener noreferrer">
+          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape copilot" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter copilot" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">P</text></svg>
+          <span class="usage-item-name">Copilot</span>
+          <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+        </a>
+        <a id="usage-link-cursor-agent" class="usage-dropdown-item" href="https://cursor.com/dashboard" target="_blank" rel="noopener noreferrer">
+          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape cursor-agent" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter cursor-agent" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">r</text></svg>
+          <span class="usage-item-name">Cursor Agent</span>
+          <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+        </a>
         <a id="usage-link-opencode" class="usage-dropdown-item" href="#" target="_blank" rel="noopener noreferrer" hidden>
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="#FAF5FF" stroke="#A855F7" stroke-width="2"/><text x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif" fill="#A855F7">O</text></svg>
+          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape opencode" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter opencode" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">O</text></svg>
           <span class="usage-item-name">OpenCode</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
         <a id="usage-link-ollama" class="usage-dropdown-item" href="http://localhost:11434" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1" y="1" width="14" height="14" rx="3" fill="#FDF6E3" stroke="#C4973A" stroke-width="2"/><text x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif" fill="#C4973A">O</text></svg>
+          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect class="prov-shape ollama" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter ollama" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">O</text></svg>
           <span class="usage-item-name">Ollama</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
@@ -187,6 +201,11 @@
             <span class="settings-label" data-i18n="settings_attach_folder">Attach folder</span>
             <button id="attach-dir-btn" class="log-dir-btn" data-i18n-tooltip="loading">📁</button>
           </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_saved_history">Saved session history</span>
+            <button id="session-store-reset-btn" class="settings-inline-btn settings-danger-btn" data-i18n="settings_history_reset">Delete history</button>
+          </div>
+          <div class="settings-note" data-i18n="settings_history_reset_desc">Deletes saved SQLite search/chat history. Running sessions continue.</div>
           <div class="settings-note" data-i18n="settings_applies_on_restart">Applied on next start</div>
         </div>
       </details>
@@ -220,6 +239,8 @@
             <select id="approval-patterns-provider" class="settings-select">
               <option value="claude" data-i18n="settings_approval_patterns_claude">Claude Code</option>
               <option value="codex" data-i18n="settings_approval_patterns_codex">Codex</option>
+              <option value="copilot" data-i18n="settings_approval_patterns_copilot">GitHub Copilot</option>
+              <option value="cursor-agent" data-i18n="settings_approval_patterns_cursor_agent">Cursor Agent</option>
               <option value="common" data-i18n="settings_approval_patterns_common">共通</option>
             </select>
           </div>
@@ -398,6 +419,14 @@
             <span class="settings-label">Codex</span>
             <input type="text" id="usage-link-codex-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_codex_placeholder" placeholder="Default Codex usage URL">
           </div>
+          <div class="settings-row">
+            <span class="settings-label">Copilot</span>
+            <input type="text" id="usage-link-copilot-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_copilot_placeholder" placeholder="Default Copilot usage URL">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Cursor Agent</span>
+            <input type="text" id="usage-link-cursor-agent-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_cursor_agent_placeholder" placeholder="Default Cursor Agent usage URL">
+          </div>
           <div class="settings-row" hidden>
             <span class="settings-label">OpenCode</span>
             <input type="text" id="usage-link-opencode-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_opencode_placeholder" placeholder="OpenCode URL">
@@ -422,6 +451,14 @@
           <div class="settings-row">
             <span class="settings-label">Codex CLI</span>
             <input type="text" id="slash-src-codex" class="settings-input-url" placeholder="Default official source">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">GitHub Copilot</span>
+            <input type="text" id="slash-src-copilot" class="settings-input-url" placeholder="Default official source">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Cursor Agent</span>
+            <input type="text" id="slash-src-cursor-agent" class="settings-input-url" placeholder="Default official source">
           </div>
           <div class="settings-row">
             <button id="slash-src-save-btn" class="slash-src-save-btn" data-i18n="settings_slash_src_save">保存</button>
@@ -452,6 +489,8 @@
             <select id="spawn-provider" class="spawn-select">
               <option value="claude">Claude Code</option>
               <option value="codex">Codex CLI</option>
+              <option value="copilot">GitHub Copilot</option>
+              <option value="cursor-agent">Cursor Agent</option>
             </select>
           </div>
           <div class="spawn-cwd-row">
@@ -508,6 +547,10 @@
               <option value="never" data-i18n="spawn_approval_never">⚠ never (no approval)</option>
             </select>
           </div>
+          <div id="spawn-claude-note" class="settings-note" data-i18n="spawn_claude_note" hidden>Uses the installed Claude Code. Authentication and permissions are managed by Claude.</div>
+          <div id="spawn-codex-note" class="settings-note" data-i18n="spawn_codex_note" hidden>Uses the installed Codex CLI. Authentication and permissions are managed by Codex.</div>
+          <div id="spawn-copilot-note" class="settings-note" data-i18n="spawn_copilot_note" hidden>Uses the installed GitHub Copilot CLI. Authentication and permissions are managed by Copilot.</div>
+          <div id="spawn-cursor-agent-note" class="settings-note" data-i18n="spawn_cursor_agent_note" hidden>Uses the installed Cursor Agent CLI. Authentication and permissions are managed by Cursor.</div>
           <div class="new-session-actions">
             <button id="spawn-cancel-btn" class="spawn-btn-cancel" data-i18n="spawn_cancel">Cancel</button>
             <button id="spawn-launch-btn" class="spawn-btn-launch" data-i18n="spawn_launch">Launch</button>

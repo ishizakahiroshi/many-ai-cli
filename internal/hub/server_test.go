@@ -18,15 +18,16 @@ func newTestServer() *Server {
 	cfg := &config.Config{}
 	cfg.Hub.Port = 47777
 	return &Server{
-		cfg:               cfg,
-		logger:            slog.Default(),
-		sessions:          map[int]*session{},
-		wrappers:          map[int]*websocket.Conn{},
-		uis:               map[*websocket.Conn]*uiConn{},
-		slashCmdCache:     map[string]*slashCmdCacheEntry{},
-		usageLinkCache:    newUsageLinkCache(),
-		modelsCache:       &modelsCache{},
-		modelsRemoteCache: newModelsRemoteCache(),
+		cfg:                 cfg,
+		logger:              slog.Default(),
+		sessions:            map[int]*session{},
+		wrappers:            map[int]*websocket.Conn{},
+		uis:                 map[*websocket.Conn]*uiConn{},
+		slashCmdCache:       map[string]*slashCmdCacheEntry{},
+		approvalRuleTargets: map[string]approvalRuleTarget{},
+		usageLinkCache:      newUsageLinkCache(),
+		modelsCache:         &modelsCache{},
+		modelsRemoteCache:   newModelsRemoteCache(),
 	}
 }
 

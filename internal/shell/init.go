@@ -5,6 +5,8 @@ func InitScript() string {
 if [ "${ANY_AI_CLI_AUTO:-0}" = "1" ]; then
   claude(){ any-ai-cli claude "$@"; }
   codex(){ any-ai-cli codex "$@"; }
+  copilot(){ any-ai-cli copilot "$@"; }
+  cursor-agent(){ any-ai-cli cursor-agent "$@"; }
 fi
 `
 }

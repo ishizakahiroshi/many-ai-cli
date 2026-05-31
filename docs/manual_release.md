@@ -93,8 +93,8 @@ git tag v0.1.2  ── push ──┐
 
 `resources/` 配下の以下は、リリースのタグやバイナリとは独立に、実行時に GitHub の `main` ブランチから raw fetch される（リビルド不要・トークン消費 0 で更新できる仕組み。実装は `internal/config/config.go` の `Default*Source` と `internal/hub/slash_cmd_fetch.go` 等を参照）。
 
-- `resources/slash-commands/claude.md` / `codex.md`
-- `resources/approval-patterns/claude.md` / `codex.md` / `common.md`
+- `resources/slash-commands/claude.md` / `codex.md` / `copilot.md`
+- `resources/approval-patterns/claude.md` / `codex.md` / `copilot.md` / `common.md`
 - `resources/usage-links/defaults.json`
 - `resources/models/defaults.json`
 
@@ -103,7 +103,7 @@ git tag v0.1.2  ── push ──┐
 スラッシュコマンドの差分確認（PowerShell）:
 
 ```powershell
-foreach ($p in 'claude','codex') {
+foreach ($p in 'claude','codex','copilot') {
   $remote = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/$p.md"
   $gh = (Invoke-WebRequest -UseBasicParsing $remote).Content
   $local = Get-Content -Raw "resources/slash-commands/$p.md"
@@ -115,7 +115,7 @@ foreach ($p in 'claude','codex') {
 bash の場合:
 
 ```bash
-for p in claude codex; do
+for p in claude codex copilot; do
   curl -s "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/$p.md" -o "/tmp/gh_$p.md"
   diff "/tmp/gh_$p.md" "resources/slash-commands/$p.md" && echo "$p: 差分なし"
 done
