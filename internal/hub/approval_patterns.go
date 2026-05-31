@@ -99,6 +99,20 @@ func legacyApprovalPath(provider string) string {
 	return filepath.Join(approvalPatternsDir(), provider+".json")
 }
 
+func ensureApprovalPatternsDir() (string, error) {
+	dir := approvalPatternsDir()
+	if err := os.MkdirAll(dir, config.DirMode); err != nil {
+		return "", fmt.Errorf("mkdir %s: %w", dir, err)
+	}
+	if err := os.Chmod(filepath.Dir(dir), config.DirMode); err != nil {
+		return "", fmt.Errorf("chmod %s: %w", filepath.Dir(dir), err)
+	}
+	if err := os.Chmod(dir, config.DirMode); err != nil {
+		return "", fmt.Errorf("chmod %s: %w", dir, err)
+	}
+	return dir, nil
+}
+
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
@@ -110,9 +124,8 @@ func fileExists(path string) bool {
 //   - <provider>.official.json が無ければハードコード値で初期化
 //   - アクティブプロファイルの内容を <provider>.json にミラー（フロント互換のため）
 func SyncApprovalPatterns(profiles config.ApprovalProfiles) error {
-	dir := approvalPatternsDir()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("mkdir %s: %w", dir, err)
+	if _, err := ensureApprovalPatternsDir(); err != nil {
+		return err
 	}
 	profiles = config.EffectiveApprovalProfiles(profiles)
 	for _, provider := range KnownApprovalProviders() {
@@ -218,9 +231,8 @@ func WriteOfficialApprovalPatterns(provider string, patterns []string) error {
 	if !IsKnownApprovalProvider(provider) {
 		return fmt.Errorf("unknown provider: %s", provider)
 	}
-	dir := approvalPatternsDir()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("mkdir %s: %w", dir, err)
+	if _, err := ensureApprovalPatternsDir(); err != nil {
+		return err
 	}
 	if patterns == nil {
 		patterns = []string{}
@@ -233,9 +245,8 @@ func WriteCustomApprovalPatterns(provider string, patterns []string) error {
 	if !IsKnownApprovalProvider(provider) {
 		return fmt.Errorf("unknown provider: %s", provider)
 	}
-	dir := approvalPatternsDir()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("mkdir %s: %w", dir, err)
+	if _, err := ensureApprovalPatternsDir(); err != nil {
+		return err
 	}
 	if patterns == nil {
 		patterns = []string{}
@@ -259,6 +270,9 @@ func writePatternFile(path string, patterns []string) error {
 	data, err := json.MarshalIndent(patterns, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal %s: %w", path, err)
+	}
+	if _, err := ensureApprovalPatternsDir(); err != nil {
+		return err
 	}
 	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)

@@ -88,6 +88,13 @@ func CentralRulesDir() string {
 // SyncRulesFile はバージョンを確認し、不一致または不存在なら最新内容で上書きする
 func SyncRulesFile() error {
 	path := centralRulesPath()
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("mkdir %s: %w", dir, err)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return fmt.Errorf("chmod %s: %w", dir, err)
+	}
 	if data, err := os.ReadFile(path); err == nil {
 		firstLine := ""
 		if idx := strings.IndexByte(string(data), '\n'); idx >= 0 {
@@ -98,9 +105,6 @@ func SyncRulesFile() error {
 		if firstLine == fmt.Sprintf("<!-- version: %s -->", rulesVersion) {
 			return nil
 		}
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
 	}
 	return os.WriteFile(path, []byte(rulesFileContent), 0o644)
 }

@@ -305,8 +305,12 @@ func (s *Server) handleOpenDir(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "not_configured", "target dir not configured")
 		return
 	}
-	if err := os.MkdirAll(target, 0o755); err != nil {
+	if err := os.MkdirAll(target, 0o700); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "mkdir_failed", errorDetail("mkdir failed", err))
+		return
+	}
+	if err := os.Chmod(target, 0o700); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "chmod_failed", errorDetail("chmod failed", err))
 		return
 	}
 	if err := openDirNative(target); err != nil {

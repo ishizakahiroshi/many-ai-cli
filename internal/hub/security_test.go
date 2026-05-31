@@ -267,6 +267,22 @@ func TestIsPathUnderAllowedRoots_NonexistentChild(t *testing.T) {
 	}
 }
 
+func TestIsPathUnderAllowedRoots_DotDotPrefixName(t *testing.T) {
+	tmp := t.TempDir()
+	child := filepath.Join(tmp, "..not-traversal")
+	if err := os.MkdirAll(child, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	ok, err := isPathUnderAllowedRoots(child, tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("expected child name beginning with '..' to be accepted under tmp")
+	}
+}
+
 func TestIsUnder_CaseSensitivity(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows-only test")

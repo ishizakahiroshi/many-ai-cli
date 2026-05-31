@@ -23,7 +23,24 @@ func callDeleteDir(t *testing.T, s *Server, src string) (int, filesDeleteDirResp
 	return w.Code, resp
 }
 
-func TestFilesDeleteDir_OK_Directory(t *testing.T) {
+func TestFilesDeleteDir_OK_EmptyDirectory(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "delete-me")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newTestRenameServer(t, tmp)
+	code, resp := callDeleteDir(t, s, src)
+	if code != http.StatusOK || !resp.OK {
+		t.Fatalf("expected ok, got code=%d resp=%+v", code, resp)
+	}
+	if _, err := os.Stat(src); !os.IsNotExist(err) {
+		t.Fatalf("src should be gone: %v", err)
+	}
+}
+
+func TestFilesDeleteDir_RejectNonEmptyDirectory(t *testing.T) {
 	tmp := t.TempDir()
 	src := filepath.Join(tmp, "delete-me")
 	if err := os.MkdirAll(filepath.Join(src, "child"), 0o755); err != nil {
@@ -35,11 +52,14 @@ func TestFilesDeleteDir_OK_Directory(t *testing.T) {
 
 	s := newTestRenameServer(t, tmp)
 	code, resp := callDeleteDir(t, s, src)
-	if code != http.StatusOK || !resp.OK {
-		t.Fatalf("expected ok, got code=%d resp=%+v", code, resp)
+	if code != http.StatusConflict || resp.OK {
+		t.Fatalf("expected conflict, got code=%d resp=%+v", code, resp)
 	}
-	if _, err := os.Stat(src); !os.IsNotExist(err) {
-		t.Fatalf("src should be gone: %v", err)
+	if resp.Error != "conflict" || !strings.Contains(resp.Detail, "empty") {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
+	}
+	if _, err := os.Stat(filepath.Join(src, "child", "file.txt")); err != nil {
+		t.Fatalf("non-empty directory should be preserved: %v", err)
 	}
 }
 
