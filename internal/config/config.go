@@ -13,6 +13,8 @@ import (
 	"any-ai-cli/internal/wslutil"
 )
 
+const DirMode os.FileMode = 0o700
+
 // Dir は ~/.any-ai-cli ディレクトリのパスを返す。
 func Dir() (string, error) {
 	home, err := os.UserHomeDir()
@@ -356,7 +358,7 @@ func LoadOrCreate() (*Config, error) {
 		return nil, fmt.Errorf("home dir: %w", err)
 	}
 	dir := filepath.Join(home, ".any-ai-cli")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := ensurePrivateDir(dir); err != nil {
 		return nil, err
 	}
 	path := filepath.Join(dir, "config.yaml")
@@ -374,6 +376,9 @@ func LoadOrCreate() (*Config, error) {
 			slog.Warn("config parse failed; backed up and regenerating",
 				"bak", bak, "err", err)
 			cfg = defaultConfig(home)
+			if err := ensureToken(cfg); err != nil {
+				return nil, err
+			}
 			out, mErr := yaml.Marshal(cfg)
 			if mErr != nil {
 				return nil, fmt.Errorf("marshal default config: %w", mErr)
@@ -383,6 +388,9 @@ func LoadOrCreate() (*Config, error) {
 			}
 		}
 	case os.IsNotExist(readErr):
+		if err := ensureToken(cfg); err != nil {
+			return nil, err
+		}
 		out, mErr := yaml.Marshal(cfg)
 		if mErr != nil {
 			return nil, fmt.Errorf("marshal default config: %w", mErr)
@@ -395,7 +403,9 @@ func LoadOrCreate() (*Config, error) {
 		return nil, fmt.Errorf("read config: %w", readErr)
 	}
 	if cfg.Token == "" {
-		cfg.Token = randomToken()
+		if err := ensureToken(cfg); err != nil {
+			return nil, err
+		}
 	}
 	// 旧 cfg.Spawn.LastModel → UserPrefs.Spawn.LastModel へ移行
 	// 読み込み時に旧位置に値があり新位置が空なら移送し、旧位置を空にする
@@ -448,13 +458,15 @@ func defaultConfig(home string) *Config {
 	cfg.SlashCmdSources = DefaultSlashCmdSources()
 	cfg.ApprovalPatternSources = DefaultApprovalPatternSources()
 	cfg.ApprovalProfiles = DefaultApprovalProfiles()
-	cfg.Token = randomToken()
 	return cfg
 }
 
 func Save(cfg *Config) error {
 	dir, err := Dir()
 	if err != nil {
+		return err
+	}
+	if err := ensurePrivateDir(dir); err != nil {
 		return err
 	}
 	path := filepath.Join(dir, "config.yaml")
@@ -550,8 +562,29 @@ func (cfg *Config) Clone() *Config {
 	return &c
 }
 
-func randomToken() string {
+func ensurePrivateDir(dir string) error {
+	if err := os.MkdirAll(dir, DirMode); err != nil {
+		return fmt.Errorf("mkdir config dir: %w", err)
+	}
+	if err := os.Chmod(dir, DirMode); err != nil {
+		return fmt.Errorf("chmod config dir: %w", err)
+	}
+	return nil
+}
+
+func ensureToken(cfg *Config) error {
+	token, err := randomToken()
+	if err != nil {
+		return err
+	}
+	cfg.Token = token
+	return nil
+}
+
+func randomToken() (string, error) {
 	buf := make([]byte, 32)
-	_, _ = rand.Read(buf)
-	return hex.EncodeToString(buf)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("generate token: %w", err)
+	}
+	return hex.EncodeToString(buf), nil
 }

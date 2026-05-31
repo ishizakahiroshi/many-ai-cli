@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -140,6 +141,47 @@ func TestLoadOrCreateNotExist(t *testing.T) {
 	path := filepath.Join(home, ".any-ai-cli", "config.yaml")
 	if _, statErr := os.Stat(path); statErr != nil {
 		t.Errorf("config.yaml not created: %v", statErr)
+	}
+}
+
+func TestLoadOrCreatePrivatePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission bits are not reliable on Windows")
+	}
+	home := t.TempDir()
+	dir := filepath.Join(home, ".any-ai-cli")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	if _, err := LoadOrCreate(); err != nil {
+		t.Fatalf("LoadOrCreate: %v", err)
+	}
+	dirInfo, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := dirInfo.Mode().Perm(); got != DirMode {
+		t.Fatalf("config dir mode = %o, want %o", got, DirMode)
+	}
+	configInfo, err := os.Stat(filepath.Join(dir, "config.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := configInfo.Mode().Perm(); got != 0o600 {
+		t.Fatalf("config file mode = %o, want 600", got)
+	}
+}
+
+func TestRandomTokenLength(t *testing.T) {
+	token, err := randomToken()
+	if err != nil {
+		t.Fatalf("randomToken: %v", err)
+	}
+	if len(token) != 64 {
+		t.Fatalf("token length = %d, want 64", len(token))
 	}
 }
 

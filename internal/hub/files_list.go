@@ -422,7 +422,7 @@ func findGitRoot(dir string) string {
 
 // evalSymlinksViaSelf は path を EvalSymlinks で解決する。
 // path 自体が存在しない場合は親ディレクトリを解決して basename を付け直す
-//（move/rename/delete のように「これから作るパス」の symlink 脱出を防ぐため）。
+// （move/rename/delete のように「これから作るパス」の symlink 脱出を防ぐため）。
 // 解決できない場合は cleaned のまま返し、ok=false を返す。
 func evalSymlinksViaSelf(cleaned string) (resolved string, ok bool) {
 	if r, err := filepath.EvalSymlinks(cleaned); err == nil {
@@ -490,8 +490,8 @@ func isUnder(target, base string) bool {
 	if err != nil {
 		return false
 	}
-	// ".." で始まる相対パスは base の外側
-	if strings.HasPrefix(rel, "..") {
+	// ".." または "../..." の相対パスだけ base の外側として扱う。
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return false
 	}
 
