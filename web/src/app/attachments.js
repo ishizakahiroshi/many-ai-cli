@@ -50,7 +50,7 @@ window.addEventListener('paste', (e) => {
     const file = item.getAsFile();
     if (!file) continue;
     hasFile = true;
-    if (isImageFile(file)) stageAttach(file);
+    if (isImageFile(file)) stageAttach(file, { normalize: true });
     else stageFileAttach(file);
   }
   if (hasFile) return;
@@ -167,8 +167,8 @@ if (chatPane) {
   });
 }
 
-export async function stageAttach(file) {
-  const normalized = await normalizeAttachImage(file);
+export async function stageAttach(file, opts = {}) {
+  const normalized = opts.normalize ? await normalizeAttachImage(file) : file;
   const buf = await normalized.arrayBuffer();
   if (buf.byteLength > MAX_ATTACH_BYTES) {
     showToast(`Attachment too large: ${(buf.byteLength / (1024 * 1024)).toFixed(1)}MB (max 8MB)`);
@@ -198,38 +198,54 @@ export async function stageFileAttach(file) {
   pendingAttachFiles.push({ buf, filename: file.name || '', entry, wrapper });
 }
 
-// Claude 側の画像処理失敗を避けるため、長辺を抑えて標準JPEGへ再エンコードする。
-// 変換に失敗した場合は元ファイルをそのまま使う。
+// クリップボード画像は元ファイル名がないことが多いため、PNG として保存する。
+// PNG が大きすぎる場合は、容量に応じて段階的に縮小する。
+// D&D/ファイル選択では元ファイルをそのまま送る。
 export async function normalizeAttachImage(file) {
+  let bmp = null;
   try {
     const maxEdge = 1568;
-    const bmp = await createImageBitmap(file);
+    bmp = await createImageBitmap(file);
     const w = bmp.width;
     const h = bmp.height;
-    const scale = Math.min(1, maxEdge / Math.max(w, h));
-    const outW = Math.max(1, Math.round(w * scale));
-    const outH = Math.max(1, Math.round(h * scale));
+    let scale = Math.min(1, maxEdge / Math.max(w, h));
+    let lastBlob = null;
 
-    const canvas = document.createElement('canvas');
-    canvas.width = outW;
-    canvas.height = outH;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      bmp.close();
-      return file;
+    for (let i = 0; i < 12; i++) {
+      const outW = Math.max(1, Math.round(w * scale));
+      const outH = Math.max(1, Math.round(h * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = outW;
+      canvas.height = outH;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return file;
+      ctx.drawImage(bmp, 0, 0, outW, outH);
+
+      const blob = await new Promise((resolve) => {
+        canvas.toBlob(resolve, 'image/png');
+      });
+      if (!blob) return file;
+      lastBlob = blob;
+      if (blob.size <= MAX_ATTACH_BYTES) {
+        const base = (file.name || 'image').replace(/\.[^.]+$/, '');
+        return new File([blob], `${base}.png`, { type: 'image/png' });
+      }
+
+      const sizeRatio = MAX_ATTACH_BYTES / blob.size;
+      const shrink = Math.max(0.35, Math.min(0.85, Math.sqrt(sizeRatio) * 0.9));
+      scale *= shrink;
+      if (outW === 1 && outH === 1) break;
     }
-    ctx.drawImage(bmp, 0, 0, outW, outH);
-    bmp.close();
 
-    const blob = await new Promise((resolve) => {
-      canvas.toBlob(resolve, 'image/jpeg', 0.92);
-    });
-    if (!blob) return file;
-
-    const base = (file.name || 'image').replace(/\.[^.]+$/, '');
-    return new File([blob], `${base}.jpg`, { type: 'image/jpeg' });
+    if (lastBlob) {
+      const base = (file.name || 'image').replace(/\.[^.]+$/, '');
+      return new File([lastBlob], `${base}.png`, { type: 'image/png' });
+    }
+    return file;
   } catch (_) {
     return file;
+  } finally {
+    if (bmp) bmp.close();
   }
 }
 
@@ -255,7 +271,7 @@ export async function flushPendingAttach(sessionId) {
   for (const { buf, filename, wrapper } of toSend) {
     try {
       const formData = new FormData();
-      formData.append('file', new Blob([buf]), filename || 'image.jpg');
+      formData.append('file', new Blob([buf]), filename || 'blob');
       const res = await fetch(
         `/api/attach?token=${encodeURIComponent(token)}&session_id=${encodeURIComponent(sessionId)}`,
         { method: 'POST', body: formData }
