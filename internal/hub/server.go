@@ -36,17 +36,18 @@ import (
 // maxPTYBuf: UI 再接続時リプレイ用の PTY バッファ上限（セッションごと）。
 // uiPingInterval: UI WebSocket keepalive ping の送信間隔。
 const (
-	idleAfter              = 500 * time.Millisecond
-	tickerInterval         = 200 * time.Millisecond
-	maxPTYBuf              = 512 * 1024 // 512 KB
-	replayTailForNonActive = 64 * 1024  // 64 KB: 非アクティブセッションの UI 接続時 replay 上限
-	uiPingInterval         = 30 * time.Second
-	branchLookupTimeout    = 250 * time.Millisecond
-	branchRefreshAfter     = 2 * time.Second
-	branchRefreshWorkers   = 4
-	vtResizeDebounce       = 200 * time.Millisecond
-	approvalConsumedTTL    = 10 * time.Second
-	wsMaxPayloadBytes      = 2 << 20 // 2 MiB: UI/wrapper JSON frame receive cap
+	idleAfter                    = 500 * time.Millisecond
+	tickerInterval               = 200 * time.Millisecond
+	maxPTYBuf                    = 512 * 1024 // 512 KB
+	replayTailForNonActive       = 64 * 1024  // 64 KB: 非アクティブセッションの UI 接続時 replay 上限
+	uiPingInterval               = 30 * time.Second
+	branchLookupTimeout          = 250 * time.Millisecond
+	branchRefreshAfter           = 2 * time.Second
+	branchRefreshWorkers         = 4
+	nativeApprovalClearMissLimit = 3
+	vtResizeDebounce             = 200 * time.Millisecond
+	approvalConsumedTTL          = 10 * time.Second
+	wsMaxPayloadBytes            = 2 << 20 // 2 MiB: UI/wrapper JSON frame receive cap
 
 	// OSC シーケンスをユーザーターン境界マーカーとして ptyBuf に注入する。
 	// xterm.js はこのシーケンスを画面に表示しない。
@@ -92,13 +93,14 @@ type session struct {
 	ptyBuf []byte
 
 	// JSON 外: Go 側 native approval 検出用 VT バッファ。
-	vt                       *vtBuffer
-	vtResizeDebounceUntil    time.Time
-	nativeApprovalSig        string
-	nativeApprovalTailSig    string
-	nativeApprovalScanQueued bool
-	nativeApprovalConsumed   string
-	nativeApprovalConsumedAt time.Time
+	vt                        *vtBuffer
+	vtResizeDebounceUntil     time.Time
+	nativeApprovalSig         string
+	nativeApprovalTailSig     string
+	nativeApprovalScanQueued  bool
+	nativeApprovalClearMisses int
+	nativeApprovalConsumed    string
+	nativeApprovalConsumedAt  time.Time
 
 	// JSON 外: wrapper に最後に送った PTY サイズ（同サイズの resize を skip して不要な SIGWINCH を防ぐ）
 	lastCols int
@@ -1034,14 +1036,18 @@ func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval)
 	}
 	if approval == nil {
 		if ses.nativeApprovalSig != "" {
-			sig := ses.nativeApprovalSig
-			ses.nativeApprovalSig = ""
-			msg = &proto.Message{
-				Type:           "approval_cleared",
-				SessionID:      id,
-				Provider:       ses.Provider,
-				ApprovalSig:    sig,
-				ApprovalSource: approvalSourceGoVT,
+			ses.nativeApprovalClearMisses++
+			if ses.nativeApprovalClearMisses >= nativeApprovalClearMissLimit {
+				sig := ses.nativeApprovalSig
+				ses.nativeApprovalSig = ""
+				ses.nativeApprovalClearMisses = 0
+				msg = &proto.Message{
+					Type:           "approval_cleared",
+					SessionID:      id,
+					Provider:       ses.Provider,
+					ApprovalSig:    sig,
+					ApprovalSource: approvalSourceGoVT,
+				}
 			}
 		}
 		s.sessionsMu.Unlock()
@@ -1054,6 +1060,7 @@ func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval)
 		s.sessionsMu.Unlock()
 		return
 	}
+	ses.nativeApprovalClearMisses = 0
 	if ses.nativeApprovalSig != approval.Sig {
 		ses.nativeApprovalSig = approval.Sig
 		msg = &proto.Message{
@@ -1094,6 +1101,7 @@ func (s *Server) markNativeApprovalConsumed(m proto.Message) {
 	ses.nativeApprovalConsumedAt = now
 	if ses.nativeApprovalSig == m.ApprovalSig {
 		ses.nativeApprovalSig = ""
+		ses.nativeApprovalClearMisses = 0
 		clearMsg = &proto.Message{
 			Type:           "approval_cleared",
 			SessionID:      m.SessionID,
@@ -1371,6 +1379,7 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 		ses.nativeApprovalSig = ""
 		ses.nativeApprovalTailSig = ""
 		ses.nativeApprovalScanQueued = false
+		ses.nativeApprovalClearMisses = 0
 		ses.nativeApprovalConsumed = ""
 		ses.nativeApprovalConsumedAt = time.Time{}
 		ids = append(ids, id)

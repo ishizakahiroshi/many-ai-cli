@@ -84,19 +84,63 @@ func TestHandleNativeApprovalDetection_SameSigNoRepeat(t *testing.T) {
 	}
 }
 
-// TestHandleNativeApprovalDetection_ClearOnNil は承認が nil のとき sig がクリアされることを確認する。
+// TestHandleNativeApprovalDetection_ClearOnNil は承認が nil の状態が連続したとき
+// sig がクリアされることを確認する。
 func TestHandleNativeApprovalDetection_ClearOnNil(t *testing.T) {
 	s := newTestServer()
 	ses := registerTestSession(s, 3, "claude")
 	ses.nativeApprovalSig = "sig-to-clear"
 
-	s.handleNativeApprovalDetection(3, nil)
+	for i := 0; i < nativeApprovalClearMissLimit; i++ {
+		s.handleNativeApprovalDetection(3, nil)
+	}
 
 	s.sessionsMu.Lock()
 	got := s.sessions[3].nativeApprovalSig
 	s.sessionsMu.Unlock()
 	if got != "" {
 		t.Fatalf("nativeApprovalSig = %q after clear, want empty", got)
+	}
+}
+
+// TestHandleNativeApprovalDetection_TransientNilKeepsSig は Codex TUI の一時的な
+// 再描画抜けで approval_cleared が即時発火しないことを確認する。
+func TestHandleNativeApprovalDetection_TransientNilKeepsSig(t *testing.T) {
+	s := newTestServer()
+	ses := registerTestSession(s, 8, "codex")
+	ses.nativeApprovalSig = "sig-stable"
+
+	for i := 0; i < nativeApprovalClearMissLimit-1; i++ {
+		s.handleNativeApprovalDetection(8, nil)
+	}
+
+	s.sessionsMu.Lock()
+	got := s.sessions[8].nativeApprovalSig
+	misses := s.sessions[8].nativeApprovalClearMisses
+	s.sessionsMu.Unlock()
+	if got != "sig-stable" {
+		t.Fatalf("nativeApprovalSig = %q before clear threshold, want %q", got, "sig-stable")
+	}
+	if misses != nativeApprovalClearMissLimit-1 {
+		t.Fatalf("nativeApprovalClearMisses = %d, want %d", misses, nativeApprovalClearMissLimit-1)
+	}
+}
+
+// TestHandleNativeApprovalDetection_DetectionResetsClearMisses は再検出で clear miss が
+// リセットされることを確認する。
+func TestHandleNativeApprovalDetection_DetectionResetsClearMisses(t *testing.T) {
+	s := newTestServer()
+	ses := registerTestSession(s, 9, "codex")
+	ses.nativeApprovalSig = "sig-stable"
+
+	s.handleNativeApprovalDetection(9, nil)
+	s.handleNativeApprovalDetection(9, &nativeApproval{Sig: "sig-stable", Kind: "native"})
+
+	s.sessionsMu.Lock()
+	misses := s.sessions[9].nativeApprovalClearMisses
+	s.sessionsMu.Unlock()
+	if misses != 0 {
+		t.Fatalf("nativeApprovalClearMisses = %d, want 0", misses)
 	}
 }
 

@@ -47,6 +47,21 @@ test('approval parser fixtures', () => {
     'Do you want to apply this patch? (Y:1/N:0)',
   ]);
   assert.deepEqual(labels(plain), ['Yes (1)', 'No (0)']);
+  assert.deepEqual(labels(parser.extractPlainYesNoApproval([
+    'A拠点・B拠点・C拠点の3台で連絡先関連機能をOFFにしますか？ （Y：1／N：0）',
+  ])), ['Yes (1)', 'No (0)']);
+  assert.deepEqual(labels(parser.extractPlainYesNoApproval([
+    'A拠点・B拠点・C拠点の3台で連絡先関連機能をOFFにしますか？ (Y:1/',
+    'N:0)',
+  ])), ['Yes (1)', 'No (0)']);
+  assert.equal(parser.extractPlainYesNoApproval([
+    'question? (Y:1/N:0)',
+  ]), null);
+  assert.equal(parser.extractHubMarkerApproval([
+    '[ANY-AI-CLI]',
+    'question? (Y:1/N:0)',
+    '[/ANY-AI-CLI]',
+  ]), null);
 
   const codexLines = [
     'This command requires approval',

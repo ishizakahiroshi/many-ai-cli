@@ -10,6 +10,7 @@
   const hubChoiceQuestionRe = /どれで進めますか|どれで進める|どちらで進め|どの選択肢|選択してください|how would you like to proceed|which option/i;
   const recommendedChoiceRe = /\(recommended\)|（recommended）|推奨/i;
   const approvalLabelRe = /\b(yes|no|allow|deny|proceed|abort|don[''']t ask|cancel|once|always|permission|confirm|details)\b/i;
+  const yesNoApprovalMarkerRe = /[（(]\s*[YＹ]\s*[:：]\s*1\s*[\/／]\s*[NＮ]\s*[:：]\s*0\s*[）)]/ig;
 
   function isMultiQuestionPrompt(lines) {
     for (const line of lines || []) {
@@ -109,21 +110,43 @@
   }
 
   function hasYesNoApprovalMarker(text) {
-    return /\(Y:1\/N:0\)/.test(String(text || ''));
+    yesNoApprovalMarkerRe.lastIndex = 0;
+    return yesNoApprovalMarkerRe.test(String(text || ''));
+  }
+
+  function lastYesNoApprovalMarkerIndex(text) {
+    const s = String(text || '');
+    yesNoApprovalMarkerRe.lastIndex = 0;
+    let idx = -1;
+    let match;
+    while ((match = yesNoApprovalMarkerRe.exec(s)) !== null) {
+      idx = match.index;
+      if (match[0].length === 0) yesNoApprovalMarkerRe.lastIndex++;
+    }
+    return idx;
+  }
+
+  function yesNoQuestionText(text) {
+    const s = String(text || '');
+    const idx = lastYesNoApprovalMarkerIndex(s);
+    if (idx < 0) return '';
+    return s.slice(0, idx).replace(/\[\/?ANY-AI-CLI\]/g, '').replace(/\s+/g, ' ').trim();
+  }
+
+  function isPlaceholderYesNoQuestion(text) {
+    return /^question\s*\d*\s*[?？]$/i.test(yesNoQuestionText(text));
   }
 
   function looksLikeYesNoQuestion(text) {
     const s = String(text || '');
     if (!hasYesNoApprovalMarker(s)) return false;
-    const before = s.slice(0, s.lastIndexOf('(Y:1/N:0)'));
+    if (isPlaceholderYesNoQuestion(s)) return false;
+    const before = yesNoQuestionText(s);
     return /[?？]\s*$/.test(before.trim()) || /[?？]/.test(before.slice(-120));
   }
 
   function yesNoCtxFromText(text) {
-    const s = String(text || '');
-    const idx = s.lastIndexOf('(Y:1/N:0)');
-    const before = idx >= 0 ? s.slice(0, idx) : s;
-    return before.slice(-200);
+    return yesNoQuestionText(text).slice(-200);
   }
 
   function yesNoApprovalOptions(ctxText) {
@@ -211,6 +234,7 @@
     const lines = ungluedMarkerLines(rawLines);
     const text = lines.join('\n');
     if (hasYesNoApprovalMarker(text)) {
+      if (isPlaceholderYesNoQuestion(text)) return null;
       return yesNoApprovalOptions(yesNoCtxFromText(text));
     }
     const sections = [];
