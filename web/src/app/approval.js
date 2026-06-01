@@ -8,6 +8,7 @@ import { ws } from './ws-client.js';
 import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, hasApprovalLikeLabel, isBatchOptions, isHubChoicePrompt, isMultiQuestionPrompt, markHubChoiceDefault, matchNativeApprovalTrigger } from './approval-parser.js';
 import { approvalUiAdapter, setMultiQuestionBannerVisible } from './approval-ui.js';
 import { chatHistoryCommitOutput, chatPaneAtBottom, getChatTimelineEl, pushMessage, scrollChatPaneToBottom } from './chat-history.js';
+import { token } from './util.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -64,7 +65,7 @@ export const providerApprovalTriggers = { claude: [], codex: [], copilot: [], 'c
 (async function loadApprovalPatterns() {
   const fetchJson = async (name) => {
     try {
-      const res = await fetch(`approval-patterns/${name}.json`);
+      const res = await fetch(`approval-patterns/${encodeURIComponent(name)}.json?token=${encodeURIComponent(token || '')}`);
       if (!res.ok) return [];
       return await res.json();
     } catch (e) {

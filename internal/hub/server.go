@@ -354,14 +354,11 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		staticHandler = http.FileServer(http.FS(subFS))
 	}
 	// 承認パターン JSON はユーザー設定ディレクトリ ~/.any-ai-cli/approval-patterns/
-	// から配信する。official / custom の 2 プロファイル管理で、旧 <provider>.json は
-	// 初回起動時に <provider>.custom.json へマイグレートする。フロント既存ロード経路
-	// との互換のためアクティブプロファイル内容を <provider>.json にミラーする。
+	// に保持する。フロント互換の /approval-patterns/*.json はユーザー設定を含むため、
+	// 汎用 FileServer ではなく token 必須の専用ハンドラで配信する。
 	if err := SyncApprovalPatterns(cfg.ApprovalProfiles); err != nil {
 		logger.Warn("sync approval patterns failed", "err", err)
 	}
-	approvalPatternsHandler := http.StripPrefix("/approval-patterns/",
-		http.FileServer(http.Dir(approvalPatternsDir())))
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleIndex)
 	mux.Handle("/app-entry.js", staticHandler)
@@ -373,7 +370,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.Handle("/i18n.js", staticHandler)
 	mux.Handle("/i18n/", staticHandler)
 	mux.Handle("/vendor/", staticHandler)
-	mux.Handle("/approval-patterns/", approvalPatternsHandler)
+	mux.HandleFunc("/approval-patterns/", s.handleApprovalPatternAsset)
 	mux.Handle("/ws", websocket.Server{
 		Handshake: s.wsHandshake,
 		Handler:   s.handleWS,

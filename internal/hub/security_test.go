@@ -3,6 +3,7 @@ package hub
 import (
 	"bytes"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -29,6 +30,14 @@ func newSecTestServer(t *testing.T, cwd string) *Server {
 		sessions: map[int]*session{},
 	}
 	return s
+}
+
+func setSecTestHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	return home
 }
 
 // --- C7: requireToken（定数時間比較） ---
@@ -166,6 +175,92 @@ func TestLimitWSReceive(t *testing.T) {
 	limitWSReceive(conn)
 	if conn.MaxPayloadBytes != wsMaxPayloadBytes {
 		t.Fatalf("MaxPayloadBytes = %d, want %d", conn.MaxPayloadBytes, wsMaxPayloadBytes)
+	}
+}
+
+func TestApprovalPatternAssetRequiresToken(t *testing.T) {
+	setSecTestHome(t)
+	dir := approvalPatternsDir()
+	if err := os.MkdirAll(dir, config.DirMode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "codex.json"), []byte(`["approve?"]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := newSecTestServer(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/approval-patterns/codex.json", nil)
+	w := httptest.NewRecorder()
+	s.handleApprovalPatternAsset(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestApprovalPatternAssetServesKnownFileWithToken(t *testing.T) {
+	setSecTestHome(t)
+	dir := approvalPatternsDir()
+	if err := os.MkdirAll(dir, config.DirMode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "codex.json"), []byte(`["approve?"]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := newSecTestServer(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/approval-patterns/codex.json?token=tok", nil)
+	w := httptest.NewRecorder()
+	s.handleApprovalPatternAsset(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := w.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("X-Content-Type-Options = %q, want nosniff", got)
+	}
+	if !strings.Contains(w.Body.String(), "approve?") {
+		t.Fatalf("expected approval pattern body, got: %s", w.Body.String())
+	}
+}
+
+func TestApprovalPatternAssetRejectsTraversal(t *testing.T) {
+	setSecTestHome(t)
+	s := newSecTestServer(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/approval-patterns/../config.yaml?token=tok", nil)
+	w := httptest.NewRecorder()
+	s.handleApprovalPatternAsset(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleAttachRejectsOversizedFile(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+	s.sessions[1] = &session{ID: 1, Provider: "codex"}
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	if err := mw.WriteField("session_id", "1"); err != nil {
+		t.Fatal(err)
+	}
+	part, err := mw.CreateFormFile("file", "large.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(bytes.Repeat([]byte("x"), attachUploadMaxBytes+1)); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/attach?token=tok", &body)
+	req.Host = "127.0.0.1:47777"
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	w := httptest.NewRecorder()
+	s.handleAttach(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusBadRequest, w.Body.String())
 	}
 }
 

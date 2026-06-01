@@ -4,7 +4,7 @@ import { escapeHtml, showToast, ti18n, token } from './util.js';
 import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
-import { activateSession, providerIconHtml, render, renderSessionList, stateLabel } from './session-list.js';
+import { activateSession, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, stateLabel } from './session-list.js';
 import { pathPopupEl } from './path-links.js';
 import { attachTerminal, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, sendResize } from './terminal.js';
 import { providerApprovalTriggers } from './approval.js';
@@ -1094,7 +1094,7 @@ window.approvalPatternsUI = (function () {
 
   async function fetchProfileList(provider, profile) {
     try {
-      const res = await fetch(`approval-patterns/${provider}.${profile}.json`);
+      const res = await fetch(`approval-patterns/${encodeURIComponent(provider)}.${encodeURIComponent(profile)}.json?token=${encodeURIComponent(token || '')}`);
       if (!res.ok) return [];
       return await res.json();
     } catch (_) {
@@ -1156,7 +1156,7 @@ window.approvalPatternsUI = (function () {
 
   async function saveCustom(provider) {
     try {
-      const res = await fetch(`/api/approval-patterns/${provider}?token=${token}`, {
+      const res = await fetch(`/api/approval-patterns/${encodeURIComponent(provider)}?token=${encodeURIComponent(token || '')}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cache[provider].custom),
@@ -1406,15 +1406,9 @@ export function renderSessionInfoChip() {
     return;
   }
   chip.hidden = false;
-  const providerName = s.provider === 'claude' ? 'Claude'
-                     : s.provider === 'codex'  ? 'Codex'
-                     : s.provider === 'copilot' ? 'Copilot'
-                     : s.provider === 'cursor-agent' ? 'Cursor Agent'
-                     : s.provider === 'ollama' ? 'Ollama'
-                     : s.provider === 'opencode' ? 'OpenCode'
-                     : (s.provider || '');
+  const providerName = providerDisplayName(s.provider);
   const providerChipHtml = providerName
-    ? `<span class="card-provider-chip ${s.provider || ''}">${escapeHtml(providerName)}</span>`
+    ? `<span class="card-provider-chip ${safeClassToken(s.provider)}">${escapeHtml(providerName)}</span>`
     : '';
   const isOllamaBackedSess = (s.route === 'ollama');
   let modelBadge = '';
@@ -1429,7 +1423,7 @@ export function renderSessionInfoChip() {
   chip.innerHTML =
     `<span class="sid">#${s.id}</span>` +
     `${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}` +
-    ` <span class="badge ${state}">${escapeHtml(stateLbl)}</span>`;
+    ` <span class="badge ${safeClassToken(state)}">${escapeHtml(stateLbl)}</span>`;
 }
 
 // D12: チャット件数バッジ更新
