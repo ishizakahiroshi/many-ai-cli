@@ -167,13 +167,25 @@ func TestCleanOldRemovesEmptySessionDirs(t *testing.T) {
 	}
 }
 
-// TestSaveExtAllowlist は allowlist 外の拡張子が magic-byte 判定に差し替えられることを確認する。
-func TestSaveExtAllowlist(t *testing.T) {
+func TestSaveKeepsOriginalExtension(t *testing.T) {
 	baseDir := t.TempDir()
 
-	// PNG magic bytes を持つが拡張子が .exe のファイル
 	pngData := []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}
 	savedPath, _, err := Save(baseDir, 1, "claude", pngData, "evil.exe")
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	ext := strings.ToLower(filepath.Ext(savedPath))
+	if ext != ".exe" {
+		t.Fatalf("expected original .exe extension, got %q", ext)
+	}
+}
+
+func TestSaveDetectsExtensionWhenFilenameHasNoExtension(t *testing.T) {
+	baseDir := t.TempDir()
+
+	pngData := []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}
+	savedPath, _, err := Save(baseDir, 1, "claude", pngData, "clipboard-image")
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -183,17 +195,64 @@ func TestSaveExtAllowlist(t *testing.T) {
 	}
 }
 
-// TestSaveExtAllowlistAllowed は allowlist 内の拡張子がそのまま使われることを確認する。
-func TestSaveExtAllowlistAllowed(t *testing.T) {
+func TestSaveKeepsCSVExtension(t *testing.T) {
 	baseDir := t.TempDir()
 
-	// .webp として保存
-	savedPath, _, err := Save(baseDir, 1, "claude", []byte("webp-data"), "image.webp")
+	savedPath, _, err := Save(baseDir, 1, "codex", []byte("name,value\nalice,1\n"), "report.csv")
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	ext := strings.ToLower(filepath.Ext(savedPath))
-	if ext != ".webp" {
-		t.Fatalf("expected .webp, got %q", ext)
+	if ext != ".csv" {
+		t.Fatalf("expected .csv, got %q", ext)
+	}
+}
+
+func TestSaveKeepsSourceFileExtensions(t *testing.T) {
+	baseDir := t.TempDir()
+	for _, name := range []string{"index.php", "app.js", "main.go", "page.html", "component.vue", "script.ts"} {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			savedPath, _, err := Save(baseDir, 1, "codex", []byte("source"), name)
+			if err != nil {
+				t.Fatalf("Save: %v", err)
+			}
+			want := strings.ToLower(filepath.Ext(name))
+			got := strings.ToLower(filepath.Ext(savedPath))
+			if got != want {
+				t.Fatalf("expected %s, got %q", want, got)
+			}
+		})
+	}
+}
+
+func TestSaveKeepsOfficeDocumentExtensions(t *testing.T) {
+	baseDir := t.TempDir()
+	for _, name := range []string{"book.xls", "book.xlsx", "report.doc", "report.docx", "deck.ppt", "deck.pptx", "paper.pdf"} {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			savedPath, _, err := Save(baseDir, 1, "codex", []byte("document"), name)
+			if err != nil {
+				t.Fatalf("Save: %v", err)
+			}
+			want := strings.ToLower(filepath.Ext(name))
+			got := strings.ToLower(filepath.Ext(savedPath))
+			if got != want {
+				t.Fatalf("expected %s, got %q", want, got)
+			}
+		})
+	}
+}
+
+func TestSaveUnknownExtensionFallsBackToBin(t *testing.T) {
+	baseDir := t.TempDir()
+
+	savedPath, _, err := Save(baseDir, 1, "codex", []byte("plain text without known extension"), "")
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	ext := strings.ToLower(filepath.Ext(savedPath))
+	if ext != ".bin" {
+		t.Fatalf("expected .bin fallback, got %q", ext)
 	}
 }

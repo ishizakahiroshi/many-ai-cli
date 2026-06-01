@@ -9,17 +9,8 @@ import (
 	"time"
 )
 
-// allowedExts は添付ファイルとして許可する拡張子の allowlist（小文字）。
-var allowedExts = map[string]bool{
-	".png":  true,
-	".jpg":  true,
-	".jpeg": true,
-	".webp": true,
-	".gif":  true,
-}
-
-// detectExt returns the file extension for img based on magic bytes.
-// Falls back to ".png" for unknown or unsupported formats.
+// detectExt returns the file extension based on magic bytes.
+// Falls back to ".bin" for unknown or unsupported formats.
 func detectExt(data []byte) string {
 	switch {
 	case len(data) >= 8 && data[0] == 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G':
@@ -30,9 +21,31 @@ func detectExt(data []byte) string {
 		return ".gif"
 	case len(data) >= 12 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WEBP":
 		return ".webp"
+	case len(data) >= 5 && string(data[:5]) == "%PDF-":
+		return ".pdf"
 	default:
-		return ".png"
+		return ".bin"
 	}
+}
+
+func extFromFilename(filename string) string {
+	ext := strings.ToLower(filepath.Ext(filepath.Base(filename)))
+	if len(ext) < 2 || len(ext) > 32 {
+		return ""
+	}
+	for _, r := range ext[1:] {
+		if r >= 'a' && r <= 'z' {
+			continue
+		}
+		if r >= '0' && r <= '9' {
+			continue
+		}
+		if r == '_' || r == '-' {
+			continue
+		}
+		return ""
+	}
+	return ext
 }
 
 // Save writes data to baseDir/<sessionID>/<YYYYMMDDHHmmss_NNNNNNNNN><ext> and returns
@@ -44,9 +57,8 @@ func Save(baseDir string, sessionID int, provider string, data []byte, filename 
 		return "", "", fmt.Errorf("attach.Save: mkdir %s: %w", dir, err)
 	}
 
-	// 拡張子を allowlist で検証し、allowlist 外なら magic-byte 判定にフォールバック
-	ext := strings.ToLower(filepath.Ext(filename))
-	if ext == "" || !allowedExts[ext] {
+	ext := extFromFilename(filename)
+	if ext == "" {
 		ext = detectExt(data)
 	}
 
