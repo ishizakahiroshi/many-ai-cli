@@ -274,10 +274,48 @@ func writePatternFile(path string, patterns []string) error {
 	if _, err := ensureApprovalPatternsDir(); err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
+}
+
+func validApprovalPatternAssetName(name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" || strings.HasPrefix(name, ".") || strings.ContainsAny(name, `/\`) {
+		return false
+	}
+	if !strings.HasSuffix(name, ".json") {
+		return false
+	}
+	base := strings.TrimSuffix(name, ".json")
+	for _, suffix := range []string{".official", ".custom"} {
+		if strings.HasSuffix(base, suffix) {
+			base = strings.TrimSuffix(base, suffix)
+			break
+		}
+	}
+	return IsKnownApprovalProvider(base)
+}
+
+func (s *Server) handleApprovalPatternAsset(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodGet) {
+		return
+	}
+	name := strings.TrimPrefix(r.URL.Path, "/approval-patterns/")
+	if !validApprovalPatternAssetName(name) {
+		writeJSONError(w, http.StatusNotFound, "not_found", "not found")
+		return
+	}
+	dir := approvalPatternsDir()
+	path := filepath.Join(dir, name)
+	if ok, _ := isPathUnderAllowedRoots(path, dir); !ok {
+		writeJSONError(w, http.StatusForbidden, "forbidden", "forbidden")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	http.ServeFile(w, r, path)
 }
 
 func (s *Server) handleApprovalPatterns(w http.ResponseWriter, r *http.Request) {

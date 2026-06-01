@@ -164,28 +164,53 @@ export function stateLabel(state) {
   return t('state_' + state) || state;
 }
 
+export function safeClassToken(value) {
+  const cleaned = String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+  return cleaned || 'unknown';
+}
+
+export function providerDisplayName(provider) {
+  const key = String(provider || '').toLowerCase();
+  const labels = {
+    claude: 'Claude',
+    codex: 'Codex',
+    copilot: 'Copilot',
+    'cursor-agent': 'Cursor Agent',
+    ollama: 'Ollama',
+    opencode: 'OpenCode',
+  };
+  return labels[key] || String(provider || '');
+}
+
 export function providerIconHtml(provider, size = 16) {
-  const base = `class="card-provider-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="${size}" height="${size}" aria-hidden="true"`;
+  const key = String(provider || '').toLowerCase();
+  const parsedSize = Number(size);
+  const safeSize = Number.isFinite(parsedSize) && parsedSize > 0 ? Math.min(Math.floor(parsedSize), 64) : 16;
+  const base = `class="card-provider-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="${safeSize}" height="${safeSize}" aria-hidden="true"`;
   const txt  = `text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif"`;
-  if (provider === 'claude') {
+  if (key === 'claude') {
     return `<svg ${base}><circle class="prov-shape claude" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter claude" x="8" y="8" ${txt}>C</text></svg>`;
   }
-  if (provider === 'codex') {
+  if (key === 'codex') {
     return `<svg ${base}><circle class="prov-shape codex" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter codex" x="8" y="8" ${txt}>X</text></svg>`;
   }
-  if (provider === 'copilot') {
+  if (key === 'copilot') {
     return `<svg ${base}><circle class="prov-shape copilot" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter copilot" x="8" y="8" ${txt}>P</text></svg>`;
   }
-  if (provider === 'cursor-agent') {
+  if (key === 'cursor-agent') {
     return `<svg ${base}><circle class="prov-shape cursor-agent" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter cursor-agent" x="8" y="8" ${txt}>r</text></svg>`;
   }
-  if (provider === 'ollama') {
+  if (key === 'ollama') {
     return `<svg ${base}><rect class="prov-shape ollama" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter ollama" x="8" y="8" ${txt}>O</text></svg>`;
   }
-  if (provider === 'opencode') {
+  if (key === 'opencode') {
     return `<svg ${base}><rect class="prov-shape opencode" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter opencode" x="8" y="8" ${txt}>O</text></svg>`;
   }
-  const letter = (provider || '?')[0].toUpperCase();
+  const letter = escapeHtml((String(provider || '?').trim()[0] || '?').toUpperCase());
   return `<svg ${base}><circle class="prov-shape" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter" x="8" y="8" ${txt}>${letter}</text></svg>`;
 }
 
@@ -528,8 +553,8 @@ export function renderSessionList() {
       const msgHtml = filteredMsg
         ? `<span class="card-msg" data-tooltip="${escapeHtml(filteredMsg)}">${escapeHtml(filteredMsg)}</span>`
         : `<span class="card-msg"></span>`;
-      const providerName = s.provider === 'claude' ? 'Claude' : s.provider === 'codex' ? 'Codex' : s.provider === 'copilot' ? 'Copilot' : s.provider === 'cursor-agent' ? 'Cursor Agent' : (s.provider || '');
-      const providerChipHtml = providerName ? `<span class="card-provider-chip ${s.provider || ''}">${providerName}</span>` : '';
+      const providerName = providerDisplayName(s.provider);
+      const providerChipHtml = providerName ? `<span class="card-provider-chip ${safeClassToken(s.provider)}">${escapeHtml(providerName)}</span>` : '';
       const isDeadState = state === 'error' || state === 'disconnected';
       let reasonText = '';
       if (isDeadState && s.end_reason) {
@@ -541,7 +566,7 @@ export function renderSessionList() {
       const reasonHtml = reasonText
         ? `<span class="card-end-reason" data-tooltip="${escapeHtml(reasonText)}">${escapeHtml(reasonText)}</span>`
         : '';
-      const metaRow = `<div class="card-meta-row"><span class="badge ${state}">${label}</span>${reasonHtml}${sessionLabel}${msgHtml}</div>`;
+      const metaRow = `<div class="card-meta-row"><span class="badge ${safeClassToken(state)}">${escapeHtml(label)}</span>${reasonHtml}${sessionLabel}${msgHtml}</div>`;
       c.dataset.sessionId = s.id;
       const isOllamaBackedSess = (s.route === 'ollama');
       let modelBadge = '';
@@ -952,7 +977,6 @@ export function renderSummaryAndNotifications() {
   });
   const totalWaiting = stateCounts.waiting;
 
-  const PROVIDER_LABELS = { claude: 'Claude', codex: 'Codex', copilot: 'Copilot', 'cursor-agent': 'Cursor Agent', ollama: 'Ollama', opencode: 'OpenCode' };
   const PROVIDER_ORDER = { claude: 0, ollama: 1, codex: 2, copilot: 3, opencode: 4, 'cursor-agent': 5 };
   const sortedGroups = Array.from(providerGroups.values()).sort((a, b) => {
     const ka = a.isOllamaBacked ? 'ollama' : a.provider;
@@ -964,15 +988,15 @@ export function renderSummaryAndNotifications() {
   });
   const providerParts = sortedGroups.map(g => {
     if (g.isOllamaBacked) {
-      const label = PROVIDER_LABELS.ollama;
+      const label = providerDisplayName('ollama');
       const modelHtml = g.model ? `<span class="summary-ollama-model">${escapeHtml(g.model)}</span>` : '';
       const tip = g.model ? `Ollama · ${g.model} : ${g.count}` : `Ollama : ${g.count}`;
-      return `<span class="summary-provider-chip" data-tooltip="${escapeHtml(tip)}">${providerIconHtml('ollama')}<span class="compact-hide"><span class="summary-provider-name ollama">${label}</span>${modelHtml}<span class="summary-provider-count">: ${g.count}</span></span><span class="compact-count">${g.count}</span></span>`;
+      return `<span class="summary-provider-chip" data-tooltip="${escapeHtml(tip)}">${providerIconHtml('ollama')}<span class="compact-hide"><span class="summary-provider-name ollama">${escapeHtml(label)}</span>${modelHtml}<span class="summary-provider-count">: ${g.count}</span></span><span class="compact-count">${g.count}</span></span>`;
     }
     const provider = g.provider;
-    const label = PROVIDER_LABELS[provider] || provider;
+    const label = providerDisplayName(provider);
     const tip = `${label} : ${g.count}`;
-    return `<span class="summary-provider-chip" data-tooltip="${escapeHtml(tip)}">${providerIconHtml(provider)}<span class="compact-hide"><span class="summary-provider-name ${provider}">${label}</span><span class="summary-provider-count">: ${g.count}</span></span><span class="compact-count">${g.count}</span></span>`;
+    return `<span class="summary-provider-chip" data-tooltip="${escapeHtml(tip)}">${providerIconHtml(provider)}<span class="compact-hide"><span class="summary-provider-name ${safeClassToken(provider)}">${escapeHtml(label)}</span><span class="summary-provider-count">: ${g.count}</span></span><span class="compact-count">${g.count}</span></span>`;
   }).join('');
 
   let summary = '';
@@ -1036,7 +1060,7 @@ export function updateSessionCardStateInPlace(id) {
   card.classList.toggle('active', id === activeSessionId);
   const badge = card.querySelector('.badge');
   if (badge) {
-    badge.className = `badge ${state}`;
+    badge.className = `badge ${safeClassToken(state)}`;
     badge.textContent = stateLabel(state);
   }
   updateProjectGroupStatusChipsForSession(s);

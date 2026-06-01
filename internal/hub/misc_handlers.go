@@ -16,6 +16,11 @@ import (
 	"any-ai-cli/internal/config"
 )
 
+const (
+	attachUploadMaxBytes    = 10 * 1024 * 1024
+	attachMultipartMaxBytes = attachUploadMaxBytes + 1*1024*1024
+)
+
 func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodGet) {
 		return
@@ -81,9 +86,13 @@ func (s *Server) handleAttach(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
+	r.Body = http.MaxBytesReader(w, r.Body, attachMultipartMaxBytes)
+	if err := r.ParseMultipartForm(attachUploadMaxBytes); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("bad request", err))
 		return
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
 	}
 	sessionID, err := strconv.Atoi(r.FormValue("session_id"))
 	if err != nil {
@@ -96,9 +105,13 @@ func (s *Server) handleAttach(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	data, err := io.ReadAll(file)
+	data, err := io.ReadAll(io.LimitReader(file, attachUploadMaxBytes+1))
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "read_failed", errorDetail("read error", err))
+		return
+	}
+	if len(data) > attachUploadMaxBytes {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "file too large")
 		return
 	}
 	s.sessionsMu.Lock()
