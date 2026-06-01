@@ -5,7 +5,7 @@ import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_NOTI
 import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, crunchLatch, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals, toolOutputs } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { appendLinkedText } from './app/path-links.js';
-import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, scrollTerminalToBottomSoon, sendResize, updateScrollLockBtn } from './app/terminal.js';
+import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
 import { DEFAULT_QUICK_CMD_1, DEFAULT_QUICK_CMD_2, appConfirm, appConfirmShutdown, applyFontSize, applyLang, applyTheme, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
@@ -96,9 +96,12 @@ export const pasteChipsEl = document.getElementById('paste-chips');
 export const pastedTexts = []; // [{id, text, lineCount}]
 export let pasteCounter = 0;
 
-export function autoExpand() {
+export function autoExpand(opts = {}) {
   const t = activeSessionId === null ? null : terminals.get(activeSessionId);
   const shouldStickToBottom = !!(t && (t.autoScroll || isTerminalAtBottom(t)));
+  if (opts.suppressPtyResize) {
+    suppressPtyResizeForInputLayout();
+  }
   inputEl.style.height = 'auto';
   inputEl.style.height = Math.min(inputEl.scrollHeight, Math.floor(window.innerHeight * 0.3)) + 'px';
   updateInputClearButton();
@@ -145,7 +148,7 @@ export function expandPasteChip(idx) {
   inputEl.value = pt.text + (inputEl.value ? '\n' + inputEl.value : '');
   pastedTexts.splice(idx, 1);
   renderPasteChips();
-  autoExpand();
+  autoExpand({ suppressPtyResize: true });
   inputEl.focus();
 }
 
@@ -388,7 +391,7 @@ export function scrollSlashIntoView() {
 }
 
 inputEl.addEventListener('input', () => {
-  autoExpand(); updateSlashMenu();
+  autoExpand({ suppressPtyResize: true }); updateSlashMenu();
   updateInputClearButton();
   if (!isComposing) {
     const _tp = getActiveTriggerPhrase();

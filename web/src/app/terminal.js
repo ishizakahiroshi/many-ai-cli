@@ -580,7 +580,9 @@ export function refitActiveTerminalAfterLayout(stickToBottom) {
     fitTerminalPreservingBottom(t, id);
     const dimsChanged = t.term.cols !== prevCols || t.term.rows !== prevRows;
     if (dimsChanged) {
-      sendResize(id, t.term.cols, t.term.rows);
+      if (!isPtyResizeSuppressed()) {
+        sendResize(id, t.term.cols, t.term.rows);
+      }
     }
     if (stickToBottom) {
       scrollTerminalToBottomSoon(id);
@@ -825,6 +827,15 @@ export function canFitTerminal(t) {
 }
 
 export let lastDevicePixelRatio = window.devicePixelRatio || 1;
+export let suppressPtyResizeUntil = 0;
+
+export function suppressPtyResizeForInputLayout(durationMs = 300) {
+  suppressPtyResizeUntil = Math.max(suppressPtyResizeUntil, Date.now() + durationMs);
+}
+
+export function isPtyResizeSuppressed() {
+  return Date.now() < suppressPtyResizeUntil;
+}
 
 export function refitAllTerminals(refreshRows = false) {
   terminals.forEach((t, id) => {
@@ -854,7 +865,9 @@ export const resizeObserver = new ResizeObserver(() => {
     const prevRows = t.term.rows;
     fitTerminalPreservingBottom(t, activeSessionId);
     if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
-      sendResize(activeSessionId, t.term.cols, t.term.rows);
+      if (!isPtyResizeSuppressed()) {
+        sendResize(activeSessionId, t.term.cols, t.term.rows);
+      }
     }
   });
 });
