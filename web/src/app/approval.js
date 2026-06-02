@@ -2,7 +2,7 @@
 import { t } from '../i18n.js';
 import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, CRUNCH_LATCH_MS, actionBarShownAt, activeSessionId, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchFocusIdx, batchSelections, crunchLatch, expandCapturePending, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionVisibleCache, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, terminals, toolOutputs, utf8Decoder } from './state.js';
 import { inputEl, renderToolOutputs, sendSubmittedText, sendText } from '../app.js';
-import { isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon } from './terminal.js';
+import { clearSuppressPtyResize, isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout } from './terminal.js';
 import { stripAnsi } from './settings.js';
 import { ws } from './ws-client.js';
 import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, hasApprovalLikeLabel, isBatchOptions, isHubChoicePrompt, isMultiQuestionPrompt, markHubChoiceDefault, matchNativeApprovalTrigger } from './approval-parser.js';
@@ -826,7 +826,12 @@ export function setActionBarFocus(idx) {
 
 export function hideActionBar(id) {
   const bar = document.getElementById('action-bar');
+  const wasVisible = !!(bar && bar.classList.contains('visible'));
   if (bar) { bar.classList.remove('visible', 'batch'); bar.innerHTML = ''; }
+  // action-bar 出現時に設定した PTY リサイズ抑制を解除する。
+  // これにより消滅後のターミナル拡大に対して ResizeObserver が
+  // 正しい行数で SIGWINCH を1回だけ送れるようになる。
+  if (wasVisible) clearSuppressPtyResize();
   // 差分スキップ用キャッシュをリセット（次回 showActionBar が同一シグネチャでも再描画されるように）
   lastActionBarRender.sessionId = null;
   lastActionBarRender.sig = null;
@@ -989,6 +994,11 @@ export function showActionBar(bar, sessionId, options, showExpand, forceStickToB
   };
   bar.appendChild(closeBtn);
 
+  // action-bar 出現でターミナル高さが縮小し、ResizeObserver が SIGWINCH を
+  // 送ると Claude Code が chrome を再描画して二重表示になる。
+  // 初回表示時のみリサイズを抑制し、hideActionBar で解除することで
+  // 消滅後の安定サイズで1回だけ SIGWINCH を送る。
+  if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(60000);
   bar.classList.add('visible');
   actionBarShownAt.set(sessionId, Date.now());
   if (shouldStickToBottom) {
@@ -1110,6 +1120,7 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   footer.appendChild(closeBatchBtn);
 
   bar.appendChild(footer);
+  if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(60000);
   bar.classList.add('visible');
   actionBarShownAt.set(sessionId, Date.now());
   if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
