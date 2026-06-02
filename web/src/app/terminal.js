@@ -833,6 +833,10 @@ export function suppressPtyResizeForInputLayout(durationMs = 300) {
   suppressPtyResizeUntil = Math.max(suppressPtyResizeUntil, Date.now() + durationMs);
 }
 
+export function clearSuppressPtyResize() {
+  suppressPtyResizeUntil = 0;
+}
+
 export function isPtyResizeSuppressed() {
   return Date.now() < suppressPtyResizeUntil;
 }
