@@ -61,6 +61,11 @@ export const DEFAULT_USAGE_LINKS = {
 
 export const FONTSIZE_MAP = { large: 15, medium: 13, small: 11 };
 
+type UserPrefsObject = Record<string, any>;
+type UserPrefSerializer = (value: any) => string;
+type UserPrefsPathMap = Record<string, readonly [string, UserPrefSerializer]>;
+type UserPrefsHttpError = Error & { phase: string; status: number };
+
 // ---- user-prefs サーバ同期 ----
 // setUserPref(path, value)
 //   path: ドット区切りの user_prefs パス（例: 'voice.wake_word_phrase'）
@@ -69,7 +74,7 @@ export const FONTSIZE_MAP = { large: 15, medium: 13, small: 11 };
 //   - サーバへ 200ms debounced PUT（取得→パス更新→PUT 全体置換）
 //   - PUT 失敗時は console.warn + トースト。localStorage は保持する
 
-export const _USER_PREFS_PATH_TO_LS = {
+export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'trigger.enabled':           [STORAGE_TRIGGER_ENABLED_KEY,       (v) => v ? '1' : '0'],
   'trigger.phrase':            [STORAGE_TRIGGER_PHRASE_KEY,         String],
   'notify_sound.enabled':      [STORAGE_NOTIFY_SOUND_ENABLED_KEY,  (v) => v ? '1' : '0'],
@@ -128,7 +133,7 @@ export const _USER_PREFS_STRING_ARRAY_PATHS = new Set([
 ]);
 
 // ドット区切りパスでオブジェクトの深いフィールドを設定する
-export function _setNestedValue(obj, path, value) {
+export function _setNestedValue(obj: UserPrefsObject, path: string, value: any): void {
   const keys = path.split('.');
   let cur = obj;
   for (let i = 0; i < keys.length - 1; i++) {
@@ -138,8 +143,8 @@ export function _setNestedValue(obj, path, value) {
   cur[keys[keys.length - 1]] = value;
 }
 
-export function _parseStoredUserPref(path, raw) {
-  let parsed;
+export function _parseStoredUserPref(path: string, raw: string): { ok: true; value: any } | { ok: false; value?: never } {
+  let parsed: any;
   try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
 
   if (path.endsWith('.enabled') || path === 'voice.wake_word_enabled' || path === 'approval.auto_switch') {
@@ -158,7 +163,7 @@ export function _parseStoredUserPref(path, raw) {
   }
   if (path === 'spawn.defaults') {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ok: false };
-    const value = {};
+    const value: Record<string, string> = {};
     for (const [k, v] of Object.entries(parsed)) {
       if (typeof k === 'string' && typeof v === 'string') value[k] = v;
     }
@@ -167,7 +172,7 @@ export function _parseStoredUserPref(path, raw) {
   return { ok: true, value: parsed };
 }
 
-export function _mergeStoredUserPrefs(current) {
+export function _mergeStoredUserPrefs(current: UserPrefsObject): UserPrefsObject {
   for (const [path, [lsKey, _]] of Object.entries(_USER_PREFS_PATH_TO_LS)) {
     const raw = localStorage.getItem(lsKey);
     if (raw == null) continue;
@@ -179,20 +184,21 @@ export function _mergeStoredUserPrefs(current) {
 }
 
 // PUT debounce タイマー
-export let _userPrefsDebounceTimer = null;
+export let _userPrefsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-export function _userPrefsSaveErrorMessage(err) {
-  const tfn = typeof window.t === 'function' ? window.t : (key) => key;
-  if (err && typeof err.status === 'number') {
-    if (err.status === 401) return tfn('user_prefs_save_failed_unauthorized');
-    if (err.status >= 500) return tfn('user_prefs_save_failed_server', { status: String(err.status) });
-    return tfn('user_prefs_save_failed_http', { status: String(err.status) });
+export function _userPrefsSaveErrorMessage(err: unknown): string {
+  const tfn = typeof window.t === 'function' ? window.t : (key: string) => key;
+  const httpErr = err as Partial<UserPrefsHttpError> | null | undefined;
+  if (typeof httpErr?.status === 'number') {
+    if (httpErr.status === 401) return tfn('user_prefs_save_failed_unauthorized');
+    if (httpErr.status >= 500) return tfn('user_prefs_save_failed_server', { status: String(httpErr.status) });
+    return tfn('user_prefs_save_failed_http', { status: String(httpErr.status) });
   }
   return tfn('user_prefs_save_failed_network');
 }
 
-export function _userPrefsHttpError(phase, res) {
-  const err = new Error(`${phase} /api/user-prefs ${res.status}`);
+export function _userPrefsHttpError(phase: string, res: Response): UserPrefsHttpError {
+  const err = new Error(`${phase} /api/user-prefs ${res.status}`) as UserPrefsHttpError;
   err.phase = phase;
   err.status = res.status;
   return err;
@@ -218,7 +224,7 @@ export async function _putUserPrefsNow() {
 }
 
 export function _scheduleUserPrefsPut() {
-  clearTimeout(_userPrefsDebounceTimer);
+  if (_userPrefsDebounceTimer) clearTimeout(_userPrefsDebounceTimer);
   _userPrefsDebounceTimer = setTimeout(async () => {
     try {
       await _putUserPrefsNow();
@@ -229,7 +235,7 @@ export function _scheduleUserPrefsPut() {
   }, 200);
 }
 
-export function setUserPref(path, value) {
+export function setUserPref(path: string, value: any): void {
   // 1. localStorage に書く
   const entry = _USER_PREFS_PATH_TO_LS[path];
   if (entry) {
@@ -254,7 +260,7 @@ export async function _mirrorUserPrefsFromServer() {
   try {
     const res = await fetch(`/api/user-prefs?token=${tk}`);
     if (!res.ok) return null;
-    const prefs = await res.json();
+    const prefs: UserPrefsObject = await res.json();
     // 各フィールドを localStorage にミラー（既存値を上書き）
     for (const [path, [lsKey, serialize]] of Object.entries(_USER_PREFS_PATH_TO_LS)) {
       const keys = path.split('.');
@@ -281,7 +287,7 @@ export async function migrateLocalstoragePrefsToServer() {
   try {
     const res = await fetch(`/api/user-prefs?token=${tk}`);
     if (!res.ok) return;
-    const prefs = await res.json();
+    const prefs: UserPrefsObject = await res.json();
     if (prefs.migrated_from_localstorage) return; // 移行済み
     // localStorage に何か値があれば移行
     let hasAny = false;
@@ -316,7 +322,7 @@ export async function migrateLocalstoragePrefsToServer() {
     // 既に移行済みのユーザー向けバックフィル: 後から user_prefs に追加した
     // display.theme/font_size/lang がサーバに無く localStorage にだけある場合、
     // 一度だけサーバへ移送する（setUserPref の debounce PUT で永続化）。
-    const disp = serverPrefs.display || {};
+    const disp: UserPrefsObject = serverPrefs.display || {};
     for (const [path, lsKey] of [
       ['display.theme',     STORAGE_THEME_KEY],
       ['display.font_size', STORAGE_FONTSIZE_KEY],

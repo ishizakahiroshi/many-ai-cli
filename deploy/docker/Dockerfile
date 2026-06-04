@@ -15,12 +15,21 @@
 # - 外向きの受け口は socat（0.0.0.0:48000 → 127.0.0.1:$HUB_PORT）で、
 #   host 側 publish は 127.0.0.1 限定。外部公開はしない
 
-# --- build stage: any-ai-cli バイナリ（CGO 不要・web/src は go:embed 同梱）---
+# --- web build stage: TypeScript フロントを web/dist に生成 ---
+FROM node:22-bookworm AS web-build
+WORKDIR /src/web
+COPY web/package*.json ./
+RUN npm ci
+COPY web ./
+RUN npm run build
+
+# --- build stage: any-ai-cli バイナリ（CGO 不要・web/dist は go:embed 同梱）---
 FROM golang:1.25-bookworm AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+COPY --from=web-build /src/web/dist ./web/dist
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/any-ai-cli ./cmd/any-ai-cli
 
 # --- runtime stage: Ubuntu 24.04 + Node.js 22 + provider CLI ---

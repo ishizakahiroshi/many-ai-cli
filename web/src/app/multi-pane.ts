@@ -10,6 +10,8 @@ import { termArea } from './terminal.js';
 
 // ─── GridPicker ────────────────────────────────────────────────
 export class GridPicker {
+  [key: string]: any;
+
   constructor(manager) {
     this.manager = manager;
     this.popup   = document.getElementById('grid-picker-popup');
@@ -29,8 +31,8 @@ export class GridPicker {
       for (let c = 1; c <= 6; c++) {
         const cell = document.createElement('div');
         cell.className = 'picker-cell';
-        cell.dataset.c = c;
-        cell.dataset.r = r;
+        cell.dataset.c = String(c);
+        cell.dataset.r = String(r);
         cell.addEventListener('mouseover', () => this.hover(c, r));
         cell.addEventListener('click', () => this.apply(c, r));
         this.grid.appendChild(cell);
@@ -157,6 +159,8 @@ export class GridPicker {
 
 // ─── MultiPaneManager ──────────────────────────────────────────
 export class MultiPaneManager {
+  [key: string]: any;
+
   constructor() {
     // localStorage から復元（デフォルト 2×2）
     const saved = this._loadLayout();
@@ -413,7 +417,7 @@ export class MultiPaneManager {
     return String(session && session.provider || '').toLowerCase() === 'codex';
   }
 
-  _stickToBottomSoon(t, opts = {}) {
+  _stickToBottomSoon(t, opts: any = {}) {
     if (!t || !t.term) return;
     const force = !!opts.force;
     let remaining = Math.max(1, opts.passes || 4);
@@ -439,7 +443,7 @@ export class MultiPaneManager {
     }
   }
 
-  _syncViewportToBuffer(t, opts = {}) {
+  _syncViewportToBuffer(t, opts: any = {}) {
     if (!t || !t.term || !t.container || !t.term.buffer) return;
     const vp = t.container.querySelector('.xterm-viewport');
     const buf = t.term.buffer.active;

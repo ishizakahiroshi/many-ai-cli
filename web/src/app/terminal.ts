@@ -46,7 +46,7 @@ export function ensureTerminal(id) {
   if (typeof WebLinksAddon !== 'undefined') {
     const webLinks = new WebLinksAddon.WebLinksAddon((event, uri) => {
       event.preventDefault();
-      window.open(uri, '_blank', 'noopener');
+      window.open(uri, '_blank', 'noopener,noreferrer');
     });
     term.loadAddon(webLinks);
   }
@@ -181,7 +181,7 @@ export function ensureTerminal(id) {
     // 幅テーブルは unicode11 本体を流用する（捕捉用ダミーへ activate して provider を取り出す）。
     let v11 = null;
     try {
-      new Unicode11Addon.Unicode11Addon().activate({ unicode: { register(p) { v11 = p; } } });
+      new Unicode11Addon.Unicode11Addon().activate({ unicode: { register(p) { v11 = p; } } } as any);
     } catch (_) { /* 捕捉失敗時は version '11' のまま（重なりは残るが描画は維持） */ }
     if (v11 && typeof v11.wcwidth === 'function') {
       const isAmbiguousWide = (cp) =>
@@ -189,7 +189,7 @@ export function ensureTerminal(id) {
       term.unicode.register({
         version: '11-aacli',
         wcwidth(cp) { return isAmbiguousWide(cp) ? 2 : v11.wcwidth(cp); },
-      });
+      } as any);
       term.unicode.activeVersion = '11-aacli';
     }
   }
@@ -490,7 +490,7 @@ export function markTerminalManualScrollIntent() {
   lastTerminalManualScrollAt = Date.now();
 }
 
-export function scrollTerminalToBottomSoon(id, opts = {}) {
+export function scrollTerminalToBottomSoon(id, opts: any = {}) {
   const t = terminals.get(id);
   if (!t || !t.term) return;
   const force = !!opts.force;
@@ -521,7 +521,7 @@ export function scrollTerminalToBottomSoon(id, opts = {}) {
   scheduleNext();
 }
 
-export function refitAndStickTerminalToBottomSoon(id, opts = {}) {
+export function refitAndStickTerminalToBottomSoon(id, opts: any = {}) {
   if (id !== activeSessionId) return;
   const passes = Math.max(1, opts.passes || 4);
   const force = !!opts.force;
@@ -557,7 +557,7 @@ export function refitAndStickTerminalToBottomSoon(id, opts = {}) {
   });
 }
 
-export function refitAndStickTerminalToBottomAfterLayoutSettles(id, opts = {}) {
+export function refitAndStickTerminalToBottomAfterLayoutSettles(id, opts: any = {}) {
   const startedAt = opts.startedAt || Date.now();
   const force = !!opts.force;
   const passes = opts.passes || 4;
@@ -622,7 +622,7 @@ export function refitActiveTerminalAfterLayout(stickToBottom) {
   });
 }
 
-export function updateScrollLockBtn(_locked) {
+export function updateScrollLockBtn(_locked?: boolean) {
   // ボタンはアクティブセッションがある間は常時表示する。
   // 以前は viewportY で「最上部/最下部判定して hidden」していたが、
   // xterm の onScroll は viewportY が動いた時しか発火せず、
@@ -817,7 +817,7 @@ export function writePTYChunk(id, term, bytes, onFlush) {
 
 // ---- バッファスキャン共通 ----
 
-export function scanBuffer(id, limit) {
+export function scanBuffer(id, limit?: number) {
   const t = terminals.get(id);
   if (!t || !t.term.buffer) return [];
   const buf = t.term.buffer.active;

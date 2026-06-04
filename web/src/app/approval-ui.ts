@@ -20,7 +20,7 @@ import { showActionBar } from './approval.js';
     ws.send(JSON.stringify({ type: 'session_hint', session_id: id, approval_visible: !!visible }));
   }
 
-  function setApprovalVisible(id, visible, options = {}) {
+  function setApprovalVisible(id, visible, options: any = {}) {
     const next = !!visible;
     const wasVisible = !!approvalVisibleCache.get(id);
     if (wasVisible === next && !options.forceNotify) return wasVisible;

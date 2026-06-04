@@ -133,7 +133,7 @@ export function _connectWs() {
     if (_wsIntentionalClose) return;
     // 指数バックオフで自動再接続
     document.getElementById('summary').textContent = t('ws_close', { code: e.code });
-    const nsBtn = document.getElementById('new-session-btn');
+    const nsBtn = document.getElementById('new-session-btn') as HTMLButtonElement | null;
     if (nsBtn) { nsBtn.disabled = true; document.getElementById('new-session-panel').hidden = true; }
     document.getElementById('reconnect-btn').hidden = false;
     const jitter = Math.random() * 200;
@@ -154,7 +154,7 @@ export function _connectWs() {
     }
     _wsRetryDelay = 500; // 再接続成功でバックオフリセット
     document.getElementById('summary').textContent = t('registering');
-    const nsBtn = document.getElementById('new-session-btn');
+    const nsBtn = document.getElementById('new-session-btn') as HTMLButtonElement | null;
     if (nsBtn) nsBtn.disabled = false;
     document.getElementById('reconnect-btn').hidden = true;
     _sendRegister();
@@ -285,7 +285,7 @@ export function _connectWs() {
       return;
     }
     const isNew = !sessions.has(m.session_id);
-    const cur = sessions.get(m.session_id) || { id: m.session_id };
+    const cur: any = sessions.get(m.session_id) || { id: m.session_id };
     const beforeLayout = sessionLayoutSnapshot(cur);
     if (m.provider)        cur.provider        = m.provider;
     if (m.display_name)    cur.display_name    = m.display_name;
@@ -359,7 +359,7 @@ export function _connectWs() {
 } // end _connectWs
 
 document.getElementById('reconnect-btn').addEventListener('click', async () => {
-  const btn = document.getElementById('reconnect-btn');
+  const btn = document.getElementById('reconnect-btn') as HTMLButtonElement;
   btn.disabled = true;
   btn.textContent = t('reconnect_checking') || '確認中...';
   try {

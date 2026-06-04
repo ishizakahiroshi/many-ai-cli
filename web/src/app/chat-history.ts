@@ -108,7 +108,7 @@ function hasMeaningfulLocalChat(sid) {
   return true;
 }
 
-export async function restoreChatHistoryFromStore(sid, opts = {}) {
+export async function restoreChatHistoryFromStore(sid, opts: any = {}) {
   if (sid === null || sid === undefined) return false;
   if (chatHistoryStoreInflight.has(sid)) return false;
   if (!opts.force && chatHistoryStoreRestored.has(sid)) return false;
@@ -428,7 +428,7 @@ export function scrollChatPaneToBottom(timeline) {
   timeline.scrollTop = timeline.scrollHeight;
 }
 
-export function scrollChatPaneToBottomSoon(opts = {}) {
+export function scrollChatPaneToBottomSoon(opts: any = {}) {
   const passes = Math.max(1, Number(opts.passes) || 1);
   const startedAt = opts.startedAt || Date.now();
   const run = (n) => {

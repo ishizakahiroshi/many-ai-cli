@@ -90,7 +90,7 @@ import { STORAGE_LANG_KEY } from './user-prefs.js';
     const activeLanes = [];
     const laneColors = [];
 
-    function allocLane(color) {
+    function allocLane(color?: any) {
       for (let i = 0; i < activeLanes.length; i++) {
         if (activeLanes[i] == null) {
           activeLanes[i] = '__pending__';
@@ -337,6 +337,8 @@ import { STORAGE_LANG_KEY } from './user-prefs.js';
   // GitGraphView クラス本体
   // ───────────────────────────────────────────────────────
   class GitGraphView {
+    [key: string]: any;
+
     constructor(containerEl, opts) {
       this.container = containerEl;
       this.opts = opts || {};

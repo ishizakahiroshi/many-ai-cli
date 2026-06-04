@@ -1,12 +1,12 @@
 # any-ai-cli 開発ガイド
 
-> 最終更新: 2026-05-31(日) 14:25:08 — v0.2.0 リリース前の参照・状態を更新
+> 最終更新: 2026-06-05(金) 05:42:17 — Web フロント TypeScript 移行後の構成を反映
 
 > 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。
 
 ## プロジェクト概要
 
-**any-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。単一 Go バイナリ（Hub 常駐 + ラッパー機能）+ ブラウザ UI（xterm.js / Vanilla JS）。
+**any-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。単一 Go バイナリ（Hub 常駐 + ラッパー機能）+ ブラウザ UI（xterm.js / TypeScript）。
 
 > **Gemini CLI は wrap 対象外**（2026-05-06 決定 / 利用規約上の制約）。詳細は [docs/v0.2.0-any-ai-cli-design.md](docs/v0.2.0-any-ai-cli-design.md) 冒頭「スコープ更新ログ」参照。
 
@@ -54,7 +54,7 @@ v0.2.0 までに以下がすべて実装済み：
 | PTY | `creack/pty`（Unix）+ `aymanbagabas/go-pty`（Windows / ConPTY） |
 | HTTP | `net/http` 標準 |
 | WebSocket | `golang.org/x/net/websocket` |
-| フロント | 静的HTML/CSS/Vanilla JS + vendored xterm.js（`go:embed` でバイナリ同梱） |
+| フロント | 静的HTML/CSS + TypeScript（ESM）+ esbuild ファイル単位トランスパイル + vendored xterm.js（`web/dist/` を `go:embed` でバイナリ同梱） |
 | 設定 | YAML (`gopkg.in/yaml.v3`) |
 | ログ | `log/slog` 標準 |
 
@@ -73,7 +73,8 @@ any-ai-cli/
 │  ├─ attach/     # 画像保存・inject生成
 │  ├─ config/
 │  └─ log/        # プレースホルダ（未実装）
-├─ web/src/       # 静的HTML/CSS/JS + vendored xterm.js（go:embed対象）
+├─ web/src/       # 静的HTML/CSS/TypeScript + vendored xterm.js（フロントソース）
+├─ web/dist/      # npm run build の生成物（go:embed対象 / gitignore）
 └─ docs/local/    # 設計書・ロードマップ等（非公開）
 ```
 

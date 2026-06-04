@@ -1,7 +1,8 @@
 # deploy/docker/Dockerfile 専用の build context 除外（BuildKit の per-Dockerfile ignore）
-# go build と go:embed (web/src) に不要なものを context から外す
+# go build と go:embed (web/dist) に不要なものを context から外す
 .git
 docs
 # ローカルビルド成果物（.gitignore 対象だが working tree の転送 tar には乗りうる）
 dist
+web/node_modules
 *.exe

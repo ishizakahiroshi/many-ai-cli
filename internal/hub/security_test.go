@@ -230,6 +230,15 @@ func TestSecurityHeadersMiddleware(t *testing.T) {
 	if got := w.Header().Get("Referrer-Policy"); got != "no-referrer" {
 		t.Fatalf("Referrer-Policy = %q, want no-referrer", got)
 	}
+	if got := w.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("X-Content-Type-Options = %q, want nosniff", got)
+	}
+	if got := w.Header().Get("Cross-Origin-Opener-Policy"); got != "same-origin" {
+		t.Fatalf("Cross-Origin-Opener-Policy = %q, want same-origin", got)
+	}
+	if got := w.Header().Get("Permissions-Policy"); !strings.Contains(got, "microphone=(self)") {
+		t.Fatalf("Permissions-Policy = %q, want microphone=(self)", got)
+	}
 	if got := w.Header().Get("Content-Security-Policy"); got == "" {
 		t.Fatal("Content-Security-Policy header should be set")
 	}

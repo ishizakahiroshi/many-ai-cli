@@ -9,5 +9,8 @@ import "embed"
 // 取りこぼさず embed する。これが無いと将来そうした名前のアセットが追加されても
 // バイナリに含まれず、実行時に見つからない事故になる。
 //
-//go:embed all:src
+// web/dist は TypeScript フロントのビルド成果物。Go ビルド前に
+// `cd web && npm ci && npm run build` で生成しておくこと。
+//
+//go:embed all:dist
 var FS embed.FS
