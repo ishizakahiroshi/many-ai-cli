@@ -36,7 +36,7 @@ signed for release integrity, but the `.exe` itself is not code-signed.
 ### Platform Verification for v0.2.0
 
 - Verified in real environment: Windows
-- WSL workflow supported through the Windows launcher: `any-ai-cli-wsl.exe`
+- WSL workflow supported through the Windows unified launcher: `any-ai-cli-launcher.exe`
 - Not yet fully verified in real environment: native Linux, native macOS
 
 Linux/macOS builds are expected to work, but they have not been fully validated in real environments for v0.2.0.
@@ -85,7 +85,7 @@ sha256sum -c SHA256SUMS.txt
 - **Server-side user preferences** — keep voice, notification, favorites, session order, spawn defaults, and avatar settings in `config.yaml`
 - **Spawn new sessions** from the UI (`/api/spawn`)
 - **Model picker with Ollama routing** — pick Anthropic / OpenAI / Ollama Cloud / Ollama Local models from the spawn form; the Hub auto-injects the right `ANTHROPIC_*` / `OPENAI_*` env vars per session, no shell setup required
-- **WSL launcher** — `any-ai-cli-wsl.exe` starts the Hub inside WSL and opens the Windows browser
+- **Windows unified launcher** — `any-ai-cli-launcher.exe` connects to a Hub inside WSL or on a remote VPS (SSH) via saved profiles and opens the Windows browser
 - **Clean transcript generation** — write readable `.txt` transcripts automatically, or regenerate them with `log-clean`
 - **Language switching** (English / Japanese)
 - **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `any-ai-cli` itself
@@ -110,113 +110,20 @@ Sessions can be created, monitored, and approved entirely from the Hub UI; you d
 > If the Hub does go down (whether by `×`, a crash, or a manual restart), running AI sessions wait up to **60 minutes** for the Hub to come back before terminating themselves (configurable in `config.yaml` up to 24 hours — extend it for long-running autonomous tasks). A Web UI bug or restart will not silently kill your work. See [Shutdown, zombie protection & Hub crash resilience](#shutdown-zombie-protection--hub-crash-resilience) for details.
 > To stop the Hub intentionally, use the `⏻` button in the top-right of the Hub UI, or run `any-ai-cli stop` from another terminal.
 
-### Windows + WSL launcher
-
-If your AI CLI tools live inside WSL, use the separate Windows launcher `any-ai-cli-wsl.exe`.
-
-#### How it works
-
-`any-ai-cli-wsl.exe` is a thin Windows-side launcher. When you run it, it calls `wsl.exe` internally to start the Linux binary (`any-ai-cli serve`) inside WSL. As soon as the Linux side prints the Hub URL to stdout, the Windows default browser opens automatically.
-
-```
-any-ai-cli-wsl.exe  (Windows side)
-    └─ wsl.exe -- bash -ilc "any-ai-cli serve --port XXXXX"
-                                 │
-                            Linux binary starts the Hub
-                                 │
-                        Hub URL printed to stdout
-                                 │
-                        Windows browser opens automatically
-```
-
-It launches the shell with `bash -ilc` (login + interactive), so `~/.bashrc` entries — including `nvm`, `pnpm`, `cargo`, etc. — are fully loaded and in `PATH`.
-
-#### Setup — two binaries, two locations
-
-The WSL launcher requires binaries in **both** Windows and WSL.
-
-**① Windows side: `any-ai-cli-wsl.exe`**
-
-Download `any-ai-cli-<version>-windows-x64.zip` from the releases page, extract `any-ai-cli-wsl.exe`, and place it somewhere on the Windows `PATH`.
-
-```powershell
-Expand-Archive any-ai-cli-<version>-windows-x64.zip -DestinationPath .\any-ai-cli-windows
-
-# Option A: ~/AppData/Local/Microsoft/WindowsApps/ (already on PATH)
-Move-Item .\any-ai-cli-windows\any-ai-cli-wsl.exe "$env:LOCALAPPDATA\Microsoft\WindowsApps\any-ai-cli-wsl.exe"
-
-# Option B: any directory already on your PATH
-Move-Item .\any-ai-cli-windows\any-ai-cli-wsl.exe "C:\tools\any-ai-cli-wsl.exe"
-```
-
-**② WSL side: `any-ai-cli` (Linux binary)**
-
-Download `any-ai-cli-<version>-linux-x64.zip` from the releases page, extract `any-ai-cli`, and place it somewhere on the WSL `PATH`.
-
-```bash
-unzip any-ai-cli-<version>-linux-x64.zip
-
-# Using ~/.local/bin (per-user, no sudo required)
-mkdir -p ~/.local/bin
-mv any-ai-cli ~/.local/bin/any-ai-cli
-chmod +x ~/.local/bin/any-ai-cli
-
-# Verify ~/.local/bin is on PATH
-echo $PATH | grep -q "$HOME/.local/bin" && echo "OK" || echo "Add ~/.local/bin to PATH"
-```
-
-If `~/.local/bin` is not on your `PATH`, add it to `~/.bashrc`:
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-Or, to install system-wide (requires sudo):
-
-```bash
-sudo mv any-ai-cli /usr/local/bin/any-ai-cli
-sudo chmod +x /usr/local/bin/any-ai-cli
-```
-
-Verify inside WSL:
-
-```bash
-any-ai-cli --version
-```
-
-#### Launch
-
-Once both binaries are in place, run the launcher from Windows:
-
-```powershell
-any-ai-cli-wsl.exe
-```
-
-The Hub starts inside WSL and your Windows default browser opens automatically.
-
-#### Options
-
-| Flag | Default | Description |
-|---|---|---|
-| `--cwd <path>` | `~` (WSL home) | Working directory inside WSL |
-| `--distro <name>` | wsl.exe default distro | WSL distribution name (see `wsl -l`) |
-| `--binary <name>` | `any-ai-cli` | Binary name to look up inside WSL |
-| `--port <n>` | auto | Hub port (auto-selected to avoid Windows-side collisions) |
-
-```powershell
-# Example: specify a distro and working directory
-any-ai-cli-wsl.exe --distro Ubuntu-22.04 --cwd /home/user/projects/my-app
-```
-
-If a port collision is detected on the Windows side (e.g. `any-ai-cli.exe` already holds 47777), the launcher picks the next available port automatically.
-
 ### Windows unified launcher
 
 `any-ai-cli-launcher.exe` is a unified launcher that manages connection profiles for both WSL and remote VPS targets. Connection profiles are stored in `~/.any-ai-cli/launcher-profiles.yaml`.
 
 #### How it works
 
-The launcher reads your saved profiles and connects to the right Hub — starting one if needed — then opens the browser automatically. Two connection modes are supported:
+The launcher reads your saved profiles and connects to the right Hub — starting one if needed — then opens the browser automatically. Two profile types are supported:
+
+| Type | Use case |
+|---|---|
+| `wsl` | Start `any-ai-cli serve` inside WSL and open it from the Windows browser |
+| `ssh` | Connect to a remote machine (e.g. a VPS) over SSH |
+
+`ssh` profiles additionally support two connection modes:
 
 | Mode | Use case |
 |---|---|
@@ -224,6 +131,8 @@ The launcher reads your saved profiles and connects to the right Hub — startin
 | `tunnel` | Port-forward to a Hub that is already running on the remote side (e.g. a Docker-compose resident Hub) |
 
 In both modes, the Hub continues to bind to `127.0.0.1` only on the remote. The SSH local forward (`-L 127.0.0.1:<port>:127.0.0.1:<port>`) makes it reachable from the Windows browser without exposing the Hub to the network.
+
+A `wsl` profile calls `wsl.exe` internally to start the Linux binary (`any-ai-cli serve`) inside WSL; as soon as the Linux side prints the Hub URL, the Windows default browser opens automatically. The shell is launched with `bash -ilc` (login + interactive), so `~/.bashrc` entries — including `nvm`, `pnpm`, `cargo`, etc. — are fully loaded and in `PATH`. If a port collision is detected on the Windows side (e.g. `any-ai-cli.exe` already holds 47777), the launcher picks the next available port automatically.
 
 #### Setup
 
@@ -256,6 +165,41 @@ profiles:
     user: your-user
     hub_port: 47801
     token_command: "docker exec any-ai-cli-user1 sh -c 'grep ^token ~/.any-ai-cli/config.yaml | cut -d\" \" -f2'"
+```
+
+#### WSL profile prerequisite: the Linux binary inside WSL
+
+A `wsl` profile requires the Linux `any-ai-cli` binary somewhere on the WSL `PATH`. Download `any-ai-cli-<version>-linux-x64.zip` from the releases page, extract it, and place the binary:
+
+```bash
+unzip any-ai-cli-<version>-linux-x64.zip
+
+# Using ~/.local/bin (per-user, no sudo required)
+mkdir -p ~/.local/bin
+mv any-ai-cli ~/.local/bin/any-ai-cli
+chmod +x ~/.local/bin/any-ai-cli
+
+# Verify ~/.local/bin is on PATH
+echo $PATH | grep -q "$HOME/.local/bin" && echo "OK" || echo "Add ~/.local/bin to PATH"
+```
+
+If `~/.local/bin` is not on your `PATH`, add it to `~/.bashrc`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Or, to install system-wide (requires sudo):
+
+```bash
+sudo mv any-ai-cli /usr/local/bin/any-ai-cli
+sudo chmod +x /usr/local/bin/any-ai-cli
+```
+
+Verify inside WSL:
+
+```bash
+any-ai-cli --version
 ```
 
 #### Tunnel mode: end-to-end setup

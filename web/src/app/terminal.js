@@ -378,6 +378,10 @@ export function isWheelTargetExcluded(target) {
   if (target.closest('.card-actions')) return true;
   if (target.closest('[data-wheel-native]')) return true;
   if (target.closest('#settings-panel')) return true;
+  // 左サイドバー（セッション一覧 / 新規セッションパネル / cwd 履歴ドロップダウン）は
+  // ネイティブの wheel スクロールを使う。除外しないと document レベルのリスナーが
+  // ターミナルへ転送して preventDefault し、サイドバー上でホイールが効かなくなる。
+  if (target.closest('#session-list')) return true;
   // ファイルタブ（ツリー / プレビュー）はネイティブの wheel スクロールを使う。
   // これを除外しないと document レベルのリスナーがターミナルへ転送して preventDefault してしまい、
   // プレビューのスクロールが効かなくなる。

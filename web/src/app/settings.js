@@ -1164,6 +1164,13 @@ export function applyLang(lang) {
     const showSSH = hintSSH || info.ssh;
     const showHost = hintHost || info.host_ip || '';
     const netSuffix = (showSSH ? ' SSH' : '') + (showHost ? ` ${showHost}` : '');
+    // SSH 経由の Hub ではフォルダ選択ダイアログがリモート側で開いてしまい使えないため、
+    // spawn パネルのフォルダ参照ボタンを非表示にする。
+    // WSL（ランチャー経由）は powershell.exe interop で Windows ダイアログが開けるので残す。
+    if (showSSH) {
+      const browseBtn = document.getElementById('spawn-cwd-browse');
+      if (browseBtn) browseBtn.hidden = true;
+    }
     const apply = () => {
       const runtime = runtimeLabel();
       const badgeEl = document.getElementById('runtime-badge');

@@ -12,7 +12,7 @@
 - `.github/workflows/`: CI / Release workflow
 - `.goreleaser.yaml`, `.gitattributes`, `.gitignore`: リリース・改行・ignore の運用設定
 - `cmd/any-ai-cli/`: メインバイナリのエントリポイント
-- `cmd/any-ai-cli-wsl/`: Windows 用 WSL ランチャー
+- `cmd/any-ai-cli-launcher/`: Windows 用統合ランチャー
 - `internal/`: Go の内部実装（Hub / wrapper / sessionlog / wslutil など）
 - `web/web.go`, `web/src/`: Hub UI のソースと vendored JS/CSS
 - `resources/`: go:embed で同梱する定義（approval patterns / slash commands / model defaults / usage links）
@@ -28,7 +28,8 @@
 Windows リソース用の `.syso` は、GitHub Actions 上の Windows 向けビルドでも使うため Git 管理する。
 
 - `cmd/any-ai-cli/rsrc_windows_*.syso`
-- `cmd/any-ai-cli-wsl/rsrc_windows_*.syso`
+
+`cmd/any-ai-cli-launcher/` 配下の `.syso` は `.gitignore`（`rsrc_windows_*.syso`）対象で Git 管理しない。リリース時は GoReleaser の before hooks が `go-winres` で都度生成する。
 
 vendored 依存のライセンス一覧 `web/src/vendor/THIRD_PARTY_LICENSES.txt` は、`.gitignore` の `*.txt` 例外として Git 管理する。
 改行を byte-stable に保つ必要があるため、`THIRD_PARTY_NOTICES.md` と `web/src/vendor/THIRD_PARTY_LICENSES.txt` は `.gitattributes` で LF 固定する。
@@ -59,9 +60,9 @@ vendored 依存のライセンス一覧 `web/src/vendor/THIRD_PARTY_LICENSES.txt
 
 GitHub Releases の成果物は、ローカルの `dist/` をアップロードしない。タグ push 後に GitHub Actions 上で GoReleaser が新しくビルドして添付する。
 
-そのため、ローカルの `dist/` はいつ消してもよい検証用ディレクトリとして扱う。ただし `dist/any-ai-cli.exe` や `dist/any-ai-cli-wsl.exe` を起動中の場合は削除できないため、Hub や WSL ランチャーを止めてから掃除する。
+そのため、ローカルの `dist/` はいつ消してもよい検証用ディレクトリとして扱う。ただし `dist/any-ai-cli.exe` や `dist/any-ai-cli-launcher.exe` を起動中の場合は削除できないため、Hub やランチャーを止めてから掃除する。
 
-現在の主な Release 添付物は `docs/manual_release.md` を正本とする。現状は Windows amd64 zip に `any-ai-cli.exe` と `any-ai-cli-wsl.exe` を含め、Linux amd64 / macOS amd64 / macOS arm64 も GoReleaser で生成する。
+現在の主な Release 添付物は `docs/manual_release.md` を正本とする。現状は Windows amd64 zip に `any-ai-cli.exe` と `any-ai-cli-launcher.exe` を含め、Linux amd64 / macOS amd64 / macOS arm64 も GoReleaser で生成する。
 
 ## リリース前チェック
 
@@ -86,7 +87,7 @@ git ls-files "*.syso"
 - `*.local.md` / `*.local.json` は Git 管理されていない
 - `dist/` と root の `any-ai-cli.exe` は `!!` として ignore 済み
 - `git ls-files "*.txt"` は `web/src/vendor/THIRD_PARTY_LICENSES.txt` のみ
-- `git ls-files "*.syso"` は `cmd/any-ai-cli/` と `cmd/any-ai-cli-wsl/` 配下のみ
+- `git ls-files "*.syso"` は `cmd/any-ai-cli/` 配下のみ
 - root 直下に `.env*`, `*.log`, `*.jsonl`, `*.tmp`, `*.bak`, `*.orig`, `*.rej` が混ざっていない
 
 大きいファイルを確認したい場合:
@@ -114,7 +115,7 @@ Remove-Item -LiteralPath .\rsrc_windows_386.syso -Force
 Remove-Item -LiteralPath .\rsrc_windows_amd64.syso -Force
 ```
 
-`cmd/any-ai-cli/rsrc_windows_*.syso` と `cmd/any-ai-cli-wsl/rsrc_windows_*.syso` は Git 管理対象なので、掃除目的で削除しない。
+`cmd/any-ai-cli/rsrc_windows_*.syso` は Git 管理対象なので、掃除目的で削除しない。
 
 `dist/any-ai-cli.exe` が使用中で削除できない場合は、Hub を停止してから再実行する。
 

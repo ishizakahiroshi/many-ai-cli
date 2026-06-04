@@ -460,8 +460,9 @@ func defaultConfig(home string) *Config {
 	cfg.Hub.Port = 47777
 	cfg.Hub.OpenBrowser = true
 	cfg.Hub.AutoShutdown = true
-	// When invoked via the any-ai-cli-wsl.exe Windows launcher (and only then —
-	// not for plain `any-ai-cli serve` inside a WSL shell), place logs under the
+	// When invoked via the any-ai-cli-launcher.exe Windows launcher's WSL
+	// profile (and only then — not for plain `any-ai-cli serve` inside a WSL
+	// shell), place logs under the
 	// Windows %USERPROFILE% so the Hub UI's open-folder button resolves to a
 	// plain C:\Users\... path that Windows Explorer can open directly. A bare
 	// WSL session is treated as pure-Linux and keeps logs under Linux $HOME.

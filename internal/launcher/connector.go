@@ -13,7 +13,14 @@ import "context"
 type Connector interface {
 	// Start initiates the connection described by p. On success it eventually
 	// sends one Hub URL string on urlCh and then closes it. On failure it
-	// sends one non-nil error on errCh and then closes it.
+	// sends one non-nil error on errCh.
+	//
+	// errCh is closed only when the connection has terminated — after a
+	// failure (the error is sent first), after the underlying child process
+	// exits (e.g. the remote Hub was stopped from the Web UI), or after ctx
+	// cancellation. Callers must treat the close as "connection over" and
+	// release whatever depends on it (the CLI launcher exits its process so
+	// the console window closes).
 	//
 	// Cancelling ctx causes the connector to shut down and perform its
 	// cleanup (e.g. kill remote processes). After ctx is cancelled both

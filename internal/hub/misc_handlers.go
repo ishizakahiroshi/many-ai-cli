@@ -42,6 +42,17 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sshSession, hostIP := hostNetInfo()
+	// launcher（SSH tunnel モード）が /api/net-hint で登録した接続元情報があれば
+	// 補正する。コンテナ内実行の Hub は NIC から内部 IP（例: 172.19.0.2）しか
+	// 検出できず、SSH 経由起動の自己判定もできないため。
+	s.netHintMu.Lock()
+	if s.netHintSSH {
+		sshSession = true
+	}
+	if s.netHintHost != "" {
+		hostIP = s.netHintHost
+	}
+	s.netHintMu.Unlock()
 	writeJSON(w, map[string]any{
 		"cwd":             s.hubCWD,
 		"version":         s.version,
@@ -52,6 +63,27 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		"userAvatar":      userAvatar,
 		"userDisplayName": userDisplayName,
 	})
+}
+
+// handleNetHint は launcher（SSH tunnel モード）から接続元情報を受け取り保持する。
+// tunnel モードでは既起動の Hub に ANY_AI_CLI_HOST_LABEL を注入できないため、
+// トンネル確立後に launcher が POST し、/api/info のバッジ表示情報を補正する。
+func (s *Server) handleNetHint(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodPost) {
+		return
+	}
+	var body struct {
+		SSH       bool   `json:"ssh"`
+		HostLabel string `json:"host_label"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	s.netHintMu.Lock()
+	s.netHintSSH = body.SSH
+	s.netHintHost = body.HostLabel
+	s.netHintMu.Unlock()
+	writeJSON(w, map[string]any{"ok": true})
 }
 
 func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {

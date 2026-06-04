@@ -49,8 +49,18 @@ func (c *WSLConnector) run(ctx context.Context, p Profile, urlCh chan<- string, 
 	if cwd != "" {
 		wslArgs = append(wslArgs, "--cd", cwd)
 	}
-	// See cmd/any-ai-cli-wsl/main_windows.go for the rationale behind
-	// bash -ilc and ANY_AI_CLI_WSL_LAUNCHER.
+	// Invoke through `bash -ilc` (login + interactive). Login alone is not
+	// enough on a default Ubuntu setup: ~/.bashrc returns early for
+	// non-interactive shells, skipping pnpm/nvm/cargo PATH setup at its
+	// tail. The symptom is that `which codex` then resolves to the
+	// Windows-side pnpm shim surfaced via WSL interop, which fails inside
+	// WSL because `node` is not installed there. Adding -i bypasses that
+	// early-return guard so the user's real PATH is in effect.
+	// ANY_AI_CLI_WSL_LAUNCHER marks "the user is reaching the WSL Hub from
+	// Windows via this launcher", so the Linux-side serve can default log_dir
+	// to the Windows %USERPROFILE% (so the Hub UI's open-folder buttons land
+	// in plain C:\Users\... instead of \\wsl$\... UNC). A bare `any-ai-cli
+	// serve` inside WSL (without this launcher) stays purely Linux-side.
 	shellCmd := fmt.Sprintf("export ANY_AI_CLI_WSL_LAUNCHER=1; exec %s serve --port %d", ShellQuote(binary), port)
 	wslArgs = append(wslArgs, "--", "bash", "-ilc", shellCmd)
 
@@ -110,13 +120,23 @@ func (c *WSLConnector) run(ctx context.Context, p Profile, urlCh chan<- string, 
 	if waitErr != nil && ctx.Err() == nil {
 		sendErr(ctx, errCh, fmt.Errorf("wsl.exe exited: %w", waitErr))
 	}
+	// wsl.exe の正常終了（= WSL 側 serve の停止。Web UI の「Web のみ停止」
+	// を含む）でもここに到達する。errCh の close は「接続終了」の合図で、
+	// launcher 本体はこれを受けてプロセスを終了する（コンソール窓の残骸防止）。
 	close(urlCh)
 	close(errCh)
 }
 
-// cleanupWSLOrphansConnector is the Connector-layer equivalent of the top-level
-// cleanupWSLOrphans in cmd/any-ai-cli-wsl. Terminates the Linux-side serve
-// that was started by this launcher run.
+// cleanupWSLOrphansConnector terminates the WSL-side any-ai-cli serve process
+// this launcher run started. WSL2 interop does not propagate SIGHUP/SIGTERM
+// from the Windows side, so the Linux serve survives wsl.exe getting killed
+// and continues to hold the Hub port. We match on the exact --port the
+// launcher used so we don't kill unrelated serve sessions on other ports.
+//
+// Best-effort: pkill exits 1 when nothing matched (the typical success path
+// when the serve already exited cleanly), so we ignore the return entirely.
+// A 5s timeout guards against wsl.exe being hung or shutdown-in-progress —
+// we'd rather exit the launcher than block forever on cleanup.
 func cleanupWSLOrphansConnector(distro string, port int) {
 	var args []string
 	if distro != "" {

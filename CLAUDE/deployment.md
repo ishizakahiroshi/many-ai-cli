@@ -55,9 +55,9 @@ GOOS=linux GOARCH=amd64 go build -o dist/linux/any-ai-cli ./cmd/any-ai-cli
 
 | ターゲット | 出力物 / 動作 | 使う場面 |
 |---|---|---|
-| `make build` | 下 4 つ（windows + wsl-launcher + linux + deploy-wsl）を順に実行 | 通常はこれ 1 本。Windows.exe・WSL ランチャー・Linux ELF を作って WSL 側へ自動転送まで完了する |
+| `make build` | 下 4 つ（windows + launcher + linux + deploy-wsl）を順に実行 | 通常はこれ 1 本。Windows.exe・統合ランチャー・Linux ELF を作って WSL 側へ自動転送まで完了する |
 | `make build-windows` | `dist/any-ai-cli.exe` | Windows 本体だけ作り直したいとき（go-winres → go build） |
-| `make build-wsl-launcher` | `dist/any-ai-cli-wsl.exe` | WSL ランチャー（`winres/winres-wsl.json` のアイコン付き）だけ作り直したいとき |
+| `make build-launcher` | `dist/any-ai-cli-launcher.exe` | 統合ランチャー（`winres/winres-launcher.json` のアイコン付き）だけ作り直したいとき |
 | `make build-linux` | `dist/linux/any-ai-cli` | Linux ELF（`CGO_ENABLED=0 GOOS=linux GOARCH=amd64`）だけ作り直したいとき |
 | `make deploy-wsl` | `dist/linux/any-ai-cli` → WSL `~/.local/bin/any-ai-cli`（cp + chmod +x） | Linux バイナリだけ作り直した後、WSL に再転送だけしたいとき。中身は `scripts/deploy-wsl.ps1` |
 | `make run` | `build-windows` 後に `dist/any-ai-cli.exe serve` | ローカルで Hub をすぐ立ち上げたいとき |
@@ -66,7 +66,7 @@ GOOS=linux GOARCH=amd64 go build -o dist/linux/any-ai-cli ./cmd/any-ai-cli
 ```bash
 # 通常はこれだけ
 make build
-# 出力: dist/any-ai-cli.exe / dist/any-ai-cli-wsl.exe / dist/linux/any-ai-cli
+# 出力: dist/any-ai-cli.exe / dist/any-ai-cli-launcher.exe / dist/linux/any-ai-cli
 # 加えて WSL ~/.local/bin/any-ai-cli が最新に差し替わる
 ```
 

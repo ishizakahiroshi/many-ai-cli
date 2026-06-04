@@ -461,6 +461,10 @@ func (s *UIServer) runConnection(ctx context.Context, lc *liveConn, profile Prof
 		if err := RegisterActiveConnection(profile.Name, hubURL); err != nil {
 			fmt.Fprintf(os.Stderr, "any-ai-cli-launcher: failed to record active connection: %v\n", err)
 		}
+		// 接続終了（errCh close）まで監視する。リモート serve 停止（Web UI の
+		// 「Web のみ停止」含む）やトンネル切断時に、確立済み接続の登録と
+		// launcher-active.json を掃除し、選択 UI のバッジを実態に合わせる。
+		s.watchConnection(lc, profile.Name, errCh)
 	case connErr := <-errCh:
 		msg := "Connection failed"
 		if connErr != nil {
@@ -471,6 +475,31 @@ func (s *UIServer) runConnection(ctx context.Context, lc *liveConn, profile Prof
 		s.failConnection(lc, "Connection timed out")
 	case <-ctx.Done():
 		s.failConnection(lc, "Connection cancelled")
+	}
+}
+
+// watchConnection blocks until errCh is closed (= the connection terminated;
+// see the Connector contract), then removes the established connection from
+// s.conns and launcher-active.json. Errors received before the close are
+// logged to stderr. runConnection 自体が専用 goroutine なのでブロックしてよい。
+func (s *UIServer) watchConnection(lc *liveConn, name string, errCh <-chan error) {
+	for connErr := range errCh {
+		if connErr != nil {
+			fmt.Fprintf(os.Stderr, "any-ai-cli-launcher: connection %q error: %v\n", name, connErr)
+		}
+	}
+	lc.cancel()
+	s.mu.Lock()
+	current := s.conns[name] == lc
+	if current {
+		delete(s.conns, name)
+	}
+	s.mu.Unlock()
+	// 既に新しい接続へ置き換わっている（再接続中）場合は、新しい接続の
+	// 登録（同 profile・同 PID で上書き済み）を消さないよう何もしない。
+	if current {
+		_ = UnregisterActiveConnection(name)
+		fmt.Fprintf(os.Stdout, "Connection %q closed.\n", name)
 	}
 }
 

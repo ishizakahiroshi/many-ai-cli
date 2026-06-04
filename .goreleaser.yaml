@@ -13,7 +13,6 @@ before:
   hooks:
     - go install github.com/tc-hib/go-winres@latest
     - go-winres make --in winres/winres.json --out cmd/any-ai-cli/rsrc --product-version={{ .Version }} --file-version={{ .Version }}
-    - go-winres make --in winres/winres-wsl.json --out cmd/any-ai-cli-wsl/rsrc --product-version={{ .Version }} --file-version={{ .Version }}
     - go-winres make --in winres/winres-launcher.json --out cmd/any-ai-cli-launcher/rsrc --product-version={{ .Version }} --file-version={{ .Version }}
 
 builds:
@@ -37,17 +36,6 @@ builds:
     ldflags:
       - -s -w
       - -X main.version={{ .Version }}
-  - id: any-ai-cli-wsl
-    main: ./cmd/any-ai-cli-wsl
-    binary: any-ai-cli-wsl
-    goos:
-      - windows
-    goarch:
-      - amd64
-    env:
-      - CGO_ENABLED=0
-    ldflags:
-      - -s -w
   - id: any-ai-cli-launcher
     main: ./cmd/any-ai-cli-launcher
     binary: any-ai-cli-launcher
@@ -65,7 +53,7 @@ builds:
 archives:
   - id: default
     formats: [zip]
-    # Windows だけ any-ai-cli.exe + any-ai-cli-wsl.exe の 2 本、他 OS は 1 本。
+    # Windows だけ any-ai-cli.exe + any-ai-cli-launcher.exe の 2 本、他 OS は 1 本。
     # platform 間でバイナリ数が異なる構成を許可する。
     allow_different_binary_count: true
     # エンドユーザー向けに OS/arch 名を分かりやすく:

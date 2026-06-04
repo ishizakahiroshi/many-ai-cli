@@ -16,6 +16,31 @@ import { token } from './util.js';
 // Pure parsing lives in approval-parser.js. This file orchestrates terminal
 // tails/buffers and delegates cache/DOM/Hub side effects to approval-ui.js.
 
+// H9 キャッシュ復元の妥当性検証用（C3: 保留中バッジ固着対応）。
+// ターミナル直接入力で承認が解決されると approvalConsumedSig が設定されず
+// （UI の sendChoice/doSend 経由でしか設定されない）、cache 復元経路が
+// action-bar と approvalVisible=true を復元し続ける。scanBuffer から
+// キャッシュ済み選択肢が消えた状態が連続 H9_RESTORE_MISS_LIMIT 回続いたら
+// 解決済みとみなして復元を打ち切る。Ink 再描画で一瞬選択肢が消えるフレームが
+// あるため、1 回のミスでは閉じない（H9 本来の誤消去防止を維持）。
+const H9_RESTORE_MISS_LIMIT = 3;
+const h9RestoreMisses = new Map();
+
+// キャッシュ済み選択肢のいずれかが描画済み行（scanBuffer）にまだ存在するか。
+// 「番号トークン + ラベル先頭 12 文字」が同一行にあることを条件にする
+// （ラベル単独だと本文中の同語にマッチしやすく、番号単独だと箇条書きに誤マッチするため）。
+function cachedOptionsOnScreen(lines, cached) {
+  return cached.some((o) => {
+    const frag = String(o.label || '').slice(0, 12).trim();
+    if (!frag) return false;
+    const numToken = `${o.num}.`;
+    return lines.some((line) => {
+      const s = String(line || '');
+      return s.includes(numToken) && s.includes(frag);
+    });
+  });
+}
+
 export function isUserSpecifiesText(text) {
   const re = globalThis.approvalParser && globalThis.approvalParser.userSpecifiesRe;
   return !!(re && re.test(String(text || '')));
@@ -709,8 +734,31 @@ export function detectApproval(id) {
     if (approvalVisibleCache.get(id)) {
       const cached = approvalRawOptionsCache.get(id);
       if (cached && cached.length > 0) {
-        approvalUiAdapter.showOptions(bar, id, cached);
-        return;
+        // C3: 復元前に scanBuffer 妥当性を検証する（保留中バッジ固着対応）。
+        // active セッションでキャッシュ済み選択肢が描画済み行から消えた状態が
+        // 連続 H9_RESTORE_MISS_LIMIT 回続いたら、ターミナル直接入力で解決済みと
+        // みなして復元せず閉じる（→ setApprovalVisible(false) が Hub に届く）。
+        // 非アクティブセッションは scanBuffer を読めないため従来通り復元する
+        // （誤維持しても Hub 側 approvalVisibleLease が最終回復する）。
+        let stillOnScreen = true;
+        if (id === activeSessionId && t?.everAttached) {
+          const lines = bufferTail.length > 0
+            ? bufferTail
+            : scanBuffer(id).slice(-Math.max(120, visibleRows + 60));
+          stillOnScreen = cachedOptionsOnScreen(lines, cached);
+        }
+        if (stillOnScreen) {
+          h9RestoreMisses.delete(id);
+          approvalUiAdapter.showOptions(bar, id, cached);
+          return;
+        }
+        const misses = (h9RestoreMisses.get(id) || 0) + 1;
+        if (misses < H9_RESTORE_MISS_LIMIT) {
+          h9RestoreMisses.set(id, misses);
+          approvalUiAdapter.showOptions(bar, id, cached);
+          return;
+        }
+        h9RestoreMisses.delete(id);
       }
     }
     hideActionBar(id);
@@ -764,6 +812,9 @@ export function detectApproval(id) {
     }
   }
 
+  // 実プロンプト検出に成功したら H9 復元の連続ミスカウンタをリセットする
+  h9RestoreMisses.delete(id);
+
   const wasVisibleBeforeShow = !!approvalVisibleCache.get(id);
   showActionBar(bar, id, options, !wasVisibleBeforeShow);
 
@@ -804,6 +855,7 @@ export function hideActionBar(id) {
   if (id !== undefined) {
     cancelApprovalHintConfirm(id);
     approvalSwitchCandidates.delete(id);
+    h9RestoreMisses.delete(id);
     clearSequentialChoiceState(id);
     const wasVisible = !!approvalVisibleCache.get(id);
     if (wasVisible) {
