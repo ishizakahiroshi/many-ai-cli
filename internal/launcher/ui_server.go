@@ -67,11 +67,34 @@ type connectResult struct {
 // Active lists verified-alive connections (this process and others) so the
 // UI can mark already-connected profiles and reuse their Hub URL.
 type profilesResponse struct {
-	OK       bool               `json:"ok"`
-	Profiles []Profile          `json:"profiles"`
-	LastUsed string             `json:"last_used,omitempty"`
-	Active   []ActiveConnection `json:"active,omitempty"`
+	OK       bool             `json:"ok"`
+	Profiles []Profile        `json:"profiles"`
+	LastUsed string           `json:"last_used,omitempty"`
+	Active   []activeResponse `json:"active,omitempty"`
 }
+
+// activeResponse mirrors ActiveConnection for the UI and adds whether the
+// connection can be cancelled by this launcher process.
+type activeResponse struct {
+	Profile   string    `json:"profile"`
+	PID       int       `json:"pid"`
+	HubURL    string    `json:"hub_url"`
+	StartedAt time.Time `json:"started_at"`
+	Owned     bool      `json:"owned"`
+}
+
+type disconnectRequest struct {
+	Name string `json:"name"`
+	Mode string `json:"mode"`
+}
+
+const (
+	disconnectModeAll        = "all"
+	disconnectModeWeb        = "web"
+	disconnectModeDisconnect = "disconnect"
+
+	disconnectHubPostTimeout = 3 * time.Second
+)
 
 // NewUIServer creates a UIServer. Call Serve to start it.
 func NewUIServer() (*UIServer, error) {
@@ -106,6 +129,7 @@ func (s *UIServer) Serve(ctx context.Context) (string, error) {
 	mux.HandleFunc("/api/profiles", s.handleProfiles)
 	mux.HandleFunc("/api/connect", s.handleConnect)
 	mux.HandleFunc("/api/connect/status", s.handleConnectStatus)
+	mux.HandleFunc("/api/disconnect", s.handleDisconnect)
 
 	s.server = &http.Server{
 		Handler:      mux,
@@ -272,7 +296,7 @@ func (s *UIServer) handleProfiles(w http.ResponseWriter, r *http.Request) {
 			OK:       true,
 			Profiles: pf.Profiles,
 			LastUsed: pf.LastUsed,
-			Active:   active,
+			Active:   s.activeResponses(active),
 		})
 
 	case http.MethodPost:
@@ -401,6 +425,174 @@ func (s *UIServer) handleConnectStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeUIJSON(w, map[string]any{"ok": true, "status": "connected", "hub_url": res.HubURL})
+}
+
+// handleDisconnect receives POST {name, mode} and stops or detaches an active
+// connection. Remote Hub operations are proxied by this UI server so the
+// browser never has to call the Hub URL directly.
+func (s *UIServer) handleDisconnect(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAuth(w, r) {
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeUIError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req disconnectRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4*1024)).Decode(&req); err != nil {
+		writeUIError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	req.Mode = strings.TrimSpace(req.Mode)
+	if req.Name == "" {
+		writeUIError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if !isDisconnectMode(req.Mode) {
+		writeUIError(w, http.StatusBadRequest, "invalid mode")
+		return
+	}
+
+	active, err := ActiveConnectionsPruned()
+	if err != nil {
+		writeUIError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	owned := s.hasOwnedConnection(req.Name)
+	target, found := selectActiveConnection(active, req.Name, owned)
+	if !found {
+		writeUIError(w, http.StatusNotFound, fmt.Sprintf("profile %q is not active", req.Name))
+		return
+	}
+	if req.Mode == disconnectModeDisconnect && !owned {
+		writeUIError(w, http.StatusBadRequest, "not owned by this launcher")
+		return
+	}
+
+	var warnings []string
+	var remoteErr error
+	if req.Mode == disconnectModeAll {
+		if err := postHubEndpoint(r.Context(), target.HubURL, "/api/kill-all"); err != nil {
+			warnings = append(warnings, err.Error())
+		}
+	}
+	if req.Mode == disconnectModeAll || req.Mode == disconnectModeWeb {
+		if err := postHubEndpoint(r.Context(), target.HubURL, "/api/shutdown"); err != nil {
+			remoteErr = err
+		}
+	}
+
+	// Local cleanup must run even when the remote Hub is already unreachable.
+	if owned {
+		s.cancelOwnedConnection(req.Name)
+	}
+
+	if remoteErr != nil {
+		msgs := append(warnings, remoteErr.Error())
+		writeUIError(w, http.StatusBadGateway, strings.Join(msgs, "; "))
+		return
+	}
+	resp := map[string]any{"ok": true}
+	if len(warnings) > 0 {
+		resp["warning"] = strings.Join(warnings, "; ")
+	}
+	writeUIJSON(w, resp)
+}
+
+func isDisconnectMode(mode string) bool {
+	switch mode {
+	case disconnectModeAll, disconnectModeWeb, disconnectModeDisconnect:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *UIServer) activeResponses(active []ActiveConnection) []activeResponse {
+	if len(active) == 0 {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]activeResponse, 0, len(active))
+	for _, c := range active {
+		_, owned := s.conns[c.Profile]
+		out = append(out, activeResponse{
+			Profile:   c.Profile,
+			PID:       c.PID,
+			HubURL:    c.HubURL,
+			StartedAt: c.StartedAt,
+			Owned:     owned,
+		})
+	}
+	return out
+}
+
+func (s *UIServer) hasOwnedConnection(name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.conns[name]
+	return ok
+}
+
+func (s *UIServer) cancelOwnedConnection(name string) {
+	s.mu.Lock()
+	lc, ok := s.conns[name]
+	if ok {
+		delete(s.conns, name)
+	}
+	s.mu.Unlock()
+	if !ok {
+		return
+	}
+	lc.cancel()
+	_ = UnregisterActiveConnection(name)
+}
+
+func selectActiveConnection(active []ActiveConnection, name string, owned bool) (ActiveConnection, bool) {
+	var selected ActiveConnection
+	found := false
+	for _, c := range active {
+		if c.Profile != name {
+			continue
+		}
+		if !found {
+			selected = c
+			found = true
+		}
+		if owned && c.PID == os.Getpid() {
+			return c, true
+		}
+	}
+	return selected, found
+}
+
+func postHubEndpoint(parent context.Context, hubURL, path string) error {
+	u, err := url.Parse(hubURL)
+	if err != nil {
+		return fmt.Errorf("%s: parse hub url: %w", path, err)
+	}
+	u.Path = path
+	u.RawPath = ""
+	u.Fragment = ""
+
+	ctx, cancel := context.WithTimeout(parent, disconnectHubPostTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), nil)
+	if err != nil {
+		return fmt.Errorf("%s: create request: %w", path, err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("%s: %s", path, resp.Status)
+	}
+	return nil
 }
 
 // runConnection starts the Connector for profile and stores the result.
