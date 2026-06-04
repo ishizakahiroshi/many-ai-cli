@@ -50,11 +50,20 @@ button:disabled{opacity:.5;cursor:not-allowed}
 #status-bar.error{background:#fee2e2;color:#b91c1c;display:block}
 #status-bar.success{background:#dcfce7;color:#15803d;display:block}
 /* modal overlay */
-#modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center}
-#modal-overlay.open{display:flex}
-#modal-box{background:#fff;border-radius:8px;padding:20px;width:500px;max-width:95vw;max-height:90vh;overflow-y:auto;border:1px solid #d0d7de}
-#modal-box h2{margin-bottom:14px;font-size:15px}
+#modal-overlay,#stop-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center}
+#modal-overlay.open,#stop-modal-overlay.open{display:flex}
+#modal-box,#stop-modal-box{background:#fff;border-radius:8px;padding:20px;width:500px;max-width:95vw;max-height:90vh;overflow-y:auto;border:1px solid #d0d7de}
+#modal-box h2,#stop-modal-box h2{margin-bottom:14px;font-size:15px}
 #modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.btn-stop-row{padding:4px 10px;font-size:12px}
+.stop-options{display:flex;flex-direction:column;gap:8px}
+.stop-option{display:block;width:100%;padding:10px 12px;text-align:left;background:#fff}
+.stop-option:hover{background:#f6f8fa}
+.stop-option.danger{border-color:#cf222e;color:#24292f;background:#fff}
+.stop-option.danger:hover{background:#fff5f5}
+.stop-label{display:block;font-weight:600;margin-bottom:3px}
+.stop-desc{display:block;font-size:12px;color:#666;line-height:1.35}
+#stop-modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 @media (max-width:560px){.launcher-header{align-items:flex-start;flex-direction:column}.lang-control{align-self:flex-end}}
 </style>
 </head>
@@ -93,10 +102,10 @@ button:disabled{opacity:.5;cursor:not-allowed}
   <h2 data-i18n="connections_title">Connections</h2>
   <table id="profile-table">
     <thead>
-      <tr><th data-i18n="th_name">Name</th><th data-i18n="th_type">Type</th><th data-i18n="th_destination">Destination</th><th data-i18n="th_hub_port">Hub port</th><th data-i18n="th_status">Status</th></tr>
+      <tr><th data-i18n="th_name">Name</th><th data-i18n="th_type">Type</th><th data-i18n="th_destination">Destination</th><th data-i18n="th_hub_port">Hub port</th><th data-i18n="th_status">Status</th><th data-i18n="th_actions">Actions</th></tr>
     </thead>
     <tbody id="profile-tbody">
-      <tr><td colspan="5" style="color:#888;text-align:center" data-i18n="loading">Loading...</td></tr>
+      <tr><td colspan="6" style="color:#888;text-align:center" data-i18n="loading">Loading...</td></tr>
     </tbody>
   </table>
   <div class="toolbar">
@@ -182,6 +191,17 @@ button:disabled{opacity:.5;cursor:not-allowed}
   </div>
 </div>
 
+<!-- stop modal -->
+<div id="stop-modal-overlay">
+  <div id="stop-modal-box">
+    <h2 id="stop-modal-title">Stop connection</h2>
+    <div id="stop-options" class="stop-options"></div>
+    <div id="stop-modal-footer">
+      <button id="btn-stop-cancel" data-i18n="btn_cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){
 'use strict';
@@ -202,12 +222,14 @@ const I18N = {
     th_destination: 'Destination',
     th_hub_port: 'Hub port',
     th_status: 'Status',
+    th_actions: 'Actions',
     loading: 'Loading...',
     btn_connect: 'Connect',
     btn_reconnect: 'Reconnect',
     btn_new: 'New',
     btn_edit: 'Edit',
     btn_delete: 'Delete',
+    btn_stop: 'Stop',
     btn_open: 'Open',
     btn_cancel: 'Cancel',
     btn_save: 'Save',
@@ -218,6 +240,14 @@ const I18N = {
     state_idle: '-',
     modal_new: 'New profile',
     modal_edit: 'Edit profile',
+    modal_stop_title: 'Stop connection: {name}',
+    stop_all_label: 'Stop everything',
+    stop_all_desc: 'Stop the Hub and all AI sessions on this connection.',
+    stop_web_label: 'Stop Web only',
+    stop_web_desc: 'Stop the Hub Web UI; AI sessions continue on the destination when supported.',
+    stop_disconnect_label: 'Disconnect only',
+    stop_disconnect_desc: 'Close only this SSH tunnel; the remote Hub and sessions continue.',
+    stop_disconnect_unowned: 'This tunnel is owned by another launcher window.',
     label_name_required: 'Name *',
     label_type_required: 'Type *',
     label_distro: 'Distro',
@@ -251,9 +281,12 @@ const I18N = {
     status_open_existing: 'Opening existing connection: {name}',
     status_connecting: 'Connecting: {name} ...',
     status_connected_redirect: 'Connected. Opening Hub UI...',
+    status_stopping: 'Stopping: {name} ...',
+    status_stopped: 'Stopped: {name}',
     error_connect_start: 'Failed to start connection: {message}',
     error_connect_timeout: 'Connection timed out',
     error_connect_failed: 'Connection failed: {message}',
+    error_stop_failed: 'Stop failed: {message}',
     confirm_delete: 'Delete "{name}"?',
     error_delete_failed: 'Delete failed: {message}',
     alert_name_required: 'Name is required',
@@ -271,12 +304,14 @@ const I18N = {
     th_destination: '接続先',
     th_hub_port: 'Hub ポート',
     th_status: '状態',
+    th_actions: '操作',
     loading: '読み込み中…',
     btn_connect: '接続',
     btn_reconnect: '再接続',
     btn_new: '新規',
     btn_edit: '編集',
     btn_delete: '削除',
+    btn_stop: '停止',
     btn_open: '開く',
     btn_cancel: 'キャンセル',
     btn_save: '保存',
@@ -287,6 +322,14 @@ const I18N = {
     state_idle: '-',
     modal_new: '新規プロファイル',
     modal_edit: 'プロファイルを編集',
+    modal_stop_title: '接続を停止: {name}',
+    stop_all_label: 'すべて停止',
+    stop_all_desc: 'この接続先の Hub とすべての AI セッションを停止します。',
+    stop_web_label: 'Web のみ停止',
+    stop_web_desc: 'Hub Web UI だけを停止します。対応する接続先では AI セッションは継続します。',
+    stop_disconnect_label: '切断のみ',
+    stop_disconnect_desc: 'この SSH トンネルだけを閉じます。リモート Hub とセッションは継続します。',
+    stop_disconnect_unowned: 'このトンネルは別のランチャー窓が保持しています。',
     label_name_required: '名前 *',
     label_type_required: '種別 *',
     label_distro: 'ディストロ',
@@ -320,9 +363,12 @@ const I18N = {
     status_open_existing: '既存の接続を開きます: {name}',
     status_connecting: '接続中: {name} …',
     status_connected_redirect: '接続しました。Hub UI に移動します…',
+    status_stopping: '停止中: {name} …',
+    status_stopped: '停止しました: {name}',
     error_connect_start: '接続開始に失敗しました: {message}',
     error_connect_timeout: '接続がタイムアウトしました',
     error_connect_failed: '接続に失敗しました: {message}',
+    error_stop_failed: '停止に失敗しました: {message}',
     confirm_delete: '「{name}」を削除しますか?',
     error_delete_failed: '削除に失敗しました: {message}',
     alert_name_required: '名前は必須です',
@@ -336,8 +382,10 @@ const I18N = {
 let profiles = [];
 let lastUsed = '';
 let activeMap = {};   // profile name -> hub_url（検証済みの稼働中接続）
+let activeInfoMap = {}; // profile name -> active entry（owned 判定用）
 let selectedIdx = -1; // index in profiles[]
 let editingIdx = -1;  // -1 = new, >=0 = editing
+let stopProfile = null;
 let currentLang = normalizeLang(readStoredLang()) || 'en';
 
 function normalizeLang(lang) {
@@ -377,6 +425,10 @@ function applyI18n() {
   if (langSelect) langSelect.value = currentLang;
   updateModalTitle();
   updateButtons();
+  if (stopProfile) {
+    const idx = profiles.findIndex(p => p.name === stopProfile.name);
+    if (idx >= 0) openStopModal(idx);
+  }
 }
 
 function setLanguage(lang) {
@@ -428,7 +480,11 @@ async function loadProfiles() {
     profiles = data.profiles || [];
     lastUsed = data.last_used || '';
     activeMap = {};
-    (data.active || []).forEach(a => { activeMap[a.profile] = a.hub_url; });
+    activeInfoMap = {};
+    (data.active || []).forEach(a => {
+      activeMap[a.profile] = a.hub_url;
+      activeInfoMap[a.profile] = a;
+    });
     renderTable();
   } catch (e) {
     showStatus(t('error_load_profiles', {message: e.message}), 'error');
@@ -438,7 +494,7 @@ async function loadProfiles() {
 function renderTable() {
   const tbody = document.getElementById('profile-tbody');
   if (profiles.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" style="color:#888;text-align:center">' + esc(t('no_profiles')) + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="color:#888;text-align:center">' + esc(t('no_profiles')) + '</td></tr>';
     selectedIdx = -1;
     updateButtons();
     return;
@@ -458,9 +514,21 @@ function renderTable() {
     const stateCell = activeMap[p.name]
       ? '<span class="badge-running">' + esc(t('state_connected')) + '</span>'
       : '<span class="badge-idle">' + esc(t('state_idle')) + '</span>';
-    tr.innerHTML = `<td>${esc(nameCell)}</td><td>${esc(typeCell)}</td><td>${esc(dest)}</td><td>${esc(String(hubPort))}</td><td>${stateCell}</td>`;
+    const actionCell = activeMap[p.name]
+      ? '<button type="button" class="danger btn-stop-row" data-index="' + i + '">' + esc(t('btn_stop')) + '</button>'
+      : '';
+    tr.innerHTML = `<td>${esc(nameCell)}</td><td>${esc(typeCell)}</td><td>${esc(dest)}</td><td>${esc(String(hubPort))}</td><td>${stateCell}</td><td>${actionCell}</td>`;
     tr.addEventListener('click', () => { selectedIdx = i; renderTable(); });
     tr.addEventListener('dblclick', () => { selectedIdx = i; renderTable(); startConnect(); });
+    const stopBtn = tr.querySelector('.btn-stop-row');
+    if (stopBtn) {
+      stopBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        selectedIdx = Number(stopBtn.dataset.index);
+        renderTable();
+        openStopModal(selectedIdx);
+      });
+    }
     tbody.appendChild(tr);
   });
   updateButtons();
@@ -544,6 +612,92 @@ async function reconnect() {
       // Transient fetch error — keep polling
     }
   }, 800);
+}
+
+// --------------------------------------------------------------------------
+// Stop flow
+// --------------------------------------------------------------------------
+function openStopModal(idx) {
+  if (idx < 0 || idx >= profiles.length) return;
+  const p = profiles[idx];
+  const active = activeInfoMap[p.name];
+  if (!active) return;
+
+  stopProfile = p;
+  document.getElementById('stop-modal-title').textContent = t('modal_stop_title', {name: p.name});
+  const optionsEl = document.getElementById('stop-options');
+  optionsEl.innerHTML = '';
+
+  const options = [
+    {mode: 'all', label: 'stop_all_label', desc: 'stop_all_desc', danger: true},
+    {mode: 'web', label: 'stop_web_label', desc: 'stop_web_desc', danger: false},
+  ];
+  if (isTunnelProfile(p)) {
+    options.push({
+      mode: 'disconnect',
+      label: 'stop_disconnect_label',
+      desc: 'stop_disconnect_desc',
+      danger: false,
+      disabled: active.owned === false,
+      title: active.owned === false ? t('stop_disconnect_unowned') : '',
+    });
+  }
+
+  options.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'stop-option' + (opt.danger ? ' danger' : '');
+    btn.dataset.mode = opt.mode;
+    btn.disabled = !!opt.disabled;
+    if (opt.title) btn.title = opt.title;
+    btn.innerHTML = '<span class="stop-label">' + esc(t(opt.label)) + '</span>' +
+      '<span class="stop-desc">' + esc(t(opt.desc)) + (opt.title ? ' ' + esc(opt.title) : '') + '</span>';
+    btn.addEventListener('click', () => stopConnection(opt.mode));
+    optionsEl.appendChild(btn);
+  });
+
+  document.getElementById('stop-modal-overlay').classList.add('open');
+}
+
+function closeStopModal() {
+  document.getElementById('stop-modal-overlay').classList.remove('open');
+  stopProfile = null;
+}
+
+function isAnyModalOpen() {
+  return document.getElementById('modal-overlay').classList.contains('open') ||
+    document.getElementById('stop-modal-overlay').classList.contains('open');
+}
+
+function isTunnelProfile(p) {
+  return p && p.type === 'ssh' && (p.mode || 'serve') === 'tunnel';
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function stopConnection(mode) {
+  const p = stopProfile;
+  if (!p) return;
+  closeStopModal();
+  showStatus(t('status_stopping', {name: p.name}), 'info');
+
+  try {
+    await apiFetch('/api/disconnect', {
+      method: 'POST',
+      body: JSON.stringify({name: p.name, mode}),
+    });
+    delete activeMap[p.name];
+    delete activeInfoMap[p.name];
+    renderTable();
+    showStatus(t('status_stopped', {name: p.name}), 'success');
+  } catch (e) {
+    showStatus(t('error_stop_failed', {message: e.message}), 'error');
+  } finally {
+    await sleep(1000);
+    await loadProfiles();
+  }
 }
 
 // --------------------------------------------------------------------------
@@ -703,14 +857,16 @@ document.getElementById('btn-edit').addEventListener('click', () => { if (select
 document.getElementById('btn-delete').addEventListener('click', deleteSelected);
 document.getElementById('btn-modal-cancel').addEventListener('click', closeModal);
 document.getElementById('btn-modal-save').addEventListener('click', saveModal);
+document.getElementById('btn-stop-cancel').addEventListener('click', closeStopModal);
 document.getElementById('f-type').addEventListener('change', () => { syncTypeSections(); syncSSHModeSections(); });
 document.getElementById('f-ssh-mode').addEventListener('change', syncSSHModeSections);
 document.getElementById('modal-overlay').addEventListener('click', e => { if (e.target === document.getElementById('modal-overlay')) closeModal(); });
+document.getElementById('stop-modal-overlay').addEventListener('click', e => { if (e.target === document.getElementById('stop-modal-overlay')) closeStopModal(); });
 
 // Keyboard shortcuts: Enter in table area triggers connect, Escape closes modal.
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeModal();
-  if (e.key === 'Enter' && document.activeElement === document.body && selectedIdx >= 0) startConnect();
+  if (e.key === 'Escape') { closeModal(); closeStopModal(); }
+  if (e.key === 'Enter' && !isAnyModalOpen() && document.activeElement === document.body && selectedIdx >= 0) startConnect();
 });
 
 // --------------------------------------------------------------------------
