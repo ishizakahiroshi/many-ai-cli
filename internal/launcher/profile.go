@@ -33,34 +33,38 @@ const (
 )
 
 // Profile is a single connection target stored in launcher-profiles.yaml.
+// The json tags must mirror the yaml tags: the UI server exchanges profiles
+// with the browser as JSON using the same snake_case field names, and
+// encoding/json does not match `hub_port` to HubPort without an explicit tag
+// (case folding ignores underscores, so the value would silently drop to 0).
 type Profile struct {
-	Name string `yaml:"name"`
-	Type ProfileType `yaml:"type"`
+	Name string      `yaml:"name" json:"name"`
+	Type ProfileType `yaml:"type" json:"type"`
 
 	// WSL-specific fields
-	Distro string `yaml:"distro,omitempty"` // empty = default WSL distro
+	Distro string `yaml:"distro,omitempty" json:"distro,omitempty"` // empty = default WSL distro
 
 	// SSH-specific fields
-	Mode         SSHMode `yaml:"mode,omitempty"`          // serve (default) or tunnel
-	Host         string  `yaml:"host,omitempty"`
-	User         string  `yaml:"user,omitempty"`
-	SSHPort      int     `yaml:"ssh_port,omitempty"`      // 0 = 22 or ssh config
-	IdentityFile string  `yaml:"identity_file,omitempty"` // empty = ssh default / agent
+	Mode         SSHMode `yaml:"mode,omitempty" json:"mode,omitempty"`                   // serve (default) or tunnel
+	Host         string  `yaml:"host,omitempty" json:"host,omitempty"`
+	User         string  `yaml:"user,omitempty" json:"user,omitempty"`
+	SSHPort      int     `yaml:"ssh_port,omitempty" json:"ssh_port,omitempty"`           // 0 = 22 or ssh config
+	IdentityFile string  `yaml:"identity_file,omitempty" json:"identity_file,omitempty"` // empty = ssh default / agent
 
 	// tunnel-mode specific
-	TokenCommand string `yaml:"token_command,omitempty"` // required for tunnel
+	TokenCommand string `yaml:"token_command,omitempty" json:"token_command,omitempty"` // required for tunnel
 
 	// Common fields
-	Binary  string `yaml:"binary,omitempty"`   // CLI binary name on remote
-	CWD     string `yaml:"cwd,omitempty"`       // working directory on remote
-	HubPort int    `yaml:"hub_port,omitempty"`  // 0 = auto-select (not allowed for tunnel)
+	Binary  string `yaml:"binary,omitempty" json:"binary,omitempty"`     // CLI binary name on remote
+	CWD     string `yaml:"cwd,omitempty" json:"cwd,omitempty"`           // working directory on remote
+	HubPort int    `yaml:"hub_port,omitempty" json:"hub_port,omitempty"` // 0 = auto-select (not allowed for tunnel)
 }
 
 // ProfilesFile is the top-level structure of launcher-profiles.yaml.
 type ProfilesFile struct {
-	Version  int       `yaml:"version"`
-	LastUsed string    `yaml:"last_used,omitempty"`
-	Profiles []Profile `yaml:"profiles,omitempty"`
+	Version  int       `yaml:"version" json:"version"`
+	LastUsed string    `yaml:"last_used,omitempty" json:"last_used,omitempty"`
+	Profiles []Profile `yaml:"profiles,omitempty" json:"profiles,omitempty"`
 }
 
 // profilesPath returns the path to ~/.any-ai-cli/launcher-profiles.yaml.
