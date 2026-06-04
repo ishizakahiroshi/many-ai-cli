@@ -163,6 +163,7 @@
   cursor: pointer;
   font-family: inherit;
   line-height: 1.4;
+  min-height: var(--control-h-sm);
   opacity: 0.7;
   transition: opacity 0.15s, color 0.15s, border-color 0.15s;
 }
@@ -173,7 +174,7 @@
   flex-shrink: 0;
   display: flex;
   align-items: stretch;
-  height: 36px;
+  height: var(--control-h-lg);
   background: var(--bg-elev);
   border-bottom: 1px solid var(--line);
   padding: 0 8px;
@@ -216,6 +217,7 @@
   font-family: inherit;
   white-space: nowrap;
   flex-shrink: 0;
+  min-height: var(--control-h-lg);
 }
 .view-tab.active {
   color: var(--accent-text);
@@ -269,6 +271,7 @@
   }
   .view-tab {
     min-width: 44px;
+    min-height: var(--touch-target);
   }
   .view-tab > span:last-child:not(.badge):not(.multi-layout-badge) {
     max-width: 8ch;
@@ -291,7 +294,7 @@
   flex-shrink: 0;
 }
 #unified-tab-bar .icon-btn {
-  height: 26px;
+  min-height: var(--control-h-sm);
   align-self: center;
   padding: 0 9px;
   border-radius: 5px;
@@ -307,7 +310,7 @@
 }
 #unified-tab-bar .icon-btn:hover { background: var(--bg-elev2, var(--bg-deep)); color: var(--text); }
 #chat-pane .chat-filter-bar .icon-btn {
-  height: 26px;
+  min-height: var(--control-h-sm);
   align-self: center;
   padding: 0 9px;
   border-radius: 5px;

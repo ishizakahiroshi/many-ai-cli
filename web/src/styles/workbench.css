@@ -87,6 +87,7 @@
   font: inherit;
   font-size: 0.78rem;
   padding: 7px 9px;
+  min-height: var(--control-h-sm);
 }
 
 .wb-card textarea {
@@ -110,6 +111,7 @@
   font: inherit;
   font-size: 0.76rem;
   cursor: pointer;
+  min-height: var(--control-h-sm);
 }
 
 .wb-card button:hover,
@@ -222,6 +224,7 @@
   padding: 4px 8px;
   color: var(--muted);
   font-size: 0.75rem;
+  min-height: var(--control-h-sm);
 }
 
 .wb-board {
@@ -244,6 +247,18 @@
   background: var(--bg-elev);
 }
 
+@media (min-width: 1600px) {
+  .wb-grid {
+    grid-template-columns: repeat(3, minmax(320px, 1fr));
+  }
+}
+
+@media (min-width: 2200px) {
+  .wb-grid {
+    grid-template-columns: repeat(4, minmax(320px, 1fr));
+  }
+}
+
 @media (max-width: 1120px) {
   .wb-grid,
   .wb-board,
@@ -259,5 +274,24 @@
     width: 100%;
     min-width: 0;
     justify-content: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .wb-shell {
+    padding: 10px;
+  }
+  .wb-head-actions,
+  .wb-actions,
+  .wb-fields,
+  .wb-checks {
+    align-items: stretch;
+  }
+  .wb-head-actions > *,
+  .wb-actions > *,
+  .wb-fields > *,
+  .wb-card button,
+  .wb-head button {
+    flex: 1 1 auto;
   }
 }

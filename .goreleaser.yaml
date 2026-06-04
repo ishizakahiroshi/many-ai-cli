@@ -11,6 +11,8 @@ project_name: any-ai-cli
 #   - go-winres は before hooks で都度 install するため CI に事前準備は不要。
 before:
   hooks:
+    - npm ci --prefix web
+    - npm run build --prefix web
     - go install github.com/tc-hib/go-winres@latest
     - go-winres make --in winres/winres.json --out cmd/any-ai-cli/rsrc --product-version={{ .Version }} --file-version={{ .Version }}
     - go-winres make --in winres/winres-launcher.json --out cmd/any-ai-cli-launcher/rsrc --product-version={{ .Version }} --file-version={{ .Version }}

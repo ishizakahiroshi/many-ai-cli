@@ -42,6 +42,7 @@
   border-radius: 6px;
   padding: 4px 12px;
   font-size: 0.78rem;
+  min-height: var(--control-h-sm);
   cursor: pointer;
   backdrop-filter: blur(1px);
   transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s, backdrop-filter 0.15s;
@@ -123,7 +124,7 @@
 #mobile-key-row button {
   flex: 0 0 auto;
   min-width: 44px;
-  min-height: 38px;
+  min-height: var(--touch-target);
   padding: 0 12px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
@@ -205,8 +206,8 @@
   color: var(--muted);
   border: 1px dashed var(--line-soft);
   opacity: 0.7;
-  flex: 0 0 28px;
-  min-width: 28px;
+  flex: 0 0 var(--control-h-sm);
+  min-width: var(--control-h-sm);
   align-self: flex-end;
   line-height: 1;
 }
@@ -258,8 +259,10 @@
   color: #fff;
   border: none;
   border-radius: 8px;
-  width: 34px;
-  height: 34px;
+  width: var(--control-h-md);
+  height: var(--control-h-md);
+  min-width: var(--control-h-md);
+  min-height: var(--control-h-md);
   font-size: 0.9rem;
   cursor: pointer;
   display: flex;
@@ -276,8 +279,10 @@
   color: var(--muted-2);
   border: none;
   border-radius: 6px;
-  width: 28px;
-  height: 28px;
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
+  min-width: var(--control-h-sm);
+  min-height: var(--control-h-sm);
   font-size: 0.72rem;
   font-family: Consolas, monospace;
   cursor: pointer;
@@ -300,7 +305,7 @@
 #quick-model-btn,
 #slash-picker-btn {
   width: auto;
-  min-width: 42px;
+  min-width: 48px;
   padding: 0 6px;
 }
 #quick-model-btn { margin-left: 6px; }
@@ -334,7 +339,7 @@
   #quick-clear-btn,
   #quick-model-btn,
   #slash-picker-btn {
-    min-width: 36px;
+    min-width: var(--touch-target);
     padding: 0 4px;
     font-size: 0.68rem;
   }

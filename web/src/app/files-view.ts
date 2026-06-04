@@ -1946,10 +1946,10 @@ export const FilesPreview = (function () {
 
   /** <table> を GFM Markdown テーブル文字列に変換 */
   function tableToMarkdown(table) {
-    const rowsFromSection = (section) => {
+    const rowsFromSection = (section: any) => {
       if (!section) return [];
-      return Array.from(section.rows).map(tr =>
-        Array.from(tr.cells).map(cell => {
+      return Array.from(section.rows).map((tr: any) =>
+        Array.from(tr.cells).map((cell: any) => {
           // セル内の改行・パイプを Markdown 互換にエスケープ
           const text = (cell.innerText || '').replace(/\r?\n/g, ' ').replace(/\|/g, '\\|').trim();
           return text;
@@ -2118,7 +2118,7 @@ export const FilesPreview = (function () {
     let editStatusEl = null;        // ステータス行（競合通知等）
     let editBarEl = null;           // 編集モード操作バー
 
-    function setBreadcrumb(pathText, fullPath) {
+    function setBreadcrumb(pathText, fullPath = '') {
       const text = pathText || (t('files_preview_no_file') || 'No file selected');
       const normalized = String(text).replace(/\\/g, '/');
       const slashIdx = normalized.lastIndexOf('/');
@@ -2271,7 +2271,7 @@ export const FilesPreview = (function () {
       textarea.value = content;
       textarea.spellcheck = false;
       textarea.autocomplete = 'off';
-      textarea.autocorrect = 'off';
+      (textarea as any).autocorrect = 'off';
       textarea.autocapitalize = 'off';
       contentEl.appendChild(textarea);
       editTextarea = textarea;
@@ -2322,13 +2322,13 @@ export const FilesPreview = (function () {
      * POST /api/files-save を呼ぶ。
      * forceOverwrite=true のときは baseMtime を serverMtime で上書きして再送する。
      */
-    async function doSave(forceOverwrite, serverMtime) {
+    async function doSave(forceOverwrite, serverMtime = null) {
       if (!currentAbsPath || !editTextarea) return;
       if (editSaveBtn) editSaveBtn.disabled = true;
       if (editStatusEl) editStatusEl.textContent = t('files_preview_edit_saving') || '保存中…';
 
       const baseMtime = forceOverwrite ? serverMtime : editBaseMtime;
-      const body = {
+      const body: any = {
         path: currentAbsPath,
         content: editTextarea.value,
       };
@@ -2623,7 +2623,7 @@ export const FilesPreview = (function () {
       if (entry && entry.openedFile) {
         const openedFile = entry.openedFile;
         // ツリーが API 取得後に描画されるまで少し待つ
-        const trySelect = () => {
+        const trySelect: any = () => {
           const fileEl = treePaneEl.querySelector(`.files-tree-item[data-abs-path="${CSS.escape(openedFile)}"]`);
           if (fileEl) {
             fileEl.click();

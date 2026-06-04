@@ -7,13 +7,16 @@ export const token = new URLSearchParams(location.search).get('token');
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
 // ---- トースト通知 ----
-export let _toastTimer = null;
-export function getToastAnchorRect(anchor) {
+export let _toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+export type ToastAnchor = Element | MouseEvent | { clientX: number; clientY: number } | null | undefined;
+
+export function getToastAnchorRect(anchor: ToastAnchor): DOMRect | { left: number; right: number; top: number; height: number } | null {
   if (!anchor) return null;
-  if (typeof anchor.getBoundingClientRect === 'function') {
+  if (anchor instanceof Element && typeof anchor.getBoundingClientRect === 'function') {
     return anchor.getBoundingClientRect();
   }
-  if (typeof anchor.clientX === 'number' && typeof anchor.clientY === 'number') {
+  if ('clientX' in anchor && 'clientY' in anchor && typeof anchor.clientX === 'number' && typeof anchor.clientY === 'number') {
     return {
       left: anchor.clientX,
       right: anchor.clientX,
@@ -24,7 +27,7 @@ export function getToastAnchorRect(anchor) {
   return null;
 }
 
-export function showToast(msg, anchor) {
+export function showToast(msg: string, anchor?: ToastAnchor): void {
   let el = document.getElementById('toast');
   if (!el) {
     el = document.createElement('div');
@@ -52,38 +55,38 @@ export function showToast(msg, anchor) {
     el.classList.remove('toast--anchored');
   }
   el.classList.add('show');
-  clearTimeout(_toastTimer);
+  if (_toastTimer) clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => { el.classList.remove('show'); el.classList.remove('toast--anchored'); }, 1800);
 }
 
 // i18n フォールバックヘルパ: t() がキー文字列をそのまま返した（未登録）場合に
 // fallback を返す。t()自体は key を確実に返す仕様なので、簡易判定で問題ない。
-export function ti18n(key, fallback, vars) {
+export function ti18n(key: string, fallback?: string | null, vars?: Record<string, unknown>): string {
   const v = window.t ? window.t(key, vars) : key;
   return (v === key && fallback != null) ? fallback : v;
 }
 
-export function escapeHtml(str) {
+export function escapeHtml(str: unknown): string {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-export function formatStartedAt(isoStr) {
+export function formatStartedAt(isoStr?: string | null): string {
   if (!isoStr) return '';
   const d = new Date(isoStr);
   if (isNaN(d.getTime())) return '';
   const elapsed = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
-  const p = n => String(n).padStart(2, '0');
+  const p = (n: number) => String(n).padStart(2, '0');
   const s = elapsed % 60;
   const m = Math.floor(elapsed / 60) % 60;
   const h = Math.floor(elapsed / 3600);
   return h > 0 ? `[${h}:${p(m)}:${p(s)}]` : `[${p(m)}:${p(s)}]`;
 }
 
-export function formatLastOutputAt(isoStr) {
+export function formatLastOutputAt(isoStr?: string | null): string {
   if (!isoStr) return '';
   const d = new Date(isoStr);
   if (isNaN(d.getTime())) return '';
-  const p = n => String(n).padStart(2, '0');
+  const p = (n: number) => String(n).padStart(2, '0');
   const now = new Date();
   const sameDay = d.getFullYear() === now.getFullYear() &&
                   d.getMonth() === now.getMonth() &&
@@ -96,7 +99,7 @@ export function formatLastOutputAt(isoStr) {
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}(${DOW[d.getDay()]}) ${time}`;
 }
 
-export function cleanCopiedText(linesOrText) {
+export function cleanCopiedText(linesOrText: string | string[] | null | undefined): string {
   const lines = Array.isArray(linesOrText)
     ? linesOrText.slice()
     : String(linesOrText || '').replace(/\r\n?/g, '\n').split('\n');
@@ -116,7 +119,7 @@ export function cleanCopiedText(linesOrText) {
     .join('\n');
 }
 
-export async function copyCleanText(linesOrText, anchor) {
+export async function copyCleanText(linesOrText: string | string[] | null | undefined, anchor?: ToastAnchor): Promise<void> {
   const text = cleanCopiedText(linesOrText);
   if (!text) return;
   await navigator.clipboard.writeText(text);

@@ -44,7 +44,7 @@ export const pasteChipsEl = document.getElementById('paste-chips');
 export const pastedTexts = []; // [{id, text, lineCount}]
 export let pasteCounter = 0;
 
-export function autoExpand(opts = {}) {
+export function autoExpand(opts: any = {}) {
   const t = activeSessionId === null ? null : terminals.get(activeSessionId);
   const shouldStickToBottom = !!(t && (t.autoScroll || isTerminalAtBottom(t)));
   if (opts.suppressPtyResize) {
@@ -1331,7 +1331,7 @@ inputEl.addEventListener('blur', (e) => {
     const dx = (e.clientX || (e.touches && e.touches[0].clientX) || 0) - startX;
     const w = Math.min(MAX, Math.max(MIN, startW + dx));
     sidebar.style.width = w + 'px';
-    try { localStorage.setItem(STORAGE_KEY, w); } catch (_) {}
+    try { localStorage.setItem(STORAGE_KEY, String(w)); } catch (_) {}
     renderSessionList();
     // ターミナルの幅変化に追従
     terminals.forEach((t, id) => {
@@ -1487,10 +1487,10 @@ inputEl.addEventListener('blur', (e) => {
     const diffMs = Date.now() - new Date(iso).getTime();
     const m = Math.floor(diffMs / 60000);
     if (m < 1)  return t('slash_picker_just_now');
-    if (m < 60) return t('slash_picker_ago_min').replace('{n}', m);
+    if (m < 60) return t('slash_picker_ago_min').replace('{n}', String(m));
     const h = Math.floor(m / 60);
-    if (h < 24) return t('slash_picker_ago_hour').replace('{n}', h);
-    return t('slash_picker_ago_day').replace('{n}', Math.floor(h / 24));
+    if (h < 24) return t('slash_picker_ago_hour').replace('{n}', String(h));
+    return t('slash_picker_ago_day').replace('{n}', String(Math.floor(h / 24)));
   }
 })();
 

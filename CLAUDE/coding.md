@@ -1,8 +1,8 @@
 # any-ai-cli コーディング規約
 
-> 最終更新: 2026-05-24(日) 17:01:04
+> 最終更新: 2026-06-05(金) 05:42:17
 
-`any-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ Vue 3 フロント（`go:embed`）。設計書: [../docs/v0.2.0-any-ai-cli-design.md](../docs/v0.2.0-any-ai-cli-design.md)
+`any-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ 静的 TypeScript フロント（`web/dist/` を `go:embed`）。設計書: [../docs/v0.2.0-any-ai-cli-design.md](../docs/v0.2.0-any-ai-cli-design.md)
 
 ## 言語別コーディング規約
 
@@ -24,14 +24,13 @@
 - **同時実行:** Hub 内のセッション管理・承認キューは `sync.Mutex` または `chan` で保護。グローバル可変状態は避ける
 - **PTY 出力バッファ:** ANSI エスケープを除去してから承認パターンマッチ（生ログは別途保存）
 
-### Vue 3 / TypeScript
+### Web TypeScript
 
-- **構成:** `web/` 配下、Vite ビルド、`web/dist/` を `go:embed` で取り込む
-- **ファイル名:** コンポーネントはパスカルケース（`ApprovalCard.vue`, `SessionList.vue`）、それ以外はケバブケース or キャメルケース
-- **Composition API + `<script setup lang="ts">`** を標準
-- **状態管理:** `web/src/stores/hub.ts`（Pinia or 軽量 reactive store）。WebSocket 接続・セッション一覧・承認キューを一元管理
-- **スタイル:** Tailwind CSS。スコープが必要なときだけ `<style scoped>`
-- **WS メッセージ型:** `proto/messages.go` と TypeScript 型定義を二重管理しない方針（生成 or 手動同期、決まり次第ここに追記）
+- **構成:** `web/src/` が静的 HTML/CSS/TypeScript ソース。`npm run build` が esbuild でファイル単位に `web/dist/` へ出力し、Go は `web/dist/` を `go:embed` で取り込む。
+- **モジュール:** app コードは native ESM。import パスは出力後に有効な `.js` 拡張子を維持する（例: `import './state.js'`）。
+- **vendor:** xterm / marked / DOMPurify / highlight は `web/src/vendor/` の classic script を維持し、型は `web/src/types/vendor.d.ts` で補う。
+- **型安全:** `tsconfig.json` は `strict: true` / `allowJs: false`。難所の動的 DOM・window 互換は明示 `any` と `TODO(ts)` で棚卸しし、無断で `// @ts-nocheck` に逃がさない。
+- **WS メッセージ型:** `web/src/types/proto.ts` は `internal/proto/messages.go` の手書きミラー。Go 側 Message フィールドを追加・改名したら同時に追従する。
 
 ## ディレクトリ責務
 
@@ -44,7 +43,7 @@
 | `internal/proto/` | WebSocket メッセージの Go 構造体定義（`type:"register"` 等） |
 | `internal/config/` | YAML 読み込み・デフォルト生成（`~/.any-ai-cli/config.yaml`） |
 | `internal/log/` | 構造化ログ（JSONL）+ PTY 生ログの書き出し |
-| `web/` | Vue 3 フロントソース。`web/dist/` がビルド成果物（`go:embed` 対象） |
+| `web/` | 静的 TypeScript フロント。`web/src/` がソース、`web/dist/` がビルド成果物（`go:embed` 対象） |
 
 ## 共通実装の使い方
 
@@ -91,7 +90,7 @@
 ## テスト方針
 
 - **Go:** `go test ./...` で単体テスト。PTY 関連は OS 別 build tag で分岐したテストファイル（`_unix_test.go` / `_windows_test.go`）
-- **Vue:** Vitest（コンポーネント単体）+ Playwright（E2E、Hub 起動 → モックラッパー → UI 操作の通しテスト）
+- **Web:** `npm run check`（TypeScript）+ `npm test`（approval-parser fixtures）。Hub 起動 → モックラッパー → UI 操作の E2E は未整備のため、フロント大変更後は手動ブラウザ確認が必要。
 - **手動検証:** 4 ペイン（Claude × 2 / Codex × 2）並列起動 + Hub UI を別画面で常時表示、設計書 §9 のレイアウト通りに動くか確認
 
 ## any-ai-cli 固有の禁止事項

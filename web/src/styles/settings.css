@@ -49,6 +49,7 @@
   padding: 2px 8px;
   line-height: 1.5;
   min-width: 54px;
+  min-height: var(--control-h-sm);
   white-space: nowrap;
 }
 .settings-header-btn:hover { color: var(--text); border-color: var(--line-soft); }
@@ -116,6 +117,7 @@
   cursor: pointer;
   outline: none;
   min-width: 90px;
+  min-height: var(--control-h-sm);
 }
 .settings-select:focus { border-color: var(--accent); }
 
@@ -143,7 +145,7 @@
   align-items: center;
   justify-content: center;
   width: auto;
-  min-height: 24px;
+  min-height: var(--control-h-sm);
   padding: 3px 8px;
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -164,6 +166,7 @@ summary.settings-section-title {
   cursor: pointer;
   user-select: none;
   list-style: none;
+  min-height: var(--control-h-sm);
 }
 summary.settings-section-title::-webkit-details-marker { display: none; }
 summary.settings-section-title::before {
@@ -178,7 +181,7 @@ summary.settings-section-title::before {
 .settings-section[open] > summary.settings-section-title::before { transform: rotate(90deg); }
 summary.settings-section-title:hover { background: var(--accent-soft); color: var(--text); }
 .settings-section-body { padding-bottom: 4px; }
-.log-dir-btn { background: none; border: none; cursor: pointer; opacity: 0.55; font-size: 0.95rem; padding: 0; line-height: 1; flex-shrink: 0; }
+.log-dir-btn { background: none; border: none; cursor: pointer; opacity: 0.55; font-size: 0.95rem; padding: 0; line-height: 1; flex-shrink: 0; min-width: var(--control-h-sm); min-height: var(--control-h-sm); }
 .log-dir-btn:hover { opacity: 1; }
 
 /* カスタムツールチップ（遅延なし） */
@@ -199,7 +202,7 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   display: none;
   box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
-.settings-checkbox { accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer; }
+.settings-checkbox { accent-color: var(--accent); width: 18px; height: 18px; cursor: pointer; }
 .settings-input-number {
   background: var(--bg);
   color: var(--text);
@@ -210,6 +213,7 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   width: 58px;
   text-align: right;
   outline: none;
+  min-height: var(--control-h-sm);
 }
 .settings-input-number:focus { border-color: var(--accent); }
 .settings-input-text {
@@ -221,6 +225,7 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   font-size: 0.85rem;
   width: 140px;
   outline: none;
+  min-height: var(--control-h-sm);
 }
 .settings-input-text:focus { border-color: var(--accent); }
 .settings-avatar-url-input { width: 130px; }
@@ -263,6 +268,37 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   line-height: 1.35;
 }
 .settings-effective-command:empty { display: none; }
+
+@media (max-width: 720px) {
+  #settings-panel {
+    top: calc(var(--app-header-h) + 6px);
+    left: 8px;
+    right: 8px;
+    width: auto;
+    max-width: none;
+    max-height: calc(100dvh - var(--app-header-h) - 14px);
+  }
+  .settings-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .settings-header-actions {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
+  .settings-row {
+    align-items: stretch;
+  }
+  .settings-label {
+    flex-basis: 100%;
+  }
+  .settings-select,
+  .settings-input-number,
+  .settings-input-text,
+  .settings-avatar-url-input {
+    width: 100%;
+  }
+}
 
 /* ---- 承認検出パターン編集 ---- */
 .approval-patterns-list {

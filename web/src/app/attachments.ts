@@ -167,14 +167,14 @@ if (chatPane) {
   });
 }
 
-export async function stageAttach(file, opts = {}) {
+export async function stageAttach(file, opts: any = {}) {
   const normalized = opts.normalize ? await normalizeAttachImage(file) : file;
   const buf = await normalized.arrayBuffer();
   if (buf.byteLength > MAX_ATTACH_BYTES) {
     showToast(`Attachment too large: ${(buf.byteLength / (1024 * 1024)).toFixed(1)}MB (max 8MB)`);
     return;
   }
-  const entry = {};
+  const entry: any = {};
   const wrapper = addAttachThumbnail(normalized, () => {
     const idx = pendingAttachFiles.findIndex(p => p.entry === entry);
     if (idx !== -1) pendingAttachFiles.splice(idx, 1);
@@ -189,7 +189,7 @@ export async function stageFileAttach(file) {
     showToast(`Attachment too large: ${(buf.byteLength / (1024 * 1024)).toFixed(1)}MB (max 8MB)`);
     return;
   }
-  const entry = {};
+  const entry: any = {};
   const wrapper = addFileChip(file, () => {
     const idx = pendingAttachFiles.findIndex(p => p.entry === entry);
     if (idx !== -1) pendingAttachFiles.splice(idx, 1);
@@ -202,14 +202,14 @@ export async function stageFileAttach(file) {
 // PNG が大きすぎる場合は、容量に応じて段階的に縮小する。
 // D&D/ファイル選択では元ファイルをそのまま送る。
 export async function normalizeAttachImage(file) {
-  let bmp = null;
+  let bmp: ImageBitmap | null = null;
   try {
     const maxEdge = 1568;
     bmp = await createImageBitmap(file);
     const w = bmp.width;
     const h = bmp.height;
     let scale = Math.min(1, maxEdge / Math.max(w, h));
-    let lastBlob = null;
+    let lastBlob: Blob | null = null;
 
     for (let i = 0; i < 12; i++) {
       const outW = Math.max(1, Math.round(w * scale));
@@ -221,7 +221,7 @@ export async function normalizeAttachImage(file) {
       if (!ctx) return file;
       ctx.drawImage(bmp, 0, 0, outW, outH);
 
-      const blob = await new Promise((resolve) => {
+      const blob = await new Promise<Blob | null>((resolve) => {
         canvas.toBlob(resolve, 'image/png');
       });
       if (!blob) return file;
@@ -378,11 +378,11 @@ export function addFileChip(file, onRemove) {
   return wrapper;
 }
 
-export function openLightbox(src, opts = {}) {
+export function openLightbox(src, opts: any = {}) {
   const overlay = document.createElement('div');
   overlay.id = 'image-lightbox';
   const isVideo = opts.type === 'video';
-  const media = document.createElement(isVideo ? 'video' : 'img');
+  const media: any = document.createElement(isVideo ? 'video' : 'img');
   if (isVideo) {
     media.controls = true;
     media.autoplay = true;

@@ -548,7 +548,7 @@
                     data-i18n-tooltip="spawn_model_refresh_tooltip"
                     aria-label="Refresh model list">↻</button>
             <a id="spawn-model-discover" class="spawn-btn-browse spawn-model-discover"
-               href="https://ollama.com/search?c=cloud" target="_blank" rel="noopener"
+               href="https://ollama.com/search?c=cloud" target="_blank" rel="noopener noreferrer"
                data-i18n-tooltip="spawn_model_discover_tooltip"
                aria-label="Browse Ollama Cloud models">🔗</a>
           </div>
@@ -850,13 +850,13 @@
               </a>
             </li>
           </ul>
-          <p class="about-license-note"><span data-i18n="about_license_note_pre">Full license text is in the repository </span><a href="https://github.com/ishizakahiroshi/any-ai-cli/blob/main/LICENSE" target="_blank" rel="noopener" class="about-link">LICENSE</a><span> / </span><a href="https://github.com/ishizakahiroshi/any-ai-cli/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener" class="about-link">THIRD_PARTY_NOTICES.md</a><span> / </span><a href="https://github.com/ishizakahiroshi/any-ai-cli/blob/main/web/src/vendor/THIRD_PARTY_LICENSES.txt" target="_blank" rel="noopener" class="about-link">THIRD_PARTY_LICENSES.txt</a><span data-i18n="about_license_note_suffix">.</span></p>
+          <p class="about-license-note"><span data-i18n="about_license_note_pre">Full license text is in the repository </span><a href="https://github.com/ishizakahiroshi/any-ai-cli/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" class="about-link">LICENSE</a><span> / </span><a href="https://github.com/ishizakahiroshi/any-ai-cli/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener noreferrer" class="about-link">THIRD_PARTY_NOTICES.md</a><span> / </span><a href="https://github.com/ishizakahiroshi/any-ai-cli/blob/main/web/src/vendor/THIRD_PARTY_LICENSES.txt" target="_blank" rel="noopener noreferrer" class="about-link">THIRD_PARTY_LICENSES.txt</a><span data-i18n="about_license_note_suffix">.</span></p>
         </section>
         <section class="about-section">
           <h3 class="about-heading" data-i18n="about_github">GitHub</h3>
           <div class="about-github-btns">
-            <a href="https://github.com/ishizakahiroshi/any-ai-cli" target="_blank" rel="noopener" class="about-gh-btn" data-i18n="about_repo">Repository</a>
-            <a href="https://github.com/ishizakahiroshi/any-ai-cli/releases" target="_blank" rel="noopener" class="about-gh-btn" data-i18n="about_releases">Releases</a>
+            <a href="https://github.com/ishizakahiroshi/any-ai-cli" target="_blank" rel="noopener noreferrer" class="about-gh-btn" data-i18n="about_repo">Repository</a>
+            <a href="https://github.com/ishizakahiroshi/any-ai-cli/releases" target="_blank" rel="noopener noreferrer" class="about-gh-btn" data-i18n="about_releases">Releases</a>
           </div>
         </section>
       </div>
@@ -865,25 +865,9 @@
   <div id="model-picker-overlay" hidden></div>
 
   <!--
-    classic-script 読込順の契約（C9: implicit-script-order-coupling の明文化）
-
-    これらは ES module ではなく classic script のため、トップレベルの const/let/function は
-    ページ共有のグローバルスコープに入り、後続スクリプトから参照できる。順序が意味を持つのは
-    「ロード時にトップレベルで即時実行される処理」が依存先より後に来る必要がある点。
-    並び替える場合は以下の依存契約を壊さないこと（中期: ESM 化で import 依存に置換予定）。
-
-      1. vendor/*            — 依存なし。最初に読む（xterm, marked, purify, highlight）。
-      2. i18n.js             — window.t() を使う全 UI コードより前。
-      3. app/util.js         — 共通ヘルパ。多数が依存。
-      4. app/user-prefs.js   — setUserPref 等。state.js より前。
-      5. app/state.js        — グローバル状態（sessions / favorites / sessionOrder /
-                               orderSessions など）の正本。以降の全モジュールの前提。
-      6. app/multi-pane.js   — window.multiPaneManager を生成。app.js より前。
-      7. app.js              — コア初期化。
-      8. app/session-list.js 〜 files-view.js — ドメインロジック。
-         - approval は parser → ui → approval の順（後者が前者の API に依存）。
-         - chat-history.js は session-list.js（orderSessions 経由の整列）後に読む。
-         - git-view.js は files-view.js（window.GitGraphView 参照）より前。
+    vendor は classic script のまま先に読み込む（xterm, marked, purify, highlight）。
+    app 本体は web/src の TypeScript ESM を npm run build で web/dist へ出力し、
+    app-entry.js から import 依存グラフで起動する。app 側の読込順は import が正本。
   -->
   <script src="/vendor/xterm.min.js"></script>
   <script src="/vendor/xterm-addon-fit.min.js"></script>

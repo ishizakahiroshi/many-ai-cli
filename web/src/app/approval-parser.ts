@@ -278,7 +278,7 @@
       .replace(/\s{2,}.*$/, '')
       .replace(/\s*\d+\.\s*[A-Za-z].*$/, '')
       .trim();
-    const opt = { num: parseInt(numText, 10), label, isCurrent: !!isCurrent };
+    const opt: any = { num: parseInt(numText, 10), label, isCurrent: !!isCurrent };
     const sendText = shortcutSendText(label);
     if (sendText) opt._sendText = sendText;
     return opt;
@@ -435,9 +435,6 @@
   Object.assign(root, api);
   root._approvalCtxHash = approvalCtxHash;
 
-  if (typeof module !== 'undefined' && module.exports) {
-    module.exports = api;
-  }
 })(typeof window !== 'undefined' ? window : globalThis);
 
 // --- ESM re-exports from the IIFE-published approval parser API (generated) ---

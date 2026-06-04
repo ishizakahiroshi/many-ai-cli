@@ -25,8 +25,8 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   const spawnModelDatalist = document.getElementById('spawn-model-datalist');
   const spawnModelClearBtn = document.getElementById('spawn-model-clear');
   const spawnModelRefreshBtn = document.getElementById('spawn-model-refresh');
-  let codexModelSelection = null;
-  let claudeModelSelection = null;
+  let codexModelSelection: any = null;
+  let claudeModelSelection: any = null;
 
   // /api/models から取得した groups の最新キャッシュ。
   // populateModelDatalist と resolveRoute で共有する。
@@ -495,8 +495,8 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   // provider共通のモデル選択モーダル
   // isHighRiskFn(candidateModel) → bool
   // opts: { titleKey, permSummaryKey }
-  function openModelModal(currentModel, isHighRiskFn, opts) {
-    return new Promise((resolve) => {
+  function openModelModal(currentModel, isHighRiskFn, opts): Promise<any> {
+    return new Promise<any>((resolve) => {
       const overlay = document.getElementById('model-picker-overlay');
       if (!overlay) { resolve(null); return; }
       const display = (currentModel || '').trim() || '(none)';
@@ -644,7 +644,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         } catch (_) {}
       }
 
-      const bodyObj = { provider, cwd, model, label };
+      const bodyObj: any = { provider, cwd, model, label };
       if (utf8Session) bodyObj.utf8_session = true;
       if (route) bodyObj.route = route;
       if (provider === 'claude') {

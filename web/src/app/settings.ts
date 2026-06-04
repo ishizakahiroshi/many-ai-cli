@@ -368,8 +368,8 @@ export function initUsageDropdown() {
   });
 }
 
-export function appConfirm({ title, message, confirmText, cancelText, kind = 'default' }) {
-  return new Promise((resolve) => {
+export function appConfirm({ title, message, confirmText, cancelText, kind = 'default' }): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
     const overlay = document.getElementById('model-picker-overlay');
     if (!overlay) { resolve(window.confirm(message)); return; }
 
@@ -1872,11 +1872,11 @@ export function openCardCtxMenu(x, y, sid) {
       const sess = sessions.get(id);
       if (!sess) return;
       if (action === 'open-git') {
-        const gr = sess.git_root || sess.cwd || '';
+        const gr = String(sess.git_root || sess.cwd || '');
         if (!gr) return;
         FilesTabManager.openGitTab(id, gr, sess.branch || '');
       } else if (action === 'open-files') {
-        const gr = sess.git_root || sess.cwd || '';
+        const gr = String(sess.git_root || sess.cwd || '');
         const pk = sess.project || (gr ? gr.split(/[\\/]/).filter(Boolean).pop() : '__no_project__');
         if (!gr) return;
         FilesTabManager.openFilesTab(id, pk, gr, gr);
@@ -1914,7 +1914,7 @@ document.addEventListener('keydown', (e) => {
     if (sid == null) return;
     const sess = sessions.get(sid);
     if (!sess) return;
-    const gr = sess.git_root || sess.cwd || '';
+    const gr = String(sess.git_root || sess.cwd || '');
     if (!gr) return;
     e.preventDefault();
     e.stopPropagation();
@@ -1924,7 +1924,7 @@ document.addEventListener('keydown', (e) => {
     if (sid == null) return;
     const sess = sessions.get(sid);
     if (!sess) return;
-    const gr = sess.git_root || sess.cwd || '';
+    const gr = String(sess.git_root || sess.cwd || '');
     if (!gr) return;
     const pk = sess.project || (gr ? gr.split(/[\\/]/).filter(Boolean).pop() : '__no_project__');
     e.preventDefault();

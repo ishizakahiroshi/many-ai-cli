@@ -111,7 +111,8 @@ function setupApprovalQueue() {
   });
   document.addEventListener('click', (e) => {
     if (p.hidden) return;
-    if (p.contains(e.target) || b.contains(e.target)) return;
+    const target = e.target instanceof Node ? e.target : null;
+    if (p.contains(target) || b.contains(target)) return;
     p.hidden = true;
     renderQueue();
   });

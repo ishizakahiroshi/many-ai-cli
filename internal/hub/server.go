@@ -60,7 +60,7 @@ const (
 	// ただし Hub 自身の go_vt detector が native prompt を見ている間
 	// （nativeApprovalSig != ""）はリース切れでもクリアしない。
 	approvalVisibleLease = 15 * time.Second
-	wsMaxPayloadBytes            = 2 << 20 // 2 MiB: UI/wrapper JSON frame receive cap
+	wsMaxPayloadBytes    = 2 << 20 // 2 MiB: UI/wrapper JSON frame receive cap
 
 	// OSC シーケンスをユーザーターン境界マーカーとして ptyBuf に注入する。
 	// xterm.js はこのシーケンスを画面に表示しない。
@@ -465,7 +465,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		}
 	}
 	if devMode {
-		logger.Info("dev mode: serving web assets from ./web/src/")
+		logger.Info("dev mode: serving web assets from ./web/dist/")
 	}
 	if push, err := newPushManager(logger); err != nil {
 		logger.Warn("web push disabled", "err", err)
@@ -474,9 +474,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	}
 	var staticHandler http.Handler
 	if devMode {
-		staticHandler = http.FileServer(http.Dir(filepath.Join("web", "src")))
+		staticHandler = http.FileServer(http.Dir(filepath.Join("web", "dist")))
 	} else {
-		subFS, err := fs.Sub(web.FS, "src")
+		subFS, err := fs.Sub(web.FS, "dist")
 		if err != nil {
 			return nil, err
 		}
@@ -581,7 +581,10 @@ func withSecurityHeaders(next http.Handler) http.Handler {
 func setSecurityHeaders(h http.Header) {
 	h.Set("Content-Security-Policy", contentSecurityPolicy)
 	h.Set("X-Frame-Options", "DENY")
+	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Referrer-Policy", "no-referrer")
+	h.Set("Cross-Origin-Opener-Policy", "same-origin")
+	h.Set("Permissions-Policy", "camera=(), geolocation=(), payment=(), usb=(), microphone=(self)")
 	h.Set("Service-Worker-Allowed", "/")
 }
 
@@ -703,9 +706,9 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	var b []byte
 	var err error
 	if s.devMode {
-		b, err = os.ReadFile(filepath.Join("web", "src", "index.html"))
+		b, err = os.ReadFile(filepath.Join("web", "dist", "index.html"))
 	} else {
-		b, err = web.FS.ReadFile("src/index.html")
+		b, err = web.FS.ReadFile("dist/index.html")
 	}
 	if err != nil {
 		http.Error(w, "asset missing", http.StatusInternalServerError)

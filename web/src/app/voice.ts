@@ -40,7 +40,7 @@ import { getActiveTriggerPhrase, normalizeTriggerMatchText, textEndsWithTriggerP
     return v && v !== key ? v : fallback;
   }
 
-  function pushVoiceDiagEvent(recognitionId, event, detail) {
+  function pushVoiceDiagEvent(recognitionId, event, detail: any = {}) {
     const item = {
       timestamp: new Date().toISOString(),
       recognitionId: recognitionId == null ? null : recognitionId,
@@ -97,7 +97,7 @@ import { getActiveTriggerPhrase, normalizeTriggerMatchText, textEndsWithTriggerP
     diagGuideEl.hidden = false;
   }
 
-  function setVoiceDiagStatus(status, detail) {
+  function setVoiceDiagStatus(status, detail = null) {
     voiceDiagStatus = status;
     voiceDiagLastDetail = detail || '';
     if (diagStatusEl) {
@@ -212,7 +212,7 @@ import { getActiveTriggerPhrase, normalizeTriggerMatchText, textEndsWithTriggerP
       stuckTimer = null;
       hardTimer = null;
     }
-    function finish(status, detail) {
+    function finish(status, detail = '') {
       if (settled) return;
       settled = true;
       clearTimers();
@@ -220,7 +220,7 @@ import { getActiveTriggerPhrase, normalizeTriggerMatchText, textEndsWithTriggerP
       setVoiceDiagStatus(status, detail);
       try { diag.abort(); } catch (_) {}
     }
-    function event(name, detail) {
+    function event(name, detail = {}) {
       pushVoiceDiagEvent(diagId, name, detail || {});
     }
 
@@ -994,5 +994,5 @@ import { getActiveTriggerPhrase, normalizeTriggerMatchText, textEndsWithTriggerP
 
   window._wakewordGlobalActive = () => isGlobalActive;
   window._wakewordSessionActive = (id) => sessionWakeMap.get(id) || false;
-  window._stopWakewordForVoiceInput = stopHotwordForVoiceInput;
+  window._stopWakewordForVoiceInput = async () => { await stopHotwordForVoiceInput(); };
 })();

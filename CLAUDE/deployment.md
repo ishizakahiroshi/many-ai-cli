@@ -1,6 +1,6 @@
 # any-ai-cli ビルド・配布・デプロイ
 
-> 最終更新: 2026-05-24(日) 17:01:04
+> 最終更新: 2026-06-05(金) 05:19:37
 
 `any-ai-cli` は **Go 単一バイナリ + go:embed フロント** の構成。サーバーへのデプロイは無し（ユーザー PC にバイナリを置くだけ）。
 
@@ -16,12 +16,13 @@
 
 ```bash
 cd web
-pnpm install        # または npm install
-pnpm run build      # web/dist/ が生成される
+npm ci              # package-lock.json に固定された devDependencies を取得
+npm run build       # web/dist/ が生成される
 cd ..
 ```
 
 `web/dist/` が `internal/hub/` の `embed.FS` に取り込まれる前提で実装すること。
+`git archive HEAD` などでソーススナップショットを展開した場合も、archive には `web/dist/` が含まれないため、展開後に必ず同じフロントビルドを実行してから Go ビルドする。
 
 ### Go バイナリビルド（クロスコンパイル）
 
@@ -125,7 +126,7 @@ make build
 ## ローカル動作確認フロー
 
 ```
-1. cd web && pnpm run build    # web/dist/ を生成
+1. cd web && npm ci && npm run build    # web/dist/ を生成
 2. cd .. && go build ./...     # 全パッケージのビルド確認
 3. go test ./...               # 単体テスト
 4. ./any-ai-cli serve          # Hub 起動

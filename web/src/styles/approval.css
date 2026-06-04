@@ -30,6 +30,7 @@
   color: var(--muted);
   padding: 5px 8px;
   font-size: 0.78rem;
+  min-height: var(--control-h-sm);
   cursor: pointer;
 }
 #approval-queue-btn.has-pending {
@@ -90,6 +91,7 @@
   color: var(--text);
   text-align: left;
   cursor: pointer;
+  min-height: var(--control-h-lg);
 }
 .approval-queue-item:hover,
 .approval-queue-item.active {
@@ -165,9 +167,10 @@
   background: var(--bg-elev);
   color: var(--text);
   border: 1px solid var(--line-soft);
-  border-radius: 14px;
-  padding: 5px 14px;
+  border-radius: 8px;
+  padding: 7px 14px;
   font-size: 0.8rem;
+  min-height: var(--control-h-sm);
   cursor: pointer;
   font-family: inherit;
   max-width: 100%;
@@ -245,9 +248,10 @@
   background: var(--bg-elev);
   color: var(--text);
   border: 1px solid var(--line-soft);
-  border-radius: 14px;
-  padding: 5px 14px;
+  border-radius: 8px;
+  padding: 7px 14px;
   font-size: 0.8rem;
+  min-height: var(--control-h-sm);
   cursor: pointer;
   font-family: inherit;
   transition: background 0.12s, border-color 0.12s, color 0.12s, opacity 0.12s;
@@ -279,8 +283,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
+  min-width: var(--control-h-sm);
+  min-height: var(--control-h-sm);
 }
 
 /* Approval opt-in toast */
@@ -319,6 +325,7 @@
   border-radius: 6px;
   padding: 6px 16px;
   font-size: 0.82rem;
+  min-height: var(--control-h-md);
   font-weight: 600;
   cursor: pointer;
   transition: opacity 0.15s;
@@ -333,6 +340,7 @@
   border-radius: 6px;
   padding: 6px 14px;
   font-size: 0.82rem;
+  min-height: var(--control-h-md);
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
 }

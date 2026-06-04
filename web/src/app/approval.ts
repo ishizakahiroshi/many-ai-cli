@@ -449,7 +449,7 @@ export function handleGoApprovalDetected(message) {
   const options = normalizeGoApprovalOptions(message.approval_options);
   if (options.length === 0) return;
   const sig = String(message.approval_sig || approvalSig(options));
-  options.forEach((opt) => {
+  options.forEach((opt: any) => {
     opt._approvalSource = 'go_vt';
     opt._approvalSig = sig;
   });

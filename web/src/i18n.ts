@@ -1,6 +1,13 @@
 // --- ESM late-bound i18n wrappers (generated; window.t is set by the IIFE below at runtime) ---
-export function t(...args) { return (typeof window.t === 'function') ? window.t(...args) : args[0]; }
-export function setLang(v) { return (typeof window.setLang === 'function') ? window.setLang(v) : undefined; }
+export type I18nVars = Record<string, unknown>;
+
+export function t(key: string, vars?: I18nVars | string): string {
+  return (typeof window.t === 'function') ? window.t(key, vars as I18nVars) : key;
+}
+
+export function setLang(v: string): void | undefined {
+  return (typeof window.setLang === 'function') ? window.setLang(v) : undefined;
+}
 
 (async () => {
   const stored = localStorage.getItem('ai_cli_hub_lang');
@@ -11,26 +18,29 @@ export function setLang(v) { return (typeof window.setLang === 'function') ? win
   const res = await fetch('/i18n/' + window.__lang + '.json');
   const dict = await res.json();
 
-  window.t = (key, vars) => {
+  window.t = (key: string, vars?: I18nVars | string) => {
     let s = dict[key] ?? key;
-    if (vars) Object.entries(vars).forEach(([k, v]) => { s = s.replaceAll('{' + k + '}', v); });
+    if (vars && typeof vars === 'object') Object.entries(vars).forEach(([k, v]) => { s = s.replaceAll('{' + k + '}', String(v)); });
     return String(s);
   };
 
-  window.setLang = (lang) => {
+  window.setLang = (lang: string) => {
     localStorage.setItem('ai_cli_hub_lang', lang);
     location.reload();
   };
 
   function applyI18n() {
     document.querySelectorAll('[data-i18n]').forEach(el => {
-      el.textContent = window.t(el.dataset.i18n);
+      const target = el as HTMLElement;
+      target.textContent = t(target.dataset.i18n || '');
     });
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-      el.placeholder = window.t(el.dataset.i18nPlaceholder);
+      const target = el as HTMLInputElement;
+      target.placeholder = t(target.dataset.i18nPlaceholder || '');
     });
     document.querySelectorAll('[data-i18n-tooltip]').forEach(el => {
-      el.dataset.tooltip = window.t(el.dataset.i18nTooltip);
+      const target = el as HTMLElement;
+      target.dataset.tooltip = t(target.dataset.i18nTooltip || '');
     });
   }
 

@@ -1,4 +1,6 @@
 **/dist/
+web/dist/
+web/node_modules/
 # winres が生成する Windows リソース。リリース時に goreleaser の before hooks で
 # タグ版数から都度再生成する運用に切り替えたため、どの階層のものも追跡しない。
 rsrc_windows_*.syso
