@@ -1213,6 +1213,11 @@ export const FilesTreeView = (function () {
     moveBtn.textContent = '↗';
     moveBtn.disabled = true;
 
+    const newFolderBtn = document.createElement('button');
+    newFolderBtn.className = 'files-tree-toolbar-btn';
+    newFolderBtn.title = t('files_tree_new_folder_tooltip') || 'Create new folder';
+    newFolderBtn.textContent = '📁+';
+
     const closeTabBtn = document.createElement('button');
     closeTabBtn.className = 'files-tree-toolbar-btn';
     closeTabBtn.title = t('files_tree_close_tab_tooltip') || 'Close tab';
@@ -1222,6 +1227,7 @@ export const FilesTreeView = (function () {
     toolbar.appendChild(openFolderBtn);
     toolbar.appendChild(searchBtn);
     toolbar.appendChild(moveBtn);
+    toolbar.appendChild(newFolderBtn);
 
     // 検索インプット（初期非表示）
     const searchWrap = document.createElement('div');
@@ -1578,6 +1584,41 @@ export const FilesTreeView = (function () {
     }
 
     moveBtn.addEventListener('click', () => openMoveDialog());
+
+    newFolderBtn.addEventListener('click', async () => {
+      const name = window.prompt(t('files_tree_new_folder_prompt') || 'Enter new folder name');
+      if (name == null) return;
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      try {
+        const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
+        const url = `/api/files-mkdir?token=${encodeURIComponent(token)}${sessionQs}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dir: filesRoot, name: trimmed }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+          await loadTree();
+          return;
+        }
+        const errCode = data && data.error;
+        let errLabel;
+        if (errCode === 'already_exists') {
+          errLabel = t('files_tree_new_folder_error_already_exists') || 'A file or folder with that name already exists';
+        } else if (errCode === 'bad_request') {
+          errLabel = t('files_tree_new_folder_error_bad_request') || 'Invalid folder name';
+        } else if (errCode === 'forbidden') {
+          errLabel = t('files_tree_new_folder_error_forbidden') || 'Creating folders here is not allowed';
+        } else {
+          errLabel = (data && (data.detail || data.error)) || ('HTTP ' + res.status);
+        }
+        showToast(`${t('files_tree_new_folder_failed') || 'Failed to create folder'}: ${errLabel}`);
+      } catch (err) {
+        showToast(`${t('files_tree_new_folder_failed') || 'Failed to create folder'}: ${String(err)}`);
+      }
+    });
 
     reloadBtn.addEventListener('click', () => loadTree());
 
@@ -2002,6 +2043,13 @@ export const FilesPreview = (function () {
     reloadBtn.textContent = '🔄';
     reloadBtn.disabled = true;
 
+    const editBtn = document.createElement('button');
+    editBtn.className = 'files-preview-toolbar-btn';
+    editBtn.title = t('files_preview_edit_tooltip') || 'Edit';
+    editBtn.textContent = '✏️';
+    editBtn.disabled = true;
+    editBtn.hidden = true;
+
     const closeBtn = document.createElement('button');
     closeBtn.className = 'files-preview-toolbar-btn';
     closeBtn.title = t('files_preview_close_tooltip') || 'Close preview';
@@ -2013,6 +2061,7 @@ export const FilesPreview = (function () {
     toolbar.appendChild(copyPathBtn);
     toolbar.appendChild(searchBtn);
     toolbar.appendChild(reloadBtn);
+    toolbar.appendChild(editBtn);
     toolbar.appendChild(closeBtn);
 
     containerEl.appendChild(toolbar);
@@ -2058,6 +2107,16 @@ export const FilesPreview = (function () {
     let currentRelPath = null;
     let highlightMatches = [];
     let highlightIndex = 0;
+
+    // ──── 編集モード状態 ────
+    let editMode = false;           // 編集モード中フラグ
+    let editBaseContent = null;     // 編集開始時のオリジナル内容
+    let editBaseMtime = null;       // 競合検出用 mtime（RFC3339 文字列）
+    let editTextarea = null;        // 現在の <textarea> 要素
+    let editSaveBtn = null;         // 保存ボタン
+    let editDiscardBtn = null;      // 破棄ボタン
+    let editStatusEl = null;        // ステータス行（競合通知等）
+    let editBarEl = null;           // 編集モード操作バー
 
     function setBreadcrumb(pathText, fullPath) {
       const text = pathText || (t('files_preview_no_file') || 'No file selected');
@@ -2171,8 +2230,178 @@ export const FilesPreview = (function () {
       else { clearHighlights(); searchInput.value = ''; }
     });
 
+    // ──── 編集モード操作 ────
+
+    /** 編集モードを終了してプレビュー表示に戻す（UI のみリセット） */
+    function exitEditMode() {
+      editMode = false;
+      editBaseContent = null;
+      editBaseMtime = null;
+      editTextarea = null;
+      editSaveBtn = null;
+      editDiscardBtn = null;
+      editStatusEl = null;
+      if (editBarEl) {
+        try { editBarEl.remove(); } catch (_) {}
+        editBarEl = null;
+      }
+      // ツールバーボタン復元
+      editBtn.hidden = true;
+      editBtn.disabled = true;
+      [openEditorBtn, openFolderBtn, copyPathBtn, searchBtn, reloadBtn].forEach(b => { b.disabled = !currentAbsPath; });
+      searchBtn.disabled = !currentAbsPath || isMediaPath(currentAbsPath);
+    }
+
+    /**
+     * テキストファイルを編集モードで開く。
+     * content / mtime は loadFile 時に取得済みのものを使う。
+     */
+    function enterEditMode(content, mtime) {
+      editMode = true;
+      editBaseContent = content;
+      editBaseMtime = mtime;
+
+      // ツールバーボタンを無効化（編集中は検索・リロード等を封じる）
+      [openEditorBtn, openFolderBtn, copyPathBtn, searchBtn, reloadBtn, editBtn].forEach(b => { b.disabled = true; });
+
+      // contentEl を textarea に切り替え
+      contentEl.innerHTML = '';
+      const textarea = document.createElement('textarea');
+      textarea.className = 'files-preview-edit-textarea';
+      textarea.value = content;
+      textarea.spellcheck = false;
+      textarea.autocomplete = 'off';
+      textarea.autocorrect = 'off';
+      textarea.autocapitalize = 'off';
+      contentEl.appendChild(textarea);
+      editTextarea = textarea;
+      textarea.focus();
+
+      // 編集操作バー（保存 / 破棄 / ステータス）
+      const bar = document.createElement('div');
+      bar.className = 'files-preview-edit-bar';
+      editBarEl = bar;
+
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'files-preview-toolbar-btn files-preview-edit-save-btn';
+      saveBtn.textContent = t('files_preview_edit_save') || '保存';
+      saveBtn.title = t('files_preview_edit_save_tooltip') || 'Save file';
+      editSaveBtn = saveBtn;
+
+      const discardBtn = document.createElement('button');
+      discardBtn.className = 'files-preview-toolbar-btn';
+      discardBtn.textContent = t('files_preview_edit_discard') || '破棄';
+      discardBtn.title = t('files_preview_edit_discard_tooltip') || 'Discard changes';
+      editDiscardBtn = discardBtn;
+
+      const statusEl = document.createElement('span');
+      statusEl.className = 'files-preview-edit-status';
+      editStatusEl = statusEl;
+
+      bar.appendChild(saveBtn);
+      bar.appendChild(discardBtn);
+      bar.appendChild(statusEl);
+      containerEl.insertBefore(bar, bodyEl);
+
+      // 保存
+      saveBtn.addEventListener('click', () => doSave(false));
+
+      // 破棄
+      discardBtn.addEventListener('click', () => {
+        const changed = editTextarea && editTextarea.value !== editBaseContent;
+        if (changed) {
+          const msg = t('files_preview_edit_discard_confirm') || 'Discard changes?';
+          if (!window.confirm(msg)) return;
+        }
+        exitEditMode();
+        loadFile(currentAbsPath, currentRelPath);
+      });
+    }
+
+    /**
+     * POST /api/files-save を呼ぶ。
+     * forceOverwrite=true のときは baseMtime を serverMtime で上書きして再送する。
+     */
+    async function doSave(forceOverwrite, serverMtime) {
+      if (!currentAbsPath || !editTextarea) return;
+      if (editSaveBtn) editSaveBtn.disabled = true;
+      if (editStatusEl) editStatusEl.textContent = t('files_preview_edit_saving') || '保存中…';
+
+      const baseMtime = forceOverwrite ? serverMtime : editBaseMtime;
+      const body = {
+        path: currentAbsPath,
+        content: editTextarea.value,
+      };
+      if (baseMtime) body.baseMtime = baseMtime;
+
+      try {
+        const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
+        const url = `/api/files-save?token=${encodeURIComponent(token)}${sessionQs}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+          // 保存成功 → 編集モード終了してプレビュー再取得
+          exitEditMode();
+          loadFile(currentAbsPath, currentRelPath);
+          return;
+        }
+        if (res.status === 409) {
+          // 競合: 他プロセスによる変更
+          const newMtime = data.mtime || null;
+          showConflict(newMtime);
+          return;
+        }
+        // その他エラー
+        const msg = data.detail || data.error || ('HTTP ' + res.status);
+        if (editStatusEl) editStatusEl.textContent = t('files_preview_edit_save_error') || ('保存失敗: ' + msg);
+        if (editSaveBtn) editSaveBtn.disabled = false;
+      } catch (err) {
+        if (editStatusEl) editStatusEl.textContent = String(err);
+        if (editSaveBtn) editSaveBtn.disabled = false;
+      }
+    }
+
+    /** 409 競合時の UI を表示する */
+    function showConflict(serverMtime) {
+      if (!editStatusEl || !editBarEl) return;
+      editStatusEl.textContent = '';
+
+      const conflictMsg = document.createElement('span');
+      conflictMsg.className = 'files-preview-edit-conflict';
+      conflictMsg.textContent = t('files_preview_edit_conflict_msg') || '他のプロセスがこのファイルを変更しました';
+
+      const reloadLatestBtn = document.createElement('button');
+      reloadLatestBtn.className = 'files-preview-toolbar-btn';
+      reloadLatestBtn.textContent = t('files_preview_edit_conflict_reload') || '最新を読み直す';
+      reloadLatestBtn.addEventListener('click', () => {
+        exitEditMode();
+        loadFile(currentAbsPath, currentRelPath);
+      });
+
+      const overwriteBtn = document.createElement('button');
+      overwriteBtn.className = 'files-preview-toolbar-btn files-preview-edit-save-btn';
+      overwriteBtn.textContent = t('files_preview_edit_conflict_overwrite') || '上書き保存';
+      overwriteBtn.addEventListener('click', () => {
+        editStatusEl.innerHTML = '';
+        doSave(true, serverMtime);
+      });
+
+      editStatusEl.appendChild(conflictMsg);
+      editStatusEl.appendChild(reloadLatestBtn);
+      editStatusEl.appendChild(overwriteBtn);
+
+      if (editSaveBtn) editSaveBtn.disabled = false;
+    }
+
     // ──── ファイルロード ────
     async function loadFile(absPath, relPath) {
+      // 編集モード中なら先にリセット（別ファイルを選んだ場合等）
+      if (editMode) exitEditMode();
+
       contentEl.innerHTML = `<div class="files-preview-loading">${escapeHtml(t('files_tab_loading') || 'Loading…')}</div>`;
       clearHighlights();
       searchBar.hidden = true;
@@ -2228,6 +2457,14 @@ export const FilesPreview = (function () {
         const data = await res.json();
         const content = data.content || '';
         const isMd = /\.md$/i.test(absPath);
+
+        // 編集ボタンの表示制御: truncated ファイルは編集不可
+        const canEdit = !data.truncated;
+        editBtn.hidden = !canEdit;
+        editBtn.disabled = !canEdit;
+        // content と mtime を保持（編集モード開始時・doSave の baseMtime に使う）
+        editBaseContent = content;
+        editBaseMtime = data.mtime || null;
 
         if (data.truncated) {
           const warn = document.createElement('div');
@@ -2289,13 +2526,22 @@ export const FilesPreview = (function () {
       if (currentAbsPath) loadFile(currentAbsPath, currentRelPath);
     });
     closeBtn.addEventListener('click', () => {
+      if (editMode) exitEditMode();
       currentAbsPath = null;
       currentRelPath = null;
       setBreadcrumb('');
       contentEl.innerHTML = '';
       clearHighlights();
       searchBar.hidden = true;
+      editBtn.hidden = true;
+      editBtn.disabled = true;
       [openEditorBtn, openFolderBtn, copyPathBtn, searchBtn, reloadBtn, closeBtn].forEach(b => { b.disabled = true; });
+    });
+
+    editBtn.addEventListener('click', () => {
+      if (editMode || !currentAbsPath) return;
+      // editBaseContent / editBaseMtime は loadFile 完了時に設定済み
+      enterEditMode(editBaseContent || '', editBaseMtime);
     });
 
     // 外部 API
@@ -2307,6 +2553,9 @@ export const FilesPreview = (function () {
         setBreadcrumb(dispPath, absPath);
         [openEditorBtn, openFolderBtn, copyPathBtn, searchBtn, reloadBtn, closeBtn].forEach(b => { b.disabled = false; });
         searchBtn.disabled = isMediaPath(absPath);
+        // 編集ボタンはロード後に truncated 判定で設定する（初期は非表示）
+        editBtn.hidden = true;
+        editBtn.disabled = true;
         loadFile(absPath, relPath);
       },
     };

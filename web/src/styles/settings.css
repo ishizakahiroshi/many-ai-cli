@@ -8,7 +8,7 @@
   right: 8px;
   width: 520px;
   max-width: calc(100vw - 16px);
-  max-height: calc(100vh - 60px);
+  max-height: calc(100dvh - 60px);
   background: var(--bg-elev);
   border: 1px solid var(--line);
   border-radius: 8px;

@@ -41,11 +41,14 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	sshSession, hostIP := hostNetInfo()
 	writeJSON(w, map[string]any{
 		"cwd":             s.hubCWD,
 		"version":         s.version,
 		"runtime_mode":    mode,
 		"runtime_label":   runtimeLabel(mode),
+		"ssh":             sshSession,
+		"host_ip":         hostIP,
 		"userAvatar":      userAvatar,
 		"userDisplayName": userDisplayName,
 	})

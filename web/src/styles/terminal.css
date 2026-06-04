@@ -104,6 +104,41 @@
 /* 入力バー外枠 */
 #input-bar-outer { position: relative; flex-shrink: 0; }
 
+#mobile-keyboard-panel {
+  display: none;
+  flex-shrink: 0;
+  background: var(--bg-elev);
+  border-top: 1px solid var(--line);
+  padding: 6px 8px;
+}
+#mobile-keyboard-panel[hidden] { display: none !important; }
+#mobile-key-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+#mobile-key-row::-webkit-scrollbar { display: none; }
+#mobile-key-row button {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Consolas, monospace;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+#mobile-key-row button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
 /* スラッシュコマンドメニュー */
 #slash-menu {
   position: absolute;
@@ -270,7 +305,13 @@
 }
 #quick-model-btn { margin-left: 6px; }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) {
+  #mobile-keyboard-toggle {
+    display: flex;
+  }
+  #mobile-keyboard-panel:not([hidden]) {
+    display: block;
+  }
   #input-wrap {
     gap: 6px;
     padding-left: 10px;
@@ -287,6 +328,21 @@
     font-size: 0.68rem;
   }
   #quick-model-btn { margin-left: 2px; }
+  #input-tools {
+    overflow-x: auto;
+    max-width: 42vw;
+    scrollbar-width: none;
+  }
+  #input-tools::-webkit-scrollbar { display: none; }
+  #input-bar {
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (min-width: 721px) and (pointer: fine) {
+  #mobile-keyboard-toggle {
+    display: none;
+  }
 }
 
 /* Tool outputs panel */

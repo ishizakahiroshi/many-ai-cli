@@ -258,6 +258,16 @@ type UserPrefsApproval struct {
 	AutoSwitch bool `yaml:"auto_switch,omitempty" json:"auto_switch,omitempty"`
 }
 
+// UserPrefsDesktopNotifications はページ内 Notification API の設定。
+type UserPrefsDesktopNotifications struct {
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+}
+
+// UserPrefsPushNotifications は Service Worker / Web Push の設定。
+type UserPrefsPushNotifications struct {
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+}
+
 // UserPrefsQuickCmds はクイックコマンドの設定。
 type UserPrefsQuickCmds struct {
 	Cmd1 string `yaml:"cmd1,omitempty" json:"cmd1,omitempty"`
@@ -298,22 +308,24 @@ type UserPrefsDisplay struct {
 // UserPrefs はサーバ側（config.yaml: user_prefs:）に保存するユーザー機能設定。
 // 端末・ポート横断で共有する D2 分類の設定を全て保持する。
 type UserPrefs struct {
-	Trigger                  UserPrefsTrigger     `yaml:"trigger,omitempty"      json:"trigger,omitempty"`
-	NotifySound              UserPrefsNotifySound `yaml:"notify_sound,omitempty" json:"notify_sound,omitempty"`
-	Approval                 UserPrefsApproval    `yaml:"approval,omitempty"     json:"approval,omitempty"`
-	QuickCmds                UserPrefsQuickCmds   `yaml:"quick_cmds,omitempty"   json:"quick_cmds,omitempty"`
-	UsageLinks               UserPrefsUsageLinks  `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
-	Voice                    UserPrefsVoice       `yaml:"voice,omitempty"        json:"voice,omitempty"`
-	Favorites                []string             `yaml:"favorites,omitempty"        json:"favorites,omitempty"`
-	SessionOrder             []string             `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
-	GroupOrder               []string             `yaml:"group_order,omitempty"      json:"group_order,omitempty"`
-	ProjectFavorites         []string             `yaml:"project_favorites,omitempty" json:"project_favorites,omitempty"`
-	CwdHistory               []string             `yaml:"cwd_history,omitempty"      json:"cwd_history,omitempty"`
-	Spawn                    UserPrefsSpawn       `yaml:"spawn,omitempty"            json:"spawn,omitempty"`
-	Display                  UserPrefsDisplay     `yaml:"display,omitempty"          json:"display,omitempty"`
-	MigratedFromLocalstorage bool                 `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
-	Avatar                   string               `yaml:"avatar,omitempty"       json:"avatar,omitempty"`
-	DisplayName              string               `yaml:"display_name,omitempty" json:"display_name,omitempty"`
+	Trigger                  UserPrefsTrigger              `yaml:"trigger,omitempty"      json:"trigger,omitempty"`
+	NotifySound              UserPrefsNotifySound          `yaml:"notify_sound,omitempty" json:"notify_sound,omitempty"`
+	DesktopNotifications     UserPrefsDesktopNotifications `yaml:"desktop_notifications,omitempty" json:"desktop_notifications,omitempty"`
+	PushNotifications        UserPrefsPushNotifications    `yaml:"push_notifications,omitempty" json:"push_notifications,omitempty"`
+	Approval                 UserPrefsApproval             `yaml:"approval,omitempty"     json:"approval,omitempty"`
+	QuickCmds                UserPrefsQuickCmds            `yaml:"quick_cmds,omitempty"   json:"quick_cmds,omitempty"`
+	UsageLinks               UserPrefsUsageLinks           `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
+	Voice                    UserPrefsVoice                `yaml:"voice,omitempty"        json:"voice,omitempty"`
+	Favorites                []string                      `yaml:"favorites,omitempty"        json:"favorites,omitempty"`
+	SessionOrder             []string                      `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
+	GroupOrder               []string                      `yaml:"group_order,omitempty"      json:"group_order,omitempty"`
+	ProjectFavorites         []string                      `yaml:"project_favorites,omitempty" json:"project_favorites,omitempty"`
+	CwdHistory               []string                      `yaml:"cwd_history,omitempty"      json:"cwd_history,omitempty"`
+	Spawn                    UserPrefsSpawn                `yaml:"spawn,omitempty"            json:"spawn,omitempty"`
+	Display                  UserPrefsDisplay              `yaml:"display,omitempty"          json:"display,omitempty"`
+	MigratedFromLocalstorage bool                          `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
+	Avatar                   string                        `yaml:"avatar,omitempty"       json:"avatar,omitempty"`
+	DisplayName              string                        `yaml:"display_name,omitempty" json:"display_name,omitempty"`
 }
 
 // Clone returns a deep copy of p. It copies slice and map fields so callers can

@@ -24,6 +24,26 @@ let _wsReconnectTimer = null;
 // 場合は旧 ID キーのローカル状態（chatHistory / terminals 等）を破棄しないと
 // 同じ番号の別セッションに旧セッションのチャット履歴・バッファが混入する。
 let _hubInstance = null;
+let _pendingOpenSessionId = parseInt(new URLSearchParams(location.search).get('session_id') || '0', 10) || 0;
+
+function openSessionFromNotification(sessionId) {
+  const id = Number(sessionId || 0);
+  if (!id) return;
+  if (sessions.has(id)) {
+    activateSession(id);
+    return;
+  }
+  _pendingOpenSessionId = id;
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    const data = event.data || {};
+    if (data.type === 'any-ai-cli-open-session') {
+      openSessionFromNotification(data.session_id);
+    }
+  });
+}
 
 // Hub 再起動検出時に live session ID をキーとするローカル状態を全破棄する。
 // removeLocalSession がターミナル dispose・チャット履歴・承認系キャッシュ等の
@@ -103,6 +123,7 @@ export function _connectWs() {
     autoDismissTimers.forEach(t => clearTimeout(t));
     autoDismissTimers.clear();
     set_activeSessionId(null);
+    if (typeof window.syncMobileLayoutState === 'function') window.syncMobileLayoutState();
     updateShellBadge(null);
     updateTabNotification(0);
     const area = document.getElementById('terminal-area');
@@ -245,6 +266,11 @@ export function _connectWs() {
     });
     document.getElementById('summary').textContent = t('connected') || '接続済み';
     renderSessionList();
+    if (_pendingOpenSessionId && sessions.has(_pendingOpenSessionId)) {
+      const id = _pendingOpenSessionId;
+      _pendingOpenSessionId = 0;
+      activateSession(id);
+    }
     checkApprovalOnStartup();
     syncElapsedTimer();
   } else if (m.type === 'session_update') {

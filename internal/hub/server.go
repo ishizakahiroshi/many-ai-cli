@@ -33,12 +33,16 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-// idleAfter: PTY 出力が静止してから running → waiting に遷移するまでの時間。
+// idleAfter: PTY 出力が静止してから running → standby/waiting に遷移するまでの時間。
+// /workflows 等でバックグラウンドエージェントが動いている間は進捗ツリーの再描画が
+// 数秒おきのバースト出力になるため、500ms では running↔standby が点滅する。
+// 3s に延長してヒステリシスを持たせる（standby→running は markRunning で即時のまま。
+// 承認検出 waiting は approvalVisible フラグで idleAfter を待たず即時遷移するため影響なし）。
 // tickerInterval: 状態評価 ticker の間隔。
 // maxPTYBuf: UI 再接続時リプレイ用の PTY バッファ上限（セッションごと）。
 // uiPingInterval: UI WebSocket keepalive ping の送信間隔。
 const (
-	idleAfter                    = 500 * time.Millisecond
+	idleAfter                    = 3 * time.Second
 	tickerInterval               = 200 * time.Millisecond
 	maxPTYBuf                    = 512 * 1024 // 512 KB
 	replayTailForNonActive       = 64 * 1024  // 64 KB: 非アクティブセッションの UI 接続時 replay 上限
@@ -107,6 +111,11 @@ type session struct {
 	// JSON 外: wrapper に最後に送った PTY サイズ（同サイズの resize を skip して不要な SIGWINCH を防ぐ）
 	lastCols int
 	lastRows int
+
+	// JSON 外: 起動バナーからの初期モデル検出用。
+	// Model が空のセッションのみ対象。検出成功 or 累計バイト超過で打ち切る。
+	initialModelScanBytes int
+	initialModelScanDone  bool
 
 	// JSON 外: セッション履歴（JSONL）
 	StoreID   int64              `json:"-"`
@@ -246,6 +255,7 @@ type Server struct {
 	modelsCache       *modelsCache
 	modelsRemoteCache *ttlCache[modelsDefaults]
 	sessionStore      *sessionstore.Store
+	push              *pushManager
 	logMaintenanceMu  sync.Mutex
 
 	branchRefreshMu       sync.Mutex
@@ -309,6 +319,49 @@ var reSetModelTo = regexp.MustCompile(`Set model to ([^\r\n]+)`)
 // reCodexModelChanged は Codex CLI の /model コマンド出力からモデル名を抽出する。
 // 例: "• Model changed to gpt-5.5 medium" → "gpt-5.5 medium"
 var reCodexModelChanged = regexp.MustCompile(`Model changed to ([^\r\n]+)`)
+
+// 起動バナーからの初期モデル検出。--model 指定なしで起動したセッションでも
+// カードにモデル名を出すため、VT バッファのレンダリング済み行をスキャンする
+// （StripANSI したテキストはカーソル移動由来のスペースが落ちて使えない）。
+//
+// Claude Code: ロゴ 2 行目 "▝▜█████▛▘  Opus 4.8 (1M context) with medium effort · Claude Max"
+//
+//	→ ロゴの後ろを取り、" · <プラン>" と " with <x> effort" を落とす → "Opus 4.8 (1M context)"
+//
+// Codex CLI:  "│ model:       gpt-5.5 xhigh   /model to change │"
+//
+//	→ "loading"（初期表示）は除外
+//
+// Copilot CLI: 最下部ステータス行の右端に右寄せでモデル名
+//
+//	例: " ● Working ...   Claude Haiku 4.5" / "...   GPT-5 mini · low"
+//	→ 3 個以上の空白で区切った最後のセグメント。" · <effort>" を落とし、
+//	  モデル名らしさ（英字始まり + 数字を含む、または "Auto"）を検査する
+//
+// Cursor Agent: "<cwd> · <branch>" ステータス行の直上の非空行がモデル名
+//
+//	例: "  Auto" / 応答中は "  Auto · 7.4%"（context 使用率サフィックスを落とす）
+const claudeBannerLogoRow2 = "▝▜█████▛▘"
+
+var (
+	reClaudeBannerEffort  = regexp.MustCompile(`\s+with\s+\S+\s+effort$`)
+	reCodexBannerModel    = regexp.MustCompile(`model:\s+(.+?)\s+/model to change`)
+	reCopilotStatusSplit  = regexp.MustCompile(`\s{3,}`)
+	reCopilotEffortSuffix = regexp.MustCompile(`\s+·\s+(?:low|medium|high|xhigh)$`)
+	reCopilotModelLike    = regexp.MustCompile(`^[A-Za-z][\w.\- ()]*\d`)
+	reCursorPercentSuffix = regexp.MustCompile(`\s+·\s+\d+(?:\.\d+)?%$`)
+)
+
+// initialModelScanMaxBytes を超えても検出できなければ諦める（バナーは起動直後に出る）。
+const initialModelScanMaxBytes = 256 * 1024
+
+// initialModelScanProviders は起動バナー検出の対象 provider。
+var initialModelScanProviders = map[string]bool{
+	"claude":       true,
+	"codex":        true,
+	"copilot":      true,
+	"cursor-agent": true,
+}
 
 var (
 	modelChangeTokens = [][]byte{
@@ -398,6 +451,11 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	if devMode {
 		logger.Info("dev mode: serving web assets from ./web/src/")
 	}
+	if push, err := newPushManager(logger); err != nil {
+		logger.Warn("web push disabled", "err", err)
+	} else {
+		s.push = push
+	}
 	var staticHandler http.Handler
 	if devMode {
 		staticHandler = http.FileServer(http.Dir(filepath.Join("web", "src")))
@@ -422,6 +480,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.Handle("/styles.css", staticHandler)
 	mux.Handle("/styles/", staticHandler)
 	mux.Handle("/icon.svg", staticHandler)
+	mux.Handle("/icons/", staticHandler)
+	mux.Handle("/manifest.webmanifest", staticHandler)
+	mux.Handle("/sw.js", staticHandler)
 	mux.Handle("/i18n.js", staticHandler)
 	mux.Handle("/i18n/", staticHandler)
 	mux.Handle("/vendor/", staticHandler)
@@ -469,6 +530,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/files-roots", s.handleFilesRoots)
 	mux.HandleFunc("/api/files-move", s.handleFilesMove)
 	mux.HandleFunc("/api/files-rename", s.handleFilesRename)
+	mux.HandleFunc("/api/files-mkdir", s.handleFilesMkdir)
+	mux.HandleFunc("/api/files-save", s.handleFilesSave)
 	mux.HandleFunc("/api/files-delete-dir", s.handleFilesDeleteDir)
 	mux.HandleFunc("/api/git-log", s.handleGitLog)
 	mux.HandleFunc("/api/git-show", s.handleGitShow)
@@ -481,6 +544,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/user-prefs/notify-sound-custom", s.handleUserPrefsNotifySoundCustom)
 	mux.HandleFunc("/api/user-prefs/avatar", s.handleUserPrefsAvatarUpload)
 	mux.HandleFunc("/api/user-prefs", s.handleUserPrefs)
+	mux.HandleFunc("/api/push/status", s.handlePushStatus)
+	mux.HandleFunc("/api/push/vapid-public-key", s.handlePushVAPIDPublicKey)
+	mux.HandleFunc("/api/push/subscriptions", s.handlePushSubscriptions)
 	s.registerWorkbenchRoutes(mux)
 	s.httpSrv = &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Handler: withSecurityHeaders(mux)}
 	return s, nil
@@ -499,6 +565,7 @@ func setSecurityHeaders(h http.Header) {
 	h.Set("Content-Security-Policy", contentSecurityPolicy)
 	h.Set("X-Frame-Options", "DENY")
 	h.Set("Referrer-Policy", "no-referrer")
+	h.Set("Service-Worker-Allowed", "/")
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -963,6 +1030,8 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			})
 			var provider string
 			var vtLines []string
+			var initialModelLines []string
+			var initialModelCWD string
 			scanNativeApproval := false
 			chunkHasApprovalTrigger := ptyChunkContainsAny(m.Data, nativeApprovalTriggerTokens)
 			s.sessionsMu.Lock()
@@ -988,6 +1057,17 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 					}
 					ses.nativeApprovalScanQueued = false
 				}
+				// 起動バナーからの初期モデル検出（--model 指定なしのセッション向け）。
+				// Model が埋まる・上限バイト超過のどちらかで打ち切る。
+				if !ses.initialModelScanDone && ses.Model == "" && initialModelScanProviders[provider] {
+					ses.initialModelScanBytes += len(m.Data)
+					if ses.initialModelScanBytes > initialModelScanMaxBytes {
+						ses.initialModelScanDone = true
+					} else {
+						initialModelCWD = ses.CWD
+						initialModelLines = ses.vt.Lines()
+					}
+				}
 			}
 			s.sessionsMu.Unlock()
 			s.broadcast(m)
@@ -996,6 +1076,9 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			}
 			s.markRunning(id)
 			s.detectModelChange(id, m.Data, cleanText)
+			if initialModelLines != nil {
+				s.detectInitialModel(id, provider, initialModelCWD, initialModelLines)
+			}
 		case "session_end":
 			histEvent := map[string]any{
 				"ts":         time.Now().Format(time.RFC3339),
@@ -1131,6 +1214,9 @@ func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval)
 			s.sessionStore.StoreApprovalDetected(id, approval.Sig, approvalSourceGoVT, approval.Kind, approval.Question, approval.Context, approval.Options, now)
 		}
 		s.broadcast(*msg)
+		if msg.Type == "approval_detected" {
+			s.notifyApprovalPush(id, approval.Sig, msg.Provider, approval.Question, approval.Context)
+		}
 	}
 }
 
@@ -1252,15 +1338,108 @@ func (s *Server) detectModelChange(id int, data []byte, cleanText string) {
 	if newModel == "" {
 		return
 	}
+	s.applyDetectedModel(id, provider, newModel, false)
+}
+
+// detectInitialModel は VT バッファのレンダリング済み行から起動バナーの
+// モデル名を抽出し、Model が空のセッションに反映する。
+// /model 変更（detectModelChange）と違い既存値は上書きしない。
+func (s *Server) detectInitialModel(id int, provider, cwd string, vtLines []string) {
+	model := extractBannerModel(provider, cwd, vtLines)
+	if model == "" {
+		return
+	}
+	s.applyDetectedModel(id, provider, model, true)
+}
+
+// extractBannerModel は起動バナー / ステータス行からモデル名を抽出する
+// （見つからなければ ""）。cwd は cursor-agent のステータス行アンカーに使う。
+func extractBannerModel(provider, cwd string, lines []string) string {
+	switch provider {
+	case "claude":
+		for _, line := range lines {
+			idx := strings.Index(line, claudeBannerLogoRow2)
+			if idx < 0 {
+				continue
+			}
+			rest := strings.TrimSpace(line[idx+len(claudeBannerLogoRow2):])
+			// " · Claude Max" 等のプラン表記を落とす
+			if before, _, found := strings.Cut(rest, "·"); found {
+				rest = strings.TrimSpace(before)
+			}
+			rest = reClaudeBannerEffort.ReplaceAllString(rest, "")
+			if rest != "" {
+				return rest
+			}
+		}
+	case "codex":
+		for _, line := range lines {
+			m := reCodexBannerModel.FindStringSubmatch(line)
+			if m == nil {
+				continue
+			}
+			model := strings.TrimSpace(m[1])
+			if model != "" && !strings.EqualFold(model, "loading") {
+				return model
+			}
+		}
+	case "copilot":
+		// 最下部の非空行（ステータス行）の右端セグメントを候補にする。
+		// ラベルが無いため、モデル名らしさの検査で誤検出を防ぐ。
+		for i := len(lines) - 1; i >= 0; i-- {
+			line := strings.TrimSpace(lines[i])
+			if line == "" {
+				continue
+			}
+			segs := reCopilotStatusSplit.Split(line, -1)
+			seg := strings.TrimSpace(segs[len(segs)-1])
+			seg = reCopilotEffortSuffix.ReplaceAllString(seg, "")
+			if seg == "Auto" || (len(seg) <= 40 && reCopilotModelLike.MatchString(seg)) {
+				return seg
+			}
+			return "" // 最下部の非空行のみ見る（それより上はステータス行ではない）
+		}
+	case "cursor-agent":
+		if cwd == "" {
+			return ""
+		}
+		// "<cwd> · <branch>" 行を探し、その直上の非空行をモデル名とみなす。
+		for i, line := range lines {
+			t := strings.TrimSpace(line)
+			if !strings.HasPrefix(t, cwd+" · ") && t != cwd {
+				continue
+			}
+			for j := i - 1; j >= 0; j-- {
+				above := strings.TrimSpace(lines[j])
+				if above == "" {
+					continue
+				}
+				above = reCursorPercentSuffix.ReplaceAllString(above, "")
+				// プロンプト残骸（"→ ..." 等）は除外
+				if above != "" && !strings.ContainsAny(above, "→❯") && len(above) <= 60 {
+					return above
+				}
+				break
+			}
+		}
+	}
+	return ""
+}
+
+// applyDetectedModel はセッションの Model / Route を更新して session_update を
+// broadcast する。onlyIfEmpty=true のときは Model 未設定のセッションのみ更新する
+// （起動バナー検出が /model 変更や --model 指定を上書きしないため）。
+func (s *Server) applyDetectedModel(id int, provider, newModel string, onlyIfEmpty bool) {
 	newRoute := s.resolveRoute(provider, newModel)
 	s.sessionsMu.Lock()
-	ses = s.sessions[id]
-	if ses == nil || ses.Model == newModel {
+	ses := s.sessions[id]
+	if ses == nil || ses.Model == newModel || (onlyIfEmpty && ses.Model != "") {
 		s.sessionsMu.Unlock()
 		return
 	}
 	ses.Model = newModel
 	ses.Route = newRoute
+	ses.initialModelScanDone = true
 	update := proto.Message{
 		Type:         "session_update",
 		SessionID:    id,
@@ -1624,6 +1803,7 @@ func (s *Server) evaluateIdle() {
 		route        string
 		state        string
 		lastOutputAt string
+		approvalWait bool
 	}
 	var changes []change
 	var branchChecks []branchRefreshRequest
@@ -1647,7 +1827,7 @@ func (s *Server) evaluateIdle() {
 		}
 		if newState != "" && newState != ses.State {
 			ses.State = newState
-			changes = append(changes, change{id: id, provider: ses.Provider, display: ses.Display, cwd: ses.CWD, branch: ses.Branch, label: ses.Label, model: ses.Model, route: ses.Route, state: newState, lastOutputAt: ses.LastOutputAt})
+			changes = append(changes, change{id: id, provider: ses.Provider, display: ses.Display, cwd: ses.CWD, branch: ses.Branch, label: ses.Label, model: ses.Model, route: ses.Route, state: newState, lastOutputAt: ses.LastOutputAt, approvalWait: newState == "waiting" && ses.approvalVisible})
 		}
 	}
 	s.sessionsMu.Unlock()
@@ -1655,6 +1835,9 @@ func (s *Server) evaluateIdle() {
 		s.broadcast(proto.Message{Type: "session_update", SessionID: c.id, Provider: c.provider, Display: c.display, CWD: c.cwd, Branch: c.branch, Label: c.label, Model: c.model, Route: c.route, State: c.state, LastOutputAt: c.lastOutputAt})
 		if s.sessionStore != nil {
 			s.sessionStore.UpdateSessionState(c.id, c.state, c.lastOutputAt)
+		}
+		if c.approvalWait {
+			s.notifyApprovalPush(c.id, fmt.Sprintf("ui-%d-%s", c.id, c.lastOutputAt), c.provider, "", "")
 		}
 	}
 	s.queueBranchRefreshes(branchChecks)

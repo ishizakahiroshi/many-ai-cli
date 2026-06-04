@@ -1,0 +1,9 @@
+# any-ai-cli マルチユーザー compose 定義
+# サーバー配置先: /opt/any-ai-cli/compose.yaml（root 所有・管理者のみ操作）
+#
+# ユーザーを追加するときは users/<user>.yaml を作成して include に 1 行追加する。
+# 手順の正本: docs/local/manual_docker-multiuser.md
+# ユーザー ⇔ ポート ⇔ volume の割当表: /opt/any-ai-cli/assign.md
+name: any-ai-cli
+include:
+  - users/admin.yaml

@@ -1,0 +1,104 @@
+const CACHE_VERSION = 'any-ai-cli-sw-v1';
+const TOKEN_CACHE = 'any-ai-cli-token-v1';
+const TOKEN_URL = '/__any-ai-cli-token__';
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((key) => key !== CACHE_VERSION && key !== TOKEN_CACHE).map((key) => caches.delete(key)));
+    await self.clients.claim();
+  })());
+});
+
+self.addEventListener('message', (event) => {
+  const data = event.data || {};
+  if (data.type !== 'any-ai-cli-token' || !data.token) return;
+  event.waitUntil((async () => {
+    const cache = await caches.open(TOKEN_CACHE);
+    await cache.put(TOKEN_URL, new Response(JSON.stringify({ token: data.token }), {
+      headers: { 'Content-Type': 'application/json' },
+    }));
+  })());
+});
+
+self.addEventListener('push', (event) => {
+  event.waitUntil((async () => {
+    const payload = parsePushPayload(event);
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    if (windows.some((client) => client.visibilityState === 'visible')) {
+      return;
+    }
+    const title = payload.title || 'ANY-AI-CLI';
+    const body = payload.body || 'Approval is waiting.';
+    await self.registration.showNotification(title, {
+      body,
+      icon: '/icon.svg',
+      badge: '/icon.svg',
+      tag: payload.session_id ? `any-ai-cli-approval-${payload.session_id}` : payload.id || 'any-ai-cli-approval',
+      data: {
+        session_id: payload.session_id || 0,
+        url: payload.url || '',
+      },
+      requireInteraction: false,
+    });
+  })());
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const data = event.notification.data || {};
+    const sessionId = Number(data.session_id || 0);
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of windows) {
+      client.postMessage({ type: 'any-ai-cli-open-session', session_id: sessionId });
+      return client.focus();
+    }
+    const url = await notificationURL(data.url || '', sessionId);
+    return self.clients.openWindow(url);
+  })());
+});
+
+self.addEventListener('fetch', () => {
+  // Network-only. The Hub is a localhost app with token-bound state, so caching
+  // authenticated UI responses would create more risk than value.
+});
+
+function parsePushPayload(event) {
+  if (!event.data) return {};
+  try {
+    return event.data.json() || {};
+  } catch (_) {
+    try {
+      return JSON.parse(event.data.text() || '{}');
+    } catch (_) {
+      return {};
+    }
+  }
+}
+
+async function notificationURL(url, sessionId) {
+  if (url && url.includes('token=')) return url;
+  const token = await readHubToken();
+  const base = url || '/';
+  const target = new URL(base, self.location.origin);
+  if (token) target.searchParams.set('token', token);
+  if (sessionId > 0) target.searchParams.set('session_id', String(sessionId));
+  return target.href;
+}
+
+async function readHubToken() {
+  try {
+    const cache = await caches.open(TOKEN_CACHE);
+    const res = await cache.match(TOKEN_URL);
+    if (!res) return '';
+    const data = await res.json();
+    return data.token || '';
+  } catch (_) {
+    return '';
+  }
+}

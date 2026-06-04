@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { actionBarShownAt, activeSessionId, approvalRawOptionsCache, approvalSourceCache, approvalVisibleCache, enqueueApprovalAutoSwitch, lastActionBarRender, multiQuestionDismissedCache, multiQuestionVisibleCache, removeApprovalAutoSwitchTarget, set_actionBarFocusIdx, set_batchFocusIdx } from './state.js';
-import { playNotificationSound } from './settings.js';
+import { playNotificationSound, showDesktopApprovalNotification } from './settings.js';
 import { ws } from './ws-client.js';
 import { showActionBar } from './approval.js';
 
@@ -28,6 +28,7 @@ import { showActionBar } from './approval.js';
     if (next) {
       if (options.autoSwitch !== false) enqueueApprovalAutoSwitch(id);
       if (options.sound) playNotificationSound();
+      showDesktopApprovalNotification(id);
     } else {
       removeApprovalAutoSwitchTarget(id);
     }

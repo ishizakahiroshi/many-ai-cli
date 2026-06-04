@@ -250,6 +250,32 @@
 .view-tab.lazy.loaded::after { content: ""; }
 .view-tab.lazy:hover { color: var(--muted); }
 .view-tab.lazy.active { color: var(--accent-text); }
+
+@media (max-width: 1000px) {
+  #multi-view,
+  #grid-picker-popup {
+    display: none !important;
+  }
+}
+
+@media (max-width: 720px) {
+  #unified-tab-bar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  #unified-tab-bar::-webkit-scrollbar {
+    display: none;
+  }
+  .view-tab {
+    min-width: 44px;
+  }
+  .view-tab > span:last-child:not(.badge):not(.multi-layout-badge) {
+    max-width: 8ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
 /* C5: 表示モード固定 (soft lock) — 🔒 を疑似要素で付与 */
 .view-tab.locked-mode::before {
   content: "🔒";

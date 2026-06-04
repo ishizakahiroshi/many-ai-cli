@@ -3,6 +3,7 @@ module any-ai-cli
 go 1.25.0
 
 require (
+	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/aymanbagabas/go-pty v0.2.3
 	github.com/creack/pty v1.1.24
 	golang.org/x/net v0.55.0
@@ -17,6 +18,7 @@ require (
 	github.com/docker/cli v29.5.2+incompatible // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-git/go-billy/v5 v5.9.0 // indirect
+	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

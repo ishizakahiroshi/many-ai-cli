@@ -139,7 +139,11 @@
 [hidden] { display: none !important; }
 
 *, *::before, *::after { box-sizing: border-box; }
-html, body { overflow: hidden; }
+html, body {
+  overflow: hidden;
+  min-height: 100%;
+  touch-action: manipulation;
+}
 body { font-family: "Segoe UI", sans-serif; margin: 0; background: var(--bg); color: var(--text); }
 
 /* スクロールバー */
@@ -356,7 +360,13 @@ header {
 /* moved to /styles/settings.css */
 
 /* 2カラムレイアウト */
-#app { display: flex; height: calc(100vh - 44px); }
+#app { display: flex; height: calc(100dvh - 44px); }
+
+#mobile-menu-btn,
+#mobile-spawn-btn,
+#mobile-drawer-backdrop {
+  display: none;
+}
 
 /* 左サイドバー */
 #session-list { width: 280px; overflow-y: auto; border-right: none; padding: 8px; flex-shrink: 0; background: var(--bg); min-width: 160px; max-width: 520px; }
@@ -378,6 +388,195 @@ header {
   inset: 0 -4px;
 }
 .no-sessions { color: var(--muted-2); font-size: 0.85rem; padding: 12px; text-align: center; }
+
+/* Responsive breakpoints:
+   - 720px and below: single-column mobile layout.
+   - 1000px and below: hide drag/split-heavy modes.
+   Pointer queries enlarge touch targets independent of width. */
+@media (pointer: coarse) {
+  button,
+  select,
+  input[type="checkbox"],
+  input[type="radio"],
+  .card,
+  .view-tab,
+  .usage-dropdown-item {
+    min-height: 44px;
+  }
+
+  #sidebar-resizer {
+    display: none;
+  }
+
+  .dismiss-btn,
+  .star-btn,
+  .session-history-reset-btn,
+  .project-group-files-btn,
+  .quick-cmd-btn,
+  .spawn-btn-browse {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .card {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+}
+
+@media (max-width: 1000px) {
+  #tab-multi,
+  .view-tab[data-tab="split"] {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  header {
+    gap: 6px;
+    padding: 0 8px 0 52px;
+  }
+
+  .header-logo span,
+  .header-sep,
+  #global-wakeword-btn,
+  #settings-btn span,
+  #main-tab-status,
+  .session-info-chip {
+    display: none !important;
+  }
+
+  #summary {
+    font-size: 0.7rem;
+    gap: 4px;
+  }
+
+  #app {
+    display: block;
+    position: relative;
+    height: calc(100dvh - 44px);
+    overflow: hidden;
+  }
+
+  #mobile-menu-btn {
+    position: fixed;
+    top: 6px;
+    left: 8px;
+    z-index: 1500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 32px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg-elev);
+    color: var(--text);
+    font-size: 1rem;
+    cursor: pointer;
+  }
+
+  #mobile-spawn-btn {
+    position: fixed;
+    right: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    z-index: 1400;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 54px;
+    height: 54px;
+    min-width: 54px;
+    min-height: 54px;
+    border: 1px solid var(--accent);
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 1.7rem;
+    line-height: 1;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.38);
+    cursor: pointer;
+  }
+  body.mobile-has-session #mobile-spawn-btn {
+    display: flex;
+  }
+
+  #mobile-drawer-backdrop {
+    position: fixed;
+    inset: 44px 0 0;
+    z-index: 1090;
+    display: none;
+    background: rgba(0,0,0,0.48);
+  }
+  body.mobile-drawer-open #mobile-drawer-backdrop {
+    display: block;
+  }
+  #mobile-drawer-backdrop[hidden] {
+    display: none !important;
+  }
+
+  #session-list {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    height: 100%;
+    padding: 10px;
+    border-right: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.mobile-has-session #session-list {
+    position: fixed;
+    top: 44px;
+    bottom: 0;
+    left: 0;
+    z-index: 1100;
+    width: min(88vw, 360px);
+    transform: translateX(-105%);
+    transition: transform 0.18s ease;
+    border-right: 1px solid var(--line);
+    box-shadow: 14px 0 36px rgba(0,0,0,0.36);
+  }
+  body.mobile-has-session.mobile-drawer-open #session-list {
+    transform: translateX(0);
+  }
+
+  body:not(.mobile-has-session) #terminal-column {
+    display: none;
+  }
+
+  #terminal-column {
+    width: 100%;
+    height: 100%;
+  }
+
+  #unified-tab-bar {
+    height: 40px;
+    padding: 0 6px;
+  }
+
+  .view-tab {
+    padding: 0 10px;
+    gap: 4px;
+    font-size: 0.75rem;
+  }
+
+  #approval-queue-btn {
+    min-height: 36px;
+    padding: 4px 7px;
+  }
+
+  #new-session-bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--bg);
+  }
+
+  body.mobile-has-session #new-session-btn {
+    width: 100%;
+  }
+}
 
 /* セッションカード */
 .card { position: relative; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 10px; padding: 9px 42px 9px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; overflow: hidden; }

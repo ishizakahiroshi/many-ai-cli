@@ -519,7 +519,7 @@
 }
 .files-preview-image {
   max-width: 100%;
-  max-height: calc(100vh - 220px);
+  max-height: calc(100dvh - 220px);
   object-fit: contain;
   border-radius: 6px;
   background: var(--bg);
@@ -625,6 +625,70 @@
    除外し、各トークン (.hljs-keyword 等) の色を上書きしないようにする */
 [data-theme="dark"] .files-preview-md-body pre { background: #0d1117; color: #e6edf3; }
 [data-theme="dark"] .files-preview-md-body pre code:not(.hljs) { color: #e6edf3; }
+
+/* ──────────────────────────────────────────────
+   FilesPreview 編集モード
+────────────────────────────────────────────── */
+.files-preview-edit-textarea {
+  width: 100%;
+  /* bodyEl の高さに合わせる: position: absolute より height: 100% が安定 */
+  min-height: 100%;
+  resize: none;
+  background: var(--bg);
+  color: var(--text);
+  border: none;
+  font-family: Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  padding: 10px 12px;
+  outline: none;
+  box-sizing: border-box;
+  display: block;
+}
+.files-preview-edit-textarea:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.files-preview-edit-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 4px 8px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--line);
+  min-height: 32px;
+}
+.files-preview-edit-save-btn {
+  color: var(--accent-text, #fff);
+  background: var(--accent, #6366f1);
+  border: 1px solid var(--accent, #6366f1);
+  border-radius: 4px;
+  padding: 2px 10px;
+}
+.files-preview-edit-save-btn:hover:not(:disabled) {
+  opacity: 0.88;
+}
+.files-preview-edit-save-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.files-preview-edit-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.files-preview-edit-conflict {
+  color: var(--warn, #ca8a04);
+  font-size: 0.78rem;
+  flex-shrink: 0;
+}
 
 /* ライトテーマ用 hljs（GitHub Light 相当）。
    vendored の hljs-github-dark.min.css は全テーマで読み込まれるが、
