@@ -27,6 +27,11 @@ import (
 	"any-ai-cli/internal/launcher"
 )
 
+// version is injected at release build time via
+// -ldflags "-X main.version=..." (see .goreleaser.yaml). Defaults to "dev"
+// for local builds, mirroring cmd/any-ai-cli.
+var version = "dev"
+
 // errOpenUI is a sentinel error returned by selectProfile to indicate that
 // the UI selection page should be opened instead of connecting directly.
 var errOpenUI = errors.New("open_ui")
@@ -40,6 +45,7 @@ func main() {
 
 func run() error {
 	launcher.ConfigureConsoleUTF8()
+	fmt.Fprint(os.Stdout, launcher.StartupBanner(version))
 
 	fs := flag.NewFlagSet("any-ai-cli-launcher", flag.ContinueOnError)
 	profileName := fs.String("profile", "", "profile name to connect (see ~/.any-ai-cli/launcher-profiles.yaml)")
@@ -92,7 +98,7 @@ func runUI() error {
 		return fmt.Errorf("start ui server: %w", err)
 	}
 
-	fmt.Fprintf(os.Stdout, "接続先選択画面を開いています: %s\n", pageURL)
+	fmt.Fprintf(os.Stdout, "Opening connection selection page: %s\n", pageURL)
 	launcher.OpenBrowserOnce(pageURL)
 
 	// Wait until Ctrl-C or the OS sends SIGTERM.
@@ -106,6 +112,7 @@ func connect(profile launcher.Profile) error {
 	if err != nil {
 		return err
 	}
+	fmt.Fprint(os.Stdout, launcher.CloseBehaviorNotice(profile))
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

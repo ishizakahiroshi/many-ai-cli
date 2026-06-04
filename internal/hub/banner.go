@@ -60,7 +60,7 @@ func startupBanner(version, addr, token string) string {
 	}
 	lines = append(lines,
 		"",
-		fmt.Sprintf("Claude Code / Codex wrapper     %s", versionLabel),
+		fmt.Sprintf("ANY AI AGENTS                   %s", versionLabel),
 		fmt.Sprintf("Runtime: %s", runtimeLabel(runtimeMode())),
 		fmt.Sprintf("GitHub: %s", repositoryURL),
 		fmt.Sprintf("WebUI:  %s", hubBase),

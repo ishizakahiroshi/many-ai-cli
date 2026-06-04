@@ -50,9 +50,9 @@ import { showActionBar } from './approval.js';
     notifyApprovalQueue();
   }
 
-  function showOptions(bar, id, options, showExpand = false, forceStickToBottom = false) {
+  function showOptions(bar, id, options, forceStickToBottom = false) {
     cacheApprovalOptions(id, options);
-    showActionBar(bar, id, options, showExpand, forceStickToBottom);
+    showActionBar(bar, id, options, forceStickToBottom);
   }
 
   function clearActionBarDom() {

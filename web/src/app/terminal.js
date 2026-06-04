@@ -6,6 +6,10 @@ import { sendText } from '../app.js';
 import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerminalPathStartBoundary, resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup, trimTerminalPathCandidate } from './path-links.js';
 import { ws } from './ws-client.js';
 import { scheduleApprovalCheck } from './approval.js';
+import { handleCrunchLinkClick } from './expand-popup.js';
+
+// Claude Code の折りたたみマーカー: "… +23 lines (ctrl+o to expand)"
+const CRUNCH_LINK_RE = /[…\.]{1,3}\s*\+\d+\s*lines?\s*\(ctrl\+o to expand\)/gi;
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -146,6 +150,24 @@ export function ensureTerminal(id) {
         const trimmed = trimTerminalPathCandidate(rawPath);
         if (!isLikelyRelPath(trimmed)) continue;
         addPathLink(rawPath, m.index + m[1].length);
+      }
+      // 折りたたみマーカーをクリック可能にする（ctrl+o キャプチャ → ポップアップ表示）
+      CRUNCH_LINK_RE.lastIndex = 0;
+      let cm;
+      while ((cm = CRUNCH_LINK_RE.exec(combined)) !== null) {
+        const startCI = cm.index;
+        const endCI = cm.index + cm[0].length - 1;
+        if (overlapsExistingLink(startCI, endCI)) continue;
+        occupiedRanges.push({ start: startCI, end: endCI });
+        links.push({
+          range: { start: ciToXY(startCI), end: ciToXY(endCI) },
+          text: cm[0],
+          hover() {},
+          leave() {},
+          activate(event) {
+            handleCrunchLinkClick(id, event.clientX, event.clientY);
+          },
+        });
       }
       callback(links);
     }

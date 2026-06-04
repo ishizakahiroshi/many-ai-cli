@@ -1,10 +1,9 @@
 // --- ESM imports (generated) ---
 import { t } from './i18n.js';
-import { copyCleanText, showToast, token } from './app/util.js';
+import { showToast, token } from './app/util.js';
 import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref } from './app/user-prefs.js';
-import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, crunchLatch, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals, toolOutputs } from './app/state.js';
+import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
-import { appendLinkedText } from './app/path-links.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
 import { DEFAULT_QUICK_CMD_1, DEFAULT_QUICK_CMD_2, appConfirm, appConfirmShutdown, applyFontSize, applyLang, applyTheme, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
@@ -34,57 +33,6 @@ document.addEventListener('i18n-ready', () => {
 
 // moved to /app/approval.js
 
-
-export function renderToolOutputs(id) {
-  const panel = document.getElementById('tool-outputs-panel');
-  const list = document.getElementById('tool-outputs-list');
-  const countEl = document.getElementById('tool-outputs-count');
-  if (!panel || !list) return;
-
-  const outputs = toolOutputs.get(id) || [];
-  if (outputs.length === 0) {
-    panel.hidden = true;
-    return;
-  }
-
-  panel.hidden = false;
-  if (countEl) countEl.textContent = t('tool_outputs_count', { n: outputs.length });
-
-  list.innerHTML = '';
-  outputs.forEach((out, idx) => {
-    const item = document.createElement('details');
-    item.className = 'tool-output-item';
-    if (idx === 0) item.open = true; // 最新は展開して表示
-
-    const summary = document.createElement('summary');
-    summary.textContent = t('tool_output_summary', { ts: out.ts, n: out.lines.length });
-    item.appendChild(summary);
-
-    const body = document.createElement('div');
-    body.className = 'tool-output-body';
-
-    const copyBtn = document.createElement('button');
-    copyBtn.type = 'button';
-    copyBtn.className = 'tool-output-copy';
-    copyBtn.textContent = '⧉';
-    copyBtn.title = t('copy_to_clipboard');
-    copyBtn.setAttribute('aria-label', t('copy_to_clipboard'));
-    copyBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      copyCleanText(out.lines, copyBtn).catch(() => {});
-    });
-    body.appendChild(copyBtn);
-
-    const pre = document.createElement('pre');
-    pre.className = 'tool-output-content';
-    appendLinkedText(pre, out.lines.join('\n'), id);
-    body.appendChild(pre);
-    item.appendChild(body);
-
-    list.appendChild(item);
-  });
-}
 
 // ---- 入力バー ----
 
@@ -807,7 +755,6 @@ export function resetAllLocalSessionHistory() {
     s.last_message = '';
   });
   terminals.forEach((_t, id) => resetTerminalHistoryForSession(id));
-  toolOutputs.clear();
   approvalVisibleCache.clear();
   multiQuestionVisibleCache.clear();
   multiQuestionDismissedCache.clear();
@@ -825,7 +772,6 @@ export function resetAllLocalSessionHistory() {
   hideActionBar(undefined);
   setMultiQuestionBannerVisible(false);
   if (activeSessionId !== null) {
-    renderToolOutputs(activeSessionId);
     updateChatCountBadge();
     if (typeof mountChatPaneForSession === 'function') mountChatPaneForSession(activeSessionId);
   }
@@ -839,7 +785,6 @@ export function resetLocalSessionHistory(id) {
     s.last_message = '';
   }
   resetTerminalHistoryForSession(id);
-  toolOutputs.delete(id);
   approvalVisibleCache.delete(id);
   if (multiQuestionVisibleCache.delete(id) && id === activeSessionId) {
     setMultiQuestionBannerVisible(false);
@@ -859,7 +804,6 @@ export function resetLocalSessionHistory(id) {
   resetChatHistoryForSession(id);
   if (id === activeSessionId) {
     hideActionBar(undefined);
-    renderToolOutputs(id);
     updateChatCountBadge();
     if (typeof mountChatPaneForSession === 'function') mountChatPaneForSession(id);
   }
@@ -876,7 +820,6 @@ export function clearSessionTimerEntry(timerMap, id) {
 export function cleanupRemovedSessionState(id) {
   try { clearSessionTimerEntry(approvalCheckTimers, id); } catch (_) {}
   try { clearSessionTimerEntry(approvalSuppressRescanTimers, id); } catch (_) {}
-  try { if (typeof crunchLatch !== 'undefined') crunchLatch.delete(id); } catch (_) {}
   try {
     const sigTimer = approvalConsumedSigDeleteTimer.get(id);
     if (sigTimer) clearTimeout(sigTimer);
@@ -904,7 +847,6 @@ export function removeLocalSession(id) {
   removeFromSessionOrder(id);
   const t = terminals.get(id);
   if (t) { try { t.term.dispose(); } catch (_) {} terminals.delete(id); }
-  toolOutputs.delete(id);
   approvalVisibleCache.delete(id);
   if (multiQuestionVisibleCache.delete(id) && id === activeSessionId) {
     setMultiQuestionBannerVisible(false);
@@ -975,29 +917,6 @@ inputEl.addEventListener('blur', (e) => {
     setTimeout(() => inputEl.focus(), 0);
   }
 });
-
-// ---- ツール出力パネル 折りたたみ / 閉じるボタン ----
-
-export const collapseOutputsBtn = document.getElementById('tool-outputs-collapse');
-if (collapseOutputsBtn) {
-  collapseOutputsBtn.addEventListener('click', () => {
-    const panel = document.getElementById('tool-outputs-panel');
-    if (!panel) return;
-    const collapsed = panel.classList.toggle('collapsed');
-    collapseOutputsBtn.textContent = collapsed ? '▶' : '▼';
-  });
-}
-
-export const clearOutputsBtn = document.getElementById('tool-outputs-clear');
-if (clearOutputsBtn) {
-  clearOutputsBtn.addEventListener('click', () => {
-    if (activeSessionId !== null) {
-      toolOutputs.delete(activeSessionId);
-      renderToolOutputs(activeSessionId);
-    }
-  });
-}
-
 
 
 // moved to /app/spawn-panel.js

@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,9 +36,9 @@ type UIServer struct {
 	server *http.Server
 
 	mu         sync.Mutex
-	connectReq *connectRequest      // set when POST /api/connect is received
-	connectRes *connectResult       // set when connection resolves
-	connCancel context.CancelFunc   // cancels the active connection goroutine
+	connectReq *connectRequest    // set when POST /api/connect is received
+	connectRes *connectResult     // set when connection resolves
+	connCancel context.CancelFunc // cancels the active connection goroutine
 }
 
 type connectRequest struct {
@@ -194,8 +195,8 @@ func writeUIError(w http.ResponseWriter, status int, detail string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"ok":     false,
-		"error":  detail,
+		"ok":    false,
+		"error": detail,
 	})
 }
 
@@ -379,6 +380,10 @@ func (s *UIServer) runConnection(ctx context.Context, profile Profile) {
 		return
 	}
 
+	// 選択 UI 経由でもコンソール側に「閉じたらどうなるか」を出しておく
+	// （このウィンドウがトンネル / Hub の本体であることはブラウザからは見えないため）。
+	fmt.Fprint(os.Stdout, CloseBehaviorNotice(profile))
+
 	urlCh := make(chan string, 1)
 	errCh := make(chan error, 1)
 
@@ -399,20 +404,20 @@ func (s *UIServer) runConnection(ctx context.Context, profile Profile) {
 				}
 			default:
 			}
-			s.setConnectResult("", "接続に失敗しました (Hub URL が取得できませんでした)")
+			s.setConnectResult("", "Connection failed (Hub URL was not received)")
 			return
 		}
 		// Update last_used.
 		s.updateLastUsed(profile.Name)
 		s.setConnectResult(hubURL, "")
 	case connErr := <-errCh:
-		msg := "接続に失敗しました"
+		msg := "Connection failed"
 		if connErr != nil {
 			msg = connErr.Error()
 		}
 		s.setConnectResult("", msg)
 	case <-ctx.Done():
-		s.setConnectResult("", "接続がタイムアウトしました")
+		s.setConnectResult("", "Connection timed out")
 	}
 }
 

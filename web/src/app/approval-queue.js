@@ -86,7 +86,7 @@ function renderQueue() {
         const bar = document.getElementById('action-bar');
         const opts = approvalRawOptionsCache.get(id);
         if (bar && opts && window.approvalUiAdapter && typeof window.approvalUiAdapter.showOptions === 'function') {
-          window.approvalUiAdapter.showOptions(bar, id, opts, false, true);
+          window.approvalUiAdapter.showOptions(bar, id, opts, true);
         }
       }, 60);
       renderQueue();

@@ -8,6 +8,8 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <meta name="theme-color" content="#08090d">
+  <!-- 標準の mobile-web-app-capable を併記（apple- 版のみだと Chrome が deprecation 警告を出す） -->
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="ANY-AI-CLI">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -633,16 +635,6 @@
         <div id="terminal-readonly-badge"><span data-i18n="terminal_output">Terminal Output</span><span id="terminal-shell-info"></span></div>
         <button id="scroll-to-top-btn" data-i18n-tooltip="scroll_to_top_tooltip" data-i18n="scroll_to_top" hidden>↑ up</button>
         <button id="scroll-to-bottom-btn" data-i18n-tooltip="scroll_to_bottom_tooltip" data-i18n="scroll_to_bottom" hidden>↓ down</button>
-      </div>
-      <div id="tool-outputs-panel" hidden>
-        <div class="tool-outputs-header">
-          <span><span data-i18n="tool_outputs">Tool Outputs</span> <span id="tool-outputs-count"></span></span>
-          <div class="tool-outputs-btns">
-            <button id="tool-outputs-collapse" title="折りたたむ">▼</button>
-            <button id="tool-outputs-clear" title="閉じる">✕</button>
-          </div>
-        </div>
-        <div id="tool-outputs-list"></div>
       </div>
     </div>
     <!-- C3: チャット履歴ペイン (C4 で filter-bar の中身が埋まる) -->

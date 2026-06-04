@@ -2,7 +2,7 @@
 import { t } from '../i18n.js';
 import { escapeHtml, formatLastOutputAt, formatStartedAt, ti18n } from './util.js';
 import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, favorites, groupOrder, multiQuestionVisibleCache, orderSessions, projectFavorites, saveFavorites, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, terminals } from './state.js';
-import { dismissSession, inputEl, renderToolOutputs, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor } from '../app.js';
+import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor } from '../app.js';
 import { attachTerminal, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, updateScrollLockBtn } from './terminal.js';
 import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, renderSessionInfoChip, updateChatCountBadge } from './settings.js';
 import { syncElapsedTimer } from './ws-client.js';
@@ -107,7 +107,6 @@ export function activateSession(id) {
   setMultiQuestionBannerVisible(!!multiQuestionVisibleCache.get(id));
   detectApproval(id);
   updateSessionListActiveCard(id);
-  renderToolOutputs(id);
   updateShellBadge(id);
   updateQuickCmdButtons(id);
   // C2: D11 セッション情報チップ更新 + D13 セッション毎モード復元 + チャット件数バッジ購読

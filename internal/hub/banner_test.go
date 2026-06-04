@@ -13,7 +13,7 @@ func TestStartupBannerIncludesProductDetails(t *testing.T) {
 	got := startupBanner("0.1.3", "127.0.0.1:47777", "abc123")
 
 	for _, want := range []string{
-		"Claude Code / Codex wrapper     v0.1.3",
+		"ANY AI AGENTS                   v0.1.3",
 		"Runtime: ",
 		"GitHub: https://github.com/ishizakahiroshi/any-ai-cli",
 		"WebUI:  http://127.0.0.1:47777",
@@ -92,7 +92,7 @@ func TestStartupBannerUsesAsciiUnderWindowsLauncher(t *testing.T) {
 	// Product detail lines and the warning still ship — only the logo art
 	// changes.
 	for _, want := range []string{
-		"Claude Code / Codex wrapper     v0.1.3",
+		"ANY AI AGENTS                   v0.1.3",
 		"From Windows: http://localhost:47777/?token=abc123",
 		"WARNING: This window is connected to the Web UI. Do not close it.",
 	} {
