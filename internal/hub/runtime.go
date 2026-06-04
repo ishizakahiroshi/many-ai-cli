@@ -52,7 +52,10 @@ func localIP() string {
 }
 
 // hostNetInfo はバッジ表示用の SSH セッション判定と自機 IP を返す。
-// SSH セッション経由で Hub が起動された場合は SSH_CONNECTION のサーバ側 IP を優先し、
+// ANY_AI_CLI_HOST_LABEL があれば最優先で表示ラベルとして使う
+// （launcher が SSH serve 起動時にプロファイルの host を注入する。
+// コンテナ内実行等で NIC からグローバル IP を検出できないケースへの対処）。
+// 次に SSH セッション経由で Hub が起動された場合は SSH_CONNECTION のサーバ側 IP、
 // それ以外（systemd 常駐等）は NIC から自機 IP を取得する。
 func hostNetInfo() (ssh bool, hostIP string) {
 	if conn := os.Getenv("SSH_CONNECTION"); conn != "" {
@@ -60,6 +63,9 @@ func hostNetInfo() (ssh bool, hostIP string) {
 		hostIP = parseSSHServerIP(conn)
 	} else if os.Getenv("SSH_CLIENT") != "" || os.Getenv("SSH_TTY") != "" {
 		ssh = true
+	}
+	if label := os.Getenv("ANY_AI_CLI_HOST_LABEL"); label != "" {
+		return ssh, label
 	}
 	if hostIP == "" {
 		hostIP = localIP()

@@ -131,10 +131,57 @@ func parseHubPID(b []byte) (int, error) {
 	return pid, nil
 }
 
-// IsRunning returns true if a Hub is already listening at the configured address.
+// hubProbeTimeout bounds each /api/info liveness probe in IsRunning /
+// runningHubPort.
+const hubProbeTimeout = 500 * time.Millisecond
+
+// IsRunning returns true if a Hub for this config is already running —
+// either at the configured port or at the actually-bound port recorded in
+// hub-runtime.json (the two differ after a port auto-move, e.g. when an
+// SSH tunnel occupies the configured port).
 func IsRunning(cfg *config.Config) bool {
-	url := fmt.Sprintf("http://127.0.0.1:%d/?token=%s", cfg.Hub.Port, cfg.Token)
-	client := &http.Client{Timeout: 500 * time.Millisecond}
+	_, ok := runningHubPort(cfg)
+	return ok
+}
+
+// runningHubPort returns the port of a verifiably running Hub that accepts
+// this config's token. It checks the configured port first, then falls back
+// to hub-runtime.json with the double guard (PID alive + /api/info probe).
+func runningHubPort(cfg *config.Config) (int, bool) {
+	return runningHubPortWith(cfg, pidAlive, func(port int) bool {
+		return probeHubInfo(port, cfg.Token, hubProbeTimeout)
+	})
+}
+
+// runningHubPortWith is runningHubPort with injectable alive/probe for tests.
+// Tunnel safety: probe requires a 200 from /api/info with cfg.Token, so a
+// foreign Hub (e.g. a remote Hub behind an SSH tunnel with a different
+// token) occupying a recorded port is never reported as "running".
+func runningHubPortWith(cfg *config.Config, alive func(pid int) bool, probe func(port int) bool) (int, bool) {
+	if probe(cfg.Hub.Port) {
+		return cfg.Hub.Port, true
+	}
+	rt, err := readHubRuntime()
+	if err != nil || rt == nil {
+		return 0, false
+	}
+	if !alive(rt.PID) {
+		// PID が死んでいる残骸だけ掃除する。probe 失敗のみ（PID 生存）は
+		// 一時的な無応答の可能性があるためファイルを残す。
+		removeHubRuntimeIfPID(rt.PID)
+		return 0, false
+	}
+	if rt.Port == cfg.Hub.Port || !probe(rt.Port) {
+		return 0, false
+	}
+	return rt.Port, true
+}
+
+// probeHubInfo reports whether a Hub answers 200 to /api/info on port with
+// token within timeout.
+func probeHubInfo(port int, token string, timeout time.Duration) bool {
+	url := fmt.Sprintf("http://127.0.0.1:%d/api/info?token=%s", port, token)
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Get(url)
 	if err != nil {
 		return false

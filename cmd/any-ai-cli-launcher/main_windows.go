@@ -8,10 +8,10 @@
 //
 //	any-ai-cli-launcher [--profile <name>] [--last] [--ui]
 //
-// If exactly one profile is defined it is used without flags.
-// When multiple profiles are present and no flag is given, or when --ui is
-// specified, a browser-based profile selection page is opened on a random
-// loopback port.
+// Without flags (= plain double-click) a browser-based profile selection
+// page is always opened on a random loopback port; already-connected
+// profiles are marked there. Direct connection without the UI requires
+// --profile or --last (e.g. a dedicated shortcut).
 package main
 
 import (
@@ -31,10 +31,6 @@ import (
 // -ldflags "-X main.version=..." (see .goreleaser.yaml). Defaults to "dev"
 // for local builds, mirroring cmd/any-ai-cli.
 var version = "dev"
-
-// errOpenUI is a sentinel error returned by selectProfile to indicate that
-// the UI selection page should be opened instead of connecting directly.
-var errOpenUI = errors.New("open_ui")
 
 func main() {
 	if err := run(); err != nil {
@@ -66,15 +62,14 @@ func run() error {
 		return fmt.Errorf("invalid profiles: %w", err)
 	}
 
-	// --ui flag or no profiles → open the selection UI.
-	if *openUI || len(pf.Profiles) == 0 {
+	// No flags (= plain double-click) always opens the selection UI so the
+	// user can pick / add / edit profiles and see already-running
+	// connections. Direct connect requires an explicit --profile / --last.
+	if *openUI || (*profileName == "" && !*useLast) {
 		return runUI()
 	}
 
 	profile, err := selectProfile(pf, *profileName, *useLast)
-	if errors.Is(err, errOpenUI) {
-		return runUI()
-	}
 	if err != nil {
 		return err
 	}
@@ -103,6 +98,10 @@ func runUI() error {
 
 	// Wait until Ctrl-C or the OS sends SIGTERM.
 	<-ctx.Done()
+	// このプロセスが抱えていたトンネル / serve はここで全て死ぬので、
+	// launcher-active.json の自プロセス分を掃除する（強制終了時の残骸は
+	// 読み取り側の二重ガードで除外される）。
+	_ = launcher.UnregisterAllForPID()
 	return nil
 }
 
@@ -123,6 +122,9 @@ func connect(profile launcher.Profile) error {
 	if err := conn.Start(ctx, profile, urlCh, errCh); err != nil {
 		return err
 	}
+	// 接続記録は URL 受信時に登録されるため、終了時は無条件に削除してよい
+	//（未登録なら no-op）。
+	defer func() { _ = launcher.UnregisterActiveConnection(profile.Name) }()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -132,27 +134,41 @@ func connect(profile launcher.Profile) error {
 		case url, ok := <-urlCh:
 			if ok && url != "" {
 				launcher.OpenBrowserOnce(url)
+				// 他のランチャープロセス（選択 UI）から「接続中」と
+				// 見えるように記録する。
+				if err := launcher.RegisterActiveConnection(profile.Name, url); err != nil {
+					fmt.Fprintf(os.Stderr, "any-ai-cli-launcher: failed to record active connection: %v\n", err)
+				}
 			}
 		case <-ctx.Done():
 		}
 	}()
 
-	select {
-	case err := <-errCh:
-		stop()
-		wg.Wait()
-		if err != nil {
+	for {
+		select {
+		case err, ok := <-errCh:
+			if !ok {
+				// コネクタは接続成功時に errCh を close する（エラー送信なし）。
+				// close をエラーと同じ扱いで return すると、トンネル確立直後に
+				// プロセスごと終了して defer がトンネルを殺し、開いたブラウザが
+				// ERR_CONNECTION_REFUSED になる。閉鎖は「成功・継続中」の意味
+				// なので、以降は Ctrl+C / シグナルまで待ち続ける。
+				errCh = nil
+				continue
+			}
+			stop()
+			wg.Wait()
 			return err
+		case <-ctx.Done():
+			wg.Wait()
+			return nil
 		}
-	case <-ctx.Done():
-		wg.Wait()
 	}
-
-	return nil
 }
 
-// selectProfile chooses which profile to connect based on the CLI flags and
-// the number of profiles available.
+// selectProfile chooses which profile to connect based on the CLI flags.
+// The caller guarantees that name or useLast is set (the no-flag case opens
+// the selection UI before this is reached).
 func selectProfile(pf *launcher.ProfilesFile, name string, useLast bool) (launcher.Profile, error) {
 	if name != "" {
 		return findByName(pf, name)
@@ -163,15 +179,7 @@ func selectProfile(pf *launcher.ProfilesFile, name string, useLast bool) (launch
 		}
 		return findByName(pf, pf.LastUsed)
 	}
-
-	switch len(pf.Profiles) {
-	case 1:
-		// Exactly one profile: connect immediately without flags.
-		return pf.Profiles[0], nil
-	default:
-		// Multiple profiles and no flag: signal to open the selection UI.
-		return launcher.Profile{}, errOpenUI
-	}
+	return launcher.Profile{}, fmt.Errorf("selectProfile requires --profile or --last")
 }
 
 func findByName(pf *launcher.ProfilesFile, name string) (launcher.Profile, error) {

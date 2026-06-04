@@ -139,22 +139,43 @@ SOCAT_LOOP_PID=$!
 
 trap 'on_term' TERM INT
 
-# 前回 boot の PID ファイル残骸を起動前に必ず除去する。コンテナは boot ごとに
-# PID が再利用される（Hub が毎回同じ番号になる）ため、残骸があると Hub の
-# killStalePid が無関係なプロセスを kill しうる。docker restart は /tmp を
-# 保持するので、Hub 側の削除（異常終了時は残る）に頼らずここでも消す。
-rm -f "${TMPDIR:-/tmp}/any-ai-cli.pid"
-
 # Hub を起動し、entrypoint 側で SIGTERM を受けて wrapper → Hub の順に止める。
 # --port は config.yaml の値より優先され、Host 検証もこのポートで行われる。
-any-ai-cli serve --port "$HUB_PORT" &
-HUB_PID=$!
-log "Hub started pid=$HUB_PID"
+#
+# Hub が status 0 で終了した場合（UI の「Web のみ停止」= /api/shutdown 等の
+# 意図的停止）はコンテナを終了させず Hub だけ再起動する。entrypoint（PID 1）が
+# exit するとコンテナごと全 wrapper が終了し「セッションを残して Web のみ停止」が
+# 成立しないため。wrapper は hub_shutdown 受信後の reconnect 猶予内に新 Hub へ
+# reattach し、セッションが復元される。
+# 非 0 終了（クラッシュ）は従来通り wrapper を止めてコンテナごと終了し、
+# restart policy（unless-stopped）による再起動に任せる。
+while :; do
+  # 前回 boot / 前回 Hub の PID ファイル残骸を起動前に必ず除去する。コンテナは
+  # boot ごとに PID が再利用される（Hub が毎回同じ番号になる）ため、残骸があると
+  # Hub の killStalePid が無関係なプロセスを kill しうる。docker restart は /tmp を
+  # 保持するので、Hub 側の削除（異常終了時は残る）に頼らずここでも消す。
+  rm -f "${TMPDIR:-/tmp}/any-ai-cli.pid"
 
-set +e
-wait "$HUB_PID"
-HUB_STATUS=$?
-set -e
+  any-ai-cli serve --port "$HUB_PORT" &
+  HUB_PID=$!
+  log "Hub started pid=$HUB_PID"
+
+  set +e
+  wait "$HUB_PID"
+  HUB_STATUS=$?
+  set -e
+
+  # SIGTERM（docker stop）受信時は on_term が exit する。trap 処理と wait 復帰の
+  # 競合に備えたガード（ここに到達したら再起動せず on_term に任せて抜ける）。
+  if [ "$TERMINATING" -eq 1 ]; then
+    exit 0
+  fi
+  if [ "$HUB_STATUS" -ne 0 ]; then
+    break
+  fi
+  log "Hub exited with status 0 (intentional stop); restarting Hub to keep sessions"
+  sleep 1
+done
 
 log "Hub exited with status $HUB_STATUS"
 terminate_wrappers "Hub exited"

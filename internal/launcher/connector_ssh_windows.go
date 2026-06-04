@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -113,7 +114,10 @@ func (c *SSHConnector) tryServe(ctx context.Context, p Profile, binary string, p
 	args = append(args, "-L", fmt.Sprintf("127.0.0.1:%d:127.0.0.1:%d", port, port))
 	args = append(args, sshTarget(p))
 	// Remote command: launch any-ai-cli serve.
-	remoteCmd := fmt.Sprintf("exec %s serve --port %d", ShellQuote(binary), port)
+	// ANY_AI_CLI_HOST_LABEL: プロファイルの接続先 host をバッジ表示用ラベルとして
+	// Hub に渡す（コンテナ内実行等で Hub 自身が外側の IP を検出できないため）。
+	remoteCmd := fmt.Sprintf("exec env ANY_AI_CLI_HOST_LABEL=%s %s serve --port %d",
+		ShellQuote(p.Host), ShellQuote(binary), port)
 	if p.CWD != "" {
 		remoteCmd = fmt.Sprintf("cd %s && %s", ShellQuote(p.CWD), remoteCmd)
 	}
@@ -243,7 +247,7 @@ func (c *SSHConnector) runTunnel(ctx context.Context, p Profile, urlCh chan<- st
 	}
 
 	// Step 4: send the Hub URL to the caller for browser open.
-	hubURL := fmt.Sprintf("http://127.0.0.1:%d/?token=%s", port, token)
+	hubURL := buildTunnelHubURL(port, token, p.Host)
 	select {
 	case urlCh <- hubURL:
 	case <-ctx.Done():
@@ -256,6 +260,15 @@ func (c *SSHConnector) runTunnel(ctx context.Context, p Profile, urlCh chan<- st
 
 	// Step 5: keep the tunnel alive until ctx is cancelled.
 	<-ctx.Done()
+}
+
+// buildTunnelHubURL builds the browser-facing Hub URL for tunnel mode.
+// via=ssh / host_label: tunnel モードでは既存 Hub に後から環境変数を渡せない
+// （ANY_AI_CLI_HOST_LABEL は serve モード起動時のみ注入可能）ため、
+// バッジ表示用の SSH 判定とホスト名を URL クエリで Hub UI へ伝える。
+func buildTunnelHubURL(port int, token, host string) string {
+	return fmt.Sprintf("http://127.0.0.1:%d/?token=%s&via=ssh&host_label=%s",
+		port, token, url.QueryEscape(host))
 }
 
 // fetchToken runs token_command on the remote host via a short-lived SSH

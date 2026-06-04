@@ -19,8 +19,6 @@ export const TERMINAL_SCROLLBACK_LINES = 2000;
 // Hub の ptyBuf replay 上限と揃える。非アクティブ中の長い Codex 出力を
 // 100KB で捨てると、セッション切替時に回答の前半が欠けて見える。
 export const TERMINAL_PENDING_MAX_BYTES = 512 * 1024;
-export const TERMINAL_PENDING_FLUSH_MAX_CHUNKS = 8;
-export const TERMINAL_PENDING_FLUSH_MAX_BYTES = 24_000;
 
 export function ensureTerminal(id) {
   if (terminals.has(id)) return;
@@ -298,7 +296,6 @@ export function flushPending(id) {
   const seq = (t.pendingFlushSeq || 0) + 1;
   t.pendingFlushSeq = seq;
   t.pendingFlushActive = true;
-  let i = 0;
 
   const finish = () => {
     const latest = terminals.get(id);
@@ -312,27 +309,22 @@ export function flushPending(id) {
     scheduleApprovalCheck(id);
   };
 
-  const writeBatch = () => {
-    const latest = terminals.get(id);
-    if (!latest || latest.pendingFlushSeq !== seq) return;
-    let writtenChunks = 0;
-    let writtenBytes = 0;
-    while (i < chunks.length &&
-           writtenChunks < TERMINAL_PENDING_FLUSH_MAX_CHUNKS &&
-           writtenBytes < TERMINAL_PENDING_FLUSH_MAX_BYTES) {
-      const chunk = chunks[i];
-      const isLast = i === chunks.length - 1;
-      i++;
-      writtenChunks++;
-      writtenBytes += chunk.length;
-      writePTYChunk(id, latest.term, chunk, isLast ? finish : undefined);
-    }
-    if (i < chunks.length) {
-      requestAnimationFrame(writeBatch);
-    }
-  };
-
-  requestAnimationFrame(writeBatch);
+  // 溜まったチャンクを 1 つに結合して一括書き込みする。
+  // 以前は 8 chunks / 24KB ずつ rAF で逐次再生していたが、PTY 由来の細切れ
+  // チャンクが数千件溜まると切替後の「再生待ち」が数秒以上になり、その間
+  // scrollToBottom も走らず途中経過が流れ続けて見えていた。
+  // 各フィルタ（マーカー除去・reverse-video 変換等）は carry 付きの
+  // ストリーム処理なので結合しても結果は変わらず、xterm.js 側も write を
+  // 内部で時分割パースするため UI ブロックは起きない。
+  let totalBytes = 0;
+  for (const c of chunks) totalBytes += c.length;
+  const merged = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const c of chunks) {
+    merged.set(c, offset);
+    offset += c.length;
+  }
+  writePTYChunk(id, t.term, merged, finish);
 }
 
 window.flushPendingTerminalChunks = flushPending;
