@@ -703,7 +703,12 @@ window.closeMobileSessionDrawer = closeMobileSessionDrawer;
       keyRow?.querySelector('[data-mobile-key="ctrl"]')?.setAttribute('aria-pressed', 'false');
     }
   });
-  syncMobileLayoutState();
+  // NOTE: 循環 import（state.js → session-list.js → … → app.js）により、本モジュールは
+  // state.js の本体評価より前に評価されうる。ここで同期的に syncMobileLayoutState() を
+  // 呼ぶと activeSessionId が TDZ（Cannot access before initialization）で落ち、モジュール
+  // グラフ全体の初期化が中断して WS 登録まで連鎖死する。files-view.js の sessionsRef と
+  // 同じく、評価完了後のマイクロタスクへ遅延する。
+  queueMicrotask(syncMobileLayoutState);
 })();
 
 export function sendQuickCommand(sessionId, cmd) {

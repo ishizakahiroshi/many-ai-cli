@@ -1,8 +1,10 @@
 package launcher
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -345,5 +347,42 @@ func TestNormalizeProfile_WSLIgnored(t *testing.T) {
 	normalizeProfile(&p)
 	if p.Host != "ubuntu@somehost" {
 		t.Errorf("WSL Host should not be modified, got %q", p.Host)
+	}
+}
+
+// --- JSON round-trip (UI server <-> browser) ---
+
+// The UI exchanges profiles as JSON with the same snake_case names as the
+// yaml file. Without explicit json tags, encoding/json silently drops
+// snake_case keys like hub_port (regression: form-saved tunnel profiles
+// arrived with hub_port=0 and failed validation).
+func TestProfileJSONRoundTrip(t *testing.T) {
+	in := Profile{
+		Name:         "vps-docker",
+		Type:         ProfileTypeSSH,
+		Mode:         SSHModeTunnel,
+		Host:         "203.0.113.10",
+		User:         "root",
+		SSHPort:      22,
+		IdentityFile: `C:\dev\.ssh\key.pem`,
+		TokenCommand: "docker exec aac-x sed -n 's/^token: //p' ~/.any-ai-cli/config.yaml",
+		HubPort:      47801,
+	}
+	data, err := json.Marshal(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The wire format must use the snake_case names the browser sends.
+	for _, key := range []string{`"hub_port":47801`, `"ssh_port":22`, `"identity_file"`, `"token_command"`} {
+		if !strings.Contains(string(data), key) {
+			t.Errorf("marshaled JSON missing %s: %s", key, data)
+		}
+	}
+	var out Profile
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out != in {
+		t.Errorf("JSON round-trip mismatch:\n in=%+v\nout=%+v", in, out)
 	}
 }
