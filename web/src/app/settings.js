@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, showToast, ti18n, token } from './util.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref } from './user-prefs.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, stateLabel } from './session-list.js';
@@ -10,6 +10,7 @@ import { attachTerminal, fitTerminalPreservingBottom, refitActiveTerminalAfterLa
 import { providerApprovalTriggers } from './approval.js';
 import { MULTI_SCROLLBACK, getMessages } from './chat-history.js';
 import { FilesTabManager } from './files-view.js';
+import { fetchPushStatus, getPushSubscription, isLikelyIOSBrowserTabWithoutStandalone, pushNotificationsSupported, subscribeWebPush, unsubscribeWebPush } from './pwa.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -155,6 +156,54 @@ export function playNotificationSound() {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.3);
+  } catch (_) {}
+}
+
+export function desktopNotificationsEnabled() {
+  return localStorage.getItem(STORAGE_DESKTOP_NOTIFY_ENABLED_KEY) === '1';
+}
+
+export function desktopNotificationPermission() {
+  if (!('Notification' in window)) return 'unsupported';
+  return Notification.permission || 'default';
+}
+
+export async function requestDesktopNotificationPermission() {
+  if (!('Notification' in window)) return 'unsupported';
+  try {
+    return await Notification.requestPermission();
+  } catch (_) {
+    return desktopNotificationPermission();
+  }
+}
+
+export function showDesktopApprovalNotification(sessionId) {
+  if (!desktopNotificationsEnabled()) return;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const sess = sessions.get(sessionId);
+  if (!sess) return;
+  const isCurrentVisible =
+    document.visibilityState === 'visible' &&
+    sessionId === activeSessionId &&
+    !document.hidden;
+  if (isCurrentVisible) return;
+  const provider = providerDisplayName(sess.provider) || sess.provider || '';
+  const title = sess.label ? `${provider} #${sessionId} [${sess.label}]` : `${provider} #${sessionId}`;
+  const bodySource = sess.last_message || sess.first_message || sess.cwd || '';
+  const body = bodySource.replace(/\s+/g, ' ').trim().slice(0, 160) || t('desktop_notification_body');
+  try {
+    const n = new Notification(title, {
+      body,
+      tag: `any-ai-cli-approval-${sessionId}`,
+      icon: '/icon.svg',
+      badge: '/icon.svg',
+      requireInteraction: false,
+    });
+    n.onclick = () => {
+      window.focus();
+      activateSession(sessionId);
+      n.close();
+    };
   } catch (_) {}
 }
 
@@ -741,6 +790,105 @@ export function applyLang(lang) {
   phraseEl.value = localStorage.getItem(STORAGE_WAKE_WORD_PHRASE_KEY) ?? getDefaultWakeWordPhrase();
 })();
 
+// ---- デスクトップ通知設定 ----
+(function () {
+  const enabledEl = document.getElementById('desktop-notify-enabled');
+  const statusEl = document.getElementById('desktop-notify-status');
+  if (!enabledEl) return;
+
+  function renderStatus() {
+    const perm = desktopNotificationPermission();
+    if (statusEl) {
+      const key = perm === 'granted' ? 'desktop_notification_granted'
+        : perm === 'denied' ? 'desktop_notification_denied'
+        : perm === 'unsupported' ? 'desktop_notification_unsupported'
+        : 'desktop_notification_default';
+      statusEl.textContent = t(key);
+    }
+    enabledEl.checked = desktopNotificationsEnabled() && perm === 'granted';
+    enabledEl.disabled = perm === 'unsupported' || perm === 'denied';
+  }
+
+  enabledEl.addEventListener('change', async () => {
+    if (!enabledEl.checked) {
+      setUserPref('desktop_notifications.enabled', false);
+      renderStatus();
+      return;
+    }
+    const perm = await requestDesktopNotificationPermission();
+    if (perm === 'granted') {
+      setUserPref('desktop_notifications.enabled', true);
+    } else {
+      setUserPref('desktop_notifications.enabled', false);
+    }
+    renderStatus();
+  });
+
+  renderStatus();
+})();
+
+// ---- プッシュ通知設定 ----
+(function () {
+  const enabledEl = document.getElementById('push-notify-enabled');
+  const statusEl = document.getElementById('push-notify-status');
+  if (!enabledEl) return;
+
+  async function renderStatus() {
+    const supported = pushNotificationsSupported();
+    const iosPwaRequired = isLikelyIOSBrowserTabWithoutStandalone();
+    const permission = ('Notification' in window) ? (Notification.permission || 'default') : 'unsupported';
+    let subscribed = false;
+    let serverSupported = false;
+    let key = 'push_notification_unsupported';
+
+    if (iosPwaRequired) {
+      key = 'push_notification_pwa_required';
+    } else if (supported) {
+      const [subscription, status] = await Promise.all([
+        getPushSubscription().catch(() => null),
+        fetchPushStatus().catch(() => ({ supported: false })),
+      ]);
+      subscribed = !!subscription;
+      serverSupported = !!(status && status.supported);
+      key = !serverSupported ? 'push_notification_unavailable'
+        : subscribed ? 'push_notification_enabled'
+        : permission === 'denied' ? 'push_notification_denied'
+        : permission === 'granted' ? 'push_notification_ready'
+        : 'push_notification_default';
+    }
+
+    if (statusEl) statusEl.textContent = t(key);
+    enabledEl.checked =
+      localStorage.getItem(STORAGE_PUSH_NOTIFY_ENABLED_KEY) === '1' &&
+      subscribed &&
+      permission === 'granted';
+    enabledEl.disabled = iosPwaRequired || !supported || !serverSupported || permission === 'denied';
+  }
+
+  enabledEl.addEventListener('change', async () => {
+    enabledEl.disabled = true;
+    try {
+      if (!enabledEl.checked) {
+        await unsubscribeWebPush();
+        setUserPref('push_notifications.enabled', false);
+      } else if (isLikelyIOSBrowserTabWithoutStandalone()) {
+        setUserPref('push_notifications.enabled', false);
+        showToast(t('push_notification_pwa_required'));
+      } else {
+        await subscribeWebPush();
+        setUserPref('push_notifications.enabled', true);
+      }
+    } catch (_) {
+      setUserPref('push_notifications.enabled', false);
+      showToast(t('push_notification_enable_failed'));
+    } finally {
+      await renderStatus();
+    }
+  });
+
+  renderStatus();
+})();
+
 // ---- 通知音設定 ----
 (function () {
   const soundEnabledEl  = document.getElementById('notify-sound-enabled');
@@ -1003,11 +1151,13 @@ export function applyLang(lang) {
       const translated = window.t(key);
       return translated && translated !== key ? translated : (info.runtime_label || runtimeMode);
     };
+    // SSH セッション経由なら「SSH <自機IP>」、それ以外は自機 IP のみ付与（例: Linux SSH 192.168.1.1）
+    const netSuffix = (info.ssh ? ' SSH' : '') + (info.host_ip ? ` ${info.host_ip}` : '');
     const apply = () => {
       const runtime = runtimeLabel();
       const badgeEl = document.getElementById('runtime-badge');
       if (badgeEl && runtime) {
-        badgeEl.textContent = runtime;
+        badgeEl.textContent = runtime + netSuffix;
         badgeEl.hidden = false;
         badgeEl.dataset.mode = runtimeMode;
       }
@@ -1318,6 +1468,14 @@ export const sessionLazyLoaded = new Map();
 export const VALID_TAB_NAMES = new Set(['terminal', 'chat', 'split', 'files', 'git', 'workbench', 'multi']);
 // C5: lock の対象モード (Files/Git は lock 対象外: D10 の lazy 読み込みと相性が悪い)
 export const LOCKABLE_MODES = new Set(['terminal', 'chat', 'split']);
+export const RESPONSIVE_WIDE_MODE_MIN = 1001;
+
+export function normalizeResponsiveTabName(name) {
+  if ((name === 'split' || name === 'multi') && window.innerWidth < RESPONSIVE_WIDE_MODE_MIN) {
+    return 'terminal';
+  }
+  return name;
+}
 
 // C5: 「表示モードを固定」設定値の取得 ('' / 'terminal' / 'chat' / 'split')
 export function getDisplayLockedMode() {
@@ -1446,6 +1604,7 @@ export function updateChatCountBadge() {
 export let _setActiveTabRecursion = false;
 export function setActiveTab(sid, name) {
   if (!VALID_TAB_NAMES.has(name)) return;
+  name = normalizeResponsiveTabName(name);
 
   // マルチタブはセッション非依存のビュー: セッションなしでも動作させる
   if (name === 'multi') {
@@ -1646,10 +1805,19 @@ export function switchToTerminalView() {
 // 新規セッション/アクティブ切替時に display-area のモードを復元
 export function applyActiveSessionViewMode() {
   if (activeSessionId === null || activeSessionId === undefined) return;
-  const mode = getSessionViewMode(activeSessionId);
+  const mode = normalizeResponsiveTabName(getSessionViewMode(activeSessionId));
   refreshLazyTabClasses(activeSessionId);
   setActiveTab(activeSessionId, mode);
 }
+
+window.addEventListener('resize', () => {
+  if (window.innerWidth >= RESPONSIVE_WIDE_MODE_MIN) return;
+  const multiView = document.getElementById('multi-view');
+  const area = document.getElementById('display-area');
+  if ((multiView && !multiView.hidden) || (area && area.classList.contains('mode-split'))) {
+    setActiveTab(activeSessionId, 'terminal');
+  }
+});
 
 
 // ─── カード右クリックメニュー (Open Git / Files / Activate / Copy ID) ───

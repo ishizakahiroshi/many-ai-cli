@@ -141,7 +141,7 @@ function renderWorkbench() {
             <button type="button" data-wb-action="redact">Mask preview</button>
             <button type="button" data-wb-action="approval-sim">Approval simulate</button>
             <button type="button" data-wb-action="diagnostics">Diagnostics</button>
-            <button type="button" data-wb-action="notify-enable">通知許可</button>
+            <button type="button" data-wb-action="notify-enable">通知状態</button>
           </div>
           <pre id="wb-safety-output" class="wb-pre"></pre>
           <h4>Policy profiles</h4>
@@ -418,8 +418,7 @@ async function safetyAction(action) {
     out.textContent = JSON.stringify(await res.json(), null, 2);
   } else if (action === 'notify-enable') {
     if ('Notification' in window) {
-      const perm = await Notification.requestPermission();
-      out.textContent = `Notification permission: ${perm}`;
+      out.textContent = `Notification permission: ${Notification.permission}`;
     } else {
       out.textContent = 'Notification API is not available';
     }

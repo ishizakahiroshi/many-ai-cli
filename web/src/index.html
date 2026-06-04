@@ -2,9 +2,15 @@
 <html lang="">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
   <title>ANY-AI-CLI</title>
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <meta name="theme-color" content="#08090d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="ANY-AI-CLI">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="stylesheet" href="/vendor/xterm.min.css">
   <link rel="stylesheet" href="/vendor/hljs-github-dark.min.css">
   <link rel="stylesheet" href="/styles.css">
@@ -352,6 +358,28 @@
         <summary class="settings-section-title"><span data-i18n="settings_notify_sound">通知音</span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_desktop_notifications">デスクトップ通知</span>
+            <div class="settings-row-actions">
+              <span id="desktop-notify-status" class="settings-note"></span>
+              <label class="approval-toggle">
+                <input type="checkbox" id="desktop-notify-enabled">
+                <span class="approval-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="settings-note" data-i18n="settings_desktop_notifications_desc">承認待ちを OS 通知で知らせます。タブ表示中の現在セッションでは抑制されます。</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_push_notifications">プッシュ通知</span>
+            <div class="settings-row-actions">
+              <span id="push-notify-status" class="settings-note"></span>
+              <label class="approval-toggle">
+                <input type="checkbox" id="push-notify-enabled">
+                <span class="approval-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="settings-note" data-i18n="settings_push_notifications_desc">タブを閉じていても承認待ちを通知します。外部のブラウザ push サービスへ通知 payload が送信されます（Hub token は含めません）。</div>
+          <div class="settings-row">
             <span class="settings-label" data-i18n="settings_notify_sound_toggle">通知音</span>
             <div class="settings-row-actions notify-sound-actions">
               <button id="notify-sound-test-btn" class="settings-link-btn settings-inline-btn" data-i18n="settings_notify_sound_test">テスト再生</button>
@@ -472,6 +500,9 @@
     </div>
   </div>
   <div id="app">
+    <button id="mobile-menu-btn" type="button" aria-label="Sessions" aria-expanded="false">☰</button>
+    <div id="mobile-drawer-backdrop" hidden></div>
+    <button id="mobile-spawn-btn" type="button" aria-label="New Session">+</button>
     <aside id="session-list">
       <div id="new-session-bar">
         <button id="kill-all-btn" data-i18n-tooltip="kill_all_tooltip" aria-label="Terminate all sessions">
@@ -634,6 +665,19 @@
     <!-- D7/D8: 共有 action-bar (display-area 外, input の上) -->
     <div id="action-bar"></div>
     <div id="multi-question-banner" hidden data-i18n="multi_question_banner"></div>
+    <div id="mobile-keyboard-panel" hidden>
+      <div id="mobile-key-row" aria-label="Terminal keys">
+        <button type="button" data-mobile-key="esc">Esc</button>
+        <button type="button" data-mobile-key="ctrl" aria-pressed="false">Ctrl</button>
+        <button type="button" data-mobile-key="tab">Tab</button>
+        <button type="button" data-mobile-key="up">↑</button>
+        <button type="button" data-mobile-key="down">↓</button>
+        <button type="button" data-mobile-key="left">←</button>
+        <button type="button" data-mobile-key="right">→</button>
+        <button type="button" data-mobile-key="ctrl-o">^O</button>
+        <button type="button" data-mobile-key="ctrl-c">^C</button>
+      </div>
+    </div>
     <div id="input-bar-outer">
         <div id="slash-menu" hidden></div>
         <div id="slash-picker" hidden>
@@ -659,6 +703,7 @@
               <textarea id="input" rows="1" data-i18n-placeholder="input_placeholder"></textarea>
             </div>
             <button id="voice-btn" hidden>🎤</button>
+            <button id="mobile-keyboard-toggle" class="quick-cmd-btn" type="button" aria-expanded="false" data-i18n-tooltip="mobile_keyboard_toggle_tooltip">⌨</button>
             <button id="input-clear-btn" class="quick-cmd-btn" data-i18n-tooltip="input_clear_tooltip" aria-label="Clear input">
               <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 13 13" fill="none"
                    stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -798,6 +843,12 @@
               <a class="about-oss-link" href="https://github.com/go-yaml/yaml" target="_blank" rel="noopener noreferrer">
                 <p class="about-oss-name">gopkg.in/yaml.v3 3.0.1</p>
                 <p class="about-oss-desc" data-i18n="about_oss_yaml_desc">MIT + Apache-2.0 License. Used for parsing YAML configuration.</p>
+              </a>
+            </li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://github.com/SherClockHolmes/webpush-go" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">github.com/SherClockHolmes/webpush-go 1.4.0</p>
+                <p class="about-oss-desc" data-i18n="about_oss_webpush_desc">MIT License. Used for Web Push notifications.</p>
               </a>
             </li>
             <li class="about-oss-item">

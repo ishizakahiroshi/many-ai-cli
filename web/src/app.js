@@ -617,6 +617,95 @@ document.getElementById('quick-model-btn').addEventListener('click', () => {
   sendQuickCommand(activeSessionId, getQuickCommand(2));
 });
 
+export function syncMobileLayoutState() {
+  const hasSession = activeSessionId !== null && sessions.size > 0;
+  document.body.classList.toggle('mobile-has-session', hasSession);
+  if (!hasSession) closeMobileSessionDrawer();
+}
+
+export function openMobileSessionDrawer() {
+  document.body.classList.add('mobile-drawer-open');
+  const btn = document.getElementById('mobile-menu-btn');
+  const backdrop = document.getElementById('mobile-drawer-backdrop');
+  if (btn) btn.setAttribute('aria-expanded', 'true');
+  if (backdrop) backdrop.hidden = false;
+}
+
+export function closeMobileSessionDrawer() {
+  document.body.classList.remove('mobile-drawer-open');
+  const btn = document.getElementById('mobile-menu-btn');
+  const backdrop = document.getElementById('mobile-drawer-backdrop');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+  if (backdrop) backdrop.hidden = true;
+}
+
+window.syncMobileLayoutState = syncMobileLayoutState;
+window.closeMobileSessionDrawer = closeMobileSessionDrawer;
+
+(function initMobileControls() {
+  const menuBtn = document.getElementById('mobile-menu-btn');
+  const backdrop = document.getElementById('mobile-drawer-backdrop');
+  const spawnBtn = document.getElementById('mobile-spawn-btn');
+  const keyboardToggle = document.getElementById('mobile-keyboard-toggle');
+  const keyboardPanel = document.getElementById('mobile-keyboard-panel');
+  const keyRow = document.getElementById('mobile-key-row');
+  let ctrlNext = false;
+
+  menuBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (document.body.classList.contains('mobile-drawer-open')) closeMobileSessionDrawer();
+    else openMobileSessionDrawer();
+  });
+  backdrop?.addEventListener('click', closeMobileSessionDrawer);
+  spawnBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openMobileSessionDrawer();
+    document.getElementById('new-session-btn')?.click();
+  });
+  keyboardToggle?.addEventListener('click', () => {
+    const nextHidden = !keyboardPanel.hidden;
+    keyboardPanel.hidden = nextHidden;
+    keyboardToggle.setAttribute('aria-expanded', String(!nextHidden));
+  });
+  keyRow?.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-mobile-key]');
+    if (!btn || activeSessionId === null) return;
+    const key = btn.dataset.mobileKey;
+    if (key === 'ctrl') {
+      ctrlNext = !ctrlNext;
+      btn.setAttribute('aria-pressed', String(ctrlNext));
+      return;
+    }
+    const textByKey = {
+      esc: '\x1b',
+      tab: '\t',
+      up: '\x1b[A',
+      down: '\x1b[B',
+      right: '\x1b[C',
+      left: '\x1b[D',
+      'ctrl-o': '\x0f',
+      'ctrl-c': '\x03',
+    };
+    const text = textByKey[key] || '';
+    if (text) sendText(activeSessionId, text);
+    ctrlNext = false;
+    keyRow.querySelector('[data-mobile-key="ctrl"]')?.setAttribute('aria-pressed', 'false');
+    focusInputForTerminalKeys();
+  });
+  inputEl.addEventListener('input', () => {
+    if (!ctrlNext || activeSessionId === null || inputEl.value.length === 0) return;
+    const ch = inputEl.value.slice(-1).toLowerCase();
+    if (ch >= 'a' && ch <= 'z') {
+      inputEl.value = inputEl.value.slice(0, -1);
+      updateInputClearButton();
+      sendText(activeSessionId, String.fromCharCode(ch.charCodeAt(0) - 96));
+      ctrlNext = false;
+      keyRow?.querySelector('[data-mobile-key="ctrl"]')?.setAttribute('aria-pressed', 'false');
+    }
+  });
+  syncMobileLayoutState();
+})();
+
 export function sendQuickCommand(sessionId, cmd) {
   // Ollama route セッションで /model 始まりはブロック（quick-model-btn 経由含む）
   if (isOllamaModelCommandBlocked(sessionId, cmd)) {
@@ -828,6 +917,7 @@ export function removeLocalSession(id) {
   onChatHistorySessionRemoved(id);
   if (activeSessionId === id) {
     set_activeSessionId(null);
+    syncMobileLayoutState();
     const area = document.getElementById('terminal-area');
     if (area) area.innerHTML = '';
     hideActionBar(undefined);

@@ -14,6 +14,7 @@ before:
     - go install github.com/tc-hib/go-winres@latest
     - go-winres make --in winres/winres.json --out cmd/any-ai-cli/rsrc --product-version={{ .Version }} --file-version={{ .Version }}
     - go-winres make --in winres/winres-wsl.json --out cmd/any-ai-cli-wsl/rsrc --product-version={{ .Version }} --file-version={{ .Version }}
+    - go-winres make --in winres/winres-launcher.json --out cmd/any-ai-cli-launcher/rsrc --product-version={{ .Version }} --file-version={{ .Version }}
 
 builds:
   - id: any-ai-cli
@@ -43,6 +44,18 @@ builds:
       - windows
     goarch:
       - amd64
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+  - id: any-ai-cli-launcher
+    main: ./cmd/any-ai-cli-launcher
+    binary: any-ai-cli-launcher
+    goos:
+      - windows
+    goarch:
+      - amd64
+      - arm64
     env:
       - CGO_ENABLED=0
     ldflags:

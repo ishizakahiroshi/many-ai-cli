@@ -210,6 +210,74 @@ any-ai-cli-wsl.exe --distro Ubuntu-22.04 --cwd /home/user/projects/my-app
 
 If a port collision is detected on the Windows side (e.g. `any-ai-cli.exe` already holds 47777), the launcher picks the next available port automatically.
 
+### Windows unified launcher
+
+`any-ai-cli-launcher.exe` is a unified launcher that manages connection profiles for both WSL and remote VPS targets. Connection profiles are stored in `~/.any-ai-cli/launcher-profiles.yaml`.
+
+#### How it works
+
+The launcher reads your saved profiles and connects to the right Hub — starting one if needed — then opens the browser automatically. Two connection modes are supported:
+
+| Mode | Use case |
+|---|---|
+| `serve` | SSH into a VPS and start `any-ai-cli serve` on the remote side |
+| `tunnel` | Port-forward to a Hub that is already running on the remote side (e.g. a Docker-compose resident Hub) |
+
+In both modes, the Hub continues to bind to `127.0.0.1` only on the remote. The SSH local forward (`-L 127.0.0.1:<port>:127.0.0.1:<port>`) makes it reachable from the Windows browser without exposing the Hub to the network.
+
+#### Setup
+
+Download `any-ai-cli-<version>-windows-x64.zip`, extract `any-ai-cli-launcher.exe`, and place it on your Windows `PATH`.
+
+Create `~/.any-ai-cli/launcher-profiles.yaml`:
+
+```yaml
+version: 1
+profiles:
+  # WSL profile — starts the Hub inside WSL
+  - name: my-wsl
+    type: wsl
+    distro: Ubuntu-22.04  # omit to use the default WSL distro
+    hub_port: 0           # 0 = auto-select to avoid Windows-side collisions
+
+  # VPS profile (serve mode) — SSH in and start any-ai-cli serve
+  - name: my-vps
+    type: ssh
+    mode: serve
+    host: vps.example.com
+    user: your-user
+    hub_port: 47777
+
+  # VPS profile (tunnel mode) — forward port to a resident Docker Hub
+  - name: vps-docker
+    type: ssh
+    mode: tunnel
+    host: vps.example.com
+    user: your-user
+    hub_port: 47801
+    token_command: "docker exec any-ai-cli-user1 sh -c 'grep ^token ~/.any-ai-cli/config.yaml | cut -d\" \" -f2'"
+```
+
+#### Launch
+
+```powershell
+any-ai-cli-launcher.exe            # auto-connect if only one profile; otherwise open selection UI
+any-ai-cli-launcher.exe --profile my-vps   # connect to a specific profile
+any-ai-cli-launcher.exe --last     # reconnect using the last-used profile
+any-ai-cli-launcher.exe --ui       # always open the selection UI
+```
+
+#### Security
+
+The launcher does not change the Hub's security model:
+
+- The Hub binds to `127.0.0.1` only — no `0.0.0.0` binding, no reverse proxy exposure
+- SSH forwarding uses `127.0.0.1`-to-`127.0.0.1` local forward only (no `-g` or `GatewayPorts`)
+- Passwords and key passphrases are never saved; key-based authentication is required (`-o BatchMode=yes`)
+- The token retrieved by `token_command` is used only for the current session and is not written to `launcher-profiles.yaml`
+
+For the full profile schema and connection flow details, see [docs/v0.2.0-any-ai-cli-design.md — §11b](docs/v0.2.0-any-ai-cli-design.md).
+
 ---
 
 ## Launching from a terminal (advanced)
@@ -527,6 +595,7 @@ When **Approval Buttons** is enabled, `any-ai-cli` writes only its marked approv
 
 - **Slash command list (Hub itself)** — When the slash command picker is opened, the Hub fetches a markdown file from `https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent}.md` and caches it for 24 hours. The source URL can be changed (or pointed to a local file path) in **Settings → Slash command sources**.
 - **Approval pattern list (Hub itself)** — On Hub startup, the official approval detection patterns can be fetched from `https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,common}.md` and cached for 24 hours. The source URLs can be overridden in config.
+- **Web Push notifications (Hub itself, opt-in only)** — When Push notifications are enabled, the Hub sends encrypted Web Push requests to the browser vendor's push service over HTTPS. Payloads include the session ID/name, provider, and a short approval-question/context excerpt; they do **not** include the Hub URL token. VAPID keys and subscriptions are stored locally in `~/.any-ai-cli/push_store.json`. Notifications can be delivered while an SSH tunnel is down, but opening the Hub from the notification still requires the tunnel and Hub to be reachable.
 - **Wrapped CLI traffic (the CLIs themselves)** — The CLIs you wrap (Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI) talk directly to their respective vendor APIs (Anthropic, OpenAI, GitHub, Cursor) over HTTPS. `any-ai-cli` only relays PTY I/O via local WebSocket; it does not intercept, log, or proxy these API requests. Whatever network behavior the underlying CLI has applies as-is.
 
 ### ⚠️ Data retention by wrapped CLIs
@@ -548,6 +617,22 @@ Wrapped-CLI vendors may change their terms — including restricting or prohibit
 
 - Recent precedent: Google began enforcing a ToS clause in 2026 that forbids accessing Gemini Code Assist through third-party wrappers, resulting in `403 ToS` account bans for tools like OpenClaw / OpenCode / Antigravity. For this reason, **Gemini CLI is intentionally out of scope** for `any-ai-cli`.
 - The same risk applies to every CLI in the table above. **Support for any wrapped CLI may be discontinued without notice** if its vendor restricts third-party automation. It is your responsibility to review each CLI's current terms before use.
+
+### ⚠️ Do not share one account among multiple users
+
+**Never share a single AI CLI account (its credentials) among multiple people** — for example by installing `any-ai-cli` on a server and pointing several users at one login. This clearly violates each vendor's terms of service.
+
+- **Claude Code (Anthropic)**: Under the Consumer Terms, accounts are for individual use; sharing or transferring credentials (login / OAuth tokens) is prohibited. Rate limits are designed around individual usage, so multi-user access can be detected as anomalous usage and lead to account suspension (no refund)
+- **Codex CLI (OpenAI)**: Sharing a ChatGPT account is likewise prohibited by OpenAI's terms
+- **GitHub Copilot CLI / Cursor Agent CLI**: Both are licensed per seat (per individual); sharing violates the terms
+
+If multiple people need access, use one of the legitimate options instead:
+
+- Each user **logs in with their own account** (even on a shared server, separate OS users / home directories so each person uses their own credentials)
+- Switch to **API-key billing** (e.g. the Anthropic API) under an organizational agreement
+- Use an organizational plan such as **Claude for Work (Team / Enterprise)** with a seat per member
+
+`any-ai-cli` itself has no multi-user support either (see the next section, "Localhost-only by design").
 
 ### ⚠️ Important: Localhost-only by design
 
@@ -613,6 +698,54 @@ GOOS=windows GOARCH=amd64 go build -o dist/any-ai-cli-windows-amd64.exe ./cmd/an
 GOOS=darwin  GOARCH=amd64 go build -o dist/any-ai-cli-darwin-amd64      ./cmd/any-ai-cli
 GOOS=darwin  GOARCH=arm64 go build -o dist/any-ai-cli-darwin-arm64      ./cmd/any-ai-cli
 GOOS=linux   GOARCH=amd64 go build -o dist/any-ai-cli-linux-amd64       ./cmd/any-ai-cli
+```
+
+---
+
+## VPS / Docker deployment (auto-update)
+
+Container assets live under [`deploy/docker/`](deploy/docker/) (one user = one container; the Hub is published on `127.0.0.1` only and is meant to be reached through an SSH tunnel or similar).
+
+Every push to `main` / `develop` triggers GitHub Actions ([`docker-image.yml`](.github/workflows/docker-image.yml)) to build and publish a container image to GHCR — the server never builds anything itself:
+
+```
+ghcr.io/ishizakahiroshi/any-ai-cli:latest      # follows main (normal operation)
+ghcr.io/ishizakahiroshi/any-ai-cli:develop     # follows develop (testing)
+ghcr.io/ishizakahiroshi/any-ai-cli:sha-<hash>  # per-commit tag (rollback)
+```
+
+### Always run the latest image
+
+Place [`deploy/docker/aac-update.sh`](deploy/docker/aac-update.sh) next to your `compose.yaml` and register it as a daily cron job. It pulls the configured tag and recreates containers **only when the image actually changed** (no-op otherwise):
+
+```cron
+# root crontab — daily at 04:30
+30 4 * * * /opt/any-ai-cli/aac-update.sh >> /var/log/aac-update.log 2>&1
+```
+
+### Development bypass
+
+The image tag is selected by `AAC_TAG` in the compose project's `.env` file (defaults to `latest`). A `HOLD` file next to `compose.yaml` freezes the auto-update cron.
+
+| Mode | `.env` | Auto-update cron |
+|---|---|---|
+| Normal (follow `main`) | `AAC_TAG=latest` or unset | runs |
+| Follow `develop` | `AAC_TAG=develop` | runs (keeps pulling `develop`) |
+| Local build on the server | `AAC_TAG=dev` | freeze it with `touch HOLD` |
+
+Local-build example (when you need to test changes without going through GitHub):
+
+```bash
+cd /opt/any-ai-cli
+touch HOLD                            # freeze the auto-update cron
+docker build -t ghcr.io/ishizakahiroshi/any-ai-cli:dev \
+  -f src/deploy/docker/Dockerfile src # src/ = a checkout of this repo
+# set AAC_TAG=dev in .env, then:
+docker compose up -d
+
+# back to normal operation:
+# set AAC_TAG=latest in .env, then:
+docker compose up -d && rm HOLD
 ```
 
 ---

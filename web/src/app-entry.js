@@ -21,3 +21,4 @@ import './app/voice.js';
 import './app/git-view.js';
 import './app/files-view.js';
 import './app/workbench.js';
+import './app/pwa.js';

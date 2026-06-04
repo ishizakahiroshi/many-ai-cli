@@ -1,0 +1,58 @@
+# ユーザー admin 用サービス定義（新規ユーザー追加時のテンプレートを兼ねる）
+#
+# 新規ユーザー追加時にこのファイルをコピーして置換するもの:
+#   - admin       → 新ユーザー名（service 名 / container_name / volume 名 / work パス）
+#   - 47801       → 割当ポート（連番。/opt/any-ai-cli/assign.md で採番・記録する）
+# 置換後、compose.yaml の include に users/<user>.yaml を追記する。
+services:
+  aac-admin:
+    container_name: aac-admin
+    # イメージは GitHub Actions が GHCR へ publish したものを pull する（VPS ではビルドしない）。
+    # タグは compose プロジェクトの .env（/opt/any-ai-cli/.env）の AAC_TAG で切り替える:
+    #   latest（既定） — main 追従。cron の aac-update.sh が自動更新する
+    #   develop        — develop 追従（開発中バイパス案1。cron がそのまま develop を追従）
+    #   dev            — VPS ローカルビルド（開発中バイパス案2。HOLD ファイルで cron を凍結すること）
+    # 手順の正本: README「VPS / Docker deployment」/ deploy/docker/aac-update.sh
+    image: ghcr.io/ishizakahiroshi/any-ai-cli:${AAC_TAG:-latest}
+    init: true                         # tini を PID 1 に挟み、provider CLI の孤児プロセスを回収
+    restart: unless-stopped
+    stop_grace_period: 40s             # wrapper TERM 待機 20s + Hub 終了の余裕
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "TOKEN=$$(sed -n 's/^token: //p' \"$$HOME/.any-ai-cli/config.yaml\"); test -n \"$$TOKEN\" && curl -fsS -o /dev/null \"http://127.0.0.1:$$HUB_PORT/api/info?token=$$TOKEN\""]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    environment:
+      HUB_PORT: "47801"                # ブラウザ URL・下の publish ポートと一致必須
+      ANY_AI_CLI_HUB_PORT: "47801"     # docker exec からの手動 wrap も Hub へ正しく接続させる
+    ports:
+      - "127.0.0.1:47801:48000"        # host 側は loopback 限定。グローバル IP には露出しない
+    volumes:
+      - aac-home-admin:/home/ubuntu                    # AI CLI 認証・~/.any-ai-cli の永続化
+      - /srv/any-ai-cli/work/admin:/home/ubuntu/work   # 作業リポジトリ（host から参照可・uid 1000 所有）
+    # ユーザー専用ネットワーク: 共有 default ネットワークだと他ユーザーのコンテナから
+    # socat:48000 へ TCP 到達できてしまう（token のみが防壁になる）ため、コンテナ間を遮断する
+    networks:
+      - aac-net-admin
+    # リソース制限の初期値（C5 の実測で調整。plan の例: memory 2g / cpus 2）
+    mem_limit: 2g
+    # mem_limit と同値にして swap 使用を実質ゼロにする。未指定だと mem と同量の swap を
+    # 追加で使えてしまい、host swap 2GiB の奪い合い → host 全体のスラッシングに繋がる。
+    # 上限超過時は当該コンテナだけ OOM で落とす（分離として健全）
+    memswap_limit: 2g
+    cpus: 2
+    pids_limit: 1024
+
+volumes:
+  aac-home-admin: {}
+
+networks:
+  aac-net-admin: {}

@@ -19,6 +19,8 @@ export const STORAGE_TRIGGER_PHRASE_KEY       = 'ai_cli_hub_trigger_phrase';
 export const STORAGE_NOTIFY_SOUND_ENABLED_KEY = 'ai_cli_hub_notify_sound_enabled';
 export const STORAGE_NOTIFY_SOUND_TYPE_KEY    = 'ai_cli_hub_notify_sound_type';
 export const STORAGE_NOTIFY_SOUND_CUSTOM_KEY  = 'ai_cli_hub_notify_sound_custom';
+export const STORAGE_DESKTOP_NOTIFY_ENABLED_KEY = 'ai_cli_hub_desktop_notify_enabled';
+export const STORAGE_PUSH_NOTIFY_ENABLED_KEY = 'ai_cli_hub_push_notify_enabled';
 export const STORAGE_APPROVAL_AUTO_SWITCH_KEY = 'ai_cli_hub_approval_auto_switch';
 export const STORAGE_QUICK_CMD_1_KEY          = 'ai_cli_hub_quick_cmd_1';
 export const STORAGE_QUICK_CMD_2_KEY          = 'ai_cli_hub_quick_cmd_2';
@@ -72,6 +74,8 @@ export const _USER_PREFS_PATH_TO_LS = {
   'trigger.phrase':            [STORAGE_TRIGGER_PHRASE_KEY,         String],
   'notify_sound.enabled':      [STORAGE_NOTIFY_SOUND_ENABLED_KEY,  (v) => v ? '1' : '0'],
   'notify_sound.type':         [STORAGE_NOTIFY_SOUND_TYPE_KEY,     String],
+  'desktop_notifications.enabled': [STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, (v) => v ? '1' : '0'],
+  'push_notifications.enabled': [STORAGE_PUSH_NOTIFY_ENABLED_KEY, (v) => v ? '1' : '0'],
   // notify_sound.custom_file はサーバ上のファイルパスのため localStorage へはミラーしない
   // （カスタム音はサーバ API /api/user-prefs/notify-sound-custom 経由で再生する）
   'voice.grace_seconds':       [STORAGE_VOICE_GRACE_KEY,           String],

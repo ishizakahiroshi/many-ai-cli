@@ -12,7 +12,7 @@ import (
 const claudeImportLine = "@~/.any-ai-cli/approval-rules.md"
 const sharedBlockStart = "<!-- any-ai-cli:approval-rules -->"
 const sharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
-const rulesVersion = "4"
+const rulesVersion = "5"
 
 var rulesFileContent = strings.Join([]string{
 	fmt.Sprintf("<!-- version: %s -->", rulesVersion),
@@ -66,8 +66,10 @@ var rulesFileContent = strings.Join([]string{
 	"",
 	"  - 1 ブロックに 2 件以上の質問を並べる場合のみこの形式を使う",
 	"  - 質問の見出し番号は 1, 2, 3 ... の連番。プレフィックス（Q1: / C1: 等）は付けない",
+	"  - 各質問の選択肢番号は質問ごとに必ず 1. から振り直す（質問2 の選択肢を 3. 4. のような通し番号にしない）",
 	"  - 各質問の選択肢行は 1 文字以上インデントする（見出し番号と区別するため）",
-	"  - ユーザーの回答は空白区切りの数字列で返ってくる（例: 1 2 1 3）。各数値は質問順に対応する",
+	"  - ユーザーの回答は各行「<質問見出し番号> <選択肢番号>」の複数行テキストで返ってくる（例: 2 質問なら「1 2」と「2 1」の 2 行 = 質問1 は選択肢2、質問2 は選択肢1）",
+	"  - ユーザーが手入力した場合は「2 1」のような質問順の数字列 1 行のこともある。行頭の数字が質問番号として解釈できない場合はこちらとみなす",
 	"",
 	"- [ANY-AI-CLI] マーカーは確認・承認の質問にのみ使用する",
 	"",
@@ -155,6 +157,20 @@ func ScanCodexConfigured(path string) (bool, error) {
 	return ScanSharedBlockConfigured(path)
 }
 
+// sharedBlockIsCurrent は注入済み共有ブロック内の version が最新かを確認する
+func sharedBlockIsCurrent(path string) (bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+	blockRe := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(sharedBlockStart) + `(.*?)` + regexp.QuoteMeta(sharedBlockEnd))
+	m := blockRe.FindSubmatch(data)
+	if m == nil {
+		return false, nil
+	}
+	return strings.Contains(string(m[1]), fmt.Sprintf("<!-- version: %s -->", rulesVersion)), nil
+}
+
 // ScanRulesConfigured は provider に対応する注入済みマーカーを検出する。
 func ScanRulesConfigured(provider, path string) (bool, error) {
 	switch {
@@ -219,13 +235,27 @@ func InjectRules(provider, path string) error {
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("scan %s: %w", path, err)
 	}
-	if already {
-		return nil
-	}
 	switch {
 	case provider == "claude":
+		// import 行方式は中央ファイル側が SyncRulesFile で更新されるため、存在すれば何もしない
+		if already {
+			return nil
+		}
 		return appendClaudeImport(path)
 	case providerUsesSharedBlock(provider):
+		// 共有ブロック方式は内容を埋め込むため、version が古ければ削除して再注入する
+		if already {
+			current, cerr := sharedBlockIsCurrent(path)
+			if cerr != nil {
+				return fmt.Errorf("check shared block version %s: %w", path, cerr)
+			}
+			if current {
+				return nil
+			}
+			if rerr := RemoveRules(provider, path); rerr != nil {
+				return fmt.Errorf("remove stale shared block %s: %w", path, rerr)
+			}
+		}
 		return appendSharedBlock(path)
 	default:
 		return fmt.Errorf("unknown provider: %s", provider)

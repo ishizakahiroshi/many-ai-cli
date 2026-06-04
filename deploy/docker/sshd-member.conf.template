@@ -1,0 +1,23 @@
+# any-ai-cli メンバー用 sshd 設定テンプレート（トンネル専用・シェルなし）
+# 正本: リポジトリ deploy/docker/sshd-member.conf.template
+# サーバー配置先: /opt/any-ai-cli/templates/sshd-member.conf.template
+#
+# 使い方（manual_docker-multiuser.md「メンバー追加手順 2」参照）:
+#   1. __USER__ と __PORT__ を置換して /etc/ssh/sshd_config.d/aac-member-__USER__.conf に配置
+#   2. sshd -t で構文検証（エラー時は適用しない）
+#   3. systemctl reload ssh
+Match User __USER__
+    # シェル・SFTP・任意コマンド実行を遮断（-N のトンネル接続のみ実用上可能）
+    ForceCommand /usr/sbin/nologin
+    PermitTTY no
+    PermitUserRC no
+    X11Forwarding no
+    AllowAgentForwarding no
+    # TCP local forward のみ許可し、宛先は本人の Hub ポートに限定
+    AllowTcpForwarding local
+    PermitOpen 127.0.0.1:__PORT__
+    # unix ドメインソケット転送は PermitOpen の制限対象外のため明示無効化
+    AllowStreamLocalForwarding no
+    # remote forward（サーバー側 listen）と外部公開を遮断
+    PermitListen none
+    GatewayPorts no

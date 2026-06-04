@@ -298,6 +298,155 @@ func TestEvaluateIdle_NoChangeWhenRunningRecent(t *testing.T) {
 	}
 }
 
+// TestExtractBannerModel は起動バナーのレンダリング済み行からの
+// モデル名抽出（Claude / Codex / 非対象 provider）を確認する。
+func TestExtractBannerModel(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		cwd      string
+		lines    []string
+		want     string
+	}{
+		{
+			name:     "claude: effort・プラン付きバナー",
+			provider: "claude",
+			lines: []string{
+				"▐▛███▜▌ Claude Code v2.1.162",
+				"▝▜█████▛▘  Opus 4.8 (1M context) with medium effort · Claude Max",
+				"  ▘▘ ▝▝  C:\\dev\\any-ai-cli",
+			},
+			want: "Opus 4.8 (1M context)",
+		},
+		{
+			name:     "claude: effort なしバナー",
+			provider: "claude",
+			lines:    []string{"▝▜█████▛▘  Sonnet 4.6 · Claude Pro"},
+			want:     "Sonnet 4.6",
+		},
+		{
+			name:     "claude: ロゴ行なし",
+			provider: "claude",
+			lines:    []string{"❯ Try \"edit <filepath> to...\""},
+			want:     "",
+		},
+		{
+			name:     "codex: 通常バナー",
+			provider: "codex",
+			lines: []string{
+				"│ >_ OpenAI Codex (v0.136.0)              │",
+				"│ model:       gpt-5.5 xhigh   /model to change │",
+			},
+			want: "gpt-5.5 xhigh",
+		},
+		{
+			name:     "codex: loading は除外",
+			provider: "codex",
+			lines:    []string{"│ model:       loading   /model to change │"},
+			want:     "",
+		},
+		{
+			name:     "copilot: ステータス行右端（effort なし）",
+			provider: "copilot",
+			lines: []string{
+				"❯",
+				" ● Working esc canceltions, 1 skill, 1 MCP server                          Claude Haiku 4.5",
+			},
+			want: "Claude Haiku 4.5",
+		},
+		{
+			name:     "copilot: effort サフィックス付き",
+			provider: "copilot",
+			lines:    []string{"● Loading: 3 instructions, 1 skill                              GPT-5 mini · low"},
+			want:     "GPT-5 mini",
+		},
+		{
+			name:     "copilot: Auto は許可",
+			provider: "copilot",
+			lines:    []string{"● Working                                  Auto"},
+			want:     "Auto",
+		},
+		{
+			name:     "copilot: モデル名らしくない右端は除外",
+			provider: "copilot",
+			lines:    []string{"↑/↓ to navigate · tab switch tab · enter to select · esc to cancel"},
+			want:     "",
+		},
+		{
+			name:     "cursor-agent: cwd·branch 行直上",
+			provider: "cursor-agent",
+			cwd:      `C:\dev\any-ai-cli`,
+			lines: []string{
+				"  → Plan, search, build anything",
+				"   Auto",
+				`  C:\dev\any-ai-cli · develop`,
+			},
+			want: "Auto",
+		},
+		{
+			name:     "cursor-agent: 使用率サフィックスを除去",
+			provider: "cursor-agent",
+			cwd:      `C:\dev\any-ai-cli`,
+			lines: []string{
+				"  Auto · 7.4%",
+				`  C:\dev\any-ai-cli · develop`,
+			},
+			want: "Auto",
+		},
+		{
+			name:     "cursor-agent: 直上がプロンプト残骸なら除外",
+			provider: "cursor-agent",
+			cwd:      `C:\dev\any-ai-cli`,
+			lines: []string{
+				"  → 今日の日時は？",
+				`  C:\dev\any-ai-cli · develop`,
+			},
+			want: "",
+		},
+		{
+			name:     "非対象 provider",
+			provider: "ollama",
+			lines:    []string{"▝▜█████▛▘  Opus 4.8 · Claude Max"},
+			want:     "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := extractBannerModel(tt.provider, tt.cwd, tt.lines); got != tt.want {
+				t.Fatalf("extractBannerModel(%q) = %q, want %q", tt.provider, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestApplyDetectedModel_OnlyIfEmpty は onlyIfEmpty=true のとき既存 Model を
+// 上書きしないこと、空なら設定することを確認する。
+func TestApplyDetectedModel_OnlyIfEmpty(t *testing.T) {
+	s := newTestServer()
+	ses := registerTestSession(s, 14, "claude")
+
+	// 空 → 設定される
+	s.applyDetectedModel(14, "claude", "Opus 4.8 (1M context)", true)
+	if ses.Model != "Opus 4.8 (1M context)" {
+		t.Fatalf("Model = %q, want %q", ses.Model, "Opus 4.8 (1M context)")
+	}
+	if !ses.initialModelScanDone {
+		t.Fatalf("initialModelScanDone = false, want true")
+	}
+
+	// 既存値あり + onlyIfEmpty=true → 上書きしない
+	s.applyDetectedModel(14, "claude", "Haiku 4.5", true)
+	if ses.Model != "Opus 4.8 (1M context)" {
+		t.Fatalf("Model = %q, onlyIfEmpty で上書きされてはならない", ses.Model)
+	}
+
+	// 既存値あり + onlyIfEmpty=false（/model 変更経路）→ 上書きする
+	s.applyDetectedModel(14, "claude", "Haiku 4.5", false)
+	if ses.Model != "Haiku 4.5" {
+		t.Fatalf("Model = %q, want %q", ses.Model, "Haiku 4.5")
+	}
+}
+
 // TestFinalizeTranscript_EmptyPath は jsonlPath が空のとき何もしないことを確認する。
 func TestFinalizeTranscript_EmptyPath(t *testing.T) {
 	s := newTestServer()

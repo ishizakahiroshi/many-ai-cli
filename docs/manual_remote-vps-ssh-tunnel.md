@@ -1,6 +1,6 @@
 # リモート VPS SSH トンネル運用手順
 
-> 最終更新: 2026-06-04(木) 12:59:29
+> 最終更新: 2026-06-04(木) 23:18:51
 
 ## 位置づけ
 
@@ -32,7 +32,94 @@ Hub 側の `Host` / `Origin` 検証は `127.0.0.1:<Hub port>` または `localho
 - 手元 PC に OpenSSH client があること
 - Hub URL の `?token=...` を他人に共有しないこと
 
-## 手順
+## launcher での自動接続
+
+`any-ai-cli-launcher.exe`（Windows 専用）を使うと、VPS への SSH トンネル確立・Hub 起動・ブラウザ起動を 1 ステップで自動化できます。
+
+下記の手動手順はトラブル時の代替として残しています。通常は launcher を使ってください。
+
+### serve モード（VPS 上で Hub を都度起動する場合）
+
+`~/.any-ai-cli/launcher-profiles.yaml` に以下を追記します。
+
+```yaml
+version: 1
+profiles:
+  - name: my-vps
+    type: ssh
+    mode: serve           # 接続時に any-ai-cli serve をリモートで起動する
+    host: vps.example.com
+    user: your-user
+    hub_port: 47777       # 0 にするとポートを自動選択
+    cwd: /home/your-user/projects
+```
+
+`host` は `~/.ssh/config` のホストエイリアスも使えます（`user` の代わりに `user@host` 形式も可）。
+
+起動:
+
+```powershell
+any-ai-cli-launcher.exe --profile my-vps
+```
+
+launcher は以下を自動で行います。
+
+1. `ssh.exe -t -L 47777:127.0.0.1:47777 your-user@vps.example.com -- bash -ilc "any-ai-cli serve --port 47777"` を起動
+2. リモートの起動バナーから Hub URL を検出（ポートが衝突した場合は +100 刻みで最大 5 回再試行）
+3. Windows の既定ブラウザで Hub UI を開く
+4. Ctrl+C または終了時にリモートの serve プロセスを cleanup
+
+### tunnel モード（VPS 上で Docker 常駐 Hub を使う場合）
+
+VPS で `deploy/docker/` の compose 構成が常駐している（`restart: unless-stopped`・固定ポート）場合は `mode: tunnel` を使います。リモート側での `serve` 起動は行わず、トンネルを確立して常駐 Hub に接続します。
+
+```yaml
+version: 1
+profiles:
+  - name: vps-docker
+    type: ssh
+    mode: tunnel          # 常駐 Hub へのトンネルのみ確立する
+    host: vps.example.com
+    user: your-user
+    hub_port: 47801       # 常駐 Hub が listen しているポートと同じ番号にする
+    token_command: "docker exec any-ai-cli-user1 sh -c 'grep ^token ~/.any-ai-cli/config.yaml | cut -d\" \" -f2'"
+```
+
+`token_command` はリモートで実行され、その標準出力（トリム済み）がトークンとして使われます。Docker コンテナ名と config.yaml のパスは実際の環境に合わせてください。
+
+起動:
+
+```powershell
+any-ai-cli-launcher.exe --profile vps-docker
+```
+
+launcher は以下を自動で行います。
+
+1. `ssh.exe -N -L 47801:127.0.0.1:47801 your-user@vps.example.com` でトンネルを確立
+2. `token_command` を SSH 経由でリモート実行してトークンを取得
+3. `/api/info?token=<token>` で Hub の疎通を確認
+4. Windows の既定ブラウザで `http://127.0.0.1:47801/?token=<token>` を開く
+5. Ctrl+C でトンネルを閉じる（リモート Hub は停止しない）
+
+#### tunnel モードのポートについて
+
+Hub の `Host` / `Origin` 検証は `127.0.0.1:<Hub port>` 同士の一致を前提にしています。そのため `hub_port` の値はローカル側とリモート側で必ず同じ番号にしてください。
+
+#### プロファイル一覧が複数ある場合
+
+プロファイルが 2 件以上ある場合は、起動時に接続先選択画面がブラウザで開きます。
+
+```powershell
+any-ai-cli-launcher.exe           # 複数あれば選択画面を表示
+any-ai-cli-launcher.exe --last    # 前回使ったプロファイルで接続
+any-ai-cli-launcher.exe --ui      # 常に選択画面を表示
+```
+
+---
+
+## 手動手順（トラブル時の代替）
+
+以下の手順は、launcher が使えない場合や接続の仕組みを確認したい場合の代替です。
 
 ### 1. VPS 側で Hub を起動する
 

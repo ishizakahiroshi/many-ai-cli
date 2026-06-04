@@ -38,6 +38,8 @@ export function activateSessionForMultiPane(id) {
     saveInputStateFor(activeSessionId);
   }
   set_activeSessionId(id);
+  if (typeof window.syncMobileLayoutState === 'function') window.syncMobileLayoutState();
+  if (typeof window.closeMobileSessionDrawer === 'function') window.closeMobileSessionDrawer();
   restoreInputStateFor(id);
   const t = terminals.get(id);
   if (t) {
@@ -93,6 +95,8 @@ export function activateSession(id) {
     saveInputStateFor(activeSessionId);
   }
   set_activeSessionId(id);
+  if (typeof window.syncMobileLayoutState === 'function') window.syncMobileLayoutState();
+  if (typeof window.closeMobileSessionDrawer === 'function') window.closeMobileSessionDrawer();
   restoreInputStateFor(id);
   // files/git 表示からセッションカードへ戻る場合、先にターミナルを表示してから
   // attach/fit/detect しないと、承認 UI 検出と最下部スナップが hidden レイアウトを基準に走る。
@@ -1069,6 +1073,7 @@ export function updateSessionCardStateInPlace(id) {
 
 export function renderSessionStateUpdate(id) {
   renderSummaryAndNotifications();
+  if (typeof window.syncMobileLayoutState === 'function') window.syncMobileLayoutState();
   const updated = updateSessionCardStateInPlace(id);
   updateMainTabStatus();
   if (typeof syncElapsedTimer === 'function') syncElapsedTimer();
@@ -1077,6 +1082,7 @@ export function renderSessionStateUpdate(id) {
 
 export function render() {
   renderSummaryAndNotifications();
+  if (typeof window.syncMobileLayoutState === 'function') window.syncMobileLayoutState();
 
   // C9: 初回アクティブ化の早期 return を明示。まだアクティブセッションが無く候補が
   // 現れた場合、最初のセッションをアクティブ化してこのパスを終える。activateSession()

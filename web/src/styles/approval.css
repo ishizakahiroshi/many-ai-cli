@@ -56,7 +56,7 @@
   right: 12px;
   z-index: 1300;
   width: min(420px, calc(100vw - 24px));
-  max-height: min(520px, calc(100vh - 72px));
+  max-height: min(520px, calc(100dvh - 72px));
   overflow: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -337,3 +337,56 @@
   transition: color 0.15s, border-color 0.15s;
 }
 .approval-toast-btn-dismiss:hover { color: var(--text); border-color: var(--line-soft); }
+
+@media (max-width: 720px), (pointer: coarse) {
+  #action-bar {
+    gap: 8px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    max-height: 56dvh;
+    border-left: 0;
+    border-top: 3px solid transparent;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  #action-bar.visible {
+    border-top-color: var(--warn);
+    border-left-color: transparent;
+  }
+  .action-bar-label {
+    font-size: 0.76rem;
+    margin: 0 0 2px;
+  }
+  .action-btn,
+  .action-clear-btn,
+  .action-submit-btn {
+    width: 100%;
+    min-height: 48px;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.9rem;
+  }
+  .action-btn.current,
+  .action-btn.session-allow,
+  .action-btn:first-of-type {
+    border-color: var(--warn);
+    background: color-mix(in srgb, var(--warn-bg) 24%, var(--bg-elev));
+  }
+  .action-dismiss-btn {
+    align-self: flex-end;
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+  }
+  #action-bar.batch {
+    max-height: 60dvh;
+  }
+  .action-section {
+    padding: 8px;
+  }
+  .action-section-buttons,
+  .action-bar-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
