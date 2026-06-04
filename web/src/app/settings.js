@@ -1151,8 +1151,19 @@ export function applyLang(lang) {
       const translated = window.t(key);
       return translated && translated !== key ? translated : (info.runtime_label || runtimeMode);
     };
-    // SSH セッション経由なら「SSH <自機IP>」、それ以外は自機 IP のみ付与（例: Linux SSH 192.168.1.1）
-    const netSuffix = (info.ssh ? ' SSH' : '') + (info.host_ip ? ` ${info.host_ip}` : '');
+    // SSH セッション経由なら「SSH <自機IP>」、それ以外は自機 IP のみ付与（例: Linux SSH 192.168.1.1）。
+    // launcher の SSH tunnel モードでは既存 Hub が SSH 経由かどうかを自己判定できない
+    // （SSH_CONNECTION 等を持たず、NIC からはコンテナ内部 IP しか見えない）ため、
+    // launcher が URL クエリ（via=ssh / host_label=<接続先 host>）で渡すヒントを最優先する。
+    // リロード・タブ内遷移でクエリが落ちても保持できるよう sessionStorage に退避する。
+    const urlParams = new URLSearchParams(location.search);
+    if (urlParams.get('via') === 'ssh') sessionStorage.setItem('netHint.ssh', '1');
+    if (urlParams.get('host_label')) sessionStorage.setItem('netHint.hostLabel', urlParams.get('host_label'));
+    const hintSSH = sessionStorage.getItem('netHint.ssh') === '1';
+    const hintHost = sessionStorage.getItem('netHint.hostLabel') || '';
+    const showSSH = hintSSH || info.ssh;
+    const showHost = hintHost || info.host_ip || '';
+    const netSuffix = (showSSH ? ' SSH' : '') + (showHost ? ` ${showHost}` : '');
     const apply = () => {
       const runtime = runtimeLabel();
       const badgeEl = document.getElementById('runtime-badge');

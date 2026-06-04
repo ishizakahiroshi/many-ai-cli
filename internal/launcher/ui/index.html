@@ -1,13 +1,17 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>any-ai-cli ランチャー</title>
+<title>ANY-AI-CLI Launcher</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:"Segoe UI",sans-serif;font-size:14px;background:#f0f2f5;color:#222;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:24px 16px}
-h1{font-size:18px;font-weight:600;margin-bottom:16px;color:#1a1a2e}
+.launcher-header{width:100%;max-width:760px;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}
+.launcher-brand{display:inline-flex;align-items:center;gap:10px;font-size:21px;font-weight:700;letter-spacing:.06em;color:#1a1a2e}
+.launcher-brand-icon{width:34px;height:34px;border-radius:8px;display:block;flex-shrink:0}
+.lang-control{display:flex;align-items:center;gap:8px;color:#555;font-size:12px}
+.lang-control select{height:30px;border:1px solid #d0d7de;border-radius:4px;background:#fff;color:#222;font-size:13px;padding:3px 8px}
 .card{background:#fff;border:1px solid #d0d7de;border-radius:6px;padding:16px;width:100%;max-width:760px;margin-bottom:12px}
 .card h2{font-size:14px;font-weight:600;margin-bottom:10px;color:#444}
 /* table */
@@ -33,6 +37,10 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .form-grid .hint{grid-column:2;font-size:11px;color:#888;margin-top:-4px}
 .form-section{border-top:1px solid #eef0f2;padding-top:10px;margin-top:10px}
 .form-section h3{font-size:13px;font-weight:600;color:#555;margin-bottom:8px}
+/* running badge */
+.badge-running{display:inline-flex;align-items:center;gap:4px;color:#15803d;font-weight:600;font-size:12px;white-space:nowrap}
+.badge-running::before{content:"●";font-size:10px}
+.badge-idle{color:#999;font-size:12px}
 /* status */
 #status-bar{width:100%;max-width:760px;padding:8px 12px;border-radius:4px;font-size:13px;display:none}
 #status-bar.info{background:#dbeafe;color:#1d4ed8;display:block}
@@ -44,39 +52,67 @@ button:disabled{opacity:.5;cursor:not-allowed}
 #modal-box{background:#fff;border-radius:8px;padding:20px;width:500px;max-width:95vw;max-height:90vh;overflow-y:auto;border:1px solid #d0d7de}
 #modal-box h2{margin-bottom:14px;font-size:15px}
 #modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+@media (max-width:560px){.launcher-header{align-items:flex-start;flex-direction:column}.lang-control{align-self:flex-end}}
 </style>
 </head>
 <body>
-<h1>any-ai-cli — 接続先選択</h1>
+<header class="launcher-header">
+  <h1 class="launcher-brand" aria-label="ANY-AI-CLI">
+    <svg class="launcher-brand-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-hidden="true">
+      <rect width="512" height="512" rx="104" fill="#111111"/>
+      <rect x="78" y="112" width="356" height="278" rx="34" fill="#1A1A1A" stroke="#FFD600" stroke-width="16"/>
+      <circle cx="132" cy="158" r="11" fill="#FFD600"/>
+      <circle cx="166" cy="158" r="11" fill="#FFD600"/>
+      <circle cx="200" cy="158" r="11" fill="#FFD600"/>
+      <line x1="88" y1="196" x2="424" y2="196" stroke="#3A3A3A" stroke-width="6"/>
+      <text x="256" y="318" text-anchor="middle" font-family="Consolas, Menlo, Monaco, monospace" font-size="116" font-weight="900" fill="#FFFFFF" letter-spacing="-6">CLI</text>
+      <g stroke="#FFD600" stroke-width="9" fill="none" stroke-linecap="round">
+        <circle cx="132" cy="424" r="16" fill="#111111"/>
+        <circle cx="256" cy="424" r="16" fill="#111111"/>
+        <circle cx="380" cy="424" r="16" fill="#111111"/>
+        <path d="M148 424 H240 M272 424 H364"/>
+      </g>
+    </svg>
+    <span>ANY-AI-CLI</span>
+  </h1>
+  <div class="lang-control">
+    <label for="lang-select" data-i18n="language_label">Language</label>
+    <select id="lang-select" aria-label="Language" data-i18n-aria-label="language_label">
+      <option value="en">English</option>
+      <option value="ja">日本語</option>
+    </select>
+  </div>
+</header>
 
 <div id="status-bar"></div>
 
 <div class="card">
-  <h2>接続先一覧</h2>
+  <h2 data-i18n="connections_title">Connections</h2>
   <table id="profile-table">
     <thead>
-      <tr><th>名前</th><th>種別</th><th>接続先</th><th>Hub ポート</th></tr>
+      <tr><th data-i18n="th_name">Name</th><th data-i18n="th_type">Type</th><th data-i18n="th_destination">Destination</th><th data-i18n="th_hub_port">Hub port</th><th data-i18n="th_status">Status</th></tr>
     </thead>
     <tbody id="profile-tbody">
-      <tr><td colspan="4" style="color:#888;text-align:center">読み込み中…</td></tr>
+      <tr><td colspan="5" style="color:#888;text-align:center" data-i18n="loading">Loading...</td></tr>
     </tbody>
   </table>
   <div class="toolbar">
-    <button id="btn-connect" class="primary" disabled>接続</button>
-    <button id="btn-new">新規</button>
-    <button id="btn-edit" disabled>編集</button>
-    <button id="btn-delete" class="danger" disabled>削除</button>
+    <button id="btn-connect" class="primary" disabled data-i18n="btn_connect">Connect</button>
+    <button id="btn-reconnect" style="display:none" data-i18n="btn_reconnect">Reconnect</button>
+    <button id="btn-new" data-i18n="btn_new">New</button>
+    <button id="btn-edit" disabled data-i18n="btn_edit">Edit</button>
+    <button id="btn-delete" class="danger" disabled data-i18n="btn_delete">Delete</button>
   </div>
 </div>
 
 <!-- edit/new modal -->
 <div id="modal-overlay">
   <div id="modal-box">
-    <h2 id="modal-title">新規プロファイル</h2>
+    <h2 id="modal-title">New profile</h2>
     <div class="form-grid">
-      <label for="f-name">名前 *</label>
-      <input id="f-name" type="text" placeholder="例: my-vps">
-      <label for="f-type">種別 *</label>
+      <label for="f-name" data-i18n="label_name_required">Name *</label>
+      <input id="f-name" type="text" placeholder="e.g. my-vps" data-i18n-placeholder="ph_name">
+      <label for="f-type" data-i18n="label_type_required">Type *</label>
       <select id="f-type">
         <option value="wsl">WSL</option>
         <option value="ssh">SSH</option>
@@ -84,61 +120,61 @@ button:disabled{opacity:.5;cursor:not-allowed}
 
       <!-- WSL section -->
       <div id="sec-wsl" class="form-section" style="grid-column:1/3">
-        <h3>WSL 設定</h3>
+        <h3 data-i18n="wsl_settings">WSL settings</h3>
         <div class="form-grid">
-          <label for="f-distro">ディストロ</label>
-          <input id="f-distro" type="text" placeholder="例: Ubuntu（空欄=既定）">
-          <label for="f-wsl-binary">バイナリ</label>
-          <input id="f-wsl-binary" type="text" placeholder="any-ai-cli（空欄=既定）">
-          <label for="f-wsl-cwd">作業ディレクトリ</label>
-          <input id="f-wsl-cwd" type="text" placeholder="例: ~/projects（空欄=~）">
-          <label for="f-wsl-hubport">Hub ポート</label>
-          <input id="f-wsl-hubport" type="number" min="1" max="65535" placeholder="0=自動選択">
+          <label for="f-distro" data-i18n="label_distro">Distro</label>
+          <input id="f-distro" type="text" placeholder="e.g. Ubuntu (blank = default)" data-i18n-placeholder="ph_distro">
+          <label for="f-wsl-binary" data-i18n="label_binary">Binary</label>
+          <input id="f-wsl-binary" type="text" placeholder="any-ai-cli (blank = default)" data-i18n-placeholder="ph_binary">
+          <label for="f-wsl-cwd" data-i18n="label_cwd">Working directory</label>
+          <input id="f-wsl-cwd" type="text" placeholder="e.g. ~/projects (blank = ~)" data-i18n-placeholder="ph_cwd">
+          <label for="f-wsl-hubport" data-i18n="label_hub_port">Hub port</label>
+          <input id="f-wsl-hubport" type="number" min="1" max="65535" placeholder="0 = auto-select" data-i18n-placeholder="ph_hub_port_auto">
         </div>
       </div>
 
       <!-- SSH section -->
       <div id="sec-ssh" class="form-section" style="grid-column:1/3;display:none">
-        <h3>SSH 設定</h3>
+        <h3 data-i18n="ssh_settings">SSH settings</h3>
         <div class="form-grid">
-          <label for="f-ssh-mode">モード *</label>
+          <label for="f-ssh-mode" data-i18n="label_mode_required">Mode *</label>
           <select id="f-ssh-mode">
-            <option value="serve">serve（リモートで Hub を起動）</option>
-            <option value="tunnel">tunnel（既存 Hub にポート転送）</option>
+            <option value="serve" data-i18n="mode_serve">serve (start Hub remotely)</option>
+            <option value="tunnel" data-i18n="mode_tunnel">tunnel (forward to existing Hub)</option>
           </select>
-          <label for="f-host">ホスト *</label>
-          <input id="f-host" type="text" placeholder="例: myserver.example.com">
-          <label for="f-user">ユーザー</label>
-          <input id="f-user" type="text" placeholder="例: ubuntu（空欄=SSH 既定）">
-          <label for="f-ssh-port">SSH ポート</label>
-          <input id="f-ssh-port" type="number" min="1" max="65535" placeholder="22（空欄=既定）">
-          <label for="f-identity">秘密鍵パス</label>
-          <input id="f-identity" type="text" placeholder="例: ~/.ssh/id_ed25519（空欄=既定）">
-          <label for="f-ssh-hubport">Hub ポート</label>
-          <input id="f-ssh-hubport" type="number" min="1" max="65535" placeholder="serve=0(自動) / tunnel=必須">
+          <label for="f-host" data-i18n="label_host_required">Host *</label>
+          <input id="f-host" type="text" placeholder="e.g. myserver.example.com" data-i18n-placeholder="ph_host">
+          <label for="f-user" data-i18n="label_user">User</label>
+          <input id="f-user" type="text" placeholder="e.g. ubuntu (blank = SSH default)" data-i18n-placeholder="ph_user">
+          <label for="f-ssh-port" data-i18n="label_ssh_port">SSH port</label>
+          <input id="f-ssh-port" type="number" min="1" max="65535" placeholder="22 (blank = default)" data-i18n-placeholder="ph_ssh_port">
+          <label for="f-identity" data-i18n="label_identity">Identity file</label>
+          <input id="f-identity" type="text" placeholder="e.g. ~/.ssh/id_ed25519 (blank = default)" data-i18n-placeholder="ph_identity">
+          <label for="f-ssh-hubport" data-i18n="label_hub_port">Hub port</label>
+          <input id="f-ssh-hubport" type="number" min="1" max="65535" placeholder="serve = 0 (auto) / tunnel = required" data-i18n-placeholder="ph_ssh_hub_port">
           <!-- serve-only -->
           <div id="sec-ssh-serve" style="grid-column:1/3">
             <div class="form-grid">
-              <label for="f-ssh-binary">バイナリ</label>
-              <input id="f-ssh-binary" type="text" placeholder="any-ai-cli（空欄=既定）">
-              <label for="f-ssh-cwd">作業ディレクトリ</label>
-              <input id="f-ssh-cwd" type="text" placeholder="例: ~/projects（空欄=~）">
+              <label for="f-ssh-binary" data-i18n="label_binary">Binary</label>
+              <input id="f-ssh-binary" type="text" placeholder="any-ai-cli (blank = default)" data-i18n-placeholder="ph_binary">
+              <label for="f-ssh-cwd" data-i18n="label_cwd">Working directory</label>
+              <input id="f-ssh-cwd" type="text" placeholder="e.g. ~/projects (blank = ~)" data-i18n-placeholder="ph_cwd">
             </div>
           </div>
           <!-- tunnel-only -->
           <div id="sec-ssh-tunnel" style="grid-column:1/3;display:none">
             <div class="form-grid">
-              <label for="f-token-cmd">token_command *</label>
-              <input id="f-token-cmd" type="text" placeholder="例: cat ~/.any-ai-cli/config.yaml | grep token | awk '{print $2}'">
-              <span class="hint">SSH 経由でリモート実行し、stdout に token を返すコマンド</span>
+              <label for="f-token-cmd" data-i18n="label_token_command_required">token_command *</label>
+              <input id="f-token-cmd" type="text" placeholder="e.g. cat ~/.any-ai-cli/config.yaml | grep token | awk '{print $2}'" data-i18n-placeholder="ph_token_command">
+              <span class="hint" data-i18n="token_command_hint">Runs remotely over SSH and returns the token on stdout.</span>
             </div>
           </div>
         </div>
       </div>
     </div>
     <div id="modal-footer">
-      <button id="btn-modal-cancel">キャンセル</button>
-      <button id="btn-modal-save" class="primary">保存</button>
+      <button id="btn-modal-cancel" data-i18n="btn_cancel">Cancel</button>
+      <button id="btn-modal-save" class="primary" data-i18n="btn_save">Save</button>
     </div>
   </div>
 </div>
@@ -150,10 +186,208 @@ button:disabled{opacity:.5;cursor:not-allowed}
 // Extract token from URL query.
 const token = new URLSearchParams(location.search).get('token') || '';
 
+const LANG_STORAGE_KEY = 'any_ai_cli_launcher_lang';
+const LANG_COOKIE_KEY = 'any_ai_cli_launcher_lang';
+const SUPPORTED_LANGS = ['en', 'ja'];
+const I18N = {
+  en: {
+    doc_title: 'ANY-AI-CLI Launcher',
+    language_label: 'Language',
+    connections_title: 'Connections',
+    th_name: 'Name',
+    th_type: 'Type',
+    th_destination: 'Destination',
+    th_hub_port: 'Hub port',
+    th_status: 'Status',
+    loading: 'Loading...',
+    btn_connect: 'Connect',
+    btn_reconnect: 'Reconnect',
+    btn_new: 'New',
+    btn_edit: 'Edit',
+    btn_delete: 'Delete',
+    btn_open: 'Open',
+    btn_cancel: 'Cancel',
+    btn_save: 'Save',
+    no_profiles: 'No profiles. Add one with New.',
+    default_distro: 'Default distro',
+    auto: 'Auto',
+    state_connected: 'Connected',
+    state_idle: '-',
+    modal_new: 'New profile',
+    modal_edit: 'Edit profile',
+    label_name_required: 'Name *',
+    label_type_required: 'Type *',
+    label_distro: 'Distro',
+    label_binary: 'Binary',
+    label_cwd: 'Working directory',
+    label_hub_port: 'Hub port',
+    label_mode_required: 'Mode *',
+    label_host_required: 'Host *',
+    label_user: 'User',
+    label_ssh_port: 'SSH port',
+    label_identity: 'Identity file',
+    label_token_command_required: 'token_command *',
+    wsl_settings: 'WSL settings',
+    ssh_settings: 'SSH settings',
+    mode_serve: 'serve (start Hub remotely)',
+    mode_tunnel: 'tunnel (forward to existing Hub)',
+    ph_name: 'e.g. my-vps',
+    ph_distro: 'e.g. Ubuntu (blank = default)',
+    ph_binary: 'any-ai-cli (blank = default)',
+    ph_cwd: 'e.g. ~/projects (blank = ~)',
+    ph_hub_port_auto: '0 = auto-select',
+    ph_host: 'e.g. myserver.example.com',
+    ph_user: 'e.g. ubuntu (blank = SSH default)',
+    ph_ssh_port: '22 (blank = default)',
+    ph_identity: 'e.g. ~/.ssh/id_ed25519 (blank = default)',
+    ph_ssh_hub_port: 'serve = 0 (auto) / tunnel = required',
+    ph_token_command: "e.g. cat ~/.any-ai-cli/config.yaml | grep token | awk '{print $2}'",
+    token_command_hint: 'Runs remotely over SSH and returns the token on stdout.',
+    unknown_error: 'unknown error',
+    error_load_profiles: 'Failed to load profiles: {message}',
+    status_open_existing: 'Opening existing connection: {name}',
+    status_connecting: 'Connecting: {name} ...',
+    status_connected_redirect: 'Connected. Opening Hub UI...',
+    error_connect_start: 'Failed to start connection: {message}',
+    error_connect_timeout: 'Connection timed out',
+    error_connect_failed: 'Connection failed: {message}',
+    confirm_delete: 'Delete "{name}"?',
+    error_delete_failed: 'Delete failed: {message}',
+    alert_name_required: 'Name is required',
+    alert_host_required: 'SSH host is required',
+    alert_token_required: 'token_command is required in tunnel mode',
+    alert_tunnel_port_required: 'Hub port is required in tunnel mode',
+    alert_save_failed: 'Save failed: {message}',
+  },
+  ja: {
+    doc_title: 'ANY-AI-CLI ランチャー',
+    language_label: '言語',
+    connections_title: '接続先一覧',
+    th_name: '名前',
+    th_type: '種別',
+    th_destination: '接続先',
+    th_hub_port: 'Hub ポート',
+    th_status: '状態',
+    loading: '読み込み中…',
+    btn_connect: '接続',
+    btn_reconnect: '再接続',
+    btn_new: '新規',
+    btn_edit: '編集',
+    btn_delete: '削除',
+    btn_open: '開く',
+    btn_cancel: 'キャンセル',
+    btn_save: '保存',
+    no_profiles: 'プロファイルがありません。「新規」で追加してください。',
+    default_distro: '既定ディストロ',
+    auto: '自動',
+    state_connected: '接続中',
+    state_idle: '-',
+    modal_new: '新規プロファイル',
+    modal_edit: 'プロファイルを編集',
+    label_name_required: '名前 *',
+    label_type_required: '種別 *',
+    label_distro: 'ディストロ',
+    label_binary: 'バイナリ',
+    label_cwd: '作業ディレクトリ',
+    label_hub_port: 'Hub ポート',
+    label_mode_required: 'モード *',
+    label_host_required: 'ホスト *',
+    label_user: 'ユーザー',
+    label_ssh_port: 'SSH ポート',
+    label_identity: '秘密鍵パス',
+    label_token_command_required: 'token_command *',
+    wsl_settings: 'WSL 設定',
+    ssh_settings: 'SSH 設定',
+    mode_serve: 'serve（リモートで Hub を起動）',
+    mode_tunnel: 'tunnel（既存 Hub にポート転送）',
+    ph_name: '例: my-vps',
+    ph_distro: '例: Ubuntu（空欄=既定）',
+    ph_binary: 'any-ai-cli（空欄=既定）',
+    ph_cwd: '例: ~/projects（空欄=~）',
+    ph_hub_port_auto: '0=自動選択',
+    ph_host: '例: myserver.example.com',
+    ph_user: '例: ubuntu（空欄=SSH 既定）',
+    ph_ssh_port: '22（空欄=既定）',
+    ph_identity: '例: ~/.ssh/id_ed25519（空欄=既定）',
+    ph_ssh_hub_port: 'serve=0(自動) / tunnel=必須',
+    ph_token_command: "例: cat ~/.any-ai-cli/config.yaml | grep token | awk '{print $2}'",
+    token_command_hint: 'SSH 経由でリモート実行し、stdout に token を返すコマンド',
+    unknown_error: '不明なエラー',
+    error_load_profiles: 'プロファイルの読み込みに失敗しました: {message}',
+    status_open_existing: '既存の接続を開きます: {name}',
+    status_connecting: '接続中: {name} …',
+    status_connected_redirect: '接続しました。Hub UI に移動します…',
+    error_connect_start: '接続開始に失敗しました: {message}',
+    error_connect_timeout: '接続がタイムアウトしました',
+    error_connect_failed: '接続に失敗しました: {message}',
+    confirm_delete: '「{name}」を削除しますか?',
+    error_delete_failed: '削除に失敗しました: {message}',
+    alert_name_required: '名前は必須です',
+    alert_host_required: 'SSH ホストは必須です',
+    alert_token_required: 'tunnel モードでは token_command は必須です',
+    alert_tunnel_port_required: 'tunnel モードでは Hub ポートは必須です',
+    alert_save_failed: '保存に失敗しました: {message}',
+  },
+};
+
 let profiles = [];
 let lastUsed = '';
+let activeMap = {};   // profile name -> hub_url（検証済みの稼働中接続）
 let selectedIdx = -1; // index in profiles[]
 let editingIdx = -1;  // -1 = new, >=0 = editing
+let currentLang = normalizeLang(readStoredLang()) || 'en';
+
+function normalizeLang(lang) {
+  const normalized = String(lang || '').toLowerCase();
+  return SUPPORTED_LANGS.includes(normalized) ? normalized : '';
+}
+
+function readStoredLang() {
+  try {
+    const stored = localStorage.getItem(LANG_STORAGE_KEY);
+    if (normalizeLang(stored)) return stored;
+  } catch (_) {}
+  const cookie = document.cookie.split('; ').find(row => row.startsWith(LANG_COOKIE_KEY + '='));
+  return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : '';
+}
+
+function writeStoredLang(lang) {
+  try {
+    localStorage.setItem(LANG_STORAGE_KEY, lang);
+  } catch (_) {}
+  document.cookie = LANG_COOKIE_KEY + '=' + encodeURIComponent(lang) + '; Max-Age=31536000; Path=/; SameSite=Lax';
+}
+
+function t(key, vars = {}) {
+  const dict = I18N[currentLang] || I18N.en;
+  let msg = dict[key] || I18N.en[key] || key;
+  return msg.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, name) => Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : '');
+}
+
+function applyI18n() {
+  document.documentElement.lang = currentLang;
+  document.title = t('doc_title');
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  document.querySelectorAll('[data-i18n-aria-label]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAriaLabel)); });
+  const langSelect = document.getElementById('lang-select');
+  if (langSelect) langSelect.value = currentLang;
+  updateModalTitle();
+  updateButtons();
+}
+
+function setLanguage(lang) {
+  currentLang = normalizeLang(lang) || 'en';
+  writeStoredLang(currentLang);
+  applyI18n();
+  renderTable();
+}
+
+function updateModalTitle() {
+  const title = document.getElementById('modal-title');
+  if (!title) return;
+  title.textContent = editingIdx < 0 ? t('modal_new') : t('modal_edit');
+}
 
 // --------------------------------------------------------------------------
 // API helpers
@@ -166,7 +400,7 @@ async function apiFetch(path, opts = {}) {
     ...opts,
   });
   const data = await res.json();
-  if (!data.ok) throw new Error(data.error || '不明なエラー');
+  if (!data.ok) throw new Error(data.error || t('unknown_error'));
   return data;
 }
 
@@ -190,16 +424,18 @@ async function loadProfiles() {
     const data = await apiFetch('/api/profiles');
     profiles = data.profiles || [];
     lastUsed = data.last_used || '';
+    activeMap = {};
+    (data.active || []).forEach(a => { activeMap[a.profile] = a.hub_url; });
     renderTable();
   } catch (e) {
-    showStatus('プロファイルの読み込みに失敗しました: ' + e.message, 'error');
+    showStatus(t('error_load_profiles', {message: e.message}), 'error');
   }
 }
 
 function renderTable() {
   const tbody = document.getElementById('profile-tbody');
   if (profiles.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4" style="color:#888;text-align:center">プロファイルがありません。「新規」で追加してください。</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" style="color:#888;text-align:center">' + esc(t('no_profiles')) + '</td></tr>';
     selectedIdx = -1;
     updateButtons();
     return;
@@ -209,11 +445,14 @@ function renderTable() {
     const tr = document.createElement('tr');
     if (i === selectedIdx) tr.classList.add('selected');
     const dest = p.type === 'wsl'
-      ? (p.distro || '既定ディストロ')
+      ? (p.distro || t('default_distro'))
       : ((p.user ? p.user + '@' : '') + (p.host || '?'));
-    const hubPort = p.hub_port || '自動';
+    const hubPort = p.hub_port || t('auto');
     const nameCell = p.name + (p.name === lastUsed ? ' ★' : '');
-    tr.innerHTML = `<td>${esc(nameCell)}</td><td>${esc(p.type)}</td><td>${esc(dest)}</td><td>${esc(String(hubPort))}</td>`;
+    const stateCell = activeMap[p.name]
+      ? '<span class="badge-running">' + esc(t('state_connected')) + '</span>'
+      : '<span class="badge-idle">' + esc(t('state_idle')) + '</span>';
+    tr.innerHTML = `<td>${esc(nameCell)}</td><td>${esc(p.type)}</td><td>${esc(dest)}</td><td>${esc(String(hubPort))}</td><td>${stateCell}</td>`;
     tr.addEventListener('click', () => { selectedIdx = i; renderTable(); });
     tr.addEventListener('dblclick', () => { selectedIdx = i; renderTable(); startConnect(); });
     tbody.appendChild(tr);
@@ -223,7 +462,12 @@ function renderTable() {
 
 function updateButtons() {
   const sel = selectedIdx >= 0;
-  document.getElementById('btn-connect').disabled = !sel;
+  const running = sel && !!activeMap[profiles[selectedIdx].name];
+  const btnConnect = document.getElementById('btn-connect');
+  btnConnect.disabled = !sel;
+  // 稼働中プロファイルは既存接続をそのまま開く（重複接続を張らない）。
+  btnConnect.textContent = running ? t('btn_open') : t('btn_connect');
+  document.getElementById('btn-reconnect').style.display = running ? '' : 'none';
   document.getElementById('btn-edit').disabled = !sel;
   document.getElementById('btn-delete').disabled = !sel;
 }
@@ -238,7 +482,21 @@ function esc(s) {
 async function startConnect() {
   if (selectedIdx < 0) return;
   const p = profiles[selectedIdx];
-  showStatus('接続中: ' + p.name + ' …', 'info');
+  // 稼働中なら新規接続せず既存の Hub URL を開く。
+  if (activeMap[p.name]) {
+    showStatus(t('status_open_existing', {name: p.name}), 'success');
+    location.href = activeMap[p.name];
+    return;
+  }
+  await reconnect();
+}
+
+// reconnect always establishes a new connection (server side tears down a
+// same-name connection it owns first).
+async function reconnect() {
+  if (selectedIdx < 0) return;
+  const p = profiles[selectedIdx];
+  showStatus(t('status_connecting', {name: p.name}), 'info');
   document.getElementById('btn-connect').disabled = true;
 
   try {
@@ -247,7 +505,7 @@ async function startConnect() {
       body: JSON.stringify({name: p.name}),
     });
   } catch (e) {
-    showStatus('接続開始に失敗しました: ' + e.message, 'error');
+    showStatus(t('error_connect_start', {message: e.message}), 'error');
     document.getElementById('btn-connect').disabled = false;
     return;
   }
@@ -259,7 +517,7 @@ async function startConnect() {
     tries++;
     if (tries > maxTries) {
       clearInterval(timer);
-      showStatus('接続がタイムアウトしました', 'error');
+      showStatus(t('error_connect_timeout'), 'error');
       document.getElementById('btn-connect').disabled = false;
       return;
     }
@@ -267,12 +525,12 @@ async function startConnect() {
       const st = await apiFetch('/api/connect/status');
       if (st.status === 'connected') {
         clearInterval(timer);
-        showStatus('接続しました。Hub UI に移動します…', 'success');
+        showStatus(t('status_connected_redirect'), 'success');
         lastUsed = p.name;
         setTimeout(() => { location.href = st.hub_url; }, 600);
       } else if (st.status === 'error') {
         clearInterval(timer);
-        showStatus('接続に失敗しました: ' + (st.error || '不明なエラー'), 'error');
+        showStatus(t('error_connect_failed', {message: st.error || t('unknown_error')}), 'error');
         document.getElementById('btn-connect').disabled = false;
       }
       // 'connecting' → keep polling
@@ -288,7 +546,7 @@ async function startConnect() {
 async function deleteSelected() {
   if (selectedIdx < 0) return;
   const p = profiles[selectedIdx];
-  if (!confirm(`「${p.name}」を削除しますか?`)) return;
+  if (!confirm(t('confirm_delete', {name: p.name}))) return;
   const newList = profiles.filter((_, i) => i !== selectedIdx);
   try {
     await apiFetch('/api/profiles', {
@@ -298,7 +556,7 @@ async function deleteSelected() {
     selectedIdx = -1;
     await loadProfiles();
   } catch (e) {
-    showStatus('削除に失敗しました: ' + e.message, 'error');
+    showStatus(t('error_delete_failed', {message: e.message}), 'error');
   }
 }
 
@@ -308,7 +566,7 @@ async function deleteSelected() {
 function openModal(idx) {
   editingIdx = idx;
   const isNew = idx < 0;
-  document.getElementById('modal-title').textContent = isNew ? '新規プロファイル' : 'プロファイルを編集';
+  updateModalTitle();
 
   const p = isNew ? {} : profiles[idx];
 
@@ -368,7 +626,7 @@ function syncSSHModeSections() {
 // --------------------------------------------------------------------------
 async function saveModal() {
   const name = getVal('f-name');
-  if (!name) { alert('名前は必須です'); return; }
+  if (!name) { alert(t('alert_name_required')); return; }
   const type = getVal('f-type');
 
   let profile = {name, type};
@@ -383,7 +641,7 @@ async function saveModal() {
     const mode = getVal('f-ssh-mode');
     profile.mode = mode;
     profile.host = getVal('f-host');
-    if (!profile.host) { alert('SSH ホストは必須です'); return; }
+    if (!profile.host) { alert(t('alert_host_required')); return; }
     if (getVal('f-user')) profile.user = getVal('f-user');
     const sp = getInt('f-ssh-port');
     if (sp) profile.ssh_port = sp;
@@ -396,9 +654,9 @@ async function saveModal() {
       if (getVal('f-ssh-cwd')) profile.cwd = getVal('f-ssh-cwd');
     } else {
       const tc = getVal('f-token-cmd');
-      if (!tc) { alert('tunnel モードでは token_command は必須です'); return; }
+      if (!tc) { alert(t('alert_token_required')); return; }
       profile.token_command = tc;
-      if (!hp) { alert('tunnel モードでは Hub ポートは必須です'); return; }
+      if (!hp) { alert(t('alert_tunnel_port_required')); return; }
     }
   }
 
@@ -422,14 +680,16 @@ async function saveModal() {
     if (newIdx >= 0) { selectedIdx = newIdx; renderTable(); }
     hideStatus();
   } catch (e) {
-    alert('保存に失敗しました: ' + e.message);
+    alert(t('alert_save_failed', {message: e.message}));
   }
 }
 
 // --------------------------------------------------------------------------
 // Event wiring
 // --------------------------------------------------------------------------
+document.getElementById('lang-select').addEventListener('change', e => setLanguage(e.target.value));
 document.getElementById('btn-connect').addEventListener('click', startConnect);
+document.getElementById('btn-reconnect').addEventListener('click', reconnect);
 document.getElementById('btn-new').addEventListener('click', () => openModal(-1));
 document.getElementById('btn-edit').addEventListener('click', () => { if (selectedIdx >= 0) openModal(selectedIdx); });
 document.getElementById('btn-delete').addEventListener('click', deleteSelected);
@@ -448,6 +708,7 @@ document.addEventListener('keydown', e => {
 // --------------------------------------------------------------------------
 // Init
 // --------------------------------------------------------------------------
+applyI18n();
 loadProfiles();
 
 })();

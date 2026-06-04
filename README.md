@@ -258,6 +258,59 @@ profiles:
     token_command: "docker exec any-ai-cli-user1 sh -c 'grep ^token ~/.any-ai-cli/config.yaml | cut -d\" \" -f2'"
 ```
 
+#### Tunnel mode: end-to-end setup
+
+`tunnel` mode connects to a Hub that keeps running on the remote — closing the launcher window only drops the SSH tunnel, while the Hub and your AI sessions keep running. Reconnect later and pick up exactly where you left off. Here is the full flow from zero.
+
+**A. Remote side (one-time)**
+
+1. Place the Linux `any-ai-cli` binary on the remote machine and make it executable.
+2. Start the Hub with a **fixed port** (auto-select is not allowed in tunnel mode) and keep it resident — systemd, tmux/screen, or Docker all work:
+
+   ```bash
+   any-ai-cli serve --port 47777
+   ```
+
+   On first start a random access token is generated and saved to `~/.any-ai-cli/config.yaml` (`token:` key).
+3. Decide the command that prints that token — this becomes `token_command` in the profile. Example:
+
+   ```bash
+   awk '/^token:/{print $2}' ~/.any-ai-cli/config.yaml
+   ```
+
+   Run it once over SSH and confirm it prints a single token line.
+
+**B. Windows side (one-time)**
+
+4. Set up SSH **key-based** authentication. The launcher runs `ssh.exe` with `-o BatchMode=yes` (no interactive prompts), so password authentication will not work. Make sure `ssh your-user@host` logs in without a password prompt.
+5. Create a profile — either in the launcher UI (Type: SSH / Mode: tunnel) or directly in `launcher-profiles.yaml`:
+
+   | Field | Value | Required |
+   |---|---|---|
+   | `name` | any name | yes |
+   | `type` | `ssh` | yes |
+   | `mode` | `tunnel` | yes |
+   | `host` | remote IP / hostname | yes |
+   | `user` | SSH login user (empty = ssh default) | no |
+   | `ssh_port` | non-22 port if needed (0 = default) | no |
+   | `identity_file` | empty = default key / agent | no |
+   | `hub_port` | the port from step 2 (e.g. `47777`) — must match | yes |
+   | `token_command` | the command from step 3 | yes |
+
+**C. Daily use**
+
+1. Start the launcher and pick the profile. It automatically establishes the tunnel, fetches the token via `token_command`, waits for the Hub to respond, and opens the browser.
+2. Work in the Hub UI as usual (spawn sessions, approve, etc.).
+3. When done, just close the launcher window — only the tunnel drops; remote sessions keep running.
+4. Next time, reconnect with the same profile and continue where you left off.
+
+**Common pitfalls**
+
+- **Port mismatch** — the remote `serve --port` and the profile's `hub_port` must be the same number.
+- **Password prompt** — BatchMode fails immediately; key authentication is mandatory.
+- **Empty `token_command` output** — the Hub must have been started at least once on the remote, otherwise `config.yaml` has no token yet.
+- **Docker** — publish the container's Hub port to the host's `127.0.0.1` (the tunnel terminates at the remote machine's `127.0.0.1:<hub_port>`).
+
 #### Launch
 
 ```powershell
@@ -722,6 +775,27 @@ Place [`deploy/docker/aac-update.sh`](deploy/docker/aac-update.sh) next to your 
 # root crontab — daily at 04:30
 30 4 * * * /opt/any-ai-cli/aac-update.sh >> /var/log/aac-update.log 2>&1
 ```
+
+### What an update restart does (and does not) reset
+
+On days with no new image the cron is a complete no-op — nothing restarts. When the image **did** change, the affected containers are recreated, which restarts the Hub. What that means for each user:
+
+| | Item | Why |
+|---|---|---|
+| ❌ Lost | Running AI sessions (claude / codex PTY processes) and their session cards in the Hub UI | processes die with the container |
+| ✅ Kept | Hub access token (`~/.any-ai-cli/config.yaml`) | the home volume persists it — **tunnel-mode launcher profiles keep working unchanged** |
+| ✅ Kept | AI CLI login state (Claude auth, etc.) | same (under home) |
+| ✅ Kept | Working repositories / files | bind-mounted work directory |
+| ✅ Kept | Session logs (`~/.any-ai-cli/logs/`) | same (under home) |
+| △ Recoverable | AI conversation history | provider CLIs keep history under home; resume with `--resume`-style options in a new session |
+
+Shutdown is graceful: `stop_grace_period: 40s` plus the entrypoint waiting up to 20 s for wrappers to exit.
+
+Operational tips (especially for multi-user servers — the cron recreates **every** user's container at once):
+
+- **Pick the cron time wisely.** If users run long overnight AI tasks, 04:30 may cut them off — choose a window nobody works in, and announce it to all users.
+- **Freeze before important runs.** `touch /opt/any-ai-cli/HOLD` skips the update (for all users); `rm HOLD` resumes it.
+- **Tag choice controls frequency.** `AAC_TAG=develop` restarts on every develop push; `latest` only on releases to `main`.
 
 ### Development bypass
 

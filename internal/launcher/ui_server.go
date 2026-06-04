@@ -27,19 +27,32 @@ import (
 //go:embed ui
 var uiFS embed.FS
 
-// UIServer is a short-lived HTTP server that serves the profile selection page.
-// It starts on a random loopback port and shuts down after a successful
-// connection or when ctx is cancelled.
+// UIServer is the HTTP server that serves the profile selection page.
+// It starts on a random loopback port and keeps running (holding any
+// tunnels / serve processes started from the page) until ctx is cancelled.
 type UIServer struct {
 	token  string
 	port   int
 	server *http.Server
 
 	mu         sync.Mutex
-	connectReq *connectRequest    // set when POST /api/connect is received
-	connectRes *connectResult     // set when connection resolves
-	connCancel context.CancelFunc // cancels the active connection goroutine
+	connectReq *connectRequest      // set when POST /api/connect is received
+	connectRes *connectResult       // set when connection resolves
+	inflight   *liveConn            // connection being established (not yet resolved)
+	conns      map[string]*liveConn // established connections keyed by profile name
 }
+
+// liveConn tracks one connection goroutine so it can be cancelled
+// individually. 確立済み接続は conns に移り、以降の新規接続要求で
+// 巻き添え cancel されない（複数接続先の同時保持が前提のため）。
+type liveConn struct {
+	cancel context.CancelFunc
+}
+
+// connectWaitTimeout bounds how long a connection may stay in the
+// "connecting" state. It must NOT bound the lifetime of an established
+// connection — the tunnel lives until the launcher process exits.
+const connectWaitTimeout = 120 * time.Second
 
 type connectRequest struct {
 	Name string `json:"name"`
@@ -51,10 +64,13 @@ type connectResult struct {
 }
 
 // profilesResponse is the JSON envelope for GET /api/profiles.
+// Active lists verified-alive connections (this process and others) so the
+// UI can mark already-connected profiles and reuse their Hub URL.
 type profilesResponse struct {
-	OK       bool      `json:"ok"`
-	Profiles []Profile `json:"profiles"`
-	LastUsed string    `json:"last_used,omitempty"`
+	OK       bool               `json:"ok"`
+	Profiles []Profile          `json:"profiles"`
+	LastUsed string             `json:"last_used,omitempty"`
+	Active   []ActiveConnection `json:"active,omitempty"`
 }
 
 // NewUIServer creates a UIServer. Call Serve to start it.
@@ -63,7 +79,7 @@ func NewUIServer() (*UIServer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("generate ui token: %w", err)
 	}
-	return &UIServer{token: token}, nil
+	return &UIServer{token: token, conns: make(map[string]*liveConn)}, nil
 }
 
 // generateToken returns a 16-byte random hex string.
@@ -246,10 +262,17 @@ func (s *UIServer) handleProfiles(w http.ResponseWriter, r *http.Request) {
 			writeUIError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		// 稼働中接続の検証（PID + /api/info 疎通の二重ガード）。残骸は
+		// この呼び出しで掃除される。失敗してもプロファイル一覧自体は返す。
+		active, err := ActiveConnectionsPruned()
+		if err != nil {
+			active = nil
+		}
 		writeUIJSON(w, profilesResponse{
 			OK:       true,
 			Profiles: pf.Profiles,
 			LastUsed: pf.LastUsed,
+			Active:   active,
 		})
 
 	case http.MethodPost:
@@ -320,18 +343,32 @@ func (s *UIServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Cancel any in-progress connection.
 	s.mu.Lock()
-	if s.connCancel != nil {
-		s.connCancel()
+	// Cancel a connection still being established (the UI drives one
+	// connect at a time). Established connections to OTHER profiles are
+	// left alone — holding several destinations at once is the point.
+	if s.inflight != nil {
+		s.inflight.cancel()
+		s.inflight = nil
+	}
+	// Reconnect semantics: an established connection to the SAME profile
+	// is torn down first (avoids duplicate serve / port conflicts).
+	if old, ok := s.conns[req.Name]; ok {
+		old.cancel()
+		delete(s.conns, req.Name)
+		_ = UnregisterActiveConnection(req.Name)
 	}
 	s.connectReq = &req
 	s.connectRes = nil
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	s.connCancel = cancel
+	// No deadline here: the context owns the tunnel for its entire
+	// lifetime. The "connecting" phase is bounded separately by
+	// connectWaitTimeout in runConnection.
+	ctx, cancel := context.WithCancel(context.Background())
+	lc := &liveConn{cancel: cancel}
+	s.inflight = lc
 	s.mu.Unlock()
 
-	go s.runConnection(ctx, profile)
+	go s.runConnection(ctx, lc, profile)
 
 	writeUIJSON(w, map[string]any{"ok": true, "status": "connecting"})
 }
@@ -367,7 +404,10 @@ func (s *UIServer) handleConnectStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // runConnection starts the Connector for profile and stores the result.
-func (s *UIServer) runConnection(ctx context.Context, profile Profile) {
+// On success the connection is promoted from inflight to s.conns and keeps
+// running until its cancel is called (reconnect or server shutdown).
+// On failure / timeout the context is cancelled to reap the connector.
+func (s *UIServer) runConnection(ctx context.Context, lc *liveConn, profile Profile) {
 	var conn Connector
 	var err error
 	switch profile.Type {
@@ -376,7 +416,7 @@ func (s *UIServer) runConnection(ctx context.Context, profile Profile) {
 	case ProfileTypeSSH:
 		conn = NewSSHConnector()
 	default:
-		s.setConnectResult("", fmt.Sprintf("unsupported profile type %q", profile.Type))
+		s.failConnection(lc, fmt.Sprintf("unsupported profile type %q", profile.Type))
 		return
 	}
 
@@ -388,9 +428,12 @@ func (s *UIServer) runConnection(ctx context.Context, profile Profile) {
 	errCh := make(chan error, 1)
 
 	if err = conn.Start(ctx, profile, urlCh, errCh); err != nil {
-		s.setConnectResult("", err.Error())
+		s.failConnection(lc, err.Error())
 		return
 	}
+
+	waitTimer := time.NewTimer(connectWaitTimeout)
+	defer waitTimer.Stop()
 
 	select {
 	case hubURL, ok := <-urlCh:
@@ -399,32 +442,64 @@ func (s *UIServer) runConnection(ctx context.Context, profile Profile) {
 			select {
 			case connErr := <-errCh:
 				if connErr != nil {
-					s.setConnectResult("", connErr.Error())
+					s.failConnection(lc, connErr.Error())
 					return
 				}
 			default:
 			}
-			s.setConnectResult("", "Connection failed (Hub URL was not received)")
+			s.failConnection(lc, "Connection failed (Hub URL was not received)")
 			return
 		}
-		// Update last_used.
+		if !s.promoteConnection(lc, profile.Name, hubURL) {
+			// Superseded by a newer connect request while waiting; the
+			// context is already cancelled, so just let the connector die.
+			return
+		}
+		// Update last_used and record the connection for other launcher
+		// processes (running badge in their selection UI).
 		s.updateLastUsed(profile.Name)
-		s.setConnectResult(hubURL, "")
+		if err := RegisterActiveConnection(profile.Name, hubURL); err != nil {
+			fmt.Fprintf(os.Stderr, "any-ai-cli-launcher: failed to record active connection: %v\n", err)
+		}
 	case connErr := <-errCh:
 		msg := "Connection failed"
 		if connErr != nil {
 			msg = connErr.Error()
 		}
-		s.setConnectResult("", msg)
+		s.failConnection(lc, msg)
+	case <-waitTimer.C:
+		s.failConnection(lc, "Connection timed out")
 	case <-ctx.Done():
-		s.setConnectResult("", "Connection timed out")
+		s.failConnection(lc, "Connection cancelled")
 	}
 }
 
-func (s *UIServer) setConnectResult(hubURL, errMsg string) {
+// promoteConnection moves lc from inflight to the established map and
+// publishes the success result. Returns false when lc has been superseded
+// by a newer connect request (its context is already cancelled).
+func (s *UIServer) promoteConnection(lc *liveConn, name, hubURL string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.connectRes = &connectResult{HubURL: hubURL, Err: errMsg}
+	if s.inflight != lc {
+		return false
+	}
+	s.inflight = nil
+	s.conns[name] = lc
+	s.connectRes = &connectResult{HubURL: hubURL}
+	return true
+}
+
+// failConnection cancels lc's context (reaping the connector goroutine)
+// and publishes the error result, unless this attempt has already been
+// superseded by a newer connect request.
+func (s *UIServer) failConnection(lc *liveConn, errMsg string) {
+	lc.cancel()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.inflight == lc {
+		s.inflight = nil
+		s.connectRes = &connectResult{Err: errMsg}
+	}
 }
 
 func (s *UIServer) updateLastUsed(name string) {

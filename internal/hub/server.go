@@ -580,11 +580,13 @@ func (s *Server) Run(ctx context.Context) error {
 	// 設定ポートが使用中の場合（例: WSL 側 Hub が先に起動済み）は空きポートへ自動移行する。
 	var ln net.Listener
 	basePort := s.currentHubPort()
+	boundPort := basePort
 	for p := basePort; p < basePort+100; p++ {
 		addr := fmt.Sprintf("127.0.0.1:%d", p)
 		var e error
 		ln, e = net.Listen("tcp", addr)
 		if e == nil {
+			boundPort = p
 			if p != basePort {
 				s.httpSrv.Addr = addr
 				s.cfgMu.Lock()
@@ -599,11 +601,22 @@ func (s *Server) Run(ctx context.Context) error {
 		return fmt.Errorf("no available port found in range %d-%d", basePort, basePort+99)
 	}
 	_ = os.WriteFile(pidPath, []byte(fmt.Sprintf("%d", os.Getpid())), 0o644)
+	// 実際にバインドしたポートを hub-runtime.json へ記録する。ポート自動退避後も
+	// 引数なし起動の IsRunning / OpenBrowserForConfig が本物の Hub を見つけられる
+	//（設定ポートしか見ないと、退避中の Hub を見落として重複起動する）。
+	if err := writeHubRuntime(boundPort); err != nil {
+		s.logger.Warn("failed to write hub runtime file", "err", err)
+	}
 	// shutdown_wait ゴルーチン内の Remove は Serve が戻った直後にプロセスが
 	// 終了すると実行されないことがある（競合）。PID ファイルが残ると次回 boot の
 	// killStalePid が再利用 PID の無関係プロセスを kill しうるため、run() の
 	// return で必ず消えるよう同期的にも削除する（二重削除は無害）。
-	defer func() { _ = os.Remove(pidPath) }()
+	defer func() {
+		_ = os.Remove(pidPath)
+		// hub-runtime.json は自 PID 記録時のみ削除（新しい Hub が上書き済みなら
+		// 残す）。強制終了の残骸は読み取り側の二重ガードで除外される。
+		removeHubRuntimeIfPID(os.Getpid())
+	}()
 	setConsoleTitle("any-ai-cli [hub] - DO NOT CLOSE")
 	setConsoleIcon()
 	s.logger.Info("ANY-AI-CLI started", "url", fmt.Sprintf("http://%s/?token=%s", s.httpSrv.Addr, s.cfg.Token))
@@ -635,6 +648,7 @@ func (s *Server) Run(ctx context.Context) error {
 			_ = s.sessionStore.Close()
 		}
 		_ = os.Remove(pidPath)
+		removeHubRuntimeIfPID(os.Getpid())
 	})
 	err := s.httpSrv.Serve(ln)
 	if errors.Is(err, http.ErrServerClosed) {
@@ -654,8 +668,14 @@ func (s *Server) SetAutoOpenBrowser(v bool) {
 }
 
 // OpenBrowserForConfig opens the browser to the Hub URL without needing a running Server.
+// ポート自動退避後の Hub（hub-runtime.json に記録）にも正しい URL で繋がるよう、
+// 検証済みの実ポートを優先する。確認できない場合は設定ポートにフォールバック。
 func OpenBrowserForConfig(cfg *config.Config) error {
-	url := fmt.Sprintf("http://127.0.0.1:%d/?token=%s", cfg.Hub.Port, cfg.Token)
+	port := cfg.Hub.Port
+	if p, ok := runningHubPort(cfg); ok {
+		port = p
+	}
+	url := fmt.Sprintf("http://127.0.0.1:%d/?token=%s", port, cfg.Token)
 	return browserCommand(url).Start()
 }
 
