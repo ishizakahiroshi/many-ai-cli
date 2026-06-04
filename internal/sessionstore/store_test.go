@@ -164,3 +164,104 @@ func TestResetHistoryPreservesActiveSessionRows(t *testing.T) {
 		t.Fatalf("messages after reset = %#v", msgs)
 	}
 }
+
+// Hub クラッシュで未終了のまま残った行が、次回 run の同じ live_session_id の
+// 新セッションに上書きされないこと（CloseStaleSessions）と、reattach 時の
+// StartSession upsert が ended_at を NULL に戻して行を継続利用できることを検証する。
+func TestCloseStaleSessionsAndReattachRevive(t *testing.T) {
+	logDir := filepath.Join(t.TempDir(), "logs")
+	store, err := OpenForLogDir(logDir)
+	if err != nil {
+		t.Fatalf("OpenForLogDir: %v", err)
+	}
+	defer store.Close()
+
+	startedAt := time.Now().Add(-time.Hour).Format(time.RFC3339)
+	// 前回 run: live 1 のセッションがクラッシュで EndSession されずに残る
+	oldID, err := store.StartSession(SessionStart{
+		LiveSessionID: 1,
+		Provider:      "claude",
+		State:         "running",
+		StartedAt:     startedAt,
+		JSONLPath:     filepath.Join(logDir, "sessions", "old_run_s1.jsonl"),
+	})
+	if err != nil {
+		t.Fatalf("StartSession(old): %v", err)
+	}
+	store.UpdateSessionMessages(1, "古いセッションの最初の入力", "古いセッションの最後の出力")
+
+	// 次回 run 起動: 未終了行を一括クローズ
+	n, err := store.CloseStaleSessions(time.Now(), "hub_restart")
+	if err != nil {
+		t.Fatalf("CloseStaleSessions: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("CloseStaleSessions closed = %d, want 1", n)
+	}
+
+	// 次回 run: 同じ live 1 を別セッションが再利用
+	newID, err := store.StartSession(SessionStart{
+		LiveSessionID: 1,
+		Provider:      "codex",
+		State:         "standby",
+		StartedAt:     time.Now().Format(time.RFC3339),
+		JSONLPath:     filepath.Join(logDir, "sessions", "new_run_s1.jsonl"),
+	})
+	if err != nil {
+		t.Fatalf("StartSession(new): %v", err)
+	}
+	if newID == oldID {
+		t.Fatalf("new session reused old row id %d", oldID)
+	}
+	store.UpdateSessionMessages(1, "新しいセッションの入力", "新しいセッションの出力")
+	store.UpdateSessionState(1, "running", time.Now().Format(time.RFC3339))
+
+	list, err := store.ListSessions(10, true)
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("sessions len = %d, want 2: %#v", len(list), list)
+	}
+	for _, it := range list {
+		switch it.ID {
+		case oldID:
+			if it.FirstMessage != "古いセッションの最初の入力" || it.LastMessage != "古いセッションの最後の出力" {
+				t.Fatalf("old row contaminated by new session: %#v", it)
+			}
+			if it.State != "disconnected" || it.EndReason != "hub_restart" || it.EndedAt == "" {
+				t.Fatalf("old row not closed: %#v", it)
+			}
+		case newID:
+			if it.FirstMessage != "新しいセッションの入力" || it.State != "running" {
+				t.Fatalf("new row = %#v", it)
+			}
+		default:
+			t.Fatalf("unexpected row: %#v", it)
+		}
+	}
+
+	// reattach: 同じ jsonl_path での StartSession upsert が ended_at を解除して行を復活させる
+	store.EndSession(1, "disconnected", "hub_lost", time.Now())
+	revivedID, err := store.StartSession(SessionStart{
+		LiveSessionID: 1,
+		Provider:      "codex",
+		State:         "running",
+		StartedAt:     time.Now().Format(time.RFC3339),
+		JSONLPath:     filepath.Join(logDir, "sessions", "new_run_s1.jsonl"),
+	})
+	if err != nil {
+		t.Fatalf("StartSession(reattach): %v", err)
+	}
+	if revivedID != newID {
+		t.Fatalf("reattach row id = %d, want %d", revivedID, newID)
+	}
+	store.UpdateSessionState(1, "waiting", time.Now().Format(time.RFC3339))
+	ov, err := store.SessionOverviewByLiveSession(1)
+	if err != nil {
+		t.Fatalf("SessionOverviewByLiveSession: %v", err)
+	}
+	if ov.ID != newID || ov.EndedAt != "" || ov.State != "waiting" {
+		t.Fatalf("revived row = %#v", ov)
+	}
+}
