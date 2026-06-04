@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, CRUNCH_LATCH_MS, actionBarShownAt, activeSessionId, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchFocusIdx, batchSelections, crunchLatch, expandCapturePending, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionVisibleCache, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, terminals, toolOutputs, utf8Decoder } from './state.js';
-import { inputEl, renderToolOutputs, sendSubmittedText, sendText } from '../app.js';
+import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchFocusIdx, batchSelections, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionVisibleCache, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, terminals, utf8Decoder } from './state.js';
+import { inputEl, sendSubmittedText } from '../app.js';
 import { clearSuppressPtyResize, isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout } from './terminal.js';
 import { stripAnsi } from './settings.js';
 import { ws } from './ws-client.js';
@@ -136,7 +136,7 @@ export function scheduleApprovalHintConfirm(id, options) {
     // 既に approvalVisible=true でも action-bar を最新オプションに張り替える。
     if (id === activeSessionId) {
       const bar = document.getElementById('action-bar');
-      if (bar) approvalUiAdapter.showOptions(bar, id, cached, false, !wasVisible);
+      if (bar) approvalUiAdapter.showOptions(bar, id, cached, !wasVisible);
     }
   }, 350));
 }
@@ -444,7 +444,7 @@ export function handleGoApprovalDetected(message) {
   approvalUiAdapter.setApprovalVisible(id, true, { sound: !wasVisible });
   if (id === activeSessionId) {
     const bar = document.getElementById('action-bar');
-    if (bar) approvalUiAdapter.showOptions(bar, id, options, false, !wasVisible);
+    if (bar) approvalUiAdapter.showOptions(bar, id, options, !wasVisible);
   }
 }
 
@@ -492,38 +492,6 @@ export function maybeSendDirectApprovalConsumed(sessionId, rawText, sentText) {
     return trimmed === String(opt.num) || trimmed === String(optSend).trim();
   });
   if (matched) sendApprovalConsumed(sessionId, cached, sentText);
-}
-
-// ---- クランチ（折りたたみ）検出 ----
-
-export function detectCrunch(id) {
-  // ライブ TUI 描画領域（baseY 〜 baseY+rows-1）のみを対象にする。
-  // scanBuffer はスクロールバック全体を返すため、`/clear` 後も古い
-  // "(ctrl+o to expand)" 行を拾って展開ボタンが残るバグの原因になっていた。
-  const t = terminals.get(id);
-  if (!t || !t.term || !t.term.buffer) return { found: false, count: 0 };
-  const buf = t.term.buffer.active;
-  const rows = t.term.rows || 40;
-  const startY = Math.max(0, buf.baseY);
-  const endY = Math.min(buf.length, startY + rows);
-  for (let y = endY - 1; y >= startY; y--) {
-    const line = buf.getLine(y)?.translateToString(true) || '';
-    // Claude Code の折りたたみパターン: "… +23 lines (ctrl+o to expand)"
-    const m = line.match(/[…\.]{1,3}\s*\+(\d+)\s*lines?\s*\(ctrl\+o to expand\)/i);
-    if (m) {
-      const count = parseInt(m[1]);
-      crunchLatch.set(id, { until: Date.now() + CRUNCH_LATCH_MS, count });
-      return { found: true, count };
-    }
-  }
-  // ストリーミング中の上書きで一時的に行が消える瞬間を吸収する（点滅防止）。
-  // 直前に found=true を観測してから CRUNCH_LATCH_MS 以内ならその状態を維持する。
-  const latched = crunchLatch.get(id);
-  if (latched && Date.now() < latched.until) {
-    return { found: true, count: latched.count };
-  }
-  if (latched) crunchLatch.delete(id);
-  return { found: false, count: 0 };
 }
 
 export function detectApproval(id) {
@@ -604,7 +572,7 @@ export function detectApproval(id) {
       approvalConsumedSig.delete(id);
       approvalUiAdapter.cacheApprovalOptions(id, markerOpts);
       const wasVisible = !!approvalVisibleCache.get(id);
-      approvalUiAdapter.showOptions(bar, id, markerOpts, false, !wasVisible);
+      approvalUiAdapter.showOptions(bar, id, markerOpts, !wasVisible);
       if (!wasVisible) {
         cancelApprovalHintConfirm(id);
         approvalUiAdapter.setApprovalVisible(id, true);
@@ -622,7 +590,7 @@ export function detectApproval(id) {
       approvalConsumedSig.delete(id);
       approvalUiAdapter.cacheApprovalOptions(id, plainYesNoOpts);
       const wasVisible = !!approvalVisibleCache.get(id);
-      approvalUiAdapter.showOptions(bar, id, plainYesNoOpts, false, !wasVisible);
+      approvalUiAdapter.showOptions(bar, id, plainYesNoOpts, !wasVisible);
       if (!wasVisible) {
         cancelApprovalHintConfirm(id);
         approvalUiAdapter.setApprovalVisible(id, true);
@@ -642,7 +610,7 @@ export function detectApproval(id) {
     const seqOpts = sequentialChoiceOptionsForState(seqState);
     approvalUiAdapter.cacheApprovalOptions(id, seqOpts);
     const wasVisible = !!approvalVisibleCache.get(id);
-    approvalUiAdapter.showOptions(bar, id, seqOpts, false, !wasVisible);
+    approvalUiAdapter.showOptions(bar, id, seqOpts, !wasVisible);
     if (!wasVisible) {
       cancelApprovalHintConfirm(id);
       approvalUiAdapter.setApprovalVisible(id, true);
@@ -654,7 +622,7 @@ export function detectApproval(id) {
   if (isGoNativeApprovalActive(id)) {
     const cached = approvalRawOptionsCache.get(id);
     if (cached && cached.length > 0) {
-      approvalUiAdapter.showOptions(bar, id, cached, false);
+      approvalUiAdapter.showOptions(bar, id, cached);
       return;
     }
   }
@@ -730,10 +698,7 @@ export function detectApproval(id) {
   const hasChoiceMenu = (hasCursorOption || isShortcutApprovalMenu) && options.length > 0 && hasNativePromptHint;
   const hasPrompt = hasApproval || hasChoiceMenu;
 
-  // 折りたたみ（クランチ）を検出
-  const crunch = detectCrunch(id);
-
-  if (!hasPrompt && !crunch.found) {
+  if (!hasPrompt) {
     // 承認プロンプトが検出できない場合は確実に閉じる。
     // ただし、approvalVisibleCache=true かつ cache が残っている場合は、
     // pendingTextTail のローテート（長考時に [ANY-AI-CLI] マーカーが押し出される）や
@@ -744,7 +709,7 @@ export function detectApproval(id) {
     if (approvalVisibleCache.get(id)) {
       const cached = approvalRawOptionsCache.get(id);
       if (cached && cached.length > 0) {
-        approvalUiAdapter.showOptions(bar, id, cached, false);
+        approvalUiAdapter.showOptions(bar, id, cached);
         return;
       }
     }
@@ -781,11 +746,11 @@ export function detectApproval(id) {
         const candidate = approvalSwitchCandidates.get(id);
         if (!candidate || candidate.sig !== newSig) {
           approvalSwitchCandidates.set(id, { sig: newSig, options: options.slice(), firstSeenAt: Date.now() });
-          showActionBar(bar, id, existingCached, crunch.found && !hasPrompt, false);
+          showActionBar(bar, id, existingCached, false);
           return;
         }
         if (Date.now() - candidate.firstSeenAt < 700) {
-          showActionBar(bar, id, existingCached, crunch.found && !hasPrompt, false);
+          showActionBar(bar, id, existingCached, false);
           return;
         }
         // 700ms 安定 — 新しい選択肢に切り替える
@@ -799,9 +764,8 @@ export function detectApproval(id) {
     }
   }
 
-  // 承認プロンプト表示中は展開ボタンを出さない（ctrl+o が承認 UI に届いて誤動作するのを防ぐ）
   const wasVisibleBeforeShow = !!approvalVisibleCache.get(id);
-  showActionBar(bar, id, hasPrompt ? options : [], crunch.found && !hasPrompt, hasPrompt && !wasVisibleBeforeShow);
+  showActionBar(bar, id, options, !wasVisibleBeforeShow);
 
   // session_hint: 承認 UI の可視状態を Hub に通知
   const nowVisible = hasPrompt;
@@ -814,9 +778,7 @@ export function detectApproval(id) {
 export function getActionBarButtons() {
   const bar = document.getElementById('action-bar');
   if (!bar) return [];
-  // expand-btn は除外: クランチ展開のみで action-bar が visible のとき Enter/←→ が
-  // 展開クリックに化けて TUI の選択確定（\r）が PTY に届かなくなるのを防ぐ
-  return Array.from(bar.querySelectorAll('.action-btn:not(.expand-btn)'));
+  return Array.from(bar.querySelectorAll('.action-btn'));
 }
 
 export function setActionBarFocus(idx) {
@@ -901,14 +863,14 @@ export function normalizeActionOptions(options) {
   return normalized.sort((a, b) => a.num - b.num);
 }
 
-export function showActionBar(bar, sessionId, options, showExpand, forceStickToBottom = false) {
+export function showActionBar(bar, sessionId, options, forceStickToBottom = false) {
   if (isBatchOptions(options)) {
     showBatchActionBar(bar, sessionId, options, forceStickToBottom);
     return;
   }
   options = normalizeActionOptions(options);
   // 注意: 局所変数名 `t` は window.t（i18n 翻訳関数）と衝突するため使わない。
-  // `term` にすることで本関数末尾の t('expand_btn') 等が正しく i18n を参照できる。
+  // `term` にすることで本関数末尾の t('dismiss_title') 等が正しく i18n を参照できる。
   const term = sessionId === activeSessionId ? terminals.get(sessionId) : null;
   const shouldStickToBottom = !!(term && (forceStickToBottom || term.autoScroll || isTerminalAtBottom(term)));
   const chatTl = getChatTimelineEl();
@@ -916,12 +878,11 @@ export function showActionBar(bar, sessionId, options, showExpand, forceStickToB
 
   // 差分スキップ: 前回描画と同一シグネチャなら DOM を再構築しない（点滅防止）。
   // detectApproval は scheduleApprovalCheck 経由で 300ms ごとに走るため、
-  // 内容が変わらない場合に bar.innerHTML を毎回作り直すと expand-btn 等が点滅する。
-  // kbd-focus は外部の setActionBarFocus が触るので、ここでは options/showExpand のみを sig に含める。
+  // 内容が変わらない場合に bar.innerHTML を毎回作り直すとボタンが点滅する。
+  // kbd-focus は外部の setActionBarFocus が触るので、ここでは options のみを sig に含める。
   const sig = JSON.stringify({
     s: sessionId,
     opts: options.map(o => ({ n: o.num, l: o.label, c: !!o.isCurrent, p: !!o.preserveOrder })),
-    x: !!showExpand,
     v: bar.classList.contains('visible'),
   });
   if (lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig) {
@@ -969,16 +930,6 @@ export function showActionBar(bar, sessionId, options, showExpand, forceStickToB
     btn.textContent = `${opt.num}. ${opt.label}`;
     btn.title = `${opt.num}. ${opt.label}`;
     btn.onclick = () => sendChoice(sessionId, opt.num);
-    bar.appendChild(btn);
-  }
-
-  // 展開ボタン（クランチ検出時・選択肢の右側）
-  if (showExpand) {
-    const btn = document.createElement('button');
-    btn.className = 'action-btn expand-btn';
-    btn.textContent = t('expand_btn');
-    btn.title = t('expand_title');
-    btn.onclick = () => handleExpandClick(sessionId);
     bar.appendChild(btn);
   }
 
@@ -1217,7 +1168,7 @@ export function sendChoice(sessionId, targetNum) {
     if (seqState.index < seqState.prompts.length && bar) {
       const nextOpts = sequentialChoiceOptionsForState(seqState);
       approvalUiAdapter.cacheApprovalOptions(sessionId, nextOpts);
-      approvalUiAdapter.showOptions(bar, sessionId, nextOpts, false);
+      approvalUiAdapter.showOptions(bar, sessionId, nextOpts);
       setTimeout(() => inputEl.focus(), 0);
       return;
     }
@@ -1287,45 +1238,6 @@ export function sendChoice(sessionId, targetNum) {
     maybeAutoSwitchToNextApproval();
   }, 450);
   setTimeout(() => inputEl.focus(), 0);
-}
-
-// ---- 展開キャプチャ ----
-
-export function handleExpandClick(id) {
-  if (expandCapturePending) return;
-  expandCapturePending = true;
-
-  // ctrl+o 送信前のバッファをスナップショット
-  const beforeSet = new Set(scanBuffer(id));
-  sendText(id, '\x0f'); // ctrl+o（detailed transcript へ切替）
-
-  // 800ms 後にバッファ差分を取得して保存し、ctrl+o を再送して元のコンパクト表示へ戻す
-  // （戻さないと Claude Code が「Showing detailed transcript」モードに張り付き、
-  //  入力プロンプトが見えなくなって「セッション切れ？」と誤認される）
-  setTimeout(() => {
-    const afterLines = scanBuffer(id);
-    const expanded = afterLines.filter(l => l.trim() && !beforeSet.has(l));
-
-    sendText(id, '\x0f'); // ctrl+o（コンパクト表示へ戻す）
-    expandCapturePending = false;
-
-    if (expanded.length === 0) return;
-
-    if (!toolOutputs.has(id)) toolOutputs.set(id, []);
-    const outputs = toolOutputs.get(id);
-    const now = new Date();
-    outputs.unshift({ uid: now.getTime(), lines: expanded, ts: formatDateTime(now) });
-    if (outputs.length > 10) outputs.length = 10; // 最大10件保持
-
-    renderToolOutputs(id);
-    // パネル表示後に承認プロンプトが来ていた場合を検出するため再評価
-    scheduleApprovalCheck(id);
-  }, 800);
-}
-
-export function formatDateTime(d) {
-  const p = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
 // --- ESM window-interop publish (generated; preserves dynamic window.* lookups) ---

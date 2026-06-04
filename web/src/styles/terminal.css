@@ -345,92 +345,7 @@
   }
 }
 
-/* Tool outputs panel */
-/* ツール出力パネル */
-#tool-outputs-panel {
-  background: var(--bg-deep);
-  border-top: 1px solid var(--line);
-  max-height: 220px;
-  overflow-y: auto;
-  flex-shrink: 0;
-}
-
-.tool-outputs-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 5px 12px;
-  background: var(--bg-elev);
-  border-bottom: 1px solid var(--line);
-  font-size: 0.8rem;
-  color: var(--muted);
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-#tool-outputs-count { color: var(--accent); margin-left: 4px; }
-
-.tool-outputs-btns { display: flex; gap: 4px; align-items: center; }
-
-#tool-outputs-collapse,
-#tool-outputs-clear {
-  background: transparent;
-  color: var(--muted-2);
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  padding: 2px 7px;
-  font-size: 0.75rem;
-  cursor: pointer;
-  line-height: 1;
-}
-#tool-outputs-collapse:hover { color: var(--text); border-color: var(--line-soft); }
-#tool-outputs-clear:hover { color: var(--danger); border-color: var(--danger); }
-
-#tool-outputs-panel.collapsed #tool-outputs-list { display: none; }
-
-.tool-output-item { border-bottom: 1px solid var(--bg-elev); font-family: Consolas, "Cascadia Mono", monospace; font-size: 12px; }
-.tool-output-item summary { cursor: pointer; padding: 5px 12px; color: var(--accent); user-select: none; list-style: none; }
-.tool-output-item summary::-webkit-details-marker { display: none; }
-.tool-output-item summary::before { content: '▶ '; font-size: 10px; }
-.tool-output-item[open] summary::before { content: '▼ '; }
-.tool-output-item summary:hover { background: var(--bg-elev); }
-
-.tool-output-body {
-  position: relative;
-}
-
-.tool-output-copy {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  width: 26px;
-  height: 26px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--bg-elev);
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  z-index: 1;
-}
-
-.tool-output-copy:hover {
-  color: var(--text);
-  border-color: var(--line-soft);
-}
-
-.tool-output-content {
-  margin: 0;
-  padding: 6px 48px 8px 16px;
-  white-space: pre-wrap;
-  word-break: break-all;
-  color: var(--muted);
-  background: var(--bg-deep);
-  font-size: 12px;
-  line-height: 1.5;
-}
+/* appendLinkedText が生成するパスリンク（展開ポップアップ・チャット等で共用） */
 .tool-output-path-link {
   color: var(--accent);
   text-decoration: underline;
@@ -472,4 +387,63 @@
 .path-link-popup-item:hover {
   background: var(--accent-soft);
   color: var(--text);
+}
+
+/* Expand capture popup */
+/* ---- 折りたたみマーカー展開ポップアップ ---- */
+#expand-capture-popup {
+  position: fixed;
+  z-index: 9000;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  display: flex;
+  flex-direction: column;
+  min-width: 240px;
+  max-width: min(680px, 80vw);
+  max-height: 50vh;
+}
+#expand-capture-popup[hidden] { display: none !important; }
+
+.expand-popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 8px 5px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.8rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.expand-popup-btns { display: flex; gap: 4px; align-items: center; }
+
+.expand-popup-copy,
+.expand-popup-close {
+  background: transparent;
+  color: var(--muted-2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 2px 7px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  line-height: 1.3;
+}
+.expand-popup-copy:hover { color: var(--text); border-color: var(--line-soft); }
+.expand-popup-close:hover { color: var(--danger); border-color: var(--danger); }
+
+.expand-popup-content {
+  margin: 0;
+  padding: 8px 12px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--muted);
+  background: var(--bg-deep);
+  border-radius: 0 0 6px 6px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+  line-height: 1.5;
 }

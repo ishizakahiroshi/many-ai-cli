@@ -54,7 +54,6 @@ export function sequentialChoiceSig(prompts) {
 }
 export const approvalHintConfirmTimers = new Map(); // sessionId → timer（生バイト検出を短時間 debounce してチカチカを防ぐ）
 export const approvalHintConfirmTrusted = new Map(); // sessionId → true: marker/plainYesNo 由来の信頼性の高い検出（fallback に上書きさせない）
-export const toolOutputs = new Map(); // sessionId → [{uid, lines, ts}]
 export const sessionInputState = new Map(); // sessionId → { inputValue, pastedTextsData, pendingAttachFiles }（サムネイルは各エントリの wrapper から再構築）
 
 // =========================================================================
@@ -101,13 +100,9 @@ export let composeEndSendTimer = null; // compositionend が doSend をスケジ
 export let lastDoSendAt = 0;          // 直前の doSend 実行時刻（二重送信防止の短時間ガード用）
 export const DOUBLE_SEND_GUARD_MS = 100;
 export const SIDEBAR_COLLAPSED_WIDTH_THRESHOLD = 180;
-export let expandCapturePending = false;
 // action-bar の点滅防止用
 // - lastActionBarRender: 前回描画した内容のシグネチャ（同一なら DOM 再構築をスキップ）
-// - crunchLatch: detectCrunch の振動吸収用ヒステリシス（一度 found=true を観測したら CRUNCH_LATCH_MS の間は維持）
 export const lastActionBarRender = { sessionId: null, sig: null };
-export const crunchLatch = new Map();
-export const CRUNCH_LATCH_MS = 800;
 export let _elapsedTimerInterval = null;
 export let dragSrcId = null;
 export let dragSrcGroupKey = null;

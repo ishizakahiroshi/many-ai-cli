@@ -96,20 +96,28 @@ func stopWithPIDPath(pidPath string) error {
 
 // killStalePid reads the PID file and kills the process if it is still running.
 // Errors are silently ignored — the goal is best-effort cleanup before a new serve.
+//
+// The file is removed *before* killing, and the current process is never a
+// target: PID 名前空間が独立したコンテナでは Hub が毎回同じ PID（例: 常に 11）で
+// 起動するため、前回 boot の残骸ファイルを無条件に kill すると新しい Hub が
+// 起動直後に自分自身を SIGKILL してしまう。しかも自殺すると Remove に到達せず
+// ファイルが残り続け、以降の再起動が全て同じ死に方をするループになる。
 func killStalePid(pidPath string) {
 	b, err := os.ReadFile(pidPath)
 	if err != nil {
 		return
 	}
+	_ = os.Remove(pidPath)
 	pid, err := parseHubPID(b)
 	if err != nil {
-		_ = os.Remove(pidPath)
+		return
+	}
+	if pid == os.Getpid() {
 		return
 	}
 	if p, err := os.FindProcess(pid); err == nil {
 		_ = p.Kill()
 	}
-	_ = os.Remove(pidPath)
 }
 
 func parseHubPID(b []byte) (int, error) {

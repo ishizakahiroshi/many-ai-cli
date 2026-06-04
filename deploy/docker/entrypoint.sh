@@ -25,12 +25,19 @@ wrapper_running() {
 }
 
 stop_socat() {
+  # 中継ループのサブシェルはフォアグラウンドの socat が終了するまで TERM trap を
+  # 処理できない。ループへ TERM を予約 → socat 本体を kill してブロックを解く →
+  # wait の順にする。socat より先に wait すると永久に戻らず（デッドロック）、
+  # Hub 終了後も entrypoint が exit できずコンテナが残り続け、
+  # restart: unless-stopped による自動復旧が効かなくなる。
   if [ -n "$SOCAT_LOOP_PID" ] && kill -0 "$SOCAT_LOOP_PID" 2>/dev/null; then
     log "stopping socat relay loop pid=$SOCAT_LOOP_PID"
     kill -TERM "$SOCAT_LOOP_PID" 2>/dev/null || true
+    pkill -TERM -f 'socat TCP-LISTEN:48000' 2>/dev/null || true
     wait "$SOCAT_LOOP_PID" 2>/dev/null || true
   fi
 
+  # ループが trap 処理前に socat を再起動した場合の取りこぼし掃除
   pkill -TERM -f 'socat TCP-LISTEN:48000' 2>/dev/null || true
 }
 
