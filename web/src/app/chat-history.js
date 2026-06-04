@@ -251,6 +251,9 @@ export function onChatHistorySessionRemoved(sid) {
   chatHistory.delete(sid);
   chatHistorySubs.delete(sid);
   chatHistoryIdSeq.delete(sid);
+  // Hub 再起動後などに同じ live ID が別セッションへ再利用された場合でも
+  // SQLite からの履歴復元が「復元済み」と誤判定されないよう印を消す
+  chatHistoryStoreRestored.delete(sid);
   if (_chatPaneMountedSid === sid) {
     _chatPaneMountedSid = null;
     _chatPaneRenderedMessageIds = new Set();

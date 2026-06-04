@@ -339,12 +339,39 @@ func (s *Store) StartSession(st SessionStart) (int64, error) {
 		state=excluded.state,
 		started_at=excluded.started_at,
 		log_path=excluded.log_path,
-		updated_at=excluded.updated_at
+		updated_at=excluded.updated_at,
+		ended_at=NULL,
+		end_reason=NULL
 	RETURNING id`,
 		st.LiveSessionID, st.Provider, st.Display, st.CWD, st.Branch, st.Label, st.Model,
 		st.Route, st.Shell, state, st.StartedAt, st.LogPath, st.JSONLPath, time.Now().Format(time.RFC3339),
 	).Scan(&id)
 	return id, err
+}
+
+// CloseStaleSessions は ended_at が未設定のまま残っている全行を一括クローズする。
+// Hub がクラッシュ・強制終了した場合 EndSession が呼ばれず未終了行が残り、
+// 次回 run で同じ live_session_id を採番された別セッションの UPDATE
+// （live_session_id=? AND ended_at IS NULL 条件）が旧行にも書き込まれてしまう。
+// Hub 起動直後（セッション登録前）に呼ぶこと。閉じた行数を返す。
+func (s *Store) CloseStaleSessions(endedAt time.Time, reason string) (int64, error) {
+	if s == nil || s.db == nil {
+		return 0, nil
+	}
+	if endedAt.IsZero() {
+		endedAt = time.Now()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	res, err := s.db.ExecContext(ctx, `UPDATE sessions SET state='disconnected',
+		end_reason=COALESCE(NULLIF(?, ''), end_reason), ended_at=?, updated_at=?
+		WHERE ended_at IS NULL`,
+		reason, endedAt.Format(time.RFC3339), time.Now().Format(time.RFC3339))
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }
 
 func (s *Store) UpdateSessionMessages(liveSessionID int, firstMessage, lastMessage string) {

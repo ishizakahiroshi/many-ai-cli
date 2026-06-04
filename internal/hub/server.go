@@ -3,7 +3,9 @@ package hub
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -219,6 +221,7 @@ type Server struct {
 	hubCWD      string // serve 起動時の os.Getwd() を保存
 	version     string // main.version (ldflags 経由) を保持し /api/info で返す
 	parentShell string
+	instanceID  string // Hub プロセス起動ごとのランダム ID。UI が Hub 再起動（live session ID の振り直し）を検出するために snapshot に同梱する
 
 	// sessionsMu guards session/connection state (nextID, sessions, wrappers,
 	// uis, lastUICols/Rows, idleTimer, idleGen). cfgMu guards s.cfg.
@@ -346,6 +349,16 @@ var (
 	}
 )
 
+// newInstanceID は Hub プロセス起動ごとのランダム ID を生成する。
+// 乱数取得に失敗した場合は起動時刻ナノ秒で代替する（識別できれば十分なため）。
+func newInstanceID() string {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		return strconv.FormatInt(time.Now().UnixNano(), 16)
+	}
+	return hex.EncodeToString(b)
+}
+
 func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version string) (*Server, error) {
 	hubCWD, _ := os.Getwd()
 	s := &Server{
@@ -354,6 +367,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		devMode:               devMode,
 		hubCWD:                hubCWD,
 		version:               version,
+		instanceID:            newInstanceID(),
 		parentShell:           wrapper.DetectShell(),
 		sessions:              map[int]*session{},
 		wrappers:              map[int]*wrapperConn{},
@@ -370,6 +384,16 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		logger.Warn("sqlite session store disabled", "err", err)
 	} else {
 		s.sessionStore = store
+		// 前回 run がクラッシュ等で EndSession できずに残した未終了行を閉じる。
+		// 放置すると live_session_id ベースの UPDATE（state / first・last message 等）が
+		// 同じ live ID を再利用する新セッションの内容で旧行を上書きしてしまう。
+		// 再接続猶予中の wrapper が reattach した場合は StartSession の upsert が
+		// ended_at を NULL に戻して同じ行を継続利用する。
+		if n, err := store.CloseStaleSessions(time.Now(), "hub_restart"); err != nil {
+			logger.Warn("close stale session rows failed", "err", err)
+		} else if n > 0 {
+			logger.Info("closed stale session rows from previous run", "count", n)
+		}
 	}
 	if devMode {
 		logger.Info("dev mode: serving web assets from ./web/src/")
@@ -1838,7 +1862,10 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 	}
 	s.sessionsMu.Unlock()
 	b, _ := json.Marshal(list)
-	_ = uc.send(map[string]any{"type": "snapshot", "sessions": json.RawMessage(b)})
+	// hub_instance: Hub 再起動を UI が検出するための起動毎 ID。
+	// UI 側は前回値と異なる場合に live session ID キーのローカル状態
+	// （チャット履歴・ターミナルバッファ等）を破棄してから snapshot を適用する。
+	_ = uc.send(map[string]any{"type": "snapshot", "sessions": json.RawMessage(b), "hub_instance": s.instanceID})
 }
 
 func (s *Server) broadcast(m any) {
