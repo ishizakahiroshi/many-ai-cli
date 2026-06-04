@@ -3,7 +3,9 @@
 package launcher
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -65,7 +67,7 @@ func (c *SSHConnector) runServe(ctx context.Context, p Profile, urlCh chan<- str
 	for attempt := 0; attempt < sshMaxRetries; attempt++ {
 		port := basePort + attempt*sshPortStep
 
-		url, cmd, err := c.tryServe(ctx, p, binary, port)
+		url, cmd, waitCh, err := c.tryServe(ctx, p, binary, port)
 		if err != nil {
 			lastErr = err
 			if ctx.Err() != nil {
@@ -75,19 +77,25 @@ func (c *SSHConnector) runServe(ctx context.Context, p Profile, urlCh chan<- str
 		}
 
 		// URL obtained successfully. Send it, then keep the ssh process alive
-		// until ctx is cancelled; clean up remote serve on exit.
+		// until it exits or ctx is cancelled; clean up remote serve on exit.
 		select {
 		case urlCh <- url:
 		case <-ctx.Done():
 		}
 		close(urlCh)
-		close(errCh)
 
-		// Wait for context cancellation, then kill and clean up.
-		<-ctx.Done()
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
+		// ssh.exe の終了（= リモート serve の停止。Web UI の「Web のみ停止」
+		// を含む）か ctx キャンセルを待つ。errCh の close は「接続終了」の
+		// 合図で、launcher 本体はこれを受けてプロセスを終了する
+		//（コンソール窓の残骸防止）。
+		select {
+		case <-waitCh:
+		case <-ctx.Done():
+			_ = cmd.Process.Kill()
+			<-waitCh
+		}
 		cleanupSSHOrphans(p, binary, port)
+		close(errCh)
 		return
 	}
 
@@ -103,10 +111,11 @@ func (c *SSHConnector) runServe(ctx context.Context, p Profile, urlCh chan<- str
 }
 
 // tryServe starts ssh.exe and blocks until the Hub URL is detected or an error
-// occurs. On success it returns the URL and the live *exec.Cmd (which the
-// caller must eventually kill). On failure the ssh process has already been
-// killed and waited.
-func (c *SSHConnector) tryServe(ctx context.Context, p Profile, binary string, port int) (string, *exec.Cmd, error) {
+// occurs. On success it returns the URL, the live *exec.Cmd (which the caller
+// must eventually kill) and waitCh, which receives the cmd.Wait() result
+// exactly once when ssh.exe exits. On failure the ssh process has already
+// been killed and waited.
+func (c *SSHConnector) tryServe(ctx context.Context, p Profile, binary string, port int) (string, *exec.Cmd, <-chan error, error) {
 	args := buildSSHBaseArgs(p)
 	// Allocate a pseudo-TTY so SIGHUP propagates when the launcher exits.
 	args = append(args, "-t")
@@ -126,14 +135,14 @@ func (c *SSHConnector) tryServe(ctx context.Context, p Profile, binary string, p
 	cmd := exec.CommandContext(ctx, "ssh.exe", args...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return "", nil, fmt.Errorf("stdout pipe: %w", err)
+		return "", nil, nil, fmt.Errorf("stdout pipe: %w", err)
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		return "", nil, fmt.Errorf("stderr pipe: %w", err)
+		return "", nil, nil, fmt.Errorf("stderr pipe: %w", err)
 	}
 	if err := cmd.Start(); err != nil {
-		return "", nil, fmt.Errorf("start ssh.exe: %w", err)
+		return "", nil, nil, fmt.Errorf("start ssh.exe: %w", err)
 	}
 
 	urlFound := make(chan string, 1)
@@ -163,21 +172,21 @@ func (c *SSHConnector) tryServe(ctx context.Context, p Profile, binary string, p
 			// Kill and let the caller retry with the next port candidate.
 			_ = cmd.Process.Kill()
 			<-waitCh
-			return "", nil, fmt.Errorf("port mismatch: expected %d in %s", port, url)
+			return "", nil, nil, fmt.Errorf("port mismatch: expected %d in %s", port, url)
 		}
-		// Success: return the live cmd to the caller.
-		return url, cmd, nil
+		// Success: return the live cmd and its wait channel to the caller.
+		return url, cmd, waitCh, nil
 
 	case err := <-waitCh:
 		if err != nil {
-			return "", nil, fmt.Errorf("ssh.exe exited: %w", err)
+			return "", nil, nil, fmt.Errorf("ssh.exe exited: %w", err)
 		}
-		return "", nil, fmt.Errorf("ssh.exe exited before Hub URL was detected")
+		return "", nil, nil, fmt.Errorf("ssh.exe exited before Hub URL was detected")
 
 	case <-ctx.Done():
 		_ = cmd.Process.Kill()
 		<-waitCh
-		return "", nil, ctx.Err()
+		return "", nil, nil, ctx.Err()
 	}
 }
 
@@ -222,10 +231,17 @@ func (c *SSHConnector) runTunnel(ctx context.Context, p Profile, urlCh chan<- st
 		close(errCh)
 		return
 	}
+	// tunnel.Wait() の結果を一度だけ受け、その後 close する。受信済みでも
+	// defer 側のドレインが closed channel からゼロ値を読むだけで詰まらない。
+	waitCh := make(chan error, 1)
+	go func() {
+		waitCh <- tunnel.Wait()
+		close(waitCh)
+	}()
 	// Kill tunnel on exit.
 	defer func() {
 		_ = tunnel.Process.Kill()
-		_ = tunnel.Wait()
+		<-waitCh
 	}()
 
 	// Step 2: obtain the token via token_command.
@@ -246,6 +262,11 @@ func (c *SSHConnector) runTunnel(ctx context.Context, p Profile, urlCh chan<- st
 		return
 	}
 
+	// Step 3.5: 接続元情報（SSH 経由・接続先 host）を Hub に登録する。
+	// URL クエリヒントを持たないクライアント（PWA・別タブ等）でも
+	// /api/info 経由で正しいバッジが出るようにする。失敗しても接続は続行。
+	postNetHint(ctx, port, token, p.Host)
+
 	// Step 4: send the Hub URL to the caller for browser open.
 	hubURL := buildTunnelHubURL(port, token, p.Host)
 	select {
@@ -256,10 +277,15 @@ func (c *SSHConnector) runTunnel(ctx context.Context, p Profile, urlCh chan<- st
 		return
 	}
 	close(urlCh)
-	close(errCh)
 
-	// Step 5: keep the tunnel alive until ctx is cancelled.
-	<-ctx.Done()
+	// Step 5: keep the tunnel alive until it exits or ctx is cancelled.
+	// ssh.exe の終了（リモート Hub 停止・回線断）時は errCh を close して
+	// launcher 本体に「接続終了」を伝える（コンソール窓の残骸防止）。
+	select {
+	case <-waitCh:
+	case <-ctx.Done():
+	}
+	close(errCh)
 }
 
 // buildTunnelHubURL builds the browser-facing Hub URL for tunnel mode.
@@ -293,6 +319,26 @@ func fetchToken(ctx context.Context, p Profile) (string, error) {
 }
 
 // pollUntilReady polls apiURL until it returns HTTP 200 or ctx is cancelled.
+// postNetHint は Hub の /api/net-hint に接続元情報（SSH 経由・接続先 host）を
+// 登録する。tunnel モードでは既起動の Hub に ANY_AI_CLI_HOST_LABEL を注入
+// できないため、API 経由でサーバ側に保持させる。best-effort（失敗は無視）。
+func postNetHint(ctx context.Context, port int, token, host string) {
+	payload, err := json.Marshal(map[string]any{"ssh": true, "host_label": host})
+	if err != nil {
+		return
+	}
+	apiURL := fmt.Sprintf("http://127.0.0.1:%d/api/net-hint?token=%s", port, token)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(payload))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: tunnelTokenTimeout}
+	if resp, err := client.Do(req); err == nil {
+		_ = resp.Body.Close()
+	}
+}
+
 func pollUntilReady(ctx context.Context, apiURL string) error {
 	client := &http.Client{Timeout: tunnelPollInterval}
 	for i := 0; i < tunnelPollMaxTries; i++ {

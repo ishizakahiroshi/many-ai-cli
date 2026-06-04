@@ -73,7 +73,8 @@ func TestStartupBannerUsesAsciiUnderWindowsLauncher(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("WSL launcher detection is a Windows-native no-op; only meaningful on Linux/macOS builds")
 	}
-	// any-ai-cli-wsl.exe sets ANY_AI_CLI_WSL_LAUNCHER=1 in the WSL shell so
+	// The any-ai-cli-launcher.exe WSL connector sets ANY_AI_CLI_WSL_LAUNCHER=1
+	// in the WSL shell so
 	// the Linux Hub knows its stdout is being rendered by conhost.exe, where
 	// EAW=Ambiguous block / box-drawing chars are promoted to full-width and
 	// distort the ASCII art. The banner must fall back to plain ASCII glyphs

@@ -76,7 +76,7 @@ func hostNetInfo() (ssh bool, hostIP string) {
 func runtimeLabel(mode string) string {
 	switch mode {
 	case "windows-wsl":
-		return "Windows + WSL (any-ai-cli-wsl.exe)"
+		return "Windows + WSL (any-ai-cli-launcher.exe)"
 	case "windows-native":
 		return "Windows native"
 	case "wsl":

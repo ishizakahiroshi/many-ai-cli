@@ -233,6 +233,7 @@ func TestEvaluateIdle_RunningToWaiting(t *testing.T) {
 	s := newTestServer()
 	ses := registerTestSession(s, 10, "claude")
 	ses.approvalVisible = true
+	ses.approvalVisibleAt = time.Now() // リース内
 	ses.lastOutputAt = time.Now().Add(-(idleAfter + time.Millisecond))
 
 	s.evaluateIdle()
@@ -278,6 +279,74 @@ func TestEvaluateIdle_WaitingToStandby(t *testing.T) {
 	s.sessionsMu.Unlock()
 	if state != "standby" {
 		t.Fatalf("state = %q, want %q", state, "standby")
+	}
+}
+
+// TestEvaluateIdle_ApprovalLeaseExpired はリース切れ（approvalVisibleAt が
+// approvalVisibleLease より古い）の waiting セッションが approvalVisible を
+// 自動クリアして standby に落ちることを確認する（保留中バッジ固着の自動回復）。
+func TestEvaluateIdle_ApprovalLeaseExpired(t *testing.T) {
+	s := newTestServer()
+	ses := registerTestSession(s, 14, "claude")
+	ses.State = "waiting"
+	ses.approvalVisible = true
+	ses.approvalVisibleAt = time.Now().Add(-(approvalVisibleLease + time.Millisecond))
+
+	s.evaluateIdle()
+
+	s.sessionsMu.Lock()
+	state := s.sessions[14].State
+	visible := s.sessions[14].approvalVisible
+	s.sessionsMu.Unlock()
+	if visible {
+		t.Fatalf("approvalVisible = true, want false (lease expired)")
+	}
+	if state != "standby" {
+		t.Fatalf("state = %q, want %q", state, "standby")
+	}
+}
+
+// TestEvaluateIdle_ApprovalLeaseRenewed はリース内（UI が再主張している）なら
+// waiting が維持されることを確認する。
+func TestEvaluateIdle_ApprovalLeaseRenewed(t *testing.T) {
+	s := newTestServer()
+	ses := registerTestSession(s, 15, "claude")
+	ses.State = "waiting"
+	ses.approvalVisible = true
+	ses.approvalVisibleAt = time.Now() // 直近に再主張あり
+
+	s.evaluateIdle()
+
+	s.sessionsMu.Lock()
+	state := s.sessions[15].State
+	s.sessionsMu.Unlock()
+	if state != "waiting" {
+		t.Fatalf("state = %q, want %q", state, "waiting")
+	}
+}
+
+// TestEvaluateIdle_ApprovalLeaseKeptByNativeSig は go_vt detector が native prompt を
+// 見ている間（nativeApprovalSig != ""）はリース切れでも approvalVisible が
+// クリアされないことを確認する（UI 非接続時の native 承認待ち維持）。
+func TestEvaluateIdle_ApprovalLeaseKeptByNativeSig(t *testing.T) {
+	s := newTestServer()
+	ses := registerTestSession(s, 16, "claude")
+	ses.State = "waiting"
+	ses.approvalVisible = true
+	ses.approvalVisibleAt = time.Now().Add(-(approvalVisibleLease + time.Millisecond))
+	ses.nativeApprovalSig = "native-sig"
+
+	s.evaluateIdle()
+
+	s.sessionsMu.Lock()
+	state := s.sessions[16].State
+	visible := s.sessions[16].approvalVisible
+	s.sessionsMu.Unlock()
+	if !visible {
+		t.Fatalf("approvalVisible = false, want true (native sig keeps lease)")
+	}
+	if state != "waiting" {
+		t.Fatalf("state = %q, want %q", state, "waiting")
 	}
 }
 

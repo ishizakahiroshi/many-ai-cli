@@ -18,7 +18,8 @@ func IsWSL() bool {
 }
 
 // IsWindowsLauncherMode reports whether the current Linux process was started
-// by the any-ai-cli-wsl.exe Windows launcher. Plain `any-ai-cli serve` invoked
+// by the any-ai-cli-launcher.exe Windows launcher (WSL profile). Plain
+// `any-ai-cli serve` invoked
 // directly inside WSL (without the launcher) returns false even though IsWSL
 // is true — that case is treated as a pure-Linux session where the Hub UI is
 // expected to be opened by a WSL-side browser, not Windows Explorer / a

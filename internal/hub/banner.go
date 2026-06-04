@@ -30,7 +30,8 @@ var unicodeLogoLines = []string{
 }
 
 // asciiLogoLines is the fallback banner art used when the Hub stdout is
-// rendered by the Windows conhost.exe console (i.e. via any-ai-cli-wsl.exe).
+// rendered by the Windows conhost.exe console (i.e. via the
+// any-ai-cli-launcher.exe WSL profile).
 // All characters here are single-byte ASCII so the layout survives the
 // East Asian Width "Ambiguous → full-width" promotion that conhost applies
 // to U+2580..259F (block) and U+2500..257F (box drawing) under CJK locales.

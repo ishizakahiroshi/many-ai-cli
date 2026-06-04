@@ -316,6 +316,17 @@
     gap: 6px;
     padding-left: 10px;
     padding-right: 8px;
+    /* 固定幅ボタン群が幅を食い尽くすと #input-area (min-width:0) がゼロ幅に
+       潰れるため、折り返しを許可してツール行を2段目へ逃がす */
+    flex-wrap: wrap;
+  }
+  #input-area {
+    min-width: 140px;
+  }
+  /* iOS WebKit は font-size 16px 未満の入力欄にフォーカスすると自動ズームし、
+     実効ビューポートが縮んで入力欄が潰れるため 16px を確保する */
+  #input {
+    font-size: 16px;
   }
   #input-tools {
     gap: 2px;

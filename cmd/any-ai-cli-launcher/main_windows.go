@@ -107,6 +107,20 @@ func runUI() error {
 
 // connect runs the connection flow for a known profile.
 func connect(profile launcher.Profile) error {
+	// 多重起動ガード: 同一プロファイルが既に接続中（PID 生存 + Hub 応答の
+	// 二重ガード済み）なら、新しい serve / トンネルを張らずに既存の Hub URL
+	// でブラウザを開いて終了する（exe を叩くたびにコンソール窓と serve が
+	// 増殖するのを防ぐ）。確認失敗時は best-effort で通常接続に進む。
+	if conns, err := launcher.ActiveConnectionsPruned(); err == nil {
+		for _, c := range conns {
+			if c.Profile == profile.Name {
+				fmt.Fprintf(os.Stdout, "Profile %q is already connected — reusing %s\n", profile.Name, c.HubURL)
+				launcher.OpenBrowserOnce(c.HubURL)
+				return nil
+			}
+		}
+	}
+
 	conn, err := connectorFor(profile)
 	if err != nil {
 		return err
@@ -144,25 +158,23 @@ func connect(profile launcher.Profile) error {
 		}
 	}()
 
-	for {
-		select {
-		case err, ok := <-errCh:
-			if !ok {
-				// コネクタは接続成功時に errCh を close する（エラー送信なし）。
-				// close をエラーと同じ扱いで return すると、トンネル確立直後に
-				// プロセスごと終了して defer がトンネルを殺し、開いたブラウザが
-				// ERR_CONNECTION_REFUSED になる。閉鎖は「成功・継続中」の意味
-				// なので、以降は Ctrl+C / シグナルまで待ち続ける。
-				errCh = nil
-				continue
-			}
+	select {
+	case err, ok := <-errCh:
+		if !ok {
+			// errCh の close は「接続終了」（リモート serve 停止 / トンネル
+			// 切断 / wsl.exe 正常終了。Web UI の「Web のみ停止」を含む）。
+			// launcher も終了してコンソール窓を閉じる（残骸防止）。
+			fmt.Fprintln(os.Stdout, "Connection closed — exiting.")
 			stop()
-			wg.Wait()
-			return err
-		case <-ctx.Done():
 			wg.Wait()
 			return nil
 		}
+		stop()
+		wg.Wait()
+		return err
+	case <-ctx.Done():
+		wg.Wait()
+		return nil
 	}
 }
 

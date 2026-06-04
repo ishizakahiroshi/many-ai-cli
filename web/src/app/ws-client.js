@@ -158,6 +158,11 @@ export function _connectWs() {
     if (nsBtn) nsBtn.disabled = false;
     document.getElementById('reconnect-btn').hidden = true;
     _sendRegister();
+    // 再接続直後に承認可視ヒントを即時再主張する（Hub 側リースの取りこぼし修復。
+    // リロード後はキャッシュが空なので no-op）。
+    if (window.approvalUiAdapter?.reassertApprovalHints) {
+      window.approvalUiAdapter.reassertApprovalHints();
+    }
   };
   _ws.onmessage = (ev) => {
     let m;

@@ -53,6 +53,13 @@ const (
 	nativeApprovalClearMissLimit = 3
 	vtResizeDebounce             = 200 * time.Millisecond
 	approvalConsumedTTL          = 10 * time.Second
+	// approvalVisibleLease: session_hint(approval_visible=true) の有効期限。
+	// UI は承認可視中 5s 間隔（approval-ui.js の APPROVAL_HINT_REASSERT_MS）で
+	// 再主張するため、リース 15s = 再主張 3 回分。リロード desync・複数クライアント・
+	// H9 復元固着など false ヒントが失われるどの経路でも最大 15s で自動回復する。
+	// ただし Hub 自身の go_vt detector が native prompt を見ている間
+	// （nativeApprovalSig != ""）はリース切れでもクリアしない。
+	approvalVisibleLease = 15 * time.Second
 	wsMaxPayloadBytes            = 2 << 20 // 2 MiB: UI/wrapper JSON frame receive cap
 
 	// OSC シーケンスをユーザーターン境界マーカーとして ptyBuf に注入する。
@@ -91,9 +98,10 @@ type session struct {
 	EndReason    string `json:"end_reason,omitempty"`     // session_end の reason コード（例: "exec_not_found"）。UI 側で i18n 翻訳して表示
 
 	// JSON 外: 状態評価用
-	lastOutputAt    time.Time // idleAfter 計算用。LastOutputAt と同期して更新する
-	approvalVisible bool
-	branchCheckedAt time.Time
+	lastOutputAt      time.Time // idleAfter 計算用。LastOutputAt と同期して更新する
+	approvalVisible   bool
+	approvalVisibleAt time.Time // approvalVisible=true を最後に受信した時刻（approvalVisibleLease 判定用）
+	branchCheckedAt   time.Time
 
 	// JSON 外: UI 再接続時リプレイ用リングバッファ（末尾 maxPTYBuf bytes）
 	ptyBuf []byte
@@ -249,6 +257,14 @@ type Server struct {
 
 	approvalRulesMu     sync.Mutex
 	approvalRuleTargets map[string]approvalRuleTarget // key: normalized path
+
+	// netHint: launcher（SSH tunnel モード）が /api/net-hint で登録する接続元情報。
+	// tunnel モードでは既起動の Hub に ANY_AI_CLI_HOST_LABEL を注入できないため、
+	// API 経由でサーバ側に保持し、URL クエリヒントを持たないクライアント
+	//（PWA・別タブ等）にも /api/info で正しいバッジ情報を返す。
+	netHintMu   sync.Mutex
+	netHintSSH  bool
+	netHintHost string
 
 	usageLinkCache *ttlCache[UsageLinkDefaults]
 
@@ -492,6 +508,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		Handler:   s.handleWS,
 	})
 	mux.HandleFunc("/api/info", s.handleInfo)
+	mux.HandleFunc("/api/net-hint", s.handleNetHint)
 	mux.HandleFunc("/api/avatar", s.handleAvatar)
 	mux.HandleFunc("/api/spawn", s.handleSpawn)
 	mux.HandleFunc("/api/pick-directory", s.handlePickDirectory)
@@ -1604,6 +1621,11 @@ func (s *Server) handleHint(m proto.Message) {
 	ses := s.sessions[m.SessionID]
 	if ses != nil {
 		ses.approvalVisible = m.ApprovalVisible
+		if m.ApprovalVisible {
+			ses.approvalVisibleAt = time.Now()
+		} else {
+			ses.approvalVisibleAt = time.Time{}
+		}
 	}
 	s.sessionsMu.Unlock()
 }
@@ -1836,6 +1858,14 @@ func (s *Server) evaluateIdle() {
 		if now.Sub(ses.branchCheckedAt) >= branchRefreshAfter {
 			ses.branchCheckedAt = now
 			branchChecks = append(branchChecks, branchRefreshRequest{id: id, cwd: ses.CWD})
+		}
+		// approvalVisible リース切れの自動クリア:
+		// UI からの false ヒントが失われても（リロード desync・複数クライアント等）
+		// 再主張が止まれば waiting 固着から自動回復する。
+		// go_vt detector がまだ native prompt を見ている間は UI 不在でも維持する。
+		if ses.approvalVisible && ses.nativeApprovalSig == "" && now.Sub(ses.approvalVisibleAt) >= approvalVisibleLease {
+			ses.approvalVisible = false
+			ses.approvalVisibleAt = time.Time{}
 		}
 		var newState string
 		switch ses.State {

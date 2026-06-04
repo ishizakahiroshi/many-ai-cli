@@ -100,6 +100,20 @@ import { showActionBar } from './approval.js';
     }
   }
 
+  // 承認可視ヒントの定期再主張: Hub 側の approvalVisible はリース制
+  // （server.go の approvalVisibleLease = 15s）のため、可視中はリースの 1/3 間隔で
+  // true を再送して維持する。false ヒントがどの経路で失われても（リロード desync・
+  // 複数クライアント・H9 復元固着等）再主張が止まれば Hub 側がリース切れで自動回復する。
+  const APPROVAL_HINT_REASSERT_MS = 5000; // approvalVisibleLease(15s) の 1/3
+
+  function reassertApprovalHints() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    approvalVisibleCache.forEach((visible, id) => {
+      if (visible) sendSessionHint(id, true);
+    });
+  }
+  setInterval(reassertApprovalHints, APPROVAL_HINT_REASSERT_MS);
+
   const api = {
     sendSessionHint,
     setApprovalVisible,
@@ -108,6 +122,7 @@ import { showActionBar } from './approval.js';
     showOptions,
     clearActionBarDom,
     setMultiQuestionBannerVisible,
+    reassertApprovalHints,
   };
 
   root.approvalUiAdapter = api;

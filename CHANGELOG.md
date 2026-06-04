@@ -10,6 +10,13 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Removed
+- **`any-ai-cli-wsl.exe` (standalone WSL launcher).** The unified Windows
+  launcher `any-ai-cli-launcher.exe` fully replaces it: a `wsl` profile
+  provides the same behavior (`bash -ilc` startup, `ANY_AI_CLI_WSL_LAUNCHER=1`,
+  automatic port selection, browser open, and WSL-side orphan cleanup). The
+  Windows release zip now ships `any-ai-cli.exe` and `any-ai-cli-launcher.exe`.
+
 ## [0.2.2] - 2026-05-24
 
 ### Changed

@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ANY-AI-CLI Launcher</title>
+<!-- ランチャー UI サーバーは / と /api/* しか配信しないため、favicon は
+     ヘッダーのブランド SVG と同一のものを data URI で埋め込む。 -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9IjEwNCIgZmlsbD0iIzExMTExMSIvPjxyZWN0IHg9Ijc4IiB5PSIxMTIiIHdpZHRoPSIzNTYiIGhlaWdodD0iMjc4IiByeD0iMzQiIGZpbGw9IiMxQTFBMUEiIHN0cm9rZT0iI0ZGRDYwMCIgc3Ryb2tlLXdpZHRoPSIxNiIvPjxjaXJjbGUgY3g9IjEzMiIgY3k9IjE1OCIgcj0iMTEiIGZpbGw9IiNGRkQ2MDAiLz48Y2lyY2xlIGN4PSIxNjYiIGN5PSIxNTgiIHI9IjExIiBmaWxsPSIjRkZENjAwIi8+PGNpcmNsZSBjeD0iMjAwIiBjeT0iMTU4IiByPSIxMSIgZmlsbD0iI0ZGRDYwMCIvPjxsaW5lIHgxPSI4OCIgeTE9IjE5NiIgeDI9IjQyNCIgeTI9IjE5NiIgc3Ryb2tlPSIjM0EzQTNBIiBzdHJva2Utd2lkdGg9IjYiLz48dGV4dCB4PSIyNTYiIHk9IjMxOCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkNvbnNvbGFzLCBNZW5sbywgTW9uYWNvLCBtb25vc3BhY2UiIGZvbnQtc2l6ZT0iMTE2IiBmb250LXdlaWdodD0iOTAwIiBmaWxsPSIjRkZGRkZGIiBsZXR0ZXItc3BhY2luZz0iLTYiPkNMSTwvdGV4dD48ZyBzdHJva2U9IiNGRkQ2MDAiIHN0cm9rZS13aWR0aD0iOSIgZmlsbD0ibm9uZSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj48Y2lyY2xlIGN4PSIxMzIiIGN5PSI0MjQiIHI9IjE2IiBmaWxsPSIjMTExMTExIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iNDI0IiByPSIxNiIgZmlsbD0iIzExMTExMSIvPjxjaXJjbGUgY3g9IjM4MCIgY3k9IjQyNCIgcj0iMTYiIGZpbGw9IiMxMTExMTEiLz48cGF0aCBkPSJNMTQ4IDQyNCBIMjQwIE0yNzIgNDI0IEgzNjQiLz48L2c+PC9zdmc+">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:"Segoe UI",sans-serif;font-size:14px;background:#f0f2f5;color:#222;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:24px 16px}
@@ -447,12 +450,15 @@ function renderTable() {
     const dest = p.type === 'wsl'
       ? (p.distro || t('default_distro'))
       : ((p.user ? p.user + '@' : '') + (p.host || '?'));
+    // SSH は接続モード（serve/tunnel）も併記する。mode 未設定は Go 側
+    // （validateSSH）の既定に合わせて serve とみなす。
+    const typeCell = p.type === 'ssh' ? p.type + ' (' + (p.mode || 'serve') + ')' : p.type;
     const hubPort = p.hub_port || t('auto');
     const nameCell = p.name + (p.name === lastUsed ? ' ★' : '');
     const stateCell = activeMap[p.name]
       ? '<span class="badge-running">' + esc(t('state_connected')) + '</span>'
       : '<span class="badge-idle">' + esc(t('state_idle')) + '</span>';
-    tr.innerHTML = `<td>${esc(nameCell)}</td><td>${esc(p.type)}</td><td>${esc(dest)}</td><td>${esc(String(hubPort))}</td><td>${stateCell}</td>`;
+    tr.innerHTML = `<td>${esc(nameCell)}</td><td>${esc(typeCell)}</td><td>${esc(dest)}</td><td>${esc(String(hubPort))}</td><td>${stateCell}</td>`;
     tr.addEventListener('click', () => { selectedIdx = i; renderTable(); });
     tr.addEventListener('dblclick', () => { selectedIdx = i; renderTable(); startConnect(); });
     tbody.appendChild(tr);
@@ -576,7 +582,9 @@ function openModal(idx) {
   setVal('f-wsl-binary', p.binary || '');
   setVal('f-wsl-cwd', p.cwd || '');
   setVal('f-wsl-hubport', p.hub_port || '');
-  setVal('f-ssh-mode', p.mode || 'serve');
+  // New profiles default to tunnel; existing ones keep serve as the
+  // empty-mode fallback to match the Go-side default (validateSSH).
+  setVal('f-ssh-mode', p.mode || (isNew ? 'tunnel' : 'serve'));
   setVal('f-host', p.host || '');
   setVal('f-user', p.user || '');
   setVal('f-ssh-port', p.ssh_port || '');
