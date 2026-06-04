@@ -139,6 +139,12 @@ SOCAT_LOOP_PID=$!
 
 trap 'on_term' TERM INT
 
+# 前回 boot の PID ファイル残骸を起動前に必ず除去する。コンテナは boot ごとに
+# PID が再利用される（Hub が毎回同じ番号になる）ため、残骸があると Hub の
+# killStalePid が無関係なプロセスを kill しうる。docker restart は /tmp を
+# 保持するので、Hub 側の削除（異常終了時は残る）に頼らずここでも消す。
+rm -f "${TMPDIR:-/tmp}/any-ai-cli.pid"
+
 # Hub を起動し、entrypoint 側で SIGTERM を受けて wrapper → Hub の順に止める。
 # --port は config.yaml の値より優先され、Host 検証もこのポートで行われる。
 any-ai-cli serve --port "$HUB_PORT" &
