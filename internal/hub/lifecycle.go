@@ -11,7 +11,6 @@ import (
 
 	"any-ai-cli/internal/config"
 	"any-ai-cli/internal/proto"
-	"golang.org/x/net/websocket"
 )
 
 func (s *Server) handleKillAll(w http.ResponseWriter, r *http.Request) {
@@ -24,13 +23,13 @@ func (s *Server) handleKillAll(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) killAllWrappers() {
 	s.sessionsMu.Lock()
-	conns := make([]*websocket.Conn, 0, len(s.wrappers))
-	for _, conn := range s.wrappers {
-		conns = append(conns, conn)
+	conns := make([]*wrapperConn, 0, len(s.wrappers))
+	for _, wc := range s.wrappers {
+		conns = append(conns, wc)
 	}
 	s.sessionsMu.Unlock()
-	for _, conn := range conns {
-		_ = conn.Close()
+	for _, wc := range conns {
+		wc.close()
 	}
 }
 
@@ -50,15 +49,14 @@ func (s *Server) handleShutdown(w http.ResponseWriter, r *http.Request) {
 // CREATE_NEW_CONSOLE による Hub 復活ターミナル窓のポップアップが発生しない。
 func (s *Server) broadcastHubShutdown(reason string) {
 	s.sessionsMu.Lock()
-	conns := make([]*websocket.Conn, 0, len(s.wrappers))
-	for _, conn := range s.wrappers {
-		conns = append(conns, conn)
+	conns := make([]*wrapperConn, 0, len(s.wrappers))
+	for _, wc := range s.wrappers {
+		conns = append(conns, wc)
 	}
 	s.sessionsMu.Unlock()
 	msg := proto.Message{Type: "hub_shutdown", Reason: reason}
-	for _, conn := range conns {
-		_ = conn.SetWriteDeadline(time.Now().Add(500 * time.Millisecond))
-		_ = websocket.JSON.Send(conn, msg)
+	for _, wc := range conns {
+		_ = wc.sendWithDeadline(msg, time.Now().Add(500*time.Millisecond))
 	}
 }
 

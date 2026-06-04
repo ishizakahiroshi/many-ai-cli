@@ -158,7 +158,14 @@ func readSlashCmdSource(source string) ([]byte, error) {
 			return nil, fmt.Errorf("open %s: %w", source, err)
 		}
 		defer f.Close()
-		return io.ReadAll(io.LimitReader(f, slashCmdLocalMaxBytes))
+		body, err := io.ReadAll(io.LimitReader(f, slashCmdLocalMaxBytes+1))
+		if err != nil {
+			return nil, err
+		}
+		if int64(len(body)) > slashCmdLocalMaxBytes {
+			return nil, fmt.Errorf("source %s exceeds %d bytes", source, slashCmdLocalMaxBytes)
+		}
+		return body, nil
 	}
 	client := makeExternalHTTPClient(15 * time.Second)
 	resp, err := client.Get(source)

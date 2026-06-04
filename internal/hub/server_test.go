@@ -21,7 +21,7 @@ func newTestServer() *Server {
 		cfg:                 cfg,
 		logger:              slog.Default(),
 		sessions:            map[int]*session{},
-		wrappers:            map[int]*websocket.Conn{},
+		wrappers:            map[int]*wrapperConn{},
 		uis:                 map[*websocket.Conn]*uiConn{},
 		slashCmdCache:       map[string]*slashCmdCacheEntry{},
 		approvalRuleTargets: map[string]approvalRuleTarget{},

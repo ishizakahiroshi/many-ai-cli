@@ -12,7 +12,9 @@ import { scheduleApprovalCheck } from './approval.js';
 // ---- xterm.js 管理 ----
 
 export const TERMINAL_SCROLLBACK_LINES = 2000;
-export const TERMINAL_PENDING_MAX_BYTES = 100_000;
+// Hub の ptyBuf replay 上限と揃える。非アクティブ中の長い Codex 出力を
+// 100KB で捨てると、セッション切替時に回答の前半が欠けて見える。
+export const TERMINAL_PENDING_MAX_BYTES = 512 * 1024;
 export const TERMINAL_PENDING_FLUSH_MAX_CHUNKS = 8;
 export const TERMINAL_PENDING_FLUSH_MAX_BYTES = 24_000;
 

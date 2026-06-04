@@ -92,6 +92,71 @@ func TestAllowedHubHost(t *testing.T) {
 	}
 }
 
+func TestAllowedHubOrigin(t *testing.T) {
+	cases := []struct {
+		origin string
+		port   int
+		want   bool
+	}{
+		{"http://127.0.0.1:47777", 47777, true},
+		{"http://localhost:47777", 47777, true},
+		{"http://[::1]:47777", 47777, true},
+		{"https://127.0.0.1:47777", 47777, false},
+		{"http://127.0.0.1:47778", 47777, false},
+		{"http://evil.example:47777", 47777, false},
+	}
+	for _, c := range cases {
+		if got := isAllowedHubOrigin(c.origin, c.port); got != c.want {
+			t.Fatalf("isAllowedHubOrigin(%q, %d) = %v, want %v", c.origin, c.port, got, c.want)
+		}
+	}
+}
+
+func TestGuardAllowsSameOriginPost(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:47777/api/test?token=tok", nil)
+	req.Header.Set("Origin", "http://127.0.0.1:47777")
+	w := httptest.NewRecorder()
+	if !s.guard(w, req, http.MethodPost) {
+		t.Fatalf("expected same-origin POST to pass, status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestGuardRejectsUnexpectedOriginPost(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:47777/api/test?token=tok", nil)
+	req.Header.Set("Origin", "http://evil.example:47777")
+	w := httptest.NewRecorder()
+	if s.guard(w, req, http.MethodPost) {
+		t.Fatal("expected cross-origin POST to fail")
+	}
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestGuardRejectsCrossSiteFetchPost(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:47777/api/test?token=tok", nil)
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	w := httptest.NewRecorder()
+	if s.guard(w, req, http.MethodPost) {
+		t.Fatal("expected cross-site POST to fail")
+	}
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestGuardAllowsPostWithoutBrowserOriginHeaders(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:47777/api/test?token=tok", nil)
+	w := httptest.NewRecorder()
+	if !s.guard(w, req, http.MethodPost) {
+		t.Fatalf("expected CLI-style POST to pass, status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
 func TestWSHandshakeRejectsUnexpectedHost(t *testing.T) {
 	s := newSecTestServer(t, t.TempDir())
 	req := httptest.NewRequest(http.MethodGet, "/ws", nil)

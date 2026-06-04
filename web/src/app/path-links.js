@@ -66,17 +66,17 @@ export function getFilesAssetUrl(absPath, sessionId) {
   return `/api/files-asset?path=${encodeURIComponent(absPath)}&token=${encodeURIComponent(token)}${sessionQs}`;
 }
 
-export function getPathOpenItem(filePath) {
+export function getPathOpenItem(filePath, sessionId) {
   if (isVideoPath(filePath)) {
-    return { icon: '🎞️', key: 'link_open_file', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error') };
+    return { icon: '🎞️', key: 'link_open_file', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error', sessionId) };
   }
   if (isImagePath(filePath)) {
-    return { icon: '🖼️', key: 'link_open_image', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error') };
+    return { icon: '🖼️', key: 'link_open_image', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error', sessionId) };
   }
   if (isTextPath(filePath)) {
-    return { icon: '📝', key: 'link_open_text', action: () => callOpenApi('/api/open-file', filePath) };
+    return { icon: '📝', key: 'link_open_text', action: () => callOpenApi('/api/open-file', filePath, 'link_open_error', sessionId) };
   }
-  return { icon: '📄', key: 'link_open_file', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error') };
+  return { icon: '📄', key: 'link_open_file', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error', sessionId) };
 }
 
 export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 'file') {
@@ -100,16 +100,16 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
     });
   }
   if (!isDir) {
-    items.push(getPathOpenItem(filePath));
+    items.push(getPathOpenItem(filePath, sessionId));
   }
   items.push(
     { icon: '📁', key: 'link_open_folder', action: () => {
-      if (isDir) return callOpenApi('/api/open-default-file', filePath, 'link_open_default_error');
-      return callOpenApi('/api/open-folder', filePath);
+      if (isDir) return callOpenApi('/api/open-default-file', filePath, 'link_open_default_error', sessionId);
+      return callOpenApi('/api/open-folder', filePath, 'link_open_error', sessionId);
     }},
     { icon: '💻', key: 'link_open_terminal', action: () => {
       const dir = isDir ? filePath : (dirnameForPath(filePath) || sessions.get(sessionId)?.cwd || filePath);
-      callOpenApi('/api/open-terminal', dir);
+      callOpenApi('/api/open-terminal', dir, 'link_open_error', sessionId);
     }},
     { icon: '📋', key: 'link_copy_path', action: (anchor) => {
       return copyPathText(filePath, anchor).catch(() => {});
@@ -187,9 +187,10 @@ export async function renameFileViaApi(filePath, sessionId) {
   }
 }
 
-export async function callOpenApi(endpoint, path, errorKey = 'link_open_error') {
+export async function callOpenApi(endpoint, path, errorKey = 'link_open_error', sessionId = null) {
   try {
-    const res = await fetch(`${endpoint}?token=${encodeURIComponent(token)}`, {
+    const sessionQs = (sessionId != null && sessionId !== '') ? `&session=${encodeURIComponent(sessionId)}` : '';
+    const res = await fetch(`${endpoint}?token=${encodeURIComponent(token)}${sessionQs}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path }),

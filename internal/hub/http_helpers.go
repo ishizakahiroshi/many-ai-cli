@@ -179,7 +179,7 @@ func (s *Server) guard(w http.ResponseWriter, r *http.Request, methods ...string
 	if len(methods) > 0 && !requireMethodOneOf(w, r, methods...) {
 		return false
 	}
-	if methodRequiresHostCheck(r.Method) && !s.requireAllowedHost(w, r) {
+	if methodRequiresHostCheck(r.Method) && !s.requireAllowedRequestOrigin(w, r) {
 		return false
 	}
 	return true
@@ -194,15 +194,29 @@ func methodRequiresHostCheck(method string) bool {
 	}
 }
 
-func (s *Server) requireAllowedHost(w http.ResponseWriter, r *http.Request) bool {
+func (s *Server) requireAllowedRequestOrigin(w http.ResponseWriter, r *http.Request) bool {
 	s.cfgMu.Lock()
 	port := s.cfg.Hub.Port
 	s.cfgMu.Unlock()
-	if isAllowedHubHost(r.Host, port) {
-		return true
+	if !isAllowedHubHost(r.Host, port) {
+		writeJSONError(w, http.StatusForbidden, "forbidden", "host not allowed")
+		return false
 	}
-	writeJSONError(w, http.StatusForbidden, "forbidden", "host not allowed")
-	return false
+	if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" {
+		if isAllowedHubOrigin(origin, port) {
+			return true
+		}
+		writeJSONError(w, http.StatusForbidden, "forbidden", "origin not allowed")
+		return false
+	}
+	site := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")))
+	switch site {
+	case "", "none", "same-origin":
+		return true
+	default:
+		writeJSONError(w, http.StatusForbidden, "forbidden", "origin not allowed")
+		return false
+	}
 }
 
 func isAllowedHubHost(hostport string, port int) bool {
@@ -224,6 +238,17 @@ func isAllowedHubHost(hostport string, port int) bool {
 	}
 	gotPort, err := strconv.Atoi(rawPort)
 	return err == nil && gotPort == port
+}
+
+func isAllowedHubOrigin(rawOrigin string, port int) bool {
+	u, err := url.Parse(rawOrigin)
+	if err != nil {
+		return false
+	}
+	if strings.ToLower(u.Scheme) != "http" || u.Host == "" {
+		return false
+	}
+	return isAllowedHubHost(u.Host, port)
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {

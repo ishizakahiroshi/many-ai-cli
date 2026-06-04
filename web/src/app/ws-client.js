@@ -17,6 +17,7 @@ export let ws = null;
 export let _wsIntentionalClose = false; // ページ遷移など意図的クローズ時は再接続しない
 export let _wsRetryDelay = 500; // 初期バックオフ ms
 export const _wsRetryMax = 10000; // 上限 ms
+let _wsReconnectTimer = null;
 
 export function syncElapsedTimer() {
   const shouldRun = !!(ws && ws.readyState === WebSocket.OPEN && activeSessionId !== null && !document.hidden);
@@ -78,6 +79,7 @@ export function _connectWs() {
   ws = _ws;
   _ws.onerror = () => { document.getElementById('summary').textContent = t('ws_error'); };
   _ws.onclose = (e) => {
+    if (ws !== _ws) return;
     if (_elapsedTimerInterval) { clearInterval(_elapsedTimerInterval); set__elapsedTimerInterval(null); }
     sessions.clear();
     autoDismissTimers.forEach(t => clearTimeout(t));
@@ -98,12 +100,19 @@ export function _connectWs() {
     const jitter = Math.random() * 200;
     const delay = Math.min(_wsRetryMax, _wsRetryDelay) + jitter;
     _wsRetryDelay = Math.min(_wsRetryMax, _wsRetryDelay * 2);
-    setTimeout(() => {
+    if (_wsReconnectTimer) clearTimeout(_wsReconnectTimer);
+    _wsReconnectTimer = setTimeout(() => {
+      _wsReconnectTimer = null;
       if (_wsIntentionalClose) return;
+      if (ws !== _ws) return;
       _connectWs();
     }, delay);
   };
   _ws.onopen = () => {
+    if (_wsReconnectTimer) {
+      clearTimeout(_wsReconnectTimer);
+      _wsReconnectTimer = null;
+    }
     _wsRetryDelay = 500; // 再接続成功でバックオフリセット
     document.getElementById('summary').textContent = t('registering');
     const nsBtn = document.getElementById('new-session-btn');
@@ -194,7 +203,12 @@ export function _connectWs() {
   }
 
   if (m.type === 'snapshot') {
-    const arr = typeof m.sessions === 'string' ? JSON.parse(m.sessions) : m.sessions;
+    let arr;
+    try {
+      arr = typeof m.sessions === 'string' ? JSON.parse(m.sessions) : m.sessions;
+    } catch (_) {
+      return;
+    }
     (arr || []).forEach(s => {
       if (s.state === 'completed') {
         requestSessionDismiss(s.id);

@@ -344,3 +344,35 @@ func TestSaveRoundTrip(t *testing.T) {
 			cfg2.UserPrefs.Spawn.LastModel["claude"], "claude-sonnet-4")
 	}
 }
+
+func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
+	cfg := &Config{}
+	cfg.Spawn.LastModel = map[string]string{"legacy": "a"}
+	cfg.UserPrefs.Favorites = []string{"one"}
+	cfg.UserPrefs.CwdHistory = []string{"C:/dev/one"}
+	cfg.UserPrefs.Spawn.Defaults = map[string]string{"claude": "default"}
+	cfg.UserPrefs.Spawn.LastModel = map[string]string{"claude": "sonnet"}
+
+	clone := cfg.Clone()
+	cfg.Spawn.LastModel["legacy"] = "b"
+	cfg.UserPrefs.Favorites[0] = "two"
+	cfg.UserPrefs.CwdHistory[0] = "C:/dev/two"
+	cfg.UserPrefs.Spawn.Defaults["claude"] = "changed"
+	cfg.UserPrefs.Spawn.LastModel["claude"] = "opus"
+
+	if clone.Spawn.LastModel["legacy"] != "a" {
+		t.Fatalf("legacy spawn map was aliased")
+	}
+	if clone.UserPrefs.Favorites[0] != "one" {
+		t.Fatalf("favorites slice was aliased")
+	}
+	if clone.UserPrefs.CwdHistory[0] != "C:/dev/one" {
+		t.Fatalf("cwd history slice was aliased")
+	}
+	if clone.UserPrefs.Spawn.Defaults["claude"] != "default" {
+		t.Fatalf("spawn defaults map was aliased")
+	}
+	if clone.UserPrefs.Spawn.LastModel["claude"] != "sonnet" {
+		t.Fatalf("spawn last model map was aliased")
+	}
+}

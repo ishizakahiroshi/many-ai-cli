@@ -30,8 +30,8 @@ func TestApprovalRulesSharedProjectTargetReferenceCount(t *testing.T) {
 	s.sessionsMu.Lock()
 	s.sessions[1] = &session{ID: 1, Provider: "codex", CWD: project, State: "running"}
 	s.sessions[2] = &session{ID: 2, Provider: "cursor-agent", CWD: project, State: "running"}
-	s.wrappers[1] = &websocket.Conn{}
-	s.wrappers[2] = &websocket.Conn{}
+	s.wrappers[1] = newWrapperConn(&websocket.Conn{})
+	s.wrappers[2] = newWrapperConn(&websocket.Conn{})
 	s.sessionsMu.Unlock()
 
 	s.injectApprovalRules()
@@ -60,9 +60,9 @@ func TestActiveApprovalRuleTargetsDedupesSharedAgentsPath(t *testing.T) {
 	s.sessions[1] = &session{ID: 1, Provider: "codex", CWD: project, State: "running"}
 	s.sessions[2] = &session{ID: 2, Provider: "copilot", CWD: project, State: "running"}
 	s.sessions[3] = &session{ID: 3, Provider: "cursor-agent", CWD: project, State: "running"}
-	s.wrappers[1] = &websocket.Conn{}
-	s.wrappers[2] = &websocket.Conn{}
-	s.wrappers[3] = &websocket.Conn{}
+	s.wrappers[1] = newWrapperConn(&websocket.Conn{})
+	s.wrappers[2] = newWrapperConn(&websocket.Conn{})
+	s.wrappers[3] = newWrapperConn(&websocket.Conn{})
 	s.sessionsMu.Unlock()
 
 	targets := s.activeApprovalRuleTargets()
