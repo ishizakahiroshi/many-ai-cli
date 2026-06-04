@@ -55,7 +55,9 @@ func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodGet) {
 		return
 	}
+	s.cfgMu.Lock()
 	path := s.cfg.UserPrefs.Avatar
+	s.cfgMu.Unlock()
 	if path == "" || strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
 		http.NotFound(w, r)
 		return
@@ -287,7 +289,7 @@ func (s *Server) handleOpenDir(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, "bad_request", "path must be absolute")
 			return
 		}
-		if !s.checkOpenPathAllowed(w, body.Path) {
+		if !s.checkOpenPathAllowed(w, r, body.Path) {
 			return
 		}
 		if err := openRevealNative(body.Path); err != nil {

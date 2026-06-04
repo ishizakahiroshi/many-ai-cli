@@ -296,10 +296,9 @@ export function rewireChatHistorySub(sid) {
   _activeChatSubUnsub = window.chatHistoryAPI.subscribe(sid, (msg) => {
     if (sid !== activeSessionId) return;
     updateChatCountBadge();
-    // C3: chat-pane が現在マウント中のセッションなら増分追加
-    if (_chatPaneMountedSid === sid && msg) {
-      appendMessage(sid, msg);
-    }
+    // C3: chat-pane へ増分追加。mount 状態の判定（および chat/split 表示中なのに
+    // mount が欠落している場合の remount 保険）は appendMessage 側に一本化する。
+    if (msg) appendMessage(sid, msg);
   });
   updateChatCountBadge();
 }
@@ -934,9 +933,23 @@ export function mountChatPaneForSession(sid) {
   scrollChatPaneToBottomSoon({ passes: 2 });
 }
 
+// display-area が chat / split 表示中かどうか（appendMessage の mount 欠落保険用）
+function isChatViewModeActive() {
+  const da = document.getElementById('display-area');
+  return !!da && (da.classList.contains('mode-chat') || da.classList.contains('mode-split'));
+}
+
 // 1 メッセージの増分追加。subscribe コールバックから呼ばれる。
 export function appendMessage(sid, msg) {
-  if (sid !== _chatPaneMountedSid) return;
+  if (sid !== _chatPaneMountedSid) {
+    // bugfix 2026-06-04 保険: active session が chat/split 表示中なのに mount が
+    // 欠落している場合は store から再構築する（msg は push 済みなので mount で描画される）。
+    if (sid === activeSessionId && isChatViewModeActive()) {
+      console.warn('[chat-history] chat-pane not mounted for active session, remounting:', sid);
+      mountChatPaneForSession(sid);
+    }
+    return;
+  }
   const timeline = getChatTimelineEl();
   if (!timeline) return;
   const wasAtBottom = chatPaneAtBottom(timeline);
@@ -954,36 +967,30 @@ export function appendMessage(sid, msg) {
 }
 
 // setActiveTab が chat/split に切り替わるタイミングで chat-pane の中身を保証する。
-// 既存 setActiveTab を wrap せず、毎回 mountChatPaneForSession を呼ぶ。
-// setActiveTab 自体は C2 のままに保ち、本ファイル末尾で chat/split に切り替わったときの
-// 副作用としてマウントを行う薄いラッパーを追加する。
-export const _originalSetActiveTab_C3 = setActiveTab;
-// NOTE: setActiveTab は settings.js からの import バインディング（読み取り専用）のため
-// 直接再代入できない（ESM 化で `Assignment to constant variable` になる）。
-// wrapper を別のローカル変数に保持し、window.setActiveTab 経由で全呼び出し元へ反映する。
-const _wrappedSetActiveTab_C3 = function (sid, name) {
-  const ret = _originalSetActiveTab_C3.call(this, sid, name);
-  try {
-    const targetSid = (sid !== null && sid !== undefined) ? sid : activeSessionId;
-    if (targetSid !== null && targetSid !== undefined &&
-        targetSid === activeSessionId &&
-        (name === 'chat' || name === 'split')) {
+// bugfix 2026-06-04: 以前は window.setActiveTab を wrapper で差し替えていたが、
+// settings.js 内の主要経路（タブクリック / applyActiveSessionViewMode）は ESM import の
+// setActiveTab を直接呼ぶため wrapper を通らず、mount が欠落していた。
+// monkey patch を廃止し、settings.js の setActiveTab() が DOM mode 確定後に発火する
+// 'session-view-mode-changed' event を購読して mount する方式に変更。
+if (typeof window !== 'undefined') {
+  window.addEventListener('session-view-mode-changed', (ev) => {
+    const { sid, name } = (ev && ev.detail) || {};
+    if (sid === null || sid === undefined) return;
+    if (sid !== activeSessionId) return;
+    if (name !== 'chat' && name !== 'split') return;
+    try {
       // 既に同 sid でマウント済みなら差分のみ。違う sid なら再構築。
-      if (_chatPaneMountedSid !== targetSid) {
-        mountChatPaneForSession(targetSid);
+      if (_chatPaneMountedSid !== sid) {
+        mountChatPaneForSession(sid);
       } else {
         // 念のためスクロール末尾追従
         const tl = getChatTimelineEl();
         if (tl) requestAnimationFrame(() => scrollChatPaneToBottom(tl));
       }
+    } catch (e) {
+      console.warn('[mountChatPaneForSession] failed:', e);
     }
-  } catch (e) {
-    console.warn('[mountChatPaneForSession] failed:', e);
-  }
-  return ret;
-};
-if (typeof window !== 'undefined') {
-  window.setActiveTab = _wrappedSetActiveTab_C3;
+  });
   window.mountChatPaneForSession = mountChatPaneForSession;
   window.appendChatMessage = appendMessage;
 }
@@ -1280,7 +1287,10 @@ if (typeof window !== 'undefined') {
         if (r.session_id && sessions.has(r.session_id)) {
           activateSession(r.session_id);
           await restoreChatHistoryFromStore(r.session_id, { force: false });
-          window.setActiveTab && window.setActiveTab('chat');
+          // bugfix 2026-06-04: 旧 window.setActiveTab('chat') は第1引数に 'chat' を渡す
+          // 誤りで no-op だった。import した setActiveTab を正しい引数で呼ぶ。
+          setActiveTab(r.session_id, 'chat');
+          // restore 完了後の再構築を保証（event 経由 mount は restore 前の場合がある）
           mountChatPaneForSession(r.session_id);
         }
       });

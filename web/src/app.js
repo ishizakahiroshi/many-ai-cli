@@ -245,15 +245,14 @@ export async function doSend(sessionId) {
 
 export function saveInputStateFor(id) {
   if (id === null) return;
-  const frag = document.createDocumentFragment();
-  if (attachThumbnails) {
-    while (attachThumbnails.firstChild) frag.appendChild(attachThumbnails.firstChild);
-  }
+  // サムネイル DOM は pendingAttachFiles 各エントリの wrapper 参照から復元できるため、
+  // ここではコンテナから切り離すだけでよい（DocumentFragment 退避は復元が1回しか
+  // 効かず、activateSession の再実行でサムネイルだけ消える不具合があった）。
+  if (attachThumbnails) attachThumbnails.replaceChildren();
   sessionInputState.set(id, {
     inputValue: inputEl.value,
     pastedTextsData: [...pastedTexts],
     pendingAttachFiles: [...pendingAttachFiles],
-    thumbsFragment: frag,
   });
   inputEl.value = '';
   inputEl.style.height = 'auto';
@@ -271,15 +270,19 @@ export function restoreInputStateFor(id) {
     pendingAttachFiles.length = 0;
     pendingAttachFiles.push(...state.pendingAttachFiles);
     if (attachThumbnails) {
-      attachThumbnails.innerHTML = '';
-      if (state.thumbsFragment) attachThumbnails.appendChild(state.thumbsFragment);
+      // renderPasteChips と同じく毎回再構築する冪等な復元。
+      // wrapper は stage 時の prepend 順（新しい順）に戻すため配列順に prepend する。
+      attachThumbnails.replaceChildren();
+      for (const p of pendingAttachFiles) {
+        if (p.wrapper) attachThumbnails.prepend(p.wrapper);
+      }
     }
   } else {
     inputEl.value = '';
     inputEl.style.height = 'auto';
     pastedTexts.length = 0;
     pendingAttachFiles.length = 0;
-    if (attachThumbnails) attachThumbnails.innerHTML = '';
+    if (attachThumbnails) attachThumbnails.replaceChildren();
   }
   autoExpand();
   renderPasteChips();
@@ -289,10 +292,9 @@ export function restoreInputStateFor(id) {
 export function cleanupSessionInputState(id) {
   const state = sessionInputState.get(id);
   if (!state) return;
-  if (state.thumbsFragment) {
-    state.thumbsFragment.querySelectorAll('img').forEach(img => {
-      if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
-    });
+  for (const p of state.pendingAttachFiles ?? []) {
+    const img = p.wrapper?.querySelector('img');
+    if (img && img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
   }
   sessionInputState.delete(id);
 }

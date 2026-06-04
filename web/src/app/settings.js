@@ -1578,6 +1578,17 @@ export function setActiveTab(sid, name) {
 
   // C5: lock 値に対応するタブに 🔒 を付け直す (DOM 更新後)
   if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
+
+  // bugfix 2026-06-04: DOM mode 確定後に view mode change event を発火する。
+  // chat-history.js はこれを購読して chat/split 切替時の chat-pane mount を保証する。
+  // ESM import binding は window.setActiveTab の上書きでは差し替わらないため、
+  // monkey patch ではなく event で副作用を流す（タブクリック / applyActiveSessionViewMode
+  // など全呼び出し経路がここを通る）。
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('session-view-mode-changed', {
+      detail: { sid: targetSid, name },
+    }));
+  }
 }
 
 // D10: Files/Git タブを初回クリックで開く (および既ロード時の再アクティブ化)

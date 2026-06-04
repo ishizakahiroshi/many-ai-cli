@@ -7,13 +7,14 @@ import (
 )
 
 // checkOpenPathAllowed は open 系ハンドラで path が allowed-roots 配下かを検証する。
+// ?session=<id> が指定されていればそのセッションの CWD を判定基準にする（省略時: Hub cwd）。
 // 許可外のパスは 403 を返す。
-func (s *Server) checkOpenPathAllowed(w http.ResponseWriter, path string) bool {
+func (s *Server) checkOpenPathAllowed(w http.ResponseWriter, r *http.Request, path string) bool {
 	if !filepath.IsAbs(path) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "path must be absolute")
 		return false
 	}
-	cwd := s.hubCWD
+	cwd := s.cwdForRequest(r)
 	gitRoot := findGitRoot(cwd)
 	allowed, err := isPathUnderAllowedRoots(path, cwd, gitRoot)
 	if err != nil || !allowed {
@@ -34,7 +35,7 @@ func (s *Server) decodeAllowedPath(w http.ResponseWriter, r *http.Request) (stri
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "path is required")
 		return "", false
 	}
-	if !s.checkOpenPathAllowed(w, body.Path) {
+	if !s.checkOpenPathAllowed(w, r, body.Path) {
 		return "", false
 	}
 	return body.Path, true

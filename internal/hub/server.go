@@ -180,6 +180,37 @@ func (c *uiConn) close() {
 	c.closeOnce.Do(func() { _ = c.ws.Close() })
 }
 
+// wrapperConn wraps a single wrapper WebSocket connection and serialises all
+// outbound Hub-to-wrapper frames. UI input/resize forwarding and shutdown
+// notices can be sent from different goroutines, so the raw websocket.Conn must
+// not be written concurrently.
+type wrapperConn struct {
+	ws        *websocket.Conn
+	sendMu    sync.Mutex
+	closeOnce sync.Once
+}
+
+func newWrapperConn(ws *websocket.Conn) *wrapperConn { return &wrapperConn{ws: ws} }
+
+func (c *wrapperConn) send(m any) error {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	return websocket.JSON.Send(c.ws, m)
+}
+
+func (c *wrapperConn) sendWithDeadline(m any, deadline time.Time) error {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	if err := c.ws.SetWriteDeadline(deadline); err != nil {
+		return err
+	}
+	return websocket.JSON.Send(c.ws, m)
+}
+
+func (c *wrapperConn) close() {
+	c.closeOnce.Do(func() { _ = c.ws.Close() })
+}
+
 type Server struct {
 	cfg         *config.Config
 	logger      *slog.Logger
@@ -198,7 +229,7 @@ type Server struct {
 	cfgMu      sync.Mutex
 	nextID     int
 	sessions   map[int]*session
-	wrappers   map[int]*websocket.Conn
+	wrappers   map[int]*wrapperConn
 	uis        map[*websocket.Conn]*uiConn
 
 	slashCmdMu    sync.Mutex
@@ -325,7 +356,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		version:               version,
 		parentShell:           wrapper.DetectShell(),
 		sessions:              map[int]*session{},
-		wrappers:              map[int]*websocket.Conn{},
+		wrappers:              map[int]*wrapperConn{},
 		uis:                   map[*websocket.Conn]*uiConn{},
 		slashCmdCache:         map[string]*slashCmdCacheEntry{},
 		approvalRuleTargets:   map[string]approvalRuleTarget{},
@@ -484,7 +515,7 @@ func (s *Server) Run(ctx context.Context) error {
 	if s.autoOpenBrowser {
 		_ = s.OpenBrowser()
 	}
-	if s.cfg.Approval.Enabled {
+	if s.approvalRulesEnabled() {
 		s.injectApprovalRules()
 	}
 	s.safeGo("state_ticker", func() { s.stateTicker(runCtx) })
@@ -495,7 +526,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.safeGo("approval_patterns_remote_sync", func() { s.approvalPatternsRemoteSync(runCtx) })
 	s.safeGo("shutdown_wait", func() {
 		<-runCtx.Done()
-		if s.cfg.Approval.Enabled {
+		if s.approvalRulesEnabled() {
 			s.removeApprovalRules()
 		}
 		// Stop the Hub server without marking wrapper sessions as intentionally
@@ -568,15 +599,8 @@ func (s *Server) wsHandshake(cfg *websocket.Config, req *http.Request) error {
 		// CLI / ラッパー由来の接続は Origin を持たないため許可する。
 		return nil
 	}
-	portStr := strconv.Itoa(port)
-	allowed := []string{
-		"http://127.0.0.1:" + portStr,
-		"http://localhost:" + portStr,
-	}
-	for _, a := range allowed {
-		if origin == a {
-			return nil
-		}
+	if isAllowedHubOrigin(origin, port) {
+		return nil
 	}
 	return fmt.Errorf("origin not allowed: %s", origin)
 }
@@ -691,7 +715,8 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		History:         history,
 	}
 	s.sessions[id] = ses
-	s.wrappers[id] = conn
+	wc := newWrapperConn(conn)
+	s.wrappers[id] = wc
 	s.sessionsMu.Unlock()
 	if initCols == 0 || initRows == 0 {
 		// UIが未接続の場合はラッパーが報告した呼び出し元端末サイズを優先する
@@ -708,7 +733,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	if s.approvalRulesEnabled() {
 		s.injectApprovalRules()
 	}
-	_ = websocket.JSON.Send(conn, proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath})
+	_ = wc.send(proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath})
 	s.logger.Info("session registered", "id", id, "provider", reg.Provider, "cwd", reg.CWD, "pid", reg.PID)
 	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Branch: branch, Label: reg.Label, Model: reg.Model, Route: regRoute, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath})
 	s.writeHistory(id, map[string]any{
@@ -723,7 +748,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		"shell":      reg.Shell,
 		"pid":        reg.PID,
 	})
-	s.wrapperMessageLoop(conn, id)
+	s.wrapperMessageLoop(wc, id)
 }
 
 func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
@@ -861,7 +886,8 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	if s.sessions[acceptedID].vt != nil && len(replay) > 0 {
 		s.sessions[acceptedID].vt.Write(replay)
 	}
-	s.wrappers[acceptedID] = conn
+	wc := newWrapperConn(conn)
+	s.wrappers[acceptedID] = wc
 	if s.nextID < acceptedID {
 		s.nextID = acceptedID
 	}
@@ -872,7 +898,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	if s.approvalRulesEnabled() {
 		s.injectApprovalRules()
 	}
-	_ = websocket.JSON.Send(conn, proto.Message{Type: "reattach_ack", SessionID: acceptedID})
+	_ = wc.send(proto.Message{Type: "reattach_ack", SessionID: acceptedID})
 	s.broadcast(proto.Message{Type: "session_update", SessionID: acceptedID, Provider: req.Provider, Display: req.Display, CWD: req.CWD, Branch: branch, Label: req.Label, Model: req.Model, Route: reqRoute, Shell: req.Shell, State: "running", LastOutputAt: lastOutputAt, StartedAt: startedAtText, LogPath: rawLogPath, JSONLPath: jsonlPath})
 	s.writeHistory(acceptedID, map[string]any{
 		"ts":             now.Format(time.RFC3339),
@@ -888,13 +914,13 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		"pid":            req.PID,
 		"renumbered":     acceptedID != req.SessionID,
 	})
-	s.wrapperMessageLoop(conn, acceptedID)
+	s.wrapperMessageLoop(wc, acceptedID)
 }
 
-func (s *Server) wrapperMessageLoop(conn *websocket.Conn, id int) {
+func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	for {
 		var m proto.Message
-		if err := websocket.JSON.Receive(conn, &m); err != nil {
+		if err := websocket.JSON.Receive(wc.ws, &m); err != nil {
 			s.logger.Debug("wrapper WS closed", "session_id", id, "err", err)
 			break
 		}
@@ -973,7 +999,9 @@ func (s *Server) wrapperMessageLoop(conn *websocket.Conn, id int) {
 
 	// wrapper 切断
 	s.sessionsMu.Lock()
-	delete(s.wrappers, id)
+	if s.wrappers[id] == wc {
+		delete(s.wrappers, id)
+	}
 	var historyToClose *sessionlog.Writer
 	var jsonlPathForTranscript string
 	var endedProvider, endedCWD string
@@ -1283,7 +1311,7 @@ func (s *Server) handleResize(m proto.Message) {
 	wc := s.wrappers[m.SessionID]
 	s.sessionsMu.Unlock()
 	if wc != nil && !skip {
-		_ = websocket.JSON.Send(wc, m)
+		_ = wc.send(m)
 	}
 }
 
@@ -1327,7 +1355,7 @@ func (s *Server) handleInput(m proto.Message) {
 		s.broadcast(proto.Message{Type: "pty_data", SessionID: m.SessionID, Data: []byte(chatHistoryUserTurnMarker)})
 	}
 	if wc != nil {
-		_ = websocket.JSON.Send(wc, proto.Message{Type: "pty_input", SessionID: m.SessionID, Data: []byte(combined)})
+		_ = wc.send(proto.Message{Type: "pty_input", SessionID: m.SessionID, Data: []byte(combined)})
 	}
 	s.writeHistory(m.SessionID, map[string]any{
 		"ts":         time.Now().Format(time.RFC3339),
@@ -1450,7 +1478,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		s.sessionStore.EndSession(m.SessionID, "dismissed", "", time.Now())
 	}
 	if wc != nil {
-		wc.Close()
+		wc.close()
 	}
 	if historyToClose != nil {
 		_ = historyToClose.Close()

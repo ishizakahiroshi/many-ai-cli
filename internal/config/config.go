@@ -316,6 +316,20 @@ type UserPrefs struct {
 	DisplayName              string               `yaml:"display_name,omitempty" json:"display_name,omitempty"`
 }
 
+// Clone returns a deep copy of p. It copies slice and map fields so callers can
+// marshal or mutate the result without racing with the live server config.
+func (p UserPrefs) Clone() UserPrefs {
+	c := p
+	c.Favorites = cloneStringSlice(p.Favorites)
+	c.SessionOrder = cloneStringSlice(p.SessionOrder)
+	c.GroupOrder = cloneStringSlice(p.GroupOrder)
+	c.ProjectFavorites = cloneStringSlice(p.ProjectFavorites)
+	c.CwdHistory = cloneStringSlice(p.CwdHistory)
+	c.Spawn.Defaults = cloneStringMap(p.Spawn.Defaults)
+	c.Spawn.LastModel = cloneStringMap(p.Spawn.LastModel)
+	return c
+}
+
 // LocalModel は config.yaml の local_models セクションに手書きで追記される
 // ローカル LLM の 1 件。Ollama daemon `/api/tags` で取得した一覧と merge して
 // /api/models の "Ollama Local" グループに表示する。
@@ -504,28 +518,11 @@ func Save(cfg *Config) error {
 // iteration/write panics during yaml.Marshal.
 func (cfg *Config) Clone() *Config {
 	c := *cfg // shallow copy of all scalar/struct fields
+	c.UserPrefs = cfg.UserPrefs.Clone()
 
 	// Deep-copy map fields
 	if cfg.Spawn.LastModel != nil {
-		m := make(map[string]string, len(cfg.Spawn.LastModel))
-		for k, v := range cfg.Spawn.LastModel {
-			m[k] = v
-		}
-		c.Spawn.LastModel = m
-	}
-	if cfg.UserPrefs.Spawn.LastModel != nil {
-		m := make(map[string]string, len(cfg.UserPrefs.Spawn.LastModel))
-		for k, v := range cfg.UserPrefs.Spawn.LastModel {
-			m[k] = v
-		}
-		c.UserPrefs.Spawn.LastModel = m
-	}
-	if cfg.UserPrefs.Spawn.Defaults != nil {
-		m := make(map[string]string, len(cfg.UserPrefs.Spawn.Defaults))
-		for k, v := range cfg.UserPrefs.Spawn.Defaults {
-			m[k] = v
-		}
-		c.UserPrefs.Spawn.Defaults = m
+		c.Spawn.LastModel = cloneStringMap(cfg.Spawn.LastModel)
 	}
 
 	// Deep-copy slice fields
@@ -534,32 +531,27 @@ func (cfg *Config) Clone() *Config {
 		copy(s, cfg.LocalModels)
 		c.LocalModels = s
 	}
-	if cfg.UserPrefs.Favorites != nil {
-		s := make([]string, len(cfg.UserPrefs.Favorites))
-		copy(s, cfg.UserPrefs.Favorites)
-		c.UserPrefs.Favorites = s
-	}
-	if cfg.UserPrefs.SessionOrder != nil {
-		s := make([]string, len(cfg.UserPrefs.SessionOrder))
-		copy(s, cfg.UserPrefs.SessionOrder)
-		c.UserPrefs.SessionOrder = s
-	}
-	if cfg.UserPrefs.GroupOrder != nil {
-		s := make([]string, len(cfg.UserPrefs.GroupOrder))
-		copy(s, cfg.UserPrefs.GroupOrder)
-		c.UserPrefs.GroupOrder = s
-	}
-	if cfg.UserPrefs.ProjectFavorites != nil {
-		s := make([]string, len(cfg.UserPrefs.ProjectFavorites))
-		copy(s, cfg.UserPrefs.ProjectFavorites)
-		c.UserPrefs.ProjectFavorites = s
-	}
-	if cfg.UserPrefs.CwdHistory != nil {
-		s := make([]string, len(cfg.UserPrefs.CwdHistory))
-		copy(s, cfg.UserPrefs.CwdHistory)
-		c.UserPrefs.CwdHistory = s
-	}
 	return &c
+}
+
+func cloneStringSlice(in []string) []string {
+	if in == nil {
+		return nil
+	}
+	out := make([]string, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }
 
 func ensurePrivateDir(dir string) error {

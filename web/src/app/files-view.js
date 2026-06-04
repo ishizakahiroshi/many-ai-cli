@@ -1582,7 +1582,7 @@ export const FilesTreeView = (function () {
     reloadBtn.addEventListener('click', () => loadTree());
 
     openFolderBtn.addEventListener('click', () => {
-      callOpenApi('/api/open-folder', filesRoot);
+      callOpenApi('/api/open-folder', filesRoot, 'link_open_error', sessionId);
     });
 
     searchBtn.addEventListener('click', () => {
@@ -2277,10 +2277,10 @@ export const FilesPreview = (function () {
 
     // ──── ボタン Wire-up ────
     openEditorBtn.addEventListener('click', () => {
-      if (currentAbsPath) callOpenApi('/api/open-file', currentAbsPath);
+      if (currentAbsPath) callOpenApi('/api/open-file', currentAbsPath, 'link_open_error', sessionId);
     });
     openFolderBtn.addEventListener('click', () => {
-      if (currentAbsPath) callOpenApi('/api/open-folder', currentAbsPath);
+      if (currentAbsPath) callOpenApi('/api/open-folder', currentAbsPath, 'link_open_error', sessionId);
     });
     copyPathBtn.addEventListener('click', (e) => {
       if (currentAbsPath) copyPathText(currentAbsPath, e.currentTarget).catch(() => {});

@@ -88,7 +88,7 @@ func (s *Server) handleUserPrefs(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleUserPrefsGet(w http.ResponseWriter, _ *http.Request) {
 	s.cfgMu.Lock()
-	prefs := s.cfg.UserPrefs
+	prefs := s.cfg.UserPrefs.Clone()
 	s.cfgMu.Unlock()
 	writeJSON(w, prefs)
 }
@@ -107,7 +107,7 @@ func (s *Server) handleUserPrefsPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.cfgMu.Lock()
-	saved := s.cfg.UserPrefs
+	saved := s.cfg.UserPrefs.Clone()
 	s.cfgMu.Unlock()
 	writeJSON(w, saved)
 }

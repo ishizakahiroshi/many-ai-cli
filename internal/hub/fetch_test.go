@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -242,13 +243,12 @@ func TestReadSlashCmdSourceLocalFileSizeLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	body, err := readSlashCmdSource(path)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := readSlashCmdSource(path)
+	if err == nil {
+		t.Fatal("expected oversized local source to fail")
 	}
-	// LimitReader により slashCmdLocalMaxBytes までしか読まれない
-	if int64(len(body)) > slashCmdLocalMaxBytes {
-		t.Fatalf("expected at most %d bytes, got %d", slashCmdLocalMaxBytes, len(body))
+	if !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("expected size error, got: %v", err)
 	}
 }
 

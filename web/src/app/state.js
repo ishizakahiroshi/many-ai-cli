@@ -55,7 +55,7 @@ export function sequentialChoiceSig(prompts) {
 export const approvalHintConfirmTimers = new Map(); // sessionId → timer（生バイト検出を短時間 debounce してチカチカを防ぐ）
 export const approvalHintConfirmTrusted = new Map(); // sessionId → true: marker/plainYesNo 由来の信頼性の高い検出（fallback に上書きさせない）
 export const toolOutputs = new Map(); // sessionId → [{uid, lines, ts}]
-export const sessionInputState = new Map(); // sessionId → { inputValue, pastedTextsData, pendingAttachFiles, thumbsFragment }
+export const sessionInputState = new Map(); // sessionId → { inputValue, pastedTextsData, pendingAttachFiles }（サムネイルは各エントリの wrapper から再構築）
 
 // =========================================================================
 // chatHistory store (plan_chat-history-subview.md §C1)
