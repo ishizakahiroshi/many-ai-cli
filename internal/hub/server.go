@@ -599,6 +599,11 @@ func (s *Server) Run(ctx context.Context) error {
 		return fmt.Errorf("no available port found in range %d-%d", basePort, basePort+99)
 	}
 	_ = os.WriteFile(pidPath, []byte(fmt.Sprintf("%d", os.Getpid())), 0o644)
+	// shutdown_wait ゴルーチン内の Remove は Serve が戻った直後にプロセスが
+	// 終了すると実行されないことがある（競合）。PID ファイルが残ると次回 boot の
+	// killStalePid が再利用 PID の無関係プロセスを kill しうるため、run() の
+	// return で必ず消えるよう同期的にも削除する（二重削除は無害）。
+	defer func() { _ = os.Remove(pidPath) }()
 	setConsoleTitle("any-ai-cli [hub] - DO NOT CLOSE")
 	setConsoleIcon()
 	s.logger.Info("ANY-AI-CLI started", "url", fmt.Sprintf("http://%s/?token=%s", s.httpSrv.Addr, s.cfg.Token))
