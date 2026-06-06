@@ -10,7 +10,7 @@ import "embed"
 // バイナリに含まれず、実行時に見つからない事故になる。
 //
 // web/dist は TypeScript フロントのビルド成果物。Go ビルド前に
-// `cd web && npm ci && npm run build` で生成しておくこと。
+// `cd web && bun install && bun run build` で生成しておくこと。
 //
 //go:embed all:dist
 var FS embed.FS

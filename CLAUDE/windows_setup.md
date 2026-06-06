@@ -1,6 +1,6 @@
 # any-ai-cli Windows 開発環境
 
-> 最終更新: 2026-05-07(木) 19:24:03
+> 最終更新: 2026-06-07(日) 01:46:08
 
 開発端末は Windows 11。`any-ai-cli` 自体はクロスプラットフォーム（Win/Mac/Linux）だが、本ドキュメントはユーザー環境固有の手順をまとめる。
 
@@ -9,7 +9,8 @@
 | ツール | 用途 | 備考 |
 |---|---|---|
 | Go 1.22+ | 本体ビルド | `winget install GoLang.Go` または公式インストーラ |
-| Node.js 20+ | フロント (`web/`) ビルド | `winget install OpenJS.NodeJS.LTS` |
+| Node.js 20+ | フロント (`web/`) ビルドスクリプト実行 | `winget install OpenJS.NodeJS.LTS` |
+| Bun 1.3+ | フロント (`web/`) 依存取得・スクリプト起動 | `winget install Oven-sh.Bun` |
 | Git | バージョン管理 | Git Bash (MSYS2) 同梱 |
 | VS Code | エディタ | Go・Vue Language Features・ESLint 拡張 |
 | PowerShell 7+ (`pwsh`) | スクリプト・タイムスタンプ取得 | 本リポジトリのコマンドはすべて `pwsh` 想定 |
@@ -24,14 +25,14 @@
 cd /c/dev/cli-popup
 go mod download         # go.mod が用意されたら
 cd web
-npm install             # または pnpm install
+bun install             # npm / pnpm は使わない（bun.lock が正）
 ```
 
 ### 反復開発（実装着手後）
 
 ```bash
 # 1. フロントを変更したらビルド
-cd web && npm run build && cd ..
+cd web && bun run build && cd ..
 
 # 2. Go 側を変更したら go build / go test
 go build ./...
