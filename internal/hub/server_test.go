@@ -144,6 +144,62 @@ func TestHandleNativeApprovalDetection_DetectionResetsClearMisses(t *testing.T) 
 	}
 }
 
+func TestResetNativeApprovalClearMisses(t *testing.T) {
+	s := newTestServer()
+	ses := registerTestSession(s, 17, "codex")
+	ses.nativeApprovalClearMisses = nativeApprovalClearMissLimit - 1
+
+	s.resetNativeApprovalClearMisses(17)
+
+	s.sessionsMu.Lock()
+	misses := s.sessions[17].nativeApprovalClearMisses
+	s.sessionsMu.Unlock()
+	if misses != 0 {
+		t.Fatalf("nativeApprovalClearMisses = %d, want 0", misses)
+	}
+}
+
+func TestShouldSuppressNativeApprovalClearMiss(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		lines    []string
+		want     bool
+	}{
+		{
+			name:     "codex mostly blank redraw",
+			provider: "codex",
+			lines:    []string{"", " ", "•", "", " "},
+			want:     true,
+		},
+		{
+			name:     "copilot mostly blank redraw",
+			provider: "copilot",
+			lines:    []string{"", "status", ""},
+			want:     true,
+		},
+		{
+			name:     "claude numbered prompt uses normal clear misses",
+			provider: "claude",
+			lines:    []string{"", " "},
+			want:     false,
+		},
+		{
+			name:     "codex nonblank output after clear",
+			provider: "codex",
+			lines:    []string{"Running command", "line 2", "line 3"},
+			want:     false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shouldSuppressNativeApprovalClearMiss(tc.provider, tc.lines); got != tc.want {
+				t.Fatalf("shouldSuppressNativeApprovalClearMiss() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestHandleNativeApprovalDetection_ConsumedTTL は consumed TTL 内の同一 sig が
 // 再度検出されないことを確認する。
 func TestHandleNativeApprovalDetection_ConsumedTTL(t *testing.T) {

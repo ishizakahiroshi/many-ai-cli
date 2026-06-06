@@ -463,3 +463,40 @@
   font-size: 12px;
   line-height: 1.5;
 }
+
+/* ─── 選択範囲コピーの右クリックメニュー ─── */
+.term-ctx-menu {
+  position: fixed;
+  z-index: 9200;
+  min-width: 160px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  padding: 4px 0;
+  display: none;
+  font-size: 12.5px;
+}
+.term-ctx-menu.open { display: block; }
+.term-ctx-menu button {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  text-align: left;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: inherit;
+}
+.term-ctx-menu button:hover { background: var(--row-hover); }
+.term-ctx-menu .ctx-icon {
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.term-ctx-menu .ctx-label { flex: 1; }

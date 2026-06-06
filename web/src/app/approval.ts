@@ -26,6 +26,82 @@ import { token } from './util.js';
 const H9_RESTORE_MISS_LIMIT = 3;
 const h9RestoreMisses = new Map();
 
+// C5: H9 復元ミス時の自走再評価タイマー（保留中バッジ固着対応の補完）。
+// detectApproval は PTY チャンク受信時・セッション切替時にしか走らないため、
+// 承認解決直後に出力が静止するとミスカウンタが H9_RESTORE_MISS_LIMIT に届く前に
+// 評価が止まり、復元ループ（approvalVisible=true 維持 → reassert でリース延命 →
+// waiting 固着）になる。ミスを数えた直後に自前で再評価を予約し、
+// 出力が無くてもカウンタが上限まで進んで閉じられるようにする。
+const H9_REVALIDATE_DELAY_MS = 700;
+const h9RevalidateTimers = new Map();
+
+function cancelH9Revalidate(id) {
+  const timer = h9RevalidateTimers.get(id);
+  if (timer) {
+    clearTimeout(timer);
+    h9RevalidateTimers.delete(id);
+  }
+}
+
+function scheduleH9Revalidate(id) {
+  cancelH9Revalidate(id);
+  h9RevalidateTimers.set(id, setTimeout(() => {
+    h9RevalidateTimers.delete(id);
+    if (id === activeSessionId) detectApproval(id);
+  }, H9_REVALIDATE_DELAY_MS));
+}
+
+// C5: 非アクティブセッションの保留中固着対策。
+// trackApprovalHintFromChunk は仕様として非アクティブセッションへ false を送らない
+// （断片再描画によるチラつき防止）ため、ターミナル直接入力で解決された承認や
+// ペーストエコー由来の誤検出は、セッションを開くまで approvalVisible=true が残り、
+// reassertApprovalHints（5s 間隔）が Hub のリース（15s）を延命し続けて
+// waiting（保留中）が固着する。
+// キャッシュ済み選択肢が pendingTextTail 末尾 BG_APPROVAL_TAIL_LINES 行から消えた
+// チャンクが BG_APPROVAL_MISS_LIMIT 回連続し、さらに BG_APPROVAL_SETTLE_MS の
+// 静定待ちでも再検出されなかった場合のみ解決済みとみなして閉じる。
+// 承認待ちのまま入力欄まわりの再描画が続くケースでは、再描画に選択肢が
+// 含まれて再検出（resetBgApprovalMisses）されるため誤クリアしない。
+const BG_APPROVAL_MISS_LIMIT = 8;
+const BG_APPROVAL_SETTLE_MS = 2500;
+const BG_APPROVAL_TAIL_LINES = 80;
+const bgApprovalMisses = new Map();
+const bgApprovalClearTimers = new Map();
+
+function resetBgApprovalMisses(id) {
+  bgApprovalMisses.delete(id);
+  const timer = bgApprovalClearTimers.get(id);
+  if (timer) {
+    clearTimeout(timer);
+    bgApprovalClearTimers.delete(id);
+  }
+}
+
+function trackBgApprovalMiss(id, tailLines) {
+  const cached = approvalRawOptionsCache.get(id);
+  // cache が無い（multiQ 等で visible だけ立った）場合は画面照合できないため対象外
+  if (!cached || cached.length === 0) return;
+  if (cachedOptionsOnScreen(tailLines, cached)) {
+    resetBgApprovalMisses(id);
+    return;
+  }
+  const misses = (bgApprovalMisses.get(id) || 0) + 1;
+  bgApprovalMisses.set(id, misses);
+  if (misses < BG_APPROVAL_MISS_LIMIT) return;
+  if (bgApprovalClearTimers.has(id)) return; // 静定待ち中
+  bgApprovalClearTimers.set(id, setTimeout(() => {
+    bgApprovalClearTimers.delete(id);
+    bgApprovalMisses.delete(id);
+    // 静定待ちの間に再検出されていれば resetBgApprovalMisses がタイマーごと
+    // 取り消すためここには来ない。アクティブ化されていたら detectApproval
+    //（H9 復元 + 自走再評価）に委ねる。
+    if (!approvalVisibleCache.get(id) || id === activeSessionId) return;
+    approvalUiAdapter.clearApprovalOptions(id);
+    approvalSourceCache.delete(id);
+    approvalUiAdapter.setApprovalVisible(id, false);
+  }, BG_APPROVAL_SETTLE_MS));
+}
+
 // キャッシュ済み選択肢のいずれかが描画済み行（scanBuffer）にまだ存在するか。
 // 「番号トークン + ラベル先頭 12 文字」が同一行にあることを条件にする
 // （ラベル単独だと本文中の同語にマッチしやすく、番号単独だと箇条書きに誤マッチするため）。
@@ -144,6 +220,8 @@ export function scheduleApprovalSuppressRescan(id, suppressUntil) {
 
 export function scheduleApprovalHintConfirm(id, options) {
   if (!options || options.length === 0) return;
+  // 承認 UI が生きている証拠なので、非アクティブ固着判定のミスカウンタを取り消す
+  resetBgApprovalMisses(id);
   const sig = approvalSig(options);
   cancelApprovalHintConfirm(id);
   approvalHintConfirmTimers.set(id, setTimeout(() => {
@@ -364,6 +442,8 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
   }
 
   if (nowVisible) {
+    // 承認 UI が描画され続けている証拠なので、非アクティブ固着判定のミスカウンタを取り消す
+    resetBgApprovalMisses(id);
     // Anti-flicker: 表示中の承認と異なる選択肢が検出されたときはキャッシュを更新しない。
     // Codex/Copilot の TUI 再描画で pendingTextTail に部分的・交互のオプションが混入する問題への対処。
     // 切り替えは detectApproval の安定性ガード（700ms）が担う。
@@ -400,6 +480,13 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
     // この保護は安全（解決済み承認の残留は起きない）。
     if (!approvalVisibleCache.get(id) && !isTrustedPending) {
       approvalUiAdapter.clearApprovalOptions(id);
+    }
+    // C5: 非アクティブセッションで解決済み承認が残留した場合の自動クリア判定。
+    // キャッシュ済み選択肢が末尾 BG_APPROVAL_TAIL_LINES 行から消えた状態の
+    // チャンクを数え、連続ミス + 静定待ちで approvalVisible=false に倒す。
+    if (id !== activeSessionId && approvalVisibleCache.get(id) && !isTrustedPending) {
+      const bgTail = t.pendingTextTail.split(/\r\n|\r|\n/).slice(-BG_APPROVAL_TAIL_LINES).map(l => stripAnsi(l));
+      trackBgApprovalMiss(id, bgTail);
     }
   }
 
@@ -457,6 +544,7 @@ export function handleGoApprovalDetected(message) {
   cancelApprovalHintConfirm(id);
   approvalSwitchCandidates.delete(id);
   approvalConsumedSig.delete(id);
+  resetBgApprovalMisses(id);
   approvalUiAdapter.cacheApprovalOptions(id, options);
   approvalSourceCache.set(id, {
     source: 'go_vt',
@@ -483,6 +571,7 @@ export function handleGoApprovalCleared(message) {
   approvalUiAdapter.clearApprovalOptions(id);
   approvalSwitchCandidates.delete(id);
   cancelApprovalHintConfirm(id);
+  resetBgApprovalMisses(id);
   if (approvalVisibleCache.get(id)) {
     approvalUiAdapter.setApprovalVisible(id, false);
   }
@@ -749,16 +838,22 @@ export function detectApproval(id) {
         }
         if (stillOnScreen) {
           h9RestoreMisses.delete(id);
+          cancelH9Revalidate(id);
           approvalUiAdapter.showOptions(bar, id, cached);
           return;
         }
         const misses = (h9RestoreMisses.get(id) || 0) + 1;
         if (misses < H9_RESTORE_MISS_LIMIT) {
           h9RestoreMisses.set(id, misses);
+          // C5: PTY 出力が静止していてもカウンタが上限まで進むよう自前で再評価を予約する。
+          // （detectApproval はチャンク駆動のため、解決直後に出力が止まると
+          //   ここで止まったまま復元ループが固着していた）
+          scheduleH9Revalidate(id);
           approvalUiAdapter.showOptions(bar, id, cached);
           return;
         }
         h9RestoreMisses.delete(id);
+        cancelH9Revalidate(id);
       }
     }
     hideActionBar(id);
@@ -814,6 +909,7 @@ export function detectApproval(id) {
 
   // 実プロンプト検出に成功したら H9 復元の連続ミスカウンタをリセットする
   h9RestoreMisses.delete(id);
+  cancelH9Revalidate(id);
 
   const wasVisibleBeforeShow = !!approvalVisibleCache.get(id);
   showActionBar(bar, id, options, !wasVisibleBeforeShow);
@@ -856,6 +952,8 @@ export function hideActionBar(id) {
     cancelApprovalHintConfirm(id);
     approvalSwitchCandidates.delete(id);
     h9RestoreMisses.delete(id);
+    cancelH9Revalidate(id);
+    resetBgApprovalMisses(id);
     clearSequentialChoiceState(id);
     const wasVisible = !!approvalVisibleCache.get(id);
     if (wasVisible) {

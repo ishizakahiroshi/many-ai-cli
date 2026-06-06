@@ -1,5 +1,6 @@
 // --- ESM imports (generated) ---
-import { copyCleanText } from './util.js';
+import { copyCleanText, copyOneLineText } from './util.js';
+import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
 import { activeSessionId, approvalRawOptionsCache, approvalVisibleCache, sessions, terminals, utf8Decoder } from './state.js';
 import { sendText } from '../app.js';
@@ -19,6 +20,7 @@ export const TERMINAL_SCROLLBACK_LINES = 2000;
 // Hub の ptyBuf replay 上限と揃える。非アクティブ中の長い Codex 出力を
 // 100KB で捨てると、セッション切替時に回答の前半が欠けて見える。
 export const TERMINAL_PENDING_MAX_BYTES = 512 * 1024;
+export const TERMINAL_WRITE_FLUSH_WATCHDOG_MS = 5000;
 
 export function ensureTerminal(id) {
   if (terminals.has(id)) return;
@@ -40,6 +42,20 @@ export function ensureTerminal(id) {
     theme: { background: '#0d1117', cursor: '#0d1117', cursorAccent: '#e6edf3' },
     disableStdin: true,
     allowProposedApi: true,
+  });
+  // マウストラッキング (DECSET 9/1000/1002/1003) を常時無効化する。
+  // disableStdin:true のため xterm はマウスレポートを PTY へ送れず tracking ON の利点が無い一方、
+  // xterm は tracking ON 中はドラッグ選択を無効化する（Shift 押下時のみ選択可になる）。
+  // SSH 経由の Copilot CLI / cursor-agent 等の TUI が tracking を有効化すると
+  // テキスト選択・コピーができなくなるため、parse 完了ごとに検出してローカルでリセットする。
+  // （Windows ローカルは ConPTY が DECSET を吸収するため元々発生しない。
+  //   リセットの write が再度 onWriteParsed を発火するが、mode が 'none' になるためループしない）
+  term.onWriteParsed(() => {
+    try {
+      if (term.modes.mouseTrackingMode !== 'none') {
+        term.write('\x1b[?9l\x1b[?1000l\x1b[?1002l\x1b[?1003l');
+      }
+    } catch (_) { /* modes 未対応ビルドでも選択以外の動作は維持 */ }
   });
   const fitAddon = new FitAddon.FitAddon();
   term.loadAddon(fitAddon);
@@ -201,6 +217,7 @@ export function ensureTerminal(id) {
     pendingTotalBytes: 0,
     pendingFlushActive: false,
     pendingFlushSeq: 0,
+    pendingFlushWatchdog: null,
     pendingTextTail: '',
     textDecoder: new TextDecoder('utf-8'),
     markerFilterCarry: new Uint8Array(0),
@@ -264,11 +281,74 @@ export function whenLayoutReady(id, container) {
     container.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       const sel = t.term.getSelection();
-      if (sel) copyCleanText(sel, e).catch(() => {});
+      if (sel) openTermCtxMenu(e.clientX, e.clientY, sel);
     });
   } else {
     requestAnimationFrame(() => whenLayoutReady(id, container));
   }
+}
+
+// ---- 選択範囲コピーの右クリックメニュー ----
+// TUI（Claude Code 等）が画面幅で再描画した出力はハード改行混じりでコピーされるため、
+// 通常コピーに加えて「1行コピー」（改行除去 → スペース join）を選べるメニューを出す。
+let termCtxMenuEl = null;
+let termCtxSelection = '';
+
+function ensureTermCtxMenu() {
+  if (termCtxMenuEl) return termCtxMenuEl;
+  const m = document.createElement('div');
+  m.className = 'term-ctx-menu';
+  const mkItem = (i18nKey, fallback, icon, handler) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    const ico = document.createElement('span');
+    ico.className = 'ctx-icon';
+    ico.textContent = icon;
+    const label = document.createElement('span');
+    label.className = 'ctx-label';
+    label.dataset.i18nKey = i18nKey;
+    label.dataset.i18nFallback = fallback;
+    btn.appendChild(ico);
+    btn.appendChild(label);
+    btn.addEventListener('click', () => {
+      const sel = termCtxSelection;
+      closeTermCtxMenu();
+      if (sel) handler(sel, btn);
+    });
+    m.appendChild(btn);
+  };
+  mkItem('term_ctx_copy', 'コピー', '⎘', (sel, btn) => copyCleanText(sel, btn).catch(() => {}));
+  mkItem('term_ctx_copy_oneline', '1行コピー', '⇥', (sel, btn) => copyOneLineText(sel, btn).catch(() => {}));
+  document.body.appendChild(m);
+  document.addEventListener('click', (e) => {
+    if (!m.contains(e.target)) closeTermCtxMenu();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeTermCtxMenu();
+  });
+  window.addEventListener('blur', closeTermCtxMenu);
+  termCtxMenuEl = m;
+  return m;
+}
+
+function openTermCtxMenu(x, y, selection) {
+  const m = ensureTermCtxMenu();
+  termCtxSelection = selection;
+  // 言語切替に追従するため表示のたびにラベルを引き直す
+  m.querySelectorAll('.ctx-label').forEach((el) => {
+    const v = ti18n(el.dataset.i18nKey);
+    el.textContent = (v && v !== el.dataset.i18nKey) ? v : el.dataset.i18nFallback;
+  });
+  m.classList.add('open');
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.max(0, Math.min(x, window.innerWidth - r.width - 4)) + 'px';
+  m.style.top = Math.max(0, Math.min(y, window.innerHeight - r.height - 4)) + 'px';
+}
+
+function closeTermCtxMenu() {
+  if (!termCtxMenuEl) return;
+  termCtxMenuEl.classList.remove('open');
+  termCtxSelection = '';
 }
 
 export function queuePendingTerminalChunk(id, bytes) {
@@ -296,10 +376,21 @@ export function flushPending(id) {
   const seq = (t.pendingFlushSeq || 0) + 1;
   t.pendingFlushSeq = seq;
   t.pendingFlushActive = true;
+  if (t.pendingFlushWatchdog) {
+    clearTimeout(t.pendingFlushWatchdog);
+    t.pendingFlushWatchdog = null;
+  }
 
+  let finished = false;
   const finish = () => {
+    if (finished) return;
+    finished = true;
     const latest = terminals.get(id);
     if (!latest || latest.pendingFlushSeq !== seq) return;
+    if (latest.pendingFlushWatchdog) {
+      clearTimeout(latest.pendingFlushWatchdog);
+      latest.pendingFlushWatchdog = null;
+    }
     latest.pendingFlushActive = false;
     if (latest.pendingChunks.length > 0) {
       requestAnimationFrame(() => flushPending(id));
@@ -308,6 +399,7 @@ export function flushPending(id) {
     if (latest.autoScroll) latest.term.scrollToBottom();
     scheduleApprovalCheck(id);
   };
+  t.pendingFlushWatchdog = setTimeout(finish, TERMINAL_WRITE_FLUSH_WATCHDOG_MS);
 
   // 溜まったチャンクを 1 つに結合して一括書き込みする。
   // 以前は 8 chunks / 24KB ずつ rAF で逐次再生していたが、PTY 由来の細切れ
@@ -669,6 +761,11 @@ export const screenClearSeqBytePatterns = [
   asciiBytes('\x1b[?1049l'),
 ];
 export const screenClearSeqCarryLength = Math.max(...screenClearSeqBytePatterns.map(pattern => pattern.length)) - 1;
+export const synchronizedUpdateSeqBytePatterns = [
+  asciiBytes('\x1b[?2026h'),
+  asciiBytes('\x1b[?2026l'),
+];
+export const synchronizedUpdateSeqCarryLength = Math.max(...synchronizedUpdateSeqBytePatterns.map(pattern => pattern.length)) - 1;
 
 export function bytesStartWith(bytes, offset, pattern) {
   if (offset + pattern.length > bytes.length) return false;
@@ -772,6 +869,42 @@ export function filterReverseVideoForDisplay(id, bytes) {
   return new Uint8Array(out);
 }
 
+export function filterSynchronizedUpdateForDisplay(id, bytes) {
+  const t = terminals.get(id);
+  if (!t) return bytes;
+  const carry = t.synchronizedUpdateFilterCarry || new Uint8Array(0);
+  const combined = new Uint8Array(carry.length + bytes.length);
+  combined.set(carry, 0);
+  combined.set(bytes, carry.length);
+
+  const out = [];
+  let i = 0;
+  const carryStartLimit = Math.max(0, combined.length - synchronizedUpdateSeqCarryLength);
+  while (i < combined.length) {
+    const seq = synchronizedUpdateSeqBytePatterns.find(pattern => bytesStartWith(combined, i, pattern));
+    if (seq) {
+      i += seq.length;
+      continue;
+    }
+    if (i >= carryStartLimit) {
+      const maybePrefix = synchronizedUpdateSeqBytePatterns.some((pattern) => {
+        const remaining = combined.length - i;
+        if (remaining >= pattern.length) return false;
+        for (let j = 0; j < remaining; j++) {
+          if (combined[i + j] !== pattern[j]) return false;
+        }
+        return true;
+      });
+      if (maybePrefix) break;
+    }
+    out.push(combined[i]);
+    i++;
+  }
+
+  t.synchronizedUpdateFilterCarry = combined.slice(i);
+  return new Uint8Array(out);
+}
+
 export function detectScreenClearSeqForAutoScroll(id, bytes) {
   const t = terminals.get(id);
   if (!t || !bytes || bytes.length === 0) return false;
@@ -799,7 +932,7 @@ export function snapToBottomAfterScreenClear(id) {
 
 export function writePTYChunk(id, term, bytes, onFlush) {
   const hasScreenClearSeq = detectScreenClearSeqForAutoScroll(id, bytes);
-  const displayBytes = filterReverseVideoForDisplay(id, filterHubMarkersForDisplay(id, bytes));
+  const displayBytes = filterSynchronizedUpdateForDisplay(id, filterReverseVideoForDisplay(id, filterHubMarkersForDisplay(id, bytes)));
   const wrappedFlush = () => {
     if (hasScreenClearSeq) snapToBottomAfterScreenClear(id);
     if (onFlush) onFlush();

@@ -1,0 +1,53 @@
+# Example per-user service definition.
+#
+# Copy this file to users/<user>.yaml and replace:
+#   - example -> user name (service name / container_name / volume / work path)
+#   - 47801   -> assigned host port (record it in /opt/any-ai-cli/assign.md)
+# Then add users/<user>.yaml to compose.yaml include.
+services:
+  aac-example:
+    container_name: aac-example
+    # Images are published to GHCR by GitHub Actions. The VPS only pulls them.
+    # Switch tags through AAC_TAG in the compose project's .env:
+    #   latest  -> follows main (normal operation)
+    #   develop -> follows develop (validation)
+    #   dev     -> local VPS build; freeze the cron with HOLD first
+    image: ghcr.io/ishizakahiroshi/any-ai-cli:${AAC_TAG:-latest}
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "TOKEN=$$(sed -n 's/^token: //p' \"$$HOME/.any-ai-cli/config.yaml\"); test -n \"$$TOKEN\" && curl -fsS -o /dev/null \"http://127.0.0.1:$$HUB_PORT/api/info?token=$$TOKEN\""]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    environment:
+      HUB_PORT: "47801"
+      ANY_AI_CLI_HUB_PORT: "47801"
+    ports:
+      - "127.0.0.1:47801:48000"
+    volumes:
+      - aac-home-example:/home/ubuntu
+      - /srv/any-ai-cli/work/example:/home/ubuntu/work
+    # Keep each user's container on a dedicated network so other user
+    # containers cannot reach the Hub TCP port directly.
+    networks:
+      - aac-net-example
+    mem_limit: 2g
+    memswap_limit: 2g
+    cpus: 2
+    pids_limit: 1024
+
+volumes:
+  aac-home-example: {}
+
+networks:
+  aac-net-example: {}

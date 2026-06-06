@@ -148,7 +148,7 @@ func (s *UIServer) Serve(ctx context.Context) (string, error) {
 		_ = s.server.Serve(ln)
 	}()
 
-	pageURL := fmt.Sprintf("http://127.0.0.1:%d/?token=%s", s.port, s.token)
+	pageURL := fmt.Sprintf("http://127.0.0.1:%d/?token=%s", s.port, url.QueryEscape(s.token))
 	return pageURL, nil
 }
 

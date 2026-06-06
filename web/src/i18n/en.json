@@ -29,6 +29,8 @@
   "dismiss_session": "Close session",
   "copied_to_clipboard": "Copied!",
   "copy_to_clipboard": "Copy",
+  "term_ctx_copy": "Copy",
+  "term_ctx_copy_oneline": "Copy as one line",
   "favorite_add": "Add to favorites",
   "favorite_remove": "Remove from favorites",
   "project_favorite_add": "Pin project to top (add to favorites)",

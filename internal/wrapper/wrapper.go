@@ -691,7 +691,7 @@ func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, 
 // Used after a WS read failure to decide whether the disconnect was intentional
 // (Hub still up — dismiss / kill-all / idle-timeout) or a Hub crash.
 func probeHubAlive(cfg *config.Config) bool {
-	u := fmt.Sprintf("http://127.0.0.1:%d/?token=%s", cfg.Hub.Port, cfg.Token)
+	u := fmt.Sprintf("http://127.0.0.1:%d/?token=%s", cfg.Hub.Port, url.QueryEscape(cfg.Token))
 	client := &http.Client{Timeout: hubProbeTimeout}
 	resp, err := client.Get(u)
 	if err != nil {
