@@ -334,13 +334,17 @@ function ensureTermCtxMenu() {
     btn.appendChild(label);
     btn.addEventListener('click', () => {
       const sel = termCtxSelection;
+      // closeTermCtxMenu() で display:none になると getBoundingClientRect() が
+      // 全て 0 を返しトーストが左上に飛ぶため、閉じる前に座標を確保しておく
+      const r = btn.getBoundingClientRect();
+      const anchor = { clientX: r.right, clientY: r.top + r.height / 2 };
       closeTermCtxMenu();
-      if (sel) handler(sel, btn);
+      if (sel) handler(sel, anchor);
     });
     m.appendChild(btn);
   };
-  mkItem('term_ctx_copy', 'コピー', '⎘', (sel, btn) => copyCleanText(sel, btn).catch(() => {}));
-  mkItem('term_ctx_copy_oneline', '1行コピー', '⇥', (sel, btn) => copyOneLineText(sel, btn).catch(() => {}));
+  mkItem('term_ctx_copy', 'コピー', '⎘', (sel, anchor) => copyCleanText(sel, anchor).catch(() => {}));
+  mkItem('term_ctx_copy_oneline', '1行コピー', '⇥', (sel, anchor) => copyOneLineText(sel, anchor).catch(() => {}));
   document.body.appendChild(m);
   document.addEventListener('click', (e) => {
     if (!m.contains(e.target)) closeTermCtxMenu();

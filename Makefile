@@ -9,7 +9,7 @@ LAUNCHER_MAIN     := ./cmd/any-ai-cli-launcher
 build: build-windows build-launcher build-linux deploy-wsl
 
 build-web:
-	cd web && npm ci && npm run build
+	cd web && bun install && bun run build
 
 build-windows: build-web
 	go-winres make --out cmd/any-ai-cli/rsrc

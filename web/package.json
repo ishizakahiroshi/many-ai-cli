@@ -5,7 +5,7 @@
     "build": "node scripts/build.mjs",
     "check": "tsc --noEmit",
     "watch": "node scripts/build.mjs --watch",
-    "test": "npm run build && node --test dist/app/approval-parser-fixtures.js"
+    "test": "bun run build && node --test dist/app/approval-parser-fixtures.js"
   },
   "type": "module",
   "devDependencies": {

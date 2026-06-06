@@ -16,12 +16,14 @@
 #   host 側 publish は 127.0.0.1 限定。外部公開はしない
 
 # --- web build stage: TypeScript フロントを web/dist に生成 ---
+# bun は依存取得のみに使い、ビルドスクリプト実行は node のまま（攻撃面を最小化）
 FROM node:22-bookworm AS web-build
+COPY --from=oven/bun:1.3.14 /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /src/web
-COPY web/package*.json ./
-RUN npm ci
+COPY web/package.json web/bun.lock web/bunfig.toml ./
+RUN bun install --frozen-lockfile
 COPY web ./
-RUN npm run build
+RUN bun run build
 
 # --- build stage: any-ai-cli バイナリ（CGO 不要・web/dist は go:embed 同梱）---
 FROM golang:1.25-bookworm AS build

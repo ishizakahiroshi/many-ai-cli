@@ -880,7 +880,7 @@
 
   <!--
     vendor は classic script のまま先に読み込む（xterm, marked, purify, highlight）。
-    app 本体は web/src の TypeScript ESM を npm run build で web/dist へ出力し、
+    app 本体は web/src の TypeScript ESM を bun run build で web/dist へ出力し、
     app-entry.js から import 依存グラフで起動する。app 側の読込順は import が正本。
   -->
   <script src="/vendor/xterm.min.js"></script>

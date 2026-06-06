@@ -1,0 +1,8 @@
+# bun install の挙動設定（サプライチェーン対策）
+# https://bun.com/docs/runtime/bunfig#install
+
+[install]
+# 公開から 3 日（259200 秒）未満の新バージョンは取得しない。
+# 乗っ取り直後の悪意あるバージョンを掴まされるワーム型攻撃への防御。
+# （bun.lock 固定の CI には影響せず、ローカルでの lockfile 更新時に効く）
+minimumReleaseAge = 259200

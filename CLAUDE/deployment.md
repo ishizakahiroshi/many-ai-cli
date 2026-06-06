@@ -1,6 +1,6 @@
 # any-ai-cli ビルド・配布・デプロイ
 
-> 最終更新: 2026-06-05(金) 05:19:37
+> 最終更新: 2026-06-07(日) 01:46:08
 
 `any-ai-cli` は **Go 単一バイナリ + go:embed フロント** の構成。サーバーへのデプロイは無し（ユーザー PC にバイナリを置くだけ）。
 
@@ -9,17 +9,22 @@
 ## ビルド前提
 
 - Go 1.22+
-- Node.js 20+ / pnpm or npm（フロント `web/` のビルド用）
+- Node.js 20+（ビルドスクリプト `scripts/build.mjs` と `node --test` の実行用）
+- Bun 1.3+（フロント `web/` の依存取得・スクリプト起動用。npm は使わない）
 - フロントは事前に `web/dist/` をビルドし、Go の `//go:embed web/dist` で同梱
 
 ### フロントビルド
 
 ```bash
 cd web
-npm ci              # package-lock.json に固定された devDependencies を取得
-npm run build       # web/dist/ が生成される
+bun install         # bun.lock に固定された devDependencies を取得
+bun run build       # web/dist/ が生成される
 cd ..
 ```
+
+依存の postinstall スクリプトはデフォルトでブロックされる（許可制 `trustedDependencies`）。
+`web/bunfig.toml` の `minimumReleaseAge` で公開直後バージョンの取得も遅延させている。
+CI / goreleaser では `bun install --frozen-lockfile` を使い lockfile との一致を強制する。
 
 `web/dist/` が `internal/hub/` の `embed.FS` に取り込まれる前提で実装すること。
 `git archive HEAD` などでソーススナップショットを展開した場合も、archive には `web/dist/` が含まれないため、展開後に必ず同じフロントビルドを実行してから Go ビルドする。
@@ -126,7 +131,7 @@ make build
 ## ローカル動作確認フロー
 
 ```
-1. cd web && npm ci && npm run build    # web/dist/ を生成
+1. cd web && bun install && bun run build    # web/dist/ を生成
 2. cd .. && go build ./...     # 全パッケージのビルド確認
 3. go test ./...               # 単体テスト
 4. ./any-ai-cli serve          # Hub 起動

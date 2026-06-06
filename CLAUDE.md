@@ -1,6 +1,6 @@
 # any-ai-cli 開発ガイド
 
-> 最終更新: 2026-06-05(金) 05:42:17 — Web フロント TypeScript 移行後の構成を反映
+> 最終更新: 2026-06-07(日) 01:46:08 — フロント依存管理を npm → bun に移行
 
 > 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。
 
@@ -74,7 +74,7 @@ any-ai-cli/
 │  ├─ config/
 │  └─ log/        # プレースホルダ（未実装）
 ├─ web/src/       # 静的HTML/CSS/TypeScript + vendored xterm.js（フロントソース）
-├─ web/dist/      # npm run build の生成物（go:embed対象 / gitignore）
+├─ web/dist/      # bun run build の生成物（go:embed対象 / gitignore）
 └─ docs/local/    # 設計書・ロードマップ等（非公開）
 ```
 
@@ -99,7 +99,7 @@ any-ai-cli/
   - 例外: ユーザーが明示的に「ビルドして」「`go build` 走らせて」等と指示した場合のみ。
   - 対象コマンド: `go build` / `go run` / `make` / `any-ai-cli serve` / `any-ai-cli stop` / Hub プロセスの起動・終了・再起動・ブラウザリロード等。
   - 完了報告では「再ビルドしますか？」のような提案を出さず、コード変更の要約だけ伝える。
-- **ビルドコマンドは `make build` が基本**。`npm run build` 単体は使わない（ユーザーへの案内でも `make build` を示す）。`make build` が web ビルド（npm ci + npm run build）〜 Windows/Linux バイナリ生成 〜 WSL 配備まで一括で行う。
+- **ビルドコマンドは `make build` が基本**。`bun run build` 単体は使わない（ユーザーへの案内でも `make build` を示す）。`make build` が web ビルド（bun install + bun run build）〜 Windows/Linux バイナリ生成 〜 WSL 配備まで一括で行う。
   - ユーザーの「ビルドして」という指示は **`make build` の実行指示** を意味する。
 
 ## 詳細ガイド（タスク種別ベース）
