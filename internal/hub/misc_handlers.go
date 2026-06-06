@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -30,7 +31,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 
 	userAvatar := cfg.UserPrefs.Avatar
 	if userAvatar != "" && !strings.HasPrefix(userAvatar, "http://") && !strings.HasPrefix(userAvatar, "https://") {
-		userAvatar = fmt.Sprintf("/api/avatar?token=%s", cfg.Token)
+		userAvatar = fmt.Sprintf("/api/avatar?token=%s", neturl.QueryEscape(cfg.Token))
 	}
 	userDisplayName := cfg.UserPrefs.DisplayName
 	if userDisplayName == "" {

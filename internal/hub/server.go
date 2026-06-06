@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -51,6 +52,7 @@ const (
 	branchRefreshAfter           = 2 * time.Second
 	branchRefreshWorkers         = 4
 	nativeApprovalClearMissLimit = 3
+	nativeApprovalBlankLineLimit = 2
 	vtResizeDebounce             = 200 * time.Millisecond
 	approvalConsumedTTL          = 10 * time.Second
 	// approvalVisibleLease: session_hint(approval_visible=true) の有効期限。
@@ -639,7 +641,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}()
 	setConsoleTitle("any-ai-cli [hub] - DO NOT CLOSE")
 	setConsoleIcon()
-	s.logger.Info("ANY-AI-CLI started", "url", fmt.Sprintf("http://%s/?token=%s", s.httpSrv.Addr, s.cfg.Token))
+	s.logger.Info("ANY-AI-CLI started", "url", fmt.Sprintf("http://%s/?token=%s", s.httpSrv.Addr, neturl.QueryEscape(s.cfg.Token)))
 	fmt.Print(startupBanner(s.version, s.httpSrv.Addr, s.cfg.Token))
 	if s.autoOpenBrowser {
 		_ = s.OpenBrowser()
@@ -695,7 +697,7 @@ func OpenBrowserForConfig(cfg *config.Config) error {
 	if p, ok := runningHubPort(cfg); ok {
 		port = p
 	}
-	url := fmt.Sprintf("http://127.0.0.1:%d/?token=%s", port, cfg.Token)
+	url := localHubURL(port, "/", cfg.Token)
 	return browserCommand(url).Start()
 }
 
@@ -1078,6 +1080,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			var initialModelLines []string
 			var initialModelCWD string
 			scanNativeApproval := false
+			hadNativeApprovalSig := false
 			chunkHasApprovalTrigger := ptyChunkContainsAny(m.Data, nativeApprovalTriggerTokens)
 			s.sessionsMu.Lock()
 			if ses := s.sessions[id]; ses != nil {
@@ -1094,6 +1097,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 					now.After(ses.vtResizeDebounceUntil) &&
 					(chunkHasApprovalTrigger || ses.nativeApprovalSig != "" || ses.nativeApprovalScanQueued)
 				if shouldCheckApproval {
+					hadNativeApprovalSig = ses.nativeApprovalSig != ""
 					vtLines = ses.vt.TailLines(vtTailLinesForApproval)
 					tailSig := nativeApprovalTailSignature(vtLines)
 					if tailSig != ses.nativeApprovalTailSig {
@@ -1117,7 +1121,12 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			s.sessionsMu.Unlock()
 			s.broadcast(m)
 			if scanNativeApproval {
-				s.handleNativeApprovalDetection(id, detectNativeApproval(provider, vtLines))
+				approval := detectNativeApproval(provider, vtLines)
+				if approval == nil && hadNativeApprovalSig && shouldSuppressNativeApprovalClearMiss(provider, vtLines) {
+					s.resetNativeApprovalClearMisses(id)
+				} else {
+					s.handleNativeApprovalDetection(id, approval)
+				}
 			}
 			s.markRunning(id)
 			s.detectModelChange(id, m.Data, cleanText)
@@ -1196,6 +1205,14 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	s.removeInactiveApprovalRules(providerApprovalRuleTargets(endedProvider, endedCWD))
 	s.finalizeTranscript(id, jsonlPathForTranscript)
 	s.broadcast(proto.Message{Type: "session_end", SessionID: id, State: endState, Reason: endReason})
+}
+
+func (s *Server) resetNativeApprovalClearMisses(id int) {
+	s.sessionsMu.Lock()
+	if ses := s.sessions[id]; ses != nil {
+		ses.nativeApprovalClearMisses = 0
+	}
+	s.sessionsMu.Unlock()
 }
 
 func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval) {
@@ -1349,6 +1366,23 @@ func nativeApprovalTailSignature(lines []string) string {
 		_, _ = h.Write([]byte{0})
 	}
 	return strconv.FormatUint(h.Sum64(), 16)
+}
+
+func shouldSuppressNativeApprovalClearMiss(provider string, lines []string) bool {
+	if !providerSupportsShortcutApproval(provider) {
+		return false
+	}
+	nonEmpty := 0
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		nonEmpty++
+		if nonEmpty > nativeApprovalBlankLineLimit {
+			return false
+		}
+	}
+	return true
 }
 
 // detectModelChange は PTY 出力からモデル変更を検出し、

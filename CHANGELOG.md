@@ -10,6 +10,52 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-05
+
+### Added
+- **Unified Windows launcher profiles.** `any-ai-cli-launcher.exe` now handles
+  WSL, SSH `serve`, and SSH `tunnel` profiles from one profile file and can
+  reconnect to resident remote Hubs without restarting the remote session.
+- **Workbench tab and session history.** The Hub now keeps a SQLite-backed
+  session store and exposes stored sessions, timeline events, summaries,
+  redacted exports, prompt templates, task/policy notes, diagnostics, usage
+  summaries, stale-session views, file context helpers, and worktree helpers.
+- **PWA and opt-in Web Push notifications.** The web UI ships a manifest,
+  icons, service worker, push subscription settings, local VAPID key storage,
+  and approval notifications that omit the Hub URL token.
+- **VPS / Docker deployment assets.** GHCR image publication, loopback-only
+  per-user compose samples, resource limits, health checks, and an idempotent
+  `aac-update.sh` workflow support resident remote Hub operation.
+- **Files and Git operations.** The Files tab can create folders, save text
+  files with base-mtime conflict detection, and delete empty folders. The Git
+  view can fetch refs and run `git pull --ff-only` from guarded Hub endpoints.
+- **Additional provider coverage.** GitHub Copilot CLI and Cursor Agent CLI
+  approval patterns, slash-command resources, usage links, and instruction
+  injection paths are documented and wired into the Hub UI.
+
+### Changed
+- The public README files now describe v0.3.0 features, platform validation,
+  Docker deployment, PWA/Web Push behavior, and Go 1.25 build requirements.
+- The Release workflow now lets GoReleaser's before-hooks perform the frontend
+  install/build once, avoiding a duplicate `npm ci` + `npm run build` step.
+- Windows resource metadata is bumped to `0.3.0` so executable properties and
+  manifests match the release tag.
+- Browser-side third-party notices now match the xterm 6.0.0 package versions
+  used by the current frontend type/dependency set.
+
+### Fixed
+- GoReleaser no longer creates a Windows arm64 archive containing only
+  `any-ai-cli-launcher.exe` and no matching `any-ai-cli.exe`; Windows release
+  archives remain x64-only until both binaries support arm64 together.
+- SSH tunnel profile URLs now URL-encode Hub tokens for `/api/info`,
+  `/api/net-hint`, and the browser URL, so manually configured tokens cannot
+  break query parsing.
+- The Hub status/probe URLs now also URL-encode tokens before local HTTP
+  requests.
+- Terminal output filtering now handles synchronized update control sequences
+  without batching repaint output until the next user input.
+- Public Docker samples no longer contain a personal user/service name.
+
 ### Removed
 - **`any-ai-cli-wsl.exe` (standalone WSL launcher).** The unified Windows
   launcher `any-ai-cli-launcher.exe` fully replaces it: a `wsl` profile
@@ -223,7 +269,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.2.0...v0.2.2
 [0.2.0]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/ishizakahiroshi/any-ai-cli/releases/tag/v0.1.3

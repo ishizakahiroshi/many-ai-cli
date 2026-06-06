@@ -3,6 +3,7 @@ package hub
 import (
 	"fmt"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -180,7 +181,7 @@ func runningHubPortWith(cfg *config.Config, alive func(pid int) bool, probe func
 // probeHubInfo reports whether a Hub answers 200 to /api/info on port with
 // token within timeout.
 func probeHubInfo(port int, token string, timeout time.Duration) bool {
-	url := fmt.Sprintf("http://127.0.0.1:%d/api/info?token=%s", port, token)
+	url := localHubURL(port, "/api/info", token)
 	client := &http.Client{Timeout: timeout}
 	resp, err := client.Get(url)
 	if err != nil {
@@ -191,7 +192,7 @@ func probeHubInfo(port int, token string, timeout time.Duration) bool {
 }
 
 func PrintStatus(cfg *config.Config) error {
-	url := fmt.Sprintf("http://127.0.0.1:%d/?token=%s", cfg.Hub.Port, cfg.Token)
+	url := localHubURL(cfg.Hub.Port, "/", cfg.Token)
 	resp, err := http.Get(url)
 	if err != nil {
 		fmt.Println("stopped")
@@ -204,4 +205,11 @@ func PrintStatus(cfg *config.Config) error {
 	}
 	fmt.Println("stopped")
 	return nil
+}
+
+func localHubURL(port int, path string, token string) string {
+	if path == "" {
+		path = "/"
+	}
+	return fmt.Sprintf("http://127.0.0.1:%d%s?token=%s", port, path, neturl.QueryEscape(token))
 }

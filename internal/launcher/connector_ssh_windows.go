@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // SSHConnector implements Connector for SSH profiles (serve and tunnel modes).
@@ -254,7 +255,7 @@ func (c *SSHConnector) runTunnel(ctx context.Context, p Profile, urlCh chan<- st
 	}
 
 	// Step 3: poll /api/info?token=<token> until the Hub responds 200.
-	apiURL := fmt.Sprintf("http://127.0.0.1:%d/api/info?token=%s", port, token)
+	apiURL := fmt.Sprintf("http://127.0.0.1:%d/api/info?token=%s", port, url.QueryEscape(token))
 	if err := pollUntilReady(ctx, apiURL); err != nil {
 		sendErr(ctx, errCh, fmt.Errorf("hub not ready: %w", err))
 		close(urlCh)
@@ -294,7 +295,7 @@ func (c *SSHConnector) runTunnel(ctx context.Context, p Profile, urlCh chan<- st
 // バッジ表示用の SSH 判定とホスト名を URL クエリで Hub UI へ伝える。
 func buildTunnelHubURL(port int, token, host string) string {
 	return fmt.Sprintf("http://127.0.0.1:%d/?token=%s&via=ssh&host_label=%s",
-		port, token, url.QueryEscape(host))
+		port, url.QueryEscape(token), url.QueryEscape(host))
 }
 
 // fetchToken runs token_command on the remote host via a short-lived SSH
@@ -315,6 +316,21 @@ func fetchToken(ctx context.Context, p Profile) (string, error) {
 	if token == "" {
 		return "", fmt.Errorf("token_command %q returned empty output", p.TokenCommand)
 	}
+	if _, err := normalizeHubToken(token); err != nil {
+		return "", fmt.Errorf("token_command %q returned invalid token: %w", p.TokenCommand, err)
+	}
+	return token, nil
+}
+
+func normalizeHubToken(token string) (string, error) {
+	if token == "" {
+		return "", fmt.Errorf("empty token")
+	}
+	for _, r := range token {
+		if unicode.IsSpace(r) || r < 0x20 || r == 0x7f {
+			return "", fmt.Errorf("token must not contain whitespace or control characters")
+		}
+	}
 	return token, nil
 }
 
@@ -327,7 +343,7 @@ func postNetHint(ctx context.Context, port int, token, host string) {
 	if err != nil {
 		return
 	}
-	apiURL := fmt.Sprintf("http://127.0.0.1:%d/api/net-hint?token=%s", port, token)
+	apiURL := fmt.Sprintf("http://127.0.0.1:%d/api/net-hint?token=%s", port, url.QueryEscape(token))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(payload))
 	if err != nil {
 		return

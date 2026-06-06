@@ -2,11 +2,11 @@
 
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Go](https://img.shields.io/badge/go-1.22+-blue)
+![Go](https://img.shields.io/badge/go-1.25+-blue)
 
 ![any-ai-cli dashboard](assets/readme-dashboard.jpg)
 
-A local web dashboard to manage multiple AI coding CLIs (Claude Code / Codex CLI) from a single screen — approvals, monitoring, and terminal in one place.
+A local web dashboard to manage multiple AI coding CLIs (Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI) from a single screen — approvals, monitoring, and terminal in one place.
 
 [日本語版 README はこちら](README.ja.md)
 
@@ -33,13 +33,12 @@ PCs where Smart App Control is enabled, Windows may block `any-ai-cli.exe` as an
 untrusted app. This is separate from checksum verification: `SHA256SUMS.txt` is
 signed for release integrity, but the `.exe` itself is not code-signed.
 
-### Platform Verification for v0.2.0
+### Platform Verification for v0.3.0
 
-- Verified in real environment: Windows
-- WSL workflow supported through the Windows unified launcher: `any-ai-cli-launcher.exe`
+- Verified in real environment: Windows local Hub and the Windows unified launcher (`wsl` / SSH tunnel profiles)
 - Not yet fully verified in real environment: native Linux, native macOS
 
-Linux/macOS builds are expected to work, but they have not been fully validated in real environments for v0.2.0.
+Linux/macOS builds are expected to work, but they have not been fully validated in real environments for v0.3.0.
 Please use at your own discretion and report any issues.
 
 ### Verify Release Artifacts (Checksum + Signature)
@@ -76,16 +75,19 @@ sha256sum -c SHA256SUMS.txt
 - **Real-time PTY output** via xterm.js over WebSocket
 - **Chat history and split view** — read a bubble-style conversation history, search/filter it, or keep it beside the live terminal
 - **Multi-pane tab** — watch multiple live sessions at once in a configurable grid
-- **Files tab** — browse project files, preview Markdown/code, copy paths, rename, and move files from the Hub
-- **Git view** — inspect branch history, commit details, changed files, and diffs without checking out refs
+- **Files tab** — browse project files, preview Markdown/code, copy paths, create folders, save text files with conflict detection, rename/move, and delete empty folders from the Hub
+- **Git view** — inspect branch history, commit details, changed files, diffs, fetch refs, and run `git pull --ff-only` without leaving the Hub
 - **Commit all** — stage all current working-tree changes and create a local commit after an explicit review step
+- **Workbench tab** — review stored session history, timeline events, summaries, redacted exports, prompt templates, task/policy notes, diagnostics, usage summaries, stale sessions, and worktree helpers
 - **File and image attach** — paste or drag-and-drop images and files into the terminal session
 - **Voice input** — dictate prompts and continue through short pauses (Chrome / Edge)
+- **PWA + opt-in Web Push** — install the Hub as a local web app and receive approval notifications after explicitly enabling push in Settings
 - **Approval pattern profiles** — keep official remote-synced trigger phrases separate from local custom edits
 - **Server-side user preferences** — keep voice, notification, favorites, session order, spawn defaults, and avatar settings in `config.yaml`
 - **Spawn new sessions** from the UI (`/api/spawn`)
 - **Model picker with Ollama routing** — pick Anthropic / OpenAI / Ollama Cloud / Ollama Local models from the spawn form; the Hub auto-injects the right `ANTHROPIC_*` / `OPENAI_*` env vars per session, no shell setup required
 - **Windows unified launcher** — `any-ai-cli-launcher.exe` connects to a Hub inside WSL or on a remote VPS (SSH) via saved profiles and opens the Windows browser
+- **VPS / Docker deployment assets** — run one Hub container per user from GHCR with loopback-only port publishing and an opt-in auto-update script
 - **Clean transcript generation** — write readable `.txt` transcripts automatically, or regenerate them with `log-clean`
 - **Language switching** (English / Japanese)
 - **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `any-ai-cli` itself
@@ -100,7 +102,7 @@ The normal flow: launch the binary, then drive everything from the browser. You 
 2. **Double-click `any-ai-cli.exe`** (or run `any-ai-cli` with no arguments)
    - The Hub starts and your browser opens automatically at `http://127.0.0.1:47777/?token=<token>`
    - If a Hub is already running, your browser is reopened against the existing instance
-3. In the Hub UI, click **"+ New Session"** to launch a Claude Code / Codex CLI session
+3. In the Hub UI, click **"+ New Session"** to launch a wrapped AI CLI session
 4. When an approval prompt appears, an action bar shows up under the input — click a button or use the keyboard to respond
 
 Sessions can be created, monitored, and approved entirely from the Hub UI; you do not need to keep a separate terminal open.
@@ -274,6 +276,162 @@ The launcher does not change the Hub's security model:
 - The token retrieved by `token_command` is used only for the current session and is not written to `launcher-profiles.yaml`
 
 For the full profile schema and connection flow details, see [docs/v0.2.0-any-ai-cli-design.md — §11b](docs/v0.2.0-any-ai-cli-design.md).
+
+#### If Windows blocks the launcher: VPS access without local `.exe`
+
+If Windows SmartScreen or company policy prevents `any-ai-cli-launcher.exe` from running, users can still connect to a VPS-hosted Hub without running any any-ai-cli executable on Windows. This route uses only:
+
+- the Windows built-in OpenSSH client (`ssh.exe`)
+- a normal browser
+- the Linux `any-ai-cli` binary or Docker container on the VPS
+
+The tradeoff is that setup is more manual: the user keeps one SSH tunnel window open, then opens the Hub URL in the browser.
+
+**What is saved where**
+
+| Item | Saved on | Notes |
+|---|---|---|
+| SSH host, user, key path | Windows `%USERPROFILE%\.ssh\config` | Safe to keep locally; this is normal SSH configuration |
+| Hub token | VPS `~/.any-ai-cli/config.yaml` | Do not paste it into public chats, issues, or screenshots |
+| Hub preferences, favorites, spawn defaults | VPS `~/.any-ai-cli/config.yaml` | Persist across reconnects because the Hub runs on the VPS |
+| Logs and attachments | VPS `~/.any-ai-cli/logs/`, `~/.any-ai-cli/attachments/` | They are not stored on the Windows PC |
+| Working repositories | VPS filesystem | The Hub edits VPS files, not files on the Windows PC |
+
+**A. Choose and prepare the VPS**
+
+Use any provider that gives you a Linux VM with SSH access. A small Ubuntu 22.04/24.04 machine is enough to start; 1 GB RAM is a practical minimum, and 2 GB+ is more comfortable once provider CLIs and long sessions are running. Free tiers can work, but check whether they sleep, reset disks, or block long-lived SSH connections.
+
+Keep the firewall/security group simple:
+
+- allow SSH only (`22/tcp`, or your custom SSH port)
+- do **not** open `47777`, `47877`, or any Hub port to the internet
+- do **not** put the Hub behind nginx, Caddy, Cloudflare Tunnel, or a public reverse proxy
+
+Install the Linux `any-ai-cli` binary on the VPS. One common per-user layout is:
+
+```bash
+mkdir -p ~/.local/bin
+# Download and unzip any-ai-cli-<version>-linux-x64.zip from GitHub Releases.
+mv any-ai-cli ~/.local/bin/any-ai-cli
+chmod +x ~/.local/bin/any-ai-cli
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+any-ai-cli --version
+```
+
+Also install and sign in to the provider CLIs you plan to use (`claude`, `codex`, `copilot`, `cursor-agent`) on the VPS, because sessions run there.
+
+**B. Start the Hub on a fixed loopback port**
+
+For a first test, run it in a normal SSH shell:
+
+```bash
+mkdir -p ~/work
+cd ~/work
+any-ai-cli serve --port 47777
+```
+
+For daily use, keep it resident with `tmux`, `screen`, `systemd`, or Docker. The simplest manual option is `tmux`:
+
+```bash
+tmux new -s any-ai-cli
+cd ~/work
+any-ai-cli serve --port 47777
+```
+
+Detach from tmux with `Ctrl+B`, then `D`. Later, reattach with:
+
+```bash
+tmux attach -t any-ai-cli
+```
+
+Confirm the Hub is listening only on loopback:
+
+```bash
+ss -ltnp | grep ':47777'
+```
+
+Expected: `127.0.0.1:47777`. If you see `0.0.0.0:47777` or the VPS public IP, stop and fix the setup before connecting.
+
+Get the token:
+
+```bash
+awk '/^token:/{print $2}' ~/.any-ai-cli/config.yaml
+```
+
+**C. Save the SSH connection on Windows**
+
+Create or edit `%USERPROFILE%\.ssh\config`:
+
+```sshconfig
+Host any-ai-vps
+  HostName vps.example.com
+  User ubuntu
+  Port 22
+  IdentityFile C:\Users\you\.ssh\id_ed25519
+  ServerAliveInterval 30
+```
+
+Test it from PowerShell:
+
+```powershell
+ssh any-ai-vps
+```
+
+If SSH asks for a password every time, set up key authentication first. The tunnel can be kept open with password auth, but key auth is much less error-prone.
+
+**D. Open the tunnel**
+
+In a Windows PowerShell window, run:
+
+```powershell
+ssh -N -T `
+  -o ExitOnForwardFailure=yes `
+  -o ServerAliveInterval=30 `
+  -L 127.0.0.1:47777:127.0.0.1:47777 `
+  any-ai-vps
+```
+
+Keep that window open. It is the private cable between your browser and the VPS Hub.
+
+Now open this in the Windows browser:
+
+```text
+http://127.0.0.1:47777/?token=<token-from-the-vps>
+```
+
+Do not replace `127.0.0.1` with the VPS IP address. The browser should always connect to the local forwarded port.
+
+**Optional: a local `.cmd` tunnel shortcut**
+
+Users who do not want to remember the SSH command can create a local file such as `connect-any-ai-cli.cmd`. This file does not contain the token; it fetches the token over SSH each time and opens the browser after starting the tunnel.
+
+```batch
+@echo off
+set HOST=any-ai-vps
+set PORT=47777
+
+for /f "tokens=2" %%T in ('ssh %HOST% "cat ~/.any-ai-cli/config.yaml" ^| findstr /b token:') do set TOKEN=%%T
+if "%TOKEN%"=="" (
+  echo Failed to read Hub token from %HOST%.
+  pause
+  exit /b 1
+)
+
+start "any-ai-cli tunnel" ssh -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -L 127.0.0.1:%PORT%:127.0.0.1:%PORT% %HOST%
+timeout /t 2 >nul
+start "" "http://127.0.0.1:%PORT%/?token=%TOKEN%"
+```
+
+Close the `any-ai-cli tunnel` window to disconnect. The remote Hub and any remote sessions continue if you started the Hub with `tmux`, `systemd`, or Docker.
+
+**Common no-launcher pitfalls**
+
+- **Browser shows 403/404/blank** - the token is wrong or the remote Hub was restarted; fetch the token again from the VPS.
+- **Terminal area does not connect** - local and remote ports must match exactly: `47777:127.0.0.1:47777`.
+- **`ssh: bind: Address already in use`** - another local process is using the port; choose a different fixed port on both the VPS Hub and the SSH tunnel.
+- **Files are "missing"** - the Hub runs on the VPS, so it sees VPS files only. Clone or mount the repository on the VPS.
+- **Free VPS disconnected** - reconnect SSH and, if needed, reattach/restart the tmux/systemd/Docker Hub.
 
 ---
 
@@ -498,7 +656,7 @@ Use **Settings → Voice → Diagnose** to identify the problem and copy a diagn
 
 Two goals are balanced here:
 
-1. Don't let child AI sessions (Claude Code / Codex CLI) keep running — and billing — when the user has clearly walked away.
+1. Don't let child AI sessions keep running — and billing — when the user has clearly walked away.
 2. Don't lose in-flight AI work just because the Hub Web UI hit a bug, was restarted, or its console window was closed.
 
 When the wrapper's WebSocket to the Hub drops, the wrapper **probes the Hub's HTTP endpoint** to tell *intentional disconnects* from *Hub crashes*:
@@ -633,9 +791,9 @@ If multiple people need access, use one of the legitimate options instead:
 
 ### ⚠️ Important: Localhost-only by design
 
-`any-ai-cli` is designed to run on the **same machine** as your browser. Do **not**:
+`any-ai-cli` is designed to be reached by your browser as **localhost**. Remote use is supported only when an SSH local forward preserves that localhost-only model. Do **not**:
 
-- Run `serve` on a remote server (VPS / cloud) and connect to it from another host
+- Expose a remote Hub directly from another host; use SSH local forwarding instead
 - Modify the bind address to anything other than `127.0.0.1` (e.g. `0.0.0.0`, LAN IP)
 - Expose the Hub UI through a reverse proxy (nginx / Caddy / etc.)
 - Share the Hub URL (with its token) with anyone
@@ -680,7 +838,7 @@ You will be shown exactly what will be deleted and asked to confirm before anyth
 
 ## Build from Source
 
-Requires Go 1.22+.
+Requires Go 1.25+.
 
 ```bash
 git clone https://github.com/ishizakahiroshi/any-ai-cli.git
@@ -691,17 +849,17 @@ go build -o any-ai-cli ./cmd/any-ai-cli
 #### Cross-compilation
 
 ```bash
-GOOS=windows GOARCH=amd64 go build -o dist/any-ai-cli-windows-amd64.exe ./cmd/any-ai-cli
-GOOS=darwin  GOARCH=amd64 go build -o dist/any-ai-cli-darwin-amd64      ./cmd/any-ai-cli
-GOOS=darwin  GOARCH=arm64 go build -o dist/any-ai-cli-darwin-arm64      ./cmd/any-ai-cli
-GOOS=linux   GOARCH=amd64 go build -o dist/any-ai-cli-linux-amd64       ./cmd/any-ai-cli
+GOOS=windows GOARCH=amd64 go build -o dist/any-ai-cli-windows-x64.exe          ./cmd/any-ai-cli
+GOOS=darwin  GOARCH=amd64 go build -o dist/any-ai-cli-macos-intel              ./cmd/any-ai-cli
+GOOS=darwin  GOARCH=arm64 go build -o dist/any-ai-cli-macos-apple-silicon      ./cmd/any-ai-cli
+GOOS=linux   GOARCH=amd64 go build -o dist/any-ai-cli-linux-x64                ./cmd/any-ai-cli
 ```
 
 ---
 
 ## VPS / Docker deployment (auto-update)
 
-Container assets live under [`deploy/docker/`](deploy/docker/) (one user = one container; the Hub is published on `127.0.0.1` only and is meant to be reached through an SSH tunnel or similar).
+Container assets live under [`deploy/docker/`](deploy/docker/) (one user = one container; the Hub is published on `127.0.0.1` only and is meant to be reached through an SSH tunnel or similar). Start from [`deploy/docker/users/example.yaml`](deploy/docker/users/example.yaml), copy it to `users/<user>.yaml`, and replace the example user name and port before adding it to `compose.yaml`.
 
 Every push to `main` / `develop` triggers GitHub Actions ([`docker-image.yml`](.github/workflows/docker-image.yml)) to build and publish a container image to GHCR — the server never builds anything itself:
 

@@ -2,11 +2,11 @@
 
 ## xterm.js
 https://github.com/xtermjs/xterm.js
-Version: 5.3.0
+Version: 6.0.0
 License: MIT
 
 Copyright (c) 2017-2019, The xterm.js authors (https://github.com/xtermjs/xterm.js)
-Copyright (c) 2014-2016, SourceLair, Private Company (www.sourcelair.com)
+Copyright (c) 2014-2016, SourceLair Private Company (https://www.sourcelair.com)
 Copyright (c) 2012-2013, Christopher Jeffrey (https://github.com/chjj/)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,10 +30,10 @@ SOFTWARE.
 ---
 
 ## xterm-addon-fit
-https://github.com/xtermjs/xterm.js/tree/5.3.0/addons/xterm-addon-fit
-Version: 0.8.0
+https://github.com/xtermjs/xterm.js/tree/6.0.0/addons/addon-fit
+Version: 0.11.0
 License: MIT
-Copyright (c) 2019 The xterm.js authors
+Copyright (c) 2019, The xterm.js authors (https://github.com/xtermjs/xterm.js)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -56,10 +56,10 @@ SOFTWARE.
 ---
 
 ## xterm-addon-unicode11
-https://github.com/xtermjs/xterm.js/tree/5.3.0/addons/xterm-addon-unicode11
-Version: 0.6.0
+https://github.com/xtermjs/xterm.js/tree/6.0.0/addons/addon-unicode11
+Version: 0.9.0
 License: MIT
-Copyright (c) 2019 The xterm.js authors
+Copyright (c) 2019, The xterm.js authors (https://github.com/xtermjs/xterm.js)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -82,10 +82,10 @@ SOFTWARE.
 ---
 
 ## xterm-addon-web-links
-https://github.com/xtermjs/xterm.js/tree/5.3.0/addons/xterm-addon-web-links
-Version: 0.9.0
+https://github.com/xtermjs/xterm.js/tree/6.0.0/addons/addon-web-links
+Version: 0.12.0
 License: MIT
-Copyright (c) 2019 The xterm.js authors
+Copyright (c) 2017, The xterm.js authors (https://github.com/xtermjs/xterm.js)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

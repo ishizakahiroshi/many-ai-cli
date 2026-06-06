@@ -14,10 +14,12 @@ export interface TerminalEntry {
   pendingTotalBytes?: number;
   pendingFlushActive?: boolean;
   pendingFlushSeq?: number;
+  pendingFlushWatchdog?: ReturnType<typeof setTimeout> | null;
   pendingTextTail?: string;
   textDecoder?: TextDecoder;
   markerFilterCarry?: Uint8Array;
   reverseVideoFilterCarry?: Uint8Array;
+  synchronizedUpdateFilterCarry?: Uint8Array;
   screenClearSeqCarry?: Uint8Array;
   autoScroll?: boolean;
   everAttached?: boolean;

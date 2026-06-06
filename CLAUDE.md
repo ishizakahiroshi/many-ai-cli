@@ -99,6 +99,8 @@ any-ai-cli/
   - 例外: ユーザーが明示的に「ビルドして」「`go build` 走らせて」等と指示した場合のみ。
   - 対象コマンド: `go build` / `go run` / `make` / `any-ai-cli serve` / `any-ai-cli stop` / Hub プロセスの起動・終了・再起動・ブラウザリロード等。
   - 完了報告では「再ビルドしますか？」のような提案を出さず、コード変更の要約だけ伝える。
+- **ビルドコマンドは `make build` が基本**。`npm run build` 単体は使わない（ユーザーへの案内でも `make build` を示す）。`make build` が web ビルド（npm ci + npm run build）〜 Windows/Linux バイナリ生成 〜 WSL 配備まで一括で行う。
+  - ユーザーの「ビルドして」という指示は **`make build` の実行指示** を意味する。
 
 ## 詳細ガイド（タスク種別ベース）
 

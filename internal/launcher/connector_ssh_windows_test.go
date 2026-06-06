@@ -22,3 +22,19 @@ func TestBuildTunnelHubURLEscapesHost(t *testing.T) {
 		t.Errorf("buildTunnelHubURL = %q, want %q", got, want)
 	}
 }
+
+func TestBuildTunnelHubURLEscapesToken(t *testing.T) {
+	got := buildTunnelHubURL(47777, "a+b&x=1", "host")
+	want := "http://127.0.0.1:47777/?token=a%2Bb%26x%3D1&via=ssh&host_label=host"
+	if got != want {
+		t.Errorf("buildTunnelHubURL = %q, want %q", got, want)
+	}
+}
+
+func TestNormalizeHubTokenRejectsWhitespace(t *testing.T) {
+	for _, token := range []string{"", "abc def", "abc\ndef", "abc\tdef"} {
+		if got, err := normalizeHubToken(token); err == nil {
+			t.Errorf("normalizeHubToken(%q) = %q, want error", token, got)
+		}
+	}
+}

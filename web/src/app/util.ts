@@ -126,5 +126,24 @@ export async function copyCleanText(linesOrText: string | string[] | null | unde
   showToast(t('copied_to_clipboard'), anchor);
 }
 
+// TUI がハード改行で折り返した複数行コマンドを 1 行に戻す。
+// 折り返しは単語境界（スペース位置）で起きるため、各行 trim → スペース 1 個で join する。
+// xterm.js の soft wrap（isWrapped 行）は getSelection() が連結済みなのでここには来ない。
+export function cleanOneLineText(text: string | null | undefined): string {
+  return String(text || '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line !== '')
+    .join(' ');
+}
+
+export async function copyOneLineText(text: string | null | undefined, anchor?: ToastAnchor): Promise<void> {
+  const oneLine = cleanOneLineText(text);
+  if (!oneLine) return;
+  await navigator.clipboard.writeText(oneLine);
+  showToast(t('copied_to_clipboard'), anchor);
+}
+
 // --- ESM window-interop publish (generated; preserves dynamic window.* lookups) ---
 window.showToast = showToast;

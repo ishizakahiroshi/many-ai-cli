@@ -2,6 +2,7 @@ package hub
 
 import (
 	"fmt"
+	neturl "net/url"
 	"strings"
 
 	"any-ai-cli/internal/wslutil"
@@ -45,7 +46,7 @@ var asciiLogoLines = []string{
 
 func startupBanner(version, addr, token string) string {
 	hubBase := "http://" + addr
-	hubURL := hubBase + "/?token=" + token
+	hubURL := hubBase + "/?token=" + neturl.QueryEscape(token)
 	versionLabel := formatVersionLabel(version)
 	warning := ansiBold + ansiReverse + ansiBrightOrange + " WARNING: This window is connected to the Web UI. Do not close it. " + ansiReset
 
