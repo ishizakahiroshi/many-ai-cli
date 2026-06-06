@@ -32,6 +32,9 @@ jobs:
         with:
           cosign-release: "v2.4.3"
 
+      # SBOM 生成用 syft（.goreleaser.yaml の sboms セクションが参照）
+      - uses: anchore/sbom-action/download-syft@v0
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser

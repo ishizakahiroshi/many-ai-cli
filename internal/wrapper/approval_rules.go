@@ -98,7 +98,7 @@ func SyncRulesFile() error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
-	if err := os.Chmod(dir, 0o700); err != nil {
+	if err := os.Chmod(dir, 0o700); err != nil { // #nosec G302 -- ディレクトリには実行ビットが必要（0700 は所有者限定で適切）
 		return fmt.Errorf("chmod %s: %w", dir, err)
 	}
 	if data, err := os.ReadFile(path); err == nil {
@@ -112,7 +112,7 @@ func SyncRulesFile() error {
 			return nil
 		}
 	}
-	return os.WriteFile(path, []byte(rulesFileContent), 0o644)
+	return os.WriteFile(path, []byte(rulesFileContent), 0o644) // #nosec G306 -- 各 AI CLI が読む共有ルールファイル（秘密情報なし、0644 が意図）
 }
 
 func providerUsesSharedBlock(provider string) bool {
@@ -189,10 +189,10 @@ func ScanRulesConfigured(provider, path string) (bool, error) {
 
 // appendClaudeImport は CLAUDE.md の末尾に claudeImportLine を追記する
 func appendClaudeImport(path string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { // #nosec G301 -- ユーザープロジェクト内の通常ディレクトリ（秘密情報なし）
 		return fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644) // #nosec G302 -- CLAUDE.md は他ツールと共有する通常ドキュメント（0644 が意図）
 	if err != nil {
 		return fmt.Errorf("open %s: %w", path, err)
 	}
@@ -213,21 +213,16 @@ func appendSharedBlock(path string) error {
 		sharedBlockEnd,
 		"",
 	}, "\n")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { // #nosec G301 -- ユーザープロジェクト内の通常ディレクトリ（秘密情報なし）
 		return fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644) // #nosec G302 -- AGENTS.md 等は他ツールと共有する通常ドキュメント（0644 が意図）
 	if err != nil {
 		return fmt.Errorf("open %s: %w", path, err)
 	}
 	defer f.Close()
 	_, err = fmt.Fprintf(f, "\n%s", block)
 	return err
-}
-
-// appendCodexBlock は後方互換用。共有ブロック方式で追記する。
-func appendCodexBlock(path string) error {
-	return appendSharedBlock(path)
 }
 
 // InjectRules はファイルに承認ルールを注入する
@@ -294,5 +289,5 @@ func RemoveRules(provider, path string) error {
 	if newContent == string(content) {
 		return nil
 	}
-	return os.WriteFile(path, []byte(newContent), 0o644)
+	return os.WriteFile(path, []byte(newContent), 0o644) // #nosec G703 G306 -- provider 既知の instruction file パスのみ（HTTP 入力なし）。共有ドキュメントのため 0644 が意図
 }

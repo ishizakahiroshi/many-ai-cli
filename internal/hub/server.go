@@ -567,7 +567,13 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/push/vapid-public-key", s.handlePushVAPIDPublicKey)
 	mux.HandleFunc("/api/push/subscriptions", s.handlePushSubscriptions)
 	s.registerWorkbenchRoutes(mux)
-	s.httpSrv = &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Handler: withSecurityHeaders(mux)}
+	s.httpSrv = &http.Server{
+		Addr:    fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port),
+		Handler: withSecurityHeaders(mux),
+		// Slowloris 対策（gosec G112）。WS を長く張るため ReadTimeout は設定せず、
+		// ヘッダ読み取りのみタイムアウトさせる。
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 	return s, nil
 }
 
@@ -622,7 +628,7 @@ func (s *Server) Run(ctx context.Context) error {
 	if ln == nil {
 		return fmt.Errorf("no available port found in range %d-%d", basePort, basePort+99)
 	}
-	_ = os.WriteFile(pidPath, []byte(fmt.Sprintf("%d", os.Getpid())), 0o644)
+	_ = os.WriteFile(pidPath, []byte(fmt.Sprintf("%d", os.Getpid())), 0o600)
 	// 実際にバインドしたポートを hub-runtime.json へ記録する。ポート自動退避後も
 	// 引数なし起動の IsRunning / OpenBrowserForConfig が本物の Hub を見つけられる
 	//（設定ポートしか見ないと、退避中の Hub を見落として重複起動する）。
@@ -1556,15 +1562,15 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 		case "approval_consumed":
 			s.handleConsumed(m)
 		case "session_history_reset":
-			if skip := s.handleHistoryReset(m); skip {
+			if s.handleHistoryReset(m) {
 				continue
 			}
 		case "session_dismiss":
-			if skip := s.handleDismiss(m); skip {
+			if s.handleDismiss(m) {
 				continue
 			}
 		case "attach_request":
-			if skip := s.handleAttachRequest(m); skip {
+			if s.handleAttachRequest(m) {
 				continue
 			}
 		}
@@ -2047,8 +2053,12 @@ func (s *Server) addUIWithHistory(c *websocket.Conn, activeSessionID int) (*uiCo
 		buf := make([]byte, len(raw))
 		copy(buf, raw)
 		items = append(items, proto.Message{Type: "pty_data", SessionID: id, Data: buf})
-		ses.lastCols = 0
-		ses.lastRows = 0
+		// lastCols/lastRows はリセットしない。ここで 0 にすると attach 直後の
+		// fit → pty_resize が handleResize の skip 判定を必ず通過し、サイズ未変更でも
+		// PTY へ resize（SIGWINCH 相当）が届いて TUI が全画面再描画する。replay 済みの
+		// 旧フレーム（フッター等）はスクロールバックに残るため二重描画になる。
+		// lastCols は「PTY に最後に送った実サイズ」なので保持したままで正しく、
+		// 新 UI のサイズが本当に異なる場合のみ resize が通る。
 	}
 	count := len(s.uis)
 	s.sessionsMu.Unlock()

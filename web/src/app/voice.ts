@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { showToast } from './util.js';
-import { STORAGE_LANG_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, getDefaultWakeWordPhrase } from './user-prefs.js';
+import { STORAGE_LANG_KEY, STORAGE_VOICE_INPUT_DISABLED_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, getDefaultWakeWordPhrase } from './user-prefs.js';
 import { activeSessionId, terminals } from './state.js';
 import { autoExpand, buildSendText, doSend, inputEl, set_voiceActive, set_voiceAudioActive, updateInputClearButton, updateSlashMenu, voiceActive, voiceAudioActive } from '../app.js';
 import { renderSessionList } from './session-list.js';
@@ -166,7 +166,9 @@ import { getActiveTriggerPhrase, normalizeTriggerMatchText, textEndsWithTriggerP
   }
   if (!btn || !voiceBar || !canvas) return;
 
-  btn.hidden = false;
+  // ブラウザ対応済みの印（settings.ts のトグルが「対応ブラウザでのみ再表示」判定に使う）
+  btn.dataset.voiceSupported = '1';
+  btn.hidden = localStorage.getItem(STORAGE_VOICE_INPUT_DISABLED_KEY) === '1';
   btn.dataset.tooltip = t('voice_tooltip');
 
   let dbgSeq = 0;
@@ -562,6 +564,8 @@ import { getActiveTriggerPhrase, normalizeTriggerMatchText, textEndsWithTriggerP
       stopVoice();
       return;
     }
+    // 設定で無効化されている場合は録音を開始しない（Alt+V 経由の click も含む）
+    if (localStorage.getItem(STORAGE_VOICE_INPUT_DISABLED_KEY) === '1') return;
     preVoiceText = inputEl.value;
     if (preVoiceText.length > 0 && !/\s$/.test(preVoiceText)) {
       inputEl.value = preVoiceText + ' ';

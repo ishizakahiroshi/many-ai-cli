@@ -287,6 +287,9 @@ type UserPrefsVoice struct {
 	GraceSeconds    int    `yaml:"grace_seconds,omitempty"    json:"grace_seconds,omitempty"`
 	WakeWordEnabled bool   `yaml:"wake_word_enabled,omitempty" json:"wake_word_enabled,omitempty"`
 	WakeWordPhrase  string `yaml:"wake_word_phrase,omitempty"  json:"wake_word_phrase,omitempty"`
+	// InputDisabled は音声入力（🎤 ボタン・Alt+V）を無効化する。
+	// 既定 false（有効）。default-true を omitempty で扱えないため否定形フィールドにしている。
+	InputDisabled bool `yaml:"input_disabled,omitempty" json:"input_disabled,omitempty"`
 }
 
 // UserPrefsSpawn はセッション起動のデフォルト設定。
@@ -396,7 +399,7 @@ func LoadOrCreate() (*Config, error) {
 		if err := yaml.Unmarshal(b, cfg); err != nil {
 			// 破損: .bak へ退避してデフォルト設定で起動継続
 			bak := path + ".bak"
-			if bakErr := os.WriteFile(bak, b, 0o600); bakErr != nil {
+			if bakErr := os.WriteFile(bak, b, 0o600); bakErr != nil { // #nosec G703 -- ~/.any-ai-cli/config.yaml.bak 固定パス（ユーザー入力なし）
 				return nil, fmt.Errorf("backup invalid config: %w", bakErr)
 			}
 			slog.Warn("config parse failed; backed up and regenerating",
@@ -510,11 +513,11 @@ func Save(cfg *Config) error {
 	tmpName := tmp.Name()
 	defer os.Remove(tmpName) // Rename 成功後は no-op
 	if _, err := tmp.Write(out); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("write temp config: %w", err)
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("sync temp config: %w", err)
 	}
 	if err := tmp.Close(); err != nil {

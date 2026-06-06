@@ -121,7 +121,7 @@ func CleanOld(baseDir string, retentionDays int) error {
 			return nil
 		}
 		if info.ModTime().Before(cutoff) {
-			if removeErr := os.Remove(path); removeErr != nil {
+			if removeErr := os.Remove(path); removeErr != nil { // #nosec G122 -- 自ユーザー所有の添付ディレクトリ内のみを掃除（外部入力パスなし）
 				slog.Debug("attach.CleanOld: remove failed", "path", path, "err", removeErr)
 				// walk を止めない（return nil）
 			}

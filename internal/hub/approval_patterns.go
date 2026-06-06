@@ -315,7 +315,7 @@ func (s *Server) handleApprovalPatternAsset(w http.ResponseWriter, r *http.Reque
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	http.ServeFile(w, r, path)
+	http.ServeFile(w, r, path) // #nosec G703 -- validApprovalPatternAssetName + isPathUnderAllowedRoots で検証済み
 }
 
 func (s *Server) handleApprovalPatterns(w http.ResponseWriter, r *http.Request) {

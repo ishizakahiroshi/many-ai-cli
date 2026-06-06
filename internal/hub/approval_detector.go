@@ -1,7 +1,7 @@
 package hub
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"regexp"
@@ -416,6 +416,6 @@ func nativeApprovalSig(provider string, approval *nativeApproval) string {
 	for _, opt := range approval.Options {
 		b.WriteString(fmt.Sprintf("\n%d:%s:%s", opt.Num, opt.Label, opt.SendText))
 	}
-	sum := sha1.Sum([]byte(b.String()))
+	sum := sha256.Sum256([]byte(b.String()))
 	return hex.EncodeToString(sum[:])[:16]
 }

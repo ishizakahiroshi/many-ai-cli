@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, showToast, ti18n, token } from './util.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref } from './user-prefs.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_INPUT_DISABLED_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, stateLabel } from './session-list.js';
@@ -138,7 +138,7 @@ export function playNotificationSound() {
   if (localStorage.getItem(STORAGE_NOTIFY_SOUND_ENABLED_KEY) !== '1') return;
   const type = localStorage.getItem(STORAGE_NOTIFY_SOUND_TYPE_KEY) || 'default';
   if (type === 'custom') {
-    const tk = new URLSearchParams(location.search).get('token');
+    const tk = token;
     const customUrl = tk ? `/api/user-prefs/notify-sound-custom?token=${tk}` : null;
     if (customUrl) {
       try { new Audio(customUrl).play().catch(() => {}); return; } catch (_) {}
@@ -731,6 +731,23 @@ export function applyLang(lang) {
   });
 })();
 
+// ---- 音声入力 有効/無効 設定 ----
+(function () {
+  const enabledEl = document.getElementById('voice-input-enabled');
+  if (!enabledEl) return;
+  enabledEl.checked = localStorage.getItem(STORAGE_VOICE_INPUT_DISABLED_KEY) !== '1';
+  enabledEl.addEventListener('change', () => {
+    const btn = document.getElementById('voice-btn');
+    // 録音中に OFF へ切り替えた場合は先に停止する（停止経路は無効化中でも通る）
+    if (!enabledEl.checked && btn && btn.classList.contains('recording')) {
+      btn.click();
+    }
+    setUserPref('voice.input_disabled', !enabledEl.checked);
+    // 再表示は対応ブラウザ（voice.ts が voiceSupported を立てた場合）のみ
+    if (btn) btn.hidden = !enabledEl.checked || btn.dataset.voiceSupported !== '1';
+  });
+})();
+
 // ---- 音声入力 終了検知 待ち時間 設定 ----
 (function () {
   const sel = document.getElementById('voice-grace-select');
@@ -923,7 +940,7 @@ export function applyLang(lang) {
     if (!file) return;
     // バイナリをサーバに PUT（dataURL ではなく binary 送信）
     const uploadCustomSound = async (f) => {
-      const tk = new URLSearchParams(location.search).get('token');
+      const tk = token;
       try {
         const buf = await f.arrayBuffer();
         const putRes = await fetch(`/api/user-prefs/notify-sound-custom?token=${tk}`, {
@@ -1031,7 +1048,7 @@ export function applyLang(lang) {
   }
 
   async function patchServerPref(path, value) {
-    const tk = new URLSearchParams(location.search).get('token');
+    const tk = token;
     if (!tk) return;
     try {
       const getRes = await fetch(`/api/user-prefs?token=${tk}`);
@@ -1086,7 +1103,7 @@ export function applyLang(lang) {
   fileInputEl.addEventListener('change', async () => {
     const file = fileInputEl.files[0];
     if (!file) return;
-    const tk = new URLSearchParams(location.search).get('token');
+    const tk = token;
     try {
       const buf = await file.arrayBuffer();
       const res = await fetch(`/api/user-prefs/avatar?token=${tk}`, {

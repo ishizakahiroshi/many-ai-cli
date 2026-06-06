@@ -146,14 +146,6 @@ func (s *Server) requireToken(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-func (s *Server) requireProvidedToken(w http.ResponseWriter, got string) bool {
-	if !validToken(got, s.cfg.Token) {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
-		return false
-	}
-	return true
-}
-
 func requireMethod(w http.ResponseWriter, r *http.Request, method string) bool {
 	if r.Method != method {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")

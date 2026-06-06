@@ -82,7 +82,7 @@ func (s *Server) handleFilesList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ルートが存在しない場合
-	info, err := os.Stat(filesRoot)
+	info, err := os.Stat(filesRoot) // #nosec G703 -- isPathUnderAllowedRoots 検証済み、または cwd 配下の既定パス
 	if err != nil || !info.IsDir() {
 		writeJSON(w, filesListResp{
 			Root:      filesRoot,
@@ -201,7 +201,7 @@ func walkFilesLocal(filesRoot, cwd string) ([]filesListItem, bool) {
 // extractFileSummary はファイルから概要を抽出する（plan §3 の fallback チェーン）。
 // 先頭 32 KiB のみ読み込む。
 func extractFileSummary(path string) string {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G703 -- 呼び出し元が許可ルート配下の walk 結果のみを渡す
 	if err != nil {
 		return ""
 	}

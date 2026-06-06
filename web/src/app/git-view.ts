@@ -1,6 +1,7 @@
 // --- ESM imports (generated) ---
 import { token } from './util.js';
 import { STORAGE_LANG_KEY } from './user-prefs.js';
+import { appConfirm } from './settings.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -346,7 +347,7 @@ import { STORAGE_LANG_KEY } from './user-prefs.js';
       this.gitRoot   = this.opts.gitRoot || '';
       this.viewRef   = this.opts.viewRef || 'HEAD';
 
-      this.token = new URLSearchParams(location.search).get('token') || '';
+      this.token = token || '';
 
       this.commits = [];
       this.filteredCommits = [];
@@ -937,6 +938,15 @@ import { STORAGE_LANG_KEY } from './user-prefs.js';
     async _gitPull() {
       const btn = this.els.pullBtn;
       if (!btn || btn.disabled) return;
+      // pull は working tree を書き換える操作のため、実行前に確認を挟む
+      const ok = await appConfirm({
+        title: _gt('git_pull_confirm_title', 'Pull remote changes'),
+        message: _gt('git_pull_confirm_message', 'Pull (fast-forward) from upstream and update the working tree. Continue?'),
+        confirmText: _gt('git_pull_confirm_run', 'Pull'),
+        cancelText: _gt('spawn_cancel', 'Cancel'),
+        kind: 'default',
+      });
+      if (!ok) return;
       // 実行中は _updatePullButton にラベルを上書きさせない（'…' を保持する）
       btn.dataset.busy = '1';
       btn.disabled = true;

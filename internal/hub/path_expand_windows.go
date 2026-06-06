@@ -156,7 +156,7 @@ func resolveWinEnvVar(name string, cache map[string]string) (string, bool) {
 	if strings.EqualFold(name, "PNPM_HOME") {
 		if la := os.Getenv("LOCALAPPDATA"); la != "" {
 			candidate := filepath.Join(la, "pnpm")
-			if st, err := os.Stat(candidate); err == nil && st.IsDir() {
+			if st, err := os.Stat(candidate); err == nil && st.IsDir() { // #nosec G703 -- LOCALAPPDATA 環境変数由来のローカル固定パス
 				cache[key] = candidate
 				return candidate, true
 			}

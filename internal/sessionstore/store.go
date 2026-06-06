@@ -816,14 +816,16 @@ func (s *Store) ResetHistory(preserveLiveIDs []int) (ResetResult, error) {
 		args[i] = id
 	}
 	inClause := strings.Join(placeholders, ",")
+	// #nosec G202 -- table は固定リスト、inClause は "?" プレースホルダの連結のみ（値は args で束縛）
 	for _, table := range []string{"events", "messages", "approvals", "attachments"} {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE session_id IN (`+inClause+`)`, args...); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE session_id IN (`+inClause+`)`, args...); err != nil { // #nosec G202 -- 同上
 			return out, err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE id NOT IN (`+inClause+`)`, args...); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE id NOT IN (`+inClause+`)`, args...); err != nil { // #nosec G202 -- inClause はプレースホルダのみ
 		return out, err
 	}
+	// #nosec G202 -- inClause はプレースホルダのみ
 	if _, err := tx.ExecContext(ctx, `UPDATE sessions SET
 		first_message=NULL,
 		last_message=NULL,
