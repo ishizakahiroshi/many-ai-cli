@@ -435,6 +435,49 @@ Close the `any-ai-cli tunnel` window to disconnect. The remote Hub and any remot
 
 ---
 
+## Using from a smartphone (iPhone / Android)
+
+The Hub UI is mobile-ready (responsive layout, touch-sized buttons, a mobile key panel for Esc/Ctrl/arrows, and PWA support). Because the Hub binds to `127.0.0.1` only, a phone cannot reach it over Wi-Fi by opening the PC's LAN IP — and that is by design. Instead, the phone uses the same pattern as remote PC access: **an SSH local forward that points the phone's own `127.0.0.1` at the Hub.** No public exposure is required (and none is supported).
+
+**What you need on the phone**
+
+- An SSH client app that supports local port forwarding (e.g. [Termius](https://termius.com/) — the free plan is enough)
+- A normal browser (Safari / Chrome)
+
+### A. Home PC on the same Wi-Fi
+
+1. Enable an SSH server on the PC that runs the Hub
+   - Windows: Settings → System → Optional features → add **OpenSSH Server**, then start the `sshd` service
+   - macOS: System Settings → General → Sharing → **Remote Login**
+   - Linux: install/enable `sshd`
+2. In Termius, register the PC as a host (its LAN IP, e.g. `192.168.x.x`, with your PC user; key auth recommended)
+3. Add a **Port Forwarding** rule: type **Local**, phone side `127.0.0.1:47777` → destination `127.0.0.1:47777`
+4. Connect the tunnel, then open `http://127.0.0.1:47777/?token=<token>` in the phone browser (the token comes from the PC's `serve` output or `~/.any-ai-cli/config.yaml`)
+5. Share menu → **Add to Home Screen** to install it as a PWA — from then on it launches like an app
+
+### B. VPS
+
+Identical to A, with the VPS as the Termius host. If you also use a home PC Hub, give each destination its own phone-side port (next section).
+
+### Port allocation for multiple Hubs
+
+A tunnel occupies the phone-side listen port, and on a PC that runs its own Hub, local port `47777` is already taken — so assign one fixed phone-side port per destination:
+
+| Destination | Phone-side URL | Termius local forward |
+|---|---|---|
+| Home PC | `http://127.0.0.1:47777/?token=<PC token>` | `47777` → `127.0.0.1:47777` |
+| VPS | `http://127.0.0.1:47778/?token=<VPS token>` | `47778` → VPS `127.0.0.1:47777` |
+
+The Hub itself stays on `47777` everywhere; only the phone-side listen port differs. Do **not** reuse one phone-side port for two Hubs: browsers treat the port as part of the origin, so reusing it would make two different Hubs share one PWA install, service worker, cache, and `localStorage` — and token mismatches after switching tunnels. Separate ports give you two independent home-screen icons ("Home" / "VPS") that never interfere.
+
+### Mobile usage notes
+
+- **iOS suspends background apps**, so the tunnel drops when Termius is backgrounded for a while. Sessions keep running on the host; reopening Termius reconnects, and the PWA picks up where it left off.
+- **Web Push** (if enabled in Settings and subscribed) can still deliver notifications while the tunnel is down — but opening the Hub from a notification requires the tunnel to be reconnected first.
+- The token regenerates when the Hub restarts; if the browser shows 403, fetch the current token again.
+
+---
+
 ## Launching from a terminal (advanced)
 
 If you prefer driving things from a shell — for scripting, shell integration, or muscle memory — these options are equivalent to clicking "+ New Session" in the UI. Use whichever you like.
@@ -618,6 +661,7 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
   - Requires Chrome or Edge (uses the browser's built-in Speech Recognition API).
   - Microphone permission must be granted on first use.
   - Settings include end-of-speech wait time.
+  - ⚠️ **Privacy note**: because this uses the browser's built-in recognition, recorded audio is **sent to the browser vendor's speech servers (Google / Microsoft)**. This is an exception to the local-first design of `any-ai-cli` — if you do not want audio leaving your machine, do not use this feature (a separate local-inference dictation tool is an alternative). See "Security / Privacy → Outbound network traffic".
 - **Auto-submit trigger**: In Settings → Auto-submit trigger, enable the toggle and set a phrase (e.g. `send`). When voice recognition finishes with that phrase, the input is sent automatically. Also works with typed text.
 - **Spawn**: Click **+ New Session** to start a new AI CLI session from the browser.
 
@@ -751,6 +795,7 @@ When **Approval Buttons** is enabled, `any-ai-cli` writes only its marked approv
 - **Slash command list (Hub itself)** — When the slash command picker is opened, the Hub fetches a markdown file from `https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent}.md` and caches it for 24 hours. The source URL can be changed (or pointed to a local file path) in **Settings → Slash command sources**.
 - **Approval pattern list (Hub itself)** — On Hub startup, the official approval detection patterns can be fetched from `https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,common}.md` and cached for 24 hours. The source URLs can be overridden in config.
 - **Web Push notifications (Hub itself, opt-in only)** — When Push notifications are enabled, the Hub sends encrypted Web Push requests to the browser vendor's push service over HTTPS. Payloads include the session ID/name, provider, and a short approval-question/context excerpt; they do **not** include the Hub URL token. VAPID keys and subscriptions are stored locally in `~/.any-ai-cli/push_store.json`. Notifications can be delivered while an SSH tunnel is down, but opening the Hub from the notification still requires the tunnel and Hub to be reachable.
+- **Voice input (the browser itself, only while in use)** — Voice input uses the browser's built-in Web Speech API; in Chrome / Edge, **microphone audio is sent to the browser vendor's speech-recognition servers (Google / Microsoft)**. The sender is the browser, not `any-ai-cli`, but note that coding instructions often contain project names and unreleased details. If you want to avoid this, simply do not use voice input (do not press the mic button), or use a separate local-inference dictation tool. See also the privacy note in the voice input section.
 - **Wrapped CLI traffic (the CLIs themselves)** — The CLIs you wrap (Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI) talk directly to their respective vendor APIs (Anthropic, OpenAI, GitHub, Cursor) over HTTPS. `any-ai-cli` only relays PTY I/O via local WebSocket; it does not intercept, log, or proxy these API requests. Whatever network behavior the underlying CLI has applies as-is.
 
 ### ⚠️ Data retention by wrapped CLIs
@@ -799,6 +844,15 @@ If multiple people need access, use one of the legitimate options instead:
 - Share the Hub URL (with its token) with anyone
 
 The Hub UI exposes APIs that perform host-level actions (e.g. `/api/open-dir` opens folders in the OS file manager). These are only safe under the localhost assumption — exposing them externally could lead to **arbitrary folder access or information disclosure**.
+
+### Public exposure (unsupported — at your own risk)
+
+The only supported configuration is localhost reachability, as described above. `any-ai-cli` is distributed under the MIT License and does not technically prevent you from placing a reverse proxy in front of the Hub and exposing it publicly — but by choosing to do so, you agree to the following:
+
+- **Public exposure is unsupported.** Questions, bug reports, and security consultations about exposed configurations will not be handled
+- **Reaching the Hub is equivalent to arbitrary command execution on that host.** Direct PTY input, auto-approving prompts, and spawning new sessions are all possible; a compromise is not a hijacked web UI — it is a hijacked host
+- The URL token alone is not designed to be your security boundary. If you expose the Hub, you must design, operate, and maintain layered defenses yourself — TLS, an independent authentication layer (mTLS / SSO / IP allowlisting, etc.), and rate limiting — with a full understanding of what each provides. If you cannot build such a configuration, do not expose the Hub
+- The developers accept no liability whatsoever for any damage arising from public exposure, including but not limited to host compromise; leakage of data, credentials, or API keys; suspension of AI CLI accounts; and damage caused to third parties. See also the [Disclaimer](#disclaimer)
 
 ---
 

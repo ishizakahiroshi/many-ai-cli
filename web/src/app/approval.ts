@@ -105,8 +105,15 @@ function trackBgApprovalMiss(id, tailLines) {
 // キャッシュ済み選択肢のいずれかが描画済み行（scanBuffer）にまだ存在するか。
 // 「番号トークン + ラベル先頭 12 文字」が同一行にあることを条件にする
 // （ラベル単独だと本文中の同語にマッチしやすく、番号単独だと箇条書きに誤マッチするため）。
+// バッチ（複数質問）形式はセクション {num, title, options} の配列で label を持たないため、
+// 照合前にフラットな選択肢へ展開する。展開しないと照合が必ず失敗し、H9 復元ミスが
+// 上限（3回 × 700ms ≒ 2.1s）に達するたび hideActionBar → マーカー再検出で再表示、
+// の約2秒周期チカチカになる（Claude の [ANY-AI-CLI] 一括質問で発生）。
 function cachedOptionsOnScreen(lines, cached) {
-  return cached.some((o) => {
+  const flat = isBatchOptions(cached)
+    ? cached.flatMap((s) => s.options || [])
+    : cached;
+  return flat.some((o) => {
     const frag = String(o.label || '').slice(0, 12).trim();
     if (!frag) return false;
     const numToken = `${o.num}.`;

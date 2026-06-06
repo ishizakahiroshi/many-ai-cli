@@ -274,6 +274,14 @@
         <summary class="settings-section-title"><span data-i18n="settings_voice_title">音声入力</span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_voice_input_toggle">音声入力（🎤 ボタン）</span>
+            <label class="approval-toggle">
+              <input type="checkbox" id="voice-input-enabled">
+              <span class="approval-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-note" data-i18n="settings_voice_input_privacy">ブラウザ内蔵認識のため、音声はブラウザベンダー（Google / Microsoft）の音声認識サーバへ送信されます。音声を外部に送りたくない場合は OFF にしてください（Alt+V も無効になります）。</div>
+          <div class="settings-row">
             <span class="settings-label" data-i18n="settings_voice_grace">終了検知の待ち時間</span>
             <select id="voice-grace-select" class="settings-select">
               <option value="0">0</option>
@@ -771,6 +779,12 @@
               </a>
             </li>
             <li class="about-oss-item">
+              <a class="about-oss-link" href="https://github.com/xtermjs/xterm.js/tree/6.0.0/addons/addon-webgl" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">xterm-addon-webgl 0.19.0</p>
+                <p class="about-oss-desc" data-i18n="about_oss_webgl_desc">MIT License. Used for cell-grid-aligned terminal rendering (WebGL).</p>
+              </a>
+            </li>
+            <li class="about-oss-item">
               <a class="about-oss-link" href="https://github.com/markedjs/marked/releases/tag/v12.0.2" target="_blank" rel="noopener noreferrer">
                 <p class="about-oss-name">marked 12.0.2</p>
                 <p class="about-oss-desc" data-i18n="about_oss_marked_desc">MIT License. Used as the Markdown parser for the files preview.</p>
@@ -873,6 +887,7 @@
   <script src="/vendor/xterm-addon-fit.min.js"></script>
   <script src="/vendor/xterm-addon-unicode11.min.js"></script>
   <script src="/vendor/xterm-addon-web-links.min.js"></script>
+  <script src="/vendor/xterm-addon-webgl.min.js"></script>
   <script src="/vendor/marked.min.js"></script>
   <script src="/vendor/purify.min.js"></script>
   <script src="/vendor/highlight.min.js"></script>

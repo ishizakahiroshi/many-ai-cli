@@ -137,7 +137,7 @@ func (s *UIServer) Serve(ctx context.Context) (string, error) {
 		WriteTimeout: 60 * time.Second,
 	}
 
-	go func() {
+	go func() { // #nosec G118 -- shutdown 用 goroutine。親 ctx の終了後に動くため独立 context が必要
 		<-ctx.Done()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()

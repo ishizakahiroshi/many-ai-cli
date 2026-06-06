@@ -5,6 +5,8 @@ package wrapper
 import "testing"
 
 func TestRepairMojibakeUTF8Japanese(t *testing.T) {
+	// 意図的な文字化けフィクスチャ（CP1252 誤解釈された UTF-8 で、制御文字を含む）
+	//lint:ignore ST1018 mojibake fixture intentionally contains control characters
 	in := []byte("ãƒ­ãƒ¼ã‚«ãƒ«ãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒªã® MD ãƒ•ã‚¡ã‚¤ãƒ«ä¸€è¦§å–å¾—")
 	got := string(repairMojibakeUTF8(in))
 	want := "ローカルディレクトリの MD ファイル一覧取得"
@@ -14,6 +16,8 @@ func TestRepairMojibakeUTF8Japanese(t *testing.T) {
 }
 
 func TestRepairMojibakeUTF8BoxDrawing(t *testing.T) {
+	// 意図的な文字化けフィクスチャ（罫線文字の CP1252 誤解釈で U+009D を含む）
+	//lint:ignore ST1018 mojibake fixture intentionally contains U+009D
 	in := []byte("â”€â”€â”€â¯ Â· â†‘")
 	got := string(repairMojibakeUTF8(in))
 	want := "───❯ · ↑"

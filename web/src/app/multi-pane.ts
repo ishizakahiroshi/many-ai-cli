@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { inputEl } from '../app.js';
 import { render } from './session-list.js';
-import { termArea } from './terminal.js';
+import { enableWebglRenderer, termArea } from './terminal.js';
 
 // multi-pane.js — MultiPaneManager + GridPicker (C3: xterm マルチインスタンス + WS ルーティング)
 // index.html で app.js より前に読み込む
@@ -610,6 +610,7 @@ export class MultiPaneManager {
         if (!termArea.isConnected || !termArea.contains(container)) return;
         if (container.clientWidth > 0 && container.clientHeight > 0) {
           t.term.open(container);
+          enableWebglRenderer(t);
           t.everAttached = true;
           if (typeof window.flushPendingTerminalChunks === 'function') {
             window.flushPendingTerminalChunks(session.id);

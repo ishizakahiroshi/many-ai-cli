@@ -57,12 +57,6 @@ func newWrapperSession(conn *websocket.Conn, sid int) *wrapperSession {
 	return &wrapperSession{currentConn: conn, currentSID: sid}
 }
 
-func (ws *wrapperSession) getConn() *websocket.Conn {
-	ws.stateMu.Lock()
-	defer ws.stateMu.Unlock()
-	return ws.currentConn
-}
-
 func (ws *wrapperSession) getSID() int {
 	ws.stateMu.Lock()
 	defer ws.stateMu.Unlock()
@@ -474,8 +468,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		}
 	}
 
-	var startReceiveLoop func(c *websocket.Conn)
-	startReceiveLoop = func(c *websocket.Conn) {
+	startReceiveLoop := func(c *websocket.Conn) {
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {

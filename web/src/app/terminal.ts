@@ -212,6 +212,7 @@ export function ensureTerminal(id) {
   terminals.set(id, {
     term,
     fitAddon,
+    webglAddon: null,
     container: null,
     pendingChunks: [],
     pendingTotalBytes: 0,
@@ -261,11 +262,32 @@ export function attachTerminal(id) {
   whenLayoutReady(id, container);
 }
 
+// WebGL レンダラを有効化する。既定の DOM レンダラはグリフをフォントの自然な字送りで
+// 流し込むため、全角グリフの字送りとセル幅（fontSize:13 では半角 6.5px と端数）の差が
+// 行内で蓄積し、選択ハイライト（セルグリッド基準）と文字の見た目がずれる。
+// WebGL レンダラはグリフを 1 セルずつグリッドへ描画するためずれない。
+// WebGL 非対応・コンテキストロスト時は addon を破棄して DOM レンダラへ戻す。
+export function enableWebglRenderer(t) {
+  if (typeof WebglAddon === 'undefined' || t.webglAddon) return;
+  try {
+    const addon = new WebglAddon.WebglAddon();
+    addon.onContextLoss(() => {
+      try { addon.dispose(); } catch (_) {}
+      t.webglAddon = null;
+    });
+    t.term.loadAddon(addon);
+    t.webglAddon = addon;
+  } catch (err) {
+    console.warn('[terminal] WebGL renderer unavailable; falling back to DOM renderer', err);
+  }
+}
+
 export function whenLayoutReady(id, container) {
   const t = terminals.get(id);
   if (!t) return;
   if (container.clientWidth > 0 && container.clientHeight > 0) {
     t.term.open(container);
+    enableWebglRenderer(t);
     fitTerminalPreservingBottom(t, id);
     if (!t.scrollHandlerInstalled) {
       t.scrollHandlerInstalled = true;

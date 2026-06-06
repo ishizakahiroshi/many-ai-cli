@@ -125,7 +125,7 @@ func (s *Server) handleAttach(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, attachMultipartMaxBytes)
-	if err := r.ParseMultipartForm(attachUploadMaxBytes); err != nil {
+	if err := r.ParseMultipartForm(attachUploadMaxBytes); err != nil { // #nosec G120 -- 直前の MaxBytesReader で読み取り上限を設定済み
 		writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("bad request", err))
 		return
 	}
@@ -360,7 +360,7 @@ func (s *Server) handleOpenDir(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "mkdir_failed", errorDetail("mkdir failed", err))
 		return
 	}
-	if err := os.Chmod(target, 0o700); err != nil {
+	if err := os.Chmod(target, 0o700); err != nil { // #nosec G302 -- ディレクトリには実行ビットが必要（0700 は所有者限定で適切）
 		writeJSONError(w, http.StatusInternalServerError, "chmod_failed", errorDetail("chmod failed", err))
 		return
 	}

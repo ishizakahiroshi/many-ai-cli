@@ -33,7 +33,7 @@ var (
 	// バッククオートリスト: - `/cmd` - description
 	listItemRe = regexp.MustCompile("(?m)^[ \\t]*[-*][ \\t]+`(/[a-z][a-z0-9_-]*)(?:[^`]*)`[ \\t]*[-–—:]+[ \\t]*(.+)")
 	// 裸のリスト: - /cmd - description
-	bareListRe = regexp.MustCompile("(?m)^[ \\t]*[-*][ \\t]+(/[a-z][a-z0-9_-]+)[ \\t]+[-–—:]+[ \\t]*(.+)")
+	bareListRe = regexp.MustCompile(`(?m)^[ \t]*[-*][ \t]+(/[a-z][a-z0-9_-]+)[ \t]+[-–—:]+[ \t]*(.+)`)
 	// ドキュメントのプレーンテキスト化行: /cmd Description...
 	plainLineRe = regexp.MustCompile("(?m)^[ \\t]*`?(/[a-z][a-z0-9_-]*)(?:\\s+[^`\\n]*)?`?[ \\t]+([^\\n]+)")
 

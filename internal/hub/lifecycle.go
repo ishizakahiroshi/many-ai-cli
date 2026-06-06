@@ -193,7 +193,10 @@ func probeHubInfo(port int, token string, timeout time.Duration) bool {
 
 func PrintStatus(cfg *config.Config) error {
 	url := localHubURL(cfg.Hub.Port, "/", cfg.Token)
-	resp, err := http.Get(url)
+	// Hub がハングしていても status コマンドが固まらないようタイムアウトを設定する。
+	// URL は 127.0.0.1 固定の自己生成値（gosec G107 対象外化も兼ねる）。
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
 		fmt.Println("stopped")
 		return nil

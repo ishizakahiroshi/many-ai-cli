@@ -2,7 +2,30 @@
 import { t } from '../i18n.js';
 
 // --- ESM shared token (generated; moved from settings.js) ---
-export const token = new URLSearchParams(location.search).get('token');
+// token は初回ロード時に URL クエリから取得し、sessionStorage へ退避したうえで
+// history.replaceState によりアドレスバーから除去する（ブラウザ履歴・スクショ・
+// 画面共有への露出対策）。リロード時は sessionStorage から復元する。
+// SW 側の token キャッシュ（pwa.ts → sw.ts postMessage）は従来通り別系統で保持。
+const TOKEN_STORAGE_KEY = 'any-ai-cli-token';
+
+function initToken(): string | null {
+  let tk: string | null = null;
+  try {
+    const params = new URLSearchParams(location.search);
+    tk = params.get('token');
+    if (tk) {
+      try { sessionStorage.setItem(TOKEN_STORAGE_KEY, tk); } catch (_) { /* private mode 等は無視 */ }
+      params.delete('token');
+      const qs = params.toString();
+      try { history.replaceState(history.state, '', location.pathname + (qs ? `?${qs}` : '') + location.hash); } catch (_) { /* 失敗しても従来動作 */ }
+    } else {
+      try { tk = sessionStorage.getItem(TOKEN_STORAGE_KEY); } catch (_) { /* 取得不可なら null のまま */ }
+    }
+  } catch (_) { /* URL 解析失敗時は null */ }
+  return tk;
+}
+
+export const token = initToken();
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 

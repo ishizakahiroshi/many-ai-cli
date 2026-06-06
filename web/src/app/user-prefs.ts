@@ -1,5 +1,5 @@
 // --- ESM imports (generated) ---
-import { showToast } from './util.js';
+import { showToast, token } from './util.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -32,6 +32,7 @@ export const STORAGE_USAGE_LINK_CURSOR_AGENT_KEY = 'ai_cli_hub_usage_link_cursor
 export const STORAGE_USAGE_LINK_OLLAMA_KEY    = 'ai_cli_hub_usage_link_ollama';
 export const STORAGE_USAGE_LINK_OPENCODE_KEY  = 'ai_cli_hub_usage_link_opencode';
 export const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds';
+export const STORAGE_VOICE_INPUT_DISABLED_KEY = 'ai_cli_hub_voice_input_disabled';
 export const STORAGE_DISPLAY_LOCKED_MODE_KEY  = 'ai_cli_hub_display_locked_mode';
 export const DEFAULT_VOICE_GRACE_SEC          = 0;
 export const STORAGE_WAKE_WORD_ENABLED_KEY    = 'ai_cli_hub_wake_word_enabled';
@@ -84,6 +85,7 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   // notify_sound.custom_file はサーバ上のファイルパスのため localStorage へはミラーしない
   // （カスタム音はサーバ API /api/user-prefs/notify-sound-custom 経由で再生する）
   'voice.grace_seconds':       [STORAGE_VOICE_GRACE_KEY,           String],
+  'voice.input_disabled':      [STORAGE_VOICE_INPUT_DISABLED_KEY,  (v) => v ? '1' : '0'],
   'voice.wake_word_enabled':   [STORAGE_WAKE_WORD_ENABLED_KEY,     (v) => v ? '1' : '0'],
   'voice.wake_word_phrase':    [STORAGE_WAKE_WORD_PHRASE_KEY,      String],
   'quick_cmds.cmd1':           [STORAGE_QUICK_CMD_1_KEY,           String],
@@ -147,7 +149,7 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
   let parsed: any;
   try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
 
-  if (path.endsWith('.enabled') || path === 'voice.wake_word_enabled' || path === 'approval.auto_switch') {
+  if (path.endsWith('.enabled') || path === 'voice.wake_word_enabled' || path === 'voice.input_disabled' || path === 'approval.auto_switch') {
     return { ok: true, value: raw === '1' || raw === 'true' || parsed === true };
   }
   if (path === 'voice.grace_seconds') {
@@ -207,7 +209,7 @@ export function _userPrefsHttpError(phase: string, res: Response): UserPrefsHttp
 // _putUserPrefsNow は localStorage の最新値をサーバへ即時（awaited）反映する。
 // 言語変更時の location.reload() 前や reset 完了時など、debounce を待てない場面で使う。
 export async function _putUserPrefsNow() {
-  const tk = new URLSearchParams(location.search).get('token');
+  const tk = token;
   if (!tk) return;
   // 現在のサーバ値を取得してからパッチ適用し全体置換
   const getRes = await fetch(`/api/user-prefs?token=${tk}`);
@@ -255,7 +257,7 @@ export function setUserPref(path: string, value: any): void {
 
 // サーバから user_prefs を取得して localStorage にミラーする（起動時 1 回）
 export async function _mirrorUserPrefsFromServer() {
-  const tk = new URLSearchParams(location.search).get('token');
+  const tk = token;
   if (!tk) return null;
   try {
     const res = await fetch(`/api/user-prefs?token=${tk}`);
@@ -282,7 +284,7 @@ export async function _mirrorUserPrefsFromServer() {
 
 // 移行: localStorage 既存値 → サーバ（初回のみ）
 export async function migrateLocalstoragePrefsToServer() {
-  const tk = new URLSearchParams(location.search).get('token');
+  const tk = token;
   if (!tk) return;
   try {
     const res = await fetch(`/api/user-prefs?token=${tk}`);

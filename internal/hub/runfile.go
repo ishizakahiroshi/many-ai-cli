@@ -75,11 +75,11 @@ func writeHubRuntime(port int) error {
 	defer os.Remove(tmpName) // no-op after successful Rename
 
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("write temp hub runtime file: %w", err)
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("sync temp hub runtime file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {

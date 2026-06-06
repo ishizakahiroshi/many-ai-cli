@@ -63,11 +63,6 @@ var previewableVideoExtensions = map[string]bool{
 	".mp4": true, ".webm": true, ".ogv": true, ".mov": true, ".m4v": true,
 }
 
-func isImageFile(absPath string) bool {
-	ext := strings.ToLower(filepath.Ext(absPath))
-	return previewableImageExtensions[ext]
-}
-
 func isMediaFile(absPath string) bool {
 	ext := strings.ToLower(filepath.Ext(absPath))
 	return previewableImageExtensions[ext] || previewableVideoExtensions[ext]
@@ -142,7 +137,7 @@ func (s *Server) handleFilesContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ファイル情報取得
-	info, err := os.Stat(pathParam)
+	info, err := os.Stat(pathParam) // #nosec G703 -- resolveAllowedFilePath で許可ルート配下を検証済み
 	if err != nil {
 		if os.IsNotExist(err) {
 			writeJSONError(w, http.StatusNotFound, "not_found", "not found")
@@ -157,7 +152,7 @@ func (s *Server) handleFilesContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ファイル読み込み（上限 1 MiB）
-	f, err := os.Open(pathParam)
+	f, err := os.Open(pathParam) // #nosec G703 -- resolveAllowedFilePath で許可ルート配下を検証済み
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "open_failed", "cannot open file")
 		return
@@ -206,7 +201,7 @@ func (s *Server) handleFilesAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	info, err := os.Stat(pathParam)
+	info, err := os.Stat(pathParam) // #nosec G703 -- resolveAllowedFilePath で許可ルート配下を検証済み
 	if err != nil {
 		if os.IsNotExist(err) {
 			writeJSONError(w, http.StatusNotFound, "not_found", "not found")
@@ -220,7 +215,7 @@ func (s *Server) handleFilesAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	f, err := os.Open(pathParam)
+	f, err := os.Open(pathParam) // #nosec G703 -- resolveAllowedFilePath で許可ルート配下を検証済み
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "open_failed", "cannot open file")
 		return

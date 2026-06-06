@@ -222,7 +222,6 @@ func (w *Writer) Event(event any) error {
 
 // isSessionEndEvent は event が session_end タイプか判定する。
 func isSessionEndEvent(event any) bool {
-	type typer interface{ getType() string }
 	// map[string]any の場合
 	if m, ok := event.(map[string]any); ok {
 		return m["type"] == "session_end"

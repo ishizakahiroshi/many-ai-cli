@@ -77,6 +77,12 @@ checksum:
   name_template: "SHA256SUMS.txt"
   algorithm: sha256
 
+# SBOM (Software Bill of Materials): 各アーカイブの依存一覧を SPDX JSON で生成する。
+# 利用者が Grype 等の脆弱性スキャナにかけられるようにするサプライチェーン透明性対策。
+# syft は release.yml の anchore/sbom-action/download-syft でインストールする。
+sboms:
+  - artifacts: archive
+
 signs:
   - artifacts: checksum
     cmd: cosign
