@@ -1213,6 +1213,11 @@ export const FilesTreeView = (function () {
     moveBtn.textContent = '↗';
     moveBtn.disabled = true;
 
+    const newFileBtn = document.createElement('button');
+    newFileBtn.className = 'files-tree-toolbar-btn';
+    newFileBtn.title = t('files_tree_new_file_tooltip') || 'Create new file';
+    newFileBtn.textContent = '📄+';
+
     const newFolderBtn = document.createElement('button');
     newFolderBtn.className = 'files-tree-toolbar-btn';
     newFolderBtn.title = t('files_tree_new_folder_tooltip') || 'Create new folder';
@@ -1227,6 +1232,7 @@ export const FilesTreeView = (function () {
     toolbar.appendChild(openFolderBtn);
     toolbar.appendChild(searchBtn);
     toolbar.appendChild(moveBtn);
+    toolbar.appendChild(newFileBtn);
     toolbar.appendChild(newFolderBtn);
 
     // 検索インプット（初期非表示）
@@ -1506,6 +1512,30 @@ export const FilesTreeView = (function () {
       moveBtn.disabled = selectedAbsPaths.size === 0;
     }
 
+    function selectCreatedFile(absPath, name) {
+      if (!absPath) return;
+      const createdEl = treeArea.querySelector(`.files-tree-item[data-abs-path="${CSS.escape(absPath)}"]`);
+      if (createdEl && typeof createdEl.click === 'function') {
+        createdEl.click();
+        if (typeof createdEl.scrollIntoView === 'function') createdEl.scrollIntoView({ block: 'nearest' });
+        return;
+      }
+      selectedAbsPaths.clear();
+      selectedAbsPaths.add(absPath);
+      lastClickedAbsPath = absPath;
+      updateMoveBtn();
+      highlightSelected();
+      if (onFileSelect) {
+        onFileSelect({
+          name: name || absPath.split(/[\\/]/).pop() || absPath,
+          relPath: computeRelPath(filesRoot, absPath),
+          absPath,
+          type: 'file',
+          children: [],
+        });
+      }
+    }
+
     function openMoveDialog() {
       if (!currentTree || selectedAbsPaths.size === 0) return;
       const dialog = document.createElement('dialog');
@@ -1584,6 +1614,44 @@ export const FilesTreeView = (function () {
     }
 
     moveBtn.addEventListener('click', () => openMoveDialog());
+
+    newFileBtn.addEventListener('click', async () => {
+      const name = window.prompt(t('files_tree_new_file_prompt') || 'Enter new file name');
+      if (name == null) return;
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      try {
+        const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
+        const url = `/api/files-create?token=${encodeURIComponent(token)}${sessionQs}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dir: filesRoot, name: trimmed }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+          await loadTree();
+          selectCreatedFile(data.newAbs || '', trimmed);
+          return;
+        }
+        const errCode = data && data.error;
+        let errLabel;
+        if (errCode === 'already_exists') {
+          errLabel = t('files_tree_new_file_error_already_exists') || 'A file or folder with that name already exists';
+        } else if (errCode === 'bad_request') {
+          errLabel = t('files_tree_new_file_error_bad_request') || 'Invalid file name';
+        } else if (errCode === 'forbidden') {
+          errLabel = t('files_tree_new_file_error_forbidden') || 'Creating files here is not allowed';
+        } else if (errCode === 'not_previewable') {
+          errLabel = t('files_tree_new_file_error_not_previewable') || 'Use a text file extension';
+        } else {
+          errLabel = (data && (data.detail || data.error)) || ('HTTP ' + res.status);
+        }
+        showToast(`${t('files_tree_new_file_failed') || 'Failed to create file'}: ${errLabel}`);
+      } catch (err) {
+        showToast(`${t('files_tree_new_file_failed') || 'Failed to create file'}: ${String(err)}`);
+      }
+    });
 
     newFolderBtn.addEventListener('click', async () => {
       const name = window.prompt(t('files_tree_new_folder_prompt') || 'Enter new folder name');

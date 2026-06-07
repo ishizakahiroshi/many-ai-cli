@@ -88,14 +88,13 @@ export async function unsubscribeWebPush() {
 }
 
 export async function fetchPushStatus() {
-  if (!token) return { supported: false, subscriptions: 0 };
-  const res = await fetch(`/api/push/status?token=${encodeURIComponent(token)}`);
+  const res = await fetch(`/api/push/status?token=${encodeURIComponent(token || '')}`);
   if (!res.ok) return { supported: false, subscriptions: 0 };
   return res.json();
 }
 
 async function fetchPushPublicKey() {
-  const res = await fetch(`/api/push/vapid-public-key?token=${encodeURIComponent(token)}`);
+  const res = await fetch(`/api/push/vapid-public-key?token=${encodeURIComponent(token || '')}`);
   if (!res.ok) throw new Error(`vapid key ${res.status}`);
   const data = await res.json();
   if (!data.public_key) throw new Error('missing_vapid_key');
@@ -103,7 +102,7 @@ async function fetchPushPublicKey() {
 }
 
 async function savePushSubscription(subscription) {
-  const res = await fetch(`/api/push/subscriptions?token=${encodeURIComponent(token)}`, {
+  const res = await fetch(`/api/push/subscriptions?token=${encodeURIComponent(token || '')}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(subscription.toJSON ? subscription.toJSON() : subscription),
@@ -113,7 +112,7 @@ async function savePushSubscription(subscription) {
 
 async function deletePushSubscription(subscription) {
   const json = subscription.toJSON ? subscription.toJSON() : subscription;
-  const res = await fetch(`/api/push/subscriptions?token=${encodeURIComponent(token)}`, {
+  const res = await fetch(`/api/push/subscriptions?token=${encodeURIComponent(token || '')}`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys || {} }),
@@ -122,9 +121,9 @@ async function deletePushSubscription(subscription) {
 }
 
 function rememberHubToken(registration) {
-  if (!registration || !token) return;
+  if (!registration) return;
   const target = registration.active || navigator.serviceWorker.controller;
-  if (target) target.postMessage({ type: 'any-ai-cli-token', token });
+  if (target) target.postMessage({ type: 'any-ai-cli-token', token: token || '' });
 }
 
 function urlBase64ToUint8Array(base64String) {

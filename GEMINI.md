@@ -4,7 +4,6 @@
 
 このリポジトリの運用ガイドは `CLAUDE.md` にある。
 
-- Global rules (all AIs): `~/.claude/CLAUDE.md` — load this first (actual path: see `./GEMINI.local.md`)
 - Project overview & task index: `./CLAUDE.md`
 - Detailed guides (read on demand):
   - `./CLAUDE/coding.md` — Go / Vue 3 conventions, PTY, detector
@@ -15,7 +14,7 @@
 - Design (source of truth): `./docs/any-ai-cli-design-v0.1.0.md`
 - Local/private additions (if present): `./CLAUDE.local.md`
 
-ガイドが衝突したときは `CLAUDE.md` を優先。
+個人グローバルルールは各 AI ツールのグローバル設定に置く。公開リポジトリ内のガイドが衝突したときは `CLAUDE.md` を優先。
 
 ## Gemini 特記
 

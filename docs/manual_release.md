@@ -130,12 +130,23 @@ done
 
 ## ローカル検証
 
-タグを打つ前に最低限これを通す。
+タグを打つ前に最低限これを通す。`go.mod` の `go` directive が v0.3.0 の release baseline（現在は `go 1.25.11`）になっていることも確認する。
 
 ```powershell
 go test ./...
 go vet ./...
 go mod verify
+go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+pushd web
+bun run check
+bun run test
+popd
+```
+
+CGO と C compiler がある環境では race detector も通す。Windows ローカルで `gcc` がない場合は WSL/Linux/CI など別環境で実行し、結果を precheck 記録に残す。
+
+```powershell
+go test -race ./...
 ```
 
 `goreleaser` がローカルに入っている場合は設定チェックも行う。
@@ -151,6 +162,10 @@ goreleaser check
 ```powershell
 .\scripts\local\check-third-party.ps1
 ```
+
+vendored browser library は `npm audit` の対象外なので、更新した実体・`web/src/vendor/THIRD_PARTY_LICENSES.txt`・About 画面の版数を一致させる。v0.3.0 で更新を defer する場合は、既知脆弱性確認結果と defer 理由を `docs/local/bugfix_v0-3-0-release-precheck_YYYY-MM-DD.md` に残す。
+
+Hub UI smoke では少なくとも spawn（Ollama Cloud route を含む）、reconnect、Files preview、path open、Git tab、approval action bar、settings save、Workbench history/export を確認し、同じ precheck 記録に結果を書く。
 
 ## CHANGELOG.md の更新
 

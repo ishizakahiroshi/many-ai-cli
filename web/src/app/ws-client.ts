@@ -4,7 +4,7 @@ import { showToast, token } from './util.js';
 import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, approvalVisibleCache, autoDismissTimers, chatHistory, deriveProjectKeyFromCwd, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, multiQuestionVisibleCache, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
 import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLocalSessionHistory, resetLocalSessionHistory } from '../app.js';
 import { activateSession, render, renderSessionList, renderSessionStateUpdate, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
-import { ensureTerminal, queuePendingTerminalChunk, writePTYChunk } from './terminal.js';
+import { applyRemotePtyResize, ensureTerminal, queuePendingTerminalChunk, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup } from './settings.js';
 import { setMultiQuestionBannerVisible } from './approval-ui.js';
 import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, hideActionBar, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
@@ -25,6 +25,13 @@ let _wsReconnectTimer = null;
 // 同じ番号の別セッションに旧セッションのチャット履歴・バッファが混入する。
 let _hubInstance = null;
 let _pendingOpenSessionId = parseInt(new URLSearchParams(location.search).get('session_id') || '0', 10) || 0;
+
+const REGISTER_DEFAULT_COLS = 200;
+const REGISTER_DEFAULT_ROWS = 50;
+const REGISTER_MIN_USABLE_COLS = 80;
+const REGISTER_MIN_USABLE_ROWS = 20;
+const REGISTER_APPROX_CELL_WIDTH = 7.5;
+const REGISTER_APPROX_CELL_HEIGHT = 16;
 
 function openSessionFromNotification(sessionId) {
   const id = Number(sessionId || 0);
@@ -75,20 +82,31 @@ export function syncElapsedTimer() {
 document.addEventListener('visibilitychange', syncElapsedTimer);
 
 export function _sendRegister() {
+  const { cols, rows } = estimateRegisterTerminalSize();
+  ws.send(JSON.stringify({ type: 'register', role: 'ui', token, cols, rows, ui_active_session_id: activeSessionId || 0 }));
+}
+
+function estimateRegisterTerminalSize(): { cols: number; rows: number } {
+  const active = activeSessionId !== null ? terminals.get(activeSessionId) : null;
+  const termCols = Number(active?.term?.cols || 0);
+  const termRows = Number(active?.term?.rows || 0);
+  if (termCols >= REGISTER_MIN_USABLE_COLS && termRows >= REGISTER_MIN_USABLE_ROWS) {
+    return { cols: termCols, rows: termRows };
+  }
+
   const area = document.getElementById('terminal-area');
   // clientWidth/Height が「ゼロではないが極小（レイアウト未確定 / 親が
-  // display:none 直後など）」のときに `0 || 200` のフォールバックが効かず、
-  // cols=1〜13 のような不正値が Hub の lastUICols として記録される。
-  // その値で spawn された新セッションは極狭幅 PTY で起動し、内部で強制改行
-  // された出力を吐く。xterm 側で再 fit しても過去行はリフローされず、
-  // 1 行 5〜7 文字のような折り返しが残り続ける症状になる。
-  // 安全しきい値未満は既定値（200×50）にフォールバック。
-  // 実寸は attach 後 whenLayoutReady → sendResize で送り直される。
+  // display:none 直後など）」のときに、小さい cols が Hub の lastUICols として
+  // 記録されると、新規セッションの初期 PTY 幅まで狭くなる。Provider CLI は
+  // その幅でテキストをハード改行するため、後から resize しても過去行は直らない。
   const cw = area ? area.clientWidth : 0;
   const ch = area ? area.clientHeight : 0;
-  const cols = cw >= 120 ? Math.floor(cw / 7.5) : 200;
-  const rows = ch >= 80  ? Math.floor(ch / 16)  : 50;
-  ws.send(JSON.stringify({ type: 'register', role: 'ui', token, cols, rows, ui_active_session_id: activeSessionId || 0 }));
+  const approxCols = cw > 0 ? Math.floor(cw / REGISTER_APPROX_CELL_WIDTH) : 0;
+  const approxRows = ch > 0 ? Math.floor(ch / REGISTER_APPROX_CELL_HEIGHT) : 0;
+  return {
+    cols: approxCols >= REGISTER_MIN_USABLE_COLS ? approxCols : REGISTER_DEFAULT_COLS,
+    rows: approxRows >= REGISTER_MIN_USABLE_ROWS ? approxRows : REGISTER_DEFAULT_ROWS,
+  };
 }
 
 export function sessionLayoutSnapshot(s) {
@@ -226,6 +244,11 @@ export function _connectWs() {
     if (window.approvalPatternsUI && typeof window.approvalPatternsUI.onOfficialUpdated === 'function') {
       window.approvalPatternsUI.onOfficialUpdated(Array.isArray(m.providers) ? m.providers : []);
     }
+    return;
+  }
+
+  if (m.type === 'pty_resize') {
+    applyRemotePtyResize(m.session_id, m.cols, m.rows);
     return;
   }
 

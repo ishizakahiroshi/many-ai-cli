@@ -273,15 +273,17 @@
       <details class="settings-section" data-section="voice">
         <summary class="settings-section-title"><span data-i18n="settings_voice_title">音声入力</span></summary>
         <div class="settings-section-body">
-          <div class="settings-row">
-            <span class="settings-label" data-i18n="settings_voice_input_toggle">音声入力（🎤 ボタン）</span>
-            <label class="approval-toggle">
-              <input type="checkbox" id="voice-input-enabled">
-              <span class="approval-toggle-slider"></span>
-            </label>
+          <div class="settings-row settings-row--stacked">
+            <span class="settings-label" data-i18n="settings_voice_engine">認識エンジン</span>
+            <div id="voice-engine-segment" class="settings-segmented" role="radiogroup" aria-label="Voice recognition engine">
+              <button type="button" class="settings-segment-btn" data-voice-engine="off" role="radio" aria-checked="false" data-i18n="settings_voice_engine_off">OFF</button>
+              <button type="button" class="settings-segment-btn" data-voice-engine="browser" role="radio" aria-checked="false" data-i18n="settings_voice_engine_browser">ブラウザ内蔵</button>
+              <button type="button" class="settings-segment-btn" data-voice-engine="whisper" role="radio" aria-checked="false" data-i18n="settings_voice_engine_whisper">Whisper（ローカル）</button>
+            </div>
           </div>
-          <div class="settings-note" data-i18n="settings_voice_input_privacy">ブラウザ内蔵認識のため、音声はブラウザベンダー（Google / Microsoft）の音声認識サーバへ送信されます。音声を外部に送りたくない場合は OFF にしてください（Alt+V も無効になります）。</div>
-          <div class="settings-row">
+          <div id="voice-engine-desc" class="settings-note" data-i18n="settings_voice_engine_desc_browser">ブラウザ内蔵認識のため、音声はブラウザベンダー（Google / Microsoft）の音声認識サーバへ送信されます。</div>
+          <div id="voice-browser-unavailable-note" class="settings-note settings-note-warn" hidden data-i18n="settings_voice_browser_unavailable">この端末ではブラウザ内蔵認識を利用できません。Whisper または OFF を選択してください。</div>
+          <div class="settings-row" id="voice-grace-row">
             <span class="settings-label" data-i18n="settings_voice_grace">終了検知の待ち時間</span>
             <select id="voice-grace-select" class="settings-select">
               <option value="0">0</option>
@@ -293,7 +295,46 @@
             </select>
             <span class="settings-note" data-i18n="settings_voice_grace_unit">秒</span>
           </div>
-          <div class="settings-note" data-i18n="settings_voice_grace_desc">無音で自動終了した後、直近の発話から指定秒数以内なら認識を継続します。0 で即終了（現状の挙動）。</div>
+          <div class="settings-note" id="voice-grace-desc" data-i18n="settings_voice_grace_desc">無音で自動終了した後、直近の発話から指定秒数以内なら認識を継続します。0 で即終了（現状の挙動）。</div>
+          <div id="voice-whisper-settings" class="voice-whisper-settings" hidden>
+            <div class="settings-row">
+              <span class="settings-label" data-i18n="settings_voice_whisper_status">Whisper 接続</span>
+              <span id="voice-whisper-status" class="settings-status" data-i18n="settings_voice_whisper_status_config">Hub 設定を使用</span>
+            </div>
+            <div class="settings-note" data-i18n="settings_voice_whisper_config_desc">Hub の config.yaml にある voice.whisper.server_url を使います。未設定の場合は録音後に設定エラーを表示します。</div>
+            <div id="voice-whisper-managed-panel" class="voice-whisper-managed-panel" hidden>
+              <div class="settings-row">
+                <span class="settings-label" data-i18n="settings_voice_whisper_install_title">ローカル Whisper</span>
+                <span id="voice-whisper-managed-state" class="settings-status">-</span>
+              </div>
+              <div class="settings-row">
+                <span class="settings-label" data-i18n="settings_voice_whisper_model">モデル</span>
+                <select id="voice-whisper-model-select" class="settings-select"></select>
+              </div>
+              <div class="whisper-install-progress" id="voice-whisper-install-progress" hidden>
+                <div class="whisper-install-progress-bar" id="voice-whisper-install-progress-bar"></div>
+              </div>
+              <div class="settings-row settings-row-actions">
+                <button type="button" id="voice-whisper-install-btn" class="settings-link-btn settings-inline-btn" data-i18n="settings_voice_whisper_install">インストール</button>
+                <button type="button" id="voice-whisper-start-btn" class="settings-link-btn settings-inline-btn" data-i18n="settings_voice_whisper_start">起動</button>
+                <button type="button" id="voice-whisper-stop-btn" class="settings-link-btn settings-inline-btn" data-i18n="settings_voice_whisper_stop">停止</button>
+                <button type="button" id="voice-whisper-uninstall-btn" class="settings-link-btn settings-inline-btn danger" data-i18n="settings_voice_whisper_uninstall">削除</button>
+              </div>
+              <div id="voice-whisper-managed-note" class="settings-note"></div>
+            </div>
+            <div class="settings-row">
+              <span class="settings-label" data-i18n="settings_voice_whisper_auto_submit">自動送信トリガー</span>
+              <label class="approval-toggle">
+                <input type="checkbox" id="voice-whisper-auto-submit">
+                <span class="approval-toggle-slider"></span>
+              </label>
+            </div>
+            <div class="settings-note settings-note-warn" data-i18n="settings_voice_whisper_auto_submit_desc">Whisper は無音や短い音でも誤認識することがあります。誤送信を避けるため、既定では認識結果を入力欄に挿入するだけです。</div>
+            <div class="settings-note" data-i18n="settings_voice_whisper_external_desc">外部 API URL を設定した場合、音声データはその外部サービスへ送信されます。</div>
+            <div class="settings-row">
+              <a class="settings-link-btn settings-inline-btn" href="https://github.com/ishizakahiroshi/any-ai-cli/blob/main/docs/manual_whisper.md" target="_blank" rel="noopener noreferrer" data-i18n="settings_voice_whisper_setup_link">セットアップ手順を開く</a>
+            </div>
+          </div>
           <div class="voice-diagnostics-panel" id="voice-diagnostics-panel">
             <div class="voice-diagnostics-head">
               <span class="settings-label" data-i18n="voice_diag_title">音声入力診断</span>
@@ -755,26 +796,26 @@
           <ul class="about-oss-list">
             <li class="about-oss-section" data-i18n="about_oss_section_frontend">Web Frontend</li>
             <li class="about-oss-item">
-              <a class="about-oss-link" href="https://github.com/xtermjs/xterm.js/releases/tag/5.3.0" target="_blank" rel="noopener noreferrer">
-                <p class="about-oss-name">xterm.js 5.3.0</p>
+              <a class="about-oss-link" href="https://github.com/xtermjs/xterm.js/releases/tag/6.0.0" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">xterm.js 6.0.0</p>
                 <p class="about-oss-desc" data-i18n="about_oss_xterm_desc">MIT License. Used as the terminal emulator.</p>
               </a>
             </li>
             <li class="about-oss-item">
-              <a class="about-oss-link" href="https://github.com/xtermjs/xterm.js/tree/5.3.0/addons/xterm-addon-fit" target="_blank" rel="noopener noreferrer">
-                <p class="about-oss-name">xterm-addon-fit 0.8.0</p>
+              <a class="about-oss-link" href="https://github.com/xtermjs/xterm.js/tree/6.0.0/addons/addon-fit" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">xterm-addon-fit 0.11.0</p>
                 <p class="about-oss-desc" data-i18n="about_oss_fit_desc">MIT License. Used for automatic terminal size adjustment.</p>
               </a>
             </li>
             <li class="about-oss-item">
-              <a class="about-oss-link" href="https://github.com/xtermjs/xterm.js/tree/5.3.0/addons/xterm-addon-unicode11" target="_blank" rel="noopener noreferrer">
-                <p class="about-oss-name">xterm-addon-unicode11 0.6.0</p>
+              <a class="about-oss-link" href="https://github.com/xtermjs/xterm.js/tree/6.0.0/addons/addon-unicode11" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">xterm-addon-unicode11 0.9.0</p>
                 <p class="about-oss-desc" data-i18n="about_oss_unicode_desc">MIT License. Used for Unicode 11 character width support.</p>
               </a>
             </li>
             <li class="about-oss-item">
-              <a class="about-oss-link" href="https://github.com/xtermjs/xterm.js/tree/5.3.0/addons/xterm-addon-web-links" target="_blank" rel="noopener noreferrer">
-                <p class="about-oss-name">xterm-addon-web-links 0.9.0</p>
+              <a class="about-oss-link" href="https://github.com/xtermjs/xterm.js/tree/6.0.0/addons/addon-web-links" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">xterm-addon-web-links 0.12.0</p>
                 <p class="about-oss-desc" data-i18n="about_oss_links_desc">MIT License. Used for URL link detection in terminal.</p>
               </a>
             </li>
@@ -805,37 +846,37 @@
             <li class="about-oss-section" data-i18n="about_oss_section_backend">Go Backend</li>
             <li class="about-oss-item">
               <a class="about-oss-link" href="https://github.com/creack/pty" target="_blank" rel="noopener noreferrer">
-                <p class="about-oss-name">creack/pty 1.1.21</p>
+                <p class="about-oss-name">creack/pty 1.1.24</p>
                 <p class="about-oss-desc" data-i18n="about_oss_pty_desc">MIT License. Used for PTY control on Unix.</p>
               </a>
             </li>
             <li class="about-oss-item">
               <a class="about-oss-link" href="https://github.com/aymanbagabas/go-pty" target="_blank" rel="noopener noreferrer">
-                <p class="about-oss-name">aymanbagabas/go-pty 0.2.2</p>
+                <p class="about-oss-name">aymanbagabas/go-pty 0.2.3</p>
                 <p class="about-oss-desc" data-i18n="about_oss_gopty_desc">MIT License. Used for PTY control on Windows (ConPTY).</p>
               </a>
             </li>
             <li class="about-oss-item">
               <a class="about-oss-link" href="https://pkg.go.dev/golang.org/x/net" target="_blank" rel="noopener noreferrer">
-                <p class="about-oss-name">golang.org/x/net v0.24.0</p>
+                <p class="about-oss-name">golang.org/x/net v0.55.0</p>
                 <p class="about-oss-desc" data-i18n="about_oss_gonet_desc">BSD-3-Clause License. Used for WebSocket.</p>
               </a>
             </li>
             <li class="about-oss-item">
               <a class="about-oss-link" href="https://pkg.go.dev/golang.org/x/term" target="_blank" rel="noopener noreferrer">
-                <p class="about-oss-name">golang.org/x/term v0.42.0</p>
+                <p class="about-oss-name">golang.org/x/term v0.43.0</p>
                 <p class="about-oss-desc" data-i18n="about_oss_goterm_desc">BSD-3-Clause License. Used for terminal control.</p>
               </a>
             </li>
             <li class="about-oss-item">
               <a class="about-oss-link" href="https://pkg.go.dev/golang.org/x/crypto" target="_blank" rel="noopener noreferrer">
-                <p class="about-oss-name">golang.org/x/crypto v0.22.0</p>
+                <p class="about-oss-name">golang.org/x/crypto v0.52.0</p>
                 <p class="about-oss-desc" data-i18n="about_oss_gocrypto_desc">BSD-3-Clause License. (indirect dependency)</p>
               </a>
             </li>
             <li class="about-oss-item">
               <a class="about-oss-link" href="https://pkg.go.dev/golang.org/x/sys" target="_blank" rel="noopener noreferrer">
-                <p class="about-oss-name">golang.org/x/sys v0.43.0</p>
+                <p class="about-oss-name">golang.org/x/sys v0.45.0</p>
                 <p class="about-oss-desc" data-i18n="about_oss_gosys_desc">BSD-3-Clause License. (indirect dependency)</p>
               </a>
             </li>
@@ -859,8 +900,14 @@
             </li>
             <li class="about-oss-item">
               <a class="about-oss-link" href="https://github.com/u-root/u-root" target="_blank" rel="noopener noreferrer">
-                <p class="about-oss-name">github.com/u-root/u-root 0.11.0</p>
+                <p class="about-oss-name">github.com/u-root/u-root 0.16.0</p>
                 <p class="about-oss-desc" data-i18n="about_oss_uroot_desc">BSD-3-Clause License. (indirect dependency)</p>
+              </a>
+            </li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://pkg.go.dev/modernc.org/sqlite" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">modernc.org/sqlite v1.51.0</p>
+                <p class="about-oss-desc" data-i18n="about_oss_sqlite_desc">BSD-3-Clause License. Used for local session history storage.</p>
               </a>
             </li>
           </ul>

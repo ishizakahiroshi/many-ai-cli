@@ -3,12 +3,16 @@ package hub
 import (
 	"bytes"
 	"encoding/json"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -73,6 +77,57 @@ func TestRequireToken_Invalid(t *testing.T) {
 	}
 }
 
+func TestRequireTokenLoopbackBypassDefaultOff(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "127.0.0.1:34567"
+	w := httptest.NewRecorder()
+	if s.requireToken(w, req) {
+		t.Fatal("expected tokenless loopback request to fail while bypass is disabled")
+	}
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestRequireTokenLoopbackBypassEnabled(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+	s.cfg.Hub.AllowLoopbackWithoutToken = true
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "127.0.0.1:34567"
+	w := httptest.NewRecorder()
+	if !s.requireToken(w, req) {
+		t.Fatalf("expected tokenless loopback request to pass, status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestRequireTokenTrustedNetworkBypassEnabled(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+	s.cfg.Hub.AllowLoopbackWithoutToken = true
+	s.cfg.Hub.TrustedNetworks = []string{"172.19.0.1/32"}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "172.19.0.1:34567"
+	w := httptest.NewRecorder()
+	if !s.requireToken(w, req) {
+		t.Fatalf("expected trusted network request to pass, status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestRequireTokenBypassRejectsUntrustedRemote(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+	s.cfg.Hub.AllowLoopbackWithoutToken = true
+	s.cfg.Hub.TrustedNetworks = []string{"172.19.0.1/32"}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "203.0.113.10:34567"
+	w := httptest.NewRecorder()
+	if s.requireToken(w, req) {
+		t.Fatal("expected tokenless untrusted request to fail")
+	}
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
 func TestAllowedHubHost(t *testing.T) {
 	cases := []struct {
 		host string
@@ -89,6 +144,15 @@ func TestAllowedHubHost(t *testing.T) {
 		if got := isAllowedHubHost(c.host, c.port); got != c.want {
 			t.Fatalf("isAllowedHubHost(%q, %d) = %v, want %v", c.host, c.port, got, c.want)
 		}
+	}
+}
+
+func TestAllowedHubHostConfig(t *testing.T) {
+	if got := isAllowedHubHost("10.8.0.1:47777", 47777); got {
+		t.Fatal("isAllowedHubHost without configured allowed host = true, want false")
+	}
+	if got := isAllowedHubHost("10.8.0.1:47777", 47777, "10.8.0.1"); !got {
+		t.Fatal("isAllowedHubHost with configured allowed host = false, want true")
 	}
 }
 
@@ -109,6 +173,15 @@ func TestAllowedHubOrigin(t *testing.T) {
 		if got := isAllowedHubOrigin(c.origin, c.port); got != c.want {
 			t.Fatalf("isAllowedHubOrigin(%q, %d) = %v, want %v", c.origin, c.port, got, c.want)
 		}
+	}
+}
+
+func TestAllowedHubOriginConfig(t *testing.T) {
+	if got := isAllowedHubOrigin("http://10.8.0.1:47777", 47777); got {
+		t.Fatal("isAllowedHubOrigin without configured allowed host = true, want false")
+	}
+	if got := isAllowedHubOrigin("http://10.8.0.1:47777", 47777, "10.8.0.1"); !got {
+		t.Fatal("isAllowedHubOrigin with configured allowed host = false, want true")
 	}
 }
 
@@ -176,6 +249,17 @@ func TestWSHandshakeAllowsLoopbackHostAndOrigin(t *testing.T) {
 	}
 }
 
+func TestWSHandshakeAllowsConfiguredHostAndOrigin(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+	s.cfg.Hub.AllowedHosts = []string{"10.8.0.1"}
+	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
+	req.Host = "10.8.0.1:47777"
+	req.Header.Set("Origin", "http://10.8.0.1:47777")
+	if err := s.wsHandshake(&websocket.Config{}, req); err != nil {
+		t.Fatalf("expected configured Host/Origin to pass: %v", err)
+	}
+}
+
 func TestWSHandshakeRejectsUnexpectedOrigin(t *testing.T) {
 	s := newSecTestServer(t, t.TempDir())
 	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
@@ -193,6 +277,68 @@ func TestWSHandshakeAllowsEmptyOriginForCLI(t *testing.T) {
 	if err := s.wsHandshake(&websocket.Config{}, req); err != nil {
 		t.Fatalf("expected empty Origin to pass for CLI clients: %v", err)
 	}
+}
+
+func TestRegisteredAPIRoutesRequireToken(t *testing.T) {
+	cfg := &config.Config{Token: "tok"}
+	cfg.Hub.Port = 47777
+	cfg.Hub.LogDir = t.TempDir()
+	s, err := NewServer(cfg, slog.Default(), true, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.sessionStore != nil {
+		t.Cleanup(func() { _ = s.sessionStore.Close() })
+	}
+
+	for _, path := range registeredAPIRoutes(t) {
+		req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:47777"+path, nil)
+		req.RemoteAddr = "203.0.113.10:34567"
+		w := httptest.NewRecorder()
+		s.httpSrv.Handler.ServeHTTP(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("%s without token returned status %d, want %d; body=%s", path, w.Code, http.StatusUnauthorized, w.Body.String())
+		}
+	}
+}
+
+func registeredAPIRoutes(t *testing.T) []string {
+	t.Helper()
+	seen := map[string]struct{}{}
+	for _, name := range []string{"server.go", "workbench_handlers.go"} {
+		path := filepath.Join("..", "..", "internal", "hub", name)
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok || len(call.Args) == 0 {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok || (sel.Sel.Name != "HandleFunc" && sel.Sel.Name != "Handle") {
+				return true
+			}
+			lit, ok := call.Args[0].(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			value, err := strconv.Unquote(lit.Value)
+			if err == nil && strings.HasPrefix(value, "/api/") {
+				seen[value] = struct{}{}
+			}
+			return true
+		})
+	}
+	if len(seen) == 0 {
+		t.Fatal("no /api routes found")
+	}
+	routes := make([]string, 0, len(seen))
+	for route := range seen {
+		routes = append(routes, route)
+	}
+	return routes
 }
 
 func TestRequireToken_Empty(t *testing.T) {
@@ -513,6 +659,32 @@ func TestHandleOpenDirPathRejectsOutsideAllowedRoots(t *testing.T) {
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCheckOpenPathAllowedUsesSessionCWD(t *testing.T) {
+	hubRoot := t.TempDir()
+	sessionRoot := t.TempDir()
+	target := filepath.Join(sessionRoot, "child.txt")
+
+	s := newSecTestServer(t, hubRoot)
+	s.sessionsMu.Lock()
+	s.sessions[7] = &session{ID: 7, CWD: sessionRoot}
+	s.sessionsMu.Unlock()
+
+	reqWithoutSession := httptest.NewRequest(http.MethodPost, "/api/open-file?token=tok", nil)
+	wWithoutSession := httptest.NewRecorder()
+	if s.checkOpenPathAllowed(wWithoutSession, reqWithoutSession, target) {
+		t.Fatal("expected path outside Hub cwd to be rejected without session scope")
+	}
+	if wWithoutSession.Code != http.StatusForbidden {
+		t.Fatalf("status without session = %d, want %d: %s", wWithoutSession.Code, http.StatusForbidden, wWithoutSession.Body.String())
+	}
+
+	reqWithSession := httptest.NewRequest(http.MethodPost, "/api/open-file?token=tok&session=7", nil)
+	wWithSession := httptest.NewRecorder()
+	if !s.checkOpenPathAllowed(wWithSession, reqWithSession, target) {
+		t.Fatalf("expected path under session cwd to be allowed, status=%d body=%s", wWithSession.Code, wWithSession.Body.String())
 	}
 }
 

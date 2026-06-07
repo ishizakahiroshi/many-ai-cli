@@ -66,6 +66,27 @@ func TestStartupBannerShowsFromWindowsHintInWSL(t *testing.T) {
 	}
 }
 
+func TestStartupBannerShowsTokenlessAccessWarning(t *testing.T) {
+	t.Setenv("ANY_AI_CLI_WSL_LAUNCHER", "")
+	t.Setenv("WSL_INTEROP", "")
+	t.Setenv("WSL_DISTRO_NAME", "")
+	got := startupBanner("0.1.3", "127.0.0.1:47777", "abc123", startupBannerAccess{
+		AllowLoopbackWithoutToken: true,
+		TrustedNetworks:           []string{"172.19.0.1/32"},
+		AllowedHosts:              []string{"10.8.0.1"},
+	})
+
+	for _, want := range []string{
+		"Token-less loopback/trusted access: ENABLED",
+		"Trusted networks: 172.19.0.1/32",
+		"Allowed hosts: 10.8.0.1",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("startupBanner() missing %q in:\n%s", want, got)
+		}
+	}
+}
+
 func TestStartupBannerUsesAsciiUnderWindowsLauncher(t *testing.T) {
 	// wslutil.IsWindowsLauncherMode / IsWSL are no-ops on the Windows-native
 	// build (always false regardless of env). This test exercises Linux-side

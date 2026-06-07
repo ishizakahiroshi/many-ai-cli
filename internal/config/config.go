@@ -5,8 +5,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"net"
+	neturl "net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -308,6 +311,20 @@ type UserPrefsDisplay struct {
 	LockedMode string `yaml:"locked_mode,omitempty" json:"locked_mode,omitempty"`
 }
 
+type VoiceWhisperConfig struct {
+	ServerURL      string `yaml:"server_url,omitempty" json:"server_url,omitempty"`
+	RequestPath    string `yaml:"request_path,omitempty" json:"request_path,omitempty"`
+	Language       string `yaml:"language,omitempty" json:"language,omitempty"`
+	TimeoutSeconds int    `yaml:"timeout_seconds,omitempty" json:"timeout_seconds,omitempty"`
+	Managed        bool   `yaml:"managed,omitempty" json:"managed,omitempty"`
+	Model          string `yaml:"model,omitempty" json:"model,omitempty"`
+	ServerPort     int    `yaml:"server_port,omitempty" json:"server_port,omitempty"`
+}
+
+type VoiceConfig struct {
+	Whisper VoiceWhisperConfig `yaml:"whisper,omitempty" json:"whisper,omitempty"`
+}
+
 // UserPrefs はサーバ側（config.yaml: user_prefs:）に保存するユーザー機能設定。
 // 端末・ポート横断で共有する D2 分類の設定を全て保持する。
 type UserPrefs struct {
@@ -355,12 +372,15 @@ type LocalModel struct {
 
 type Config struct {
 	Hub struct {
-		Port                     int    `yaml:"port"`
-		OpenBrowser              bool   `yaml:"open_browser"`
-		AutoShutdown             bool   `yaml:"auto_shutdown"`
-		LogDir                   string `yaml:"log_dir"`
-		IdleTimeoutMin           int    `yaml:"idle_timeout_min"`
-		WrapperReconnectGraceSec int    `yaml:"wrapper_reconnect_grace_sec"`
+		Port                      int      `yaml:"port"`
+		OpenBrowser               bool     `yaml:"open_browser"`
+		AutoShutdown              bool     `yaml:"auto_shutdown"`
+		LogDir                    string   `yaml:"log_dir"`
+		IdleTimeoutMin            int      `yaml:"idle_timeout_min"`
+		WrapperReconnectGraceSec  int      `yaml:"wrapper_reconnect_grace_sec"`
+		AllowLoopbackWithoutToken bool     `yaml:"allow_loopback_without_token,omitempty" json:"allow_loopback_without_token,omitempty"`
+		TrustedNetworks           []string `yaml:"trusted_networks,omitempty" json:"trusted_networks,omitempty"`
+		AllowedHosts              []string `yaml:"allowed_hosts,omitempty" json:"allowed_hosts,omitempty"`
 	} `yaml:"hub"`
 	Log   LogConfig `yaml:"log"`
 	Spawn struct {
@@ -379,6 +399,7 @@ type Config struct {
 	Token                  string                 `yaml:"token"`
 	LocalModels            []LocalModel           `yaml:"local_models,omitempty" json:"local_models,omitempty"`
 	UserPrefs              UserPrefs              `yaml:"user_prefs,omitempty" json:"user_prefs,omitempty"`
+	Voice                  VoiceConfig            `yaml:"voice,omitempty" json:"voice,omitempty"`
 }
 
 func LoadOrCreate() (*Config, error) {
@@ -455,6 +476,10 @@ func LoadOrCreate() (*Config, error) {
 	cfg.SlashCmdSources = EffectiveSlashCmdSources(cfg.SlashCmdSources)
 	cfg.ApprovalPatternSources = EffectiveApprovalPatternSources(cfg.ApprovalPatternSources)
 	cfg.ApprovalProfiles = EffectiveApprovalProfiles(cfg.ApprovalProfiles)
+	cfg.applyDefaults()
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
 	return cfg, nil
 }
 
@@ -485,6 +510,8 @@ func defaultConfig(home string) *Config {
 	cfg.Log.SessionRetentionDays = 7
 	cfg.Log.SessionMaxSizeMB = 50
 	cfg.UserPrefs = UserPrefs{}
+	cfg.Voice.Whisper.Language = "ja"
+	cfg.Voice.Whisper.TimeoutSeconds = 60
 	cfg.SlashCmdSources = DefaultSlashCmdSources()
 	cfg.ApprovalPatternSources = DefaultApprovalPatternSources()
 	cfg.ApprovalProfiles = DefaultApprovalProfiles()
@@ -492,6 +519,10 @@ func defaultConfig(home string) *Config {
 }
 
 func Save(cfg *Config) error {
+	cfg.applyDefaults()
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
 	dir, err := Dir()
 	if err != nil {
 		return err
@@ -535,6 +566,8 @@ func Save(cfg *Config) error {
 func (cfg *Config) Clone() *Config {
 	c := *cfg // shallow copy of all scalar/struct fields
 	c.UserPrefs = cfg.UserPrefs.Clone()
+	c.Hub.TrustedNetworks = cloneStringSlice(cfg.Hub.TrustedNetworks)
+	c.Hub.AllowedHosts = cloneStringSlice(cfg.Hub.AllowedHosts)
 
 	// Deep-copy map fields
 	if cfg.Spawn.LastModel != nil {
@@ -548,6 +581,125 @@ func (cfg *Config) Clone() *Config {
 		c.LocalModels = s
 	}
 	return &c
+}
+
+func (cfg *Config) applyDefaults() {
+	if cfg == nil {
+		return
+	}
+	if strings.TrimSpace(cfg.Voice.Whisper.Language) == "" {
+		cfg.Voice.Whisper.Language = "ja"
+	}
+	if cfg.Voice.Whisper.TimeoutSeconds <= 0 {
+		cfg.Voice.Whisper.TimeoutSeconds = 60
+	}
+	if strings.TrimSpace(cfg.Voice.Whisper.Model) == "" {
+		cfg.Voice.Whisper.Model = "large-v3-turbo-q5_0"
+	}
+}
+
+func (cfg *Config) Validate() error {
+	if cfg == nil {
+		return nil
+	}
+	if err := validateTrustedNetworks(cfg.Hub.TrustedNetworks); err != nil {
+		return err
+	}
+	if err := validateAllowedHosts(cfg.Hub.AllowedHosts); err != nil {
+		return err
+	}
+	if err := validateVoiceWhisper(cfg.Voice.Whisper); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateVoiceWhisper(whisper VoiceWhisperConfig) error {
+	serverURL := strings.TrimSpace(whisper.ServerURL)
+	if serverURL != "" {
+		u, err := neturl.Parse(serverURL)
+		if err != nil || u.Scheme != "http" || u.Host == "" {
+			return fmt.Errorf("voice.whisper.server_url must be a localhost http URL")
+		}
+		host := strings.TrimSuffix(strings.ToLower(strings.Trim(u.Hostname(), "[]")), ".")
+		if host != "127.0.0.1" && host != "localhost" && host != "::1" {
+			return fmt.Errorf("voice.whisper.server_url must point to localhost")
+		}
+	}
+	requestPath := strings.TrimSpace(whisper.RequestPath)
+	if requestPath != "" && (!strings.HasPrefix(requestPath, "/") || strings.Contains(requestPath, "://")) {
+		return fmt.Errorf("voice.whisper.request_path must be empty or start with /")
+	}
+	if whisper.TimeoutSeconds < 1 || whisper.TimeoutSeconds > 300 {
+		return fmt.Errorf("voice.whisper.timeout_seconds must be between 1 and 300")
+	}
+	if whisper.ServerPort != 0 && (whisper.ServerPort < 1024 || whisper.ServerPort > 65535) {
+		return fmt.Errorf("voice.whisper.server_port must be between 1024 and 65535")
+	}
+	return nil
+}
+
+func validateTrustedNetworks(networks []string) error {
+	for _, raw := range networks {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			return fmt.Errorf("hub.trusted_networks contains empty CIDR")
+		}
+		_, cidr, err := net.ParseCIDR(value)
+		if err != nil {
+			return fmt.Errorf("hub.trusted_networks %q: %w", raw, err)
+		}
+		ones, bits := cidr.Mask.Size()
+		if bits == 0 || ones == 0 {
+			return fmt.Errorf("hub.trusted_networks %q is too broad", raw)
+		}
+	}
+	return nil
+}
+
+func validateAllowedHosts(hosts []string) error {
+	for _, raw := range hosts {
+		host := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(raw)), ".")
+		if host == "" {
+			return fmt.Errorf("hub.allowed_hosts contains empty host")
+		}
+		if _, _, err := net.SplitHostPort(host); err == nil {
+			return fmt.Errorf("hub.allowed_hosts %q must not include a port", raw)
+		}
+		if strings.Contains(host, "*") || strings.Contains(host, "://") || strings.ContainsAny(host, "/\\") {
+			return fmt.Errorf("hub.allowed_hosts %q is not a host name or IP literal", raw)
+		}
+		if ip := net.ParseIP(strings.Trim(host, "[]")); ip != nil {
+			continue
+		}
+		if !isValidAllowedHostname(host) {
+			return fmt.Errorf("hub.allowed_hosts %q is not a valid host name", raw)
+		}
+	}
+	return nil
+}
+
+func isValidAllowedHostname(host string) bool {
+	if len(host) > 253 {
+		return false
+	}
+	labels := strings.Split(host, ".")
+	for _, label := range labels {
+		if label == "" || len(label) > 63 {
+			return false
+		}
+		for i, r := range label {
+			isAlphaNum := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+			if isAlphaNum {
+				continue
+			}
+			if r == '-' && i > 0 && i < len(label)-1 {
+				continue
+			}
+			return false
+		}
+	}
+	return true
 }
 
 func cloneStringSlice(in []string) []string {

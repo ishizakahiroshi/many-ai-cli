@@ -139,11 +139,74 @@ func requestToken(r *http.Request) string {
 }
 
 func (s *Server) requireToken(w http.ResponseWriter, r *http.Request) bool {
-	if !validToken(requestToken(r), s.cfg.Token) {
+	if !s.validTokenOrTrustedRemote(requestToken(r), r.RemoteAddr) {
 		writeJSONError(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
 		return false
 	}
 	return true
+}
+
+func (s *Server) validTokenOrTrustedRemote(got, remoteAddr string) bool {
+	s.cfgMu.Lock()
+	want := s.cfg.Token
+	allowBypass := s.cfg.Hub.AllowLoopbackWithoutToken
+	trustedNetworks := append([]string(nil), s.cfg.Hub.TrustedNetworks...)
+	s.cfgMu.Unlock()
+	if validToken(got, want) {
+		return true
+	}
+	if !allowBypass {
+		return false
+	}
+	if isLoopbackRemote(remoteAddr) {
+		return true
+	}
+	return isTrustedRemote(remoteAddr, parseTrustedNetworks(trustedNetworks))
+}
+
+func remoteAddrIP(remoteAddr string) net.IP {
+	value := strings.TrimSpace(remoteAddr)
+	if value == "" {
+		return nil
+	}
+	host, _, err := net.SplitHostPort(value)
+	if err == nil {
+		value = host
+	}
+	value = strings.Trim(value, "[]")
+	if i := strings.LastIndex(value, "%"); i >= 0 {
+		value = value[:i]
+	}
+	return net.ParseIP(value)
+}
+
+func isLoopbackRemote(remoteAddr string) bool {
+	ip := remoteAddrIP(remoteAddr)
+	return ip != nil && ip.IsLoopback()
+}
+
+func parseTrustedNetworks(values []string) []*net.IPNet {
+	out := make([]*net.IPNet, 0, len(values))
+	for _, raw := range values {
+		_, cidr, err := net.ParseCIDR(strings.TrimSpace(raw))
+		if err == nil && cidr != nil {
+			out = append(out, cidr)
+		}
+	}
+	return out
+}
+
+func isTrustedRemote(remoteAddr string, networks []*net.IPNet) bool {
+	ip := remoteAddrIP(remoteAddr)
+	if ip == nil {
+		return false
+	}
+	for _, network := range networks {
+		if network != nil && network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 func requireMethod(w http.ResponseWriter, r *http.Request, method string) bool {
@@ -189,13 +252,14 @@ func methodRequiresHostCheck(method string) bool {
 func (s *Server) requireAllowedRequestOrigin(w http.ResponseWriter, r *http.Request) bool {
 	s.cfgMu.Lock()
 	port := s.cfg.Hub.Port
+	allowedHosts := append([]string(nil), s.cfg.Hub.AllowedHosts...)
 	s.cfgMu.Unlock()
-	if !isAllowedHubHost(r.Host, port) {
+	if !isAllowedHubHost(r.Host, port, allowedHosts...) {
 		writeJSONError(w, http.StatusForbidden, "forbidden", "host not allowed")
 		return false
 	}
 	if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" {
-		if isAllowedHubOrigin(origin, port) {
+		if isAllowedHubOrigin(origin, port, allowedHosts...) {
 			return true
 		}
 		writeJSONError(w, http.StatusForbidden, "forbidden", "origin not allowed")
@@ -211,7 +275,7 @@ func (s *Server) requireAllowedRequestOrigin(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-func isAllowedHubHost(hostport string, port int) bool {
+func isAllowedHubHost(hostport string, port int, allowedHosts ...string) bool {
 	hostport = strings.TrimSpace(hostport)
 	if hostport == "" {
 		return port <= 0
@@ -222,7 +286,7 @@ func isAllowedHubHost(hostport string, port int) bool {
 		rawPort = ""
 	}
 	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
-	if host != "127.0.0.1" && host != "localhost" && host != "::1" {
+	if !isDefaultAllowedHubHost(host) && !isConfiguredAllowedHubHost(host, allowedHosts) {
 		return false
 	}
 	if port <= 0 || rawPort == "" {
@@ -232,7 +296,21 @@ func isAllowedHubHost(hostport string, port int) bool {
 	return err == nil && gotPort == port
 }
 
-func isAllowedHubOrigin(rawOrigin string, port int) bool {
+func isDefaultAllowedHubHost(host string) bool {
+	return host == "127.0.0.1" || host == "localhost" || host == "::1"
+}
+
+func isConfiguredAllowedHubHost(host string, allowedHosts []string) bool {
+	for _, raw := range allowedHosts {
+		allowed := strings.TrimSuffix(strings.ToLower(strings.Trim(strings.TrimSpace(raw), "[]")), ".")
+		if allowed != "" && host == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+func isAllowedHubOrigin(rawOrigin string, port int, allowedHosts ...string) bool {
 	u, err := url.Parse(rawOrigin)
 	if err != nil {
 		return false
@@ -240,7 +318,7 @@ func isAllowedHubOrigin(rawOrigin string, port int) bool {
 	if strings.ToLower(u.Scheme) != "http" || u.Host == "" {
 		return false
 	}
-	return isAllowedHubHost(u.Host, port)
+	return isAllowedHubHost(u.Host, port, allowedHosts...)
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {

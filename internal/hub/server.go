@@ -275,6 +275,11 @@ type Server struct {
 	sessionStore      *sessionstore.Store
 	push              *pushManager
 	logMaintenanceMu  sync.Mutex
+	whisperMu         sync.Mutex
+	whisperInstall    whisperInstallState
+	whisperCmd        *exec.Cmd
+	whisperJob        whisperProcessJob
+	whisperServerURL  string
 
 	branchRefreshMu       sync.Mutex
 	branchRefreshSem      chan struct{}
@@ -326,9 +331,18 @@ func (s *Server) idleTimeoutMin() int {
 }
 
 const (
-	defaultInitCols = 200
-	defaultInitRows = 50
+	defaultInitCols   = 200
+	defaultInitRows   = 50
+	minUsableInitCols = 80
+	minUsableInitRows = 20
 )
+
+func usableInitPTYSize(cols, rows int) (int, int, bool) {
+	if cols < minUsableInitCols || rows < minUsableInitRows {
+		return 0, 0, false
+	}
+	return cols, rows, true
+}
 
 // reSetModelTo は Claude Code の /model コマンド出力からモデル名を抽出する。
 // 例: "└  Set model to Haiku 4.5" → "Haiku 4.5"
@@ -550,6 +564,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/files-move", s.handleFilesMove)
 	mux.HandleFunc("/api/files-rename", s.handleFilesRename)
 	mux.HandleFunc("/api/files-mkdir", s.handleFilesMkdir)
+	mux.HandleFunc("/api/files-create", s.handleFilesCreate)
 	mux.HandleFunc("/api/files-save", s.handleFilesSave)
 	mux.HandleFunc("/api/files-delete-dir", s.handleFilesDeleteDir)
 	mux.HandleFunc("/api/git-log", s.handleGitLog)
@@ -566,6 +581,12 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/push/status", s.handlePushStatus)
 	mux.HandleFunc("/api/push/vapid-public-key", s.handlePushVAPIDPublicKey)
 	mux.HandleFunc("/api/push/subscriptions", s.handlePushSubscriptions)
+	mux.HandleFunc("/api/voice/transcribe", s.handleVoiceTranscribe)
+	mux.HandleFunc("/api/whisper/status", s.handleWhisperStatus)
+	mux.HandleFunc("/api/whisper/install", s.handleWhisperInstall)
+	mux.HandleFunc("/api/whisper/uninstall", s.handleWhisperUninstall)
+	mux.HandleFunc("/api/whisper/start", s.handleWhisperStart)
+	mux.HandleFunc("/api/whisper/stop", s.handleWhisperStop)
 	s.registerWorkbenchRoutes(mux)
 	s.httpSrv = &http.Server{
 		Addr:    fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port),
@@ -648,7 +669,12 @@ func (s *Server) Run(ctx context.Context) error {
 	setConsoleTitle("any-ai-cli [hub] - DO NOT CLOSE")
 	setConsoleIcon()
 	s.logger.Info("ANY-AI-CLI started", "url", fmt.Sprintf("http://%s/?token=%s", s.httpSrv.Addr, neturl.QueryEscape(s.cfg.Token)))
-	fmt.Print(startupBanner(s.version, s.httpSrv.Addr, s.cfg.Token))
+	cfgSnapshot := s.snapshotCfg()
+	fmt.Print(startupBanner(s.version, s.httpSrv.Addr, cfgSnapshot.Token, startupBannerAccess{
+		AllowLoopbackWithoutToken: cfgSnapshot.Hub.AllowLoopbackWithoutToken,
+		TrustedNetworks:           cfgSnapshot.Hub.TrustedNetworks,
+		AllowedHosts:              cfgSnapshot.Hub.AllowedHosts,
+	}))
 	if s.autoOpenBrowser {
 		_ = s.OpenBrowser()
 	}
@@ -666,6 +692,7 @@ func (s *Server) Run(ctx context.Context) error {
 		if s.approvalRulesEnabled() {
 			s.removeApprovalRules()
 		}
+		s.stopManagedWhisper()
 		// Stop the Hub server without marking wrapper sessions as intentionally
 		// disconnected. Closing the HTTP server drops WS connections after the
 		// listener is gone, so wrappers treat this as Hub-down and enter their
@@ -734,8 +761,9 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 func (s *Server) wsHandshake(cfg *websocket.Config, req *http.Request) error {
 	s.cfgMu.Lock()
 	port := s.cfg.Hub.Port
+	allowedHosts := append([]string(nil), s.cfg.Hub.AllowedHosts...)
 	s.cfgMu.Unlock()
-	if !isAllowedHubHost(req.Host, port) {
+	if !isAllowedHubHost(req.Host, port, allowedHosts...) {
 		return fmt.Errorf("host not allowed: %s", req.Host)
 	}
 	origin := req.Header.Get("Origin")
@@ -743,7 +771,7 @@ func (s *Server) wsHandshake(cfg *websocket.Config, req *http.Request) error {
 		// CLI / ラッパー由来の接続は Origin を持たないため許可する。
 		return nil
 	}
-	if isAllowedHubOrigin(origin, port) {
+	if isAllowedHubOrigin(origin, port, allowedHosts...) {
 		return nil
 	}
 	return fmt.Errorf("origin not allowed: %s", origin)
@@ -756,7 +784,12 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 	if err := websocket.JSON.Receive(conn, &m); err != nil {
 		return
 	}
-	if !validToken(m.Token, s.cfg.Token) {
+	req := conn.Request()
+	remoteAddr := ""
+	if req != nil {
+		remoteAddr = req.RemoteAddr
+	}
+	if !s.validTokenOrTrustedRemote(m.Token, remoteAddr) {
 		return
 	}
 	if m.Role == "ui" {
@@ -797,6 +830,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	s.nextID++
 	id := s.nextID
 	initCols, initRows := s.lastUICols, s.lastUIRows
+	initCols, initRows, _ = usableInitPTYSize(initCols, initRows)
 	s.sessionsMu.Unlock()
 
 	rawLogPath, jsonlPath := sessionlog.Paths(s.cfg.Hub.LogDir, sessionlog.Metadata{
@@ -864,8 +898,8 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	s.sessionsMu.Unlock()
 	if initCols == 0 || initRows == 0 {
 		// UIが未接続の場合はラッパーが報告した呼び出し元端末サイズを優先する
-		if reg.Cols > 0 && reg.Rows > 0 {
-			initCols, initRows = reg.Cols, reg.Rows
+		if cols, rows, ok := usableInitPTYSize(reg.Cols, reg.Rows); ok {
+			initCols, initRows = cols, rows
 		} else {
 			initCols, initRows = defaultInitCols, defaultInitRows
 		}
@@ -1601,6 +1635,9 @@ func (s *Server) handleResize(m proto.Message) {
 	if wc != nil && !skip {
 		_ = wc.send(m)
 	}
+	if !skip {
+		s.broadcast(proto.Message{Type: "pty_resize", SessionID: m.SessionID, Cols: m.Cols, Rows: m.Rows})
+	}
 }
 
 // handleInput は pty_input メッセージを処理する。
@@ -1623,12 +1660,13 @@ func (s *Server) handleInput(m proto.Message) {
 			msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt}
 			firstMsgBroadcast = &msg
 		} else if text != "" {
+			maskedText := sessionlog.MaskSecrets(text)
 			if ses.FirstMessage == "" {
-				ses.FirstMessage = text
+				ses.FirstMessage = maskedText
 			}
 			// 数字のみ（選択肢番号）は LastMessage を更新しない
 			if !isDigitsOnly(text) {
-				ses.LastMessage = text
+				ses.LastMessage = maskedText
 			}
 			msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt, FirstMessage: ses.FirstMessage, LastMessage: ses.LastMessage}
 			firstMsgBroadcast = &msg
@@ -1649,7 +1687,7 @@ func (s *Server) handleInput(m proto.Message) {
 		"ts":         time.Now().Format(time.RFC3339),
 		"type":       "user_input",
 		"session_id": m.SessionID,
-		"text":       m.Text,
+		"text":       sessionlog.MaskSecrets(m.Text),
 	})
 	if firstMsgBroadcast != nil {
 		s.broadcast(*firstMsgBroadcast)

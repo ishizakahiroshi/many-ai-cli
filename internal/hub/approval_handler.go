@@ -24,6 +24,11 @@ type approvalRuleTarget struct {
 	Mode      approvalRuleMode
 }
 
+type approvalRuleSessionSnap struct {
+	provider string
+	cwd      string
+}
+
 func (t approvalRuleTarget) wrapperProvider() string {
 	if t.Mode == approvalRuleModeClaudeImport {
 		return "claude"
@@ -110,6 +115,27 @@ func instructionRootForCWD(cwd string) string {
 	return filepath.Clean(cwd)
 }
 
+func codexAgentsPath() string {
+	home, _ := os.UserHomeDir()
+	codexHome := os.Getenv("CODEX_HOME")
+	if codexHome == "" {
+		codexHome = filepath.Join(home, ".codex")
+	}
+	return filepath.Join(codexHome, "AGENTS.md")
+}
+
+func projectAgentsApprovalRuleTarget(provider, cwd string) []approvalRuleTarget {
+	root := instructionRootForCWD(cwd)
+	if root == "" {
+		return nil
+	}
+	return []approvalRuleTarget{{
+		Path:      filepath.Join(root, "AGENTS.md"),
+		Providers: []string{provider},
+		Mode:      approvalRuleModeSharedBlock,
+	}}
+}
+
 func providerApprovalRuleTargets(provider, cwd string) []approvalRuleTarget {
 	home, _ := os.UserHomeDir()
 	switch provider {
@@ -119,32 +145,24 @@ func providerApprovalRuleTargets(provider, cwd string) []approvalRuleTarget {
 			Providers: []string{"claude"},
 			Mode:      approvalRuleModeClaudeImport,
 		}}
-	case "codex", "copilot", "cursor-agent":
-		root := instructionRootForCWD(cwd)
-		if root == "" {
-			return nil
-		}
+	case "codex":
 		return []approvalRuleTarget{{
-			Path:      filepath.Join(root, "AGENTS.md"),
-			Providers: []string{provider},
+			Path:      codexAgentsPath(),
+			Providers: []string{"codex"},
 			Mode:      approvalRuleModeSharedBlock,
 		}}
+	case "copilot", "cursor-agent":
+		return projectAgentsApprovalRuleTarget(provider, cwd)
 	default:
 		return nil
 	}
 }
 
-func legacyApprovalRuleTargets() []approvalRuleTarget {
-	home, _ := os.UserHomeDir()
-	codexHome := os.Getenv("CODEX_HOME")
-	if codexHome == "" {
-		codexHome = filepath.Join(home, ".codex")
+func legacyApprovalRuleTargets(provider, cwd string) []approvalRuleTarget {
+	if provider != "codex" {
+		return nil
 	}
-	return []approvalRuleTarget{{
-		Path:      filepath.Join(codexHome, "AGENTS.md"),
-		Providers: []string{"codex"},
-		Mode:      approvalRuleModeSharedBlock,
-	}}
+	return projectAgentsApprovalRuleTarget("codex", cwd)
 }
 
 func (s *Server) approvalRulesEnabled() bool {
@@ -154,12 +172,28 @@ func (s *Server) approvalRulesEnabled() bool {
 }
 
 func (s *Server) activeApprovalRuleTargets() []approvalRuleTarget {
-	type snap struct {
-		provider string
-		cwd      string
+	snaps := s.activeApprovalRuleSessionSnaps()
+
+	targets := make([]approvalRuleTarget, 0, len(snaps))
+	for _, snap := range snaps {
+		targets = append(targets, providerApprovalRuleTargets(snap.provider, snap.cwd)...)
 	}
+	return mergeApprovalRuleTargets(targets)
+}
+
+func (s *Server) activeLegacyApprovalRuleTargets() []approvalRuleTarget {
+	snaps := s.activeApprovalRuleSessionSnaps()
+
+	targets := make([]approvalRuleTarget, 0, len(snaps))
+	for _, snap := range snaps {
+		targets = append(targets, legacyApprovalRuleTargets(snap.provider, snap.cwd)...)
+	}
+	return mergeApprovalRuleTargets(targets)
+}
+
+func (s *Server) activeApprovalRuleSessionSnaps() []approvalRuleSessionSnap {
 	s.sessionsMu.Lock()
-	snaps := make([]snap, 0, len(s.sessions))
+	snaps := make([]approvalRuleSessionSnap, 0, len(s.sessions))
 	for id, ses := range s.sessions {
 		if ses == nil || s.wrappers[id] == nil {
 			continue
@@ -167,15 +201,10 @@ func (s *Server) activeApprovalRuleTargets() []approvalRuleTarget {
 		if ses.State == "completed" || ses.State == "error" || ses.State == "disconnected" {
 			continue
 		}
-		snaps = append(snaps, snap{provider: ses.Provider, cwd: ses.CWD})
+		snaps = append(snaps, approvalRuleSessionSnap{provider: ses.Provider, cwd: ses.CWD})
 	}
 	s.sessionsMu.Unlock()
-
-	targets := make([]approvalRuleTarget, 0, len(snaps))
-	for _, snap := range snaps {
-		targets = append(targets, providerApprovalRuleTargets(snap.provider, snap.cwd)...)
-	}
-	return mergeApprovalRuleTargets(targets)
+	return snaps
 }
 
 func (s *Server) rememberApprovalTargets(targets []approvalRuleTarget) {
@@ -260,11 +289,12 @@ func (s *Server) removeApprovalTargets(targets []approvalRuleTarget) {
 
 func (s *Server) injectApprovalRules() {
 	s.injectApprovalTargets(s.activeApprovalRuleTargets())
+	s.removeInactiveApprovalRules(s.activeLegacyApprovalRuleTargets())
 }
 
 func (s *Server) removeApprovalRules() {
 	targets := append(s.knownApprovalTargets(), s.activeApprovalRuleTargets()...)
-	targets = append(targets, legacyApprovalRuleTargets()...)
+	targets = append(targets, s.activeLegacyApprovalRuleTargets()...)
 	s.removeApprovalTargets(targets)
 }
 

@@ -113,6 +113,47 @@ func TestStoreChatRestoreSearchAndPrune(t *testing.T) {
 	}
 }
 
+func TestStoreEventMasksUserInputSecrets(t *testing.T) {
+	logDir := filepath.Join(t.TempDir(), "logs")
+	store, err := OpenForLogDir(logDir)
+	if err != nil {
+		t.Fatalf("OpenForLogDir: %v", err)
+	}
+	defer store.Close()
+
+	startedAt := time.Now().Format(time.RFC3339)
+	if _, err := store.StartSession(SessionStart{
+		LiveSessionID: 1,
+		Provider:      "codex",
+		State:         "standby",
+		StartedAt:     startedAt,
+		LogPath:       filepath.Join(logDir, "sessions", "s.log"),
+		JSONLPath:     filepath.Join(logDir, "sessions", "s.jsonl"),
+	}); err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+
+	secret := "sk-testkey1234567890abcdef"
+	if err := store.StoreEvent(1, map[string]any{
+		"ts":         startedAt,
+		"type":       "user_input",
+		"session_id": 1,
+		"text":       "OPENAI_API_KEY=" + secret + "\r",
+	}); err != nil {
+		t.Fatalf("StoreEvent: %v", err)
+	}
+	msgs, err := store.ChatMessagesByLiveSession(1, 10)
+	if err != nil {
+		t.Fatalf("ChatMessagesByLiveSession: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("messages len = %d, want 1: %#v", len(msgs), msgs)
+	}
+	if strings.Contains(msgs[0].NormalizedText, secret) || strings.Contains(msgs[0].RawText, secret) {
+		t.Fatalf("stored message should be masked: %#v", msgs[0])
+	}
+}
+
 func TestResetHistoryPreservesActiveSessionRows(t *testing.T) {
 	logDir := filepath.Join(t.TempDir(), "logs")
 	store, err := OpenForLogDir(logDir)

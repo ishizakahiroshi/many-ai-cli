@@ -842,7 +842,7 @@ func (s *Store) ResetHistory(preserveLiveIDs []int) (ResetResult, error) {
 func (s *Store) storeMessageForEvent(ctx context.Context, tx *sql.Tx, sessionID int64, ts, typ string, event map[string]any, payload []byte) error {
 	switch typ {
 	case "user_input":
-		text := strings.TrimRight(stringValue(event["text"]), "\r\n")
+		text := strings.TrimRight(sessionlog.MaskSecrets(stringValue(event["text"])), "\r\n")
 		if strings.TrimSpace(text) == "" {
 			return nil
 		}

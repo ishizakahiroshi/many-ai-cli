@@ -44,11 +44,21 @@ var asciiLogoLines = []string{
 	"/_/   \\_\\_| \\_| |_|       /_/   \\_\\___|     \\____|_____|___|",
 }
 
-func startupBanner(version, addr, token string) string {
+type startupBannerAccess struct {
+	AllowLoopbackWithoutToken bool
+	TrustedNetworks           []string
+	AllowedHosts              []string
+}
+
+func startupBanner(version, addr, token string, accessOpt ...startupBannerAccess) string {
 	hubBase := "http://" + addr
 	hubURL := hubBase + "/?token=" + neturl.QueryEscape(token)
 	versionLabel := formatVersionLabel(version)
 	warning := ansiBold + ansiReverse + ansiBrightOrange + " WARNING: This window is connected to the Web UI. Do not close it. " + ansiReset
+	var access startupBannerAccess
+	if len(accessOpt) > 0 {
+		access = accessOpt[0]
+	}
 
 	logoLines := unicodeLogoLines
 	colorize := colorizeLogoLine
@@ -68,6 +78,15 @@ func startupBanner(version, addr, token string) string {
 		fmt.Sprintf("WebUI:  %s", hubBase),
 		fmt.Sprintf("Open:   %s", hubURL),
 	)
+	if access.AllowLoopbackWithoutToken {
+		lines = append(lines, "Token-less loopback/trusted access: ENABLED")
+		if len(access.TrustedNetworks) > 0 {
+			lines = append(lines, fmt.Sprintf("Trusted networks: %s", strings.Join(access.TrustedNetworks, ", ")))
+		}
+		if len(access.AllowedHosts) > 0 {
+			lines = append(lines, fmt.Sprintf("Allowed hosts: %s", strings.Join(access.AllowedHosts, ", ")))
+		}
+	}
 	if wslutil.IsWSL() {
 		// WSL2 auto-forwards 127.0.0.1 between Windows and the WSL guest, so
 		// the same URL works from a Windows-side browser. Show it explicitly

@@ -230,6 +230,31 @@ func TestMaskSecrets(t *testing.T) {
 			want:  "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef",
 		},
 		{
+			name:  "GitHub fine-grained PAT",
+			input: "token: github_pat_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef123456",
+			want:  "github_pat_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef123456",
+		},
+		{
+			name:  "GitLab PAT",
+			input: "token: glpat-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef",
+			want:  "glpat-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef",
+		},
+		{
+			name:  "Slack token",
+			input: "token: xoxb-123456789012-abcdefghijklmnopqr",
+			want:  "xoxb-123456789012-abcdefghijklmnopqr",
+		},
+		{
+			name:  "Google API key",
+			input: "token: AIzaABCDEFGHIJKLMNOPQRSTUVWXYZabc",
+			want:  "AIzaABCDEFGHIJKLMNOPQRSTUVWXYZabc",
+		},
+		{
+			name:  "Hugging Face token",
+			input: "token: hf_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef",
+			want:  "hf_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef",
+		},
+		{
 			name:  "API_KEY env",
 			input: "OPENAI_API_KEY=sk-testkey1234567890abcdef",
 			want:  "sk-testkey1234567890abcdef",

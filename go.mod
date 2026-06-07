@@ -1,6 +1,6 @@
 module any-ai-cli
 
-go 1.25.0
+go 1.25.11
 
 require (
 	github.com/SherClockHolmes/webpush-go v1.4.0
