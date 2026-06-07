@@ -8,6 +8,7 @@ import './app.js';
 import './app/session-list.js';
 import './app/path-links.js';
 import './app/terminal.js';
+import './app/history-viewer.js';
 import './app/settings.js';
 import './app/ws-client.js';
 import './app/approval-parser.js';

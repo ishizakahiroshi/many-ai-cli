@@ -4,7 +4,7 @@ import { activeSessionId, chatHistory, chatHistoryAutoCommitTimers, chatHistoryI
 import { _userAvatarUrl, _userDisplayName } from '../app.js';
 import { activateSession, providerIconHtml, renderSessionList } from './session-list.js';
 import { showPathPopup } from './path-links.js';
-import { markTerminalManualScrollIntent, sendResize, updateScrollLockBtn } from './terminal.js';
+import { TERMINAL_SCROLLBACK_LINES, markTerminalManualScrollIntent, sendResize, updateScrollLockBtn } from './terminal.js';
 import { setActiveTab, updateChatCountBadge } from './settings.js';
 import { chatPane, openLightbox } from './attachments.js';
 
@@ -360,7 +360,11 @@ export function clearBuffer(session) {
   const t = session.id !== undefined ? terminals.get(session.id) : null;
   if (!t || !t.term) return;
   try { t.term.clear(); } catch (_) {}
-  try { t.term.options.scrollback = MULTI_SCROLLBACK(); } catch (_) {}
+  // scrollback の縮小はマルチビュー表示中のみ。シングルモードでクリアした場合に
+  // 縮小値（150 行）が残り続けると以後の履歴がほぼ遡れなくなるため標準値を維持する。
+  const multiViewEl = document.getElementById('multi-view');
+  const multiOpen = !!(multiViewEl && !multiViewEl.hidden);
+  try { t.term.options.scrollback = multiOpen ? MULTI_SCROLLBACK() : TERMINAL_SCROLLBACK_LINES; } catch (_) {}
   if (session.id !== undefined) {
     resetChatHistoryForSession(session.id);
     if (typeof mountChatPaneForSession === 'function') mountChatPaneForSession(session.id);

@@ -8,6 +8,7 @@ import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerm
 import { ws } from './ws-client.js';
 import { scheduleApprovalCheck } from './approval.js';
 import { handleCrunchLinkClick } from './expand-popup.js';
+import { resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
 
 // Claude Code の折りたたみマーカー: "… +23 lines (ctrl+o to expand)"
 const CRUNCH_LINK_RE = /[…\.]{1,3}\s*\+\d+\s*lines?\s*\(ctrl\+o to expand\)/gi;
@@ -16,7 +17,10 @@ const CRUNCH_LINK_RE = /[…\.]{1,3}\s*\+\d+\s*lines?\s*\(ctrl\+o to expand\)/gi
 
 // ---- xterm.js 管理 ----
 
-export const TERMINAL_SCROLLBACK_LINES = 2000;
+// 旧 app.js 時代は 5000 行、モジュール分割時に 2000 行へ縮んでいた。
+// 長時間セッションで過去ターンが押し出される苦情を受けて 10000 行へ拡大。
+// それ以前の出力は過去ログビューア（history-viewer.ts）で生ログから遡る。
+export const TERMINAL_SCROLLBACK_LINES = 10000;
 // 非アクティブセッションの未描画 PTY chunk は末尾だけ保持し、
 // 長時間放置後のセッション切替で UI スレッドを詰まらせない。
 export const TERMINAL_PENDING_MAX_BYTES = 100 * 1024;
@@ -233,6 +237,8 @@ export function attachTerminal(id) {
   if (!area) return;
   const t = terminals.get(id);
   if (!t) return;
+  // セッション切替・タブ復帰時は過去ログビューアを閉じる（別セッションの誤表示防止）
+  resetHistoryViewerForSessionChange();
   if (t.container) {
     // DOM 再配置で WebGL canvas の描画バッファが失われるため、移動前に破棄する
     disableWebglRenderer(t);
@@ -328,6 +334,7 @@ export function whenLayoutReady(id, container) {
         const atBottom = isTerminalAtBottom(t);
         t.autoScroll = atBottom;
         if (id === activeSessionId) updateScrollLockBtn(!atBottom);
+        updateHistoryHint(id);
       });
     }
     flushPending(id);
