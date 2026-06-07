@@ -37,7 +37,7 @@ const (
 	filesSummaryLen = 200
 )
 
-// 走査時にスキップする重量級ディレクトリ（隠しディレクトリは別途 "." 接頭辞で除外）。
+// 走査時にスキップする重量級ディレクトリ。
 var filesSkipDirs = map[string]bool{
 	"node_modules": true,
 	"vendor":       true,
@@ -46,6 +46,13 @@ var filesSkipDirs = map[string]bool{
 	"build":        true,
 	"out":          true,
 	"__pycache__":  true,
+}
+
+// 表示はするが配下の再帰走査をしない管理ディレクトリ。
+var filesNoDescendDirs = map[string]bool{
+	".git": true,
+	".hg":  true,
+	".svn": true,
 }
 
 // handleFilesList は GET /api/files-list を処理する。
@@ -105,7 +112,7 @@ func (s *Server) handleFilesList(w http.ResponseWriter, r *http.Request) {
 }
 
 // walkFilesLocal は filesRoot 以下を再帰走査し filesListItem スライスを返す。
-// 件数上限 2000・深さ上限 8・隠しディレクトリ + filesSkipDirs スキップ・シンボリックリンク非追跡。
+// 件数上限 2000・深さ上限 8・filesSkipDirs スキップ・シンボリックリンク非追跡。
 // 全ファイル・ディレクトリ対象（拡張子フィルタなし）。summary は text 系ファイルのみ抽出。
 // mtime 降順ソート済み。
 func walkFilesLocal(filesRoot, cwd string) ([]filesListItem, bool) {
@@ -123,10 +130,7 @@ func walkFilesLocal(filesRoot, cwd string) ([]filesListItem, bool) {
 		}
 		for _, e := range entries {
 			name := e.Name()
-			// 隠しエントリ（. 始まり）と重量級ディレクトリをスキップ
-			if strings.HasPrefix(name, ".") {
-				continue
-			}
+			// 重量級ディレクトリはツリーから除外する。
 			if e.IsDir() && filesSkipDirs[name] {
 				continue
 			}
@@ -155,6 +159,9 @@ func walkFilesLocal(filesRoot, cwd string) ([]filesListItem, bool) {
 					Size:  info.Size(),
 					Mtime: info.ModTime(),
 				})
+				if filesNoDescendDirs[name] {
+					continue
+				}
 				walk(fullPath, depth+1)
 				continue
 			}

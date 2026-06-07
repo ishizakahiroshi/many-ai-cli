@@ -33,6 +33,8 @@ export const STORAGE_USAGE_LINK_OLLAMA_KEY    = 'ai_cli_hub_usage_link_ollama';
 export const STORAGE_USAGE_LINK_OPENCODE_KEY  = 'ai_cli_hub_usage_link_opencode';
 export const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds';
 export const STORAGE_VOICE_INPUT_DISABLED_KEY = 'ai_cli_hub_voice_input_disabled';
+export const STORAGE_VOICE_ENGINE_KEY         = 'anyai.voiceEngine';
+export const STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY = 'anyai.voiceWhisperAutoSubmit';
 export const STORAGE_DISPLAY_LOCKED_MODE_KEY  = 'ai_cli_hub_display_locked_mode';
 export const DEFAULT_VOICE_GRACE_SEC          = 0;
 export const STORAGE_WAKE_WORD_ENABLED_KEY    = 'ai_cli_hub_wake_word_enabled';
@@ -50,6 +52,34 @@ export function getDefaultTriggerPhrase() {
   return lang === 'en' ? DEFAULT_TRIGGER_PHRASE_EN : DEFAULT_TRIGGER_PHRASE_JA;
 }
 export const CWD_HISTORY_MAX               = 10;
+
+export type VoiceEngine = 'off' | 'browser' | 'whisper';
+
+export function normalizeVoiceEngine(value: any): VoiceEngine {
+  if (value === 'off' || value === 'browser' || value === 'whisper') return value;
+  return 'browser';
+}
+
+export function getVoiceEngine(): VoiceEngine {
+  const explicit = localStorage.getItem(STORAGE_VOICE_ENGINE_KEY);
+  if (explicit != null) {
+    const normalized = normalizeVoiceEngine(explicit);
+    if (normalized !== explicit) localStorage.setItem(STORAGE_VOICE_ENGINE_KEY, normalized);
+    return normalized;
+  }
+  const migrated = localStorage.getItem(STORAGE_VOICE_INPUT_DISABLED_KEY) === '1' ? 'off' : 'browser';
+  localStorage.setItem(STORAGE_VOICE_ENGINE_KEY, migrated);
+  return migrated;
+}
+
+export function setVoiceEngine(value: any): VoiceEngine {
+  const engine = normalizeVoiceEngine(value);
+  localStorage.setItem(STORAGE_VOICE_ENGINE_KEY, engine);
+  document.dispatchEvent(new CustomEvent('voiceengine:changed', { detail: { engine } }));
+  return engine;
+}
+
+try { getVoiceEngine(); } catch (_) {}
 
 export const DEFAULT_USAGE_LINKS = {
   claude:   'https://claude.ai/settings/usage',
@@ -108,6 +138,8 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'display.font_size':         [STORAGE_FONTSIZE_KEY,              String],
   'display.lang':              [STORAGE_LANG_KEY,                  String],
 };
+// Voice engine selection is intentionally absent from server-synced user prefs.
+// It must stay device-local so PC can use browser recognition while iPhone uses Whisper.
 
 export const _USER_PREFS_STRING_PATHS = new Set([
   'trigger.phrase',
@@ -210,14 +242,13 @@ export function _userPrefsHttpError(phase: string, res: Response): UserPrefsHttp
 // 言語変更時の location.reload() 前や reset 完了時など、debounce を待てない場面で使う。
 export async function _putUserPrefsNow() {
   const tk = token;
-  if (!tk) return;
   // 現在のサーバ値を取得してからパッチ適用し全体置換
-  const getRes = await fetch(`/api/user-prefs?token=${tk}`);
+  const getRes = await fetch(`/api/user-prefs?token=${encodeURIComponent(tk || '')}`);
   if (!getRes.ok) throw _userPrefsHttpError('GET', getRes);
   const current = await getRes.json();
   // localStorage の最新値を current にマージ
   _mergeStoredUserPrefs(current);
-  const putRes = await fetch(`/api/user-prefs?token=${tk}`, {
+  const putRes = await fetch(`/api/user-prefs?token=${encodeURIComponent(tk || '')}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(current),
@@ -258,9 +289,8 @@ export function setUserPref(path: string, value: any): void {
 // サーバから user_prefs を取得して localStorage にミラーする（起動時 1 回）
 export async function _mirrorUserPrefsFromServer() {
   const tk = token;
-  if (!tk) return null;
   try {
-    const res = await fetch(`/api/user-prefs?token=${tk}`);
+    const res = await fetch(`/api/user-prefs?token=${encodeURIComponent(tk || '')}`);
     if (!res.ok) return null;
     const prefs: UserPrefsObject = await res.json();
     // 各フィールドを localStorage にミラー（既存値を上書き）
@@ -285,9 +315,8 @@ export async function _mirrorUserPrefsFromServer() {
 // 移行: localStorage 既存値 → サーバ（初回のみ）
 export async function migrateLocalstoragePrefsToServer() {
   const tk = token;
-  if (!tk) return;
   try {
-    const res = await fetch(`/api/user-prefs?token=${tk}`);
+    const res = await fetch(`/api/user-prefs?token=${encodeURIComponent(tk || '')}`);
     if (!res.ok) return;
     const prefs: UserPrefsObject = await res.json();
     if (prefs.migrated_from_localstorage) return; // 移行済み
@@ -304,7 +333,7 @@ export async function migrateLocalstoragePrefsToServer() {
     }
     if (!hasAny) return;
     merged.migrated_from_localstorage = true;
-    await fetch(`/api/user-prefs?token=${tk}`, {
+    await fetch(`/api/user-prefs?token=${encodeURIComponent(tk || '')}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(merged),

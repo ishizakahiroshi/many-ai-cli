@@ -17,9 +17,9 @@ const CRUNCH_LINK_RE = /[…\.]{1,3}\s*\+\d+\s*lines?\s*\(ctrl\+o to expand\)/gi
 // ---- xterm.js 管理 ----
 
 export const TERMINAL_SCROLLBACK_LINES = 2000;
-// Hub の ptyBuf replay 上限と揃える。非アクティブ中の長い Codex 出力を
-// 100KB で捨てると、セッション切替時に回答の前半が欠けて見える。
-export const TERMINAL_PENDING_MAX_BYTES = 512 * 1024;
+// 非アクティブセッションの未描画 PTY chunk は末尾だけ保持し、
+// 長時間放置後のセッション切替で UI スレッドを詰まらせない。
+export const TERMINAL_PENDING_MAX_BYTES = 100 * 1024;
 export const TERMINAL_WRITE_FLUSH_WATCHDOG_MS = 5000;
 
 export function ensureTerminal(id) {
@@ -332,7 +332,9 @@ export function whenLayoutReady(id, container) {
     }
     flushPending(id);
     t.everAttached = true;
-    sendResize(id, t.term.cols, t.term.rows);
+    if (!isPtyResizeSuppressed()) {
+      sendResize(id, t.term.cols, t.term.rows);
+    }
     container.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       const sel = t.term.getSelection();
@@ -488,6 +490,7 @@ export function isTerminalAtBottom(t) {
 
 export function fitTerminalPreservingBottom(t, id) {
   if (!canFitTerminal(t)) return;
+  if (isPtyResizeSuppressed()) return;
   const wasAtBottom = isTerminalAtBottom(t) || t.autoScroll;
   t.fitAddon.fit();
   if (wasAtBottom) {
@@ -1027,6 +1030,25 @@ export function sendResize(sessionId, cols, rows) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'pty_resize', session_id: sessionId, cols, rows }));
   }
+}
+
+export function applyRemotePtyResize(sessionId, cols, rows) {
+  const id = Number(sessionId || 0);
+  const nextCols = Number(cols || 0);
+  const nextRows = Number(rows || 0);
+  if (!id || nextCols <= 0 || nextRows <= 0) return;
+  const t = terminals.get(id);
+  if (!t || !t.term) return;
+  if (t.term.cols === nextCols && t.term.rows === nextRows) return;
+  const wasAtBottom = isTerminalAtBottom(t) || t.autoScroll;
+  try {
+    t.term.resize(nextCols, nextRows);
+    if (wasAtBottom) {
+      t.autoScroll = true;
+      t.term.scrollToBottom();
+      if (id === activeSessionId) updateScrollLockBtn(false);
+    }
+  } catch (_) {}
 }
 
 export function canFitTerminal(t) {

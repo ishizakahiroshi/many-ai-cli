@@ -18,6 +18,7 @@ import './app/chat-history.js';
 import './app/attachments.js';
 import './app/spawn-panel.js';
 import './app/voice.js';
+import './app/voice-whisper.js';
 import './app/git-view.js';
 import './app/files-view.js';
 import './app/workbench.js';

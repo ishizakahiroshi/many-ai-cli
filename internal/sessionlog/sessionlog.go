@@ -20,8 +20,16 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)([A-Z_]*API_KEY=)\S+`),
 	// Anthropic / OpenAI トークン: sk-ant-... / sk-...
 	regexp.MustCompile(`sk-(?:ant-)?[A-Za-z0-9_\-]{20,}`),
-	// GitHub Personal Access Token: ghp_ / github_pat_
-	regexp.MustCompile(`(?:ghp_|github_pat_)[A-Za-z0-9_]{20,}`),
+	// GitHub tokens: classic PAT, fine-grained PAT, OAuth / user / server / refresh tokens.
+	regexp.MustCompile(`(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_)[A-Za-z0-9_]{20,}`),
+	// GitLab personal access tokens.
+	regexp.MustCompile(`glpat-[A-Za-z0-9_\-]{20,}`),
+	// Slack xox* tokens.
+	regexp.MustCompile(`xox[abprs]-[A-Za-z0-9\-]{20,}`),
+	// Google API keys.
+	regexp.MustCompile(`AIza[A-Za-z0-9_\-]{20,}`),
+	// Hugging Face access tokens.
+	regexp.MustCompile(`hf_[A-Za-z0-9]{20,}`),
 	// Bearer トークン
 	regexp.MustCompile(`(?i)(Bearer )\S{8,}`),
 	// AWS アクセスキー

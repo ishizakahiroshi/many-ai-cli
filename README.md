@@ -107,7 +107,7 @@ sha256sum -c SHA256SUMS.txt
 - **Commit all** — stage all current working-tree changes and create a local commit after an explicit review step
 - **Workbench tab** — review stored session history, timeline events, summaries, redacted exports, prompt templates, task/policy notes, diagnostics, usage summaries, stale sessions, and worktree helpers
 - **File and image attach** — paste or drag-and-drop images and files into the terminal session
-- **Voice input** — dictate prompts and continue through short pauses (Chrome / Edge)
+- **Voice input** — dictate prompts through Browser recognition or local Whisper, with Windows x64 managed Whisper install
 - **PWA + opt-in Web Push** — install the Hub as a local web app and receive approval notifications after explicitly enabling push in Settings
 - **Approval pattern profiles** — keep official remote-synced trigger phrases separate from local custom edits
 - **Server-side user preferences** — keep voice, notification, favorites, session order, spawn defaults, and avatar settings in `config.yaml`
@@ -604,6 +604,11 @@ Settings are stored in `~/.any-ai-cli/config.yaml` (auto-created on first run).
 | `language` | UI language (`en` or `ja`) | `en` |
 | `hub.open_browser` | Auto-open browser on Hub start | `false` in generated config; `--open` or no-argument launch opens it |
 | `hub.wrapper_reconnect_grace_sec` | How long wrapped sessions wait for a crashed/restarted Hub to return | `3600` |
+| `voice.whisper.managed` | Let the Hub manage the local whisper.cpp server lifecycle | `false` |
+| `voice.whisper.model` | Managed Whisper model ID | `large-v3-turbo-q5_0` |
+| `voice.whisper.server_url` | Local Whisper-compatible server used by the Hub voice proxy | empty; set automatically for managed mode |
+| `voice.whisper.server_port` | Preferred local port for the managed whisper.cpp server | `0` (auto-pick) |
+| `voice.whisper.request_path` | Whisper transcription endpoint override | empty (`/v1/audio/transcriptions`, then `/inference`) |
 | `approval_pattern_sources` | Remote or local sources for official approval trigger patterns | GitHub raw URLs |
 | `approval_profiles` | Active approval pattern profile per provider (`official` or `custom`) | `official` |
 
@@ -618,6 +623,8 @@ Settings are split into three categories:
 | **D3: Server operation settings** | hub port, log config, approval enable/disable, slash command sources, approval pattern sources, token | `~/.any-ai-cli/config.yaml` (direct edit or dedicated Settings UI) |
 
 D2 settings survive port changes (e.g. the WSL launcher shifting from 47777 to 47877) because they are stored server-side rather than in per-origin localStorage.
+
+Voice engine selection is the exception: `off` / `browser` / `whisper` stays in each browser's localStorage so a PC can keep Browser recognition while an iPhone uses Whisper.
 
 On first load the browser mirrors D2 values from the server. Subsequent changes are written to both localStorage (as a cache) and the server simultaneously. Any existing localStorage values are pushed to the server automatically on first run.
 
@@ -685,10 +692,13 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 - **Terminal input**: Type directly in the input field and press `Enter` to send. Use `Shift+Enter` for a newline.
 - **File and image attach**: Paste (`Ctrl+V`) or drag-and-drop a file onto the attach area to inject a local file path reference into the session.
 - **Voice input**: Click the 🎤 button or press `Alt+V` to start voice input. Click again or press `Alt+V` to stop. Transcribed text is inserted into the input field.
-  - Requires Chrome or Edge (uses the browser's built-in Speech Recognition API).
+  - Settings → Voice lets each device choose `OFF`, `Browser`, or `Whisper (local)`.
+  - Browser mode requires Chrome or Edge and uses the browser's built-in Speech Recognition API.
+  - Whisper mode records in the browser, sends a WAV to the Hub, and the Hub proxies it to the configured Whisper server. On Windows x64, Settings → Voice can install and manage a local whisper.cpp server and model under `~/.any-ai-cli/whisper/`; on other platforms, run a Whisper-compatible server yourself and set `voice.whisper.server_url`.
   - Microphone permission must be granted on first use.
-  - Settings include end-of-speech wait time.
-  - ⚠️ **Privacy note**: because this uses the browser's built-in recognition, recorded audio is **sent to the browser vendor's speech servers (Google / Microsoft)**. This is an exception to the local-first design of `any-ai-cli` — if you do not want audio leaving your machine, do not use this feature (a separate local-inference dictation tool is an alternative). See "Security / Privacy → Outbound network traffic".
+  - Browser mode includes end-of-speech wait time. Whisper mode is batch recognition: stop recording, wait for transcription, then review the inserted text.
+  - ⚠️ **Privacy note**: Browser mode sends recorded audio to the browser vendor's speech servers (Google / Microsoft). Whisper mode stays local only when `voice.whisper.server_url` points to a local server such as `http://127.0.0.1:8080`; if you configure an external API URL in the future, audio is sent there. The managed installer downloads whisper.cpp from GitHub Releases and the selected model from Hugging Face. See "Security / Privacy → Outbound network traffic" and [Whisper setup](docs/manual_whisper.md).
+  - Recommended Whisper server setup: enable the server's VAD/no-speech filtering when available (for whisper.cpp, use its current Silero VAD option/model for your build), keep temperature low/deterministic, and prefer a local OpenAI-compatible `/v1/audio/transcriptions` endpoint or `/inference`. The browser also skips near-silent recordings and discards exact known hallucination phrases.
 - **Auto-submit trigger**: In Settings → Auto-submit trigger, enable the toggle and set a phrase (e.g. `send`). When voice recognition finishes with that phrase, the input is sent automatically. Also works with typed text.
 - **Spawn**: Click **+ New Session** to start a new AI CLI session from the browser.
 
@@ -720,6 +730,8 @@ If voice input stops responding (button press has no effect, or the microphone p
 > If voice input works in Incognito with the same Hub URL, the issue is in your normal Chrome profile's internal state. The steps above will recover it.
 
 Use **Settings → Voice → Diagnose** to identify the problem and copy a diagnostic log.
+
+For Whisper, `Whisper server is not installed` / `Whisper server is not configured` means either run **Settings → Voice → Install** on a Windows x64 Hub or configure `voice.whisper.server_url` to a manually started local server. The managed server log is written to `~/.any-ai-cli/whisper/whisper-server.log`.
 
 ---
 
@@ -775,6 +787,8 @@ The Hub server acts as a relay between PTY sessions and the browser UI. Each AI 
 | Session history | `~/.any-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.jsonl` | Structured session events (`session_start`, `user_input`, `pty_output`, `attach`, `session_end`, `session_dismiss`) |
 | Clean transcript | `~/.any-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.txt` | Human-readable text (ANSI / spinners / control bytes stripped). Generated automatically on session end; any sessions missed due to a Hub crash are reconstructed at the next `serve` startup |
 
+Session logs and the SQLite-backed Workbench history are local private storage (`0700` directories / `0600` files where applicable), but they can still contain prompts, file paths, and other user-provided text. Known token patterns are redacted before PTY output and user-input history are stored, and Workbench exports are redacted by default, but this is heuristic. Delete saved history from Settings or remove `~/.any-ai-cli/logs/` if you accidentally paste sensitive material.
+
 The Hub UI log-path button copies the log directory path to your clipboard.
 
 You can also regenerate a clean transcript manually:
@@ -809,11 +823,12 @@ Hub diagnostics for each spawn are written to `~/.any-ai-cli/logs/spawn/<provide
 
 - The Hub HTTP/WebSocket server binds to `127.0.0.1` only — external hosts cannot reach it directly
 - Random token in URL prevents unauthorized local access
+- Token-less access is available only as an explicit opt-in for loopback / trusted private paths such as SSH local forwarding or a per-user WireGuard/Docker gateway. Configure `hub.allow_loopback_without_token: true`, narrow `hub.trusted_networks` values such as `172.19.0.1/32`, and `hub.allowed_hosts` values such as `10.8.0.1` only when that private path is already protected. Never use it with public bind addresses, reverse proxies, shared shell hosts, or broad CIDRs such as `0.0.0.0/0`.
 - `any-ai-cli` itself sends no telemetry or usage data to any service
 
 ### Local instruction file writes
 
-When **Approval Buttons** is enabled, `any-ai-cli` writes only its marked approval-rules block to AI instruction files for active wrapped sessions: `~/.claude/CLAUDE.md` for Claude Code and the project instruction root `AGENTS.md` for Codex, GitHub Copilot, and Cursor Agent. The block is idempotent and is removed when the last active wrapped session using that file ends, when Approval Buttons is disabled, or when the Hub stops.
+When **Approval Buttons** is enabled, `any-ai-cli` writes only its marked approval-rules block to AI instruction files for active wrapped sessions: `~/.claude/CLAUDE.md` for Claude Code, `$CODEX_HOME/AGENTS.md` or `~/.codex/AGENTS.md` for Codex, and the project instruction root `AGENTS.md` for GitHub Copilot and Cursor Agent. The block is idempotent and is removed when the last active wrapped session using that file ends, when Approval Buttons is disabled, or when the Hub stops.
 
 ### Outbound network traffic
 
@@ -822,7 +837,8 @@ When **Approval Buttons** is enabled, `any-ai-cli` writes only its marked approv
 - **Slash command list (Hub itself)** — When the slash command picker is opened, the Hub fetches a markdown file from `https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent}.md` and caches it for 24 hours. The source URL can be changed (or pointed to a local file path) in **Settings → Slash command sources**.
 - **Approval pattern list (Hub itself)** — On Hub startup, the official approval detection patterns can be fetched from `https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,common}.md` and cached for 24 hours. The source URLs can be overridden in config.
 - **Web Push notifications (Hub itself, opt-in only)** — When Push notifications are enabled, the Hub sends encrypted Web Push requests to the browser vendor's push service over HTTPS. Payloads include the session ID/name, provider, and a short approval-question/context excerpt; they do **not** include the Hub URL token. VAPID keys and subscriptions are stored locally in `~/.any-ai-cli/push_store.json`. Notifications can be delivered while an SSH tunnel is down, but opening the Hub from the notification still requires the tunnel and Hub to be reachable.
-- **Voice input (the browser itself, only while in use)** — Voice input uses the browser's built-in Web Speech API; in Chrome / Edge, **microphone audio is sent to the browser vendor's speech-recognition servers (Google / Microsoft)**. The sender is the browser, not `any-ai-cli`, but note that coding instructions often contain project names and unreleased details. If you want to avoid this, simply do not use voice input (do not press the mic button), or use a separate local-inference dictation tool. See also the privacy note in the voice input section.
+- **Voice input (only while in use)** — Browser mode uses the Web Speech API; in Chrome / Edge, **microphone audio is sent to the browser vendor's speech-recognition servers (Google / Microsoft)**. Whisper mode sends audio to the Hub and then to the configured Whisper server. Keep `voice.whisper.server_url` on `127.0.0.1` / `localhost` for local-only processing; external API URLs would send audio to that external service. See also the privacy note in the voice input section.
+- **Managed Whisper install (Windows x64 Hub, opt-in only)** — Clicking **Settings → Voice → Install** downloads a whisper.cpp Windows x64 release archive from GitHub Releases and the selected ggml model from Hugging Face into `~/.any-ai-cli/whisper/`. The release archive is SHA-256 verified before extraction; model entries without a published hash are downloaded over HTTPS and shown as hash-unverified in the UI.
 - **Wrapped CLI traffic (the CLIs themselves)** — The CLIs you wrap (Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI) talk directly to their respective vendor APIs (Anthropic, OpenAI, GitHub, Cursor) over HTTPS. `any-ai-cli` only relays PTY I/O via local WebSocket; it does not intercept, log, or proxy these API requests. Whatever network behavior the underlying CLI has applies as-is.
 
 ### ⚠️ Data retention by wrapped CLIs

@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, showToast, ti18n, token } from './util.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_INPUT_DISABLED_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref } from './user-prefs.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, stateLabel } from './session-list.js';
@@ -139,7 +139,7 @@ export function playNotificationSound() {
   const type = localStorage.getItem(STORAGE_NOTIFY_SOUND_TYPE_KEY) || 'default';
   if (type === 'custom') {
     const tk = token;
-    const customUrl = tk ? `/api/user-prefs/notify-sound-custom?token=${tk}` : null;
+    const customUrl = `/api/user-prefs/notify-sound-custom?token=${encodeURIComponent(tk || '')}`;
     if (customUrl) {
       try { new Audio(customUrl).play().catch(() => {}); return; } catch (_) {}
     }
@@ -731,21 +731,235 @@ export function applyLang(lang) {
   });
 })();
 
-// ---- 音声入力 有効/無効 設定 ----
+// ---- 音声入力 エンジン設定 ----
 (function () {
-  const enabledEl = document.getElementById('voice-input-enabled');
-  if (!enabledEl) return;
-  enabledEl.checked = localStorage.getItem(STORAGE_VOICE_INPUT_DISABLED_KEY) !== '1';
-  enabledEl.addEventListener('change', () => {
-    const btn = document.getElementById('voice-btn');
-    // 録音中に OFF へ切り替えた場合は先に停止する（停止経路は無効化中でも通る）
-    if (!enabledEl.checked && btn && btn.classList.contains('recording')) {
-      btn.click();
+  const group = document.getElementById('voice-engine-segment');
+  if (!group) return;
+  const buttons = Array.from(group.querySelectorAll('[data-voice-engine]'));
+  const descEl = document.getElementById('voice-engine-desc');
+  const browserUnavailableEl = document.getElementById('voice-browser-unavailable-note');
+  const whisperBlock = document.getElementById('voice-whisper-settings');
+  const whisperAutoSubmitEl = document.getElementById('voice-whisper-auto-submit');
+  const whisperManagedPanel = document.getElementById('voice-whisper-managed-panel');
+  const whisperManagedStateEl = document.getElementById('voice-whisper-managed-state');
+  const whisperModelSelect = document.getElementById('voice-whisper-model-select');
+  const whisperInstallProgress = document.getElementById('voice-whisper-install-progress');
+  const whisperInstallProgressBar = document.getElementById('voice-whisper-install-progress-bar');
+  const whisperManagedNote = document.getElementById('voice-whisper-managed-note');
+  const whisperInstallBtn = document.getElementById('voice-whisper-install-btn');
+  const whisperStartBtn = document.getElementById('voice-whisper-start-btn');
+  const whisperStopBtn = document.getElementById('voice-whisper-stop-btn');
+  const whisperUninstallBtn = document.getElementById('voice-whisper-uninstall-btn');
+  const graceRow = document.getElementById('voice-grace-row');
+  const graceDesc = document.getElementById('voice-grace-desc');
+  const diagnosticsPanel = document.getElementById('voice-diagnostics-panel');
+  let whisperPollTimer = null;
+  let lastWhisperStatus = null;
+
+  function browserRecognitionSupported() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const isChromium = navigator.userAgentData?.brands?.some(b => /Chromium/.test(b.brand))
+      ?? /Chrome\//.test(navigator.userAgent);
+    return !!SpeechRecognition && !!isChromium;
+  }
+
+  function descriptionKey(engine) {
+    if (engine === 'off') return 'settings_voice_engine_desc_off';
+    if (engine === 'whisper') return 'settings_voice_engine_desc_whisper';
+    return 'settings_voice_engine_desc_browser';
+  }
+
+  function renderVoiceEngineSettings() {
+    const engine = getVoiceEngine();
+    const browserSupported = browserRecognitionSupported();
+    buttons.forEach((button) => {
+      const value = button.dataset.voiceEngine;
+      button.classList.toggle('active', value === engine);
+      button.setAttribute('aria-checked', value === engine ? 'true' : 'false');
+      if (value === 'browser') {
+        button.disabled = !browserSupported;
+        button.dataset.tooltip = browserSupported ? '' : t('settings_voice_browser_unavailable');
+      }
+    });
+    if (descEl) {
+      const key = descriptionKey(engine);
+      descEl.dataset.i18n = key;
+      descEl.textContent = t(key);
     }
-    setUserPref('voice.input_disabled', !enabledEl.checked);
-    // 再表示は対応ブラウザ（voice.ts が voiceSupported を立てた場合）のみ
-    if (btn) btn.hidden = !enabledEl.checked || btn.dataset.voiceSupported !== '1';
+    if (browserUnavailableEl) browserUnavailableEl.hidden = browserSupported;
+    if (whisperBlock) whisperBlock.hidden = engine !== 'whisper';
+    if (graceRow) graceRow.hidden = engine !== 'browser';
+    if (graceDesc) graceDesc.hidden = engine !== 'browser';
+    if (diagnosticsPanel) diagnosticsPanel.hidden = engine !== 'browser';
+    if (whisperAutoSubmitEl) {
+      whisperAutoSubmitEl.checked = localStorage.getItem(STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY) === '1';
+    }
+    if (engine === 'whisper') {
+      refreshWhisperStatus();
+    } else {
+      setWhisperPolling(false);
+    }
+  }
+
+  function formatWhisperBytes(bytes) {
+    const n = Number(bytes || 0);
+    if (!Number.isFinite(n) || n <= 0) return '';
+    if (n >= 1024 * 1024 * 1024) return `${(n / 1024 / 1024 / 1024).toFixed(1)} GB`;
+    if (n >= 1024 * 1024) return `${Math.round(n / 1024 / 1024)} MB`;
+    return `${Math.round(n / 1024)} KB`;
+  }
+
+  function setWhisperPolling(active) {
+    if (whisperPollTimer) {
+      clearInterval(whisperPollTimer);
+      whisperPollTimer = null;
+    }
+    if (active) {
+      whisperPollTimer = setInterval(refreshWhisperStatus, 2000);
+    }
+  }
+
+  function renderWhisperStatus(data) {
+    lastWhisperStatus = data;
+    if (!data || !whisperManagedPanel) return;
+    whisperManagedPanel.hidden = false;
+    if (whisperModelSelect && Array.isArray(data.models)) {
+      const current = whisperModelSelect.value || data.model || '';
+      whisperModelSelect.innerHTML = '';
+      for (const model of data.models) {
+        const opt = document.createElement('option');
+        opt.value = model.id;
+        const size = formatWhisperBytes(model.size_bytes);
+        opt.textContent = size ? `${model.label} (${size})` : model.label;
+        opt.title = model.quality || '';
+        whisperModelSelect.appendChild(opt);
+      }
+      whisperModelSelect.value = data.model || current;
+    }
+    const install = data.install || {};
+    const installing = !!install.installing;
+    const percent = Math.round((Number(install.progress || 0) * 100));
+    if (whisperInstallProgress) whisperInstallProgress.hidden = !installing;
+    if (whisperInstallProgressBar) whisperInstallProgressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+
+    let stateText = '';
+    if (!data.supported) {
+      stateText = t('settings_voice_whisper_status_unsupported');
+    } else if (installing) {
+      stateText = t('settings_voice_whisper_status_installing')
+        .replace('{phase}', install.phase || '')
+        .replace('{percent}', String(percent));
+    } else if (install.error) {
+      stateText = t('settings_voice_whisper_status_error').replace('{error}', install.error);
+    } else if (data.running) {
+      stateText = t('settings_voice_whisper_status_running');
+    } else if (data.installed) {
+      stateText = t('settings_voice_whisper_status_installed');
+    } else {
+      stateText = t('settings_voice_whisper_status_not_installed');
+    }
+    if (whisperManagedStateEl) whisperManagedStateEl.textContent = stateText;
+    if (document.getElementById('voice-whisper-status')) {
+      const statusEl = document.getElementById('voice-whisper-status');
+      statusEl.textContent = data.server_url || stateText;
+      statusEl.dataset.i18n = '';
+    }
+    const supported = !!data.supported;
+    if (whisperInstallBtn) whisperInstallBtn.disabled = !supported || installing;
+    if (whisperStartBtn) whisperStartBtn.disabled = !supported || installing || !data.installed || data.running;
+    if (whisperStopBtn) whisperStopBtn.disabled = !supported || installing || !data.running;
+    if (whisperUninstallBtn) whisperUninstallBtn.disabled = !supported || installing || (!data.installed && !data.managed);
+    if (whisperModelSelect) whisperModelSelect.disabled = !supported || installing || data.running;
+    if (whisperManagedNote) {
+      if (!supported) {
+        whisperManagedNote.textContent = data.manual_only_message || t('settings_voice_whisper_status_unsupported');
+      } else if (data.installed) {
+        whisperManagedNote.textContent = t('settings_voice_whisper_note_ready').replace('{path}', data.install_dir || '');
+      } else {
+        whisperManagedNote.textContent = t('settings_voice_whisper_note_download');
+      }
+    }
+    setWhisperPolling(installing && getVoiceEngine() === 'whisper');
+  }
+
+  async function refreshWhisperStatus() {
+    if (!whisperManagedPanel) return;
+    try {
+      const res = await fetch(`/api/whisper/status?token=${encodeURIComponent(token || '')}`);
+      if (!res.ok) return;
+      renderWhisperStatus(await res.json());
+    } catch (_) {}
+  }
+
+  async function postWhisperAction(action, body = null) {
+    const init: any = { method: 'POST' };
+    if (body) {
+      init.headers = { 'Content-Type': 'application/json' };
+      init.body = JSON.stringify(body);
+    }
+    const res = await fetch(`/api/whisper/${action}?token=${encodeURIComponent(token || '')}`, init);
+    let data = null;
+    try { data = await res.json(); } catch (_) {}
+    if (!res.ok) {
+      const detail = data?.detail || data?.error || `${action} failed`;
+      throw new Error(detail);
+    }
+    renderWhisperStatus(data);
+    return data;
+  }
+
+  buttons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const engine = button.dataset.voiceEngine;
+      if (!engine || button.disabled) return;
+      const voiceBtn = document.getElementById('voice-btn');
+      if (voiceBtn?.classList.contains('recording')) {
+        document.getElementById('voice-cancel-btn')?.click();
+      }
+      setVoiceEngine(engine);
+      renderVoiceEngineSettings();
+    });
   });
+
+  whisperAutoSubmitEl?.addEventListener('change', () => {
+    localStorage.setItem(STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, whisperAutoSubmitEl.checked ? '1' : '0');
+  });
+  whisperInstallBtn?.addEventListener('click', async () => {
+    try {
+      await postWhisperAction('install', { model: whisperModelSelect?.value || lastWhisperStatus?.model || 'large-v3-turbo-q5_0' });
+      showToast(t('settings_voice_whisper_action_done'), whisperInstallBtn);
+    } catch (err) {
+      showToast(String(err?.message || err), whisperInstallBtn);
+    }
+  });
+  whisperStartBtn?.addEventListener('click', async () => {
+    try {
+      await postWhisperAction('start');
+      showToast(t('settings_voice_whisper_action_done'), whisperStartBtn);
+    } catch (err) {
+      showToast(String(err?.message || err), whisperStartBtn);
+    }
+  });
+  whisperStopBtn?.addEventListener('click', async () => {
+    try {
+      await postWhisperAction('stop');
+      showToast(t('settings_voice_whisper_action_done'), whisperStopBtn);
+    } catch (err) {
+      showToast(String(err?.message || err), whisperStopBtn);
+    }
+  });
+  whisperUninstallBtn?.addEventListener('click', async () => {
+    if (!window.confirm(t('settings_voice_whisper_uninstall'))) return;
+    try {
+      await postWhisperAction('uninstall');
+      showToast(t('settings_voice_whisper_action_done'), whisperUninstallBtn);
+    } catch (err) {
+      showToast(String(err?.message || err), whisperUninstallBtn);
+    }
+  });
+
+  document.addEventListener('voiceengine:changed', renderVoiceEngineSettings);
+  renderVoiceEngineSettings();
 })();
 
 // ---- 音声入力 終了検知 待ち時間 設定 ----
@@ -1049,13 +1263,12 @@ export function applyLang(lang) {
 
   async function patchServerPref(path, value) {
     const tk = token;
-    if (!tk) return;
     try {
-      const getRes = await fetch(`/api/user-prefs?token=${tk}`);
+      const getRes = await fetch(`/api/user-prefs?token=${encodeURIComponent(tk || '')}`);
       if (!getRes.ok) throw new Error(`GET ${getRes.status}`);
       const prefs = await getRes.json();
       _setNestedValue(prefs, path, value);
-      const putRes = await fetch(`/api/user-prefs?token=${tk}`, {
+      const putRes = await fetch(`/api/user-prefs?token=${encodeURIComponent(tk || '')}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(prefs),
@@ -1137,9 +1350,8 @@ export function applyLang(lang) {
 // usage-link デフォルトをリモート（GitHub バック）から取得して更新。
 // 失敗時は DEFAULT_USAGE_LINKS のハードコード値をそのまま使う。
 (async () => {
-  if (!token) return;
   try {
-    const res = await fetch(`/api/usage-link-defaults?token=${token}`);
+    const res = await fetch(`/api/usage-link-defaults?token=${encodeURIComponent(token || '')}`);
     if (!res.ok) return;
     const d = await res.json();
     for (const k of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'opencode']) {
@@ -1168,7 +1380,8 @@ export function applyLang(lang) {
       const translated = window.t(key);
       return translated && translated !== key ? translated : (info.runtime_label || runtimeMode);
     };
-    // SSH セッション経由なら「SSH <自機IP>」、それ以外は自機 IP のみ付与（例: Linux SSH 192.168.1.1）。
+    // SSH セッション経由なら runtime バッジに SSH のみ常時表示し、IP/host は
+    // title とクリック時の一時展開にだけ出す。スクリーンショットへの映り込みを避けるため。
     // launcher の SSH tunnel モードでは既存 Hub が SSH 経由かどうかを自己判定できない
     // （SSH_CONNECTION 等を持たず、NIC からはコンテナ内部 IP しか見えない）ため、
     // launcher が URL クエリ（via=ssh / host_label=<接続先 host>）で渡すヒントを最優先する。
@@ -1180,7 +1393,7 @@ export function applyLang(lang) {
     const hintHost = sessionStorage.getItem('netHint.hostLabel') || '';
     const showSSH = hintSSH || info.ssh;
     const showHost = hintHost || info.host_ip || '';
-    const netSuffix = (showSSH ? ' SSH' : '') + (showHost ? ` ${showHost}` : '');
+    const connectionSuffix = showSSH ? ' SSH' : '';
     // SSH 経由の Hub ではフォルダ選択ダイアログがリモート側で開いてしまい使えないため、
     // spawn パネルのフォルダ参照ボタンを非表示にする。
     // WSL（ランチャー経由）は powershell.exe interop で Windows ダイアログが開けるので残す。
@@ -1192,9 +1405,30 @@ export function applyLang(lang) {
       const runtime = runtimeLabel();
       const badgeEl = document.getElementById('runtime-badge');
       if (badgeEl && runtime) {
-        badgeEl.textContent = runtime + netSuffix;
+        const baseText = runtime + connectionSuffix;
+        badgeEl.textContent = baseText;
         badgeEl.hidden = false;
         badgeEl.dataset.mode = runtimeMode;
+        badgeEl.dataset.baseText = baseText;
+        badgeEl.dataset.hostExpanded = '0';
+        if (showHost) {
+          badgeEl.title = showHost;
+          badgeEl.dataset.hostLabel = showHost;
+        } else {
+          badgeEl.removeAttribute('title');
+          delete badgeEl.dataset.hostLabel;
+        }
+        if (!badgeEl.dataset.hostToggleAttached) {
+          badgeEl.dataset.hostToggleAttached = '1';
+          badgeEl.addEventListener('click', () => {
+            const host = badgeEl.dataset.hostLabel || '';
+            const base = badgeEl.dataset.baseText || badgeEl.textContent || '';
+            if (!host || !base) return;
+            const expanded = badgeEl.dataset.hostExpanded === '1';
+            badgeEl.dataset.hostExpanded = expanded ? '0' : '1';
+            badgeEl.textContent = expanded ? base : `${base} ${host}`;
+          });
+        }
       }
       const settingsEl = document.querySelector('.settings-app-version');
       if (settingsEl) settingsEl.textContent = runtime ? `${ver} [Hub UI] - ${runtime}` : ver + ' [Hub UI]';

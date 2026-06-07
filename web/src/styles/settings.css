@@ -71,6 +71,7 @@
   color: var(--text);
   background: var(--panel);
   font-size: 0.72rem;
+  cursor: pointer;
 }
 .runtime-badge[data-mode="windows-wsl"] {
   border-color: rgba(56, 189, 248, 0.45);
@@ -98,6 +99,9 @@
   padding: 7px 14px;
 }
 .settings-row[hidden] { display: none !important; }
+.settings-row--stacked {
+  align-items: stretch;
+}
 .settings-label { font-size: 0.85rem; color: var(--text); white-space: nowrap; flex-shrink: 0; }
 .settings-row-actions {
   display: flex;
@@ -151,6 +155,42 @@
   border-radius: 4px;
   text-align: center;
   white-space: nowrap;
+}
+.settings-inline-btn.danger {
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.45);
+}
+.settings-inline-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.voice-whisper-managed-panel {
+  margin: 6px 14px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  overflow: hidden;
+}
+.voice-whisper-managed-panel[hidden] { display: none !important; }
+.voice-whisper-managed-panel .settings-row {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+.whisper-install-progress {
+  height: 7px;
+  margin: 4px 10px 8px;
+  border-radius: 999px;
+  background: var(--bg);
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.whisper-install-progress[hidden] { display: none !important; }
+.whisper-install-progress-bar {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.2s ease;
 }
 
 .settings-section { border-top: 1px solid var(--line); }
@@ -255,6 +295,64 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 .settings-avatar-status.ok  { color: #4ade80; }
 .settings-avatar-status.err { color: #f87171; }
 .settings-note { padding: 0 14px 4px; font-size: 0.75rem; color: var(--muted); font-style: italic; }
+.settings-note[hidden] { display: none !important; }
+.settings-note-warn { color: var(--warn-text); }
+.settings-status {
+  color: var(--muted-2);
+  font-size: 0.78rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 7px;
+  background: var(--bg);
+}
+.settings-segmented {
+  display: inline-grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  min-width: min(100%, 360px);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.settings-segment-btn {
+  min-height: 32px;
+  padding: 5px 9px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.settings-segment-btn:last-child { border-right: 0; }
+.settings-segment-btn:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.settings-segment-btn.active {
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 700;
+}
+.settings-segment-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.voice-whisper-settings {
+  margin: 4px 14px 8px;
+  padding: 8px 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+}
+.voice-whisper-settings[hidden] { display: none !important; }
+.voice-whisper-settings .settings-row,
+.voice-whisper-settings .settings-note {
+  padding-left: 10px;
+  padding-right: 10px;
+}
 .settings-effective-command {
   margin: 0 14px 8px;
   padding: 6px 8px;
@@ -297,6 +395,14 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   .settings-input-text,
   .settings-avatar-url-input {
     width: 100%;
+  }
+  .settings-segmented {
+    width: 100%;
+    min-width: 0;
+  }
+  .settings-segment-btn {
+    padding-left: 5px;
+    padding-right: 5px;
   }
 }
 

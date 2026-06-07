@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { showToast } from './util.js';
-import { STORAGE_LANG_KEY, STORAGE_VOICE_INPUT_DISABLED_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, getDefaultWakeWordPhrase } from './user-prefs.js';
+import { STORAGE_LANG_KEY, STORAGE_VOICE_INPUT_DISABLED_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, getDefaultWakeWordPhrase, getVoiceEngine } from './user-prefs.js';
 import { activeSessionId, terminals } from './state.js';
 import { autoExpand, buildSendText, doSend, inputEl, set_voiceActive, set_voiceAudioActive, updateInputClearButton, updateSlashMenu, voiceActive, voiceAudioActive } from '../app.js';
 import { renderSessionList } from './session-list.js';
@@ -167,9 +167,23 @@ import { getActiveTriggerPhrase, normalizeTriggerMatchText, textEndsWithTriggerP
   if (!btn || !voiceBar || !canvas) return;
 
   // ブラウザ対応済みの印（settings.ts のトグルが「対応ブラウザでのみ再表示」判定に使う）
-  btn.dataset.voiceSupported = '1';
-  btn.hidden = localStorage.getItem(STORAGE_VOICE_INPUT_DISABLED_KEY) === '1';
-  btn.dataset.tooltip = t('voice_tooltip');
+  btn.dataset.voiceBrowserSupported = '1';
+  function updateBrowserVoiceButtonVisibility() {
+    const engine = getVoiceEngine();
+    if (engine === 'browser') {
+      btn.dataset.voiceSupported = '1';
+      btn.hidden = false;
+      btn.dataset.tooltip = t('voice_tooltip');
+      return;
+    }
+    if (engine === 'off') {
+      btn.hidden = true;
+      return;
+    }
+    if (btn.dataset.voiceWhisperSupported !== '1') btn.hidden = true;
+  }
+  updateBrowserVoiceButtonVisibility();
+  document.addEventListener('voiceengine:changed', updateBrowserVoiceButtonVisibility);
 
   let dbgSeq = 0;
   let recognition = new SpeechRecognition();
@@ -558,6 +572,7 @@ import { getActiveTriggerPhrase, normalizeTriggerMatchText, textEndsWithTriggerP
   attachHandlers();
 
   btn.addEventListener('click', () => {
+    if (getVoiceEngine() !== 'browser') return;
     pushVoiceDiagEvent(recognition._dbgId, 'click');
     if (isRecording) {
       try { recognition.abort(); } catch (_) {}
@@ -613,7 +628,7 @@ import { getActiveTriggerPhrase, normalizeTriggerMatchText, textEndsWithTriggerP
       cancelBtn.click();
       return;
     }
-    if (e.altKey && e.code === 'KeyV' && !e.ctrlKey && !e.metaKey) {
+    if (e.altKey && e.code === 'KeyV' && !e.ctrlKey && !e.metaKey && getVoiceEngine() === 'browser') {
       e.preventDefault();
       btn.click();
     }

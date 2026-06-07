@@ -1,6 +1,6 @@
 # any-ai-cli 開発ガイド
 
-> 最終更新: 2026-06-07(日) 01:46:08 — フロント依存管理を npm → bun に移行
+> 最終更新: 2026-06-07(日) 12:57:07 — 公開用AI指示を個人グローバル設定から分離
 
 > 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。
 
@@ -14,7 +14,7 @@
 
 **設計書（正本）**: [docs/v0.2.0-any-ai-cli-design.md](docs/v0.2.0-any-ai-cli-design.md)
 
-> 全AI共通ルール（言語・確認・質問フォーマット・ターン終端の出力ルール・スクリーンショット規約等）は `C:\Users\admin\.claude\CLAUDE.md` を正本とする。Claude Code は自動ロード、Codex 等他AIは `AGENTS.md` 経由で参照。
+> AI の個人グローバルルール（言語・確認・質問フォーマット・ターン終端の出力ルール・スクリーンショット規約等）は、各利用者が使う AI ツールのグローバル設定に置く。公開リポジトリ内の `CLAUDE.md` / `AGENTS.md` はプロジェクト固有ルールだけを扱う。
 
 ## 現在の実装状態（v0.2.0）
 
@@ -125,5 +125,5 @@ any-ai-cli/
 |------|------|
 | 設計書 v0.2.0（現行・正本） | [docs/v0.2.0-any-ai-cli-design.md](docs/v0.2.0-any-ai-cli-design.md) |
 | 設計書 v1（履歴） | [docs/local/archive/cli-popup-design-v1.md](docs/local/archive/cli-popup-design-v1.md) |
-| Codex 用補足 | [AGENTS.md](AGENTS.md) / [AGENTS.local.md](AGENTS.local.md) |
+| Codex 用補足 | [AGENTS.md](AGENTS.md)（ローカル補足があれば `AGENTS.local.md`） |
 | Gemini 用補足 | [GEMINI.md](GEMINI.md)（**any-ai-cli の wrap 対象外**。本リポジトリで Gemini CLI を開発補助に使う場合の手引きとして残置） |

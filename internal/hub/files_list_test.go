@@ -54,3 +54,67 @@ func TestWalkFilesLocalIncludesDirectoryOnceWithChildren(t *testing.T) {
 		t.Fatalf("file count = %d, want 1; items=%+v", fileCount, items)
 	}
 }
+
+func TestWalkFilesLocalIncludesDotFilesAndDotDirs(t *testing.T) {
+	tmp := t.TempDir()
+	dotDir := filepath.Join(tmp, ".github")
+	if err := os.MkdirAll(dotDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dotFile := filepath.Join(tmp, ".gitignore")
+	if err := os.WriteFile(dotFile, []byte("dist/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dotDirFile := filepath.Join(dotDir, "workflow.yml")
+	if err := os.WriteFile(dotDirFile, []byte("name: ci\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	items, truncated := walkFilesLocal(tmp, tmp)
+	if truncated {
+		t.Fatal("walkFilesLocal should not truncate small trees")
+	}
+
+	if !hasFilesListItem(items, "file", dotFile) {
+		t.Fatalf("dotfile %q was not returned: %+v", dotFile, items)
+	}
+	if !hasFilesListItem(items, "dir", dotDir) {
+		t.Fatalf("dotdir %q was not returned: %+v", dotDir, items)
+	}
+	if !hasFilesListItem(items, "file", dotDirFile) {
+		t.Fatalf("dotdir child %q was not returned: %+v", dotDirFile, items)
+	}
+}
+
+func TestWalkFilesLocalListsGitDirWithoutDescending(t *testing.T) {
+	tmp := t.TempDir()
+	gitDir := filepath.Join(tmp, ".git")
+	if err := os.MkdirAll(filepath.Join(gitDir, "objects"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hiddenGitFile := filepath.Join(gitDir, "objects", "pack")
+	if err := os.WriteFile(hiddenGitFile, []byte("pack"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	items, truncated := walkFilesLocal(tmp, tmp)
+	if truncated {
+		t.Fatal("walkFilesLocal should not truncate small trees")
+	}
+
+	if !hasFilesListItem(items, "dir", gitDir) {
+		t.Fatalf(".git directory %q was not returned: %+v", gitDir, items)
+	}
+	if hasFilesListItem(items, "file", hiddenGitFile) {
+		t.Fatalf(".git child %q should not be returned: %+v", hiddenGitFile, items)
+	}
+}
+
+func hasFilesListItem(items []filesListItem, typ, path string) bool {
+	for _, item := range items {
+		if item.Type == typ && item.Path == path {
+			return true
+		}
+	}
+	return false
+}

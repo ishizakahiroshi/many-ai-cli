@@ -345,6 +345,77 @@ func TestSaveRoundTrip(t *testing.T) {
 	}
 }
 
+func TestHubTokenlessAccessRoundTrip(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	cfg1, err := LoadOrCreate()
+	if err != nil {
+		t.Fatalf("LoadOrCreate: %v", err)
+	}
+	cfg1.Hub.AllowLoopbackWithoutToken = true
+	cfg1.Hub.TrustedNetworks = []string{"172.19.0.1/32"}
+	cfg1.Hub.AllowedHosts = []string{"10.8.0.1", "hub.example"}
+	if err := Save(cfg1); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	cfg2, err := LoadOrCreate()
+	if err != nil {
+		t.Fatalf("LoadOrCreate second: %v", err)
+	}
+	if !cfg2.Hub.AllowLoopbackWithoutToken {
+		t.Fatal("AllowLoopbackWithoutToken = false, want true")
+	}
+	if got := strings.Join(cfg2.Hub.TrustedNetworks, ","); got != "172.19.0.1/32" {
+		t.Fatalf("TrustedNetworks = %q", got)
+	}
+	if got := strings.Join(cfg2.Hub.AllowedHosts, ","); got != "10.8.0.1,hub.example" {
+		t.Fatalf("AllowedHosts = %q", got)
+	}
+}
+
+func TestConfigValidationRejectsUnsafeTrustedNetworks(t *testing.T) {
+	for _, cidr := range []string{"0.0.0.0/0", "::/0", "not-a-cidr"} {
+		cfg := defaultConfig(t.TempDir())
+		cfg.Hub.TrustedNetworks = []string{cidr}
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("Validate() with trusted network %q succeeded, want error", cidr)
+		}
+	}
+}
+
+func TestConfigValidationRejectsInvalidAllowedHosts(t *testing.T) {
+	for _, host := range []string{"", "*", "10.8.0.1:47801", "http://10.8.0.1", "bad/host"} {
+		cfg := defaultConfig(t.TempDir())
+		cfg.Hub.AllowedHosts = []string{host}
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("Validate() with allowed host %q succeeded, want error", host)
+		}
+	}
+}
+
+func TestVoiceWhisperConfigDefaultsAndValidation(t *testing.T) {
+	cfg := defaultConfig(t.TempDir())
+	if cfg.Voice.Whisper.Language != "ja" {
+		t.Fatalf("default whisper language = %q, want ja", cfg.Voice.Whisper.Language)
+	}
+	if cfg.Voice.Whisper.TimeoutSeconds != 60 {
+		t.Fatalf("default whisper timeout = %d, want 60", cfg.Voice.Whisper.TimeoutSeconds)
+	}
+	cfg.Voice.Whisper.ServerURL = "http://127.0.0.1:8178"
+	cfg.Voice.Whisper.RequestPath = "/inference"
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate localhost whisper config: %v", err)
+	}
+
+	cfg.Voice.Whisper.ServerURL = "https://api.openai.com"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate external whisper server succeeded, want error")
+	}
+}
+
 func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	cfg := &Config{}
 	cfg.Spawn.LastModel = map[string]string{"legacy": "a"}
@@ -352,6 +423,8 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	cfg.UserPrefs.CwdHistory = []string{"C:/dev/one"}
 	cfg.UserPrefs.Spawn.Defaults = map[string]string{"claude": "default"}
 	cfg.UserPrefs.Spawn.LastModel = map[string]string{"claude": "sonnet"}
+	cfg.Hub.TrustedNetworks = []string{"172.19.0.1/32"}
+	cfg.Hub.AllowedHosts = []string{"10.8.0.1"}
 
 	clone := cfg.Clone()
 	cfg.Spawn.LastModel["legacy"] = "b"
@@ -359,6 +432,8 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	cfg.UserPrefs.CwdHistory[0] = "C:/dev/two"
 	cfg.UserPrefs.Spawn.Defaults["claude"] = "changed"
 	cfg.UserPrefs.Spawn.LastModel["claude"] = "opus"
+	cfg.Hub.TrustedNetworks[0] = "172.19.0.2/32"
+	cfg.Hub.AllowedHosts[0] = "10.8.0.2"
 
 	if clone.Spawn.LastModel["legacy"] != "a" {
 		t.Fatalf("legacy spawn map was aliased")
@@ -374,5 +449,11 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	}
 	if clone.UserPrefs.Spawn.LastModel["claude"] != "sonnet" {
 		t.Fatalf("spawn last model map was aliased")
+	}
+	if clone.Hub.TrustedNetworks[0] != "172.19.0.1/32" {
+		t.Fatalf("trusted networks slice was aliased")
+	}
+	if clone.Hub.AllowedHosts[0] != "10.8.0.1" {
+		t.Fatalf("allowed hosts slice was aliased")
 	}
 }
