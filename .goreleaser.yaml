@@ -95,6 +95,75 @@ signs:
       - "--output-certificate=${certificate}"
       - "${artifact}"
 
+# Homebrew 自前 tap への cask 公開（macOS amd64/arm64）。
+# 当初は formula(brews) で macOS + Linux 両対応の予定だったが、brews は
+# v2.16 で hard deprecation（release 実行が失敗）のため cask に変更。
+# cask は macOS 専用につき、Linux ユーザーは下の nfpms(deb/rpm) か zip を使う
+# （plan_package-manager-distribution.md C1 の分岐決定 2026-06-07）。
+homebrew_casks:
+  - name: any-ai-cli
+    ids: [default]
+    repository:
+      owner: ishizakahiroshi
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.PUBLISH_GITHUB_TOKEN }}"
+    homepage: https://github.com/ishizakahiroshi/any-ai-cli
+    description: "Web dashboard to manage approvals and progress across multiple AI coding CLIs"
+    license: MIT
+    # prerelease タグ (-rc 等) では tap へ push しない
+    skip_upload: auto
+    # バイナリは未署名・未公証のため、quarantine 属性を post-install で除去する
+    # （これがないと初回実行時に Gatekeeper にブロックされる）
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/any-ai-cli"]
+          end
+
+# winget への manifest 公開（Windows x64、zip + nested portable）。
+# 自分の winget-pkgs fork へ commit し、microsoft/winget-pkgs master へ自動 PR。
+# fork は release.yml の sync ステップで upstream と同期してから使う。
+winget:
+  - name: any-ai-cli
+    publisher: ishizakahiroshi
+    # 後から実質変更不可。本名名義で長期運用（2026-06-07 ユーザー確定）
+    package_identifier: ishizakahiroshi.any-ai-cli
+    short_description: "Web dashboard to manage approvals and progress across multiple AI coding CLIs"
+    license: MIT
+    license_url: https://github.com/ishizakahiroshi/any-ai-cli/blob/main/LICENSE
+    homepage: https://github.com/ishizakahiroshi/any-ai-cli
+    publisher_url: https://github.com/ishizakahiroshi
+    publisher_support_url: https://github.com/ishizakahiroshi/any-ai-cli/issues
+    release_notes_url: https://github.com/ishizakahiroshi/any-ai-cli/releases/tag/v{{ .Version }}
+    # prerelease タグでは manifest を push しない
+    skip_upload: auto
+    repository:
+      owner: ishizakahiroshi
+      name: winget-pkgs
+      branch: "any-ai-cli-{{ .Version }}"
+      token: "{{ .Env.PUBLISH_GITHUB_TOKEN }}"
+      pull_request:
+        enabled: true
+        draft: false
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master
+
+# Linux 向け deb/rpm を生成し GitHub Releases に添付する（apt/yum リポジトリ運営はしない）。
+nfpms:
+  - package_name: any-ai-cli
+    ids: [any-ai-cli]
+    vendor: ishizakahiroshi
+    maintainer: "Hiroshi Ishizaka <ishizakahiroshi@gmail.com>"
+    homepage: https://github.com/ishizakahiroshi/any-ai-cli
+    description: Web dashboard to manage approvals and progress across multiple AI coding CLIs
+    license: MIT
+    formats: [deb, rpm]
+    bindir: /usr/bin
+
 changelog:
   sort: asc
   filters:

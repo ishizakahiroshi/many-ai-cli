@@ -14,6 +14,33 @@ A local web dashboard to manage multiple AI coding CLIs (Claude Code / Codex CLI
 
 ## Quick Download
 
+### Install via a package manager
+
+**Windows (winget):**
+
+```powershell
+winget install ishizakahiroshi.any-ai-cli
+```
+
+> Available once the first winget manifest PR is merged into `microsoft/winget-pkgs`. Until then, use the zip download below.
+
+**macOS (Homebrew):**
+
+```bash
+brew install --cask ishizakahiroshi/tap/any-ai-cli
+```
+
+**Linux — Debian / Ubuntu (.deb) and RHEL-family (.rpm):**
+
+Download the package from [GitHub Releases](https://github.com/ishizakahiroshi/any-ai-cli/releases/latest), then:
+
+```bash
+sudo dpkg -i any-ai-cli_<version>_amd64.deb   # Debian / Ubuntu
+sudo rpm -i any-ai-cli-<version>.x86_64.rpm   # RHEL family
+```
+
+### Manual download (all platforms)
+
 Get the latest release from [GitHub Releases](https://github.com/ishizakahiroshi/any-ai-cli/releases/latest).
 
 | Platform | Download |
