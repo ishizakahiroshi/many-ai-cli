@@ -2526,8 +2526,8 @@ export const FilesPreview = (function () {
         const content = data.content || '';
         const isMd = /\.md$/i.test(absPath);
 
-        // 編集ボタンの表示制御: truncated ファイルは編集不可
-        const canEdit = !data.truncated;
+        // 編集ボタンの表示制御: truncated ファイル・readOnly（スコープ外の読み取り専用許可）は編集不可
+        const canEdit = !data.truncated && !data.readOnly;
         editBtn.hidden = !canEdit;
         editBtn.disabled = !canEdit;
         // content と mtime を保持（編集モード開始時・doSave の baseMtime に使う）
@@ -2573,6 +2573,13 @@ export const FilesPreview = (function () {
           contentEl.innerHTML = '';
           contentEl.appendChild(renderSourceToPre(content, absPath));
           addCodeCopyButtons(contentEl);
+        }
+        // スコープ外パスの読み取り専用プレビュー（チャット履歴の言及により許可）には注記を出す
+        if (data.readOnly) {
+          const note = document.createElement('div');
+          note.className = 'files-preview-truncated-warn files-preview-readonly-note';
+          note.textContent = t('files_preview_readonly_note') || '🔒 Outside project scope — read-only preview.';
+          contentEl.prepend(note);
         }
         bodyEl.scrollTop = 0;
       } catch (err) {

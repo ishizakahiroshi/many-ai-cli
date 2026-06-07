@@ -113,6 +113,50 @@ func TestStoreChatRestoreSearchAndPrune(t *testing.T) {
 	}
 }
 
+func TestMessagesMentionText(t *testing.T) {
+	logDir := filepath.Join(t.TempDir(), "logs")
+	store, err := OpenForLogDir(logDir)
+	if err != nil {
+		t.Fatalf("OpenForLogDir: %v", err)
+	}
+	defer store.Close()
+
+	startedAt := time.Now().Format(time.RFC3339)
+	if _, err := store.StartSession(SessionStart{
+		LiveSessionID: 1,
+		Provider:      "claude",
+		CWD:           filepath.Join("C:", "dev", "any-ai-cli"),
+		State:         "standby",
+		StartedAt:     startedAt,
+	}); err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+	mentioned := `C:\dev\works\plans\plan_outside.md`
+	ev := map[string]any{"ts": startedAt, "type": "pty_output", "session_id": 1, "text": "変更ファイル: " + mentioned + "\n"}
+	if err := store.StoreEvent(1, ev); err != nil {
+		t.Fatalf("StoreEvent: %v", err)
+	}
+
+	ok, err := store.MessagesMentionText(1, []string{mentioned})
+	if err != nil || !ok {
+		t.Fatalf("MessagesMentionText(mentioned) = %v, %v; want true, nil", ok, err)
+	}
+	ok, err = store.MessagesMentionText(1, []string{`C:\dev\works\plans\never_mentioned.md`})
+	if err != nil || ok {
+		t.Fatalf("MessagesMentionText(not mentioned) = %v, %v; want false, nil", ok, err)
+	}
+	// 未知の live セッション ID は false
+	ok, err = store.MessagesMentionText(99, []string{mentioned})
+	if err != nil || ok {
+		t.Fatalf("MessagesMentionText(unknown session) = %v, %v; want false, nil", ok, err)
+	}
+	// 空 variants は false
+	ok, err = store.MessagesMentionText(1, nil)
+	if err != nil || ok {
+		t.Fatalf("MessagesMentionText(nil variants) = %v, %v; want false, nil", ok, err)
+	}
+}
+
 func TestStoreEventMasksUserInputSecrets(t *testing.T) {
 	logDir := filepath.Join(t.TempDir(), "logs")
 	store, err := OpenForLogDir(logDir)
