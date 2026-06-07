@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { inputEl } from '../app.js';
 import { render } from './session-list.js';
-import { enableWebglRenderer, termArea } from './terminal.js';
+import { disableWebglRenderer, enableWebglRenderer, releaseHiddenWebglRenderers, termArea } from './terminal.js';
 
 // multi-pane.js — MultiPaneManager + GridPicker (C3: xterm マルチインスタンス + WS ルーティング)
 // index.html で app.js より前に読み込む
@@ -585,6 +585,8 @@ export class MultiPaneManager {
     if (t.container) {
       // 既に open 済み: container を termArea に移動する
       if (!termArea.contains(t.container)) {
+        // DOM 再配置で WebGL canvas の描画バッファが失われるため、移動前に破棄する
+        disableWebglRenderer(t);
         termArea.appendChild(t.container);
         // DOM 移動で .xterm-viewport の scrollTop がブラウザにリセットされるため、
         // 次フレームでスクロール位置を xterm 内部状態に合わせて再同期する
@@ -596,6 +598,8 @@ export class MultiPaneManager {
             // autoScroll=false（ユーザーが上にスクロール中）の場合は viewportY に合わせる
             this._syncViewportToBuffer(t);
           }
+          // 配置・fit 確定後に WebGL レンダラを再生成する
+          enableWebglRenderer(t);
         });
       }
     } else {
@@ -684,6 +688,9 @@ export class MultiPaneManager {
       children.forEach(child => {
         try { termArea.removeChild(child); } catch (_) {}
       });
+      // 非表示になったターミナルの WebGL コンテキストを解放する
+      // （次の attach 時に enableWebglRenderer が再生成する）
+      releaseHiddenWebglRenderers();
     }
   }
 

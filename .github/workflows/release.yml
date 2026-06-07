@@ -38,6 +38,14 @@ jobs:
       # SBOM 生成用 syft（.goreleaser.yaml の sboms セクションが参照）
       - uses: anchore/sbom-action/download-syft@v0
 
+      # winget-pkgs fork を upstream (microsoft/winget-pkgs) と同期してから
+      # goreleaser の winget publisher に使わせる。winget-pkgs は1日数百コミット
+      # 動くため、stale な fork から PR を作ると差分汚染・conflict が起きる。
+      - name: Sync winget-pkgs fork
+        env:
+          GH_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}
+        run: gh repo sync ishizakahiroshi/winget-pkgs --source microsoft/winget-pkgs
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
@@ -45,3 +53,5 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # homebrew-tap / winget-pkgs fork への push 用 PAT（GITHUB_TOKEN は自リポジトリ限定のため）
+          PUBLISH_GITHUB_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}

@@ -15,6 +15,7 @@ export interface TerminalEntry {
   pendingFlushActive?: boolean;
   pendingFlushSeq?: number;
   pendingFlushWatchdog?: ReturnType<typeof setTimeout> | null;
+  webglAddon?: { dispose?: () => void } | null;
   pendingTextTail?: string;
   textDecoder?: TextDecoder;
   markerFilterCarry?: Uint8Array;

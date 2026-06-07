@@ -234,8 +234,11 @@ export function attachTerminal(id) {
   const t = terminals.get(id);
   if (!t) return;
   if (t.container) {
+    // DOM 再配置で WebGL canvas の描画バッファが失われるため、移動前に破棄する
+    disableWebglRenderer(t);
     area.innerHTML = '';
     area.appendChild(t.container);
+    releaseHiddenWebglRenderers();
     t.autoScroll = true;
     updateScrollLockBtn(false);
     requestAnimationFrame(() => {
@@ -250,6 +253,8 @@ export function attachTerminal(id) {
       if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
         sendResize(id, t.term.cols, t.term.rows);
       }
+      // 配置・fit 確定後に WebGL レンダラを再生成する
+      enableWebglRenderer(t);
     });
     return;
   }
@@ -259,6 +264,7 @@ export function attachTerminal(id) {
   t.container = container;
   area.innerHTML = '';
   area.appendChild(container);
+  releaseHiddenWebglRenderers();
   whenLayoutReady(id, container);
 }
 
@@ -274,12 +280,39 @@ export function enableWebglRenderer(t) {
     addon.onContextLoss(() => {
       try { addon.dispose(); } catch (_) {}
       t.webglAddon = null;
+      // DOM レンダラへ戻った直後は何も再描画されないため全行 repaint する
+      refreshAllRows(t);
     });
     t.term.loadAddon(addon);
     t.webglAddon = addon;
+    // addon ロード直後に全行 repaint し、ロード前の内容も WebGL canvas へ載せる
+    refreshAllRows(t);
   } catch (err) {
     console.warn('[terminal] WebGL renderer unavailable; falling back to DOM renderer', err);
   }
+}
+
+// WebGL レンダラを破棄して DOM レンダラへ戻す。
+// container を DOM 上で再配置（タブ切替・マルチペインへの移動）すると WebGL canvas の
+// 描画バッファが失われ、addon は全面再描画しないため大半の行が空白になる。
+// VS Code と同様「移動前に破棄 → 配置確定後に再生成」で対処する。
+export function disableWebglRenderer(t) {
+  if (!t || !t.webglAddon) return;
+  try { t.webglAddon.dispose(); } catch (_) {}
+  t.webglAddon = null;
+}
+
+// 画面に表示されていないターミナルの WebGL コンテキストを解放する。
+// ブラウザは同時 WebGL コンテキスト数に上限があり（Chrome で約16）、超えると
+// 古いコンテキストから強制喪失されるため、DOM に接続中のペイン分だけ保持する。
+export function releaseHiddenWebglRenderers() {
+  terminals.forEach((t) => {
+    if (t.webglAddon && (!t.container || !t.container.isConnected)) disableWebglRenderer(t);
+  });
+}
+
+function refreshAllRows(t) {
+  try { t.term.refresh(0, t.term.rows - 1); } catch (_) { /* 未 open 時は無視 */ }
 }
 
 export function whenLayoutReady(id, container) {
