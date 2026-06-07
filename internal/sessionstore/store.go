@@ -560,6 +560,35 @@ func (s *Store) SearchMessages(query string, limit int) ([]SearchResult, error) 
 	return s.searchLike(query, limit)
 }
 
+// MessagesMentionText は指定 live セッションの保存済みメッセージに
+// variants のいずれかが部分一致で含まれるかを返す。
+// Files プレビューの「チャットで言及されたパスは読み取り専用で開ける」判定に使う。
+func (s *Store) MessagesMentionText(liveSessionID int, variants []string) (bool, error) {
+	sessionID, err := s.sessionIDForLive(liveSessionID)
+	if err != nil || sessionID == 0 {
+		return false, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	for _, v := range variants {
+		if v == "" {
+			continue
+		}
+		var one int
+		err := s.db.QueryRowContext(ctx, `SELECT 1 FROM messages
+			WHERE session_id=? AND (instr(COALESCE(raw_text, ''), ?) > 0 OR instr(COALESCE(text, ''), ?) > 0)
+			LIMIT 1`, sessionID, v, v).Scan(&one)
+		if err == sql.ErrNoRows {
+			continue
+		}
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
 func (s *Store) ListSessions(limit int, includeArchived bool) ([]SessionOverview, error) {
 	if s == nil || s.db == nil {
 		return nil, nil

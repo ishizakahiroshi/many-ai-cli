@@ -471,6 +471,7 @@
   "files_preview_search_next": "次の一致",
   "files_preview_search_close": "検索を閉じる",
   "files_preview_truncated_warn": "⚠ ファイルが大きすぎます（>1MiB）。先頭のみ表示しています。",
+  "files_preview_readonly_note": "🔒 プロジェクト外のファイルです（チャットで言及されたため読み取り専用で表示）。",
   "files_preview_code_copy_label": "コピー",
   "files_preview_code_copied_label": "コピーしました",
   "files_preview_code_copy_tooltip": "コードをコピー",

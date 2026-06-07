@@ -20,6 +20,8 @@ type filesContentResp struct {
 	Mtime     time.Time `json:"mtime"`
 	Content   string    `json:"content"`
 	Truncated bool      `json:"truncated"`
+	// ReadOnly は許可ルート外だがチャット履歴の言及により読み取り専用で許可した場合に true。
+	ReadOnly bool `json:"readOnly"`
 }
 
 // previewableTextExtensions は /api/files-content で許可するテキスト系拡張子（小文字）。
@@ -87,23 +89,69 @@ func (s *Server) cwdForRequest(r *http.Request) string {
 	return s.hubCWD
 }
 
-func (s *Server) resolveAllowedFilePath(r *http.Request) (string, error) {
+// resolveAllowedFilePath は ?path= を検証して絶対パスを返す。
+// 許可ルート外でも、?session= のチャット履歴にそのパスが言及されている場合は
+// 読み取り専用（readOnly=true）として許可する。このフォールバックは
+// files-content / files-asset の GET プレビュー専用。書き込み系 API では使わないこと。
+func (s *Server) resolveAllowedFilePath(r *http.Request) (string, bool, error) {
 	pathParam := r.URL.Query().Get("path")
 	if pathParam == "" {
-		return "", httpError{status: http.StatusBadRequest, msg: "path parameter is required"}
+		return "", false, httpError{status: http.StatusBadRequest, msg: "path parameter is required"}
 	}
 	if !filepath.IsAbs(pathParam) {
-		return "", httpError{status: http.StatusBadRequest, msg: "path must be an absolute path"}
+		return "", false, httpError{status: http.StatusBadRequest, msg: "path must be an absolute path"}
 	}
 
 	cwd := s.cwdForRequest(r)
 
 	gitRoot := findGitRoot(cwd)
 	allowed, err := isPathUnderAllowedRoots(pathParam, cwd, gitRoot)
-	if err != nil || !allowed {
-		return "", httpError{status: http.StatusForbidden, msg: "forbidden: path is outside allowed roots"}
+	if err == nil && allowed {
+		return pathParam, false, nil
 	}
-	return pathParam, nil
+	if s.isPathMentionedInSession(r, pathParam, cwd) {
+		return pathParam, true, nil
+	}
+	return "", false, httpError{status: http.StatusForbidden, msg: "forbidden: path is outside allowed roots"}
+}
+
+// isPathMentionedInSession は ?session= のチャット履歴（sessionstore）に
+// absPath の言及があるかをサーバ側で照合する。クライアント申告は信用しない。
+func (s *Server) isPathMentionedInSession(r *http.Request, absPath, cwd string) bool {
+	if s.sessionStore == nil {
+		return false
+	}
+	sid, err := strconv.Atoi(r.URL.Query().Get("session"))
+	if err != nil || sid <= 0 {
+		return false
+	}
+	ok, err := s.sessionStore.MessagesMentionText(sid, pathMentionVariants(absPath, cwd))
+	return err == nil && ok
+}
+
+// pathMentionVariants は履歴照合に使うパス表記の変種を返す。
+// ターミナル出力では \ と / が混在し、cwd からの相対表記で言及されることもあるため、
+// 絶対パス（両セパレータ）+ 相対パス（両セパレータ）を照合対象にする。
+func pathMentionVariants(absPath, cwd string) []string {
+	addBothSeps := func(out []string, p string) []string {
+		if p == "" {
+			return out
+		}
+		out = append(out, p)
+		if fwd := strings.ReplaceAll(p, "\\", "/"); fwd != p {
+			out = append(out, fwd)
+		} else if back := strings.ReplaceAll(p, "/", "\\"); back != p {
+			out = append(out, back)
+		}
+		return out
+	}
+	variants := addBothSeps(nil, absPath)
+	if cwd != "" {
+		if rel, err := filepath.Rel(cwd, absPath); err == nil && rel != "" && rel != "." {
+			variants = addBothSeps(variants, rel)
+		}
+	}
+	return variants
 }
 
 type httpError struct {
@@ -121,7 +169,7 @@ func (s *Server) handleFilesContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pathParam, err := s.resolveAllowedFilePath(r)
+	pathParam, readOnly, err := s.resolveAllowedFilePath(r)
 	if err != nil {
 		if he, ok := err.(httpError); ok {
 			writeJSONError(w, he.status, httpErrorCode(he.status), he.msg)
@@ -175,6 +223,7 @@ func (s *Server) handleFilesContent(w http.ResponseWriter, r *http.Request) {
 		Mtime:     info.ModTime(),
 		Content:   string(buf),
 		Truncated: truncated,
+		ReadOnly:  readOnly,
 	}
 
 	writeJSON(w, resp)
@@ -187,7 +236,7 @@ func (s *Server) handleFilesAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pathParam, err := s.resolveAllowedFilePath(r)
+	pathParam, _, err := s.resolveAllowedFilePath(r)
 	if err != nil {
 		if he, ok := err.(httpError); ok {
 			writeJSONError(w, he.status, httpErrorCode(he.status), he.msg)

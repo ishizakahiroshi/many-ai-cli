@@ -471,6 +471,7 @@
   "files_preview_search_next": "Next match",
   "files_preview_search_close": "Close search",
   "files_preview_truncated_warn": "⚠ File truncated (>1MiB). Showing partial content.",
+  "files_preview_readonly_note": "🔒 Outside the project scope — shown read-only (mentioned in chat).",
   "files_preview_code_copy_label": "Copy",
   "files_preview_code_copied_label": "Copied",
   "files_preview_code_copy_tooltip": "Copy code",
