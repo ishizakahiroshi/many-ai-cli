@@ -45,7 +45,7 @@ import (
 const (
 	idleAfter                    = 3 * time.Second
 	tickerInterval               = 200 * time.Millisecond
-	maxPTYBuf                    = 512 * 1024 // 512 KB
+	maxPTYBuf                    = 2 * 1024 * 1024 // 2 MB: scrollback 拡大に合わせてアクティブセッションの replay を伸長
 	replayTailForNonActive       = 64 * 1024  // 64 KB: 非アクティブセッションの UI 接続時 replay 上限
 	uiPingInterval               = 30 * time.Second
 	branchLookupTimeout          = 250 * time.Millisecond
@@ -540,6 +540,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/shutdown", s.handleShutdown)
 	mux.HandleFunc("/api/log-config", s.handleLogConfig)
 	mux.HandleFunc("/api/session-chat", s.handleSessionChat)
+	mux.HandleFunc("/api/session-log", s.handleSessionLog)
 	mux.HandleFunc("/api/session-search", s.handleSessionSearch)
 	mux.HandleFunc("/api/session-store/reset", s.handleSessionStoreReset)
 	mux.HandleFunc("/api/open-dir", s.handleOpenDir)
@@ -737,6 +738,21 @@ func OpenBrowserForConfig(cfg *config.Config) error {
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if !s.requireToken(w, r) {
 		return
+	}
+	// UI が URL から token を除去した後のリロード（token なし GET /）でも
+	// 認証が通るよう、HttpOnly cookie に token を保持させる。
+	// SameSite=Strict によりクロスサイト送信されないため CSRF 経路にはならない。
+	s.cfgMu.Lock()
+	tok := s.cfg.Token
+	s.cfgMu.Unlock()
+	if tok != "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     tokenCookieName,
+			Value:    tok,
+			Path:     "/",
+			HttpOnly: true,
+			SameSite: http.SameSiteStrictMode,
+		})
 	}
 	var b []byte
 	var err error

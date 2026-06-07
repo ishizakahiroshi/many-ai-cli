@@ -500,3 +500,55 @@
   color: var(--muted);
 }
 .term-ctx-menu .ctx-label { flex: 1; }
+
+/* ---- 過去ログビューア (history-viewer.ts) ---- */
+#history-viewer-open-btn {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 18;
+  background: rgba(22, 30, 43, 0.92);
+  color: var(--text);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 3px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+#history-viewer-open-btn:hover { background: var(--row-hover); }
+#history-viewer {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: #0d1117;
+  border: 1px solid var(--line-soft);
+}
+#history-viewer[hidden] { display: none; }
+#history-viewer .hv-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line-soft);
+  background: rgba(22, 30, 43, 0.92);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+#history-viewer .hv-title { color: var(--text); font-weight: 600; }
+#history-viewer .hv-range { color: var(--muted); margin-right: auto; margin-left: 8px; }
+#history-viewer .hv-btn {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#history-viewer .hv-btn:hover { background: var(--row-hover); }
+#history-viewer .hv-body { flex: 1; min-height: 0; overflow: hidden; }
+#history-viewer .hv-body .xterm { height: 100%; }

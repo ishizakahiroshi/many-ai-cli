@@ -6,7 +6,7 @@ import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, stateLabel } from './session-list.js';
 import { pathPopupEl } from './path-links.js';
-import { attachTerminal, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, sendResize } from './terminal.js';
+import { TERMINAL_SCROLLBACK_LINES, attachTerminal, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, sendResize } from './terminal.js';
 import { providerApprovalTriggers } from './approval.js';
 import { MULTI_SCROLLBACK, getMessages } from './chat-history.js';
 import { FilesTabManager } from './files-view.js';
@@ -1918,7 +1918,7 @@ export function setActiveTab(sid, name) {
       sessions.forEach(s => {
         const t = terminals.get(s.id);
         if (t && t.term) {
-          try { t.term.options.scrollback = 1000; } catch (_) {}
+          try { t.term.options.scrollback = TERMINAL_SCROLLBACK_LINES; } catch (_) {}
         }
       });
       if (activeSessionId !== null && activeSessionId !== undefined) {
@@ -1966,7 +1966,7 @@ export function setActiveTab(sid, name) {
     sessions.forEach(s => {
       const t = terminals.get(s.id);
       if (t && t.term) {
-        try { t.term.options.scrollback = 1000; } catch (_) {}
+        try { t.term.options.scrollback = TERMINAL_SCROLLBACK_LINES; } catch (_) {}
       }
     });
     // アクティブセッションの xterm を #terminal-area に再アタッチ

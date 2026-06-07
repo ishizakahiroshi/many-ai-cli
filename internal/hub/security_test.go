@@ -65,6 +65,70 @@ func TestRequireToken_AuthorizationBearer(t *testing.T) {
 	}
 }
 
+func TestRequireToken_Cookie(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: tokenCookieName, Value: "tok"})
+	w := httptest.NewRecorder()
+	if !s.requireToken(w, req) {
+		t.Fatal("expected cookie token to pass")
+	}
+}
+
+func TestRequireToken_CookieInvalid(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: tokenCookieName, Value: "bad"})
+	w := httptest.NewRecorder()
+	if s.requireToken(w, req) {
+		t.Fatal("expected invalid cookie token to fail")
+	}
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestHandleIndexSetsTokenCookie(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/?token=tok", nil)
+	w := httptest.NewRecorder()
+	s.handleIndex(w, req)
+	var found *http.Cookie
+	for _, c := range w.Result().Cookies() {
+		if c.Name == tokenCookieName {
+			found = c
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("expected Set-Cookie for token cookie")
+	}
+	if found.Value != "tok" {
+		t.Fatalf("cookie value = %q, want %q", found.Value, "tok")
+	}
+	if !found.HttpOnly {
+		t.Fatal("expected HttpOnly cookie")
+	}
+	if found.SameSite != http.SameSiteStrictMode {
+		t.Fatalf("SameSite = %v, want Strict", found.SameSite)
+	}
+}
+
+func TestHandleIndexNoCookieWhenUnauthorized(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/?token=bad", nil)
+	w := httptest.NewRecorder()
+	s.handleIndex(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+	for _, c := range w.Result().Cookies() {
+		if c.Name == tokenCookieName {
+			t.Fatal("unexpected Set-Cookie on unauthorized request")
+		}
+	}
+}
+
 func TestRequireToken_Invalid(t *testing.T) {
 	s := newSecTestServer(t, t.TempDir())
 	req := httptest.NewRequest(http.MethodGet, "/?token=bad", nil)

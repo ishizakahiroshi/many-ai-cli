@@ -127,6 +127,11 @@ func validToken(got, want string) bool {
 	return subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
 }
 
+// tokenCookieName は handleIndex が発行する認証 cookie 名。
+// UI 側が history.replaceState で URL から token を除去するため（web/src/app/util.ts）、
+// リロード時の GET / は token クエリを持たない。cookie で再認証できるようにする。
+const tokenCookieName = "any_ai_cli_token"
+
 func requestToken(r *http.Request) string {
 	if got := r.URL.Query().Get("token"); got != "" {
 		return got
@@ -134,6 +139,9 @@ func requestToken(r *http.Request) string {
 	auth := strings.TrimSpace(r.Header.Get("Authorization"))
 	if token, ok := strings.CutPrefix(auth, "Bearer "); ok {
 		return strings.TrimSpace(token)
+	}
+	if c, err := r.Cookie(tokenCookieName); err == nil {
+		return strings.TrimSpace(c.Value)
 	}
 	return ""
 }
