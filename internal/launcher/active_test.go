@@ -1,7 +1,9 @@
 package launcher
 
 import (
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -186,4 +188,57 @@ func TestLoadActiveFileToleratesCorruptJSON(t *testing.T) {
 	if len(d.Connections) != 0 {
 		t.Fatalf("got %d connections, want 0", len(d.Connections))
 	}
+}
+
+func TestProfileConnectLockExcludesSecondProcess(t *testing.T) {
+	_, cleanup := setupTempHome(t)
+	defer cleanup()
+
+	lock, acquired, err := TryAcquireProfileConnectLock("vps")
+	if err != nil {
+		t.Fatalf("TryAcquireProfileConnectLock: %v", err)
+	}
+	if !acquired {
+		t.Fatal("first lock acquisition was not acquired")
+	}
+	defer lock.Release()
+
+	second, acquired, err := TryAcquireProfileConnectLock("vps")
+	if err != nil {
+		t.Fatalf("second TryAcquireProfileConnectLock: %v", err)
+	}
+	if acquired {
+		defer second.Release()
+		t.Fatal("second lock acquisition unexpectedly succeeded")
+	}
+}
+
+func TestProfileConnectLockPrunesStaleLock(t *testing.T) {
+	_, cleanup := setupTempHome(t)
+	defer cleanup()
+
+	path, err := connectLockPath("vps")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	stale := connectLockData{Profile: "vps", PID: -1, StartedAt: time.Now()}
+	data, err := json.Marshal(stale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	lock, acquired, err := TryAcquireProfileConnectLock("vps")
+	if err != nil {
+		t.Fatalf("TryAcquireProfileConnectLock: %v", err)
+	}
+	if !acquired {
+		t.Fatal("stale lock was not replaced")
+	}
+	defer lock.Release()
 }

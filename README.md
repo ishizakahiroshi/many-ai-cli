@@ -956,6 +956,15 @@ GOOS=linux   GOARCH=amd64 go build -o dist/any-ai-cli-linux-x64                .
 
 ## VPS / Docker deployment (auto-update)
 
+Docker is not required for VPS use. For a small team, normal SSH plus `tmux`, `screen`, or `systemd` can work as long as each person signs in with their own AI CLI account and has a separate OS user, home directory, working directory, and Hub port. Try the layout that best fits your team before adopting the Docker setup.
+
+If you do not use Docker, pay attention to these points:
+
+- **Do not share one Linux user.** `~/.any-ai-cli/`, AI CLI credentials, logs, and caches will otherwise be mixed together.
+- **Separate working directories and ports per person.** Example: user A uses `/srv/any-ai-cli/work/a` + `47777`, user B uses `/srv/any-ai-cli/work/b` + `47778`.
+- **Pin Python / Node / bun tooling per project.** Use `venv` / `uv`, `nvm` / `mise`, and project-local lockfiles to avoid version conflicts.
+- **Do not share one AI CLI account across users.** Each person must sign in with their own account; see "Do not share one account among multiple users" above.
+
 Container assets live under [`deploy/docker/`](deploy/docker/) (one user = one container; the Hub is published on `127.0.0.1` only and is meant to be reached through an SSH tunnel or similar). Start from [`deploy/docker/users/example.yaml`](deploy/docker/users/example.yaml), copy it to `users/<user>.yaml`, and replace the example user name and port before adding it to `compose.yaml`.
 
 Every push to `main` / `develop` triggers GitHub Actions ([`docker-image.yml`](.github/workflows/docker-image.yml)) to build and publish a container image to GHCR — the server never builds anything itself:
