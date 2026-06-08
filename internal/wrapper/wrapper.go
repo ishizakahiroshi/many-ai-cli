@@ -17,6 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"any-ai-cli/internal/config"
 	"any-ai-cli/internal/proto"
@@ -32,6 +33,8 @@ const (
 	hubStartupTimeout     = 10 * time.Second
 	hubStartupPoll        = 100 * time.Millisecond
 	processCloseGrace     = 2 * time.Second
+	ptyInputChunkBytes    = 1024
+	ptyInputChunkDelay    = 3 * time.Millisecond
 )
 
 // reconnectGrace returns the wrapper's grace period before giving up after Hub crash.
@@ -295,19 +298,59 @@ func writePTY(ps processSession, data []byte) error {
 	if len(data) == 0 {
 		return nil
 	}
-	_, err := ps.Write(data)
-	return err
+	for len(data) > 0 {
+		n, err := ps.Write(data)
+		if err != nil {
+			return err
+		}
+		if n <= 0 {
+			return io.ErrShortWrite
+		}
+		data = data[n:]
+	}
+	return nil
+}
+
+func writePTYChunked(ps processSession, data []byte) error {
+	if len(data) <= ptyInputChunkBytes {
+		return writePTY(ps, data)
+	}
+	for len(data) > 0 {
+		n := nextPTYInputChunkLen(data, ptyInputChunkBytes)
+		if err := writePTY(ps, data[:n]); err != nil {
+			return err
+		}
+		data = data[n:]
+		if len(data) > 0 {
+			time.Sleep(ptyInputChunkDelay)
+		}
+	}
+	return nil
+}
+
+func nextPTYInputChunkLen(data []byte, limit int) int {
+	if len(data) <= limit {
+		return len(data)
+	}
+	n := limit
+	for n > 0 && !utf8.RuneStart(data[n]) {
+		n--
+	}
+	if n == 0 {
+		return limit
+	}
+	return n
 }
 
 func writeWithTrailingEnter(ps processSession, data []byte, delay time.Duration) error {
 	if len(data) > 1 && data[len(data)-1] == '\r' {
-		if err := writePTY(ps, data[:len(data)-1]); err != nil {
+		if err := writePTYChunked(ps, data[:len(data)-1]); err != nil {
 			return err
 		}
 		time.Sleep(delay)
 		return writePTY(ps, data[len(data)-1:])
 	}
-	return writePTY(ps, data)
+	return writePTYChunked(ps, data)
 }
 
 func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string) error {

@@ -159,6 +159,43 @@ func TestResetNativeApprovalClearMisses(t *testing.T) {
 	}
 }
 
+func TestSplitBracketedPasteSubmit(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		wantFirst   string
+		wantDelayed string
+	}{
+		{
+			name:        "bracketed paste submit",
+			input:       "\x1b[200~line 1\nline 2\x1b[201~\r",
+			wantFirst:   "\x1b[200~line 1\nline 2\x1b[201~",
+			wantDelayed: "\r",
+		},
+		{
+			name:        "plain submit stays together",
+			input:       "hello\r",
+			wantFirst:   "hello\r",
+			wantDelayed: "",
+		},
+		{
+			name:        "bracketed paste without submit stays together",
+			input:       "\x1b[200~line 1\nline 2\x1b[201~",
+			wantFirst:   "\x1b[200~line 1\nline 2\x1b[201~",
+			wantDelayed: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotFirst, gotDelayed := splitBracketedPasteSubmit(tc.input)
+			if gotFirst != tc.wantFirst || gotDelayed != tc.wantDelayed {
+				t.Fatalf("splitBracketedPasteSubmit() = (%q, %q), want (%q, %q)", gotFirst, gotDelayed, tc.wantFirst, tc.wantDelayed)
+			}
+		})
+	}
+}
+
 func TestShouldSuppressNativeApprovalClearMiss(t *testing.T) {
 	tests := []struct {
 		name     string

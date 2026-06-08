@@ -240,16 +240,7 @@
 }
 /* Files/Git lazy (未取得) — dim 表示 */
 .view-tab.lazy { color: color-mix(in srgb, var(--muted) 60%, transparent); }
-.view-tab.lazy::after {
-  content: "·";
-  position: absolute;
-  top: 4px;
-  right: 6px;
-  color: color-mix(in srgb, var(--muted) 60%, transparent);
-  font-size: 16px;
-  line-height: 1;
-}
-.view-tab.lazy.loaded::after { content: ""; }
+.view-tab.lazy::after { content: none; display: none; }
 .view-tab.lazy:hover { color: var(--muted); }
 .view-tab.lazy.active { color: var(--accent-text); }
 
