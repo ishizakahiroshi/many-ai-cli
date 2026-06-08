@@ -2,7 +2,7 @@
 import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
 import { activeSessionId, terminals } from './state.js';
-import { inputEl, isInteractiveFocusTarget, pasteCounter, pastedTexts, renderPasteChips, set_pasteCounter } from '../app.js';
+import { inputEl, isInteractiveFocusTarget, stagePastedText } from '../app.js';
 import { pushMessage } from './chat-history.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
@@ -57,16 +57,7 @@ window.addEventListener('paste', (e) => {
 
   // 長いテキストはチップに折りたたむ
   const text = e.clipboardData?.getData('text');
-  if (text) {
-    const lines = text.split('\n');
-    if (lines.length > 4 || text.length > 300) {
-      e.preventDefault();
-      if (pastedTexts.length >= 3) pastedTexts.shift();
-      set_pasteCounter(pasteCounter + 1);
-      pastedTexts.push({ id: pasteCounter, text, lineCount: lines.length });
-      renderPasteChips();
-    }
-  }
+  if (text && stagePastedText(text)) e.preventDefault();
 });
 
 if (attachDropZone) {

@@ -1047,6 +1047,15 @@ Hub UI には「ログフォルダを OS のファイルマネージャで開く
 
 ## VPS / Docker 運用（自動更新）
 
+Docker は VPS 運用の必須条件ではありません。複数人で使う場合でも、各利用者が自分の AI CLI アカウントでログインし、OS ユーザー / ホームディレクトリ / 作業フォルダ / Hub ポートを分ければ、通常の SSH + `tmux` / `screen` / `systemd` でも運用できます。まずは自分たちのチームに合う方法を試してください。
+
+Docker を使わない場合は、特に次の点に注意してください。
+
+- **同じ Linux ユーザーを共有しない。** `~/.any-ai-cli/`、AI CLI の認証情報、ログ、キャッシュが混ざります
+- **作業フォルダとポートを利用者ごとに分ける。** 例: A さんは `/srv/any-ai-cli/work/a` + `47777`、B さんは `/srv/any-ai-cli/work/b` + `47778`
+- **Python / Node / bun などの実行環境をプロジェクト単位で固定する。** `venv` / `uv`、`nvm` / `mise`、プロジェクトローカルの lockfile を使うと衝突を避けやすくなります
+- **1 つの AI CLI アカウントを複数人で共有しない。** 必ず各利用者が自分のアカウントでログインしてください（詳細は上の「アカウントの複数人共有は禁止」参照）
+
 コンテナ運用一式は [`deploy/docker/`](deploy/docker/) にあります（1 ユーザー = 1 コンテナ。Hub の公開は `127.0.0.1` 限定で、SSH トンネル等を介して到達する前提です。前節「ローカル実行限定」の通り、外部公開は行わないでください）。[`deploy/docker/users/example.yaml`](deploy/docker/users/example.yaml) を `users/<user>.yaml` にコピーし、ユーザー名とポートを置き換えてから `compose.yaml` に追加します。
 
 `main` / `develop` への push をトリガーに GitHub Actions（[`docker-image.yml`](.github/workflows/docker-image.yml)）がコンテナイメージをビルドして GHCR へ publish します。サーバー側では一切ビルドしません:

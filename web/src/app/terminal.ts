@@ -1,9 +1,9 @@
 // --- ESM imports (generated) ---
-import { copyCleanText, copyOneLineText } from './util.js';
+import { cleanCopiedText, cleanOneLineText, showToast } from './util.js';
 import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
 import { activeSessionId, approvalRawOptionsCache, approvalVisibleCache, sessions, terminals, utf8Decoder } from './state.js';
-import { sendText } from '../app.js';
+import { sendText, stagePastedText } from '../app.js';
 import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerminalPathStartBoundary, resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup, trimTerminalPathCandidate } from './path-links.js';
 import { ws } from './ws-client.js';
 import { scheduleApprovalCheck } from './approval.js';
@@ -26,6 +26,14 @@ export const TERMINAL_SCROLLBACK_LINES = 10000;
 export const TERMINAL_PENDING_MAX_BYTES = 100 * 1024;
 export const TERMINAL_WRITE_FLUSH_WATCHDOG_MS = 5000;
 
+async function copyTerminalSelectionText(text, opts: any = {}) {
+  const cleaned = opts.oneLine ? cleanOneLineText(text) : cleanCopiedText(text);
+  if (!cleaned) return;
+  await navigator.clipboard.writeText(cleaned);
+  stagePastedText(cleaned, { force: true });
+  showToast(ti18n('copied_to_clipboard'), opts.anchor);
+}
+
 export function ensureTerminal(id) {
   if (terminals.has(id)) return;
   const provider = sessions.get(id)?.provider;
@@ -46,6 +54,13 @@ export function ensureTerminal(id) {
     theme: { background: '#0d1117', cursor: '#0d1117', cursorAccent: '#e6edf3' },
     disableStdin: true,
     allowProposedApi: true,
+  });
+  term.attachCustomKeyEventHandler((event) => {
+    if (event.type !== 'keydown') return true;
+    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'c') return true;
+    if (!term.hasSelection()) return true;
+    copyTerminalSelectionText(term.getSelection()).catch(() => {});
+    return false;
   });
   // マウストラッキング (DECSET 9/1000/1002/1003) を常時無効化する。
   // disableStdin:true のため xterm はマウスレポートを PTY へ送れず tracking ON の利点が無い一方、
@@ -392,8 +407,8 @@ function ensureTermCtxMenu() {
     });
     m.appendChild(btn);
   };
-  mkItem('term_ctx_copy', 'コピー', '⎘', (sel, anchor) => copyCleanText(sel, anchor).catch(() => {}));
-  mkItem('term_ctx_copy_oneline', '1行コピー', '⇥', (sel, anchor) => copyOneLineText(sel, anchor).catch(() => {}));
+  mkItem('term_ctx_copy', 'コピー', '⎘', (sel, anchor) => copyTerminalSelectionText(sel, { anchor }).catch(() => {}));
+  mkItem('term_ctx_copy_oneline', '1行コピー', '⇥', (sel, anchor) => copyTerminalSelectionText(sel, { oneLine: true, anchor }).catch(() => {}));
   document.body.appendChild(m);
   document.addEventListener('click', (e) => {
     if (!m.contains(e.target)) closeTermCtxMenu();

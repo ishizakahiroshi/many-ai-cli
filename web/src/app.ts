@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from './i18n.js';
-import { showToast, token } from './app/util.js';
+import { cleanCopiedText, showToast, token } from './app/util.js';
 import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
 import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
@@ -88,6 +88,19 @@ export function renderPasteChips() {
     chip.appendChild(removeBtn);
     pasteChipsEl.appendChild(chip);
   });
+}
+
+export function stagePastedText(text, opts: any = {}) {
+  const cleaned = String(text || '');
+  if (!cleaned) return false;
+  const lines = cleaned.split('\n');
+  if (!opts.force && lines.length <= 4 && cleaned.length <= 300) return false;
+  if (pastedTexts.length >= 3) pastedTexts.shift();
+  set_pasteCounter(pasteCounter + 1);
+  pastedTexts.push({ id: pasteCounter, text: cleaned, lineCount: lines.length });
+  renderPasteChips();
+  inputEl.focus();
+  return true;
 }
 
 export function expandPasteChip(idx) {
@@ -461,7 +474,11 @@ inputEl.addEventListener('keydown', (e) => {
     // xterm.js 選択中はクリップボードにコピーして SIGINT を送らない
     const xt = terminals.get(activeSessionId);
     if (xt?.term.hasSelection()) {
-      navigator.clipboard.writeText(xt.term.getSelection()).catch(() => {});
+      const text = cleanCopiedText(xt.term.getSelection());
+      if (text) {
+        navigator.clipboard.writeText(text).catch(() => {});
+        stagePastedText(text, { force: true });
+      }
       e.preventDefault(); return;
     }
     // ブラウザ側の通常テキスト選択中もコピーに委譲

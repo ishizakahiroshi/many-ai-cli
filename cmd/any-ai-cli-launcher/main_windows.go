@@ -23,6 +23,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"any-ai-cli/internal/launcher"
 )
@@ -121,6 +122,22 @@ func connect(profile launcher.Profile) error {
 		}
 	}
 
+	startupLock, acquired, err := launcher.TryAcquireProfileConnectLock(profile.Name)
+	if err != nil {
+		return fmt.Errorf("acquire startup lock: %w", err)
+	}
+	if !acquired {
+		fmt.Fprintf(os.Stdout, "Profile %q is already starting — waiting for Hub URL...\n", profile.Name)
+		if c, ok := launcher.WaitForActiveConnection(profile.Name, 30*time.Second); ok {
+			fmt.Fprintf(os.Stdout, "Profile %q is connected — reusing %s\n", profile.Name, c.HubURL)
+			launcher.OpenBrowserOnce(c.HubURL)
+			return nil
+		}
+		fmt.Fprintf(os.Stdout, "Profile %q is still starting; no new terminal was opened.\n", profile.Name)
+		return nil
+	}
+	defer func() { _ = startupLock.Release() }()
+
 	conn, err := connectorFor(profile)
 	if err != nil {
 		return err
@@ -153,6 +170,7 @@ func connect(profile launcher.Profile) error {
 				if err := launcher.RegisterActiveConnection(profile.Name, url); err != nil {
 					fmt.Fprintf(os.Stderr, "any-ai-cli-launcher: failed to record active connection: %v\n", err)
 				}
+				_ = startupLock.Release()
 			}
 		case <-ctx.Done():
 		}
