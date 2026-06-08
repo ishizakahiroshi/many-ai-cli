@@ -298,7 +298,10 @@ export async function flushPendingAttach(sessionId) {
     } catch (_) {
       showToast('Attachment send failed');
     }
-    if (wrapper) setTimeout(() => { wrapper.remove(); updateAttachClearBtn(); }, 1000);
+    if (wrapper) {
+      wrapper.remove();
+      updateAttachClearBtn();
+    }
   }
   // chatHistory: attach を user/attach として 1 メッセージにまとめて push
   if (historyAttachments.length > 0) {

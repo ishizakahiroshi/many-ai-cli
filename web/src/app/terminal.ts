@@ -337,6 +337,13 @@ export function whenLayoutReady(id, container) {
         updateHistoryHint(id);
       });
     }
+    const viewport = t.term.element?.querySelector('.xterm-viewport');
+    if (viewport && !t.viewportScrollIntentInstalled) {
+      t.viewportScrollIntentInstalled = true;
+      viewport.addEventListener('pointerdown', () => {
+        markTerminalManualScrollIntent();
+      });
+    }
     flushPending(id);
     t.everAttached = true;
     if (!isPtyResizeSuppressed()) {
@@ -645,10 +652,16 @@ document.addEventListener('wheel', (e) => {
   e.stopPropagation();
 }, { passive: false, capture: true });
 
+export let terminalBottomFollow: any = {
+  id: null,
+  startedAt: 0,
+};
+
 export let lastTerminalManualScrollAt = 0;
 
 export function markTerminalManualScrollIntent() {
   lastTerminalManualScrollAt = Date.now();
+  terminalBottomFollow.id = null;
 }
 
 export function scrollTerminalToBottomSoon(id, opts: any = {}) {
@@ -731,6 +744,14 @@ export function refitAndStickTerminalToBottomAfterLayoutSettles(id, opts: any = 
       refitAndStickTerminalToBottomSoon(id, { force, passes, startedAt });
     }, delay);
   }
+}
+
+export function resumeTerminalBottomFollow(id, opts: any = {}) {
+  if (id === null || id === undefined) return;
+  const startedAt = opts.startedAt || Date.now();
+  terminalBottomFollow.id = id;
+  terminalBottomFollow.startedAt = startedAt;
+  scrollTerminalToBottomSoon(id, { force: true, passes: 2, startedAt });
 }
 
 export function revealApprovalPromptForSession(id) {
@@ -1108,11 +1129,20 @@ export const resizeObserver = new ResizeObserver(() => {
     if (!canFitTerminal(t)) return;
     const prevCols = t.term.cols;
     const prevRows = t.term.rows;
+    const shouldFollowBottom = terminalBottomFollow.id === activeSessionId
+      && lastTerminalManualScrollAt <= terminalBottomFollow.startedAt;
+    if (shouldFollowBottom) {
+      t.autoScroll = true;
+    }
     fitTerminalPreservingBottom(t, activeSessionId);
     if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
       if (!isPtyResizeSuppressed()) {
         sendResize(activeSessionId, t.term.cols, t.term.rows);
       }
+    }
+    if (shouldFollowBottom) {
+      try { t.term.scrollToBottom(); } catch (_) {}
+      updateScrollLockBtn(false);
     }
   });
 });

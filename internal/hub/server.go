@@ -46,7 +46,7 @@ const (
 	idleAfter                    = 3 * time.Second
 	tickerInterval               = 200 * time.Millisecond
 	maxPTYBuf                    = 2 * 1024 * 1024 // 2 MB: scrollback 拡大に合わせてアクティブセッションの replay を伸長
-	replayTailForNonActive       = 64 * 1024  // 64 KB: 非アクティブセッションの UI 接続時 replay 上限
+	replayTailForNonActive       = 64 * 1024       // 64 KB: 非アクティブセッションの UI 接続時 replay 上限
 	uiPingInterval               = 30 * time.Second
 	branchLookupTimeout          = 250 * time.Millisecond
 	branchRefreshAfter           = 2 * time.Second
@@ -63,6 +63,9 @@ const (
 	// （nativeApprovalSig != ""）はリース切れでもクリアしない。
 	approvalVisibleLease = 15 * time.Second
 	wsMaxPayloadBytes    = 2 << 20 // 2 MiB: UI/wrapper JSON frame receive cap
+
+	bracketedPasteEnd         = "\x1b[201~"
+	bracketedPasteSubmitDelay = 50 * time.Millisecond
 
 	// OSC シーケンスをユーザーターン境界マーカーとして ptyBuf に注入する。
 	// xterm.js はこのシーケンスを画面に表示しない。
@@ -1697,7 +1700,12 @@ func (s *Server) handleInput(m proto.Message) {
 		s.broadcast(proto.Message{Type: "pty_data", SessionID: m.SessionID, Data: []byte(chatHistoryUserTurnMarker)})
 	}
 	if wc != nil {
-		_ = wc.send(proto.Message{Type: "pty_input", SessionID: m.SessionID, Data: []byte(combined)})
+		first, delayed := splitBracketedPasteSubmit(combined)
+		_ = wc.send(proto.Message{Type: "pty_input", SessionID: m.SessionID, Data: []byte(first)})
+		if delayed != "" {
+			time.Sleep(bracketedPasteSubmitDelay)
+			_ = wc.send(proto.Message{Type: "pty_input", SessionID: m.SessionID, Data: []byte(delayed)})
+		}
 	}
 	s.writeHistory(m.SessionID, map[string]any{
 		"ts":         time.Now().Format(time.RFC3339),
@@ -1708,6 +1716,13 @@ func (s *Server) handleInput(m proto.Message) {
 	if firstMsgBroadcast != nil {
 		s.broadcast(*firstMsgBroadcast)
 	}
+}
+
+func splitBracketedPasteSubmit(text string) (first string, delayed string) {
+	if !strings.HasSuffix(text, bracketedPasteEnd+"\r") {
+		return text, ""
+	}
+	return strings.TrimSuffix(text, "\r"), "\r"
 }
 
 // handleHint は session_hint メッセージを処理する。

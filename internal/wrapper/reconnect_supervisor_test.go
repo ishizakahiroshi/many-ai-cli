@@ -1,11 +1,14 @@
 package wrapper
 
 import (
+	"bytes"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"any-ai-cli/internal/config"
 	"golang.org/x/net/websocket"
@@ -17,10 +20,10 @@ type mockProcessSession struct {
 	closeCalled atomic.Bool
 }
 
-func (m *mockProcessSession) Read(p []byte) (int, error)    { return 0, nil }
-func (m *mockProcessSession) Write(p []byte) (int, error)   { return len(p), nil }
-func (m *mockProcessSession) Close() error                  { m.closeCalled.Store(true); return nil }
-func (m *mockProcessSession) Wait() error                   { return nil }
+func (m *mockProcessSession) Read(p []byte) (int, error)     { return 0, nil }
+func (m *mockProcessSession) Write(p []byte) (int, error)    { return len(p), nil }
+func (m *mockProcessSession) Close() error                   { m.closeCalled.Store(true); return nil }
+func (m *mockProcessSession) Wait() error                    { return nil }
 func (m *mockProcessSession) Resize(cols, rows uint16) error { return nil }
 
 // makeSupervisor はテスト用の reconnectSupervisor を組み立てるヘルパー。
@@ -282,13 +285,64 @@ func TestWriteWithTrailingEnter_NoSplitForNoTrailingCR(t *testing.T) {
 	}
 }
 
+func TestWriteWithTrailingEnter_ChunksLongUTF8Input(t *testing.T) {
+	var writes [][]byte
+	mock := &writeTracker{writeFunc: func(p []byte) (int, error) {
+		cp := make([]byte, len(p))
+		copy(cp, p)
+		writes = append(writes, cp)
+		return len(p), nil
+	}}
+	body := strings.Repeat("あ", 500) + "終"
+	data := []byte(body + "\r")
+	if err := writeWithTrailingEnter(mock, data, 1*time.Millisecond); err != nil {
+		t.Fatalf("writeWithTrailingEnter returned error: %v", err)
+	}
+	if len(writes) < 3 {
+		t.Fatalf("expected chunked body plus trailing CR, got %d writes", len(writes))
+	}
+	if string(writes[len(writes)-1]) != "\r" {
+		t.Fatalf("last write = %q, want CR", writes[len(writes)-1])
+	}
+	bodyWrites := writes[:len(writes)-1]
+	for i, w := range bodyWrites {
+		if len(w) > ptyInputChunkBytes {
+			t.Fatalf("write %d length = %d, want <= %d", i, len(w), ptyInputChunkBytes)
+		}
+		if !utf8.Valid(w) {
+			t.Fatalf("write %d split a UTF-8 rune: % x", i, w)
+		}
+	}
+	if got := string(bytes.Join(bodyWrites, nil)); got != body {
+		t.Fatalf("joined body = %q, want %q", got, body)
+	}
+}
+
+func TestWritePTYCompletesShortWrites(t *testing.T) {
+	var got []byte
+	mock := &writeTracker{writeFunc: func(p []byte) (int, error) {
+		n := 2
+		if len(p) < n {
+			n = len(p)
+		}
+		got = append(got, p[:n]...)
+		return n, nil
+	}}
+	if err := writePTY(mock, []byte("hello")); err != nil {
+		t.Fatalf("writePTY returned error: %v", err)
+	}
+	if string(got) != "hello" {
+		t.Fatalf("written bytes = %q, want hello", got)
+	}
+}
+
 // writeTracker はテスト用の processSession 実装（Write 呼び出しを記録）。
 type writeTracker struct {
 	writeFunc func(p []byte) (int, error)
 }
 
-func (w *writeTracker) Write(p []byte) (int, error)   { return w.writeFunc(p) }
-func (w *writeTracker) Read(p []byte) (int, error)    { return 0, nil }
-func (w *writeTracker) Close() error                  { return nil }
-func (w *writeTracker) Wait() error                   { return nil }
+func (w *writeTracker) Write(p []byte) (int, error)    { return w.writeFunc(p) }
+func (w *writeTracker) Read(p []byte) (int, error)     { return 0, nil }
+func (w *writeTracker) Close() error                   { return nil }
+func (w *writeTracker) Wait() error                    { return nil }
 func (w *writeTracker) Resize(cols, rows uint16) error { return nil }
