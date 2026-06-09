@@ -549,6 +549,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/session-search", s.handleSessionSearch)
 	mux.HandleFunc("/api/session-store/reset", s.handleSessionStoreReset)
 	mux.HandleFunc("/api/logs/purge", s.handleLogsPurge)
+	mux.HandleFunc("/api/logs/legacy-notice", s.handleLegacyLogsNotice)
 	mux.HandleFunc("/api/attachments/purge", s.handleAttachmentsPurge)
 	mux.HandleFunc("/api/open-dir", s.handleOpenDir)
 	mux.HandleFunc("/api/idle-timeout", s.handleIdleTimeout)
@@ -865,10 +866,16 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	})
 	s.cfgMu.Lock()
 	jsonlMaxBytes := int64(s.cfg.Log.SessionMaxSizeMB) * 1024 * 1024
+	sessionLogEnabled := s.cfg.Log.SessionEnabled
 	s.cfgMu.Unlock()
-	history, histErr := sessionlog.NewJSONLWriter(jsonlPath, jsonlMaxBytes)
-	if histErr != nil {
-		s.logger.Warn("session history create failed", "path", jsonlPath, "err", histErr)
+	// セッションログが無効（既定）なら .jsonl を作らない（空ファイルも残さない）。
+	var history *sessionlog.Writer
+	if sessionLogEnabled {
+		var histErr error
+		history, histErr = sessionlog.NewJSONLWriter(jsonlPath, jsonlMaxBytes)
+		if histErr != nil {
+			s.logger.Warn("session history create failed", "path", jsonlPath, "err", histErr)
+		}
 	}
 
 	regRoute := strings.TrimSpace(reg.Route)
@@ -991,10 +998,16 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	}
 	s.cfgMu.Lock()
 	jsonlMaxBytesReattach := int64(s.cfg.Log.SessionMaxSizeMB) * 1024 * 1024
+	sessionLogEnabled := s.cfg.Log.SessionEnabled
 	s.cfgMu.Unlock()
-	history, histErr := sessionlog.NewJSONLWriterAppend(jsonlPath, jsonlMaxBytesReattach)
-	if histErr != nil {
-		s.logger.Warn("session history append failed", "path", jsonlPath, "err", histErr)
+	// セッションログが無効（既定）なら .jsonl を作らない。
+	var history *sessionlog.Writer
+	if sessionLogEnabled {
+		var histErr error
+		history, histErr = sessionlog.NewJSONLWriterAppend(jsonlPath, jsonlMaxBytesReattach)
+		if histErr != nil {
+			s.logger.Warn("session history append failed", "path", jsonlPath, "err", histErr)
+		}
 	}
 
 	reqRoute := strings.TrimSpace(req.Route)
@@ -2262,6 +2275,15 @@ func isDigitsOnly(s string) bool {
 }
 
 func (s *Server) writeHistory(sessionID int, event map[string]any) {
+	// セッションログが無効（既定）なら .jsonl・SQLite いずれにも本文を残さない。
+	// .log の抑止は wrapper 側、.jsonl writer の不生成は wrapperLoop/reattachLoop 側で
+	// 行うが、SQLite の StoreEvent もここを通るため一括でゲートする。
+	s.cfgMu.Lock()
+	sessionLogEnabled := s.cfg.Log.SessionEnabled
+	s.cfgMu.Unlock()
+	if !sessionLogEnabled {
+		return
+	}
 	s.sessionsMu.Lock()
 	ses := s.sessions[sessionID]
 	var w *sessionlog.Writer

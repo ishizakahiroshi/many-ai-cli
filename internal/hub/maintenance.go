@@ -150,6 +150,11 @@ func (s *Server) finalizeTranscript(id int, jsonlPath string) {
 	if jsonlPath == "" {
 		return
 	}
+	// .jsonl が無い（セッションログ無効など）場合は .txt を生成しない。
+	// 無駄な警告ログを避けるため stat で存在確認する。
+	if _, err := os.Stat(jsonlPath); err != nil {
+		return
+	}
 	transcriptPath := sessionlog.TranscriptPath(jsonlPath)
 	if err := sessionlog.WriteTranscriptFile(jsonlPath, transcriptPath); err != nil {
 		s.logger.Warn("transcript generation failed", "session_id", id, "path", transcriptPath, "err", err)

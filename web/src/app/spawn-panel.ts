@@ -21,6 +21,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   const spawnProviderCombobox = document.getElementById('spawn-provider-combobox');
   const spawnProviderTrigger = document.getElementById('spawn-provider-trigger');
   const spawnProviderTriggerLabel = document.getElementById('spawn-provider-trigger-label');
+  const spawnProviderTriggerIcon = document.getElementById('spawn-provider-trigger-icon');
   const spawnProviderList = document.getElementById('spawn-provider-list');
   const spawnCodexModelBtn = document.getElementById('spawn-codex-model-btn');
   const spawnClaudeModelBtn = document.getElementById('spawn-claude-model-btn');
@@ -251,6 +252,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   function updateSpawnProviderIcon() {
     const selected = getSelectedSpawnProviderOption();
     if (spawnProviderTriggerLabel) spawnProviderTriggerLabel.textContent = selected.label;
+    if (spawnProviderTriggerIcon) spawnProviderTriggerIcon.innerHTML = providerIconHtml(selected.value, 14);
     renderSpawnProviderOptions();
   }
 

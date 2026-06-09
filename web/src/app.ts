@@ -5,7 +5,7 @@ import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_NOTI
 import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, resumeTerminalBottomFollow, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
-import { DEFAULT_QUICK_CMD_1, DEFAULT_QUICK_CMD_2, appConfirm, appConfirmShutdown, applyFontSize, applyLang, applyTheme, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
+import { DEFAULT_QUICK_CMD_1, DEFAULT_QUICK_CMD_2, appConfirm, appConfirmShutdown, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, hideActionBar, isBatchActionBarVisible, maybeSendDirectApprovalConsumed, moveBatchFocus, sendBatchChoices, setActionBarFocus } from './app/approval.js';
@@ -588,6 +588,11 @@ inputClearBtn?.addEventListener('click', () => {
   inputEl.value = '';
   autoExpand();
   updateInputClearButton();
+  // Web テキストエリアだけでなく内側 CLI の入力行も消す。ビジー時等に溜まった
+  // 残骸（例: "/login/login..."）は web を空にしても TUI 側に残り続けるため、
+  // doSend / sendQuickCommand と同じ \x15(Ctrl+U) を単独送信して行クリアする。
+  // セッション未選択なら no-op。
+  if (activeSessionId !== null) sendText(activeSessionId, '\x15');
   inputEl.focus();
 });
 
@@ -1030,6 +1035,7 @@ inputEl.addEventListener('blur', (e) => {
   const idleTimeoutEl     = document.getElementById('idle-timeout-min');
   const reconnectGraceEl  = document.getElementById('reconnect-grace-min');
   const logEnabledEl               = document.getElementById('log-enabled');
+  const logSessionEnabledEl        = document.getElementById('log-session-enabled');
   const logMaxSizeEl               = document.getElementById('log-max-size');
   const logMaxBackupsEl            = document.getElementById('log-max-backups');
   const logSessionRetentionDaysEl  = document.getElementById('log-session-retention-days');
@@ -1090,6 +1096,7 @@ inputEl.addEventListener('blur', (e) => {
       if (!res.ok) return;
       const cfg = await res.json();
       logEnabledEl.checked  = cfg.enabled;
+      if (logSessionEnabledEl) logSessionEnabledEl.checked = !!cfg.session_enabled;
       logMaxSizeEl.value    = cfg.max_size_mb;
       logMaxBackupsEl.value = cfg.max_backups;
       if (logSessionRetentionDaysEl) logSessionRetentionDaysEl.value = cfg.session_retention_days ?? 7;
@@ -1267,6 +1274,7 @@ inputEl.addEventListener('blur', (e) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           enabled:                 logEnabledEl.checked,
+          session_enabled:         !!logSessionEnabledEl?.checked,
           max_size_mb:             parseInt(logMaxSizeEl.value, 10) || 10,
           max_backups:             parseInt(logMaxBackupsEl.value, 10) || 3,
           compress:                false,
@@ -1378,6 +1386,8 @@ inputEl.addEventListener('blur', (e) => {
     if (idleTimeoutEl) idleTimeoutEl.value = '60';
     if (reconnectGraceEl) reconnectGraceEl.value = '60';
     if (logEnabledEl) logEnabledEl.checked = true;
+    const logSessionEnabledEl2 = document.getElementById('log-session-enabled');
+    if (logSessionEnabledEl2) logSessionEnabledEl2.checked = false;
     if (logMaxSizeEl) logMaxSizeEl.value = '10';
     if (logMaxBackupsEl) logMaxBackupsEl.value = '3';
     const logSessionRetentionDaysEl2 = document.getElementById('log-session-retention-days');
@@ -1416,6 +1426,51 @@ inputEl.addEventListener('blur', (e) => {
     location.reload();
   };
 
+  // 新バージョン移行時、初回ロードで一度だけ案内を出す。チェックボックスで
+  // 「ログ・履歴を削除 / 添付を削除 / 今後ログを記録する」を複数選択 → 実行。
+  // サーバ側が「未通知 & セッションログ無効 & 旧ログあり」と判定したときだけ表示し、
+  // 表示後はフラグを立てて二度と出さない。
+  (async () => {
+    try {
+      const res = await fetch(`/api/logs/legacy-notice?token=${token}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.show) return;
+      const choice = await appLegacyResetNotice();
+      if (!choice) {
+        // 閉じる/Escape: 変更なし。ただし再表示はしない（フラグだけ立てる）。
+        try { await fetch(`/api/logs/legacy-notice?token=${token}`, { method: 'POST' }); } catch (_) {}
+        return;
+      }
+      // フラグを立てつつ、選択したログ記録設定（オン/オフ）も保存する。
+      try {
+        await fetch(`/api/logs/legacy-notice?token=${token}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enable_logging: choice.enableLogging }),
+        });
+      } catch (_) {}
+      // チェックされた削除対象だけ実行（実行中セッションのぶんは各 purge 側で保護）。
+      const tasks: Promise<Response>[] = [];
+      if (choice.deleteLogs) tasks.push(fetch(`/api/logs/purge?token=${token}`, { method: 'POST' }));
+      if (choice.deleteAttachments) tasks.push(fetch(`/api/attachments/purge?token=${token}`, { method: 'POST' }));
+      if (tasks.length === 0) {
+        showToast(t('legacy_logs_notice_done'));
+        return;
+      }
+      try {
+        const results = await Promise.all(tasks);
+        if (choice.deleteLogs) {
+          resetAllLocalSessionHistory();
+          window.dispatchEvent(new CustomEvent('workbench-session-store-reset'));
+        }
+        showToast(results.every(r => r.ok) ? t('legacy_logs_notice_done') : t('legacy_logs_notice_failed'));
+      } catch (_) {
+        showToast(t('legacy_logs_notice_failed'));
+      }
+    } catch (_) {}
+  })();
+
   // 設定パネルが開かれたときにログ設定を読み込む
   document.getElementById('settings-btn').addEventListener('click', () => {
     if (!document.getElementById('settings-panel').hidden) {
@@ -1431,6 +1486,7 @@ inputEl.addEventListener('blur', (e) => {
   if (idleTimeoutEl) idleTimeoutEl.addEventListener('change', saveIdleTimeout);
   if (reconnectGraceEl) reconnectGraceEl.addEventListener('change', saveReconnectGrace);
   logEnabledEl.addEventListener('change', saveLogConfig);
+  if (logSessionEnabledEl) logSessionEnabledEl.addEventListener('change', saveLogConfig);
   logMaxSizeEl.addEventListener('change', saveLogConfig);
   logMaxBackupsEl.addEventListener('change', saveLogConfig);
   if (logSessionRetentionDaysEl) logSessionRetentionDaysEl.addEventListener('change', saveLogConfig);

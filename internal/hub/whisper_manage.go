@@ -1,7 +1,9 @@
 package hub
 
 import (
+	"archive/tar"
 	"archive/zip"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -20,6 +22,7 @@ import (
 	"time"
 
 	"any-ai-cli/internal/config"
+	"any-ai-cli/internal/whisperruntime"
 )
 
 const (
@@ -30,18 +33,72 @@ const (
 	whisperDownloadExtraRoom = 256 * 1024 * 1024
 )
 
-type whisperBinaryManifest struct {
-	Version string
-	URL     string
-	SHA256  string
+// whisperBinaryEntry は OS/arch ごとの managed Whisper バイナリ入手定義。
+// ServerNames は実行ファイル候補名、KeepFromArchive が非空ならアーカイブから
+// その basename だけを bin/ へ平坦展開する。Runtime は internal/whisperruntime
+// の同梱物キー（os-arch）で、空なら同梱ランタイム無し。Archive が空のときは
+// URL 拡張子から zip / tar.gz を推定する。
+type whisperBinaryEntry struct {
+	Version         string
+	URL             string
+	SHA256          string
+	SizeBytes       int64
+	Archive         string
+	ServerNames     []string
+	KeepFromArchive []string
+	Runtime         string
 }
 
 type whisperProcessJob uintptr
 
-var whisperWindowsX64Binary = whisperBinaryManifest{
-	Version: whisperReleaseTag,
-	URL:     "https://github.com/ggml-org/whisper.cpp/releases/download/v1.8.6/whisper-bin-x64.zip",
-	SHA256:  "b07ea0b1b4115a38e1a7b07debf581f0b77d999925f8acb8f39d322b0ba0a822",
+// whisperBinaries は OS/arch → 入手定義。ここに在る OS/arch だけが
+// 「ダウンロード方式の managed install」をサポートする（whisperManagedSupported）。
+// Docker/VPS など実行ファイルを焼き込む構成では ANY_AI_CLI_WHISPER_SERVER で
+// 既設バイナリを指す（bakedWhisperServerPath）ため、ここへの登録は不要。
+//
+// TODO(C3/C4): Linux/macOS は公式 release に server バイナリが無いため、
+// .github/workflows/whisper-binaries.yml が自前ビルドした tar.gz を
+// 自リポジトリ release 資産として公開したら、実 URL/SHA256 で下記を有効化する。
+//
+//	"linux/amd64": {
+//	    Version: "v1.8.6",
+//	    URL:     "https://github.com/ishizakahiroshi/any-ai-cli/releases/download/whisper-v1.8.6/whisper-server-linux-amd64.tar.gz",
+//	    SHA256:  "<fill-from-ci>",
+//	    Archive: "tar.gz",
+//	    ServerNames:     []string{"whisper-server"},
+//	    KeepFromArchive: []string{"whisper-server"},
+//	},
+//	"darwin/arm64": { ...whisper-server-darwin-arm64.tar.gz... },
+//	"darwin/amd64": { ...whisper-server-darwin-amd64.tar.gz... },
+var whisperBinaries = map[string]whisperBinaryEntry{
+	"windows/amd64": {
+		Version:         whisperReleaseTag,
+		URL:             "https://github.com/ggml-org/whisper.cpp/releases/download/v1.8.6/whisper-bin-x64.zip",
+		SHA256:          "b07ea0b1b4115a38e1a7b07debf581f0b77d999925f8acb8f39d322b0ba0a822",
+		SizeBytes:       4093849,
+		Archive:         "zip",
+		ServerNames:     []string{"whisper-server.exe", "server.exe"},
+		KeepFromArchive: []string{"whisper-server.exe", "whisper.dll", "ggml.dll", "ggml-base.dll", "ggml-cpu.dll"},
+		Runtime:         "windows-amd64",
+	},
+}
+
+// whisperServerEnvVar は焼き込み済み whisper-server のフルパスを指す環境変数。
+// Docker(VPS) イメージが /usr/local/bin/whisper-server を焼き込み、この変数で
+// Hub に知らせる。設定されていればダウンロード無しで managed 扱いになる（C3/D5）。
+const whisperServerEnvVar = "ANY_AI_CLI_WHISPER_SERVER"
+
+func bakedWhisperServerPath() string {
+	p := strings.TrimSpace(os.Getenv(whisperServerEnvVar))
+	if p != "" && whisperFileExists(p) {
+		return p
+	}
+	return ""
+}
+
+func whisperBinaryForHost() (whisperBinaryEntry, bool) {
+	entry, ok := whisperBinaries[runtime.GOOS+"/"+runtime.GOARCH]
+	return entry, ok
 }
 
 type whisperModelOption struct {
@@ -142,7 +199,7 @@ func (s *Server) handleWhisperInstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !whisperManagedSupported() {
-		writeJSONError(w, http.StatusBadRequest, "unsupported_platform", "managed Whisper install is available on Windows x64 only")
+		writeJSONError(w, http.StatusBadRequest, "unsupported_platform", whisperUnsupportedDetail())
 		return
 	}
 	var req whisperInstallRequest
@@ -271,7 +328,11 @@ func (s *Server) whisperStatus() whisperStatusResponse {
 	}
 	manualOnly := ""
 	if !whisperManagedSupported() {
-		manualOnly = "Managed install is available on Windows x64 only. Use an external Whisper server URL on this platform."
+		manualOnly = whisperManualOnlyMessage()
+	}
+	binaryVersion := whisperReleaseTag
+	if entry, ok := whisperBinaryForHost(); ok {
+		binaryVersion = entry.Version
 	}
 	return whisperStatusResponse{
 		OK:                true,
@@ -286,7 +347,7 @@ func (s *Server) whisperStatus() whisperStatusResponse {
 		InstallDir:        baseDir,
 		BinaryPath:        binaryPath,
 		ModelPath:         modelPath,
-		BinaryVersion:     whisperReleaseTag,
+		BinaryVersion:     binaryVersion,
 		Install:           install,
 		Models:            publicWhisperModelOptions(),
 		ManualOnlyMessage: manualOnly,
@@ -307,20 +368,33 @@ func (s *Server) installManagedWhisper(ctx context.Context, model whisperModelOp
 		}
 	}
 	if _, err := findWhisperServerExe(binDir); err != nil {
-		zipPath := filepath.Join(tmpDir, "whisper-bin-x64.zip")
-		s.setWhisperInstallProgress("binary", "whisper.cpp "+whisperReleaseTag, 0, whisperWindowsX64BinarySize())
-		if err := downloadFile(ctx, whisperWindowsX64Binary.URL, zipPath, whisperWindowsX64Binary.SHA256, func(done, total int64) {
-			s.setWhisperInstallProgress("binary", "whisper.cpp "+whisperReleaseTag, done, total)
+		entry, ok := whisperBinaryForHost()
+		if !ok {
+			return fmt.Errorf("no managed Whisper binary is available for %s/%s", runtime.GOOS, runtime.GOARCH)
+		}
+		archivePath := filepath.Join(tmpDir, whisperArchiveName(entry))
+		label := "whisper.cpp " + entry.Version
+		s.setWhisperInstallProgress("binary", label, 0, entry.SizeBytes)
+		if err := downloadFile(ctx, entry.URL, archivePath, entry.SHA256, func(done, total int64) {
+			if total <= 0 {
+				total = entry.SizeBytes
+			}
+			s.setWhisperInstallProgress("binary", label, done, total)
 		}); err != nil {
 			return err
 		}
-		if err := extractZip(zipPath, binDir); err != nil {
+		if err := extractWhisperArchive(archivePath, binDir, entry); err != nil {
 			return err
 		}
-		_ = os.Remove(zipPath)
+		_ = os.Remove(archivePath)
 		if _, err := findWhisperServerExe(binDir); err != nil {
-			return fmt.Errorf("whisper-server.exe not found in release archive")
+			return fmt.Errorf("whisper-server not found in release archive")
 		}
+	}
+	// 同梱ランタイム（Windows の VC++ DLL 等）を exe と同一ディレクトリへ配置する。
+	// 焼き込み構成や同梱物の無い OS では no-op。
+	if err := ensureWhisperRuntime(binDir); err != nil {
+		return err
 	}
 	modelPath := filepath.Join(modelDir, model.FileName)
 	if !whisperFileExists(modelPath) {
@@ -356,7 +430,7 @@ func (s *Server) ensureManagedWhisper(ctx context.Context) (config.VoiceWhisperC
 		return cfg, nil
 	}
 	if !whisperManagedSupported() {
-		return cfg, whisperProxyError{status: http.StatusBadRequest, code: "unsupported_platform", detail: "managed Whisper is available on Windows x64 only"}
+		return cfg, whisperProxyError{status: http.StatusBadRequest, code: "unsupported_platform", detail: whisperUnsupportedDetail()}
 	}
 	modelID := strings.TrimSpace(cfg.Model)
 	if modelID == "" {
@@ -370,9 +444,14 @@ func (s *Server) ensureManagedWhisper(ctx context.Context) (config.VoiceWhisperC
 	if err != nil {
 		return cfg, err
 	}
-	binaryPath, err := findWhisperServerExe(filepath.Join(baseDir, "bin"))
+	binDir := filepath.Join(baseDir, "bin")
+	binaryPath, err := findWhisperServerExe(binDir)
 	if err != nil {
 		return cfg, whisperProxyError{status: http.StatusBadRequest, code: "whisper_not_installed", detail: "Whisper server is not installed"}
+	}
+	// 旧バージョンでインストール済みの環境にも、起動前に同梱ランタイムを補填する。
+	if err := ensureWhisperRuntime(binDir); err != nil {
+		return cfg, whisperProxyError{status: http.StatusBadGateway, code: "whisper_start_failed", detail: err.Error()}
 	}
 	modelPath := filepath.Join(baseDir, "models", model.FileName)
 	if !fileExists(modelPath) {
@@ -404,13 +483,25 @@ func (s *Server) startManagedWhisper(ctx context.Context, cfg config.VoiceWhispe
 		}
 	}
 	serverURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	logFile, _ := os.OpenFile(filepath.Join(filepath.Dir(filepath.Dir(binaryPath)), "whisper-server.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	// ログは常に ~/.any-ai-cli/whisper/whisper-server.log（ドキュメント記載の
+	// 書込可能パス）へ。binaryPath 相対だと焼き込みバイナリ
+	// (/usr/local/bin/whisper-server) で /usr/local/ 配下になり、非 root の
+	// Docker ユーザーでは書けず観測不能になる。
+	logPath := filepath.Join(filepath.Dir(filepath.Dir(binaryPath)), "whisper-server.log")
+	if baseDir, baseErr := whisperBaseDir(); baseErr == nil {
+		_ = os.MkdirAll(baseDir, 0o700)
+		logPath = filepath.Join(baseDir, "whisper-server.log")
+	}
+	logFile, _ := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	cmd := exec.Command(binaryPath, "-m", modelPath, "--host", "127.0.0.1", "--port", strconv.Itoa(port))
 	cmd.Dir = filepath.Dir(binaryPath)
 	if logFile != nil {
 		cmd.Stdout = logFile
 		cmd.Stderr = logFile
 	}
+	// 非 Windows では子を独立プロセスグループにし（Setpgid）、停止時に
+	// グループごと kill して孤児を残さない。Windows は JobObject 側で扱う。
+	configureWhisperCmd(cmd)
 	if err := cmd.Start(); err != nil {
 		if logFile != nil {
 			_ = logFile.Close()
@@ -420,9 +511,14 @@ func (s *Server) startManagedWhisper(ctx context.Context, cfg config.VoiceWhispe
 	job, err := attachWhisperProcessJob(cmd)
 	if err != nil {
 		_ = cmd.Process.Kill()
-		if logFile != nil {
-			_ = logFile.Close()
-		}
+		// 起動済みの子は必ず Wait で reap する（成功パスの wait goroutine と対称）。
+		// Wait 完了後に logFile を閉じ、kill 直前の出力取りこぼしを避ける。
+		go func() {
+			_ = cmd.Wait()
+			if logFile != nil {
+				_ = logFile.Close()
+			}
+		}()
 		return "", whisperProxyError{status: http.StatusBadGateway, code: "whisper_start_failed", detail: err.Error()}
 	}
 	s.whisperMu.Lock()
@@ -474,9 +570,7 @@ func (s *Server) stopManagedWhisper() {
 	s.whisperJob = 0
 	s.whisperServerURL = ""
 	s.whisperMu.Unlock()
-	if cmd != nil && cmd.Process != nil {
-		_ = cmd.Process.Kill()
-	}
+	killWhisperProcess(cmd)
 	closeWhisperProcessJob(job)
 }
 
@@ -524,7 +618,19 @@ func (s *Server) setWhisperInstallDone(modelID string) {
 }
 
 func whisperManagedSupported() bool {
-	return runtime.GOOS == "windows" && runtime.GOARCH == "amd64"
+	if bakedWhisperServerPath() != "" {
+		return true
+	}
+	_, ok := whisperBinaryForHost()
+	return ok
+}
+
+func whisperUnsupportedDetail() string {
+	return "managed Whisper is not available on this platform; set an external Whisper server URL instead"
+}
+
+func whisperManualOnlyMessage() string {
+	return "Managed install is not available on this platform. Use an external Whisper server URL, or run on a supported platform (Windows x64, or a Docker image with a bundled whisper-server)."
 }
 
 func whisperModelByID(id string) (whisperModelOption, bool) {
@@ -558,20 +664,26 @@ func whisperBaseDir() (string, error) {
 }
 
 func findWhisperServerExe(dir string) (string, error) {
-	names := []string{"whisper-server.exe", "server.exe"}
+	if p := bakedWhisperServerPath(); p != "" {
+		return p, nil
+	}
+	names := whisperServerNames()
 	for _, name := range names {
 		path := filepath.Join(dir, name)
 		if whisperFileExists(path) {
 			return path, nil
 		}
 	}
+	lower := make(map[string]bool, len(names))
+	for _, n := range names {
+		lower[strings.ToLower(n)] = true
+	}
 	var found string
 	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || found != "" {
 			return nil
 		}
-		name := strings.ToLower(d.Name())
-		if name == "whisper-server.exe" || name == "server.exe" {
+		if lower[strings.ToLower(d.Name())] {
 			found = path
 		}
 		return nil
@@ -580,6 +692,16 @@ func findWhisperServerExe(dir string) (string, error) {
 		return found, nil
 	}
 	return "", os.ErrNotExist
+}
+
+// whisperServerNames は実行ファイル候補名。host の manifest エントリがあれば
+// その ServerNames を、無ければ全 OS 共通の既定候補（焼き込み Linux/mac の
+// whisper-server / server を含む）を返す。
+func whisperServerNames() []string {
+	if entry, ok := whisperBinaryForHost(); ok && len(entry.ServerNames) > 0 {
+		return entry.ServerNames
+	}
+	return []string{"whisper-server.exe", "server.exe", "whisper-server", "server"}
 }
 
 func whisperFileExists(path string) bool {
@@ -743,6 +865,164 @@ func waitTCPReady(ctx context.Context, host string, port int) error {
 	}
 }
 
-func whisperWindowsX64BinarySize() int64 {
-	return 4093849
+// whisperArchiveName はダウンロード先のファイル名を URL から導く。
+func whisperArchiveName(entry whisperBinaryEntry) string {
+	url := strings.TrimRight(entry.URL, "/")
+	if i := strings.LastIndex(url, "/"); i >= 0 && i+1 < len(url) {
+		if name := url[i+1:]; name != "" {
+			return name
+		}
+	}
+	if whisperArchiveKind(entry) == "tar.gz" {
+		return "whisper-download.tar.gz"
+	}
+	return "whisper-download.zip"
+}
+
+// whisperArchiveKind は Archive 指定が無ければ URL 拡張子から種別を推定する。
+func whisperArchiveKind(entry whisperBinaryEntry) string {
+	if entry.Archive != "" {
+		return entry.Archive
+	}
+	u := strings.ToLower(entry.URL)
+	if strings.HasSuffix(u, ".tar.gz") || strings.HasSuffix(u, ".tgz") {
+		return "tar.gz"
+	}
+	return "zip"
+}
+
+// extractWhisperArchive はアーカイブを bin/ へ展開する。KeepFromArchive が
+// 非空のときはその basename だけを平坦展開する（公式 Windows zip は Release/
+// 配下に21ファイル入りのため必要なものだけ取り出す）。
+func extractWhisperArchive(archivePath, destDir string, entry whisperBinaryEntry) error {
+	var err error
+	switch whisperArchiveKind(entry) {
+	case "tar.gz":
+		err = extractTarGzSelected(archivePath, destDir, entry.KeepFromArchive)
+	default:
+		if len(entry.KeepFromArchive) > 0 {
+			err = extractZipSelected(archivePath, destDir, entry.KeepFromArchive)
+		} else {
+			err = extractZip(archivePath, destDir)
+		}
+	}
+	if err != nil {
+		return err
+	}
+	// KeepFromArchive 指定時は、想定ファイルが全て展開されたか確認する。
+	// 将来 zip のレイアウト/命名が変わったら、start 時の不可解な DLL ロード失敗
+	// ではなく install 時に明示エラーで落とす（選択抽出は未一致を黙って skip するため）。
+	var missing []string
+	for _, name := range entry.KeepFromArchive {
+		base := filepath.Base(name)
+		if !whisperFileExists(filepath.Join(destDir, base)) {
+			missing = append(missing, base)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("archive %s is missing expected files: %s", whisperArchiveName(entry), strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+func extractZipSelected(zipPath, destDir string, keep []string) error {
+	zr, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return err
+	}
+	defer zr.Close()
+	if err := os.MkdirAll(destDir, 0o700); err != nil {
+		return err
+	}
+	keepSet := whisperKeepSet(keep)
+	for _, f := range zr.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		base := filepath.Base(f.Name)
+		if keepSet != nil && !keepSet[strings.ToLower(base)] {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+		err = writeWhisperFlatFile(filepath.Join(destDir, base), rc)
+		_ = rc.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func extractTarGzSelected(tarPath, destDir string, keep []string) error {
+	f, err := os.Open(tarPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	defer gz.Close()
+	if err := os.MkdirAll(destDir, 0o700); err != nil {
+		return err
+	}
+	keepSet := whisperKeepSet(keep)
+	tr := tar.NewReader(gz)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if hdr.FileInfo().IsDir() {
+			continue
+		}
+		base := filepath.Base(hdr.Name)
+		if keepSet != nil && !keepSet[strings.ToLower(base)] {
+			continue
+		}
+		if err := writeWhisperFlatFile(filepath.Join(destDir, base), tr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func whisperKeepSet(keep []string) map[string]bool {
+	if len(keep) == 0 {
+		return nil
+	}
+	set := make(map[string]bool, len(keep))
+	for _, k := range keep {
+		set[strings.ToLower(filepath.Base(k))] = true
+	}
+	return set
+}
+
+func writeWhisperFlatFile(dest string, src io.Reader) error {
+	if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
+		return err
+	}
+	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o700)
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(out, src)
+	closeErr := out.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	return closeErr
+}
+
+// ensureWhisperRuntime は同梱ランタイム（Windows の VC++ DLL 等）を bin/ へ
+// 配置する。冪等（既存はスキップ）で、同梱物の無い OS/arch では no-op。
+func ensureWhisperRuntime(binDir string) error {
+	return whisperruntime.Ensure(binDir, runtime.GOOS+"-"+runtime.GOARCH)
 }

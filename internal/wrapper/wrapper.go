@@ -436,10 +436,19 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 			StartedAt: startedAt,
 		})
 	}
-	_ = os.MkdirAll(filepath.Dir(rawLogPath), sessionlog.PrivateDirMode)
-	lf, err := os.OpenFile(rawLogPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, sessionlog.PrivateFileMode)
-	if err != nil {
-		logger.Warn("session raw log create failed", "session_id", sessionID, "path", rawLogPath, "err", err)
+	// セッションログが無効（既定）なら生 PTY ログ（.log）を一切作らない。
+	// .log には API キー・トークン・パスワードがマスクされず残るため、
+	// オプトインした利用者のみ記録する。lf == nil 時は以降の書き込みが
+	// すべてスキップされる（ptyPump 側で nil チェック済み）。
+	var lf *os.File
+	if cfg.Log.SessionEnabled {
+		_ = os.MkdirAll(filepath.Dir(rawLogPath), sessionlog.PrivateDirMode)
+		f, err := os.OpenFile(rawLogPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, sessionlog.PrivateFileMode)
+		if err != nil {
+			logger.Warn("session raw log create failed", "session_id", sessionID, "path", rawLogPath, "err", err)
+		} else {
+			lf = f
+		}
 	}
 	if lf != nil {
 		defer lf.Close()

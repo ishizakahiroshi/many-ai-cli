@@ -414,6 +414,55 @@ export function appConfirm({ title, message, confirmText, cancelText, kind = 'de
   });
 }
 
+// 新バージョン移行時の「データリセット & ログ設定」案内（チェックボックス複数選択 + 実行）
+// 戻り値: { deleteLogs, deleteAttachments, enableLogging } / null（閉じる・Escape）
+export function appLegacyResetNotice(): Promise<{ deleteLogs: boolean; deleteAttachments: boolean; enableLogging: boolean } | null> {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById('model-picker-overlay');
+    if (!overlay) { resolve(null); return; }
+
+    // このモーダルは閉じる手段を持たない（✕・キャンセル・Escape・オーバーレイクリック
+    // すべて不可）。必ずチェック内容を確認して「実行」を押させてから先へ進ませる。
+    const blockEsc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); } };
+    const close = (value) => {
+      document.removeEventListener('keydown', blockEsc, true);
+      overlay.hidden = true;
+      overlay.innerHTML = '';
+      resolve(value);
+    };
+
+    overlay.innerHTML = '';
+    overlay.hidden = false;
+
+    const rowStyle = 'display:flex;align-items:center;gap:8px;margin-top:10px;text-align:left;cursor:pointer';
+    const dialog = document.createElement('div');
+    dialog.className = 'confirm-dialog confirm-dialog--danger';
+    dialog.innerHTML = `
+      <div class="confirm-icon" aria-hidden="true">!</div>
+      <div class="confirm-body">
+        <div class="confirm-title">${escapeHtml(t('legacy_logs_notice_title'))}</div>
+        <div class="confirm-message">${escapeHtml(t('legacy_logs_notice_message'))}</div>
+        <label style="${rowStyle}"><input type="checkbox" id="legacy-del-logs" checked> <span>${escapeHtml(t('legacy_logs_notice_opt_logs'))}</span></label>
+        <label style="${rowStyle}"><input type="checkbox" id="legacy-del-attach" checked> <span>${escapeHtml(t('legacy_logs_notice_opt_attach'))}</span></label>
+        <label style="${rowStyle}"><input type="checkbox" id="legacy-enable-logging"> <span>${escapeHtml(t('legacy_logs_notice_opt_enable'))}</span></label>
+      </div>
+      <div class="confirm-actions">
+        <button class="confirm-btn primary" id="legacy-exec">${escapeHtml(t('legacy_logs_notice_exec'))}</button>
+      </div>
+    `;
+    overlay.appendChild(dialog);
+
+    document.getElementById('legacy-exec').addEventListener('click', () => close({
+      deleteLogs:        (document.getElementById('legacy-del-logs') as HTMLInputElement).checked,
+      deleteAttachments: (document.getElementById('legacy-del-attach') as HTMLInputElement).checked,
+      enableLogging:     (document.getElementById('legacy-enable-logging') as HTMLInputElement).checked,
+    }));
+    // Escape を捕捉段階で握りつぶし、他のハンドラにも閉じさせない。
+    document.addEventListener('keydown', blockEsc, true);
+    document.getElementById('legacy-exec').focus();
+  });
+}
+
 // Ollama エンコーディング警告ダイアログ（3 択）
 // 戻り値: 'utf8' | 'continue' | null（キャンセル）
 export function appConfirmOllamaEncoding() {

@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -99,6 +100,64 @@ func (s *Server) handleLogsPurge(w http.ResponseWriter, r *http.Request) {
 		"spawn_files":    spawnRemoved,
 		"store_sessions": storeSessions,
 	})
+}
+
+// hasSessionLogFiles は logs/sessions に .log / .jsonl が 1 つでも存在するかを返す。
+// 旧バージョン（セッションログ既定 ON）から残ったログの有無判定に使う。
+func (s *Server) hasSessionLogFiles() bool {
+	s.cfgMu.Lock()
+	logDir := s.cfg.Hub.LogDir
+	s.cfgMu.Unlock()
+	entries, err := os.ReadDir(filepath.Join(logDir, "sessions"))
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if strings.HasSuffix(name, ".log") || strings.HasSuffix(name, ".jsonl") {
+			return true
+		}
+	}
+	return false
+}
+
+// handleLegacyLogsNotice は「旧バージョンの残存セッションログの削除を推奨する」
+// 一回限りの通知の表示要否を返し（GET）、表示済みフラグを立てる（POST）。
+// 表示条件: 未通知 かつ セッションログが現在無効 かつ 旧ログが残っている。
+func (s *Server) handleLegacyLogsNotice(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		s.cfgMu.Lock()
+		shown := s.cfg.Log.LegacyLogsNoticeShown
+		sessionEnabled := s.cfg.Log.SessionEnabled
+		s.cfgMu.Unlock()
+		show := !shown && !sessionEnabled && s.hasSessionLogFiles()
+		writeJSON(w, map[string]bool{"show": show})
+	case http.MethodPost:
+		// 本文は任意。enable_logging が指定されていれば、通知と同時にユーザーが
+		// 選んだセッションログ設定（オン/オフ）も保存する。
+		var body struct {
+			EnableLogging *bool `json:"enable_logging"`
+		}
+		_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&body)
+		s.cfgMu.Lock()
+		s.cfg.Log.LegacyLogsNoticeShown = true
+		if body.EnableLogging != nil {
+			s.cfg.Log.SessionEnabled = *body.EnableLogging
+		}
+		s.cfgMu.Unlock()
+		if err := s.persistConfig(); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "save_failed", errorDetail("save failed", err))
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+	}
 }
 
 // handleAttachmentsPurge は attachments 配下の全セッションフォルダを削除する。

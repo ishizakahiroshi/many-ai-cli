@@ -1,0 +1,5 @@
+# 実 DLL はリポジトリに含めない（リリース/CI 時に fetch_windows_runtime.ps1 で取得）。
+# go:embed は working tree を読むため、gitignore でも build 時には同梱される。
+*.dll
+!.gitkeep
+!README.md

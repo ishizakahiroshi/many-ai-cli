@@ -34,6 +34,30 @@ COPY . .
 COPY --from=web-build /src/web/dist ./web/dist
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/any-ai-cli ./cmd/any-ai-cli
 
+# --- whisper build stage: VPS 内 localhost 用の whisper-server を焼き込む ---
+# 公式 release に Linux server バイナリが無いため（plan D3）ソースからビルドする。
+# GGML_OPENMP=OFF で libgomp 依存を断ち（内蔵 threadpool で並列維持）、
+# BUILD_SHARED_LIBS=OFF で共有ライブラリ同梱を不要にし、GGML_NATIVE=OFF で
+# ビルドホスト固有命令への最適化を避けて他 CPU でも動くようにする。
+FROM ubuntu:24.04 AS whisper-build
+ARG WHISPER_CPP_TAG=v1.8.6
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates git build-essential cmake \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 --branch "${WHISPER_CPP_TAG}" \
+      https://github.com/ggml-org/whisper.cpp /src/whisper.cpp
+WORKDIR /src/whisper.cpp
+RUN cmake -B build \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DBUILD_SHARED_LIBS=OFF \
+      -DGGML_NATIVE=OFF \
+      -DGGML_OPENMP=OFF \
+      -DWHISPER_BUILD_TESTS=OFF \
+ && cmake --build build --config Release -j --target whisper-server \
+ && cp build/bin/whisper-server /usr/local/bin/whisper-server
+
 # --- runtime stage: Ubuntu 24.04 + Node.js 22 + provider CLI ---
 FROM ubuntu:24.04
 ARG CURSOR_AGENT_VERSION=2026.06.03-0bbb28e
@@ -83,6 +107,13 @@ RUN set -eu; \
 COPY --from=build /out/any-ai-cli /usr/local/bin/any-ai-cli
 COPY deploy/docker/entrypoint.sh /usr/local/bin/aac-entrypoint.sh
 RUN chmod +x /usr/local/bin/aac-entrypoint.sh
+
+# VPS 内 localhost で動かす whisper-server を焼き込み、Hub に環境変数で知らせる。
+# Hub はこのパスを見つけると DL 無しで managed 扱いにし、モデルだけ取得する
+# （internal/hub bakedWhisperServerPath / plan C3・D5）。GGML_OPENMP=OFF ビルドの
+# ため libgomp1 は不要。libstdc++6 は ubuntu:24.04 ベースに同梱済み。
+COPY --from=whisper-build /usr/local/bin/whisper-server /usr/local/bin/whisper-server
+ENV ANY_AI_CLI_WHISPER_SERVER=/usr/local/bin/whisper-server
 
 # provider CLI の更新はイメージ再ビルドで行う（非 root 実行時の /usr/lib 書込を防ぐ）
 ENV DISABLE_AUTOUPDATER=1

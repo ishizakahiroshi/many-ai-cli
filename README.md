@@ -6,9 +6,81 @@
 
 ![any-ai-cli dashboard](assets/readme-dashboard.jpg)
 
-A local web dashboard to manage multiple AI coding CLIs (Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI) from a single screen — approvals, monitoring, and terminal in one place.
+**Never miss an approval prompt.** `any-ai-cli` watches your AI coding CLIs (Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI) and notifies your desktop or phone the moment one is waiting for your approval — so you don't have to babysit the terminal. It also gives you a local web dashboard to handle approvals, monitoring, and terminals across multiple sessions in one place.
 
 [日本語版 README はこちら](README.ja.md)
+
+---
+
+## Overview
+
+When you run several AI coding CLIs in parallel across multiple terminals, it's easy to lose track of which session is blocked waiting for your approval — so you end up checking the terminals over and over. `any-ai-cli` wraps each CLI in a PTY and notifies your desktop or phone the moment it detects an approval prompt. It also lets you handle approvals and monitor progress from a single browser-based Hub UI. The CLI itself works exactly as before; `any-ai-cli` only adds notifications and an approval GUI on top.
+
+```
+Terminal pane #1              Terminal pane #2
+┌────────────────────┐        ┌────────────────────┐
+│ any-ai-cli claude  │        │ any-ai-cli codex   │
+│  (PTY passthrough) │        │  (PTY passthrough) │
+└────────┬───────────┘        └────────┬───────────┘
+         │ WebSocket                   │ WebSocket
+         └─────────────┬───────────────┘
+                       ▼
+            ┌──────────────────┐
+            │ any-ai-cli serve │  http://127.0.0.1:47777
+            │  (Hub daemon)    │
+            └────────┬─────────┘
+                     │
+                     ▼
+            ┌──────────────────┐
+            │  Browser Hub UI  │
+            │  approval popover│
+            │  session list    │
+            └──────────────────┘
+```
+
+---
+
+## Features
+
+- **Unified approval panel** — approve/reject Claude Code, Codex CLI, GitHub Copilot CLI, and Cursor Agent CLI prompts from the browser
+- **Batch approvals** — answer multiple numbered questions from one action bar and submit them together
+- **Real-time PTY output** via xterm.js over WebSocket
+- **Chat history and split view** — read a bubble-style conversation history, search/filter it, or keep it beside the live terminal
+- **Multi-pane tab** — watch multiple live sessions at once in a configurable grid
+- **Files tab** — browse project files, preview Markdown/code, copy paths, create folders, save text files with conflict detection, rename/move, and delete empty folders from the Hub
+- **Git view** — inspect branch history, commit details, changed files, diffs, fetch refs, and run `git pull --ff-only` without leaving the Hub
+- **Commit all** — stage all current working-tree changes and create a local commit after an explicit review step
+- **Workbench tab** — review stored session history, timeline events, summaries, redacted exports, prompt templates, task/policy notes, diagnostics, usage summaries, stale sessions, and worktree helpers
+- **File and image attach** — paste or drag-and-drop images and files into the terminal session
+- **Voice input** — dictate prompts through Browser recognition or local Whisper, with Windows x64 managed Whisper install
+- **PWA + opt-in Web Push** — install the Hub as a local web app and receive approval notifications after explicitly enabling push in Settings
+- **Approval pattern profiles** — keep official remote-synced trigger phrases separate from local custom edits
+- **Server-side user preferences** — keep voice, notification, favorites, session order, spawn defaults, and avatar settings in `config.yaml`
+- **Spawn new sessions** from the UI (`/api/spawn`)
+- **Model picker with Ollama routing** — pick Anthropic / OpenAI / Ollama Cloud / Ollama Local models from the spawn form; the Hub auto-injects the right `ANTHROPIC_*` / `OPENAI_*` env vars per session, no shell setup required
+- **Windows unified launcher** — `any-ai-cli-launcher.exe` connects to a Hub inside WSL or on a remote VPS (SSH) via saved profiles and opens the Windows browser
+- **VPS / Docker deployment assets** — run one Hub container per user from GHCR with loopback-only port publishing and an opt-in auto-update script
+- **Clean transcript generation** — write readable `.txt` transcripts automatically, or regenerate them with `log-clean`
+- **Language switching** (English / Japanese)
+- **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `any-ai-cli` itself
+
+---
+
+## Requirements
+
+| Item | Requirement |
+|---|---|
+| Go | 1.25+ (build time) |
+| OS | Windows 10/11, macOS, Linux |
+| Browser | Chrome / Edge / Firefox / Safari |
+| AI CLI | Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI (install the providers you intend to use separately) |
+
+### Platform verification for v0.3.0
+
+- Verified in real environments: Windows local Hub and the Windows unified launcher (`wsl` / SSH tunnel profiles)
+- Not yet fully verified in real environments: native Linux, native macOS
+
+Linux/macOS builds are expected to work, but they have not been fully validated in real environments for v0.3.0. Please use at your own discretion and report any issues.
 
 ---
 
@@ -50,6 +122,8 @@ Get the latest release from [GitHub Releases](https://github.com/ishizakahiroshi
 | macOS (Apple Silicon) | `any-ai-cli-<version>-macos-apple-silicon.zip` |
 | Linux (x64) | `any-ai-cli-<version>-linux-x64.zip` |
 
+Extract the zip and place the binary somewhere on your `PATH`.
+
 > Settings and logs are stored in `~/.any-ai-cli/` (created on first run).
 > Session logs contain user input and AI output. Treat them as sensitive data.
 
@@ -82,14 +156,6 @@ Recommended Windows zip flow:
 4. Run `unblock-windows.cmd`
 5. Start `any-ai-cli.exe` or `any-ai-cli-launcher.exe` manually
 
-### Platform Verification for v0.3.0
-
-- Verified in real environment: Windows local Hub and the Windows unified launcher (`wsl` / SSH tunnel profiles)
-- Not yet fully verified in real environment: native Linux, native macOS
-
-Linux/macOS builds are expected to work, but they have not been fully validated in real environments for v0.3.0.
-Please use at your own discretion and report any issues.
-
 ### Verify Release Artifacts (Checksum + Signature)
 
 `v0.1.2` and later releases include:
@@ -114,32 +180,6 @@ cosign verify-blob \
 ```bash
 sha256sum -c SHA256SUMS.txt
 ```
-
----
-
-## Features
-
-- **Unified approval panel** — approve/reject Claude Code, Codex CLI, GitHub Copilot CLI, and Cursor Agent CLI prompts from the browser
-- **Batch approvals** — answer multiple numbered questions from one action bar and submit them together
-- **Real-time PTY output** via xterm.js over WebSocket
-- **Chat history and split view** — read a bubble-style conversation history, search/filter it, or keep it beside the live terminal
-- **Multi-pane tab** — watch multiple live sessions at once in a configurable grid
-- **Files tab** — browse project files, preview Markdown/code, copy paths, create folders, save text files with conflict detection, rename/move, and delete empty folders from the Hub
-- **Git view** — inspect branch history, commit details, changed files, diffs, fetch refs, and run `git pull --ff-only` without leaving the Hub
-- **Commit all** — stage all current working-tree changes and create a local commit after an explicit review step
-- **Workbench tab** — review stored session history, timeline events, summaries, redacted exports, prompt templates, task/policy notes, diagnostics, usage summaries, stale sessions, and worktree helpers
-- **File and image attach** — paste or drag-and-drop images and files into the terminal session
-- **Voice input** — dictate prompts through Browser recognition or local Whisper, with Windows x64 managed Whisper install
-- **PWA + opt-in Web Push** — install the Hub as a local web app and receive approval notifications after explicitly enabling push in Settings
-- **Approval pattern profiles** — keep official remote-synced trigger phrases separate from local custom edits
-- **Server-side user preferences** — keep voice, notification, favorites, session order, spawn defaults, and avatar settings in `config.yaml`
-- **Spawn new sessions** from the UI (`/api/spawn`)
-- **Model picker with Ollama routing** — pick Anthropic / OpenAI / Ollama Cloud / Ollama Local models from the spawn form; the Hub auto-injects the right `ANTHROPIC_*` / `OPENAI_*` env vars per session, no shell setup required
-- **Windows unified launcher** — `any-ai-cli-launcher.exe` connects to a Hub inside WSL or on a remote VPS (SSH) via saved profiles and opens the Windows browser
-- **VPS / Docker deployment assets** — run one Hub container per user from GHCR with loopback-only port publishing and an opt-in auto-update script
-- **Clean transcript generation** — write readable `.txt` transcripts automatically, or regenerate them with `log-clean`
-- **Language switching** (English / Japanese)
-- **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `any-ai-cli` itself
 
 ---
 
@@ -616,41 +656,21 @@ set-option -g default-command "ANY_AI_CLI_AUTO=1 bash -c 'eval \"$(any-ai-cli sh
 
 ---
 
-## Settings
+## Subcommands
 
-Settings are stored in `~/.any-ai-cli/config.yaml` (auto-created on first run).
-
-| Key | Description | Default |
-|-----|-------------|---------|
-| `port` | Hub port | `47777` |
-| `language` | UI language (`en` or `ja`) | `en` |
-| `hub.open_browser` | Auto-open browser on Hub start | `false` in generated config; `--open` or no-argument launch opens it |
-| `hub.wrapper_reconnect_grace_sec` | How long wrapped sessions wait for a crashed/restarted Hub to return | `3600` |
-| `voice.whisper.managed` | Let the Hub manage the local whisper.cpp server lifecycle | `false` |
-| `voice.whisper.model` | Managed Whisper model ID | `large-v3-turbo-q5_0` |
-| `voice.whisper.server_url` | Local Whisper-compatible server used by the Hub voice proxy | empty; set automatically for managed mode |
-| `voice.whisper.server_port` | Preferred local port for the managed whisper.cpp server | `0` (auto-pick) |
-| `voice.whisper.request_path` | Whisper transcription endpoint override | empty (`/v1/audio/transcriptions`, then `/inference`) |
-| `approval_pattern_sources` | Remote or local sources for official approval trigger patterns | GitHub raw URLs |
-| `approval_profiles` | Active approval pattern profile per provider (`official` or `custom`) | `official` |
-
-### Where settings are saved
-
-Settings are split into three categories:
-
-| Category | Examples | Storage |
-|---|---|---|
-| **D1: UI display state** (per-device is natural) | theme, font size, language, sidebar width | Browser **localStorage** |
-| **D2: User feature settings** (shared across devices / ports) | voice, trigger, notification sound, approval auto-switch, quick commands, usage links, favorites, session order, spawn defaults | `~/.any-ai-cli/config.yaml` under `user_prefs:`, read/written via `GET/PUT /api/user-prefs` |
-| **D3: Server operation settings** | hub port, log config, approval enable/disable, slash command sources, approval pattern sources, token | `~/.any-ai-cli/config.yaml` (direct edit or dedicated Settings UI) |
-
-D2 settings survive port changes (e.g. the WSL launcher shifting from 47777 to 47877) because they are stored server-side rather than in per-origin localStorage.
-
-Voice engine selection is the exception: `off` / `browser` / `whisper` stays in each browser's localStorage so a PC can keep Browser recognition while an iPhone uses Whisper.
-
-On first load the browser mirrors D2 values from the server. Subsequent changes are written to both localStorage (as a cache) and the server simultaneously. Any existing localStorage values are pushed to the server automatically on first run.
-
-Custom notification sounds are stored as a binary file at `~/.any-ai-cli/notify_sound_custom.bin`, with the MIME type recorded in `user_prefs.notify_sound.custom_mime`.
+| Command | Description |
+|---|---|
+| `serve [--open] [--port N]` | Start the Hub. `--open` opens the browser automatically |
+| `claude [args...]` | Launch Claude Code through the Hub |
+| `codex [args...]` | Launch Codex CLI through the Hub |
+| `copilot [args...]` | Launch GitHub Copilot CLI through the Hub |
+| `cursor-agent [args...]` | Launch Cursor Agent CLI through the Hub |
+| `wrap <provider> [args...]` | Wrap an arbitrary provider (for debugging) |
+| `shell-init` | Emit shell function snippets for transparent mode |
+| `status` | Show whether the Hub is running |
+| `stop` | Stop the Hub |
+| `log-clean <session.jsonl>` | Generate a clean transcript from session history |
+| `uninstall [--purge]` | Remove settings and logs and uninstall; `--purge` also removes the binary itself |
 
 ---
 
@@ -713,18 +733,12 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 - **Git**: Click a branch badge or press `Ctrl+Shift+G` to open the Git view for the current session. Commit all stages the whole working tree with `git add -A`, then runs `git commit` only after Review.
 - **Terminal input**: Type directly in the input field and press `Enter` to send. Use `Shift+Enter` for a newline.
 - **File and image attach**: Paste (`Ctrl+V`) or drag-and-drop a file onto the attach area to inject a local file path reference into the session.
-- **Voice input**: Click the 🎤 button or press `Alt+V` to start voice input. Click again or press `Alt+V` to stop. Transcribed text is inserted into the input field.
-  - Settings → Voice lets each device choose `OFF`, `Browser`, or `Whisper (local)`.
-  - Browser mode requires Chrome or Edge and uses the browser's built-in Speech Recognition API.
-  - Whisper mode records in the browser, sends a WAV to the Hub, and the Hub proxies it to the configured Whisper server. On Windows x64, Settings → Voice can install and manage a local whisper.cpp server and model under `~/.any-ai-cli/whisper/`; on other platforms, run a Whisper-compatible server yourself and set `voice.whisper.server_url`.
-  - Microphone permission must be granted on first use.
-  - Browser mode includes end-of-speech wait time. Whisper mode is batch recognition: stop recording, wait for transcription, then review the inserted text.
-  - ⚠️ **Privacy note**: Browser mode sends recorded audio to the browser vendor's speech servers (Google / Microsoft). Whisper mode stays local only when `voice.whisper.server_url` points to a local server such as `http://127.0.0.1:8080`; if you configure an external API URL in the future, audio is sent there. The managed installer downloads whisper.cpp from GitHub Releases and the selected model from Hugging Face. See "Security / Privacy → Outbound network traffic" and [Whisper setup](docs/manual_whisper.md).
-  - Recommended Whisper server setup: enable the server's VAD/no-speech filtering when available (for whisper.cpp, use its current Silero VAD option/model for your build), keep temperature low/deterministic, and prefer a local OpenAI-compatible `/v1/audio/transcriptions` endpoint or `/inference`. The browser also skips near-silent recordings and discards exact known hallucination phrases.
-- **Auto-submit trigger**: In Settings → Auto-submit trigger, enable the toggle and set a phrase (e.g. `send`). When voice recognition finishes with that phrase, the input is sent automatically. Also works with typed text.
+- **Voice input**: Click the 🎤 button or press `Alt+V` to start/stop voice input. See the [Voice Input](#voice-input) section for engine selection and details.
 - **Spawn**: Click **+ New Session** to start a new AI CLI session from the browser.
 
-### Keyboard Shortcuts
+---
+
+## Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
@@ -741,9 +755,49 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 | `Ctrl+D` | Send EOF to PTY |
 | `Ctrl+O` | Expand Claude Code folded content |
 
-### Voice Input Troubleshooting
+---
 
-If voice input stops responding (button press has no effect, or the microphone picks up audio but no text appears):
+## Voice Input
+
+You can dictate text into the Hub UI input box.
+
+### How to use
+
+1. In Settings → Voice, choose a recognition engine (`OFF` / `Browser` / `Whisper (local)`)
+2. Click the 🎤 button or press `Alt+V` (macOS: `Option+V`) to start recording
+3. Speak into the microphone
+4. Browser mode inserts recognized text as you speak; Whisper mode transcribes after you stop and inserts the result into the input box
+5. Review the input box and press `Enter` to send
+
+> **Browser**: Chrome / Edge (Web Speech API)
+> **Whisper (local)**: a WAV recorded in the browser is sent through the Hub to a Whisper server. On a Windows x64 Hub, Settings → Voice can install and run a whisper.cpp server and model under `~/.any-ai-cli/whisper/`. On other platforms, start a Whisper-compatible server yourself and set `voice.whisper.server_url`.
+> Microphone permission is required on first use.
+
+> ⚠️ **Privacy note**: In Browser mode, recorded audio is sent to the browser vendor's speech-recognition servers (Google / Microsoft). Whisper mode stays local only when `voice.whisper.server_url` points to a local server such as `http://127.0.0.1:...` / `http://localhost:...`; if you configure an external API URL, audio is sent to that external service. The managed installer downloads whisper.cpp from GitHub Releases and the model from Hugging Face. See "Security / Privacy → Outbound network traffic" and [Whisper setup](docs/manual_whisper.md).
+
+### Recommended Whisper server settings
+
+Whisper can hallucinate boilerplate phrases on silent or noisy audio. On the Hub UI side, near-silent recordings are discarded before sending, and known hallucination phrases are dropped only when they match the entire result.
+
+On the server side, enable the VAD / no-speech filtering of the whisper.cpp / Whisper-compatible server you use. For whisper.cpp, follow its current docs to specify a Silero VAD model and keep temperature low (deterministic). The Hub tries the OpenAI-compatible `/v1/audio/transcriptions` endpoint first and falls back to `/inference`.
+
+### Auto-submit trigger
+
+In Settings → Auto-submit trigger, turn on the toggle and set a submit phrase. When the phrase is detected at the end of voice recognition or typed input, the message is sent automatically.
+
+**Example**: with the phrase set to `send`
+- Saying "fix the bug **send**" → "fix the bug" is sent automatically
+- Typing `fix the bug send` → "fix the bug" is sent automatically
+
+The phrase itself is not sent to the PTY or the AI.
+
+### End-of-speech wait time
+
+In Settings → Voice you can change the "end-of-speech wait time". This applies to Browser recognition only. Even after Chrome's recognition auto-stops on silence, it resumes recognition if you speak again within the configured number of seconds. Whisper is batch recognition, so this setting does not apply.
+
+### Troubleshooting
+
+If Browser recognition stops responding (button press has no effect, or the microphone picks up audio but no text appears):
 
 1. **Fully restart Chrome** (close all windows and relaunch). Chrome's internal Speech Recognition state can get stuck and a full restart clears it — this is the most common fix.
 2. If that doesn't help, paste `chrome://settings/content/all?searchSubpage=127.0.0.1` into the address bar, reset the microphone permission for `127.0.0.1`, and allow it again.
@@ -753,7 +807,95 @@ If voice input stops responding (button press has no effect, or the microphone p
 
 Use **Settings → Voice → Diagnose** to identify the problem and copy a diagnostic log.
 
-For Whisper, `Whisper server is not installed` / `Whisper server is not configured` means either run **Settings → Voice → Install** on a Windows x64 Hub or configure `voice.whisper.server_url` to a manually started local server. The managed server log is written to `~/.any-ai-cli/whisper/whisper-server.log`.
+For Whisper, `Whisper server is not installed` / `Whisper server is not configured` / `cannot connect` means either run **Settings → Voice → Install** on a Windows x64 Hub or configure `voice.whisper.server_url` to a manually started local server. The managed server log is written to `~/.any-ai-cli/whisper/whisper-server.log`.
+
+---
+
+## Settings
+
+The config file is auto-created on first run.
+
+| OS | Path |
+|---|---|
+| Windows | `%USERPROFILE%\.any-ai-cli\config.yaml` |
+| macOS / Linux | `~/.any-ai-cli/config.yaml` |
+
+```yaml
+hub:
+  port: 47777               # default port (auto-probes 47778, 47779... on collision)
+  open_browser: false       # true = open the browser automatically on serve
+  auto_shutdown: true       # stop the Hub once all wrappers exit
+  log_dir: ""               # empty = ~/.any-ai-cli/logs
+  idle_timeout_min: 60      # minutes before idle sessions are auto-disconnected (0 = disabled)
+  wrapper_reconnect_grace_sec: 3600  # how long wrapped sessions wait for a crashed/restarted Hub (0–86400)
+
+voice:
+  whisper:
+    managed: false          # true = Hub manages a local whisper.cpp server
+    model: "large-v3-turbo-q5_0"
+    server_url: ""          # e.g. http://127.0.0.1:8080 (auto-set in managed mode)
+    server_port: 0          # 0 = auto-pick
+    request_path: ""        # empty = try /v1/audio/transcriptions then /inference
+    language: "ja"          # ja / en / auto, etc.
+    timeout_seconds: 60
+
+log:                        # hub.log rotation (lumberjack)
+  enabled: true
+  max_size_mb: 10           # max size per file
+  max_backups: 3            # number of rotated files to keep
+  compress: false           # gzip rotated files
+
+token: ""                   # empty = randomly generated on startup (URL stays stable across restarts)
+```
+
+To reset the `token`, delete the `token:` line and restart the Hub.
+
+> The `approval` / `spawn` / `slash_cmd_sources` / `approval_pattern_sources` / `approval_profiles` / `user_prefs` sections may be appended automatically by UI actions (no hand-editing required).
+
+### Where settings are saved
+
+Settings are split into three categories:
+
+| Category | Examples | Storage |
+|---|---|---|
+| **D1: UI display state** (per-device is natural) | theme, font size, language, sidebar width | Browser **localStorage** |
+| **D2: User feature settings** (shared across devices / ports) | voice, trigger, notification sound, approval auto-switch, quick commands, usage links, favorites, session order, spawn defaults | `~/.any-ai-cli/config.yaml` under `user_prefs:`, read/written via `GET/PUT /api/user-prefs` |
+| **D3: Server operation settings** | hub port, log config, approval enable/disable, slash command sources, approval pattern sources, token | `~/.any-ai-cli/config.yaml` (direct edit or dedicated Settings UI) |
+
+`user_prefs:` (D2) survives port changes (e.g. the WSL launcher shifting from 47777 to 47877) because it is stored server-side rather than in per-origin localStorage.
+
+Voice engine selection is the exception: `off` / `browser` / `whisper` stays in each browser's localStorage so a PC can keep Browser recognition while an iPhone uses Whisper.
+
+On first load the browser mirrors D2 values from the server. Subsequent changes are written to both localStorage (as a cache) and the server simultaneously. Any existing localStorage values are pushed to the server automatically on first run.
+
+Approval detection patterns have an `official` / `custom` profile per provider. `official` is fetched and cached at startup from `resources/approval-patterns/{claude,codex,copilot,cursor-agent,common}.md` on GitHub; `custom` is for your own edits.
+
+Custom notification sounds are stored as a binary file at `~/.any-ai-cli/notify_sound_custom.bin`, with the MIME type recorded in `user_prefs.notify_sound.custom_mime`.
+
+---
+
+## Image transfer
+
+You can send image files from the Hub UI to a wrapped session.
+
+### Steps
+
+1. Start `any-ai-cli serve`
+2. Open the Hub UI in a browser
+3. With a session card selected, send an image in one of these ways:
+   - **Paste**: `Ctrl+V`
+   - **Drag & drop**: drop onto the area at the bottom of the sidebar
+   - **Click to choose**: click the area to open a file dialog
+4. The Hub saves it under `~/.any-ai-cli/attachments/<session-id>/` and injects the path into the PTY
+   - Claude: `@<saved-path>` form
+   - Codex: `<saved-path>` form
+
+### Verification script (Windows / PowerShell 7)
+
+```powershell
+pwsh scripts/test_attach.ps1          # run test (auto-start Hub → WS connect → send PNG)
+pwsh scripts/test_attach.ps1 -KeepHub # keep the Hub running
+```
 
 ---
 
@@ -800,16 +942,26 @@ AI CLI (claude / codex / copilot / cursor-agent)
 
 The Hub server acts as a relay between PTY sessions and the browser UI. Each AI CLI runs inside a PTY wrapper that forwards I/O over WebSocket to the Hub, which in turn serves the browser UI.
 
+---
+
 ## Logs
+
+> **Session logging is OFF by default (opt-in).** No per-session `.log` / `.jsonl` / `.txt` file is written, and no transcript content is stored in the SQLite history, until you turn it on in **Settings → Log → Session log** (or set `log.session_enabled: true` in `config.yaml`). The reason is security: the raw `.log` stream records exactly what the terminal showed, including any API keys, tokens, or passwords that appeared on screen — and these **cannot be reliably masked** (a password like `test1234` is indistinguishable from ordinary text). The `.jsonl` / `.txt` files do pass through a heuristic token redactor, but that is best-effort only. Enable session logging only if you understand and accept that anything shown in the session may be persisted to disk in clear text. The Hub's own diagnostic log (`hub.log`) is independent and does not contain session content.
 
 | Type | Path | Content |
 |---|---|---|
-| Hub log | `~/.any-ai-cli/logs/hub.log` | Hub server runtime logs (rotated by lumberjack; configured via the `log:` section) |
+| Hub log | `~/.any-ai-cli/logs/hub.log` | Hub server runtime logs (rotated by lumberjack; configured via the `log:` section). Independent of session logging |
 | Session raw log | `~/.any-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.log` | Raw PTY stream for each wrapped session (includes ANSI sequences) |
 | Session history | `~/.any-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.jsonl` | Structured session events (`session_start`, `user_input`, `pty_output`, `attach`, `session_end`, `session_dismiss`) |
 | Clean transcript | `~/.any-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.txt` | Human-readable text (ANSI / spinners / control bytes stripped). Generated automatically on session end; any sessions missed due to a Hub crash are reconstructed at the next `serve` startup |
 
-Session logs and the SQLite-backed Workbench history are local private storage (`0700` directories / `0600` files where applicable), but they can still contain prompts, file paths, and other user-provided text. Known token patterns are redacted before PTY output and user-input history are stored, and Workbench exports are redacted by default, but this is heuristic. Delete saved history from Settings or remove `~/.any-ai-cli/logs/` if you accidentally paste sensitive material.
+Each wrapped session produces **three files that share the same basename** (`.log` / `.jsonl` / `.txt`) on purpose — they are not duplicates but serve different access patterns:
+
+- **`.log`** is the raw, unmodified PTY byte stream. It still contains the terminal control codes (ANSI color, cursor moves, screen clears) that the CLI emitted, so it looks "garbled" in a plain editor — that is expected. **It is NOT redacted**: any secret shown on screen is written verbatim. It exists because it can be replayed to re-render the colored output and supports fast byte-range reads for the UI scrollback.
+- **`.jsonl`** is the structured event timeline (input, output, session boundaries, timestamps). The output bytes are stored escaped here, so it also looks noisy when read directly. Output and input pass through the heuristic token redactor before being written. It is the source of truth and the input for regenerating the transcript and for crash recovery.
+- **`.txt`** is the one meant for humans: control codes are stripped, and (because it is derived from `.jsonl`) known token patterns are masked. **Read this one** unless you specifically need the colored replay or the structured events.
+
+Session logs and the SQLite-backed Workbench history are local private storage (`0700` directories / `0600` files where applicable), but they can still contain prompts, file paths, and other user-provided text. Known token patterns are redacted before `.jsonl` / `.txt` content and user-input history are stored, and Workbench exports are redacted by default, but this is heuristic and the raw `.log` is not redacted at all — which is the main reason session logging is opt-in. Delete saved history from Settings or remove `~/.any-ai-cli/logs/` if you accidentally paste sensitive material.
 
 The Hub UI log-path button copies the log directory path to your clipboard.
 
@@ -838,6 +990,14 @@ The Hub inherits the `PATH` snapshot of the shell that launched it. If that shel
 Hub diagnostics for each spawn are written to `~/.any-ai-cli/logs/spawn/<provider>-<timestamp>.log` and include the resolved `PATH`, detected package managers, and an explicit hint when `executable file not found` is the underlying cause.
 
 > **v0.2.0 and later:** The Hub re-expands `%VAR%`-style entries in the inherited USER `Path` just before spawning a wrap process (reading `HKCU\Environment` and falling back to `%LOCALAPPDATA%\pnpm` when the directory exists), so this manual restart is normally no longer needed. The recovery procedure above remains as a fallback when the fix cannot resolve the variable.
+
+### Session shows `Standby` while a workflow (ultracode, etc.) is running
+
+While a session is running a long task that mostly works through background subagents — such as a Claude Code workflow (ultracode) — the session card may show `Standby` instead of `Running`. **This is not a malfunction; the work is still in progress.**
+
+The Hub decides a session's liveness solely from **whether the terminal (PTY) produced output within the last few seconds** (if output is idle and no approval UI is visible, it is treated as `Standby`). During a workflow there are frequent quiet periods with no output to the main terminal, so the state momentarily falls back to `Standby`; it returns to `Running` automatically once output resumes. Unlike `Waiting` (an approval prompt), this state is not asking you for input — the terminal is simply quiet.
+
+> any-ai-cli does not inspect the internal state of the wrapped CLI (e.g. whether a workflow is in flight), so this is a known limitation of the output-based heuristic. Even when the card reads `Standby`, you can open the terminal itself to confirm the task is still running.
 
 ---
 
@@ -921,40 +1081,6 @@ The only supported configuration is localhost reachability, as described above. 
 
 ---
 
-## Uninstall
-
-Since `any-ai-cli` is a single binary you download and run directly (no installer), uninstalling is done by running the binary with the `uninstall` subcommand from wherever you placed it.
-
-**Windows** — run from the folder containing `any-ai-cli.exe`:
-
-```powershell
-.\any-ai-cli.exe uninstall          # removes settings and logs (~/.any-ai-cli/)
-.\any-ai-cli.exe uninstall --purge  # also removes the binary itself
-```
-
-**macOS / Linux / WSL** — run from the folder containing `any-ai-cli`:
-
-```bash
-./any-ai-cli uninstall          # removes settings and logs (~/.any-ai-cli/)
-./any-ai-cli uninstall --purge  # also removes the binary itself
-```
-
-You will be shown exactly what will be deleted and asked to confirm before anything is removed.
-
-| Option | What is removed |
-|---|---|
-| (none) | `~/.any-ai-cli/` (config, logs, attachments). The binary path is printed — delete it manually. |
-| `--purge` | Everything above, plus the binary itself. |
-
-**Manual removal** — if you prefer to delete files by hand:
-
-1. Delete `~/.any-ai-cli/` (Windows: `%USERPROFILE%\.any-ai-cli\`)
-2. Delete the binary (`any-ai-cli.exe` / `any-ai-cli`)
-
-> **Browser data is not cleared.** `uninstall` cannot reach your browser's storage. Most settings (theme, language, font size, favorites, quick commands, etc.) live server-side under `~/.any-ai-cli/` and are removed, but per-browser display state kept in `localStorage` (files-tree expansion, pane layout, scrollback size) remains. To clear it, open the tab where the Hub was running, press `F12`, and run `localStorage.clear()` in the console.
-
----
-
 ## Build from Source
 
 Requires Go 1.25+.
@@ -962,7 +1088,10 @@ Requires Go 1.25+.
 ```bash
 git clone https://github.com/ishizakahiroshi/any-ai-cli.git
 cd any-ai-cli
-go build -o any-ai-cli ./cmd/any-ai-cli
+
+# Build for the current OS
+go build -o any-ai-cli.exe ./cmd/any-ai-cli   # Windows
+go build -o any-ai-cli ./cmd/any-ai-cli        # macOS / Linux
 ```
 
 #### Cross-compilation
@@ -1051,6 +1180,40 @@ docker compose up -d
 # set AAC_TAG=latest in .env, then:
 docker compose up -d && rm HOLD
 ```
+
+---
+
+## Uninstall
+
+Since `any-ai-cli` is a single binary you download and run directly (no installer), uninstalling is done by running the binary with the `uninstall` subcommand from wherever you placed it.
+
+**Windows** — run from the folder containing `any-ai-cli.exe`:
+
+```powershell
+.\any-ai-cli.exe uninstall          # removes settings and logs (~/.any-ai-cli/)
+.\any-ai-cli.exe uninstall --purge  # also removes the binary itself
+```
+
+**macOS / Linux / WSL** — run from the folder containing `any-ai-cli`:
+
+```bash
+./any-ai-cli uninstall          # removes settings and logs (~/.any-ai-cli/)
+./any-ai-cli uninstall --purge  # also removes the binary itself
+```
+
+You will be shown exactly what will be deleted and asked to confirm before anything is removed.
+
+| Option | What is removed |
+|---|---|
+| (none) | `~/.any-ai-cli/` (config, logs, attachments). The binary path is printed — delete it manually. |
+| `--purge` | Everything above, plus the binary itself. |
+
+**Manual removal** — if you prefer to delete files by hand:
+
+1. Delete `~/.any-ai-cli/` (Windows: `%USERPROFILE%\.any-ai-cli\`)
+2. Delete the binary (`any-ai-cli.exe` / `any-ai-cli`)
+
+> **Browser data is not cleared.** `uninstall` cannot reach your browser's storage. Most settings (theme, language, font size, favorites, quick commands, etc.) live server-side under `~/.any-ai-cli/` and are removed, but per-browser display state kept in `localStorage` (files-tree expansion, pane layout, scrollback size) remains. To clear it, open the tab where the Hub was running, press `F12`, and run `localStorage.clear()` in the console.
 
 ---
 

@@ -46,6 +46,20 @@ function addSelectionToInput(text, opts: any = {}) {
   showToast(ti18n('added_to_input'), opts.anchor);
 }
 
+// モーダル/オーバーレイ表示中は、ターミナル上でのホイール操作を xterm に処理させない。
+// overscroll-behavior はスクロールコンテナのチェーンしか止められず、モーダルの非スクロール領域
+// （タイトルバー・余白・背景）でのホイールは xterm が拾って背後の端末がスクロールしてしまう。
+// xterm 側でホイールを無視させることで、どの経路で来ても背後の端末が動かないようにする。
+function isModalOverlayOpen() {
+  const ids = ['settings-panel', 'about-panel', 'model-picker-overlay', 'new-session-panel', 'slash-picker', 'attach-panel'];
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (!el || el.hidden) continue;
+    if (getComputedStyle(el).display !== 'none') return true;
+  }
+  return false;
+}
+
 export function ensureTerminal(id) {
   if (terminals.has(id)) return;
   const provider = sessions.get(id)?.provider;
@@ -74,6 +88,8 @@ export function ensureTerminal(id) {
     copyTerminalSelectionText(term.getSelection()).catch(() => {});
     return false;
   });
+  // モーダル表示中はホイールで背後の端末がスクロールしないよう、xterm にホイールを無視させる。
+  term.attachCustomWheelEventHandler(() => !isModalOverlayOpen());
   // マウストラッキング (DECSET 9/1000/1002/1003) を常時無効化する。
   // disableStdin:true のため xterm はマウスレポートを PTY へ送れず tracking ON の利点が無い一方、
   // xterm は tracking ON 中はドラッグ選択を無効化する（Shift 押下時のみ選択可になる）。

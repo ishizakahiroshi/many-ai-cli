@@ -1,0 +1,116 @@
+# whisper-server バイナリの自前ビルド（plan C3/C4・D3）
+#
+# 公式 ggml-org/whisper.cpp の release には Linux/macOS の whisper-server
+# 実行ファイルが添付されていない（v1.8.6 時点）。managed install のダウンロード
+# 経路で使うため、ここで各プラットフォーム向けに whisper-server をビルドし、
+# tar.gz + SHA256 を生成する。
+#
+# 使い方:
+#   1. Actions から手動実行（whisper_tag を指定。publish=true で release へ添付）
+#   2. 出力された SHA256 を internal/hub/whisper_manage.go の whisperBinaries の
+#      該当 os/arch エントリ（現在 TODO コメント）へ転記して有効化する
+#
+# 注意: Docker(VPS) 経路はこの資産を使わず、イメージにビルド同梱する
+#       （deploy/docker/Dockerfile の whisper-build ステージ / D5-A）。
+name: whisper-binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      whisper_tag:
+        description: "whisper.cpp release tag to build (e.g. v1.8.6)"
+        required: true
+        default: "v1.8.6"
+      publish:
+        description: "Upload tarballs to a GitHub release (whisper-<tag>)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-amd64
+            runner: ubuntu-22.04
+            cmake_flags: "-DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF"
+          - name: linux-arm64
+            runner: ubuntu-22.04-arm
+            cmake_flags: "-DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF"
+          - name: darwin-arm64
+            runner: macos-14
+            cmake_flags: "-DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=1 -DGGML_OPENMP=OFF"
+          - name: darwin-amd64
+            runner: macos-13
+            cmake_flags: "-DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF"
+    steps:
+      - name: Install build deps (Linux)
+        if: startsWith(matrix.runner, 'ubuntu')
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential cmake git
+
+      - name: Checkout whisper.cpp ${{ inputs.whisper_tag }}
+        uses: actions/checkout@v4
+        with:
+          repository: ggml-org/whisper.cpp
+          ref: ${{ inputs.whisper_tag }}
+
+      - name: Build whisper-server
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_flags }} -DWHISPER_BUILD_TESTS=OFF
+          cmake --build build --config Release -j --target whisper-server
+
+      - name: Inspect runtime dependencies
+        shell: bash
+        run: |
+          BIN=build/bin/whisper-server
+          file "$BIN" || true
+          if [ "$RUNNER_OS" = "macOS" ]; then otool -L "$BIN" || true; else ldd "$BIN" || true; fi
+
+      - name: Package tarball + SHA256
+        id: pkg
+        shell: bash
+        run: |
+          NAME=whisper-server-${{ matrix.name }}
+          mkdir -p "dist/$NAME"
+          cp build/bin/whisper-server "dist/$NAME/"
+          tar -C dist -czf "dist/$NAME.tar.gz" "$NAME"
+          cd dist
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            SHA=$(shasum -a 256 "$NAME.tar.gz" | awk '{print $1}')
+          else
+            SHA=$(sha256sum "$NAME.tar.gz" | awk '{print $1}')
+          fi
+          echo "$SHA  $NAME.tar.gz" | tee "$NAME.tar.gz.sha256"
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "### ${{ matrix.name }}: \`$SHA\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-server-${{ matrix.name }}
+          path: dist/whisper-server-${{ matrix.name }}.tar.gz*
+
+      - name: Publish to release
+        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # workflow_dispatch 入力は env 経由で渡し、bash の構文解析に参加させない
+          # （run ブロックへ ${{ }} を直接埋め込むのはスクリプトインジェクションの定石）。
+          WHISPER_TAG: ${{ inputs.whisper_tag }}
+          MATRIX_NAME: ${{ matrix.name }}
+        shell: bash
+        run: |
+          TAG="whisper-$WHISPER_TAG"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" \
+              --notes "whisper.cpp $WHISPER_TAG server binaries built by whisper-binaries.yml. Paste the SHA256 into whisperBinaries in internal/hub/whisper_manage.go."
+          gh release upload "$TAG" \
+            "dist/whisper-server-$MATRIX_NAME.tar.gz" \
+            "dist/whisper-server-$MATRIX_NAME.tar.gz.sha256" \
+            --repo "$GITHUB_REPOSITORY" --clobber
