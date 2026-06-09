@@ -370,7 +370,9 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
   // フォールバック検出（既存）
   let extraction = extractApprovalOptions(lines);
   const options = extraction.options;
-  let contextSourceLines = lines;
+  // cluster の index は展開後の行（Ink 連結を再分割した結果）が基準。
+  // approvalContextLines で同じ配列を使わないと index ずれでコンテキストを取り違える。
+  let contextSourceLines = extraction.lines || lines;
   let contextCluster = extraction.cluster;
 
   // 非アクティブセッション含めて xterm の解釈済みバッファ (scanBuffer) も参照する。
@@ -395,7 +397,7 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
     if (bufOpts.length > options.length || (!pendingHasCursor && bufHasCursor && bufOpts.length >= options.length)) {
       options.length = 0;
       options.push(...bufOpts);
-      contextSourceLines = bufferTail;
+      contextSourceLines = bufExtraction.lines || bufferTail;
       contextCluster = bufExtraction.cluster;
     }
     // option 1 が pendingTextTail から欠落している場合（保持上限）に補完
@@ -406,7 +408,7 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
           if (!options.some(o => o.num === bo.num)) options.push(bo);
         }
         options.sort((a, b) => a.num - b.num);
-        contextSourceLines = bufferTail;
+        contextSourceLines = bufExtraction.lines || bufferTail;
         contextCluster = bufExtraction.cluster;
       }
     }
@@ -755,7 +757,9 @@ export function detectApproval(id) {
   // フォールバック検出（既存）
   let extraction = extractApprovalOptions(tail);
   const options = extraction.options;
-  let contextSourceLines = tail;
+  // cluster の index は展開後の行（Ink 連結を再分割した結果）が基準。
+  // approvalContextLines で同じ配列を使わないと index ずれでコンテキストを取り違える。
+  let contextSourceLines = extraction.lines || tail;
   let contextCluster = extraction.cluster;
   // ターミナル高さぶんの空白行 + 余裕60行を確保（ダイアログが画面上部にある場合に備える）
   const visibleRows = t?.term?.rows || 40;
@@ -781,7 +785,7 @@ export function detectApproval(id) {
       options.length = 0;
       options.push(...bufOpts);
       options.sort((a, b) => a.num - b.num);
-      contextSourceLines = bufferTail;
+      contextSourceLines = bufExtraction.lines || bufferTail;
       contextCluster = bufExtraction.cluster;
     }
   }
@@ -798,7 +802,7 @@ export function detectApproval(id) {
         if (!options.some(o => o.num === bo.num)) options.push(bo);
       }
       options.sort((a, b) => a.num - b.num);
-      contextSourceLines = bufferTail;
+      contextSourceLines = bufExtraction.lines || bufferTail;
       contextCluster = bufExtraction.cluster;
     }
   }
