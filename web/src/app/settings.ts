@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, showToast, ti18n, token } from './util.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, setFaviconEnvBadge, stateLabel } from './session-list.js';
@@ -980,21 +980,39 @@ export function applyLang(lang) {
   });
 })();
 
-// ---- スマホ: 入力補助ツール表示トグル ----
-// 狭い画面（max-width:720px / pointer:coarse）でのみ効く。OFF（既定）で
-// #input-tools を隠し、ON で body.mobile-input-tools-on を付与して表示する。
+// ---- 入力補助ツール表示トグル（PC / スマホ 独立）----
+// PC（広い画面）は既定 ON: OFF にした時だけ body.pc-input-tools-off で隠す。
+// スマホ（狭い画面 max-width:720px / pointer:coarse）は既定 OFF:
+//   ON にした時だけ body.mobile-input-tools-on で表示する。
+// 2 つは別キーで、画面幅ごとに独立して効く（CSS 側でメディアクエリ分岐）。
 (function () {
-  const enabledEl = document.getElementById('mobile-input-tools-enabled') as HTMLInputElement | null;
-  if (!enabledEl) return;
-  const apply = (on: boolean) => {
-    document.body.classList.toggle('mobile-input-tools-on', on);
-  };
-  enabledEl.addEventListener('change', () => {
-    apply(enabledEl.checked);
-    setUserPref('mobile.input_tools_enabled', enabledEl.checked);
-  });
-  enabledEl.checked = localStorage.getItem(STORAGE_MOBILE_INPUT_TOOLS_KEY) === '1';
-  apply(enabledEl.checked);
+  // PC: 既定 ON（localStorage 未設定 or '0' 以外を ON とみなす）
+  const pcEl = document.getElementById('pc-input-tools-enabled') as HTMLInputElement | null;
+  if (pcEl) {
+    const applyPc = (on: boolean) => {
+      document.body.classList.toggle('pc-input-tools-off', !on);
+    };
+    pcEl.addEventListener('change', () => {
+      applyPc(pcEl.checked);
+      setUserPref('pc.input_tools_enabled', pcEl.checked);
+    });
+    pcEl.checked = localStorage.getItem(STORAGE_PC_INPUT_TOOLS_KEY) !== '0';
+    applyPc(pcEl.checked);
+  }
+
+  // スマホ: 既定 OFF（'1' の時だけ ON）
+  const mobileEl = document.getElementById('mobile-input-tools-enabled') as HTMLInputElement | null;
+  if (mobileEl) {
+    const applyMobile = (on: boolean) => {
+      document.body.classList.toggle('mobile-input-tools-on', on);
+    };
+    mobileEl.addEventListener('change', () => {
+      applyMobile(mobileEl.checked);
+      setUserPref('mobile.input_tools_enabled', mobileEl.checked);
+    });
+    mobileEl.checked = localStorage.getItem(STORAGE_MOBILE_INPUT_TOOLS_KEY) === '1';
+    applyMobile(mobileEl.checked);
+  }
 })();
 
 // ---- トリガーフレーズ設定 ----
