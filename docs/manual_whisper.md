@@ -17,12 +17,44 @@ The installer stores files under `~/.any-ai-cli/whisper/`:
 
 | Path | Purpose |
 |---|---|
-| `bin/` | Extracted whisper.cpp Windows server binaries |
+| `bin/` | Extracted whisper.cpp server binaries plus bundled runtime DLLs |
 | `models/` | Downloaded ggml model files |
 | `tmp/` | Temporary downloads |
 | `whisper-server.log` | Managed server stdout/stderr |
 
 The Hub starts the managed server on `127.0.0.1` and writes the selected local URL back to `voice.whisper.server_url`.
+
+### Self-contained VC++ runtime (no System32 dependency)
+
+`whisper-server.exe` links against the Microsoft Visual C++ runtime — in
+particular `vcomp140.dll` (OpenMP), which the official `whisper-bin-x64.zip` does
+not ship. On machines without the VC++ redistributable this caused a startup
+failure (`0xC0000135` / `STATUS_DLL_NOT_FOUND`).
+
+To stay self-contained, any-ai-cli bundles four x64 runtime DLLs
+(`vcomp140.dll`, `msvcp140.dll`, `vcruntime140.dll`, `vcruntime140_1.dll`) inside
+the binary (`go:embed`) and lays them down next to `whisper-server.exe` in `bin/`
+on install and before each start. Nothing is written to System32, so an uninstall
+(`RemoveAll` of `~/.any-ai-cli/whisper/`) leaves no trace. The UCRT
+(`ucrtbase.dll`) is a Windows 10/11 system component and is not bundled.
+
+The DLLs are sourced from the Visual Studio `\VC\redist` folder by
+`internal/whisperruntime/fetch_windows_runtime.ps1`, which checks the Authenticode
+signature and PE machine type. They are gitignored (not committed), so they must
+be placed into `internal/whisperruntime/files/windows-amd64/` **before the Go
+build** for `go:embed` to pick them up — by running that script on the build
+machine, or by committing the signed DLLs.
+
+> Note: this placement is **not yet automated in the release pipeline**
+> (`release.yml` builds on Linux via GoReleaser and does not run the Windows-only
+> fetch script). Until that is wired up — e.g. a `windows-latest` build leg that
+> runs the script, or committing the DLLs — a released Windows binary embeds the
+> runtime only if the DLLs were present at build time. When they are absent,
+> `whisperruntime.Ensure` is a safe no-op and managed Whisper still relies on a
+> machine-wide VC++ runtime (the original `0xC0000135` exposure).
+
+See `docs/local/plan_unified-local-whisper-all-os.md` (C2) for the licensing terms
+(Microsoft "Distributable Code", redistributed app-local).
 
 ## Downloads And Verification
 
@@ -33,9 +65,32 @@ Managed install is opt-in. It downloads:
 
 The whisper.cpp release archive is SHA-256 verified before extraction. Model entries without a published hash are downloaded over HTTPS and shown in the UI as hash-unverified.
 
+## Managed Install: Docker (Linux / VPS) With A Bundled Server
+
+The primary remote use case is iPhone -> SSH tunnel -> VPS Hub -> localhost
+Whisper. For that, the any-ai-cli Docker image bakes a `whisper-server` binary
+(built from whisper.cpp with `GGML_OPENMP=OFF`, so no libgomp dependency) into
+the image and points the Hub at it with the `ANY_AI_CLI_WHISPER_SERVER`
+environment variable.
+
+When that variable points at an existing executable, the Hub treats Whisper as
+"managed and already installed": the binary download is skipped and only the
+selected model is downloaded into `~/.any-ai-cli/whisper/models/`. With the
+default compose setup that path lives on the user's home volume, so the model
+survives container recreation and is not re-downloaded.
+
+The compose service runs with `init: true` (tini as PID 1) so the spawned
+`whisper-server` child is reaped and never left as a zombie/orphan if the Hub
+crashes; the Hub additionally kills the process group on shutdown.
+
+No port is published for Whisper — it listens on `127.0.0.1` inside the
+container's network namespace and is reached only by the Hub in the same
+container.
+
 ## Manual Server: macOS, Linux, WSL, Or Custom Builds
 
-For non-Windows Hub environments, run a Whisper-compatible server yourself and point the Hub at it.
+For non-Windows Hub environments without a bundled server, run a
+Whisper-compatible server yourself and point the Hub at it.
 
 Example shape:
 
@@ -61,7 +116,7 @@ The Hub first tries OpenAI-compatible `/v1/audio/transcriptions` and then falls 
 
 | Key | Meaning |
 |---|---|
-| `voice.whisper.managed` | `true` lets the Hub manage the local whisper.cpp server. Windows x64 only. |
+| `voice.whisper.managed` | `true` lets the Hub manage the local whisper.cpp server. Supported on Windows x64, and on images/hosts that provide a server via `ANY_AI_CLI_WHISPER_SERVER`. |
 | `voice.whisper.model` | Managed model ID. Default: `large-v3-turbo-q5_0`. |
 | `voice.whisper.server_url` | Local Whisper server URL. Managed mode writes this automatically. |
 | `voice.whisper.server_port` | Preferred managed server port. `0` means auto-pick. |
@@ -84,7 +139,7 @@ The browser side also drops near-silent recordings and discards exact matches fo
 
 | Symptom | Check |
 |---|---|
-| `Whisper server is not installed` | On Windows x64, run Settings -> Voice -> Install. On other platforms, configure `server_url`. |
+| `Whisper server is not installed` | On Windows x64 (or a Docker image with a bundled server), run Settings -> Voice -> Install. On unsupported platforms, configure `server_url`. |
 | `Whisper server is not configured` | Set `voice.whisper.server_url` or enable managed install. |
 | Connection error | Confirm the server is listening on `127.0.0.1` and that the configured port matches. |
 | Slow transcription | Try a smaller model such as `small` or `tiny-q5_1`. |

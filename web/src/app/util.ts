@@ -37,6 +37,10 @@ export type ToastAnchor = Element | MouseEvent | { clientX: number; clientY: num
 export function getToastAnchorRect(anchor: ToastAnchor): DOMRect | { left: number; right: number; top: number; height: number } | null {
   if (!anchor) return null;
   if (anchor instanceof Element && typeof anchor.getBoundingClientRect === 'function') {
+    // 非表示（display:none）やデタッチ済みの要素は getClientRects() が空になる。
+    // その場合は全 0 の矩形が返り、トーストが左上に貼り付くため、
+    // アンカー無し扱いにして既定の下中央表示へフォールバックさせる。
+    if (anchor.getClientRects().length === 0) return null;
     return anchor.getBoundingClientRect();
   }
   if ('clientX' in anchor && 'clientY' in anchor && typeof anchor.clientX === 'number' && typeof anchor.clientY === 'number') {

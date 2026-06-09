@@ -10,6 +10,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// configureWhisperCmd は Windows では何もしない。子プロセスの取り回しは
+// 起動後に attachWhisperProcessJob が JobObject(KILL_ON_JOB_CLOSE) で扱う。
+func configureWhisperCmd(_ *exec.Cmd) {}
+
 func attachWhisperProcessJob(cmd *exec.Cmd) (whisperProcessJob, error) {
 	if cmd == nil || cmd.Process == nil {
 		return 0, fmt.Errorf("missing whisper process")
@@ -47,4 +51,13 @@ func closeWhisperProcessJob(job whisperProcessJob) {
 		return
 	}
 	_ = windows.CloseHandle(windows.Handle(job))
+}
+
+// killWhisperProcess は単体プロセスを終了させる。子孫の確実な掃除は
+// JobObject(KILL_ON_JOB_CLOSE) を閉じる closeWhisperProcessJob が担う。
+func killWhisperProcess(cmd *exec.Cmd) {
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	_ = cmd.Process.Kill()
 }

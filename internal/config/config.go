@@ -38,8 +38,18 @@ func Path() (string, error) {
 
 // LogConfig はファイルローテーションロギングの設定。
 type LogConfig struct {
-	Enabled              bool `yaml:"enabled" json:"enabled"`
-	MaxSizeMB            int  `yaml:"max_size_mb" json:"max_size_mb"`
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// SessionEnabled はセッションログ（.log/.jsonl/.txt + SQLite のイベント本文）の
+	// 記録を有効にするかどうか。既定 false（オプトイン）。生 PTY ログ（.log）には
+	// API キー・トークン・パスワード等がマスクされずに残り得るため、リスクを理解した
+	// 利用者だけが有効化する。Enabled（hub.log の診断ログ）とは別物。
+	SessionEnabled bool `yaml:"session_enabled" json:"session_enabled"`
+	// LegacyLogsNoticeShown は「旧バージョンで既定 ON だった頃のセッションログが
+	// 残っているので削除を推奨する」一回限りの通知を既に出したかどうか。
+	// 旧バージョンからの設定ファイルにはこのキーが無く false 起点になるため、
+	// 旧ログが残っている利用者にだけ初回起動時に通知が出る。
+	LegacyLogsNoticeShown bool `yaml:"legacy_logs_notice_shown" json:"legacy_logs_notice_shown"`
+	MaxSizeMB             int  `yaml:"max_size_mb" json:"max_size_mb"`
 	MaxBackups           int  `yaml:"max_backups" json:"max_backups"`
 	Compress             bool `yaml:"compress" json:"compress"`
 	SessionRetentionDays int  `yaml:"session_retention_days" json:"session_retention_days"`
@@ -505,6 +515,8 @@ func defaultConfig(home string) *Config {
 	cfg.Hub.IdleTimeoutMin = 60
 	cfg.Hub.WrapperReconnectGraceSec = 3600
 	cfg.Log.Enabled = true
+	// セッションログは既定で無効（オプトイン）。.log に秘密情報が平文で残るリスクのため。
+	cfg.Log.SessionEnabled = false
 	cfg.Log.MaxSizeMB = 10
 	cfg.Log.MaxBackups = 3
 	cfg.Log.Compress = false

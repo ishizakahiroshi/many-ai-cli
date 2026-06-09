@@ -51,6 +51,9 @@ func (s *Server) handleLogConfig(w http.ResponseWriter, r *http.Request) {
 			body.SessionMaxSizeMB = 10000
 		}
 		s.cfgMu.Lock()
+		// LegacyLogsNoticeShown はサーバ管理フラグで設定フォームには含まれないため、
+		// body の零値で上書きせず現在値を引き継ぐ（さもないと旧ログ通知が再表示され得る）。
+		body.LegacyLogsNoticeShown = s.cfg.Log.LegacyLogsNoticeShown
 		s.cfg.Log = body
 		s.cfgMu.Unlock()
 		if err := s.persistConfig(); err != nil {

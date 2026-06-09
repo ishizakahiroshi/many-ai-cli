@@ -925,7 +925,7 @@ header {
   flex-shrink: 0;
 }
 .slash-picker-search:focus { border-color: var(--accent); }
-.slash-picker-list { overflow-y: auto; flex: 1; }
+.slash-picker-list { overflow-y: auto; overscroll-behavior: contain; flex: 1; }
 .slash-picker-item {
   display: flex;
   align-items: baseline;
@@ -1044,7 +1044,7 @@ header {
 #attach-drop-zone.dragover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); }
 .attach-sub { font-size: 0.7rem; color: var(--line-soft); }
 
-#attach-thumbnails { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; flex: 1; }
+#attach-thumbnails { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; overscroll-behavior: contain; flex: 1; }
 .attach-thumb-wrapper { position: relative; flex-shrink: 0; }
 .attach-thumb {
   width: 40px;
@@ -1163,7 +1163,7 @@ header {
 }
 .about-x-btn:hover { background: var(--danger-bg); color: var(--danger); }
 
-.about-content { overflow-y: auto; }
+.about-content { overflow-y: auto; overscroll-behavior: contain; }
 
 .about-section {
   padding: 12px 16px;

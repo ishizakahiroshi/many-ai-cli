@@ -1,3 +1,12 @@
+# NOTE (managed Whisper on Windows): the bundled VC++ runtime DLLs
+# (internal/whisperruntime/files/windows-amd64/*.dll) are gitignored and NOT
+# fetched here — this job builds on Linux via GoReleaser and cannot run the
+# Windows-only fetch_windows_runtime.ps1. As a result the released windows/amd64
+# binary embeds the runtime ONLY if the DLLs were committed or placed before the
+# build. To make managed Windows Whisper self-contained at release time, either
+# add a windows-latest build leg that runs the fetch script before `go build`, or
+# commit the signed DLLs. Without that, whisperruntime.Ensure is a safe no-op and
+# the original 0xC0000135 exposure remains. See docs/manual_whisper.md (C2).
 name: Release
 
 on:

@@ -199,6 +199,11 @@
             <input type="number" id="log-max-backups" min="0" max="100" class="settings-input-number">
           </div>
           <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_session_log">Session log</span>
+            <input type="checkbox" id="log-session-enabled" class="settings-checkbox">
+          </div>
+          <div class="settings-note settings-note-warn" data-i18n="settings_session_log_desc">OFF by default. The raw .log keeps API keys, tokens, and passwords UNMASKED — enable only if you understand the risk.</div>
+          <div class="settings-row">
             <span class="settings-label" data-i18n="settings_session_retention">Session retention (days)</span>
             <input type="number" id="log-session-retention-days" min="0" max="365" class="settings-input-number">
           </div>
@@ -941,6 +946,32 @@
               <a class="about-oss-link" href="https://pkg.go.dev/modernc.org/sqlite" target="_blank" rel="noopener noreferrer">
                 <p class="about-oss-name">modernc.org/sqlite v1.51.0</p>
                 <p class="about-oss-desc" data-i18n="about_oss_sqlite_desc">BSD-3-Clause License. Used for local session history storage.</p>
+              </a>
+            </li>
+            <li class="about-oss-section" data-i18n="about_oss_section_whisper">Speech Recognition (Whisper)</li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://github.com/ggml-org/whisper.cpp" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">whisper.cpp</p>
+                <p class="about-oss-desc" data-i18n="about_oss_whisper_cpp_desc">MIT License. Copyright (c) 2023-2026 The ggml authors. Local speech-to-text engine for the bundled voice input.</p>
+              </a>
+            </li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://github.com/ggml-org/ggml" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">ggml</p>
+                <p class="about-oss-desc" data-i18n="about_oss_ggml_desc">MIT License. Copyright (c) 2023-2026 The ggml authors. Tensor library underlying whisper.cpp.</p>
+              </a>
+            </li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://huggingface.co/ggerganov/whisper.cpp" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">OpenAI Whisper model</p>
+                <p class="about-oss-desc" data-i18n="about_oss_whisper_model_desc">MIT License. Copyright (c) 2022 OpenAI. Model weights downloaded at runtime for transcription.</p>
+              </a>
+            </li>
+            <li class="about-oss-section" data-i18n="about_oss_section_redist">Redistributed Microsoft Components</li>
+            <li class="about-oss-item">
+              <a class="about-oss-link" href="https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">Microsoft Visual C++ Runtime</p>
+                <p class="about-oss-desc" data-i18n="about_oss_vc_runtime_desc">© Microsoft Corporation. Microsoft Visual Studio License Terms (not open source). Redistributed on Windows x64 so the bundled whisper-server runs without a separate VC++ install.</p>
               </a>
             </li>
           </ul>
