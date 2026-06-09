@@ -473,6 +473,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		logger.Warn("sqlite session store disabled", "err", err)
 	} else {
 		s.sessionStore = store
+		store.SetOnWriteError(func(liveSessionID int, err error) {
+			logger.Warn("sqlite session event write failed", "session_id", liveSessionID, "err", err)
+		})
 		// 前回 run がクラッシュ等で EndSession できずに残した未終了行を閉じる。
 		// 放置すると live_session_id ベースの UPDATE（state / first・last message 等）が
 		// 同じ live ID を再利用する新セッションの内容で旧行を上書きしてしまう。
@@ -1850,7 +1853,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		})
 	}
 	if s.sessionStore != nil {
-		_ = s.sessionStore.StoreEvent(m.SessionID, map[string]any{
+		_ = s.sessionStore.StoreEventAsync(m.SessionID, map[string]any{
 			"ts":         time.Now().Format(time.RFC3339),
 			"type":       "session_dismiss",
 			"session_id": m.SessionID,
@@ -2297,8 +2300,10 @@ func (s *Server) writeHistory(sessionID int, event map[string]any) {
 		}
 	}
 	if s.sessionStore != nil {
-		if err := s.sessionStore.StoreEvent(sessionID, event); err != nil {
-			s.logger.Warn("sqlite session event write failed", "session_id", sessionID, "err", err)
+		// SQLite への書き込みは非同期キュー経由。pty_data のホットパスから
+		// 呼ばれるため、DB の遅延・障害で UI 配信（broadcast）を止めない。
+		if dropped := s.sessionStore.StoreEventAsync(sessionID, event); dropped > 0 && dropped%1000 == 1 {
+			s.logger.Warn("sqlite session event queue full; dropping events", "session_id", sessionID, "dropped_total", dropped)
 		}
 	}
 }

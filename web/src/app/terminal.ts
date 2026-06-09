@@ -89,7 +89,13 @@ export function ensureTerminal(id) {
     return false;
   });
   // モーダル表示中はホイールで背後の端末がスクロールしないよう、xterm にホイールを無視させる。
-  term.attachCustomWheelEventHandler(() => !isModalOverlayOpen());
+  // vendored xterm には attachCustomWheelEventHandler が存在しないビルドがあるため存在確認必須
+  //（存在しないまま呼ぶと ensureTerminal が毎回 TypeError → terminals 未登録 →
+  //  ターミナルが一切描画されず、activateSession も途中で死ぬ）。
+  // 無い場合は whenLayoutReady 側の capture リスナーで同等の抑止を行う。
+  if (typeof term.attachCustomWheelEventHandler === 'function') {
+    term.attachCustomWheelEventHandler(() => !isModalOverlayOpen());
+  }
   // マウストラッキング (DECSET 9/1000/1002/1003) を常時無効化する。
   // disableStdin:true のため xterm はマウスレポートを PTY へ送れず tracking ON の利点が無い一方、
   // xterm は tracking ON 中はドラッグ選択を無効化する（Shift 押下時のみ選択可になる）。
@@ -386,6 +392,18 @@ export function whenLayoutReady(id, container) {
       viewport.addEventListener('pointerdown', () => {
         markTerminalManualScrollIntent();
       });
+    }
+    // attachCustomWheelEventHandler が無い xterm ビルド向けのフォールバック。
+    // capture 段階で遮断することで、xterm 内部のホイールリスナーと
+    // viewport のネイティブスクロールの両方へ届く前に止める（モーダル表示中のみ）。
+    if (typeof t.term.attachCustomWheelEventHandler !== 'function' && !t.modalWheelBlockerInstalled) {
+      t.modalWheelBlockerInstalled = true;
+      container.addEventListener('wheel', (e) => {
+        if (isModalOverlayOpen()) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+      }, { capture: true, passive: false });
     }
     flushPending(id);
     t.everAttached = true;
