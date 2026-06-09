@@ -112,11 +112,24 @@ sudo rpm -i any-ai-cli-<version>.x86_64.rpm   # RHEL 系
 
 リリースページから自分の OS 向け zip をダウンロードして展開し、バイナリを `PATH` の通った場所に置きます。
 
-#### Windows Smart App Control について
+#### Windows のセキュリティ警告について
 
 現在の Windows 向けリリースバイナリは Authenticode コード署名されていません。
-Windows 11 の Smart App Control が有効な PC では、`any-ai-cli.exe` が信頼されていないアプリとしてブロックされる場合があります。
-これはチェックサム検証とは別の仕組みです。`SHA256SUMS.txt` はリリース成果物の完全性確認用に署名されていますが、`.exe` 本体のコード署名ではありません。
+`SHA256SUMS.txt` はリリース成果物の完全性確認用に署名されていますが、`.exe` 本体のコード署名ではありません。
+Windows のブロックには複数の種類があります。
+
+- **Mark-of-the-Web**: ダウンロードした zip / exe にインターネット由来の印が付くことで警告される場合があります。Windows zip を展開した後、展開先フォルダで `unblock-windows.cmd` を実行してください。このスクリプトは同じフォルダの `any-ai-cli*.exe` だけに PowerShell `Unblock-File` を実行します。管理者権限は不要で、システムポリシーを永続変更せず、アプリも自動起動しません。
+- **SmartScreen**: 未知の発行元・利用実績の少ないアプリとして警告される場合があります。自分で公式リリースから取得し、必要に応じてチェックサム / 署名を確認した場合だけ続行してください。
+- **Smart App Control**: Windows 11 の一部環境では、未署名アプリが完全にブロックされる場合があります。`unblock-windows.cmd` では回避できません。未署名 `.exe` 配布のままでは、このケースに対するサポート済み回避策はありません。
+- **組織管理ポリシー**: 会社 PC などでは AppLocker / WDAC / EDR / ウイルス対策ソフト等により、上記とは別にブロックされる場合があります。これらを無効化せず、組織の許可リスト登録手順に従ってください。
+
+Windows zip の推奨手順:
+
+1. GitHub Releases から `any-ai-cli-<version>-windows-x64.zip` をダウンロードする
+2. 必要に応じて `SHA256SUMS.txt` / cosign 署名を検証する
+3. zip を展開する
+4. `unblock-windows.cmd` を実行する
+5. `any-ai-cli.exe` または `any-ai-cli-launcher.exe` を手動で起動する
 
 #### リリース成果物の検証（チェックサム + 署名）
 

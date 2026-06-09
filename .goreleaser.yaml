@@ -72,6 +72,9 @@ archives:
       - LICENSE
       - THIRD_PARTY_NOTICES.md
       - web/src/vendor/THIRD_PARTY_LICENSES.txt
+      # Windows archives include a local Mark-of-the-Web helper next to the .exe files.
+      # Other OS archives resolve this template to a non-matching glob.
+      - '{{ if eq .Os "windows" }}unblock-windows.cmd{{ else }}__no_windows_unblock_file__*{{ end }}'
 
 checksum:
   name_template: "SHA256SUMS.txt"

@@ -67,3 +67,58 @@ func TestHostNetInfoNonSSH(t *testing.T) {
 		t.Error("SSH 環境変数なしで ssh=true")
 	}
 }
+
+func TestResolveEnvMetaPriority(t *testing.T) {
+	t.Setenv("ANY_AI_CLI_ENV_KIND", "vps")
+	got := resolveEnvMeta("wsl", "windows-wsl", false, "host.example", true, "vps-tunnel")
+	if got.Kind != "vps" || got.Label != "VPS" || got.HostLabel != "host.example" {
+		t.Fatalf("env var should win, got %+v", got)
+	}
+}
+
+func TestResolveEnvMetaInvalidExplicitFallsBackToLocal(t *testing.T) {
+	t.Setenv("ANY_AI_CLI_ENV_KIND", "invalid")
+	got := resolveEnvMeta("vps", "wsl", true, "", true, "vps-tunnel")
+	if got.Kind != "local" {
+		t.Fatalf("invalid explicit env kind = %q, want local", got.Kind)
+	}
+}
+
+func TestResolveEnvMetaConfigAndHints(t *testing.T) {
+	t.Run("config", func(t *testing.T) {
+		got := resolveEnvMeta("wsl", "linux", false, "", false, "")
+		if got.Kind != "wsl" {
+			t.Fatalf("config env kind = %q, want wsl", got.Kind)
+		}
+	})
+	t.Run("net hint kind", func(t *testing.T) {
+		got := resolveEnvMeta("", "linux", false, "203.0.113.10", true, "vps-tunnel")
+		if got.Kind != "vps-tunnel" || got.HostLabel != "203.0.113.10" {
+			t.Fatalf("net hint env = %+v, want vps-tunnel with host", got)
+		}
+	})
+	t.Run("net hint ssh fallback", func(t *testing.T) {
+		got := resolveEnvMeta("", "linux", false, "", true, "")
+		if got.Kind != "vps-tunnel" {
+			t.Fatalf("net hint ssh env = %q, want vps-tunnel", got.Kind)
+		}
+	})
+	t.Run("runtime wsl", func(t *testing.T) {
+		got := resolveEnvMeta("", "windows-wsl", false, "", false, "")
+		if got.Kind != "wsl" {
+			t.Fatalf("runtime env = %q, want wsl", got.Kind)
+		}
+	})
+	t.Run("ssh", func(t *testing.T) {
+		got := resolveEnvMeta("", "linux", true, "", false, "")
+		if got.Kind != "vps" {
+			t.Fatalf("ssh env = %q, want vps", got.Kind)
+		}
+	})
+	t.Run("default local", func(t *testing.T) {
+		got := resolveEnvMeta("", "linux", false, "", false, "")
+		if got.Kind != "local" {
+			t.Fatalf("default env = %q, want local", got.Kind)
+		}
+	})
+}

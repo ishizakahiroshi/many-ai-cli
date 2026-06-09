@@ -28,6 +28,7 @@ if (typeof window.t !== 'function') window.t = (key) => key;
 document.addEventListener('i18n-ready', () => {
   document.getElementById('summary').textContent = t('registering');
   renderSessionList();
+  updateInputAffordance();
 });
 
 
@@ -58,6 +59,32 @@ export function autoExpand(opts: any = {}) {
 
 export function updateInputClearButton() {
   inputClearBtn?.classList.toggle('has-text', inputEl.value.length > 0);
+}
+
+// アクティブセッションが実行中（state === 'running'）かを返す単一ヘルパ。
+// C1（プレースホルダ差し替え）・C2（送信→停止ボタン化）が共通で参照する。
+export function isActiveSessionRunning() {
+  if (activeSessionId === null) return false;
+  const s = sessions.get(activeSessionId);
+  return !!s && s.state === 'running';
+}
+
+// 実行中状態に応じて入力欄プレースホルダと送信ボタンの見た目／挙動を再評価する。
+// WS の state 更新・セッション切替・i18n 適用後にこれを呼ぶことで停止導線を同期する。
+export function updateInputAffordance() {
+  const running = isActiveSessionRunning();
+  // C1: 実行中は「Esc で停止」、それ以外は通常文言。data-i18n-placeholder の自動適用と
+  // 競合しないよう、running 状態を見て JS から明示的に上書きする。
+  inputEl.placeholder = running ? t('input_placeholder_running') : t('input_placeholder');
+  // C2: 実行中は ▶ → ■（停止）に切替え、停止色クラスと title/aria-label も差し替える。
+  const sendBtn = document.getElementById('send-btn');
+  if (sendBtn) {
+    sendBtn.textContent = running ? '■' : '➤';
+    sendBtn.classList.toggle('is-stopping', running);
+    const title = running ? t('stop_btn_title') : t('send_btn_title');
+    sendBtn.title = title;
+    sendBtn.setAttribute('aria-label', title);
+  }
 }
 
 export function renderPasteChips() {
@@ -560,6 +587,11 @@ document.getElementById('send-btn').addEventListener('mousedown', () => {
 });
 document.getElementById('send-btn').addEventListener('click', () => {
   if (activeSessionId === null) return;
+  // C2: 実行中は停止ボタンとして振る舞う。Esc 相当(\x1b)を送り送信はしない。
+  if (isActiveSessionRunning()) {
+    sendText(activeSessionId, '\x1b');
+    return;
+  }
   if (isComposing) return; // compositionend 側で処理する
   // 直前 (DOUBLE_SEND_GUARD_MS) に doSend 済み → autosend 等の直後 click を取り込む二重送信防止
   if (Date.now() - lastDoSendAt < DOUBLE_SEND_GUARD_MS) return;
@@ -693,7 +725,10 @@ export function sendQuickCommand(sessionId, cmd) {
     detectApproval(sessionId);
     maybeAutoSwitchToNextApproval();
   }, 2050);
-  sendSubmittedText(sessionId, `${cmd}\r`);
+  // 内側 CLI がビジー等で入力行に残骸があると、クイックコマンドが既存テキストへ
+  // 連結され（例: "...質問/clear/clear"）独立コマンドにならない。Ctrl+U(\x15) で
+  // 入力行を一度クリアしてから送り、連結を物理的に防ぐ。
+  sendSubmittedText(sessionId, `\x15${cmd}\r`);
   focusInputForTerminalKeys();
 }
 

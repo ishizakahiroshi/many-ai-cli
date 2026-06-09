@@ -2,7 +2,7 @@
 import { t } from '../i18n.js';
 import { escapeHtml, formatLastOutputAt, formatStartedAt, ti18n } from './util.js';
 import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, favorites, groupOrder, multiQuestionVisibleCache, orderSessions, projectFavorites, saveFavorites, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, terminals } from './state.js';
-import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor } from '../app.js';
+import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor, updateInputAffordance } from '../app.js';
 import { attachTerminal, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, updateScrollLockBtn } from './terminal.js';
 import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, renderSessionInfoChip, updateChatCountBadge } from './settings.js';
 import { syncElapsedTimer } from './ws-client.js';
@@ -54,6 +54,8 @@ export function activateSessionForMultiPane(id) {
   }
   // 承認 UI をフォーカスセッション向きに更新
   setMultiQuestionBannerVisible(!!multiQuestionVisibleCache.get(id));
+  // フォーカスセッションの実行中状態を入力欄／送信ボタンへ反映
+  updateInputAffordance();
   detectApproval(id);
   revealApprovalPromptForSession(id);
   // サイドバーのアクティブカードを更新
@@ -104,6 +106,8 @@ export function activateSession(id) {
   ensureTerminal(id);
   attachTerminal(id);
   updateScrollLockBtn();
+  // 切替先セッションの実行中状態に合わせて入力欄プレースホルダ／送信ボタンを更新
+  updateInputAffordance();
   setMultiQuestionBannerVisible(!!multiQuestionVisibleCache.get(id));
   detectApproval(id);
   updateSessionListActiveCard(id);

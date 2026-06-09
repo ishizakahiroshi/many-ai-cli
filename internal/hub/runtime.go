@@ -9,6 +9,46 @@ import (
 	"any-ai-cli/internal/wslutil"
 )
 
+type envMeta struct {
+	Kind      string
+	Label     string
+	Short     string
+	Color     string
+	Title     string
+	HostLabel string
+}
+
+var envMetaByKind = map[string]envMeta{
+	"local": {
+		Kind:  "local",
+		Label: "Local",
+		Short: "L",
+		Color: "#22c55e",
+		Title: "ANY-AI-CLI Local",
+	},
+	"wsl": {
+		Kind:  "wsl",
+		Label: "WSL",
+		Short: "W",
+		Color: "#3b82f6",
+		Title: "ANY-AI-CLI WSL",
+	},
+	"vps": {
+		Kind:  "vps",
+		Label: "VPS",
+		Short: "V",
+		Color: "#f97316",
+		Title: "ANY-AI-CLI VPS",
+	},
+	"vps-tunnel": {
+		Kind:  "vps-tunnel",
+		Label: "VPS Tunnel",
+		Short: "T",
+		Color: "#ef4444",
+		Title: "ANY-AI-CLI VPS Tunnel",
+	},
+}
+
 func runtimeMode() string {
 	if wslutil.IsWindowsLauncherMode() {
 		return "windows-wsl"
@@ -88,4 +128,60 @@ func runtimeLabel(mode string) string {
 	default:
 		return mode
 	}
+}
+
+func normalizeEnvKind(kind string) string {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "local":
+		return "local"
+	case "wsl":
+		return "wsl"
+	case "vps":
+		return "vps"
+	case "vps-tunnel", "vpstunnel", "vps_tunnel":
+		return "vps-tunnel"
+	default:
+		return ""
+	}
+}
+
+func resolveEnvMeta(configKind, mode string, ssh bool, hostLabel string, netHintSSH bool, netHintKind string) envMeta {
+	resolveExplicit := func(raw string) (envMeta, bool) {
+		if strings.TrimSpace(raw) == "" {
+			return envMeta{}, false
+		}
+		kind := normalizeEnvKind(raw)
+		if kind == "" {
+			kind = "local"
+		}
+		return envMetaForKind(kind, hostLabel), true
+	}
+	if meta, ok := resolveExplicit(os.Getenv("ANY_AI_CLI_ENV_KIND")); ok {
+		return meta
+	}
+	if meta, ok := resolveExplicit(configKind); ok {
+		return meta
+	}
+	if meta, ok := resolveExplicit(netHintKind); ok {
+		return meta
+	}
+	if netHintSSH {
+		return envMetaForKind("vps-tunnel", hostLabel)
+	}
+	if mode == "windows-wsl" || mode == "wsl" {
+		return envMetaForKind("wsl", hostLabel)
+	}
+	if ssh {
+		return envMetaForKind("vps", hostLabel)
+	}
+	return envMetaForKind("local", hostLabel)
+}
+
+func envMetaForKind(kind, hostLabel string) envMeta {
+	meta, ok := envMetaByKind[normalizeEnvKind(kind)]
+	if !ok {
+		meta = envMetaByKind["local"]
+	}
+	meta.HostLabel = strings.TrimSpace(hostLabel)
+	return meta
 }

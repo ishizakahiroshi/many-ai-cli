@@ -53,12 +53,34 @@ Get the latest release from [GitHub Releases](https://github.com/ishizakahiroshi
 > Settings and logs are stored in `~/.any-ai-cli/` (created on first run).
 > Session logs contain user input and AI output. Treat them as sensitive data.
 
-### Windows Smart App Control Notice
+### Windows Security Warnings
 
-The Windows release binary is not currently Authenticode-signed. On Windows 11
-PCs where Smart App Control is enabled, Windows may block `any-ai-cli.exe` as an
-untrusted app. This is separate from checksum verification: `SHA256SUMS.txt` is
-signed for release integrity, but the `.exe` itself is not code-signed.
+The Windows release binaries are not currently Authenticode-signed.
+`SHA256SUMS.txt` verifies release integrity, but it is not code signing for the
+`.exe` files. Windows blocks can come from several different systems:
+
+- **Mark-of-the-Web**: downloaded zip/exe files can carry an internet-zone mark.
+  After extracting the Windows zip, run `unblock-windows.cmd` from the extracted
+  folder. It uses PowerShell `Unblock-File` only on `any-ai-cli*.exe` in that
+  same folder, does not require administrator rights, does not change system
+  policy permanently, and does not launch the app.
+- **SmartScreen**: Windows may warn that the app is uncommon or from an unknown
+  publisher. Only continue if you intentionally downloaded the release and, when
+  needed, verified the checksum/signature.
+- **Smart App Control**: on some Windows 11 PCs this can fully block unsigned
+  apps. `unblock-windows.cmd` cannot bypass that; unsigned `.exe` distribution
+  has no supported workaround for this case.
+- **Organization policy**: AppLocker, WDAC, EDR, antivirus, or other managed-PC
+  policies can block local tools independently. Follow your organization's
+  allowlisting process rather than disabling those controls.
+
+Recommended Windows zip flow:
+
+1. Download `any-ai-cli-<version>-windows-x64.zip` from GitHub Releases
+2. Verify `SHA256SUMS.txt` / cosign signature if required
+3. Extract the zip
+4. Run `unblock-windows.cmd`
+5. Start `any-ai-cli.exe` or `any-ai-cli-launcher.exe` manually
 
 ### Platform Verification for v0.3.0
 

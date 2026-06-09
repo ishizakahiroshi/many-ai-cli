@@ -274,6 +274,11 @@
 #send-btn:hover { background: var(--accent-2); }
 #send-btn:active { transform: scale(0.92); }
 
+/* C2: 実行中は停止ボタン（■）化。白アイコンとのコントラストを両テーマで保つため
+   テーマ変数（--danger はダークテーマだと淡色前景）ではなく固定の停止赤を使う */
+#send-btn.is-stopping { background: #d9534f; }
+#send-btn.is-stopping:hover { background: #c9302c; }
+
 .quick-cmd-btn {
   background: transparent;
   color: var(--muted-2);

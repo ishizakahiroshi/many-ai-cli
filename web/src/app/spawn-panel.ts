@@ -19,6 +19,11 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   const spawnLaunchBtn  = document.getElementById('spawn-launch-btn');
   const spawnProviderEl = document.getElementById('spawn-provider');
   const spawnProviderIcon = document.getElementById('spawn-provider-icon');
+  const spawnProviderCombobox = document.getElementById('spawn-provider-combobox');
+  const spawnProviderTrigger = document.getElementById('spawn-provider-trigger');
+  const spawnProviderTriggerIcon = document.getElementById('spawn-provider-trigger-icon');
+  const spawnProviderTriggerLabel = document.getElementById('spawn-provider-trigger-label');
+  const spawnProviderList = document.getElementById('spawn-provider-list');
   const spawnCodexModelBtn = document.getElementById('spawn-codex-model-btn');
   const spawnClaudeModelBtn = document.getElementById('spawn-claude-model-btn');
   const spawnModelInput = document.getElementById('spawn-model');
@@ -34,6 +39,8 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   // model id → route の即時参照 Map。
   const spawnModelRouteMap = new Map();
   let spawnModelFetchInFlight = null;
+  let spawnProviderOpen = false;
+  let spawnProviderActiveIndex = -1;
 
   function rebuildModelRouteMap(groups) {
     spawnModelRouteMap.clear();
@@ -193,9 +200,164 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     });
   }
 
-  function updateSpawnProviderIcon() {
-    if (spawnProviderIcon) spawnProviderIcon.innerHTML = providerIconHtml(spawnProviderEl.value);
+  function getSpawnProviderOptions() {
+    return Array.from((spawnProviderEl as HTMLSelectElement).options).map((opt, index) => {
+      const label = (opt.textContent || opt.label || opt.value).trim() || opt.value;
+      return { value: opt.value, label, id: `spawn-provider-option-${index}` };
+    });
   }
+
+  function getSelectedSpawnProviderIndex() {
+    const options = getSpawnProviderOptions();
+    const idx = options.findIndex(opt => opt.value === spawnProviderEl.value);
+    return idx >= 0 ? idx : 0;
+  }
+
+  function getSelectedSpawnProviderOption() {
+    const options = getSpawnProviderOptions();
+    return options.find(opt => opt.value === spawnProviderEl.value) || options[0] || {
+      value: spawnProviderEl.value,
+      label: spawnProviderEl.value,
+      id: 'spawn-provider-option-0',
+    };
+  }
+
+  function renderSpawnProviderOptions() {
+    if (!spawnProviderList) return;
+    const options = getSpawnProviderOptions();
+    if (spawnProviderActiveIndex < 0 || spawnProviderActiveIndex >= options.length) {
+      spawnProviderActiveIndex = getSelectedSpawnProviderIndex();
+    }
+    const selectedValue = spawnProviderEl.value;
+    spawnProviderList.innerHTML = options.map((opt, index) => {
+      const selected = opt.value === selectedValue;
+      const active = spawnProviderOpen && index === spawnProviderActiveIndex;
+      return (
+        `<li id="${opt.id}" class="spawn-provider-option${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}" ` +
+        `role="option" aria-selected="${selected ? 'true' : 'false'}" data-value="${escapeHtml(opt.value)}" tabindex="-1">` +
+        `<span class="spawn-provider-option-icon" aria-hidden="true">${providerIconHtml(opt.value, 14)}</span>` +
+        `<span class="spawn-provider-option-label">${escapeHtml(opt.label)}</span>` +
+        `<span class="spawn-provider-option-check" aria-hidden="true">${selected ? '✓' : ''}</span>` +
+        `</li>`
+      );
+    }).join('');
+    const activeOption = options[spawnProviderActiveIndex];
+    if (spawnProviderOpen && activeOption && spawnProviderTrigger) {
+      spawnProviderTrigger.setAttribute('aria-activedescendant', activeOption.id);
+      document.getElementById(activeOption.id)?.scrollIntoView({ block: 'nearest' });
+    } else if (spawnProviderTrigger) {
+      spawnProviderTrigger.removeAttribute('aria-activedescendant');
+    }
+  }
+
+  function updateSpawnProviderIcon() {
+    const selected = getSelectedSpawnProviderOption();
+    if (spawnProviderIcon) spawnProviderIcon.innerHTML = providerIconHtml(selected.value);
+    if (spawnProviderTriggerIcon) spawnProviderTriggerIcon.innerHTML = providerIconHtml(selected.value, 14);
+    if (spawnProviderTriggerLabel) spawnProviderTriggerLabel.textContent = selected.label;
+    renderSpawnProviderOptions();
+  }
+
+  function openSpawnProviderList() {
+    if (!spawnProviderList || !spawnProviderTrigger || !spawnProviderCombobox) return;
+    spawnProviderOpen = true;
+    spawnProviderActiveIndex = getSelectedSpawnProviderIndex();
+    spawnProviderList.hidden = false;
+    spawnProviderTrigger.setAttribute('aria-expanded', 'true');
+    spawnProviderTrigger.classList.add('is-open');
+    spawnProviderCombobox.classList.add('is-open');
+    renderSpawnProviderOptions();
+  }
+
+  function closeSpawnProviderList(focusTrigger = false) {
+    if (!spawnProviderList || !spawnProviderTrigger || !spawnProviderCombobox) return;
+    spawnProviderOpen = false;
+    spawnProviderList.hidden = true;
+    spawnProviderTrigger.setAttribute('aria-expanded', 'false');
+    spawnProviderTrigger.removeAttribute('aria-activedescendant');
+    spawnProviderTrigger.classList.remove('is-open');
+    spawnProviderCombobox.classList.remove('is-open');
+    renderSpawnProviderOptions();
+    if (focusTrigger) spawnProviderTrigger.focus();
+  }
+
+  function setSpawnProviderActiveIndex(index) {
+    const options = getSpawnProviderOptions();
+    if (options.length === 0) return;
+    spawnProviderActiveIndex = (index + options.length) % options.length;
+    renderSpawnProviderOptions();
+  }
+
+  function selectSpawnProviderValue(value) {
+    (spawnProviderEl as HTMLSelectElement).value = value;
+    spawnProviderEl.dispatchEvent(new Event('change', { bubbles: true }));
+    closeSpawnProviderList(true);
+  }
+
+  function handleSpawnProviderKeydown(e) {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+      e.preventDefault();
+      if (!spawnProviderOpen) {
+        openSpawnProviderList();
+        return;
+      }
+      const opt = getSpawnProviderOptions()[spawnProviderActiveIndex];
+      if (opt) selectSpawnProviderValue(opt.value);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!spawnProviderOpen) openSpawnProviderList();
+      else setSpawnProviderActiveIndex(spawnProviderActiveIndex + 1);
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!spawnProviderOpen) openSpawnProviderList();
+      else setSpawnProviderActiveIndex(spawnProviderActiveIndex - 1);
+      return;
+    }
+    if (e.key === 'Escape') {
+      if (spawnProviderOpen) {
+        e.preventDefault();
+        closeSpawnProviderList(true);
+      }
+      return;
+    }
+    if (e.key === 'Tab' && spawnProviderOpen) {
+      closeSpawnProviderList(false);
+    }
+  }
+
+  if (spawnProviderTrigger) {
+    spawnProviderTrigger.addEventListener('click', () => {
+      if (spawnProviderOpen) closeSpawnProviderList(false);
+      else openSpawnProviderList();
+    });
+    spawnProviderTrigger.addEventListener('keydown', handleSpawnProviderKeydown);
+  }
+
+  if (spawnProviderList) {
+    spawnProviderList.addEventListener('click', (e) => {
+      const item = e.target.closest('.spawn-provider-option');
+      if (!item) return;
+      selectSpawnProviderValue(item.dataset.value);
+    });
+    spawnProviderList.addEventListener('mousemove', (e) => {
+      const item = e.target.closest('.spawn-provider-option');
+      if (!item || !spawnProviderList.contains(item)) return;
+      const items = [...spawnProviderList.querySelectorAll('.spawn-provider-option')];
+      const idx = items.indexOf(item);
+      if (idx >= 0 && idx !== spawnProviderActiveIndex) setSpawnProviderActiveIndex(idx);
+    });
+    spawnProviderList.addEventListener('keydown', handleSpawnProviderKeydown);
+  }
+
+  document.addEventListener('mousedown', (e) => {
+    if (!spawnProviderOpen || !spawnProviderCombobox) return;
+    if (!spawnProviderCombobox.contains(e.target)) closeSpawnProviderList(false);
+  });
+
   spawnProviderEl.addEventListener('change', () => {
     updateSpawnProviderIcon();
     const p = spawnProviderEl.value;
@@ -272,6 +434,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       if (s.permission_mode)  document.getElementById('spawn-permission-mode').value = s.permission_mode;
       if (s.sandbox)          document.getElementById('spawn-sandbox').value = s.sandbox;
       if (s.ask_for_approval) document.getElementById('spawn-ask-approval').value = s.ask_for_approval;
+      updateSpawnProviderIcon();
       return !!s.cwd;
     } catch (_) { return false; }
   }

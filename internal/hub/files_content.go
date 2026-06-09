@@ -1,9 +1,11 @@
 package hub
 
 import (
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -227,6 +229,82 @@ func (s *Server) handleFilesContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, resp)
+}
+
+func contentDispositionAttachment(filename string) string {
+	fallback := asciiFilenameFallback(filename)
+	return fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`, fallback, url.PathEscape(filename))
+}
+
+func asciiFilenameFallback(filename string) string {
+	var b strings.Builder
+	for _, r := range filename {
+		switch {
+		case r >= 0x20 && r <= 0x7e && r != '"' && r != '\\' && r != '/' && r != ';':
+			b.WriteRune(r)
+		case r == '\t':
+			b.WriteByte('_')
+		case r > 0x7e:
+			b.WriteByte('_')
+		default:
+			b.WriteByte('_')
+		}
+	}
+	fallback := strings.TrimSpace(b.String())
+	if fallback == "" || fallback == "." || fallback == ".." {
+		return "download"
+	}
+	return fallback
+}
+
+// handleFilesDownload は GET /api/files-download を処理する。
+// ?path=<absPath>&token=<token> 必須。
+// ?session=<id> で検証スコープを指定（省略時: Hub cwd）。
+func (s *Server) handleFilesDownload(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodGet) {
+		return
+	}
+
+	pathParam, _, err := s.resolveAllowedFilePath(r)
+	if err != nil {
+		if he, ok := err.(httpError); ok {
+			writeJSONError(w, he.status, httpErrorCode(he.status), he.msg)
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+		return
+	}
+
+	info, err := os.Stat(pathParam) // #nosec G703 -- resolveAllowedFilePath で許可ルート配下を検証済み
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeJSONError(w, http.StatusNotFound, "not_found", "not found")
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+		return
+	}
+	if info.IsDir() {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "path is a directory")
+		return
+	}
+
+	f, err := os.Open(pathParam) // #nosec G703 -- resolveAllowedFilePath で許可ルート配下を検証済み
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "open_failed", "cannot open file")
+		return
+	}
+	defer f.Close()
+
+	filename := filepath.Base(pathParam)
+	contentType := mime.TypeByExtension(strings.ToLower(filepath.Ext(pathParam)))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	w.Header().Set("Content-Disposition", contentDispositionAttachment(filename))
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	http.ServeContent(w, r, filename, info.ModTime(), f)
 }
 
 // handleFilesAsset は GET /api/files-asset を処理する。

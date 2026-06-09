@@ -53,7 +53,10 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	if s.netHintHost != "" {
 		hostIP = s.netHintHost
 	}
+	netHintSSH := s.netHintSSH
+	netHintEnvKind := s.netHintEnvKind
 	s.netHintMu.Unlock()
+	env := resolveEnvMeta(cfg.Hub.EnvKind, mode, sshSession, hostIP, netHintSSH, netHintEnvKind)
 	writeJSON(w, map[string]any{
 		"cwd":             s.hubCWD,
 		"version":         s.version,
@@ -61,6 +64,12 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		"runtime_label":   runtimeLabel(mode),
 		"ssh":             sshSession,
 		"host_ip":         hostIP,
+		"env_kind":        env.Kind,
+		"env_label":       env.Label,
+		"env_short":       env.Short,
+		"env_color":       env.Color,
+		"env_title":       env.Title,
+		"env_host_label":  env.HostLabel,
 		"userAvatar":      userAvatar,
 		"userDisplayName": userDisplayName,
 	})
@@ -76,6 +85,7 @@ func (s *Server) handleNetHint(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		SSH       bool   `json:"ssh"`
 		HostLabel string `json:"host_label"`
+		EnvKind   string `json:"env_kind"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
@@ -83,6 +93,7 @@ func (s *Server) handleNetHint(w http.ResponseWriter, r *http.Request) {
 	s.netHintMu.Lock()
 	s.netHintSSH = body.SSH
 	s.netHintHost = body.HostLabel
+	s.netHintEnvKind = body.EnvKind
 	s.netHintMu.Unlock()
 	writeJSON(w, map[string]any{"ok": true})
 }

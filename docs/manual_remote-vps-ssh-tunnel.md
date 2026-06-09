@@ -1,6 +1,6 @@
 # リモート VPS SSH トンネル運用手順
 
-> 最終更新: 2026-06-04(木) 23:18:51
+> 最終更新: 2026-06-09(火) 11:06:29
 
 ## 位置づけ
 
@@ -98,8 +98,22 @@ launcher は以下を自動で行います。
 1. `ssh.exe -N -L 47801:127.0.0.1:47801 your-user@vps.example.com` でトンネルを確立
 2. `token_command` を SSH 経由でリモート実行してトークンを取得
 3. `/api/info?token=<token>` で Hub の疎通を確認
-4. Windows の既定ブラウザで `http://127.0.0.1:47801/?token=<token>` を開く
-5. Ctrl+C でトンネルを閉じる（リモート Hub は停止しない）
+4. `/api/net-hint` に `ssh=true`, `host_label`, `env_kind=vps-tunnel` を登録する
+5. Windows の既定ブラウザで `http://127.0.0.1:47801/?token=<token>&via=ssh&host_label=<host>&env_kind=vps-tunnel` を開く
+6. Ctrl+C でトンネルを閉じる（リモート Hub は停止しない）
+
+#### 環境識別表示
+
+Hub UI は `/api/info` の `env_kind` を使い、ブラウザタブ title、SVG favicon、ヘッダー badge、Settings/About 表示を切り替えます。複数の Hub を同時に開く場合は、タブの色とヘッダー badge で操作対象を確認してください。
+
+| env_kind | 表示 | favicon | 主なケース |
+|---|---|---|---|
+| `local` | Local | 緑 + `L` | 手元 PC 上のローカル Hub |
+| `wsl` | WSL | 青 + `W` | WSL Hub / Windows launcher 経由の WSL Hub |
+| `vps` | VPS | オレンジ + `V` | SSH で起動した VPS 上の Hub |
+| `vps-tunnel` | VPS Tunnel | 赤 + `T` | この manual の tunnel モードで常駐 VPS Hub に接続する場合 |
+
+URL が `127.0.0.1` でも、`VPS Tunnel` と表示されている場合の操作対象 filesystem / Git repository / ログは VPS 側です。
 
 #### tunnel モードのポートについて
 
