@@ -199,7 +199,11 @@ export async function doSend(sessionId) {
   } else {
     textPart = rawText + '\r';
   }
-  const textToSend = injectPrefix + textPart;
+  // 内側 CLI がビジー等で入力行に残骸（前回の未確定入力）があると、本送信が
+  // その後ろへ連結されてしまう（例: "残骸質問"）。sendQuickCommand と同じく
+  // \x15(Ctrl+U) を先頭に置き、inject/本文を送る前に入力行を一度クリアする。
+  // 入力行が空なら no-op なので無害。claude/codex/copilot/cursor 共通に送る。
+  const textToSend = '\x15' + injectPrefix + textPart;
   clearInput();
   hideSlashMenu();
   // 送信したら次のプロンプトは別物の可能性があるため dismiss フラグをクリア
