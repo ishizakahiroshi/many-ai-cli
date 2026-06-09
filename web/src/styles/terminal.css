@@ -193,6 +193,9 @@
   gap: 4px;
   flex-shrink: 0;
 }
+/* PC（広い画面）は既定で表示。設定 OFF（body.pc-input-tools-off）でのみ隠す。
+   スマホ（狭い画面）の既定/トグルは下のメディアクエリ側で上書きする。 */
+body.pc-input-tools-off #input-tools { display: none; }
 
 #input-area {
   flex: 1;
@@ -355,9 +358,10 @@
     scrollbar-width: none;
   }
   #input-tools::-webkit-scrollbar { display: none; }
-  /* 狭い画面では入力補助ツールを既定で隠し（省スペース）、
+  /* 狭い画面（スマホ）では入力補助ツールを既定で隠し（省スペース）、
      設定トグル ON（body.mobile-input-tools-on）でのみ表示する。
-     PC（このメディアクエリ外）では常に表示。 */
+     ここはメディアクエリ内なので PC 用 body.pc-input-tools-off より後勝ちになり、
+     PC 設定の影響を受けずスマホ側だけで完結する。 */
   #input-tools { display: none; }
   body.mobile-input-tools-on #input-tools { display: flex; }
   #input-bar {

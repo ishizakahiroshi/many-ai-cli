@@ -497,14 +497,18 @@
           </div>
         </div>
       </details>
-      <details class="settings-section" data-section="mobile">
-        <summary class="settings-section-title"><span data-i18n="settings_mobile_title">スマホ表示</span></summary>
+      <details class="settings-section" data-section="input-tools">
+        <summary class="settings-section-title"><span data-i18n="settings_input_tools_title">入力補助ツール表示</span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
-            <span class="settings-label" data-i18n="settings_mobile_input_tools">入力補助ツールを表示</span>
+            <span class="settings-label" data-i18n="settings_input_tools_pc">PC（広い画面）</span>
+            <input type="checkbox" id="pc-input-tools-enabled" class="settings-checkbox">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_input_tools_mobile">スマホ（狭い画面）</span>
             <input type="checkbox" id="mobile-input-tools-enabled" class="settings-checkbox">
           </div>
-          <div class="settings-note" data-i18n="settings_mobile_input_tools_desc">スマホなど狭い画面で、入力欄の /clear・/model・/ ▾・⌫ ボタンを表示します。OFF で省スペースになります（PC では常に表示）。</div>
+          <div class="settings-note" data-i18n="settings_input_tools_desc">入力欄の /clear・/model・/ ▾・⌫ ボタンの表示を画面幅ごとに切り替えます。既定は PC=表示・スマホ=非表示（省スペース）です。</div>
         </div>
       </details>
       <details class="settings-section" data-section="usage-links">
