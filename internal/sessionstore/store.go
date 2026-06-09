@@ -4,10 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"any-ai-cli/internal/proto"
@@ -18,9 +21,48 @@ import (
 
 const defaultTimeout = 3 * time.Second
 
+// resetTimeout は ResetHistory（UI の「履歴を全削除」）専用のタイムアウト。
+// 利用者が明示的に押す保守操作なので、肥大化した DB でも完走できるよう長めに取る。
+const resetTimeout = 60 * time.Second
+
+// asyncQueueSize は StoreEventAsync のバッファ上限。健全な DB なら書き込みは
+// ミリ秒単位で掃けるため溢れない。DB が劣化して書き込みが滞った場合は
+// 溢れたイベントを黙って捨てる（.jsonl 側には全量残る）。
+const asyncQueueSize = 4096
+
+// プルーニングのバッチサイズと 1 回の実行で使う時間予算。
+// 肥大化した DB では 1 文の巨大 DELETE（CASCADE 含む）が defaultTimeout に
+// 収まらず永遠に掃除できなくなるため、子テーブルをチャンク削除してから
+// セッション行を消す。予算切れなら中断し、次回の定期実行で続きから進む。
+var (
+	pruneSessionBatch  = 50
+	pruneChildRowBatch = 2000
+)
+
+const pruneTimeBudget = 60 * time.Second
+
+// errPruneBudgetExhausted は時間予算切れによる正常中断（エラーではない）。
+var errPruneBudgetExhausted = errors.New("prune budget exhausted")
+
 type Store struct {
 	db         *sql.DB
+	path       string
 	ftsEnabled bool
+
+	// 非同期イベント書き込み。PTY ホットパス（hub の pty_data 処理）から
+	// SQLite の遅延を切り離すため、StoreEventAsync はキューに積むだけで返る。
+	asyncCh      chan asyncEvent
+	asyncQuit    chan struct{}
+	asyncDone    chan struct{}
+	asyncDropped atomic.Int64
+	closeOnce    sync.Once
+	// onWriteError は非同期書き込みの失敗通知（writer goroutine と競合するため atomic）。
+	onWriteError atomic.Pointer[func(liveSessionID int, err error)]
+}
+
+type asyncEvent struct {
+	liveSessionID int
+	event         map[string]any
 }
 
 type SessionStart struct {
@@ -146,17 +188,22 @@ func OpenForLogDir(logDir string) (*Store, error) {
 		return nil, fmt.Errorf("create session store dir: %w", err)
 	}
 	path := filepath.Join(base, "any-ai-cli.db")
+	applyPendingFileReset(path)
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite session store: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
-	s := &Store{db: db}
+	s := &Store{db: db, path: path}
 	if err := s.init(); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
+	s.asyncCh = make(chan asyncEvent, asyncQueueSize)
+	s.asyncQuit = make(chan struct{})
+	s.asyncDone = make(chan struct{})
+	go s.asyncWriter()
 	return s, nil
 }
 
@@ -164,13 +211,107 @@ func (s *Store) Close() error {
 	if s == nil || s.db == nil {
 		return nil
 	}
+	// writer goroutine を止めてから DB を閉じる。掃けないほど詰まっている場合は
+	// 待ちすぎない（残イベントは捨てる。.jsonl 側には全量残っている）。
+	s.closeOnce.Do(func() {
+		if s.asyncQuit != nil {
+			close(s.asyncQuit)
+			select {
+			case <-s.asyncDone:
+			case <-time.After(2 * defaultTimeout):
+			}
+		}
+	})
 	return s.db.Close()
+}
+
+// resetPendingSuffix は「次回起動時に DB ファイルを作り直す」予約マーカーの拡張子。
+// SQL でのリセットが完了できないほど DB が肥大化・劣化している場合の最終保証。
+const resetPendingSuffix = ".reset-pending"
+
+// applyPendingFileReset は予約マーカーがあれば DB を開く前にファイルごと削除する。
+// 実行中セッションの行は失われるが、wrapper の reattach 時に StartSession の
+// upsert で新 DB へ再登録されるため実害はない。DB ファイルを他プロセスが
+// 掴んでいて消せない場合はマーカーを残し、次回起動で再試行する。
+func applyPendingFileReset(path string) {
+	marker := path + resetPendingSuffix
+	if _, err := os.Stat(marker); err != nil {
+		return
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return
+	}
+	_ = os.Remove(path + "-wal")
+	_ = os.Remove(path + "-shm")
+	_ = os.Remove(marker)
+}
+
+// ScheduleFileReset は次回の OpenForLogDir で DB ファイルを作り直す予約を入れる。
+func (s *Store) ScheduleFileReset() error {
+	if s == nil || s.path == "" {
+		return nil
+	}
+	return os.WriteFile(s.path+resetPendingSuffix, []byte(time.Now().Format(time.RFC3339)+"\n"), sessionlog.PrivateFileMode)
+}
+
+// FileResetPending はファイル再作成の予約マーカーが存在するかを返す。
+func (s *Store) FileResetPending() bool {
+	if s == nil || s.path == "" {
+		return false
+	}
+	_, err := os.Stat(s.path + resetPendingSuffix)
+	return err == nil
+}
+
+// SetOnWriteError は非同期書き込み（StoreEventAsync 経由）の失敗時に呼ばれる
+// コールバックを設定する。
+func (s *Store) SetOnWriteError(fn func(liveSessionID int, err error)) {
+	if s == nil {
+		return
+	}
+	s.onWriteError.Store(&fn)
+}
+
+// StoreEventAsync はイベントを書き込みキューへ積んで即座に返る。
+// PTY 配信のホットパスから呼ばれるため、SQLite の遅延・障害がここへ
+// 波及しないことを最優先とし、キューが満杯ならイベントを破棄する。
+// 戻り値は累計破棄数（0 = キューイング成功）。
+func (s *Store) StoreEventAsync(liveSessionID int, event map[string]any) int64 {
+	if s == nil || s.db == nil || s.asyncCh == nil {
+		return 0
+	}
+	select {
+	case s.asyncCh <- asyncEvent{liveSessionID: liveSessionID, event: event}:
+		return 0
+	default:
+		return s.asyncDropped.Add(1)
+	}
+}
+
+func (s *Store) asyncWriter() {
+	defer close(s.asyncDone)
+	for {
+		select {
+		case <-s.asyncQuit:
+			return
+		case ev := <-s.asyncCh:
+			if err := s.StoreEvent(ev.liveSessionID, ev.event); err != nil {
+				if fn := s.onWriteError.Load(); fn != nil && *fn != nil {
+					(*fn)(ev.liveSessionID, err)
+				}
+			}
+		}
+	}
 }
 
 func (s *Store) init() error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 	pragmas := []string{
+		// 新規 DB はここで incremental に確定する。既存 DB（auto_vacuum=NONE）には
+		// 即時効果は無いが、設定は pending になり次回 VACUUM（ResetHistory 実行時）で
+		// 反映される。incremental になると incremental_vacuum で空きページを OS へ返せる。
+		`PRAGMA auto_vacuum=INCREMENTAL`,
 		`PRAGMA journal_mode=WAL`,
 		`PRAGMA synchronous=NORMAL`,
 		`PRAGMA foreign_keys=ON`,
@@ -429,7 +570,7 @@ func (s *Store) StoreEvent(liveSessionID int, event map[string]any) error {
 	if err != nil || sessionID == 0 {
 		return err
 	}
-	payload, err := json.Marshal(event)
+	payload, err := json.Marshal(slimEventPayload(event))
 	if err != nil {
 		return err
 	}
@@ -774,19 +915,157 @@ func (s *Store) PruneOlderThan(cutoff time.Time) error {
 	if s == nil || s.db == nil || cutoff.IsZero() {
 		return nil
 	}
+	deadline := time.Now().Add(pruneTimeBudget)
+	for {
+		ids, err := s.expiredSessionIDs(cutoff, pruneSessionBatch)
+		if err != nil {
+			return err
+		}
+		if len(ids) == 0 {
+			break
+		}
+		for _, id := range ids {
+			if err := s.pruneSessionRow(id, deadline); err != nil {
+				if errors.Is(err, errPruneBudgetExhausted) {
+					return nil
+				}
+				return err
+			}
+		}
+	}
+	// 空きページを OS へ返却（auto_vacuum=INCREMENTAL の DB のみ効く。NONE では no-op）。
+	// 1 回あたり最大 20000 ページ（4KB ページで約 80MB）に制限して長時間ロックを避ける。
+	// 続きは次回の定期実行で進む。その後、溜まった WAL を切り詰める（いずれも失敗無害）。
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
-	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions
-		WHERE ended_at IS NOT NULL AND ended_at < ?`, cutoff.Format(time.RFC3339))
+	_, _ = s.db.ExecContext(ctx, `PRAGMA incremental_vacuum(20000)`)
+	_, _ = s.db.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`)
+	return nil
+}
+
+func (s *Store) expiredSessionIDs(cutoff time.Time, limit int) ([]int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM sessions
+		WHERE ended_at IS NOT NULL AND ended_at < ? ORDER BY id LIMIT ?`,
+		cutoff.Format(time.RFC3339), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// pruneSessionRow は子テーブルをチャンク削除してからセッション行を消す。
+// 子行を先に消しておくことで、最後の sessions DELETE の CASCADE が
+// 空振り（インデックス参照のみ）になり、巨大セッションでもタイムアウトしない。
+func (s *Store) pruneSessionRow(id int64, deadline time.Time) error {
+	for _, table := range []string{"events", "messages", "approvals", "attachments"} {
+		if err := s.deleteChildRowsChunked(table, id, deadline); err != nil {
+			return err
+		}
+	}
+	if time.Now().After(deadline) {
+		return errPruneBudgetExhausted
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE id=?`, id)
 	return err
 }
 
+func (s *Store) deleteChildRowsChunked(table string, sessionID int64, deadline time.Time) error {
+	for {
+		if time.Now().After(deadline) {
+			return errPruneBudgetExhausted
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+		// #nosec G202 -- table は呼び元の固定リストのみ
+		rows, err := s.db.QueryContext(ctx, `SELECT id FROM `+table+` WHERE session_id=? LIMIT ?`, sessionID, pruneChildRowBatch)
+		if err != nil {
+			cancel()
+			return err
+		}
+		var ids []int64
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				cancel()
+				return err
+			}
+			ids = append(ids, id)
+		}
+		err = rows.Err()
+		rows.Close()
+		cancel()
+		if err != nil {
+			return err
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		placeholders := make([]string, len(ids))
+		args := make([]any, len(ids))
+		for i, id := range ids {
+			placeholders[i] = "?"
+			args[i] = id
+		}
+		inClause := strings.Join(placeholders, ",")
+		ctx2, cancel2 := context.WithTimeout(context.Background(), defaultTimeout)
+		if table == "messages" && s.ftsEnabled {
+			// 外部 content の FTS は本体行の削除に追従しないため、同じ rowid を先に消す
+			_, _ = s.db.ExecContext(ctx2, `DELETE FROM messages_fts WHERE rowid IN (`+inClause+`)`, args...)
+		}
+		// #nosec G202 -- table は固定リスト、inClause は "?" の連結のみ
+		_, err = s.db.ExecContext(ctx2, `DELETE FROM `+table+` WHERE id IN (`+inClause+`)`, args...)
+		cancel2()
+		if err != nil {
+			return err
+		}
+		if len(ids) < pruneChildRowBatch {
+			return nil
+		}
+	}
+}
+
+// ResetHistory は保存済みセッション履歴を全削除する（実行中セッションの行は保護）。
+// SQL での削除または VACUUM が完走できない場合（DB の肥大化・劣化）は、
+// 次回 Hub 起動時のファイル再作成を予約する。「UI でリセットしたのに
+// ファイルが残り続ける」状態を作らないための最終保証。
 func (s *Store) ResetHistory(preserveLiveIDs []int) (ResetResult, error) {
+	if s == nil || s.db == nil {
+		return ResetResult{}, nil
+	}
+	out, err := s.resetHistorySQL(preserveLiveIDs)
+	if err != nil {
+		_ = s.ScheduleFileReset()
+		return out, err
+	}
+	if !s.vacuumAfterReset() {
+		// 行削除は成功したが物理縮小に失敗。再作成しても消えるのは
+		// リセット後に書かれた直近データのみ（実行中セッションは reattach で再登録）。
+		_ = s.ScheduleFileReset()
+	}
+	return out, nil
+}
+
+func (s *Store) resetHistorySQL(preserveLiveIDs []int) (ResetResult, error) {
 	var out ResetResult
 	if s == nil || s.db == nil {
 		return out, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	// 利用者が明示的に押す全削除なので、肥大化した DB でも完走できるよう
+	// defaultTimeout ではなく resetTimeout を使う。
+	ctx, cancel := context.WithTimeout(context.Background(), resetTimeout)
 	defer cancel()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -832,6 +1111,13 @@ func (s *Store) ResetHistory(preserveLiveIDs []int) (ResetResult, error) {
 		}
 	}
 	if len(preserved) == 0 {
+		// 子テーブルを先に空にしておくと、sessions の DELETE で CASCADE が
+		// 空振りになり、行数が多くても完走しやすい。
+		for _, table := range []string{"events", "messages", "approvals", "attachments"} {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM `+table); err != nil { // #nosec G202 -- table は固定リスト
+				return out, err
+			}
+		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM sessions`); err != nil {
 			return out, err
 		}
@@ -866,6 +1152,47 @@ func (s *Store) ResetHistory(preserveLiveIDs []int) (ResetResult, error) {
 		return out, err
 	}
 	return out, tx.Commit()
+}
+
+// vacuumAfterReset は全削除後にファイルを物理的に縮める。
+// VACUUM はトランザクション外でしか実行できないため commit 後に呼ぶ。
+// 行をほぼ消した直後なので通常は軽い。auto_vacuum=NONE の旧 DB はこの VACUUM で
+// init() の pending 設定（INCREMENTAL）が反映される副次効果もある。
+// 戻り値 false は VACUUM 未完走（呼び元がファイル再作成の予約で補償する）。
+func (s *Store) vacuumAfterReset() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), resetTimeout)
+	defer cancel()
+	if _, err := s.db.ExecContext(ctx, `VACUUM`); err != nil {
+		return false
+	}
+	_, _ = s.db.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`)
+	return true
+}
+
+// eventPayloadTextLimit は events.payload_json に残す text の上限（rune 数）。
+// UI のタイムラインは payload の先頭 180 文字しか表示せず、全文は .jsonl / messages
+// 側にあるため、events には参照用の冒頭だけ残せば足りる。
+const eventPayloadTextLimit = 2000
+
+// slimEventPayload は events.payload_json 用に PTY 出力イベントを間引く。
+// pty_output は出力量が膨大（TUI の再描画を全チャンク含む）な一方、
+// data_b64 は .log/.jsonl に全量残る複製のため SQLite には保存しない。
+// chat 履歴（messages テーブル）は元の event map から作るので影響しない。
+func slimEventPayload(event map[string]any) map[string]any {
+	if stringValue(event["type"]) != "pty_output" {
+		return event
+	}
+	slim := make(map[string]any, len(event))
+	for k, v := range event {
+		if k == "data_b64" {
+			continue
+		}
+		slim[k] = v
+	}
+	if text, ok := slim["text"].(string); ok {
+		slim["text"] = trimRunes(text, eventPayloadTextLimit)
+	}
+	return slim
 }
 
 func (s *Store) storeMessageForEvent(ctx context.Context, tx *sql.Tx, sessionID int64, ts, typ string, event map[string]any, payload []byte) error {

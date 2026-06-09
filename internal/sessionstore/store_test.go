@@ -350,3 +350,259 @@ func TestCloseStaleSessionsAndReattachRevive(t *testing.T) {
 		t.Fatalf("revived row = %#v", ov)
 	}
 }
+
+// StoreEventAsync がキュー経由で書き込まれ、最終的に同期版と同じ結果になることを検証する。
+func TestStoreEventAsyncDrainsQueue(t *testing.T) {
+	logDir := filepath.Join(t.TempDir(), "logs")
+	store, err := OpenForLogDir(logDir)
+	if err != nil {
+		t.Fatalf("OpenForLogDir: %v", err)
+	}
+	defer store.Close()
+
+	startedAt := time.Now().Format(time.RFC3339)
+	if _, err := store.StartSession(SessionStart{
+		LiveSessionID: 1,
+		Provider:      "claude",
+		State:         "running",
+		StartedAt:     startedAt,
+		JSONLPath:     filepath.Join(logDir, "sessions", "s1.jsonl"),
+	}); err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+
+	for i := 0; i < 10; i++ {
+		if dropped := store.StoreEventAsync(1, map[string]any{
+			"ts": startedAt, "type": "pty_output", "session_id": 1,
+			"text": "async chunk " + strconv.Itoa(i) + "\n",
+		}); dropped != 0 {
+			t.Fatalf("StoreEventAsync dropped = %d, want 0", dropped)
+		}
+	}
+
+	// 連続する AI 出力は 1 message に結合されるため、件数確認は events で行う
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		events, err := store.TimelineByLiveSession(1, 100)
+		if err != nil {
+			t.Fatalf("TimelineByLiveSession: %v", err)
+		}
+		if len(events) == 10 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("queue not drained: events = %d, want 10", len(events))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	msgs, err := store.ChatMessagesByLiveSession(1, 100)
+	if err != nil {
+		t.Fatalf("ChatMessagesByLiveSession: %v", err)
+	}
+	if len(msgs) == 0 || !strings.Contains(msgs[0].RawText, "async chunk 9") {
+		t.Fatalf("messages after drain = %#v", msgs)
+	}
+}
+
+// 子テーブルの行数がチャンクサイズを跨いでも PruneOlderThan が完走し、
+// 期限内のセッションは残ることを検証する。
+func TestPruneOlderThanChunked(t *testing.T) {
+	origChild, origSession := pruneChildRowBatch, pruneSessionBatch
+	pruneChildRowBatch, pruneSessionBatch = 7, 1
+	defer func() { pruneChildRowBatch, pruneSessionBatch = origChild, origSession }()
+
+	logDir := filepath.Join(t.TempDir(), "logs")
+	store, err := OpenForLogDir(logDir)
+	if err != nil {
+		t.Fatalf("OpenForLogDir: %v", err)
+	}
+	defer store.Close()
+
+	startedAt := time.Now().Add(-48 * time.Hour).Format(time.RFC3339)
+	for _, liveID := range []int{1, 2, 3} {
+		if _, err := store.StartSession(SessionStart{
+			LiveSessionID: liveID,
+			Provider:      "claude",
+			State:         "running",
+			StartedAt:     startedAt,
+			JSONLPath:     filepath.Join(logDir, "sessions", "s"+strconv.Itoa(liveID)+".jsonl"),
+		}); err != nil {
+			t.Fatalf("StartSession(%d): %v", liveID, err)
+		}
+		// pruneChildRowBatch(7) を跨ぐ行数を作る（events と messages の両方に入る）
+		for i := 0; i < 20; i++ {
+			if err := store.StoreEvent(liveID, map[string]any{
+				"ts": startedAt, "type": "pty_output", "session_id": liveID,
+				"text": "chunk " + strconv.Itoa(i) + " of session " + strconv.Itoa(liveID) + "\n",
+			}); err != nil {
+				t.Fatalf("StoreEvent(%d): %v", liveID, err)
+			}
+		}
+	}
+	// 1, 2 は期限切れ、3 は期限内（終了が新しい）
+	store.EndSession(1, "completed", "", time.Now().Add(-24*time.Hour))
+	store.EndSession(2, "completed", "", time.Now().Add(-24*time.Hour))
+	store.EndSession(3, "completed", "", time.Now())
+
+	if err := store.PruneOlderThan(time.Now().Add(-time.Hour)); err != nil {
+		t.Fatalf("PruneOlderThan: %v", err)
+	}
+
+	list, err := store.ListSessions(10, true)
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(list) != 1 || list[0].LiveSessionID != 3 {
+		t.Fatalf("sessions after prune = %#v", list)
+	}
+	if list[0].MessageCount != 20 || list[0].EventCount != 20 {
+		t.Fatalf("surviving session counts = %#v", list[0])
+	}
+	// 期限切れセッションの子行が残っていない（孤児行なし）ことを確認
+	for _, liveID := range []int{1, 2} {
+		msgs, err := store.ChatMessagesByLiveSession(liveID, 100)
+		if err != nil {
+			t.Fatalf("ChatMessagesByLiveSession(%d): %v", liveID, err)
+		}
+		if len(msgs) != 0 {
+			t.Fatalf("pruned session %d still has %d messages", liveID, len(msgs))
+		}
+	}
+}
+
+// pty_output の events.payload_json から data_b64 が除去され text が切り詰められること、
+// chat 履歴（messages）側は影響を受けないことを検証する。
+func TestStoreEventSlimsPtyOutputPayload(t *testing.T) {
+	logDir := filepath.Join(t.TempDir(), "logs")
+	store, err := OpenForLogDir(logDir)
+	if err != nil {
+		t.Fatalf("OpenForLogDir: %v", err)
+	}
+	defer store.Close()
+
+	startedAt := time.Now().Format(time.RFC3339)
+	if _, err := store.StartSession(SessionStart{
+		LiveSessionID: 1,
+		Provider:      "claude",
+		State:         "running",
+		StartedAt:     startedAt,
+		JSONLPath:     filepath.Join(logDir, "sessions", "s1.jsonl"),
+	}); err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+
+	longText := "longtext " + strings.Repeat("あ", 3000) + " end-marker"
+	if err := store.StoreEvent(1, map[string]any{
+		"ts": startedAt, "type": "pty_output", "session_id": 1,
+		"data_b64": "QkFTRTY0REFUQQ==",
+		"text":     longText,
+	}); err != nil {
+		t.Fatalf("StoreEvent: %v", err)
+	}
+
+	events, err := store.TimelineByLiveSession(1, 10)
+	if err != nil {
+		t.Fatalf("TimelineByLiveSession: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events len = %d, want 1", len(events))
+	}
+	if _, ok := events[0].Payload["data_b64"]; ok {
+		t.Fatalf("payload should not contain data_b64: %#v", events[0].Payload)
+	}
+	storedText, _ := events[0].Payload["text"].(string)
+	if n := len([]rune(storedText)); n > eventPayloadTextLimit {
+		t.Fatalf("payload text runes = %d, want <= %d", n, eventPayloadTextLimit)
+	}
+	if !strings.HasPrefix(storedText, "longtext ") {
+		t.Fatalf("payload text prefix lost: %.40q", storedText)
+	}
+	// messages 側は元の text から作られる（末尾まで保持）
+	msgs, err := store.ChatMessagesByLiveSession(1, 10)
+	if err != nil {
+		t.Fatalf("ChatMessagesByLiveSession: %v", err)
+	}
+	if len(msgs) != 1 || !strings.Contains(msgs[0].RawText, "end-marker") {
+		t.Fatalf("message should keep full text: len=%d", len(msgs))
+	}
+	// pty_output 以外（user_input）は payload を間引かない
+	if err := store.StoreEvent(1, map[string]any{
+		"ts": startedAt, "type": "user_input", "session_id": 1, "text": "短い入力",
+	}); err != nil {
+		t.Fatalf("StoreEvent(user_input): %v", err)
+	}
+	events, err = store.TimelineByLiveSession(1, 10)
+	if err != nil {
+		t.Fatalf("TimelineByLiveSession(2nd): %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("events len = %d, want 2", len(events))
+	}
+}
+
+// 新規 DB が auto_vacuum=INCREMENTAL で作成されることを検証する。
+func TestNewStoreUsesIncrementalAutoVacuum(t *testing.T) {
+	logDir := filepath.Join(t.TempDir(), "logs")
+	store, err := OpenForLogDir(logDir)
+	if err != nil {
+		t.Fatalf("OpenForLogDir: %v", err)
+	}
+	defer store.Close()
+
+	var mode int
+	if err := store.db.QueryRow(`PRAGMA auto_vacuum`).Scan(&mode); err != nil {
+		t.Fatalf("PRAGMA auto_vacuum: %v", err)
+	}
+	// 0=NONE, 1=FULL, 2=INCREMENTAL
+	if mode != 2 {
+		t.Fatalf("auto_vacuum = %d, want 2 (INCREMENTAL)", mode)
+	}
+}
+
+// 予約マーカーがあると次回 OpenForLogDir で DB ファイルが作り直されること、
+// SQL リセットが失敗した場合にマーカーが自動予約されることを検証する。
+func TestFileResetPendingRecreatesDB(t *testing.T) {
+	logDir := filepath.Join(t.TempDir(), "logs")
+	store, err := OpenForLogDir(logDir)
+	if err != nil {
+		t.Fatalf("OpenForLogDir: %v", err)
+	}
+	startedAt := time.Now().Format(time.RFC3339)
+	if _, err := store.StartSession(SessionStart{
+		LiveSessionID: 1,
+		Provider:      "claude",
+		State:         "running",
+		StartedAt:     startedAt,
+		JSONLPath:     filepath.Join(logDir, "sessions", "s1.jsonl"),
+	}); err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+
+	// DB を閉じた状態で ResetHistory → SQL 失敗 → マーカー予約される
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if _, err := store.ResetHistory(nil); err == nil {
+		t.Fatalf("ResetHistory on closed db should fail")
+	}
+	if !store.FileResetPending() {
+		t.Fatalf("FileResetPending should be true after failed reset")
+	}
+
+	// 再オープンでファイルが作り直され、旧データもマーカーも消えている
+	store2, err := OpenForLogDir(logDir)
+	if err != nil {
+		t.Fatalf("OpenForLogDir(2nd): %v", err)
+	}
+	defer store2.Close()
+	if store2.FileResetPending() {
+		t.Fatalf("marker should be consumed on reopen")
+	}
+	list, err := store2.ListSessions(10, true)
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("recreated db should be empty: %#v", list)
+	}
+}

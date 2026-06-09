@@ -62,13 +62,17 @@ func (s *Server) handleSessionStoreReset(w http.ResponseWriter, r *http.Request)
 	}
 	activeIDs := s.activeSessionIDs()
 	result, err := s.sessionStore.ResetHistory(activeIDs)
+	filePending := s.sessionStore.FileResetPending()
+	if filePending {
+		s.logger.Info("session store file reset scheduled; db file will be recreated at next hub start")
+	}
 	if err != nil {
-		s.logger.Warn("session store reset failed", "err", err)
+		s.logger.Warn("session store reset failed", "err", err, "file_reset_scheduled", filePending)
 		writeJSONError(w, http.StatusInternalServerError, "session_store_reset_failed", "failed to reset saved session history")
 		return
 	}
 	s.logger.Info("session store reset", "sessions", result.Sessions, "messages", result.Messages, "events", result.Events, "preserved_sessions", result.Preserved)
-	writeJSON(w, map[string]any{"ok": true, "result": result})
+	writeJSON(w, map[string]any{"ok": true, "result": result, "file_reset_scheduled": filePending})
 }
 
 func (s *Server) activeSessionIDs() []int {

@@ -91,6 +91,9 @@ func (s *Server) handleLogsPurge(w http.ResponseWriter, r *http.Request) {
 		} else {
 			storeSessions = result.Sessions
 		}
+		if s.sessionStore.FileResetPending() {
+			s.logger.Info("logs purge: session store file reset scheduled; db file will be recreated at next hub start")
+		}
 	}
 
 	s.logger.Info("logs purged", "session_files", sessionsRemoved, "spawn_files", spawnRemoved, "store_sessions", storeSessions)
