@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, showToast, ti18n, token } from './util.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, setFaviconEnvBadge, stateLabel } from './session-list.js';
@@ -978,6 +978,23 @@ export function applyLang(lang) {
   sel.addEventListener('change', () => {
     setUserPref('voice.grace_seconds', parseInt(sel.value, 10) || 0);
   });
+})();
+
+// ---- スマホ: 入力補助ツール表示トグル ----
+// 狭い画面（max-width:720px / pointer:coarse）でのみ効く。OFF（既定）で
+// #input-tools を隠し、ON で body.mobile-input-tools-on を付与して表示する。
+(function () {
+  const enabledEl = document.getElementById('mobile-input-tools-enabled') as HTMLInputElement | null;
+  if (!enabledEl) return;
+  const apply = (on: boolean) => {
+    document.body.classList.toggle('mobile-input-tools-on', on);
+  };
+  enabledEl.addEventListener('change', () => {
+    apply(enabledEl.checked);
+    setUserPref('mobile.input_tools_enabled', enabledEl.checked);
+  });
+  enabledEl.checked = localStorage.getItem(STORAGE_MOBILE_INPUT_TOOLS_KEY) === '1';
+  apply(enabledEl.checked);
 })();
 
 // ---- トリガーフレーズ設定 ----

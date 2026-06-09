@@ -1,6 +1,9 @@
 package hub
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseGitStatusPorcelainZ(t *testing.T) {
 	raw := " M web/src/app.js\x00?? internal/hub/git_status.go\x00D  old.txt\x00R  new.txt\x00old.txt\x00"
@@ -67,14 +70,80 @@ func TestParseAheadBehind(t *testing.T) {
 }
 
 func TestSuggestCommitMessage(t *testing.T) {
+	diff := "+++ b/internal/hub/server.go\n" +
+		"+\tmux.HandleFunc(\"/api/logs/purge\", s.handleLogsPurge)\n" +
+		"+++ b/internal/hub/purge_handlers.go\n" +
+		"+func (s *Server) handleLogsPurge(w http.ResponseWriter, r *http.Request) {\n" +
+		"+++ b/web/src/i18n/ja.json\n" +
+		"+  \"settings_logs_purge\": \"x\",\n"
 	subject, body := suggestCommitMessage([]gitStatusFile{
-		{Status: "M", Path: "web/src/app.js"},
-		{Status: "A", Path: "internal/hub/git_commit.go"},
-	}, "2 files changed", "", "ja")
-	if subject != "feat: webの変更を反映" {
+		{Status: "M", Path: "internal/hub/server.go"},
+		{Status: "??", Path: "internal/hub/purge_handlers.go"},
+		{Status: "M", Path: "web/src/i18n/ja.json"},
+	}, "3 files changed", diff, "", "ja")
+	// 追加された HTTP ルートが拾えていれば subject に反映される。
+	if !strings.HasPrefix(subject, "feat: ") || !strings.Contains(subject, "/api/logs/purge") {
 		t.Fatalf("subject = %q", subject)
 	}
-	if body == "" {
-		t.Fatalf("body is empty")
+	// 領域別の解析結果（新規ファイル・API・i18n）が body に出ること。
+	for _, want := range []string{"purge_handlers.go", "/api/logs/purge", "i18n"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("body missing %q:\n%s", want, body)
+		}
+	}
+}
+
+func TestSuggestCommitMessageDocsOnly(t *testing.T) {
+	subject, _ := suggestCommitMessage([]gitStatusFile{
+		{Status: "M", Path: "README.md"},
+		{Status: "M", Path: "docs/guide.md"},
+	}, "", "", "", "ja")
+	if !strings.HasPrefix(subject, "docs: ") {
+		t.Fatalf("subject = %q", subject)
+	}
+}
+
+func TestSuggestCommitMessageClassification(t *testing.T) {
+	cases := []struct {
+		name        string
+		files       []gitStatusFile
+		diff        string
+		wantPrefix  string
+		wantSubject string // 部分一致
+	}{
+		{
+			name:        "deps only",
+			files:       []gitStatusFile{{Status: "M", Path: "go.mod"}, {Status: "M", Path: "go.sum"}},
+			wantPrefix:  "chore: ",
+			wantSubject: "依存関係を更新",
+		},
+		{
+			name:        "style only",
+			files:       []gitStatusFile{{Status: "M", Path: "web/src/styles/spawn.css"}},
+			wantPrefix:  "style: ",
+			wantSubject: "スタイルを調整",
+		},
+		{
+			name:        "rename only",
+			files:       []gitStatusFile{{Status: "R", Path: "internal/hub/new.go"}},
+			diff:        "rename from internal/hub/old.go\nrename to internal/hub/new.go\n",
+			wantPrefix:  "refactor: ",
+			wantSubject: "old.go → new.go",
+		},
+		{
+			name:        "removed route",
+			files:       []gitStatusFile{{Status: "M", Path: "internal/hub/server.go"}},
+			diff:        "+++ b/internal/hub/server.go\n-\tmux.HandleFunc(\"/api/old\", s.handleOld)\n",
+			wantPrefix:  "feat: ",
+			wantSubject: "/api/old エンドポイントを削除",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			subject, _ := suggestCommitMessage(c.files, "", c.diff, "", "ja")
+			if !strings.HasPrefix(subject, c.wantPrefix) || !strings.Contains(subject, c.wantSubject) {
+				t.Fatalf("subject = %q, want prefix %q containing %q", subject, c.wantPrefix, c.wantSubject)
+			}
+		})
 	}
 }

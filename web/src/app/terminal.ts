@@ -530,9 +530,14 @@ export function isTerminalAtBottom(t) {
   return buf.viewportY + t.term.rows >= buf.length;
 }
 
-export function fitTerminalPreservingBottom(t, id) {
+export function fitTerminalPreservingBottom(t, id, forceVisualFit = false) {
   if (!canFitTerminal(t)) return;
-  if (isPtyResizeSuppressed()) return;
+  // PTY リサイズ抑制中（action-bar 表示中など）は通常スキップするが、
+  // forceVisualFit=true の場合は「見た目のフィット（xterm の行数調整）」だけは行う。
+  // SIGWINCH の送信（sendResize）は呼び元が isPtyResizeSuppressed() で別途ガードする。
+  // これにより action-bar 出現でターミナルが縮んでも、xterm が縮小後の表示領域に
+  // 追従して再フィットされ、CLI 最新行がポップアップ裏に切れて隠れるのを防ぐ。
+  if (!forceVisualFit && isPtyResizeSuppressed()) return;
   const wasAtBottom = isTerminalAtBottom(t) || t.autoScroll;
   t.fitAddon.fit();
   if (wasAtBottom) {
@@ -737,8 +742,11 @@ export function refitAndStickTerminalToBottomSoon(id, opts: any = {}) {
     const prevCols = t.term.cols;
     const prevRows = t.term.rows;
     t.autoScroll = true;
-    fitTerminalPreservingBottom(t, id);
-    if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
+    // 抑制中でも視覚的なフィットは行い（行数を縮小後の表示領域に合わせ）、
+    // ポップアップ裏に CLI が切れて隠れるのを防ぐ。
+    fitTerminalPreservingBottom(t, id, true);
+    // SIGWINCH の送信は抑制中はスキップ（action-bar が閉じた時に正しいサイズで1回だけ送る）。
+    if ((t.term.cols !== prevCols || t.term.rows !== prevRows) && !isPtyResizeSuppressed()) {
       sendResize(id, t.term.cols, t.term.rows);
     }
     scrollTerminalToBottomSoon(id, { force, passes: 1, startedAt });

@@ -355,6 +355,11 @@
     scrollbar-width: none;
   }
   #input-tools::-webkit-scrollbar { display: none; }
+  /* 狭い画面では入力補助ツールを既定で隠し（省スペース）、
+     設定トグル ON（body.mobile-input-tools-on）でのみ表示する。
+     PC（このメディアクエリ外）では常に表示。 */
+  #input-tools { display: none; }
+  body.mobile-input-tools-on #input-tools { display: flex; }
   #input-bar {
     padding-bottom: calc(8px + env(safe-area-inset-bottom));
   }

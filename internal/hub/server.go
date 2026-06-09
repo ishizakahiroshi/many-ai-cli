@@ -547,6 +547,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/session-log", s.handleSessionLog)
 	mux.HandleFunc("/api/session-search", s.handleSessionSearch)
 	mux.HandleFunc("/api/session-store/reset", s.handleSessionStoreReset)
+	mux.HandleFunc("/api/logs/purge", s.handleLogsPurge)
+	mux.HandleFunc("/api/attachments/purge", s.handleAttachmentsPurge)
 	mux.HandleFunc("/api/open-dir", s.handleOpenDir)
 	mux.HandleFunc("/api/idle-timeout", s.handleIdleTimeout)
 	mux.HandleFunc("/api/reconnect-grace", s.handleReconnectGrace)
