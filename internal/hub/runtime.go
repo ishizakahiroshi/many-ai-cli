@@ -24,28 +24,28 @@ var envMetaByKind = map[string]envMeta{
 		Label: "Local",
 		Short: "L",
 		Color: "#22c55e",
-		Title: "ANY-AI-CLI Local",
+		Title: "L ANY-AI-CLI",
 	},
 	"wsl": {
 		Kind:  "wsl",
 		Label: "WSL",
 		Short: "W",
 		Color: "#3b82f6",
-		Title: "ANY-AI-CLI WSL",
+		Title: "W ANY-AI-CLI",
 	},
 	"vps": {
 		Kind:  "vps",
 		Label: "VPS",
 		Short: "V",
 		Color: "#f97316",
-		Title: "ANY-AI-CLI VPS",
+		Title: "V ANY-AI-CLI",
 	},
 	"vps-tunnel": {
 		Kind:  "vps-tunnel",
 		Label: "VPS Tunnel",
 		Short: "T",
 		Color: "#ef4444",
-		Title: "ANY-AI-CLI VPS Tunnel",
+		Title: "T ANY-AI-CLI",
 	},
 }
 
