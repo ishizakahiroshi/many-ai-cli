@@ -133,6 +133,7 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
     );
   } else {
     items.push(
+      { icon: '✏️', key: 'link_rename', action: () => renameFileViaApi(filePath, sessionId) },
       { icon: '⬇️', key: 'link_download_file', action: (anchor) => downloadPathViaBrowser(filePath, sessionId, anchor) },
     );
   }

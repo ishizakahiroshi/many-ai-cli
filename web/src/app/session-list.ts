@@ -863,6 +863,9 @@ export let _faviconBaseImg = null;
 export let _faviconBaseLoaded = false;
 export let _faviconPendingCount = 0;
 export let _faviconRenderedPendingCount = null;
+// 環境略号（L/W/V/T）。タイトルに出さず favicon に焼き込む。
+export let _faviconEnvShort = '';
+export let _faviconEnvColor = '';
 
 export let _titleBlinkInterval = null;
 export let _titleBlinkState = false;
@@ -906,7 +909,31 @@ export function drawFavicon(pendingCount, force = false) {
   const ctx = _faviconCtx;
   const SIZE = 32;
   ctx.clearRect(0, 0, SIZE, SIZE);
-  if (_faviconBaseLoaded) ctx.drawImage(_faviconBaseImg, 0, 0, SIZE, SIZE);
+  // ベースは常に CLI ロゴ。環境（local/wsl/vps…）が設定されているときは、
+  // ロゴを潰さずに済むよう略号 1 文字のバッジを左下隅へ小さく重ねる。
+  // 左右半分ずつ並べる旧方式は中央で重なって見えた（「センターマン」）ため隅オーバーレイに変更。
+  if (_faviconBaseLoaded) {
+    ctx.drawImage(_faviconBaseImg, 0, 0, SIZE, SIZE);
+  }
+  if (_faviconEnvShort && _faviconEnvColor) {
+    const BW = 18, BH = 18;           // バッジ箱（32 のうち左下に配置）
+    const bx = 0, by = SIZE - BH;
+    const R = 5;
+    // ロゴから分離して見えるよう白縁を一段敷く
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.roundRect(bx, by, BW, BH, R);
+    ctx.fill();
+    ctx.fillStyle = _faviconEnvColor;
+    ctx.beginPath();
+    ctx.roundRect(bx + 1.5, by + 1.5, BW - 3, BH - 3, R - 1);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(_faviconEnvShort, bx + BW / 2, by + BH / 2 + 1);
+  }
 
   if (pendingCount > 0) {
     const R = 9;
@@ -927,6 +954,13 @@ export function drawFavicon(pendingCount, force = false) {
   link.type = 'image/png';
   link.href = _faviconCanvas.toDataURL('image/png');
   _faviconRenderedPendingCount = pendingCount;
+}
+
+// 環境略号バッジ（L/W/V/T）を favicon に焼き込む。タイトル文字列には出さず favicon 側で表現する。
+export function setFaviconEnvBadge(short, color) {
+  _faviconEnvShort = String(short || '').trim();
+  _faviconEnvColor = String(color || '').trim();
+  drawFavicon(_faviconPendingCount, true);
 }
 
 export function updateTabNotification(pendingCount) {

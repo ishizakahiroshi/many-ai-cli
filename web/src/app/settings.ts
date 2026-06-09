@@ -4,7 +4,7 @@ import { escapeHtml, showToast, ti18n, token } from './util.js';
 import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
-import { activateSession, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, stateLabel } from './session-list.js';
+import { activateSession, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, setFaviconEnvBadge, stateLabel } from './session-list.js';
 import { pathPopupEl } from './path-links.js';
 import { TERMINAL_SCROLLBACK_LINES, attachTerminal, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, sendResize } from './terminal.js';
 import { providerApprovalTriggers } from './approval.js';
@@ -1381,7 +1381,7 @@ export function applyLang(lang) {
       return translated && translated !== key ? translated : (info.runtime_label || runtimeMode);
     };
     const envFallbacks: Record<string, { label: string; short: string; color: string; title: string }> = {
-      local: { label: 'Local', short: 'L', color: '#22c55e', title: 'L ANY-AI-CLI' },
+      local: { label: 'Local', short: 'L', color: '#8b5cf6', title: 'L ANY-AI-CLI' },
       wsl: { label: 'WSL', short: 'W', color: '#3b82f6', title: 'W ANY-AI-CLI' },
       vps: { label: 'VPS', short: 'V', color: '#f97316', title: 'V ANY-AI-CLI' },
       'vps-tunnel': { label: 'VPS Tunnel', short: 'T', color: '#ef4444', title: 'T ANY-AI-CLI' },
@@ -1395,16 +1395,6 @@ export function applyLang(lang) {
     const sanitizeEnvColor = (value, fallback) => {
       const color = String(value || '').trim();
       return /^#[0-9a-fA-F]{6}$/.test(color) ? color : fallback;
-    };
-    const escapeSvgText = (value) => String(value || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-    const envFaviconUrl = (short, color) => {
-      const text = escapeSvgText(String(short || 'L').trim().slice(0, 1).toUpperCase() || 'L');
-      const fill = sanitizeEnvColor(color, '#22c55e');
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${fill}"/><text x="32" y="35" text-anchor="middle" dominant-baseline="middle" font-family="Segoe UI, Arial, sans-serif" font-size="36" font-weight="700" fill="#fff">${text}</text></svg>`;
-      return `data:image/svg+xml,${encodeURIComponent(svg)}`;
     };
     // SSH セッション経由なら runtime バッジに SSH のみ常時表示し、IP/host は
     // title とクリック時の一時展開にだけ出す。スクリーンショットへの映り込みを避けるため。
@@ -1441,14 +1431,12 @@ export function applyLang(lang) {
       const envKey = `env_${String(envKind).replace(/-/g, '_')}`;
       const translatedEnv = (typeof window.t === 'function') ? window.t(envKey) : '';
       const envLabel = translatedEnv && translatedEnv !== envKey ? translatedEnv : envLabelRaw;
-      document.title = envTitle;
+      document.title = 'ANY-AI-CLI';
+      // CLI ロゴをベースに、環境略号（L/W/V/T）を左下隅の小バッジとして重ねる
+      // （drawFavicon 側で合成）。旧実装は全面バッジ化でロゴが消えていた。
+      setFaviconEnvBadge(envShort, envColor);
       const appleTitle = document.getElementById('apple-web-app-title');
-      if (appleTitle) appleTitle.setAttribute('content', envTitle);
-      const faviconEl = document.getElementById('app-favicon') || document.querySelector('link[rel~="icon"]');
-      if (faviconEl) {
-        faviconEl.setAttribute('href', envFaviconUrl(envShort, envColor));
-        faviconEl.setAttribute('type', 'image/svg+xml');
-      }
+      if (appleTitle) appleTitle.setAttribute('content', 'ANY-AI-CLI');
       const envBadgeEl = document.getElementById('env-badge');
       if (envBadgeEl) {
         envBadgeEl.textContent = envLabel.toUpperCase();
