@@ -1,16 +1,16 @@
-# [計画] Windows セキュリティブロック対策計画
+# [完了] Windows セキュリティブロック対策計画
 
 > 親: [`local/plan_2026-06-09-batch.md`](local/plan_2026-06-09-batch.md)（2026-06-09 一括実行バッチの C1）
-> 最終更新: 2026-06-09(火) 05:31:15
+> 最終更新: 2026-06-09(火) 10:52:16
 
 ## context配分
 
 | context | 状態 | 担当作業 | 対象ファイル | 依存 |
 |---|---|---|---|---|
-| C1 | plan | Windows 向け unblock 補助スクリプトを追加する | `scripts/` または release zip 同梱用ファイル | なし |
-| C2 | plan | README / リリース手順に、SmartScreen・Smart App Control・Unblock-File の違いと対処手順を追記する | `README.md`, `README.ja.md`, `docs/manual_release.md` | C1 |
-| C3 | plan | GoReleaser / 配布成果物に unblock 補助スクリプトを同梱する | `.goreleaser.yaml`, 必要なら `CHANGELOG.md` | C1 |
-| C4 | plan | 無料配布経路の改善方針を整理する | `docs/manual_release.md` または別 manual | C2 |
+| C1 | fix | Windows 向け unblock 補助スクリプトを追加する | `scripts/` または release zip 同梱用ファイル | なし |
+| C2 | fix | README / リリース手順に、SmartScreen・Smart App Control・Unblock-File の違いと対処手順を追記する | `README.md`, `README.ja.md`, `docs/manual_release.md` | C1 |
+| C3 | fix | GoReleaser / 配布成果物に unblock 補助スクリプトを同梱する | `.goreleaser.yaml`, 必要なら `CHANGELOG.md` | C1 |
+| C4 | fix | 無料配布経路の改善方針を整理する | `docs/manual_release.md` または別 manual | C2 |
 
 実行順序: `C1 → C2 → C3 → C4`
 

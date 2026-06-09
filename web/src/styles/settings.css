@@ -59,6 +59,24 @@
 .settings-app-icon { width: 32px; height: 32px; flex-shrink: 0; }
 .settings-app-name { font-size: 0.9rem; font-weight: bold; color: var(--text); }
 .settings-app-version { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+.env-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  max-width: 118px;
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, var(--env-color, var(--accent)) 58%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--env-color, var(--accent)) 14%, transparent);
+  color: color-mix(in srgb, var(--env-color, var(--accent)) 82%, var(--text));
+  font-size: 0.62rem;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .runtime-badge {
   flex: 0 0 auto;
   max-width: 220px;

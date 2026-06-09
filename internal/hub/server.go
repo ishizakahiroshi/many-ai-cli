@@ -267,9 +267,10 @@ type Server struct {
 	// tunnel モードでは既起動の Hub に ANY_AI_CLI_HOST_LABEL を注入できないため、
 	// API 経由でサーバ側に保持し、URL クエリヒントを持たないクライアント
 	//（PWA・別タブ等）にも /api/info で正しいバッジ情報を返す。
-	netHintMu   sync.Mutex
-	netHintSSH  bool
-	netHintHost string
+	netHintMu      sync.Mutex
+	netHintSSH     bool
+	netHintHost    string
+	netHintEnvKind string
 
 	usageLinkCache *ttlCache[UsageLinkDefaults]
 
@@ -564,6 +565,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/files-list", s.handleFilesList)
 	mux.HandleFunc("/api/files-content", s.handleFilesContent)
 	mux.HandleFunc("/api/files-asset", s.handleFilesAsset)
+	mux.HandleFunc("/api/files-download", s.handleFilesDownload)
 	mux.HandleFunc("/api/files-roots", s.handleFilesRoots)
 	mux.HandleFunc("/api/files-move", s.handleFilesMove)
 	mux.HandleFunc("/api/files-rename", s.handleFilesRename)

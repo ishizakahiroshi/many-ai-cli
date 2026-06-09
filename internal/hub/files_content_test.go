@@ -44,6 +44,22 @@ func callFilesAsset(t *testing.T, s *Server, path string) (int, string) {
 	return w.Code, w.Body.String()
 }
 
+func callFilesDownload(t *testing.T, s *Server, path string) (int, string, http.Header) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/files-download?token=tok&path="+url.QueryEscape(path), nil)
+	w := httptest.NewRecorder()
+	s.handleFilesDownload(w, req)
+	return w.Code, w.Body.String(), w.Header()
+}
+
+func callFilesDownloadWithSession(t *testing.T, s *Server, path string, sessionID int) (int, string, http.Header) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/files-download?token=tok&session="+strconv.Itoa(sessionID)+"&path="+url.QueryEscape(path), nil)
+	w := httptest.NewRecorder()
+	s.handleFilesDownload(w, req)
+	return w.Code, w.Body.String(), w.Header()
+}
+
 func TestIsTextFile(t *testing.T) {
 	cases := map[string]bool{
 		"main.go":        true,
@@ -88,6 +104,72 @@ func TestHandleFilesContent_AllowsPreviewableText(t *testing.T) {
 		if resp.Content != content {
 			t.Fatalf("%s: content = %q, want %q", name, resp.Content, content)
 		}
+	}
+}
+
+func TestHandleFilesDownload_AllowsArbitraryExtension(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "payload.custombin")
+	content := "binary-ish\x00payload"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newTestFilesContentServer(tmp)
+	code, body, header := callFilesDownload(t, s, path)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", code, body)
+	}
+	if body != content {
+		t.Fatalf("body = %q, want %q", body, content)
+	}
+	disposition := header.Get("Content-Disposition")
+	if !strings.Contains(disposition, "attachment") || !strings.Contains(disposition, `filename="payload.custombin"`) || !strings.Contains(disposition, "filename*=UTF-8''payload.custombin") {
+		t.Fatalf("unexpected Content-Disposition: %q", disposition)
+	}
+	if got := header.Get("Content-Type"); got != "application/octet-stream" {
+		t.Fatalf("Content-Type = %q, want application/octet-stream", got)
+	}
+	if got := header.Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("X-Content-Type-Options = %q, want nosniff", got)
+	}
+}
+
+func TestHandleFilesDownload_ContentDispositionNonASCII(t *testing.T) {
+	tmp := t.TempDir()
+	name := "日本語.txt"
+	path := filepath.Join(tmp, name)
+	if err := os.WriteFile(path, []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newTestFilesContentServer(tmp)
+	code, body, header := callFilesDownload(t, s, path)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", code, body)
+	}
+	disposition := header.Get("Content-Disposition")
+	if !strings.Contains(disposition, `filename="___.txt"`) {
+		t.Fatalf("missing ASCII fallback in Content-Disposition: %q", disposition)
+	}
+	if !strings.Contains(disposition, "filename*=UTF-8''"+url.PathEscape(name)) {
+		t.Fatalf("missing filename* in Content-Disposition: %q", disposition)
+	}
+	if got := header.Get("Content-Type"); !strings.HasPrefix(got, "text/plain") {
+		t.Fatalf("Content-Type = %q, want text/plain", got)
+	}
+}
+
+func TestHandleFilesDownload_RejectsDirectory(t *testing.T) {
+	tmp := t.TempDir()
+	s := newTestFilesContentServer(tmp)
+
+	code, body, _ := callFilesDownload(t, s, tmp)
+	if code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", code, body)
+	}
+	if !strings.Contains(body, "path is a directory") {
+		t.Fatalf("unexpected body: %q", body)
 	}
 }
 
@@ -206,6 +288,41 @@ func TestHandleFilesContent_UnmentionedOutsidePathForbidden(t *testing.T) {
 	code, body, _ = callFilesContent(t, s, outsideFile)
 	if code != http.StatusForbidden {
 		t.Fatalf("expected 403 without session, got %d: %s", code, body)
+	}
+}
+
+func TestHandleFilesDownload_UnmentionedOutsidePathForbidden(t *testing.T) {
+	projDir := t.TempDir()
+	outsideFile := filepath.Join(t.TempDir(), "artifact.bin")
+	if err := os.WriteFile(outsideFile, []byte("secret\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s, mention := newMentionTestServer(t, projDir, 7)
+	mention("関係ない出力\n")
+
+	code, body, _ := callFilesDownloadWithSession(t, s, outsideFile, 7)
+	if code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", code, body)
+	}
+}
+
+func TestHandleFilesDownload_MentionedOutsidePathAllowed(t *testing.T) {
+	projDir := t.TempDir()
+	outsideFile := filepath.Join(t.TempDir(), "artifact.bin")
+	if err := os.WriteFile(outsideFile, []byte("outside\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s, mention := newMentionTestServer(t, projDir, 7)
+	mention("artifact: " + outsideFile + "\n")
+
+	code, body, _ := callFilesDownloadWithSession(t, s, outsideFile, 7)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", code, body)
+	}
+	if body != "outside\n" {
+		t.Fatalf("body = %q", body)
 	}
 }
 

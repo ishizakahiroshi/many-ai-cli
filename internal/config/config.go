@@ -381,6 +381,7 @@ type Config struct {
 		AllowLoopbackWithoutToken bool     `yaml:"allow_loopback_without_token,omitempty" json:"allow_loopback_without_token,omitempty"`
 		TrustedNetworks           []string `yaml:"trusted_networks,omitempty" json:"trusted_networks,omitempty"`
 		AllowedHosts              []string `yaml:"allowed_hosts,omitempty" json:"allowed_hosts,omitempty"`
+		EnvKind                   string   `yaml:"env_kind,omitempty" json:"env_kind,omitempty"`
 	} `yaml:"hub"`
 	Log   LogConfig `yaml:"log"`
 	Spawn struct {

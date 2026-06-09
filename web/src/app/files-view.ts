@@ -29,6 +29,12 @@ import { openLightbox, terminalWrapper } from './attachments.js';
   }
 })();
 
+const FILES_TREE_WIDTH_KEY = 'any_ai_cli_files_tree_width';
+const FILES_TREE_MIN = 140;
+const FILES_TREE_MAX = 640;
+const FILES_TREE_DRAG_AUTOSCROLL_EDGE_PX = 36;
+const FILES_TREE_DRAG_AUTOSCROLL_MAX_STEP_PX = 18;
+
 /**
  * FilesTabManager — メインエリアのタブ管理
  *
@@ -358,10 +364,6 @@ export const FilesTabManager = (function () {
     notifyTabStateChanged();
     return id;
   }
-
-  const FILES_TREE_WIDTH_KEY = 'any_ai_cli_files_tree_width';
-  const FILES_TREE_MIN = 140;
-  const FILES_TREE_MAX = 640;
 
   function getFilesTreeSavedWidth() {
     const v = parseInt(localStorage.getItem(FILES_TREE_WIDTH_KEY), 10);
@@ -1271,6 +1273,8 @@ export const FilesTreeView = (function () {
     let draggingSrcs = [];
     let draggingRep = null;
     let hoverDropEl = null;
+    let dragAutoScrollRaf = null;
+    let dragAutoScrollDelta = 0;
 
     function highlightSelected() {
       treeArea.querySelectorAll('.files-tree-item').forEach(el => {
@@ -1297,6 +1301,50 @@ export const FilesTreeView = (function () {
         el.classList.add('files-tree-item--drop-target');
       }
       hoverDropEl = el || null;
+    }
+    function stopDragAutoScroll() {
+      dragAutoScrollDelta = 0;
+      if (dragAutoScrollRaf != null) {
+        cancelAnimationFrame(dragAutoScrollRaf);
+        dragAutoScrollRaf = null;
+      }
+    }
+    function scheduleDragAutoScroll() {
+      if (dragAutoScrollRaf != null) return;
+      dragAutoScrollRaf = requestAnimationFrame(() => {
+        dragAutoScrollRaf = null;
+        if (!dragAutoScrollDelta) return;
+        const maxScrollTop = Math.max(0, treeArea.scrollHeight - treeArea.clientHeight);
+        const nextTop = Math.max(0, Math.min(maxScrollTop, treeArea.scrollTop + dragAutoScrollDelta));
+        if (nextTop === treeArea.scrollTop) {
+          stopDragAutoScroll();
+          return;
+        }
+        treeArea.scrollTop = nextTop;
+        scheduleDragAutoScroll();
+      });
+    }
+    function updateDragAutoScroll(clientY) {
+      if (!draggingRep || treeArea.scrollHeight <= treeArea.clientHeight) {
+        stopDragAutoScroll();
+        return;
+      }
+      const rect = treeArea.getBoundingClientRect();
+      const edgePx = Math.min(FILES_TREE_DRAG_AUTOSCROLL_EDGE_PX, Math.max(1, rect.height / 2));
+      let nextDelta = 0;
+      if (clientY < rect.top + edgePx) {
+        const ratio = Math.min(1, Math.max(0, (rect.top + edgePx - clientY) / edgePx));
+        nextDelta = -Math.max(1, Math.ceil(ratio * FILES_TREE_DRAG_AUTOSCROLL_MAX_STEP_PX));
+      } else if (clientY > rect.bottom - edgePx) {
+        const ratio = Math.min(1, Math.max(0, (clientY - (rect.bottom - edgePx)) / edgePx));
+        nextDelta = Math.max(1, Math.ceil(ratio * FILES_TREE_DRAG_AUTOSCROLL_MAX_STEP_PX));
+      }
+      if (!nextDelta) {
+        stopDragAutoScroll();
+        return;
+      }
+      dragAutoScrollDelta = nextDelta;
+      scheduleDragAutoScroll();
     }
     // パス比較（OS 由来の \ / の差を吸収しつつ、Windows のドライブレターは大文字小文字無視）
     function normalizePath(p) {
@@ -1344,6 +1392,7 @@ export const FilesTreeView = (function () {
 
     // ──── D&D ハンドラ（イベント委譲） ────
     treeArea.addEventListener('dragstart', (e) => {
+      stopDragAutoScroll();
       const item = e.target.closest && e.target.closest('.files-tree-item');
       if (!item || !item.dataset.absPath) { return; }
       const srcAbsPath = item.dataset.absPath;
@@ -1361,9 +1410,11 @@ export const FilesTreeView = (function () {
       if (item) item.classList.remove('files-tree-item--dragging');
       draggingSrcs = [];
       draggingRep = null;
+      stopDragAutoScroll();
       clearDropHighlight();
     });
     treeArea.addEventListener('dragover', (e) => {
+      updateDragAutoScroll(e.clientY);
       const target = resolveDropTarget(e);
       if (!target) { clearDropHighlight(); return; }
       e.preventDefault();
@@ -1372,7 +1423,11 @@ export const FilesTreeView = (function () {
     });
     treeArea.addEventListener('dragleave', (e) => {
       // ツリー全体の外に出たら強調を消す
-      if (e.target === treeArea && !treeArea.contains(e.relatedTarget)) {
+      const related = e.relatedTarget as Node | null;
+      const rect = treeArea.getBoundingClientRect();
+      const stillInside = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+      if (!(related && treeArea.contains(related)) && !stillInside) {
+        stopDragAutoScroll();
         clearDropHighlight();
       }
     });
@@ -1415,6 +1470,7 @@ export const FilesTreeView = (function () {
 
     treeArea.addEventListener('drop', async (e) => {
       const target = resolveDropTarget(e);
+      stopDragAutoScroll();
       clearDropHighlight();
       if (!target || draggingSrcs.length === 0) return;
       e.preventDefault();

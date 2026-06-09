@@ -1380,6 +1380,32 @@ export function applyLang(lang) {
       const translated = window.t(key);
       return translated && translated !== key ? translated : (info.runtime_label || runtimeMode);
     };
+    const envFallbacks: Record<string, { label: string; short: string; color: string; title: string }> = {
+      local: { label: 'Local', short: 'L', color: '#22c55e', title: 'ANY-AI-CLI Local' },
+      wsl: { label: 'WSL', short: 'W', color: '#3b82f6', title: 'ANY-AI-CLI WSL' },
+      vps: { label: 'VPS', short: 'V', color: '#f97316', title: 'ANY-AI-CLI VPS' },
+      'vps-tunnel': { label: 'VPS Tunnel', short: 'T', color: '#ef4444', title: 'ANY-AI-CLI VPS Tunnel' },
+    };
+    const normalizeEnvKind = (value) => {
+      const raw = String(value || '').trim().toLowerCase().replace(/_/g, '-');
+      if (raw === 'local' || raw === 'wsl' || raw === 'vps' || raw === 'vps-tunnel') return raw;
+      if (raw === 'vpstunnel') return 'vps-tunnel';
+      return '';
+    };
+    const sanitizeEnvColor = (value, fallback) => {
+      const color = String(value || '').trim();
+      return /^#[0-9a-fA-F]{6}$/.test(color) ? color : fallback;
+    };
+    const escapeSvgText = (value) => String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    const envFaviconUrl = (short, color) => {
+      const text = escapeSvgText(String(short || 'L').trim().slice(0, 1).toUpperCase() || 'L');
+      const fill = sanitizeEnvColor(color, '#22c55e');
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${fill}"/><text x="32" y="35" text-anchor="middle" dominant-baseline="middle" font-family="Segoe UI, Arial, sans-serif" font-size="36" font-weight="700" fill="#fff">${text}</text></svg>`;
+      return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+    };
     // SSH セッション経由なら runtime バッジに SSH のみ常時表示し、IP/host は
     // title とクリック時の一時展開にだけ出す。スクリーンショットへの映り込みを避けるため。
     // launcher の SSH tunnel モードでは既存 Hub が SSH 経由かどうかを自己判定できない
@@ -1389,10 +1415,19 @@ export function applyLang(lang) {
     const urlParams = new URLSearchParams(location.search);
     if (urlParams.get('via') === 'ssh') sessionStorage.setItem('netHint.ssh', '1');
     if (urlParams.get('host_label')) sessionStorage.setItem('netHint.hostLabel', urlParams.get('host_label'));
+    if (urlParams.get('env_kind')) sessionStorage.setItem('netHint.envKind', urlParams.get('env_kind'));
     const hintSSH = sessionStorage.getItem('netHint.ssh') === '1';
     const hintHost = sessionStorage.getItem('netHint.hostLabel') || '';
+    const hintEnvKind = normalizeEnvKind(sessionStorage.getItem('netHint.envKind'));
     const showSSH = hintSSH || info.ssh;
     const showHost = hintHost || info.host_ip || '';
+    const serverEnvKind = normalizeEnvKind(info.env_kind);
+    const envKind = serverEnvKind || hintEnvKind || (hintSSH ? 'vps-tunnel' : 'local');
+    const envBase = envFallbacks[envKind] || envFallbacks.local;
+    const envLabelRaw = info.env_label || envBase.label;
+    const envShort = info.env_short || envBase.short;
+    const envColor = sanitizeEnvColor(info.env_color, envBase.color);
+    const envTitle = info.env_title || envBase.title || `ANY-AI-CLI ${envLabelRaw}`;
     const connectionSuffix = showSSH ? ' SSH' : '';
     // SSH 経由の Hub ではフォルダ選択ダイアログがリモート側で開いてしまい使えないため、
     // spawn パネルのフォルダ参照ボタンを非表示にする。
@@ -1403,6 +1438,25 @@ export function applyLang(lang) {
     }
     const apply = () => {
       const runtime = runtimeLabel();
+      const envKey = `env_${String(envKind).replace(/-/g, '_')}`;
+      const translatedEnv = (typeof window.t === 'function') ? window.t(envKey) : '';
+      const envLabel = translatedEnv && translatedEnv !== envKey ? translatedEnv : envLabelRaw;
+      document.title = envTitle;
+      const appleTitle = document.getElementById('apple-web-app-title');
+      if (appleTitle) appleTitle.setAttribute('content', envTitle);
+      const faviconEl = document.getElementById('app-favicon') || document.querySelector('link[rel~="icon"]');
+      if (faviconEl) {
+        faviconEl.setAttribute('href', envFaviconUrl(envShort, envColor));
+        faviconEl.setAttribute('type', 'image/svg+xml');
+      }
+      const envBadgeEl = document.getElementById('env-badge');
+      if (envBadgeEl) {
+        envBadgeEl.textContent = envLabel.toUpperCase();
+        envBadgeEl.hidden = false;
+        envBadgeEl.dataset.envKind = envKind;
+        envBadgeEl.style.setProperty('--env-color', envColor);
+        envBadgeEl.title = info.env_host_label || showHost || envLabel;
+      }
       const badgeEl = document.getElementById('runtime-badge');
       if (badgeEl && runtime) {
         const baseText = runtime + connectionSuffix;
@@ -1431,7 +1485,7 @@ export function applyLang(lang) {
         }
       }
       const settingsEl = document.querySelector('.settings-app-version');
-      if (settingsEl) settingsEl.textContent = runtime ? `${ver} [Hub UI] - ${runtime}` : ver + ' [Hub UI]';
+      if (settingsEl) settingsEl.textContent = runtime ? `${ver} [Hub UI] - ${envLabel} - ${runtime}` : `${ver} [Hub UI] - ${envLabel}`;
       const aboutEl = document.querySelector('.about-version');
       if (aboutEl) {
         aboutEl.textContent = (typeof window.t === 'function')
@@ -1441,8 +1495,8 @@ export function applyLang(lang) {
       const aboutRuntimeEl = document.querySelector('.about-runtime');
       if (aboutRuntimeEl) {
         aboutRuntimeEl.textContent = runtime
-          ? (typeof window.t === 'function' ? window.t('about_runtime', { runtime }) : `Runtime: ${runtime}`)
-          : '';
+          ? (typeof window.t === 'function' ? window.t('about_runtime_env', { env: envLabel, runtime }) : `Environment: ${envLabel} / Runtime: ${runtime}`)
+          : (typeof window.t === 'function' ? window.t('about_env', { env: envLabel }) : `Environment: ${envLabel}`);
       }
     };
     if (typeof window.t === 'function') {

@@ -66,6 +66,11 @@ export function getFilesAssetUrl(absPath, sessionId) {
   return `/api/files-asset?path=${encodeURIComponent(absPath)}&token=${encodeURIComponent(token)}${sessionQs}`;
 }
 
+export function getFilesDownloadUrl(absPath, sessionId) {
+  const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
+  return `/api/files-download?path=${encodeURIComponent(absPath)}&token=${encodeURIComponent(token)}${sessionQs}`;
+}
+
 export function getPathOpenItem(filePath, sessionId) {
   if (isVideoPath(filePath)) {
     return { icon: '🎞️', key: 'link_open_file', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error', sessionId) };
@@ -126,6 +131,10 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
       { icon: '✏️', key: 'link_rename', action: () => renameFileViaApi(filePath, sessionId) },
       { icon: '🗑️', key: 'link_delete_dir', action: () => deleteDirViaApi(filePath, sessionId) },
     );
+  } else {
+    items.push(
+      { icon: '⬇️', key: 'link_download_file', action: (anchor) => downloadPathViaBrowser(filePath, sessionId, anchor) },
+    );
   }
 
   for (const item of items) {
@@ -157,6 +166,22 @@ export function basenameForPath(filePath) {
   const normalized = String(filePath || '').replace(/[\\/]+$/, '');
   const slash = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
   return slash >= 0 ? normalized.slice(slash + 1) : normalized;
+}
+
+export function downloadPathViaBrowser(filePath, sessionId, anchorEl = null) {
+  const path = String(filePath || '').trim();
+  if (!path) {
+    showToast(t('link_open_error'), anchorEl);
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = getFilesDownloadUrl(path, sessionId);
+  a.download = basenameForPath(path) || 'download';
+  a.hidden = true;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 export async function renameFileViaApi(filePath, sessionId) {

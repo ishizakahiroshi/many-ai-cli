@@ -10,6 +10,16 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Added
+- Windows release archives now include `unblock-windows.cmd`, a local helper
+  that runs PowerShell `Unblock-File` for `any-ai-cli*.exe` files after zip
+  extraction.
+
+### Changed
+- README and release-operation docs now distinguish Mark-of-the-Web,
+  SmartScreen, Smart App Control, organization policy, and checksum/signature
+  verification for unsigned Windows builds.
+
 ## [0.3.0] - 2026-06-05
 
 ### Added

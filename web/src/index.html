@@ -4,14 +4,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
   <title>ANY-AI-CLI</title>
-  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link id="app-favicon" rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <meta name="theme-color" content="#08090d">
   <!-- 標準の mobile-web-app-capable を併記（apple- 版のみだと Chrome が deprecation 警告を出す） -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="ANY-AI-CLI">
+  <meta id="apple-web-app-title" name="apple-mobile-web-app-title" content="ANY-AI-CLI">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="stylesheet" href="/vendor/xterm.min.css">
   <link rel="stylesheet" href="/vendor/hljs-github-dark.min.css">
@@ -22,6 +22,7 @@
     <div class="header-logo">
       <img class="header-logo-icon" src="/icon.svg" alt="">
       <span>ANY-AI-CLI</span>
+      <span id="env-badge" class="env-badge" hidden></span>
     </div>
     <span id="runtime-badge" class="runtime-badge" hidden></span>
     <div class="header-sep"></div>
@@ -568,12 +569,21 @@
         <div class="new-session-form">
           <div class="spawn-provider-row">
             <span id="spawn-provider-icon"></span>
-            <select id="spawn-provider" class="spawn-select">
+            <select id="spawn-provider" class="spawn-select spawn-provider-native" aria-hidden="true" tabindex="-1">
               <option value="claude">Claude Code</option>
               <option value="codex">Codex CLI</option>
               <option value="copilot">GitHub Copilot</option>
               <option value="cursor-agent">Cursor Agent</option>
             </select>
+            <div id="spawn-provider-combobox" class="spawn-provider-combobox">
+              <button id="spawn-provider-trigger" class="spawn-provider-trigger" type="button"
+                      aria-haspopup="listbox" aria-expanded="false" aria-controls="spawn-provider-list">
+                <span id="spawn-provider-trigger-icon" class="spawn-provider-trigger-icon" aria-hidden="true"></span>
+                <span id="spawn-provider-trigger-label" class="spawn-provider-trigger-label"></span>
+                <span class="spawn-provider-trigger-chevron" aria-hidden="true">▾</span>
+              </button>
+              <ul id="spawn-provider-list" class="spawn-provider-list" role="listbox" aria-labelledby="spawn-provider-trigger" hidden></ul>
+            </div>
           </div>
           <div class="spawn-cwd-row">
             <div class="cwd-combobox">
