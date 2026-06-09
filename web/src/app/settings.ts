@@ -1381,10 +1381,10 @@ export function applyLang(lang) {
       return translated && translated !== key ? translated : (info.runtime_label || runtimeMode);
     };
     const envFallbacks: Record<string, { label: string; short: string; color: string; title: string }> = {
-      local: { label: 'Local', short: 'L', color: '#22c55e', title: 'ANY-AI-CLI Local' },
-      wsl: { label: 'WSL', short: 'W', color: '#3b82f6', title: 'ANY-AI-CLI WSL' },
-      vps: { label: 'VPS', short: 'V', color: '#f97316', title: 'ANY-AI-CLI VPS' },
-      'vps-tunnel': { label: 'VPS Tunnel', short: 'T', color: '#ef4444', title: 'ANY-AI-CLI VPS Tunnel' },
+      local: { label: 'Local', short: 'L', color: '#22c55e', title: 'L ANY-AI-CLI' },
+      wsl: { label: 'WSL', short: 'W', color: '#3b82f6', title: 'W ANY-AI-CLI' },
+      vps: { label: 'VPS', short: 'V', color: '#f97316', title: 'V ANY-AI-CLI' },
+      'vps-tunnel': { label: 'VPS Tunnel', short: 'T', color: '#ef4444', title: 'T ANY-AI-CLI' },
     };
     const normalizeEnvKind = (value) => {
       const raw = String(value || '').trim().toLowerCase().replace(/_/g, '-');
@@ -1427,7 +1427,7 @@ export function applyLang(lang) {
     const envLabelRaw = info.env_label || envBase.label;
     const envShort = info.env_short || envBase.short;
     const envColor = sanitizeEnvColor(info.env_color, envBase.color);
-    const envTitle = info.env_title || envBase.title || `ANY-AI-CLI ${envLabelRaw}`;
+    const envTitle = info.env_title || envBase.title || `${envShort} ANY-AI-CLI`;
     const connectionSuffix = showSSH ? ' SSH' : '';
     // SSH 経由の Hub ではフォルダ選択ダイアログがリモート側で開いてしまい使えないため、
     // spawn パネルのフォルダ参照ボタンを非表示にする。
