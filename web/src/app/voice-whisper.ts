@@ -50,7 +50,6 @@ const WHISPER_HALLUCINATION_PHRASES = [
   let scriptNode: ScriptProcessorNode | null = null;
   let analyserNode: AnalyserNode | null = null;
   let silentGainNode: GainNode | null = null;
-  let workletUrl = '';
   let abortController: AbortController | null = null;
   let startedAt = 0;
   let maxRecordTimer: ReturnType<typeof setTimeout> | null = null;
@@ -224,28 +223,10 @@ const WHISPER_HALLUCINATION_PHRASES = [
     return out;
   }
 
-  function makeRecorderWorkletUrl() {
-    const source = `
-      class AnyAiCliWhisperRecorder extends AudioWorkletProcessor {
-        process(inputs) {
-          const input = inputs[0];
-          if (!input || input.length === 0 || input[0].length === 0) return true;
-          const frames = input[0].length;
-          const channels = input.length;
-          const mono = new Float32Array(frames);
-          for (let i = 0; i < frames; i++) {
-            let sum = 0;
-            for (let ch = 0; ch < channels; ch++) sum += input[ch][i] || 0;
-            mono[i] = sum / channels;
-          }
-          this.port.postMessage(mono, [mono.buffer]);
-          return true;
-        }
-      }
-      registerProcessor('any-ai-cli-whisper-recorder', AnyAiCliWhisperRecorder);
-    `;
-    return URL.createObjectURL(new Blob([source], { type: 'application/javascript' }));
-  }
+  // worklet モジュールは同一オリジンの静的 JS として配信する（web/src/whisper-recorder-worklet.js）。
+  // 以前は blob URL を addModule() していたが、Hub の CSP script-src 'self' が blob: を許可しないため
+  // ロードがブロックされていた。CSP を緩めずに済むよう static 配信に変更した。
+  const RECORDER_WORKLET_URL = '/whisper-recorder-worklet.js';
 
   async function attachRecorder(ctx: AudioContext, source: MediaStreamAudioSourceNode) {
     analyserNode = ctx.createAnalyser();
@@ -257,8 +238,7 @@ const WHISPER_HALLUCINATION_PHRASES = [
     silentGainNode.connect(ctx.destination);
 
     if (ctx.audioWorklet) {
-      workletUrl = makeRecorderWorkletUrl();
-      await ctx.audioWorklet.addModule(workletUrl);
+      await ctx.audioWorklet.addModule(RECORDER_WORKLET_URL);
       workletNode = new AudioWorkletNode(ctx, 'any-ai-cli-whisper-recorder');
       workletNode.port.onmessage = (event) => appendChunk(event.data);
       source.connect(workletNode);
@@ -300,9 +280,6 @@ const WHISPER_HALLUCINATION_PHRASES = [
     if (audioCtx && audioCtx.state !== 'closed') {
       audioCtx.close().catch(() => {});
     }
-    if (workletUrl) {
-      try { URL.revokeObjectURL(workletUrl); } catch (_) {}
-    }
     stream = null;
     audioCtx = null;
     sourceNode = null;
@@ -310,7 +287,6 @@ const WHISPER_HALLUCINATION_PHRASES = [
     scriptNode = null;
     analyserNode = null;
     silentGainNode = null;
-    workletUrl = '';
     setVoiceAudioActive(false);
   }
 

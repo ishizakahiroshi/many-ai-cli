@@ -519,6 +519,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.Handle("/icons/", staticHandler)
 	mux.Handle("/manifest.webmanifest", staticHandler)
 	mux.Handle("/sw.js", staticHandler)
+	mux.Handle("/whisper-recorder-worklet.js", staticHandler)
 	mux.Handle("/i18n.js", staticHandler)
 	mux.Handle("/i18n/", staticHandler)
 	mux.Handle("/vendor/", staticHandler)
