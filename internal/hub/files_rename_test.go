@@ -36,7 +36,7 @@ func callRename(t *testing.T, s *Server, src, newName string) (int, filesRenameR
 	return w.Code, resp
 }
 
-func TestFilesRename_RejectFile(t *testing.T) {
+func TestFilesRename_OK_File(t *testing.T) {
 	tmp := t.TempDir()
 	src := filepath.Join(tmp, "old.md")
 	if err := os.WriteFile(src, []byte("hi"), 0o644); err != nil {
@@ -45,11 +45,15 @@ func TestFilesRename_RejectFile(t *testing.T) {
 
 	s := newTestRenameServer(t, tmp)
 	code, resp := callRename(t, s, src, "new.md")
-	if code != http.StatusBadRequest || resp.OK {
-		t.Fatalf("expected error, got code=%d resp=%+v", code, resp)
+	if code != http.StatusOK || !resp.OK {
+		t.Fatalf("expected ok, got code=%d resp=%+v", code, resp)
 	}
-	if resp.Error != "bad_request" || !strings.Contains(resp.Detail, "directory") {
-		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
+	want := filepath.Join(tmp, "new.md")
+	if resp.NewAbs != want {
+		t.Fatalf("newAbs = %q, want %q", resp.NewAbs, want)
+	}
+	if _, err := os.Stat(want); err != nil {
+		t.Fatalf("renamed file not found: %v", err)
 	}
 }
 

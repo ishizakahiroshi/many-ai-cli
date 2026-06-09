@@ -8,7 +8,7 @@ import (
 )
 
 // filesRenameReq は POST /api/files-rename のリクエスト body。
-//   - Src:     リネーム対象ディレクトリの絶対パス
+//   - Src:     リネーム対象（ファイルまたはディレクトリ）の絶対パス
 //   - NewName: 新しい basename（ディレクトリセパレータを含まないこと）
 type filesRenameReq struct {
 	Src     string `json:"src"`
@@ -29,7 +29,7 @@ type filesRenameResp struct {
 //  2. method (POST)
 //  3. src が絶対パス
 //  4. newName が basename のみ（空でない、"." ".." でない、セパレータを含まない）
-//  5. src 存在、かつディレクトリ
+//  5. src 存在（ファイルまたはディレクトリ）
 //  6. src が allowed roots（cwd または gitRoot）配下
 //  7. newName が src の現在の basename と異なる（no-op 拒否）
 //  8. 移動先（同ディレクトリ/newName）が既存でない（上書き禁止）
@@ -65,13 +65,8 @@ func (s *Server) handleFilesRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	info, err := os.Lstat(srcClean)
-	if err != nil {
+	if _, err := os.Lstat(srcClean); err != nil {
 		writeRenameErr(w, http.StatusNotFound, "not_found", errorDetail("src not found", err))
-		return
-	}
-	if !info.IsDir() {
-		writeRenameErr(w, http.StatusBadRequest, "bad_request", "src must be a directory")
 		return
 	}
 

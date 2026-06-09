@@ -3,7 +3,7 @@ import { cleanCopiedText, cleanOneLineText, showToast } from './util.js';
 import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
 import { activeSessionId, approvalRawOptionsCache, approvalVisibleCache, sessions, terminals, utf8Decoder } from './state.js';
-import { sendText, stagePastedText } from '../app.js';
+import { autoExpand, inputEl, sendText, updateInputClearButton } from '../app.js';
 import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerminalPathStartBoundary, resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup, trimTerminalPathCandidate } from './path-links.js';
 import { ws } from './ws-client.js';
 import { scheduleApprovalCheck } from './approval.js';
@@ -30,8 +30,20 @@ async function copyTerminalSelectionText(text, opts: any = {}) {
   const cleaned = opts.oneLine ? cleanOneLineText(text) : cleanCopiedText(text);
   if (!cleaned) return;
   await navigator.clipboard.writeText(cleaned);
-  stagePastedText(cleaned, { force: true });
   showToast(ti18n('copied_to_clipboard'), opts.anchor);
+}
+
+// 選択範囲をクリップボード経由ではなく入力欄へ直接追記する。
+// コピー → 貼り付けだと複数行は「Pasted text」添付になってしまうため、
+// 添付化を避けて本文として入力したいケース向け。
+function addSelectionToInput(text, opts: any = {}) {
+  const cleaned = cleanCopiedText(text);
+  if (!cleaned) return;
+  inputEl.value = inputEl.value ? inputEl.value + '\n' + cleaned : cleaned;
+  autoExpand({ suppressPtyResize: true });
+  updateInputClearButton();
+  inputEl.focus();
+  showToast(ti18n('added_to_input'), opts.anchor);
 }
 
 export function ensureTerminal(id) {
@@ -409,6 +421,7 @@ function ensureTermCtxMenu() {
   };
   mkItem('term_ctx_copy', 'コピー', '⎘', (sel, anchor) => copyTerminalSelectionText(sel, { anchor }).catch(() => {}));
   mkItem('term_ctx_copy_oneline', '1行コピー', '⇥', (sel, anchor) => copyTerminalSelectionText(sel, { oneLine: true, anchor }).catch(() => {}));
+  mkItem('term_ctx_add_to_input', '入力欄に追加', '＋', (sel, anchor) => addSelectionToInput(sel, { anchor }));
   document.body.appendChild(m);
   document.addEventListener('click', (e) => {
     if (!m.contains(e.target)) closeTermCtxMenu();
