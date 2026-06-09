@@ -196,6 +196,30 @@ test('approval parser fixtures', () => {
   assert.deepEqual(detectFallback('claude', numberedList, triggerMatcher), []);
   assert.equal(parser.linesHaveHint('claude', numberedList, triggerMatcher), false);
 
+  // Ink のカーソル位置制御描画で選択肢間の改行が失われ「1. … 2. … 3. … N. User specifies」が
+  // 1行へ連結されたケースの回帰（=「承認ボタンが全部1つに潰れる」症状）。
+  // フォールパック経路（extractApprovalOptions）で 3 選択肢へ復元でき、
+  // N. User specifies が最後の選択肢ラベルへ混入しないこと。
+  const gluedFallback = parser.extractApprovalOptions([
+    '1. 質問2=「PCも含め全画面で効かせる」を選択（質問1の初期値はON=既定で表示のまま）(Recommended)2. 質問1=「初期値OFF=既定で非表示」を選択（質問2の適用範囲はスマホのみのまま）3. 両方とも option 2（初期値OFF かつ 全画面で効かせる） N. User specifies',
+  ]);
+  assert.deepEqual(numbers(gluedFallback.options), [1, 2, 3]);
+  assert.equal(/User specifies/.test(gluedFallback.options[2].label), false);
+  assert.equal(/Recommended/.test(gluedFallback.options[0].label), true);
+
+  // 連番でない「1. … 3. …」や小数「1.5」は誤分割しないこと（保守的分割の確認）。
+  const notSequential = parser.extractApprovalOptions([
+    '1. first 3. third',
+  ]);
+  assert.equal(notSequential.options.length <= 1, true);
+
+  // marker 経路でブロック全体が1行へ完全に潰れたケースの回帰。
+  // 見出し「1 …?」と選択肢「1. 2. 3.」が混在連結されても 3 選択肢へ復元できること。
+  const gluedMarker = parser.extractHubMarkerApproval([
+    '[ANY-AI-CLI] 1 「2」はどの設定を指していますか? 1. A を選択(Recommended)2. B を選択 3. 両方とも C N. User specifies [/ANY-AI-CLI]',
+  ]);
+  assert.deepEqual(numbers(gluedMarker), [1, 2, 3]);
+
   const chunkPath = parser.extractHubMarkerApproval([
     'noise',
     '[ANY-AI-CLI]',

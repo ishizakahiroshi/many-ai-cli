@@ -212,7 +212,7 @@
   // 2つの質問が1つに合体する（一括承認パネルの件数・ボタン文字列が壊れる）。
   // 各質問末尾の「N. User specifies」を区切りアンカーとして、行内に埋もれた
   // 「N行」および後続の見出しを元の行構造へ再分割する。
-  function ungluedMarkerLines(lines) {
+  function splitUserSpecifiesAnchor(lines) {
     // 「N. User specifies / その他指定」を区切りアンカーにする（行頭・行中問わず）。
     // \b 直前判定で "PLAN." 等の語中 N は誤マッチしない。
     const splitRe = /\s*\b(N\.[ \t]*(?:User specifies|その他指定))\b\s*/i;
@@ -230,8 +230,47 @@
     return out;
   }
 
+  // Ink のカーソル位置制御描画では選択肢間の改行も失われ、
+  // 「1. … 2. … 3. …」が1行へ連結されることがある（pendingTextTail の split で1要素化）。
+  // この状態だと行頭正規表現が先頭の「1.」しか拾えず、残り全部が1個目のラベルへ飲み込まれて
+  // 承認ボタンが1つに潰れる（=「ボタンが全部一緒になる」症状）。
+  // 行内に「<番号>.」が 1→2→3 と単調増加で連続する場合のみ、各番号の直前で分割する。
+  // 誤分割防止: ① 直前は行頭/空白/閉じ括弧のいずれか ② 「1.5」等の小数は除外
+  //（ピリオド直後が空白か非数字のときだけ選択肢開始とみなす） ③ 連番でなければ分割しない。
+  function splitGluedNumberedLine(rawLine) {
+    const line = String(rawLine == null ? '' : rawLine);
+    const re = /(^|[\s)）」』】])(\d{1,2})\.(?:\s+|(?=\D))/g;
+    const marks = [];
+    let m;
+    while ((m = re.exec(line)) !== null) {
+      marks.push({ at: m.index + m[1].length, num: parseInt(m[2], 10) });
+      if (m.index === re.lastIndex) re.lastIndex++; // ゼロ幅マッチの無限ループ防止
+    }
+    if (marks.length < 2) return [rawLine];
+    for (let i = 1; i < marks.length; i++) {
+      if (marks[i].num !== marks[i - 1].num + 1) return [rawLine];
+    }
+    const out = [];
+    const head = line.slice(0, marks[0].at).trim(); // 先頭の見出し/本文（あれば）
+    if (head) out.push(head);
+    for (let i = 0; i < marks.length; i++) {
+      const end = i + 1 < marks.length ? marks[i + 1].at : line.length;
+      const seg = line.slice(marks[i].at, end).trim();
+      if (seg) out.push(seg);
+    }
+    return out;
+  }
+
+  // 連結された承認行を元の行構造へ復元する共通処理。
+  // marker 経路（parseHubBlock）/ フォールバック経路（extractApprovalOptions）双方で使う。
+  // 先に「N. User specifies」アンカーで切り、その後で行内連番を分割する
+  //（N. を先に切らないと最後の選択肢ラベルへ「N. User specifies」が混入するため）。
+  function ungluedApprovalLines(lines) {
+    return splitUserSpecifiesAnchor(lines).flatMap(splitGluedNumberedLine);
+  }
+
   function parseHubBlock(rawLines) {
-    const lines = ungluedMarkerLines(rawLines);
+    const lines = ungluedApprovalLines(rawLines);
     const text = lines.join('\n');
     if (hasYesNoApprovalMarker(text)) {
       if (isPlaceholderYesNoQuestion(text)) return null;
@@ -310,7 +349,11 @@
       lower.includes('esc to cancel');
   }
 
-  function extractApprovalOptions(tail) {
+  function extractApprovalOptions(rawTail) {
+    // Ink 連結で1行へ潰れた選択肢を元の行構造へ復元してから走査する。
+    // cluster の index は展開後の tail を基準にするため、呼び出し側へ展開後の lines も返す
+    //（呼び出し側が approvalContextLines で同じ配列を使えるようにし、index ずれを防ぐ）。
+    const tail = ungluedApprovalLines(rawTail);
     const options = [];
     let clusterStart = -1;
     let clusterEnd = -1;
@@ -357,12 +400,12 @@
       }
       break;
     }
-    if (options.length === 0) return { options: [], cluster: null };
+    if (options.length === 0) return { options: [], cluster: null, lines: tail };
     const nums = options.map(opt => opt.num);
     const numMin = Math.min(...nums);
     const numMax = Math.max(...nums);
     if (numMax > 20 || numMax - numMin > 15 || options.length > 12) {
-      return { options: [], cluster: null };
+      return { options: [], cluster: null, lines: tail };
     }
     const seen = new Set();
     const uniqueOptions = options.filter(opt => {
@@ -371,10 +414,11 @@
       seen.add(key);
       return true;
     });
-    if (uniqueOptions.length < 2) return { options: [], cluster: null };
+    if (uniqueOptions.length < 2) return { options: [], cluster: null, lines: tail };
     return {
       options: uniqueOptions,
       cluster: { start: clusterStart, end: clusterEnd },
+      lines: tail,
     };
   }
 
