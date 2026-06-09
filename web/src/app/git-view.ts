@@ -464,7 +464,7 @@ import { appConfirm } from './settings.js';
               <button class="git-commit-close" data-commit-close title="${_esc(_gt('git_view_detail_close', 'Close'))}">✕</button>
             </div>
             <div class="git-commit-warning">${_esc(_gt('git_commit_no_push_warning', 'Only git add -A and git commit are run. Push is not run.'))}</div>
-            <div class="git-commit-generate-note">${_esc(_gt('git_commit_generate_note', 'Generate checks the diff with the current AI agent and fills in a draft commit message. Review it before committing.'))}</div>
+            <div class="git-commit-generate-note">${_esc(_gt('git_commit_generate_note', 'Generate has any-ai-cli analyze the diff and fill in a draft commit message. This is a lightweight heuristic, so accuracy is limited. Review it before committing.'))}</div>
             <label class="git-commit-field">
               <span>${_esc(_gt('git_commit_subject', 'Commit message subject'))}</span>
               <input type="text" data-commit-subject maxlength="200">

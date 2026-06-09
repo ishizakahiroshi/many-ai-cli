@@ -215,6 +215,16 @@
             <button id="session-store-reset-btn" class="settings-inline-btn settings-danger-btn" data-i18n="settings_history_reset">Delete history</button>
           </div>
           <div class="settings-note" data-i18n="settings_history_reset_desc">Deletes saved SQLite search/chat history. Running sessions continue.</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_logs_purge_label">All logs</span>
+            <button id="logs-purge-btn" class="settings-inline-btn settings-danger-btn" data-i18n="settings_logs_purge">Delete all logs</button>
+          </div>
+          <div class="settings-note" data-i18n="settings_logs_purge_desc">Deletes all session logs (.log/.jsonl/.txt), spawn logs, and SQLite history. Running sessions are kept.</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_attachments_purge_label">All attachments</span>
+            <button id="attachments-purge-btn" class="settings-inline-btn settings-danger-btn" data-i18n="settings_attachments_purge">Delete all attachments</button>
+          </div>
+          <div class="settings-note" data-i18n="settings_attachments_purge_desc">Deletes all saved attachment folders. Folders of running sessions are kept.</div>
           <div class="settings-note" data-i18n="settings_applies_on_restart">Applied on next start</div>
         </div>
       </details>
@@ -487,6 +497,16 @@
           </div>
         </div>
       </details>
+      <details class="settings-section" data-section="mobile">
+        <summary class="settings-section-title"><span data-i18n="settings_mobile_title">スマホ表示</span></summary>
+        <div class="settings-section-body">
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_mobile_input_tools">入力補助ツールを表示</span>
+            <input type="checkbox" id="mobile-input-tools-enabled" class="settings-checkbox">
+          </div>
+          <div class="settings-note" data-i18n="settings_mobile_input_tools_desc">スマホなど狭い画面で、入力欄の /clear・/model・/ ▾・⌫ ボタンを表示します。OFF で省スペースになります（PC では常に表示）。</div>
+        </div>
+      </details>
       <details class="settings-section" data-section="usage-links">
         <summary class="settings-section-title"><span data-i18n="settings_usage_links_title">Usage Links</span></summary>
         <div class="settings-section-body">
@@ -568,7 +588,6 @@
       <div id="new-session-panel" hidden>
         <div class="new-session-form">
           <div class="spawn-provider-row">
-            <span id="spawn-provider-icon"></span>
             <select id="spawn-provider" class="spawn-select spawn-provider-native" aria-hidden="true" tabindex="-1">
               <option value="claude">Claude Code</option>
               <option value="codex">Codex CLI</option>

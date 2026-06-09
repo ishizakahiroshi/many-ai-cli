@@ -188,6 +188,12 @@ export async function doSend(sessionId) {
   if (_tp && textEndsWithTriggerPhrase(rawText, _tp)) {
     rawText = stripTrailingTriggerPhrase(rawText, _tp);
   }
+  // 外部クリップボードからのペーストは CRLF(\r\n) を保持する。ブラケットペースト
+  // 本体に生の \r が残ると、内側 CLI（Claude Code 等）が paste 内の \r を確定キーと
+  // 誤解し、末尾に付与した本来の確定 \r が無効化されて入力欄に残る（pasted text が
+  // 実行されない）。確定はこちらが末尾に付ける \r のみが担うべきなので、本文中の CR は
+  // すべて LF に正規化する。入力欄で打った複数行は元々 \n のみなので影響を受けない。
+  rawText = rawText.replace(/\r\n?/g, '\n');
   // 改行を含む場合はブラケットペーストモードでラップ（\n が途中 Enter と解釈されるのを防ぐ）
   // ブラケットペーストはテキスト部分のみに適用し、injectPrefix は前置する
   let textPart;
@@ -1160,6 +1166,64 @@ inputEl.addEventListener('blur', (e) => {
         showToast(t('settings_history_reset_failed'), sessionStoreResetBtn);
       } finally {
         sessionStoreResetBtn.disabled = false;
+      }
+    });
+  }
+
+  const logsPurgeBtn = document.getElementById('logs-purge-btn');
+  if (logsPurgeBtn) {
+    logsPurgeBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const ok = await appConfirm({
+        title: t('settings_logs_purge_confirm_title'),
+        message: t('settings_logs_purge_confirm_message'),
+        confirmText: t('settings_history_reset_confirm_run'),
+        cancelText: t('confirm_cancel'),
+        kind: 'danger',
+      });
+      if (!ok) return;
+      logsPurgeBtn.disabled = true;
+      try {
+        const res = await fetch(`/api/logs/purge?token=${token}`, { method: 'POST' });
+        if (!res.ok) {
+          showToast(t('settings_logs_purge_failed'), logsPurgeBtn);
+          return;
+        }
+        resetAllLocalSessionHistory();
+        showToast(t('settings_logs_purge_done'), logsPurgeBtn);
+        window.dispatchEvent(new CustomEvent('workbench-session-store-reset'));
+      } catch (_) {
+        showToast(t('settings_logs_purge_failed'), logsPurgeBtn);
+      } finally {
+        logsPurgeBtn.disabled = false;
+      }
+    });
+  }
+
+  const attachmentsPurgeBtn = document.getElementById('attachments-purge-btn');
+  if (attachmentsPurgeBtn) {
+    attachmentsPurgeBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const ok = await appConfirm({
+        title: t('settings_attachments_purge_confirm_title'),
+        message: t('settings_attachments_purge_confirm_message'),
+        confirmText: t('settings_history_reset_confirm_run'),
+        cancelText: t('confirm_cancel'),
+        kind: 'danger',
+      });
+      if (!ok) return;
+      attachmentsPurgeBtn.disabled = true;
+      try {
+        const res = await fetch(`/api/attachments/purge?token=${token}`, { method: 'POST' });
+        if (!res.ok) {
+          showToast(t('settings_attachments_purge_failed'), attachmentsPurgeBtn);
+          return;
+        }
+        showToast(t('settings_attachments_purge_done'), attachmentsPurgeBtn);
+      } catch (_) {
+        showToast(t('settings_attachments_purge_failed'), attachmentsPurgeBtn);
+      } finally {
+        attachmentsPurgeBtn.disabled = false;
       }
     });
   }
