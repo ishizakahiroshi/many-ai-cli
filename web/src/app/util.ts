@@ -54,7 +54,7 @@ export function getToastAnchorRect(anchor: ToastAnchor): DOMRect | { left: numbe
   return null;
 }
 
-export function showToast(msg: string, anchor?: ToastAnchor): void {
+export function showToast(msg: string, anchor?: ToastAnchor, durationMs = 1800): void {
   let el = document.getElementById('toast');
   if (!el) {
     el = document.createElement('div');
@@ -83,7 +83,7 @@ export function showToast(msg: string, anchor?: ToastAnchor): void {
   }
   el.classList.add('show');
   if (_toastTimer) clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => { el.classList.remove('show'); el.classList.remove('toast--anchored'); }, 1800);
+  _toastTimer = setTimeout(() => { el.classList.remove('show'); el.classList.remove('toast--anchored'); }, durationMs);
 }
 
 // i18n フォールバックヘルパ: t() がキー文字列をそのまま返した（未登録）場合に

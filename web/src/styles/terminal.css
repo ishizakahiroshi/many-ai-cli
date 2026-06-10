@@ -5,7 +5,7 @@
 #terminal-column { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
 
 /* ターミナルラッパー */
-/* padding-bottom: token-statusbar の高さ分（fixed 要素が attach-panel に被るのを防ぐ） */
+/* padding-bottom: token-statusbar の高さ分（ターミナル出力最終行が fixed バーに隠れるのを防ぐ） */
 #terminal-wrapper { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; padding-bottom: var(--tsb-bottom-offset, 22px); }
 
 /* ドラッグオーバーレイ */
@@ -121,8 +121,8 @@
 
 
 /* Input bar / terminal adjacent panels */
-/* 入力バー外枠 */
-#input-bar-outer { position: relative; flex-shrink: 0; }
+/* 入力バー外枠 — padding-bottom: token-statusbar の高さ分（fixed 要素が attach-panel に被るのを防ぐ） */
+#input-bar-outer { position: relative; flex-shrink: 0; padding-bottom: var(--tsb-bottom-offset, 22px); }
 
 #mobile-keyboard-panel {
   display: none;

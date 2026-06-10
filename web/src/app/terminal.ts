@@ -918,6 +918,8 @@ export const hubMarkerBytePatterns = [
   new TextEncoder().encode('[/ANY-AI-CLI]'),
 ];
 export const hubMarkerEndBytes = hubMarkerBytePatterns[1];
+export const hubDoneMarkerOpen = new TextEncoder().encode('[ANY-AI-CLI-DONE]');
+export const hubDoneMarkerClose = new TextEncoder().encode('[/ANY-AI-CLI-DONE]');
 export const eraseDisplayBelowBytes = new TextEncoder().encode('\x1b[J');
 export const screenClearSeqBytePatterns = [
   asciiBytes('\x1b[2J'),
@@ -943,15 +945,20 @@ export function bytesStartWith(bytes, offset, pattern) {
   return true;
 }
 
-export function isPossibleMarkerPrefix(bytes, offset) {
+function isPossiblePrefix(bytes, offset, patterns) {
   const remaining = bytes.length - offset;
-  return hubMarkerBytePatterns.some((pattern) => {
+  return patterns.some((pattern) => {
     if (remaining >= pattern.length) return false;
     for (let i = 0; i < remaining; i++) {
       if (bytes[offset + i] !== pattern[i]) return false;
     }
     return true;
   });
+}
+
+export function isPossibleMarkerPrefix(bytes, offset) {
+  return isPossiblePrefix(bytes, offset, hubMarkerBytePatterns) ||
+    isPossiblePrefix(bytes, offset, [hubDoneMarkerOpen]);
 }
 
 export function filterHubMarkersForDisplay(id, bytes) {
@@ -964,7 +971,27 @@ export function filterHubMarkersForDisplay(id, bytes) {
 
   const out = [];
   let i = 0;
+  let inDone = t.inDoneBlock || false;
+
   while (i < combined.length) {
+    if (inDone) {
+      if (bytesStartWith(combined, i, hubDoneMarkerClose)) {
+        i += hubDoneMarkerClose.length;
+        inDone = false;
+        for (const b of eraseDisplayBelowBytes) out.push(b);
+        continue;
+      }
+      if (isPossiblePrefix(combined, i, [hubDoneMarkerClose])) break;
+      i++;
+      continue;
+    }
+
+    if (bytesStartWith(combined, i, hubDoneMarkerOpen)) {
+      i += hubDoneMarkerOpen.length;
+      inDone = true;
+      continue;
+    }
+
     const marker = hubMarkerBytePatterns.find(pattern => bytesStartWith(combined, i, pattern));
     if (marker) {
       i += marker.length;
@@ -979,6 +1006,7 @@ export function filterHubMarkersForDisplay(id, bytes) {
   }
 
   t.markerFilterCarry = combined.slice(i);
+  t.inDoneBlock = inDone;
   return new Uint8Array(out);
 }
 
