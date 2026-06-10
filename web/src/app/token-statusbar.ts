@@ -2,7 +2,8 @@
 //
 // 表示対象: アクティブセッション 1 件分のみ。
 // provider 差分:
-//   - claude: $ cost / model / ⏱ 経過時間
+//   - claude: tok ↑in ↓out / $ cost / model / ⏱ 経過時間
+//     （tok は現在のコンテキストウィンドウ使用量。セッション累積ではない）
 //   - codex:  tok ↑in ↓out / $ cost / model / ⏱ 経過時間
 //   - copilot / cursor-agent: model / ⏱ 経過時間 / project のみ
 // 未取得セグメントは DOM から非表示にしてレイアウト崩れを防ぐ。
@@ -143,11 +144,11 @@ export function renderStatusbar(): void {
     }
   }
 
-  // ---- tok セグメント（Codex のみ）----
+  // ---- tok セグメント（Claude / Codex）----
   const tokEl = bar.querySelector<HTMLElement>('.tsb-seg-tok');
   if (tokEl) {
     // provider 値で判定（モデル名文字列には依存しない）
-    if (provider === 'codex' && entry) {
+    if ((provider === 'codex' || provider === 'claude') && entry) {
       const inStr  = formatTok(entry.tokensIn);
       const outStr = formatTok(entry.tokensOut);
       tokEl.textContent = `tok ↑${inStr} ↓${outStr}`;

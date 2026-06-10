@@ -131,6 +131,49 @@ func TestDetectNativeApprovalCursorAgentShortcut(t *testing.T) {
 	}
 }
 
+func TestDetectNativeApprovalClaudeModelSelector(t *testing.T) {
+	// Claude Code の /model セレクタ（実機ログ claude_2026-06-11_051610_mer_s1 より）。
+	// 選択肢ラベルに承認語（yes/no/allow 等）を含まないセレクタ型ダイアログ。
+	lines := []string{
+		"Select model",
+		"Switch between Claude models. Your pick becomes the default for new sessions.",
+		"",
+		"  1. Default (recommended)  Opus 4.8 with 1M context · Best for everyday, complex tasks",
+		"❯ 2. Fable ✔  Fable 5 · Most capable for your hardest and longest-running tasks",
+		"  3. Sonnet  Sonnet 4.6 · Efficient for routine tasks",
+		"  4. Haiku  Haiku 4.5 · Fastest for quick answers",
+		"",
+		"◐ Medium effort  ←/→ to adjust  Enter to set as default · s to use this session only · Esc to cancel",
+	}
+	got := detectNativeApproval("claude", lines)
+	if got == nil {
+		t.Fatal("detectNativeApproval returned nil")
+	}
+	if got.Kind != "native" {
+		t.Fatalf("kind = %q", got.Kind)
+	}
+	if len(got.Options) != 4 {
+		t.Fatalf("options len = %d (%+v)", len(got.Options), got.Options)
+	}
+	if !got.Options[1].IsCurrent {
+		t.Fatalf("option 2 should be current: %+v", got.Options[1])
+	}
+}
+
+func TestDetectNativeApprovalSelectorRequiresKeyHints(t *testing.T) {
+	// セレクタ許容はキー操作ヒント行（Enter to ... + Esc to cancel）が揃う場合のみ。
+	// ヒントなしのカーソル付き番号リスト（AI 応答の箇条書き等）は引き続き拒否する。
+	lines := []string{
+		"Pick one of the following:",
+		"❯ 1. First plan",
+		"  2. Second plan",
+		"  3. Third plan",
+	}
+	if got := detectNativeApproval("claude", lines); got != nil {
+		t.Fatalf("detectNativeApproval = %+v, want nil", got)
+	}
+}
+
 func TestDetectNativeApprovalFalsePositiveNumberedList(t *testing.T) {
 	lines := []string{
 		"Implementation plan:",
