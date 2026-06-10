@@ -37,6 +37,7 @@ export const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds'
 export const STORAGE_VOICE_INPUT_DISABLED_KEY = 'ai_cli_hub_voice_input_disabled';
 export const STORAGE_VOICE_ENGINE_KEY         = 'anyai.voiceEngine';
 export const STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY = 'anyai.voiceWhisperAutoSubmit';
+export const STORAGE_VOICE_WHISPER_AUTO_STOP_KEY = 'anyai.voiceWhisperAutoStop';
 export const STORAGE_DISPLAY_LOCKED_MODE_KEY  = 'ai_cli_hub_display_locked_mode';
 export const DEFAULT_VOICE_GRACE_SEC          = 0;
 export const STORAGE_WAKE_WORD_ENABLED_KEY    = 'ai_cli_hub_wake_word_enabled';

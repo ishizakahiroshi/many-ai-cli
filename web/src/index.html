@@ -361,6 +361,14 @@
               <div id="voice-whisper-managed-note" class="settings-note"></div>
             </div>
             <div class="settings-row">
+              <span class="settings-label" data-i18n="settings_voice_whisper_auto_stop">終了検知</span>
+              <label class="approval-toggle">
+                <input type="checkbox" id="voice-whisper-auto-stop">
+                <span class="approval-toggle-slider"></span>
+              </label>
+            </div>
+            <div class="settings-note" data-i18n="settings_voice_whisper_auto_stop_desc">発話後に無音が約2秒続いたら録音を自動で確定し、認識を開始します。OFF の場合は確定ボタンを押すまで録音を続けます。</div>
+            <div class="settings-row">
               <span class="settings-label" data-i18n="settings_voice_whisper_auto_submit">自動送信トリガー</span>
               <label class="approval-toggle">
                 <input type="checkbox" id="voice-whisper-auto-submit">

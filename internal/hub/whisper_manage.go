@@ -273,6 +273,28 @@ func (s *Server) handleWhisperStart(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
+	var req whisperInstallRequest
+	if err := handleJSONDecode(r, &req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid json")
+		return
+	}
+	if reqModel := strings.TrimSpace(req.Model); reqModel != "" {
+		model, ok := whisperModelByID(reqModel)
+		if !ok {
+			writeJSONError(w, http.StatusBadRequest, "whisper_bad_model", "unknown Whisper model "+reqModel)
+			return
+		}
+		s.cfgMu.Lock()
+		changed := s.cfg.Voice.Whisper.Model != model.ID
+		s.cfg.Voice.Whisper.Model = model.ID
+		s.cfgMu.Unlock()
+		if changed {
+			if err := s.persistConfig(); err != nil {
+				writeJSONError(w, http.StatusInternalServerError, "save_failed", err.Error())
+				return
+			}
+		}
+	}
 	if _, err := s.ensureManagedWhisper(r.Context()); err != nil {
 		var proxyErr whisperProxyError
 		if errors.As(err, &proxyErr) {
