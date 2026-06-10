@@ -22,7 +22,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -53,16 +52,28 @@ func Run(args []string) error {
 // Claude モード
 // ---------------------------------------------------------------------------
 //
-// Claude statusLine は次の JSON を stdin に渡す（実機確認済みフィールド抜粋）:
+// Claude statusLine は次の JSON を stdin に渡す（公式ドキュメント
+// https://code.claude.com/docs/en/statusline.md で確認済みのフィールド抜粋）:
 //
 //	{
 //	  "model": { "display_name": "claude-opus-4-5-20251101" },
 //	  "cost": { "total_cost_usd": 0.18, "total_duration_ms": 42000 },
+//	  "context_window": {
+//	    "total_input_tokens": 15500,
+//	    "total_output_tokens": 1200,
+//	    "current_usage": {
+//	      "cache_creation_input_tokens": 5000,
+//	      "cache_read_input_tokens": 2000
+//	    }
+//	  },
 //	  "workspace": { "project": "..." }
 //	}
 //
-// relay は cost.total_cost_usd / model.display_name / cost.total_duration_ms を
-// 取り出して Hub へ POST し、stdout には最小限のステータス行を返す。
+// context_window は「現在のコンテキストウィンドウの使用量」（最新 API 応答時点）。
+// Claude Code v2.1.132 以降はセッション累積値ではない点に注意。
+//
+// relay は cost / model / context_window のトークン数を取り出して Hub へ POST し、
+// stdout には最小限のステータス行を返す。
 // （CLI ターミナルの statusLine 表示に使われる。短く 1 行で返すこと）
 
 type claudeStatusLineInput struct {
@@ -73,6 +84,14 @@ type claudeStatusLineInput struct {
 		TotalCostUSD    float64 `json:"total_cost_usd"`
 		TotalDurationMs float64 `json:"total_duration_ms"`
 	} `json:"cost"`
+	ContextWindow struct {
+		TotalInputTokens  int `json:"total_input_tokens"`
+		TotalOutputTokens int `json:"total_output_tokens"`
+		CurrentUsage      struct {
+			CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+			CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+		} `json:"current_usage"`
+	} `json:"context_window"`
 }
 
 func runClaude(hubURL, token string, sessionID int, stdin io.Reader, stdout io.Writer, logger *slog.Logger) error {
@@ -83,13 +102,6 @@ func runClaude(hubURL, token string, sessionID int, stdin io.Reader, stdout io.W
 		return nil
 	}
 
-	// デバッグ: stdin の生 JSON を ~/.any-ai-cli/statusline-debug.json に書き出す。
-	// トークンフィールド名確認後に削除する。
-	if home, err2 := os.UserHomeDir(); err2 == nil {
-		dumpPath := filepath.Join(home, ".any-ai-cli", "statusline-debug.json")
-		_ = os.WriteFile(dumpPath, raw, 0o600)
-	}
-
 	var input claudeStatusLineInput
 	if err := json.Unmarshal(raw, &input); err != nil {
 		logger.Warn("usage-relay(claude): JSON parse failed", "err", err)
@@ -98,10 +110,14 @@ func runClaude(hubURL, token string, sessionID int, stdin io.Reader, stdout io.W
 
 	modelName := input.Model.DisplayName
 	costUSD := input.Cost.TotalCostUSD
+	tokIn := input.ContextWindow.TotalInputTokens
+	tokOut := input.ContextWindow.TotalOutputTokens
+	tokCache := input.ContextWindow.CurrentUsage.CacheCreationInputTokens +
+		input.ContextWindow.CurrentUsage.CacheReadInputTokens
 
 	// stdout に最小限のステータス行を返す（CLI ターミナル側の statusLine 表示）。
-	// "$ <cost>  <model>" の形式。trim して 1 行のみ。
-	statusLine := fmt.Sprintf("$%.4f  %s", costUSD, modelName)
+	// "$ <cost>  <model>  ↑in ↓out" の形式。trim して 1 行のみ。
+	statusLine := fmt.Sprintf("$%.4f  %s  ↑%s ↓%s", costUSD, modelName, formatTokens(tokIn), formatTokens(tokOut))
 	_, _ = fmt.Fprintln(stdout, statusLine)
 
 	// Hub へ数値メタのみを POST する。
@@ -112,6 +128,10 @@ func runClaude(hubURL, token string, sessionID int, stdin io.Reader, stdout io.W
 			CostUSD:       costUSD,
 			CostFromRelay: true, // Claude は計算済みコストを送る
 			Model:         modelName,
+			TokensIn:      tokIn,
+			TokensOut:     tokOut,
+			TokensCache:   tokCache,
+			TokensTotal:   tokIn + tokOut,
 			StartedAt:     time.Now().Format(time.RFC3339),
 		}
 		if err := postUsage(hubURL, token, payload, logger); err != nil {
@@ -119,6 +139,19 @@ func runClaude(hubURL, token string, sessionID int, stdin io.Reader, stdout io.W
 		}
 	}
 	return nil
+}
+
+// formatTokens はトークン数を k / M 単位の短い文字列にする
+// （フロント token-statusbar.ts の formatTok と同じ表記）。
+func formatTokens(n int) string {
+	switch {
+	case n >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	case n >= 1_000:
+		return fmt.Sprintf("%.1fk", float64(n)/1_000)
+	default:
+		return fmt.Sprintf("%d", n)
+	}
 }
 
 // ---------------------------------------------------------------------------

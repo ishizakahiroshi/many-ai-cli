@@ -10,8 +10,11 @@ import { scheduleApprovalCheck } from './approval.js';
 import { handleCrunchLinkClick } from './expand-popup.js';
 import { resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
 
-// Claude Code の折りたたみマーカー: "… +23 lines (ctrl+o to expand)"
-const CRUNCH_LINK_RE = /[…\.]{1,3}\s*\+\d+\s*lines?\s*\(ctrl\+o to expand\)/gi;
+// Claude Code の折りたたみマーカー: "… +23 lines (ctrl+o to expand)"。
+// サブエージェント実行行・ツール要約行は "+N lines" 無しで "(ctrl+o to expand)" 単独で
+// 出るため（例: "Done (5 tool uses · 43.9k tokens · 32s)" 直下、"Read 2 files (ctrl+o to expand)"）、
+// プレフィックスはオプションにして単独マーカーも拾う。
+const CRUNCH_LINK_RE = /(?:[…\.]{1,3}\s*\+\d+\s*lines?\s*)?\(ctrl\+o to expand\)/gi;
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 

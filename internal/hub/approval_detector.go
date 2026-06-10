@@ -383,6 +383,19 @@ func nativeApprovalLooksValid(provider string, contextLines []string, opts []pro
 	if providerSupportsShortcutApproval(provider) && approvalOptionsHaveSendText(opts) {
 		return hasHint
 	}
+	// Claude Code の /model 等のセレクタ型ダイアログは、選択肢ラベルが
+	// "Default" / "Fable" / "Sonnet" のようにモデル名等であり承認語を含まない。
+	// hasApprovalLabel を要求すると検出されず action-bar が出ないため、
+	// ユーザーが /model を再送 → その Enter が開いたままのダイアログを即確定する
+	// 事故が起きる。
+	// カーソル付き選択肢 + キー操作ヒント行（"Enter to ..." と "Esc to cancel" の併記）が
+	// 揃う場合はセレクタ UI とみなし、承認語ラベルなしでも許容する。
+	isSelectorDialog := approvalOptionsHaveCursor(opts) &&
+		strings.Contains(context, "esc to cancel") &&
+		strings.Contains(context, "enter to")
+	if isSelectorDialog {
+		return true
+	}
 	return hasHint && hasApprovalLabel
 }
 
