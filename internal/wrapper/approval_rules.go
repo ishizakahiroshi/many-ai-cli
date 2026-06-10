@@ -12,7 +12,7 @@ import (
 const claudeImportLine = "@~/.any-ai-cli/approval-rules.md"
 const sharedBlockStart = "<!-- any-ai-cli:approval-rules -->"
 const sharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
-const rulesVersion = "7"
+const rulesVersion = "8"
 
 var rulesFileContent = strings.Join([]string{
 	fmt.Sprintf("<!-- version: %s -->", rulesVersion),
@@ -76,6 +76,19 @@ var rulesFileContent = strings.Join([]string{
 	"  - ユーザーが手入力した場合は「2 5」のような質問順の数字列 1 行のこともある。行頭の数字が質問番号として解釈できない場合はこちらとみなす",
 	"",
 	"- [ANY-AI-CLI] マーカーは確認・承認の質問にのみ使用する",
+	"",
+	"## any-ai-cli Done Summary Format",
+	"",
+	"**タスクが完了した直後（AI の返答末尾）に以下のマーカーを出力してください。**",
+	"",
+	"- 出力形式:",
+	"  [ANY-AI-CLI-DONE] <1〜2 文の完了サマリー> [/ANY-AI-CLI-DONE]",
+	"",
+	"- 条件: `ANY_AI_CLI=1` の場合のみ出力する（承認マーカーと同じ確認済みの値を使用）。",
+	"- サマリーは「何を完了したか」を端的に 1〜2 文で記述する。例:",
+	"  [ANY-AI-CLI-DONE] files タブの検索バグを修正し、テストを追加しました。 [/ANY-AI-CLI-DONE]",
+	"- マーカーは 1 ターン 1 回のみ、返答の末尾に出力する。",
+	"- 通常の会話・質問への回答・作業途中には出力しない（タスク完了時のみ）。",
 	"",
 }, "\n")
 

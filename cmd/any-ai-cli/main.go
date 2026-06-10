@@ -19,6 +19,7 @@ import (
 	"any-ai-cli/internal/sessionlog"
 	"any-ai-cli/internal/shell"
 	"any-ai-cli/internal/uninstall"
+	"any-ai-cli/internal/usagerelay"
 	"any-ai-cli/internal/wrapper"
 )
 
@@ -208,6 +209,10 @@ func run(args []string) error {
 		return wrapper.Run(cfg, logger, args[1], args[2:])
 	case "claude", "codex", "copilot", "cursor-agent":
 		return wrapper.Run(cfg, logger, cmd, args[1:])
+	case "usage-relay":
+		// 隠しサブコマンド: Claude statusLine / Codex Stop フックから呼び出される。
+		// usage() ヘルプには載せない。
+		return usagerelay.Run(args[1:])
 	case "-h", "--help", "help":
 		return usage()
 	default:

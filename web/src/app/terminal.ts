@@ -51,7 +51,7 @@ function addSelectionToInput(text, opts: any = {}) {
 // （タイトルバー・余白・背景）でのホイールは xterm が拾って背後の端末がスクロールしてしまう。
 // xterm 側でホイールを無視させることで、どの経路で来ても背後の端末が動かないようにする。
 function isModalOverlayOpen() {
-  const ids = ['settings-panel', 'about-panel', 'model-picker-overlay', 'new-session-panel', 'slash-picker', 'attach-panel'];
+  const ids = ['settings-panel', 'about-panel', 'model-picker-overlay', 'new-session-panel', 'slash-picker'];
   for (const id of ids) {
     const el = document.getElementById(id);
     if (!el || el.hidden) continue;
@@ -672,6 +672,13 @@ export function getWheelTargetSessionId(target) {
 //    確実に立ててから xterm に伝播させない。
 document.addEventListener('wheel', (e) => {
   if (routeWheelToOpenSettingsPanel(e)) return;
+
+  // モーダル/オーバーレイ（about-panel / model-picker / new-session-panel 等）表示中は、
+  // この document レベルハンドラが背後ターミナルを scrollLines しないよう早期 return する。
+  // settings-panel は上の routeWheelToOpenSettingsPanel が先に処理するのでここに来ても問題ない
+  //（body 内なら return false → ここで早期 return しネイティブスクロールに任せる）。
+  // ここを抜くと、モーダルの非スクロール領域でのホイールが背後 CLI に転送されてしまう。
+  if (isModalOverlayOpen()) return;
 
   // マウスがチャット履歴ペイン上にある場合: 最近傍のスクロール可能要素へ明示スクロール
   if (e.target instanceof Element && e.target.closest('#chat-pane')) {

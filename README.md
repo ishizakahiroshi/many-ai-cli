@@ -565,6 +565,26 @@ The Hub itself stays on `47777` everywhere; only the phone-side listen port diff
 - **Web Push** (if enabled in Settings and subscribed) can still deliver notifications while the tunnel is down — but opening the Hub from a notification requires the tunnel to be reconnected first.
 - The token regenerates when the Hub restarts; if the browser shows 403, fetch the current token again.
 
+### Receiving approval notifications without the tunnel (ntfy / webhook)
+
+Web Push requires a live browser subscription, which drops with the tunnel. **ntfy** is an outbound HTTP push service — the Hub POSTs to the ntfy server, and the ntfy app on your phone receives it. No persistent tunnel needed.
+
+**Setup (ntfy — recommended for simplest experience)**
+
+1. Install the [ntfy app](https://ntfy.sh/) on your phone (iOS / Android, free)
+2. In the Hub Settings panel → **ntfy / webhook notification** → click **Configure...**
+3. Click **+ Add ntfy**; leave the URL as `https://ntfy.sh` (or enter your self-hosted URL)
+4. Click **Generate** next to Topic to create a random private topic name, then click **Save**
+5. In the ntfy app, subscribe to the same topic (`anyaicli-xxxx`)
+6. Click **Send test** to verify the phone receives the notification
+7. Tick **Approval** under Events (default) so the Hub sends a notification on every approval prompt
+
+The Hub token is **never included** in the ntfy payload. The topic name itself is the only shared secret — use a long random string (the Generate button produces one).
+
+**Setup (generic webhook)**
+
+Click **+ Add webhook** and enter any URL that accepts a `POST` request with JSON body `{"title":"...", "body":"..."}`. Examples: Discord webhooks, Slack incoming webhooks, custom relay servers.
+
 ---
 
 ## Launching from a terminal (advanced)

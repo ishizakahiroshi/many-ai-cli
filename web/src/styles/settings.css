@@ -572,6 +572,10 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   border-color: var(--danger);
   color: var(--danger);
   background: color-mix(in srgb, var(--danger-bg) 55%, transparent);
+  /* ヘッダーの「閉じる」ボタン (.settings-header-btn) と同じ寸法に揃える */
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  line-height: 1.5;
 }
 .settings-danger-btn:hover {
   background: var(--danger-bg-hover);

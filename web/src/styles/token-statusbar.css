@@ -1,0 +1,71 @@
+/* token-statusbar.css — 画面最下部固定のトークン/コスト ステータスバー（案1 配色） */
+
+#token-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  background: #1f2335;
+  border-top: 1px solid #292e42;
+  height: 22px;
+  min-height: 22px;
+  font-size: 0.72rem;
+  line-height: 22px;
+  user-select: none;
+  flex-shrink: 0;
+  z-index: 10;
+  /* body 最下部に固定 */
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+}
+
+/* セグメント共通 */
+.tsb-seg {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 8px;
+  height: 100%;
+  border-right: 1px solid #292e42;
+  gap: 4px;
+}
+.tsb-seg:last-child {
+  border-right: none;
+}
+
+/* project(branch): cyan */
+.tsb-seg-project {
+  color: #7dcfff;
+  max-width: 220px;
+}
+
+/* model: green */
+.tsb-seg-model {
+  color: #9ece6a;
+  max-width: 200px;
+}
+
+/* tok ↑in ↓out (Codex): orange */
+.tsb-seg-tok {
+  color: #ff9e64;
+}
+
+/* cost: purple */
+.tsb-seg-cost {
+  color: #bb9af7;
+}
+
+/* elapsed: pink/red */
+.tsb-seg-elapsed {
+  color: #f7768e;
+}
+
+/* 設定 OFF やセッション未選択時は非表示（JS で制御するが念のため） */
+#token-statusbar[hidden] {
+  display: none !important;
+}

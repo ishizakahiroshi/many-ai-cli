@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"any-ai-cli/internal/config"
+	notifyPkg "any-ai-cli/internal/notify"
 	webpush "github.com/SherClockHolmes/webpush-go"
 )
 
@@ -422,6 +423,61 @@ func firstNonEmpty(values ...string) string {
 
 func approvalPushURL(id int) string {
 	return fmt.Sprintf("/?session_id=%d", id)
+}
+
+// notifyApprovalOutbound は ntfy/webhook バックエンドへの承認通知を行う。
+// notifyApprovalPush (Web Push) と同じ引数・同じイベント箇所から呼ばれる。
+func (s *Server) notifyApprovalOutbound(id int, approvalID, provider, question, contextText string) {
+	if s.notifyMgr == nil {
+		return
+	}
+	s.sessionsMu.Lock()
+	ses := s.sessions[id]
+	if ses == nil {
+		s.sessionsMu.Unlock()
+		return
+	}
+	titleName := strings.TrimSpace(ses.Display)
+	if titleName == "" {
+		titleName = strings.TrimSpace(ses.Provider)
+	}
+	if titleName == "" {
+		titleName = "any-ai-cli"
+	}
+	if ses.Label != "" {
+		titleName = fmt.Sprintf("%s #%d [%s]", titleName, id, ses.Label)
+	} else {
+		titleName = fmt.Sprintf("%s #%d", titleName, id)
+	}
+	body := firstNonEmpty(question, contextText, ses.LastMessage, ses.FirstMessage, ses.CWD, "Approval is waiting.")
+	s.sessionsMu.Unlock()
+	body = strings.Join(strings.Fields(body), " ")
+
+	s.notifyMgr.SendApproval(notifyPkg.ApprovalPayload{
+		ID:        approvalID,
+		SessionID: id,
+		Provider:  provider,
+		Title:     titleName,
+		Body:      body,
+	})
+}
+
+// configToNotify は config.NotifyConfig を notify.Config に変換する。
+func configToNotify(cfg config.NotifyConfig) notifyPkg.Config {
+	backends := make([]notifyPkg.BackendConfig, len(cfg.Backends))
+	for i, b := range cfg.Backends {
+		backends[i] = notifyPkg.BackendConfig{
+			Type:  b.Type,
+			URL:   b.URL,
+			Topic: b.Topic,
+		}
+	}
+	events := make([]string, len(cfg.Events))
+	copy(events, cfg.Events)
+	return notifyPkg.Config{
+		Backends: backends,
+		Events:   events,
+	}
 }
 
 func truncateUTF8Bytes(s string, max int) string {

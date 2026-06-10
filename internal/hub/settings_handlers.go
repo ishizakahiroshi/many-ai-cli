@@ -1,10 +1,13 @@
 package hub
 
 import (
+	"context"
 	"net/http"
 	"path/filepath"
+	"time"
 
 	"any-ai-cli/internal/config"
+	notifyPkg "any-ai-cli/internal/notify"
 )
 
 func (s *Server) handleLogConfig(w http.ResponseWriter, r *http.Request) {
@@ -49,6 +52,16 @@ func (s *Server) handleLogConfig(w http.ResponseWriter, r *http.Request) {
 			body.SessionMaxSizeMB = 0
 		} else if body.SessionMaxSizeMB > 10000 {
 			body.SessionMaxSizeMB = 10000
+		}
+		if body.AttachmentRetentionDays < 0 {
+			body.AttachmentRetentionDays = 0
+		} else if body.AttachmentRetentionDays > 365 {
+			body.AttachmentRetentionDays = 365
+		}
+		if body.AttachmentMaxTotalMB < 0 {
+			body.AttachmentMaxTotalMB = 0
+		} else if body.AttachmentMaxTotalMB > 100000 {
+			body.AttachmentMaxTotalMB = 100000
 		}
 		s.cfgMu.Lock()
 		// LegacyLogsNoticeShown はサーバ管理フラグで設定フォームには含まれないため、
@@ -103,6 +116,92 @@ func (s *Server) handleIdleTimeout(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]bool{"ok": true})
 	}
 }
+// handleNotifyConfig は GET/POST で ntfy/webhook 通知設定を読み書きする。
+// POST body: { backends: [...], events: [...] }
+func (s *Server) handleNotifyConfig(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		s.cfgMu.Lock()
+		nc := s.cfg.Notify
+		s.cfgMu.Unlock()
+		writeJSON(w, nc)
+	case http.MethodPost:
+		var body config.NotifyConfig
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		// 簡易バリデーション
+		for _, b := range body.Backends {
+			if b.Type != "ntfy" && b.Type != "webhook" {
+				writeJSONError(w, http.StatusBadRequest, "invalid_type", "backend type must be ntfy or webhook")
+				return
+			}
+		}
+		s.cfgMu.Lock()
+		s.cfg.Notify = body
+		s.cfgMu.Unlock()
+		// notifyMgr の設定を動的反映
+		if s.notifyMgr != nil {
+			s.notifyMgr.UpdateConfig(configToNotify(body))
+		}
+		if err := s.persistConfig(); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "save_failed", errorDetail("save failed", err))
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+	}
+}
+
+// handleNotifyTest は Settings の「テスト送信」ボタン用。
+// POST body: { backend: { type, url, topic } }
+func (s *Server) handleNotifyTest(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodPost) {
+		return
+	}
+	var body struct {
+		Backend config.NotifyBackendConfig `json:"backend"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if body.Backend.Type != "ntfy" && body.Backend.Type != "webhook" {
+		writeJSONError(w, http.StatusBadRequest, "invalid_type", "backend type must be ntfy or webhook")
+		return
+	}
+	bc := notifyPkg.BackendConfig{
+		Type:  body.Backend.Type,
+		URL:   body.Backend.URL,
+		Topic: body.Backend.Topic,
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	if s.notifyMgr == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "notify_unavailable", "notify manager not initialized")
+		return
+	}
+	if err := s.notifyMgr.SendTest(ctx, bc, "any-ai-cli test", "Test notification from any-ai-cli Hub"); err != nil {
+		writeJSONError(w, http.StatusBadGateway, "send_failed", err.Error())
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// handleNotifyGenerateTopic は ntfy トピックのランダム生成 API。
+func (s *Server) handleNotifyGenerateTopic(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodPost) {
+		return
+	}
+	topic, err := notifyPkg.GenerateRandomTopic()
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "generate_failed", err.Error())
+		return
+	}
+	writeJSON(w, map[string]string{"topic": topic})
+}
+
 func (s *Server) handleReconnectGrace(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
 		return

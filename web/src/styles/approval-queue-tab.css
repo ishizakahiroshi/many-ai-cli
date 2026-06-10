@@ -1,0 +1,274 @@
+/* approval-queue-tab.css — 承認キュータブ専用スタイル */
+
+/* ペイン自体の表示制御は display-area mode-approval クラスで行う */
+#display-area.mode-approval #approval-pane {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  height: 100%;
+}
+#display-area:not(.mode-approval) #approval-pane {
+  display: none;
+}
+
+/* 承認タブボタンのバッジ */
+#approval-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--warn);
+  color: #111;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  margin-left: 4px;
+}
+#approval-tab-badge[hidden] { display: none !important; }
+
+/* タブボタン自体の pending 強調（点滅アニメーション） */
+#unified-tab-bar .view-tab[data-tab="approval"].has-pending {
+  color: var(--warn-text);
+}
+@media (prefers-reduced-motion: no-preference) {
+  #unified-tab-bar .view-tab[data-tab="approval"].has-pending #approval-tab-badge {
+    animation: aqt-badge-pulse 1.4s ease-in-out infinite;
+  }
+}
+@keyframes aqt-badge-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+/* ── 承認ペイン内レイアウト ── */
+#approval-pane {
+  padding: 12px;
+  gap: 12px;
+  box-sizing: border-box;
+}
+
+/* 空状態 */
+.aqt-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 12px;
+  padding: 40px 16px;
+  color: var(--muted);
+}
+.aqt-empty-icon {
+  font-size: 2.5rem;
+  color: var(--green);
+  opacity: 0.7;
+}
+.aqt-empty-msg {
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* 承認カード */
+.aqt-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--warn);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.aqt-card.is-active-session {
+  border-left-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-soft);
+}
+
+/* カードヘッダー */
+.aqt-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.aqt-card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.82rem;
+}
+.aqt-provider-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1.5px solid currentColor;
+}
+.aqt-session-id {
+  color: var(--muted);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+.aqt-session-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+/* ターミナルで見るボタン */
+.aqt-go-terminal-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-soft);
+  color: var(--muted);
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.aqt-go-terminal-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* 質問文 */
+.aqt-question {
+  font-size: 0.82rem;
+  color: var(--text-soft);
+  line-height: 1.45;
+}
+.aqt-question--batch {
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 4px;
+}
+.aqt-question--detecting,
+.aqt-question--multiq {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* 選択肢ボタン群 */
+.aqt-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.aqt-option-btn {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev2);
+  color: var(--text-soft);
+  padding: 10px 16px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  min-height: 44px;   /* タッチターゲット 44px 以上（モバイル要件） */
+  line-height: 1.2;
+  text-align: left;
+  word-break: break-word;
+}
+.aqt-option-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.aqt-option-btn.is-current {
+  border-color: color-mix(in srgb, var(--warn) 60%, transparent);
+  background: color-mix(in srgb, var(--warn-bg) 25%, transparent);
+  color: var(--warn-text);
+}
+.aqt-option-btn.chosen {
+  border-color: var(--green);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  color: var(--green);
+}
+.aqt-option-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── C4: スワイプ承認 ── */
+
+/* カードをスワイプ中に translateX が適用される */
+.aqt-card {
+  position: relative;
+  overflow: hidden;    /* オーバーレイがはみ出さないよう */
+  user-select: none;   /* ドラッグ中のテキスト選択を防ぐ */
+  touch-action: pan-y; /* 縦スクロールはデフォルト動作に任せ、横はイベントで処理 */
+}
+
+/* スワイプ方向の視覚フィードバック用オーバーレイ */
+.aqt-swipe-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.08s;
+  z-index: 2;
+}
+.aqt-swipe-overlay--accept {
+  background: color-mix(in srgb, var(--green) 30%, transparent);
+  justify-content: flex-start;
+  padding-left: 20px;
+}
+.aqt-swipe-overlay--reject {
+  background: color-mix(in srgb, var(--red, #f44) 30%, transparent);
+  justify-content: flex-end;
+  padding-right: 20px;
+}
+.aqt-swipe-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* Undo トーストのインラインボタン */
+.aqt-undo-toast-btn {
+  display: inline-block;
+  margin-left: 10px;
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  color: inherit;
+  font-size: 0.8rem;
+  padding: 2px 8px;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.aqt-undo-toast-btn:hover {
+  background: rgba(255,255,255,0.15);
+}
+
+/* ── モバイル最適化 (720px 以下) ── */
+@media (max-width: 720px) {
+  #approval-pane {
+    padding: 8px;
+    gap: 8px;
+  }
+  .aqt-card {
+    padding: 10px 12px;
+  }
+  .aqt-option-btn {
+    width: 100%;
+    min-height: 48px; /* モバイル 48px 以上 */
+    padding: 12px 14px;
+    font-size: 0.9rem;
+  }
+  .aqt-options {
+    flex-direction: column;
+  }
+}

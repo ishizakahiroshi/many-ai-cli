@@ -8,6 +8,7 @@ import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, render
 import { syncElapsedTimer } from './ws-client.js';
 import { setMultiQuestionBannerVisible } from './approval-ui.js';
 import { detectApproval, setActionBarFocus } from './approval.js';
+import { onActiveSessionChanged } from './token-statusbar.js';
 import { rewireChatHistorySub } from './chat-history.js';
 import { FilesTabManager } from './files-view.js';
 
@@ -64,6 +65,7 @@ export function activateSessionForMultiPane(id) {
   if (typeof updateChatCountBadge === 'function') updateChatCountBadge();
   if (typeof renderSessionInfoChip === 'function') renderSessionInfoChip();
   if (typeof syncElapsedTimer === 'function') syncElapsedTimer();
+  onActiveSessionChanged();
 }
 // multi-pane.js から参照できるよう window に公開
 window.activateSessionForMultiPane = activateSessionForMultiPane;
@@ -127,6 +129,7 @@ export function activateSession(id) {
     FilesTabManager.updateSessionTabLabel(label);
   }
   if (typeof syncElapsedTimer === 'function') syncElapsedTimer();
+  onActiveSessionChanged();
   const switchStartedAt = Date.now();
   scrollTerminalToBottomSoon(id, { force: true, passes: 4, startedAt: switchStartedAt });
   requestAnimationFrame(() => {

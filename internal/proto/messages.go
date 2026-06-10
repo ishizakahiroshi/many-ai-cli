@@ -93,6 +93,18 @@ type Message struct {
 	// Hub は replay 時にアクティブセッションは全量、非アクティブは末尾に絞って送信する。
 	// 0 の場合はアクティブセッション不明として扱う。
 	UIActiveSessionID int `json:"ui_active_session_id,omitempty"`
+
+	// usage_stat: Hub → UI。セッション単位の累積トークン / コスト情報。
+	// 数値メタデータのみを持ち、プロンプト本文などは一切含まない。
+	// CostKnown が false の場合はコストが不明（価格表未登録モデル）。表示側は "$ —" とする。
+	CostUSD        float64 `json:"cost_usd,omitempty"`
+	CostKnown      bool    `json:"cost_known,omitempty"`
+	TokensIn       int     `json:"tokens_in,omitempty"`
+	TokensOut      int     `json:"tokens_out,omitempty"`
+	TokensCache    int     `json:"tokens_cache,omitempty"`
+	TokensTotal    int     `json:"tokens_total,omitempty"`
+	UsageModel     string  `json:"usage_model,omitempty"`
+	UsageStartedAt string  `json:"usage_started_at,omitempty"`
 }
 
 type ApprovalOption struct {

@@ -11,6 +11,7 @@ import { providerApprovalTriggers } from './approval.js';
 import { MULTI_SCROLLBACK, getMessages } from './chat-history.js';
 import { FilesTabManager } from './files-view.js';
 import { fetchPushStatus, getPushSubscription, isLikelyIOSBrowserTabWithoutStandalone, pushNotificationsSupported, subscribeWebPush, unsubscribeWebPush } from './pwa.js';
+import { setStatusbarEnabled, isStatusbarEnabled } from './token-statusbar.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -91,6 +92,72 @@ export async function loadApprovalSettings() {
     const data = await res.json();
     updateApprovalToggle(data.enabled);
   } catch (_) {}
+}
+
+// ---- トークン/コスト ステータスバー トグル ----
+
+export function updateTokenStatusbarToggle(enabled: boolean): void {
+  const toggle = document.getElementById('token-statusbar-toggle-input') as HTMLInputElement | null;
+  if (toggle) toggle.checked = enabled;
+  setStatusbarEnabled(enabled);
+}
+
+// 設定パネルのトグルが DOM に存在する時点（パネル open 時）に一度だけ配線する。
+let _tokenStatusbarToggleAttached = false;
+export function attachTokenStatusbarToggle(): void {
+  if (_tokenStatusbarToggleAttached) return;
+  const toggle = document.getElementById('token-statusbar-toggle-input') as HTMLInputElement | null;
+  if (!toggle) return;
+  _tokenStatusbarToggleAttached = true;
+  // 現在値を反映
+  toggle.checked = isStatusbarEnabled();
+  toggle.addEventListener('change', async () => {
+    const enabled = toggle.checked;
+    setStatusbarEnabled(enabled);
+    // /api/user-prefs に保存
+    try {
+      await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token_statusbar: { enabled } }),
+      });
+    } catch (_) {}
+  });
+}
+
+// ---- タスク完了サマリー通知トグル ----
+
+export function updateDoneSummaryNotifyToggle(enabled: boolean): void {
+  const toggle = document.getElementById('done-summary-notify-toggle') as HTMLInputElement | null;
+  if (toggle) toggle.checked = enabled;
+}
+
+let _doneSummaryNotifyToggleAttached = false;
+export function attachDoneSummaryNotifyToggle(): void {
+  if (_doneSummaryNotifyToggleAttached) return;
+  const toggle = document.getElementById('done-summary-notify-toggle') as HTMLInputElement | null;
+  if (!toggle) return;
+  _doneSummaryNotifyToggleAttached = true;
+  // 現在値をサーバから読んで反映
+  (async () => {
+    try {
+      const res = await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`);
+      if (res.ok) {
+        const data = await res.json();
+        toggle.checked = !!(data?.done_summary_notify?.enabled);
+      }
+    } catch (_) {}
+  })();
+  toggle.addEventListener('change', async () => {
+    const enabled = toggle.checked;
+    try {
+      await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ done_summary_notify: { enabled } }),
+      });
+    } catch (_) {}
+  });
 }
 
 // ---- グローバルカスタムツールチップ（遅延なし） ----
@@ -1860,7 +1927,7 @@ export const sessionViewMode = new Map(); // sid -> 'terminal' | 'chat' | 'split
 // Files/Git の遅延ロード状態 (sid -> Set<'files'|'git'>)
 export const sessionLazyLoaded = new Map();
 
-export const VALID_TAB_NAMES = new Set(['terminal', 'chat', 'split', 'files', 'git', 'workbench', 'multi']);
+export const VALID_TAB_NAMES = new Set(['terminal', 'chat', 'split', 'files', 'git', 'workbench', 'multi', 'approval']);
 // C5: lock の対象モード (Files/Git は lock 対象外: D10 の lazy 読み込みと相性が悪い)
 export const LOCKABLE_MODES = new Set(['terminal', 'chat', 'split']);
 export const RESPONSIVE_WIDE_MODE_MIN = 1001;
@@ -2052,7 +2119,7 @@ export function setActiveTab(sid, name) {
       }
     }
     area.hidden = false;
-    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-workbench');
+    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-workbench', 'mode-approval');
     area.classList.add('mode-workbench');
     document.querySelectorAll('#unified-tab-bar .view-tab').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === 'workbench');
@@ -2062,6 +2129,42 @@ export function setActiveTab(sid, name) {
     }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('workbench-opened'));
+    }
+    return;
+  }
+
+  // 承認タブ: セッション非依存のビュー（workbench と同様の扱い）
+  if (name === 'approval') {
+    const area = document.getElementById('display-area');
+    if (!area) return;
+    const multiView = document.getElementById('multi-view');
+    const mgr = window.multiPaneManager;
+    const prevMultiOpen = (multiView && !multiView.hidden);
+    if (multiView) multiView.hidden = true;
+    if (mgr && mgr.picker) mgr.picker.hide();
+    if (prevMultiOpen && mgr) {
+      mgr.teardown();
+      sessions.forEach(s => {
+        const t = terminals.get(s.id);
+        if (t && t.term) {
+          try { t.term.options.scrollback = TERMINAL_SCROLLBACK_LINES; } catch (_) {}
+        }
+      });
+      if (activeSessionId !== null && activeSessionId !== undefined) {
+        attachTerminal(activeSessionId);
+      }
+    }
+    area.hidden = false;
+    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-workbench', 'mode-approval');
+    area.classList.add('mode-approval');
+    document.querySelectorAll('#unified-tab-bar .view-tab').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === 'approval');
+    });
+    if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('session-view-mode-changed', {
+        detail: { sid: activeSessionId, name },
+      }));
     }
     return;
   }
@@ -2317,6 +2420,186 @@ window.addEventListener('files-tab-state-changed', () => {
   } catch (_) {}
 });
 
+
+// ---- ntfy / webhook 通知設定 ----
+(function () {
+  const toggleBtn = document.getElementById('ntfy-settings-toggle-btn');
+  const block = document.getElementById('ntfy-settings-block') as HTMLDivElement | null;
+  const backendsList = document.getElementById('ntfy-backends-list');
+  const addNtfyBtn = document.getElementById('ntfy-add-ntfy-btn');
+  const addWebhookBtn = document.getElementById('ntfy-add-webhook-btn');
+  const eventApprovalEl = document.getElementById('ntfy-event-approval') as HTMLInputElement | null;
+  const eventDoneEl = document.getElementById('ntfy-event-done') as HTMLInputElement | null;
+  const saveBtn = document.getElementById('ntfy-save-btn');
+  const saveStatus = document.getElementById('ntfy-save-status');
+  if (!toggleBtn || !block || !backendsList || !saveBtn) return;
+
+  type Backend = { type: string; url: string; topic: string };
+  let backends: Backend[] = [];
+
+  toggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    block.hidden = !block.hidden;
+    if (!block.hidden) loadNotifyConfig();
+  });
+
+  async function loadNotifyConfig() {
+    try {
+      const res = await fetch(`/api/notify-config?token=${encodeURIComponent(token || '')}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      backends = Array.isArray(data.backends) ? data.backends.map((b: any) => ({
+        type: b.type || 'ntfy',
+        url: b.url || '',
+        topic: b.topic || '',
+      })) : [];
+      if (eventApprovalEl || eventDoneEl) {
+        const events: string[] = Array.isArray(data.events) ? data.events : [];
+        if (eventApprovalEl) {
+          eventApprovalEl.checked = events.length === 0 || events.some((e: string) => e === 'approval');
+        }
+        if (eventDoneEl) {
+          eventDoneEl.checked = events.some((e: string) => e === 'done');
+        }
+      }
+      renderBackends();
+    } catch (_) {}
+  }
+
+  function renderBackends() {
+    backendsList.innerHTML = '';
+    backends.forEach((b, i) => {
+      const row = document.createElement('div');
+      row.className = 'ntfy-backend-row';
+      row.style.cssText = 'display:flex;flex-direction:column;gap:4px;border:1px solid var(--border-color,#ccc);border-radius:4px;padding:6px 8px;margin-bottom:6px';
+
+      const header = document.createElement('div');
+      header.style.cssText = 'display:flex;align-items:center;gap:6px;';
+      const typeBadge = document.createElement('span');
+      typeBadge.textContent = b.type.toUpperCase();
+      typeBadge.style.cssText = 'font-size:0.75em;background:var(--accent-bg,#e0e0e0);padding:1px 6px;border-radius:3px;';
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'settings-link-btn';
+      removeBtn.textContent = '✕';
+      removeBtn.style.cssText = 'margin-left:auto;color:var(--danger-color,#c00);';
+      removeBtn.title = t('settings_ntfy_remove_backend') || 'Remove';
+      removeBtn.addEventListener('click', () => { backends.splice(i, 1); renderBackends(); });
+      header.appendChild(typeBadge);
+      header.appendChild(removeBtn);
+
+      const urlRow = document.createElement('div');
+      urlRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
+      const urlLabel = document.createElement('span');
+      urlLabel.textContent = 'URL';
+      urlLabel.style.cssText = 'font-size:0.82em;min-width:52px;';
+      const urlInput = document.createElement('input');
+      urlInput.type = 'url';
+      urlInput.value = b.url;
+      urlInput.placeholder = b.type === 'ntfy' ? 'https://ntfy.sh' : 'https://...';
+      urlInput.className = 'settings-input-url';
+      urlInput.style.cssText = 'flex:1;font-size:0.85em;';
+      urlInput.addEventListener('input', () => { backends[i].url = urlInput.value; });
+      urlRow.appendChild(urlLabel);
+      urlRow.appendChild(urlInput);
+
+      row.appendChild(header);
+      row.appendChild(urlRow);
+
+      if (b.type === 'ntfy') {
+        const topicRow = document.createElement('div');
+        topicRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
+        const topicLabel = document.createElement('span');
+        topicLabel.textContent = t('settings_ntfy_topic') || 'Topic';
+        topicLabel.style.cssText = 'font-size:0.82em;min-width:52px;';
+        const topicInput = document.createElement('input');
+        topicInput.type = 'text';
+        topicInput.value = b.topic || '';
+        topicInput.placeholder = 'anyaicli-xxxx';
+        topicInput.className = 'settings-input-url';
+        topicInput.style.cssText = 'flex:1;font-size:0.85em;';
+        topicInput.addEventListener('input', () => { backends[i].topic = topicInput.value; });
+        const genBtn = document.createElement('button');
+        genBtn.className = 'settings-link-btn';
+        genBtn.textContent = t('settings_ntfy_generate_topic') || '自動生成';
+        genBtn.addEventListener('click', async () => {
+          try {
+            const res = await fetch(`/api/notify-generate-topic?token=${encodeURIComponent(token || '')}`, { method: 'POST' });
+            if (!res.ok) return;
+            const data = await res.json();
+            backends[i].topic = data.topic || '';
+            topicInput.value = backends[i].topic;
+          } catch (_) {}
+        });
+        topicRow.appendChild(topicLabel);
+        topicRow.appendChild(topicInput);
+        topicRow.appendChild(genBtn);
+        row.appendChild(topicRow);
+      }
+
+      const testRow = document.createElement('div');
+      testRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:2px;';
+      const testBtn = document.createElement('button');
+      testBtn.className = 'settings-link-btn';
+      testBtn.textContent = t('settings_ntfy_test_send') || 'テスト送信';
+      testBtn.addEventListener('click', async () => {
+        testBtn.disabled = true;
+        try {
+          const res = await fetch(`/api/notify-test?token=${encodeURIComponent(token || '')}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ backend: backends[i] }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.ok) {
+            showToast(t('settings_ntfy_test_ok') || 'テスト送信しました', testBtn);
+          } else {
+            showToast((data.detail || data.error || t('settings_ntfy_test_failed') || '送信失敗'), testBtn);
+          }
+        } catch (_) {
+          showToast(t('settings_ntfy_test_failed') || '送信失敗', testBtn);
+        } finally {
+          testBtn.disabled = false;
+        }
+      });
+      testRow.appendChild(testBtn);
+      row.appendChild(testRow);
+
+      backendsList.appendChild(row);
+    });
+  }
+
+  addNtfyBtn?.addEventListener('click', () => {
+    backends.push({ type: 'ntfy', url: 'https://ntfy.sh', topic: '' });
+    renderBackends();
+  });
+  addWebhookBtn?.addEventListener('click', () => {
+    backends.push({ type: 'webhook', url: '', topic: '' });
+    renderBackends();
+  });
+
+  saveBtn.addEventListener('click', async () => {
+    saveBtn.disabled = true;
+    try {
+      const events: string[] = [];
+      if (eventApprovalEl?.checked) events.push('approval');
+      if (eventDoneEl?.checked) events.push('done');
+      const res = await fetch(`/api/notify-config?token=${encodeURIComponent(token || '')}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backends, events }),
+      });
+      if (res.ok) {
+        if (saveStatus) { saveStatus.textContent = t('settings_ntfy_saved') || '保存しました'; setTimeout(() => { if (saveStatus) saveStatus.textContent = ''; }, 2500); }
+      } else {
+        if (saveStatus) { saveStatus.textContent = t('settings_ntfy_save_failed') || '保存失敗'; }
+      }
+    } catch (_) {
+      if (saveStatus) { saveStatus.textContent = t('settings_ntfy_save_failed') || '保存失敗'; }
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+})();
 
 // ---- ファイルリンク設定 ----
 (function () {

@@ -5,7 +5,7 @@ import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_NOTI
 import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, resumeTerminalBottomFollow, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
-import { DEFAULT_QUICK_CMD_1, DEFAULT_QUICK_CMD_2, appConfirm, appConfirmShutdown, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
+import { DEFAULT_QUICK_CMD_1, DEFAULT_QUICK_CMD_2, appConfirm, appConfirmShutdown, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, hideActionBar, isBatchActionBarVisible, maybeSendDirectApprovalConsumed, moveBatchFocus, sendBatchChoices, setActionBarFocus } from './app/approval.js';
@@ -76,12 +76,15 @@ export function updateInputAffordance() {
   // C1: 実行中は「Esc で停止」、それ以外は通常文言。data-i18n-placeholder の自動適用と
   // 競合しないよう、running 状態を見て JS から明示的に上書きする。
   inputEl.placeholder = running ? t('input_placeholder_running') : t('input_placeholder');
-  // C2: 実行中は ▶ → ■（停止）に切替え、停止色クラスと title/aria-label も差し替える。
+  // C2: 実行中でも入力欄にテキスト/チップ/ファイルがあれば ➤（送信）のまま。
+  // 入力が空の場合のみ ■（停止）に切替える。ペースト・ファイル添付直後に送信できずもっさりする問題を解消。
+  const hasContent = inputEl.value.length > 0 || pastedTexts.length > 0 || pendingAttachFiles.length > 0;
+  const showStop = running && !hasContent;
   const sendBtn = document.getElementById('send-btn');
   if (sendBtn) {
-    sendBtn.textContent = running ? '■' : '➤';
-    sendBtn.classList.toggle('is-stopping', running);
-    const title = running ? t('stop_btn_title') : t('send_btn_title');
+    sendBtn.textContent = showStop ? '■' : '➤';
+    sendBtn.classList.toggle('is-stopping', showStop);
+    const title = showStop ? t('stop_btn_title') : t('send_btn_title');
     sendBtn.title = title;
     sendBtn.setAttribute('aria-label', title);
   }
@@ -126,6 +129,7 @@ export function stagePastedText(text, opts: any = {}) {
   set_pasteCounter(pasteCounter + 1);
   pastedTexts.push({ id: pasteCounter, text: cleaned, lineCount: lines.length });
   renderPasteChips();
+  updateInputAffordance();
   inputEl.focus();
   return true;
 }
@@ -143,11 +147,13 @@ export function expandPasteChip(idx) {
 export function removePasteChip(idx) {
   pastedTexts.splice(idx, 1);
   renderPasteChips();
+  updateInputAffordance();
 }
 
 export function clearAllPastes() {
   pastedTexts.length = 0;
   renderPasteChips();
+  updateInputAffordance();
 }
 
 export function buildSendText() {
@@ -393,6 +399,7 @@ export function scrollSlashIntoView() {
 inputEl.addEventListener('input', () => {
   autoExpand({ suppressPtyResize: true }); updateSlashMenu();
   updateInputClearButton();
+  updateInputAffordance();
   if (!isComposing) {
     const _tp = getActiveTriggerPhrase();
     if (_tp && activeSessionId !== null && textEndsWithTriggerPhrase(buildSendText(), _tp)) {
@@ -602,8 +609,9 @@ document.getElementById('send-btn').addEventListener('mousedown', () => {
 });
 document.getElementById('send-btn').addEventListener('click', () => {
   if (activeSessionId === null) return;
-  // C2: 実行中は停止ボタンとして振る舞う。Esc 相当(\x1b)を送り送信はしない。
-  if (isActiveSessionRunning()) {
+  // C2: 実行中 + 入力なし → 停止（Esc）。実行中 + 入力あり → そのまま送信（Claude に割り込み）。
+  const hasContent = inputEl.value.length > 0 || pastedTexts.length > 0 || pendingAttachFiles.length > 0;
+  if (isActiveSessionRunning() && !hasContent) {
     sendText(activeSessionId, '\x1b');
     return;
   }
@@ -1040,6 +1048,8 @@ inputEl.addEventListener('blur', (e) => {
   const logMaxBackupsEl            = document.getElementById('log-max-backups');
   const logSessionRetentionDaysEl  = document.getElementById('log-session-retention-days');
   const logSessionMaxSizeEl        = document.getElementById('log-session-max-size');
+  const attachRetentionDaysEl      = document.getElementById('attach-retention-days');
+  const attachMaxTotalMbEl         = document.getElementById('attach-max-total-mb');
 
   async function loadIdleTimeout() {
     if (!idleTimeoutEl) return;
@@ -1101,6 +1111,8 @@ inputEl.addEventListener('blur', (e) => {
       logMaxBackupsEl.value = cfg.max_backups;
       if (logSessionRetentionDaysEl) logSessionRetentionDaysEl.value = cfg.session_retention_days ?? 7;
       if (logSessionMaxSizeEl) logSessionMaxSizeEl.value = cfg.session_max_size_mb ?? 50;
+      if (attachRetentionDaysEl) attachRetentionDaysEl.value = cfg.attachment_retention_days ?? 7;
+      if (attachMaxTotalMbEl) attachMaxTotalMbEl.value = cfg.attachment_max_total_mb ?? 500;
       const logDirBtn = document.getElementById('log-dir-btn');
       if (logDirBtn && cfg.log_dir) {
         logDirBtn.dataset.tooltip = cfg.log_dir;
@@ -1280,6 +1292,8 @@ inputEl.addEventListener('blur', (e) => {
           compress:                false,
           session_retention_days:  parseInt(logSessionRetentionDaysEl?.value ?? '7', 10) || 7,
           session_max_size_mb:     parseInt(logSessionMaxSizeEl?.value ?? '50', 10),
+          attachment_retention_days: parseInt(attachRetentionDaysEl?.value ?? '7', 10) || 0,
+          attachment_max_total_mb:   parseInt(attachMaxTotalMbEl?.value ?? '500', 10) || 0,
         }),
       });
     } catch (_) {}
@@ -1394,6 +1408,10 @@ inputEl.addEventListener('blur', (e) => {
     if (logSessionRetentionDaysEl2) logSessionRetentionDaysEl2.value = '7';
     const logSessionMaxSizeEl2 = document.getElementById('log-session-max-size');
     if (logSessionMaxSizeEl2) logSessionMaxSizeEl2.value = '50';
+    const attachRetentionDaysEl2 = document.getElementById('attach-retention-days');
+    if (attachRetentionDaysEl2) attachRetentionDaysEl2.value = '7';
+    const attachMaxTotalMbEl2 = document.getElementById('attach-max-total-mb');
+    if (attachMaxTotalMbEl2) attachMaxTotalMbEl2.value = '500';
 
     const approvalToggleInput = document.getElementById('approval-toggle-input');
     if (approvalToggleInput) {
@@ -1480,6 +1498,8 @@ inputEl.addEventListener('blur', (e) => {
       loadApprovalSettings();
       loadSlashCmdSources();
       loadUsageLinkSettings();
+      attachTokenStatusbarToggle();
+      attachDoneSummaryNotifyToggle();
     }
   });
 
@@ -1491,6 +1511,8 @@ inputEl.addEventListener('blur', (e) => {
   logMaxBackupsEl.addEventListener('change', saveLogConfig);
   if (logSessionRetentionDaysEl) logSessionRetentionDaysEl.addEventListener('change', saveLogConfig);
   if (logSessionMaxSizeEl) logSessionMaxSizeEl.addEventListener('change', saveLogConfig);
+  if (attachRetentionDaysEl) attachRetentionDaysEl.addEventListener('change', saveLogConfig);
+  if (attachMaxTotalMbEl) attachMaxTotalMbEl.addEventListener('change', saveLogConfig);
 })();
 
 (function () {

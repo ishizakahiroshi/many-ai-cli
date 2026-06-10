@@ -575,7 +575,12 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 								logPTYWriteError(logger, wses.getSID(), "input_enter", err)
 							}
 						} else {
-							if err := writePTY(ps, data); err != nil {
+							// ブラケットペースト等で \r なしの大量入力が来る場合も
+							// writePTYChunked でチャンク分割して書き込む。
+							// splitBracketedPasteSubmit で \r が分離された後の
+							// ペースト本文はこのブランチを通るため、以前の
+							// writeWithTrailingEnter 経由と同等の書き込み挙動を維持する。
+							if err := writePTYChunked(ps, data); err != nil {
 								logPTYWriteError(logger, wses.getSID(), "input", err)
 							}
 						}
