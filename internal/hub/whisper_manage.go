@@ -27,7 +27,7 @@ import (
 
 const (
 	whisperReleaseTag        = "v1.8.6"
-	whisperDefaultModelID    = "large-v3-turbo-q5_0"
+	whisperDefaultModelID    = "small"
 	whisperInstallHTTPUA     = "any-ai-cli whisper installer"
 	whisperServerReadyWait   = 20 * time.Second
 	whisperDownloadExtraRoom = 256 * 1024 * 1024
@@ -115,21 +115,21 @@ type whisperModelOption struct {
 
 var whisperModelOptions = []whisperModelOption{
 	{
-		ID:        "large-v3-turbo-q5_0",
-		Label:     "Large v3 Turbo Q5_0 (recommended)",
-		FileName:  "ggml-large-v3-turbo-q5_0.bin",
-		URL:       "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
-		SizeBytes: 574 * 1024 * 1024,
-		Quality:   "best balance for Japanese/English, larger download",
-		Default:   true,
-	},
-	{
 		ID:        "small",
-		Label:     "Small",
+		Label:     "Small (recommended)",
 		FileName:  "ggml-small.bin",
 		URL:       "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
 		SizeBytes: 488 * 1024 * 1024,
-		Quality:   "smaller and faster, lower accuracy",
+		Quality:   "fast on ordinary CPUs (2-3s per utterance), may misspell technical terms",
+		Default:   true,
+	},
+	{
+		ID:        "large-v3-turbo-q5_0",
+		Label:     "Large v3 Turbo Q5_0",
+		FileName:  "ggml-large-v3-turbo-q5_0.bin",
+		URL:       "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
+		SizeBytes: 574 * 1024 * 1024,
+		Quality:   "best accuracy for Japanese/English; needs a fast multi-core CPU or GPU server",
 	},
 	{
 		ID:        "tiny-q5_1",
@@ -493,7 +493,9 @@ func (s *Server) startManagedWhisper(ctx context.Context, cfg config.VoiceWhispe
 		logPath = filepath.Join(baseDir, "whisper-server.log")
 	}
 	logFile, _ := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	cmd := exec.Command(binaryPath, "-m", modelPath, "--host", "127.0.0.1", "--port", strconv.Itoa(port))
+	// whisper-server の既定スレッド数は 4 固定で、コア数の多いホストでは
+	// CPU を使い切れず認識が遅い（10 論理 CPU 環境で 13s → 7s の実測差）。
+	cmd := exec.Command(binaryPath, "-m", modelPath, "--host", "127.0.0.1", "--port", strconv.Itoa(port), "-t", strconv.Itoa(runtime.NumCPU()))
 	cmd.Dir = filepath.Dir(binaryPath)
 	if logFile != nil {
 		cmd.Stdout = logFile

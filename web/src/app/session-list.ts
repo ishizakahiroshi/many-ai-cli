@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { escapeHtml, formatLastOutputAt, formatStartedAt, ti18n } from './util.js';
+import { escapeHtml, ti18n } from './util.js';
 import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, favorites, groupOrder, multiQuestionVisibleCache, orderSessions, projectFavorites, saveFavorites, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, terminals } from './state.js';
 import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor, updateInputAffordance } from '../app.js';
 import { attachTerminal, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, updateScrollLockBtn } from './terminal.js';
@@ -830,32 +830,6 @@ export function _addSidebarGroupLabels(root) {
 export function updateMainTabStatus() {
   // D11: セッション情報チップも同タイミングで更新 (state badge を反映)
   if (typeof renderSessionInfoChip === 'function') renderSessionInfoChip();
-  const wrap = document.getElementById('main-tab-status');
-  if (!wrap) return;
-  const sess = sessions.get(activeSessionId);
-  if (!sess) {
-    wrap.hidden = true;
-    return;
-  }
-  const runtimeStr = sess.started_at ? formatStartedAt(sess.started_at) : '';
-  const lastStr = sess.last_output_at ? formatLastOutputAt(sess.last_output_at) : '';
-  if (!runtimeStr && !lastStr) {
-    wrap.hidden = true;
-    return;
-  }
-  const runtimeLabel = (typeof window.t === 'function') ? window.t('main_tab_runtime_label') : 'Runtime';
-  const lastLabel = (typeof window.t === 'function') ? window.t('main_tab_last_label') : 'Last';
-  const runtimeEl = wrap.querySelector('.main-tab-status-runtime');
-  const lastEl = wrap.querySelector('.main-tab-status-last');
-  if (runtimeEl) {
-    runtimeEl.textContent = runtimeStr ? `${runtimeLabel} ${runtimeStr}` : '';
-    runtimeEl.hidden = !runtimeStr;
-  }
-  if (lastEl) {
-    lastEl.textContent = lastStr ? `${lastLabel} [${lastStr}]` : '';
-    lastEl.hidden = !lastStr;
-  }
-  wrap.hidden = false;
 }
 
 // ---- タブ通知（保留バッジ） ----

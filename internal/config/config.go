@@ -657,7 +657,7 @@ func (cfg *Config) applyDefaults() {
 		cfg.Voice.Whisper.TimeoutSeconds = 60
 	}
 	if strings.TrimSpace(cfg.Voice.Whisper.Model) == "" {
-		cfg.Voice.Whisper.Model = "large-v3-turbo-q5_0"
+		cfg.Voice.Whisper.Model = "small"
 	}
 }
 

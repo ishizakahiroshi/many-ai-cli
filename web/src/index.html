@@ -136,7 +136,7 @@
             <select id="locked-mode-select" class="settings-select">
               <option value="" data-i18n="settings_locked_mode_none">自由切替</option>
               <option value="terminal" data-i18n="settings_locked_mode_terminal">ターミナル</option>
-              <option value="chat" data-i18n="settings_locked_mode_chat">チャット履歴</option>
+              <option value="chat" data-i18n="settings_locked_mode_chat">チャット</option>
               <option value="split" data-i18n="settings_locked_mode_split">分割</option>
             </select>
           </div>
@@ -752,17 +752,13 @@
       <span class="session-info-chip" id="session-info-chip" hidden></span>
       <button class="view-tab active" data-tab="terminal" type="button"><span>🖥</span> <span data-i18n="tab_terminal">ターミナル</span></button>
       <button class="view-tab" data-tab="multi" id="tab-multi" type="button"><span>⊞</span> <span data-i18n="tab_multi">マルチ</span><span class="multi-layout-badge" id="multi-tab-layout-badge">2×2</span></button>
-      <button class="view-tab" data-tab="chat" type="button"><span>💬</span> <span data-i18n="tab_chat">チャット履歴</span> <span class="badge" id="chat-count-badge">0</span></button>
+      <button class="view-tab" data-tab="chat" type="button"><span>💬</span> <span data-i18n="tab_chat">チャット</span> <span class="badge" id="chat-count-badge">0</span></button>
       <button class="view-tab" data-tab="split" type="button"><span>⇿</span> <span data-i18n="tab_split">分割</span></button>
       <button class="view-tab lazy" data-tab="files" type="button" data-i18n-tooltip="tab_files_lazy_tooltip"><span>📁</span> <span data-i18n="tab_files">Files</span></button>
       <button class="view-tab lazy" data-tab="git" type="button" data-i18n-tooltip="tab_git_lazy_tooltip"><span>⎇</span> <span data-i18n="tab_git">Git</span></button>
       <button class="view-tab" data-tab="workbench" type="button"><span>▣</span> <span>Workbench</span></button>
       <button class="view-tab" data-tab="approval" type="button" id="approval-tab-btn"><span>⚡</span> <span data-i18n="tab_approval">承認</span><span id="approval-tab-badge" hidden>0</span></button>
-      <!-- D12: 既存 #main-tab-status を統合バー右側へ移植 -->
-      <span id="main-tab-status" class="tab-status" hidden>
-        <span class="main-tab-status-runtime"></span>
-        <span class="main-tab-status-last"></span>
-      </span>
+
       <button id="approval-queue-btn" type="button" aria-expanded="false">
         <span data-i18n="approval_queue_btn">承認</span>
         <span id="approval-queue-count">0</span>
@@ -792,7 +788,7 @@
         <button id="scroll-to-bottom-btn" data-i18n-tooltip="scroll_to_bottom_tooltip" data-i18n="scroll_to_bottom" hidden>↓ down</button>
       </div>
     </div>
-    <!-- C3: チャット履歴ペイン (C4 で filter-bar の中身が埋まる) -->
+    <!-- C3: チャットペイン (C4 で filter-bar の中身が埋まる) -->
     <div id="chat-pane">
       <div class="chat-filter-bar" hidden><!-- C4 で実装 --></div>
       <div class="chat-timeline" data-sid=""></div>

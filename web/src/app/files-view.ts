@@ -2630,7 +2630,7 @@ export const FilesPreview = (function () {
           contentEl.appendChild(renderSourceToPre(content, absPath));
           addCodeCopyButtons(contentEl);
         }
-        // スコープ外パスの読み取り専用プレビュー（チャット履歴の言及により許可）には注記を出す
+        // スコープ外パスの読み取り専用プレビュー（チャットの言及により許可）には注記を出す
         if (data.readOnly) {
           const note = document.createElement('div');
           note.className = 'files-preview-truncated-warn files-preview-readonly-note';

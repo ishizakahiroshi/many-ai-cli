@@ -45,7 +45,7 @@ Terminal pane #1              Terminal pane #2
 - **承認パネル統合**: Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI の承認待ちをブラウザ上のアクションバーで処理
 - **複数質問の一括承認**: 1つの承認ブロック内の番号付き質問を選択し、まとめて PTY へ送信
 - **リアルタイム PTY 表示**: xterm.js + WebSocket で CLI 出力を表示
-- **チャット履歴 / 分割表示**: 会話ログを吹き出し形式で読み、検索・フィルタし、ライブターミナルと並べて表示
+- **チャット / 分割表示**: 会話ログを吹き出し形式で読み、検索・フィルタし、ライブターミナルと並べて表示
 - **マルチタブ**: 複数の実行中セッションをグリッドで同時監視
 - **Files タブ**: プロジェクトファイルをツリー表示し、Markdown / コードのプレビュー、パスコピー、フォルダ作成、競合検出付き保存、リネーム、移動、空フォルダ削除を実行
 - **Git ビュー**: ブランチ履歴、commit 詳細、変更ファイル、diff、fetch、`git pull --ff-only` を checkout なしで実行
@@ -726,8 +726,8 @@ set-option -g default-command "ANY_AI_CLI_AUTO=1 bash -c 'eval \"$(any-ai-cli sh
   - 上部バー: アクティブセッションのプロバイダ・cwd、`↑最上部へ`（PTY バッファの先頭にスクロール）
   - 中央: xterm.js でリアルタイム描画される PTY 出力
   - 下部: 入力欄（複数行可）、添付・送信・スラッシュコマンドピッカー（`/clear`, `/model`, `/`）、auto mode 切替ヒント `shift+tab`
-- **タブ**: Terminal / チャット履歴 / 分割 / マルチ / Files / Git を同じメイン領域で切り替え。Files / Git は遅延ロードされ、Hub 再起動後の復元にも対応
-- **チャット履歴 / 分割**: ライブ PTY ストリームからユーザー入力、AI 出力、承認、添付を会話形式に整形。分割表示ではターミナルと履歴を並べて確認可能
+- **タブ**: Terminal / チャット / 分割 / マルチ / Files / Git を同じメイン領域で切り替え。Files / Git は遅延ロードされ、Hub 再起動後の復元にも対応
+- **チャット / 分割**: ライブ PTY ストリームからユーザー入力、AI 出力、承認、添付を会話形式に整形。分割表示ではターミナルと履歴を並べて確認可能
 - **マルチタブ**: 複数セッションをグリッドで表示し、フォーカス中ペインへ入力・リサイズ・承認 UI を連動
 - **承認アクションバー**: 承認待ちが発生すると入力欄の上に表示。単一質問はボタン、複数質問は縦積みの選択肢と「Submit all」でまとめて送信
 - **Files タブ**: 左にファイルツリー、右に Markdown / コードプレビュー。パスコピー、OS で開く、移動、リネームなどをコンテキストメニューから実行可能
@@ -842,7 +842,7 @@ hub:
 voice:
   whisper:
     managed: false          # true = Hub がローカル whisper.cpp server を管理
-    model: "large-v3-turbo-q5_0"
+    model: "small"            # 既定。高性能 CPU / GPU サーバなら large-v3-turbo-q5_0 も選べる
     server_url: ""          # 例: http://127.0.0.1:8080（managed では自動設定）
     server_port: 0          # 0 = 自動採番
     request_path: ""        # 空 = /v1/audio/transcriptions → /inference の順で試行

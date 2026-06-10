@@ -22,7 +22,7 @@ type filesContentResp struct {
 	Mtime     time.Time `json:"mtime"`
 	Content   string    `json:"content"`
 	Truncated bool      `json:"truncated"`
-	// ReadOnly は許可ルート外だがチャット履歴の言及により読み取り専用で許可した場合に true。
+	// ReadOnly は許可ルート外だがチャットの言及により読み取り専用で許可した場合に true。
 	ReadOnly bool `json:"readOnly"`
 }
 
@@ -92,7 +92,7 @@ func (s *Server) cwdForRequest(r *http.Request) string {
 }
 
 // resolveAllowedFilePath は ?path= を検証して絶対パスを返す。
-// 許可ルート外でも、?session= のチャット履歴にそのパスが言及されている場合は
+// 許可ルート外でも、?session= のチャットにそのパスが言及されている場合は
 // 読み取り専用（readOnly=true）として許可する。このフォールバックは
 // files-content / files-asset の GET プレビュー専用。書き込み系 API では使わないこと。
 func (s *Server) resolveAllowedFilePath(r *http.Request) (string, bool, error) {
@@ -117,7 +117,7 @@ func (s *Server) resolveAllowedFilePath(r *http.Request) (string, bool, error) {
 	return "", false, httpError{status: http.StatusForbidden, msg: "forbidden: path is outside allowed roots"}
 }
 
-// isPathMentionedInSession は ?session= のチャット履歴（sessionstore）に
+// isPathMentionedInSession は ?session= のチャット（sessionstore）に
 // absPath の言及があるかをサーバ側で照合する。クライアント申告は信用しない。
 func (s *Server) isPathMentionedInSession(r *http.Request, absPath, cwd string) bool {
 	if s.sessionStore == nil {
