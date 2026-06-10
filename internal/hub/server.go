@@ -26,6 +26,7 @@ import (
 
 	"any-ai-cli/internal/attach"
 	"any-ai-cli/internal/config"
+	"any-ai-cli/internal/notify"
 	"any-ai-cli/internal/proto"
 	"any-ai-cli/internal/sessionlog"
 	"any-ai-cli/internal/sessionstore"
@@ -124,6 +125,9 @@ type session struct {
 	// JSON 外: wrapper に最後に送った PTY サイズ（同サイズの resize を skip して不要な SIGWINCH を防ぐ）
 	lastCols int
 	lastRows int
+
+	// JSON 外: 完了サマリー通知の連投抑制用
+	lastDoneNotifyAt time.Time
 
 	// JSON 外: 起動バナーからの初期モデル検出用。
 	// Model が空のセッションのみ対象。検出成功 or 累計バイト超過で打ち切る。
@@ -278,6 +282,7 @@ type Server struct {
 	modelsRemoteCache *ttlCache[modelsDefaults]
 	sessionStore      *sessionstore.Store
 	push              *pushManager
+	notifyMgr         *notify.Manager
 	logMaintenanceMu  sync.Mutex
 	whisperMu         sync.Mutex
 	whisperInstall    whisperInstallState
@@ -399,6 +404,11 @@ var initialModelScanProviders = map[string]bool{
 	"cursor-agent": true,
 }
 
+const doneNotifyMinInterval = 60 * time.Second
+
+var doneSummaryMarkerOpen = []byte("[ANY-AI-CLI-DONE]")
+var doneSummaryMarkerClose = []byte("[/ANY-AI-CLI-DONE]")
+
 var (
 	modelChangeTokens = [][]byte{
 		[]byte("Set model to "),
@@ -495,6 +505,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	} else {
 		s.push = push
 	}
+	s.notifyMgr = notify.New(configToNotify(cfg.Notify), logger)
 	var staticHandler http.Handler
 	if devMode {
 		staticHandler = http.FileServer(http.Dir(filepath.Join("web", "dist")))
@@ -557,6 +568,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/open-dir", s.handleOpenDir)
 	mux.HandleFunc("/api/idle-timeout", s.handleIdleTimeout)
 	mux.HandleFunc("/api/reconnect-grace", s.handleReconnectGrace)
+	mux.HandleFunc("/api/notify-config", s.handleNotifyConfig)
+	mux.HandleFunc("/api/notify-test", s.handleNotifyTest)
+	mux.HandleFunc("/api/notify-generate-topic", s.handleNotifyGenerateTopic)
 	mux.HandleFunc("/api/encoding-check", s.handleEncodingCheck)
 	mux.HandleFunc("/api/approval/status", s.handleApprovalStatus)
 	mux.HandleFunc("/api/approval/enable", s.handleApprovalEnable)
@@ -600,6 +614,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/whisper/uninstall", s.handleWhisperUninstall)
 	mux.HandleFunc("/api/whisper/start", s.handleWhisperStart)
 	mux.HandleFunc("/api/whisper/stop", s.handleWhisperStop)
+	mux.HandleFunc("/api/session-usage", s.handleSessionUsage)
 	s.registerWorkbenchRoutes(mux)
 	s.httpSrv = &http.Server{
 		Addr:    fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port),
@@ -694,10 +709,14 @@ func (s *Server) Run(ctx context.Context) error {
 	if s.approvalRulesEnabled() {
 		s.injectApprovalRules()
 	}
+	if s.tokenStatusbarEnabled() {
+		s.injectUsageHooks()
+	}
 	s.safeGo("state_ticker", func() { s.stateTicker(runCtx) })
 	s.safeGo("clean_attachments", s.cleanAttachments)
 	s.safeGo("clean_spawn_logs", s.cleanSpawnLogs)
 	s.safeGo("clean_session_logs", s.cleanSessionLogs)
+	s.safeGo("maintenance_loop", func() { s.maintenanceLoop(runCtx) })
 	s.safeGo("recover_transcripts", s.recoverTranscripts)
 	s.safeGo("approval_patterns_remote_sync", func() { s.approvalPatternsRemoteSync(runCtx) })
 	s.safeGo("shutdown_wait", func() {
@@ -705,6 +724,7 @@ func (s *Server) Run(ctx context.Context) error {
 		if s.approvalRulesEnabled() {
 			s.removeApprovalRules()
 		}
+		s.removeAllUsageHooks()
 		s.stopManagedWhisper()
 		// Stop the Hub server without marking wrapper sessions as intentionally
 		// disconnected. Closing the HTTP server drops WS connections after the
@@ -945,6 +965,9 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	if s.approvalRulesEnabled() {
 		s.injectApprovalRules()
 	}
+	if s.tokenStatusbarEnabled() {
+		s.injectUsageHooks()
+	}
 	_ = wc.send(proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath})
 	s.logger.Info("session registered", "id", id, "provider", reg.Provider, "cwd", reg.CWD, "pid", reg.PID)
 	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Branch: branch, Label: reg.Label, Model: reg.Model, Route: regRoute, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath})
@@ -1116,6 +1139,9 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	if s.approvalRulesEnabled() {
 		s.injectApprovalRules()
 	}
+	if s.tokenStatusbarEnabled() {
+		s.injectUsageHooks()
+	}
 	_ = wc.send(proto.Message{Type: "reattach_ack", SessionID: acceptedID})
 	s.broadcast(proto.Message{Type: "session_update", SessionID: acceptedID, Provider: req.Provider, Display: req.Display, CWD: req.CWD, Branch: branch, Label: req.Label, Model: req.Model, Route: reqRoute, Shell: req.Shell, State: "running", LastOutputAt: lastOutputAt, StartedAt: startedAtText, LogPath: rawLogPath, JSONLPath: jsonlPath})
 	s.writeHistory(acceptedID, map[string]any{
@@ -1213,6 +1239,9 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			if initialModelLines != nil {
 				s.detectInitialModel(id, provider, initialModelCWD, initialModelLines)
 			}
+			if bytes.Contains(m.Data, doneSummaryMarkerOpen) {
+				s.handleDoneSummaryMarker(id, m.Data)
+			}
 		case "session_end":
 			histEvent := map[string]any{
 				"ts":         time.Now().Format(time.RFC3339),
@@ -1283,6 +1312,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 		s.sessionStore.EndSession(id, endState, endReason, time.Now())
 	}
 	s.removeInactiveApprovalRules(providerApprovalRuleTargets(endedProvider, endedCWD))
+	s.removeInactiveUsageHooks(endedProvider, endedCWD)
 	s.finalizeTranscript(id, jsonlPathForTranscript)
 	s.broadcast(proto.Message{Type: "session_end", SessionID: id, State: endState, Reason: endReason})
 }
@@ -1358,8 +1388,83 @@ func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval)
 		s.broadcast(*msg)
 		if msg.Type == "approval_detected" {
 			s.notifyApprovalPush(id, approval.Sig, msg.Provider, approval.Question, approval.Context)
+			s.notifyApprovalOutbound(id, approval.Sig, msg.Provider, approval.Question, approval.Context)
 		}
 	}
+}
+
+// handleDoneSummaryMarker は PTY データから [ANY-AI-CLI-DONE] マーカーを検出し、
+// 完了サマリー通知を発火する。設定が OFF のセッション・連投抑制中はスキップ。
+func (s *Server) handleDoneSummaryMarker(id int, data []byte) {
+	open := bytes.Index(data, doneSummaryMarkerOpen)
+	if open < 0 {
+		return
+	}
+	start := open + len(doneSummaryMarkerOpen)
+	closeIdx := bytes.Index(data[start:], doneSummaryMarkerClose)
+	if closeIdx < 0 {
+		return
+	}
+	summary := strings.TrimSpace(string(data[start : start+closeIdx]))
+	if summary == "" {
+		return
+	}
+
+	now := time.Now()
+	s.cfgMu.Lock()
+	doneSummaryEnabled := s.cfg.UserPrefs.DoneSummaryNotify.Enabled
+	s.cfgMu.Unlock()
+	if !doneSummaryEnabled {
+		return
+	}
+
+	s.sessionsMu.Lock()
+	ses := s.sessions[id]
+	if ses == nil {
+		s.sessionsMu.Unlock()
+		return
+	}
+	if !ses.lastDoneNotifyAt.IsZero() && now.Sub(ses.lastDoneNotifyAt) < doneNotifyMinInterval {
+		s.sessionsMu.Unlock()
+		return
+	}
+	ses.lastDoneNotifyAt = now
+	titleName := strings.TrimSpace(ses.Display)
+	if titleName == "" {
+		titleName = strings.TrimSpace(ses.Provider)
+	}
+	if titleName == "" {
+		titleName = "any-ai-cli"
+	}
+	if ses.Label != "" {
+		titleName = fmt.Sprintf("%s #%d [%s]", titleName, id, ses.Label)
+	} else {
+		titleName = fmt.Sprintf("%s #%d", titleName, id)
+	}
+	provider := ses.Provider
+	s.sessionsMu.Unlock()
+
+	s.notifyDoneOutbound(id, provider, titleName, summary)
+	s.notifyDonePush(id, provider, titleName, summary)
+}
+
+// notifyDoneOutbound は ntfy/webhook バックエンドへのタスク完了通知を行う。
+func (s *Server) notifyDoneOutbound(id int, provider, titleName, summary string) {
+	if s.notifyMgr == nil {
+		return
+	}
+	s.notifyMgr.SendDone(notify.DonePayload{
+		SessionID: id,
+		Provider:  provider,
+		Title:     titleName,
+		Summary:   summary,
+	})
+}
+
+// notifyDonePush は Web Push でタスク完了通知を送信する。
+// Web Push 経路は notifyApprovalPush を流用する（同じ Web Push チャンネルを使う）。
+func (s *Server) notifyDonePush(id int, provider, titleName, summary string) {
+	s.notifyApprovalPush(id, fmt.Sprintf("done-%d-%d", id, time.Now().UnixNano()), provider, summary, "")
 }
 
 func (s *Server) markNativeApprovalConsumed(m proto.Message) {
@@ -2025,7 +2130,9 @@ func (s *Server) evaluateIdle() {
 			s.sessionStore.UpdateSessionState(c.id, c.state, c.lastOutputAt)
 		}
 		if c.approvalWait {
-			s.notifyApprovalPush(c.id, fmt.Sprintf("ui-%d-%s", c.id, c.lastOutputAt), c.provider, "", "")
+			approvalID := fmt.Sprintf("ui-%d-%s", c.id, c.lastOutputAt)
+			s.notifyApprovalPush(c.id, approvalID, c.provider, "", "")
+			s.notifyApprovalOutbound(c.id, approvalID, c.provider, "", "")
 		}
 	}
 	s.queueBranchRefreshes(branchChecks)
@@ -2232,8 +2339,10 @@ func (s *Server) pingLoop(ctx context.Context, uc *uiConn) {
 func (s *Server) sendSnapshot(uc *uiConn) {
 	s.sessionsMu.Lock()
 	list := make([]*session, 0, len(s.sessions))
+	sessionIDs := make([]int, 0, len(s.sessions))
 	for _, ses := range s.sessions {
 		list = append(list, ses)
+		sessionIDs = append(sessionIDs, ses.ID)
 	}
 	s.sessionsMu.Unlock()
 	b, _ := json.Marshal(list)
@@ -2241,6 +2350,36 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 	// UI 側は前回値と異なる場合に live session ID キーのローカル状態
 	// （チャット履歴・ターミナルバッファ等）を破棄してから snapshot を適用する。
 	_ = uc.send(map[string]any{"type": "snapshot", "sessions": json.RawMessage(b), "hub_instance": s.instanceID})
+
+	// C3: UI 接続時に既存セッションの usageStat をまとめて送る。
+	// これにより再接続時・リロード時にステータスバーが即座に復元される。
+	usageStatsMu.Lock()
+	for _, id := range sessionIDs {
+		if stat, ok := usageStats[id]; ok {
+			// provider を sessions から取る（usageStat にはセッション情報なし）
+			s.sessionsMu.Lock()
+			ses := s.sessions[id]
+			var provider string
+			if ses != nil {
+				provider = ses.Provider
+			}
+			s.sessionsMu.Unlock()
+			_ = uc.send(proto.Message{
+				Type:           "usage_stat",
+				SessionID:      id,
+				Provider:       provider,
+				CostUSD:        stat.CostUSD,
+				CostKnown:      stat.CostKnown,
+				TokensIn:       stat.TokensIn,
+				TokensOut:      stat.TokensOut,
+				TokensCache:    stat.TokensCache,
+				TokensTotal:    stat.TokensTotal,
+				UsageModel:     stat.UsageModel,
+				UsageStartedAt: stat.StartedAt,
+			})
+		}
+	}
+	usageStatsMu.Unlock()
 }
 
 func (s *Server) broadcast(m any) {

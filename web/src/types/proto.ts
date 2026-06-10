@@ -35,7 +35,8 @@ export type MessageType =
   | 'approval_patterns_updated'
   | 'attach_request'
   | 'hub_shutdown'
-  | 'ping';
+  | 'ping'
+  | 'usage_stat';
 
 export interface ApprovalOption {
   num: number;
@@ -90,6 +91,16 @@ export interface Message {
   ui_active_session_id?: number;
   sessions?: string | SessionSnapshot[];
   hub_instance?: string;
+  // usage_stat フィールド: 数値メタデータのみ。本文は含まない。
+  // cost_known が false のときはコスト不明（価格表未登録モデル）→ "$ —" 表示。
+  cost_usd?: number;
+  cost_known?: boolean;
+  tokens_in?: number;
+  tokens_out?: number;
+  tokens_cache?: number;
+  tokens_total?: number;
+  usage_model?: string;
+  usage_started_at?: string;
   [key: string]: unknown;
 }
 

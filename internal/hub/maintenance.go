@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -107,6 +108,28 @@ func (s *Server) cleanSessionLogs() {
 	}
 }
 
+// maintenanceInterval は常駐中に掃除タスク（添付・セッションログ・spawn ログ）を
+// 周期実行する間隔。起動時に一度走るだけだと Hub を再起動しない常駐運用
+// （VPS の Docker 等）で保持日数・容量上限を超えても削除されないため、定期的に回す。
+const maintenanceInterval = 6 * time.Hour
+
+// maintenanceLoop は maintenanceInterval ごとに掃除タスクを再実行する。
+// 起動直後の初回実行は Run 側の safeGo で別途行うため、ここでは初回 tick を待ってから走る。
+func (s *Server) maintenanceLoop(ctx context.Context) {
+	t := time.NewTicker(maintenanceInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.cleanAttachments()
+			s.cleanSpawnLogs()
+			s.cleanSessionLogs()
+		}
+	}
+}
+
 // attachmentsDir は添付ファイルの保存先 ~/.any-ai-cli/attachments を返す。
 // 4 箇所で散らばっていた os.UserHomeDir + filepath.Join のリテラル重複を集約する。
 func attachmentsDir() (string, error) {
@@ -117,15 +140,29 @@ func attachmentsDir() (string, error) {
 	return filepath.Join(home, ".any-ai-cli", "attachments"), nil
 }
 
-// cleanAttachments removes attachment files older than 7 days and then prunes
-// any session directories that are now empty.
+// cleanAttachments removes attachment files older than the configured retention
+// (cfg.Log.AttachmentRetentionDays) and, if a total-size cap is configured
+// (cfg.Log.AttachmentMaxTotalMB), trims the oldest files until under that cap.
+// Empty session directories are then pruned.
 func (s *Server) cleanAttachments() {
 	attachDir, err := attachmentsDir()
 	if err != nil {
 		return
 	}
-	if err := attach.CleanOld(attachDir, 7); err != nil {
-		s.logger.Warn("attach cleanup failed", "err", err)
+	s.cfgMu.Lock()
+	retentionDays := s.cfg.Log.AttachmentRetentionDays
+	maxTotalMB := s.cfg.Log.AttachmentMaxTotalMB
+	s.cfgMu.Unlock()
+
+	if retentionDays > 0 {
+		if err := attach.CleanOld(attachDir, retentionDays); err != nil {
+			s.logger.Warn("attach cleanup failed", "err", err)
+		}
+	}
+	if maxTotalMB > 0 {
+		if err := attach.EnforceTotalSize(attachDir, int64(maxTotalMB)*1024*1024); err != nil {
+			s.logger.Warn("attach size enforcement failed", "err", err)
+		}
 	}
 	entries, err := os.ReadDir(attachDir)
 	if err != nil {

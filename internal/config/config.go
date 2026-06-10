@@ -54,6 +54,12 @@ type LogConfig struct {
 	Compress             bool `yaml:"compress" json:"compress"`
 	SessionRetentionDays int  `yaml:"session_retention_days" json:"session_retention_days"`
 	SessionMaxSizeMB     int  `yaml:"session_max_size_mb" json:"session_max_size_mb"`
+	// AttachmentRetentionDays は添付ファイル（~/.any-ai-cli/attachments）の保持日数。
+	// この日数より古い添付を定期削除する。0 で日数ベースの削除を無効化。
+	AttachmentRetentionDays int `yaml:"attachment_retention_days" json:"attachment_retention_days"`
+	// AttachmentMaxTotalMB は添付ファイル全体の合計容量上限(MB)。これを超えた分を
+	// 古い mtime のファイルから削除して上限内に収める。0 で容量ベースの削除を無効化。
+	AttachmentMaxTotalMB int `yaml:"attachment_max_total_mb" json:"attachment_max_total_mb"`
 }
 
 // ApprovalConfig は Hub 承認ボタン機能の設定。
@@ -311,6 +317,23 @@ type UserPrefsSpawn struct {
 	LastModel map[string]string `yaml:"last_model,omitempty" json:"last_model,omitempty"`
 }
 
+// UserPrefsDoneSummaryNotify はタスク完了サマリー通知の設定。
+type UserPrefsDoneSummaryNotify struct {
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+}
+
+// UserPrefsTokenStatusbar はトークンコスト常時表示バーの設定。
+// Enabled が nil（未設定）または true のときに表示する（既定 ON）。
+// bool のゼロ値が false なため *bool ポインタで三値（nil=未設定/true/false）を表現する。
+type UserPrefsTokenStatusbar struct {
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+}
+
+// IsEnabled は Enabled が nil（未設定）または true のとき true を返す（既定 ON）。
+func (u UserPrefsTokenStatusbar) IsEnabled() bool {
+	return u.Enabled == nil || *u.Enabled
+}
+
 // UserPrefsDisplay は表示まわりのユーザー設定（端末横断で共有する分）。
 // theme / font_size / lang は従来 localStorage のみだったがサーバへ移行した。
 // locked_mode はクライアントが従来から送っていたが収容先が無く取りこぼしていた分。
@@ -356,6 +379,8 @@ type UserPrefs struct {
 	MigratedFromLocalstorage bool                          `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
 	Avatar                   string                        `yaml:"avatar,omitempty"       json:"avatar,omitempty"`
 	DisplayName              string                        `yaml:"display_name,omitempty" json:"display_name,omitempty"`
+	TokenStatusbar           UserPrefsTokenStatusbar       `yaml:"token_statusbar,omitempty" json:"token_statusbar,omitempty"`
+	DoneSummaryNotify        UserPrefsDoneSummaryNotify    `yaml:"done_summary_notify,omitempty" json:"done_summary_notify,omitempty"`
 }
 
 // Clone returns a deep copy of p. It copies slice and map fields so callers can
@@ -378,6 +403,20 @@ func (p UserPrefs) Clone() UserPrefs {
 type LocalModel struct {
 	ID    string `yaml:"id"             json:"id"`
 	Label string `yaml:"label,omitempty" json:"label,omitempty"`
+}
+
+// NotifyBackendConfig は通知バックエンド 1 件の設定。
+type NotifyBackendConfig struct {
+	Type  string `yaml:"type"  json:"type"`  // "ntfy" | "webhook"
+	URL   string `yaml:"url"   json:"url"`
+	Topic string `yaml:"topic,omitempty" json:"topic,omitempty"` // ntfy のみ有効
+}
+
+// NotifyConfig は config.yaml の notify: セクションに対応する。
+// 未設定時は全イベントで通知しない（オプトイン）。
+type NotifyConfig struct {
+	Backends []NotifyBackendConfig `yaml:"backends,omitempty" json:"backends,omitempty"`
+	Events   []string              `yaml:"events,omitempty"   json:"events,omitempty"`
 }
 
 type Config struct {
@@ -411,6 +450,7 @@ type Config struct {
 	LocalModels            []LocalModel           `yaml:"local_models,omitempty" json:"local_models,omitempty"`
 	UserPrefs              UserPrefs              `yaml:"user_prefs,omitempty" json:"user_prefs,omitempty"`
 	Voice                  VoiceConfig            `yaml:"voice,omitempty" json:"voice,omitempty"`
+	Notify                 NotifyConfig           `yaml:"notify,omitempty" json:"notify,omitempty"`
 }
 
 func LoadOrCreate() (*Config, error) {
@@ -522,6 +562,8 @@ func defaultConfig(home string) *Config {
 	cfg.Log.Compress = false
 	cfg.Log.SessionRetentionDays = 7
 	cfg.Log.SessionMaxSizeMB = 50
+	cfg.Log.AttachmentRetentionDays = 7
+	cfg.Log.AttachmentMaxTotalMB = 500
 	cfg.UserPrefs = UserPrefs{}
 	cfg.Voice.Whisper.Language = "ja"
 	cfg.Voice.Whisper.TimeoutSeconds = 60
@@ -592,6 +634,14 @@ func (cfg *Config) Clone() *Config {
 		s := make([]LocalModel, len(cfg.LocalModels))
 		copy(s, cfg.LocalModels)
 		c.LocalModels = s
+	}
+	if cfg.Notify.Backends != nil {
+		bs := make([]NotifyBackendConfig, len(cfg.Notify.Backends))
+		copy(bs, cfg.Notify.Backends)
+		c.Notify.Backends = bs
+	}
+	if cfg.Notify.Events != nil {
+		c.Notify.Events = cloneStringSlice(cfg.Notify.Events)
 	}
 	return &c
 }

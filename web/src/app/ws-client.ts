@@ -9,6 +9,7 @@ import { checkApprovalOnStartup } from './settings.js';
 import { setMultiQuestionBannerVisible } from './approval-ui.js';
 import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, hideActionBar, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
 import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed } from './chat-history.js';
+import { handleUsageStatMessage, removeUsageCacheEntry } from './token-statusbar.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -239,6 +240,11 @@ export function _connectWs() {
     return;
   }
 
+  if (m.type === 'usage_stat') {
+    handleUsageStatMessage(m);
+    return;
+  }
+
   if (m.type === 'approval_patterns_updated') {
     showToast(t('toast_approval_patterns_updated'));
     if (window.approvalPatternsUI && typeof window.approvalPatternsUI.onOfficialUpdated === 'function') {
@@ -377,6 +383,7 @@ export function _connectWs() {
     }
   } else if (m.type === 'session_removed') {
     removeLocalSession(m.session_id);
+    removeUsageCacheEntry(m.session_id);
   }
 
   if (fastRenderSessionId !== null && renderSessionStateUpdate(fastRenderSessionId)) return;

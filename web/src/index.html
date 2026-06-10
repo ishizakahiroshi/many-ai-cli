@@ -168,6 +168,19 @@
           </div>
         </div>
       </details>
+      <details class="settings-section" data-section="token-statusbar">
+        <summary class="settings-section-title"><span data-i18n="settings_token_statusbar">Token/Cost Statusbar</span></summary>
+        <div class="settings-section-body">
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_token_statusbar_toggle">トークン/コスト バー</span>
+            <label class="approval-toggle">
+              <input type="checkbox" id="token-statusbar-toggle-input" checked>
+              <span class="approval-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-note" data-i18n="settings_token_statusbar_desc">画面下部にアクティブセッションのコスト・モデル・経過時間を常時表示します。</div>
+        </div>
+      </details>
       <details class="settings-section" data-section="session">
         <summary class="settings-section-title"><span data-i18n="settings_session">Session</span></summary>
         <div class="settings-section-body">
@@ -215,6 +228,15 @@
             <span class="settings-label" data-i18n="settings_attach_folder">Attach folder</span>
             <button id="attach-dir-btn" class="log-dir-btn" data-i18n-tooltip="loading">📁</button>
           </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_attach_retention">Attachment retention (days)</span>
+            <input type="number" id="attach-retention-days" min="0" max="365" class="settings-input-number">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_attach_max_size">Attachment max total (MB)</span>
+            <input type="number" id="attach-max-total-mb" min="0" max="100000" class="settings-input-number">
+          </div>
+          <div class="settings-note" data-i18n="settings_attach_cleanup_desc">Old attachments are deleted by retention days; total size is capped (0 disables). Cleaned at startup and every 6 hours.</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_saved_history">Saved session history</span>
             <button id="session-store-reset-btn" class="settings-inline-btn settings-danger-btn" data-i18n="settings_history_reset">Delete history</button>
@@ -446,6 +468,49 @@
             </div>
           </div>
           <div class="settings-note" data-i18n="settings_push_notifications_desc">タブを閉じていても承認待ちを通知します。外部のブラウザ push サービスへ通知 payload が送信されます（Hub token は含めません）。</div>
+          <!-- ntfy / webhook アウトバウンド通知 -->
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_ntfy_notify">ntfy / webhook 通知</span>
+            <div class="settings-row-actions">
+              <button id="ntfy-settings-toggle-btn" class="settings-link-btn" data-i18n="settings_ntfy_configure">設定...</button>
+            </div>
+          </div>
+          <div id="ntfy-settings-block" hidden>
+            <div id="ntfy-backends-list"></div>
+            <div class="settings-row" style="margin-top:4px">
+              <button id="ntfy-add-ntfy-btn" class="settings-link-btn" data-i18n="settings_ntfy_add_ntfy">+ ntfy を追加</button>
+              <button id="ntfy-add-webhook-btn" class="settings-link-btn" data-i18n="settings_ntfy_add_webhook">+ webhook を追加</button>
+            </div>
+            <div class="settings-row" style="margin-top:4px">
+              <span class="settings-label" data-i18n="settings_ntfy_events">通知イベント</span>
+              <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">
+                <label style="display:flex;align-items:center;gap:4px;font-size:0.85em">
+                  <input type="checkbox" id="ntfy-event-approval" checked>
+                  <span data-i18n="settings_ntfy_event_approval">承認待ち</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:4px;font-size:0.85em">
+                  <input type="checkbox" id="ntfy-event-done">
+                  <span data-i18n="settings_ntfy_event_done">タスク完了</span>
+                </label>
+              </div>
+            </div>
+            <div class="settings-row" style="margin-top:6px">
+              <button id="ntfy-save-btn" class="settings-link-btn settings-inline-btn" data-i18n="settings_ntfy_save">保存</button>
+              <span id="ntfy-save-status" class="settings-note" style="margin-left:6px"></span>
+            </div>
+          </div>
+          <div class="settings-note" data-i18n="settings_ntfy_desc">SSH トンネル切断中でもスマホに承認通知が届きます。Hub token は送信されません。</div>
+          <!-- タスク完了サマリー通知 -->
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_done_summary_notify">タスク完了サマリー通知</span>
+            <div class="settings-row-actions">
+              <label class="approval-toggle">
+                <input type="checkbox" id="done-summary-notify-toggle">
+                <span class="approval-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="settings-note" data-i18n="settings_done_summary_notify_desc">AI のタスク完了時にサマリーを通知します。承認ルール機能を有効にする必要があります。</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_notify_sound_toggle">通知音</span>
             <div class="settings-row-actions notify-sound-actions">
@@ -692,6 +757,7 @@
       <button class="view-tab lazy" data-tab="files" type="button" data-i18n-tooltip="tab_files_lazy_tooltip"><span>📁</span> <span data-i18n="tab_files">Files</span></button>
       <button class="view-tab lazy" data-tab="git" type="button" data-i18n-tooltip="tab_git_lazy_tooltip"><span>⎇</span> <span data-i18n="tab_git">Git</span></button>
       <button class="view-tab" data-tab="workbench" type="button"><span>▣</span> <span>Workbench</span></button>
+      <button class="view-tab" data-tab="approval" type="button" id="approval-tab-btn"><span>⚡</span> <span data-i18n="tab_approval">承認</span><span id="approval-tab-badge" hidden>0</span></button>
       <!-- D12: 既存 #main-tab-status を統合バー右側へ移植 -->
       <span id="main-tab-status" class="tab-status" hidden>
         <span class="main-tab-status-runtime"></span>
@@ -718,6 +784,8 @@
     <div id="display-area" class="mode-terminal">
     <div id="terminal-wrapper">
       <div id="terminal-area-wrapper">
+        <!-- C4: セッション切替スワイプ用ハンドル帯（xterm.js と干渉しない上部専用領域） -->
+        <div id="swipe-session-handle" aria-hidden="true"></div>
         <div id="terminal-area"></div>
         <div id="terminal-readonly-badge"><span data-i18n="terminal_output">Terminal Output</span><span id="terminal-shell-info"></span></div>
         <button id="scroll-to-top-btn" data-i18n-tooltip="scroll_to_top_tooltip" data-i18n="scroll_to_top" hidden>↑ up</button>
@@ -736,6 +804,8 @@
     </div>
     <div id="git-pane"></div>
     <div id="workbench-pane"></div>
+    <!-- 承認キュータブ -->
+    <div id="approval-pane"></div>
     </div><!-- /#display-area -->
     <!-- マルチビューコンテナ（#display-area の兄弟, マルチタブ選択時のみ表示） -->
     <div id="multi-view" hidden>
@@ -988,6 +1058,15 @@
     </div>
   </div>
   <div id="model-picker-overlay" hidden></div>
+
+  <!-- トークン/コスト ステータスバー（画面最下部固定） -->
+  <div id="token-statusbar" style="display:none" role="status" aria-live="off">
+    <span class="tsb-seg tsb-seg-project"></span>
+    <span class="tsb-seg tsb-seg-model"></span>
+    <span class="tsb-seg tsb-seg-tok"></span>
+    <span class="tsb-seg tsb-seg-cost"></span>
+    <span class="tsb-seg tsb-seg-elapsed"></span>
+  </div>
 
   <!--
     vendor は classic script のまま先に読み込む（xterm, marked, purify, highlight）。

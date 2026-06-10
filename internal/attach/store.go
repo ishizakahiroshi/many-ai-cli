@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -152,6 +153,91 @@ func CleanOld(baseDir string, retentionDays int) error {
 		if len(children) == 0 {
 			if removeErr := os.Remove(subDir); removeErr != nil {
 				slog.Debug("attach.CleanOld: remove dir failed", "path", subDir, "err", removeErr)
+			}
+		}
+	}
+	return nil
+}
+
+// attachFile は EnforceTotalSize の内部用。1 添付ファイルのパス・サイズ・mtime。
+type attachFile struct {
+	path  string
+	size  int64
+	mtime time.Time
+}
+
+// EnforceTotalSize は baseDir 配下の添付ファイル合計サイズが maxBytes を超えている場合、
+// mtime が古いファイルから順に削除して上限内に収める。maxBytes <= 0 のときは何もしない。
+// 削除後、空になったセッションサブディレクトリも片付ける。
+// 個別の削除失敗はログして継続する（walk を止めない）。
+func EnforceTotalSize(baseDir string, maxBytes int64) error {
+	if maxBytes <= 0 {
+		return nil
+	}
+
+	var files []attachFile
+	var total int64
+	if err := filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			slog.Debug("attach.EnforceTotalSize: walk error", "path", path, "err", err)
+			return nil // walk を止めない
+		}
+		if info.IsDir() {
+			return nil
+		}
+		files = append(files, attachFile{path: path, size: info.Size(), mtime: info.ModTime()})
+		total += info.Size()
+		return nil
+	}); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("attach.EnforceTotalSize: walk %s: %w", baseDir, err)
+	}
+
+	if total <= maxBytes {
+		return nil
+	}
+
+	// 古い mtime から削除（同 mtime はパス順で安定化）
+	sort.Slice(files, func(i, j int) bool {
+		if files[i].mtime.Equal(files[j].mtime) {
+			return files[i].path < files[j].path
+		}
+		return files[i].mtime.Before(files[j].mtime)
+	})
+	for _, f := range files {
+		if total <= maxBytes {
+			break
+		}
+		if removeErr := os.Remove(f.path); removeErr != nil { // #nosec G122 -- 自ユーザー所有の添付ディレクトリ内のみを掃除（外部入力パスなし）
+			slog.Debug("attach.EnforceTotalSize: remove failed", "path", f.path, "err", removeErr)
+			continue // 消せなかった分は total から引かない
+		}
+		total -= f.size
+	}
+
+	// 空になったセッションサブディレクトリを削除
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("attach.EnforceTotalSize: readdir %s: %w", baseDir, err)
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		subDir := filepath.Join(baseDir, e.Name())
+		children, readErr := os.ReadDir(subDir)
+		if readErr != nil {
+			slog.Debug("attach.EnforceTotalSize: readdir failed", "path", subDir, "err", readErr)
+			continue
+		}
+		if len(children) == 0 {
+			if removeErr := os.Remove(subDir); removeErr != nil {
+				slog.Debug("attach.EnforceTotalSize: remove dir failed", "path", subDir, "err", removeErr)
 			}
 		}
 	}

@@ -8,6 +8,8 @@
 @import url("/styles/chat.css");
 @import url("/styles/workbench.css");
 @import url("/styles/voice.css");
+@import url("/styles/token-statusbar.css");
+@import url("/styles/approval-queue-tab.css");
 
 /* ============================================================
    テーマ変数（Dark / Light）

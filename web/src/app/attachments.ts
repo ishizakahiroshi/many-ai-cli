@@ -2,7 +2,7 @@
 import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
 import { activeSessionId, terminals } from './state.js';
-import { inputEl, isInteractiveFocusTarget, stagePastedText } from '../app.js';
+import { inputEl, isInteractiveFocusTarget, stagePastedText, updateInputAffordance } from '../app.js';
 import { pushMessage } from './chat-history.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
@@ -35,6 +35,7 @@ if (attachClearBtn) {
       wrapper.remove();
     });
     updateAttachClearBtn();
+    updateInputAffordance();
   });
 }
 
@@ -169,9 +170,11 @@ export async function stageAttach(file, opts: any = {}) {
   const wrapper = addAttachThumbnail(normalized, () => {
     const idx = pendingAttachFiles.findIndex(p => p.entry === entry);
     if (idx !== -1) pendingAttachFiles.splice(idx, 1);
+    updateInputAffordance();
   });
   entry.wrapper = wrapper;
   pendingAttachFiles.push({ buf, filename: normalized.name || '', entry, wrapper });
+  updateInputAffordance();
 }
 
 export async function stageFileAttach(file) {
@@ -184,9 +187,11 @@ export async function stageFileAttach(file) {
   const wrapper = addFileChip(file, () => {
     const idx = pendingAttachFiles.findIndex(p => p.entry === entry);
     if (idx !== -1) pendingAttachFiles.splice(idx, 1);
+    updateInputAffordance();
   });
   entry.wrapper = wrapper;
   pendingAttachFiles.push({ buf, filename: file.name || '', entry, wrapper });
+  updateInputAffordance();
 }
 
 // クリップボード画像は元ファイル名がないことが多いため、PNG として保存する。
