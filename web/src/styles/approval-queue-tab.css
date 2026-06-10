@@ -268,6 +268,11 @@
     padding: 12px 14px;
     font-size: 0.9rem;
   }
+  .aqt-go-terminal-btn {
+    min-height: 48px; /* モバイル 48px 以上（タッチターゲット） */
+    padding: 10px 14px;
+    font-size: 0.85rem;
+  }
   .aqt-options {
     flex-direction: column;
   }

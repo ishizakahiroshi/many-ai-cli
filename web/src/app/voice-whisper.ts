@@ -102,7 +102,7 @@ const WHISPER_HALLUCINATION_PHRASES = [
       permission_denied: t('voice_error_permission'),
       audio_capture: t('voice_error_audio_capture'),
     };
-    showToast(byCode[normalized] || t('voice_error_detail').replace('{code}', normalized), btn);
+    showToast(byCode[normalized] || t('voice_error_detail').replace('{code}', normalized), btn, 5000);
   }
 
   function setVoiceAudioActive(active: boolean) {
@@ -312,7 +312,10 @@ const WHISPER_HALLUCINATION_PHRASES = [
       showVoiceError('audio_capture');
       return;
     }
-    if (isProcessing) return;
+    if (isProcessing) {
+      showToast(tr('voice_whisper_processing', '認識中です…しばらくお待ちください'), btn, 3000);
+      return;
+    }
     if (isRecording) {
       await finishWhisperRecording();
       return;
@@ -371,7 +374,11 @@ const WHISPER_HALLUCINATION_PHRASES = [
   }
 
   async function finishWhisperRecording() {
-    if (!isRecording || isProcessing) return;
+    if (isProcessing) {
+      showToast(tr('voice_whisper_processing', '認識中です…しばらくお待ちください'), btn, 3000);
+      return;
+    }
+    if (!isRecording) return;
     isRecording = false;
     isProcessing = true;
     const sourceRate = audioCtx?.sampleRate || TARGET_SAMPLE_RATE;
@@ -400,7 +407,11 @@ const WHISPER_HALLUCINATION_PHRASES = [
       document.dispatchEvent(new CustomEvent('voiceinput:stopped'));
       setTimeout(() => inputEl.focus(), 0);
     } catch (err) {
-      if (err?.name !== 'AbortError') showVoiceError(String(err?.message || err || 'whisper_failed'));
+      if (err?.name === 'AbortError') {
+        showToast(tr('voice_whisper_cancelled', '音声認識を取り消しました'), btn, 2000);
+      } else {
+        showVoiceError(String(err?.message || err || 'whisper_failed'));
+      }
       inputEl.value = preVoiceText;
       autoExpand();
       voiceBar.classList.remove('voice-processing');

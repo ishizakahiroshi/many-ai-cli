@@ -22,6 +22,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -80,6 +81,13 @@ func runClaude(hubURL, token string, sessionID int, stdin io.Reader, stdout io.W
 		logger.Warn("usage-relay(claude): stdin read failed", "err", err)
 		// exit 0 — statusLine を壊さない
 		return nil
+	}
+
+	// デバッグ: stdin の生 JSON を ~/.any-ai-cli/statusline-debug.json に書き出す。
+	// トークンフィールド名確認後に削除する。
+	if home, err2 := os.UserHomeDir(); err2 == nil {
+		dumpPath := filepath.Join(home, ".any-ai-cli", "statusline-debug.json")
+		_ = os.WriteFile(dumpPath, raw, 0o600)
 	}
 
 	var input claudeStatusLineInput

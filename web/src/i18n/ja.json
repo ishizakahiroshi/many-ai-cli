@@ -399,6 +399,8 @@
   "voice_whisper_discard_silence": "発話が検出されなかったため、認識を実行しませんでした",
   "voice_whisper_discard_empty": "音声を認識できませんでした",
   "voice_whisper_discard_hallucination": "既知の幻覚パターンと一致したため、認識結果を破棄しました",
+  "voice_whisper_processing": "認識中です…しばらくお待ちください",
+  "voice_whisper_cancelled": "音声認識を取り消しました",
   "voice_cancel_tooltip": "キャンセル (ESC)",
   "voice_confirm_tooltip": "確定",
   "settings_voice_title": "音声入力",

@@ -399,6 +399,8 @@
   "voice_whisper_discard_silence": "No speech was detected, so transcription was skipped",
   "voice_whisper_discard_empty": "No speech was recognized",
   "voice_whisper_discard_hallucination": "Discarded a known hallucination pattern",
+  "voice_whisper_processing": "Transcribing… please wait",
+  "voice_whisper_cancelled": "Voice recognition cancelled",
   "voice_cancel_tooltip": "Cancel (ESC)",
   "voice_confirm_tooltip": "Confirm",
   "settings_voice_title": "Voice input",
