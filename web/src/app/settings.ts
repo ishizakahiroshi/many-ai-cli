@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, showToast, ti18n, token } from './util.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, setFaviconEnvBadge, stateLabel } from './session-list.js';
@@ -856,6 +856,7 @@ export function applyLang(lang) {
   const browserUnavailableEl = document.getElementById('voice-browser-unavailable-note');
   const whisperBlock = document.getElementById('voice-whisper-settings');
   const whisperAutoSubmitEl = document.getElementById('voice-whisper-auto-submit');
+  const whisperAutoStopEl = document.getElementById('voice-whisper-auto-stop');
   const whisperManagedPanel = document.getElementById('voice-whisper-managed-panel');
   const whisperManagedStateEl = document.getElementById('voice-whisper-managed-state');
   const whisperModelSelect = document.getElementById('voice-whisper-model-select');
@@ -871,6 +872,7 @@ export function applyLang(lang) {
   const diagnosticsPanel = document.getElementById('voice-diagnostics-panel');
   let whisperPollTimer = null;
   let lastWhisperStatus = null;
+  let whisperUserModelChoice = null;
 
   function browserRecognitionSupported() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -909,6 +911,9 @@ export function applyLang(lang) {
     if (diagnosticsPanel) diagnosticsPanel.hidden = engine !== 'browser';
     if (whisperAutoSubmitEl) {
       whisperAutoSubmitEl.checked = localStorage.getItem(STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY) === '1';
+    }
+    if (whisperAutoStopEl) {
+      whisperAutoStopEl.checked = localStorage.getItem(STORAGE_VOICE_WHISPER_AUTO_STOP_KEY) !== '0';
     }
     if (engine === 'whisper') {
       refreshWhisperStatus();
@@ -950,7 +955,12 @@ export function applyLang(lang) {
         opt.title = model.quality || '';
         whisperModelSelect.appendChild(opt);
       }
-      whisperModelSelect.value = data.model || current;
+      if (whisperUserModelChoice && whisperUserModelChoice === data.model) {
+        whisperUserModelChoice = null;
+      }
+      whisperModelSelect.value = (whisperUserModelChoice && !data.running)
+        ? whisperUserModelChoice
+        : (data.model || current);
     }
     const install = data.install || {};
     const installing = !!install.installing;
@@ -1037,8 +1047,14 @@ export function applyLang(lang) {
     });
   });
 
+  whisperModelSelect?.addEventListener('change', () => {
+    whisperUserModelChoice = whisperModelSelect.value || null;
+  });
   whisperAutoSubmitEl?.addEventListener('change', () => {
     localStorage.setItem(STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, whisperAutoSubmitEl.checked ? '1' : '0');
+  });
+  whisperAutoStopEl?.addEventListener('change', () => {
+    localStorage.setItem(STORAGE_VOICE_WHISPER_AUTO_STOP_KEY, whisperAutoStopEl.checked ? '1' : '0');
   });
   whisperInstallBtn?.addEventListener('click', async () => {
     try {
@@ -1050,7 +1066,8 @@ export function applyLang(lang) {
   });
   whisperStartBtn?.addEventListener('click', async () => {
     try {
-      await postWhisperAction('start');
+      const model = whisperModelSelect?.value || '';
+      await postWhisperAction('start', model ? { model } : null);
       showToast(t('settings_voice_whisper_action_done'), whisperStartBtn);
     } catch (err) {
       showToast(String(err?.message || err), whisperStartBtn);

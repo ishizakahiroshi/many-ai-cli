@@ -432,6 +432,8 @@
   "settings_voice_whisper_note_download": "インストーラーは whisper.cpp を GitHub Releases から、選択モデルを Hugging Face から HTTPS ダウンロードします。バイナリは SHA-256 を照合します。公開ハッシュ未設定のモデルは HTTPS ダウンロードとして扱い、ハッシュ未検証と表示します。",
   "settings_voice_whisper_note_ready": "{path} にインストール済みです。サーバを起動してから認識エンジンに Whisper を選んでください。",
   "settings_voice_whisper_action_done": "Whisper の状態を更新しました。",
+  "settings_voice_whisper_auto_stop": "終了検知",
+  "settings_voice_whisper_auto_stop_desc": "発話後に無音が約2秒続いたら録音を自動で確定し、認識を開始します。OFF の場合は確定ボタンを押すまで録音を続けます。",
   "settings_voice_whisper_auto_submit": "自動送信トリガー",
   "settings_voice_whisper_auto_submit_desc": "Whisper は無音や短い音でも誤認識することがあります。誤送信を避けるため、既定では認識結果を入力欄に挿入するだけです。",
   "settings_voice_whisper_external_desc": "外部 API URL を設定した場合、音声データはその外部サービスへ送信されます。",

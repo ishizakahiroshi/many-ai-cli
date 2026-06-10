@@ -13,6 +13,7 @@ import (
 	neturl "net/url"
 	"strings"
 	"time"
+	"unicode"
 
 	"any-ai-cli/internal/config"
 )
@@ -69,7 +70,37 @@ func (s *Server) handleVoiceTranscribe(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadGateway, "whisper_failed", err.Error())
 		return
 	}
+	if isWhisperHallucination(text, cfg.HallucinationPhrases) {
+		writeJSONError(w, http.StatusUnprocessableEntity, "hallucination", "transcript matched a known hallucination phrase")
+		return
+	}
 	writeJSON(w, voiceTranscribeResponse{OK: true, Text: text})
+}
+
+// normalizeWhisperTranscript は幻聴フィルタの比較用に表記ゆれを吸収する
+// （小文字化・空白除去・末尾の句読点や括弧類の除去）。
+func normalizeWhisperTranscript(text string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(text) {
+		if unicode.IsSpace(r) {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return strings.TrimRight(b.String(), "。．.!！?？、,，'\"“”‘’「」『』（）()[]{}")
+}
+
+func isWhisperHallucination(text string, phrases []string) bool {
+	normalized := normalizeWhisperTranscript(text)
+	if normalized == "" {
+		return false
+	}
+	for _, phrase := range phrases {
+		if normalized == normalizeWhisperTranscript(phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 func transcribeWithWhisper(parent context.Context, cfg config.VoiceWhisperConfig, audio []byte) (string, error) {

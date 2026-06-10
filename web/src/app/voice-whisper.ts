@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
-import { STORAGE_VOICE_ENGINE_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, getVoiceEngine } from './user-prefs.js';
+import { STORAGE_VOICE_ENGINE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, getVoiceEngine } from './user-prefs.js';
 import { activeSessionId, terminals } from './state.js';
 import { autoExpand, buildSendText, doSend, inputEl, set_voiceActive, set_voiceAudioActive, updateInputClearButton, updateSlashMenu, voiceAudioActive } from '../app.js';
 import { isTerminalAtBottom, refitActiveTerminalAfterLayout } from './terminal.js';
@@ -17,19 +17,8 @@ const MIN_PEAK_RMS = 0.012;
 // voiced 時間に関わらず発話とみなす（無音・暗騒音は peakRms が桁違いに小さい）。
 const STRONG_PEAK_RMS = 0.05;
 const VAD_RMS_THRESHOLD = 0.004;
-const WHISPER_HALLUCINATION_PHRASES = [
-  'ご視聴ありがとうございました',
-  'ご清聴ありがとうございました',
-  'チャンネル登録をお願いします',
-  'チャンネル登録よろしくお願いします',
-  '字幕視聴ありがとうございました',
-  'thanks for watching',
-  'thank you for watching',
-  'please subscribe',
-  'like and subscribe',
-  'don\'t forget to subscribe',
-];
-
+// 終了検知: 発話開始後にこの時間だけ無音が続いたら自動で録音を確定する
+const AUTO_STOP_SILENCE_MS = 1800;
 (function () {
   const btn = document.getElementById('voice-btn');
   const voiceBar = document.getElementById('voice-bar');
@@ -65,6 +54,7 @@ const WHISPER_HALLUCINATION_PHRASES = [
   let totalSampleCount = 0;
   let voicedSampleCount = 0;
   let peakRms = 0;
+  let silentSampleCount = 0;
   const chunks: Float32Array[] = [];
 
   function tr(key: string, fallback: string, vars: Record<string, string> = {}) {
@@ -212,7 +202,28 @@ const WHISPER_HALLUCINATION_PHRASES = [
     const rms = Math.sqrt(sum / chunk.length);
     totalSampleCount += chunk.length;
     peakRms = Math.max(peakRms, rms);
-    if (rms >= VAD_RMS_THRESHOLD) voicedSampleCount += chunk.length;
+    if (rms >= VAD_RMS_THRESHOLD) {
+      voicedSampleCount += chunk.length;
+      silentSampleCount = 0;
+    } else {
+      silentSampleCount += chunk.length;
+    }
+    maybeAutoStopOnSilence();
+  }
+
+  function autoStopEnabled() {
+    return localStorage.getItem(STORAGE_VOICE_WHISPER_AUTO_STOP_KEY) !== '0';
+  }
+
+  function maybeAutoStopOnSilence() {
+    if (!isRecording || isProcessing || !autoStopEnabled()) return;
+    // 発話前の無音では切らない（発話とみなす条件は hasMeaningfulAudio と同じピーク基準）
+    if (peakRms < MIN_PEAK_RMS) return;
+    const sampleRate = audioCtx?.sampleRate || TARGET_SAMPLE_RATE;
+    const silentMs = (silentSampleCount / Math.max(1, sampleRate)) * 1000;
+    if (silentMs >= AUTO_STOP_SILENCE_MS) {
+      finishWhisperRecording();
+    }
   }
 
   function mixToMono(input: Float32Array, channels: number) {
@@ -329,6 +340,7 @@ const WHISPER_HALLUCINATION_PHRASES = [
     totalSampleCount = 0;
     voicedSampleCount = 0;
     peakRms = 0;
+    silentSampleCount = 0;
     preVoiceText = inputEl.value;
     if (preVoiceText.length > 0 && !/\s$/.test(preVoiceText)) {
       inputEl.value = preVoiceText + ' ';
@@ -453,23 +465,7 @@ const WHISPER_HALLUCINATION_PHRASES = [
     if (!res.ok) throw new Error(body?.error || 'whisper_failed');
     const text = String(body?.text || '').trim();
     if (!text) discardWhisperResult('empty_result');
-    if (isKnownWhisperHallucination(text)) {
-      discardWhisperResult('hallucination', { text });
-    }
     return text;
-  }
-
-  function normalizeWhisperResult(text: string) {
-    return String(text || '')
-      .normalize('NFKC')
-      .toLowerCase()
-      .replace(/[\s\u3000]+/g, '')
-      .replace(/[。．.!！?？、,，'"“”‘’「」『』（）()[\]{}]+$/g, '');
-  }
-
-  function isKnownWhisperHallucination(text: string) {
-    const normalized = normalizeWhisperResult(text);
-    return WHISPER_HALLUCINATION_PHRASES.some((phrase) => normalized === normalizeWhisperResult(phrase));
   }
 
   function insertTranscribedText(text: string) {

@@ -432,6 +432,8 @@
   "settings_voice_whisper_note_download": "The installer downloads whisper.cpp from GitHub Releases and the selected model from Hugging Face. Binary archives are SHA-256 verified; models without a published hash are downloaded over HTTPS and marked as hash-unverified.",
   "settings_voice_whisper_note_ready": "Installed at {path}. Start the server, then select Whisper as the engine.",
   "settings_voice_whisper_action_done": "Whisper status updated.",
+  "settings_voice_whisper_auto_stop": "End-of-speech detection",
+  "settings_voice_whisper_auto_stop_desc": "Automatically finalizes the recording and starts transcription after about 2 seconds of silence following speech. When OFF, recording continues until you press the confirm button.",
   "settings_voice_whisper_auto_submit": "Auto-submit trigger",
   "settings_voice_whisper_auto_submit_desc": "Whisper can hallucinate on silence or short sounds. To avoid accidental sends, results are inserted into the input field by default.",
   "settings_voice_whisper_external_desc": "If an external API URL is configured, audio data is sent to that external service.",

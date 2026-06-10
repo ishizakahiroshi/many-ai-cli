@@ -352,6 +352,24 @@ type VoiceWhisperConfig struct {
 	Managed        bool   `yaml:"managed,omitempty" json:"managed,omitempty"`
 	Model          string `yaml:"model,omitempty" json:"model,omitempty"`
 	ServerPort     int    `yaml:"server_port,omitempty" json:"server_port,omitempty"`
+	// HallucinationPhrases は認識結果がこれらと（正規化後に）完全一致したら破棄する幻聴フィルタ。
+	// 未設定（nil）なら既定リストを適用。空リスト（[]）を明示するとフィルタ無効。
+	HallucinationPhrases []string `yaml:"hallucination_phrases,omitempty" json:"hallucination_phrases,omitempty"`
+}
+
+// DefaultWhisperHallucinationPhrases は Whisper が無音・微小音に対して出力しがちな
+// 定型句（幻聴）の既定リスト。config.yaml の voice.whisper.hallucination_phrases で上書きできる。
+var DefaultWhisperHallucinationPhrases = []string{
+	"ご視聴ありがとうございました",
+	"ご清聴ありがとうございました",
+	"チャンネル登録をお願いします",
+	"チャンネル登録よろしくお願いします",
+	"字幕視聴ありがとうございました",
+	"thanks for watching",
+	"thank you for watching",
+	"please subscribe",
+	"like and subscribe",
+	"don't forget to subscribe",
 }
 
 type VoiceConfig struct {
@@ -643,6 +661,9 @@ func (cfg *Config) Clone() *Config {
 	if cfg.Notify.Events != nil {
 		c.Notify.Events = cloneStringSlice(cfg.Notify.Events)
 	}
+	if cfg.Voice.Whisper.HallucinationPhrases != nil {
+		c.Voice.Whisper.HallucinationPhrases = cloneStringSlice(cfg.Voice.Whisper.HallucinationPhrases)
+	}
 	return &c
 }
 
@@ -658,6 +679,9 @@ func (cfg *Config) applyDefaults() {
 	}
 	if strings.TrimSpace(cfg.Voice.Whisper.Model) == "" {
 		cfg.Voice.Whisper.Model = "small"
+	}
+	if cfg.Voice.Whisper.HallucinationPhrases == nil {
+		cfg.Voice.Whisper.HallucinationPhrases = cloneStringSlice(DefaultWhisperHallucinationPhrases)
 	}
 }
 
