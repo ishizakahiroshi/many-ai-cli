@@ -23,7 +23,7 @@ let _wsReconnectTimer = null;
 // Hub プロセス起動毎の ID（snapshot の hub_instance）。Hub が再起動すると
 // live session ID が 1 から振り直されるため、再接続先が別インスタンスだった
 // 場合は旧 ID キーのローカル状態（chatHistory / terminals 等）を破棄しないと
-// 同じ番号の別セッションに旧セッションのチャット履歴・バッファが混入する。
+// 同じ番号の別セッションに旧セッションのチャット・バッファが混入する。
 let _hubInstance = null;
 let _pendingOpenSessionId = parseInt(new URLSearchParams(location.search).get('session_id') || '0', 10) || 0;
 
@@ -54,7 +54,7 @@ if ('serviceWorker' in navigator) {
 }
 
 // Hub 再起動検出時に live session ID をキーとするローカル状態を全破棄する。
-// removeLocalSession がターミナル dispose・チャット履歴・承認系キャッシュ等の
+// removeLocalSession がターミナル dispose・チャット・承認系キャッシュ等の
 // 個別クリーンアップを一括で行うため、既知の全 ID に対して呼ぶ。
 function purgeLocalStateForHubRestart() {
   const ids = new Set([

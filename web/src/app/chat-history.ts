@@ -29,7 +29,7 @@ export function stripAnsiBasic(s) {
 export function normalizeChatText(raw) {
   if (!raw) return '';
   // [ANY-AI-CLI]...[/ANY-AI-CLI] / [ANY-AI-CLI-DONE]...[/ANY-AI-CLI-DONE] ブロックを除去
-  // （承認マーカー・完了サマリーマーカーはチャット履歴に表示しない。DONE は -DONE 付きで
+  // （承認マーカー・完了サマリーマーカーはチャットに表示しない。DONE は -DONE 付きで
   //  別リテラルのため、汎用の [ANY-AI-CLI] パターンに一致せず先に専用で除去する）
   let s = raw
     .replace(/\[ANY-AI-CLI-DONE\][\s\S]*?\[\/ANY-AI-CLI-DONE\]/g, '')
@@ -126,7 +126,7 @@ export async function restoreChatHistoryFromStore(sid, opts: any = {}) {
     if (messages.length === 0) {
       // DB がまだ空のタイミングで照会すると 0 件が返る。ここで「復元済み」と
       // 記録してしまうと、その後 DB に履歴が蓄積されても二度と読み直さず、
-      // チャット履歴タブが「履歴はまだありません」のままになる（DB復元ボタン
+      // チャットタブが「履歴はまだありません」のままになる（DB復元ボタン
       // を押すまで解消しない）。0 件のときは印を付けず、次回の mount/開封で
       // 再照会できるようにする。
       return false;
@@ -294,7 +294,7 @@ if (typeof window !== 'undefined') {
   };
 }
 
-// チャット履歴の購読: バッジ更新用 (アクティブセッションだけ)
+// チャットの購読: バッジ更新用 (アクティブセッションだけ)
 export let _activeChatSubUnsub = null;
 export function rewireChatHistorySub(sid) {
   if (_activeChatSubUnsub) { try { _activeChatSubUnsub(); } catch (_) {} _activeChatSubUnsub = null; }
@@ -401,7 +401,7 @@ export function clearBuffer(session) {
 })();
 
 // =========================================================================
-// C3: チャット履歴メッセージレンダリング本体
+// C3: チャットメッセージレンダリング本体
 // docs/local/plan_chat-history-subview.md §C3
 //
 // 主要関数:
@@ -1007,7 +1007,7 @@ if (typeof window !== 'undefined') {
 }
 
 // =========================================================================
-// C4: チャット履歴の補助機能 (子 plan plan_chat-history-subview_c4_extras.md)
+// C4: チャットの補助機能 (子 plan plan_chat-history-subview_c4_extras.md)
 //   - 子 C1: .path-link 右クリックメニュー (showPathPopup 流用)
 //   - 子 C2: 吹き出し hover アクション (コピー / 折りたたみ / raw)
 //            #btn-expand-all / #btn-collapse-all / #btn-raw-log 本実装
@@ -1215,7 +1215,7 @@ if (typeof window !== 'undefined') {
     const restored = await restoreChatHistoryFromStore(activeSessionId, { force: true });
     if (restored) {
       mountChatPaneForSession(activeSessionId);
-      showToast(ti18n('chat_db_restore_done', 'SQLite からチャット履歴を復元しました'));
+      showToast(ti18n('chat_db_restore_done', 'SQLite からチャットを復元しました'));
     } else {
       showToast(ti18n('chat_db_restore_empty', '復元できる履歴はありません'));
     }
@@ -1375,7 +1375,7 @@ if (typeof window !== 'undefined') {
       { id: 'btn-expand-all',   icon: '⊞', label: ti18n('btn_expand_all', '全展開'),       tip: ti18n('btn_expand_all_tooltip', '全てのツール呼び出しを展開'),       fn: () => expandAllTools() },
       { id: 'btn-collapse-all', icon: '⊟', label: ti18n('btn_collapse_all', '全折りたたみ'), tip: ti18n('btn_collapse_all_tooltip', '全てのツール呼び出しを折りたたみ'), fn: () => collapseAllTools() },
       { id: 'btn-raw-log',      icon: '📄', label: ti18n('btn_raw_log', '生ログ'),           tip: ti18n('btn_raw_log_tooltip', '生ログを開く'),                       fn: () => openRawLog() },
-      { id: 'btn-db-restore',   icon: '↺', label: ti18n('btn_db_restore', 'DB復元'),         tip: ti18n('btn_db_restore_tooltip', 'SQLite からチャット履歴を復元'),      fn: () => restoreCurrentChatFromStore() },
+      { id: 'btn-db-restore',   icon: '↺', label: ti18n('btn_db_restore', 'DB復元'),         tip: ti18n('btn_db_restore_tooltip', 'SQLite からチャットを復元'),      fn: () => restoreCurrentChatFromStore() },
       { id: 'btn-global-search', icon: '⌕', label: ti18n('btn_global_search', '横断'),       tip: ti18n('btn_global_search_tooltip', 'SQLite の全セッション履歴を検索'), fn: () => runGlobalSearchFromBar() },
     ];
     for (const def of iconBtnDefs) {

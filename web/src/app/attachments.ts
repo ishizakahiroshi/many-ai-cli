@@ -132,7 +132,7 @@ if (terminalWrapper) {
   });
 }
 
-// チャット履歴ペインへの D&D
+// チャットペインへの D&D
 export const chatPane = document.getElementById('chat-pane');
 if (chatPane) {
   chatPane.addEventListener('dragenter', (e) => {

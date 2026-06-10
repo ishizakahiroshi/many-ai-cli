@@ -2348,7 +2348,7 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 	b, _ := json.Marshal(list)
 	// hub_instance: Hub 再起動を UI が検出するための起動毎 ID。
 	// UI 側は前回値と異なる場合に live session ID キーのローカル状態
-	// （チャット履歴・ターミナルバッファ等）を破棄してから snapshot を適用する。
+	// （チャット・ターミナルバッファ等）を破棄してから snapshot を適用する。
 	_ = uc.send(map[string]any{"type": "snapshot", "sessions": json.RawMessage(b), "hub_instance": s.instanceID})
 
 	// C3: UI 接続時に既存セッションの usageStat をまとめて送る。

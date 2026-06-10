@@ -915,7 +915,7 @@ export function removeLocalSession(id) {
   // sessions.delete より前に git/files タブの付け替えを試みる
   // （onSessionRemoved 内で sessionsRef を引いて代替を探すため、削除前の方が探しやすい）
   try { FilesTabManager.onSessionRemoved(id); } catch (_) {}
-  // C1/C2: チャット履歴 store とビューモード state をクリーンアップ
+  // C1/C2: チャット store とビューモード state をクリーンアップ
   try { if (typeof onChatHistorySessionRemoved === 'function') onChatHistorySessionRemoved(id); } catch (_) {}
   try { if (typeof sessionViewMode !== 'undefined') sessionViewMode.delete(id); } catch (_) {}
   try { if (typeof sessionLazyLoaded !== 'undefined') sessionLazyLoaded.delete(id); } catch (_) {}

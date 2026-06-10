@@ -852,7 +852,7 @@ hub:
 voice:
   whisper:
     managed: false          # true = Hub manages a local whisper.cpp server
-    model: "large-v3-turbo-q5_0"
+    model: "small"            # default; pick large-v3-turbo-q5_0 on a fast CPU / GPU server
     server_url: ""          # e.g. http://127.0.0.1:8080 (auto-set in managed mode)
     server_port: 0          # 0 = auto-pick
     request_path: ""        # empty = try /v1/audio/transcriptions then /inference

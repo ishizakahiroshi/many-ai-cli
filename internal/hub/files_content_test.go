@@ -190,7 +190,7 @@ func TestHandleFilesContent_RejectsBinaryExtension(t *testing.T) {
 	}
 }
 
-// newMentionTestServer は「チャット履歴に言及されたスコープ外パス」テスト用の
+// newMentionTestServer は「チャットに言及されたスコープ外パス」テスト用の
 // Server（sessionStore + live セッション付き）と、言及登録用ヘルパを返す。
 func newMentionTestServer(t *testing.T, projDir string, sessionID int) (*Server, func(text string)) {
 	t.Helper()
@@ -232,7 +232,7 @@ func callFilesContentWithSession(t *testing.T, s *Server, path string, sessionID
 	return w.Code, body, resp
 }
 
-// TestHandleFilesContent_MentionedOutsidePathReadOnly は、チャット履歴に言及された
+// TestHandleFilesContent_MentionedOutsidePathReadOnly は、チャットに言及された
 // スコープ外パスが読み取り専用（readOnly=true）で 200 になることを確認する。
 func TestHandleFilesContent_MentionedOutsidePathReadOnly(t *testing.T) {
 	projDir := t.TempDir()

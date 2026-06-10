@@ -112,12 +112,27 @@ voice:
 
 The Hub first tries OpenAI-compatible `/v1/audio/transcriptions` and then falls back to `/inference`. Set `request_path` only when your server needs a fixed custom path.
 
+## Model Choice
+
+Managed Whisper runs on the CPU (the bundled whisper.cpp build has no GPU
+support), so transcription latency is bound by CPU cores. Measured on a 10
+logical-CPU machine with a 5-7 s Japanese utterance:
+
+| Model | Latency | Accuracy |
+|---|---|---|
+| `small` (default) | 2-3 s | Good sentence structure; may misspell technical terms |
+| `large-v3-turbo-q5_0` | ~7 s | Best accuracy; latency grows quickly on fewer cores |
+| `tiny-q5_1` | <1 s | Smoke test only; not usable for real input |
+
+Start with `small`. Switch to `large-v3-turbo-q5_0` only on a fast multi-core
+CPU, or when pointing `server_url` at an external GPU-backed Whisper server.
+
 ## Config Reference
 
 | Key | Meaning |
 |---|---|
 | `voice.whisper.managed` | `true` lets the Hub manage the local whisper.cpp server. Supported on Windows x64, and on images/hosts that provide a server via `ANY_AI_CLI_WHISPER_SERVER`. |
-| `voice.whisper.model` | Managed model ID. Default: `large-v3-turbo-q5_0`. |
+| `voice.whisper.model` | Managed model ID. Default: `small`. |
 | `voice.whisper.server_url` | Local Whisper server URL. Managed mode writes this automatically. |
 | `voice.whisper.server_port` | Preferred managed server port. `0` means auto-pick. |
 | `voice.whisper.request_path` | Optional endpoint override. Empty means auto-probe. |

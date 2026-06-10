@@ -281,6 +281,7 @@ export function ensureTerminal(id) {
     inCursorHideBlock: false,
     cursorHideBlockBuf: [] as number[],
     cursorHideHasAbsPos: false,
+    cursorHideHasNewline: false,
     autoScroll: true,
     everAttached: false,
   });
@@ -685,7 +686,7 @@ document.addEventListener('wheel', (e) => {
   // ここを抜くと、モーダルの非スクロール領域でのホイールが背後 CLI に転送されてしまう。
   if (isModalOverlayOpen()) return;
 
-  // マウスがチャット履歴ペイン上にある場合: 最近傍のスクロール可能要素へ明示スクロール
+  // マウスがチャットペイン上にある場合: 最近傍のスクロール可能要素へ明示スクロール
   if (e.target instanceof Element && e.target.closest('#chat-pane')) {
     let scrollEl = null;
     let el = e.target;
@@ -1137,6 +1138,11 @@ export function snapToBottomAfterScreenClear(id) {
 // Claude Code がステータスバーをこのパターンで書き込んでおり、xterm.js の
 // スクロールバックに混入してツール呼び出し行の文字が壊れる原因になる。
 // 絶対移動を含まない（初期化の cursor home 等）は通過させる。
+// 改行（LF）を含むブロックも通過させる。ステータスバー更新は 1 行内の
+// 書き換えで改行を含まない一方、Claude Code の起動バナー等の本文描画は
+// 同じ ?25l〜?25h + 絶対移動パターンかつ複数行で、破棄すると spawn 直後の
+// 画面が真っ黒になる（jsonl 実測: バナー約1.3〜1.5KB は改行入り、
+// 破棄すべきステータス更新 30B は改行なし）。
 const MAX_CURSOR_HIDE_BUF = 2048;
 export function filterCursorHideShowBlocksForDisplay(id, bytes) {
   const t = terminals.get(id);
@@ -1151,6 +1157,7 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
   let inBlock: boolean = t.inCursorHideBlock || false;
   let blockBuf: number[] = [...(t.cursorHideBlockBuf || [])];
   let hasAbsPos: boolean = t.cursorHideHasAbsPos || false;
+  let hasNewline: boolean = t.cursorHideHasNewline || false;
 
   while (i < combined.length) {
     if (!inBlock) {
@@ -1158,6 +1165,7 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
         inBlock = true;
         blockBuf = [];
         hasAbsPos = false;
+        hasNewline = false;
         i += hideCursorSeq.length;
         continue;
       }
@@ -1166,6 +1174,7 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
         t.inCursorHideBlock = false;
         t.cursorHideBlockBuf = [];
         t.cursorHideHasAbsPos = false;
+        t.cursorHideHasNewline = false;
         return new Uint8Array(out);
       }
       out.push(combined[i]);
@@ -1178,11 +1187,12 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
         inBlock = false;
         blockBuf = [];
         hasAbsPos = false;
+        hasNewline = false;
         continue;
       }
       if (bytesStartWith(combined, i, showCursorSeq)) {
-        if (!hasAbsPos) {
-          // ステータスバー更新でない → 通過
+        if (!hasAbsPos || hasNewline) {
+          // ステータスバー更新でない（絶対移動なし or 複数行の本文描画） → 通過
           for (const b of hideCursorSeq) out.push(b);
           for (const b of blockBuf) out.push(b);
           for (const b of showCursorSeq) out.push(b);
@@ -1190,6 +1200,7 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
         inBlock = false;
         blockBuf = [];
         hasAbsPos = false;
+        hasNewline = false;
         i += showCursorSeq.length;
         continue;
       }
@@ -1198,6 +1209,7 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
         t.inCursorHideBlock = true;
         t.cursorHideBlockBuf = blockBuf;
         t.cursorHideHasAbsPos = hasAbsPos;
+        t.cursorHideHasNewline = hasNewline;
         return new Uint8Array(out);
       }
       // \x1b[row;colH（row・col ともに数字あり）を検出したらステータス更新とみなす
@@ -1217,6 +1229,7 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
           }
         }
       }
+      if (combined[i] === 0x0A) hasNewline = true;
       blockBuf.push(combined[i]);
       i++;
     }
@@ -1226,6 +1239,7 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
   t.inCursorHideBlock = inBlock;
   t.cursorHideBlockBuf = blockBuf;
   t.cursorHideHasAbsPos = hasAbsPos;
+  t.cursorHideHasNewline = hasNewline;
   return new Uint8Array(out);
 }
 

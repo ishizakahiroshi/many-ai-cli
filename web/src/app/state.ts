@@ -101,7 +101,7 @@ export const sessionInputState = new Map<number, any>(); // sessionId → { inpu
 // =========================================================================
 // chatHistory store (plan_chat-history-subview.md §C1)
 //
-// セッションごとのチャット履歴を保持する in-memory store。
+// セッションごとのチャットを保持する in-memory store。
 // C2 (タブ切替) / C3 (吹き出しレンダラ) が購読して描画する。
 //
 // メッセージ shape:

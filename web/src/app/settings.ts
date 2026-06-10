@@ -1042,7 +1042,7 @@ export function applyLang(lang) {
   });
   whisperInstallBtn?.addEventListener('click', async () => {
     try {
-      await postWhisperAction('install', { model: whisperModelSelect?.value || lastWhisperStatus?.model || 'large-v3-turbo-q5_0' });
+      await postWhisperAction('install', { model: whisperModelSelect?.value || lastWhisperStatus?.model || 'small' });
       showToast(t('settings_voice_whisper_action_done'), whisperInstallBtn);
     } catch (err) {
       showToast(String(err?.message || err), whisperInstallBtn);
@@ -2205,7 +2205,7 @@ export function setActiveTab(sid, name) {
   }
   area.hidden = false;
 
-  area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-workbench');
+  area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-workbench', 'mode-approval');
   area.classList.add('mode-' + name);
 
   // タブボタンの active 切替
