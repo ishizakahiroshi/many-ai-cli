@@ -225,6 +225,8 @@ export function setStatusbarEnabled(enabled: boolean): void {
   if (bar) {
     bar.style.display = enabled ? '' : 'none';
   }
+  // attach-panel が fixed statusbar に隠れないよう padding-bottom を同期する
+  document.body.style.setProperty('--tsb-bottom-offset', enabled ? '22px' : '0px');
   if (enabled) {
     renderStatusbar();
     startTick();
