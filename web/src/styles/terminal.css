@@ -5,7 +5,8 @@
 #terminal-column { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
 
 /* ターミナルラッパー */
-#terminal-wrapper { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+/* padding-bottom: token-statusbar の高さ分（fixed 要素が attach-panel に被るのを防ぐ） */
+#terminal-wrapper { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; padding-bottom: var(--tsb-bottom-offset, 22px); }
 
 /* ドラッグオーバーレイ */
 #terminal-wrapper.drag-active::after,

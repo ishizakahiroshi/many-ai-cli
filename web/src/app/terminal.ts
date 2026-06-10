@@ -276,6 +276,7 @@ export function ensureTerminal(id) {
     textDecoder: new TextDecoder('utf-8'),
     markerFilterCarry: new Uint8Array(0),
     screenClearSeqCarry: new Uint8Array(0),
+    crFilterCarry: new Uint8Array(0),
     autoScroll: true,
     everAttached: false,
   });
@@ -1097,9 +1098,41 @@ export function snapToBottomAfterScreenClear(id) {
   if (id === activeSessionId) updateScrollLockBtn(false);
 }
 
+// \r（CR）で行頭へ戻ったあと行末を消去しないと、短い上書きテキストの後ろに
+// 旧テキストの末尾が残ってスクロールバック上で混在して見える。
+// \r の直後に \x1b[K（EL: Erase Line from cursor to right）を挿入して残留を防ぐ。
+// \r\n の \r（正常な改行ペア）には挿入しない（不要かつ \n 前の空白消去になる）。
+export function filterBareCarriageReturnForDisplay(id, bytes) {
+  const t = terminals.get(id);
+  if (!t) return bytes;
+  const carry = t.crFilterCarry || new Uint8Array(0);
+  const combined = new Uint8Array(carry.length + bytes.length);
+  combined.set(carry, 0);
+  combined.set(bytes, carry.length);
+
+  const EL = asciiBytes('\x1b[K');
+  const out: number[] = [];
+  for (let i = 0; i < combined.length; i++) {
+    out.push(combined[i]);
+    if (combined[i] === 0x0D) {  // \r
+      if (i + 1 < combined.length) {
+        if (combined[i + 1] !== 0x0A) {  // 直後が \n でなければ EL を挿入
+          for (const b of EL) out.push(b);
+        }
+      } else {
+        // チャンク末尾の \r は次チャンクの先頭が \n かどうか未確定のため carry に残す
+        t.crFilterCarry = combined.slice(i);
+        return new Uint8Array(out.slice(0, out.length - 1));
+      }
+    }
+  }
+  t.crFilterCarry = new Uint8Array(0);
+  return new Uint8Array(out);
+}
+
 export function writePTYChunk(id, term, bytes, onFlush) {
   const hasScreenClearSeq = detectScreenClearSeqForAutoScroll(id, bytes);
-  const displayBytes = filterSynchronizedUpdateForDisplay(id, filterReverseVideoForDisplay(id, filterHubMarkersForDisplay(id, bytes)));
+  const displayBytes = filterSynchronizedUpdateForDisplay(id, filterBareCarriageReturnForDisplay(id, filterReverseVideoForDisplay(id, filterHubMarkersForDisplay(id, bytes))));
   const wrappedFlush = () => {
     if (hasScreenClearSeq) snapToBottomAfterScreenClear(id);
     if (onFlush) onFlush();
