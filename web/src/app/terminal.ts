@@ -277,6 +277,10 @@ export function ensureTerminal(id) {
     markerFilterCarry: new Uint8Array(0),
     screenClearSeqCarry: new Uint8Array(0),
     crFilterCarry: new Uint8Array(0),
+    cursorHideFilterCarry: new Uint8Array(0),
+    inCursorHideBlock: false,
+    cursorHideBlockBuf: [] as number[],
+    cursorHideHasAbsPos: false,
     autoScroll: true,
     everAttached: false,
   });
@@ -936,6 +940,8 @@ export const synchronizedUpdateSeqBytePatterns = [
   asciiBytes('\x1b[?2026l'),
 ];
 export const synchronizedUpdateSeqCarryLength = Math.max(...synchronizedUpdateSeqBytePatterns.map(pattern => pattern.length)) - 1;
+export const hideCursorSeq = asciiBytes('\x1b[?25l');
+export const showCursorSeq = asciiBytes('\x1b[?25h');
 
 export function bytesStartWith(bytes, offset, pattern) {
   if (offset + pattern.length > bytes.length) return false;
@@ -1126,6 +1132,103 @@ export function snapToBottomAfterScreenClear(id) {
   if (id === activeSessionId) updateScrollLockBtn(false);
 }
 
+// \x1b[?25l（カーソル非表示）〜 \x1b[?25h（表示）ブロックの中に row;col 形式の
+// 絶対カーソル移動（\x1b[row;colH）が含まれる場合はブロック全体をフィルタする。
+// Claude Code がステータスバーをこのパターンで書き込んでおり、xterm.js の
+// スクロールバックに混入してツール呼び出し行の文字が壊れる原因になる。
+// 絶対移動を含まない（初期化の cursor home 等）は通過させる。
+const MAX_CURSOR_HIDE_BUF = 2048;
+export function filterCursorHideShowBlocksForDisplay(id, bytes) {
+  const t = terminals.get(id);
+  if (!t) return bytes;
+  const carry = t.cursorHideFilterCarry || new Uint8Array(0);
+  const combined = new Uint8Array(carry.length + bytes.length);
+  combined.set(carry, 0);
+  combined.set(bytes, carry.length);
+
+  const out: number[] = [];
+  let i = 0;
+  let inBlock: boolean = t.inCursorHideBlock || false;
+  let blockBuf: number[] = [...(t.cursorHideBlockBuf || [])];
+  let hasAbsPos: boolean = t.cursorHideHasAbsPos || false;
+
+  while (i < combined.length) {
+    if (!inBlock) {
+      if (bytesStartWith(combined, i, hideCursorSeq)) {
+        inBlock = true;
+        blockBuf = [];
+        hasAbsPos = false;
+        i += hideCursorSeq.length;
+        continue;
+      }
+      if (isPossiblePrefix(combined, i, [hideCursorSeq])) {
+        t.cursorHideFilterCarry = combined.slice(i);
+        t.inCursorHideBlock = false;
+        t.cursorHideBlockBuf = [];
+        t.cursorHideHasAbsPos = false;
+        return new Uint8Array(out);
+      }
+      out.push(combined[i]);
+      i++;
+    } else {
+      // バッファ上限超過時は非ステータス扱いで通過
+      if (blockBuf.length >= MAX_CURSOR_HIDE_BUF) {
+        for (const b of hideCursorSeq) out.push(b);
+        for (const b of blockBuf) out.push(b);
+        inBlock = false;
+        blockBuf = [];
+        hasAbsPos = false;
+        continue;
+      }
+      if (bytesStartWith(combined, i, showCursorSeq)) {
+        if (!hasAbsPos) {
+          // ステータスバー更新でない → 通過
+          for (const b of hideCursorSeq) out.push(b);
+          for (const b of blockBuf) out.push(b);
+          for (const b of showCursorSeq) out.push(b);
+        }
+        inBlock = false;
+        blockBuf = [];
+        hasAbsPos = false;
+        i += showCursorSeq.length;
+        continue;
+      }
+      if (isPossiblePrefix(combined, i, [showCursorSeq])) {
+        t.cursorHideFilterCarry = combined.slice(i);
+        t.inCursorHideBlock = true;
+        t.cursorHideBlockBuf = blockBuf;
+        t.cursorHideHasAbsPos = hasAbsPos;
+        return new Uint8Array(out);
+      }
+      // \x1b[row;colH（row・col ともに数字あり）を検出したらステータス更新とみなす
+      if (!hasAbsPos && combined[i] === 0x1b && i + 4 < combined.length && combined[i + 1] === 0x5b) {
+        let j = i + 2;
+        let rowDigits = 0;
+        while (j < combined.length && combined[j] >= 0x30 && combined[j] <= 0x39) { j++; rowDigits++; }
+        if (rowDigits > 0 && j < combined.length && combined[j] === 0x3b) {
+          j++;
+          let colDigits = 0;
+          while (j < combined.length && combined[j] >= 0x30 && combined[j] <= 0x39) { j++; colDigits++; }
+          if (colDigits > 0 && j < combined.length && combined[j] === 0x48) {
+            hasAbsPos = true;
+            for (let k = i; k <= j; k++) blockBuf.push(combined[k]);
+            i = j + 1;
+            continue;
+          }
+        }
+      }
+      blockBuf.push(combined[i]);
+      i++;
+    }
+  }
+
+  t.cursorHideFilterCarry = new Uint8Array(0);
+  t.inCursorHideBlock = inBlock;
+  t.cursorHideBlockBuf = blockBuf;
+  t.cursorHideHasAbsPos = hasAbsPos;
+  return new Uint8Array(out);
+}
+
 // \r（CR）で行頭へ戻ったあと行末を消去しないと、短い上書きテキストの後ろに
 // 旧テキストの末尾が残ってスクロールバック上で混在して見える。
 // \r の直後に \x1b[K（EL: Erase Line from cursor to right）を挿入して残留を防ぐ。
@@ -1160,7 +1263,7 @@ export function filterBareCarriageReturnForDisplay(id, bytes) {
 
 export function writePTYChunk(id, term, bytes, onFlush) {
   const hasScreenClearSeq = detectScreenClearSeqForAutoScroll(id, bytes);
-  const displayBytes = filterSynchronizedUpdateForDisplay(id, filterBareCarriageReturnForDisplay(id, filterReverseVideoForDisplay(id, filterHubMarkersForDisplay(id, bytes))));
+  const displayBytes = filterSynchronizedUpdateForDisplay(id, filterBareCarriageReturnForDisplay(id, filterCursorHideShowBlocksForDisplay(id, filterReverseVideoForDisplay(id, filterHubMarkersForDisplay(id, bytes)))));
   const wrappedFlush = () => {
     if (hasScreenClearSeq) snapToBottomAfterScreenClear(id);
     if (onFlush) onFlush();
