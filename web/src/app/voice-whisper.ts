@@ -10,9 +10,13 @@ import { getActiveTriggerPhrase, textEndsWithTriggerPhrase } from './settings.js
 const TARGET_SAMPLE_RATE = 16000;
 const MAX_RECORD_SECONDS = 120;
 const MIN_RECORD_MS = 250;
-const MIN_VOICED_MS = 120;
+const MIN_VOICED_MS = 60;
 const MIN_PEAK_RMS = 0.012;
-const VAD_RMS_THRESHOLD = 0.008;
+// RDP のマイクリダイレクトやノイズ抑制が効いた入力は発話が短いバースト状で届き、
+// voiced 時間が実際の発話よりかなり短く集計される。ピークが十分強ければ
+// voiced 時間に関わらず発話とみなす（無音・暗騒音は peakRms が桁違いに小さい）。
+const STRONG_PEAK_RMS = 0.05;
+const VAD_RMS_THRESHOLD = 0.004;
 const WHISPER_HALLUCINATION_PHRASES = [
   'ご視聴ありがとうございました',
   'ご清聴ありがとうございました',
@@ -427,6 +431,7 @@ const WHISPER_HALLUCINATION_PHRASES = [
   function hasMeaningfulAudio(sourceRate: number, elapsedMs: number) {
     if (elapsedMs < MIN_RECORD_MS || chunks.length === 0 || totalSampleCount === 0) return false;
     const voicedMs = (voicedSampleCount / Math.max(1, sourceRate)) * 1000;
+    if (peakRms >= STRONG_PEAK_RMS) return true;
     return peakRms >= MIN_PEAK_RMS && voicedMs >= MIN_VOICED_MS;
   }
 
