@@ -454,6 +454,28 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		defer lf.Close()
 	}
 
+	// Claude: 共有 .claude/settings.local.json を一切触らず、wrapper 所有の temp
+	// settings を `--settings` で渡して statusLine（usage-relay）を有効化する。
+	// reg.TokenStatusbar が false（UI バー無効）なら付けない＝従来の挙動を維持。
+	if provider == "claude" && reg.TokenStatusbar {
+		exe, exeErr := os.Executable()
+		if exeErr != nil {
+			exe = "any-ai-cli"
+		}
+		hp := UsageHookParams{
+			HubURL:    fmt.Sprintf("http://127.0.0.1:%d", cfg.Hub.Port),
+			Token:     cfg.Token,
+			SessionID: sessionID,
+			ExePath:   exe,
+		}
+		if slPath, cleanup, slErr := WriteClaudeStatuslineSettings(hp); slErr == nil {
+			providerArgs = append(providerArgs, "--settings", slPath)
+			defer cleanup()
+		} else {
+			logger.Warn("claude statusline settings write failed", "session_id", sessionID, "err", slErr)
+		}
+	}
+
 	if *utf8Session {
 		applyUTF8Session()
 	}

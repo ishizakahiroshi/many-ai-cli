@@ -12,7 +12,7 @@ import (
 const claudeImportLine = "@~/.any-ai-cli/approval-rules.md"
 const sharedBlockStart = "<!-- any-ai-cli:approval-rules -->"
 const sharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
-const rulesVersion = "9"
+const rulesVersion = "10"
 
 var rulesFileContent = strings.Join([]string{
 	fmt.Sprintf("<!-- version: %s -->", rulesVersion),
@@ -35,6 +35,12 @@ var rulesFileContent = strings.Join([]string{
 	"`ANY_AI_CLI=1` の場合のみ、以下の [ANY-AI-CLI] マーカーを使用してください。",
 	"未設定・空の場合はマーカーなしでプレーンテキストで出力してください。",
 	"（このチェックはセッション内で1回だけ行い、結果を記憶してください）",
+	"",
+	"**⚠️ 最優先の禁止事項: `ANY_AI_CLI=1` のセッションでは、AI が自発的に出すネイティブ対話 UI を一切使わないこと。**",
+	"具体的には Claude の `AskUserQuestion` ツール（端末に `❯` カーソル・`↑↓ to navigate`・`Type something`・`Chat about this` を描く選択ピッカー）や、同種の TUI セレクトメニューでユーザーに選ばせてはいけない。",
+	"理由: これらは Web ダッシュボードの xterm.js 上で文字化けし、再描画されるピッカーを VT スクレイプで Web ボタン化する過程で**選択肢の番号が Web 側ボタンとズレ、ユーザーが誤った項目を選んでしまう**（過去に繰り返し発生）。",
+	"ユーザーへの確認・選択は、例外なく下記 [ANY-AI-CLI] マーカー（YES/NO・番号付き選択肢・複数質問・#multi 複数選択）のテキストで出力すること。`AskUserQuestion` は呼ばない。",
+	"（例外: CLI 本体がツール実行許可のために出すネイティブ承認プロンプトはこの限りではない。禁止対象は AI が自発的に出す選択 UI のみ。）",
 	"",
 	"- YES/NO:",
 	"  [ANY-AI-CLI]",

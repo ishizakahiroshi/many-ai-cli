@@ -1,7 +1,6 @@
 package wrapper
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -17,9 +16,6 @@ import (
 const (
 	usageHookBlockStart = "# any-ai-cli:usage-hook-start"
 	usageHookBlockEnd   = "# any-ai-cli:usage-hook-end"
-
-	claudeSettingsLocalFilename = "settings.local.json"
-	claudeSettingsLocalDir      = ".claude"
 )
 
 // UsageHookParams は注入時に埋め込む接続パラメータ。
@@ -31,22 +27,21 @@ type UsageHookParams struct {
 }
 
 // ---------------------------------------------------------------------------
-// Claude: .claude/settings.local.json への statusLine 冪等注入
+// Claude: wrapper 所有の一時 settings ファイル経由で statusLine を渡す
 // ---------------------------------------------------------------------------
 //
-// Claude Code の statusLine スキーマ（実機確認済み）:
+// 共有ファイル .claude/settings.local.json には一切書き込まない（重要）。
+// Claude Code 本体も権限承認のたびに同ファイルを書き換え、ユーザーも手編集する
+// ため、後付け注入は衝突・手編集ミスで壊れ続ける（過去に単一バックスラッシュの
+// Windows パスで JSON 全体が不正化し、Claude が settings を読めず statusLine が
+// 無効化された。さらに旧実装は破損ファイルを安全のためスキップする設計だったので
+// 一度壊れると永久に再注入できず「トークンが流れてこない」状態に固定された）。
 //
-//	"statusLine": {
-//	  "type": "command",
-//	  "command": "<cmd>",
-//	  "padding": 0
-//	}
-//
-// 既存の statusLine があれば "__aac_orig_statusLine" キーにバックアップして
-// 上書きする。全セッション終了時に RemoveClaudeStatusLine で復元する。
-
-const claudeStatusLineKey = "statusLine"
-const claudeStatusLineBackupKey = "__aac_orig_statusLine"
+// 代わりに claude 起動時に `claude --settings <temp>` を渡す。--settings は設定
+// 階層のうちコマンドライン引数（local/project/user より上・managed の下）として
+// マージされるため、temp に statusLine だけ書けば有効になる。temp は wrapper だけ
+// が所有し起動ごとに作り直すので、共有衝突が原理的に発生せず、万一壊れても次回
+// 起動で上書きされる。
 
 // claudeStatusLineCmd は relay コマンド文字列を組み立てる。
 func claudeStatusLineCmd(p UsageHookParams) string {
@@ -54,147 +49,36 @@ func claudeStatusLineCmd(p UsageHookParams) string {
 		p.ExePath, p.HubURL, p.Token, p.SessionID)
 }
 
-// claudeSettingsLocalPath は <cwd>/.claude/settings.local.json のパスを返す。
-func claudeSettingsLocalPath(cwd string) string {
-	return filepath.Join(cwd, claudeSettingsLocalDir, claudeSettingsLocalFilename)
-}
-
-// InjectClaudeStatusLine は cwd の .claude/settings.local.json に statusLine を注入する。
-// 既存の statusLine があれば "__aac_orig_statusLine" にバックアップして上書きする。
-// 冪等（already 注入済みなら無操作）。
-func InjectClaudeStatusLine(cwd string, p UsageHookParams) error {
-	path := claudeSettingsLocalPath(cwd)
-
-	// 既存ファイルを読み込む（無ければ空 map）。
-	// 空ファイル・空白のみのファイルは「空オブジェクト」とみなす。
-	// （json.Unmarshal("") は "unexpected end of JSON input" で失敗するため、
-	//  これを破損扱いにすると statusLine が永久に注入されなくなる。実害が出ていた。）
-	obj := map[string]json.RawMessage{}
-	if data, err := os.ReadFile(path); err == nil {
-		if len(bytes.TrimSpace(data)) > 0 {
-			if jErr := json.Unmarshal(data, &obj); jErr != nil {
-				// 破損していたら上書きは危険なためスキップ。
-				return fmt.Errorf("parse %s: %w", path, jErr)
-			}
-		}
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("read %s: %w", path, err)
-	}
-
-	// already 注入済み（backup キーが存在）かどうか確認。
-	if _, exists := obj[claudeStatusLineBackupKey]; exists {
-		// backup キーがあれば注入済みとみなし、command だけ更新する。
-		newSL, err := buildClaudeStatusLineJSON(p)
-		if err != nil {
-			return err
-		}
-		obj[claudeStatusLineKey] = newSL
-		return writeSettingsLocalJSON(path, obj)
-	}
-
-	// 既存 statusLine があればバックアップ。
-	if existing, exists := obj[claudeStatusLineKey]; exists {
-		obj[claudeStatusLineBackupKey] = existing
-	} else {
-		// 無い場合も null でバックアップキーを立てて「注入済み」マーカーにする。
-		obj[claudeStatusLineBackupKey] = json.RawMessage("null")
-	}
-
-	newSL, err := buildClaudeStatusLineJSON(p)
-	if err != nil {
-		return err
-	}
-	obj[claudeStatusLineKey] = newSL
-
-	return writeSettingsLocalJSON(path, obj)
-}
-
-// buildClaudeStatusLineJSON は statusLine フィールドの JSON を構築する。
-func buildClaudeStatusLineJSON(p UsageHookParams) (json.RawMessage, error) {
+// WriteClaudeStatuslineSettings は statusLine だけを含む wrapper 所有の一時
+// settings JSON を書き出し、そのパスと後始末関数を返す。
+// `claude --settings <path>` に渡して使う。
+// JSON は json.Marshal で生成するため Windows パスのバックスラッシュも常に
+// 正しくエスケープされ、手編集由来の破損は起こり得ない。
+func WriteClaudeStatuslineSettings(p UsageHookParams) (path string, cleanup func(), err error) {
 	type statusLineValue struct {
 		Type    string `json:"type"`
 		Command string `json:"command"`
 		Padding int    `json:"padding"`
 	}
-	v := statusLineValue{
-		Type:    "command",
-		Command: claudeStatusLineCmd(p),
-		Padding: 0,
+	doc := map[string]any{
+		"statusLine": statusLineValue{
+			Type:    "command",
+			Command: claudeStatusLineCmd(p),
+			Padding: 0,
+		},
 	}
-	b, err := json.Marshal(v)
+	body, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
-		return nil, fmt.Errorf("marshal statusLine: %w", err)
+		return "", nil, fmt.Errorf("marshal statusline settings: %w", err)
 	}
-	return json.RawMessage(b), nil
-}
-
-// RemoveClaudeStatusLine は注入した statusLine を除去し、バックアップを復元する。
-func RemoveClaudeStatusLine(cwd string) error {
-	path := claudeSettingsLocalPath(cwd)
-
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return nil
+	name := fmt.Sprintf("aac-claude-statusline-s%d-%d.json", p.SessionID, os.Getpid())
+	path = filepath.Join(os.TempDir(), name)
+	// 0600: Hub URL と token を含むため他ユーザーに読ませない。
+	if err := os.WriteFile(path, append(body, '\n'), 0o600); err != nil { // #nosec G306 -- wrapper 専用 temp（token を含むため 0600 が意図）
+		return "", nil, fmt.Errorf("write statusline settings: %w", err)
 	}
-	if err != nil {
-		return fmt.Errorf("read %s: %w", path, err)
-	}
-
-	// 空ファイル・空白のみは注入されていない＝除去対象なし。
-	if len(bytes.TrimSpace(data)) == 0 {
-		return nil
-	}
-
-	obj := map[string]json.RawMessage{}
-	if jErr := json.Unmarshal(data, &obj); jErr != nil {
-		return fmt.Errorf("parse %s: %w", path, jErr)
-	}
-
-	backup, hasBackup := obj[claudeStatusLineBackupKey]
-	if !hasBackup {
-		// 注入されていない
-		return nil
-	}
-
-	delete(obj, claudeStatusLineBackupKey)
-
-	// backup が null なら statusLine ごと削除、それ以外なら復元。
-	if string(backup) == "null" {
-		delete(obj, claudeStatusLineKey)
-	} else {
-		obj[claudeStatusLineKey] = backup
-	}
-
-	return writeSettingsLocalJSON(path, obj)
-}
-
-// ScanClaudeStatusLineInjected は注入済みかどうかを確認する。
-func ScanClaudeStatusLineInjected(cwd string) (bool, error) {
-	path := claudeSettingsLocalPath(cwd)
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("read %s: %w", path, err)
-	}
-	obj := map[string]json.RawMessage{}
-	if jErr := json.Unmarshal(data, &obj); jErr != nil {
-		return false, nil
-	}
-	_, exists := obj[claudeStatusLineBackupKey]
-	return exists, nil
-}
-
-func writeSettingsLocalJSON(path string, obj map[string]json.RawMessage) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { // #nosec G301 -- .claude/ は他ツール共有ディレクトリ
-		return fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
-	}
-	out, err := json.MarshalIndent(obj, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal settings.local.json: %w", err)
-	}
-	return os.WriteFile(path, append(out, '\n'), 0o644) // #nosec G306 -- settings.local.json は他ツール共有（秘密情報なし）
+	cleanup = func() { _ = os.Remove(path) }
+	return path, cleanup, nil
 }
 
 // ---------------------------------------------------------------------------

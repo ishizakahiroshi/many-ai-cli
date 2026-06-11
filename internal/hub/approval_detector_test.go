@@ -160,6 +160,26 @@ func TestDetectNativeApprovalClaudeModelSelector(t *testing.T) {
 	}
 }
 
+func TestDetectNativeApprovalSuppressesAskUserQuestion(t *testing.T) {
+	// Claude の AskUserQuestion ピッカー（末尾に "Type something" / "Chat about this"
+	// の自由入力肢を持つ arrow 駆動 UI）は webify しない。再描画される VT のスクレイプで
+	// 選択肢番号が Web ボタンとズレ誤選択を招くため、キーヒントが揃っていても nil を返し
+	// ターミナル直操作へフォールバックする（approval-rules.md version 10 でマーカー誘導済み）。
+	lines := []string{
+		"スキーマ差分の適用範囲は?",
+		"❯ 1. 全差分を全環境へ適用",
+		"  2. 必要なものだけ精査して適用",
+		"  3. コードだけ先にデプロイ",
+		"  4. 差分の中身を先に見たい",
+		"  5. Type something.",
+		"  6. Chat about this",
+		"Enter to select · ↑↓ to navigate · Esc to cancel",
+	}
+	if got := detectNativeApproval("claude", lines); got != nil {
+		t.Fatalf("detectNativeApproval = %+v, want nil (AskUserQuestion should be suppressed)", got)
+	}
+}
+
 func TestDetectNativeApprovalSelectorRequiresKeyHints(t *testing.T) {
 	// セレクタ許容はキー操作ヒント行（Enter to ... + Esc to cancel）が揃う場合のみ。
 	// ヒントなしのカーソル付き番号リスト（AI 応答の箇条書き等）は引き続き拒否する。
