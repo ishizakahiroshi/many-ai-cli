@@ -3,7 +3,6 @@ package hub
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"any-ai-cli/internal/wrapper"
 )
@@ -99,11 +98,9 @@ func (s *Server) injectUsageHooks() {
 		}
 		switch snap.provider {
 		case "claude":
-			if err := wrapper.InjectClaudeStatusLine(snap.cwd, p); err != nil {
-				s.logger.Warn("inject claude statusLine failed", "session_id", snap.sessionID, "cwd", snap.cwd, "err", err)
-			} else {
-				s.logger.Debug("inject claude statusLine ok", "session_id", snap.sessionID, "cwd", snap.cwd)
-			}
+			// claude は Hub 側で settings.local.json を書き換えない。
+			// wrapper が起動時に `claude --settings <temp>` で statusLine を渡す
+			// （共有ファイル衝突を避ける根本対策。usage_hooks.go 参照）。
 		case "codex":
 			if err := wrapper.InjectCodexStopHook(p); err != nil {
 				s.logger.Warn("inject codex stop hook failed", "session_id", snap.sessionID, "err", err)
@@ -118,48 +115,23 @@ func (s *Server) injectUsageHooks() {
 // removeUsageHooks は active セッションが存在しなくなった provider の usage フックを除去する。
 // approval_handler.go の removeInactiveApprovalRules と同じ思想。
 func (s *Server) removeInactiveUsageHooks(endedProvider, endedCWD string) {
-	snaps := s.activeUsageHookSnaps()
-
-	// active セッションの provider/cwd セットを確認。
-	claudeCWDs := make(map[string]struct{})
-	hasCodex := false
-	for _, snap := range snaps {
-		switch snap.provider {
-		case "claude":
-			cwd := strings.TrimSpace(snap.cwd)
-			if cwd != "" {
-				claudeCWDs[cwd] = struct{}{}
-			}
-		case "codex":
-			hasCodex = true
-		}
+	// claude は共有ファイルを書き換えず wrapper 所有の temp settings を使うため、
+	// Hub 側で除去する対象は無い（temp は wrapper 終了時に自身で削除する）。
+	if endedProvider != "codex" {
+		return
 	}
 
-	switch endedProvider {
-	case "claude":
-		cwd := strings.TrimSpace(endedCWD)
-		if cwd == "" {
+	// codex は ~/.codex/config.toml への global 注入。active な codex が残って
+	// いれば除去しない。
+	for _, snap := range s.activeUsageHookSnaps() {
+		if snap.provider == "codex" {
 			return
 		}
-		if _, still := claudeCWDs[cwd]; still {
-			// 同じ cwd の claude セッションがまだ active
-			return
-		}
-		if err := wrapper.RemoveClaudeStatusLine(cwd); err != nil {
-			s.logger.Warn("remove claude statusLine failed", "cwd", cwd, "err", err)
-		} else {
-			s.logger.Debug("remove claude statusLine ok", "cwd", cwd)
-		}
-	case "codex":
-		if hasCodex {
-			// 他の codex セッションがまだ active
-			return
-		}
-		if err := wrapper.RemoveCodexStopHook(); err != nil {
-			s.logger.Warn("remove codex stop hook failed", "err", err)
-		} else {
-			s.logger.Debug("remove codex stop hook ok")
-		}
+	}
+	if err := wrapper.RemoveCodexStopHook(); err != nil {
+		s.logger.Warn("remove codex stop hook failed", "err", err)
+	} else {
+		s.logger.Debug("remove codex stop hook ok")
 	}
 }
 

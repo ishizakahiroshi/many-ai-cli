@@ -64,6 +64,14 @@ func detectNativeApproval(provider string, lines []string) *nativeApproval {
 	if !nativeApprovalLooksValid(provider, contextLines, opts) {
 		return nil
 	}
+	// AI が自発的に出す Claude AskUserQuestion ピッカー（末尾に "Type something" /
+	// "Chat about this" の自由入力肢を持つ arrow 駆動 UI）は webify しない。
+	// 再描画される VT をスクレイプして Web ボタン化すると選択肢番号がズレて誤選択を
+	// 招くため（approval-rules.md version 10 で AI を [ANY-AI-CLI] マーカーへ誘導済み）。
+	// 万一 AI が出しても Web バーは出さず、ユーザーは端末で直接 ↑↓/Enter 操作する。
+	if looksLikeNativeAskUserQuestion(opts) {
+		return nil
+	}
 	kind := "native"
 	if provider == "codex" && approvalOptionsHaveSendText(opts) {
 		kind = "native_codex_shortcut"
@@ -322,6 +330,19 @@ func approvalShortcutSendText(provider, label string) string {
 		return "\x1b"
 	}
 	return ""
+}
+
+// looksLikeNativeAskUserQuestion は、選択肢ラベルに Claude AskUserQuestion 特有の
+// 自由入力肢（"Type something" / "Chat about this"）が含まれるかを判定する。
+// 標準のツール許可プロンプト（Yes / Yes, and / No）はこれらを含まないため誤検出しない。
+func looksLikeNativeAskUserQuestion(opts []proto.ApprovalOption) bool {
+	for _, o := range opts {
+		l := strings.ToLower(strings.TrimSpace(o.Label))
+		if strings.HasPrefix(l, "type something") || strings.HasPrefix(l, "chat about") {
+			return true
+		}
+	}
+	return false
 }
 
 func nativeApprovalQuestion(contextLines []string, optionStart int) string {

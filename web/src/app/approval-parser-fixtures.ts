@@ -247,6 +247,30 @@ test('approval parser fixtures', () => {
   ]);
   assert.deepEqual(numbers(gluedMarker), [1, 2, 3]);
 
+  // Claude のネイティブ AskUserQuestion ピッカー（末尾に "Type something" /
+  // "Chat about this" の自由入力肢を持つ arrow 駆動 UI）は extractApprovalOptions で
+  // 抑止し Web ボタン化しないこと（VT スクレイプで番号がズレ誤選択を招くため）。
+  const askUserQuestion = parser.extractApprovalOptions([
+    'スキーマ差分の適用範囲は?',
+    '❯ 1. 全差分を全環境へ適用',
+    '  2. 必要なものだけ精査して適用',
+    '  3. コードだけ先にデプロイ',
+    '  4. 差分の中身を先に見たい',
+    '  5. Type something.',
+    '  6. Chat about this',
+  ]);
+  assert.deepEqual(askUserQuestion.options, []);
+
+  // 標準のツール許可プロンプト（Yes / Yes, and / No）は "Type something" を
+  // 含まないため抑止されず、これまで通り選択肢を返すこと（誤抑止の回帰防止）。
+  const normalApproval = parser.extractApprovalOptions([
+    'This command requires approval',
+    '❯ 1. Yes',
+    '  2. Yes, and don\'t ask again for this command',
+    '  3. No',
+  ]);
+  assert.deepEqual(numbers(normalApproval.options), [1, 2, 3]);
+
   const chunkPath = parser.extractHubMarkerApproval([
     'noise',
     '[ANY-AI-CLI]',

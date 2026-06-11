@@ -34,6 +34,11 @@ type Message struct {
 	ReplayB64 string `json:"replay_b64,omitempty"`
 	Reason    string `json:"reason,omitempty"`
 
+	// TokenStatusbar: registered ack で Hub が返す「トークン常時表示バーが有効か」。
+	// wrapper はこれを見て claude 起動時に --settings で statusLine を渡すか決める
+	// （共有の .claude/settings.local.json は一切書き換えない方式）。
+	TokenStatusbar bool `json:"token_statusbar,omitempty"`
+
 	// session_hint で UI 側から送る「承認 UI が可視」フラグ。
 	ApprovalVisible bool `json:"approval_visible,omitempty"`
 

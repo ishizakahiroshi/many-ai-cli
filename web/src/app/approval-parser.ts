@@ -450,6 +450,14 @@
       return true;
     });
     if (uniqueOptions.length < 2) return { options: [], cluster: null, lines: tail };
+    // Claude のネイティブ AskUserQuestion ピッカー（末尾に "Type something" /
+    // "Chat about this" の自由入力肢を持つ arrow 駆動 UI）は Web ボタン化しない。
+    // 再描画される VT をスクレイプすると選択肢番号が Web ボタンとズレて誤選択を招くため。
+    // AI には approval-rules.md(version 10) で [ANY-AI-CLI] マーカーへ誘導済み。
+    // 万一 AI が出しても Web バーは出さず、端末で直接 ↑↓/Enter 操作する。
+    if (uniqueOptions.some(o => /^\s*(type something|chat about)/i.test(o.label || ''))) {
+      return { options: [], cluster: null, lines: tail };
+    }
     return {
       options: uniqueOptions,
       cluster: { start: clusterStart, end: clusterEnd },
