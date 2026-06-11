@@ -43,10 +43,30 @@ type UsageHookParams struct {
 // が所有し起動ごとに作り直すので、共有衝突が原理的に発生せず、万一壊れても次回
 // 起動で上書きされる。
 
+// toShellPath は exe パスを Windows シェルでも安全に実行できる形へ変換する。
+//
+// Claude Code は Windows で statusLine コマンドを Git Bash（無ければ PowerShell）
+// 経由で実行する。Git Bash はバックスラッシュをエスケープ文字として扱うため、
+// `C:\dev\foo\any-ai-cli.exe` のような生の Windows パスはセパレータが消えて
+// パスが壊れ、コマンドが「エラーも出さずに実行されない」（＝relay が一度も
+// POST せずトークンがステータスバーに出ない症状の根本原因）。
+// 正スラッシュ（`C:/dev/foo/any-ai-cli.exe`）なら Git Bash / PowerShell とも
+// 引用符なしで実行でき、Codex の config.toml（TOML 文字列でも `\d` 等が不正
+// エスケープになる）でも同じ変換で破損を回避できる。
+// 公式ドキュメント: https://code.claude.com/docs/en/statusline.md の
+// 「Windows configuration」節（バックスラッシュは無視されコマンドが沈黙する）。
+//
+// 注意: パスにスペースが含まれる場合の引用は Git Bash と PowerShell で必要な
+// 形式（"..." vs `& "..."`）が異なり両立しないため、ここでは行わない
+// （any-ai-cli の配置パスにスペースを含めない運用前提）。
+func toShellPath(p string) string {
+	return filepath.ToSlash(p)
+}
+
 // claudeStatusLineCmd は relay コマンド文字列を組み立てる。
 func claudeStatusLineCmd(p UsageHookParams) string {
 	return fmt.Sprintf("%s usage-relay --provider claude --hub %s --token %s --session %d",
-		p.ExePath, p.HubURL, p.Token, p.SessionID)
+		toShellPath(p.ExePath), p.HubURL, p.Token, p.SessionID)
 }
 
 // WriteClaudeStatuslineSettings は statusLine だけを含む wrapper 所有の一時
@@ -107,7 +127,7 @@ func codexConfigPath() string {
 // 現在は OpenAI Codex CLI の [[hooks.Stop]] TOML テーブル配列形式を想定。
 func codexStopHookBlock(p UsageHookParams) string {
 	cmd := fmt.Sprintf("%s usage-relay --provider codex --hub %s --token %s --session %d",
-		p.ExePath, p.HubURL, p.Token, p.SessionID)
+		toShellPath(p.ExePath), p.HubURL, p.Token, p.SessionID)
 	return strings.Join([]string{
 		usageHookBlockStart,
 		"[[hooks.Stop]]",

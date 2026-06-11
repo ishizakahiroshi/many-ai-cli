@@ -211,10 +211,31 @@ export const providerApprovalTriggers = { claude: [], codex: [], copilot: [], 'c
 export function matchProviderApprovalTrigger(provider, line) {
   if (!line) return false;
   const lower = String(line).toLowerCase();
+  if (provider === 'codex' && isCodexModelSelectorHint(lower)) return false;
   const list = providerApprovalTriggers[provider] || [];
   for (const s of list) if (lower.includes(s)) return true;
   for (const s of providerApprovalTriggers.common) if (lower.includes(s)) return true;
   return false;
+}
+
+function isCodexModelSelectorHint(lower) {
+  return lower.includes('select model') ||
+    lower.includes('select effort') ||
+    lower.includes('model and effort') ||
+    lower.includes('reasoning effort') ||
+    lower.includes('esc to go back') ||
+    lower.includes('↑/↓ to change') ||
+    lower.includes('arrow keys');
+}
+
+function isCodexModelSelectorContext(provider, lines) {
+  if (provider !== 'codex') return false;
+  const text = (lines || []).map(line => String(line || '').toLowerCase()).join('\n');
+  return text.includes('select model') ||
+    text.includes('select effort') ||
+    text.includes('model and effort') ||
+    text.includes('reasoning effort') ||
+    ((text.includes('gpt-') || text.includes('effort')) && (text.includes('esc to go back') || text.includes('press enter to confirm')));
 }
 
 export const approvalCheckTimers = new Map(); // セッション別タイマー（マルチペインで単一タイマーに上書きされる問題を解消）
@@ -450,7 +471,8 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
   const approvalLabelRe = /\b(yes|no|allow|deny|proceed|abort|don[''']t ask|cancel|once|always|permission|confirm|details)\b/i;
   const hasApprovalLikeLabel = options.some((opt) => approvalLabelRe.test(opt.label));
   const isHubChoice = isHubChoicePrompt(contextLines, options);
-  const hasNativePromptHint = contextLines.some((line) => !String(line || '').toLowerCase().includes('esc to go back') && (matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)));
+  const suppressCodexModelSelector = isCodexModelSelectorContext(provider, contextLines);
+  const hasNativePromptHint = !suppressCodexModelSelector && contextLines.some((line) => !String(line || '').toLowerCase().includes('esc to go back') && (matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)));
   const isShortcutApprovalMenu = (provider === 'codex' || provider === 'copilot' || provider === 'cursor-agent') && options.some(o => o._sendText) && hasNativePromptHint;
   const approvalNear = (hasCursorOption || isShortcutApprovalMenu) &&
     ((hasApprovalLikeLabel && (hasUserSpecifies || contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)))) || isHubChoice);
@@ -849,7 +871,8 @@ export function detectApproval(id) {
   const approvalLabelRe = /\b(yes|no|allow|deny|proceed|abort|don[''']t ask|cancel)\b/i;
   const hasApprovalLikeLabel = options.some((opt) => approvalLabelRe.test(opt.label));
   const isHubChoice = isHubChoicePrompt(contextLines, options);
-  const hasNativePromptHint = contextLines.some((line) => !String(line || '').toLowerCase().includes('esc to go back') && (matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)));
+  const suppressCodexModelSelector = isCodexModelSelectorContext(provider, contextLines);
+  const hasNativePromptHint = !suppressCodexModelSelector && contextLines.some((line) => !String(line || '').toLowerCase().includes('esc to go back') && (matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)));
   const isShortcutApprovalMenu = (provider === 'codex' || provider === 'copilot' || provider === 'cursor-agent') && options.some(o => o._sendText) && hasNativePromptHint;
   const approvalNear = (hasApprovalLikeLabel &&
     (hasUserSpecifies || hasNativePromptHint)) || isHubChoice || isShortcutApprovalMenu;

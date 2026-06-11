@@ -160,6 +160,21 @@ func TestDetectNativeApprovalClaudeModelSelector(t *testing.T) {
 	}
 }
 
+func TestDetectNativeApprovalSuppressesCodexModelSelector(t *testing.T) {
+	lines := []string{
+		"Select model and effort",
+		"",
+		"❯ 1. gpt-5.5 (current)",
+		"  2. gpt-5.4 Strong model for everyday coding.",
+		"  3. gpt-5.4-mini",
+		"",
+		"Press Enter to confirm · Esc to go back",
+	}
+	if got := detectNativeApproval("codex", lines); got != nil {
+		t.Fatalf("detectNativeApproval = %+v, want nil (Codex /model selector should be suppressed)", got)
+	}
+}
+
 func TestDetectNativeApprovalSuppressesAskUserQuestion(t *testing.T) {
 	// Claude の AskUserQuestion ピッカー（末尾に "Type something" / "Chat about this"
 	// の自由入力肢を持つ arrow 駆動 UI）は webify しない。再描画される VT のスクレイプで

@@ -179,6 +179,9 @@ export function clearInput() {
   clearAllPastes();
 }
 
+// 複数行ペーストの確定 \r を本文と分離して送るまでの待ち時間（内側 CLI の畳み込み確定待ち）
+const DEFER_ENTER_MS = 120;
+
 export async function doSend(sessionId) {
   // Ollama route セッションで /model 始まりはブロック（spawn 時固定 env と不整合のため）
   if (isOllamaModelCommandBlocked(sessionId, buildSendText())) {
@@ -203,11 +206,17 @@ export async function doSend(sessionId) {
   // 改行を含む場合はブラケットペーストモードでラップ（\n が途中 Enter と解釈されるのを防ぐ）
   // ブラケットペーストはテキスト部分のみに適用し、injectPrefix は前置する
   let textPart;
+  // 確定 \r をブラケットペースト終端 \x1b[201~ と同一書き込みに含めると、内側 CLI
+  // （Claude Code v2 等）が大きい/複数行ペーストを [Pasted text #N] に畳み込む処理中に
+  // 直後の \r を吸収し、確定キーとして登録されない（pasted text が入力欄に張り付いたまま
+  // 送信されない）。複数行のときは確定 \r を本文と別書き込みに分離し、畳み込み確定後に送る。
+  let deferEnter = false;
   if (rawText === '' && injectPrefix !== '') {
     // 画像のみ（テキストなし）: inject 末尾の \r or スペースで確定済み → 追加の \r で送信
     textPart = '\r';
   } else if (rawText.includes('\n')) {
-    textPart = '\x1b[200~' + rawText + '\x1b[201~\r';
+    textPart = '\x1b[200~' + rawText + '\x1b[201~';
+    deferEnter = true;
   } else {
     textPart = rawText + '\r';
   }
@@ -246,6 +255,11 @@ export async function doSend(sessionId) {
     scrollChatPaneToBottomSoon({ passes: 4, startedAt: Date.now() });
   }
   sendSubmittedText(sessionId, textToSend);
+  // 複数行ペーストの確定 \r は、内側 CLI の畳み込み処理が落ち着いてから別書き込みで送る。
+  // 同一書き込みに含めると \r が吸収され送信されないため（上の deferEnter コメント参照）。
+  if (deferEnter) {
+    setTimeout(() => { try { sendText(sessionId, '\r'); } catch (_) {} }, DEFER_ENTER_MS);
+  }
 }
 
 export function saveInputStateFor(id) {
