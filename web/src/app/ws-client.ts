@@ -8,6 +8,7 @@ import { applyRemotePtyResize, ensureTerminal, queuePendingTerminalChunk, writeP
 import { checkApprovalOnStartup } from './settings.js';
 import { setMultiQuestionBannerVisible } from './approval-ui.js';
 import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, hideActionBar, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
+import { notifyDeferredEnterOutput } from './deferred-enter.js';
 import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed } from './chat-history.js';
 import { handleUsageStatMessage, removeUsageCacheEntry } from './token-statusbar.js';
 
@@ -237,6 +238,9 @@ export function _connectWs() {
     }
     trackApprovalHintFromChunk(id, xtermBytes, approvalTextChunk);
     if (isLiveRendered) scheduleApprovalCheck(id);
+    // 複数行ペースト送信後の確定 \r は、この出力が静止する（取り込み・再描画完了）まで遅延させる。
+    // 出力が来るたび待機をリセットし、止まったら deferred-enter.ts が \r を 1 回だけ送る。
+    notifyDeferredEnterOutput(id);
 
     // chatHistory: マーカー検出でターン境界を確定し AI 出力を commit する
     if (hasMarker) {

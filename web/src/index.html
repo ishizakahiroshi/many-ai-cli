@@ -767,11 +767,6 @@
       <button class="view-tab" data-tab="workbench" type="button"><span>▣</span> <span>Workbench</span></button>
       <button class="view-tab" data-tab="approval" type="button" id="approval-tab-btn"><span>⚡</span> <span data-i18n="tab_approval">承認</span><span id="approval-tab-badge" hidden>0</span></button>
 
-      <button id="approval-queue-btn" type="button" aria-expanded="false">
-        <span data-i18n="approval_queue_btn">承認</span>
-        <span id="approval-queue-count">0</span>
-      </button>
-      <div id="approval-queue-panel" hidden></div>
       <!-- 旧 #main-tab-bar / #main-tab-list: FilesTabManager の DOM 状態保持用に残置(非表示) -->
       <div id="main-tab-bar" hidden><div id="main-tab-list"></div></div>
     </div>
@@ -791,6 +786,10 @@
         <!-- C4: セッション切替スワイプ用ハンドル帯（xterm.js と干渉しない上部専用領域） -->
         <div id="swipe-session-handle" aria-hidden="true"></div>
         <div id="terminal-area"></div>
+        <!-- スピナー等のステータスバー更新（絶対位置・改行なし）は scrollback 汚染防止のため
+             xterm へは描かず破棄するが、抽出したテキストをこのライブ行に出して進捗を可視化する。
+             更新が一定時間止まると自動で hidden に戻る（terminal.ts の setSessionLiveStatus）。 -->
+        <div id="terminal-live-status" hidden></div>
         <div id="terminal-readonly-badge"><span data-i18n="terminal_output">Terminal Output</span><span id="terminal-shell-info"></span></div>
         <button id="scroll-to-top-btn" data-i18n-tooltip="scroll_to_top_tooltip" data-i18n="scroll_to_top" hidden>↑ up</button>
         <button id="scroll-to-bottom-btn" data-i18n-tooltip="scroll_to_bottom_tooltip" data-i18n="scroll_to_bottom" hidden>↓ down</button>

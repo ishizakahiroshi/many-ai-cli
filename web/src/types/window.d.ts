@@ -76,7 +76,6 @@ declare global {
 
     approvalParser?: any;
     approvalUiAdapter?: any;
-    updateApprovalQueue?: () => void;
     matchProviderApprovalTrigger?: (provider: string, line: string) => boolean;
     approvalPatternsUI?: any;
 

@@ -14,7 +14,6 @@ import './app/ws-client.js';
 import './app/approval-parser.js';
 import './app/approval-ui.js';
 import './app/approval.js';
-import './app/approval-queue.js';
 import './app/approval-queue-tab.js';
 import './app/session-swipe.js';
 import './app/chat-history.js';

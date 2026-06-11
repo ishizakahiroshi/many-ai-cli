@@ -22,6 +22,8 @@ export interface TerminalEntry {
   reverseVideoFilterCarry?: Uint8Array;
   synchronizedUpdateFilterCarry?: Uint8Array;
   screenClearSeqCarry?: Uint8Array;
+  liveStatusText?: string;
+  liveStatusHideTimer?: ReturnType<typeof setTimeout> | null;
   autoScroll?: boolean;
   everAttached?: boolean;
   scrollHandlerInstalled?: boolean;
