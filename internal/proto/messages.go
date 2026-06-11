@@ -94,6 +94,14 @@ type Message struct {
 	// 0 の場合はアクティブセッション不明として扱う。
 	UIActiveSessionID int `json:"ui_active_session_id,omitempty"`
 
+	// git_stat: Hub → UI。セッション cwd の Git 変更統計。
+	// GitChecked が true のメッセージでのみ git 統計が含まれる。
+	// git 未インストール / 非 git ディレクトリの場合は 0 が入る。
+	GitChecked bool `json:"git_checked,omitempty"` // このメッセージが git 統計を含むことを示すフラグ
+	GitFiles   int  `json:"git_files,omitempty"`   // 変更ファイル数（git status --porcelain の行数）
+	GitAdded   int  `json:"git_added,omitempty"`   // 追加行数
+	GitDeleted int  `json:"git_deleted,omitempty"` // 削除行数
+
 	// usage_stat: Hub → UI。セッション単位の累積トークン / コスト情報。
 	// 数値メタデータのみを持ち、プロンプト本文などは一切含まない。
 	// CostKnown が false の場合はコストが不明（価格表未登録モデル）。表示側は "$ —" とする。

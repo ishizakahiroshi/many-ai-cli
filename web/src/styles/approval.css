@@ -6,7 +6,7 @@
   display: none;
   position: relative;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 8px calc(12px + 32px + 8px) 8px 12px; /* 右側: dismiss ボタン(32px)+gap(8px)+元padding(12px) */
   background: var(--bg-elev);
   border-top: 1px solid var(--line);
   border-left: 3px solid transparent;
@@ -265,12 +265,26 @@
 .action-submit-btn:hover:not(:disabled) { filter: brightness(1.1); }
 .action-submit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
+/* 複数選択（#multi）: 1 問で任意個 ON/OFF できるチェックボックス UI */
+#action-bar.multi-select { flex-direction: column; align-items: stretch; max-height: 60vh; }
+#action-bar.multi-select .action-bar-label { margin-bottom: 4px; }
+#action-bar.multi-select .action-section-buttons { padding: 0 2px; }
+.action-btn.multi-option.selected {
+  border-color: var(--line-soft);
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--text);
+}
+.action-btn.multi-option.selected:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+
 
 /* Approval dismiss button */
-/* 承認UI閉じボタン（action-bar 右端） */
+/* 承認UI閉じボタン（action-bar 右上に固定配置） */
+/* position:absolute でフレックス行の折り返しに影響しない。#action-bar の右 padding が空白を確保。 */
 .action-dismiss-btn {
-  margin-left: auto;
-  flex-shrink: 0;
+  position: absolute;
+  top: 8px;
+  right: 12px;
   background: transparent;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -349,7 +363,7 @@
 @media (max-width: 720px), (pointer: coarse) {
   #action-bar {
     gap: 8px;
-    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    padding: 10px calc(12px + 32px + 8px) calc(10px + env(safe-area-inset-bottom)) 12px;
     max-height: 56dvh;
     border-left: 0;
     border-top: 3px solid transparent;
@@ -380,7 +394,8 @@
     background: color-mix(in srgb, var(--warn-bg) 24%, var(--bg-elev));
   }
   .action-dismiss-btn {
-    align-self: flex-end;
+    top: 10px;
+    right: 12px;
     min-width: 44px;
     min-height: 44px;
     width: 44px;

@@ -54,12 +54,14 @@ function addSelectionToInput(text, opts: any = {}) {
 // （タイトルバー・余白・背景）でのホイールは xterm が拾って背後の端末がスクロールしてしまう。
 // xterm 側でホイールを無視させることで、どの経路で来ても背後の端末が動かないようにする。
 function isModalOverlayOpen() {
-  const ids = ['settings-panel', 'about-panel', 'model-picker-overlay', 'new-session-panel', 'slash-picker'];
+  const ids = ['settings-panel', 'about-panel', 'model-picker-overlay', 'new-session-panel', 'slash-picker', 'expand-capture-popup'];
   for (const id of ids) {
     const el = document.getElementById(id);
     if (!el || el.hidden) continue;
     if (getComputedStyle(el).display !== 'none') return true;
   }
+  // ファイルプレビューモーダル（path-links.ts）はクラスのみで id を持たないため別途検出する。
+  if (document.querySelector('.aac-file-modal-overlay')) return true;
   return false;
 }
 
@@ -622,6 +624,10 @@ export function isWheelTargetExcluded(target) {
   if (target.closest('.card-actions')) return true;
   if (target.closest('[data-wheel-native]')) return true;
   if (target.closest('#settings-panel')) return true;
+  // 承認バー（action-bar）は max-height:40vh / overflow-y:auto で自前のスクロール領域を持つ。
+  // 除外しないと document レベルの wheel ハンドラが背後ターミナルへ横取りし、
+  // 長い承認内容を action-bar 内でスクロールできなくなる（= 承認表示中にホイールが阻害される）。
+  if (target.closest('#action-bar')) return true;
   // 左サイドバー（セッション一覧 / 新規セッションパネル / cwd 履歴ドロップダウン）は
   // ネイティブの wheel スクロールを使う。除外しないと document レベルのリスナーが
   // ターミナルへ転送して preventDefault し、サイドバー上でホイールが効かなくなる。
@@ -1146,6 +1152,11 @@ export function snapToBottomAfterScreenClear(id) {
 // 同じ ?25l〜?25h + 絶対移動パターンかつ複数行で、破棄すると spawn 直後の
 // 画面が真っ黒になる（jsonl 実測: バナー約1.3〜1.5KB は改行入り、
 // 破棄すべきステータス更新 30B は改行なし）。
+// 改行を見つけた時点で「破棄対象でない」と確定するため、?25h を待たず即 flush する。
+// Claude Code の /model 等のセレクタダイアログは描画後カーソルを非表示のままにして
+// ?25h を送らないため、閉じを待つ実装だと描画全体（<2KB）が blockBuf に滞留し、
+// 次の PTY 出力が来るまでダイアログが画面に一切表示されない
+// （承認バーには出るのにターミナルには出ない、の原因）。
 const MAX_CURSOR_HIDE_BUF = 2048;
 export function filterCursorHideShowBlocksForDisplay(id, bytes) {
   const t = terminals.get(id);
@@ -1232,7 +1243,19 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
           }
         }
       }
-      if (combined[i] === 0x0A) hasNewline = true;
+      if (combined[i] === 0x0A) {
+        // 改行入り = 本文描画と確定。?25h を待たずに通過させてブロックを抜ける。
+        // 以降のバイトは生のまま通過し、後続の ?25h も（来れば）そのまま流れる。
+        blockBuf.push(combined[i]);
+        i++;
+        for (const b of hideCursorSeq) out.push(b);
+        for (const b of blockBuf) out.push(b);
+        inBlock = false;
+        blockBuf = [];
+        hasAbsPos = false;
+        hasNewline = false;
+        continue;
+      }
       blockBuf.push(combined[i]);
       i++;
     }

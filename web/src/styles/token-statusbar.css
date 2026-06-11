@@ -1,4 +1,4 @@
-/* token-statusbar.css — 画面最下部固定のトークン/コスト ステータスバー（案1 配色） */
+/* token-statusbar.css — 画面最下部固定のトークン/コスト ステータスバー */
 
 #token-statusbar {
   display: flex;
@@ -38,31 +38,143 @@
   border-right: none;
 }
 
-/* project(branch): cyan */
+/* #N セッション番号（最左・チップ風） */
+.tsb-seg-id {
+  font-weight: 700;
+  color: #c0caf5;
+  background: #2a2f45;
+}
+
+/* 状態 pill */
+.tsb-seg-status { padding: 0 6px; }
+.tsb-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  line-height: 1.2;
+}
+.tsb-pill .tsb-pdot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.tsb-pill.running { color: #9ece6a; background: rgba(158,206,106,.15); border-color: rgba(158,206,106,.35); }
+.tsb-pill.waiting { color: #e0af68; background: rgba(224,175,104,.18); border-color: rgba(224,175,104,.45); }
+.tsb-pill.standby { color: #cbd5e1; background: rgba(203,213,225,.12); border-color: rgba(203,213,225,.3); }
+.tsb-pill.error   { color: #f7768e; background: rgba(247,118,142,.15); border-color: rgba(247,118,142,.4); }
+
+/* provider アイコン + ラベルチップ + モデル名 */
+.tsb-seg-agent .card-provider-icon { width: 13px; height: 13px; }
+.tsb-seg-agent .card-provider-chip { font-size: 0.6rem; padding: 1px 6px; }
+.tsb-model {
+  color: #9ece6a;
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 作業ラベル（一押しE・薄字イタリック） */
+.tsb-seg-label {
+  color: #565f89;
+  font-style: italic;
+  max-width: 160px;
+}
+
+/* project(branch) ±git: cyan クラスタ */
 .tsb-seg-project {
   color: #7dcfff;
-  max-width: 220px;
+  max-width: 280px;
 }
+.tsb-branch { color: #bb9af7; }
+.tsb-git { color: #73daca; }
 
-/* model: green */
-.tsb-seg-model {
-  color: #9ece6a;
-  max-width: 200px;
+/* 塗りゲージ（ctx / cache 共通） */
+.tsb-gauge {
+  display: inline-block;
+  width: 46px;
+  height: 8px;
+  border-radius: 4px;
+  background: #2a2f45;
+  overflow: hidden;
+  vertical-align: middle;
 }
+.tsb-gauge .tsb-fill { display: block; height: 100%; border-radius: 4px; }
+.tsb-fill.ok    { background: #9ece6a; }
+.tsb-fill.warn  { background: #e0af68; }
+.tsb-fill.crit  { background: #f7768e; }
+.tsb-fill.cache { background: #7dcfff; }
+.tsb-pct { font-size: 0.62rem; }
+.tsb-pct.crit { color: #f7768e; font-weight: 700; }
 
-/* tok ↑in ↓out (Codex): orange */
-.tsb-seg-tok {
-  color: #ff9e64;
+.tsb-seg-ctx   { color: #9aa5ce; cursor: pointer; }
+.tsb-seg-tok   { color: #ff9e64; cursor: pointer; }
+.tsb-seg-cache { color: #7dcfff; }
+
+/* コピー時の一瞬のフラッシュ */
+.tsb-copied { background: rgba(125,207,255,.18); }
+
+/* cost: purple（+ today / クリックで内訳） */
+.tsb-seg-cost { color: #bb9af7; cursor: pointer; }
+.tsb-today { color: #9d7cd8; }
+
+/* burn rate: amber */
+.tsb-seg-burn { color: #e0af68; }
+
+/* elapsed: pink/red（+ turn） */
+.tsb-seg-elapsed { color: #f7768e; }
+.tsb-turn { color: #ff9e64; }
+
+/* 接続状態 */
+.tsb-seg-conn { padding: 0 6px; }
+
+/* 横断バッジ */
+.tsb-seg-fleet { gap: 6px; cursor: pointer; }
+.tsb-seg-fleet .tsb-run  { color: #9ece6a; }
+.tsb-seg-fleet .tsb-idle { color: #565f89; }
+.tsb-seg-fleet .tsb-wait { color: #f7768e; font-weight: 700; cursor: pointer; }
+
+/* コスト内訳ポップオーバー */
+#tsb-cost-pop {
+  position: fixed;
+  bottom: 26px;
+  right: 8px;
+  min-width: 220px;
+  max-width: 360px;
+  background: #1a1b26;
+  border: 1px solid #3b4261;
+  border-radius: 6px;
+  padding: 6px 0;
+  font-size: 0.72rem;
+  color: #c0caf5;
+  box-shadow: 0 6px 20px rgba(0,0,0,.5);
+  z-index: 60;
 }
-
-/* cost: purple */
-.tsb-seg-cost {
-  color: #bb9af7;
+#tsb-cost-pop .tsb-pop-title {
+  padding: 2px 12px 6px;
+  font-weight: 700;
+  color: #7aa2f7;
+  border-bottom: 1px solid #292e42;
+  margin-bottom: 4px;
 }
-
-/* elapsed: pink/red */
-.tsb-seg-elapsed {
-  color: #f7768e;
+#tsb-cost-pop .tsb-pop-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 2px 12px;
+}
+#tsb-cost-pop .tsb-pop-row span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#tsb-cost-pop .tsb-pop-row span:last-child { color: #bb9af7; flex-shrink: 0; }
+#tsb-cost-pop .tsb-pop-total {
+  border-top: 1px solid #292e42;
+  margin-top: 4px;
+  padding-top: 4px;
+  font-weight: 700;
 }
 
 /* 設定 OFF やセッション未選択時は非表示（JS で制御するが念のため） */

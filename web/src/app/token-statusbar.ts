@@ -1,17 +1,19 @@
-// token-statusbar.ts — 画面最下部に固定表示するトークン/コスト ステータスバー（案1 レイアウト）。
+// token-statusbar.ts — 画面最下部に固定表示するトークン/コスト ステータスバー。
 //
-// 表示対象: アクティブセッション 1 件分のみ。
-// provider 差分:
-//   - claude: tok ↑in ↓out / $ cost / model / ⏱ 経過時間
-//     （tok は現在のコンテキストウィンドウ使用量。セッション累積ではない）
-//   - codex:  tok ↑in ↓out / $ cost / model / ⏱ 経過時間
-//   - copilot / cursor-agent: model / ⏱ 経過時間 / project のみ
+// 表示対象: アクティブセッション 1 件分（+ 全セッション横断バッジ）。
+// セグメント構成（左→右）:
+//   #N / 状態pill / provider(アイコン+ラベル)+モデル / 作業ラベル /
+//   📁project ⎇branch ±git / ctxゲージ / tok / cacheゲージ / cost(+today) /
+//   burn / elapsed(+turn) / 接続 / 横断バッジ(▶⏸⚠)
 // 未取得セグメントは DOM から非表示にしてレイアウト崩れを防ぐ。
 // コスト不明（cost_known=false）時は "$ —" を表示し誤金額を出さない。
 
 import type { Message } from '../types/proto.js';
 import { activeSessionId, sessions } from './state.js';
-import { token } from './util.js';
+import { token, escapeHtml } from './util.js';
+import { t } from '../i18n.js';
+import { providerIconHtml, providerDisplayName, safeClassToken, stateLabel, activateSession } from './session-list.js';
+import { wsConnectionState } from './ws-client.js';
 
 // セッション単位の usage データキャッシュ。
 interface UsageCacheEntry {
@@ -28,10 +30,46 @@ interface UsageCacheEntry {
 
 const usageCache = new Map<number, UsageCacheEntry>();
 
+// セッションごとの「このターン」開始時刻（state==running になった時点）。
+const turnStartAt = new Map<number, number>();
+
 // 毎秒の経過時間更新用 timer。
 let _tickInterval: ReturnType<typeof setInterval> | null = null;
 // バー全体の有効/無効フラグ（settings から制御）。
 let _barEnabled = true;
+// クリックハンドラを 1 度だけ結線するためのフラグ。
+let _clickWired = false;
+
+// ── モデル別コンテキスト上限テーブル ────────────────────────────────────────
+// feedback_no_hardcoded_model_names: UI の分岐にモデル名文字列を使うのは禁止だが、
+// ここは「ID→数値上限」の純粋なデータマップなので許容範囲。前方一致で解決する。
+// ヒットしないモデルは null を返し、ctx 率セグメントを非表示にする（誤分母回避）。
+const CTX_LIMIT_TABLE: Array<{ prefix: string; limit: number }> = [
+  { prefix: 'claude-opus',   limit: 200_000 },
+  { prefix: 'claude-sonnet', limit: 200_000 },
+  { prefix: 'claude-haiku',  limit: 200_000 },
+  { prefix: 'claude-3',      limit: 200_000 },
+  { prefix: 'claude',        limit: 200_000 },
+  { prefix: 'gpt-4.1',       limit: 1_000_000 },
+  { prefix: 'gpt-5',         limit: 400_000 },
+  { prefix: 'gpt-4o',        limit: 128_000 },
+  { prefix: 'gpt-4',         limit: 128_000 },
+  { prefix: 'o4',            limit: 200_000 },
+  { prefix: 'o3',            limit: 200_000 },
+  { prefix: 'o1',            limit: 200_000 },
+  { prefix: 'codex',         limit: 400_000 },
+];
+
+function resolveCtxLimit(model: string): number | null {
+  const id = String(model || '').toLowerCase().trim();
+  if (!id) return null;
+  // 1M コンテキスト版（"[1m]" / "1m" / "1-million" 等のマーカー）は上限を底上げ。
+  const oneM = /\[1m\]|(^|[^0-9a-z])1m([^0-9a-z]|$)|1-?million/.test(id);
+  for (const { prefix, limit } of CTX_LIMIT_TABLE) {
+    if (id.startsWith(prefix)) return oneM ? Math.max(limit, 1_000_000) : limit;
+  }
+  return null;
+}
 
 // ── DOM 要素参照 ──────────────────────────────────────────────────────────────
 
@@ -39,7 +77,7 @@ function getBar(): HTMLElement | null {
   return document.getElementById('token-statusbar') as HTMLElement | null;
 }
 
-// ── 経過時間フォーマット ──────────────────────────────────────────────────────
+// ── フォーマッタ ──────────────────────────────────────────────────────────────
 // startedAt は ISO 8601 (RFC 3339) 文字列。Date.toLocaleString() は使わない。
 
 function formatElapsed(startedAt: string): string {
@@ -47,6 +85,10 @@ function formatElapsed(startedAt: string): string {
   const start = Date.parse(startedAt);
   if (isNaN(start)) return '';
   const elapsedSec = Math.max(0, Math.floor((Date.now() - start) / 1000));
+  return formatDurSec(elapsedSec);
+}
+
+function formatDurSec(elapsedSec: number): string {
   const h = Math.floor(elapsedSec / 3600);
   const m = Math.floor((elapsedSec % 3600) / 60);
   const s = elapsedSec % 60;
@@ -55,16 +97,12 @@ function formatElapsed(startedAt: string): string {
   return `${s}s`;
 }
 
-// ── コスト表示フォーマット ──────────────────────────────────────────────────
-
 function formatCost(costUSD: number, costKnown: boolean): string {
   if (!costKnown) return '$ —';
   if (costUSD === 0) return '$0.0000';
   if (costUSD < 0.0001) return '$<0.0001';
   return '$' + costUSD.toFixed(4);
 }
-
-// ── トークン表示フォーマット ──────────────────────────────────────────────────
 
 function formatTok(n: number): string {
   if (n === 0) return '0';
@@ -73,19 +111,63 @@ function formatTok(n: number): string {
   return String(n);
 }
 
+// 0..100 に丸めた塗りゲージ HTML。fillClass: ok/warn/crit/cache。
+function gaugeHtml(pct: number, fillClass: string): string {
+  const w = Math.max(0, Math.min(100, pct));
+  return `<span class="tsb-gauge"><span class="tsb-fill ${fillClass}" style="width:${w}%"></span></span>`;
+}
+
 // ── プロジェクト名取得 ──────────────────────────────────────────────────────
 
 function getProject(sessionId: number): string {
   const s = sessions.get(sessionId);
   if (!s) return '';
-  // project キーは deriveProjectKeyFromCwd で設定される（state.js で管理）
   const p = (s as any).project || '';
   if (p) return p;
-  // cwd から末尾ディレクトリ名を取る
   const cwd = s.cwd || '';
   if (!cwd) return '';
   const parts = cwd.replace(/\\/g, '/').split('/').filter(Boolean);
   return parts[parts.length - 1] || '';
+}
+
+// 状態 → pill クラス（リストの色定義に合わせる）。
+function pillClassFor(state: string): string {
+  if (state === 'running') return 'running';
+  if (state === 'waiting') return 'waiting';
+  if (state === 'error' || state === 'disconnected') return 'error';
+  return 'standby';
+}
+
+// ── 横断集計（全セッション）────────────────────────────────────────────────
+
+function fleetCounts(): { running: number; standby: number; waiting: number } {
+  const c = { running: 0, standby: 0, waiting: 0 };
+  sessions.forEach(s => {
+    const st = (s.state as string) || 'standby';
+    if (st === 'running') c.running++;
+    else if (st === 'waiting') c.waiting++;
+    else c.standby++;
+  });
+  return c;
+}
+
+// 本日累計コスト（全セッションのライブコスト合算）。
+// 集計対象は現在生存しているセッションのみ＝実質「本日アクティブ分」。
+function todayCostSum(): { sum: number; known: boolean } {
+  let sum = 0;
+  let known = false;
+  usageCache.forEach(e => {
+    if (e.costKnown) { sum += e.costUSD; known = true; }
+  });
+  return { sum, known };
+}
+
+// セグメント表示ユーティリティ。
+function setSeg(bar: HTMLElement, cls: string, show: boolean): HTMLElement | null {
+  const el = bar.querySelector<HTMLElement>('.' + cls);
+  if (!el) return null;
+  el.style.display = show ? '' : 'none';
+  return show ? el : null;
 }
 
 // ── ステータスバー描画 ────────────────────────────────────────────────────────
@@ -106,81 +188,238 @@ export function renderStatusbar(): void {
   }
 
   const entry = usageCache.get(sid);
-  const sesInfo = sessions.get(sid);
-  const provider: string = entry?.provider || sesInfo?.provider || '';
+  const sesData = sessions.get(sid);
+  const provider: string = entry?.provider || sesData?.provider || '';
 
-  // provider が不明な場合でも最低限表示するため、完全非表示はしない。
-  // ただし usage データが全くない場合はバーを隠す。
-  if (!entry && !sesInfo) {
+  if (!entry && !sesData) {
     bar.style.display = 'none';
     return;
   }
 
   bar.style.display = 'flex';
+  wireClicks(bar);
 
-  // ---- project セグメント ----
-  const projectEl = bar.querySelector<HTMLElement>('.tsb-seg-project');
-  const project = getProject(sid);
-  const sesData = sessions.get(sid);
-  const branch = sesData?.branch || '';
-  if (projectEl) {
-    if (project) {
-      projectEl.textContent = branch ? `📁 ${project}(${branch})` : `📁 ${project}`;
-      projectEl.style.display = '';
-    } else {
-      projectEl.style.display = 'none';
-    }
-  }
-
-  // ---- model セグメント ----
-  const modelEl = bar.querySelector<HTMLElement>('.tsb-seg-model');
+  const isTokenProvider = provider === 'claude' || provider === 'codex';
   const modelName = entry?.usageModel || sesData?.model || '';
-  if (modelEl) {
-    if (modelName) {
-      modelEl.textContent = `🤖 ${modelName}`;
-      modelEl.style.display = '';
-    } else {
-      modelEl.style.display = 'none';
-    }
+
+  // ---- #N セッション番号 ----
+  const idEl = setSeg(bar, 'tsb-seg-id', true);
+  if (idEl) idEl.textContent = `#${sid}`;
+
+  // ---- 状態 pill ----
+  const stateKey = (sesData?.state as string) || 'standby';
+  const statusEl = setSeg(bar, 'tsb-seg-status', true);
+  if (statusEl) {
+    statusEl.innerHTML = `<span class="tsb-pill ${pillClassFor(stateKey)}"><span class="tsb-pdot"></span>${escapeHtml(stateLabel(stateKey))}</span>`;
   }
 
-  // ---- tok セグメント（Claude / Codex）----
-  const tokEl = bar.querySelector<HTMLElement>('.tsb-seg-tok');
-  if (tokEl) {
-    // provider 値で判定（モデル名文字列には依存しない）
-    if ((provider === 'codex' || provider === 'claude') && entry) {
-      const inStr  = formatTok(entry.tokensIn);
-      const outStr = formatTok(entry.tokensOut);
-      tokEl.textContent = `tok ↑${inStr} ↓${outStr}`;
-      tokEl.style.display = '';
-    } else {
-      tokEl.style.display = 'none';
-    }
+  // ---- provider アイコン+ラベル+モデル ----
+  const agentEl = setSeg(bar, 'tsb-seg-agent', !!provider);
+  if (agentEl) {
+    const chip = `<span class="card-provider-chip ${safeClassToken(provider)}">${escapeHtml(providerDisplayName(provider))}</span>`;
+    const model = modelName ? `<span class="tsb-model" title="${escapeHtml(modelName)}">${escapeHtml(modelName)}</span>` : '';
+    agentEl.innerHTML = `${providerIconHtml(provider, 13)}${chip}${model}`;
   }
 
-  // ---- cost セグメント（claude / codex のみ）----
-  const costEl = bar.querySelector<HTMLElement>('.tsb-seg-cost');
-  if (costEl) {
-    if ((provider === 'claude' || provider === 'codex') && entry) {
-      costEl.textContent = formatCost(entry.costUSD, entry.costKnown);
-      costEl.style.display = '';
-    } else {
-      costEl.style.display = 'none';
-    }
+  // ---- 作業ラベル（E）----
+  const labelText = (sesData?.label && String(sesData.label).trim())
+    || (sesData?.last_message ? String(sesData.last_message).trim() : '');
+  const labelEl = setSeg(bar, 'tsb-seg-label', !!labelText);
+  if (labelEl) {
+    labelEl.textContent = `“${labelText}”`;
+    labelEl.title = labelText;
   }
 
-  // ---- elapsed セグメント ----
-  const elapsedEl = bar.querySelector<HTMLElement>('.tsb-seg-elapsed');
+  // ---- project ⎇branch ±git ----
+  const project = getProject(sid);
+  const branch = sesData?.branch || '';
+  const gf = Number((sesData as any)?.git_files || 0);
+  const ga = Number((sesData as any)?.git_added || 0);
+  const gd = Number((sesData as any)?.git_deleted || 0);
+  const projectEl = setSeg(bar, 'tsb-seg-project', !!project);
+  if (projectEl) {
+    let html = `📁 ${escapeHtml(project)}`;
+    if (branch) html += ` <span class="tsb-branch">⎇ ${escapeHtml(branch)}</span>`;
+    if (gf > 0 || ga > 0 || gd > 0) {
+      const title = `+${ga} -${gd} (${gf} files)`;
+      html += ` <span class="tsb-git" title="${escapeHtml(title)}">±${gf} ~${ga + gd}</span>`;
+    }
+    projectEl.innerHTML = html;
+  }
+
+  // ---- ctx 使用率（塗りゲージ + %）----
+  const ctxLimit = resolveCtxLimit(modelName);
+  const showCtx = !!(isTokenProvider && entry && ctxLimit && ctxLimit > 0);
+  const ctxEl = setSeg(bar, 'tsb-seg-ctx', showCtx);
+  if (ctxEl && entry && ctxLimit) {
+    const used = entry.tokensIn;
+    const pct = Math.max(0, Math.min(100, Math.round((used / ctxLimit) * 100)));
+    const fill = pct >= 90 ? 'crit' : pct >= 80 ? 'warn' : 'ok';
+    const pctCls = pct >= 90 ? 'tsb-pct crit' : 'tsb-pct';
+    ctxEl.innerHTML = `ctx ${gaugeHtml(pct, fill)}<span class="${pctCls}">${pct}%</span>`;
+    ctxEl.title = `${formatTok(used)} / ${formatTok(ctxLimit)} tokens`;
+    ctxEl.dataset.copy = `${used}/${ctxLimit}`;
+  }
+
+  // ---- tok ↑in ↓out ----
+  const showTok = !!(isTokenProvider && entry);
+  const tokEl = setSeg(bar, 'tsb-seg-tok', showTok);
+  if (tokEl && entry) {
+    tokEl.textContent = `tok ↑${formatTok(entry.tokensIn)} ↓${formatTok(entry.tokensOut)}`;
+    tokEl.dataset.copy = `in=${entry.tokensIn} out=${entry.tokensOut}`;
+  }
+
+  // ---- cache 率（塗りゲージ + %、情報色）----
+  const showCache = !!(entry && entry.tokensCache > 0 && entry.tokensIn > 0);
+  const cacheEl = setSeg(bar, 'tsb-seg-cache', showCache);
+  if (cacheEl && entry) {
+    const pct = Math.max(0, Math.min(100, Math.round((entry.tokensCache / entry.tokensIn) * 100)));
+    cacheEl.innerHTML = `⛁ ${gaugeHtml(pct, 'cache')}<span class="tsb-pct">${pct}%</span>`;
+    cacheEl.title = `cache ${formatTok(entry.tokensCache)} / ${formatTok(entry.tokensIn)} tokens`;
+  }
+
+  // ---- cost（+ 本日累計）----
+  const showCost = !!(isTokenProvider && entry);
+  const costEl = setSeg(bar, 'tsb-seg-cost', showCost);
+  if (costEl && entry) {
+    let html = escapeHtml(formatCost(entry.costUSD, entry.costKnown));
+    const today = todayCostSum();
+    if (today.known && today.sum > 0) {
+      html += ` <span class="tsb-today">· today ${escapeHtml(formatCost(today.sum, true))}</span>`;
+    }
+    costEl.innerHTML = html;
+  }
+
+  // ---- burn rate ----
+  const startedAt = sesData?.started_at || entry?.usageStartedAt || '';
+  let showBurn = false;
+  if (isTokenProvider && entry && startedAt) {
+    const start = Date.parse(startedAt);
+    if (!isNaN(start)) {
+      const elapsedSec = (Date.now() - start) / 1000;
+      if (elapsedSec >= 10) {
+        const burnEl = setSeg(bar, 'tsb-seg-burn', true);
+        if (burnEl) {
+          if (entry.costKnown && entry.costUSD > 0) {
+            const perH = entry.costUSD / (elapsedSec / 3600);
+            burnEl.textContent = `~$${perH.toFixed(perH >= 1 ? 1 : 2)}/h`;
+            showBurn = true;
+          } else if (entry.tokensTotal > 0) {
+            const perMin = entry.tokensTotal / (elapsedSec / 60);
+            burnEl.textContent = `~${formatTok(Math.round(perMin))} tok/min`;
+            showBurn = true;
+          }
+        }
+      }
+    }
+  }
+  if (!showBurn) setSeg(bar, 'tsb-seg-burn', false);
+
+  // ---- elapsed（+ このターン経過）----
+  // ターン境界: state==running 中だけ ▷ を併記する。
+  if (stateKey === 'running') {
+    if (!turnStartAt.has(sid)) turnStartAt.set(sid, Date.now());
+  } else {
+    turnStartAt.delete(sid);
+  }
+  const elapsedEl = setSeg(bar, 'tsb-seg-elapsed', !!startedAt);
   if (elapsedEl) {
-    // startedAt: entry から取るか session の started_at を使う
-    const startedAt = entry?.usageStartedAt || sesData?.started_at || '';
-    if (startedAt) {
-      elapsedEl.textContent = `⏱ ${formatElapsed(startedAt)}`;
-      elapsedEl.style.display = '';
-    } else {
-      elapsedEl.style.display = 'none';
+    let html = `⏱ ${escapeHtml(formatElapsed(startedAt))}`;
+    const ts = turnStartAt.get(sid);
+    if (ts) {
+      const turnSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+      html += ` <span class="tsb-turn">· ▷${escapeHtml(formatDurSec(turnSec))}</span>`;
     }
+    elapsedEl.innerHTML = html;
   }
+
+  // ---- 接続状態 ----
+  const connEl = setSeg(bar, 'tsb-seg-conn', true);
+  if (connEl) {
+    const st = wsConnectionState();
+    const icon = st === 'open' ? '🟢' : st === 'connecting' ? '🟡' : '🔴';
+    const label = st === 'open' ? t('tsb_conn_open') : st === 'connecting' ? t('tsb_conn_connecting') : t('tsb_conn_closed');
+    connEl.innerHTML = `<span class="tsb-dot">${icon}</span>`;
+    connEl.title = label;
+  }
+
+  // ---- 横断バッジ（▶run ⏸idle ⚠wait）----
+  const fc = fleetCounts();
+  const showFleet = fc.running > 0 || fc.standby > 0 || fc.waiting > 0;
+  const fleetEl = setSeg(bar, 'tsb-seg-fleet', showFleet);
+  if (fleetEl) {
+    let html = '';
+    if (fc.running > 0) html += `<span class="tsb-run">▶${fc.running}</span>`;
+    if (fc.standby > 0) html += `<span class="tsb-idle">⏸${fc.standby}</span>`;
+    if (fc.waiting > 0) html += `<span class="tsb-wait" title="${escapeHtml(t('tsb_fleet_jump'))}">⚠${fc.waiting}</span>`;
+    fleetEl.innerHTML = html;
+  }
+}
+
+// ── クリック操作（D）─────────────────────────────────────────────────────────
+
+function wireClicks(bar: HTMLElement): void {
+  if (_clickWired) return;
+  _clickWired = true;
+  bar.addEventListener('click', (ev) => {
+    const target = ev.target as HTMLElement;
+    // ⚠ → 承認待ちセッションへジャンプ
+    if (target.closest('.tsb-wait')) {
+      let jumpTo: number | null = null;
+      sessions.forEach((s, id) => {
+        if (jumpTo === null && (s.state as string) === 'waiting') jumpTo = id;
+      });
+      if (jumpTo !== null) activateSession(jumpTo);
+      return;
+    }
+    // cost → 内訳ポップ
+    if (target.closest('.tsb-seg-cost')) {
+      toggleCostPopover(bar);
+      return;
+    }
+    // ctx / tok → 値をコピー
+    const copySeg = target.closest('.tsb-seg-ctx, .tsb-seg-tok') as HTMLElement | null;
+    if (copySeg && copySeg.dataset.copy) {
+      copyText(copySeg.dataset.copy, copySeg);
+      return;
+    }
+  });
+}
+
+function copyText(text: string, flashEl: HTMLElement): void {
+  try {
+    navigator.clipboard?.writeText(text);
+    flashEl.classList.add('tsb-copied');
+    setTimeout(() => flashEl.classList.remove('tsb-copied'), 600);
+  } catch (_) { /* clipboard 不可環境は黙ってスキップ */ }
+}
+
+function toggleCostPopover(bar: HTMLElement): void {
+  const existing = document.getElementById('tsb-cost-pop');
+  if (existing) { existing.remove(); return; }
+  const pop = document.createElement('div');
+  pop.id = 'tsb-cost-pop';
+  const rows: string[] = [];
+  let total = 0;
+  usageCache.forEach((e, id) => {
+    if (!e.costKnown) return;
+    total += e.costUSD;
+    const s = sessions.get(id);
+    const name = s?.label || s?.model || e.provider || `#${id}`;
+    rows.push(`<div class="tsb-pop-row"><span>#${id} ${escapeHtml(String(name))}</span><span>${escapeHtml(formatCost(e.costUSD, true))}</span></div>`);
+  });
+  if (!rows.length) rows.push(`<div class="tsb-pop-row"><span>${escapeHtml(t('tsb_cost_none'))}</span><span></span></div>`);
+  pop.innerHTML =
+    `<div class="tsb-pop-title">${escapeHtml(t('tsb_cost_breakdown_title'))}</div>${rows.join('')}` +
+    `<div class="tsb-pop-row tsb-pop-total"><span>${escapeHtml(t('tsb_cost_total'))}</span><span>${escapeHtml(formatCost(total, true))}</span></div>`;
+  bar.appendChild(pop);
+  // バー外クリックで閉じる
+  setTimeout(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (!pop.contains(e.target as Node)) { pop.remove(); document.removeEventListener('mousedown', onDoc, true); }
+    };
+    document.addEventListener('mousedown', onDoc, true);
+  }, 0);
 }
 
 // ── 外部 API ─────────────────────────────────────────────────────────────────
@@ -200,7 +439,6 @@ export function handleUsageStatMessage(m: Message): void {
     usageModel:     m.usage_model    || '',
     usageStartedAt: m.usage_started_at || '',
   });
-  // アクティブセッションの更新なら即座に再描画
   if (sid === activeSessionId) {
     renderStatusbar();
   }
@@ -209,6 +447,7 @@ export function handleUsageStatMessage(m: Message): void {
 /** セッション削除時にキャッシュをクリアする。 */
 export function removeUsageCacheEntry(sessionId: number): void {
   usageCache.delete(sessionId);
+  turnStartAt.delete(sessionId);
   if (sessionId === activeSessionId) {
     renderStatusbar();
   }
@@ -226,7 +465,6 @@ export function setStatusbarEnabled(enabled: boolean): void {
   if (bar) {
     bar.style.display = enabled ? '' : 'none';
   }
-  // attach-panel が fixed statusbar に隠れないよう padding-bottom を同期する
   document.body.style.setProperty('--tsb-bottom-offset', enabled ? '22px' : '0px');
   if (enabled) {
     renderStatusbar();
@@ -241,7 +479,7 @@ export function isStatusbarEnabled(): boolean {
   return _barEnabled;
 }
 
-// ── 毎秒 tick（経過時間更新）──────────────────────────────────────────────────
+// ── 毎秒 tick（経過時間・バーンレート・接続状態の更新）────────────────────────
 
 function startTick(): void {
   if (_tickInterval) return;
@@ -267,12 +505,10 @@ export async function initTokenStatusbar(): Promise<void> {
     const res = await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`);
     if (!res.ok) return;
     const data = await res.json();
-    // token_statusbar.enabled が null/undefined（未設定）または true のとき ON（既定 ON）
     const tsb = data?.token_statusbar;
     const enabled = tsb == null || tsb.enabled == null ? true : !!tsb.enabled;
     setStatusbarEnabled(enabled);
   } catch (_) {
-    // fetch 失敗時は既定 ON を維持
     setStatusbarEnabled(true);
   }
 }

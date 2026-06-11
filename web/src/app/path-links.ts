@@ -2,7 +2,7 @@
 import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
 import { sessions } from './state.js';
-import { FilesTabManager } from './files-view.js';
+import { FilesTabManager, FilesPreview } from './files-view.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -103,6 +103,11 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
         FilesTabManager.openFilesTabAtFile(sessionId, projectKey, cwd, cwd, filePath);
       },
     });
+    items.push({
+      icon: '🗔',
+      key: 'link_open_modal',
+      action: () => openFileModal(filePath, sessionId),
+    });
   }
   if (!isDir) {
     items.push(getPathOpenItem(filePath, sessionId));
@@ -161,6 +166,70 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
   if (top + rect.height > vh - 8) top = clientY - rect.height - 8;
   popup.style.left = Math.max(4, left) + 'px';
   popup.style.top = Math.max(4, top) + 'px';
+}
+
+// ---- ファイルプレビューモーダル（FilesPreview をツリー無しで単体表示）----
+
+export let fileModalEl = null;
+let fileModalKeyHandler = null;
+
+export function closeFileModal() {
+  if (fileModalKeyHandler) {
+    document.removeEventListener('keydown', fileModalKeyHandler, true);
+    fileModalKeyHandler = null;
+  }
+  if (fileModalEl) {
+    fileModalEl.remove();
+    fileModalEl = null;
+  }
+}
+
+export function openFileModal(filePath, sessionId) {
+  const ses = sessions.get(sessionId);
+  const cwd = ses?.cwd;
+  if (!cwd) { showToast(t('link_open_error')); return; }
+  closeFileModal(); // 二重起動防止
+
+  const overlay = document.createElement('div');
+  overlay.className = 'aac-file-modal-overlay';
+  const panel = document.createElement('div');
+  panel.className = 'aac-file-modal';
+  const body = document.createElement('div');
+  body.className = 'aac-file-modal-body';
+  panel.appendChild(body);
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+  fileModalEl = overlay;
+
+  // 背景（オーバーレイ自身）クリックで閉じる。パネル内クリックは閉じない。
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeFileModal(); });
+
+  // Esc で閉じる（capture で他ハンドラより先に処理し、ターミナル等への波及を防ぐ）
+  fileModalKeyHandler = (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); closeFileModal(); }
+  };
+  document.addEventListener('keydown', fileModalKeyHandler, true);
+
+  // FilesPreview を単体バインド（ツリー無し）。モーダルなので filesRoot/gitRoot は cwd 起点。
+  FilesPreview.bind(body, { sessionId, gitRoot: cwd, filesRoot: cwd });
+
+  // FilesPreview 内蔵の閉じる(×)はプレビューを空にするだけでモーダルは残るため隠し、
+  // モーダル全体を閉じる専用ボタンに差し替える。
+  const toolbar = body.querySelector('.files-preview-toolbar');
+  if (toolbar) {
+    toolbar.querySelectorAll('.files-preview-toolbar-btn').forEach((b) => {
+      if (b.textContent === '×') b.hidden = true;
+    });
+    const modalClose = document.createElement('button');
+    modalClose.className = 'files-preview-toolbar-btn';
+    modalClose.title = t('files_preview_close_tooltip') || 'Close';
+    modalClose.textContent = '×';
+    modalClose.addEventListener('click', () => closeFileModal());
+    toolbar.appendChild(modalClose);
+  }
+
+  const relPath = computeRelPath(cwd, filePath);
+  if (body._filesPreview) body._filesPreview.loadFile(filePath, relPath);
 }
 
 export function basenameForPath(filePath) {

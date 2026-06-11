@@ -7,6 +7,41 @@ import { refitActiveTerminalAfterLayout } from './terminal.js';
 import { markTabLazyLoaded, refreshLazyTabClasses } from './settings.js';
 import { openLightbox, terminalWrapper } from './attachments.js';
 
+// ─── セッション ID の動的解決 ────────────────────────────────────────────
+// Files/Git タブは bind 時に sessionId をクロージャへ固定する。元の CLI セッションが
+// 再起動などで別 ID に置き換わると、タブは死んだ ID を送り続け、Hub が許可ルートを
+// 「session 未解決時のフォールバック = Hub 起動ディレクトリ」基準で判定するため、
+// 別プロジェクト配下のパスが軒並み 403 になる。リクエストのたびに「このタブの root 配下で
+// 生きているセッション」を選び直すことで、セッション入れ替えに追従させる。
+function isPathUnderOrEqual(child: any, parent: any): boolean {
+  if (!child || !parent) return false;
+  const norm = (p: any) => String(p).replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase();
+  const c = norm(child), p = norm(parent);
+  return c === p || c.startsWith(p + '/');
+}
+
+// capturedId が生存セッションならそれを返す。死んでいれば filesRoot / gitRoot 配下の
+// 生存セッション（activeSessionId 優先）を返す。該当が無ければ capturedId（無ければ ''）。
+function resolveLiveSessionId(capturedId: any, filesRoot?: any, gitRoot?: any): any {
+  const capNum = (capturedId === '' || capturedId == null) ? null : Number(capturedId);
+  const capValid = capNum != null && !Number.isNaN(capNum);
+  if (capValid && sessions.has(capNum as number)) return capNum;
+  const roots = [filesRoot, gitRoot].filter(Boolean);
+  if (roots.length > 0) {
+    const matches = (s: any) => {
+      const cwd = s && s.cwd ? s.cwd : '';
+      if (!cwd) return false;
+      return roots.some(r => isPathUnderOrEqual(cwd, r) || isPathUnderOrEqual(r, cwd));
+    };
+    const active = (activeSessionId != null) ? sessions.get(activeSessionId) : null;
+    if (active && matches(active)) return active.id;
+    for (const s of sessions.values()) {
+      if (matches(s)) return s.id;
+    }
+  }
+  return capValid ? capNum : '';
+}
+
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
 // ---- Files tab manager ----
@@ -1051,7 +1086,7 @@ export const FilesTreeView = (function () {
         const preview = document.createElement('div');
         preview.className = 'files-image-hover-preview';
         preview.dataset.filesSkipSearch = '1';
-        const src = getFilesAssetUrl(node.absPath, sessionId || '');
+        const src = getFilesAssetUrl(node.absPath, resolveLiveSessionId(sessionId, filesRoot) || '');
         if (isVideoPreviewable(node.name)) {
           const video = document.createElement('video');
           video.muted = true;
@@ -1433,7 +1468,8 @@ export const FilesTreeView = (function () {
     });
     // C2: 多ファイル移動の共通ロジック。失敗メッセージ配列を返す（空なら全件成功）。
     async function moveFiles(srcs, dstDir) {
-      const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
+      const liveSid = resolveLiveSessionId(sessionId, filesRoot, gitRoot);
+      const sessionQs = liveSid ? `&session=${encodeURIComponent(liveSid)}` : '';
       const url = `/api/files-move?token=${encodeURIComponent(token)}${sessionQs}`;
       const res = await fetch(url, {
         method: 'POST',
@@ -1545,7 +1581,8 @@ export const FilesTreeView = (function () {
     async function loadTree() {
       treeArea.innerHTML = `<div class="files-tree-loading">${escapeHtml(t('files_tab_loading') || 'Loading…')}</div>`;
       try {
-        const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
+        const liveSid = resolveLiveSessionId(sessionId, filesRoot, gitRoot);
+        const sessionQs = liveSid ? `&session=${encodeURIComponent(liveSid)}` : '';
         const url = `/api/files-list?root=${encodeURIComponent(filesRoot)}&token=${encodeURIComponent(token)}${sessionQs}`;
         const res = await fetch(url);
         if (!res.ok) { treeArea.innerHTML = `<div class="files-tree-error">${escapeHtml('HTTP ' + res.status)} — ${escapeHtml(filesRoot)}</div>`; return; }
@@ -1677,7 +1714,8 @@ export const FilesTreeView = (function () {
       const trimmed = name.trim();
       if (!trimmed) return;
       try {
-        const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
+        const liveSid = resolveLiveSessionId(sessionId, filesRoot, gitRoot);
+        const sessionQs = liveSid ? `&session=${encodeURIComponent(liveSid)}` : '';
         const url = `/api/files-create?token=${encodeURIComponent(token)}${sessionQs}`;
         const res = await fetch(url, {
           method: 'POST',
@@ -1715,7 +1753,8 @@ export const FilesTreeView = (function () {
       const trimmed = name.trim();
       if (!trimmed) return;
       try {
-        const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
+        const liveSid = resolveLiveSessionId(sessionId, filesRoot, gitRoot);
+        const sessionQs = liveSid ? `&session=${encodeURIComponent(liveSid)}` : '';
         const url = `/api/files-mkdir?token=${encodeURIComponent(token)}${sessionQs}`;
         const res = await fetch(url, {
           method: 'POST',
@@ -2459,7 +2498,8 @@ export const FilesPreview = (function () {
       if (baseMtime) body.baseMtime = baseMtime;
 
       try {
-        const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
+        const liveSid = resolveLiveSessionId(sessionId, filesRoot, gitRoot);
+        const sessionQs = liveSid ? `&session=${encodeURIComponent(liveSid)}` : '';
         const url = `/api/files-save?token=${encodeURIComponent(token)}${sessionQs}`;
         const res = await fetch(url, {
           method: 'POST',
@@ -2532,7 +2572,7 @@ export const FilesPreview = (function () {
       searchInput.value = '';
 
       if (isMediaPath(absPath)) {
-        const mediaUrl = getFilesAssetUrl(absPath, sessionId || '');
+        const mediaUrl = getFilesAssetUrl(absPath, resolveLiveSessionId(sessionId, filesRoot, gitRoot) || '');
         const wrap = document.createElement('div');
         wrap.className = 'files-preview-image-wrap';
         wrap.dataset.filesSkipSearch = '1';
@@ -2571,7 +2611,8 @@ export const FilesPreview = (function () {
       }
 
       try {
-        const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
+        const liveSid = resolveLiveSessionId(sessionId, filesRoot, gitRoot);
+        const sessionQs = liveSid ? `&session=${encodeURIComponent(liveSid)}` : '';
         const url = `/api/files-content?path=${encodeURIComponent(absPath)}&token=${encodeURIComponent(token)}${sessionQs}`;
         const res = await fetch(url);
         if (!res.ok) {

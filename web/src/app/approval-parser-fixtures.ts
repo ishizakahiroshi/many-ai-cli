@@ -187,6 +187,33 @@ test('approval parser fixtures', () => {
   assert.deepEqual(numbers(glued[1].options), [3, 4]);
   assert.deepEqual(numbers(glued[2].options), [5, 6]);
 
+  // 複数選択（#multi）: 1 問で任意個 ON/OFF。options に _multiSelect と _question が付き、
+  // isMultiSelectOptions が true、isBatchOptions は false になること。
+  const multi = parser.extractHubMarkerApproval([
+    '[ANY-AI-CLI]',
+    '#multi 下バーに追加したい情報は？',
+    '1. コンテキスト使用率',
+    '2. 承認待ちバッジ',
+    '3. キャッシュ率',
+    '[/ANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isMultiSelectOptions(multi), true);
+  assert.equal(parser.isBatchOptions(multi), false);
+  assert.equal(multi.length, 3);
+  assert.deepEqual(numbers(multi), [1, 2, 3]);
+  assert.deepEqual(labels(multi), ['コンテキスト使用率', '承認待ちバッジ', 'キャッシュ率']);
+  assert.equal(multi[0]._question, '下バーに追加したい情報は？');
+
+  // #multi が無い同形の番号付きリストは単一選択（multiSelect ではない）のまま。
+  const singleSelect = parser.extractHubMarkerApproval([
+    '[ANY-AI-CLI]',
+    'どれにしますか？',
+    '1. A',
+    '2. B',
+    '[/ANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isMultiSelectOptions(singleSelect), false);
+
   const numberedList = [
     'Implementation notes:',
     '1. Read the config',

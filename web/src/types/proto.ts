@@ -101,6 +101,11 @@ export interface Message {
   tokens_total?: number;
   usage_model?: string;
   usage_started_at?: string;
+  // C3: git 変更状況メタ（git_checked=true のメッセージのみ有効）
+  git_checked?: boolean;
+  git_files?: number;
+  git_added?: number;
+  git_deleted?: number;
   [key: string]: unknown;
 }
 
@@ -123,6 +128,10 @@ export interface SessionSnapshot {
   end_reason?: string;
   log_path?: string;
   jsonl_path?: string;
+  // C3: git 変更状況メタ（session_update で git_checked=true 時に蓄積）
+  git_files?: number;
+  git_added?: number;
+  git_deleted?: number;
   [key: string]: unknown;
 }
 

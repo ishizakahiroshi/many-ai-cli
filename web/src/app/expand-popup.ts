@@ -46,18 +46,11 @@ export function hideExpandPopup() {
   if (popupEl) popupEl.hidden = true;
 }
 
-function positionPopupNear(popup, clientX, clientY) {
-  // 位置調整: 画面端からはみ出さないようにする（path-popup と同方式）
-  popup.style.left = '0';
-  popup.style.top = '0';
-  const rect = popup.getBoundingClientRect();
-  const vw = window.innerWidth, vh = window.innerHeight;
-  let left = clientX + 8;
-  let top = clientY + 8;
-  if (left + rect.width > vw - 8) left = clientX - rect.width - 8;
-  if (top + rect.height > vh - 8) top = clientY - rect.height - 8;
-  popup.style.left = Math.max(4, left) + 'px';
-  popup.style.top = Math.max(4, top) + 'px';
+function positionPopupNear(popup) {
+  // モーダルとして画面中央に固定表示する（クリック位置には追従しない）。
+  popup.style.left = '50%';
+  popup.style.top = '50%';
+  popup.style.transform = 'translate(-50%, -50%)';
 }
 
 function renderExpandPopup(sessionId, lines, clientX, clientY, loading) {
@@ -108,7 +101,7 @@ function renderExpandPopup(sessionId, lines, clientX, clientY, loading) {
     popup.appendChild(pre);
   }
 
-  positionPopupNear(popup, clientX, clientY);
+  positionPopupNear(popup);
 }
 
 export function handleCrunchLinkClick(sessionId, clientX, clientY) {

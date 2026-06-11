@@ -433,7 +433,7 @@ export function renderSessionList() {
     if (key !== '__no_project__') {
       const filesBtn = document.createElement('button');
       filesBtn.className = 'project-group-files-btn';
-      filesBtn.textContent = '📁 files';
+      filesBtn.textContent = '📁 Files';
       filesBtn.title = t('files_group_btn_tooltip');
       filesBtn.addEventListener('click', async (e) => {
         e.stopPropagation();

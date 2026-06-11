@@ -12,7 +12,7 @@ import (
 const claudeImportLine = "@~/.any-ai-cli/approval-rules.md"
 const sharedBlockStart = "<!-- any-ai-cli:approval-rules -->"
 const sharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
-const rulesVersion = "8"
+const rulesVersion = "9"
 
 var rulesFileContent = strings.Join([]string{
 	fmt.Sprintf("<!-- version: %s -->", rulesVersion),
@@ -74,6 +74,20 @@ var rulesFileContent = strings.Join([]string{
 	"  - 各質問の選択肢行は 1 文字以上インデントする（見出し番号と区別するため）",
 	"  - ユーザーの回答は各行「<質問見出し番号> <選択肢番号>」の複数行テキストで返ってくる（例: 上の通し番号の例なら「1 2」と「2 5」の 2 行 = 質問1 は Option B、質問2 は Option E）",
 	"  - ユーザーが手入力した場合は「2 5」のような質問順の数字列 1 行のこともある。行頭の数字が質問番号として解釈できない場合はこちらとみなす",
+	"",
+	"- 複数選択（1 問で任意個を選ばせる場合）:",
+	"  [ANY-AI-CLI]",
+	"  #multi question?",
+	"  1. Option A",
+	"  2. Option B",
+	"  3. Option C",
+	"  [/ANY-AI-CLI]",
+	"",
+	"  - 1 行目を「#multi 」で始め、その後ろに質問文を書く（`#multi` は複数選択の合図で、画面には出ない）",
+	"  - 続けて番号付き選択肢を並べる。ユーザーは任意個を ON/OFF できる",
+	"  - この形式では「N. User specifies」は付けない（自由入力は入力欄で行える）",
+	"  - ユーザーの回答は選択番号をカンマ連結した 1 行で返ってくる（例: 「1,3」= Option A と C を選択）。最低 1 件は選択される",
+	"  - 「1 問で 1 つだけ選ばせる」場合は #multi を使わず、上の「番号付き選択肢」形式を使う",
 	"",
 	"- [ANY-AI-CLI] マーカーは確認・承認の質問にのみ使用する",
 	"",
