@@ -287,6 +287,8 @@ export function ensureTerminal(id) {
     cursorHideBlockBuf: [] as number[],
     cursorHideHasAbsPos: false,
     cursorHideHasNewline: false,
+    liveStatusText: '',
+    liveStatusHideTimer: null,
     autoScroll: true,
     everAttached: false,
   });
@@ -299,6 +301,8 @@ export function attachTerminal(id) {
   if (!t) return;
   // セッション切替・タブ復帰時は過去ログビューアを閉じる（別セッションの誤表示防止）
   resetHistoryViewerForSessionChange();
+  // 切替先セッションの最新ライブ進捗を反映（無ければ hidden に戻す）
+  syncLiveStatusDomForActive();
   if (t.container) {
     // DOM 再配置で WebGL canvas の描画バッファが失われるため、移動前に破棄する
     disableWebglRenderer(t);
@@ -1210,6 +1214,10 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
           for (const b of hideCursorSeq) out.push(b);
           for (const b of blockBuf) out.push(b);
           for (const b of showCursorSeq) out.push(b);
+        } else {
+          // ステータスバー更新（スピナー進捗等）は scrollback へ描かず破棄するが、
+          // 可読テキストを抽出して専用ライブ行に出し、進捗を可視化する。
+          extractAndSetLiveStatus(id, blockBuf);
         }
         inBlock = false;
         blockBuf = [];
@@ -1267,6 +1275,78 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
   t.cursorHideHasAbsPos = hasAbsPos;
   t.cursorHideHasNewline = hasNewline;
   return new Uint8Array(out);
+}
+
+// ── スピナー等のライブ進捗行 ───────────────────────────────────────────────
+// filterCursorHideShowBlocksForDisplay が破棄するステータスバーブロックから
+// 可読テキストを取り出し、#terminal-live-status へ出す。スピナーは毎秒数回
+// 更新されるため、更新が LIVE_STATUS_HIDE_MS 途切れたら停止とみなして消す。
+const LIVE_STATUS_HIDE_MS = 1500;
+// ライブステータス表示（#terminal-live-status）の有効/無効。
+// Web ターミナルのスクレイプでスピナー断片（例: `·ii` / `+49` / `thinking with...`）が
+// 残るため、ユーザー要望により既定で無効化。再表示したい場合は true に戻す。
+const LIVE_STATUS_ENABLED = false;
+const liveStatusDecoder = new TextDecoder('utf-8');
+
+// ANSI エスケープ・制御文字を除去して可読テキストだけを返す。
+function stripAnsiToText(blockBuf) {
+  let s;
+  try {
+    s = liveStatusDecoder.decode(new Uint8Array(blockBuf));
+  } catch (_) {
+    return '';
+  }
+  return s
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '') // OSC
+    .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')          // CSI（カーソル移動・色）
+    .replace(/\x1b[@-Z\\-_]/g, '')                       // 2バイト ESC シーケンス
+    .replace(/\x1b./g, '')                               // 取りこぼした ESC
+    .replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '')            // 残った制御文字
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function extractAndSetLiveStatus(id, blockBuf) {
+  if (!LIVE_STATUS_ENABLED) return; // 無効時はステータスバーブロックの破棄のみ行い、ライブ行へは出さない
+  if (!blockBuf || blockBuf.length === 0) return;
+  const text = stripAnsiToText(blockBuf);
+  // 文字・数字を含まない（罫線やカーソル退避だけの）ブロックは無視し、前回値を維持する。
+  if (!/[\p{L}\p{N}]/u.test(text)) return;
+  setSessionLiveStatus(id, text);
+}
+
+export function setSessionLiveStatus(id, text) {
+  const t = terminals.get(id);
+  if (!t) return;
+  t.liveStatusText = text;
+  if (t.liveStatusHideTimer) clearTimeout(t.liveStatusHideTimer);
+  t.liveStatusHideTimer = setTimeout(() => {
+    const cur = terminals.get(id);
+    if (cur) { cur.liveStatusText = ''; cur.liveStatusHideTimer = null; }
+    if (id === activeSessionId) renderLiveStatusDom('');
+  }, LIVE_STATUS_HIDE_MS);
+  if (id === activeSessionId) renderLiveStatusDom(text);
+}
+
+function renderLiveStatusDom(text) {
+  const el = document.getElementById('terminal-live-status');
+  if (!el) return;
+  if (!LIVE_STATUS_ENABLED) { el.textContent = ''; el.hidden = true; return; } // 常に非表示
+  if (text) {
+    el.textContent = text;
+    el.hidden = false;
+  } else {
+    el.textContent = '';
+    el.hidden = true;
+  }
+}
+
+// セッション切替時に、アクティブセッションの最新ライブ進捗を DOM へ反映する。
+// 非アクティブ中も hide タイマーは各 terminal で走り続けるため、
+// バックグラウンドで稼働中のセッションへ切り替えれば現在のスピナーが出る。
+export function syncLiveStatusDomForActive() {
+  const t = activeSessionId !== null ? terminals.get(activeSessionId) : null;
+  renderLiveStatusDom(t ? (t.liveStatusText || '') : '');
 }
 
 // \r（CR）で行頭へ戻ったあと行末を消去しないと、短い上書きテキストの後ろに

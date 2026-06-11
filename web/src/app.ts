@@ -8,6 +8,7 @@ import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitA
 import { DEFAULT_QUICK_CMD_1, DEFAULT_QUICK_CMD_2, appConfirm, appConfirmShutdown, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
+import { scheduleDeferredEnter } from './app/deferred-enter.js';
 import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, sendBatchChoices, sendMultiSelectChoices, setActionBarFocus, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn } from './app/attachments.js';
@@ -179,9 +180,6 @@ export function clearInput() {
   clearAllPastes();
 }
 
-// 複数行ペーストの確定 \r を本文と分離して送るまでの待ち時間（内側 CLI の畳み込み確定待ち）
-const DEFER_ENTER_MS = 120;
-
 export async function doSend(sessionId) {
   // Ollama route セッションで /model 始まりはブロック（spawn 時固定 env と不整合のため）
   if (isOllamaModelCommandBlocked(sessionId, buildSendText())) {
@@ -255,10 +253,11 @@ export async function doSend(sessionId) {
     scrollChatPaneToBottomSoon({ passes: 4, startedAt: Date.now() });
   }
   sendSubmittedText(sessionId, textToSend);
-  // 複数行ペーストの確定 \r は、内側 CLI の畳み込み処理が落ち着いてから別書き込みで送る。
-  // 同一書き込みに含めると \r が吸収され送信されないため（上の deferEnter コメント参照）。
+  // 複数行ペーストの確定 \r は、内側 CLI の畳み込み・再描画が落ち着いてから別書き込みで送る。
+  // 同一書き込みに含めると \r が吸収され送信されない。固定遅延では大きなペーストの取り込み時間を
+  // 当てられず取りこぼすため、PTY 出力が静止するのを待ってから 1 回だけ送る（deferred-enter.ts）。
   if (deferEnter) {
-    setTimeout(() => { try { sendText(sessionId, '\r'); } catch (_) {} }, DEFER_ENTER_MS);
+    scheduleDeferredEnter(sessionId);
   }
 }
 

@@ -11,7 +11,6 @@ import { showActionBar } from './approval.js';
 
   function notifyApprovalQueue() {
     try {
-      if (typeof root.updateApprovalQueue === 'function') root.updateApprovalQueue();
       root.dispatchEvent(new CustomEvent('approval-queue-updated'));
     } catch (_) {}
   }

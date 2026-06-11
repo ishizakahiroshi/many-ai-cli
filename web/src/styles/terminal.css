@@ -99,6 +99,29 @@
   user-select: none;
   z-index: 10;
 }
+/* スピナー等のライブ進捗行（xterm へ描かないステータス更新の抽出表示）。
+   右下のスクロールボタン（right:14px）と重ならないよう右側に余白を空ける。 */
+#terminal-live-status {
+  position: absolute;
+  left: 10px;
+  right: 96px;
+  bottom: 10px;
+  z-index: 15;
+  background: rgba(13, 17, 23, 0.82);
+  color: rgba(147, 197, 253, 0.92);
+  font-family: "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  padding: 3px 10px;
+  border-radius: 5px;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  user-select: none;
+  backdrop-filter: blur(2px);
+}
 .xterm { height: 100%; }
 .xterm-viewport {
   overflow-y: scroll !important;

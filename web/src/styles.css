@@ -624,11 +624,6 @@ header {
     font-size: 0.75rem;
   }
 
-  #approval-queue-btn {
-    min-height: 36px;
-    padding: 4px 7px;
-  }
-
   #new-session-bar {
     position: sticky;
     top: 0;
