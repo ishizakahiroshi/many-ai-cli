@@ -1,11 +1,11 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchFocusIdx, batchSelections, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionVisibleCache, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, terminals, utf8Decoder } from './state.js';
+import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchFocusIdx, batchSelections, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectFocusIdx, multiSelectSelections, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, utf8Decoder } from './state.js';
 import { inputEl, sendSubmittedText } from '../app.js';
 import { clearSuppressPtyResize, isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout } from './terminal.js';
 import { stripAnsi } from './settings.js';
 import { ws } from './ws-client.js';
-import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, hasApprovalLikeLabel, isBatchOptions, isHubChoicePrompt, isMultiQuestionPrompt, markHubChoiceDefault, matchNativeApprovalTrigger } from './approval-parser.js';
+import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, hasApprovalLikeLabel, isBatchOptions, isHubChoicePrompt, isMultiQuestionPrompt, isMultiSelectOptions, markHubChoiceDefault, matchNativeApprovalTrigger } from './approval-parser.js';
 import { approvalUiAdapter, setMultiQuestionBannerVisible } from './approval-ui.js';
 import { chatHistoryCommitOutput, chatPaneAtBottom, getChatTimelineEl, pushMessage, scrollChatPaneToBottom } from './chat-history.js';
 import { token } from './util.js';
@@ -25,6 +25,22 @@ import { token } from './util.js';
 // あるため、1 回のミスでは閉じない（H9 本来の誤消去防止を維持）。
 const H9_RESTORE_MISS_LIMIT = 3;
 const h9RestoreMisses = new Map();
+
+// 複数質問 UI（AskUserQuestion 等）検出の窓と取りこぼし対策。
+// scanBuffer の固定 40 行窓だと、端末行数(term.rows)が 40 を超える縦長ターミナルで
+// プロンプトがビューポート全体を占め、上端のタブ行（←…→/Submit）が下端 40 行より
+// 上に来て検出から外れる。窓をビューポート高さ（=現在画面ぶん）まで広げて必ず含める。
+// scrollback の古い残骸は viewport の外（上）へスクロールアウトするため拾わない。
+function multiQuestionScanCount(t) {
+  const rows = t && t.term && t.term.rows ? t.term.rows : 0;
+  return Math.max(40, rows);
+}
+// タブ行を最後にライブ検出してからこの時間内は、単発ポーリングでタブ行が窓から
+// 一瞬外れても multiQ 終了に倒さない（Ink 部分再描画の隙で action-bar に固着するのを防ぐ）。
+const MULTIQ_GRACE_MS = 2000;
+function multiQuestionRecentlyLive(id) {
+  return Date.now() - (multiQuestionLatchAt.get(id) || 0) < MULTIQ_GRACE_MS;
+}
 
 // C5: H9 復元ミス時の自走再評価タイマー（保留中バッジ固着対応の補完）。
 // detectApproval は PTY チャンク受信時・セッション切替時にしか走らないため、
@@ -277,9 +293,10 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
   // 非アクティブセッションの全チャンクに対して scanBuffer を走らせると多セッション時の CPU 負荷が増大する。
   const pendingHasMultiQHint = isMultiQuestionPrompt(lines) || approvalLinesHaveHint(provider, lines);
   if (t && t.everAttached && (id === activeSessionId || pendingHasMultiQHint)) {
-    multiQContext = lines.concat(scanBuffer(id, 40));
+    multiQContext = lines.concat(scanBuffer(id, multiQuestionScanCount(t)));
   }
   if (isMultiQuestionPrompt(multiQContext)) {
+    multiQuestionLatchAt.set(id, Date.now()); // タブ行のライブ検出を記録（grace デバウンス基準）
     // ユーザーが ✕ で手動 dismiss した場合は再表示しない（誤検出を尊重）
     const dismissed = multiQuestionDismissedCache.get(id);
     // regular approval が確認済みなら false positive として扱い、multiQuestion 検出を完全にスキップする。
@@ -302,6 +319,12 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
       }
       return;
     }
+  } else if (multiQuestionVisibleCache.get(id) && multiQuestionRecentlyLive(id)) {
+    // タブ行を直前までライブ検出していた multiQ 中で、今回のチャンクだけ Ink 部分再描画で
+    // タブ行が窓から外れたケース。grace 期間内は通常承認としてキャッシュせず据え置く。
+    // これを通すと選択肢リストが単問承認として確定し、hasCachedApproval ガードで
+    // 以後 multiQ 判定が恒久スキップされて action-bar に固着する。
+    return;
   }
 
   // フォーマットベース検出（優先）: [ANY-AI-CLI] マーカーがあれば即確定
@@ -633,11 +656,13 @@ export function detectApproval(id) {
   const tEarly = terminals.get(id);
   // 複数質問 UI（AskUserQuestion 等）の判定を最優先。末尾 40 行に限定して scrollback 残骸を除外。
   // scanBuffer は active セッションのみ（非アクティブは pendingTextTail の末尾で代替）。
-  const mqPending = (tEarly?.pendingTextTail || '').split(/\r\n|\r|\n/).slice(-40).map(l => stripAnsi(l));
+  const mqScanCount = multiQuestionScanCount(tEarly);
+  const mqPending = (tEarly?.pendingTextTail || '').split(/\r\n|\r|\n/).slice(-mqScanCount).map(l => stripAnsi(l));
   const mqLines = (tEarly?.everAttached && id === activeSessionId)
-    ? mqPending.concat(scanBuffer(id).slice(-40))
+    ? mqPending.concat(scanBuffer(id).slice(-mqScanCount))
     : mqPending;
   if (isMultiQuestionPrompt(mqLines)) {
+    multiQuestionLatchAt.set(id, Date.now()); // タブ行のライブ検出を記録（grace デバウンス基準）
     // 確認済みの regular approval がある場合は false positive として扱い、
     // action-bar を消さず通常の承認検出にフォールスルーする。
     // xterm scrollback に前回 AskUserQuestion の残骸が残ると誤検出しチカチカする。
@@ -664,9 +689,18 @@ export function detectApproval(id) {
     }
     // fall through to regular approval detection
   } else if (multiQuestionVisibleCache.get(id)) {
-    // multiQ が genuinely 終了した: transition path で approvalVisibleCache を false に戻す
+    if (multiQuestionRecentlyLive(id)) {
+      // 直前までタブ行をライブ検出していた。今回だけ Ink 部分再描画でタブ行が窓から
+      // 外れた transient miss とみなし、banner を据え置いて通常承認へ倒さない。
+      // これが無いと単発ミスで banner→action-bar に転移し、以後 hasCachedApproval
+      // ガードで multiQ が恒久スキップされ action-bar に固着する。
+      if (id === activeSessionId) setMultiQuestionBannerVisible(true);
+      return;
+    }
+    // grace を超えてタブ行が消えた = multiQ が genuinely 終了: approvalVisibleCache を false に戻す
     multiQuestionVisibleCache.delete(id);
     multiQuestionDismissedCache.delete(id);
+    multiQuestionLatchAt.delete(id);
     if (id === activeSessionId) setMultiQuestionBannerVisible(false);
     if (approvalVisibleCache.get(id)) {
       approvalUiAdapter.setApprovalVisible(id, false);
@@ -957,8 +991,10 @@ export function hideActionBar(id) {
   lastActionBarRender.sig = null;
   set_actionBarFocusIdx(-1);
   set_batchFocusIdx(-1);
+  set_multiSelectFocusIdx(-1);
   if (id !== undefined) actionBarShownAt.delete(id);
   if (id !== undefined) batchSelections.delete(id);
+  if (id !== undefined) multiSelectSelections.delete(id);
   if (id !== undefined) {
     cancelApprovalHintConfirm(id);
     approvalSwitchCandidates.delete(id);
@@ -1029,6 +1065,10 @@ export function showActionBar(bar, sessionId, options, forceStickToBottom = fals
     showBatchActionBar(bar, sessionId, options, forceStickToBottom);
     return;
   }
+  if (isMultiSelectOptions(options)) {
+    showMultiSelectActionBar(bar, sessionId, options, forceStickToBottom);
+    return;
+  }
   options = normalizeActionOptions(options);
   // 注意: 局所変数名 `t` は window.t（i18n 翻訳関数）と衝突するため使わない。
   // `term` にすることで本関数末尾の t('dismiss_title') 等が正しく i18n を参照できる。
@@ -1058,8 +1098,9 @@ export function showActionBar(bar, sessionId, options, forceStickToBottom = fals
   bar.innerHTML = '';
   // バッチ→単一質問の遷移で残留する .batch クラスと選択状態を取り除く（縦スタック CSS の誤適用と
   // 後続バッチへの古いセレクション持ち越しを防ぐ）。
-  bar.classList.remove('batch');
+  bar.classList.remove('batch', 'multi-select');
   batchSelections.delete(sessionId);
+  multiSelectSelections.delete(sessionId);
 
   // "⚠ Approval needed" ラベル
   if (options.length > 0) {
@@ -1315,6 +1356,208 @@ export function handleBatchNumberKey(sessionId, num) {
   return true;
 }
 
+// ---- 複数選択（#multi）: 1 問で任意個 ON/OFF できるチェックボックス UI ----
+
+export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBottom = false) {
+  const term = sessionId === activeSessionId ? terminals.get(sessionId) : null;
+  const shouldStickToBottom = !!(term && (forceStickToBottom || term.autoScroll || isTerminalAtBottom(term)));
+  const chatTlM = getChatTimelineEl();
+  const chatWasAtBottomM = chatTlM ? chatPaneAtBottom(chatTlM) : false;
+
+  let selected = multiSelectSelections.get(sessionId);
+  if (!selected) {
+    selected = new Set();
+    multiSelectSelections.set(sessionId, selected);
+    if (multiSelectFocusIdx < 0 || multiSelectFocusIdx >= options.length) set_multiSelectFocusIdx(0);
+  }
+  const question = (options[0] && options[0]._question) || '';
+
+  const sig = JSON.stringify({
+    s: sessionId,
+    mode: 'multi',
+    q: question,
+    opts: options.map(o => ({ n: o.num, l: o.label })),
+    sel: Array.from(selected).sort((a, b) => a - b),
+    f: multiSelectFocusIdx,
+    v: bar.classList.contains('visible'),
+  });
+  if (lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig) {
+    if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
+    if (chatWasAtBottomM && chatTlM) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlM));
+    return;
+  }
+  lastActionBarRender.sessionId = sessionId;
+  lastActionBarRender.sig = sig;
+  bar.innerHTML = '';
+  bar.classList.remove('batch');
+  bar.classList.add('multi-select');
+
+  const label = document.createElement('span');
+  label.className = 'action-bar-label';
+  label.textContent = question ? `⚠ ${question}` : t('approval_multi_label');
+  if (question) label.title = question;
+  bar.appendChild(label);
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'action-section-buttons';
+  options.forEach((opt, idx) => {
+    const btn = document.createElement('button');
+    let cls = 'action-btn multi-option';
+    const checked = selected.has(opt.num);
+    if (checked) cls += ' selected';
+    if (idx === multiSelectFocusIdx) cls += ' kbd-focus';
+    btn.className = cls;
+    btn.textContent = `${checked ? '☑' : '☐'} ${opt.num}. ${opt.label}`;
+    btn.title = `${opt.num}. ${opt.label}`;
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      set_multiSelectFocusIdx(idx);
+      toggleMultiSelectOption(sessionId, opt.num);
+    };
+    btnRow.appendChild(btn);
+  });
+  bar.appendChild(btnRow);
+
+  const footer = document.createElement('div');
+  footer.className = 'action-bar-footer';
+
+  const progress = document.createElement('span');
+  progress.className = 'action-bar-progress';
+  progress.textContent = t('approval_multi_progress', { n: selected.size });
+  footer.appendChild(progress);
+
+  const submitBtn = document.createElement('button');
+  submitBtn.className = 'action-submit-btn';
+  submitBtn.textContent = t('approval_batch_submit');
+  submitBtn.disabled = selected.size === 0;
+  submitBtn.onclick = (e) => {
+    e.stopPropagation();
+    sendMultiSelectChoices(sessionId);
+  };
+  footer.appendChild(submitBtn);
+
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'action-clear-btn';
+  clearBtn.textContent = t('approval_batch_clear');
+  clearBtn.onclick = (e) => {
+    e.stopPropagation();
+    clearMultiSelectSelections(sessionId);
+  };
+  footer.appendChild(clearBtn);
+
+  const closeMultiBtn = document.createElement('button');
+  closeMultiBtn.className = 'action-dismiss-btn';
+  closeMultiBtn.textContent = '✕';
+  closeMultiBtn.title = t('dismiss_title');
+  closeMultiBtn.onclick = (e) => {
+    e.stopPropagation();
+    hideActionBar(sessionId);
+    approvalSuppressUntil.set(sessionId, Date.now() + 60000);
+  };
+  footer.appendChild(closeMultiBtn);
+
+  bar.appendChild(footer);
+  if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(60000);
+  bar.classList.add('visible');
+  actionBarShownAt.set(sessionId, Date.now());
+  if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
+  if (chatWasAtBottomM && chatTlM) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlM));
+}
+
+export function isMultiSelectActionBarVisible() {
+  const bar = document.getElementById('action-bar');
+  return !!(bar && bar.classList.contains('visible') && bar.classList.contains('multi-select'));
+}
+
+export function toggleMultiSelectOption(sessionId, num) {
+  const cached = approvalRawOptionsCache.get(sessionId);
+  if (!isMultiSelectOptions(cached)) return false;
+  if (!cached.some(o => o.num === num)) return false;
+  let selected = multiSelectSelections.get(sessionId);
+  if (!selected) { selected = new Set(); multiSelectSelections.set(sessionId, selected); }
+  if (selected.has(num)) selected.delete(num);
+  else selected.add(num);
+  const bar = document.getElementById('action-bar');
+  if (bar) showMultiSelectActionBar(bar, sessionId, cached);
+  setTimeout(() => inputEl.focus(), 0);
+  return true;
+}
+
+export function clearMultiSelectSelections(sessionId) {
+  const cached = approvalRawOptionsCache.get(sessionId);
+  if (!isMultiSelectOptions(cached)) return;
+  multiSelectSelections.set(sessionId, new Set());
+  set_multiSelectFocusIdx(0);
+  const bar = document.getElementById('action-bar');
+  if (bar) showMultiSelectActionBar(bar, sessionId, cached);
+  setTimeout(() => inputEl.focus(), 0);
+}
+
+export function moveMultiSelectFocus(delta) {
+  if (activeSessionId === null) return false;
+  const cached = approvalRawOptionsCache.get(activeSessionId);
+  if (!isMultiSelectOptions(cached) || cached.length === 0) return false;
+  const n = cached.length;
+  const start = multiSelectFocusIdx < 0 ? (delta > 0 ? -1 : 0) : multiSelectFocusIdx;
+  set_multiSelectFocusIdx(((start + delta) % n + n) % n);
+  const bar = document.getElementById('action-bar');
+  if (bar) showMultiSelectActionBar(bar, activeSessionId, cached);
+  return true;
+}
+
+// フォーカス中の選択肢を Space でトグルする
+export function toggleMultiSelectFocused(sessionId) {
+  const cached = approvalRawOptionsCache.get(sessionId);
+  if (!isMultiSelectOptions(cached)) return false;
+  if (multiSelectFocusIdx < 0 || multiSelectFocusIdx >= cached.length) return false;
+  const opt = cached[multiSelectFocusIdx];
+  if (!opt) return false;
+  return toggleMultiSelectOption(sessionId, opt.num);
+}
+
+export function handleMultiSelectNumberKey(sessionId, num) {
+  const cached = approvalRawOptionsCache.get(sessionId);
+  if (!isMultiSelectOptions(cached)) return false;
+  const idx = cached.findIndex(o => o.num === num);
+  if (idx < 0) return false;
+  set_multiSelectFocusIdx(idx);
+  return toggleMultiSelectOption(sessionId, num);
+}
+
+export function sendMultiSelectChoices(sessionId) {
+  const selected = multiSelectSelections.get(sessionId);
+  if (!selected || selected.size === 0) return;
+  const prevOpts = approvalRawOptionsCache.get(sessionId);
+  const nums = Array.from(selected).sort((a, b) => a - b);
+  // 選択番号をカンマ連結で返す（例 "1,3"）。エージェントが提示した実番号をそのまま使う。
+  const text = nums.join(',');
+  const labelMap = new Map((isMultiSelectOptions(prevOpts) ? prevOpts : []).map(o => [o.num, o.label]));
+  chatHistoryCommitOutput(sessionId);
+  pushMessage(sessionId, {
+    role: 'system',
+    kind: 'approval',
+    rawText: nums.map(n => labelMap.get(n) || `#${n}`).join(', '),
+    meta: {
+      kind: 'multi',
+      answers: nums,
+      labels: nums.map(n => labelMap.get(n) || null),
+    },
+  });
+  if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
+  sendApprovalConsumed(sessionId, prevOpts, text);
+  multiQuestionDismissedCache.delete(sessionId);
+  multiQuestionLatchAt.delete(sessionId);
+  sendSubmittedText(sessionId, `${text}\r`);
+  hideActionBar(sessionId);
+  approvalSuppressUntil.set(sessionId, Date.now() + 400);
+  multiSelectSelections.delete(sessionId);
+  setTimeout(() => {
+    detectApproval(sessionId);
+    maybeAutoSwitchToNextApproval();
+  }, 450);
+  setTimeout(() => inputEl.focus(), 0);
+}
+
 export function sendChoice(sessionId, targetNum) {
   const seqState = sequentialChoiceCache.get(sessionId);
   if (seqState && seqState.index < seqState.prompts.length) {
@@ -1356,6 +1599,7 @@ export function sendChoice(sessionId, targetNum) {
     const prevOpts = approvalRawOptionsCache.get(sessionId);
     if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
     multiQuestionDismissedCache.delete(sessionId);
+    multiQuestionLatchAt.delete(sessionId);
     sendSubmittedText(sessionId, response);
     hideActionBar(sessionId);
     approvalSuppressUntil.set(sessionId, Date.now() + 400);

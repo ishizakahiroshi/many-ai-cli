@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { actionBarShownAt, activeSessionId, approvalRawOptionsCache, approvalSourceCache, approvalVisibleCache, enqueueApprovalAutoSwitch, lastActionBarRender, multiQuestionDismissedCache, multiQuestionVisibleCache, removeApprovalAutoSwitchTarget, set_actionBarFocusIdx, set_batchFocusIdx } from './state.js';
+import { actionBarShownAt, activeSessionId, approvalRawOptionsCache, approvalSourceCache, approvalVisibleCache, enqueueApprovalAutoSwitch, lastActionBarRender, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectSelections, removeApprovalAutoSwitchTarget, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx } from './state.js';
 import { playNotificationSound, showDesktopApprovalNotification } from './settings.js';
 import { ws } from './ws-client.js';
 import { showActionBar } from './approval.js';
@@ -65,7 +65,8 @@ import { showActionBar } from './approval.js';
     lastActionBarRender.sig = null;
     set_actionBarFocusIdx(-1);
     set_batchFocusIdx(-1);
-    if (activeSessionId != null) actionBarShownAt.delete(activeSessionId);
+    set_multiSelectFocusIdx(-1);
+    if (activeSessionId != null) { actionBarShownAt.delete(activeSessionId); multiSelectSelections.delete(activeSessionId); }
     notifyApprovalQueue();
   }
 
@@ -87,6 +88,7 @@ import { showActionBar } from './approval.js';
         if (!id) { banner.hidden = true; return; }
         multiQuestionDismissedCache.set(id, true);
         multiQuestionVisibleCache.delete(id);
+        multiQuestionLatchAt.delete(id);
         banner.hidden = true;
         if (approvalVisibleCache.get(id) && !(approvalRawOptionsCache.get(id)?.length > 0)) {
           setApprovalVisible(id, false);

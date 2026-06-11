@@ -109,6 +109,12 @@ type session struct {
 	approvalVisibleAt time.Time // approvalVisible=true を最後に受信した時刻（approvalVisibleLease 判定用）
 	branchCheckedAt   time.Time
 
+	// JSON 外: git 変更統計（直近の refreshBranchForCWD で取得した値）
+	gitChecked bool
+	gitFiles   int
+	gitAdded   int
+	gitDeleted int
+
 	// JSON 外: UI 再接続時リプレイ用リングバッファ（末尾 maxPTYBuf bytes）
 	ptyBuf []byte
 
@@ -183,6 +189,56 @@ func gitBranch(cwd string) string {
 		return ""
 	}
 	return "detached:" + hash
+}
+
+// gitChangeStats は cwd の Git 変更統計を返す。
+// files = git status --porcelain の非空行数（変更ファイル数）。
+// added / deleted = git diff --numstat HEAD の集計値。
+// いずれかのコマンドが失敗した場合は 0,0,0 を返す（git 未インストール / 非 git ディレクトリを含む）。
+func gitChangeStats(cwd string) (files, added, deleted int) {
+	if strings.TrimSpace(cwd) == "" {
+		return 0, 0, 0
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), branchLookupTimeout)
+	defer cancel()
+
+	// 変更ファイル数: git status --porcelain の非空行数
+	statusOut, err := exec.CommandContext(ctx, "git", "-C", cwd, "status", "--porcelain").Output()
+	if err != nil {
+		return 0, 0, 0
+	}
+	for _, line := range strings.Split(string(statusOut), "\n") {
+		if strings.TrimSpace(line) != "" {
+			files++
+		}
+	}
+
+	// 追加/削除行数: git diff --numstat HEAD
+	numstatOut, err := exec.CommandContext(ctx, "git", "-C", cwd, "diff", "--numstat", "HEAD").Output()
+	if err != nil {
+		// HEAD が無い（初期コミット前）等のエラーは 0 として扱う
+		return files, 0, 0
+	}
+	for _, line := range strings.Split(string(numstatOut), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 3)
+		if len(parts) < 2 {
+			continue
+		}
+		// バイナリファイルは "-" になるので 0 扱い
+		a, errA := strconv.Atoi(parts[0])
+		d, errD := strconv.Atoi(parts[1])
+		if errA == nil {
+			added += a
+		}
+		if errD == nil {
+			deleted += d
+		}
+	}
+	return files, added, deleted
 }
 
 // uiConn wraps a single UI WebSocket connection and serialises all outbound
@@ -2184,14 +2240,24 @@ func (s *Server) queueBranchRefreshes(checks []branchRefreshRequest) {
 
 func (s *Server) refreshBranchForCWD(cwd string, ids []int) {
 	branch := gitBranch(cwd)
+	gitFiles, gitAdded, gitDeleted := gitChangeStats(cwd)
 	msgs := make([]proto.Message, 0, len(ids))
 	s.sessionsMu.Lock()
 	for _, id := range ids {
 		ses := s.sessions[id]
-		if ses == nil || ses.CWD != cwd || ses.Branch == branch {
+		if ses == nil || ses.CWD != cwd {
+			continue
+		}
+		branchChanged := ses.Branch != branch
+		gitChanged := !ses.gitChecked || ses.gitFiles != gitFiles || ses.gitAdded != gitAdded || ses.gitDeleted != gitDeleted
+		if !branchChanged && !gitChanged {
 			continue
 		}
 		ses.Branch = branch
+		ses.gitChecked = true
+		ses.gitFiles = gitFiles
+		ses.gitAdded = gitAdded
+		ses.gitDeleted = gitDeleted
 		msgs = append(msgs, proto.Message{
 			Type:         "session_update",
 			SessionID:    id,
@@ -2207,6 +2273,10 @@ func (s *Server) refreshBranchForCWD(cwd string, ids []int) {
 			StartedAt:    ses.StartedAt,
 			FirstMessage: ses.FirstMessage,
 			LastMessage:  ses.LastMessage,
+			GitChecked:   true,
+			GitFiles:     gitFiles,
+			GitAdded:     gitAdded,
+			GitDeleted:   gitDeleted,
 		})
 	}
 	s.sessionsMu.Unlock()

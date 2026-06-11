@@ -1,6 +1,7 @@
 package wrapper
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -65,11 +66,16 @@ func InjectClaudeStatusLine(cwd string, p UsageHookParams) error {
 	path := claudeSettingsLocalPath(cwd)
 
 	// 既存ファイルを読み込む（無ければ空 map）。
+	// 空ファイル・空白のみのファイルは「空オブジェクト」とみなす。
+	// （json.Unmarshal("") は "unexpected end of JSON input" で失敗するため、
+	//  これを破損扱いにすると statusLine が永久に注入されなくなる。実害が出ていた。）
 	obj := map[string]json.RawMessage{}
 	if data, err := os.ReadFile(path); err == nil {
-		if jErr := json.Unmarshal(data, &obj); jErr != nil {
-			// 破損していたら空 map で続行（上書きは危険なためスキップ）
-			return fmt.Errorf("parse %s: %w", path, jErr)
+		if len(bytes.TrimSpace(data)) > 0 {
+			if jErr := json.Unmarshal(data, &obj); jErr != nil {
+				// 破損していたら上書きは危険なためスキップ。
+				return fmt.Errorf("parse %s: %w", path, jErr)
+			}
 		}
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("read %s: %w", path, err)
@@ -132,6 +138,11 @@ func RemoveClaudeStatusLine(cwd string) error {
 	}
 	if err != nil {
 		return fmt.Errorf("read %s: %w", path, err)
+	}
+
+	// 空ファイル・空白のみは注入されていない＝除去対象なし。
+	if len(bytes.TrimSpace(data)) == 0 {
+		return nil
 	}
 
 	obj := map[string]json.RawMessage{}

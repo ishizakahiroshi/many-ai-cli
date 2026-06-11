@@ -2,13 +2,13 @@
 import { t } from './i18n.js';
 import { cleanCopiedText, showToast, token } from './app/util.js';
 import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
-import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
+import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, resumeTerminalBottomFollow, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
 import { DEFAULT_QUICK_CMD_1, DEFAULT_QUICK_CMD_2, appConfirm, appConfirmShutdown, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
-import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, hideActionBar, isBatchActionBarVisible, maybeSendDirectApprovalConsumed, moveBatchFocus, sendBatchChoices, setActionBarFocus } from './app/approval.js';
+import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, sendBatchChoices, sendMultiSelectChoices, setActionBarFocus, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
@@ -218,8 +218,9 @@ export async function doSend(sessionId) {
   const textToSend = '\x15' + injectPrefix + textPart;
   clearInput();
   hideSlashMenu();
-  // 送信したら次のプロンプトは別物の可能性があるため dismiss フラグをクリア
+  // 送信したら次のプロンプトは別物の可能性があるため dismiss フラグ・multiQ ラッチをクリア
   multiQuestionDismissedCache.delete(sessionId);
+  multiQuestionLatchAt.delete(sessionId);
   // テキスト送信で承認ポップアップをバイパスした場合、Ink 再描画による
   // 同一選択肢の再検出・再表示を防ぐため消費済み署名を保存する
   const prevOpts = approvalRawOptionsCache.get(sessionId);
@@ -484,6 +485,49 @@ inputEl.addEventListener('keydown', (e) => {
       sendBatchChoices(activeSessionId);
       e.preventDefault(); return;
     }
+  }
+
+  // 複数選択（#multi）の専用キー処理。入力欄が空のときのみ作動。
+  // ←→↑↓ でフォーカス移動、Space でフォーカス中の選択肢を ON/OFF、
+  // 数字キーで該当選択肢をトグル、Enter でまとめて送信。
+  if (inputEl.value === '' && !e.isComposing && isMultiSelectActionBarVisible()) {
+    if ((e.key === 'Tab' && slashMenuEl.hidden)) {
+      moveMultiSelectFocus(e.shiftKey ? -1 : 1);
+      e.preventDefault(); return;
+    }
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      moveMultiSelectFocus(1);
+      e.preventDefault(); return;
+    }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      moveMultiSelectFocus(-1);
+      e.preventDefault(); return;
+    }
+    if (e.key === ' ') {
+      toggleMultiSelectFocused(activeSessionId);
+      e.preventDefault(); return;
+    }
+    if (/^[0-9]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (handleMultiSelectNumberKey(activeSessionId, parseInt(e.key, 10))) {
+        e.preventDefault(); return;
+      }
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      sendMultiSelectChoices(activeSessionId);
+      e.preventDefault(); return;
+    }
+  }
+
+  // 複数質問プロンプト（AskUserQuestion 等の複数選択）はバナー表示のみで
+  // action-bar を出さないため、ターミナルへ直接キーを送って操作する。
+  // ↑↓←→/Esc は specialKeys で転送されるが、複数選択のチェックボックス
+  // トグルに必須のスペースは転送経路が無く入力欄へ空白が入るだけだった。
+  // 複数質問検出中・入力欄が空・修飾なしのスペースに限り PTY へ転送する。
+  if (e.key === ' ' && inputEl.value === '' && !e.isComposing &&
+      !e.ctrlKey && !e.metaKey && !e.altKey &&
+      multiQuestionVisibleCache.get(activeSessionId)) {
+    sendText(activeSessionId, ' ');
+    e.preventDefault(); return;
   }
 
   // Tab でセッション切り替え（スラッシュメニューが閉じているとき）
@@ -834,6 +878,7 @@ export function resetAllLocalSessionHistory() {
   approvalVisibleCache.clear();
   multiQuestionVisibleCache.clear();
   multiQuestionDismissedCache.clear();
+  multiQuestionLatchAt.clear();
   sequentialChoiceCache.clear();
   approvalRawOptionsCache.clear();
   approvalSourceCache.clear();
@@ -866,6 +911,7 @@ export function resetLocalSessionHistory(id) {
     setMultiQuestionBannerVisible(false);
   }
   multiQuestionDismissedCache.delete(id);
+  multiQuestionLatchAt.delete(id);
   clearSequentialChoiceState(id);
   approvalRawOptionsCache.delete(id);
   approvalSourceCache.delete(id);
@@ -928,6 +974,7 @@ export function removeLocalSession(id) {
     setMultiQuestionBannerVisible(false);
   }
   multiQuestionDismissedCache.delete(id);
+  multiQuestionLatchAt.delete(id);
   removeApprovalAutoSwitchTarget(id);
   approvalRawOptionsCache.delete(id);
   approvalSourceCache.delete(id);

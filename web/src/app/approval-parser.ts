@@ -81,6 +81,11 @@
       value[0] && Array.isArray(value[0].options);
   }
 
+  function isMultiSelectOptions(value) {
+    return Array.isArray(value) && value.length > 0 &&
+      value[0] && value[0]._multiSelect === true;
+  }
+
   function approvalSig(options) {
     if (isBatchOptions(options)) {
       return JSON.stringify(options.map(s => ({
@@ -269,12 +274,42 @@
     return splitUserSpecifiesAnchor(lines).flatMap(splitGluedNumberedLine);
   }
 
+  // 複数選択ディレクティブ「#multi 質問文?」。これがブロック内にあると、後続の
+  // 番号付き選択肢を「任意個 ON/OFF できる複数選択」として扱う（単一選択ではない）。
+  const multiSelectDirectiveRe = /^#multi\b[ \t]*(.*)$/i;
+
   function parseHubBlock(rawLines) {
     const lines = ungluedApprovalLines(rawLines);
     const text = lines.join('\n');
     if (hasYesNoApprovalMarker(text)) {
       if (isPlaceholderYesNoQuestion(text)) return null;
       return yesNoApprovalOptions(yesNoCtxFromText(text));
+    }
+    // 複数選択（#multi）: ディレクティブ行があれば番号付き選択肢を multiSelect として返す。
+    // 単一選択・バッチのセクション解析より前に確定させる（#multi 行自体は heading/option に
+    // マッチしないので通常ループには載らないが、明示的に専用経路で処理する）。
+    {
+      const optionRe = /^(\d+)\.\s*(.+?)\s*$/;
+      let question = '';
+      let isMulti = false;
+      const opts = [];
+      for (const raw of lines) {
+        const line = String(raw || '').trim();
+        if (!line) continue;
+        const dm = line.match(multiSelectDirectiveRe);
+        if (dm) { isMulti = true; question = dm[1].trim(); continue; }
+        const om = line.match(optionRe);
+        if (om) { opts.push({ num: parseInt(om[1], 10), label: om[2].trim() }); }
+      }
+      if (isMulti && opts.length > 0) {
+        return opts.map(o => ({
+          num: o.num,
+          label: o.label,
+          isCurrent: false,
+          _multiSelect: true,
+          _question: question,
+        }));
+      }
     }
     const sections = [];
     const looseOpts = [];
@@ -467,6 +502,7 @@
     approvalSig,
     sequentialChoiceSig,
     isBatchOptions,
+    isMultiSelectOptions,
     isMultiQuestionPrompt,
     isHubChoicePrompt,
     markHubChoiceDefault,
@@ -485,5 +521,5 @@
 const __esmRoot = (typeof window !== 'undefined') ? window : globalThis;
 export const approvalParser = __esmRoot.approvalParser;
 export const {
-  lineHasHint, linesHaveHint, approvalLineHasHint, approvalLinesHaveHint, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, extractApprovalOptions, approvalContextLines, isBatchOptions, isMultiQuestionPrompt, isHubChoicePrompt, markHubChoiceDefault, matchNativeApprovalTrigger, hasApprovalLikeLabel, userSpecifiesRe,
+  lineHasHint, linesHaveHint, approvalLineHasHint, approvalLinesHaveHint, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, extractApprovalOptions, approvalContextLines, isBatchOptions, isMultiSelectOptions, isMultiQuestionPrompt, isHubChoicePrompt, markHubChoiceDefault, matchNativeApprovalTrigger, hasApprovalLikeLabel, userSpecifiesRe,
 } = __esmRoot.approvalParser;
