@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, showToast, ti18n, token } from './util.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, setFaviconEnvBadge, stateLabel } from './session-list.js';
@@ -906,8 +906,11 @@ export function applyLang(lang) {
     }
     if (browserUnavailableEl) browserUnavailableEl.hidden = browserSupported;
     if (whisperBlock) whisperBlock.hidden = engine !== 'whisper';
-    if (graceRow) graceRow.hidden = engine !== 'browser';
-    if (graceDesc) graceDesc.hidden = engine !== 'browser';
+    // 「終了検知の待ち時間」は browser / whisper の両方で表示する（OFF のときだけ隠す）。
+    // 値（秒）は両エンジン共通の voice.grace_seconds。Whisper では無音→自動確定までの待ち時間として実効、
+    // Chrome 内蔵では Web Speech API の制約からブラウザ側の終了判定が優先される。
+    if (graceRow) graceRow.hidden = engine === 'off';
+    if (graceDesc) graceDesc.hidden = engine === 'off';
     if (diagnosticsPanel) diagnosticsPanel.hidden = engine !== 'browser';
     if (whisperAutoSubmitEl) {
       whisperAutoSubmitEl.checked = localStorage.getItem(STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY) === '1';
@@ -1099,11 +1102,8 @@ export function applyLang(lang) {
 (function () {
   const sel = document.getElementById('voice-grace-select');
   if (!sel) return;
-  try {
-    if (localStorage.getItem(STORAGE_VOICE_GRACE_KEY) === '2') {
-      localStorage.removeItem(STORAGE_VOICE_GRACE_KEY);
-    }
-  } catch (_) {}
+  // 旧来は「2 を既定値リセット対象として消す」移行処理があったが、
+  // この設定が Whisper の無音→自動確定にも実効するようになり 2 秒が標準的な既定値になったため撤去。
   const saved = localStorage.getItem(STORAGE_VOICE_GRACE_KEY);
   const v = saved == null ? DEFAULT_VOICE_GRACE_SEC : parseInt(saved, 10);
   const clamped = Number.isFinite(v) ? Math.max(0, Math.min(5, v)) : DEFAULT_VOICE_GRACE_SEC;

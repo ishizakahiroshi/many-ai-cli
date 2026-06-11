@@ -39,7 +39,9 @@ export const STORAGE_VOICE_ENGINE_KEY         = 'anyai.voiceEngine';
 export const STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY = 'anyai.voiceWhisperAutoSubmit';
 export const STORAGE_VOICE_WHISPER_AUTO_STOP_KEY = 'anyai.voiceWhisperAutoStop';
 export const STORAGE_DISPLAY_LOCKED_MODE_KEY  = 'ai_cli_hub_display_locked_mode';
-export const DEFAULT_VOICE_GRACE_SEC          = 0;
+// 両エンジン共通の「終了検知の待ち時間（秒）」既定値。
+// Whisper では無音がこの秒数続くと自動確定する（旧 Whisper 固定値 1.8秒に近い 2秒を採用）。
+export const DEFAULT_VOICE_GRACE_SEC          = 2;
 export const STORAGE_WAKE_WORD_ENABLED_KEY    = 'ai_cli_hub_wake_word_enabled';
 export const STORAGE_WAKE_WORD_PHRASE_KEY     = 'ai_cli_hub_wake_word_phrase';
 export const DEFAULT_WAKE_WORD_PHRASE_JA      = 'サウンドスタート';

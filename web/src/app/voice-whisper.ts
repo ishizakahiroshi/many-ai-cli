@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
-import { STORAGE_VOICE_ENGINE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, getVoiceEngine } from './user-prefs.js';
+import { STORAGE_VOICE_ENGINE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_VOICE_GRACE_KEY, DEFAULT_VOICE_GRACE_SEC, getVoiceEngine } from './user-prefs.js';
 import { activeSessionId, terminals } from './state.js';
 import { autoExpand, buildSendText, doSend, inputEl, set_voiceActive, set_voiceAudioActive, updateInputClearButton, updateSlashMenu, voiceAudioActive } from '../app.js';
 import { isTerminalAtBottom, refitActiveTerminalAfterLayout } from './terminal.js';
@@ -17,8 +17,17 @@ const MIN_PEAK_RMS = 0.012;
 // voiced 時間に関わらず発話とみなす（無音・暗騒音は peakRms が桁違いに小さい）。
 const STRONG_PEAK_RMS = 0.05;
 const VAD_RMS_THRESHOLD = 0.004;
-// 終了検知: 発話開始後にこの時間だけ無音が続いたら自動で録音を確定する
-const AUTO_STOP_SILENCE_MS = 1800;
+// 終了検知: 発話開始後にこの時間だけ無音が続いたら自動で録音を確定する。
+// 待ち時間は両エンジン共通の「終了検知の待ち時間（秒）」設定（voice.grace_seconds）を共有する。
+// Chrome 内蔵では Web Speech API の制約で実効はブラウザ任せだが、Whisper はこの値を実際に使う。
+// 秒→ms に変換し 0〜10 秒にクランプ、不正値は既定値へフォールバック。
+const MAX_AUTO_STOP_SILENCE_SEC = 10;
+function getAutoStopSilenceMs() {
+  const raw = localStorage.getItem(STORAGE_VOICE_GRACE_KEY);
+  const sec = raw == null ? DEFAULT_VOICE_GRACE_SEC : parseInt(raw, 10);
+  const clamped = Number.isFinite(sec) ? Math.max(0, Math.min(MAX_AUTO_STOP_SILENCE_SEC, sec)) : DEFAULT_VOICE_GRACE_SEC;
+  return clamped * 1000;
+}
 (function () {
   const btn = document.getElementById('voice-btn');
   const voiceBar = document.getElementById('voice-bar');
@@ -221,7 +230,7 @@ const AUTO_STOP_SILENCE_MS = 1800;
     if (peakRms < MIN_PEAK_RMS) return;
     const sampleRate = audioCtx?.sampleRate || TARGET_SAMPLE_RATE;
     const silentMs = (silentSampleCount / Math.max(1, sampleRate)) * 1000;
-    if (silentMs >= AUTO_STOP_SILENCE_MS) {
+    if (silentMs >= getAutoStopSilenceMs()) {
       finishWhisperRecording();
     }
   }
