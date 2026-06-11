@@ -58,6 +58,33 @@ const CTX_LIMIT_TABLE: Array<{ prefix: string; limit: number }> = [
   { prefix: 'o3',            limit: 200_000 },
   { prefix: 'o1',            limit: 200_000 },
   { prefix: 'codex',         limit: 400_000 },
+  // --- Ollama / ローカルモデル（route="ollama" で claude/codex CLI から利用）---
+  // 値は各モデルのネイティブ最大コンテキスト長。タグ（:7b 等）は前方一致で吸収。
+  // 注意: 実際に使える窓は Ollama 側の num_ctx 設定に依存し、ここより小さい場合がある。
+  // より具体的なプレフィックスを先に置く（startsWith 先勝ちのため）。
+  { prefix: 'qwen2.5-coder',     limit: 32_768 },
+  { prefix: 'qwen3-coder',       limit: 262_144 },
+  { prefix: 'qwen2.5',           limit: 32_768 },
+  { prefix: 'qwen3',             limit: 131_072 },
+  { prefix: 'qwen',              limit: 32_768 },
+  { prefix: 'deepseek-coder-v2', limit: 131_072 },
+  { prefix: 'deepseek-r1',       limit: 131_072 },
+  { prefix: 'deepseek',          limit: 32_768 },
+  { prefix: 'llama3.3',          limit: 131_072 },
+  { prefix: 'llama3.2',          limit: 131_072 },
+  { prefix: 'llama3.1',          limit: 131_072 },
+  { prefix: 'llama3',            limit: 8_192 },
+  { prefix: 'codellama',         limit: 16_384 },
+  { prefix: 'codestral',         limit: 32_768 },
+  { prefix: 'devstral',          limit: 131_072 },
+  { prefix: 'mixtral',           limit: 32_768 },
+  { prefix: 'mistral',           limit: 32_768 },
+  { prefix: 'gemma3',            limit: 131_072 },
+  { prefix: 'gemma2',            limit: 8_192 },
+  { prefix: 'phi4',              limit: 16_384 },
+  { prefix: 'phi3',              limit: 131_072 },
+  { prefix: 'starcoder2',        limit: 16_384 },
+  { prefix: 'gpt-oss',           limit: 131_072 },
 ];
 
 function resolveCtxLimit(model: string): number | null {
@@ -394,9 +421,18 @@ function copyText(text: string, flashEl: HTMLElement): void {
   } catch (_) { /* clipboard 不可環境は黙ってスキップ */ }
 }
 
-function toggleCostPopover(bar: HTMLElement): void {
+let _costPopDocHandler: ((e: MouseEvent) => void) | null = null;
+function closeCostPopover(): void {
   const existing = document.getElementById('tsb-cost-pop');
-  if (existing) { existing.remove(); return; }
+  if (existing) existing.remove();
+  if (_costPopDocHandler) {
+    document.removeEventListener('mousedown', _costPopDocHandler, true);
+    _costPopDocHandler = null;
+  }
+}
+
+function toggleCostPopover(bar: HTMLElement): void {
+  if (document.getElementById('tsb-cost-pop')) { closeCostPopover(); return; }
   const pop = document.createElement('div');
   pop.id = 'tsb-cost-pop';
   const rows: string[] = [];
@@ -413,12 +449,16 @@ function toggleCostPopover(bar: HTMLElement): void {
     `<div class="tsb-pop-title">${escapeHtml(t('tsb_cost_breakdown_title'))}</div>${rows.join('')}` +
     `<div class="tsb-pop-row tsb-pop-total"><span>${escapeHtml(t('tsb_cost_total'))}</span><span>${escapeHtml(formatCost(total, true))}</span></div>`;
   bar.appendChild(pop);
-  // バー外クリックで閉じる
+  // バー外クリックで閉じる。cost セグメント上のクリックは toggle 側に委ねる
+  // （ここで閉じると click が再度開いてトグルが効かなくなるため除外）。
   setTimeout(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (!pop.contains(e.target as Node)) { pop.remove(); document.removeEventListener('mousedown', onDoc, true); }
+    _costPopDocHandler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (pop.contains(target)) return;
+      if ((target as HTMLElement).closest?.('.tsb-seg-cost')) return;
+      closeCostPopover();
     };
-    document.addEventListener('mousedown', onDoc, true);
+    document.addEventListener('mousedown', _costPopDocHandler, true);
   }, 0);
 }
 
