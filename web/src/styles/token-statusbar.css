@@ -59,10 +59,26 @@
   line-height: 1.2;
 }
 .tsb-pill .tsb-pdot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-.tsb-pill.running { color: #9ece6a; background: rgba(158,206,106,.15); border-color: rgba(158,206,106,.35); }
-.tsb-pill.waiting { color: #e0af68; background: rgba(224,175,104,.18); border-color: rgba(224,175,104,.45); }
-.tsb-pill.standby { color: #cbd5e1; background: rgba(203,213,225,.12); border-color: rgba(203,213,225,.3); }
-.tsb-pill.error   { color: #f7768e; background: rgba(247,118,142,.15); border-color: rgba(247,118,142,.4); }
+.tsb-pill.running {
+  color: var(--badge-running-text);
+  background: color-mix(in srgb, var(--badge-running-bg) 25%, transparent);
+  border-color: color-mix(in srgb, var(--badge-running-text) 35%, transparent);
+}
+.tsb-pill.waiting {
+  color: var(--warn-text);
+  background: color-mix(in srgb, var(--warn-bg) 25%, transparent);
+  border-color: color-mix(in srgb, var(--warn-text) 35%, transparent);
+}
+.tsb-pill.standby {
+  color: var(--badge-standby-text);
+  background: color-mix(in srgb, var(--badge-standby-bg) 25%, transparent);
+  border-color: color-mix(in srgb, var(--badge-standby-text) 35%, transparent);
+}
+.tsb-pill.error {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger-bg) 25%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
 
 /* provider アイコン + ラベルチップ + モデル名 */
 .tsb-seg-agent .card-provider-icon { width: 13px; height: 13px; }
@@ -131,9 +147,9 @@
 
 /* 横断バッジ */
 .tsb-seg-fleet { gap: 6px; cursor: pointer; }
-.tsb-seg-fleet .tsb-run  { color: #9ece6a; }
-.tsb-seg-fleet .tsb-idle { color: #565f89; }
-.tsb-seg-fleet .tsb-wait { color: #f7768e; font-weight: 700; cursor: pointer; }
+.tsb-seg-fleet .tsb-run  { color: var(--badge-running-text); }
+.tsb-seg-fleet .tsb-idle { color: var(--muted-2); }
+.tsb-seg-fleet .tsb-wait { color: var(--warn-text); font-weight: 700; cursor: pointer; }
 
 /* コスト内訳ポップオーバー */
 #tsb-cost-pop {

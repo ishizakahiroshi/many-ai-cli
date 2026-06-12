@@ -111,6 +111,12 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
   }
   if (!isDir) {
     items.push(getPathOpenItem(filePath, sessionId));
+    // テキスト系のプライマリは「テキストで開く」(エディタ) に流れるため、
+    // OS 既定の関連付けアプリ（.html ならブラウザ等）で開く項目を別に足す。
+    // 画像/動画/未知の拡張子はプライマリが既に /api/open-default-file なので重複させない。
+    if (isTextPath(filePath)) {
+      items.push({ icon: '🚀', key: 'link_open_default', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error', sessionId) });
+    }
   }
   items.push(
     { icon: '📁', key: 'link_open_folder', action: () => {

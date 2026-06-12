@@ -517,6 +517,7 @@
   "link_open_file": "Open file",
   "link_open_text": "Open as text",
   "link_open_image": "Open image",
+  "link_open_default": "Open with default app",
   "link_open_any_ai_cli": "Open in ANY-AI-CLI",
   "link_open_modal": "Open in modal",
   "link_open_folder": "Open folder",

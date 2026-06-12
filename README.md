@@ -744,6 +744,7 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 - **Git tab**: read-only commit log, ref selector, commit detail, changed files, diff preview, copy actions, and a guarded Commit all modal for local commits.
 - **Sync with terminal input**: if you resolve the prompt by typing `y` / `n` directly in the terminal, the action bar disappears automatically.
 - **File and image attach**: paste or drag-and-drop into the attach area; the file is materialized locally and a path reference is injected into the PTY on send.
+- **Status bar (bottom)**: a single always-on line showing the active session's tokens, cost, context usage, and more. See [Status bar (bottom)](#status-bar-bottom) below (toggle visibility from the settings panel).
 
 ### Usage notes
 
@@ -755,6 +756,30 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 - **File and image attach**: Paste (`Ctrl+V`) or drag-and-drop a file onto the attach area to inject a local file path reference into the session.
 - **Voice input**: Click the 🎤 button or press `Alt+V` to start/stop voice input. See the [Voice Input](#voice-input) section for engine selection and details.
 - **Spawn**: Click **+ New Session** to start a new AI CLI session from the browser.
+
+### Status bar (bottom)
+
+A single always-on line at the bottom of the screen shows the status of one active session (toggle visibility from the settings panel). Segments are laid out left to right; any segment whose data is unavailable is hidden automatically.
+
+```
+#6 │ ●Standby │ Claude Opus 4.8 │ "got it…" │ 📁 any-ai-cli ⎇ develop │ tok ↑63.7k ↓1.1k │ ⛁ 100% │ $0.8134 · today $12.3460 │ ~$5.4/h │ ⏱ 8m 58s │ 🟢 │ ▶1 ⏸6
+```
+
+- **#N** — session number
+- **State pill** — running / standby / waiting (for approval) / error, color-coded (green = running, amber = waiting, red = error/disconnected)
+- **Provider + model** — provider icon and label, plus the model in use
+- **Work label** — a summary of the latest user input or AI output (dimmed)
+- **📁project ⎇branch ±git** — project folder name, Git branch, and number of changed files
+- **ctx** — context-window usage gauge. **It goes green → amber (80%) → red (90%); red is a danger signal that the window is nearly full.** Click to copy `used/limit` (shown only when the model's limit is known)
+- **tok ↑in ↓out** — input / output token counts. Click to copy the values
+- **⛁** — prompt-cache hit rate. Higher is more cost-efficient (high is good, informational only)
+- **Cost** — estimated cost for the current session plus today's total (`· today …`). Click to open a per-session breakdown popover. Shows `$ —` when cost is unknown
+- **burn** — burn rate (`$/h` or `tok/min`), shown after the first 10 seconds
+- **⏱ elapsed** — session elapsed time; while running, `▷` also shows the current turn's elapsed time
+- **Connection** — WebSocket state to the Hub (🟢 open / 🟡 connecting / 🔴 closed)
+- **Fleet badge** — totals across all sessions (▶ running / ⏸ standby / ⚠ waiting). Click ⚠ to jump to a session awaiting approval
+
+> Token- and cost-related segments (ctx / tok / ⛁ / cost / burn) appear only for Claude / Codex sessions.
 
 ---
 

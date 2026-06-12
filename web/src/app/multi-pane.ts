@@ -591,6 +591,11 @@ export class MultiPaneManager {
         // DOM 移動で .xterm-viewport の scrollTop がブラウザにリセットされるため、
         // 次フレームでスクロール位置を xterm 内部状態に合わせて再同期する
         requestAnimationFrame(() => {
+          // DOM 再配置でレイアウトが確定してから fit し、新ペインの行数(rows)を PTY へ反映する。
+          // 636 行の同期呼び出しは container 移動直後＝レイアウト未確定のサイズで判定されるため
+          // PTY rows が更新されず、Codex が旧高さ前提の絶対座標（ESC[35;1H 等）で描画して
+          // 回答本文が画面外へ消える（スタンバイでも結果が出ない）不具合の対策。
+          this._fitTerminalInSlot(termArea, t, session.id);
           if (forceBottom || t.autoScroll) {
             if (forceBottom) t.autoScroll = true;
             this._scrollToBottomAndSync(t);
