@@ -16,16 +16,17 @@ func openFileNative(filePath, app string) error {
 	if app != "" {
 		return exec.Command(app, filePath).Start()
 	}
-	// cmd.exe メタ文字解釈を避けるため explorer.exe /select,<path> を使う。
-	// ファイル選択表示はフォルダを開くより UX が良く、cmd.exe 経由のリスクを排除できる。
-	return exec.Command("explorer.exe", "/select,"+filePath).Start()
+	// app 未指定は「OS 既定の関連付けアプリで開く」。explorer.exe <path>（/select なし）は
+	// 既定ハンドラへディスパッチするため .html ならブラウザ等で開く。shell を介さないので
+	// cmd.exe メタ文字リスクもない。フォルダ内で選択表示したい場合は openRevealNative を使う。
+	return exec.Command("explorer.exe", filePath).Start()
 }
 
 func effectiveFileOpenAppDescription(app string) string {
 	if app != "" {
 		return app + " <path>"
 	}
-	return `explorer.exe /select,<path>`
+	return `explorer.exe <path>`
 }
 
 func openTerminalNative(dir, app string) error {

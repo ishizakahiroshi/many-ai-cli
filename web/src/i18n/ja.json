@@ -517,6 +517,7 @@
   "link_open_file": "ファイルを開く",
   "link_open_text": "テキストで開く",
   "link_open_image": "画像を開く",
+  "link_open_default": "既定のアプリで開く",
   "link_open_any_ai_cli": "ANY-AI-CLI で開く",
   "link_open_modal": "モーダルで開く",
   "link_open_folder": "フォルダを開く",
