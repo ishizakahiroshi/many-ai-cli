@@ -281,6 +281,7 @@ export function ensureTerminal(id) {
     textDecoder: new TextDecoder('utf-8'),
     markerFilterCarry: new Uint8Array(0),
     screenClearSeqCarry: new Uint8Array(0),
+    eraseScrollbackFilterCarry: new Uint8Array(0),
     crFilterCarry: new Uint8Array(0),
     cursorHideFilterCarry: new Uint8Array(0),
     inCursorHideBlock: false,
@@ -1139,6 +1140,47 @@ export function detectScreenClearSeqForAutoScroll(id, bytes) {
   return found;
 }
 
+export const eraseScrollbackSeqBytePatterns = [
+  asciiBytes('\x1b[3J'),
+];
+export const eraseScrollbackSeqCarryLength = Math.max(...eraseScrollbackSeqBytePatterns.map(pattern => pattern.length)) - 1;
+
+export function filterEraseScrollbackForDisplay(id, bytes) {
+  const t = terminals.get(id);
+  if (!t) return bytes;
+  if (sessions.get(id)?.provider !== 'codex') return bytes;
+  const carry = t.eraseScrollbackFilterCarry || new Uint8Array(0);
+  const combined = new Uint8Array(carry.length + bytes.length);
+  combined.set(carry, 0);
+  combined.set(bytes, carry.length);
+
+  const out: number[] = [];
+  let i = 0;
+  while (i < combined.length) {
+    const seq = eraseScrollbackSeqBytePatterns.find(pattern => bytesStartWith(combined, i, pattern));
+    if (seq) {
+      i += seq.length;
+      continue;
+    }
+    if (i >= Math.max(0, combined.length - eraseScrollbackSeqCarryLength)) {
+      const maybePrefix = eraseScrollbackSeqBytePatterns.some((pattern) => {
+        const remaining = combined.length - i;
+        if (remaining >= pattern.length) return false;
+        for (let j = 0; j < remaining; j++) {
+          if (combined[i + j] !== pattern[j]) return false;
+        }
+        return true;
+      });
+      if (maybePrefix) break;
+    }
+    out.push(combined[i]);
+    i++;
+  }
+
+  t.eraseScrollbackFilterCarry = combined.slice(i);
+  return new Uint8Array(out);
+}
+
 export function snapToBottomAfterScreenClear(id) {
   const t = terminals.get(id);
   if (!t || !t.autoScroll) return;
@@ -1383,7 +1425,7 @@ export function filterBareCarriageReturnForDisplay(id, bytes) {
 
 export function writePTYChunk(id, term, bytes, onFlush) {
   const hasScreenClearSeq = detectScreenClearSeqForAutoScroll(id, bytes);
-  const displayBytes = filterSynchronizedUpdateForDisplay(id, filterBareCarriageReturnForDisplay(id, filterCursorHideShowBlocksForDisplay(id, filterReverseVideoForDisplay(id, filterHubMarkersForDisplay(id, bytes)))));
+  const displayBytes = filterSynchronizedUpdateForDisplay(id, filterBareCarriageReturnForDisplay(id, filterCursorHideShowBlocksForDisplay(id, filterEraseScrollbackForDisplay(id, filterReverseVideoForDisplay(id, filterHubMarkersForDisplay(id, bytes))))));
   const wrappedFlush = () => {
     if (hasScreenClearSeq) snapToBottomAfterScreenClear(id);
     if (onFlush) onFlush();
