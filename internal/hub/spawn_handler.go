@@ -33,7 +33,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	if body.Provider != "claude" && body.Provider != "codex" && body.Provider != "copilot" && body.Provider != "cursor-agent" {
+	if body.Provider != "claude" && body.Provider != "codex" && body.Provider != "copilot" && body.Provider != "cursor-agent" && body.Provider != "shell" {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
 		return
 	}
@@ -91,6 +91,71 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if body.Label != "" {
 		// --label=value 形式で渡す（空白区切りだと value が次フラグに化ける可能性がある）。
 		wrapArgs = append(wrapArgs, "--label="+body.Label)
+	}
+
+	// Shell は AI 固有フラグ (model / route / permission) を使わない。
+	// 以下の switch / effectiveRoute / EnvPresetFor / setLastModel を全てスキップ
+	// するため、shell の場合は早期パスで exec.Command まで飛ばす。
+	if body.Provider == "shell" {
+		if body.Utf8Session {
+			wrapArgs = append(wrapArgs, "--utf8")
+		}
+		hubPort := s.currentHubPort()
+		cmd := exec.Command(exe, wrapArgs...)
+		cmd.Dir = cwd
+		cmd.Env = append(sanitizeEnv(os.Environ()), "MANY_AI_CLI=1",
+			fmt.Sprintf("MANY_AI_CLI_HUB_PORT=%d", hubPort))
+		if s.parentShell != "" {
+			cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
+		}
+		var stdinNull, spawnLog *os.File
+		if f, devErr := os.OpenFile(os.DevNull, os.O_RDWR, 0); devErr == nil {
+			stdinNull = f
+			cmd.Stdin = stdinNull
+		} else {
+			s.logger.Warn("spawn: failed to open os.DevNull for stdin (shell)", "err", devErr)
+		}
+		spawnLogPath := filepath.Join(s.cfg.Hub.LogDir, "spawn",
+			fmt.Sprintf("%s-%s.log", body.Provider, time.Now().Format("20060102-150405.000")))
+		if err := os.MkdirAll(filepath.Dir(spawnLogPath), sessionlog.PrivateDirMode); err == nil {
+			if f, logErr := os.OpenFile(spawnLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, sessionlog.PrivateFileMode); logErr == nil {
+				spawnLog = f
+				cmd.Stdout = spawnLog
+				cmd.Stderr = spawnLog
+			} else {
+				s.logger.Warn("spawn: failed to create spawn log file (shell)", "path", spawnLogPath, "err", logErr)
+			}
+		}
+		setCmdSysProcAttr(cmd)
+		if err := cmd.Start(); err != nil {
+			if stdinNull != nil {
+				_ = stdinNull.Close()
+			}
+			if spawnLog != nil {
+				_ = spawnLog.Close()
+			}
+			writeJSONError(w, http.StatusInternalServerError, "spawn_error", errorDetail("spawn error", err))
+			return
+		}
+		s.logger.Debug("spawn: wrap process started",
+			"provider", body.Provider, "pid", cmd.Process.Pid, "spawn_log", spawnLogPath)
+		s.safeGo("spawn_wait", func() {
+			waitErr := cmd.Wait()
+			exitCode := 0
+			if cmd.ProcessState != nil {
+				exitCode = cmd.ProcessState.ExitCode()
+			}
+			s.logger.Debug("spawn: wrap process exited",
+				"provider", body.Provider, "exit_code", exitCode, "wait_err", fmt.Sprintf("%v", waitErr))
+			if stdinNull != nil {
+				_ = stdinNull.Close()
+			}
+			if spawnLog != nil {
+				_ = spawnLog.Close()
+			}
+		})
+		writeJSON(w, map[string]bool{"ok": true})
+		return
 	}
 
 	switch body.Provider {
@@ -257,6 +322,218 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// handleSpawnGrid は複数 session を一括起動して Detached Grid 用の session_ids を返す。
+// request: { preset, layout, count, cwd, label_prefix }
+// response: { ok, layout, session_ids }
+//
+// 対応 preset:
+//   - "shell"     : count 枚の Shell session を起動
+//   - "ai+shell"  : AI session 1 枚 + Shell session (count-1) 枚を起動
+//                   provider フィールドで AI provider を指定（省略時 "claude"）
+func (s *Server) handleSpawnGrid(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodPost) {
+		return
+	}
+	var body struct {
+		Preset      string `json:"preset"`
+		Layout      string `json:"layout"`
+		Count       int    `json:"count"`
+		CWD         string `json:"cwd"`
+		LabelPrefix string `json:"label_prefix"`
+		Provider    string `json:"provider"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+
+	// preset バリデーション
+	validPresets := map[string]bool{
+		"shell": true, "ai+shell": true,
+	}
+	if !validPresets[body.Preset] {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid preset")
+		return
+	}
+
+	// layout バリデーション（1x1〜6x3 の範囲）
+	validLayouts := map[string]bool{
+		"": true, "1x1": true, "1x2": true, "2x2": true,
+		"2x3": true, "3x3": true, "4x3": true, "6x3": true,
+	}
+	if !validLayouts[body.Layout] {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid layout")
+		return
+	}
+
+	// count バリデーション（1〜18）
+	if body.Count < 1 || body.Count > 18 {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "count must be 1-18")
+		return
+	}
+
+	// cwd 解決 + 検証
+	cwd := body.CWD
+	if cwd == "" {
+		cwd = s.hubCWD
+	} else {
+		info, statErr := os.Stat(cwd)
+		if statErr != nil || !info.IsDir() {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", "cwd does not exist or is not a directory")
+			return
+		}
+	}
+
+	// layout 自動算出（省略時）
+	layout := body.Layout
+	if layout == "" {
+		layout = calcGridLayout(body.Count)
+	}
+
+	// label_prefix の先頭 "-" はフラグ偽装を防ぐために禁止する。
+	if strings.HasPrefix(body.LabelPrefix, "-") {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid label_prefix")
+		return
+	}
+	if strings.HasPrefix(body.Provider, "-") {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
+		return
+	}
+
+	// AI provider バリデーション（ai+shell プリセット時のみ使用）
+	aiProvider := body.Provider
+	if aiProvider == "" {
+		aiProvider = "claude"
+	}
+	validAIProviders := map[string]bool{
+		"claude": true, "codex": true, "copilot": true, "cursor-agent": true,
+	}
+	if body.Preset == "ai+shell" && !validAIProviders[aiProvider] {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid ai provider for ai+shell preset")
+		return
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "executable_error", errorDetail("executable error", err))
+		return
+	}
+	hubPort := s.currentHubPort()
+
+	// 起動するセッションの (provider, label) リストを構築する
+	type sessionSpec struct {
+		provider string
+		label    string
+	}
+	var specs []sessionSpec
+	labelPrefix := body.LabelPrefix
+	if labelPrefix == "" {
+		labelPrefix = "grid"
+	}
+
+	switch body.Preset {
+	case "shell":
+		for i := 0; i < body.Count; i++ {
+			specs = append(specs, sessionSpec{
+				provider: "shell",
+				label:    fmt.Sprintf("%s-%d", labelPrefix, i+1),
+			})
+		}
+	case "ai+shell":
+		// AI 1 枚 + Shell (count-1) 枚
+		aiCount := 1
+		shellCount := body.Count - aiCount
+		if shellCount < 0 {
+			shellCount = 0
+		}
+		specs = append(specs, sessionSpec{
+			provider: aiProvider,
+			label:    fmt.Sprintf("%s-%s-1", labelPrefix, aiProvider),
+		})
+		for i := 0; i < shellCount; i++ {
+			specs = append(specs, sessionSpec{
+				provider: "shell",
+				label:    fmt.Sprintf("%s-shell-%d", labelPrefix, i+1),
+			})
+		}
+	}
+
+	// セッションを順次 spawn する
+	for _, spec := range specs {
+		wrapArgs := []string{"wrap", spec.provider, "--label=" + spec.label}
+		cmd := exec.Command(exe, wrapArgs...)
+		cmd.Dir = cwd
+		cmd.Env = append(sanitizeEnv(os.Environ()), "MANY_AI_CLI=1",
+			fmt.Sprintf("MANY_AI_CLI_HUB_PORT=%d", hubPort))
+		if s.parentShell != "" {
+			cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
+		}
+		// stdin を DevNull に、stdout/stderr をログファイルに向ける（handleSpawn と同様）
+		var stdinNull, spawnLog *os.File
+		if f, devErr := os.OpenFile(os.DevNull, os.O_RDWR, 0); devErr == nil {
+			stdinNull = f
+			cmd.Stdin = stdinNull
+		}
+		spawnLogPath := filepath.Join(s.cfg.Hub.LogDir, "spawn",
+			fmt.Sprintf("%s-%s.log", spec.provider, time.Now().Format("20060102-150405.000")))
+		if mkErr := os.MkdirAll(filepath.Dir(spawnLogPath), sessionlog.PrivateDirMode); mkErr == nil {
+			if f, logErr := os.OpenFile(spawnLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, sessionlog.PrivateFileMode); logErr == nil {
+				spawnLog = f
+				cmd.Stdout = spawnLog
+				cmd.Stderr = spawnLog
+			}
+		}
+		setCmdSysProcAttr(cmd)
+		if startErr := cmd.Start(); startErr != nil {
+			if stdinNull != nil {
+				_ = stdinNull.Close()
+			}
+			if spawnLog != nil {
+				_ = spawnLog.Close()
+			}
+			writeJSONError(w, http.StatusInternalServerError, "spawn_error", errorDetail("spawn error", startErr))
+			return
+		}
+		s.logger.Debug("spawn-grid: wrap process started",
+			"provider", spec.provider, "label", spec.label, "pid", cmd.Process.Pid)
+		s.safeGo("spawn_grid_wait", func() {
+			_ = cmd.Wait()
+			if stdinNull != nil {
+				_ = stdinNull.Close()
+			}
+			if spawnLog != nil {
+				_ = spawnLog.Close()
+			}
+		})
+	}
+
+	writeJSON(w, map[string]any{
+		"ok":     true,
+		"layout": layout,
+		"count":  len(specs),
+	})
+}
+
+// calcGridLayout は session 数から適切な grid レイアウト文字列を返す。
+// session-list.ts の calcDetachedLayout と対称的な実装。
+func calcGridLayout(count int) string {
+	switch {
+	case count <= 1:
+		return "1x1"
+	case count <= 2:
+		return "1x2"
+	case count <= 4:
+		return "2x2"
+	case count <= 6:
+		return "2x3"
+	case count <= 9:
+		return "3x3"
+	case count <= 12:
+		return "4x3"
+	default:
+		return "6x3"
+	}
 }
 
 func (s *Server) getLastModel(provider string) string {

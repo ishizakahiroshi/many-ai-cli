@@ -91,6 +91,9 @@ func startProcess(provider string, args []string, cwd string, cols, rows int) (p
 }
 
 func resolveCmd(provider string, args []string) (string, []string) {
+	if provider == "shell" {
+		return resolveDefaultShell(), args
+	}
 	if provider == "copilot" {
 		if exePath, err := exec.LookPath("copilot"); err == nil {
 			return resolveExecutablePath(exePath, args)
@@ -105,6 +108,23 @@ func resolveCmd(provider string, args []string) (string, []string) {
 		return provider, args
 	}
 	return resolveExecutablePath(exePath, args)
+}
+
+// resolveDefaultShell returns the path to the default interactive shell on
+// Windows. Preference order: pwsh.exe → powershell.exe → cmd.exe.
+func resolveDefaultShell() string {
+	for _, name := range []string{"pwsh.exe", "powershell.exe"} {
+		if p, err := exec.LookPath(name); err == nil {
+			return p
+		}
+	}
+	comspec := os.Getenv("COMSPEC")
+	if comspec != "" {
+		if _, err := os.Stat(comspec); err == nil {
+			return comspec
+		}
+	}
+	return `C:\Windows\System32\cmd.exe`
 }
 
 func resolveExecutablePath(exePath string, args []string) (string, []string) {

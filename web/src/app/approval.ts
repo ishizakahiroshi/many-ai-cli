@@ -181,6 +181,25 @@ export function clearSequentialChoiceState(id) {
 
 // ---- 承認検出 (xterm.js バッファスキャン) ----
 
+// ---- provider 分類 helper ----
+// Go 側の isAIProvider と対応する。承認検出・chat history・done summary 等の
+// AI 固有機能を適用するかどうかの判定に使う。Shell provider は対象外。
+export function isAIProvider(provider: string): boolean {
+  switch (provider) {
+    case 'claude':
+    case 'codex':
+    case 'copilot':
+    case 'cursor-agent':
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function isShellProvider(provider: string): boolean {
+  return provider === 'shell';
+}
+
 // provider 別の承認 trigger phrase は ~/.many-ai-cli/approval-patterns/{provider}.json に外出し。
 // Hub 起動時にデフォルトをユーザー設定ディレクトリに展開（既存ファイルは尊重）し、
 // HTTP 経由で配信する。ユーザーが直接編集して文言を追加・調整できる。
@@ -239,6 +258,44 @@ function isCodexModelSelectorContext(provider, lines) {
     ((text.includes('gpt-') || text.includes('effort')) && (text.includes('esc to go back') || text.includes('press enter to confirm')));
 }
 
+// /model 等のカーソル駆動 TUI 選択メニュー（承認ではない）を action-bar に出す際の
+// タイトル抽出。選択肢クラスタの直上から、選択肢行・フッターヒント・長い説明文を除いた
+// 最初の短い見出し行を採用する（例: claude /model の "Select model"）。
+function extractSelectMenuTitle(lines, cluster) {
+  if (!cluster || !Array.isArray(lines)) return null;
+  const limit = Math.max(0, cluster.start - 8);
+  for (let i = cluster.start - 1; i >= limit; i--) {
+    const ln = String(lines[i] || '').trim();
+    if (!ln) continue;
+    if (/^[>❯›❱]?\s*\d{1,2}\.\s/.test(ln)) continue;       // 選択肢行
+    if (matchNativeApprovalTrigger(ln)) continue;          // フッターヒント行
+    if (ln.length > 40 && /[.。]\s*$/.test(ln)) continue;  // 長い説明文（タイトルではない）
+    return ln.replace(/\s{2,}.*$/, '').slice(0, 60);
+  }
+  return null;
+}
+
+// カーソル駆動だが承認ではない選択メニュー（claude /model 等）の options に
+// _selectMenu / _menuTitle を付与する。承認との見分け（ラベル表示）と、メニュー表示中の
+// チャット入力ガード（doSend が末尾 \r で現在選択を誤確定するのを防ぐ）に使う。
+function tagSelectMenuOptions(options, isSelectMenu, contextSourceLines, contextCluster) {
+  if (!isSelectMenu || !Array.isArray(options) || options.length === 0) return;
+  const title = extractSelectMenuTitle(contextSourceLines, contextCluster);
+  for (const o of options) {
+    if (!o) continue;
+    o._selectMenu = true;
+    if (title) o._menuTitle = title;
+  }
+}
+
+// メニュー表示中ガード用: action-bar に表示中の選択肢が「承認ではない選択メニュー」かを返す。
+// doSend はこれが true の間、プレーンテキスト注入（末尾 \r）を保留する。
+export function isSelectMenuActive(id) {
+  if (!approvalVisibleCache.get(id)) return false;
+  const cached = approvalRawOptionsCache.get(id);
+  return Array.isArray(cached) && cached.some(o => o && o._selectMenu);
+}
+
 export const approvalCheckTimers = new Map(); // セッション別タイマー（マルチペインで単一タイマーに上書きされる問題を解消）
 
 export function cancelApprovalHintConfirm(id) {
@@ -293,6 +350,8 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
   const t = terminals.get(id);
   if (!t) return;
   const provider = sessions.get(id)?.provider;
+  // Shell session は approval parser の対象外
+  if (!isAIProvider(provider || '')) return;
   const text = decodedText !== undefined ? decodedText : (t.textDecoder || utf8Decoder).decode(bytes, { stream: true });
   t.pendingTextTail = (t.pendingTextTail + text).slice(-APPROVAL_PENDING_TEXT_TAIL_LIMIT);
 
@@ -479,6 +538,10 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
     ((hasApprovalLikeLabel && (hasUserSpecifies || contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)))) || isHubChoice);
   const hasChoiceMenuHint = (hasCursorOption || isShortcutApprovalMenu) && options.length > 0 && hasNativePromptHint;
   const nowVisible = (options.length > 0 && approvalNear) || hasChoiceMenuHint;
+  // 承認ではないカーソル駆動の選択メニュー（claude /model 等）にタグ付けする。
+  // 入力ガード（isSelectMenuActive）とメニュータイトル表示に使う。
+  const isSelectMenu = hasChoiceMenuHint && !approvalNear && hasCursorOption && !isShortcutApprovalMenu;
+  tagSelectMenuOptions(options, isSelectMenu, contextSourceLines, contextCluster);
 
   // doSend / sendChoice で消費済みの選択肢が xterm scanBuffer に残っているため
   // フォールバック検出で再抽出されるケースを抑止する（marker 検出と同じ debounce 戦略）。
@@ -664,6 +727,10 @@ export function maybeSendDirectApprovalConsumed(sessionId, rawText, sentText) {
 }
 
 export function detectApproval(id) {
+  // Shell session は approval parser の対象外
+  const provider = sessions.get(id)?.provider;
+  if (!isAIProvider(provider || '')) return;
+
   // sendChoice 直後の誤再表示を抑制
   const suppressUntil = approvalSuppressUntil.get(id);
   if (suppressUntil && Date.now() < suppressUntil) {
@@ -672,7 +739,6 @@ export function detectApproval(id) {
   }
   approvalSuppressUntil.delete(id);
 
-  const provider = sessions.get(id)?.provider;
   const bar = document.getElementById('action-bar');
   if (!bar) return;
 
@@ -880,6 +946,10 @@ export function detectApproval(id) {
   const hasApproval = options.length > 0 && approvalNear && (hasCursorOption || isShortcutApprovalMenu);
   const hasChoiceMenu = (hasCursorOption || isShortcutApprovalMenu) && options.length > 0 && hasNativePromptHint;
   const hasPrompt = hasApproval || hasChoiceMenu;
+  // 承認ではないカーソル駆動の選択メニュー（claude /model 等）にタグ付けし、
+  // action-bar にメニュータイトルを出す。承認は常に優先（hasApproval が真なら対象外）。
+  const isSelectMenu = hasChoiceMenu && !hasApproval && hasCursorOption && !isShortcutApprovalMenu;
+  tagSelectMenuOptions(options, isSelectMenu, contextSourceLines, contextCluster);
 
   if (!hasPrompt) {
     // 承認プロンプトが検出できない場合は確実に閉じる。
@@ -1163,10 +1233,22 @@ export function showActionBar(bar, sessionId, options, forceStickToBottom = fals
     const label = document.createElement('span');
     label.className = 'action-bar-label';
     const sequentialQuestion = options.find(o => o && o._sequentialQuestion)?._sequentialQuestion;
-    label.textContent = sequentialQuestion ? `⚠ ${sequentialQuestion}` : '⚠ Approval needed';
+    const menuTitle = options.find(o => o && o._menuTitle)?._menuTitle;
+    const isSelectMenu = options.some(o => o && o._selectMenu);
+    if (sequentialQuestion) {
+      label.textContent = `⚠ ${sequentialQuestion}`;
+    } else if (isSelectMenu) {
+      // 承認ではない選択メニュー（claude /model 等）。承認と見分けがつくラベルにする。
+      label.textContent = menuTitle ? `📋 ${menuTitle}` : '📋 Select an option';
+    } else {
+      label.textContent = '⚠ Approval needed';
+    }
     if (sequentialQuestion) {
       label.classList.add('sequential-question-label');
       label.title = sequentialQuestion;
+    } else if (isSelectMenu) {
+      label.classList.add('select-menu-label');
+      if (menuTitle) label.title = menuTitle;
     }
     bar.appendChild(label);
   }

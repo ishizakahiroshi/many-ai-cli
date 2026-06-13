@@ -311,4 +311,89 @@ test('approval parser fixtures', () => {
   assert.equal(wrappedBatch[1].title, 'detached-session-grid と security-audit（未着手・索引未掲載）は?');
   assert.equal(wrappedBatch[1].options[0].label, 'consolidated-3 ④ に追記して追跡下に置く（security-audit は [保留] 降格）(Recommended)');
   assert.deepEqual(numbers(wrappedBatch[1].options), [3, 4]);
+
+  // claude /model のような承認ではないカーソル駆動 TUI 選択メニュー。
+  // フッターの「Esc to cancel」を matchNativeApprovalTrigger が拾い、❯ カーソル付き選択肢が
+  // あるため detectFallback の choice-menu 経路で検出される（=action-bar が出る）。
+  // 承認ラベル（yes/no/allow/deny…）を含まないので「承認」ではなく「選択メニュー」として
+  // 扱える（detectApproval 側で _selectMenu タグを付け、入力ガード・メニュータイトル表示に使う）。
+  const modelMenuLines = [
+    'Select model',
+    'Switch between Claude models. Your pick becomes the default for new sessions.',
+    '❯ 1. Default (recommended) ✔ Opus 4.8 with 1M context',
+    '  2. Opus  Opus 4.8 with 1M context',
+    '  3. Sonnet  Sonnet 4.6',
+    '  4. Haiku  Haiku 4.5',
+    '  5. Fable  Claude Fable 5 is currently unavailable',
+    '',
+    'Enter to set as default · s to use this session only · Esc to cancel',
+  ];
+  const modelMenu = detectFallback('claude', modelMenuLines, triggerMatcher);
+  assert.deepEqual(numbers(modelMenu), [1, 2, 3, 4, 5]);
+  assert.equal(modelMenu[0].isCurrent, true);
+  // 承認ラベルを含まない（=承認ではなく選択メニュー）。
+  assert.equal(parser.hasApprovalLikeLabel(modelMenu), false);
+  // フッターは native approval/menu ヒントとして拾われる（choice-menu 経路の発火条件）。
+  assert.equal(parser.matchNativeApprovalTrigger('Enter to set as default · s to use this session only · Esc to cancel'), true);
+
+  // 選択メニューの本文に紛れた通常の番号付き箇条書き（フッターヒントなし）は誤検出しない。
+  const plainNumbered = [
+    'Here is the plan:',
+    '1. Read the file',
+    '2. Apply the patch',
+    '3. Run tests',
+  ];
+  assert.deepEqual(detectFallback('claude', plainNumbered, triggerMatcher), []);
+});
+
+// Detached Session Grid URL の layout parse ロジックを検証する。
+// detached-grid.ts の parseDetachedGridParams は window.location.search に依存するため
+// Node.js 環境では直接 import できない。レイアウト文字列のパースロジックを
+// インラインで抽出して境界値を検証する。
+test('detached-grid layout parse', () => {
+  // detached-grid.ts の parseDetachedGridParams 内の layout parse ロジックと同等
+  function parseLayout(layoutRaw: string): { cols: number; rows: number } {
+    const match = /^(\d+)x(\d+)$/i.exec(layoutRaw || '2x2');
+    let cols = 2;
+    let rows = 2;
+    if (match) {
+      cols = Math.max(1, Math.min(6, parseInt(match[1], 10)));
+      rows = Math.max(1, Math.min(3, parseInt(match[2], 10)));
+    }
+    return { cols, rows };
+  }
+
+  // 正常ケース
+  assert.deepEqual(parseLayout('2x2'), { cols: 2, rows: 2 });
+  assert.deepEqual(parseLayout('3x3'), { cols: 3, rows: 3 });
+  assert.deepEqual(parseLayout('1x1'), { cols: 1, rows: 1 });
+  assert.deepEqual(parseLayout('1x2'), { cols: 1, rows: 2 });
+  assert.deepEqual(parseLayout('2x3'), { cols: 2, rows: 3 });
+  assert.deepEqual(parseLayout('6x3'), { cols: 6, rows: 3 });
+
+  // 上限クリップ: cols max=6, rows max=3
+  assert.deepEqual(parseLayout('9x9'), { cols: 6, rows: 3 });
+  assert.deepEqual(parseLayout('7x4'), { cols: 6, rows: 3 });
+
+  // 下限クリップ: cols min=1, rows min=1
+  assert.deepEqual(parseLayout('0x0'), { cols: 1, rows: 1 });
+
+  // 大文字も受け付ける（/i フラグ）
+  assert.deepEqual(parseLayout('2X2'), { cols: 2, rows: 2 });
+
+  // session_ids parse ロジック（detached-grid.ts 内と同等）
+  function parseSessionIds(raw: string): number[] {
+    return (raw || '').split(',')
+      .map((s: string) => parseInt(s.trim(), 10))
+      .filter((n: number) => Number.isFinite(n) && n > 0);
+  }
+
+  assert.deepEqual(parseSessionIds('1,2,3,4'), [1, 2, 3, 4]);
+  assert.deepEqual(parseSessionIds('5'), [5]);
+  assert.deepEqual(parseSessionIds(''), []);
+  assert.deepEqual(parseSessionIds('1, 2, 3'), [1, 2, 3]);
+  // 無効値はフィルタされる
+  assert.deepEqual(parseSessionIds('1,abc,3'), [1, 3]);
+  assert.deepEqual(parseSessionIds('0,1,2'), [1, 2]); // 0 は除外（n > 0）
+  assert.deepEqual(parseSessionIds('-1,1'), [1]);
 });

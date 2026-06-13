@@ -19,6 +19,29 @@
 #new-session-btn:hover { background: var(--accent); color: var(--bg); border-style: solid; }
 #new-session-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* C5: Detached Grid Launcher サイドバーボタン */
+.detached-grid-launcher-sidebar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--bg-elev, #181c24);
+  color: var(--accent-text, #93c5fd);
+  border: 1px solid var(--line, #2a3040);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+.detached-grid-launcher-sidebar-btn:hover {
+  background: var(--accent, #3b82f6);
+  border-color: var(--accent, #3b82f6);
+  color: #fff;
+}
+
 #kill-all-btn {
   display: inline-flex;
   align-items: center;
@@ -330,3 +353,98 @@
   color: #fff;
 }
 .model-picker-check { display: flex; gap: 6px; align-items: center; font-size: 0.75rem; color: var(--muted); }
+
+/* ---- C2: Detached 設定セクション ---- */
+.spawn-detached-section {
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.spawn-detached-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.spawn-detached-label {
+  font-size: 0.76rem;
+  color: var(--muted);
+  white-space: nowrap;
+  min-width: 72px;
+}
+
+.spawn-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+}
+
+.spawn-radio-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--text);
+  cursor: pointer;
+  padding: 2px 6px 2px 4px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+.spawn-radio-label:hover { background: var(--bg-elev2); }
+.spawn-radio-label:has(input:checked) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.spawn-radio-label--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.spawn-radio-label input[type="radio"] {
+  accent-color: var(--accent);
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  cursor: pointer;
+}
+.spawn-radio-label--disabled input[type="radio"] { cursor: not-allowed; }
+
+.spawn-detached-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 4px;
+}
+
+.spawn-detached-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.spawn-layout-group { gap: 4px; }
+
+.spawn-preset-select {
+  flex: 1;
+  max-width: 240px;
+}
+
+.spawn-detached-preview {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.73rem;
+  color: var(--muted);
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.spawn-detached-preview-text { white-space: nowrap; }
+.spawn-detached-preview-value { color: var(--text); word-break: break-all; }

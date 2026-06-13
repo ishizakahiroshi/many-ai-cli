@@ -70,3 +70,26 @@ func TestShellVersionSuffix_PowerShell51Hardcoded(t *testing.T) {
 		t.Fatalf("shellVersionSuffix(powershell.exe) = %q, want 5.1", got)
 	}
 }
+
+// TestResolveDefaultShell_Windows は Windows 上で resolveDefaultShell が空でない
+// 実行ファイルパスを返すことを確認する。
+// 最低でも COMSPEC / cmd.exe フォールバックが動作することを検証する。
+func TestResolveDefaultShell_Windows(t *testing.T) {
+	got := resolveDefaultShell()
+	if got == "" {
+		t.Error("resolveDefaultShell() returned empty string on Windows")
+	}
+}
+
+// TestResolveCmdShellProvider_Windows は provider="shell" のとき resolveCmd が
+// resolveDefaultShell の結果と同じコマンドを返すことを確認する。
+func TestResolveCmdShellProvider_Windows(t *testing.T) {
+	want := resolveDefaultShell()
+	got, gotArgs := resolveCmd("shell", []string{})
+	if got != want {
+		t.Errorf("resolveCmd(shell) = %q, want %q", got, want)
+	}
+	if len(gotArgs) != 0 {
+		t.Errorf("resolveCmd(shell) args = %v, want empty", gotArgs)
+	}
+}

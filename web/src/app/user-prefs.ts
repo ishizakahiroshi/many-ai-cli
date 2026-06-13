@@ -68,6 +68,43 @@ export function getDefaultTriggerPhrase() {
 }
 export const CWD_HISTORY_MAX               = 10;
 
+// ── Detached Grid ユーザー設定（device-local: localStorage のみ） ──────────
+// detached window size は OS の window manager に任せるため保存しない。
+// よく使う preset / 直近の layout・count を保存する。
+export const STORAGE_DETACHED_GRID_PRESET_KEY    = 'ai_cli_hub_detached_grid_preset';
+export const STORAGE_DETACHED_GRID_LAYOUT_KEY    = 'ai_cli_hub_detached_grid_layout';
+export const STORAGE_DETACHED_GRID_COUNT_KEY     = 'ai_cli_hub_detached_grid_count';
+export const STORAGE_DETACHED_GRID_FAVORITES_KEY = 'ai_cli_hub_detached_grid_favorites';
+
+export interface DetachedGridPrefs {
+  lastPreset?: string;
+  lastLayout?: string;
+  lastCount?: number;
+  favoritePresets?: string[];
+}
+
+export function getDetachedGridPrefs(): DetachedGridPrefs {
+  try {
+    return {
+      lastPreset:      localStorage.getItem(STORAGE_DETACHED_GRID_PRESET_KEY) || undefined,
+      lastLayout:      localStorage.getItem(STORAGE_DETACHED_GRID_LAYOUT_KEY) || undefined,
+      lastCount:       parseInt(localStorage.getItem(STORAGE_DETACHED_GRID_COUNT_KEY) || '', 10) || undefined,
+      favoritePresets: JSON.parse(localStorage.getItem(STORAGE_DETACHED_GRID_FAVORITES_KEY) || '[]'),
+    };
+  } catch (_) {
+    return {};
+  }
+}
+
+export function setDetachedGridPrefs(prefs: DetachedGridPrefs): void {
+  try {
+    if (prefs.lastPreset != null)      localStorage.setItem(STORAGE_DETACHED_GRID_PRESET_KEY, prefs.lastPreset);
+    if (prefs.lastLayout != null)      localStorage.setItem(STORAGE_DETACHED_GRID_LAYOUT_KEY, prefs.lastLayout);
+    if (prefs.lastCount != null)       localStorage.setItem(STORAGE_DETACHED_GRID_COUNT_KEY, String(prefs.lastCount));
+    if (prefs.favoritePresets != null) localStorage.setItem(STORAGE_DETACHED_GRID_FAVORITES_KEY, JSON.stringify(prefs.favoritePresets));
+  } catch (_) {}
+}
+
 export type VoiceEngine = 'off' | 'browser' | 'whisper';
 
 export function normalizeVoiceEngine(value: any): VoiceEngine {

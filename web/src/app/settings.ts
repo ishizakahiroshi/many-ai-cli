@@ -4,7 +4,7 @@ import { escapeHtml, showToast, ti18n, token } from './util.js';
 import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
-import { activateSession, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, setFaviconEnvBadge, stateLabel } from './session-list.js';
+import { activateSession, openDetachedGridForSessions, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
 import { pathPopupEl } from './path-links.js';
 import { TERMINAL_SCROLLBACK_LINES, attachTerminal, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, sendResize } from './terminal.js';
 import { providerApprovalTriggers } from './approval.js';
@@ -2112,6 +2112,8 @@ export function setActiveTab(sid, name) {
       mgr.focusSlot(restoreIdx);
     }
     if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
+    // C3: "Detach current grid" ボタンをタブバーに挿入（初回のみ生成）
+    _ensureMultiDetachBtn();
     return;
   }
 
@@ -2335,6 +2337,37 @@ window.addEventListener('resize', () => {
 });
 
 
+// ─── C3: Multi tab "Detach current grid" ボタン ───────────────────────────
+/**
+ * Multi タブが開いているとき、unified-tab-bar に "Detach current grid" ボタンを追加する。
+ * 初回呼び出しでボタンを生成し、以降は既存要素を再利用する。
+ */
+function _ensureMultiDetachBtn(): void {
+  const bar = document.getElementById('unified-tab-bar');
+  if (!bar) return;
+  let btn = document.getElementById('multi-detach-btn');
+  if (btn) return; // 既存
+  btn = document.createElement('button');
+  btn.id = 'multi-detach-btn';
+  btn.className = 'multi-detach-btn view-tab-util';
+  btn.type = 'button';
+  btn.textContent = '⊞↗';
+  btn.title = ti18n('multi_detach_current_grid', 'Detach current grid');
+  btn.setAttribute('aria-label', ti18n('multi_detach_current_grid', 'Detach current grid'));
+  btn.addEventListener('click', () => {
+    const mgr = window.multiPaneManager;
+    if (!mgr) return;
+    // 現在 Multi にマウントされているセッション id を収集する
+    const slotIds: number[] = mgr.slots
+      .filter((s: any) => s && s.session && s.session.id != null)
+      .map((s: any) => s.session.id);
+    if (slotIds.length === 0) return;
+    openDetachedGridForSessions(slotIds);
+  });
+  // タブバー末尾に追加
+  bar.appendChild(btn);
+}
+
 // ─── カード右クリックメニュー (Open Git / Files / Activate / Copy ID) ───
 export let _cardCtxMenuEl = null;
 export let _cardCtxSid    = null;
@@ -2344,13 +2377,18 @@ export function openCardCtxMenu(x, y, sid) {
   const menu = document.createElement('div');
   menu.className = 'card-ctx-menu open';
   menu.id = 'card-ctx-menu';
-  const labelOpenGit   = ti18n('ctx_open_git',   'Open Git View');
-  const labelOpenFiles = ti18n('ctx_open_files', 'Open Files Tab');
-  const labelActivate  = ti18n('ctx_activate',   'Activate Session');
-  const labelCopyId    = ti18n('ctx_copy_id',    'Copy session ID');
+  const labelOpenGit        = ti18n('ctx_open_git',              'Open Git View');
+  const labelOpenFiles      = ti18n('ctx_open_files',            'Open Files Tab');
+  const labelActivate       = ti18n('ctx_activate',              'Activate Session');
+  const labelCopyId         = ti18n('ctx_copy_id',               'Copy session ID');
+  const labelOpenInGrid     = ti18n('ctx_open_in_grid',          'Open in detached grid');
+  const labelOpenProjectGrid = ti18n('ctx_open_project_in_grid', 'Open project in detached grid');
   menu.innerHTML =
     `<button type="button" data-action="open-git"><span class="ico">⎇</span><span>${escapeHtml(labelOpenGit)}</span><span class="kbd">Ctrl+Shift+G</span></button>` +
     `<button type="button" data-action="open-files"><span class="ico">📁</span><span>${escapeHtml(labelOpenFiles)}</span><span class="kbd">Ctrl+Shift+F</span></button>` +
+    `<div class="card-ctx-sep"></div>` +
+    `<button type="button" data-action="open-in-grid"><span class="ico">⊞</span><span>${escapeHtml(labelOpenInGrid)}</span></button>` +
+    `<button type="button" data-action="open-project-grid"><span class="ico">⊞</span><span>${escapeHtml(labelOpenProjectGrid)}</span></button>` +
     `<div class="card-ctx-sep"></div>` +
     `<button type="button" data-action="activate"><span class="ico">→</span><span>${escapeHtml(labelActivate)}</span></button>` +
     `<button type="button" data-action="copy-id"><span class="ico">#</span><span>${escapeHtml(labelCopyId)}</span></button>`;
@@ -2377,6 +2415,17 @@ export function openCardCtxMenu(x, y, sid) {
         const pk = sess.project || (gr ? gr.split(/[\\/]/).filter(Boolean).pop() : '__no_project__');
         if (!gr) return;
         FilesTabManager.openFilesTab(id, pk, gr, gr);
+      } else if (action === 'open-in-grid') {
+        // C3: このセッション単体を別窓 grid で開く
+        openDetachedGridForSessions([id]);
+      } else if (action === 'open-project-grid') {
+        // C3: 同一 project group の全セッションを別窓 grid で開く
+        const projKey = sessionProjectKey(sess);
+        const projectSessionIds: number[] = [];
+        sessions.forEach((s, sid2) => {
+          if (sessionProjectKey(s) === projKey) projectSessionIds.push(sid2);
+        });
+        openDetachedGridForSessions(projectSessionIds);
       } else if (action === 'activate') {
         activateSession(id);
         FilesTabManager.switchToSessionView();

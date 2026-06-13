@@ -7,7 +7,7 @@ import { activateSession, render, renderSessionList, renderSessionStateUpdate, u
 import { applyRemotePtyResize, ensureTerminal, queuePendingTerminalChunk, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup } from './settings.js';
 import { setMultiQuestionBannerVisible } from './approval-ui.js';
-import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, hideActionBar, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
+import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, hideActionBar, isAIProvider, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
 import { notifyDeferredEnterOutput } from './deferred-enter.js';
 import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed } from './chat-history.js';
 import { handleUsageStatMessage, removeUsageCacheEntry } from './token-statusbar.js';
@@ -242,15 +242,19 @@ export function _connectWs() {
     // 出力が来るたび待機をリセットし、止まったら deferred-enter.ts が \r を 1 回だけ送る。
     notifyDeferredEnterOutput(id);
 
-    // chatHistory: マーカー検出でターン境界を確定し AI 出力を commit する
-    if (hasMarker) {
-      const parts = textChunk.split(CHAT_HISTORY_USER_TURN_MARKER);
-      for (let i = 0; i < parts.length; i++) {
-        if (parts[i]) chatHistoryAppendOutput(id, parts[i]);
-        if (i < parts.length - 1) chatHistoryCommitOutputOrSeed(id);
+    // chatHistory: マーカー検出でターン境界を確定し AI 出力を commit する。
+    // Shell session は chat history extraction の対象外。
+    const sessionProvider = sessions.get(id)?.provider || '';
+    if (isAIProvider(sessionProvider)) {
+      if (hasMarker) {
+        const parts = textChunk.split(CHAT_HISTORY_USER_TURN_MARKER);
+        for (let i = 0; i < parts.length; i++) {
+          if (parts[i]) chatHistoryAppendOutput(id, parts[i]);
+          if (i < parts.length - 1) chatHistoryCommitOutputOrSeed(id);
+        }
+      } else if (textChunk) {
+        chatHistoryAppendOutput(id, textChunk);
       }
-    } else if (textChunk) {
-      chatHistoryAppendOutput(id, textChunk);
     }
     return;
   }
@@ -374,6 +378,19 @@ export function _connectWs() {
                           : m.state === 'running' ? 'running'
                           : 'standby';
         mgr.updateSlotBadge(m.session_id, badgeStatus);
+      }
+      // C1: detached-grid モード: バッジ更新 + セッション追加時に再描画
+      const dgMgr = window.detachedGridManager;
+      if (dgMgr) {
+        if (typeof dgMgr.updateSlotBadge === 'function') {
+          const badgeStatus = m.state === 'waiting' ? 'waiting'
+                            : m.state === 'running' ? 'running'
+                            : 'standby';
+          dgMgr.updateSlotBadge(m.session_id, badgeStatus);
+        }
+        if (isNew && typeof dgMgr.onSessionsUpdated === 'function') {
+          dgMgr.onSessionsUpdated();
+        }
       }
     }
     // C5: 新規セッションは非★グループ末尾（forceToFront=false）

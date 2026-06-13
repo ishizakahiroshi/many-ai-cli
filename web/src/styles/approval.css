@@ -37,6 +37,15 @@
   overflow-wrap: anywhere;
   line-height: 1.45;
 }
+/* 承認ではない選択メニュー（claude /model 等）のラベル。警告色ではなくアクセント色で、
+   承認プロンプト（警告色・大文字）と視覚的に区別する。 */
+.action-bar-label.select-menu-label {
+  letter-spacing: 0;
+  text-transform: none;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+  color: var(--accent);
+}
 
 #multi-question-banner {
   display: flex;
