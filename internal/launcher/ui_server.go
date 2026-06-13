@@ -1,5 +1,3 @@
-//go:build windows
-
 // Package launcher provides the local HTTP server that serves the profile
 // selection UI. The server binds to 127.0.0.1 on a random free port and
 // requires a random token on every API request (same security model as the Hub).
@@ -604,7 +602,11 @@ func (s *UIServer) runConnection(ctx context.Context, lc *liveConn, profile Prof
 	var err error
 	switch profile.Type {
 	case ProfileTypeWSL:
-		conn = NewWSLConnector()
+		conn, err = connectorForWSL()
+		if err != nil {
+			s.failConnection(lc, err.Error())
+			return
+		}
 	case ProfileTypeSSH:
 		conn = NewSSHConnector()
 	default:

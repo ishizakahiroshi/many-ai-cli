@@ -190,27 +190,12 @@
 
 
 /* Input bar / terminal adjacent panels */
-/* 入力バー外枠 — padding-bottom: token-statusbar の高さ分（fixed 要素が attach-panel に被るのを防ぐ） */
-/* transform: CLI 下部クローム破棄で xterm 末尾に残る空行帯を、最下部追従中だけ入力欄ごと
-   上へ詰めて覆い隠す（--term-trailing-trim は terminal.ts が計測して設定。0 のとき無効）。
-   layout には影響させない（transform のみ）ので PTY の refit/SIGWINCH は起きない。 */
+/* 入力バー外枠 — padding-bottom: token-statusbar の高さ分（fixed 要素が attach-panel に被るのを防ぐ）。
+   常に最下部へ吸着させる（flex-shrink:0 で縮まず、display-area(flex:1) の下に置かれる）。 */
 #input-bar-outer {
   position: relative;
   flex-shrink: 0;
   padding-bottom: var(--tsb-bottom-offset, 22px);
-  transform: translateY(calc(-1 * var(--term-trailing-trim, 0px)));
-}
-/* transform で上へ詰めた分、最下部にできる空きを入力欄と同色で埋める（absolute なので
-   layout 非干渉）。token-statusbar(fixed) と重なっても同系色で目立たない。 */
-#input-bar-outer::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 100%;
-  height: var(--term-trailing-trim, 0px);
-  background: var(--bg-elev);
-  pointer-events: none;
 }
 
 #mobile-keyboard-panel {

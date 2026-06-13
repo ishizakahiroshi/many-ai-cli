@@ -1,5 +1,3 @@
-//go:build windows
-
 package launcher
 
 import (
@@ -17,23 +15,20 @@ const (
 )
 
 // PickPort returns the first port (DefaultHubPort, +portStep, +2*portStep, ...)
-// that has no Windows-side listener responding within probeTimeout.
-// This avoids the WSL-Hub-on-47777 case getting shadowed by a Windows-native
-// Hub already bound to 47777 (Windows side wins for localhost forwarding).
-// If all probes find something listening, fall back to DefaultHubPort and let
-// the WSL-side serve port-scan as usual.
+// that has no listener responding within probeTimeout.
+// If all probes find something listening, fall back to DefaultHubPort.
 func PickPort() int {
 	for i := 0; i < maxPortProbes; i++ {
 		port := DefaultHubPort + i*portStep
-		if !WindowsPortInUse(port) {
+		if !PortInUse(port) {
 			return port
 		}
 	}
 	return DefaultHubPort
 }
 
-// WindowsPortInUse reports whether a TCP listener is active on 127.0.0.1:port.
-func WindowsPortInUse(port int) bool {
+// PortInUse reports whether a TCP listener is active on 127.0.0.1:port.
+func PortInUse(port int) bool {
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), probeTimeout)
 	if err != nil {
 		return !isConnectionRefused(err)

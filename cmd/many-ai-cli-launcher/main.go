@@ -1,17 +1,16 @@
-//go:build windows
-
-// many-ai-cli-launcher is the unified Windows launcher for many-ai-cli remote
+// many-ai-cli-launcher is the unified launcher for many-ai-cli remote
 // connections. It reads connection profiles from
-// ~/.many-ai-cli/launcher-profiles.yaml and connects to a Hub via WSL or SSH.
+// ~/.many-ai-cli/launcher-profiles.yaml and connects to a Hub via WSL (Windows
+// only) or SSH.
 //
 // Usage:
 //
 //	many-ai-cli-launcher [--profile <name>] [--last] [--ui]
 //
-// Without flags (= plain double-click) a browser-based profile selection
-// page is always opened on a random loopback port; already-connected
-// profiles are marked there. Direct connection without the UI requires
-// --profile or --last (e.g. a dedicated shortcut).
+// Without flags (= plain double-click / direct invocation) a browser-based
+// profile selection page is always opened on a random loopback port;
+// already-connected profiles are marked there. Direct connection without the
+// UI requires --profile or --last (e.g. a dedicated shortcut).
 package main
 
 import (
@@ -138,7 +137,7 @@ func connect(profile launcher.Profile) error {
 	}
 	defer func() { _ = startupLock.Release() }()
 
-	conn, err := connectorFor(profile)
+	conn, err := launcher.ConnectorFor(profile)
 	if err != nil {
 		return err
 	}
@@ -219,16 +218,4 @@ func findByName(pf *launcher.ProfilesFile, name string) (launcher.Profile, error
 		}
 	}
 	return launcher.Profile{}, fmt.Errorf("profile %q not found in launcher-profiles.yaml", name)
-}
-
-// connectorFor returns the correct Connector for the given profile type.
-func connectorFor(p launcher.Profile) (launcher.Connector, error) {
-	switch p.Type {
-	case launcher.ProfileTypeWSL:
-		return launcher.NewWSLConnector(), nil
-	case launcher.ProfileTypeSSH:
-		return launcher.NewSSHConnector(), nil
-	default:
-		return nil, fmt.Errorf("unsupported profile type %q", p.Type)
-	}
 }
