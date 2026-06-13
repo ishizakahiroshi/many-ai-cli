@@ -11,8 +11,11 @@ project_name: many-ai-cli
 #   - go-winres は before hooks で都度 install するため CI に事前準備は不要。
 before:
   hooks:
-    - bun install --frozen-lockfile --cwd web
-    - bun --cwd web run build
+    # `bun --cwd web run build` は goreleaser hook 内で no-op になり（web/dist が
+    # 空のまま go build され `//go:embed all:dist` が失敗）、before.hooks は
+    # map 形式(dir:)も非対応。Release workflow は ubuntu 上で走るため sh -c で
+    # web へ cd し、Validate と同じく素の bun install/build を実行する。
+    - sh -c 'cd web && bun install --frozen-lockfile && bun run build'
     - go install github.com/tc-hib/go-winres@latest
     - go-winres make --in winres/winres.json --out cmd/many-ai-cli/rsrc --product-version={{ .Version }} --file-version={{ .Version }}
     - go-winres make --in winres/winres-launcher.json --out cmd/many-ai-cli-launcher/rsrc --product-version={{ .Version }} --file-version={{ .Version }}
