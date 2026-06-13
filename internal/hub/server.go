@@ -608,6 +608,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/net-hint", s.handleNetHint)
 	mux.HandleFunc("/api/avatar", s.handleAvatar)
 	mux.HandleFunc("/api/spawn", s.handleSpawn)
+	mux.HandleFunc("/api/spawn-grid", s.handleSpawnGrid)
 	mux.HandleFunc("/api/pick-directory", s.handlePickDirectory)
 	mux.HandleFunc("/api/path-exists", s.handlePathExists)
 	mux.HandleFunc("/api/pick-file", s.handlePickFile)
@@ -1262,7 +1263,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				if chunkHasApprovalTrigger && now.Before(ses.vtResizeDebounceUntil) {
 					ses.nativeApprovalScanQueued = true
 				}
-				shouldCheckApproval := provider != "" &&
+				shouldCheckApproval := isAIProvider(provider) &&
 					now.After(ses.vtResizeDebounceUntil) &&
 					(chunkHasApprovalTrigger || ses.nativeApprovalSig != "" || ses.nativeApprovalScanQueued)
 				if shouldCheckApproval {
@@ -1484,6 +1485,11 @@ func (s *Server) handleDoneSummaryMarker(id int, data []byte) {
 	s.sessionsMu.Lock()
 	ses := s.sessions[id]
 	if ses == nil {
+		s.sessionsMu.Unlock()
+		return
+	}
+	// Shell session は done summary push notification の対象外
+	if !isAIProvider(ses.Provider) {
 		s.sessionsMu.Unlock()
 		return
 	}

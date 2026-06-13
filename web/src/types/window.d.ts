@@ -66,6 +66,7 @@ declare global {
     updateScrollLockBtn?: (locked?: boolean) => void;
 
     multiPaneManager?: any;
+    detachedGridManager?: any;
     activateSessionForMultiPane?: (id: number) => void;
     dismissSession?: (id: number) => void;
     renderSessionList?: () => void;

@@ -26,5 +26,8 @@ import './app/files-view.js';
 import './app/workbench.js';
 import './app/pwa.js';
 import { initTokenStatusbar } from './app/token-statusbar.js';
+import { initDetachedGridMode } from './app/detached-grid.js';
 // ステータスバー初期化（/api/user-prefs から enabled を読む）
 initTokenStatusbar();
+// detached-grid モード判定（/?view=detached-grid の場合のみ初期化）
+initDetachedGridMode();

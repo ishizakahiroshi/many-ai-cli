@@ -657,6 +657,7 @@
           </svg>
         </button>
         <button id="new-session-btn" data-i18n="new_session">+ New Session</button>
+        <button id="detached-grid-launcher-btn" class="detached-grid-launcher-sidebar-btn" data-i18n-tooltip="dgl_sidebar_btn_tooltip" aria-label="Open Detached Grid Launcher" title="Open Detached Grid">⊞</button>
       </div>
       <div id="new-session-panel" hidden>
         <div class="new-session-form">
@@ -666,6 +667,7 @@
               <option value="codex">Codex CLI</option>
               <option value="copilot">GitHub Copilot</option>
               <option value="cursor-agent">Cursor Agent</option>
+              <option value="shell">Shell</option>
             </select>
             <div id="spawn-provider-combobox" class="spawn-provider-combobox">
               <button id="spawn-provider-trigger" class="spawn-provider-trigger" type="button"
@@ -735,6 +737,75 @@
           <div id="spawn-codex-note" class="settings-note" data-i18n="spawn_codex_note" hidden>Uses the installed Codex CLI. Authentication and permissions are managed by Codex.</div>
           <div id="spawn-copilot-note" class="settings-note" data-i18n="spawn_copilot_note" hidden>Uses the installed GitHub Copilot CLI. Authentication and permissions are managed by Copilot.</div>
           <div id="spawn-cursor-agent-note" class="settings-note" data-i18n="spawn_cursor_agent_note" hidden>Uses the installed Cursor Agent CLI. Authentication and permissions are managed by Cursor.</div>
+          <div id="spawn-shell-note" class="settings-note" data-i18n="spawn_shell_note" hidden>Opens the OS default shell (pwsh / bash). No AI-specific options apply.</div>
+
+          <!-- C2: Detached 設定セクション -->
+          <div id="spawn-detached-section" class="spawn-detached-section">
+            <div class="spawn-detached-header">
+              <span class="spawn-detached-label" data-i18n="spawn_open_target_label">Open target</span>
+              <div id="spawn-open-target-group" class="spawn-radio-group" role="radiogroup" aria-label="Open target">
+                <label class="spawn-radio-label">
+                  <input type="radio" name="spawn-open-target" value="hub" id="spawn-target-hub" checked>
+                  <span data-i18n="spawn_target_hub">Hub tab</span>
+                </label>
+                <label class="spawn-radio-label">
+                  <input type="radio" name="spawn-open-target" value="detached" id="spawn-target-detached">
+                  <span data-i18n="spawn_target_detached">Detached window</span>
+                </label>
+                <label class="spawn-radio-label spawn-radio-label--disabled">
+                  <input type="radio" name="spawn-open-target" value="attach" id="spawn-target-attach" disabled>
+                  <span data-i18n="spawn_target_attach">Attach to grid</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Grid layout (Detached window 選択時のみ表示) -->
+            <div id="spawn-detached-opts" class="spawn-detached-opts" hidden>
+              <div class="spawn-detached-row">
+                <span class="spawn-detached-label" data-i18n="spawn_grid_layout_label">Grid layout</span>
+                <div id="spawn-layout-group" class="spawn-radio-group spawn-layout-group" role="radiogroup" aria-label="Grid layout">
+                  <label class="spawn-radio-label">
+                    <input type="radio" name="spawn-grid-layout" value="1x1" id="spawn-layout-1x1" checked>
+                    <span>1×1</span>
+                  </label>
+                  <label class="spawn-radio-label">
+                    <input type="radio" name="spawn-grid-layout" value="1x2" id="spawn-layout-1x2">
+                    <span>1×2</span>
+                  </label>
+                  <label class="spawn-radio-label">
+                    <input type="radio" name="spawn-grid-layout" value="2x2" id="spawn-layout-2x2">
+                    <span>2×2</span>
+                  </label>
+                  <label class="spawn-radio-label">
+                    <input type="radio" name="spawn-grid-layout" value="2x3" id="spawn-layout-2x3">
+                    <span>2×3</span>
+                  </label>
+                  <label class="spawn-radio-label">
+                    <input type="radio" name="spawn-grid-layout" value="3x3" id="spawn-layout-3x3">
+                    <span>3×3</span>
+                  </label>
+                </div>
+              </div>
+              <div class="spawn-detached-row">
+                <span class="spawn-detached-label" data-i18n="spawn_preset_label">Preset</span>
+                <select id="spawn-detached-preset" class="spawn-select spawn-preset-select">
+                  <option value="single" data-i18n="spawn_preset_single">Single large pane</option>
+                  <option value="claude-shell-2x2" data-i18n="spawn_preset_claude_shell">Claude + Shell 2×2</option>
+                  <option value="shell-2x2" data-i18n="spawn_preset_shell_2x2">Shell 2×2</option>
+                  <option value="shell-3x3" data-i18n="spawn_preset_shell_3x3">Shell 3×3</option>
+                  <option value="project" data-i18n="spawn_preset_project">Project sessions</option>
+                  <option value="multi" data-i18n="spawn_preset_multi">Current Multi layout</option>
+                  <option value="advanced" data-i18n="spawn_preset_advanced">Advanced launcher…</option>
+                </select>
+              </div>
+              <!-- Launch plan preview -->
+              <div id="spawn-detached-preview" class="spawn-detached-preview">
+                <span class="spawn-detached-preview-text" data-i18n="spawn_detached_preview_label">Launch plan:</span>
+                <span id="spawn-detached-preview-text" class="spawn-detached-preview-value"></span>
+              </div>
+            </div>
+          </div>
+
           <div class="new-session-actions">
             <button id="spawn-cancel-btn" class="spawn-btn-cancel" data-i18n="spawn_cancel">Cancel</button>
             <button id="spawn-launch-btn" class="spawn-btn-launch" data-i18n="spawn_launch">Launch</button>

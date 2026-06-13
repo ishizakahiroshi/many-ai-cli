@@ -47,6 +47,8 @@ Terminal pane #1              Terminal pane #2
 - **Real-time PTY output** via xterm.js over WebSocket
 - **Chat history and split view** — read a bubble-style conversation history, search/filter it, or keep it beside the live terminal
 - **Multi-pane tab** — watch multiple live sessions at once in a configurable grid
+- **Detached Session Grid** — pop AI or Shell sessions out into a separate browser window as a standalone grid view; the Hub keeps managing approvals and session state
+- **Shell sessions** — spawn a plain interactive shell (PowerShell / bash / sh) as a regular Hub session alongside AI sessions; AI-specific features (approval injection, Chat, token bar) are automatically disabled for shell sessions
 - **Files tab** — browse project files, preview Markdown/code, copy paths, create folders, save text files with conflict detection, rename/move, and delete empty folders from the Hub
 - **Git view** — inspect branch history, commit details, changed files, diffs, fetch refs, and run `git pull --ff-only` without leaving the Hub
 - **Commit all** — stage all current working-tree changes and create a local commit after an explicit review step
@@ -58,8 +60,8 @@ Terminal pane #1              Terminal pane #2
 - **Server-side user preferences** — keep voice, notification, favorites, session order, spawn defaults, and avatar settings in `config.yaml`
 - **Spawn new sessions** from the UI (`/api/spawn`)
 - **Model picker with Ollama routing** — pick Anthropic / OpenAI / Ollama Cloud / Ollama Local models from the spawn form; the Hub auto-injects the right `ANTHROPIC_*` / `OPENAI_*` env vars per session, no shell setup required
-- **Windows unified launcher** — `many-ai-cli-launcher.exe` connects to a Hub inside WSL or on a remote VPS (SSH) via saved profiles and opens the Windows browser
-- **VPS / Docker deployment assets** — run one Hub container per user from GHCR with loopback-only port publishing and an opt-in auto-update script
+- **Windows unified launcher** — `many-ai-cli-launcher.exe` connects to a Hub inside WSL or on a remote server (SSH) via saved profiles and opens the Windows browser
+- **Remote server / Docker deployment assets** — run one Hub container per user from GHCR with loopback-only port publishing and an opt-in auto-update script
 - **Clean transcript generation** — write readable `.txt` transcripts automatically, or regenerate them with `log-clean`
 - **Language switching** (English / Japanese)
 - **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `many-ai-cli` itself
@@ -224,7 +226,7 @@ Sessions can be created, monitored, and approved entirely from the Hub UI; you d
 
 ### Windows unified launcher
 
-`many-ai-cli-launcher.exe` is a unified launcher that manages connection profiles for both WSL and remote VPS targets. Connection profiles are stored in `~/.many-ai-cli/launcher-profiles.yaml`.
+`many-ai-cli-launcher.exe` is a unified launcher that manages connection profiles for both WSL and remote server targets. Connection profiles are stored in `~/.many-ai-cli/launcher-profiles.yaml`.
 
 #### How it works
 
@@ -233,13 +235,13 @@ The launcher reads your saved profiles and connects to the right Hub — startin
 | Type | Use case |
 |---|---|
 | `wsl` | Start `many-ai-cli serve` inside WSL and open it from the Windows browser |
-| `ssh` | Connect to a remote machine (e.g. a VPS) over SSH |
+| `ssh` | Connect to a remote machine (e.g. a VPS or home server) over SSH |
 
 `ssh` profiles additionally support two connection modes:
 
 | Mode | Use case |
 |---|---|
-| `serve` | SSH into a VPS and start `many-ai-cli serve` on the remote side |
+| `serve` | SSH into a remote server and start `many-ai-cli serve` on the remote side |
 | `tunnel` | Port-forward to a Hub that is already running on the remote side (e.g. a Docker-compose resident Hub) |
 
 In both modes, the Hub continues to bind to `127.0.0.1` only on the remote. The SSH local forward (`-L 127.0.0.1:<port>:127.0.0.1:<port>`) makes it reachable from the Windows browser without exposing the Hub to the network.
@@ -261,7 +263,7 @@ profiles:
     distro: Ubuntu-22.04  # omit to use the default WSL distro
     hub_port: 0           # 0 = auto-select to avoid Windows-side collisions
 
-  # VPS profile (serve mode) — SSH in and start many-ai-cli serve
+  # Remote server profile (serve mode) — SSH in and start many-ai-cli serve
   - name: my-vps
     type: ssh
     mode: serve
@@ -269,7 +271,7 @@ profiles:
     user: your-user
     hub_port: 47777
 
-  # VPS profile (tunnel mode) — forward port to a resident Docker Hub
+  # Remote server profile (tunnel mode) — forward port to a resident Docker Hub
   - name: vps-docker
     type: ssh
     mode: tunnel
@@ -387,13 +389,13 @@ The launcher does not change the Hub's security model:
 
 For the full profile schema and connection flow details, see [docs/v0.2.0-any-ai-cli-design.md — §11b](docs/v0.2.0-any-ai-cli-design.md).
 
-#### If Windows blocks the launcher: VPS access without local `.exe`
+#### If Windows blocks the launcher: remote-server access without local `.exe`
 
-If Windows SmartScreen or company policy prevents `many-ai-cli-launcher.exe` from running, users can still connect to a VPS-hosted Hub without running any many-ai-cli executable on Windows. This route uses only:
+If Windows SmartScreen or company policy prevents `many-ai-cli-launcher.exe` from running, users can still connect to a remote-hosted Hub without running any many-ai-cli executable on Windows. This route uses only:
 
 - the Windows built-in OpenSSH client (`ssh.exe`)
 - a normal browser
-- the Linux `many-ai-cli` binary or Docker container on the VPS
+- the Linux `many-ai-cli` binary or Docker container on the remote server
 
 The tradeoff is that setup is more manual: the user keeps one SSH tunnel window open, then opens the Hub URL in the browser.
 
@@ -402,12 +404,12 @@ The tradeoff is that setup is more manual: the user keeps one SSH tunnel window 
 | Item | Saved on | Notes |
 |---|---|---|
 | SSH host, user, key path | Windows `%USERPROFILE%\.ssh\config` | Safe to keep locally; this is normal SSH configuration |
-| Hub token | VPS `~/.many-ai-cli/config.yaml` | Do not paste it into public chats, issues, or screenshots |
-| Hub preferences, favorites, spawn defaults | VPS `~/.many-ai-cli/config.yaml` | Persist across reconnects because the Hub runs on the VPS |
-| Logs and attachments | VPS `~/.many-ai-cli/logs/`, `~/.many-ai-cli/attachments/` | They are not stored on the Windows PC |
-| Working repositories | VPS filesystem | The Hub edits VPS files, not files on the Windows PC |
+| Hub token | Remote server `~/.many-ai-cli/config.yaml` | Do not paste it into public chats, issues, or screenshots |
+| Hub preferences, favorites, spawn defaults | Remote server `~/.many-ai-cli/config.yaml` | Persist across reconnects because the Hub runs on the remote server |
+| Logs and attachments | Remote server `~/.many-ai-cli/logs/`, `~/.many-ai-cli/attachments/` | They are not stored on the Windows PC |
+| Working repositories | Remote server filesystem | The Hub edits the remote server's files, not files on the Windows PC |
 
-**A. Choose and prepare the VPS**
+**A. Choose and prepare the remote server**
 
 Use any provider that gives you a Linux VM with SSH access. A small Ubuntu 22.04/24.04 machine is enough to start; 1 GB RAM is a practical minimum, and 2 GB+ is more comfortable once provider CLIs and long sessions are running. Free tiers can work, but check whether they sleep, reset disks, or block long-lived SSH connections.
 
@@ -417,7 +419,7 @@ Keep the firewall/security group simple:
 - do **not** open `47777`, `47877`, or any Hub port to the internet
 - do **not** put the Hub behind nginx, Caddy, Cloudflare Tunnel, or a public reverse proxy
 
-Install the Linux `many-ai-cli` binary on the VPS. One common per-user layout is:
+Install the Linux `many-ai-cli` binary on the remote server. One common per-user layout is:
 
 ```bash
 mkdir -p ~/.local/bin
@@ -429,7 +431,7 @@ source ~/.bashrc
 many-ai-cli --version
 ```
 
-Also install and sign in to the provider CLIs you plan to use (`claude`, `codex`, `copilot`, `cursor-agent`) on the VPS, because sessions run there.
+Also install and sign in to the provider CLIs you plan to use (`claude`, `codex`, `copilot`, `cursor-agent`) on the remote server, because sessions run there.
 
 **B. Start the Hub on a fixed loopback port**
 
@@ -461,7 +463,7 @@ Confirm the Hub is listening only on loopback:
 ss -ltnp | grep ':47777'
 ```
 
-Expected: `127.0.0.1:47777`. If you see `0.0.0.0:47777` or the VPS public IP, stop and fix the setup before connecting.
+Expected: `127.0.0.1:47777`. If you see `0.0.0.0:47777` or the remote server's public IP, stop and fix the setup before connecting.
 
 Get the token:
 
@@ -502,15 +504,15 @@ ssh -N -T `
   any-ai-vps
 ```
 
-Keep that window open. It is the private cable between your browser and the VPS Hub.
+Keep that window open. It is the private cable between your browser and the remote server's Hub.
 
 Now open this in the Windows browser:
 
 ```text
-http://127.0.0.1:47777/?token=<token-from-the-vps>
+http://127.0.0.1:47777/?token=<token-from-the-remote-server>
 ```
 
-Do not replace `127.0.0.1` with the VPS IP address. The browser should always connect to the local forwarded port.
+Do not replace `127.0.0.1` with the remote server's IP address. The browser should always connect to the local forwarded port.
 
 **Optional: a local `.cmd` tunnel shortcut**
 
@@ -537,11 +539,11 @@ Close the `many-ai-cli tunnel` window to disconnect. The remote Hub and any remo
 
 **Common no-launcher pitfalls**
 
-- **Browser shows 403/404/blank** - the token is wrong or the remote Hub was restarted; fetch the token again from the VPS.
+- **Browser shows 403/404/blank** - the token is wrong or the remote Hub was restarted; fetch the token again from the remote server.
 - **Terminal area does not connect** - local and remote ports must match exactly: `47777:127.0.0.1:47777`.
-- **`ssh: bind: Address already in use`** - another local process is using the port; choose a different fixed port on both the VPS Hub and the SSH tunnel.
-- **Files are "missing"** - the Hub runs on the VPS, so it sees VPS files only. Clone or mount the repository on the VPS.
-- **Free VPS disconnected** - reconnect SSH and, if needed, reattach/restart the tmux/systemd/Docker Hub.
+- **`ssh: bind: Address already in use`** - another local process is using the port; choose a different fixed port on both the remote server's Hub and the SSH tunnel.
+- **Files are "missing"** - the Hub runs on the remote server, so it sees the remote server's files only. Clone or mount the repository on the remote server.
+- **Free-tier server disconnected** - reconnect SSH and, if needed, reattach/restart the tmux/systemd/Docker Hub.
 
 ---
 
@@ -565,9 +567,9 @@ The Hub UI is mobile-ready (responsive layout, touch-sized buttons, a mobile key
 4. Connect the tunnel, then open `http://127.0.0.1:47777/?token=<token>` in the phone browser (the token comes from the PC's `serve` output or `~/.many-ai-cli/config.yaml`)
 5. Share menu → **Add to Home Screen** to install it as a PWA — from then on it launches like an app
 
-### B. VPS
+### B. Remote server
 
-Identical to A, with the VPS as the Termius host. If you also use a home PC Hub, give each destination its own phone-side port (next section).
+Identical to A, with the remote server as the Termius host. If you also use a home PC Hub, give each destination its own phone-side port (next section).
 
 ### Port allocation for multiple Hubs
 
@@ -576,9 +578,9 @@ A tunnel occupies the phone-side listen port, and on a PC that runs its own Hub,
 | Destination | Phone-side URL | Termius local forward |
 |---|---|---|
 | Home PC | `http://127.0.0.1:47777/?token=<PC token>` | `47777` → `127.0.0.1:47777` |
-| VPS | `http://127.0.0.1:47778/?token=<VPS token>` | `47778` → VPS `127.0.0.1:47777` |
+| Remote | `http://127.0.0.1:47778/?token=<remote token>` | `47778` → remote `127.0.0.1:47777` |
 
-The Hub itself stays on `47777` everywhere; only the phone-side listen port differs. Do **not** reuse one phone-side port for two Hubs: browsers treat the port as part of the origin, so reusing it would make two different Hubs share one PWA install, service worker, cache, and `localStorage` — and token mismatches after switching tunnels. Separate ports give you two independent home-screen icons ("Home" / "VPS") that never interfere.
+The Hub itself stays on `47777` everywhere; only the phone-side listen port differs. Do **not** reuse one phone-side port for two Hubs: browsers treat the port as part of the origin, so reusing it would make two different Hubs share one PWA install, service worker, cache, and `localStorage` — and token mismatches after switching tunnels. Separate ports give you two independent home-screen icons ("Home" / "Remote") that never interfere.
 
 ### Mobile usage notes
 
@@ -1171,9 +1173,9 @@ GOOS=linux   GOARCH=amd64 go build -o dist/many-ai-cli-linux-x64                
 
 ---
 
-## VPS / Docker deployment (auto-update)
+## Remote server / Docker deployment (auto-update)
 
-Docker is not required for VPS use. For a small team, normal SSH plus `tmux`, `screen`, or `systemd` can work as long as each person signs in with their own AI CLI account and has a separate OS user, home directory, working directory, and Hub port. Try the layout that best fits your team before adopting the Docker setup.
+Docker is not required for remote-server use. For a small team, normal SSH plus `tmux`, `screen`, or `systemd` can work as long as each person signs in with their own AI CLI account and has a separate OS user, home directory, working directory, and Hub port. Try the layout that best fits your team before adopting the Docker setup.
 
 If you do not use Docker, pay attention to these points:
 

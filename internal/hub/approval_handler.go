@@ -70,6 +70,17 @@ func mergeApprovalRuleTargets(targets []approvalRuleTarget) []approvalRuleTarget
 	return out
 }
 
+// isAIProvider は provider が AI セッション（承認・chat history・done summary 等が
+// 適用される）かどうかを返す。Shell セッションは対象外。
+func isAIProvider(provider string) bool {
+	switch provider {
+	case "claude", "codex", "copilot", "cursor-agent":
+		return true
+	default:
+		return false
+	}
+}
+
 func uniqueProviders(providers []string) []string {
 	seen := make(map[string]struct{}, len(providers))
 	for _, provider := range providers {
@@ -199,6 +210,10 @@ func (s *Server) activeApprovalRuleSessionSnaps() []approvalRuleSessionSnap {
 			continue
 		}
 		if ses.State == "completed" || ses.State == "error" || ses.State == "disconnected" {
+			continue
+		}
+		// Shell session は approval rule injection / cleanup の対象外
+		if !isAIProvider(ses.Provider) {
 			continue
 		}
 		snaps = append(snaps, approvalRuleSessionSnap{provider: ses.Provider, cwd: ses.CWD})

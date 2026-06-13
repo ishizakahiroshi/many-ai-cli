@@ -92,6 +92,9 @@ func startProcess(provider string, args []string, cwd string, cols, rows int) (p
 }
 
 func resolveCmd(provider string, args []string) (string, []string) {
+	if provider == "shell" {
+		return resolveDefaultShell(), args
+	}
 	if provider == "copilot" {
 		if path, err := exec.LookPath("copilot"); err == nil {
 			return path, args
@@ -105,4 +108,20 @@ func resolveCmd(provider string, args []string) (string, []string) {
 		return path, args
 	}
 	return provider, args
+}
+
+// resolveDefaultShell returns the path to the default interactive shell on
+// Unix. Preference order: $SHELL env → bash → sh.
+func resolveDefaultShell() string {
+	if sh := os.Getenv("SHELL"); sh != "" {
+		if _, err := os.Stat(sh); err == nil {
+			return sh
+		}
+	}
+	for _, name := range []string{"bash", "sh"} {
+		if p, err := exec.LookPath(name); err == nil {
+			return p
+		}
+	}
+	return "/bin/sh"
 }

@@ -1,0 +1,215 @@
+/* detached-grid.css — C1: 別窓 Session Grid スタイル / C5: Launcher ダイアログ */
+
+/* ─── grid エリア ──────────────────────────────────────────── */
+
+#detached-grid-area {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(var(--pane-cols, 2), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--pane-rows, 2), minmax(0, 1fr));
+  gap: 2px;
+  background: var(--bg-deep, #050609);
+  overflow: hidden;
+  height: 100%;
+  min-height: 0;
+}
+
+/* body が detached-grid モードのとき #app を全画面にする */
+body.detached-grid-mode #app {
+  height: 100vh;
+  overflow: hidden;
+}
+
+body.detached-grid-mode header {
+  flex-shrink: 0;
+}
+
+/* ─── Hub ボタン（detached header） ────────────────────────── */
+
+.detached-hub-open-btn {
+  padding: 2px 10px;
+  font-size: 0.82rem;
+  background: var(--bg-elev, #181c24);
+  border: 1px solid var(--line, #2a3040);
+  border-radius: 4px;
+  color: var(--accent-text, #93c5fd);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.detached-hub-open-btn:hover {
+  background: var(--accent, #3b82f6);
+  border-color: var(--accent, #3b82f6);
+  color: #fff;
+}
+
+/* ─── pending スロット ─────────────────────────────────────── */
+
+.pane-slot .pane-pending-label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  color: var(--muted, #6b7280);
+  padding: 8px;
+}
+
+/* ─── C5: Detached Grid Launcher ダイアログ ─────────────────── */
+
+.detached-grid-launcher-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9000;
+}
+
+.dgl-dialog {
+  background: var(--bg-elev, #181c24);
+  border: 1px solid var(--line, #2a3040);
+  border-radius: 8px;
+  min-width: 400px;
+  max-width: 540px;
+  width: 92vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+
+.dgl-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line, #2a3040);
+  flex-shrink: 0;
+}
+
+.dgl-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text, #e2e8f0);
+}
+
+.dgl-close {
+  background: none;
+  border: none;
+  color: var(--muted, #6b7280);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  line-height: 1;
+}
+.dgl-close:hover { background: var(--hover-bg, #2a3040); color: var(--text, #e2e8f0); }
+
+.dgl-body {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* プリセット一覧 */
+.dgl-presets {
+  padding: 8px 10px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dgl-preset-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border-radius: 5px;
+  background: var(--bg-deep, #050609);
+  transition: background 0.12s;
+}
+.dgl-preset-item:hover {
+  background: var(--hover-bg, #1e2534);
+}
+
+.dgl-preset-fav {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted, #6b7280);
+  font-size: 0.85rem;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.dgl-preset-fav.is-fav { color: #f59e0b; }
+.dgl-preset-fav:hover { color: #f59e0b; }
+
+.dgl-preset-label {
+  flex: 1;
+  font-size: 0.82rem;
+  color: var(--text, #e2e8f0);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dgl-preset-badge {
+  font-size: 0.72rem;
+  color: var(--muted, #6b7280);
+  flex-shrink: 0;
+}
+
+.dgl-preset-launch {
+  background: var(--accent, #3b82f6);
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.78rem;
+  padding: 3px 10px;
+  flex-shrink: 0;
+  transition: background 0.12s;
+}
+.dgl-preset-launch:hover { background: var(--accent-hover, #2563eb); }
+
+/* オプション行 */
+.dgl-options {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 10px;
+  align-items: center;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--line, #2a3040);
+}
+
+.dgl-opt-label {
+  font-size: 0.78rem;
+  color: var(--muted, #6b7280);
+  white-space: nowrap;
+}
+
+.dgl-layout-select,
+.dgl-count-input,
+.dgl-cwd-input {
+  background: var(--bg-deep, #050609);
+  border: 1px solid var(--line, #2a3040);
+  border-radius: 4px;
+  color: var(--text, #e2e8f0);
+  font-size: 0.82rem;
+  padding: 3px 7px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dgl-layout-select:focus,
+.dgl-count-input:focus,
+.dgl-cwd-input:focus {
+  outline: 1px solid var(--accent, #3b82f6);
+  border-color: var(--accent, #3b82f6);
+}

@@ -10,6 +10,7 @@
 @import url("/styles/voice.css");
 @import url("/styles/token-statusbar.css");
 @import url("/styles/approval-queue-tab.css");
+@import url("/styles/detached-grid.css");
 
 /* ============================================================
    テーマ変数（Dark / Light）

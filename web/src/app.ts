@@ -9,10 +9,11 @@ import { DEFAULT_QUICK_CMD_1, DEFAULT_QUICK_CMD_2, appConfirm, appConfirmShutdow
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { scheduleDeferredEnter, scheduleAfterOutputSettle } from './app/deferred-enter.js';
-import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, sendBatchChoices, sendMultiSelectChoices, setActionBarFocus, toggleMultiSelectFocused } from './app/approval.js';
+import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, sendBatchChoices, sendMultiSelectChoices, setActionBarFocus, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
+import './app/detached-grid-launcher.js';
 
 export let _userAvatarUrl = '';
 export let _userDisplayName = '';
@@ -184,6 +185,14 @@ export async function doSend(sessionId) {
   // Ollama route セッションで /model 始まりはブロック（spawn 時固定 env と不整合のため）
   if (isOllamaModelCommandBlocked(sessionId, buildSendText())) {
     showToast(t('toast_model_blocked_on_ollama'));
+    return;
+  }
+  // 選択メニュー（claude /model 等・承認ではないカーソル駆動 TUI）表示中は、
+  // チャット入力欄からの素通し注入（末尾 \r）を保留する。注入すると \r が
+  // 現在カーソル選択中の項目を誤確定してしまうため。入力テキストは消さず、
+  // ユーザーは下の action-bar ボタンか端末ペインで選択を解決する。
+  if (isSelectMenuActive(sessionId)) {
+    showToast(t('toast_select_menu_active'));
     return;
   }
   set_lastDoSendAt(Date.now());
@@ -1070,6 +1079,17 @@ inputEl.addEventListener('blur', (e) => {
 
 
 // moved to /app/spawn-panel.js
+
+// C5: Detached Grid Launcher ボタン
+(function () {
+  const launcherBtn = document.getElementById('detached-grid-launcher-btn');
+  if (!launcherBtn) return;
+  launcherBtn.addEventListener('click', () => {
+    if (typeof (window as any).openDetachedGridLauncher === 'function') {
+      (window as any).openDetachedGridLauncher();
+    }
+  });
+})();
 
 (function () {
   const killAllBtn = document.getElementById('kill-all-btn');

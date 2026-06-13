@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { escapeHtml, ti18n } from './util.js';
+import { escapeHtml, ti18n, token } from './util.js';
 import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, favorites, groupOrder, multiQuestionVisibleCache, orderSessions, projectFavorites, saveFavorites, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, terminals } from './state.js';
 import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor, updateInputAffordance } from '../app.js';
 import { attachTerminal, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, updateScrollLockBtn } from './terminal.js';
@@ -155,17 +155,20 @@ export function updateShellBadge(id) {
 // provider 別の quick コマンドボタン制御。
 // Ollama REPL は `/model` を持たず（近いのは `/load`）、Hub 側のスラッシュピッカーも
 // Claude/Codex 専用候補で構成されているため、Ollama セッションでは両方を非活性化する。
+// Shell session も同様に `/model` とスラッシュピッカーを非活性化する。
 // `/clear` は Ollama REPL にも実在し意味も一致するため活性のまま残す。
 export function updateQuickCmdButtons(id) {
   const s = id !== null ? sessions.get(id) : null;
   const provider = s?.provider || '';
   const isOllama = provider === 'ollama';
+  const isShell  = provider === 'shell';
+  const shouldDisable = isOllama || isShell;
   const modelBtn  = document.getElementById('quick-model-btn');
   const pickerBtn = document.getElementById('slash-picker-btn');
   for (const btn of [modelBtn, pickerBtn]) {
     if (!btn) continue;
-    btn.disabled = isOllama;
-    if (isOllama) btn.setAttribute('aria-disabled', 'true');
+    btn.disabled = shouldDisable;
+    if (shouldDisable) btn.setAttribute('aria-disabled', 'true');
     else btn.removeAttribute('aria-disabled');
   }
 }
@@ -449,6 +452,21 @@ export function renderSessionList() {
         }
       });
       header.appendChild(filesBtn);
+
+      // C3: "Open running sessions in grid" ボタン
+      const runningSessionsInGroup = groupSessions.filter(s => s.state === 'running' || s.state === 'waiting' || (s.state || 'standby') === 'standby');
+      if (runningSessionsInGroup.length > 0) {
+        const gridBtn = document.createElement('button');
+        gridBtn.className = 'project-group-grid-btn';
+        gridBtn.textContent = '⊞';
+        gridBtn.title = t('ctx_open_project_in_grid');
+        gridBtn.setAttribute('aria-label', t('ctx_open_project_in_grid'));
+        gridBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openDetachedGridForSessions(runningSessionsInGroup.map(s => s.id));
+        });
+        header.appendChild(gridBtn);
+      }
     }
 
     const runningCount  = groupSessions.filter(s => s.state === 'running').length;
@@ -813,7 +831,25 @@ export function _addSidebarGroupLabels(root) {
   if (firstChild) {
     const starLabel = document.createElement('div');
     starLabel.className = 'sidebar-group-label';
-    starLabel.textContent = '★ ' + (window.t ? window.t('sidebar_favorites', 'Favorites') : 'Favorites');
+    const starText = document.createElement('span');
+    starText.textContent = '★ ' + (window.t ? window.t('sidebar_favorites', 'Favorites') : 'Favorites');
+    starLabel.appendChild(starText);
+
+    // C3: ★ セッションを別窓 Grid で開くボタン
+    const favGridBtn = document.createElement('button');
+    favGridBtn.className = 'sidebar-group-label-grid-btn';
+    favGridBtn.type = 'button';
+    favGridBtn.textContent = '⊞';
+    const favGridLabel = window.t ? window.t('ctx_open_selected_in_grid', 'Open selected in grid') : 'Open selected in grid';
+    favGridBtn.title = favGridLabel;
+    favGridBtn.setAttribute('aria-label', favGridLabel);
+    favGridBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const activeFavIds = favorites.filter(id => sessions.has(id));
+      openDetachedGridForSessions(activeFavIds);
+    });
+    starLabel.appendChild(favGridBtn);
+
     root.insertBefore(starLabel, firstChild);
   }
 
@@ -1117,4 +1153,34 @@ export function render() {
     finally { window._c5SidebarUpdating = false; }
   }
   if (typeof syncElapsedTimer === 'function') syncElapsedTimer();
+}
+
+// ─── C3: Detached Grid 導線ヘルパー ──────────────────────────────────────
+
+/**
+ * session 数からグリッドレイアウト文字列を自動算出する。
+ * 1→1x1, 2→1x2, 3-4→2x2, 5-6→2x3, 7-9→3x3, 10-12→4x3, 13-18→6x3
+ */
+export function calcDetachedLayout(count: number): string {
+  if (count <= 1) return '1x1';
+  if (count <= 2) return '1x2';
+  if (count <= 4) return '2x2';
+  if (count <= 6) return '2x3';
+  if (count <= 9) return '3x3';
+  if (count <= 12) return '4x3';
+  return '6x3';
+}
+
+/**
+ * 指定した session id 群を Detached Grid で別窓に開く。
+ * layout は count から自動算出。
+ */
+export function openDetachedGridForSessions(sessionIds: number[]): void {
+  if (sessionIds.length === 0) return;
+  const layout = calcDetachedLayout(sessionIds.length);
+  const params = new URLSearchParams(window.location.search);
+  const tokenVal = params.get('token') || token;
+  const idsStr = sessionIds.join(',');
+  const url = `/?view=detached-grid&layout=${encodeURIComponent(layout)}&session_ids=${idsStr}&token=${tokenVal}`;
+  window.open(url, '_blank');
 }

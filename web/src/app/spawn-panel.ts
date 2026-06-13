@@ -2,7 +2,7 @@
 import { t } from '../i18n.js';
 import { escapeHtml, showToast, token } from './util.js';
 import { CWD_HISTORY_MAX, STORAGE_CWD_HISTORY_KEY, STORAGE_SPAWN_KEY, setUserPref } from './user-prefs.js';
-import { set_pendingAutoSwitch } from './state.js';
+import { set_pendingAutoSwitch, sessions } from './state.js';
 import { providerIconHtml } from './session-list.js';
 import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 
@@ -31,6 +31,66 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   const spawnModelRefreshBtn = document.getElementById('spawn-model-refresh');
   let codexModelSelection: any = null;
   let claudeModelSelection: any = null;
+
+  // ---- C2: Detached 設定 ----
+  const spawnDetachedOpts   = document.getElementById('spawn-detached-opts');
+  const spawnDetachedPreset = document.getElementById('spawn-detached-preset') as HTMLSelectElement | null;
+  const spawnDetachedPreviewText = document.getElementById('spawn-detached-preview-text');
+
+  function getSpawnOpenTarget(): string {
+    const el = document.querySelector<HTMLInputElement>('input[name="spawn-open-target"]:checked');
+    return el ? el.value : 'hub';
+  }
+
+  function getSpawnGridLayout(): string {
+    const el = document.querySelector<HTMLInputElement>('input[name="spawn-grid-layout"]:checked');
+    return el ? el.value : '1x1';
+  }
+
+  function updateDetachedPreview(): void {
+    if (!spawnDetachedPreviewText) return;
+    const target = getSpawnOpenTarget();
+    if (target !== 'detached') { spawnDetachedPreviewText.textContent = ''; return; }
+    const layout = getSpawnGridLayout();
+    const provider = (spawnProviderEl as HTMLSelectElement).value || 'claude';
+    const preset = spawnDetachedPreset ? spawnDetachedPreset.value : 'single';
+    let desc = '';
+    if (preset === 'project') {
+      desc = t('spawn_preview_project_sessions');
+    } else if (preset === 'multi') {
+      desc = t('spawn_preview_current_multi');
+    } else if (preset === 'claude-shell-2x2') {
+      desc = t('spawn_preview_claude_shell_2x2', { provider });
+    } else if (preset === 'shell-2x2') {
+      desc = t('spawn_preview_shell_2x2');
+    } else if (preset === 'shell-3x3') {
+      desc = t('spawn_preview_shell_3x3');
+    } else if (preset === 'advanced') {
+      desc = t('spawn_preview_advanced');
+    } else {
+      desc = t('spawn_preview_single', { provider, layout });
+    }
+    spawnDetachedPreviewText.textContent = desc;
+  }
+
+  // Open target ラジオボタン変更 → detached opts の表示/非表示 + プレビュー更新
+  document.querySelectorAll<HTMLInputElement>('input[name="spawn-open-target"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      const target = getSpawnOpenTarget();
+      if (spawnDetachedOpts) spawnDetachedOpts.hidden = (target !== 'detached');
+      updateDetachedPreview();
+    });
+  });
+
+  // Grid layout ラジオボタン変更 → プレビュー更新
+  document.querySelectorAll<HTMLInputElement>('input[name="spawn-grid-layout"]').forEach(radio => {
+    radio.addEventListener('change', () => updateDetachedPreview());
+  });
+
+  // Preset 変更 → プレビュー更新
+  if (spawnDetachedPreset) {
+    spawnDetachedPreset.addEventListener('change', () => updateDetachedPreview());
+  }
 
   // /api/models から取得した groups の最新キャッシュ。
   // populateModelDatalist と resolveRoute で共有する。
@@ -359,20 +419,27 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   spawnProviderEl.addEventListener('change', () => {
     updateSpawnProviderIcon();
     const p = spawnProviderEl.value;
+    const isShell = (p === 'shell');
+    // Shell は model input / datalist / provider-specific opts を隠す
+    const modelRow = document.querySelector<HTMLElement>('.spawn-model-row');
+    if (modelRow) modelRow.hidden = isShell;
     document.getElementById('spawn-claude-opts').hidden = (p !== 'claude');
     document.getElementById('spawn-codex-opts').hidden  = (p !== 'codex');
     const claudeNote = document.getElementById('spawn-claude-note');
     const codexNote = document.getElementById('spawn-codex-note');
     const copilotNote = document.getElementById('spawn-copilot-note');
     const cursorAgentNote = document.getElementById('spawn-cursor-agent-note');
+    const shellNote = document.getElementById('spawn-shell-note');
     if (claudeNote) claudeNote.hidden = (p !== 'claude');
     if (codexNote) codexNote.hidden = (p !== 'codex');
     if (copilotNote) copilotNote.hidden = (p !== 'copilot');
     if (cursorAgentNote) cursorAgentNote.hidden = (p !== 'cursor-agent');
+    if (shellNote) shellNote.hidden = !isShell;
     if (p !== 'codex')  codexModelSelection  = null;
     if (p !== 'claude') claudeModelSelection = null;
     populateModelDatalist();
     clearIncompatibleModelForProvider(p);
+    updateDetachedPreview();
   });
   updateSpawnProviderIcon();
 
@@ -416,29 +483,94 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       if (s.provider) {
         spawnProviderEl.value = s.provider;
         const p = s.provider;
+        const isShell = (p === 'shell');
+        const modelRow = document.querySelector<HTMLElement>('.spawn-model-row');
+        if (modelRow) modelRow.hidden = isShell;
         document.getElementById('spawn-claude-opts').hidden = (p !== 'claude');
         document.getElementById('spawn-codex-opts').hidden  = (p !== 'codex');
         const claudeNote = document.getElementById('spawn-claude-note');
         const codexNote = document.getElementById('spawn-codex-note');
         const copilotNote = document.getElementById('spawn-copilot-note');
         const cursorAgentNote = document.getElementById('spawn-cursor-agent-note');
+        const shellNote = document.getElementById('spawn-shell-note');
         if (claudeNote) claudeNote.hidden = (p !== 'claude');
         if (codexNote) codexNote.hidden = (p !== 'codex');
         if (copilotNote) copilotNote.hidden = (p !== 'copilot');
         if (cursorAgentNote) cursorAgentNote.hidden = (p !== 'cursor-agent');
+        if (shellNote) shellNote.hidden = !isShell;
       }
       if (s.cwd)              spawnCwdInput.value = s.cwd;
       if (s.model !== undefined) setSpawnModelValue(s.model);
       if (s.permission_mode)  document.getElementById('spawn-permission-mode').value = s.permission_mode;
       if (s.sandbox)          document.getElementById('spawn-sandbox').value = s.sandbox;
       if (s.ask_for_approval) document.getElementById('spawn-ask-approval').value = s.ask_for_approval;
+      // C2: Detached 設定を復元
+      if (s.open_target) {
+        const radio = document.getElementById(`spawn-target-${s.open_target}`) as HTMLInputElement | null;
+        if (radio && !radio.disabled) {
+          radio.checked = true;
+          if (spawnDetachedOpts) spawnDetachedOpts.hidden = (s.open_target !== 'detached');
+        }
+      }
+      if (s.grid_layout) {
+        const layoutMap: Record<string, string> = { '1x1': '1x1', '1x2': '1x2', '2x2': '2x2', '2x3': '2x3', '3x3': '3x3' };
+        const normalizedLayout = layoutMap[s.grid_layout] || '1x1';
+        const layoutRadio = document.getElementById(`spawn-layout-${normalizedLayout}`) as HTMLInputElement | null;
+        if (layoutRadio) layoutRadio.checked = true;
+      }
+      if (s.detached_preset && spawnDetachedPreset) {
+        spawnDetachedPreset.value = s.detached_preset;
+      }
       updateSpawnProviderIcon();
+      updateDetachedPreview();
       return !!s.cwd;
     } catch (_) { return false; }
   }
 
   function saveSpawnSettings(obj) {
     setUserPref('spawn.defaults', obj);
+  }
+
+  // C2: detached-grid URL を生成して別窓で開く
+  function openDetachedGrid(sessionId: number, layout: string): void {
+    const params = new URLSearchParams(window.location.search);
+    const tokenVal = params.get('token') || token;
+    const url = `/?view=detached-grid&layout=${encodeURIComponent(layout)}&session_ids=${sessionId}&token=${tokenVal}`;
+    window.open(url, '_blank');
+  }
+
+  // C2: spawn 後に新しいセッションが WS 経由で登録されるのを待って別窓を開く。
+  // /api/spawn レスポンスには session_id が含まれないため、spawn 前の最大 ID を
+  // 記録しておき、その後に登録された最新 ID を検出する。
+  function _waitForNewSessionAndOpenGrid(layout: string): void {
+    const prevMax = sessions.size > 0
+      ? Math.max(...Array.from(sessions.keys()))
+      : 0;
+    const TIMEOUT_MS = 8000;
+    const POLL_MS = 200;
+    const deadline = Date.now() + TIMEOUT_MS;
+
+    function poll() {
+      if (sessions.size > 0) {
+        const allIds = Array.from(sessions.keys());
+        const newIds = allIds.filter(id => id > prevMax);
+        if (newIds.length > 0) {
+          const latestId = Math.max(...newIds);
+          openDetachedGrid(latestId, layout);
+          return;
+        }
+      }
+      if (Date.now() < deadline) {
+        setTimeout(poll, POLL_MS);
+      } else {
+        // タイムアウト: 最後に登録されたセッションを使う
+        if (sessions.size > 0) {
+          const latestId = Math.max(...Array.from(sessions.keys()));
+          openDetachedGrid(latestId, layout);
+        }
+      }
+    }
+    setTimeout(poll, POLL_MS);
   }
 
   function loadCwdHistory() {
@@ -805,9 +937,11 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         } catch (_) {}
       }
 
-      const bodyObj: any = { provider, cwd, model, label };
+      // Shell は model / route / permission 系フィールドを送らない
+      const bodyObj: any = { provider, cwd, label };
+      if (provider !== 'shell') bodyObj.model = model;
       if (utf8Session) bodyObj.utf8_session = true;
-      if (route) bodyObj.route = route;
+      if (provider !== 'shell' && route) bodyObj.route = route;
       if (provider === 'claude') {
         const picked = claudeModelSelection;
         const permMode = document.getElementById('spawn-permission-mode').value;
@@ -872,10 +1006,16 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         // そのセッション内で /model が blocked になる罠を踏むため。
         // Claude/Codex の純正モデル選択は引き続き sticky に残す。
         const persistedModel = route === 'ollama' ? '' : model;
+        const openTarget = getSpawnOpenTarget();
+        const gridLayout = getSpawnGridLayout();
+        const detachedPreset = spawnDetachedPreset ? spawnDetachedPreset.value : 'single';
         saveSpawnSettings({
           provider,
           cwd,
           model: persistedModel,
+          open_target: openTarget,
+          grid_layout: gridLayout,
+          detached_preset: detachedPreset,
           ...(provider === 'claude' ? { permission_mode: bodyObj.permission_mode } : {}),
           ...(provider === 'codex'  ? { sandbox: bodyObj.sandbox, ask_for_approval: bodyObj.ask_for_approval } : {}),
         });
@@ -883,7 +1023,61 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         codexModelSelection  = null;
         claudeModelSelection = null;
         newSessionPanel.hidden = true;
-        set_pendingAutoSwitch(true);
+
+        // C2 / C5: Detached window 選択時 — preset に応じた起動フローを実行する
+        if (openTarget === 'detached') {
+          if (detachedPreset === 'project') {
+            // project プリセット: 現在の provider のプロジェクトグループのセッションを別窓表示
+            if (typeof (window as any).openDetachedGridLauncher === 'function') {
+              (window as any).openDetachedGridLauncher({ cwd });
+            }
+          } else if (detachedPreset === 'multi') {
+            // multi プリセット: 現在の Multi layout のセッションを別窓へ切り出す
+            if (typeof (window as any).launchDetachedPreset === 'function') {
+              (window as any).launchDetachedPreset({ presetId: 'current-multi', layout: gridLayout }).catch(() => {});
+            }
+          } else if (detachedPreset === 'claude-shell-2x2') {
+            // AI + Shell 2x2: 起動した AI session + Shell 3枚で grid を開く
+            if (typeof (window as any).launchDetachedPreset === 'function') {
+              (window as any).launchDetachedPreset({
+                presetId: 'claude+shell-2x2',
+                layout: gridLayout,
+                count: 4,
+                cwd,
+                provider,
+              }).catch(() => {});
+            }
+          } else if (detachedPreset === 'shell-2x2') {
+            if (typeof (window as any).launchDetachedPreset === 'function') {
+              (window as any).launchDetachedPreset({
+                presetId: 'shell-2x2',
+                layout: '2x2',
+                count: 4,
+                cwd,
+              }).catch(() => {});
+            }
+          } else if (detachedPreset === 'shell-3x3') {
+            if (typeof (window as any).launchDetachedPreset === 'function') {
+              (window as any).launchDetachedPreset({
+                presetId: 'shell-3x3',
+                layout: '3x3',
+                count: 9,
+                cwd,
+              }).catch(() => {});
+            }
+          } else if (detachedPreset === 'advanced') {
+            // advanced: Launcher ダイアログを開く
+            if (typeof (window as any).openDetachedGridLauncher === 'function') {
+              (window as any).openDetachedGridLauncher({ cwd });
+            }
+          } else {
+            // single (デフォルト): 新しいセッションを別窓 1x1 で表示
+            _waitForNewSessionAndOpenGrid(gridLayout);
+          }
+          set_pendingAutoSwitch(false);
+        } else {
+          set_pendingAutoSwitch(true);
+        }
       } else {
         alert(t('spawn_failed') + await res.text());
       }
