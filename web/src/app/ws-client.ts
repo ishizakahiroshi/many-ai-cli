@@ -4,7 +4,7 @@ import { showToast, token } from './util.js';
 import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, approvalVisibleCache, autoDismissTimers, chatHistory, deriveProjectKeyFromCwd, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, multiQuestionLatchAt, multiQuestionVisibleCache, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
 import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLocalSessionHistory, resetLocalSessionHistory, updateInputAffordance } from '../app.js';
 import { activateSession, render, renderSessionList, renderSessionStateUpdate, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
-import { applyRemotePtyResize, ensureTerminal, queuePendingTerminalChunk, writePTYChunk } from './terminal.js';
+import { applyRemotePtyResize, ensureTerminal, queuePendingTerminalChunk, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup } from './settings.js';
 import { setMultiQuestionBannerVisible } from './approval-ui.js';
 import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, hideActionBar, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
@@ -362,7 +362,7 @@ export function _connectWs() {
     }
     sessions.set(m.session_id, cur);
     // 実行中⇄アイドルの遷移をアクティブセッションの入力欄／送信ボタンへ反映する
-    if (m.state && m.session_id === activeSessionId) updateInputAffordance();
+    if (m.state && m.session_id === activeSessionId) { updateInputAffordance(); syncLiveStatusDomForActive(); }
     if (!isNew && beforeLayout === sessionLayoutSnapshot(cur) && (m.state || m.last_output_at)) {
       fastRenderSessionId = m.session_id;
     }
@@ -394,7 +394,7 @@ export function _connectWs() {
       s.state = m.state || 'disconnected';
       if (m.reason) s.end_reason = m.reason;
     }
-    if (m.session_id === activeSessionId) updateInputAffordance();
+    if (m.session_id === activeSessionId) { updateInputAffordance(); syncLiveStatusDomForActive(); }
     cancelApprovalHintConfirm(m.session_id);
     approvalVisibleCache.delete(m.session_id);
     if (multiQuestionVisibleCache.delete(m.session_id) && m.session_id === activeSessionId) {

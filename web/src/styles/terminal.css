@@ -100,12 +100,10 @@
   z-index: 10;
 }
 /* スピナー等のライブ進捗行（xterm へ描かないステータス更新の抽出表示）。
-   右下のスクロールボタン（right:14px）と重ならないよう右側に余白を空ける。 */
+   入力欄の真上に固定する帯。端末の中身に被らず、視線が集まる入力欄付近で
+   「動いているか／止まったか」を常に確認できる位置に置く。 */
 #terminal-live-status {
-  position: absolute;
-  left: 10px;
-  right: 96px;
-  bottom: 10px;
+  margin: 0 12px 6px;
   z-index: 15;
   background: rgba(13, 17, 23, 0.82);
   color: rgba(147, 197, 253, 0.92);
@@ -118,7 +116,29 @@
   overflow: hidden;
   pointer-events: none;
   user-select: none;
-  backdrop-filter: blur(2px);
+  transition: color 0.25s ease, border-color 0.25s ease, opacity 0.25s ease;
+}
+/* 待機表示(idle): 更新が途切れたらグレーアウトしてスピナーを止め、枠は残したまま
+   「もう動いていない＝終わっている」を明示する（消えない）。 */
+#terminal-live-status.idle {
+  color: rgba(148, 163, 184, 0.78);
+  border-color: rgba(100, 116, 139, 0.38);
+  opacity: 0.82;
+}
+#terminal-live-status.idle .live-spinner {
+  animation: none;
+  border-color: rgba(100, 116, 139, 0.45);
+  border-top-color: rgba(100, 116, 139, 0.45);
+}
+/* 承認待ち(waiting): アンバーで目立たせる（枠は残しスピナーは止める）。 */
+#terminal-live-status.waiting {
+  color: rgba(251, 191, 36, 0.95);
+  border-color: rgba(217, 119, 6, 0.5);
+}
+#terminal-live-status.waiting .live-spinner {
+  animation: none;
+  border-color: rgba(217, 119, 6, 0.45);
+  border-top-color: rgba(251, 191, 36, 0.9);
 }
 /* hidden 属性より id セレクタが強いため、:not([hidden]) でのみ flex 化して非表示を保つ */
 #terminal-live-status:not([hidden]) {

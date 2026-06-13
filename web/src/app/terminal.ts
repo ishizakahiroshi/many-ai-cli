@@ -1342,7 +1342,8 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
 // ── スピナー等のライブ進捗行 ───────────────────────────────────────────────
 // filterCursorHideShowBlocksForDisplay が破棄するステータスバーブロックから
 // 可読テキストを取り出し、#terminal-live-status へ出す。スピナーは毎秒数回
-// 更新されるため、更新が LIVE_STATUS_HIDE_MS 途切れたら停止とみなして消す。
+// 更新されるため、更新が LIVE_STATUS_HIDE_MS 途切れたら稼働中→待機表示(idle)へ移す。
+// 待機表示でも枠は消さず常時残し、「何も送られていない＝終わっている」を一目で分かるようにする。
 const LIVE_STATUS_HIDE_MS = 1500;
 // ライブステータス表示（#terminal-live-status）の有効/無効。
 // 以前はステータス更新ブロックを「断片で丸ごと上書き」していたため `·ii` / `+49`
@@ -1448,37 +1449,60 @@ export function setSessionLiveStatus(id, text) {
   const t = terminals.get(id);
   if (!t) return;
   if (text) t.liveStatusText = text; // 意味のある全文だけ差し替え（記号だけの中間フレームでは前回値維持）
-  // フレームが来るたび hide タイマーをリセット → 更新が途切れて初めて窓を消す
+  // フレームが来た＝稼働中。判定タイマーをリセットして「稼働中」表示へ。
   if (t.liveStatusHideTimer) clearTimeout(t.liveStatusHideTimer);
+  // 更新が LIVE_STATUS_HIDE_MS 途切れたらセッション状態ベースの表示へ。枠は消さず常時残す
+  // （何も送られていない＝終わっている／承認待ち等を一目で判別できるようにする）。
   t.liveStatusHideTimer = setTimeout(() => {
     const cur = terminals.get(id);
-    if (cur) { cur.liveStatusText = ''; cur.liveStatusHideTimer = null; cur.liveLineRow = null; cur.liveLineCells = []; }
-    if (id === activeSessionId) renderLiveStatusDom('', false);
+    if (!cur) return;
+    cur.liveStatusHideTimer = null;
+    if (id === activeSessionId) { const v = liveStatusViewFor(id); renderLiveStatusDom(v.mode, v.text); }
   }, LIVE_STATUS_HIDE_MS);
-  if (id === activeSessionId) renderLiveStatusDom(t.liveStatusText || '', true);
+  if (id === activeSessionId) renderLiveStatusDom('active', t.liveStatusText || '');
 }
 
-// ライブ進捗窓の描画。visible=true の間は CSS で .live-spinner が回り続ける。
-function renderLiveStatusDom(text, visible) {
+// 現在のピル表示（mode + ラベル）を決める。フレーム流入中はライブテキスト、
+// 途切れていればセッション状態（running/waiting/standby/error/disconnected）からラベルを引く。
+// これにより「実行中／承認待ち／待機中（＝終わってる）／切断」がピルだけで分かる。
+function liveStatusViewFor(sid) {
+  const term = terminals.get(sid);
+  const streaming = !!(term && term.liveStatusHideTimer);
+  if (streaming) return { mode: 'active', text: (term && term.liveStatusText) || '' };
+  const state = (sessions.get(sid)?.state as string) || 'standby';
+  switch (state) {
+    case 'running':      return { mode: 'active',  text: ti18n('live_status_running') };
+    case 'waiting':      return { mode: 'waiting', text: ti18n('live_status_waiting') };
+    case 'error':        return { mode: 'idle',    text: ti18n('live_status_error') };
+    case 'disconnected': return { mode: 'idle',    text: ti18n('live_status_disconnected') };
+    default:             return { mode: 'idle',    text: ti18n('live_status_idle') }; // standby ＝ 待機中（送信待ち）
+  }
+}
+
+// ライブ進捗窓の描画。mode: 'active'（青・スピナー回転）/ 'waiting'（アンバー・承認待ち）/
+// 'idle'（グレー・スピナー停止・状態ラベル／枠は残す）/ 'hidden'（アクティブセッション無し時のみ）。
+function renderLiveStatusDom(mode, text) {
   const el = document.getElementById('terminal-live-status');
   if (!el) return;
   const textEl = el.querySelector('.live-status-text') as HTMLElement | null;
-  if (!LIVE_STATUS_ENABLED || !visible) {
+  if (!LIVE_STATUS_ENABLED || mode === 'hidden') {
     el.hidden = true;
+    el.classList.remove('idle', 'waiting');
     if (textEl) textEl.textContent = '';
     return;
   }
   el.hidden = false;
+  el.classList.toggle('idle', mode === 'idle');
+  el.classList.toggle('waiting', mode === 'waiting');
   if (textEl && textEl.textContent !== text) textEl.textContent = text || '';
 }
 
-// セッション切替時に、アクティブセッションの最新ライブ進捗を DOM へ反映する。
-// 非アクティブ中も hide タイマーは各 terminal で走り続けるため、
-// バックグラウンドで稼働中のセッション（hide タイマー稼働中）へ切り替えれば現在のスピナーが出る。
+// セッション切替・状態変化時に、アクティブセッションの現在状態を DOM へ反映する。
+// 枠は常時表示。アクティブセッションが無いときだけ枠ごと消す(hidden)。
 export function syncLiveStatusDomForActive() {
-  const t = activeSessionId !== null ? terminals.get(activeSessionId) : null;
-  const active = !!(t && t.liveStatusHideTimer);
-  renderLiveStatusDom(t ? (t.liveStatusText || '') : '', active);
+  if (activeSessionId === null || !terminals.get(activeSessionId)) { renderLiveStatusDom('hidden', ''); return; }
+  const v = liveStatusViewFor(activeSessionId);
+  renderLiveStatusDom(v.mode, v.text);
 }
 
 // \r（CR）で行頭へ戻ったあと行末を消去しないと、短い上書きテキストの後ろに

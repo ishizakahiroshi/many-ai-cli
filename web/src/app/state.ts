@@ -23,6 +23,8 @@ export interface TerminalEntry {
   synchronizedUpdateFilterCarry?: Uint8Array;
   screenClearSeqCarry?: Uint8Array;
   liveStatusText?: string;
+  // 更新が途切れたら稼働中→待機表示(idle)へ切替えるためのタイマー。
+  // タイマーが生きている間＝稼働中、null＝待機（idle）。枠自体は消さず常時表示する。
   liveStatusHideTimer?: ReturnType<typeof setTimeout> | null;
   // ライブ進捗行の列アドレス再構成用（部分更新を 1 行へ組み立てる）
   liveLineRow?: number | null;   // 現在組み立て中の行番号（端末スクロールで動く）

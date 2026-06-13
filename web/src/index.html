@@ -777,10 +777,6 @@
         <!-- C4: セッション切替スワイプ用ハンドル帯（xterm.js と干渉しない上部専用領域） -->
         <div id="swipe-session-handle" aria-hidden="true"></div>
         <div id="terminal-area"></div>
-        <!-- スピナー等のステータスバー更新（絶対位置・改行なし）は scrollback 汚染防止のため
-             xterm へは描かず破棄するが、抽出したテキストをこのライブ行に出して進捗を可視化する。
-             更新が一定時間止まると自動で hidden に戻る（terminal.ts の setSessionLiveStatus）。 -->
-        <div id="terminal-live-status" hidden><span class="live-spinner" aria-hidden="true"></span><span class="live-status-text"></span></div>
         <div id="terminal-readonly-badge"><span data-i18n="terminal_output">Terminal Output</span><span id="terminal-shell-info"></span></div>
         <button id="scroll-to-top-btn" data-i18n-tooltip="scroll_to_top_tooltip" data-i18n="scroll_to_top" hidden>↑ up</button>
         <button id="scroll-to-bottom-btn" data-i18n-tooltip="scroll_to_bottom_tooltip" data-i18n="scroll_to_bottom" hidden>↓ down</button>
@@ -838,6 +834,11 @@
           <button id="voice-cancel-btn" class="voice-action-btn voice-cancel-btn" data-i18n-tooltip="voice_cancel_tooltip">✕</button>
           <button id="voice-confirm-btn" class="voice-action-btn voice-confirm-btn" data-i18n-tooltip="voice_confirm_tooltip">✓</button>
         </div>
+        <!-- ライブ進捗ピル（旧 #terminal-area 内 absolute から入力欄直上へ移設）。
+             CLI のステータス更新を抽出して表示し、稼働中はスピナーが回る。更新が途切れると
+             グレーの待機表示(idle)へ変わるが枠は消さず常時残す＝「何も送られていない＝終わってる」
+             を一目で判別できる（terminal.ts の setSessionLiveStatus / renderLiveStatusDom）。 -->
+        <div id="terminal-live-status" hidden><span class="live-spinner" aria-hidden="true"></span><span class="live-status-text"></span></div>
         <div id="input-bar">
           <div id="input-wrap">
             <button id="tools-flip-btn" class="quick-cmd-btn" data-i18n-tooltip="tools_flip_tooltip" aria-label="Toggle tools position">⇄</button>
