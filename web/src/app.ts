@@ -9,7 +9,7 @@ import { DEFAULT_QUICK_CMD_1, DEFAULT_QUICK_CMD_2, appConfirm, appConfirmShutdow
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { scheduleDeferredEnter, scheduleAfterOutputSettle } from './app/deferred-enter.js';
-import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, toggleMultiSelectFocused } from './app/approval.js';
+import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
@@ -235,8 +235,12 @@ export async function doSend(sessionId) {
   // 前倒し発火し、内側 CLI がペースト取り込み中（「Pasting…」）のまま \r を吸収して固着する。
   // injectPrefix がある複数行ペーストでは、まず画像 inject だけ送り、取り込みが落ち着いてから
   // ペースト本体＋確定 \r を送る（下記 needPasteSplit 分岐）。それ以外は従来通り 1 書き込みにまとめる。
+  // ただし shell provider（素のシェル）は Ink 入力欄を持たずシェル自身が行編集を担うため、
+  // \x15 を本文と同一書き込みで前置すると PowerShell 等で行クリアにならずリテラル ^U が混入し
+  // コマンドが壊れる（例: codex → ^Ucodex）。shell 宛ては前置せずそのまま送る。
+  const clearPrefix = isShellProvider(sessions.get(sessionId)?.provider || '') ? '' : '\x15';
   const needPasteSplit = deferEnter && injectPrefix !== '';
-  const textToSend = needPasteSplit ? ('\x15' + injectPrefix) : ('\x15' + injectPrefix + textPart);
+  const textToSend = needPasteSplit ? (clearPrefix + injectPrefix) : (clearPrefix + injectPrefix + textPart);
   clearInput();
   hideSlashMenu();
   // 送信したら次のプロンプトは別物の可能性があるため dismiss フラグ・multiQ ラッチをクリア
@@ -833,7 +837,9 @@ export function sendQuickCommand(sessionId, cmd) {
   // 内側 CLI がビジー等で入力行に残骸があると、クイックコマンドが既存テキストへ
   // 連結され（例: "...質問/clear/clear"）独立コマンドにならない。Ctrl+U(\x15) で
   // 入力行を一度クリアしてから送り、連結を物理的に防ぐ。
-  sendSubmittedText(sessionId, `\x15${cmd}\r`);
+  // shell provider は doSend と同理由で \x15 を前置しない（PowerShell 等で ^U 混入を防ぐ）。
+  const qcPrefix = isShellProvider(sessions.get(sessionId)?.provider || '') ? '' : '\x15';
+  sendSubmittedText(sessionId, `${qcPrefix}${cmd}\r`);
   focusInputForTerminalKeys();
 }
 

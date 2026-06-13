@@ -553,12 +553,23 @@ func (s *Store) ClearSessionHistory(liveSessionID int) {
 		return
 	}
 	defer tx.Rollback()
+	// 各 DELETE のエラーを拾い、いずれか失敗したら Commit せず return（defer Rollback に委ねる）。
+	// 途中失敗を無視して Commit すると messages_fts と messages が部分削除のまま不整合になり、
+	// 全文検索が削除済みメッセージにヒットし得る。
 	if s.ftsEnabled {
-		_, _ = tx.ExecContext(ctx, `DELETE FROM messages_fts WHERE rowid IN (SELECT id FROM messages WHERE session_id=?)`, id)
+		if _, err := tx.ExecContext(ctx, `DELETE FROM messages_fts WHERE rowid IN (SELECT id FROM messages WHERE session_id=?)`, id); err != nil {
+			return
+		}
 	}
-	_, _ = tx.ExecContext(ctx, `DELETE FROM messages WHERE session_id=?`, id)
-	_, _ = tx.ExecContext(ctx, `DELETE FROM events WHERE session_id=?`, id)
-	_, _ = tx.ExecContext(ctx, `DELETE FROM approvals WHERE session_id=?`, id)
+	if _, err := tx.ExecContext(ctx, `DELETE FROM messages WHERE session_id=?`, id); err != nil {
+		return
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM events WHERE session_id=?`, id); err != nil {
+		return
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM approvals WHERE session_id=?`, id); err != nil {
+		return
+	}
 	_ = tx.Commit()
 }
 
