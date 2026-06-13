@@ -2,7 +2,11 @@
 
 package hub
 
-import "os/exec"
+import (
+	"os/exec"
+
+	"golang.org/x/sys/windows"
+)
 
 func openDirNative(path string) error {
 	return exec.Command("explorer.exe", path).Start()
@@ -12,21 +16,28 @@ func openRevealNative(path string) error {
 	return exec.Command("explorer.exe", "/select,"+path).Start()
 }
 
-func openFileNative(filePath, app string) error {
-	if app != "" {
-		return exec.Command(app, filePath).Start()
-	}
-	// app 未指定は「OS 既定の関連付けアプリで開く」。explorer.exe <path>（/select なし）は
-	// 既定ハンドラへディスパッチするため .html ならブラウザ等で開く。shell を介さないので
-	// cmd.exe メタ文字リスクもない。フォルダ内で選択表示したい場合は openRevealNative を使う。
-	return exec.Command("explorer.exe", filePath).Start()
+func openFileNative(filePath string) error {
+	// 「OS 既定の関連付けアプリで開く」。
+	// explorer.exe <path> は画像など一部のファイル種別で既定アプリを起動せず
+	// 親フォルダを開いてしまう（"画像を開く" を押すとフォルダが開く不具合の原因）。
+	// ShellExecute の "open" 動詞なら既定ハンドラへ確実にディスパッチでき、
+	// shell を介さないので cmd.exe メタ文字リスクもない。
+	// フォルダ内で選択表示したい場合は openRevealNative を使う。
+	return shellExecuteOpen(filePath)
 }
 
-func effectiveFileOpenAppDescription(app string) string {
-	if app != "" {
-		return app + " <path>"
+// shellExecuteOpen は ShellExecute("open") で path を OS 既定の関連付けで開く。
+// ファイル・フォルダ・URL いずれにも使え、戻りは即時（プロセス終了を待たない）。
+func shellExecuteOpen(path string) error {
+	verb, err := windows.UTF16PtrFromString("open")
+	if err != nil {
+		return err
 	}
-	return `explorer.exe <path>`
+	file, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return err
+	}
+	return windows.ShellExecute(0, verb, file, nil, nil, windows.SW_SHOWNORMAL)
 }
 
 func openTerminalNative(dir, app string) error {

@@ -430,16 +430,7 @@
       <details class="settings-section" data-section="file-open">
         <summary class="settings-section-title"><span data-i18n="settings_file_open_title">ファイルリンク</span></summary>
         <div class="settings-section-body">
-          <div class="settings-note" data-i18n="settings_file_open_desc">ターミナルのファイルパスをホバーしたとき、テキスト系は指定アプリ、画像・その他は OS 既定アプリで開きます。</div>
-          <div class="settings-row">
-            <span class="settings-label" data-i18n="settings_file_open_app">テキストを開くアプリ</span>
-          </div>
-          <div class="settings-input-row">
-            <input id="settings-file-open-app" type="text" class="settings-input-url" data-i18n-placeholder="settings_file_open_app_placeholder">
-            <button id="settings-file-open-app-browse" class="settings-link-btn" data-i18n="settings_file_open_app_browse">参照...</button>
-          </div>
-          <div class="settings-note" data-i18n="settings_file_open_app_desc">テキスト系のみ使用。空欄 = OS デフォルト</div>
-          <div id="settings-file-open-app-effective" class="settings-effective-command"></div>
+          <div class="settings-note" data-i18n="settings_file_open_desc">ターミナルや Files のファイルパスは OS 既定の関連付けアプリで開きます。ターミナルアプリのみ指定できます。</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_terminal_app">ターミナルアプリ</span>
           </div>
@@ -789,7 +780,7 @@
         <!-- スピナー等のステータスバー更新（絶対位置・改行なし）は scrollback 汚染防止のため
              xterm へは描かず破棄するが、抽出したテキストをこのライブ行に出して進捗を可視化する。
              更新が一定時間止まると自動で hidden に戻る（terminal.ts の setSessionLiveStatus）。 -->
-        <div id="terminal-live-status" hidden></div>
+        <div id="terminal-live-status" hidden><span class="live-spinner" aria-hidden="true"></span><span class="live-status-text"></span></div>
         <div id="terminal-readonly-badge"><span data-i18n="terminal_output">Terminal Output</span><span id="terminal-shell-info"></span></div>
         <button id="scroll-to-top-btn" data-i18n-tooltip="scroll_to_top_tooltip" data-i18n="scroll_to_top" hidden>↑ up</button>
         <button id="scroll-to-bottom-btn" data-i18n-tooltip="scroll_to_bottom_tooltip" data-i18n="scroll_to_bottom" hidden>↓ down</button>
@@ -1072,6 +1063,7 @@
     <span class="tsb-seg tsb-seg-ctx"></span>
     <span class="tsb-seg tsb-seg-tok"></span>
     <span class="tsb-seg tsb-seg-cache"></span>
+    <span class="tsb-seg tsb-seg-compact"></span>
     <span class="tsb-seg tsb-seg-cost"></span>
     <span class="tsb-seg tsb-seg-burn"></span>
     <span class="tsb-seg tsb-seg-elapsed"></span>

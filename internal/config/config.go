@@ -462,7 +462,6 @@ type Config struct {
 	ModelsSource           string                 `yaml:"models_source,omitempty" json:"models_source,omitempty"`
 	ApprovalPatternSources ApprovalPatternSources `yaml:"approval_pattern_sources,omitempty" json:"approval_pattern_sources,omitempty"`
 	ApprovalProfiles       ApprovalProfiles       `yaml:"approval_profiles,omitempty"        json:"approval_profiles,omitempty"`
-	FileOpenApp            string                 `yaml:"file_open_app,omitempty"`
 	TerminalApp            string                 `yaml:"terminal_app,omitempty"`
 	Token                  string                 `yaml:"token"`
 	LocalModels            []LocalModel           `yaml:"local_models,omitempty" json:"local_models,omitempty"`

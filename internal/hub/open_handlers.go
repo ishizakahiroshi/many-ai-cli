@@ -41,24 +41,6 @@ func (s *Server) decodeAllowedPath(w http.ResponseWriter, r *http.Request) (stri
 	return body.Path, true
 }
 
-func (s *Server) handleOpenFile(w http.ResponseWriter, r *http.Request) {
-	if !s.guard(w, r, http.MethodPost) {
-		return
-	}
-	path, ok := s.decodeAllowedPath(w, r)
-	if !ok {
-		return
-	}
-	s.cfgMu.Lock()
-	app := s.cfg.FileOpenApp
-	s.cfgMu.Unlock()
-	if err := openFileNative(path, app); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "open_failed", err.Error())
-		return
-	}
-	writeJSON(w, map[string]any{"ok": true})
-}
-
 func (s *Server) handleOpenDefaultFile(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
 		return
@@ -67,7 +49,7 @@ func (s *Server) handleOpenDefaultFile(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := openFileNative(path, ""); err != nil {
+	if err := openFileNative(path); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "open_failed", err.Error())
 		return
 	}
@@ -106,42 +88,6 @@ func (s *Server) handleOpenTerminal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true})
-}
-
-func (s *Server) handleFileOpenApp(w http.ResponseWriter, r *http.Request) {
-	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
-		return
-	}
-	switch r.Method {
-	case http.MethodGet:
-		s.cfgMu.Lock()
-		app := s.cfg.FileOpenApp
-		s.cfgMu.Unlock()
-		writeJSON(w, map[string]string{
-			"file_open_app":           app,
-			"effective_file_open_app": effectiveFileOpenAppDescription(app),
-		})
-	case http.MethodPost:
-		var body struct {
-			FileOpenApp string `json:"file_open_app"`
-		}
-		if !decodeJSON(w, r, &body) {
-			return
-		}
-		app := strings.TrimSpace(body.FileOpenApp)
-		s.cfgMu.Lock()
-		s.cfg.FileOpenApp = app
-		s.cfgMu.Unlock()
-		if err := s.persistConfig(); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "save_failed", errorDetail("save failed", err))
-			return
-		}
-		writeJSON(w, map[string]any{
-			"ok":                      true,
-			"file_open_app":           app,
-			"effective_file_open_app": effectiveFileOpenAppDescription(app),
-		})
-	}
 }
 
 func (s *Server) handleTerminalApp(w http.ResponseWriter, r *http.Request) {

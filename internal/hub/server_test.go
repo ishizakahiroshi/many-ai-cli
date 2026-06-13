@@ -23,6 +23,7 @@ func newTestServer() *Server {
 		sessions:            map[int]*session{},
 		wrappers:            map[int]*wrapperConn{},
 		uis:                 map[*websocket.Conn]*uiConn{},
+		pendingInput:        map[int][]string{},
 		slashCmdCache:       map[string]*slashCmdCacheEntry{},
 		approvalRuleTargets: map[string]approvalRuleTarget{},
 		usageLinkCache:      newUsageLinkCache(),

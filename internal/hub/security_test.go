@@ -736,7 +736,7 @@ func TestCheckOpenPathAllowedUsesSessionCWD(t *testing.T) {
 	s.sessions[7] = &session{ID: 7, CWD: sessionRoot}
 	s.sessionsMu.Unlock()
 
-	reqWithoutSession := httptest.NewRequest(http.MethodPost, "/api/open-file?token=tok", nil)
+	reqWithoutSession := httptest.NewRequest(http.MethodPost, "/api/open-default-file?token=tok", nil)
 	wWithoutSession := httptest.NewRecorder()
 	if s.checkOpenPathAllowed(wWithoutSession, reqWithoutSession, target) {
 		t.Fatal("expected path outside Hub cwd to be rejected without session scope")
@@ -745,7 +745,7 @@ func TestCheckOpenPathAllowedUsesSessionCWD(t *testing.T) {
 		t.Fatalf("status without session = %d, want %d: %s", wWithoutSession.Code, http.StatusForbidden, wWithoutSession.Body.String())
 	}
 
-	reqWithSession := httptest.NewRequest(http.MethodPost, "/api/open-file?token=tok&session=7", nil)
+	reqWithSession := httptest.NewRequest(http.MethodPost, "/api/open-default-file?token=tok&session=7", nil)
 	wWithSession := httptest.NewRecorder()
 	if !s.checkOpenPathAllowed(wWithSession, reqWithSession, target) {
 		t.Fatalf("expected path under session cwd to be allowed, status=%d body=%s", wWithSession.Code, wWithSession.Body.String())

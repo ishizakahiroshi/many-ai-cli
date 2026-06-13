@@ -2176,11 +2176,11 @@ export const FilesPreview = (function () {
     toolbar.appendChild(spacer);
 
     // ツールバーボタン群（ファイル選択後に有効化）
-    const openEditorBtn = document.createElement('button');
-    openEditorBtn.className = 'files-preview-toolbar-btn';
-    openEditorBtn.title = t('files_preview_open_editor_tooltip') || 'Open in editor';
-    openEditorBtn.textContent = '📝';
-    openEditorBtn.disabled = true;
+    const openExternalBtn = document.createElement('button');
+    openExternalBtn.className = 'files-preview-toolbar-btn';
+    openExternalBtn.title = t('link_open_default') || 'Open with default app';
+    openExternalBtn.textContent = '🚀';
+    openExternalBtn.disabled = true;
 
     const openFolderBtn = document.createElement('button');
     openFolderBtn.className = 'files-preview-toolbar-btn';
@@ -2219,7 +2219,7 @@ export const FilesPreview = (function () {
     closeBtn.textContent = '×';
     closeBtn.disabled = true;
 
-    toolbar.appendChild(openEditorBtn);
+    toolbar.appendChild(openExternalBtn);
     toolbar.appendChild(openFolderBtn);
     toolbar.appendChild(copyPathBtn);
     toolbar.appendChild(searchBtn);
@@ -2411,7 +2411,7 @@ export const FilesPreview = (function () {
       // ツールバーボタン復元
       editBtn.hidden = true;
       editBtn.disabled = true;
-      [openEditorBtn, openFolderBtn, copyPathBtn, searchBtn, reloadBtn].forEach(b => { b.disabled = !currentAbsPath; });
+      [openExternalBtn, openFolderBtn, copyPathBtn, searchBtn, reloadBtn].forEach(b => { b.disabled = !currentAbsPath; });
       searchBtn.disabled = !currentAbsPath || isMediaPath(currentAbsPath);
     }
 
@@ -2425,7 +2425,7 @@ export const FilesPreview = (function () {
       editBaseMtime = mtime;
 
       // ツールバーボタンを無効化（編集中は検索・リロード等を封じる）
-      [openEditorBtn, openFolderBtn, copyPathBtn, searchBtn, reloadBtn, editBtn].forEach(b => { b.disabled = true; });
+      [openExternalBtn, openFolderBtn, copyPathBtn, searchBtn, reloadBtn, editBtn].forEach(b => { b.disabled = true; });
 
       // contentEl を textarea に切り替え
       contentEl.innerHTML = '';
@@ -2685,8 +2685,8 @@ export const FilesPreview = (function () {
     }
 
     // ──── ボタン Wire-up ────
-    openEditorBtn.addEventListener('click', () => {
-      if (currentAbsPath) callOpenApi('/api/open-file', currentAbsPath, 'link_open_error', sessionId);
+    openExternalBtn.addEventListener('click', () => {
+      if (currentAbsPath) callOpenApi('/api/open-default-file', currentAbsPath, 'link_open_default_error', sessionId);
     });
     openFolderBtn.addEventListener('click', () => {
       if (currentAbsPath) callOpenApi('/api/open-folder', currentAbsPath, 'link_open_error', sessionId);
@@ -2707,7 +2707,7 @@ export const FilesPreview = (function () {
       searchBar.hidden = true;
       editBtn.hidden = true;
       editBtn.disabled = true;
-      [openEditorBtn, openFolderBtn, copyPathBtn, searchBtn, reloadBtn, closeBtn].forEach(b => { b.disabled = true; });
+      [openExternalBtn, openFolderBtn, copyPathBtn, searchBtn, reloadBtn, closeBtn].forEach(b => { b.disabled = true; });
     });
 
     editBtn.addEventListener('click', () => {
@@ -2723,7 +2723,7 @@ export const FilesPreview = (function () {
         currentRelPath = relPath;
         const dispPath = relPath || absPath;
         setBreadcrumb(dispPath, absPath);
-        [openEditorBtn, openFolderBtn, copyPathBtn, searchBtn, reloadBtn, closeBtn].forEach(b => { b.disabled = false; });
+        [openExternalBtn, openFolderBtn, copyPathBtn, searchBtn, reloadBtn, closeBtn].forEach(b => { b.disabled = false; });
         searchBtn.disabled = isMediaPath(absPath);
         // 編集ボタンはロード後に truncated 判定で設定する（初期は非表示）
         editBtn.hidden = true;

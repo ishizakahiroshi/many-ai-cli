@@ -268,6 +268,13 @@ export function _connectWs() {
     return;
   }
 
+  if (m.type === 'input_deferred') {
+    // wrapper 未接続/送信失敗で Hub が入力を保留した。再接続時に自動再送されるが、
+    // ユーザーには「今すぐは届いていない」ことを知らせる。
+    showToast(t('toast_input_deferred', { id: m.session_id }));
+    return;
+  }
+
   if (m.type === 'pty_resize') {
     applyRemotePtyResize(m.session_id, m.cols, m.rows);
     return;

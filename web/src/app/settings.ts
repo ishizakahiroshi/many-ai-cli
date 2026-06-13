@@ -2620,41 +2620,14 @@ window.addEventListener('files-tab-state-changed', () => {
 
 // ---- ファイルリンク設定 ----
 (function () {
-  const fileOpenAppEl     = document.getElementById('settings-file-open-app');
-  const fileOpenBrowseBtn = document.getElementById('settings-file-open-app-browse');
-  const fileOpenEffectiveEl = document.getElementById('settings-file-open-app-effective');
   const terminalAppEl     = document.getElementById('settings-terminal-app');
   const terminalBrowseBtn = document.getElementById('settings-terminal-app-browse');
   const terminalEffectiveEl = document.getElementById('settings-terminal-app-effective');
-  if (!fileOpenAppEl) return;
+  if (!terminalAppEl) return;
 
   function renderEffectiveCommand(el, value) {
     if (!el) return;
     el.textContent = value ? `${t('settings_effective_command')}: ${value}` : '';
-  }
-
-  async function loadFileOpenApp() {
-    try {
-      const res = await fetch(`/api/file-open-app?token=${token}`);
-      if (!res.ok) return;
-      const cfg = await res.json();
-      fileOpenAppEl.value = cfg.file_open_app || '';
-      renderEffectiveCommand(fileOpenEffectiveEl, cfg.effective_file_open_app);
-    } catch (_) {}
-  }
-
-  async function saveFileOpenApp() {
-    try {
-      const res = await fetch(`/api/file-open-app?token=${token}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_open_app: fileOpenAppEl.value.trim() }),
-      });
-      if (res.ok) {
-        const cfg = await res.json();
-        renderEffectiveCommand(fileOpenEffectiveEl, cfg.effective_file_open_app);
-      }
-    } catch (_) {}
   }
 
   async function loadTerminalApp() {
@@ -2681,20 +2654,6 @@ window.addEventListener('files-tab-state-changed', () => {
     } catch (_) {}
   }
 
-  if (fileOpenBrowseBtn) {
-    fileOpenBrowseBtn.addEventListener('click', async () => {
-      fileOpenBrowseBtn.disabled = true;
-      try {
-        const res = await fetch(`/api/pick-file?filter=exe&token=${token}`, { method: 'POST' });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.ok && data.path) fileOpenAppEl.value = data.path;
-        }
-      } catch (_) {}
-      finally { fileOpenBrowseBtn.disabled = false; }
-    });
-  }
-
   if (terminalBrowseBtn) {
     terminalBrowseBtn.addEventListener('click', async () => {
       terminalBrowseBtn.disabled = true;
@@ -2713,7 +2672,6 @@ window.addEventListener('files-tab-state-changed', () => {
   const origSave = window.__settingsSaveAll;
   window.__settingsSaveAll = async () => {
     if (origSave) await origSave();
-    await saveFileOpenApp();
     await saveTerminalApp();
   };
 
@@ -2722,7 +2680,6 @@ window.addEventListener('files-tab-state-changed', () => {
   if (settingsBtn) {
     settingsBtn.addEventListener('click', () => {
       if (!document.getElementById('settings-panel').hidden) {
-        loadFileOpenApp();
         loadTerminalApp();
       }
     });

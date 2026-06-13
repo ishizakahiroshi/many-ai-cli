@@ -33,6 +33,7 @@ export type MessageType =
   | 'approval_cleared'
   | 'approval_consumed'
   | 'approval_patterns_updated'
+  | 'input_deferred'
   | 'attach_request'
   | 'hub_shutdown'
   | 'ping'
@@ -99,6 +100,7 @@ export interface Message {
   tokens_out?: number;
   tokens_cache?: number;
   tokens_total?: number;
+  ctx_window?: number;
   usage_model?: string;
   usage_started_at?: string;
   // C3: git 変更状況メタ（git_checked=true のメッセージのみ有効）

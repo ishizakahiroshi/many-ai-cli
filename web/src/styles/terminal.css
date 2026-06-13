@@ -115,12 +115,38 @@
   padding: 3px 10px;
   border-radius: 5px;
   border: 1px solid rgba(59, 130, 246, 0.35);
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   pointer-events: none;
   user-select: none;
   backdrop-filter: blur(2px);
+}
+/* hidden 属性より id セレクタが強いため、:not([hidden]) でのみ flex 化して非表示を保つ */
+#terminal-live-status:not([hidden]) {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+/* 合成 CSS スピナー（再構成テキストの精度に関係なく、窓が出ている間は必ず回る） */
+.live-spinner {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid rgba(59, 130, 246, 0.25);
+  border-top-color: rgba(147, 197, 253, 0.95);
+  animation: aacli-live-spin 0.8s linear infinite;
+}
+@keyframes aacli-live-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-spinner { animation-duration: 1.6s; }
+}
+.live-status-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .xterm { height: 100%; }
 .xterm-viewport {
