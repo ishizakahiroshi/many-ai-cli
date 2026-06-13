@@ -1,6 +1,8 @@
 **/dist/
 # ビルド時に毎回生成される作業フォルダ（生成物のみ・追跡しない）。
 build/
+# Codex CLI が作業ディレクトリに残す一時フォルダ（go-build-cache / transcript）。
+.codex-tmp/
 web/dist/
 web/node_modules/
 # winres が生成する Windows リソース。リリース時に goreleaser の before hooks で

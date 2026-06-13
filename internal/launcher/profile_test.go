@@ -50,7 +50,7 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 				Name:     "sakura-remote",
 				Type:     ProfileTypeSSH,
 				Mode:     SSHModeServe,
-				Host:     "153.127.0.1",
+				Host:     "198.51.100.10",
 				User:     "ubuntu",
 				SSHPort:  10022,
 				Binary:   "many-ai-cli",
@@ -309,15 +309,15 @@ func TestNormalizeProfile_UserAtHost(t *testing.T) {
 	p := Profile{
 		Name: "remote",
 		Type: ProfileTypeSSH,
-		Host: "ubuntu@153.127.0.1",
+		Host: "ubuntu@198.51.100.10",
 		User: "old-user",
 	}
 	normalizeProfile(&p)
 	if p.User != "ubuntu" {
 		t.Errorf("User: got %q, want %q", p.User, "ubuntu")
 	}
-	if p.Host != "153.127.0.1" {
-		t.Errorf("Host: got %q, want %q", p.Host, "153.127.0.1")
+	if p.Host != "198.51.100.10" {
+		t.Errorf("Host: got %q, want %q", p.Host, "198.51.100.10")
 	}
 }
 
@@ -325,14 +325,14 @@ func TestNormalizeProfile_NoAt(t *testing.T) {
 	p := Profile{
 		Name: "remote",
 		Type: ProfileTypeSSH,
-		Host: "153.127.0.1",
+		Host: "198.51.100.10",
 		User: "ubuntu",
 	}
 	normalizeProfile(&p)
 	if p.User != "ubuntu" {
 		t.Errorf("User should be unchanged: got %q", p.User)
 	}
-	if p.Host != "153.127.0.1" {
+	if p.Host != "198.51.100.10" {
 		t.Errorf("Host should be unchanged: got %q", p.Host)
 	}
 }

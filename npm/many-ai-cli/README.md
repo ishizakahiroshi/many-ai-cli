@@ -41,4 +41,4 @@ Other platforms: download from
 
 ## License
 
-MIT © Hiroshi Ishizaka
+MIT © Hiroshi Ishizaka (ishizakahiroshi)

@@ -117,9 +117,11 @@
 /* バッチ承認（複数質問の一括回答）/ 単一質問タブUI（1タブ・即送信）
    どちらも質問タブUIの縦積みレイアウト（タブ列→パネル→送信バー）を共有する。 */
 #action-bar.batch,
-#action-bar.single-tabs { flex-direction: column; align-items: stretch; max-height: 60vh; }
+#action-bar.single-tabs { flex-direction: column; flex-wrap: nowrap; align-items: stretch; max-height: 60vh; }
+/* column レイアウトでは flex-basis:100% が「高さ100%」として作用し、ラベルが縦に伸びて
+   本体を右カラムへ押し出す。auto に戻して content 高さだけにする。 */
 #action-bar.batch .action-bar-label,
-#action-bar.single-tabs .action-bar-label { margin-bottom: 4px; }
+#action-bar.single-tabs .action-bar-label { margin-bottom: 4px; flex-basis: auto; }
 
 .action-section {
   display: flex;
@@ -348,8 +350,8 @@
 .action-submit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* 複数選択（#multi）: 1 問で任意個 ON/OFF できるチェックボックス UI */
-#action-bar.multi-select { flex-direction: column; align-items: stretch; max-height: 60vh; }
-#action-bar.multi-select .action-bar-label { margin-bottom: 4px; }
+#action-bar.multi-select { flex-direction: column; flex-wrap: nowrap; align-items: stretch; max-height: 60vh; }
+#action-bar.multi-select .action-bar-label { margin-bottom: 4px; flex-basis: auto; }
 #action-bar.multi-select .action-section-buttons { padding: 0 2px; }
 .action-btn.multi-option.selected {
   border-color: var(--line-soft);
