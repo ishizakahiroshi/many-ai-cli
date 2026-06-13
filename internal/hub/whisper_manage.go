@@ -729,7 +729,7 @@ func whisperServerNames() []string {
 }
 
 func whisperFileExists(path string) bool {
-	st, err := os.Stat(path)
+	st, err := os.Stat(path) // #nosec G703 -- path は管理下の whisper バイナリ/モデルの存在確認で外部入力ではない
 	return err == nil && !st.IsDir()
 }
 
@@ -883,7 +883,7 @@ func waitTCPReady(ctx context.Context, host string, port int) error {
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("Whisper server did not become ready on %s: %w", addr, ctx.Err())
+			return fmt.Errorf("timed out waiting for Whisper server to become ready on %s: %w", addr, ctx.Err())
 		case <-ticker.C:
 		}
 	}
