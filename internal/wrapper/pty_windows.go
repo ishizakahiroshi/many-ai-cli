@@ -120,7 +120,7 @@ func resolveDefaultShell() string {
 	}
 	comspec := os.Getenv("COMSPEC")
 	if comspec != "" {
-		if _, err := os.Stat(comspec); err == nil {
+		if _, err := os.Stat(comspec); err == nil { // #nosec G703 -- comspec は %COMSPEC% 由来の既定シェルパスの存在確認で外部入力ではない
 			return comspec
 		}
 	}

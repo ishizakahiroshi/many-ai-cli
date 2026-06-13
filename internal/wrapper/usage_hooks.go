@@ -209,5 +209,5 @@ func writeCodexConfig(path, content string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { // #nosec G301 -- ~/.codex は秘密情報を持つ可能性があるため 0700
 		return fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
 	}
-	return os.WriteFile(path, []byte(content), 0o600) // #nosec G306 -- ~/.codex/config.toml は Codex CLI の設定ファイル（0600 が意図）
+	return os.WriteFile(path, []byte(content), 0o600) // #nosec G306,G703 -- ~/.codex/config.toml は Codex CLI の設定ファイル（0600 が意図）。path はホーム配下の固定設定パスで外部入力ではない
 }
