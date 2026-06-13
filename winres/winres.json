@@ -9,7 +9,7 @@
       "0409": {
         "identity": {
           "name": "many-ai-cli",
-          "version": "0.3.0.0"
+          "version": "0.3.1.0"
         },
         "description": "",
         "minimum-os": "win7",
@@ -33,22 +33,22 @@
     "#1": {
       "0000": {
         "fixed": {
-          "file_version": "0.3.0.0",
-          "product_version": "0.3.0.0"
+          "file_version": "0.3.1.0",
+          "product_version": "0.3.1.0"
         },
         "info": {
           "0409": {
             "Comments": "Local web dashboard for managing multiple AI coding CLIs. https://github.com/ishizakahiroshi/many-ai-cli",
             "CompanyName": "Hiroshi Ishizaka",
             "FileDescription": "MANY-AI-CLI",
-            "FileVersion": "0.3.0",
+            "FileVersion": "0.3.1",
             "InternalName": "many-ai-cli",
-            "LegalCopyright": "Copyright (c) 2026 Hiroshi Ishizaka. MIT License.",
+            "LegalCopyright": "Copyright (c) 2026 Hiroshi Ishizaka (ishizakahiroshi). MIT License.",
             "LegalTrademarks": "",
             "OriginalFilename": "many-ai-cli.exe",
             "PrivateBuild": "",
             "ProductName": "MANY-AI-CLI",
-            "ProductVersion": "0.3.0",
+            "ProductVersion": "0.3.1",
             "SpecialBuild": ""
           }
         }

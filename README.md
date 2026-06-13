@@ -244,7 +244,7 @@ The launcher reads your saved profiles and connects to the right Hub — startin
 | Mode | Use case |
 |---|---|
 | `serve` | SSH into a remote server and start `many-ai-cli serve` on the remote side |
-| `tunnel` | Port-forward to a Hub that is already running on the remote side (e.g. a Docker-compose resident Hub) |
+| `tunnel` | Port-forward to a Hub already running on the remote side (kept resident via systemd / tmux / Docker compose, etc.) |
 
 In both modes, the Hub continues to bind to `127.0.0.1` only on the remote. The SSH local forward (`-L 127.0.0.1:<port>:127.0.0.1:<port>`) makes it reachable from the Windows browser without exposing the Hub to the network.
 
@@ -273,7 +273,7 @@ profiles:
     user: your-user
     hub_port: 47777
 
-  # Remote server profile (tunnel mode) — forward port to a resident Docker Hub
+  # Remote server profile (tunnel mode) — forward to a resident Hub (systemd / tmux / Docker)
   - name: remote-docker
     type: ssh
     mode: tunnel

@@ -1,0 +1,47 @@
+title = "many-ai-cli secret scan config"
+
+# gitleaks 既定ルール（API キー・トークン・秘密鍵など）を有効化しつつ、
+# 公開リポに混入しやすい「サーバー IP リテラル」「PEM 秘密鍵」を追加で検出する。
+# 固有名（ホスト名・認証ファイル名）の取り違え防止は、値を Git 管理外
+# （docs/local/ や *.local.md）に置く運用ルール側で担保する。
+[extend]
+useDefault = true
+
+# --- 公開 IPv4 リテラル（実サーバー IP の混入検出）-----------------------------
+[[rules]]
+id = "public-ipv4-literal"
+description = "Public IPv4 literal — 実インフラ IP の可能性。docs/コードにはプレースホルダか RFC5737 例示IPを使う"
+regex = '''\b(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}\b'''
+[rules.allowlist]
+regexTarget = "match"
+regexes = [
+  '''^127\.''',                               # loopback
+  '''^0\.''',                                 # 0.0.0.0 等
+  '''^10\.''',                                # private A
+  '''^192\.168\.''',                          # private C
+  '''^172\.(1[6-9]|2[0-9]|3[01])\.''',        # private B
+  '''^169\.254\.''',                          # link-local
+  '''^192\.0\.2\.''',                         # RFC5737 TEST-NET-1（例示用）
+  '''^198\.51\.100\.''',                      # RFC5737 TEST-NET-2（例示用）
+  '''^203\.0\.113\.''',                       # RFC5737 TEST-NET-3（本プロジェクトの例示IP）
+  '''^22[4-9]\.''',                           # multicast
+  '''^23[0-9]\.''',                           # multicast
+  '''^255\.''',                               # broadcast/mask
+]
+
+# --- 秘密鍵そのものの貼り付け検出 ---------------------------------------------
+[[rules]]
+id = "private-key-block"
+description = "PEM 形式の秘密鍵ブロック"
+regex = '''-----BEGIN (?:RSA |OPENSSH |EC |DSA |PGP |)PRIVATE KEY-----'''
+
+# --- グローバル allowlist ------------------------------------------------------
+[allowlist]
+description = "ルール定義自身・サンプル記載・バイナリのため除外するパス"
+paths = [
+  '''^\.gitleaks\.toml$''',
+  '''^\.github/workflows/secret-scan\.yml$''',
+  # バイナリ（ランダムバイトが IP 正規表現に偶然マッチするため除外）
+  '''\.syso$''',
+  '''\.(?:png|jpe?g|webp|gif|ico|woff2?|ttf|otf|eot|wasm)$''',
+]

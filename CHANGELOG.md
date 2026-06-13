@@ -10,6 +10,24 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-06-14
+
+### Fixed
+- The approval action bar no longer renders a tall empty column to the left of
+  the question panel. In the batch / single-question / multi-select layouts the
+  `APPROVAL NEEDED` label kept `flex-basis: 100%` (intended for the wrapped row
+  layout), which in the `flex-direction: column` variants behaves as a
+  100%-height basis and pushed the question tabs/panel into a second wrapped
+  column. The label now uses `flex-basis: auto` and the column layouts set
+  `flex-wrap: nowrap`.
+
+### Changed
+- The Cursor Agent slash-command resource
+  (`resources/slash-commands/cursor-agent.md`) is now populated from the
+  official Cursor CLI documentation (about 22 commands such as `/plan`, `/ask`,
+  `/model`, `/auto-run`, `/sandbox`, `/compress`) instead of the previous
+  4-command placeholder.
+
 ## [0.3.0] - 2026-06-13
 
 ### Added
@@ -337,7 +355,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.2.0...v0.2.2
 [0.2.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.1.3...v0.2.0
