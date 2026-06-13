@@ -60,11 +60,27 @@ jobs:
           GH_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}
         run: gh repo sync ishizakahiroshi/winget-pkgs --source microsoft/winget-pkgs
 
+      # GitHub Release のノートは CHANGELOG.md の該当版節を使う。コミットメッセージ
+      # 由来の自動 changelog は Git タブ自動生成コミット（internal/hub/git_commit.go）の
+      # 羅列で読めないため、CHANGELOG.md の人間可読な節を抽出して --release-notes で渡す。
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v ver="$VERSION" '
+            BEGIN { hdr = "## [" ver "]" }
+            index($0, hdr) == 1 { flag = 1; next }
+            flag && index($0, "## [") == 1 { exit }
+            flag { print }
+          ' CHANGELOG.md > "${RUNNER_TEMP}/release-notes.md"
+          echo "----- release notes (${VERSION}) -----"
+          cat "${RUNNER_TEMP}/release-notes.md"
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          args: release --clean --release-notes=${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # homebrew-tap / winget-pkgs fork への push 用 PAT（GITHUB_TOKEN は自リポジトリ限定のため）
@@ -96,7 +112,7 @@ jobs:
           echo "publishing with dist-tag: $DIST_TAG"
           # optional dependency（platform package）を先に publish。root が解決できるようにする。
           for pkg in many-ai-cli-windows-x64 many-ai-cli-linux-x64 many-ai-cli-macos-intel many-ai-cli-macos-apple-silicon; do
-            npm publish "npm/$pkg" --access public --provenance --tag "$DIST_TAG"
+            npm publish "./npm/$pkg" --access public --provenance --tag "$DIST_TAG"
           done
           # root package を最後に publish（optional deps が出揃った後）。
-          npm publish "npm/many-ai-cli" --access public --provenance --tag "$DIST_TAG"
+          npm publish "./npm/many-ai-cli" --access public --provenance --tag "$DIST_TAG"

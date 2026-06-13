@@ -180,15 +180,11 @@ nfpms:
     formats: [deb, rpm]
     bindir: /usr/bin
 
+# リリースノートは release.yml が CHANGELOG.md の該当版節を抽出し --release-notes で
+# 渡す。コミットメッセージ由来の自動 changelog は Git タブ自動生成コミット
+# （internal/hub/git_commit.go の subjectLine）の羅列で読めないため無効化する。
 changelog:
-  sort: asc
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
-      - "^chore:"
-      - Merge pull request
-      - Merge branch
+  disable: true
 
 release:
   draft: false
