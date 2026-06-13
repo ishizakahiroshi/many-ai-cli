@@ -3,7 +3,7 @@
 // プリセット → session 起動 / URL 生成ロジックを集約する。
 // spawn-panel.ts や session-list.ts から呼び出して二重化を防ぐ。
 
-import { token } from './util.js';
+import { token, escapeHtml } from './util.js';
 import { sessions } from './state.js';
 import { calcDetachedLayout, openDetachedGridForSessions } from './session-list.js';
 import {
@@ -358,7 +358,7 @@ export function openDetachedGridLauncher(opts?: {
     `<label class="dgl-opt-label">${tw('dgl_count', 'Count')}</label>` +
     `<input class="dgl-count-input" id="dgl-count-input" type="number" min="1" max="18" value="${prefs.lastCount || 4}">` +
     `<label class="dgl-opt-label">${tw('dgl_cwd', 'CWD')}</label>` +
-    `<input class="dgl-cwd-input" id="dgl-cwd-input" type="text" value="${currentCwd}">` +
+    `<input class="dgl-cwd-input" id="dgl-cwd-input" type="text" value="${escapeHtml(currentCwd)}">` +
     `</div>` +
     `</div>` +
     `</div>`;

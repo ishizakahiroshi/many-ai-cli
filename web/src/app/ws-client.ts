@@ -204,6 +204,9 @@ export function _connectWs() {
     const id = m.session_id;
     ensureTerminal(id);
     const t = terminals.get(id);
+    // ensureTerminal が内部例外で terminals へ登録できなかった場合 t は undefined になり、
+    // 直後の t.textDecoder 参照で TypeError → このメッセージ処理が中断する。ガードして握り潰しを防ぐ。
+    if (!t) return;
     const binary = atob(m.data);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);

@@ -1,4 +1,6 @@
 **/dist/
+# ビルド時に毎回生成される作業フォルダ（生成物のみ・追跡しない）。
+build/
 web/dist/
 web/node_modules/
 # winres が生成する Windows リソース。リリース時に goreleaser の before hooks で

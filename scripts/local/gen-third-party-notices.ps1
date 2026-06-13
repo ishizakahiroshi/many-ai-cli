@@ -87,6 +87,66 @@ try {
     }
   }
 
+  # --- Static section: components bundled or downloaded at runtime that are NOT
+  # Go modules in go.mod (so they never appear in the table above). Kept inside
+  # the generator (not hand-edited into the output) so check-third-party.ps1
+  # stays green after regeneration. Text mirrors the in-app About-screen
+  # attribution (web/src/index.html "Speech Recognition" / "Redistributed
+  # Microsoft Components" sections).
+  $rows.Add("")
+  $rows.Add("## Bundled Components Not Tracked by go.mod")
+  $rows.Add("")
+  $rows.Add("The following components are bundled in the release archive or downloaded at")
+  $rows.Add("runtime. They are not Go modules listed in ``go.mod`` and therefore do not appear")
+  $rows.Add("in the table above. They are also attributed in-app on the About screen.")
+  $rows.Add("")
+  $rows.Add("### whisper.cpp (https://github.com/ggml-org/whisper.cpp)")
+  $rows.Add("")
+  $rows.Add("MIT License. Copyright (c) 2023-2026 The ggml authors. Local speech-to-text engine for the bundled voice input.")
+  $rows.Add("")
+  $rows.Add("### ggml (https://github.com/ggml-org/ggml)")
+  $rows.Add("")
+  $rows.Add("MIT License. Copyright (c) 2023-2026 The ggml authors. Tensor library underlying whisper.cpp.")
+  $rows.Add("")
+  $rows.Add("### OpenAI Whisper model (https://huggingface.co/ggerganov/whisper.cpp)")
+  $rows.Add("")
+  $rows.Add("MIT License. Copyright (c) 2022 OpenAI. Model weights downloaded at runtime for transcription.")
+  $rows.Add("")
+  $rows.Add("#### MIT License (whisper.cpp / ggml / OpenAI Whisper model)")
+  $rows.Add("")
+  $rows.Add("``````text")
+  $mitText = @'
+MIT License
+
+Copyright (c) 2023-2026 The ggml authors (whisper.cpp, ggml)
+Copyright (c) 2022 OpenAI (Whisper model weights)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+'@
+  $mitText = $mitText -replace "`r`n", "`n" -replace "`r", "`n"
+  $rows.Add($mitText.TrimEnd())
+  $rows.Add("``````")
+  $rows.Add("")
+  $rows.Add("### Microsoft Visual C++ Runtime (https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)")
+  $rows.Add("")
+  $rows.Add("(c) Microsoft Corporation. Microsoft Visual Studio License Terms (not open source). Redistributed on Windows x64 (vcomp140.dll, msvcp140.dll, vcruntime140.dll, vcruntime140_1.dll) so the bundled whisper-server runs without a separate VC++ install.")
+
   $resolvedOutputPath = if ([System.IO.Path]::IsPathRooted($OutputPath)) { $OutputPath } else { Join-Path $repoRoot $OutputPath }
   # Use explicit LF so that the file content is byte-identical between
   # Windows dev machines and Linux/Windows CI runners. WriteAllLines uses

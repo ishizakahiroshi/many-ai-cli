@@ -1581,3 +1581,52 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
+
+## Bundled Components Not Tracked by go.mod
+
+The following components are bundled in the release archive or downloaded at
+runtime. They are not Go modules listed in `go.mod` and therefore do not appear
+in the table above. They are also attributed in-app on the About screen.
+
+### whisper.cpp (https://github.com/ggml-org/whisper.cpp)
+
+MIT License. Copyright (c) 2023-2026 The ggml authors. Local speech-to-text engine for the bundled voice input.
+
+### ggml (https://github.com/ggml-org/ggml)
+
+MIT License. Copyright (c) 2023-2026 The ggml authors. Tensor library underlying whisper.cpp.
+
+### OpenAI Whisper model (https://huggingface.co/ggerganov/whisper.cpp)
+
+MIT License. Copyright (c) 2022 OpenAI. Model weights downloaded at runtime for transcription.
+
+#### MIT License (whisper.cpp / ggml / OpenAI Whisper model)
+
+```text
+MIT License
+
+Copyright (c) 2023-2026 The ggml authors (whisper.cpp, ggml)
+Copyright (c) 2022 OpenAI (Whisper model weights)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### Microsoft Visual C++ Runtime (https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
+
+(c) Microsoft Corporation. Microsoft Visual Studio License Terms (not open source). Redistributed on Windows x64 (vcomp140.dll, msvcp140.dll, vcruntime140.dll, vcruntime140_1.dll) so the bundled whisper-server runs without a separate VC++ install.

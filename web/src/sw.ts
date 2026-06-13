@@ -82,10 +82,26 @@ function parsePushPayload(event) {
 }
 
 async function notificationURL(url, sessionId) {
-  if (url && url.includes('token=')) return url;
-  const token = await readHubToken();
   const base = url || '/';
-  const target = new URL(base, self.location.origin);
+  let target;
+  try {
+    target = new URL(base, self.location.origin);
+  } catch (_) {
+    target = new URL('/', self.location.origin);
+  }
+  // 同一オリジン以外（payload.url に外部絶対 URL が来た場合）には Hub トークンを付けず、
+  // 安全側に自オリジンのトップへフォールバックする（トークンの外部オリジン漏洩を防ぐ）。
+  if (target.origin !== self.location.origin) {
+    target = new URL('/', self.location.origin);
+  }
+  // 既にトークン付き URL（自オリジン）なら、そのトークンを尊重してそのまま使う。
+  if (target.searchParams.has('token')) {
+    if (sessionId > 0 && !target.searchParams.has('session_id')) {
+      target.searchParams.set('session_id', String(sessionId));
+    }
+    return target.href;
+  }
+  const token = await readHubToken();
   if (token) target.searchParams.set('token', token);
   if (sessionId > 0) target.searchParams.set('session_id', String(sessionId));
   return target.href;

@@ -1196,7 +1196,8 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	}
 	s.sessionsMu.Unlock()
 	// wrapper が一時切断中に届かなかった保留入力を、再接続したこの wrapper へ順番に再送する。
-	go s.flushPendingInput(acceptedID)
+	// 他のバックグラウンド goroutine と同様 safeGo で起動し、panic で Hub 全体を巻き込まないようにする。
+	s.safeGo("flush_pending_input", func() { s.flushPendingInput(acceptedID) })
 	if oldHistory != nil {
 		_ = oldHistory.Close()
 	}
@@ -2122,6 +2123,9 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	if !exists {
 		return true
 	}
+	// セッション破棄時に usageStat も解放する（メモリ無制限増加を防ぐ）。
+	// usageStatsMu のロック順序のため sessionsMu 解放後に呼ぶ。
+	DeleteSessionUsageStat(m.SessionID)
 	if historyToClose != nil {
 		_ = historyToClose.Event(map[string]any{
 			"ts":         time.Now().Format(time.RFC3339),
@@ -2526,12 +2530,18 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 	s.sessionsMu.Lock()
 	list := make([]*session, 0, len(s.sessions))
 	sessionIDs := make([]int, 0, len(s.sessions))
+	providerByID := make(map[int]string, len(s.sessions))
 	for _, ses := range s.sessions {
 		list = append(list, ses)
 		sessionIDs = append(sessionIDs, ses.ID)
+		providerByID[ses.ID] = ses.Provider
 	}
-	s.sessionsMu.Unlock()
+	// json.Marshal は sessionsMu 保持下で行う。list は *session ポインタを保持し、
+	// markRunning / evaluateIdle / applyDetectedModel 等が sessionsMu 下で同じフィールド
+	// （State / Model / Branch 等）を書き換えるため、ロック外で Marshal すると read/write
+	// data race になる（-race ビルドで検出可能）。
 	b, _ := json.Marshal(list)
+	s.sessionsMu.Unlock()
 	// hub_instance: Hub 再起動を UI が検出するための起動毎 ID。
 	// UI 側は前回値と異なる場合に live session ID キーのローカル状態
 	// （チャット・ターミナルバッファ等）を破棄してから snapshot を適用する。
@@ -2539,21 +2549,15 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 
 	// C3: UI 接続時に既存セッションの usageStat をまとめて送る。
 	// これにより再接続時・リロード時にステータスバーが即座に復元される。
+	// ロック順序（usage_stat.go の不変条件）: usageStatsMu 保持中に sessionsMu を取得しない。
+	// provider は上の sessionsMu 区間で確定済みの providerByID から引く（ネスト取得を避ける）。
 	usageStatsMu.Lock()
 	for _, id := range sessionIDs {
 		if stat, ok := usageStats[id]; ok {
-			// provider を sessions から取る（usageStat にはセッション情報なし）
-			s.sessionsMu.Lock()
-			ses := s.sessions[id]
-			var provider string
-			if ses != nil {
-				provider = ses.Provider
-			}
-			s.sessionsMu.Unlock()
 			_ = uc.send(proto.Message{
 				Type:           "usage_stat",
 				SessionID:      id,
-				Provider:       provider,
+				Provider:       providerByID[id],
 				CostUSD:        stat.CostUSD,
 				CostKnown:      stat.CostKnown,
 				TokensIn:       stat.TokensIn,
