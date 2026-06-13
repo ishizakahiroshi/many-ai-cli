@@ -151,6 +151,164 @@
 }
 .action-btn.batch-option.selected:hover { background: rgba(255,255,255,0.08); color: var(--text); }
 
+/* ===== 一括承認: 質問タブUI（plan_choice-tab-ui.md） ===== */
+/* 質問そのものを横タブにし、選択中 1 問分の選択肢だけを下のパネルに出す。
+   質問数が増えても縦の高さは一定で、上のターミナル（文脈）が隠れない。 */
+.action-qtabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  margin-bottom: -1px;
+  scrollbar-width: thin;
+  position: relative;
+  z-index: 2;
+}
+.action-qtabs::-webkit-scrollbar { height: 6px; }
+.action-qtabs::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+.action-qtab {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 160px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: var(--bg-elev);
+  color: var(--muted-2);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.action-qtab .qn { color: var(--accent); font-weight: 700; flex: 0 0 auto; }
+.action-qtab .qlabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.action-qtab .st { flex: 0 0 auto; font-size: 0.75rem; }
+.action-qtab .st.done { color: var(--green); }
+.action-qtab .st.todo { color: var(--warn); }
+.action-qtab.active {
+  background: var(--accent-soft);
+  color: var(--text);
+  border-color: rgba(99,102,241,0.45);
+}
+.action-qtab.active .qn { color: var(--text); }
+
+.action-qpane {
+  border: 1px solid rgba(99,102,241,0.45);
+  border-radius: 0 8px 8px 8px;
+  background: var(--accent-soft);
+  padding: 10px 12px;
+  position: relative;
+  z-index: 1;
+}
+.action-qhead {
+  font-size: 0.9rem;
+  color: var(--text);
+  margin-bottom: 8px;
+  overflow-wrap: anywhere;
+}
+.action-qopts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.action-qopt { display: flex; align-items: center; gap: 6px; max-width: 160px; }
+.action-qopt .n { color: var(--accent); font-weight: 700; flex: 0 0 auto; }
+.action-qopt.selected .n { color: var(--text); }
+.action-qopt .opt-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.action-qdetail {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  color: var(--text);
+  min-height: 42px;
+}
+.action-qdetail.empty { color: var(--muted-2); }
+.action-qdetail .detail-lab {
+  display: block;
+  color: var(--muted-2);
+  font-size: 0.75rem;
+  margin-bottom: 3px;
+}
+.action-qdetail .detail-body { overflow-wrap: anywhere; line-height: 1.5; }
+.action-qfreein {
+  margin-top: 8px;
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+.action-qfreein:focus { outline: none; border-color: var(--accent); }
+
+/* 送信確認モーダル（position:fixed で画面中央・内部スクロールで隠れない） */
+.action-confirm-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(3,5,15,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.action-confirm-modal {
+  width: 90%;
+  max-width: 540px;
+  max-height: 86vh;
+  overflow-y: auto;
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+}
+.action-confirm-modal h3 { margin: 0 0 8px; font-size: 0.95rem; }
+.action-confirm-modal p { font-size: 0.8rem; color: var(--muted-2); margin: 10px 0 6px; }
+.action-confirm-readable,
+.action-confirm-payload {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.action-confirm-payload { color: var(--green); }
+.action-confirm-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+.action-confirm-back,
+.action-confirm-go {
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+.action-confirm-back { background: transparent; border: 1px solid var(--line); color: var(--muted-2); }
+.action-confirm-go { background: var(--accent); color: #fff; font-weight: 600; }
+
+@media (max-width: 480px) {
+  .action-qtab { max-width: 96px; }
+  .action-qopt { max-width: 96px; }
+}
+
 .action-bar-footer {
   display: flex;
   align-items: center;

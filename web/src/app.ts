@@ -9,7 +9,7 @@ import { DEFAULT_QUICK_CMD_1, DEFAULT_QUICK_CMD_2, appConfirm, appConfirmShutdow
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { scheduleDeferredEnter, scheduleAfterOutputSettle } from './app/deferred-enter.js';
-import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, sendBatchChoices, sendMultiSelectChoices, setActionBarFocus, toggleMultiSelectFocused } from './app/approval.js';
+import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
@@ -499,7 +499,8 @@ inputEl.addEventListener('keydown', (e) => {
 
   // バッチ承認モード（複数質問の一括回答）の専用キー処理。
   // 入力が空のときのみ作動し、通常の文字入力・IME と競合しないようにする。
-  if (inputEl.value === '' && !e.isComposing && isBatchActionBarVisible()) {
+  // 送信確認モーダル表示中は action-bar の専用キー処理を行わない（モーダル側で操作する）。
+  if (inputEl.value === '' && !e.isComposing && isBatchActionBarVisible() && !document.getElementById('action-confirm-mask')) {
     if (e.key === 'Tab' && slashMenuEl.hidden) {
       moveBatchFocus(e.shiftKey ? -1 : 1);
       e.preventDefault(); return;
@@ -517,8 +518,9 @@ inputEl.addEventListener('keydown', (e) => {
         e.preventDefault(); return;
       }
     }
+    // Enter で「送信確認」モーダルを開く（即送信はしない）。全問回答済みのときだけ開く。
     if (e.key === 'Enter' && !e.shiftKey) {
-      sendBatchChoices(activeSessionId);
+      openBatchConfirm(activeSessionId);
       e.preventDefault(); return;
     }
   }
