@@ -71,7 +71,7 @@ func TestWhisperServerNamesNonEmpty(t *testing.T) {
 
 func TestBakedWhisperServerPath(t *testing.T) {
 	if bakedWhisperServerPath() != "" {
-		t.Skip("ANY_AI_CLI_WHISPER_SERVER already set in env")
+		t.Skip("MANY_AI_CLI_WHISPER_SERVER already set in env")
 	}
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "whisper-server")

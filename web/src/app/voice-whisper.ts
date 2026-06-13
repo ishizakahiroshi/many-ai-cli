@@ -263,7 +263,7 @@ function getAutoStopSilenceMs() {
 
     if (ctx.audioWorklet) {
       await ctx.audioWorklet.addModule(RECORDER_WORKLET_URL);
-      workletNode = new AudioWorkletNode(ctx, 'any-ai-cli-whisper-recorder');
+      workletNode = new AudioWorkletNode(ctx, 'many-ai-cli-whisper-recorder');
       workletNode.port.onmessage = (event) => appendChunk(event.data);
       source.connect(workletNode);
       workletNode.connect(silentGainNode);

@@ -13,21 +13,21 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"any-ai-cli/internal/wslutil"
+	"many-ai-cli/internal/wslutil"
 )
 
 const DirMode os.FileMode = 0o700
 
-// Dir は ~/.any-ai-cli ディレクトリのパスを返す。
+// Dir は ~/.many-ai-cli ディレクトリのパスを返す。
 func Dir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("home dir: %w", err)
 	}
-	return filepath.Join(home, ".any-ai-cli"), nil
+	return filepath.Join(home, ".many-ai-cli"), nil
 }
 
-// Path は ~/.any-ai-cli/config.yaml のパスを返す。
+// Path は ~/.many-ai-cli/config.yaml のパスを返す。
 func Path() (string, error) {
 	dir, err := Dir()
 	if err != nil {
@@ -54,7 +54,7 @@ type LogConfig struct {
 	Compress             bool `yaml:"compress" json:"compress"`
 	SessionRetentionDays int  `yaml:"session_retention_days" json:"session_retention_days"`
 	SessionMaxSizeMB     int  `yaml:"session_max_size_mb" json:"session_max_size_mb"`
-	// AttachmentRetentionDays は添付ファイル（~/.any-ai-cli/attachments）の保持日数。
+	// AttachmentRetentionDays は添付ファイル（~/.many-ai-cli/attachments）の保持日数。
 	// この日数より古い添付を定期削除する。0 で日数ベースの削除を無効化。
 	AttachmentRetentionDays int `yaml:"attachment_retention_days" json:"attachment_retention_days"`
 	// AttachmentMaxTotalMB は添付ファイル全体の合計容量上限(MB)。これを超えた分を
@@ -79,15 +79,15 @@ type SlashCmdSources struct {
 
 const (
 	LegacyClaudeSlashCmdSource       = "https://code.claude.com/docs/en/commands.md"
-	DefaultClaudeSlashCmdSource      = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/claude.md"
-	DefaultCodexSlashCmdSource       = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/codex.md"
-	DefaultCopilotSlashCmdSource     = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/copilot.md"
-	DefaultCursorAgentSlashCmdSource = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/cursor-agent.md"
+	DefaultClaudeSlashCmdSource      = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/claude.md"
+	DefaultCodexSlashCmdSource       = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/codex.md"
+	DefaultCopilotSlashCmdSource     = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/copilot.md"
+	DefaultCursorAgentSlashCmdSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/cursor-agent.md"
 )
 
-const DefaultUsageLinkSource = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/usage-links/defaults.json"
+const DefaultUsageLinkSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/defaults.json"
 
-const DefaultModelsSource = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/models/defaults.json"
+const DefaultModelsSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/models/defaults.json"
 
 func DefaultSlashCmdSources() SlashCmdSources {
 	return SlashCmdSources{
@@ -129,11 +129,11 @@ type ApprovalPatternSources struct {
 }
 
 const (
-	DefaultClaudeApprovalPatternSource      = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/claude.md"
-	DefaultCodexApprovalPatternSource       = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/codex.md"
-	DefaultCopilotApprovalPatternSource     = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/copilot.md"
-	DefaultCursorAgentApprovalPatternSource = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/cursor-agent.md"
-	DefaultCommonApprovalPatternSource      = "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/common.md"
+	DefaultClaudeApprovalPatternSource      = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/claude.md"
+	DefaultCodexApprovalPatternSource       = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/codex.md"
+	DefaultCopilotApprovalPatternSource     = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/copilot.md"
+	DefaultCursorAgentApprovalPatternSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/cursor-agent.md"
+	DefaultCommonApprovalPatternSource      = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/common.md"
 )
 
 func DefaultApprovalPatternSources() ApprovalPatternSources {
@@ -475,7 +475,8 @@ func LoadOrCreate() (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("home dir: %w", err)
 	}
-	dir := filepath.Join(home, ".any-ai-cli")
+	migrateLegacyDir(home)
+	dir := filepath.Join(home, ".many-ai-cli")
 	if err := ensurePrivateDir(dir); err != nil {
 		return nil, err
 	}
@@ -488,7 +489,7 @@ func LoadOrCreate() (*Config, error) {
 		if err := yaml.Unmarshal(b, cfg); err != nil {
 			// 破損: .bak へ退避してデフォルト設定で起動継続
 			bak := path + ".bak"
-			if bakErr := os.WriteFile(bak, b, 0o600); bakErr != nil { // #nosec G703 -- ~/.any-ai-cli/config.yaml.bak 固定パス（ユーザー入力なし）
+			if bakErr := os.WriteFile(bak, b, 0o600); bakErr != nil { // #nosec G703 -- ~/.many-ai-cli/config.yaml.bak 固定パス（ユーザー入力なし）
 				return nil, fmt.Errorf("backup invalid config: %w", bakErr)
 			}
 			slog.Warn("config parse failed; backed up and regenerating",
@@ -551,13 +552,36 @@ func LoadOrCreate() (*Config, error) {
 	return cfg, nil
 }
 
+// migrateLegacyDir は旧名 ~/.any-ai-cli を新名 ~/.many-ai-cli へ一度だけ移行する。
+// any-ai-cli → many-ai-cli 改名（v0.3.0）の後方互換。新ディレクトリが既に存在する
+// 場合は何もしない。コピーではなく os.Rename（移動）で stale ディレクトリを残さない。
+// 失敗しても起動は継続する（新規ディレクトリ作成にフォールバックする）。
+func migrateLegacyDir(home string) {
+	newDir := filepath.Join(home, ".many-ai-cli")
+	oldDir := filepath.Join(home, ".any-ai-cli")
+	if _, err := os.Stat(newDir); err == nil {
+		return // 新ディレクトリが既にある: 移行不要
+	} else if !os.IsNotExist(err) {
+		return // stat エラー（権限等）: 触らない
+	}
+	if info, err := os.Stat(oldDir); err != nil || !info.IsDir() {
+		return // 旧ディレクトリが無い: 新規ユーザー
+	}
+	if err := os.Rename(oldDir, newDir); err != nil {
+		slog.Warn("legacy config dir migration failed; starting fresh",
+			"from", oldDir, "to", newDir, "err", err)
+		return
+	}
+	slog.Info("migrated legacy config dir", "from", oldDir, "to", newDir)
+}
+
 func defaultConfig(home string) *Config {
 	cfg := &Config{}
 	cfg.Hub.Port = 47777
 	cfg.Hub.OpenBrowser = true
 	cfg.Hub.AutoShutdown = true
-	// When invoked via the any-ai-cli-launcher.exe Windows launcher's WSL
-	// profile (and only then — not for plain `any-ai-cli serve` inside a WSL
+	// When invoked via the many-ai-cli-launcher.exe Windows launcher's WSL
+	// profile (and only then — not for plain `many-ai-cli serve` inside a WSL
 	// shell), place logs under the
 	// Windows %USERPROFILE% so the Hub UI's open-folder button resolves to a
 	// plain C:\Users\... path that Windows Explorer can open directly. A bare
@@ -568,7 +592,7 @@ func defaultConfig(home string) *Config {
 			logHome = winHome
 		}
 	}
-	cfg.Hub.LogDir = filepath.Join(logHome, ".any-ai-cli", "logs")
+	cfg.Hub.LogDir = filepath.Join(logHome, ".many-ai-cli", "logs")
 	cfg.Hub.IdleTimeoutMin = 60
 	cfg.Hub.WrapperReconnectGraceSec = 3600
 	cfg.Log.Enabled = true

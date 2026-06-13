@@ -1,4 +1,4 @@
-# any-ai-cli 実装規約・context分割・AI作業モデル
+# many-ai-cli 実装規約・context分割・AI作業モデル
 
 > 最終更新: 2026-06-07(日) 12:57:07
 
@@ -66,7 +66,7 @@
 - 依存関係がある変更（後工程が前工程の成果物に依存）は別contextに分ける
 - 調査・設計と実装は原則として分けない（同一contextで完結させる）
 
-**any-ai-cli 固有の分割例：**
+**many-ai-cli 固有の分割例：**
 - C1: `internal/proto/messages.go` 定義（Hub・ラッパー・UI が依存）
 - C2: `internal/hub/server.go` HTTP+WS 起動 [C1 完了後]
 - C3: `internal/wrapper/wrapper.go` PTY ラップ + 接続 [C1 完了後、C2 と並列OK]

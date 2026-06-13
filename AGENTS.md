@@ -1,4 +1,4 @@
-# Agent Entry Point (any-ai-cli)
+# Agent Entry Point (many-ai-cli)
 
 This repository's operational guidance is maintained in `CLAUDE.md`.
 

@@ -16,7 +16,7 @@ func TestClassifyStartFailure_ExecNotFound(t *testing.T) {
 }
 
 func TestClassifyStartFailure_TextualNotFound(t *testing.T) {
-	err := errors.New(`exec: "C:\\dev\\any-ai-cli\\codex": executable file not found in %PATH%`)
+	err := errors.New(`exec: "C:\\dev\\many-ai-cli\\codex": executable file not found in %PATH%`)
 	if got := classifyStartFailure(err); got != "exec_not_found" {
 		t.Fatalf("classifyStartFailure(textual) = %q, want %q", got, "exec_not_found")
 	}
@@ -40,11 +40,11 @@ func TestDiagnoseStartFailure_IncludesHintForExecNotFound(t *testing.T) {
 	diagnoseStartFailure(&buf, "codex", []string{"--ask-for-approval", "on-request"}, err)
 	out := buf.String()
 	for _, want := range []string{
-		"any-ai-cli spawn diagnostic",
+		"many-ai-cli spawn diagnostic",
 		"provider: codex",
 		"PATH entries:",
 		"Hint:",
-		"any-ai-cli stop && any-ai-cli codex",
+		"many-ai-cli stop && many-ai-cli codex",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("diagnostic output missing %q\n---\n%s", want, out)
@@ -60,7 +60,7 @@ func TestDiagnoseStartFailure_NoHintForUnrelatedError(t *testing.T) {
 	if strings.Contains(out, "Hint:") {
 		t.Fatalf("unexpected Hint section for unrelated error\n---\n%s", out)
 	}
-	if !strings.Contains(out, "any-ai-cli spawn diagnostic") {
+	if !strings.Contains(out, "many-ai-cli spawn diagnostic") {
 		t.Fatalf("missing diagnostic header\n---\n%s", out)
 	}
 }

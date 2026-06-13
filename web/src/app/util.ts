@@ -6,7 +6,7 @@ import { t } from '../i18n.js';
 // history.replaceState によりアドレスバーから除去する（ブラウザ履歴・スクショ・
 // 画面共有への露出対策）。リロード時は sessionStorage から復元する。
 // SW 側の token キャッシュ（pwa.ts → sw.ts postMessage）は従来通り別系統で保持。
-const TOKEN_STORAGE_KEY = 'any-ai-cli-token';
+const TOKEN_STORAGE_KEY = 'many-ai-cli-token';
 
 function initToken(): string | null {
   let tk: string | null = null;

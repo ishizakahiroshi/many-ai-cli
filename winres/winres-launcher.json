@@ -1,14 +1,14 @@
 {
   "RT_GROUP_ICON": {
     "#1": {
-      "0000": "../assets/any-ai-cli.ico"
+      "0000": "../assets/many-ai-cli.ico"
     }
   },
   "RT_MANIFEST": {
     "#1": {
       "0409": {
         "identity": {
-          "name": "any-ai-cli-launcher",
+          "name": "many-ai-cli-launcher",
           "version": "0.3.0.0"
         },
         "description": "",
@@ -38,16 +38,16 @@
         },
         "info": {
           "0409": {
-            "Comments": "Windows launcher that connects to any-ai-cli Hub via connection profiles (WSL / SSH). https://github.com/ishizakahiroshi/any-ai-cli",
+            "Comments": "Windows launcher that connects to many-ai-cli Hub via connection profiles (WSL / SSH). https://github.com/ishizakahiroshi/many-ai-cli",
             "CompanyName": "Hiroshi Ishizaka",
-            "FileDescription": "ANY-AI-CLI Launcher",
+            "FileDescription": "MANY-AI-CLI Launcher",
             "FileVersion": "0.3.0",
-            "InternalName": "any-ai-cli-launcher",
+            "InternalName": "many-ai-cli-launcher",
             "LegalCopyright": "Copyright (c) 2026 Hiroshi Ishizaka. MIT License.",
             "LegalTrademarks": "",
-            "OriginalFilename": "any-ai-cli-launcher.exe",
+            "OriginalFilename": "many-ai-cli-launcher.exe",
             "PrivateBuild": "",
-            "ProductName": "ANY-AI-CLI",
+            "ProductName": "MANY-AI-CLI",
             "ProductVersion": "0.3.0",
             "SpecialBuild": ""
           }

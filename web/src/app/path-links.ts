@@ -56,7 +56,7 @@ export function isTextPath(filePath) {
   return /\.(txt|md|markdown|rst|log|json|jsonl|yaml|yml|toml|ini|cfg|conf|env|csv|tsv|xml|html?|css|scss|sass|less|js|mjs|cjs|jsx|ts|tsx|vue|go|rs|py|rb|php|java|kt|kts|c|cc|cpp|cxx|h|hh|hpp|cs|sh|bash|zsh|fish|ps1|psm1|bat|cmd|sql|graphql|gql|proto|diff|patch|gitignore|gitattributes|editorconfig)$/i.test(path);
 }
 
-// ANY-AI-CLI 内蔵プレビューが扱える拡張子（バックエンド /api/files-content の許可リストと一致させること）
+// MANY-AI-CLI 内蔵プレビューが扱える拡張子（バックエンド /api/files-content の許可リストと一致させること）
 export function isAnyAiCliPreviewable(filePath) {
   return isTextPath(filePath) || isMediaPath(filePath);
 }
@@ -269,7 +269,7 @@ export async function renameFileViaApi(filePath, sessionId) {
       showToast(`${t('link_rename_failed') || 'Failed to rename'}: ${msg}`);
       return;
     }
-    window.dispatchEvent(new CustomEvent('any-ai-cli:files-changed', {
+    window.dispatchEvent(new CustomEvent('many-ai-cli:files-changed', {
       detail: { kind: 'rename', oldAbs: filePath, newAbs: data.newAbs },
     }));
   } catch (err) {
@@ -485,7 +485,7 @@ export async function deleteDirViaApi(filePath, sessionId) {
       showToast(`${t('link_delete_dir_failed') || 'Failed to delete folder'}: ${msg}`);
       return;
     }
-    window.dispatchEvent(new CustomEvent('any-ai-cli:files-changed', {
+    window.dispatchEvent(new CustomEvent('many-ai-cli:files-changed', {
       detail: { kind: 'delete-dir', oldAbs: filePath },
     }));
   } catch (err) {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/config"
 )
 
 func testConfigDir(t *testing.T) string {
@@ -123,7 +123,7 @@ func TestFetchAndParseSlashCmdsFromLocalFile(t *testing.T) {
 }
 
 func TestValidateSlashCmdSourceAllowsRawGitHubHTTPS(t *testing.T) {
-	src := "https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/codex.md"
+	src := "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/codex.md"
 	if err := validateSlashCmdSource(src); err != nil {
 		t.Fatalf("expected raw GitHub source to be allowed: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestValidateSlashCmdSourceAllowsRawGitHubHTTPS(t *testing.T) {
 
 func TestValidateSlashCmdSourceRejectsHTTPAndPrivateHosts(t *testing.T) {
 	cases := []string{
-		"http://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/codex.md",
+		"http://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/codex.md",
 		"https://127.0.0.1/slash.md",
 		"https://169.254.169.254/latest/meta-data",
 		"https://192.168.1.10/slash.md",

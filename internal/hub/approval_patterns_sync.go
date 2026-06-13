@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"any-ai-cli/internal/config"
-	"any-ai-cli/internal/proto"
+	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/proto"
 )
 
 // approvalPatternsRemoteSync は Hub 起動直後に呼ばれ、各 provider の公式 md を

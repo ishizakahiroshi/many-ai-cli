@@ -75,7 +75,7 @@ func startProcess(provider string, args []string, cwd string, cols, rows int) (p
 	cmdName, cmdArgs := resolveCmd(provider, args)
 	cmd := exec.Command(cmdName, cmdArgs...)
 	cmd.Dir = cwd
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor", "ANY_AI_CLI=1")
+	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor", "MANY_AI_CLI=1")
 	var (
 		f   *os.File
 		err error

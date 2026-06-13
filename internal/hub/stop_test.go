@@ -26,7 +26,7 @@ func TestParseHubPIDAcceptsTrimmedPositivePID(t *testing.T) {
 }
 
 func TestStopWithPIDPathInvalidPIDRemovesFile(t *testing.T) {
-	pidPath := filepath.Join(t.TempDir(), "any-ai-cli.pid")
+	pidPath := filepath.Join(t.TempDir(), "many-ai-cli.pid")
 	if err := os.WriteFile(pidPath, []byte("not-a-pid"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestStopWithPIDPathInvalidPIDRemovesFile(t *testing.T) {
 // 毎回同じ PID で起動するため、前回 boot の PID ファイルが自分の PID と一致
 // しうる（一致時に kill すると起動直後の自殺ループになる）。
 func TestKillStalePid_SelfPIDGuard(t *testing.T) {
-	pidPath := filepath.Join(t.TempDir(), "any-ai-cli.pid")
+	pidPath := filepath.Join(t.TempDir(), "many-ai-cli.pid")
 	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestKillStalePid_SelfPIDGuard(t *testing.T) {
 
 // 不正な内容でもファイルは必ず除去される（除去が kill より先なら自殺時も残らない）。
 func TestKillStalePid_RemovesInvalidFile(t *testing.T) {
-	pidPath := filepath.Join(t.TempDir(), "any-ai-cli.pid")
+	pidPath := filepath.Join(t.TempDir(), "many-ai-cli.pid")
 	if err := os.WriteFile(pidPath, []byte("garbage"), 0o600); err != nil {
 		t.Fatal(err)
 	}

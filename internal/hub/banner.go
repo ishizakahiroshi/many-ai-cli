@@ -5,10 +5,10 @@ import (
 	neturl "net/url"
 	"strings"
 
-	"any-ai-cli/internal/wslutil"
+	"many-ai-cli/internal/wslutil"
 )
 
-const repositoryURL = "https://github.com/ishizakahiroshi/any-ai-cli"
+const repositoryURL = "https://github.com/ishizakahiroshi/many-ai-cli"
 
 const (
 	ansiReset        = "\x1b[0m"
@@ -22,26 +22,26 @@ const (
 // unicodeLogoLines is the default banner art using block / box-drawing
 // characters. Rendered cleanly on Linux, macOS, and Windows Terminal.
 var unicodeLogoLines = []string{
-	" █████╗ ███╗   ██╗██╗   ██╗       █████╗ ██╗",
-	"██╔══██╗████╗  ██║╚██╗ ██╔╝      ██╔══██╗██║",
-	"███████║██╔██╗ ██║ ╚████╔╝ █████╗███████║██║",
-	"██╔══██║██║╚██╗██║  ╚██╔╝  ╚════╝██╔══██║██║",
-	"██║  ██║██║ ╚████║   ██║         ██║  ██║██║",
-	"╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝         ╚═╝  ╚═╝╚═╝",
+	"███╗   ███╗ █████╗ ███╗   ██╗██╗   ██╗       █████╗ ██╗",
+	"████╗ ████║██╔══██╗████╗  ██║╚██╗ ██╔╝      ██╔══██╗██║",
+	"██╔████╔██║███████║██╔██╗ ██║ ╚████╔╝ █████╗███████║██║",
+	"██║╚██╔╝██║██╔══██║██║╚██╗██║  ╚██╔╝  ╚════╝██╔══██║██║",
+	"██║ ╚═╝ ██║██║  ██║██║ ╚████║   ██║         ██║  ██║██║",
+	"╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝         ╚═╝  ╚═╝╚═╝",
 }
 
 // asciiLogoLines is the fallback banner art used when the Hub stdout is
 // rendered by the Windows conhost.exe console (i.e. via the
-// any-ai-cli-launcher.exe WSL profile).
+// many-ai-cli-launcher.exe WSL profile).
 // All characters here are single-byte ASCII so the layout survives the
 // East Asian Width "Ambiguous → full-width" promotion that conhost applies
 // to U+2580..259F (block) and U+2500..257F (box drawing) under CJK locales.
 var asciiLogoLines = []string{
-	"    _    _   ___   __        _    ___        ____ _     ___ ",
-	"   / \\  | \\ | \\ \\ / /       / \\  |_ _|      / ___| |   |_ _|",
-	"  / _ \\ |  \\| |\\ V /  ___  / _ \\  | |  ___ | |   | |    | | ",
-	" / ___ \\| |\\  | | |  |___|/ ___ \\ | | |___|| |___| |___ | | ",
-	"/_/   \\_\\_| \\_| |_|       /_/   \\_\\___|     \\____|_____|___|",
+	" __  __     _    _   ___   __        _    ___        ____ _     ___ ",
+	"|  \\/  |   / \\  | \\ | \\ \\ / /       / \\  |_ _|      / ___| |   |_ _|",
+	"| |\\/| |  / _ \\ |  \\| |\\ V /  ___  / _ \\  | |  ___ | |   | |    | | ",
+	"| |  | | / ___ \\| |\\  | | |  |___|/ ___ \\ | | |___|| |___| |___ | | ",
+	"|_|  |_|/_/   \\_\\_| \\_| |_|       /_/   \\_\\___|     \\____|_____|___|",
 }
 
 type startupBannerAccess struct {
@@ -72,7 +72,7 @@ func startupBanner(version, addr, token string, accessOpt ...startupBannerAccess
 	}
 	lines = append(lines,
 		"",
-		fmt.Sprintf("ANY AI AGENTS                   %s", versionLabel),
+		fmt.Sprintf("MANY AI AGENTS                  %s", versionLabel),
 		fmt.Sprintf("Runtime: %s", runtimeLabel(runtimeMode())),
 		fmt.Sprintf("GitHub: %s", repositoryURL),
 		fmt.Sprintf("WebUI:  %s", hubBase),
@@ -90,7 +90,7 @@ func startupBanner(version, addr, token string, accessOpt ...startupBannerAccess
 	if wslutil.IsWSL() {
 		// WSL2 auto-forwards 127.0.0.1 between Windows and the WSL guest, so
 		// the same URL works from a Windows-side browser. Show it explicitly
-		// with the "localhost" form so users running `any-ai-cli serve` inside
+		// with the "localhost" form so users running `many-ai-cli serve` inside
 		// WSL know they don't need to start a Linux-side browser — the Hub UI
 		// is reachable from Windows as-is.
 		winURL := strings.Replace(hubURL, "127.0.0.1", "localhost", 1)

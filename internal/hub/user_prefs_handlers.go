@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/config"
 )
 
 // notifySoundCustomPath はカスタム通知音のバイナリファイルパスを返す。

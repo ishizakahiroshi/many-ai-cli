@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"strings"
 
-	"any-ai-cli/internal/wrapper"
+	"many-ai-cli/internal/wrapper"
 )
 
 type approvalRuleMode string

@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"any-ai-cli/internal/proto"
-	"any-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/proto"
+	"many-ai-cli/internal/sessionlog"
 
 	_ "modernc.org/sqlite"
 )

@@ -123,7 +123,7 @@ async function deletePushSubscription(subscription) {
 function rememberHubToken(registration) {
   if (!registration) return;
   const target = registration.active || navigator.serviceWorker.controller;
-  if (target) target.postMessage({ type: 'any-ai-cli-token', token: token || '' });
+  if (target) target.postMessage({ type: 'many-ai-cli-token', token: token || '' });
 }
 
 function urlBase64ToUint8Array(base64String) {
@@ -138,7 +138,7 @@ function urlBase64ToUint8Array(base64String) {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (event) => {
     const data = event.data || {};
-    if (data.type !== 'any-ai-cli-open-session') return;
+    if (data.type !== 'many-ai-cli-open-session') return;
     const sessionId = Number(data.session_id || 0);
     if (!Number.isFinite(sessionId) || sessionId <= 0) return;
     activateSession(sessionId);

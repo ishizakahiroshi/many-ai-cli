@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"any-ai-cli/internal/config"
-	"any-ai-cli/internal/sessionstore"
+	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/sessionstore"
 )
 
 func newTestFilesContentServer(tmpDir string) *Server {

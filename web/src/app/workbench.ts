@@ -110,7 +110,7 @@ function renderWorkbench() {
         `)}
 
         ${card('files', 'Files からコンテキスト投入', '絶対パスを指定して安全範囲内のテキストを prompt snippet 化。', `
-          <textarea id="wb-files-paths" rows="5" placeholder="C:\\\\dev\\\\any-ai-cli\\\\internal\\\\hub\\\\server.go"></textarea>
+          <textarea id="wb-files-paths" rows="5" placeholder="C:\\\\dev\\\\many-ai-cli\\\\internal\\\\hub\\\\server.go"></textarea>
           <div class="wb-actions">
             <button type="button" data-wb-action="files-context">Context 生成</button>
             <button type="button" data-wb-action="files-insert">入力へ追加</button>

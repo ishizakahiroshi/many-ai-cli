@@ -15,7 +15,7 @@ import (
 	"time"
 	"unicode"
 
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/config"
 )
 
 const voiceTranscribeMaxBytes = 25 * 1024 * 1024

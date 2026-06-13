@@ -8,12 +8,12 @@ import (
 	"testing"
 )
 
-// setupTempHome creates a temporary home directory with a .any-ai-cli subdir,
+// setupTempHome creates a temporary home directory with a .many-ai-cli subdir,
 // sets HOME (and USERPROFILE on Windows) to it, and returns a cleanup func.
 func setupTempHome(t *testing.T) (string, func()) {
 	t.Helper()
 	tmp := t.TempDir()
-	aacDir := filepath.Join(tmp, ".any-ai-cli")
+	aacDir := filepath.Join(tmp, ".many-ai-cli")
 	if err := os.MkdirAll(aacDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 				Name:    "WSL (Ubuntu)",
 				Type:    ProfileTypeWSL,
 				Distro:  "",
-				Binary:  "any-ai-cli",
+				Binary:  "many-ai-cli",
 				CWD:     "~",
 				HubPort: 0,
 			},
@@ -53,7 +53,7 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 				Host:     "153.127.0.1",
 				User:     "ubuntu",
 				SSHPort:  10022,
-				Binary:   "any-ai-cli",
+				Binary:   "many-ai-cli",
 				HubPort:  47777,
 			},
 		},
@@ -113,7 +113,7 @@ func TestLoadProfiles_EmptyFile(t *testing.T) {
 	tmpHome, cleanup := setupTempHome(t)
 	defer cleanup()
 
-	path := filepath.Join(tmpHome, ".any-ai-cli", profilesFile)
+	path := filepath.Join(tmpHome, ".many-ai-cli", profilesFile)
 	if err := os.WriteFile(path, []byte(""), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestLoadProfiles_UnknownVersion(t *testing.T) {
 	tmpHome, cleanup := setupTempHome(t)
 	defer cleanup()
 
-	path := filepath.Join(tmpHome, ".any-ai-cli", profilesFile)
+	path := filepath.Join(tmpHome, ".many-ai-cli", profilesFile)
 	if err := os.WriteFile(path, []byte("version: 999\nprofiles: []\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -365,7 +365,7 @@ func TestProfileJSONRoundTrip(t *testing.T) {
 		User:         "root",
 		SSHPort:      22,
 		IdentityFile: `C:\dev\.ssh\key.pem`,
-		TokenCommand: "docker exec aac-x sed -n 's/^token: //p' ~/.any-ai-cli/config.yaml",
+		TokenCommand: "docker exec aac-x sed -n 's/^token: //p' ~/.many-ai-cli/config.yaml",
 		HubPort:      47801,
 	}
 	data, err := json.Marshal(in)

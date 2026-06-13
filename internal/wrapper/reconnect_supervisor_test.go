@@ -10,7 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/config"
 	"golang.org/x/net/websocket"
 )
 

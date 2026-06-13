@@ -5,7 +5,7 @@ package hub
 import (
 	"os/exec"
 
-	"any-ai-cli/internal/wslutil"
+	"many-ai-cli/internal/wslutil"
 )
 
 func browserCommand(url string) *exec.Cmd {

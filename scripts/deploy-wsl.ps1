@@ -1,18 +1,18 @@
-# dist/linux/any-ai-cli を WSL の ~/.local/bin/ へ転送する
+# dist/linux/many-ai-cli を WSL の ~/.local/bin/ へ転送する
 # Usage:
-#   .\scripts\deploy-wsl.ps1                # 既定 (Distro=Ubuntu, Dest=~/.local/bin/any-ai-cli)
-#   .\scripts\deploy-wsl.ps1 -Distro Ubuntu -Dest '~/.local/bin/any-ai-cli'
+#   .\scripts\deploy-wsl.ps1                # 既定 (Distro=Ubuntu, Dest=~/.local/bin/many-ai-cli)
+#   .\scripts\deploy-wsl.ps1 -Distro Ubuntu -Dest '~/.local/bin/many-ai-cli'
 
 [CmdletBinding()]
 param(
     [string]$Distro = 'Ubuntu',
-    [string]$Dest   = '~/.local/bin/any-ai-cli'
+    [string]$Dest   = '~/.local/bin/many-ai-cli'
 )
 
 $ErrorActionPreference = 'Stop'
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
-$SrcWin   = Join-Path $RepoRoot 'dist\linux\any-ai-cli'
+$SrcWin   = Join-Path $RepoRoot 'dist\linux\many-ai-cli'
 
 if (-not (Test-Path -LiteralPath $SrcWin)) {
     Write-Error "Source not found: $SrcWin  (先に 'make build-linux' を実行してください)"
@@ -32,7 +32,7 @@ Write-Host ''
 
 # wsl.exe は `bash -c "...; $VAR"` のような引数を bash に渡すときに `$VAR` `$(...)` を壊すので、
 # bash 側でシェル変数・コマンド置換は使わず、値を直接埋め込んで && でチェインする。
-# 前提: 転送先パスに空白を含まないこと (any-ai-cli のデフォルトパスは満たす)。
+# 前提: 転送先パスに空白を含まないこと (many-ai-cli のデフォルトパスは満たす)。
 $DestDir = $Dest -replace '/[^/]+$', ''
 if ([string]::IsNullOrEmpty($DestDir)) { $DestDir = '.' }
 

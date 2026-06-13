@@ -2,7 +2,7 @@
 // Visual C++ runtime DLLs that whisper-server links against) and lays them down
 // next to the managed whisper-server binary so the install is self-contained
 // (no System32 / no machine-wide runtime dependency). Everything lives under
-// ~/.any-ai-cli/whisper/ so an uninstall (RemoveAll) leaves zero trace.
+// ~/.many-ai-cli/whisper/ so an uninstall (RemoveAll) leaves zero trace.
 //
 // Build-safety: files/ ships placeholder READMEs so `go:embed` always finds at
 // least one file and the build succeeds even before real signed DLLs are

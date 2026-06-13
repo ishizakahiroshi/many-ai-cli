@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"any-ai-cli/internal/config"
-	"any-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/sessionlog"
 )
 
 func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
@@ -185,10 +185,10 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	hubPort := s.currentHubPort()
 	cmd := exec.Command(exe, wrapArgs...)
 	cmd.Dir = cwd
-	cmd.Env = append(sanitizeEnv(os.Environ()), "ANY_AI_CLI=1",
-		fmt.Sprintf("ANY_AI_CLI_HUB_PORT=%d", hubPort))
+	cmd.Env = append(sanitizeEnv(os.Environ()), "MANY_AI_CLI=1",
+		fmt.Sprintf("MANY_AI_CLI_HUB_PORT=%d", hubPort))
 	if s.parentShell != "" {
-		cmd.Env = append(cmd.Env, "ANY_AI_CLI_PARENT_SHELL="+s.parentShell)
+		cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}
 	if envPreset := EnvPresetFor(body.Provider, effectiveRoute); len(envPreset) > 0 {
 		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)

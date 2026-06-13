@@ -12,7 +12,7 @@ services:
     #   latest  -> follows main (normal operation)
     #   develop -> follows develop (validation)
     #   dev     -> local VPS build; freeze the cron with HOLD first
-    image: ghcr.io/ishizakahiroshi/any-ai-cli:${AAC_TAG:-latest}
+    image: ghcr.io/ishizakahiroshi/many-ai-cli:${AAC_TAG:-latest}
     init: true
     restart: unless-stopped
     stop_grace_period: 40s
@@ -24,14 +24,14 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD-SHELL", "TOKEN=$$(sed -n 's/^token: //p' \"$$HOME/.any-ai-cli/config.yaml\"); test -n \"$$TOKEN\" && curl -fsS -o /dev/null \"http://127.0.0.1:$$HUB_PORT/api/info?token=$$TOKEN\""]
+      test: ["CMD-SHELL", "TOKEN=$$(sed -n 's/^token: //p' \"$$HOME/.many-ai-cli/config.yaml\"); test -n \"$$TOKEN\" && curl -fsS -o /dev/null \"http://127.0.0.1:$$HUB_PORT/api/info?token=$$TOKEN\""]
       interval: 60s
       timeout: 5s
       retries: 3
       start_period: 15s
     environment:
       HUB_PORT: "47801"
-      ANY_AI_CLI_HUB_PORT: "47801"
+      MANY_AI_CLI_HUB_PORT: "47801"
     ports:
       - "127.0.0.1:47801:48000"
     volumes:

@@ -7,11 +7,11 @@ import (
 
 func TestParseWorktreePorcelain(t *testing.T) {
 	raw := strings.Join([]string{
-		"worktree C:/dev/any-ai-cli",
+		"worktree C:/dev/many-ai-cli",
 		"HEAD abc123",
 		"branch refs/heads/develop",
 		"",
-		"worktree C:/dev/any-ai-cli-feature",
+		"worktree C:/dev/many-ai-cli-feature",
 		"HEAD def456",
 		"detached",
 		"",

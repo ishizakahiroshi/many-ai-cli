@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/config"
 )
 
 // TestCwdForRequest_NoSession は ?session パラメータ無しのとき hubCWD を返すことを確認する。

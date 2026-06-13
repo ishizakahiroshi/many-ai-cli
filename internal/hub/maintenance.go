@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"any-ai-cli/internal/attach"
-	"any-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/attach"
+	"many-ai-cli/internal/sessionlog"
 )
 
 // recoverTranscripts は logs/sessions/*.jsonl のうち、対応する .txt が
@@ -130,14 +130,14 @@ func (s *Server) maintenanceLoop(ctx context.Context) {
 	}
 }
 
-// attachmentsDir は添付ファイルの保存先 ~/.any-ai-cli/attachments を返す。
+// attachmentsDir は添付ファイルの保存先 ~/.many-ai-cli/attachments を返す。
 // 4 箇所で散らばっていた os.UserHomeDir + filepath.Join のリテラル重複を集約する。
 func attachmentsDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".any-ai-cli", "attachments"), nil
+	return filepath.Join(home, ".many-ai-cli", "attachments"), nil
 }
 
 // cleanAttachments removes attachment files older than the configured retention

@@ -651,7 +651,7 @@ func (s *UIServer) runConnection(ctx context.Context, lc *liveConn, profile Prof
 		// processes (running badge in their selection UI).
 		s.updateLastUsed(profile.Name)
 		if err := RegisterActiveConnection(profile.Name, hubURL); err != nil {
-			fmt.Fprintf(os.Stderr, "any-ai-cli-launcher: failed to record active connection: %v\n", err)
+			fmt.Fprintf(os.Stderr, "many-ai-cli-launcher: failed to record active connection: %v\n", err)
 		}
 		// 接続終了（errCh close）まで監視する。リモート serve 停止（Web UI の
 		// 「Web のみ停止」含む）やトンネル切断時に、確立済み接続の登録と
@@ -677,7 +677,7 @@ func (s *UIServer) runConnection(ctx context.Context, lc *liveConn, profile Prof
 func (s *UIServer) watchConnection(lc *liveConn, name string, errCh <-chan error) {
 	for connErr := range errCh {
 		if connErr != nil {
-			fmt.Fprintf(os.Stderr, "any-ai-cli-launcher: connection %q error: %v\n", name, connErr)
+			fmt.Fprintf(os.Stderr, "many-ai-cli-launcher: connection %q error: %v\n", name, connErr)
 		}
 	}
 	lc.cancel()

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/config"
 )
 
 // newTestMoveServer は handleFilesMove テスト用に最小限の Server を組み立てる。

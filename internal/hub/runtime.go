@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"strings"
 
-	"any-ai-cli/internal/wslutil"
+	"many-ai-cli/internal/wslutil"
 )
 
 type envMeta struct {
@@ -24,28 +24,28 @@ var envMetaByKind = map[string]envMeta{
 		Label: "Local",
 		Short: "L",
 		Color: "#22c55e",
-		Title: "L ANY-AI-CLI",
+		Title: "L MANY-AI-CLI",
 	},
 	"wsl": {
 		Kind:  "wsl",
 		Label: "WSL",
 		Short: "W",
 		Color: "#3b82f6",
-		Title: "W ANY-AI-CLI",
+		Title: "W MANY-AI-CLI",
 	},
 	"vps": {
 		Kind:  "vps",
 		Label: "VPS",
 		Short: "V",
 		Color: "#f97316",
-		Title: "V ANY-AI-CLI",
+		Title: "V MANY-AI-CLI",
 	},
 	"vps-tunnel": {
 		Kind:  "vps-tunnel",
 		Label: "VPS Tunnel",
 		Short: "T",
 		Color: "#ef4444",
-		Title: "T ANY-AI-CLI",
+		Title: "T MANY-AI-CLI",
 	},
 }
 
@@ -92,7 +92,7 @@ func localIP() string {
 }
 
 // hostNetInfo はバッジ表示用の SSH セッション判定と自機 IP を返す。
-// ANY_AI_CLI_HOST_LABEL があれば最優先で表示ラベルとして使う
+// MANY_AI_CLI_HOST_LABEL があれば最優先で表示ラベルとして使う
 // （launcher が SSH serve 起動時にプロファイルの host を注入する。
 // コンテナ内実行等で NIC からグローバル IP を検出できないケースへの対処）。
 // 次に SSH セッション経由で Hub が起動された場合は SSH_CONNECTION のサーバ側 IP、
@@ -104,7 +104,7 @@ func hostNetInfo() (ssh bool, hostIP string) {
 	} else if os.Getenv("SSH_CLIENT") != "" || os.Getenv("SSH_TTY") != "" {
 		ssh = true
 	}
-	if label := os.Getenv("ANY_AI_CLI_HOST_LABEL"); label != "" {
+	if label := os.Getenv("MANY_AI_CLI_HOST_LABEL"); label != "" {
 		return ssh, label
 	}
 	if hostIP == "" {
@@ -116,7 +116,7 @@ func hostNetInfo() (ssh bool, hostIP string) {
 func runtimeLabel(mode string) string {
 	switch mode {
 	case "windows-wsl":
-		return "Windows + WSL (any-ai-cli-launcher.exe)"
+		return "Windows + WSL (many-ai-cli-launcher.exe)"
 	case "windows-native":
 		return "Windows native"
 	case "wsl":
@@ -156,7 +156,7 @@ func resolveEnvMeta(configKind, mode string, ssh bool, hostLabel string, netHint
 		}
 		return envMetaForKind(kind, hostLabel), true
 	}
-	if meta, ok := resolveExplicit(os.Getenv("ANY_AI_CLI_ENV_KIND")); ok {
+	if meta, ok := resolveExplicit(os.Getenv("MANY_AI_CLI_ENV_KIND")); ok {
 		return meta
 	}
 	if meta, ok := resolveExplicit(configKind); ok {

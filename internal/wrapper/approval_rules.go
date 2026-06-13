@@ -9,57 +9,57 @@ import (
 	"strings"
 )
 
-const claudeImportLine = "@~/.any-ai-cli/approval-rules.md"
+const claudeImportLine = "@~/.many-ai-cli/approval-rules.md"
 const sharedBlockStart = "<!-- any-ai-cli:approval-rules -->"
 const sharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
-const rulesVersion = "10"
+const rulesVersion = "11"
 
 var rulesFileContent = strings.Join([]string{
 	fmt.Sprintf("<!-- version: %s -->", rulesVersion),
-	"## any-ai-cli Approval Format",
+	"## many-ai-cli Approval Format",
 	"",
-	"**このセッションが any-ai-cli Hub 管理下かどうかを最初に確認してください。**",
+	"**このセッションが many-ai-cli Hub 管理下かどうかを最初に確認してください。**",
 	"",
 	"確認方法（**OS と使用するツールに応じて構文を選ぶ**）：",
 	"",
-	"- macOS / Linux: `Bash` ツールで `echo \"$ANY_AI_CLI\"`",
-	"- Windows (PowerShell ネイティブ): `PowerShell` ツールで `$env:ANY_AI_CLI`",
-	"- Windows (Git Bash / WSL / Cygwin): `Bash` ツールで `echo \"$ANY_AI_CLI\"`",
+	"- macOS / Linux: `Bash` ツールで `echo \"$MANY_AI_CLI\"`",
+	"- Windows (PowerShell ネイティブ): `PowerShell` ツールで `$env:MANY_AI_CLI`",
+	"- Windows (Git Bash / WSL / Cygwin): `Bash` ツールで `echo \"$MANY_AI_CLI\"`",
 	"",
 	"⚠️ **取り違え注意**：",
-	"- `Bash` ツールに `$env:ANY_AI_CLI` を渡すと `:ANY_AI_CLI: command not found`（exit 127）で失敗する。bash では `$env` が空に展開され、残った `:ANY_AI_CLI` がコマンドとして実行されるため。",
-	"- `PowerShell` ツールに `echo $ANY_AI_CLI` を渡すと、`$ANY_AI_CLI` は PowerShell では未定義の変数として空文字に展開され、値が取得できない。",
+	"- `Bash` ツールに `$env:MANY_AI_CLI` を渡すと `:MANY_AI_CLI: command not found`（exit 127）で失敗する。bash では `$env` が空に展開され、残った `:MANY_AI_CLI` がコマンドとして実行されるため。",
+	"- `PowerShell` ツールに `echo $MANY_AI_CLI` を渡すと、`$MANY_AI_CLI` は PowerShell では未定義の変数として空文字に展開され、値が取得できない。",
 	"- macOS / Linux には PowerShell が標準で入っていないので `PowerShell` ツールは選ばない。",
 	"- 失敗したらツールを切り替えて再試行すること（落としてセッションを止めない）。",
 	"",
-	"`ANY_AI_CLI=1` の場合のみ、以下の [ANY-AI-CLI] マーカーを使用してください。",
+	"`MANY_AI_CLI=1` の場合のみ、以下の [MANY-AI-CLI] マーカーを使用してください。",
 	"未設定・空の場合はマーカーなしでプレーンテキストで出力してください。",
 	"（このチェックはセッション内で1回だけ行い、結果を記憶してください）",
 	"",
-	"**⚠️ 最優先の禁止事項: `ANY_AI_CLI=1` のセッションでは、AI が自発的に出すネイティブ対話 UI を一切使わないこと。**",
+	"**⚠️ 最優先の禁止事項: `MANY_AI_CLI=1` のセッションでは、AI が自発的に出すネイティブ対話 UI を一切使わないこと。**",
 	"具体的には Claude の `AskUserQuestion` ツール（端末に `❯` カーソル・`↑↓ to navigate`・`Type something`・`Chat about this` を描く選択ピッカー）や、同種の TUI セレクトメニューでユーザーに選ばせてはいけない。",
 	"理由: これらは Web ダッシュボードの xterm.js 上で文字化けし、再描画されるピッカーを VT スクレイプで Web ボタン化する過程で**選択肢の番号が Web 側ボタンとズレ、ユーザーが誤った項目を選んでしまう**（過去に繰り返し発生）。",
-	"ユーザーへの確認・選択は、例外なく下記 [ANY-AI-CLI] マーカー（YES/NO・番号付き選択肢・複数質問・#multi 複数選択）のテキストで出力すること。`AskUserQuestion` は呼ばない。",
+	"ユーザーへの確認・選択は、例外なく下記 [MANY-AI-CLI] マーカー（YES/NO・番号付き選択肢・複数質問・#multi 複数選択）のテキストで出力すること。`AskUserQuestion` は呼ばない。",
 	"（例外: CLI 本体がツール実行許可のために出すネイティブ承認プロンプトはこの限りではない。禁止対象は AI が自発的に出す選択 UI のみ。）",
 	"",
 	"- YES/NO:",
-	"  [ANY-AI-CLI]",
+	"  [MANY-AI-CLI]",
 	"  question? (Y:1/N:0)",
-	"  [/ANY-AI-CLI]",
+	"  [/MANY-AI-CLI]",
 	"",
 	"- 番号付き選択肢:",
-	"  [ANY-AI-CLI]",
+	"  [MANY-AI-CLI]",
 	"  question?",
 	"  1. Option A (Recommended)",
 	"  2. Option B",
 	"  N. User specifies",
-	"  [/ANY-AI-CLI]",
+	"  [/MANY-AI-CLI]",
 	"",
 	"  - Option 1 は必ず推奨選択肢とし (Recommended) を末尾に付ける",
 	"  - 最後の選択肢は必ず「N. User specifies」",
 	"",
 	"- 複数質問（一括確認、上限 N=8 推奨）:",
-	"  [ANY-AI-CLI]",
+	"  [MANY-AI-CLI]",
 	"  1 question1?",
 	"   1. Option A (Recommended)",
 	"   2. Option B",
@@ -70,7 +70,7 @@ var rulesFileContent = strings.Join([]string{
 	"   5. Option E",
 	"   6. Option F",
 	"   N. User specifies",
-	"  [/ANY-AI-CLI]",
+	"  [/MANY-AI-CLI]",
 	"",
 	"  - 選択肢番号は自由。上例のようなブロック全体の通し番号でも、質問ごとに 1. から振り直してもよい。ただし同一質問内で番号を重複させない",
 	"  - ユーザーの回答には **画面に表示した選択肢番号がそのまま** 返ってくる。解釈時は自分が出力した番号と照合すること（1 起点に読み替えない）",
@@ -82,12 +82,12 @@ var rulesFileContent = strings.Join([]string{
 	"  - ユーザーが手入力した場合は「2 5」のような質問順の数字列 1 行のこともある。行頭の数字が質問番号として解釈できない場合はこちらとみなす",
 	"",
 	"- 複数選択（1 問で任意個を選ばせる場合）:",
-	"  [ANY-AI-CLI]",
+	"  [MANY-AI-CLI]",
 	"  #multi question?",
 	"  1. Option A",
 	"  2. Option B",
 	"  3. Option C",
-	"  [/ANY-AI-CLI]",
+	"  [/MANY-AI-CLI]",
 	"",
 	"  - 1 行目を「#multi 」で始め、その後ろに質問文を書く（`#multi` は複数選択の合図で、画面には出ない）",
 	"  - 続けて番号付き選択肢を並べる。ユーザーは任意個を ON/OFF できる",
@@ -95,33 +95,33 @@ var rulesFileContent = strings.Join([]string{
 	"  - ユーザーの回答は選択番号をカンマ連結した 1 行で返ってくる（例: 「1,3」= Option A と C を選択）。最低 1 件は選択される",
 	"  - 「1 問で 1 つだけ選ばせる」場合は #multi を使わず、上の「番号付き選択肢」形式を使う",
 	"",
-	"- [ANY-AI-CLI] マーカーは確認・承認の質問にのみ使用する",
+	"- [MANY-AI-CLI] マーカーは確認・承認の質問にのみ使用する",
 	"",
-	"## any-ai-cli Done Summary Format",
+	"## many-ai-cli Done Summary Format",
 	"",
 	"**タスクが完了した直後（AI の返答末尾）に以下のマーカーを出力してください。**",
 	"",
 	"- 出力形式:",
-	"  [ANY-AI-CLI-DONE] <1〜2 文の完了サマリー> [/ANY-AI-CLI-DONE]",
+	"  [MANY-AI-CLI-DONE] <1〜2 文の完了サマリー> [/MANY-AI-CLI-DONE]",
 	"",
-	"- 条件: `ANY_AI_CLI=1` の場合のみ出力する（承認マーカーと同じ確認済みの値を使用）。",
+	"- 条件: `MANY_AI_CLI=1` の場合のみ出力する（承認マーカーと同じ確認済みの値を使用）。",
 	"- サマリーは「何を完了したか」を端的に 1〜2 文で記述する。例:",
-	"  [ANY-AI-CLI-DONE] files タブの検索バグを修正し、テストを追加しました。 [/ANY-AI-CLI-DONE]",
+	"  [MANY-AI-CLI-DONE] files タブの検索バグを修正し、テストを追加しました。 [/MANY-AI-CLI-DONE]",
 	"- マーカーは 1 ターン 1 回のみ、返答の末尾に出力する。",
 	"- 通常の会話・質問への回答・作業途中には出力しない（タスク完了時のみ）。",
 	"",
 }, "\n")
 
-// centralRulesPath は ~/.any-ai-cli/approval-rules.md のパスを返す
+// centralRulesPath は ~/.many-ai-cli/approval-rules.md のパスを返す
 func centralRulesPath() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".any-ai-cli", "approval-rules.md")
+	return filepath.Join(home, ".many-ai-cli", "approval-rules.md")
 }
 
-// CentralRulesDir は ~/.any-ai-cli/ ディレクトリのパスを返す
+// CentralRulesDir は ~/.many-ai-cli/ ディレクトリのパスを返す
 func CentralRulesDir() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".any-ai-cli")
+	return filepath.Join(home, ".many-ai-cli")
 }
 
 // SyncRulesFile はバージョンを確認し、不一致または不存在なら最新内容で上書きする

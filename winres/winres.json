@@ -1,14 +1,14 @@
 {
   "RT_GROUP_ICON": {
     "#1": {
-      "0000": "../assets/any-ai-cli.ico"
+      "0000": "../assets/many-ai-cli.ico"
     }
   },
   "RT_MANIFEST": {
     "#1": {
       "0409": {
         "identity": {
-          "name": "any-ai-cli",
+          "name": "many-ai-cli",
           "version": "0.3.0.0"
         },
         "description": "",
@@ -38,16 +38,16 @@
         },
         "info": {
           "0409": {
-            "Comments": "Local web dashboard for managing multiple AI coding CLIs. https://github.com/ishizakahiroshi/any-ai-cli",
+            "Comments": "Local web dashboard for managing multiple AI coding CLIs. https://github.com/ishizakahiroshi/many-ai-cli",
             "CompanyName": "Hiroshi Ishizaka",
-            "FileDescription": "ANY-AI-CLI",
+            "FileDescription": "MANY-AI-CLI",
             "FileVersion": "0.3.0",
-            "InternalName": "any-ai-cli",
+            "InternalName": "many-ai-cli",
             "LegalCopyright": "Copyright (c) 2026 Hiroshi Ishizaka. MIT License.",
             "LegalTrademarks": "",
-            "OriginalFilename": "any-ai-cli.exe",
+            "OriginalFilename": "many-ai-cli.exe",
             "PrivateBuild": "",
-            "ProductName": "ANY-AI-CLI",
+            "ProductName": "MANY-AI-CLI",
             "ProductVersion": "0.3.0",
             "SpecialBuild": ""
           }

@@ -1,6 +1,6 @@
 version: 2
 
-project_name: any-ai-cli
+project_name: many-ai-cli
 
 # Windows リソース (.syso) はタグ版数で都度生成する。git に commit 済みの
 # .syso に依存せず、リリースごとに {{.Version}} を winres に焼き込むことで
@@ -14,13 +14,13 @@ before:
     - bun install --frozen-lockfile --cwd web
     - bun --cwd web run build
     - go install github.com/tc-hib/go-winres@latest
-    - go-winres make --in winres/winres.json --out cmd/any-ai-cli/rsrc --product-version={{ .Version }} --file-version={{ .Version }}
-    - go-winres make --in winres/winres-launcher.json --out cmd/any-ai-cli-launcher/rsrc --product-version={{ .Version }} --file-version={{ .Version }}
+    - go-winres make --in winres/winres.json --out cmd/many-ai-cli/rsrc --product-version={{ .Version }} --file-version={{ .Version }}
+    - go-winres make --in winres/winres-launcher.json --out cmd/many-ai-cli-launcher/rsrc --product-version={{ .Version }} --file-version={{ .Version }}
 
 builds:
-  - id: any-ai-cli
-    main: ./cmd/any-ai-cli
-    binary: any-ai-cli
+  - id: many-ai-cli
+    main: ./cmd/many-ai-cli
+    binary: many-ai-cli
     goos:
       - windows
       - linux
@@ -38,9 +38,9 @@ builds:
     ldflags:
       - -s -w
       - -X main.version={{ .Version }}
-  - id: any-ai-cli-launcher
-    main: ./cmd/any-ai-cli-launcher
-    binary: any-ai-cli-launcher
+  - id: many-ai-cli-launcher
+    main: ./cmd/many-ai-cli-launcher
+    binary: many-ai-cli-launcher
     goos:
       - windows
     goarch:
@@ -58,7 +58,7 @@ builds:
 archives:
   - id: default
     formats: [zip]
-    # Windows だけ any-ai-cli.exe + any-ai-cli-launcher.exe の 2 本、他 OS は 1 本。
+    # Windows だけ many-ai-cli.exe + many-ai-cli-launcher.exe の 2 本、他 OS は 1 本。
     # platform 間でバイナリ数が異なる構成を許可する。
     allow_different_binary_count: true
     # エンドユーザー向けに OS/arch 名を分かりやすく:
@@ -104,14 +104,14 @@ signs:
 # cask は macOS 専用につき、Linux ユーザーは下の nfpms(deb/rpm) か zip を使う
 # （plan_package-manager-distribution.md C1 の分岐決定 2026-06-07）。
 homebrew_casks:
-  - name: any-ai-cli
+  - name: many-ai-cli
     ids: [default]
     repository:
       owner: ishizakahiroshi
       name: homebrew-tap
       branch: main
       token: "{{ .Env.PUBLISH_GITHUB_TOKEN }}"
-    homepage: https://github.com/ishizakahiroshi/any-ai-cli
+    homepage: https://github.com/ishizakahiroshi/many-ai-cli
     description: "Web dashboard to manage approvals and progress across multiple AI coding CLIs"
     license: MIT
     # prerelease タグ (-rc 等) では tap へ push しない
@@ -122,30 +122,30 @@ homebrew_casks:
       post:
         install: |
           if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/any-ai-cli"]
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/many-ai-cli"]
           end
 
 # winget への manifest 公開（Windows x64、zip + nested portable）。
 # 自分の winget-pkgs fork へ commit し、microsoft/winget-pkgs master へ自動 PR。
 # fork は release.yml の sync ステップで upstream と同期してから使う。
 winget:
-  - name: any-ai-cli
+  - name: many-ai-cli
     publisher: ishizakahiroshi
     # 後から実質変更不可。本名名義で長期運用（2026-06-07 ユーザー確定）
-    package_identifier: ishizakahiroshi.any-ai-cli
+    package_identifier: ishizakahiroshi.many-ai-cli
     short_description: "Web dashboard to manage approvals and progress across multiple AI coding CLIs"
     license: MIT
-    license_url: https://github.com/ishizakahiroshi/any-ai-cli/blob/main/LICENSE
-    homepage: https://github.com/ishizakahiroshi/any-ai-cli
+    license_url: https://github.com/ishizakahiroshi/many-ai-cli/blob/main/LICENSE
+    homepage: https://github.com/ishizakahiroshi/many-ai-cli
     publisher_url: https://github.com/ishizakahiroshi
-    publisher_support_url: https://github.com/ishizakahiroshi/any-ai-cli/issues
-    release_notes_url: https://github.com/ishizakahiroshi/any-ai-cli/releases/tag/v{{ .Version }}
+    publisher_support_url: https://github.com/ishizakahiroshi/many-ai-cli/issues
+    release_notes_url: https://github.com/ishizakahiroshi/many-ai-cli/releases/tag/v{{ .Version }}
     # prerelease タグでは manifest を push しない
     skip_upload: auto
     repository:
       owner: ishizakahiroshi
       name: winget-pkgs
-      branch: "any-ai-cli-{{ .Version }}"
+      branch: "many-ai-cli-{{ .Version }}"
       token: "{{ .Env.PUBLISH_GITHUB_TOKEN }}"
       pull_request:
         enabled: true
@@ -157,11 +157,11 @@ winget:
 
 # Linux 向け deb/rpm を生成し GitHub Releases に添付する（apt/yum リポジトリ運営はしない）。
 nfpms:
-  - package_name: any-ai-cli
-    ids: [any-ai-cli]
+  - package_name: many-ai-cli
+    ids: [many-ai-cli]
     vendor: ishizakahiroshi
     maintainer: "Hiroshi Ishizaka <ishizakahiroshi@gmail.com>"
-    homepage: https://github.com/ishizakahiroshi/any-ai-cli
+    homepage: https://github.com/ishizakahiroshi/many-ai-cli
     description: Web dashboard to manage approvals and progress across multiple AI coding CLIs
     license: MIT
     formats: [deb, rpm]

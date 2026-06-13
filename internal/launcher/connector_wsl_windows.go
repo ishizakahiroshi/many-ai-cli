@@ -14,7 +14,7 @@ import (
 // WSLConnector implements Connector for WSL profiles.
 type WSLConnector struct{}
 
-// Start launches `wsl.exe -- any-ai-cli serve` in the target distribution,
+// Start launches `wsl.exe -- many-ai-cli serve` in the target distribution,
 // watches stdout/stderr for the Hub URL, then opens the default browser.
 func (c *WSLConnector) Start(ctx context.Context, p Profile, urlCh chan<- string, errCh chan<- error) error {
 	if p.Type != ProfileTypeWSL {
@@ -27,7 +27,7 @@ func (c *WSLConnector) Start(ctx context.Context, p Profile, urlCh chan<- string
 func (c *WSLConnector) run(ctx context.Context, p Profile, urlCh chan<- string, errCh chan<- error) {
 	binary := p.Binary
 	if binary == "" {
-		binary = "any-ai-cli"
+		binary = "many-ai-cli"
 	}
 
 	port := p.HubPort
@@ -56,12 +56,12 @@ func (c *WSLConnector) run(ctx context.Context, p Profile, urlCh chan<- string, 
 	// Windows-side pnpm shim surfaced via WSL interop, which fails inside
 	// WSL because `node` is not installed there. Adding -i bypasses that
 	// early-return guard so the user's real PATH is in effect.
-	// ANY_AI_CLI_WSL_LAUNCHER marks "the user is reaching the WSL Hub from
+	// MANY_AI_CLI_WSL_LAUNCHER marks "the user is reaching the WSL Hub from
 	// Windows via this launcher", so the Linux-side serve can default log_dir
 	// to the Windows %USERPROFILE% (so the Hub UI's open-folder buttons land
-	// in plain C:\Users\... instead of \\wsl$\... UNC). A bare `any-ai-cli
+	// in plain C:\Users\... instead of \\wsl$\... UNC). A bare `many-ai-cli
 	// serve` inside WSL (without this launcher) stays purely Linux-side.
-	shellCmd := fmt.Sprintf("export ANY_AI_CLI_WSL_LAUNCHER=1; exec %s serve --port %d", ShellQuote(binary), port)
+	shellCmd := fmt.Sprintf("export MANY_AI_CLI_WSL_LAUNCHER=1; exec %s serve --port %d", ShellQuote(binary), port)
 	wslArgs = append(wslArgs, "--", "bash", "-ilc", shellCmd)
 
 	cmd := exec.CommandContext(ctx, "wsl.exe", wslArgs...)
@@ -127,7 +127,7 @@ func (c *WSLConnector) run(ctx context.Context, p Profile, urlCh chan<- string, 
 	close(errCh)
 }
 
-// cleanupWSLOrphansConnector terminates the WSL-side any-ai-cli serve process
+// cleanupWSLOrphansConnector terminates the WSL-side many-ai-cli serve process
 // this launcher run started. WSL2 interop does not propagate SIGHUP/SIGTERM
 // from the Windows side, so the Linux serve survives wsl.exe getting killed
 // and continues to hold the Hub port. We match on the exact --port the
@@ -142,7 +142,7 @@ func cleanupWSLOrphansConnector(distro string, port int) {
 	if distro != "" {
 		args = append(args, "-d", distro)
 	}
-	pattern := fmt.Sprintf("any-ai-cli serve --port %d", port)
+	pattern := fmt.Sprintf("many-ai-cli serve --port %d", port)
 	args = append(args, "--", "pkill", "-f", pattern)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"strings"
 
-	"any-ai-cli/internal/wslutil"
+	"many-ai-cli/internal/wslutil"
 )
 
 func pickDirectoryNative() (string, error) {

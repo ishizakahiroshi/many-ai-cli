@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"any-ai-cli/internal/config"
-	notifyPkg "any-ai-cli/internal/notify"
+	"many-ai-cli/internal/config"
+	notifyPkg "many-ai-cli/internal/notify"
 )
 
 func (s *Server) handleLogConfig(w http.ResponseWriter, r *http.Request) {
@@ -182,7 +182,7 @@ func (s *Server) handleNotifyTest(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusServiceUnavailable, "notify_unavailable", "notify manager not initialized")
 		return
 	}
-	if err := s.notifyMgr.SendTest(ctx, bc, "any-ai-cli test", "Test notification from any-ai-cli Hub"); err != nil {
+	if err := s.notifyMgr.SendTest(ctx, bc, "many-ai-cli test", "Test notification from many-ai-cli Hub"); err != nil {
 		writeJSONError(w, http.StatusBadGateway, "send_failed", err.Error())
 		return
 	}

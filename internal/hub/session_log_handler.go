@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"any-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/sessionlog"
 )
 
 const (

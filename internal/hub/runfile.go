@@ -1,4 +1,4 @@
-// Hub runtime file (~/.any-ai-cli/hub-runtime.json).
+// Hub runtime file (~/.many-ai-cli/hub-runtime.json).
 //
 // The Hub records its actually-bound port and PID here after Listen
 // succeeds. The configured port (config.yaml hub.port) and the actual
@@ -35,13 +35,13 @@ type hubRuntimeData struct {
 	StartedAt time.Time `json:"started_at"`
 }
 
-// hubRuntimePath returns the path to ~/.any-ai-cli/hub-runtime.json.
+// hubRuntimePath returns the path to ~/.many-ai-cli/hub-runtime.json.
 func hubRuntimePath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("home dir: %w", err)
 	}
-	return filepath.Join(home, ".any-ai-cli", hubRuntimeFile), nil
+	return filepath.Join(home, ".many-ai-cli", hubRuntimeFile), nil
 }
 
 // writeHubRuntime records the calling process as the Hub bound to port.

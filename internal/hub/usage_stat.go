@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"any-ai-cli/internal/proto"
+	"many-ai-cli/internal/proto"
 )
 
 // usageStat はセッション単位のトークン / コスト累積値。

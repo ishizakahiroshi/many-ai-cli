@@ -77,7 +77,7 @@ func TestProviderDefaultsIncludeCursorAgent(t *testing.T) {
 // 書き込み後に temp ファイルが残っていないこと、内容が一致することを検証する。
 func TestSaveAtomicWrite(t *testing.T) {
 	home := t.TempDir()
-	dir := filepath.Join(home, ".any-ai-cli")
+	dir := filepath.Join(home, ".many-ai-cli")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestLoadOrCreateNotExist(t *testing.T) {
 	}
 
 	// config.yaml が生成されていること
-	path := filepath.Join(home, ".any-ai-cli", "config.yaml")
+	path := filepath.Join(home, ".many-ai-cli", "config.yaml")
 	if _, statErr := os.Stat(path); statErr != nil {
 		t.Errorf("config.yaml not created: %v", statErr)
 	}
@@ -149,7 +149,7 @@ func TestLoadOrCreatePrivatePermissions(t *testing.T) {
 		t.Skip("Unix permission bits are not reliable on Windows")
 	}
 	home := t.TempDir()
-	dir := filepath.Join(home, ".any-ai-cli")
+	dir := filepath.Join(home, ".many-ai-cli")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func TestRandomTokenLength(t *testing.T) {
 // TestLoadOrCreateCorruptedFile は破損 YAML の場合に .bak が生成され、デフォルト設定で起動できることを確認する。
 func TestLoadOrCreateCorruptedFile(t *testing.T) {
 	home := t.TempDir()
-	dir := filepath.Join(home, ".any-ai-cli")
+	dir := filepath.Join(home, ".many-ai-cli")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +239,7 @@ func TestLoadOrCreatePermissionError(t *testing.T) {
 	}
 
 	home := t.TempDir()
-	dir := filepath.Join(home, ".any-ai-cli")
+	dir := filepath.Join(home, ".many-ai-cli")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func unmarshalYAML(b []byte, v interface{}) error {
 // への移行ロジックを確認する。
 func TestLoadOrCreate_SpawnMigration(t *testing.T) {
 	home := t.TempDir()
-	dir := filepath.Join(home, ".any-ai-cli")
+	dir := filepath.Join(home, ".many-ai-cli")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

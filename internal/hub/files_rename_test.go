@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/config"
 )
 
 func newTestRenameServer(t *testing.T, tmpDir string) *Server {

@@ -1,4 +1,4 @@
-module any-ai-cli
+module many-ai-cli
 
 go 1.25.11
 

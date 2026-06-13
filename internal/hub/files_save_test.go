@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/config"
 )
 
 // newTestSaveServer はテスト用 Server を生成する（files_rename_test.go のヘルパ構成に準拠）。

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/config"
 )
 
 func (s *Server) invalidateSlashCache(provider string) {

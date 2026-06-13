@@ -45,10 +45,10 @@ func TestHostNetInfoSSHClientOnly(t *testing.T) {
 }
 
 func TestHostNetInfoHostLabelOverride(t *testing.T) {
-	// ANY_AI_CLI_HOST_LABEL は SSH_CONNECTION のサーバ側 IP より優先される
+	// MANY_AI_CLI_HOST_LABEL は SSH_CONNECTION のサーバ側 IP より優先される
 	// （コンテナ内 sshd 経由だと SSH_CONNECTION がコンテナ IP になるため）
 	t.Setenv("SSH_CONNECTION", "192.168.1.50 52344 172.19.0.2 22")
-	t.Setenv("ANY_AI_CLI_HOST_LABEL", "203.0.113.10")
+	t.Setenv("MANY_AI_CLI_HOST_LABEL", "203.0.113.10")
 	ssh, ip := hostNetInfo()
 	if !ssh {
 		t.Error("SSH_CONNECTION 設定時に ssh=false")
@@ -69,7 +69,7 @@ func TestHostNetInfoNonSSH(t *testing.T) {
 }
 
 func TestResolveEnvMetaPriority(t *testing.T) {
-	t.Setenv("ANY_AI_CLI_ENV_KIND", "vps")
+	t.Setenv("MANY_AI_CLI_ENV_KIND", "vps")
 	got := resolveEnvMeta("wsl", "windows-wsl", false, "host.example", true, "vps-tunnel")
 	if got.Kind != "vps" || got.Label != "VPS" || got.HostLabel != "host.example" {
 		t.Fatalf("env var should win, got %+v", got)
@@ -77,7 +77,7 @@ func TestResolveEnvMetaPriority(t *testing.T) {
 }
 
 func TestResolveEnvMetaInvalidExplicitFallsBackToLocal(t *testing.T) {
-	t.Setenv("ANY_AI_CLI_ENV_KIND", "invalid")
+	t.Setenv("MANY_AI_CLI_ENV_KIND", "invalid")
 	got := resolveEnvMeta("vps", "wsl", true, "", true, "vps-tunnel")
 	if got.Kind != "local" {
 		t.Fatalf("invalid explicit env kind = %q, want local", got.Kind)

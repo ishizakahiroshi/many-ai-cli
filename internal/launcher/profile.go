@@ -1,5 +1,5 @@
-// Package launcher provides connection profile management for the any-ai-cli launcher.
-// Profiles are stored in ~/.any-ai-cli/launcher-profiles.yaml.
+// Package launcher provides connection profile management for the many-ai-cli launcher.
+// Profiles are stored in ~/.many-ai-cli/launcher-profiles.yaml.
 package launcher
 
 import (
@@ -28,7 +28,7 @@ const (
 type SSHMode string
 
 const (
-	SSHModeServe  SSHMode = "serve"  // Start any-ai-cli serve on remote
+	SSHModeServe  SSHMode = "serve"  // Start many-ai-cli serve on remote
 	SSHModeTunnel SSHMode = "tunnel" // Forward port to an already-running Hub
 )
 
@@ -67,13 +67,13 @@ type ProfilesFile struct {
 	Profiles []Profile `yaml:"profiles,omitempty" json:"profiles,omitempty"`
 }
 
-// profilesPath returns the path to ~/.any-ai-cli/launcher-profiles.yaml.
+// profilesPath returns the path to ~/.many-ai-cli/launcher-profiles.yaml.
 func profilesPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("home dir: %w", err)
 	}
-	return filepath.Join(home, ".any-ai-cli", profilesFile), nil
+	return filepath.Join(home, ".many-ai-cli", profilesFile), nil
 }
 
 // LoadProfiles reads launcher-profiles.yaml and returns the parsed ProfilesFile.
@@ -115,7 +115,7 @@ func LoadProfiles() (*ProfilesFile, error) {
 	return &pf, nil
 }
 
-// SaveProfiles writes pf to ~/.any-ai-cli/launcher-profiles.yaml atomically
+// SaveProfiles writes pf to ~/.many-ai-cli/launcher-profiles.yaml atomically
 // (write to a temp file in the same directory, then rename).
 func SaveProfiles(pf *ProfilesFile) error {
 	path, err := profilesPath()

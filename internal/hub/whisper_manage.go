@@ -21,14 +21,14 @@ import (
 	"strings"
 	"time"
 
-	"any-ai-cli/internal/config"
-	"any-ai-cli/internal/whisperruntime"
+	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/whisperruntime"
 )
 
 const (
 	whisperReleaseTag        = "v1.8.6"
 	whisperDefaultModelID    = "small"
-	whisperInstallHTTPUA     = "any-ai-cli whisper installer"
+	whisperInstallHTTPUA     = "many-ai-cli whisper installer"
 	whisperServerReadyWait   = 20 * time.Second
 	whisperDownloadExtraRoom = 256 * 1024 * 1024
 )
@@ -53,7 +53,7 @@ type whisperProcessJob uintptr
 
 // whisperBinaries は OS/arch → 入手定義。ここに在る OS/arch だけが
 // 「ダウンロード方式の managed install」をサポートする（whisperManagedSupported）。
-// Docker/VPS など実行ファイルを焼き込む構成では ANY_AI_CLI_WHISPER_SERVER で
+// Docker/VPS など実行ファイルを焼き込む構成では MANY_AI_CLI_WHISPER_SERVER で
 // 既設バイナリを指す（bakedWhisperServerPath）ため、ここへの登録は不要。
 //
 // TODO(C3/C4): Linux/macOS は公式 release に server バイナリが無いため、
@@ -62,7 +62,7 @@ type whisperProcessJob uintptr
 //
 //	"linux/amd64": {
 //	    Version: "v1.8.6",
-//	    URL:     "https://github.com/ishizakahiroshi/any-ai-cli/releases/download/whisper-v1.8.6/whisper-server-linux-amd64.tar.gz",
+//	    URL:     "https://github.com/ishizakahiroshi/many-ai-cli/releases/download/whisper-v1.8.6/whisper-server-linux-amd64.tar.gz",
 //	    SHA256:  "<fill-from-ci>",
 //	    Archive: "tar.gz",
 //	    ServerNames:     []string{"whisper-server"},
@@ -86,7 +86,7 @@ var whisperBinaries = map[string]whisperBinaryEntry{
 // whisperServerEnvVar は焼き込み済み whisper-server のフルパスを指す環境変数。
 // Docker(VPS) イメージが /usr/local/bin/whisper-server を焼き込み、この変数で
 // Hub に知らせる。設定されていればダウンロード無しで managed 扱いになる（C3/D5）。
-const whisperServerEnvVar = "ANY_AI_CLI_WHISPER_SERVER"
+const whisperServerEnvVar = "MANY_AI_CLI_WHISPER_SERVER"
 
 func bakedWhisperServerPath() string {
 	p := strings.TrimSpace(os.Getenv(whisperServerEnvVar))
@@ -505,7 +505,7 @@ func (s *Server) startManagedWhisper(ctx context.Context, cfg config.VoiceWhispe
 		}
 	}
 	serverURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	// ログは常に ~/.any-ai-cli/whisper/whisper-server.log（ドキュメント記載の
+	// ログは常に ~/.many-ai-cli/whisper/whisper-server.log（ドキュメント記載の
 	// 書込可能パス）へ。binaryPath 相対だと焼き込みバイナリ
 	// (/usr/local/bin/whisper-server) で /usr/local/ 配下になり、非 root の
 	// Docker ユーザーでは書けず観測不能になる。

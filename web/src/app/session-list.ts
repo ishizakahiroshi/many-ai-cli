@@ -855,7 +855,7 @@ export function startTitleBlink(pendingCount) {
   _titleBlinkState = true;
   _titleBlinkInterval = setInterval(() => {
     _titleBlinkState = !_titleBlinkState;
-    document.title = _titleBlinkState ? `(${_titleBlinkCount}) ANY-AI-CLI` : 'ANY-AI-CLI';
+    document.title = _titleBlinkState ? `(${_titleBlinkCount}) MANY-AI-CLI` : 'MANY-AI-CLI';
   }, 800);
 }
 
@@ -948,7 +948,7 @@ export function updateTabNotification(pendingCount) {
     startTitleBlink(pendingCount);
   } else {
     stopTitleBlink();
-    document.title = 'ANY-AI-CLI';
+    document.title = 'MANY-AI-CLI';
   }
 
   if (faviconChanged) drawFavicon(pendingCount);

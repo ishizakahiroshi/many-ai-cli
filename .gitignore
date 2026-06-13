@@ -29,3 +29,33 @@ Thumbs.db
 *.local.json
 docs/local/
 *gopty_lic.json
+
+# --- 認証情報・secrets・鍵（public へ絶対に出さない）---
+*.pem
+*.key
+*.p12
+*.pfx
+*.ppk
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+*.env
+secrets.*
+*.secret.*
+*credential*
+.netrc
+.npmrc
+.pypirc
+
+# --- ローカル専用ファイル（*.local.md / *.local.json は上で個別指定済み・ここで包括）---
+*.local
+*.local.*
+
+# --- OS / エディタ ---
+desktop.ini
+.idea/
+.vscode/
+*.swp
+# 広範な *token* / *secret* は web/src の token-statusbar.* 等ソースを巻き込むため
+# 採用しない（秘匿は上の鍵・secrets.* / *.secret.* / *credential* で担保）。

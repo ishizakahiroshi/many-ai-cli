@@ -21,7 +21,7 @@ import (
 type SSHConnector struct{}
 
 // Start launches the SSH connection described by p.
-// For serve mode it starts `ssh.exe -t -L …` which runs `any-ai-cli serve`
+// For serve mode it starts `ssh.exe -t -L …` which runs `many-ai-cli serve`
 // on the remote host. For tunnel mode it forwards the port of an already-
 // running remote Hub and fetches the token via token_command.
 func (c *SSHConnector) Start(ctx context.Context, p Profile, urlCh chan<- string, errCh chan<- error) error {
@@ -56,7 +56,7 @@ const (
 func (c *SSHConnector) runServe(ctx context.Context, p Profile, urlCh chan<- string, errCh chan<- error) {
 	binary := p.Binary
 	if binary == "" {
-		binary = "any-ai-cli"
+		binary = "many-ai-cli"
 	}
 
 	basePort := p.HubPort
@@ -123,10 +123,10 @@ func (c *SSHConnector) tryServe(ctx context.Context, p Profile, binary string, p
 	// Forward the Hub port to localhost so the Windows browser can reach it.
 	args = append(args, "-L", fmt.Sprintf("127.0.0.1:%d:127.0.0.1:%d", port, port))
 	args = append(args, sshTarget(p))
-	// Remote command: launch any-ai-cli serve.
-	// ANY_AI_CLI_HOST_LABEL: プロファイルの接続先 host をバッジ表示用ラベルとして
+	// Remote command: launch many-ai-cli serve.
+	// MANY_AI_CLI_HOST_LABEL: プロファイルの接続先 host をバッジ表示用ラベルとして
 	// Hub に渡す（コンテナ内実行等で Hub 自身が外側の IP を検出できないため）。
-	remoteCmd := fmt.Sprintf("exec env ANY_AI_CLI_HOST_LABEL=%s %s serve --port %d",
+	remoteCmd := fmt.Sprintf("exec env MANY_AI_CLI_HOST_LABEL=%s %s serve --port %d",
 		ShellQuote(p.Host), ShellQuote(binary), port)
 	if p.CWD != "" {
 		remoteCmd = fmt.Sprintf("cd %s && %s", ShellQuote(p.CWD), remoteCmd)
@@ -191,7 +191,7 @@ func (c *SSHConnector) tryServe(ctx context.Context, p Profile, binary string, p
 	}
 }
 
-// cleanupSSHOrphans kills the remote any-ai-cli serve process matching port.
+// cleanupSSHOrphans kills the remote many-ai-cli serve process matching port.
 // Best-effort: pkill exits 1 when nothing matched. A 5s timeout guards against
 // hung ssh or shutdown-in-progress.
 func cleanupSSHOrphans(p Profile, binary string, port int) {
@@ -291,7 +291,7 @@ func (c *SSHConnector) runTunnel(ctx context.Context, p Profile, urlCh chan<- st
 
 // buildTunnelHubURL builds the browser-facing Hub URL for tunnel mode.
 // via=ssh / host_label: tunnel モードでは既存 Hub に後から環境変数を渡せない
-// （ANY_AI_CLI_HOST_LABEL は serve モード起動時のみ注入可能）ため、
+// （MANY_AI_CLI_HOST_LABEL は serve モード起動時のみ注入可能）ため、
 // バッジ表示用の SSH 判定とホスト名を URL クエリで Hub UI へ伝える。
 func buildTunnelHubURL(port int, token, host string) string {
 	return fmt.Sprintf("http://127.0.0.1:%d/?token=%s&via=ssh&host_label=%s&env_kind=vps-tunnel",
@@ -336,7 +336,7 @@ func normalizeHubToken(token string) (string, error) {
 
 // pollUntilReady polls apiURL until it returns HTTP 200 or ctx is cancelled.
 // postNetHint は Hub の /api/net-hint に接続元情報（SSH 経由・接続先 host）を
-// 登録する。tunnel モードでは既起動の Hub に ANY_AI_CLI_HOST_LABEL を注入
+// 登録する。tunnel モードでは既起動の Hub に MANY_AI_CLI_HOST_LABEL を注入
 // できないため、API 経由でサーバ側に保持させる。best-effort（失敗は無視）。
 func postNetHint(ctx context.Context, port int, token, host string) {
 	payload, err := json.Marshal(map[string]any{"ssh": true, "host_label": host, "env_kind": "vps-tunnel"})
@@ -429,7 +429,7 @@ func NewSSHConnector() Connector {
 // connectors that receive a url from urlCh.
 func OpenBrowserOnce(url string) {
 	if err := OpenBrowser(url); err != nil {
-		fmt.Fprintf(os.Stderr, "any-ai-cli-launcher: failed to open browser for %s: %v\n", url, err)
+		fmt.Fprintf(os.Stderr, "many-ai-cli-launcher: failed to open browser for %s: %v\n", url, err)
 	}
 }
 

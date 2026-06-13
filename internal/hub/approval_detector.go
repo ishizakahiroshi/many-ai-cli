@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"any-ai-cli/internal/proto"
+	"many-ai-cli/internal/proto"
 )
 
 const approvalSourceGoVT = "go_vt"
@@ -67,7 +67,7 @@ func detectNativeApproval(provider string, lines []string) *nativeApproval {
 	// AI が自発的に出す Claude AskUserQuestion ピッカー（末尾に "Type something" /
 	// "Chat about this" の自由入力肢を持つ arrow 駆動 UI）は webify しない。
 	// 再描画される VT をスクレイプして Web ボタン化すると選択肢番号がズレて誤選択を
-	// 招くため（approval-rules.md version 10 で AI を [ANY-AI-CLI] マーカーへ誘導済み）。
+	// 招くため（approval-rules.md version 10 で AI を [MANY-AI-CLI] マーカーへ誘導済み）。
 	// 万一 AI が出しても Web バーは出さず、ユーザーは端末で直接 ↑↓/Enter 操作する。
 	if looksLikeNativeAskUserQuestion(opts) {
 		return nil

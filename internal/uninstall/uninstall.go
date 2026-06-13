@@ -15,7 +15,7 @@ func Run(purge bool) error {
 	if err != nil {
 		return fmt.Errorf("ホームディレクトリの取得に失敗: %w", err)
 	}
-	dataDir := filepath.Join(home, ".any-ai-cli")
+	dataDir := filepath.Join(home, ".many-ai-cli")
 
 	if !confirm(dataDir, purge) {
 		fmt.Println("アンインストールをキャンセルしました。")

@@ -41,7 +41,7 @@ func TestWindowsExeToShellUnknown(t *testing.T) {
 
 func TestShouldSkipWindowsShellProcess(t *testing.T) {
 	skip := []string{
-		"any-ai-cli.exe",
+		"many-ai-cli.exe",
 		"explorer.exe",
 		"WindowsTerminal.exe",
 		"wt.exe",
