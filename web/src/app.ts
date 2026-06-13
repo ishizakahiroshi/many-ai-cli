@@ -8,7 +8,7 @@ import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitA
 import { DEFAULT_QUICK_CMD_1, DEFAULT_QUICK_CMD_2, appConfirm, appConfirmShutdown, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
-import { scheduleDeferredEnter } from './app/deferred-enter.js';
+import { scheduleDeferredEnter, scheduleAfterOutputSettle } from './app/deferred-enter.js';
 import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, sendBatchChoices, sendMultiSelectChoices, setActionBarFocus, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn } from './app/attachments.js';
@@ -222,7 +222,12 @@ export async function doSend(sessionId) {
   // その後ろへ連結されてしまう（例: "残骸質問"）。sendQuickCommand と同じく
   // \x15(Ctrl+U) を先頭に置き、inject/本文を送る前に入力行を一度クリアする。
   // 入力行が空なら no-op なので無害。claude/codex/copilot/cursor 共通に送る。
-  const textToSend = '\x15' + injectPrefix + textPart;
+  // 画像 inject（@path）を複数行ペーストに前置すると、@path エコー由来の早期 idle で確定 \r が
+  // 前倒し発火し、内側 CLI がペースト取り込み中（「Pasting…」）のまま \r を吸収して固着する。
+  // injectPrefix がある複数行ペーストでは、まず画像 inject だけ送り、取り込みが落ち着いてから
+  // ペースト本体＋確定 \r を送る（下記 needPasteSplit 分岐）。それ以外は従来通り 1 書き込みにまとめる。
+  const needPasteSplit = deferEnter && injectPrefix !== '';
+  const textToSend = needPasteSplit ? ('\x15' + injectPrefix) : ('\x15' + injectPrefix + textPart);
   clearInput();
   hideSlashMenu();
   // 送信したら次のプロンプトは別物の可能性があるため dismiss フラグ・multiQ ラッチをクリア
@@ -253,10 +258,19 @@ export async function doSend(sessionId) {
     scrollChatPaneToBottomSoon({ passes: 4, startedAt: Date.now() });
   }
   sendSubmittedText(sessionId, textToSend);
-  // 複数行ペーストの確定 \r は、内側 CLI の畳み込み・再描画が落ち着いてから別書き込みで送る。
-  // 同一書き込みに含めると \r が吸収され送信されない。固定遅延では大きなペーストの取り込み時間を
-  // 当てられず取りこぼすため、PTY 出力が静止するのを待ってから 1 回だけ送る（deferred-enter.ts）。
-  if (deferEnter) {
+  if (needPasteSplit) {
+    // 段1: 画像 inject（@path）の取り込み（[Image #N] 畳み込み・@ 補完ポップアップ閉じ）が
+    // 出力静止で落ち着くのを待ち、段2: ペースト本体を送り、段3: 確定 \r を予約する。確定 \r の
+    // 予約をペースト送出後まで遅らせることで、@path エコー由来の早期静止で \r が前倒し発火して
+    // 「Pasting…」固着するのを断つ。ペースト送出以降は画像なし複数行ペーストと同一経路で確定する。
+    scheduleAfterOutputSettle(sessionId, () => {
+      sendText(sessionId, textPart);
+      scheduleDeferredEnter(sessionId);
+    });
+  } else if (deferEnter) {
+    // 複数行ペーストの確定 \r は、内側 CLI の畳み込み・再描画が落ち着いてから別書き込みで送る。
+    // 同一書き込みに含めると \r が吸収され送信されない。固定遅延では大きなペーストの取り込み時間を
+    // 当てられず取りこぼすため、PTY 出力が静止するのを待ってから 1 回だけ送る（deferred-enter.ts）。
     scheduleDeferredEnter(sessionId);
   }
 }
