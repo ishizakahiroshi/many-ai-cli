@@ -28,6 +28,8 @@ type usageStat struct {
 	TokensOut   int
 	TokensCache int
 	TokensTotal int
+	// CtxWindow: モデルのコンテキストウィンドウ上限（relay から受信。不明なら 0）。
+	CtxWindow int
 	// UsageModel: relay が報告したモデル ID / display_name。
 	UsageModel  string
 	StartedAt   string
@@ -141,6 +143,7 @@ type sessionUsageRequest struct {
 	TokensOut     int    `json:"tokens_out"`
 	TokensCache   int    `json:"tokens_cache"`
 	TokensTotal   int    `json:"tokens_total"`
+	CtxWindow     int    `json:"ctx_window"`
 	StartedAt     string `json:"started_at"`
 }
 
@@ -178,6 +181,7 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 		TokensOut:   req.TokensOut,
 		TokensCache: req.TokensCache,
 		TokensTotal: req.TokensTotal,
+		CtxWindow:   req.CtxWindow,
 		UsageModel:  req.Model,
 		StartedAt:   req.StartedAt,
 		ReceivedAt:  time.Now(),
@@ -210,6 +214,7 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 		TokensOut:      req.TokensOut,
 		TokensCache:    req.TokensCache,
 		TokensTotal:    req.TokensTotal,
+		CtxWindow:      req.CtxWindow,
 		UsageModel:     req.Model,
 		UsageStartedAt: req.StartedAt,
 	})

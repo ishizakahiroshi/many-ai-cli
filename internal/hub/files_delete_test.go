@@ -40,7 +40,9 @@ func TestFilesDeleteDir_OK_EmptyDirectory(t *testing.T) {
 	}
 }
 
-func TestFilesDeleteDir_RejectNonEmptyDirectory(t *testing.T) {
+// 非空ディレクトリは「フォルダと中身をすべて削除」（UI の確認文言どおり）として
+// 再帰削除される（c15b169 で os.RemoveAll へ意図的に変更）。中身ごと消えることを確認する。
+func TestFilesDeleteDir_OK_NonEmptyDirectory(t *testing.T) {
 	tmp := t.TempDir()
 	src := filepath.Join(tmp, "delete-me")
 	if err := os.MkdirAll(filepath.Join(src, "child"), 0o755); err != nil {
@@ -52,14 +54,11 @@ func TestFilesDeleteDir_RejectNonEmptyDirectory(t *testing.T) {
 
 	s := newTestRenameServer(t, tmp)
 	code, resp := callDeleteDir(t, s, src)
-	if code != http.StatusConflict || resp.OK {
-		t.Fatalf("expected conflict, got code=%d resp=%+v", code, resp)
+	if code != http.StatusOK || !resp.OK {
+		t.Fatalf("expected ok (recursive delete), got code=%d resp=%+v", code, resp)
 	}
-	if resp.Error != "conflict" || !strings.Contains(resp.Detail, "empty") {
-		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
-	}
-	if _, err := os.Stat(filepath.Join(src, "child", "file.txt")); err != nil {
-		t.Fatalf("non-empty directory should be preserved: %v", err)
+	if _, err := os.Stat(src); !os.IsNotExist(err) {
+		t.Fatalf("non-empty directory should be removed recursively: %v", err)
 	}
 }
 

@@ -3,7 +3,7 @@
 // 表示対象: アクティブセッション 1 件分（+ 全セッション横断バッジ）。
 // セグメント構成（左→右）:
 //   #N / 状態pill / provider(アイコン+ラベル)+モデル / 作業ラベル /
-//   📁project ⎇branch ±git / ctxゲージ / tok / cacheゲージ / cost(+today) /
+//   📁project ⎇branch ±git / ctxゲージ / tok / cacheゲージ / compact残量 / cost(+today) /
 //   burn / elapsed(+turn) / 接続 / 横断バッジ(▶⏸⚠)
 // 未取得セグメントは DOM から非表示にしてレイアウト崩れを防ぐ。
 // コスト不明（cost_known=false）時は "$ —" を表示し誤金額を出さない。
@@ -24,6 +24,7 @@ interface UsageCacheEntry {
   tokensOut: number;
   tokensCache: number;
   tokensTotal: number;
+  ctxWindow: number;
   usageModel: string;
   usageStartedAt: string;
 }
@@ -275,7 +276,9 @@ export function renderStatusbar(): void {
   }
 
   // ---- ctx 使用率（塗りゲージ + %）----
-  const ctxLimit = resolveCtxLimit(modelName);
+  // 上限は relay 経由の実値（Claude statusline の context_window_size）を最優先し、
+  // 取得できないプロバイダのみモデル名テーブルにフォールバックする。
+  const ctxLimit = (entry && entry.ctxWindow > 0) ? entry.ctxWindow : resolveCtxLimit(modelName);
   const showCtx = !!(isTokenProvider && entry && ctxLimit && ctxLimit > 0);
   const ctxEl = setSeg(bar, 'tsb-seg-ctx', showCtx);
   if (ctxEl && entry && ctxLimit) {
@@ -302,7 +305,31 @@ export function renderStatusbar(): void {
   if (cacheEl && entry) {
     const pct = Math.max(0, Math.min(100, Math.round((entry.tokensCache / entry.tokensIn) * 100)));
     cacheEl.innerHTML = `⛁ ${gaugeHtml(pct, 'cache')}<span class="tsb-pct">${pct}%</span>`;
-    cacheEl.title = `cache ${formatTok(entry.tokensCache)} / ${formatTok(entry.tokensIn)} tokens`;
+    cacheEl.title = `cache read ${formatTok(entry.tokensCache)} / ${formatTok(entry.tokensIn)} tokens`;
+  }
+
+  // ---- compact 残量（auto-compact 発動目安までの残りトークン）----
+  // しきい値は Claude Code が auto-compact を始めるおおよその位置（公式未公開の近似値）。
+  const COMPACT_TRIGGER_RATIO = 0.92;
+  const showCompact = !!(provider === 'claude' && entry && ctxLimit && ctxLimit > 0 && entry.tokensIn > 0);
+  const compactEl = setSeg(bar, 'tsb-seg-compact', showCompact);
+  if (compactEl && entry && ctxLimit) {
+    const threshold = Math.round(ctxLimit * COMPACT_TRIGGER_RATIO);
+    const left = threshold - entry.tokensIn;
+    // 到達率 = 現在 tokensIn が「しきい値（=発火点）」のどこまで来たか。100% で auto-compact 発動。
+    // バー全体は 0→threshold を表し、満タン＝発火。ctx ゲージ（0→ctxLimit）とは分母が違う点に注意。
+    const reachPct = Math.max(0, Math.min(100, Math.round((entry.tokensIn / threshold) * 100)));
+    const fill = reachPct >= 90 ? 'crit' : reachPct >= 75 ? 'warn' : 'ok';
+    if (left <= 0) {
+      compactEl.innerHTML = `⌛ ${gaugeHtml(100, 'crit')}<span class="tsb-pct crit">compact間近</span>`;
+    } else {
+      const pctCls = reachPct >= 90 ? 'tsb-pct crit' : 'tsb-pct';
+      compactEl.innerHTML = `⌛ ${gaugeHtml(reachPct, fill)}<span class="${pctCls}">${reachPct}%</span>`;
+    }
+    compactEl.title = `auto-compact しきい値到達率 ${reachPct}%（100% で発動）`
+      + `\n残り ${formatTok(Math.max(0, left))} tokens`
+      + `\nしきい値 ~${Math.round(COMPACT_TRIGGER_RATIO * 100)}% = ${formatTok(threshold)} / ${formatTok(ctxLimit)}、現在 ${formatTok(entry.tokensIn)}`;
+    compactEl.dataset.copy = `${Math.max(0, left)}`;
   }
 
   // ---- cost（+ 本日累計）----
@@ -476,6 +503,7 @@ export function handleUsageStatMessage(m: Message): void {
     tokensOut:      m.tokens_out     ?? 0,
     tokensCache:    m.tokens_cache   ?? 0,
     tokensTotal:    m.tokens_total   ?? 0,
+    ctxWindow:      m.ctx_window     ?? 0,
     usageModel:     m.usage_model    || '',
     usageStartedAt: m.usage_started_at || '',
   });

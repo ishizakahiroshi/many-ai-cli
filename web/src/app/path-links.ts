@@ -72,16 +72,8 @@ export function getFilesDownloadUrl(absPath, sessionId) {
 }
 
 export function getPathOpenItem(filePath, sessionId) {
-  if (isVideoPath(filePath)) {
-    return { icon: '🎞️', key: 'link_open_file', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error', sessionId) };
-  }
-  if (isImagePath(filePath)) {
-    return { icon: '🖼️', key: 'link_open_image', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error', sessionId) };
-  }
-  if (isTextPath(filePath)) {
-    return { icon: '📝', key: 'link_open_text', action: () => callOpenApi('/api/open-file', filePath, 'link_open_error', sessionId) };
-  }
-  return { icon: '📄', key: 'link_open_file', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error', sessionId) };
+  // 種別を問わず OS 既定の関連付けアプリで開く（画像・動画・テキスト・その他で挙動は同一）。
+  return { icon: '🚀', key: 'link_open_default', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error', sessionId) };
 }
 
 export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 'file') {
@@ -111,12 +103,6 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
   }
   if (!isDir) {
     items.push(getPathOpenItem(filePath, sessionId));
-    // テキスト系のプライマリは「テキストで開く」(エディタ) に流れるため、
-    // OS 既定の関連付けアプリ（.html ならブラウザ等）で開く項目を別に足す。
-    // 画像/動画/未知の拡張子はプライマリが既に /api/open-default-file なので重複させない。
-    if (isTextPath(filePath)) {
-      items.push({ icon: '🚀', key: 'link_open_default', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error', sessionId) });
-    }
   }
   items.push(
     { icon: '📁', key: 'link_open_folder', action: () => {
@@ -235,7 +221,10 @@ export function openFileModal(filePath, sessionId) {
   }
 
   const relPath = computeRelPath(cwd, filePath);
-  if (body._filesPreview) body._filesPreview.loadFile(filePath, relPath);
+  // _filesPreview は FilesPreview.bind が要素へ動的に付与する外部 API（files-view.ts 参照）。
+  // 型定義上は存在しないため any 経由でアクセスする。
+  const preview = (body as any)._filesPreview;
+  if (preview) preview.loadFile(filePath, relPath);
 }
 
 export function basenameForPath(filePath) {

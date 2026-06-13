@@ -39,6 +39,16 @@ export const STORAGE_VOICE_ENGINE_KEY         = 'anyai.voiceEngine';
 export const STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY = 'anyai.voiceWhisperAutoSubmit';
 export const STORAGE_VOICE_WHISPER_AUTO_STOP_KEY = 'anyai.voiceWhisperAutoStop';
 export const STORAGE_DISPLAY_LOCKED_MODE_KEY  = 'ai_cli_hub_display_locked_mode';
+// 承認 action-bar の折りたたみ（コンパクト）表示。device-local（端末ごとに保持）。
+// 大きな承認パネルで前後のターミナル本文が見切れる問題への対処として、
+// 質問本文・選択肢を 1 行省略表示にして高さを最小化する。既定は展開（false）。
+export const STORAGE_ACTION_BAR_COLLAPSED_KEY = 'ai_cli_hub_action_bar_collapsed';
+export function isActionBarCollapsed(): boolean {
+  try { return localStorage.getItem(STORAGE_ACTION_BAR_COLLAPSED_KEY) === '1'; } catch (_) { return false; }
+}
+export function setActionBarCollapsed(value: boolean): void {
+  try { localStorage.setItem(STORAGE_ACTION_BAR_COLLAPSED_KEY, value ? '1' : '0'); } catch (_) {}
+}
 // 両エンジン共通の「終了検知の待ち時間（秒）」既定値。
 // Whisper では無音がこの秒数続くと自動確定する（旧 Whisper 固定値 1.8秒に近い 2秒を採用）。
 export const DEFAULT_VOICE_GRACE_SEC          = 2;

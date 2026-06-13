@@ -24,6 +24,9 @@ export interface TerminalEntry {
   screenClearSeqCarry?: Uint8Array;
   liveStatusText?: string;
   liveStatusHideTimer?: ReturnType<typeof setTimeout> | null;
+  // ライブ進捗行の列アドレス再構成用（部分更新を 1 行へ組み立てる）
+  liveLineRow?: number | null;   // 現在組み立て中の行番号（端末スクロールで動く）
+  liveLineCells?: string[];      // 列 → 文字のスパース配列（1 列 1 要素 / 1-based）
   autoScroll?: boolean;
   everAttached?: boolean;
   scrollHandlerInstalled?: boolean;

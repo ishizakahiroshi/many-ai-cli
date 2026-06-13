@@ -9,6 +9,7 @@ import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, ex
 import { approvalUiAdapter, setMultiQuestionBannerVisible } from './approval-ui.js';
 import { chatHistoryCommitOutput, chatPaneAtBottom, getChatTimelineEl, pushMessage, scrollChatPaneToBottom } from './chat-history.js';
 import { token } from './util.js';
+import { isActionBarCollapsed, setActionBarCollapsed } from './user-prefs.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -1083,6 +1084,37 @@ export function normalizeActionOptions(options) {
   return normalized.sort((a, b) => a.num - b.num);
 }
 
+// 折りたたみトグル（全文⇄コンパクト切替）。3 経路（単問/一括/複数選択）共通で使う。
+// position:absolute なので bar 直下に append すれば footer の有無に関わらず同じ位置に出る。
+function appendCollapseToggle(bar, sessionId) {
+  const btn = document.createElement('button');
+  btn.className = 'action-collapse-btn';
+  const collapsed = isActionBarCollapsed();
+  btn.textContent = collapsed ? '⊞' : '⊟';
+  btn.title = collapsed ? t('action_bar_expand') : t('action_bar_collapse');
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    toggleActionBarCollapsed(sessionId);
+  };
+  bar.appendChild(btn);
+}
+
+export function toggleActionBarCollapsed(sessionId) {
+  setActionBarCollapsed(!isActionBarCollapsed());
+  const bar = document.getElementById('action-bar');
+  if (!bar) return;
+  // collapsed を各 show* の sig に含めているため、再描画させるには sig を無効化する。
+  lastActionBarRender.sessionId = null;
+  lastActionBarRender.sig = null;
+  const cached = approvalRawOptionsCache.get(sessionId);
+  if (cached && cached.length > 0) {
+    showActionBar(bar, sessionId, cached, false);
+  } else {
+    bar.classList.toggle('collapsed', isActionBarCollapsed());
+  }
+  setTimeout(() => inputEl.focus(), 0);
+}
+
 export function showActionBar(bar, sessionId, options, forceStickToBottom = false) {
   if (isBatchOptions(options)) {
     showBatchActionBar(bar, sessionId, options, forceStickToBottom);
@@ -1108,6 +1140,7 @@ export function showActionBar(bar, sessionId, options, forceStickToBottom = fals
     s: sessionId,
     opts: options.map(o => ({ n: o.num, l: o.label, c: !!o.isCurrent, p: !!o.preserveOrder })),
     v: bar.classList.contains('visible'),
+    col: isActionBarCollapsed(),
   });
   if (lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig) {
     // 承認検出は PTY write / ResizeObserver / セッション自動切替と同時に走ることがある。
@@ -1169,6 +1202,8 @@ export function showActionBar(bar, sessionId, options, forceStickToBottom = fals
     approvalSuppressUntil.set(sessionId, Date.now() + 60000);
   };
   bar.appendChild(closeBtn);
+  appendCollapseToggle(bar, sessionId);
+  bar.classList.toggle('collapsed', isActionBarCollapsed());
 
   // action-bar 出現でターミナル高さが縮小し、ResizeObserver が SIGWINCH を
   // 送ると Claude Code が chrome を再描画して二重表示になる。
@@ -1208,6 +1243,7 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
     sel: selections,
     f: batchFocusIdx,
     v: bar.classList.contains('visible'),
+    col: isActionBarCollapsed(),
   });
   if (lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig) {
     if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
@@ -1296,6 +1332,8 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   footer.appendChild(closeBatchBtn);
 
   bar.appendChild(footer);
+  appendCollapseToggle(bar, sessionId);
+  bar.classList.toggle('collapsed', isActionBarCollapsed());
   if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(60000);
   bar.classList.add('visible');
   actionBarShownAt.set(sessionId, Date.now());
@@ -1403,6 +1441,7 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
     sel: Array.from(selected).sort((a, b) => a - b),
     f: multiSelectFocusIdx,
     v: bar.classList.contains('visible'),
+    col: isActionBarCollapsed(),
   });
   if (lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig) {
     if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
@@ -1480,6 +1519,8 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
   footer.appendChild(closeMultiBtn);
 
   bar.appendChild(footer);
+  appendCollapseToggle(bar, sessionId);
+  bar.classList.toggle('collapsed', isActionBarCollapsed());
   if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(60000);
   bar.classList.add('visible');
   actionBarShownAt.set(sessionId, Date.now());

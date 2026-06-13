@@ -316,6 +316,11 @@ type Server struct {
 	sessions   map[int]*session
 	wrappers   map[int]*wrapperConn
 	uis        map[*websocket.Conn]*uiConn
+	// pendingInput は wrapper 未接続・送信失敗で届けられなかったユーザー入力を
+	// セッションごとに順序保持でバッファする。wrapper の (再)接続時に
+	// flushPendingInput が順番に再送するため、入力が黙って失われない。
+	// sessionsMu で保護。
+	pendingInput map[int][]string
 
 	slashCmdMu    sync.Mutex
 	slashCmdCache map[string]*slashCmdCacheEntry // key: provider
@@ -527,6 +532,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		sessions:              map[int]*session{},
 		wrappers:              map[int]*wrapperConn{},
 		uis:                   map[*websocket.Conn]*uiConn{},
+		pendingInput:          map[int][]string{},
 		slashCmdCache:         map[string]*slashCmdCacheEntry{},
 		approvalRuleTargets:   map[string]approvalRuleTarget{},
 		usageLinkCache:        newUsageLinkCache(),
@@ -605,11 +611,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/pick-directory", s.handlePickDirectory)
 	mux.HandleFunc("/api/path-exists", s.handlePathExists)
 	mux.HandleFunc("/api/pick-file", s.handlePickFile)
-	mux.HandleFunc("/api/open-file", s.handleOpenFile)
 	mux.HandleFunc("/api/open-default-file", s.handleOpenDefaultFile)
 	mux.HandleFunc("/api/open-folder", s.handleOpenFolder)
 	mux.HandleFunc("/api/open-terminal", s.handleOpenTerminal)
-	mux.HandleFunc("/api/file-open-app", s.handleFileOpenApp)
 	mux.HandleFunc("/api/terminal-app", s.handleTerminalApp)
 	mux.HandleFunc("/api/kill-all", s.handleKillAll)
 	mux.HandleFunc("/api/shutdown", s.handleShutdown)
@@ -1189,6 +1193,8 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		s.nextID = acceptedID
 	}
 	s.sessionsMu.Unlock()
+	// wrapper が一時切断中に届かなかった保留入力を、再接続したこの wrapper へ順番に再送する。
+	go s.flushPendingInput(acceptedID)
 	if oldHistory != nil {
 		_ = oldHistory.Close()
 	}
@@ -1881,14 +1887,7 @@ func (s *Server) handleInput(m proto.Message) {
 	if injectMarker {
 		s.broadcast(proto.Message{Type: "pty_data", SessionID: m.SessionID, Data: []byte(chatHistoryUserTurnMarker)})
 	}
-	if wc != nil {
-		first, delayed := splitBracketedPasteSubmit(combined)
-		_ = wc.send(proto.Message{Type: "pty_input", SessionID: m.SessionID, Data: []byte(first)})
-		if delayed != "" {
-			time.Sleep(bracketedPasteSubmitDelay)
-			_ = wc.send(proto.Message{Type: "pty_input", SessionID: m.SessionID, Data: []byte(delayed)})
-		}
-	}
+	s.submitInput(wc, m.SessionID, combined)
 	s.writeHistory(m.SessionID, map[string]any{
 		"ts":         time.Now().Format(time.RFC3339),
 		"type":       "user_input",
@@ -1905,6 +1904,115 @@ func splitBracketedPasteSubmit(text string) (first string, delayed string) {
 		return text, ""
 	}
 	return strings.TrimSuffix(text, "\r"), "\r"
+}
+
+// maxPendingInputPerSession は 1 セッションあたりの保留入力の上限。
+// wrapper が長時間戻らないケースで無制限に溜まるのを防ぐ。超過時は古い方から捨てる。
+const maxPendingInputPerSession = 100
+
+// submitInput はユーザー入力を wrapper へ届ける。wrapper 未接続・送信失敗時は
+// 入力を順序保持でバッファし、wrapper の (再)接続時に flushPendingInput が自動再送する
+// （= 黙って捨てない）。既に保留中の入力があるセッションでは、新規入力を直送せず
+// 末尾へ積んで順序を保つ。
+func (s *Server) submitInput(wc *wrapperConn, sessionID int, combined string) {
+	s.sessionsMu.Lock()
+	hasPending := len(s.pendingInput[sessionID]) > 0
+	if hasPending {
+		s.pendingInput[sessionID] = appendPendingInput(s.pendingInput[sessionID], combined)
+	}
+	s.sessionsMu.Unlock()
+	if hasPending {
+		s.notifyInputDeferred(sessionID)
+		return
+	}
+	if rem := s.trySendInput(wc, sessionID, combined); rem != "" {
+		s.sessionsMu.Lock()
+		s.pendingInput[sessionID] = appendPendingInput(s.pendingInput[sessionID], rem)
+		s.sessionsMu.Unlock()
+		s.notifyInputDeferred(sessionID)
+	}
+}
+
+// trySendInput は combined を wrapper へ送る。届けられなかった残り（未送信部分）を返す
+// （"" = 全て送信済み）。bracketed-paste の確定 \r は別書き込み + 50ms 遅延で送る従来挙動を保つ。
+// first まで送れて delayed(\r) だけ失敗した場合は \r のみを残りとして返し、本文の二重送信を避ける。
+func (s *Server) trySendInput(wc *wrapperConn, sessionID int, combined string) (remaining string) {
+	if wc == nil {
+		s.logger.Warn("pty_input deferred: no wrapper connected", "session_id", sessionID)
+		return combined
+	}
+	first, delayed := splitBracketedPasteSubmit(combined)
+	if err := wc.send(proto.Message{Type: "pty_input", SessionID: sessionID, Data: []byte(first)}); err != nil {
+		s.logger.Warn("pty_input deferred: send failed", "session_id", sessionID, "stage", "first", "err", err)
+		return combined
+	}
+	if delayed != "" {
+		time.Sleep(bracketedPasteSubmitDelay)
+		if err := wc.send(proto.Message{Type: "pty_input", SessionID: sessionID, Data: []byte(delayed)}); err != nil {
+			s.logger.Warn("pty_input deferred: send failed", "session_id", sessionID, "stage", "delayed", "err", err)
+			return delayed
+		}
+	}
+	return ""
+}
+
+// flushPendingInput は wrapper の (再)接続後に保留入力を順番に再送する。
+// trySendInput が遅延 sleep しうるため goroutine で呼ぶ前提。再送に失敗した場合は
+// 残りを先頭へ戻し、次の接続でリトライする。
+func (s *Server) flushPendingInput(sessionID int) {
+	s.sessionsMu.Lock()
+	pending := s.pendingInput[sessionID]
+	delete(s.pendingInput, sessionID)
+	wc := s.wrappers[sessionID]
+	s.sessionsMu.Unlock()
+	if len(pending) == 0 {
+		return
+	}
+	if wc == nil {
+		s.requeuePendingInput(sessionID, pending)
+		return
+	}
+	var remainder []string
+	for i, combined := range pending {
+		if rem := s.trySendInput(wc, sessionID, combined); rem != "" {
+			remainder = append(remainder, rem)
+			remainder = append(remainder, pending[i+1:]...)
+			break
+		}
+	}
+	if len(remainder) > 0 {
+		s.requeuePendingInput(sessionID, remainder)
+		return
+	}
+	s.logger.Info("flushed deferred pty_input", "session_id", sessionID, "count", len(pending))
+}
+
+// requeuePendingInput は再送できなかった残りを保留キューの先頭へ戻す
+// （フラッシュ中に新規到着した入力は後ろに残す）。
+func (s *Server) requeuePendingInput(sessionID int, queue []string) {
+	s.sessionsMu.Lock()
+	if existing := s.pendingInput[sessionID]; len(existing) > 0 {
+		queue = append(queue, existing...)
+	}
+	if len(queue) > maxPendingInputPerSession {
+		queue = queue[len(queue)-maxPendingInputPerSession:]
+	}
+	s.pendingInput[sessionID] = queue
+	s.sessionsMu.Unlock()
+}
+
+// appendPendingInput は保留キューへ 1 件積み、上限超過分を古い方から捨てる。
+func appendPendingInput(q []string, item string) []string {
+	q = append(q, item)
+	if len(q) > maxPendingInputPerSession {
+		q = q[len(q)-maxPendingInputPerSession:]
+	}
+	return q
+}
+
+// notifyInputDeferred は UI へ「入力を保留した（wrapper 未接続/送信失敗）」を通知する。
+func (s *Server) notifyInputDeferred(sessionID int) {
+	s.broadcast(proto.Message{Type: "input_deferred", SessionID: sessionID})
 }
 
 // handleHint は session_hint メッセージを処理する。
@@ -2001,6 +2109,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		ses.History = nil
 		delete(s.sessions, m.SessionID)
 		delete(s.wrappers, m.SessionID)
+		delete(s.pendingInput, m.SessionID)
 	}
 	s.sessionsMu.Unlock()
 	if !exists {
@@ -2444,6 +2553,7 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 				TokensOut:      stat.TokensOut,
 				TokensCache:    stat.TokensCache,
 				TokensTotal:    stat.TokensTotal,
+				CtxWindow:      stat.CtxWindow,
 				UsageModel:     stat.UsageModel,
 				UsageStartedAt: stat.StartedAt,
 			})

@@ -116,6 +116,7 @@ type Message struct {
 	TokensOut      int     `json:"tokens_out,omitempty"`
 	TokensCache    int     `json:"tokens_cache,omitempty"`
 	TokensTotal    int     `json:"tokens_total,omitempty"`
+	CtxWindow      int     `json:"ctx_window,omitempty"` // モデルのコンテキストウィンドウ上限（不明なら省略）
 	UsageModel     string  `json:"usage_model,omitempty"`
 	UsageStartedAt string  `json:"usage_started_at,omitempty"`
 }

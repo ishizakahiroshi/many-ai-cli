@@ -61,6 +61,7 @@ func Run(args []string) error {
 //	  "context_window": {
 //	    "total_input_tokens": 15500,
 //	    "total_output_tokens": 1200,
+//	    "context_window_size": 200000,
 //	    "current_usage": {
 //	      "cache_creation_input_tokens": 5000,
 //	      "cache_read_input_tokens": 2000
@@ -87,6 +88,7 @@ type claudeStatusLineInput struct {
 	ContextWindow struct {
 		TotalInputTokens  int `json:"total_input_tokens"`
 		TotalOutputTokens int `json:"total_output_tokens"`
+		ContextWindowSize int `json:"context_window_size"`
 		CurrentUsage      struct {
 			CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
 			CacheReadInputTokens     int `json:"cache_read_input_tokens"`
@@ -112,8 +114,9 @@ func runClaude(hubURL, token string, sessionID int, stdin io.Reader, stdout io.W
 	costUSD := input.Cost.TotalCostUSD
 	tokIn := input.ContextWindow.TotalInputTokens
 	tokOut := input.ContextWindow.TotalOutputTokens
-	tokCache := input.ContextWindow.CurrentUsage.CacheCreationInputTokens +
-		input.ContextWindow.CurrentUsage.CacheReadInputTokens
+	// cache 率の分子は cache_read のみ（実際にキャッシュヒットした分）。
+	// cache_creation まで含めると分子≒分母となり常時 100% 表示で指標として無意味になる。
+	tokCache := input.ContextWindow.CurrentUsage.CacheReadInputTokens
 
 	// stdout に最小限のステータス行を返す（CLI ターミナル側の statusLine 表示）。
 	// "$ <cost>  <model>  ↑in ↓out" の形式。trim して 1 行のみ。
@@ -132,6 +135,7 @@ func runClaude(hubURL, token string, sessionID int, stdin io.Reader, stdout io.W
 			TokensOut:     tokOut,
 			TokensCache:   tokCache,
 			TokensTotal:   tokIn + tokOut,
+			CtxWindow:     input.ContextWindow.ContextWindowSize,
 			StartedAt:     time.Now().Format(time.RFC3339),
 		}
 		if err := postUsage(hubURL, token, payload, logger); err != nil {
@@ -344,7 +348,10 @@ type hubUsagePayload struct {
 	TokensOut     int     `json:"tokens_out,omitempty"`
 	TokensCache   int     `json:"tokens_cache,omitempty"`
 	TokensTotal   int     `json:"tokens_total,omitempty"`
-	StartedAt     string  `json:"started_at,omitempty"`
+	// CtxWindow: モデルのコンテキストウィンドウ上限（Claude statusline の
+	// context_window_size をそのまま中継。取得できないプロバイダは 0）。
+	CtxWindow int    `json:"ctx_window,omitempty"`
+	StartedAt string `json:"started_at,omitempty"`
 }
 
 func postUsage(hubURL, token string, payload hubUsagePayload, logger *slog.Logger) error {

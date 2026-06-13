@@ -38,7 +38,7 @@ document.addEventListener('i18n-ready', () => {
 
 // ---- 入力バー ----
 
-export const inputEl = document.getElementById('input');
+export const inputEl = document.getElementById('input') as HTMLTextAreaElement;
 export const inputClearBtn = document.getElementById('input-clear-btn');
 export const pasteChipsEl = document.getElementById('paste-chips');
 
@@ -1503,9 +1503,7 @@ inputEl.addEventListener('blur', (e) => {
     if (slashCursorAgentEl) slashCursorAgentEl.value = '';
     loadUsageLinkSettings();
 
-    const foAppEl = document.getElementById('settings-file-open-app');
     const termAppEl = document.getElementById('settings-terminal-app');
-    if (foAppEl) foAppEl.value = '';
     if (termAppEl) termAppEl.value = '';
 
     await window.__settingsSaveAll();

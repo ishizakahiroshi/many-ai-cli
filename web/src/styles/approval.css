@@ -6,7 +6,8 @@
   display: none;
   position: relative;
   gap: 8px;
-  padding: 8px calc(12px + 32px + 8px) 8px 12px; /* 右側: dismiss ボタン(32px)+gap(8px)+元padding(12px) */
+  /* 右側: dismiss + collapse の 2 ボタン分を確保（dismiss(32) + gap(6) + collapse(32) + gap(8) + 元padding(12)） */
+  padding: 8px calc(12px + 32px + 6px + 32px + 8px) 8px 12px;
   background: var(--bg-elev);
   border-top: 1px solid var(--line);
   border-left: 3px solid transparent;
@@ -210,6 +211,51 @@
   min-height: var(--control-h-sm);
 }
 
+/* 折りたたみ（全文⇄コンパクト）トグル — dismiss ボタンの左隣に固定配置 */
+.action-collapse-btn {
+  position: absolute;
+  top: 8px;
+  right: calc(12px + var(--control-h-sm) + 6px);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted-2);
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 4px 8px;
+  line-height: 1;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
+  min-width: var(--control-h-sm);
+  min-height: var(--control-h-sm);
+}
+.action-collapse-btn:hover { color: var(--text); border-color: var(--line-soft); }
+
+/* コンパクト表示: 質問本文・選択肢を 1 行省略にして高さを最小化する。
+   全文はボタン/タイトルの title 属性とターミナル本文で確認できる。 */
+#action-bar.collapsed .action-bar-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+#action-bar.collapsed .action-section-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#action-bar.collapsed .action-section { margin: 1px 0; padding: 4px 8px; }
+#action-bar.collapsed .action-btn {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 360px;
+}
+
 /* Approval opt-in toast */
 /* ---- Hub 承認ボタン オプトイントースト ---- */
 #approval-toast {
@@ -270,7 +316,7 @@
 @media (max-width: 720px), (pointer: coarse) {
   #action-bar {
     gap: 8px;
-    padding: 10px calc(12px + 32px + 8px) calc(10px + env(safe-area-inset-bottom)) 12px;
+    padding: 10px calc(12px + 44px + 6px + 44px + 8px) calc(10px + env(safe-area-inset-bottom)) 12px;
     max-height: 56dvh;
     border-left: 0;
     border-top: 3px solid transparent;
@@ -308,6 +354,15 @@
     width: 44px;
     height: 44px;
   }
+  .action-collapse-btn {
+    top: 10px;
+    right: calc(12px + 44px + 6px);
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+  }
+  #action-bar.collapsed .action-btn { max-width: 100%; }
   #action-bar.batch {
     max-height: 60dvh;
   }

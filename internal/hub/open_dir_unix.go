@@ -54,10 +54,7 @@ func openRevealNative(path string) error {
 	}
 }
 
-func openFileNative(filePath, app string) error {
-	if app != "" {
-		return exec.Command(app, filePath).Start()
-	}
+func openFileNative(filePath string) error {
 	switch runtime.GOOS {
 	case "darwin":
 		return exec.Command("open", filePath).Start()
@@ -69,21 +66,6 @@ func openFileNative(filePath, app string) error {
 			return exec.Command("cmd.exe", "/c", "start", "", wslutil.ToWindowsPath(filePath)).Start()
 		}
 		return linuxOpenDefault(filePath)
-	}
-}
-
-func effectiveFileOpenAppDescription(app string) string {
-	if app != "" {
-		return app + " <path>"
-	}
-	switch runtime.GOOS {
-	case "darwin":
-		return "open <path>"
-	default:
-		if wslutil.IsWindowsLauncherMode() {
-			return `cmd.exe /c start "" <path>`
-		}
-		return "xdg-open <path>"
 	}
 }
 

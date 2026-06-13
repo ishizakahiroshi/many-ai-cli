@@ -290,6 +290,8 @@ export function ensureTerminal(id) {
     cursorHideHasNewline: false,
     liveStatusText: '',
     liveStatusHideTimer: null,
+    liveLineRow: null,
+    liveLineCells: [],
     autoScroll: true,
     everAttached: false,
   });
@@ -522,7 +524,7 @@ export function flushPending(id) {
   t.pendingChunks = [];
   t.pendingTotalBytes = 0;
   if (chunks.length === 0) {
-    if (t.autoScroll) t.term.scrollToBottom();
+    if (t.autoScroll) { t.term.scrollToBottom(); syncViewportScrollbarToBottom(t); }
     scheduleApprovalCheck(id);
     return;
   }
@@ -549,7 +551,7 @@ export function flushPending(id) {
       requestAnimationFrame(() => flushPending(id));
       return;
     }
-    if (latest.autoScroll) latest.term.scrollToBottom();
+    if (latest.autoScroll) { latest.term.scrollToBottom(); syncViewportScrollbarToBottom(latest); }
     scheduleApprovalCheck(id);
   };
   t.pendingFlushWatchdog = setTimeout(finish, TERMINAL_WRITE_FLUSH_WATCHDOG_MS);
@@ -580,6 +582,20 @@ export function isTerminalAtBottom(t) {
   return buf.viewportY + t.term.rows >= buf.length;
 }
 
+// xterm の内部スクロール状態（ydisp=ybase=最下部）と、ネイティブの
+// .xterm-viewport.scrollTop（青いスクロールバーのつまみ位置）は別管理で、
+// fit（リサイズ）直後に PTY 出力が来るとつまみ位置の同期が取りこぼされ、
+// 「表示は最下部なのにつまみだけ先頭に残る」状態になることがある。
+// scrollToBottom() の後にこれを呼び、つまみも実際の表示位置（最下部）へ合わせる。
+function syncViewportScrollbarToBottom(t) {
+  const viewport = t?.term?.element?.querySelector('.xterm-viewport') as HTMLElement | null;
+  if (!viewport) return;
+  const target = viewport.scrollHeight - viewport.clientHeight;
+  if (target > 0 && Math.abs(viewport.scrollTop - target) > 1) {
+    viewport.scrollTop = target;
+  }
+}
+
 export function fitTerminalPreservingBottom(t, id, forceVisualFit = false) {
   if (!canFitTerminal(t)) return;
   // PTY リサイズ抑制中（action-bar 表示中など）は通常スキップするが、
@@ -593,6 +609,7 @@ export function fitTerminalPreservingBottom(t, id, forceVisualFit = false) {
   if (wasAtBottom) {
     t.autoScroll = true;
     t.term.scrollToBottom();
+    syncViewportScrollbarToBottom(t);
     if (id === activeSessionId) updateScrollLockBtn(false);
   }
 }
@@ -773,6 +790,7 @@ export function scrollTerminalToBottomSoon(id, opts: any = {}) {
     if (!force && !tNext.autoScroll) return;
     tNext.autoScroll = true;
     tNext.term.scrollToBottom();
+    syncViewportScrollbarToBottom(tNext);
     if (id === activeSessionId) updateScrollLockBtn(false);
   };
 
@@ -930,6 +948,7 @@ document.getElementById('scroll-to-bottom-btn')?.addEventListener('click', () =>
   if (!t) return;
   t.autoScroll = true;
   t.term.scrollToBottom();
+  syncViewportScrollbarToBottom(t);
 });
 
 export const hubMarkerBytePatterns = [
@@ -1185,6 +1204,7 @@ export function snapToBottomAfterScreenClear(id) {
   const t = terminals.get(id);
   if (!t || !t.autoScroll) return;
   t.term.scrollToBottom();
+  syncViewportScrollbarToBottom(t);
   if (id === activeSessionId) updateScrollLockBtn(false);
 }
 
@@ -1325,70 +1345,140 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
 // 更新されるため、更新が LIVE_STATUS_HIDE_MS 途切れたら停止とみなして消す。
 const LIVE_STATUS_HIDE_MS = 1500;
 // ライブステータス表示（#terminal-live-status）の有効/無効。
-// Web ターミナルのスクレイプでスピナー断片（例: `·ii` / `+49` / `thinking with...`）が
-// 残るため、ユーザー要望により既定で無効化。再表示したい場合は true に戻す。
-const LIVE_STATUS_ENABLED = false;
+// 以前はステータス更新ブロックを「断片で丸ごと上書き」していたため `·ii` / `+49`
+// のような断片しか出ず無効化していた（bugfix_live-status-spinner-fragments_2026-06-12.md）。
+// 現在は列アドレス（CUP/CUF）でセッションごとの 1 行へ部分更新を適用する再構成方式に
+// 置き換え、断片バグが構造的に再発しないため有効化。くるくる自体は Web 側の CSS
+// アニメーション（.live-spinner）で描くので再構成精度に関係なく必ず回る。
+// 再無効化したい場合は false に戻す（退路として残す）。
+const LIVE_STATUS_ENABLED = true;
 const liveStatusDecoder = new TextDecoder('utf-8');
 
-// ANSI エスケープ・制御文字を除去して可読テキストだけを返す。
-function stripAnsiToText(blockBuf) {
-  let s;
-  try {
-    s = liveStatusDecoder.decode(new Uint8Array(blockBuf));
-  } catch (_) {
-    return '';
+// ステータスバーブロック（絶対カーソル移動 + 部分書き換え）を、セッションごとの
+// 仮想 1 行バッファ（列 → 文字のスパース配列）へ適用して全文テキストを組み立てる。
+// 部分更新（スピナー記号だけ col1 / `↓` だけ col18 / 末尾だけ col29〜 等）が複数フレームに
+// 分かれて来ても、列アドレスで同じ行へ重ね書きするため断片にならず全文が復元される。
+function reconstructLiveLine(id, blockBuf): string {
+  const t = terminals.get(id);
+  if (!t) return '';
+  let s = '';
+  try { s = liveStatusDecoder.decode(new Uint8Array(blockBuf)); } catch (_) { return ''; }
+  if (t.liveLineRow === undefined) t.liveLineRow = null;
+  if (!t.liveLineCells) t.liveLineCells = [];
+  const cells: string[] = t.liveLineCells;
+
+  let row = t.liveLineRow ?? 1;        // 仮想カーソル行（液晶上の行番号）
+  let col = 1;                         // 仮想カーソル列（1-based）
+  const chars: string[] = Array.from(s); // コードポイント単位（全角は 1 要素 = 1 セル近似）
+
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i];
+    if (ch === '\x1b') {
+      const next = chars[i + 1];
+      if (next === '[') {
+        // CSI: パラメータ（0x20-0x3F）を読み、終端バイト（0x40-0x7E = @〜~）で確定
+        let j = i + 2;
+        let params = '';
+        while (j < chars.length && !/[@-~]/.test(chars[j])) { params += chars[j]; j++; }
+        const final = chars[j];
+        if (final === 'H' || final === 'f') {            // CUP: 絶対位置
+          const m = params.match(/^(\d*);?(\d*)$/);
+          row = m && m[1] ? parseInt(m[1], 10) : 1;
+          col = m && m[2] ? parseInt(m[2], 10) : 1;
+        } else if (final === 'C') {                      // CUF: 右移動（実ログに [30C 等）
+          col += params ? (parseInt(params, 10) || 1) : 1;
+        } else if (final === 'D') {                      // CUB: 左移動
+          col = Math.max(1, col - (params ? (parseInt(params, 10) || 1) : 1));
+        } else if (final === 'G') {                      // CHA: 列絶対
+          col = params ? (parseInt(params, 10) || 1) : 1;
+        } else if (final === 'K') {                      // EL: 行消去（対象行のみ）
+          if (row === t.liveLineRow) {
+            const mode = params ? (parseInt(params, 10) || 0) : 0;
+            if (mode === 0) cells.length = Math.min(cells.length, col);          // col 以降を消去
+            else if (mode === 2) cells.length = 0;                               // 全消去
+            else if (mode === 1) { for (let k = 1; k <= col && k < cells.length; k++) cells[k] = ' '; }
+          }
+        }
+        // m（SGR 色）等その他の終端は読み飛ばすだけ
+        i = (final === undefined) ? chars.length : j;
+        continue;
+      } else if (next === ']') {
+        // OSC: BEL か ST（ESC \）まで読み飛ばす
+        let j = i + 2;
+        while (j < chars.length && chars[j] !== '\x07' && !(chars[j] === '\x1b' && chars[j + 1] === '\\')) j++;
+        if (chars[j] === '\x1b') j++;
+        i = j;
+        continue;
+      } else {
+        i = i + 1; // 2 バイト ESC: 次を読み飛ばす
+        continue;
+      }
+    }
+    if (ch === '\r') { col = 1; continue; }
+    if (ch === '\n') { row += 1; continue; }
+    if (ch <= '\x1f' || ch === '\x7f') continue; // その他制御文字は無視
+    // 印字可能文字
+    if (row !== t.liveLineRow) {
+      if (ch === ' ') { col += 1; continue; } // 別行への空白書き込み（[17;3H のカーソル退避先）は行を切り替えない
+      // 文字・記号の実書き込みでこの行をステータス行として確定（端末スクロール追従）
+      t.liveLineRow = row;
+      cells.length = 0;
+    }
+    cells[col] = ch;
+    col += 1;
   }
-  return s
-    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '') // OSC
-    .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')          // CSI（カーソル移動・色）
-    .replace(/\x1b[@-Z\\-_]/g, '')                       // 2バイト ESC シーケンス
-    .replace(/\x1b./g, '')                               // 取りこぼした ESC
-    .replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '')            // 残った制御文字
-    .replace(/\s+/g, ' ')
-    .trim();
+
+  let out = '';
+  for (let k = 1; k < cells.length; k++) out += (cells[k] === undefined ? ' ' : cells[k]);
+  out = out.replace(/\s+/g, ' ').trim();
+  // 文字・数字を含まない（記号・空白だけの）段階では前回値を維持（''を返す）
+  if (!/[\p{L}\p{N}]/u.test(out)) return '';
+  return out;
 }
 
 export function extractAndSetLiveStatus(id, blockBuf) {
   if (!LIVE_STATUS_ENABLED) return; // 無効時はステータスバーブロックの破棄のみ行い、ライブ行へは出さない
   if (!blockBuf || blockBuf.length === 0) return;
-  const text = stripAnsiToText(blockBuf);
-  // 文字・数字を含まない（罫線やカーソル退避だけの）ブロックは無視し、前回値を維持する。
-  if (!/[\p{L}\p{N}]/u.test(text)) return;
+  const text = reconstructLiveLine(id, blockBuf);
+  // text が '' でも「ステータス更新フレームが来た」事実＝稼働中なので窓は出し続ける（くるくる継続）。
   setSessionLiveStatus(id, text);
 }
 
 export function setSessionLiveStatus(id, text) {
   const t = terminals.get(id);
   if (!t) return;
-  t.liveStatusText = text;
+  if (text) t.liveStatusText = text; // 意味のある全文だけ差し替え（記号だけの中間フレームでは前回値維持）
+  // フレームが来るたび hide タイマーをリセット → 更新が途切れて初めて窓を消す
   if (t.liveStatusHideTimer) clearTimeout(t.liveStatusHideTimer);
   t.liveStatusHideTimer = setTimeout(() => {
     const cur = terminals.get(id);
-    if (cur) { cur.liveStatusText = ''; cur.liveStatusHideTimer = null; }
-    if (id === activeSessionId) renderLiveStatusDom('');
+    if (cur) { cur.liveStatusText = ''; cur.liveStatusHideTimer = null; cur.liveLineRow = null; cur.liveLineCells = []; }
+    if (id === activeSessionId) renderLiveStatusDom('', false);
   }, LIVE_STATUS_HIDE_MS);
-  if (id === activeSessionId) renderLiveStatusDom(text);
+  if (id === activeSessionId) renderLiveStatusDom(t.liveStatusText || '', true);
 }
 
-function renderLiveStatusDom(text) {
+// ライブ進捗窓の描画。visible=true の間は CSS で .live-spinner が回り続ける。
+function renderLiveStatusDom(text, visible) {
   const el = document.getElementById('terminal-live-status');
   if (!el) return;
-  if (!LIVE_STATUS_ENABLED) { el.textContent = ''; el.hidden = true; return; } // 常に非表示
-  if (text) {
-    el.textContent = text;
-    el.hidden = false;
-  } else {
-    el.textContent = '';
+  const textEl = el.querySelector('.live-status-text') as HTMLElement | null;
+  if (!LIVE_STATUS_ENABLED || !visible) {
     el.hidden = true;
+    if (textEl) textEl.textContent = '';
+    return;
   }
+  el.hidden = false;
+  if (textEl && textEl.textContent !== text) textEl.textContent = text || '';
 }
 
 // セッション切替時に、アクティブセッションの最新ライブ進捗を DOM へ反映する。
 // 非アクティブ中も hide タイマーは各 terminal で走り続けるため、
-// バックグラウンドで稼働中のセッションへ切り替えれば現在のスピナーが出る。
+// バックグラウンドで稼働中のセッション（hide タイマー稼働中）へ切り替えれば現在のスピナーが出る。
 export function syncLiveStatusDomForActive() {
   const t = activeSessionId !== null ? terminals.get(activeSessionId) : null;
-  renderLiveStatusDom(t ? (t.liveStatusText || '') : '');
+  const active = !!(t && t.liveStatusHideTimer);
+  renderLiveStatusDom(t ? (t.liveStatusText || '') : '', active);
 }
 
 // \r（CR）で行頭へ戻ったあと行末を消去しないと、短い上書きテキストの後ろに
@@ -1477,6 +1567,7 @@ export function applyRemotePtyResize(sessionId, cols, rows) {
     if (wasAtBottom) {
       t.autoScroll = true;
       t.term.scrollToBottom();
+      syncViewportScrollbarToBottom(t);
       if (id === activeSessionId) updateScrollLockBtn(false);
     }
   } catch (_) {}
@@ -1544,7 +1635,7 @@ export const resizeObserver = new ResizeObserver(() => {
       }
     }
     if (shouldFollowBottom) {
-      try { t.term.scrollToBottom(); } catch (_) {}
+      try { t.term.scrollToBottom(); syncViewportScrollbarToBottom(t); } catch (_) {}
       updateScrollLockBtn(false);
     }
   });
