@@ -4,7 +4,7 @@
 
 XServer リモートサーバー（サーバー名 `admin`）上で「ユーザー 1 人 = Docker コンテナ 1 つ」の分離方式で `any-ai-cli` を複数人運用するための手順書。設計の経緯・決定ログは [plan_docker-multiuser-isolation.md](plan_docker-multiuser-isolation.md) を参照。
 
-**接続情報の正本は `C:\dev\.ssh\serverpass.local.toml`（Git 管理外）。本書には認証情報を書かない。**
+**接続情報（サーバー IP・秘密鍵パス・token 等）の正本は管理者ローカルの認証情報ファイル（Git 管理外）に置く。本書には実値を書かない。**
 
 ## 全体像
 
@@ -157,12 +157,12 @@ docker logs aac-<user> 2>&1 | grep -m1 'Open:'
 
 ```powershell
 # Windows (PowerShell) — つなぎっぱなしにするウィンドウで実行
-ssh -N -L <port>:127.0.0.1:<port> <user>@203.0.113.10 -i <受領した秘密鍵のパス>
+ssh -N -L <port>:127.0.0.1:<port> <user>@<server-ip> -i <受領した秘密鍵のパス>
 ```
 
 ```bash
 # macOS / Linux
-ssh -N -L <port>:127.0.0.1:<port> <user>@203.0.113.10 -i <秘密鍵パス>
+ssh -N -L <port>:127.0.0.1:<port> <user>@<server-ip> -i <秘密鍵パス>
 ```
 
 ブラウザで `http://127.0.0.1:<port>/?token=<token>` を開く。
@@ -203,12 +203,12 @@ ssh -N -L <port>:127.0.0.1:<port> <user>@203.0.113.10 -i <秘密鍵パス>
 # 並行編集中（別 AI セッション・エディタ）の中途半端なファイルを拾って
 # ビルドが壊れることがある（2026-06-04 に実際に発生）
 git archive HEAD | gzip | \
-  ssh root@203.0.113.10 'rm -rf /opt/any-ai-cli/src && mkdir -p /opt/any-ai-cli/src && tar -xzf - -C /opt/any-ai-cli/src'
+  ssh root@<server-ip> 'rm -rf /opt/any-ai-cli/src && mkdir -p /opt/any-ai-cli/src && tar -xzf - -C /opt/any-ai-cli/src'
 
 # deploy/ が未コミットの間だけ、作業ツリーから上書き転送する（コミット後は不要）。
 # entrypoint.sh の CR 除去は git archive の autocrlf 変換対策として常に実行してよい
 tar -czf - deploy | \
-  ssh root@203.0.113.10 "tar -xzf - -C /opt/any-ai-cli/src && sed -i 's/\r\$//' /opt/any-ai-cli/src/deploy/docker/entrypoint.sh"
+  ssh root@<server-ip> "tar -xzf - -C /opt/any-ai-cli/src && sed -i 's/\r\$//' /opt/any-ai-cli/src/deploy/docker/entrypoint.sh"
 ```
 
 ### provider CLI のバージョン管理ポリシー
@@ -247,11 +247,11 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
 apt-get update && apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 docker run --rm hello-world
 
-# 2. 管理者ユーザー admin（既存 admin-key.pem の公開鍵を使い回し）
+# 2. 管理者ユーザー admin（既存の管理者秘密鍵 <admin-key>.pem の公開鍵を使い回し）
 adduser --disabled-password --gecos "" admin
 usermod -aG docker admin
 install -d -m 700 -o admin -g admin /home/admin/.ssh
-# ssh-keygen -y -f admin-key.pem の出力を authorized_keys へ
+# ssh-keygen -y -f <admin-key>.pem の出力を authorized_keys へ
 chmod 600 /home/admin/.ssh/authorized_keys && chown admin:admin /home/admin/.ssh/authorized_keys
 
 # 3. ディレクトリ規約

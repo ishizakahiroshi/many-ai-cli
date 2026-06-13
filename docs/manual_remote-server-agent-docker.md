@@ -1,17 +1,19 @@
-# AI エージェント設定タスク: リモートサーバー（Docker 常駐版）
+# AI エージェント設定タスク: リモートサーバー（Docker / マルチユーザー・隔離向け）
 
 > 最終更新: 2026-06-14(日) 00:15:54
 
-このファイルは **そのまま AI エージェント（手元 PC の Claude Code / Codex CLI 等）に貼り付けて使う設定タスク指示書** です。エージェントは手元 PC で動き、SSH 越しにリモートサーバーへ `many-ai-cli` の Docker compose 構成を配置・常駐起動し、最後に手元の launcher プロファイル（tunnel モード）を作成します。
+このファイルは **そのまま AI エージェント（手元 PC の Claude Code / Codex CLI 等）に貼り付けて使う設定タスク指示書** です。エージェントは手元 PC で動き、SSH 越しにリモートサーバーへ `many-ai-cli` の Docker compose 構成を配置し、自動再起動付きで常駐起動し、最後に手元の launcher プロファイル（tunnel モード）を作成します。
 
-単一サーバー版（pnpm で都度 `serve`）との違い:
+単一サーバー版（pnpm + `serve`）との違い:
 
 | | 単一サーバー版 | Docker 版（このファイル） |
 |---|---|---|
 | リモート導入 | pnpm でグローバル install | GHCR のイメージを compose で pull |
-| Hub の起動 | 接続のたびに `serve` | `restart: unless-stopped` で常駐 |
+| Hub の起動 | `serve` を手動 or systemd/tmux 等で起動（都度・常駐どちらも可） | `restart: unless-stopped` で自動再起動付き常駐 |
 | launcher モード | `serve` | `tunnel`（トンネルだけ張る） |
-| 向く用途 | 1 人・お試し | 常駐・複数ユーザー・無停止運用 |
+| 向く用途 | 手軽に始めたい・単一ユーザー・隔離不要（常駐も可） | 複数ユーザーを隔離・自動再起動/自動更新を仕組み化したい |
+
+※ `serve` モードでもリモート側 `serve` を常駐させ、`tunnel` モードで繋ぐ運用は可能。モード=常駐可否ではない。
 
 使い方:
 

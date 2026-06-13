@@ -232,7 +232,7 @@ sha256sum -c SHA256SUMS.txt
 | モード | 用途 |
 |---|---|
 | `serve` | リモートサーバーに SSH してリモート側で `many-ai-cli serve` を起動する |
-| `tunnel` | リモート側ですでに起動中の Hub（Docker compose 常駐 Hub 等）へポートフォワードする |
+| `tunnel` | リモート側ですでに起動中の常駐 Hub（systemd / tmux / Docker compose 等で立てっぱなしにした Hub）へポートフォワードする |
 
 どちらのモードでも、リモートの Hub は `127.0.0.1` にのみ bind したままです。SSH のローカルフォワード（`-L 127.0.0.1:<port>:127.0.0.1:<port>`）によって Hub をネットワークに公開することなく Windows ブラウザから到達可能にします。
 
@@ -261,7 +261,7 @@ profiles:
     user: your-user
     hub_port: 47777
 
-  # リモートサーバープロファイル（tunnel モード）— Docker 常駐 Hub へポートフォワード
+  # リモートサーバープロファイル（tunnel モード）— 常駐させた Hub（systemd / tmux / Docker いずれでも）へポートフォワード
   - name: remote-docker
     type: ssh
     mode: tunnel
