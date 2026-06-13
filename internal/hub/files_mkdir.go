@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/config"
 )
 
 // filesMkdirReq は POST /api/files-mkdir のリクエスト body。

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/config"
 )
 
 func TestReconnectGraceClampsNegative(t *testing.T) {

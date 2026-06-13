@@ -39,7 +39,7 @@ func isExecNotFound(err error) bool {
 // 別種のエラー（権限不足・ConPTY 内部障害等）でノイズにしない。
 func diagnoseStartFailure(w io.Writer, provider string, providerArgs []string, startErr error) {
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "==== any-ai-cli spawn diagnostic ====")
+	fmt.Fprintln(w, "==== many-ai-cli spawn diagnostic ====")
 	fmt.Fprintf(w, "provider: %s\n", provider)
 	fmt.Fprintf(w, "lookup target: argv[0]=%q args=%v\n", provider, providerArgs)
 	fmt.Fprintf(w, "error: %v\n", startErr)
@@ -61,7 +61,7 @@ func diagnoseStartFailure(w io.Writer, provider string, providerArgs []string, s
 		fmt.Fprintf(w, "Hint: %q was not found on PATH at Hub start time.\n", provider)
 		fmt.Fprintln(w, "  - If installed via pnpm: ensure $PNPM_HOME (or %PNPM_HOME%) is exported")
 		fmt.Fprintln(w, "    in the shell that starts the Hub, then run:")
-		fmt.Fprintf(w, "      any-ai-cli stop && any-ai-cli %s\n", provider)
+		fmt.Fprintf(w, "      many-ai-cli stop && many-ai-cli %s\n", provider)
 		fmt.Fprintln(w, "    to refresh the Hub's PATH snapshot.")
 		fmt.Fprintln(w, "  - Otherwise verify the provider CLI is installed and on PATH for the")
 		fmt.Fprintln(w, "    parent shell (the env Hub inherited at start time).")

@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"any-ai-cli/internal/config"
-	"any-ai-cli/internal/sessionlog"
-	"any-ai-cli/internal/sessionstore"
+	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/sessionstore"
 )
 
 const (
@@ -218,14 +218,14 @@ func (s *Server) handleWorkbenchSessionExport(w http.ResponseWriter, r *http.Req
 	}
 	messages, _ := s.sessionStore.ChatMessagesByLiveSession(id, 1000)
 	events, _ := s.sessionStore.TimelineByLiveSession(id, 1000)
-	name := fmt.Sprintf("any-ai-cli-session-%d.zip", id)
+	name := fmt.Sprintf("many-ai-cli-session-%d.zip", id)
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, name))
 	zw := zip.NewWriter(w)
 	defer zw.Close()
 	addZipJSON(zw, "session.json", map[string]any{"session": meta, "events": events})
 	var md strings.Builder
-	fmt.Fprintf(&md, "# any-ai-cli session #%d\n\n", id)
+	fmt.Fprintf(&md, "# many-ai-cli session #%d\n\n", id)
 	if meta.Title != "" {
 		fmt.Fprintf(&md, "Title: %s\n\n", meta.Title)
 	}
@@ -894,7 +894,7 @@ func addZipFile(zw *zip.Writer, name, path string, redact bool) {
 		b = []byte(sessionlog.MaskSecrets(string(b)))
 	}
 	if truncated {
-		b = append(b, []byte("\n\n[truncated by any-ai-cli export]\n")...)
+		b = append(b, []byte("\n\n[truncated by many-ai-cli export]\n")...)
 	}
 	f, err := zw.Create(name)
 	if err != nil {

@@ -1,0 +1,10 @@
+# Native binaries are staged from GoReleaser dist/ at release time
+# (scripts/stage-npm-binaries.mjs) and published to npm — never committed.
+*/bin/many-ai-cli
+*/bin/many-ai-cli.exe
+
+# Local pack artifacts
+*/*.tgz
+
+# Local smoke scratch (scripts/smoke-npm.mjs stages a temp platform package here)
+*/node_modules/

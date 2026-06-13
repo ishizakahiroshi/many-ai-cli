@@ -1,4 +1,4 @@
-# Gemini Entry Point (any-ai-cli)
+# Gemini Entry Point (many-ai-cli)
 
 > 最終更新: 2026-05-07(木) 19:24:03
 
@@ -20,4 +20,4 @@
 
 - **本リポジトリでは Gemini CLI を wrap 対象外とした**（2026-05-06 決定 / ToS グレーゾーンのため）。
 - 詳細: [docs/provider_tos_review.md](docs/provider_tos_review.md)
-- 本リポジトリ自体は `any-ai-cli`（Claude Code / Codex 向け承認ハブ）の開発リポジトリであり、開発補助に Gemini CLI を使う場合の手引きとして本ファイルを残置している。
+- 本リポジトリ自体は `many-ai-cli`（Claude Code / Codex 向け承認ハブ）の開発リポジトリであり、開発補助に Gemini CLI を使う場合の手引きとして本ファイルを残置している。

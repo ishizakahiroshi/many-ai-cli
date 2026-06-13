@@ -13,14 +13,14 @@ import (
 	"strings"
 	"syscall"
 
-	"any-ai-cli/internal/config"
-	"any-ai-cli/internal/hub"
-	hublog "any-ai-cli/internal/log"
-	"any-ai-cli/internal/sessionlog"
-	"any-ai-cli/internal/shell"
-	"any-ai-cli/internal/uninstall"
-	"any-ai-cli/internal/usagerelay"
-	"any-ai-cli/internal/wrapper"
+	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/hub"
+	hublog "many-ai-cli/internal/log"
+	"many-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/shell"
+	"many-ai-cli/internal/uninstall"
+	"many-ai-cli/internal/usagerelay"
+	"many-ai-cli/internal/wrapper"
 )
 
 // version はリリースビルド時に goreleaser の ldflags
@@ -83,7 +83,7 @@ func repoRoot(dir string) string {
 		data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
 		if err == nil {
 			for _, line := range strings.Split(string(data), "\n") {
-				if strings.TrimSpace(line) == "module any-ai-cli" {
+				if strings.TrimSpace(line) == "module many-ai-cli" {
 					return dir
 				}
 			}
@@ -129,8 +129,8 @@ func run(args []string) error {
 	cmd := args[0]
 	switch cmd {
 	case "version", "--version", "-v":
-		// deploy-wsl.ps1 など外部スクリプトが `any-ai-cli --version` /
-		// `any-ai-cli version` で版数を取得できるようにする。
+		// deploy-wsl.ps1 など外部スクリプトが `many-ai-cli --version` /
+		// `many-ai-cli version` で版数を取得できるようにする。
 		// 出力は displayVersion() に一本化（ldflags 注入値 → git タグの順）。
 		fmt.Println(displayVersion())
 		return nil
@@ -221,6 +221,6 @@ func run(args []string) error {
 }
 
 func usage() error {
-	fmt.Println("any-ai-cli <serve|wrap|claude|codex|copilot|cursor-agent|shell-init|stop|status|log-clean|uninstall|version>")
+	fmt.Println("many-ai-cli <serve|wrap|claude|codex|copilot|cursor-agent|shell-init|stop|status|log-clean|uninstall|version>")
 	return nil
 }

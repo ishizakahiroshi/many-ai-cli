@@ -19,9 +19,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"any-ai-cli/internal/config"
-	"any-ai-cli/internal/proto"
-	"any-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/proto"
+	"many-ai-cli/internal/sessionlog"
 	"golang.org/x/net/websocket"
 	"golang.org/x/term"
 )
@@ -388,9 +388,9 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	}
 	providerArgs = append(extra, providerArgs...)
 
-	// Hub にスポーンされた場合、起動中の Hub ポートが ANY_AI_CLI_HUB_PORT で渡される。
+	// Hub にスポーンされた場合、起動中の Hub ポートが MANY_AI_CLI_HUB_PORT で渡される。
 	// config.yaml のポートより優先して使い、wrapper が別 Hub を勝手に起動するのを防ぐ。
-	if portStr := os.Getenv("ANY_AI_CLI_HUB_PORT"); portStr != "" {
+	if portStr := os.Getenv("MANY_AI_CLI_HUB_PORT"); portStr != "" {
 		if port, err2 := strconv.Atoi(portStr); err2 == nil && port > 0 {
 			cfg.Hub.Port = port
 		}
@@ -411,7 +411,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		return err
 	}
 	sessionID := reg.SessionID
-	setConsoleTitle(fmt.Sprintf("any-ai-cli [#%d:%s]", sessionID, provider))
+	setConsoleTitle(fmt.Sprintf("many-ai-cli [#%d:%s]", sessionID, provider))
 	setConsoleIcon()
 	initCols, initRows := reg.Cols, reg.Rows
 	if initCols <= 0 || initRows <= 0 {
@@ -460,7 +460,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	if provider == "claude" && reg.TokenStatusbar {
 		exe, exeErr := os.Executable()
 		if exeErr != nil {
-			exe = "any-ai-cli"
+			exe = "many-ai-cli"
 		}
 		hp := UsageHookParams{
 			HubURL:    fmt.Sprintf("http://127.0.0.1:%d", cfg.Hub.Port),
@@ -481,7 +481,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	}
 	ps, err := startProcess(provider, providerArgs, cwd, initCols, initRows)
 	if err != nil {
-		// Hub 側の spawn ログ (~/.any-ai-cli/logs/spawn/<provider>-<ts>.log) に
+		// Hub 側の spawn ログ (~/.many-ai-cli/logs/spawn/<provider>-<ts>.log) に
 		// 何が起きたかを残し、Hub UI のセッションカード「Disconnected」表示に
 		// 「reason: provider not found in PATH」等を 1 行付けるための reason
 		// コードを session_end で送る。生のスタックトレースは UI に流さない。
@@ -787,10 +787,10 @@ func waitForHubReady(cfg *config.Config, timeout time.Duration) bool {
 }
 
 func ensureHub(cfg *config.Config) error {
-	// Hub にスポーンされた場合（ANY_AI_CLI=1）、Hub は既に動いている。
+	// Hub にスポーンされた場合（MANY_AI_CLI=1）、Hub は既に動いている。
 	// 新 Hub を起動すると PID ファイル経由で実際の Hub が kill される危険があるため
 	// プローブと起動を一切スキップする。
-	if os.Getenv("ANY_AI_CLI") == "1" {
+	if os.Getenv("MANY_AI_CLI") == "1" {
 		return nil
 	}
 	if probeHubAlive(cfg) {

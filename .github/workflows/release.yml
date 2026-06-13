@@ -34,6 +34,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          registry-url: "https://registry.npmjs.org"
 
       # .goreleaser.yaml の before hooks（bun install / bun run build）が使用
       - uses: oven-sh/setup-bun@v2
@@ -64,3 +65,34 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # homebrew-tap / winget-pkgs fork への push 用 PAT（GITHUB_TOKEN は自リポジトリ限定のため）
           PUBLISH_GITHUB_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}
+
+      # --- npm registry 配布（pnpm add -g many-ai-cli の導線）---
+      # platform 別 optional dependency package に GoReleaser がビルドした Go バイナリを
+      # 同梱して publish する。standalone exe をブラウザ DL させないことで MotW/SmartScreen を回避。
+      # NPM_TOKEN secret が未設定なら丸ごとスキップ（既存の GitHub/Homebrew/winget リリースは壊さない）。
+      - name: Stage npm binaries from GoReleaser dist
+        if: ${{ secrets.NPM_TOKEN != '' }}
+        run: node scripts/stage-npm-binaries.mjs
+
+      - name: Sync npm package versions to tag
+        if: ${{ secrets.NPM_TOKEN != '' }}
+        run: node scripts/sync-npm-version.mjs "${{ github.ref_name }}"
+
+      - name: Publish npm packages
+        if: ${{ secrets.NPM_TOKEN != '' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          # prerelease タグ（v0.3.0-rc.1 等）は dist-tag を next にし、latest を汚さない。
+          DIST_TAG=latest
+          case "${{ github.ref_name }}" in
+            *-*) DIST_TAG=next ;;
+          esac
+          echo "publishing with dist-tag: $DIST_TAG"
+          # optional dependency（platform package）を先に publish。root が解決できるようにする。
+          for pkg in many-ai-cli-windows-x64 many-ai-cli-linux-x64 many-ai-cli-macos-intel many-ai-cli-macos-apple-silicon; do
+            npm publish "npm/$pkg" --access public --provenance --tag "$DIST_TAG"
+          done
+          # root package を最後に publish（optional deps が出揃った後）。
+          npm publish "npm/many-ai-cli" --access public --provenance --tag "$DIST_TAG"

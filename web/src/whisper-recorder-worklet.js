@@ -21,4 +21,4 @@ class AnyAiCliWhisperRecorder extends AudioWorkletProcessor {
     return true;
   }
 }
-registerProcessor('any-ai-cli-whisper-recorder', AnyAiCliWhisperRecorder);
+registerProcessor('many-ai-cli-whisper-recorder', AnyAiCliWhisperRecorder);

@@ -1,6 +1,6 @@
 # GitHub Copilot Approval Patterns
 
-> any-ai-cli の Hub UI が GitHub Copilot CLI の permission / confirmation UI を検出するためのトリガー文言。
+> many-ai-cli の Hub UI が GitHub Copilot CLI の permission / confirmation UI を検出するためのトリガー文言。
 > 1 行 1 パターン。バッククオートで囲んだ部分のみをパースする。
 > GitHub Copilot CLI 1.0.45 の `copilot help permissions` と公式 CLI ドキュメントの表現に基づく。
 

@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/config"
 )
 
 func TestHandleVoiceTranscribeNotConfigured(t *testing.T) {

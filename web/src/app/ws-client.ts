@@ -59,7 +59,7 @@ function openSessionFromNotification(sessionId) {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (event) => {
     const data = event.data || {};
-    if (data.type === 'any-ai-cli-open-session') {
+    if (data.type === 'many-ai-cli-open-session') {
       openSessionFromNotification(data.session_id);
     }
   });
@@ -432,7 +432,7 @@ document.getElementById('reconnect-btn').addEventListener('click', async () => {
   } catch (_) {
     btn.textContent = '↺ ' + (t('reconnect') || '再接続');
     btn.disabled = false;
-    document.getElementById('summary').textContent = t('hub_stopped') || 'Hub停止中 — any-ai-cli serve で再起動してください';
+    document.getElementById('summary').textContent = t('hub_stopped') || 'Hub停止中 — many-ai-cli serve で再起動してください';
   }
 });
 

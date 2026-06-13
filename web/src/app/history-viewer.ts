@@ -13,7 +13,7 @@ const HV_CHUNK_BYTES = 128 * 1024;
 // ログ中間からの再生では絶対カーソル移動・画面消去が前後の文脈を失って
 // ページ内容を上書き破壊するため、改行に置き換えて「流れ」として読めるようにする。
 const HV_REWRITE_RE = /\x1b\[[0-9;]*[Hf]|\x1b\[2J|\x1b\[3J/g;
-const HV_DROP_RE = /\x1b\[\?1049[hl]|\x1b\[\?2026[hl]|\[\/?ANY-AI-CLI\]/g;
+const HV_DROP_RE = /\x1b\[\?1049[hl]|\x1b\[\?2026[hl]|\[\/?MANY-AI-CLI\]/g;
 
 let hvRoot: any = null;        // オーバーレイ要素
 let hvOpenBtn: any = null;     // 上端到達時に出す「過去ログ」ボタン

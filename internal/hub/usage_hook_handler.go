@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"any-ai-cli/internal/wrapper"
+	"many-ai-cli/internal/wrapper"
 )
 
 // usageHookSessionSnap は usage フック注入の参照カウント用スナップショット。
@@ -39,12 +39,12 @@ func (s *Server) hubToken() string {
 	return s.cfg.Token
 }
 
-// resolveExePath は any-ai-cli バイナリのフルパスを返す。
-// 取得に失敗した場合は "any-ai-cli" を返す（PATH 解決任せ）。
+// resolveExePath は many-ai-cli バイナリのフルパスを返す。
+// 取得に失敗した場合は "many-ai-cli" を返す（PATH 解決任せ）。
 func resolveExePath() string {
 	exe, err := os.Executable()
 	if err != nil {
-		return "any-ai-cli"
+		return "many-ai-cli"
 	}
 	return exe
 }

@@ -261,7 +261,7 @@ export function showDesktopApprovalNotification(sessionId) {
   try {
     const n = new Notification(title, {
       body,
-      tag: `any-ai-cli-approval-${sessionId}`,
+      tag: `many-ai-cli-approval-${sessionId}`,
       icon: '/icon.svg',
       badge: '/icon.svg',
       requireInteraction: false,
@@ -804,7 +804,7 @@ export function applyLang(lang) {
   document.getElementById('settings-readme-btn').addEventListener('click', () => {
     const file = window.__lang === 'ja' ? 'README.ja.md' : 'README.md';
     window.open(
-      'https://github.com/ishizakahiroshi/any-ai-cli/blob/main/' + file,
+      'https://github.com/ishizakahiroshi/many-ai-cli/blob/main/' + file,
       '_blank', 'noopener,noreferrer'
     );
   });
@@ -1549,10 +1549,10 @@ export function applyLang(lang) {
       return translated && translated !== key ? translated : (info.runtime_label || runtimeMode);
     };
     const envFallbacks: Record<string, { label: string; short: string; color: string; title: string }> = {
-      local: { label: 'Local', short: 'L', color: '#8b5cf6', title: 'L ANY-AI-CLI' },
-      wsl: { label: 'WSL', short: 'W', color: '#3b82f6', title: 'W ANY-AI-CLI' },
-      vps: { label: 'VPS', short: 'V', color: '#f97316', title: 'V ANY-AI-CLI' },
-      'vps-tunnel': { label: 'VPS Tunnel', short: 'T', color: '#ef4444', title: 'T ANY-AI-CLI' },
+      local: { label: 'Local', short: 'L', color: '#8b5cf6', title: 'L MANY-AI-CLI' },
+      wsl: { label: 'WSL', short: 'W', color: '#3b82f6', title: 'W MANY-AI-CLI' },
+      vps: { label: 'VPS', short: 'V', color: '#f97316', title: 'V MANY-AI-CLI' },
+      'vps-tunnel': { label: 'VPS Tunnel', short: 'T', color: '#ef4444', title: 'T MANY-AI-CLI' },
     };
     const normalizeEnvKind = (value) => {
       const raw = String(value || '').trim().toLowerCase().replace(/_/g, '-');
@@ -1585,7 +1585,7 @@ export function applyLang(lang) {
     const envLabelRaw = info.env_label || envBase.label;
     const envShort = info.env_short || envBase.short;
     const envColor = sanitizeEnvColor(info.env_color, envBase.color);
-    const envTitle = info.env_title || envBase.title || `${envShort} ANY-AI-CLI`;
+    const envTitle = info.env_title || envBase.title || `${envShort} MANY-AI-CLI`;
     const connectionSuffix = showSSH ? ' SSH' : '';
     // SSH 経由の Hub ではフォルダ選択ダイアログがリモート側で開いてしまい使えないため、
     // spawn パネルのフォルダ参照ボタンを非表示にする。
@@ -1599,12 +1599,12 @@ export function applyLang(lang) {
       const envKey = `env_${String(envKind).replace(/-/g, '_')}`;
       const translatedEnv = (typeof window.t === 'function') ? window.t(envKey) : '';
       const envLabel = translatedEnv && translatedEnv !== envKey ? translatedEnv : envLabelRaw;
-      document.title = 'ANY-AI-CLI';
+      document.title = 'MANY-AI-CLI';
       // CLI ロゴをベースに、環境略号（L/W/V/T）を左下隅の小バッジとして重ねる
       // （drawFavicon 側で合成）。旧実装は全面バッジ化でロゴが消えていた。
       setFaviconEnvBadge(envShort, envColor);
       const appleTitle = document.getElementById('apple-web-app-title');
-      if (appleTitle) appleTitle.setAttribute('content', 'ANY-AI-CLI');
+      if (appleTitle) appleTitle.setAttribute('content', 'MANY-AI-CLI');
       const envBadgeEl = document.getElementById('env-badge');
       if (envBadgeEl) {
         envBadgeEl.textContent = envLabel.toUpperCase();

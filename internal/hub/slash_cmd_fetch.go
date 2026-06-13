@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/config"
 )
 
 // SlashCmd はスラッシュコマンドの名前と説明。

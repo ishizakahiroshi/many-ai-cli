@@ -1,7 +1,7 @@
 // Active-connection registry for the launcher.
 //
 // Each launcher process records its established connections in
-// ~/.any-ai-cli/launcher-active.json so that other launcher processes
+// ~/.many-ai-cli/launcher-active.json so that other launcher processes
 // (= the profile selection UI) can show which profiles are already
 // connected and reuse the existing Hub URL instead of starting a
 // duplicate tunnel / serve.
@@ -64,13 +64,13 @@ type ProfileConnectLock struct {
 	path string
 }
 
-// activePath returns the path to ~/.any-ai-cli/launcher-active.json.
+// activePath returns the path to ~/.many-ai-cli/launcher-active.json.
 func activePath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("home dir: %w", err)
 	}
-	return filepath.Join(home, ".any-ai-cli", activeFile), nil
+	return filepath.Join(home, ".many-ai-cli", activeFile), nil
 }
 
 func connectLockPath(profile string) (string, error) {
@@ -80,7 +80,7 @@ func connectLockPath(profile string) (string, error) {
 	}
 	sum := sha256.Sum256([]byte(profile))
 	name := connectLockPrefix + fmt.Sprintf("%x", sum[:8]) + ".json"
-	return filepath.Join(home, ".any-ai-cli", name), nil
+	return filepath.Join(home, ".many-ai-cli", name), nil
 }
 
 // loadActiveFile reads launcher-active.json. A missing, empty, or corrupt

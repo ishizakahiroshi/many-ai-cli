@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"any-ai-cli/internal/config"
-	"any-ai-cli/internal/proto"
+	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/proto"
 )
 
 func (s *Server) handleKillAll(w http.ResponseWriter, r *http.Request) {
@@ -72,7 +72,7 @@ func (s *Server) requestStop() {
 }
 
 func Stop(cfg *config.Config) error {
-	pidPath := filepath.Join(os.TempDir(), "any-ai-cli.pid")
+	pidPath := filepath.Join(os.TempDir(), "many-ai-cli.pid")
 	return stopWithPIDPath(pidPath)
 }
 

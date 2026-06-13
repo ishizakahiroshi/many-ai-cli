@@ -23,7 +23,7 @@ type UsageHookParams struct {
 	HubURL    string
 	Token     string
 	SessionID int
-	ExePath   string // any-ai-cli バイナリのフルパス（os.Executable() で解決済み）
+	ExePath   string // many-ai-cli バイナリのフルパス（os.Executable() で解決済み）
 }
 
 // ---------------------------------------------------------------------------
@@ -47,10 +47,10 @@ type UsageHookParams struct {
 //
 // Claude Code は Windows で statusLine コマンドを Git Bash（無ければ PowerShell）
 // 経由で実行する。Git Bash はバックスラッシュをエスケープ文字として扱うため、
-// `C:\dev\foo\any-ai-cli.exe` のような生の Windows パスはセパレータが消えて
+// `C:\dev\foo\many-ai-cli.exe` のような生の Windows パスはセパレータが消えて
 // パスが壊れ、コマンドが「エラーも出さずに実行されない」（＝relay が一度も
 // POST せずトークンがステータスバーに出ない症状の根本原因）。
-// 正スラッシュ（`C:/dev/foo/any-ai-cli.exe`）なら Git Bash / PowerShell とも
+// 正スラッシュ（`C:/dev/foo/many-ai-cli.exe`）なら Git Bash / PowerShell とも
 // 引用符なしで実行でき、Codex の config.toml（TOML 文字列でも `\d` 等が不正
 // エスケープになる）でも同じ変換で破損を回避できる。
 // 公式ドキュメント: https://code.claude.com/docs/en/statusline.md の
@@ -58,7 +58,7 @@ type UsageHookParams struct {
 //
 // 注意: パスにスペースが含まれる場合の引用は Git Bash と PowerShell で必要な
 // 形式（"..." vs `& "..."`）が異なり両立しないため、ここでは行わない
-// （any-ai-cli の配置パスにスペースを含めない運用前提）。
+// （many-ai-cli の配置パスにスペースを含めない運用前提）。
 func toShellPath(p string) string {
 	return filepath.ToSlash(p)
 }

@@ -1,6 +1,6 @@
 # Cursor Agent Approval Patterns
 
-> any-ai-cli の Hub UI が Cursor Agent CLI の permission / confirmation UI を検出するためのトリガー文言。
+> many-ai-cli の Hub UI が Cursor Agent CLI の permission / confirmation UI を検出するためのトリガー文言。
 > 1 行 1 パターン。バッククオートで囲んだ部分のみをパースする。
 > 実機 UI（コマンド allowlist 確認ダイアログ）の文言を正とする。
 

@@ -10,7 +10,7 @@
   埋め込む ICO ファイルパス
 
 .EXAMPLE
-  .\scripts\embed_icon.ps1 -ExePath dist\any-ai-cli.exe -IcoPath assets\any-ai-cli.ico
+  .\scripts\embed_icon.ps1 -ExePath dist\many-ai-cli.exe -IcoPath assets\many-ai-cli.ico
 #>
 param(
     [Parameter(Mandatory)][string]$ExePath,

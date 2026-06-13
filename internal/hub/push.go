@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"any-ai-cli/internal/config"
-	notifyPkg "any-ai-cli/internal/notify"
+	"many-ai-cli/internal/config"
+	notifyPkg "many-ai-cli/internal/notify"
 	webpush "github.com/SherClockHolmes/webpush-go"
 )
 
@@ -218,7 +218,7 @@ func (pm *pushManager) sendApproval(ctx context.Context, payload pushApprovalPay
 			Keys:     sub.Keys,
 		}, &webpush.Options{
 			HTTPClient:      pm.httpClient,
-			Subscriber:      "mailto:any-ai-cli@localhost.invalid",
+			Subscriber:      "mailto:many-ai-cli@localhost.invalid",
 			VAPIDPublicKey:  store.VAPIDPublicKey,
 			VAPIDPrivateKey: store.VAPIDPrivateKey,
 			TTL:             300,
@@ -382,7 +382,7 @@ func (s *Server) notifyApprovalPush(id int, approvalID, provider, question, cont
 		titleName = strings.TrimSpace(ses.Provider)
 	}
 	if titleName == "" {
-		titleName = "any-ai-cli"
+		titleName = "many-ai-cli"
 	}
 	if ses.Label != "" {
 		titleName = fmt.Sprintf("%s #%d [%s]", titleName, id, ses.Label)
@@ -442,7 +442,7 @@ func (s *Server) notifyApprovalOutbound(id int, approvalID, provider, question, 
 		titleName = strings.TrimSpace(ses.Provider)
 	}
 	if titleName == "" {
-		titleName = "any-ai-cli"
+		titleName = "many-ai-cli"
 	}
 	if ses.Label != "" {
 		titleName = fmt.Sprintf("%s #%d [%s]", titleName, id, ses.Label)

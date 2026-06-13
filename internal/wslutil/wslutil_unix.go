@@ -18,14 +18,14 @@ func IsWSL() bool {
 }
 
 // IsWindowsLauncherMode reports whether the current Linux process was started
-// by the any-ai-cli-launcher.exe Windows launcher (WSL profile). Plain
-// `any-ai-cli serve` invoked
+// by the many-ai-cli-launcher.exe Windows launcher (WSL profile). Plain
+// `many-ai-cli serve` invoked
 // directly inside WSL (without the launcher) returns false even though IsWSL
 // is true — that case is treated as a pure-Linux session where the Hub UI is
 // expected to be opened by a WSL-side browser, not Windows Explorer / a
 // Windows-side browser.
 func IsWindowsLauncherMode() bool {
-	return os.Getenv("ANY_AI_CLI_WSL_LAUNCHER") == "1"
+	return os.Getenv("MANY_AI_CLI_WSL_LAUNCHER") == "1"
 }
 
 // ToWindowsPath converts a Linux path to a Windows path via `wslpath -w`.

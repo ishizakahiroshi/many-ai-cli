@@ -14,11 +14,11 @@ func TestBaseName(t *testing.T) {
 	meta := Metadata{
 		SessionID: 12,
 		Provider:  "claude",
-		CWD:       filepath.Join("anywhere", "any-ai-cli"),
+		CWD:       filepath.Join("anywhere", "many-ai-cli"),
 		StartedAt: time.Date(2026, 5, 10, 9, 15, 32, 0, time.Local),
 	}
 	got := BaseName(meta)
-	if !strings.HasPrefix(got, "claude_2026-05-10_091532_any-ai-cli_s12") {
+	if !strings.HasPrefix(got, "claude_2026-05-10_091532_many-ai-cli_s12") {
 		t.Fatalf("unexpected basename: %s", got)
 	}
 }

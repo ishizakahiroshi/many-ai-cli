@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"any-ai-cli/internal/wslutil"
+	"many-ai-cli/internal/wslutil"
 )
 
 func pickFileNative(filterExe bool) (string, error) {

@@ -34,13 +34,13 @@ test('approval parser fixtures', () => {
   assert.equal(parser.userSpecifiesRe.test('その他指定'), true);
 
   const hub = parser.extractHubMarkerApproval([
-    '[ANY-AI-CLI]',
+    '[MANY-AI-CLI]',
     'Proceed with this change? (Y:1/N:0)',
-    '[/ANY-AI-CLI]',
+    '[/MANY-AI-CLI]',
   ]);
   assert.deepEqual(numbers(hub), [1, 0]);
   assert.equal(parser.approvalSig(hub), parser.approvalSig(parser.extractHubMarkerApproval([
-    '[ANY-AI-CLI] Proceed with this change? (Y:1/N:0) [/ANY-AI-CLI]',
+    '[MANY-AI-CLI] Proceed with this change? (Y:1/N:0) [/MANY-AI-CLI]',
   ])));
 
   const plain = parser.extractPlainYesNoApproval([
@@ -58,9 +58,9 @@ test('approval parser fixtures', () => {
     'question? (Y:1/N:0)',
   ]), null);
   assert.equal(parser.extractHubMarkerApproval([
-    '[ANY-AI-CLI]',
+    '[MANY-AI-CLI]',
     'question? (Y:1/N:0)',
-    '[/ANY-AI-CLI]',
+    '[/MANY-AI-CLI]',
   ]), null);
 
   const codexLines = [
@@ -123,20 +123,20 @@ test('approval parser fixtures', () => {
   ]))));
 
   const batch = parser.extractHubMarkerApproval([
-    '[ANY-AI-CLI]',
+    '[MANY-AI-CLI]',
     '1 first question?',
     ' 1. Approve',
     ' 2. Deny',
     '2 second question?',
     ' 1. Approve',
     ' 2. Deny',
-    '[/ANY-AI-CLI]',
+    '[/MANY-AI-CLI]',
   ]);
   assert.equal(parser.isBatchOptions(batch), true);
   assert.equal(batch.length, 2);
 
   const japaneseBatch = parser.extractHubMarkerApproval([
-    '[ANY-AI-CLI]',
+    '[MANY-AI-CLI]',
     '',
     '1 次のうちどれが好きですか？',
     '',
@@ -154,7 +154,7 @@ test('approval parser fixtures', () => {
     '',
     '  3.うどん',
     '',
-    '[/ANY-AI-CLI]',
+    '[/MANY-AI-CLI]',
   ]);
   assert.equal(parser.isBatchOptions(japaneseBatch), true);
   assert.equal(japaneseBatch.length, 2);
@@ -164,7 +164,7 @@ test('approval parser fixtures', () => {
   // TUI 再描画で改行が抜け、次の質問見出しが直前の行へ連結されたケースの回帰。
   // 「N. User specifies」を区切りに再分割し、3 質問へ正しく復元できること。
   const glued = parser.extractHubMarkerApproval([
-    '[ANY-AI-CLI]',
+    '[MANY-AI-CLI]',
     '1 マーカー指示の配置先は？',
     '1. AGENTS.md に1ブロック集約',
     '2. provider固有ファイルに分離（cursor=.cursor/rules/） N. User specifies 2 共有ブロックの削除タイミングは？',
@@ -174,7 +174,7 @@ test('approval parser fixtures', () => {
     '5. まずplanに整理',
     '6. そのまま実装',
     'N. User specifies',
-    '[/ANY-AI-CLI]',
+    '[/MANY-AI-CLI]',
   ]);
   assert.equal(parser.isBatchOptions(glued), true);
   assert.equal(glued.length, 3);
@@ -190,12 +190,12 @@ test('approval parser fixtures', () => {
   // 複数選択（#multi）: 1 問で任意個 ON/OFF。options に _multiSelect と _question が付き、
   // isMultiSelectOptions が true、isBatchOptions は false になること。
   const multi = parser.extractHubMarkerApproval([
-    '[ANY-AI-CLI]',
+    '[MANY-AI-CLI]',
     '#multi 下バーに追加したい情報は？',
     '1. コンテキスト使用率',
     '2. 承認待ちバッジ',
     '3. キャッシュ率',
-    '[/ANY-AI-CLI]',
+    '[/MANY-AI-CLI]',
   ]);
   assert.equal(parser.isMultiSelectOptions(multi), true);
   assert.equal(parser.isBatchOptions(multi), false);
@@ -206,11 +206,11 @@ test('approval parser fixtures', () => {
 
   // #multi が無い同形の番号付きリストは単一選択（multiSelect ではない）のまま。
   const singleSelect = parser.extractHubMarkerApproval([
-    '[ANY-AI-CLI]',
+    '[MANY-AI-CLI]',
     'どれにしますか？',
     '1. A',
     '2. B',
-    '[/ANY-AI-CLI]',
+    '[/MANY-AI-CLI]',
   ]);
   assert.equal(parser.isMultiSelectOptions(singleSelect), false);
 
@@ -243,7 +243,7 @@ test('approval parser fixtures', () => {
   // marker 経路でブロック全体が1行へ完全に潰れたケースの回帰。
   // 見出し「1 …?」と選択肢「1. 2. 3.」が混在連結されても 3 選択肢へ復元できること。
   const gluedMarker = parser.extractHubMarkerApproval([
-    '[ANY-AI-CLI] 1 「2」はどの設定を指していますか? 1. A を選択(Recommended)2. B を選択 3. 両方とも C N. User specifies [/ANY-AI-CLI]',
+    '[MANY-AI-CLI] 1 「2」はどの設定を指していますか? 1. A を選択(Recommended)2. B を選択 3. 両方とも C N. User specifies [/MANY-AI-CLI]',
   ]);
   assert.deepEqual(numbers(gluedMarker), [1, 2, 3]);
 
@@ -273,14 +273,14 @@ test('approval parser fixtures', () => {
 
   const chunkPath = parser.extractHubMarkerApproval([
     'noise',
-    '[ANY-AI-CLI]',
+    '[MANY-AI-CLI]',
     'Proceed? (Y:1/N:0)',
-    '[/ANY-AI-CLI]',
+    '[/MANY-AI-CLI]',
   ]);
   const bufferPath = parser.extractHubMarkerApproval([
-    '[ANY-AI-CLI]',
+    '[MANY-AI-CLI]',
     'Proceed? (Y:1/N:0)',
-    '[/ANY-AI-CLI]',
+    '[/MANY-AI-CLI]',
   ]);
   assert.equal(parser.approvalSig(chunkPath), parser.approvalSig(bufferPath));
 });

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"any-ai-cli/internal/wslutil"
+	"many-ai-cli/internal/wslutil"
 )
 
 // linuxOpenDefault tries the user's default opener on native Linux,

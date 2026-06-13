@@ -1,16 +1,30 @@
 # Changelog
 
-All notable changes to **any-ai-cli** are documented in this file.
+All notable changes to **many-ai-cli** (formerly `any-ai-cli`) are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Release artifacts are published at
-<https://github.com/ishizakahiroshi/any-ai-cli/releases>.
+<https://github.com/ishizakahiroshi/many-ai-cli/releases>.
 
 ## [Unreleased]
 
+### Changed
+- **Renamed the project from `any-ai-cli` to `many-ai-cli`** (binary, config
+  directory `~/.many-ai-cli/`, `MANY_AI_CLI*` environment variables, approval
+  markers `[MANY-AI-CLI]`, Hub banner, and all public docs/UI strings). The npm
+  package name `any-ai-cli` was too similar to an existing package, so the
+  project is published as `many-ai-cli`.
+
 ### Added
+- **npm registry distribution.** `many-ai-cli` is now installable with
+  `pnpm add -g many-ai-cli` (fallbacks: `bun install -g` / `npm install -g`).
+  Each platform's native Go binary ships in an optional dependency package
+  (`many-ai-cli-<os>-<arch>`), so no standalone exe is downloaded in a browser
+  and no Mark-of-the-Web SmartScreen prompt is triggered. The release workflow
+  stages the GoReleaser binaries into the npm packages and publishes them with
+  provenance.
 - Windows release archives now include `unblock-windows.cmd`, a local helper
   that runs PowerShell `Unblock-File` for `any-ai-cli*.exe` files after zip
   extraction.
@@ -23,7 +37,7 @@ Release artifacts are published at
   available, keeps GitHub Releases zip as the manual fallback, and documents
   the separate roles of pnpm, winget, and direct release downloads.
 - Release planning now distinguishes npm registry publication from the `npm`
-  command and sets `pnpm add -g any-ai-cli` as the preferred developer install
+  command and sets `pnpm add -g many-ai-cli` as the preferred developer install
   command once the registry package exists.
 
 ## [0.3.0] - 2026-06-05

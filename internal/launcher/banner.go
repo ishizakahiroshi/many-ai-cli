@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-const repositoryURL = "https://github.com/ishizakahiroshi/any-ai-cli"
+const repositoryURL = "https://github.com/ishizakahiroshi/many-ai-cli"
 
 const (
 	ansiReset        = "\x1b[0m"

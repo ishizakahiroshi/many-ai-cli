@@ -1,12 +1,12 @@
 //go:build windows
 
-// any-ai-cli-launcher is the unified Windows launcher for any-ai-cli remote
+// many-ai-cli-launcher is the unified Windows launcher for many-ai-cli remote
 // connections. It reads connection profiles from
-// ~/.any-ai-cli/launcher-profiles.yaml and connects to a Hub via WSL or SSH.
+// ~/.many-ai-cli/launcher-profiles.yaml and connects to a Hub via WSL or SSH.
 //
 // Usage:
 //
-//	any-ai-cli-launcher [--profile <name>] [--last] [--ui]
+//	many-ai-cli-launcher [--profile <name>] [--last] [--ui]
 //
 // Without flags (= plain double-click) a browser-based profile selection
 // page is always opened on a random loopback port; already-connected
@@ -25,12 +25,12 @@ import (
 	"syscall"
 	"time"
 
-	"any-ai-cli/internal/launcher"
+	"many-ai-cli/internal/launcher"
 )
 
 // version is injected at release build time via
 // -ldflags "-X main.version=..." (see .goreleaser.yaml). Defaults to "dev"
-// for local builds, mirroring cmd/any-ai-cli.
+// for local builds, mirroring cmd/many-ai-cli.
 var version = "dev"
 
 func main() {
@@ -44,8 +44,8 @@ func run() error {
 	launcher.ConfigureConsoleUTF8()
 	fmt.Fprint(os.Stdout, launcher.StartupBanner(version))
 
-	fs := flag.NewFlagSet("any-ai-cli-launcher", flag.ContinueOnError)
-	profileName := fs.String("profile", "", "profile name to connect (see ~/.any-ai-cli/launcher-profiles.yaml)")
+	fs := flag.NewFlagSet("many-ai-cli-launcher", flag.ContinueOnError)
+	profileName := fs.String("profile", "", "profile name to connect (see ~/.many-ai-cli/launcher-profiles.yaml)")
 	useLast := fs.Bool("last", false, "connect using the last-used profile")
 	openUI := fs.Bool("ui", false, "open the profile selection UI in the browser")
 	if err := fs.Parse(os.Args[1:]); err != nil {
@@ -168,7 +168,7 @@ func connect(profile launcher.Profile) error {
 				// 他のランチャープロセス（選択 UI）から「接続中」と
 				// 見えるように記録する。
 				if err := launcher.RegisterActiveConnection(profile.Name, url); err != nil {
-					fmt.Fprintf(os.Stderr, "any-ai-cli-launcher: failed to record active connection: %v\n", err)
+					fmt.Fprintf(os.Stderr, "many-ai-cli-launcher: failed to record active connection: %v\n", err)
 				}
 				_ = startupLock.Release()
 			}

@@ -1,6 +1,6 @@
 # Codex Approval Patterns
 
-> any-ai-cli の Hub UI が Codex CLI の承認 UI を検出するためのトリガー文言。
+> many-ai-cli の Hub UI が Codex CLI の承認 UI を検出するためのトリガー文言。
 > 1 行 1 パターン。バッククオートで囲んだ部分のみをパースする。
 
 - `approve?`

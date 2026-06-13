@@ -73,7 +73,7 @@ func TestInjectRulesSharedBlockRefreshesStaleVersion(t *testing.T) {
 		"",
 		sharedBlockStart,
 		"<!-- version: 0 -->",
-		"## any-ai-cli Approval Format",
+		"## many-ai-cli Approval Format",
 		"(old rules)",
 		sharedBlockEnd,
 		"",

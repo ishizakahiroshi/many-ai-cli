@@ -32,7 +32,7 @@
     for (const rawLine of recent) {
       const line = rawLine.trim();
       if (!line) continue;
-      if (/\[ANY-AI-CLI\]|\[\/ANY-AI-CLI\]/.test(line)) return null;
+      if (/\[MANY-AI-CLI\]|\[\/MANY-AI-CLI\]/.test(line)) return null;
 
       const hm = line.match(sequentialQuestionHeaderRe);
       if (hm) {
@@ -135,7 +135,7 @@
     const s = String(text || '');
     const idx = lastYesNoApprovalMarkerIndex(s);
     if (idx < 0) return '';
-    return s.slice(0, idx).replace(/\[\/?ANY-AI-CLI\]/g, '').replace(/\s+/g, ' ').trim();
+    return s.slice(0, idx).replace(/\[\/?MANY-AI-CLI\]/g, '').replace(/\s+/g, ' ').trim();
   }
 
   function isPlaceholderYesNoQuestion(text) {
@@ -166,7 +166,7 @@
     const source = Array.isArray(lines) ? lines : [];
     const searchStart = Math.max(0, source.length - 40);
     const recentText = source.slice(searchStart).join('\n');
-    const blockRe = /\[ANY-AI-CLI\]([\s\S]*?)\[\/ANY-AI-CLI\]/g;
+    const blockRe = /\[MANY-AI-CLI\]([\s\S]*?)\[\/MANY-AI-CLI\]/g;
     let match;
     let lastBlock = null;
     while ((match = blockRe.exec(recentText)) !== null) {
@@ -181,12 +181,12 @@
     let openIdx = -1;
     for (let i = source.length - 1; i >= searchStart; i--) {
       const line = source[i];
-      if (/\[ANY-AI-CLI\]/.test(line) && /\[\/ANY-AI-CLI\]/.test(line)) {
-        const inner = line.replace(/^[\s\S]*?\[ANY-AI-CLI\]/, '').replace(/\[\/ANY-AI-CLI\][\s\S]*$/, '').trim();
+      if (/\[MANY-AI-CLI\]/.test(line) && /\[\/MANY-AI-CLI\]/.test(line)) {
+        const inner = line.replace(/^[\s\S]*?\[MANY-AI-CLI\]/, '').replace(/\[\/MANY-AI-CLI\][\s\S]*$/, '').trim();
         return parseHubBlock([inner]);
       }
-      if (/\[\/ANY-AI-CLI\]/.test(line) && closeIdx === -1) { closeIdx = i; continue; }
-      if (/\[ANY-AI-CLI\]/.test(line) && closeIdx !== -1) { openIdx = i; break; }
+      if (/\[\/MANY-AI-CLI\]/.test(line) && closeIdx === -1) { closeIdx = i; continue; }
+      if (/\[MANY-AI-CLI\]/.test(line) && closeIdx !== -1) { openIdx = i; break; }
     }
 
     if (openIdx === -1 || closeIdx === -1) return null;
@@ -201,11 +201,11 @@
     for (let i = source.length - 1; i >= searchStart; i--) {
       const line = String(source[i] || '').trim();
       if (!line) continue;
-      if (/\[ANY-AI-CLI\]|\[\/ANY-AI-CLI\]/.test(line)) continue;
+      if (/\[MANY-AI-CLI\]|\[\/MANY-AI-CLI\]/.test(line)) continue;
       if (looksLikeYesNoQuestion(line)) return yesNoApprovalOptions(yesNoCtxFromText(line));
     }
     const recentText = recentLines.join('\n');
-    if (!/\[ANY-AI-CLI\]|\[\/ANY-AI-CLI\]/.test(recentText) && looksLikeYesNoQuestion(recentText)) {
+    if (!/\[MANY-AI-CLI\]|\[\/MANY-AI-CLI\]/.test(recentText) && looksLikeYesNoQuestion(recentText)) {
       return yesNoApprovalOptions(yesNoCtxFromText(recentText));
     }
     return null;
@@ -453,7 +453,7 @@
     // Claude のネイティブ AskUserQuestion ピッカー（末尾に "Type something" /
     // "Chat about this" の自由入力肢を持つ arrow 駆動 UI）は Web ボタン化しない。
     // 再描画される VT をスクレイプすると選択肢番号が Web ボタンとズレて誤選択を招くため。
-    // AI には approval-rules.md(version 10) で [ANY-AI-CLI] マーカーへ誘導済み。
+    // AI には approval-rules.md(version 10) で [MANY-AI-CLI] マーカーへ誘導済み。
     // 万一 AI が出しても Web バーは出さず、端末で直接 ↑↓/Enter 操作する。
     if (uniqueOptions.some(o => /^\s*(type something|chat about)/i.test(o.label || ''))) {
       return { options: [], cluster: null, lines: tail };

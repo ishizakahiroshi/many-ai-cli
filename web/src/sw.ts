@@ -1,6 +1,6 @@
-const CACHE_VERSION = 'any-ai-cli-sw-v1';
-const TOKEN_CACHE = 'any-ai-cli-token-v1';
-const TOKEN_URL = '/__any-ai-cli-token__';
+const CACHE_VERSION = 'many-ai-cli-sw-v1';
+const TOKEN_CACHE = 'many-ai-cli-token-v1';
+const TOKEN_URL = '/__many-ai-cli-token__';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
@@ -16,7 +16,7 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('message', (event) => {
   const data = event.data || {};
-  if (data.type !== 'any-ai-cli-token' || !data.token) return;
+  if (data.type !== 'many-ai-cli-token' || !data.token) return;
   event.waitUntil((async () => {
     const cache = await caches.open(TOKEN_CACHE);
     await cache.put(TOKEN_URL, new Response(JSON.stringify({ token: data.token }), {
@@ -32,13 +32,13 @@ self.addEventListener('push', (event) => {
     if (windows.some((client) => client.visibilityState === 'visible')) {
       return;
     }
-    const title = payload.title || 'ANY-AI-CLI';
+    const title = payload.title || 'MANY-AI-CLI';
     const body = payload.body || 'Approval is waiting.';
     await self.registration.showNotification(title, {
       body,
       icon: '/icon.svg',
       badge: '/icon.svg',
-      tag: payload.session_id ? `any-ai-cli-approval-${payload.session_id}` : payload.id || 'any-ai-cli-approval',
+      tag: payload.session_id ? `many-ai-cli-approval-${payload.session_id}` : payload.id || 'many-ai-cli-approval',
       data: {
         session_id: payload.session_id || 0,
         url: payload.url || '',
@@ -55,7 +55,7 @@ self.addEventListener('notificationclick', (event) => {
     const sessionId = Number(data.session_id || 0);
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of windows) {
-      client.postMessage({ type: 'any-ai-cli-open-session', session_id: sessionId });
+      client.postMessage({ type: 'many-ai-cli-open-session', session_id: sessionId });
       return client.focus();
     }
     const url = await notificationURL(data.url || '', sessionId);

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"any-ai-cli/internal/proto"
+	"many-ai-cli/internal/proto"
 )
 
 // HandleAttach は attach_file メッセージの Inject 文字列を ptySink へ書き込む。

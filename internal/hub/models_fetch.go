@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/config"
 )
 
 // Model は /api/models response の 1 件分。
@@ -181,7 +181,7 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 			"anthropic":           remoteSource,
 			"openai":              remoteSource,
 			"ollama_local":        ollamaLocalURL,
-			"local_models_config": "~/.any-ai-cli/config.yaml#local_models",
+			"local_models_config": "~/.many-ai-cli/config.yaml#local_models",
 		},
 	}
 	var newest time.Time

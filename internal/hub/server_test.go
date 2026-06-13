@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"any-ai-cli/internal/config"
-	"any-ai-cli/internal/proto"
+	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/proto"
 	"golang.org/x/net/websocket"
 )
 
@@ -477,7 +477,7 @@ func TestExtractBannerModel(t *testing.T) {
 			lines: []string{
 				"▐▛███▜▌ Claude Code v2.1.162",
 				"▝▜█████▛▘  Opus 4.8 (1M context) with medium effort · Claude Max",
-				"  ▘▘ ▝▝  C:\\dev\\any-ai-cli",
+				"  ▘▘ ▝▝  C:\\dev\\many-ai-cli",
 			},
 			want: "Opus 4.8 (1M context)",
 		},
@@ -538,31 +538,31 @@ func TestExtractBannerModel(t *testing.T) {
 		{
 			name:     "cursor-agent: cwd·branch 行直上",
 			provider: "cursor-agent",
-			cwd:      `C:\dev\any-ai-cli`,
+			cwd:      `C:\dev\many-ai-cli`,
 			lines: []string{
 				"  → Plan, search, build anything",
 				"   Auto",
-				`  C:\dev\any-ai-cli · develop`,
+				`  C:\dev\many-ai-cli · develop`,
 			},
 			want: "Auto",
 		},
 		{
 			name:     "cursor-agent: 使用率サフィックスを除去",
 			provider: "cursor-agent",
-			cwd:      `C:\dev\any-ai-cli`,
+			cwd:      `C:\dev\many-ai-cli`,
 			lines: []string{
 				"  Auto · 7.4%",
-				`  C:\dev\any-ai-cli · develop`,
+				`  C:\dev\many-ai-cli · develop`,
 			},
 			want: "Auto",
 		},
 		{
 			name:     "cursor-agent: 直上がプロンプト残骸なら除外",
 			provider: "cursor-agent",
-			cwd:      `C:\dev\any-ai-cli`,
+			cwd:      `C:\dev\many-ai-cli`,
 			lines: []string{
 				"  → 今日の日時は？",
-				`  C:\dev\any-ai-cli · develop`,
+				`  C:\dev\many-ai-cli · develop`,
 			},
 			want: "",
 		},

@@ -20,7 +20,7 @@ func TestStoreChatRestoreSearchAndPrune(t *testing.T) {
 	if _, err := store.StartSession(SessionStart{
 		LiveSessionID: 1,
 		Provider:      "codex",
-		CWD:           filepath.Join("C:", "dev", "any-ai-cli"),
+		CWD:           filepath.Join("C:", "dev", "many-ai-cli"),
 		Branch:        "develop",
 		State:         "standby",
 		StartedAt:     startedAt,
@@ -125,7 +125,7 @@ func TestMessagesMentionText(t *testing.T) {
 	if _, err := store.StartSession(SessionStart{
 		LiveSessionID: 1,
 		Provider:      "claude",
-		CWD:           filepath.Join("C:", "dev", "any-ai-cli"),
+		CWD:           filepath.Join("C:", "dev", "many-ai-cli"),
 		State:         "standby",
 		StartedAt:     startedAt,
 	}); err != nil {

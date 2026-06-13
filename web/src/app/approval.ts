@@ -125,7 +125,7 @@ function trackBgApprovalMiss(id, tailLines) {
 // バッチ（複数質問）形式はセクション {num, title, options} の配列で label を持たないため、
 // 照合前にフラットな選択肢へ展開する。展開しないと照合が必ず失敗し、H9 復元ミスが
 // 上限（3回 × 700ms ≒ 2.1s）に達するたび hideActionBar → マーカー再検出で再表示、
-// の約2秒周期チカチカになる（Claude の [ANY-AI-CLI] 一括質問で発生）。
+// の約2秒周期チカチカになる（Claude の [MANY-AI-CLI] 一括質問で発生）。
 function cachedOptionsOnScreen(lines, cached) {
   const flat = isBatchOptions(cached)
     ? cached.flatMap((s) => s.options || [])
@@ -181,7 +181,7 @@ export function clearSequentialChoiceState(id) {
 
 // ---- 承認検出 (xterm.js バッファスキャン) ----
 
-// provider 別の承認 trigger phrase は ~/.any-ai-cli/approval-patterns/{provider}.json に外出し。
+// provider 別の承認 trigger phrase は ~/.many-ai-cli/approval-patterns/{provider}.json に外出し。
 // Hub 起動時にデフォルトをユーザー設定ディレクトリに展開（既存ファイルは尊重）し、
 // HTTP 経由で配信する。ユーザーが直接編集して文言を追加・調整できる。
 // claude / codex は英語固定（Anthropic/OpenAI が国際化していない）、common は多言語混在。
@@ -280,7 +280,7 @@ export function scheduleApprovalHintConfirm(id, options) {
     if (!wasVisible) {
       approvalUiAdapter.setApprovalVisible(id, true, { sound: true });
     }
-    // 連続して [ANY-AI-CLI] ブロックが来た場合 (例: 1質問目を回答せず 2質問目が来た) は
+    // 連続して [MANY-AI-CLI] ブロックが来た場合 (例: 1質問目を回答せず 2質問目が来た) は
     // 既に approvalVisible=true でも action-bar を最新オプションに張り替える。
     if (id === activeSessionId) {
       const bar = document.getElementById('action-bar');
@@ -349,7 +349,7 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
     return;
   }
 
-  // フォーマットベース検出（優先）: [ANY-AI-CLI] マーカーがあれば即確定
+  // フォーマットベース検出（優先）: [MANY-AI-CLI] マーカーがあれば即確定
   const markerOpts = extractHubMarkerApproval(lines);
   if (markerOpts) {
     // doSend でテキスト送信済みの承認が Ink 再描画で再検出された場合はスキップ
@@ -734,8 +734,8 @@ export function detectApproval(id) {
   // ✕ で dismiss しても窓への再入で banner が即復活してしまう（バツボタンが効かない）。
   // dismissed は送信時（doSend）と一括回答確定時に確実にクリアされるため、それで十分。
 
-  // [ANY-AI-CLI] マーカー検出: xterm バッファではなく pendingTextTail を使う。
-  // xterm バッファは回答済みの古い [ANY-AI-CLI] ブロックを保持し続けるため、
+  // [MANY-AI-CLI] マーカー検出: xterm バッファではなく pendingTextTail を使う。
+  // xterm バッファは回答済みの古い [MANY-AI-CLI] ブロックを保持し続けるため、
   // suppress 期間が切れると再検出・再表示されてしまう。
   // pendingTextTail は hideActionBar でクリアされるが、Ink 再描画で同一内容が
   // 再び入ることがあるため approvalConsumedSig で二重表示を防ぐ。
@@ -884,7 +884,7 @@ export function detectApproval(id) {
   if (!hasPrompt) {
     // 承認プロンプトが検出できない場合は確実に閉じる。
     // ただし、approvalVisibleCache=true かつ cache が残っている場合は、
-    // pendingTextTail のローテート（長考時に [ANY-AI-CLI] マーカーが押し出される）や
+    // pendingTextTail のローテート（長考時に [MANY-AI-CLI] マーカーが押し出される）や
     // 一時的なフォールバック検出失敗で action-bar を誤って消さないよう、
     // cache から action-bar を復元する（H9: 非対称スタック対策 — plan_action-bar-not-showing.md §7.1）。
     // sendChoice / doSend / closeBtn は hideActionBar を直接呼ぶため、ここの復元経路は通らない。

@@ -2,7 +2,7 @@
 
 このディレクトリには、`whisper-server.exe` が依存する **Microsoft Visual C++
 ランタイム DLL 4 点**を配置する。`go:embed` で本体バイナリに同梱され、
-managed install 時に `~/.any-ai-cli/whisper/bin/` へ展開される（`whisperruntime.Ensure`）。
+managed install 時に `~/.many-ai-cli/whisper/bin/` へ展開される（`whisperruntime.Ensure`）。
 
 これにより、VC++ ランタイム未導入の Windows でも `whisper-server.exe` 起動時の
 `0xC0000135`(STATUS_DLL_NOT_FOUND) を回避する（plan C2 / D2）。

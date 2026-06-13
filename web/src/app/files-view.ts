@@ -50,7 +50,7 @@ function resolveLiveSessionId(capturedId: any, filesRoot?: any, gitRoot?: any): 
 // localStorage キー移行（旧 docs キー → 新 files キー、1 回限り）
 (function migrateDocsToFilesLS() {
   const moves = [
-    ['any-ai-cli.docs.tabs',        'any-ai-cli.files.tabs'],
+    ['many-ai-cli.docs.tabs',        'many-ai-cli.files.tabs'],
     ['any_ai_cli_docs_tree_width',  'any_ai_cli_files_tree_width'],
   ];
   for (const [oldK, newK] of moves) {
@@ -80,7 +80,7 @@ const FILES_TREE_DRAG_AUTOSCROLL_MAX_STEP_PX = 18;
  * - restoreFromLocalStorage()  ← 起動時に呼ぶ
  */
 export const FilesTabManager = (function () {
-  const LS_KEY = 'any-ai-cli.files.tabs';
+  const LS_KEY = 'many-ai-cli.files.tabs';
   const tabList = document.getElementById('main-tab-list');
   const tabBar  = document.getElementById('main-tab-bar');
   const terminalWrapper = document.getElementById('terminal-wrapper');
@@ -1830,7 +1830,7 @@ export const FilesTreeView = (function () {
       }
       loadTree();
     };
-    window.addEventListener('any-ai-cli:files-changed', filesChangedHandler);
+    window.addEventListener('many-ai-cli:files-changed', filesChangedHandler);
 
     // 初回ロード
     loadTree();
@@ -1845,7 +1845,7 @@ export const FilesTreeView = (function () {
       },
     };
     containerEl._filesTreeCleanup = () => {
-      window.removeEventListener('any-ai-cli:files-changed', filesChangedHandler);
+      window.removeEventListener('many-ai-cli:files-changed', filesChangedHandler);
     };
   }
 
@@ -2788,7 +2788,7 @@ export const FilesPreview = (function () {
 
     // ─── localStorage 復元: 最後に開いていたファイルを自動選択 ───
     try {
-      const lsKey = 'any-ai-cli.files.tabs';
+      const lsKey = 'many-ai-cli.files.tabs';
       const data = JSON.parse(localStorage.getItem(lsKey) || '{}');
       const entries = data[gitRoot] || [];
       const entry = entries.find(e => e.root === filesRoot);

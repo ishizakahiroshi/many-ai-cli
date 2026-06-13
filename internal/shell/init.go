@@ -2,11 +2,11 @@ package shell
 
 func InitScript() string {
 	return `
-if [ "${ANY_AI_CLI_AUTO:-0}" = "1" ]; then
-  claude(){ any-ai-cli claude "$@"; }
-  codex(){ any-ai-cli codex "$@"; }
-  copilot(){ any-ai-cli copilot "$@"; }
-  cursor-agent(){ any-ai-cli cursor-agent "$@"; }
+if [ "${MANY_AI_CLI_AUTO:-0}" = "1" ]; then
+  claude(){ many-ai-cli claude "$@"; }
+  codex(){ many-ai-cli codex "$@"; }
+  copilot(){ many-ai-cli copilot "$@"; }
+  cursor-agent(){ many-ai-cli cursor-agent "$@"; }
 fi
 `
 }

@@ -7,15 +7,15 @@ import (
 )
 
 func TestStartupBannerIncludesProductDetails(t *testing.T) {
-	t.Setenv("ANY_AI_CLI_WSL_LAUNCHER", "")
+	t.Setenv("MANY_AI_CLI_WSL_LAUNCHER", "")
 	t.Setenv("WSL_INTEROP", "")
 	t.Setenv("WSL_DISTRO_NAME", "")
 	got := startupBanner("0.1.3", "127.0.0.1:47777", "abc123")
 
 	for _, want := range []string{
-		"ANY AI AGENTS                   v0.1.3",
+		"MANY AI AGENTS                  v0.1.3",
 		"Runtime: ",
-		"GitHub: https://github.com/ishizakahiroshi/any-ai-cli",
+		"GitHub: https://github.com/ishizakahiroshi/many-ai-cli",
 		"WebUI:  http://127.0.0.1:47777",
 		"Open:   http://127.0.0.1:47777/?token=abc123",
 		"WARNING: This window is connected to the Web UI. Do not close it.",
@@ -50,12 +50,12 @@ func TestStartupBannerShowsFromWindowsHintInWSL(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("WSL detection is a Windows-native no-op; only meaningful on Linux/macOS builds")
 	}
-	// Pure-WSL session (no launcher) — user ran `any-ai-cli serve` directly
+	// Pure-WSL session (no launcher) — user ran `many-ai-cli serve` directly
 	// inside WSL. The Hub URL is still reachable from a Windows-side browser
 	// via WSL2's automatic 127.0.0.1 forwarding, so the banner should advertise
 	// the localhost form so users aren't left wondering whether they need a
 	// Linux-side browser.
-	t.Setenv("ANY_AI_CLI_WSL_LAUNCHER", "")
+	t.Setenv("MANY_AI_CLI_WSL_LAUNCHER", "")
 	t.Setenv("WSL_INTEROP", "/run/WSL/1_interop")
 	t.Setenv("WSL_DISTRO_NAME", "Ubuntu")
 	got := startupBanner("0.1.3", "127.0.0.1:47777", "abc123")
@@ -67,7 +67,7 @@ func TestStartupBannerShowsFromWindowsHintInWSL(t *testing.T) {
 }
 
 func TestStartupBannerShowsTokenlessAccessWarning(t *testing.T) {
-	t.Setenv("ANY_AI_CLI_WSL_LAUNCHER", "")
+	t.Setenv("MANY_AI_CLI_WSL_LAUNCHER", "")
 	t.Setenv("WSL_INTEROP", "")
 	t.Setenv("WSL_DISTRO_NAME", "")
 	got := startupBanner("0.1.3", "127.0.0.1:47777", "abc123", startupBannerAccess{
@@ -94,13 +94,13 @@ func TestStartupBannerUsesAsciiUnderWindowsLauncher(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("WSL launcher detection is a Windows-native no-op; only meaningful on Linux/macOS builds")
 	}
-	// The any-ai-cli-launcher.exe WSL connector sets ANY_AI_CLI_WSL_LAUNCHER=1
+	// The many-ai-cli-launcher.exe WSL connector sets MANY_AI_CLI_WSL_LAUNCHER=1
 	// in the WSL shell so
 	// the Linux Hub knows its stdout is being rendered by conhost.exe, where
 	// EAW=Ambiguous block / box-drawing chars are promoted to full-width and
 	// distort the ASCII art. The banner must fall back to plain ASCII glyphs
 	// (single-byte, unambiguous width) in that mode.
-	t.Setenv("ANY_AI_CLI_WSL_LAUNCHER", "1")
+	t.Setenv("MANY_AI_CLI_WSL_LAUNCHER", "1")
 	t.Setenv("WSL_INTEROP", "/run/WSL/1_interop")
 	t.Setenv("WSL_DISTRO_NAME", "Ubuntu")
 	got := startupBanner("0.1.3", "127.0.0.1:47777", "abc123")
@@ -114,7 +114,7 @@ func TestStartupBannerUsesAsciiUnderWindowsLauncher(t *testing.T) {
 	// Product detail lines and the warning still ship — only the logo art
 	// changes.
 	for _, want := range []string{
-		"ANY AI AGENTS                   v0.1.3",
+		"MANY AI AGENTS                  v0.1.3",
 		"From Windows: http://localhost:47777/?token=abc123",
 		"WARNING: This window is connected to the Web UI. Do not close it.",
 	} {

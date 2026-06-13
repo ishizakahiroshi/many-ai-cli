@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/config"
 )
 
 // 承認 trigger phrase のハードコードフォールバック値。
 // 通常は GitHub の resources/approval-patterns/*.md からリモート取得した内容で
-// ~/.any-ai-cli/approval-patterns/<provider>.official.json が更新される。
+// ~/.many-ai-cli/approval-patterns/<provider>.official.json が更新される。
 // fetch が失敗した場合（ネット切断・リポジトリ乗っ取り等）はここの値で初期化される。
 //
 // 各 provider の承認 UI 文言は基本的に英語ハードコード（Anthropic / OpenAI 側で
@@ -82,7 +82,7 @@ func IsValidApprovalProfile(profile config.ApprovalProfileName) bool {
 
 func approvalPatternsDir() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".any-ai-cli", "approval-patterns")
+	return filepath.Join(home, ".many-ai-cli", "approval-patterns")
 }
 
 func approvalProfilePath(provider string, profile config.ApprovalProfileName) string {

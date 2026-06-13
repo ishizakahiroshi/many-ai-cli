@@ -28,12 +28,12 @@ export function stripAnsiBasic(s) {
 // コードブロック内（```...```）の trim はあえてしない。
 export function normalizeChatText(raw) {
   if (!raw) return '';
-  // [ANY-AI-CLI]...[/ANY-AI-CLI] / [ANY-AI-CLI-DONE]...[/ANY-AI-CLI-DONE] ブロックを除去
+  // [MANY-AI-CLI]...[/MANY-AI-CLI] / [MANY-AI-CLI-DONE]...[/MANY-AI-CLI-DONE] ブロックを除去
   // （承認マーカー・完了サマリーマーカーはチャットに表示しない。DONE は -DONE 付きで
-  //  別リテラルのため、汎用の [ANY-AI-CLI] パターンに一致せず先に専用で除去する）
+  //  別リテラルのため、汎用の [MANY-AI-CLI] パターンに一致せず先に専用で除去する）
   let s = raw
-    .replace(/\[ANY-AI-CLI-DONE\][\s\S]*?\[\/ANY-AI-CLI-DONE\]/g, '')
-    .replace(/\[ANY-AI-CLI\][\s\S]*?\[\/ANY-AI-CLI\]/g, '');
+    .replace(/\[MANY-AI-CLI-DONE\][\s\S]*?\[\/MANY-AI-CLI-DONE\]/g, '')
+    .replace(/\[MANY-AI-CLI\][\s\S]*?\[\/MANY-AI-CLI\]/g, '');
   const lines = s.split(/\r?\n/);
   const out = [];
   let inFence = false;

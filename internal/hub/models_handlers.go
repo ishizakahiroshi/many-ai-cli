@@ -3,7 +3,7 @@ package hub
 import (
 	"net/http"
 
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/config"
 )
 
 // handleModels は spawn フォーム用のモデル一覧を返す。

@@ -21,7 +21,7 @@ import (
 // Hub プロセス起動時に `PNPM_HOME` が未 export だと REG_EXPAND_SZ が展開できず
 // pnpm bin のエントリが脱落する。spawn 直前に再展開することで救済する。
 //
-// any-ai-cli 自身は spawn 直前に env を sanitize することで、永続 Path のゴミを
+// many-ai-cli 自身は spawn 直前に env を sanitize することで、永続 Path のゴミを
 // ユーザーが気づかなくても claude / codex が見える状態を保証する。
 func sanitizeEnv(env []string) []string {
 	out := make([]string, 0, len(env))

@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/config"
 	"golang.org/x/net/websocket"
 	"log/slog"
 )
@@ -760,7 +760,7 @@ func strconvQuote(s string) string {
 // --- C7: sanitizeGitErrMsg ---
 
 func TestSanitizeGitErrMsg_PathInStderr(t *testing.T) {
-	err := &sanitizeGitTestErr{msg: `git show abc: fatal: /home/user/.any-ai-cli/repo: not a git repo`}
+	err := &sanitizeGitTestErr{msg: `git show abc: fatal: /home/user/.many-ai-cli/repo: not a git repo`}
 	got := sanitizeGitErrMsg(err)
 	if got == "" {
 		t.Fatal("expected non-empty sanitized message")

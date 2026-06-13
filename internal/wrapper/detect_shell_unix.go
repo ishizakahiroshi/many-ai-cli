@@ -12,10 +12,10 @@ import (
 	"strings"
 )
 
-const parentShellEnv = "ANY_AI_CLI_PARENT_SHELL"
+const parentShellEnv = "MANY_AI_CLI_PARENT_SHELL"
 
 // DetectShell は起動元シェルの種別を返す。
-// ANY_AI_CLI_PARENT_SHELL がセットされている場合はその値を最優先で返す。
+// MANY_AI_CLI_PARENT_SHELL がセットされている場合はその値を最優先で返す。
 // 取得できない場合は $SHELL 環境変数にフォールバックする。
 func DetectShell() string {
 	if v := strings.TrimSpace(os.Getenv(parentShellEnv)); v != "" {

@@ -24,14 +24,14 @@ import (
 	"sync"
 	"time"
 
-	"any-ai-cli/internal/attach"
-	"any-ai-cli/internal/config"
-	"any-ai-cli/internal/notify"
-	"any-ai-cli/internal/proto"
-	"any-ai-cli/internal/sessionlog"
-	"any-ai-cli/internal/sessionstore"
-	"any-ai-cli/internal/wrapper"
-	"any-ai-cli/web"
+	"many-ai-cli/internal/attach"
+	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/notify"
+	"many-ai-cli/internal/proto"
+	"many-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/sessionstore"
+	"many-ai-cli/internal/wrapper"
+	"many-ai-cli/web"
 	"golang.org/x/net/websocket"
 )
 
@@ -329,7 +329,7 @@ type Server struct {
 	approvalRuleTargets map[string]approvalRuleTarget // key: normalized path
 
 	// netHint: launcher（SSH tunnel モード）が /api/net-hint で登録する接続元情報。
-	// tunnel モードでは既起動の Hub に ANY_AI_CLI_HOST_LABEL を注入できないため、
+	// tunnel モードでは既起動の Hub に MANY_AI_CLI_HOST_LABEL を注入できないため、
 	// API 経由でサーバ側に保持し、URL クエリヒントを持たないクライアント
 	//（PWA・別タブ等）にも /api/info で正しいバッジ情報を返す。
 	netHintMu      sync.Mutex
@@ -467,8 +467,8 @@ var initialModelScanProviders = map[string]bool{
 
 const doneNotifyMinInterval = 60 * time.Second
 
-var doneSummaryMarkerOpen = []byte("[ANY-AI-CLI-DONE]")
-var doneSummaryMarkerClose = []byte("[/ANY-AI-CLI-DONE]")
+var doneSummaryMarkerOpen = []byte("[MANY-AI-CLI-DONE]")
+var doneSummaryMarkerClose = []byte("[/MANY-AI-CLI-DONE]")
 
 var (
 	modelChangeTokens = [][]byte{
@@ -476,7 +476,7 @@ var (
 		[]byte("Model changed to "),
 	}
 	nativeApprovalTriggerTokens = [][]byte{
-		[]byte("[ANY-AI-CLI]"),
+		[]byte("[MANY-AI-CLI]"),
 		[]byte("approval"),
 		[]byte("Approval"),
 		[]byte("requires approval"),
@@ -578,7 +578,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		}
 		staticHandler = http.FileServer(http.FS(subFS))
 	}
-	// 承認パターン JSON はユーザー設定ディレクトリ ~/.any-ai-cli/approval-patterns/
+	// 承認パターン JSON はユーザー設定ディレクトリ ~/.many-ai-cli/approval-patterns/
 	// に保持する。フロント互換の /approval-patterns/*.json はユーザー設定を含むため、
 	// 汎用 FileServer ではなく token 必須の専用ハンドラで配信する。
 	if err := SyncApprovalPatterns(cfg.ApprovalProfiles); err != nil {
@@ -712,7 +712,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.stopFunc = cancel
 	s.stopMu.Unlock()
 
-	pidPath := filepath.Join(os.TempDir(), "any-ai-cli.pid")
+	pidPath := filepath.Join(os.TempDir(), "many-ai-cli.pid")
 	killStalePid(pidPath)
 
 	// 設定ポートが使用中の場合（例: WSL 側 Hub が先に起動済み）は空きポートへ自動移行する。
@@ -755,9 +755,9 @@ func (s *Server) Run(ctx context.Context) error {
 		// 残す）。強制終了の残骸は読み取り側の二重ガードで除外される。
 		removeHubRuntimeIfPID(os.Getpid())
 	}()
-	setConsoleTitle("any-ai-cli [hub] - DO NOT CLOSE")
+	setConsoleTitle("many-ai-cli [hub] - DO NOT CLOSE")
 	setConsoleIcon()
-	s.logger.Info("ANY-AI-CLI started", "url", fmt.Sprintf("http://%s/?token=%s", s.httpSrv.Addr, neturl.QueryEscape(s.cfg.Token)))
+	s.logger.Info("MANY-AI-CLI started", "url", fmt.Sprintf("http://%s/?token=%s", s.httpSrv.Addr, neturl.QueryEscape(s.cfg.Token)))
 	cfgSnapshot := s.snapshotCfg()
 	fmt.Print(startupBanner(s.version, s.httpSrv.Addr, cfgSnapshot.Token, startupBannerAccess{
 		AllowLoopbackWithoutToken: cfgSnapshot.Hub.AllowLoopbackWithoutToken,
@@ -1456,7 +1456,7 @@ func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval)
 	}
 }
 
-// handleDoneSummaryMarker は PTY データから [ANY-AI-CLI-DONE] マーカーを検出し、
+// handleDoneSummaryMarker は PTY データから [MANY-AI-CLI-DONE] マーカーを検出し、
 // 完了サマリー通知を発火する。設定が OFF のセッション・連投抑制中はスキップ。
 func (s *Server) handleDoneSummaryMarker(id int, data []byte) {
 	open := bytes.Index(data, doneSummaryMarkerOpen)
@@ -1497,7 +1497,7 @@ func (s *Server) handleDoneSummaryMarker(id int, data []byte) {
 		titleName = strings.TrimSpace(ses.Provider)
 	}
 	if titleName == "" {
-		titleName = "any-ai-cli"
+		titleName = "many-ai-cli"
 	}
 	if ses.Label != "" {
 		titleName = fmt.Sprintf("%s #%d [%s]", titleName, id, ses.Label)
@@ -2165,7 +2165,7 @@ func (s *Server) handleAttachRequest(m proto.Message) (skip bool) {
 	}
 	s.sessionsMu.Unlock()
 
-	// attachments ディレクトリは ~/.any-ai-cli/attachments
+	// attachments ディレクトリは ~/.many-ai-cli/attachments
 	attachDir, err := attachmentsDir()
 	if err != nil {
 		s.logger.Warn("attach_request: os.UserHomeDir failed", "err", err)

@@ -1,12 +1,12 @@
-# any-ai-cli
+# many-ai-cli
 
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Go](https://img.shields.io/badge/go-1.25+-blue)
 
-![any-ai-cli dashboard](assets/readme-dashboard.jpg)
+![many-ai-cli dashboard](assets/readme-dashboard.jpg)
 
-**Never miss an approval prompt.** `any-ai-cli` watches your AI coding CLIs (Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI) and notifies your desktop or phone the moment one is waiting for your approval — so you don't have to babysit the terminal. It also gives you a local web dashboard to handle approvals, monitoring, and terminals across multiple sessions in one place.
+**Never miss an approval prompt.** `many-ai-cli` watches your AI coding CLIs (Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI) and notifies your desktop or phone the moment one is waiting for your approval — so you don't have to babysit the terminal. It also gives you a local web dashboard to handle approvals, monitoring, and terminals across multiple sessions in one place.
 
 [日本語版 README はこちら](README.ja.md)
 
@@ -14,19 +14,19 @@
 
 ## Overview
 
-When you run several AI coding CLIs in parallel across multiple terminals, it's easy to lose track of which session is blocked waiting for your approval — so you end up checking the terminals over and over. `any-ai-cli` wraps each CLI in a PTY and notifies your desktop or phone the moment it detects an approval prompt. It also lets you handle approvals and monitor progress from a single browser-based Hub UI. The CLI itself works exactly as before; `any-ai-cli` only adds notifications and an approval GUI on top.
+When you run several AI coding CLIs in parallel across multiple terminals, it's easy to lose track of which session is blocked waiting for your approval — so you end up checking the terminals over and over. `many-ai-cli` wraps each CLI in a PTY and notifies your desktop or phone the moment it detects an approval prompt. It also lets you handle approvals and monitor progress from a single browser-based Hub UI. The CLI itself works exactly as before; `many-ai-cli` only adds notifications and an approval GUI on top.
 
 ```
 Terminal pane #1              Terminal pane #2
 ┌────────────────────┐        ┌────────────────────┐
-│ any-ai-cli claude  │        │ any-ai-cli codex   │
+│ many-ai-cli claude  │        │ many-ai-cli codex   │
 │  (PTY passthrough) │        │  (PTY passthrough) │
 └────────┬───────────┘        └────────┬───────────┘
          │ WebSocket                   │ WebSocket
          └─────────────┬───────────────┘
                        ▼
             ┌──────────────────┐
-            │ any-ai-cli serve │  http://127.0.0.1:47777
+            │ many-ai-cli serve │  http://127.0.0.1:47777
             │  (Hub daemon)    │
             └────────┬─────────┘
                      │
@@ -58,11 +58,11 @@ Terminal pane #1              Terminal pane #2
 - **Server-side user preferences** — keep voice, notification, favorites, session order, spawn defaults, and avatar settings in `config.yaml`
 - **Spawn new sessions** from the UI (`/api/spawn`)
 - **Model picker with Ollama routing** — pick Anthropic / OpenAI / Ollama Cloud / Ollama Local models from the spawn form; the Hub auto-injects the right `ANTHROPIC_*` / `OPENAI_*` env vars per session, no shell setup required
-- **Windows unified launcher** — `any-ai-cli-launcher.exe` connects to a Hub inside WSL or on a remote VPS (SSH) via saved profiles and opens the Windows browser
+- **Windows unified launcher** — `many-ai-cli-launcher.exe` connects to a Hub inside WSL or on a remote VPS (SSH) via saved profiles and opens the Windows browser
 - **VPS / Docker deployment assets** — run one Hub container per user from GHCR with loopback-only port publishing and an opt-in auto-update script
 - **Clean transcript generation** — write readable `.txt` transcripts automatically, or regenerate them with `log-clean`
 - **Language switching** (English / Japanese)
-- **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `any-ai-cli` itself
+- **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `many-ai-cli` itself
 
 ---
 
@@ -88,10 +88,25 @@ Linux/macOS builds are expected to work, but they have not been fully validated 
 
 ### Install via a package manager
 
+**Developer install (npm registry — recommended):**
+
+```powershell
+pnpm add -g many-ai-cli
+```
+
+Fallbacks (same registry, pick whichever you already have):
+
+```powershell
+bun install -g many-ai-cli
+npm install -g many-ai-cli
+```
+
+> Available once `many-ai-cli` v0.3.0 is published to the npm registry. The package ships the native Go binary for your platform as an optional dependency, so nothing is downloaded in a browser — the launcher is generated locally at install time and carries no Mark-of-the-Web, which avoids that SmartScreen trigger. This is **not** a substitute for Authenticode signing: Smart App Control / WDAC / AppLocker / EDR / antivirus policies are handled separately. If the global command is not found after install, run `pnpm setup` (or reopen your shell) so the global bin directory is on your `PATH`.
+
 **Windows (winget):**
 
 ```powershell
-winget install ishizakahiroshi.any-ai-cli
+winget install ishizakahiroshi.many-ai-cli
 ```
 
 > Available once the first winget manifest PR is merged into `microsoft/winget-pkgs`. Until then, use the zip download below.
@@ -100,32 +115,32 @@ winget install ishizakahiroshi.any-ai-cli
 **macOS (Homebrew):**
 
 ```bash
-brew install --cask ishizakahiroshi/tap/any-ai-cli
+brew install --cask ishizakahiroshi/tap/many-ai-cli
 ```
 
 **Linux — Debian / Ubuntu (.deb) and RHEL-family (.rpm):**
 
-Download the package from [GitHub Releases](https://github.com/ishizakahiroshi/any-ai-cli/releases/latest), then:
+Download the package from [GitHub Releases](https://github.com/ishizakahiroshi/many-ai-cli/releases/latest), then:
 
 ```bash
-sudo dpkg -i any-ai-cli_<version>_amd64.deb   # Debian / Ubuntu
-sudo rpm -i any-ai-cli-<version>.x86_64.rpm   # RHEL family
+sudo dpkg -i many-ai-cli_<version>_amd64.deb   # Debian / Ubuntu
+sudo rpm -i many-ai-cli-<version>.x86_64.rpm   # RHEL family
 ```
 
 ### Manual download (all platforms)
 
-Get the latest release from [GitHub Releases](https://github.com/ishizakahiroshi/any-ai-cli/releases/latest).
+Get the latest release from [GitHub Releases](https://github.com/ishizakahiroshi/many-ai-cli/releases/latest).
 
 | Platform | Download |
 |----------|----------|
-| Windows (x64) | `any-ai-cli-<version>-windows-x64.zip` |
-| macOS (Intel) | `any-ai-cli-<version>-macos-intel.zip` |
-| macOS (Apple Silicon) | `any-ai-cli-<version>-macos-apple-silicon.zip` |
-| Linux (x64) | `any-ai-cli-<version>-linux-x64.zip` |
+| Windows (x64) | `many-ai-cli-<version>-windows-x64.zip` |
+| macOS (Intel) | `many-ai-cli-<version>-macos-intel.zip` |
+| macOS (Apple Silicon) | `many-ai-cli-<version>-macos-apple-silicon.zip` |
+| Linux (x64) | `many-ai-cli-<version>-linux-x64.zip` |
 
 Extract the zip and place the binary somewhere on your `PATH`.
 
-> Settings and logs are stored in `~/.any-ai-cli/` (created on first run).
+> Settings and logs are stored in `~/.many-ai-cli/` (created on first run).
 > Session logs contain user input and AI output. Treat them as sensitive data.
 
 ### Windows Security Warnings
@@ -136,7 +151,7 @@ The Windows release binaries are not currently Authenticode-signed.
 
 - **Mark-of-the-Web**: downloaded zip/exe files can carry an internet-zone mark.
   After extracting the Windows zip, run `unblock-windows.cmd` from the extracted
-  folder. It uses PowerShell `Unblock-File` only on `any-ai-cli*.exe` in that
+  folder. It uses PowerShell `Unblock-File` only on `many-ai-cli*.exe` in that
   same folder, does not require administrator rights, does not change system
   policy permanently, and does not launch the app.
 - **SmartScreen**: Windows may warn that the app is uncommon or from an unknown
@@ -156,11 +171,11 @@ opening the server to the LAN or adding a public Windows Firewall exception.
 
 Recommended Windows zip flow:
 
-1. Download `any-ai-cli-<version>-windows-x64.zip` from GitHub Releases
+1. Download `many-ai-cli-<version>-windows-x64.zip` from GitHub Releases
 2. Verify `SHA256SUMS.txt` / cosign signature if required
 3. Extract the zip
 4. Run `unblock-windows.cmd`
-5. Start `any-ai-cli.exe` or `any-ai-cli-launcher.exe` manually
+5. Start `many-ai-cli.exe` or `many-ai-cli-launcher.exe` manually
 
 ### Verify Release Artifacts (Checksum + Signature)
 
@@ -176,7 +191,7 @@ Recommended Windows zip flow:
 cosign verify-blob \
   --certificate SHA256SUMS.txt.pem \
   --signature SHA256SUMS.txt.sig \
-  --certificate-identity-regexp "https://github.com/ishizakahiroshi/any-ai-cli/.github/workflows/release.yml@refs/tags/v.*" \
+  --certificate-identity-regexp "https://github.com/ishizakahiroshi/many-ai-cli/.github/workflows/release.yml@refs/tags/v.*" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   SHA256SUMS.txt
 ```
@@ -194,7 +209,7 @@ sha256sum -c SHA256SUMS.txt
 The normal flow: launch the binary, then drive everything from the browser. You do not need to run any CLI command yourself.
 
 1. Download and extract the zip for your platform from the table above
-2. **Double-click `any-ai-cli.exe`** (or run `any-ai-cli` with no arguments)
+2. **Double-click `many-ai-cli.exe`** (or run `many-ai-cli` with no arguments)
    - The Hub starts and your browser opens automatically at `http://127.0.0.1:47777/?token=<token>`
    - If a Hub is already running, your browser is reopened against the existing instance
 3. In the Hub UI, click **"+ New Session"** to launch a wrapped AI CLI session
@@ -205,11 +220,11 @@ Sessions can be created, monitored, and approved entirely from the Hub UI; you d
 > **⚠ About the console window**
 > Double-clicking the binary opens a console window alongside the browser. **That console *is* the Hub server process** — closing it with `×` terminates the Hub. If it gets in the way, **minimize** it instead of closing it.
 > If the Hub does go down (whether by `×`, a crash, or a manual restart), running AI sessions wait up to **60 minutes** for the Hub to come back before terminating themselves (configurable in `config.yaml` up to 24 hours — extend it for long-running autonomous tasks). A Web UI bug or restart will not silently kill your work. See [Shutdown, zombie protection & Hub crash resilience](#shutdown-zombie-protection--hub-crash-resilience) for details.
-> To stop the Hub intentionally, use the `⏻` button in the top-right of the Hub UI, or run `any-ai-cli stop` from another terminal.
+> To stop the Hub intentionally, use the `⏻` button in the top-right of the Hub UI, or run `many-ai-cli stop` from another terminal.
 
 ### Windows unified launcher
 
-`any-ai-cli-launcher.exe` is a unified launcher that manages connection profiles for both WSL and remote VPS targets. Connection profiles are stored in `~/.any-ai-cli/launcher-profiles.yaml`.
+`many-ai-cli-launcher.exe` is a unified launcher that manages connection profiles for both WSL and remote VPS targets. Connection profiles are stored in `~/.many-ai-cli/launcher-profiles.yaml`.
 
 #### How it works
 
@@ -217,25 +232,25 @@ The launcher reads your saved profiles and connects to the right Hub — startin
 
 | Type | Use case |
 |---|---|
-| `wsl` | Start `any-ai-cli serve` inside WSL and open it from the Windows browser |
+| `wsl` | Start `many-ai-cli serve` inside WSL and open it from the Windows browser |
 | `ssh` | Connect to a remote machine (e.g. a VPS) over SSH |
 
 `ssh` profiles additionally support two connection modes:
 
 | Mode | Use case |
 |---|---|
-| `serve` | SSH into a VPS and start `any-ai-cli serve` on the remote side |
+| `serve` | SSH into a VPS and start `many-ai-cli serve` on the remote side |
 | `tunnel` | Port-forward to a Hub that is already running on the remote side (e.g. a Docker-compose resident Hub) |
 
 In both modes, the Hub continues to bind to `127.0.0.1` only on the remote. The SSH local forward (`-L 127.0.0.1:<port>:127.0.0.1:<port>`) makes it reachable from the Windows browser without exposing the Hub to the network.
 
-A `wsl` profile calls `wsl.exe` internally to start the Linux binary (`any-ai-cli serve`) inside WSL; as soon as the Linux side prints the Hub URL, the Windows default browser opens automatically. The shell is launched with `bash -ilc` (login + interactive), so `~/.bashrc` entries — including `nvm`, `pnpm`, `cargo`, etc. — are fully loaded and in `PATH`. If a port collision is detected on the Windows side (e.g. `any-ai-cli.exe` already holds 47777), the launcher picks the next available port automatically.
+A `wsl` profile calls `wsl.exe` internally to start the Linux binary (`many-ai-cli serve`) inside WSL; as soon as the Linux side prints the Hub URL, the Windows default browser opens automatically. The shell is launched with `bash -ilc` (login + interactive), so `~/.bashrc` entries — including `nvm`, `pnpm`, `cargo`, etc. — are fully loaded and in `PATH`. If a port collision is detected on the Windows side (e.g. `many-ai-cli.exe` already holds 47777), the launcher picks the next available port automatically.
 
 #### Setup
 
-Download `any-ai-cli-<version>-windows-x64.zip`, extract `any-ai-cli-launcher.exe`, and place it on your Windows `PATH`.
+Download `many-ai-cli-<version>-windows-x64.zip`, extract `many-ai-cli-launcher.exe`, and place it on your Windows `PATH`.
 
-Create `~/.any-ai-cli/launcher-profiles.yaml`:
+Create `~/.many-ai-cli/launcher-profiles.yaml`:
 
 ```yaml
 version: 1
@@ -246,7 +261,7 @@ profiles:
     distro: Ubuntu-22.04  # omit to use the default WSL distro
     hub_port: 0           # 0 = auto-select to avoid Windows-side collisions
 
-  # VPS profile (serve mode) — SSH in and start any-ai-cli serve
+  # VPS profile (serve mode) — SSH in and start many-ai-cli serve
   - name: my-vps
     type: ssh
     mode: serve
@@ -261,20 +276,20 @@ profiles:
     host: vps.example.com
     user: your-user
     hub_port: 47801
-    token_command: "docker exec any-ai-cli-user1 sh -c 'grep ^token ~/.any-ai-cli/config.yaml | cut -d\" \" -f2'"
+    token_command: "docker exec many-ai-cli-user1 sh -c 'grep ^token ~/.many-ai-cli/config.yaml | cut -d\" \" -f2'"
 ```
 
 #### WSL profile prerequisite: the Linux binary inside WSL
 
-A `wsl` profile requires the Linux `any-ai-cli` binary somewhere on the WSL `PATH`. Download `any-ai-cli-<version>-linux-x64.zip` from the releases page, extract it, and place the binary:
+A `wsl` profile requires the Linux `many-ai-cli` binary somewhere on the WSL `PATH`. Download `many-ai-cli-<version>-linux-x64.zip` from the releases page, extract it, and place the binary:
 
 ```bash
-unzip any-ai-cli-<version>-linux-x64.zip
+unzip many-ai-cli-<version>-linux-x64.zip
 
 # Using ~/.local/bin (per-user, no sudo required)
 mkdir -p ~/.local/bin
-mv any-ai-cli ~/.local/bin/any-ai-cli
-chmod +x ~/.local/bin/any-ai-cli
+mv many-ai-cli ~/.local/bin/many-ai-cli
+chmod +x ~/.local/bin/many-ai-cli
 
 # Verify ~/.local/bin is on PATH
 echo $PATH | grep -q "$HOME/.local/bin" && echo "OK" || echo "Add ~/.local/bin to PATH"
@@ -289,14 +304,14 @@ export PATH="$HOME/.local/bin:$PATH"
 Or, to install system-wide (requires sudo):
 
 ```bash
-sudo mv any-ai-cli /usr/local/bin/any-ai-cli
-sudo chmod +x /usr/local/bin/any-ai-cli
+sudo mv many-ai-cli /usr/local/bin/many-ai-cli
+sudo chmod +x /usr/local/bin/many-ai-cli
 ```
 
 Verify inside WSL:
 
 ```bash
-any-ai-cli --version
+many-ai-cli --version
 ```
 
 #### Tunnel mode: end-to-end setup
@@ -305,18 +320,18 @@ any-ai-cli --version
 
 **A. Remote side (one-time)**
 
-1. Place the Linux `any-ai-cli` binary on the remote machine and make it executable.
+1. Place the Linux `many-ai-cli` binary on the remote machine and make it executable.
 2. Start the Hub with a **fixed port** (auto-select is not allowed in tunnel mode) and keep it resident — systemd, tmux/screen, or Docker all work:
 
    ```bash
-   any-ai-cli serve --port 47777
+   many-ai-cli serve --port 47777
    ```
 
-   On first start a random access token is generated and saved to `~/.any-ai-cli/config.yaml` (`token:` key).
+   On first start a random access token is generated and saved to `~/.many-ai-cli/config.yaml` (`token:` key).
 3. Decide the command that prints that token — this becomes `token_command` in the profile. Example:
 
    ```bash
-   awk '/^token:/{print $2}' ~/.any-ai-cli/config.yaml
+   awk '/^token:/{print $2}' ~/.many-ai-cli/config.yaml
    ```
 
    Run it once over SSH and confirm it prints a single token line.
@@ -355,10 +370,10 @@ any-ai-cli --version
 #### Launch
 
 ```powershell
-any-ai-cli-launcher.exe            # auto-connect if only one profile; otherwise open selection UI
-any-ai-cli-launcher.exe --profile my-vps   # connect to a specific profile
-any-ai-cli-launcher.exe --last     # reconnect using the last-used profile
-any-ai-cli-launcher.exe --ui       # always open the selection UI
+many-ai-cli-launcher.exe            # auto-connect if only one profile; otherwise open selection UI
+many-ai-cli-launcher.exe --profile my-vps   # connect to a specific profile
+many-ai-cli-launcher.exe --last     # reconnect using the last-used profile
+many-ai-cli-launcher.exe --ui       # always open the selection UI
 ```
 
 #### Security
@@ -374,11 +389,11 @@ For the full profile schema and connection flow details, see [docs/v0.2.0-any-ai
 
 #### If Windows blocks the launcher: VPS access without local `.exe`
 
-If Windows SmartScreen or company policy prevents `any-ai-cli-launcher.exe` from running, users can still connect to a VPS-hosted Hub without running any any-ai-cli executable on Windows. This route uses only:
+If Windows SmartScreen or company policy prevents `many-ai-cli-launcher.exe` from running, users can still connect to a VPS-hosted Hub without running any many-ai-cli executable on Windows. This route uses only:
 
 - the Windows built-in OpenSSH client (`ssh.exe`)
 - a normal browser
-- the Linux `any-ai-cli` binary or Docker container on the VPS
+- the Linux `many-ai-cli` binary or Docker container on the VPS
 
 The tradeoff is that setup is more manual: the user keeps one SSH tunnel window open, then opens the Hub URL in the browser.
 
@@ -387,9 +402,9 @@ The tradeoff is that setup is more manual: the user keeps one SSH tunnel window 
 | Item | Saved on | Notes |
 |---|---|---|
 | SSH host, user, key path | Windows `%USERPROFILE%\.ssh\config` | Safe to keep locally; this is normal SSH configuration |
-| Hub token | VPS `~/.any-ai-cli/config.yaml` | Do not paste it into public chats, issues, or screenshots |
-| Hub preferences, favorites, spawn defaults | VPS `~/.any-ai-cli/config.yaml` | Persist across reconnects because the Hub runs on the VPS |
-| Logs and attachments | VPS `~/.any-ai-cli/logs/`, `~/.any-ai-cli/attachments/` | They are not stored on the Windows PC |
+| Hub token | VPS `~/.many-ai-cli/config.yaml` | Do not paste it into public chats, issues, or screenshots |
+| Hub preferences, favorites, spawn defaults | VPS `~/.many-ai-cli/config.yaml` | Persist across reconnects because the Hub runs on the VPS |
+| Logs and attachments | VPS `~/.many-ai-cli/logs/`, `~/.many-ai-cli/attachments/` | They are not stored on the Windows PC |
 | Working repositories | VPS filesystem | The Hub edits VPS files, not files on the Windows PC |
 
 **A. Choose and prepare the VPS**
@@ -402,16 +417,16 @@ Keep the firewall/security group simple:
 - do **not** open `47777`, `47877`, or any Hub port to the internet
 - do **not** put the Hub behind nginx, Caddy, Cloudflare Tunnel, or a public reverse proxy
 
-Install the Linux `any-ai-cli` binary on the VPS. One common per-user layout is:
+Install the Linux `many-ai-cli` binary on the VPS. One common per-user layout is:
 
 ```bash
 mkdir -p ~/.local/bin
-# Download and unzip any-ai-cli-<version>-linux-x64.zip from GitHub Releases.
-mv any-ai-cli ~/.local/bin/any-ai-cli
-chmod +x ~/.local/bin/any-ai-cli
+# Download and unzip many-ai-cli-<version>-linux-x64.zip from GitHub Releases.
+mv many-ai-cli ~/.local/bin/many-ai-cli
+chmod +x ~/.local/bin/many-ai-cli
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
-any-ai-cli --version
+many-ai-cli --version
 ```
 
 Also install and sign in to the provider CLIs you plan to use (`claude`, `codex`, `copilot`, `cursor-agent`) on the VPS, because sessions run there.
@@ -423,21 +438,21 @@ For a first test, run it in a normal SSH shell:
 ```bash
 mkdir -p ~/work
 cd ~/work
-any-ai-cli serve --port 47777
+many-ai-cli serve --port 47777
 ```
 
 For daily use, keep it resident with `tmux`, `screen`, `systemd`, or Docker. The simplest manual option is `tmux`:
 
 ```bash
-tmux new -s any-ai-cli
+tmux new -s many-ai-cli
 cd ~/work
-any-ai-cli serve --port 47777
+many-ai-cli serve --port 47777
 ```
 
 Detach from tmux with `Ctrl+B`, then `D`. Later, reattach with:
 
 ```bash
-tmux attach -t any-ai-cli
+tmux attach -t many-ai-cli
 ```
 
 Confirm the Hub is listening only on loopback:
@@ -451,7 +466,7 @@ Expected: `127.0.0.1:47777`. If you see `0.0.0.0:47777` or the VPS public IP, st
 Get the token:
 
 ```bash
-awk '/^token:/{print $2}' ~/.any-ai-cli/config.yaml
+awk '/^token:/{print $2}' ~/.many-ai-cli/config.yaml
 ```
 
 **C. Save the SSH connection on Windows**
@@ -499,26 +514,26 @@ Do not replace `127.0.0.1` with the VPS IP address. The browser should always co
 
 **Optional: a local `.cmd` tunnel shortcut**
 
-Users who do not want to remember the SSH command can create a local file such as `connect-any-ai-cli.cmd`. This file does not contain the token; it fetches the token over SSH each time and opens the browser after starting the tunnel.
+Users who do not want to remember the SSH command can create a local file such as `connect-many-ai-cli.cmd`. This file does not contain the token; it fetches the token over SSH each time and opens the browser after starting the tunnel.
 
 ```batch
 @echo off
 set HOST=any-ai-vps
 set PORT=47777
 
-for /f "tokens=2" %%T in ('ssh %HOST% "cat ~/.any-ai-cli/config.yaml" ^| findstr /b token:') do set TOKEN=%%T
+for /f "tokens=2" %%T in ('ssh %HOST% "cat ~/.many-ai-cli/config.yaml" ^| findstr /b token:') do set TOKEN=%%T
 if "%TOKEN%"=="" (
   echo Failed to read Hub token from %HOST%.
   pause
   exit /b 1
 )
 
-start "any-ai-cli tunnel" ssh -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -L 127.0.0.1:%PORT%:127.0.0.1:%PORT% %HOST%
+start "many-ai-cli tunnel" ssh -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -L 127.0.0.1:%PORT%:127.0.0.1:%PORT% %HOST%
 timeout /t 2 >nul
 start "" "http://127.0.0.1:%PORT%/?token=%TOKEN%"
 ```
 
-Close the `any-ai-cli tunnel` window to disconnect. The remote Hub and any remote sessions continue if you started the Hub with `tmux`, `systemd`, or Docker.
+Close the `many-ai-cli tunnel` window to disconnect. The remote Hub and any remote sessions continue if you started the Hub with `tmux`, `systemd`, or Docker.
 
 **Common no-launcher pitfalls**
 
@@ -547,7 +562,7 @@ The Hub UI is mobile-ready (responsive layout, touch-sized buttons, a mobile key
    - Linux: install/enable `sshd`
 2. In Termius, register the PC as a host (its LAN IP, e.g. `192.168.x.x`, with your PC user; key auth recommended)
 3. Add a **Port Forwarding** rule: type **Local**, phone side `127.0.0.1:47777` → destination `127.0.0.1:47777`
-4. Connect the tunnel, then open `http://127.0.0.1:47777/?token=<token>` in the phone browser (the token comes from the PC's `serve` output or `~/.any-ai-cli/config.yaml`)
+4. Connect the tunnel, then open `http://127.0.0.1:47777/?token=<token>` in the phone browser (the token comes from the PC's `serve` output or `~/.many-ai-cli/config.yaml`)
 5. Share menu → **Add to Home Screen** to install it as a PWA — from then on it launches like an app
 
 ### B. VPS
@@ -600,48 +615,48 @@ If you prefer driving things from a shell — for scripting, shell integration, 
 ### Option A: provider as a subcommand
 
 ```bash
-any-ai-cli claude      # auto-starts Hub in the background if not running, then launches Claude
-any-ai-cli codex       # same
-any-ai-cli copilot     # same, using the installed GitHub Copilot CLI
-any-ai-cli cursor-agent # same, using the installed Cursor Agent CLI
+many-ai-cli claude      # auto-starts Hub in the background if not running, then launches Claude
+many-ai-cli codex       # same
+many-ai-cli copilot     # same, using the installed GitHub Copilot CLI
+many-ai-cli cursor-agent # same, using the installed Cursor Agent CLI
 ```
 
-You do not need to run `any-ai-cli serve` first.
+You do not need to run `many-ai-cli serve` first.
 
 ### Option B: `wrap` subcommand (for debugging)
 
 ```bash
-any-ai-cli wrap claude
-any-ai-cli wrap codex
-any-ai-cli wrap copilot
-any-ai-cli wrap cursor-agent
+many-ai-cli wrap claude
+many-ai-cli wrap codex
+many-ai-cli wrap copilot
+many-ai-cli wrap cursor-agent
 ```
 
 Functionally identical to Option A; useful when you want to be explicit about the wrapper layer.
 
-### Option C: transparent mode (`ANY_AI_CLI_AUTO`)
+### Option C: transparent mode (`MANY_AI_CLI_AUTO`)
 
 Initialize the shell once, then your normal `claude` / `codex` / `copilot` / `cursor-agent` commands transparently go through the wrapper.
 
-> `any-ai-cli shell-init` emits **POSIX shell (bash / zsh) only** function definitions. There is no PowerShell snippet — see below for a manual alternative.
+> `many-ai-cli shell-init` emits **POSIX shell (bash / zsh) only** function definitions. There is no PowerShell snippet — see below for a manual alternative.
 
 ```bash
 # Run once per shell startup (bash / zsh)
-eval "$(any-ai-cli shell-init)"
+eval "$(many-ai-cli shell-init)"
 
 # Turn on per-session — only the shells where you opt in are wrapped
-export ANY_AI_CLI_AUTO=1
+export MANY_AI_CLI_AUTO=1
 claude    # → goes through the wrapper, auto-starts Hub if needed
 codex     # → same
 copilot   # → same
 cursor-agent # → same
 ```
 
-Without `ANY_AI_CLI_AUTO=1`, `claude` / `codex` / `copilot` / `cursor-agent` behave exactly as the original commands. No global `.bashrc` modification.
+Without `MANY_AI_CLI_AUTO=1`, `claude` / `codex` / `copilot` / `cursor-agent` behave exactly as the original commands. No global `.bashrc` modification.
 
-GitHub Copilot support only wraps the official installed CLI in a PTY. `any-ai-cli` does not read, store, or proxy GitHub OAuth tokens, PATs, or Copilot credentials.
+GitHub Copilot support only wraps the official installed CLI in a PTY. `many-ai-cli` does not read, store, or proxy GitHub OAuth tokens, PATs, or Copilot credentials.
 
-Cursor Agent support only wraps the official installed `cursor-agent` CLI in a PTY (it assumes you are already signed in). `any-ai-cli` does not read, store, or proxy Cursor session tokens or credentials.
+Cursor Agent support only wraps the official installed `cursor-agent` CLI in a PTY (it assumes you are already signed in). `many-ai-cli` does not read, store, or proxy Cursor session tokens or credentials.
 
 #### OS-specific automation examples
 
@@ -650,34 +665,34 @@ Cursor Agent support only wraps the official installed `cursor-agent` CLI in a P
 Add the following to your `$PROFILE` (since `shell-init` does not support PowerShell, the functions are defined directly):
 
 ```powershell
-if ($env:ANY_AI_CLI_AUTO -eq '1') {
-    function claude { any-ai-cli claude @args }
-    function codex  { any-ai-cli codex  @args }
-    function copilot { any-ai-cli copilot @args }
-    function cursor-agent { any-ai-cli cursor-agent @args }
+if ($env:MANY_AI_CLI_AUTO -eq '1') {
+    function claude { many-ai-cli claude @args }
+    function codex  { many-ai-cli codex  @args }
+    function copilot { many-ai-cli copilot @args }
+    function cursor-agent { many-ai-cli cursor-agent @args }
 }
 ```
 
-Set `ANY_AI_CLI_AUTO=1` on a specific Windows Terminal profile to enable transparent mode only in that tab:
+Set `MANY_AI_CLI_AUTO=1` on a specific Windows Terminal profile to enable transparent mode only in that tab:
 
 ```jsonc
 {
   "name": "AI Watch",
   "commandline": "pwsh.exe -NoExit",
-  "environment": { "ANY_AI_CLI_AUTO": "1" }
+  "environment": { "MANY_AI_CLI_AUTO": "1" }
 }
 ```
 
 **iTerm2 (macOS)**
 
-- Profiles → Environment → Variables: `ANY_AI_CLI_AUTO=1`
-- Profiles → General → Send text at start: `eval "$(any-ai-cli shell-init)"`
+- Profiles → Environment → Variables: `MANY_AI_CLI_AUTO=1`
+- Profiles → General → Send text at start: `eval "$(many-ai-cli shell-init)"`
 
 **tmux (all OSes)**
 
 ```bash
 # ~/.tmux.conf
-set-option -g default-command "ANY_AI_CLI_AUTO=1 bash -c 'eval \"$(any-ai-cli shell-init)\"; exec bash'"
+set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli shell-init)\"; exec bash'"
 ```
 
 ---
@@ -705,10 +720,10 @@ set-option -g default-command "ANY_AI_CLI_AUTO=1 bash -c 'eval \"$(any-ai-cli sh
 Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 
 ```
-┌─ ANY-AI-CLI  [1][0][6] │ ● Claude:2  ● Codex:5         [⏻] [Settings] ─┐
+┌─ MANY-AI-CLI  [1][0][6] │ ● Claude:2  ● Codex:5         [⏻] [Settings] ─┐
 ├──────────────────────────┬──────────────────────────────────────────────┤
-│ [+ New Session]          │ ● Codex  cwd: C:\dev\any-ai-cli  [↑ to top] │
-│ 📁 any-ai-cli  [1][0][6] │ Terminal output — Windows PowerShell         │
+│ [+ New Session]          │ ● Codex  cwd: C:\dev\many-ai-cli  [↑ to top] │
+│ 📁 many-ai-cli  [1][0][6] │ Terminal output — Windows PowerShell         │
 │ ─────────────────────── │                                              │
 │ ★ #7 ● Codex  Running × │   (xterm.js terminal output)                │
 │    Last: 00:11:57       │                                              │
@@ -768,7 +783,7 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 A single always-on line at the bottom of the screen shows the status of one active session (toggle visibility from the settings panel). Segments are laid out left to right; any segment whose data is unavailable is hidden automatically.
 
 ```
-#6 │ ●Standby │ Claude Opus 4.8 │ "got it…" │ 📁 any-ai-cli ⎇ develop │ tok ↑63.7k ↓1.1k │ ⛁ 100% │ $0.8134 · today $12.3460 │ ~$5.4/h │ ⏱ 8m 58s │ 🟢 │ ▶1 ⏸6
+#6 │ ●Standby │ Claude Opus 4.8 │ "got it…" │ 📁 many-ai-cli ⎇ develop │ tok ↑63.7k ↓1.1k │ ⛁ 100% │ $0.8134 · today $12.3460 │ ~$5.4/h │ ⏱ 8m 58s │ 🟢 │ ▶1 ⏸6
 ```
 
 - **#N** — session number
@@ -821,7 +836,7 @@ You can dictate text into the Hub UI input box.
 5. Review the input box and press `Enter` to send
 
 > **Browser**: Chrome / Edge (Web Speech API)
-> **Whisper (local)**: a WAV recorded in the browser is sent through the Hub to a Whisper server. On a Windows x64 Hub, Settings → Voice can install and run a whisper.cpp server and model under `~/.any-ai-cli/whisper/`. On other platforms, start a Whisper-compatible server yourself and set `voice.whisper.server_url`.
+> **Whisper (local)**: a WAV recorded in the browser is sent through the Hub to a Whisper server. On a Windows x64 Hub, Settings → Voice can install and run a whisper.cpp server and model under `~/.many-ai-cli/whisper/`. On other platforms, start a Whisper-compatible server yourself and set `voice.whisper.server_url`.
 > Microphone permission is required on first use.
 
 > ⚠️ **Privacy note**: In Browser mode, recorded audio is sent to the browser vendor's speech-recognition servers (Google / Microsoft). Whisper mode stays local only when `voice.whisper.server_url` points to a local server such as `http://127.0.0.1:...` / `http://localhost:...`; if you configure an external API URL, audio is sent to that external service. The managed installer downloads whisper.cpp from GitHub Releases and the model from Hugging Face. See "Security / Privacy → Outbound network traffic" and [Whisper setup](docs/manual_whisper.md).
@@ -858,7 +873,7 @@ If Browser recognition stops responding (button press has no effect, or the micr
 
 Use **Settings → Voice → Diagnose** to identify the problem and copy a diagnostic log.
 
-For Whisper, `Whisper server is not installed` / `Whisper server is not configured` / `cannot connect` means either run **Settings → Voice → Install** on a Windows x64 Hub or configure `voice.whisper.server_url` to a manually started local server. The managed server log is written to `~/.any-ai-cli/whisper/whisper-server.log`.
+For Whisper, `Whisper server is not installed` / `Whisper server is not configured` / `cannot connect` means either run **Settings → Voice → Install** on a Windows x64 Hub or configure `voice.whisper.server_url` to a manually started local server. The managed server log is written to `~/.many-ai-cli/whisper/whisper-server.log`.
 
 ---
 
@@ -868,15 +883,15 @@ The config file is auto-created on first run.
 
 | OS | Path |
 |---|---|
-| Windows | `%USERPROFILE%\.any-ai-cli\config.yaml` |
-| macOS / Linux | `~/.any-ai-cli/config.yaml` |
+| Windows | `%USERPROFILE%\.many-ai-cli\config.yaml` |
+| macOS / Linux | `~/.many-ai-cli/config.yaml` |
 
 ```yaml
 hub:
   port: 47777               # default port (auto-probes 47778, 47779... on collision)
   open_browser: false       # true = open the browser automatically on serve
   auto_shutdown: true       # stop the Hub once all wrappers exit
-  log_dir: ""               # empty = ~/.any-ai-cli/logs
+  log_dir: ""               # empty = ~/.many-ai-cli/logs
   idle_timeout_min: 60      # minutes before idle sessions are auto-disconnected (0 = disabled)
   wrapper_reconnect_grace_sec: 3600  # how long wrapped sessions wait for a crashed/restarted Hub (0–86400)
 
@@ -910,8 +925,8 @@ Settings are split into three categories:
 | Category | Examples | Storage |
 |---|---|---|
 | **D1: UI display state** (per-device is natural) | theme, font size, language, sidebar width | Browser **localStorage** |
-| **D2: User feature settings** (shared across devices / ports) | voice, trigger, notification sound, approval auto-switch, quick commands, usage links, favorites, session order, spawn defaults | `~/.any-ai-cli/config.yaml` under `user_prefs:`, read/written via `GET/PUT /api/user-prefs` |
-| **D3: Server operation settings** | hub port, log config, approval enable/disable, slash command sources, approval pattern sources, token | `~/.any-ai-cli/config.yaml` (direct edit or dedicated Settings UI) |
+| **D2: User feature settings** (shared across devices / ports) | voice, trigger, notification sound, approval auto-switch, quick commands, usage links, favorites, session order, spawn defaults | `~/.many-ai-cli/config.yaml` under `user_prefs:`, read/written via `GET/PUT /api/user-prefs` |
+| **D3: Server operation settings** | hub port, log config, approval enable/disable, slash command sources, approval pattern sources, token | `~/.many-ai-cli/config.yaml` (direct edit or dedicated Settings UI) |
 
 `user_prefs:` (D2) survives port changes (e.g. the WSL launcher shifting from 47777 to 47877) because it is stored server-side rather than in per-origin localStorage.
 
@@ -921,7 +936,7 @@ On first load the browser mirrors D2 values from the server. Subsequent changes 
 
 Approval detection patterns have an `official` / `custom` profile per provider. `official` is fetched and cached at startup from `resources/approval-patterns/{claude,codex,copilot,cursor-agent,common}.md` on GitHub; `custom` is for your own edits.
 
-Custom notification sounds are stored as a binary file at `~/.any-ai-cli/notify_sound_custom.bin`, with the MIME type recorded in `user_prefs.notify_sound.custom_mime`.
+Custom notification sounds are stored as a binary file at `~/.many-ai-cli/notify_sound_custom.bin`, with the MIME type recorded in `user_prefs.notify_sound.custom_mime`.
 
 ---
 
@@ -931,13 +946,13 @@ You can send image files from the Hub UI to a wrapped session.
 
 ### Steps
 
-1. Start `any-ai-cli serve`
+1. Start `many-ai-cli serve`
 2. Open the Hub UI in a browser
 3. With a session card selected, send an image in one of these ways:
    - **Paste**: `Ctrl+V`
    - **Drag & drop**: drop onto the area at the bottom of the sidebar
    - **Click to choose**: click the area to open a file dialog
-4. The Hub saves it under `~/.any-ai-cli/attachments/<session-id>/` and injects the path into the PTY
+4. The Hub saves it under `~/.many-ai-cli/attachments/<session-id>/` and injects the path into the PTY
    - Claude: `@<saved-path>` form
    - Codex: `<saved-path>` form
 
@@ -967,12 +982,12 @@ When the wrapper's WebSocket to the Hub drops, the wrapper **probes the Hub's HT
 
 > **Why**: this lets you recover from a Hub-side bug, panic, or manual restart without losing your AI session — as long as the Hub comes back within the grace window. For long-running autonomous tasks (multi-hour agent loops), bump `wrapper_reconnect_grace_sec` up to e.g. 12 h (`43200`). Cases where the user *meant* to stop (dismiss, "stop everything", browser closed and forgotten) still terminate sessions promptly.
 
-Configuration knobs in `~/.any-ai-cli/config.yaml`:
+Configuration knobs in `~/.many-ai-cli/config.yaml`:
 
 - `hub.wrapper_reconnect_grace_sec` — `0` disables reconnect (legacy "kill immediately" behavior). Range `0`–`86400` seconds (up to 24 h). Default `3600` (60 min). Also editable in Settings (in minutes). **Applies to new sessions only** — running sessions keep the value they were spawned with.
 - `hub.idle_timeout_min` — how long the Hub keeps wrappers alive when no UI is connected. `0` disables. Range `0`–`1440` minutes. Also editable in Settings.
 
-For a clean shutdown, prefer the `⏻` button in the Hub UI top-right or `any-ai-cli stop`; closing the console window now leaves wrappers waiting for the Hub to come back rather than killing them right away.
+For a clean shutdown, prefer the `⏻` button in the Hub UI top-right or `many-ai-cli stop`; closing the console window now leaves wrappers waiting for the Hub to come back rather than killing them right away.
 
 ---
 
@@ -980,7 +995,7 @@ For a clean shutdown, prefer the `⏻` button in the Hub UI top-right or `any-ai
 
 ```
 AI CLI (claude / codex / copilot / cursor-agent)
-    └─ any-ai-cli wrap  <── PTY wrapper
+    └─ many-ai-cli wrap  <── PTY wrapper
            │ WebSocket
     ┌──────▼──────┐
     │  Hub Server │  127.0.0.1:47777
@@ -1001,10 +1016,10 @@ The Hub server acts as a relay between PTY sessions and the browser UI. Each AI 
 
 | Type | Path | Content |
 |---|---|---|
-| Hub log | `~/.any-ai-cli/logs/hub.log` | Hub server runtime logs (rotated by lumberjack; configured via the `log:` section). Independent of session logging |
-| Session raw log | `~/.any-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.log` | Raw PTY stream for each wrapped session (includes ANSI sequences) |
-| Session history | `~/.any-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.jsonl` | Structured session events (`session_start`, `user_input`, `pty_output`, `attach`, `session_end`, `session_dismiss`) |
-| Clean transcript | `~/.any-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.txt` | Human-readable text (ANSI / spinners / control bytes stripped). Generated automatically on session end; any sessions missed due to a Hub crash are reconstructed at the next `serve` startup |
+| Hub log | `~/.many-ai-cli/logs/hub.log` | Hub server runtime logs (rotated by lumberjack; configured via the `log:` section). Independent of session logging |
+| Session raw log | `~/.many-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.log` | Raw PTY stream for each wrapped session (includes ANSI sequences) |
+| Session history | `~/.many-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.jsonl` | Structured session events (`session_start`, `user_input`, `pty_output`, `attach`, `session_end`, `session_dismiss`) |
+| Clean transcript | `~/.many-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.txt` | Human-readable text (ANSI / spinners / control bytes stripped). Generated automatically on session end; any sessions missed due to a Hub crash are reconstructed at the next `serve` startup |
 
 Each wrapped session produces **three files that share the same basename** (`.log` / `.jsonl` / `.txt`) on purpose — they are not duplicates but serve different access patterns:
 
@@ -1012,14 +1027,14 @@ Each wrapped session produces **three files that share the same basename** (`.lo
 - **`.jsonl`** is the structured event timeline (input, output, session boundaries, timestamps). The output bytes are stored escaped here, so it also looks noisy when read directly. Output and input pass through the heuristic token redactor before being written. It is the source of truth and the input for regenerating the transcript and for crash recovery.
 - **`.txt`** is the one meant for humans: control codes are stripped, and (because it is derived from `.jsonl`) known token patterns are masked. **Read this one** unless you specifically need the colored replay or the structured events.
 
-Session logs and the SQLite-backed Workbench history are local private storage (`0700` directories / `0600` files where applicable), but they can still contain prompts, file paths, and other user-provided text. Known token patterns are redacted before `.jsonl` / `.txt` content and user-input history are stored, and Workbench exports are redacted by default, but this is heuristic and the raw `.log` is not redacted at all — which is the main reason session logging is opt-in. Delete saved history from Settings or remove `~/.any-ai-cli/logs/` if you accidentally paste sensitive material.
+Session logs and the SQLite-backed Workbench history are local private storage (`0700` directories / `0600` files where applicable), but they can still contain prompts, file paths, and other user-provided text. Known token patterns are redacted before `.jsonl` / `.txt` content and user-input history are stored, and Workbench exports are redacted by default, but this is heuristic and the raw `.log` is not redacted at all — which is the main reason session logging is opt-in. Delete saved history from Settings or remove `~/.many-ai-cli/logs/` if you accidentally paste sensitive material.
 
 The Hub UI log-path button copies the log directory path to your clipboard.
 
 You can also regenerate a clean transcript manually:
 
 ```bash
-any-ai-cli log-clean ~/.any-ai-cli/logs/sessions/<session>.jsonl -o transcript.txt
+many-ai-cli log-clean ~/.many-ai-cli/logs/sessions/<session>.jsonl -o transcript.txt
 ```
 
 ---
@@ -1034,11 +1049,11 @@ The Hub inherits the `PATH` snapshot of the shell that launched it. If that shel
 
 **To recover:**
 
-1. `any-ai-cli stop`
+1. `many-ai-cli stop`
 2. Open an interactive PowerShell where `$env:PNPM_HOME` resolves correctly (verify with `$env:PATH -split ';' | Select-String pnpm`).
-3. From that shell, run `any-ai-cli claude`, `any-ai-cli codex`, `any-ai-cli copilot`, or `any-ai-cli cursor-agent` — the Hub will be re-spawned with the fresh `PATH` snapshot.
+3. From that shell, run `many-ai-cli claude`, `many-ai-cli codex`, `many-ai-cli copilot`, or `many-ai-cli cursor-agent` — the Hub will be re-spawned with the fresh `PATH` snapshot.
 
-Hub diagnostics for each spawn are written to `~/.any-ai-cli/logs/spawn/<provider>-<timestamp>.log` and include the resolved `PATH`, detected package managers, and an explicit hint when `executable file not found` is the underlying cause.
+Hub diagnostics for each spawn are written to `~/.many-ai-cli/logs/spawn/<provider>-<timestamp>.log` and include the resolved `PATH`, detected package managers, and an explicit hint when `executable file not found` is the underlying cause.
 
 > **v0.2.0 and later:** The Hub re-expands `%VAR%`-style entries in the inherited USER `Path` just before spawning a wrap process (reading `HKCU\Environment` and falling back to `%LOCALAPPDATA%\pnpm` when the directory exists), so this manual restart is normally no longer needed. The recovery procedure above remains as a fallback when the fix cannot resolve the variable.
 
@@ -1048,7 +1063,7 @@ While a session is running a long task that mostly works through background suba
 
 The Hub decides a session's liveness solely from **whether the terminal (PTY) produced output within the last few seconds** (if output is idle and no approval UI is visible, it is treated as `Standby`). During a workflow there are frequent quiet periods with no output to the main terminal, so the state momentarily falls back to `Standby`; it returns to `Running` automatically once output resumes. Unlike `Waiting` (an approval prompt), this state is not asking you for input — the terminal is simply quiet.
 
-> any-ai-cli does not inspect the internal state of the wrapped CLI (e.g. whether a workflow is in flight), so this is a known limitation of the output-based heuristic. Even when the card reads `Standby`, you can open the terminal itself to confirm the task is still running.
+> many-ai-cli does not inspect the internal state of the wrapped CLI (e.g. whether a workflow is in flight), so this is a known limitation of the output-based heuristic. Even when the card reads `Standby`, you can open the terminal itself to confirm the task is still running.
 
 ---
 
@@ -1057,26 +1072,26 @@ The Hub decides a session's liveness solely from **whether the terminal (PTY) pr
 - The Hub HTTP/WebSocket server binds to `127.0.0.1` only — external hosts cannot reach it directly
 - Random token in URL prevents unauthorized local access
 - Token-less access is available only as an explicit opt-in for loopback / trusted private paths such as SSH local forwarding or a per-user WireGuard/Docker gateway. Configure `hub.allow_loopback_without_token: true`, narrow `hub.trusted_networks` values such as `172.19.0.1/32`, and `hub.allowed_hosts` values such as `10.8.0.1` only when that private path is already protected. Never use it with public bind addresses, reverse proxies, shared shell hosts, or broad CIDRs such as `0.0.0.0/0`.
-- `any-ai-cli` itself sends no telemetry or usage data to any service
+- `many-ai-cli` itself sends no telemetry or usage data to any service
 
 ### Local instruction file writes
 
-When **Approval Buttons** is enabled, `any-ai-cli` writes only its marked approval-rules block to AI instruction files for active wrapped sessions: `~/.claude/CLAUDE.md` for Claude Code, `$CODEX_HOME/AGENTS.md` or `~/.codex/AGENTS.md` for Codex, and the project instruction root `AGENTS.md` for GitHub Copilot and Cursor Agent. The block is idempotent and is removed when the last active wrapped session using that file ends, when Approval Buttons is disabled, or when the Hub stops.
+When **Approval Buttons** is enabled, `many-ai-cli` writes only its marked approval-rules block to AI instruction files for active wrapped sessions: `~/.claude/CLAUDE.md` for Claude Code, `$CODEX_HOME/AGENTS.md` or `~/.codex/AGENTS.md` for Codex, and the project instruction root `AGENTS.md` for GitHub Copilot and Cursor Agent. The block is idempotent and is removed when the last active wrapped session using that file ends, when Approval Buttons is disabled, or when the Hub stops.
 
 ### Outbound network traffic
 
-`any-ai-cli` is local-first, but the following outbound HTTPS requests can occur and you should be aware of them:
+`many-ai-cli` is local-first, but the following outbound HTTPS requests can occur and you should be aware of them:
 
-- **Slash command list (Hub itself)** — When the slash command picker is opened, the Hub fetches a markdown file from `https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent}.md` and caches it for 24 hours. The source URL can be changed (or pointed to a local file path) in **Settings → Slash command sources**.
-- **Approval pattern list (Hub itself)** — On Hub startup, the official approval detection patterns can be fetched from `https://raw.githubusercontent.com/ishizakahiroshi/any-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,common}.md` and cached for 24 hours. The source URLs can be overridden in config.
-- **Web Push notifications (Hub itself, opt-in only)** — When Push notifications are enabled, the Hub sends encrypted Web Push requests to the browser vendor's push service over HTTPS. Payloads include the session ID/name, provider, and a short approval-question/context excerpt; they do **not** include the Hub URL token. VAPID keys and subscriptions are stored locally in `~/.any-ai-cli/push_store.json`. Notifications can be delivered while an SSH tunnel is down, but opening the Hub from the notification still requires the tunnel and Hub to be reachable.
+- **Slash command list (Hub itself)** — When the slash command picker is opened, the Hub fetches a markdown file from `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent}.md` and caches it for 24 hours. The source URL can be changed (or pointed to a local file path) in **Settings → Slash command sources**.
+- **Approval pattern list (Hub itself)** — On Hub startup, the official approval detection patterns can be fetched from `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,common}.md` and cached for 24 hours. The source URLs can be overridden in config.
+- **Web Push notifications (Hub itself, opt-in only)** — When Push notifications are enabled, the Hub sends encrypted Web Push requests to the browser vendor's push service over HTTPS. Payloads include the session ID/name, provider, and a short approval-question/context excerpt; they do **not** include the Hub URL token. VAPID keys and subscriptions are stored locally in `~/.many-ai-cli/push_store.json`. Notifications can be delivered while an SSH tunnel is down, but opening the Hub from the notification still requires the tunnel and Hub to be reachable.
 - **Voice input (only while in use)** — Browser mode uses the Web Speech API; in Chrome / Edge, **microphone audio is sent to the browser vendor's speech-recognition servers (Google / Microsoft)**. Whisper mode sends audio to the Hub and then to the configured Whisper server. Keep `voice.whisper.server_url` on `127.0.0.1` / `localhost` for local-only processing; external API URLs would send audio to that external service. See also the privacy note in the voice input section.
-- **Managed Whisper install (Windows x64 Hub, opt-in only)** — Clicking **Settings → Voice → Install** downloads a whisper.cpp Windows x64 release archive from GitHub Releases and the selected ggml model from Hugging Face into `~/.any-ai-cli/whisper/`. The release archive is SHA-256 verified before extraction; model entries without a published hash are downloaded over HTTPS and shown as hash-unverified in the UI.
-- **Wrapped CLI traffic (the CLIs themselves)** — The CLIs you wrap (Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI) talk directly to their respective vendor APIs (Anthropic, OpenAI, GitHub, Cursor) over HTTPS. `any-ai-cli` only relays PTY I/O via local WebSocket; it does not intercept, log, or proxy these API requests. Whatever network behavior the underlying CLI has applies as-is.
+- **Managed Whisper install (Windows x64 Hub, opt-in only)** — Clicking **Settings → Voice → Install** downloads a whisper.cpp Windows x64 release archive from GitHub Releases and the selected ggml model from Hugging Face into `~/.many-ai-cli/whisper/`. The release archive is SHA-256 verified before extraction; model entries without a published hash are downloaded over HTTPS and shown as hash-unverified in the UI.
+- **Wrapped CLI traffic (the CLIs themselves)** — The CLIs you wrap (Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI) talk directly to their respective vendor APIs (Anthropic, OpenAI, GitHub, Cursor) over HTTPS. `many-ai-cli` only relays PTY I/O via local WebSocket; it does not intercept, log, or proxy these API requests. Whatever network behavior the underlying CLI has applies as-is.
 
 ### ⚠️ Data retention by wrapped CLIs
 
-`any-ai-cli` does not collect or transmit your data, but **the CLIs it wraps do** — and each vendor's data-handling rules differ. Because the Hub only relays PTY I/O, the wrapped CLI's policy applies to you **as-is**.
+`many-ai-cli` does not collect or transmit your data, but **the CLIs it wraps do** — and each vendor's data-handling rules differ. Because the Hub only relays PTY I/O, the wrapped CLI's policy applies to you **as-is**.
 
 The table below summarizes each vendor's stance as of 2026. Always verify the current terms before use.
 
@@ -1089,14 +1104,14 @@ The table below summarizes each vendor's stance as of 2026. Always verify the cu
 
 ### ⚠️ Terms-of-service change risk
 
-Wrapped-CLI vendors may change their terms — including restricting or prohibiting third-party wrapper / automation access — at any time. If that happens, using the CLI through `any-ai-cli` could become a terms violation.
+Wrapped-CLI vendors may change their terms — including restricting or prohibiting third-party wrapper / automation access — at any time. If that happens, using the CLI through `many-ai-cli` could become a terms violation.
 
-- Recent precedent: Google began enforcing a ToS clause in 2026 that forbids accessing Gemini Code Assist through third-party wrappers, resulting in `403 ToS` account bans for tools like OpenClaw / OpenCode / Antigravity. For this reason, **Gemini CLI is intentionally out of scope** for `any-ai-cli`.
+- Recent precedent: Google began enforcing a ToS clause in 2026 that forbids accessing Gemini Code Assist through third-party wrappers, resulting in `403 ToS` account bans for tools like OpenClaw / OpenCode / Antigravity. For this reason, **Gemini CLI is intentionally out of scope** for `many-ai-cli`.
 - The same risk applies to every CLI in the table above. **Support for any wrapped CLI may be discontinued without notice** if its vendor restricts third-party automation. It is your responsibility to review each CLI's current terms before use.
 
 ### ⚠️ Do not share one account among multiple users
 
-**Never share a single AI CLI account (its credentials) among multiple people** — for example by installing `any-ai-cli` on a server and pointing several users at one login. This clearly violates each vendor's terms of service.
+**Never share a single AI CLI account (its credentials) among multiple people** — for example by installing `many-ai-cli` on a server and pointing several users at one login. This clearly violates each vendor's terms of service.
 
 - **Claude Code (Anthropic)**: Under the Consumer Terms, accounts are for individual use; sharing or transferring credentials (login / OAuth tokens) is prohibited. Rate limits are designed around individual usage, so multi-user access can be detected as anomalous usage and lead to account suspension (no refund)
 - **Codex CLI (OpenAI)**: Sharing a ChatGPT account is likewise prohibited by OpenAI's terms
@@ -1108,11 +1123,11 @@ If multiple people need access, use one of the legitimate options instead:
 - Switch to **API-key billing** (e.g. the Anthropic API) under an organizational agreement
 - Use an organizational plan such as **Claude for Work (Team / Enterprise)** with a seat per member
 
-`any-ai-cli` itself has no multi-user support either (see the next section, "Localhost-only by design").
+`many-ai-cli` itself has no multi-user support either (see the next section, "Localhost-only by design").
 
 ### ⚠️ Important: Localhost-only by design
 
-`any-ai-cli` is designed to be reached by your browser as **localhost**. Remote use is supported only when an SSH local forward preserves that localhost-only model. Do **not**:
+`many-ai-cli` is designed to be reached by your browser as **localhost**. Remote use is supported only when an SSH local forward preserves that localhost-only model. Do **not**:
 
 - Expose a remote Hub directly from another host; use SSH local forwarding instead
 - Modify the bind address to anything other than `127.0.0.1` (e.g. `0.0.0.0`, LAN IP)
@@ -1123,7 +1138,7 @@ The Hub UI exposes APIs that perform host-level actions (e.g. `/api/open-dir` op
 
 ### Public exposure (unsupported — at your own risk)
 
-The only supported configuration is localhost reachability, as described above. `any-ai-cli` is distributed under the MIT License and does not technically prevent you from placing a reverse proxy in front of the Hub and exposing it publicly — but by choosing to do so, you agree to the following:
+The only supported configuration is localhost reachability, as described above. `many-ai-cli` is distributed under the MIT License and does not technically prevent you from placing a reverse proxy in front of the Hub and exposing it publicly — but by choosing to do so, you agree to the following:
 
 - **Public exposure is unsupported.** Questions, bug reports, and security consultations about exposed configurations will not be handled
 - **Reaching the Hub is equivalent to arbitrary command execution on that host.** Direct PTY input, auto-approving prompts, and spawning new sessions are all possible; a compromise is not a hijacked web UI — it is a hijacked host
@@ -1137,21 +1152,21 @@ The only supported configuration is localhost reachability, as described above. 
 Requires Go 1.25+.
 
 ```bash
-git clone https://github.com/ishizakahiroshi/any-ai-cli.git
-cd any-ai-cli
+git clone https://github.com/ishizakahiroshi/many-ai-cli.git
+cd many-ai-cli
 
 # Build for the current OS
-go build -o any-ai-cli.exe ./cmd/any-ai-cli   # Windows
-go build -o any-ai-cli ./cmd/any-ai-cli        # macOS / Linux
+go build -o many-ai-cli.exe ./cmd/many-ai-cli   # Windows
+go build -o many-ai-cli ./cmd/many-ai-cli        # macOS / Linux
 ```
 
 #### Cross-compilation
 
 ```bash
-GOOS=windows GOARCH=amd64 go build -o dist/any-ai-cli-windows-x64.exe          ./cmd/any-ai-cli
-GOOS=darwin  GOARCH=amd64 go build -o dist/any-ai-cli-macos-intel              ./cmd/any-ai-cli
-GOOS=darwin  GOARCH=arm64 go build -o dist/any-ai-cli-macos-apple-silicon      ./cmd/any-ai-cli
-GOOS=linux   GOARCH=amd64 go build -o dist/any-ai-cli-linux-x64                ./cmd/any-ai-cli
+GOOS=windows GOARCH=amd64 go build -o dist/many-ai-cli-windows-x64.exe          ./cmd/many-ai-cli
+GOOS=darwin  GOARCH=amd64 go build -o dist/many-ai-cli-macos-intel              ./cmd/many-ai-cli
+GOOS=darwin  GOARCH=arm64 go build -o dist/many-ai-cli-macos-apple-silicon      ./cmd/many-ai-cli
+GOOS=linux   GOARCH=amd64 go build -o dist/many-ai-cli-linux-x64                ./cmd/many-ai-cli
 ```
 
 ---
@@ -1162,8 +1177,8 @@ Docker is not required for VPS use. For a small team, normal SSH plus `tmux`, `s
 
 If you do not use Docker, pay attention to these points:
 
-- **Do not share one Linux user.** `~/.any-ai-cli/`, AI CLI credentials, logs, and caches will otherwise be mixed together.
-- **Separate working directories and ports per person.** Example: user A uses `/srv/any-ai-cli/work/a` + `47777`, user B uses `/srv/any-ai-cli/work/b` + `47778`.
+- **Do not share one Linux user.** `~/.many-ai-cli/`, AI CLI credentials, logs, and caches will otherwise be mixed together.
+- **Separate working directories and ports per person.** Example: user A uses `/srv/many-ai-cli/work/a` + `47777`, user B uses `/srv/many-ai-cli/work/b` + `47778`.
 - **Pin Python / Node / bun tooling per project.** Use `venv` / `uv`, `nvm` / `mise`, and project-local lockfiles to avoid version conflicts.
 - **Do not share one AI CLI account across users.** Each person must sign in with their own account; see "Do not share one account among multiple users" above.
 
@@ -1172,9 +1187,9 @@ Container assets live under [`deploy/docker/`](deploy/docker/) (one user = one c
 Every push to `main` / `develop` triggers GitHub Actions ([`docker-image.yml`](.github/workflows/docker-image.yml)) to build and publish a container image to GHCR — the server never builds anything itself:
 
 ```
-ghcr.io/ishizakahiroshi/any-ai-cli:latest      # follows main (normal operation)
-ghcr.io/ishizakahiroshi/any-ai-cli:develop     # follows develop (testing)
-ghcr.io/ishizakahiroshi/any-ai-cli:sha-<hash>  # per-commit tag (rollback)
+ghcr.io/ishizakahiroshi/many-ai-cli:latest      # follows main (normal operation)
+ghcr.io/ishizakahiroshi/many-ai-cli:develop     # follows develop (testing)
+ghcr.io/ishizakahiroshi/many-ai-cli:sha-<hash>  # per-commit tag (rollback)
 ```
 
 ### Always run the latest image
@@ -1183,7 +1198,7 @@ Place [`deploy/docker/aac-update.sh`](deploy/docker/aac-update.sh) next to your 
 
 ```cron
 # root crontab — daily at 04:30
-30 4 * * * /opt/any-ai-cli/aac-update.sh >> /var/log/aac-update.log 2>&1
+30 4 * * * /opt/many-ai-cli/aac-update.sh >> /var/log/aac-update.log 2>&1
 ```
 
 ### What an update restart does (and does not) reset
@@ -1193,10 +1208,10 @@ On days with no new image the cron is a complete no-op — nothing restarts. Whe
 | | Item | Why |
 |---|---|---|
 | ❌ Lost | Running AI sessions (claude / codex PTY processes) and their session cards in the Hub UI | processes die with the container |
-| ✅ Kept | Hub access token (`~/.any-ai-cli/config.yaml`) | the home volume persists it — **tunnel-mode launcher profiles keep working unchanged** |
+| ✅ Kept | Hub access token (`~/.many-ai-cli/config.yaml`) | the home volume persists it — **tunnel-mode launcher profiles keep working unchanged** |
 | ✅ Kept | AI CLI login state (Claude auth, etc.) | same (under home) |
 | ✅ Kept | Working repositories / files | bind-mounted work directory |
-| ✅ Kept | Session logs (`~/.any-ai-cli/logs/`) | same (under home) |
+| ✅ Kept | Session logs (`~/.many-ai-cli/logs/`) | same (under home) |
 | △ Recoverable | AI conversation history | provider CLIs keep history under home; resume with `--resume`-style options in a new session |
 
 Shutdown is graceful: `stop_grace_period: 40s` plus the entrypoint waiting up to 20 s for wrappers to exit.
@@ -1204,7 +1219,7 @@ Shutdown is graceful: `stop_grace_period: 40s` plus the entrypoint waiting up to
 Operational tips (especially for multi-user servers — the cron recreates **every** user's container at once):
 
 - **Pick the cron time wisely.** If users run long overnight AI tasks, 04:30 may cut them off — choose a window nobody works in, and announce it to all users.
-- **Freeze before important runs.** `touch /opt/any-ai-cli/HOLD` skips the update (for all users); `rm HOLD` resumes it.
+- **Freeze before important runs.** `touch /opt/many-ai-cli/HOLD` skips the update (for all users); `rm HOLD` resumes it.
 - **Tag choice controls frequency.** `AAC_TAG=develop` restarts on every develop push; `latest` only on releases to `main`.
 
 ### Development bypass
@@ -1220,9 +1235,9 @@ The image tag is selected by `AAC_TAG` in the compose project's `.env` file (def
 Local-build example (when you need to test changes without going through GitHub):
 
 ```bash
-cd /opt/any-ai-cli
+cd /opt/many-ai-cli
 touch HOLD                            # freeze the auto-update cron
-docker build -t ghcr.io/ishizakahiroshi/any-ai-cli:dev \
+docker build -t ghcr.io/ishizakahiroshi/many-ai-cli:dev \
   -f src/deploy/docker/Dockerfile src # src/ = a checkout of this repo
 # set AAC_TAG=dev in .env, then:
 docker compose up -d
@@ -1236,35 +1251,35 @@ docker compose up -d && rm HOLD
 
 ## Uninstall
 
-Since `any-ai-cli` is a single binary you download and run directly (no installer), uninstalling is done by running the binary with the `uninstall` subcommand from wherever you placed it.
+Since `many-ai-cli` is a single binary you download and run directly (no installer), uninstalling is done by running the binary with the `uninstall` subcommand from wherever you placed it.
 
-**Windows** — run from the folder containing `any-ai-cli.exe`:
+**Windows** — run from the folder containing `many-ai-cli.exe`:
 
 ```powershell
-.\any-ai-cli.exe uninstall          # removes settings and logs (~/.any-ai-cli/)
-.\any-ai-cli.exe uninstall --purge  # also removes the binary itself
+.\many-ai-cli.exe uninstall          # removes settings and logs (~/.many-ai-cli/)
+.\many-ai-cli.exe uninstall --purge  # also removes the binary itself
 ```
 
-**macOS / Linux / WSL** — run from the folder containing `any-ai-cli`:
+**macOS / Linux / WSL** — run from the folder containing `many-ai-cli`:
 
 ```bash
-./any-ai-cli uninstall          # removes settings and logs (~/.any-ai-cli/)
-./any-ai-cli uninstall --purge  # also removes the binary itself
+./many-ai-cli uninstall          # removes settings and logs (~/.many-ai-cli/)
+./many-ai-cli uninstall --purge  # also removes the binary itself
 ```
 
 You will be shown exactly what will be deleted and asked to confirm before anything is removed.
 
 | Option | What is removed |
 |---|---|
-| (none) | `~/.any-ai-cli/` (config, logs, attachments). The binary path is printed — delete it manually. |
+| (none) | `~/.many-ai-cli/` (config, logs, attachments). The binary path is printed — delete it manually. |
 | `--purge` | Everything above, plus the binary itself. |
 
 **Manual removal** — if you prefer to delete files by hand:
 
-1. Delete `~/.any-ai-cli/` (Windows: `%USERPROFILE%\.any-ai-cli\`)
-2. Delete the binary (`any-ai-cli.exe` / `any-ai-cli`)
+1. Delete `~/.many-ai-cli/` (Windows: `%USERPROFILE%\.many-ai-cli\`)
+2. Delete the binary (`many-ai-cli.exe` / `many-ai-cli`)
 
-> **Browser data is not cleared.** `uninstall` cannot reach your browser's storage. Most settings (theme, language, font size, favorites, quick commands, etc.) live server-side under `~/.any-ai-cli/` and are removed, but per-browser display state kept in `localStorage` (files-tree expansion, pane layout, scrollback size) remains. To clear it, open the tab where the Hub was running, press `F12`, and run `localStorage.clear()` in the console.
+> **Browser data is not cleared.** `uninstall` cannot reach your browser's storage. Most settings (theme, language, font size, favorites, quick commands, etc.) live server-side under `~/.many-ai-cli/` and are removed, but per-browser display state kept in `localStorage` (files-tree expansion, pane layout, scrollback size) remains. To clear it, open the tab where the Hub was running, press `F12`, and run `localStorage.clear()` in the console.
 
 ---
 
@@ -1278,7 +1293,7 @@ Third-party dependency notices are provided in [THIRD_PARTY_NOTICES.md](THIRD_PA
 
 ## Not Official / No Affiliation
 
-`any-ai-cli` is a third-party, community-maintained tool. It is **not affiliated with, endorsed by, or officially supported by Anthropic, OpenAI, GitHub, Cursor, or Ollama**. All trademarks — including "Claude", "Claude Code", "Codex", "ChatGPT", "GitHub Copilot", "Cursor", "Cursor Agent", "Ollama", and "Gemini" — are the property of their respective owners and are used here only for descriptive and interoperability purposes.
+`many-ai-cli` is a third-party, community-maintained tool. It is **not affiliated with, endorsed by, or officially supported by Anthropic, OpenAI, GitHub, Cursor, or Ollama**. All trademarks — including "Claude", "Claude Code", "Codex", "ChatGPT", "GitHub Copilot", "Cursor", "Cursor Agent", "Ollama", and "Gemini" — are the property of their respective owners and are used here only for descriptive and interoperability purposes.
 
 ---
 

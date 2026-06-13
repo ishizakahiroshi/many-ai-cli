@@ -1,0 +1,21 @@
+{
+  "name": "many-ai-cli-windows-x64",
+  "version": "0.3.0",
+  "description": "Windows x64 native binary for many-ai-cli. Installed automatically as an optional dependency of many-ai-cli.",
+  "homepage": "https://github.com/ishizakahiroshi/many-ai-cli",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ishizakahiroshi/many-ai-cli.git"
+  },
+  "license": "MIT",
+  "author": "Hiroshi Ishizaka <ishizakahiroshi@gmail.com>",
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin/many-ai-cli.exe"
+  ]
+}

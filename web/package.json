@@ -1,5 +1,5 @@
 {
-  "name": "any-ai-cli-web",
+  "name": "many-ai-cli-web",
   "private": true,
   "scripts": {
     "build": "node scripts/build.mjs",

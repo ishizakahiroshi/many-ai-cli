@@ -8,10 +8,10 @@
 set -eu
 
 HUB_PORT="${HUB_PORT:?HUB_PORT is required (per-user assigned port)}"
-CFG_DIR="$HOME/.any-ai-cli"
+CFG_DIR="$HOME/.many-ai-cli"
 CFG="$CFG_DIR/config.yaml"
 WRAPPER_TERM_GRACE_SECONDS=20
-WRAPPER_PATTERN='any-ai-cli (wrap|claude|codex|copilot|cursor-agent)( |$)'
+WRAPPER_PATTERN='many-ai-cli (wrap|claude|codex|copilot|cursor-agent)( |$)'
 SOCAT_LOOP_PID=""
 HUB_PID=""
 TERMINATING=0
@@ -113,12 +113,12 @@ EOF
 fi
 
 # docker exec の対話シェルで claude/codex が透過 wrap されるようにする（冪等追記）
-if [ -f "$HOME/.bashrc" ] && ! grep -q 'any-ai-cli shell-init' "$HOME/.bashrc"; then
+if [ -f "$HOME/.bashrc" ] && ! grep -q 'many-ai-cli shell-init' "$HOME/.bashrc"; then
   {
     echo ''
     echo '# any-ai-cli transparent wrap'
-    echo 'export ANY_AI_CLI_AUTO=1'
-    echo 'eval "$(any-ai-cli shell-init)"'
+    echo 'export MANY_AI_CLI_AUTO=1'
+    echo 'eval "$(many-ai-cli shell-init)"'
   } >> "$HOME/.bashrc"
 fi
 
@@ -154,9 +154,9 @@ while :; do
   # boot ごとに PID が再利用される（Hub が毎回同じ番号になる）ため、残骸があると
   # Hub の killStalePid が無関係なプロセスを kill しうる。docker restart は /tmp を
   # 保持するので、Hub 側の削除（異常終了時は残る）に頼らずここでも消す。
-  rm -f "${TMPDIR:-/tmp}/any-ai-cli.pid"
+  rm -f "${TMPDIR:-/tmp}/many-ai-cli.pid"
 
-  any-ai-cli serve --port "$HUB_PORT" &
+  many-ai-cli serve --port "$HUB_PORT" &
   HUB_PID=$!
   log "Hub started pid=$HUB_PID"
 

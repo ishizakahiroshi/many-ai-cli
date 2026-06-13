@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/config"
 )
 
 // setTempHome は HOME / USERPROFILE を一時ディレクトリへ向け、
@@ -57,7 +57,7 @@ func TestHubRuntimeReadMissing(t *testing.T) {
 func TestHubRuntimeReadCorrupt(t *testing.T) {
 	home := setTempHome(t)
 
-	dir := filepath.Join(home, ".any-ai-cli")
+	dir := filepath.Join(home, ".many-ai-cli")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}

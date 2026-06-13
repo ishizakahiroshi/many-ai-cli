@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ANY-AI-CLI Launcher</title>
+<title>MANY-AI-CLI Launcher</title>
 <!-- ランチャー UI サーバーは / と /api/* しか配信しないため、favicon は
      ヘッダーのブランド SVG と同一のものを data URI で埋め込む。 -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9IjEwNCIgZmlsbD0iIzExMTExMSIvPjxyZWN0IHg9Ijc4IiB5PSIxMTIiIHdpZHRoPSIzNTYiIGhlaWdodD0iMjc4IiByeD0iMzQiIGZpbGw9IiMxQTFBMUEiIHN0cm9rZT0iI0ZGRDYwMCIgc3Ryb2tlLXdpZHRoPSIxNiIvPjxjaXJjbGUgY3g9IjEzMiIgY3k9IjE1OCIgcj0iMTEiIGZpbGw9IiNGRkQ2MDAiLz48Y2lyY2xlIGN4PSIxNjYiIGN5PSIxNTgiIHI9IjExIiBmaWxsPSIjRkZENjAwIi8+PGNpcmNsZSBjeD0iMjAwIiBjeT0iMTU4IiByPSIxMSIgZmlsbD0iI0ZGRDYwMCIvPjxsaW5lIHgxPSI4OCIgeTE9IjE5NiIgeDI9IjQyNCIgeTI9IjE5NiIgc3Ryb2tlPSIjM0EzQTNBIiBzdHJva2Utd2lkdGg9IjYiLz48dGV4dCB4PSIyNTYiIHk9IjMxOCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkNvbnNvbGFzLCBNZW5sbywgTW9uYWNvLCBtb25vc3BhY2UiIGZvbnQtc2l6ZT0iMTE2IiBmb250LXdlaWdodD0iOTAwIiBmaWxsPSIjRkZGRkZGIiBsZXR0ZXItc3BhY2luZz0iLTYiPkNMSTwvdGV4dD48ZyBzdHJva2U9IiNGRkQ2MDAiIHN0cm9rZS13aWR0aD0iOSIgZmlsbD0ibm9uZSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj48Y2lyY2xlIGN4PSIxMzIiIGN5PSI0MjQiIHI9IjE2IiBmaWxsPSIjMTExMTExIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iNDI0IiByPSIxNiIgZmlsbD0iIzExMTExMSIvPjxjaXJjbGUgY3g9IjM4MCIgY3k9IjQyNCIgcj0iMTYiIGZpbGw9IiMxMTExMTEiLz48cGF0aCBkPSJNMTQ4IDQyNCBIMjQwIE0yNzIgNDI0IEgzNjQiLz48L2c+PC9zdmc+">
@@ -69,7 +69,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 </head>
 <body>
 <header class="launcher-header">
-  <h1 class="launcher-brand" aria-label="ANY-AI-CLI">
+  <h1 class="launcher-brand" aria-label="MANY-AI-CLI">
     <svg class="launcher-brand-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-hidden="true">
       <rect width="512" height="512" rx="104" fill="#111111"/>
       <rect x="78" y="112" width="356" height="278" rx="34" fill="#1A1A1A" stroke="#FFD600" stroke-width="16"/>
@@ -85,7 +85,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
         <path d="M148 424 H240 M272 424 H364"/>
       </g>
     </svg>
-    <span>ANY-AI-CLI</span>
+    <span>MANY-AI-CLI</span>
   </h1>
   <div class="lang-control">
     <label for="lang-select" data-i18n="language_label">Language</label>
@@ -137,7 +137,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
           <label for="f-distro" data-i18n="label_distro">Distro</label>
           <input id="f-distro" type="text" placeholder="e.g. Ubuntu (blank = default)" data-i18n-placeholder="ph_distro">
           <label for="f-wsl-binary" data-i18n="label_binary">Binary</label>
-          <input id="f-wsl-binary" type="text" placeholder="any-ai-cli (blank = default)" data-i18n-placeholder="ph_binary">
+          <input id="f-wsl-binary" type="text" placeholder="many-ai-cli (blank = default)" data-i18n-placeholder="ph_binary">
           <label for="f-wsl-cwd" data-i18n="label_cwd">Working directory</label>
           <input id="f-wsl-cwd" type="text" placeholder="e.g. ~/projects (blank = ~)" data-i18n-placeholder="ph_cwd">
           <label for="f-wsl-hubport" data-i18n="label_hub_port">Hub port</label>
@@ -168,7 +168,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
           <div id="sec-ssh-serve" style="grid-column:1/3">
             <div class="form-grid">
               <label for="f-ssh-binary" data-i18n="label_binary">Binary</label>
-              <input id="f-ssh-binary" type="text" placeholder="any-ai-cli (blank = default)" data-i18n-placeholder="ph_binary">
+              <input id="f-ssh-binary" type="text" placeholder="many-ai-cli (blank = default)" data-i18n-placeholder="ph_binary">
               <label for="f-ssh-cwd" data-i18n="label_cwd">Working directory</label>
               <input id="f-ssh-cwd" type="text" placeholder="e.g. ~/projects (blank = ~)" data-i18n-placeholder="ph_cwd">
             </div>
@@ -177,7 +177,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
           <div id="sec-ssh-tunnel" style="grid-column:1/3;display:none">
             <div class="form-grid">
               <label for="f-token-cmd" data-i18n="label_token_command_required">token_command *</label>
-              <input id="f-token-cmd" type="text" placeholder="e.g. cat ~/.any-ai-cli/config.yaml | grep token | awk '{print $2}'" data-i18n-placeholder="ph_token_command">
+              <input id="f-token-cmd" type="text" placeholder="e.g. cat ~/.many-ai-cli/config.yaml | grep token | awk '{print $2}'" data-i18n-placeholder="ph_token_command">
               <span class="hint" data-i18n="token_command_hint">Runs remotely over SSH and returns the token on stdout.</span>
             </div>
           </div>
@@ -214,7 +214,7 @@ const LANG_COOKIE_KEY = 'any_ai_cli_launcher_lang';
 const SUPPORTED_LANGS = ['en', 'ja'];
 const I18N = {
   en: {
-    doc_title: 'ANY-AI-CLI Launcher',
+    doc_title: 'MANY-AI-CLI Launcher',
     language_label: 'Language',
     connections_title: 'Connections',
     th_name: 'Name',
@@ -266,7 +266,7 @@ const I18N = {
     mode_tunnel: 'tunnel (forward to existing Hub)',
     ph_name: 'e.g. my-vps',
     ph_distro: 'e.g. Ubuntu (blank = default)',
-    ph_binary: 'any-ai-cli (blank = default)',
+    ph_binary: 'many-ai-cli (blank = default)',
     ph_cwd: 'e.g. ~/projects (blank = ~)',
     ph_hub_port_auto: '0 = auto-select',
     ph_host: 'e.g. myserver.example.com',
@@ -274,7 +274,7 @@ const I18N = {
     ph_ssh_port: '22 (blank = default)',
     ph_identity: 'e.g. ~/.ssh/id_ed25519 (blank = default)',
     ph_ssh_hub_port: 'serve = 0 (auto) / tunnel = required',
-    ph_token_command: "e.g. cat ~/.any-ai-cli/config.yaml | grep token | awk '{print $2}'",
+    ph_token_command: "e.g. cat ~/.many-ai-cli/config.yaml | grep token | awk '{print $2}'",
     token_command_hint: 'Runs remotely over SSH and returns the token on stdout.',
     unknown_error: 'unknown error',
     error_load_profiles: 'Failed to load profiles: {message}',
@@ -296,7 +296,7 @@ const I18N = {
     alert_save_failed: 'Save failed: {message}',
   },
   ja: {
-    doc_title: 'ANY-AI-CLI ランチャー',
+    doc_title: 'MANY-AI-CLI ランチャー',
     language_label: '言語',
     connections_title: '接続先一覧',
     th_name: '名前',
@@ -348,7 +348,7 @@ const I18N = {
     mode_tunnel: 'tunnel（既存 Hub にポート転送）',
     ph_name: '例: my-vps',
     ph_distro: '例: Ubuntu（空欄=既定）',
-    ph_binary: 'any-ai-cli（空欄=既定）',
+    ph_binary: 'many-ai-cli（空欄=既定）',
     ph_cwd: '例: ~/projects（空欄=~）',
     ph_hub_port_auto: '0=自動選択',
     ph_host: '例: myserver.example.com',
@@ -356,7 +356,7 @@ const I18N = {
     ph_ssh_port: '22（空欄=既定）',
     ph_identity: '例: ~/.ssh/id_ed25519（空欄=既定）',
     ph_ssh_hub_port: 'serve=0(自動) / tunnel=必須',
-    ph_token_command: "例: cat ~/.any-ai-cli/config.yaml | grep token | awk '{print $2}'",
+    ph_token_command: "例: cat ~/.many-ai-cli/config.yaml | grep token | awk '{print $2}'",
     token_command_hint: 'SSH 経由でリモート実行し、stdout に token を返すコマンド',
     unknown_error: '不明なエラー',
     error_load_profiles: 'プロファイルの読み込みに失敗しました: {message}',

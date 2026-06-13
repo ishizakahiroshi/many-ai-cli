@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"any-ai-cli/internal/proto"
+	"many-ai-cli/internal/proto"
 )
 
 func TestDetectNativeApprovalClaude(t *testing.T) {

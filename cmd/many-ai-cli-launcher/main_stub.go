@@ -8,6 +8,6 @@ import (
 )
 
 func main() {
-	fmt.Fprintln(os.Stderr, "any-ai-cli-launcher is only available on Windows")
+	fmt.Fprintln(os.Stderr, "many-ai-cli-launcher is only available on Windows")
 	os.Exit(1)
 }

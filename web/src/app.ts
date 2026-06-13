@@ -1322,7 +1322,7 @@ inputEl.addEventListener('blur', (e) => {
   }
 
   (function () {
-    const KEY = 'any-ai-cli.settings-section-state';
+    const KEY = 'many-ai-cli.settings-section-state';
     let state = {};
     try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (_) { state = {}; }
     document.querySelectorAll('.settings-section[data-section]').forEach((el) => {

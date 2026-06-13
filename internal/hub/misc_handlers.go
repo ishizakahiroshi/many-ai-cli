@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"any-ai-cli/internal/attach"
-	"any-ai-cli/internal/config"
+	"many-ai-cli/internal/attach"
+	"many-ai-cli/internal/config"
 )
 
 const (
@@ -76,7 +76,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleNetHint は launcher（SSH tunnel モード）から接続元情報を受け取り保持する。
-// tunnel モードでは既起動の Hub に ANY_AI_CLI_HOST_LABEL を注入できないため、
+// tunnel モードでは既起動の Hub に MANY_AI_CLI_HOST_LABEL を注入できないため、
 // トンネル確立後に launcher が POST し、/api/info のバッジ表示情報を補正する。
 func (s *Server) handleNetHint(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
@@ -109,7 +109,7 @@ func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	// パストラバーサル防止: avatar は固定ディレクトリ（~/.any-ai-cli/）配下のみ許可する。
+	// パストラバーサル防止: avatar は固定ディレクトリ（~/.many-ai-cli/）配下のみ許可する。
 	allowedDir, err := config.Dir()
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)

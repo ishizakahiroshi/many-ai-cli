@@ -1,4 +1,4 @@
-# any-ai-cli 開発ガイド
+# many-ai-cli 開発ガイド
 
 > 最終更新: 2026-06-07(日) 12:57:07 — 公開用AI指示を個人グローバル設定から分離
 
@@ -6,7 +6,7 @@
 
 ## プロジェクト概要
 
-**any-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。単一 Go バイナリ（Hub 常駐 + ラッパー機能）+ ブラウザ UI（xterm.js / TypeScript）。
+**many-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。単一 Go バイナリ（Hub 常駐 + ラッパー機能）+ ブラウザ UI（xterm.js / TypeScript）。
 
 > **Gemini CLI は wrap 対象外**（2026-05-06 決定 / 利用規約上の制約）。詳細は [docs/v0.2.0-any-ai-cli-design.md](docs/v0.2.0-any-ai-cli-design.md) 冒頭「スコープ更新ログ」参照。
 
@@ -20,8 +20,8 @@
 
 v0.2.0 までに以下がすべて実装済み：
 
-- `any-ai-cli serve` で Hub が起動する
-- `any-ai-cli claude` / `codex` / `copilot` / `cursor-agent` が Hub 未起動時に自動起動し接続する
+- `many-ai-cli serve` で Hub が起動する
+- `many-ai-cli claude` / `codex` / `copilot` / `cursor-agent` が Hub 未起動時に自動起動し接続する
 - Hub UI に xterm.js でPTY出力がリアルタイム表示される
 - xterm.js バッファスキャンで承認待ちを検出し action-bar を表示する
 - 承認マーカー指示を Claude / Codex / Copilot / Cursor Agent の instruction file へ冪等注入し、active session 参照が0になったファイルから削除する
@@ -35,16 +35,16 @@ v0.2.0 までに以下がすべて実装済み：
 
 | 項目 | 値 |
 |------|------|
-| プロダクト名 | `any-ai-cli` |
-| バイナリ名 | `any-ai-cli`（Windows: `any-ai-cli.exe`） |
+| プロダクト名 | `many-ai-cli` |
+| バイナリ名 | `many-ai-cli`（Windows: `many-ai-cli.exe`） |
 | サブコマンド | `serve` / `wrap <provider>` / `shell-init` / `stop` / `status` |
 | Hub URL | `http://127.0.0.1:47777/?token=<random>` |
-| 設定ファイル | `~/.any-ai-cli/config.yaml`（Win: `%USERPROFILE%\.any-ai-cli\config.yaml`） |
-| ログ | `~/.any-ai-cli/logs/sessions/<provider>_<日時>_<folder>_s<id>.log/.jsonl/.txt`（PTY生ログ + イベント履歴JSONL + クリーンテキスト） |
-| 透過化環境変数 | `ANY_AI_CLI_AUTO=1` |
+| 設定ファイル | `~/.many-ai-cli/config.yaml`（Win: `%USERPROFILE%\.many-ai-cli\config.yaml`） |
+| ログ | `~/.many-ai-cli/logs/sessions/<provider>_<日時>_<folder>_s<id>.log/.jsonl/.txt`（PTY生ログ + イベント履歴JSONL + クリーンテキスト） |
+| 透過化環境変数 | `MANY_AI_CLI_AUTO=1` |
 | Provider | `claude` / `codex`（`gemini` は対象外、上記スコープ更新参照） |
 
-> プロジェクトディレクトリは `c:\dev\any-ai-cli\`。md 内の参照は `any-ai-cli` に統一。
+> プロジェクトディレクトリは `c:\dev\many-ai-cli\`。md 内の参照は `many-ai-cli` に統一。
 
 ## 技術スタック
 
@@ -63,8 +63,8 @@ v0.2.0 までに以下がすべて実装済み：
 設計書 `docs/v0.2.0-any-ai-cli-design.md` を参照。
 
 ```
-any-ai-cli/
-├─ cmd/any-ai-cli/main.go    # 単一バイナリのエントリポイント
+many-ai-cli/
+├─ cmd/many-ai-cli/main.go    # 単一バイナリのエントリポイント
 ├─ internal/
 │  ├─ hub/        # HTTP+WS / セッション管理 / attach処理 / spawn
 │  ├─ wrapper/    # PTYラッパー / PTY実装（OS別）/ attach inject
@@ -83,21 +83,21 @@ any-ai-cli/
 - **OS固有コードは build tag で分離**（例: `pty_unix.go` / `pty_windows.go`）
 - **パス操作は `filepath.Join` / `os.UserHomeDir`**（`/` ハードコード禁止）
 - **改行・PTY 動作の差異**は `internal/wrapper/` で吸収し、上位層は OS 非依存に保つ
-- **設定・ログのデフォルトディレクトリ**は全 OS 共通の `~/.any-ai-cli/`（Windows でも `%USERPROFILE%\.any-ai-cli\` で同じ意味）
+- **設定・ログのデフォルトディレクトリ**は全 OS 共通の `~/.many-ai-cli/`（Windows でも `%USERPROFILE%\.many-ai-cli\` で同じ意味）
 
 ## ローカルサーバの設計上の制約
 
 - **バインドは `127.0.0.1` 固定**（外部公開しない）
 - **デフォルトポート 47777**（衝突時は 47778, 47779… と自動探索）
 - **ランダムトークンを起動時生成し URL に付与**（`?token=xxx`）
-- **外部公開しない**（`127.0.0.1` 固定）。`any-ai-cli` 自身はテレメトリを送信しないが、スラッシュコマンド一覧取得で GitHub へ HTTPS 通信する場合がある（README のセキュリティ節参照）
-- **`.bashrc` 等への永続書き込みなし**（透過化は環境変数 + `eval "$(any-ai-cli shell-init)"` のオプトイン方式のみ）
+- **外部公開しない**（`127.0.0.1` 固定）。`many-ai-cli` 自身はテレメトリを送信しないが、スラッシュコマンド一覧取得で GitHub へ HTTPS 通信する場合がある（README のセキュリティ節参照）
+- **`.bashrc` 等への永続書き込みなし**（透過化は環境変数 + `eval "$(many-ai-cli shell-init)"` のオプトイン方式のみ）
 
 ## 作業運用ルール（AI 共通）
 
 - **ビルド・実行・Hub 起動・ブラウザリロードは全てユーザーが行う**。AI からは提案しない・確認質問もしない。
   - 例外: ユーザーが明示的に「ビルドして」「`go build` 走らせて」等と指示した場合のみ。
-  - 対象コマンド: `go build` / `go run` / `make` / `any-ai-cli serve` / `any-ai-cli stop` / Hub プロセスの起動・終了・再起動・ブラウザリロード等。
+  - 対象コマンド: `go build` / `go run` / `make` / `many-ai-cli serve` / `many-ai-cli stop` / Hub プロセスの起動・終了・再起動・ブラウザリロード等。
   - 完了報告では「再ビルドしますか？」のような提案を出さず、コード変更の要約だけ伝える。
 - **ビルドコマンドは `make build` が基本**。`bun run build` 単体は使わない（ユーザーへの案内でも `make build` を示す）。`make build` が web ビルド（bun install + bun run build）〜 Windows/Linux バイナリ生成 〜 WSL 配備まで一括で行う。
   - ユーザーの「ビルドして」という指示は **`make build` の実行指示** を意味する。
@@ -126,4 +126,4 @@ any-ai-cli/
 | 設計書 v0.2.0（現行・正本） | [docs/v0.2.0-any-ai-cli-design.md](docs/v0.2.0-any-ai-cli-design.md) |
 | 設計書 v1（履歴） | [docs/local/archive/cli-popup-design-v1.md](docs/local/archive/cli-popup-design-v1.md) |
 | Codex 用補足 | [AGENTS.md](AGENTS.md)（ローカル補足があれば `AGENTS.local.md`） |
-| Gemini 用補足 | [GEMINI.md](GEMINI.md)（**any-ai-cli の wrap 対象外**。本リポジトリで Gemini CLI を開発補助に使う場合の手引きとして残置） |
+| Gemini 用補足 | [GEMINI.md](GEMINI.md)（**many-ai-cli の wrap 対象外**。本リポジトリで Gemini CLI を開発補助に使う場合の手引きとして残置） |

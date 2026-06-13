@@ -3,10 +3,10 @@
 #
 # build context はリポジトリルート。
 # 通常は GitHub Actions（.github/workflows/docker-image.yml）がビルドして
-# ghcr.io/ishizakahiroshi/any-ai-cli へ publish し、VPS は pull するだけ
+# ghcr.io/ishizakahiroshi/many-ai-cli へ publish し、VPS は pull するだけ
 # （users/<user>.yaml の image: 参照と aac-update.sh の cron が更新を担う）。
 # 開発中バイパス（VPS ローカルビルド）の例:
-#   docker build -t ghcr.io/ishizakahiroshi/any-ai-cli:dev \
+#   docker build -t ghcr.io/ishizakahiroshi/many-ai-cli:dev \
 #     -f src/deploy/docker/Dockerfile src
 #
 # 設計の前提（docs/local/archive/plan_docker-multiuser-isolation.md）:
@@ -32,7 +32,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=web-build /src/web/dist ./web/dist
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/any-ai-cli ./cmd/any-ai-cli
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/many-ai-cli ./cmd/many-ai-cli
 
 # --- whisper build stage: VPS 内 localhost 用の whisper-server を焼き込む ---
 # 公式 release に Linux server バイナリが無いため（plan D3）ソースからビルドする。
@@ -104,7 +104,7 @@ RUN set -eu; \
       *) echo "cursor-agent version mismatch: expected ${CURSOR_AGENT_VERSION}, got ${CURSOR_AGENT_ACTUAL}" >&2; exit 1 ;; \
     esac
 
-COPY --from=build /out/any-ai-cli /usr/local/bin/any-ai-cli
+COPY --from=build /out/many-ai-cli /usr/local/bin/many-ai-cli
 COPY deploy/docker/entrypoint.sh /usr/local/bin/aac-entrypoint.sh
 RUN chmod +x /usr/local/bin/aac-entrypoint.sh
 
@@ -113,7 +113,7 @@ RUN chmod +x /usr/local/bin/aac-entrypoint.sh
 # （internal/hub bakedWhisperServerPath / plan C3・D5）。GGML_OPENMP=OFF ビルドの
 # ため libgomp1 は不要。libstdc++6 は ubuntu:24.04 ベースに同梱済み。
 COPY --from=whisper-build /usr/local/bin/whisper-server /usr/local/bin/whisper-server
-ENV ANY_AI_CLI_WHISPER_SERVER=/usr/local/bin/whisper-server
+ENV MANY_AI_CLI_WHISPER_SERVER=/usr/local/bin/whisper-server
 
 # provider CLI の更新はイメージ再ビルドで行う（非 root 実行時の /usr/lib 書込を防ぐ）
 ENV DISABLE_AUTOUPDATER=1

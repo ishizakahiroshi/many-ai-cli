@@ -1,8 +1,8 @@
-# any-ai-cli ビルド・配布・デプロイ
+# many-ai-cli ビルド・配布・デプロイ
 
 > 最終更新: 2026-06-13(土) 14:00:52
 
-`any-ai-cli` は **Go 単一バイナリ + go:embed フロント** の構成。サーバーへのデプロイは無し（ユーザー PC にバイナリを置くだけ）。
+`many-ai-cli` は **Go 単一バイナリ + go:embed フロント** の構成。サーバーへのデプロイは無し（ユーザー PC にバイナリを置くだけ）。
 
 設計書: [../docs/v0.2.0-any-ai-cli-design.md §4・§17](../docs/v0.2.0-any-ai-cli-design.md)
 
@@ -33,16 +33,16 @@ CI / goreleaser では `bun install --frozen-lockfile` を使い lockfile との
 
 ```bash
 # Windows (x86_64)
-GOOS=windows GOARCH=amd64 go build -o dist/win/any-ai-cli.exe ./cmd/any-ai-cli
+GOOS=windows GOARCH=amd64 go build -o dist/win/many-ai-cli.exe ./cmd/many-ai-cli
 
 # macOS (Intel)
-GOOS=darwin GOARCH=amd64 go build -o dist/mac/any-ai-cli ./cmd/any-ai-cli
+GOOS=darwin GOARCH=amd64 go build -o dist/mac/many-ai-cli ./cmd/many-ai-cli
 
 # macOS (Apple Silicon)
-GOOS=darwin GOARCH=arm64 go build -o dist/mac-arm/any-ai-cli ./cmd/any-ai-cli
+GOOS=darwin GOARCH=arm64 go build -o dist/mac-arm/many-ai-cli ./cmd/many-ai-cli
 
 # Linux (x86_64)
-GOOS=linux GOARCH=amd64 go build -o dist/linux/any-ai-cli ./cmd/any-ai-cli
+GOOS=linux GOARCH=amd64 go build -o dist/linux/many-ai-cli ./cmd/many-ai-cli
 ```
 
 ### CGO の扱い
@@ -53,7 +53,7 @@ GOOS=linux GOARCH=amd64 go build -o dist/linux/any-ai-cli ./cmd/any-ai-cli
 
 ### Windows での開発フロー
 
-**ローカルビルドは原則 `make build` を使う**。`go build` を素で叩くと `go-winres` がスキップされて、`cmd/any-ai-cli/rsrc_windows_*.syso`（アプリアイコン等の Windows リソース）が古いまま `dist/any-ai-cli.exe` に embed される。
+**ローカルビルドは原則 `make build` を使う**。`go build` を素で叩くと `go-winres` がスキップされて、`cmd/many-ai-cli/rsrc_windows_*.syso`（アプリアイコン等の Windows リソース）が古いまま `dist/many-ai-cli.exe` に embed される。
 
 #### Makefile ターゲット一覧（v0.2.0 時点）
 
@@ -62,29 +62,29 @@ GOOS=linux GOARCH=amd64 go build -o dist/linux/any-ai-cli ./cmd/any-ai-cli
 | ターゲット | 出力物 / 動作 | 使う場面 |
 |---|---|---|
 | `make build` | 下 4 つ（windows + launcher + linux + deploy-wsl）を順に実行 | 通常はこれ 1 本。Windows.exe・統合ランチャー・Linux ELF を作って WSL 側へ自動転送まで完了する |
-| `make build-windows` | `dist/any-ai-cli.exe` | Windows 本体だけ作り直したいとき（go-winres → go build） |
-| `make build-launcher` | `dist/any-ai-cli-launcher.exe` | 統合ランチャー（`winres/winres-launcher.json` のアイコン付き）だけ作り直したいとき |
-| `make build-linux` | `dist/linux/any-ai-cli` | Linux ELF（`CGO_ENABLED=0 GOOS=linux GOARCH=amd64`）だけ作り直したいとき |
-| `make deploy-wsl` | `dist/linux/any-ai-cli` → WSL `~/.local/bin/any-ai-cli`（cp + chmod +x） | Linux バイナリだけ作り直した後、WSL に再転送だけしたいとき。中身は `scripts/deploy-wsl.ps1` |
-| `make run` | `build-windows` 後に `dist/any-ai-cli.exe serve` | ローカルで Hub をすぐ立ち上げたいとき |
+| `make build-windows` | `dist/many-ai-cli.exe` | Windows 本体だけ作り直したいとき（go-winres → go build） |
+| `make build-launcher` | `dist/many-ai-cli-launcher.exe` | 統合ランチャー（`winres/winres-launcher.json` のアイコン付き）だけ作り直したいとき |
+| `make build-linux` | `dist/linux/many-ai-cli` | Linux ELF（`CGO_ENABLED=0 GOOS=linux GOARCH=amd64`）だけ作り直したいとき |
+| `make deploy-wsl` | `dist/linux/many-ai-cli` → WSL `~/.local/bin/many-ai-cli`（cp + chmod +x） | Linux バイナリだけ作り直した後、WSL に再転送だけしたいとき。中身は `scripts/deploy-wsl.ps1` |
+| `make run` | `build-windows` 後に `dist/many-ai-cli.exe serve` | ローカルで Hub をすぐ立ち上げたいとき |
 | `make clean` | `dist/` 配下と `cmd/*/rsrc_windows_*.syso` を削除 | リソース埋め込みを作り直したいとき |
 
 ```bash
 # 通常はこれだけ
 make build
-# 出力: dist/any-ai-cli.exe / dist/any-ai-cli-launcher.exe / dist/linux/any-ai-cli
-# 加えて WSL ~/.local/bin/any-ai-cli が最新に差し替わる
+# 出力: dist/many-ai-cli.exe / dist/many-ai-cli-launcher.exe / dist/linux/many-ai-cli
+# 加えて WSL ~/.local/bin/many-ai-cli が最新に差し替わる
 ```
 
 #### `make deploy-wsl` の中身
 
 `scripts/deploy-wsl.ps1` が以下をやる：
 
-1. `dist/linux/any-ai-cli` を `/mnt/c/...` 形式に変換
+1. `dist/linux/many-ai-cli` を `/mnt/c/...` 形式に変換
 2. `wsl -d Ubuntu -- bash -c 'mkdir -p ~/.local/bin && cp ... && chmod +x ...'`
 3. `ls -la` と `--version` で反映を確認
 
-引数で上書き可能：`.\scripts\deploy-wsl.ps1 -Distro Ubuntu -Dest '~/.local/bin/any-ai-cli'`
+引数で上書き可能：`.\scripts\deploy-wsl.ps1 -Distro Ubuntu -Dest '~/.local/bin/many-ai-cli'`
 
 実行中の Hub プロセスがあっても上書き可（Linux は inode 差し替え）。**ただし新バイナリは Hub 再起動まで有効にならない**点に注意。
 
@@ -102,32 +102,34 @@ make build
 ### v0.1〜v0.3 の手動配布（暫定）
 
 手動でビルド成果物を共有：
-- Windows: `any-ai-cli.exe` を `%LOCALAPPDATA%\Programs\any-ai-cli\` に配置 → PATH 追加
-- macOS: `any-ai-cli` を `/usr/local/bin/` または `~/bin/` に配置
+- Windows: `many-ai-cli.exe` を `%LOCALAPPDATA%\Programs\many-ai-cli\` に配置 → PATH 追加
+- macOS: `many-ai-cli` を `/usr/local/bin/` または `~/bin/` に配置
 - Linux: 同上
 
 ### Windows 配布導線の原則
 
 Windows では、ブラウザで直接ダウンロードした unsigned exe / zip は Mark-of-the-Web 付きになりやすく、SmartScreen や Smart App Control の警告・ブロックに入りやすい。そのため、公開導線は次の優先順位で設計する。
 
-1. developer install の推奨導線は npm registry + `pnpm add -g any-ai-cli` にする
+1. developer install の推奨導線は npm registry + `pnpm add -g many-ai-cli` にする
 2. `winget` は Windows 標準 package manager 導線として扱う
 3. Scoop は CLI ユーザー向けの追加導線として扱う
 4. GitHub Releases zip は checksum / cosign / `unblock-windows.cmd` 付きの手動導線として維持する
 
 package manager は発見性・更新性・再現性を改善し、ブラウザダウンロード由来の MotW 問題を避けやすくする。ただし Authenticode コード署名の代替ではないため、Smart App Control の完全ブロックや AppLocker / WDAC / EDR 等の組織ポリシーは別途扱う。
 
-npm registry 導線は `npm` コマンド推奨ではない。pnpm / bun / yarn が取得する共有 registry として使い、README の主要コマンドは `pnpm add -g any-ai-cli` にする。`npm install -g any-ai-cli` は Node 標準 fallback として小さく扱う。
+npm registry 導線は `npm` コマンド推奨ではない。pnpm / bun / yarn が取得する共有 registry として使い、README の主要コマンドは `pnpm add -g many-ai-cli` にする。`npm install -g many-ai-cli` は Node 標準 fallback として小さく扱う。
 
 npm package を作る場合は platform 別 optional package に Go バイナリを同梱する方式を優先し、install 時に GitHub Releases から exe を後段ダウンロードする wrapper は避ける。
+
+> **実装済み（v0.3.0）**: `npm/many-ai-cli/`（root shim）+ `npm/many-ai-cli-<os>-<arch>/`（platform 別、バイナリは gitignore）。`scripts/sync-npm-version.mjs`（tag→version 同期）/ `scripts/stage-npm-binaries.mjs`（`dist/artifacts.json`→bin 配置）/ `scripts/smoke-npm.mjs`（pack 検証）。release.yml が GoReleaser 後に publish（`NPM_TOKEN` secret 必須・未設定ならスキップ）。詳細は `docs/manual_release.md` の「npm registry 配布」節。
 
 Hub は引き続き `127.0.0.1` 固定で bind し、外部公開用の Windows Firewall 例外を要求しない設計を維持する。
 
 ### v0.4+ の CI/CD 配布（予定）
 
 - GitHub Actions で OS 別バイナリビルド + リリースタグ自動生成
-- `goreleaser` または手書きワークフローで `dist/{win,mac,mac-arm,linux}/any-ai-cli` をリリース成果物として添付
-- 自動更新機能（`any-ai-cli update`）は MVP では作らない
+- `goreleaser` または手書きワークフローで `dist/{win,mac,mac-arm,linux}/many-ai-cli` をリリース成果物として添付
+- 自動更新機能（`many-ai-cli update`）は MVP では作らない
 
 ## go:embed の運用
 
@@ -139,9 +141,9 @@ Hub は引き続き `127.0.0.1` 固定で bind し、外部公開用の Windows 
 
 | 種別 | 全 OS 共通の表記 | 実体 |
 |---|---|---|
-| 設定 | `~/.any-ai-cli/config.yaml` | Win: `%USERPROFILE%\.any-ai-cli\config.yaml` |
-| ログ（JSONL） | `~/.any-ai-cli/logs/YYYYMMDD.jsonl` | 同上 |
-| PTY ログ | `~/.any-ai-cli/logs/sessions/<id>.log` | 同上 |
+| 設定 | `~/.many-ai-cli/config.yaml` | Win: `%USERPROFILE%\.many-ai-cli\config.yaml` |
+| ログ（JSONL） | `~/.many-ai-cli/logs/YYYYMMDD.jsonl` | 同上 |
+| PTY ログ | `~/.many-ai-cli/logs/sessions/<id>.log` | 同上 |
 
 `os.UserHomeDir()` を使い、`/` ハードコードを避けること。
 
@@ -151,8 +153,8 @@ Hub は引き続き `127.0.0.1` 固定で bind し、外部公開用の Windows 
 1. cd web && bun install && bun run build    # web/dist/ を生成
 2. cd .. && go build ./...     # 全パッケージのビルド確認
 3. go test ./...               # 単体テスト
-4. ./any-ai-cli serve          # Hub 起動
-5. （別ターミナルで）./any-ai-cli wrap claude    # ラッパー起動
+4. ./many-ai-cli serve          # Hub 起動
+5. （別ターミナルで）./many-ai-cli wrap claude    # ラッパー起動
 6. ブラウザで http://127.0.0.1:47777/?token=... を開いて動作確認
 ```
 
@@ -161,22 +163,22 @@ UI 確認は実機ブラウザで実施。Hub UI のレイアウトは設計書 
 ## サブコマンド一覧（実装時参照）
 
 ```
-any-ai-cli serve [--open] [--port N]
+many-ai-cli serve [--open] [--port N]
     Hub単体を起動
 
-any-ai-cli wrap <provider> [args...]
+many-ai-cli wrap <provider> [args...]
     ラッパーとしてCLIを起動
 
-any-ai-cli shell-init
+many-ai-cli shell-init
     シェル統合用のスクリプトを標準出力へ
-    eval "$(any-ai-cli shell-init)" で取り込む
+    eval "$(many-ai-cli shell-init)" で取り込む
 
-any-ai-cli stop
+many-ai-cli stop
     動作中のHubを停止
 
-any-ai-cli status
+many-ai-cli status
     Hubの状態確認・接続中セッション数
 
-any-ai-cli --version / -v
-any-ai-cli --help / -h
+many-ai-cli --version / -v
+many-ai-cli --help / -h
 ```

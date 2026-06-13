@@ -1,4 +1,4 @@
-// Package usagerelay は "any-ai-cli usage-relay" 隠しサブコマンドの実装。
+// Package usagerelay は "many-ai-cli usage-relay" 隠しサブコマンドの実装。
 //
 // Claude（statusLine）/ Codex（Stop フック）の両モードに対応し、
 // stdin の JSON から数値メタのみを抽出して Hub の POST /api/session-usage へ送信する。
@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-// Run は "any-ai-cli usage-relay" サブコマンドのエントリポイント。
+// Run は "many-ai-cli usage-relay" サブコマンドのエントリポイント。
 func Run(args []string) error {
 	fs := flag.NewFlagSet("usage-relay", flag.ContinueOnError)
 	provider := fs.String("provider", "", "provider: claude or codex")
