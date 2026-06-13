@@ -335,6 +335,7 @@
     const looseOpts = [];
     let cur = null;
     let lastOpt = null; // 続き行結合の対象（直近の選択肢）
+    let looseFreeInput = false; // 単一選択（looseOpts）に「N. User specifies」があったか
     const optionRe = /^(\d+)\.\s*(.+?)\s*$/;
     const headingRe = /^(\d+)\s+(.+?)\s*$/;
     for (const raw of lines) {
@@ -343,16 +344,13 @@
       const om = line.match(optionRe);
       if (om) {
         const opt = { num: parseInt(om[1], 10), label: om[2].trim(), isCurrent: false };
-        if (cur) {
-          // バッチ（複数質問）の選択肢のみ短ラベルを分離する。単一選択（looseOpts）は
-          // スコープ外（既存の見た目を変えない）なので分離しない。
-          const sl = splitShortLabel(opt.label);
-          opt.label = sl.label;
-          if (sl.shortLabel) (opt as any).shortLabel = sl.shortLabel;
-          cur.options.push(opt);
-        } else {
-          looseOpts.push(opt);
-        }
+        // バッチ・単一いずれも短ラベル表記 `[短ラベル] 本文` を分離する
+        //（単一質問もタブUIに統合され、短ラベル＝ボタン圧縮表示／本文＝詳細パネルに使うため）。
+        const sl = splitShortLabel(opt.label);
+        opt.label = sl.label;
+        if (sl.shortLabel) (opt as any).shortLabel = sl.shortLabel;
+        if (cur) cur.options.push(opt);
+        else looseOpts.push(opt);
         lastOpt = opt;
         continue;
       }
@@ -364,8 +362,14 @@
         continue;
       }
       // 質問末尾の「N. User specifies」は区切り。続き行として混入させない。
-      // バッチの質問内に出現したら、その質問は自由入力可（タブUIで N 肢を出す）。
-      if (userSpecifiesLineRe.test(line)) { if (cur) (cur as any)._freeInput = true; lastOpt = null; continue; }
+      // バッチの質問内に出現したらその質問を、単一選択の文脈なら looseOpts を自由入力可にする
+      //（タブUIで N 肢を出す）。
+      if (userSpecifiesLineRe.test(line)) {
+        if (cur) (cur as any)._freeInput = true;
+        else looseFreeInput = true;
+        lastOpt = null;
+        continue;
+      }
       // xterm がラベル/見出し途中で折り返した続き行（数字始まりでない）を元の要素へ結合する。
       // 直前に選択肢があればそのラベルへ、無ければ現在の見出しタイトルへ繋ぐ。
       if (lastOpt) lastOpt.label = (lastOpt.label + line).replace(/\s+/g, ' ').trim();
@@ -374,7 +378,12 @@
     const filledSections = sections.filter(s => s.options.length > 0);
     if (filledSections.length >= 2) return filledSections;
     if (filledSections.length === 1) return filledSections[0].options;
-    return looseOpts.length > 0 ? looseOpts : null;
+    if (looseOpts.length > 0) {
+      // 自由入力フラグは配列プロパティで持たせる（option 構造は変えず isBatchOptions=false を維持）。
+      if (looseFreeInput) (looseOpts as any)._freeInput = true;
+      return looseOpts;
+    }
+    return null;
   }
 
   function shortcutSendText(label) {

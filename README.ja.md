@@ -60,7 +60,7 @@ Terminal pane #1              Terminal pane #2
 - **サーバ側ユーザー設定**: 音声、通知音、お気に入り、セッション順、spawn 既定、アバター設定を `config.yaml` に保存
 - **UI からの新規セッション spawn**（`/api/spawn`）
 - **モデルピッカー + Ollama route 自動切替**: spawn フォームから Anthropic / OpenAI / Ollama Cloud / Ollama Local のモデルを選択でき、Hub が必要な `ANTHROPIC_*` / `OPENAI_*` 環境変数をセッションごとに自動注入（shell での事前設定不要）
-- **Windows 統合ランチャー**: `many-ai-cli-launcher.exe` で WSL 内やリモートサーバー（SSH）の Hub へ接続プロファイルから接続し、Windows ブラウザから操作
+- **統合ランチャー（Windows / Linux / macOS）**: `many-ai-cli-launcher` で接続プロファイルから Hub へ接続し既定ブラウザで操作。SSH `serve` / `tunnel` プロファイルは全 OS、WSL プロファイルは Windows で WSL 内に Hub を起動
 - **リモートサーバー / Docker 運用資材**: GHCR image、ユーザー別コンテナ、loopback 限定公開、自動更新スクリプトでサーバー運用
 - **クリーン transcript 生成**: 人間が読める `.txt` を自動生成し、`log-clean` で手動再生成も可能
 - **言語切替**（英語 / 日本語）
@@ -212,9 +212,11 @@ sha256sum -c SHA256SUMS.txt
 > なお Hub が落ちた場合でも、走行中の AI セッションはデフォルトで **60 分間 Hub の復帰を待つ**ようになっています（`config.yaml` で 0–86400 秒 = 最大 24 時間まで変更可、長時間タスクを走らせる場合は伸ばせます）。間に合わなければ自動で終了するので、Web UI 側のバグや再起動で AI 作業が即座に道連れにはなりません。詳細は「[シャットダウン・ゾンビセッション対策・Hub クラッシュ耐性](#シャットダウンゾンビセッション対策hub-クラッシュ耐性)」を参照してください。
 > Hub を意図的に停止するときは、Hub UI 右上の `⏻` ボタン、または別ターミナルで `many-ai-cli stop` を使ってください。
 
-### Windows 統合ランチャー
+### 統合ランチャー（Windows / Linux / macOS）
 
-`many-ai-cli-launcher.exe` は WSL とリモートサーバー（SSH）の両方を対象に接続プロファイルを管理できる統合ランチャーです。プロファイルは `~/.many-ai-cli/launcher-profiles.yaml` に保存されます。
+`many-ai-cli-launcher`（Windows では `many-ai-cli-launcher.exe`）は WSL とリモートサーバー（SSH）の両方を対象に接続プロファイルを管理できる統合ランチャーです。プロファイルは `~/.many-ai-cli/launcher-profiles.yaml` に保存されます。
+
+ランチャーバイナリは全 OS 向けに配布されます。`ssh` プロファイル（`serve` / `tunnel`）は Windows / Linux / macOS のいずれでも動作します。`wsl` プロファイルは Windows 専用で、他 OS では明示的にエラーを返します。ブラウザは Linux では `xdg-open`、macOS では `open` で開きます。
 
 #### 仕組み
 
@@ -222,8 +224,8 @@ sha256sum -c SHA256SUMS.txt
 
 | 種別 | 用途 |
 |---|---|
-| `wsl` | WSL 内で `many-ai-cli serve` を起動し、Windows ブラウザで開く |
-| `ssh` | VPS 等のリモートマシンへ SSH 経由で接続する |
+| `wsl` | WSL 内で `many-ai-cli serve` を起動し、Windows ブラウザで開く（Windows 専用） |
+| `ssh` | リモートサーバー（自宅サーバーや借りた Linux マシン等）へ SSH 経由で接続する（全 OS 対応） |
 
 `ssh` 種別にはさらに 2 つのモードがあります。
 
@@ -238,7 +240,7 @@ sha256sum -c SHA256SUMS.txt
 
 #### セットアップ
 
-`many-ai-cli-<version>-windows-x64.zip` を展開して `many-ai-cli-launcher.exe` を Windows の PATH が通った場所に置きます。
+ランチャーバイナリは各 OS のリリースアーカイブに本体バイナリと並んで同梱されています（deb/rpm/Homebrew パッケージにも含まれます）。Windows では `many-ai-cli-<version>-windows-x64.zip` を展開して `many-ai-cli-launcher.exe` を PATH の通った場所に置きます。Linux/macOS では各プラットフォームのアーカイブから `many-ai-cli-launcher` を取り出す（またはパッケージマネージャでインストールする）して PATH に置きます。
 
 `~/.many-ai-cli/launcher-profiles.yaml` を作成します。
 
@@ -252,18 +254,18 @@ profiles:
     hub_port: 0           # 0 = Windows 側衝突を避けて自動選択
 
   # リモートサーバープロファイル（serve モード）— SSH してリモートで many-ai-cli serve を起動
-  - name: my-vps
+  - name: my-remote
     type: ssh
     mode: serve
-    host: vps.example.com
+    host: remote.example.com
     user: your-user
     hub_port: 47777
 
   # リモートサーバープロファイル（tunnel モード）— Docker 常駐 Hub へポートフォワード
-  - name: vps-docker
+  - name: remote-docker
     type: ssh
     mode: tunnel
-    host: vps.example.com
+    host: remote.example.com
     user: your-user
     hub_port: 47801
     token_command: "docker exec many-ai-cli-user1 sh -c 'grep ^token ~/.many-ai-cli/config.yaml | cut -d\" \" -f2'"
@@ -362,7 +364,7 @@ many-ai-cli --version
 
 ```powershell
 many-ai-cli-launcher.exe                    # プロファイル 1 件なら即接続。複数なら選択画面を表示
-many-ai-cli-launcher.exe --profile my-vps  # 指定プロファイルで接続
+many-ai-cli-launcher.exe --profile my-remote  # 指定プロファイルで接続
 many-ai-cli-launcher.exe --last            # 前回使ったプロファイルで接続
 many-ai-cli-launcher.exe --ui             # 常に選択画面を表示
 ```
@@ -376,7 +378,7 @@ many-ai-cli-launcher.exe --ui             # 常に選択画面を表示
 - パスワード・鍵のパスフレーズは保存しません。鍵認証が必要です（`-o BatchMode=yes` で対話を禁止）
 - `token_command` で取得したトークンは現在のセッション中のみ使用し、`launcher-profiles.yaml` には書き込みません
 
-プロファイルの全フィールドと接続フローの詳細は [docs/v0.2.0-any-ai-cli-design.md — §11b](docs/v0.2.0-any-ai-cli-design.md) を参照してください。
+プロファイルの全フィールドと接続フローの詳細は [docs/v0.3.0-many-ai-cli-design.md — §13](docs/v0.3.0-many-ai-cli-design.md) を参照してください。
 
 #### Windows がランチャーをブロックする場合: ローカル `.exe` なしでリモートサーバーに接続
 
@@ -464,8 +466,8 @@ awk '/^token:/{print $2}' ~/.many-ai-cli/config.yaml
 `%USERPROFILE%\.ssh\config` を作成または編集します。
 
 ```sshconfig
-Host any-ai-vps
-  HostName vps.example.com
+Host remote-host
+  HostName remote.example.com
   User ubuntu
   Port 22
   IdentityFile C:\Users\you\.ssh\id_ed25519
@@ -475,7 +477,7 @@ Host any-ai-vps
 PowerShell から接続確認します。
 
 ```powershell
-ssh any-ai-vps
+ssh remote-host
 ```
 
 毎回パスワードを聞かれる場合は、先に SSH 鍵認証を設定してください。パスワード認証でもトンネル自体は張れますが、鍵認証の方が安定します。
@@ -489,7 +491,7 @@ ssh -N -T `
   -o ExitOnForwardFailure=yes `
   -o ServerAliveInterval=30 `
   -L 127.0.0.1:47777:127.0.0.1:47777 `
-  any-ai-vps
+  remote-host
 ```
 
 このウィンドウは開いたままにします。手元ブラウザとリモートサーバー上の Hub をつなぐ専用ケーブルだと思ってください。
@@ -508,7 +510,7 @@ http://127.0.0.1:47777/?token=<リモートサーバーで確認したtoken>
 
 ```batch
 @echo off
-set HOST=any-ai-vps
+set HOST=remote-host
 set PORT=47777
 
 for /f "tokens=2" %%T in ('ssh %HOST% "cat ~/.many-ai-cli/config.yaml" ^| findstr /b token:') do set TOKEN=%%T

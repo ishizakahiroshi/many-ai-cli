@@ -10,7 +10,7 @@
 #   2. 出力された SHA256 を internal/hub/whisper_manage.go の whisperBinaries の
 #      該当 os/arch エントリ（現在 TODO コメント）へ転記して有効化する
 #
-# 注意: Docker(VPS) 経路はこの資産を使わず、イメージにビルド同梱する
+# 注意: Docker(リモートサーバー) 経路はこの資産を使わず、イメージにビルド同梱する
 #       （deploy/docker/Dockerfile の whisper-build ステージ / D5-A）。
 name: whisper-binaries
 

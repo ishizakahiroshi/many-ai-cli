@@ -3,9 +3,9 @@
 #
 # build context はリポジトリルート。
 # 通常は GitHub Actions（.github/workflows/docker-image.yml）がビルドして
-# ghcr.io/ishizakahiroshi/many-ai-cli へ publish し、VPS は pull するだけ
+# ghcr.io/ishizakahiroshi/many-ai-cli へ publish し、リモートサーバーは pull するだけ
 # （users/<user>.yaml の image: 参照と aac-update.sh の cron が更新を担う）。
-# 開発中バイパス（VPS ローカルビルド）の例:
+# 開発中バイパス（リモートサーバーローカルビルド）の例:
 #   docker build -t ghcr.io/ishizakahiroshi/many-ai-cli:dev \
 #     -f src/deploy/docker/Dockerfile src
 #
@@ -34,7 +34,7 @@ COPY . .
 COPY --from=web-build /src/web/dist ./web/dist
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/many-ai-cli ./cmd/many-ai-cli
 
-# --- whisper build stage: VPS 内 localhost 用の whisper-server を焼き込む ---
+# --- whisper build stage: リモートサーバー内 localhost 用の whisper-server を焼き込む ---
 # 公式 release に Linux server バイナリが無いため（plan D3）ソースからビルドする。
 # GGML_OPENMP=OFF で libgomp 依存を断ち（内蔵 threadpool で並列維持）、
 # BUILD_SHARED_LIBS=OFF で共有ライブラリ同梱を不要にし、GGML_NATIVE=OFF で
@@ -108,7 +108,7 @@ COPY --from=build /out/many-ai-cli /usr/local/bin/many-ai-cli
 COPY deploy/docker/entrypoint.sh /usr/local/bin/aac-entrypoint.sh
 RUN chmod +x /usr/local/bin/aac-entrypoint.sh
 
-# VPS 内 localhost で動かす whisper-server を焼き込み、Hub に環境変数で知らせる。
+# リモートサーバー内 localhost で動かす whisper-server を焼き込み、Hub に環境変数で知らせる。
 # Hub はこのパスを見つけると DL 無しで managed 扱いにし、モデルだけ取得する
 # （internal/hub bakedWhisperServerPath / plan C3・D5）。GGML_OPENMP=OFF ビルドの
 # ため libgomp1 は不要。libstdc++6 は ubuntu:24.04 ベースに同梱済み。

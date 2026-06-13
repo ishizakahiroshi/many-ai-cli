@@ -42,7 +42,7 @@ func TestNetHint_OverridesInfo(t *testing.T) {
 	s := newTestServer()
 	s.cfg.Token = "tok"
 
-	if code := callNetHint(t, s, map[string]any{"ssh": true, "host_label": "203.0.113.10", "env_kind": "vps-tunnel"}); code != http.StatusOK {
+	if code := callNetHint(t, s, map[string]any{"ssh": true, "host_label": "203.0.113.10", "env_kind": "remote-tunnel"}); code != http.StatusOK {
 		t.Fatalf("/api/net-hint code = %d, want 200", code)
 	}
 
@@ -53,8 +53,8 @@ func TestNetHint_OverridesInfo(t *testing.T) {
 	if resp["host_ip"] != "203.0.113.10" {
 		t.Errorf("host_ip = %v, want %q", resp["host_ip"], "203.0.113.10")
 	}
-	if resp["env_kind"] != "vps-tunnel" {
-		t.Errorf("env_kind = %v, want vps-tunnel", resp["env_kind"])
+	if resp["env_kind"] != "remote-tunnel" {
+		t.Errorf("env_kind = %v, want remote-tunnel", resp["env_kind"])
 	}
 	if resp["env_host_label"] != "203.0.113.10" {
 		t.Errorf("env_host_label = %v, want %q", resp["env_host_label"], "203.0.113.10")

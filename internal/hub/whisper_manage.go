@@ -53,7 +53,7 @@ type whisperProcessJob uintptr
 
 // whisperBinaries は OS/arch → 入手定義。ここに在る OS/arch だけが
 // 「ダウンロード方式の managed install」をサポートする（whisperManagedSupported）。
-// Docker/VPS など実行ファイルを焼き込む構成では MANY_AI_CLI_WHISPER_SERVER で
+// Docker/リモートサーバー など実行ファイルを焼き込む構成では MANY_AI_CLI_WHISPER_SERVER で
 // 既設バイナリを指す（bakedWhisperServerPath）ため、ここへの登録は不要。
 //
 // TODO(C3/C4): Linux/macOS は公式 release に server バイナリが無いため、
@@ -84,7 +84,7 @@ var whisperBinaries = map[string]whisperBinaryEntry{
 }
 
 // whisperServerEnvVar は焼き込み済み whisper-server のフルパスを指す環境変数。
-// Docker(VPS) イメージが /usr/local/bin/whisper-server を焼き込み、この変数で
+// Docker(リモートサーバー) イメージが /usr/local/bin/whisper-server を焼き込み、この変数で
 // Hub に知らせる。設定されていればダウンロード無しで managed 扱いになる（C3/D5）。
 const whisperServerEnvVar = "MANY_AI_CLI_WHISPER_SERVER"
 

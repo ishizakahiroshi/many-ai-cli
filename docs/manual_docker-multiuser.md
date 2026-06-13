@@ -1,8 +1,8 @@
-# any-ai-cli Docker マルチユーザー運用 manual（admin VPS）
+# any-ai-cli Docker マルチユーザー運用 manual（admin リモートサーバー）
 
 > 最終更新: 2026-06-04(木) 22:44:40
 
-XServer VPS（サーバー名 `admin`）上で「ユーザー 1 人 = Docker コンテナ 1 つ」の分離方式で `any-ai-cli` を複数人運用するための手順書。設計の経緯・決定ログは [plan_docker-multiuser-isolation.md](plan_docker-multiuser-isolation.md) を参照。
+XServer リモートサーバー（サーバー名 `admin`）上で「ユーザー 1 人 = Docker コンテナ 1 つ」の分離方式で `any-ai-cli` を複数人運用するための手順書。設計の経緯・決定ログは [plan_docker-multiuser-isolation.md](plan_docker-multiuser-isolation.md) を参照。
 
 **接続情報の正本は `C:\dev\.ssh\serverpass.local.toml`（Git 管理外）。本書には認証情報を書かない。**
 
@@ -12,13 +12,13 @@ XServer VPS（サーバー名 `admin`）上で「ユーザー 1 人 = Docker コ
 メンバーの PC ブラウザ
   -> http://127.0.0.1:478NN/?token=<本人専用 token>
   -> SSH local forward（本人の OS アカウント + 公開鍵）
-  -> VPS host 127.0.0.1:478NN
+  -> リモートサーバー host 127.0.0.1:478NN
   -> (docker publish) コンテナ aac-<user> の :48000
   -> (socat 中継) コンテナ内 127.0.0.1:478NN = Hub
 ```
 
 - Hub はコンテナ内で **本人の割当ポート 478NN** で listen する（Hub の Host/Origin 検証がポート完全一致を要求するため、経路上のすべてのポート番号を 478NN に揃える。コンテナ内 socat の受け口 48000 だけは内部固定値）
-- host 側 publish は `127.0.0.1` 限定。VPS のグローバル IP には一切露出しない。外からの経路は SSH トンネルのみ
+- host 側 publish は `127.0.0.1` 限定。リモートサーバーのグローバル IP には一切露出しない。外からの経路は SSH トンネルのみ
 - token はコンテナ初回起動時に自動生成され、`aac-home-<user>` volume 内に永続化される
 
 ## サーバー側レイアウト
@@ -104,7 +104,7 @@ docker compose config --quiet && docker compose up -d aac-<user>
 
 ### 4. AI CLI 初回ログイン（本人のアカウントで）
 
-メンバー本人は VPS に入れないため、**コマンドは管理者のシェルで・認可はメンバー本人のブラウザで**という分担にする。チャットで URL / コードを往復するだけで済み、画面共有もメンバーへの VPS アクセス付与も不要。
+メンバー本人はリモートサーバーに入れないため、**コマンドは管理者のシェルで・認可はメンバー本人のブラウザで**という分担にする。チャットで URL / コードを往復するだけで済み、画面共有もメンバーへのリモートサーバーアクセス付与も不要。
 
 ```bash
 docker exec -it aac-<user> bash   # 以降このシェルで（管理者が実行）

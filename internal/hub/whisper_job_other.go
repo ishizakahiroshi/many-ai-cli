@@ -10,7 +10,7 @@ import (
 // configureWhisperCmd は whisper-server を独立したプロセスグループで起動させる
 // （Setpgid: true → 子の pgid == 子の pid）。これにより停止時に
 // killWhisperProcess がグループごと kill でき、whisper-server が spawn しうる
-// 子まで含めて孤児を残さない。Docker(VPS) では tini(init: true) が backstop。
+// 子まで含めて孤児を残さない。Docker(リモートサーバー) では tini(init: true) が backstop。
 func configureWhisperCmd(cmd *exec.Cmd) {
 	if cmd == nil {
 		return

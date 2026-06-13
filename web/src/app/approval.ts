@@ -1075,7 +1075,7 @@ export function setActionBarFocus(idx) {
 export function hideActionBar(id) {
   const bar = document.getElementById('action-bar');
   const wasVisible = !!(bar && bar.classList.contains('visible'));
-  if (bar) { bar.classList.remove('visible', 'batch'); bar.innerHTML = ''; }
+  if (bar) { bar.classList.remove('visible', 'batch', 'multi-select', 'single-tabs'); bar.innerHTML = ''; }
   // action-bar 出現時に設定した PTY リサイズ抑制を解除する。
   // これにより消滅後のターミナル拡大に対して ResizeObserver が
   // 正しい行数で SIGWINCH を1回だけ送れるようになる。
@@ -1099,6 +1099,7 @@ export function hideActionBar(id) {
     cancelH9Revalidate(id);
     resetBgApprovalMisses(id);
     clearSequentialChoiceState(id);
+    clearSingleTabState(id);
     const wasVisible = !!approvalVisibleCache.get(id);
     if (wasVisible) {
       approvalUiAdapter.setApprovalVisible(id, false);
@@ -1197,110 +1198,71 @@ export function showActionBar(bar, sessionId, options, forceStickToBottom = fals
     showMultiSelectActionBar(bar, sessionId, options, forceStickToBottom);
     return;
   }
-  options = normalizeActionOptions(options);
-  // 注意: 局所変数名 `t` は window.t（i18n 翻訳関数）と衝突するため使わない。
-  // `term` にすることで本関数末尾の t('dismiss_title') 等が正しく i18n を参照できる。
-  const term = sessionId === activeSessionId ? terminals.get(sessionId) : null;
-  const shouldStickToBottom = !!(term && (forceStickToBottom || term.autoScroll || isTerminalAtBottom(term)));
-  const chatTl = getChatTimelineEl();
-  const chatWasAtBottom = chatTl ? chatPaneAtBottom(chatTl) : false;
-
-  // 差分スキップ: 前回描画と同一シグネチャなら DOM を再構築しない（点滅防止）。
-  // detectApproval は scheduleApprovalCheck 経由で 300ms ごとに走るため、
-  // 内容が変わらない場合に bar.innerHTML を毎回作り直すとボタンが点滅する。
-  // kbd-focus は外部の setActionBarFocus が触るので、ここでは options のみを sig に含める。
-  const sig = JSON.stringify({
-    s: sessionId,
-    opts: options.map(o => ({ n: o.num, l: o.label, c: !!o.isCurrent, p: !!o.preserveOrder })),
-    v: bar.classList.contains('visible'),
-    col: isActionBarCollapsed(),
-  });
-  if (lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig) {
-    // 承認検出は PTY write / ResizeObserver / セッション自動切替と同時に走ることがある。
-    // DOM 再描画をスキップする場合でも、追従中なら最下部への再スナップは省略しない。
-    if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
-    if (chatWasAtBottom && chatTl) requestAnimationFrame(() => scrollChatPaneToBottom(chatTl));
-    return;
-  }
-  lastActionBarRender.sessionId = sessionId;
-  lastActionBarRender.sig = sig;
-  bar.innerHTML = '';
-  // バッチ→単一質問の遷移で残留する .batch クラスと選択状態を取り除く（縦スタック CSS の誤適用と
-  // 後続バッチへの古いセレクション持ち越しを防ぐ）。
-  bar.classList.remove('batch', 'multi-select');
-  batchSelections.delete(sessionId);
-  multiSelectSelections.delete(sessionId);
-
-  // "⚠ Approval needed" ラベル
-  if (options.length > 0) {
-    const label = document.createElement('span');
-    label.className = 'action-bar-label';
-    const sequentialQuestion = options.find(o => o && o._sequentialQuestion)?._sequentialQuestion;
-    const menuTitle = options.find(o => o && o._menuTitle)?._menuTitle;
-    const isSelectMenu = options.some(o => o && o._selectMenu);
-    if (sequentialQuestion) {
-      label.textContent = `⚠ ${sequentialQuestion}`;
-    } else if (isSelectMenu) {
-      // 承認ではない選択メニュー（claude /model 等）。承認と見分けがつくラベルにする。
-      label.textContent = menuTitle ? `📋 ${menuTitle}` : '📋 Select an option';
-    } else {
-      label.textContent = '⚠ Approval needed';
-    }
-    if (sequentialQuestion) {
-      label.classList.add('sequential-question-label');
-      label.title = sequentialQuestion;
-    } else if (isSelectMenu) {
-      label.classList.add('select-menu-label');
-      if (menuTitle) label.title = menuTitle;
-    }
-    bar.appendChild(label);
-  }
-
-  // "Yes, and" 系（セッション全体許可）が存在する場合はそちらを推奨扱いにする
-  const hasSessionAllow = options.some(o => /during this session|allow.*session|yes.*allow/i.test(o.label));
-
-  // 選択肢ボタン（左側）
-  for (const opt of options) {
-    const btn = document.createElement('button');
-    const isPermanent = /don[''']t ask again/i.test(opt.label);
-    const isSessionAllow = /during this session|allow.*session|yes.*allow/i.test(opt.label);
-    const isRecommended = hasSessionAllow ? isSessionAllow : opt.isCurrent;
-    let cls = 'action-btn';
-    if (isSessionAllow) cls += ' session-allow';
-    else if (isRecommended) cls += ' current';
-    if (isPermanent) cls += ' permanent';
-    btn.className = cls;
-    btn.textContent = `${opt.num}. ${opt.label}`;
-    btn.title = `${opt.num}. ${opt.label}`;
-    btn.onclick = () => sendChoice(sessionId, opt.num);
-    bar.appendChild(btn);
-  }
-
-  // 手動閉じボタン（誤検出時に消すため）— action-bar の右端に表示
-  const closeBtn = document.createElement('button');
-  closeBtn.className = 'action-dismiss-btn';
-  closeBtn.textContent = '✕';
-  closeBtn.title = t('dismiss_title');
-  closeBtn.onclick = (e) => {
-    e.stopPropagation();
-    hideActionBar(sessionId);
-    approvalSuppressUntil.set(sessionId, Date.now() + 60000);
+  // 単一質問（YES/NO・単一選択・選択メニュー・順次質問）も質問タブUI（1タブ）へ統合する。
+  // plan_choice-tab-ui.md C5。flat options を 1 セクション（_single）へ変換し、
+  // 既存の showBatchActionBar に同じ params 形で渡す（描画は同関数の単一モード分岐で行う）。
+  // approvalRawOptionsCache は flat のまま保持する（sendChoice の _sendText 等が機能するため）。
+  const opts = normalizeActionOptions(options);
+  const sequentialQuestion = opts.find(o => o && o._sequentialQuestion)?._sequentialQuestion;
+  const menuTitle = opts.find(o => o && o._menuTitle)?._menuTitle;
+  const isSelectMenu = opts.some(o => o && o._selectMenu);
+  const title = sequentialQuestion
+    ? sequentialQuestion
+    : (isSelectMenu ? (menuTitle || 'Select an option') : 'Approval needed');
+  const section = {
+    num: 1,
+    title,
+    options: opts,
+    _single: true,
+    _freeInput: !!(options && (options as any)._freeInput),
+    _labelKind: sequentialQuestion ? 'sequential' : (isSelectMenu ? 'select-menu' : 'approval'),
+    _labelTitle: sequentialQuestion || menuTitle || '',
   };
-  bar.appendChild(closeBtn);
-  appendCollapseToggle(bar, sessionId);
-  bar.classList.toggle('collapsed', isActionBarCollapsed());
+  showBatchActionBar(bar, sessionId, [section], forceStickToBottom);
+}
 
-  // action-bar 出現でターミナル高さが縮小し、ResizeObserver が SIGWINCH を
-  // 送ると Claude Code が chrome を再描画して二重表示になる。
-  // 初回表示時のみリサイズを抑制し、hideActionBar で解除することで
-  // 消滅後の安定サイズで1回だけ SIGWINCH を送る。
-  if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(60000);
-  bar.classList.add('visible');
-  actionBarShownAt.set(sessionId, Date.now());
-  if (shouldStickToBottom) {
-    refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
-  }
-  if (chatWasAtBottom && chatTl) requestAnimationFrame(() => scrollChatPaneToBottom(chatTl));
+// 単一質問タブUI（plan_choice-tab-ui.md C5）の自由入力状態。バッチの batchSelections/
+// batchFreeText とは別管理（単一は selections 機構を使わず即送信のため）。
+const singleFreeText = new Map<number, string>();   // sessionId → 自由入力テキスト（再描画跨ぎで保持）
+const singleFreeActive = new Map<number, boolean>(); // sessionId → 自由入力欄を開いているか
+
+function clearSingleTabState(id) {
+  singleFreeText.delete(id);
+  singleFreeActive.delete(id);
+}
+
+// 自由入力欄を開く（再描画して入力欄を出しフォーカスする）。
+export function activateSingleFree(sessionId) {
+  singleFreeActive.set(sessionId, true);
+  const cached = approvalRawOptionsCache.get(sessionId);
+  if (!Array.isArray(cached) || isBatchOptions(cached) || isMultiSelectOptions(cached)) return;
+  const bar = document.getElementById('action-bar');
+  if (bar) showActionBar(bar, sessionId, cached); // router 経由で 1 セクションへ再変換
+}
+
+// 自由入力テキストをそのまま送信する（確認モーダルなし）。送信後は UI を消して会話へ戻る。
+export function sendSingleFreeText(sessionId) {
+  const text = (singleFreeText.get(sessionId) || '').trim();
+  if (!text) return;
+  const cachedOpts = approvalRawOptionsCache.get(sessionId);
+  chatHistoryCommitOutput(sessionId);
+  pushMessage(sessionId, {
+    role: 'system',
+    kind: 'approval',
+    rawText: text,
+    meta: { kind: 'single', answer: null, label: text },
+  });
+  if (cachedOpts) approvalConsumedSig.set(sessionId, approvalSig(cachedOpts));
+  sendApprovalConsumed(sessionId, cachedOpts, `${text}\r`);
+  sendSubmittedText(sessionId, `${text}\r`);
+  hideActionBar(sessionId);
+  approvalSuppressUntil.set(sessionId, Date.now() + 400);
+  multiQuestionDismissedCache.delete(sessionId);
+  setTimeout(() => {
+    detectApproval(sessionId);
+    maybeAutoSwitchToNextApproval();
+  }, 450);
+  setTimeout(() => inputEl.focus(), 0);
 }
 
 // ---- 一括承認: 質問タブUI（plan_choice-tab-ui.md）----
@@ -1345,11 +1307,178 @@ function batchAllAnswered(sessionId, sections) {
   return true;
 }
 
+// 単一質問モードの描画（showBatchActionBar から呼ばれる分岐実体・plan_choice-tab-ui.md C5）。
+// タブは常に1つ。選択肢ボタン押下で確認モーダルを挟まず sendChoice で即送信する（1クリック）。
+// 単一質問は横幅に余裕があるので短ラベル圧縮・詳細パネルは使わず、ボタンに全文を表示する
+// （プレビュー不要で 1 クリック・誤クリック防止）。自由入力肢（「N. User specifies」）は
+// 入力欄を開き、Enter で入力テキストをそのまま送る。
+function showSingleSectionBar(bar, sessionId, section, ctx) {
+  const { shouldStickToBottom, chatTlB, chatWasAtBottomB, forceStickToBottom } = ctx;
+  const options = (section.options || []);
+  const allowFree = !!section._freeInput;
+  const title = section.title || 'Approval needed';
+  const labelKind = section._labelKind || 'approval';
+  const labelTitle = section._labelTitle || '';
+  const freeActive = allowFree && !!singleFreeActive.get(sessionId);
+
+  const sig = JSON.stringify({
+    s: sessionId,
+    mode: 'single-tabs',
+    title,
+    lk: labelKind,
+    opts: options.map(o => ({ n: o.num, l: o.label, c: !!o.isCurrent, p: !!o.preserveOrder })),
+    free: allowFree,
+    fa: freeActive,
+    v: bar.classList.contains('visible'),
+    col: isActionBarCollapsed(),
+  });
+  if (lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig) {
+    if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
+    if (chatWasAtBottomB && chatTlB) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlB));
+    return;
+  }
+  lastActionBarRender.sessionId = sessionId;
+  lastActionBarRender.sig = sig;
+  bar.innerHTML = '';
+  bar.classList.remove('batch', 'multi-select');
+  bar.classList.add('single-tabs');
+  batchSelections.delete(sessionId);
+  multiSelectSelections.delete(sessionId);
+
+  if (options.length === 0 && !allowFree) return;
+
+  // ===== ラベル =====
+  const label = document.createElement('span');
+  label.className = 'action-bar-label';
+  if (labelKind === 'sequential') {
+    label.textContent = `⚠ ${labelTitle || title}`;
+    label.classList.add('sequential-question-label');
+    label.title = labelTitle || title;
+  } else if (labelKind === 'select-menu') {
+    label.textContent = labelTitle ? `📋 ${labelTitle}` : '📋 Select an option';
+    label.classList.add('select-menu-label');
+    if (labelTitle) label.title = labelTitle;
+  } else {
+    label.textContent = '⚠ Approval needed';
+  }
+  bar.appendChild(label);
+
+  // ===== 質問タブ列（常に1タブ・active） =====
+  const tabsEl = document.createElement('div');
+  tabsEl.className = 'action-qtabs';
+  const tab = document.createElement('button');
+  tab.className = 'action-qtab active';
+  tab.onclick = (e) => { e.stopPropagation(); };
+  const qn = document.createElement('span');
+  qn.className = 'qn';
+  qn.textContent = '1.';
+  const txt = document.createElement('span');
+  txt.className = 'qlabel';
+  txt.textContent = title;
+  txt.title = title;
+  tab.appendChild(qn); tab.appendChild(txt);
+  tabsEl.appendChild(tab);
+  bar.appendChild(tabsEl);
+
+  // ===== パネル（質問見出し + 全文選択肢 + 自由入力欄） =====
+  const pane = document.createElement('div');
+  pane.className = 'action-qpane';
+
+  const head = document.createElement('div');
+  head.className = 'action-qhead';
+  head.textContent = title;
+  head.title = title;
+  pane.appendChild(head);
+
+  // "Yes, and" 系（セッション全体許可）があればそれを推奨扱いにする（既存ロジック踏襲）。
+  const isSessionAllowLabel = (s) => /during this session|allow.*session|yes.*allow/i.test(s);
+  const hasSessionAllow = options.some(o => isSessionAllowLabel(o.label));
+  const isRecommendedOpt = (o) => hasSessionAllow ? isSessionAllowLabel(o.label) : o.isCurrent;
+
+  // 選択肢ボタンは全文表示（短ラベル圧縮なし）。.action-btn の通常スタイルで折り返す
+  //（詳細パネルでのプレビューが不要になり、見て 1 クリックで送れる）。
+  const optsEl = document.createElement('div');
+  optsEl.className = 'action-qopts action-qopts-full';
+  for (const opt of options) {
+    const btn = document.createElement('button');
+    const isPermanent = /don[''']t ask again/i.test(opt.label);
+    const isSessionAllow = isSessionAllowLabel(opt.label);
+    let cls = 'action-btn';
+    if (isSessionAllow) cls += ' session-allow';
+    else if (isRecommendedOpt(opt)) cls += ' current';
+    if (isPermanent) cls += ' permanent';
+    btn.className = cls;
+    btn.textContent = `${opt.num}. ${opt.label}` + (isRecommendedOpt(opt) ? ` (${t('approval_recommended')})` : '');
+    btn.title = `${opt.num}. ${opt.label}`;
+    btn.onclick = () => sendChoice(sessionId, opt.num); // 即送信（確認モーダルなし）
+    optsEl.appendChild(btn);
+  }
+
+  // 自由入力肢（あれば）。クリックで入力欄を開き、入力後 Enter で即送信する。
+  if (allowFree) {
+    const fbtn = document.createElement('button');
+    fbtn.className = 'action-btn' + (freeActive ? ' current' : '');
+    fbtn.textContent = `N. ${t('approval_free_input')}`;
+    fbtn.title = t('approval_free_input');
+    fbtn.onclick = (e) => { e.stopPropagation(); activateSingleFree(sessionId); };
+    optsEl.appendChild(fbtn);
+  }
+  pane.appendChild(optsEl);
+
+  // 自由入力中だけ入力欄を出す（詳細パネルは廃止）。
+  if (freeActive) {
+    const inp = document.createElement('input');
+    inp.className = 'action-qfreein';
+    inp.type = 'text';
+    inp.placeholder = t('approval_free_input_placeholder');
+    inp.value = singleFreeText.get(sessionId) || '';
+    inp.oninput = () => singleFreeText.set(sessionId, inp.value);
+    inp.onkeydown = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        sendSingleFreeText(sessionId);
+      }
+    };
+    pane.appendChild(inp);
+    setTimeout(() => inp.focus(), 0);
+  }
+  bar.appendChild(pane);
+
+  // 手動閉じボタン（誤検出時に消すため）
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'action-dismiss-btn';
+  closeBtn.textContent = '✕';
+  closeBtn.title = t('dismiss_title');
+  closeBtn.onclick = (e) => {
+    e.stopPropagation();
+    hideActionBar(sessionId);
+    approvalSuppressUntil.set(sessionId, Date.now() + 60000);
+  };
+  bar.appendChild(closeBtn);
+  appendCollapseToggle(bar, sessionId);
+  bar.classList.toggle('collapsed', isActionBarCollapsed());
+
+  if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(60000);
+  bar.classList.add('visible');
+  actionBarShownAt.set(sessionId, Date.now());
+  if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
+  if (chatWasAtBottomB && chatTlB) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlB));
+}
+
 export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom = false) {
   const term = sessionId === activeSessionId ? terminals.get(sessionId) : null;
   const shouldStickToBottom = !!(term && (forceStickToBottom || term.autoScroll || isTerminalAtBottom(term)));
   const chatTlB = getChatTimelineEl();
   const chatWasAtBottomB = chatTlB ? chatPaneAtBottom(chatTlB) : false;
+
+  // 単一質問モード（plan_choice-tab-ui.md C5）: showActionBar が flat options を
+  // [{_single:true,...}] 1 セクションへ変換して渡す。バッチと同じタブ/パネル/詳細/自由入力の
+  // 見た目を踏襲しつつ、タブは常に1つ・確認モーダルを出さず即送信する点だけが異なる。
+  if (sections.length === 1 && (sections[0] as any)._single) {
+    showSingleSectionBar(bar, sessionId, sections[0], { shouldStickToBottom, chatTlB, chatWasAtBottomB, forceStickToBottom });
+    return;
+  }
 
   // セクション数が変わったら選択状態・自由入力をリセット（前回セレクションの持ち越し防止）
   let selections = batchSelections.get(sessionId);
@@ -1385,6 +1514,7 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   lastActionBarRender.sessionId = sessionId;
   lastActionBarRender.sig = sig;
   bar.innerHTML = '';
+  bar.classList.remove('single-tabs', 'multi-select');
   bar.classList.add('batch');
 
   const label = document.createElement('span');
@@ -1759,7 +1889,7 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
   lastActionBarRender.sessionId = sessionId;
   lastActionBarRender.sig = sig;
   bar.innerHTML = '';
-  bar.classList.remove('batch');
+  bar.classList.remove('batch', 'single-tabs');
   bar.classList.add('multi-select');
 
   const label = document.createElement('span');

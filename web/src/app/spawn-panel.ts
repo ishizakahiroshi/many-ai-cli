@@ -704,6 +704,36 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     }
   });
 
+  // app.ts（shell セッション内で AI CLI 起動コマンドを検知した誘導）から呼ばれる。
+  // 検知した provider と元 shell セッションの cwd をプリセットして新規セッションパネルを開く。
+  async function openSpawnFor(provider: string, cwd: string): Promise<void> {
+    loadSpawnSettings();
+    if (cwd) {
+      spawnCwdInput.value = cwd;
+    } else if (!spawnCwdInput.value) {
+      try {
+        const res = await fetch(`/api/info?token=${token}`);
+        if (res.ok) spawnCwdInput.value = (await res.json()).cwd || '';
+      } catch (_) {}
+    }
+    if (provider) {
+      (spawnProviderEl as HTMLSelectElement).value = provider;
+      // change ハンドラに note/opts 表示・model datalist 更新を委譲する
+      spawnProviderEl.dispatchEvent(new Event('change'));
+    }
+    newSessionPanel.hidden = false;
+    updateSpawnProviderIcon();
+    refreshCwdInputStatus();
+    spawnCwdInput.focus();
+    if (!spawnModelGroups) {
+      fetchModelGroups(false).catch(() => {});
+    } else {
+      populateModelDatalist();
+      clearOllamaModelDefault();
+    }
+  }
+  (window as any).openSpawnFor = openSpawnFor;
+
   spawnCancelBtn.addEventListener('click', () => { newSessionPanel.hidden = true; });
   spawnLaunchBtn.addEventListener('click', spawnSession);
   if (spawnCwdBrowse) {

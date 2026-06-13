@@ -65,9 +65,9 @@ Managed install is opt-in. It downloads:
 
 The whisper.cpp release archive is SHA-256 verified before extraction. Model entries without a published hash are downloaded over HTTPS and shown in the UI as hash-unverified.
 
-## Managed Install: Docker (Linux / VPS) With A Bundled Server
+## Managed Install: Docker (Linux / リモートサーバー) With A Bundled Server
 
-The primary remote use case is iPhone -> SSH tunnel -> VPS Hub -> localhost
+The primary remote use case is iPhone -> SSH tunnel -> リモートサーバー Hub -> localhost
 Whisper. For that, the any-ai-cli Docker image bakes a `whisper-server` binary
 (built from whisper.cpp with `GGML_OPENMP=OFF`, so no libgomp dependency) into
 the image and points the Hub at it with the `ANY_AI_CLI_WHISPER_SERVER`
