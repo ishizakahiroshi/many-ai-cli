@@ -9,7 +9,7 @@ This repository's operational guidance is maintained in `CLAUDE.md`.
   - `./CLAUDE/operations.md` — Git, commit messages, output rules
   - `./CLAUDE/deployment.md` — cross-compile build & distribution
   - `./CLAUDE/windows_setup.md` — Windows dev environment specifics
-- Design (source of truth): `./docs/v0.2.0-any-ai-cli-design.md`
+- Design (source of truth): `./docs/v0.3.0-many-ai-cli-design.md`
 - Local/private additions (if present, not committed): `./CLAUDE.local.md`
 - Tool-specific local notes (if present, not committed): `./AGENTS.local.md`
 

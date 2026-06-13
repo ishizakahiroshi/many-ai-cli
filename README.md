@@ -60,7 +60,7 @@ Terminal pane #1              Terminal pane #2
 - **Server-side user preferences** — keep voice, notification, favorites, session order, spawn defaults, and avatar settings in `config.yaml`
 - **Spawn new sessions** from the UI (`/api/spawn`)
 - **Model picker with Ollama routing** — pick Anthropic / OpenAI / Ollama Cloud / Ollama Local models from the spawn form; the Hub auto-injects the right `ANTHROPIC_*` / `OPENAI_*` env vars per session, no shell setup required
-- **Windows unified launcher** — `many-ai-cli-launcher.exe` connects to a Hub inside WSL or on a remote server (SSH) via saved profiles and opens the Windows browser
+- **Unified launcher (Windows / Linux / macOS)** — `many-ai-cli-launcher` connects to a Hub via saved profiles and opens your default browser: SSH `serve` / `tunnel` profiles work on every OS, and WSL profiles start a Hub inside WSL on Windows
 - **Remote server / Docker deployment assets** — run one Hub container per user from GHCR with loopback-only port publishing and an opt-in auto-update script
 - **Clean transcript generation** — write readable `.txt` transcripts automatically, or regenerate them with `log-clean`
 - **Language switching** (English / Japanese)
@@ -224,9 +224,11 @@ Sessions can be created, monitored, and approved entirely from the Hub UI; you d
 > If the Hub does go down (whether by `×`, a crash, or a manual restart), running AI sessions wait up to **60 minutes** for the Hub to come back before terminating themselves (configurable in `config.yaml` up to 24 hours — extend it for long-running autonomous tasks). A Web UI bug or restart will not silently kill your work. See [Shutdown, zombie protection & Hub crash resilience](#shutdown-zombie-protection--hub-crash-resilience) for details.
 > To stop the Hub intentionally, use the `⏻` button in the top-right of the Hub UI, or run `many-ai-cli stop` from another terminal.
 
-### Windows unified launcher
+### Unified launcher (Windows / Linux / macOS)
 
-`many-ai-cli-launcher.exe` is a unified launcher that manages connection profiles for both WSL and remote server targets. Connection profiles are stored in `~/.many-ai-cli/launcher-profiles.yaml`.
+`many-ai-cli-launcher` (`many-ai-cli-launcher.exe` on Windows) is a unified launcher that manages connection profiles for both WSL and remote server targets. Connection profiles are stored in `~/.many-ai-cli/launcher-profiles.yaml`.
+
+The launcher binary ships for all platforms. `ssh` profiles (`serve` / `tunnel`) work on Windows, Linux, and macOS; `wsl` profiles are Windows-only and report a clear error on other operating systems. On Linux the launcher opens the browser with `xdg-open`, and on macOS with `open`.
 
 #### How it works
 
@@ -234,8 +236,8 @@ The launcher reads your saved profiles and connects to the right Hub — startin
 
 | Type | Use case |
 |---|---|
-| `wsl` | Start `many-ai-cli serve` inside WSL and open it from the Windows browser |
-| `ssh` | Connect to a remote machine (e.g. a VPS or home server) over SSH |
+| `wsl` | Start `many-ai-cli serve` inside WSL and open it from the Windows browser (Windows only) |
+| `ssh` | Connect to a remote machine (e.g. a remote server or home machine) over SSH (any OS) |
 
 `ssh` profiles additionally support two connection modes:
 
@@ -250,7 +252,7 @@ A `wsl` profile calls `wsl.exe` internally to start the Linux binary (`many-ai-c
 
 #### Setup
 
-Download `many-ai-cli-<version>-windows-x64.zip`, extract `many-ai-cli-launcher.exe`, and place it on your Windows `PATH`.
+The launcher binary is bundled in every release archive next to the main binary (and in the deb/rpm/Homebrew packages). On Windows, download `many-ai-cli-<version>-windows-x64.zip`, extract `many-ai-cli-launcher.exe`, and place it on your `PATH`. On Linux/macOS, extract `many-ai-cli-launcher` from your platform's archive (or install via the package manager) and put it on your `PATH`.
 
 Create `~/.many-ai-cli/launcher-profiles.yaml`:
 
@@ -264,18 +266,18 @@ profiles:
     hub_port: 0           # 0 = auto-select to avoid Windows-side collisions
 
   # Remote server profile (serve mode) — SSH in and start many-ai-cli serve
-  - name: my-vps
+  - name: my-remote
     type: ssh
     mode: serve
-    host: vps.example.com
+    host: remote.example.com
     user: your-user
     hub_port: 47777
 
   # Remote server profile (tunnel mode) — forward port to a resident Docker Hub
-  - name: vps-docker
+  - name: remote-docker
     type: ssh
     mode: tunnel
-    host: vps.example.com
+    host: remote.example.com
     user: your-user
     hub_port: 47801
     token_command: "docker exec many-ai-cli-user1 sh -c 'grep ^token ~/.many-ai-cli/config.yaml | cut -d\" \" -f2'"
@@ -373,7 +375,7 @@ many-ai-cli --version
 
 ```powershell
 many-ai-cli-launcher.exe            # auto-connect if only one profile; otherwise open selection UI
-many-ai-cli-launcher.exe --profile my-vps   # connect to a specific profile
+many-ai-cli-launcher.exe --profile my-remote   # connect to a specific profile
 many-ai-cli-launcher.exe --last     # reconnect using the last-used profile
 many-ai-cli-launcher.exe --ui       # always open the selection UI
 ```
@@ -387,7 +389,7 @@ The launcher does not change the Hub's security model:
 - Passwords and key passphrases are never saved; key-based authentication is required (`-o BatchMode=yes`)
 - The token retrieved by `token_command` is used only for the current session and is not written to `launcher-profiles.yaml`
 
-For the full profile schema and connection flow details, see [docs/v0.2.0-any-ai-cli-design.md — §11b](docs/v0.2.0-any-ai-cli-design.md).
+For the full profile schema and connection flow details, see [docs/v0.3.0-many-ai-cli-design.md — §13](docs/v0.3.0-many-ai-cli-design.md).
 
 #### If Windows blocks the launcher: remote-server access without local `.exe`
 
@@ -476,8 +478,8 @@ awk '/^token:/{print $2}' ~/.many-ai-cli/config.yaml
 Create or edit `%USERPROFILE%\.ssh\config`:
 
 ```sshconfig
-Host any-ai-vps
-  HostName vps.example.com
+Host remote-host
+  HostName remote.example.com
   User ubuntu
   Port 22
   IdentityFile C:\Users\you\.ssh\id_ed25519
@@ -487,7 +489,7 @@ Host any-ai-vps
 Test it from PowerShell:
 
 ```powershell
-ssh any-ai-vps
+ssh remote-host
 ```
 
 If SSH asks for a password every time, set up key authentication first. The tunnel can be kept open with password auth, but key auth is much less error-prone.
@@ -501,7 +503,7 @@ ssh -N -T `
   -o ExitOnForwardFailure=yes `
   -o ServerAliveInterval=30 `
   -L 127.0.0.1:47777:127.0.0.1:47777 `
-  any-ai-vps
+  remote-host
 ```
 
 Keep that window open. It is the private cable between your browser and the remote server's Hub.
@@ -520,7 +522,7 @@ Users who do not want to remember the SSH command can create a local file such a
 
 ```batch
 @echo off
-set HOST=any-ai-vps
+set HOST=remote-host
 set PORT=47777
 
 for /f "tokens=2" %%T in ('ssh %HOST% "cat ~/.many-ai-cli/config.yaml" ^| findstr /b token:') do set TOKEN=%%T

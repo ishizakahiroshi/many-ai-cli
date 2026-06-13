@@ -1551,13 +1551,13 @@ export function applyLang(lang) {
     const envFallbacks: Record<string, { label: string; short: string; color: string; title: string }> = {
       local: { label: 'Local', short: 'L', color: '#8b5cf6', title: 'L MANY-AI-CLI' },
       wsl: { label: 'WSL', short: 'W', color: '#3b82f6', title: 'W MANY-AI-CLI' },
-      vps: { label: 'VPS', short: 'V', color: '#f97316', title: 'V MANY-AI-CLI' },
-      'vps-tunnel': { label: 'VPS Tunnel', short: 'T', color: '#ef4444', title: 'T MANY-AI-CLI' },
+      remote: { label: 'Remote server', short: 'R', color: '#f97316', title: 'R MANY-AI-CLI' },
+      'remote-tunnel': { label: 'Remote server (tunnel)', short: 'T', color: '#ef4444', title: 'T MANY-AI-CLI' },
     };
     const normalizeEnvKind = (value) => {
       const raw = String(value || '').trim().toLowerCase().replace(/_/g, '-');
-      if (raw === 'local' || raw === 'wsl' || raw === 'vps' || raw === 'vps-tunnel') return raw;
-      if (raw === 'vpstunnel') return 'vps-tunnel';
+      if (raw === 'local' || raw === 'wsl' || raw === 'remote' || raw === 'remote-tunnel') return raw;
+      if (raw === 'remotetunnel') return 'remote-tunnel';
       return '';
     };
     const sanitizeEnvColor = (value, fallback) => {
@@ -1580,7 +1580,7 @@ export function applyLang(lang) {
     const showSSH = hintSSH || info.ssh;
     const showHost = hintHost || info.host_ip || '';
     const serverEnvKind = normalizeEnvKind(info.env_kind);
-    const envKind = serverEnvKind || hintEnvKind || (hintSSH ? 'vps-tunnel' : 'local');
+    const envKind = serverEnvKind || hintEnvKind || (hintSSH ? 'remote-tunnel' : 'local');
     const envBase = envFallbacks[envKind] || envFallbacks.local;
     const envLabelRaw = info.env_label || envBase.label;
     const envShort = info.env_short || envBase.short;

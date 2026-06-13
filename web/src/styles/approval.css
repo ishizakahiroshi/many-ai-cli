@@ -114,9 +114,12 @@
 }
 .action-btn.kbd-focus { box-shadow: 0 0 0 2px var(--text); }
 
-/* バッチ承認（複数質問の一括回答） */
-#action-bar.batch { flex-direction: column; align-items: stretch; max-height: 60vh; }
-#action-bar.batch .action-bar-label { margin-bottom: 4px; }
+/* バッチ承認（複数質問の一括回答）/ 単一質問タブUI（1タブ・即送信）
+   どちらも質問タブUIの縦積みレイアウト（タブ列→パネル→送信バー）を共有する。 */
+#action-bar.batch,
+#action-bar.single-tabs { flex-direction: column; align-items: stretch; max-height: 60vh; }
+#action-bar.batch .action-bar-label,
+#action-bar.single-tabs .action-bar-label { margin-bottom: 4px; }
 
 .action-section {
   display: flex;
@@ -215,6 +218,10 @@
   margin-bottom: 8px;
 }
 .action-qopt { display: flex; align-items: center; gap: 6px; max-width: 160px; }
+/* 単一質問（1タブ）モード: 選択肢は全文表示（短ラベル圧縮なし）。横に並べて折り返し、
+   ラベルが長い場合はボタン内で折り返す（詳細パネル不要・1クリックで送信）。 */
+.action-qopts-full { gap: 6px; }
+.action-qopts-full .action-btn { flex: 0 1 auto; max-width: 100%; }
 .action-qopt .n { color: var(--accent); font-weight: 700; flex: 0 0 auto; }
 .action-qopt.selected .n { color: var(--text); }
 .action-qopt .opt-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

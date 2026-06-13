@@ -110,7 +110,7 @@ func (s *Server) cleanSessionLogs() {
 
 // maintenanceInterval は常駐中に掃除タスク（添付・セッションログ・spawn ログ）を
 // 周期実行する間隔。起動時に一度走るだけだと Hub を再起動しない常駐運用
-// （VPS の Docker 等）で保持日数・容量上限を超えても削除されないため、定期的に回す。
+// （リモートサーバー の Docker 等）で保持日数・容量上限を超えても削除されないため、定期的に回す。
 const maintenanceInterval = 6 * time.Hour
 
 // maintenanceLoop は maintenanceInterval ごとに掃除タスクを再実行する。

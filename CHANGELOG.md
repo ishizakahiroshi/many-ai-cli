@@ -10,12 +10,7 @@ Release artifacts are published at
 
 ## [Unreleased]
 
-### Changed
-- **Renamed the project from `any-ai-cli` to `many-ai-cli`** (binary, config
-  directory `~/.many-ai-cli/`, `MANY_AI_CLI*` environment variables, approval
-  markers `[MANY-AI-CLI]`, Hub banner, and all public docs/UI strings). The npm
-  package name `any-ai-cli` was too similar to an existing package, so the
-  project is published as `many-ai-cli`.
+## [0.3.0] - 2026-06-13
 
 ### Added
 - **npm registry distribution.** `many-ai-cli` is now installable with
@@ -26,26 +21,50 @@ Release artifacts are published at
   stages the GoReleaser binaries into the npm packages and publishes them with
   provenance.
 - Windows release archives now include `unblock-windows.cmd`, a local helper
-  that runs PowerShell `Unblock-File` for `any-ai-cli*.exe` files after zip
+  that runs PowerShell `Unblock-File` for `many-ai-cli*.exe` files after zip
   extraction.
-
-### Changed
-- README and release-operation docs now distinguish Mark-of-the-Web,
-  SmartScreen, Smart App Control, organization policy, and checksum/signature
-  verification for unsigned Windows builds.
-- Windows install guidance now prefers package-manager installation when
-  available, keeps GitHub Releases zip as the manual fallback, and documents
-  the separate roles of pnpm, winget, and direct release downloads.
-- Release planning now distinguishes npm registry publication from the `npm`
-  command and sets `pnpm add -g many-ai-cli` as the preferred developer install
-  command once the registry package exists.
-
-## [0.3.0] - 2026-06-05
-
-### Added
-- **Unified Windows launcher profiles.** `any-ai-cli-launcher.exe` now handles
-  WSL, SSH `serve`, and SSH `tunnel` profiles from one profile file and can
-  reconnect to resident remote Hubs without restarting the remote session.
+- **Detached Session Grid.** AI and Shell sessions can be popped out into a
+  separate browser window as a standalone grid (with presets such as
+  "Claude + Shell 2x2" / "Shell 3x3"); the Hub keeps managing approvals and
+  session state from the main window.
+- **Shell sessions.** A plain interactive shell (PowerShell / bash / sh) can be
+  spawned as a regular Hub session alongside AI sessions; AI-only features
+  (approval injection, Chat, token bar) are disabled automatically for shell
+  sessions.
+- **Always-on status bar.** A single bottom line shows the active session's
+  state, provider/model, work label, project/branch and changed-file count,
+  context-window gauge, token counts, prompt-cache hit rate, per-session and
+  daily cost, burn rate, elapsed time, connection state, and a fleet badge
+  (toggleable in Settings). Token/cost segments are populated for Claude and
+  Codex sessions.
+- **Model picker with Ollama routing.** The spawn form can select Anthropic /
+  OpenAI / Ollama Cloud / Ollama Local models; the Hub injects the matching
+  `ANTHROPIC_*` / `OPENAI_*` environment variables per session, with no shell
+  setup required.
+- **Voice input.** Prompts can be dictated through Browser speech recognition or
+  a local Whisper server, including a Windows x64 managed whisper.cpp installer
+  and an iPhone-Safari → Hub → PC Whisper relay, with near-silence and
+  hallucination-phrase filtering on the Hub side.
+- **Mobile / smartphone access.** The Hub UI is responsive (single-column layout
+  on narrow viewports, touch-sized controls, and a mobile key panel for
+  Esc/Ctrl/arrows) and documents reaching it from a phone over an SSH local
+  forward; no public exposure is required or supported.
+- **Outbound approval notifications (ntfy / webhook).** In addition to Web Push,
+  the Hub can POST approval notifications to an ntfy topic or a generic webhook,
+  which still works when no browser tunnel is connected. The Hub token is never
+  included in the payload.
+- **Token-less loopback access.** Requests from a `127.0.0.1` origin can reach
+  the Hub UI without the URL token, configurable via an allowed-hosts setting;
+  remote and tunnelled access still require the token.
+- **`uninstall` subcommand.** `many-ai-cli uninstall [--purge]` removes settings
+  and logs, and with `--purge` also removes the binary itself.
+- **Unified launcher with connection profiles (cross-platform).**
+  `many-ai-cli-launcher` handles WSL, SSH `serve`, and SSH `tunnel` profiles
+  from one profile file and can reconnect to resident remote Hubs without
+  restarting the remote session. The launcher binary now ships for Windows,
+  Linux, and macOS (in every release archive and in the deb/rpm/Homebrew
+  packages): SSH `serve`/`tunnel` profiles work on all three, while `wsl`
+  profiles remain Windows-only and report a clear error elsewhere.
 - **Workbench tab and session history.** The Hub now keeps a SQLite-backed
   session store and exposes stored sessions, timeline events, summaries,
   redacted exports, prompt templates, task/policy notes, diagnostics, usage
@@ -53,7 +72,7 @@ Release artifacts are published at
 - **PWA and opt-in Web Push notifications.** The web UI ships a manifest,
   icons, service worker, push subscription settings, local VAPID key storage,
   and approval notifications that omit the Hub URL token.
-- **VPS / Docker deployment assets.** GHCR image publication, loopback-only
+- **Remote server / Docker deployment assets.** GHCR image publication, loopback-only
   per-user compose samples, resource limits, health checks, and an idempotent
   `aac-update.sh` workflow support resident remote Hub operation.
 - **Files and Git operations.** The Files tab can create folders, save text
@@ -66,6 +85,15 @@ Release artifacts are published at
   injection paths are documented and wired into the Hub UI.
 
 ### Changed
+- **Renamed the project from `any-ai-cli` to `many-ai-cli`** (binary, config
+  directory `~/.many-ai-cli/`, `MANY_AI_CLI*` environment variables, approval
+  markers `[MANY-AI-CLI]`, Hub banner, and all public docs/UI strings). The npm
+  package name `any-ai-cli` was too similar to an existing package, so the
+  project is published as `many-ai-cli`.
+- README and release-operation docs now distinguish Mark-of-the-Web,
+  SmartScreen, Smart App Control, organization policy, and checksum/signature
+  verification for unsigned Windows builds, prefer package-manager installation
+  when available, and keep the GitHub Releases zip as the manual fallback.
 - The public README files now describe v0.3.0 features, platform validation,
   Docker deployment, PWA/Web Push behavior, and Go 1.25 build requirements.
 - The Release workflow now lets GoReleaser's before-hooks perform the frontend
@@ -76,8 +104,16 @@ Release artifacts are published at
   used by the current frontend type/dependency set.
 
 ### Fixed
+- Switching between sessions stays responsive after long-running connections:
+  per-session pending output is now capped so a backlog no longer makes the
+  first paint after a tab switch sluggish.
+- Terminal output is no longer duplicated when the PTY size and the xterm.js
+  render size briefly disagree during a window resize.
+- Numerous terminal, approval, and voice UI refinements across xterm rendering,
+  action-bar positioning/clearing, multi-pane interactions, Codex/Claude prompt
+  detection, and voice diagnostics.
 - GoReleaser no longer creates a Windows arm64 archive containing only
-  `any-ai-cli-launcher.exe` and no matching `any-ai-cli.exe`; Windows release
+  the launcher binary and no matching main binary; Windows release
   archives remain x64-only until both binaries support arm64 together.
 - SSH tunnel profile URLs now URL-encode Hub tokens for `/api/info`,
   `/api/net-hint`, and the browser URL, so manually configured tokens cannot
@@ -301,10 +337,10 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.2.2...v0.3.0
-[0.2.2]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.2.0...v0.2.2
-[0.2.0]: https://github.com/ishizakahiroshi/any-ai-cli/compare/v0.1.3...v0.2.0
-[0.1.3]: https://github.com/ishizakahiroshi/any-ai-cli/releases/tag/v0.1.3
-[0.1.2]: https://github.com/ishizakahiroshi/any-ai-cli/releases/tag/v0.1.2
-[0.1.1]: https://github.com/ishizakahiroshi/any-ai-cli/releases/tag/v0.1.1
+[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.2.2...v0.3.0
+[0.2.2]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.2.0...v0.2.2
+[0.2.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.1.3...v0.2.0
+[0.1.3]: https://github.com/ishizakahiroshi/many-ai-cli/releases/tag/v0.1.3
+[0.1.2]: https://github.com/ishizakahiroshi/many-ai-cli/releases/tag/v0.1.2
+[0.1.1]: https://github.com/ishizakahiroshi/many-ai-cli/releases/tag/v0.1.1

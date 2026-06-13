@@ -174,6 +174,46 @@ export function isOllamaModelCommandBlocked(sessionId, text) {
   return /^\/model(\b|\s|$)/i.test(trimmed);
 }
 
+// shell（素のシェル）セッション内で AI CLI（claude/codex/copilot/cursor-agent）の
+// 起動コマンドを直接打つと、provider=shell 用にチューニングされた入力・承認処理
+// （\x15 前置なし・マーカー未注入・shell 用承認検出）と二重ラップになり、スラッシュ
+// コマンドの文字化けや承認ボタンの不動作を招く。先頭トークンが起動コマンドのときは
+// 検知して provider 名を返す（パス前置・.cmd/.exe 等の拡張子も許容）。該当なしは null。
+const AI_CLI_LAUNCH_RE = /^(?:[^\s]*[\\/])?(claude|codex|copilot|cursor-agent)(?:\.(?:cmd|exe|bat|ps1))?(?=\s|$)/i;
+// 「このまま続行」を選んだ shell セッションでは以後ナグを出さない（セッション単位で抑止）。
+const aiCliLaunchNudgeSuppressed = new Set();
+
+export function detectAiCliLaunchInShell(sessionId, text) {
+  const s = sessions.get(sessionId);
+  if (!s || !isShellProvider(s.provider || '')) return null;
+  if (aiCliLaunchNudgeSuppressed.has(sessionId)) return null;
+  const trimmed = String(text || '').replace(/^[\s\x00-\x1f]+/, '');
+  const m = AI_CLI_LAUNCH_RE.exec(trimmed);
+  return m ? m[1].toLowerCase() : null;
+}
+
+// 検知時に専用セッション spawn を促す。ブロックはしない：
+//   「専用セッションを開く」→ spawn パネルを provider/cwd プリセットで開き、true を返す
+//                            （呼び出し側は起動コマンドを shell へ送らない＝二重起動を防ぐ）
+//   「このまま続行」          → false を返し（以後そのセッションでは抑止）、通常送信させる
+async function maybeNudgeAiCliLaunchInShell(sessionId, text) {
+  const provider = detectAiCliLaunchInShell(sessionId, text);
+  if (!provider) return false;
+  const ok = await appConfirm({
+    title: t('shell_ai_launch_title'),
+    message: t('shell_ai_launch_msg', { provider }),
+    confirmText: t('shell_ai_launch_open', { provider }),
+    cancelText: t('shell_ai_launch_continue'),
+  });
+  if (ok) {
+    const cwd = sessions.get(sessionId)?.cwd || '';
+    (window as any).openSpawnFor?.(provider, cwd);
+    return true;
+  }
+  aiCliLaunchNudgeSuppressed.add(sessionId);
+  return false;
+}
+
 export function clearInput() {
   inputEl.value = '';
   inputEl.style.height = 'auto';
@@ -193,6 +233,12 @@ export async function doSend(sessionId) {
   // ユーザーは下の action-bar ボタンか端末ペインで選択を解決する。
   if (isSelectMenuActive(sessionId)) {
     showToast(t('toast_select_menu_active'));
+    return;
+  }
+  // shell セッション内で AI CLI 起動コマンドを検知 → 専用セッション spawn を誘導。
+  // 「開く」を選べば起動コマンドは shell へ送らず spawn パネルへ切り替える（二重起動防止）。
+  // flushPendingAttach より前に判定し、誘導採択時に画像 inject を無駄に消費しないようにする。
+  if (await maybeNudgeAiCliLaunchInShell(sessionId, buildSendText())) {
     return;
   }
   set_lastDoSendAt(Date.now());
@@ -823,6 +869,18 @@ export function sendQuickCommand(sessionId, cmd) {
     showToast(t('toast_model_blocked_on_ollama'));
     return;
   }
+  // shell セッション内で AI CLI 起動コマンドを検知 → 専用セッション spawn を誘導。
+  // confirm は非同期なので、検知時のみ判定を待ってから（誘導不採択なら）実送信する。
+  if (detectAiCliLaunchInShell(sessionId, cmd)) {
+    void maybeNudgeAiCliLaunchInShell(sessionId, cmd).then((handled) => {
+      if (!handled) doSendQuickCommand(sessionId, cmd);
+    });
+    return;
+  }
+  doSendQuickCommand(sessionId, cmd);
+}
+
+function doSendQuickCommand(sessionId, cmd) {
   // doSend / sendChoice と同様に承認 UI 状態を Hub と同期する。
   // /clear 等で画面がリセットされた後も approvalVisibleCache=true が残ると、
   // セッションカードの "Pending" バッジが消えなくなる。

@@ -33,16 +33,16 @@ var envMetaByKind = map[string]envMeta{
 		Color: "#3b82f6",
 		Title: "W MANY-AI-CLI",
 	},
-	"vps": {
-		Kind:  "vps",
-		Label: "VPS",
-		Short: "V",
+	"remote": {
+		Kind:  "remote",
+		Label: "Remote server",
+		Short: "R",
 		Color: "#f97316",
-		Title: "V MANY-AI-CLI",
+		Title: "R MANY-AI-CLI",
 	},
-	"vps-tunnel": {
-		Kind:  "vps-tunnel",
-		Label: "VPS Tunnel",
+	"remote-tunnel": {
+		Kind:  "remote-tunnel",
+		Label: "Remote server (tunnel)",
 		Short: "T",
 		Color: "#ef4444",
 		Title: "T MANY-AI-CLI",
@@ -136,10 +136,10 @@ func normalizeEnvKind(kind string) string {
 		return "local"
 	case "wsl":
 		return "wsl"
-	case "vps":
-		return "vps"
-	case "vps-tunnel", "vpstunnel", "vps_tunnel":
-		return "vps-tunnel"
+	case "remote":
+		return "remote"
+	case "remote-tunnel", "remotetunnel", "remote_tunnel":
+		return "remote-tunnel"
 	default:
 		return ""
 	}
@@ -166,13 +166,13 @@ func resolveEnvMeta(configKind, mode string, ssh bool, hostLabel string, netHint
 		return meta
 	}
 	if netHintSSH {
-		return envMetaForKind("vps-tunnel", hostLabel)
+		return envMetaForKind("remote-tunnel", hostLabel)
 	}
 	if mode == "windows-wsl" || mode == "wsl" {
 		return envMetaForKind("wsl", hostLabel)
 	}
 	if ssh {
-		return envMetaForKind("vps", hostLabel)
+		return envMetaForKind("remote", hostLabel)
 	}
 	return envMetaForKind("local", hostLabel)
 }

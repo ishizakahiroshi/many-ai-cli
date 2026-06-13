@@ -292,7 +292,7 @@ func (c *SSHConnector) runTunnel(ctx context.Context, p Profile, urlCh chan<- st
 // （MANY_AI_CLI_HOST_LABEL は serve モード起動時のみ注入可能）ため、
 // バッジ表示用の SSH 判定とホスト名を URL クエリで Hub UI へ伝える。
 func buildTunnelHubURL(port int, token, host string) string {
-	return fmt.Sprintf("http://127.0.0.1:%d/?token=%s&via=ssh&host_label=%s&env_kind=vps-tunnel",
+	return fmt.Sprintf("http://127.0.0.1:%d/?token=%s&via=ssh&host_label=%s&env_kind=remote-tunnel",
 		port, url.QueryEscape(token), url.QueryEscape(host))
 }
 
@@ -360,7 +360,7 @@ func pollUntilReady(ctx context.Context, apiURL string) error {
 // 登録する。tunnel モードでは既起動の Hub に MANY_AI_CLI_HOST_LABEL を注入
 // できないため、API 経由でサーバ側に保持させる。best-effort（失敗は無視）。
 func postNetHint(ctx context.Context, port int, token, host string) {
-	payload, err := json.Marshal(map[string]any{"ssh": true, "host_label": host, "env_kind": "vps-tunnel"})
+	payload, err := json.Marshal(map[string]any{"ssh": true, "host_label": host, "env_kind": "remote-tunnel"})
 	if err != nil {
 		return
 	}

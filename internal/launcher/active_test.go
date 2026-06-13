@@ -51,10 +51,10 @@ func TestRegisterActiveConnectionReplacesSameProfile(t *testing.T) {
 	_, cleanup := setupTempHome(t)
 	defer cleanup()
 
-	if err := RegisterActiveConnection("vps", "http://127.0.0.1:47777/?token=old"); err != nil {
+	if err := RegisterActiveConnection("remote", "http://127.0.0.1:47777/?token=old"); err != nil {
 		t.Fatal(err)
 	}
-	if err := RegisterActiveConnection("vps", "http://127.0.0.1:47877/?token=new"); err != nil {
+	if err := RegisterActiveConnection("remote", "http://127.0.0.1:47877/?token=new"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -194,7 +194,7 @@ func TestProfileConnectLockExcludesSecondProcess(t *testing.T) {
 	_, cleanup := setupTempHome(t)
 	defer cleanup()
 
-	lock, acquired, err := TryAcquireProfileConnectLock("vps")
+	lock, acquired, err := TryAcquireProfileConnectLock("remote")
 	if err != nil {
 		t.Fatalf("TryAcquireProfileConnectLock: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestProfileConnectLockExcludesSecondProcess(t *testing.T) {
 	}
 	defer lock.Release()
 
-	second, acquired, err := TryAcquireProfileConnectLock("vps")
+	second, acquired, err := TryAcquireProfileConnectLock("remote")
 	if err != nil {
 		t.Fatalf("second TryAcquireProfileConnectLock: %v", err)
 	}
@@ -217,14 +217,14 @@ func TestProfileConnectLockPrunesStaleLock(t *testing.T) {
 	_, cleanup := setupTempHome(t)
 	defer cleanup()
 
-	path, err := connectLockPath("vps")
+	path, err := connectLockPath("remote")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	stale := connectLockData{Profile: "vps", PID: -1, StartedAt: time.Now()}
+	stale := connectLockData{Profile: "remote", PID: -1, StartedAt: time.Now()}
 	data, err := json.Marshal(stale)
 	if err != nil {
 		t.Fatal(err)
@@ -233,7 +233,7 @@ func TestProfileConnectLockPrunesStaleLock(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	lock, acquired, err := TryAcquireProfileConnectLock("vps")
+	lock, acquired, err := TryAcquireProfileConnectLock("remote")
 	if err != nil {
 		t.Fatalf("TryAcquireProfileConnectLock: %v", err)
 	}

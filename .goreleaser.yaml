@@ -41,13 +41,21 @@ builds:
   - id: many-ai-cli-launcher
     main: ./cmd/many-ai-cli-launcher
     binary: many-ai-cli-launcher
+    # Cross-platform: the launcher's SSH serve/tunnel profiles work on Windows,
+    # Linux, and macOS; WSL profiles error gracefully off Windows. The build
+    # matrix mirrors the main binary so every release archive ships both
+    # binaries. windows/arm64 and linux/arm64 stay excluded (same as main).
     goos:
       - windows
+      - linux
+      - darwin
     goarch:
       - amd64
       - arm64
     ignore:
       - goos: windows
+        goarch: arm64
+      - goos: linux
         goarch: arm64
     env:
       - CGO_ENABLED=0
@@ -58,8 +66,9 @@ builds:
 archives:
   - id: default
     formats: [zip]
-    # Windows だけ many-ai-cli.exe + many-ai-cli-launcher.exe の 2 本、他 OS は 1 本。
-    # platform 間でバイナリ数が異なる構成を許可する。
+    # 全 OS で many-ai-cli + many-ai-cli-launcher の 2 本を同梱する
+    # （windows は .exe ペア）。windows/arm64・linux/arm64 を ignore している
+    # 都合で platform 間のバイナリ数が揃わないケースを許可しておく。
     allow_different_binary_count: true
     # エンドユーザー向けに OS/arch 名を分かりやすく:
     #   darwin/amd64 -> macos-intel, darwin/arm64 -> macos-apple-silicon
@@ -123,6 +132,7 @@ homebrew_casks:
         install: |
           if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
             system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/many-ai-cli"]
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/many-ai-cli-launcher"]
           end
 
 # winget への manifest 公開（Windows x64、zip + nested portable）。
@@ -158,7 +168,7 @@ winget:
 # Linux 向け deb/rpm を生成し GitHub Releases に添付する（apt/yum リポジトリ運営はしない）。
 nfpms:
   - package_name: many-ai-cli
-    ids: [many-ai-cli]
+    ids: [many-ai-cli, many-ai-cli-launcher]
     vendor: ishizakahiroshi
     maintainer: "Hiroshi Ishizaka <ishizakahiroshi@gmail.com>"
     homepage: https://github.com/ishizakahiroshi/many-ai-cli

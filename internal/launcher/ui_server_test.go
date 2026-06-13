@@ -16,15 +16,15 @@ func TestHandleDisconnectAllProxiesKillAllThenShutdownAndCancelsOwned(t *testing
 
 	hub := newFakeDisconnectHub(t, nil)
 	defer hub.server.Close()
-	if err := RegisterActiveConnection("vps", hub.server.URL+"/?token=hubtok"); err != nil {
+	if err := RegisterActiveConnection("remote", hub.server.URL+"/?token=hubtok"); err != nil {
 		t.Fatal(err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	s := newTestUIServer()
-	s.conns["vps"] = &liveConn{cancel: cancel}
+	s.conns["remote"] = &liveConn{cancel: cancel}
 
-	rr := postDisconnect(t, s, `{"name":"vps","mode":"all"}`)
+	rr := postDisconnect(t, s, `{"name":"remote","mode":"all"}`)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("code = %d, body = %s", rr.Code, rr.Body.String())
 	}
@@ -75,7 +75,7 @@ func TestHandleDisconnectRejectsInactiveProfile(t *testing.T) {
 
 func TestHandleDisconnectRejectsInvalidMode(t *testing.T) {
 	s := newTestUIServer()
-	rr := postDisconnect(t, s, `{"name":"vps","mode":"local"}`)
+	rr := postDisconnect(t, s, `{"name":"remote","mode":"local"}`)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("code = %d, want %d, body = %s", rr.Code, http.StatusBadRequest, rr.Body.String())
 	}
@@ -105,12 +105,12 @@ func TestHandleDisconnectContinuesShutdownWhenKillAllFails(t *testing.T) {
 
 	hub := newFakeDisconnectHub(t, map[string]int{"/api/kill-all": http.StatusInternalServerError})
 	defer hub.server.Close()
-	if err := RegisterActiveConnection("vps", hub.server.URL+"/?token=hubtok"); err != nil {
+	if err := RegisterActiveConnection("remote", hub.server.URL+"/?token=hubtok"); err != nil {
 		t.Fatal(err)
 	}
 
 	s := newTestUIServer()
-	rr := postDisconnect(t, s, `{"name":"vps","mode":"all"}`)
+	rr := postDisconnect(t, s, `{"name":"remote","mode":"all"}`)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("code = %d, body = %s", rr.Code, rr.Body.String())
 	}
@@ -136,15 +136,15 @@ func TestHandleDisconnectCleansOwnedConnectionWhenShutdownFails(t *testing.T) {
 
 	hub := newFakeDisconnectHub(t, map[string]int{"/api/shutdown": http.StatusBadGateway})
 	defer hub.server.Close()
-	if err := RegisterActiveConnection("vps", hub.server.URL+"/?token=hubtok"); err != nil {
+	if err := RegisterActiveConnection("remote", hub.server.URL+"/?token=hubtok"); err != nil {
 		t.Fatal(err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	s := newTestUIServer()
-	s.conns["vps"] = &liveConn{cancel: cancel}
+	s.conns["remote"] = &liveConn{cancel: cancel}
 
-	rr := postDisconnect(t, s, `{"name":"vps","mode":"web"}`)
+	rr := postDisconnect(t, s, `{"name":"remote","mode":"web"}`)
 	if rr.Code != http.StatusBadGateway {
 		t.Fatalf("code = %d, want %d, body = %s", rr.Code, http.StatusBadGateway, rr.Body.String())
 	}

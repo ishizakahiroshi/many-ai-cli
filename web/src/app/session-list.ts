@@ -922,7 +922,7 @@ export function drawFavicon(pendingCount, force = false) {
   const ctx = _faviconCtx;
   const SIZE = 32;
   ctx.clearRect(0, 0, SIZE, SIZE);
-  // ベースは常に CLI ロゴ。環境（local/wsl/vps…）が設定されているときは、
+  // ベースは常に CLI ロゴ。環境（local/wsl/remote…）が設定されているときは、
   // ロゴを潰さずに済むよう略号 1 文字のバッジを左下隅へ小さく重ねる。
   // 左右半分ずつ並べる旧方式は中央で重なって見えた（「センターマン」）ため隅オーバーレイに変更。
   if (_faviconBaseLoaded) {

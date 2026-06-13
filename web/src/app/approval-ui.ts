@@ -57,7 +57,7 @@ import { showActionBar } from './approval.js';
   function clearActionBarDom() {
     const bar = document.getElementById('action-bar');
     if (bar) {
-      bar.classList.remove('visible', 'batch');
+      bar.classList.remove('visible', 'batch', 'multi-select', 'single-tabs');
       bar.innerHTML = '';
     }
     lastActionBarRender.sessionId = null;

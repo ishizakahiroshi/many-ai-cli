@@ -69,16 +69,16 @@ func TestHostNetInfoNonSSH(t *testing.T) {
 }
 
 func TestResolveEnvMetaPriority(t *testing.T) {
-	t.Setenv("MANY_AI_CLI_ENV_KIND", "vps")
-	got := resolveEnvMeta("wsl", "windows-wsl", false, "host.example", true, "vps-tunnel")
-	if got.Kind != "vps" || got.Label != "VPS" || got.HostLabel != "host.example" {
+	t.Setenv("MANY_AI_CLI_ENV_KIND", "remote")
+	got := resolveEnvMeta("wsl", "windows-wsl", false, "host.example", true, "remote-tunnel")
+	if got.Kind != "remote" || got.Label != "Remote server" || got.HostLabel != "host.example" {
 		t.Fatalf("env var should win, got %+v", got)
 	}
 }
 
 func TestResolveEnvMetaInvalidExplicitFallsBackToLocal(t *testing.T) {
 	t.Setenv("MANY_AI_CLI_ENV_KIND", "invalid")
-	got := resolveEnvMeta("vps", "wsl", true, "", true, "vps-tunnel")
+	got := resolveEnvMeta("remote", "wsl", true, "", true, "remote-tunnel")
 	if got.Kind != "local" {
 		t.Fatalf("invalid explicit env kind = %q, want local", got.Kind)
 	}
@@ -92,15 +92,15 @@ func TestResolveEnvMetaConfigAndHints(t *testing.T) {
 		}
 	})
 	t.Run("net hint kind", func(t *testing.T) {
-		got := resolveEnvMeta("", "linux", false, "203.0.113.10", true, "vps-tunnel")
-		if got.Kind != "vps-tunnel" || got.HostLabel != "203.0.113.10" {
-			t.Fatalf("net hint env = %+v, want vps-tunnel with host", got)
+		got := resolveEnvMeta("", "linux", false, "203.0.113.10", true, "remote-tunnel")
+		if got.Kind != "remote-tunnel" || got.HostLabel != "203.0.113.10" {
+			t.Fatalf("net hint env = %+v, want remote-tunnel with host", got)
 		}
 	})
 	t.Run("net hint ssh fallback", func(t *testing.T) {
 		got := resolveEnvMeta("", "linux", false, "", true, "")
-		if got.Kind != "vps-tunnel" {
-			t.Fatalf("net hint ssh env = %q, want vps-tunnel", got.Kind)
+		if got.Kind != "remote-tunnel" {
+			t.Fatalf("net hint ssh env = %q, want remote-tunnel", got.Kind)
 		}
 	})
 	t.Run("runtime wsl", func(t *testing.T) {
@@ -111,8 +111,8 @@ func TestResolveEnvMetaConfigAndHints(t *testing.T) {
 	})
 	t.Run("ssh", func(t *testing.T) {
 		got := resolveEnvMeta("", "linux", true, "", false, "")
-		if got.Kind != "vps" {
-			t.Fatalf("ssh env = %q, want vps", got.Kind)
+		if got.Kind != "remote" {
+			t.Fatalf("ssh env = %q, want remote", got.Kind)
 		}
 	})
 	t.Run("default local", func(t *testing.T) {

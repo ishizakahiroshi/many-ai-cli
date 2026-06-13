@@ -7,11 +7,11 @@
 services:
   aac-example:
     container_name: aac-example
-    # Images are published to GHCR by GitHub Actions. The VPS only pulls them.
+    # Images are published to GHCR by GitHub Actions. The remote server only pulls them.
     # Switch tags through AAC_TAG in the compose project's .env:
     #   latest  -> follows main (normal operation)
     #   develop -> follows develop (validation)
-    #   dev     -> local VPS build; freeze the cron with HOLD first
+    #   dev     -> local remote-server build; freeze the cron with HOLD first
     image: ghcr.io/ishizakahiroshi/many-ai-cli:${AAC_TAG:-latest}
     init: true
     restart: unless-stopped

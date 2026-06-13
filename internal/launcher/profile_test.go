@@ -36,7 +36,7 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 
 	pf := &ProfilesFile{
 		Version:  1,
-		LastUsed: "sakura-vps",
+		LastUsed: "sakura-remote",
 		Profiles: []Profile{
 			{
 				Name:    "WSL (Ubuntu)",
@@ -47,7 +47,7 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 				HubPort: 0,
 			},
 			{
-				Name:     "sakura-vps",
+				Name:     "sakura-remote",
 				Type:     ProfileTypeSSH,
 				Mode:     SSHModeServe,
 				Host:     "153.127.0.1",
@@ -177,9 +177,9 @@ func TestValidate_Valid(t *testing.T) {
 		Version: 1,
 		Profiles: []Profile{
 			{Name: "wsl-local", Type: ProfileTypeWSL},
-			{Name: "vps-serve", Type: ProfileTypeSSH, Mode: SSHModeServe, HubPort: 47777},
+			{Name: "remote-serve", Type: ProfileTypeSSH, Mode: SSHModeServe, HubPort: 47777},
 			{
-				Name:         "vps-tunnel",
+				Name:         "remote-tunnel",
 				Type:         ProfileTypeSSH,
 				Mode:         SSHModeTunnel,
 				HubPort:      47801,
@@ -307,7 +307,7 @@ func TestValidate_TunnelEmptyTokenCommand(t *testing.T) {
 
 func TestNormalizeProfile_UserAtHost(t *testing.T) {
 	p := Profile{
-		Name: "vps",
+		Name: "remote",
 		Type: ProfileTypeSSH,
 		Host: "ubuntu@153.127.0.1",
 		User: "old-user",
@@ -323,7 +323,7 @@ func TestNormalizeProfile_UserAtHost(t *testing.T) {
 
 func TestNormalizeProfile_NoAt(t *testing.T) {
 	p := Profile{
-		Name: "vps",
+		Name: "remote",
 		Type: ProfileTypeSSH,
 		Host: "153.127.0.1",
 		User: "ubuntu",
@@ -358,7 +358,7 @@ func TestNormalizeProfile_WSLIgnored(t *testing.T) {
 // arrived with hub_port=0 and failed validation).
 func TestProfileJSONRoundTrip(t *testing.T) {
 	in := Profile{
-		Name:         "vps-docker",
+		Name:         "remote-docker",
 		Type:         ProfileTypeSSH,
 		Mode:         SSHModeTunnel,
 		Host:         "203.0.113.10",

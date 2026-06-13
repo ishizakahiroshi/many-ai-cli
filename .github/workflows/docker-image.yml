@@ -1,10 +1,10 @@
 # GHCR へのコンテナイメージ publish
 #
-# - main push    → ghcr.io/<repo>:latest（VPS 通常運用が追従するタグ）
+# - main push    → ghcr.io/<repo>:latest（リモートサーバー通常運用が追従するタグ）
 # - develop push → ghcr.io/<repo>:develop（開発中バイパス用タグ）
 # - 各 push に :sha-<short> タグも付与（ロールバック用）
 #
-# VPS 側の利用方法は README「VPS / Docker deployment」と
+# リモートサーバー側の利用方法は README「リモートサーバー / Docker deployment」と
 # deploy/docker/aac-update.sh を参照。
 name: docker-image
 

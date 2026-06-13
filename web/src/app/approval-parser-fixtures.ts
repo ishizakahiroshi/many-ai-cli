@@ -339,17 +339,35 @@ test('approval parser fixtures', () => {
   // 「N. User specifies」が無い質問は _freeInput が立たない
   assert.equal(!!shortLabelBatch[1]._freeInput, false);
 
-  // 既存の単一・YES/NO 経路（スコープ外）では短ラベル分離をしない（looseOpts は素通し）。
+  // 単一質問もタブUIへ統合（plan_choice-tab-ui.md C5）: looseOpts でも短ラベルを分離し、
+  // 「N. User specifies」があれば配列プロパティ _freeInput=true が立つ（構造は flat のまま）。
   const singleWithBracket = parser.extractHubMarkerApproval([
     '[MANY-AI-CLI]',
     'どれにしますか？',
     '1. [保留] そのまま',
     '2. 進める',
+    'N. User specifies',
     '[/MANY-AI-CLI]',
   ]);
   assert.equal(parser.isBatchOptions(singleWithBracket), false);
-  assert.equal(singleWithBracket[0].label, '[保留] そのまま');
-  assert.equal(singleWithBracket[0].shortLabel, undefined);
+  assert.equal(singleWithBracket[0].shortLabel, '保留');
+  assert.equal(singleWithBracket[0].label, 'そのまま');
+  // 短ラベル表記が無い選択肢は shortLabel 未設定・label そのまま
+  assert.equal(singleWithBracket[1].shortLabel, undefined);
+  assert.equal(singleWithBracket[1].label, '進める');
+  // 自由入力フラグは配列プロパティで保持される
+  assert.equal((singleWithBracket as any)._freeInput, true);
+
+  // 「N. User specifies」が無い単一質問では _freeInput が立たない
+  const singleNoFree = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'どれにしますか？',
+    '1. そのまま',
+    '2. 進める',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isBatchOptions(singleNoFree), false);
+  assert.equal(!!(singleNoFree as any)._freeInput, false);
 
   // claude /model のような承認ではないカーソル駆動 TUI 選択メニュー。
   // フッターの「Esc to cancel」を matchNativeApprovalTrigger が拾い、❯ カーソル付き選択肢が

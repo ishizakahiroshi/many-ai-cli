@@ -8,11 +8,11 @@
 
 **many-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。単一 Go バイナリ（Hub 常駐 + ラッパー機能）+ ブラウザ UI（xterm.js / TypeScript）。
 
-> **Gemini CLI は wrap 対象外**（2026-05-06 決定 / 利用規約上の制約）。詳細は [docs/v0.2.0-any-ai-cli-design.md](docs/v0.2.0-any-ai-cli-design.md) 冒頭「スコープ更新ログ」参照。
+> **Gemini CLI は wrap 対象外**（2026-05-06 決定 / 利用規約上の制約）。詳細は [docs/v0.3.0-many-ai-cli-design.md](docs/v0.3.0-many-ai-cli-design.md) 「2. 公開スコープ」参照。
 
-**現状**: v0.2.0 を公開予定（v0.1.1 が初回正式リリース、v0.1.0 は試験扱い）。v0.1.2 でバージョン文字列を ldflags + `/api/info` 経由の single source of truth に再設計し、v0.2.0 で WSL ランチャー、Files/Git/Chat/Split/Multi、Commit all、Ollama routing、サーバ側ユーザー設定を追加。設計書はソースコードを正本として更新済み。
+**現状**: v0.3.0 を公開予定（v0.1.1 が初回正式リリース、v0.1.0 は試験扱い）。v0.1.2 でバージョン文字列を ldflags + `/api/info` 経由の single source of truth に再設計、v0.2.0 で WSL ランチャー・Files/Git/Chat/Split/Multi・Commit all・Ollama routing・サーバ側ユーザー設定を追加。v0.3.0 で Workbench（SQLite セッション履歴）・PWA/Web Push・統合ランチャーのクロスプラットフォーム化（SSH は全 OS、WSL は Windows 専用）・リモートサーバー/Docker デプロイ資産・npm 配布を追加し、プロジェクト名を any-ai-cli から many-ai-cli へリネーム。設計書はソースコードを正本として更新済み。
 
-**設計書（正本）**: [docs/v0.2.0-any-ai-cli-design.md](docs/v0.2.0-any-ai-cli-design.md)
+**設計書（正本）**: [docs/v0.3.0-many-ai-cli-design.md](docs/v0.3.0-many-ai-cli-design.md)
 
 > AI の個人グローバルルール（言語・確認・質問フォーマット・ターン終端の出力ルール・スクリーンショット規約等）は、各利用者が使う AI ツールのグローバル設定に置く。公開リポジトリ内の `CLAUDE.md` / `AGENTS.md` はプロジェクト固有ルールだけを扱う。
 
@@ -60,7 +60,7 @@ v0.2.0 までに以下がすべて実装済み：
 
 ## ディレクトリ構成（実際）
 
-設計書 `docs/v0.2.0-any-ai-cli-design.md` を参照。
+設計書 `docs/v0.3.0-many-ai-cli-design.md` を参照。
 
 ```
 many-ai-cli/
@@ -123,7 +123,8 @@ many-ai-cli/
 
 | 項目 | パス |
 |------|------|
-| 設計書 v0.2.0（現行・正本） | [docs/v0.2.0-any-ai-cli-design.md](docs/v0.2.0-any-ai-cli-design.md) |
+| 設計書 v0.3.0（現行・正本） | [docs/v0.3.0-many-ai-cli-design.md](docs/v0.3.0-many-ai-cli-design.md) |
+| 設計書 v0.2.0（履歴） | [docs/v0.2.0-any-ai-cli-design.md](docs/v0.2.0-any-ai-cli-design.md) |
 | 設計書 v1（履歴） | [docs/local/archive/cli-popup-design-v1.md](docs/local/archive/cli-popup-design-v1.md) |
 | Codex 用補足 | [AGENTS.md](AGENTS.md)（ローカル補足があれば `AGENTS.local.md`） |
 | Gemini 用補足 | [GEMINI.md](GEMINI.md)（**many-ai-cli の wrap 対象外**。本リポジトリで Gemini CLI を開発補助に使う場合の手引きとして残置） |
