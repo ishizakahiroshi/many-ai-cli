@@ -312,6 +312,45 @@ test('approval parser fixtures', () => {
   assert.equal(wrappedBatch[1].options[0].label, 'consolidated-3 ④ に追記して追跡下に置く（security-audit は [保留] 降格）(Recommended)');
   assert.deepEqual(numbers(wrappedBatch[1].options), [3, 4]);
 
+  // 一括質問タブUI（plan_choice-tab-ui.md C1）: 選択肢先頭の `[短ラベル]` を
+  // shortLabel/label に分離し、「N. User specifies」がある質問は _freeInput=true になること。
+  const shortLabelBatch = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    '1 短ラベルの生成方法は？',
+    '1. [AI付与] AI 側が各選択肢に短ラベルを付ける',
+    '2. [Web短縮] Web 側で自動短縮する',
+    'N. User specifies',
+    '2 タブ溢れ時は？',
+    '3. 横スクロール',
+    '4. 折り返し',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isBatchOptions(shortLabelBatch), true);
+  assert.equal(shortLabelBatch.length, 2);
+  assert.equal(shortLabelBatch[0].options[0].shortLabel, 'AI付与');
+  assert.equal(shortLabelBatch[0].options[0].label, 'AI 側が各選択肢に短ラベルを付ける');
+  assert.equal(shortLabelBatch[0].options[1].shortLabel, 'Web短縮');
+  assert.equal(shortLabelBatch[0].options[1].label, 'Web 側で自動短縮する');
+  // 「N. User specifies」がある質問は自由入力フラグが立つ
+  assert.equal(shortLabelBatch[0]._freeInput, true);
+  // 短ラベル表記が無い選択肢は shortLabel 未設定・label そのまま
+  assert.equal(shortLabelBatch[1].options[0].shortLabel, undefined);
+  assert.equal(shortLabelBatch[1].options[0].label, '横スクロール');
+  // 「N. User specifies」が無い質問は _freeInput が立たない
+  assert.equal(!!shortLabelBatch[1]._freeInput, false);
+
+  // 既存の単一・YES/NO 経路（スコープ外）では短ラベル分離をしない（looseOpts は素通し）。
+  const singleWithBracket = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'どれにしますか？',
+    '1. [保留] そのまま',
+    '2. 進める',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isBatchOptions(singleWithBracket), false);
+  assert.equal(singleWithBracket[0].label, '[保留] そのまま');
+  assert.equal(singleWithBracket[0].shortLabel, undefined);
+
   // claude /model のような承認ではないカーソル駆動 TUI 選択メニュー。
   // フッターの「Esc to cancel」を matchNativeApprovalTrigger が拾い、❯ カーソル付き選択肢が
   // あるため detectFallback の choice-menu 経路で検出される（=action-bar が出る）。

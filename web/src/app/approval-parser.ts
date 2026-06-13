@@ -280,6 +280,16 @@
   // 各質問末尾の区切りアンカー。続き行結合の対象から除外する（ラベルへ混入させない）。
   const userSpecifiesLineRe = /^N\.\s*(?:user specifies|その他指定)/i;
 
+  // 一括質問タブUI 用: 選択肢ラベル先頭の短ラベル表記 `[短ラベル] 本文` を分離する。
+  // 角括弧内が 1〜12 文字で、かつ続く本文が空でないときのみ短ラベルとして扱う
+  //（`[保留] ...` のような既存ラベル先頭表記の取り違えを避けるため本文必須）。
+  // shortLabel はタブ/選択肢ボタンの圧縮表示に、label（本文）は詳細パネルに使う。
+  function splitShortLabel(label) {
+    const m = String(label || '').match(/^\[([^\][]{1,12})\]\s*(\S.*)$/);
+    if (!m) return { shortLabel: undefined, label: String(label || '').trim() };
+    return { shortLabel: m[1].trim(), label: m[2].trim() };
+  }
+
   function parseHubBlock(rawLines) {
     const lines = ungluedApprovalLines(rawLines);
     const text = lines.join('\n');
@@ -333,8 +343,16 @@
       const om = line.match(optionRe);
       if (om) {
         const opt = { num: parseInt(om[1], 10), label: om[2].trim(), isCurrent: false };
-        if (cur) cur.options.push(opt);
-        else looseOpts.push(opt);
+        if (cur) {
+          // バッチ（複数質問）の選択肢のみ短ラベルを分離する。単一選択（looseOpts）は
+          // スコープ外（既存の見た目を変えない）なので分離しない。
+          const sl = splitShortLabel(opt.label);
+          opt.label = sl.label;
+          if (sl.shortLabel) (opt as any).shortLabel = sl.shortLabel;
+          cur.options.push(opt);
+        } else {
+          looseOpts.push(opt);
+        }
         lastOpt = opt;
         continue;
       }
@@ -346,7 +364,8 @@
         continue;
       }
       // 質問末尾の「N. User specifies」は区切り。続き行として混入させない。
-      if (userSpecifiesLineRe.test(line)) { lastOpt = null; continue; }
+      // バッチの質問内に出現したら、その質問は自由入力可（タブUIで N 肢を出す）。
+      if (userSpecifiesLineRe.test(line)) { if (cur) (cur as any)._freeInput = true; lastOpt = null; continue; }
       // xterm がラベル/見出し途中で折り返した続き行（数字始まりでない）を元の要素へ結合する。
       // 直前に選択肢があればそのラベルへ、無ければ現在の見出しタイトルへ繋ぐ。
       if (lastOpt) lastOpt.label = (lastOpt.label + line).replace(/\s+/g, ' ').trim();

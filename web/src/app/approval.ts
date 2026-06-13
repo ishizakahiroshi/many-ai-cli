@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchFocusIdx, batchSelections, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectFocusIdx, multiSelectSelections, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, utf8Decoder } from './state.js';
+import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchActiveQ, batchFreeText, batchSelections, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectFocusIdx, multiSelectSelections, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, utf8Decoder } from './state.js';
 import { inputEl, sendSubmittedText } from '../app.js';
 import { clearSuppressPtyResize, isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout } from './terminal.js';
 import { stripAnsi } from './settings.js';
@@ -1088,7 +1088,10 @@ export function hideActionBar(id) {
   set_multiSelectFocusIdx(-1);
   if (id !== undefined) actionBarShownAt.delete(id);
   if (id !== undefined) batchSelections.delete(id);
+  if (id !== undefined) batchFreeText.delete(id);
+  if (id !== undefined) batchActiveQ.delete(id);
   if (id !== undefined) multiSelectSelections.delete(id);
+  removeBatchConfirmModal();
   if (id !== undefined) {
     cancelApprovalHintConfirm(id);
     approvalSwitchCandidates.delete(id);
@@ -1300,30 +1303,77 @@ export function showActionBar(bar, sessionId, options, forceStickToBottom = fals
   if (chatWasAtBottom && chatTl) requestAnimationFrame(() => scrollChatPaneToBottom(chatTl));
 }
 
+// ---- 一括承認: 質問タブUI（plan_choice-tab-ui.md）----
+// 質問そのものを横タブにし、選択中の 1 問分の選択肢だけを下のパネルに出す。
+// 質問数が増えても縦の高さが一定で、上のターミナル（文脈）が隠れない。
+// 全問回答後に「送信確認」→ モーダルで内容＋実送信文字列を確認 →「送信」で確定する。
+
+const BATCH_FREE = -1; // 自由入力肢を選択中であることを示す selections センチネル
+
+// アクティブな質問タブ index を範囲内に正規化して返す（未設定/範囲外は 0）。
+function getBatchActiveQ(sessionId, n) {
+  let idx = batchActiveQ.get(sessionId);
+  if (idx == null || idx < 0 || idx >= n) { idx = 0; batchActiveQ.set(sessionId, idx); }
+  return idx;
+}
+
+// タブ/選択肢ボタンの圧縮表示テキスト。shortLabel を優先し、無ければ label 先頭を
+// 全角8字で自動短縮する（最終的な伸縮は CSS の max-width + ellipsis が担う）。
+function batchShortText(opt) {
+  if (opt && opt.shortLabel) return String(opt.shortLabel);
+  const s = String((opt && opt.label) || '').trim();
+  return s.length > 8 ? s.slice(0, 8) + '…' : s;
+}
+
+function batchSectionAnswered(sessionId, idx) {
+  const selections = batchSelections.get(sessionId);
+  if (!selections) return false;
+  const sel = selections[idx];
+  if (sel == null) return false;
+  if (sel === BATCH_FREE) {
+    const ft = batchFreeText.get(sessionId) || [];
+    return (ft[idx] || '').trim().length > 0;
+  }
+  return true;
+}
+
+function batchAllAnswered(sessionId, sections) {
+  if (!sections || sections.length === 0) return false;
+  for (let i = 0; i < sections.length; i++) {
+    if (!batchSectionAnswered(sessionId, i)) return false;
+  }
+  return true;
+}
+
 export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom = false) {
   const term = sessionId === activeSessionId ? terminals.get(sessionId) : null;
   const shouldStickToBottom = !!(term && (forceStickToBottom || term.autoScroll || isTerminalAtBottom(term)));
   const chatTlB = getChatTimelineEl();
   const chatWasAtBottomB = chatTlB ? chatPaneAtBottom(chatTlB) : false;
 
-  // セクション数が変わったら選択状態をリセット（前回の sectionA→sectionB セレクションが残らないように）
+  // セクション数が変わったら選択状態・自由入力をリセット（前回セレクションの持ち越し防止）
   let selections = batchSelections.get(sessionId);
   if (!selections || selections.length !== sections.length) {
     selections = new Array(sections.length).fill(null);
     batchSelections.set(sessionId, selections);
-    if (batchFocusIdx < 0 || batchFocusIdx >= sections.length) set_batchFocusIdx(0);
   }
+  let freeTexts = batchFreeText.get(sessionId);
+  if (!freeTexts || freeTexts.length !== sections.length) {
+    freeTexts = new Array(sections.length).fill('');
+    batchFreeText.set(sessionId, freeTexts);
+  }
+  const activeQ = getBatchActiveQ(sessionId, sections.length);
 
   const sig = JSON.stringify({
     s: sessionId,
-    mode: 'batch',
+    mode: 'batch-tabs',
     sects: sections.map(sec => ({
-      n: sec.num,
-      t: sec.title,
-      o: (sec.options || []).map(o => ({ n: o.num, l: o.label, c: !!o.isCurrent })),
+      n: sec.num, t: sec.title, f: !!sec._freeInput,
+      o: (sec.options || []).map(o => ({ n: o.num, l: o.label, s: o.shortLabel || '', c: !!o.isCurrent })),
     })),
     sel: selections,
-    f: batchFocusIdx,
+    ft: freeTexts,
+    aq: activeQ,
     v: bar.classList.contains('visible'),
     col: isActionBarCollapsed(),
   });
@@ -1342,64 +1392,130 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   label.textContent = t('approval_batch_label', { n: sections.length });
   bar.appendChild(label);
 
+  // ===== 質問タブ列（横スクロール・✓/未 ステータス付き） =====
+  const tabsEl = document.createElement('div');
+  tabsEl.className = 'action-qtabs';
+  const statusEls: any[] = [];
   sections.forEach((sec, idx) => {
-    const sectionEl = document.createElement('div');
-    sectionEl.className = 'action-section';
-    if (idx === batchFocusIdx) sectionEl.classList.add('focused');
-    sectionEl.dataset.idx = String(idx);
-
-    const titleEl = document.createElement('div');
-    titleEl.className = 'action-section-title';
-    titleEl.textContent = `${sec.num}. ${sec.title}`;
-    titleEl.title = sec.title;
-    sectionEl.appendChild(titleEl);
-
-    const btnRow = document.createElement('div');
-    btnRow.className = 'action-section-buttons';
-    (sec.options || []).forEach((opt) => {
-      const btn = document.createElement('button');
-      let cls = 'action-btn batch-option';
-      if (opt.isCurrent) cls += ' current';
-      if (selections[idx] === opt.num) cls += ' selected';
-      btn.className = cls;
-      btn.textContent = `${opt.num}. ${opt.label}`;
-      btn.title = `${opt.num}. ${opt.label}`;
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        selectBatchOption(sessionId, idx, opt.num);
-      };
-      btnRow.appendChild(btn);
-    });
-    sectionEl.appendChild(btnRow);
-    bar.appendChild(sectionEl);
+    const tab = document.createElement('button');
+    tab.className = 'action-qtab' + (idx === activeQ ? ' active' : '');
+    tab.onclick = (e) => { e.stopPropagation(); setBatchActiveQ(sessionId, idx); };
+    const qn = document.createElement('span');
+    qn.className = 'qn';
+    qn.textContent = `${idx + 1}.`;
+    const txt = document.createElement('span');
+    txt.className = 'qlabel';
+    txt.textContent = sec.title;
+    txt.title = sec.title;
+    const st = document.createElement('span');
+    st.className = 'st';
+    statusEls[idx] = st;
+    tab.appendChild(qn); tab.appendChild(txt); tab.appendChild(st);
+    tabsEl.appendChild(tab);
   });
+  bar.appendChild(tabsEl);
 
+  // ===== アクティブ質問のパネル（選択肢 + 詳細 + 自由入力） =====
+  const pane = document.createElement('div');
+  pane.className = 'action-qpane';
+  const activeSec = sections[activeQ];
+
+  const head = document.createElement('div');
+  head.className = 'action-qhead';
+  head.textContent = `${activeQ + 1}. ${activeSec.title}`;
+  head.title = activeSec.title;
+  pane.appendChild(head);
+
+  // 選択肢（+ 自由入力肢）
+  const choices = (activeSec.options || []).slice();
+  if (activeSec._freeInput) {
+    choices.push({ num: BATCH_FREE, label: t('approval_free_input_full'), shortLabel: t('approval_free_input'), _free: true });
+  }
+
+  const optsEl = document.createElement('div');
+  optsEl.className = 'action-qopts';
+  choices.forEach((opt) => {
+    const btn = document.createElement('button');
+    let cls = 'action-btn batch-option action-qopt';
+    if (opt.isCurrent) cls += ' current';
+    if (selections[activeQ] === opt.num) cls += ' selected';
+    btn.className = cls;
+    const nEl = document.createElement('span');
+    nEl.className = 'n';
+    nEl.textContent = opt._free ? 'N' : `${opt.num}`;
+    const lEl = document.createElement('span');
+    lEl.className = 'opt-label';
+    lEl.textContent = batchShortText(opt);
+    btn.appendChild(nEl); btn.appendChild(lEl);
+    btn.title = opt._free ? t('approval_free_input') : `${opt.num}. ${opt.label}`;
+    btn.onclick = (e) => { e.stopPropagation(); selectBatchOption(sessionId, activeQ, opt.num); };
+    optsEl.appendChild(btn);
+  });
+  pane.appendChild(optsEl);
+
+  // 詳細パネル（選択中の全文 / 自由入力欄）
+  const detail = document.createElement('div');
+  const sel = selections[activeQ];
+  // status/progress/submit を入力中に再構築せず更新する closure（後段で定義）
+  let updateBatchStatus = () => {};
+  if (sel != null) {
+    const opt = sel === BATCH_FREE
+      ? { num: BATCH_FREE, label: t('approval_free_input_full'), _free: true } as any
+      : choices.find((o) => o.num === sel);
+    if (opt) {
+      detail.className = 'action-qdetail';
+      const lab = document.createElement('span');
+      lab.className = 'detail-lab';
+      lab.textContent = opt._free ? t('approval_free_input') : `${opt.num}. ${batchShortText(opt)}`;
+      detail.appendChild(lab);
+      if (!opt._free) {
+        const body = document.createElement('div');
+        body.className = 'detail-body';
+        body.textContent = opt.label + (opt.isCurrent ? ` (${t('approval_recommended')})` : '');
+        detail.appendChild(body);
+      } else {
+        const inp = document.createElement('input');
+        inp.className = 'action-qfreein';
+        inp.type = 'text';
+        inp.placeholder = t('approval_free_input_placeholder');
+        inp.value = freeTexts[activeQ] || '';
+        inp.oninput = () => {
+          freeTexts[activeQ] = inp.value;
+          // 入力中は full rebuild せずステータス/進捗/送信のみ更新（フォーカス維持）
+          updateBatchStatus();
+        };
+        detail.appendChild(inp);
+        setTimeout(() => inp.focus(), 0);
+      }
+    } else {
+      detail.className = 'action-qdetail empty';
+      detail.textContent = t('approval_batch_detail_empty');
+    }
+  } else {
+    detail.className = 'action-qdetail empty';
+    detail.textContent = t('approval_batch_detail_empty');
+  }
+  pane.appendChild(detail);
+  bar.appendChild(pane);
+
+  // ===== 送信バー =====
   const footer = document.createElement('div');
   footer.className = 'action-bar-footer';
 
   const progress = document.createElement('span');
   progress.className = 'action-bar-progress';
-  const done = selections.filter(v => v != null).length;
-  progress.textContent = t('approval_batch_progress', { done, total: sections.length });
   footer.appendChild(progress);
 
   const submitBtn = document.createElement('button');
   submitBtn.className = 'action-submit-btn';
-  submitBtn.textContent = t('approval_batch_submit');
-  submitBtn.disabled = !selections.every(v => v != null);
-  submitBtn.onclick = (e) => {
-    e.stopPropagation();
-    sendBatchChoices(sessionId);
-  };
+  submitBtn.textContent = t('approval_batch_confirm');
+  submitBtn.onclick = (e) => { e.stopPropagation(); openBatchConfirm(sessionId); };
   footer.appendChild(submitBtn);
 
   const clearBtn = document.createElement('button');
   clearBtn.className = 'action-clear-btn';
   clearBtn.textContent = t('approval_batch_clear');
-  clearBtn.onclick = (e) => {
-    e.stopPropagation();
-    clearBatchSelections(sessionId);
-  };
+  clearBtn.onclick = (e) => { e.stopPropagation(); clearBatchSelections(sessionId); };
   footer.appendChild(clearBtn);
 
   const closeBatchBtn = document.createElement('button');
@@ -1414,6 +1530,21 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   footer.appendChild(closeBatchBtn);
 
   bar.appendChild(footer);
+
+  // タブ ✓/未・進捗・送信ボタン活性を一括更新（自由入力の oninput からも呼ぶ）
+  updateBatchStatus = () => {
+    let done = 0;
+    sections.forEach((sec, idx) => {
+      const ok = batchSectionAnswered(sessionId, idx);
+      if (ok) done++;
+      const st = statusEls[idx];
+      if (st) { st.textContent = ok ? '✓' : '未'; st.className = 'st ' + (ok ? 'done' : 'todo'); }
+    });
+    progress.textContent = t('approval_batch_progress', { done, total: sections.length });
+    submitBtn.disabled = done < sections.length;
+  };
+  updateBatchStatus();
+
   appendCollapseToggle(bar, sessionId);
   bar.classList.toggle('collapsed', isActionBarCollapsed());
   if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(60000);
@@ -1423,46 +1554,142 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   if (chatWasAtBottomB && chatTlB) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlB));
 }
 
+export function setBatchActiveQ(sessionId, idx) {
+  batchActiveQ.set(sessionId, idx);
+  const cached = approvalRawOptionsCache.get(sessionId);
+  if (isBatchOptions(cached)) {
+    const bar = document.getElementById('action-bar');
+    if (bar) showBatchActionBar(bar, sessionId, cached);
+  }
+}
+
 export function selectBatchOption(sessionId, sectionIdx, optionNum) {
   const selections = batchSelections.get(sessionId);
   if (!selections) return;
   selections[sectionIdx] = optionNum;
+  batchActiveQ.set(sessionId, sectionIdx); // 選んだ質問をアクティブに保つ（自動で別タブに飛ばさない）
   const cached = approvalRawOptionsCache.get(sessionId);
   if (isBatchOptions(cached)) {
-    // 自動前進: 末尾セクションを選んだら -1（無効化）して Enter で送信可能にする
-    set_batchFocusIdx(sectionIdx + 1 < cached.length ? sectionIdx + 1 : -1);
     const bar = document.getElementById('action-bar');
     if (bar) showBatchActionBar(bar, sessionId, cached);
   }
-  setTimeout(() => inputEl.focus(), 0);
+  // 自由入力肢は再描画後に入力欄へフォーカスする（showBatchActionBar 内）。それ以外は本体入力へ。
+  if (optionNum !== BATCH_FREE) setTimeout(() => inputEl.focus(), 0);
 }
 
 export function clearBatchSelections(sessionId) {
   const cached = approvalRawOptionsCache.get(sessionId);
   if (!isBatchOptions(cached)) return;
   batchSelections.set(sessionId, new Array(cached.length).fill(null));
-  set_batchFocusIdx(0);
+  batchFreeText.set(sessionId, new Array(cached.length).fill(''));
+  batchActiveQ.set(sessionId, 0);
   const bar = document.getElementById('action-bar');
   if (bar) showBatchActionBar(bar, sessionId, cached);
   setTimeout(() => inputEl.focus(), 0);
 }
 
+// 実送信文字列を組み立てる。各行「質問番号 選択肢番号」。自由入力の行は入力テキストを送る。
+// 選択肢番号はエージェントが提示した実番号（ボタン表示と一致）をそのまま使う
+// （1始まり位置への変換はしない。グローバル連番の場合に表示・回答・解釈がずれるため）。
+function buildBatchPayload(sessionId) {
+  const selections = batchSelections.get(sessionId) || [];
+  const freeTexts = batchFreeText.get(sessionId) || [];
+  return selections.map((sel, idx) =>
+    sel === BATCH_FREE ? `${idx + 1} ${(freeTexts[idx] || '').trim()}` : `${idx + 1} ${sel}`
+  ).join('\n');
+}
+
+// 確認モーダル用の人が読む形（質問タイトル＋選んだラベル/全文、自由入力は入力テキスト）。
+function buildBatchReadable(sessionId, sections) {
+  const selections = batchSelections.get(sessionId) || [];
+  const freeTexts = batchFreeText.get(sessionId) || [];
+  return sections.map((sec, idx) => {
+    const sel = selections[idx];
+    let val;
+    if (sel === BATCH_FREE) {
+      val = `${t('approval_free_input')}「${(freeTexts[idx] || '').trim()}」`;
+    } else {
+      const opt = (sec.options || []).find((o) => o.num === sel);
+      val = opt ? `${opt.shortLabel ? opt.shortLabel + ' — ' : ''}${opt.label}` : `${sel}`;
+    }
+    return `${idx + 1}. ${sec.title}\n   → ${val}`;
+  }).join('\n');
+}
+
+function removeBatchConfirmModal() {
+  const m = document.getElementById('action-confirm-mask');
+  if (m && m.parentNode) m.parentNode.removeChild(m);
+}
+
+// 「送信確認」: 全問回答済みのときだけ、内容＋実送信文字列を確認するモーダルを開く。
+export function openBatchConfirm(sessionId) {
+  const cached = approvalRawOptionsCache.get(sessionId);
+  if (!isBatchOptions(cached)) return;
+  if (!batchAllAnswered(sessionId, cached)) return;
+  removeBatchConfirmModal();
+
+  const mask = document.createElement('div');
+  mask.className = 'action-confirm-mask';
+  mask.id = 'action-confirm-mask';
+  const modal = document.createElement('div');
+  modal.className = 'action-confirm-modal';
+
+  const h = document.createElement('h3');
+  h.textContent = t('approval_confirm_title');
+  modal.appendChild(h);
+
+  const p1 = document.createElement('p');
+  p1.textContent = t('approval_confirm_readable_label');
+  modal.appendChild(p1);
+  const readable = document.createElement('div');
+  readable.className = 'action-confirm-readable';
+  readable.textContent = buildBatchReadable(sessionId, cached);
+  modal.appendChild(readable);
+
+  const p2 = document.createElement('p');
+  p2.textContent = t('approval_confirm_payload_label');
+  modal.appendChild(p2);
+  const payload = document.createElement('div');
+  payload.className = 'action-confirm-payload';
+  payload.textContent = buildBatchPayload(sessionId);
+  modal.appendChild(payload);
+
+  const row = document.createElement('div');
+  row.className = 'action-confirm-row';
+  const back = document.createElement('button');
+  back.className = 'action-confirm-back';
+  back.textContent = t('approval_confirm_back');
+  back.onclick = (e) => { e.stopPropagation(); removeBatchConfirmModal(); setTimeout(() => inputEl.focus(), 0); };
+  const go = document.createElement('button');
+  go.className = 'action-confirm-go';
+  go.textContent = t('approval_confirm_send');
+  go.onclick = (e) => { e.stopPropagation(); removeBatchConfirmModal(); sendBatchChoices(sessionId); };
+  row.appendChild(back); row.appendChild(go);
+  modal.appendChild(row);
+
+  mask.appendChild(modal);
+  // 背景クリックで閉じる（戻る相当）
+  mask.onclick = (e) => { if (e.target === mask) { removeBatchConfirmModal(); setTimeout(() => inputEl.focus(), 0); } };
+  document.body.appendChild(mask);
+  setTimeout(() => go.focus(), 0);
+}
+
+// 確定送信（モーダルの「送信」から呼ぶ）。送信後は完了メッセージを出さず UI を消して会話に戻る。
 export function sendBatchChoices(sessionId) {
-  const selections = batchSelections.get(sessionId);
-  if (!selections || selections.length === 0 || selections.some(v => v == null)) return;
-  const prevOpts = approvalRawOptionsCache.get(sessionId);
-  // 各行「質問番号 選択肢番号」で送る。選択肢番号はエージェントが提示した実番号
-  // （ボタン表示と一致）をそのまま使い、1始まり位置への変換は行わない。
-  // エージェントがグローバル連番（Q2が3,4等）を使った場合に変換すると、
-  // 提示番号（3,4）と回答番号（1,2）がずれ、表示・回答・エージェント解釈の
-  // 三者が食い違う。実番号を返せば、正しく1始まりのエージェントでも結果は同じ。
-  const text = selections.map((sel, idx) => `${idx + 1} ${sel}`).join('\n');
-  if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
-  sendApprovalConsumed(sessionId, prevOpts, text);
+  const cached = approvalRawOptionsCache.get(sessionId);
+  if (!isBatchOptions(cached)) return;
+  if (!batchAllAnswered(sessionId, cached)) return;
+  const text = buildBatchPayload(sessionId);
+  approvalConsumedSig.set(sessionId, approvalSig(cached));
+  sendApprovalConsumed(sessionId, cached, text);
   sendSubmittedText(sessionId, `${text}\r`);
+  removeBatchConfirmModal();
   hideActionBar(sessionId);
   approvalSuppressUntil.set(sessionId, Date.now() + 400);
   batchSelections.delete(sessionId);
+  batchFreeText.delete(sessionId);
+  batchActiveQ.delete(sessionId);
+  multiQuestionDismissedCache.delete(sessionId);
   setTimeout(() => {
     detectApproval(sessionId);
     maybeAutoSwitchToNextApproval();
@@ -1475,27 +1702,26 @@ export function isBatchActionBarVisible() {
   return !!(bar && bar.classList.contains('visible') && bar.classList.contains('batch'));
 }
 
+// 質問タブの移動（Tab / ←→）。タブを巡回するだけで選択は変えない。
 export function moveBatchFocus(delta) {
   if (activeSessionId === null) return false;
   const cached = approvalRawOptionsCache.get(activeSessionId);
   if (!isBatchOptions(cached) || cached.length === 0) return false;
   const n = cached.length;
-  const start = batchFocusIdx < 0 ? (delta > 0 ? -1 : n) : batchFocusIdx;
-  set_batchFocusIdx(((start + delta) % n + n) % n);
-  const bar = document.getElementById('action-bar');
-  if (bar) showBatchActionBar(bar, activeSessionId, cached);
+  const cur = getBatchActiveQ(activeSessionId, n);
+  setBatchActiveQ(activeSessionId, ((cur + delta) % n + n) % n);
   return true;
 }
 
 export function handleBatchNumberKey(sessionId, num) {
   const cached = approvalRawOptionsCache.get(sessionId);
   if (!isBatchOptions(cached)) return false;
-  if (batchFocusIdx < 0 || batchFocusIdx >= cached.length) return false;
-  const section = cached[batchFocusIdx];
+  const idx = getBatchActiveQ(sessionId, cached.length);
+  const section = cached[idx];
   if (!section) return false;
   const opt = (section.options || []).find(o => o.num === num);
   if (!opt) return false;
-  selectBatchOption(sessionId, batchFocusIdx, num);
+  selectBatchOption(sessionId, idx, num);
   return true;
 }
 

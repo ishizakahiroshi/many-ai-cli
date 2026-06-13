@@ -12,7 +12,7 @@ import (
 const claudeImportLine = "@~/.many-ai-cli/approval-rules.md"
 const sharedBlockStart = "<!-- any-ai-cli:approval-rules -->"
 const sharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
-const rulesVersion = "11"
+const rulesVersion = "12"
 
 var rulesFileContent = strings.Join([]string{
 	fmt.Sprintf("<!-- version: %s -->", rulesVersion),
@@ -77,6 +77,7 @@ var rulesFileContent = strings.Join([]string{
 	"  - 1 ブロックに 2 件以上の質問を並べる場合のみこの形式を使う",
 	"  - 質問の見出し番号は 1, 2, 3 ... の連番。プレフィックス（Q1: / C1: 等）は付けない",
 	"  - 各質問の最初の選択肢を推奨とし (Recommended) を末尾に付ける。各質問の最後は必ず「N. User specifies」",
+	"  - 任意: 各選択肢の本文先頭に `[短ラベル]` を付けてよい（例: `1. [AI付与] AI 側が各選択肢に短ラベルを付ける`）。Web ダッシュボードの質問タブ UI が、この短ラベルをタブ/選択肢ボタンの圧縮表示に使い、本文は詳細パネルに出す。短ラベルは全角8字以内・名詞優先が目安（表示は端末幅で自動truncationされるため厳密長は不問）。省略時は Web 側が本文先頭を自動短縮するので付けなくてもよい",
 	"  - 各質問の選択肢行は 1 文字以上インデントする（見出し番号と区別するため）",
 	"  - ユーザーの回答は各行「<質問見出し番号> <選択肢番号>」の複数行テキストで返ってくる（例: 上の通し番号の例なら「1 2」と「2 5」の 2 行 = 質問1 は Option B、質問2 は Option E）",
 	"  - ユーザーが手入力した場合は「2 5」のような質問順の数字列 1 行のこともある。行頭の数字が質問番号として解釈できない場合はこちらとみなす",
