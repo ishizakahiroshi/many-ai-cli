@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"testing"
 
 	"many-ai-cli/internal/config"
@@ -35,7 +36,12 @@ func TestEnsureManagedWhisperNotInstalled(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d body=%s", w.Code, http.StatusBadRequest, w.Body.String())
 	}
-	if !bytes.Contains(w.Body.Bytes(), []byte("whisper_not_installed")) {
-		t.Fatalf("body missing whisper_not_installed: %s", w.Body.String())
+	want := "whisper_not_installed"
+	if runtime.GOOS != "windows" {
+		// managed Whisper is Windows-only; other platforms report it as unsupported.
+		want = "unsupported_platform"
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte(want)) {
+		t.Fatalf("body missing %s: %s", want, w.Body.String())
 	}
 }

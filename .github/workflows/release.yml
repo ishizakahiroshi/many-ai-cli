@@ -21,6 +21,10 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      # secrets context is not allowed in step-level `if:`; expose NPM_TOKEN as a
+      # job env so the npm steps can gate on env.NPM_TOKEN instead.
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -71,15 +75,15 @@ jobs:
       # 同梱して publish する。standalone exe をブラウザ DL させないことで MotW/SmartScreen を回避。
       # NPM_TOKEN secret が未設定なら丸ごとスキップ（既存の GitHub/Homebrew/winget リリースは壊さない）。
       - name: Stage npm binaries from GoReleaser dist
-        if: ${{ secrets.NPM_TOKEN != '' }}
+        if: ${{ env.NPM_TOKEN != '' }}
         run: node scripts/stage-npm-binaries.mjs
 
       - name: Sync npm package versions to tag
-        if: ${{ secrets.NPM_TOKEN != '' }}
+        if: ${{ env.NPM_TOKEN != '' }}
         run: node scripts/sync-npm-version.mjs "${{ github.ref_name }}"
 
       - name: Publish npm packages
-        if: ${{ secrets.NPM_TOKEN != '' }}
+        if: ${{ env.NPM_TOKEN != '' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |

@@ -47,8 +47,9 @@ func TestBrowserCommandUnderWSLUsesExplorer(t *testing.T) {
 	}
 	const url = "http://127.0.0.1:47777/?token=test"
 
-	t.Setenv("WSL_INTEROP", "")
-	t.Setenv("WSL_DISTRO_NAME", "Ubuntu")
+	// browserCommand picks explorer.exe only in Windows-launcher (WSL) mode,
+	// which wslutil.IsWindowsLauncherMode() detects via MANY_AI_CLI_WSL_LAUNCHER.
+	t.Setenv("MANY_AI_CLI_WSL_LAUNCHER", "1")
 
 	cmd := browserCommand(url)
 	name := strings.ToLower(filepath.Base(cmd.Path))

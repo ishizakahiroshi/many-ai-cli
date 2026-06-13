@@ -114,7 +114,7 @@ func resolveCmd(provider string, args []string) (string, []string) {
 // Unix. Preference order: $SHELL env → bash → sh.
 func resolveDefaultShell() string {
 	if sh := os.Getenv("SHELL"); sh != "" {
-		if _, err := os.Stat(sh); err == nil {
+		if _, err := os.Stat(sh); err == nil { // #nosec G703 -- sh は $SHELL 由来の既定シェルパスの存在確認で外部入力ではない
 			return sh
 		}
 	}
