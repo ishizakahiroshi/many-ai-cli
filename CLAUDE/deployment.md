@@ -1,6 +1,6 @@
 # any-ai-cli ビルド・配布・デプロイ
 
-> 最終更新: 2026-06-07(日) 01:46:08
+> 最終更新: 2026-06-13(土) 14:00:52
 
 `any-ai-cli` は **Go 単一バイナリ + go:embed フロント** の構成。サーバーへのデプロイは無し（ユーザー PC にバイナリを置くだけ）。
 
@@ -105,6 +105,23 @@ make build
 - Windows: `any-ai-cli.exe` を `%LOCALAPPDATA%\Programs\any-ai-cli\` に配置 → PATH 追加
 - macOS: `any-ai-cli` を `/usr/local/bin/` または `~/bin/` に配置
 - Linux: 同上
+
+### Windows 配布導線の原則
+
+Windows では、ブラウザで直接ダウンロードした unsigned exe / zip は Mark-of-the-Web 付きになりやすく、SmartScreen や Smart App Control の警告・ブロックに入りやすい。そのため、公開導線は次の優先順位で設計する。
+
+1. developer install の推奨導線は npm registry + `pnpm add -g any-ai-cli` にする
+2. `winget` は Windows 標準 package manager 導線として扱う
+3. Scoop は CLI ユーザー向けの追加導線として扱う
+4. GitHub Releases zip は checksum / cosign / `unblock-windows.cmd` 付きの手動導線として維持する
+
+package manager は発見性・更新性・再現性を改善し、ブラウザダウンロード由来の MotW 問題を避けやすくする。ただし Authenticode コード署名の代替ではないため、Smart App Control の完全ブロックや AppLocker / WDAC / EDR 等の組織ポリシーは別途扱う。
+
+npm registry 導線は `npm` コマンド推奨ではない。pnpm / bun / yarn が取得する共有 registry として使い、README の主要コマンドは `pnpm add -g any-ai-cli` にする。`npm install -g any-ai-cli` は Node 標準 fallback として小さく扱う。
+
+npm package を作る場合は platform 別 optional package に Go バイナリを同梱する方式を優先し、install 時に GitHub Releases から exe を後段ダウンロードする wrapper は避ける。
+
+Hub は引き続き `127.0.0.1` 固定で bind し、外部公開用の Windows Firewall 例外を要求しない設計を維持する。
 
 ### v0.4+ の CI/CD 配布（予定）
 

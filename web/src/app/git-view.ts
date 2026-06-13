@@ -412,6 +412,7 @@ import { appConfirm } from './settings.js';
           <div class="git-graph-count" data-count>${_esc(_gt('git_view_loading', 'loading...'))}</div>
           <button class="git-icon-btn" data-fetch-btn title="${_esc(_gt('git_view_fetch', 'Fetch'))}">↓ fetch</button>
           <button class="git-icon-btn" data-pull-btn title="${_esc(_gt('git_view_pull', 'Pull (fast-forward)'))}" disabled>↧ pull</button>
+          <button class="git-icon-btn" data-push-btn title="${_esc(_gt('git_view_push', 'Push'))}" disabled>↥ push</button>
           <button class="git-icon-btn" data-refresh-btn title="${_esc(_gt('git_view_refresh', 'Refresh'))}">↻</button>
           <button class="git-icon-btn" data-loadmore-btn title="${_esc(_gt('git_view_load_more', 'Load 100 more'))}">+${PAGE_LIMIT}</button>
           <button class="git-commit-all-btn" data-commit-all-btn disabled>${_esc(_gt('git_commit_all', 'Commit all'))}</button>
@@ -500,6 +501,7 @@ import { appConfirm } from './settings.js';
       this.els.workingCount  = root.querySelector('[data-working-count]');
       this.els.fetchBtn      = root.querySelector('[data-fetch-btn]');
       this.els.pullBtn       = root.querySelector('[data-pull-btn]');
+      this.els.pushBtn       = root.querySelector('[data-push-btn]');
       this.els.refreshBtn    = root.querySelector('[data-refresh-btn]');
       this.els.loadmoreBtn   = root.querySelector('[data-loadmore-btn]');
       this.els.commitAllBtn  = root.querySelector('[data-commit-all-btn]');
@@ -531,6 +533,7 @@ import { appConfirm } from './settings.js';
 
       this.els.fetchBtn.addEventListener('click', () => this._gitFetch());
       this.els.pullBtn.addEventListener('click', () => this._gitPull());
+      this.els.pushBtn.addEventListener('click', () => this._gitPush());
       this.els.refreshBtn.addEventListener('click', () => this.refresh());
       this.els.loadmoreBtn.addEventListener('click', () => this.loadMore());
       this.els.commitAllBtn.addEventListener('click', () => this._openCommitModal());
@@ -761,6 +764,7 @@ import { appConfirm } from './settings.js';
         this.els.commitAllBtn.disabled = !changed;
       }
       this._updatePullButton();
+      this._updatePushButton();
       if (!this.els.workingPreview) return;
       if (!changed) {
         this.els.workingPreview.innerHTML = `
@@ -977,6 +981,57 @@ import { appConfirm } from './settings.js';
       }
     }
 
+    async _gitPush() {
+      const btn = this.els.pushBtn;
+      if (!btn || btn.disabled) return;
+      const wt = this.workingTree || {};
+      const branch = wt.branch || this.sessionBranch || this.viewRef || 'HEAD';
+      const ahead = Number.isFinite(wt.ahead) ? wt.ahead : 0;
+      const fallbackMessage = `Push ${ahead} commit(s) from ${branch} to the configured upstream. This publishes commits to the remote. Continue?`;
+      const message = _gt('git_push_confirm_message', fallbackMessage)
+        .replace('{branch}', branch)
+        .replace('{ahead}', String(ahead));
+      const ok = await appConfirm({
+        title: _gt('git_push_confirm_title', 'Push commits'),
+        message,
+        confirmText: _gt('git_push_confirm_run', 'Push'),
+        cancelText: _gt('spawn_cancel', 'Cancel'),
+        kind: 'danger',
+      });
+      if (!ok) return;
+      btn.dataset.busy = '1';
+      btn.disabled = true;
+      btn.textContent = '…';
+      try {
+        const res = await fetch(`/api/git-push?token=${encodeURIComponent(this.token)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session: this.sessionId, token: this.token }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) {
+          const detail = data && data.detail ? data.detail : `HTTP ${res.status}`;
+          if (data && data.error === 'rejected_non_fast_forward') {
+            _toast(_gt('git_push_rejected', 'Remote has new commits. Pull first.'), detail);
+          } else if (data && data.error === 'no_upstream') {
+            _toast(_gt('git_push_no_upstream', 'No upstream branch is configured.'), detail);
+          } else if (data && data.error === 'auth_failed') {
+            _toast(_gt('git_push_auth_failed', 'Git authentication failed.'), detail);
+          } else {
+            _toast(_gt('git_push_failed', 'Push failed'), detail);
+          }
+          return;
+        }
+        _toast(_gt('git_push_done', 'Push complete'), '');
+        await this.refresh();
+      } catch (err) {
+        _toast(_gt('git_push_failed', 'Push failed'), err && err.message ? err.message : String(err));
+      } finally {
+        delete btn.dataset.busy;
+        this._updatePushButton();
+      }
+    }
+
     // _updatePullButton は workingTree の ahead/behind 状態から pull ボタンの
     // ラベル・活性・強調を更新する。behind>0 のときのみ活性化し「↧ N」を表示する。
     _updatePullButton() {
@@ -995,6 +1050,25 @@ import { appConfirm } from './settings.js';
         btn.textContent = '↧ pull';
         btn.disabled = true;
         btn.classList.remove('git-behind');
+      }
+    }
+
+    _updatePushButton() {
+      const btn = this.els.pushBtn;
+      if (!btn) return;
+      if (btn.dataset.busy === '1') return;
+      const wt = this.workingTree;
+      const ahead = wt && Number.isFinite(wt.ahead) ? wt.ahead : 0;
+      const hasUpstream = !!(wt && wt.has_upstream);
+      btn.title = _gt('git_view_push', 'Push');
+      if (hasUpstream && ahead > 0) {
+        btn.textContent = `↥ ${ahead}`;
+        btn.disabled = false;
+        btn.classList.add('git-ahead');
+      } else {
+        btn.textContent = '↥ push';
+        btn.disabled = true;
+        btn.classList.remove('git-ahead');
       }
     }
 

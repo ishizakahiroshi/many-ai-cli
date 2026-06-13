@@ -96,6 +96,7 @@ winget install ishizakahiroshi.any-ai-cli
 ```
 
 > 初回の winget manifest PR が `microsoft/winget-pkgs` にマージされてから利用可能になります。それまでは下記の zip ダウンロードを使ってください。
+> Windows では、利用可能になり次第 package manager 経由を推奨します。ブラウザで zip / exe を直接ダウンロードする導線に比べ、Mark-of-the-Web 起因の警告に入りにくくなります。ただし Authenticode コード署名や組織の許可リスト登録の代替ではありません。
 
 **macOS (Homebrew):**
 
@@ -136,6 +137,10 @@ Windows のブロックには複数の種類があります。
 - **SmartScreen**: 未知の発行元・利用実績の少ないアプリとして警告される場合があります。自分で公式リリースから取得し、必要に応じてチェックサム / 署名を確認した場合だけ続行してください。
 - **Smart App Control**: Windows 11 の一部環境では、未署名アプリが完全にブロックされる場合があります。`unblock-windows.cmd` では回避できません。未署名 `.exe` 配布のままでは、このケースに対するサポート済み回避策はありません。
 - **組織管理ポリシー**: 会社 PC などでは AppLocker / WDAC / EDR / ウイルス対策ソフト等により、上記とは別にブロックされる場合があります。これらを無効化せず、組織の許可リスト登録手順に従ってください。
+
+winget が利用可能な場合、Windows では手動 zip より winget を優先してください。
+手動 zip は、リリース成果物を直接取得したいユーザー向けに引き続きサポートします。
+Hub 自体は `127.0.0.1` のみに bind するため、通常のローカル利用で LAN にサーバーを開いたり、公開用の Windows Firewall 例外を追加したりする必要はありません。
 
 Windows zip の推奨手順:
 

@@ -1,6 +1,6 @@
 # any-ai-cli リリース手順
 
-> 最終更新: 2026-06-09(火) 10:49:46 — Windows unblock helper と無料配布経路の整理を追記
+> 最終更新: 2026-06-13(土) 14:00:52 — pnpm 推奨の developer install 方針を追記
 
 この手順は GitHub Actions の `Release` workflow と GoReleaser で GitHub Releases を作成するための運用メモ。
 
@@ -56,10 +56,27 @@ README では以下を区別して説明する:
 
 短期の優先順位:
 
-1. GitHub Releases zip + checksum / cosign + `unblock-windows.cmd` を標準導線にする
+1. npm registry に developer install 用 package を用意し、README では `pnpm add -g any-ai-cli` を推奨コマンドにする
 2. winget manifest を整備し、Windows ユーザーが標準ツールで見つけられるようにする
-3. Scoop bucket は CLI 利用者向けの追加導線として検討する
-4. Chocolatey は利用要望と保守コストを見て後回しにする
+3. GitHub Releases zip + checksum / cosign + `unblock-windows.cmd` を手動導線として維持する
+4. Scoop bucket は CLI 利用者向けの追加導線として検討する
+5. Chocolatey は利用要望と保守コストを見て後回しにする
+
+Windows では、ブラウザで zip / exe を直接ダウンロードするより、OS 標準または CLI 利用者向け package manager 経由の導線を優先する。理由は次の通り:
+
+- ブラウザ経由で取得した zip / exe は Mark-of-the-Web が付きやすく、SmartScreen / Smart App Control / 組織ポリシーの判断対象になりやすい
+- `pnpm add -g` / `bun install -g` / `npm install -g` 経由では、ブラウザで exe を直接取得する導線を避けられ、グローバルコマンドの shim はローカル生成される
+- package manager 経由の取得はユーザーが標準ツールで明示的にインストールする導線になり、発見性・更新性・再現性が上がる
+- ただし package manager は Authenticode コード署名の代替ではない。未知の発行元警告、Smart App Control の完全ブロック、AppLocker / WDAC / EDR 等の組織ポリシーは別問題として扱う
+- `any-ai-cli` の Hub は `127.0.0.1` に bind するローカルサーバであり、外部公開用の Windows Firewall 例外を要求しない設計を維持する
+
+他言語 ecosystem への登録方針:
+
+- publish 先は npm registry とする。これは `npm` コマンドを推奨するという意味ではなく、pnpm / bun / yarn も同じ registry から取得するため
+- README の推奨コマンドは `npm install -g any-ai-cli` ではなく `pnpm add -g any-ai-cli` にする。`npm install -g` は互換 fallback として小さく載せる程度に留める
+- `bun install -g any-ai-cli` は Bun 利用者向けの選択肢として併記してよいが、Bun は本リポジトリでは引き続きフロントエンド開発・ビルド用の標準ツールでもある
+- npm package は platform 別 optional package で Go バイナリを同梱する方式を優先する。install 時に GitHub Releases から exe を後段ダウンロードする wrapper は、責務・更新経路・セキュリティ説明が分散するため避ける
+- 公式の Windows 標準導線は winget、developer primary は pnpm、手動取得は GitHub Releases と位置付ける
 
 無料で改善できる範囲:
 

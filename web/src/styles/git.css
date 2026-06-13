@@ -125,6 +125,13 @@
 }
 .git-icon-btn:hover { background: var(--line); border-color: var(--line-soft); }
 .git-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.git-icon-btn.git-behind,
+.git-icon-btn.git-ahead {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 48%, transparent);
+  background: color-mix(in srgb, var(--warn) 14%, var(--bg-deep));
+  font-weight: 600;
+}
 .git-commit-all-btn {
   background: var(--accent);
   color: #fff;

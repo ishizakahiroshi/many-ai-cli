@@ -95,6 +95,7 @@ winget install ishizakahiroshi.any-ai-cli
 ```
 
 > Available once the first winget manifest PR is merged into `microsoft/winget-pkgs`. Until then, use the zip download below.
+> On Windows, the package-manager path is preferred when available because it avoids the browser-downloaded zip/exe flow that commonly carries Mark-of-the-Web. It is still not a substitute for Authenticode code signing or organization allowlisting.
 
 **macOS (Homebrew):**
 
@@ -147,6 +148,11 @@ The Windows release binaries are not currently Authenticode-signed.
 - **Organization policy**: AppLocker, WDAC, EDR, antivirus, or other managed-PC
   policies can block local tools independently. Follow your organization's
   allowlisting process rather than disabling those controls.
+
+When winget is available, prefer it over manual zip download on Windows. The
+manual zip remains supported for users who need direct release artifacts.
+The Hub itself binds to `127.0.0.1` only, so normal local use does not require
+opening the server to the LAN or adding a public Windows Firewall exception.
 
 Recommended Windows zip flow:
 

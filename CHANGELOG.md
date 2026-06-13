@@ -19,6 +19,12 @@ Release artifacts are published at
 - README and release-operation docs now distinguish Mark-of-the-Web,
   SmartScreen, Smart App Control, organization policy, and checksum/signature
   verification for unsigned Windows builds.
+- Windows install guidance now prefers package-manager installation when
+  available, keeps GitHub Releases zip as the manual fallback, and documents
+  the separate roles of pnpm, winget, and direct release downloads.
+- Release planning now distinguishes npm registry publication from the `npm`
+  command and sets `pnpm add -g any-ai-cli` as the preferred developer install
+  command once the registry package exists.
 
 ## [0.3.0] - 2026-06-05
 
@@ -38,7 +44,9 @@ Release artifacts are published at
   `aac-update.sh` workflow support resident remote Hub operation.
 - **Files and Git operations.** The Files tab can create folders, save text
   files with base-mtime conflict detection, and delete empty folders. The Git
-  view can fetch refs and run `git pull --ff-only` from guarded Hub endpoints.
+  view can fetch refs, run `git pull --ff-only`, and run a guarded plain
+  `git push` (force/tag/delete disabled, non-interactive, confirmation dialog
+  showing branch name and ahead count) from guarded Hub endpoints.
 - **Additional provider coverage.** GitHub Copilot CLI and Cursor Agent CLI
   approval patterns, slash-command resources, usage links, and instruction
   injection paths are documented and wired into the Hub UI.

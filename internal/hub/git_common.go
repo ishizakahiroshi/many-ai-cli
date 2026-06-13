@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -135,8 +136,17 @@ func runGit(ctx context.Context, cwd string, args ...string) ([]byte, error) {
 // runGitCombined は stdout/stderr をまとめて返す。commit のように失敗理由が stderr
 // に出るコマンドで、UI に見せる detail を失わないために使う。
 func runGitCombined(ctx context.Context, cwd string, args ...string) ([]byte, error) {
+	return runGitCombinedEnv(ctx, cwd, nil, args...)
+}
+
+// runGitCombinedEnv は stdout/stderr をまとめて返しつつ、必要な追加環境変数を
+// git プロセスへ渡す。push のように認証プロンプトを抑止したい場合に使う。
+func runGitCombinedEnv(ctx context.Context, cwd string, extraEnv []string, args ...string) ([]byte, error) {
 	full := append([]string{"-C", cwd}, args...)
 	cmd := exec.CommandContext(ctx, "git", full...)
+	if len(extraEnv) > 0 {
+		cmd.Env = append(os.Environ(), extraEnv...)
+	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return out, fmt.Errorf("git %s: %s", strings.Join(args, " "), strings.TrimSpace(string(out)))
