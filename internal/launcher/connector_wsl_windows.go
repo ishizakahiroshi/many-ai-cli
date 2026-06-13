@@ -157,3 +157,8 @@ var _ Connector = (*WSLConnector)(nil)
 func NewWSLConnector() Connector {
 	return &WSLConnector{}
 }
+
+// connectorForWSL returns a WSLConnector on Windows.
+func connectorForWSL() (Connector, error) {
+	return NewWSLConnector(), nil
+}

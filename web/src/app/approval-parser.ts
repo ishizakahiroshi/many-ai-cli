@@ -277,6 +277,8 @@
   // 複数選択ディレクティブ「#multi 質問文?」。これがブロック内にあると、後続の
   // 番号付き選択肢を「任意個 ON/OFF できる複数選択」として扱う（単一選択ではない）。
   const multiSelectDirectiveRe = /^#multi\b[ \t]*(.*)$/i;
+  // 各質問末尾の区切りアンカー。続き行結合の対象から除外する（ラベルへ混入させない）。
+  const userSpecifiesLineRe = /^N\.\s*(?:user specifies|その他指定)/i;
 
   function parseHubBlock(rawLines) {
     const lines = ungluedApprovalLines(rawLines);
@@ -293,13 +295,21 @@
       let question = '';
       let isMulti = false;
       const opts = [];
+      let lastMultiOpt = null;
       for (const raw of lines) {
         const line = String(raw || '').trim();
         if (!line) continue;
         const dm = line.match(multiSelectDirectiveRe);
-        if (dm) { isMulti = true; question = dm[1].trim(); continue; }
+        if (dm) { isMulti = true; question = dm[1].trim(); lastMultiOpt = null; continue; }
         const om = line.match(optionRe);
-        if (om) { opts.push({ num: parseInt(om[1], 10), label: om[2].trim() }); }
+        if (om) {
+          lastMultiOpt = { num: parseInt(om[1], 10), label: om[2].trim() };
+          opts.push(lastMultiOpt);
+          continue;
+        }
+        if (userSpecifiesLineRe.test(line)) { lastMultiOpt = null; continue; }
+        // xterm がラベル途中で折り返した続き行（数字始まりでない）は直前の選択肢へ結合する。
+        if (lastMultiOpt) lastMultiOpt.label = (lastMultiOpt.label + line).replace(/\s+/g, ' ').trim();
       }
       if (isMulti && opts.length > 0) {
         return opts.map(o => ({
@@ -314,6 +324,7 @@
     const sections = [];
     const looseOpts = [];
     let cur = null;
+    let lastOpt = null; // 続き行結合の対象（直近の選択肢）
     const optionRe = /^(\d+)\.\s*(.+?)\s*$/;
     const headingRe = /^(\d+)\s+(.+?)\s*$/;
     for (const raw of lines) {
@@ -324,14 +335,22 @@
         const opt = { num: parseInt(om[1], 10), label: om[2].trim(), isCurrent: false };
         if (cur) cur.options.push(opt);
         else looseOpts.push(opt);
+        lastOpt = opt;
         continue;
       }
       const hm = line.match(headingRe);
       if (hm) {
         cur = { num: parseInt(hm[1], 10), title: hm[2].trim(), options: [] };
         sections.push(cur);
+        lastOpt = null;
         continue;
       }
+      // 質問末尾の「N. User specifies」は区切り。続き行として混入させない。
+      if (userSpecifiesLineRe.test(line)) { lastOpt = null; continue; }
+      // xterm がラベル/見出し途中で折り返した続き行（数字始まりでない）を元の要素へ結合する。
+      // 直前に選択肢があればそのラベルへ、無ければ現在の見出しタイトルへ繋ぐ。
+      if (lastOpt) lastOpt.label = (lastOpt.label + line).replace(/\s+/g, ' ').trim();
+      else if (cur) cur.title = (cur.title + line).replace(/\s+/g, ' ').trim();
     }
     const filledSections = sections.filter(s => s.options.length > 0);
     if (filledSections.length >= 2) return filledSections;

@@ -283,4 +283,32 @@ test('approval parser fixtures', () => {
     '[/MANY-AI-CLI]',
   ]);
   assert.equal(parser.approvalSig(chunkPath), parser.approvalSig(bufferPath));
+
+  // xterm がラベル/見出し途中で物理行に折り返し、続き行が数字始まりにならないケース。
+  // 続き行を直前の選択肢ラベル・見出しタイトルへ結合し、「N. User specifies」は混入させない。
+  const wrappedBatch = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    '1 codex-spawn-zombie の方針は?',
+    '1. 案2 watchdog を実装（無言固着を「起動失敗」表示',
+    'に）(Recommended)',
+    '2. blocker 降格して defer（再',
+    '発時に着手）',
+    'N. User specifies',
+    '2 detached-session-grid と security-audit（未着手・索',
+    '引未掲載）は?',
+    '3. consolidated-3 ④ に追記して追跡下に置く（securit',
+    'y-audit は [保留] 降格）(Recommended)',
+    '4. 触らない',
+    'N. User specifies',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isBatchOptions(wrappedBatch), true);
+  assert.equal(wrappedBatch.length, 2);
+  assert.equal(wrappedBatch[0].title, 'codex-spawn-zombie の方針は?');
+  assert.deepEqual(numbers(wrappedBatch[0].options), [1, 2]);
+  assert.equal(wrappedBatch[0].options[0].label, '案2 watchdog を実装（無言固着を「起動失敗」表示に）(Recommended)');
+  assert.equal(wrappedBatch[0].options[1].label, 'blocker 降格して defer（再発時に着手）');
+  assert.equal(wrappedBatch[1].title, 'detached-session-grid と security-audit（未着手・索引未掲載）は?');
+  assert.equal(wrappedBatch[1].options[0].label, 'consolidated-3 ④ に追記して追跡下に置く（security-audit は [保留] 降格）(Recommended)');
+  assert.deepEqual(numbers(wrappedBatch[1].options), [3, 4]);
 });

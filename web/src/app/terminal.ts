@@ -422,7 +422,6 @@ export function whenLayoutReady(id, container) {
         }
         if (id === activeSessionId) updateScrollLockBtn(!t.autoScroll);
         updateHistoryHint(id);
-        if (id === activeSessionId) updateTrailingTrim();
       });
     }
     const viewport = t.term.element?.querySelector('.xterm-viewport');
@@ -1564,7 +1563,6 @@ export function writePTYChunk(id, term, bytes, onFlush) {
   const wrappedFlush = () => {
     if (hasScreenClearSeq) snapToBottomAfterScreenClear(id);
     if (onFlush) onFlush();
-    if (id === activeSessionId) updateTrailingTrim();
   };
   if (displayBytes.length === 0) {
     wrappedFlush();
@@ -1575,69 +1573,6 @@ export function writePTYChunk(id, term, bytes, onFlush) {
     return;
   }
   term.write(utf8Decoder.decode(displayBytes, { stream: true }), wrappedFlush);
-}
-
-// ── 末尾余白トリム ───────────────────────────────────────────────────────────
-// Claude 等の CLI は画面下部クローム（スピナー/ステータス行）を hide/show カーソル +
-// 絶対座標移動で毎フレーム描き直す。any-ai-cli はそのブロックを xterm 表示から破棄して
-// #terminal-live-status ピルへ回すため、xterm 側には破棄分の空行が末尾に残り、入力欄との
-// 間に「CLI の余白」のような帯ができる（バッファ内の空行なのでスクロールに追従する）。
-// 最下部に吸着している間だけ、末尾の連続空行の高さ分 #input-bar-outer を CSS transform で
-// 上へ詰めて帯を覆い隠す。履歴を上へスクロール中（最下部に居ない）は実コンテンツを覆わない
-// よう 0 に戻す。PTY サイズは変えない（SIGWINCH を送らないので Claude の描画を乱さない）。
-let _trailingTrimRaf = false;
-
-export function updateTrailingTrim() {
-  if (_trailingTrimRaf) return;
-  _trailingTrimRaf = true;
-  requestAnimationFrame(() => {
-    _trailingTrimRaf = false;
-    const px = computeTrailingTrimPx();
-    document.documentElement.style.setProperty('--term-trailing-trim', px + 'px');
-  });
-}
-
-function computeTrailingTrimPx() {
-  if (activeSessionId === null) return 0;
-  const t = terminals.get(activeSessionId);
-  if (!t || !t.term || !t.term.element) return 0;
-  // 最下部に吸着している時だけ詰める（履歴閲覧中は最下部に実コンテンツが来るため覆わない）
-  if (!t.autoScroll && !isTerminalAtBottom(t)) return 0;
-  // 承認バー表示中はその領域を使うので詰めない
-  const bar = document.getElementById('action-bar');
-  if (bar && bar.classList.contains('visible')) return 0;
-  const blank = countTrailingBlankRows(t);
-  if (blank <= 0) return 0;
-  const cell = getCellHeightPx(t);
-  if (cell <= 0) return 0;
-  // 端末を覆い過ぎない安全弁（最低数行は残す）
-  const rows = Math.min(blank, Math.max(0, t.term.rows - 3));
-  if (rows <= 0) return 0;
-  return Math.round(rows * cell);
-}
-
-// バッファ末尾から連続する空行（trailing whitespace を除くと空になる行）の数を数える。
-function countTrailingBlankRows(t) {
-  const buf = t.term.buffer && t.term.buffer.active;
-  if (!buf) return 0;
-  let blank = 0;
-  const maxScan = t.term.rows;
-  for (let i = buf.length - 1; i >= 0 && blank < maxScan; i--) {
-    const line = buf.getLine(i);
-    const s = line ? line.translateToString(true) : '';
-    if (s.length === 0) blank++;
-    else break;
-  }
-  return blank;
-}
-
-function getCellHeightPx(t) {
-  const screen = t.term.element.querySelector('.xterm-screen') as HTMLElement | null;
-  if (screen && t.term.rows > 0) {
-    const h = screen.clientHeight || screen.getBoundingClientRect().height;
-    if (h > 0) return h / t.term.rows;
-  }
-  return 0;
 }
 
 // ---- バッファスキャン共通 ----
@@ -1747,8 +1682,6 @@ export const resizeObserver = new ResizeObserver(() => {
       try { t.term.scrollToBottom(); syncViewportScrollbarToBottom(t); } catch (_) {}
       updateScrollLockBtn(false);
     }
-    // セル高/行数が変わるので末尾余白トリムを再計算する
-    updateTrailingTrim();
   });
 });
 
