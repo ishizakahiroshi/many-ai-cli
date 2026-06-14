@@ -9,15 +9,17 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	webpush "github.com/SherClockHolmes/webpush-go"
 	"many-ai-cli/internal/config"
 	notifyPkg "many-ai-cli/internal/notify"
-	webpush "github.com/SherClockHolmes/webpush-go"
+	"many-ai-cli/internal/sessionlog"
 )
 
 const (
@@ -185,7 +187,6 @@ func (pm *pushManager) sendApproval(ctx context.Context, payload pushApprovalPay
 		pm.mu.Unlock()
 		return
 	}
-	pm.sent[payload.ID] = time.Now()
 	store := pm.store
 	pm.mu.Unlock()
 
@@ -207,6 +208,7 @@ func (pm *pushManager) sendApproval(ctx context.Context, payload pushApprovalPay
 	}
 
 	var expired []string
+	sentOK := 0
 	for _, sub := range store.Subscriptions {
 		select {
 		case <-ctx.Done():
@@ -226,20 +228,51 @@ func (pm *pushManager) sendApproval(ctx context.Context, payload pushApprovalPay
 		})
 		if err != nil {
 			if pm.logger != nil {
-				pm.logger.Warn("web push send failed", "endpoint_hash", endpointHash(sub.Endpoint), "err", err)
+				pm.logger.Warn("web push send failed", "endpoint_hash", endpointHash(sub.Endpoint), "err", pushSanitizeErr(err))
 			}
 			continue
 		}
 		if resp != nil {
 			if resp.StatusCode == http.StatusGone || resp.StatusCode == http.StatusNotFound {
 				expired = append(expired, sub.Endpoint)
+			} else {
+				sentOK++
 			}
 			_ = resp.Body.Close()
 		}
 	}
+	// dedup マークは「送信試行前」ではなく「最低1件成功後」に記録する。全送信失敗
+	// （例: 一時的なネットワーク全断）のときはマークせず、同一 ID の次回通知で再送可能に
+	// する。成功時は従来通り pruneSentLocked が消すまで（1時間）dedup される。
+	if sentOK > 0 {
+		pm.mu.Lock()
+		pm.sent[payload.ID] = time.Now()
+		pm.mu.Unlock()
+	}
 	if len(expired) > 0 {
 		pm.removeExpired(expired)
 	}
+}
+
+// pushSanitizeErr は web push 送信エラーから購読エンドポイント URL（push 購読の秘密を
+// 含み得る）を取り除き、操作種別とトランスポート由来メッセージのみを残す。hub.log への
+// エンドポイント URL 平文記録を防ぐ（notify.go のエラー整形と方針を揃える）。
+func pushSanitizeErr(err error) string {
+	if err == nil {
+		return ""
+	}
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		msg := "error"
+		if ue.Err != nil {
+			msg = ue.Err.Error()
+		}
+		if ue.Op != "" {
+			return ue.Op + ": " + msg
+		}
+		return msg
+	}
+	return err.Error()
 }
 
 func (pm *pushManager) removeExpired(endpoints []string) {
@@ -391,6 +424,9 @@ func (s *Server) notifyApprovalPush(id int, approvalID, provider, question, cont
 	}
 	body := firstNonEmpty(question, contextText, ses.LastMessage, ses.FirstMessage, ses.CWD, "Approval is waiting.")
 	s.sessionsMu.Unlock()
+	// 承認 question/context は生 PTY テキスト由来で未マスク。ntfy/webhook/Web Push
+	// という端末外の第三者へ送出する前に MaskSecrets を通す（全外部送出の単一ボトルネック）。
+	body = sessionlog.MaskSecrets(body)
 	approvalID = strings.TrimSpace(approvalID)
 	if approvalID == "" {
 		approvalID = fmt.Sprintf("session-%d-%s", id, body)
@@ -451,6 +487,9 @@ func (s *Server) notifyApprovalOutbound(id int, approvalID, provider, question, 
 	}
 	body := firstNonEmpty(question, contextText, ses.LastMessage, ses.FirstMessage, ses.CWD, "Approval is waiting.")
 	s.sessionsMu.Unlock()
+	// 承認 question/context は生 PTY テキスト由来で未マスク。ntfy/webhook という
+	// 端末外の第三者へ送出する前に MaskSecrets を通す（全外部送出の単一ボトルネック）。
+	body = sessionlog.MaskSecrets(body)
 	body = strings.Join(strings.Fields(body), " ")
 
 	s.notifyMgr.SendApproval(notifyPkg.ApprovalPayload{

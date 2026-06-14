@@ -570,6 +570,13 @@ func (s *Store) ClearSessionHistory(liveSessionID int) {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM approvals WHERE session_id=?`, id); err != nil {
 		return
 	}
+	// attachments も同 Tx 内で削除する。sessions 行は残す（per-session 履歴クリアのため）ので
+	// attachments.session_id の ON DELETE CASCADE は発火せず、ここで明示削除しないと
+	// 孤児 attachments 行（添付の path/filename/mime/size）が残留する。
+	// pruneSessionRow / resetHistorySQL と削除対象を揃える。
+	if _, err := tx.ExecContext(ctx, `DELETE FROM attachments WHERE session_id=?`, id); err != nil {
+		return
+	}
 	_ = tx.Commit()
 }
 
@@ -715,6 +722,12 @@ func (s *Store) SearchMessages(query string, limit int) ([]SearchResult, error) 
 // MessagesMentionText は指定 live セッションの保存済みメッセージに
 // variants のいずれかが部分一致で含まれるかを返す。
 // Files プレビューの「チャットで言及されたパスは読み取り専用で開ける」判定に使う。
+//
+// 照合対象は role='user'（人間の入力）に限定する。pty_output（AI CLI の端末出力）は
+// role='ai' で保存されるが、これを照合対象に含めると、AI 出力やプロンプトインジェクション
+// 経由で許可ルート外の絶対パス文字列を 1 度出力させるだけで当該ファイルを読めてしまう
+// （read-only バイパスの悪用経路）。正規 UX（ユーザーがチャットで言及したファイルを開く）は
+// role='user' のみで維持される。
 func (s *Store) MessagesMentionText(liveSessionID int, variants []string) (bool, error) {
 	sessionID, err := s.sessionIDForLive(liveSessionID)
 	if err != nil || sessionID == 0 {
@@ -728,7 +741,7 @@ func (s *Store) MessagesMentionText(liveSessionID int, variants []string) (bool,
 		}
 		var one int
 		err := s.db.QueryRowContext(ctx, `SELECT 1 FROM messages
-			WHERE session_id=? AND (instr(COALESCE(raw_text, ''), ?) > 0 OR instr(COALESCE(text, ''), ?) > 0)
+			WHERE session_id=? AND role='user' AND (instr(COALESCE(raw_text, ''), ?) > 0 OR instr(COALESCE(text, ''), ?) > 0)
 			LIMIT 1`, sessionID, v, v).Scan(&one)
 		if err == sql.ErrNoRows {
 			continue
@@ -1311,7 +1324,12 @@ func (s *Store) searchFTS(query string, limit int) ([]SearchResult, error) {
 func (s *Store) searchLike(query string, limit int) ([]SearchResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
-	like := "%" + strings.ReplaceAll(query, "%", "\\%") + "%"
+	// LIKE のワイルドカード（% と _）と ESCAPE 文字（\）をすべてエスケープし、
+	// クエリ語をリテラル部分一致として扱う。\ を先に置換しないと、後段で挿入した
+	// エスケープ用 \ が二重エスケープされて意味が崩れるため順序が重要。
+	// 例: `go_test` の `_` を未処理にすると `goXtest`（X は任意1文字）にも過剰一致する。
+	likeEscaper := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	like := "%" + likeEscaper.Replace(query) + "%"
 	rows, err := s.db.QueryContext(ctx, `SELECT m.id, m.session_id, se.live_session_id, se.provider, se.cwd, se.branch, se.model, se.state, se.started_at,
 			m.ts, m.role, m.kind, COALESCE(m.text, ''), COALESCE(m.text, '')
 		FROM messages m

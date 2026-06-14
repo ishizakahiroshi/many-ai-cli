@@ -108,8 +108,13 @@ func Save(baseDir string, sessionID int, provider string, data []byte, filename 
 
 // CleanOld removes files under baseDir whose mtime is older than retentionDays,
 // then removes empty session subdirectories.
+// retentionDays <= 0 disables day-based deletion and is a no-op (symmetric with
+// EnforceTotalSize's maxBytes <= 0 guard); see config.go の「0 で日数ベースの削除を無効化」.
 // Individual removal failures are logged and skipped; a single failure does not abort the walk.
 func CleanOld(baseDir string, retentionDays int) error {
+	if retentionDays <= 0 {
+		return nil
+	}
 	cutoff := time.Now().AddDate(0, 0, -retentionDays)
 
 	// 1パス目: 古いファイルを削除（失敗はログして継続）

@@ -187,6 +187,40 @@ test('approval parser fixtures', () => {
   assert.deepEqual(numbers(glued[1].options), [3, 4]);
   assert.deepEqual(numbers(glued[2].options), [5, 6]);
 
+  // 大きなマーカーブロックの回帰（行数非依存の検証）。複数質問・長い日本語ラベルが端末幅で
+  // 折り返されるとブロックは容易に数十〜百行へ膨らむ。抽出は末尾 N 行固定窓で切らず
+  // [MANY-AI-CLI]…[/MANY-AI-CLI] をアンカーでブロックごと取るため、ブロックがどれだけ大きくても
+  // 開始マーカーを取りこぼさない。折り返し継続行（数字始まりでない行）は直前の選択肢ラベルへ
+  // 結合される性質を使い、各選択肢に 30 行の継続を付けてブロックを ~190 行へ意図的に肥大化させ、
+  // それでも 2 質問が両方とも復元されることを確認する（旧 40 行窓・暫定 240 行窓いずれも超える）。
+  const wrapCont = (n) => Array.from({ length: n }, (_, i) => `（折り返し継続${i}）`);
+  const bigBlock = [
+    '[MANY-AI-CLI]',
+    '1 監査対象（対象範囲）はどれにしますか？',
+    ' 1. SAB 本体に絞る',
+    ...wrapCont(30),
+    ' 2. 全 Go サービス',
+    ...wrapCont(30),
+    ' 3. 特定の1サービスのみ',
+    ...wrapCont(30),
+    ' N. User specifies',
+    '2 スコープ（修正までやるか）はどうしますか？',
+    ' 4. 調査→検証で終了',
+    ...wrapCont(30),
+    ' 5. finding 報告のみ',
+    ...wrapCont(30),
+    ' 6. 修正＋再調査ループまで完走',
+    ...wrapCont(30),
+    ' N. User specifies',
+    '[/MANY-AI-CLI]',
+  ];
+  assert.ok(bigBlock.length > 180, 'regression block must dwarf any fixed-size window');
+  const bigBatch = parser.extractHubMarkerApproval(bigBlock);
+  assert.equal(parser.isBatchOptions(bigBatch), true);
+  assert.equal(bigBatch.length, 2);
+  assert.deepEqual(numbers(bigBatch[0].options), [1, 2, 3]);
+  assert.deepEqual(numbers(bigBatch[1].options), [4, 5, 6]);
+
   // 見出し（質問文）が option 1 と同一行へ連結され、option 2 以降が別行に残ったケースの回帰。
   // Ink 再描画で改行が抜けると「質問? 1. A」の 1 行になり、従来は option 1 が丸ごと捨てられて
   // 「選択肢の 1 が無い」症状になっていた。見出しを切り離し option 1 を復元できること。

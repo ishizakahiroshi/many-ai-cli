@@ -44,20 +44,19 @@ func TestParseNumstatRaw_RenameNewPath(t *testing.T) {
 }
 
 func TestParseNumstatRaw_BraceRenameNewPath(t *testing.T) {
-	// "{src => dst}/file.go" 形式
+	// "{src => dst}/file.go" 形式（クロスディレクトリ brace 圧縮）。
+	// brace 展開で new path "dst/file.go" に復元される（`}` 残存しない）。
 	raw := "2\t1\t{src => dst}/file.go\n"
 	m := parseNumstatRaw(raw)
-	if _, ok := m["dst}/file.go"]; !ok {
-		// 期待: " => dst}/file.go" の右辺から } を strip した "dst/file.go" または "dst}/file.go"
-		// parseNumstatRaw は TrimRight(path, "}") をするが fields[2] 全体に対して => 分岐なので
-		// "dst}/file.go" → TrimRight → "dst}/file.go" のまま（"}" は末尾でないため）
-		// 実装通りのキーが存在すれば OK
-		if _, ok2 := m["dst/file.go"]; !ok2 {
-			// どちらでもなければ何らかの形でキーが存在することを確認
-			if len(m) == 0 {
-				t.Fatal("no entries parsed")
-			}
-		}
+	if _, ok := m["dst}/file.go"]; ok {
+		t.Error("broken key dst}/file.go must not exist after brace expansion")
+	}
+	e, ok := m["dst/file.go"]
+	if !ok {
+		t.Fatalf("dst/file.go not found; keys=%v", mapKeys(m))
+	}
+	if e.added != 2 || e.removed != 1 {
+		t.Errorf("dst/file.go: %+v", e)
 	}
 }
 

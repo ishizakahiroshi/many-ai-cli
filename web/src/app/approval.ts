@@ -82,6 +82,16 @@ function scheduleH9Revalidate(id) {
 const BG_APPROVAL_MISS_LIMIT = 8;
 const BG_APPROVAL_SETTLE_MS = 2500;
 const BG_APPROVAL_TAIL_LINES = 80;
+
+// [MANY-AI-CLI] マーカーブロックは pendingTextTail 全体から抽出する（固定行数で切らない）。
+// 複数質問一括（バッチ）や #multi で選択肢が多く・日本語ラベルが端末幅で折り返されると
+// ブロックは容易に数十行へ膨らむ。末尾 N 行で切ると開きマーカーが窓から外れ、閉じマーカー側の
+// 質問だけを単問承認として誤描画する（行数依存の構造的バグ）。マーカーは明示デリミタ済みで
+// scrollback 誤検出の懸念が無いため、ヒューリスティック scanner（40 行）と分離して全文を渡し、
+// 取りこぼし上限は pendingTextTail の保持量（APPROVAL_PENDING_TEXT_TAIL_LIMIT 文字）に一本化する。
+function markerLinesFromTail(tail) {
+  return String(tail || '').split(/\r\n|\r|\n/).map(l => stripAnsi(l));
+}
 const bgApprovalMisses = new Map();
 const bgApprovalClearTimers = new Map();
 
@@ -408,8 +418,10 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
     return;
   }
 
-  // フォーマットベース検出（優先）: [MANY-AI-CLI] マーカーがあれば即確定
-  const markerOpts = extractHubMarkerApproval(lines);
+  // フォーマットベース検出（優先）: [MANY-AI-CLI] マーカーがあれば即確定。
+  // マーカーブロックは大きくなり得る（複数質問・長い日本語ラベルの折り返し）ため、
+  // 40 行の lines ではなく pendingTextTail 全体（markerLinesFromTail）から抽出する。
+  const markerOpts = extractHubMarkerApproval(markerLinesFromTail(t.pendingTextTail));
   if (markerOpts) {
     // doSend でテキスト送信済みの承認が Ink 再描画で再検出された場合はスキップ
     const consumed = approvalConsumedSig.get(id);
@@ -807,7 +819,7 @@ export function detectApproval(id) {
   // 再び入ることがあるため approvalConsumedSig で二重表示を防ぐ。
   const t = terminals.get(id);
   if (t) {
-    const pendingLines = (t.pendingTextTail || '').split(/\r\n|\r|\n/).slice(-40).map(l => stripAnsi(l));
+    const pendingLines = markerLinesFromTail(t.pendingTextTail);
     const markerOpts = extractHubMarkerApproval(pendingLines);
     if (markerOpts) {
       const consumed = approvalConsumedSig.get(id);

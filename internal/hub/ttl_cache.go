@@ -18,6 +18,12 @@ type ttlCache[T any] struct {
 	fetchedAt time.Time
 	failedAt  time.Time // 最後に fetch に失敗した時刻（負キャッシュ用）
 
+	// fetchInflight は単一フライト制御用。fetch（外部ネットワーク I/O）はロックを
+	// 離して実行するため、複数 caller が同時にキャッシュ切れに遭遇しても fetch を
+	// 1 本に束ね、残りは fetchCond で待機して結果を共有する。
+	fetchInflight bool
+	fetchCond     *sync.Cond // mu に紐づく。初回 get 時に遅延初期化。
+
 	ttl         time.Duration
 	negativeTTL time.Duration // 失敗後の再試行抑制期間
 	fallback    T             // fetch 未成功時に返す値
@@ -29,21 +35,51 @@ type ttlCache[T any] struct {
 
 // get は TTL 内ならキャッシュを返し、期限切れなら sourceURL から再取得する。
 // 取得失敗時はフォールバック値を返し、失敗時刻を記録して負 TTL 内は再試行しない。
+//
+// 外部ネットワーク I/O である c.fetch はロックを保持したまま呼ばない。
+// fetch が必要なときは選出された 1 caller だけがロックを離して fetch し、
+// 残りの並行 caller は fetchCond で待機して結果を共有する（単一フライト）。
+// これにより fetch 遅延時でもキャッシュヒット／負キャッシュのパスは即座に
+// ロックを解放し、並行リクエストが直列化しない。
 func (c *ttlCache[T]) get(sourceURL string) T {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// 成功キャッシュが有効
-	if c.data != nil && time.Since(c.fetchedAt) < c.ttl {
-		return *c.data
+	if c.fetchCond == nil {
+		c.fetchCond = sync.NewCond(&c.mu)
 	}
-	// 負キャッシュが有効（失敗後の再試行抑制）
-	if !c.failedAt.IsZero() && time.Since(c.failedAt) < c.negativeTTL {
-		if c.data != nil {
+
+	for {
+		// 成功キャッシュが有効
+		if c.data != nil && time.Since(c.fetchedAt) < c.ttl {
 			return *c.data
 		}
-		return c.fallback
+		// 負キャッシュが有効（失敗後の再試行抑制）
+		if !c.failedAt.IsZero() && time.Since(c.failedAt) < c.negativeTTL {
+			if c.data != nil {
+				return *c.data
+			}
+			return c.fallback
+		}
+		// 別 caller が既に fetch 中なら、その完了を待って再評価する。
+		// 完了後はキャッシュ／負キャッシュが更新されている可能性が高い。
+		if c.fetchInflight {
+			c.fetchCond.Wait()
+			continue
+		}
+		break
 	}
+
+	// 自分が fetch を担当する。ロックを離してネットワーク I/O を行う。
+	c.fetchInflight = true
+	c.mu.Unlock()
+
 	fetched, err := c.fetch(sourceURL)
+
+	c.mu.Lock()
+	c.fetchInflight = false
+	// 待機中の caller を全員起こす（更新後のキャッシュ／負キャッシュで再評価させる）。
+	c.fetchCond.Broadcast()
+
 	if err != nil {
 		c.failedAt = time.Now() // 負 TTL 開始
 		if c.data != nil {

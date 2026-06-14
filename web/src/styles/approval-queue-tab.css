@@ -248,6 +248,7 @@
   padding: 2px 8px;
   cursor: pointer;
   vertical-align: middle;
+  pointer-events: auto; /* #toast は pointer-events:none のため Undo ボタンだけクリック可能に戻す */
 }
 .aqt-undo-toast-btn:hover {
   background: rgba(255,255,255,0.15);

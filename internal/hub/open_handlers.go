@@ -16,7 +16,11 @@ func (s *Server) checkOpenPathAllowed(w http.ResponseWriter, r *http.Request, pa
 	}
 	cwd := s.cwdForRequest(r)
 	gitRoot := findGitRoot(cwd)
-	allowed, err := isPathUnderAllowedRoots(path, cwd, gitRoot)
+	// 添付ディレクトリ（~/.many-ai-cli/attachments）も許可ルートに含める。
+	// many-ai-cli 自身が保存した画像等を「既定のアプリで開く」「フォルダを開く」
+	// 対象にできるようにするため（CWD/git root の外にあるため従来は 403 になっていた）。
+	attachDir, _ := attachmentsDir()
+	allowed, err := isPathUnderAllowedRoots(path, cwd, gitRoot, attachDir)
 	if err != nil || !allowed {
 		writeJSONError(w, http.StatusForbidden, "forbidden", "path is outside allowed roots")
 		return false

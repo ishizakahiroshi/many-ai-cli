@@ -103,10 +103,13 @@
    入力欄の真上に固定する帯。端末の中身に被らず、視線が集まる入力欄付近で
    「動いているか／止まったか」を常に確認できる位置に置く。 */
 #terminal-live-status {
+  position: relative;
   margin: 0 12px 6px;
   z-index: 15;
-  background: rgba(13, 17, 23, 0.82);
-  color: rgba(147, 197, 253, 0.92);
+  /* ユーザー配色（live-status-color.ts が documentElement に立てる CSS 変数）。
+     未設定なら既定の青系へフォールバック。 */
+  background: var(--live-status-bg, rgba(13, 17, 23, 0.82));
+  color: var(--live-status-fg, rgba(147, 197, 253, 0.92));
   font-family: "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
   font-size: 0.74rem;
   line-height: 1.4;
@@ -168,6 +171,69 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 配色パレット: 帯の右端に置く。帯は pointer-events:none なので操作要素だけ復活させる。 */
+.live-status-palette-btn {
+  flex: 0 0 auto;
+  margin-left: auto;        /* テキストを左に詰め、ボタンを右端へ */
+  pointer-events: auto;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  padding: 0 2px;
+  font-size: 0.85rem;
+  line-height: 1;
+  opacity: 0.78;
+  transition: opacity 0.15s ease;
+}
+.live-status-palette-btn:hover { opacity: 1; }
+.live-status-palette-popover {
+  position: absolute;
+  right: 6px;
+  bottom: calc(100% + 4px);
+  z-index: 30;
+  pointer-events: auto;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #0d1117;
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  font-family: system-ui, sans-serif;
+  font-size: 0.72rem;
+  color: #cbd5e1;
+}
+.live-status-palette-popover[hidden] { display: none; }
+.live-status-palette-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+}
+.live-status-palette-row input[type="color"] {
+  width: 34px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+.live-status-palette-reset {
+  pointer-events: auto;
+  cursor: pointer;
+  margin-top: 2px;
+  padding: 4px 8px;
+  font-size: 0.7rem;
+  color: #cbd5e1;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 5px;
+}
+.live-status-palette-reset:hover { background: rgba(148, 163, 184, 0.22); }
 .xterm { height: 100%; }
 .xterm-viewport {
   overflow-y: scroll !important;

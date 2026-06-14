@@ -593,14 +593,16 @@ function openSentHistoryModal(): void {
     empty.textContent = t('tsb_sent_history_empty');
     body.appendChild(empty);
   } else {
-    items.forEach((it, i) => {
+    // 直近の送信を上に出すため新しい順（降順）で並べる。# は実際の送信順（古い=#1）を維持する。
+    items.slice().reverse().forEach((it, i) => {
+      const seq = items.length - i;
       const row = document.createElement('div');
       row.className = 'tsb-sent-row';
       const meta = document.createElement('div');
       meta.className = 'tsb-sent-meta';
       const idx = document.createElement('span');
       idx.className = 'tsb-sent-idx';
-      idx.textContent = `#${i + 1}`;
+      idx.textContent = `#${seq}`;
       const time = document.createElement('span');
       time.className = 'tsb-sent-time';
       time.textContent = formatSentDateTime(it.ts);
@@ -620,8 +622,8 @@ function openSentHistoryModal(): void {
   box.appendChild(body);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
-  // 最新の送信が見えるよう最下部へスクロール。
-  body.scrollTop = body.scrollHeight;
+  // 新しい順（降順）で並べているので、最新の送信が見える先頭へスクロール。
+  body.scrollTop = 0;
 
   // 外側クリック / Esc で閉じる。
   _sentModalDownHandler = (e: MouseEvent | TouchEvent) => {

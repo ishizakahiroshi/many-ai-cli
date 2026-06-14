@@ -9,24 +9,26 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	neturl "net/url"
 	"strings"
 	"sync"
 	"time"
 )
 
 const (
-	sendTimeout      = 10 * time.Second
-	payloadMaxBytes  = 200
+	sendTimeout     = 10 * time.Second
+	payloadMaxBytes = 200
 	// sentTTL は重複送信防止エントリの保持時間。
 	sentTTL = time.Hour
 )
 
 // BackendConfig は設定ファイルの backends[] 1 件に対応する。
 type BackendConfig struct {
-	Type  string `yaml:"type"  json:"type"`  // "ntfy" | "webhook"
+	Type  string `yaml:"type"  json:"type"` // "ntfy" | "webhook"
 	URL   string `yaml:"url"   json:"url"`
 	Topic string `yaml:"topic" json:"topic"` // ntfy のみ有効
 }
@@ -126,7 +128,8 @@ func (m *Manager) SendApproval(payload ApprovalPayload) {
 			if err := send(ctx, m.client, b, payload.Title, body); err != nil {
 				m.logger.Warn("notify send failed",
 					"type", b.Type,
-					"err", err)
+					"host", notifyHostOf(b.URL),
+					"err", notifySanitizeErr(err))
 			}
 		}()
 	}
@@ -165,7 +168,8 @@ func (m *Manager) SendDone(payload DonePayload) {
 			if err := send(ctx, m.client, b, payload.Title, body); err != nil {
 				m.logger.Warn("notify done send failed",
 					"type", b.Type,
-					"err", err)
+					"host", notifyHostOf(b.URL),
+					"err", notifySanitizeErr(err))
 			}
 		}()
 	}
@@ -235,6 +239,47 @@ func sendWebhook(ctx context.Context, client *http.Client, backend BackendConfig
 		return fmt.Errorf("webhook: unexpected status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// notifySanitizeErr は送信失敗 err をログ出力用に整形する。
+// http.Client.Do が返す *url.Error は対象 URL 全体（ntfy トピック秘密や
+// webhook の ?token=... を含む）を Error() に埋め込むため、生のまま
+// hub.log へ出すと通知チャンネルの秘密が平文で残る。ここで URL を剥がし、
+// transport 由来のメッセージのみに縮約する。host は呼び出し側が backend.URL
+// から別途取り出す（notifyHostOf）。
+func notifySanitizeErr(err error) string {
+	if err == nil {
+		return ""
+	}
+	var ue *neturl.Error
+	if errors.As(err, &ue) {
+		// ue.Err は URL を含まない transport / context 由来のエラー。
+		// ue.Op（"Post" 等）と合わせて種別のみを残す。
+		op := strings.TrimSpace(ue.Op)
+		if inner := ue.Err; inner != nil {
+			if op != "" {
+				return op + ": " + inner.Error()
+			}
+			return inner.Error()
+		}
+		if op != "" {
+			return op + ": request error"
+		}
+		return "request error"
+	}
+	// *url.Error 以外（build request / marshal / status N 等）は URL を
+	// 含まない自前 fmt.Errorf 文言なのでそのまま返してよい。
+	return err.Error()
+}
+
+// notifyHostOf は backend URL から host:port のみを取り出す。
+// パース不能・空のときは "unknown" を返す（URL 全体は決して返さない）。
+func notifyHostOf(rawURL string) string {
+	u, err := neturl.Parse(strings.TrimSpace(rawURL))
+	if err != nil || u == nil || u.Host == "" {
+		return "unknown"
+	}
+	return u.Host
 }
 
 func hasEvent(events []string, target string) bool {

@@ -265,13 +265,22 @@ func (s *Server) handleFilesDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pathParam, _, err := s.resolveAllowedFilePath(r)
+	pathParam, readOnly, err := s.resolveAllowedFilePath(r)
 	if err != nil {
 		if he, ok := err.(httpError); ok {
 			writeJSONError(w, he.status, httpErrorCode(he.status), he.msg)
 			return
 		}
 		writeJSONError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+		return
+	}
+
+	// readOnly==true はチャット言及フォールバック由来（許可ルート外）。この経路では
+	// content/asset と同じく type ゲートを課し、テキスト/メディア以外の任意バイナリ
+	// （資格情報・鍵ファイル等）が言及されただけで全文配信されるのを防ぐ。
+	// 許可ルート内（readOnly==false）は従来どおり拡張子無制限でダウンロードできる。
+	if readOnly && !isTextFile(pathParam) && !isMediaFile(pathParam) {
+		writeJSONError(w, http.StatusForbidden, "forbidden", "not a downloadable file outside allowed roots")
 		return
 	}
 

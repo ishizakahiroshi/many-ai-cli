@@ -132,7 +132,10 @@ func TestMessagesMentionText(t *testing.T) {
 		t.Fatalf("StartSession: %v", err)
 	}
 	mentioned := `C:\dev\works\plans\plan_outside.md`
-	ev := map[string]any{"ts": startedAt, "type": "pty_output", "session_id": 1, "text": "変更ファイル: " + mentioned + "\n"}
+	// MessagesMentionText は role='user'（人間の入力）のみを照合対象にするため、
+	// ユーザー入力イベント（user_input → role='user'）で言及を記録する。
+	// pty_output（role='ai'）は意図的に除外される（read-only バイパス悪用防止、#8）。
+	ev := map[string]any{"ts": startedAt, "type": "user_input", "session_id": 1, "text": "変更ファイル: " + mentioned + "\n"}
 	if err := store.StoreEvent(1, ev); err != nil {
 		t.Fatalf("StoreEvent: %v", err)
 	}

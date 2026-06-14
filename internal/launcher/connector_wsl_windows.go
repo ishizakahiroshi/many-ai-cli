@@ -124,23 +124,45 @@ func (c *WSLConnector) run(ctx context.Context, p Profile, urlCh chan<- string, 
 	}()
 
 	go func() {
-		select {
-		case url := <-foundCh:
-			select {
-			case urlCh <- url:
-			case <-ctx.Done():
-			}
-		case <-ctx.Done():
-		}
-	}()
-
-	go func() {
 		<-ctx.Done()
 		_ = cmd.Process.Kill()
 	}()
 
-	waitErr := cmd.Wait()
-	wg.Wait()
+	// waitCh delivers cmd.Wait() exactly once, after stdout/stderr scanners
+	// drain. Mirrors connector_ssh.go runServe: the URL is forwarded and
+	// urlCh is closed from this single goroutine's main flow, so no other
+	// goroutine ever sends on urlCh after it is closed (avoids the prior
+	// "send on closed channel" race where a separate forwarding goroutine
+	// could send after close(urlCh)).
+	waitCh := make(chan error, 1)
+	go func() {
+		wg.Wait()
+		waitCh <- cmd.Wait()
+	}()
+
+	// Phase 1: wait for the Hub URL, process exit, or cancellation.
+	// Forward the URL (if any) and close urlCh exactly once here.
+	var waitErr error
+	select {
+	case url := <-foundCh:
+		select {
+		case urlCh <- url:
+		case <-ctx.Done():
+		}
+		close(urlCh)
+		// Phase 2: keep wsl.exe alive until it exits or ctx is cancelled.
+		select {
+		case waitErr = <-waitCh:
+		case <-ctx.Done():
+			waitErr = <-waitCh
+		}
+	case waitErr = <-waitCh:
+		// Process exited before any URL was detected.
+		close(urlCh)
+	case <-ctx.Done():
+		waitErr = <-waitCh
+		close(urlCh)
+	}
 
 	if waitErr != nil && ctx.Err() == nil {
 		sendErr(ctx, errCh, fmt.Errorf("wsl.exe exited: %w", waitErr))
@@ -148,7 +170,6 @@ func (c *WSLConnector) run(ctx context.Context, p Profile, urlCh chan<- string, 
 	// wsl.exe の正常終了（= WSL 側 serve の停止。Web UI の「Web のみ停止」
 	// を含む）でもここに到達する。errCh の close は「接続終了」の合図で、
 	// launcher 本体はこれを受けてプロセスを終了する（コンソール窓の残骸防止）。
-	close(urlCh)
 	close(errCh)
 }
 

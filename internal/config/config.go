@@ -50,10 +50,10 @@ type LogConfig struct {
 	// 旧ログが残っている利用者にだけ初回起動時に通知が出る。
 	LegacyLogsNoticeShown bool `yaml:"legacy_logs_notice_shown" json:"legacy_logs_notice_shown"`
 	MaxSizeMB             int  `yaml:"max_size_mb" json:"max_size_mb"`
-	MaxBackups           int  `yaml:"max_backups" json:"max_backups"`
-	Compress             bool `yaml:"compress" json:"compress"`
-	SessionRetentionDays int  `yaml:"session_retention_days" json:"session_retention_days"`
-	SessionMaxSizeMB     int  `yaml:"session_max_size_mb" json:"session_max_size_mb"`
+	MaxBackups            int  `yaml:"max_backups" json:"max_backups"`
+	Compress              bool `yaml:"compress" json:"compress"`
+	SessionRetentionDays  int  `yaml:"session_retention_days" json:"session_retention_days"`
+	SessionMaxSizeMB      int  `yaml:"session_max_size_mb" json:"session_max_size_mb"`
 	// AttachmentRetentionDays は添付ファイル（~/.many-ai-cli/attachments）の保持日数。
 	// この日数より古い添付を定期削除する。0 で日数ベースの削除を無効化。
 	AttachmentRetentionDays int `yaml:"attachment_retention_days" json:"attachment_retention_days"`
@@ -342,6 +342,9 @@ type UserPrefsDisplay struct {
 	FontSize   string `yaml:"font_size,omitempty"   json:"font_size,omitempty"`
 	Lang       string `yaml:"lang,omitempty"        json:"lang,omitempty"`
 	LockedMode string `yaml:"locked_mode,omitempty" json:"locked_mode,omitempty"`
+	// ライブステータス帯（「実行中」バー）のユーザー配色（hex 文字列）。空＝既定。
+	LiveStatusBg string `yaml:"live_status_bg,omitempty" json:"live_status_bg,omitempty"`
+	LiveStatusFg string `yaml:"live_status_fg,omitempty" json:"live_status_fg,omitempty"`
 }
 
 type VoiceWhisperConfig struct {
@@ -425,7 +428,7 @@ type LocalModel struct {
 
 // NotifyBackendConfig は通知バックエンド 1 件の設定。
 type NotifyBackendConfig struct {
-	Type  string `yaml:"type"  json:"type"`  // "ntfy" | "webhook"
+	Type  string `yaml:"type"  json:"type"` // "ntfy" | "webhook"
 	URL   string `yaml:"url"   json:"url"`
 	Topic string `yaml:"topic,omitempty" json:"topic,omitempty"` // ntfy のみ有効
 }
@@ -489,7 +492,7 @@ func LoadOrCreate() (*Config, error) {
 		if err := yaml.Unmarshal(b, cfg); err != nil {
 			// 破損: .bak へ退避してデフォルト設定で起動継続
 			bak := path + ".bak"
-			if bakErr := os.WriteFile(bak, b, 0o600); bakErr != nil { // #nosec G703 -- ~/.many-ai-cli/config.yaml.bak 固定パス（ユーザー入力なし）
+			if bakErr := writeConfigAtomic(dir, bak, b); bakErr != nil { // #nosec G703 -- ~/.many-ai-cli/config.yaml.bak 固定パス（ユーザー入力なし）
 				return nil, fmt.Errorf("backup invalid config: %w", bakErr)
 			}
 			slog.Warn("config parse failed; backed up and regenerating",
@@ -502,7 +505,7 @@ func LoadOrCreate() (*Config, error) {
 			if mErr != nil {
 				return nil, fmt.Errorf("marshal default config: %w", mErr)
 			}
-			if err := os.WriteFile(path, out, 0o600); err != nil {
+			if err := writeConfigAtomic(dir, path, out); err != nil {
 				return nil, fmt.Errorf("write default config: %w", err)
 			}
 		}
@@ -514,7 +517,7 @@ func LoadOrCreate() (*Config, error) {
 		if mErr != nil {
 			return nil, fmt.Errorf("marshal default config: %w", mErr)
 		}
-		if err := os.WriteFile(path, out, 0o600); err != nil {
+		if err := writeConfigAtomic(dir, path, out); err != nil {
 			return nil, fmt.Errorf("write default config: %w", err)
 		}
 	default:
@@ -631,8 +634,16 @@ func Save(cfg *Config) error {
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
-	// atomic write: temp ファイルを同一ディレクトリに作成して Rename で差し替える。
-	// 同一ボリューム内の Rename はほぼ atomic であり、書き込み中断でも既存 config.yaml を破損しない。
+	return writeConfigAtomic(dir, path, out)
+}
+
+// writeConfigAtomic は out を path へ原子的に書き込む。
+// temp ファイルを同一ディレクトリ dir に作成し、Sync + 0o600 設定後に Rename で
+// 差し替える。同一ボリューム内の Rename はほぼ atomic であり、書き込み中断
+// （クラッシュ・電源断）でも path を部分書き込み（破損）状態で残さない。
+// パーミッション 0o600・同一ディレクトリ内 temp・戻り値エラーの挙動は Save の
+// 旧実装と同一。LoadOrCreate のデフォルト/再生成/バックアップ書き込みでも共用する。
+func writeConfigAtomic(dir, path string, out []byte) error {
 	tmp, err := os.CreateTemp(dir, "config-*.yaml.tmp")
 	if err != nil {
 		return fmt.Errorf("create temp config: %w", err)

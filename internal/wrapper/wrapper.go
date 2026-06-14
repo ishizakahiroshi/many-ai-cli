@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -467,6 +468,13 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 			Token:     cfg.Token,
 			SessionID: sessionID,
 			ExePath:   exe,
+		}
+		// exe パスにスペースが含まれると、Claude が statusLine を実行する Git Bash と
+		// PowerShell で必要なクォート形式が非互換（usage_hooks.go: toShellPath 参照）のため、
+		// status line（トークン/使用量表示）が沈黙して動かないことがある。沈黙バグを可視化する。
+		if strings.ContainsAny(exe, " ") {
+			logger.Warn("claude statusLine exe path contains a space; the token/usage status line may silently fail to run because Git Bash and PowerShell need incompatible quoting — install many-ai-cli to a path without spaces",
+				"session_id", sessionID, "exe_path", exe)
 		}
 		if slPath, cleanup, slErr := WriteClaudeStatuslineSettings(hp); slErr == nil {
 			providerArgs = append(providerArgs, "--settings", slPath)
