@@ -59,9 +59,10 @@
   color: rgba(147, 197, 253, 0.78);
   border: 1px solid rgba(59, 130, 246, 0.45);
   border-radius: 6px;
-  padding: 4px 12px;
-  font-size: 0.78rem;
-  min-height: var(--control-h-sm);
+  /* 約 0.7 倍に縮小（min-height 32px→22px） */
+  padding: 3px 8px;
+  font-size: 0.68rem;
+  min-height: 22px;
   cursor: pointer;
   backdrop-filter: blur(1px);
   transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s, backdrop-filter 0.15s;
@@ -70,9 +71,13 @@
 .pane-scroll-top {
   top: 34px;
 }
-#scroll-to-bottom-btn,
 .pane-scroll-bottom {
   bottom: 10px;
+}
+/* 承認リコールバー（縮小後 高さ 22px）を真下に積むため down を 1 段上げる。
+   承認バーを入力バー直上まで詰めるため浮かせオフセットを 10px→2px に下げる */
+#scroll-to-bottom-btn {
+  bottom: calc(2px + 22px + 6px);
 }
 #scroll-to-top-btn:hover,
 #scroll-to-bottom-btn:hover,
@@ -84,11 +89,11 @@
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
 }
 
-/* 承認ポップアップ 再表示/消す ボタン（↓ down の左の余白に常時表示） */
+/* 承認ポップアップ 再表示/消す ボタン（↓ down の真下に右揃えで配置） */
 #approval-recall-bar {
   position: absolute;
-  bottom: 10px;
-  right: 88px;
+  bottom: 2px;
+  right: 14px;
   z-index: 20;
   display: flex;
   gap: 6px;
@@ -102,9 +107,10 @@
   color: rgba(147, 197, 253, 0.78);
   border: 1px solid rgba(59, 130, 246, 0.45);
   border-radius: 6px;
-  padding: 4px 12px;
-  font-size: 0.78rem;
-  min-height: var(--control-h-sm);
+  /* 約 0.7 倍に縮小（up/down と同サイズ） */
+  padding: 3px 8px;
+  font-size: 0.68rem;
+  min-height: 22px;
   cursor: pointer;
   backdrop-filter: blur(1px);
   transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
