@@ -9,7 +9,7 @@
 // コスト不明（cost_known=false）時は "$ —" を表示し誤金額を出さない。
 
 import type { Message } from '../types/proto.js';
-import { activeSessionId, sessions } from './state.js';
+import { activeSessionId, sessions, chatHistory } from './state.js';
 import { token, escapeHtml } from './util.js';
 import { t } from '../i18n.js';
 import { providerIconHtml, providerDisplayName, safeClassToken, stateLabel, activateSession } from './session-list.js';
@@ -256,7 +256,8 @@ export function renderStatusbar(): void {
   const labelEl = setSeg(bar, 'tsb-seg-label', !!labelText);
   if (labelEl) {
     labelEl.textContent = `“${labelText}”`;
-    labelEl.title = labelText;
+    // クリックで送信履歴モーダルを開く導線。本文＋操作ヒントを tooltip に出す。
+    labelEl.title = `${labelText}\n${t('tsb_sent_history_hint')}`;
   }
 
   // ---- project ⎇branch ±git ----
@@ -437,6 +438,11 @@ function wireClicks(bar: HTMLElement): void {
       if (cwd) FilesTabManager.openFilesTab(sid, getProject(sid), cwd, cwd);
       return;
     }
+    // 作業ラベル → 送信履歴モーダル（アクティブセッションの user 送信のみを時系列表示）
+    if (target.closest('.tsb-seg-label')) {
+      openSentHistoryModal();
+      return;
+    }
     // cost → 内訳ポップ
     if (target.closest('.tsb-seg-cost')) {
       toggleCostPopover(bar);
@@ -498,6 +504,145 @@ function toggleCostPopover(bar: HTMLElement): void {
     };
     document.addEventListener('mousedown', _costPopDocHandler, true);
   }, 0);
+}
+
+// ── 送信履歴モーダル ──────────────────────────────────────────────────────────
+// 作業ラベルセグメントのクリックで開く。アクティブセッションのチャット履歴から
+// role==='user'（＝ AI への送信内容）だけを抜き出し、日時付きで時系列表示する。
+// チャットタブと同じ chatHistory（state）を参照するが、送信内容のみを対象にする。
+
+// ts（epoch ms / ISO 文字列 / Date）を「YYYY-MM-DD HH:MM:SS」のローカル日時に整形。
+function formatSentDateTime(ts: any): string {
+  const d = (ts instanceof Date) ? ts : new Date(ts);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} `
+    + `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+// アクティブセッションの送信メッセージ（user role・本文あり）を時系列（古い→新しい）で返す。
+function collectSentMessages(sid: number): Array<{ ts: any; text: string }> {
+  const arr = chatHistory.get(sid) || [];
+  const out: Array<{ ts: any; text: string }> = [];
+  for (const m of arr) {
+    if (!m || m.role !== 'user') continue;
+    const text = String(m.normalizedText || m.rawText || '').trim();
+    if (!text) continue;
+    out.push({ ts: m.ts, text });
+  }
+  return out;
+}
+
+let _sentModalKeyHandler: ((e: KeyboardEvent) => void) | null = null;
+let _sentModalDownHandler: ((e: MouseEvent | TouchEvent) => void) | null = null;
+
+function closeSentHistoryModal(): void {
+  const existing = document.getElementById('tsb-sent-modal');
+  if (existing) existing.remove();
+  if (_sentModalKeyHandler) {
+    document.removeEventListener('keydown', _sentModalKeyHandler, true);
+    _sentModalKeyHandler = null;
+  }
+  if (_sentModalDownHandler) {
+    document.removeEventListener('mousedown', _sentModalDownHandler, true);
+    document.removeEventListener('touchstart', _sentModalDownHandler, true);
+    _sentModalDownHandler = null;
+  }
+}
+
+function openSentHistoryModal(): void {
+  // 既に開いていればトグルで閉じる。
+  if (document.getElementById('tsb-sent-modal')) { closeSentHistoryModal(); return; }
+  const sid = activeSessionId;
+  if (sid === null) return;
+
+  const items = collectSentMessages(sid);
+
+  const overlay = document.createElement('div');
+  overlay.id = 'tsb-sent-modal';
+
+  const box = document.createElement('div');
+  box.className = 'tsb-sent-box';
+
+  // ---- ヘッダ（タイトル + 件数 + 閉じる）----
+  const header = document.createElement('div');
+  header.className = 'tsb-sent-header';
+  const title = document.createElement('span');
+  title.className = 'tsb-sent-title';
+  title.textContent = t('tsb_sent_history_title');
+  header.appendChild(title);
+  const count = document.createElement('span');
+  count.className = 'tsb-sent-count';
+  count.textContent = t('tsb_sent_history_count', { n: items.length });
+  header.appendChild(count);
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'tsb-sent-close';
+  closeBtn.textContent = '✕';
+  closeBtn.setAttribute('aria-label', t('settings_close'));
+  closeBtn.addEventListener('click', closeSentHistoryModal);
+  header.appendChild(closeBtn);
+  box.appendChild(header);
+
+  // ---- 本文（時系列リスト）----
+  const body = document.createElement('div');
+  body.className = 'tsb-sent-body';
+  if (items.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'tsb-sent-empty';
+    empty.textContent = t('tsb_sent_history_empty');
+    body.appendChild(empty);
+  } else {
+    items.forEach((it, i) => {
+      const row = document.createElement('div');
+      row.className = 'tsb-sent-row';
+      const meta = document.createElement('div');
+      meta.className = 'tsb-sent-meta';
+      const idx = document.createElement('span');
+      idx.className = 'tsb-sent-idx';
+      idx.textContent = `#${i + 1}`;
+      const time = document.createElement('span');
+      time.className = 'tsb-sent-time';
+      time.textContent = formatSentDateTime(it.ts);
+      meta.appendChild(idx);
+      meta.appendChild(time);
+      const text = document.createElement('div');
+      text.className = 'tsb-sent-text';
+      text.textContent = it.text;
+      // クリックでその送信内容をコピー。
+      row.title = t('tsb_sent_history_copy_hint');
+      row.addEventListener('click', () => copyText(it.text, row));
+      row.appendChild(meta);
+      row.appendChild(text);
+      body.appendChild(row);
+    });
+  }
+  box.appendChild(body);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  // 最新の送信が見えるよう最下部へスクロール。
+  body.scrollTop = body.scrollHeight;
+
+  // 外側クリック / Esc で閉じる。
+  _sentModalDownHandler = (e: MouseEvent | TouchEvent) => {
+    const target = e.target as Node;
+    if (box.contains(target)) return;
+    if ((target as HTMLElement).closest?.('.tsb-seg-label')) return; // ラベル再クリックは toggle に委ねる
+    closeSentHistoryModal();
+  };
+  _sentModalKeyHandler = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeSentHistoryModal();
+  };
+  setTimeout(() => {
+    if (_sentModalDownHandler) {
+      document.addEventListener('mousedown', _sentModalDownHandler, true);
+      document.addEventListener('touchstart', _sentModalDownHandler, true);
+    }
+  }, 0);
+  document.addEventListener('keydown', _sentModalKeyHandler, true);
 }
 
 // ── 外部 API ─────────────────────────────────────────────────────────────────
