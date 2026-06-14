@@ -171,6 +171,13 @@ export class MultiPaneManager {
     this.focusedIdx = 0;
     this.dismissPendingSessionIds = new Set();
 
+    // B: ユーザーが D&D で並べ替えたセッション順（sessionId の配列）。
+    //    render() のたびに live セッションで再構築し、新規は末尾へ追加する。
+    this.order = this._loadOrder();
+    // A: 列／行ごとのサイズ比率（fr 値の配列）。境界ドラッグで更新する。
+    this.colFracs = this._loadFracs('Cols', this.cols);
+    this.rowFracs = this._loadFracs('Rows', this.rows);
+
     // CSS カスタムプロパティを初期値にセット
     if (this.area) {
       this.area.style.setProperty('--pane-cols', this.cols);
@@ -190,6 +197,10 @@ export class MultiPaneManager {
       this.area.style.setProperty('--pane-cols', this.cols);
       this.area.style.setProperty('--pane-rows', this.rows);
     }
+    // A: 列／行数が変わったらサイズ比率を等分にリセットする
+    this.colFracs = this._equalFracs(this.cols);
+    this.rowFracs = this._equalFracs(this.rows);
+    this._saveFracs();
     this._applyFontScale();
     this.render();
     this._saveLayout();
@@ -210,10 +221,24 @@ export class MultiPaneManager {
     // 既存スロットを detach してから DOM を再構築
     this.area.querySelectorAll('.pane-slot').forEach(el => this.detachSlot(el));
 
-    // slots 配列を更新（セッション終了後も位置を動かさない）
+    // B: order（ユーザー並べ替え順）を live セッションで再構築する。
+    //    既存順のうち生存しているものを保持し、未登録の新規を sort 順で末尾追加。
+    const byId = new Map(sorted.map(s => [s.id, s]));
+    const liveIds = new Set(byId.keys());
+    const newOrder = this.order.filter(id => liveIds.has(id));
+    const inOrder = new Set(newOrder);
+    for (const s of sorted) {
+      if (!inOrder.has(s.id)) { newOrder.push(s.id); inOrder.add(s.id); }
+    }
+    this.order = newOrder;
+    this._saveOrder();
+
+    // slots 配列を更新（order の先頭 total 件を表示）
     this.slots = [];
     for (let i = 0; i < total; i++) {
-      this.slots.push(sorted[i] ? { session: sorted[i] } : null);
+      const id = this.order[i];
+      const session = (id != null) ? byId.get(id) : null;
+      this.slots.push(session ? { session } : null);
     }
 
     // DOM を再構築
@@ -223,6 +248,10 @@ export class MultiPaneManager {
       const pane = slot ? this._buildPane(i, slot.session) : this._buildEmptyPane(i);
       this.area.appendChild(pane);
     }
+
+    // A: グリッドのサイズ比率を適用し、境界スプリッタを生成する
+    this._applyGridTemplate();
+    this._buildSplitters();
 
     this._applyFontScale();
 
@@ -250,6 +279,23 @@ export class MultiPaneManager {
 
     const header = this._buildHeader(idx, session);
     el.appendChild(header);
+
+    // B: ヘッダを掴んでペインを並べ替える（HTML5 D&D）。
+    //    ドラッグ元はヘッダのみ（端末本体はテキスト選択を維持）。
+    header.draggable = true;
+    header.addEventListener('dragstart', (e) => {
+      this._dragFromIdx = idx;
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(idx));
+      }
+      el.classList.add('dragging');
+    });
+    header.addEventListener('dragend', () => {
+      this._dragFromIdx = null;
+      if (this.area) this.area.querySelectorAll('.pane-slot').forEach(s => s.classList.remove('dragging', 'drag-over'));
+    });
+    this._wireDropTarget(el, idx);
 
     const termArea = document.createElement('div');
     termArea.className = 'pane-terminal-area';
@@ -488,7 +534,54 @@ export class MultiPaneManager {
     label.textContent = `スロット ${idx + 1}`;
     el.appendChild(label);
 
+    // B: 空スロットもドロップ先にする（末尾への移動）
+    this._wireDropTarget(el, idx);
+
     return el;
+  }
+
+  /** B: ペイン要素をドロップ先として配線する */
+  _wireDropTarget(el, idx) {
+    el.addEventListener('dragover', (e) => {
+      if (this._dragFromIdx == null || this._dragFromIdx === idx) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      el.classList.add('drag-over');
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+    el.addEventListener('drop', (e) => {
+      e.preventDefault();
+      el.classList.remove('drag-over');
+      const from = this._dragFromIdx;
+      this._dragFromIdx = null;
+      if (from == null || from === idx) return;
+      this._reorderSlots(from, idx);
+    });
+  }
+
+  /**
+   * B: スロット from を slot to の位置へ移動する。
+   * - to が埋まっている場合は両者を入れ替え（swap）
+   * - to が空（order 範囲外）の場合は from を to 相当の末尾位置へ移動
+   */
+  _reorderSlots(from, to) {
+    const order = this.order;
+    if (from < 0 || from >= order.length) return;
+    if (to < order.length) {
+      // swap
+      const tmp = order[from];
+      order[from] = order[to];
+      order[to] = tmp;
+    } else {
+      // 空スロットへ: from を取り出して末尾（表示範囲の末端）へ
+      const [id] = order.splice(from, 1);
+      order.push(id);
+    }
+    this.order = order;
+    this._saveOrder();
+    // フォーカスはドロップ先スロットへ移す
+    this.focusedIdx = Math.min(to, this.cols * this.rows - 1);
+    this.render();
   }
 
   /** スロットのセッションを終了して空にする */
@@ -708,6 +801,107 @@ export class MultiPaneManager {
     this.area.querySelectorAll('.pane-slot').forEach(el => this.detachSlot(el));
   }
 
+  // ─── A: グリッドのリサイズ（境界スプリッタ） ──────────────────
+
+  /** fr 配列から grid-template-columns / rows を適用する */
+  _applyGridTemplate() {
+    if (!this.area) return;
+    this.area.style.gridTemplateColumns = this.colFracs.map(f => `minmax(0, ${f.toFixed(4)}fr)`).join(' ');
+    this.area.style.gridTemplateRows    = this.rowFracs.map(f => `minmax(0, ${f.toFixed(4)}fr)`).join(' ');
+  }
+
+  /** 内部境界ごとにドラッグ用スプリッタを生成し area に重ねる */
+  _buildSplitters() {
+    if (!this.area) return;
+    // 既存スプリッタを除去（pane-slot は残す）
+    this.area.querySelectorAll('.pane-splitter').forEach(el => el.remove());
+
+    const sum = (arr, n) => arr.slice(0, n).reduce((a, b) => a + b, 0);
+    const colTotal = this.colFracs.reduce((a, b) => a + b, 0) || 1;
+    const rowTotal = this.rowFracs.reduce((a, b) => a + b, 0) || 1;
+
+    // 列境界（縦バー）: k = 0..cols-2
+    for (let k = 0; k < this.cols - 1; k++) {
+      const sp = document.createElement('div');
+      sp.className = 'pane-splitter col';
+      sp.style.left = (sum(this.colFracs, k + 1) / colTotal * 100) + '%';
+      this._wireSplitter(sp, 'col', k);
+      this.area.appendChild(sp);
+    }
+    // 行境界（横バー）: k = 0..rows-2
+    for (let k = 0; k < this.rows - 1; k++) {
+      const sp = document.createElement('div');
+      sp.className = 'pane-splitter row';
+      sp.style.top = (sum(this.rowFracs, k + 1) / rowTotal * 100) + '%';
+      this._wireSplitter(sp, 'row', k);
+      this.area.appendChild(sp);
+    }
+  }
+
+  /** スプリッタにポインタドラッグを配線する（境界 k と k+1 の比率を移動） */
+  _wireSplitter(sp, axis, k) {
+    const onDown = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = this.area.getBoundingClientRect();
+      const isCol = axis === 'col';
+      const fracs = isCol ? this.colFracs : this.rowFracs;
+      const total = fracs.reduce((a, b) => a + b, 0) || 1;
+      const containerPx = isCol ? rect.width : rect.height;
+      const startPos = isCol ? e.clientX : e.clientY;
+      const a0 = fracs[k];
+      const b0 = fracs[k + 1];
+      const minFrac = total * 0.08; // 1セルが極端に潰れないよう下限を設ける
+
+      const onMove = (ev) => {
+        const pos = isCol ? ev.clientX : ev.clientY;
+        const deltaPx = pos - startPos;
+        const deltaFrac = (deltaPx / Math.max(1, containerPx)) * total;
+        let na = a0 + deltaFrac;
+        let nb = b0 - deltaFrac;
+        if (na < minFrac) { nb -= (minFrac - na); na = minFrac; }
+        if (nb < minFrac) { na -= (minFrac - nb); nb = minFrac; }
+        fracs[k] = na;
+        fracs[k + 1] = nb;
+        this._applyGridTemplate();
+        this._repositionSplitters();
+      };
+      const onUp = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        document.body.classList.remove('pane-resizing');
+        this._saveFracs();
+      };
+      document.body.classList.add('pane-resizing');
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    };
+    sp.addEventListener('pointerdown', onDown);
+  }
+
+  /** ドラッグ中にスプリッタ位置だけ再計算する（DOM 再構築なし） */
+  _repositionSplitters() {
+    if (!this.area) return;
+    const sum = (arr, n) => arr.slice(0, n).reduce((a, b) => a + b, 0);
+    const colTotal = this.colFracs.reduce((a, b) => a + b, 0) || 1;
+    const rowTotal = this.rowFracs.reduce((a, b) => a + b, 0) || 1;
+    let ci = 0, ri = 0;
+    this.area.querySelectorAll('.pane-splitter').forEach(sp => {
+      if (sp.classList.contains('col')) {
+        sp.style.left = (sum(this.colFracs, ci + 1) / colTotal * 100) + '%';
+        ci++;
+      } else {
+        sp.style.top = (sum(this.rowFracs, ri + 1) / rowTotal * 100) + '%';
+        ri++;
+      }
+    });
+  }
+
+  /** 指定長の等分 fr 配列を返す */
+  _equalFracs(n) {
+    return new Array(Math.max(1, n)).fill(1);
+  }
+
   /** ペイン数に応じてフォントスケールクラスを付与 */
   _applyFontScale() {
     const n = this.cols * this.rows;
@@ -737,6 +931,40 @@ export class MultiPaneManager {
     } catch (_) {
       return { cols: 2, rows: 2 };
     }
+  }
+
+  // ─── B: 並べ替え順の永続化 ──────────────────────────────────
+  _saveOrder() {
+    try { localStorage.setItem('multiPaneOrder', JSON.stringify(this.order)); } catch (_) {}
+  }
+  _loadOrder() {
+    try {
+      const raw = localStorage.getItem('multiPaneOrder');
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.filter(n => Number.isFinite(n)) : [];
+    } catch (_) { return []; }
+  }
+
+  // ─── A: サイズ比率の永続化 ──────────────────────────────────
+  _saveFracs() {
+    try {
+      localStorage.setItem('multiPaneColFracs', JSON.stringify(this.colFracs));
+      localStorage.setItem('multiPaneRowFracs', JSON.stringify(this.rowFracs));
+    } catch (_) {}
+  }
+  /** 'Cols' | 'Rows' の比率を読み込み、長さが n と一致しなければ等分にフォールバック */
+  _loadFracs(which, n) {
+    try {
+      const raw = localStorage.getItem('multiPane' + which + 'Fracs');
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr) && arr.length === n && arr.every(v => Number.isFinite(v) && v > 0)) {
+          return arr;
+        }
+      }
+    } catch (_) {}
+    return this._equalFracs(n);
   }
 }
 

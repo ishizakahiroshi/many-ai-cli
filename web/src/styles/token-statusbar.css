@@ -269,6 +269,29 @@
   word-break: break-word;
 }
 .tsb-sent-row.tsb-copied { background: rgba(125,207,255,.18); }
+.tsb-sent-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.tsb-sent-attach-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid #2a2f45;
+  border-radius: 6px;
+  background: #1a1d29;
+  color: #c0caf5;
+  font-size: 0.74rem;
+  line-height: 1.3;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tsb-sent-attach-chip:hover { background: #2a2f45; border-color: #7aa2f7; }
 
 /* 設定 OFF やセッション未選択時は非表示（JS で制御するが念のため） */
 #token-statusbar[hidden] {

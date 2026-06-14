@@ -27,6 +27,12 @@ import { isActionBarCollapsed, setActionBarCollapsed } from './user-prefs.js';
 const H9_RESTORE_MISS_LIMIT = 3;
 const h9RestoreMisses = new Map();
 
+// 手動「✕ 承認」（消す）で一時的に隠した承認の sig（sessionId → approvalSig）。
+// approvalRawOptionsCache / approvalVisibleCache は保持したまま action-bar の描画だけ抑制する。
+// showActionBar の choke point で「同一 sig の承認は描画スキップ・別 sig の新しい承認は抑制解除して描画」する。
+// 「↻ 承認」（再表示）でこのエントリを消し、承認解決（hideActionBar）でも確実に消す。
+const manualHideSig = new Map();
+
 // 複数質問 UI（AskUserQuestion 等）検出の窓と取りこぼし対策。
 // scanBuffer の固定 40 行窓だと、端末行数(term.rows)が 40 を超える縦長ターミナルで
 // プロンプトがビューポート全体を占め、上端のタブ行（←…→/Submit）が下端 40 行より
@@ -1105,6 +1111,7 @@ export function hideActionBar(id) {
   if (id !== undefined) multiSelectSelections.delete(id);
   removeBatchConfirmModal();
   if (id !== undefined) {
+    manualHideSig.delete(id); // 承認が解決したら手動抑制も解除する
     cancelApprovalHintConfirm(id);
     approvalSwitchCandidates.delete(id);
     h9RestoreMisses.delete(id);
@@ -1146,6 +1153,42 @@ export function hideActionBar(id) {
     }
     maybeAutoSwitchToNextApproval();
   }
+}
+
+// 「✕ 承認」（消す）: action-bar の描画だけを一時的に消す。
+// approvalRawOptionsCache / approvalVisibleCache はあえて保持し、承認は保留のまま（waiting も残す）。
+// 「↻ 承認」（reshowActionBar）で元に戻せる。承認が解決すれば hideActionBar が manualHideSig を消す。
+export function manuallyHideActionBar(id) {
+  if (id === undefined || id === null) return;
+  const cached = approvalRawOptionsCache.get(id);
+  if (Array.isArray(cached) && cached.length > 0) {
+    manualHideSig.set(id, approvalSig(cached));
+  }
+  const bar = document.getElementById('action-bar');
+  const wasVisible = !!(bar && bar.classList.contains('visible'));
+  if (bar) { bar.classList.remove('visible', 'batch', 'multi-select', 'single-tabs'); bar.innerHTML = ''; }
+  // action-bar 出現時の PTY リサイズ抑制を解除（ターミナルが正しい行数へ拡張できるように）
+  if (wasVisible) clearSuppressPtyResize();
+  lastActionBarRender.sessionId = null;
+  lastActionBarRender.sig = null;
+  set_actionBarFocusIdx(-1);
+  set_batchFocusIdx(-1);
+  set_multiSelectFocusIdx(-1);
+  // ターミナル領域が拡張されるので追従中なら最下部へ再スナップ（hideActionBar と対称）。
+  if (wasVisible && id === activeSessionId) {
+    const term = terminals.get(id);
+    const shouldStickToBottom = !!(term && (term.autoScroll || isTerminalAtBottom(term)));
+    if (shouldStickToBottom) scrollTerminalToBottomSoon(id);
+  }
+}
+
+// 「↻ 承認」（再表示）: 手動抑制を解除して通常の検出を再実行する。
+// detectApproval が pendingTextTail / cache / scanBuffer から再判定するため、
+// 本当に保留中の承認だけが復活し、すでに解決済みなら何も表示されない（安全な再判定）。
+export function reshowActionBar(id) {
+  if (id === undefined || id === null) return;
+  manualHideSig.delete(id);
+  detectApproval(id);
 }
 
 export function normalizeActionOptions(options) {
@@ -1202,6 +1245,12 @@ export function toggleActionBarCollapsed(sessionId) {
 }
 
 export function showActionBar(bar, sessionId, options, forceStickToBottom = false) {
+  // 手動「✕ 承認」で抑制中は描画しない。同一承認のみ抑制し、別 sig の新しい承認は抑制解除して描画する。
+  const suppressedSig = manualHideSig.get(sessionId);
+  if (suppressedSig !== undefined) {
+    if (suppressedSig === approvalSig(options)) return;
+    manualHideSig.delete(sessionId);
+  }
   if (isBatchOptions(options)) {
     showBatchActionBar(bar, sessionId, options, forceStickToBottom);
     return;
@@ -1418,9 +1467,11 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   pane.appendChild(optsEl);
 
   // 自由入力中だけ入力欄を出す（詳細パネルは廃止）。
+  // 「N. 自由入力」ボタンの直後（optsEl 内）に入れて同じ行の右側に並べる。
+  // pane 下へ縦積みすると余分な行高が増えるため、横並びで高さを抑える。
   if (freeActive) {
     const inp = document.createElement('input');
-    inp.className = 'action-qfreein';
+    inp.className = 'action-qfreein action-qfreein-inline';
     inp.type = 'text';
     inp.placeholder = t('approval_free_input_placeholder');
     inp.value = singleFreeText.get(sessionId) || '';
@@ -1432,7 +1483,7 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
         sendSingleFreeText(sessionId);
       }
     };
-    pane.appendChild(inp);
+    optsEl.appendChild(inp);
     setTimeout(() => inp.focus(), 0);
   }
   bar.appendChild(pane);
@@ -2148,6 +2199,17 @@ export function sendChoice(sessionId, targetNum) {
   }, 450);
   setTimeout(() => inputEl.focus(), 0);
 }
+
+// 承認ポップアップ 再表示/消す ボタン（↓ down の左の余白に常時表示）。
+// type=module は defer 実行のため DOM は構築済み。
+document.getElementById('approval-reshow-btn')?.addEventListener('click', () => {
+  if (activeSessionId === null) return;
+  reshowActionBar(activeSessionId);
+});
+document.getElementById('approval-dismiss-btn')?.addEventListener('click', () => {
+  if (activeSessionId === null) return;
+  manuallyHideActionBar(activeSessionId);
+});
 
 // --- ESM window-interop publish (generated; preserves dynamic window.* lookups) ---
 window.matchProviderApprovalTrigger = matchProviderApprovalTrigger;

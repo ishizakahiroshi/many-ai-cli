@@ -288,9 +288,13 @@ type UserPrefsPushNotifications struct {
 }
 
 // UserPrefsQuickCmds はクイックコマンドの設定。
+// Show1/Show2 はボタンの表示/非表示。既定は表示のため、未設定(nil)は表示として扱う。
+// false を omitempty で落とさないようポインタにする（非表示設定の永続化のため）。
 type UserPrefsQuickCmds struct {
-	Cmd1 string `yaml:"cmd1,omitempty" json:"cmd1,omitempty"`
-	Cmd2 string `yaml:"cmd2,omitempty" json:"cmd2,omitempty"`
+	Cmd1  string `yaml:"cmd1,omitempty"  json:"cmd1,omitempty"`
+	Cmd2  string `yaml:"cmd2,omitempty"  json:"cmd2,omitempty"`
+	Show1 *bool  `yaml:"show1,omitempty" json:"show1,omitempty"`
+	Show2 *bool  `yaml:"show2,omitempty" json:"show2,omitempty"`
 }
 
 // UserPrefsUsageLinks は使用量リンクの設定。

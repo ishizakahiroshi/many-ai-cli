@@ -950,6 +950,9 @@ export function updateScrollLockBtn(_locked?: boolean) {
   const hasSession = activeSessionId !== null && terminals.has(activeSessionId);
   if (topBtn) topBtn.hidden = !hasSession;
   if (bottomBtn) bottomBtn.hidden = !hasSession;
+  // 承認ポップアップ 再表示/消す ボタンもセッション表示中は常時表示する。
+  const recallBar = document.getElementById('approval-recall-bar');
+  if (recallBar) recallBar.hidden = !hasSession;
 }
 
 document.getElementById('scroll-to-top-btn')?.addEventListener('click', () => {

@@ -107,7 +107,12 @@ func (s *Server) resolveAllowedFilePath(r *http.Request) (string, bool, error) {
 	cwd := s.cwdForRequest(r)
 
 	gitRoot := findGitRoot(cwd)
-	allowed, err := isPathUnderAllowedRoots(pathParam, cwd, gitRoot)
+	// 添付ディレクトリ（~/.many-ai-cli/attachments）も許可ルートに含める。
+	// 送信履歴から many-ai-cli 自身が保存した添付（画像・CSV・テキスト等）を
+	// プレビュー / ダウンロードできるようにするため（CWD/git root の外にあるため
+	// 従来は 403 になっていた）。open 系ハンドラと同じ扱い（read-only の GET 専用）。
+	attachDir, _ := attachmentsDir()
+	allowed, err := isPathUnderAllowedRoots(pathParam, cwd, gitRoot, attachDir)
 	if err == nil && allowed {
 		return pathParam, false, nil
 	}

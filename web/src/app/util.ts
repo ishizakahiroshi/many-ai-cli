@@ -2,9 +2,16 @@
 import { t } from '../i18n.js';
 
 // --- ESM shared token (generated; moved from settings.js) ---
-// token は初回ロード時に URL クエリから取得し、sessionStorage へ退避したうえで
+// token は初回ロード時に URL クエリから取得し、localStorage へ退避したうえで
 // history.replaceState によりアドレスバーから除去する（ブラウザ履歴・スクショ・
-// 画面共有への露出対策）。リロード時は sessionStorage から復元する。
+// 画面共有への露出対策）。
+//
+// localStorage を使うのは「QR/token 付き URL を一度開けば、以降は token 無しの
+// 保存 URL（ブックマーク・ホーム画面ショートカット）でも再アクセスできる」運用を
+// 成立させるため。sessionStorage はタブ/アプリを閉じると消えるため、スマホで
+// 保存 URL を開き直すと token が失われ unauthorized になっていた。
+// 端末に token が永続保存される点はトレードオフ（自分専用端末・VPN 網内アクセス前提）。
+// Hub の token がローテートしたら保存値は無効になり、再度 token 付き URL が必要。
 // SW 側の token キャッシュ（pwa.ts → sw.ts postMessage）は従来通り別系統で保持。
 const TOKEN_STORAGE_KEY = 'many-ai-cli-token';
 
@@ -14,18 +21,23 @@ function initToken(): string | null {
     const params = new URLSearchParams(location.search);
     tk = params.get('token');
     if (tk) {
-      try { sessionStorage.setItem(TOKEN_STORAGE_KEY, tk); } catch (_) { /* private mode 等は無視 */ }
+      try { localStorage.setItem(TOKEN_STORAGE_KEY, tk); } catch (_) { /* private mode 等は無視 */ }
       params.delete('token');
       const qs = params.toString();
       try { history.replaceState(history.state, '', location.pathname + (qs ? `?${qs}` : '') + location.hash); } catch (_) { /* 失敗しても従来動作 */ }
     } else {
-      try { tk = sessionStorage.getItem(TOKEN_STORAGE_KEY); } catch (_) { /* 取得不可なら null のまま */ }
+      try { tk = localStorage.getItem(TOKEN_STORAGE_KEY); } catch (_) { /* 取得不可なら null のまま */ }
     }
   } catch (_) { /* URL 解析失敗時は null */ }
   return tk;
 }
 
-export const token = initToken();
+// token は null を返さない（initToken が見つけられなければ空文字）。
+// 生の `?token=${token}` 埋め込みが `?token=null` という不正トークン文字列を
+// 送ってしまうと、サーバーの requestToken が cookie 認証へフォールバックできず
+// unauthorized になる（特にスマホ/PWA でタブを開き直し sessionStorage が消えた場合）。
+// 空文字なら `?token=` となりサーバーが認証 cookie へ正しくフォールバックする。
+export const token = initToken() ?? '';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -62,25 +74,14 @@ export function showToast(msg: string, anchor?: ToastAnchor, durationMs = 1800):
     document.body.appendChild(el);
   }
   el.textContent = msg;
-  const r = getToastAnchorRect(anchor);
-  if (r) {
-    const margin = 8;
-    const y = Math.min(Math.max(r.top + r.height / 2, margin), window.innerHeight - margin);
-    el.style.top = y + 'px';
-    el.style.bottom = 'auto';
-    el.classList.add('toast--anchored');
-    // 右側に置けるか確認し、はみ出す場合は anchor の左側に表示
-    el.style.left = (r.right + 6) + 'px';
-    const w = el.offsetWidth;
-    if (r.right + 6 + w > window.innerWidth - margin) {
-      el.style.left = Math.max(margin, r.left - 6 - w) + 'px';
-    }
-  } else {
-    el.style.left = '';
-    el.style.top = '';
-    el.style.bottom = '';
-    el.classList.remove('toast--anchored');
-  }
+  // トーストは常に画面下中央へ固定表示する。anchor 引数は呼び出し側の後方互換の
+  // ため残すが、位置決めには使わない（ボタン隣表示はボタンごとに縦位置が変わり
+  // 「バラバラ」に見えるため、全体で下中央に統一した）。
+  void anchor;
+  el.style.left = '';
+  el.style.top = '';
+  el.style.bottom = '';
+  el.classList.remove('toast--anchored');
   el.classList.add('show');
   if (_toastTimer) clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => { el.classList.remove('show'); el.classList.remove('toast--anchored'); }, durationMs);

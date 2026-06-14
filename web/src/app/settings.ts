@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, showToast, ti18n, token } from './util.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, openDetachedGridForSessions, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
@@ -448,6 +448,10 @@ export function appConfirm({ title, message, confirmText, cancelText, kind = 'de
       resolve(value);
     };
     const onOverlayClick = (e) => {
+      // この確認ダイアログは設定パネルの外（model-picker-overlay）に出るため、
+      // ここで止めないとクリックが document まで伝播し、設定パネルの
+      // 「パネル外クリックで閉じる」ハンドラに拾われてパネルごと閉じてしまう。
+      e.stopPropagation();
       if (e.target === overlay) close(false);
     };
     const onKeyDown = (e) => {
@@ -473,8 +477,11 @@ export function appConfirm({ title, message, confirmText, cancelText, kind = 'de
     `;
     overlay.appendChild(dialog);
 
-    document.getElementById('app-confirm-cancel').addEventListener('click', () => close(false));
-    document.getElementById('app-confirm-ok').addEventListener('click', () => close(true));
+    // ボタン経路では close() が onOverlayClick を先に解除するため、overlay 側の
+    // stopPropagation では止められない。各ボタンで直接伝播を止めて、document の
+    // 「パネル外クリックで閉じる」ハンドラに届かないようにする。
+    document.getElementById('app-confirm-cancel').addEventListener('click', (e) => { e.stopPropagation(); close(false); });
+    document.getElementById('app-confirm-ok').addEventListener('click', (e) => { e.stopPropagation(); close(true); });
     overlay.addEventListener('click', onOverlayClick);
     document.addEventListener('keydown', onKeyDown);
     document.getElementById('app-confirm-ok').focus();
@@ -657,23 +664,51 @@ export function stripAnsi(str) {
   return str.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\x1b[^[]/g, '');
 }
 
-export const DEFAULT_QUICK_CMD_1 = '/clear';
-export const DEFAULT_QUICK_CMD_2 = '/model';
-export const ALLOWED_QUICK_COMMANDS = new Set([
+// 初回（未設定）は空欄にして入力欄のプレースホルダーで自由入力を誘導する。
+// 空のスロットはボタン自体を非表示にする（送るものが無いため）。
+export const DEFAULT_QUICK_CMD_1 = '';
+export const DEFAULT_QUICK_CMD_2 = '';
+// datalist の入力候補（自由入力可。スラッシュコマンドだけでなく任意テキストも登録できる）
+export const QUICK_COMMAND_PRESETS = [
   '/clear', '/model', '/help', '/status', '/usage', '/review', '/compact', '/config',
-]);
+];
+// PTY へ送る文字列の最大長。改行は \r 連結時の複数行送信を防ぐため除去する。
+export const QUICK_CMD_MAXLEN = 200;
+// action-bar 上のボタンに表示する先頭文字数（残りは … で省略、全文は tooltip 表示）。
+export const QUICK_CMD_LABEL_LEN = 5;
 
+// 自由入力テキストをクイックコマンドとして受け入れ可能な形に整える。
+// 旧実装の whitelist 制限は撤廃（任意テキストを登録・送信できる）。
 export function sanitizeQuickCommand(cmd, fallback) {
-  return ALLOWED_QUICK_COMMANDS.has(cmd) ? cmd : fallback;
+  if (typeof cmd !== 'string') return fallback;
+  const cleaned = cmd
+    .replace(/[\r\n]+/g, ' ')        // 改行は空白化（複数行送信化を防ぐ）
+    .replace(/[\x00-\x1f\x7f]/g, '') // 制御文字を除去
+    .trim();
+  if (!cleaned) return fallback;
+  return cleaned.slice(0, QUICK_CMD_MAXLEN);
+}
+
+// ボタン表示用の短縮ラベル（先頭 QUICK_CMD_LABEL_LEN 文字 + …）。
+// コードポイント単位で数えて絵文字・CJK が途中で割れないようにする。
+export function quickCommandLabel(cmd) {
+  const chars = [...(cmd || '')];
+  if (chars.length <= QUICK_CMD_LABEL_LEN) return chars.join('');
+  return chars.slice(0, QUICK_CMD_LABEL_LEN).join('') + '…';
 }
 
 export function getQuickCommand(slot) {
+  // 未設定(null)は空欄。空文字は「未登録スロット」を意味する（fallback も空）。
   if (slot === 1) {
-    const saved = localStorage.getItem(STORAGE_QUICK_CMD_1_KEY) || DEFAULT_QUICK_CMD_1;
-    return sanitizeQuickCommand(saved, DEFAULT_QUICK_CMD_1);
+    return sanitizeQuickCommand(localStorage.getItem(STORAGE_QUICK_CMD_1_KEY) ?? '', '');
   }
-  const saved = localStorage.getItem(STORAGE_QUICK_CMD_2_KEY) || DEFAULT_QUICK_CMD_2;
-  return sanitizeQuickCommand(saved, DEFAULT_QUICK_CMD_2);
+  return sanitizeQuickCommand(localStorage.getItem(STORAGE_QUICK_CMD_2_KEY) ?? '', '');
+}
+
+// クイックコマンドボタンの表示状態（既定: 表示）。未設定(null)は表示扱い、'0' のみ非表示。
+export function getQuickCommandVisible(slot) {
+  const key = slot === 1 ? STORAGE_QUICK_CMD_1_SHOW_KEY : STORAGE_QUICK_CMD_2_SHOW_KEY;
+  return localStorage.getItem(key) !== '0';
 }
 
 export function refreshQuickCommandButtons() {
@@ -682,10 +717,13 @@ export function refreshQuickCommandButtons() {
   if (!btn1 || !btn2) return;
   const cmd1 = getQuickCommand(1);
   const cmd2 = getQuickCommand(2);
-  btn1.textContent = cmd1;
-  btn2.textContent = cmd2;
+  btn1.textContent = quickCommandLabel(cmd1);
+  btn2.textContent = quickCommandLabel(cmd2);
   btn1.dataset.tooltip = cmd1;
   btn2.dataset.tooltip = cmd2;
+  // 表示トグル ON かつコマンドが空でないときだけボタンを出す。
+  btn1.hidden = !(getQuickCommandVisible(1) && cmd1 !== '');
+  btn2.hidden = !(getQuickCommandVisible(2) && cmd2 !== '');
 }
 
 // @attachment と先頭スラッシュコマンドを除外してカード表示用テキストを返す
@@ -1393,19 +1431,39 @@ export function applyLang(lang) {
   quickCmd2El.value = getQuickCommand(2);
   refreshQuickCommandButtons();
 
-  quickCmd1El.addEventListener('change', () => {
-    const value = sanitizeQuickCommand(quickCmd1El.value, DEFAULT_QUICK_CMD_1);
-    quickCmd1El.value = value;
-    setUserPref('quick_cmds.cmd1', value);
-    refreshQuickCommandButtons();
-  });
+  // 入力中はボタンのラベル・表示を即時プレビュー（保存はフォーカス確定時の change）。
+  const bind = (el, btnId, prefKey, slot) => {
+    const btn = document.getElementById(btnId);
+    el.addEventListener('input', () => {
+      if (!btn) return;
+      const v = el.value.trim();
+      btn.textContent = quickCommandLabel(v);
+      btn.dataset.tooltip = v;
+      btn.hidden = !(getQuickCommandVisible(slot) && v !== '');
+    });
+    el.addEventListener('change', () => {
+      const value = sanitizeQuickCommand(el.value, '');
+      el.value = value;
+      setUserPref(prefKey, value);
+      refreshQuickCommandButtons();
+    });
+  };
+  bind(quickCmd1El, 'quick-clear-btn', 'quick_cmds.cmd1', 1);
+  bind(quickCmd2El, 'quick-model-btn', 'quick_cmds.cmd2', 2);
 
-  quickCmd2El.addEventListener('change', () => {
-    const value = sanitizeQuickCommand(quickCmd2El.value, DEFAULT_QUICK_CMD_2);
-    quickCmd2El.value = value;
-    setUserPref('quick_cmds.cmd2', value);
-    refreshQuickCommandButtons();
-  });
+  // 表示/非表示トグル（不要な人は個別に隠せる）。
+  const show1El = document.getElementById('quick-cmd-1-show');
+  const show2El = document.getElementById('quick-cmd-2-show');
+  const bindShow = (el, prefKey, slot) => {
+    if (!el) return;
+    el.checked = getQuickCommandVisible(slot);
+    el.addEventListener('change', () => {
+      setUserPref(prefKey, el.checked);
+      refreshQuickCommandButtons();
+    });
+  };
+  bindShow(show1El, 'quick_cmds.show1', 1);
+  bindShow(show2El, 'quick_cmds.show2', 2);
 })();
 
 // ---- アバター・表示名設定 ----

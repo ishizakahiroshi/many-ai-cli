@@ -15,6 +15,7 @@ import { t } from '../i18n.js';
 import { providerIconHtml, providerDisplayName, safeClassToken, stateLabel, activateSession } from './session-list.js';
 import { wsConnectionState } from './ws-client.js';
 import { FilesTabManager } from './files-view.js';
+import { showPathPopup } from './path-links.js';
 
 // セッション単位の usage データキャッシュ。
 interface UsageCacheEntry {
@@ -520,15 +521,20 @@ function formatSentDateTime(ts: any): string {
     + `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-// アクティブセッションの送信メッセージ（user role・本文あり）を時系列（古い→新しい）で返す。
-function collectSentMessages(sid: number): Array<{ ts: any; text: string }> {
+// アクティブセッションの送信メッセージ（user role）を時系列（古い→新しい）で返す。
+// 本文ありのテキスト送信と、添付のみ（kind==='attach'）の送信の両方を対象にする。
+// 添付は saved_path（絶対パス）を持つものだけを拾う（クリックで開けないものは除外）。
+function collectSentMessages(sid: number): Array<{ ts: any; text: string; attachments: any[] }> {
   const arr = chatHistory.get(sid) || [];
-  const out: Array<{ ts: any; text: string }> = [];
+  const out: Array<{ ts: any; text: string; attachments: any[] }> = [];
   for (const m of arr) {
     if (!m || m.role !== 'user') continue;
     const text = String(m.normalizedText || m.rawText || '').trim();
-    if (!text) continue;
-    out.push({ ts: m.ts, text });
+    const attachments = Array.isArray(m.attachments)
+      ? m.attachments.filter((a: any) => a && a.path)
+      : [];
+    if (!text && attachments.length === 0) continue;
+    out.push({ ts: m.ts, text, attachments });
   }
   return out;
 }
@@ -608,14 +614,39 @@ function openSentHistoryModal(): void {
       time.textContent = formatSentDateTime(it.ts);
       meta.appendChild(idx);
       meta.appendChild(time);
-      const text = document.createElement('div');
-      text.className = 'tsb-sent-text';
-      text.textContent = it.text;
-      // クリックでその送信内容をコピー。
-      row.title = t('tsb_sent_history_copy_hint');
-      row.addEventListener('click', () => copyText(it.text, row));
       row.appendChild(meta);
-      row.appendChild(text);
+      // 本文（テキスト送信のみ）。クリックでその送信内容をコピー。
+      if (it.text) {
+        const text = document.createElement('div');
+        text.className = 'tsb-sent-text';
+        text.textContent = it.text;
+        row.title = t('tsb_sent_history_copy_hint');
+        // 添付チップのクリックがここまでバブルした場合はコピーしない。
+        row.addEventListener('click', (e) => {
+          if ((e.target as HTMLElement).closest?.('.tsb-sent-attach-chip')) return;
+          copyText(it.text, row);
+        });
+        row.appendChild(text);
+      }
+      // 添付（画像・CSV・テキスト等）。クリックで Files と同じ右クリックメニューを開く。
+      if (it.attachments.length > 0) {
+        const ats = document.createElement('div');
+        ats.className = 'tsb-sent-attachments';
+        for (const a of it.attachments) {
+          const name = a.filename || String(a.path).split(/[\\/]/).pop() || a.path;
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'tsb-sent-attach-chip';
+          chip.textContent = `${a.kind === 'image' ? '🖼' : '📄'} ${name}`;
+          chip.title = t('tsb_sent_history_attach_hint');
+          chip.addEventListener('click', (e) => {
+            e.stopPropagation();
+            showPathPopup(a.path, e.clientX, e.clientY, sid, 'file');
+          });
+          ats.appendChild(chip);
+        }
+        row.appendChild(ats);
+      }
       body.appendChild(row);
     });
   }

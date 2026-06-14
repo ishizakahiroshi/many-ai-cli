@@ -8,10 +8,43 @@
   background: var(--line);
   overflow: hidden;
   min-height: 0;
-  /* JS が --pane-cols / --pane-rows をセット */
+  /* スプリッタ（境界ドラッグ用ハンドル）を絶対配置で重ねる基準 */
+  position: relative;
+  /* JS が --pane-cols / --pane-rows をセット。
+     比率は JS が gridTemplateColumns/Rows をインライン上書きする（A: 可変リサイズ） */
   grid-template-columns: repeat(var(--pane-cols, 2), minmax(0, 1fr));
   grid-template-rows:    repeat(var(--pane-rows, 2), minmax(0, 1fr));
 }
+
+/* ── A: グリッド境界スプリッタ ── */
+.pane-splitter {
+  position: absolute;
+  z-index: 5;
+  background: transparent;
+  touch-action: none;
+}
+.pane-splitter.col {
+  top: 0; bottom: 0;
+  width: 8px;
+  transform: translateX(-50%);
+  cursor: col-resize;
+}
+.pane-splitter.row {
+  left: 0; right: 0;
+  height: 8px;
+  transform: translateY(-50%);
+  cursor: row-resize;
+}
+.pane-splitter:hover { background: rgba(91,124,246,0.35); }
+body.pane-resizing { cursor: col-resize; user-select: none; }
+body.pane-resizing .xterm { pointer-events: none; }
+
+/* ── B: ペイン D&D 並べ替え ── */
+.pane-slot .pane-header { cursor: grab; }
+.pane-slot .pane-header:active { cursor: grabbing; }
+.pane-slot.dragging { opacity: 0.4; }
+.pane-slot.drag-over { box-shadow: inset 0 0 0 2px var(--accent); }
+.pane-slot.drag-over .pane-terminal-area { background: rgba(91,124,246,0.12); }
 
 /* ── ペイン ── */
 .pane-slot {

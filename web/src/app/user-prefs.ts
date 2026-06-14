@@ -24,6 +24,9 @@ export const STORAGE_PUSH_NOTIFY_ENABLED_KEY = 'ai_cli_hub_push_notify_enabled';
 export const STORAGE_APPROVAL_AUTO_SWITCH_KEY = 'ai_cli_hub_approval_auto_switch';
 export const STORAGE_QUICK_CMD_1_KEY          = 'ai_cli_hub_quick_cmd_1';
 export const STORAGE_QUICK_CMD_2_KEY          = 'ai_cli_hub_quick_cmd_2';
+// クイックコマンドボタンの表示/非表示（既定: 表示）。不要な人は個別に隠せる。
+export const STORAGE_QUICK_CMD_1_SHOW_KEY     = 'ai_cli_hub_quick_cmd_1_show';
+export const STORAGE_QUICK_CMD_2_SHOW_KEY     = 'ai_cli_hub_quick_cmd_2_show';
 export const STORAGE_TOOLS_LEFT_KEY           = 'ai_cli_hub_tools_left';
 export const STORAGE_PC_INPUT_TOOLS_KEY       = 'ai_cli_hub_pc_input_tools';
 export const STORAGE_MOBILE_INPUT_TOOLS_KEY   = 'ai_cli_hub_mobile_input_tools';
@@ -176,6 +179,8 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'voice.wake_word_phrase':    [STORAGE_WAKE_WORD_PHRASE_KEY,      String],
   'quick_cmds.cmd1':           [STORAGE_QUICK_CMD_1_KEY,           String],
   'quick_cmds.cmd2':           [STORAGE_QUICK_CMD_2_KEY,           String],
+  'quick_cmds.show1':          [STORAGE_QUICK_CMD_1_SHOW_KEY,      (v) => v ? '1' : '0'],
+  'quick_cmds.show2':          [STORAGE_QUICK_CMD_2_SHOW_KEY,      (v) => v ? '1' : '0'],
   'usage_links.claude':        [STORAGE_USAGE_LINK_CLAUDE_KEY,     String],
   'usage_links.codex':         [STORAGE_USAGE_LINK_CODEX_KEY,      String],
   'usage_links.copilot':       [STORAGE_USAGE_LINK_COPILOT_KEY,    String],
@@ -243,7 +248,8 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
   let parsed: any;
   try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
 
-  if (path.endsWith('.enabled') || path === 'voice.wake_word_enabled' || path === 'voice.input_disabled' || path === 'approval.auto_switch') {
+  if (path.endsWith('.enabled') || path === 'voice.wake_word_enabled' || path === 'voice.input_disabled' || path === 'approval.auto_switch'
+      || path === 'quick_cmds.show1' || path === 'quick_cmds.show2') {
     return { ok: true, value: raw === '1' || raw === 'true' || parsed === true };
   }
   if (path === 'voice.grace_seconds') {

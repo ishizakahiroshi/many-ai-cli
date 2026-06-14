@@ -568,31 +568,37 @@
       <details class="settings-section" data-section="quick-cmd">
         <summary class="settings-section-title"><span data-i18n="settings_quick_cmd_title">クイックコマンド</span></summary>
         <div class="settings-section-body">
+          <datalist id="quick-cmd-presets">
+            <option value="/clear"></option>
+            <option value="/model"></option>
+            <option value="/help"></option>
+            <option value="/status"></option>
+            <option value="/usage"></option>
+            <option value="/review"></option>
+            <option value="/compact"></option>
+            <option value="/config"></option>
+          </datalist>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_quick_cmd_1">コマンド 1</span>
-            <select id="quick-cmd-1" class="settings-select">
-              <option value="/clear">/clear</option>
-              <option value="/model">/model</option>
-              <option value="/help">/help</option>
-              <option value="/status">/status</option>
-              <option value="/usage">/usage</option>
-              <option value="/review">/review</option>
-              <option value="/compact">/compact</option>
-              <option value="/config">/config</option>
-            </select>
+            <input type="text" id="quick-cmd-1" class="settings-input-text" list="quick-cmd-presets"
+                   maxlength="200" autocomplete="off"
+                   data-i18n-placeholder="settings_quick_cmd_placeholder"
+                   placeholder="例: bugfix 作って / スラッシュコマンド">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_quick_cmd_1_show">コマンド 1 を表示</span>
+            <input type="checkbox" id="quick-cmd-1-show" class="settings-checkbox">
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_quick_cmd_2">コマンド 2</span>
-            <select id="quick-cmd-2" class="settings-select">
-              <option value="/model">/model</option>
-              <option value="/clear">/clear</option>
-              <option value="/help">/help</option>
-              <option value="/status">/status</option>
-              <option value="/usage">/usage</option>
-              <option value="/review">/review</option>
-              <option value="/compact">/compact</option>
-              <option value="/config">/config</option>
-            </select>
+            <input type="text" id="quick-cmd-2" class="settings-input-text" list="quick-cmd-presets"
+                   maxlength="200" autocomplete="off"
+                   data-i18n-placeholder="settings_quick_cmd_placeholder"
+                   placeholder="例: plan md 作って / スラッシュコマンド">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_quick_cmd_2_show">コマンド 2 を表示</span>
+            <input type="checkbox" id="quick-cmd-2-show" class="settings-checkbox">
           </div>
         </div>
       </details>
@@ -970,6 +976,11 @@
         <div id="terminal-readonly-badge"><span data-i18n="terminal_output">Terminal Output</span><span id="terminal-shell-info"></span></div>
         <button id="scroll-to-top-btn" data-i18n-tooltip="scroll_to_top_tooltip" data-i18n="scroll_to_top" hidden>↑ up</button>
         <button id="scroll-to-bottom-btn" data-i18n-tooltip="scroll_to_bottom_tooltip" data-i18n="scroll_to_bottom" hidden>↓ down</button>
+        <!-- 承認ポップアップ 再表示/消す（↓ down の左の余白に常時表示） -->
+        <div id="approval-recall-bar" hidden>
+          <button id="approval-reshow-btn" type="button" data-i18n-tooltip="approval_reshow_tooltip" data-i18n="approval_reshow">↻ 承認</button>
+          <button id="approval-dismiss-btn" type="button" data-i18n-tooltip="approval_dismiss_tooltip" data-i18n="approval_dismiss">✕ 承認</button>
+        </div>
       </div>
     </div>
     <!-- C3: チャットペイン (C4 で filter-bar の中身が埋まる) -->
@@ -1048,8 +1059,8 @@
             <button id="send-btn" title="Send" aria-label="Send">➤</button>
             <div id="input-tools">
               <button id="voice-wakeword-btn" hidden>🎧</button>
-              <button id="quick-clear-btn" class="quick-cmd-btn" data-i18n-tooltip="quick_clear_tooltip">/clear</button>
-              <button id="quick-model-btn" class="quick-cmd-btn" data-i18n-tooltip="quick_model_tooltip">/model</button>
+              <button id="quick-clear-btn" class="quick-cmd-btn quick-cmd-btn--text">/clear</button>
+              <button id="quick-model-btn" class="quick-cmd-btn quick-cmd-btn--text">/model</button>
               <button id="slash-picker-btn" class="quick-cmd-btn" data-i18n-tooltip="slash_picker_tooltip">/ ▾</button>
               <button id="buf-clear-btn" class="quick-cmd-btn" data-i18n-tooltip="buf_clear_tooltip">⌫</button>
             </div>
