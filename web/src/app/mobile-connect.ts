@@ -236,13 +236,17 @@ function stepDots(active: number): HTMLElement {
   return steps;
 }
 
-function choiceBtn(icon: string, name: string, desc: string, badge: { text: string; cls: string } | null, onClick: () => void): HTMLElement {
+function choiceBtn(icon: string, name: string, desc: string, badge: { text: string; cls: string } | null, onClick: () => void, opts?: { recommend?: boolean; note?: string }): HTMLElement {
   const btn = el('button', { class: 'mc-choice', attrs: { type: 'button' } });
   btn.appendChild(el('span', { class: 'mc-choice-ico', text: icon }));
   const tcol = el('span', { class: 'mc-choice-t' });
   tcol.appendChild(el('span', { class: 'mc-choice-nm', text: name }));
   tcol.appendChild(el('span', { class: 'mc-choice-ds', text: desc }));
-  if (badge) tcol.appendChild(el('span', { class: 'mc-badge ' + badge.cls, text: badge.text }));
+  if (opts?.note) tcol.appendChild(el('span', { class: 'mc-choice-note', text: opts.note }));
+  const brow = el('span', { class: 'mc-badge-row' });
+  if (opts?.recommend) brow.appendChild(el('span', { class: 'mc-badge mc-badge-recommend', text: t('mobile_connect_badge_recommend') }));
+  if (badge) brow.appendChild(el('span', { class: 'mc-badge ' + badge.cls, text: badge.text }));
+  if (brow.childElementCount) tcol.appendChild(brow);
   btn.appendChild(tcol);
   btn.addEventListener('click', onClick);
   return btn;
@@ -374,10 +378,11 @@ function renderPattern(body: HTMLElement): void {
   qRow.appendChild(helpBtn);
   body.appendChild(qRow);
 
+  body.appendChild(choiceBtn('🌍', t('mobile_connect_opt_vpn_name'), t('mobile_connect_opt_vpn_desc'),
+    { text: t('mobile_connect_badge_full'), cls: 'mc-badge-full' }, () => pick('vpn'),
+    { recommend: true, note: t('mobile_connect_opt_vpn_note') }));
   body.appendChild(choiceBtn('🏠', t('mobile_connect_opt_ssh_name'), t('mobile_connect_opt_ssh_desc'),
     { text: t('mobile_connect_badge_full'), cls: 'mc-badge-full' }, () => pick('ssh')));
-  body.appendChild(choiceBtn('🌍', t('mobile_connect_opt_vpn_name'), t('mobile_connect_opt_vpn_desc'),
-    { text: t('mobile_connect_badge_full'), cls: 'mc-badge-full' }, () => pick('vpn')));
   body.appendChild(choiceBtn('✅', t('mobile_connect_opt_done_name'), t('mobile_connect_opt_done_desc'),
     { text: t('mobile_connect_badge_keep'), cls: 'mc-badge-keep' }, () => pick('done')));
 

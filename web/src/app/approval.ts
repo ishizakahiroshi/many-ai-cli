@@ -1617,29 +1617,41 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
     detail.className = 'action-qdetail empty';
     detail.textContent = t('approval_batch_detail_empty');
   }
-  pane.appendChild(detail);
-  bar.appendChild(pane);
+  // ===== 詳細メッセージ＋送信バーを横並びに =====
+  // 左に「送信確認 / クリア」、右にメッセージ詳細を置く。縦積みの送信バー行を無くし、
+  // 承認ポップアップの高さを抑える（CLI 表示欄を広く保ち、メッセージ確認をしやすくする）。
+  const detailRow = document.createElement('div');
+  detailRow.className = 'action-qdetail-row';
 
-  // ===== 送信バー =====
-  const footer = document.createElement('div');
-  footer.className = 'action-bar-footer';
+  const actions = document.createElement('div');
+  actions.className = 'action-qdetail-actions';
 
   const progress = document.createElement('span');
   progress.className = 'action-bar-progress';
-  footer.appendChild(progress);
+  actions.appendChild(progress);
+
+  const actionBtns = document.createElement('div');
+  actionBtns.className = 'action-qdetail-btns';
 
   const submitBtn = document.createElement('button');
   submitBtn.className = 'action-submit-btn';
   submitBtn.textContent = t('approval_batch_confirm');
   submitBtn.onclick = (e) => { e.stopPropagation(); openBatchConfirm(sessionId); };
-  footer.appendChild(submitBtn);
+  actionBtns.appendChild(submitBtn);
 
   const clearBtn = document.createElement('button');
   clearBtn.className = 'action-clear-btn';
   clearBtn.textContent = t('approval_batch_clear');
   clearBtn.onclick = (e) => { e.stopPropagation(); clearBatchSelections(sessionId); };
-  footer.appendChild(clearBtn);
+  actionBtns.appendChild(clearBtn);
 
+  actions.appendChild(actionBtns);
+  detailRow.appendChild(actions);
+  detailRow.appendChild(detail);
+  pane.appendChild(detailRow);
+  bar.appendChild(pane);
+
+  // 閉じ（✕）は position:absolute なので bar 直下に置けば右上に固定表示される。
   const closeBatchBtn = document.createElement('button');
   closeBatchBtn.className = 'action-dismiss-btn';
   closeBatchBtn.textContent = '✕';
@@ -1649,9 +1661,7 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
     hideActionBar(sessionId);
     approvalSuppressUntil.set(sessionId, Date.now() + 60000);
   };
-  footer.appendChild(closeBatchBtn);
-
-  bar.appendChild(footer);
+  bar.appendChild(closeBatchBtn);
 
   // タブ ✓/未・進捗・送信ボタン活性を一括更新（自由入力の oninput からも呼ぶ）
   updateBatchStatus = () => {

@@ -248,6 +248,16 @@
 .spawn-input:focus { border-color: var(--accent); }
 .spawn-input { font-family: Consolas, monospace; font-size: 0.78rem; }
 
+/* iOS WebKit は font-size 16px 未満の入力欄にフォーカスすると自動ズームし、
+   セッション作成パネルを開いた瞬間（spawnCwdInput.focus()）に画面が拡大して
+   使いにくくなる。ターミナル入力欄 #input と同じく mobile 時は 16px を確保する。 */
+@media (max-width: 720px), (pointer: coarse) {
+  .spawn-select,
+  .spawn-input {
+    font-size: 16px;
+  }
+}
+
 @media (max-width: 520px) {
   .spawn-provider-trigger {
     grid-template-columns: 15px minmax(0, 1fr) 10px;
