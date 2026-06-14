@@ -28,6 +28,23 @@ declare global {
   const marked: any;
   const DOMPurify: any;
   const hljs: any;
+
+  // qrcode-generator (vendored, MIT). classic script がグローバル `qrcode` を公開する。
+  interface QRCodeModel {
+    addData(data: string, mode?: string): void;
+    make(): void;
+    getModuleCount(): number;
+    isDark(row: number, col: number): boolean;
+    createImgTag(cellSize?: number, margin?: number): string;
+    createSvgTag(cellSize?: number, margin?: number): string;
+    createDataURL(cellSize?: number, margin?: number): string;
+    createTableTag(cellSize?: number, margin?: number): string;
+    createASCII(cellSize?: number, margin?: number): string;
+  }
+  const qrcode: {
+    (typeNumber: number, errorCorrectionLevel: 'L' | 'M' | 'Q' | 'H'): QRCodeModel;
+    stringToBytes(s: string): number[];
+  };
 }
 
 export {};

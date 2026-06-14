@@ -39,6 +39,9 @@ export const STORAGE_VOICE_ENGINE_KEY         = 'anyai.voiceEngine';
 export const STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY = 'anyai.voiceWhisperAutoSubmit';
 export const STORAGE_VOICE_WHISPER_AUTO_STOP_KEY = 'anyai.voiceWhisperAutoStop';
 export const STORAGE_DISPLAY_LOCKED_MODE_KEY  = 'ai_cli_hub_display_locked_mode';
+// ライブステータス帯のユーザー配色（display.live_status_bg / live_status_fg にサーバ同期）。
+export const STORAGE_LIVE_STATUS_BG_KEY       = 'ai_cli_hub_live_status_bg';
+export const STORAGE_LIVE_STATUS_FG_KEY       = 'ai_cli_hub_live_status_fg';
 // 承認 action-bar の折りたたみ（コンパクト）表示。device-local（端末ごとに保持）。
 // 大きな承認パネルで前後のターミナル本文が見切れる問題への対処として、
 // 質問本文・選択肢を 1 行省略表示にして高さを最小化する。既定は展開（false）。
@@ -188,6 +191,8 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'mobile.input_tools_enabled': [STORAGE_MOBILE_INPUT_TOOLS_KEY,   (v) => v ? '1' : '0'],
   'spawn.defaults':            [STORAGE_SPAWN_KEY,                 JSON.stringify],
   'display.locked_mode':       [STORAGE_DISPLAY_LOCKED_MODE_KEY,   (v) => (v == null || v === '') ? '' : String(v)],
+  'display.live_status_bg':    [STORAGE_LIVE_STATUS_BG_KEY,        (v) => (v == null || v === '') ? '' : String(v)],
+  'display.live_status_fg':    [STORAGE_LIVE_STATUS_FG_KEY,        (v) => (v == null || v === '') ? '' : String(v)],
   'display.theme':             [STORAGE_THEME_KEY,                 String],
   'display.font_size':         [STORAGE_FONTSIZE_KEY,              String],
   'display.lang':              [STORAGE_LANG_KEY,                  String],
@@ -208,6 +213,8 @@ export const _USER_PREFS_STRING_PATHS = new Set([
   'usage_links.ollama',
   'usage_links.opencode',
   'display.locked_mode',
+  'display.live_status_bg',
+  'display.live_status_fg',
   'display.theme',
   'display.font_size',
   'display.lang',

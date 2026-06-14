@@ -87,6 +87,8 @@
     <button id="server-btn" data-i18n-tooltip="server_tooltip" aria-haspopup="dialog" aria-expanded="false">🖥 <span data-i18n="server_btn">Server</span></button>
     <button id="global-wakeword-btn" hidden>🎧</button>
     <span id="mic-status-chip" class="status-chip" hidden></span>
+    <!-- 📱 モバイル接続（QR ウィザード）。SSH ローカルフォワード / VPN 前提で 127.0.0.1 URL の QR を出す。bind は 127.0.0.1 不変。 -->
+    <button id="mobile-connect-btn" data-i18n-tooltip="mobile_connect_tooltip" aria-haspopup="dialog" aria-expanded="false">📱</button>
     <button id="shutdown-btn" data-i18n-tooltip="shutdown_tooltip">⏻</button>
     <button id="settings-btn">
       <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -1238,6 +1240,7 @@
   <script src="/vendor/marked.min.js"></script>
   <script src="/vendor/purify.min.js"></script>
   <script src="/vendor/highlight.min.js"></script>
+  <script src="/vendor/qrcode.js"></script>
   <script type="module" src="/app-entry.js"></script>
 </body>
 </html>
