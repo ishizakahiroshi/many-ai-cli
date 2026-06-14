@@ -279,6 +279,19 @@
 }
 .action-qfreein:focus { outline: none; border-color: var(--accent); }
 
+/* 単一質問モード: 「N. 自由入力」ボタンの右隣（同じ flex 行）に並べる版。
+   縦積み（margin-top + width:100%）をやめて余分な行高を消し、ボタンと同じ高さに揃える。 */
+.action-qfreein-inline {
+  margin-top: 0;
+  width: auto;
+  flex: 1 1 200px;
+  min-width: 160px;
+  min-height: var(--control-h-sm);
+  padding: 7px 10px;
+  font-size: 0.8rem;
+  box-sizing: border-box;
+}
+
 /* 送信確認モーダル（position:fixed で画面中央・内部スクロールで隠れない） */
 .action-confirm-mask {
   position: fixed;

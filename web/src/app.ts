@@ -913,6 +913,8 @@ window.closeMobileSessionDrawer = closeMobileSessionDrawer;
 })();
 
 export function sendQuickCommand(sessionId, cmd) {
+  // 未登録（空）スロットは送信しない（ボタンは非表示だが念のためのガード）。
+  if (!cmd || !cmd.trim()) return;
   // Ollama route セッションで /model 始まりはブロック（quick-model-btn 経由含む）
   if (isOllamaModelCommandBlocked(sessionId, cmd)) {
     showToast(t('toast_model_blocked_on_ollama'));
@@ -1566,6 +1568,8 @@ inputEl.addEventListener('blur', (e) => {
     setUserPref('approval.auto_switch', false);
     setUserPref('quick_cmds.cmd1', DEFAULT_QUICK_CMD_1);
     setUserPref('quick_cmds.cmd2', DEFAULT_QUICK_CMD_2);
+    setUserPref('quick_cmds.show1', true);
+    setUserPref('quick_cmds.show2', true);
     setUserPref('usage_links.claude', '');
     setUserPref('usage_links.codex', '');
     setUserPref('usage_links.copilot', '');
