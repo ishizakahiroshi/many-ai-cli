@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Go](https://img.shields.io/badge/go-1.25+-blue)
 
-![many-ai-cli ダッシュボード](assets/readme-dashboard.jpg)
+![many-ai-cli ダッシュボード](assets/readme-dashboard.png)
 
 **AI コーディング CLI の承認待ちを見逃さない。** `many-ai-cli` は Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI を監視し、承認が必要になった瞬間にデスクトップ／スマホへ通知します。ターミナルを見張り続ける必要はありません。あわせて、複数セッションの承認・監視・ターミナルを 1 画面の Web ダッシュボードで操作できます。
 
@@ -37,6 +37,25 @@ Terminal pane #1              Terminal pane #2
             │  セッション一覧  │
             └──────────────────┘
 ```
+
+各ペインでは対応プロバイダーのいずれか（`claude` / `codex` / `copilot` / `cursor-agent`）を実行できます。図では例として2つを示しています。
+
+---
+
+## 対応プロバイダー
+
+`many-ai-cli` は以下の AI コーディング CLI を PTY でラップします（使うものは別途インストールしてください）:
+
+| プロバイダー | サブコマンド | 備考 |
+|---|---|---|
+| Claude Code | `claude` | Anthropic |
+| Codex CLI | `codex` | OpenAI |
+| GitHub Copilot CLI | `copilot` | 公式 CLI。OAuth token / PAT / 認証情報は読み取り・保存・代理利用しません |
+| Cursor Agent CLI | `cursor-agent` | 公式 CLI。事前にサインインが必要 |
+
+**Ollama** は独立したラッパーではありません。`claude` または `codex` のラッパー経由で Ollama のモデルを使います（spawn フォームのモデルピッカーで **Ollama Cloud / Ollama Local** を選ぶと、Hub が Anthropic / OpenAI 互換エンドポイントを Ollama に向けます。「主な機能」の「モデルピッカー + Ollama route 自動切替」参照）。
+
+Gemini CLI は意図的に対象外です。
 
 ---
 

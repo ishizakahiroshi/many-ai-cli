@@ -251,7 +251,24 @@
       marks.push({ at: m.index + m[1].length, num: parseInt(m[2], 10) });
       if (m.index === re.lastIndex) re.lastIndex++; // ゼロ幅マッチの無限ループ防止
     }
-    if (marks.length < 2) return [rawLine];
+    if (marks.length < 2) {
+      // 見出し（質問文）が option 1 と同一行へ連結されたケース（「質問? 1. A」）。
+      // option 2 以降は別行に残るため連番ペアが作れず、上の <2 早期 return だと
+      // この行は optionRe/headingRe いずれにもマッチせず丸ごと捨てられ、option 1 が欠落する
+      //（=「選択肢の 1 が無い」症状）。唯一の番号が 1 で、かつ前に見出しテキストがあるときだけ
+      // 見出しと option 1 へ分割して救済する（先頭が既に「1.」の正規行は head が空なので不変）。
+      // head がカーソル/箇条書き記号だけ（「❯ 1. …」等）の場合は分割しない。
+      // それは見出し連結ではなく正規のカーソル付き選択肢行で、分割するとカーソルが
+      // 別行へ切り離されて isCurrent 検出が壊れる（claude /model メニュー等）。
+      if (marks.length === 1 && marks[0].num === 1) {
+        const head = line.slice(0, marks[0].at).trim();
+        if (head && !/^[>❯›❱*\-•・]+$/.test(head)) {
+          const seg = line.slice(marks[0].at).trim();
+          return seg ? [head, seg] : [head];
+        }
+      }
+      return [rawLine];
+    }
     for (let i = 1; i < marks.length; i++) {
       if (marks[i].num !== marks[i - 1].num + 1) return [rawLine];
     }

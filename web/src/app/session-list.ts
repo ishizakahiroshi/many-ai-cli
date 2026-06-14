@@ -432,27 +432,9 @@ export function renderSessionList() {
     nameSpan.textContent = projectDisplayName;
     header.appendChild(nameSpan);
 
-    // v2: files ボタン（__no_project__ 以外のプロジェクトにのみ表示）
+    // Files 導線はステータスバーの 📁project セグメントへ移設（plan_statusbar-files-open.md C1）。
+    // ここ（プロジェクトグループ header）の「📁 Files」ボタンは廃止した。
     if (key !== '__no_project__') {
-      const filesBtn = document.createElement('button');
-      filesBtn.className = 'project-group-files-btn';
-      filesBtn.textContent = '📁 Files';
-      filesBtn.title = t('files_group_btn_tooltip');
-      filesBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        // セッション ID（グループの最初のアクティブセッション）
-        const firstSession = groupSessions[0];
-        const sessionId = firstSession ? firstSession.id : null;
-        // セッションの cwd（= UI 上のプロジェクト直下）を直接開く。
-        // /api/files-roots の gitRoot は cwd の親方向探索結果なので、
-        // 親側に別の .git があるとプロジェクト外を指してしまう。ここでは使わない。
-        const rootToOpen = firstSession ? firstSession.cwd : null;
-        if (rootToOpen) {
-          FilesTabManager.openFilesTab(sessionId, key, rootToOpen, rootToOpen);
-        }
-      });
-      header.appendChild(filesBtn);
-
       // C3: "Open running sessions in grid" ボタン
       const runningSessionsInGroup = groupSessions.filter(s => s.state === 'running' || s.state === 'waiting' || (s.state || 'standby') === 'standby');
       if (runningSessionsInGroup.length > 0) {

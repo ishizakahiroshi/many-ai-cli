@@ -13,6 +13,20 @@ on:
   push:
     tags:
       - "v*.*.*"
+  # npm-only re-run: when goreleaser (GitHub Release / winget / Homebrew) already
+  # succeeded but npm publish failed (e.g. E429), re-publish npm ALONE against the
+  # existing tag. goreleaser is NOT re-run (it would collide with the existing
+  # Release), and npm is staged by extracting the binaries from the already
+  # published Release zips + verifying SHA256 — so npm ships the exact same bytes.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag, e.g. v0.3.1"
+        required: true
+      npm_only:
+        description: "Re-publish npm only from the existing GitHub Release"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -25,7 +39,14 @@ jobs:
       # secrets context is not allowed in step-level `if:`; expose NPM_TOKEN as a
       # job env so the npm steps can gate on env.NPM_TOKEN instead.
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Single source for the tag/mode across push and workflow_dispatch.
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      NPM_ONLY: ${{ (github.event_name == 'workflow_dispatch' && inputs.npm_only) && 'true' || 'false' }}
     steps:
+      # Default checkout ref: a tag push checks out that tag; a workflow_dispatch
+      # checks out the branch it was launched from (e.g. main). For the npm-only
+      # re-run we WANT main's scripts + shim (which may post-date the old tag) —
+      # only the binaries come from the published Release, the version from the tag.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -56,6 +77,7 @@ jobs:
       # goreleaser の winget publisher に使わせる。winget-pkgs は1日数百コミット
       # 動くため、stale な fork から PR を作ると差分汚染・conflict が起きる。
       - name: Sync winget-pkgs fork
+        if: ${{ env.NPM_ONLY != 'true' }}
         env:
           GH_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}
         run: gh repo sync ishizakahiroshi/winget-pkgs --source microsoft/winget-pkgs
@@ -64,9 +86,10 @@ jobs:
       # 由来の自動 changelog は Git タブ自動生成コミット（internal/hub/git_commit.go）の
       # 羅列で読めないため、CHANGELOG.md の人間可読な節を抽出して --release-notes で渡す。
       - name: Extract release notes from CHANGELOG.md
+        if: ${{ env.NPM_ONLY != 'true' }}
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${RELEASE_TAG#v}"
           awk -v ver="$VERSION" '
             BEGIN { hdr = "## [" ver "]" }
             index($0, hdr) == 1 { flag = 1; next }
@@ -77,6 +100,7 @@ jobs:
           cat "${RUNNER_TEMP}/release-notes.md"
 
       - uses: goreleaser/goreleaser-action@v6
+        if: ${{ env.NPM_ONLY != 'true' }}
         with:
           distribution: goreleaser
           version: "~> v2"
@@ -86,33 +110,65 @@ jobs:
           # homebrew-tap / winget-pkgs fork への push 用 PAT（GITHUB_TOKEN は自リポジトリ限定のため）
           PUBLISH_GITHUB_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}
 
+      # Belt-and-suspenders: re-apply the human-readable CHANGELOG section as the
+      # Release body unconditionally. Past releases needed a MANUAL `gh release
+      # edit` because goreleaser occasionally left the body empty / full of raw
+      # commit noise. Automating it here removes that manual step — a release must
+      # never depend on someone remembering to fix the notes by hand.
+      - name: Ensure release notes (automated, no manual gh release edit)
+        if: ${{ env.NPM_ONLY != 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          notes="${RUNNER_TEMP}/release-notes.md"
+          if [ -s "$notes" ]; then
+            gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --notes-file "$notes"
+            echo "release body set from CHANGELOG [${RELEASE_TAG#v}] section"
+          else
+            echo "WARN: extracted notes empty; left goreleaser-generated body in place"
+          fi
+
       # --- npm registry 配布（pnpm add -g many-ai-cli の導線）---
-      # platform 別 optional dependency package に GoReleaser がビルドした Go バイナリを
-      # 同梱して publish する。standalone exe をブラウザ DL させないことで MotW/SmartScreen を回避。
+      # platform 別 optional dependency package に Go バイナリを同梱して publish する。
+      # standalone exe をブラウザ DL させないことで MotW/SmartScreen を回避。
       # NPM_TOKEN secret が未設定なら丸ごとスキップ（既存の GitHub/Homebrew/winget リリースは壊さない）。
-      - name: Stage npm binaries from GoReleaser dist
-        if: ${{ env.NPM_TOKEN != '' }}
+      #
+      # 同一性の担保: npm が配るバイナリは GitHub Release の zip と同一でなければならない。
+      #  - 通常リリース（tag push）: 直前の goreleaser が作った dist/ から staging（同一ビルド）。
+      #  - npm-only 再実行（workflow_dispatch）: 公開済み Release zip を DL し、SHA256SUMS で
+      #    照合してから取り出す（cosign 署名済みチェックサムに鎖でつながる＝暗号的に同一バイト）。
+
+      - name: Download published release archives (npm-only re-run)
+        if: ${{ env.NPM_TOKEN != '' && env.NPM_ONLY == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          rm -rf "${RUNNER_TEMP}/relzips"; mkdir -p "${RUNNER_TEMP}/relzips"
+          gh release download "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+            --dir "${RUNNER_TEMP}/relzips" \
+            --pattern '*-windows-x64.zip' \
+            --pattern '*-linux-x64.zip' \
+            --pattern '*-macos-intel.zip' \
+            --pattern '*-macos-apple-silicon.zip' \
+            --pattern 'SHA256SUMS.txt'
+
+      - name: Stage npm binaries (verified, from published release zips)
+        if: ${{ env.NPM_TOKEN != '' && env.NPM_ONLY == 'true' }}
+        run: node scripts/stage-npm-from-release.mjs "${RUNNER_TEMP}/relzips"
+
+      - name: Stage npm binaries (from GoReleaser dist)
+        if: ${{ env.NPM_TOKEN != '' && env.NPM_ONLY != 'true' }}
         run: node scripts/stage-npm-binaries.mjs
 
       - name: Sync npm package versions to tag
         if: ${{ env.NPM_TOKEN != '' }}
-        run: node scripts/sync-npm-version.mjs "${{ github.ref_name }}"
+        run: node scripts/sync-npm-version.mjs "${RELEASE_TAG}"
 
+      # ordered publish (platform pkgs -> root) with E429 backoff + idempotent skip.
       - name: Publish npm packages
         if: ${{ env.NPM_TOKEN != '' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          set -euo pipefail
-          # prerelease タグ（v0.3.0-rc.1 等）は dist-tag を next にし、latest を汚さない。
-          DIST_TAG=latest
-          case "${{ github.ref_name }}" in
-            *-*) DIST_TAG=next ;;
-          esac
-          echo "publishing with dist-tag: $DIST_TAG"
-          # optional dependency（platform package）を先に publish。root が解決できるようにする。
-          for pkg in many-ai-cli-windows-x64 many-ai-cli-linux-x64 many-ai-cli-macos-intel many-ai-cli-macos-apple-silicon; do
-            npm publish "./npm/$pkg" --access public --provenance --tag "$DIST_TAG"
-          done
-          # root package を最後に publish（optional deps が出揃った後）。
-          npm publish "./npm/many-ai-cli" --access public --provenance --tag "$DIST_TAG"
+        run: bash scripts/publish-npm.sh "${RELEASE_TAG}"

@@ -245,6 +245,8 @@ git tag v0.3.0  ── push ──┐
 
 取得元はいずれも `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/...`。つまり **`main` に push した瞬間、全ユーザーの取得元が切り替わる**（Hub 側 24h キャッシュ TTL の範囲で順次反映）。バイナリの version とは無関係に live に効くため、リリース commit を `main` に入れる前に、ローカル作業ツリーと GitHub `main` 公開分の差分を必ず確認する。
 
+> **鮮度の再チェックは別オペ**: 以下の差分確認は「ローカルと公開分が食い違っていないか（drift）」を見るもので、「`resources/slash-commands/*.md` そのものが各プロバイダー本家の最新コマンドに対して古くないか（freshness）」は別の話。リリース前に本家コマンドの追加・削除を取り込みたい場合は先に [manual_slash_commands_update.md](manual_slash_commands_update.md) の C1〜C2 を実施し、その結果をこの差分確認に通すこと。
+
 スラッシュコマンドの差分確認（PowerShell）:
 
 ```powershell

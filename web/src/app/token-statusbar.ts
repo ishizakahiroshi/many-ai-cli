@@ -14,6 +14,7 @@ import { token, escapeHtml } from './util.js';
 import { t } from '../i18n.js';
 import { providerIconHtml, providerDisplayName, safeClassToken, stateLabel, activateSession } from './session-list.js';
 import { wsConnectionState } from './ws-client.js';
+import { FilesTabManager } from './files-view.js';
 
 // セッション単位の usage データキャッシュ。
 interface UsageCacheEntry {
@@ -273,6 +274,8 @@ export function renderStatusbar(): void {
       html += ` <span class="tsb-git" title="${escapeHtml(title)}">±${gf} ~${ga + gd}</span>`;
     }
     projectEl.innerHTML = html;
+    // クリックで Files タブを開く導線（旧プロジェクトグループ header の「📁 Files」ボタンの代替）。
+    projectEl.title = t('files_group_btn_tooltip');
   }
 
   // ---- ctx 使用率（塗りゲージ + %）----
@@ -424,6 +427,14 @@ function wireClicks(bar: HTMLElement): void {
         if (jumpTo === null && (s.state as string) === 'waiting') jumpTo = id;
       });
       if (jumpTo !== null) activateSession(jumpTo);
+      return;
+    }
+    // 📁project → Files タブを開く（アクティブセッションの cwd 起点）
+    if (target.closest('.tsb-seg-project')) {
+      const sid = activeSessionId;
+      if (sid === null) return;
+      const cwd = sessions.get(sid)?.cwd;
+      if (cwd) FilesTabManager.openFilesTab(sid, getProject(sid), cwd, cwd);
       return;
     }
     // cost → 内訳ポップ

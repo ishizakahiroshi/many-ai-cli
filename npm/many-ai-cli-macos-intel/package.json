@@ -1,6 +1,6 @@
 {
   "name": "many-ai-cli-macos-intel",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "macOS Intel (x64) native binary for many-ai-cli. Installed automatically as an optional dependency of many-ai-cli.",
   "homepage": "https://github.com/ishizakahiroshi/many-ai-cli",
   "repository": {
@@ -8,7 +8,10 @@
     "url": "git+https://github.com/ishizakahiroshi/many-ai-cli.git"
   },
   "license": "MIT",
-  "author": "Hiroshi Ishizaka <ishizakahiroshi@gmail.com>",
+  "author": {
+    "name": "Hiroshi Ishizaka",
+    "url": "https://github.com/ishizakahiroshi"
+  },
   "os": [
     "darwin"
   ],

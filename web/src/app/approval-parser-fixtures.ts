@@ -187,6 +187,20 @@ test('approval parser fixtures', () => {
   assert.deepEqual(numbers(glued[1].options), [3, 4]);
   assert.deepEqual(numbers(glued[2].options), [5, 6]);
 
+  // 見出し（質問文）が option 1 と同一行へ連結され、option 2 以降が別行に残ったケースの回帰。
+  // Ink 再描画で改行が抜けると「質問? 1. A」の 1 行になり、従来は option 1 が丸ごと捨てられて
+  // 「選択肢の 1 が無い」症状になっていた。見出しを切り離し option 1 を復元できること。
+  const gluedHeadingOpt1 = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'どの方式にしますか? 1. A方式 (Recommended)',
+    '2. B方式',
+    'N. User specifies',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isBatchOptions(gluedHeadingOpt1), false);
+  assert.deepEqual(numbers(gluedHeadingOpt1), [1, 2]);
+  assert.deepEqual(labels(gluedHeadingOpt1), ['A方式 (Recommended)', 'B方式']);
+
   // 複数選択（#multi）: 1 問で任意個 ON/OFF。options に _multiSelect と _question が付き、
   // isMultiSelectOptions が true、isBatchOptions は false になること。
   const multi = parser.extractHubMarkerApproval([
