@@ -369,13 +369,22 @@ func isConfiguredAllowedHubHost(host string, allowedHosts []string) bool {
 
 func isAllowedHubOrigin(rawOrigin string, port int, allowedHosts ...string) bool {
 	u, err := url.Parse(rawOrigin)
-	if err != nil {
+	if err != nil || u.Host == "" {
 		return false
 	}
-	if strings.ToLower(u.Scheme) != "http" || u.Host == "" {
+	switch strings.ToLower(u.Scheme) {
+	case "http":
+		// ローカル直アクセスは http かつ hub ポート一致を要求する（従来通り）。
+		return isAllowedHubHost(u.Host, port, allowedHosts...)
+	case "https":
+		// Tailscale serve など HTTPS リバースプロキシ経由は外部ポートが 443 で
+		// hub の bind ポート（47777 等）と異なるため、ポート一致は課さない。
+		// 設定済み allowed_hosts のホスト名一致のみで許可する（loopback 既定は対象外）。
+		host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+		return isConfiguredAllowedHubHost(host, allowedHosts)
+	default:
 		return false
 	}
-	return isAllowedHubHost(u.Host, port, allowedHosts...)
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {

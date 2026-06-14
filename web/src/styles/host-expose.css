@@ -13,8 +13,9 @@
   border-radius: 6px;
   cursor: pointer;
   font-family: inherit;
-  padding: 4px 8px;
-  font-size: 0.85rem;
+  padding: 4px 9px;
+  font-size: 0.72rem;
+  white-space: nowrap;
   line-height: 1;
   transition: color 0.15s, background 0.15s, border-color 0.15s;
   min-height: var(--control-h-sm);
