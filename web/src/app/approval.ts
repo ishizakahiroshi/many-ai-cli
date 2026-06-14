@@ -1363,32 +1363,12 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   }
   bar.appendChild(label);
 
-  // ===== 質問タブ列（常に1タブ・active） =====
-  const tabsEl = document.createElement('div');
-  tabsEl.className = 'action-qtabs';
-  const tab = document.createElement('button');
-  tab.className = 'action-qtab active';
-  tab.onclick = (e) => { e.stopPropagation(); };
-  const qn = document.createElement('span');
-  qn.className = 'qn';
-  qn.textContent = '1.';
-  const txt = document.createElement('span');
-  txt.className = 'qlabel';
-  txt.textContent = title;
-  txt.title = title;
-  tab.appendChild(qn); tab.appendChild(txt);
-  tabsEl.appendChild(tab);
-  bar.appendChild(tabsEl);
-
-  // ===== パネル（質問見出し + 全文選択肢 + 自由入力欄） =====
+  // ===== パネル（全文選択肢 + 自由入力欄） =====
+  // 単一質問モードでは質問タブ列（常に1タブで無意味）と質問見出しを出さない。
+  // 質問文/承認文言は上の黄色ヘッダー（action-bar-label）に集約済みで、見出し・タブに
+  // 同じ文字列を重ねると「Approval needed」が 3 連発して冗長になるため（plan_choice-tab-ui.md C5 改）。
   const pane = document.createElement('div');
   pane.className = 'action-qpane';
-
-  const head = document.createElement('div');
-  head.className = 'action-qhead';
-  head.textContent = title;
-  head.title = title;
-  pane.appendChild(head);
 
   // "Yes, and" 系（セッション全体許可）があればそれを推奨扱いにする（既存ロジック踏襲）。
   const isSessionAllowLabel = (s) => /during this session|allow.*session|yes.*allow/i.test(s);

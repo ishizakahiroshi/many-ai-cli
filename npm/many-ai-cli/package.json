@@ -1,6 +1,6 @@
 {
   "name": "many-ai-cli",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Web dashboard to manage approvals and progress across multiple AI coding CLIs (Claude Code / Codex). Bundles a native Go binary per platform — no standalone exe download, no Mark-of-the-Web SmartScreen prompt.",
   "keywords": [
     "cli",
@@ -20,7 +20,10 @@
     "url": "git+https://github.com/ishizakahiroshi/many-ai-cli.git"
   },
   "license": "MIT",
-  "author": "Hiroshi Ishizaka <ishizakahiroshi@gmail.com>",
+  "author": {
+    "name": "Hiroshi Ishizaka",
+    "url": "https://github.com/ishizakahiroshi"
+  },
   "type": "module",
   "bin": {
     "many-ai-cli": "./bin/many-ai-cli.mjs"
@@ -30,10 +33,10 @@
     "README.md"
   ],
   "optionalDependencies": {
-    "many-ai-cli-windows-x64": "0.3.0",
-    "many-ai-cli-linux-x64": "0.3.0",
-    "many-ai-cli-macos-intel": "0.3.0",
-    "many-ai-cli-macos-apple-silicon": "0.3.0"
+    "many-ai-cli-windows-x64": "0.3.1",
+    "many-ai-cli-linux-x64": "0.3.1",
+    "many-ai-cli-macos-intel": "0.3.1",
+    "many-ai-cli-macos-apple-silicon": "0.3.1"
   },
   "engines": {
     "node": ">=18"

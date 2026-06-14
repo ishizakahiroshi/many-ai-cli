@@ -4,16 +4,17 @@ package hub
 
 import (
 	"os/exec"
+	"path/filepath"
 
 	"golang.org/x/sys/windows"
 )
 
 func openDirNative(path string) error {
-	return exec.Command("explorer.exe", path).Start()
+	return exec.Command("explorer.exe", filepath.Clean(path)).Start()
 }
 
 func openRevealNative(path string) error {
-	return exec.Command("explorer.exe", "/select,"+path).Start()
+	return exec.Command("explorer.exe", "/select,"+filepath.Clean(path)).Start()
 }
 
 func openFileNative(filePath string) error {
@@ -23,7 +24,11 @@ func openFileNative(filePath string) error {
 	// ShellExecute の "open" 動詞なら既定ハンドラへ確実にディスパッチでき、
 	// shell を介さないので cmd.exe メタ文字リスクもない。
 	// フォルダ内で選択表示したい場合は openRevealNative を使う。
-	return shellExecuteOpen(filePath)
+	//
+	// ShellExecute("open") はフォワードスラッシュ区切りのパス（端末リンク経由で
+	// 渡る `C:/dir/file` 等）を解決できず SE_ERR_FNF（「The system cannot find
+	// the file specified.」）を返すため、必ずネイティブ区切りへ正規化してから渡す。
+	return shellExecuteOpen(filepath.Clean(filePath))
 }
 
 // shellExecuteOpen は ShellExecute("open") で path を OS 既定の関連付けで開く。

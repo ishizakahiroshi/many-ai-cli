@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Go](https://img.shields.io/badge/go-1.25+-blue)
 
-![many-ai-cli dashboard](assets/readme-dashboard.jpg)
+![many-ai-cli dashboard](assets/readme-dashboard.png)
 
 **Never miss an approval prompt.** `many-ai-cli` watches your AI coding CLIs (Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI) and notifies your desktop or phone the moment one is waiting for your approval — so you don't have to babysit the terminal. It also gives you a local web dashboard to handle approvals, monitoring, and terminals across multiple sessions in one place.
 
@@ -37,6 +37,25 @@ Terminal pane #1              Terminal pane #2
             │  session list    │
             └──────────────────┘
 ```
+
+Each pane can run any supported provider — `claude`, `codex`, `copilot`, or `cursor-agent`; two are shown for illustration.
+
+---
+
+## Supported providers
+
+`many-ai-cli` wraps these AI coding CLIs in a PTY (install the ones you use separately):
+
+| Provider | Subcommand | Notes |
+|---|---|---|
+| Claude Code | `claude` | Anthropic |
+| Codex CLI | `codex` | OpenAI |
+| GitHub Copilot CLI | `copilot` | official CLI; OAuth tokens / PATs / credentials are never read, stored, or proxied |
+| Cursor Agent CLI | `cursor-agent` | official CLI; sign in first |
+
+**Ollama** is not a separate wrapper. Run Ollama models *through* the `claude` or `codex` wrapper — pick **Ollama Cloud / Ollama Local** in the spawn form's model picker, and the Hub points the Anthropic/OpenAI-compatible endpoint at Ollama (see "Model picker with Ollama routing" in Features).
+
+Gemini CLI is intentionally out of scope.
 
 ---
 

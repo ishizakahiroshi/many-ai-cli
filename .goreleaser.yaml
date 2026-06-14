@@ -173,7 +173,7 @@ nfpms:
   - package_name: many-ai-cli
     ids: [many-ai-cli, many-ai-cli-launcher]
     vendor: ishizakahiroshi
-    maintainer: "Hiroshi Ishizaka <ishizakahiroshi@gmail.com>"
+    maintainer: "Hiroshi Ishizaka <ishizakahiroshi.dev@gmail.com>"
     homepage: https://github.com/ishizakahiroshi/many-ai-cli
     description: Web dashboard to manage approvals and progress across multiple AI coding CLIs
     license: MIT

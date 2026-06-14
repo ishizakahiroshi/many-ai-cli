@@ -11,6 +11,7 @@
 // Mark-of-the-Web and does not trigger the Windows SmartScreen prompt.
 
 import { spawnSync } from 'node:child_process';
+import { chmodSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -58,6 +59,21 @@ function main() {
   } catch (err) {
     process.stderr.write(`${err.message}\n`);
     process.exit(1);
+  }
+
+  // The platform binary must carry the unix exec bit on Linux/macOS. npm
+  // preserves the file mode from the published tarball, but a tarball packed on
+  // Windows (which has no exec bit) arrives as 0644 and spawnSync would fail
+  // with EACCES. Restore it defensively so the package works regardless of where
+  // it was packed — this removes the need to pack on WSL/Linux just for the bit.
+  // Best-effort: a root-owned global install run as a non-root user may reject
+  // chmod, in which case the binary was already 0755 from a posix pack anyway.
+  if (process.platform !== 'win32') {
+    try {
+      chmodSync(binary, 0o755);
+    } catch {
+      // ignore — fall through to spawn, which works if the mode is already ok.
+    }
   }
 
   const result = spawnSync(binary, process.argv.slice(2), { stdio: 'inherit' });

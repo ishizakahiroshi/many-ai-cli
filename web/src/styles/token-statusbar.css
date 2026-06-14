@@ -102,6 +102,7 @@
 .tsb-seg-project {
   color: #7dcfff;
   max-width: 280px;
+  cursor: pointer;
 }
 .tsb-branch { color: #bb9af7; }
 .tsb-git { color: #73daca; }
