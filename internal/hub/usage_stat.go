@@ -80,10 +80,18 @@ var modelPriceTable = map[string]modelPricing{
 	"claude-opus-4":        {InputPerMTok: 15.00, OutputPerMTok: 75.00, CacheReadPerMTok: 1.50, CacheWritePerMTok: 18.75},
 	"claude-sonnet-4":      {InputPerMTok: 3.00, OutputPerMTok: 15.00, CacheReadPerMTok: 0.30, CacheWritePerMTok: 3.75},
 	"claude-haiku-4":       {InputPerMTok: 0.80, OutputPerMTok: 4.00, CacheReadPerMTok: 0.08, CacheWritePerMTok: 1.00},
-	// Claude 3.x 系
+	// 現行モデル（2026-06 公式単価。CacheRead=入力×0.1 / CacheWrite=入力×1.25 の慣習で算出）
+	// audit #31: 現行モデル ID を正規単価で表に収録（claude-api スキル公式テーブル 2026-06-04 確認）。
+	"claude-fable-5":        {InputPerMTok: 10.00, OutputPerMTok: 50.00, CacheReadPerMTok: 1.00, CacheWritePerMTok: 12.50},
+	"claude-opus-4-8":       {InputPerMTok: 5.00, OutputPerMTok: 25.00, CacheReadPerMTok: 0.50, CacheWritePerMTok: 6.25},
+	"claude-opus-4-7":       {InputPerMTok: 5.00, OutputPerMTok: 25.00, CacheReadPerMTok: 0.50, CacheWritePerMTok: 6.25},
+	"claude-opus-4-6":       {InputPerMTok: 5.00, OutputPerMTok: 25.00, CacheReadPerMTok: 0.50, CacheWritePerMTok: 6.25},
+	"claude-sonnet-4-6":     {InputPerMTok: 3.00, OutputPerMTok: 15.00, CacheReadPerMTok: 0.30, CacheWritePerMTok: 3.75},
+	// claude-opus-4-5 / claude-opus-4（4.0）: 公式 pricing 表に現行単価の記載なし（legacy/deprecated）。
+	// 確証なしのため $15/$75 据え置き（C6 判断ログ参照）。
 	"claude-opus-4-5":       {InputPerMTok: 15.00, OutputPerMTok: 75.00, CacheReadPerMTok: 1.50, CacheWritePerMTok: 18.75},
 	"claude-sonnet-4-5":     {InputPerMTok: 3.00, OutputPerMTok: 15.00, CacheReadPerMTok: 0.30, CacheWritePerMTok: 3.75},
-	"claude-haiku-4-5":      {InputPerMTok: 0.80, OutputPerMTok: 4.00, CacheReadPerMTok: 0.08, CacheWritePerMTok: 1.00},
+	"claude-haiku-4-5":      {InputPerMTok: 1.00, OutputPerMTok: 5.00, CacheReadPerMTok: 0.10, CacheWritePerMTok: 1.25},
 	"claude-3-5-sonnet":     {InputPerMTok: 3.00, OutputPerMTok: 15.00, CacheReadPerMTok: 0.30, CacheWritePerMTok: 3.75},
 	"claude-3-5-haiku":      {InputPerMTok: 0.80, OutputPerMTok: 4.00, CacheReadPerMTok: 0.08, CacheWritePerMTok: 1.00},
 	"claude-3-opus":         {InputPerMTok: 15.00, OutputPerMTok: 75.00, CacheReadPerMTok: 1.50, CacheWritePerMTok: 18.75},

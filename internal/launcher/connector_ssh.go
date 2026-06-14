@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -16,7 +18,31 @@ import (
 )
 
 // SSHConnector implements Connector for SSH profiles (serve and tunnel modes).
-type SSHConnector struct{}
+//
+// out controls where the scanned child-process output is mirrored. nil keeps
+// the launcher-exe behaviour (os.Stdout / os.Stderr — the console the user
+// watches). The Hub sets it to io.Discard via setQuiet so hosting a tunnel
+// produces no console noise and never echoes the remote Hub URL + token.
+type SSHConnector struct {
+	out io.Writer
+}
+
+func (c *SSHConnector) stdoutWriter() io.Writer {
+	if c.out != nil {
+		return c.out
+	}
+	return os.Stdout
+}
+
+func (c *SSHConnector) stderrWriter() io.Writer {
+	if c.out != nil {
+		return c.out
+	}
+	return os.Stderr
+}
+
+// setQuiet implements the quietable interface used by ConnectorForQuiet.
+func (c *SSHConnector) setQuiet(w io.Writer) { c.out = w }
 
 // Start launches the SSH connection described by p.
 // For serve mode it starts `ssh -t -L …` which runs `many-ai-cli serve`
@@ -132,6 +158,7 @@ func (c *SSHConnector) tryServe(ctx context.Context, p Profile, binary string, p
 	args = append(args, "--", "bash", "-ilc", remoteCmd)
 
 	cmd := exec.CommandContext(ctx, sshExe, args...)
+	cmd.SysProcAttr = noWindowSysProcAttr()
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("stdout pipe: %w", err)
@@ -149,11 +176,11 @@ func (c *SSHConnector) tryServe(ctx context.Context, p Profile, binary string, p
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		ScanForURL(stdout, os.Stdout, urlFound)
+		ScanForURL(stdout, c.stdoutWriter(), urlFound)
 	}()
 	go func() {
 		defer wg.Done()
-		ScanForURL(stderr, os.Stderr, urlFound)
+		ScanForURL(stderr, c.stderrWriter(), urlFound)
 	}()
 
 	// waitCh receives the error from cmd.Wait() after stdout/stderr drain.
@@ -193,14 +220,20 @@ func (c *SSHConnector) tryServe(ctx context.Context, p Profile, binary string, p
 // Best-effort: pkill exits 1 when nothing matched. A 5s timeout guards against
 // hung ssh or shutdown-in-progress.
 func cleanupSSHOrphans(p Profile, binary string, port int) {
-	pattern := fmt.Sprintf("%s serve --port %d", binary, port)
+	// pkill -f のパターンはリモートのログインシェルを経由する（ssh は remote command を
+	// 空白連結し、シェルが再パースする）。QuoteMeta で binary 内の正規表現メタ文字を
+	// リテラル化し pkill の ERE が広がるのを防ぎ、ShellQuote でパターン全体を 1 つの
+	// シェルトークンにして、シェルメタ文字を含む binary が別コマンドを注入できないようにする。
+	pattern := regexp.QuoteMeta(binary) + fmt.Sprintf(" serve --port %d", port)
 	args := buildSSHBaseArgs(p)
 	args = append(args, sshTarget(p))
-	args = append(args, "--", "pkill", "-f", pattern)
+	args = append(args, "--", "pkill", "-f", ShellQuote(pattern))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = exec.CommandContext(ctx, sshExe, args...).Run()
+	cmd := exec.CommandContext(ctx, sshExe, args...)
+	cmd.SysProcAttr = noWindowSysProcAttr()
+	_ = cmd.Run()
 }
 
 // --------------------------------------------------------------------------
@@ -223,7 +256,8 @@ func (c *SSHConnector) runTunnel(ctx context.Context, p Profile, urlCh chan<- st
 	tunnelArgs = append(tunnelArgs, sshTarget(p))
 
 	tunnel := exec.CommandContext(ctx, sshExe, tunnelArgs...)
-	tunnel.Stderr = os.Stderr
+	tunnel.SysProcAttr = noWindowSysProcAttr()
+	tunnel.Stderr = c.stderrWriter()
 	if err := tunnel.Start(); err != nil {
 		sendErr(ctx, errCh, fmt.Errorf("start ssh tunnel: %w", err))
 		close(urlCh)
@@ -306,7 +340,9 @@ func fetchToken(ctx context.Context, p Profile) (string, error) {
 	args = append(args, sshTarget(p))
 	args = append(args, "--", p.TokenCommand)
 
-	out, err := exec.CommandContext(timeoutCtx, sshExe, args...).Output()
+	cmd := exec.CommandContext(timeoutCtx, sshExe, args...)
+	cmd.SysProcAttr = noWindowSysProcAttr()
+	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("token_command %q: %w", p.TokenCommand, err)
 	}

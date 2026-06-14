@@ -2,13 +2,45 @@ package hub
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"net/url"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"many-ai-cli/internal/config"
 	notifyPkg "many-ai-cli/internal/notify"
 )
+
+// validateNotifyBackend は通知バックエンド設定の妥当性を検証する（finding #35）。
+// type: "ntfy" または "webhook" のみ許可。
+// url: http/https スキーム・ホスト必須。空・ファイル/ftp スキーム等は拒否。
+// ntfy: topic が空の場合も拒否。
+func validateNotifyBackend(backend config.NotifyBackendConfig) error {
+	backendType := strings.TrimSpace(backend.Type)
+	if backendType != "ntfy" && backendType != "webhook" {
+		return fmt.Errorf("invalid backend type %q: must be ntfy or webhook", backend.Type)
+	}
+	rawURL := strings.TrimSpace(backend.URL)
+	if rawURL == "" {
+		return fmt.Errorf("backend URL is required")
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("backend URL is invalid: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("backend URL scheme %q is not allowed: must be http or https", parsed.Scheme)
+	}
+	if parsed.Host == "" {
+		return fmt.Errorf("backend URL must have a host")
+	}
+	if backendType == "ntfy" && strings.TrimSpace(backend.Topic) == "" {
+		return fmt.Errorf("ntfy backend requires a non-empty topic")
+	}
+	return nil
+}
 
 func (s *Server) handleLogConfig(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodGet, http.MethodPost) {

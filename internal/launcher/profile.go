@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"gopkg.in/yaml.v3"
 )
@@ -210,6 +211,31 @@ func validateWSL(p Profile, idx int) error {
 }
 
 func validateSSH(p Profile, idx int) error {
+	// ssh-option / remote-command インジェクション対策。Host / User は ssh の
+	// 位置引数（"user@host"）になるため、"-" 始まりだと ssh がローカルオプション
+	// （例: -oProxyCommand=...）として解釈し任意コマンドを実行しうる。Binary /
+	// IdentityFile も同様に "-" 始まりを禁止する。UI サーバ / Hub は normalizeProfile
+	// を通さず Validate を呼ぶため、ローカルコピーで "user@host" を分割してから検査する。
+	check := p
+	normalizeProfile(&check)
+	for _, f := range []struct{ name, val string }{
+		{"host", check.Host},
+		{"user", check.User},
+		{"binary", check.Binary},
+		{"identity_file", check.IdentityFile},
+	} {
+		if strings.HasPrefix(f.val, "-") {
+			return fmt.Errorf("profile[%d] %q: %s must not start with '-' (got %q)", idx, p.Name, f.name, f.val)
+		}
+	}
+	// Host / User の空白・制御文字も拒否（リモートコマンド組み立て時の分割・改行注入防止）。
+	if strings.IndexFunc(check.Host, isSpaceOrControl) >= 0 {
+		return fmt.Errorf("profile[%d] %q: host must not contain whitespace or control characters", idx, p.Name)
+	}
+	if strings.IndexFunc(check.User, isSpaceOrControl) >= 0 {
+		return fmt.Errorf("profile[%d] %q: user must not contain whitespace or control characters", idx, p.Name)
+	}
+
 	// Resolve default mode.
 	mode := p.Mode
 	if mode == "" {
@@ -240,6 +266,13 @@ func validateSSH(p Profile, idx int) error {
 	}
 
 	return nil
+}
+
+// isSpaceOrControl reports whether r is whitespace or an ASCII control char.
+// Used to reject ssh destination fields that could split into extra arguments
+// or smuggle control sequences into the remote command.
+func isSpaceOrControl(r rune) bool {
+	return unicode.IsSpace(r) || r < 0x20 || r == 0x7f
 }
 
 // validatePort checks that port is within [1, 65535].

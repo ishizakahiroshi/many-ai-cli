@@ -27,6 +27,7 @@ func newTestFilesContentServer(tmpDir string) *Server {
 func callFilesContent(t *testing.T, s *Server, path string) (int, string, filesContentResp) {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/api/files-content?token=tok&path="+url.QueryEscape(path), nil)
+	req.Host = "127.0.0.1:47777"
 	w := httptest.NewRecorder()
 	s.handleFilesContent(w, req)
 
@@ -39,6 +40,7 @@ func callFilesContent(t *testing.T, s *Server, path string) (int, string, filesC
 func callFilesAsset(t *testing.T, s *Server, path string) (int, string) {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/api/files-asset?token=tok&path="+url.QueryEscape(path), nil)
+	req.Host = "127.0.0.1:47777"
 	w := httptest.NewRecorder()
 	s.handleFilesAsset(w, req)
 	return w.Code, w.Body.String()
@@ -47,6 +49,7 @@ func callFilesAsset(t *testing.T, s *Server, path string) (int, string) {
 func callFilesDownload(t *testing.T, s *Server, path string) (int, string, http.Header) {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/api/files-download?token=tok&path="+url.QueryEscape(path), nil)
+	req.Host = "127.0.0.1:47777"
 	w := httptest.NewRecorder()
 	s.handleFilesDownload(w, req)
 	return w.Code, w.Body.String(), w.Header()
@@ -55,6 +58,7 @@ func callFilesDownload(t *testing.T, s *Server, path string) (int, string, http.
 func callFilesDownloadWithSession(t *testing.T, s *Server, path string, sessionID int) (int, string, http.Header) {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/api/files-download?token=tok&session="+strconv.Itoa(sessionID)+"&path="+url.QueryEscape(path), nil)
+	req.Host = "127.0.0.1:47777"
 	w := httptest.NewRecorder()
 	s.handleFilesDownload(w, req)
 	return w.Code, w.Body.String(), w.Header()
@@ -224,6 +228,7 @@ func newMentionTestServer(t *testing.T, projDir string, sessionID int) (*Server,
 func callFilesContentWithSession(t *testing.T, s *Server, path string, sessionID int) (int, string, filesContentResp) {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/api/files-content?token=tok&session="+strconv.Itoa(sessionID)+"&path="+url.QueryEscape(path), nil)
+	req.Host = "127.0.0.1:47777"
 	w := httptest.NewRecorder()
 	s.handleFilesContent(w, req)
 	var resp filesContentResp

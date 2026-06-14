@@ -57,9 +57,10 @@ type ollamaTagsResponse struct {
 }
 
 type ollamaTagsCacheEntry struct {
-	models    []Model
-	fetchedAt time.Time
-	err       error
+	models     []Model
+	fetchedAt  time.Time
+	err        error
+	generation uint64 // invalidate() で進む世代番号; finding #24 の force リフレッシュ判定に使用
 }
 
 // modelsCache は Ollama Local `/api/tags` 取得結果を保持する。
@@ -69,10 +70,12 @@ type modelsCache struct {
 	mu         sync.Mutex
 	local      *ollamaTagsCacheEntry
 	localFetch *ollamaTagsFetch
+	generation uint64 // invalidate() ごとに +1; force fetch が古い世代結果を受け取らないようにする
 }
 
 type ollamaTagsFetch struct {
-	done chan struct{}
+	done     chan struct{}
+	startGen uint64 // fetch 開始時の generation; 完了時に世代チェックして stale かどうか判定
 }
 
 // Anthropic / OpenAI のモデル一覧は GitHub の resources/models/defaults.json から
@@ -115,33 +118,58 @@ func fetchOllamaTags(url string, timeout time.Duration) ([]Model, error) {
 }
 
 // getOllamaLocal はキャッシュ済みのローカル daemon モデル一覧を返す。
+// force=true 時は TTL を無視し強制リフレッシュする。finding #24 対策として
+// invalidate() で進んだ世代より前の in-flight 結果を受け取らない。
 func (c *modelsCache) getOllamaLocal(force bool) (models []Model, fetchedAt time.Time, err error) {
 	var inFlight *ollamaTagsFetch
 	for {
 		c.mu.Lock()
 		entry := c.local
-		if !force && entry != nil && time.Since(entry.fetchedAt) < ollamaLocalCacheTTL {
+		curGen := c.generation
+		// force 時は世代が最新の fresh entry のみ受け入れる（stale 世代を拒否）
+		entryFresh := entry != nil && (!force || entry.generation >= curGen) && time.Since(entry.fetchedAt) < ollamaLocalCacheTTL
+		if !force && entryFresh {
+			c.mu.Unlock()
+			return entry.models, entry.fetchedAt, entry.err
+		}
+		if entryFresh && !force {
 			c.mu.Unlock()
 			return entry.models, entry.fetchedAt, entry.err
 		}
 		if c.localFetch == nil {
-			inFlight = &ollamaTagsFetch{done: make(chan struct{})}
+			inFlight = &ollamaTagsFetch{done: make(chan struct{}), startGen: curGen}
 			c.localFetch = inFlight
 			c.mu.Unlock()
 			break
 		}
+		// 既に in-flight の fetch がある。待機後に世代チェック。
+		myStartGen := curGen
 		wait := c.localFetch.done
 		c.mu.Unlock()
 		<-wait
+		// 待機後: fresh かつ世代が自分の startGen 以上なら受け入れる
+		c.mu.Lock()
+		entry = c.local
+		if entry != nil && entry.generation >= myStartGen && time.Since(entry.fetchedAt) < ollamaLocalCacheTTL {
+			c.mu.Unlock()
+			return entry.models, entry.fetchedAt, entry.err
+		}
+		c.mu.Unlock()
+		// 世代が古い結果は受け入れず再試行（force は既に消費）
 		force = false
 	}
 	models, err = fetchOllamaTags(ollamaLocalURL, 3*time.Second)
-	newEntry := &ollamaTagsCacheEntry{
-		models:    models,
-		fetchedAt: time.Now(),
-		err:       err,
-	}
 	c.mu.Lock()
+	newGen := inFlight.startGen
+	if c.generation > newGen {
+		newGen = c.generation
+	}
+	newEntry := &ollamaTagsCacheEntry{
+		models:     models,
+		fetchedAt:  time.Now(),
+		err:        err,
+		generation: newGen,
+	}
 	c.local = newEntry
 	if c.localFetch == inFlight {
 		close(c.localFetch.done)
@@ -151,10 +179,12 @@ func (c *modelsCache) getOllamaLocal(force bool) (models []Model, fetchedAt time
 	return models, newEntry.fetchedAt, err
 }
 
-// invalidate はローカルキャッシュを削除する。
+// invalidate はローカルキャッシュを削除し世代を進める（finding #24: force リフレッシュが
+// invalidate 前の stale in-flight 結果で満たされないようにする）。
 func (c *modelsCache) invalidate() {
 	c.mu.Lock()
 	c.local = nil
+	c.generation++
 	c.mu.Unlock()
 }
 

@@ -132,6 +132,11 @@ func validToken(got, want string) bool {
 // リロード時の GET / は token クエリを持たない。cookie で再認証できるようにする。
 const tokenCookieName = "MANY_AI_CLI_token"
 
+// tokenCookieMaxAge は tokenCookieName Cookie の MaxAge（finding #12:
+// 永続セッション Cookie を避け、ブラウザセッション終了で失効させる上限）。
+// 24 時間を上限とし、ブラウザが開いている間は Hub へのアクセスを継続できる。
+const tokenCookieMaxAge = 24 * time.Hour
+
 func requestToken(r *http.Request) string {
 	if got := r.URL.Query().Get("token"); got != "" {
 		return got
@@ -242,13 +247,21 @@ func (s *Server) guard(w http.ResponseWriter, r *http.Request, methods ...string
 	if len(methods) > 0 && !requireMethodOneOf(w, r, methods...) {
 		return false
 	}
-	if methodRequiresHostCheck(r.Method) && !s.requireAllowedRequestOrigin(w, r) {
+	// Host 許可リスト検証（DNS リバインディング防御）: 全メソッド（GET 含む）で常に必須。
+	// トークン認証済みの GET であっても Host 許可リスト外は 403。
+	if !s.requireAllowedHubHost(w, r) {
+		return false
+	}
+	// Origin / Sec-Fetch-Site による CSRF 追加チェックは状態変更系（非GET）のみ。
+	if methodAllowsStateChange(r.Method) && !s.requireAllowedRequestOrigin(w, r) {
 		return false
 	}
 	return true
 }
 
-func methodRequiresHostCheck(method string) bool {
+// methodAllowsStateChange は CSRF（Origin/Sec-Fetch-Site）追加チェックを
+// 課すべき状態変更系メソッドか判定する。GET/HEAD/OPTIONS は安全側のため false。
+func methodAllowsStateChange(method string) bool {
 	switch method {
 	case http.MethodGet, http.MethodHead, http.MethodOptions:
 		return false
@@ -257,7 +270,9 @@ func methodRequiresHostCheck(method string) bool {
 	}
 }
 
-func (s *Server) requireAllowedRequestOrigin(w http.ResponseWriter, r *http.Request) bool {
+// requireAllowedHubHost は Host ヘッダが許可リスト（127.0.0.1/localhost/::1 +
+// allowed_hosts）に一致するか検証する。全メソッドで必須に呼ぶこと。
+func (s *Server) requireAllowedHubHost(w http.ResponseWriter, r *http.Request) bool {
 	s.cfgMu.Lock()
 	port := s.cfg.Hub.Port
 	allowedHosts := append([]string(nil), s.cfg.Hub.AllowedHosts...)
@@ -266,6 +281,17 @@ func (s *Server) requireAllowedRequestOrigin(w http.ResponseWriter, r *http.Requ
 		writeJSONError(w, http.StatusForbidden, "forbidden", "host not allowed")
 		return false
 	}
+	return true
+}
+
+// requireAllowedRequestOrigin は CSRF 防御として Origin / Sec-Fetch-Site を
+// 検証する。Host 検証は requireAllowedHubHost が担うため、ここでは行わない。
+// 非GET メソッドからのみ呼ぶこと。
+func (s *Server) requireAllowedRequestOrigin(w http.ResponseWriter, r *http.Request) bool {
+	s.cfgMu.Lock()
+	port := s.cfg.Hub.Port
+	allowedHosts := append([]string(nil), s.cfg.Hub.AllowedHosts...)
+	s.cfgMu.Unlock()
 	if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" {
 		if isAllowedHubOrigin(origin, port, allowedHosts...) {
 			return true

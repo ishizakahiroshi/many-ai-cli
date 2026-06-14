@@ -15,6 +15,7 @@ import (
 
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/hub"
+	"many-ai-cli/internal/launcher"
 	hublog "many-ai-cli/internal/log"
 	"many-ai-cli/internal/sessionlog"
 	"many-ai-cli/internal/shell"
@@ -164,6 +165,35 @@ func run(args []string) error {
 			logger.Info("shutdown signal received, shutting down")
 		}()
 		return s.Run(ctx)
+	case "connect":
+		// リモート Hub へターミナルから接続する（SmartScreen フォールバックの正規手順）。
+		// 別 exe many-ai-cli-launcher のダブルクリックを使わずに済むよう、同じ接続
+		// フロー（internal/launcher）を本体サブコマンドとして公開する。
+		fs := flag.NewFlagSet("connect", flag.ContinueOnError)
+		profileName := fs.String("profile", "", "profile name to connect (see ~/.many-ai-cli/launcher-profiles.yaml)")
+		useLast := fs.Bool("last", false, "connect using the last-used profile")
+		if err := fs.Parse(args[1:]); err != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				return nil
+			}
+			return err
+		}
+		if *profileName == "" && !*useLast {
+			return errors.New("connect requires --profile <name> or --last")
+		}
+		launcher.ConfigureConsoleUTF8()
+		pf, err := launcher.LoadProfiles()
+		if err != nil {
+			return fmt.Errorf("load profiles: %w", err)
+		}
+		if err := launcher.Validate(pf); err != nil {
+			return fmt.Errorf("invalid profiles: %w", err)
+		}
+		profile, err := launcher.SelectProfile(pf, *profileName, *useLast)
+		if err != nil {
+			return err
+		}
+		return launcher.Connect(profile)
 	case "status":
 		return hub.PrintStatus(cfg)
 	case "stop":
@@ -221,6 +251,6 @@ func run(args []string) error {
 }
 
 func usage() error {
-	fmt.Println("many-ai-cli <serve|wrap|claude|codex|copilot|cursor-agent|shell-init|stop|status|log-clean|uninstall|version>")
+	fmt.Println("many-ai-cli <serve|connect|wrap|claude|codex|copilot|cursor-agent|shell-init|stop|status|log-clean|uninstall|version>")
 	return nil
 }

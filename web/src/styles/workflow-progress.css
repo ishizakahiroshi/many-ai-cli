@@ -1,0 +1,194 @@
+/* workflow-progress.css — Workflow ライブ進捗のトリガーピル + モーダル。
+   親 plan: docs/local/plan_workflow-progress-modal.md
+   スピナーは terminal.css の .live-spinner / @keyframes aacli-live-spin を共用する。 */
+
+/* ── トリガーピル（入力欄上部・#terminal-live-status の直前） ── */
+/* 本体（クリックでモーダル）＋ ✕（dismiss）の 2 ボタン構成のコンテナ。 */
+#workflow-progress-pill {
+  display: inline-flex;
+  align-items: stretch;
+  align-self: flex-start;
+  margin: 0 12px 6px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-elev));
+  color: var(--accent-text);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 14px;
+  font-family: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+#workflow-progress-pill[hidden] { display: none !important; }
+#workflow-progress-pill:hover { border-color: var(--accent); }
+
+.wf-pill-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 6px 3px 11px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.wf-pill-open::before { content: "⚙"; font-size: 0.85rem; }
+.wf-pill-dismiss {
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  border-left: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 0.7rem;
+  opacity: 0.55;
+  cursor: pointer;
+}
+.wf-pill-dismiss:hover { opacity: 1; color: var(--danger); }
+
+/* 完了状態: 走行終了。スピナーを止めグリーン寄りに。 */
+#workflow-progress-pill.wf-done {
+  background: color-mix(in srgb, var(--green) 16%, var(--bg-elev));
+  color: var(--green-text);
+  border-color: color-mix(in srgb, var(--green) 45%, transparent);
+}
+#workflow-progress-pill.wf-done .wf-pill-spinner { animation: none; border-color: var(--green); border-top-color: var(--green); }
+.wf-pill-spinner { width: 10px; height: 10px; }
+
+/* ── モーダル ── */
+#workflow-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+#workflow-modal[hidden] { display: none !important; }
+
+.wf-modal-box {
+  width: min(560px, 92vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.wf-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.wf-modal-title { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+.wf-modal-title::before { content: "⚙ "; }
+.wf-modal-counts { font-size: 0.74rem; color: var(--muted); white-space: nowrap; }
+.wf-modal-close {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: inherit;
+}
+.wf-modal-close:hover { background: var(--danger-bg); color: var(--danger); }
+
+.wf-modal-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px 14px;
+}
+
+.wf-modal-empty {
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-align: center;
+  padding: 24px 12px;
+  line-height: 1.6;
+}
+
+.wf-modal-name {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.78rem;
+  color: var(--accent-text);
+  margin-bottom: 10px;
+}
+
+/* 進捗バー */
+.wf-progress-bar {
+  position: relative;
+  height: 8px;
+  background: var(--bg-deep);
+  border-radius: 4px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.wf-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.wf-progress-fill-done { background: var(--green); }
+.wf-progress-pct {
+  position: absolute;
+  right: 6px;
+  top: -6px;
+  font-size: 0.66rem;
+  color: var(--muted);
+}
+
+/* フェーズ → エージェント階層 */
+.wf-phase { margin-bottom: 12px; }
+.wf-phase:last-child { margin-bottom: 0; }
+.wf-phase-title {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 5px;
+}
+.wf-agent-list { display: flex; flex-direction: column; gap: 3px; }
+.wf-agent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: var(--bg-soft);
+}
+.wf-agent-label {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.78rem;
+  color: var(--text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.wf-agent-icon {
+  flex: 0 0 auto;
+  width: 13px;
+  text-align: center;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+.wf-agent-running .wf-agent-label { color: var(--text); }
+.wf-state-done { color: var(--green); }
+.wf-state-failed { color: var(--red); }
+.wf-state-pending { color: var(--muted-2); }
+/* running アイコンは .live-spinner を流用するため固定サイズに揃える */
+.wf-agent-icon.live-spinner { width: 11px; height: 11px; }

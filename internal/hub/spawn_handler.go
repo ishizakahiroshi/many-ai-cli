@@ -554,3 +554,65 @@ func (s *Server) setLastModel(provider, model string) error {
 	s.cfgMu.Unlock()
 	return s.persistConfig()
 }
+
+// spawnValidModelLabel は model / label / label_prefix 値が安全かを検証する。
+// 空文字は「未指定」として許可。シェルメタ文字・制御文字・空白を含む値は拒否する。
+// finding #22: Windows の cmd.exe /c シム経路への引数注入の多層防御。
+func spawnValidModelLabel(s string) bool {
+	if s == "" {
+		return true
+	}
+	// 禁止文字: ASCII 制御文字・空白・シェルメタ文字
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+		switch r {
+		case ' ', '\t', '"', '\'', '|', '&', '>', '<', '^', '%', '(', ')', ';', '`', '$':
+			return false
+		}
+	}
+	return true
+}
+
+// spawnCwdTooBroad は cwd がルートや主要システムディレクトリ自身である場合 true を返す。
+// 配下の通常プロジェクトフォルダは許可（finding #1 折衷案）。
+func spawnCwdTooBroad(cwd string) bool {
+	if cwd == "" {
+		return false
+	}
+	cwd = filepath.Clean(cwd)
+	vol := filepath.VolumeName(cwd)
+	// ドライブ/FS ルート
+	if cwd == vol+"/" || cwd == vol+"\\" || cwd == vol+string(filepath.Separator) {
+		return true
+	}
+	// ホームディレクトリ自身
+	if home, err := os.UserHomeDir(); err == nil {
+		if filepath.Clean(home) == cwd {
+			return true
+		}
+		// 全ユーザーの親（/home, /Users, C:\Users 等）
+		if filepath.Clean(filepath.Dir(home)) == cwd {
+			return true
+		}
+	}
+	// 主要 Unix システムディレクトリ（自身のみ）
+	unixBroad := map[string]bool{
+		"/etc": true, "/usr": true, "/var": true,
+		"/bin": true, "/sbin": true, "/lib": true, "/root": true,
+	}
+	if unixBroad[cwd] {
+		return true
+	}
+	// Windows 主要システムディレクトリ
+	winBroad := map[string]bool{
+		`C:\Windows`:      true,
+		`C:\Program Files`: true,
+		`C:\Program Files (x86)`: true,
+	}
+	if winBroad[cwd] {
+		return true
+	}
+	return false
+}

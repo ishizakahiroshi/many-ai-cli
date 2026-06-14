@@ -13,6 +13,23 @@ import (
 
 const approvalSourceGoVT = "go_vt"
 
+// nativeApprovalJaTokens は日本語ネイティブ承認プロンプトで出現するヒント語。
+// Go VT 検出器（server.go の nativeApprovalTriggerTokens と
+// nativeApprovalLooksValid の hasHint）で共通参照する single source。
+// TS 側（approval.ts の matchProviderApprovalTrigger / common パターン JSON）とは
+// 役割が異なるため別管理だが、意味的に重複しない語を選んでいる。
+// 二重発火の回避: TS 側スキャンは xterm.js バッファ全体を対象とし、Go 側は
+// PTY チャンクをトリガーにして VT テールを再スキャンする別経路。
+// 同一 sig が検出されても Hub は sig 一致で重複送信をスキップするため二重発火しない。
+var nativeApprovalJaTokens = []string{
+	"許可",           // 「この操作を許可しますか」等
+	"承認",           // 「承認しますか」等
+	"続行",           // 「続行しますか」等
+	"実行しますか",   // 「コマンドを実行しますか」等
+	"よろしいですか", // 「よろしいですか？」等
+	"確認してください", // 「操作を確認してください」等
+}
+
 // 承認検出のチューニング定数。
 // approvalRecentLines: detectNativeApproval に渡す末尾行数の上限。
 //
@@ -357,7 +374,10 @@ func nativeApprovalQuestion(contextLines []string, optionStart int) string {
 }
 
 func nativeApprovalLooksValid(provider string, contextLines []string, opts []proto.ApprovalOption) bool {
-	context := strings.ToLower(strings.Join(contextLines, "\n"))
+	// Note: context は小文字化しているが nativeApprovalJaTokens は日本語（大文字化不要）なので
+	// 元の文字列でも検索する必要がある。rawContext を別途用意する。
+	rawContext := strings.Join(contextLines, "\n")
+	context := strings.ToLower(rawContext)
 	hasHint := strings.Contains(context, "approval") ||
 		strings.Contains(context, "allow tool") ||
 		strings.Contains(context, "allow this") ||
@@ -372,6 +392,15 @@ func nativeApprovalLooksValid(provider string, contextLines []string, opts []pro
 		strings.Contains(context, "press enter to confirm") ||
 		strings.Contains(context, "enter to select") ||
 		strings.Contains(context, "esc to cancel")
+	// 日本語ネイティブ承認プロンプトのヒント語（nativeApprovalJaTokens と共通）。
+	if !hasHint {
+		for _, tok := range nativeApprovalJaTokens {
+			if strings.Contains(rawContext, tok) {
+				hasHint = true
+				break
+			}
+		}
+	}
 	// cursor-agent 実機 UI 特有のヒント（"Run this command?" / "Not in allowlist:" /
 	// "Add ... to allowlist?" / "Auto-run everything"）を追加で許容する。
 	if provider == "cursor-agent" && !hasHint {

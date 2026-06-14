@@ -83,6 +83,8 @@
         </a>
       </div>
     </div>
+    <!-- 🖥 Server（内蔵リモート接続）。スマホ QR 接続ボタン(📱)を将来ここ(server-btn の直前)に挿す想定。 -->
+    <button id="server-btn" data-i18n-tooltip="server_tooltip" aria-haspopup="dialog" aria-expanded="false">🖥 <span data-i18n="server_btn">Server</span></button>
     <button id="global-wakeword-btn" hidden>🎧</button>
     <span id="mic-status-chip" class="status-chip" hidden></span>
     <button id="shutdown-btn" data-i18n-tooltip="shutdown_tooltip">⏻</button>
@@ -641,6 +643,86 @@
       <div class="settings-footer">
         <button class="settings-link-btn" id="settings-readme-btn" data-i18n="settings_readme_btn">README</button>
         <button class="settings-link-btn" id="settings-licenses-btn" data-i18n="settings_about_btn">About &amp; Licenses</button>
+      </div>
+    </div>
+  </div>
+  <!-- 🖥 Server モーダル（内蔵リモート接続）。設計は settings-panel / workflow-modal に準拠。
+       一覧（接続/切断/Open）はサーバから取得して server-modal.ts が動的描画。追加フォームは静的。 -->
+  <div id="server-modal" hidden>
+    <div class="server-modal-box" role="dialog" aria-modal="true" aria-labelledby="server-modal-title">
+      <div class="server-modal-header">
+        <span class="server-modal-title" id="server-modal-title" data-i18n="server_modal_title">Servers / Remote Connections</span>
+        <button id="server-modal-refresh" class="server-modal-icon-btn" type="button" data-i18n-tooltip="server_refresh_tooltip" aria-label="Refresh">⟳</button>
+        <button id="server-modal-close" class="server-modal-close" type="button" data-i18n-tooltip="settings_close" aria-label="Close">✕</button>
+      </div>
+      <div class="server-modal-body">
+        <div id="server-modal-status" class="server-modal-status" hidden></div>
+        <ul id="server-profile-list" class="server-profile-list"></ul>
+        <div id="server-profile-empty" class="server-modal-empty" data-i18n="server_no_profiles" hidden>No connection profiles yet. Add one below.</div>
+        <details class="server-add-section" id="server-add-section">
+          <summary class="server-add-summary" data-i18n="server_add_profile">＋ Add profile</summary>
+          <div class="server-add-form">
+            <label class="server-field">
+              <span class="server-field-label" data-i18n="server_field_name">Name</span>
+              <input type="text" id="server-add-name" class="server-input" autocomplete="off">
+            </label>
+            <label class="server-field">
+              <span class="server-field-label" data-i18n="server_field_type">Type</span>
+              <select id="server-add-type" class="server-select">
+                <option value="ssh">SSH</option>
+                <option value="wsl">WSL</option>
+              </select>
+            </label>
+            <label class="server-field server-field-ssh">
+              <span class="server-field-label" data-i18n="server_field_mode">Mode</span>
+              <select id="server-add-mode" class="server-select">
+                <option value="serve" data-i18n="server_mode_serve">serve (start Hub on remote)</option>
+                <option value="tunnel" data-i18n="server_mode_tunnel">tunnel (forward to running Hub)</option>
+              </select>
+            </label>
+            <label class="server-field server-field-ssh">
+              <span class="server-field-label" data-i18n="server_field_host">Host</span>
+              <input type="text" id="server-add-host" class="server-input" autocomplete="off" placeholder="user@host or host">
+            </label>
+            <label class="server-field server-field-ssh">
+              <span class="server-field-label" data-i18n="server_field_user">User</span>
+              <input type="text" id="server-add-user" class="server-input" autocomplete="off">
+            </label>
+            <label class="server-field server-field-ssh">
+              <span class="server-field-label" data-i18n="server_field_ssh_port">SSH port</span>
+              <input type="number" id="server-add-ssh-port" class="server-input" min="0" max="65535" placeholder="22">
+            </label>
+            <label class="server-field server-field-ssh">
+              <span class="server-field-label" data-i18n="server_field_identity">Identity file</span>
+              <input type="text" id="server-add-identity" class="server-input" autocomplete="off" placeholder="~/.ssh/id_ed25519">
+            </label>
+            <label class="server-field server-field-tunnel">
+              <span class="server-field-label" data-i18n="server_field_token_command">Token command</span>
+              <input type="text" id="server-add-token-command" class="server-input" autocomplete="off">
+            </label>
+            <label class="server-field server-field-wsl">
+              <span class="server-field-label" data-i18n="server_field_distro">Distro</span>
+              <input type="text" id="server-add-distro" class="server-input" autocomplete="off" placeholder="(default distro)">
+            </label>
+            <label class="server-field">
+              <span class="server-field-label" data-i18n="server_field_binary">Binary</span>
+              <input type="text" id="server-add-binary" class="server-input" autocomplete="off" placeholder="many-ai-cli">
+            </label>
+            <label class="server-field">
+              <span class="server-field-label" data-i18n="server_field_cwd">Working dir</span>
+              <input type="text" id="server-add-cwd" class="server-input" autocomplete="off">
+            </label>
+            <label class="server-field">
+              <span class="server-field-label" data-i18n="server_field_hub_port">Hub port</span>
+              <input type="number" id="server-add-hub-port" class="server-input" min="0" max="65535" placeholder="0 = auto">
+            </label>
+            <div class="server-add-error" id="server-add-error" hidden></div>
+            <div class="server-add-actions">
+              <button id="server-add-cancel" class="server-btn-secondary" type="button" data-i18n="server_add_cancel">Cancel</button>
+              <button id="server-add-save" class="server-btn-primary" type="button" data-i18n="server_add_save">Save</button>
+            </div>
+          </div>
+        </details>
       </div>
     </div>
   </div>

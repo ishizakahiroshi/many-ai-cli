@@ -2057,10 +2057,18 @@ export function renderSessionInfoChip() {
   }
   const state = s.state || 'standby';
   const stateLbl = (typeof stateLabel === 'function') ? stateLabel(state) : state;
+  // 状態 pill はステータスバー（token-statusbar）と表示順・フォント・色を揃える:
+  //   #N → 状態pill(●ドット付き) → providerアイコン+チップ+モデル
+  // disconnected はステータスバーと同様に error 配色へ寄せる。
+  const pillCls = (state === 'running') ? 'running'
+    : (state === 'waiting') ? 'waiting'
+    : (state === 'error' || state === 'disconnected') ? 'error'
+    : 'standby';
+  const statePill = `<span class="tsb-pill ${pillCls}"><span class="tsb-pdot"></span>${escapeHtml(stateLbl)}</span>`;
   chip.innerHTML =
     `<span class="sid">#${s.id}</span>` +
-    `${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}` +
-    ` <span class="badge ${safeClassToken(state)}">${escapeHtml(stateLbl)}</span>`;
+    ` ${statePill} ` +
+    `${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}`;
 }
 
 // D12: チャット件数バッジ更新
