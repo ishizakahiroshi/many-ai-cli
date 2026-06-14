@@ -1,6 +1,6 @@
 # AI エージェント設定タスク: リモートサーバー（Docker / マルチユーザー・隔離向け）
 
-> 最終更新: 2026-06-14(日) 00:15:54
+> 最終更新: 2026-06-14(日) 21:09:45 — 禁止事項に Tailscale Funnel 公開禁止を追記・コンテナ内 serve 不可とモバイル接続経路を注記
 
 このファイルは **そのまま AI エージェント（手元 PC の Claude Code / Codex CLI 等）に貼り付けて使う設定タスク指示書** です。エージェントは手元 PC で動き、SSH 越しにリモートサーバーへ `many-ai-cli` の Docker compose 構成を配置し、自動再起動付きで常駐起動し、最後に手元の launcher プロファイル（tunnel モード）を作成します。
 
@@ -34,6 +34,7 @@
 | 変数 | 説明 | 例 |
 |---|---|---|
 | `SSH_TARGET` | SSH 接続先（`user@host` またはエイリアス）。docker を叩ける権限が要る | `your-user@remote.example.com` |
+| `SSH_KEY` | 秘密鍵パス（config で指定済みなら空でよい） | `C:\dev\.ssh\id_ed25519` |
 | `USER_TAG` | サービス/コンテナ/volume を区別する名前 | `user1` |
 | `HUB_PORT` | host 側 publish ポート（手元と同番号にする） | `47801` |
 | `AAC_TAG` | 追従するイメージタグ（`latest`=main / `develop`=検証） | `latest` |
@@ -129,6 +130,9 @@ ssh SSH_TARGET 'bash -lc "docker exec aac-USER_TAG sh -c \"grep ^token: /home/ub
 
 verify: `token: ...` が取れる。**token はログ・チャットに残さない**（launcher は接続のたびに `token_command` で取り直すので、ここで控えた値はファイルに保存しない）。
 
+> **モバイル接続（📱）の経路**: コンテナ内 Hub には `tailscale` CLI が無いため `tailscale serve` は使えない。スマホから繋ぐ場合は **SSH トンネル / launcher 経由**（モバイル接続ウィザードは degrade して SSH トンネルへ誘導する）。詳細は [local/plan_mobile-connect-flow-redesign.md](local/plan_mobile-connect-flow-redesign.md)。
+> **token モデルの差異**: launcher は接続のたびに `token_command` で token を取り直し**ファイルに保存しない**。一方モバイル接続（📱）は token を QR でスマホ端末に**永続化**する（紛失対策は別プラン `plan_remote-auth-hardening-future.md` の領分）。モバイル接続をリモート Hub 上で使う場合も当該 Hub 自身の token を読むため、上記の `token_command` 運用と矛盾しない。
+
 ### 手元 launcher プロファイルの作成（C6）
 
 手元 PC の `~/.many-ai-cli/launcher-profiles.yaml`（Windows: `%USERPROFILE%\.many-ai-cli\launcher-profiles.yaml`）に **tunnel モード**のプロファイルを追記する（バックアップを取ってから）。
@@ -141,9 +145,16 @@ profiles:
     mode: tunnel
     host: <SSH_TARGET の host 部>
     user: <SSH_TARGET の user 部>
+    identity_file: <SSH_KEY の値。空なら行ごと省略>
     hub_port: HUB_PORT
     token_command: "docker exec aac-USER_TAG sh -c 'grep ^token ~/.many-ai-cli/config.yaml | cut -d\" \" -f2'"
 ```
+
+このプロファイルの値はエージェントが SSH 接続時に把握済み（host/user は `SSH_TARGET`、port は `HUB_PORT`）で、ユーザー確認が要るのは実質 **鍵（`SSH_KEY`）だけ**：
+
+- `SSH_KEY` を指定されていれば `identity_file:` にその値をそのまま書く。空（ssh-agent / config 任せ）なら行ごと省略。
+- `host:` は **SSH 接続先（VPS の DNS 名 / 公開 IP / config エイリアス）** にする。tunnel モードはこの host へ SSH してコンテナの `127.0.0.1:48000` を転送するため、**コンテナ内 IP は書かない**（手元からは到達できない）。
+- `SSH_TARGET` がエイリアスなら `host:` にエイリアスを書き `user:` は省略してよい。
 
 verify: YAML が妥当で、既存プロファイルを壊していないこと。
 
@@ -169,6 +180,7 @@ verify: 既定ブラウザで `http://127.0.0.1:HUB_PORT/?token=...&env_kind=rem
 ## やってはいけないこと（厳守）
 
 - `ports:` を `0.0.0.0:...` / public IP にする、firewall で Hub ポートを開ける、リバースプロキシ公開
+- **Tailscale Funnel での公開**（全世界公開で方針に反する。スマホ接続は SSH トンネル / launcher 経由で行う）
 - 引数なしの `docker compose down`（**全ユーザーのコンテナを巻き込む**）。個別操作は必ずサービス名を付けるか `stop` / `rm` を使う
 - token 付き URL や token をログ・チャット・コミットに残す
 - リモートの既存 compose / 他ユーザー定義 / volume の破壊的変更
@@ -176,6 +188,7 @@ verify: 既定ブラウザで `http://127.0.0.1:HUB_PORT/?token=...&env_kind=rem
 
 ## 関連
 
+- 入口（どれを入れて、どの手順を使うか）: [manual_remote-server-overview.md](manual_remote-server-overview.md)
 - 仕組み・トラブル対処: [manual_remote-server-ssh-tunnel.md](manual_remote-server-ssh-tunnel.md)
 - Docker マルチユーザー運用の正本: [manual_docker-multiuser.md](manual_docker-multiuser.md)
 - 単一サーバー版（pnpm）の設定タスク: [manual_remote-server-agent-single.md](manual_remote-server-agent-single.md)

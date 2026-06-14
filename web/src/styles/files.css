@@ -178,6 +178,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* ファイル/フォルダ名の隣に出す更新日時バッジ。名前を優先し、余白に右寄せで表示する。 */
+.files-tree-mtime {
+  margin-left: auto;
+  padding-left: 8px;
+  font-size: 0.68rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 .files-tree-file--previewable > .files-tree-label { cursor: pointer; }
 .files-tree-file--other > .files-tree-label { color: var(--muted); cursor: default; }
 .files-tree-dir > .files-tree-label { cursor: pointer; }

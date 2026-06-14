@@ -1031,14 +1031,16 @@ export const FilesTreeView = (function () {
       const itemType = item.type === 'dir' ? 'dir' : 'file';
       if (itemType === 'dir') {
         if (!nodes[relPath]) {
-          const node = { name: parts[parts.length - 1], relPath, absPath, type: 'dir', children: [] };
+          const node = { name: parts[parts.length - 1], relPath, absPath, type: 'dir', mtime: item.mtime, children: [] };
           nodes[relPath] = node;
           parent.children.push(node);
-        } else if (!nodes[relPath].absPath && absPath) {
-          nodes[relPath].absPath = absPath;
+        } else {
+          if (!nodes[relPath].absPath && absPath) nodes[relPath].absPath = absPath;
+          // 親 dir 補完で先に作られたノードには mtime が無いので、自身の item で補完する。
+          if (!nodes[relPath].mtime && item.mtime) nodes[relPath].mtime = item.mtime;
         }
       } else {
-        const node = { name: parts[parts.length - 1], relPath, absPath, type: 'file', children: [] };
+        const node = { name: parts[parts.length - 1], relPath, absPath, type: 'file', mtime: item.mtime, children: [] };
         nodes[relPath] = node;
         parent.children.push(node);
       }
@@ -1055,6 +1057,16 @@ export const FilesTreeView = (function () {
     }
     sortChildren(root);
     return root;
+  }
+
+  // mtime（RFC3339 文字列）を "2026/06/14 19:10:10" 形式のローカル時刻に整形する。
+  // 値が無い／パース不能なら空文字を返す（その場合バッジは描画しない）。
+  function formatMtime(mtime) {
+    if (!mtime) return '';
+    const d = new Date(mtime);
+    if (isNaN(d.getTime())) return '';
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
   }
 
   function isPreviewable(name) {
@@ -1144,6 +1156,13 @@ export const FilesTreeView = (function () {
         nameSpan.className = 'files-tree-name';
         nameSpan.textContent = node.name;
         label.appendChild(nameSpan);
+        const mtimeText = formatMtime(node.mtime);
+        if (mtimeText) {
+          const mtimeSpan = document.createElement('span');
+          mtimeSpan.className = 'files-tree-mtime';
+          mtimeSpan.textContent = mtimeText;
+          label.appendChild(mtimeSpan);
+        }
         item.appendChild(label);
 
         const childrenEl = document.createElement('div');
@@ -1190,6 +1209,13 @@ export const FilesTreeView = (function () {
         nameSpan.className = 'files-tree-name';
         nameSpan.textContent = node.name;
         label.appendChild(nameSpan);
+        const mtimeText = formatMtime(node.mtime);
+        if (mtimeText) {
+          const mtimeSpan = document.createElement('span');
+          mtimeSpan.className = 'files-tree-mtime';
+          mtimeSpan.textContent = mtimeText;
+          label.appendChild(mtimeSpan);
+        }
         item.appendChild(label);
 
         if (isPreviewable(node.name)) {

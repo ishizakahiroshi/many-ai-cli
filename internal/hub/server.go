@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/websocket"
 	"many-ai-cli/internal/attach"
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/notify"
@@ -32,7 +33,6 @@ import (
 	"many-ai-cli/internal/sessionstore"
 	"many-ai-cli/internal/wrapper"
 	"many-ai-cli/web"
-	"golang.org/x/net/websocket"
 )
 
 // idleAfter: PTY 出力が静止してから running → standby/waiting に遷移するまでの時間。
@@ -392,6 +392,12 @@ type Server struct {
 	serverConns *serverConnManager
 
 	autoOpenBrowser bool
+
+	// tsRunner: tailscale CLI 実行の抽象（テストでモック注入）。nil なら exec 実装。
+	tsRunner tailscaleRunner
+
+	// sshdProber: OpenSSH Server 状態検知の抽象（テストでモック注入）。nil なら OS 実装。
+	sshdProber sshdProber
 }
 
 type branchRefreshRequest struct {
@@ -646,6 +652,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	})
 	mux.HandleFunc("/api/info", s.handleInfo)
 	mux.HandleFunc("/api/mobile-connect", s.handleMobileConnect)
+	mux.HandleFunc("/api/mobile-connect/tailscale", s.handleTailscaleStatus)
+	mux.HandleFunc("/api/mobile-connect/tailscale/serve", s.handleTailscaleServe)
 	mux.HandleFunc("/api/auth/revoke-all", s.handleAuthRevokeAll)
 	mux.HandleFunc("/api/net-hint", s.handleNetHint)
 	mux.HandleFunc("/api/avatar", s.handleAvatar)
@@ -724,6 +732,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/servers/connect", s.handleServerConnect)
 	mux.HandleFunc("/api/servers/connect/status", s.handleServerConnectStatus)
 	mux.HandleFunc("/api/servers/disconnect", s.handleServerDisconnect)
+	mux.HandleFunc("/api/profiles/fetch", s.handleProfilesFetch)
 	s.registerWorkbenchRoutes(mux)
 	s.httpSrv = &http.Server{
 		Addr:    fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port),

@@ -689,7 +689,7 @@ header {
 .card-model.card-model--with-icon svg.card-provider-icon { width: 10px; height: 10px; flex-shrink: 0; margin-right: 0; }
 /* モデル名は先頭10文字相当で打ち切り（…）。全文はバッジの data-tooltip でホバー表示。 */
 .card-model.card-model--with-icon .card-model-text { min-width: 0; max-width: 10ch; flex-shrink: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card-branch { flex-shrink: 1; min-width: 0; max-width: 34%; color: var(--green-text); background: color-mix(in srgb, var(--green-bg) 35%, transparent); border: 1px solid color-mix(in srgb, var(--green-text) 30%, transparent); border-radius: 4px; padding: 1px 5px; font-size: 0.68rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 2px; cursor: pointer; user-select: none; transition: background 0.15s, transform 0.05s, color 0.15s; font-family: Consolas, monospace; }
+.card-branch { flex-shrink: 0; min-width: 0; max-width: 50%; color: var(--green-text); background: color-mix(in srgb, var(--green-bg) 35%, transparent); border: 1px solid color-mix(in srgb, var(--green-text) 30%, transparent); border-radius: 4px; padding: 1px 5px; font-size: 0.68rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 2px; cursor: pointer; user-select: none; transition: background 0.15s, transform 0.05s, color 0.15s; font-family: Consolas, monospace; }
 .card-branch:hover { background: color-mix(in srgb, var(--green-text) 22%, transparent); color: var(--text); }
 .card-branch:active { transform: scale(0.96); }
 .card-branch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

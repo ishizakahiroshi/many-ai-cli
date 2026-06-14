@@ -30,23 +30,61 @@ interface MobileConnectInfo {
   ssh_command: string;
   ssh_url: string;
   hub_url: string;
+  ssh_forward_url?: string;
+  // SSH 経路: OpenSSH Server 状態（C2 backend）。
+  sshd_state?: string;
+  sshd_installed?: boolean;
+  sshd_running?: boolean;
+}
+
+// Tailscale 自己診断レスポンス（C1 backend: GET /api/mobile-connect/tailscale）。
+// フィールド名は internal/hub/tailscale_handlers.go と厳密一致させる。
+type TailscaleStateName =
+  | 'not_installed'
+  | 'not_logged_in'
+  | 'serve_disabled_on_tailnet'
+  | 'serve_inactive'
+  | 'ready';
+
+interface TailscaleStatus {
+  state: TailscaleStateName;
+  dns_name: string;
+  online: boolean;
+  hub_port: number;
+  serve_command: string;
+  serve_off_command: string;
+  admin_url?: string;
+  https_url?: string;
+}
+
+// serve 有効化（POST）レスポンス。
+interface TailscaleServeResult {
+  ok: boolean;
+  state: TailscaleStateName;
+  dns_name: string;
+  hub_port: number;
+  admin_url?: string;
+  https_url?: string;
+  allowed_host_added?: boolean;
+  allowed_host_hint?: string;
 }
 
 type Pattern = 'ssh' | 'vpn' | 'done';
 type Platform = 'ios' | 'android';
+// VPN 経路は Tailscale を第一推奨（D2）。WireGuard は「上級」として畳む（D4）。
 type VpnKind = 'tailscale' | 'wireguard';
-type VpnAccess = 'rawip' | 'https';
 
 interface WizardState {
   consented: boolean;
   pattern: Pattern | null;
   platform: Platform | null;
   vpnKind: VpnKind;
-  vpnAccess: VpnAccess;
   step: 'connect' | null;
   help: boolean;
   reveal: boolean;       // token QR を表示中か（click-to-reveal）
   wgConfig: string;      // WireGuard 設定（クライアントサイドのみ・サーバー送信なし）
+  wgServerIp: string;    // WG サーバ IP（ユーザー入力・D4: ダミー撤廃）
+  tsBusy: boolean;       // Tailscale serve 有効化/停止の実行中フラグ
 }
 
 const APP_LINKS = {
@@ -58,6 +96,12 @@ const APP_LINKS = {
 let modalOpen = false;
 let info: MobileConnectInfo | null = null;
 let loadError = '';
+// Tailscale 自己診断の最新スナップショット（VPN/Tailscale 経路の状態駆動 UI 用）。
+let tsStatus: TailscaleStatus | null = null;
+let tsLoading = false;
+let tsError = '';
+// env_kind（A2/IP-4: メッセージ出し分け）。/api/info から取得し、無ければ 'local'。
+let envKind = 'local';
 let state: WizardState = freshState();
 let revealTimer: ReturnType<typeof setTimeout> | null = null;
 let keyHandler: ((e: KeyboardEvent) => void) | null = null;
@@ -70,11 +114,12 @@ function freshState(): WizardState {
     pattern: (lsGet(LS_PATTERN) as Pattern) || null,
     platform: (lsGet(LS_PLATFORM) as Platform) || null,
     vpnKind: (lsGet(LS_VPN_KIND) as VpnKind) || 'tailscale',
-    vpnAccess: 'rawip',
     step: null,
     help: false,
     reveal: false,
     wgConfig: '',
+    wgServerIp: '',
+    tsBusy: false,
   };
 }
 
@@ -331,9 +376,9 @@ function renderHelp(body: HTMLElement): void {
   const table = el('table', { class: 'mc-cmp' });
   const rows: string[][] = [
     [t('mobile_connect_help_col_method'), t('mobile_connect_help_col_effort'), t('mobile_connect_help_col_external'), t('mobile_connect_help_col_features')],
+    // D3: 生IP（VPN 直）経路は撤廃。Tailscale serve は HTTPS 一本（secure context・フル機能）。
     [t('mobile_connect_help_ssh'), t('mobile_connect_help_effort_mid'), t('mobile_connect_help_ssh_external'), t('mobile_connect_help_full')],
-    [t('mobile_connect_help_vpn_raw'), t('mobile_connect_help_effort_low'), '◎', t('mobile_connect_help_limited')],
-    [t('mobile_connect_help_vpn_https'), t('mobile_connect_help_effort_mid'), '◎', t('mobile_connect_help_full')],
+    [t('mobile_connect_help_vpn_https'), t('mobile_connect_help_effort_low'), '◎', t('mobile_connect_help_full')],
   ];
   rows.forEach((cells, ri) => {
     const tr = el('tr');
@@ -361,7 +406,7 @@ function renderPattern(body: HTMLElement): void {
   body.appendChild(choiceBtn('🏠', t('mobile_connect_opt_ssh_name'), t('mobile_connect_opt_ssh_desc'),
     { text: t('mobile_connect_badge_full'), cls: 'mc-badge-full' }, () => pick('ssh')));
   body.appendChild(choiceBtn('🌍', t('mobile_connect_opt_vpn_name'), t('mobile_connect_opt_vpn_desc'),
-    { text: t('mobile_connect_badge_limited'), cls: 'mc-badge-lim' }, () => pick('vpn')));
+    { text: t('mobile_connect_badge_full'), cls: 'mc-badge-full' }, () => pick('vpn')));
   body.appendChild(choiceBtn('✅', t('mobile_connect_opt_done_name'), t('mobile_connect_opt_done_desc'),
     { text: t('mobile_connect_badge_keep'), cls: 'mc-badge-keep' }, () => pick('done')));
 
@@ -436,52 +481,238 @@ function renderConnect(body: HTMLElement): void {
   body.appendChild(stepDots(4));
 
   if (state.pattern === 'ssh') {
-    body.appendChild(el('div', { class: 'mc-q', text: t('mobile_connect_connect_ssh_title') }));
-    body.appendChild(featBar(true));
-    body.appendChild(ctxNote(true, 'mobile_connect_ssh_ctx_extra'));
-    body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_connect_ssh_steps') }));
-    body.appendChild(qrBlock(info.ssh_url, t('mobile_connect_ssh_host_cap', { url: info.ssh_url }), false));
-    body.appendChild(cmdRow(info.ssh_command));
-    body.appendChild(el('div', { class: 'mc-cap mc-cap-warn', text: t('mobile_connect_ssh_note') }));
-    body.appendChild(el('hr', { class: 'mc-hr' }));
-    body.appendChild(qrBlock(info.hub_url, t('mobile_connect_ssh_url_cap'), true));
-    appendNotifyTest(body);
-    appendHomeHint(body);
-    body.appendChild(navRow({
-      back: () => { state.step = null; state.reveal = false; render(); },
-      primary: { text: t('mobile_connect_done'), onClick: () => closeModal() },
-    }));
+    renderConnectSSH(body);
     return;
   }
 
-  // VPN
-  const secure = state.vpnAccess === 'https';
-  const accessSeg = el('div', { class: 'mc-seg' });
-  const mkAccess = (acc: VpnAccess, label: string) => {
-    const b = el('button', { class: 'mc-seg-btn' + (state.vpnAccess === acc ? ' on' : ''), text: label, attrs: { type: 'button' } });
-    b.addEventListener('click', () => { state.vpnAccess = acc; state.reveal = false; render(); });
+  // VPN: Tailscale を第一推奨として前面に（D2）。
+  // セグメントで Tailscale（推奨）/ WireGuard（上級）を切替。
+  const seg = el('div', { class: 'mc-seg' });
+  const mkKind = (kind: VpnKind, label: string) => {
+    const b = el('button', { class: 'mc-seg-btn' + (state.vpnKind === kind ? ' on' : ''), text: label, attrs: { type: 'button' } });
+    b.addEventListener('click', () => {
+      if (state.vpnKind === kind) return;
+      state.vpnKind = kind;
+      lsSet(LS_VPN_KIND, kind);
+      state.reveal = false;
+      if (kind === 'tailscale' && !tsStatus) void loadTailscale(false);
+      render();
+    });
     return b;
   };
-  accessSeg.append(mkAccess('rawip', t('mobile_connect_vpn_rawip')), mkAccess('https', t('mobile_connect_vpn_https')));
+  seg.append(
+    mkKind('tailscale', t('mobile_connect_vpn_tailscale')),
+    mkKind('wireguard', t('mobile_connect_vpn_wireguard')),
+  );
+  body.appendChild(seg);
 
   if (state.vpnKind === 'tailscale') {
-    body.appendChild(el('div', { class: 'mc-q', text: t('mobile_connect_connect_ts_title') }));
-    body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_connect_ts_steps') }));
-    body.appendChild(accessSeg);
-    body.appendChild(featBar(secure));
-    body.appendChild(ctxNote(secure, secure ? 'mobile_connect_ts_ctx_https' : 'mobile_connect_ts_ctx_rawip'));
-    const url = secure ? 'https://my-pc.tailnet.ts.net/?token=…' : info.hub_url;
-    body.appendChild(qrBlock(url, secure ? t('mobile_connect_vpn_url_cap_https') : t('mobile_connect_vpn_url_cap_rawip'), true));
-    appendNotifyTest(body);
-    appendHomeHint(body);
+    renderConnectTailscale(body);
+  } else {
+    renderConnectWireguard(body);
+  }
+}
+
+// ── SSH 経路（上級・接続後の 127.0.0.1 QR は正しい唯一の経路として維持）──────────
+function renderConnectSSH(body: HTMLElement): void {
+  if (!info) return;
+  body.appendChild(el('div', { class: 'mc-q', text: t('mobile_connect_connect_ssh_title') }));
+  body.appendChild(featBar(true));
+  body.appendChild(ctxNote(true, 'mobile_connect_ssh_ctx_extra'));
+
+  // C2: OpenSSH Server 状態を表示。未導入/停止なら有効化導線。
+  appendSshdState(body);
+
+  body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_connect_ssh_steps') }));
+  body.appendChild(qrBlock(info.ssh_url, t('mobile_connect_ssh_host_cap', { url: info.ssh_url }), false));
+  body.appendChild(cmdRow(info.ssh_command));
+  body.appendChild(el('div', { class: 'mc-cap mc-cap-warn', text: t('mobile_connect_ssh_note') }));
+  body.appendChild(el('hr', { class: 'mc-hr' }));
+  const forwardURL = info.ssh_forward_url || info.hub_url;
+  body.appendChild(qrBlock(forwardURL, t('mobile_connect_ssh_url_cap'), true));
+  appendNotifyTest(body);
+  appendHomeHint(body);
+  body.appendChild(navRow({
+    back: () => { state.step = null; state.reveal = false; render(); },
+    primary: { text: t('mobile_connect_done'), onClick: () => closeModal() },
+  }));
+}
+
+// C2: OpenSSH Server 状態バッジ＋未導入時の有効化導線。
+function appendSshdState(body: HTMLElement): void {
+  const st = info?.sshd_state || 'unknown';
+  let cls = 'mc-status mc-status-warn';
+  let txt = t('mobile_connect_sshd_unknown');
+  if (st === 'running') { cls = 'mc-status mc-status-ok'; txt = t('mobile_connect_sshd_running'); }
+  else if (st === 'stopped') { cls = 'mc-status mc-status-warn'; txt = t('mobile_connect_sshd_stopped'); }
+  else if (st === 'not_installed') { cls = 'mc-status mc-status-ng'; txt = t('mobile_connect_sshd_not_installed'); }
+  body.appendChild(el('div', { class: cls, text: txt }));
+  if (st === 'not_installed' || st === 'stopped') {
+    body.appendChild(el('div', { class: 'mc-cap mc-cap-warn', text: t('mobile_connect_sshd_enable_hint') }));
+  }
+}
+
+// ── Tailscale 経路（第一推奨・状態駆動）────────────────────────────────────────
+function renderConnectTailscale(body: HTMLElement): void {
+  body.appendChild(el('div', { class: 'mc-q', text: t('mobile_connect_connect_ts_title') }));
+
+  // A2/IP-4: env_kind 連動メッセージ。remote/remote-tunnel ではリモート側で serve が動く旨を明示。
+  if (envKind === 'remote' || envKind === 'remote-tunnel') {
+    body.appendChild(el('div', { class: 'mc-ts-remote-note', text: t('mobile_connect_ts_remote_note') }));
+  }
+
+  if (tsLoading && !tsStatus) {
+    body.appendChild(el('div', { class: 'mc-loading', text: t('mobile_connect_ts_loading') }));
+    appendTailscaleNav(body);
+    return;
+  }
+  if (tsError) {
+    body.appendChild(el('div', { class: 'mc-error', text: tsError }));
     body.appendChild(navRow({
       back: () => { state.step = null; state.reveal = false; render(); },
-      primary: { text: t('mobile_connect_done'), onClick: () => closeModal() },
+      primary: { text: t('mobile_connect_retry'), onClick: () => { void loadTailscale(true); } },
     }));
     return;
   }
+  if (!tsStatus) {
+    // 未取得（初回）。取得をキックして loading 表示。
+    void loadTailscale(false);
+    body.appendChild(el('div', { class: 'mc-loading', text: t('mobile_connect_ts_loading') }));
+    appendTailscaleNav(body);
+    return;
+  }
 
-  // WireGuard
+  const st = tsStatus;
+  // ライブ状態バッジ。
+  body.appendChild(tsStateBadge(st.state));
+
+  switch (st.state) {
+    case 'not_installed':
+      body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_connect_ts_not_installed') }));
+      // CLI 不在（Docker/degrade 含む）→ SSH トンネル/launcher へ誘導。
+      body.appendChild(el('div', { class: 'mc-ctx-note mc-ctx-ng', text: t('mobile_connect_ts_degrade_ssh') }));
+      appendTailscaleAppLink(body);
+      appendSwitchToSshLink(body);
+      break;
+    case 'not_logged_in':
+      body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_connect_ts_not_logged_in') }));
+      appendTailscaleAppLink(body);
+      break;
+    case 'serve_disabled_on_tailnet':
+      body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_connect_ts_serve_disabled') }));
+      // Funnel 警告（チェックを外す）を明示。
+      body.appendChild(el('div', { class: 'mc-ts-funnel-warn', html: t('mobile_connect_ts_funnel_warn') }));
+      if (st.admin_url) {
+        const a = el('a', { class: 'mc-applink', attrs: { href: st.admin_url, target: '_blank', rel: 'noopener noreferrer' } });
+        a.appendChild(el('span', { class: 'mc-applink-ico', text: '🔧' }));
+        const c = el('div');
+        c.appendChild(el('div', { text: t('mobile_connect_ts_admin_open') }));
+        c.appendChild(el('div', { class: 'mc-applink-url', text: st.admin_url }));
+        a.appendChild(c);
+        body.appendChild(a);
+      }
+      // 有効化後の再取得導線。
+      appendTailscaleRefreshBtn(body);
+      break;
+    case 'serve_inactive':
+      body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_connect_ts_serve_inactive') }));
+      // D1: 「serve を有効化」ボタン＋等価コマンド併記（コピー可能）。
+      {
+        const enableBtn = el('button', {
+          class: 'mc-nav-btn mc-nav-primary mc-ts-action',
+          text: state.tsBusy ? t('mobile_connect_ts_enabling') : t('mobile_connect_ts_enable_btn'),
+          attrs: { type: 'button' },
+        }) as HTMLButtonElement;
+        enableBtn.disabled = state.tsBusy;
+        enableBtn.addEventListener('click', () => { void enableServe(); });
+        body.appendChild(enableBtn);
+      }
+      body.appendChild(el('div', { class: 'mc-cap', text: t('mobile_connect_ts_equiv_cmd') }));
+      body.appendChild(cmdRow(st.serve_command));
+      break;
+    case 'ready':
+      // 本物 https_url の QR（click-to-reveal＋SEC-D 自動再ぼかし）。
+      body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_connect_ts_ready_sub') }));
+      body.appendChild(featBar(true));
+      body.appendChild(ctxNote(true, 'mobile_connect_ts_ctx_https'));
+      if (st.https_url) {
+        body.appendChild(qrBlock(st.https_url, t('mobile_connect_ts_url_cap'), true));
+      } else {
+        body.appendChild(el('div', { class: 'mc-error', text: t('mobile_connect_ts_no_url') }));
+      }
+      appendNotifyTest(body);
+      appendHomeHint(body);
+      // D6: 「公開を停止」ボタン＋停止用の等価コマンド併記。
+      {
+        const offBtn = el('button', {
+          class: 'mc-nav-btn mc-ts-stop',
+          text: state.tsBusy ? t('mobile_connect_ts_stopping') : t('mobile_connect_ts_stop_btn'),
+          attrs: { type: 'button' },
+        }) as HTMLButtonElement;
+        offBtn.disabled = state.tsBusy;
+        offBtn.addEventListener('click', () => { void disableServe(); });
+        body.appendChild(offBtn);
+      }
+      body.appendChild(cmdRow(st.serve_off_command));
+      break;
+    default:
+      body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_connect_ts_loading') }));
+      break;
+  }
+
+  appendTailscaleNav(body);
+}
+
+function tsStateBadge(stateName: TailscaleStateName): HTMLElement {
+  let cls = 'mc-status mc-status-warn';
+  let label = '';
+  switch (stateName) {
+    case 'ready': cls = 'mc-status mc-status-ok'; label = t('mobile_connect_ts_badge_ready'); break;
+    case 'serve_inactive': cls = 'mc-status mc-status-warn'; label = t('mobile_connect_ts_badge_serve_inactive'); break;
+    case 'serve_disabled_on_tailnet': cls = 'mc-status mc-status-warn'; label = t('mobile_connect_ts_badge_serve_disabled'); break;
+    case 'not_logged_in': cls = 'mc-status mc-status-ng'; label = t('mobile_connect_ts_badge_not_logged_in'); break;
+    case 'not_installed': cls = 'mc-status mc-status-ng'; label = t('mobile_connect_ts_badge_not_installed'); break;
+  }
+  return el('div', { class: cls, text: label });
+}
+
+function appendTailscaleAppLink(body: HTMLElement): void {
+  const app = APP_LINKS.tailscale;
+  const link = el('a', { class: 'mc-applink', attrs: { href: app.dl, target: '_blank', rel: 'noopener noreferrer' } });
+  link.appendChild(el('span', { class: 'mc-applink-ico', text: '📲' }));
+  const lcol = el('div');
+  lcol.appendChild(el('div', { text: app.name }));
+  lcol.appendChild(el('div', { class: 'mc-applink-url', text: app.url }));
+  link.appendChild(lcol);
+  body.appendChild(link);
+}
+
+function appendSwitchToSshLink(body: HTMLElement): void {
+  const row = el('div', { class: 'mc-notify-test' });
+  const btn = el('button', { class: 'mc-link', text: t('mobile_connect_ts_switch_ssh'), attrs: { type: 'button' } });
+  btn.addEventListener('click', () => { state.pattern = 'ssh'; state.reveal = false; lsSet(LS_PATTERN, 'ssh'); render(); });
+  row.appendChild(btn);
+  body.appendChild(row);
+}
+
+function appendTailscaleRefreshBtn(body: HTMLElement): void {
+  const row = el('div', { class: 'mc-notify-test' });
+  const btn = el('button', { class: 'mc-link', text: t('mobile_connect_ts_refresh'), attrs: { type: 'button' } });
+  btn.addEventListener('click', () => { void loadTailscale(true); });
+  row.appendChild(btn);
+  body.appendChild(row);
+}
+
+function appendTailscaleNav(body: HTMLElement): void {
+  body.appendChild(navRow({
+    back: () => { state.step = null; state.reveal = false; render(); },
+    primary: { text: t('mobile_connect_done'), onClick: () => closeModal() },
+  }));
+}
+
+// ── WireGuard 経路（上級・D4: ペースト→クライアントサイド QR は維持）─────────────
+function renderConnectWireguard(body: HTMLElement): void {
+  if (!info) return;
   body.appendChild(el('div', { class: 'mc-q', text: t('mobile_connect_connect_wg_title') }));
   body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_connect_wg_paste_sub') }));
   const ta = el('textarea', { class: 'mc-textarea', attrs: { placeholder: '[Interface]\nPrivateKey = ...\nAddress = ...\n[Peer]\n...' } }) as HTMLTextAreaElement;
@@ -494,13 +725,21 @@ function renderConnect(body: HTMLElement): void {
 
   body.appendChild(el('hr', { class: 'mc-hr' }));
   body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_connect_wg_after') }));
-  body.appendChild(accessSeg);
-  body.appendChild(featBar(secure));
-  body.appendChild(ctxNote(secure, secure ? 'mobile_connect_wg_ctx_https' : 'mobile_connect_wg_ctx_rawip'));
-  const url = secure ? 'https://my-pc.example/?token=…' : info.hub_url;
-  body.appendChild(qrBlock(url, secure ? t('mobile_connect_vpn_url_cap_https') : t('mobile_connect_vpn_url_cap_rawip'), true));
-  appendNotifyTest(body);
-  appendHomeHint(body);
+
+  // D4: ダミー URL 撤廃。WG サーバ IP をユーザーが入力して本物 URL を組み立てる。
+  const ipInput = el('input', {
+    class: 'mc-input',
+    attrs: { type: 'text', placeholder: t('mobile_connect_wg_ip_placeholder'), value: state.wgServerIp },
+  }) as HTMLInputElement;
+  ipInput.addEventListener('input', () => { state.wgServerIp = ipInput.value.trim(); state.reveal = false; refreshWgUrlQr(); });
+  body.appendChild(ipInput);
+
+  const urlWrap = el('div', { class: 'mc-wg-url-qr' });
+  body.appendChild(urlWrap);
+  renderWgUrlQrInto(urlWrap);
+
+  body.appendChild(el('div', { class: 'mc-cap mc-cap-warn', text: t('mobile_connect_wg_url_note') }));
+
   body.appendChild(navRow({
     back: () => { state.step = null; state.reveal = false; render(); },
     primary: { text: t('mobile_connect_done'), onClick: () => closeModal() },
@@ -521,6 +760,32 @@ function renderWgQrInto(wrap: HTMLElement): void {
   }
   // クライアントサイドのみで QR 化。サーバーには送らない（S4）。
   wrap.appendChild(qrBlock(cfg, t('mobile_connect_wg_qr_cap'), true));
+}
+
+// D4: WG サーバ IP 入力に追従して「接続後 URL」QR を個別更新（ダミー撤廃）。
+function refreshWgUrlQr(): void {
+  const wrap = document.querySelector('.mc-wg-url-qr') as HTMLElement | null;
+  if (wrap) renderWgUrlQrInto(wrap);
+}
+function renderWgUrlQrInto(wrap: HTMLElement): void {
+  wrap.innerHTML = '';
+  const ip = state.wgServerIp.trim();
+  if (!ip || !info) {
+    wrap.appendChild(el('div', { class: 'mc-cap', text: t('mobile_connect_wg_ip_prompt') }));
+    return;
+  }
+  // ユーザー入力の WG サーバ IP で本物 URL を組み立てる（token は info 由来・既存と同水準）。
+  const tokenQuery = extractTokenQuery();
+  const url = `http://${ip}:${info.hub_port}/${tokenQuery}`;
+  wrap.appendChild(qrBlock(url, t('mobile_connect_wg_url_cap'), true));
+}
+
+// info.hub_url（= http://127.0.0.1:<port>/?token=…）から ?token=… のクエリ部を取り出す。
+// token を JS 側で組み立てず、サーバーが返した URL のクエリを再利用する。
+function extractTokenQuery(): string {
+  const src = info?.ssh_forward_url || info?.hub_url || '';
+  const idx = src.indexOf('?');
+  return idx >= 0 ? src.slice(idx) : '';
 }
 
 // UX-C: 通知テスト。push 購読状態を案内する簡易導線。
@@ -610,6 +875,101 @@ async function loadInfo(force: boolean): Promise<void> {
   if (modalOpen) render();
 }
 
+// A2/IP-4: env_kind を /api/info から取得（メッセージ出し分け用）。失敗時は 'local' 据え置き。
+async function loadEnvKind(): Promise<void> {
+  try {
+    const res = await fetch(`/api/info?token=${encodeURIComponent(token || '')}`, { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json() as { env_kind?: string };
+    const raw = String(data?.env_kind || '').trim().toLowerCase().replace(/_/g, '-');
+    if (raw === 'remote' || raw === 'remote-tunnel' || raw === 'wsl' || raw === 'local') envKind = raw;
+  } catch (_) { /* 取得失敗は local 据え置き */ }
+}
+
+// ── Tailscale 自己診断の取得・serve 操作（C1 backend エンドポイント）─────────────
+
+// GET /api/mobile-connect/tailscale を取得し tsStatus を更新する。
+async function loadTailscale(force: boolean): Promise<void> {
+  if (tsLoading) return;
+  if (tsStatus && !force) return;
+  tsLoading = true;
+  tsError = '';
+  if (force) tsStatus = null;
+  if (modalOpen && state.vpnKind === 'tailscale') render();
+  try {
+    const res = await fetch(`/api/mobile-connect/tailscale?token=${encodeURIComponent(token || '')}`, { cache: 'no-store' });
+    if (!res.ok) {
+      tsError = res.status === 401
+        ? t('mobile_connect_error_unauthorized')
+        : t('mobile_connect_error_http', { status: String(res.status) });
+    } else {
+      tsStatus = await res.json() as TailscaleStatus;
+    }
+  } catch (_) {
+    tsError = t('mobile_connect_error_network');
+  }
+  tsLoading = false;
+  if (modalOpen && state.vpnKind === 'tailscale') render();
+}
+
+// POST /api/mobile-connect/tailscale/serve … serve を有効化し、成功で再取得して ready へ。
+async function enableServe(): Promise<void> {
+  if (state.tsBusy) return;
+  state.tsBusy = true;
+  if (modalOpen) render();
+  try {
+    const res = await fetch(`/api/mobile-connect/tailscale/serve?token=${encodeURIComponent(token || '')}`, {
+      method: 'POST',
+      cache: 'no-store',
+    });
+    if (!res.ok) {
+      showToast(res.status === 401 ? t('mobile_connect_error_unauthorized') : t('mobile_connect_error_http', { status: String(res.status) }));
+      state.tsBusy = false;
+      if (modalOpen) render();
+      return;
+    }
+    const result = await res.json() as TailscaleServeResult;
+    state.tsBusy = false;
+    if (!result.ok) {
+      // serve_disabled_on_tailnet 等。状態を反映して案内へ遷移。
+      if (result.state === 'serve_disabled_on_tailnet') showToast(t('mobile_connect_ts_serve_disabled_toast'));
+      else showToast(t('mobile_connect_ts_enable_failed'));
+    }
+    // 成否いずれも最新状態を取り直して UI を出し分ける。
+    await loadTailscale(true);
+  } catch (_) {
+    state.tsBusy = false;
+    showToast(t('mobile_connect_error_network'));
+    if (modalOpen) render();
+  }
+}
+
+// DELETE /api/mobile-connect/tailscale/serve … 公開を停止（D6）。
+async function disableServe(): Promise<void> {
+  if (state.tsBusy) return;
+  state.tsBusy = true;
+  state.reveal = false;
+  if (modalOpen) render();
+  try {
+    const res = await fetch(`/api/mobile-connect/tailscale/serve?token=${encodeURIComponent(token || '')}`, {
+      method: 'DELETE',
+      cache: 'no-store',
+    });
+    state.tsBusy = false;
+    if (!res.ok) {
+      showToast(res.status === 401 ? t('mobile_connect_error_unauthorized') : t('mobile_connect_error_http', { status: String(res.status) }));
+      if (modalOpen) render();
+      return;
+    }
+    showToast(t('mobile_connect_ts_stopped_toast'));
+    await loadTailscale(true);
+  } catch (_) {
+    state.tsBusy = false;
+    showToast(t('mobile_connect_error_network'));
+    if (modalOpen) render();
+  }
+}
+
 // ── モーダル開閉 ──────────────────────────────────────────────────────────────
 
 function openModal(): void {
@@ -631,6 +991,7 @@ function openModal(): void {
   }
 
   void loadInfo(false);
+  void loadEnvKind();
   render();
 
   downHandler = (e: MouseEvent | TouchEvent) => {
@@ -671,6 +1032,10 @@ function closeModal(): void {
   const btn = document.getElementById('mobile-connect-btn');
   modalOpen = false;
   state.reveal = false;
+  // ready 時の本物 QR を背面に残さないよう Tailscale スナップショットを破棄。
+  tsStatus = null;
+  tsError = '';
+  state.tsBusy = false;
   clearRevealTimer();
   if (modal) modal.hidden = true;
   btn?.setAttribute('aria-expanded', 'false');

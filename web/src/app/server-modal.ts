@@ -316,6 +316,82 @@ function buildProfileFromForm(): ServerProfile {
   return p;
 }
 
+// ── リモートから取得（SSH-pull → フォーム自動補完） ──────────────────────────
+
+function setFormValue(id: string, value: string | number | undefined): void {
+  const el = document.getElementById(id) as HTMLInputElement | null;
+  if (!el) return;
+  el.value = value == null || value === 0 ? '' : String(value);
+}
+
+function populateHostCandidates(candidates: string[], current: string): void {
+  const wrap = document.getElementById('server-fetch-candidate-wrap') as HTMLElement | null;
+  const sel = document.getElementById('server-fetch-candidate') as HTMLSelectElement | null;
+  if (!wrap || !sel) return;
+  // 候補が無い／1 件だけならセレクタは出さない（ユーザーが入れた host をそのまま使う）。
+  const uniq = Array.from(new Set([current, ...candidates].map((h) => (h || '').trim()).filter(Boolean)));
+  if (uniq.length <= 1) {
+    wrap.hidden = true;
+    sel.innerHTML = '';
+    return;
+  }
+  sel.innerHTML = '';
+  for (const h of uniq) {
+    const opt = document.createElement('option');
+    opt.value = h;
+    opt.textContent = h;
+    if (h === current) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  wrap.hidden = false;
+}
+
+async function fetchFromRemote(btn: HTMLButtonElement): Promise<void> {
+  const host = str('server-add-host');
+  if (!host) {
+    setAddError(t('server_fetch_host_required'));
+    return;
+  }
+  setAddError('');
+  btn.disabled = true;
+  setStatus(t('server_fetch_fetching').replace('{host}', host));
+  try {
+    const data = await apiPost('/api/profiles/fetch', {
+      host,
+      user: str('server-add-user'),
+      ssh_port: num('server-add-ssh-port'),
+      identity_file: str('server-add-identity'),
+      binary: str('server-add-binary'),
+    });
+    const p: ServerProfile = data.profile || {};
+    const candidates: string[] = Array.isArray(data.host_candidates) ? data.host_candidates : [];
+    // 鍵入力は保持（補完で上書きしない）。host はユーザーが SSH した値を既定採用。
+    if (p.name) setFormValue('server-add-name', p.name);
+    if (p.host) setFormValue('server-add-host', p.host);
+    if (p.user) setFormValue('server-add-user', p.user);
+    if (p.mode) {
+      const modeSel = document.getElementById('server-add-mode') as HTMLSelectElement | null;
+      if (modeSel) modeSel.value = p.mode;
+    }
+    if (p.binary) setFormValue('server-add-binary', p.binary);
+    if (p.cwd) setFormValue('server-add-cwd', p.cwd);
+    if (p.hub_port) setFormValue('server-add-hub-port', p.hub_port);
+    populateHostCandidates(candidates, p.host || host);
+    applyAddFormVisibility();
+    // 鍵が空ならハイライトして補完を促す。
+    if (!str('server-add-identity')) {
+      setStatus(t('server_fetch_done') + ' ' + t('server_fetch_key_missing'));
+    } else {
+      setStatus(t('server_fetch_done'));
+    }
+  } catch (err) {
+    setAddError(t('server_fetch_failed') + ': ' + String((err as Error)?.message || err));
+    setStatus('');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function setAddError(msg: string): void {
   const el = document.getElementById('server-add-error');
   if (!el) return;
@@ -357,6 +433,10 @@ function resetAddForm(): void {
     const el = document.getElementById(id) as HTMLInputElement | null;
     if (el) el.value = '';
   });
+  const candWrap = document.getElementById('server-fetch-candidate-wrap') as HTMLElement | null;
+  const candSel = document.getElementById('server-fetch-candidate') as HTMLSelectElement | null;
+  if (candWrap) candWrap.hidden = true;
+  if (candSel) candSel.innerHTML = '';
   setAddError('');
 }
 
@@ -428,6 +508,13 @@ export function initServerModal(): void {
   document.getElementById('server-add-mode')?.addEventListener('change', applyAddFormVisibility);
   document.getElementById('server-add-save')?.addEventListener('click', (e) => {
     saveNewProfile(e.currentTarget as HTMLButtonElement);
+  });
+  document.getElementById('server-fetch-btn')?.addEventListener('click', (e) => {
+    void fetchFromRemote(e.currentTarget as HTMLButtonElement);
+  });
+  document.getElementById('server-fetch-candidate')?.addEventListener('change', (e) => {
+    const sel = e.currentTarget as HTMLSelectElement;
+    setFormValue('server-add-host', sel.value);
   });
   document.getElementById('server-add-cancel')?.addEventListener('click', () => {
     resetAddForm();
