@@ -1,6 +1,9 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { token, showToast } from './util.js';
+// serve 状態の取得は外部公開トグルと共有（plan_tailscale-serve-host-toggle.md C2）。
+// 有効化/停止操作はツールバーの 🌐外部公開へ一本化したため、ここでは状態取得のみ参照する。
+import { fetchExposeStatus, type TailscaleStatus, type TailscaleStateName } from './host-expose.js';
 
 // ---- 📱 モバイル接続ウィザード（QR / SSH / VPN）----
 // docs/local/plan_mobile-qr-ssh-tunnel.md C3 / docs/local/mockup-mobile-connect.html を基準に実装。
@@ -37,37 +40,7 @@ interface MobileConnectInfo {
   sshd_running?: boolean;
 }
 
-// Tailscale 自己診断レスポンス（C1 backend: GET /api/mobile-connect/tailscale）。
-// フィールド名は internal/hub/tailscale_handlers.go と厳密一致させる。
-type TailscaleStateName =
-  | 'not_installed'
-  | 'not_logged_in'
-  | 'serve_disabled_on_tailnet'
-  | 'serve_inactive'
-  | 'ready';
-
-interface TailscaleStatus {
-  state: TailscaleStateName;
-  dns_name: string;
-  online: boolean;
-  hub_port: number;
-  serve_command: string;
-  serve_off_command: string;
-  admin_url?: string;
-  https_url?: string;
-}
-
-// serve 有効化（POST）レスポンス。
-interface TailscaleServeResult {
-  ok: boolean;
-  state: TailscaleStateName;
-  dns_name: string;
-  hub_port: number;
-  admin_url?: string;
-  https_url?: string;
-  allowed_host_added?: boolean;
-  allowed_host_hint?: string;
-}
+// Tailscale 自己診断の型（TailscaleStatus / TailscaleStateName）は host-expose.ts に集約済み。
 
 type Pattern = 'ssh' | 'vpn' | 'done';
 type Platform = 'ios' | 'android';
@@ -84,7 +57,6 @@ interface WizardState {
   reveal: boolean;       // token QR を表示中か（click-to-reveal）
   wgConfig: string;      // WireGuard 設定（クライアントサイドのみ・サーバー送信なし）
   wgServerIp: string;    // WG サーバ IP（ユーザー入力・D4: ダミー撤廃）
-  tsBusy: boolean;       // Tailscale serve 有効化/停止の実行中フラグ
 }
 
 const APP_LINKS = {
@@ -119,7 +91,6 @@ function freshState(): WizardState {
     reveal: false,
     wgConfig: '',
     wgServerIp: '',
-    tsBusy: false,
   };
 }
 
@@ -616,22 +587,14 @@ function renderConnectTailscale(body: HTMLElement): void {
       break;
     case 'serve_inactive':
       body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_connect_ts_serve_inactive') }));
-      // D1: 「serve を有効化」ボタン＋等価コマンド併記（コピー可能）。
-      {
-        const enableBtn = el('button', {
-          class: 'mc-nav-btn mc-nav-primary mc-ts-action',
-          text: state.tsBusy ? t('mobile_connect_ts_enabling') : t('mobile_connect_ts_enable_btn'),
-          attrs: { type: 'button' },
-        }) as HTMLButtonElement;
-        enableBtn.disabled = state.tsBusy;
-        enableBtn.addEventListener('click', () => { void enableServe(); });
-        body.appendChild(enableBtn);
-      }
+      // C2: 有効化操作はツールバーの 🌐外部公開トグルへ一本化（二重管理の解消）。
+      // ここでは導線案内＋等価コマンド（情報）のみ残す。
+      body.appendChild(el('div', { class: 'mc-ctx-note mc-ctx-ng', text: t('mobile_connect_ts_toolbar_hint') }));
       body.appendChild(el('div', { class: 'mc-cap', text: t('mobile_connect_ts_equiv_cmd') }));
       body.appendChild(cmdRow(st.serve_command));
       break;
     case 'ready':
-      // 本物 https_url の QR（click-to-reveal＋SEC-D 自動再ぼかし）。
+      // 本物 https_url の QR（click-to-reveal＋SEC-D 自動再ぼかし）。QR はスマホ接続の本来価値なのでウィザードに残す。
       body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_connect_ts_ready_sub') }));
       body.appendChild(featBar(true));
       body.appendChild(ctxNote(true, 'mobile_connect_ts_ctx_https'));
@@ -642,18 +605,8 @@ function renderConnectTailscale(body: HTMLElement): void {
       }
       appendNotifyTest(body);
       appendHomeHint(body);
-      // D6: 「公開を停止」ボタン＋停止用の等価コマンド併記。
-      {
-        const offBtn = el('button', {
-          class: 'mc-nav-btn mc-ts-stop',
-          text: state.tsBusy ? t('mobile_connect_ts_stopping') : t('mobile_connect_ts_stop_btn'),
-          attrs: { type: 'button' },
-        }) as HTMLButtonElement;
-        offBtn.disabled = state.tsBusy;
-        offBtn.addEventListener('click', () => { void disableServe(); });
-        body.appendChild(offBtn);
-      }
-      body.appendChild(cmdRow(st.serve_off_command));
+      // C2: 公開の停止もツールバーの 🌐外部公開トグルへ一本化（ウィザードからは停止ボタンを撤去）。
+      body.appendChild(el('div', { class: 'mc-cap mc-cap-warn', text: t('mobile_connect_ts_toolbar_stop_hint') }));
       break;
     default:
       body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_connect_ts_loading') }));
@@ -888,7 +841,9 @@ async function loadEnvKind(): Promise<void> {
 
 // ── Tailscale 自己診断の取得・serve 操作（C1 backend エンドポイント）─────────────
 
-// GET /api/mobile-connect/tailscale を取得し tsStatus を更新する。
+// 状態取得は host-expose.ts の共有関数経由（serve の有効化/停止はツールバーへ一本化）。
+// ツールバー側で公開を on/off した結果もこの共有キャッシュに反映されるため、
+// ウィザードを次に開いた/再取得したときに最新状態が出る。
 async function loadTailscale(force: boolean): Promise<void> {
   if (tsLoading) return;
   if (tsStatus && !force) return;
@@ -896,78 +851,18 @@ async function loadTailscale(force: boolean): Promise<void> {
   tsError = '';
   if (force) tsStatus = null;
   if (modalOpen && state.vpnKind === 'tailscale') render();
-  try {
-    const res = await fetch(`/api/mobile-connect/tailscale?token=${encodeURIComponent(token || '')}`, { cache: 'no-store' });
-    if (!res.ok) {
-      tsError = res.status === 401
+  const r = await fetchExposeStatus(force);
+  if (r.ok) {
+    tsStatus = r.status;
+  } else {
+    tsError = r.httpStatus === 'network'
+      ? t('mobile_connect_error_network')
+      : r.httpStatus === 401
         ? t('mobile_connect_error_unauthorized')
-        : t('mobile_connect_error_http', { status: String(res.status) });
-    } else {
-      tsStatus = await res.json() as TailscaleStatus;
-    }
-  } catch (_) {
-    tsError = t('mobile_connect_error_network');
+        : t('mobile_connect_error_http', { status: String(r.httpStatus) });
   }
   tsLoading = false;
   if (modalOpen && state.vpnKind === 'tailscale') render();
-}
-
-// POST /api/mobile-connect/tailscale/serve … serve を有効化し、成功で再取得して ready へ。
-async function enableServe(): Promise<void> {
-  if (state.tsBusy) return;
-  state.tsBusy = true;
-  if (modalOpen) render();
-  try {
-    const res = await fetch(`/api/mobile-connect/tailscale/serve?token=${encodeURIComponent(token || '')}`, {
-      method: 'POST',
-      cache: 'no-store',
-    });
-    if (!res.ok) {
-      showToast(res.status === 401 ? t('mobile_connect_error_unauthorized') : t('mobile_connect_error_http', { status: String(res.status) }));
-      state.tsBusy = false;
-      if (modalOpen) render();
-      return;
-    }
-    const result = await res.json() as TailscaleServeResult;
-    state.tsBusy = false;
-    if (!result.ok) {
-      // serve_disabled_on_tailnet 等。状態を反映して案内へ遷移。
-      if (result.state === 'serve_disabled_on_tailnet') showToast(t('mobile_connect_ts_serve_disabled_toast'));
-      else showToast(t('mobile_connect_ts_enable_failed'));
-    }
-    // 成否いずれも最新状態を取り直して UI を出し分ける。
-    await loadTailscale(true);
-  } catch (_) {
-    state.tsBusy = false;
-    showToast(t('mobile_connect_error_network'));
-    if (modalOpen) render();
-  }
-}
-
-// DELETE /api/mobile-connect/tailscale/serve … 公開を停止（D6）。
-async function disableServe(): Promise<void> {
-  if (state.tsBusy) return;
-  state.tsBusy = true;
-  state.reveal = false;
-  if (modalOpen) render();
-  try {
-    const res = await fetch(`/api/mobile-connect/tailscale/serve?token=${encodeURIComponent(token || '')}`, {
-      method: 'DELETE',
-      cache: 'no-store',
-    });
-    state.tsBusy = false;
-    if (!res.ok) {
-      showToast(res.status === 401 ? t('mobile_connect_error_unauthorized') : t('mobile_connect_error_http', { status: String(res.status) }));
-      if (modalOpen) render();
-      return;
-    }
-    showToast(t('mobile_connect_ts_stopped_toast'));
-    await loadTailscale(true);
-  } catch (_) {
-    state.tsBusy = false;
-    showToast(t('mobile_connect_error_network'));
-    if (modalOpen) render();
-  }
 }
 
 // ── モーダル開閉 ──────────────────────────────────────────────────────────────
@@ -1035,7 +930,6 @@ function closeModal(): void {
   // ready 時の本物 QR を背面に残さないよう Tailscale スナップショットを破棄。
   tsStatus = null;
   tsError = '';
-  state.tsBusy = false;
   clearRevealTimer();
   if (modal) modal.hidden = true;
   btn?.setAttribute('aria-expanded', 'false');

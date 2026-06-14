@@ -434,11 +434,12 @@ export function renderSessionList() {
 
     // Files 導線はステータスバーの 📁project セグメントへ移設（plan_statusbar-files-open.md C1）。
     // ここ（プロジェクトグループ header）の「📁 Files」ボタンは廃止した。
+    // C3: "Open running sessions in grid" ボタンは projActions（☆ の左隣）へ配置する。
+    let gridBtn: HTMLButtonElement | null = null;
     if (key !== '__no_project__') {
-      // C3: "Open running sessions in grid" ボタン
       const runningSessionsInGroup = groupSessions.filter(s => s.state === 'running' || s.state === 'waiting' || (s.state || 'standby') === 'standby');
       if (runningSessionsInGroup.length > 0) {
-        const gridBtn = document.createElement('button');
+        gridBtn = document.createElement('button');
         gridBtn.className = 'project-group-grid-btn';
         gridBtn.textContent = '⊞';
         gridBtn.title = t('ctx_open_project_in_grid');
@@ -447,7 +448,6 @@ export function renderSessionList() {
           e.stopPropagation();
           openDetachedGridForSessions(runningSessionsInGroup.map(s => s.id));
         });
-        header.appendChild(gridBtn);
       }
     }
 
@@ -465,6 +465,9 @@ export function renderSessionList() {
     // プロジェクト ☆/✕ ボタン
     const projActions = document.createElement('div');
     projActions.className = 'project-group-actions';
+
+    // ☆ の左隣にグリッド起動ボタンを置く
+    if (gridBtn) projActions.appendChild(gridBtn);
 
     const projStarBtn = document.createElement('button');
     const isProjFav = projectFavorites.includes(key);

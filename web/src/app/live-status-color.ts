@@ -107,7 +107,11 @@ function buildUI(): void {
   resetBtn.textContent = ti18n('live_status_palette_reset');
 
   pop.append(bgRow, fgRow, resetBtn);
-  bar.append(btn, pop);
+  bar.append(btn);
+  // ポップオーバーは帯（#terminal-live-status: overflow:hidden）に入れると
+  // 帯の枠外へ出た瞬間クリップされて見えなくなる。body 直下に出し、開くたびに
+  // ボタン位置から position:fixed で配置する。
+  document.body.append(pop);
   popoverEl = pop;
 
   const syncInputs = () => {
@@ -115,10 +119,20 @@ function buildUI(): void {
     fgInput.value = readStored(STORAGE_LIVE_STATUS_FG_KEY) || DEFAULT_FG;
   };
 
+  // ボタンの右上にポップオーバーを配置（帯の上側に出す）。
+  const positionPopover = () => {
+    const r = btn.getBoundingClientRect();
+    pop.style.left = 'auto';
+    pop.style.right = `${Math.max(6, window.innerWidth - r.right)}px`;
+    // 一旦表示してから高さを測り、ボタンの上に重ならないよう持ち上げる。
+    pop.style.bottom = `${Math.max(6, window.innerHeight - r.top + 4)}px`;
+    pop.style.top = 'auto';
+  };
+
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (pop.hidden) syncInputs();
-    pop.hidden = !pop.hidden;
+    if (pop.hidden) { syncInputs(); pop.hidden = false; positionPopover(); }
+    else pop.hidden = true;
   });
   // 入力中（input）でライブプレビュー、確定（change）で保存
   bgInput.addEventListener('input', () => document.documentElement.style.setProperty('--live-status-bg', bgInput.value));

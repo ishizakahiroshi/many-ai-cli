@@ -501,7 +501,13 @@
         pendingContinuation = [];
         continue;
       }
-      if (blankGap === 0 && /^\s+\S/.test(line)) {
+      // 空行を挟まずに選択肢の直上(画面では直下)へ続く非選択肢行は、xterm の
+      // ハードラップで分割された折り返し継続行とみなし、直近(上方)の選択肢ラベルへ結合する。
+      // 旧実装はインデント付き行(/^\s+\S/)のみ継続扱いにしていたが、xterm の折り返しは
+      // 行頭に空白を入れないため、最長になりがちな option 1(Recommended 本文)が折り返されると
+      // ここで break して option 1 ごと欠落していた(「確認メッセージの 1 が途切れる」頻発症状)。
+      // 空行(blankGap>0)で区切られた履歴は従来どおり break するため scrollback の誤検出は増えない。
+      if (blankGap === 0) {
         pendingContinuation.push(line.trim());
         continue;
       }

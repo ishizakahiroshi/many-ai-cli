@@ -14,6 +14,7 @@
 @import url("/styles/detached-grid.css");
 @import url("/styles/server-modal.css");
 @import url("/styles/mobile-connect.css");
+@import url("/styles/host-expose.css");
 
 /* ============================================================
    テーマ変数（Dark / Light）
@@ -689,7 +690,7 @@ header {
 .card-model.card-model--with-icon svg.card-provider-icon { width: 10px; height: 10px; flex-shrink: 0; margin-right: 0; }
 /* モデル名は先頭10文字相当で打ち切り（…）。全文はバッジの data-tooltip でホバー表示。 */
 .card-model.card-model--with-icon .card-model-text { min-width: 0; max-width: 10ch; flex-shrink: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card-branch { flex-shrink: 0; min-width: 0; max-width: 50%; color: var(--green-text); background: color-mix(in srgb, var(--green-bg) 35%, transparent); border: 1px solid color-mix(in srgb, var(--green-text) 30%, transparent); border-radius: 4px; padding: 1px 5px; font-size: 0.68rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 2px; cursor: pointer; user-select: none; transition: background 0.15s, transform 0.05s, color 0.15s; font-family: Consolas, monospace; }
+.card-branch { flex-shrink: 0; min-width: 0; max-width: 50%; color: var(--green-text); background: color-mix(in srgb, var(--green-bg) 35%, transparent); border: 1px solid color-mix(in srgb, var(--green-text) 30%, transparent); border-radius: 4px; padding: 1px 5px; font-size: 0.68rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: auto; cursor: pointer; user-select: none; transition: background 0.15s, transform 0.05s, color 0.15s; font-family: Consolas, monospace; }
 .card-branch:hover { background: color-mix(in srgb, var(--green-text) 22%, transparent); color: var(--text); }
 .card-branch:active { transform: scale(0.96); }
 .card-branch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -797,7 +798,9 @@ header {
   margin-left: 2px;
 }
 .card-project { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; margin-left: 4px; }
-.card-meta-row { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+/* meta-row（2行目）はアクション(☆↻×)が上段のみのため、右パディング(42px)分まで
+   はみ出させてブランチバッジを右端近くまで寄せる（上段アクションとは縦に重ならない）。 */
+.card-meta-row { display: flex; align-items: center; gap: 6px; margin-top: 3px; margin-right: -30px; }
 .card-last-output { flex-shrink: 0; font-size: 0.72rem; color: var(--muted-2); margin-left: 2px; }
 .card-label { flex-shrink: 0; font-size: 0.75rem; color: var(--accent, #7aa2f7); font-weight: 600; white-space: nowrap; }
 .card-end-reason { flex-shrink: 0; font-size: 0.72rem; color: var(--danger, #ef4444); font-weight: 500; white-space: nowrap; max-width: 18rem; overflow: hidden; text-overflow: ellipsis; }
@@ -1360,6 +1363,24 @@ header {
 .project-group-body.hidden { display: none; }
 .group-status-chips { margin-left: auto; display: flex; gap: 4px; flex-shrink: 0; }
 .project-group-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; opacity: 1; transition: opacity 0.15s; }
+.project-group-grid-btn {
+  background: none;
+  appearance: none;
+  -webkit-appearance: none;
+  color: var(--muted);
+  border: none;
+  border-radius: 3px;
+  width: 18px;
+  height: 18px;
+  font-size: 0.8rem;
+  line-height: 18px;
+  text-align: center;
+  padding: 0;
+  cursor: pointer;
+  display: block;
+  transition: color 0.12s;
+}
+.project-group-grid-btn:hover { color: var(--accent-text); }
 .project-group--pinned > .project-group-header { border-left: 2px solid var(--warn); padding-left: 6px; }
 .status-chip { display: inline-flex; align-items: center; justify-content: center; gap: 3px; min-width: 26px; font-variant-numeric: tabular-nums; font-size: 0.8rem; font-weight: bold; padding: 2px 8px; border-radius: 4px; line-height: 1.4; }
 .status-chip--running { color: var(--badge-running-text); background: color-mix(in srgb, var(--badge-running-bg) 25%, transparent); border: 1px solid color-mix(in srgb, var(--badge-running-text) 35%, transparent); }

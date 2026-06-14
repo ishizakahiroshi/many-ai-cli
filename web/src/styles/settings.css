@@ -286,6 +286,64 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   min-height: var(--control-h-sm);
 }
 .settings-input-text:focus { border-color: var(--accent); }
+
+/* リモート PIN ログインモーダル（remote-auth.ts / plan_hub-remote-auth.md C3） */
+#pin-login-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+}
+#pin-login-overlay[hidden] { display: none; }
+#pin-login-dialog {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 22px 24px;
+  width: min(340px, 86vw);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  text-align: center;
+}
+#pin-login-title { font-size: 1.05rem; font-weight: 600; margin-bottom: 8px; }
+#pin-login-msg { font-size: 0.85rem; opacity: 0.8; margin-bottom: 14px; line-height: 1.5; }
+#pin-login-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 1.1rem;
+  letter-spacing: 0.2em;
+  text-align: center;
+  outline: none;
+}
+#pin-login-input:focus { border-color: var(--accent); }
+#pin-login-error {
+  color: #fca5a5;
+  font-size: 0.82rem;
+  margin-top: 10px;
+}
+#pin-login-error[hidden] { display: none; }
+#pin-login-submit {
+  margin-top: 14px;
+  width: 100%;
+  padding: 8px 0;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+#pin-login-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .settings-avatar-url-input { width: 130px; }
 .settings-avatar-preview-row { gap: 10px; }
 .settings-avatar-circle {
@@ -552,6 +610,17 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   font-size: 0.8rem;
   line-height: 1.55;
 }
+.confirm-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: var(--text);
+  cursor: pointer;
+  line-height: 1.45;
+}
+.confirm-check input { margin-top: 2px; flex: 0 0 auto; cursor: pointer; }
 .confirm-actions {
   grid-column: 1 / -1;
   display: flex;

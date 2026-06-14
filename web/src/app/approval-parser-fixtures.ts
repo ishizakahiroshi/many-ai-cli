@@ -282,6 +282,22 @@ test('approval parser fixtures', () => {
   assert.equal(/User specifies/.test(gluedFallback.options[2].label), false);
   assert.equal(/Recommended/.test(gluedFallback.options[0].label), true);
 
+  // xterm のハードラップで option 1(Recommended・最長本文)が物理2行へ折り返され、
+  // 継続行が行頭に空白を持たないケース。フォールバック経路（extractApprovalOptions）が
+  // 継続行で break して option 1 ごと脱落していた回帰（「確認メッセージの 1 が途切れる」頻発症状）。
+  // 継続行を直前(上方)の option 1 ラベルへ結合し、1/2/3 すべて復元できること。
+  const wrappedFallbackOpt1 = parser.extractApprovalOptions([
+    'どこまで進めるか確認します。',
+    '1. C4(docs) + C3の「全アクセス失効」ボタンのみ（＝最小構成完成・C1を実際に使え',
+    'る状態に。PINは見送り）  (Recommended)',
+    '2. 上記に加えて C2+C3のPIN一式も実装（任意PIN・ロックアウト・SEC-C新規デバイス通知まで全部）',
+    '3. C4(docs)だけ先に作る（ボタンUIは後回し）',
+    'N. User specifies',
+  ]);
+  assert.deepEqual(numbers(wrappedFallbackOpt1.options), [1, 2, 3]);
+  assert.equal(/Recommended/.test(wrappedFallbackOpt1.options[0].label), true);
+  assert.equal(/る状態に/.test(wrappedFallbackOpt1.options[0].label), true);
+
   // 連番でない「1. … 3. …」や小数「1.5」は誤分割しないこと（保守的分割の確認）。
   const notSequential = parser.extractApprovalOptions([
     '1. first 3. third',

@@ -470,11 +470,15 @@ type Config struct {
 	// AuthCookieSecret は将来のリモート認証 cookie（PIN セッション）の HMAC 署名鍵。
 	// 「全アクセス失効」で Token と共にローテーションして既存セッションを無効化する。
 	// API レスポンスには出さない（json:"-"）。
-	AuthCookieSecret       string                 `yaml:"auth_cookie_secret,omitempty" json:"-"`
-	LocalModels            []LocalModel           `yaml:"local_models,omitempty" json:"local_models,omitempty"`
-	UserPrefs              UserPrefs              `yaml:"user_prefs,omitempty" json:"user_prefs,omitempty"`
-	Voice                  VoiceConfig            `yaml:"voice,omitempty" json:"voice,omitempty"`
-	Notify                 NotifyConfig           `yaml:"notify,omitempty" json:"notify,omitempty"`
+	AuthCookieSecret string `yaml:"auth_cookie_secret,omitempty" json:"-"`
+	// RemotePINHash は任意リモート PIN（既定 OFF）の bcrypt ハッシュ。空なら PIN 無効。
+	// 非 loopback アクセス時のみ PIN ログインを要求する追加の扉（plan_hub-remote-auth.md / A）。
+	// 平文 PIN は決して保存しない。API レスポンスにも出さない（json:"-"）。
+	RemotePINHash string       `yaml:"remote_pin_hash,omitempty" json:"-"`
+	LocalModels   []LocalModel `yaml:"local_models,omitempty" json:"local_models,omitempty"`
+	UserPrefs     UserPrefs    `yaml:"user_prefs,omitempty" json:"user_prefs,omitempty"`
+	Voice         VoiceConfig  `yaml:"voice,omitempty" json:"voice,omitempty"`
+	Notify        NotifyConfig `yaml:"notify,omitempty" json:"notify,omitempty"`
 }
 
 func LoadOrCreate() (*Config, error) {

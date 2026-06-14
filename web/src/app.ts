@@ -13,6 +13,7 @@ import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintCo
 import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
+import { getExposeStatus, fetchExposeStatus, disableExpose } from './app/host-expose.js';
 import './app/detached-grid-launcher.js';
 
 export let _userAvatarUrl = '';
@@ -1231,10 +1232,24 @@ inputEl.addEventListener('blur', (e) => {
   if (!shutdownBtn) return;
 
   shutdownBtn.addEventListener('click', async () => {
-    const result = await appConfirmShutdown();
+    // 外部公開（tailscale serve）中なら確認に「公開も停止」チェック（既定 ON）を出す。
+    // serve は --bg で tailscaled 側に残るため、Hub 停止だけだと幽霊公開状態になる。
+    let exposeActive = getExposeStatus()?.state === 'ready';
+    try {
+      const r = await fetchExposeStatus(true);
+      if (r.ok && r.status) exposeActive = r.status.state === 'ready';
+    } catch (_) { /* 取得失敗時はキャッシュ値で判断 */ }
+
+    const result = await appConfirmShutdown({ exposeActive });
     if (!result) return;
     shutdownBtn.disabled = true;
-    if (result === 'sessions') {
+
+    // graceful 経路でのみ確実に停止できる（PID kill / クラッシュでは走らない）。
+    if (result.stopExpose) {
+      try { await disableExpose(); } catch (_) {}
+    }
+
+    if (result.action === 'sessions') {
       try { await fetch(`/api/kill-all?token=${token}`, { method: 'POST' }); } catch (_) {}
       try { await fetch(`/api/shutdown?token=${token}`, { method: 'POST' }); } catch (_) {}
       window.close();

@@ -31,6 +31,8 @@ import { initServerModal } from './app/server-modal.js';
 import { initWorkflowProgress } from './app/workflow-modal.js';
 import { initLiveStatusColor } from './app/live-status-color.js';
 import { initMobileConnect } from './app/mobile-connect.js';
+import { initHostExpose } from './app/host-expose.js';
+import { initRemoteAuth } from './app/remote-auth.js';
 // ステータスバー初期化（/api/user-prefs から enabled を読む）
 initTokenStatusbar();
 // detached-grid モード判定（/?view=detached-grid の場合のみ初期化）
@@ -43,3 +45,7 @@ initWorkflowProgress();
 initLiveStatusColor();
 // 📱 モバイル接続ウィザード（QR）の配線
 initMobileConnect();
+// 🌐 外部公開（Tailscale serve）トグル＋状態ドットの配線
+initHostExpose();
+// 🔒 リモートアクセス保護（全アクセス失効 / 任意 PIN / PIN ログイン）の配線
+initRemoteAuth();
