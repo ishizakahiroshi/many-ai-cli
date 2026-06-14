@@ -576,7 +576,8 @@ export function renderSessionList() {
       const reasonHtml = reasonText
         ? `<span class="card-end-reason" data-tooltip="${escapeHtml(reasonText)}">${escapeHtml(reasonText)}</span>`
         : '';
-      const metaRow = `<div class="card-meta-row"><span class="badge ${safeClassToken(state)}">${escapeHtml(label)}</span>${reasonHtml}${sessionLabel}${msgHtml}</div>`;
+      // 状態は title-row の #N 直後（ステータスバーと同じ並び）へ移したため、meta-row からは外す。
+      const metaRow = `<div class="card-meta-row">${reasonHtml}${sessionLabel}${msgHtml}</div>`;
       c.dataset.sessionId = s.id;
       const isOllamaBackedSess = (s.route === 'ollama');
       let modelBadge = '';
@@ -594,8 +595,10 @@ export function renderSessionList() {
       // 空 branch でも常に span を表示（git 外であることが分かるよう "(no git)" を表示）
       const branchLabel = branchStr || ti18n('card_branch_no_git', '(no git)');
       const branchBadge = ` <span class="card-branch" role="button" tabindex="0" data-sid="${s.id}"${branchDisabledAttr} data-tooltip="${escapeHtml(branchTip)}" aria-label="${escapeHtml(branchTip)}">${escapeHtml(branchLabel)}</span>`;
+      // 状態 pill（ステータスバー .tsb-pill と同じ ●ドット付き形状）。並び順も下のバーに合わせ #N の直後に置く。
+      const statePillHtml = ` <span class="card-state-pill ${safeClassToken(state)}"><span class="card-pdot"></span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
       c.innerHTML =
-        `<div class="card-title-row"><b>#${s.id}</b> ${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${branchBadge}</div>` +
+        `<div class="card-title-row"><b>#${s.id}</b>${statePillHtml} ${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${branchBadge}</div>` +
         metaRow;
 
       const actions = document.createElement('div');
@@ -1094,10 +1097,11 @@ export function updateSessionCardStateInPlace(id) {
   card.classList.toggle('running', state === 'running');
   card.classList.toggle('waiting', state === 'waiting');
   card.classList.toggle('active', id === activeSessionId);
-  const badge = card.querySelector('.badge');
-  if (badge) {
-    badge.className = `badge ${safeClassToken(state)}`;
-    badge.textContent = stateLabel(state);
+  const pill = card.querySelector('.card-state-pill');
+  if (pill) {
+    pill.className = `card-state-pill ${safeClassToken(state)}`;
+    const txt = pill.querySelector('.card-state-text');
+    if (txt) txt.textContent = stateLabel(state);
   }
   updateProjectGroupStatusChipsForSession(s);
   return true;

@@ -412,3 +412,138 @@ func TestCleanNativeApprovalLabelCompactsWhitespace(t *testing.T) {
 		t.Fatalf("clean label has outer whitespace: %q", got)
 	}
 }
+
+// ---- 日本語ネイティブ承認検出テスト ----
+
+// TestDetectNativeApprovalJapaneseHint は日本語ヒント語を含むコンテキストで
+// Go VT 検出器が approval を emit することを確認する。
+func TestDetectNativeApprovalJapaneseHint(t *testing.T) {
+	lines := []string{
+		"コマンドを実行しますか？",
+		"rm -rf ./tmp",
+		"",
+		"❯ 1. Yes, allow once",
+		"  2. No",
+	}
+	got := detectNativeApproval("claude", lines)
+	if got == nil {
+		t.Fatal("detectNativeApproval returned nil for Japanese hint")
+	}
+	if got.Kind != "native" {
+		t.Fatalf("kind = %q, want %q", got.Kind, "native")
+	}
+	if len(got.Options) != 2 {
+		t.Fatalf("options len = %d, want 2", len(got.Options))
+	}
+}
+
+// TestDetectNativeApprovalJapanesePermission は「許可」「承認」語で検出することを確認。
+func TestDetectNativeApprovalJapanesePermission(t *testing.T) {
+	cases := []struct {
+		name    string
+		context string
+	}{
+		{"許可", "この操作を許可しますか"},
+		{"承認", "承認しますか？"},
+		{"続行", "続行しますか？"},
+		{"よろしいですか", "よろしいですか？"},
+		{"確認してください", "操作を確認してください"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			lines := []string{
+				tc.context,
+				"",
+				"❯ 1. Yes, allow once",
+				"  2. No",
+			}
+			got := detectNativeApproval("claude", lines)
+			if got == nil {
+				t.Fatalf("detectNativeApproval returned nil for context %q", tc.context)
+			}
+		})
+	}
+}
+
+// TestDetectNativeApprovalEnglishUnchanged は英語の承認検出が日本語追加後も不変なことを確認。
+func TestDetectNativeApprovalEnglishUnchanged(t *testing.T) {
+	lines := []string{
+		"Allow tool: Bash",
+		"",
+		"❯ 1. Yes, allow once",
+		"  2. Yes, allow for this session",
+		"  3. No",
+	}
+	got := detectNativeApproval("claude", lines)
+	if got == nil {
+		t.Fatal("English approval detection returned nil")
+	}
+	if len(got.Options) != 3 {
+		t.Fatalf("options len = %d, want 3", len(got.Options))
+	}
+	if got.Options[0].Label != "Yes, allow once" {
+		t.Fatalf("option 1 label = %q", got.Options[0].Label)
+	}
+}
+
+// TestNativeApprovalJaNoFalsePositive は日本語テキストのみで承認語ラベルがない場合に
+// nil（誤検出なし）を返すことを確認する。
+func TestNativeApprovalJaNoFalsePositive(t *testing.T) {
+	// 日本語トークンを含むが選択肢に承認語がなく、カーソルもない→誤検出しない
+	lines := []string{
+		"実行しますか？",
+		"",
+		"  1. 手順 A",
+		"  2. 手順 B",
+		"  3. 手順 C",
+	}
+	got := detectNativeApproval("claude", lines)
+	if got != nil {
+		t.Fatalf("detectNativeApproval = %+v, want nil (no cursor or approval label in options)", got)
+	}
+}
+
+// TestNativeApprovalLooksValidJapanese は nativeApprovalLooksValid が日本語ヒント語を
+// hasHint として認識することを単体テストする。
+func TestNativeApprovalLooksValidJapanese(t *testing.T) {
+	claudeOpts := []proto.ApprovalOption{
+		{Label: "Yes, allow once", IsCurrent: true},
+		{Label: "No"},
+	}
+	jaCases := []string{
+		"この操作を許可しますか",
+		"承認しますか？",
+		"続行しますか？",
+		"実行しますか？",
+		"よろしいですか？",
+		"操作を確認してください",
+	}
+	for _, ctx := range jaCases {
+		if !nativeApprovalLooksValid("claude", []string{ctx}, claudeOpts) {
+			t.Errorf("nativeApprovalLooksValid returned false for Japanese context %q", ctx)
+		}
+	}
+	// 日本語トークンを含まない無関係なテキスト → hasHint=false のまま
+	if nativeApprovalLooksValid("claude", []string{"ランダムなテキスト"}, claudeOpts) {
+		t.Error("nativeApprovalLooksValid returned true for unrelated Japanese text")
+	}
+}
+
+// TestNativeApprovalJaTokensInTriggers は init() で nativeApprovalJaTokens が
+// nativeApprovalTriggerTokens に追記されていることを確認する。
+func TestNativeApprovalJaTokensInTriggers(t *testing.T) {
+	for _, tok := range nativeApprovalJaTokens {
+		b := []byte(tok)
+		found := false
+		for _, trigger := range nativeApprovalTriggerTokens {
+			if bytes.Equal(trigger, b) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("nativeApprovalJaTokens[%q] not found in nativeApprovalTriggerTokens", tok)
+		}
+	}
+}

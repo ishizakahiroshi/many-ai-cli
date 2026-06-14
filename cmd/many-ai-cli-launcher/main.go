@@ -20,9 +20,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
-	"time"
 
 	"many-ai-cli/internal/launcher"
 )
@@ -69,12 +67,12 @@ func run() error {
 		return runUI()
 	}
 
-	profile, err := selectProfile(pf, *profileName, *useLast)
+	profile, err := launcher.SelectProfile(pf, *profileName, *useLast)
 	if err != nil {
 		return err
 	}
 
-	return connect(profile)
+	return launcher.Connect(profile)
 }
 
 // runUI starts the local HTTP server for the profile selection page, opens the
@@ -105,117 +103,6 @@ func runUI() error {
 	return nil
 }
 
-// connect runs the connection flow for a known profile.
-func connect(profile launcher.Profile) error {
-	// 多重起動ガード: 同一プロファイルが既に接続中（PID 生存 + Hub 応答の
-	// 二重ガード済み）なら、新しい serve / トンネルを張らずに既存の Hub URL
-	// でブラウザを開いて終了する（exe を叩くたびにコンソール窓と serve が
-	// 増殖するのを防ぐ）。確認失敗時は best-effort で通常接続に進む。
-	if conns, err := launcher.ActiveConnectionsPruned(); err == nil {
-		for _, c := range conns {
-			if c.Profile == profile.Name {
-				fmt.Fprintf(os.Stdout, "Profile %q is already connected — reusing %s\n", profile.Name, c.HubURL)
-				launcher.OpenBrowserOnce(c.HubURL)
-				return nil
-			}
-		}
-	}
-
-	startupLock, acquired, err := launcher.TryAcquireProfileConnectLock(profile.Name)
-	if err != nil {
-		return fmt.Errorf("acquire startup lock: %w", err)
-	}
-	if !acquired {
-		fmt.Fprintf(os.Stdout, "Profile %q is already starting — waiting for Hub URL...\n", profile.Name)
-		if c, ok := launcher.WaitForActiveConnection(profile.Name, 30*time.Second); ok {
-			fmt.Fprintf(os.Stdout, "Profile %q is connected — reusing %s\n", profile.Name, c.HubURL)
-			launcher.OpenBrowserOnce(c.HubURL)
-			return nil
-		}
-		fmt.Fprintf(os.Stdout, "Profile %q is still starting; no new terminal was opened.\n", profile.Name)
-		return nil
-	}
-	defer func() { _ = startupLock.Release() }()
-
-	conn, err := launcher.ConnectorFor(profile)
-	if err != nil {
-		return err
-	}
-	fmt.Fprint(os.Stdout, launcher.CloseBehaviorNotice(profile))
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	urlCh := make(chan string, 1)
-	errCh := make(chan error, 1)
-
-	if err := conn.Start(ctx, profile, urlCh, errCh); err != nil {
-		return err
-	}
-	// 接続記録は URL 受信時に登録されるため、終了時は無条件に削除してよい
-	//（未登録なら no-op）。
-	defer func() { _ = launcher.UnregisterActiveConnection(profile.Name) }()
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		select {
-		case url, ok := <-urlCh:
-			if ok && url != "" {
-				launcher.OpenBrowserOnce(url)
-				// 他のランチャープロセス（選択 UI）から「接続中」と
-				// 見えるように記録する。
-				if err := launcher.RegisterActiveConnection(profile.Name, url); err != nil {
-					fmt.Fprintf(os.Stderr, "many-ai-cli-launcher: failed to record active connection: %v\n", err)
-				}
-				_ = startupLock.Release()
-			}
-		case <-ctx.Done():
-		}
-	}()
-
-	select {
-	case err, ok := <-errCh:
-		if !ok {
-			// errCh の close は「接続終了」（リモート serve 停止 / トンネル
-			// 切断 / wsl.exe 正常終了。Web UI の「Web のみ停止」を含む）。
-			// launcher も終了してコンソール窓を閉じる（残骸防止）。
-			fmt.Fprintln(os.Stdout, "Connection closed — exiting.")
-			stop()
-			wg.Wait()
-			return nil
-		}
-		stop()
-		wg.Wait()
-		return err
-	case <-ctx.Done():
-		wg.Wait()
-		return nil
-	}
-}
-
-// selectProfile chooses which profile to connect based on the CLI flags.
-// The caller guarantees that name or useLast is set (the no-flag case opens
-// the selection UI before this is reached).
-func selectProfile(pf *launcher.ProfilesFile, name string, useLast bool) (launcher.Profile, error) {
-	if name != "" {
-		return findByName(pf, name)
-	}
-	if useLast {
-		if pf.LastUsed == "" {
-			return launcher.Profile{}, fmt.Errorf("no last-used profile recorded in launcher-profiles.yaml")
-		}
-		return findByName(pf, pf.LastUsed)
-	}
-	return launcher.Profile{}, fmt.Errorf("selectProfile requires --profile or --last")
-}
-
-func findByName(pf *launcher.ProfilesFile, name string) (launcher.Profile, error) {
-	for _, p := range pf.Profiles {
-		if p.Name == name {
-			return p, nil
-		}
-	}
-	return launcher.Profile{}, fmt.Errorf("profile %q not found in launcher-profiles.yaml", name)
-}
+// 接続フロー（connect / selectProfile）は internal/launcher パッケージへ移設し、
+// 本体の `many-ai-cli connect` サブコマンドと共用している
+// （launcher.Connect / launcher.SelectProfile）。

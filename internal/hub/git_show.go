@@ -241,13 +241,7 @@ func parseNumstatRaw(raw string) map[string]numstatEntry {
 		}
 		added, _ := strconv.Atoi(fields[0])   // "-" は 0 として扱う（バイナリ）
 		removed, _ := strconv.Atoi(fields[1]) //nolint:mnd
-		path := fields[2]
-		// "old => new" / "{a => b}/x" 形式は new path 側を採用するため右辺優先
-		if idx := strings.LastIndex(path, " => "); idx >= 0 {
-			path = strings.TrimSpace(path[idx+4:])
-			path = strings.TrimRight(path, "}")
-			path = strings.TrimSpace(path)
-		}
+		path := gitNumstatRestoreRenamePath(strings.TrimRight(fields[2], "\r"))
 		m[path] = numstatEntry{added: added, removed: removed}
 	}
 	return m
@@ -270,4 +264,51 @@ func applyNumstat(files []gitShowFile, raw string) {
 			files[i].Removed = v.removed
 		}
 	}
+}
+
+// gitNumstatRestoreRenamePath は git numstat の brace 圧縮リネーム表記から new path を復元する。
+// git numstat は rename を "prefix/{old => new}/suffix" や "old => new" の形式で出力する。
+//
+// 例:
+//
+//	"old.go => new.go"           → "new.go"
+//	"src/{old => new}/file.go"   → "src/new/file.go"
+//	"src/{old => }/file.go"      → "src/file.go"
+//	"internal/hub/git_show.go"   → "internal/hub/git_show.go"（変化なし）
+func gitNumstatRestoreRenamePath(path string) string {
+	// brace 圧縮形: "prefix/{old => new}/suffix"
+	lBrace := strings.Index(path, "{")
+	rBrace := strings.Index(path, "}")
+	if lBrace >= 0 && rBrace > lBrace {
+		inner := path[lBrace+1 : rBrace]
+		arrowIdx := strings.Index(inner, " => ")
+		if arrowIdx < 0 {
+			// brace はあるが " => " がない → リネームではない
+			return path
+		}
+		newSeg := strings.TrimSpace(inner[arrowIdx+4:])
+		prefix := path[:lBrace]
+		suffix := path[rBrace+1:]
+		result := prefix + newSeg + suffix
+		// 連続スラッシュを畳む（newSeg が空のとき "src//file.go" になる）
+		for strings.Contains(result, "//") {
+			result = strings.ReplaceAll(result, "//", "/")
+		}
+		result = strings.TrimSuffix(result, "/")
+		return result
+	}
+	// 単純形: "old => new"
+	if idx := strings.LastIndex(path, " => "); idx >= 0 {
+		return strings.TrimSpace(path[idx+4:])
+	}
+	return path
+}
+
+// mapKeys は numstatEntry マップのキー一覧を返す（テスト用）。
+func mapKeys(m map[string]numstatEntry) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }

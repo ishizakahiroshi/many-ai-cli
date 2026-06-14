@@ -145,6 +145,16 @@ type session struct {
 	LogPath   string             `json:"log_path,omitempty"`
 	JSONLPath string             `json:"jsonl_path,omitempty"`
 	History   *sessionlog.Writer `json:"-"`
+
+	// JSON 外: per-session 入力直列化ロック（#18）。
+	// 複数 UI が同一セッションへ同時入力した場合に、hasPending チェック〜
+	// trySendInput（50ms sleep を含む bracketd-paste 二段送信）が
+	// sessionsMu 保持外で並行実行されると bracketed-paste 本文と確定 CR
+	// が PTY 上でインターリーブする問題を防ぐ。
+	// sessionsMu を 50ms sleep 中に保持しないよう、per-session の別ロックで分離する。
+	// ロック順序: inputMu は sessionsMu の外側でのみ取得する
+	//（sessionsMu 保持中に inputMu を取得しない）。
+	inputMu sync.Mutex
 }
 
 func (s *session) idleStateName() string {
@@ -252,11 +262,25 @@ type uiConn struct {
 	closeOnce sync.Once
 }
 
+// broadcastWriteTimeout は UI WebSocket への JSON フレーム書き込みデッドライン。
+// 受信側が詰まっている場合にサーバー全体がブロックされないための上限（finding #4）。
+const broadcastWriteTimeout = 5 * time.Second
+
 func newUIConn(ws *websocket.Conn) *uiConn { return &uiConn{ws: ws} }
 
 func (c *uiConn) send(m any) error {
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
+	return websocket.JSON.Send(c.ws, m)
+}
+
+// sendWithDeadline は deadline までに JSON フレームを送信する（finding #4: 書き込みブロック防止）。
+func (c *uiConn) sendWithDeadline(m any, deadline time.Time) error {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	if err := c.ws.SetWriteDeadline(deadline); err != nil {
+		return err
+	}
 	return websocket.JSON.Send(c.ws, m)
 }
 
@@ -362,6 +386,10 @@ type Server struct {
 
 	stopMu   sync.Mutex
 	stopFunc context.CancelFunc
+
+	// serverConns: 内蔵リモート接続マネージャ（SSH/WSL トンネルを Hub 子プロセス
+	// として無窓で抱える）。servers.go 参照。
+	serverConns *serverConnManager
 
 	autoOpenBrowser bool
 }
@@ -509,6 +537,17 @@ var (
 	}
 )
 
+func init() {
+	// nativeApprovalJaTokens（approval_detector.go で定義）を
+	// nativeApprovalTriggerTokens に追記する。
+	// single source: 日本語ヒント語を approval_detector.go の 1 箇所で管理し、
+	// PTY チャンクトリガー（ここ）と VT テール最終ゲート（nativeApprovalLooksValid）の
+	// 両方に自動反映させる。
+	for _, tok := range nativeApprovalJaTokens {
+		nativeApprovalTriggerTokens = append(nativeApprovalTriggerTokens, []byte(tok))
+	}
+}
+
 // newInstanceID は Hub プロセス起動ごとのランダム ID を生成する。
 // 乱数取得に失敗した場合は起動時刻ナノ秒で代替する（識別できれば十分なため）。
 func newInstanceID() string {
@@ -540,6 +579,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		modelsRemoteCache:     newModelsRemoteCache(),
 		branchRefreshSem:      make(chan struct{}, branchRefreshWorkers),
 		branchRefreshInFlight: map[string]struct{}{},
+		serverConns:           newServerConnManager(logger),
 	}
 	if store, err := sessionstore.OpenForLogDir(cfg.Hub.LogDir); err != nil {
 		logger.Warn("sqlite session store disabled", "err", err)
@@ -677,6 +717,11 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/whisper/start", s.handleWhisperStart)
 	mux.HandleFunc("/api/whisper/stop", s.handleWhisperStop)
 	mux.HandleFunc("/api/session-usage", s.handleSessionUsage)
+	// 内蔵リモート接続（🖥 Server ボタン）。servers.go 参照。
+	mux.HandleFunc("/api/servers", s.handleServers)
+	mux.HandleFunc("/api/servers/connect", s.handleServerConnect)
+	mux.HandleFunc("/api/servers/connect/status", s.handleServerConnectStatus)
+	mux.HandleFunc("/api/servers/disconnect", s.handleServerDisconnect)
 	s.registerWorkbenchRoutes(mux)
 	s.httpSrv = &http.Server{
 		Addr:    fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port),
@@ -794,6 +839,12 @@ func (s *Server) Run(ctx context.Context) error {
 		// reconnect grace period. Explicit session termination still goes through
 		// /api/kill-all, dismiss, or idle-timeout.
 		_ = s.httpSrv.Close()
+		// 内蔵リモート接続の SSH/WSL 子プロセスを全て落とし、launcher-active.json の
+		// 自 PID 分を掃除する（Hub 終了でトンネルも落ちるのが期待動作）。
+		// httpSrv.Close() の後に呼ぶこと: 先に HTTP を閉じれば、shutdown 中に新規
+		// /api/servers/connect が UnregisterAllForPID の後で接続を登録し、旧
+		// watchConnection の UnregisterActiveConnection に巻き添えで消される競合を防げる。
+		s.serverConns.closeAll()
 		if s.sessionStore != nil {
 			_ = s.sessionStore.Close()
 		}
@@ -846,6 +897,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			Path:     "/",
 			HttpOnly: true,
 			SameSite: http.SameSiteStrictMode,
+			MaxAge:   int(tokenCookieMaxAge / time.Second),
 		})
 	}
 	var b []byte
@@ -1922,7 +1974,29 @@ const maxPendingInputPerSession = 100
 // 入力を順序保持でバッファし、wrapper の (再)接続時に flushPendingInput が自動再送する
 // （= 黙って捨てない）。既に保留中の入力があるセッションでは、新規入力を直送せず
 // 末尾へ積んで順序を保つ。
+//
+// per-session inputMu (#18) により、複数 UI が同一セッションへ同時に入力しても
+// hasPending チェック〜trySendInput（50ms sleep 含む bracketd-paste 二段送信）が
+// 直列化され、bracketed-paste 本文と確定 CR のインターリーブが起きない。
+// sessionsMu は inputMu の外側でのみ取得し、50ms sleep 中に保持しない。
 func (s *Server) submitInput(wc *wrapperConn, sessionID int, combined string) {
+	// session ポインタを短期間だけ sessionsMu で取得する。
+	// session が既に削除済みの場合は nil になるので早期リターンする。
+	s.sessionsMu.Lock()
+	ses := s.sessions[sessionID]
+	s.sessionsMu.Unlock()
+
+	if ses == nil {
+		// セッションが既に終了している場合は入力を捨てる（黙って失わない挙動は
+		// 存在するセッションへの入力に限る）。
+		return
+	}
+
+	// per-session 入力直列化ロック: hasPending チェック〜trySendInput 完了まで保持。
+	// 複数 UI が同時にこの関数を呼んでも、同一 sessionID に対しては 1 件ずつ処理される。
+	ses.inputMu.Lock()
+	defer ses.inputMu.Unlock()
+
 	s.sessionsMu.Lock()
 	hasPending := len(s.pendingInput[sessionID]) > 0
 	if hasPending {
@@ -1967,7 +2041,21 @@ func (s *Server) trySendInput(wc *wrapperConn, sessionID int, combined string) (
 // flushPendingInput は wrapper の (再)接続後に保留入力を順番に再送する。
 // trySendInput が遅延 sleep しうるため goroutine で呼ぶ前提。再送に失敗した場合は
 // 残りを先頭へ戻し、次の接続でリトライする。
+// per-session inputMu (#18) を保持して実行するため、フラッシュ中に submitInput が
+// 割り込んで入力順序が乱れることはない。
 func (s *Server) flushPendingInput(sessionID int) {
+	// session ポインタを短期間だけ sessionsMu で取得する。
+	s.sessionsMu.Lock()
+	ses := s.sessions[sessionID]
+	s.sessionsMu.Unlock()
+	if ses == nil {
+		return
+	}
+
+	// per-session 入力直列化ロック: pending ドレイン中に submitInput が割り込まないよう保持。
+	ses.inputMu.Lock()
+	defer ses.inputMu.Unlock()
+
 	s.sessionsMu.Lock()
 	pending := s.pendingInput[sessionID]
 	delete(s.pendingInput, sessionID)

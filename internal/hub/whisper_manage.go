@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"many-ai-cli/internal/config"
@@ -31,7 +32,27 @@ const (
 	whisperInstallHTTPUA     = "many-ai-cli whisper installer"
 	whisperServerReadyWait   = 20 * time.Second
 	whisperDownloadExtraRoom = 256 * 1024 * 1024
+
+	// whisperDownloadHeaderTimeout は TCP 接続後に応答ヘッダが届くまでの上限。
+	// 本文(最大 488MB)の正常な低速転送は切らないため、全体 Timeout ではなく
+	// ヘッダ/ハンドシェイク単位のタイムアウトを使う。
+	whisperDownloadHeaderTimeout = 60 * time.Second
+	whisperDownloadTLSTimeout    = 30 * time.Second
+	// whisperDownloadStallTimeout は本文読込中に進捗が無いまま許容する最大時間。
+	// これを超えると Body を閉じて Read のブロックを解除し、ダウンロードを失敗させる。
+	whisperDownloadStallTimeout = 90 * time.Second
 )
+
+// whisperDownloadClient は managed Whisper のアーカイブ/モデル取得専用 HTTP クライアント。
+// http.DefaultClient（Timeout:0=無制限）と異なり、ヘッダ受信・TLS ハンドシェイクに
+// 上限を設けて stall による恒久ハングを防ぐ。本文全体への一律 Timeout は付けない
+// （488MB の正常な低速転送を中断しないため。idle/stall はウォッチドッグで検出する）。
+var whisperDownloadClient = func() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = whisperDownloadHeaderTimeout
+	transport.TLSHandshakeTimeout = whisperDownloadTLSTimeout
+	return &http.Client{Transport: transport}
+}()
 
 // whisperBinaryEntry は OS/arch ごとの managed Whisper バイナリ入手定義。
 // ServerNames は実行ファイル候補名、KeepFromArchive が非空ならアーカイブから
@@ -113,6 +134,11 @@ type whisperModelOption struct {
 	HashChecked bool   `json:"hash_checked"`
 }
 
+// whisperModelOptions はモデル選択候補。SHA256 は HuggingFace LFS ポインタ
+// （ggerganov/whisper.cpp の /raw/main/<file>.bin）から取得した値で、
+// resolve/main/ 経由でダウンロードされる実ファイルバイトの SHA256 と同一。
+// SHA256 が空のモデルは downloadFile で整合性検証をスキップする（インストールは可能）。
+// 誤値を入れると正規インストールが失敗するため、確証のない値は絶対に設定しないこと。
 var whisperModelOptions = []whisperModelOption{
 	{
 		ID:        "small",
@@ -122,6 +148,8 @@ var whisperModelOptions = []whisperModelOption{
 		SizeBytes: 488 * 1024 * 1024,
 		Quality:   "fast on ordinary CPUs (2-3s per utterance), may misspell technical terms",
 		Default:   true,
+		// SHA256: HF LFS oid (ggerganov/whisper.cpp /raw/main/ggml-small.bin)
+		SHA256: "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
 	},
 	{
 		ID:        "large-v3-turbo-q5_0",
@@ -130,6 +158,8 @@ var whisperModelOptions = []whisperModelOption{
 		URL:       "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
 		SizeBytes: 574 * 1024 * 1024,
 		Quality:   "best accuracy for Japanese/English; needs a fast multi-core CPU or GPU server",
+		// SHA256: HF LFS oid (ggerganov/whisper.cpp /raw/main/ggml-large-v3-turbo-q5_0.bin)
+		SHA256: "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
 	},
 	{
 		ID:        "tiny-q5_1",
@@ -138,6 +168,8 @@ var whisperModelOptions = []whisperModelOption{
 		URL:       "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin",
 		SizeBytes: 15 * 1024 * 1024,
 		Quality:   "smoke test / very low resource",
+		// SHA256: HF LFS oid (ggerganov/whisper.cpp /raw/main/ggml-tiny-q5_1.bin)
+		SHA256: "818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7",
 	},
 }
 
@@ -395,6 +427,10 @@ func (s *Server) installManagedWhisper(ctx context.Context, model whisperModelOp
 			return fmt.Errorf("no managed Whisper binary is available for %s/%s", runtime.GOOS, runtime.GOARCH)
 		}
 		archivePath := filepath.Join(tmpDir, whisperArchiveName(entry))
+		// 抽出成功/失敗いずれの return でも tmp アーカイブを必ず消す。
+		// downloadFile の defer は dest+".download" しか消さず、rename 後の
+		// archivePath 本体は対象外のため（成功時の明示 Remove と二重になるが無害）。
+		defer func() { _ = os.Remove(archivePath) }()
 		label := "whisper.cpp " + entry.Version
 		s.setWhisperInstallProgress("binary", label, 0, entry.SizeBytes)
 		if err := downloadFile(ctx, entry.URL, archivePath, entry.SHA256, func(done, total int64) {
@@ -734,6 +770,11 @@ func whisperFileExists(path string) bool {
 }
 
 func downloadFile(ctx context.Context, url, dest, sha256Hex string, progress func(done, total int64)) (err error) {
+	// managed Whisper の取得先は https の固定 HF / GitHub release のみ。
+	// http へのダウングレードや非 https URL は拒否する（最小ハードニング）。
+	if !strings.EqualFold(strings.SplitN(url, ":", 2)[0], "https") {
+		return fmt.Errorf("refusing non-https download URL for %s", filepath.Base(dest))
+	}
 	tmp := dest + ".download"
 	_ = os.Remove(tmp)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -741,7 +782,7 @@ func downloadFile(ctx context.Context, url, dest, sha256Hex string, progress fun
 		return err
 	}
 	req.Header.Set("User-Agent", whisperInstallHTTPUA)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := whisperDownloadClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -762,6 +803,12 @@ func downloadFile(ctx context.Context, url, dest, sha256Hex string, progress fun
 			_ = os.Remove(tmp)
 		}
 	}()
+	// stall ウォッチドッグ: 進捗が一定時間途絶えたら resp.Body を閉じ、ブロック中の
+	// Read を error 解除してダウンロードを失敗させる。これにより stall サーバ相手でも
+	// goroutine が固着せず、installManagedWhisper が error を返して
+	// setWhisperInstallError 経由で Installing=false に戻る（再 install/uninstall 可能）。
+	watch := whisperNewDownloadWatchdog(whisperDownloadStallTimeout, func() { _ = resp.Body.Close() })
+	defer watch.stop()
 	hasher := sha256.New()
 	writer := io.MultiWriter(f, hasher)
 	buf := make([]byte, 256*1024)
@@ -770,6 +817,7 @@ func downloadFile(ctx context.Context, url, dest, sha256Hex string, progress fun
 	for {
 		n, readErr := resp.Body.Read(buf)
 		if n > 0 {
+			watch.tick()
 			if _, err = writer.Write(buf[:n]); err != nil {
 				return err
 			}
@@ -782,22 +830,89 @@ func downloadFile(ctx context.Context, url, dest, sha256Hex string, progress fun
 			break
 		}
 		if readErr != nil {
+			if watch.stalled() {
+				return fmt.Errorf("download %s stalled: no data for %s", filepath.Base(dest), whisperDownloadStallTimeout)
+			}
 			return readErr
 		}
 	}
 	if err = f.Sync(); err != nil {
 		return err
 	}
+	// SHA256 検証: sha256Hex が設定されている場合のみ照合する。
+	// 不一致は即 error を返し、defer の os.Remove(tmp) が tmp ファイルを破棄する。
+	// sha256Hex が空のエントリはここをスキップして検証なしでインストールを続行する
+	// （whisperModelOptions の全モデルには SHA256 を設定済み。将来モデルを追加する
+	// 場合は必ず HF LFS oid を確認して設定すること）。
 	if sha256Hex != "" {
 		got := hex.EncodeToString(hasher.Sum(nil))
 		if !strings.EqualFold(got, sha256Hex) {
-			return fmt.Errorf("sha256 mismatch for %s: got %s", filepath.Base(dest), got)
+			return fmt.Errorf("sha256 mismatch for %s: got %s, want %s", filepath.Base(dest), got, strings.ToLower(sha256Hex))
 		}
 	}
 	if err = f.Close(); err != nil {
 		return err
 	}
 	return os.Rename(tmp, dest)
+}
+
+// whisperDownloadWatchdog は本文読込の idle/stall を監視する。timeout の間
+// tick() が一度も来なければ onStall を一度だけ呼ぶ（典型的には resp.Body.Close）。
+// tick() で計時をリセットし、stop() で監視を終了する。すべてのメソッドは
+// 並行呼び出し安全。
+type whisperDownloadWatchdog struct {
+	timeout time.Duration
+	onStall func()
+	mu      sync.Mutex
+	timer   *time.Timer
+	fired   bool
+	done    bool
+}
+
+func whisperNewDownloadWatchdog(timeout time.Duration, onStall func()) *whisperDownloadWatchdog {
+	w := &whisperDownloadWatchdog{timeout: timeout, onStall: onStall}
+	w.timer = time.AfterFunc(timeout, w.trip)
+	return w
+}
+
+func (w *whisperDownloadWatchdog) trip() {
+	w.mu.Lock()
+	if w.done || w.fired {
+		w.mu.Unlock()
+		return
+	}
+	w.fired = true
+	onStall := w.onStall
+	w.mu.Unlock()
+	if onStall != nil {
+		onStall()
+	}
+}
+
+// tick は進捗があったことを記録し、stall タイマーをリセットする。
+func (w *whisperDownloadWatchdog) tick() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.done || w.fired || w.timer == nil {
+		return
+	}
+	w.timer.Reset(w.timeout)
+}
+
+// stalled は stall を検出して onStall を発火済みかを返す。
+func (w *whisperDownloadWatchdog) stalled() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.fired
+}
+
+func (w *whisperDownloadWatchdog) stop() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.done = true
+	if w.timer != nil {
+		w.timer.Stop()
+	}
 }
 
 func extractZip(zipPath, destDir string) error {

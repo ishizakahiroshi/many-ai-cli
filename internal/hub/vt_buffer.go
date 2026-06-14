@@ -25,6 +25,24 @@ type vtBuffer struct {
 	utf8Pending []byte
 	esc         []byte
 	inOSC       bool
+	// inStringSeq は OSC 以外の文字列シーケンス（DCS/SOS/PM/APC）の
+	// ペイロードをスキップ中かを示す（finding #: DCS Sixel 等を画面に出力しない）。
+	inStringSeq bool
+}
+
+// isStringSequenceIntroducer は ESC の次のバイトが文字列シーケンス（OSC/DCS/SOS/PM/APC）を
+// 導入するかを返す。これらはペイロード全体を ST（ESC \）または BEL で終端されるまでスキップする。
+//   - ']' = OSC (Operating System Command)
+//   - 'P' = DCS (Device Control String)
+//   - 'X' = SOS (Start of String)
+//   - '^' = PM  (Privacy Message)
+//   - '_' = APC (Application Program Command)
+func isStringSequenceIntroducer(c byte) bool {
+	switch c {
+	case ']', 'P', 'X', '^', '_':
+		return true
+	}
+	return false
 }
 
 func newVTBuffer(cols, rows int) *vtBuffer {
@@ -87,6 +105,7 @@ func (b *vtBuffer) Write(data []byte) {
 		b.utf8Pending = nil
 	}
 	for len(buf) > 0 {
+		// OSC (ESC ]) スキップ: BEL または ST (ESC \) で終端。
 		if b.inOSC {
 			if buf[0] == 0x07 {
 				b.inOSC = false
@@ -101,12 +120,33 @@ func (b *vtBuffer) Write(data []byte) {
 			buf = buf[1:]
 			continue
 		}
+		// DCS/SOS/PM/APC (ESC P/X/^/_) スキップ: ST (ESC \) または BEL で終端。
+		if b.inStringSeq {
+			if buf[0] == 0x07 {
+				b.inStringSeq = false
+				buf = buf[1:]
+				continue
+			}
+			if len(buf) >= 2 && buf[0] == 0x1b && buf[1] == '\\' {
+				b.inStringSeq = false
+				buf = buf[2:]
+				continue
+			}
+			buf = buf[1:]
+			continue
+		}
 		if len(b.esc) > 0 {
 			b.esc = append(b.esc, buf[0])
 			buf = buf[1:]
 			if b.esc[0] == 0x1b && len(b.esc) >= 2 && b.esc[1] == ']' {
 				b.esc = nil
 				b.inOSC = true
+				continue
+			}
+			// DCS/SOS/PM/APC 導入文字の検出
+			if b.esc[0] == 0x1b && len(b.esc) >= 2 && isStringSequenceIntroducer(b.esc[1]) {
+				b.esc = nil
+				b.inStringSeq = true
 				continue
 			}
 			if b.escapeComplete() {

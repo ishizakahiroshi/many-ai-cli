@@ -420,6 +420,15 @@ If Windows SmartScreen or company policy prevents `many-ai-cli-launcher.exe` fro
 
 The tradeoff is that setup is more manual: the user keeps one SSH tunnel window open, then opens the Hub URL in the browser.
 
+**Simpler routes that avoid the SmartScreen dialog**
+
+Launching from a terminal (via `CreateProcess`) does not go through Explorer's reputation check, so the SmartScreen "Windows protected your PC" dialog generally does not appear. Two terminal-launched routes use the main `many-ai-cli` binary and never require double-clicking `many-ai-cli-launcher.exe`:
+
+- **Hub 🖥 Server button** — run `many-ai-cli serve` (or just start the Hub), open the dashboard, and click **🖥 Server** in the header. Manage connection profiles and connect/disconnect there; a successful connection opens the target Hub in a new tab. The SSH/WSL child process is held by the Hub itself, so no extra console window stays open.
+- **`many-ai-cli connect`** — `many-ai-cli connect --profile <name>` (or `--last`) runs the same connection flow as the launcher straight from the terminal.
+
+If you still hit a SmartScreen *dialog* (not an actual virus detection), clear the Mark-of-the-Web first: run `unblock-windows.cmd` from the extracted folder, or `Unblock-File` the binaries in PowerShell. Note this only dismisses the reputation prompt — if Microsoft Defender actually quarantines the binary (Go binaries are sometimes false-positives), code signing / an exclusion / a false-positive report is needed instead. Installing via a package manager avoids the Mark-of-the-Web entirely (the binary is built locally).
+
 **What is saved where**
 
 | Item | Saved on | Notes |
@@ -725,6 +734,7 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 | Command | Description |
 |---|---|
 | `serve [--open] [--port N]` | Start the Hub. `--open` opens the browser automatically |
+| `connect --profile <name> \| --last` | Connect to a remote Hub from the terminal using a saved launcher profile (SmartScreen-safe alternative to the launcher `.exe`) |
 | `claude [args...]` | Launch Claude Code through the Hub |
 | `codex [args...]` | Launch Codex CLI through the Hub |
 | `copilot [args...]` | Launch GitHub Copilot CLI through the Hub |

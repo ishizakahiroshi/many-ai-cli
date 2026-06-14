@@ -5,6 +5,7 @@ package launcher
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"sync"
@@ -12,7 +13,30 @@ import (
 )
 
 // WSLConnector implements Connector for WSL profiles.
-type WSLConnector struct{}
+//
+// out mirrors SSHConnector.out: nil keeps the launcher-exe behaviour
+// (os.Stdout / os.Stderr); the Hub sets io.Discard via setQuiet for quiet,
+// windowless hosting.
+type WSLConnector struct {
+	out io.Writer
+}
+
+func (c *WSLConnector) stdoutWriter() io.Writer {
+	if c.out != nil {
+		return c.out
+	}
+	return os.Stdout
+}
+
+func (c *WSLConnector) stderrWriter() io.Writer {
+	if c.out != nil {
+		return c.out
+	}
+	return os.Stderr
+}
+
+// setQuiet implements the quietable interface used by ConnectorForQuiet.
+func (c *WSLConnector) setQuiet(w io.Writer) { c.out = w }
 
 // Start launches `wsl.exe -- many-ai-cli serve` in the target distribution,
 // watches stdout/stderr for the Hub URL, then opens the default browser.
@@ -65,6 +89,7 @@ func (c *WSLConnector) run(ctx context.Context, p Profile, urlCh chan<- string, 
 	wslArgs = append(wslArgs, "--", "bash", "-ilc", shellCmd)
 
 	cmd := exec.CommandContext(ctx, "wsl.exe", wslArgs...)
+	cmd.SysProcAttr = noWindowSysProcAttr()
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		sendErr(ctx, errCh, fmt.Errorf("stdout pipe: %w", err))
@@ -91,11 +116,11 @@ func (c *WSLConnector) run(ctx context.Context, p Profile, urlCh chan<- string, 
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		ScanForURL(stdout, os.Stdout, foundCh)
+		ScanForURL(stdout, c.stdoutWriter(), foundCh)
 	}()
 	go func() {
 		defer wg.Done()
-		ScanForURL(stderr, os.Stderr, foundCh)
+		ScanForURL(stderr, c.stderrWriter(), foundCh)
 	}()
 
 	go func() {
@@ -147,7 +172,9 @@ func cleanupWSLOrphansConnector(distro string, port int) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = exec.CommandContext(ctx, "wsl.exe", args...).Run()
+	cmd := exec.CommandContext(ctx, "wsl.exe", args...)
+	cmd.SysProcAttr = noWindowSysProcAttr()
+	_ = cmd.Run()
 }
 
 // Ensure WSLConnector satisfies the Connector interface at compile time.

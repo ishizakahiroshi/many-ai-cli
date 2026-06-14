@@ -11,6 +11,7 @@
 @import url("/styles/token-statusbar.css");
 @import url("/styles/approval-queue-tab.css");
 @import url("/styles/detached-grid.css");
+@import url("/styles/server-modal.css");
 
 /* ============================================================
    テーマ変数（Dark / Light）
@@ -669,9 +670,18 @@ header {
 .card.active::before  { background: var(--accent); opacity: 1; width: 5px; top: 4px; bottom: 4px; }
 .card-title-row { display: flex; align-items: center; gap: 2px; overflow: hidden; }
 .card-title-row > b { flex-shrink: 0; }
+/* 状態 pill（下のステータスバー .tsb-pill と同形状: ●ドット付き・丸み・同じ状態色）。 */
+.card-state-pill { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 0.62rem; font-weight: 700; padding: 1px 7px; border-radius: 9px; border: 1px solid transparent; line-height: 1.2; }
+.card-state-pill .card-pdot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.card-state-pill.running  { color: var(--badge-running-text); background: color-mix(in srgb, var(--badge-running-bg) 25%, transparent); border-color: color-mix(in srgb, var(--badge-running-text) 35%, transparent); }
+.card-state-pill.waiting  { color: var(--warn-text);          background: color-mix(in srgb, var(--warn-bg) 25%, transparent);          border-color: color-mix(in srgb, var(--warn-text) 35%, transparent); }
+.card-state-pill.standby  { color: var(--badge-standby-text); background: color-mix(in srgb, var(--badge-standby-bg) 25%, transparent); border-color: color-mix(in srgb, var(--badge-standby-text) 35%, transparent); }
+.card-state-pill.error,
+.card-state-pill.disconnected { color: var(--danger);          background: color-mix(in srgb, var(--danger-bg) 25%, transparent);        border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
 .card-started-at { flex-shrink: 0; font-size: 0.72rem; color: var(--muted-2); margin-left: 3px; }
 .card-provider-icon { flex-shrink: 0; vertical-align: middle; margin-right: 2px; }
-.card-model { flex-shrink: 1; font-size: 0.72rem; color: var(--muted-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; margin-left: 2px; }
+/* モデル名の色は下のステータスバー .tsb-model（#9ece6a）に合わせて緑系で統一。 */
+.card-model { flex-shrink: 1; font-size: 0.72rem; color: #9ece6a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; margin-left: 2px; }
 /* モデルバッジ（Claude/Codex/Ollama 共通）。アイコン + モデル名。幅が狭いと ellipsis 省略しつつアイコンは常時表示。ホバーで provider · model のツールチップ。 */
 .card-model.card-model--with-icon { display: inline-flex; align-items: center; gap: 3px; cursor: default; min-width: 0; }
 .card-model.card-model--with-icon svg.card-provider-icon { width: 10px; height: 10px; flex-shrink: 0; margin-right: 0; }

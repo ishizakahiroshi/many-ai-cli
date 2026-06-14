@@ -492,6 +492,7 @@ func TestApprovalPatternAssetServesKnownFileWithToken(t *testing.T) {
 	}
 	s := newSecTestServer(t, t.TempDir())
 	req := httptest.NewRequest(http.MethodGet, "/approval-patterns/codex.json?token=tok", nil)
+	req.Host = "127.0.0.1:47777"
 	w := httptest.NewRecorder()
 	s.handleApprovalPatternAsset(w, req)
 
@@ -510,6 +511,7 @@ func TestApprovalPatternAssetRejectsTraversal(t *testing.T) {
 	setSecTestHome(t)
 	s := newSecTestServer(t, t.TempDir())
 	req := httptest.NewRequest(http.MethodGet, "/approval-patterns/../config.yaml?token=tok", nil)
+	req.Host = "127.0.0.1:47777"
 	w := httptest.NewRecorder()
 	s.handleApprovalPatternAsset(w, req)
 
