@@ -133,6 +133,8 @@
 .mc-choice-t { display: flex; flex-direction: column; min-width: 0; }
 .mc-choice-nm { font-weight: 600; }
 .mc-choice-ds { color: var(--muted); font-size: 0.72rem; margin-top: 2px; line-height: 1.5; }
+.mc-choice-note { color: var(--muted); font-size: 0.66rem; margin-top: 3px; opacity: 0.78; }
+.mc-badge-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .mc-choice-col { flex: 1; flex-direction: column; align-items: center; text-align: center; gap: 6px; }
 
 .mc-row2 { display: flex; gap: 9px; }
@@ -149,6 +151,7 @@
 .mc-badge-full { color: var(--green-text); border-color: color-mix(in srgb, var(--green) 45%, transparent); background: var(--green-bg); }
 .mc-badge-lim { color: var(--warn-text); border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn-bg) 35%, transparent); }
 .mc-badge-keep { color: var(--accent-text); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft); }
+.mc-badge-recommend { color: var(--accent-text); border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: var(--accent-soft); font-weight: 600; }
 
 /* QR */
 .mc-qrwrap { display: flex; flex-direction: column; align-items: center; gap: 7px; margin: 6px 0 4px; }

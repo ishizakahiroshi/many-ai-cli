@@ -235,6 +235,43 @@ test('approval parser fixtures', () => {
   assert.deepEqual(numbers(gluedHeadingOpt1), [1, 2]);
   assert.deepEqual(labels(gluedHeadingOpt1), ['A方式 (Recommended)', 'B方式']);
 
+  // 見出し末尾「…ますか?」の直後へ空白なしで option 1 が連結（「?1.」）し、さらに option 2 まで
+  // 同一行に巻き込まれたケースの回帰。xterm ハードラップで改行と行頭空白が同時に落ちると発生する。
+  // 文末記号「?」を分割境界に含めないと option 1/2 が見出しへ飲み込まれ、タブ見出しが
+  // 「質問文＋選択肢1＋選択肢2」に化け、残りの番号からしかボタンが作られない症状になっていた。
+  const gluedAfterQuestionMark = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    '1 スマホでセッションを「作成」した直後、画面はどうなりますか?1. 何も変わらない（作成前のセッション/画面のまま）(Recommended)2. 黒いターミナル画面に切り替わるが中身が空/止まっている',
+    '3. エラーのトースト/赤いメッセージが一瞬出る',
+    'N. User specifies',
+    '2 スマホで ☰（左上メニュー）を開き直すと、作ったセッションは一覧に出ていますか?',
+    '4. 一覧に出てこない（古いセッションだけ）(Recommended)',
+    '5. 一覧には出るが、タップしても開けない',
+    '6. 一覧に出る（PCと同じに見える）',
+    'N. User specifies',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isBatchOptions(gluedAfterQuestionMark), true);
+  assert.equal(gluedAfterQuestionMark.length, 2);
+  assert.equal(gluedAfterQuestionMark[0].title, 'スマホでセッションを「作成」した直後、画面はどうなりますか?');
+  assert.deepEqual(numbers(gluedAfterQuestionMark[0].options), [1, 2, 3]);
+  assert.equal(gluedAfterQuestionMark[0].options[0].label, '何も変わらない（作成前のセッション/画面のまま）(Recommended)');
+  assert.deepEqual(numbers(gluedAfterQuestionMark[1].options), [4, 5, 6]);
+  assert.equal(gluedAfterQuestionMark[0]._freeInput, true);
+
+  // 単一質問でも「?1.」連結（空白なし）で option 1 が欠落していた回帰。
+  // 文末記号を境界に含めることで marks=[1] の救済分岐（marks.length===1 && num===1）が働く。
+  const gluedSingleAfterQ = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'どの方式にしますか?1. A方式 (Recommended)',
+    '2. B方式',
+    'N. User specifies',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isBatchOptions(gluedSingleAfterQ), false);
+  assert.deepEqual(numbers(gluedSingleAfterQ), [1, 2]);
+  assert.deepEqual(labels(gluedSingleAfterQ), ['A方式 (Recommended)', 'B方式']);
+
   // 複数選択（#multi）: 1 問で任意個 ON/OFF。options に _multiSelect と _question が付き、
   // isMultiSelectOptions が true、isBatchOptions は false になること。
   const multi = parser.extractHubMarkerApproval([

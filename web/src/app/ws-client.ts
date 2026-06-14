@@ -22,6 +22,18 @@ export let _wsRetryDelay = 500; // 初期バックオフ ms
 export const _wsRetryMax = 10000; // 上限 ms
 let _wsReconnectTimer = null;
 
+// ---- WS 死活監視（モバイルの half-open / ゾンビ接続対策） ----
+// スマホは画面ロック・アプリ切替・Wi-Fi⇄モバイル回線のハンドオーバ等で、
+// onclose を発火しないまま接続が半オープン状態になることがある。その場合
+// ws.readyState は OPEN のまま固まり、session_update 等のライブ通知が届かず
+// 「新規セッションが出ない（リロードすると出る）」という症状になる。
+// サーバは uiPingInterval(30s) ごとに {type:'ping'} を送るため、健全な接続なら
+// 最低30秒に1回は何らかのメッセージが届く。直近受信からの経過で死活判定する。
+let _lastMsgAt = Date.now();
+let _wsWatchdog = null;
+const WS_STALE_MS = 75000; // ping 約2.5回分。これを超える無通信はゾンビとみなす
+const WS_WATCHDOG_INTERVAL_MS = 15000;
+
 // ステータスバー等から Hub 接続状態を参照するための getter。
 //   'open'        : WS 接続中
 //   'connecting'  : 接続試行中 / 再接続待ち
@@ -95,6 +107,38 @@ export function syncElapsedTimer() {
 
 document.addEventListener('visibilitychange', syncElapsedTimer);
 
+// 直近受信からの経過が WS_STALE_MS を超えていたらゾンビ接続とみなして張り直す。
+// OPEN のまま固まった half-open ソケットを能動的に検出する唯一の手段。
+function _wsWatchdogTick() {
+  if (_wsIntentionalClose) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (Date.now() - _lastMsgAt > WS_STALE_MS) {
+    // close() → onclose ハンドラが後片付け＋自動再接続をスケジュールする。
+    try { ws.close(); } catch (_) {}
+  }
+}
+
+// フォアグラウンド復帰／オンライン復帰時に接続の生死を確認し、
+// 死んでいれば即時に張り直す（ウォッチドッグの最大75秒待ちを回避）。
+function _ensureWsAlive() {
+  if (_wsIntentionalClose) return;
+  if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+    // 再接続待ちが入っていれば前倒しして即接続する。
+    if (_wsReconnectTimer) { clearTimeout(_wsReconnectTimer); _wsReconnectTimer = null; }
+    _wsRetryDelay = 500;
+    _connectWs();
+    return;
+  }
+  // OPEN でも復帰直後はゾンビの可能性がある。無通信が続いていれば張り直す。
+  if (ws.readyState === WebSocket.OPEN && Date.now() - _lastMsgAt > WS_STALE_MS) {
+    try { ws.close(); } catch (_) {}
+  }
+}
+
+document.addEventListener('visibilitychange', () => { if (!document.hidden) _ensureWsAlive(); });
+window.addEventListener('online', _ensureWsAlive);
+window.addEventListener('pageshow', _ensureWsAlive);
+
 export function _sendRegister() {
   const { cols, rows } = estimateRegisterTerminalSize();
   ws.send(JSON.stringify({ type: 'register', role: 'ui', token, cols, rows, ui_active_session_id: activeSessionId || 0 }));
@@ -150,6 +194,7 @@ export function _connectWs() {
   _ws.onerror = () => { document.getElementById('summary').textContent = t('ws_error'); };
   _ws.onclose = (e) => {
     if (ws !== _ws) return;
+    if (_wsWatchdog) { clearInterval(_wsWatchdog); _wsWatchdog = null; }
     if (_elapsedTimerInterval) { clearInterval(_elapsedTimerInterval); set__elapsedTimerInterval(null); }
     sessions.clear();
     autoDismissTimers.forEach(t => clearTimeout(t));
@@ -185,6 +230,9 @@ export function _connectWs() {
       _wsReconnectTimer = null;
     }
     _wsRetryDelay = 500; // 再接続成功でバックオフリセット
+    _lastMsgAt = Date.now();
+    if (_wsWatchdog) clearInterval(_wsWatchdog);
+    _wsWatchdog = setInterval(_wsWatchdogTick, WS_WATCHDOG_INTERVAL_MS);
     document.getElementById('summary').textContent = t('registering');
     const nsBtn = document.getElementById('new-session-btn') as HTMLButtonElement | null;
     if (nsBtn) nsBtn.disabled = false;
@@ -197,6 +245,8 @@ export function _connectWs() {
     }
   };
   _ws.onmessage = (ev) => {
+    // 任意のメッセージ受信（ping 含む）で死活タイマを更新する。
+    _lastMsgAt = Date.now();
     let m;
     try { m = JSON.parse(ev.data); } catch { return; }
     let fastRenderSessionId = null;

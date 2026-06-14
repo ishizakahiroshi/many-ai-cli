@@ -244,6 +244,28 @@
   margin-bottom: 3px;
 }
 .action-qdetail .detail-body { overflow-wrap: anywhere; line-height: 1.5; }
+/* 一括承認: 詳細メッセージの左に「送信確認 / クリア」を横並びにして高さを抑える。
+   送信バー行を独立させず detail と同じ行に収めることで縦の占有を減らす。 */
+.action-qdetail-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  margin-top: 8px;
+}
+.action-qdetail-row .action-qdetail {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.action-qdetail-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+}
+.action-qdetail-actions .action-bar-progress { white-space: nowrap; }
+.action-qdetail-btns { display: flex; gap: 6px; }
+
 .action-qfreein {
   margin-top: 8px;
   width: 100%;
@@ -550,4 +572,7 @@
     flex-direction: column;
     align-items: stretch;
   }
+  /* 狭幅では横並びだとメッセージ欄が潰れるため、メッセージ→ボタンの縦積みに戻す */
+  .action-qdetail-row { flex-direction: column-reverse; }
+  .action-qdetail-btns { flex-direction: column; }
 }
