@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -194,6 +195,34 @@ func run(args []string) error {
 			return err
 		}
 		return launcher.Connect(profile)
+	case "profile-export":
+		// リモートサーバー上で実行し、自分へ SSH 接続するための接続プロファイルを
+		// 鍵を除いて JSON 出力する。手元 PC の UI が SSH-pull でこれを取得して
+		// 接続フォームを自動補完する（plan_server-profile-export-import.md C1）。
+		fs := flag.NewFlagSet("profile-export", flag.ContinueOnError)
+		asJSON := fs.Bool("json", false, "output as JSON")
+		name := fs.String("name", "", "profile display name (default: hostname)")
+		host := fs.String("host", "", "public host to advertise first (overrides auto-detected IP; e.g. for Docker)")
+		cwd := fs.String("cwd", "", "remote working directory (default: current directory)")
+		hubPort := fs.Int("hub-port", 0, "fixed hub port (0 = auto-select)")
+		if err := fs.Parse(args[1:]); err != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				return nil
+			}
+			return err
+		}
+		if !*asJSON {
+			return errors.New("profile-export currently supports only --json output")
+		}
+		exported := launcher.BuildExportProfile(launcher.ExportOptions{
+			Name:       *name,
+			PublicHost: *host,
+			CWD:        *cwd,
+			HubPort:    *hubPort,
+		})
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(exported)
 	case "status":
 		return hub.PrintStatus(cfg)
 	case "stop":
@@ -251,6 +280,6 @@ func run(args []string) error {
 }
 
 func usage() error {
-	fmt.Println("many-ai-cli <serve|connect|wrap|claude|codex|copilot|cursor-agent|shell-init|stop|status|log-clean|uninstall|version>")
+	fmt.Println("many-ai-cli <serve|connect|wrap|claude|codex|copilot|cursor-agent|shell-init|stop|status|profile-export|log-clean|uninstall|version>")
 	return nil
 }

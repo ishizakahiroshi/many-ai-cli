@@ -675,6 +675,15 @@
                 <option value="wsl">WSL</option>
               </select>
             </label>
+            <div class="server-field server-field-ssh server-fetch-box">
+              <div class="server-fetch-title" data-i18n="server_fetch_title">Auto-fill from remote (SSH)</div>
+              <div class="server-fetch-hint" data-i18n="server_fetch_hint">Enter host / user / key, then pull the remote's own info over SSH to fill the form.</div>
+              <button id="server-fetch-btn" class="server-btn-secondary" type="button" data-i18n="server_fetch_btn">Fetch from remote</button>
+              <label class="server-field server-fetch-candidate" id="server-fetch-candidate-wrap" hidden>
+                <span class="server-field-label" data-i18n="server_fetch_host_candidate">Reachable host</span>
+                <select id="server-fetch-candidate" class="server-select"></select>
+              </label>
+            </div>
             <label class="server-field server-field-ssh">
               <span class="server-field-label" data-i18n="server_field_mode">Mode</span>
               <select id="server-add-mode" class="server-select">

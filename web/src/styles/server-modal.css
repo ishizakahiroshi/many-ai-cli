@@ -241,3 +241,16 @@
 }
 
 .server-add-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+/* ── リモートから取得（SSH-pull 自動補完） ── */
+.server-fetch-box {
+  display: block;
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.server-fetch-box[hidden] { display: none; }
+.server-fetch-title { font-size: 0.8rem; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.server-fetch-hint { font-size: 0.72rem; color: var(--text-soft); line-height: 1.45; margin-bottom: 8px; }
+.server-fetch-candidate { margin-top: 8px; }

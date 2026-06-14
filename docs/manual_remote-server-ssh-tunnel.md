@@ -1,6 +1,6 @@
 # リモートサーバー SSH トンネル運用手順
 
-> 最終更新: 2026-06-14(日) 00:15:54 — 読みやすさ改善・pnpm 導入を反映・旧名 any-ai-cli を many-ai-cli に統一
+> 最終更新: 2026-06-14(日) 21:09:45 — スマホ接続（📱）節を追加（Tailscale serve はウィザード自動化・残る手動手順のみ・Funnel 不使用・生IP 制限）
 
 ## このドキュメントは何か
 
@@ -278,6 +278,26 @@ ss -ltnp | grep ':47777'
 `47777` は実際の Hub ポートに置き換える。期待値は `127.0.0.1:<Hub port>` の listen のみ。`0.0.0.0:<Hub port>` や public IP で listen していたら止める。
 
 リモートの firewall / cloud security group で Hub ポートを inbound 許可しない。接続は SSH（`22/tcp` または運用中の SSH ポート）だけで行う。
+
+## スマホから直接つなぐ（📱 モバイル接続）
+
+手元 PC を経由せず**スマホのブラウザ / PWA から直接 Hub を開きたい**場合は、Hub UI の「📱 モバイル接続」を使う。`tailscale serve` の HTTPS 経由で「スキャンすれば実際に繋がる本物の QR」を出す。
+
+**PC 側のセットアップはウィザードで自動化済み**（`tailscale serve --bg <port>` の実行・`allowed_hosts` への tailnet 名追加・本物 URL の QR 生成は Hub が自分でやる）。利用者に残る手動手順は次の 3 つだけ:
+
+1. PC とスマホの両方に Tailscale アプリを入れる（ウィザードに導入リンク / ストア QR あり）。
+2. 両方を**同一アカウントでログイン**して同じ tailnet に参加させる。
+3. tailnet の **HTTPS を初回だけ管理コンソールで有効化**する（ウィザードがディープリンクで誘導）。このとき **Funnel（全世界公開）のチェックは必ず外す**。serve は tailnet 内限定で使い、Funnel は使わない。
+
+以後はウィザードが `serve` 状態を自己診断し、`ready` になったら `https://<実DNS名>.<tailnet>.ts.net/?token=` の QR を出す。スキャンすればダッシュボードが開く。公開を止めたいときはウィザードの「公開を停止」ボタン（`tailscale serve --https=443 off` 相当）を押す。
+
+注意:
+
+- **bind は `127.0.0.1` のまま**。`tailscale serve` が loopback へプロキシするので Hub を LAN / 外部に晒さない。
+- **HTTPS 推奨**。生IP（`100.x` 直）経路は採用しない。生IP の `http://100.x` は secure context にならず、Web Push / Service Worker / PWA インストール / マイク音声入力が無効化される。`tailscale serve` の `https://…ts.net` ならフル機能。SSH ローカルフォワードの `http://127.0.0.1:<port>` も secure context でフル機能。
+- **Docker コンテナ内 Hub では `tailscale serve` は使えない**（コンテナ内に `tailscale` CLI が無い）。その場合ウィザードは degrade し、SSH トンネル / launcher 経由のモバイル接続へ誘導する。
+- token 入り QR は**パスワード相当**。写真の流出 = Hub フルアクセスなので共有しない。
+- 詳細設計: [local/plan_mobile-connect-flow-redesign.md](local/plan_mobile-connect-flow-redesign.md)。
 
 ## 関連
 
