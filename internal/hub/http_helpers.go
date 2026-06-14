@@ -240,7 +240,17 @@ func requireMethodOneOf(w http.ResponseWriter, r *http.Request, methods ...strin
 	return false
 }
 
+// guard は token + method + Host + Origin に加え、リモート PIN ゲート（pin_auth.go）も通す。
+// PIN ログイン前に到達する必要がある /api/auth/login・/api/auth/status は guardBase を使うこと。
 func (s *Server) guard(w http.ResponseWriter, r *http.Request, methods ...string) bool {
+	if !s.guardBase(w, r, methods...) {
+		return false
+	}
+	return s.requireRemotePIN(w, r)
+}
+
+// guardBase は PIN ゲートを含まない従来の guard（token + method + Host + Origin）。
+func (s *Server) guardBase(w http.ResponseWriter, r *http.Request, methods ...string) bool {
 	if !s.requireToken(w, r) {
 		return false
 	}

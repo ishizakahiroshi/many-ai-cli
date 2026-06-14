@@ -187,10 +187,11 @@
 }
 .live-status-palette-btn:hover { opacity: 1; }
 .live-status-palette-popover {
-  position: absolute;
+  /* body 直下に出して帯の overflow:hidden によるクリップを回避し、
+     JS（live-status-color.ts）が開くたびにボタン位置から配置する。 */
+  position: fixed;
   right: 6px;
-  bottom: calc(100% + 4px);
-  z-index: 30;
+  z-index: 1000;
   pointer-events: auto;
   user-select: none;
   display: flex;

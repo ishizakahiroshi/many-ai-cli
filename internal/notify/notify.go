@@ -175,6 +175,41 @@ func (m *Manager) SendDone(payload DonePayload) {
 	}
 }
 
+// SendSecurity はセキュリティ警告（SEC-C 新規デバイス接続など）を全 backend に送る。
+// 重要度が高いため events フィルタは無視し、backend が設定されていれば常に送る。
+// 同一 title+body は sentTTL 内では 1 回だけ送る（連投抑制）。
+func (m *Manager) SendSecurity(title, body string) {
+	m.mu.Lock()
+	cfg := m.cfg
+	m.pruneSentLocked(time.Now())
+	if len(cfg.Backends) == 0 {
+		m.mu.Unlock()
+		return
+	}
+	id := "security-" + title + "-" + body
+	if _, ok := m.sent[id]; ok {
+		m.mu.Unlock()
+		return
+	}
+	m.sent[id] = time.Now()
+	m.mu.Unlock()
+
+	out := truncateUTF8(body, payloadMaxBytes)
+	for _, backend := range cfg.Backends {
+		b := backend
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
+			defer cancel()
+			if err := send(ctx, m.client, b, title, out); err != nil {
+				m.logger.Warn("notify security send failed",
+					"type", b.Type,
+					"host", notifyHostOf(b.URL),
+					"err", notifySanitizeErr(err))
+			}
+		}()
+	}
+}
+
 // SendTest は Settings のテスト送信ボタン用。指定 backend に即時送信して err を返す。
 func (m *Manager) SendTest(ctx context.Context, backend BackendConfig, title, body string) error {
 	return send(ctx, m.client, backend, title, body)

@@ -254,6 +254,64 @@ func (pm *pushManager) sendApproval(ctx context.Context, payload pushApprovalPay
 	}
 }
 
+// sendSecurity は SEC-C セキュリティ警告（新規デバイス接続）を全購読へ Web Push する。
+// sw.ts の push ハンドラは title/body をそのまま表示するため専用 type でも問題ない。
+func (pm *pushManager) sendSecurity(ctx context.Context, title, body string) {
+	pm.mu.Lock()
+	store := pm.store
+	pm.mu.Unlock()
+	if len(store.Subscriptions) == 0 || store.VAPIDPublicKey == "" || store.VAPIDPrivateKey == "" {
+		return
+	}
+	body = truncateUTF8Bytes(body, pushPayloadMaxLen)
+	sum := sha256.Sum256([]byte(title + "\x00" + body))
+	id := "security-" + hex.EncodeToString(sum[:])[:16]
+	payload, err := json.Marshal(map[string]any{
+		"type":  "security_alert",
+		"id":    id,
+		"title": title,
+		"body":  body,
+		"url":   "/",
+	})
+	if err != nil {
+		return
+	}
+	var expired []string
+	for _, sub := range store.Subscriptions {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		resp, err := webpush.SendNotificationWithContext(ctx, payload, &webpush.Subscription{
+			Endpoint: sub.Endpoint,
+			Keys:     sub.Keys,
+		}, &webpush.Options{
+			HTTPClient:      pm.httpClient,
+			Subscriber:      "mailto:many-ai-cli@localhost.invalid",
+			VAPIDPublicKey:  store.VAPIDPublicKey,
+			VAPIDPrivateKey: store.VAPIDPrivateKey,
+			TTL:             300,
+			Topic:           topicForPush(id),
+		})
+		if err != nil {
+			if pm.logger != nil {
+				pm.logger.Warn("web push security send failed", "endpoint_hash", endpointHash(sub.Endpoint), "err", pushSanitizeErr(err))
+			}
+			continue
+		}
+		if resp != nil {
+			if resp.StatusCode == http.StatusGone || resp.StatusCode == http.StatusNotFound {
+				expired = append(expired, sub.Endpoint)
+			}
+			_ = resp.Body.Close()
+		}
+	}
+	if len(expired) > 0 {
+		pm.removeExpired(expired)
+	}
+}
+
 // pushSanitizeErr は web push 送信エラーから購読エンドポイント URL（push 購読の秘密を
 // 含み得る）を取り除き、操作種別とトランスポート由来メッセージのみを残す。hub.log への
 // エンドポイント URL 平文記録を防ぐ（notify.go のエラー整形と方針を揃える）。

@@ -585,17 +585,33 @@ export function appConfirmOllamaEncoding() {
   });
 }
 
-export function appConfirmShutdown() {
-  return new Promise((resolve) => {
+// Hub 停止確認ダイアログ。
+// 戻り値: null（キャンセル）/ { action: 'shutdown'|'sessions', stopExpose: boolean }。
+// opts.exposeActive=true（tailscale serve が ready）のとき「外部公開も停止する」
+// チェックボックス（既定 ON）を表示し、その状態を stopExpose で返す。
+// serve は --bg で tailscaled 側に残るため、Hub 停止だけでは幽霊公開状態になる（既定で一緒に停止）。
+export function appConfirmShutdown(opts) {
+  const exposeActive = !!(opts && opts.exposeActive);
+  return new Promise<{ action: 'shutdown' | 'sessions'; stopExpose: boolean } | null>((resolve) => {
     const overlay = document.getElementById('model-picker-overlay');
-    if (!overlay) { resolve(window.confirm(t('shutdown_confirm')) ? 'shutdown' : null); return; }
+    if (!overlay) {
+      const ok = window.confirm(t('shutdown_confirm'));
+      resolve(ok ? { action: 'shutdown', stopExpose: exposeActive } : null);
+      return;
+    }
 
-    const close = (value) => {
+    const readStopExpose = () => {
+      if (!exposeActive) return false;
+      const cb = document.getElementById('app-confirm-stop-expose');
+      return cb ? !!cb.checked : true;
+    };
+    const close = (action) => {
+      const stopExpose = readStopExpose();
       overlay.removeEventListener('click', onOverlayClick);
       document.removeEventListener('keydown', onKeyDown);
       overlay.hidden = true;
       overlay.innerHTML = '';
-      resolve(value);
+      resolve(action ? { action, stopExpose } : null);
     };
     const onOverlayClick = (e) => { if (e.target === overlay) close(null); };
     const onKeyDown = (e) => {
@@ -606,13 +622,19 @@ export function appConfirmShutdown() {
     overlay.innerHTML = '';
     overlay.hidden = false;
 
+    const exposeRow = exposeActive ? `
+        <label class="confirm-check">
+          <input type="checkbox" id="app-confirm-stop-expose" checked>
+          <span>${escapeHtml(t('shutdown_stop_expose'))}</span>
+        </label>` : '';
+
     const dialog = document.createElement('div');
     dialog.className = 'confirm-dialog confirm-dialog--danger';
     dialog.innerHTML = `
       <div class="confirm-icon" aria-hidden="true">!</div>
       <div class="confirm-body">
         <div class="confirm-title">${escapeHtml(t('shutdown_confirm_title'))}</div>
-        <div class="confirm-message">${escapeHtml(t('shutdown_confirm'))}</div>
+        <div class="confirm-message">${escapeHtml(t('shutdown_confirm'))}</div>${exposeRow}
       </div>
       <div class="confirm-actions">
         <button class="confirm-btn" id="app-confirm-cancel">${escapeHtml(t('spawn_cancel'))}</button>

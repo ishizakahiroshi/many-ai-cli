@@ -368,12 +368,20 @@ type Server struct {
 	sessionStore      *sessionstore.Store
 	push              *pushManager
 	notifyMgr         *notify.Manager
-	logMaintenanceMu  sync.Mutex
-	whisperMu         sync.Mutex
-	whisperInstall    whisperInstallState
-	whisperCmd        *exec.Cmd
-	whisperJob        whisperProcessJob
-	whisperServerURL  string
+
+	// 任意リモート PIN（pin_auth.go）。lazy 生成のため pinLim() 経由でアクセスする。
+	pinLimiterMu sync.Mutex
+	pinLimiter   *pinLimiter
+	// SEC-C: 既知デバイス（IP+UA ハッシュ → 最終接続時刻）。未知デバイスの初回 remote 接続で通知。
+	devicesMu    sync.Mutex
+	knownDevices map[string]time.Time
+
+	logMaintenanceMu sync.Mutex
+	whisperMu        sync.Mutex
+	whisperInstall   whisperInstallState
+	whisperCmd       *exec.Cmd
+	whisperJob       whisperProcessJob
+	whisperServerURL string
 
 	branchRefreshMu       sync.Mutex
 	branchRefreshSem      chan struct{}
@@ -655,6 +663,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/mobile-connect/tailscale", s.handleTailscaleStatus)
 	mux.HandleFunc("/api/mobile-connect/tailscale/serve", s.handleTailscaleServe)
 	mux.HandleFunc("/api/auth/revoke-all", s.handleAuthRevokeAll)
+	mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
+	mux.HandleFunc("/api/auth/login", s.handleAuthLogin)
+	mux.HandleFunc("/api/auth/set-pin", s.handleAuthSetPIN)
 	mux.HandleFunc("/api/net-hint", s.handleNetHint)
 	mux.HandleFunc("/api/avatar", s.handleAvatar)
 	mux.HandleFunc("/api/spawn", s.handleSpawn)
@@ -952,6 +963,9 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			MaxAge: int(tokenCookieMaxAge / time.Second),
 		})
 	}
+	// SEC-C: リモートからの（token 認証済み）ページ取得を記録し、未知デバイスなら通知する。
+	// PIN 未入力でもここは通る（モーダルを出すため）。盗まれた token の使用を即検知する。
+	s.noteRemoteDevice(r, "page")
 	var b []byte
 	var err error
 	if s.devMode {
@@ -1009,7 +1023,14 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 	if !s.validTokenOrTrustedRemote(m.Token, remoteAddr) {
 		return
 	}
+	// リモート PIN ゲート（pin_auth.go）。loopback / PIN 無効時は素通し。
+	// wrapper は同一ホスト（loopback）から接続するため影響しない。
+	if s.remotePINRequired(remoteAddr) && !s.hasValidPINCookie(req) {
+		return
+	}
 	if m.Role == "ui" {
+		// SEC-C: リモートからの UI 接続を記録し、未知デバイスなら本人へ通知する。
+		s.noteRemoteDevice(req, "ws")
 		if m.Cols > 0 && m.Rows > 0 {
 			s.sessionsMu.Lock()
 			s.lastUICols, s.lastUIRows = m.Cols, m.Rows

@@ -84,6 +84,7 @@ Gemini CLI is intentionally out of scope.
 - **Clean transcript generation** — write readable `.txt` transcripts automatically, or regenerate them with `log-clean`
 - **Language switching** (English / Japanese)
 - **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `many-ai-cli` itself
+- **Remote access protection** — Settings → "Remote access protection" offers a **Revoke all access** kill switch (regenerates the token and auth cookie when a device is lost), an **optional PIN** required only for non-loopback access (off by default, with lockout), and **new-device connection notifications**
 
 ---
 

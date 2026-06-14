@@ -83,6 +83,8 @@
         </a>
       </div>
     </div>
+    <!-- 🌐 外部公開（Tailscale serve）トグル＋状態ドット。ホスト直下から tailnet 公開を on/off。bind は 127.0.0.1 不変。 -->
+    <button id="expose-btn" data-i18n-tooltip="expose_tooltip" aria-haspopup="dialog" aria-pressed="false">🌐 <span data-i18n="expose_btn">Expose</span><span id="expose-dot" class="expose-dot expose-dot-off"></span></button>
     <!-- 🖥 Server（内蔵リモート接続）。スマホ QR 接続ボタン(📱)を将来ここ(server-btn の直前)に挿す想定。 -->
     <button id="server-btn" data-i18n-tooltip="server_tooltip" aria-haspopup="dialog" aria-expanded="false">🖥 <span data-i18n="server_btn">Server</span></button>
     <button id="global-wakeword-btn" hidden>🎧</button>
@@ -198,6 +200,30 @@
             <input type="number" id="reconnect-grace-min" min="0" max="1440" value="60" class="settings-input-number">
           </div>
           <div class="settings-note" data-i18n="settings_reconnect_grace_desc">0 = disable reconnect. How long wrappers wait for the Hub to come back after a crash before terminating their PTY. Applies to NEW sessions only — running sessions keep the value at the time they were spawned.</div>
+        </div>
+      </details>
+      <details class="settings-section" data-section="remote-auth">
+        <summary class="settings-section-title"><span data-i18n="settings_remote_auth">リモートアクセス保護</span></summary>
+        <div class="settings-section-body">
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_revoke_all">全アクセスを失効</span>
+            <div class="settings-row-actions">
+              <button id="revoke-all-btn" class="settings-inline-btn danger" data-i18n="settings_revoke_all_btn">失効する</button>
+            </div>
+          </div>
+          <div class="settings-note settings-note-warn" data-i18n="settings_revoke_all_desc">Hub の token と認証 cookie を再生成し、紛失端末を含む全デバイスを弾きます。このPCも新しいURLで再ログインが必要になります。SSH/VPN の鍵失効は別途必要です（紛失時プレイブック参照）。</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_remote_pin">リモート PIN（任意）</span>
+            <div class="settings-row-actions">
+              <span id="remote-pin-status" class="settings-note"></span>
+            </div>
+          </div>
+          <div class="settings-row">
+            <input type="password" inputmode="numeric" pattern="[0-9]*" id="remote-pin-input" class="settings-input-text" placeholder="6+ digits" autocomplete="off">
+            <button id="remote-pin-set-btn" class="settings-inline-btn" data-i18n="settings_remote_pin_set">設定</button>
+            <button id="remote-pin-clear-btn" class="settings-inline-btn danger" data-i18n="settings_remote_pin_clear" hidden>解除</button>
+          </div>
+          <div class="settings-note" data-i18n="settings_remote_pin_desc">既定 OFF。設定すると非 loopback（スマホ/VPN）からのアクセス時に PIN ログインを要求します。loopback（このPC）は従来どおり token のみで通ります。VPN 専用で SSH を置かない運用の追加の鍵向けです。</div>
         </div>
       </details>
       <details class="settings-section" data-section="log">
@@ -1217,6 +1243,17 @@
     </div>
   </div>
   <div id="model-picker-overlay" hidden></div>
+
+  <!-- リモート PIN ログインモーダル（plan_hub-remote-auth.md C3 / 非 loopback 未認証時のみ表示） -->
+  <div id="pin-login-overlay" hidden>
+    <div id="pin-login-dialog">
+      <div id="pin-login-title" data-i18n="pin_login_title">PIN を入力</div>
+      <div id="pin-login-msg" data-i18n="pin_login_msg">このHubはリモートPINで保護されています。PINを入力してください。</div>
+      <input type="password" inputmode="numeric" pattern="[0-9]*" id="pin-login-input" autocomplete="off">
+      <div id="pin-login-error" hidden></div>
+      <button id="pin-login-submit" data-i18n="pin_login_submit">ログイン</button>
+    </div>
+  </div>
 
   <!-- トークン/コスト ステータスバー（画面最下部固定） -->
   <div id="token-statusbar" style="display:none" role="status" aria-live="off">

@@ -1,0 +1,110 @@
+/* host-expose.css — 🌐 外部公開（Tailscale serve）トグル＋状態ドット。
+   親 plan: docs/local/plan_tailscale-serve-host-toggle.md（C1）。
+   配色は :root テーマ変数と mobile-connect.css の .mc-status 配色トークンに合わせる。 */
+
+/* ── ヘッダーボタン（#server-btn と同じ見た目） ── */
+#expose-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 4px 8px;
+  font-size: 0.85rem;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  min-height: var(--control-h-sm);
+}
+#expose-btn:hover,
+#expose-btn[aria-pressed="true"],
+#expose-btn.expose-on {
+  color: var(--text);
+  border-color: var(--line);
+  background: var(--bg-elev);
+}
+#expose-btn:disabled { opacity: 0.6; cursor: progress; }
+
+@media (max-width: 720px) {
+  #expose-btn span[data-i18n="expose_btn"] { display: none; }
+  #expose-btn { padding: 4px 7px; }
+}
+
+/* ── 状態ドット ── */
+.expose-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--line-soft);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--line) 60%, transparent);
+}
+.expose-dot-ready {
+  background: var(--green, #3fb950);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--green) 50%, transparent),
+              0 0 6px color-mix(in srgb, var(--green) 70%, transparent);
+}
+.expose-dot-inactive { background: var(--muted); box-shadow: none; }
+.expose-dot-warn { background: var(--warn, #d29922); box-shadow: 0 0 0 1px color-mix(in srgb, var(--warn) 50%, transparent); }
+.expose-dot-off { background: var(--line-soft); box-shadow: none; opacity: 0.7; }
+.expose-dot-busy {
+  background: var(--accent);
+  animation: expose-dot-pulse 1s ease-in-out infinite;
+}
+@keyframes expose-dot-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+/* ── 案内ポップオーバー（要ログイン / serve 未有効 / 未導入） ── */
+.expose-pop {
+  position: fixed;
+  z-index: 2200;
+  width: min(320px, 92vw);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.expose-pop-title { font-weight: 600; font-size: 0.9rem; color: var(--text); }
+.expose-pop-msg { font-size: 0.78rem; color: var(--muted); line-height: 1.6; }
+.expose-pop-warn {
+  color: var(--warn-text);
+  background: color-mix(in srgb, var(--warn-bg) 35%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  border-radius: 8px;
+  padding: 7px 9px;
+}
+.expose-pop-warn b { color: var(--warn-text); }
+.expose-pop-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--accent-text);
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+}
+.expose-pop-link:hover { border-color: var(--accent); }
+.expose-pop-link-ico { font-size: 1rem; }
+.expose-pop-refresh {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--accent-text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.78rem;
+  padding: 2px 0;
+}
+.expose-pop-refresh:hover { text-decoration: underline; }
