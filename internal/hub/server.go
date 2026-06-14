@@ -887,17 +887,26 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	// UI が URL から token を除去した後のリロード（token なし GET /）でも
 	// 認証が通るよう、HttpOnly cookie に token を保持させる。
 	// SameSite=Strict によりクロスサイト送信されないため CSRF 経路にはならない。
+	//
+	// ただし Set-Cookie は「有効な token が実際に提示された」要求にのみ行う。
+	// requireToken は allow_loopback_without_token 有効時に token 未提示の loopback
+	// 要求も通すが、その経路（バイパスのみ通過した無 token 要求）に対して全権 token を
+	// Set-Cookie で配ってしまうと、同一マシンの任意プロセスが生 HTTP 応答から実 token を
+	// 採取できる。requestToken の実 token 一致を再評価し、真のときだけ Cookie を発行する。
 	s.cfgMu.Lock()
 	tok := s.cfg.Token
 	s.cfgMu.Unlock()
-	if tok != "" {
+	if tok != "" && validToken(requestToken(r), tok) {
 		http.SetCookie(w, &http.Cookie{
 			Name:     tokenCookieName,
 			Value:    tok,
 			Path:     "/",
 			HttpOnly: true,
 			SameSite: http.SameSiteStrictMode,
-			MaxAge:   int(tokenCookieMaxAge / time.Second),
+			// 永続セッション Cookie 化を避け、失効口を与える。起動毎 token と
+			// 不一致になれば（Hub 再起動で token がローテートされた等）期限切れ後に
+			// 再認証へ倒れる。MaxAge>0 なら Expires も併せて付与される。
+			MaxAge: int(tokenCookieMaxAge / time.Second),
 		})
 	}
 	var b []byte

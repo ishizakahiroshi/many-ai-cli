@@ -15,9 +15,18 @@ import (
 
 // secretPatterns は PTY 出力から既知の秘密文字列を伏字化するパターン一覧。
 // ヒューリスティックなので過剰マスクは許容し、取りこぼしは残る前提。
+//
+// この slice のパターンは「キャプチャグループ 1 を prefix として残し、それ以降の
+// マッチ全体を *** に置換する」方式で処理される（グループ無しは全体を *** にする）。
+// group2 のみ伏字化したいパターン（資格情報付き URL など）は secretGroup2Patterns へ。
 var secretPatterns = []*regexp.Regexp{
 	// 汎用 API キー変数への代入 / 出力: ANTHROPIC_API_KEY=sk-... など
 	regexp.MustCompile(`(?i)([A-Z_]*API_KEY=)\S+`),
+	// PASSWORD= / SECRET= / TOKEN= など汎用シークレットの代入形（キー名は残し値を伏字化）。
+	// 値長 6 文字以上に限定して通常テキストの過剰マスクを抑える。区切りは = または :。
+	// group1 はマッチ先頭から始まる必要がある（prefix 保持ロジックが m[0:len(group1)] を残すため）。
+	// DB_PASSWORD= のように接頭辞付きキー名も group1 に取り込んで丸ごと残す。
+	regexp.MustCompile(`(?i)((?:[A-Z0-9]+_)?(?:PASSWORD|PASSWD|PWD|SECRET|ACCESS_KEY|SECRET_KEY|AUTH_TOKEN|API_TOKEN|ACCESS_TOKEN)\s*[=:]\s*)\S{6,}`),
 	// Anthropic / OpenAI トークン: sk-ant-... / sk-...
 	regexp.MustCompile(`sk-(?:ant-)?[A-Za-z0-9_\-]{20,}`),
 	// GitHub tokens: classic PAT, fine-grained PAT, OAuth / user / server / refresh tokens.
@@ -34,6 +43,16 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(Bearer )\S{8,}`),
 	// AWS アクセスキー
 	regexp.MustCompile(`(?:AKIA|ASIA|AROA)[A-Z0-9]{16}`),
+	// PEM 秘密鍵ブロックは丸ごと伏字化（BEGIN〜END をまとめて）。
+	regexp.MustCompile(`(?s)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----`),
+}
+
+// secretGroup2Patterns は group1 と group3 を残し group2（パスワード）のみを伏字化するパターン。
+// 資格情報付き URL（scheme://user:pass@host）で host 等を壊さずパスワードだけを隠す用途。
+var secretGroup2Patterns = []*regexp.Regexp{
+	// scheme://user:pass@host の pass のみ伏字化（group1=scheme://user:, group2=pass, group3=@）。
+	// ユーザ名・パスワードに :/@ や空白を含まない一般的な DSN を対象に絞る。
+	regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://[^\s:/@]+:)([^\s:/@]+)(@)`),
 }
 
 // MaskSecrets は s 中の既知の秘密パターンを "***" に置換して返す。
@@ -53,6 +72,10 @@ func MaskSecrets(s string) string {
 		} else {
 			s = re.ReplaceAllString(s, "***")
 		}
+	}
+	// group2（パスワード）のみ伏字化するパターン: group1 + "***" + group3 で再構築。
+	for _, re := range secretGroup2Patterns {
+		s = re.ReplaceAllString(s, "${1}***${3}")
 	}
 	return s
 }

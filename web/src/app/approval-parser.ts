@@ -164,8 +164,14 @@
 
   function extractHubMarkerApproval(lines) {
     const source = Array.isArray(lines) ? lines : [];
-    const searchStart = Math.max(0, source.length - 40);
-    const recentText = source.slice(searchStart).join('\n');
+    // [MANY-AI-CLI]…[/MANY-AI-CLI] を「末尾優先の完全ブロック」として取り出す。
+    // ブロックの行数に依存させない（固定窓で切らない）のが要点 — 複数質問一括や #multi で
+    // 選択肢が増え、長い日本語ラベルが端末幅で折り返されてブロックが何十行になっても、
+    // 開きマーカーが窓から外れて末尾の質問だけ拾う事故を構造的に防ぐ。マーカーは明示
+    // デリミタ済みで scrollback 誤検出の懸念がないため source 全体を走査してよい。
+    // 取りこぼしの実質的な上限は呼び出し側が保持する pendingTextTail の文字数
+    // （APPROVAL_PENDING_TEXT_TAIL_LIMIT）のみ＝制約をそこ一点に集約する。
+    const recentText = source.join('\n');
     const blockRe = /\[MANY-AI-CLI\]([\s\S]*?)\[\/MANY-AI-CLI\]/g;
     let match;
     let lastBlock = null;
@@ -177,9 +183,11 @@
       return parseHubBlock(inner);
     }
 
+    // 開き/閉じが別チャンクに割れて全文一致しなかった場合の末尾アンカー・フォールバック。
+    // 同じく固定窓は使わず source 全体を末尾から遡って対の開きマーカーを探す。
     let closeIdx = -1;
     let openIdx = -1;
-    for (let i = source.length - 1; i >= searchStart; i--) {
+    for (let i = source.length - 1; i >= 0; i--) {
       const line = source[i];
       if (/\[MANY-AI-CLI\]/.test(line) && /\[\/MANY-AI-CLI\]/.test(line)) {
         const inner = line.replace(/^[\s\S]*?\[MANY-AI-CLI\]/, '').replace(/\[\/MANY-AI-CLI\][\s\S]*$/, '').trim();

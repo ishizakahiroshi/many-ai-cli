@@ -247,16 +247,29 @@ func (s *Server) guard(w http.ResponseWriter, r *http.Request, methods ...string
 	if len(methods) > 0 && !requireMethodOneOf(w, r, methods...) {
 		return false
 	}
-	// Host 許可リスト検証（DNS リバインディング防御）: 全メソッド（GET 含む）で常に必須。
-	// トークン認証済みの GET であっても Host 許可リスト外は 403。
+	stateChange := methodAllowsStateChange(r.Method)
+	// Host 許可リスト検証（DNS リバインディング防御）:
+	//   - 全メソッド（GET/HEAD/OPTIONS 含む）で常に必須。
+	//   - トークン認証済みの GET であっても Host 許可リスト外（例 Host=evil.example）は 403。
+	//   - defense-in-depth: トークン漏洩時でも DNS リバインディング由来の越境読み取りを阻止。
 	if !s.requireAllowedHubHost(w, r) {
 		return false
 	}
 	// Origin / Sec-Fetch-Site による CSRF 追加チェックは状態変更系（非GET）のみ。
-	if methodAllowsStateChange(r.Method) && !s.requireAllowedRequestOrigin(w, r) {
+	// GET/HEAD/OPTIONS は安全側メソッドのため CSRF 追加チェックを課さない。
+	if stateChange && !s.requireAllowedRequestOrigin(w, r) {
 		return false
 	}
 	return true
+}
+
+// hasValidToken は、リクエストが有効なトークンを実際に提示しているか
+// （loopback/trusted バイパスではなくトークン認証で通過しているか）を返す。
+func (s *Server) hasValidToken(r *http.Request) bool {
+	s.cfgMu.Lock()
+	want := s.cfg.Token
+	s.cfgMu.Unlock()
+	return validToken(requestToken(r), want)
 }
 
 // methodAllowsStateChange は CSRF（Origin/Sec-Fetch-Site）追加チェックを

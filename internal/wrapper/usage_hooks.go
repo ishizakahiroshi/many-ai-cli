@@ -122,12 +122,25 @@ func codexConfigPath() string {
 	return filepath.Join(codexHome, "config.toml")
 }
 
+// usageHookQuotePOSIX は s を POSIX シングルクォートで囲み、シェル再解釈時の
+// 語分割・展開を防ぐ（埋め込みシングルクォートは close/quote/reopen イディオム）。
+// Codex は config.toml の command 値（TOML 文字列）を取り出した後さらにシェルとして
+// 解釈するため、exe パスにスペースが含まれると無クォートでは語分割で壊れる。
+// toShellPath で正スラッシュ化済みのパスはバックスラッシュを含まないので、
+// このシングルクォート化だけで安全に 1 引数化できる。
+func usageHookQuotePOSIX(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
 // codexStopHookBlock は注入するブロックテキストを返す。
 // 注意: Codex の config.toml フォーマットは要実機確認。
 // 現在は OpenAI Codex CLI の [[hooks.Stop]] TOML テーブル配列形式を想定。
 func codexStopHookBlock(p UsageHookParams) string {
+	// exe パスのみクォートする。HubURL（ポート番号のみ）と Token（hex）は型上
+	// シェルメタ文字を持てないためクォート不要だが、exe パスはユーザーの配置場所
+	// 次第でスペースを含み得るので語分割を防ぐ。
 	cmd := fmt.Sprintf("%s usage-relay --provider codex --hub %s --token %s --session %d",
-		toShellPath(p.ExePath), p.HubURL, p.Token, p.SessionID)
+		usageHookQuotePOSIX(toShellPath(p.ExePath)), p.HubURL, p.Token, p.SessionID)
 	return strings.Join([]string{
 		usageHookBlockStart,
 		"[[hooks.Stop]]",

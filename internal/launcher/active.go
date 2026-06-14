@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -31,6 +32,16 @@ const connectLockPrefix = "launcher-connect-"
 // activeProbeTimeout bounds the /api/info liveness probe per entry.
 const activeProbeTimeout = 800 * time.Millisecond
 const activePollInterval = 500 * time.Millisecond
+
+// activeFileMu serializes the load→modify→save sequences against
+// launcher-active.json within this process. saveActiveFile already provides
+// cross-process atomicity (temp file + rename), but that is per-write, not
+// transactional: without this guard, two goroutines in the same process
+// (e.g. UI server mode running RegisterActiveConnection and
+// ActiveConnectionsPruned concurrently) can read the same state and clobber
+// each other's update on save. loadActiveFile/saveActiveFile themselves do
+// NOT take this lock; callers hold it across the whole read-modify-write.
+var activeFileMu sync.Mutex
 
 // ActiveConnection is one established launcher connection recorded in
 // launcher-active.json.
@@ -230,6 +241,8 @@ func (l *ProfileConnectLock) Release() error {
 // RegisterActiveConnection records (or replaces) the calling process's
 // connection for profile in launcher-active.json.
 func RegisterActiveConnection(profile, hubURL string) error {
+	activeFileMu.Lock()
+	defer activeFileMu.Unlock()
 	d, err := loadActiveFile()
 	if err != nil {
 		return err
@@ -270,6 +283,8 @@ func UnregisterAllForPID() error {
 // removeOwnEntries drops entries with the calling process's PID that also
 // satisfy match.
 func removeOwnEntries(match func(ActiveConnection) bool) error {
+	activeFileMu.Lock()
+	defer activeFileMu.Unlock()
 	d, err := loadActiveFile()
 	if err != nil {
 		return err
@@ -322,6 +337,8 @@ func WaitForActiveConnection(profile string, timeout time.Duration) (ActiveConne
 // collectActive applies the double guard (PID alive + Hub probe) to every
 // recorded entry. alive and probe are injectable for tests.
 func collectActive(alive func(pid int) bool, probe func(hubURL string) bool) ([]ActiveConnection, error) {
+	activeFileMu.Lock()
+	defer activeFileMu.Unlock()
 	d, err := loadActiveFile()
 	if err != nil {
 		return nil, err

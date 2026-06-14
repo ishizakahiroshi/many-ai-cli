@@ -215,14 +215,33 @@ func newMentionTestServer(t *testing.T, projDir string, sessionID int) (*Server,
 	s := newTestFilesContentServer(projDir)
 	s.sessionStore = store
 	s.sessions[sessionID] = &session{ID: sessionID, CWD: projDir}
+	// mention はユーザー入力（user_input → role='user'）として保存する。
+	// read-only バイパスは role='user' 言及のみで許可される仕様のため、
+	// 正規 UX（ユーザーがチャットで言及したファイルを開く）はこの経路で検証する。
 	mention := func(text string) {
 		t.Helper()
-		ev := map[string]any{"ts": time.Now().Format(time.RFC3339), "type": "pty_output", "session_id": sessionID, "text": text}
+		ev := map[string]any{"ts": time.Now().Format(time.RFC3339), "type": "user_input", "session_id": sessionID, "text": text}
 		if err := store.StoreEvent(sessionID, ev); err != nil {
 			t.Fatalf("StoreEvent: %v", err)
 		}
 	}
 	return s, mention
+}
+
+// newMentionTestServerAI は AI 出力（pty_output → role='ai'）言及を登録できる
+// ヘルパ付きの Server を返す。AI 出力一致では read-only バイパスが効かないこと
+// （インジェクション経路の遮断）を検証するために使う。
+func newMentionTestServerAI(t *testing.T, projDir string, sessionID int) (*Server, func(text string)) {
+	t.Helper()
+	s, _ := newMentionTestServer(t, projDir, sessionID)
+	mentionAI := func(text string) {
+		t.Helper()
+		ev := map[string]any{"ts": time.Now().Format(time.RFC3339), "type": "pty_output", "session_id": sessionID, "text": text}
+		if err := s.sessionStore.StoreEvent(sessionID, ev); err != nil {
+			t.Fatalf("StoreEvent: %v", err)
+		}
+	}
+	return s, mentionAI
 }
 
 func callFilesContentWithSession(t *testing.T, s *Server, path string, sessionID int) (int, string, filesContentResp) {
@@ -312,7 +331,31 @@ func TestHandleFilesDownload_UnmentionedOutsidePathForbidden(t *testing.T) {
 	}
 }
 
-func TestHandleFilesDownload_MentionedOutsidePathAllowed(t *testing.T) {
+// TestHandleFilesDownload_MentionedOutsideTextAllowed は、ユーザーがチャットで言及した
+// スコープ外の「テキストファイル」は read-only バイパスでダウンロードできることを確認する。
+func TestHandleFilesDownload_MentionedOutsideTextAllowed(t *testing.T) {
+	projDir := t.TempDir()
+	outsideFile := filepath.Join(t.TempDir(), "plan_outside.md")
+	if err := os.WriteFile(outsideFile, []byte("outside\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s, mention := newMentionTestServer(t, projDir, 7)
+	mention("plan: " + outsideFile + "\n")
+
+	code, body, _ := callFilesDownloadWithSession(t, s, outsideFile, 7)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", code, body)
+	}
+	if body != "outside\n" {
+		t.Fatalf("body = %q", body)
+	}
+}
+
+// TestHandleFilesDownload_MentionedOutsideBinaryForbidden は、ユーザーが言及していても
+// スコープ外の「テキスト/メディア以外のバイナリ」は read-only バイパス経由では
+// ダウンロードできない（type ゲート）ことを確認する。
+func TestHandleFilesDownload_MentionedOutsideBinaryForbidden(t *testing.T) {
 	projDir := t.TempDir()
 	outsideFile := filepath.Join(t.TempDir(), "artifact.bin")
 	if err := os.WriteFile(outsideFile, []byte("outside\n"), 0o644); err != nil {
@@ -323,11 +366,33 @@ func TestHandleFilesDownload_MentionedOutsidePathAllowed(t *testing.T) {
 	mention("artifact: " + outsideFile + "\n")
 
 	code, body, _ := callFilesDownloadWithSession(t, s, outsideFile, 7)
-	if code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", code, body)
+	if code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", code, body)
 	}
-	if body != "outside\n" {
-		t.Fatalf("body = %q", body)
+}
+
+// TestHandleFilesContent_AIMentionedOutsidePathForbidden は、AI 出力（pty_output / role='ai'）
+// にだけスコープ外パスが現れた場合は read-only バイパスが効かず 403 になることを確認する
+// （プロンプトインジェクション等で AI に任意パスを出力させても開けない）。
+func TestHandleFilesContent_AIMentionedOutsidePathForbidden(t *testing.T) {
+	projDir := t.TempDir()
+	outsideFile := filepath.Join(t.TempDir(), "plan_outside.md")
+	if err := os.WriteFile(outsideFile, []byte("# outside\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s, mentionAI := newMentionTestServerAI(t, projDir, 8)
+	mentionAI("変更ファイル: " + outsideFile + "\n")
+
+	code, body, _ := callFilesContentWithSession(t, s, outsideFile, 8)
+	if code != http.StatusForbidden {
+		t.Fatalf("expected 403 (AI-only mention must not bypass), got %d: %s", code, body)
+	}
+
+	// 同じパスを download でも 403 であることを確認する。
+	code, body, _ = callFilesDownloadWithSession(t, s, outsideFile, 8)
+	if code != http.StatusForbidden {
+		t.Fatalf("download: expected 403, got %d: %s", code, body)
 	}
 }
 

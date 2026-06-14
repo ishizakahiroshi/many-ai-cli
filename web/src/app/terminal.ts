@@ -54,7 +54,7 @@ function addSelectionToInput(text, opts: any = {}) {
 // （タイトルバー・余白・背景）でのホイールは xterm が拾って背後の端末がスクロールしてしまう。
 // xterm 側でホイールを無視させることで、どの経路で来ても背後の端末が動かないようにする。
 function isModalOverlayOpen() {
-  const ids = ['settings-panel', 'about-panel', 'model-picker-overlay', 'new-session-panel', 'slash-picker', 'expand-capture-popup'];
+  const ids = ['settings-panel', 'about-panel', 'model-picker-overlay', 'new-session-panel', 'slash-picker', 'expand-capture-popup', 'tsb-sent-modal'];
   for (const id of ids) {
     const el = document.getElementById(id);
     if (!el || el.hidden) continue;

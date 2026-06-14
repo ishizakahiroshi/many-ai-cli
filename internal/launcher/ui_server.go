@@ -649,6 +649,13 @@ func (s *UIServer) runConnection(ctx context.Context, lc *liveConn, profile Prof
 			// context is already cancelled, so just let the connector die.
 			return
 		}
+		// connectWaitTimeout only bounds the "connecting" phase. The
+		// established connection lives for the launcher process lifetime
+		// (watchConnection below blocks until errCh closes), during which
+		// the defer above would not run. Stop the timer now so it does not
+		// linger for the whole connection lifetime. defer Stop remains for
+		// the timeout/failure paths; a second Stop is harmless.
+		waitTimer.Stop()
 		// Update last_used and record the connection for other launcher
 		// processes (running badge in their selection UI).
 		s.updateLastUsed(profile.Name)

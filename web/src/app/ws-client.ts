@@ -11,6 +11,7 @@ import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDet
 import { notifyDeferredEnterOutput } from './deferred-enter.js';
 import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed } from './chat-history.js';
 import { handleUsageStatMessage, removeUsageCacheEntry } from './token-statusbar.js';
+import { removeWorkflowSnapshot } from './workflow-modal.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -434,6 +435,7 @@ export function _connectWs() {
   } else if (m.type === 'session_removed') {
     removeLocalSession(m.session_id);
     removeUsageCacheEntry(m.session_id);
+    removeWorkflowSnapshot(m.session_id);
   }
 
   if (fastRenderSessionId !== null && renderSessionStateUpdate(fastRenderSessionId)) return;

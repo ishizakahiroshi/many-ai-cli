@@ -9,6 +9,7 @@
 @import url("/styles/workbench.css");
 @import url("/styles/voice.css");
 @import url("/styles/token-statusbar.css");
+@import url("/styles/workflow-progress.css");
 @import url("/styles/approval-queue-tab.css");
 @import url("/styles/detached-grid.css");
 @import url("/styles/server-modal.css");
