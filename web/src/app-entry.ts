@@ -30,6 +30,7 @@ import { initDetachedGridMode } from './app/detached-grid.js';
 import { initServerModal } from './app/server-modal.js';
 import { initWorkflowProgress } from './app/workflow-modal.js';
 import { initLiveStatusColor } from './app/live-status-color.js';
+import { initMobileConnect } from './app/mobile-connect.js';
 // ステータスバー初期化（/api/user-prefs から enabled を読む）
 initTokenStatusbar();
 // detached-grid モード判定（/?view=detached-grid の場合のみ初期化）
@@ -40,3 +41,5 @@ initServerModal();
 initWorkflowProgress();
 // ライブステータス帯の配色パレット（右端ボタン）を構築 + 保存色を適用
 initLiveStatusColor();
+// 📱 モバイル接続ウィザード（QR）の配線
+initMobileConnect();
