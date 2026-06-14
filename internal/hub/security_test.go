@@ -247,6 +247,15 @@ func TestAllowedHubOriginConfig(t *testing.T) {
 	if got := isAllowedHubOrigin("http://10.8.0.1:47777", 47777, "10.8.0.1"); !got {
 		t.Fatal("isAllowedHubOrigin with configured allowed host = false, want true")
 	}
+	// Tailscale serve 経由は HTTPS かつ外部ポート 443（hub ポートと不一致）。
+	// 設定済み allowed_hosts に一致すれば許可する。
+	if got := isAllowedHubOrigin("https://host1.taila5e951.ts.net", 47777, "host1.taila5e951.ts.net"); !got {
+		t.Fatal("isAllowedHubOrigin https with configured allowed host = false, want true")
+	}
+	// 設定されていない HTTPS ホストは拒否する。
+	if got := isAllowedHubOrigin("https://host1.taila5e951.ts.net", 47777); got {
+		t.Fatal("isAllowedHubOrigin https without configured allowed host = true, want false")
+	}
 }
 
 func TestGuardAllowsSameOriginPost(t *testing.T) {
