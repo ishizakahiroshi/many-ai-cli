@@ -467,6 +467,10 @@ type Config struct {
 	ApprovalProfiles       ApprovalProfiles       `yaml:"approval_profiles,omitempty"        json:"approval_profiles,omitempty"`
 	TerminalApp            string                 `yaml:"terminal_app,omitempty"`
 	Token                  string                 `yaml:"token"`
+	// AuthCookieSecret は将来のリモート認証 cookie（PIN セッション）の HMAC 署名鍵。
+	// 「全アクセス失効」で Token と共にローテーションして既存セッションを無効化する。
+	// API レスポンスには出さない（json:"-"）。
+	AuthCookieSecret       string                 `yaml:"auth_cookie_secret,omitempty" json:"-"`
 	LocalModels            []LocalModel           `yaml:"local_models,omitempty" json:"local_models,omitempty"`
 	UserPrefs              UserPrefs              `yaml:"user_prefs,omitempty" json:"user_prefs,omitempty"`
 	Voice                  VoiceConfig            `yaml:"voice,omitempty" json:"voice,omitempty"`

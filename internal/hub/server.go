@@ -645,6 +645,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		Handler:   s.handleWS,
 	})
 	mux.HandleFunc("/api/info", s.handleInfo)
+	mux.HandleFunc("/api/mobile-connect", s.handleMobileConnect)
+	mux.HandleFunc("/api/auth/revoke-all", s.handleAuthRevokeAll)
 	mux.HandleFunc("/api/net-hint", s.handleNetHint)
 	mux.HandleFunc("/api/avatar", s.handleAvatar)
 	mux.HandleFunc("/api/spawn", s.handleSpawn)
@@ -733,7 +735,39 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	return s, nil
 }
 
-const contentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+// cspConnectSrcBase は loopback（SSHトンネル経由のスマホ含む）向けの WebSocket 許可元。
+const cspConnectSrcBase = "'self' ws://127.0.0.1:* ws://localhost:*"
+
+// cspWithConnectSrc は connect-src 部分だけ差し替えた CSP を組み立てる。
+func cspWithConnectSrc(connectSrc string) string {
+	return "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src " + connectSrc + "; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+}
+
+// contentSecurityPolicy は API レスポンス等に付与する静的 CSP（loopback のみ）。
+var contentSecurityPolicy = cspWithConnectSrc(cspConnectSrcBase)
+
+// documentCSP は HTML ドキュメント（handleIndex）に付与する CSP。
+// VPN 直アクセス（例 http://100.x:port / https://名前.ts.net）でも WebSocket が
+// 張れるよう、hub.allowed_hosts に登録済みの host を ws://host:* / wss://host:* として
+// connect-src に展開する（C5 / G2）。allowed_hosts は config.Validate 済みで
+// ポート・ワイルドカード・スキームを含まない host 文字列のみ（安全に補間できる）。
+func (s *Server) documentCSP() string {
+	s.cfgMu.Lock()
+	hosts := append([]string(nil), s.cfg.Hub.AllowedHosts...)
+	s.cfgMu.Unlock()
+	parts := []string{cspConnectSrcBase}
+	for _, h := range hosts {
+		h = strings.TrimSuffix(strings.TrimSpace(h), ".")
+		if h == "" {
+			continue
+		}
+		if strings.Contains(h, ":") { // IPv6 リテラルは [] で括る
+			h = "[" + h + "]"
+		}
+		parts = append(parts, "ws://"+h+":*", "wss://"+h+":*")
+	}
+	return cspWithConnectSrc(strings.Join(parts, " "))
+}
 
 func withSecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -923,6 +957,9 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store, must-revalidate")
 	setSecurityHeaders(w.Header())
+	// ドキュメントの CSP は allowed_hosts を connect-src に展開した動的版で上書きする
+	// （VPN 直アクセス時に WebSocket が CSP で弾かれないようにする / C5）。
+	w.Header().Set("Content-Security-Policy", s.documentCSP())
 	_, _ = w.Write(b)
 }
 
