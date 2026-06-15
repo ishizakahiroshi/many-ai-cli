@@ -33,6 +33,7 @@ import { initLiveStatusColor } from './app/live-status-color.js';
 import { initMobileConnect } from './app/mobile-connect.js';
 import { initHostExpose } from './app/host-expose.js';
 import { initRemoteAuth } from './app/remote-auth.js';
+import { initActionBarResize } from './app/action-bar-resize.js';
 // ステータスバー初期化（/api/user-prefs から enabled を読む）
 initTokenStatusbar();
 // detached-grid モード判定（/?view=detached-grid の場合のみ初期化）
@@ -49,3 +50,5 @@ initMobileConnect();
 initHostExpose();
 // 🔒 リモートアクセス保護（全アクセス失効 / 任意 PIN / PIN ログイン）の配線
 initRemoteAuth();
+// 質問エリア（#action-bar）の上端ドラッグで縦に伸縮
+initActionBarResize();

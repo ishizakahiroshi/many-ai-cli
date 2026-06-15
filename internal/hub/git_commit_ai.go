@@ -168,7 +168,7 @@ func extractCommitMarker(buf string) (subject, body string, ok bool) {
 // cleanTUILine は TUI 描画でよく行頭に付く罫線・ガター文字を取り除く。
 func cleanTUILine(ln string) string {
 	ln = strings.TrimRight(ln, "\r")
-	return strings.TrimLeft(ln, "│┃┆┊╎▏|⏺•◦· \t")
+	return strings.TrimLeft(ln, "│┃┆┊╎▏|⏺●•◦· \t")
 }
 
 func commitMsgTimeoutReason(language string) string {

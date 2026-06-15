@@ -20,6 +20,28 @@
 }
 #action-bar.visible { display: flex; border-left-color: var(--warn); background: rgba(245,158,11,0.04); }
 
+/* 上端ドラッグハンドル（マウスで縦に伸ばせる）。
+   実体は #action-bar 自身の上端 6px 帯で pointerdown を拾う JS と組で動く。
+   ::before は視覚的なグリップだけを描く（pointer-events:none でクリックを邪魔しない）。
+   ダブルクリック（上端帯）でユーザー指定高さを解除しデフォルトに戻す。 */
+#action-bar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  background: linear-gradient(to bottom, rgba(255,255,255,0.08), transparent);
+  border-top: 1px solid var(--line-soft);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+#action-bar.visible::before { opacity: 0.6; }
+#action-bar:hover::before { opacity: 1; }
+#action-bar.resizing { user-select: none; }
+
 .action-bar-label {
   font-size: 0.7rem;
   font-weight: 700;

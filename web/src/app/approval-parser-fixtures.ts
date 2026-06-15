@@ -63,15 +63,11 @@ test('approval parser fixtures', () => {
     '[/MANY-AI-CLI]',
   ]), null);
 
-  // マーカー直前の地の文（前置き説明）を _preamble として取り出す。
-  // 大きな段落区切り（2 行連続の空行）より上は対象外。
+  // マーカー内側で、最初の質問より前に置かれた地の文（前置き説明）を _preamble として取り出す。
   const withPreamble = parser.extractHubMarkerApproval([
-    'これは無関係な過去ログ。',
-    '',
-    '',
+    '[MANY-AI-CLI]',
     'そのうえで、判断が要るものがあります。',
     'License 不在時は自動生成しない。',
-    '[MANY-AI-CLI]',
     'Proceed? (Y:1/N:0)',
     '[/MANY-AI-CLI]',
   ]);
@@ -80,16 +76,19 @@ test('approval parser fixtures', () => {
     (withPreamble as any)._preamble,
     'そのうえで、判断が要るものがあります。\nLicense 不在時は自動生成しない。',
   );
-  // 直前に確定ブロックがあれば、それより前は前置きに含めない。
-  const afterPrevBlock = parser.extractHubMarkerApproval([
-    '前の質問の本文。',
-    '[/MANY-AI-CLI-DONE] 完了サマリー [/MANY-AI-CLI-DONE]',
+  assert.equal((withPreamble as any)._question, 'Proceed?');
+
+  // マーカー外のスピナー再描画ノイズや古い前置きは _preamble に混ぜない。
+  const outsideNoise = parser.extractHubMarkerApproval([
+    '\x1b[38;2;53;153;153m⠂⠐⠠⠐⠂ 実行: plan_xxx.md',
+    'g…lg…ln…ei…vl…',
     '次の前置き。',
     '[MANY-AI-CLI]',
     'Proceed? (Y:1/N:0)',
     '[/MANY-AI-CLI]',
   ]);
-  assert.equal((afterPrevBlock as any)._preamble, '次の前置き。');
+  assert.deepEqual(numbers(outsideNoise), [1, 0]);
+  assert.equal((outsideNoise as any)._preamble, undefined);
 
   // 単一ブロックで選択肢より前に置かれた質問文を _question として取り出す（見出し Q1 形式でなくても）。
   // 承認ポップアップに質問本文を出すための捕捉（CLI 画面を見ずに何を聞かれているか分かるように）。
@@ -103,6 +102,7 @@ test('approval parser fixtures', () => {
   ]);
   assert.deepEqual(numbers(singleQ), [1, 2]);
   assert.equal((singleQ as any)._question, 'path-exists の挙動をどうしますか？');
+  assert.equal((singleQ as any)._preamble, 'path-exists の挙動をどうしますか？');
   assert.equal((singleQ as any)._freeInput, true);
 
   // 複数行に折り返された質問文は 1 つに連結して捕捉する。
@@ -196,6 +196,25 @@ test('approval parser fixtures', () => {
   ]);
   assert.equal(parser.isBatchOptions(batch), true);
   assert.equal(batch.length, 2);
+
+  const batchWithPreamble = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'この変更は承認方式の表示だけに影響します。',
+    '既存セッションの入力処理は変えません。',
+    'Q1 first question?',
+    ' 1. Approve',
+    ' 2. Deny',
+    'Q2 second question?',
+    ' 1. Approve',
+    ' 2. Deny',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isBatchOptions(batchWithPreamble), true);
+  assert.equal(batchWithPreamble.length, 2);
+  assert.equal(
+    (batchWithPreamble as any)._preamble,
+    'この変更は承認方式の表示だけに影響します。\n既存セッションの入力処理は変えません。',
+  );
 
   // 見出しの `Q1`/`Q2` プレフィックス対応（質問番号と選択肢番号の混同解消）。
   // 旧 `1 質問?` 形式（上の batch）と同様にバッチ復元できること。
