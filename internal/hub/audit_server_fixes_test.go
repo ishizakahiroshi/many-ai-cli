@@ -34,6 +34,7 @@ func auditFixServer(t *testing.T, allowBypass bool) *Server {
 func TestHandleIndexTokenCookieHasMaxAge(t *testing.T) {
 	s := auditFixServer(t, false)
 	req := httptest.NewRequest(http.MethodGet, "/?token=tok", nil)
+	req.Host = "127.0.0.1:47777" // handleIndex は guardBase で Host 許可リスト検証も通す
 	w := httptest.NewRecorder()
 	s.handleIndex(w, req)
 	var found *http.Cookie
@@ -59,9 +60,10 @@ func TestHandleIndexTokenCookieHasMaxAge(t *testing.T) {
 // 配布しないことを確認する（生 HTTP 応答からの実トークン採取を防ぐ）。
 func TestHandleIndexNoCookieOnLoopbackBypass(t *testing.T) {
 	s := auditFixServer(t, true)
-	// トークン未提示の loopback 要求。requireToken はバイパスで通過する。
+	// トークン未提示の loopback 要求（実ローカルアクセス＝既定ホスト）。バイパスで通過する。
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.RemoteAddr = "127.0.0.1:54321"
+	req.Host = "127.0.0.1:47777"
 	w := httptest.NewRecorder()
 	s.handleIndex(w, req)
 	if w.Code == http.StatusUnauthorized {
@@ -80,6 +82,7 @@ func TestHandleIndexCookieIssuedWhenValidTokenWithBypassEnabled(t *testing.T) {
 	s := auditFixServer(t, true)
 	req := httptest.NewRequest(http.MethodGet, "/?token=tok", nil)
 	req.RemoteAddr = "127.0.0.1:54321"
+	req.Host = "127.0.0.1:47777"
 	w := httptest.NewRecorder()
 	s.handleIndex(w, req)
 	var found *http.Cookie

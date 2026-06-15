@@ -2,9 +2,36 @@ package hub
 
 import (
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 )
+
+// requireLoopbackRemote は open 系のホスト操作（既定アプリ/フォルダ/ターミナル起動）を
+// loopback 元のみに制限する。設計上これらは localhost 専用のホスト操作 API であり、
+// reverse-proxy / Docker 等で非 loopback peer から到達する経路では 403 にする
+// （handleOpenDir と同じ防御を共通化）。tailscale serve / SSH tunnel 経由は元が
+// loopback になるためここは素通しだが、guard() の PIN ゲート（isLogicallyRemote）で
+// 別途保護される。
+func (s *Server) requireLoopbackRemote(w http.ResponseWriter, r *http.Request) bool {
+	if !isLoopbackRemote(r.RemoteAddr) {
+		writeJSONError(w, http.StatusForbidden, "forbidden", "loopback only")
+		return false
+	}
+	return true
+}
+
+// openDeniedExtensions は「既定のアプリで開く」で実行に化ける拡張子のブラックリスト。
+// ShellExecute("open")（Windows）や cmd.exe /c start はこれらを実行するため、文書/メディアを
+// 開く正規 UX を保ちつつ、認証済みユーザーからのホスト上 RCE（.bat/.ps1 を書いてから開く等）を
+// 防ぐ。tailscale serve / SSH tunnel 経由（RemoteAddr が loopback 化する）でも効く多層防御。
+var openDeniedExtensions = map[string]bool{
+	".bat": true, ".cmd": true, ".com": true, ".exe": true, ".scr": true,
+	".pif": true, ".hta": true, ".cpl": true, ".msc": true, ".msi": true,
+	".reg": true, ".ps1": true, ".psm1": true, ".vbs": true, ".vbe": true,
+	".js": true, ".jse": true, ".wsf": true, ".wsh": true, ".lnk": true,
+	".scf": true, ".url": true,
+}
 
 // checkOpenPathAllowed は open 系ハンドラで path が allowed-roots 配下かを検証する。
 // ?session=<id> が指定されていればそのセッションの CWD を判定基準にする（省略時: Hub cwd）。
@@ -49,8 +76,15 @@ func (s *Server) handleOpenDefaultFile(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
+	if !s.requireLoopbackRemote(w, r) {
+		return
+	}
 	path, ok := s.decodeAllowedPath(w, r)
 	if !ok {
+		return
+	}
+	if openDeniedExtensions[strings.ToLower(filepath.Ext(path))] {
+		writeJSONError(w, http.StatusForbidden, "forbidden", "executable file type not allowed")
 		return
 	}
 	if err := openFileNative(path); err != nil {
@@ -64,11 +98,21 @@ func (s *Server) handleOpenFolder(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
+	if !s.requireLoopbackRemote(w, r) {
+		return
+	}
 	path, ok := s.decodeAllowedPath(w, r)
 	if !ok {
 		return
 	}
+	// path がディレクトリ（許可ルート自身＝Files タブの「フォルダを開く」など）なら
+	// それ自体を開く。ファイルのときだけ親フォルダを reveal する。旧実装は常に
+	// filepath.Dir(path) を開くため、path が許可ルート自身だと検証していない親
+	// （許可境界の 1 階層外）を開いてしまっていた。
 	dir := filepath.Dir(path)
+	if fi, err := os.Stat(path); err == nil && fi.IsDir() {
+		dir = path
+	}
 	if err := openDirNative(dir); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "open_failed", err.Error())
 		return
@@ -78,6 +122,9 @@ func (s *Server) handleOpenFolder(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleOpenTerminal(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
+		return
+	}
+	if !s.requireLoopbackRemote(w, r) {
 		return
 	}
 	path, ok := s.decodeAllowedPath(w, r)
@@ -108,6 +155,12 @@ func (s *Server) handleTerminalApp(w http.ResponseWriter, r *http.Request) {
 			"effective_terminal_app": effectiveTerminalAppDescription(app),
 		})
 	case http.MethodPost:
+		// ターミナル exe の設定変更は loopback 元のみ（任意 executable / UNC パスを
+		// リモートから仕込んで handleOpenTerminal で起動させる経路を塞ぐ）。GET（表示）は
+		// remote でも可。
+		if !s.requireLoopbackRemote(w, r) {
+			return
+		}
 		var body struct {
 			TerminalApp string `json:"terminal_app"`
 		}

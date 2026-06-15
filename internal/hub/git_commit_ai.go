@@ -111,40 +111,56 @@ func (s *Server) handleCommitMsgChunk(id int, cleanText string) {
 	s.broadcast(proto.Message{Type: "commit_msg_suggested", SessionID: id, CommitSubject: subject, CommitBody: body})
 }
 
-// extractCommitMarker はバッファ末尾の最新マーカー対から subject/body を取り出す。
-// 注入プロンプトのエコーにも同じマーカー語が含まれるため、最後の open を基点にして
-// プロンプト側のマーカーを取り違えないようにする。
+// extractCommitMarker はバッファから最新のマーカー対を探して subject/body を取り出す。
+//
+// マーカーは「行頭・単独・装飾なし」で出力させる仕様（aiCommitPrompt）なので、
+// マーカー語を含む行ではなく "マーカー語だけの行"（TUI ガター除去後）で一致させる。
+// これにより、注入プロンプトのエコーがマーカー語を文中にインラインで含んでいても
+// （AI の本応答が届く前の中間状態でも）プロンプト指示文を subject に取り違えない。
 func extractCommitMarker(buf string) (subject, body string, ok bool) {
-	o := strings.LastIndex(buf, commitMsgMarkerOpen)
-	if o < 0 {
+	rawLines := strings.Split(buf, "\n")
+	lines := make([]string, len(rawLines))
+	for i, ln := range rawLines {
+		lines[i] = cleanTUILine(ln)
+	}
+	// 最後の「OPEN マーカー単独行」を基点にする。
+	openIdx := -1
+	for i := len(lines) - 1; i >= 0; i-- {
+		if strings.TrimSpace(lines[i]) == commitMsgMarkerOpen {
+			openIdx = i
+			break
+		}
+	}
+	if openIdx < 0 {
 		return "", "", false
 	}
-	rest := buf[o+len(commitMsgMarkerOpen):]
-	c := strings.Index(rest, commitMsgMarkerClose)
-	if c < 0 {
+	// その後ろの最初の「CLOSE マーカー単独行」までを inner とする。
+	closeIdx := -1
+	for i := openIdx + 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == commitMsgMarkerClose {
+			closeIdx = i
+			break
+		}
+	}
+	if closeIdx < 0 {
 		return "", "", false
 	}
-	inner := rest[:c]
-	lines := strings.Split(inner, "\n")
-	cleaned := make([]string, 0, len(lines))
-	for _, ln := range lines {
-		cleaned = append(cleaned, cleanTUILine(ln))
+	inner := lines[openIdx+1 : closeIdx]
+	for len(inner) > 0 && strings.TrimSpace(inner[0]) == "" {
+		inner = inner[1:]
 	}
-	for len(cleaned) > 0 && strings.TrimSpace(cleaned[0]) == "" {
-		cleaned = cleaned[1:]
+	for len(inner) > 0 && strings.TrimSpace(inner[len(inner)-1]) == "" {
+		inner = inner[:len(inner)-1]
 	}
-	for len(cleaned) > 0 && strings.TrimSpace(cleaned[len(cleaned)-1]) == "" {
-		cleaned = cleaned[:len(cleaned)-1]
-	}
-	if len(cleaned) == 0 {
+	if len(inner) == 0 {
 		return "", "", false
 	}
-	subject = strings.TrimSpace(cleaned[0])
+	subject = strings.TrimSpace(inner[0])
 	if subject == "" {
 		return "", "", false
 	}
-	if len(cleaned) > 1 {
-		body = strings.TrimSpace(strings.Join(cleaned[1:], "\n"))
+	if len(inner) > 1 {
+		body = strings.TrimSpace(strings.Join(inner[1:], "\n"))
 	}
 	return subject, body, true
 }

@@ -1582,7 +1582,8 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
     tab.onclick = (e) => { e.stopPropagation(); setBatchActiveQ(sessionId, idx); };
     const qn = document.createElement('span');
     qn.className = 'qn';
-    qn.textContent = `${idx + 1}.`;
+    // 質問番号は `Q1` 表記（選択肢番号 `1.` `2.` と視覚的に区別する）
+    qn.textContent = `Q${idx + 1}`;
     const txt = document.createElement('span');
     txt.className = 'qlabel';
     txt.textContent = sec.title;
@@ -1602,7 +1603,7 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
 
   const head = document.createElement('div');
   head.className = 'action-qhead';
-  head.textContent = `${activeQ + 1}. ${activeSec.title}`;
+  head.textContent = `Q${activeQ + 1} ${activeSec.title}`;
   head.title = activeSec.title;
   pane.appendChild(head);
 
@@ -1802,7 +1803,7 @@ function buildBatchReadable(sessionId, sections) {
       const opt = (sec.options || []).find((o) => o.num === sel);
       val = opt ? `${opt.shortLabel ? opt.shortLabel + ' — ' : ''}${opt.label}` : `${sel}`;
     }
-    return `${idx + 1}. ${sec.title}\n   → ${val}`;
+    return `Q${idx + 1} ${sec.title}\n   → ${val}`;
   }).join('\n');
 }
 

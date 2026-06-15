@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"many-ai-cli/internal/config"
 )
@@ -93,11 +94,30 @@ func (s *Server) handleUserPrefsGet(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, prefs)
 }
 
+// sanitizeAvatarPref は永続化前に Avatar フィールドを正規化する。
+// 許可するのは ""（未設定）/ http(s):// URL / アップロード専用パス（user_avatar.bin）
+// のみ。任意ローカル絶対パスは "" に落とす（config.yaml 等を avatar 値に仕込んで
+// /api/avatar 経由で read する経路を、書き込み側でも塞ぐ defense-in-depth）。
+func sanitizeAvatarPref(avatar string) string {
+	avatar = strings.TrimSpace(avatar)
+	if avatar == "" {
+		return ""
+	}
+	if strings.HasPrefix(avatar, "http://") || strings.HasPrefix(avatar, "https://") {
+		return avatar
+	}
+	if uploadPath, err := avatarUploadPath(); err == nil && pathExistsCandidateKey(avatar) == pathExistsCandidateKey(uploadPath) {
+		return avatar
+	}
+	return ""
+}
+
 func (s *Server) handleUserPrefsPut(w http.ResponseWriter, r *http.Request) {
 	var prefs config.UserPrefs
 	if !decodeJSON(w, r, &prefs) {
 		return
 	}
+	prefs.Avatar = sanitizeAvatarPref(prefs.Avatar)
 	s.cfgMu.Lock()
 	s.cfg.UserPrefs = prefs
 	s.cfgMu.Unlock()

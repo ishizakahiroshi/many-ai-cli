@@ -944,7 +944,10 @@ func OpenBrowserForConfig(cfg *config.Config) error {
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	if !s.requireToken(w, r) {
+	// guardBase で token に加え Host 許可リスト検証（DNS リバインディング防御）も通す。
+	// GET なので CSRF（Origin）追加チェックは課されず、PIN ゲート（guard）は通さない
+	// ので PIN 未入力でも index は返り、フロントが PIN モーダルを出せる。
+	if !s.guardBase(w, r, http.MethodGet) {
 		return
 	}
 	// UI が URL から token を除去した後のリロード（token なし GET /）でも
@@ -1025,16 +1028,14 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 		return
 	}
 	req := conn.Request()
-	remoteAddr := ""
-	if req != nil {
-		remoteAddr = req.RemoteAddr
-	}
-	if !s.validTokenOrTrustedRemote(m.Token, remoteAddr) {
+	if !s.validTokenOrTrustedRemote(m.Token, req) {
 		return
 	}
 	// リモート PIN ゲート（pin_auth.go）。loopback / PIN 無効時は素通し。
-	// wrapper は同一ホスト（loopback）から接続するため影響しない。
-	if s.remotePINRequired(remoteAddr) && !s.hasValidPINCookie(req) {
+	// wrapper は同一ホスト（loopback・Host=127.0.0.1）から接続するため影響しない。
+	// tailscale serve 経由（loopback 元・Host=tailnet 名）は remotePINRequired が
+	// true を返すため PIN cookie を要求する。
+	if s.remotePINRequired(req) && !s.hasValidPINCookie(req) {
 		return
 	}
 	if m.Role == "ui" {

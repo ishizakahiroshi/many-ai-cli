@@ -126,13 +126,12 @@ func (c *modelsCache) getOllamaLocal(force bool) (models []Model, fetchedAt time
 		c.mu.Lock()
 		entry := c.local
 		curGen := c.generation
-		// force 時は世代が最新の fresh entry のみ受け入れる（stale 世代を拒否）
+		// force 時は世代が最新の fresh entry のみ受け入れる（stale 世代を拒否）。
+		// entryFresh は force 用の世代チェック（entry.generation >= curGen）を内包する
+		// ため、force でも「invalidate 後に完了済みの現世代 fresh entry」は再 fetch せず
+		// 受け入れる（rapid force 連打での thundering・不要な Ollama 接続を防ぐ）。
 		entryFresh := entry != nil && (!force || entry.generation >= curGen) && time.Since(entry.fetchedAt) < ollamaLocalCacheTTL
-		if !force && entryFresh {
-			c.mu.Unlock()
-			return entry.models, entry.fetchedAt, entry.err
-		}
-		if entryFresh && !force {
+		if entryFresh {
 			c.mu.Unlock()
 			return entry.models, entry.fetchedAt, entry.err
 		}
