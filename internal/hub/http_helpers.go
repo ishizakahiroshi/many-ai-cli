@@ -152,14 +152,14 @@ func requestToken(r *http.Request) string {
 }
 
 func (s *Server) requireToken(w http.ResponseWriter, r *http.Request) bool {
-	if !s.validTokenOrTrustedRemote(requestToken(r), r.RemoteAddr) {
+	if !s.validTokenOrTrustedRemote(requestToken(r), r) {
 		writeJSONError(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
 		return false
 	}
 	return true
 }
 
-func (s *Server) validTokenOrTrustedRemote(got, remoteAddr string) bool {
+func (s *Server) validTokenOrTrustedRemote(got string, r *http.Request) bool {
 	s.cfgMu.Lock()
 	want := s.cfg.Token
 	allowBypass := s.cfg.Hub.AllowLoopbackWithoutToken
@@ -171,7 +171,15 @@ func (s *Server) validTokenOrTrustedRemote(got, remoteAddr string) bool {
 	if !allowBypass {
 		return false
 	}
-	if isLoopbackRemote(remoteAddr) {
+	remoteAddr := ""
+	if r != nil {
+		remoteAddr = r.RemoteAddr
+	}
+	// loopback バイパスは「実際にローカル」な要求のみに適用する。tailscale serve 等の
+	// リバースプロキシ経由は TCP 元が loopback でも論理的にはリモート（Host が tailnet
+	// DNS 名等の非既定ホスト）なので、その場合はバイパスせず token / trusted_networks を
+	// 要求する（無 token での tailnet 経由フルアクセスを防ぐ）。
+	if !s.isLogicallyRemote(r) && isLoopbackRemote(remoteAddr) {
 		return true
 	}
 	return isTrustedRemote(remoteAddr, parseTrustedNetworks(trustedNetworks))
@@ -196,6 +204,30 @@ func remoteAddrIP(remoteAddr string) net.IP {
 func isLoopbackRemote(remoteAddr string) bool {
 	ip := remoteAddrIP(remoteAddr)
 	return ip != nil && ip.IsLoopback()
+}
+
+// isLogicallyRemote は、TCP 接続元が loopback でも「実体はリモート」な要求かを返す。
+// tailscale serve 等のリバースプロキシは TLS を終端して 127.0.0.1:<hubPort> へ再接続
+// するため、tailnet 上の全クライアントが Hub からは loopback に見える。これらは Host
+// ヘッダ（ブラウザはプロキシ先ホスト名＝設定済み allowed_host を入れる）で見分ける。
+// 直 loopback ブラウザは Host に 127.0.0.1 / localhost / ::1 を入れる。
+// この判定は PIN ゲート・SEC-C 通知・loopback トークンバイパスの「remote 判定」に使う。
+func (s *Server) isLogicallyRemote(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if !isLoopbackRemote(r.RemoteAddr) {
+		return true
+	}
+	host := strings.TrimSpace(r.Host)
+	if host == "" {
+		return false
+	}
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.TrimSuffix(strings.ToLower(strings.Trim(host, "[]")), ".")
+	return host != "" && !isDefaultAllowedHubHost(host)
 }
 
 func parseTrustedNetworks(values []string) []*net.IPNet {

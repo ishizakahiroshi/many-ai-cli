@@ -157,10 +157,20 @@ func runGitCombinedEnv(ctx context.Context, cwd string, extraEnv []string, args 
 func sanitizeCommitMessage(s string, maxLen int) string {
 	s = strings.ReplaceAll(s, "\r\n", "\n")
 	s = strings.ReplaceAll(s, "\r", "\n")
+	// \t / \n 以外の C0 制御文字と DEL を除去する。BEL/ESC 等が残ると git 履歴や
+	// WS 配信に混入し、ターミナルで git log を見た第三者にエスケープシーケンス
+	// （タイトルバー詐称・画面クリア等）を注入できてしまうため。
+	s = strings.Map(func(r rune) rune {
+		if (r < 0x20 && r != '\t' && r != '\n') || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
 	s = strings.TrimSpace(s)
 	if maxLen > 0 && len(s) > maxLen {
-		s = s[:maxLen]
-		s = strings.TrimSpace(s)
+		// rune 境界で丸める（バイト単位の切り詰めはマルチバイト文字を分断し
+		// 不正 UTF-8 を git 履歴へ永続化させるため、既存の rune 安全ヘルパを使う）。
+		s = truncateUTF8Bytes(s, maxLen)
 	}
 	return s
 }

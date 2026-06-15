@@ -379,7 +379,11 @@
     let lastOpt = null; // 続き行結合の対象（直近の選択肢）
     let looseFreeInput = false; // 単一選択（looseOpts）に「N. User specifies」があったか
     const optionRe = /^(\d+)\.\s*(.+?)\s*$/;
-    const headingRe = /^(\d+)\s+(.+?)\s*$/;
+    // 見出しは `Q1 質問文?`（Q + 連番）を正とする。選択肢 `1.`（数字+ピリオド）と区別するため。
+    // 後方互換: 旧 `1 質問文?`（プレフィックスなし数字+スペース）も引き続き受理する。
+    // 区切りゆれ吸収: 数字直後の `:` `：` `.` は任意（`Q1: 質問` / `Q1. 質問` も可）。
+    // optionRe を先に評価するので `1. 選択肢` は見出しに誤マッチしない（順序維持が前提）。
+    const headingRe = /^(?:[QＱ][ \t]*)?(\d+)[ \t]*[.:：]?[ \t]+(.+?)\s*$/i;
     for (const raw of lines) {
       const line = String(raw || '').trim();
       if (!line) continue;

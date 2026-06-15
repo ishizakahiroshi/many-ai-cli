@@ -91,6 +91,7 @@ func TestRequireToken_CookieInvalid(t *testing.T) {
 func TestHandleIndexSetsTokenCookie(t *testing.T) {
 	s := newSecTestServer(t, t.TempDir())
 	req := httptest.NewRequest(http.MethodGet, "/?token=tok", nil)
+	req.Host = "127.0.0.1:47777" // handleIndex は guardBase で Host 許可リスト検証も通すため実ホストを設定
 	w := httptest.NewRecorder()
 	s.handleIndex(w, req)
 	var found *http.Cookie
@@ -159,6 +160,7 @@ func TestRequireTokenLoopbackBypassEnabled(t *testing.T) {
 	s.cfg.Hub.AllowLoopbackWithoutToken = true
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.RemoteAddr = "127.0.0.1:34567"
+	req.Host = "127.0.0.1:47777" // 実ローカルアクセス（既定ホスト）でのみ loopback バイパスが効く
 	w := httptest.NewRecorder()
 	if !s.requireToken(w, req) {
 		t.Fatalf("expected tokenless loopback request to pass, status=%d body=%s", w.Code, w.Body.String())

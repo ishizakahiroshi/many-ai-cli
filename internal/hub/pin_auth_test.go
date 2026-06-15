@@ -71,9 +71,28 @@ func TestRequireRemotePIN_LoopbackBypass(t *testing.T) {
 	s := newPINTestServer(t, "123456")
 	req := httptest.NewRequest(http.MethodGet, "/api/anything", nil)
 	req.RemoteAddr = testLoopbackAddr
+	req.Host = testHubHost // 実ローカルアクセス（既定ホスト）。tailscale serve 等の非既定ホストとは区別する
 	w := httptest.NewRecorder()
 	if !s.requireRemotePIN(w, req) {
 		t.Fatalf("loopback should bypass PIN, got %d", w.Code)
+	}
+}
+
+// TestRequireRemotePIN_ProxiedRemoteRequiresCookie は tailscale serve 等の
+// リバースプロキシ経由（TCP 元は loopback だが Host が tailnet DNS 名＝非既定の
+// allowed_host）では PIN が要求されることを検証する（loopback 偽装での PIN 素通し防止）。
+func TestRequireRemotePIN_ProxiedRemoteRequiresCookie(t *testing.T) {
+	s := newPINTestServer(t, "123456")
+	s.cfg.Hub.AllowedHosts = []string{"host.example.ts.net"}
+	req := httptest.NewRequest(http.MethodGet, "/api/anything", nil)
+	req.RemoteAddr = testLoopbackAddr // serve プロキシは 127.0.0.1 から再接続する
+	req.Host = "host.example.ts.net"
+	w := httptest.NewRecorder()
+	if s.requireRemotePIN(w, req) {
+		t.Fatal("tailscale serve 経由（非既定ホスト）は PIN cookie 無しでは通してはいけない")
+	}
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("code = %d, want 401", w.Code)
 	}
 }
 

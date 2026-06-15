@@ -1331,6 +1331,12 @@ Third-party dependency notices are provided in [THIRD_PARTY_NOTICES.md](THIRD_PA
 
 ---
 
+## Third-Party Apps (mobile connection)
+
+The mobile-connection wizard suggests third-party apps (**Termius**, **Tailscale**, **WireGuard**) only as examples of clients that work with this setup. These are independent products; `many-ai-cli` is **not affiliated with, endorsed by, or sponsored by** their developers. You may use any equivalent app, and you install and use third-party software **at your own risk**. All product names are trademarks or registered trademarks of their respective owners. **WireGuard** is a registered trademark of Jason A. Donenfeld.
+
+---
+
 ## Disclaimer
 
 This tool is provided as-is without warranty. Use at your own risk.

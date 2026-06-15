@@ -135,6 +135,39 @@ test('approval parser fixtures', () => {
   assert.equal(parser.isBatchOptions(batch), true);
   assert.equal(batch.length, 2);
 
+  // 見出しの `Q1`/`Q2` プレフィックス対応（質問番号と選択肢番号の混同解消）。
+  // 旧 `1 質問?` 形式（上の batch）と同様にバッチ復元できること。
+  const qPrefixBatch = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'Q1 first question?',
+    ' 1. Approve',
+    ' 2. Deny',
+    'Q2 second question?',
+    ' 1. Approve',
+    ' 2. Deny',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isBatchOptions(qPrefixBatch), true);
+  assert.equal(qPrefixBatch.length, 2);
+  assert.equal(qPrefixBatch[0].num, 1);
+  assert.equal(qPrefixBatch[1].num, 2);
+  assert.deepEqual(labels(qPrefixBatch[0].options), ['Approve', 'Deny']);
+
+  // 区切りゆれ（`Q1:` / `Q2.`）も見出しとして受理する。
+  const qPrefixSep = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'Q1: 好きな麺は？',
+    ' 1. うどん',
+    ' 2. そば',
+    'Q2. 好きな主食は？',
+    ' 1. 白米',
+    ' 2. パン',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isBatchOptions(qPrefixSep), true);
+  assert.equal(qPrefixSep.length, 2);
+  assert.deepEqual(labels(qPrefixSep[0].options), ['うどん', 'そば']);
+
   const japaneseBatch = parser.extractHubMarkerApproval([
     '[MANY-AI-CLI]',
     '',

@@ -7,9 +7,11 @@ import (
 )
 
 // TestGuardGetEnforcesHostWhenTokenBypassed は、allow_loopback_without_token=true で
-// トークンが省略可能な場合でも、GET リクエストの Host 許可リスト検証が必須に走り、
-// DNS リバインディング由来の許可外ホスト名（Host=evil.example）が拒否されることを検証する。
-// 回帰対象: guard() が GET で Host 検証をスキップしていた問題。
+// トークンが省略可能な場合でも、DNS リバインディング由来の許可外ホスト名
+// （Host=evil.example）への GET が拒否されることを検証する。
+// loopback バイパスは「論理的にローカル」（既定ホスト）な要求のみに適用されるよう
+// 厳格化したため、Host が非既定の要求はバイパス対象外になり token 層で 401 になる
+// （host 層の 403 ではなく token 層で先に弾かれるが、いずれも拒否でDNSリバインド防御は成立）。
 func TestGuardGetEnforcesHostWhenTokenBypassed(t *testing.T) {
 	s := newSecTestServer(t, t.TempDir())
 	s.cfg.Hub.AllowLoopbackWithoutToken = true
@@ -22,8 +24,8 @@ func TestGuardGetEnforcesHostWhenTokenBypassed(t *testing.T) {
 	if s.guard(w, req, http.MethodGet) {
 		t.Fatal("expected DNS-rebinding GET (Host=evil.example) to be rejected even with token bypass")
 	}
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
 	}
 }
 

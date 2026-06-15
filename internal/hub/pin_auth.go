@@ -221,9 +221,12 @@ func (s *Server) hasValidPINCookie(r *http.Request) bool {
 	return verifyPINCookie(secret, c.Value, time.Now())
 }
 
-// remotePINRequired は「remote（非 loopback）かつ PIN 設定済み」を返す。
-func (s *Server) remotePINRequired(remoteAddr string) bool {
-	if isLoopbackRemote(remoteAddr) {
+// remotePINRequired は「論理的に remote かつ PIN 設定済み」を返す。
+// 非 loopback の直アクセスだけでなく、tailscale serve 等のリバースプロキシ経由
+// （TCP 元は loopback だが Host が tailnet DNS 名）も remote として扱う
+// （isLogicallyRemote）。これにより公開経路で PIN ゲートが素通しになる事故を防ぐ。
+func (s *Server) remotePINRequired(r *http.Request) bool {
+	if !s.isLogicallyRemote(r) {
 		return false
 	}
 	s.cfgMu.Lock()
@@ -235,7 +238,7 @@ func (s *Server) remotePINRequired(remoteAddr string) bool {
 // requireRemotePIN は guard に組み込む追加ゲート。remote かつ PIN 設定済みのとき
 // 有効な PIN セッション cookie を要求する。loopback / PIN 無効時は素通し。
 func (s *Server) requireRemotePIN(w http.ResponseWriter, r *http.Request) bool {
-	if !s.remotePINRequired(r.RemoteAddr) {
+	if !s.remotePINRequired(r) {
 		return true
 	}
 	if s.hasValidPINCookie(r) {
@@ -257,7 +260,7 @@ func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 	s.cfgMu.Lock()
 	pinSet := strings.TrimSpace(s.cfg.RemotePINHash) != ""
 	s.cfgMu.Unlock()
-	remote := !isLoopbackRemote(r.RemoteAddr)
+	remote := s.isLogicallyRemote(r)
 	authed := !pinSet || !remote || s.hasValidPINCookie(r)
 	retry := 0
 	if pinSet && remote {
@@ -424,7 +427,10 @@ func deviceKey(remoteAddr, ua string) string {
 // 未知デバイスの初回接続時に SEC-C 通知（push / ntfy / webhook）を本人へ送る。
 // loopback は無視。盗まれた QR / token が使われたら即気づけるようにするのが狙い。
 func (s *Server) noteRemoteDevice(r *http.Request, via string) {
-	if r == nil || isLoopbackRemote(r.RemoteAddr) {
+	// loopback 直アクセス（ローカル PC のブラウザ・wrapper/CLI）は通知対象外。
+	// tailscale serve 等のプロキシ経由（loopback 元だが Host が tailnet 名）は
+	// isLogicallyRemote が true を返し、未知デバイス通知の対象になる。
+	if !s.isLogicallyRemote(r) {
 		return
 	}
 	ua := strings.TrimSpace(r.UserAgent())

@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"many-ai-cli/internal/attach"
-	"many-ai-cli/internal/config"
 )
 
 const (
@@ -109,18 +108,21 @@ func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	// パストラバーサル防止: avatar は固定ディレクトリ（~/.many-ai-cli/）配下のみ許可する。
-	allowedDir, err := config.Dir()
+	// avatar はアップロード専用パス（~/.many-ai-cli/user_avatar.bin）の配信のみ許可する。
+	// 任意ローカルパスを許すと config.yaml（Token / RemotePINHash / AuthCookieSecret 等を
+	// 含む）など ~/.many-ai-cli 配下の機密ファイルを read できてしまうため、固定パスとの
+	// 完全一致のみ通す（任意ファイル read プリミティブ化を防ぐ。AuthCookieSecret 漏洩は
+	// PIN cookie 偽造による PIN 境界の恒久バイパスにつながる）。
+	uploadPath, err := avatarUploadPath()
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	cleanPath := filepath.Clean(path)
-	if ok, _ := isPathUnderAllowedRoots(cleanPath, allowedDir); !ok {
-		http.Error(w, "forbidden", http.StatusForbidden)
+	if pathExistsCandidateKey(path) != pathExistsCandidateKey(uploadPath) {
+		http.NotFound(w, r)
 		return
 	}
-	data, err := os.ReadFile(cleanPath)
+	data, err := os.ReadFile(uploadPath)
 	if err != nil {
 		http.NotFound(w, r)
 		return

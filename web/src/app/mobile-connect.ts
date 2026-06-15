@@ -445,11 +445,28 @@ function renderAppInstall(body: HTMLElement): void {
   lcol.appendChild(el('div', { class: 'mc-applink-url', text: app.url }));
   link.appendChild(lcol);
   body.appendChild(link);
+  appendThirdPartyNote(body);
 
   body.appendChild(navRow({
     back: () => { state.platform = null; render(); },
     primary: { text: t('mobile_connect_installed_next'), onClick: () => { state.step = 'connect'; render(); } },
   }));
+}
+
+// 第三者アプリ免責（S?: QR画面はアプリを実際に勧める面なので、推奨箇所の直下に常設注記を出す）。
+// ポップアップにはせず常設。非提携・商標帰属などの正式表記は About パネルへ集約し、リンクで開く。
+function appendThirdPartyNote(body: HTMLElement): void {
+  const note = el('div', { class: 'mc-thirdparty-note' });
+  note.appendChild(el('span', { class: 'mc-thirdparty-text', text: t('mobile_connect_thirdparty_note') }));
+  const link = el('button', { class: 'mc-link', text: t('mobile_connect_thirdparty_details'), attrs: { type: 'button' } });
+  link.addEventListener('click', () => {
+    // About パネル（z-index 2000）はウィザード（2100）より下なので、ウィザードを閉じてから開く。
+    closeModal();
+    const ap = document.getElementById('about-panel');
+    if (ap) ap.hidden = false;
+  });
+  note.appendChild(link);
+  body.appendChild(note);
 }
 
 function renderConnect(body: HTMLElement): void {
@@ -643,6 +660,7 @@ function appendTailscaleAppLink(body: HTMLElement): void {
   lcol.appendChild(el('div', { class: 'mc-applink-url', text: app.url }));
   link.appendChild(lcol);
   body.appendChild(link);
+  appendThirdPartyNote(body);
 }
 
 function appendSwitchToSshLink(body: HTMLElement): void {

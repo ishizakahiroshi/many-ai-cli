@@ -188,6 +188,10 @@ func (pm *pushManager) sendApproval(ctx context.Context, payload pushApprovalPay
 		return
 	}
 	store := pm.store
+	// Subscriptions はロック解放後にロックなしで走査するため、backing array を
+	// 共有しないようディープコピーする（upsert/delete/removeExpired の in-place
+	// 変更との data race・torn read を防ぐ。pushSubscription は値型）。
+	store.Subscriptions = append([]pushSubscription(nil), pm.store.Subscriptions...)
 	pm.mu.Unlock()
 
 	if len(store.Subscriptions) == 0 || store.VAPIDPublicKey == "" || store.VAPIDPrivateKey == "" {
@@ -259,6 +263,9 @@ func (pm *pushManager) sendApproval(ctx context.Context, payload pushApprovalPay
 func (pm *pushManager) sendSecurity(ctx context.Context, title, body string) {
 	pm.mu.Lock()
 	store := pm.store
+	// sendApproval と同様、走査前に Subscriptions をディープコピーして backing array
+	// 共有による data race を避ける。
+	store.Subscriptions = append([]pushSubscription(nil), pm.store.Subscriptions...)
 	pm.mu.Unlock()
 	if len(store.Subscriptions) == 0 || store.VAPIDPublicKey == "" || store.VAPIDPrivateKey == "" {
 		return

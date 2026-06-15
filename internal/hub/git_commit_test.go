@@ -25,6 +25,22 @@ func TestExtractCommitMarker(t *testing.T) {
 		}
 	})
 
+	t.Run("エコー単独窓では未確定（AI本応答前の中間状態）", func(t *testing.T) {
+		// AI の本応答が届く前は、バッファに注入プロンプトのエコーしか無い。
+		// マーカー語は文中インラインなので "マーカー単独行" 一致では拾わず ok=false になり、
+		// プロンプト指示文断片を subject に取り違えない。
+		for _, ja := range []bool{true, false} {
+			if _, _, ok := extractCommitMarker(aiCommitPrompt(ja)); ok {
+				t.Fatalf("echo-only buffer (ja=%v) must not yield a marker pair", ja)
+			}
+		}
+		// その後 AI の本応答が届けば正しく抽出できる。
+		buf := aiCommitPrompt(true) + "\n" + commitMsgMarkerOpen + "\nfeat: done\n" + commitMsgMarkerClose
+		if sub, _, ok := extractCommitMarker(buf); !ok || sub != "feat: done" {
+			t.Fatalf("after real response: got ok=%v sub=%q", ok, sub)
+		}
+	})
+
 	t.Run("TUI 罫線ガターを除去", func(t *testing.T) {
 		buf := commitMsgMarkerOpen + "\n│ refactor: tidy up\n│ \n│ details here\n" + commitMsgMarkerClose
 		sub, body, ok := extractCommitMarker(buf)

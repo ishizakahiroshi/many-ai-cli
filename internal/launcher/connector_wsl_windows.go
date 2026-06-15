@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"sync"
 	"time"
 )
@@ -59,7 +60,7 @@ func (c *WSLConnector) run(ctx context.Context, p Profile, urlCh chan<- string, 
 		port = PickPort()
 	}
 
-	defer cleanupWSLOrphansConnector(p.Distro, port)
+	defer cleanupWSLOrphansConnector(p.Distro, binary, port)
 
 	cwd := p.CWD
 	if cwd == "" {
@@ -183,12 +184,20 @@ func (c *WSLConnector) run(ctx context.Context, p Profile, urlCh chan<- string, 
 // when the serve already exited cleanly), so we ignore the return entirely.
 // A 5s timeout guards against wsl.exe being hung or shutdown-in-progress —
 // we'd rather exit the launcher than block forever on cleanup.
-func cleanupWSLOrphansConnector(distro string, port int) {
+func cleanupWSLOrphansConnector(distro, binary string, port int) {
+	if binary == "" {
+		binary = "many-ai-cli"
+	}
 	var args []string
 	if distro != "" {
 		args = append(args, "-d", distro)
 	}
-	pattern := fmt.Sprintf("many-ai-cli serve --port %d", port)
+	// binary はプロファイル指定の任意値（既定 many-ai-cli・絶対パスやバージョン付き名も可）。
+	// pkill -f は ERE なので QuoteMeta でメタ文字をリテラル化し、起動時の実コマンドライン
+	// `<binary> serve --port <port>` に正しくマッチさせる（SSH 側 cleanupSSHOrphans と同方式）。
+	// 非既定 binary だと固定 "many-ai-cli" パターンでは一致せず、WSL2 はシグナル非伝播のため
+	// orphan serve が Hub ポートを掴んだまま残る不具合を防ぐ。
+	pattern := regexp.QuoteMeta(binary) + fmt.Sprintf(" serve --port %d", port)
 	args = append(args, "--", "pkill", "-f", pattern)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

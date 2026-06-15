@@ -97,9 +97,13 @@ func (c *ttlCache[T]) get(sourceURL string) T {
 }
 
 // invalidate は次回 get で必ず再 fetch されるようキャッシュを破棄する。
+// 負キャッシュ（failedAt）も解除する。直近 fetch が失敗した状態で invalidate を
+// 呼んでも、failedAt が残ると次の get が負キャッシュ分岐に入り再 fetch されず
+// fallback を返してしまう（force refresh が negativeTTL 内は効かない）ため。
 func (c *ttlCache[T]) invalidate() {
 	c.mu.Lock()
 	c.data = nil
 	c.fetchedAt = time.Time{}
+	c.failedAt = time.Time{}
 	c.mu.Unlock()
 }

@@ -181,6 +181,15 @@
 .mc-cap { font-size: 0.7rem; color: var(--muted); text-align: center; line-height: 1.5; word-break: break-all; }
 .mc-cap-warn { text-align: left; color: var(--muted); margin: -2px 0 8px; }
 
+/* 第三者アプリ免責（推奨アプリの直下に常設） */
+.mc-thirdparty-note {
+  font-size: 0.7rem;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 6px 0 0;
+}
+.mc-thirdparty-text { margin-right: 4px; }
+
 /* コマンド行 */
 .mc-cmd {
   display: flex;
