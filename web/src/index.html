@@ -600,6 +600,39 @@
             <span class="settings-label" data-i18n="settings_quick_cmd_2_show">コマンド 2 を表示</span>
             <input type="checkbox" id="quick-cmd-2-show" class="settings-checkbox">
           </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_quick_cmd_3">コマンド 3</span>
+            <input type="text" id="quick-cmd-3" class="settings-input-text" list="quick-cmd-presets"
+                   maxlength="200" autocomplete="off"
+                   data-i18n-placeholder="settings_quick_cmd_placeholder"
+                   placeholder="例: bugfix 作って / スラッシュコマンド">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_quick_cmd_3_show">コマンド 3 を表示</span>
+            <input type="checkbox" id="quick-cmd-3-show" class="settings-checkbox">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_quick_cmd_4">コマンド 4</span>
+            <input type="text" id="quick-cmd-4" class="settings-input-text" list="quick-cmd-presets"
+                   maxlength="200" autocomplete="off"
+                   data-i18n-placeholder="settings_quick_cmd_placeholder"
+                   placeholder="例: bugfix 作って / スラッシュコマンド">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_quick_cmd_4_show">コマンド 4 を表示</span>
+            <input type="checkbox" id="quick-cmd-4-show" class="settings-checkbox">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_quick_cmd_5">コマンド 5</span>
+            <input type="text" id="quick-cmd-5" class="settings-input-text" list="quick-cmd-presets"
+                   maxlength="200" autocomplete="off"
+                   data-i18n-placeholder="settings_quick_cmd_placeholder"
+                   placeholder="例: bugfix 作って / スラッシュコマンド">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_quick_cmd_5_show">コマンド 5 を表示</span>
+            <input type="checkbox" id="quick-cmd-5-show" class="settings-checkbox">
+          </div>
         </div>
       </details>
       <details class="settings-section" data-section="input-tools">
@@ -1059,8 +1092,11 @@
             <button id="send-btn" title="Send" aria-label="Send">➤</button>
             <div id="input-tools">
               <button id="voice-wakeword-btn" hidden>🎧</button>
-              <button id="quick-clear-btn" class="quick-cmd-btn quick-cmd-btn--text">/clear</button>
-              <button id="quick-model-btn" class="quick-cmd-btn quick-cmd-btn--text">/model</button>
+              <button id="quick-clear-btn" class="quick-cmd-btn quick-cmd-btn--text" hidden></button>
+              <button id="quick-model-btn" class="quick-cmd-btn quick-cmd-btn--text" hidden></button>
+              <button id="quick-cmd-btn-3" class="quick-cmd-btn quick-cmd-btn--text" hidden></button>
+              <button id="quick-cmd-btn-4" class="quick-cmd-btn quick-cmd-btn--text" hidden></button>
+              <button id="quick-cmd-btn-5" class="quick-cmd-btn quick-cmd-btn--text" hidden></button>
               <button id="slash-picker-btn" class="quick-cmd-btn" data-i18n-tooltip="slash_picker_tooltip">/ ▾</button>
               <button id="buf-clear-btn" class="quick-cmd-btn" data-i18n-tooltip="buf_clear_tooltip">⌫</button>
             </div>

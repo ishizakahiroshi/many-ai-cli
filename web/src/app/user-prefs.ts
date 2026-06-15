@@ -25,9 +25,15 @@ export const STORAGE_PUSH_NOTIFY_ENABLED_KEY = 'ai_cli_hub_push_notify_enabled';
 export const STORAGE_APPROVAL_AUTO_SWITCH_KEY = 'ai_cli_hub_approval_auto_switch';
 export const STORAGE_QUICK_CMD_1_KEY          = 'ai_cli_hub_quick_cmd_1';
 export const STORAGE_QUICK_CMD_2_KEY          = 'ai_cli_hub_quick_cmd_2';
+export const STORAGE_QUICK_CMD_3_KEY          = 'ai_cli_hub_quick_cmd_3';
+export const STORAGE_QUICK_CMD_4_KEY          = 'ai_cli_hub_quick_cmd_4';
+export const STORAGE_QUICK_CMD_5_KEY          = 'ai_cli_hub_quick_cmd_5';
 // クイックコマンドボタンの表示/非表示（既定: 表示）。不要な人は個別に隠せる。
 export const STORAGE_QUICK_CMD_1_SHOW_KEY     = 'ai_cli_hub_quick_cmd_1_show';
 export const STORAGE_QUICK_CMD_2_SHOW_KEY     = 'ai_cli_hub_quick_cmd_2_show';
+export const STORAGE_QUICK_CMD_3_SHOW_KEY     = 'ai_cli_hub_quick_cmd_3_show';
+export const STORAGE_QUICK_CMD_4_SHOW_KEY     = 'ai_cli_hub_quick_cmd_4_show';
+export const STORAGE_QUICK_CMD_5_SHOW_KEY     = 'ai_cli_hub_quick_cmd_5_show';
 export const STORAGE_TOOLS_LEFT_KEY           = 'ai_cli_hub_tools_left';
 export const STORAGE_PC_INPUT_TOOLS_KEY       = 'ai_cli_hub_pc_input_tools';
 export const STORAGE_MOBILE_INPUT_TOOLS_KEY   = 'ai_cli_hub_mobile_input_tools';
@@ -180,8 +186,14 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'voice.wake_word_phrase':    [STORAGE_WAKE_WORD_PHRASE_KEY,      String],
   'quick_cmds.cmd1':           [STORAGE_QUICK_CMD_1_KEY,           String],
   'quick_cmds.cmd2':           [STORAGE_QUICK_CMD_2_KEY,           String],
+  'quick_cmds.cmd3':           [STORAGE_QUICK_CMD_3_KEY,           String],
+  'quick_cmds.cmd4':           [STORAGE_QUICK_CMD_4_KEY,           String],
+  'quick_cmds.cmd5':           [STORAGE_QUICK_CMD_5_KEY,           String],
   'quick_cmds.show1':          [STORAGE_QUICK_CMD_1_SHOW_KEY,      (v) => v ? '1' : '0'],
   'quick_cmds.show2':          [STORAGE_QUICK_CMD_2_SHOW_KEY,      (v) => v ? '1' : '0'],
+  'quick_cmds.show3':          [STORAGE_QUICK_CMD_3_SHOW_KEY,      (v) => v ? '1' : '0'],
+  'quick_cmds.show4':          [STORAGE_QUICK_CMD_4_SHOW_KEY,      (v) => v ? '1' : '0'],
+  'quick_cmds.show5':          [STORAGE_QUICK_CMD_5_SHOW_KEY,      (v) => v ? '1' : '0'],
   'usage_links.claude':        [STORAGE_USAGE_LINK_CLAUDE_KEY,     String],
   'usage_links.codex':         [STORAGE_USAGE_LINK_CODEX_KEY,      String],
   'usage_links.copilot':       [STORAGE_USAGE_LINK_COPILOT_KEY,    String],

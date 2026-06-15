@@ -530,12 +530,18 @@ body.pc-input-tools-off #input-tools { display: none; }
 .quick-cmd-btn:disabled:hover { background: transparent; color: var(--muted-2); }
 #quick-clear-btn,
 #quick-model-btn,
+#quick-cmd-btn-3,
+#quick-cmd-btn-4,
+#quick-cmd-btn-5,
 #slash-picker-btn {
   width: auto;
   min-width: 48px;
   padding: 0 6px;
 }
-#quick-model-btn { margin-left: 6px; }
+#quick-model-btn,
+#quick-cmd-btn-3,
+#quick-cmd-btn-4,
+#quick-cmd-btn-5 { margin-left: 6px; }
 
 @media (max-width: 720px), (pointer: coarse) {
   #mobile-keyboard-toggle {
@@ -565,12 +571,18 @@ body.pc-input-tools-off #input-tools { display: none; }
   }
   #quick-clear-btn,
   #quick-model-btn,
+  #quick-cmd-btn-3,
+  #quick-cmd-btn-4,
+  #quick-cmd-btn-5,
   #slash-picker-btn {
     min-width: var(--touch-target);
     padding: 0 4px;
     font-size: 0.68rem;
   }
-  #quick-model-btn { margin-left: 2px; }
+  #quick-model-btn,
+  #quick-cmd-btn-3,
+  #quick-cmd-btn-4,
+  #quick-cmd-btn-5 { margin-left: 2px; }
   #input-tools {
     overflow-x: auto;
     max-width: 42vw;

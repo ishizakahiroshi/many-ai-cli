@@ -5,7 +5,7 @@ import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_NOTI
 import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, answeredMarkerSigs, recordAnsweredMarkerSig, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, resumeTerminalBottomFollow, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
-import { DEFAULT_QUICK_CMD_1, DEFAULT_QUICK_CMD_2, appConfirm, appConfirmShutdown, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
+import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { scheduleDeferredEnter, scheduleAfterOutputSettle } from './app/deferred-enter.js';
@@ -809,15 +809,14 @@ document.getElementById('send-btn').addEventListener('click', () => {
   doSend(activeSessionId);
 });
 
-document.getElementById('quick-clear-btn').addEventListener('click', () => {
-  if (activeSessionId === null) return;
-  sendQuickCommand(activeSessionId, getQuickCommand(1));
-});
-
-document.getElementById('quick-model-btn').addEventListener('click', () => {
-  if (activeSessionId === null) return;
-  sendQuickCommand(activeSessionId, getQuickCommand(2));
-});
+for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
+  const btn = document.getElementById(quickCommandButtonId(slot));
+  if (!btn) continue;
+  btn.addEventListener('click', () => {
+    if (activeSessionId === null) return;
+    sendQuickCommand(activeSessionId, getQuickCommand(slot));
+  });
+}
 
 export function syncMobileLayoutState() {
   const hasSession = activeSessionId !== null && sessions.size > 0;
@@ -1569,10 +1568,10 @@ inputEl.addEventListener('blur', (e) => {
     setUserPref('notify_sound.type', 'default');
     try { localStorage.removeItem(STORAGE_NOTIFY_SOUND_CUSTOM_KEY); } catch (_) {}
     setUserPref('approval.auto_switch', false);
-    setUserPref('quick_cmds.cmd1', DEFAULT_QUICK_CMD_1);
-    setUserPref('quick_cmds.cmd2', DEFAULT_QUICK_CMD_2);
-    setUserPref('quick_cmds.show1', true);
-    setUserPref('quick_cmds.show2', true);
+    for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
+      setUserPref(`quick_cmds.cmd${slot}`, quickCommandDefault(slot));
+      setUserPref(`quick_cmds.show${slot}`, true);
+    }
     setUserPref('usage_links.claude', '');
     setUserPref('usage_links.codex', '');
     setUserPref('usage_links.copilot', '');
@@ -1609,10 +1608,12 @@ inputEl.addEventListener('blur', (e) => {
     if (soundFilenameEl) soundFilenameEl.textContent = '';
     if (soundFileEl) soundFileEl.value = '';
 
-    const quickCmd1El = document.getElementById('quick-cmd-1');
-    const quickCmd2El = document.getElementById('quick-cmd-2');
-    if (quickCmd1El) quickCmd1El.value = DEFAULT_QUICK_CMD_1;
-    if (quickCmd2El) quickCmd2El.value = DEFAULT_QUICK_CMD_2;
+    for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
+      const el = document.getElementById(`quick-cmd-${slot}`);
+      if (el) el.value = quickCommandDefault(slot);
+      const showEl = document.getElementById(`quick-cmd-${slot}-show`);
+      if (showEl) showEl.checked = true;
+    }
 
     const voiceGraceEl = document.getElementById('voice-grace-select');
     if (voiceGraceEl) {
