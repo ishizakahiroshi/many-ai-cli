@@ -398,7 +398,7 @@ many-ai-cli-launcher.exe --ui             # 常に選択画面を表示
 - パスワード・鍵のパスフレーズは保存しません。鍵認証が必要です（`-o BatchMode=yes` で対話を禁止）
 - `token_command` で取得したトークンは現在のセッション中のみ使用し、`launcher-profiles.yaml` には書き込みません
 
-プロファイルの全フィールドと接続フローの詳細は [docs/v0.3.0-many-ai-cli-design.md — §13](docs/v0.3.0-many-ai-cli-design.md) を参照してください。
+プロファイルの全フィールドと接続フローの詳細は [docs/v0.3.x-many-ai-cli-design.md — §13](docs/v0.3.x-many-ai-cli-design.md) を参照してください。
 
 #### Windows がランチャーをブロックする場合: ローカル `.exe` なしでリモートサーバーに接続
 

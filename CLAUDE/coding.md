@@ -2,7 +2,7 @@
 
 > 最終更新: 2026-06-05(金) 05:42:17
 
-`many-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ 静的 TypeScript フロント（`web/dist/` を `go:embed`）。設計書: [../docs/v0.2.0-any-ai-cli-design.md](../docs/v0.2.0-any-ai-cli-design.md)
+`many-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ 静的 TypeScript フロント（`web/dist/` を `go:embed`）。設計書: [../docs/v0.2.x-any-ai-cli-design.md](../docs/v0.2.x-any-ai-cli-design.md)
 
 ## 言語別コーディング規約
 

@@ -4,7 +4,7 @@
 
 `many-ai-cli` は **Go 単一バイナリ + go:embed フロント** の構成。サーバーへのデプロイは無し（ユーザー PC にバイナリを置くだけ）。
 
-設計書: [../docs/v0.2.0-any-ai-cli-design.md §4・§17](../docs/v0.2.0-any-ai-cli-design.md)
+設計書: [../docs/v0.2.x-any-ai-cli-design.md §4・§17](../docs/v0.2.x-any-ai-cli-design.md)
 
 ## ビルド前提
 
