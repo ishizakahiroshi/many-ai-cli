@@ -391,6 +391,11 @@ import { appConfirm } from './settings.js';
       document.addEventListener('click', this._docClickHandler);
       document.addEventListener('keydown', this._docKeyHandler);
 
+      // Git タブ「Ask AI」: Hub が AI 出力から拾ったコミットメッセージを WS 経由で
+      // 受け取り、自分のセッション宛なら待ち受け中のモーダルへ反映する。
+      this._commitMsgHandler = (e) => this._handleCommitMsgEvent(e && e.detail);
+      window.addEventListener('many-commit-msg', this._commitMsgHandler);
+
       this.load().catch(err => this._showError(err && err.message ? err.message : String(err)));
     }
 
@@ -481,6 +486,7 @@ import { appConfirm } from './settings.js';
             <div class="git-commit-error" data-commit-error hidden></div>
             <div class="git-commit-actions">
               <button class="git-secondary-btn" data-commit-generate>${_esc(_gt('git_commit_generate_message', 'Generate'))}</button>
+              <button class="git-secondary-btn" data-commit-ai title="${_esc(_gt('git_commit_ai_note', 'Ask the connected AI agent to read the diff and draft a commit message. Review it before committing.'))}">${_esc(_gt('git_commit_ai_message', 'Ask AI'))}</button>
               <div class="git-commit-action-spacer"></div>
               <button class="git-secondary-btn" data-commit-cancel>${_esc(_gt('confirm_cancel', 'Cancel'))}</button>
               <button class="git-secondary-btn" data-commit-review>${_esc(_gt('git_commit_review', 'Review'))}</button>
@@ -525,6 +531,7 @@ import { appConfirm } from './settings.js';
       this.els.commitSubject = root.querySelector('[data-commit-subject]');
       this.els.commitBody    = root.querySelector('[data-commit-body]');
       this.els.commitGenerate = root.querySelector('[data-commit-generate]');
+      this.els.commitAI      = root.querySelector('[data-commit-ai]');
       this.els.commitReview  = root.querySelector('[data-commit-review]');
       this.els.commitRun     = root.querySelector('[data-commit-run]');
       this.els.commitReviewBox = root.querySelector('[data-commit-review-box]');
@@ -569,6 +576,7 @@ import { appConfirm } from './settings.js';
         this._renderCommitModalState();
       });
       this.els.commitGenerate.addEventListener('click', () => this._generateCommitMessage());
+      if (this.els.commitAI) this.els.commitAI.addEventListener('click', () => this._askAICommitMessage());
       this.els.commitReview.addEventListener('click', () => this._reviewCommitMessage());
       this.els.commitRun.addEventListener('click', () => this._commitAll());
       this.els.detailTabs.forEach(tabBtn => {
@@ -662,6 +670,7 @@ import { appConfirm } from './settings.js';
     dispose() {
       try { document.removeEventListener('click', this._docClickHandler); } catch (_) {}
       try { document.removeEventListener('keydown', this._docKeyHandler); } catch (_) {}
+      try { window.removeEventListener('many-commit-msg', this._commitMsgHandler); } catch (_) {}
       try { this.container.innerHTML = ''; } catch (_) {}
     }
 
@@ -804,6 +813,7 @@ import { appConfirm } from './settings.js';
         reviewed: false,
         busy: false,
         generating: false,
+        aiGenerating: false,
         error: '',
         subject: '',
         body: '',
@@ -839,18 +849,25 @@ import { appConfirm } from './settings.js';
         this.els.commitBody.value = st.body;
       }
       const hasSubject = (st.subject || '').trim() !== '';
-      this.els.commitReview.disabled = !hasSubject || st.busy || st.generating;
-      this.els.commitRun.disabled = !hasSubject || !st.reviewed || st.busy || st.generating;
+      const blocked = st.busy || st.generating || st.aiGenerating;
+      this.els.commitReview.disabled = !hasSubject || blocked;
+      this.els.commitRun.disabled = !hasSubject || !st.reviewed || blocked;
       this.els.commitRun.title = !hasSubject
         ? _gt('git_commit_disabled_no_subject', 'Enter a subject first.')
         : (!st.reviewed ? _gt('git_commit_disabled_needs_review', 'Press Review to enable Commit.') : '');
-      this.els.commitReview.classList.toggle('primary', hasSubject && !st.reviewed && !st.busy && !st.generating);
-      this.els.commitGenerate.disabled = st.busy || st.generating;
+      this.els.commitReview.classList.toggle('primary', hasSubject && !st.reviewed && !blocked);
+      this.els.commitGenerate.disabled = blocked;
+      if (this.els.commitAI) {
+        this.els.commitAI.disabled = blocked;
+        this.els.commitAI.textContent = st.aiGenerating
+          ? _gt('git_commit_ai_generating', 'Asking AI...')
+          : _gt('git_commit_ai_message', 'Ask AI');
+      }
       this.els.commitSubject.disabled = st.busy;
       this.els.commitBody.disabled = st.busy;
       this.els.commitReviewBox.hidden = !st.reviewed;
       if (this.els.commitHint) {
-        const showHint = hasSubject && !st.reviewed && !st.busy && !st.generating;
+        const showHint = hasSubject && !st.reviewed && !blocked;
         this.els.commitHint.hidden = !showHint;
         this.els.commitHint.textContent = showHint
           ? _gt('git_commit_review_required_hint', 'Press Review to enable Commit.')
@@ -900,6 +917,67 @@ import { appConfirm } from './settings.js';
         st.generating = false;
         this._renderCommitModalState();
       }
+    }
+
+    // _askAICommitMessage は接続中の AI セッションへ diff を解析させ、生成された
+    // コミットメッセージを WS（many-commit-msg イベント）経由で受け取る。
+    async _askAICommitMessage() {
+      const st = this.commitModalState;
+      if (st.busy || st.generating || st.aiGenerating) return;
+      st.aiGenerating = true;
+      st.error = '';
+      this._renderCommitModalState();
+      // 応答が来ない場合に備えたフロント側タイムアウト（Hub 側より少し長め）。
+      if (this._aiCommitTimer) clearTimeout(this._aiCommitTimer);
+      this._aiCommitTimer = setTimeout(() => {
+        const s = this.commitModalState;
+        if (s.aiGenerating) {
+          s.aiGenerating = false;
+          s.error = _gt('git_commit_ai_timeout', 'Timed out waiting for the AI response.');
+          this._renderCommitModalState();
+        }
+      }, 200000);
+      try {
+        const res = await fetch(`/api/git-commit-message?token=${encodeURIComponent(this.token)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session: this.sessionId,
+            token: this.token,
+            mode: 'ai',
+            language: (localStorage.getItem(STORAGE_LANG_KEY) || 'ja').startsWith('en') ? 'en' : 'ja',
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) {
+          throw new Error(data && data.detail ? data.detail : `HTTP ${res.status}`);
+        }
+        // pending: 結果は many-commit-msg イベントで届く。ここでは待機継続。
+      } catch (err) {
+        st.aiGenerating = false;
+        if (this._aiCommitTimer) { clearTimeout(this._aiCommitTimer); this._aiCommitTimer = null; }
+        st.error = err && err.message ? err.message : String(err);
+        this._renderCommitModalState();
+      }
+    }
+
+    // _handleCommitMsgEvent は Hub からの commit_msg_suggested / commit_msg_error を
+    // 自セッション・待ち受け中のときだけ反映する。
+    _handleCommitMsgEvent(m) {
+      if (!m || String(m.session_id) !== String(this.sessionId)) return;
+      const st = this.commitModalState;
+      if (!st.open || !st.aiGenerating) return;
+      st.aiGenerating = false;
+      if (this._aiCommitTimer) { clearTimeout(this._aiCommitTimer); this._aiCommitTimer = null; }
+      if (m.type === 'commit_msg_error') {
+        st.error = m.reason || _gt('git_commit_ai_failed', 'AI failed to produce a commit message.');
+      } else {
+        st.subject = m.commit_subject || '';
+        st.body = m.commit_body || '';
+        st.reviewed = false;
+        st.error = '';
+      }
+      this._renderCommitModalState();
     }
 
     _reviewCommitMessage() {

@@ -78,7 +78,8 @@ export function ensureTerminal(id) {
     fontFamily: '"MS Gothic", "BIZ UDGothic", "BIZ UDゴシック", "Segoe UI Symbol", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace',
     fontSize: FONTSIZE_MAP[localStorage.getItem(STORAGE_FONTSIZE_KEY)] || 13,
     // 一部フォントで大文字上端がクリップされるため、行高を少し広げて回避する。
-    lineHeight: 1.25,
+    // さらに Claude Code TUI の進捗バー（1行ぶんの高さで描かれる黒帯）が細く見える問題の緩和も兼ねる。
+    lineHeight: 1.35,
     windowsPty: { backend: 'conpty' },
     // cursor を背景色と同色にしてブロックカーソルを不可視化する。
     // 'transparent' はブラウザ実装によって輪郭線だけ □ として描画されることがある。
@@ -1696,4 +1697,27 @@ window.addEventListener('resize', () => {
   if (Math.abs(dpr - lastDevicePixelRatio) < 0.001) return;
   lastDevicePixelRatio = dpr;
   refitAllTerminals(true);
+});
+
+// 別窓 Session Grid（detached-grid）と通常 Hub は同一セッションの PTY を共有する。
+// 別窓側は自スロットの小さいサイズに PTY をフィットさせるため、別窓を操作した後
+// 通常 Hub に戻ると PTY が縮んだまま（このウィンドウの xterm の cols/rows は変わって
+// いないので resizeObserver は発火せず、PTY が再アサートされない）。
+// ウィンドウがフォーカス/可視に戻ったタイミングで、アクティブセッションの正しい
+// サイズへ PTY を取り戻す（local の cols/rows 変化に依らず無条件で sendResize する）。
+export function reassertActivePtySize() {
+  // detached-grid ウィンドウ自身では実行しない（PTY 主導権を奪い合わないため）。
+  if (window.detachedGridManager) return;
+  if (activeSessionId === null) return;
+  if (isPtyResizeSuppressed()) return;
+  const t = terminals.get(activeSessionId);
+  if (!canFitTerminal(t)) return;
+  fitTerminalPreservingBottom(t, activeSessionId);
+  // PTY は別窓に縮められている可能性があるため、local 変化に関わらず再送する。
+  sendResize(activeSessionId, t.term.cols, t.term.rows);
+}
+
+window.addEventListener('focus', reassertActivePtySize);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) reassertActivePtySize();
 });

@@ -33,6 +33,8 @@ export type MessageType =
   | 'approval_cleared'
   | 'approval_consumed'
   | 'approval_patterns_updated'
+  | 'commit_msg_suggested'
+  | 'commit_msg_error'
   | 'input_deferred'
   | 'attach_request'
   | 'hub_shutdown'
@@ -77,6 +79,8 @@ export interface Message {
   approval_context?: string;
   approval_options?: ApprovalOption[];
   sent_text?: string;
+  commit_subject?: string;
+  commit_body?: string;
   detected_at?: string;
   last_output_at?: string;
   started_at?: string;

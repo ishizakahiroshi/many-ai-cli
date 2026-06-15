@@ -107,6 +107,12 @@ type Message struct {
 	GitAdded   int  `json:"git_added,omitempty"`   // 追加行数
 	GitDeleted int  `json:"git_deleted,omitempty"` // 削除行数
 
+	// commit_msg_suggested / commit_msg_error: Hub → UI。Git タブ「Ask AI」で
+	// 接続中の AI が生成したコミットメッセージ。CommitSubject が 1 行目、
+	// CommitBody が本文。エラー時は commit_msg_error + Reason を返す。
+	CommitSubject string `json:"commit_subject,omitempty"`
+	CommitBody    string `json:"commit_body,omitempty"`
+
 	// usage_stat: Hub → UI。セッション単位の累積トークン / コスト情報。
 	// 数値メタデータのみを持ち、プロンプト本文などは一切含まない。
 	// CostKnown が false の場合はコストが不明（価格表未登録モデル）。表示側は "$ —" とする。

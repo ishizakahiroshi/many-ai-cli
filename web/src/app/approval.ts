@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchActiveQ, batchFreeText, batchSelections, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectFocusIdx, multiSelectSelections, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, utf8Decoder } from './state.js';
+import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, isAnsweredMarkerSig, recordAnsweredMarkerSig, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchActiveQ, batchFreeText, batchSelections, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectFocusIdx, multiSelectSelections, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, utf8Decoder } from './state.js';
 import { inputEl, sendSubmittedText } from '../app.js';
 import { clearSuppressPtyResize, isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout } from './terminal.js';
 import { stripAnsi } from './settings.js';
@@ -429,6 +429,10 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
   // 40 行の lines ではなく pendingTextTail 全体（markerLinesFromTail）から抽出する。
   const markerOpts = extractHubMarkerApproval(markerLinesFromTail(t.pendingTextTail));
   if (markerOpts) {
+    // 回答済みの [MANY-AI-CLI] ブロックは恒久的に承認 UI を出さない（タブ切替の SIGWINCH
+    // 再描画で画面に残った回答済みブロックが再流入しても再表示しない）。質問文込みのハッシュ
+    // で判定するため、別質問を誤って抑制することはない。
+    if (isAnsweredMarkerSig(id, markerOpts)) return;
     // doSend でテキスト送信済みの承認が Ink 再描画で再検出された場合はスキップ
     const consumed = approvalConsumedSig.get(id);
     const sig = approvalSig(markerOpts);
@@ -828,6 +832,8 @@ export function detectApproval(id) {
     const pendingLines = markerLinesFromTail(t.pendingTextTail);
     const markerOpts = extractHubMarkerApproval(pendingLines);
     if (markerOpts) {
+      // 回答済みブロックは恒久的にスキップ（タブ切替の再描画で再流入しても出さない）
+      if (isAnsweredMarkerSig(id, markerOpts)) return;
       const consumed = approvalConsumedSig.get(id);
       const sig = approvalSig(markerOpts);
       if (consumed === sig) return; // 消費済み承認の再表示をスキップ（タイマーは trackApprovalHintFromChunk 側で管理）
@@ -1314,6 +1320,7 @@ export function sendSingleFreeText(sessionId) {
     meta: { kind: 'single', answer: null, label: text },
   });
   if (cachedOpts) approvalConsumedSig.set(sessionId, approvalSig(cachedOpts));
+  recordAnsweredMarkerSig(sessionId, cachedOpts);
   sendApprovalConsumed(sessionId, cachedOpts, `${text}\r`);
   sendSubmittedText(sessionId, `${text}\r`);
   hideActionBar(sessionId);
@@ -1864,6 +1871,7 @@ export function sendBatchChoices(sessionId) {
   if (!batchAllAnswered(sessionId, cached)) return;
   const text = buildBatchPayload(sessionId);
   approvalConsumedSig.set(sessionId, approvalSig(cached));
+  recordAnsweredMarkerSig(sessionId, cached);
   sendApprovalConsumed(sessionId, cached, text);
   sendSubmittedText(sessionId, `${text}\r`);
   removeBatchConfirmModal();
@@ -2099,6 +2107,7 @@ export function sendMultiSelectChoices(sessionId) {
     },
   });
   if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
+  recordAnsweredMarkerSig(sessionId, prevOpts);
   sendApprovalConsumed(sessionId, prevOpts, text);
   multiQuestionDismissedCache.delete(sessionId);
   multiQuestionLatchAt.delete(sessionId);
@@ -2153,6 +2162,7 @@ export function sendChoice(sessionId, targetNum) {
     clearSequentialChoiceState(sessionId);
     const prevOpts = approvalRawOptionsCache.get(sessionId);
     if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
+    recordAnsweredMarkerSig(sessionId, prevOpts);
     multiQuestionDismissedCache.delete(sessionId);
     multiQuestionLatchAt.delete(sessionId);
     sendSubmittedText(sessionId, response);
@@ -2187,6 +2197,7 @@ export function sendChoice(sessionId, targetNum) {
   // doSend と同様に消費済み署名を記録（Ink 再描画による同一ブロックの再検出・再表示を防ぐ）
   const prevOpts = cachedOpts;
   if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
+  recordAnsweredMarkerSig(sessionId, prevOpts);
   sendApprovalConsumed(sessionId, prevOpts, choiceText);
   sendSubmittedText(sessionId, choiceText);
   hideActionBar(sessionId);

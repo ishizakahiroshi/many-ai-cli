@@ -40,6 +40,8 @@ type gitCommitMessageResp struct {
 	OK      bool   `json:"ok"`
 	Subject string `json:"subject"`
 	Body    string `json:"body"`
+	// Pending は mode=="ai" のとき true。結果は別途 WS（commit_msg_suggested）で届く。
+	Pending bool `json:"pending,omitempty"`
 }
 
 func (s *Server) handleGitCommitAll(w http.ResponseWriter, r *http.Request) {
@@ -146,6 +148,13 @@ func (s *Server) handleGitCommitMessage(w http.ResponseWriter, r *http.Request) 
 	files := parseGitStatusPorcelainZ(string(statusOut))
 	if len(files) == 0 {
 		writeGitError(w, http.StatusBadRequest, "no_changes", "working tree has no changes")
+		return
+	}
+	// mode=="ai": 接続中の AI セッションへ生成プロンプトを注入し、PTY 出力から
+	// マーカーを拾ってフォームへ反映する。結果は WS（commit_msg_suggested）で届くため、
+	// ここでは pending を返して即応答する。
+	if strings.EqualFold(req.Mode, "ai") {
+		s.startAICommitMessage(w, req.Session, req.Language)
 		return
 	}
 	stat := ""
@@ -268,11 +277,16 @@ func analyzeCommitChanges(files []gitStatusFile, diff string) commitChangeAnalys
 
 	// リネームのみ・追加削除を伴わない編集は refactor 寄りに分類する。
 	renameOnly := len(a.renamed) > 0 && len(a.added) == 0 && len(a.deleted) == 0 && len(a.modified) == 0
+	// 具体的な新規シンボル（新規ファイル・関数・型・HTTP ルート）が検出できた場合のみ
+	// feat 扱いにする。これが無い「既存コードの編集だけ」を一律 feat にしないことで、
+	// 公開履歴が feat: で埋まるのを防ぐ（方針1: prefix 推定の正確化）。
+	hasAdditions := len(a.added) > 0 || len(a.funcs) > 0 || len(a.types) > 0 || len(a.routes) > 0
+	hasRemovals := len(a.deleted) > 0 || len(a.removedRts) > 0
 	switch {
 	case !hasFile:
 		a.prefix = "chore"
 	case a.depsOnly:
-		a.prefix = "chore"
+		a.prefix = "chore(deps)"
 	case docOnly:
 		a.prefix = "docs"
 	case testOnly:
@@ -280,6 +294,11 @@ func analyzeCommitChanges(files []gitStatusFile, diff string) commitChangeAnalys
 	case a.styleOnly:
 		a.prefix = "style"
 	case renameOnly:
+		a.prefix = "refactor"
+	case hasAdditions:
+		a.prefix = "feat"
+	case codeChange && (hasRemovals || len(a.modified) > 0):
+		// 新規シンボルを伴わないコード変更（削除・既存編集のみ）は refactor 寄り。
 		a.prefix = "refactor"
 	case codeChange:
 		a.prefix = "feat"
@@ -398,6 +417,9 @@ func (a commitChangeAnalysis) subjectLine(ja bool) string {
 			what = withMoreJa(a.removedRts[0], len(a.removedRts)) + " エンドポイントを削除"
 		case len(a.deleted) > 0 && len(a.modified) == 0:
 			what = withMoreJa(baseName(a.deleted[0]), len(a.deleted)) + " を削除"
+		case len(a.modified) > 0:
+			// 無情報な「scope を更新」を避け、代表的な変更ファイル名で要約する（方針2）。
+			what = withMoreJa(baseName(a.modified[0]), len(a.modified)) + " を変更"
 		default:
 			what = scope + " を更新"
 		}
@@ -423,6 +445,8 @@ func (a commitChangeAnalysis) subjectLine(ja bool) string {
 		what = "remove " + withMoreEn(a.removedRts[0], len(a.removedRts)) + " endpoint(s)"
 	case len(a.deleted) > 0 && len(a.modified) == 0:
 		what = "remove " + withMoreEn(baseName(a.deleted[0]), len(a.deleted))
+	case len(a.modified) > 0:
+		what = "update " + withMoreEn(baseName(a.modified[0]), len(a.modified))
 	default:
 		what = "update " + scope
 	}

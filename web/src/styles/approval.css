@@ -5,7 +5,7 @@
 #action-bar {
   display: none;
   position: relative;
-  gap: 8px;
+  gap: var(--space-2);
   /* 右側: dismiss + collapse の 2 ボタン分を確保（dismiss(32) + gap(6) + collapse(32) + gap(8) + 元padding(12)） */
   padding: 8px calc(12px + 32px + 6px + 32px + 8px) 8px 12px;
   background: var(--bg-elev);
@@ -50,7 +50,7 @@
 #multi-question-banner {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 8px 12px;
   background: var(--bg-elev);
   border-top: 1px solid var(--line);
@@ -73,7 +73,7 @@
   padding: 2px 8px;
   font-size: 0.875rem;
   line-height: 1.2;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   margin-left: 8px;
 }
 .multi-question-banner-close:hover {
@@ -84,7 +84,7 @@
   background: var(--bg-elev);
   color: var(--text);
   border: 1px solid var(--line-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 7px 14px;
   font-size: 0.8rem;
   min-height: var(--control-h-sm);
@@ -126,9 +126,9 @@
 .action-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid transparent;
   margin: 2px 0;
 }
@@ -146,7 +146,7 @@
 .action-section-buttons {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-2);
 }
 .action-btn.batch-option.selected {
   border-color: var(--line-soft);
@@ -161,7 +161,7 @@
    質問数が増えても縦の高さは一定で、上のターミナル（文脈）が隠れない。 */
 .action-qtabs {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
   overflow-x: auto;
   margin-bottom: -1px;
   scrollbar-width: thin;
@@ -169,12 +169,12 @@
   z-index: 2;
 }
 .action-qtabs::-webkit-scrollbar { height: 6px; }
-.action-qtabs::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+.action-qtabs::-webkit-scrollbar-thumb { background: var(--line); border-radius: var(--radius-sm); }
 .action-qtab {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   max-width: 160px;
   padding: 7px 12px;
   border: 1px solid var(--line);
@@ -216,13 +216,13 @@
 .action-qopts {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-2);
   margin-bottom: 8px;
 }
-.action-qopt { display: flex; align-items: center; gap: 6px; max-width: 160px; }
+.action-qopt { display: flex; align-items: center; gap: var(--space-2); max-width: 160px; }
 /* 単一質問（1タブ）モード: 選択肢は全文表示（短ラベル圧縮なし）。横に並べて折り返し、
    ラベルが長い場合はボタン内で折り返す（詳細パネル不要・1クリックで送信）。 */
-.action-qopts-full { gap: 6px; }
+.action-qopts-full { gap: var(--space-2); }
 .action-qopts-full .action-btn { flex: 0 1 auto; max-width: 100%; }
 .action-qopt .n { color: var(--accent); font-weight: 700; flex: 0 0 auto; }
 .action-qopt.selected .n { color: var(--text); }
@@ -230,7 +230,7 @@
 .action-qdetail {
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 8px 10px;
   font-size: 0.85rem;
   color: var(--text);
@@ -248,7 +248,7 @@
    送信バー行を独立させず detail と同じ行に収めることで縦の占有を減らす。 */
 .action-qdetail-row {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: stretch;
   margin-top: 8px;
 }
@@ -260,11 +260,11 @@
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
   justify-content: center;
 }
 .action-qdetail-actions .action-bar-progress { white-space: nowrap; }
-.action-qdetail-btns { display: flex; gap: 6px; }
+.action-qdetail-btns { display: flex; gap: var(--space-2); }
 
 .action-qfreein {
   margin-top: 8px;
@@ -272,7 +272,7 @@
   background: var(--bg);
   color: var(--text);
   border: 1px solid var(--accent);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 8px 10px;
   font-size: 0.85rem;
   font-family: inherit;
@@ -311,7 +311,7 @@
   background: var(--bg-elev);
   color: var(--text);
   border: 1px solid var(--accent);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 16px 18px;
   box-shadow: 0 20px 60px rgba(0,0,0,0.6);
 }
@@ -321,7 +321,7 @@
 .action-confirm-payload {
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 8px 10px;
   font-family: "Cascadia Code", Consolas, monospace;
   font-size: 0.82rem;
@@ -333,13 +333,13 @@
 .action-confirm-row {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
   margin-top: 12px;
 }
 .action-confirm-back,
 .action-confirm-go {
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 8px 16px;
   font-size: 0.82rem;
   cursor: pointer;
@@ -356,7 +356,7 @@
 .action-bar-footer {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   margin-top: 6px;
   padding-top: 6px;
   border-top: 1px solid var(--line);
@@ -367,7 +367,7 @@
   background: var(--bg-elev);
   color: var(--text);
   border: 1px solid var(--line-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 7px 14px;
   font-size: 0.8rem;
   min-height: var(--control-h-sm);
@@ -406,7 +406,7 @@
   right: 12px;
   background: transparent;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--muted-2);
   cursor: pointer;
   font-size: 0.875rem;
@@ -429,7 +429,7 @@
   right: calc(12px + var(--control-h-sm) + 6px);
   background: transparent;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--muted-2);
   cursor: pointer;
   font-size: 0.95rem;
@@ -483,24 +483,24 @@
   background: var(--bg-elev);
   color: var(--text);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 20px 22px;
   font-size: 0.9rem;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-4);
   box-shadow: 0 4px 20px rgba(0,0,0,0.4);
   max-width: 420px;
   line-height: 1.6;
 }
 .approval-toast-msg { margin: 0; }
-.approval-toast-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.approval-toast-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
 .approval-toast-btn {
   flex-shrink: 0;
   background: var(--accent);
   color: #fff;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 6px 16px;
   font-size: 0.82rem;
   min-height: var(--control-h-md);
@@ -515,7 +515,7 @@
   background: transparent;
   color: var(--muted);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 6px 14px;
   font-size: 0.82rem;
   min-height: var(--control-h-md);
@@ -526,7 +526,7 @@
 
 @media (max-width: 720px), (pointer: coarse) {
   #action-bar {
-    gap: 8px;
+    gap: var(--space-2);
     padding: 10px calc(12px + 44px + 6px + 44px + 8px) calc(10px + env(safe-area-inset-bottom)) 12px;
     max-height: 56dvh;
     border-left: 0;
@@ -547,7 +547,7 @@
   .action-submit-btn {
     width: 100%;
     min-height: 48px;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     padding: 10px 12px;
     font-size: 0.9rem;
   }

@@ -64,14 +64,14 @@ body.pane-resizing .xterm { pointer-events: none; }
 .pane-slot.focused .ph-sid { color: var(--accent); }
 .pane-slot.focused .ph-dir { color: var(--text); }
 .pane-slot.empty {
-  align-items: center; justify-content: center; flex-direction: column; gap: 4px;
+  align-items: center; justify-content: center; flex-direction: column; gap: var(--space-1);
   background: var(--bg-deep); border: 1px dashed var(--line);
   color: var(--muted); font-size: 0.75rem; cursor: default;
 }
 .pane-slot .pane-header {
   flex-shrink: 0; height: 24px; background: var(--bg-elev);
   border-bottom: 1px solid var(--line);
-  display: flex; align-items: center; padding: 0 6px; gap: 5px; min-width: 0;
+  display: flex; align-items: center; padding: 0 6px; gap: var(--space-1); min-width: 0;
 }
 .pane-slot .pane-terminal-area { flex: 1; overflow: hidden; position: relative; }
 .pane-slot .pane-scroll-top { top: 10px; }
@@ -106,7 +106,7 @@ body.pane-resizing .xterm { pointer-events: none; }
 .pane-slot .ph-badge.error    { color: var(--red,    #ef4444); }
 /* ✕ 閉じるボタン: ペインヘッダ右端、hover時のみ表示 */
 .pane-slot .ph-close {
-  flex-shrink: 0; width: 16px; height: 16px; border-radius: 3px;
+  flex-shrink: 0; width: 16px; height: 16px; border-radius: var(--radius-sm);
   background: transparent; border: none; color: var(--muted);
   cursor: pointer; font-size: 0.6rem;
   opacity: 0; transition: opacity 0.1s, background 0.1s;
@@ -126,7 +126,7 @@ body.pane-resizing .xterm { pointer-events: none; }
 
 /* ── マルチタブ内のレイアウトバッジ ── */
 .multi-layout-badge {
-  font-size: 0.62rem; padding: 1px 5px; border-radius: 3px;
+  font-size: 0.62rem; padding: 1px 5px; border-radius: var(--radius-sm);
   background: rgba(91,124,246,0.2); color: var(--accent-text);
   margin-left: 3px;
 }
@@ -137,9 +137,9 @@ body.pane-resizing .xterm { pointer-events: none; }
   /* JS で getBoundingClientRect() によりビューポート基準座標をセット */
   top: 0;
   left: 0;
-  background: var(--bg-elev); border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius-md);
   padding: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.5); z-index: 200;
-  display: flex; flex-direction: column; gap: 8px; min-width: 240px;
+  display: flex; flex-direction: column; gap: var(--space-2); min-width: 240px;
 }
 /* hidden 解除後は display:flex で開く（.open クラス or hidden 属性の除去で制御） */
 #grid-picker-popup[hidden] { display: none !important; }
@@ -155,7 +155,7 @@ body.pane-resizing .xterm { pointer-events: none; }
   gap: 3px;
 }
 .picker-cell {
-  border-radius: 4px; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); border: 1px solid var(--line);
   background: var(--bg-deep); cursor: pointer;
   transition: background 0.1s, border-color 0.1s;
 }
@@ -167,10 +167,10 @@ body.pane-resizing .xterm { pointer-events: none; }
 }
 
 .picker-presets {
-  display: flex; flex-wrap: wrap; gap: 4px;
+  display: flex; flex-wrap: wrap; gap: var(--space-1);
 }
 .picker-preset-btn {
-  padding: 2px 8px; border-radius: 4px;
+  padding: 2px 8px; border-radius: var(--radius-sm);
   background: var(--bg-deep); border: 1px solid var(--line);
   color: var(--muted); font-size: 0.7rem; cursor: pointer;
   font-family: inherit;
@@ -190,7 +190,7 @@ body.pane-resizing .xterm { pointer-events: none; }
   background: transparent;
   border: 1px solid var(--line);
   color: var(--muted);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 1px 5px;
   font-size: 0.72rem;
   cursor: pointer;
@@ -218,7 +218,7 @@ body.pane-resizing .xterm { pointer-events: none; }
 .session-info-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   padding: 0 12px;
   margin-right: 4px;
   height: 100%;
@@ -238,7 +238,7 @@ body.pane-resizing .xterm { pointer-events: none; }
   padding: 0 14px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   background: transparent;
   border: none;
   color: var(--muted);
@@ -263,7 +263,7 @@ body.pane-resizing .xterm { pointer-events: none; }
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--accent) 20%, transparent);
   color: var(--accent-text);
   font-size: 0.62rem;
@@ -314,14 +314,14 @@ body.pane-resizing .xterm { pointer-events: none; }
   margin-left: auto;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   flex-shrink: 0;
 }
 #unified-tab-bar .icon-btn {
   min-height: var(--control-h-sm);
   align-self: center;
   padding: 0 9px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   background: transparent;
   color: var(--muted);
@@ -329,7 +329,7 @@ body.pane-resizing .xterm { pointer-events: none; }
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   font-family: inherit;
 }
 #unified-tab-bar .icon-btn:hover { background: var(--bg-elev2, var(--bg-deep)); color: var(--text); }
@@ -337,7 +337,7 @@ body.pane-resizing .xterm { pointer-events: none; }
   min-height: var(--control-h-sm);
   align-self: center;
   padding: 0 9px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   background: transparent;
   color: var(--muted);
@@ -345,7 +345,7 @@ body.pane-resizing .xterm { pointer-events: none; }
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   font-family: inherit;
 }
 #chat-pane .chat-filter-bar .icon-btn:hover { background: var(--bg-elev2, var(--bg-deep)); color: var(--text); }

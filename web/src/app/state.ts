@@ -64,6 +64,36 @@ export const sequentialChoiceCache = new Map<number, any>(); // sessionId → { 
 export const approvalRawOptionsCache = new Map<number, ApprovalOptionLike[] | any[]>(); // sessionId → approval options
 export const approvalSourceCache = new Map<number, { source?: string; sig?: string; kind?: string; detectedAt?: string }>(); // sessionId → { source, sig, kind, detectedAt }
 export const approvalConsumedSig = new Map<number, string>(); // sessionId → 消費済み承認の署名（doSend でテキスト送信した場合の再表示防止）
+// [MANY-AI-CLI] マーカー質問の「回答済み」恒久マーク（sessionId → ブロック全文ハッシュの集合）。
+// approvalConsumedSig はタイマー失効する短期抑制で、Ink の SIGWINCH 再描画（タブ切替時など）で
+// 画面に残った回答済みマーカーブロックが再流入すると失効後に再表示されてしまう。
+// こちらは時間に依存せず、一度回答した [MANY-AI-CLI] ブロック（質問文＋全選択肢のハッシュ）を
+// セッション存続中ずっと記録し、同一ブロックの検出を完全にスキップする。
+// 質問文も含めたハッシュなので「Yes/No」等ラベルが同一でも別質問なら別ハッシュになり誤抑制しない。
+// ネイティブ承認（go_vt / Codex 等のファイル編集・コマンド許可）は対象外＝毎回出す。
+export const answeredMarkerSigs = new Map<number, Set<string>>(); // sessionId → Set<blockSig>
+const ANSWERED_MARKER_SIG_LIMIT = 200; // 1 セッションあたりの保持上限（無制限増加防止）
+
+export function recordAnsweredMarkerSig(id: number, opts: any): void {
+  const sig = opts && opts[0] && opts[0]._blockSig;
+  if (!sig) return;
+  let set = answeredMarkerSigs.get(id);
+  if (!set) { set = new Set<string>(); answeredMarkerSigs.set(id, set); }
+  set.add(sig);
+  // 上限超過時は最古から間引く（Set は挿入順を保持する）。
+  while (set.size > ANSWERED_MARKER_SIG_LIMIT) {
+    const oldest = set.values().next().value;
+    if (oldest === undefined) break;
+    set.delete(oldest);
+  }
+}
+
+export function isAnsweredMarkerSig(id: number, opts: any): boolean {
+  const sig = opts && opts[0] && opts[0]._blockSig;
+  if (!sig) return false;
+  const set = answeredMarkerSigs.get(id);
+  return !!(set && set.has(sig));
+}
 export const batchSelections = new Map<number, number[]>(); // sessionId → number[]（セクションごとの選択番号、未選択は null、自由入力選択中は -1）
 export const batchFreeText = new Map<number, string[]>(); // sessionId → string[]（質問タブUIの自由入力テキスト、セクションごと）
 export const batchActiveQ = new Map<number, number>(); // sessionId → アクティブな質問タブ index（質問タブUI）

@@ -7,12 +7,12 @@
   background: transparent;
   color: var(--muted);
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-family: inherit;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   padding: 4px 9px;
   font-size: 0.72rem;
   white-space: nowrap;
@@ -46,7 +46,7 @@
   flex-direction: column;
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
   overflow: hidden;
 }
@@ -54,7 +54,7 @@
 .server-modal-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   padding: 10px 14px;
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
@@ -69,7 +69,7 @@
   font-size: 0.85rem;
   cursor: pointer;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-family: inherit;
 }
 .server-modal-icon-btn { margin-left: auto; }
@@ -86,7 +86,7 @@
   font-size: 0.8rem;
   color: var(--text-soft);
   background: var(--bg-soft);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 7px 10px;
   margin-bottom: 10px;
   line-height: 1.4;
@@ -103,19 +103,19 @@
 }
 
 /* ── プロファイル行 ── */
-.server-profile-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.server-profile-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
 
 .server-profile-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   padding: 9px 11px;
   background: var(--bg-soft);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 .server-profile-info { flex: 1 1 auto; min-width: 0; }
-.server-profile-top { display: flex; align-items: center; gap: 8px; }
+.server-profile-top { display: flex; align-items: center; gap: var(--space-2); }
 
 .server-type-badge {
   flex: 0 0 auto;
@@ -123,7 +123,7 @@
   font-weight: 700;
   letter-spacing: 0.04em;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   color: var(--accent-text);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -149,7 +149,7 @@
   font-size: 0.68rem;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .server-profile-state::before { content: "○"; font-size: 0.7rem; }
 .server-profile-state.is-connected { color: var(--green-text); }
@@ -166,7 +166,7 @@
   white-space: nowrap;
 }
 
-.server-profile-actions { flex: 0 0 auto; display: flex; gap: 6px; }
+.server-profile-actions { flex: 0 0 auto; display: flex; gap: var(--space-2); }
 
 .server-row-btn { font-size: 0.74rem; padding: 4px 11px; }
 
@@ -175,7 +175,7 @@
 .server-btn-secondary {
   cursor: pointer;
   font-family: inherit;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 6px 13px;
   font-size: 0.78rem;
   border: 1px solid var(--line);
@@ -211,8 +211,8 @@
 .server-add-summary::-webkit-details-marker { display: none; }
 .server-add-summary:hover { color: var(--text); }
 
-.server-add-form { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
-.server-field { display: flex; align-items: center; gap: 10px; }
+.server-add-form { margin-top: 10px; display: flex; flex-direction: column; gap: var(--space-2); }
+.server-field { display: flex; align-items: center; gap: var(--space-3); }
 .server-field[hidden] { display: none; }
 .server-field-label { flex: 0 0 110px; font-size: 0.78rem; color: var(--text-soft); }
 .server-input,
@@ -221,7 +221,7 @@
   min-width: 0;
   background: var(--bg-deep);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text);
   padding: 6px 9px;
   font-size: 0.8rem;
@@ -234,20 +234,20 @@
   font-size: 0.78rem;
   color: var(--danger);
   background: var(--danger-bg);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 6px 10px;
   line-height: 1.4;
   word-break: break-word;
 }
 
-.server-add-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.server-add-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: 4px; }
 
 /* ── リモートから取得（SSH-pull 自動補完） ── */
 .server-fetch-box {
   display: block;
   background: var(--bg-deep);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
 }
 .server-fetch-box[hidden] { display: none; }

@@ -23,7 +23,7 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   padding: 4px 8px;
   background: var(--bg-elev);
   border-bottom: 1px solid var(--line);
@@ -96,7 +96,7 @@
   cursor: pointer;
   font-size: 0.85rem;
   padding: 2px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-family: inherit;
   line-height: 1.4;
   flex-shrink: 0;
@@ -117,7 +117,7 @@
   font-size: 0.78rem;
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--text);
   padding: 2px 6px;
   font-family: inherit;
@@ -134,7 +134,7 @@
   display: flex;
   flex-direction: column;
   cursor: default;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   margin: 0 2px;
 }
 .files-tree-label {
@@ -142,7 +142,7 @@
   align-items: center;
   gap: 2px;
   padding: 2px 2px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -218,7 +218,7 @@
   padding: 6px;
   background: color-mix(in srgb, var(--bg-elev) 94%, transparent);
   border: 1px solid var(--line-soft, var(--line));
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.48);
   pointer-events: none;
 }
@@ -228,14 +228,14 @@
   max-width: calc(min(420px, 46vw) - 12px);
   max-height: calc(min(320px, 46vh) - 12px);
   object-fit: contain;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: #000;
 }
 
 /* ─── 複数選択移動ダイアログ ─────────────────────── */
 .files-move-dialog {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg);
   color: var(--text);
   padding: 0;
@@ -280,12 +280,12 @@
 .files-move-dialog-buttons {
   display: flex;
   justify-content: flex-end;
-  gap: 6px;
+  gap: var(--space-2);
   padding: 8px 12px;
 }
 .files-move-dialog-buttons button {
   padding: 4px 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--bg-elev);
   color: var(--text);
@@ -314,7 +314,7 @@
 .files-preview-toolbar {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   padding: 3px 8px;
   background: var(--bg-elev);
   border-bottom: 1px solid var(--line);
@@ -352,7 +352,7 @@
   cursor: pointer;
   font-size: 0.85rem;
   padding: 2px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-family: inherit;
   line-height: 1.4;
   flex-shrink: 0;
@@ -365,7 +365,7 @@
 .files-preview-search-bar {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   padding: 3px 8px;
   background: var(--bg-elev);
   border-bottom: 1px solid var(--line);
@@ -377,7 +377,7 @@
   font-size: 0.78rem;
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--text);
   padding: 2px 6px;
   font-family: inherit;
@@ -391,7 +391,7 @@
   cursor: pointer;
   font-size: 0.78rem;
   padding: 2px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-family: inherit;
   min-width: var(--control-h-sm);
   min-height: var(--control-h-sm);
@@ -432,7 +432,7 @@
   height: min(82vh, 100%);
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
   overflow: hidden;
 }
@@ -504,7 +504,7 @@
 .files-preview-md-body code {
   background: var(--bg-elev2);
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 1px 4px;
   font-family: Consolas, monospace;
   font-size: 0.82em;
@@ -512,7 +512,7 @@
 .files-preview-md-body pre {
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 10px 14px;
   overflow-x: auto;
   margin: 0.8em 0;
@@ -538,14 +538,14 @@
 .files-preview-md-body tr:nth-child(even) { background: var(--bg-elev); }
 .files-preview-md-body a { color: var(--accent-text, #818cf8); text-decoration: underline; }
 .files-preview-md-body a:hover { opacity: 0.8; }
-.files-preview-md-body img { max-width: 100%; border-radius: 4px; }
+.files-preview-md-body img { max-width: 100%; border-radius: var(--radius-sm); }
 .files-preview-md-body hr { border: none; border-top: 1px solid var(--line); margin: 1em 0; }
 /* GFM タスクリスト */
 .files-preview-md-body input[type="checkbox"] { cursor: default; margin-right: 4px; }
 /* ページ内検索ハイライト */
 .files-search-highlight {
   background: rgba(255, 210, 0, 0.35);
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
 }
 .files-search-highlight--active {
   background: rgba(255, 160, 0, 0.65);
@@ -555,7 +555,7 @@
 .files-preview-truncated-warn {
   background: var(--warn-bg, rgba(234, 179, 8, 0.12));
   border: 1px solid var(--warn, #ca8a04);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--warn, #ca8a04);
   font-size: 0.78rem;
   padding: 6px 12px;
@@ -599,7 +599,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   max-width: 100%;
   min-height: 100%;
   padding: 12px;
@@ -608,7 +608,7 @@
   max-width: 100%;
   max-height: calc(100dvh - 220px);
   object-fit: contain;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg);
   border: 1px solid var(--line);
   cursor: zoom-in;
@@ -625,7 +625,7 @@
   width: 30px;
   height: 30px;
   border: 1px solid var(--line-soft, var(--line));
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--text);
   background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
   cursor: pointer;
@@ -660,7 +660,7 @@
   color: var(--muted);
   background: var(--bg-elev2);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.15s, color 0.15s, background 0.15s;
@@ -693,7 +693,7 @@
   color: var(--muted);
   background: var(--bg-elev2);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.15s, color 0.15s, background 0.15s;
@@ -739,7 +739,7 @@
 .files-preview-edit-bar {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   flex-shrink: 0;
   padding: 4px 8px;
   background: var(--bg-elev);
@@ -750,7 +750,7 @@
   color: var(--accent-text, #fff);
   background: var(--accent, #6366f1);
   border: 1px solid var(--accent, #6366f1);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 2px 10px;
 }
 .files-preview-edit-save-btn:hover:not(:disabled) {
@@ -763,7 +763,7 @@
 .files-preview-edit-status {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   flex: 1;
   font-size: 0.78rem;
   color: var(--muted);

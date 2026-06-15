@@ -16,6 +16,8 @@ export type WfAgentState = 'running' | 'done' | 'failed' | 'pending';
 export interface WfAgent {
   label: string;
   state: WfAgentState;
+  /** 行頭の生グリフ（スピナー回転を検知してフレーム凍結判定に使う。表示には使わない）。 */
+  glyph: string;
 }
 
 export interface WfPhase {
@@ -29,6 +31,13 @@ export interface WorkflowProgress {
   detected: boolean;
   /** 走行中のエージェントが 1 件以上あるか（false かつ detected=true は「完了」）。 */
   running: boolean;
+  /**
+   * 「N/M agents done」サマリー行が存在し未完（done<total）か。
+   * これは Claude Code がバックグラウンド Workflow 実行中に毎秒更新するステータス行で、
+   * 走行の権威的な証拠。true の間は呼び出し側はフレーム凍結 settle を行ってはならない
+   * （インラインツリーが再描画されず固まっても、実際は走行中のため）。
+   */
+  live: boolean;
   /** Workflow 名（⚙ 行 / workflow: 行から拾えれば。無ければ ''）。 */
   name: string;
   phases: WfPhase[];
@@ -38,6 +47,12 @@ export interface WorkflowProgress {
   totalCount: number;
   /** 完了率（0..100）。明示の % / M/N があればそれを、無ければ done/total から算出。 */
   percent: number | null;
+  /**
+   * フレーム凍結判定用の署名。生グリフ（スピナー回転）と状態・件数を含む。
+   * 生きている Workflow はスピナーが回るので毎フレーム変化し、完了して静止した
+   * フレームでは不変になる。呼び出し側は連続一致で「実質完了」とみなす。
+   */
+  frameSig: string;
 }
 
 // ── グリフ定義（CALIBRATE: 実機サンプルで増減する） ───────────────────────────
@@ -89,7 +104,7 @@ function matchAgentRow(stripped: string): WfAgent | null {
   if (rest && !/^\s/.test(rest)) return null;
   const label = cleanLabel(rest);
   if (!label || label.length > 200) return null;
-  return { label, state };
+  return { label, state, glyph: first };
 }
 
 // Workflow 見出し行か（⚙ か "workflow" を含む）。name 抽出も兼ねる。
@@ -109,6 +124,18 @@ function matchHeader(stripped: string): { name: string } | null {
 }
 
 // サマリー行（"3 agents running · 5 done" / "60%" / "5/12" 等）から percent を拾う。
+// 「N/M agents done」サマリー行（Claude Code のバックグラウンド Workflow ステータス行）。
+// 例: "◑ ur… 43/90 agents done · 5m 25s · ↓ 1.9m"。done/total と raw（経過時間込み）を返す。
+const AGENTS_SUMMARY_RE = /\b(\d{1,4})\s*\/\s*(\d{1,4})\s+agents?\b/i;
+function matchAgentsSummary(stripped: string): { done: number; total: number } | null {
+  const m = stripped.match(AGENTS_SUMMARY_RE);
+  if (!m) return null;
+  const done = parseInt(m[1], 10);
+  const total = parseInt(m[2], 10);
+  if (!(total > 0) || done < 0 || done > total) return null;
+  return { done, total };
+}
+
 function matchSummaryPercent(stripped: string): number | null {
   const pct = stripped.match(/(\d{1,3})\s*%/);
   if (pct) {
@@ -128,6 +155,7 @@ function emptyResult(): WorkflowProgress {
   return {
     detected: false,
     running: false,
+    live: false,
     name: '',
     phases: [],
     runningCount: 0,
@@ -135,6 +163,7 @@ function emptyResult(): WorkflowProgress {
     failedCount: 0,
     totalCount: 0,
     percent: null,
+    frameSig: '',
   };
 }
 
@@ -154,6 +183,13 @@ export function parseWorkflowProgress(lines: string[]): WorkflowProgress {
     const h = matchHeader(stripTree(src[i]));
     if (h) { headerIdx = i; headerName = h.name; break; }
   }
+  // 見出しが無くても「N/M agents done」サマリー行があればそこを起点に解析する
+  // （バックグラウンド Workflow はインラインの ⚙ ツリーをビューポートに出さないため）。
+  if (headerIdx === -1) {
+    for (let i = src.length - 1; i >= 0; i--) {
+      if (matchAgentsSummary(stripTree(src[i]))) { headerIdx = i; break; }
+    }
+  }
   if (headerIdx === -1) return emptyResult();
 
   const block = src.slice(headerIdx);
@@ -161,10 +197,18 @@ export function parseWorkflowProgress(lines: string[]): WorkflowProgress {
   let current: WfPhase | null = null;
   let pendingTitle: string | null = null;
   let explicitPercent: number | null = null;
+  // 「N/M agents done」サマリー（権威信号）。最後の値と生行（経過時間込み）を保持。
+  let summary: { done: number; total: number } | null = null;
+  let summaryRaw = '';
 
   for (let i = 0; i < block.length; i++) {
     const stripped = stripTree(block[i]);
     if (!stripped) continue;
+
+    // agents サマリーは見出し行自体でも拾う（背景実行時は起点行が summary 行のため）。
+    const sum = matchAgentsSummary(stripped);
+    if (sum) { summary = sum; summaryRaw = stripped; continue; }
+
     if (i === 0) continue; // 見出し行自体はスキップ（name は採取済み）
 
     const agent = matchAgentRow(stripped);
@@ -201,17 +245,41 @@ export function parseWorkflowProgress(lines: string[]): WorkflowProgress {
     }
   }
 
+  // 「N/M agents done」サマリーがあれば、走行/件数はそれを権威として採用する
+  // （バックグラウンド実行はインラインのエージェント行が出ない / 古い静止フレームのため）。
+  let running: boolean;
+  let live = false;
+  if (summary) {
+    totalCount = summary.total;
+    doneCount = summary.done;
+    runningCount = Math.max(0, summary.total - summary.done);
+    failedCount = 0;
+    running = summary.done < summary.total;
+    live = running; // done<total の生サマリー＝走行中の権威的証拠
+  } else {
+    running = runningCount > 0;
+  }
+
   if (totalCount === 0) return emptyResult();
 
   let percent = explicitPercent;
-  if (percent === null) {
+  if (summary) {
+    percent = Math.round((summary.done / summary.total) * 100);
+  } else if (percent === null) {
     const finished = doneCount + failedCount;
     percent = totalCount > 0 ? Math.round((finished / totalCount) * 100) : null;
   }
 
+  // フレーム署名: 生グリフ込みのエージェント行 + 生サマリー行（経過時間込み）。
+  // 走行中は経過時間が毎秒変わるので frameSig が変化し、凍結誤判定を防ぐ。
+  const frameSig = phases
+    .map(p => p.title + ':' + p.agents.map(a => a.glyph + a.label).join(','))
+    .join('|') + '||S:' + summaryRaw;
+
   return {
     detected: true,
-    running: runningCount > 0,
+    running,
+    live,
     name: headerName,
     phases,
     runningCount,
@@ -219,5 +287,6 @@ export function parseWorkflowProgress(lines: string[]): WorkflowProgress {
     failedCount,
     totalCount,
     percent,
+    frameSig,
   };
 }

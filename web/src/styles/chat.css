@@ -9,7 +9,7 @@
 #chat-pane .chat-filter-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 8px 14px;
   background: #0f1320;
   border-bottom: 1px solid rgba(255,255,255,0.06);
@@ -23,7 +23,7 @@
   padding: 16px 20px 20px 20px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-4);
   background: #0a0c14;
   min-height: 0;
 }
@@ -34,7 +34,7 @@
 
 #chat-pane .msg {
   display: flex;
-  gap: 10px;
+  gap: var(--space-3);
   max-width: 100%;
   align-items: flex-start;
   position: relative;
@@ -88,7 +88,7 @@
 #chat-pane .bubble-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   font-size: 10px;
   color: #4a5568;
   padding: 0 4px;
@@ -105,7 +105,7 @@
 
 #chat-pane .bubble {
   padding: 8px 12px;
-  border-radius: 14px;
+  border-radius: var(--radius-xl);
   font-size: var(--chat-font-size);
   line-height: 1.5;
   white-space: pre-wrap;
@@ -131,7 +131,7 @@
 #chat-pane .code-inline {
   background: rgba(0,0,0,0.3);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-family: "Cascadia Code", Consolas, monospace;
   font-size: 12px;
   color: #f9a8d4;
@@ -142,7 +142,7 @@
   background: rgba(99,102,241,0.15);
   color: #a5b4fc;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid rgba(99,102,241,0.3);
   font-family: "Cascadia Code", Consolas, monospace;
   font-size: 12px;
@@ -170,14 +170,14 @@
 #chat-pane .tool-call {
   margin-top: 6px;
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: rgba(0,0,0,0.25);
   overflow: hidden;
 }
 #chat-pane .tool-call-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 6px 10px;
   cursor: pointer;
   font-size: 11px;
@@ -228,13 +228,13 @@
 #chat-pane .attachments {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-2);
   margin-top: 6px;
 }
 #chat-pane .thumb {
   width: 84px;
   height: 84px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: linear-gradient(135deg, #1e293b, #334155);
   border: 1px solid rgba(255,255,255,0.08);
   display: grid;
@@ -274,14 +274,14 @@
   border: 1px dashed rgba(245,158,11,0.35);
   color: #fde68a;
   font-size: 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 8px 12px;
   max-width: 560px;
 }
 #chat-pane .bubble.approval .ttl {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   font-weight: 700;
   margin-bottom: 4px;
 }
@@ -302,7 +302,7 @@
 #chat-pane .bubble-footer {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
 }
 #chat-pane .msg.user .bubble-footer { justify-content: flex-end; }
 #chat-pane .bubble-actions {
@@ -312,7 +312,7 @@
 #chat-pane .msg-action {
   width: 26px;
   height: 22px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   border: 1px solid rgba(255,255,255,0.1);
   background: #1a1f2e;
   color: #94a3b8;
@@ -357,7 +357,7 @@
   height: min(70vh, 600px);
   background: #0f1320;
   border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -366,7 +366,7 @@
 .chat-raw-modal-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   padding: 8px 12px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
   background: #1a1f2e;
@@ -381,7 +381,7 @@
 .chat-raw-modal-btn {
   width: 28px;
   height: 24px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   border: 1px solid rgba(255,255,255,0.1);
   background: #0f1320;
   color: #cbd5e1;
@@ -411,7 +411,7 @@
 }
 #chat-pane .filter-chip {
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid rgba(255,255,255,0.1);
   background: transparent;
   color: #8892b4;
@@ -419,7 +419,7 @@
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
 }
 #chat-pane .filter-chip:hover {
   border-color: rgba(255,255,255,0.2);
@@ -437,7 +437,7 @@
 #chat-pane .chat-filter-actions {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex: 1 1 340px;
   min-width: 0;
 }
@@ -449,7 +449,7 @@
   flex: 0 0 auto;
   margin: 8px 10px 0;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-elev);
   max-height: 220px;
   overflow: auto;
@@ -462,7 +462,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-elev);
@@ -471,7 +471,7 @@
 }
 #chat-pane .chat-global-search-head button {
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg-elev2);
   color: var(--muted);
   padding: 3px 8px;
@@ -516,7 +516,7 @@
   height: 28px;
   padding: 0 10px;
   border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: #0a0d15;
   color: #e2e8f0;
   font-size: 12px;
@@ -529,7 +529,7 @@
 #chat-pane mark.chat-search-mark {
   background: rgba(251, 191, 36, 0.4);
   color: inherit;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   padding: 0 1px;
 }
 #chat-pane .msg.search-current .bubble {
@@ -550,7 +550,7 @@
   right: 6px;
   width: 16px;
   background: rgba(15, 19, 32, 0.85);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   padding: 5px 3px;
   display: flex;
   flex-direction: column;
@@ -563,7 +563,7 @@
 #chat-pane .mm-tick {
   flex: 1;
   min-height: 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   opacity: 0.55;
   position: relative;
@@ -579,7 +579,7 @@
   background: #1a1f2e;
   color: #e2e8f0;
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 10px;
   white-space: nowrap;
   opacity: 0;

@@ -189,7 +189,11 @@ export function sessionLayoutSnapshot(s) {
 }
 
 export function _connectWs() {
-  const _ws = new WebSocket(`ws://${location.host}/ws`);
+  // HTTPS（Tailscale serve / リモート公開）経由では平文 ws:// が mixed-content で
+  // ブロックされ snapshot を受信できずセッションカードが出ない。ページの protocol に
+  // 合わせて wss:// / ws:// を選ぶ。
+  const wsProto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+  const _ws = new WebSocket(`${wsProto}${location.host}/ws`);
   ws = _ws;
   _ws.onerror = () => { document.getElementById('summary').textContent = t('ws_error'); };
   _ws.onclose = (e) => {
@@ -335,6 +339,12 @@ export function _connectWs() {
 
   if (m.type === 'pty_resize') {
     applyRemotePtyResize(m.session_id, m.cols, m.rows);
+    return;
+  }
+
+  if (m.type === 'commit_msg_suggested' || m.type === 'commit_msg_error') {
+    // Git タブ「Ask AI」の結果。該当する GitGraphView インスタンスが拾う。
+    try { window.dispatchEvent(new CustomEvent('many-commit-msg', { detail: m })); } catch (_) {}
     return;
   }
 
