@@ -164,6 +164,8 @@
   right: 8px;
   min-width: 220px;
   max-width: 360px;
+  max-height: min(70vh, calc(100vh - 48px));
+  overflow-y: auto;
   background: #1a1b26;
   border: 1px solid #3b4261;
   border-radius: var(--radius-md);
@@ -171,7 +173,7 @@
   font-size: 0.72rem;
   color: #c0caf5;
   box-shadow: 0 6px 20px rgba(0,0,0,.5);
-  z-index: 60;
+  z-index: 1300;
 }
 #tsb-cost-pop .tsb-pop-title {
   padding: 2px 12px 6px;

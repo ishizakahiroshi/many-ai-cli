@@ -10,6 +10,7 @@ package hub
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,7 +24,7 @@ type usageStat struct {
 	// Codex は Hub 側の価格表で算出。
 	CostUSD float64
 	// CostKnown: 価格表に登録されているモデルか。false なら表示側は "$ —" とする。
-	CostKnown bool
+	CostKnown   bool
 	TokensIn    int
 	TokensOut   int
 	TokensCache int
@@ -31,9 +32,9 @@ type usageStat struct {
 	// CtxWindow: モデルのコンテキストウィンドウ上限（relay から受信。不明なら 0）。
 	CtxWindow int
 	// UsageModel: relay が報告したモデル ID / display_name。
-	UsageModel  string
-	StartedAt   string
-	ReceivedAt  time.Time
+	UsageModel string
+	StartedAt  string
+	ReceivedAt time.Time
 }
 
 // usageStatsMu は usageStats map を保護する。sessionsMu とは独立したロック。
@@ -66,37 +67,37 @@ type modelPricing struct {
 var modelPriceTable = map[string]modelPricing{
 	// --- OpenAI / Codex ---
 	// gpt-4.1 系 (2025-04 発表)
-	"gpt-4.1":       {InputPerMTok: 2.00, OutputPerMTok: 8.00, CacheReadPerMTok: 0.50},
-	"gpt-4.1-mini":  {InputPerMTok: 0.40, OutputPerMTok: 1.60, CacheReadPerMTok: 0.10},
-	"gpt-4.1-nano":  {InputPerMTok: 0.10, OutputPerMTok: 0.40, CacheReadPerMTok: 0.025},
-	"gpt-4o":        {InputPerMTok: 2.50, OutputPerMTok: 10.00, CacheReadPerMTok: 1.25},
-	"gpt-4o-mini":   {InputPerMTok: 0.15, OutputPerMTok: 0.60, CacheReadPerMTok: 0.075},
-	"gpt-5":         {InputPerMTok: 10.00, OutputPerMTok: 40.00, CacheReadPerMTok: 2.50},
-	"gpt-5.5":       {InputPerMTok: 10.00, OutputPerMTok: 40.00, CacheReadPerMTok: 2.50},
-	"o3":            {InputPerMTok: 10.00, OutputPerMTok: 40.00, CacheReadPerMTok: 2.50},
-	"o4-mini":       {InputPerMTok: 1.10, OutputPerMTok: 4.40, CacheReadPerMTok: 0.275},
+	"gpt-4.1":      {InputPerMTok: 2.00, OutputPerMTok: 8.00, CacheReadPerMTok: 0.50},
+	"gpt-4.1-mini": {InputPerMTok: 0.40, OutputPerMTok: 1.60, CacheReadPerMTok: 0.10},
+	"gpt-4.1-nano": {InputPerMTok: 0.10, OutputPerMTok: 0.40, CacheReadPerMTok: 0.025},
+	"gpt-4o":       {InputPerMTok: 2.50, OutputPerMTok: 10.00, CacheReadPerMTok: 1.25},
+	"gpt-4o-mini":  {InputPerMTok: 0.15, OutputPerMTok: 0.60, CacheReadPerMTok: 0.075},
+	"gpt-5":        {InputPerMTok: 10.00, OutputPerMTok: 40.00, CacheReadPerMTok: 2.50},
+	"gpt-5.5":      {InputPerMTok: 10.00, OutputPerMTok: 40.00, CacheReadPerMTok: 2.50},
+	"o3":           {InputPerMTok: 10.00, OutputPerMTok: 40.00, CacheReadPerMTok: 2.50},
+	"o4-mini":      {InputPerMTok: 1.10, OutputPerMTok: 4.40, CacheReadPerMTok: 0.275},
 	// --- Anthropic / Claude ---
 	// Claude 4 系 (2026 Q1)
-	"claude-opus-4":        {InputPerMTok: 15.00, OutputPerMTok: 75.00, CacheReadPerMTok: 1.50, CacheWritePerMTok: 18.75},
-	"claude-sonnet-4":      {InputPerMTok: 3.00, OutputPerMTok: 15.00, CacheReadPerMTok: 0.30, CacheWritePerMTok: 3.75},
-	"claude-haiku-4":       {InputPerMTok: 0.80, OutputPerMTok: 4.00, CacheReadPerMTok: 0.08, CacheWritePerMTok: 1.00},
+	"claude-opus-4":   {InputPerMTok: 15.00, OutputPerMTok: 75.00, CacheReadPerMTok: 1.50, CacheWritePerMTok: 18.75},
+	"claude-sonnet-4": {InputPerMTok: 3.00, OutputPerMTok: 15.00, CacheReadPerMTok: 0.30, CacheWritePerMTok: 3.75},
+	"claude-haiku-4":  {InputPerMTok: 0.80, OutputPerMTok: 4.00, CacheReadPerMTok: 0.08, CacheWritePerMTok: 1.00},
 	// 現行モデル（2026-06 公式単価。CacheRead=入力×0.1 / CacheWrite=入力×1.25 の慣習で算出）
 	// audit #31: 現行モデル ID を正規単価で表に収録（claude-api スキル公式テーブル 2026-06-04 確認）。
-	"claude-fable-5":        {InputPerMTok: 10.00, OutputPerMTok: 50.00, CacheReadPerMTok: 1.00, CacheWritePerMTok: 12.50},
-	"claude-opus-4-8":       {InputPerMTok: 5.00, OutputPerMTok: 25.00, CacheReadPerMTok: 0.50, CacheWritePerMTok: 6.25},
-	"claude-opus-4-7":       {InputPerMTok: 5.00, OutputPerMTok: 25.00, CacheReadPerMTok: 0.50, CacheWritePerMTok: 6.25},
-	"claude-opus-4-6":       {InputPerMTok: 5.00, OutputPerMTok: 25.00, CacheReadPerMTok: 0.50, CacheWritePerMTok: 6.25},
-	"claude-sonnet-4-6":     {InputPerMTok: 3.00, OutputPerMTok: 15.00, CacheReadPerMTok: 0.30, CacheWritePerMTok: 3.75},
+	"claude-fable-5":    {InputPerMTok: 10.00, OutputPerMTok: 50.00, CacheReadPerMTok: 1.00, CacheWritePerMTok: 12.50},
+	"claude-opus-4-8":   {InputPerMTok: 5.00, OutputPerMTok: 25.00, CacheReadPerMTok: 0.50, CacheWritePerMTok: 6.25},
+	"claude-opus-4-7":   {InputPerMTok: 5.00, OutputPerMTok: 25.00, CacheReadPerMTok: 0.50, CacheWritePerMTok: 6.25},
+	"claude-opus-4-6":   {InputPerMTok: 5.00, OutputPerMTok: 25.00, CacheReadPerMTok: 0.50, CacheWritePerMTok: 6.25},
+	"claude-sonnet-4-6": {InputPerMTok: 3.00, OutputPerMTok: 15.00, CacheReadPerMTok: 0.30, CacheWritePerMTok: 3.75},
 	// claude-opus-4-5 / claude-opus-4（4.0）: 公式 pricing 表に現行単価の記載なし（legacy/deprecated）。
 	// 確証なしのため $15/$75 据え置き（C6 判断ログ参照）。
-	"claude-opus-4-5":       {InputPerMTok: 15.00, OutputPerMTok: 75.00, CacheReadPerMTok: 1.50, CacheWritePerMTok: 18.75},
-	"claude-sonnet-4-5":     {InputPerMTok: 3.00, OutputPerMTok: 15.00, CacheReadPerMTok: 0.30, CacheWritePerMTok: 3.75},
-	"claude-haiku-4-5":      {InputPerMTok: 1.00, OutputPerMTok: 5.00, CacheReadPerMTok: 0.10, CacheWritePerMTok: 1.25},
-	"claude-3-5-sonnet":     {InputPerMTok: 3.00, OutputPerMTok: 15.00, CacheReadPerMTok: 0.30, CacheWritePerMTok: 3.75},
-	"claude-3-5-haiku":      {InputPerMTok: 0.80, OutputPerMTok: 4.00, CacheReadPerMTok: 0.08, CacheWritePerMTok: 1.00},
-	"claude-3-opus":         {InputPerMTok: 15.00, OutputPerMTok: 75.00, CacheReadPerMTok: 1.50, CacheWritePerMTok: 18.75},
-	"claude-3-sonnet":       {InputPerMTok: 3.00, OutputPerMTok: 15.00, CacheReadPerMTok: 0.30, CacheWritePerMTok: 3.75},
-	"claude-3-haiku":        {InputPerMTok: 0.25, OutputPerMTok: 1.25, CacheReadPerMTok: 0.03, CacheWritePerMTok: 0.30},
+	"claude-opus-4-5":   {InputPerMTok: 15.00, OutputPerMTok: 75.00, CacheReadPerMTok: 1.50, CacheWritePerMTok: 18.75},
+	"claude-sonnet-4-5": {InputPerMTok: 3.00, OutputPerMTok: 15.00, CacheReadPerMTok: 0.30, CacheWritePerMTok: 3.75},
+	"claude-haiku-4-5":  {InputPerMTok: 1.00, OutputPerMTok: 5.00, CacheReadPerMTok: 0.10, CacheWritePerMTok: 1.25},
+	"claude-3-5-sonnet": {InputPerMTok: 3.00, OutputPerMTok: 15.00, CacheReadPerMTok: 0.30, CacheWritePerMTok: 3.75},
+	"claude-3-5-haiku":  {InputPerMTok: 0.80, OutputPerMTok: 4.00, CacheReadPerMTok: 0.08, CacheWritePerMTok: 1.00},
+	"claude-3-opus":     {InputPerMTok: 15.00, OutputPerMTok: 75.00, CacheReadPerMTok: 1.50, CacheWritePerMTok: 18.75},
+	"claude-3-sonnet":   {InputPerMTok: 3.00, OutputPerMTok: 15.00, CacheReadPerMTok: 0.30, CacheWritePerMTok: 3.75},
+	"claude-3-haiku":    {InputPerMTok: 0.25, OutputPerMTok: 1.25, CacheReadPerMTok: 0.03, CacheWritePerMTok: 0.30},
 }
 
 // lookupModelPricing はモデル ID（完全一致 → 前方一致の順）で価格表を引く。
@@ -133,6 +134,15 @@ func calcCostUSD(modelID string, tokIn, tokOut, tokCacheRead int) (cost float64,
 	return cost, true
 }
 
+func (s *Server) sessionUsageModel(sessionID int) string {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	if ses := s.sessions[sessionID]; ses != nil {
+		return strings.TrimSpace(ses.Model)
+	}
+	return ""
+}
+
 // ---------------------------------------------------------------------------
 // HTTP ハンドラ
 // ---------------------------------------------------------------------------
@@ -140,9 +150,9 @@ func calcCostUSD(modelID string, tokIn, tokOut, tokCacheRead int) (cost float64,
 // sessionUsageRequest は relay が POST する数値メタのみを受け取る構造体。
 // プロンプト本文・コード・ツール入出力などのフィールドは存在しない（セキュリティ要件）。
 type sessionUsageRequest struct {
-	Provider   string  `json:"provider"`
-	SessionID  int     `json:"session_id"`
-	CostUSD    float64 `json:"cost_usd"`
+	Provider  string  `json:"provider"`
+	SessionID int     `json:"session_id"`
+	CostUSD   float64 `json:"cost_usd"`
 	// CostFromRelay: relay 側（Claude）が計算済みコストを送る場合は true。
 	// false（Codex 等）の場合は Hub 側の価格表で算出する。
 	CostFromRelay bool   `json:"cost_from_relay"`
@@ -169,6 +179,10 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "session_id required")
 		return
 	}
+	usageModel := strings.TrimSpace(req.Model)
+	if usageModel == "" {
+		usageModel = s.sessionUsageModel(req.SessionID)
+	}
 
 	// コスト決定:
 	//   - Claude: relay が計算済みコストを送る（CostFromRelay=true）→ そのまま採用。
@@ -179,7 +193,7 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 		costUSD = req.CostUSD
 		costKnown = true
 	} else {
-		costUSD, costKnown = calcCostUSD(req.Model, req.TokensIn, req.TokensOut, req.TokensCache)
+		costUSD, costKnown = calcCostUSD(usageModel, req.TokensIn, req.TokensOut, req.TokensCache)
 	}
 
 	stat := &usageStat{
@@ -190,7 +204,7 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 		TokensCache: req.TokensCache,
 		TokensTotal: req.TokensTotal,
 		CtxWindow:   req.CtxWindow,
-		UsageModel:  req.Model,
+		UsageModel:  usageModel,
 		StartedAt:   req.StartedAt,
 		ReceivedAt:  time.Now(),
 	}
@@ -202,7 +216,7 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 	s.logger.Info("usage_stat received",
 		slog.Int("session_id", req.SessionID),
 		slog.String("provider", req.Provider),
-		slog.String("model", req.Model),
+		slog.String("model", usageModel),
 		slog.Float64("cost_usd", costUSD),
 		slog.Bool("cost_known", costKnown),
 		slog.Int("tokens_in", req.TokensIn),
@@ -223,7 +237,7 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 		TokensCache:    req.TokensCache,
 		TokensTotal:    req.TokensTotal,
 		CtxWindow:      req.CtxWindow,
-		UsageModel:     req.Model,
+		UsageModel:     usageModel,
 		UsageStartedAt: req.StartedAt,
 	})
 

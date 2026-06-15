@@ -445,8 +445,9 @@ function wireClicks(bar: HTMLElement): void {
       return;
     }
     // cost → 内訳ポップ
-    if (target.closest('.tsb-seg-cost')) {
-      toggleCostPopover(bar);
+    const costSeg = target.closest('.tsb-seg-cost') as HTMLElement | null;
+    if (costSeg) {
+      toggleCostPopover(costSeg);
       return;
     }
     // ctx / tok → 値をコピー
@@ -476,7 +477,17 @@ function closeCostPopover(): void {
   }
 }
 
-function toggleCostPopover(bar: HTMLElement): void {
+function positionCostPopover(pop: HTMLElement, anchor: HTMLElement): void {
+  const r = anchor.getBoundingClientRect();
+  const margin = 8;
+  const width = pop.offsetWidth || 220;
+  const left = Math.max(margin, Math.min(r.right - width, window.innerWidth - width - margin));
+  pop.style.left = `${Math.round(left)}px`;
+  pop.style.right = 'auto';
+  pop.style.bottom = `${Math.max(26, Math.round(window.innerHeight - r.top + 4))}px`;
+}
+
+function toggleCostPopover(anchor: HTMLElement): void {
   if (document.getElementById('tsb-cost-pop')) { closeCostPopover(); return; }
   const pop = document.createElement('div');
   pop.id = 'tsb-cost-pop';
@@ -493,7 +504,10 @@ function toggleCostPopover(bar: HTMLElement): void {
   pop.innerHTML =
     `<div class="tsb-pop-title">${escapeHtml(t('tsb_cost_breakdown_title'))}</div>${rows.join('')}` +
     `<div class="tsb-pop-row tsb-pop-total"><span>${escapeHtml(t('tsb_cost_total'))}</span><span>${escapeHtml(formatCost(total, true))}</span></div>`;
-  bar.appendChild(pop);
+  // fixed のステータスバー配下に置くと stacking context の都合で入力欄やライブステータスに
+  // 潜ることがあるため、body 直下に出してクリック位置の上へ配置する。
+  document.body.appendChild(pop);
+  positionCostPopover(pop, anchor);
   // バー外クリックで閉じる。cost セグメント上のクリックは toggle 側に委ねる
   // （ここで閉じると click が再度開いてトグルが効かなくなるため除外）。
   setTimeout(() => {

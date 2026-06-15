@@ -403,6 +403,20 @@ test('approval parser fixtures', () => {
   assert.deepEqual(labels(multi), ['コンテキスト使用率', '承認待ちバッジ', 'キャッシュ率']);
   assert.equal(multi[0]._question, '下バーに追加したい情報は？');
 
+  const multiWithPreamble = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    '表示密度だけに関わる設定です。',
+    '#multi 下バーに追加したい情報は？',
+    '1. コンテキスト使用率',
+    '2. 承認待ちバッジ',
+    '3. キャッシュ率',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isMultiSelectOptions(multiWithPreamble), true);
+  assert.deepEqual(numbers(multiWithPreamble), [1, 2, 3]);
+  assert.equal((multiWithPreamble as any)._preamble, '表示密度だけに関わる設定です。');
+  assert.equal(multiWithPreamble[0]._question, '下バーに追加したい情報は？');
+
   // #multi が無い同形の番号付きリストは単一選択（multiSelect ではない）のまま。
   const singleSelect = parser.extractHubMarkerApproval([
     '[MANY-AI-CLI]',
