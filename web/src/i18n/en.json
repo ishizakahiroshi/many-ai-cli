@@ -250,6 +250,8 @@
   "settings_quick_cmd_3_show": "Show command 3",
   "settings_quick_cmd_4_show": "Show command 4",
   "settings_quick_cmd_5_show": "Show command 5",
+  "settings_quick_cmd_show_short": "Show",
+  "settings_quick_cmd_show_tooltip": "Show this command as a button",
   "settings_input_tools_title": "Input assist tools",
   "settings_input_tools_pc": "PC (wide screen)",
   "settings_input_tools_mobile": "Mobile (narrow screen)",

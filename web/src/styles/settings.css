@@ -287,6 +287,29 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 }
 .settings-input-text:focus { border-color: var(--accent); }
 
+/* クイックコマンド設定: 1コマンド1行に圧縮し、入力欄を横いっぱいに広げる */
+.quick-cmd-row { flex-wrap: nowrap; }
+.quick-cmd-row .settings-label { flex-basis: auto; }
+.quick-cmd-row .settings-input-text.quick-cmd-input {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  padding: 7px 9px;
+  font-size: 0.9rem;
+  min-height: 38px;
+}
+.quick-cmd-show {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.quick-cmd-show .settings-checkbox { margin: 0; }
+
 /* リモート PIN ログインモーダル（remote-auth.ts / plan_hub-remote-auth.md C3） */
 #pin-login-overlay {
   position: fixed;
