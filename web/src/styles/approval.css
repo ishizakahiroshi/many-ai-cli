@@ -248,6 +248,13 @@
   margin-bottom: 8px;
   overflow-wrap: anywhere;
 }
+/* 単一質問モードで選択肢の上に出す質問本文。AI が何を聞いているかを CLI を見ずに把握できるよう
+   選択肢より目立たせる（やや太字・前置きと区別する余白）。長文は折り返す。 */
+.action-single-qhead {
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
 .action-qopts {
   display: flex;
   flex-wrap: wrap;

@@ -169,6 +169,19 @@
   //  ② 2 行以上連続する空行（大きな段落区切り）を上端の境界にする（段落間の単一空行は保持）
   //  ③ 上限 PREAMBLE_MAX_LINES 行（長文の前置きでポップアップが肥大しないよう保険。表示側はスクロール可）
   const PREAMBLE_MAX_LINES = 40;
+  // 罫線・表組みの区切り行だけを判定する。AI には approval-rules.md(version 14) で
+  // 経緯に罫線・テーブルを使わないよう指示済みだが、過去出力・非対応 AI の保険として
+  // Web 側でも「罫線文字だけで構成された行」を経緯から落とす（崩れた横線のノイズ除去）。
+  // 列対応の再構築はしない（VTスクレイプ後はハードラップで構造が失われているため不可能）。
+  // 判定: 罫線/区切り文字を 1 つ以上含み、かつ罫線・表枠・区切り記号と空白のみで構成される行。
+  const RULE_ONLY_RE = /^[\s|:+┌┐└┘├┤┬┴┼╮╭╯╰│║─━═┄┅┈┉╌╍╴╶—–‐_=\-]+$/;
+  const RULE_CHAR_RE = /[─━═┄┅┈┉╌╍╴╶│║┌┐└┘├┤┬┴┼—–‐\-=]/;
+  function isRuleOnlyLine(line) {
+    const trimmed = String(line || '').trim();
+    if (!trimmed) return false;
+    if (!RULE_CHAR_RE.test(trimmed)) return false;
+    return RULE_ONLY_RE.test(trimmed);
+  }
   function preambleBeforeMarker(textBefore) {
     let s = String(textBefore || '');
     const lastClose = Math.max(s.lastIndexOf('[/MANY-AI-CLI]'), s.lastIndexOf('[/MANY-AI-CLI-DONE]'));
@@ -179,6 +192,8 @@
     // 対応の取れなかったマーカー片が残っていても表示に混ぜない。
     s = s.replace(/\[\/?MANY-AI-CLI(?:-DONE)?\]/g, '');
     let lines = s.split('\n').map(l => l.replace(/\s+$/g, ''));
+    // 罫線・表組みの区切り行を除去する（崩れた横線ノイズを経緯に出さない）。
+    lines = lines.filter(l => !isRuleOnlyLine(l));
     // 末尾(画面では直上)から遡り、最初に現れる「2 行連続の空行」を上端境界にする。
     let cut = 0;
     for (let i = lines.length - 1; i >= 1; i--) {
@@ -260,11 +275,19 @@
       const line = String(source[i] || '').trim();
       if (!line) continue;
       if (/\[MANY-AI-CLI\]|\[\/MANY-AI-CLI\]/.test(line)) continue;
-      if (looksLikeYesNoQuestion(line)) return yesNoApprovalOptions(yesNoCtxFromText(line));
+      if (looksLikeYesNoQuestion(line)) {
+        const yn = yesNoApprovalOptions(yesNoCtxFromText(line));
+        const q = yesNoQuestionText(line);
+        if (q) (yn as any)._question = q;
+        return yn;
+      }
     }
     const recentText = recentLines.join('\n');
     if (!/\[MANY-AI-CLI\]|\[\/MANY-AI-CLI\]/.test(recentText) && looksLikeYesNoQuestion(recentText)) {
-      return yesNoApprovalOptions(yesNoCtxFromText(recentText));
+      const yn = yesNoApprovalOptions(yesNoCtxFromText(recentText));
+      const q = yesNoQuestionText(recentText);
+      if (q) (yn as any)._question = q;
+      return yn;
     }
     return null;
   }
@@ -375,7 +398,10 @@
     const text = lines.join('\n');
     if (hasYesNoApprovalMarker(text)) {
       if (isPlaceholderYesNoQuestion(text)) return null;
-      return yesNoApprovalOptions(yesNoCtxFromText(text));
+      const yn = yesNoApprovalOptions(yesNoCtxFromText(text));
+      const q = yesNoQuestionText(text);
+      if (q) (yn as any)._question = q; // 質問本文を承認ポップアップへ表示するため付与
+      return yn;
     }
     // 複数選択（#multi）: ディレクティブ行があれば番号付き選択肢を multiSelect として返す。
     // 単一選択・バッチのセクション解析より前に確定させる（#multi 行自体は heading/option に
@@ -416,6 +442,7 @@
     let cur = null;
     let lastOpt = null; // 続き行結合の対象（直近の選択肢）
     let looseFreeInput = false; // 単一選択（looseOpts）に「N. User specifies」があったか
+    const looseQuestionLines = []; // 単一ブロックで最初の選択肢より前に置かれた質問文（見出し`Q1`形式でない地の文）
     const optionRe = /^(\d+)\.\s*(.+?)\s*$/;
     // 見出しは `Q1 質問文?`（Q + 連番）を正とする。選択肢 `1.`（数字+ピリオド）と区別するため。
     // 後方互換: 旧 `1 質問文?`（プレフィックスなし数字+スペース）も引き続き受理する。
@@ -458,6 +485,10 @@
       // 直前に選択肢があればそのラベルへ、無ければ現在の見出しタイトルへ繋ぐ。
       if (lastOpt) lastOpt.label = (lastOpt.label + line).replace(/\s+/g, ' ').trim();
       else if (cur) cur.title = (cur.title + line).replace(/\s+/g, ' ').trim();
+      // 単一ブロックの先頭（選択肢も見出しも未出現）に置かれた地の文は質問文として捕捉する。
+      // 従来はここで捨てられ、単一質問の承認 UI に質問が出ず CLI 画面を見ないと内容が分からなかった。
+      // バッチ（`Q1 質問?` 見出し）と対称に、単一でも質問文をポップアップへ出すための捕捉。
+      else looseQuestionLines.push(line);
     }
     const filledSections = sections.filter(s => s.options.length > 0);
     if (filledSections.length >= 2) return filledSections;
@@ -465,6 +496,10 @@
     if (looseOpts.length > 0) {
       // 自由入力フラグは配列プロパティで持たせる（option 構造は変えず isBatchOptions=false を維持）。
       if (looseFreeInput) (looseOpts as any)._freeInput = true;
+      // 質問文も配列プロパティで持たせる（同上・isBatchOptions/approvalSig に影響させない）。
+      if (looseQuestionLines.length) {
+        (looseOpts as any)._question = looseQuestionLines.join(' ').replace(/\s+/g, ' ').trim();
+      }
       return looseOpts;
     }
     return null;

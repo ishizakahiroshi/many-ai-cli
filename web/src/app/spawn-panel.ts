@@ -610,27 +610,147 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   let cwdDragMoved = false;     // 並び替え直後に発火する click 選択を1回抑止する
   let cwdSuppressReopen = false; // お気に入り選択で入力欄を再 focus する際の自動再オープンを1回抑止する
 
+  // パス文字列を「親ディレクトリ」「末尾セグメント（basename）」に分割する。
+  // 区切りは \ と / の両対応。末尾が区切り文字の場合は手前のセグメントを basename とする。
+  function splitCwdPath(value) {
+    const v = String(value);
+    // 末尾の区切り文字は無視して basename 境界を探す。
+    let end = v.length;
+    while (end > 0 && (v[end - 1] === '/' || v[end - 1] === '\\')) end--;
+    let start = end;
+    while (start > 0 && v[start - 1] !== '/' && v[start - 1] !== '\\') start--;
+    return { parent: v.slice(0, start), basename: v.slice(start) };
+  }
+
+  // 生テキスト raw を escapeHtml した上で、filter にマッチする部分のみ <mark> で囲む。
+  // ⚠️ XSS: 分割は raw（未エスケープ）の小文字比較で位置だけ求め、出力は必ず
+  //         escapeHtml 済みの各断片に対してのみ span/mark を組み立てる。
+  function highlightCwdSegment(raw, filter) {
+    const escaped = escapeHtml(raw);
+    if (!filter) return escaped;
+    const lowRaw = raw.toLowerCase();
+    const lowFilter = filter.toLowerCase();
+    let out = '';
+    let i = 0;
+    while (i < raw.length) {
+      const hit = lowRaw.indexOf(lowFilter, i);
+      if (hit < 0) { out += escapeHtml(raw.slice(i)); break; }
+      out += escapeHtml(raw.slice(i, hit));
+      out += `<mark class="cwd-dropdown-mark">${escapeHtml(raw.slice(hit, hit + filter.length))}</mark>`;
+      i = hit + filter.length;
+    }
+    return out;
+  }
+
+  // 2トーン（親=muted / 末尾=強調）＋ filter マッチハイライトのラベル HTML を組み立てる。
+  function buildCwdLabelHtml(value, filter) {
+    const { parent, basename } = splitCwdPath(value);
+    const parentHtml = parent
+      ? `<span class="cwd-dropdown-path-parent">${highlightCwdSegment(parent, filter)}</span>`
+      : '';
+    const baseHtml = `<span class="cwd-dropdown-path-base">${highlightCwdSegment(basename, filter)}</span>`;
+    return parentHtml + baseHtml;
+  }
+
+  // 末尾が `\` または `/` のとき、その親パス直下のサブフォルダ一覧を保持する。
+  // input 値が変わるたびに更新され、renderCwdDropdown が先頭セクションとして描画する。
+  const subdirsCache = new Map<string, string[]>();
+  let subdirsCurrent: { parent: string; sep: string; items: string[] } | null = null;
+
+  function detectPathSep(v: string): string {
+    if (v.includes('\\')) return '\\';
+    if (v.includes('/')) return '/';
+    return '\\';
+  }
+  function endsWithSep(v: string): boolean {
+    return v.endsWith('\\') || v.endsWith('/');
+  }
+  function stripTrailingSep(v: string): string {
+    let end = v.length;
+    while (end > 0 && (v[end - 1] === '\\' || v[end - 1] === '/')) end--;
+    return v.slice(0, end);
+  }
+
+  async function fetchSubdirs(parent: string): Promise<string[]> {
+    if (subdirsCache.has(parent)) return subdirsCache.get(parent)!;
+    try {
+      const res = await fetch(`/api/list-subdirs?token=${token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: parent }),
+      });
+      if (!res.ok) { subdirsCache.set(parent, []); return []; }
+      const data = await res.json();
+      const items = Array.isArray(data.subdirs) ? data.subdirs : [];
+      subdirsCache.set(parent, items);
+      return items;
+    } catch (_) {
+      subdirsCache.set(parent, []);
+      return [];
+    }
+  }
+
+  function maybeUpdateSubdirs(value: string): void {
+    if (!value || !endsWithSep(value)) {
+      subdirsCurrent = null;
+      return;
+    }
+    const sep = detectPathSep(value);
+    const parent = stripTrailingSep(value);
+    if (!parent) { subdirsCurrent = null; return; }
+    if (subdirsCurrent && subdirsCurrent.parent === parent) return;
+    subdirsCurrent = { parent, sep, items: subdirsCache.get(parent) ?? [] };
+    fetchSubdirs(parent).then(items => {
+      if (!subdirsCurrent || subdirsCurrent.parent !== parent) return;
+      subdirsCurrent.items = items;
+      renderCwdDropdown(spawnCwdInput.value.trim());
+    });
+  }
+
   function renderCwdDropdown(filter) {
     const favs = loadCwdFavorites();
     const favSet = new Set(favs);
     const hist = loadCwdHistory();
-    // お気に入りは履歴から漏れていても常に表示。お気に入り → 非お気に入り履歴の順に並べる。
-    const merged = [...favs, ...hist.filter(v => !favSet.has(v))];
-    const items = filter
-      ? merged.filter(v => v.toLowerCase().includes(filter.toLowerCase()))
-      : merged;
+    const subItems: string[] = subdirsCurrent
+      ? subdirsCurrent.items.map(name => subdirsCurrent!.parent + subdirsCurrent!.sep + name)
+      : [];
+    const favItems = (filter
+      ? favs.filter(v => v.toLowerCase().includes(filter.toLowerCase()))
+      : favs);
+    const histItems = (filter
+      ? hist.filter(v => !favSet.has(v) && v.toLowerCase().includes(filter.toLowerCase()))
+      : hist.filter(v => !favSet.has(v)));
+    const items = [...subItems, ...favItems, ...histItems];
     if (items.length === 0) { cwdDropdown.hidden = true; return; }
-    cwdDropdown.innerHTML = items.map(v => {
-      const fav = favSet.has(v);
+
+    function renderRow(v, fav, isSub = false) {
+      const labelFilter = isSub ? '' : filter;
       return (
-        `<li class="cwd-dropdown-item${fav ? ' is-favorite' : ''}" tabindex="-1"${fav ? ' draggable="true"' : ''} data-value="${escapeHtml(v)}">` +
+        `<li class="cwd-dropdown-item${fav ? ' is-favorite' : ''}${isSub ? ' is-subdir' : ''}" tabindex="-1"${fav ? ' draggable="true"' : ''} data-value="${escapeHtml(v)}">` +
         `<button class="cwd-dropdown-fav${fav ? ' is-on' : ''}" tabindex="-1" data-value="${escapeHtml(v)}" ` +
         `title="${escapeHtml(t(fav ? 'spawn_cwd_unfavorite' : 'spawn_cwd_favorite'))}">${fav ? '★' : '☆'}</button>` +
-        `<span class="cwd-dropdown-label">${escapeHtml(v)}</span>` +
-        `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(v)}">×</button>` +
+        `<span class="cwd-dropdown-label" title="${escapeHtml(v)}">${buildCwdLabelHtml(v, labelFilter)}</span>` +
+        (isSub ? '' : `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(v)}">×</button>`) +
         `</li>`
       );
-    }).join('');
+    }
+
+    // セクション見出し（クリック/フォーカス/キーボード移動/D&D の対象外）。
+    // 各セクション0件なら見出しは出さない。
+    let html = '';
+    if (subItems.length > 0) {
+      html += `<li class="cwd-dropdown-header" aria-hidden="true">${escapeHtml(t('spawn_cwd_section_subdirs'))}</li>`;
+      html += subItems.map(v => renderRow(v, false, true)).join('');
+    }
+    if (favItems.length > 0) {
+      html += `<li class="cwd-dropdown-header" aria-hidden="true">${escapeHtml(t('spawn_cwd_section_favorites'))}</li>`;
+      html += favItems.map(v => renderRow(v, true)).join('');
+    }
+    if (histItems.length > 0) {
+      html += `<li class="cwd-dropdown-header" aria-hidden="true">${escapeHtml(t('spawn_cwd_section_history'))}</li>`;
+      html += histItems.map(v => renderRow(v, false)).join('');
+    }
+    cwdDropdown.innerHTML = html;
     cwdDropdown.hidden = false;
     applyDropdownMissingStatus();
     checkPathsExist(items).then(applyDropdownMissingStatus);
@@ -699,12 +819,16 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   function applyDropdownMissingStatus() {
     cwdDropdown.querySelectorAll('.cwd-dropdown-item').forEach(el => {
       const v = el.dataset.value;
+      const delBtn = el.querySelector('.cwd-dropdown-del');
       if (isPathMissing(v)) {
         el.classList.add('is-missing');
         el.title = t('spawn_cwd_missing', { path: v });
+        // 実在しないパスの × は常時表示。削除導線である旨をツールチップで強調する。
+        if (delBtn) delBtn.title = t('spawn_cwd_remove_missing');
       } else {
         el.classList.remove('is-missing');
         el.removeAttribute('title');
+        if (delBtn) delBtn.removeAttribute('title');
       }
     });
   }
@@ -793,10 +917,19 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   spawnCwdInput.addEventListener('focus', () => {
     // お気に入り選択直後の再 focus では再オープンしない（選択して閉じたのに即開き直る事故を防ぐ）。
     if (cwdSuppressReopen) { cwdSuppressReopen = false; return; }
+    maybeUpdateSubdirs(spawnCwdInput.value.trim());
     renderCwdDropdown(''); refreshCwdInputStatus();
   });
-  spawnCwdInput.addEventListener('click', () => { renderCwdDropdown(''); });
-  spawnCwdInput.addEventListener('input', () => { renderCwdDropdown(spawnCwdInput.value.trim()); scheduleCwdInputCheck(); });
+  spawnCwdInput.addEventListener('click', () => {
+    maybeUpdateSubdirs(spawnCwdInput.value.trim());
+    renderCwdDropdown('');
+  });
+  spawnCwdInput.addEventListener('input', () => {
+    const v = spawnCwdInput.value.trim();
+    maybeUpdateSubdirs(v);
+    renderCwdDropdown(v);
+    scheduleCwdInputCheck();
+  });
   spawnCwdInput.addEventListener('blur', (e) => {
     // フォーカスがドロップダウン内（上下キーで行へ移動）へ抜けた場合は閉じない。
     // これを忘れると ArrowDown で行に focus した瞬間に blur が発火し、150ms 後に
@@ -822,7 +955,21 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     const idx = items.indexOf(document.activeElement);
     if (e.key === 'ArrowDown') { e.preventDefault(); items[idx + 1]?.focus(); }
     if (e.key === 'ArrowUp')   { e.preventDefault(); idx > 0 ? items[idx - 1].focus() : spawnCwdInput.focus(); }
+    if (e.key === 'Home')      { e.preventDefault(); items[0]?.focus(); }
+    if (e.key === 'End')       { e.preventDefault(); items[items.length - 1]?.focus(); }
     if (e.key === 'Enter' && idx >= 0) { selectCwdItem(items[idx]); }
+    // Backspace / Delete: 履歴行（非お気に入り）のみ削除し、近接行へフォーカスを移す。
+    // お気に入り行・見出し行は誤操作防止のため削除しない。
+    if ((e.key === 'Backspace' || e.key === 'Delete') && idx >= 0) {
+      const item = items[idx];
+      if (item.classList.contains('is-favorite') || item.classList.contains('is-subdir')) return;
+      e.preventDefault();
+      deleteCwdHistoryItem(item.dataset.value);
+      renderCwdDropdown(spawnCwdInput.value.trim());
+      const next = [...cwdDropdown.querySelectorAll('.cwd-dropdown-item')];
+      if (next.length === 0) { focusInputNoReopen(); return; }
+      (next[Math.min(idx, next.length - 1)] as HTMLElement).focus();
+    }
     // 閉じて入力欄へ戻すだけ。focus() による再オープンを抑止しないと即開き直る。
     if (e.key === 'Escape') { cwdDropdown.hidden = true; focusInputNoReopen(); }
   });

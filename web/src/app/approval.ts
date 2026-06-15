@@ -1273,9 +1273,12 @@ export function showActionBar(bar, sessionId, options, forceStickToBottom = fals
   const sequentialQuestion = opts.find(o => o && o._sequentialQuestion)?._sequentialQuestion;
   const menuTitle = opts.find(o => o && o._menuTitle)?._menuTitle;
   const isSelectMenu = opts.some(o => o && o._selectMenu);
+  // [MANY-AI-CLI] 単一ブロックの先頭にあった質問文（parseHubBlock が配列プロパティ _question に格納）。
+  // これを承認ポップアップ内に表示し、AI が何を聞いているのかを CLI 画面を見ずに把握できるようにする。
+  const hubQuestion = (options && (options as any)._question) ? String((options as any)._question).trim() : '';
   const title = sequentialQuestion
     ? sequentialQuestion
-    : (isSelectMenu ? (menuTitle || 'Select an option') : 'Approval needed');
+    : (isSelectMenu ? (menuTitle || 'Select an option') : (hubQuestion || 'Approval needed'));
   const section = {
     num: 1,
     title,
@@ -1284,6 +1287,10 @@ export function showActionBar(bar, sessionId, options, forceStickToBottom = fals
     _freeInput: !!(options && (options as any)._freeInput),
     _labelKind: sequentialQuestion ? 'sequential' : (isSelectMenu ? 'select-menu' : 'approval'),
     _labelTitle: sequentialQuestion || menuTitle || '',
+    // 質問本文（承認系のみ；sequential/select-menu は title 側で表示済み）。
+    _question: hubQuestion,
+    // 配列プロパティの _preamble は [section] 変換で失われるためセクションへも引き継ぐ。
+    _preamble: (options && (options as any)._preamble) ? (options as any)._preamble : '',
   };
   // 単一質問は [section] の 1 要素配列へ変換するため、配列プロパティの _preamble が
   // 失われる。明示的に引き継いでポップアップ先頭の前置き表示を効かせる。
@@ -1412,6 +1419,9 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   const title = section.title || 'Approval needed';
   const labelKind = section._labelKind || 'approval';
   const labelTitle = section._labelTitle || '';
+  // 承認系（Yes/No・AI の番号付き選択肢）の質問本文。sequential/select-menu は title 側に出すため除外。
+  const question = (labelKind === 'approval' && section._question) ? String(section._question).trim() : '';
+  const preamble = section._preamble ? String(section._preamble).trim() : '';
   const freeActive = allowFree && !!singleFreeActive.get(sessionId);
 
   const sig = JSON.stringify({
@@ -1419,6 +1429,8 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
     mode: 'single-tabs',
     title,
     lk: labelKind,
+    q: question,
+    pre: preamble,
     opts: options.map(o => ({ n: o.num, l: o.label, c: !!o.isCurrent, p: !!o.preserveOrder })),
     free: allowFree,
     fa: freeActive,
@@ -1456,12 +1468,27 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   }
   bar.appendChild(label);
 
+  // 承認ブロック直前の地の文（前置き説明）があれば先頭に表示する（バッチ/複数選択と対称）。
+  // 単一質問だけここが抜けていたため、AI の質問文・文脈がポップアップに出ず CLI 画面を
+  // 見ないと内容が分からなかった。
+  appendApprovalPreamble(bar, preamble);
+
   // ===== パネル（全文選択肢 + 自由入力欄） =====
   // 単一質問モードでは質問タブ列（常に1タブで無意味）と質問見出しを出さない。
   // 質問文/承認文言は上の黄色ヘッダー（action-bar-label）に集約済みで、見出し・タブに
   // 同じ文字列を重ねると「Approval needed」が 3 連発して冗長になるため（plan_choice-tab-ui.md C5 改）。
   const pane = document.createElement('div');
   pane.className = 'action-qpane';
+
+  // AI の質問本文を選択肢の上に全文表示する（折り返し可・バッチの action-qhead と同じ見た目）。
+  // ラベル（黄色ヘッダ）は単行省略のため、長い質問はここで読めるようにする。
+  if (question) {
+    const qhead = document.createElement('div');
+    qhead.className = 'action-qhead action-single-qhead';
+    qhead.textContent = question;
+    qhead.title = question;
+    pane.appendChild(qhead);
+  }
 
   // "Yes, and" 系（セッション全体許可）があればそれを推奨扱いにする（既存ロジック踏襲）。
   const isSessionAllowLabel = (s) => /during this session|allow.*session|yes.*allow/i.test(s);

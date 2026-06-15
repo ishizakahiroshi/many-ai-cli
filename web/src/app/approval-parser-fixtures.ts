@@ -91,6 +91,40 @@ test('approval parser fixtures', () => {
   ]);
   assert.equal((afterPrevBlock as any)._preamble, '次の前置き。');
 
+  // 単一ブロックで選択肢より前に置かれた質問文を _question として取り出す（見出し Q1 形式でなくても）。
+  // 承認ポップアップに質問本文を出すための捕捉（CLI 画面を見ずに何を聞かれているか分かるように）。
+  const singleQ = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'path-exists の挙動をどうしますか？',
+    '1. 実在判定可にする (Recommended)',
+    '2. 許可リストを維持',
+    'N. User specifies',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.deepEqual(numbers(singleQ), [1, 2]);
+  assert.equal((singleQ as any)._question, 'path-exists の挙動をどうしますか？');
+  assert.equal((singleQ as any)._freeInput, true);
+
+  // 複数行に折り返された質問文は 1 つに連結して捕捉する。
+  const singleQWrapped = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'とても長い質問の前半部分が',
+    '次の行に折り返されている場合？',
+    '1. A',
+    '2. B',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal((singleQWrapped as any)._question, 'とても長い質問の前半部分が 次の行に折り返されている場合？');
+
+  // Yes/No 単一質問も質問本文を _question として取り出す。
+  const ynQ = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'この変更を適用しますか？ (Y:1/N:0)',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.deepEqual(numbers(ynQ), [1, 0]);
+  assert.equal((ynQ as any)._question, 'この変更を適用しますか？');
+
   const codexLines = [
     'This command requires approval',
     '> 1. Yes (y)',

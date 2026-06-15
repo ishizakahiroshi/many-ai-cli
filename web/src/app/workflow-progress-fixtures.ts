@@ -125,3 +125,18 @@ test('parseWorkflowProgress: 見出しのみでエージェント行が無けれ
   const r = parseWorkflowProgress(['⚙ workflow empty-run', 'starting...']);
   assert.equal(r.detected, false);
 });
+
+test('parseWorkflowProgress: waitingDynamic は背景 Workflow 件数を拾う', () => {
+  const r = parseWorkflowProgress(['Waiting for 2 dynamic workflows to finish']);
+  assert.equal(r.waitingDynamic, 2);
+});
+
+test('parseWorkflowProgress: waitingDynamic は行頭 * 付き単数形も拾う', () => {
+  const r = parseWorkflowProgress(['*Waiting for 1 dynamic workflow to finish']);
+  assert.equal(r.waitingDynamic, 1);
+});
+
+test('parseWorkflowProgress: 待ち行が無いバッファは waitingDynamic:0', () => {
+  const r = parseWorkflowProgress(['⚙ workflow w', '  ✓ a']);
+  assert.equal(r.waitingDynamic, 0);
+});

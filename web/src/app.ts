@@ -4,6 +4,7 @@ import { cleanCopiedText, showToast, token } from './app/util.js';
 import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
 import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, answeredMarkerSigs, recordAnsweredMarkerSig, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
+import { orderSessions } from './app/state.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, resumeTerminalBottomFollow, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
 import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
@@ -1107,6 +1108,18 @@ export function cleanupRemovedSessionState(id) {
 export function removeLocalSession(id) {
   const timer = autoDismissTimers.get(id);
   if (timer) { clearTimeout(timer); autoDismissTimers.delete(id); }
+  // 削除直前にセッション一覧上の「上の隣」を覚えておく。
+  // active セッションを削除した際、勝手に先頭へジャンプしないよう、
+  // 削除カードの直上（先頭の場合は直下）を後でアクティブ化する。
+  let neighborId: number | null = null;
+  if (activeSessionId === id) {
+    try {
+      const ordered = orderSessions();
+      const idx = ordered.findIndex(s => s.id === id);
+      if (idx > 0) neighborId = ordered[idx - 1].id;
+      else if (idx === 0 && ordered.length > 1) neighborId = ordered[1].id;
+    } catch (_) {}
+  }
   cleanupRemovedSessionState(id);
   try {
     const mgr = window.multiPaneManager;
@@ -1148,7 +1161,10 @@ export function removeLocalSession(id) {
     hideActionBar(undefined);
     setMultiQuestionBannerVisible(false);
     if (sessions.size > 0) {
-      activateSession(sessions.keys().next().value);
+      const next = (neighborId !== null && sessions.has(neighborId))
+        ? neighborId
+        : sessions.keys().next().value;
+      activateSession(next);
       return;
     }
   }

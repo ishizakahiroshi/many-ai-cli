@@ -241,6 +241,11 @@ func (s *Server) handlePickFile(w http.ResponseWriter, r *http.Request) {
 //
 // Spawn 時の Cmd.Dir に渡すと Windows では存在しないディレクトリで
 // CreateProcess が ERROR_DIRECTORY を返して分かりにくいので、事前に弾く用途。
+//
+// 要求された各パスをそのまま stat する（履歴に無い、ユーザーが新規に打ち込んだ
+// パスこそ検証が必要なため、許可リストでの絞り込みはしない）。spawn 自体が
+// 任意 cwd を受け付けてエラーで存在有無を返すので、ここで実在判定を返しても
+// 漏れる情報は同じ。バインドは 127.0.0.1 固定＋トークン認証で保護される。
 func (s *Server) handlePathExists(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
 		return
@@ -251,13 +256,9 @@ func (s *Server) handlePathExists(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	allowedCandidates := s.pathExistsAllowedCandidates()
 	results := make(map[string]bool, len(body.Paths))
 	for _, p := range body.Paths {
 		if p == "" {
-			continue
-		}
-		if _, ok := allowedCandidates[pathExistsCandidateKey(p)]; !ok {
 			continue
 		}
 		info, err := os.Stat(p)
@@ -266,43 +267,71 @@ func (s *Server) handlePathExists(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"results": results})
 }
 
+// handleListSubdirs は cwd 入力欄の補完用に、指定パス直下のサブディレクトリ名一覧を返す。
+// POST {"path": "C:\\dev\\github\\public\\"} → {"ok": true, "path": "...", "subdirs": ["a", "b", ...]}
+//
+// バインドは 127.0.0.1 固定 + トークン認証で保護。隠しフォルダ（先頭ドット）は除外、
+// 上限 500 件で打ち切る（巨大ディレクトリでのフロント側カクつき防止）。
+func (s *Server) handleListSubdirs(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodPost) {
+		return
+	}
+	var body struct {
+		Path string `json:"path"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	p := strings.TrimSpace(body.Path)
+	if p == "" {
+		writeJSON(w, map[string]any{"ok": false, "subdirs": []string{}})
+		return
+	}
+	if !filepath.IsAbs(p) {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "path must be absolute")
+		return
+	}
+	clean := filepath.Clean(p)
+	info, err := os.Stat(clean)
+	if err != nil || !info.IsDir() {
+		writeJSON(w, map[string]any{"ok": false, "path": clean, "subdirs": []string{}})
+		return
+	}
+	entries, err := os.ReadDir(clean)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "read_failed", errorDetail("readdir failed", err))
+		return
+	}
+	const maxSubdirs = 500
+	subdirs := make([]string, 0, len(entries))
+	for _, e := range entries {
+		name := e.Name()
+		if name == "" || name[0] == '.' {
+			continue
+		}
+		if !e.IsDir() {
+			// シンボリックリンク経由のディレクトリも拾う
+			if e.Type()&os.ModeSymlink == 0 {
+				continue
+			}
+			if fi, err := os.Stat(filepath.Join(clean, name)); err != nil || !fi.IsDir() {
+				continue
+			}
+		}
+		subdirs = append(subdirs, name)
+		if len(subdirs) >= maxSubdirs {
+			break
+		}
+	}
+	writeJSON(w, map[string]any{"ok": true, "path": clean, "subdirs": subdirs})
+}
+
 func pathExistsCandidateKey(path string) string {
 	key := filepath.Clean(path)
 	if runtime.GOOS == "windows" {
 		key = strings.ToLower(key)
 	}
 	return key
-}
-
-func (s *Server) pathExistsAllowedCandidates() map[string]struct{} {
-	candidates := map[string]struct{}{}
-	add := func(path string) {
-		if strings.TrimSpace(path) == "" {
-			return
-		}
-		candidates[pathExistsCandidateKey(path)] = struct{}{}
-	}
-
-	add(s.hubCWD)
-	s.cfgMu.Lock()
-	cwdHistory := append([]string(nil), s.cfg.UserPrefs.CwdHistory...)
-	cwdFavorites := append([]string(nil), s.cfg.UserPrefs.CwdFavorites...)
-	s.cfgMu.Unlock()
-	for _, cwd := range cwdHistory {
-		add(cwd)
-	}
-	for _, cwd := range cwdFavorites {
-		add(cwd)
-	}
-	s.sessionsMu.Lock()
-	for _, ses := range s.sessions {
-		if ses != nil {
-			add(ses.CWD)
-		}
-	}
-	s.sessionsMu.Unlock()
-
-	return candidates
 }
 
 // handleOpenDir opens a directory or reveals a file in the OS file manager.
