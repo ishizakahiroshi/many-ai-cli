@@ -1285,7 +1285,11 @@ export function showActionBar(bar, sessionId, options, forceStickToBottom = fals
     _labelKind: sequentialQuestion ? 'sequential' : (isSelectMenu ? 'select-menu' : 'approval'),
     _labelTitle: sequentialQuestion || menuTitle || '',
   };
-  showBatchActionBar(bar, sessionId, [section], forceStickToBottom);
+  // 単一質問は [section] の 1 要素配列へ変換するため、配列プロパティの _preamble が
+  // 失われる。明示的に引き継いでポップアップ先頭の前置き表示を効かせる。
+  const sectionArr: any[] = [section];
+  if (options && (options as any)._preamble) (sectionArr as any)._preamble = (options as any)._preamble;
+  showBatchActionBar(bar, sessionId, sectionArr, forceStickToBottom);
 }
 
 // 単一質問タブUI（plan_choice-tab-ui.md C5）の自由入力状態。バッチの batchSelections/
@@ -1345,6 +1349,27 @@ function getBatchActiveQ(sessionId, n) {
   let idx = batchActiveQ.get(sessionId);
   if (idx == null || idx < 0 || idx >= n) { idx = 0; batchActiveQ.set(sessionId, idx); }
   return idx;
+}
+
+// 承認ブロック直前の前置き説明（_preamble）をポップアップ先頭へ表示する。
+// 既定はヘッダ＋高さ上限つきスクロール枠で文脈を即見せ（CLI をスクロールしなくて済む）、
+// ヘッダクリックで枠を広げて全文を読めるようにする（'expanded' クラスのトグル）。
+function appendApprovalPreamble(bar, preamble) {
+  const text = String(preamble || '').trim();
+  if (!text) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'action-preamble';
+  const head = document.createElement('button');
+  head.type = 'button';
+  head.className = 'action-preamble-head';
+  head.textContent = t('approval_preamble_label');
+  head.onclick = (e) => { e.stopPropagation(); wrap.classList.toggle('expanded'); };
+  const body = document.createElement('div');
+  body.className = 'action-preamble-body';
+  body.textContent = text;
+  wrap.appendChild(head);
+  wrap.appendChild(body);
+  bar.appendChild(wrap);
 }
 
 // タブ/選択肢ボタンの圧縮表示テキスト。shortLabel を優先し、無ければ label 先頭を
@@ -1571,6 +1596,9 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   label.className = 'action-bar-label';
   label.textContent = t('approval_batch_label', { n: sections.length });
   bar.appendChild(label);
+
+  // 承認ブロック直前の地の文（前置き説明）があれば先頭に表示する。
+  appendApprovalPreamble(bar, (sections as any)._preamble);
 
   // ===== 質問タブ列（横スクロール・✓/未 ステータス付き） =====
   const tabsEl = document.createElement('div');
@@ -1959,6 +1987,9 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
   label.textContent = question ? `⚠ ${question}` : t('approval_multi_label');
   if (question) label.title = question;
   bar.appendChild(label);
+
+  // 承認ブロック直前の地の文（前置き説明）があれば先頭に表示する。
+  appendApprovalPreamble(bar, (options as any)._preamble);
 
   const btnRow = document.createElement('div');
   btnRow.className = 'action-section-buttons';

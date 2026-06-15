@@ -440,6 +440,7 @@
   "approval_batch_submit": "まとめて送信",
   "approval_batch_confirm": "送信確認",
   "approval_batch_detail_empty": "選択肢を押すと、ここに詳細が表示されます。",
+  "approval_preamble_label": "📋 経緯（クリックで全文）",
   "approval_recommended": "推奨",
   "approval_free_input": "自由入力",
   "approval_free_input_full": "自由入力（テキストを入力して送信）",

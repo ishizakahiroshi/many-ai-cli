@@ -162,6 +162,35 @@
     ];
   }
 
+  // 承認ブロック直前の地の文（前置き説明）を取り出す。ポップアップ先頭に表示し、
+  // ユーザーが判断の文脈を見るために CLI 本体をスクロールせずに済むようにするためのもの。
+  // 境界の決め方:
+  //  ① 直前の確定ブロック（前の質問の `[/MANY-AI-CLI]` / 完了 `[/MANY-AI-CLI-DONE]`）以降だけを対象にする
+  //  ② 2 行以上連続する空行（大きな段落区切り）を上端の境界にする（段落間の単一空行は保持）
+  //  ③ 上限 PREAMBLE_MAX_LINES 行（長文の前置きでポップアップが肥大しないよう保険。表示側はスクロール可）
+  const PREAMBLE_MAX_LINES = 40;
+  function preambleBeforeMarker(textBefore) {
+    let s = String(textBefore || '');
+    const lastClose = Math.max(s.lastIndexOf('[/MANY-AI-CLI]'), s.lastIndexOf('[/MANY-AI-CLI-DONE]'));
+    if (lastClose !== -1) {
+      const nl = s.indexOf('\n', lastClose);
+      s = nl === -1 ? '' : s.slice(nl + 1);
+    }
+    // 対応の取れなかったマーカー片が残っていても表示に混ぜない。
+    s = s.replace(/\[\/?MANY-AI-CLI(?:-DONE)?\]/g, '');
+    let lines = s.split('\n').map(l => l.replace(/\s+$/g, ''));
+    // 末尾(画面では直上)から遡り、最初に現れる「2 行連続の空行」を上端境界にする。
+    let cut = 0;
+    for (let i = lines.length - 1; i >= 1; i--) {
+      if (!lines[i].trim() && !lines[i - 1].trim()) { cut = i + 1; break; }
+    }
+    lines = lines.slice(cut);
+    while (lines.length && !lines[0].trim()) lines.shift();
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+    if (lines.length > PREAMBLE_MAX_LINES) lines = lines.slice(-PREAMBLE_MAX_LINES);
+    return lines.join('\n').trim();
+  }
+
   function extractHubMarkerApproval(lines) {
     const source = Array.isArray(lines) ? lines : [];
     // [MANY-AI-CLI]…[/MANY-AI-CLI] を「末尾優先の完全ブロック」として取り出す。
@@ -175,10 +204,14 @@
     // 「回答済みの質問は二度と承認 UI を出さない」恒久抑制（answeredMarkerSigs）のキーに使う。
     // 質問文＋全選択肢を含むため、ラベルが同一でも別質問なら別ハッシュになり誤抑制しない。
     // approvalCtxHash は空白を正規化するので、端末幅による折り返し差は吸収される。
-    const withBlockSig = (parsed, innerArr) => {
+    // 承認ブロック直前の地の文（前置き説明）を parsed 配列へ _preamble として添付する。
+    // ポップアップ先頭に表示して、ユーザーが判断の文脈を見るために CLI をスクロールせずに済むようにする。
+    // 配列プロパティなので approvalSig（要素のみを見る）には影響せず、誤抑制・余計な再描画を招かない。
+    const withBlockSig = (parsed, innerArr, preamble) => {
       if (parsed && Array.isArray(parsed)) {
         const sig = approvalCtxHash((innerArr || []).join('\n'));
         for (const el of parsed) { if (el && typeof el === 'object') el._blockSig = sig; }
+        if (preamble) (parsed as any)._preamble = preamble;
       }
       return parsed;
     };
@@ -187,12 +220,15 @@
     const blockRe = /\[MANY-AI-CLI\]([\s\S]*?)\[\/MANY-AI-CLI\]/g;
     let match;
     let lastBlock = null;
+    let lastOpenIdx = -1;
     while ((match = blockRe.exec(recentText)) !== null) {
       lastBlock = match[1];
+      lastOpenIdx = match.index;
     }
     if (lastBlock !== null) {
       const inner = lastBlock.split('\n').map(l => l.trim()).filter(Boolean);
-      return withBlockSig(parseHubBlock(inner), inner);
+      const preamble = preambleBeforeMarker(recentText.slice(0, lastOpenIdx));
+      return withBlockSig(parseHubBlock(inner), inner, preamble);
     }
 
     // 開き/閉じが別チャンクに割れて全文一致しなかった場合の末尾アンカー・フォールバック。
@@ -203,7 +239,8 @@
       const line = source[i];
       if (/\[MANY-AI-CLI\]/.test(line) && /\[\/MANY-AI-CLI\]/.test(line)) {
         const inner = line.replace(/^[\s\S]*?\[MANY-AI-CLI\]/, '').replace(/\[\/MANY-AI-CLI\][\s\S]*$/, '').trim();
-        return withBlockSig(parseHubBlock([inner]), [inner]);
+        const preamble = preambleBeforeMarker(source.slice(0, i).join('\n'));
+        return withBlockSig(parseHubBlock([inner]), [inner], preamble);
       }
       if (/\[\/MANY-AI-CLI\]/.test(line) && closeIdx === -1) { closeIdx = i; continue; }
       if (/\[MANY-AI-CLI\]/.test(line) && closeIdx !== -1) { openIdx = i; break; }
@@ -211,7 +248,8 @@
 
     if (openIdx === -1 || closeIdx === -1) return null;
     const inner = source.slice(openIdx + 1, closeIdx).map(l => l.trim()).filter(Boolean);
-    return withBlockSig(parseHubBlock(inner), inner);
+    const preamble = preambleBeforeMarker(source.slice(0, openIdx).join('\n'));
+    return withBlockSig(parseHubBlock(inner), inner, preamble);
   }
 
   function extractPlainYesNoApproval(lines) {

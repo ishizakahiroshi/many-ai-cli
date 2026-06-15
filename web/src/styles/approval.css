@@ -123,6 +123,41 @@
 #action-bar.batch .action-bar-label,
 #action-bar.single-tabs .action-bar-label { margin-bottom: 4px; flex-basis: auto; }
 
+/* 承認ブロック直前の前置き説明。文脈を CLI スクロールなしで見せる。
+   既定は高さ上限つきスクロール枠、ヘッダクリックで .expanded を付けて広げる。 */
+.action-preamble {
+  flex-basis: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+.action-preamble-head {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--bg-2, var(--bg));
+  color: var(--muted-2);
+  border: none;
+  border-bottom: 1px solid var(--line);
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.action-preamble-head:hover { color: var(--text); }
+.action-preamble-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+  font-size: 0.8rem;
+  color: var(--text);
+  padding: 6px 8px;
+  max-height: 5.5em;
+  overflow-y: auto;
+}
+.action-preamble.expanded .action-preamble-body { max-height: 22em; }
+
 .action-section {
   display: flex;
   flex-direction: column;
