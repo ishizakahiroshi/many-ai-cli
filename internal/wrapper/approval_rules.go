@@ -12,7 +12,7 @@ import (
 const claudeImportLine = "@~/.many-ai-cli/approval-rules.md"
 const sharedBlockStart = "<!-- any-ai-cli:approval-rules -->"
 const sharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
-const rulesVersion = "14"
+const rulesVersion = "15"
 
 var rulesFileContent = strings.Join([]string{
 	fmt.Sprintf("<!-- version: %s -->", rulesVersion),
@@ -98,7 +98,18 @@ var rulesFileContent = strings.Join([]string{
 	"",
 	"- [MANY-AI-CLI] マーカーは確認・承認の質問にのみ使用する",
 	"",
-	"**確認・承認の直前に置く前置き説明（経緯）では、罫線・表組みを使わないこと。**",
+	"**前置き説明（経緯）は必ず `[MANY-AI-CLI]` マーカーの内側、最初の質問見出し（`Q1` / `#multi` / `(Y:1/N:0)` / `1.`）より前に書くこと。**",
+	"形式:",
+	"  [MANY-AI-CLI]",
+	"  ここに前置き説明（複数行可）。何を変えるか・何を選ばせたいかを 1〜数行で。",
+	"",
+	"  Q1 question1?",
+	"   1. Option A (Recommended)",
+	"   ...",
+	"  [/MANY-AI-CLI]",
+	"理由: マーカー外に置くと、その直前で動いていた進捗バー・スピナーの再描画ストリームがゴミとして経緯欄へ混入する（過去に発生）。マーカーで境界を切れば原理的に混入しない。",
+	"",
+	"**前置きでも罫線・表組みを使わないこと。**",
 	"具体的には Markdown テーブル（`|` 区切りや `---|---` 区切り行）・水平線（`---` / `===` / 罫線文字）を出力しない。",
 	"理由: Web ダッシュボードの xterm.js では端末幅でハードラップされた後にスクレイプされるため、テーブルや罫線は行・列の対応が崩れて読めなくなる（過去に発生）。",
 	"代わりに箇条書き（`- `）か短い段落で書くこと。どうしても項目の対応関係を示したい場合は「項目: 値」を 1 行 1 件で並べる。",
