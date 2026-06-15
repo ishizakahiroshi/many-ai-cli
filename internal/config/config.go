@@ -399,6 +399,7 @@ type UserPrefs struct {
 	GroupOrder               []string                      `yaml:"group_order,omitempty"      json:"group_order,omitempty"`
 	ProjectFavorites         []string                      `yaml:"project_favorites,omitempty" json:"project_favorites,omitempty"`
 	CwdHistory               []string                      `yaml:"cwd_history,omitempty"      json:"cwd_history,omitempty"`
+	CwdFavorites             []string                      `yaml:"cwd_favorites,omitempty"    json:"cwd_favorites,omitempty"`
 	Spawn                    UserPrefsSpawn                `yaml:"spawn,omitempty"            json:"spawn,omitempty"`
 	Display                  UserPrefsDisplay              `yaml:"display,omitempty"          json:"display,omitempty"`
 	MigratedFromLocalstorage bool                          `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
@@ -417,6 +418,7 @@ func (p UserPrefs) Clone() UserPrefs {
 	c.GroupOrder = cloneStringSlice(p.GroupOrder)
 	c.ProjectFavorites = cloneStringSlice(p.ProjectFavorites)
 	c.CwdHistory = cloneStringSlice(p.CwdHistory)
+	c.CwdFavorites = cloneStringSlice(p.CwdFavorites)
 	c.Spawn.Defaults = cloneStringMap(p.Spawn.Defaults)
 	c.Spawn.LastModel = cloneStringMap(p.Spawn.LastModel)
 	return c

@@ -32,7 +32,7 @@
   padding: 0 8px;
   height: 100%;
   border-right: 1px solid #292e42;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .tsb-seg:last-child {
   border-right: none;
@@ -54,7 +54,7 @@
   font-size: 0.62rem;
   font-weight: 700;
   padding: 1px 7px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   border: 1px solid transparent;
   line-height: 1.2;
 }
@@ -114,12 +114,12 @@
   display: inline-block;
   width: 46px;
   height: 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: #2a2f45;
   overflow: hidden;
   vertical-align: middle;
 }
-.tsb-gauge .tsb-fill { display: block; height: 100%; border-radius: 4px; }
+.tsb-gauge .tsb-fill { display: block; height: 100%; border-radius: var(--radius-sm); }
 .tsb-fill.ok    { background: #9ece6a; }
 .tsb-fill.warn  { background: #e0af68; }
 .tsb-fill.crit  { background: #f7768e; }
@@ -152,7 +152,7 @@
 .tsb-seg-conn { padding: 0 6px; }
 
 /* 横断バッジ */
-.tsb-seg-fleet { gap: 6px; cursor: pointer; }
+.tsb-seg-fleet { gap: var(--space-2); cursor: pointer; }
 .tsb-seg-fleet .tsb-run  { color: var(--badge-running-text); }
 .tsb-seg-fleet .tsb-idle { color: var(--muted-2); }
 .tsb-seg-fleet .tsb-wait { color: var(--warn-text); font-weight: 700; cursor: pointer; }
@@ -166,7 +166,7 @@
   max-width: 360px;
   background: #1a1b26;
   border: 1px solid #3b4261;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 6px 0;
   font-size: 0.72rem;
   color: #c0caf5;
@@ -183,7 +183,7 @@
 #tsb-cost-pop .tsb-pop-row {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--space-4);
   padding: 2px 12px;
 }
 #tsb-cost-pop .tsb-pop-row span:first-child {
@@ -216,14 +216,14 @@
   flex-direction: column;
   background: #1a1b26;
   border: 1px solid #3b4261;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: 0 10px 40px rgba(0,0,0,.6);
   overflow: hidden;
 }
 .tsb-sent-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   padding: 8px 12px;
   border-bottom: 1px solid #292e42;
   flex-shrink: 0;
@@ -238,7 +238,7 @@
   font-size: 0.9rem;
   cursor: pointer;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 .tsb-sent-close:hover { background: #2a2f45; }
 .tsb-sent-body {
@@ -256,7 +256,7 @@
 .tsb-sent-meta {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--space-2);
   margin-bottom: 3px;
 }
 .tsb-sent-idx { color: #565f89; font-size: 0.7rem; font-weight: 700; flex-shrink: 0; }
@@ -272,7 +272,7 @@
 .tsb-sent-attachments {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-2);
   margin-top: 4px;
 }
 .tsb-sent-attach-chip {
@@ -281,7 +281,7 @@
   max-width: 100%;
   padding: 3px 8px;
   border: 1px solid #2a2f45;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: #1a1d29;
   color: #c0caf5;
   font-size: 0.74rem;

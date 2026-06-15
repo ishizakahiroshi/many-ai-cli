@@ -284,8 +284,12 @@ func (s *Server) pathExistsAllowedCandidates() map[string]struct{} {
 	add(s.hubCWD)
 	s.cfgMu.Lock()
 	cwdHistory := append([]string(nil), s.cfg.UserPrefs.CwdHistory...)
+	cwdFavorites := append([]string(nil), s.cfg.UserPrefs.CwdFavorites...)
 	s.cfgMu.Unlock()
 	for _, cwd := range cwdHistory {
+		add(cwd)
+	}
+	for _, cwd := range cwdFavorites {
 		add(cwd)
 	}
 	s.sessionsMu.Lock()

@@ -879,6 +879,8 @@ function openModal(): void {
   modal.hidden = false;
   modalOpen = true;
   btn?.setAttribute('aria-expanded', 'true');
+  // i18n ロード後に確実に翻訳済みヘッダーへ差し替える（生キー表示の防止）。
+  applyHeadI18n();
 
   // 2回目以降（UX-A）: 同意済み + pattern 記憶があれば④へ直行。
   state = freshState();
@@ -980,6 +982,26 @@ function ensureModal(): void {
   box.appendChild(el('div', { class: 'mc-body', attrs: { id: 'mobile-connect-body' } }));
   modal.appendChild(box);
   document.body.appendChild(modal);
+
+  // head/warnbar は一度だけ生成するため、i18n ロード前に initMobileConnect() から
+  // ensureModal() が走ると t() が生キーを返したまま焼き付く（body は開く度に再描画
+  // されるので翻訳されるが head は据え置き）。生成直後＋openModal 時に再適用する。
+  applyHeadI18n();
+}
+
+// モーダル head/warnbar の i18n を（再）適用する。openModal 時にも呼び、i18n ロード
+// 完了後は確実に翻訳済み文字列へ差し替える。
+function applyHeadI18n(): void {
+  const modal = document.getElementById('mobile-connect-modal');
+  if (!modal) return;
+  const title = modal.querySelector('.mc-head-title');
+  if (title) title.textContent = t('mobile_connect_title');
+  const reShow = modal.querySelector('.mc-head-reshow');
+  if (reShow) reShow.textContent = t('mobile_connect_show_risk');
+  const closeBtn = modal.querySelector('.mc-modal-close');
+  if (closeBtn) closeBtn.setAttribute('aria-label', t('settings_close'));
+  const warnbar = modal.querySelector('#mobile-connect-warnbar');
+  if (warnbar) warnbar.innerHTML = t('mobile_connect_warnbar');
 }
 
 // ── 初期化（app-entry から呼ぶ）────────────────────────────────────────────────

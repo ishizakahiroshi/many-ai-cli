@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, showToast, token } from './util.js';
-import { CWD_HISTORY_MAX, STORAGE_CWD_HISTORY_KEY, STORAGE_SPAWN_KEY, setUserPref } from './user-prefs.js';
+import { CWD_HISTORY_MAX, STORAGE_CWD_HISTORY_KEY, STORAGE_CWD_FAVORITES_KEY, STORAGE_SPAWN_KEY, setUserPref } from './user-prefs.js';
 import { set_pendingAutoSwitch, sessions } from './state.js';
 import { providerIconHtml } from './session-list.js';
 import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
@@ -590,18 +590,42 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     setUserPref('cwd_history', hist);
   }
 
+  function loadCwdFavorites() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_CWD_FAVORITES_KEY) || '[]'); } catch (_) { return []; }
+  }
+
+  function isCwdFavorite(cwd) {
+    return loadCwdFavorites().includes(cwd);
+  }
+
+  function toggleCwdFavorite(cwd) {
+    if (!cwd) return;
+    const favs = loadCwdFavorites();
+    const next = favs.includes(cwd) ? favs.filter(v => v !== cwd) : [cwd, ...favs];
+    setUserPref('cwd_favorites', next);
+  }
+
   function renderCwdDropdown(filter) {
+    const favs = loadCwdFavorites();
+    const favSet = new Set(favs);
     const hist = loadCwdHistory();
+    // お気に入りは履歴から漏れていても常に表示。お気に入り → 非お気に入り履歴の順に並べる。
+    const merged = [...favs, ...hist.filter(v => !favSet.has(v))];
     const items = filter
-      ? hist.filter(v => v.toLowerCase().includes(filter.toLowerCase()))
-      : hist;
+      ? merged.filter(v => v.toLowerCase().includes(filter.toLowerCase()))
+      : merged;
     if (items.length === 0) { cwdDropdown.hidden = true; return; }
-    cwdDropdown.innerHTML = items.map(v =>
-      `<li class="cwd-dropdown-item" tabindex="-1" data-value="${escapeHtml(v)}">` +
-      `<span class="cwd-dropdown-label">${escapeHtml(v)}</span>` +
-      `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(v)}">×</button>` +
-      `</li>`
-    ).join('');
+    cwdDropdown.innerHTML = items.map(v => {
+      const fav = favSet.has(v);
+      return (
+        `<li class="cwd-dropdown-item${fav ? ' is-favorite' : ''}" tabindex="-1" data-value="${escapeHtml(v)}">` +
+        `<button class="cwd-dropdown-fav${fav ? ' is-on' : ''}" tabindex="-1" data-value="${escapeHtml(v)}" ` +
+        `title="${escapeHtml(t(fav ? 'spawn_cwd_unfavorite' : 'spawn_cwd_favorite'))}">${fav ? '★' : '☆'}</button>` +
+        `<span class="cwd-dropdown-label">${escapeHtml(v)}</span>` +
+        `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(v)}">×</button>` +
+        `</li>`
+      );
+    }).join('');
     cwdDropdown.hidden = false;
     applyDropdownMissingStatus();
     checkPathsExist(items).then(applyDropdownMissingStatus);
@@ -784,6 +808,13 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   });
   cwdDropdown.addEventListener('mousedown', (e) => {
     e.preventDefault();
+    const favBtn = e.target.closest('.cwd-dropdown-fav');
+    if (favBtn) {
+      toggleCwdFavorite(favBtn.dataset.value);
+      renderCwdDropdown(spawnCwdInput.value.trim());
+      spawnCwdInput.focus();
+      return;
+    }
     const delBtn = e.target.closest('.cwd-dropdown-del');
     if (delBtn) {
       deleteCwdHistoryItem(delBtn.dataset.value);

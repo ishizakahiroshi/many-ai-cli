@@ -14,7 +14,7 @@
 .git-tab-placeholder-warning {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 6px 12px;
   background: color-mix(in srgb, var(--warn) 18%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
@@ -43,7 +43,7 @@
 .git-graph-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   padding: 8px 14px;
   background: var(--bg-elev);
   border-bottom: 1px solid var(--line);
@@ -79,7 +79,7 @@
   color: var(--green-text);
   background: var(--green-bg);
   padding: 3px 9px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 11px;
   font-weight: 600;
   border: 1px solid color-mix(in srgb, var(--green-text) 35%, transparent);
@@ -87,7 +87,7 @@
   font-family: inherit;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
 }
 .view-ref-btn:hover { background: color-mix(in srgb, var(--green-text) 22%, transparent); }
 .view-ref-btn::before { content: "View: "; opacity: 0.7; font-weight: 400; }
@@ -101,12 +101,12 @@
 .session-head-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   color: var(--muted);
   background: var(--bg-deep);
   border: 1px dashed var(--line-soft);
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 10.5px;
   font-family: Consolas, "Cascadia Mono", monospace;
   white-space: nowrap;
@@ -118,7 +118,7 @@
   color: var(--text);
   border: 1px solid var(--line);
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   cursor: pointer;
   line-height: 1;
@@ -136,7 +136,7 @@
   background: var(--accent);
   color: #fff;
   border: 1px solid var(--accent);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 5px 12px;
   font-size: 12px;
   font-weight: 600;
@@ -164,7 +164,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   padding: 7px 14px 4px;
   color: var(--text);
   font-size: 12px;
@@ -186,7 +186,7 @@
   display: grid;
   grid-template-columns: 22px 1fr auto auto;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
   font-family: Consolas, "Cascadia Mono", monospace;
   font-size: 11.5px;
@@ -205,7 +205,7 @@
   max-height: 60vh;
   background: var(--bg-elev);
   border: 1px solid var(--line-soft);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0,0,0,0.55);
   display: none;
   flex-direction: column;
@@ -223,7 +223,7 @@
   color: var(--text);
   border: 1px solid var(--line);
   padding: 5px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   outline: none;
 }
@@ -241,7 +241,7 @@
   display: grid;
   grid-template-columns: 16px 1fr auto;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 4px 12px;
   cursor: pointer;
   font-size: 12px;
@@ -270,14 +270,14 @@
   font-size: 11px;
   background: var(--chip-bg);
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
 }
 
 /* ─── ツールバー ─── */
 .git-graph-toolbar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   padding: 6px 14px;
   background: var(--bg-deep);
   border-bottom: 1px solid var(--line);
@@ -289,7 +289,7 @@
   color: var(--text);
   border: 1px solid var(--line);
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   outline: none;
 }
@@ -298,7 +298,7 @@
   display: flex;
   gap: 0;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 .git-graph-toolbar .filter-group .git-icon-btn {
@@ -359,7 +359,7 @@
 
 .col-refs {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
   flex-wrap: nowrap;
   overflow: hidden;
   padding-right: 8px;
@@ -368,7 +368,7 @@
   display: inline-flex;
   align-items: center;
   padding: 1px 7px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   font-size: 10.5px;
   font-weight: 600;
   white-space: nowrap;
@@ -426,7 +426,7 @@
   background: var(--chip-bg);
   color: var(--hash-color);
   padding: 2px 7px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 11.5px;
   display: inline-block;
   width: fit-content;
@@ -527,11 +527,11 @@
   word-break: break-word;
 }
 .info-value .mono { font-family: Consolas, "Cascadia Mono", monospace; }
-.info-author { display: flex; align-items: center; gap: 10px; }
+.info-author { display: flex; align-items: center; gap: var(--space-3); }
 .info-avatar {
   width: 32px;
   height: 32px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: linear-gradient(135deg, var(--lane-2), var(--lane-3));
   display: flex;
   align-items: center;
@@ -545,13 +545,13 @@
 .info-author-email { color: var(--muted); font-size: 11.5px; margin-left: 6px; }
 .info-author-date { color: var(--muted); font-size: 11px; margin-top: 2px; }
 
-.info-sha { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.info-sha { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .info-sha-value {
   font-family: Consolas, "Cascadia Mono", monospace;
   color: var(--hash-color);
   background: var(--chip-bg);
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 11.5px;
   word-break: break-all;
 }
@@ -561,7 +561,7 @@
   color: var(--muted);
   cursor: pointer;
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   font-size: 11px;
   line-height: 1.4;
 }
@@ -588,7 +588,7 @@
   line-height: 1.55;
   background: var(--bg-deep);
   padding: 8px 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border-left: 3px solid var(--accent);
 }
 .info-message .subject { font-weight: 600; display: block; margin-bottom: 4px; }
@@ -598,18 +598,18 @@
   display: grid;
   grid-template-columns: 22px 1fr auto auto;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   padding: 4px 8px;
   font-family: Consolas, "Cascadia Mono", monospace;
   font-size: 12px;
   cursor: pointer;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
 }
 .file-row:hover { background: var(--row-hover); }
 .file-status {
   width: 18px;
   height: 18px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -637,7 +637,7 @@
 .diff-file {
   margin-bottom: 14px;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 .diff-file-header {
@@ -648,7 +648,7 @@
   color: var(--text);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   user-select: none;
 }
 .diff-body {
@@ -671,7 +671,7 @@
   min-width: 280px;
   background: var(--bg-elev);
   border: 1px solid var(--line-soft);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
   padding: 4px 0;
   display: none;
@@ -689,7 +689,7 @@
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   font-family: inherit;
 }
 .git-ctx-menu button:hover { background: var(--row-hover); }
@@ -762,14 +762,14 @@
   background: var(--bg-elev);
   color: var(--text);
   border: 1px solid var(--line-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: 0 18px 44px rgba(0,0,0,0.55);
 }
 .git-commit-modal-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
 }
@@ -798,7 +798,7 @@
   border: 1px solid color-mix(in srgb, var(--warn) 42%, transparent);
   background: color-mix(in srgb, var(--warn) 12%, transparent);
   color: var(--warn);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
 }
 .git-commit-generate-note {
@@ -807,13 +807,13 @@
   border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
   background: color-mix(in srgb, var(--accent) 9%, transparent);
   color: var(--muted);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
 }
 .git-commit-field {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: var(--space-1);
   padding: 12px 16px 0;
   color: var(--muted);
   font-size: 12px;
@@ -824,7 +824,7 @@
   background: var(--bg-deep);
   color: var(--text);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 7px 9px;
   font-family: inherit;
   font-size: 13px;
@@ -838,7 +838,7 @@
 .git-commit-error {
   margin: 12px 16px 0;
   padding: 8px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
 }
 .git-commit-review {
@@ -859,13 +859,13 @@
 .git-commit-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 14px 16px 16px;
 }
 .git-commit-action-spacer { flex: 1; }
 .git-secondary-btn,
 .git-commit-run-btn {
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 6px 12px;
   font-family: inherit;
   font-size: 12px;
@@ -899,7 +899,7 @@
 @media (max-width: 760px) {
   .git-graph-header {
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--space-2);
   }
   .git-graph-header .git-graph-repo {
     max-width: 100%;

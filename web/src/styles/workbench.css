@@ -13,7 +13,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 14px;
+  gap: var(--space-4);
   margin-bottom: 14px;
 }
 
@@ -37,7 +37,7 @@
 .wb-checks {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
@@ -49,25 +49,25 @@
 .wb-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(320px, 1fr));
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .wb-card {
   min-width: 0;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-elev);
   padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .wb-card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .wb-card-head h3 {
@@ -81,7 +81,7 @@
 .wb-head select {
   min-width: 0;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg-deep);
   color: var(--text);
   font: inherit;
@@ -104,7 +104,7 @@
 .wb-card button,
 .wb-head button {
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text);
   padding: 6px 10px;
@@ -129,7 +129,7 @@
 .wb-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
   max-height: 260px;
   overflow: auto;
 }
@@ -138,7 +138,7 @@
 .wb-item,
 .wb-task {
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--bg-deep) 78%, transparent);
   padding: 7px 8px;
 }
@@ -188,7 +188,7 @@
 .wb-two-lists {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .wb-two-lists h4,
@@ -207,7 +207,7 @@
   overflow: auto;
   margin: 0;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg-deep);
   color: var(--text);
   padding: 8px;
@@ -218,9 +218,9 @@
 .wb-checks label {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   padding: 4px 8px;
   color: var(--muted);
   font-size: 0.75rem;
@@ -230,14 +230,14 @@
 .wb-board {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: var(--space-2);
   min-height: 100px;
 }
 
 .wb-lane {
   min-width: 0;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 7px;
   background: var(--bg-deep);
 }

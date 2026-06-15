@@ -114,7 +114,7 @@ func TestSuggestCommitMessageClassification(t *testing.T) {
 		{
 			name:        "deps only",
 			files:       []gitStatusFile{{Status: "M", Path: "go.mod"}, {Status: "M", Path: "go.sum"}},
-			wantPrefix:  "chore: ",
+			wantPrefix:  "chore(deps): ",
 			wantSubject: "依存関係を更新",
 		},
 		{
@@ -134,7 +134,8 @@ func TestSuggestCommitMessageClassification(t *testing.T) {
 			name:        "removed route",
 			files:       []gitStatusFile{{Status: "M", Path: "internal/hub/server.go"}},
 			diff:        "+++ b/internal/hub/server.go\n-\tmux.HandleFunc(\"/api/old\", s.handleOld)\n",
-			wantPrefix:  "feat: ",
+			// 新規シンボルを伴わないルート削除は refactor 扱いに変更（方針1）。
+			wantPrefix:  "refactor: ",
 			wantSubject: "/api/old エンドポイントを削除",
 		},
 	}

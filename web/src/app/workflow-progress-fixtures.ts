@@ -47,6 +47,49 @@ test('parseWorkflowProgress: 全完了は detected:true / running:false', () => 
   assert.equal(r.percent, 100);
 });
 
+test('parseWorkflowProgress: 背景実行の「N/M agents done」サマリーを権威として走行判定する', () => {
+  // ⚙ 見出しが無く（背景実行でツリーが出ない）、ステータス行だけが残るケース。
+  const r = parseWorkflowProgress([
+    'some output',
+    '◑ ur… 43/90 agents done · 5m 25s · ↓ 1.9m',
+  ]);
+  assert.equal(r.detected, true);
+  assert.equal(r.running, true);
+  assert.equal(r.live, true); // done<total の生サマリー＝凍結 settle 禁止
+  assert.equal(r.totalCount, 90);
+  assert.equal(r.doneCount, 43);
+  assert.equal(r.runningCount, 47);
+  assert.equal(r.percent, 48);
+});
+
+test('parseWorkflowProgress: サマリーは経過時間込みで frameSig が変わる（凍結誤判定防止）', () => {
+  const a = parseWorkflowProgress(['◑ wf 43/90 agents done · 5m 25s']);
+  const b = parseWorkflowProgress(['◑ wf 43/90 agents done · 5m 26s']); // 経過時間だけ進む
+  assert.equal(a.runningCount, b.runningCount); // 件数は同じでも
+  assert.notEqual(a.frameSig, b.frameSig);      // frameSig は変わる→凍結しない
+});
+
+test('parseWorkflowProgress: N/N agents done は完了（live:false）', () => {
+  const r = parseWorkflowProgress(['✓ wf 90/90 agents done · 9m 2s']);
+  assert.equal(r.detected, true);
+  assert.equal(r.running, false);
+  assert.equal(r.live, false);
+  assert.equal(r.percent, 100);
+});
+
+test('parseWorkflowProgress: frameSig は生グリフを含み、同フレームで安定・別グリフで変化する', () => {
+  const base = ['⚙ workflow w', '  ▸ P', '    ⠋ a', '    ⠹ b'];
+  const r1 = parseWorkflowProgress(base);
+  const r2 = parseWorkflowProgress(base);
+  // 同一フレームは frameSig 一致（凍結検出が連続一致を数えられる）。
+  assert.equal(r1.frameSig, r2.frameSig);
+  // スピナーが回った（グリフが変わった）フレームは frameSig が変化する。
+  const r3 = parseWorkflowProgress(['⚙ workflow w', '  ▸ P', '    ⠙ a', '    ⠸ b']);
+  assert.notEqual(r1.frameSig, r3.frameSig);
+  // 状態（running 件数）自体は同じでも frameSig だけが変わる＝「生きている」検知に使える。
+  assert.equal(r1.runningCount, r3.runningCount);
+});
+
 test('parseWorkflowProgress: 明示の % を優先採用する', () => {
   const lines = [
     '⚙ workflow migrate',

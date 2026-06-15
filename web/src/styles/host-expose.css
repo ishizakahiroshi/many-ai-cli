@@ -6,11 +6,11 @@
 #expose-btn {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   background: transparent;
   color: var(--muted);
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-family: inherit;
   padding: 4px 9px;
@@ -67,12 +67,12 @@
   width: min(320px, 92vw);
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 12px 14px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .expose-pop-title { font-weight: 600; font-size: 0.9rem; color: var(--text); }
 .expose-pop-msg { font-size: 0.78rem; color: var(--muted); line-height: 1.6; }
@@ -80,19 +80,19 @@
   color: var(--warn-text);
   background: color-mix(in srgb, var(--warn-bg) 35%, transparent);
   border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 7px 9px;
 }
 .expose-pop-warn b { color: var(--warn-text); }
 .expose-pop-link {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   text-decoration: none;
   color: var(--accent-text);
   background: var(--bg-deep);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 8px 10px;
   font-size: 0.8rem;
 }

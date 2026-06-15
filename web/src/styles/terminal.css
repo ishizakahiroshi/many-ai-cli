@@ -16,7 +16,7 @@
   inset: 0;
   background: rgba(59, 130, 246, 0.12);
   border: 2px dashed var(--accent);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   pointer-events: none;
   z-index: 50;
   display: flex;
@@ -58,7 +58,7 @@
   background: rgba(30, 40, 60, 0.36);
   color: rgba(147, 197, 253, 0.78);
   border: 1px solid rgba(59, 130, 246, 0.45);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   /* 約 0.7 倍に縮小（min-height 32px→22px） */
   padding: 3px 8px;
   font-size: 0.68rem;
@@ -96,7 +96,7 @@
   right: 14px;
   z-index: 20;
   display: flex;
-  gap: 6px;
+  gap: var(--space-2);
 }
 #approval-recall-bar[hidden] {
   display: none;
@@ -106,7 +106,7 @@
   background: rgba(30, 40, 60, 0.36);
   color: rgba(147, 197, 253, 0.78);
   border: 1px solid rgba(59, 130, 246, 0.45);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   /* 約 0.7 倍に縮小（up/down と同サイズ） */
   padding: 3px 8px;
   font-size: 0.68rem;
@@ -142,7 +142,7 @@
   color: var(--line-soft);
   font-size: 0.7rem;
   padding: 2px 7px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   pointer-events: none;
   user-select: none;
@@ -163,7 +163,7 @@
   font-size: 0.74rem;
   line-height: 1.4;
   padding: 3px 10px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   border: 1px solid rgba(59, 130, 246, 0.35);
   overflow: hidden;
   pointer-events: none;
@@ -196,7 +196,7 @@
 #terminal-live-status:not([hidden]) {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-2);
 }
 /* 合成 CSS スピナー（再構成テキストの精度に関係なく、窓が出ている間は必ず回る） */
 .live-spinner {
@@ -245,11 +245,11 @@
   user-select: none;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 10px 12px;
   background: #0d1117;
   border: 1px solid rgba(59, 130, 246, 0.45);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
   font-family: system-ui, sans-serif;
   font-size: 0.72rem;
@@ -260,7 +260,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   cursor: pointer;
 }
 .live-status-palette-row input[type="color"] {
@@ -268,7 +268,7 @@
   height: 22px;
   padding: 0;
   border: 1px solid rgba(148, 163, 184, 0.45);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: none;
   cursor: pointer;
 }
@@ -281,7 +281,7 @@
   color: #cbd5e1;
   background: rgba(148, 163, 184, 0.12);
   border: 1px solid rgba(148, 163, 184, 0.35);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 .live-status-palette-reset:hover { background: rgba(148, 163, 184, 0.22); }
 .xterm { height: 100%; }
@@ -298,7 +298,7 @@
 }
 .xterm-viewport::-webkit-scrollbar-thumb {
   background: #4f5bd5;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 .xterm-viewport::-webkit-scrollbar-thumb:hover {
   background: #6b74ff;
@@ -324,7 +324,7 @@
 #mobile-keyboard-panel[hidden] { display: none !important; }
 #mobile-key-row {
   display: flex;
-  gap: 6px;
+  gap: var(--space-2);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
@@ -336,7 +336,7 @@
   min-height: var(--touch-target);
   padding: 0 12px;
   border: 1px solid var(--line-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg);
   color: var(--text);
   font-family: Consolas, monospace;
@@ -363,7 +363,7 @@
   overflow-y: auto;
   z-index: 100;
 }
-.slash-item { display: flex; align-items: center; gap: 12px; padding: 7px 12px; cursor: pointer; }
+.slash-item { display: flex; align-items: center; gap: var(--space-3); padding: 7px 12px; cursor: pointer; }
 .slash-item:hover,
 .slash-item.selected { background: var(--accent-soft); }
 .slash-item .slash-cmd { color: var(--accent); font-family: Consolas, monospace; font-size: 13px; min-width: 120px; }
@@ -384,10 +384,10 @@
   flex: 1;
   display: flex;
   align-items: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
   background: var(--bg);
   border: 1px solid var(--line-soft);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 8px 10px 8px 14px;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
@@ -399,7 +399,7 @@
 #input-tools {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   flex-shrink: 0;
 }
 /* PC（広い画面）は既定で表示。設定 OFF（body.pc-input-tools-off）でのみ隠す。
@@ -410,7 +410,7 @@ body.pc-input-tools-off #input-tools { display: none; }
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 0;
 }
 
@@ -426,16 +426,16 @@ body.pc-input-tools-off #input-tools { display: none; }
 #tools-flip-btn:hover { opacity: 1; color: var(--text); }
 
 /* ペーストチップ */
-#paste-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+#paste-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 #paste-chips:empty { display: none; }
 
 .paste-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   background: var(--accent-soft);
   border: 1px solid var(--accent);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 2px 8px;
   font-size: 12px;
   color: var(--accent-text);
@@ -470,7 +470,7 @@ body.pc-input-tools-off #input-tools { display: none; }
   background: var(--accent);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   width: var(--control-h-md);
   height: var(--control-h-md);
   min-width: var(--control-h-md);
@@ -495,7 +495,7 @@ body.pc-input-tools-off #input-tools { display: none; }
   background: transparent;
   color: var(--muted-2);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   width: var(--control-h-sm);
   height: var(--control-h-sm);
   min-width: var(--control-h-sm);
@@ -545,7 +545,7 @@ body.pc-input-tools-off #input-tools { display: none; }
     display: block;
   }
   #input-wrap {
-    gap: 6px;
+    gap: var(--space-2);
     padding-left: 10px;
     padding-right: 8px;
     /* 固定幅ボタン群が幅を食い尽くすと #input-area (min-width:0) がゼロ幅に
@@ -614,7 +614,7 @@ body.pc-input-tools-off #input-tools { display: none; }
   z-index: 9000;
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   box-shadow: 0 4px 16px rgba(0,0,0,0.4);
   padding: 4px 0;
   min-width: 160px;
@@ -645,7 +645,7 @@ body.pc-input-tools-off #input-tools { display: none; }
   z-index: 9000;
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   box-shadow: 0 4px 16px rgba(0,0,0,0.4);
   display: flex;
   flex-direction: column;
@@ -659,7 +659,7 @@ body.pc-input-tools-off #input-tools { display: none; }
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   padding: 5px 8px 5px 12px;
   border-bottom: 1px solid var(--line);
   font-size: 0.8rem;
@@ -667,14 +667,14 @@ body.pc-input-tools-off #input-tools { display: none; }
   flex-shrink: 0;
 }
 
-.expand-popup-btns { display: flex; gap: 4px; align-items: center; }
+.expand-popup-btns { display: flex; gap: var(--space-1); align-items: center; }
 
 .expand-popup-copy,
 .expand-popup-close {
   background: transparent;
   color: var(--muted-2);
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 2px 7px;
   font-size: 0.8rem;
   cursor: pointer;
@@ -704,7 +704,7 @@ body.pc-input-tools-off #input-tools { display: none; }
   min-width: 160px;
   background: var(--bg-elev);
   border: 1px solid var(--line-soft);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
   padding: 4px 0;
   display: none;
@@ -722,7 +722,7 @@ body.pc-input-tools-off #input-tools { display: none; }
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   font-family: inherit;
 }
 .term-ctx-menu button:hover { background: var(--row-hover); }
@@ -744,7 +744,7 @@ body.pc-input-tools-off #input-tools { display: none; }
   background: rgba(22, 30, 43, 0.92);
   color: var(--text);
   border: 1px solid var(--line-soft);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 3px 12px;
   font-size: 12px;
   cursor: pointer;
@@ -763,7 +763,7 @@ body.pc-input-tools-off #input-tools { display: none; }
 #history-viewer .hv-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   padding: 4px 8px;
   border-bottom: 1px solid var(--line-soft);
   background: rgba(22, 30, 43, 0.92);
@@ -776,7 +776,7 @@ body.pc-input-tools-off #input-tools { display: none; }
   background: transparent;
   color: var(--text);
   border: 1px solid var(--line-soft);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 2px 8px;
   font-size: 12px;
   cursor: pointer;

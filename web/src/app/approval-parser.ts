@@ -171,6 +171,18 @@
     // デリミタ済みで scrollback 誤検出の懸念がないため source 全体を走査してよい。
     // 取りこぼしの実質的な上限は呼び出し側が保持する pendingTextTail の文字数
     // （APPROVAL_PENDING_TEXT_TAIL_LIMIT）のみ＝制約をそこ一点に集約する。
+    // ブロック全文ハッシュを各選択肢へ _blockSig として付与する。
+    // 「回答済みの質問は二度と承認 UI を出さない」恒久抑制（answeredMarkerSigs）のキーに使う。
+    // 質問文＋全選択肢を含むため、ラベルが同一でも別質問なら別ハッシュになり誤抑制しない。
+    // approvalCtxHash は空白を正規化するので、端末幅による折り返し差は吸収される。
+    const withBlockSig = (parsed, innerArr) => {
+      if (parsed && Array.isArray(parsed)) {
+        const sig = approvalCtxHash((innerArr || []).join('\n'));
+        for (const el of parsed) { if (el && typeof el === 'object') el._blockSig = sig; }
+      }
+      return parsed;
+    };
+
     const recentText = source.join('\n');
     const blockRe = /\[MANY-AI-CLI\]([\s\S]*?)\[\/MANY-AI-CLI\]/g;
     let match;
@@ -180,7 +192,7 @@
     }
     if (lastBlock !== null) {
       const inner = lastBlock.split('\n').map(l => l.trim()).filter(Boolean);
-      return parseHubBlock(inner);
+      return withBlockSig(parseHubBlock(inner), inner);
     }
 
     // 開き/閉じが別チャンクに割れて全文一致しなかった場合の末尾アンカー・フォールバック。
@@ -191,7 +203,7 @@
       const line = source[i];
       if (/\[MANY-AI-CLI\]/.test(line) && /\[\/MANY-AI-CLI\]/.test(line)) {
         const inner = line.replace(/^[\s\S]*?\[MANY-AI-CLI\]/, '').replace(/\[\/MANY-AI-CLI\][\s\S]*$/, '').trim();
-        return parseHubBlock([inner]);
+        return withBlockSig(parseHubBlock([inner]), [inner]);
       }
       if (/\[\/MANY-AI-CLI\]/.test(line) && closeIdx === -1) { closeIdx = i; continue; }
       if (/\[MANY-AI-CLI\]/.test(line) && closeIdx !== -1) { openIdx = i; break; }
@@ -199,7 +211,7 @@
 
     if (openIdx === -1 || closeIdx === -1) return null;
     const inner = source.slice(openIdx + 1, closeIdx).map(l => l.trim()).filter(Boolean);
-    return parseHubBlock(inner);
+    return withBlockSig(parseHubBlock(inner), inner);
   }
 
   function extractPlainYesNoApproval(lines) {

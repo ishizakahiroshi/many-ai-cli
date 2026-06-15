@@ -97,6 +97,23 @@
   --sidebar-default:     clamp(260px, 18vw, 420px);
   --sidebar-min:         220px;
   --sidebar-max:         520px;
+
+  /* 角丸スケール（4段階＋pill に集約。生px直書きを廃しここへ寄せる） */
+  --radius-sm:           4px;   /* チップ・小ボタン・タグ */
+  --radius-md:           8px;   /* カード・パネル・入力欄・通常ボタン */
+  --radius-lg:           12px;  /* モーダル・大枠コンテナ */
+  --radius-xl:           16px;  /* 特大枠・ヒーロー領域 */
+  --radius-pill:         99px;  /* バッジ・丸ボタン・ピル */
+
+  /* 余白スケール（4の倍数で固定。gap/padding/margin はここへ寄せる）
+     1〜3px の微調整は意図的なので据え置き、4px 以上をこの段階へ丸める */
+  --space-1:             4px;
+  --space-2:             8px;
+  --space-3:             12px;
+  --space-4:             16px;
+  --space-5:             20px;
+  --space-6:             24px;
+  --space-8:             32px;
 }
 
 [data-theme="light"] {
@@ -189,7 +206,7 @@ body { font-family: "Segoe UI", sans-serif; margin: 0; background: var(--bg); co
 /* スクロールバー */
 ::-webkit-scrollbar { width: 3px; height: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--line); border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: var(--radius-sm); }
 ::-webkit-scrollbar-thumb:hover { background: var(--line-soft); }
 * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 h1 { margin: 0; font-size: 1.25rem; }
@@ -216,7 +233,7 @@ header {
   height: var(--app-header-h);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   padding: 0 14px;
   background: rgba(13,15,23,0.85);
   backdrop-filter: blur(20px);
@@ -230,7 +247,7 @@ header {
 .header-logo {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--space-2);
   font-size: 1.23rem;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -240,7 +257,7 @@ header {
 .header-logo-icon {
   width: 33px;
   height: 33px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   flex-shrink: 0;
   object-fit: contain;
   display: block;
@@ -256,7 +273,7 @@ header {
   font-size: 0.75rem;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex: 1 1 auto;
   min-width: 0;
   flex-wrap: nowrap;
@@ -265,9 +282,9 @@ header {
 .session-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   padding: 2px 8px;
-  border-radius: 20px;
+  border-radius: var(--radius-xl);
   font-size: 0.7rem;
   font-weight: 600;
   border: 1px solid;
@@ -297,7 +314,7 @@ header {
   background: transparent;
   color: var(--accent-text);
   border: 1px solid var(--accent);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 3px 9px;
   font-size: 0.8rem;
   cursor: pointer;
@@ -316,13 +333,13 @@ header {
 .usage-menu-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   min-height: var(--control-h-sm);
   padding: 3px 9px;
   color: var(--muted);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 0.72rem;
   font-family: inherit;
   line-height: 1;
@@ -351,7 +368,7 @@ header {
   min-width: 160px;
   background: var(--bg-elev, #1e2330);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: 0 8px 20px rgba(0,0,0,0.4);
   overflow: hidden;
 }
@@ -367,7 +384,7 @@ header {
 .usage-dropdown-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 7px 12px;
   font-size: 0.75rem;
   color: var(--text-soft, var(--muted));
@@ -389,12 +406,12 @@ header {
   background: transparent;
   color: var(--muted);
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-family: inherit;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   transition: color 0.15s, background 0.15s, border-color 0.15s;
   min-height: var(--control-h-sm);
 }
@@ -501,7 +518,7 @@ header {
 
 @media (max-width: 720px) {
   header {
-    gap: 6px;
+    gap: var(--space-2);
     padding: 0 8px 0 52px;
   }
 
@@ -516,7 +533,7 @@ header {
 
   #summary {
     font-size: 0.7rem;
-    gap: 4px;
+    gap: var(--space-1);
   }
 
   #app {
@@ -537,7 +554,7 @@ header {
     width: 36px;
     height: 32px;
     border: 1px solid var(--line);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background: var(--bg-elev);
     color: var(--text);
     font-size: 1rem;
@@ -597,6 +614,9 @@ header {
     position: fixed;
     top: var(--app-header-h);
     bottom: 0;
+    /* base mobile の height:100% を打ち消す。height と top/bottom の過剰指定だと
+       height が優先され、ドロワー下端がビューポートを 44px はみ出して見切れる。 */
+    height: auto;
     left: 0;
     z-index: 1100;
     width: min(88vw, 380px);
@@ -625,7 +645,7 @@ header {
 
   .view-tab {
     padding: 0 10px;
-    gap: 4px;
+    gap: var(--space-1);
     font-size: 0.75rem;
   }
 
@@ -642,7 +662,7 @@ header {
 }
 
 /* セッションカード */
-.card { position: relative; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 8px; padding: 9px 42px 9px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; overflow: hidden; }
+.card { position: relative; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 9px 42px 9px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; overflow: hidden; }
 .card:hover { border-color: var(--line-soft); background: var(--bg-deep); }
 .card.waiting { border-color: rgba(245,158,11,0.35); }
 .card.active {
@@ -674,7 +694,7 @@ header {
 .card-title-row { display: flex; align-items: center; gap: 2px; overflow: hidden; }
 .card-title-row > b { flex-shrink: 0; }
 /* 状態 pill（下のステータスバー .tsb-pill と同形状: ●ドット付き・丸み・同じ状態色）。 */
-.card-state-pill { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 0.62rem; font-weight: 700; padding: 1px 7px; border-radius: 9px; border: 1px solid transparent; line-height: 1.2; }
+.card-state-pill { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 0.62rem; font-weight: 700; padding: 1px 7px; border-radius: var(--radius-md); border: 1px solid transparent; line-height: 1.2; }
 .card-state-pill .card-pdot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 .card-state-pill.running  { color: var(--badge-running-text); background: color-mix(in srgb, var(--badge-running-bg) 25%, transparent); border-color: color-mix(in srgb, var(--badge-running-text) 35%, transparent); }
 .card-state-pill.waiting  { color: var(--warn-text);          background: color-mix(in srgb, var(--warn-bg) 25%, transparent);          border-color: color-mix(in srgb, var(--warn-text) 35%, transparent); }
@@ -690,7 +710,7 @@ header {
 .card-model.card-model--with-icon svg.card-provider-icon { width: 10px; height: 10px; flex-shrink: 0; margin-right: 0; }
 /* モデル名は先頭10文字相当で打ち切り（…）。全文はバッジの data-tooltip でホバー表示。 */
 .card-model.card-model--with-icon .card-model-text { min-width: 0; max-width: 10ch; flex-shrink: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card-branch { flex-shrink: 0; min-width: 0; max-width: 50%; color: var(--green-text); background: color-mix(in srgb, var(--green-bg) 35%, transparent); border: 1px solid color-mix(in srgb, var(--green-text) 30%, transparent); border-radius: 4px; padding: 1px 5px; font-size: 0.68rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: auto; cursor: pointer; user-select: none; transition: background 0.15s, transform 0.05s, color 0.15s; font-family: Consolas, monospace; }
+.card-branch { flex-shrink: 0; min-width: 0; max-width: 50%; color: var(--green-text); background: color-mix(in srgb, var(--green-bg) 35%, transparent); border: 1px solid color-mix(in srgb, var(--green-text) 30%, transparent); border-radius: var(--radius-sm); padding: 1px 5px; font-size: 0.68rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: auto; cursor: pointer; user-select: none; transition: background 0.15s, transform 0.05s, color 0.15s; font-family: Consolas, monospace; }
 .card-branch:hover { background: color-mix(in srgb, var(--green-text) 22%, transparent); color: var(--text); }
 .card-branch:active { transform: scale(0.96); }
 .card-branch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -704,7 +724,7 @@ header {
   min-width: 240px;
   background: var(--bg-elev);
   border: 1px solid var(--line-soft);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0,0,0,0.55);
   padding: 4px 0;
   font-size: 0.82rem;
@@ -722,7 +742,7 @@ header {
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   font-family: inherit;
 }
 .card-ctx-menu button:hover { background: var(--bg-elev2, var(--bg-deep)); }
@@ -756,7 +776,7 @@ header {
   min-width: 180px;
   background: var(--bg-elev);
   border: 1px solid var(--line-soft);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0,0,0,0.55);
   padding: 4px 0;
   font-size: 0.82rem;
@@ -774,7 +794,7 @@ header {
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   font-family: inherit;
 }
 .main-tab-add-menu button:hover { background: var(--bg-elev2, var(--bg-deep)); }
@@ -800,7 +820,7 @@ header {
 .card-project { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; margin-left: 4px; }
 /* meta-row（2行目）はアクション(☆↻×)が上段のみのため、右パディング(42px)分まで
    はみ出させてブランチバッジを右端近くまで寄せる（上段アクションとは縦に重ならない）。 */
-.card-meta-row { display: flex; align-items: center; gap: 6px; margin-top: 3px; margin-right: -30px; }
+.card-meta-row { display: flex; align-items: center; gap: var(--space-2); margin-top: 3px; margin-right: -30px; }
 .card-last-output { flex-shrink: 0; font-size: 0.72rem; color: var(--muted-2); margin-left: 2px; }
 .card-label { flex-shrink: 0; font-size: 0.75rem; color: var(--accent, #7aa2f7); font-weight: 600; white-space: nowrap; }
 .card-end-reason { flex-shrink: 0; font-size: 0.72rem; color: var(--danger, #ef4444); font-weight: 500; white-space: nowrap; max-width: 18rem; overflow: hidden; text-overflow: ellipsis; }
@@ -811,7 +831,7 @@ header {
   right: 6px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   z-index: 2;
 }
 .card-dir-icon {
@@ -862,13 +882,13 @@ header {
   font-size: 0.64rem;
   font-weight: 700;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   letter-spacing: 0.04em;
   flex-shrink: 0;
 }
 
 /* バッジ */
-.badge { display: inline-block; padding: 2px 6px; font-size: 0.64rem; font-weight: bold; border-radius: 20px; }
+.badge { display: inline-block; padding: 2px 6px; font-size: 0.64rem; font-weight: bold; border-radius: var(--radius-xl); }
 .badge.standby    { color: var(--badge-standby-text); background: color-mix(in srgb, var(--badge-standby-bg) 25%, transparent); border: 1px solid color-mix(in srgb, var(--badge-standby-text) 35%, transparent); }
 .badge.running    { color: var(--badge-running-text); background: color-mix(in srgb, var(--badge-running-bg) 25%, transparent); border: 1px solid color-mix(in srgb, var(--badge-running-text) 35%, transparent); }
 .badge.waiting    { color: var(--warn-text);           background: color-mix(in srgb, var(--warn-bg) 25%, transparent);         border: 1px solid color-mix(in srgb, var(--warn-text) 35%, transparent); }
@@ -889,7 +909,7 @@ header {
   max-height: 360px;
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: 0 4px 20px rgba(0,0,0,0.5);
   display: flex;
   flex-direction: column;
@@ -900,7 +920,7 @@ header {
 .slash-picker-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   padding: 8px 10px;
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
@@ -922,7 +942,7 @@ header {
   cursor: pointer;
   font-size: 14px;
   padding: 2px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   line-height: 1;
 }
 .slash-picker-icon-btn:hover { background: var(--accent-soft); color: var(--accent); }
@@ -931,7 +951,7 @@ header {
   padding: 5px 9px;
   background: var(--bg-deep);
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   color: var(--text);
   font-size: 12px;
   outline: none;
@@ -942,7 +962,7 @@ header {
 .slash-picker-item {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 7px 12px;
   cursor: pointer;
 }
@@ -983,7 +1003,7 @@ header {
   -webkit-appearance: none;
   color: var(--muted);
   border: none;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   width: 18px;
   height: 18px;
   font-size: 0.85rem;
@@ -1004,7 +1024,7 @@ header {
   -webkit-appearance: none;
   color: var(--muted);
   border: none;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   width: 18px;
   height: 18px;
   font-size: 0.75rem;
@@ -1022,7 +1042,7 @@ header {
 .card.dragging { opacity: 0.4; cursor: grabbing; }
 .card.drag-over { border-color: var(--accent) !important; border-style: dashed !important; }
 .project-group.dragging { opacity: 0.4; }
-.project-group.drag-over > .project-group-header { border: 1px dashed var(--accent); border-radius: 4px; }
+.project-group.drag-over > .project-group-header { border: 1px dashed var(--accent); border-radius: var(--radius-sm); }
 .project-group-header:active { cursor: grabbing; }
 
 /* moved to /styles/approval.css */
@@ -1032,7 +1052,7 @@ header {
 #attach-panel {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 6px 12px;
   background: var(--bg-elev);
   border-top: 1px solid var(--line);
@@ -1042,10 +1062,10 @@ header {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   padding: 5px 10px;
   border: 1px dashed var(--line-soft);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 0.78rem;
   color: var(--muted-2);
@@ -1057,13 +1077,13 @@ header {
 #attach-drop-zone.dragover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); }
 .attach-sub { font-size: 0.7rem; color: var(--line-soft); }
 
-#attach-thumbnails { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; overscroll-behavior: contain; flex: 1; }
+#attach-thumbnails { display: flex; gap: var(--space-2); flex-wrap: nowrap; overflow-x: auto; overscroll-behavior: contain; flex: 1; }
 .attach-thumb-wrapper { position: relative; flex-shrink: 0; }
 .attach-thumb {
   width: 40px;
   height: 40px;
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   display: block;
   cursor: zoom-in;
@@ -1094,10 +1114,10 @@ header {
 .attach-file-chip {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   padding: 2px 8px;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--bg-2);
   height: 40px;
   max-width: 160px;
@@ -1123,7 +1143,7 @@ header {
   background: transparent;
   color: var(--muted-2);
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 2px 7px;
   font-size: 0.75rem;
   cursor: pointer;
@@ -1147,7 +1167,7 @@ header {
 .about-dialog {
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   width: 680px;
   max-height: 80vh;
   display: flex;
@@ -1171,7 +1191,7 @@ header {
   font-size: 0.85rem;
   cursor: pointer;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   font-family: inherit;
 }
 .about-x-btn:hover { background: var(--danger-bg); color: var(--danger); }
@@ -1194,7 +1214,7 @@ header {
 .about-oss-list { list-style: none; margin: 0; padding: 0; }
 .about-oss-item { border-bottom: 1px solid var(--line); }
 .about-oss-item:last-child { border-bottom: none; }
-.about-oss-link { display: block; padding: 6px 0; text-decoration: none; color: inherit; border-radius: 4px; }
+.about-oss-link { display: block; padding: 6px 0; text-decoration: none; color: inherit; border-radius: var(--radius-sm); }
 .about-oss-link:hover .about-oss-name,
 .about-oss-link:focus-visible .about-oss-name { color: var(--accent); text-decoration: underline; }
 .about-oss-link:focus-visible { outline: none; }
@@ -1206,12 +1226,12 @@ header {
 .about-link { color: var(--accent-text); text-decoration: underline; }
 .about-link:hover { color: var(--accent); }
 
-.about-github-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.about-github-btns { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .about-gh-btn {
   display: inline-block;
   padding: 4px 12px;
   border: 1px solid var(--line-soft);
-  border-radius: 14px;
+  border-radius: var(--radius-xl);
   font-size: 0.8rem;
   color: var(--text);
   text-decoration: none;
@@ -1235,7 +1255,7 @@ header {
   max-width: 90vw;
   max-height: 90vh;
   object-fit: contain;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   box-shadow: 0 0 60px rgba(0, 0, 0, 0.9);
 }
 #image-lightbox video {
@@ -1250,7 +1270,7 @@ header {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   padding: 0 12px;
   margin-right: 4px;
   font-size: 0.72rem;
@@ -1265,7 +1285,7 @@ header {
 .main-tab {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   padding: 5px 12px;
   font-size: 0.78rem;
   color: var(--muted);
@@ -1298,7 +1318,7 @@ header {
   cursor: pointer;
   font-size: 0.75rem;
   padding: 0 2px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   line-height: 1;
   font-family: inherit;
 }
@@ -1321,7 +1341,7 @@ header {
   background: var(--bg-elev);
   color: var(--green-text);
   border: 1px solid var(--green);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 6px 16px;
   font-size: 0.82rem;
   pointer-events: none;
@@ -1350,9 +1370,9 @@ header {
    ============================================================ */
 .project-group { margin-bottom: 8px; }
 .project-group-header {
-  display: flex; align-items: center; gap: 6px;
+  display: flex; align-items: center; gap: var(--space-2);
   padding: 4px 8px; cursor: grab;
-  background: var(--bg-elev); border-radius: 4px;
+  background: var(--bg-elev); border-radius: var(--radius-sm);
   font-size: 0.82em; font-weight: bold; color: var(--muted);
   user-select: none;
 }
@@ -1361,7 +1381,7 @@ header {
 .project-group-header--collapsed .project-group-chevron { transform: rotate(-90deg); }
 .project-group-body { padding-left: 8px; }
 .project-group-body.hidden { display: none; }
-.group-status-chips { margin-left: auto; display: flex; gap: 4px; flex-shrink: 0; }
+.group-status-chips { margin-left: auto; display: flex; gap: var(--space-1); flex-shrink: 0; }
 .project-group-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; opacity: 1; transition: opacity 0.15s; }
 .project-group-grid-btn {
   background: none;
@@ -1369,7 +1389,7 @@ header {
   -webkit-appearance: none;
   color: var(--muted);
   border: none;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   width: 18px;
   height: 18px;
   font-size: 0.8rem;
@@ -1382,7 +1402,7 @@ header {
 }
 .project-group-grid-btn:hover { color: var(--accent-text); }
 .project-group--pinned > .project-group-header { border-left: 2px solid var(--warn); padding-left: 6px; }
-.status-chip { display: inline-flex; align-items: center; justify-content: center; gap: 3px; min-width: 26px; font-variant-numeric: tabular-nums; font-size: 0.8rem; font-weight: bold; padding: 2px 8px; border-radius: 4px; line-height: 1.4; }
+.status-chip { display: inline-flex; align-items: center; justify-content: center; gap: 3px; min-width: 26px; font-variant-numeric: tabular-nums; font-size: 0.8rem; font-weight: bold; padding: 2px 8px; border-radius: var(--radius-sm); line-height: 1.4; }
 .status-chip--running { color: var(--badge-running-text); background: color-mix(in srgb, var(--badge-running-bg) 25%, transparent); border: 1px solid color-mix(in srgb, var(--badge-running-text) 35%, transparent); }
 .status-chip--waiting { color: var(--warn-text);          background: color-mix(in srgb, var(--warn-bg) 25%, transparent);         border: 1px solid color-mix(in srgb, var(--warn-text) 35%, transparent); }
 .status-chip--standby { color: var(--badge-standby-text); background: color-mix(in srgb, var(--badge-standby-bg) 25%, transparent); border: 1px solid color-mix(in srgb, var(--badge-standby-text) 35%, transparent); }
@@ -1392,11 +1412,11 @@ header {
   50%       { opacity: 0.6; }
 }
 .summary-sep { color: var(--line-soft); align-self: center; font-size: 0.9rem; padding: 0 2px; }
-.summary-provider-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 0.78rem; color: var(--text); white-space: nowrap; flex-shrink: 0; }
+.summary-provider-chip { display: inline-flex; align-items: center; gap: var(--space-1); font-size: 0.78rem; color: var(--text); white-space: nowrap; flex-shrink: 0; }
 .summary-provider-chip .card-provider-icon { flex-shrink: 0; }
-.summary-provider-chip .compact-hide { display: inline-flex; align-items: center; gap: 4px; }
+.summary-provider-chip .compact-hide { display: inline-flex; align-items: center; gap: var(--space-1); }
 .summary-provider-chip .compact-count { display: none; color: var(--muted); font-size: 0.78rem; }
-.summary-provider-name { display: inline-flex; align-items: center; font-size: 0.7rem; font-weight: 700; padding: 1px 6px; border-radius: 4px; letter-spacing: 0.04em; }
+.summary-provider-name { display: inline-flex; align-items: center; font-size: 0.7rem; font-weight: 700; padding: 1px 6px; border-radius: var(--radius-sm); letter-spacing: 0.04em; }
 /* プロバイダ別の color/background はプロバイダ識別色ユーティリティで適用 */
 .summary-provider-count { color: var(--muted); font-size: 0.78rem; }
 .summary-ollama-model { font-size: 0.7rem; color: var(--muted-2); white-space: nowrap; }

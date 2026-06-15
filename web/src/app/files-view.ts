@@ -2642,7 +2642,17 @@ export const FilesPreview = (function () {
         const url = `/api/files-content?path=${encodeURIComponent(absPath)}&token=${encodeURIComponent(token)}${sessionQs}`;
         const res = await fetch(url);
         if (!res.ok) {
-          contentEl.innerHTML = `<div class="files-preview-error">${escapeHtml('HTTP ' + res.status)}</div>`;
+          let detail = '';
+          try { const ed = await res.json(); detail = (ed && (ed.detail || ed.error)) || ''; } catch (_) {}
+          let msg;
+          if (res.status === 403 && /outside allowed roots/i.test(detail)) {
+            // スコープ外＋ユーザー入力で未言及（AI 出力のみのパスは安全のため対象外）。
+            // 素の「HTTP 403」だと理由が分からないため、平易な説明に差し替える。
+            msg = t('files_preview_forbidden_scope') || ('HTTP ' + res.status);
+          } else {
+            msg = detail || ('HTTP ' + res.status);
+          }
+          contentEl.innerHTML = `<div class="files-preview-error">${escapeHtml(msg)}</div>`;
           return;
         }
         const data = await res.json();

@@ -38,6 +38,10 @@ interface WfSnapshot {
 
 const snapshots = new Map<number, WfSnapshot>();
 const missCounts = new Map<number, number>();
+// フレーム凍結検出: 走行中なのに frameSig が連続で不変＝スピナーが止まっている
+// （＝完了したのに走行中グリフがバッファに残っている）状態。連続一致回数を数える。
+const freezeCounts = new Map<number, number>();
+const lastFrameSig = new Map<number, string>();
 let modalOpen = false;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -90,7 +94,24 @@ function poll(): void {
       const prev = snapshots.get(sid);
       // 別 Workflow（sig 変化）になったら dismiss を解除して再表示する。
       const keepDismissed = !!(prev && prev.dismissed && prev.sig === sig);
-      snapshots.set(sid, { result, settled: !result.running, dismissed: keepDismissed, sig });
+      // フレーム凍結判定: 走行中表示なのに frameSig が連続不変なら、スピナーが止まった
+      // ＝完了したのに走行中グリフが残っているとみなし settle する（永久走行中の防止）。
+      let settled = !result.running;
+      // result.live（「N/M agents done」未完サマリー）がある間は走行の権威的証拠なので
+      // フレーム凍結 settle を一切行わない（背景実行でツリーが固まっても完了扱いしない）。
+      if (result.running && !result.live) {
+        const sameFrame = lastFrameSig.get(sid) === result.frameSig;
+        const frozen = (freezeCounts.get(sid) || 0) + (sameFrame ? 1 : 0);
+        freezeCounts.set(sid, sameFrame ? frozen : 0);
+        lastFrameSig.set(sid, result.frameSig);
+        if (frozen >= SETTLE_MISS_LIMIT) settled = true;
+      } else {
+        freezeCounts.set(sid, 0);
+        lastFrameSig.set(sid, result.frameSig);
+      }
+      // 既に settle 済みなら維持（再び走行中グリフを拾っても戻さない）。
+      if (prev && prev.sig === sig && prev.settled) settled = true;
+      snapshots.set(sid, { result, settled, dismissed: keepDismissed, sig });
     } else {
       // 未検出。完了スナップショットは振り返り用に保持し続ける（消さない）。
       // 走行中のまま進捗が途切れた場合は SETTLE_MISS_LIMIT 連続で完了表示へ倒す。
@@ -125,9 +146,17 @@ function renderPill(): void {
   pill.classList.toggle('wf-done', done);
   const textEl = pill.querySelector('.wf-pill-text') as HTMLElement | null;
   if (textEl) {
-    textEl.textContent = done
-      ? t('wf_progress_pill_done', { n: snap.result.totalCount })
-      : t('wf_progress_pill_running', { n: snap.result.runningCount });
+    if (done) {
+      textEl.textContent = t('wf_progress_pill_done', { n: snap.result.totalCount });
+    } else if (snap.result.live) {
+      // 背景実行（N/M agents done）は done/total で下のステータス行と表示を揃える。
+      textEl.textContent = t('wf_progress_pill_live', {
+        done: snap.result.doneCount,
+        total: snap.result.totalCount,
+      });
+    } else {
+      textEl.textContent = t('wf_progress_pill_running', { n: snap.result.runningCount });
+    }
   }
   const openBtn = pill.querySelector('.wf-pill-open') as HTMLElement | null;
   if (openBtn) openBtn.title = done ? t('wf_progress_done') : t('wf_progress_running');
@@ -323,6 +352,8 @@ function renderModalBody(): void {
 export function removeWorkflowSnapshot(sessionId: number): void {
   snapshots.delete(sessionId);
   missCounts.delete(sessionId);
+  freezeCounts.delete(sessionId);
+  lastFrameSig.delete(sessionId);
   if (sessionId === activeSessionId) renderPill();
 }
 

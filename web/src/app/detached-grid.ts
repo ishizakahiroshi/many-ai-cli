@@ -61,6 +61,11 @@ export class DetachedGridManager {
   private _area: HTMLElement | null;
   private _slots: Array<{ sessionId: number; slotEl: HTMLElement | null }>;
   private _focusedIdx: number;
+  // A: 列／行ごとのサイズ比率（fr 値の配列）。境界ドラッグで更新する。
+  private _colFracs: number[];
+  private _rowFracs: number[];
+  // B: D&D 並べ替え中のドラッグ元スロット index。
+  private _dragFromIdx: number | null;
 
   constructor(params: DetachedGridParams) {
     this._cols = params.cols;
@@ -69,6 +74,13 @@ export class DetachedGridManager {
     this._area = document.getElementById('detached-grid-area');
     this._slots = [];
     this._focusedIdx = 0;
+    this._dragFromIdx = null;
+
+    // B: 保存済みの並べ替え順を session id list に反映してから比率を読み込む
+    //    （比率・順序キーは window 単位 = layout + session 集合で一意化）
+    this._applySavedOrder();
+    this._colFracs = this._loadFracs('Cols', this._cols);
+    this._rowFracs = this._loadFracs('Rows', this._rows);
 
     if (this._area) {
       this._area.style.setProperty('--pane-cols', String(this._cols));
@@ -105,6 +117,10 @@ export class DetachedGridManager {
       this._area.appendChild(paneEl);
       this._slots.push({ sessionId: sessionId ?? -1, slotEl: paneEl });
     }
+
+    // A: グリッドのサイズ比率を適用し、境界スプリッタを生成する
+    this._applyGridTemplate();
+    this._buildSplitters();
 
     this._applyFontScale();
 
@@ -144,6 +160,8 @@ export class DetachedGridManager {
       if (oldHeader) {
         const newHeader = this._buildHeader(i, session);
         slot.slotEl.replaceChild(newHeader, oldHeader);
+        // B: ヘッダ差し替えで失われた D&D ハンドラを再配線する
+        this._wireHeaderDrag(newHeader, slot.slotEl, i);
       }
       // pending ラベルを消してターミナルエリアを追加（初回 session 登録時）
       const pending = slot.slotEl.querySelector('.pane-pending-label');
@@ -181,7 +199,12 @@ export class DetachedGridManager {
     el.className = 'pane-slot' + (idx === this._focusedIdx ? ' focused' : '');
     el.dataset.slotIdx = String(idx);
 
-    el.appendChild(this._buildHeader(idx, session));
+    const header = this._buildHeader(idx, session);
+    el.appendChild(header);
+
+    // B: ヘッダを掴んでペインを並べ替える（HTML5 D&D）
+    this._wireHeaderDrag(header, el, idx);
+    this._wireDropTarget(el, idx);
 
     const termArea = document.createElement('div');
     termArea.className = 'pane-terminal-area';
@@ -267,6 +290,9 @@ export class DetachedGridManager {
     pending.textContent = `Waiting for session #${sessionId}…`;
     el.appendChild(pending);
 
+    // B: pending スロットもドロップ先にする
+    this._wireDropTarget(el, idx);
+
     return el;
   }
 
@@ -277,6 +303,10 @@ export class DetachedGridManager {
     const plus = document.createElement('span');
     plus.textContent = '＋';
     el.appendChild(plus);
+
+    // B: 空スロットもドロップ先にする（末尾への移動）
+    this._wireDropTarget(el, idx);
+
     return el;
   }
 
@@ -430,6 +460,221 @@ export class DetachedGridManager {
       n <= 9  ? 'pane-fs-small'  :
                 'pane-fs-tiny'
     );
+  }
+
+  // ─── A: グリッドのリサイズ（境界スプリッタ） ──────────────────
+
+  /** fr 配列から grid-template-columns / rows を適用する */
+  private _applyGridTemplate(): void {
+    if (!this._area) return;
+    this._area.style.gridTemplateColumns = this._colFracs.map(f => `minmax(0, ${f.toFixed(4)}fr)`).join(' ');
+    this._area.style.gridTemplateRows    = this._rowFracs.map(f => `minmax(0, ${f.toFixed(4)}fr)`).join(' ');
+  }
+
+  /** 内部境界ごとにドラッグ用スプリッタを生成し area に重ねる */
+  private _buildSplitters(): void {
+    if (!this._area) return;
+    this._area.querySelectorAll('.pane-splitter').forEach(el => el.remove());
+
+    const sum = (arr: number[], n: number) => arr.slice(0, n).reduce((a, b) => a + b, 0);
+    const colTotal = this._colFracs.reduce((a, b) => a + b, 0) || 1;
+    const rowTotal = this._rowFracs.reduce((a, b) => a + b, 0) || 1;
+
+    // 列境界（縦バー）
+    for (let k = 0; k < this._cols - 1; k++) {
+      const sp = document.createElement('div');
+      sp.className = 'pane-splitter col';
+      sp.style.left = (sum(this._colFracs, k + 1) / colTotal * 100) + '%';
+      this._wireSplitter(sp, 'col', k);
+      this._area.appendChild(sp);
+    }
+    // 行境界（横バー）
+    for (let k = 0; k < this._rows - 1; k++) {
+      const sp = document.createElement('div');
+      sp.className = 'pane-splitter row';
+      sp.style.top = (sum(this._rowFracs, k + 1) / rowTotal * 100) + '%';
+      this._wireSplitter(sp, 'row', k);
+      this._area.appendChild(sp);
+    }
+  }
+
+  /** スプリッタにポインタドラッグを配線する（境界 k と k+1 の比率を移動） */
+  private _wireSplitter(sp: HTMLElement, axis: 'col' | 'row', k: number): void {
+    const onDown = (e: PointerEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!this._area) return;
+      const rect = this._area.getBoundingClientRect();
+      const isCol = axis === 'col';
+      const fracs = isCol ? this._colFracs : this._rowFracs;
+      const total = fracs.reduce((a, b) => a + b, 0) || 1;
+      const containerPx = isCol ? rect.width : rect.height;
+      const startPos = isCol ? e.clientX : e.clientY;
+      const a0 = fracs[k];
+      const b0 = fracs[k + 1];
+      const minFrac = total * 0.08; // 1セルが極端に潰れないよう下限を設ける
+
+      const onMove = (ev: PointerEvent) => {
+        const pos = isCol ? ev.clientX : ev.clientY;
+        const deltaPx = pos - startPos;
+        const deltaFrac = (deltaPx / Math.max(1, containerPx)) * total;
+        let na = a0 + deltaFrac;
+        let nb = b0 - deltaFrac;
+        if (na < minFrac) { nb -= (minFrac - na); na = minFrac; }
+        if (nb < minFrac) { na -= (minFrac - nb); nb = minFrac; }
+        fracs[k] = na;
+        fracs[k + 1] = nb;
+        this._applyGridTemplate();
+        this._repositionSplitters();
+      };
+      const onUp = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        document.body.classList.remove('pane-resizing');
+        this._saveFracs();
+      };
+      document.body.classList.add('pane-resizing');
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    };
+    sp.addEventListener('pointerdown', onDown);
+  }
+
+  /** ドラッグ中にスプリッタ位置だけ再計算する（DOM 再構築なし） */
+  private _repositionSplitters(): void {
+    if (!this._area) return;
+    const sum = (arr: number[], n: number) => arr.slice(0, n).reduce((a, b) => a + b, 0);
+    const colTotal = this._colFracs.reduce((a, b) => a + b, 0) || 1;
+    const rowTotal = this._rowFracs.reduce((a, b) => a + b, 0) || 1;
+    let ci = 0, ri = 0;
+    this._area.querySelectorAll('.pane-splitter').forEach(spEl => {
+      const sp = spEl as HTMLElement;
+      if (sp.classList.contains('col')) {
+        sp.style.left = (sum(this._colFracs, ci + 1) / colTotal * 100) + '%';
+        ci++;
+      } else {
+        sp.style.top = (sum(this._rowFracs, ri + 1) / rowTotal * 100) + '%';
+        ri++;
+      }
+    });
+  }
+
+  private _equalFracs(n: number): number[] {
+    return new Array(Math.max(1, n)).fill(1);
+  }
+
+  // ─── B: ペイン D&D 並べ替え ──────────────────────────────────
+
+  /** ヘッダにドラッグ開始ハンドラを配線する */
+  private _wireHeaderDrag(header: HTMLElement, el: HTMLElement, idx: number): void {
+    header.draggable = true;
+    header.addEventListener('dragstart', (e) => {
+      this._dragFromIdx = idx;
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(idx));
+      }
+      el.classList.add('dragging');
+    });
+    header.addEventListener('dragend', () => {
+      this._dragFromIdx = null;
+      if (this._area) this._area.querySelectorAll('.pane-slot').forEach(s => s.classList.remove('dragging', 'drag-over'));
+    });
+  }
+
+  /** ペイン要素をドロップ先として配線する */
+  private _wireDropTarget(el: HTMLElement, idx: number): void {
+    el.addEventListener('dragover', (e) => {
+      if (this._dragFromIdx == null || this._dragFromIdx === idx) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      el.classList.add('drag-over');
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+    el.addEventListener('drop', (e) => {
+      e.preventDefault();
+      el.classList.remove('drag-over');
+      const from = this._dragFromIdx;
+      this._dragFromIdx = null;
+      if (from == null || from === idx) return;
+      this._reorderSlots(from, idx);
+    });
+  }
+
+  /**
+   * スロット from を slot to の位置へ移動する。
+   * - to が埋まっている場合は両者を入れ替え（swap）
+   * - to が空（session id 範囲外）の場合は from を末尾へ移動
+   */
+  private _reorderSlots(from: number, to: number): void {
+    const ids = this._sessionIds;
+    const total = this._cols * this._rows;
+    if (from < 0 || from >= ids.length) return;
+    if (to < ids.length) {
+      const tmp = ids[from];
+      ids[from] = ids[to];
+      ids[to] = tmp;
+    } else {
+      const [id] = ids.splice(from, 1);
+      ids.push(id);
+    }
+    this._sessionIds = ids;
+    this._saveOrder();
+    this._focusedIdx = Math.min(to, total - 1);
+    this.render();
+  }
+
+  // ─── 永続化（detached 専用キー / window 単位で記憶） ──────────
+
+  /** layout + session 集合で window を一意化したストレージキー接尾辞 */
+  private _storeKey(): string {
+    const ids = [...this._sessionIds].sort((a, b) => a - b).join(',');
+    return `${this._cols}x${this._rows}|${ids}`;
+  }
+
+  private _saveFracs(): void {
+    try {
+      localStorage.setItem('detachedGridColsFracs:' + this._storeKey(), JSON.stringify(this._colFracs));
+      localStorage.setItem('detachedGridRowsFracs:' + this._storeKey(), JSON.stringify(this._rowFracs));
+    } catch (_) {}
+  }
+
+  /** 'Cols' | 'Rows' の比率を読み込み、長さが n と一致しなければ等分にフォールバック */
+  private _loadFracs(which: 'Cols' | 'Rows', n: number): number[] {
+    try {
+      const raw = localStorage.getItem('detachedGrid' + which + 'Fracs:' + this._storeKey());
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr) && arr.length === n && arr.every((v: any) => Number.isFinite(v) && v > 0)) {
+          return arr;
+        }
+      }
+    } catch (_) {}
+    return this._equalFracs(n);
+  }
+
+  private _saveOrder(): void {
+    try { localStorage.setItem('detachedGridOrder:' + this._storeKey(), JSON.stringify(this._sessionIds)); } catch (_) {}
+  }
+
+  /** 保存済み並べ替え順を session id list に反映する（存在する id のみ・新規は末尾） */
+  private _applySavedOrder(): void {
+    let saved: number[] | null = null;
+    try {
+      const raw = localStorage.getItem('detachedGridOrder:' + this._storeKey());
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) saved = arr.filter((v: any) => Number.isFinite(v));
+      }
+    } catch (_) {}
+    if (!saved || !saved.length) return;
+    const present = new Set(this._sessionIds);
+    const ordered = saved.filter(id => present.has(id));
+    const inOrder = new Set(ordered);
+    for (const id of this._sessionIds) {
+      if (!inOrder.has(id)) ordered.push(id);
+    }
+    this._sessionIds = ordered;
   }
 }
 

@@ -14,6 +14,7 @@ export const STORAGE_GROUP_ORDER_KEY       = 'ai_cli_hub_group_order';
 export const STORAGE_PROJECT_FAVORITES_KEY = 'ai_cli_hub_project_favorites';
 export const STORAGE_SPAWN_KEY             = 'ai_cli_hub_spawn_settings';
 export const STORAGE_CWD_HISTORY_KEY       = 'ai_cli_hub_cwd_history';
+export const STORAGE_CWD_FAVORITES_KEY     = 'ai_cli_hub_cwd_favorites';
 export const STORAGE_TRIGGER_ENABLED_KEY      = 'ai_cli_hub_trigger_enabled';
 export const STORAGE_TRIGGER_PHRASE_KEY       = 'ai_cli_hub_trigger_phrase';
 export const STORAGE_NOTIFY_SOUND_ENABLED_KEY = 'ai_cli_hub_notify_sound_enabled';
@@ -192,6 +193,7 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'group_order':               [STORAGE_GROUP_ORDER_KEY,           JSON.stringify],
   'project_favorites':         [STORAGE_PROJECT_FAVORITES_KEY,     JSON.stringify],
   'cwd_history':               [STORAGE_CWD_HISTORY_KEY,           JSON.stringify],
+  'cwd_favorites':             [STORAGE_CWD_FAVORITES_KEY,         JSON.stringify],
   'approval.auto_switch':      [STORAGE_APPROVAL_AUTO_SWITCH_KEY,  (v) => v ? '1' : '0'],
   'pc.input_tools_enabled':     [STORAGE_PC_INPUT_TOOLS_KEY,       (v) => v ? '1' : '0'],
   'mobile.input_tools_enabled': [STORAGE_MOBILE_INPUT_TOOLS_KEY,   (v) => v ? '1' : '0'],
@@ -231,6 +233,7 @@ export const _USER_PREFS_STRING_ARRAY_PATHS = new Set([
   'group_order',
   'project_favorites',
   'cwd_history',
+  'cwd_favorites',
 ]);
 
 // ドット区切りパスでオブジェクトの深いフィールドを設定する

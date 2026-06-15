@@ -8,7 +8,7 @@
   background: transparent;
   color: var(--muted);
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-family: inherit;
   display: flex;
@@ -46,7 +46,7 @@
   flex-direction: column;
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-xl);
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
   overflow: hidden;
 }
@@ -54,7 +54,7 @@
 .mc-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
   background: var(--bg-elev2);
@@ -71,7 +71,7 @@
   font-size: 1.1rem;
   line-height: 1;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-family: inherit;
 }
 .mc-head-reshow + .mc-modal-close { margin-left: 8px; }
@@ -83,7 +83,7 @@
   border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
   color: var(--danger);
   font-size: 0.7rem;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 6px 10px;
   line-height: 1.5;
 }
@@ -97,8 +97,8 @@
 }
 
 /* ステップインジケータ */
-.mc-steps { display: flex; gap: 6px; justify-content: center; margin: 0 0 12px; }
-.mc-step-dot { width: 22px; height: 4px; border-radius: 3px; background: var(--line-soft); }
+.mc-steps { display: flex; gap: var(--space-2); justify-content: center; margin: 0 0 12px; }
+.mc-step-dot { width: 22px; height: 4px; border-radius: var(--radius-sm); background: var(--line-soft); }
 .mc-step-dot.on { background: var(--accent); }
 
 .mc-q {
@@ -107,20 +107,20 @@
   color: var(--text);
   margin: 4px 0 10px;
 }
-.mc-q-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mc-q-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .mc-sub { color: var(--muted); font-size: 0.78rem; margin: -2px 0 12px; line-height: 1.6; }
 
 /* 選択肢ボタン */
 .mc-choice {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   width: 100%;
   text-align: left;
   background: var(--bg-elev2);
   border: 1px solid var(--line);
   color: var(--text);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 12px 14px;
   margin-bottom: 9px;
   cursor: pointer;
@@ -134,16 +134,16 @@
 .mc-choice-nm { font-weight: 600; }
 .mc-choice-ds { color: var(--muted); font-size: 0.72rem; margin-top: 2px; line-height: 1.5; }
 .mc-choice-note { color: var(--muted); font-size: 0.66rem; margin-top: 3px; opacity: 0.78; }
-.mc-badge-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.mc-choice-col { flex: 1; flex-direction: column; align-items: center; text-align: center; gap: 6px; }
+.mc-badge-row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.mc-choice-col { flex: 1; flex-direction: column; align-items: center; text-align: center; gap: var(--space-2); }
 
-.mc-row2 { display: flex; gap: 9px; }
+.mc-row2 { display: flex; gap: var(--space-2); }
 
 .mc-badge {
   display: inline-block;
   font-size: 0.62rem;
   padding: 1px 7px;
-  border-radius: 20px;
+  border-radius: var(--radius-xl);
   margin-top: 5px;
   border: 1px solid;
   width: fit-content;
@@ -154,12 +154,12 @@
 .mc-badge-recommend { color: var(--accent-text); border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: var(--accent-soft); font-weight: 600; }
 
 /* QR */
-.mc-qrwrap { display: flex; flex-direction: column; align-items: center; gap: 7px; margin: 6px 0 4px; }
+.mc-qrwrap { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); margin: 6px 0 4px; }
 .mc-qr {
   width: 156px;
   height: 156px;
   background: #fff;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 6px;
   display: flex;
   align-items: center;
@@ -185,10 +185,10 @@
 .mc-cmd {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   background: var(--bg-deep);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 8px 10px;
   margin: 8px 0;
   font-family: "Cascadia Code", Consolas, monospace;
@@ -202,7 +202,7 @@
   border: 0;
   color: #fff;
   font-weight: 600;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 4px 10px;
   cursor: pointer;
   font-size: 0.68rem;
@@ -217,7 +217,7 @@
   height: 64px;
   background: var(--bg-deep);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--text);
   font-family: Consolas, monospace;
   font-size: 0.68rem;
@@ -230,10 +230,10 @@
 .mc-applink {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   background: var(--bg-elev2);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 10px 12px;
   margin-top: 8px;
   font-size: 0.8rem;
@@ -245,13 +245,13 @@
 .mc-applink-url { color: var(--accent-text); font-size: 0.7rem; }
 
 /* セグメント切替 */
-.mc-seg { display: flex; gap: 6px; margin: 0 0 10px; }
+.mc-seg { display: flex; gap: var(--space-2); margin: 0 0 10px; }
 .mc-seg-btn {
   flex: 1;
   background: var(--bg-elev2);
   border: 1px solid var(--line);
   color: var(--muted);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 7px;
   cursor: pointer;
   font-size: 0.72rem;
@@ -260,12 +260,12 @@
 .mc-seg-btn.on { border-color: var(--accent); color: var(--text); background: var(--accent-soft); }
 
 /* 機能ステータスバー（トレードオフ可視化） */
-.mc-feat { display: flex; gap: 6px; margin: 4px 0 10px; }
+.mc-feat { display: flex; gap: var(--space-2); margin: 4px 0 10px; }
 .mc-feat-cell {
   flex: 1;
   text-align: center;
   font-size: 0.66rem;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 6px 2px;
   border: 1px solid var(--line);
   display: flex;
@@ -279,7 +279,7 @@
 
 .mc-ctx-note {
   font-size: 0.7rem;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 8px 10px;
   margin: 2px 0 10px;
   line-height: 1.6;
@@ -298,25 +298,25 @@
 .mc-risk b { color: var(--danger); }
 .mc-chk {
   display: flex;
-  gap: 9px;
+  gap: var(--space-2);
   align-items: flex-start;
   font-size: 0.78rem;
   color: var(--text);
   background: var(--bg-elev2);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 11px 13px;
   margin-top: 10px;
   cursor: pointer;
 }
 
 /* ナビ */
-.mc-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; gap: 8px; }
+.mc-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; gap: var(--space-2); }
 .mc-nav-btn {
   background: transparent;
   border: 1px solid var(--line);
   color: var(--muted);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 7px 14px;
   cursor: pointer;
   font-size: 0.75rem;
@@ -346,7 +346,7 @@
   color: var(--danger);
   background: var(--danger-bg);
   border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   line-height: 1.6;
 }
@@ -363,7 +363,7 @@
   align-items: center;
   font-size: 0.72rem;
   font-weight: 600;
-  border-radius: 20px;
+  border-radius: var(--radius-xl);
   padding: 3px 11px;
   margin: 2px 0 10px;
   border: 1px solid;
@@ -379,7 +379,7 @@
   color: var(--accent-text);
   background: var(--accent-soft);
   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 7px 10px;
   margin: 0 0 10px;
   line-height: 1.6;
@@ -391,7 +391,7 @@
   color: var(--danger);
   background: var(--danger-bg);
   border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 8px 10px;
   margin: 0 0 10px;
   line-height: 1.6;
@@ -417,7 +417,7 @@
   background: transparent;
   border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
   color: var(--danger);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-family: inherit;
 }
@@ -429,7 +429,7 @@
   width: 100%;
   background: var(--bg-deep);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--text);
   font-family: Consolas, monospace;
   font-size: 0.74rem;

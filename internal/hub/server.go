@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -134,6 +135,14 @@ type session struct {
 
 	// JSON 外: 完了サマリー通知の連投抑制用
 	lastDoneNotifyAt time.Time
+
+	// JSON 外: Git タブ「Ask AI」コミットメッセージ生成の待ち受け状態。
+	// 接続中の AI セッションへ生成プロンプトを注入し、PTY 出力から
+	// [MANY-AI-CLI-COMMIT] マーカーを拾ってフォームへ反映する。
+	commitMsgAwait    bool            // マーカー待ち受け中
+	commitMsgDeadline time.Time       // 待ち受けの打ち切り時刻
+	commitMsgLang     string          // 生成言語（ja/en）。タイムアウト文言に使用
+	commitMsgBuf      strings.Builder // ANSI 除去済み出力の蓄積（マーカー抽出用・上限つき）
 
 	// JSON 外: 起動バナーからの初期モデル検出用。
 	// Model が空のセッションのみ対象。検出成功 or 累計バイト超過で打ち切る。
@@ -1435,6 +1444,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			if bytes.Contains(m.Data, doneSummaryMarkerOpen) {
 				s.handleDoneSummaryMarker(id, m.Data)
 			}
+			s.handleCommitMsgChunk(id, cleanText)
 		case "session_end":
 			histEvent := map[string]any{
 				"ts":         time.Now().Format(time.RFC3339),
@@ -2700,6 +2710,11 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 		sessionIDs = append(sessionIDs, ses.ID)
 		providerByID[ses.ID] = ses.Provider
 	}
+	// Go の map イテレーションは順序が不定なため、ID 昇順へ決定的にソートしてから送る。
+	// UI 側はまだ sessionOrder に載っていないセッションをこの配列順で並べる（state.ts
+	// orderSessions の末尾フォールバック）。ソートしないと再接続のたびにカードの並びが
+	// バラバラに変わり、固定したはずの順序が崩れて見える。
+	sort.Slice(list, func(i, j int) bool { return list[i].ID < list[j].ID })
 	// json.Marshal は sessionsMu 保持下で行う。list は *session ポインタを保持し、
 	// markRunning / evaluateIdle / applyDetectedModel 等が sessionsMu 下で同じフィールド
 	// （State / Model / Branch 等）を書き換えるため、ロック外で Marshal すると read/write
