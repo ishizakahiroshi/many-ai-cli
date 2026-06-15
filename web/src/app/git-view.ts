@@ -2,6 +2,7 @@
 import { token } from './util.js';
 import { STORAGE_LANG_KEY } from './user-prefs.js';
 import { appConfirm } from './settings.js';
+import { showFileActionsPopup, joinPath } from './path-links.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -787,7 +788,7 @@ import { appConfirm } from './settings.js';
         const added = f.added == null ? '' : `<span class="file-stat-add">+${f.added || 0}</span>`;
         const removed = f.removed == null ? '' : `<span class="file-stat-del">-${f.removed || 0}</span>`;
         return `
-          <div class="git-working-file-row">
+          <div class="git-working-file-row" data-path="${_esc(f.path || '')}">
             <span class="file-status ${_esc(statusClass(f.status))}">${_esc(f.status || 'M')}</span>
             <span class="file-path">${_esc(f.path || '')}</span>
             ${added}${removed}
@@ -804,6 +805,16 @@ import { appConfirm } from './settings.js';
         </div>
         <div class="git-working-files">${rows}${more}</div>
       `;
+      // working tree のファイル行クリックで、CLI 画面の右クリックと同型の軽量ポップアップ
+      //（モーダルで開く / 既定のアプリで開く）を出す。f.path は gitRoot 相対なので絶対化する。
+      this.els.workingPreview.querySelectorAll('.git-working-file-row[data-path]').forEach(row => {
+        row.addEventListener('click', (e) => {
+          const rel = row.dataset.path;
+          if (!rel) return;
+          const abs = this.gitRoot ? joinPath(this.gitRoot, rel) : rel;
+          showFileActionsPopup(abs, e.clientX, e.clientY, this.sessionId);
+        });
+      });
     }
 
     _openCommitModal() {
@@ -1422,6 +1433,15 @@ import { appConfirm } from './settings.js';
           this.activeTab = 'changes';
           this._syncDetailTabs();
           this._renderDetailContent();
+        });
+        // 左クリックの差分表示は維持し、右クリックで CLI 同型の軽量ポップアップ
+        //（モーダルで開く / 既定のアプリで開く）を出す。開く対象は working tree の現物。
+        row.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          const rel = row.dataset.path;
+          if (!rel) return;
+          const abs = this.gitRoot ? joinPath(this.gitRoot, rel) : rel;
+          showFileActionsPopup(abs, e.clientX, e.clientY, this.sessionId);
         });
       });
     }

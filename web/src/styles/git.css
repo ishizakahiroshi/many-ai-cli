@@ -191,6 +191,13 @@
   font-family: Consolas, "Cascadia Mono", monospace;
   font-size: 11.5px;
 }
+.git-working-file-row[data-path] {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  padding: 1px 4px;
+  margin: 0 -4px;
+}
+.git-working-file-row[data-path]:hover { background: var(--row-hover); }
 .git-working-more {
   color: var(--muted);
   font-size: 11.5px;

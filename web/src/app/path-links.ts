@@ -135,6 +135,12 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
     );
   }
 
+  renderPathPopupItems(popup, items, clientX, clientY);
+}
+
+// renderPathPopupItems は items 配列をボタン化して popup に並べ、画面端からはみ出さない
+// よう位置調整する。showPathPopup / showFileActionsPopup で共有する。
+export function renderPathPopupItems(popup, items, clientX, clientY) {
   for (const item of items) {
     const btn = document.createElement('button');
     btn.className = 'path-link-popup-item';
@@ -158,6 +164,24 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
   if (top + rect.height > vh - 8) top = clientY - rect.height - 8;
   popup.style.left = Math.max(4, left) + 'px';
   popup.style.top = Math.max(4, top) + 'px';
+}
+
+// showFileActionsPopup は Git タブのファイル行向けの軽量ポップアップ。
+// CLI 画面の右クリックメニュー（showPathPopup）と同じ部品を流用しつつ、項目を
+// 「🗔 モーダルで開く」「🚀 既定のアプリで開く」の 2 つだけに絞る。
+// プレビュー不能な拡張子のときはモーダル項目を出さず既定アプリのみにする。
+export function showFileActionsPopup(filePath, clientX, clientY, sessionId) {
+  const popup = getOrCreatePathPopup();
+  popup.innerHTML = '';
+  popup.hidden = false;
+
+  const items = [];
+  if (isAnyAiCliPreviewable(filePath)) {
+    items.push({ icon: '🗔', key: 'link_open_modal', action: () => openFileModal(filePath, sessionId) });
+  }
+  items.push(getPathOpenItem(filePath, sessionId));
+
+  renderPathPopupItems(popup, items, clientX, clientY);
 }
 
 // ---- ファイルプレビューモーダル（FilesPreview をツリー無しで単体表示）----
