@@ -11,7 +11,7 @@
   - `./CLAUDE/operations.md` — Git, commit messages, output rules
   - `./CLAUDE/deployment.md` — cross-compile build & distribution
   - `./CLAUDE/windows_setup.md` — Windows dev environment specifics
-- Design (source of truth): `./docs/any-ai-cli-design-v0.1.0.md`
+- Design (source of truth): `./docs/v0.3.x-many-ai-cli-design.md`
 - Local/private additions (if present): `./CLAUDE.local.md`
 
 個人グローバルルールは各 AI ツールのグローバル設定に置く。公開リポジトリ内のガイドが衝突したときは `CLAUDE.md` を優先。
