@@ -242,6 +242,11 @@
   border-color: var(--danger, #ff6b6b);
   background: rgba(255, 107, 107, 0.06);
 }
+/* お気に入りの D&D 並び替え */
+.cwd-dropdown-item.is-favorite { cursor: grab; }
+.cwd-dropdown-item.dragging { opacity: 0.45; cursor: grabbing; }
+.cwd-dropdown-item.drop-before { box-shadow: inset 0 2px 0 var(--accent, #6ea8fe); }
+.cwd-dropdown-item.drop-after  { box-shadow: inset 0 -2px 0 var(--accent, #6ea8fe); }
 
 .spawn-select,
 .spawn-input {

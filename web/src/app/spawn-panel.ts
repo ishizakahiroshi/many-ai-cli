@@ -605,6 +605,11 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     setUserPref('cwd_favorites', next);
   }
 
+  // D&D（お気に入り並び替え）用の状態。
+  let cwdDragValue = null;      // ドラッグ中のお気に入りパス（非ドラッグ時 null）
+  let cwdDragMoved = false;     // 並び替え直後に発火する click 選択を1回抑止する
+  let cwdSuppressReopen = false; // お気に入り選択で入力欄を再 focus する際の自動再オープンを1回抑止する
+
   function renderCwdDropdown(filter) {
     const favs = loadCwdFavorites();
     const favSet = new Set(favs);
@@ -618,7 +623,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     cwdDropdown.innerHTML = items.map(v => {
       const fav = favSet.has(v);
       return (
-        `<li class="cwd-dropdown-item${fav ? ' is-favorite' : ''}" tabindex="-1" data-value="${escapeHtml(v)}">` +
+        `<li class="cwd-dropdown-item${fav ? ' is-favorite' : ''}" tabindex="-1"${fav ? ' draggable="true"' : ''} data-value="${escapeHtml(v)}">` +
         `<button class="cwd-dropdown-fav${fav ? ' is-on' : ''}" tabindex="-1" data-value="${escapeHtml(v)}" ` +
         `title="${escapeHtml(t(fav ? 'spawn_cwd_unfavorite' : 'spawn_cwd_favorite'))}">${fav ? '★' : '☆'}</button>` +
         `<span class="cwd-dropdown-label">${escapeHtml(v)}</span>` +
@@ -785,10 +790,24 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       finally { spawnCwdBrowse.disabled = false; }
     });
   }
-  spawnCwdInput.addEventListener('focus', () => { renderCwdDropdown(''); refreshCwdInputStatus(); });
+  spawnCwdInput.addEventListener('focus', () => {
+    // お気に入り選択直後の再 focus では再オープンしない（選択して閉じたのに即開き直る事故を防ぐ）。
+    if (cwdSuppressReopen) { cwdSuppressReopen = false; return; }
+    renderCwdDropdown(''); refreshCwdInputStatus();
+  });
   spawnCwdInput.addEventListener('click', () => { renderCwdDropdown(''); });
   spawnCwdInput.addEventListener('input', () => { renderCwdDropdown(spawnCwdInput.value.trim()); scheduleCwdInputCheck(); });
-  spawnCwdInput.addEventListener('blur',  () => setTimeout(() => { cwdDropdown.hidden = true; }, 150));
+  spawnCwdInput.addEventListener('blur', (e) => {
+    // フォーカスがドロップダウン内（上下キーで行へ移動）へ抜けた場合は閉じない。
+    // これを忘れると ArrowDown で行に focus した瞬間に blur が発火し、150ms 後に
+    // リストが消えて「上下キーで動かせない」状態になる。
+    if (e.relatedTarget && cwdDropdown.contains(e.relatedTarget)) return;
+    setTimeout(() => {
+      if (cwdDragValue != null) return;                          // D&D 中は閉じない
+      if (cwdDropdown.contains(document.activeElement)) return;  // フォーカスがまだ中にある
+      cwdDropdown.hidden = true;
+    }, 150);
+  });
   spawnCwdInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter')  { cwdDropdown.hidden = true; if (!spawnLaunchBtn.disabled) spawnSession(); }
     if (e.key === 'Escape') { cwdDropdown.hidden = true; newSessionPanel.hidden = true; }
@@ -803,13 +822,29 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     const idx = items.indexOf(document.activeElement);
     if (e.key === 'ArrowDown') { e.preventDefault(); items[idx + 1]?.focus(); }
     if (e.key === 'ArrowUp')   { e.preventDefault(); idx > 0 ? items[idx - 1].focus() : spawnCwdInput.focus(); }
-    if (e.key === 'Enter' && idx >= 0) { spawnCwdInput.value = items[idx].dataset.value; cwdDropdown.hidden = true; spawnCwdInput.focus(); refreshCwdInputStatus(); }
-    if (e.key === 'Escape') { cwdDropdown.hidden = true; spawnCwdInput.focus(); }
+    if (e.key === 'Enter' && idx >= 0) { selectCwdItem(items[idx]); }
+    // 閉じて入力欄へ戻すだけ。focus() による再オープンを抑止しないと即開き直る。
+    if (e.key === 'Escape') { cwdDropdown.hidden = true; focusInputNoReopen(); }
   });
+  // 入力欄へフォーカスを戻す。入力欄が今フォーカスを持っていない場合のみ、
+  // focus リスナによる再オープンを1回抑止する（持っている場合は focus() が no-op で
+  // リスナが発火しないため抑止フラグを立てない＝フラグの立てっぱなしを防ぐ）。
+  function focusInputNoReopen() {
+    if (document.activeElement !== spawnCwdInput) cwdSuppressReopen = true;
+    spawnCwdInput.focus();
+  }
+
+  function selectCwdItem(item) {
+    spawnCwdInput.value = item.dataset.value;
+    cwdDropdown.hidden = true;
+    focusInputNoReopen();
+    refreshCwdInputStatus();
+  }
+
   cwdDropdown.addEventListener('mousedown', (e) => {
-    e.preventDefault();
     const favBtn = e.target.closest('.cwd-dropdown-fav');
     if (favBtn) {
+      e.preventDefault();
       toggleCwdFavorite(favBtn.dataset.value);
       renderCwdDropdown(spawnCwdInput.value.trim());
       spawnCwdInput.focus();
@@ -817,17 +852,81 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     }
     const delBtn = e.target.closest('.cwd-dropdown-del');
     if (delBtn) {
+      e.preventDefault();
       deleteCwdHistoryItem(delBtn.dataset.value);
       renderCwdDropdown(spawnCwdInput.value.trim());
       spawnCwdInput.focus();
       return;
     }
     const item = e.target.closest('.cwd-dropdown-item');
-    if (!item) return;
-    spawnCwdInput.value = item.dataset.value;
-    cwdDropdown.hidden = true;
-    spawnCwdInput.focus();
-    refreshCwdInputStatus();
+    if (!item) { e.preventDefault(); return; }   // 余白クリックは入力欄フォーカス維持
+    // お気に入り行は preventDefault しない: mousedown で preventDefault すると Chromium で
+    // ネイティブ D&D が開始できなくなるため。選択確定は click 側に委ねる。
+    if (item.classList.contains('is-favorite')) return;
+    // 履歴行は従来どおり mousedown 即確定（フォーカス維持のため preventDefault）。
+    e.preventDefault();
+    selectCwdItem(item);
+  });
+
+  // お気に入り行の選択確定は click で行う（mousedown で確定するとドラッグ開始前に
+  // ドロップダウンが閉じてしまうため）。ドラッグで並び替えた直後の click は抑止する。
+  cwdDropdown.addEventListener('click', (e) => {
+    if (cwdDragMoved) { cwdDragMoved = false; return; }
+    if (e.target.closest('.cwd-dropdown-fav') || e.target.closest('.cwd-dropdown-del')) return;
+    const item = e.target.closest('.cwd-dropdown-item.is-favorite');
+    if (item) selectCwdItem(item);
+  });
+
+  // --- お気に入りの D&D 並び替え（C4）---
+  function clearCwdDropIndicators() {
+    cwdDropdown.querySelectorAll('.drop-before, .drop-after, .dragging')
+      .forEach(el => el.classList.remove('drop-before', 'drop-after', 'dragging'));
+  }
+  function cwdDropIsAfter(item, clientY) {
+    const r = item.getBoundingClientRect();
+    return clientY > r.top + r.height / 2;
+  }
+  cwdDropdown.addEventListener('dragstart', (e) => {
+    const item = e.target.closest('.cwd-dropdown-item.is-favorite');
+    if (!item) { e.preventDefault(); return; }   // お気に入り以外はドラッグ不可
+    cwdDragValue = item.dataset.value;
+    cwdDragMoved = false;
+    item.classList.add('dragging');
+    try {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', cwdDragValue);
+    } catch (_) {}
+  });
+  cwdDropdown.addEventListener('dragover', (e) => {
+    if (cwdDragValue == null) return;
+    const item = e.target.closest('.cwd-dropdown-item.is-favorite');
+    if (!item || item.dataset.value === cwdDragValue) return;
+    e.preventDefault();                          // drop を許可
+    try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
+    cwdDropdown.querySelectorAll('.drop-before, .drop-after')
+      .forEach(el => el.classList.remove('drop-before', 'drop-after'));
+    item.classList.add(cwdDropIsAfter(item, e.clientY) ? 'drop-after' : 'drop-before');
+  });
+  cwdDropdown.addEventListener('drop', (e) => {
+    if (cwdDragValue == null) return;
+    const item = e.target.closest('.cwd-dropdown-item.is-favorite');
+    if (!item || item.dataset.value === cwdDragValue) { clearCwdDropIndicators(); return; }
+    e.preventDefault();
+    const after = cwdDropIsAfter(item, e.clientY);
+    const next = loadCwdFavorites().filter(v => v !== cwdDragValue);
+    let ti = next.indexOf(item.dataset.value);
+    if (ti < 0) { clearCwdDropIndicators(); return; }
+    if (after) ti += 1;
+    next.splice(ti, 0, cwdDragValue);
+    cwdDragMoved = true;
+    setUserPref('cwd_favorites', next);
+    renderCwdDropdown(spawnCwdInput.value.trim());
+    // 並び替え後もリストは開いたまま見せる。focus による再オープン(空フィルタ再描画)は抑止。
+    focusInputNoReopen();
+  });
+  cwdDropdown.addEventListener('dragend', () => {
+    clearCwdDropIndicators();
+    cwdDragValue = null;
   });
 
   function isCodexHighRisk(currentModel, nextModel, sandbox, approval) {

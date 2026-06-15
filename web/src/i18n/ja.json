@@ -250,6 +250,8 @@
   "settings_quick_cmd_3_show": "コマンド 3 を表示",
   "settings_quick_cmd_4_show": "コマンド 4 を表示",
   "settings_quick_cmd_5_show": "コマンド 5 を表示",
+  "settings_quick_cmd_show_short": "表示",
+  "settings_quick_cmd_show_tooltip": "このコマンドをボタンとして表示",
   "settings_input_tools_title": "入力補助ツール表示",
   "settings_input_tools_pc": "PC（広い画面）",
   "settings_input_tools_mobile": "スマホ（狭い画面）",
