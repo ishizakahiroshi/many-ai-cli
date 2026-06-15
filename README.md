@@ -834,7 +834,7 @@ A single always-on line at the bottom of the screen shows the status of one acti
 - **Connection** — WebSocket state to the Hub (🟢 open / 🟡 connecting / 🔴 closed)
 - **Fleet badge** — totals across all sessions (▶ running / ⏸ standby / ⚠ waiting). Click ⚠ to jump to a session awaiting approval
 
-> Token- and cost-related segments (ctx / tok / ⛁ / cost / burn) appear only for Claude / Codex sessions.
+> Token- and cost-related segments (ctx / tok / ⛁ / cost / burn) appear only for Claude / Codex sessions. Codex does not expose exact billing totals through the CLI, so many-ai-cli reads rollout token_count data after the Stop hook and calculates an estimate from its local pricing table and model context limits.
 
 ---
 

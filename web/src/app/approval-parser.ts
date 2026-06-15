@@ -187,10 +187,8 @@
     const blockRe = /\[MANY-AI-CLI\]([\s\S]*?)\[\/MANY-AI-CLI\]/g;
     let match;
     let lastBlock = null;
-    let lastOpenIdx = -1;
     while ((match = blockRe.exec(recentText)) !== null) {
       lastBlock = match[1];
-      lastOpenIdx = match.index;
     }
     if (lastBlock !== null) {
       const inner = lastBlock.split('\n').map(l => l.trim()).filter(Boolean);
@@ -351,18 +349,24 @@
     // optionRe を先に評価するので `1. 選択肢` は見出しに誤マッチしない（順序維持が前提）。
     const headingRe = /^(?:[QＱ][ \t]*)?(\d+)[ \t]*[.:：]?[ \t]+(.+?)\s*$/i;
     const preambleLines = [];
-    for (const raw of lines) {
+    let preambleEnd = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
       const line = String(raw || '').trim();
-      if (!line) continue;
-      if (optionRe.test(line) || headingRe.test(line) || multiSelectDirectiveRe.test(line) || hasYesNoApprovalMarker(line)) break;
+      if (!line) { preambleEnd = i + 1; continue; }
+      if (optionRe.test(line) || headingRe.test(line) || multiSelectDirectiveRe.test(line) || hasYesNoApprovalMarker(line)) {
+        preambleEnd = i;
+        break;
+      }
       preambleLines.push(line);
+      preambleEnd = i + 1;
     }
     const attachPreamble = (parsed) => {
       const preamble = preambleLines.join('\n').trim();
       if (preamble && parsed && Array.isArray(parsed)) (parsed as any)._preamble = preamble;
       return parsed;
     };
-    const questionLines = preambleLines.length ? lines.slice(preambleLines.length) : lines;
+    const questionLines = preambleLines.length ? lines.slice(preambleEnd) : lines;
     const text = questionLines.join('\n');
     if (hasYesNoApprovalMarker(text)) {
       if (isPlaceholderYesNoQuestion(text)) return null;

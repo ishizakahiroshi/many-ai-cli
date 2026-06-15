@@ -178,6 +178,10 @@ func formatTokens(n int) string {
 //
 //	{ "type": "token_count", "info": { "total_token_usage": { "input": ..., "output": ..., "cached": ..., "total": ... } } }
 //
+// 現行 Codex rollout では event_msg.payload 配下に token_count が入り、
+// total_token_usage は input_tokens / cached_input_tokens / output_tokens /
+// total_tokens 名で届く。model_context_window も同じ info 配下に入る。
+//
 // フォーマットが不確実なため、複数のキー名にフォールバックする寛容なパーサを採用する。
 
 type codexStopInput struct {
@@ -186,60 +190,98 @@ type codexStopInput struct {
 	Model string `json:"model"`
 }
 
-// tokenCountEvent は rollout JSONL の token_count イベントを寛容にパースする。
-// 実機確認前は複数のキー名にフォールバックする。
-// 要実機確認: フォーマットが確定次第このコメントと不要なフォールバックを削除する。
-type tokenCountEvent struct {
-	// フォーマット A: フラットな数値フィールド
+type tokenUsageNumbers struct {
 	Input  int `json:"input"`
 	Output int `json:"output"`
 	Cached int `json:"cached"`
 	Total  int `json:"total"`
 
+	InputTokens           int `json:"input_tokens"`
+	OutputTokens          int `json:"output_tokens"`
+	CachedInputTokens     int `json:"cached_input_tokens"`
+	CachedTokens          int `json:"cached_tokens"`
+	PromptTokens          int `json:"prompt_tokens"`
+	CompletionTokens      int `json:"completion_tokens"`
+	TotalTokens           int `json:"total_tokens"`
+	ReasoningOutputTokens int `json:"reasoning_output_tokens"`
+}
+
+func (u tokenUsageNumbers) resolve() (in, out, cache, total int) {
+	in = firstNonZero(u.InputTokens, u.Input, u.PromptTokens)
+	out = firstNonZero(u.OutputTokens, u.Output, u.CompletionTokens)
+	cache = firstNonZero(u.CachedInputTokens, u.Cached, u.CachedTokens)
+	total = firstNonZero(u.TotalTokens, u.Total)
+	if total == 0 && (in > 0 || out > 0) {
+		total = in + out
+	}
+	return in, out, cache, total
+}
+
+func firstNonZero(vals ...int) int {
+	for _, v := range vals {
+		if v != 0 {
+			return v
+		}
+	}
+	return 0
+}
+
+// tokenCountEvent は rollout JSONL の token_count イベントを寛容にパースする。
+// 実機確認前は複数のキー名にフォールバックする。
+// 要実機確認: フォーマットが確定次第このコメントと不要なフォールバックを削除する。
+type tokenCountEvent struct {
+	// フォーマット A: フラットな数値フィールド
+	tokenUsageNumbers
+
 	// フォーマット B: info.total_token_usage ネスト
 	Info struct {
-		TotalTokenUsage struct {
-			Input  int `json:"input"`
-			Output int `json:"output"`
-			Cached int `json:"cached"`
-			Total  int `json:"total"`
-		} `json:"total_token_usage"`
+		TotalTokenUsage    tokenUsageNumbers `json:"total_token_usage"`
+		LastTokenUsage     tokenUsageNumbers `json:"last_token_usage"`
+		ModelContextWindow int               `json:"model_context_window"`
 	} `json:"info"`
 
 	// フォーマット C: usage フィールド
-	Usage struct {
-		Input  int `json:"input"`
-		Output int `json:"output"`
-		Cached int `json:"cached"`
-		Total  int `json:"total"`
-		// OpenAI 互換名
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		CachedTokens     int `json:"cached_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage"`
+	Usage tokenUsageNumbers `json:"usage"`
+
+	// 現行 Codex rollout: {"type":"event_msg","payload":{"type":"token_count",...}}
+	Payload struct {
+		Type string `json:"type"`
+		Info struct {
+			TotalTokenUsage    tokenUsageNumbers `json:"total_token_usage"`
+			LastTokenUsage     tokenUsageNumbers `json:"last_token_usage"`
+			ModelContextWindow int               `json:"model_context_window"`
+		} `json:"info"`
+		ModelContextWindow int `json:"model_context_window"`
+	} `json:"payload"`
+
+	ModelContextWindow int `json:"model_context_window"`
 }
 
-// resolve は複数フォーマットを試して (tokIn, tokOut, tokCache, tokTotal) を返す。
-func (e *tokenCountEvent) resolve() (in, out, cache, total int) {
+// resolve は複数フォーマットを試して (tokIn, tokOut, tokCache, tokTotal, ctxWindow) を返す。
+func (e *tokenCountEvent) resolve() (in, out, cache, total, ctxWindow int) {
+	// 現行 Codex rollout の event_msg.payload ネストを最優先する。
+	if e.Payload.Type == "token_count" {
+		in, out, cache, total = e.Payload.Info.TotalTokenUsage.resolve()
+		if in > 0 || out > 0 || total > 0 {
+			return in, out, cache, total, firstNonZero(e.Payload.Info.ModelContextWindow, e.Payload.ModelContextWindow)
+		}
+	}
 	// フォーマット A
-	if e.Input > 0 || e.Output > 0 {
-		return e.Input, e.Output, e.Cached, e.Total
+	in, out, cache, total = e.tokenUsageNumbers.resolve()
+	if in > 0 || out > 0 || total > 0 {
+		return in, out, cache, total, e.ModelContextWindow
 	}
 	// フォーマット B
-	u := e.Info.TotalTokenUsage
-	if u.Input > 0 || u.Output > 0 {
-		return u.Input, u.Output, u.Cached, u.Total
+	in, out, cache, total = e.Info.TotalTokenUsage.resolve()
+	if in > 0 || out > 0 || total > 0 {
+		return in, out, cache, total, e.Info.ModelContextWindow
 	}
 	// フォーマット C (OpenAI 互換)
-	v := e.Usage
-	if v.PromptTokens > 0 || v.CompletionTokens > 0 {
-		return v.PromptTokens, v.CompletionTokens, v.CachedTokens, v.TotalTokens
+	in, out, cache, total = e.Usage.resolve()
+	if in > 0 || out > 0 || total > 0 {
+		return in, out, cache, total, 0
 	}
-	if v.Input > 0 || v.Output > 0 {
-		return v.Input, v.Output, v.Cached, v.Total
-	}
-	return 0, 0, 0, 0
+	return 0, 0, 0, 0, 0
 }
 
 // scanLastTokenCount は rollout JSONL を末尾から走査し、
@@ -247,14 +289,14 @@ func (e *tokenCountEvent) resolve() (in, out, cache, total int) {
 //
 // セキュリティ要件: 会話本文の行はメモリに保持しない。
 // 各行を読んだら type フィールドを確認し、token_count 以外は即座に破棄する。
-func scanLastTokenCount(path string) (in, out, cache, total int, err error) {
+func scanLastTokenCount(path string) (in, out, cache, total, ctxWindow int, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return 0, 0, 0, 0, fmt.Errorf("open rollout: %w", err)
+		return 0, 0, 0, 0, 0, fmt.Errorf("open rollout: %w", err)
 	}
 	defer f.Close()
 
-	var lastIn, lastOut, lastCache, lastTotal int
+	var lastIn, lastOut, lastCache, lastTotal, lastCtxWindow int
 	scanner := bufio.NewScanner(f)
 	// バッファを 256 KB に制限（1 行が異常に長い場合の保護）
 	scanner.Buffer(make([]byte, 256*1024), 256*1024)
@@ -271,15 +313,18 @@ func scanLastTokenCount(path string) (in, out, cache, total int, err error) {
 		if err := json.Unmarshal(line, &ev); err != nil {
 			continue
 		}
-		i, o, c, t := ev.resolve()
+		i, o, c, t, ctx := ev.resolve()
 		if i > 0 || o > 0 || t > 0 {
 			lastIn, lastOut, lastCache, lastTotal = i, o, c, t
+			if ctx > 0 {
+				lastCtxWindow = ctx
+			}
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return 0, 0, 0, 0, fmt.Errorf("scan rollout: %w", err)
+		return 0, 0, 0, 0, 0, fmt.Errorf("scan rollout: %w", err)
 	}
-	return lastIn, lastOut, lastCache, lastTotal, nil
+	return lastIn, lastOut, lastCache, lastTotal, lastCtxWindow, nil
 }
 
 // isTokenCountLine は行が token_count イベントかどうかを JSON 全パース前に
@@ -307,7 +352,7 @@ func runCodex(hubURL, token string, sessionID int, stdin io.Reader, logger *slog
 	}
 
 	// rollout JSONL から token_count の数値のみを抽出。本文行は読み捨て。
-	tokIn, tokOut, tokCache, tokTotal, err := scanLastTokenCount(input.TranscriptPath)
+	tokIn, tokOut, tokCache, tokTotal, ctxWindow, err := scanLastTokenCount(input.TranscriptPath)
 	if err != nil {
 		logger.Warn("usage-relay(codex): rollout scan failed", "path", input.TranscriptPath, "err", err)
 		return nil
@@ -323,6 +368,7 @@ func runCodex(hubURL, token string, sessionID int, stdin io.Reader, logger *slog
 			TokensOut:     tokOut,
 			TokensCache:   tokCache,
 			TokensTotal:   tokTotal,
+			CtxWindow:     ctxWindow,
 			StartedAt:     time.Now().Format(time.RFC3339),
 		}
 		if err := postUsage(hubURL, token, payload, logger); err != nil {

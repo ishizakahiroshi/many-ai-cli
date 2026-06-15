@@ -823,7 +823,7 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 - **接続** — Hub との WebSocket 状態（🟢 接続 / 🟡 接続中 / 🔴 切断）
 - **横断バッジ** — 全セッションの合計（▶ 実行中 / ⏸ スタンバイ / ⚠ 承認待ち）。⚠ をクリックすると承認待ちのセッションへジャンプします
 
-> トークン・コスト関連のセグメント（ctx / tok / ⛁ / コスト / burn）は Claude / Codex セッションでのみ表示されます。
+> トークン・コスト関連のセグメント（ctx / tok / ⛁ / コスト / burn）は Claude / Codex セッションでのみ表示されます。Codex は CLI から正確な課金額を直接取得できないため、Stop hook 後に rollout の token_count を読み取り、many-ai-cli 側の価格表とモデル別 context 上限で計算した概算です。
 
 ---
 
