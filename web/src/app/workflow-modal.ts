@@ -24,6 +24,10 @@ const POLL_MS = 800;
 // 走行中スナップショットが連続で未検出になったら「進捗フレームが止まった＝実質完了」とみなし
 // 完了表示へ倒す（端末から流れた / 終わった、を VT では区別できないため idle 判定と同じ思想）。
 const SETTLE_MISS_LIMIT = 5;
+// 直近が live（背景 Workflow の N/M agents done）だった場合、全信号（要約も Waiting 行も）
+// が窓外へ流れても即 settle せず、長い backstop 猶予（≈32 秒 = 40 ポール）まで待つ。
+// 通常のスクロール欠落（数秒）では発火しない。非 live は SETTLE_MISS_LIMIT のまま。
+const LIVE_SETTLE_MISS_LIMIT = 40;
 
 // セッションごとの最新 Workflow スナップショット（セッション生存中のみ・ディスク非永続）。
 interface WfSnapshot {
@@ -88,18 +92,28 @@ function poll(): void {
   const sid = activeSessionId;
   if (sid !== null) {
     const result = parseWorkflowProgress(scanBuffer(sid, SCAN_LINES));
+    // 走行中である肯定的証拠。これが真の間は「完了」を生成も維持もしない。
+    // result.live（N/M agents done 未完サマリー）／waitingDynamic（背景 Workflow の
+    // 明示セントネル）のいずれかがあれば走行中と断定する。
+    const authoritativeRunning = result.live || result.waitingDynamic > 0;
     if (result.detected) {
       missCounts.set(sid, 0);
       const sig = sigOf(result);
       const prev = snapshots.get(sid);
       // 別 Workflow（sig 変化）になったら dismiss を解除して再表示する。
       const keepDismissed = !!(prev && prev.dismissed && prev.sig === sig);
-      // フレーム凍結判定: 走行中表示なのに frameSig が連続不変なら、スピナーが止まった
-      // ＝完了したのに走行中グリフが残っているとみなし settle する（永久走行中の防止）。
+      // 走行中の権威的証拠があるときは settle を強制解除し、freeze/miss カウンタもリセット。
+      // 過去の誤 settle（完了 N 固着）もここで剥がす。
       let settled = !result.running;
-      // result.live（「N/M agents done」未完サマリー）がある間は走行の権威的証拠なので
-      // フレーム凍結 settle を一切行わない（背景実行でツリーが固まっても完了扱いしない）。
-      if (result.running && !result.live) {
+      if (authoritativeRunning) {
+        settled = false;
+        freezeCounts.set(sid, 0);
+        missCounts.set(sid, 0);
+        lastFrameSig.set(sid, result.frameSig);
+      } else if (result.running) {
+        // フレーム凍結判定: 走行中表示なのに frameSig が連続不変なら、スピナーが止まった
+        // ＝完了したのに走行中グリフが残っているとみなし settle する（インラインツリー専用。
+        // 背景実行は authoritativeRunning 側で除外済み）。
         const sameFrame = lastFrameSig.get(sid) === result.frameSig;
         const frozen = (freezeCounts.get(sid) || 0) + (sameFrame ? 1 : 0);
         freezeCounts.set(sid, sameFrame ? frozen : 0);
@@ -109,17 +123,24 @@ function poll(): void {
         freezeCounts.set(sid, 0);
         lastFrameSig.set(sid, result.frameSig);
       }
-      // 既に settle 済みなら維持（再び走行中グリフを拾っても戻さない）。
-      if (prev && prev.sig === sig && prev.settled) settled = true;
+      // sticky-settle（既に settle 済みなら維持）は走行証拠が無いときだけ適用する
+      // （新しいライブ要約が来たら「完了」へ貼り付けない）。
+      if (!authoritativeRunning && prev && prev.sig === sig && prev.settled) settled = true;
       snapshots.set(sid, { result, settled, dismissed: keepDismissed, sig });
     } else {
       // 未検出。完了スナップショットは振り返り用に保持し続ける（消さない）。
-      // 走行中のまま進捗が途切れた場合は SETTLE_MISS_LIMIT 連続で完了表示へ倒す。
       const prev = snapshots.get(sid);
-      if (prev && !prev.settled) {
+      if (authoritativeRunning && prev) {
+        // 要約が窓外でも Waiting 行が残存＝走行中。prev を走行中として維持し誤完了を消す。
+        prev.settled = false;
+        missCounts.set(sid, 0);
+        freezeCounts.set(sid, 0);
+      } else if (prev && !prev.settled) {
+        // 走行信号も無い未検出。直近が live だったら長い backstop 猶予まで settle しない。
         const miss = (missCounts.get(sid) || 0) + 1;
         missCounts.set(sid, miss);
-        if (miss >= SETTLE_MISS_LIMIT) prev.settled = true;
+        const limit = prev.result.live ? LIVE_SETTLE_MISS_LIMIT : SETTLE_MISS_LIMIT;
+        if (miss >= limit) prev.settled = true;
       }
     }
   }
@@ -286,10 +307,17 @@ function renderModalBody(): void {
   }
 
   const done = snap!.settled || !r.running;
+  // done（settle 済み / 走行終了）のときは表示を完了側へ倒す。
+  // settle はフレーム凍結ヒューリスティックで確定するため、生パース結果の
+  // running グリフ・件数・percent はまだ走行中のまま残っている。ピル（バッジ）と
+  // 整合させ、走行中件数を 0・残りを done・バーを 100% として描画する。
+  const dispRunning = done ? 0 : r.runningCount;
+  const dispDone = done ? Math.max(r.doneCount, r.totalCount - r.failedCount) : r.doneCount;
+  const dispPercent = done ? 100 : r.percent;
   if (counts) {
     const parts = [
-      t('wf_progress_counts_running', { n: r.runningCount }),
-      t('wf_progress_counts_done', { n: r.doneCount }),
+      t('wf_progress_counts_running', { n: dispRunning }),
+      t('wf_progress_counts_done', { n: dispDone }),
     ];
     if (r.failedCount > 0) parts.push(t('wf_progress_counts_failed', { n: r.failedCount }));
     counts.textContent = parts.join(' · ');
@@ -297,18 +325,18 @@ function renderModalBody(): void {
 
   body.innerHTML = '';
 
-  // 進捗バー（percent があれば）。
-  if (r.percent !== null) {
+  // 進捗バー（percent があれば。done なら 100% 固定）。
+  if (dispPercent !== null) {
     const barWrap = document.createElement('div');
     barWrap.className = 'wf-progress-bar';
     const fill = document.createElement('div');
     fill.className = 'wf-progress-fill';
-    fill.style.width = Math.max(0, Math.min(100, r.percent)) + '%';
+    fill.style.width = Math.max(0, Math.min(100, dispPercent)) + '%';
     if (done) fill.classList.add('wf-progress-fill-done');
     barWrap.appendChild(fill);
     const pct = document.createElement('span');
     pct.className = 'wf-progress-pct';
-    pct.textContent = r.percent + '%';
+    pct.textContent = dispPercent + '%';
     barWrap.appendChild(pct);
     body.appendChild(barWrap);
   }
@@ -332,9 +360,12 @@ function renderModalBody(): void {
     const list = document.createElement('div');
     list.className = 'wf-agent-list';
     for (const agent of phase.agents) {
+      // done なら残った running グリフ（凍結スピナー）を完了アイコンへ倒す。
+      const effState: WfAgentState =
+        done && agent.state === 'running' ? 'done' : agent.state;
       const row = document.createElement('div');
-      row.className = 'wf-agent-row wf-agent-' + agent.state;
-      row.appendChild(stateIcon(agent.state));
+      row.className = 'wf-agent-row wf-agent-' + effState;
+      row.appendChild(stateIcon(effState));
       const lbl = document.createElement('span');
       lbl.className = 'wf-agent-label';
       lbl.textContent = agent.label;

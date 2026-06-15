@@ -15,8 +15,10 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/proto"
 	"golang.org/x/net/websocket"
 	"log/slog"
 )
@@ -687,17 +689,20 @@ func TestIsUnder_CaseSensitivity(t *testing.T) {
 	}
 }
 
-func TestHandlePathExistsOmitsUnknownPaths(t *testing.T) {
+func TestHandlePathExistsChecksRequestedPaths(t *testing.T) {
 	root := t.TempDir()
 	historyDir := filepath.Join(root, "known")
 	if err := os.MkdirAll(historyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	outside := t.TempDir()
+	// 履歴に無い、ユーザーが新規に打ち込んだパス。実在するものと
+	// 実在しないものの両方を検証対象にする。
+	freshDir := t.TempDir()
+	missingDir := filepath.Join(root, "does-not-exist")
 
 	s := newSecTestServer(t, root)
 	s.cfg.UserPrefs.CwdHistory = []string{historyDir}
-	body := []byte(`{"paths":[` + strconvQuote(historyDir) + `,` + strconvQuote(outside) + `]}`)
+	body := []byte(`{"paths":[` + strconvQuote(historyDir) + `,` + strconvQuote(freshDir) + `,` + strconvQuote(missingDir) + `]}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/path-exists?token=tok", bytes.NewReader(body))
 	req.Host = "127.0.0.1:47777"
 	w := httptest.NewRecorder()
@@ -715,8 +720,13 @@ func TestHandlePathExistsOmitsUnknownPaths(t *testing.T) {
 	if !resp.Results[historyDir] {
 		t.Fatalf("known history dir should be reported as existing: %+v", resp.Results)
 	}
-	if _, ok := resp.Results[outside]; ok {
-		t.Fatalf("unknown path should be omitted from oracle response: %+v", resp.Results)
+	// 履歴に無くても実在するパスは true を返す（新規入力 cwd の検証用途）。
+	if !resp.Results[freshDir] {
+		t.Fatalf("fresh existing dir should be reported as existing: %+v", resp.Results)
+	}
+	// 実在しないパスは false を返し、起動ボタン抑止につなげる。
+	if exists, ok := resp.Results[missingDir]; !ok || exists {
+		t.Fatalf("missing dir should be reported as not existing: %+v", resp.Results)
 	}
 }
 
@@ -804,6 +814,143 @@ func TestSanitizeGitErrMsg_URLInStderr(t *testing.T) {
 type sanitizeGitTestErr struct{ msg string }
 
 func (e *sanitizeGitTestErr) Error() string { return e.msg }
+
+// --- handleWS Cookie フォールバック（bugfix_mobile-ws-token-cookie-fallback） ---
+
+// newWSTestServer は handleWS を流せる最小だが完全なマップ初期化済みの Server を返す。
+// token="tok"。UI 接続経路（addUIWithHistory / sendSnapshot / pingLoop / uiLoop）が
+// nil panic しないよう newTestServer と同じ map 群を初期化する。
+func newWSTestServer(t *testing.T) *Server {
+	t.Helper()
+	s := newTestServer()
+	s.cfg.Token = "tok"
+	return s
+}
+
+// dialWSWithRegister は httptest 上の handleWS へ接続し、register メッセージ
+// （role=ui）を送る。token は m.Token に、cookieToken は Cookie ヘッダに載せる
+// （どちらも空文字なら付けない）。
+//
+// 注意: golang.org/x/net/websocket の Host ヘッダは Location（= httptest の
+// loopback アドレス）固定で上書きできないため、この WS ハーネスでは常に
+// loopback/既定ホスト扱いになる。remote 限定の PIN ゲート挙動は handleWS と
+// 同じ条件式を別途 httptest.NewRequest で検証する（TestHandleWSPINGate...）。
+func dialWSWithRegister(t *testing.T, srv *httptest.Server, mToken, cookieToken string) (*websocket.Conn, error) {
+	t.Helper()
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+	cfg, err := websocket.NewConfig(wsURL+"/ws", srv.URL)
+	if err != nil {
+		t.Fatalf("websocket.NewConfig: %v", err)
+	}
+	if cookieToken != "" {
+		cfg.Header.Set("Cookie", (&http.Cookie{Name: tokenCookieName, Value: cookieToken}).String())
+	}
+	conn, err := websocket.DialConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	// register（role=ui）を送る。m.Token は呼び出し側指定（空なら付かない）。
+	reg := proto.Message{Type: "register", Role: "ui", Token: mToken}
+	if err := websocket.JSON.Send(conn, reg); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	return conn, nil
+}
+
+// readSnapshot は conn から最初の snapshot メッセージを読む。読めれば true。
+// 認証拒否時は handleWS が conn を閉じるため Receive がエラーになり false を返す。
+func readSnapshot(t *testing.T, conn *websocket.Conn) bool {
+	t.Helper()
+	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	var raw map[string]any
+	if err := websocket.JSON.Receive(conn, &raw); err != nil {
+		return false
+	}
+	return raw["type"] == "snapshot"
+}
+
+// TestHandleWSAcceptsCookieTokenWhenRegisterTokenEmpty は、register の m.Token が
+// 空でも Cookie（MANY_AI_CLI_token）が有効なら handleWS が UI 接続を受理し
+// snapshot を返すことを確認する（スマホ/PWA で localStorage 揮発時の回復）。
+func TestHandleWSAcceptsCookieTokenWhenRegisterTokenEmpty(t *testing.T) {
+	s := newWSTestServer(t)
+	srv := httptest.NewServer(websocket.Handler(s.handleWS))
+	defer srv.Close()
+
+	conn, err := dialWSWithRegister(t, srv, "", "tok")
+	if err != nil {
+		t.Fatalf("dial/register failed: %v", err)
+	}
+	defer conn.Close()
+
+	if !readSnapshot(t, conn) {
+		t.Fatal("expected snapshot when register token empty but cookie valid")
+	}
+}
+
+// TestHandleWSRejectsWhenBothTokenAndCookieInvalid は、m.Token も Cookie も
+// 無効なら従来どおり拒否される（snapshot が来ず接続が閉じる）ことを確認する。
+func TestHandleWSRejectsWhenBothTokenAndCookieInvalid(t *testing.T) {
+	s := newWSTestServer(t)
+	srv := httptest.NewServer(websocket.Handler(s.handleWS))
+	defer srv.Close()
+
+	conn, err := dialWSWithRegister(t, srv, "bad", "also-bad")
+	if err != nil {
+		t.Fatalf("dial/register failed: %v", err)
+	}
+	defer conn.Close()
+
+	if readSnapshot(t, conn) {
+		t.Fatal("expected rejection when both register token and cookie are invalid")
+	}
+}
+
+// TestHandleWSAcceptsRegisterTokenStillValid は、Cookie が無くても従来どおり
+// m.Token が有効なら受理されること（リグレッション）を確認する。
+func TestHandleWSAcceptsRegisterTokenStillValid(t *testing.T) {
+	s := newWSTestServer(t)
+	srv := httptest.NewServer(websocket.Handler(s.handleWS))
+	defer srv.Close()
+
+	conn, err := dialWSWithRegister(t, srv, "tok", "")
+	if err != nil {
+		t.Fatalf("dial/register failed: %v", err)
+	}
+	defer conn.Close()
+
+	if !readSnapshot(t, conn) {
+		t.Fatal("expected snapshot when register token valid (regression)")
+	}
+}
+
+// TestHandleWSPINGateStillBlocksAfterTokenAccepted は、Cookie フォールバックを
+// 追加しても PIN ゲート（token チェックの後段、server.go handleWS）が従来どおり
+// 働くことを確認する。x/net/websocket は Host ヘッダを上書きできず WS ハーネスでは
+// remote 判定を再現できないため、handleWS が用いる条件式
+// 「remotePINRequired(req) && !hasValidPINCookie(req)」を同じ remote リクエストで
+// 直接評価し、ゲートが block を返すこと（＝順序が token の後段で効くこと）を検証する。
+func TestHandleWSPINGateStillBlocksAfterTokenAccepted(t *testing.T) {
+	s := newWSTestServer(t)
+	s.cfg.RemotePINHash = "dummy-pin-hash" // PIN 設定済み
+
+	// loopback 元だが Host が tailnet 名 → isLogicallyRemote=true（tailscale serve 相当）。
+	// Cookie で token は有効だが PIN cookie は無い。
+	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
+	req.RemoteAddr = "127.0.0.1:40000"
+	req.Host = "host1.taila5e951.ts.net"
+	req.AddCookie(&http.Cookie{Name: tokenCookieName, Value: "tok"})
+
+	// token フォールバックは通る（前段は素通り）。
+	if !s.validTokenOrTrustedRemote(requestToken(req), req) {
+		t.Fatal("expected cookie token to pass the token gate (precondition)")
+	}
+	// PIN ゲート（token の後段）が block する。
+	if !(s.remotePINRequired(req) && !s.hasValidPINCookie(req)) {
+		t.Fatal("expected PIN gate to block remote UI without valid PIN cookie")
+	}
+}
 
 func containsPath(s string) bool {
 	for _, ch := range s {

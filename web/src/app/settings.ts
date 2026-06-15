@@ -660,8 +660,27 @@ export function appConfirmShutdown(opts) {
   });
 }
 
+// VT スクレイプ用の堅牢な ANSI/制御文字除去。旧版は CSI を終端 [A-Za-z] のみ・
+// OSC 本体や生制御文字（BEL 等）を残し、承認/質問ポップアップにゴミ文字が混入していた。
+// chat-history.ts の stripAnsiBasic と同等のカバレッジ（CSI中間バイト・OSC・DCS/PM/APC・
+// charset 指定・制御文字）に統一する。
 export function stripAnsi(str) {
-  return str.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\x1b[^[]/g, '');
+  if (!str) return '';
+  return String(str)
+    // CSI: ESC [ パラメータ 中間バイト 終端（@-~ の任意終端まで）
+    .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
+    // OSC: ESC ] ... BEL もしくは ESC \
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+    // DCS / PM / APC / SOS: ESC P|X|^|_ ... ESC \
+    .replace(/\x1b[PX^_][^\x1b]*\x1b\\/g, '')
+    // charset 指定: ESC ( | ) + 1 文字
+    .replace(/\x1b[()][0-9A-Za-z]/g, '')
+    // ESC = / ESC >
+    .replace(/\x1b[=>]/g, '')
+    // 取りこぼした単独 ESC + 1 文字
+    .replace(/\x1b[^[]/g, '')
+    // 生の制御文字（BEL 等。改行・タブは残す）
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
 }
 
 // 初回（未設定）は空欄にして入力欄のプレースホルダーで自由入力を誘導する。

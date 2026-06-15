@@ -12,7 +12,7 @@ import (
 const claudeImportLine = "@~/.many-ai-cli/approval-rules.md"
 const sharedBlockStart = "<!-- any-ai-cli:approval-rules -->"
 const sharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
-const rulesVersion = "13"
+const rulesVersion = "14"
 
 var rulesFileContent = strings.Join([]string{
 	fmt.Sprintf("<!-- version: %s -->", rulesVersion),
@@ -97,6 +97,11 @@ var rulesFileContent = strings.Join([]string{
 	"  - 「1 問で 1 つだけ選ばせる」場合は #multi を使わず、上の「番号付き選択肢」形式を使う",
 	"",
 	"- [MANY-AI-CLI] マーカーは確認・承認の質問にのみ使用する",
+	"",
+	"**確認・承認の直前に置く前置き説明（経緯）では、罫線・表組みを使わないこと。**",
+	"具体的には Markdown テーブル（`|` 区切りや `---|---` 区切り行）・水平線（`---` / `===` / 罫線文字）を出力しない。",
+	"理由: Web ダッシュボードの xterm.js では端末幅でハードラップされた後にスクレイプされるため、テーブルや罫線は行・列の対応が崩れて読めなくなる（過去に発生）。",
+	"代わりに箇条書き（`- `）か短い段落で書くこと。どうしても項目の対応関係を示したい場合は「項目: 値」を 1 行 1 件で並べる。",
 	"",
 	"## many-ai-cli Done Summary Format",
 	"",

@@ -681,6 +681,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/spawn-grid", s.handleSpawnGrid)
 	mux.HandleFunc("/api/pick-directory", s.handlePickDirectory)
 	mux.HandleFunc("/api/path-exists", s.handlePathExists)
+	mux.HandleFunc("/api/list-subdirs", s.handleListSubdirs)
 	mux.HandleFunc("/api/pick-file", s.handlePickFile)
 	mux.HandleFunc("/api/open-default-file", s.handleOpenDefaultFile)
 	mux.HandleFunc("/api/open-folder", s.handleOpenFolder)
@@ -1028,7 +1029,13 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 		return
 	}
 	req := conn.Request()
-	if !s.validTokenOrTrustedRemote(m.Token, req) {
+	// register の m.Token（URLクエリ→localStorage 由来）が無効でも、ハンドシェイク
+	// 要求の Cookie/Authorization/クエリ（requestToken）を、ページ GET / と同じ
+	// フォールバックで受け付ける。スマホ/PWA で localStorage の token が揮発しても
+	// Cookie（MANY_AI_CLI_token）が生きていれば WS を確立でき、セッション一覧が空に
+	// ならない（bugfix_mobile-ws-token-cookie-fallback）。
+	if !s.validTokenOrTrustedRemote(m.Token, req) &&
+		!(req != nil && s.validTokenOrTrustedRemote(requestToken(req), req)) {
 		return
 	}
 	// リモート PIN ゲート（pin_auth.go）。loopback / PIN 無効時は素通し。

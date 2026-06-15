@@ -38,6 +38,13 @@ export interface WorkflowProgress {
    * （インラインツリーが再描画されず固まっても、実際は走行中のため）。
    */
   live: boolean;
+  /**
+   * 未完了の動的 Workflow 件数（`*Waiting for N dynamic workflow to finish` 由来）。
+   * 0 で待ち無し。> 0 は背景 Workflow が走行中である肯定的証拠で、detected の成否と
+   * 独立に常に算出して返す（要約が窓外でも Waiting 行は残るため）。判定への利用は
+   * 呼び出し側（poll()）に委ねる。これ自体では detected:true にしない。
+   */
+  waitingDynamic: number;
   /** Workflow 名（⚙ 行 / workflow: 行から拾えれば。無ければ ''）。 */
   name: string;
   phases: WfPhase[];
@@ -136,6 +143,17 @@ function matchAgentsSummary(stripped: string): { done: number; total: number } |
   return { done, total };
 }
 
+// 背景 Workflow 走行中の明示セントネル。
+// 例: "*Waiting for 1 dynamic workflow to finish" / "Waiting for 2 dynamic workflows to finish"。
+// 行頭 `*` 等は anchor せず search（部分一致）。数が読めない異形は 1 とみなす。
+const WAITING_DYNAMIC_RE = /\bwaiting for\s+(\d{1,3})\s+dynamic\s+workflows?\s+to\s+finish\b/i;
+function matchWaitingDynamic(stripped: string): number | null {
+  const m = WAITING_DYNAMIC_RE.exec(stripped);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
 function matchSummaryPercent(stripped: string): number | null {
   const pct = stripped.match(/(\d{1,3})\s*%/);
   if (pct) {
@@ -156,6 +174,7 @@ function emptyResult(): WorkflowProgress {
     detected: false,
     running: false,
     live: false,
+    waitingDynamic: 0,
     name: '',
     phases: [],
     runningCount: 0,
@@ -173,7 +192,16 @@ function emptyResult(): WorkflowProgress {
  */
 export function parseWorkflowProgress(lines: string[]): WorkflowProgress {
   const src = Array.isArray(lines) ? lines.map(stripAnsi) : [];
-  if (src.length === 0) return emptyResult();
+
+  // 背景 Workflow の走行セントネル（`*Waiting for N dynamic workflow to finish`）は
+  // detected の成否と独立に常に算出する。末尾から走査して最後の値を採る。
+  let waitingDynamic = 0;
+  for (let i = src.length - 1; i >= 0; i--) {
+    const w = matchWaitingDynamic(src[i]);
+    if (w !== null) { waitingDynamic = w; break; }
+  }
+
+  if (src.length === 0) return { ...emptyResult(), waitingDynamic };
 
   // scrollback に古いブロックが残っても末尾の生きたブロックを採るため、
   // 最後の見出し行（⚙ / workflow）以降だけを解析対象にする。
@@ -190,7 +218,7 @@ export function parseWorkflowProgress(lines: string[]): WorkflowProgress {
       if (matchAgentsSummary(stripTree(src[i]))) { headerIdx = i; break; }
     }
   }
-  if (headerIdx === -1) return emptyResult();
+  if (headerIdx === -1) return { ...emptyResult(), waitingDynamic };
 
   const block = src.slice(headerIdx);
   const phases: WfPhase[] = [];
@@ -260,7 +288,7 @@ export function parseWorkflowProgress(lines: string[]): WorkflowProgress {
     running = runningCount > 0;
   }
 
-  if (totalCount === 0) return emptyResult();
+  if (totalCount === 0) return { ...emptyResult(), waitingDynamic };
 
   let percent = explicitPercent;
   if (summary) {
@@ -280,6 +308,7 @@ export function parseWorkflowProgress(lines: string[]): WorkflowProgress {
     detected: true,
     running,
     live,
+    waitingDynamic,
     name: headerName,
     phases,
     runningCount,
