@@ -63,6 +63,34 @@ test('approval parser fixtures', () => {
     '[/MANY-AI-CLI]',
   ]), null);
 
+  // マーカー直前の地の文（前置き説明）を _preamble として取り出す。
+  // 大きな段落区切り（2 行連続の空行）より上は対象外。
+  const withPreamble = parser.extractHubMarkerApproval([
+    'これは無関係な過去ログ。',
+    '',
+    '',
+    'そのうえで、判断が要るものがあります。',
+    'License 不在時は自動生成しない。',
+    '[MANY-AI-CLI]',
+    'Proceed? (Y:1/N:0)',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.deepEqual(numbers(withPreamble), [1, 0]);
+  assert.equal(
+    (withPreamble as any)._preamble,
+    'そのうえで、判断が要るものがあります。\nLicense 不在時は自動生成しない。',
+  );
+  // 直前に確定ブロックがあれば、それより前は前置きに含めない。
+  const afterPrevBlock = parser.extractHubMarkerApproval([
+    '前の質問の本文。',
+    '[/MANY-AI-CLI-DONE] 完了サマリー [/MANY-AI-CLI-DONE]',
+    '次の前置き。',
+    '[MANY-AI-CLI]',
+    'Proceed? (Y:1/N:0)',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal((afterPrevBlock as any)._preamble, '次の前置き。');
+
   const codexLines = [
     'This command requires approval',
     '> 1. Yes (y)',

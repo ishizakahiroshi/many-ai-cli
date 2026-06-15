@@ -440,6 +440,7 @@
   "approval_batch_submit": "Submit all",
   "approval_batch_confirm": "Review & send",
   "approval_batch_detail_empty": "Select an option to see its details here.",
+  "approval_preamble_label": "📋 Context (click for full text)",
   "approval_recommended": "Recommended",
   "approval_free_input": "Custom",
   "approval_free_input_full": "Custom input (type your answer)",
