@@ -401,7 +401,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		return err
 	}
 	cwd, _ := os.Getwd()
-	display := map[string]string{"claude": "Claude", "codex": "Codex", "copilot": "GitHub Copilot", "cursor-agent": "Cursor Agent", "shell": "Shell"}[provider]
+	display := map[string]string{"claude": "Claude", "codex": "Codex", "copilot": "GitHub Copilot", "cursor-agent": "Cursor Agent", "opencode": "OpenCode", "shell": "Shell"}[provider]
 	termCols, termRows := 0, 0
 	if w, h, err := term.GetSize(int(os.Stdin.Fd())); err == nil && w > 0 && h > 0 {
 		termCols, termRows = w, h
@@ -486,6 +486,13 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 
 	if *utf8Session {
 		applyUTF8Session()
+	}
+	if provider == "opencode" {
+		if cleanupCfg, cfgErr := prepareOpenCodeConfig(cwd); cfgErr != nil {
+			logger.Warn("opencode: failed to prepare opencode.json permission config", "session_id", sessionID, "err", cfgErr)
+		} else {
+			defer cleanupCfg()
+		}
 	}
 	ps, err := startProcess(provider, providerArgs, cwd, initCols, initRows)
 	if err != nil {

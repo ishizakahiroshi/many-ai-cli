@@ -71,7 +71,7 @@
           <span class="usage-item-name">Cursor Agent</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
-        <a id="usage-link-opencode" class="usage-dropdown-item" href="#" target="_blank" rel="noopener noreferrer" hidden>
+        <a id="usage-link-opencode" class="usage-dropdown-item" href="#" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape opencode" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter opencode" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">O</text></svg>
           <span class="usage-item-name">OpenCode</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
@@ -317,6 +317,7 @@
               <option value="codex" data-i18n="settings_approval_patterns_codex">Codex</option>
               <option value="copilot" data-i18n="settings_approval_patterns_copilot">GitHub Copilot</option>
               <option value="cursor-agent" data-i18n="settings_approval_patterns_cursor_agent">Cursor Agent</option>
+              <option value="opencode" data-i18n="settings_approval_patterns_opencode">OpenCode</option>
               <option value="common" data-i18n="settings_approval_patterns_common">共通</option>
             </select>
           </div>
@@ -825,6 +826,7 @@
               <option value="codex">Codex CLI</option>
               <option value="copilot">GitHub Copilot</option>
               <option value="cursor-agent">Cursor Agent</option>
+              <option value="opencode">OpenCode</option>
               <option value="shell">Shell</option>
             </select>
             <div id="spawn-provider-combobox" class="spawn-provider-combobox">
@@ -895,6 +897,7 @@
           <div id="spawn-codex-note" class="settings-note" data-i18n="spawn_codex_note" hidden>Uses the installed Codex CLI. Authentication and permissions are managed by Codex.</div>
           <div id="spawn-copilot-note" class="settings-note" data-i18n="spawn_copilot_note" hidden>Uses the installed GitHub Copilot CLI. Authentication and permissions are managed by Copilot.</div>
           <div id="spawn-cursor-agent-note" class="settings-note" data-i18n="spawn_cursor_agent_note" hidden>Uses the installed Cursor Agent CLI. Authentication and permissions are managed by Cursor.</div>
+          <div id="spawn-opencode-note" class="settings-note" data-i18n="spawn_opencode_note" hidden>Uses the installed OpenCode CLI. Run `opencode auth login` before starting. Free-tier models may take 1–2 minutes to respond.</div>
           <div id="spawn-shell-note" class="settings-note" data-i18n="spawn_shell_note" hidden>Opens the OS default shell (pwsh / bash). No AI-specific options apply.</div>
 
           <!-- C2: Detached 設定セクション -->

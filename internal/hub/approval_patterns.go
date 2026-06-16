@@ -55,6 +55,14 @@ var defaultApprovalPatterns = map[string][]string{
 		"requires permission",
 		"requires confirmation",
 	},
+	// opencode 実機 UI（Build agent 承認ダイアログ）の文言を正とする。
+	// 選択は左右矢印 + Enter（数字キー不使用）。
+	"opencode": {
+		"permission required",
+		"allow once",
+		"allow always",
+		"reject",
+	},
 	"common": {
 		"would you like to",
 		"この操作を許可",
@@ -66,7 +74,7 @@ var defaultApprovalPatterns = map[string][]string{
 
 // KnownApprovalProviders は承認パターンを管理する provider 名一覧（順序固定）。
 func KnownApprovalProviders() []string {
-	return []string{"claude", "codex", "copilot", "cursor-agent", "common"}
+	return []string{"claude", "codex", "copilot", "cursor-agent", "opencode", "common"}
 }
 
 // IsKnownApprovalProvider は provider 名が管理対象か判定する。

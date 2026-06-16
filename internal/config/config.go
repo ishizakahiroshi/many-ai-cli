@@ -75,6 +75,7 @@ type SlashCmdSources struct {
 	Codex       string `yaml:"codex"   json:"codex"`
 	Copilot     string `yaml:"copilot" json:"copilot"`
 	CursorAgent string `yaml:"cursor-agent" json:"cursor-agent"`
+	Opencode    string `yaml:"opencode" json:"opencode"`
 }
 
 const (
@@ -83,6 +84,7 @@ const (
 	DefaultCodexSlashCmdSource       = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/codex.md"
 	DefaultCopilotSlashCmdSource     = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/copilot.md"
 	DefaultCursorAgentSlashCmdSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/cursor-agent.md"
+	DefaultOpenCodeSlashCmdSource    = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/opencode.md"
 )
 
 const DefaultUsageLinkSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/defaults.json"
@@ -95,6 +97,7 @@ func DefaultSlashCmdSources() SlashCmdSources {
 		Codex:       DefaultCodexSlashCmdSource,
 		Copilot:     DefaultCopilotSlashCmdSource,
 		CursorAgent: DefaultCursorAgentSlashCmdSource,
+		Opencode:    DefaultOpenCodeSlashCmdSource,
 	}
 }
 
@@ -115,6 +118,9 @@ func EffectiveSlashCmdSources(src SlashCmdSources) SlashCmdSources {
 	if src.CursorAgent == "" {
 		src.CursorAgent = defaults.CursorAgent
 	}
+	if src.Opencode == "" {
+		src.Opencode = defaults.Opencode
+	}
 	return src
 }
 
@@ -125,6 +131,7 @@ type ApprovalPatternSources struct {
 	Codex       string `yaml:"codex,omitempty"   json:"codex,omitempty"`
 	Copilot     string `yaml:"copilot,omitempty" json:"copilot,omitempty"`
 	CursorAgent string `yaml:"cursor-agent,omitempty" json:"cursor-agent,omitempty"`
+	Opencode    string `yaml:"opencode,omitempty" json:"opencode,omitempty"`
 	Common      string `yaml:"common,omitempty"  json:"common,omitempty"`
 }
 
@@ -134,6 +141,7 @@ const (
 	DefaultCopilotApprovalPatternSource     = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/copilot.md"
 	DefaultCursorAgentApprovalPatternSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/cursor-agent.md"
 	DefaultCommonApprovalPatternSource      = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/common.md"
+	DefaultOpenCodeApprovalPatternSource    = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/opencode.md"
 )
 
 func DefaultApprovalPatternSources() ApprovalPatternSources {
@@ -142,6 +150,7 @@ func DefaultApprovalPatternSources() ApprovalPatternSources {
 		Codex:       DefaultCodexApprovalPatternSource,
 		Copilot:     DefaultCopilotApprovalPatternSource,
 		CursorAgent: DefaultCursorAgentApprovalPatternSource,
+		Opencode:    DefaultOpenCodeApprovalPatternSource,
 		Common:      DefaultCommonApprovalPatternSource,
 	}
 }
@@ -159,6 +168,9 @@ func EffectiveApprovalPatternSources(src ApprovalPatternSources) ApprovalPattern
 	}
 	if src.CursorAgent == "" {
 		src.CursorAgent = defaults.CursorAgent
+	}
+	if src.Opencode == "" {
+		src.Opencode = defaults.Opencode
 	}
 	if src.Common == "" {
 		src.Common = defaults.Common
@@ -180,6 +192,7 @@ type ApprovalProfiles struct {
 	Codex       ApprovalProfileName `yaml:"codex,omitempty"   json:"codex,omitempty"`
 	Copilot     ApprovalProfileName `yaml:"copilot,omitempty" json:"copilot,omitempty"`
 	CursorAgent ApprovalProfileName `yaml:"cursor-agent,omitempty" json:"cursor-agent,omitempty"`
+	Opencode    ApprovalProfileName `yaml:"opencode,omitempty" json:"opencode,omitempty"`
 	Common      ApprovalProfileName `yaml:"common,omitempty"  json:"common,omitempty"`
 }
 
@@ -190,6 +203,7 @@ func DefaultApprovalProfiles() ApprovalProfiles {
 		Codex:       ApprovalProfileOfficial,
 		Copilot:     ApprovalProfileOfficial,
 		CursorAgent: ApprovalProfileOfficial,
+		Opencode:    ApprovalProfileOfficial,
 		Common:      ApprovalProfileOfficial,
 	}
 }
@@ -207,6 +221,9 @@ func EffectiveApprovalProfiles(p ApprovalProfiles) ApprovalProfiles {
 	}
 	if p.CursorAgent == "" {
 		p.CursorAgent = ApprovalProfileOfficial
+	}
+	if p.Opencode == "" {
+		p.Opencode = ApprovalProfileOfficial
 	}
 	if p.Common == "" {
 		p.Common = ApprovalProfileOfficial
@@ -233,6 +250,10 @@ func (p ApprovalProfiles) For(provider string) ApprovalProfileName {
 		if p.CursorAgent != "" {
 			return p.CursorAgent
 		}
+	case "opencode":
+		if p.Opencode != "" {
+			return p.Opencode
+		}
 	case "common":
 		if p.Common != "" {
 			return p.Common
@@ -252,6 +273,8 @@ func (p ApprovalProfiles) WithProvider(provider string, name ApprovalProfileName
 		p.Copilot = name
 	case "cursor-agent":
 		p.CursorAgent = name
+	case "opencode":
+		p.Opencode = name
 	case "common":
 		p.Common = name
 	}
@@ -309,6 +332,7 @@ type UserPrefsUsageLinks struct {
 	Codex       string `yaml:"codex,omitempty"   json:"codex,omitempty"`
 	Copilot     string `yaml:"copilot,omitempty" json:"copilot,omitempty"`
 	CursorAgent string `yaml:"cursor-agent,omitempty" json:"cursor-agent,omitempty"`
+	Opencode    string `yaml:"opencode,omitempty" json:"opencode,omitempty"`
 }
 
 // UserPrefsVoice は音声入力の設定。

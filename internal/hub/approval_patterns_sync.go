@@ -111,6 +111,8 @@ func approvalSourceFor(src config.ApprovalPatternSources, provider string) strin
 		return src.Copilot
 	case "cursor-agent":
 		return src.CursorAgent
+	case "opencode":
+		return src.Opencode
 	case "common":
 		return src.Common
 	}
