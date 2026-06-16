@@ -44,4 +44,6 @@ paths = [
   # バイナリ（ランダムバイトが IP 正規表現に偶然マッチするため除外）
   '''\.syso$''',
   '''\.(?:png|jpe?g|webp|gif|ico|woff2?|ttf|otf|eot|wasm)$''',
+  # MaskSecrets() のテストフィクスチャ（故意の偽秘密で generic-api-key を誤検出）
+  '''^internal/sessionlog/audit_masksecrets_test\.go$''',
 ]
