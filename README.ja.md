@@ -97,12 +97,12 @@ Gemini CLI は意図的に対象外です。
 | ブラウザ | Chrome / Edge / Firefox / Safari |
 | AI CLI | Claude Code、Codex CLI、GitHub Copilot CLI、Cursor Agent CLI（使う provider は別途インストール済みであること） |
 
-### v0.3.0 の検証状況
+### プラットフォーム検証状況
 
 - 実機で動作検証済み: Windows ローカル Hub、Windows 統合ランチャー（`wsl` / SSH tunnel profile）
 - 実機で十分に未検証: ネイティブ Linux / ネイティブ macOS
 
-Linux / macOS でも動作する想定ですが、v0.3.0 時点では実機での十分な検証は未実施です。
+Linux / macOS でも動作する想定ですが、現時点では実機での十分な検証は未実施です。
 ご利用の際はご了承ください。問題があれば Issue で報告してください。
 
 ---
@@ -124,7 +124,7 @@ bun install -g many-ai-cli
 npm install -g many-ai-cli
 ```
 
-> `many-ai-cli` v0.3.0 が npm registry に公開され次第、利用可能になります。各プラットフォーム向けの Go ネイティブバイナリを optional dependency として同梱するため、ブラウザでのダウンロードは発生せず、起動 shim はインストール時にローカル生成されるので Mark-of-the-Web が付かず、その SmartScreen トリガーを回避できます。これは Authenticode 署名の代替ではありません（Smart App Control / WDAC / AppLocker / EDR / ウイルス対策のポリシーは別問題）。インストール後にグローバルコマンドが見つからない場合は `pnpm setup` を実行する（またはシェルを開き直す）と、グローバル bin ディレクトリが `PATH` に載ります。
+> v0.3.0 以降、`many-ai-cli` は npm registry で公開されています。各プラットフォーム向けの Go ネイティブバイナリを optional dependency として同梱するため、ブラウザでのダウンロードは発生せず、起動 shim はインストール時にローカル生成されるので Mark-of-the-Web が付かず、その SmartScreen トリガーを回避できます。これは Authenticode 署名の代替ではありません（Smart App Control / WDAC / AppLocker / EDR / ウイルス対策のポリシーは別問題）。インストール後にグローバルコマンドが見つからない場合は `pnpm setup` を実行する（またはシェルを開き直す）と、グローバル bin ディレクトリが `PATH` に載ります。
 
 **Windows (winget):**
 
