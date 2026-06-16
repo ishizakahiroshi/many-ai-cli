@@ -825,6 +825,7 @@ import { showFileActionsPopup, joinPath } from './path-links.js';
         busy: false,
         generating: false,
         aiGenerating: false,
+        aiProgressing: false,
         error: '',
         subject: '',
         body: '',
@@ -871,7 +872,9 @@ import { showFileActionsPopup, joinPath } from './path-links.js';
       if (this.els.commitAI) {
         this.els.commitAI.disabled = blocked;
         this.els.commitAI.textContent = st.aiGenerating
-          ? _gt('git_commit_ai_generating', 'Asking AI...')
+          ? (st.aiProgressing
+              ? _gt('git_commit_ai_progressing', 'AI is responding...')
+              : _gt('git_commit_ai_generating', 'Asking AI...'))
           : _gt('git_commit_ai_message', 'Ask AI');
       }
       this.els.commitSubject.disabled = st.busy;
@@ -936,6 +939,7 @@ import { showFileActionsPopup, joinPath } from './path-links.js';
       const st = this.commitModalState;
       if (st.busy || st.generating || st.aiGenerating) return;
       st.aiGenerating = true;
+      st.aiProgressing = false;
       st.error = '';
       this._renderCommitModalState();
       // 応答が来ない場合に備えたフロント側タイムアウト（Hub 側より少し長め）。
@@ -944,6 +948,7 @@ import { showFileActionsPopup, joinPath } from './path-links.js';
         const s = this.commitModalState;
         if (s.aiGenerating) {
           s.aiGenerating = false;
+          s.aiProgressing = false;
           s.error = _gt('git_commit_ai_timeout', 'Timed out waiting for the AI response.');
           this._renderCommitModalState();
         }
@@ -966,19 +971,26 @@ import { showFileActionsPopup, joinPath } from './path-links.js';
         // pending: 結果は many-commit-msg イベントで届く。ここでは待機継続。
       } catch (err) {
         st.aiGenerating = false;
+        st.aiProgressing = false;
         if (this._aiCommitTimer) { clearTimeout(this._aiCommitTimer); this._aiCommitTimer = null; }
         st.error = err && err.message ? err.message : String(err);
         this._renderCommitModalState();
       }
     }
 
-    // _handleCommitMsgEvent は Hub からの commit_msg_suggested / commit_msg_error を
-    // 自セッション・待ち受け中のときだけ反映する。
+    // _handleCommitMsgEvent は Hub からの commit_msg_suggested / commit_msg_error /
+    // commit_msg_progress を自セッション・待ち受け中のときだけ反映する。
     _handleCommitMsgEvent(m) {
       if (!m || String(m.session_id) !== String(this.sessionId)) return;
       const st = this.commitModalState;
       if (!st.open || !st.aiGenerating) return;
+      if (m.type === 'commit_msg_progress') {
+        st.aiProgressing = true;
+        this._renderCommitModalState();
+        return;
+      }
       st.aiGenerating = false;
+      st.aiProgressing = false;
       if (this._aiCommitTimer) { clearTimeout(this._aiCommitTimer); this._aiCommitTimer = null; }
       if (m.type === 'commit_msg_error') {
         st.error = m.reason || _gt('git_commit_ai_failed', 'AI failed to produce a commit message.');

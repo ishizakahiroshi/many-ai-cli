@@ -369,8 +369,15 @@ func normalizeHubToken(token string) (string, error) {
 }
 
 // pollUntilReady polls apiURL until it returns HTTP 200 or ctx is cancelled.
+// Redirects are rejected so an adversarial / misconfigured Hub cannot satisfy
+// the readiness probe by bouncing to an unrelated endpoint.
 func pollUntilReady(ctx context.Context, apiURL string) error {
-	client := &http.Client{Timeout: tunnelPollInterval}
+	client := &http.Client{
+		Timeout: tunnelPollInterval,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	for i := 0; i < tunnelPollMaxTries; i++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 		if err != nil {

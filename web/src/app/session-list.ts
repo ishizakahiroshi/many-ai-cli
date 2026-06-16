@@ -10,6 +10,7 @@ import { setMultiQuestionBannerVisible } from './approval-ui.js';
 import { detectApproval, setActionBarFocus } from './approval.js';
 import { onActiveSessionChanged } from './token-statusbar.js';
 import { rewireChatHistorySub } from './chat-history.js';
+import { setActiveSessionForPayload } from './chat-payload.js';
 import { FilesTabManager } from './files-view.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
@@ -119,6 +120,8 @@ export function activateSession(id) {
   if (typeof renderSessionInfoChip === 'function') renderSessionInfoChip();
   if (typeof applyActiveSessionViewMode === 'function') applyActiveSessionViewMode();
   if (typeof rewireChatHistorySub === 'function') rewireChatHistorySub(id);
+  // chat-payload (内蔵プロキシ経由 payload 表示) のアクティブセッションを切替
+  setActiveSessionForPayload(id);
   inputEl.focus();
   if (typeof window._wakewordSessionChanged === 'function') window._wakewordSessionChanged();
   const sessionInfo = sessions.get(id);

@@ -13,7 +13,7 @@ Managed install is available only when the Hub process itself runs on Windows x6
 5. Click Install and wait for the progress bar to finish.
 6. Click Start, then use the microphone button or `Alt+V`.
 
-The installer stores files under `~/.any-ai-cli/whisper/`:
+The installer stores files under `~/.many-ai-cli/whisper/`:
 
 | Path | Purpose |
 |---|---|
@@ -31,11 +31,11 @@ particular `vcomp140.dll` (OpenMP), which the official `whisper-bin-x64.zip` doe
 not ship. On machines without the VC++ redistributable this caused a startup
 failure (`0xC0000135` / `STATUS_DLL_NOT_FOUND`).
 
-To stay self-contained, any-ai-cli bundles four x64 runtime DLLs
+To stay self-contained, many-ai-cli bundles four x64 runtime DLLs
 (`vcomp140.dll`, `msvcp140.dll`, `vcruntime140.dll`, `vcruntime140_1.dll`) inside
 the binary (`go:embed`) and lays them down next to `whisper-server.exe` in `bin/`
 on install and before each start. Nothing is written to System32, so an uninstall
-(`RemoveAll` of `~/.any-ai-cli/whisper/`) leaves no trace. The UCRT
+(`RemoveAll` of `~/.many-ai-cli/whisper/`) leaves no trace. The UCRT
 (`ucrtbase.dll`) is a Windows 10/11 system component and is not bundled.
 
 The DLLs are sourced from the Visual Studio `\VC\redist` folder by
@@ -68,14 +68,14 @@ The whisper.cpp release archive is SHA-256 verified before extraction. Model ent
 ## Managed Install: Docker (Linux / リモートサーバー) With A Bundled Server
 
 The primary remote use case is iPhone -> SSH tunnel -> リモートサーバー Hub -> localhost
-Whisper. For that, the any-ai-cli Docker image bakes a `whisper-server` binary
+Whisper. For that, the many-ai-cli Docker image bakes a `whisper-server` binary
 (built from whisper.cpp with `GGML_OPENMP=OFF`, so no libgomp dependency) into
-the image and points the Hub at it with the `ANY_AI_CLI_WHISPER_SERVER`
+the image and points the Hub at it with the `MANY_AI_CLI_WHISPER_SERVER`
 environment variable.
 
 When that variable points at an existing executable, the Hub treats Whisper as
 "managed and already installed": the binary download is skipped and only the
-selected model is downloaded into `~/.any-ai-cli/whisper/models/`. With the
+selected model is downloaded into `~/.many-ai-cli/whisper/models/`. With the
 default compose setup that path lives on the user's home volume, so the model
 survives container recreation and is not re-downloaded.
 
@@ -98,7 +98,7 @@ Example shape:
 whisper-server -m /path/to/ggml-large-v3-turbo-q5_0.bin --host 127.0.0.1 --port 8080
 ```
 
-Then edit `~/.any-ai-cli/config.yaml`:
+Then edit `~/.many-ai-cli/config.yaml`:
 
 ```yaml
 voice:
@@ -131,7 +131,7 @@ CPU, or when pointing `server_url` at an external GPU-backed Whisper server.
 
 | Key | Meaning |
 |---|---|
-| `voice.whisper.managed` | `true` lets the Hub manage the local whisper.cpp server. Supported on Windows x64, and on images/hosts that provide a server via `ANY_AI_CLI_WHISPER_SERVER`. |
+| `voice.whisper.managed` | `true` lets the Hub manage the local whisper.cpp server. Supported on Windows x64, and on images/hosts that provide a server via `MANY_AI_CLI_WHISPER_SERVER`. |
 | `voice.whisper.model` | Managed model ID. Default: `small`. |
 | `voice.whisper.server_url` | Local Whisper server URL. Managed mode writes this automatically. |
 | `voice.whisper.server_port` | Preferred managed server port. `0` means auto-pick. |
@@ -159,4 +159,4 @@ The browser side also drops near-silent recordings and discards exact matches fo
 | Connection error | Confirm the server is listening on `127.0.0.1` and that the configured port matches. |
 | Slow transcription | Try a smaller model such as `small` or `tiny-q5_1`. |
 | Empty or hallucinated result | Enable VAD/no-speech filtering and keep auto-submit disabled until validated. |
-| Managed server fails to start | Check `~/.any-ai-cli/whisper/whisper-server.log`. |
+| Managed server fails to start | Check `~/.many-ai-cli/whisper/whisper-server.log`. |

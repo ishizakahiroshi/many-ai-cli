@@ -145,6 +145,20 @@ func (s *Server) handleUserPrefsNotifySoundCustom(w http.ResponseWriter, r *http
 	}
 }
 
+// notifySoundAllowed は通知サウンドとして許容する MIME のプレフィックス集合。
+// audio/* のみ許可することで、PUT で text/html 等を保存し GET で同一オリジン HTML を
+// 配信する攻撃面（CSP 越しの phishing surface）を閉じる。
+func notifySoundAllowed(mime string) bool {
+	mime = strings.TrimSpace(strings.ToLower(mime))
+	if mime == "" {
+		return false
+	}
+	if i := strings.Index(mime, ";"); i >= 0 {
+		mime = strings.TrimSpace(mime[:i])
+	}
+	return strings.HasPrefix(mime, "audio/")
+}
+
 func (s *Server) handleUserPrefsNotifySoundCustomGet(w http.ResponseWriter, _ *http.Request) {
 	path, err := notifySoundCustomPath()
 	if err != nil {
@@ -163,10 +177,17 @@ func (s *Server) handleUserPrefsNotifySoundCustomGet(w http.ResponseWriter, _ *h
 	s.cfgMu.Lock()
 	mime := s.cfg.UserPrefs.NotifySound.CustomMime
 	s.cfgMu.Unlock()
-	if mime == "" {
+	// 過去に attacker-controlled な MIME（text/html 等）が保存されている可能性が
+	// あるため、audio/* 以外は application/octet-stream に正規化して配信する
+	// （HTML として inline render される経路を閉じる）。
+	if !notifySoundAllowed(mime) {
 		mime = "application/octet-stream"
 	}
 	w.Header().Set("Content-Type", mime)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	// audio/* のみ inline 再生を許可（同 URL を別文脈で開かれても document として
+	// レンダリングされないよう Content-Disposition でも明示する）。
+	w.Header().Set("Content-Disposition", `inline; filename="notify-sound"`)
 	_, _ = w.Write(data)
 }
 
@@ -182,13 +203,24 @@ func (s *Server) handleUserPrefsNotifySoundCustomPut(w http.ResponseWriter, r *h
 		writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("read body error", err))
 		return
 	}
+	// MIME は client header を信用せず、バイト列から sniff する（http.DetectContentType
+	// は OGG/WAV/MP3 の magic byte を audio/* に判定する）。
+	mime := http.DetectContentType(data)
+	if !notifySoundAllowed(mime) {
+		// 万一 client header が audio/* を主張していても、検出結果が audio/* で
+		// ない場合は拒否（multimedia container 越しの polyglot 防止）。
+		hdr := strings.TrimSpace(r.Header.Get("Content-Type"))
+		if !notifySoundAllowed(hdr) {
+			writeJSONError(w, http.StatusUnsupportedMediaType, "bad_request", "audio/* MIME type required")
+			return
+		}
+		// 検出失敗だが client header が audio/* のときは header を採用（実機の magic
+		// byte が DetectContentType の table に無いコンテナへの将来互換）。
+		mime = hdr
+	}
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "write_error", errorDetail("write error", err))
 		return
-	}
-	mime := r.Header.Get("Content-Type")
-	if mime == "" {
-		mime = "application/octet-stream"
 	}
 	s.cfgMu.Lock()
 	s.cfg.UserPrefs.NotifySound.CustomFile = path

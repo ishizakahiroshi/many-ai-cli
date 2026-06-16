@@ -49,15 +49,21 @@ func TestCodexStopHookBlock_QuotesSpaceyExePath(t *testing.T) {
 		t.Errorf("relay flags not placed outside the quoted exe path:\n%s", block)
 	}
 
-	// HubURL / Token / SessionID は引き続き無クォートで埋め込まれる（現行構造維持）。
+	// HubURL / SessionID は引き続き無クォートで埋め込まれる（現行構造維持）。
+	// Token は env プレフィックス（MANY_AI_CLI_HUB_TOKEN=...）として出力される。
 	for _, frag := range []string{
 		"--hub http://127.0.0.1:47777",
-		"--token deadbeef",
+		"MANY_AI_CLI_HUB_TOKEN=deadbeef",
 		"--session 7",
 	} {
 		if !strings.Contains(block, frag) {
 			t.Errorf("expected fragment %q in codex block:\n%s", frag, block)
 		}
+	}
+
+	// Token が --token CLI 引数として出ていないことを確認（argv 経由 leak の防止）。
+	if strings.Contains(block, "--token ") {
+		t.Errorf("token must not be passed as --token CLI arg (argv leak):\n%s", block)
 	}
 
 	// TOML テーブル配列形式・マーカーは維持される。

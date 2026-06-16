@@ -361,13 +361,21 @@ func collectActive(alive func(pid int) bool, probe func(hubURL string) bool) ([]
 
 // probeHub reports whether the Hub behind hubURL responds 200 to
 // /api/info within timeout. The token query of hubURL is preserved.
+// Redirects are rejected (the legitimate /api/info always returns 200
+// directly; following 3xx would let an adversarial Hub bounce the probe
+// elsewhere).
 func probeHub(hubURL string, timeout time.Duration) bool {
 	u, err := url.Parse(hubURL)
 	if err != nil {
 		return false
 	}
 	u.Path = "/api/info"
-	client := &http.Client{Timeout: timeout}
+	client := &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	resp, err := client.Get(u.String())
 	if err != nil {
 		return false

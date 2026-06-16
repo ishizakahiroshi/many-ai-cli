@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"time"
+
+	"many-ai-cli/internal/sessionlog"
 )
 
 const gitFetchTimeout = 30 * time.Second
@@ -39,7 +41,7 @@ func (s *Server) handleGitFetch(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	out, runErr := runGitCombined(ctx, cwd, "fetch")
 	if runErr != nil {
-		s.logger.Warn("git fetch failed", "session_id", sid, "err", runErr, "output", string(out))
+		s.logger.Warn("git fetch failed", "session_id", sid, "err", runErr, "output", sessionlog.MaskSecrets(string(out)))
 		writeGitError(w, http.StatusInternalServerError, "git_command_failed", sanitizeGitErrMsg(runErr))
 		return
 	}

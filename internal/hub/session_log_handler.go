@@ -40,12 +40,16 @@ func (s *Server) handleSessionLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// cfg は cfgMu / sessionsMu とは別ロックで保護されている（server.go の
+	// lock-ordering ルール: 同時保持禁止、cfgMu を先に release してから sessionsMu）。
+	// LogDir は cfgMu 配下、ses.LogPath は sessionsMu 配下なので 2 段で取得する。
+	cfg := s.snapshotCfg()
+	logDir := cfg.Hub.LogDir
 	s.sessionsMu.Lock()
 	var logPath string
 	if ses := s.sessions[sessionID]; ses != nil {
 		logPath = ses.LogPath
 	}
-	logDir := s.cfg.Hub.LogDir
 	s.sessionsMu.Unlock()
 	if logPath == "" {
 		writeJSONError(w, http.StatusNotFound, "not_found", "session log not found")

@@ -10,6 +10,7 @@ import { setMultiQuestionBannerVisible } from './approval-ui.js';
 import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, hideActionBar, isAIProvider, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
 import { notifyDeferredEnterOutput } from './deferred-enter.js';
 import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed } from './chat-history.js';
+import { clearChatPayloadForSession, handleChatTurnMessage, initChatPayloadUI } from './chat-payload.js';
 import { handleUsageStatMessage, removeUsageCacheEntry } from './token-statusbar.js';
 import { removeWorkflowSnapshot } from './workflow-modal.js';
 
@@ -296,6 +297,8 @@ export function _connectWs() {
     }
     trackApprovalHintFromChunk(id, xtermBytes, approvalTextChunk);
     if (isLiveRendered) scheduleApprovalCheck(id);
+    // chat_turn / chat_turns_snapshot は早期 return しないが、ここで早期処理する
+    // ためのフックを別途下に置く。
     // 複数行ペースト送信後の確定 \r は、この出力が静止する（取り込み・再描画完了）まで遅延させる。
     // 出力が来るたび待機をリセットし、止まったら deferred-enter.ts が \r を 1 回だけ送る。
     notifyDeferredEnterOutput(id);
@@ -342,7 +345,7 @@ export function _connectWs() {
     return;
   }
 
-  if (m.type === 'commit_msg_suggested' || m.type === 'commit_msg_error') {
+  if (m.type === 'commit_msg_suggested' || m.type === 'commit_msg_error' || m.type === 'commit_msg_progress') {
     // Git タブ「Ask AI」の結果。該当する GitGraphView インスタンスが拾う。
     try { window.dispatchEvent(new CustomEvent('many-commit-msg', { detail: m })); } catch (_) {}
     return;
@@ -362,6 +365,11 @@ export function _connectWs() {
     if (m.session_id) resetLocalSessionHistory(m.session_id);
     else resetAllLocalSessionHistory();
     showToast(t('session_history_reset_done'));
+    return;
+  }
+
+  if (m.type === 'chat_turn' || m.type === 'chat_turns_snapshot') {
+    handleChatTurnMessage(m);
     return;
   }
 

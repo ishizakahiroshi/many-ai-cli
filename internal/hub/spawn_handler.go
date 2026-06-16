@@ -79,6 +79,16 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid label value")
 		return
 	}
+	// シェルメタ文字・制御文字を弾く（Windows の cmd.exe /c シム経路への引数注入の多層防御）。
+	if !spawnValidModelLabel(body.Model) || !spawnValidModelLabel(body.Label) {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid model or label value")
+		return
+	}
+	// ドライブ/FS ルートやホーム親ディレクトリ自身は cwd として弾く（AI がホーム配下を巻き込む事故防止）。
+	if spawnCwdTooBroad(cwd) {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "cwd is too broad (system root or home root)")
+		return
+	}
 
 	exe, err := os.Executable()
 	if err != nil {
@@ -255,7 +265,12 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if s.parentShell != "" {
 		cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}
-	if envPreset := EnvPresetFor(body.Provider, effectiveRoute); len(envPreset) > 0 {
+	proxyToken := ""
+	if base := s.chatProxyBaseURL(); base != "" && effectiveRoute != RouteOllama {
+		proxyToken = newProxyToken()
+		s.registerPendingProxyToken(proxyToken)
+	}
+	if envPreset := EnvPresetForProxy(body.Provider, effectiveRoute, s.chatProxyBaseURL(), proxyToken); len(envPreset) > 0 {
 		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
 		s.logger.Debug("spawn: env preset applied",
 			"provider", body.Provider, "route", effectiveRoute, "keys", envKeyList(envPreset))
@@ -400,6 +415,17 @@ func (s *Server) handleSpawnGrid(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
 		return
 	}
+	// シェルメタ文字・制御文字を弾く（grid 経由の引数注入の多層防御）。
+	// label_prefix のみ検証する（provider/model は固定 enum / validAIProviders 側で網羅）。
+	if !spawnValidModelLabel(body.LabelPrefix) {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid label_prefix")
+		return
+	}
+	// 広域 cwd を弾く（spawn と同じ多層防御）。
+	if spawnCwdTooBroad(cwd) {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "cwd is too broad (system root or home root)")
+		return
+	}
 
 	// AI provider バリデーション（ai+shell プリセット時のみ使用）
 	aiProvider := body.Provider
@@ -468,6 +494,14 @@ func (s *Server) handleSpawnGrid(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf("MANY_AI_CLI_HUB_PORT=%d", hubPort))
 		if s.parentShell != "" {
 			cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
+		}
+		gridProxyToken := ""
+		if base := s.chatProxyBaseURL(); base != "" {
+			gridProxyToken = newProxyToken()
+			s.registerPendingProxyToken(gridProxyToken)
+		}
+		if envPreset := EnvPresetForProxy(spec.provider, "", s.chatProxyBaseURL(), gridProxyToken); len(envPreset) > 0 {
+			cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
 		}
 		// stdin を DevNull に、stdout/stderr をログファイルに向ける（handleSpawn と同様）
 		var stdinNull, spawnLog *os.File

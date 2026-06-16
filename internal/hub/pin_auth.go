@@ -340,8 +340,18 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 
 // handleAuthSetPIN は PIN の設定/変更/解除。full guard（token + host + origin + PIN ゲート）を通す。
 // よって remote からの変更は既存 PIN で認証済みのときだけ可能。loopback は常に可。
+//
+// 追加ゲート: PIN 未設定時の bootstrap で remotePINRequired() が false を返すため、
+// guard() 単体ではリモート token 保持者が初回 PIN を奪える（所有者を締め出せる）。
+// loopback でないリモートからの POST は、既存 PIN cookie で本人確認できる場合のみ
+// 通す（PIN 解除を含む）。
 func (s *Server) handleAuthSetPIN(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
+		return
+	}
+	if s.isLogicallyRemote(r) && !s.hasValidPINCookie(r) {
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSONError(w, http.StatusForbidden, "forbidden", "set-pin from a remote address requires existing PIN authentication or a local (loopback) session")
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1263,9 +1264,24 @@ func (s *Store) insertMessage(ctx context.Context, tx *sql.Tx, sessionID int64, 
 	}
 	id, err := res.LastInsertId()
 	if err != nil {
+		// LastInsertId 失敗は ID 取得失敗のみで messages 行は INSERT 済。
+		// FTS 行が作れないことを記録して continue（messages の保存は維持）。
+		slog.Warn("sessionstore: LastInsertId failed, FTS index entry skipped",
+			slog.String("err", err.Error()),
+			slog.Int64("session_id", sessionID))
 		return nil
 	}
-	_, _ = tx.ExecContext(ctx, `INSERT INTO messages_fts(rowid, text, raw_text) VALUES (?, ?, ?)`, id, text, rawText)
+	if _, ftsErr := tx.ExecContext(ctx, `INSERT INTO messages_fts(rowid, text, raw_text) VALUES (?, ?, ?)`, id, text, rawText); ftsErr != nil {
+		// FTS への INSERT 失敗は messages 本体には影響しないため tx は commit させ
+		// 検索インデックス未登録（沈黙的可視性低下）の事実だけ slog に残す。
+		// transaction を中断すると以降のメッセージ保存自体が止まり情報損失が拡大する
+		// ため、ここでは soft fail に倒す。長期運用で発生頻度が高い場合は
+		// onWriteError コールバック経由で UI へ通知する設計に拡張すること。
+		slog.Warn("sessionstore: messages_fts insert failed (message saved but not indexed)",
+			slog.String("err", ftsErr.Error()),
+			slog.Int64("session_id", sessionID),
+			slog.Int64("message_rowid", id))
+	}
 	return nil
 }
 

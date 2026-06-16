@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"many-ai-cli/internal/sessionlog"
 )
 
 const gitPushTimeout = 60 * time.Second
@@ -49,7 +51,9 @@ func (s *Server) handleGitPush(w http.ResponseWriter, r *http.Request) {
 	out, runErr := runGitCombinedEnv(ctx, cwd, gitPushNonInteractiveEnv(), "push")
 	if runErr != nil {
 		code, status := classifyGitPushError(string(out))
-		s.logger.Warn("git push failed", "session_id", sid, "err", runErr, "output", string(out))
+		// output には git のエラー出力（URL 埋め込み credentials を含み得る）が
+		// 入るため、ログ出力前に MaskSecrets で DSN を伏せる。
+		s.logger.Warn("git push failed", "session_id", sid, "err", runErr, "output", sessionlog.MaskSecrets(string(out)))
 		writeGitError(w, status, code, sanitizeGitErrMsg(runErr))
 		return
 	}

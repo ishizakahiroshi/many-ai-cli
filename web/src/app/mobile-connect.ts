@@ -3,7 +3,7 @@ import { t } from '../i18n.js';
 import { token, showToast } from './util.js';
 // serve 状態の取得は外部公開トグルと共有（plan_tailscale-serve-host-toggle.md C2）。
 // 有効化/停止操作はツールバーの 🌐外部公開へ一本化したため、ここでは状態取得のみ参照する。
-import { fetchExposeStatus, type TailscaleStatus, type TailscaleStateName } from './host-expose.js';
+import { fetchExposeStatus, enableExpose, type TailscaleStatus, type TailscaleStateName } from './host-expose.js';
 
 // ---- 📱 モバイル接続ウィザード（QR / SSH / VPN）----
 // docs/local/plan_mobile-qr-ssh-tunnel.md C3 / docs/local/mockup-mobile-connect.html を基準に実装。
@@ -72,6 +72,8 @@ let loadError = '';
 let tsStatus: TailscaleStatus | null = null;
 let tsLoading = false;
 let tsError = '';
+// serve_inactive 状態からウィザード内で「外部公開を有効化」ボタンを押した間の inflight フラグ。
+let tsEnabling = false;
 // env_kind（A2/IP-4: メッセージ出し分け）。/api/info から取得し、無ければ 'local'。
 let envKind = 'local';
 let state: WizardState = freshState();
@@ -609,8 +611,9 @@ function renderConnectTailscale(body: HTMLElement): void {
       break;
     case 'serve_inactive':
       body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_connect_ts_serve_inactive') }));
-      // C2: 有効化操作はツールバーの 🌐外部公開トグルへ一本化（二重管理の解消）。
-      // ここでは導線案内＋等価コマンド（情報）のみ残す。
+      // ウィザード内から直接 serve を有効化するボタン（ツールバーまで戻る必要をなくす）。
+      // 案内文・等価コマンドはツールバー操作派／CLI 派の逃げ道として併存させる。
+      body.appendChild(buildEnableServeButton());
       body.appendChild(el('div', { class: 'mc-ctx-note mc-ctx-ng', text: t('mobile_connect_ts_toolbar_hint') }));
       body.appendChild(el('div', { class: 'mc-cap', text: t('mobile_connect_ts_equiv_cmd') }));
       body.appendChild(cmdRow(st.serve_command));
@@ -636,6 +639,43 @@ function renderConnectTailscale(body: HTMLElement): void {
   }
 
   appendTailscaleNav(body);
+}
+
+// serve_inactive 状態でウィザード内から直接 `tailscale serve` を有効化するボタン。
+// 成功すれば同じ画面が ready 表示（本物 QR）へ自動遷移する。
+function buildEnableServeButton(): HTMLElement {
+  const wrap = el('div', { class: 'mc-ts-enable' });
+  const btn = el('button', {
+    class: 'mc-nav-btn mc-nav-primary mc-ts-enable-btn',
+    text: tsEnabling ? t('mobile_connect_ts_enable_busy') : t('mobile_connect_ts_enable_btn'),
+    attrs: { type: 'button' },
+  }) as HTMLButtonElement;
+  btn.disabled = tsEnabling;
+  btn.addEventListener('click', () => { void onEnableServeClick(btn); });
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+async function onEnableServeClick(anchor: Element): Promise<void> {
+  if (tsEnabling) return;
+  tsEnabling = true;
+  tsError = '';
+  if (modalOpen) render();
+  const r = await enableExpose();
+  tsEnabling = false;
+  if (!r.ok) {
+    tsError = r.httpStatus === 'network'
+      ? t('mobile_connect_error_network')
+      : r.httpStatus === 401
+        ? t('mobile_connect_error_unauthorized')
+        : t('mobile_connect_error_http', { status: String(r.httpStatus) });
+    showToast(tsError, anchor);
+    if (modalOpen) render();
+    return;
+  }
+  // 共有キャッシュは enableExpose 内で更新済み。ウィザード側スナップショットも取り直す。
+  tsStatus = null;
+  await loadTailscale(true);
 }
 
 function tsStateBadge(stateName: TailscaleStateName): HTMLElement {

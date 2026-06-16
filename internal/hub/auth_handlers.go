@@ -29,6 +29,15 @@ func (s *Server) handleAuthRevokeAll(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
+	// 追加ゲート: PIN 未設定時の bootstrap で remotePINRequired() が false を返すため、
+	// guard() 単体ではリモート token 保持者が token + AuthCookieSecret を rotate して
+	// 所有者を締め出せる。loopback でないリモートは既存 PIN cookie で本人確認できる
+	// 場合のみ通す。
+	if s.isLogicallyRemote(r) && !s.hasValidPINCookie(r) {
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSONError(w, http.StatusForbidden, "forbidden", "revoke-all from a remote address requires existing PIN authentication or a local (loopback) session")
+		return
+	}
 	newToken, err := randomHex(32)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "internal", "failed to generate token")

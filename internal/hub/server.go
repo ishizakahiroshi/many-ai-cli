@@ -30,6 +30,7 @@ import (
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/notify"
 	"many-ai-cli/internal/proto"
+	"many-ai-cli/internal/proxy"
 	"many-ai-cli/internal/sessionlog"
 	"many-ai-cli/internal/sessionstore"
 	"many-ai-cli/internal/wrapper"
@@ -139,10 +140,11 @@ type session struct {
 	// JSON 外: Git タブ「Ask AI」コミットメッセージ生成の待ち受け状態。
 	// 接続中の AI セッションへ生成プロンプトを注入し、PTY 出力から
 	// [MANY-AI-CLI-COMMIT] マーカーを拾ってフォームへ反映する。
-	commitMsgAwait    bool            // マーカー待ち受け中
-	commitMsgDeadline time.Time       // 待ち受けの打ち切り時刻
-	commitMsgLang     string          // 生成言語（ja/en）。タイムアウト文言に使用
-	commitMsgBuf      strings.Builder // ANSI 除去済み出力の蓄積（マーカー抽出用・上限つき）
+	commitMsgAwait      bool            // マーカー待ち受け中
+	commitMsgDeadline   time.Time       // 待ち受けの打ち切り時刻
+	commitMsgLang       string          // 生成言語（ja/en）。タイムアウト文言に使用
+	commitMsgBuf        strings.Builder // ANSI 除去済み出力の蓄積（マーカー抽出用・上限つき）
+	commitMsgProgressed bool            // AI からの最初の非空出力で 1 回だけ commit_msg_progress を送る
 
 	// JSON 外: 起動バナーからの初期モデル検出用。
 	// Model が空のセッションのみ対象。検出成功 or 累計バイト超過で打ち切る。
@@ -154,6 +156,11 @@ type session struct {
 	LogPath   string             `json:"log_path,omitempty"`
 	JSONLPath string             `json:"jsonl_path,omitempty"`
 	History   *sessionlog.Writer `json:"-"`
+
+	// JSON 外: 内蔵プロキシ経由で捕捉した API リクエスト/レスポンスのリングバッファ。
+	// chat 履歴 UI が payload ベースのクリーン表示を行うためのソース。
+	// Hub プロセス終了で揮発（永続化は将来 opt-in）。
+	chatTurns []*proto.ChatTurn
 
 	// JSON 外: per-session 入力直列化ロック（#18）。
 	// 複数 UI が同一セッションへ同時入力した場合に、hasPending チェック〜
@@ -415,6 +422,11 @@ type Server struct {
 
 	// sshdProber: OpenSSH Server 状態検知の抽象（テストでモック注入）。nil なら OS 実装。
 	sshdProber sshdProber
+
+	// chatProxy: wrap 対象 CLI（Claude / Codex）の API リクエストを透過プロキシし、
+	// payload を構造化チャット履歴として捕捉する内蔵プロキシ。
+	// 起動失敗時は nil（payload 取得 OFF。PTY スクレイプにフォールバック）。
+	chatProxy *proxy.Server
 }
 
 type branchRefreshRequest struct {
@@ -883,6 +895,7 @@ func (s *Server) Run(ctx context.Context) error {
 	if s.tokenStatusbarEnabled() {
 		s.injectUsageHooks()
 	}
+	s.startChatProxy()
 	s.safeGo("state_ticker", func() { s.stateTicker(runCtx) })
 	s.safeGo("clean_attachments", s.cleanAttachments)
 	s.safeGo("clean_spawn_logs", s.cleanSpawnLogs)
@@ -903,6 +916,7 @@ func (s *Server) Run(ctx context.Context) error {
 		// reconnect grace period. Explicit session termination still goes through
 		// /api/kill-all, dismiss, or idle-timeout.
 		_ = s.httpSrv.Close()
+		s.stopChatProxy()
 		// 内蔵リモート接続の SSH/WSL 子プロセスを全て落とし、launcher-active.json の
 		// 自 PID 分を掃除する（Hub 終了でトンネルも落ちるのが期待動作）。
 		// httpSrv.Close() の後に呼ぶこと: 先に HTTP を閉じれば、shutdown 中に新規
@@ -1157,6 +1171,9 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	wc := newWrapperConn(conn)
 	s.wrappers[id] = wc
 	s.sessionsMu.Unlock()
+	// register 時に wrapper から渡された proxy token を session ID と紐付ける
+	// （chat_proxy.go: 内蔵プロキシ捕捉 payload を session ringbuffer へ振り分けるため）。
+	s.linkProxyTokenToSession(reg.ProxyToken, id)
 	if initCols == 0 || initRows == 0 {
 		// UIが未接続の場合はラッパーが報告した呼び出し元端末サイズを優先する
 		if cols, rows, ok := usableInitPTYSize(reg.Cols, reg.Rows); ok {
@@ -1220,19 +1237,22 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		replay = replay[len(replay)-maxPTYBuf:]
 	}
 
-	rawLogPath, jsonlPath := req.LogPath, req.JSONLPath
-	if rawLogPath == "" || jsonlPath == "" {
-		rawLogPath, jsonlPath = sessionlog.Paths(s.cfg.Hub.LogDir, sessionlog.Metadata{
-			SessionID: req.SessionID,
-			Provider:  req.Provider,
-			CWD:       req.CWD,
-			StartedAt: startedAt,
-		})
-	}
+	// LogPath / JSONLPath は wrapper からの提案値を信用せず、常に Hub 側の
+	// LogDir + Metadata から決定的に再構築する（リモート token 保持者による
+	// 任意ファイル append プリミティブを閉じるため）。req.LogPath / req.JSONLPath
+	// は無視する。06-15 監査の F2 と同様の方針（attacker-controlled パスを read/write
+	// プリミティブにしない）。
 	s.cfgMu.Lock()
+	logDir := s.cfg.Hub.LogDir
 	jsonlMaxBytesReattach := int64(s.cfg.Log.SessionMaxSizeMB) * 1024 * 1024
 	sessionLogEnabled := s.cfg.Log.SessionEnabled
 	s.cfgMu.Unlock()
+	rawLogPath, jsonlPath := sessionlog.Paths(logDir, sessionlog.Metadata{
+		SessionID: req.SessionID,
+		Provider:  req.Provider,
+		CWD:       req.CWD,
+		StartedAt: startedAt,
+	})
 	// セッションログが無効（既定）なら .jsonl を作らない。
 	var history *sessionlog.Writer
 	if sessionLogEnabled {
@@ -1247,35 +1267,42 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	if reqRoute == "" {
 		reqRoute = s.resolveRoute(req.Provider, req.Model)
 	}
-	var storeID int64
-	if s.sessionStore != nil {
-		var storeErr error
-		storeID, storeErr = s.sessionStore.StartSession(sessionstore.SessionStart{
-			LiveSessionID: req.SessionID,
-			Provider:      req.Provider,
-			Display:       req.Display,
-			CWD:           req.CWD,
-			Branch:        branch,
-			Label:         req.Label,
-			Model:         req.Model,
-			Route:         reqRoute,
-			Shell:         req.Shell,
-			State:         "running",
-			StartedAt:     startedAtText,
-			LogPath:       rawLogPath,
-			JSONLPath:     jsonlPath,
-		})
-		if storeErr != nil {
-			s.logger.Warn("sqlite session reattach failed", "session_id", req.SessionID, "err", storeErr)
-		}
-	}
+	// renumber 判定（既存 wrapper と衝突する場合は新 ID を割り当てる）を SQLite
+	// アクセスより前に行い、StartSession を 1 回だけ呼ぶ（重複 INSERT による orphan
+	// 行の発生を防ぐ）。
 	s.sessionsMu.Lock()
 	acceptedID := req.SessionID
 	if s.wrappers[acceptedID] != nil {
 		s.nextID++
 		acceptedID = s.nextID
 	}
-	if acceptedID != req.SessionID && s.sessionStore != nil {
+	if s.nextID < acceptedID {
+		s.nextID = acceptedID
+	}
+	s.sessionsMu.Unlock()
+	if acceptedID != req.SessionID {
+		// renumber が確定したら JSONLPath も新 ID で再計算する（旧 ID のパスは
+		// 既に他 wrapper が使っている可能性がある）。
+		rawLogPath, jsonlPath = sessionlog.Paths(logDir, sessionlog.Metadata{
+			SessionID: acceptedID,
+			Provider:  req.Provider,
+			CWD:       req.CWD,
+			StartedAt: startedAt,
+		})
+		if sessionLogEnabled {
+			if history != nil {
+				_ = history.Close()
+			}
+			var histErr error
+			history, histErr = sessionlog.NewJSONLWriterAppend(jsonlPath, jsonlMaxBytesReattach)
+			if histErr != nil {
+				s.logger.Warn("session history append failed (renumbered)", "path", jsonlPath, "err", histErr)
+				history = nil
+			}
+		}
+	}
+	var storeID int64
+	if s.sessionStore != nil {
 		var storeErr error
 		storeID, storeErr = s.sessionStore.StartSession(sessionstore.SessionStart{
 			LiveSessionID: acceptedID,
@@ -1293,9 +1320,10 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 			JSONLPath:     jsonlPath,
 		})
 		if storeErr != nil {
-			s.logger.Warn("sqlite session reattach renumber failed", "session_id", acceptedID, "err", storeErr)
+			s.logger.Warn("sqlite session reattach failed", "session_id", acceptedID, "err", storeErr)
 		}
 	}
+	s.sessionsMu.Lock()
 	var oldHistory *sessionlog.Writer
 	if cur := s.sessions[acceptedID]; cur != nil {
 		oldHistory = cur.History
@@ -1525,6 +1553,10 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	s.removeInactiveApprovalRules(providerApprovalRuleTargets(endedProvider, endedCWD))
 	s.removeInactiveUsageHooks(endedProvider, endedCWD)
 	s.finalizeTranscript(id, jsonlPathForTranscript)
+	// usage 集計マップから当該セッションのエントリを掃除する。dismiss 経路だけでなく
+	// completed/error/disconnected の wrapper 切断時にも削除しないと、長期稼働 Hub
+	// (VPS / docker) で線形にメモリが累積する。
+	DeleteSessionUsageStat(id)
 	s.broadcast(proto.Message{Type: "session_end", SessionID: id, State: endState, Reason: endReason})
 }
 
@@ -2308,6 +2340,8 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	// セッション破棄時に usageStat も解放する（メモリ無制限増加を防ぐ）。
 	// usageStatsMu のロック順序のため sessionsMu 解放後に呼ぶ。
 	DeleteSessionUsageStat(m.SessionID)
+	// chat proxy token 紐付けも掃除
+	s.unlinkProxyTokensForSession(m.SessionID)
 	if historyToClose != nil {
 		_ = historyToClose.Event(map[string]any{
 			"ts":         time.Now().Format(time.RFC3339),
@@ -2758,6 +2792,17 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 		}
 	}
 	usageStatsMu.Unlock()
+
+	// chat proxy 履歴のスナップショット配信（payload ベースのチャット履歴復元用）。
+	for _, id := range sessionIDs {
+		if turns := s.snapshotChatTurns(id); len(turns) > 0 {
+			_ = uc.send(proto.Message{
+				Type:      "chat_turns_snapshot",
+				SessionID: id,
+				ChatTurns: turns,
+			})
+		}
+	}
 }
 
 func (s *Server) broadcast(m any) {

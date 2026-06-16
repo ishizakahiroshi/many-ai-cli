@@ -456,7 +456,118 @@ function wireClicks(bar: HTMLElement): void {
       copyText(copySeg.dataset.copy, copySeg);
       return;
     }
+    // … → モバイル時の詳細モーダル
+    if (target.closest('.tsb-seg-more')) {
+      openDetailModal();
+      return;
+    }
   });
+}
+
+// ── 詳細モーダル（モバイル時 … タップで開く）─────────────────────────────────
+// CSS @media でモバイル時に折り畳まれるセグメントを、垂直リストとして再表示する。
+// バーの現在 DOM をそのままクローンしてラベルを添える方式で、表示ロジックを二重化しない。
+
+const DETAIL_SEGMENTS: Array<{ cls: string; label: string }> = [
+  { cls: 'tsb-seg-id',      label: 'ID' },
+  { cls: 'tsb-seg-status',  label: '状態' },
+  { cls: 'tsb-seg-agent',   label: 'AI' },
+  { cls: 'tsb-seg-label',   label: '作業' },
+  { cls: 'tsb-seg-project', label: 'プロジェクト' },
+  { cls: 'tsb-seg-ctx',     label: 'ctx' },
+  { cls: 'tsb-seg-tok',     label: 'tok' },
+  { cls: 'tsb-seg-cache',   label: 'cache' },
+  { cls: 'tsb-seg-compact', label: 'compact' },
+  { cls: 'tsb-seg-cost',    label: 'cost' },
+  { cls: 'tsb-seg-burn',    label: 'burn' },
+  { cls: 'tsb-seg-elapsed', label: '経過' },
+  { cls: 'tsb-seg-conn',    label: '接続' },
+  { cls: 'tsb-seg-fleet',   label: '横断' },
+];
+
+let _detailDownHandler: ((e: MouseEvent | TouchEvent) => void) | null = null;
+let _detailKeyHandler: ((e: KeyboardEvent) => void) | null = null;
+
+function closeDetailModal(): void {
+  const existing = document.getElementById('tsb-detail-modal');
+  if (existing) existing.remove();
+  if (_detailDownHandler) {
+    document.removeEventListener('mousedown', _detailDownHandler, true);
+    document.removeEventListener('touchstart', _detailDownHandler, true);
+    _detailDownHandler = null;
+  }
+  if (_detailKeyHandler) {
+    document.removeEventListener('keydown', _detailKeyHandler, true);
+    _detailKeyHandler = null;
+  }
+}
+
+function openDetailModal(): void {
+  if (document.getElementById('tsb-detail-modal')) { closeDetailModal(); return; }
+  const bar = getBar();
+  if (!bar) return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'tsb-detail-modal';
+  const box = document.createElement('div');
+  box.className = 'tsb-detail-box';
+
+  const header = document.createElement('div');
+  header.className = 'tsb-detail-header';
+  const title = document.createElement('span');
+  title.className = 'tsb-detail-title';
+  title.textContent = 'セッション詳細';
+  header.appendChild(title);
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'tsb-detail-close';
+  closeBtn.textContent = '✕';
+  closeBtn.addEventListener('click', closeDetailModal);
+  header.appendChild(closeBtn);
+  box.appendChild(header);
+
+  const body = document.createElement('div');
+  body.className = 'tsb-detail-body';
+  for (const { cls, label } of DETAIL_SEGMENTS) {
+    const src = bar.querySelector<HTMLElement>('.' + cls);
+    if (!src) continue;
+    const html = src.innerHTML.trim();
+    if (!html || src.style.display === 'none') continue;
+    const row = document.createElement('div');
+    row.className = 'tsb-detail-row';
+    const lab = document.createElement('span');
+    lab.className = 'tsb-detail-label';
+    lab.textContent = label;
+    const val = document.createElement('span');
+    val.className = 'tsb-detail-value';
+    val.innerHTML = html;
+    row.appendChild(lab);
+    row.appendChild(val);
+    body.appendChild(row);
+  }
+  box.appendChild(body);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  _detailDownHandler = (e: MouseEvent | TouchEvent) => {
+    const target = e.target as Node;
+    if (box.contains(target)) return;
+    if ((target as HTMLElement).closest?.('.tsb-seg-more')) return;
+    closeDetailModal();
+  };
+  _detailKeyHandler = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeDetailModal();
+  };
+  setTimeout(() => {
+    if (_detailDownHandler) {
+      document.addEventListener('mousedown', _detailDownHandler, true);
+      document.addEventListener('touchstart', _detailDownHandler, true);
+    }
+  }, 0);
+  document.addEventListener('keydown', _detailKeyHandler, true);
 }
 
 function copyText(text: string, flashEl: HTMLElement): void {

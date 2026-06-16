@@ -125,6 +125,45 @@ type Message struct {
 	CtxWindow      int     `json:"ctx_window,omitempty"` // モデルのコンテキストウィンドウ上限（不明なら省略）
 	UsageModel     string  `json:"usage_model,omitempty"`
 	UsageStartedAt string  `json:"usage_started_at,omitempty"`
+
+	// ProxyToken: register 時に wrapper が伝える内蔵プロキシ用ランダムトークン。
+	// Hub は spawn 時にこれを env (MANY_AI_CLI_PROXY_TOKEN) として注入し、
+	// ANTHROPIC_BASE_URL / OPENAI_BASE_URL のパス要素にも埋め込む。
+	// 同じ token を register で受け取ることで、プロキシ捕捉した payload を
+	// どの session の履歴に積むか解決する。
+	ProxyToken string `json:"proxy_token,omitempty"`
+
+	// chat:turn: Hub → UI。内蔵プロキシが捕捉した 1 リクエスト/レスポンスの組。
+	// payload 由来のクリーンなチャット履歴として UI が描画する。
+	ChatTurn *ChatTurn `json:"chat_turn,omitempty"`
+
+	// chat:turns_snapshot: Hub → UI。WS 接続 / セッション切替時のスナップショット配信。
+	ChatTurns []*ChatTurn `json:"chat_turns,omitempty"`
+}
+
+// ChatTurn は内蔵プロキシ経由で捕捉した 1 リクエスト/レスポンスの構造化データ。
+// RAM 上のセッションリングバッファに保持され、WS で UI に配信される。
+//
+// RequestJSON / ResponseJSON は raw payload（マスキング後）。UI 側で `Raw` トグル時に
+// 表示する。Summary 系フィールドは UI 側のレンダリングを軽くするための事前抽出。
+type ChatTurn struct {
+	ID           int64  `json:"id"` // セッション内連番（リングバッファ index ではなく単調増加）
+	Provider     string `json:"provider"` // "anthropic" | "openai"
+	Endpoint     string `json:"endpoint"` // "/v1/messages" など
+	ReceivedAt   string `json:"received_at"`
+	DurationMS   int64  `json:"duration_ms,omitempty"`
+	StatusCode   int    `json:"status_code,omitempty"`
+	IsStream     bool   `json:"is_stream,omitempty"`
+	Truncated    bool   `json:"truncated,omitempty"`
+	Model        string `json:"model,omitempty"`
+	MessageCount int    `json:"message_count,omitempty"`
+	ToolCount    int    `json:"tool_count,omitempty"`
+	HasSystem    bool   `json:"has_system,omitempty"`
+	TokensIn     int    `json:"tokens_in,omitempty"`
+	TokensOut    int    `json:"tokens_out,omitempty"`
+	RequestJSON  string `json:"request_json,omitempty"`  // マスキング済み raw JSON
+	ResponseJSON string `json:"response_json,omitempty"` // マスキング済み raw JSON / SSE 結合後
+	ErrorText    string `json:"error_text,omitempty"`
 }
 
 type ApprovalOption struct {

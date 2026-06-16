@@ -299,3 +299,114 @@
 #token-statusbar[hidden] {
   display: none !important;
 }
+
+/* …（詳細）ボタン: デスクトップでは隠す。モバイルだけで使う */
+.tsb-seg-more {
+  background: transparent;
+  border: none;
+  border-left: 1px solid #292e42;
+  color: #c0caf5;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0 12px;
+  height: 100%;
+  display: none;
+  align-items: center;
+  margin-left: auto;
+}
+.tsb-seg-more:hover { background: #2a2f45; }
+
+/* ── モバイル（640px 以下）: 最重要セグメントだけに絞る ─────────────────
+   表示: #N / 状態 / ctx / cost / conn / fleet / …（詳細ボタン）
+   非表示: agent / label / project / tok / cache / compact / burn / elapsed */
+@media (max-width: 640px) {
+  #token-statusbar .tsb-seg-agent,
+  #token-statusbar .tsb-seg-label,
+  #token-statusbar .tsb-seg-project,
+  #token-statusbar .tsb-seg-tok,
+  #token-statusbar .tsb-seg-cache,
+  #token-statusbar .tsb-seg-compact,
+  #token-statusbar .tsb-seg-burn,
+  #token-statusbar .tsb-seg-elapsed {
+    display: none !important;
+  }
+  #token-statusbar .tsb-seg-more {
+    display: inline-flex;
+  }
+  /* fleet を右端固定にして … を最右に並べる */
+  #token-statusbar .tsb-seg-fleet { margin-left: auto; }
+  #token-statusbar .tsb-seg-fleet + .tsb-seg-more { margin-left: 0; }
+  /* 残ったセグメントの padding を詰めて文字数を稼ぐ */
+  #token-statusbar .tsb-seg { padding: 0 6px; }
+}
+
+/* 詳細モーダル（モバイルで … タップで開く） */
+#tsb-detail-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 75;
+}
+.tsb-detail-box {
+  width: 100%;
+  max-width: 560px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: #1a1b26;
+  border: 1px solid #3b4261;
+  border-top-left-radius: var(--radius-lg, 12px);
+  border-top-right-radius: var(--radius-lg, 12px);
+  box-shadow: 0 -10px 40px rgba(0,0,0,.6);
+  overflow: hidden;
+}
+.tsb-detail-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid #292e42;
+  flex-shrink: 0;
+}
+.tsb-detail-title { font-weight: 700; color: #7aa2f7; font-size: 0.9rem; }
+.tsb-detail-close {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: #c0caf5;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+.tsb-detail-close:hover { background: #2a2f45; }
+.tsb-detail-body {
+  overflow-y: auto;
+  padding: 6px 0;
+}
+.tsb-detail-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 10px 14px;
+  border-bottom: 1px solid #20232f;
+  font-size: 0.82rem;
+}
+.tsb-detail-row:last-child { border-bottom: none; }
+.tsb-detail-label {
+  color: #565f89;
+  font-size: 0.72rem;
+  min-width: 64px;
+  flex-shrink: 0;
+}
+.tsb-detail-value {
+  color: #c0caf5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  word-break: break-word;
+  min-width: 0;
+}
