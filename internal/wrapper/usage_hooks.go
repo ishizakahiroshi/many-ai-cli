@@ -60,7 +60,10 @@ type UsageHookParams struct {
 // 形式（"..." vs `& "..."`）が異なり両立しないため、ここでは行わない
 // （many-ai-cli の配置パスにスペースを含めない運用前提）。
 func toShellPath(p string) string {
-	return filepath.ToSlash(p)
+	// filepath.ToSlash は実行時 OS の PathSeparator しか変換しないため、
+	// Linux CI 上で Windows パスを扱うテストでは `\` が残る。POSIX シェル
+	// 用フックは常に `/` 区切りなので、無条件で `\` を `/` に置換する。
+	return strings.ReplaceAll(p, `\`, "/")
 }
 
 // claudeStatusLineCmd は relay コマンド文字列を組み立てる。
