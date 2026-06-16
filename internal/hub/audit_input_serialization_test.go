@@ -122,6 +122,9 @@ func TestSubmitInputNilSessionDropped(t *testing.T) {
 func TestInputMuExistsOnSession(t *testing.T) {
 	var ses session
 	// inputMu に対して Lock/Unlock が呼べることをコンパイル・実行レベルで確認する。
+	// 空クリティカルセクションは意図的（フィールド存在のコンパイル時保証）なので
+	// staticcheck SA2001 を無効化する。
 	ses.inputMu.Lock()
+	//lint:ignore SA2001 intentional empty critical section — proves inputMu exists
 	ses.inputMu.Unlock()
 }

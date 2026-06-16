@@ -30,7 +30,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -41,11 +40,6 @@ const (
 
 	upstreamAnthropic = "https://api.anthropic.com"
 	upstreamOpenAI    = "https://api.openai.com"
-
-	// 内部ヘッダー（CLI からのリクエストに付与されていたら除去）
-	hdrAuthorization = "Authorization"
-	hdrAPIKey        = "X-Api-Key"
-	hdrAnthropicKey  = "Anthropic-Auth-Token"
 )
 
 // Provider は本プロキシが扱う API 系統。
@@ -103,11 +97,6 @@ type Server struct {
 	logger   *slog.Logger
 	sink     Sink
 	port     int
-
-	// sinkMu はノンブロッキング送出のための簡易ガード。
-	// Sink 実装側で詰まると goroutine が累積するため、worker pool 化したい
-	// 場合はここで切る。MVP では goroutine 直起こしで割り切る。
-	sinkMu sync.Mutex
 }
 
 // New は 127.0.0.1 で listen する Server を返す。port=0 で空きポート自動割当。
@@ -428,12 +417,3 @@ func joinSSE(raw []byte) []byte {
 	return out.Bytes()
 }
 
-// strip auth headers — 構造化データに含めない（ヘッダーは Sink へ渡さないので
-// 念のための補助関数。現在は使っていないが、将来 header 情報を Sink に追加するときに使う）。
-func stripAuthHeaders(h http.Header) http.Header {
-	out := h.Clone()
-	out.Del(hdrAuthorization)
-	out.Del(hdrAPIKey)
-	out.Del(hdrAnthropicKey)
-	return out
-}
