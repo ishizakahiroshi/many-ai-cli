@@ -97,12 +97,12 @@ Gemini CLI is intentionally out of scope.
 | Browser | Chrome / Edge / Firefox / Safari |
 | AI CLI | Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI (install the providers you intend to use separately) |
 
-### Platform verification for v0.3.0
+### Platform verification
 
 - Verified in real environments: Windows local Hub and the Windows unified launcher (`wsl` / SSH tunnel profiles)
 - Not yet fully verified in real environments: native Linux, native macOS
 
-Linux/macOS builds are expected to work, but they have not been fully validated in real environments for v0.3.0. Please use at your own discretion and report any issues.
+Linux/macOS builds are expected to work, but they have not been fully validated in real environments yet. Please use at your own discretion and report any issues.
 
 ---
 
@@ -123,7 +123,7 @@ bun install -g many-ai-cli
 npm install -g many-ai-cli
 ```
 
-> Available once `many-ai-cli` v0.3.0 is published to the npm registry. The package ships the native Go binary for your platform as an optional dependency, so nothing is downloaded in a browser — the launcher is generated locally at install time and carries no Mark-of-the-Web, which avoids that SmartScreen trigger. This is **not** a substitute for Authenticode signing: Smart App Control / WDAC / AppLocker / EDR / antivirus policies are handled separately. If the global command is not found after install, run `pnpm setup` (or reopen your shell) so the global bin directory is on your `PATH`.
+> Published to the npm registry since v0.3.0. The package ships the native Go binary for your platform as an optional dependency, so nothing is downloaded in a browser — the launcher is generated locally at install time and carries no Mark-of-the-Web, which avoids that SmartScreen trigger. This is **not** a substitute for Authenticode signing: Smart App Control / WDAC / AppLocker / EDR / antivirus policies are handled separately. If the global command is not found after install, run `pnpm setup` (or reopen your shell) so the global bin directory is on your `PATH`.
 
 **Windows (winget):**
 

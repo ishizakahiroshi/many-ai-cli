@@ -411,7 +411,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.2.0...v0.2.2
