@@ -144,6 +144,10 @@
    本体を右カラムへ押し出す。auto に戻して content 高さだけにする。 */
 #action-bar.batch .action-bar-label,
 #action-bar.single-tabs .action-bar-label { margin-bottom: 4px; flex-basis: auto; }
+/* 前置き説明（.action-preamble）も同じ理由で column レイアウト時は flex-basis:auto に。
+   100% のままだと前置きが縦に伸びてタブ列を圧迫する。 */
+#action-bar.batch .action-preamble,
+#action-bar.single-tabs .action-preamble { flex-basis: auto; }
 
 /* 承認ブロック直前の前置き説明。文脈を CLI スクロールなしで見せる。
    既定は高さ上限つきスクロール枠、ヘッダクリックで .expanded を付けて広げる。 */
@@ -591,8 +595,8 @@
 @media (max-width: 720px), (pointer: coarse) {
   #action-bar {
     gap: var(--space-2);
-    padding: 10px calc(12px + 44px + 6px + 44px + 8px) calc(10px + env(safe-area-inset-bottom)) 12px;
-    max-height: 56dvh;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    max-height: 42dvh;
     border-left: 0;
     border-top: 3px solid transparent;
     flex-direction: column;
@@ -605,16 +609,32 @@
   .action-bar-label {
     font-size: 0.76rem;
     margin: 0 0 2px;
+    min-height: 44px;
+    padding-right: calc(44px + 6px + 44px + 8px);
+    display: flex;
+    align-items: center;
+  }
+  .action-preamble-body { max-height: 4.5em; }
+  .action-qpane { padding: 8px; }
+  .action-single-qhead {
+    max-height: 6.2em;
+    overflow-y: auto;
+    font-size: 0.84rem;
+  }
+  .action-qopts-full {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   }
   .action-btn,
   .action-clear-btn,
   .action-submit-btn {
     width: 100%;
-    min-height: 48px;
+    min-height: 44px;
     border-radius: var(--radius-md);
-    padding: 10px 12px;
-    font-size: 0.9rem;
+    padding: 8px 10px;
+    font-size: 0.84rem;
   }
+  .action-qopts-full .action-btn { width: auto; }
   .action-btn.current,
   .action-btn.session-allow,
   .action-btn:first-of-type {
@@ -638,8 +658,9 @@
     height: 44px;
   }
   #action-bar.collapsed .action-btn { max-width: 100%; }
-  #action-bar.batch {
-    max-height: 60dvh;
+  #action-bar.batch,
+  #action-bar.multi-select {
+    max-height: 50dvh;
   }
   .action-section {
     padding: 8px;

@@ -580,6 +580,8 @@ Close the `many-ai-cli tunnel` window to disconnect. The remote Hub and any remo
 
 ## Using from a smartphone (iPhone / Android)
 
+> **Note (beta / draft)** — The smartphone UI is a preview in v0.3.x. Layout, interactions, and notification behavior may change in future releases. Please share feedback via GitHub Issues.
+
 The Hub UI is mobile-ready (responsive layout, touch-sized buttons, a mobile key panel for Esc/Ctrl/arrows, and PWA support). Because the Hub binds to `127.0.0.1` only, a phone cannot reach it over Wi-Fi by opening the PC's LAN IP — and that is by design. Instead, the phone uses the same pattern as remote PC access: **an SSH local forward that points the phone's own `127.0.0.1` at the Hub.** No public exposure is required (and none is supported).
 
 **What you need on the phone**
@@ -860,6 +862,14 @@ A single always-on line at the bottom of the screen shows the status of one acti
 ## Voice Input
 
 You can dictate text into the Hub UI input box.
+
+### Choosing an engine
+
+- **Whisper (local)** — for users who do not want audio leaving the machine. The browser sends the recording through the Hub to a local whisper.cpp server, and nothing goes to a third-party service (as long as `voice.whisper.server_url` points at `127.0.0.1` / `localhost`). Accuracy depends on the model and CPU.
+- **Browser** — Chrome / Edge Web Speech API. **Audio is sent to Google / Microsoft recognition servers.** Fast and accurate; pick this when convenience and accuracy matter more than privacy.
+- **Smartphone usage** — instead of the Hub's voice engines, you can use the **phone OS's voice input or an IME** (on iPhone, third-party IMEs like `Gboard` are an option too). These are also cloud-based like the Browser engine, but the phone IME path is often more responsive on mobile.
+
+In short: "don't want audio leaving the machine → Whisper", "want convenience and accuracy → Browser or phone IME".
 
 ### How to use
 

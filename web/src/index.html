@@ -1018,8 +1018,16 @@
     </div>
     <!-- C3: チャットペイン (C4 で filter-bar の中身が埋まる) -->
     <div id="chat-pane">
+      <div class="chat-pane-toolbar">
+        <label class="chat-source-toggle">
+          <input type="checkbox" id="chat-source-payload-toggle" />
+          <span data-i18n="chat_source_payload">Payload表示 (β)</span>
+        </label>
+        <span id="chat-source-badge" class="chat-source-badge" hidden></span>
+      </div>
       <div class="chat-filter-bar" hidden><!-- C4 で実装 --></div>
       <div class="chat-timeline" data-sid=""></div>
+      <div class="chat-payload-timeline" data-sid="" hidden></div>
       <div class="chat-pane-empty" data-i18n="tab_chat_empty">履歴はまだありません</div>
     </div>
     <!-- v2: Files tab content areas (lazy fetch on first click) -->
@@ -1104,7 +1112,8 @@
         </div>
         <div id="attach-panel">
           <div id="attach-drop-zone">
-            <span data-i18n="attach_hint">Paste or D&amp;D file</span>
+            <span class="attach-icon" aria-hidden="true">📎</span>
+            <span class="attach-hint-text" data-i18n="attach_hint">Paste or D&amp;D file</span>
             <span class="attach-sub" data-i18n="attach_sub">(Click to select file)</span>
           </div>
           <input type="file" id="attach-file-input" multiple style="display:none">
@@ -1322,6 +1331,7 @@
     <span class="tsb-seg tsb-seg-elapsed"></span>
     <span class="tsb-seg tsb-seg-conn"></span>
     <span class="tsb-seg tsb-seg-fleet"></span>
+    <button type="button" class="tsb-seg tsb-seg-more" aria-label="詳細">…</button>
   </div>
 
   <!--

@@ -275,13 +275,18 @@ func fileOperationErrorStatus(msg string) (int, string) {
 }
 
 // pathsEqual は 2 つのパスを Clean したうえで比較する。
-// Windows のドライブレターは大文字小文字を無視する。
+// Windows のドライブレターは大文字小文字を無視するが、case-sensitive な FS
+// (Linux/macOS) では `Foo` と `foo` は別物として扱う（リネーム・削除の誤判定を防ぐ）。
 func pathsEqual(a, b string) bool {
 	ca := filepath.Clean(a)
 	cb := filepath.Clean(b)
 	if ca == cb {
 		return true
 	}
-	// Windows のドライブレター違い対策（例: C:\foo vs c:\foo）
-	return strings.EqualFold(ca, cb)
+	// Windows パス（C:\foo 等）またはランタイムが Windows のときのみ大小文字を無視する。
+	// files_list.go の isUnder と同じガードを使う。
+	if runtime.GOOS == "windows" || isWindowsPath(ca) || isWindowsPath(cb) {
+		return strings.EqualFold(ca, cb)
+	}
+	return false
 }

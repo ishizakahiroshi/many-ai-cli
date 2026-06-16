@@ -64,10 +64,20 @@ func toShellPath(p string) string {
 }
 
 // claudeStatusLineCmd は relay コマンド文字列を組み立てる。
+//
+// token は CLI 引数ではなく POSIX 環境変数プレフィックスで渡す
+// （MANY_AI_CLI_HUB_TOKEN=<hex> <exe> usage-relay ...）。
+// /proc/<pid>/cmdline / ps aux から他ユーザーが token を読み取れる経路を閉じるため。
+// Claude Code は Windows でも Git Bash（POSIX）経由で statusLine を実行するので
+// 同一構文で動作する。
 func claudeStatusLineCmd(p UsageHookParams) string {
-	return fmt.Sprintf("%s usage-relay --provider claude --hub %s --token %s --session %d",
-		toShellPath(p.ExePath), p.HubURL, p.Token, p.SessionID)
+	return fmt.Sprintf("%s=%s %s usage-relay --provider claude --hub %s --session %d",
+		hubTokenEnvName, p.Token, toShellPath(p.ExePath), p.HubURL, p.SessionID)
 }
+
+// hubTokenEnvName は relay 側 (internal/usagerelay/usagerelay.go) の hubTokenEnv と同値。
+// 循環 import を避けるためここに複製する。両者の値は乖離させないこと。
+const hubTokenEnvName = "MANY_AI_CLI_HUB_TOKEN"
 
 // WriteClaudeStatuslineSettings は statusLine だけを含む wrapper 所有の一時
 // settings JSON を書き出し、そのパスと後始末関数を返す。
@@ -133,14 +143,20 @@ func usageHookQuotePOSIX(s string) string {
 }
 
 // codexStopHookBlock は注入するブロックテキストを返す。
+//
+// token は CLI 引数ではなく POSIX 環境変数プレフィックスで渡す
+// （MANY_AI_CLI_HUB_TOKEN=<hex> <exe> usage-relay ...）。
+// /proc/<pid>/cmdline / ps aux から他ユーザーが token を読み取れる経路を閉じるため。
+// Codex は config.toml の command 値を POSIX シェルで解釈するため同一構文で動作する。
+//
 // 注意: Codex の config.toml フォーマットは要実機確認。
 // 現在は OpenAI Codex CLI の [[hooks.Stop]] TOML テーブル配列形式を想定。
 func codexStopHookBlock(p UsageHookParams) string {
 	// exe パスのみクォートする。HubURL（ポート番号のみ）と Token（hex）は型上
 	// シェルメタ文字を持てないためクォート不要だが、exe パスはユーザーの配置場所
 	// 次第でスペースを含み得るので語分割を防ぐ。
-	cmd := fmt.Sprintf("%s usage-relay --provider codex --hub %s --token %s --session %d",
-		usageHookQuotePOSIX(toShellPath(p.ExePath)), p.HubURL, p.Token, p.SessionID)
+	cmd := fmt.Sprintf("%s=%s %s usage-relay --provider codex --hub %s --session %d",
+		hubTokenEnvName, p.Token, usageHookQuotePOSIX(toShellPath(p.ExePath)), p.HubURL, p.SessionID)
 	return strings.Join([]string{
 		usageHookBlockStart,
 		"[[hooks.Stop]]",

@@ -50,6 +50,7 @@ func (s *Server) startAICommitMessage(w http.ResponseWriter, sessionID int, lang
 	ses.commitMsgDeadline = time.Now().Add(commitMsgAwaitTimeout)
 	ses.commitMsgLang = language
 	ses.commitMsgBuf.Reset()
+	ses.commitMsgProgressed = false
 	s.sessionsMu.Unlock()
 
 	prompt := aiCommitPrompt(ja)
@@ -96,10 +97,18 @@ func (s *Server) handleCommitMsgChunk(id int, cleanText string) {
 		ses.commitMsgBuf.Reset()
 		ses.commitMsgBuf.WriteString(trimmed)
 	}
+	progressed := false
+	if !ses.commitMsgProgressed && strings.TrimSpace(cleanText) != "" {
+		ses.commitMsgProgressed = true
+		progressed = true
+	}
 	buf := ses.commitMsgBuf.String()
 	subject, body, ok := extractCommitMarker(buf)
 	if !ok {
 		s.sessionsMu.Unlock()
+		if progressed {
+			s.broadcast(proto.Message{Type: "commit_msg_progress", SessionID: id})
+		}
 		return
 	}
 	ses.commitMsgAwait = false

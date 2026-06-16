@@ -17,6 +17,26 @@ import (
 	"many-ai-cli/internal/proto"
 )
 
+// stripControlForLog は ASCII 制御文字（タブ・改行含む）を除去し最大 maxRunes
+// rune に切り詰める。usage_stat の model 文字列など、UI バッジ・ログに流す
+// 短い識別子のサニタイズに使う。
+func stripControlForLog(s string, maxRunes int) string {
+	if s == "" {
+		return ""
+	}
+	out := make([]rune, 0, len(s))
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			continue
+		}
+		out = append(out, r)
+		if maxRunes > 0 && len(out) >= maxRunes {
+			break
+		}
+	}
+	return string(out)
+}
+
 // usageStat はセッション単位のトークン / コスト累積値。
 // メモリのみ保持し、ディスクへは書き込まない。
 type usageStat struct {
@@ -179,7 +199,40 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "session_id required")
 		return
 	}
+	// session_id 実在チェック: 認証済みでも未知の session_id で usageStats を膨張させ
+	// られないようにする（OOM 抑止）。relay は wrapper が登録した直後に POST するため
+	// 通常は実在するが、登録直前の窓では 404 が出る（relay 側は exit 0 で吸収する設計）。
+	s.sessionsMu.Lock()
+	knownSession := s.sessions[req.SessionID] != nil
+	s.sessionsMu.Unlock()
+	if !knownSession {
+		writeJSONError(w, http.StatusNotFound, "not_found", "session not found")
+		return
+	}
+	// トークン数・コストの値域チェック（負値・極大値・NaN/Inf を弾く）。
+	const (
+		maxTokens  = 1_000_000_000 // 10^9 — 単一セッションでは桁外れ
+		maxCostUSD = 1_000_000.0   // $1M 上限（現実のセッションでは到達しない）
+	)
+	if req.TokensIn < 0 || req.TokensIn > maxTokens ||
+		req.TokensOut < 0 || req.TokensOut > maxTokens ||
+		req.TokensCache < 0 || req.TokensCache > maxTokens ||
+		req.TokensTotal < 0 || req.TokensTotal > maxTokens {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "token counts out of range")
+		return
+	}
+	if req.CtxWindow < 0 || req.CtxWindow > maxTokens {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "ctx_window out of range")
+		return
+	}
+	// NaN / Inf / 負 / 過大コストを弾く（IEEE754 安全比較）。
+	if req.CostUSD < 0 || req.CostUSD > maxCostUSD || req.CostUSD != req.CostUSD /* NaN */ {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "cost_usd out of range")
+		return
+	}
 	usageModel := strings.TrimSpace(req.Model)
+	// model 文字列の上限と制御文字除去（UI バッジに流すため）。
+	usageModel = stripControlForLog(usageModel, 128)
 	if usageModel == "" {
 		usageModel = s.sessionUsageModel(req.SessionID)
 	}

@@ -382,6 +382,11 @@
 .mc-status-warn { color: var(--warn-text); border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn-bg) 35%, transparent); }
 .mc-status-ng { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); background: var(--danger-bg); }
 
+/* serve_inactive 状態のウィザード内有効化ボタン */
+.mc-ts-enable { display: flex; justify-content: center; margin: 8px 0 10px; }
+.mc-ts-enable-btn { padding: 8px 18px; font-size: 0.85rem; }
+.mc-ts-enable-btn:disabled { opacity: 0.6; cursor: progress; }
+
 /* env_kind 連動メッセージ（remote/remote-tunnel 時のリモート注記） */
 .mc-ts-remote-note {
   font-size: 0.72rem;

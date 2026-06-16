@@ -10,6 +10,62 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-06-16
+
+### Added
+- **Built-in API proxy + Payload chat view (β).** The Hub now embeds a
+  transparent HTTP proxy for `https://api.anthropic.com/v1/messages`,
+  `https://api.openai.com/v1/chat/completions`, and
+  `https://api.openai.com/v1/responses`. Wrapped CLIs (Claude Code / Codex CLI)
+  are pointed at the local proxy via `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL`
+  env injection, so every request/response is captured per session without TLS
+  MITM or CA distribution. A new "Payload 表示 (β)" toggle on the chat pane
+  shows a clean, structured turn list sourced from the proxy (independent of
+  PTY scraping), and each turn has a `[Raw]` toggle that opens the raw JSON.
+  `Authorization` headers are stripped before the payload reaches the in-memory
+  sink — credentials are never persisted.
+- **Tailscale wizard: inline "Enable external exposure" button.** The mobile
+  connect wizard step ④ now ships a one-click button that flips the Tailscale
+  serve toggle from inside the wizard instead of bouncing the user back to the
+  toolbar.
+- README (English / Japanese) now flags the smartphone section as a
+  beta / draft preview shipped in v0.3.x.
+
+### Fixed
+- **Approval popup garbage.** ANSI escape leftovers in the action-bar question
+  panel (`approval-popup-stripansi-garbage`), the missing option 1 in
+  wrapped-fallback layouts (`approval-fallback-wrapped-opt1-missing`), the free
+  input misalignment in inline-right layouts (`approval-free-input-inline-right`),
+  the Q-tab shrinkage when a batch preamble was long
+  (`batch-preamble-shrinks-qtabs`), and the preamble's table/rule garbage are
+  all addressed by moving the preamble inside the marker and stripping any
+  rules/tables that slip through.
+- **Token statusbar / cost popover.** The cost popover no longer ends up
+  visually behind the statusbar (`token-statusbar-cost-popover-under-statusbar`).
+- **Live status palette popover.** No longer clipped at the terminal edge
+  (`live-status-palette-popover-clipped`).
+- **Spawn cwd.** Typed paths are now existence-checked before the session is
+  created (`spawn-cwd-existence-unchecked-for-typed-path`).
+- **Session card order.** Eliminated the random-snapshot reorder that swapped
+  card positions on refresh (`session-card-order-random-snapshot`).
+- **Card branch badge.** Restored right padding on the branch badge
+  (`card-branch-badge-right-padding-gap`).
+- **AI commit message marker.** Stripped the stray bullet prefix that leaked
+  into the generated commit message (`commit-ai-marker-bullet-prefix`).
+- **Project group grid button style.** Aligned with the rest of the grid
+  (`project-group-grid-btn-style`).
+- **Quick-command settings.** Restored vertical breathing room
+  (`quick-cmd-settings-vertical-compress`).
+- **Settings confirm.** Confirmation now uses the toast pattern instead of
+  closing the panel (`settings-confirm-closes-panel-toast-unify`).
+- **Workflow modal.** Spinner now settles correctly
+  (`workflow-modal-spinner-not-settling`); progress bar percentage is readable
+  again (`workflow-progress-bar-pct-unreadable`).
+- **Mobile statusbar overflow.** Long status text no longer pushes the
+  statusbar off the viewport (`mobile-statusbar-overflow`).
+- **Mobile WebSocket auth.** The mobile flow now falls back to the cookie when
+  the URL token is unavailable (`mobile-ws-token-cookie-fallback`).
+
 ## [0.3.1] - 2026-06-14
 
 ### Fixed

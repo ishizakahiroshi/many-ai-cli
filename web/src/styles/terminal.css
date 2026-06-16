@@ -425,6 +425,11 @@ body.pc-input-tools-off #input-tools { display: none; }
 }
 #tools-flip-btn:hover { opacity: 1; color: var(--text); }
 
+/* スマホでは入力欄ツールバーの左右切替ボタンは用途がないため非表示 */
+@media (max-width: 720px), (pointer: coarse) {
+  #tools-flip-btn { display: none; }
+}
+
 /* ペーストチップ */
 #paste-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 #paste-chips:empty { display: none; }

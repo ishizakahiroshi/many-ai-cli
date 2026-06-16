@@ -264,7 +264,7 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
   try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
 
   if (path.endsWith('.enabled') || path === 'voice.wake_word_enabled' || path === 'voice.input_disabled' || path === 'approval.auto_switch'
-      || path === 'quick_cmds.show1' || path === 'quick_cmds.show2') {
+      || /^quick_cmds\.show[1-5]$/.test(path)) {
     return { ok: true, value: raw === '1' || raw === 'true' || parsed === true };
   }
   if (path === 'voice.grace_seconds') {

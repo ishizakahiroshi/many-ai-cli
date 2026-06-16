@@ -573,8 +573,14 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     setTimeout(poll, POLL_MS);
   }
 
+  // localStorage に非配列 JSON（null/数値/object）が紛れ込んでも .filter / .unshift が
+  // TypeError で落ちないよう Array.isArray ガードで [] にフォールバックする
+  // （user-prefs サーバー同期で非配列がプッシュされた場合の防御）。
   function loadCwdHistory() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_CWD_HISTORY_KEY) || '[]'); } catch (_) { return []; }
+    try {
+      const v = JSON.parse(localStorage.getItem(STORAGE_CWD_HISTORY_KEY) || '[]');
+      return Array.isArray(v) ? v : [];
+    } catch (_) { return []; }
   }
 
   function saveCwdHistory(cwd) {
@@ -591,7 +597,10 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   }
 
   function loadCwdFavorites() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_CWD_FAVORITES_KEY) || '[]'); } catch (_) { return []; }
+    try {
+      const v = JSON.parse(localStorage.getItem(STORAGE_CWD_FAVORITES_KEY) || '[]');
+      return Array.isArray(v) ? v : [];
+    } catch (_) { return []; }
   }
 
   function isCwdFavorite(cwd) {
@@ -679,13 +688,16 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: parent }),
       });
-      if (!res.ok) { subdirsCache.set(parent, []); return []; }
+      // 失敗時は空配列をキャッシュに書かない（次回呼び出しでリトライできるよう）。
+      // 一時的な 5xx / 403 / 認証 rotate 直後の 401 で permanent に空表示になる回帰を防ぐ。
+      if (!res.ok) { return []; }
       const data = await res.json();
       const items = Array.isArray(data.subdirs) ? data.subdirs : [];
+      // 成功（hit=true）のときだけキャッシュへ書く。空ディレクトリも valid な結果。
       subdirsCache.set(parent, items);
       return items;
     } catch (_) {
-      subdirsCache.set(parent, []);
+      // ネットワーク例外もキャッシュしない（同上の理由）。
       return [];
     }
   }

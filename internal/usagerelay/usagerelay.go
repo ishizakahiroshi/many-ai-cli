@@ -25,12 +25,18 @@ import (
 	"time"
 )
 
+// hubTokenEnv は relay が Hub auth token を読み出す環境変数名。
+// CLI 引数 --token は /proc/<pid>/cmdline / ps aux 経由で他ユーザーから読み取れる
+// ため deprecated。AI CLI から spawn される relay は親プロセスの環境変数を継承する
+// ので、env 経由なら argv に token が現れない。
+const hubTokenEnv = "MANY_AI_CLI_HUB_TOKEN"
+
 // Run は "many-ai-cli usage-relay" サブコマンドのエントリポイント。
 func Run(args []string) error {
 	fs := flag.NewFlagSet("usage-relay", flag.ContinueOnError)
 	provider := fs.String("provider", "", "provider: claude or codex")
 	hub := fs.String("hub", "", "Hub base URL (e.g. http://127.0.0.1:47777)")
-	token := fs.String("token", "", "Hub auth token")
+	tokenArg := fs.String("token", "", "Hub auth token (deprecated: use "+hubTokenEnv+" env instead)")
 	sessionID := fs.Int("session", 0, "session ID")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -38,11 +44,21 @@ func Run(args []string) error {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
+	// token は env を最優先で読む。空ならフォールバックで --token CLI 引数を使う
+	// （旧 config 互換）。env 経由なら argv に出現しないため procfs / ps から漏れない。
+	token := os.Getenv(hubTokenEnv)
+	if token == "" {
+		token = *tokenArg
+		if token != "" {
+			logger.Warn("usage-relay: --token CLI arg is deprecated and exposes the token via process argv; use " + hubTokenEnv + " env instead")
+		}
+	}
+
 	switch *provider {
 	case "claude":
-		return runClaude(*hub, *token, *sessionID, os.Stdin, os.Stdout, logger)
+		return runClaude(*hub, token, *sessionID, os.Stdin, os.Stdout, logger)
 	case "codex":
-		return runCodex(*hub, *token, *sessionID, os.Stdin, logger)
+		return runCodex(*hub, token, *sessionID, os.Stdin, logger)
 	default:
 		return fmt.Errorf("usage-relay: --provider must be claude or codex (got %q)", *provider)
 	}
@@ -258,10 +274,19 @@ type tokenCountEvent struct {
 }
 
 // resolve は複数フォーマットを試して (tokIn, tokOut, tokCache, tokTotal, ctxWindow) を返す。
+//
+// 各フォーマット内で TotalTokenUsage が空（累計未集計の初回ラウンド等）の場合は
+// LastTokenUsage にフォールバックする。これがないと最初のターンの使用量が常にゼロ
+// 表示になり、ステータスバーが沈黙する。
 func (e *tokenCountEvent) resolve() (in, out, cache, total, ctxWindow int) {
 	// 現行 Codex rollout の event_msg.payload ネストを最優先する。
 	if e.Payload.Type == "token_count" {
 		in, out, cache, total = e.Payload.Info.TotalTokenUsage.resolve()
+		if in > 0 || out > 0 || total > 0 {
+			return in, out, cache, total, firstNonZero(e.Payload.Info.ModelContextWindow, e.Payload.ModelContextWindow)
+		}
+		// TotalTokenUsage が空なら LastTokenUsage を試す。
+		in, out, cache, total = e.Payload.Info.LastTokenUsage.resolve()
 		if in > 0 || out > 0 || total > 0 {
 			return in, out, cache, total, firstNonZero(e.Payload.Info.ModelContextWindow, e.Payload.ModelContextWindow)
 		}
@@ -273,6 +298,10 @@ func (e *tokenCountEvent) resolve() (in, out, cache, total, ctxWindow int) {
 	}
 	// フォーマット B
 	in, out, cache, total = e.Info.TotalTokenUsage.resolve()
+	if in > 0 || out > 0 || total > 0 {
+		return in, out, cache, total, e.Info.ModelContextWindow
+	}
+	in, out, cache, total = e.Info.LastTokenUsage.resolve()
 	if in > 0 || out > 0 || total > 0 {
 		return in, out, cache, total, e.Info.ModelContextWindow
 	}
@@ -406,12 +435,19 @@ func postUsage(hubURL, token string, payload hubUsagePayload, logger *slog.Logge
 		return fmt.Errorf("marshal payload: %w", err)
 	}
 
-	url := hubURL + "/api/session-usage?token=" + token
+	// token は URL クエリではなく Authorization ヘッダで送る
+	// （HTTP アクセスログ・上流プロキシのログに ?token=<hex> が残らないようにするため）。
+	// Hub 側 requestToken() は Authorization Bearer / Cookie / URL クエリの 3 経路を
+	// サポートしているので互換性に問題はない（06-15 監査で確認済）。
+	url := hubURL + "/api/session-usage"
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)

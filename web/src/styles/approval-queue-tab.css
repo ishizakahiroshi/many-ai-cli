@@ -150,6 +150,17 @@
   color: var(--text);
   margin-top: 4px;
 }
+.aqt-question--preamble {
+  max-height: 9em;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--text-soft);
+}
 .aqt-question--detecting,
 .aqt-question--multiq {
   color: var(--muted);
@@ -257,11 +268,18 @@
 /* ── モバイル最適化 (720px 以下) ── */
 @media (max-width: 720px) {
   #approval-pane {
-    padding: 8px;
-    gap: var(--space-2);
+    padding: 4px 8px;
+    gap: var(--space-1);
   }
   .aqt-card {
-    padding: 10px 12px;
+    padding: 6px 12px;
+    gap: var(--space-2);
+  }
+  .aqt-question {
+    font-size: 0.86rem;
+  }
+  .aqt-question--preamble {
+    max-height: 7.5em;
   }
   .aqt-option-btn {
     width: 100%;

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"many-ai-cli/internal/sessionlog"
 )
 
 const gitPullTimeout = 30 * time.Second
@@ -42,7 +44,7 @@ func (s *Server) handleGitPull(w http.ResponseWriter, r *http.Request) {
 	out, runErr := runGitCombined(ctx, cwd, "pull", "--ff-only")
 	if runErr != nil {
 		code, status := classifyGitPullError(string(out))
-		s.logger.Warn("git pull failed", "session_id", sid, "err", runErr, "output", string(out))
+		s.logger.Warn("git pull failed", "session_id", sid, "err", runErr, "output", sessionlog.MaskSecrets(string(out)))
 		writeGitError(w, status, code, sanitizeGitErrMsg(runErr))
 		return
 	}

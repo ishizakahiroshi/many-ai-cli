@@ -697,18 +697,19 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model st
 		return nil, proto.Message{}, err
 	}
 	if err := websocket.JSON.Send(conn, proto.Message{
-		Type:     "register",
-		Role:     "wrapper",
-		Provider: provider,
-		Display:  display,
-		CWD:      cwd,
-		Label:    label,
-		Model:    model,
-		PID:      os.Getpid(),
-		Shell:    DetectShell(),
-		Token:    cfg.Token,
-		Cols:     termCols,
-		Rows:     termRows,
+		Type:       "register",
+		Role:       "wrapper",
+		Provider:   provider,
+		Display:    display,
+		CWD:        cwd,
+		Label:      label,
+		Model:      model,
+		PID:        os.Getpid(),
+		Shell:      DetectShell(),
+		Token:      cfg.Token,
+		Cols:       termCols,
+		Rows:       termRows,
+		ProxyToken: os.Getenv("MANY_AI_CLI_PROXY_TOKEN"),
 	}); err != nil {
 		_ = conn.Close()
 		return nil, proto.Message{}, err

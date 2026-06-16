@@ -77,8 +77,16 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 // handleNetHint は launcher（SSH tunnel モード）から接続元情報を受け取り保持する。
 // tunnel モードでは既起動の Hub に MANY_AI_CLI_HOST_LABEL を注入できないため、
 // トンネル確立後に launcher が POST し、/api/info のバッジ表示情報を補正する。
+//
+// セキュリティ: launcher は常に同一ホスト（直 loopback）から POST する設計のため、
+// 論理リモート（tailscale serve 等）からの POST は受け付けない（環境バッジ spoofing
+// 防止）。host_label は制御文字を除去し長さを制限、env_kind は許可値のみ採用する。
 func (s *Server) handleNetHint(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
+		return
+	}
+	if s.isLogicallyRemote(r) {
+		writeJSONError(w, http.StatusForbidden, "forbidden", "net-hint is only accepted from local loopback callers")
 		return
 	}
 	var body struct {
@@ -89,12 +97,36 @@ func (s *Server) handleNetHint(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
+	// HostLabel: 制御文字を除去し最大長 128 rune に切る（UI バッジへ流すため）。
+	cleanLabel := sanitizeHostLabel(body.HostLabel)
+	// EnvKind: 既知値のみ採用。未知値は空文字に正規化（resolveEnvMeta 側でデフォルト動作）。
+	cleanKind := normalizeEnvKind(body.EnvKind)
 	s.netHintMu.Lock()
 	s.netHintSSH = body.SSH
-	s.netHintHost = body.HostLabel
-	s.netHintEnvKind = body.EnvKind
+	s.netHintHost = cleanLabel
+	s.netHintEnvKind = cleanKind
 	s.netHintMu.Unlock()
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+// sanitizeHostLabel は host_label を UI 表示に安全な形に丸める
+// （制御文字・改行除去、長さ 128 rune 上限）。
+func sanitizeHostLabel(s string) string {
+	if s == "" {
+		return ""
+	}
+	const maxRunes = 128
+	out := make([]rune, 0, len(s))
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			continue
+		}
+		out = append(out, r)
+		if len(out) >= maxRunes {
+			break
+		}
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
@@ -270,8 +302,12 @@ func (s *Server) handlePathExists(w http.ResponseWriter, r *http.Request) {
 // handleListSubdirs は cwd 入力欄の補完用に、指定パス直下のサブディレクトリ名一覧を返す。
 // POST {"path": "C:\\dev\\github\\public\\"} → {"ok": true, "path": "...", "subdirs": ["a", "b", ...]}
 //
-// バインドは 127.0.0.1 固定 + トークン認証で保護。隠しフォルダ（先頭ドット）は除外、
-// 上限 500 件で打ち切る（巨大ディレクトリでのフロント側カクつき防止）。
+// 直 loopback（直接ブラウザでローカル Hub に接続）は任意パスを許可する（cwd 入力 UX）。
+// 論理リモート（tailscale serve / SSH tunnel 経由）は、ファイルシステム enumeration の
+// 攻撃面を狭めるため、許可ルート（Hub cwd / 既存セッション cwd / project_favorites /
+// cwd_history / cwd_favorites / HOME）の祖先または子孫のパスに限定する。
+// 隠しフォルダ（先頭ドット）は除外、上限 500 件で打ち切る。シンボリックリンクは
+// follow しない（リモートでの symlink-hop による enumeration 拡張を防ぐ）。
 func (s *Server) handleListSubdirs(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
 		return
@@ -292,6 +328,10 @@ func (s *Server) handleListSubdirs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clean := filepath.Clean(p)
+	if s.isLogicallyRemote(r) && !s.listSubdirsAllowedRemote(clean) {
+		writeJSONError(w, http.StatusForbidden, "forbidden", "path is outside allowed roots for remote callers")
+		return
+	}
 	info, err := os.Stat(clean)
 	if err != nil || !info.IsDir() {
 		writeJSON(w, map[string]any{"ok": false, "path": clean, "subdirs": []string{}})
@@ -310,13 +350,10 @@ func (s *Server) handleListSubdirs(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if !e.IsDir() {
-			// シンボリックリンク経由のディレクトリも拾う
-			if e.Type()&os.ModeSymlink == 0 {
-				continue
-			}
-			if fi, err := os.Stat(filepath.Join(clean, name)); err != nil || !fi.IsDir() {
-				continue
-			}
+			// シンボリックリンクは follow しない（リモートからの symlink-hop による
+			// allowed roots 外への enumeration 経路を断つ）。直 loopback の cwd 入力
+			// 補完では subdir 補完が落ちるが、UX 劣化は許容範囲。
+			continue
 		}
 		subdirs = append(subdirs, name)
 		if len(subdirs) >= maxSubdirs {
@@ -324,6 +361,95 @@ func (s *Server) handleListSubdirs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, map[string]any{"ok": true, "path": clean, "subdirs": subdirs})
+}
+
+// listSubdirsAllowedRemote はリモート caller の指定パスが許可ルートの祖先 or 子孫かを返す。
+// 許可ルート集合: Hub cwd / 既存セッション cwd / UserPrefs.{CwdHistory,CwdFavorites,ProjectFavorites} / HOME。
+// 子孫許可は cwd 入力時の subdir 補完、祖先許可は「上のディレクトリへ移動」UX のため。
+func (s *Server) listSubdirsAllowedRemote(p string) bool {
+	if p == "" {
+		return false
+	}
+	roots := make(map[string]struct{}, 16)
+	addRoot := func(v string) {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return
+		}
+		if !filepath.IsAbs(v) {
+			return
+		}
+		roots[filepath.Clean(v)] = struct{}{}
+	}
+	addRoot(s.hubCWD)
+	if home, err := os.UserHomeDir(); err == nil {
+		addRoot(home)
+	}
+	s.sessionsMu.Lock()
+	for _, ses := range s.sessions {
+		if ses != nil {
+			addRoot(ses.CWD)
+		}
+	}
+	s.sessionsMu.Unlock()
+	cfg := s.snapshotCfg()
+	for _, v := range cfg.UserPrefs.ProjectFavorites {
+		addRoot(v)
+	}
+	for _, v := range cfg.UserPrefs.CwdHistory {
+		addRoot(v)
+	}
+	for _, v := range cfg.UserPrefs.CwdFavorites {
+		addRoot(v)
+	}
+	for root := range roots {
+		if pathsEqualForListSubdirs(p, root) {
+			return true
+		}
+		if isAncestorOrEqual(root, p) {
+			// p は root の子孫
+			return true
+		}
+		if isAncestorOrEqual(p, root) {
+			// p は root の祖先（「上に行く」UX）
+			return true
+		}
+	}
+	return false
+}
+
+// pathsEqualForListSubdirs は Windows のみ大小文字を無視して比較する。
+func pathsEqualForListSubdirs(a, b string) bool {
+	a = filepath.Clean(a)
+	b = filepath.Clean(b)
+	if a == b {
+		return true
+	}
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return false
+}
+
+// isAncestorOrEqual は child が parent と等しい、または parent 配下にあるかを返す。
+func isAncestorOrEqual(parent, child string) bool {
+	parent = filepath.Clean(parent)
+	child = filepath.Clean(child)
+	if pathsEqualForListSubdirs(parent, child) {
+		return true
+	}
+	rel, err := filepath.Rel(parent, child)
+	if err != nil {
+		return false
+	}
+	rel = filepath.ToSlash(rel)
+	if rel == "." {
+		return true
+	}
+	if strings.HasPrefix(rel, "../") || rel == ".." {
+		return false
+	}
+	return true
 }
 
 func pathExistsCandidateKey(path string) string {
