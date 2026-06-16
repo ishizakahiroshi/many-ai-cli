@@ -305,15 +305,6 @@ func (s *Server) guardBase(w http.ResponseWriter, r *http.Request, methods ...st
 	return true
 }
 
-// hasValidToken は、リクエストが有効なトークンを実際に提示しているか
-// （loopback/trusted バイパスではなくトークン認証で通過しているか）を返す。
-func (s *Server) hasValidToken(r *http.Request) bool {
-	s.cfgMu.Lock()
-	want := s.cfg.Token
-	s.cfgMu.Unlock()
-	return validToken(requestToken(r), want)
-}
-
 // methodAllowsStateChange は CSRF（Origin/Sec-Fetch-Site）追加チェックを
 // 課すべき状態変更系メソッドか判定する。GET/HEAD/OPTIONS は安全側のため false。
 func methodAllowsStateChange(method string) bool {

@@ -631,22 +631,24 @@ func spawnCwdTooBroad(cwd string) bool {
 			return true
 		}
 	}
-	// 主要 Unix システムディレクトリ（自身のみ）
+	// 主要 Unix システムディレクトリ＋全ユーザー親（自身のみ）。
+	// /home / /Users は os.UserHomeDir() ベースの判定では捕まらないケース
+	// （CI macOS では HOME=/Users/... なので /home が漏れる）があるため、
+	// プラットフォームに依らず明示的に列挙する。
 	unixBroad := map[string]bool{
 		"/etc": true, "/usr": true, "/var": true,
 		"/bin": true, "/sbin": true, "/lib": true, "/root": true,
+		"/home": true, "/Users": true,
 	}
 	if unixBroad[cwd] {
 		return true
 	}
 	// Windows 主要システムディレクトリ
 	winBroad := map[string]bool{
-		`C:\Windows`:      true,
-		`C:\Program Files`: true,
+		`C:\Windows`:             true,
+		`C:\Program Files`:       true,
 		`C:\Program Files (x86)`: true,
+		`C:\Users`:               true,
 	}
-	if winBroad[cwd] {
-		return true
-	}
-	return false
+	return winBroad[cwd]
 }
