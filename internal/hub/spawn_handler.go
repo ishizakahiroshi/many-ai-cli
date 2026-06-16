@@ -33,7 +33,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	if body.Provider != "claude" && body.Provider != "codex" && body.Provider != "copilot" && body.Provider != "cursor-agent" && body.Provider != "shell" {
+	if body.Provider != "claude" && body.Provider != "codex" && body.Provider != "copilot" && body.Provider != "cursor-agent" && body.Provider != "opencode" && body.Provider != "shell" {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
 		return
 	}
@@ -237,6 +237,10 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		if resolvedModel != "" {
 			wrapArgs = append(wrapArgs, "--model", resolvedModel)
 		}
+	case "opencode":
+		if resolvedModel != "" {
+			wrapArgs = append(wrapArgs, "--model", resolvedModel)
+		}
 	}
 	// route が未指定の場合は model 名から推定する。Anthropic / OpenAI の
 	// 既定 route は env 注入を行わない（ユーザー shell の値を継承）。
@@ -433,7 +437,7 @@ func (s *Server) handleSpawnGrid(w http.ResponseWriter, r *http.Request) {
 		aiProvider = "claude"
 	}
 	validAIProviders := map[string]bool{
-		"claude": true, "codex": true, "copilot": true, "cursor-agent": true,
+		"claude": true, "codex": true, "copilot": true, "cursor-agent": true, "opencode": true,
 	}
 	if body.Preset == "ai+shell" && !validAIProviders[aiProvider] {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid ai provider for ai+shell preset")

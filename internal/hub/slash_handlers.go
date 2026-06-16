@@ -34,6 +34,7 @@ func (s *Server) handleSlashCmdSources(w http.ResponseWriter, r *http.Request) {
 		body.Codex = strings.TrimSpace(body.Codex)
 		body.Copilot = strings.TrimSpace(body.Copilot)
 		body.CursorAgent = strings.TrimSpace(body.CursorAgent)
+		body.Opencode = strings.TrimSpace(body.Opencode)
 		if err := validateSlashCmdSource(body.Claude); err != nil {
 			writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("invalid claude source", err))
 			return
@@ -48,6 +49,10 @@ func (s *Server) handleSlashCmdSources(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := validateSlashCmdSource(body.CursorAgent); err != nil {
 			writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("invalid cursor-agent source", err))
+			return
+		}
+		if err := validateSlashCmdSource(body.Opencode); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("invalid opencode source", err))
 			return
 		}
 		s.cfgMu.Lock()
@@ -66,6 +71,9 @@ func (s *Server) handleSlashCmdSources(w http.ResponseWriter, r *http.Request) {
 		if body.CursorAgent != prev.CursorAgent {
 			s.invalidateSlashCache("cursor-agent")
 		}
+		if body.Opencode != prev.Opencode {
+			s.invalidateSlashCache("opencode")
+		}
 		if err := s.persistConfig(); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "save_failed", "save failed")
 			return
@@ -83,7 +91,7 @@ func (s *Server) handleSlashCommands(w http.ResponseWriter, r *http.Request) {
 	}
 
 	provider := r.URL.Query().Get("provider")
-	if provider != "claude" && provider != "codex" && provider != "copilot" && provider != "cursor-agent" {
+	if provider != "claude" && provider != "codex" && provider != "copilot" && provider != "cursor-agent" && provider != "opencode" {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
 		return
 	}
@@ -111,6 +119,8 @@ func (s *Server) handleSlashCommands(w http.ResponseWriter, r *http.Request) {
 		sourceURL = src.Copilot
 	case "cursor-agent":
 		sourceURL = src.CursorAgent
+	case "opencode":
+		sourceURL = src.Opencode
 	}
 	s.cfgMu.Unlock()
 

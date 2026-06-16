@@ -96,6 +96,8 @@ func detectNativeApproval(provider string, lines []string) *nativeApproval {
 		kind = "native_copilot_shortcut"
 	} else if provider == "cursor-agent" && approvalOptionsHaveSendText(opts) {
 		kind = "native_cursor_agent_shortcut"
+	} else if provider == "opencode" && approvalOptionsHaveSendText(opts) {
+		kind = "native_opencode_shortcut"
 	}
 	approval := &nativeApproval{
 		Kind:     kind,
@@ -119,7 +121,30 @@ func compactRecentLines(lines []string, limit int) []string {
 	return out
 }
 
+// extractOpenCodeApprovalOptions は OpenCode の水平 3 ボタン UI
+// (Allow once / Allow always / Reject) を検出し合成オプションを返す。
+// "allow once" の文言が PTY バッファに現れた時点でオプションを確定する
+// (初期フォーカスは常に "Allow once"。矢印 + Enter で移動・確定)。
+func extractOpenCodeApprovalOptions(lines []string) []proto.ApprovalOption {
+	for _, line := range lines {
+		if strings.Contains(strings.ToLower(line), "allow once") {
+			return []proto.ApprovalOption{
+				{Num: 1, Label: "Allow once", SendText: "\r", IsCurrent: true, PreserveOrder: true},
+				{Num: 2, Label: "Allow always", SendText: "\x1b[C\r", PreserveOrder: true},
+				{Num: 3, Label: "Reject", SendText: "\x1b[C\x1b[C\r", PreserveOrder: true},
+			}
+		}
+	}
+	return nil
+}
+
 func extractNativeApprovalOptions(provider string, lines []string) ([]proto.ApprovalOption, int, int) {
+	if provider == "opencode" {
+		if opts := extractOpenCodeApprovalOptions(lines); len(opts) >= 2 {
+			return opts, 0, len(lines) - 1
+		}
+		return nil, -1, -1
+	}
 	type parsedLine struct {
 		opt proto.ApprovalOption
 		idx int
