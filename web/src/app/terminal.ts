@@ -635,6 +635,19 @@ export function fitTerminalPreservingBottom(t, id, forceVisualFit = false) {
   }
 }
 
+// action-bar（承認ポップアップ）の手動リサイズに追従して、アクティブセッションの
+// xterm を現在の表示領域へ再フィットし、最下部へスクロールする。
+// 承認表示中は isPtyResizeSuppressed() が true で通常の fit はスキップされるため、
+// forceVisualFit=true で「見た目のフィット」だけ強制し、ポップアップを縮めた瞬間に
+// CLI 最新行が空いた領域へ降りてくるようにする（ユーザーが手動スクロールせずに済む）。
+export function followActionBarResize(): void {
+  if (activeSessionId === null) return;
+  const t = terminals.get(activeSessionId);
+  if (!canFitTerminal(t)) return;
+  t.autoScroll = true;
+  fitTerminalPreservingBottom(t, activeSessionId, true);
+}
+
 // xterm が alternate screen buffer（TUI モード, Codex 等）に居るかを判定。
 // alt buffer は scrollback を持たないため term.scrollLines は no-op となり、
 export function isAlternateBuffer(t) {
@@ -1467,6 +1480,54 @@ export function extractAndSetLiveStatus(id, blockBuf) {
   const text = reconstructLiveLine(id, blockBuf);
   // text が '' でも「ステータス更新フレームが来た」事実＝稼働中なので窓は出し続ける（くるくる継続）。
   setSessionLiveStatus(id, text);
+}
+
+// ── provider 別ライブステータス抽出（Codex/Copilot/Cursor 用） ─────────────────
+// Claude は filterCursorHideShowBlocksForDisplay がステータスバーブロックを本文から
+// 抜き取り、extractAndSetLiveStatus でピル内テキストを埋める。一方 Codex 等は別方式
+// （Synchronized Update + 絶対カーソル移動でメインバッファへインライン全画面描画）の
+// ため、このブロック抽出に乗らず liveStatusText が空になり「中のテキスト」が出ない。
+// そこで本文（xterm バッファ）末尾を走査して進捗行を拾い、同じピルへ流し表示を統一する。
+// スピナー回転自体は state=running 由来で別に回るため、ここでは中のテキストだけ補う。
+
+// Codex: 「• Working (12s • esc to interrupt)」等のステータス行を最優先で拾い、
+// 無ければ直近のアクション行（• Running/Ran/Reading …）を返す。どちらも無ければ
+// '' を返し、setSessionLiveStatus 側で前回値を維持する。
+function extractCodexLiveStatus(id) {
+  const lines = scanBuffer(id, 48); // 末尾 48 行（おおむね 1 画面ぶん）を後方優先で見る
+  let action = '';
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const raw = lines[i].replace(/\s+/g, ' ').trim();
+    if (!raw) continue;
+    const stripped = raw.replace(/^[•·]\s*/, '').trim();
+    if (/^Working\b/i.test(stripped)) return stripped;           // 稼働ステータス行（経過秒つき）
+    if (!action && /^(Running|Ran|Reading|Read|Editing|Edited|Searching|Thinking)\b/i.test(stripped)) {
+      action = stripped;                                          // 直近アクション行（最初の 1 件を控える）
+    }
+  }
+  return action;
+}
+
+// provider（小文字）→ 抽出関数。Claude は既存のブロック抽出経路を使うため載せない。
+// Copilot/Cursor は実機ログ採取後、同形式の抽出関数をここへ足すだけで載る拡張ポイント。
+const liveStatusExtractors: Record<string, (id: number) => string> = {
+  codex: extractCodexLiveStatus,
+};
+
+// provider 別抽出を 250ms に間引いて実行し、ピル内テキストへ流す。leading 抑制
+// （予約中は新規予約しない）で Codex の毎秒大量フレームでもバッファ走査を間引く。
+const liveStatusExtractTimers = new Map();
+export function scheduleLiveStatusExtract(id) {
+  if (!LIVE_STATUS_ENABLED) return;
+  if (liveStatusExtractTimers.has(id)) return;
+  const provider = String(sessions.get(id)?.provider || '').toLowerCase();
+  const extractor = liveStatusExtractors[provider];
+  if (!extractor) return; // Claude 等は既存経路に任せる
+  liveStatusExtractTimers.set(id, setTimeout(() => {
+    liveStatusExtractTimers.delete(id);
+    if (!terminals.get(id)) return;
+    setSessionLiveStatus(id, extractor(id));
+  }, 250));
 }
 
 export function setSessionLiveStatus(id, text) {

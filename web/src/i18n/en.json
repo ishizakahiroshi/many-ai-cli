@@ -176,6 +176,7 @@
   "tsb_conn_open": "Connected to Hub",
   "tsb_conn_connecting": "Reconnecting…",
   "tsb_conn_closed": "Disconnected",
+  "tsb_turn_elapsed_title": "Time the AI has been working since the latest send or approval response",
   "tsb_fleet_jump": "Jump to session awaiting approval",
   "tsb_cost_breakdown_title": "Today's cost breakdown",
   "tsb_cost_none": "No cost data",
