@@ -50,6 +50,10 @@ let _clickWired = false;
 // ここは「ID→数値上限」の純粋なデータマップなので許容範囲。前方一致で解決する。
 // ヒットしないモデルは null を返し、ctx 率セグメントを非表示にする（誤分母回避）。
 const CTX_LIMIT_TABLE: Array<{ prefix: string; limit: number }> = [
+  { prefix: 'claude-opus-4-8', limit: 1_000_000 },
+  { prefix: 'claude-opus-4.8', limit: 1_000_000 },
+  { prefix: 'claude opus 4.8', limit: 1_000_000 },
+  { prefix: 'opus 4.8',        limit: 1_000_000 },
   { prefix: 'claude-opus',   limit: 200_000 },
   { prefix: 'claude-sonnet', limit: 200_000 },
   { prefix: 'claude-haiku',  limit: 200_000 },
@@ -96,11 +100,34 @@ function resolveCtxLimit(model: string): number | null {
   const id = String(model || '').toLowerCase().trim();
   if (!id) return null;
   // 1M コンテキスト版（"[1m]" / "1m" / "1-million" 等のマーカー）は上限を底上げ。
-  const oneM = /\[1m\]|(^|[^0-9a-z])1m([^0-9a-z]|$)|1-?million/.test(id);
+  const oneM = /\[1m\]|(^|[^0-9a-z])1m([^0-9a-z]|$)|1-?million/.test(id)
+    || /(^|[^0-9a-z])(?:claude\s+)?opus\s*4[.-]8([^0-9a-z]|$)/.test(id)
+    || id.startsWith('claude-opus-4-8')
+    || id.startsWith('claude-opus-4.8');
   for (const { prefix, limit } of CTX_LIMIT_TABLE) {
     if (id.startsWith(prefix)) return oneM ? Math.max(limit, 1_000_000) : limit;
   }
   return null;
+}
+
+function resolveCtxLimitFromModels(models: string[]): number | null {
+  let best: number | null = null;
+  for (const model of models) {
+    const limit = resolveCtxLimit(model);
+    if (!limit) continue;
+    best = best === null ? limit : Math.max(best, limit);
+  }
+  return best;
+}
+
+function resolveEffectiveCtxLimit(entry: UsageCacheEntry | undefined, models: string[]): number | null {
+  const relayLimit = entry && entry.ctxWindow > 0 ? entry.ctxWindow : null;
+  const modelLimit = resolveCtxLimitFromModels(models);
+  if (relayLimit === null) return modelLimit;
+  if (modelLimit === null) return relayLimit;
+  // Claude Code の Opus 4.8 1M では statusLine 側の context_window_size が
+  // 200k を返すことがあるため、モデル名から分かる上限を下限として使う。
+  return Math.max(relayLimit, modelLimit);
 }
 
 // ── DOM 要素参照 ──────────────────────────────────────────────────────────────
@@ -262,7 +289,8 @@ export function renderStatusbar(): void {
   wireClicks(bar);
 
   const isTokenProvider = provider === 'claude' || provider === 'codex';
-  const modelName = entry?.usageModel || sesData?.model || '';
+  const sessionModelName = sesData?.model || '';
+  const modelName = entry?.usageModel || sessionModelName || '';
 
   // ---- #N セッション番号 ----
   const idEl = setSeg(bar, 'tsb-seg-id', true);
@@ -313,9 +341,9 @@ export function renderStatusbar(): void {
   }
 
   // ---- ctx 使用率（塗りゲージ + %）----
-  // 上限は relay 経由の実値（Claude statusline の context_window_size）を最優先し、
-  // 取得できないプロバイダのみモデル名テーブルにフォールバックする。
-  const ctxLimit = (entry && entry.ctxWindow > 0) ? entry.ctxWindow : resolveCtxLimit(modelName);
+  // 上限は relay 経由の実値とモデル名テーブルの大きい方を使う。
+  // Opus 4.8 1M のように statusLine が 200k を返すケースで誤って満杯表示にしない。
+  const ctxLimit = resolveEffectiveCtxLimit(entry, [entry?.usageModel || '', sessionModelName]);
   const showCtx = !!(isTokenProvider && entry && ctxLimit && ctxLimit > 0);
   const ctxEl = setSeg(bar, 'tsb-seg-ctx', showCtx);
   if (ctxEl && entry && ctxLimit) {
