@@ -33,7 +33,9 @@ interface UsageCacheEntry {
 
 const usageCache = new Map<number, UsageCacheEntry>();
 
-// セッションごとの「このターン」開始時刻（state==running になった時点）。
+// セッションごとの「このターン」開始時刻フォールバック。
+// 基本は chatHistory の直近 user/approval 時刻を使う。履歴がまだ無いセッションでは
+// state==running になった時点を暫定起点として使う。
 const turnStartAt = new Map<number, number>();
 
 // 毎秒の経過時間更新用 timer。
@@ -125,6 +127,36 @@ function formatDurSec(elapsedSec: number): string {
   if (h > 0) return `${h}h ${m}m ${s}s`;
   if (m > 0) return `${m}m ${s}s`;
   return `${s}s`;
+}
+
+function parseEpochMs(ts: unknown): number {
+  if (typeof ts === 'number' && Number.isFinite(ts)) return ts;
+  if (ts instanceof Date) {
+    const n = ts.getTime();
+    return Number.isFinite(n) ? n : 0;
+  }
+  if (typeof ts === 'string' && ts.trim() !== '') {
+    const n = Date.parse(ts);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
+function latestInteractionAt(sessionId: number): number | null {
+  const arr = chatHistory.get(sessionId) || [];
+  for (let i = arr.length - 1; i >= 0; i--) {
+    const msg = arr[i];
+    if (!msg) continue;
+    const role = String(msg.role || '');
+    const kind = String(msg.kind || '');
+    if (role !== 'user' && kind !== 'approval') continue;
+    const text = String(msg.normalizedText || msg.rawText || '').trim();
+    const hasAttachment = Array.isArray(msg.attachments) && msg.attachments.length > 0;
+    if (!text && !hasAttachment) continue;
+    const ts = parseEpochMs(msg.ts);
+    if (ts > 0) return ts;
+  }
+  return null;
 }
 
 function formatCost(costUSD: number, costKnown: boolean): string {
@@ -374,8 +406,7 @@ export function renderStatusbar(): void {
   }
   if (!showBurn) setSeg(bar, 'tsb-seg-burn', false);
 
-  // ---- elapsed（+ このターン経過）----
-  // ターン境界: state==running 中だけ ▷ を併記する。
+  // ---- elapsed（+ 直近の送信/承認から AI が動いている時間）----
   if (stateKey === 'running') {
     if (!turnStartAt.has(sid)) turnStartAt.set(sid, Date.now());
   } else {
@@ -384,10 +415,10 @@ export function renderStatusbar(): void {
   const elapsedEl = setSeg(bar, 'tsb-seg-elapsed', !!startedAt);
   if (elapsedEl) {
     let html = `⏱ ${escapeHtml(formatElapsed(startedAt))}`;
-    const ts = turnStartAt.get(sid);
+    const ts = latestInteractionAt(sid) || turnStartAt.get(sid);
     if (ts) {
       const turnSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-      html += ` <span class="tsb-turn">· ▷${escapeHtml(formatDurSec(turnSec))}</span>`;
+      html += ` <span class="tsb-turn" title="${escapeHtml(t('tsb_turn_elapsed_title'))}">· AI ${escapeHtml(formatDurSec(turnSec))}</span>`;
     }
     elapsedEl.innerHTML = html;
   }

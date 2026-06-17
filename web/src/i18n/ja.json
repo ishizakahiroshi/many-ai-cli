@@ -176,6 +176,7 @@
   "tsb_conn_open": "Hub 接続中",
   "tsb_conn_connecting": "再接続中…",
   "tsb_conn_closed": "切断",
+  "tsb_turn_elapsed_title": "直近の送信または承認回答から AI が動いている時間",
   "tsb_fleet_jump": "承認待ちセッションへジャンプ",
   "tsb_cost_breakdown_title": "本日のコスト内訳",
   "tsb_cost_none": "コスト情報なし",
