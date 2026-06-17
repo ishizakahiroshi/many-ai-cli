@@ -354,6 +354,15 @@ func writeWithTrailingEnter(ps processSession, data []byte, delay time.Duration)
 	return writePTYChunked(ps, data)
 }
 
+func trailingEnterDelay(provider string) time.Duration {
+	switch provider {
+	case "codex", "opencode":
+		return 180 * time.Millisecond
+	default:
+		return 20 * time.Millisecond
+	}
+}
+
 func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string) error {
 	fs := flag.NewFlagSet("wrap", flag.ContinueOnError)
 	label := fs.String("label", "", "session label shown in UI card")
@@ -603,11 +612,8 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 						} else if len(data) > 1 && data[len(data)-1] == '\r' {
 							// Windows ConPTY では text+\r を1チャンクで書き込むと
 							// \r が Enter ではなく改行として処理される場合がある。
-							// Codex は入力反映直後の Enter を取りこぼすことがあるため長めに待つ。
-							delay := 20 * time.Millisecond
-							if provider == "codex" {
-								delay = 180 * time.Millisecond
-							}
+							// Codex / OpenCode は入力反映直後の Enter を取りこぼすことがあるため長めに待つ。
+							delay := trailingEnterDelay(provider)
 							if err := writeWithTrailingEnter(ps, data, delay); err != nil {
 								logPTYWriteError(logger, wses.getSID(), "input_enter", err)
 							}
