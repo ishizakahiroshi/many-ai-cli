@@ -224,7 +224,7 @@ export function providerIconHtml(provider, size = 16) {
     return `<svg ${base}><rect class="prov-shape ollama" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter ollama" x="8" y="8" ${txt}>O</text></svg>`;
   }
   if (key === 'opencode') {
-    return `<svg ${base}><rect class="prov-shape opencode" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter opencode" x="8" y="8" ${txt}>O</text></svg>`;
+    return `<svg ${base}><circle class="prov-shape opencode" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter opencode" x="8" y="8" ${txt}>O</text></svg>`;
   }
   const letter = escapeHtml((String(provider || '?').trim()[0] || '?').toUpperCase());
   return `<svg ${base}><circle class="prov-shape" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter" x="8" y="8" ${txt}>${letter}</text></svg>`;

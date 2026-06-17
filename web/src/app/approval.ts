@@ -1732,6 +1732,10 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   } else {
     detail.className = 'action-qdetail empty';
     detail.textContent = t('approval_batch_detail_empty');
+    if (activeSec._freeInput) {
+      detail.classList.add('clickable');
+      detail.onclick = (e) => { e.stopPropagation(); selectBatchOption(sessionId, activeQ, BATCH_FREE); };
+    }
   }
   // ===== 詳細メッセージ＋送信バーを横並びに =====
   // 左に「送信確認 / クリア」、右にメッセージ詳細を置く。縦積みの送信バー行を無くし、

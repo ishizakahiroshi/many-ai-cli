@@ -20,26 +20,44 @@
 }
 #action-bar.visible { display: flex; border-left-color: var(--warn); background: rgba(245,158,11,0.04); }
 
-/* 上端ドラッグハンドル（マウスで縦に伸ばせる）。
-   実体は #action-bar 自身の上端 6px 帯で pointerdown を拾う JS と組で動く。
-   ::before は視覚的なグリップだけを描く（pointer-events:none でクリックを邪魔しない）。
-   ダブルクリック（上端帯）でユーザー指定高さを解除しデフォルトに戻す。 */
+/* 上端ドラッグハンドル（マウスで縦に伸縮）。
+   ::before = 当たり判定＋カーソル変更用の上端 8px 帯。pointer-events:auto にしないと
+             ns-resize カーソルが出ない（過去 none のままでカーソルが変わらなかった）。
+   ::after  = 中央の「掴めるよ」グリップ表示（ピル型マーキング）。視覚専用なので
+             pointer-events:none にして当たり判定は ::before 帯に任せる。
+   JS(action-bar-resize.ts) は e.target===bar で判定するが、擬似要素のイベントは
+   host(bar) が target になるため JS 変更は不要（HANDLE_ZONE_PX を 8 に合わせるのみ）。
+   上端帯のダブルクリックでユーザー指定高さを解除しデフォルトに戻す。 */
 #action-bar::before {
   content: "";
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 6px;
+  height: 8px;
   cursor: ns-resize;
-  background: linear-gradient(to bottom, rgba(255,255,255,0.08), transparent);
-  border-top: 1px solid var(--line-soft);
+  background: transparent;
+  pointer-events: auto;
+  z-index: 5;
+}
+#action-bar::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 44px;
+  height: 4px;
+  border-radius: 3px;
+  background: var(--line-soft);
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.12s;
+  transition: opacity 0.12s, background 0.12s, width 0.12s;
+  z-index: 6;
 }
-#action-bar.visible::before { opacity: 0.6; }
-#action-bar:hover::before { opacity: 1; }
+#action-bar.visible::after { opacity: 0.85; }
+#action-bar.visible:hover::after { background: var(--accent); width: 60px; opacity: 1; }
+#action-bar.resizing::after { background: var(--accent); width: 60px; opacity: 1; }
 #action-bar.resizing { user-select: none; }
 
 .action-bar-label {
@@ -305,6 +323,8 @@
   min-height: 42px;
 }
 .action-qdetail.empty { color: var(--muted-2); }
+.action-qdetail.empty.clickable { cursor: text; }
+.action-qdetail.empty.clickable:hover { border-color: var(--accent); color: var(--text); }
 .action-qdetail .detail-lab {
   display: block;
   color: var(--muted-2);

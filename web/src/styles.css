@@ -493,6 +493,12 @@ header {
     display: none;
   }
 
+  /* スマホからは無意味なので非表示（reference_mobile-ui-strategy.md P6-C1） */
+  #server-btn,
+  #mobile-connect-btn {
+    display: none;
+  }
+
   .dismiss-btn,
   .star-btn,
   .session-history-reset-btn,
