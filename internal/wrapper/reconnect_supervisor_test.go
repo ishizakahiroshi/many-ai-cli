@@ -10,8 +10,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"many-ai-cli/internal/config"
 	"golang.org/x/net/websocket"
+	"many-ai-cli/internal/config"
 )
 
 // mockProcessSession はテスト用の processSession 実装。
@@ -315,6 +315,26 @@ func TestWriteWithTrailingEnter_ChunksLongUTF8Input(t *testing.T) {
 	}
 	if got := string(bytes.Join(bodyWrites, nil)); got != body {
 		t.Fatalf("joined body = %q, want %q", got, body)
+	}
+}
+
+func TestTrailingEnterDelay(t *testing.T) {
+	tests := []struct {
+		provider string
+		want     time.Duration
+	}{
+		{provider: "codex", want: 180 * time.Millisecond},
+		{provider: "opencode", want: 180 * time.Millisecond},
+		{provider: "claude", want: 20 * time.Millisecond},
+		{provider: "copilot", want: 20 * time.Millisecond},
+		{provider: "cursor-agent", want: 20 * time.Millisecond},
+	}
+	for _, tt := range tests {
+		t.Run(tt.provider, func(t *testing.T) {
+			if got := trailingEnterDelay(tt.provider); got != tt.want {
+				t.Fatalf("trailingEnterDelay(%q) = %s, want %s", tt.provider, got, tt.want)
+			}
+		})
 	}
 }
 

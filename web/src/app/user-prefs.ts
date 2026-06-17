@@ -153,7 +153,7 @@ export const DEFAULT_USAGE_LINKS = {
   copilot:  'https://github.com/settings/billing',
   'cursor-agent': 'https://cursor.com/dashboard',
   ollama:   'https://ollama.com/settings',
-  opencode: '',
+  opencode: 'https://opencode.ai',
 };
 
 export const FONTSIZE_MAP = { large: 15, medium: 13, small: 11 };

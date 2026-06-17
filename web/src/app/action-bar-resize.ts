@@ -6,7 +6,7 @@
 // 同量だけ注いで一緒に伸縮させる（広げた分の空白を質問欄が埋め、縮めた分は戻す）。
 // 質問欄が無い承認（前置きなし）のときはバーの伸縮のみ行う。
 
-import { followActionBarResize } from './terminal';
+import { followActionBarResize } from './terminal.js';
 
 const HANDLE_ZONE_PX = 8;
 const MIN_PX = 80;

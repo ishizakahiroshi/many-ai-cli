@@ -30,7 +30,7 @@ var hardcodedUsageLinkDefaults = UsageLinkDefaults{
 	Copilot:     "https://github.com/settings/billing",
 	CursorAgent: "https://cursor.com/dashboard",
 	Ollama:      "https://ollama.com/settings",
-	OpenCode:    "",
+	OpenCode:    "https://opencode.ai",
 }
 
 // newUsageLinkCache は usage リンクデフォルトの TTL キャッシュを生成する。
