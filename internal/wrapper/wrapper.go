@@ -20,11 +20,11 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"golang.org/x/net/websocket"
+	"golang.org/x/term"
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/sessionlog"
-	"golang.org/x/net/websocket"
-	"golang.org/x/term"
 )
 
 const (
@@ -703,6 +703,7 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model st
 	if err != nil {
 		return nil, proto.Message{}, err
 	}
+	homeDir, codexHome, claudeDir := userSkillDirs()
 	if err := websocket.JSON.Send(conn, proto.Message{
 		Type:       "register",
 		Role:       "wrapper",
@@ -714,6 +715,9 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model st
 		PID:        os.Getpid(),
 		Shell:      DetectShell(),
 		Token:      cfg.Token,
+		HomeDir:    homeDir,
+		CodexHome:  codexHome,
+		ClaudeDir:  claudeDir,
 		Cols:       termCols,
 		Rows:       termRows,
 		ProxyToken: os.Getenv("MANY_AI_CLI_PROXY_TOKEN"),
@@ -737,6 +741,7 @@ func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, 
 	if err != nil {
 		return nil, 0, err
 	}
+	homeDir, codexHome, claudeDir := userSkillDirs()
 	if err := websocket.JSON.Send(conn, proto.Message{
 		Type:      "reattach",
 		Role:      "wrapper",
@@ -749,6 +754,9 @@ func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, 
 		PID:       os.Getpid(),
 		Shell:     DetectShell(),
 		Token:     cfg.Token,
+		HomeDir:   homeDir,
+		CodexHome: codexHome,
+		ClaudeDir: claudeDir,
 		Cols:      termCols,
 		Rows:      termRows,
 		StartedAt: startedAt,
@@ -773,6 +781,11 @@ func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, 
 		return nil, 0, fmt.Errorf("unexpected reattach response: %s", resp.Type)
 	}
 	return conn, resp.SessionID, nil
+}
+
+func userSkillDirs() (homeDir, codexHome, claudeDir string) {
+	homeDir, _ = os.UserHomeDir()
+	return homeDir, os.Getenv("CODEX_HOME"), os.Getenv("CLAUDE_CONFIG_DIR")
 }
 
 // probeHubAlive returns true if the Hub HTTP server responds at 127.0.0.1:port.

@@ -2,6 +2,7 @@ package hub
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -10,7 +11,11 @@ import (
 
 func (s *Server) invalidateSlashCache(provider string) {
 	s.slashCmdMu.Lock()
-	delete(s.slashCmdCache, provider)
+	for key := range s.slashCmdCache {
+		if strings.HasPrefix(key, provider+"|") || key == provider {
+			delete(s.slashCmdCache, key)
+		}
+	}
 	s.slashCmdMu.Unlock()
 }
 
@@ -97,9 +102,11 @@ func (s *Server) handleSlashCommands(w http.ResponseWriter, r *http.Request) {
 	}
 
 	forceRefresh := r.Method == http.MethodPost
+	searchCtx := s.skillSearchContextForRequest(provider, r)
+	cacheKey := slashCmdCacheKey(provider, searchCtx)
 
 	s.slashCmdMu.Lock()
-	entry := s.slashCmdCache[provider]
+	entry := s.slashCmdCache[cacheKey]
 	s.slashCmdMu.Unlock()
 
 	if !forceRefresh && entry != nil && time.Since(entry.fetchedAt) < slashCmdCacheTTL {
@@ -129,16 +136,32 @@ func (s *Server) handleSlashCommands(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	skills := discoverSkillSlashCmds(provider, searchCtx)
 	cmds, err := fetchAndParseSlashCmds(sourceURL)
 	if err != nil {
 		s.logger.Warn("slash cmd fetch failed", "provider", provider, "err", err)
 		if entry != nil {
-			writeSlashCmdsResp(w, entry)
+			fallback := *entry
+			fallback.cmds = mergeSkillSlashCmds(provider, entry.cmds, skills)
+			writeSlashCmdsResp(w, &fallback)
+			return
+		}
+		if len(skills) > 0 {
+			newEntry := &slashCmdCacheEntry{
+				cmds:      dedupeSlashCmds(skills),
+				fetchedAt: time.Now(),
+				sourceURL: sourceURL,
+			}
+			s.slashCmdMu.Lock()
+			s.slashCmdCache[cacheKey] = newEntry
+			s.slashCmdMu.Unlock()
+			writeSlashCmdsResp(w, newEntry)
 			return
 		}
 		writeJSONError(w, http.StatusBadGateway, "fetch_failed", errorDetail("fetch failed", err))
 		return
 	}
+	cmds = mergeSkillSlashCmds(provider, cmds, skills)
 
 	newEntry := &slashCmdCacheEntry{
 		cmds:      cmds,
@@ -146,10 +169,47 @@ func (s *Server) handleSlashCommands(w http.ResponseWriter, r *http.Request) {
 		sourceURL: sourceURL,
 	}
 	s.slashCmdMu.Lock()
-	s.slashCmdCache[provider] = newEntry
+	s.slashCmdCache[cacheKey] = newEntry
 	s.slashCmdMu.Unlock()
 
 	writeSlashCmdsResp(w, newEntry)
+}
+
+func slashCmdCacheKey(provider string, ctx skillSearchContext) string {
+	return provider + "|" + filepathCleanForCache(ctx.HomeDir) + "|" + filepathCleanForCache(ctx.CodexHome) + "|" + filepathCleanForCache(ctx.ClaudeDir)
+}
+
+func filepathCleanForCache(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	return strings.ToLower(path)
+}
+
+func (s *Server) skillSearchContextForRequest(provider string, r *http.Request) skillSearchContext {
+	raw := strings.TrimSpace(r.URL.Query().Get("session_id"))
+	if raw == "" {
+		raw = strings.TrimSpace(r.URL.Query().Get("session"))
+	}
+	if raw == "" {
+		return skillSearchContext{}
+	}
+	id, err := strconv.Atoi(raw)
+	if err != nil || id <= 0 {
+		return skillSearchContext{}
+	}
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[id]
+	if ses == nil || ses.Provider != provider {
+		return skillSearchContext{}
+	}
+	return skillSearchContext{
+		HomeDir:   ses.HomeDir,
+		CodexHome: ses.CodexHome,
+		ClaudeDir: ses.ClaudeDir,
+	}
 }
 
 func writeSlashCmdsResp(w http.ResponseWriter, entry *slashCmdCacheEntry) {

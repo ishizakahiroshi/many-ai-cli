@@ -427,45 +427,52 @@ function getSlashCommandsFallback() {
 
 // provider 単位の動的スラッシュコマンドキャッシュ。スラッシュピッカー（/ ▾）と
 // /api/slash-commands を共有し、取得済みなら /入力補完にも英語フルリストを出す。
-export const slashCmdDynamic = new Map(); // provider -> [{cmd, desc}]
-const slashCmdRetryAfter = new Map();     // provider -> epoch ms（失敗時の再試行抑止）
-const slashCmdLoading = new Set();        // 取得中の provider
+export const slashCmdDynamic = new Map(); // cache key -> [{cmd, desc}]
+const slashCmdRetryAfter = new Map();     // cache key -> epoch ms（失敗時の再試行抑止）
+const slashCmdLoading = new Set();        // 取得中の cache key
 
 function activeProvider() {
   return sessions.get(activeSessionId)?.provider || 'claude';
 }
 
+function slashCmdCacheKey(provider, sessionId = activeSessionId) {
+  return `${provider}#${sessionId || 0}`;
+}
+
 // ピッカー／/入力補完の双方から呼べるキャッシュ充填。
-export function setSlashCmdCache(provider, cmds) {
+export function setSlashCmdCache(provider, cmds, sessionId = activeSessionId) {
   const list = (cmds || []).filter(c => c && c.cmd);
   if (list.length > 0) {
-    slashCmdDynamic.set(provider, list);
-    slashCmdRetryAfter.delete(provider);
+    const key = slashCmdCacheKey(provider, sessionId);
+    slashCmdDynamic.set(key, list);
+    slashCmdRetryAfter.delete(key);
   }
 }
 
 // /入力補完用にフルリストを遅延取得する。取得済み・取得中・抑止中は何もしない。
 // 取得完了時、メニューが開いていれば再描画する。
-async function ensureSlashCommands(provider) {
-  if (slashCmdDynamic.has(provider) || slashCmdLoading.has(provider)) return;
-  const retryAt = slashCmdRetryAfter.get(provider) || 0;
+async function ensureSlashCommands(provider, sessionId = activeSessionId) {
+  const key = slashCmdCacheKey(provider, sessionId);
+  if (slashCmdDynamic.has(key) || slashCmdLoading.has(key)) return;
+  const retryAt = slashCmdRetryAfter.get(key) || 0;
   if (Date.now() < retryAt) return;
-  slashCmdLoading.add(provider);
+  slashCmdLoading.add(key);
   try {
-    const resp = await fetch(`/api/slash-commands?provider=${provider}&token=${token}`);
-    if (!resp.ok) { slashCmdRetryAfter.set(provider, Date.now() + 60_000); return; }
+    const sidParam = sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : '';
+    const resp = await fetch(`/api/slash-commands?provider=${provider}${sidParam}&token=${token}`);
+    if (!resp.ok) { slashCmdRetryAfter.set(key, Date.now() + 60_000); return; }
     const data = await resp.json();
-    setSlashCmdCache(provider, data.cmds);
-    if (slashCmdDynamic.has(provider) && !slashMenuEl.hidden) updateSlashMenu();
+    setSlashCmdCache(provider, data.cmds, sessionId);
+    if (slashCmdDynamic.has(key) && !slashMenuEl.hidden) updateSlashMenu();
   } catch (_) {
-    slashCmdRetryAfter.set(provider, Date.now() + 60_000);
+    slashCmdRetryAfter.set(key, Date.now() + 60_000);
   } finally {
-    slashCmdLoading.delete(provider);
+    slashCmdLoading.delete(key);
   }
 }
 
 export function getSlashCommands() {
-  const dyn = slashCmdDynamic.get(activeProvider());
+  const dyn = slashCmdDynamic.get(slashCmdCacheKey(activeProvider()));
   if (dyn && dyn.length > 0) return dyn;
   return getSlashCommandsFallback();
 }
@@ -476,8 +483,8 @@ export let slashIndex = -1;
 
 export function updateSlashMenu() {
   const val = inputEl.value;
-  if (!val.startsWith('/')) { hideSlashMenu(); return; }
-  ensureSlashCommands(activeProvider()); // 非同期: 取得完了時に自動で再描画
+  if (!val.startsWith('/') && !val.startsWith('$')) { hideSlashMenu(); return; }
+  ensureSlashCommands(activeProvider(), activeSessionId); // 非同期: 取得完了時に自動で再描画
   const filtered = getSlashCommands().filter(c => c.cmd.startsWith(val));
   if (filtered.length === 0) { hideSlashMenu(); return; }
   slashItems = filtered;
@@ -1826,19 +1833,20 @@ inputEl.addEventListener('blur', (e) => {
   if (!pickerEl || !pickerBtn) return;
 
   let pickerProvider = null;
+  let pickerSessionId = null;
   let pickerData     = null; // { cmds, fetched_at, source_url }
 
   pickerBtn.addEventListener('click', async () => {
     if (!pickerEl.hidden) { hidePicker(); return; }
     const sess = sessions.get(activeSessionId);
     const provider = sess?.provider || 'claude';
-    await openPicker(provider, false);
+    await openPicker(provider, activeSessionId, false);
   });
 
   refreshBtn.addEventListener('click', async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (pickerProvider) await openPicker(pickerProvider, true);
+    if (pickerProvider) await openPicker(pickerProvider, pickerSessionId, true);
   });
 
   closeBtn.addEventListener('click', (e) => {
@@ -1859,8 +1867,9 @@ inputEl.addEventListener('blur', (e) => {
     }
   });
 
-  async function openPicker(provider, forceRefresh) {
+  async function openPicker(provider, sessionId, forceRefresh) {
     pickerProvider = provider;
+    pickerSessionId = sessionId || null;
     pickerEl.hidden = false;
     titleEl.textContent = provider === 'claude' ? 'Claude Code'
                         : provider === 'copilot' ? 'GitHub Copilot'
@@ -1871,7 +1880,8 @@ inputEl.addEventListener('blur', (e) => {
     searchEl.value = '';
     try {
       const method = forceRefresh ? 'POST' : 'GET';
-      const resp = await fetch(`/api/slash-commands?provider=${provider}&token=${token}`, { method });
+      const sidParam = sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : '';
+      const resp = await fetch(`/api/slash-commands?provider=${provider}${sidParam}&token=${token}`, { method });
       if (!resp.ok) {
         const txt = await resp.text();
         if (resp.status === 404) {
@@ -1882,7 +1892,7 @@ inputEl.addEventListener('blur', (e) => {
         return;
       }
       pickerData = await resp.json();
-      setSlashCmdCache(provider, pickerData.cmds); // /入力補完と一覧を共有
+      setSlashCmdCache(provider, pickerData.cmds, sessionId); // /入力補完と一覧を共有
       timeEl.textContent = formatAge(pickerData.fetched_at);
       renderList('');
       setTimeout(() => searchEl.focus(), 0);

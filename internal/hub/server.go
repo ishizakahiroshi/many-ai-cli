@@ -104,6 +104,9 @@ type session struct {
 	FirstMessage string `json:"first_message,omitempty"`  // 最初の確定入力; UI カード表示用
 	LastMessage  string `json:"last_message,omitempty"`   // 最新の確定入力; UI カード表示用
 	EndReason    string `json:"end_reason,omitempty"`     // session_end の reason コード（例: "exec_not_found"）。UI 側で i18n 翻訳して表示
+	HomeDir      string `json:"-"`
+	CodexHome    string `json:"-"`
+	ClaudeDir    string `json:"-"`
 
 	// JSON 外: 状態評価用
 	lastOutputAt      time.Time // idleAfter 計算用。LastOutputAt と同期して更新する
@@ -1160,6 +1163,9 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		Model:           reg.Model,
 		Route:           regRoute,
 		Shell:           reg.Shell,
+		HomeDir:         reg.HomeDir,
+		CodexHome:       reg.CodexHome,
+		ClaudeDir:       reg.ClaudeDir,
 		State:           "standby",
 		StartedAt:       startedAt.Format(time.RFC3339),
 		branchCheckedAt: startedAt,
@@ -1346,6 +1352,9 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		Model:           req.Model,
 		Route:           reqRoute,
 		Shell:           req.Shell,
+		HomeDir:         req.HomeDir,
+		CodexHome:       req.CodexHome,
+		ClaudeDir:       req.ClaudeDir,
 		State:           "running",
 		LastOutputAt:    lastOutputAt,
 		StartedAt:       startedAtText,

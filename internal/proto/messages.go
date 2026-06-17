@@ -23,6 +23,9 @@ type Message struct {
 	State     string `json:"state,omitempty"`
 	ExitCode  int    `json:"exit_code,omitempty"`
 	Token     string `json:"token,omitempty"`
+	HomeDir   string `json:"home_dir,omitempty"`
+	CodexHome string `json:"codex_home,omitempty"`
+	ClaudeDir string `json:"claude_dir,omitempty"`
 	Data      []byte `json:"data,omitempty"` // wrapper内部用: PTY生バイト列（base64エンコード）
 	Text      string `json:"text,omitempty"` // pty_output: ANSIを除去したプレーンテキスト / pty_input: ユーザー入力文字列
 	Cols      int    `json:"cols,omitempty"` // pty_resize / register / registered
@@ -147,7 +150,7 @@ type Message struct {
 // RequestJSON / ResponseJSON は raw payload（マスキング後）。UI 側で `Raw` トグル時に
 // 表示する。Summary 系フィールドは UI 側のレンダリングを軽くするための事前抽出。
 type ChatTurn struct {
-	ID           int64  `json:"id"` // セッション内連番（リングバッファ index ではなく単調増加）
+	ID           int64  `json:"id"`       // セッション内連番（リングバッファ index ではなく単調増加）
 	Provider     string `json:"provider"` // "anthropic" | "openai"
 	Endpoint     string `json:"endpoint"` // "/v1/messages" など
 	ReceivedAt   string `json:"received_at"`
