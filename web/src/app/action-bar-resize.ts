@@ -2,7 +2,7 @@
 // 上端 6px 帯を pointerdown で掴むと max-height を伸縮できる。
 // 上端帯のダブルクリックでユーザー指定高さを解除（CSS のデフォルトに戻す）。
 
-const HANDLE_ZONE_PX = 6;
+const HANDLE_ZONE_PX = 8;
 const MIN_PX = 80;
 
 export function initActionBarResize(): void {
