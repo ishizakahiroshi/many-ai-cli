@@ -23,6 +23,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -185,6 +186,11 @@ func (s *Server) makeReverseProxy(provider Provider, upstreamRaw, pathPrefix str
 		// request body は読まず ReverseProxy に素通しさせる（上流へ無加工で全文転送）。
 		// 以前は観測用 cap を転送ボディにも適用し、1 MiB 超のリクエストを切断して
 		// 上流 400 (unexpected end of data) を起こしていた。捕捉は response のみ。
+		//
+		// [診断] 転送 body は cap せず、実際に上流へ流れたバイト数だけ数える（非破壊）。
+		// Content-Length と食い違えば、上流到達前（CLI 側）で body が短く切れている疑い。
+		reqCL := r.ContentLength
+		bodyCount := instrumentRequestBody(r)
 
 		// response 捕捉用 ResponseWriter ラッパー（client へは素通し、コピーだけ cap）
 		cap := &captureWriter{
@@ -194,6 +200,8 @@ func (s *Server) makeReverseProxy(provider Provider, upstreamRaw, pathPrefix str
 		}
 
 		rp.ServeHTTP(cap, r)
+
+		s.logRequestForward(provider, endpoint, reqCL, bodyCount, cap.statusCode)
 
 		// response body 確定 → Sink へ送信（非同期、ノンブロッキング）
 		respBytes, respTruncated := cap.captured()
@@ -281,8 +289,12 @@ func (s *Server) proxyOnceWithToken(w http.ResponseWriter, r *http.Request, prov
 	startedAt := time.Now()
 	endpoint := strings.TrimPrefix(r.URL.Path, pathPrefix)
 	// request body は読まず素通し（上流へ無加工で全文転送）。捕捉は response のみ。
+	// [診断] 転送バイト数だけ数える（非破壊・cap しない）。
+	reqCL := r.ContentLength
+	bodyCount := instrumentRequestBody(r)
 	cap := &captureWriter{ResponseWriter: w, buf: &bytes.Buffer{}, maxBytes: maxCaptureBytes}
 	rp.ServeHTTP(cap, r)
+	s.logRequestForward(provider, endpoint, reqCL, bodyCount, cap.statusCode)
 	respBytes, respTruncated := cap.captured()
 	isStream := strings.Contains(cap.Header().Get("Content-Type"), "text/event-stream")
 	var respBody []byte
@@ -357,6 +369,56 @@ func (c *captureWriter) Flush() {
 
 func (c *captureWriter) captured() ([]byte, bool) {
 	return c.buf.Bytes(), c.truncated
+}
+
+// countingReadCloser は ReadCloser をラップして、読まれた総バイト数を数えるだけのもの。
+// ReverseProxy が r.Body から上流へコピーした実バイト数を計測する用途（非破壊・cap なし）。
+type countingReadCloser struct {
+	rc io.ReadCloser
+	n  int64
+}
+
+func (c *countingReadCloser) Read(p []byte) (int, error) {
+	n, err := c.rc.Read(p)
+	c.n += int64(n)
+	return n, err
+}
+
+func (c *countingReadCloser) Close() error { return c.rc.Close() }
+
+// instrumentRequestBody は r.Body を countingReadCloser に差し替え、上流へ流れた
+// 実バイト数を後から取得できるようにする。body の中身は一切加工・cap しない。
+// r.Body が nil（GET 等）の場合は何もせず nil を返す。
+func instrumentRequestBody(r *http.Request) *countingReadCloser {
+	if r.Body == nil {
+		return nil
+	}
+	c := &countingReadCloser{rc: r.Body}
+	r.Body = c
+	return c
+}
+
+// logRequestForward は 1 リクエストの「宣言 Content-Length」と「実際に上流へ転送した
+// バイト数」を比較してログする（診断用）。
+//   - cl >= 0 かつ転送数と食い違う → WARN（上流到達前で body が短く切れている疑い＝
+//     CLI 側送出か localhost 接続断。proxy は cap していないので proxy 由来ではない）。
+//   - 一致していて 256 KiB 以上の大きめリクエスト → INFO（大リクエストが無事素通しできた記録）。
+//   - それ以外（小さく一致）→ 何も出さない（ノイズ抑制）。
+func (s *Server) logRequestForward(provider Provider, endpoint string, cl int64, c *countingReadCloser, status int) {
+	if c == nil {
+		return
+	}
+	if cl >= 0 && c.n != cl {
+		s.logger.Warn("proxy request body length mismatch (possible pre-proxy truncation)",
+			"provider", provider, "endpoint", endpoint,
+			"content_length", cl, "forwarded", c.n, "status", status)
+		return
+	}
+	if c.n >= 256*1024 {
+		s.logger.Info("proxy request forwarded",
+			"provider", provider, "endpoint", endpoint,
+			"content_length", cl, "forwarded", c.n, "status", status)
+	}
 }
 
 // joinSSE は SSE 生バイト列から `data: ` 行を抽出し、JSON を改行区切りで連結する。

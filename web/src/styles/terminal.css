@@ -383,8 +383,14 @@
 #input-wrap {
   flex: 1;
   display: flex;
-  align-items: flex-end;
+  /* テキスト欄(#input-area)を常に上段フル幅にし、操作ボタン群を下段へ回す。
+     order:-1 + flex-basis:100% を #input-area に与えることで、flip(左右切替)
+     どちらの DOM 順でもテキスト欄が必ず最初の行（フル幅）に来る。これにより
+     長文でも横幅を使い切り、左に文字が積み上がって見づらくなる問題を解消する。 */
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
+  row-gap: 6px;
   background: var(--bg);
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-lg);
@@ -407,7 +413,10 @@
 body.pc-input-tools-off #input-tools { display: none; }
 
 #input-area {
-  flex: 1;
+  /* 常に最初の行へ・フル幅。下段に操作ボタンが回る（#input-wrap のコメント参照） */
+  order: -1;
+  flex: 1 1 100%;
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -559,12 +568,8 @@ body.pc-input-tools-off #input-tools { display: none; }
     gap: var(--space-2);
     padding-left: 10px;
     padding-right: 8px;
-    /* 固定幅ボタン群が幅を食い尽くすと #input-area (min-width:0) がゼロ幅に
-       潰れるため、折り返しを許可してツール行を2段目へ逃がす */
-    flex-wrap: wrap;
-  }
-  #input-area {
-    min-width: 140px;
+    /* テキスト欄フル幅＋ツール下段化は基底ルール（#input-wrap）で全画面共通。
+       モバイル固有はパディング/ギャップの微調整のみ。 */
   }
   /* iOS WebKit は font-size 16px 未満の入力欄にフォーカスすると自動ズームし、
      実効ビューポートが縮んで入力欄が潰れるため 16px を確保する */

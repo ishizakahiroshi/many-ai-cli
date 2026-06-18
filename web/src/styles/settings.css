@@ -241,6 +241,8 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 .settings-section-body { padding-bottom: 4px; }
 .log-dir-btn { background: none; border: none; cursor: pointer; opacity: 0.55; font-size: 0.95rem; padding: 0; line-height: 1; flex-shrink: 0; min-width: var(--control-h-sm); min-height: var(--control-h-sm); }
 .log-dir-btn:hover { opacity: 1; }
+.log-dir-path { font-size: 0.68rem; color: var(--muted); opacity: 0.7; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; text-decoration: none; }
+.log-dir-path:hover { opacity: 1; color: var(--accent); text-decoration: underline; }
 
 /* カスタムツールチップ（遅延なし） */
 #hub-tooltip {
