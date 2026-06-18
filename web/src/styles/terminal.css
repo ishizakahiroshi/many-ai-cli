@@ -389,6 +389,7 @@
      長文でも横幅を使い切り、左に文字が積み上がって見づらくなる問題を解消する。 */
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-2);
   row-gap: 6px;
   background: var(--bg);
@@ -397,6 +398,7 @@
   padding: 8px 10px 8px 14px;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
+#input-wrap.tools-left { justify-content: flex-start; }
 #input-wrap:focus-within {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow);
