@@ -12,7 +12,7 @@ import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { scheduleDeferredEnter, scheduleAfterOutputSettle, deferredEnterMinWaitFor } from './app/deferred-enter.js';
 import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
-import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn } from './app/attachments.js';
+import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn, MAX_ATTACH_BYTES } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
 import { getExposeStatus, fetchExposeStatus, disableExpose } from './app/host-expose.js';
 import './app/detached-grid-launcher.js';
@@ -166,6 +166,32 @@ export function buildSendText() {
   return parts.join('\n');
 }
 
+// 長文ペースト（10行以上 または 1500字以上）を一時 .txt 添付へ変換して @path 参照で送るための閾値。
+// 巨大なブラケットペーストを内側 CLI へ送らなくなるため、Codex の [Pasted Content] 畳み込みと、
+// それに伴う確定 \r の吸収（入力欄にテキストが張り付いたまま送信されない不具合）が原理的に発生しない。
+// タイミングを推測して確定 \r を撃つ（オープンループ）のではなく、そもそも畳み込みを起こさない経路へ
+// 変える根本対処。閾値未満のチップは従来どおり本文へ結合する（短い貼り付けまで参照化しない）。
+const PASTE_FILE_MIN_LINES = 10;
+const PASTE_FILE_MIN_CHARS = 1500;
+
+// 長文ペーストチップを一時テキストファイル化し、画像添付と同じ pendingAttachFiles 経路へ積む。
+// flushPendingAttach が provider 別の inject（codex/claude は `@絶対パス `）へ変換するため、内側 CLI へ
+// 渡るのは短い 1 行の @path だけになり、畳み込みも確定 \r 吸収も起きない。確定は通常の \r で済む。
+// 閾値未満のチップ・入力欄テキストは pastedTexts に残し、本文として従来経路で送る（混在も自然）。
+export async function stageLongPastesAsFiles() {
+  for (let i = pastedTexts.length - 1; i >= 0; i--) {
+    const pt = pastedTexts[i];
+    if (pt.lineCount < PASTE_FILE_MIN_LINES && pt.text.length < PASTE_FILE_MIN_CHARS) continue;
+    const bytes = new TextEncoder().encode(pt.text);
+    // 8MB 超は添付保存に失敗してテキストを失う恐れがあるため、ファイル化せず従来のブラケットペースト経路に残す。
+    if (bytes.byteLength > MAX_ATTACH_BYTES) continue;
+    pendingAttachFiles.push({ buf: bytes.buffer, filename: `paste-${pt.id}.txt`, entry: {}, wrapper: null });
+    pastedTexts.splice(i, 1);
+  }
+  renderPasteChips();
+  updateInputAffordance();
+}
+
 // Ollama route で起動したセッションでは Claude Code / Codex 側の /model コマンドが
 // spawn 時固定の env (ANTHROPIC_BASE_URL=http://localhost:11434 等) と整合しないため
 // 純正モデルに切替えるとエラーになる。行頭 /model 入力は送信前にブロックする。
@@ -244,6 +270,9 @@ export async function doSend(sessionId) {
     return;
   }
   set_lastDoSendAt(Date.now());
+  // 長文ペーストチップを一時 .txt 化して @path 参照で送る（Codex の畳み込みによる確定 \r 吸収を回避）。
+  // flushPendingAttach より前に積むことで、画像添付と同一の inject 経路へ合流させる。
+  await stageLongPastesAsFiles();
   const injects = await flushPendingAttach(sessionId);
   const injectPrefix = injects.join('');
   let rawText = buildSendText();
@@ -1370,6 +1399,11 @@ inputEl.addEventListener('blur', (e) => {
       if (logDirBtn && cfg.log_dir) {
         logDirBtn.dataset.tooltip = cfg.log_dir;
       }
+      const logDirPath = document.getElementById('log-dir-path') as HTMLAnchorElement | null;
+      if (logDirPath && cfg.log_dir) {
+        logDirPath.textContent = cfg.log_dir;
+        logDirPath.title = cfg.log_dir;
+      }
       const attachDirBtn = document.getElementById('attach-dir-btn');
       if (attachDirBtn && cfg.attach_dir) {
         attachDirBtn.dataset.tooltip = cfg.attach_dir;
@@ -1401,6 +1435,13 @@ inputEl.addEventListener('blur', (e) => {
     logDirBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       openDirOrCopy(logDirBtn, 'log');
+    });
+  }
+  const logDirPath = document.getElementById('log-dir-path');
+  if (logDirPath) {
+    logDirPath.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (logDirBtn) openDirOrCopy(logDirBtn, 'log');
     });
   }
 
