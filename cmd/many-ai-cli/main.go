@@ -31,6 +31,19 @@ import (
 // single source of truth。
 var version = "dev"
 
+// gitCommit / buildTime はビルド時に ldflags (-X main.gitCommit=... /
+// -X main.buildTime=...) で注入される人間可読のビルド識別子。同一 version 内の
+// ビルド差を識別するための付加情報で、/api/info に出す。未注入なら空文字。
+var (
+	gitCommit = ""
+	buildTime = ""
+)
+
+// buildInfo は Hub へ渡すビルド識別子をまとめる。
+func buildInfo() hub.BuildInfo {
+	return hub.BuildInfo{GitCommit: gitCommit, BuildTime: buildTime}
+}
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -113,7 +126,7 @@ func run(args []string) error {
 		// CREATE_NEW_CONSOLE で新規コンソールが割り当てられるので、stderr 出力も
 		// banner と同じ「Hub 専用ターミナル」に表示される。
 		logger := hublog.NewFileLogger(cfg.Hub.LogDir, cfg.Log, false, true)
-		s, err := hub.NewServer(cfg, logger, false, displayVersion())
+		s, err := hub.NewServer(cfg, logger, false, displayVersion(), buildInfo())
 		if err != nil {
 			return err
 		}
@@ -152,7 +165,7 @@ func run(args []string) error {
 		// Hub 用コンソール（CREATE_NEW_CONSOLE で割り当てられた窓 or 直接起動された
 		// シェル）でリアルタイムに動作状況を確認するため。
 		logger = hublog.NewFileLogger(cfg.Hub.LogDir, cfg.Log, *debug, true)
-		s, err := hub.NewServer(cfg, logger, *dev, displayVersion())
+		s, err := hub.NewServer(cfg, logger, *dev, displayVersion(), buildInfo())
 		if err != nil {
 			return err
 		}

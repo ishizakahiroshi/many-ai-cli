@@ -22,11 +22,11 @@ const approvalSourceGoVT = "go_vt"
 // PTY チャンクをトリガーにして VT テールを再スキャンする別経路。
 // 同一 sig が検出されても Hub は sig 一致で重複送信をスキップするため二重発火しない。
 var nativeApprovalJaTokens = []string{
-	"許可",           // 「この操作を許可しますか」等
-	"承認",           // 「承認しますか」等
-	"続行",           // 「続行しますか」等
+	"許可",       // 「この操作を許可しますか」等
+	"承認",       // 「承認しますか」等
+	"続行",       // 「続行しますか」等
 	"実行しますか",   // 「コマンドを実行しますか」等
-	"よろしいですか", // 「よろしいですか？」等
+	"よろしいですか",  // 「よろしいですか？」等
 	"確認してください", // 「操作を確認してください」等
 }
 
@@ -78,6 +78,9 @@ func detectNativeApproval(provider string, lines []string) *nativeApproval {
 	contextLines := recent[contextStart:contextEnd]
 	context := strings.Join(contextLines, "\n")
 	question := nativeApprovalQuestion(contextLines, start-contextStart)
+	if provider == "opencode" && looksLikeOpenCodeModelSelector(contextLines) {
+		return nil
+	}
 	if !nativeApprovalLooksValid(provider, contextLines, opts) {
 		return nil
 	}
@@ -136,6 +139,18 @@ func extractOpenCodeApprovalOptions(lines []string) []proto.ApprovalOption {
 		}
 	}
 	return nil
+}
+
+func looksLikeOpenCodeModelSelector(lines []string) bool {
+	context := strings.ToLower(strings.Join(lines, "\n"))
+	if !strings.Contains(context, "select model") {
+		return false
+	}
+	return strings.Contains(context, "connect provider") ||
+		strings.Contains(context, "favorite") ||
+		strings.Contains(context, "opencode zen") ||
+		strings.Contains(context, "ollama (local)") ||
+		strings.Contains(context, "recent")
 }
 
 func extractNativeApprovalOptions(provider string, lines []string) ([]proto.ApprovalOption, int, int) {

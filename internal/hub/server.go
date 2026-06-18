@@ -345,6 +345,12 @@ type Server struct {
 	devMode     bool   // --dev: web/ をファイルシステムから直接サーブ（再コンパイル不要）
 	hubCWD      string // serve 起動時の os.Getwd() を保存
 	version     string // main.version (ldflags 経由) を保持し /api/info で返す
+	gitCommit   string // main.gitCommit (ldflags 経由・任意)。/api/info で返す
+	buildTime   string // main.buildTime (ldflags 経由・任意)。/api/info で返す
+	// binGuard は「稼働中 Hub が起動時のバイナリのままか」を判定する。
+	// /api/info が binary_sha256 と binary_stale を申告するのに使い、
+	// wrapper・launcher・status・UI はこのフラグを読むだけで stale を扱える。
+	binGuard    *binaryGuard
 	parentShell string
 	instanceID  string // Hub プロセス起動ごとのランダム ID。UI が Hub 再起動（live session ID の振り直し）を検出するために snapshot に同梱する
 
@@ -596,14 +602,23 @@ func newInstanceID() string {
 	return hex.EncodeToString(b)
 }
 
-func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version string) (*Server, error) {
+func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version string, build BuildInfo) (*Server, error) {
 	hubCWD, _ := os.Getwd()
+	binGuard := newBinaryGuard()
+	if binGuard.StartSHA() == "" {
+		// 致命的にはしない。binary_sha256 が空でも Hub は起動でき、
+		// stale 検知が無効化されるだけ。
+		logger.Warn("self binary hash unavailable; stale-binary detection disabled")
+	}
 	s := &Server{
 		cfg:                   cfg,
 		logger:                logger,
 		devMode:               devMode,
 		hubCWD:                hubCWD,
 		version:               version,
+		gitCommit:             build.GitCommit,
+		buildTime:             build.BuildTime,
+		binGuard:              binGuard,
 		instanceID:            newInstanceID(),
 		parentShell:           wrapper.DetectShell(),
 		sessions:              map[int]*session{},

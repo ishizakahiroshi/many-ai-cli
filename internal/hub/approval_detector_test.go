@@ -131,6 +131,30 @@ func TestDetectNativeApprovalCursorAgentShortcut(t *testing.T) {
 	}
 }
 
+func TestDetectNativeApprovalOpenCodeShortcut(t *testing.T) {
+	lines := []string{
+		"Permission required",
+		"Edit file: README.md",
+		"",
+		"Allow once",
+		"Allow always",
+		"Reject",
+	}
+	got := detectNativeApproval("opencode", lines)
+	if got == nil {
+		t.Fatal("detectNativeApproval returned nil")
+	}
+	if got.Kind != "native_opencode_shortcut" {
+		t.Fatalf("kind = %q", got.Kind)
+	}
+	if len(got.Options) != 3 {
+		t.Fatalf("options len = %d (%+v)", len(got.Options), got.Options)
+	}
+	if got.Options[0].SendText != "\r" || got.Options[1].SendText != "\x1b[C\r" || got.Options[2].SendText != "\x1b[C\x1b[C\r" {
+		t.Fatalf("opencode send_text values = %+v", got.Options)
+	}
+}
+
 func TestDetectNativeApprovalClaudeModelSelector(t *testing.T) {
 	// Claude Code の /model セレクタ（実機ログ claude_2026-06-11_051610_mer_s1 より）。
 	// 選択肢ラベルに承認語（yes/no/allow 等）を含まないセレクタ型ダイアログ。
@@ -157,6 +181,32 @@ func TestDetectNativeApprovalClaudeModelSelector(t *testing.T) {
 	}
 	if !got.Options[1].IsCurrent {
 		t.Fatalf("option 2 should be current: %+v", got.Options[1])
+	}
+}
+
+func TestDetectNativeApprovalSuppressesOpenCodeModelSelector(t *testing.T) {
+	lines := []string{
+		"Select model",
+		"Search",
+		"Recent",
+		"❯ Big Pickle OpenCode Zen Free",
+		"Nemotron 3 Ultra Free OpenCode Zen Free",
+		"Gemma 4 31B (Ollama Cloud) Ollama (local)",
+		"",
+		"OpenCode Zen",
+		"DeepSeek V4 Flash Free",
+		"Mimo V2.5 Free",
+		"North Mini Code Free",
+		"",
+		"Connect provider ctrl+a  Favorite ctrl+f",
+		// Old permission labels can remain in scrollback/recent VT lines. They must not
+		// turn the model selector into a synthetic OpenCode approval.
+		"Allow once",
+		"Allow always",
+		"Reject",
+	}
+	if got := detectNativeApproval("opencode", lines); got != nil {
+		t.Fatalf("detectNativeApproval = %+v, want nil (OpenCode /model selector should be suppressed)", got)
 	}
 }
 

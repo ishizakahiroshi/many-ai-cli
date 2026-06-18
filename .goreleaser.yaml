@@ -41,6 +41,8 @@ builds:
     ldflags:
       - -s -w
       - -X main.version={{ .Version }}
+      - -X main.gitCommit={{ .ShortCommit }}
+      - -X main.buildTime={{ .Date }}
   - id: many-ai-cli-launcher
     main: ./cmd/many-ai-cli-launcher
     binary: many-ai-cli-launcher

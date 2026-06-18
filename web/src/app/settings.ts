@@ -1666,6 +1666,36 @@ export function applyLang(lang) {
   } catch (_) {}
 })();
 
+// renderStaleBinaryBanner は #stale-binary-banner を stale フラグに応じて出し分ける。
+// 常設・dismissible。multi-question-banner と同じ -text / -close クラスを流用する。
+function renderStaleBinaryBanner(stale: boolean): void {
+  const banner = document.getElementById('stale-binary-banner');
+  if (!banner) return;
+  const tr = (key: string, fallback: string): string => {
+    if (typeof window.t !== 'function') return fallback;
+    const v = window.t(key);
+    return v && v !== key ? v : fallback;
+  };
+  if (!stale) {
+    banner.hidden = true;
+    banner.innerHTML = '';
+    return;
+  }
+  banner.innerHTML = '';
+  const msg = document.createElement('span');
+  msg.className = 'multi-question-banner-text';
+  msg.textContent = tr('stale_binary_banner', 'This Hub is running an old build; restart it to apply your rebuild.');
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'multi-question-banner-close';
+  closeBtn.textContent = '×';
+  closeBtn.title = tr('stale_binary_banner_close_tooltip', 'Dismiss');
+  closeBtn.addEventListener('click', () => { banner.hidden = true; });
+  banner.appendChild(msg);
+  banner.appendChild(closeBtn);
+  banner.hidden = false;
+}
+
 // ---- Hub 情報表示（single source: main.version / runtime → /api/info → ここ） ----
 (async () => {
   try {
@@ -1675,6 +1705,9 @@ export function applyLang(lang) {
     set__userAvatarUrl(info.userAvatar || '');
     set__userDisplayName(info.userDisplayName || '');
     document.dispatchEvent(new CustomEvent('user-info-ready'));
+    // 稼働中 Hub が古いバイナリ（起動後にディスクの exe が差し替わった）なら
+    // 常設バナーで再起動を促す。multi-question-banner と同じ構造・クラスを流用。
+    renderStaleBinaryBanner(!!info.binary_stale);
     const ver = 'v' + (info.version || 'dev');
     const runtimeMode = info.runtime_mode || '';
     const runtimeLabel = () => {

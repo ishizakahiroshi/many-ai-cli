@@ -14,7 +14,48 @@ import (
 var (
 	controlRE = regexp.MustCompile(`[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]`)
 	blankRun  = regexp.MustCompile(`\n{3,}`)
+
+	// spinnerAnimRe は Claude/Codex の「思考中」スピナーが描く星形 dingbat
+	// （✢✳✶✷✻✽ 等 U+2722–U+273F）と braille 進捗グリフ（⠋⠙ 等）。会話本文には
+	// まず現れない記号に絞り、✓✗ など普通に使われる dingbat を誤検出しないようにする。
+	spinnerAnimRe = regexp.MustCompile(`[\x{2722}-\x{273F}\x{2800}-\x{28FF}]`)
 )
+
+// IsThinkingNoiseLine は 1 行が AI CLI の「思考中」ステータス／スピナー再描画
+// フレームかどうかを判定する。PTY を ANSI 除去しただけでは、思考中行
+// （"✳ Imploring… (12s · ↑3.2k tokens · esc to interrupt)" 等）の再描画フレームが
+// 大量に連結して残るため、会話本文と区別してまるごと落とすのに使う。
+// 誤検出を避けるため、強いシグネチャ（"esc to interrupt"・トークンバー・
+// "thinking"+スピナーグリフ・グリフ密集）に限定する。
+func IsThinkingNoiseLine(line string) bool {
+	t := strings.TrimSpace(line)
+	if t == "" {
+		return false
+	}
+	lower := strings.ToLower(t)
+	// 1) ステータスフッター（Claude/Codex とも "esc to interrupt" を必ず表示する）
+	if strings.Contains(lower, "esc to interrupt") {
+		return true
+	}
+	// 2) モード切替ヒント行（"auto mode on (shift+tab to cycle)" 等）
+	if strings.Contains(lower, "shift+tab to cycle") || strings.Contains(lower, "shift + tab to cycle") {
+		return true
+	}
+	// 3) トークンバー "↑111.0k ↓764"（U+2191/U+2193 の両方を含む行）
+	if strings.Contains(t, "↑") && strings.Contains(t, "↓") {
+		return true
+	}
+	// 4) "thinking" + スピナーグリフ（思考アニメの再描画フレーム）
+	if strings.Contains(lower, "thinking") && spinnerAnimRe.MatchString(t) {
+		return true
+	}
+	// 5) スピナーグリフが複数現れる断片（"Imp·rmpovri✶osviisng✶..." 等）。
+	//    対象は星形 dingbat と braille に限るため、本文に 2 個以上並ぶのは実質スピナーのみ。
+	if len(spinnerAnimRe.FindAllString(t, 2)) >= 2 {
+		return true
+	}
+	return false
+}
 
 type transcriptEvent struct {
 	TS                string `json:"ts"`
@@ -175,7 +216,6 @@ func isSpinnerLine(s string) bool {
 	switch s {
 	case "Boot", "Boo", "Bo", "Thinking", "Working":
 		return true
-	default:
-		return false
 	}
+	return IsThinkingNoiseLine(s)
 }

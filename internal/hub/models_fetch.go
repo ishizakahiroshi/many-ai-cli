@@ -1,10 +1,12 @@
 package hub
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -41,8 +43,10 @@ type ModelsResponse struct {
 }
 
 const (
-	ollamaLocalCacheTTL = 60 * time.Second
-	ollamaLocalURL      = "http://localhost:11434/api/tags"
+	ollamaLocalCacheTTL  = 60 * time.Second
+	ollamaLocalURL       = "http://localhost:11434/api/tags"
+	openCodeModelsTTL    = 10 * time.Minute
+	openCodeModelsNegTTL = 3 * time.Minute
 )
 
 // ollamaTagsResponse は `/api/tags` の最低限のレスポンス構造。
@@ -63,6 +67,12 @@ type ollamaTagsCacheEntry struct {
 	generation uint64 // invalidate() で進む世代番号; finding #24 の force リフレッシュ判定に使用
 }
 
+type openCodeModelsCacheEntry struct {
+	models    []Model
+	fetchedAt time.Time
+	err       error
+}
+
 // modelsCache は Ollama Local `/api/tags` 取得結果を保持する。
 // cloud 側のカタログは外部 fetch せず、ローカル daemon の remote_host で判定するため
 // 専用のキャッシュは持たない。
@@ -70,6 +80,7 @@ type modelsCache struct {
 	mu         sync.Mutex
 	local      *ollamaTagsCacheEntry
 	localFetch *ollamaTagsFetch
+	openCode   *openCodeModelsCacheEntry
 	generation uint64 // invalidate() ごとに +1; force fetch が古い世代結果を受け取らないようにする
 }
 
@@ -78,9 +89,164 @@ type ollamaTagsFetch struct {
 	startGen uint64 // fetch 開始時の generation; 完了時に世代チェックして stale かどうか判定
 }
 
-// Anthropic / OpenAI のモデル一覧は GitHub の resources/models/defaults.json から
-// 24h TTL で取得する（fetch 失敗時は models_remote_fetch.go の hardcodedModelsDefaults にフォールバック）。
-// slash-commands / approval-patterns / usage-links と同じ仕組みで、リビルド不要・トークン消費 0 で更新できる。
+func (c *modelsCache) getOpenCodeModels(force bool) ([]Model, time.Time, error) {
+	if c == nil {
+		return nil, time.Time{}, nil
+	}
+	c.mu.Lock()
+	entry := c.openCode
+	if entry != nil {
+		age := time.Since(entry.fetchedAt)
+		fresh := (!force && entry.err == nil && age < openCodeModelsTTL) || (!force && entry.err != nil && age < openCodeModelsNegTTL)
+		if fresh {
+			models := append([]Model(nil), entry.models...)
+			fetchedAt := entry.fetchedAt
+			err := entry.err
+			c.mu.Unlock()
+			return models, fetchedAt, err
+		}
+	}
+	c.mu.Unlock()
+
+	models, err := fetchOpenCodeModels(force)
+	entry = &openCodeModelsCacheEntry{
+		models:    append([]Model(nil), models...),
+		fetchedAt: time.Now(),
+		err:       err,
+	}
+	c.mu.Lock()
+	c.openCode = entry
+	c.mu.Unlock()
+	return append([]Model(nil), models...), entry.fetchedAt, err
+}
+
+type openCodeVerboseModel struct {
+	ID         string `json:"id"`
+	ProviderID string `json:"providerID"`
+	Name       string `json:"name"`
+	Status     string `json:"status"`
+}
+
+func fetchOpenCodeModels(force bool) ([]Model, error) {
+	bin, err := exec.LookPath("opencode")
+	if err != nil {
+		return nil, err
+	}
+	args := []string{"models", "opencode", "--verbose"}
+	if force {
+		args = append(args, "--refresh")
+	}
+	cmd := exec.Command(bin, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("opencode models: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return parseOpenCodeModelsOutput(out)
+}
+
+func parseOpenCodeModelsOutput(out []byte) ([]Model, error) {
+	lines := bytes.Split(bytes.ReplaceAll(out, []byte("\r\n"), []byte("\n")), []byte("\n"))
+	models := make([]Model, 0, len(lines))
+	seen := map[string]bool{}
+	var pendingID string
+
+	flushPending := func() {
+		if pendingID == "" {
+			return
+		}
+		fullID := pendingID
+		if !strings.Contains(fullID, "/") {
+			fullID = "opencode/" + fullID
+		}
+		if !seen[fullID] {
+			models = append(models, Model{ID: fullID, Label: humanizeOpenCodeModelLabel(pendingID)})
+			seen[fullID] = true
+		}
+		pendingID = ""
+	}
+
+	for i := 0; i < len(lines); i++ {
+		line := strings.TrimSpace(string(lines[i]))
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "opencode/") {
+			flushPending()
+			pendingID = strings.TrimSpace(strings.TrimPrefix(line, "opencode/"))
+			continue
+		}
+		if !strings.HasPrefix(line, "{") {
+			continue
+		}
+		objLines := [][]byte{[]byte(line)}
+		depth := strings.Count(line, "{") - strings.Count(line, "}")
+		for depth > 0 && i+1 < len(lines) {
+			i++
+			next := lines[i]
+			nextLine := bytes.TrimSpace(next)
+			objLines = append(objLines, nextLine)
+			depth += strings.Count(string(nextLine), "{") - strings.Count(string(nextLine), "}")
+		}
+		var info openCodeVerboseModel
+		if err := json.Unmarshal(bytes.Join(objLines, []byte("\n")), &info); err != nil {
+			flushPending()
+			continue
+		}
+		fullID := strings.TrimSpace(info.ID)
+		if fullID == "" {
+			fullID = pendingID
+		}
+		if fullID == "" {
+			continue
+		}
+		if !strings.Contains(fullID, "/") {
+			fullID = "opencode/" + fullID
+		}
+		if seen[fullID] {
+			pendingID = ""
+			continue
+		}
+		if strings.TrimSpace(info.Status) != "" && !strings.EqualFold(strings.TrimSpace(info.Status), "active") {
+			pendingID = ""
+			continue
+		}
+		label := strings.TrimSpace(info.Name)
+		if label == "" {
+			label = humanizeOpenCodeModelLabel(pendingID)
+		}
+		models = append(models, Model{ID: fullID, Label: label})
+		seen[fullID] = true
+		pendingID = ""
+	}
+	flushPending()
+	return models, nil
+}
+
+func humanizeOpenCodeModelLabel(id string) string {
+	id = strings.TrimSpace(id)
+	id = strings.TrimPrefix(id, "opencode/")
+	if id == "" {
+		return "OpenCode"
+	}
+	parts := strings.FieldsFunc(id, func(r rune) bool {
+		return r == '-' || r == '_' || r == '/'
+	})
+	for i, p := range parts {
+		switch {
+		case p == "":
+			continue
+		case len(p) == 1:
+			parts[i] = strings.ToUpper(p)
+		default:
+			parts[i] = strings.ToUpper(p[:1]) + strings.ToLower(p[1:])
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+// Anthropic / OpenAI / Copilot / Cursor Agent のモデル一覧は GitHub の
+// resources/models/defaults.json から 24h TTL で取得する。
+// fetch 失敗時は空配列に倒し、静的 fallback は持たない。
 
 // fetchOllamaTags は指定 URL から `/api/tags` を取得して models 列に変換する。
 func fetchOllamaTags(url string, timeout time.Duration) ([]Model, error) {
@@ -200,7 +366,7 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 	if force && remote != nil {
 		remote.invalidate()
 	}
-	defaults := hardcodedModelsDefaults
+	defaults := modelsDefaults{}
 	if remote != nil {
 		defaults = remote.get(remoteSource)
 	}
@@ -209,13 +375,14 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 		Sources: map[string]string{
 			"anthropic":           remoteSource,
 			"openai":              remoteSource,
+			"opencode":            "opencode models opencode --verbose",
 			"ollama_local":        ollamaLocalURL,
 			"local_models_config": "~/.many-ai-cli/config.yaml#local_models",
 		},
 	}
 	var newest time.Time
 
-	// Anthropic（GitHub fetch / fallback ハードコード）
+	// Anthropic（GitHub fetch only）
 	resp.Groups = append(resp.Groups, ModelGroup{
 		Label:    "Anthropic",
 		Provider: "claude",
@@ -223,7 +390,7 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 		Models:   append([]Model{}, defaults.Anthropic...),
 	})
 
-	// OpenAI（GitHub fetch / fallback ハードコード）
+	// OpenAI（GitHub fetch only）
 	resp.Groups = append(resp.Groups, ModelGroup{
 		Label:    "OpenAI",
 		Provider: "codex",
@@ -231,7 +398,7 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 		Models:   append([]Model{}, defaults.OpenAI...),
 	})
 
-	// GitHub Copilot（GitHub fetch / fallback ハードコード）
+	// GitHub Copilot（GitHub fetch only）
 	// Route は空: copilot は env 注入せず `copilot --model <id>` へ素通しする。
 	if len(defaults.Copilot) > 0 {
 		resp.Groups = append(resp.Groups, ModelGroup{
@@ -242,7 +409,7 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 		})
 	}
 
-	// Cursor Agent（GitHub fetch / fallback ハードコード）
+	// Cursor Agent（GitHub fetch only）
 	// Route は空: cursor-agent は env 注入せず `cursor-agent --model <id>` へ素通しする。
 	if len(defaults.CursorAgent) > 0 {
 		resp.Groups = append(resp.Groups, ModelGroup{
@@ -251,6 +418,19 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 			Route:    "",
 			Models:   append([]Model{}, defaults.CursorAgent...),
 		})
+	}
+
+	// OpenCode は CLI から動的取得する。固定候補は持たない。
+	if models, fetchedAt, _ := cache.getOpenCodeModels(force); len(models) > 0 {
+		resp.Groups = append(resp.Groups, ModelGroup{
+			Label:    "OpenCode",
+			Provider: "opencode",
+			Route:    "",
+			Models:   append([]Model{}, models...),
+		})
+		if fetchedAt.After(newest) {
+			newest = fetchedAt
+		}
 	}
 
 	// Ollama Local daemon の /api/tags を 1 度だけ取得し、remote_host で 2 分割する
