@@ -481,6 +481,11 @@ type Config struct {
 		Port                      int      `yaml:"port"`
 		OpenBrowser               bool     `yaml:"open_browser"`
 		AutoShutdown              bool     `yaml:"auto_shutdown"`
+		// StaleBinaryAutoRestart: 既定 true。`many-ai-cli claude` 等の起動時に
+		// 「ディスクの exe ≠ 稼働中 Hub のバイナリ」かつアクティブセッション 0 の
+		// とき、古い Hub を自動で停止→再起動して新バイナリに載せ替える。
+		// false にすると載せ替えず警告ログのみ（手動再起動に委ねる）。
+		StaleBinaryAutoRestart    bool     `yaml:"stale_binary_auto_restart"`
 		LogDir                    string   `yaml:"log_dir"`
 		IdleTimeoutMin            int      `yaml:"idle_timeout_min"`
 		WrapperReconnectGraceSec  int      `yaml:"wrapper_reconnect_grace_sec"`
@@ -627,6 +632,7 @@ func defaultConfig(home string) *Config {
 	cfg.Hub.Port = 47777
 	cfg.Hub.OpenBrowser = true
 	cfg.Hub.AutoShutdown = true
+	cfg.Hub.StaleBinaryAutoRestart = true
 	// When invoked via the many-ai-cli-launcher.exe Windows launcher's WSL
 	// profile (and only then — not for plain `many-ai-cli serve` inside a WSL
 	// shell), place logs under the

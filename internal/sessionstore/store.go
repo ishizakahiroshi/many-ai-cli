@@ -1493,9 +1493,19 @@ func isNoiseOutput(s string) bool {
 	switch t {
 	case "Boot", "Boo", "Bo", "Thinking", "Working":
 		return true
-	default:
-		return false
 	}
+	// 全行が「思考中」スピナー再描画フレームだけのメッセージは保存しない。
+	// 1 行でも実本文を含むチャンクは保存し（情報損失を避ける）、混入した
+	// ノイズ行は表示側 normalizeChatText が落とす。
+	for _, line := range strings.Split(t, "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if !sessionlog.IsThinkingNoiseLine(line) {
+			return false
+		}
+	}
+	return true
 }
 
 func isDigitsText(s string) bool {

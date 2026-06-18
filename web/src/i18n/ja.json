@@ -443,6 +443,8 @@
   "about_oss_vc_runtime_desc": "© Microsoft Corporation。Microsoft Visual Studio License Terms（オープンソースではありません）。同梱した whisper-server を VC++ の別途インストール無しで動かすため、Windows x64 で再頒布しています。",
   "multi_question_banner": "複数質問プロンプトです — 画面のボタンでは操作できません。ターミナルで ←/→ でタブ移動、↑/↓ で選択、複数選択は Space で ON/OFF、Enter で決定してください。",
   "multi_question_banner_close_tooltip": "閉じる（誤検出の場合）",
+  "stale_binary_banner": "⚠ この Hub は古いビルドで動いています — 起動後にディスク上の実行ファイルが差し替わりました。Hub を再起動するまで再ビルドは反映されません（例: `many-ai-cli stop` 後に再起動）。",
+  "stale_binary_banner_close_tooltip": "閉じる",
   "approval_batch_label": "⚠ 一括承認 ({n} 件)",
   "approval_batch_progress": "{done}/{total} 選択済み",
   "approval_batch_clear": "クリア",

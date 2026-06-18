@@ -24,6 +24,33 @@ export function stripAnsiBasic(s) {
     .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
 }
 
+// Claude Code / Codex の「思考中」スピナー行を判定する。
+// PTY を ANSI 除去しただけだと、思考中ステータス行
+// （"✳ Imploring… (12s · ↑3.2k tokens · esc to interrupt)" 等）の再描画フレームが
+// 大量に連結して残る。これらは会話本文ではないので 1 行まるごと落とす。
+// 誤検出を避けるため、星形 dingbat（✢✳✶✷ U+2722–U+273F）と braille に絞り、
+// ✓✗ など普通に使う記号は対象にしない。Go 側 sessionlog.IsThinkingNoiseLine と同義。
+const SPINNER_ANIM_RE = /[✢-✿⠀-⣿]/;
+const SPINNER_ANIM_RE_G = /[✢-✿⠀-⣿]/g;
+
+export function isThinkingNoiseLine(line) {
+  const t = String(line == null ? '' : line).trim();
+  if (!t) return false;
+  const lower = t.toLowerCase();
+  // 1) ステータスフッター（Claude/Codex とも "esc to interrupt" を必ず表示する）
+  if (lower.includes('esc to interrupt')) return true;
+  // 2) モード切替ヒント "auto mode on (shift+tab to cycle)"
+  if (/shift\s*\+\s*tab to cycle/i.test(t)) return true;
+  // 3) トークンバー "↑111.0k ↓764"
+  if (t.includes('↑') && t.includes('↓')) return true;
+  // 4) "thinking" + スピナーグリフ（思考アニメの再描画フレーム）
+  if (lower.includes('thinking') && SPINNER_ANIM_RE.test(t)) return true;
+  // 5) スピナーグリフが複数現れる断片（"Imp·rmpovri✶osviisng✶..." 等）
+  const m = t.match(SPINNER_ANIM_RE_G);
+  if (m && m.length >= 2) return true;
+  return false;
+}
+
 // D15: 軽い正規化（行頭末 trim / prompt prefix 除去 / 連続空行圧縮）。
 // コードブロック内（```...```）の trim はあえてしない。
 export function normalizeChatText(raw) {
@@ -39,7 +66,10 @@ export function normalizeChatText(raw) {
   let inFence = false;
   let blankRun = 0;
   for (let line of lines) {
-    if (/^\s*```/.test(line)) inFence = !inFence;
+    const isFenceMarker = /^\s*```/.test(line);
+    if (isFenceMarker) inFence = !inFence;
+    // 思考中スピナーの再描画フレーム行を丸ごと落とす（コードフェンス内・フェンス行は対象外）
+    if (!inFence && !isFenceMarker && isThinkingNoiseLine(line)) continue;
     if (!inFence) {
       // prompt prefix 除去（行頭のみ）
       line = line.replace(/^[\s]*[▌>$#]\s?/, '');
@@ -138,12 +168,23 @@ export async function restoreChatHistoryFromStore(sid, opts: any = {}) {
     chatHistory.delete(sid);
     chatHistoryIdSeq.delete(sid);
     for (const m of messages) {
+      const role = m.role || 'system';
+      const kind = m.kind || 'text';
+      const rawText = m.rawText || m.raw_text || m.text || '';
+      // normalizedText は保存値を信用せず rawText から再計算する。
+      // 旧 DB に保存済みのスピナー混入テキストも、改善後の normalizeChatText で除去するため。
+      let normalizedText;
+      if (role === 'ai' && kind === 'text') {
+        normalizedText = normalizeChatText(rawText);
+        // 思考スピナーだけで実本文の無い AI メッセージ（旧 DB の残骸）は復元しない
+        if (!normalizedText.trim()) continue;
+      }
       pushMessage(sid, {
         ts: m.ts || Date.now(),
-        role: m.role || 'system',
-        kind: m.kind || 'text',
-        rawText: m.rawText || m.raw_text || m.text || '',
-        normalizedText: m.normalizedText || m.normalized_text || '',
+        role,
+        kind,
+        rawText,
+        normalizedText, // user/attach は undefined → pushMessage が再計算
         attachments: Array.isArray(m.attachments) ? m.attachments : null,
         meta: m.meta || null,
       });
@@ -209,11 +250,15 @@ export function chatHistoryCommitOutput(sid) {
   // role:'user' 限定では承認ボタン回答（role:'system'）後も AI 出力が記録されないため msgs.length で判定する。
   const msgs = chatHistory.get(sid);
   if (!msgs || msgs.length === 0) return;
+  // 思考中スピナーの再描画フレームだけで実本文が無いチャンクはメッセージ化しない。
+  // （これを許すと normalizedText が空になり、表示が rawText のゴミへフォールバックする）
+  const normalized = normalizeChatText(stripped);
+  if (!normalized.trim()) return;
   pushMessage(sid, {
     role: 'ai',
     kind: 'text',
     rawText: stripped,
-    // normalizedText は pushMessage 側で生成
+    normalizedText: normalized,
   });
 }
 

@@ -23,7 +23,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -63,8 +62,10 @@ type CapturedTurn struct {
 
 	StatusCode int
 
-	// RequestBody / ResponseBody は raw JSON（SSE は結合後の JSON 配列風テキスト）。
-	// 上限 maxCaptureBytes を超えた場合は truncate される。
+	// RequestBody は廃止（常に nil）。以前は転送用ボディにも maxCaptureBytes の cap を
+	// 適用してしまい、1 MiB 超のリクエストを切断して上流 400 (unexpected end of data) を
+	// 誘発していたため、request は捕捉せず素通しに変更した（捕捉は response のみ）。
+	// ResponseBody は raw JSON（SSE は結合後の JSON 配列風テキスト）。上限 maxCaptureBytes 超で truncate。
 	RequestBody  []byte
 	ResponseBody []byte
 	Truncated    bool
@@ -181,18 +182,11 @@ func (s *Server) makeReverseProxy(provider Provider, upstreamRaw, pathPrefix str
 		startedAt := time.Now()
 		endpoint := strings.TrimPrefix(r.URL.Path, pathPrefix)
 
-		// 1. request body を読み取り（上限つき）→ 上流へ転送するため bytes.NewReader で巻き戻す
-		reqBody, reqTruncated, reqErr := readCappedBody(r.Body, maxCaptureBytes)
-		_ = r.Body.Close()
-		if reqErr != nil {
-			s.logger.Warn("proxy read req body", "err", reqErr)
-		}
-		// 上流転送用に body を巻き戻す。truncated 時は読み切ったところまで送る
-		// （超過時は本来上流が拒否するが、ここで止めるとデバッグしにくいので素通し）。
-		r.Body = io.NopCloser(bytes.NewReader(reqBody))
-		r.ContentLength = int64(len(reqBody))
+		// request body は読まず ReverseProxy に素通しさせる（上流へ無加工で全文転送）。
+		// 以前は観測用 cap を転送ボディにも適用し、1 MiB 超のリクエストを切断して
+		// 上流 400 (unexpected end of data) を起こしていた。捕捉は response のみ。
 
-		// 2. response 捕捉用 ResponseWriter ラッパー
+		// response 捕捉用 ResponseWriter ラッパー（client へは素通し、コピーだけ cap）
 		cap := &captureWriter{
 			ResponseWriter: w,
 			buf:            &bytes.Buffer{},
@@ -201,7 +195,7 @@ func (s *Server) makeReverseProxy(provider Provider, upstreamRaw, pathPrefix str
 
 		rp.ServeHTTP(cap, r)
 
-		// 3. response body 確定 → Sink へ送信（非同期、ノンブロッキング）
+		// response body 確定 → Sink へ送信（非同期、ノンブロッキング）
 		respBytes, respTruncated := cap.captured()
 		isStream := strings.Contains(cap.Header().Get("Content-Type"), "text/event-stream")
 		var respBody []byte
@@ -217,13 +211,9 @@ func (s *Server) makeReverseProxy(provider Provider, upstreamRaw, pathPrefix str
 			ReceivedAt:   startedAt,
 			DurationMS:   time.Since(startedAt).Milliseconds(),
 			StatusCode:   cap.statusCode,
-			RequestBody:  reqBody,
 			ResponseBody: respBody,
-			Truncated:    reqTruncated || respTruncated,
+			Truncated:    respTruncated,
 			IsStream:     isStream,
-		}
-		if reqErr != nil {
-			turn.RequestErr = reqErr.Error()
 		}
 
 		go s.dispatchSink(turn)
@@ -290,10 +280,7 @@ func (s *Server) proxyOnceWithToken(w http.ResponseWriter, r *http.Request, prov
 	}
 	startedAt := time.Now()
 	endpoint := strings.TrimPrefix(r.URL.Path, pathPrefix)
-	reqBody, reqTruncated, reqErr := readCappedBody(r.Body, maxCaptureBytes)
-	_ = r.Body.Close()
-	r.Body = io.NopCloser(bytes.NewReader(reqBody))
-	r.ContentLength = int64(len(reqBody))
+	// request body は読まず素通し（上流へ無加工で全文転送）。捕捉は response のみ。
 	cap := &captureWriter{ResponseWriter: w, buf: &bytes.Buffer{}, maxBytes: maxCaptureBytes}
 	rp.ServeHTTP(cap, r)
 	respBytes, respTruncated := cap.captured()
@@ -311,13 +298,9 @@ func (s *Server) proxyOnceWithToken(w http.ResponseWriter, r *http.Request, prov
 		ReceivedAt:   startedAt,
 		DurationMS:   time.Since(startedAt).Milliseconds(),
 		StatusCode:   cap.statusCode,
-		RequestBody:  reqBody,
 		ResponseBody: respBody,
-		Truncated:    reqTruncated || respTruncated,
+		Truncated:    respTruncated,
 		IsStream:     isStream,
-	}
-	if reqErr != nil {
-		turn.RequestErr = reqErr.Error()
 	}
 	go s.dispatchSink(turn)
 }
@@ -329,24 +312,6 @@ func (s *Server) dispatchSink(turn CapturedTurn) {
 		}
 	}()
 	s.sink.OnTurn(turn)
-}
-
-// readCappedBody は body を最大 maxBytes 読む。超過分は破棄して truncated=true を返す。
-// 上流送出には ここで読んだ範囲しか渡らないため、超過時の上流動作はベストエフォート。
-func readCappedBody(rc io.ReadCloser, maxBytes int) ([]byte, bool, error) {
-	if rc == nil {
-		return nil, false, nil
-	}
-	limited := io.LimitReader(rc, int64(maxBytes)+1)
-	b, err := io.ReadAll(limited)
-	truncated := false
-	if len(b) > maxBytes {
-		b = b[:maxBytes]
-		truncated = true
-		// 残りを drain して TCP 上の半端を防ぐ（無視）
-		_, _ = io.Copy(io.Discard, rc)
-	}
-	return b, truncated, err
 }
 
 // captureWriter は http.ResponseWriter をラップして status と body を捕捉する。

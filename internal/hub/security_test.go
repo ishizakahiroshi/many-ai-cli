@@ -360,7 +360,7 @@ func TestRegisteredAPIRoutesRequireToken(t *testing.T) {
 	cfg := &config.Config{Token: "tok"}
 	cfg.Hub.Port = 47777
 	cfg.Hub.LogDir = t.TempDir()
-	s, err := NewServer(cfg, slog.Default(), true, "test")
+	s, err := NewServer(cfg, slog.Default(), true, "test", BuildInfo{})
 	if err != nil {
 		t.Fatal(err)
 	}

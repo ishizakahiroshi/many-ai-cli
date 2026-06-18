@@ -9,7 +9,7 @@ import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitA
 import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
-import { scheduleDeferredEnter, scheduleAfterOutputSettle } from './app/deferred-enter.js';
+import { scheduleDeferredEnter, scheduleAfterOutputSettle, deferredEnterMinWaitFor } from './app/deferred-enter.js';
 import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn } from './app/attachments.js';
@@ -320,6 +320,9 @@ export async function doSend(sessionId) {
     scrollChatPaneToBottomSoon({ passes: 4, startedAt: Date.now() });
   }
   sendSubmittedText(sessionId, textToSend);
+  // Codex/OpenCode は大きいペーストを無出力で即プレースホルダ化するため、確定 \r の最低待機を
+  // 長めに取り早撃ち（\r 吸収による送信不発）を防ぐ。他 provider は既定値で挙動不変。
+  const enterMinWait = deferredEnterMinWaitFor(sessions.get(sessionId)?.provider || '');
   if (needPasteSplit) {
     // 段1: 画像 inject（@path）の取り込み（[Image #N] 畳み込み・@ 補完ポップアップ閉じ）が
     // 出力静止で落ち着くのを待ち、段2: ペースト本体を送り、段3: 確定 \r を予約する。確定 \r の
@@ -327,13 +330,13 @@ export async function doSend(sessionId) {
     // 「Pasting…」固着するのを断つ。ペースト送出以降は画像なし複数行ペーストと同一経路で確定する。
     scheduleAfterOutputSettle(sessionId, () => {
       sendText(sessionId, textPart);
-      scheduleDeferredEnter(sessionId);
+      scheduleDeferredEnter(sessionId, enterMinWait);
     });
   } else if (deferEnter) {
     // 複数行ペーストの確定 \r は、内側 CLI の畳み込み・再描画が落ち着いてから別書き込みで送る。
     // 同一書き込みに含めると \r が吸収され送信されない。固定遅延では大きなペーストの取り込み時間を
     // 当てられず取りこぼすため、PTY 出力が静止するのを待ってから 1 回だけ送る（deferred-enter.ts）。
-    scheduleDeferredEnter(sessionId);
+    scheduleDeferredEnter(sessionId, enterMinWait);
   }
 }
 

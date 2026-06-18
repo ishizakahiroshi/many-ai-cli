@@ -249,10 +249,16 @@ export const providerApprovalTriggers = { claude: [], codex: [], copilot: [], 'c
 export function matchProviderApprovalTrigger(provider, line) {
   if (!line) return false;
   const lower = String(line).toLowerCase();
-  if (provider === 'codex' && isCodexModelSelectorHint(lower)) return false;
+  if (isModelSelectorHint(provider, lower)) return false;
   const list = providerApprovalTriggers[provider] || [];
   for (const s of list) if (lower.includes(s)) return true;
   for (const s of providerApprovalTriggers.common) if (lower.includes(s)) return true;
+  return false;
+}
+
+function isModelSelectorHint(provider, lower) {
+  if (provider === 'codex') return isCodexModelSelectorHint(lower);
+  if (provider === 'opencode') return isOpenCodeModelSelectorHint(lower);
   return false;
 }
 
@@ -266,14 +272,32 @@ function isCodexModelSelectorHint(lower) {
     lower.includes('arrow keys');
 }
 
-function isCodexModelSelectorContext(provider, lines) {
-  if (provider !== 'codex') return false;
+function isOpenCodeModelSelectorHint(lower) {
+  return lower.includes('select model') ||
+    lower.includes('connect provider') ||
+    lower.includes('favorite ctrl+f') ||
+    lower.includes('opencode zen') ||
+    lower.includes('ollama (local)');
+}
+
+function isModelSelectorContext(provider, lines) {
   const text = (lines || []).map(line => String(line || '').toLowerCase()).join('\n');
-  return text.includes('select model') ||
-    text.includes('select effort') ||
-    text.includes('model and effort') ||
-    text.includes('reasoning effort') ||
-    ((text.includes('gpt-') || text.includes('effort')) && (text.includes('esc to go back') || text.includes('press enter to confirm')));
+  if (provider === 'codex') {
+    return text.includes('select model') ||
+      text.includes('select effort') ||
+      text.includes('model and effort') ||
+      text.includes('reasoning effort') ||
+      ((text.includes('gpt-') || text.includes('effort')) && (text.includes('esc to go back') || text.includes('press enter to confirm')));
+  }
+  if (provider === 'opencode') {
+    return text.includes('select model') &&
+      (text.includes('connect provider') ||
+        text.includes('favorite') ||
+        text.includes('opencode zen') ||
+        text.includes('ollama (local)') ||
+        text.includes('recent'));
+  }
+  return false;
 }
 
 // /model 等のカーソル駆動 TUI 選択メニュー（承認ではない）を action-bar に出す際の
@@ -555,8 +579,8 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
   const approvalLabelRe = /\b(yes|no|allow|deny|proceed|abort|don[''']t ask|cancel|once|always|permission|confirm|details)\b/i;
   const hasApprovalLikeLabel = options.some((opt) => approvalLabelRe.test(opt.label));
   const isHubChoice = isHubChoicePrompt(contextLines, options);
-  const suppressCodexModelSelector = isCodexModelSelectorContext(provider, contextLines);
-  const hasNativePromptHint = !suppressCodexModelSelector && contextLines.some((line) => !String(line || '').toLowerCase().includes('esc to go back') && (matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)));
+  const suppressModelSelector = isModelSelectorContext(provider, contextLines);
+  const hasNativePromptHint = !suppressModelSelector && contextLines.some((line) => !String(line || '').toLowerCase().includes('esc to go back') && (matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)));
   const isShortcutApprovalMenu = (provider === 'codex' || provider === 'copilot' || provider === 'cursor-agent' || provider === 'opencode') && options.some(o => o._sendText) && hasNativePromptHint;
   const approvalNear = (hasCursorOption || isShortcutApprovalMenu) &&
     ((hasApprovalLikeLabel && (hasUserSpecifies || contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)))) || isHubChoice);
@@ -964,8 +988,8 @@ export function detectApproval(id) {
   const approvalLabelRe = /\b(yes|no|allow|deny|proceed|abort|don[''']t ask|cancel)\b/i;
   const hasApprovalLikeLabel = options.some((opt) => approvalLabelRe.test(opt.label));
   const isHubChoice = isHubChoicePrompt(contextLines, options);
-  const suppressCodexModelSelector = isCodexModelSelectorContext(provider, contextLines);
-  const hasNativePromptHint = !suppressCodexModelSelector && contextLines.some((line) => !String(line || '').toLowerCase().includes('esc to go back') && (matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)));
+  const suppressModelSelector = isModelSelectorContext(provider, contextLines);
+  const hasNativePromptHint = !suppressModelSelector && contextLines.some((line) => !String(line || '').toLowerCase().includes('esc to go back') && (matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)));
   const isShortcutApprovalMenu = (provider === 'codex' || provider === 'copilot' || provider === 'cursor-agent' || provider === 'opencode') && options.some(o => o._sendText) && hasNativePromptHint;
   const approvalNear = (hasApprovalLikeLabel &&
     (hasUserSpecifies || hasNativePromptHint)) || isHubChoice || isShortcutApprovalMenu;

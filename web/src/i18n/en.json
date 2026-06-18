@@ -443,6 +443,8 @@
   "about_oss_vc_runtime_desc": "© Microsoft Corporation. Microsoft Visual Studio License Terms (not open source). Redistributed on Windows x64 so the bundled whisper-server runs without a separate VC++ install.",
   "multi_question_banner": "Multi-question prompt — on-screen buttons can't drive this. Use ←/→ to switch tabs, ↑/↓ to select, Space to toggle multi-select, Enter to confirm in the terminal.",
   "multi_question_banner_close_tooltip": "Dismiss (if false positive)",
+  "stale_binary_banner": "⚠ This Hub is running an OLD build — the on-disk executable has changed since it started. Your rebuild won't take effect until the Hub is restarted (e.g. `many-ai-cli stop`, then relaunch).",
+  "stale_binary_banner_close_tooltip": "Dismiss",
   "approval_batch_label": "⚠ Batch approval ({n} questions)",
   "approval_batch_progress": "{done}/{total} selected",
   "approval_batch_clear": "Clear",

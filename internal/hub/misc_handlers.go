@@ -21,6 +21,14 @@ const (
 	attachMultipartMaxBytes = attachUploadMaxBytes + 1*1024*1024
 )
 
+// activeSessionCount は現在登録されているセッション数を返す。
+// stale 検知時に「自動再起動してよいか（=巻き込むセッションが無いか）」の判断に使う。
+func (s *Server) activeSessionCount() int {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	return len(s.sessions)
+}
+
 func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodGet) {
 		return
@@ -59,6 +67,11 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{
 		"cwd":             s.hubCWD,
 		"version":         s.version,
+		"binary_sha256":   s.binGuard.StartSHA(),
+		"binary_stale":    s.binGuard.IsStale(),
+		"active_sessions": s.activeSessionCount(),
+		"git_commit":      s.gitCommit,
+		"build_time":      s.buildTime,
 		"runtime_mode":    mode,
 		"runtime_label":   runtimeLabel(mode),
 		"ssh":             sshSession,

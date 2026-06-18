@@ -100,6 +100,22 @@
   flex-shrink: 0;
 }
 #multi-question-banner[hidden] { display: none; }
+/* stale-binary-banner: 稼働中 Hub が古いバイナリのとき常設表示する警告。
+   multi-question-banner と同じ構造・クラス（-text / -close）を流用し、
+   左ボーダーだけ警告色にする。 */
+#stale-binary-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: 8px 12px;
+  background: var(--bg-elev);
+  border-top: 1px solid var(--line);
+  border-left: 3px solid #ef4444;
+  color: var(--text);
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+#stale-binary-banner[hidden] { display: none; }
 .multi-question-banner-text {
   flex: 1 1 auto;
   white-space: pre-wrap;

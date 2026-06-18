@@ -406,7 +406,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		}
 	}
 
-	if err := ensureHub(cfg); err != nil {
+	if err := ensureHub(cfg, logger); err != nil {
 		return err
 	}
 	cwd, _ := os.Getwd()
@@ -821,7 +821,7 @@ func waitForHubReady(cfg *config.Config, timeout time.Duration) bool {
 	}
 }
 
-func ensureHub(cfg *config.Config) error {
+func ensureHub(cfg *config.Config, logger *slog.Logger) error {
 	// Hub にスポーンされた場合（MANY_AI_CLI=1）、Hub は既に動いている。
 	// 新 Hub を起動すると PID ファイル経由で実際の Hub が kill される危険があるため
 	// プローブと起動を一切スキップする。
@@ -829,7 +829,12 @@ func ensureHub(cfg *config.Config) error {
 		return nil
 	}
 	if probeHubAlive(cfg) {
-		return nil
+		// 既存 Hub が古いバイナリ（ディスクの exe と内容が食い違う）で、かつ
+		// アクティブセッションが無ければ自動で停止する。停止できたら下の spawn
+		// 経路で新バイナリの Hub を起動し直す。そうでなければ既存 Hub を使う。
+		if !maybeRestartStaleHub(cfg, logger) {
+			return nil
+		}
 	}
 	// 設定ポートが WSL 側 Hub など別プロセスに使用されている場合に備え、
 	// 実際にバインドできるポートを確認してから Hub を起動する。
