@@ -73,6 +73,34 @@ func TestProviderDefaultsIncludeCursorAgent(t *testing.T) {
 	}
 }
 
+func TestProviderDefaultsIncludeGrok(t *testing.T) {
+	slash := DefaultSlashCmdSources()
+	if slash.Grok == "" || !strings.Contains(slash.Grok, "/grok.md") {
+		t.Fatalf("DefaultSlashCmdSources().Grok = %q", slash.Grok)
+	}
+	effSlash := EffectiveSlashCmdSources(SlashCmdSources{})
+	if effSlash.Grok != slash.Grok {
+		t.Fatalf("EffectiveSlashCmdSources().Grok = %q, want %q", effSlash.Grok, slash.Grok)
+	}
+
+	patterns := DefaultApprovalPatternSources()
+	if patterns.Grok == "" || !strings.Contains(patterns.Grok, "/grok.md") {
+		t.Fatalf("DefaultApprovalPatternSources().Grok = %q", patterns.Grok)
+	}
+	effPatterns := EffectiveApprovalPatternSources(ApprovalPatternSources{})
+	if effPatterns.Grok != patterns.Grok {
+		t.Fatalf("EffectiveApprovalPatternSources().Grok = %q, want %q", effPatterns.Grok, patterns.Grok)
+	}
+
+	profiles := EffectiveApprovalProfiles(ApprovalProfiles{})
+	if profiles.For("grok") != ApprovalProfileOfficial {
+		t.Fatalf("profiles.For(grok) = %q", profiles.For("grok"))
+	}
+	if got := profiles.WithProvider("grok", ApprovalProfileCustom).For("grok"); got != ApprovalProfileCustom {
+		t.Fatalf("WithProvider(grok, custom).For(grok) = %q", got)
+	}
+}
+
 // TestSaveAtomicWrite は Save が atomic write（temp + Rename）を使うことを確認する。
 // 書き込み後に temp ファイルが残っていないこと、内容が一致することを検証する。
 func TestSaveAtomicWrite(t *testing.T) {
@@ -373,6 +401,45 @@ func TestHubTokenlessAccessRoundTrip(t *testing.T) {
 	}
 	if got := strings.Join(cfg2.Hub.AllowedHosts, ","); got != "10.8.0.1,hub.example" {
 		t.Fatalf("AllowedHosts = %q", got)
+	}
+}
+
+func TestOllamaBaseURLRoundTripAndValidation(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	cfg1, err := LoadOrCreate()
+	if err != nil {
+		t.Fatalf("LoadOrCreate: %v", err)
+	}
+	cfg1.Ollama.BaseURL = "http://192.168.11.50:11434"
+	if err := Save(cfg1); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	cfg2, err := LoadOrCreate()
+	if err != nil {
+		t.Fatalf("LoadOrCreate second: %v", err)
+	}
+	if cfg2.Ollama.BaseURL != "http://192.168.11.50:11434" {
+		t.Fatalf("Ollama.BaseURL = %q", cfg2.Ollama.BaseURL)
+	}
+	if got := EffectiveOllamaBaseURL(""); got != DefaultOllamaBaseURL {
+		t.Fatalf("EffectiveOllamaBaseURL(\"\") = %q", got)
+	}
+
+	for _, raw := range []string{
+		"ftp://127.0.0.1:11434",
+		"http://127.0.0.1:11434/v1",
+		"http://user:pass@127.0.0.1:11434",
+		"http://127.0.0.1:11434?x=1",
+	} {
+		cfg := defaultConfig(t.TempDir())
+		cfg.Ollama.BaseURL = raw
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("Validate() with ollama.base_url %q succeeded, want error", raw)
+		}
 	}
 }
 

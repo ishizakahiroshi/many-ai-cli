@@ -53,5 +53,9 @@
     {"id": "gemini-3.5-flash",              "label": "Gemini 3.5 Flash"},
     {"id": "grok-4.3",                      "label": "Grok 4.3 1M"},
     {"id": "kimi-k2.5",                     "label": "Kimi K2.5"}
+  ],
+  "grok": [
+    {"id": "grok-composer-2.5-fast", "label": "Grok Composer 2.5 Fast"},
+    {"id": "grok-build",             "label": "Grok Build"}
   ]
 }

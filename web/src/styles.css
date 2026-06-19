@@ -74,6 +74,7 @@
   --prov-ollama:         #c4973a;
   --prov-opencode:       #22c55e;
   --prov-cursor-agent:   #94a3b8;
+  --prov-grok:           #52525b;
 
   /* Git graph lane colors (dark) */
   --lane-1:              #38bdf8;  /* 青系: HEAD/develop/main 系の主軸 */
@@ -871,6 +872,7 @@ header {
 .card-provider-chip.ollama,   .summary-provider-name.ollama,   .pane-slot .sc-provider.ollama,   .prov-shape.ollama,   .prov-letter.ollama   { --prov: var(--prov-ollama); }
 .card-provider-chip.opencode, .summary-provider-name.opencode, .pane-slot .sc-provider.opencode, .prov-shape.opencode, .prov-letter.opencode { --prov: var(--prov-opencode); }
 .card-provider-chip.cursor-agent, .summary-provider-name.cursor-agent, .pane-slot .sc-provider.cursor-agent, .prov-shape.cursor-agent, .prov-letter.cursor-agent { --prov: var(--prov-cursor-agent); }
+.card-provider-chip.grok, .summary-provider-name.grok, .pane-slot .sc-provider.grok, .prov-shape.grok, .prov-letter.grok { --prov: var(--prov-grok); }
 
 /* チップ（プロバイダーチップ / サマリ名）: メイン色文字 + 12%背景 */
 .card-provider-chip, .summary-provider-name {

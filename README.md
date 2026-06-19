@@ -6,7 +6,7 @@
 
 ![many-ai-cli dashboard](assets/readme-dashboard.png)
 
-**Never miss an approval prompt.** `many-ai-cli` watches your AI coding CLIs (Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI) and notifies your desktop or phone the moment one is waiting for your approval — so you don't have to babysit the terminal. It also gives you a local web dashboard to handle approvals, monitoring, and terminals across multiple sessions in one place.
+**Never miss an approval prompt.** `many-ai-cli` watches your AI coding CLIs (Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / Grok Build CLI) and notifies your desktop or phone the moment one is waiting for your approval — so you don't have to babysit the terminal. It also gives you a local web dashboard to handle approvals, monitoring, and terminals across multiple sessions in one place.
 
 [日本語版 README はこちら](README.ja.md)
 
@@ -38,7 +38,7 @@ Terminal pane #1              Terminal pane #2
             └──────────────────┘
 ```
 
-Each pane can run any supported provider — `claude`, `codex`, `copilot`, or `cursor-agent`; two are shown for illustration.
+Each pane can run any supported provider — `claude`, `codex`, `copilot`, `cursor-agent`, or `grok`; two are shown for illustration.
 
 ---
 
@@ -52,6 +52,7 @@ Each pane can run any supported provider — `claude`, `codex`, `copilot`, or `c
 | Codex CLI | `codex` | OpenAI |
 | GitHub Copilot CLI | `copilot` | official CLI; OAuth tokens / PATs / credentials are never read, stored, or proxied |
 | Cursor Agent CLI | `cursor-agent` | official CLI; sign in first |
+| Grok Build CLI | `grok` | xAI's official terminal coding agent; sign in first (requires a **SuperGrok** or **X Premium+** subscription — base X Premium does not include it) |
 
 **Ollama** is not a separate wrapper. Run Ollama models *through* the `claude` or `codex` wrapper — pick **Ollama Cloud / Ollama Local** in the spawn form's model picker, and the Hub points the Anthropic/OpenAI-compatible endpoint at Ollama (see "Model picker with Ollama routing" in Features).
 
@@ -61,7 +62,7 @@ Gemini CLI is intentionally out of scope.
 
 ## Features
 
-- **Unified approval panel** — approve/reject Claude Code, Codex CLI, GitHub Copilot CLI, and Cursor Agent CLI prompts from the browser
+- **Unified approval panel** — approve/reject Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, and Grok Build CLI prompts from the browser
 - **Batch approvals** — answer multiple numbered questions from one action bar and submit them together
 - **Real-time PTY output** via xterm.js over WebSocket
 - **Chat history and split view** — read a bubble-style conversation history, search/filter it, or keep it beside the live terminal
@@ -78,7 +79,7 @@ Gemini CLI is intentionally out of scope.
 - **Approval pattern profiles** — keep official remote-synced trigger phrases separate from local custom edits
 - **Server-side user preferences** — keep voice, notification, favorites, session order, spawn defaults, and avatar settings in `config.yaml`
 - **Spawn new sessions** from the UI (`/api/spawn`)
-- **Model picker with Ollama routing** — pick Anthropic / OpenAI / Ollama Cloud / Ollama Local models from the spawn form; the Hub auto-injects the right `ANTHROPIC_*` / `OPENAI_*` env vars per session, no shell setup required
+- **Model picker with Ollama routing** — pick Anthropic / OpenAI / Ollama Cloud / Ollama Local models from the spawn form; the Hub auto-injects the right `ANTHROPIC_*` / `OPENAI_*` env vars per session, no shell setup required. If the Ollama daemon runs on another host, set `ollama.base_url` in `config.yaml`
 - **Unified launcher (Windows / Linux / macOS)** — `many-ai-cli-launcher` connects to a Hub via saved profiles and opens your default browser: SSH `serve` / `tunnel` profiles work on every OS, and WSL profiles start a Hub inside WSL on Windows
 - **Remote server / Docker deployment assets** — run one Hub container per user from GHCR with loopback-only port publishing and an opt-in auto-update script
 - **Clean transcript generation** — write readable `.txt` transcripts automatically, or regenerate them with `log-clean`
@@ -95,7 +96,7 @@ Gemini CLI is intentionally out of scope.
 | Go | 1.25+ (build time) |
 | OS | Windows 10/11, macOS, Linux |
 | Browser | Chrome / Edge / Firefox / Safari |
-| AI CLI | Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI (install the providers you intend to use separately) |
+| AI CLI | Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI (install the providers you intend to use separately) |
 
 ### Platform verification
 
@@ -462,7 +463,7 @@ source ~/.bashrc
 many-ai-cli --version
 ```
 
-Also install and sign in to the provider CLIs you plan to use (`claude`, `codex`, `copilot`, `cursor-agent`) on the remote server, because sessions run there.
+Also install and sign in to the provider CLIs you plan to use (`claude`, `codex`, `copilot`, `cursor-agent`, `grok`) on the remote server, because sessions run there.
 
 **B. Start the Hub on a fixed loopback port**
 
@@ -654,6 +655,7 @@ many-ai-cli claude      # auto-starts Hub in the background if not running, then
 many-ai-cli codex       # same
 many-ai-cli copilot     # same, using the installed GitHub Copilot CLI
 many-ai-cli cursor-agent # same, using the installed Cursor Agent CLI
+many-ai-cli grok        # same, using the installed Grok Build CLI
 ```
 
 You do not need to run `many-ai-cli serve` first.
@@ -665,13 +667,14 @@ many-ai-cli wrap claude
 many-ai-cli wrap codex
 many-ai-cli wrap copilot
 many-ai-cli wrap cursor-agent
+many-ai-cli wrap grok
 ```
 
 Functionally identical to Option A; useful when you want to be explicit about the wrapper layer.
 
 ### Option C: transparent mode (`MANY_AI_CLI_AUTO`)
 
-Initialize the shell once, then your normal `claude` / `codex` / `copilot` / `cursor-agent` commands transparently go through the wrapper.
+Initialize the shell once, then your normal `claude` / `codex` / `copilot` / `cursor-agent` / `grok` commands transparently go through the wrapper.
 
 > `many-ai-cli shell-init` emits **POSIX shell (bash / zsh) only** function definitions. There is no PowerShell snippet — see below for a manual alternative.
 
@@ -685,13 +688,16 @@ claude    # → goes through the wrapper, auto-starts Hub if needed
 codex     # → same
 copilot   # → same
 cursor-agent # → same
+grok      # → same
 ```
 
-Without `MANY_AI_CLI_AUTO=1`, `claude` / `codex` / `copilot` / `cursor-agent` behave exactly as the original commands. No global `.bashrc` modification.
+Without `MANY_AI_CLI_AUTO=1`, `claude` / `codex` / `copilot` / `cursor-agent` / `grok` behave exactly as the original commands. No global `.bashrc` modification.
 
 GitHub Copilot support only wraps the official installed CLI in a PTY. `many-ai-cli` does not read, store, or proxy GitHub OAuth tokens, PATs, or Copilot credentials.
 
 Cursor Agent support only wraps the official installed `cursor-agent` CLI in a PTY (it assumes you are already signed in). `many-ai-cli` does not read, store, or proxy Cursor session tokens or credentials.
+
+Grok support only wraps the official installed `grok` CLI (xAI's Grok Build CLI) in a PTY (it assumes you are already signed in via your grok.com login, which requires a SuperGrok or X Premium+ subscription). `many-ai-cli` does not read, store, or proxy xAI session tokens or credentials.
 
 #### OS-specific automation examples
 
@@ -705,6 +711,7 @@ if ($env:MANY_AI_CLI_AUTO -eq '1') {
     function codex  { many-ai-cli codex  @args }
     function copilot { many-ai-cli copilot @args }
     function cursor-agent { many-ai-cli cursor-agent @args }
+    function grok { many-ai-cli grok @args }
 }
 ```
 
@@ -742,6 +749,7 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 | `codex [args...]` | Launch Codex CLI through the Hub |
 | `copilot [args...]` | Launch GitHub Copilot CLI through the Hub |
 | `cursor-agent [args...]` | Launch Cursor Agent CLI through the Hub |
+| `grok [args...]` | Launch Grok Build CLI through the Hub |
 | `wrap <provider> [args...]` | Wrap an arbitrary provider (for debugging) |
 | `shell-init` | Emit shell function snippets for transparent mode |
 | `status` | Show whether the Hub is running |
@@ -781,7 +789,7 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 ### Layout
 
 - **Header**
-  - Status summary chips `[running][waiting][standby]` (the waiting chip blinks when > 0) and per-provider connection counts such as `Claude:N / Codex:N / Copilot:N / Cursor Agent:N`.
+  - Status summary chips `[running][waiting][standby]` (the waiting chip blinks when > 0) and per-provider connection counts such as `Claude:N / Codex:N / Copilot:N / Cursor Agent:N / Grok:N`.
   - Right edge: `⏻` (stop the Hub) and `Settings` (language, theme, timeouts, log dir, etc.).
 - **Left sidebar (session list)**
   - Top: `+ New Session` button (opens the spawn dialog).
@@ -939,6 +947,9 @@ hub:
   idle_timeout_min: 60      # minutes before idle sessions are auto-disconnected (0 = disabled)
   wrapper_reconnect_grace_sec: 3600  # how long wrapped sessions wait for a crashed/restarted Hub (0–86400)
 
+ollama:
+  base_url: ""              # empty = http://localhost:11434. For another host, use e.g. http://<host-ip>:11434
+
 voice:
   whisper:
     managed: false          # true = Hub manages a local whisper.cpp server
@@ -960,6 +971,8 @@ token: ""                   # empty = randomly generated on startup (URL stays s
 
 To reset the `token`, delete the `token:` line and restart the Hub.
 
+`ollama.base_url` is the Ollama daemon endpoint as seen from the Hub process. It is not specific to Hyper-V, WSL, Docker, or another VM setup: any host/guest relationship works as long as the Hub can reach that HTTP URL. The model picker reads `<base_url>/api/tags`, Claude Code Ollama sessions receive `ANTHROPIC_BASE_URL=<base_url>`, and Codex Ollama sessions receive `OPENAI_BASE_URL=<base_url>/v1`. Do not include `/v1` or `/api/tags` in `base_url`; the Hub appends the provider-specific suffix when needed.
+
 > The `approval` / `spawn` / `slash_cmd_sources` / `approval_pattern_sources` / `approval_profiles` / `user_prefs` sections may be appended automatically by UI actions (no hand-editing required).
 
 ### Where settings are saved
@@ -978,7 +991,7 @@ Voice engine selection is the exception: `off` / `browser` / `whisper` stays in 
 
 On first load the browser mirrors D2 values from the server. Subsequent changes are written to both localStorage (as a cache) and the server simultaneously. Any existing localStorage values are pushed to the server automatically on first run.
 
-Approval detection patterns have an `official` / `custom` profile per provider. `official` is fetched and cached at startup from `resources/approval-patterns/{claude,codex,copilot,cursor-agent,common}.md` on GitHub; `custom` is for your own edits.
+Approval detection patterns have an `official` / `custom` profile per provider. `official` is fetched and cached at startup from `resources/approval-patterns/{claude,codex,copilot,cursor-agent,grok,common}.md` on GitHub; `custom` is for your own edits.
 
 Custom notification sounds are stored as a binary file at `~/.many-ai-cli/notify_sound_custom.bin`, with the MIME type recorded in `user_prefs.notify_sound.custom_mime`.
 
@@ -1020,7 +1033,7 @@ When the wrapper's WebSocket to the Hub drops, the wrapper **probes the Hub's HT
 
 | Scenario | Wrapper behavior |
 |---|---|
-| **Intentional disconnect** — UI `×` (dismiss), "stop everything", or idle-timeout fired<br>(Hub HTTP responds normally) | Kill the PTY child (`claude` / `codex` / `copilot` / `cursor-agent`) **immediately**. No grace period. |
+| **Intentional disconnect** — UI `×` (dismiss), "stop everything", or idle-timeout fired<br>(Hub HTTP responds normally) | Kill the PTY child (`claude` / `codex` / `copilot` / `cursor-agent` / `grok`) **immediately**. No grace period. |
 | **Hub crash / `.exe` console closed**<br>(Hub HTTP unreachable) | Retry dial+register every 2 s for up to `wrapper_reconnect_grace_sec` (default **3600 s = 60 min**).<br>　• If Hub comes back: re-register as a new session, replay the last 64 KB of PTY output to the UI, and resume.<br>　• If the grace expires with Hub still down: kill the PTY. |
 | **Browser closed but Hub still running** (no UI connected) | After `idle_timeout_min` minutes (default 60), the Hub force-disconnects every wrapper, which is then handled as the "intentional disconnect" row above. |
 
@@ -1038,7 +1051,7 @@ For a clean shutdown, prefer the `⏻` button in the Hub UI top-right or `many-a
 ## Architecture
 
 ```
-AI CLI (claude / codex / copilot / cursor-agent)
+AI CLI (claude / codex / copilot / cursor-agent / grok)
     └─ many-ai-cli wrap  <── PTY wrapper
            │ WebSocket
     ┌──────▼──────┐
@@ -1095,7 +1108,7 @@ The Hub inherits the `PATH` snapshot of the shell that launched it. If that shel
 
 1. `many-ai-cli stop`
 2. Open an interactive PowerShell where `$env:PNPM_HOME` resolves correctly (verify with `$env:PATH -split ';' | Select-String pnpm`).
-3. From that shell, run `many-ai-cli claude`, `many-ai-cli codex`, `many-ai-cli copilot`, or `many-ai-cli cursor-agent` — the Hub will be re-spawned with the fresh `PATH` snapshot.
+3. From that shell, run `many-ai-cli claude`, `many-ai-cli codex`, `many-ai-cli copilot`, `many-ai-cli cursor-agent`, or `many-ai-cli grok` — the Hub will be re-spawned with the fresh `PATH` snapshot.
 
 Hub diagnostics for each spawn are written to `~/.many-ai-cli/logs/spawn/<provider>-<timestamp>.log` and include the resolved `PATH`, detected package managers, and an explicit hint when `executable file not found` is the underlying cause.
 
@@ -1120,18 +1133,18 @@ The Hub decides a session's liveness solely from **whether the terminal (PTY) pr
 
 ### Local instruction file writes
 
-When **Approval Buttons** is enabled, `many-ai-cli` writes only its marked approval-rules block to AI instruction files for active wrapped sessions: `~/.claude/CLAUDE.md` for Claude Code, `$CODEX_HOME/AGENTS.md` or `~/.codex/AGENTS.md` for Codex, and the project instruction root `AGENTS.md` for GitHub Copilot and Cursor Agent. The block is idempotent and is removed when the last active wrapped session using that file ends, when Approval Buttons is disabled, or when the Hub stops.
+When **Approval Buttons** is enabled, `many-ai-cli` writes only its marked approval-rules block to AI instruction files for active wrapped sessions: `~/.claude/CLAUDE.md` for Claude Code, `$CODEX_HOME/AGENTS.md` or `~/.codex/AGENTS.md` for Codex, and the project instruction root `AGENTS.md` for GitHub Copilot, Cursor Agent, and Grok (Grok reads both `CLAUDE.md` and `AGENTS.md` natively as a Claude Code-compatible harness). The block is idempotent and is removed when the last active wrapped session using that file ends, when Approval Buttons is disabled, or when the Hub stops.
 
 ### Outbound network traffic
 
 `many-ai-cli` is local-first, but the following outbound HTTPS requests can occur and you should be aware of them:
 
-- **Slash command list (Hub itself)** — When the slash command picker is opened, the Hub fetches a markdown file from `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent}.md` and caches it for 24 hours. The source URL can be changed (or pointed to a local file path) in **Settings → Slash command sources**.
-- **Approval pattern list (Hub itself)** — On Hub startup, the official approval detection patterns can be fetched from `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,common}.md` and cached for 24 hours. The source URLs can be overridden in config.
+- **Slash command list (Hub itself)** — When the slash command picker is opened, the Hub fetches a markdown file from `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent,grok}.md` and caches it for 24 hours. The source URL can be changed (or pointed to a local file path) in **Settings → Slash command sources**.
+- **Approval pattern list (Hub itself)** — On Hub startup, the official approval detection patterns can be fetched from `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,grok,common}.md` and cached for 24 hours. The source URLs can be overridden in config.
 - **Web Push notifications (Hub itself, opt-in only)** — When Push notifications are enabled, the Hub sends encrypted Web Push requests to the browser vendor's push service over HTTPS. Payloads include the session ID/name, provider, and a short approval-question/context excerpt; they do **not** include the Hub URL token. VAPID keys and subscriptions are stored locally in `~/.many-ai-cli/push_store.json`. Notifications can be delivered while an SSH tunnel is down, but opening the Hub from the notification still requires the tunnel and Hub to be reachable.
 - **Voice input (only while in use)** — Browser mode uses the Web Speech API; in Chrome / Edge, **microphone audio is sent to the browser vendor's speech-recognition servers (Google / Microsoft)**. Whisper mode sends audio to the Hub and then to the configured Whisper server. Keep `voice.whisper.server_url` on `127.0.0.1` / `localhost` for local-only processing; external API URLs would send audio to that external service. See also the privacy note in the voice input section.
 - **Managed Whisper install (Windows x64 Hub, opt-in only)** — Clicking **Settings → Voice → Install** downloads a whisper.cpp Windows x64 release archive from GitHub Releases and the selected ggml model from Hugging Face into `~/.many-ai-cli/whisper/`. The release archive is SHA-256 verified before extraction; model entries without a published hash are downloaded over HTTPS and shown as hash-unverified in the UI.
-- **Wrapped CLI traffic (the CLIs themselves)** — The CLIs you wrap (Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI) talk directly to their respective vendor APIs (Anthropic, OpenAI, GitHub, Cursor) over HTTPS. `many-ai-cli` only relays PTY I/O via local WebSocket; it does not intercept, log, or proxy these API requests. Whatever network behavior the underlying CLI has applies as-is.
+- **Wrapped CLI traffic (the CLIs themselves)** — The CLIs you wrap (Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI) talk directly to their respective vendor APIs (Anthropic, OpenAI, GitHub, Cursor, xAI) over HTTPS. `many-ai-cli` only relays PTY I/O via local WebSocket; it does not intercept, log, or proxy these API requests. Whatever network behavior the underlying CLI has applies as-is.
 
 ### ⚠️ Data retention by wrapped CLIs
 
@@ -1145,6 +1158,7 @@ The table below summarizes each vendor's stance as of 2026. Always verify the cu
 | **Codex CLI** (OpenAI: via ChatGPT Plus / Pro / Business plans) | **Possibly** — content from ChatGPT plans can be used for training | "Do not train on my content" toggle in the privacy portal; separate "allow training on full environments" control in Codex Settings | Abuse-monitoring logs up to 30 days; ZDR / Modified Abuse Monitoring available |
 | **GitHub Copilot CLI** (GitHub: Product Specific Terms, March 2026) | **Yes** — prompts are retained and used to fine-tune your private model | No explicit opt-out documented (verify current terms) | Not specified |
 | **Cursor Agent CLI** (Cursor) | Verify current terms | Verify current terms | Verify current terms |
+| **Grok Build CLI** (xAI) | Verify current terms | Verify current terms | Verify current terms |
 
 ### ⚠️ Terms-of-service change risk
 
@@ -1160,6 +1174,7 @@ Wrapped-CLI vendors may change their terms — including restricting or prohibit
 - **Claude Code (Anthropic)**: Under the Consumer Terms, accounts are for individual use; sharing or transferring credentials (login / OAuth tokens) is prohibited. Rate limits are designed around individual usage, so multi-user access can be detected as anomalous usage and lead to account suspension (no refund)
 - **Codex CLI (OpenAI)**: Sharing a ChatGPT account is likewise prohibited by OpenAI's terms
 - **GitHub Copilot CLI / Cursor Agent CLI**: Both are licensed per seat (per individual); sharing violates the terms
+- **Grok Build CLI (xAI)**: Access is tied to an individual SuperGrok / X Premium+ subscription; sharing the account violates xAI's terms
 
 If multiple people need access, use one of the legitimate options instead:
 
@@ -1337,7 +1352,7 @@ Third-party dependency notices are provided in [THIRD_PARTY_NOTICES.md](THIRD_PA
 
 ## Not Official / No Affiliation
 
-`many-ai-cli` is a third-party, community-maintained tool. It is **not affiliated with, endorsed by, or officially supported by Anthropic, OpenAI, GitHub, Cursor, or Ollama**. All trademarks — including "Claude", "Claude Code", "Codex", "ChatGPT", "GitHub Copilot", "Cursor", "Cursor Agent", "Ollama", and "Gemini" — are the property of their respective owners and are used here only for descriptive and interoperability purposes.
+`many-ai-cli` is a third-party, community-maintained tool. It is **not affiliated with, endorsed by, or officially supported by Anthropic, OpenAI, GitHub, Cursor, xAI, or Ollama**. All trademarks — including "Claude", "Claude Code", "Codex", "ChatGPT", "GitHub Copilot", "Cursor", "Cursor Agent", "Grok", "Ollama", and "Gemini" — are the property of their respective owners and are used here only for descriptive and interoperability purposes.
 
 ---
 

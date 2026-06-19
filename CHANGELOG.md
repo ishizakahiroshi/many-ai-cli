@@ -10,6 +10,25 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Added
+- **Grok Build CLI provider support.** `many-ai-cli grok` (and `wrap grok`)
+  now wraps xAI's official `grok` terminal coding agent in a PTY, joining
+  Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI as the fifth
+  supported provider. It is handled like Cursor Agent — `grok --model <id>`
+  passthrough with no route or env injection, the shared approval-rules block
+  injected into the project-root `AGENTS.md`, and official approval patterns
+  from `resources/approval-patterns/grok.md`. `/api/spawn` validation,
+  diagnostics, slash-command/approval-pattern sources, and the model picker
+  were extended accordingly. Requires a SuperGrok or X Premium+ subscription;
+  `many-ai-cli` never reads, stores, or proxies xAI session tokens.
+- **Configurable Ollama daemon base URL.** `ollama.base_url` in
+  `~/.many-ai-cli/config.yaml` can now point Ollama routing at any HTTP(S)
+  daemon reachable from the Hub process, not just `localhost:11434`. This
+  supports host/guest setups such as Windows host + Hyper-V guest or Windows
+  host + WSL guest: `/api/models` reads `<base_url>/api/tags`, Claude Code gets
+  `ANTHROPIC_BASE_URL=<base_url>`, and Codex gets
+  `OPENAI_BASE_URL=<base_url>/v1`.
+
 ## [0.3.2] - 2026-06-16
 
 ### Added

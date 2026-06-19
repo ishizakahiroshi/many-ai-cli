@@ -2,7 +2,7 @@
 // Go side is the source of truth; update this file when JSON fields or message
 // type values change in internal/proto/messages.go.
 
-export type ProviderID = 'claude' | 'codex' | 'copilot' | 'cursor-agent' | 'common' | string;
+export type ProviderID = 'claude' | 'codex' | 'copilot' | 'cursor-agent' | 'opencode' | 'grok' | 'common' | string;
 
 export type SessionState =
   | 'standby'
@@ -105,8 +105,29 @@ export interface Message {
   tokens_cache?: number;
   tokens_total?: number;
   ctx_window?: number;
+  ctx_used_pct?: number; // Claude Code statusLine 算出済みの context 使用率%（0/未送=未取得。Claude のみ）
   usage_model?: string;
   usage_started_at?: string;
+  // statusbar 追加メタ（Claude statusLine ネイティブ算出値・Claude のみ・0/未送=未取得）
+  rl_5h_pct?: number;       // 5時間レート制限の使用率%（Pro/Max のみ）
+  rl_5h_reset?: number;     // 同リセット時刻（unix epoch 秒）
+  rl_7d_pct?: number;       // 週次レート制限の使用率%
+  rl_7d_reset?: number;     // 同リセット時刻（unix epoch 秒）
+  lines_added?: number;     // AI がこのセッションで追加した行数
+  lines_removed?: number;   // AI がこのセッションで削除した行数
+  effort_level?: string;    // reasoning effort（low/medium/high/xhigh/max）
+  thinking?: boolean;       // 拡張思考の有効/無効
+  exceeds_200k?: boolean;   // 直近 API 応答の総トークンが 200k 超か
+  duration_ms?: number;     // セッション総経過時間（ms）
+  api_duration_ms?: number; // うち API 応答待ち時間（ms）
+  output_style?: string;    // Claude Code output_style.name
+  vim_mode?: string;        // Claude Code vim.mode
+  agent_name?: string;      // Claude Code agent.name
+  repo_host?: string;       // workspace.repo.host
+  repo_owner?: string;      // workspace.repo.owner
+  repo_name?: string;       // workspace.repo.name
+  remaining_pct?: number;   // Claude Code statusLine 算出済みの context 残り%
+  reasoning_output_tokens?: number; // Codex token_count.info reasoning_output_tokens
   // C3: git 変更状況メタ（git_checked=true のメッセージのみ有効）
   git_checked?: boolean;
   git_files?: number;

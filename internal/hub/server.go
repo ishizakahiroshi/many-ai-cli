@@ -339,14 +339,14 @@ func (c *wrapperConn) close() {
 }
 
 type Server struct {
-	cfg         *config.Config
-	logger      *slog.Logger
-	httpSrv     *http.Server
-	devMode     bool   // --dev: web/ をファイルシステムから直接サーブ（再コンパイル不要）
-	hubCWD      string // serve 起動時の os.Getwd() を保存
-	version     string // main.version (ldflags 経由) を保持し /api/info で返す
-	gitCommit   string // main.gitCommit (ldflags 経由・任意)。/api/info で返す
-	buildTime   string // main.buildTime (ldflags 経由・任意)。/api/info で返す
+	cfg       *config.Config
+	logger    *slog.Logger
+	httpSrv   *http.Server
+	devMode   bool   // --dev: web/ をファイルシステムから直接サーブ（再コンパイル不要）
+	hubCWD    string // serve 起動時の os.Getwd() を保存
+	version   string // main.version (ldflags 経由) を保持し /api/info で返す
+	gitCommit string // main.gitCommit (ldflags 経由・任意)。/api/info で返す
+	buildTime string // main.buildTime (ldflags 経由・任意)。/api/info で返す
 	// binGuard は「稼働中 Hub が起動時のバイナリのままか」を判定する。
 	// /api/info が binary_sha256 と binary_stale を申告するのに使い、
 	// wrapper・launcher・status・UI はこのフラグを読むだけで stale を扱える。
@@ -2800,18 +2800,39 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 	for _, id := range sessionIDs {
 		if stat, ok := usageStats[id]; ok {
 			_ = uc.send(proto.Message{
-				Type:           "usage_stat",
-				SessionID:      id,
-				Provider:       providerByID[id],
-				CostUSD:        stat.CostUSD,
-				CostKnown:      stat.CostKnown,
-				TokensIn:       stat.TokensIn,
-				TokensOut:      stat.TokensOut,
-				TokensCache:    stat.TokensCache,
-				TokensTotal:    stat.TokensTotal,
-				CtxWindow:      stat.CtxWindow,
-				UsageModel:     stat.UsageModel,
-				UsageStartedAt: stat.StartedAt,
+				Type:             "usage_stat",
+				SessionID:        id,
+				Provider:         providerByID[id],
+				CostUSD:          stat.CostUSD,
+				CostKnown:        stat.CostKnown,
+				TokensIn:         stat.TokensIn,
+				TokensOut:        stat.TokensOut,
+				TokensCache:      stat.TokensCache,
+				TokensTotal:      stat.TokensTotal,
+				CtxWindow:        stat.CtxWindow,
+				CtxUsedPct:       stat.CtxUsedPct,
+				RateLimit5hPct:   stat.RateLimit5hPct,
+				RateLimit5hReset: stat.RateLimit5hReset,
+				RateLimit7dPct:   stat.RateLimit7dPct,
+				RateLimit7dReset: stat.RateLimit7dReset,
+				LinesAdded:       stat.LinesAdded,
+				LinesRemoved:     stat.LinesRemoved,
+				EffortLevel:      stat.EffortLevel,
+				Thinking:         stat.Thinking,
+				Exceeds200k:      stat.Exceeds200k,
+				DurationMs:       stat.DurationMs,
+				APIDurationMs:    stat.APIDurationMs,
+				Version:          stat.Version,
+				OutputStyle:      stat.OutputStyle,
+				VimMode:          stat.VimMode,
+				AgentName:        stat.AgentName,
+				RepoHost:         stat.RepoHost,
+				RepoOwner:        stat.RepoOwner,
+				RepoName:         stat.RepoName,
+				RemainingPct:     stat.RemainingPct,
+				ReasoningOut:     stat.ReasoningOut,
+				UsageModel:       stat.UsageModel,
+				UsageStartedAt:   stat.StartedAt,
 			})
 		}
 	}

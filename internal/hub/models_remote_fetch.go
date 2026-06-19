@@ -18,6 +18,9 @@ type modelsDefaults struct {
 	// CursorAgent は cursor-agent CLI の `--model` に渡す候補。route/env 注入は行わず、
 	// 対応可否は cursor-agent 側に委ねる（全 ID は `cursor-agent --list-models` 参照、datalist で自由入力可）。
 	CursorAgent []Model `json:"cursor-agent"`
+	// Grok は Grok Build CLI の `--model` に渡す候補。route/env 注入は行わず、
+	// 対応可否は grok 側に委ねる（全 ID は `grok models` 参照、datalist で自由入力可）。
+	Grok []Model `json:"grok"`
 }
 
 const (

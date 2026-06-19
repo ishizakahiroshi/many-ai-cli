@@ -293,6 +293,8 @@ export function ensureTerminal(id) {
     liveStatusHideTimer: null,
     liveLineRow: null,
     liveLineCells: [],
+    compactingSince: null,
+    compactSeenAt: 0,
     autoScroll: true,
     everAttached: false,
   });
@@ -1547,6 +1549,59 @@ export function setSessionLiveStatus(id, text) {
   if (id === activeSessionId) renderLiveStatusDom('active', t.liveStatusText || '');
 }
 
+// ── compact（Claude /compact）専用のライブ表示 ────────────────────────────────
+// Claude Code は compact の中間進捗（10%,20%…）を PTY へ出さず 0%→100% に飛ぶため、
+// ターミナル内のバーは固まって見える。そこで many-ai-cli 側で経過秒を発番し、ライブ
+// 進捗窓に「圧縮中…(Ns)」＋不定形バーを出して「動いている」ことを示す。正確な % の
+// 再現はしない（PTY に無いものは作らない）。
+const COMPACT_DETECT_RE = /Compacting conversation/i;
+// compact のステータス更新が途切れた（＝完了）とみなすまでの猶予。spinner 再描画間隔より長く。
+const COMPACT_IDLE_MS = 1500;
+let compactTickTimer: ReturnType<typeof setInterval> | null = null;
+
+// PTY 出力チャンクに compact の兆候があれば、経過秒タイマーを起動/継続する。
+export function markCompactActivity(id, textChunk) {
+  if (!textChunk || !COMPACT_DETECT_RE.test(textChunk)) return;
+  const t = terminals.get(id);
+  if (!t) return;
+  if (t.compactingSince == null) t.compactingSince = Date.now();
+  t.compactSeenAt = Date.now();
+  if (id === activeSessionId) {
+    ensureCompactTick();
+    renderLiveStatusDom('active', ''); // text は renderLiveStatusDom 側で compact 文言へ差し替え
+  }
+}
+
+// activeSession が compact 中なら経過秒（整数）、そうでなければ null。
+function activeCompactElapsedSec(): number | null {
+  const id = activeSessionId;
+  const t = id != null ? terminals.get(id) : null;
+  if (!t || t.compactingSince == null) return null;
+  return Math.max(0, Math.floor((Date.now() - t.compactingSince) / 1000));
+}
+
+// 経過秒を毎秒更新する単一タイマー。activeSession の compact が解除されたら停止する。
+function ensureCompactTick() {
+  if (compactTickTimer != null) return;
+  compactTickTimer = setInterval(() => {
+    const id = activeSessionId;
+    const t = id != null ? terminals.get(id) : null;
+    if (!t || t.compactingSince == null) { stopCompactTick(); return; }
+    if (Date.now() - t.compactSeenAt > COMPACT_IDLE_MS) {
+      // compact のステータス更新が途切れた＝完了とみなし、通常表示へ戻す。
+      t.compactingSince = null;
+      stopCompactTick();
+      syncLiveStatusDomForActive();
+      return;
+    }
+    renderLiveStatusDom('active', ''); // 経過秒を再計算して再描画
+  }, 1000);
+}
+
+function stopCompactTick() {
+  if (compactTickTimer != null) { clearInterval(compactTickTimer); compactTickTimer = null; }
+}
+
 // 現在のピル表示（mode + ラベル）を決める。フレーム流入中はライブテキスト、
 // 途切れていればセッション状態（running/waiting/standby/error/disconnected）からラベルを引く。
 // これにより「実行中／承認待ち／待機中（＝終わってる）／切断」がピルだけで分かる。
@@ -1570,22 +1625,34 @@ function renderLiveStatusDom(mode, text) {
   const el = document.getElementById('terminal-live-status');
   if (!el) return;
   const textEl = el.querySelector('.live-status-text') as HTMLElement | null;
+  const barEl = el.querySelector('.live-compact-bar') as HTMLElement | null;
   if (!LIVE_STATUS_ENABLED || mode === 'hidden') {
     el.hidden = true;
     el.classList.remove('idle', 'waiting');
     if (textEl) textEl.textContent = '';
+    if (barEl) barEl.hidden = true;
     return;
+  }
+  // compact 中は経過秒ラベル＋不定形バーへ差し替える。active の特殊形として扱い、
+  // idle/waiting には落とさない（処理中であることを優先表示）。
+  const compactSec = activeCompactElapsedSec();
+  if (compactSec != null) {
+    mode = 'active';
+    text = ti18n('live_status_compacting', { sec: compactSec });
   }
   el.hidden = false;
   el.classList.toggle('idle', mode === 'idle');
   el.classList.toggle('waiting', mode === 'waiting');
+  if (barEl) barEl.hidden = (compactSec == null);
   if (textEl && textEl.textContent !== text) textEl.textContent = text || '';
 }
 
 // セッション切替・状態変化時に、アクティブセッションの現在状態を DOM へ反映する。
 // 枠は常時表示。アクティブセッションが無いときだけ枠ごと消す(hidden)。
 export function syncLiveStatusDomForActive() {
-  if (activeSessionId === null || !terminals.get(activeSessionId)) { renderLiveStatusDom('hidden', ''); return; }
+  if (activeSessionId === null || !terminals.get(activeSessionId)) { stopCompactTick(); renderLiveStatusDom('hidden', ''); return; }
+  // 切替先が compact 中なら経過秒タイマーを再開（非アクティブ中は tick を回していないため）。
+  if (activeCompactElapsedSec() != null) ensureCompactTick();
   const v = liveStatusViewFor(activeSessionId);
   renderLiveStatusDom(v.mode, v.text);
 }

@@ -338,6 +338,7 @@ export class MultiPaneManager {
                           : session.provider === 'codex'  ? 'X'
                           : session.provider === 'copilot' ? 'P'
                           : session.provider === 'cursor-agent' ? 'r'
+                          : session.provider === 'grok' ? 'G'
                           : session.provider === 'ollama' ? 'O'
                           : (session.provider || '?')[0].toUpperCase();
     header.appendChild(provBadge);

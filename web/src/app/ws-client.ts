@@ -4,7 +4,7 @@ import { showToast, token } from './util.js';
 import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, approvalVisibleCache, autoDismissTimers, chatHistory, deriveProjectKeyFromCwd, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, multiQuestionLatchAt, multiQuestionVisibleCache, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
 import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLocalSessionHistory, resetLocalSessionHistory, updateInputAffordance } from '../app.js';
 import { activateSession, render, renderSessionList, renderSessionStateUpdate, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
-import { applyRemotePtyResize, ensureTerminal, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
+import { applyRemotePtyResize, ensureTerminal, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup } from './settings.js';
 import { setMultiQuestionBannerVisible } from './approval-ui.js';
 import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, hideActionBar, isAIProvider, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
@@ -296,6 +296,7 @@ export function _connectWs() {
       queuePendingTerminalChunk(id, xtermBytes);
     }
     trackApprovalHintFromChunk(id, xtermBytes, approvalTextChunk);
+    markCompactActivity(id, approvalTextChunk);
     if (isLiveRendered) scheduleApprovalCheck(id);
     // Codex 等 provider 別のピル内テキストを本文から抽出（Claude は既存ブロック抽出経路）。
     if (isActive) scheduleLiveStatusExtract(id);

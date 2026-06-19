@@ -480,7 +480,7 @@ func nativeApprovalLooksValid(provider string, contextLines []string, opts []pro
 	// 事故が起きる。
 	// カーソル付き選択肢 + キー操作ヒント行（"Enter to ..." と "Esc to cancel" の併記）が
 	// 揃う場合はセレクタ UI とみなし、承認語ラベルなしでも許容する。
-	isSelectorDialog := provider == "claude" &&
+	isSelectorDialog := (provider == "claude" || provider == "grok") &&
 		approvalOptionsHaveCursor(opts) &&
 		strings.Contains(context, "esc to cancel") &&
 		strings.Contains(context, "enter to")

@@ -1,6 +1,10 @@
 package hub
 
-import "strings"
+import (
+	"strings"
+
+	"many-ai-cli/internal/config"
+)
 
 // Route 名の定数。空文字は「指定なし（既定 provider）」を意味する。
 const (
@@ -40,17 +44,22 @@ func EnvPresetFor(provider, route string) []string {
 // proxyToken が非空のとき、URL に `/s/<token>` を埋め込み、MANY_AI_CLI_PROXY_TOKEN env も付与する。
 // wrapper はこの env を読んで register 時に Hub へ伝え、Hub が token → session ID を解決する。
 func EnvPresetForProxy(provider, route, proxyBaseURL, proxyToken string) []string {
+	return EnvPresetForProxyWithOllamaBase(provider, route, proxyBaseURL, proxyToken, "")
+}
+
+func EnvPresetForProxyWithOllamaBase(provider, route, proxyBaseURL, proxyToken, ollamaBaseURL string) []string {
 	pathPrefix := ""
 	if proxyToken != "" {
 		pathPrefix = "/s/" + proxyToken
 	}
+	ollamaBase := config.EffectiveOllamaBaseURL(ollamaBaseURL)
 	switch provider {
 	case "claude":
 		if route == RouteOllama {
 			return []string{
 				"ANTHROPIC_AUTH_TOKEN=ollama",
 				"ANTHROPIC_API_KEY=",
-				"ANTHROPIC_BASE_URL=http://localhost:11434",
+				"ANTHROPIC_BASE_URL=" + ollamaBase,
 			}
 		}
 		if proxyBaseURL != "" {
@@ -66,7 +75,7 @@ func EnvPresetForProxy(provider, route, proxyBaseURL, proxyToken string) []strin
 		if route == RouteOllama {
 			return []string{
 				"OPENAI_API_KEY=ollama",
-				"OPENAI_BASE_URL=http://localhost:11434/v1",
+				"OPENAI_BASE_URL=" + ollamaBase + "/v1",
 			}
 		}
 		if proxyBaseURL != "" {

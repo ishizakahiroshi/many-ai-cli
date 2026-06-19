@@ -44,7 +44,6 @@ type ModelsResponse struct {
 
 const (
 	ollamaLocalCacheTTL  = 60 * time.Second
-	ollamaLocalURL       = "http://localhost:11434/api/tags"
 	openCodeModelsTTL    = 10 * time.Minute
 	openCodeModelsNegTTL = 3 * time.Minute
 )
@@ -64,6 +63,7 @@ type ollamaTagsCacheEntry struct {
 	models     []Model
 	fetchedAt  time.Time
 	err        error
+	tagsURL    string
 	generation uint64 // invalidate() で進む世代番号; finding #24 の force リフレッシュ判定に使用
 }
 
@@ -283,10 +283,18 @@ func fetchOllamaTags(url string, timeout time.Duration) ([]Model, error) {
 	return out, nil
 }
 
+func ollamaTagsURL(baseURL string) string {
+	return config.EffectiveOllamaBaseURL(baseURL) + "/api/tags"
+}
+
 // getOllamaLocal はキャッシュ済みのローカル daemon モデル一覧を返す。
 // force=true 時は TTL を無視し強制リフレッシュする。finding #24 対策として
 // invalidate() で進んだ世代より前の in-flight 結果を受け取らない。
-func (c *modelsCache) getOllamaLocal(force bool) (models []Model, fetchedAt time.Time, err error) {
+func (c *modelsCache) getOllamaLocal(force bool, tagsURL string) (models []Model, fetchedAt time.Time, err error) {
+	tagsURL = strings.TrimSpace(tagsURL)
+	if tagsURL == "" {
+		tagsURL = ollamaTagsURL("")
+	}
 	var inFlight *ollamaTagsFetch
 	for {
 		c.mu.Lock()
@@ -296,7 +304,7 @@ func (c *modelsCache) getOllamaLocal(force bool) (models []Model, fetchedAt time
 		// entryFresh は force 用の世代チェック（entry.generation >= curGen）を内包する
 		// ため、force でも「invalidate 後に完了済みの現世代 fresh entry」は再 fetch せず
 		// 受け入れる（rapid force 連打での thundering・不要な Ollama 接続を防ぐ）。
-		entryFresh := entry != nil && (!force || entry.generation >= curGen) && time.Since(entry.fetchedAt) < ollamaLocalCacheTTL
+		entryFresh := entry != nil && entry.tagsURL == tagsURL && (!force || entry.generation >= curGen) && time.Since(entry.fetchedAt) < ollamaLocalCacheTTL
 		if entryFresh {
 			c.mu.Unlock()
 			return entry.models, entry.fetchedAt, entry.err
@@ -315,7 +323,7 @@ func (c *modelsCache) getOllamaLocal(force bool) (models []Model, fetchedAt time
 		// 待機後: fresh かつ世代が自分の startGen 以上なら受け入れる
 		c.mu.Lock()
 		entry = c.local
-		if entry != nil && entry.generation >= myStartGen && time.Since(entry.fetchedAt) < ollamaLocalCacheTTL {
+		if entry != nil && entry.tagsURL == tagsURL && entry.generation >= myStartGen && time.Since(entry.fetchedAt) < ollamaLocalCacheTTL {
 			c.mu.Unlock()
 			return entry.models, entry.fetchedAt, entry.err
 		}
@@ -323,7 +331,7 @@ func (c *modelsCache) getOllamaLocal(force bool) (models []Model, fetchedAt time
 		// 世代が古い結果は受け入れず再試行（force は既に消費）
 		force = false
 	}
-	models, err = fetchOllamaTags(ollamaLocalURL, 3*time.Second)
+	models, err = fetchOllamaTags(tagsURL, 3*time.Second)
 	c.mu.Lock()
 	newGen := inFlight.startGen
 	if c.generation > newGen {
@@ -333,6 +341,7 @@ func (c *modelsCache) getOllamaLocal(force bool) (models []Model, fetchedAt time
 		models:     models,
 		fetchedAt:  time.Now(),
 		err:        err,
+		tagsURL:    tagsURL,
 		generation: newGen,
 	}
 	c.local = newEntry
@@ -362,7 +371,7 @@ func (c *modelsCache) invalidate() {
 //
 // この設計により「daemon が知らない catalog 名」が選択肢に出ない（= 選んだら必ず呼べる）。
 // 新規 cloud モデルの発見は UI 側の外部リンク（https://ollama.com/search?c=cloud）に任せる。
-func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], remoteSource string, localConfig []config.LocalModel, force bool) ModelsResponse {
+func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], remoteSource string, localConfig []config.LocalModel, ollamaBaseURL string, force bool) ModelsResponse {
 	if force && remote != nil {
 		remote.invalidate()
 	}
@@ -376,7 +385,7 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 			"anthropic":           remoteSource,
 			"openai":              remoteSource,
 			"opencode":            "opencode models opencode --verbose",
-			"ollama_local":        ollamaLocalURL,
+			"ollama_local":        ollamaTagsURL(ollamaBaseURL),
 			"local_models_config": "~/.many-ai-cli/config.yaml#local_models",
 		},
 	}
@@ -420,6 +429,17 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 		})
 	}
 
+	// Grok Build（GitHub fetch only）
+	// Route は空: grok は env 注入せず `grok --model <id>` へ素通しする。
+	if len(defaults.Grok) > 0 {
+		resp.Groups = append(resp.Groups, ModelGroup{
+			Label:    "Grok",
+			Provider: "grok",
+			Route:    "",
+			Models:   append([]Model{}, defaults.Grok...),
+		})
+	}
+
 	// OpenCode は CLI から動的取得する。固定候補は持たない。
 	if models, fetchedAt, _ := cache.getOpenCodeModels(force); len(models) > 0 {
 		resp.Groups = append(resp.Groups, ModelGroup{
@@ -434,7 +454,7 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 	}
 
 	// Ollama Local daemon の /api/tags を 1 度だけ取得し、remote_host で 2 分割する
-	localAll, localAt, localErr := cache.getOllamaLocal(force)
+	localAll, localAt, localErr := cache.getOllamaLocal(force, ollamaTagsURL(ollamaBaseURL))
 	var cloudFromDaemon, trulyLocal []Model
 	for _, m := range localAll {
 		if m.RemoteHost != "" {
