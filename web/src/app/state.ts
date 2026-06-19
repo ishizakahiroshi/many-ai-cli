@@ -29,6 +29,9 @@ export interface TerminalEntry {
   // ライブ進捗行の列アドレス再構成用（部分更新を 1 行へ組み立てる）
   liveLineRow?: number | null;   // 現在組み立て中の行番号（端末スクロールで動く）
   liveLineCells?: string[];      // 列 → 文字のスパース配列（1 列 1 要素 / 1-based）
+  // compact（Claude /compact）中の経過秒表示用。中間 % が PTY に来ないため自前で発番する。
+  compactingSince?: number | null;  // compact 開始時刻(ms)。経過秒の起点。null＝非 compact
+  compactSeenAt?: number;           // 最後に compact フレームを観測した時刻(ms)。解除判定用
   autoScroll?: boolean;
   everAttached?: boolean;
   scrollHandlerInstalled?: boolean;

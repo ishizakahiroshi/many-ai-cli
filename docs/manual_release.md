@@ -251,19 +251,23 @@ git tag v0.3.0  ── push ──┐
 
 `resources/` 配下の以下は、リリースのタグやバイナリとは独立に、実行時に GitHub の `main` ブランチから raw fetch される（リビルド不要・トークン消費 0 で更新できる仕組み。実装は `internal/config/config.go` の `Default*Source` と `internal/hub/slash_cmd_fetch.go` 等を参照）。
 
-- `resources/slash-commands/claude.md` / `codex.md` / `copilot.md`
+- `resources/slash-commands/claude.md` / `codex.md` / `copilot.md` / `cursor-agent.md` / `opencode.md`
 - `resources/approval-patterns/claude.md` / `codex.md` / `copilot.md` / `common.md`
 - `resources/usage-links/defaults.json`
 - `resources/models/defaults.json`
 
 取得元はいずれも `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/...`。つまり **`main` に push した瞬間、全ユーザーの取得元が切り替わる**（Hub 側 24h キャッシュ TTL の範囲で順次反映）。バイナリの version とは無関係に live に効くため、リリース commit を `main` に入れる前に、ローカル作業ツリーと GitHub `main` 公開分の差分を必ず確認する。
 
-> **鮮度の再チェックは別オペ**: 以下の差分確認は「ローカルと公開分が食い違っていないか（drift）」を見るもので、「`resources/slash-commands/*.md` そのものが各プロバイダー本家の最新コマンドに対して古くないか（freshness）」は別の話。リリース前に本家コマンドの追加・削除を取り込みたい場合は先に [manual_slash_commands_update.md](manual_slash_commands_update.md) の C1〜C2 を実施し、その結果をこの差分確認に通すこと。
+> **鮮度（freshness）と drift は別オペ**: 以下の差分確認は「ローカルと公開分が食い違っていないか（drift）」を見るもので、「`resources/slash-commands/*.md` そのものが各プロバイダー本家の最新コマンドに対して古くないか（freshness）」は別の話。
+>
+> freshness は `release` スキルの前提チェックに組み込み済み: `repo == many-ai-cli` のとき `slash-commands-update` の **preflight** が走り、最新 `docs/local/slash-command-freshness_YYYY-MM-DD.md` が期限内に存在し、**未判断差分（`decision = pending`）が残っていないこと**を確認する。pending が残るとタグを打たせない（採否＝`accepted` / `deferred: 理由` を release md に書くまでブロック）。`unknown`（source 取得不能・opencode 等）は既定で警告のみ。
+>
+> リリース前に本家コマンドの追加・削除を取り込みたい場合は、先に `slash-commands-update` の `report` モード（手順詳細は [manual_slash_commands_update.md](manual_slash_commands_update.md) の C1〜C2）で鮮度レポートを作り、差分の採否を決めて `apply` で `resources/slash-commands/*.md` に反映してから、下記の drift 差分確認に通すこと。freshness 結果は release md の `## 申し送り` に「Slash command freshness」表として残す。
 
 スラッシュコマンドの差分確認（PowerShell）:
 
 ```powershell
-foreach ($p in 'claude','codex','copilot') {
+foreach ($p in 'claude','codex','copilot','cursor-agent','opencode') {
   $remote = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/$p.md"
   $gh = (Invoke-WebRequest -UseBasicParsing $remote).Content
   $local = Get-Content -Raw "resources/slash-commands/$p.md"
@@ -275,7 +279,7 @@ foreach ($p in 'claude','codex','copilot') {
 bash の場合:
 
 ```bash
-for p in claude codex copilot; do
+for p in claude codex copilot cursor-agent opencode; do
   curl -s "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/$p.md" -o "/tmp/gh_$p.md"
   diff "/tmp/gh_$p.md" "resources/slash-commands/$p.md" && echo "$p: 差分なし"
 done

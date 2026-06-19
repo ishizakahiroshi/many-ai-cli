@@ -125,9 +125,32 @@ type Message struct {
 	TokensOut      int     `json:"tokens_out,omitempty"`
 	TokensCache    int     `json:"tokens_cache,omitempty"`
 	TokensTotal    int     `json:"tokens_total,omitempty"`
-	CtxWindow      int     `json:"ctx_window,omitempty"` // モデルのコンテキストウィンドウ上限（不明なら省略）
+	CtxWindow      int     `json:"ctx_window,omitempty"`   // モデルのコンテキストウィンドウ上限（不明なら省略）
+	CtxUsedPct     float64 `json:"ctx_used_pct,omitempty"` // Claude statusLine 算出済みの context 使用率%（0=未取得・Claude のみ）
 	UsageModel     string  `json:"usage_model,omitempty"`
 	UsageStartedAt string  `json:"usage_started_at,omitempty"`
+
+	// statusbar 追加メタ（Claude statusLine ネイティブ算出値。Claude のみ・C2 relay 中継）。
+	// rate_limits は Pro/Max のみ／early-session は 0。lines は AI 編集量（作業ツリー git diff とは別軸）。
+	RateLimit5hPct   float64 `json:"rl_5h_pct,omitempty"`
+	RateLimit5hReset int64   `json:"rl_5h_reset,omitempty"`
+	RateLimit7dPct   float64 `json:"rl_7d_pct,omitempty"`
+	RateLimit7dReset int64   `json:"rl_7d_reset,omitempty"`
+	LinesAdded       int     `json:"lines_added,omitempty"`
+	LinesRemoved     int     `json:"lines_removed,omitempty"`
+	EffortLevel      string  `json:"effort_level,omitempty"`
+	Thinking         bool    `json:"thinking,omitempty"`
+	Exceeds200k      bool    `json:"exceeds_200k,omitempty"`
+	DurationMs       int64   `json:"duration_ms,omitempty"`
+	APIDurationMs    int64   `json:"api_duration_ms,omitempty"`
+	OutputStyle      string  `json:"output_style,omitempty"`
+	VimMode          string  `json:"vim_mode,omitempty"`
+	AgentName        string  `json:"agent_name,omitempty"`
+	RepoHost         string  `json:"repo_host,omitempty"`
+	RepoOwner        string  `json:"repo_owner,omitempty"`
+	RepoName         string  `json:"repo_name,omitempty"`
+	RemainingPct     float64 `json:"remaining_pct,omitempty"`
+	ReasoningOut     int     `json:"reasoning_output_tokens,omitempty"`
 
 	// ProxyToken: register 時に wrapper が伝える内蔵プロキシ用ランダムトークン。
 	// Hub は spawn 時にこれを env (MANY_AI_CLI_PROXY_TOKEN) として注入し、

@@ -207,6 +207,7 @@ export function isAIProvider(provider: string): boolean {
     case 'copilot':
     case 'cursor-agent':
     case 'opencode':
+    case 'grok':
       return true;
     default:
       return false;
@@ -221,7 +222,7 @@ export function isShellProvider(provider: string): boolean {
 // Hub 起動時にデフォルトをユーザー設定ディレクトリに展開（既存ファイルは尊重）し、
 // HTTP 経由で配信する。ユーザーが直接編集して文言を追加・調整できる。
 // claude / codex は英語固定（Anthropic/OpenAI が国際化していない）、common は多言語混在。
-export const providerApprovalTriggers = { claude: [], codex: [], copilot: [], 'cursor-agent': [], opencode: [], common: [] };
+export const providerApprovalTriggers = { claude: [], codex: [], copilot: [], 'cursor-agent': [], opencode: [], grok: [], common: [] };
 
 (async function loadApprovalPatterns() {
   const fetchJson = async (name) => {
@@ -234,8 +235,8 @@ export const providerApprovalTriggers = { claude: [], codex: [], copilot: [], 'c
       return [];
     }
   };
-  const [claude, codex, copilot, cursorAgent, opencode, common] = await Promise.all([
-    fetchJson('claude'), fetchJson('codex'), fetchJson('copilot'), fetchJson('cursor-agent'), fetchJson('opencode'), fetchJson('common'),
+  const [claude, codex, copilot, cursorAgent, opencode, grok, common] = await Promise.all([
+    fetchJson('claude'), fetchJson('codex'), fetchJson('copilot'), fetchJson('cursor-agent'), fetchJson('opencode'), fetchJson('grok'), fetchJson('common'),
   ]);
   const norm = arr => (Array.isArray(arr) ? arr : []).map(s => String(s).toLowerCase()).filter(Boolean);
   providerApprovalTriggers.claude = norm(claude);
@@ -243,6 +244,7 @@ export const providerApprovalTriggers = { claude: [], codex: [], copilot: [], 'c
   providerApprovalTriggers.copilot = norm(copilot);
   providerApprovalTriggers['cursor-agent'] = norm(cursorAgent);
   providerApprovalTriggers.opencode = norm(opencode);
+  providerApprovalTriggers.grok = norm(grok);
   providerApprovalTriggers.common = norm(common);
 })();
 
@@ -581,7 +583,7 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
   const isHubChoice = isHubChoicePrompt(contextLines, options);
   const suppressModelSelector = isModelSelectorContext(provider, contextLines);
   const hasNativePromptHint = !suppressModelSelector && contextLines.some((line) => !String(line || '').toLowerCase().includes('esc to go back') && (matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)));
-  const isShortcutApprovalMenu = (provider === 'codex' || provider === 'copilot' || provider === 'cursor-agent' || provider === 'opencode') && options.some(o => o._sendText) && hasNativePromptHint;
+  const isShortcutApprovalMenu = (provider === 'codex' || provider === 'copilot' || provider === 'cursor-agent' || provider === 'opencode' || provider === 'grok') && options.some(o => o._sendText) && hasNativePromptHint;
   const approvalNear = (hasCursorOption || isShortcutApprovalMenu) &&
     ((hasApprovalLikeLabel && (hasUserSpecifies || contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)))) || isHubChoice);
   const hasChoiceMenuHint = (hasCursorOption || isShortcutApprovalMenu) && options.length > 0 && hasNativePromptHint;
@@ -990,7 +992,7 @@ export function detectApproval(id) {
   const isHubChoice = isHubChoicePrompt(contextLines, options);
   const suppressModelSelector = isModelSelectorContext(provider, contextLines);
   const hasNativePromptHint = !suppressModelSelector && contextLines.some((line) => !String(line || '').toLowerCase().includes('esc to go back') && (matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)));
-  const isShortcutApprovalMenu = (provider === 'codex' || provider === 'copilot' || provider === 'cursor-agent' || provider === 'opencode') && options.some(o => o._sendText) && hasNativePromptHint;
+  const isShortcutApprovalMenu = (provider === 'codex' || provider === 'copilot' || provider === 'cursor-agent' || provider === 'opencode' || provider === 'grok') && options.some(o => o._sendText) && hasNativePromptHint;
   const approvalNear = (hasApprovalLikeLabel &&
     (hasUserSpecifies || hasNativePromptHint)) || isHubChoice || isShortcutApprovalMenu;
   const hasApproval = options.length > 0 && approvalNear && (hasCursorOption || isShortcutApprovalMenu);

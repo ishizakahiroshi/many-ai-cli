@@ -113,6 +113,8 @@ func approvalSourceFor(src config.ApprovalPatternSources, provider string) strin
 		return src.CursorAgent
 	case "opencode":
 		return src.Opencode
+	case "grok":
+		return src.Grok
 	case "common":
 		return src.Common
 	}

@@ -63,6 +63,18 @@ var defaultApprovalPatterns = map[string][]string{
 		"allow always",
 		"reject",
 	},
+	// grok (Grok Build) は Claude Code 互換 harness（--permission-mode / CLAUDE.md）。
+	// 承認 UI も Claude Code 系と推定し、暫定で Claude 系 + 汎用文言を採用する。
+	// 実機 TUI の承認プロンプトで確定する（plan_grok-build-provider-integration.md C3）。
+	"grok": {
+		"do you want to",
+		"esc to cancel",
+		"press enter to confirm",
+		"allow this command",
+		"permission required",
+		"approve?",
+		"proceed?",
+	},
 	"common": {
 		"would you like to",
 		"この操作を許可",
@@ -74,7 +86,7 @@ var defaultApprovalPatterns = map[string][]string{
 
 // KnownApprovalProviders は承認パターンを管理する provider 名一覧（順序固定）。
 func KnownApprovalProviders() []string {
-	return []string{"claude", "codex", "copilot", "cursor-agent", "opencode", "common"}
+	return []string{"claude", "codex", "copilot", "cursor-agent", "opencode", "grok", "common"}
 }
 
 // IsKnownApprovalProvider は provider 名が管理対象か判定する。

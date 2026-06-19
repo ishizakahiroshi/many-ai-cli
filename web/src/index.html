@@ -30,7 +30,7 @@
     <button id="reconnect-btn" hidden>↺ <span data-i18n="reconnect">reconnect</span></button>
     <div class="usage-menu" id="usage-menu">
       <button class="usage-menu-btn" id="usage-menu-btn" aria-haspopup="true" aria-expanded="false">
-        <svg class="usage-menu-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 14" width="60" height="14" aria-hidden="true">
+        <svg class="usage-menu-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 70 14" width="70" height="14" aria-hidden="true">
           <circle class="prov-shape claude" cx="5" cy="7" r="4.5" stroke-width="1.6"/>
           <text class="prov-letter claude" x="5" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">C</text>
           <circle class="prov-shape codex" cx="15" cy="7" r="4.5" stroke-width="1.6"/>
@@ -41,8 +41,10 @@
           <text class="prov-letter cursor-agent" x="35" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">r</text>
           <circle class="prov-shape opencode" cx="45" cy="7" r="4.5" stroke-width="1.6"/>
           <text class="prov-letter opencode" x="45" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
-          <rect class="prov-shape ollama" x="50.5" y="2.5" width="9" height="9" rx="2" stroke-width="1.6"/>
-          <text class="prov-letter ollama" x="55" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
+          <circle class="prov-shape grok" cx="55" cy="7" r="4.5" stroke-width="1.6"/>
+          <text class="prov-letter grok" x="55" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">G</text>
+          <rect class="prov-shape ollama" x="60.5" y="2.5" width="9" height="9" rx="2" stroke-width="1.6"/>
+          <text class="prov-letter ollama" x="65" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
         </svg>
         <span data-i18n="usage_menu_btn">Usage</span>
         <svg class="usage-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -72,6 +74,11 @@
         <a id="usage-link-opencode" class="usage-dropdown-item" href="https://opencode.ai/go" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape opencode" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter opencode" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">O</text></svg>
           <span class="usage-item-name">OpenCode</span>
+          <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+        </a>
+        <a id="usage-link-grok" class="usage-dropdown-item" href="https://grok.com" target="_blank" rel="noopener noreferrer">
+          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape grok" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter grok" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">G</text></svg>
+          <span class="usage-item-name">Grok</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
         <a id="usage-link-ollama" class="usage-dropdown-item" href="http://localhost:11434" target="_blank" rel="noopener noreferrer">
@@ -183,6 +190,8 @@
             </label>
           </div>
           <div class="settings-note" data-i18n="settings_token_statusbar_desc">画面下部にアクティブセッションのコスト・モデル・経過時間を常時表示します。</div>
+          <div class="settings-subhead" data-i18n="settings_token_statusbar_segments">表示するセグメント</div>
+          <div id="tsb-segments-toggles" class="tsb-segments-toggles"></div>
         </div>
       </details>
       <details class="settings-section" data-section="session">
@@ -316,6 +325,7 @@
               <option value="copilot" data-i18n="settings_approval_patterns_copilot">GitHub Copilot</option>
               <option value="cursor-agent" data-i18n="settings_approval_patterns_cursor_agent">Cursor Agent</option>
               <option value="opencode" data-i18n="settings_approval_patterns_opencode">OpenCode</option>
+              <option value="grok" data-i18n="settings_approval_patterns_grok">Grok</option>
               <option value="common" data-i18n="settings_approval_patterns_common">共通</option>
             </select>
           </div>
@@ -673,6 +683,10 @@
             <input type="text" id="usage-link-opencode-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_opencode_placeholder" placeholder="OpenCode URL">
           </div>
           <div class="settings-row">
+            <span class="settings-label">Grok</span>
+            <input type="text" id="usage-link-grok-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_grok_placeholder" placeholder="Default Grok usage URL">
+          </div>
+          <div class="settings-row">
             <span class="settings-label">Ollama</span>
             <input type="text" id="usage-link-ollama-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_ollama_placeholder" placeholder="Default: http://localhost:11434">
           </div>
@@ -825,6 +839,7 @@
               <option value="copilot">GitHub Copilot</option>
               <option value="cursor-agent">Cursor Agent</option>
               <option value="opencode">OpenCode</option>
+              <option value="grok">Grok</option>
               <option value="shell">Shell</option>
             </select>
             <div id="spawn-provider-combobox" class="spawn-provider-combobox">
@@ -896,6 +911,7 @@
           <div id="spawn-copilot-note" class="settings-note" data-i18n="spawn_copilot_note" hidden>Uses the installed GitHub Copilot CLI. Authentication and permissions are managed by Copilot.</div>
           <div id="spawn-cursor-agent-note" class="settings-note" data-i18n="spawn_cursor_agent_note" hidden>Uses the installed Cursor Agent CLI. Authentication and permissions are managed by Cursor.</div>
           <div id="spawn-opencode-note" class="settings-note" data-i18n="spawn_opencode_note" hidden>Uses the installed OpenCode CLI. Run `opencode auth login` before starting. Free-tier models may take 1–2 minutes to respond.</div>
+          <div id="spawn-grok-note" class="settings-note" data-i18n="spawn_grok_note" hidden>Uses the installed Grok Build CLI (xAI). Requires a SuperGrok or X Premium+ subscription — the base X Premium plan cannot use it. Sign-in and quota stay in Grok.</div>
           <div id="spawn-shell-note" class="settings-note" data-i18n="spawn_shell_note" hidden>Opens the OS default shell (pwsh / bash). No AI-specific options apply.</div>
 
           <!-- C2: Detached 設定セクション -->
@@ -1082,7 +1098,7 @@
              CLI のステータス更新を抽出して表示し、稼働中はスピナーが回る。更新が途切れると
              グレーの待機表示(idle)へ変わるが枠は消さず常時残す＝「何も送られていない＝終わってる」
              を一目で判別できる（terminal.ts の setSessionLiveStatus / renderLiveStatusDom）。 -->
-        <div id="terminal-live-status" hidden><span class="live-spinner" aria-hidden="true"></span><span class="live-status-text"></span></div>
+        <div id="terminal-live-status" hidden><span class="live-spinner" aria-hidden="true"></span><span class="live-status-text"></span><span class="live-compact-bar" aria-hidden="true" hidden></span></div>
         <div id="input-bar">
           <div id="input-wrap">
             <button id="tools-flip-btn" class="quick-cmd-btn" data-i18n-tooltip="tools_flip_tooltip" aria-label="Toggle tools position">⇄</button>
@@ -1322,8 +1338,10 @@
     <span class="tsb-seg tsb-seg-id"></span>
     <span class="tsb-seg tsb-seg-status"></span>
     <span class="tsb-seg tsb-seg-agent"></span>
+    <span class="tsb-seg tsb-seg-effort"></span>
     <span class="tsb-seg tsb-seg-label"></span>
     <span class="tsb-seg tsb-seg-project"></span>
+    <span class="tsb-seg tsb-seg-ailines"></span>
     <span class="tsb-seg tsb-seg-ctx"></span>
     <span class="tsb-seg tsb-seg-tok"></span>
     <span class="tsb-seg tsb-seg-cache"></span>
@@ -1331,6 +1349,7 @@
     <span class="tsb-seg tsb-seg-cost"></span>
     <span class="tsb-seg tsb-seg-burn"></span>
     <span class="tsb-seg tsb-seg-elapsed"></span>
+    <span class="tsb-seg tsb-seg-ratelimit"></span>
     <span class="tsb-seg tsb-seg-conn"></span>
     <span class="tsb-seg tsb-seg-fleet"></span>
     <button type="button" class="tsb-seg tsb-seg-more" aria-label="詳細">…</button>

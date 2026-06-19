@@ -51,6 +51,29 @@ type usageStat struct {
 	TokensTotal int
 	// CtxWindow: モデルのコンテキストウィンドウ上限（relay から受信。不明なら 0）。
 	CtxWindow int
+	// CtxUsedPct: Claude Code statusLine 算出済みの context 使用率%（0=未取得。Claude のみ）。
+	CtxUsedPct float64
+	// statusbar 追加メタ（Claude statusLine ネイティブ算出値。Claude のみ・0/未送=未取得）。
+	RateLimit5hPct   float64
+	RateLimit5hReset int64
+	RateLimit7dPct   float64
+	RateLimit7dReset int64
+	LinesAdded       int
+	LinesRemoved     int
+	EffortLevel      string
+	Thinking         bool
+	Exceeds200k      bool
+	DurationMs       int64
+	APIDurationMs    int64
+	Version          string
+	OutputStyle      string
+	VimMode          string
+	AgentName        string
+	RepoHost         string
+	RepoOwner        string
+	RepoName         string
+	RemainingPct     float64
+	ReasoningOut     int
 	// UsageModel: relay が報告したモデル ID / display_name。
 	UsageModel string
 	StartedAt  string
@@ -175,14 +198,36 @@ type sessionUsageRequest struct {
 	CostUSD   float64 `json:"cost_usd"`
 	// CostFromRelay: relay 側（Claude）が計算済みコストを送る場合は true。
 	// false（Codex 等）の場合は Hub 側の価格表で算出する。
-	CostFromRelay bool   `json:"cost_from_relay"`
-	Model         string `json:"model"`
-	TokensIn      int    `json:"tokens_in"`
-	TokensOut     int    `json:"tokens_out"`
-	TokensCache   int    `json:"tokens_cache"`
-	TokensTotal   int    `json:"tokens_total"`
-	CtxWindow     int    `json:"ctx_window"`
-	StartedAt     string `json:"started_at"`
+	CostFromRelay bool    `json:"cost_from_relay"`
+	Model         string  `json:"model"`
+	TokensIn      int     `json:"tokens_in"`
+	TokensOut     int     `json:"tokens_out"`
+	TokensCache   int     `json:"tokens_cache"`
+	TokensTotal   int     `json:"tokens_total"`
+	CtxWindow     int     `json:"ctx_window"`
+	CtxUsedPct    float64 `json:"ctx_used_pct"`
+	StartedAt     string  `json:"started_at"`
+	// statusbar 追加メタ（Claude statusLine ネイティブ算出値。Claude のみ）。
+	RateLimit5hPct   float64 `json:"rl_5h_pct"`
+	RateLimit5hReset int64   `json:"rl_5h_reset"`
+	RateLimit7dPct   float64 `json:"rl_7d_pct"`
+	RateLimit7dReset int64   `json:"rl_7d_reset"`
+	LinesAdded       int     `json:"lines_added"`
+	LinesRemoved     int     `json:"lines_removed"`
+	EffortLevel      string  `json:"effort_level"`
+	Thinking         bool    `json:"thinking"`
+	Exceeds200k      bool    `json:"exceeds_200k"`
+	DurationMs       int64   `json:"duration_ms"`
+	APIDurationMs    int64   `json:"api_duration_ms"`
+	Version          string  `json:"version"`
+	OutputStyle      string  `json:"output_style"`
+	VimMode          string  `json:"vim_mode"`
+	AgentName        string  `json:"agent_name"`
+	RepoHost         string  `json:"repo_host"`
+	RepoOwner        string  `json:"repo_owner"`
+	RepoName         string  `json:"repo_name"`
+	RemainingPct     float64 `json:"remaining_pct"`
+	ReasoningOut     int     `json:"reasoning_output_tokens"`
 }
 
 // handleSessionUsage は POST /api/session-usage を処理する。
@@ -225,6 +270,59 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "ctx_window out of range")
 		return
 	}
+	// ctx_used_pct は Claude statusLine 算出済みの 0–100 の使用率%。
+	// 範囲外・NaN/Inf は不正値として 0（=未取得・UI 側はフォールバック）に丸める。
+	// リクエスト全体は弾かない（他フィールドは正常なため）。
+	ctxUsedPct := req.CtxUsedPct
+	if ctxUsedPct != ctxUsedPct /* NaN */ || ctxUsedPct < 0 || ctxUsedPct > 100 {
+		ctxUsedPct = 0
+	}
+	// statusbar 追加メタの値域チェック。いずれも補助表示なので不正値は 0/空に丸め、
+	// リクエスト全体は弾かない（他フィールドが正常なら usage 更新は通す）。
+	clampPct := func(v float64) float64 {
+		if v != v /* NaN */ || v < 0 || v > 100 {
+			return 0
+		}
+		return v
+	}
+	rl5hPct := clampPct(req.RateLimit5hPct)
+	rl7dPct := clampPct(req.RateLimit7dPct)
+	clampEpoch := func(v int64) int64 {
+		if v < 0 {
+			return 0
+		}
+		return v
+	}
+	rl5hReset := clampEpoch(req.RateLimit5hReset)
+	rl7dReset := clampEpoch(req.RateLimit7dReset)
+	clampLines := func(v int) int {
+		if v < 0 || v > maxTokens {
+			return 0
+		}
+		return v
+	}
+	linesAdded := clampLines(req.LinesAdded)
+	linesRemoved := clampLines(req.LinesRemoved)
+	const maxDurationMs = 30 * 24 * 3600 * 1000 // 30日（ms）。これを超える値は不正とみなす。
+	clampDuration := func(v int64) int64 {
+		if v < 0 || v > maxDurationMs {
+			return 0
+		}
+		return v
+	}
+	durationMs := clampDuration(req.DurationMs)
+	apiDurationMs := clampDuration(req.APIDurationMs)
+	// effort.level は短い識別子。制御文字除去 + 長さ制限（UI バッジに流すため）。
+	effortLevel := stripControlForLog(strings.TrimSpace(req.EffortLevel), 16)
+	version := stripControlForLog(strings.TrimSpace(req.Version), 64)
+	outputStyle := stripControlForLog(strings.TrimSpace(req.OutputStyle), 64)
+	vimMode := stripControlForLog(strings.TrimSpace(req.VimMode), 32)
+	agentName := stripControlForLog(strings.TrimSpace(req.AgentName), 64)
+	repoHost := stripControlForLog(strings.TrimSpace(req.RepoHost), 64)
+	repoOwner := stripControlForLog(strings.TrimSpace(req.RepoOwner), 128)
+	repoName := stripControlForLog(strings.TrimSpace(req.RepoName), 128)
+	remainingPct := clampPct(req.RemainingPct)
+	reasoningOut := clampLines(req.ReasoningOut)
 	// NaN / Inf / 負 / 過大コストを弾く（IEEE754 安全比較）。
 	if req.CostUSD < 0 || req.CostUSD > maxCostUSD || req.CostUSD != req.CostUSD /* NaN */ {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "cost_usd out of range")
@@ -250,16 +348,37 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stat := &usageStat{
-		CostUSD:     costUSD,
-		CostKnown:   costKnown,
-		TokensIn:    req.TokensIn,
-		TokensOut:   req.TokensOut,
-		TokensCache: req.TokensCache,
-		TokensTotal: req.TokensTotal,
-		CtxWindow:   req.CtxWindow,
-		UsageModel:  usageModel,
-		StartedAt:   req.StartedAt,
-		ReceivedAt:  time.Now(),
+		CostUSD:          costUSD,
+		CostKnown:        costKnown,
+		TokensIn:         req.TokensIn,
+		TokensOut:        req.TokensOut,
+		TokensCache:      req.TokensCache,
+		TokensTotal:      req.TokensTotal,
+		CtxWindow:        req.CtxWindow,
+		CtxUsedPct:       ctxUsedPct,
+		RateLimit5hPct:   rl5hPct,
+		RateLimit5hReset: rl5hReset,
+		RateLimit7dPct:   rl7dPct,
+		RateLimit7dReset: rl7dReset,
+		LinesAdded:       linesAdded,
+		LinesRemoved:     linesRemoved,
+		EffortLevel:      effortLevel,
+		Thinking:         req.Thinking,
+		Exceeds200k:      req.Exceeds200k,
+		DurationMs:       durationMs,
+		APIDurationMs:    apiDurationMs,
+		Version:          version,
+		OutputStyle:      outputStyle,
+		VimMode:          vimMode,
+		AgentName:        agentName,
+		RepoHost:         repoHost,
+		RepoOwner:        repoOwner,
+		RepoName:         repoName,
+		RemainingPct:     remainingPct,
+		ReasoningOut:     reasoningOut,
+		UsageModel:       usageModel,
+		StartedAt:        req.StartedAt,
+		ReceivedAt:       time.Now(),
 	}
 
 	usageStatsMu.Lock()
@@ -280,18 +399,39 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 
 	// C3: usage 更新を全 UI クライアントに broadcast する。
 	s.broadcast(proto.Message{
-		Type:           "usage_stat",
-		SessionID:      req.SessionID,
-		Provider:       req.Provider,
-		CostUSD:        costUSD,
-		CostKnown:      costKnown,
-		TokensIn:       req.TokensIn,
-		TokensOut:      req.TokensOut,
-		TokensCache:    req.TokensCache,
-		TokensTotal:    req.TokensTotal,
-		CtxWindow:      req.CtxWindow,
-		UsageModel:     usageModel,
-		UsageStartedAt: req.StartedAt,
+		Type:             "usage_stat",
+		SessionID:        req.SessionID,
+		Provider:         req.Provider,
+		CostUSD:          costUSD,
+		CostKnown:        costKnown,
+		TokensIn:         req.TokensIn,
+		TokensOut:        req.TokensOut,
+		TokensCache:      req.TokensCache,
+		TokensTotal:      req.TokensTotal,
+		CtxWindow:        req.CtxWindow,
+		CtxUsedPct:       ctxUsedPct,
+		RateLimit5hPct:   rl5hPct,
+		RateLimit5hReset: rl5hReset,
+		RateLimit7dPct:   rl7dPct,
+		RateLimit7dReset: rl7dReset,
+		LinesAdded:       linesAdded,
+		LinesRemoved:     linesRemoved,
+		EffortLevel:      effortLevel,
+		Thinking:         req.Thinking,
+		Exceeds200k:      req.Exceeds200k,
+		DurationMs:       durationMs,
+		APIDurationMs:    apiDurationMs,
+		Version:          version,
+		OutputStyle:      outputStyle,
+		VimMode:          vimMode,
+		AgentName:        agentName,
+		RepoHost:         repoHost,
+		RepoOwner:        repoOwner,
+		RepoName:         repoName,
+		RemainingPct:     remainingPct,
+		ReasoningOut:     reasoningOut,
+		UsageModel:       usageModel,
+		UsageStartedAt:   req.StartedAt,
 	})
 
 	writeJSON(w, map[string]any{"ok": true})

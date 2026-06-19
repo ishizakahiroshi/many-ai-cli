@@ -202,12 +202,12 @@ export function isOllamaModelCommandBlocked(sessionId, text) {
   return /^\/model(\b|\s|$)/i.test(trimmed);
 }
 
-// shell（素のシェル）セッション内で AI CLI（claude/codex/copilot/cursor-agent）の
+// shell（素のシェル）セッション内で AI CLI（claude/codex/copilot/cursor-agent/grok）の
 // 起動コマンドを直接打つと、provider=shell 用にチューニングされた入力・承認処理
 // （\x15 前置なし・マーカー未注入・shell 用承認検出）と二重ラップになり、スラッシュ
 // コマンドの文字化けや承認ボタンの不動作を招く。先頭トークンが起動コマンドのときは
 // 検知して provider 名を返す（パス前置・.cmd/.exe 等の拡張子も許容）。該当なしは null。
-const AI_CLI_LAUNCH_RE = /^(?:[^\s]*[\\/])?(claude|codex|copilot|cursor-agent)(?:\.(?:cmd|exe|bat|ps1))?(?=\s|$)/i;
+const AI_CLI_LAUNCH_RE = /^(?:[^\s]*[\\/])?(claude|codex|copilot|cursor-agent|grok)(?:\.(?:cmd|exe|bat|ps1))?(?=\s|$)/i;
 // 「このまま続行」を選んだ shell セッションでは以後ナグを出さない（セッション単位で抑止）。
 const aiCliLaunchNudgeSuppressed = new Set();
 
@@ -1645,6 +1645,7 @@ inputEl.addEventListener('blur', (e) => {
     setUserPref('usage_links.cursor-agent', '');
     setUserPref('usage_links.ollama', '');
     setUserPref('usage_links.opencode', '');
+    setUserPref('usage_links.grok', '');
     setUserPref('voice.grace_seconds', DEFAULT_VOICE_GRACE_SEC);
 
     const triggerEnabled = document.getElementById('trigger-enabled');

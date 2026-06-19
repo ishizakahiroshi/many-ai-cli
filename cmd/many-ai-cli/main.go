@@ -279,7 +279,7 @@ func run(args []string) error {
 			return errors.New("wrap <provider>")
 		}
 		return wrapper.Run(cfg, logger, args[1], args[2:])
-	case "claude", "codex", "copilot", "cursor-agent", "opencode":
+	case "claude", "codex", "copilot", "cursor-agent", "opencode", "grok":
 		return wrapper.Run(cfg, logger, cmd, args[1:])
 	case "usage-relay":
 		// 隠しサブコマンド: Claude statusLine / Codex Stop フックから呼び出される。
@@ -293,6 +293,6 @@ func run(args []string) error {
 }
 
 func usage() error {
-	fmt.Println("many-ai-cli <serve|connect|wrap|claude|codex|copilot|cursor-agent|opencode|shell-init|stop|status|profile-export|log-clean|uninstall|version>")
+	fmt.Println("many-ai-cli <serve|connect|wrap|claude|codex|copilot|cursor-agent|opencode|grok|shell-init|stop|status|profile-export|log-clean|uninstall|version>")
 	return nil
 }

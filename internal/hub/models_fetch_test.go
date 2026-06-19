@@ -3,6 +3,7 @@ package hub
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseOpenCodeModelsOutput(t *testing.T) {
@@ -42,5 +43,20 @@ func TestParseOpenCodeModelsOutput(t *testing.T) {
 	}
 	if models[1].ID != "opencode/deepseek-v4-flash-free" || models[1].Label != "DeepSeek V4 Flash Free" {
 		t.Fatalf("second model = %+v", models[1])
+	}
+}
+
+func TestBuildModelsResponseUsesConfiguredOllamaBaseURL(t *testing.T) {
+	baseURL := "http://192.168.11.50:11434"
+	cache := &modelsCache{
+		local: &ollamaTagsCacheEntry{
+			models:    []Model{{ID: "qwen3:8b", Label: "qwen3:8b"}},
+			fetchedAt: time.Now(),
+			tagsURL:   ollamaTagsURL(baseURL),
+		},
+	}
+	resp := buildModelsResponse(cache, nil, "", nil, baseURL, false)
+	if got := resp.Sources["ollama_local"]; got != "http://192.168.11.50:11434/api/tags" {
+		t.Fatalf("ollama source = %q, want configured /api/tags URL", got)
 	}
 }

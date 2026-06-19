@@ -43,6 +43,7 @@ export const STORAGE_USAGE_LINK_COPILOT_KEY   = 'ai_cli_hub_usage_link_copilot';
 export const STORAGE_USAGE_LINK_CURSOR_AGENT_KEY = 'ai_cli_hub_usage_link_cursor_agent';
 export const STORAGE_USAGE_LINK_OLLAMA_KEY    = 'ai_cli_hub_usage_link_ollama';
 export const STORAGE_USAGE_LINK_OPENCODE_KEY  = 'ai_cli_hub_usage_link_opencode';
+export const STORAGE_USAGE_LINK_GROK_KEY      = 'ai_cli_hub_usage_link_grok';
 export const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds';
 export const STORAGE_VOICE_INPUT_DISABLED_KEY = 'ai_cli_hub_voice_input_disabled';
 export const STORAGE_VOICE_ENGINE_KEY         = 'anyai.voiceEngine';
@@ -154,6 +155,7 @@ export const DEFAULT_USAGE_LINKS = {
   'cursor-agent': 'https://cursor.com/dashboard',
   ollama:   'https://ollama.com/settings',
   opencode: 'https://opencode.ai/go',
+  grok:     'https://grok.com',
 };
 
 export const FONTSIZE_MAP = { large: 15, medium: 13, small: 11 };
@@ -200,6 +202,7 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'usage_links.cursor-agent':  [STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, String],
   'usage_links.ollama':        [STORAGE_USAGE_LINK_OLLAMA_KEY,     String],
   'usage_links.opencode':      [STORAGE_USAGE_LINK_OPENCODE_KEY,   String],
+  'usage_links.grok':          [STORAGE_USAGE_LINK_GROK_KEY,       String],
   'favorites':                 [STORAGE_FAVORITES_KEY,             JSON.stringify],
   'session_order':             [STORAGE_ORDER_KEY,                 JSON.stringify],
   'group_order':               [STORAGE_GROUP_ORDER_KEY,           JSON.stringify],
@@ -232,6 +235,7 @@ export const _USER_PREFS_STRING_PATHS = new Set([
   'usage_links.cursor-agent',
   'usage_links.ollama',
   'usage_links.opencode',
+  'usage_links.grok',
   'display.locked_mode',
   'display.theme',
   'display.font_size',

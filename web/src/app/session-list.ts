@@ -198,6 +198,7 @@ export function providerDisplayName(provider) {
     'cursor-agent': 'Cursor Agent',
     ollama: 'Ollama',
     opencode: 'OpenCode',
+    grok: 'Grok',
   };
   return labels[key] || String(provider || '');
 }
@@ -225,6 +226,9 @@ export function providerIconHtml(provider, size = 16) {
   }
   if (key === 'opencode') {
     return `<svg ${base}><circle class="prov-shape opencode" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter opencode" x="8" y="8" ${txt}>O</text></svg>`;
+  }
+  if (key === 'grok') {
+    return `<svg ${base}><circle class="prov-shape grok" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter grok" x="8" y="8" ${txt}>G</text></svg>`;
   }
   const letter = escapeHtml((String(provider || '?').trim()[0] || '?').toUpperCase());
   return `<svg ${base}><circle class="prov-shape" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter" x="8" y="8" ${txt}>${letter}</text></svg>`;
@@ -1022,7 +1026,7 @@ export function renderSummaryAndNotifications() {
   });
   const totalWaiting = stateCounts.waiting;
 
-  const PROVIDER_ORDER = { claude: 0, ollama: 1, codex: 2, copilot: 3, opencode: 4, 'cursor-agent': 5 };
+  const PROVIDER_ORDER = { claude: 0, ollama: 1, codex: 2, copilot: 3, opencode: 4, 'cursor-agent': 5, grok: 6 };
   const sortedGroups = Array.from(providerGroups.values()).sort((a, b) => {
     const ka = a.isOllamaBacked ? 'ollama' : a.provider;
     const kb = b.isOllamaBacked ? 'ollama' : b.provider;

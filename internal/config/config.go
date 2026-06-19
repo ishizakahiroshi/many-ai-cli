@@ -76,6 +76,7 @@ type SlashCmdSources struct {
 	Copilot     string `yaml:"copilot" json:"copilot"`
 	CursorAgent string `yaml:"cursor-agent" json:"cursor-agent"`
 	Opencode    string `yaml:"opencode" json:"opencode"`
+	Grok        string `yaml:"grok" json:"grok"`
 }
 
 const (
@@ -85,11 +86,14 @@ const (
 	DefaultCopilotSlashCmdSource     = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/copilot.md"
 	DefaultCursorAgentSlashCmdSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/cursor-agent.md"
 	DefaultOpenCodeSlashCmdSource    = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/opencode.md"
+	DefaultGrokSlashCmdSource        = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/grok.md"
 )
 
 const DefaultUsageLinkSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/defaults.json"
 
 const DefaultModelsSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/models/defaults.json"
+
+const DefaultOllamaBaseURL = "http://localhost:11434"
 
 func DefaultSlashCmdSources() SlashCmdSources {
 	return SlashCmdSources{
@@ -98,6 +102,7 @@ func DefaultSlashCmdSources() SlashCmdSources {
 		Copilot:     DefaultCopilotSlashCmdSource,
 		CursorAgent: DefaultCursorAgentSlashCmdSource,
 		Opencode:    DefaultOpenCodeSlashCmdSource,
+		Grok:        DefaultGrokSlashCmdSource,
 	}
 }
 
@@ -121,6 +126,9 @@ func EffectiveSlashCmdSources(src SlashCmdSources) SlashCmdSources {
 	if src.Opencode == "" {
 		src.Opencode = defaults.Opencode
 	}
+	if src.Grok == "" {
+		src.Grok = defaults.Grok
+	}
 	return src
 }
 
@@ -132,6 +140,7 @@ type ApprovalPatternSources struct {
 	Copilot     string `yaml:"copilot,omitempty" json:"copilot,omitempty"`
 	CursorAgent string `yaml:"cursor-agent,omitempty" json:"cursor-agent,omitempty"`
 	Opencode    string `yaml:"opencode,omitempty" json:"opencode,omitempty"`
+	Grok        string `yaml:"grok,omitempty" json:"grok,omitempty"`
 	Common      string `yaml:"common,omitempty"  json:"common,omitempty"`
 }
 
@@ -142,6 +151,7 @@ const (
 	DefaultCursorAgentApprovalPatternSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/cursor-agent.md"
 	DefaultCommonApprovalPatternSource      = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/common.md"
 	DefaultOpenCodeApprovalPatternSource    = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/opencode.md"
+	DefaultGrokApprovalPatternSource        = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/grok.md"
 )
 
 func DefaultApprovalPatternSources() ApprovalPatternSources {
@@ -151,6 +161,7 @@ func DefaultApprovalPatternSources() ApprovalPatternSources {
 		Copilot:     DefaultCopilotApprovalPatternSource,
 		CursorAgent: DefaultCursorAgentApprovalPatternSource,
 		Opencode:    DefaultOpenCodeApprovalPatternSource,
+		Grok:        DefaultGrokApprovalPatternSource,
 		Common:      DefaultCommonApprovalPatternSource,
 	}
 }
@@ -171,6 +182,9 @@ func EffectiveApprovalPatternSources(src ApprovalPatternSources) ApprovalPattern
 	}
 	if src.Opencode == "" {
 		src.Opencode = defaults.Opencode
+	}
+	if src.Grok == "" {
+		src.Grok = defaults.Grok
 	}
 	if src.Common == "" {
 		src.Common = defaults.Common
@@ -193,6 +207,7 @@ type ApprovalProfiles struct {
 	Copilot     ApprovalProfileName `yaml:"copilot,omitempty" json:"copilot,omitempty"`
 	CursorAgent ApprovalProfileName `yaml:"cursor-agent,omitempty" json:"cursor-agent,omitempty"`
 	Opencode    ApprovalProfileName `yaml:"opencode,omitempty" json:"opencode,omitempty"`
+	Grok        ApprovalProfileName `yaml:"grok,omitempty" json:"grok,omitempty"`
 	Common      ApprovalProfileName `yaml:"common,omitempty"  json:"common,omitempty"`
 }
 
@@ -204,6 +219,7 @@ func DefaultApprovalProfiles() ApprovalProfiles {
 		Copilot:     ApprovalProfileOfficial,
 		CursorAgent: ApprovalProfileOfficial,
 		Opencode:    ApprovalProfileOfficial,
+		Grok:        ApprovalProfileOfficial,
 		Common:      ApprovalProfileOfficial,
 	}
 }
@@ -224,6 +240,9 @@ func EffectiveApprovalProfiles(p ApprovalProfiles) ApprovalProfiles {
 	}
 	if p.Opencode == "" {
 		p.Opencode = ApprovalProfileOfficial
+	}
+	if p.Grok == "" {
+		p.Grok = ApprovalProfileOfficial
 	}
 	if p.Common == "" {
 		p.Common = ApprovalProfileOfficial
@@ -254,6 +273,10 @@ func (p ApprovalProfiles) For(provider string) ApprovalProfileName {
 		if p.Opencode != "" {
 			return p.Opencode
 		}
+	case "grok":
+		if p.Grok != "" {
+			return p.Grok
+		}
 	case "common":
 		if p.Common != "" {
 			return p.Common
@@ -275,6 +298,8 @@ func (p ApprovalProfiles) WithProvider(provider string, name ApprovalProfileName
 		p.CursorAgent = name
 	case "opencode":
 		p.Opencode = name
+	case "grok":
+		p.Grok = name
 	case "common":
 		p.Common = name
 	}
@@ -333,6 +358,7 @@ type UserPrefsUsageLinks struct {
 	Copilot     string `yaml:"copilot,omitempty" json:"copilot,omitempty"`
 	CursorAgent string `yaml:"cursor-agent,omitempty" json:"cursor-agent,omitempty"`
 	Opencode    string `yaml:"opencode,omitempty" json:"opencode,omitempty"`
+	Grok        string `yaml:"grok,omitempty" json:"grok,omitempty"`
 }
 
 // UserPrefsVoice は音声入力の設定。
@@ -361,6 +387,9 @@ type UserPrefsDoneSummaryNotify struct {
 // bool のゼロ値が false なため *bool ポインタで三値（nil=未設定/true/false）を表現する。
 type UserPrefsTokenStatusbar struct {
 	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	// Segments: セグメント名(short, 例 "ctx"/"ratelimit"/"ailines") → 表示するか。
+	// キー未設定 = デフォルト表示。明示的に false のセグメントだけ UI 側で非表示にする。
+	Segments map[string]bool `yaml:"segments,omitempty" json:"segments,omitempty"`
 }
 
 // IsEnabled は Enabled が nil（未設定）または true のとき true を返す（既定 ON）。
@@ -451,6 +480,13 @@ func (p UserPrefs) Clone() UserPrefs {
 	c.CwdFavorites = cloneStringSlice(p.CwdFavorites)
 	c.Spawn.Defaults = cloneStringMap(p.Spawn.Defaults)
 	c.Spawn.LastModel = cloneStringMap(p.Spawn.LastModel)
+	if p.TokenStatusbar.Segments != nil {
+		m := make(map[string]bool, len(p.TokenStatusbar.Segments))
+		for k, v := range p.TokenStatusbar.Segments {
+			m[k] = v
+		}
+		c.TokenStatusbar.Segments = m
+	}
 	return c
 }
 
@@ -460,6 +496,20 @@ func (p UserPrefs) Clone() UserPrefs {
 type LocalModel struct {
 	ID    string `yaml:"id"             json:"id"`
 	Label string `yaml:"label,omitempty" json:"label,omitempty"`
+}
+
+// OllamaConfig は Ollama daemon への接続先設定。
+// 空なら DefaultOllamaBaseURL を使う。
+type OllamaConfig struct {
+	BaseURL string `yaml:"base_url,omitempty" json:"base_url,omitempty"`
+}
+
+func EffectiveOllamaBaseURL(baseURL string) string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		return DefaultOllamaBaseURL
+	}
+	return baseURL
 }
 
 // NotifyBackendConfig は通知バックエンド 1 件の設定。
@@ -478,9 +528,9 @@ type NotifyConfig struct {
 
 type Config struct {
 	Hub struct {
-		Port                      int      `yaml:"port"`
-		OpenBrowser               bool     `yaml:"open_browser"`
-		AutoShutdown              bool     `yaml:"auto_shutdown"`
+		Port         int  `yaml:"port"`
+		OpenBrowser  bool `yaml:"open_browser"`
+		AutoShutdown bool `yaml:"auto_shutdown"`
 		// StaleBinaryAutoRestart: 既定 true。`many-ai-cli claude` 等の起動時に
 		// 「ディスクの exe ≠ 稼働中 Hub のバイナリ」かつアクティブセッション 0 の
 		// とき、古い Hub を自動で停止→再起動して新バイナリに載せ替える。
@@ -516,6 +566,7 @@ type Config struct {
 	// 非 loopback アクセス時のみ PIN ログインを要求する追加の扉（plan_hub-remote-auth.md / A）。
 	// 平文 PIN は決して保存しない。API レスポンスにも出さない（json:"-"）。
 	RemotePINHash string       `yaml:"remote_pin_hash,omitempty" json:"-"`
+	Ollama        OllamaConfig `yaml:"ollama,omitempty" json:"ollama,omitempty"`
 	LocalModels   []LocalModel `yaml:"local_models,omitempty" json:"local_models,omitempty"`
 	UserPrefs     UserPrefs    `yaml:"user_prefs,omitempty" json:"user_prefs,omitempty"`
 	Voice         VoiceConfig  `yaml:"voice,omitempty" json:"voice,omitempty"`
@@ -781,6 +832,30 @@ func (cfg *Config) Validate() error {
 	}
 	if err := validateVoiceWhisper(cfg.Voice.Whisper); err != nil {
 		return err
+	}
+	if err := validateOllama(cfg.Ollama); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateOllama(ollama OllamaConfig) error {
+	baseURL := strings.TrimSpace(ollama.BaseURL)
+	if baseURL == "" {
+		return nil
+	}
+	u, err := neturl.Parse(baseURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return fmt.Errorf("ollama.base_url must be an http or https base URL")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("ollama.base_url must use http or https")
+	}
+	if u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("ollama.base_url must not include credentials, query, or fragment")
+	}
+	if u.Path != "" && u.Path != "/" {
+		return fmt.Errorf("ollama.base_url must not include a path")
 	}
 	return nil
 }

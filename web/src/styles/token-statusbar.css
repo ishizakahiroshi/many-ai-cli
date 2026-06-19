@@ -90,6 +90,44 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.tsb-agent-name {
+  color: #7dcfff;
+  max-width: 10ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* effort / thinking バッジ（モデルチップ隣） */
+.tsb-seg-effort { gap: 4px; }
+.tsb-effort-lvl {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #e0af68;
+  background: color-mix(in srgb, #e0af68 18%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 1px 5px;
+  text-transform: uppercase;
+}
+.tsb-thinking { font-size: 0.7rem; }
+
+/* AI 編集行数（project 隣・追加=緑 / 削除=赤） */
+.tsb-seg-ailines { color: #565f89; }
+.tsb-seg-ailines .tsb-add { color: #9ece6a; }
+.tsb-seg-ailines .tsb-del { color: #f7768e; }
+
+/* 拡張コンテキスト（1M 窓）バッジ */
+.tsb-1m {
+  font-size: 0.56rem;
+  font-weight: 700;
+  color: #7dcfff;
+  background: color-mix(in srgb, #7dcfff 18%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+}
+
+/* レート制限残量（接続状態の手前・hourglass + 5h/7d %） */
+.tsb-seg-ratelimit { color: #9aa5ce; gap: 4px; }
 
 /* 作業ラベル（一押しE・薄字イタリック・クリックで送信履歴モーダル） */
 .tsb-seg-label {
@@ -321,13 +359,16 @@
    非表示: agent / label / project / tok / cache / compact / burn / elapsed */
 @media (max-width: 640px) {
   #token-statusbar .tsb-seg-agent,
+  #token-statusbar .tsb-seg-effort,
   #token-statusbar .tsb-seg-label,
   #token-statusbar .tsb-seg-project,
+  #token-statusbar .tsb-seg-ailines,
   #token-statusbar .tsb-seg-tok,
   #token-statusbar .tsb-seg-cache,
   #token-statusbar .tsb-seg-compact,
   #token-statusbar .tsb-seg-burn,
-  #token-statusbar .tsb-seg-elapsed {
+  #token-statusbar .tsb-seg-elapsed,
+  #token-statusbar .tsb-seg-ratelimit {
     display: none !important;
   }
   #token-statusbar .tsb-seg-more {
@@ -410,3 +451,27 @@
   word-break: break-word;
   min-width: 0;
 }
+
+/* 設定パネル: ステータスバー セグメント表示トグル群 */
+.settings-subhead {
+  margin-top: 10px;
+  margin-bottom: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #7aa2f7;
+}
+.tsb-segments-toggles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 12px;
+}
+.tsb-seg-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: #c0caf5;
+  cursor: pointer;
+  padding: 2px 0;
+}
+.tsb-seg-toggle input { cursor: pointer; }

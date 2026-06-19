@@ -220,6 +220,36 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* compact（Claude /compact）中の不定形プログレスバー。中間 % が PTY に来ないため、
+   光点が左右に流れる帯で「処理中」を直感的に示す。色はユーザー配色変数を流用。 */
+.live-compact-bar {
+  flex: 0 0 auto;
+  width: 72px;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+  background: rgba(147, 197, 253, 0.18);
+}
+.live-compact-bar[hidden] { display: none; }
+.live-compact-bar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -40%;
+  width: 40%;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--live-status-fg, rgba(147, 197, 253, 0.92));
+  animation: aacli-compact-slide 1.1s ease-in-out infinite;
+}
+@keyframes aacli-compact-slide {
+  0%   { left: -40%; }
+  100% { left: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-compact-bar::before { animation-duration: 2.4s; }
+}
 /* 配色パレット: 帯の右端に置く。帯は pointer-events:none なので操作要素だけ復活させる。 */
 .live-status-palette-btn {
   flex: 0 0 auto;

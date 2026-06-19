@@ -33,7 +33,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	if body.Provider != "claude" && body.Provider != "codex" && body.Provider != "copilot" && body.Provider != "cursor-agent" && body.Provider != "opencode" && body.Provider != "shell" {
+	if body.Provider != "claude" && body.Provider != "codex" && body.Provider != "copilot" && body.Provider != "cursor-agent" && body.Provider != "opencode" && body.Provider != "grok" && body.Provider != "shell" {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
 		return
 	}
@@ -241,6 +241,10 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		if resolvedModel != "" {
 			wrapArgs = append(wrapArgs, "--model", resolvedModel)
 		}
+	case "grok":
+		if resolvedModel != "" {
+			wrapArgs = append(wrapArgs, "--model", resolvedModel)
+		}
 	}
 	// route が未指定の場合は model 名から推定する。Anthropic / OpenAI の
 	// 既定 route は env 注入を行わない（ユーザー shell の値を継承）。
@@ -269,12 +273,15 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if s.parentShell != "" {
 		cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}
+	s.cfgMu.Lock()
+	ollamaBaseURL := s.cfg.Ollama.BaseURL
+	s.cfgMu.Unlock()
 	proxyToken := ""
 	if base := s.chatProxyBaseURL(); base != "" && effectiveRoute != RouteOllama {
 		proxyToken = newProxyToken()
 		s.registerPendingProxyToken(proxyToken)
 	}
-	if envPreset := EnvPresetForProxy(body.Provider, effectiveRoute, s.chatProxyBaseURL(), proxyToken); len(envPreset) > 0 {
+	if envPreset := EnvPresetForProxyWithOllamaBase(body.Provider, effectiveRoute, s.chatProxyBaseURL(), proxyToken, ollamaBaseURL); len(envPreset) > 0 {
 		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
 		s.logger.Debug("spawn: env preset applied",
 			"provider", body.Provider, "route", effectiveRoute, "keys", envKeyList(envPreset))
@@ -437,7 +444,7 @@ func (s *Server) handleSpawnGrid(w http.ResponseWriter, r *http.Request) {
 		aiProvider = "claude"
 	}
 	validAIProviders := map[string]bool{
-		"claude": true, "codex": true, "copilot": true, "cursor-agent": true, "opencode": true,
+		"claude": true, "codex": true, "copilot": true, "cursor-agent": true, "opencode": true, "grok": true,
 	}
 	if body.Preset == "ai+shell" && !validAIProviders[aiProvider] {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid ai provider for ai+shell preset")

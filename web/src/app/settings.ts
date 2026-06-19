@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, showToast, ti18n, token } from './util.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, openDetachedGridForSessions, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
@@ -11,7 +11,7 @@ import { providerApprovalTriggers } from './approval.js';
 import { MULTI_SCROLLBACK, getMessages } from './chat-history.js';
 import { FilesTabManager } from './files-view.js';
 import { fetchPushStatus, getPushSubscription, isLikelyIOSBrowserTabWithoutStandalone, pushNotificationsSupported, subscribeWebPush, unsubscribeWebPush } from './pwa.js';
-import { setStatusbarEnabled, isStatusbarEnabled } from './token-statusbar.js';
+import { setStatusbarEnabled, isStatusbarEnabled, TOGGLEABLE_SEGMENTS, applySegmentVisibility } from './token-statusbar.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -102,6 +102,25 @@ export function updateTokenStatusbarToggle(enabled: boolean): void {
   setStatusbarEnabled(enabled);
 }
 
+// token_statusbar 設定を read-modify-write で保存する。
+// PUT /api/user-prefs は UserPrefs を全置換するため、partial を送ると他フィールド
+// （enabled / segments / 他の prefs）を消してしまう。必ず現在値を GET → マージ → full PUT。
+async function saveTokenStatusbarPrefs(patch: { enabled?: boolean; segments?: Record<string, boolean> }): Promise<void> {
+  try {
+    const res = await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`);
+    const cur = res.ok ? await res.json() : {};
+    const tsb = { ...(cur.token_statusbar || {}) };
+    if (patch.enabled !== undefined) tsb.enabled = patch.enabled;
+    if (patch.segments !== undefined) tsb.segments = { ...(tsb.segments || {}), ...patch.segments };
+    const next = { ...cur, token_statusbar: tsb };
+    await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(next),
+    });
+  } catch (_) {}
+}
+
 // 設定パネルのトグルが DOM に存在する時点（パネル open 時）に一度だけ配線する。
 let _tokenStatusbarToggleAttached = false;
 export function attachTokenStatusbarToggle(): void {
@@ -111,18 +130,53 @@ export function attachTokenStatusbarToggle(): void {
   _tokenStatusbarToggleAttached = true;
   // 現在値を反映
   toggle.checked = isStatusbarEnabled();
-  toggle.addEventListener('change', async () => {
+  toggle.addEventListener('change', () => {
     const enabled = toggle.checked;
     setStatusbarEnabled(enabled);
-    // /api/user-prefs に保存
-    try {
-      await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token_statusbar: { enabled } }),
-      });
-    } catch (_) {}
+    void saveTokenStatusbarPrefs({ enabled });
   });
+  // セグメント表示/非表示トグル群を構築。
+  void buildSegmentToggles();
+}
+
+// セグメント表示/非表示のチェックボックス群を #tsb-segments-toggles に構築する。
+// 現在の prefs を読んで初期チェック状態を反映し、変更時は read-modify-write で保存しつつ
+// ステータスバーへ即時反映する。
+let _segmentTogglesBuilt = false;
+async function buildSegmentToggles(): Promise<void> {
+  if (_segmentTogglesBuilt) return;
+  const host = document.getElementById('tsb-segments-toggles');
+  if (!host) return;
+  _segmentTogglesBuilt = true;
+
+  let segments: Record<string, boolean> = {};
+  try {
+    const res = await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`);
+    if (res.ok) {
+      const data = await res.json();
+      segments = (data?.token_statusbar?.segments as Record<string, boolean>) || {};
+    }
+  } catch (_) {}
+
+  const lang = window.__lang === 'en' ? 'en' : 'ja';
+  host.textContent = '';
+  for (const seg of TOGGLEABLE_SEGMENTS) {
+    const label = document.createElement('label');
+    label.className = 'tsb-seg-toggle';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = segments[seg.key] !== false; // 未設定 = 表示
+    cb.addEventListener('change', () => {
+      segments[seg.key] = cb.checked;
+      applySegmentVisibility(segments);
+      void saveTokenStatusbarPrefs({ segments: { [seg.key]: cb.checked } });
+    });
+    const span = document.createElement('span');
+    span.textContent = lang === 'en' ? seg.en : seg.ja;
+    label.appendChild(cb);
+    label.appendChild(span);
+    host.appendChild(label);
+  }
 }
 
 // ---- タスク完了サマリー通知トグル ----
@@ -324,6 +378,7 @@ export function getUsageLinkUrl(provider) {
     'cursor-agent': STORAGE_USAGE_LINK_CURSOR_AGENT_KEY,
     ollama:   STORAGE_USAGE_LINK_OLLAMA_KEY,
     opencode: STORAGE_USAGE_LINK_OPENCODE_KEY,
+    grok:     STORAGE_USAGE_LINK_GROK_KEY,
   };
   const key = keyMap[provider];
   if (!key) return DEFAULT_USAGE_LINKS[provider] || '#';
@@ -331,7 +386,7 @@ export function getUsageLinkUrl(provider) {
 }
 
 export function applyUsageLinks() {
-  for (const p of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'opencode']) {
+  for (const p of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'opencode', 'grok']) {
     const el = document.getElementById(`usage-link-${p}`);
     if (el) el.href = getUsageLinkUrl(p);
   }
@@ -345,6 +400,7 @@ export function loadUsageLinkSettings() {
     'cursor-agent': STORAGE_USAGE_LINK_CURSOR_AGENT_KEY,
     ollama:   STORAGE_USAGE_LINK_OLLAMA_KEY,
     opencode: STORAGE_USAGE_LINK_OPENCODE_KEY,
+    grok:     STORAGE_USAGE_LINK_GROK_KEY,
   };
   for (const [p, k] of Object.entries(keyMap)) {
     const el = document.getElementById(`usage-link-${p}-url`);
@@ -361,6 +417,7 @@ export function saveUsageLinkSettings() {
     ['cursor-agent', 'usage_links.cursor-agent', STORAGE_USAGE_LINK_CURSOR_AGENT_KEY],
     ['ollama',   'usage_links.ollama',   STORAGE_USAGE_LINK_OLLAMA_KEY],
     ['opencode', 'usage_links.opencode', STORAGE_USAGE_LINK_OPENCODE_KEY],
+    ['grok',     'usage_links.grok',     STORAGE_USAGE_LINK_GROK_KEY],
   ];
   for (const [p, prefPath, key] of pairs) {
     const input = document.getElementById(`usage-link-${p}-url`);
@@ -937,6 +994,7 @@ export function applyLang(lang) {
       setUserPref('usage_links.cursor-agent', '');
       setUserPref('usage_links.ollama', '');
       setUserPref('usage_links.opencode', '');
+      setUserPref('usage_links.grok', '');
       loadUsageLinkSettings();
       showToast(t('settings_usage_links_reset_done'), usageLinksResetBtn);
     });
@@ -1657,7 +1715,7 @@ export function applyLang(lang) {
     const res = await fetch(`/api/usage-link-defaults?token=${encodeURIComponent(token || '')}`);
     if (!res.ok) return;
     const d = await res.json();
-    for (const k of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'opencode']) {
+    for (const k of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'opencode', 'grok']) {
       // 空文字は無視（GitHub 側が古くキーを欠く場合に空で返るため、
       // ローカルの正しいデフォルト値を潰さない）
       if (typeof d[k] === 'string' && d[k] !== '') DEFAULT_USAGE_LINKS[k] = d[k];
@@ -1848,10 +1906,11 @@ window.approvalPatternsUI = (function () {
     codex:  { official: [], custom: [] },
     copilot: { official: [], custom: [] },
     'cursor-agent': { official: [], custom: [] },
+    grok: { official: [], custom: [] },
     common: { official: [], custom: [] },
   };
   // アクティブプロファイル設定（サーバ側 ApprovalProfiles と同期）
-  let activeProfiles = { claude: 'official', codex: 'official', copilot: 'official', 'cursor-agent': 'official', common: 'official' };
+  let activeProfiles = { claude: 'official', codex: 'official', copilot: 'official', 'cursor-agent': 'official', grok: 'official', common: 'official' };
 
   function currentProvider() { return providerEl.value; }
   function currentProfile() { return profileEl.value; }
@@ -1867,6 +1926,7 @@ window.approvalPatternsUI = (function () {
           codex:  p.codex  || 'official',
           copilot: p.copilot || 'official',
           'cursor-agent': p['cursor-agent'] || 'official',
+          grok: p.grok || 'official',
           common: p.common || 'official',
         };
       }
@@ -1882,6 +1942,7 @@ window.approvalPatternsUI = (function () {
         providerApprovalTriggers.codex  = norm(data.codex);
         providerApprovalTriggers.copilot = norm(data.copilot);
         providerApprovalTriggers['cursor-agent'] = norm(data['cursor-agent']);
+        providerApprovalTriggers.grok = norm(data.grok);
         providerApprovalTriggers.common = norm(data.common);
       }
     } catch (e) {
