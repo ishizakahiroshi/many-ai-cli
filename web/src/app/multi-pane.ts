@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { inputEl } from '../app.js';
 import { render } from './session-list.js';
-import { disableWebglRenderer, enableWebglRenderer, releaseHiddenWebglRenderers, termArea } from './terminal.js';
+import { disableWebglRenderer, enableWebglRenderer, releaseHiddenWebglRenderers, scrollAltBufferPage, termArea } from './terminal.js';
 
 // multi-pane.js — MultiPaneManager + GridPicker (C3: xterm マルチインスタンス + WS ルーティング)
 // index.html で app.js より前に読み込む
@@ -422,9 +422,17 @@ export class MultiPaneManager {
       if (typeof window.markTerminalManualScrollIntent === 'function') {
         window.markTerminalManualScrollIntent();
       }
+      if (scrollAltBufferPage(sessionId, t, -1)) {
+        t.autoScroll = false;
+        return;
+      }
       t.autoScroll = false;
       t.term.scrollToTop();
       this._syncViewportToBuffer(t, { top: true });
+      return;
+    }
+    if (scrollAltBufferPage(sessionId, t, 1)) {
+      t.autoScroll = true;
       return;
     }
     t.autoScroll = true;

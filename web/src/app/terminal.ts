@@ -658,18 +658,19 @@ export function isAlternateBuffer(t) {
   return !!(active && active.type === 'alternate');
 }
 
-// alt buffer 中の wheel は PTY 側アプリ（Codex の TUI 等）に PgUp/PgDn として転送する。
-// 戻り値: 転送した場合 true（呼び元はそれ以降の autoScroll 操作等をスキップ）。
-// mouse tracking が ON の場合は xterm が wheel を mouse escape として送るため二重送信を避ける。
-export function forwardWheelToAltBuffer(sessionId, t, deltaY) {
+// alt buffer 中のスクロール操作は PTY 側アプリ（Codex / Grok 等の TUI）に
+// PgUp/PgDn として転送する。xterm は disableStdin:true のため、mouse tracking が
+// ON でも wheel を PTY へ送らない。
+// 戻り値: 転送した場合 true（呼び元は xterm scrollback 操作等をスキップ）。
+export function scrollAltBufferPage(sessionId, t, direction) {
   if (!isAlternateBuffer(t)) return false;
-  try {
-    const mode = t.term.modes && t.term.modes.mouseTrackingMode;
-    if (mode && mode !== 'none') return true; // xterm 自身が送るのでこちらは何もしない（が転送扱いで他処理を抑止）
-  } catch (_) {}
-  const key = deltaY < 0 ? '\x1b[5~' : '\x1b[6~';
+  const key = direction < 0 ? '\x1b[5~' : '\x1b[6~';
   try { sendText(sessionId, key); } catch (_) {}
   return true;
+}
+
+export function forwardWheelToAltBuffer(sessionId, t, deltaY) {
+  return scrollAltBufferPage(sessionId, t, deltaY < 0 ? -1 : 1);
 }
 
 export function isWheelTargetExcluded(target) {
@@ -976,6 +977,11 @@ document.getElementById('scroll-to-top-btn')?.addEventListener('click', () => {
   const t = terminals.get(activeSessionId);
   if (!t) return;
   markTerminalManualScrollIntent();
+  if (scrollAltBufferPage(activeSessionId, t, -1)) {
+    t.autoScroll = false;
+    updateScrollLockBtn(true);
+    return;
+  }
   t.autoScroll = false;
   t.term.scrollToTop();
   updateScrollLockBtn(true);
@@ -985,6 +991,11 @@ document.getElementById('scroll-to-bottom-btn')?.addEventListener('click', () =>
   if (activeSessionId === null) return;
   const t = terminals.get(activeSessionId);
   if (!t) return;
+  if (scrollAltBufferPage(activeSessionId, t, 1)) {
+    t.autoScroll = true;
+    updateScrollLockBtn(false);
+    return;
+  }
   t.autoScroll = true;
   t.term.scrollToBottom();
   syncViewportScrollbarToBottom(t);
