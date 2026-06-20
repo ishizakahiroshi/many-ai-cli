@@ -174,17 +174,13 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		if mode == "" {
 			mode = "auto"
 		}
+		// モデル未選択（auto）のときは last_model を --model へ再注入しない。
+		// 以前は前回モデルを復活させていたが、それが claude CLI 側の既定モデル
+		// （/model で選んだ 1M 窓モデルなど）を黙って上書きし、巨大コンテキストを
+		// 200K へ縮める原因になっていた。明示選択が無ければ --model を付けず、
+		// CLI 自身の既定（ユーザーが /model で決めた値）をそのまま尊重する。
+		// last_model は risk 判定の基準値としてのみ参照する。
 		currentModel := s.getLastModel("claude")
-		// Ollama route のモデルは fallback として復活させない。
-		// 残すと model 空欄の spawn で前回の Ollama モデルが --model に注入され、
-		// route=ollama と判定されて ANTHROPIC_BASE_URL=localhost:11434 が焼き付く。
-		// その結果 Claude 単独起動のつもりが Ollama 経由になる罠を踏むため。
-		if currentModel != "" && s.resolveRoute("claude", currentModel) == RouteOllama {
-			currentModel = ""
-		}
-		if resolvedModel == "" {
-			resolvedModel = currentModel
-		}
 		risk := evaluateClaudeRisk(currentModel, resolvedModel, body.PermissionMode)
 		if risk.HighRisk && mode != "required" {
 			mode = "required"
@@ -204,14 +200,11 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		if mode == "" {
 			mode = "auto"
 		}
+		// claude 側と同じく、モデル未選択（auto）のときは last_model を
+		// --model へ再注入しない。再注入は codex CLI 自身の既定モデルを黙って
+		// 上書きしてしまうため。明示選択が無ければ --model を付けず CLI 既定を尊重する。
+		// last_model は risk 判定の基準値としてのみ参照する。
 		currentModel := s.getLastModel("codex")
-		// Ollama route のモデルは fallback として復活させない（claude 側と同じ理由）。
-		if currentModel != "" && s.resolveRoute("codex", currentModel) == RouteOllama {
-			currentModel = ""
-		}
-		if resolvedModel == "" {
-			resolvedModel = currentModel
-		}
 		risk := evaluateCodexRisk(currentModel, resolvedModel, body.Sandbox, body.AskForApproval)
 		if risk.HighRisk && mode != "required" {
 			mode = "required"

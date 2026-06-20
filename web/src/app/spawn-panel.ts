@@ -500,7 +500,11 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         if (shellNote) shellNote.hidden = !isShell;
       }
       if (s.cwd)              spawnCwdInput.value = s.cwd;
-      if (s.model !== undefined) setSpawnModelValue(s.model);
+      // モデル欄は保存値を prefill しない（空 = 各 CLI の既定モデルを尊重）。
+      // 以前は前回モデルを復元して明示送信していたが、それが claude CLI の
+      // /model 既定（1M 窓など）を 200K へ上書きする原因だった。非既定モデルを
+      // 使いたいときは datalist から明示選択する（その選択はそのセッションにのみ適用）。
+      // s.model は後方互換のため保存自体は残すが、ここでは読み込まない。
       if (s.permission_mode)  document.getElementById('spawn-permission-mode').value = s.permission_mode;
       if (s.sandbox)          document.getElementById('spawn-sandbox').value = s.sandbox;
       if (s.ask_for_approval) document.getElementById('spawn-ask-approval').value = s.ask_for_approval;
