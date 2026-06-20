@@ -32,6 +32,7 @@ export interface TerminalEntry {
   // compact（Claude /compact）中の経過秒表示用。中間 % が PTY に来ないため自前で発番する。
   compactingSince?: number | null;  // compact 開始時刻(ms)。経過秒の起点。null＝非 compact
   compactSeenAt?: number;           // 最後に compact フレームを観測した時刻(ms)。解除判定用
+  compactDetectTail?: string;       // 直前チャンク末尾。検出語のチャンク境界分断対策の繰り越し
   autoScroll?: boolean;
   everAttached?: boolean;
   scrollHandlerInstalled?: boolean;

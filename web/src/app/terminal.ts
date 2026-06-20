@@ -1546,6 +1546,9 @@ export function scheduleLiveStatusExtract(id) {
 export function setSessionLiveStatus(id, text) {
   const t = terminals.get(id);
   if (!t) return;
+  // 再構成済みの綺麗なステータス行からも compact 開始を拾う（生チャンクが分割されて
+  // 「Compacting conversation」が途切れても、ここで確実に検出できる）。
+  if (text && COMPACT_DETECT_RE.test(text)) noteCompactStart(id);
   if (text) t.liveStatusText = text; // 意味のある全文だけ差し替え（記号だけの中間フレームでは前回値維持）
   // フレームが来た＝稼働中。判定タイマーをリセットして「稼働中」表示へ。
   if (t.liveStatusHideTimer) clearTimeout(t.liveStatusHideTimer);
@@ -1570,17 +1573,38 @@ const COMPACT_DETECT_RE = /Compacting conversation/i;
 const COMPACT_IDLE_MS = 1500;
 let compactTickTimer: ReturnType<typeof setInterval> | null = null;
 
-// PTY 出力チャンクに compact の兆候があれば、経過秒タイマーを起動/継続する。
-export function markCompactActivity(id, textChunk) {
-  if (!textChunk || !COMPACT_DETECT_RE.test(textChunk)) return;
+// compact 開始を記録し、ライブ表示（不定形バー）を起動する。生チャンク・再構成済み
+// ステータス行のどちらから検出しても通れるよう共通化する（チャンク分割での取りこぼし防止）。
+function noteCompactStart(id) {
   const t = terminals.get(id);
   if (!t) return;
-  if (t.compactingSince == null) t.compactingSince = Date.now();
+  const justStarted = t.compactingSince == null;
+  if (justStarted) t.compactingSince = Date.now();
   t.compactSeenAt = Date.now();
-  if (id === activeSessionId) {
+  if (id === activeSessionId && justStarted) {
     ensureCompactTick();
     renderLiveStatusDom('active', ''); // text は renderLiveStatusDom 側で compact 文言へ差し替え
   }
+}
+
+// PTY 出力チャンクから compact を追従する。
+// 注意: 「Compacting conversation」は compact の最初の数フレームにしか出ず、その後は
+// 通常ターンと同じランダムな進行語（Combobulating/Churning/Actioning 等。compact 無しでも
+// 出る汎用スピナー語）へ切り替わる。よって「この語が出続ける限り表示」だと 1.5s で消え、
+// 長い compact 本体の間ずっと何も出ない。開始を一度捉えたら、以降は内容を問わず当該
+// セッションのフレーム到来で生存を更新し（＝処理が続く限り表示）、フレームが
+// COMPACT_IDLE_MS 途切れたら完了とみなす（tick 側で判定）。
+export function markCompactActivity(id, textChunk) {
+  const t = terminals.get(id);
+  if (!t) return;
+  if (t.compactingSince != null) { t.compactSeenAt = Date.now(); return; } // compact 中は任意フレームで延命
+  if (!textChunk) return;
+  // 検出語「Compacting conversation」は compact 全体で 1 回しか出ない（その後は通常ターンと
+  // 同じ汎用スピナー語へ替わる）。この 1 回をチャンク境界で分断されても確実に拾うため、
+  // 直前チャンク末尾を前置して判定し、未検出なら末尾だけ次回へ繰り越す。
+  const probe = (t.compactDetectTail || '') + textChunk;
+  if (COMPACT_DETECT_RE.test(probe)) { t.compactDetectTail = ''; noteCompactStart(id); return; }
+  t.compactDetectTail = probe.slice(-24); // 検出語長(23)+余裕ぶんだけ繰り越す
 }
 
 // activeSession が compact 中なら経過秒（整数）、そうでなければ null。

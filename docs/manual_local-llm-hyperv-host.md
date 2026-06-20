@@ -1,10 +1,12 @@
-# Hyper-V ゲストからホスト Windows の Ollama を使う手順
+# Hyper-V ゲストからホスト Windows のローカルLLM（Ollama / LM Studio）を使う手順
 
-> 最終更新: 2026-06-19(金) 07:51:46
+> 最終更新: 2026-06-19(金) 23:03:50
 
 ## 概要
 
 Ollama とモデルをホスト Windows 側で動かし、Hyper-V ゲスト Windows 上の many-ai-cli からホストの Ollama API へ接続する。RTX 4060 などホスト側 GPU を使いたい場合の構成。
+
+LM Studio をホスト側で使う場合も基本は同じ（ホスト側で動かし、ゲストから API 接続する）。違いはポート（既定 1234）・サーバー公開設定のしかた・many-ai-cli の設定キーで、差分は本書末尾の「LM Studio の場合（Ollama との差分）」を参照。
 
 確認済み例:
 
@@ -181,6 +183,59 @@ ollama:
 - Claude Code: `ANTHROPIC_BASE_URL=<base_url>`
 - Codex: `OPENAI_BASE_URL=<base_url>/v1`
 
+## LM Studio の場合（Ollama との差分）
+
+LM Studio もホスト Windows 側で動かし、ゲストから接続する。手順は Ollama とほぼ同じで、違いは「サーバーの公開のしかた」「ポート（既定 1234）」「many-ai-cli の設定キー」の3点。
+
+前提: **LM Studio 0.4.1 以降**。Claude Code を Anthropic 互換で繋ぐ場合に必須（古いバージョンは Anthropic 互換エンドポイントが無く Claude 不可）。Codex（OpenAI 互換）だけなら古くても可。
+
+### ホスト側: ローカルネットワークに公開する
+
+LM Studio の Developer（サーバー）タブでローカルサーバーを起動し、**ローカルネットワークへの公開を有効化**する。既定は localhost のみの待ち受けで、そのままではゲストから繋がらない（Ollama の `OLLAMA_HOST=0.0.0.0` に相当する設定）。
+
+- Server Port: `1234`（既定）
+- 「Serve on Local Network」（ローカルネットワークで配信）を ON にする
+- Claude 用に Anthropic 互換が有効なバージョン（0.4.1+）であること
+
+### Firewall: 1234 を開ける
+
+Ollama の 11434 とは別に 1234 を許可する。上の Ollama 用ルールのポートを 1234 に変えて同様に作る。
+
+```powershell
+New-NetFirewallRule `
+    -DisplayName "LM Studio API from Hyper-V Guest" `
+    -Direction Inbound `
+    -Action Allow `
+    -Protocol TCP `
+    -LocalPort 1234 `
+    -RemoteAddress 192.168.11.0/24 `
+    -Profile Private
+```
+
+Default Switch 側なら `-RemoteAddress 172.20.224.0/20` のようにゲストのサブネットに合わせる。
+
+### ゲスト側: 疎通確認
+
+```powershell
+Test-NetConnection <hostIP> -Port 1234
+Invoke-RestMethod http://<hostIP>:1234/v1/models
+```
+
+`/v1/models` は OpenAI 互換（Codex 用）。Claude 用には Anthropic 互換 `/v1/messages` を持つバージョン（0.4.1+）が必要。
+
+### many-ai-cli の接続先設定
+
+config.yaml に `lm_studio.base_url` を設定する。`/v1` は付けない（many-ai-cli 側で付与）。
+
+```yaml
+lm_studio:
+  base_url: "http://<hostIP>:1234"
+```
+
+### モデルの context window に注意
+
+Claude Code は context を多く使うため、LM Studio 側でロードモデルの context を **32K 以上**に上げないと実用にならない（32K 未満はチャットのデモ程度）。
+
 ## トラブルシューティング
 
 ### `TcpTestSucceeded` が `False`
@@ -222,3 +277,4 @@ Ollama を再起動しても改善しない場合は、NVIDIA ドライバーと
 - Ollama Windows: https://docs.ollama.com/windows
 - Ollama API: https://docs.ollama.com/api
 - Ollama モデル一覧: https://ollama.com/search
+- LM Studio ドキュメント: https://lmstudio.ai/docs

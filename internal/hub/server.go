@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -192,7 +193,8 @@ func (s *Server) resolveRoute(provider, model string) string {
 	}
 	localCfg := s.snapshotLocalModels()
 	known := collectOllamaModelIDs(s.modelsCache, localCfg)
-	return RouteForModel(provider, model, known)
+	knownLmStudio := collectLMStudioModelIDs(s.modelsCache)
+	return RouteForModel(provider, model, known, knownLmStudio)
 }
 
 func gitBranch(cwd string) string {
@@ -350,8 +352,10 @@ type Server struct {
 	// binGuard は「稼働中 Hub が起動時のバイナリのままか」を判定する。
 	// /api/info が binary_sha256 と binary_stale を申告するのに使い、
 	// wrapper・launcher・status・UI はこのフラグを読むだけで stale を扱える。
-	binGuard    *binaryGuard
-	parentShell string
+	binGuard     *binaryGuard
+	webSrcHash   string // hash of web/src/ baked into dist/.src-hash at build time
+	webDistFresh bool   // true if current web/src/ matches webSrcHash (always true on VPS/Docker)
+	parentShell  string
 	instanceID  string // Hub プロセス起動ごとのランダム ID。UI が Hub 再起動（live session ID の振り直し）を検出するために snapshot に同梱する
 
 	// sessionsMu guards session/connection state (nextID, sessions, wrappers,
@@ -592,6 +596,53 @@ func init() {
 	}
 }
 
+// computeWebSrcHash は srcDir 配下の .ts/.js ファイル（vendor/ 除外・.d.ts 除外）を
+// ソート順に SHA256 ハッシュし、先頭 12 文字の hex 文字列を返す。
+// build.mjs の generateSrcHash() と同じアルゴリズムで、両者の出力を直接比較できる。
+func computeWebSrcHash(srcDir string) string {
+	var files []string
+	_ = filepath.WalkDir(srcDir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if d.Name() == "vendor" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		name := d.Name()
+		if strings.HasSuffix(name, ".d.ts") {
+			return nil
+		}
+		if strings.HasSuffix(name, ".ts") || strings.HasSuffix(name, ".js") {
+			files = append(files, p)
+		}
+		return nil
+	})
+	if len(files) == 0 {
+		return ""
+	}
+	sort.Strings(files)
+	h := sha256.New()
+	for _, f := range files {
+		rel, _ := filepath.Rel(srcDir, f)
+		rel = filepath.ToSlash(rel)
+		content, err := os.ReadFile(f)
+		if err != nil {
+			return ""
+		}
+		_, _ = h.Write([]byte(rel + "\n"))
+		_, _ = h.Write(content)
+		_, _ = h.Write([]byte("\n"))
+	}
+	result := fmt.Sprintf("%x", h.Sum(nil))
+	if len(result) > 12 {
+		return result[:12]
+	}
+	return result
+}
+
 // newInstanceID は Hub プロセス起動ごとのランダム ID を生成する。
 // 乱数取得に失敗した場合は起動時刻ナノ秒で代替する（識別できれば十分なため）。
 func newInstanceID() string {
@@ -633,6 +684,30 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		branchRefreshSem:      make(chan struct{}, branchRefreshWorkers),
 		branchRefreshInFlight: map[string]struct{}{},
 		serverConns:           newServerConnManager(logger),
+	}
+	// web/dist 鮮度チェック: dist/.src-hash (ビルド時焼き付け) と現在の web/src/ を比較。
+	// web/src/ が存在しない環境（VPS/Docker）ではチェックをスキップし fresh 扱いとする。
+	{
+		bakedHash := ""
+		if hashBytes, err := web.FS.ReadFile("dist/.src-hash"); err == nil {
+			bakedHash = strings.TrimSpace(string(hashBytes))
+		}
+		s.webSrcHash = bakedHash
+		webSrcDir := filepath.Join(hubCWD, "web", "src")
+		if bakedHash == "" {
+			s.webDistFresh = true // hash 未生成（初回ビルド前等）は誤警告を避けて fresh 扱い
+		} else if _, err := os.Stat(webSrcDir); err != nil {
+			s.webDistFresh = true // web/src/ が無い環境（VPS/Docker）はチェック不可
+		} else {
+			currentHash := computeWebSrcHash(webSrcDir)
+			s.webDistFresh = currentHash == bakedHash
+			if !s.webDistFresh {
+				logger.Warn("web/dist is stale: run make build",
+					"dist_hash", bakedHash,
+					"src_hash", currentHash,
+				)
+			}
+		}
 	}
 	if store, err := sessionstore.OpenForLogDir(cfg.Hub.LogDir); err != nil {
 		logger.Warn("sqlite session store disabled", "err", err)

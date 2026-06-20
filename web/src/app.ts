@@ -197,7 +197,7 @@ export async function stageLongPastesAsFiles() {
 // 純正モデルに切替えるとエラーになる。行頭 /model 入力は送信前にブロックする。
 export function isOllamaModelCommandBlocked(sessionId, text) {
   const s = sessions.get(sessionId);
-  if (!s || s.route !== 'ollama') return false;
+  if (!s || (s.route !== 'ollama' && s.route !== 'lm-studio')) return false;
   const trimmed = String(text || '').replace(/^[\s\x00-\x1f]+/, '');
   return /^\/model(\b|\s|$)/i.test(trimmed);
 }

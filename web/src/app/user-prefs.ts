@@ -42,6 +42,7 @@ export const STORAGE_USAGE_LINK_CODEX_KEY     = 'ai_cli_hub_usage_link_codex';
 export const STORAGE_USAGE_LINK_COPILOT_KEY   = 'ai_cli_hub_usage_link_copilot';
 export const STORAGE_USAGE_LINK_CURSOR_AGENT_KEY = 'ai_cli_hub_usage_link_cursor_agent';
 export const STORAGE_USAGE_LINK_OLLAMA_KEY    = 'ai_cli_hub_usage_link_ollama';
+export const STORAGE_USAGE_LINK_LM_STUDIO_KEY = 'ai_cli_hub_usage_link_lm_studio';
 export const STORAGE_USAGE_LINK_OPENCODE_KEY  = 'ai_cli_hub_usage_link_opencode';
 export const STORAGE_USAGE_LINK_GROK_KEY      = 'ai_cli_hub_usage_link_grok';
 export const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds';
@@ -153,7 +154,8 @@ export const DEFAULT_USAGE_LINKS = {
   codex:    'https://chatgpt.com/codex/cloud/settings/analytics#usage',
   copilot:  'https://github.com/settings/billing',
   'cursor-agent': 'https://cursor.com/dashboard',
-  ollama:   'https://ollama.com/settings',
+  ollama:      'https://ollama.com/settings',
+  'lm-studio': 'http://localhost:1234',
   opencode: 'https://opencode.ai/go',
   grok:     'https://grok.com',
 };
@@ -201,6 +203,7 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'usage_links.copilot':       [STORAGE_USAGE_LINK_COPILOT_KEY,    String],
   'usage_links.cursor-agent':  [STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, String],
   'usage_links.ollama':        [STORAGE_USAGE_LINK_OLLAMA_KEY,     String],
+  'usage_links.lm-studio':     [STORAGE_USAGE_LINK_LM_STUDIO_KEY,  String],
   'usage_links.opencode':      [STORAGE_USAGE_LINK_OPENCODE_KEY,   String],
   'usage_links.grok':          [STORAGE_USAGE_LINK_GROK_KEY,       String],
   'favorites':                 [STORAGE_FAVORITES_KEY,             JSON.stringify],

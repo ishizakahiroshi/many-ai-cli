@@ -502,7 +502,8 @@ export function getAiDisplayName(provider) {
     case 'codex':    return ti18n('chat_ai_name_codex', 'Codex');
     case 'copilot':  return ti18n('chat_ai_name_copilot', 'Copilot');
     case 'cursor-agent': return ti18n('chat_ai_name_cursor_agent', 'Cursor Agent');
-    case 'ollama':   return ti18n('chat_ai_name_ollama', 'Ollama');
+    case 'ollama':     return ti18n('chat_ai_name_ollama', 'Ollama');
+    case 'lm-studio':  return ti18n('chat_ai_name_lm_studio', 'LM Studio');
     case 'opencode': return ti18n('chat_ai_name_opencode', 'OpenCode');
     case 'grok':     return ti18n('chat_ai_name_grok', 'Grok');
     default: return provider ? String(provider) : 'AI';
@@ -514,7 +515,8 @@ export function getAiAvatarLetter(provider) {
     case 'claude':   return 'C';
     case 'codex':    return 'X';
     case 'cursor-agent': return 'r';
-    case 'ollama':   return 'O';
+    case 'ollama':     return 'O';
+    case 'lm-studio':  return 'L';
     case 'opencode': return 'P';
     case 'grok':     return 'G';
     default: return 'A';

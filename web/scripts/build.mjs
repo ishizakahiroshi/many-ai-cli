@@ -1,4 +1,5 @@
-import { mkdir, readdir, rm, stat, copyFile } from 'node:fs/promises';
+import { mkdir, readdir, rm, stat, copyFile, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build, context } from 'esbuild';
@@ -78,10 +79,26 @@ const buildOptions = {
 await cleanDist();
 await copyStaticAssets();
 
+async function generateSrcHash() {
+  const files = (await walk(srcDir)).sort((a, b) => a.localeCompare(b));
+  const hasher = createHash('sha256');
+  for (const f of files) {
+    const rel = path.relative(srcDir, f).replaceAll(path.sep, '/');
+    hasher.update(rel + '\n');
+    hasher.update(await readFile(f));
+    hasher.update('\n');
+  }
+  const hash = hasher.digest('hex').slice(0, 12);
+  await writeFile(path.join(distDir, '.src-hash'), hash, 'utf8');
+  return hash;
+}
+
 if (watch) {
   const ctx = await context(buildOptions);
   await ctx.watch();
   console.log('watching web/src -> web/dist');
 } else {
   await build(buildOptions);
+  const hash = await generateSrcHash();
+  console.log(`web/src hash: ${hash}`);
 }

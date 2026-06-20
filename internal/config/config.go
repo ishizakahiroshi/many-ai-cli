@@ -95,6 +95,8 @@ const DefaultModelsSource = "https://raw.githubusercontent.com/ishizakahiroshi/m
 
 const DefaultOllamaBaseURL = "http://localhost:11434"
 
+const DefaultLMStudioBaseURL = "http://localhost:1234"
+
 func DefaultSlashCmdSources() SlashCmdSources {
 	return SlashCmdSources{
 		Claude:      DefaultClaudeSlashCmdSource,
@@ -512,6 +514,20 @@ func EffectiveOllamaBaseURL(baseURL string) string {
 	return baseURL
 }
 
+// LMStudioConfig は LM Studio ローカルサーバーへの接続先設定。
+// 空なら DefaultLMStudioBaseURL を使う。base_url に /v1 や path は付けない。
+type LMStudioConfig struct {
+	BaseURL string `yaml:"base_url,omitempty" json:"base_url,omitempty"`
+}
+
+func EffectiveLMStudioBaseURL(baseURL string) string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		return DefaultLMStudioBaseURL
+	}
+	return baseURL
+}
+
 // NotifyBackendConfig は通知バックエンド 1 件の設定。
 type NotifyBackendConfig struct {
 	Type  string `yaml:"type"  json:"type"` // "ntfy" | "webhook"
@@ -566,8 +582,9 @@ type Config struct {
 	// 非 loopback アクセス時のみ PIN ログインを要求する追加の扉（plan_hub-remote-auth.md / A）。
 	// 平文 PIN は決して保存しない。API レスポンスにも出さない（json:"-"）。
 	RemotePINHash string       `yaml:"remote_pin_hash,omitempty" json:"-"`
-	Ollama        OllamaConfig `yaml:"ollama,omitempty" json:"ollama,omitempty"`
-	LocalModels   []LocalModel `yaml:"local_models,omitempty" json:"local_models,omitempty"`
+	Ollama        OllamaConfig   `yaml:"ollama,omitempty" json:"ollama,omitempty"`
+	LMStudio      LMStudioConfig `yaml:"lm_studio,omitempty" json:"lm_studio,omitempty"`
+	LocalModels   []LocalModel   `yaml:"local_models,omitempty" json:"local_models,omitempty"`
 	UserPrefs     UserPrefs    `yaml:"user_prefs,omitempty" json:"user_prefs,omitempty"`
 	Voice         VoiceConfig  `yaml:"voice,omitempty" json:"voice,omitempty"`
 	Notify        NotifyConfig `yaml:"notify,omitempty" json:"notify,omitempty"`
@@ -836,6 +853,9 @@ func (cfg *Config) Validate() error {
 	if err := validateOllama(cfg.Ollama); err != nil {
 		return err
 	}
+	if err := validateLMStudio(cfg.LMStudio); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -856,6 +876,27 @@ func validateOllama(ollama OllamaConfig) error {
 	}
 	if u.Path != "" && u.Path != "/" {
 		return fmt.Errorf("ollama.base_url must not include a path")
+	}
+	return nil
+}
+
+func validateLMStudio(lms LMStudioConfig) error {
+	baseURL := strings.TrimSpace(lms.BaseURL)
+	if baseURL == "" {
+		return nil
+	}
+	u, err := neturl.Parse(baseURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return fmt.Errorf("lm_studio.base_url must be an http or https base URL")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("lm_studio.base_url must use http or https")
+	}
+	if u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("lm_studio.base_url must not include credentials, query, or fragment")
+	}
+	if u.Path != "" && u.Path != "/" {
+		return fmt.Errorf("lm_studio.base_url must not include a path")
 	}
 	return nil
 }

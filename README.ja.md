@@ -79,7 +79,7 @@ Gemini CLI は意図的に対象外です。
 - **承認検出パターン profile**: GitHub から同期する公式 trigger phrase と、ユーザー編集用 custom profile を分離
 - **サーバ側ユーザー設定**: 音声、通知音、お気に入り、セッション順、spawn 既定、アバター設定を `config.yaml` に保存
 - **UI からの新規セッション spawn**（`/api/spawn`）
-- **モデルピッカー + Ollama route 自動切替**: spawn フォームから Anthropic / OpenAI / Ollama Cloud / Ollama Local のモデルを選択でき、Hub が必要な `ANTHROPIC_*` / `OPENAI_*` 環境変数をセッションごとに自動注入（shell での事前設定不要）。Ollama daemon が別ホストにある場合は `config.yaml` の `ollama.base_url` で接続先を変更可能（Hyper-V ゲストからホストの Ollama を使う手順は [docs/manual_ollama-hyperv-host.md](docs/manual_ollama-hyperv-host.md) を参照）
+- **モデルピッカー + Ollama route 自動切替**: spawn フォームから Anthropic / OpenAI / Ollama Cloud / Ollama Local のモデルを選択でき、Hub が必要な `ANTHROPIC_*` / `OPENAI_*` 環境変数をセッションごとに自動注入（shell での事前設定不要）。Ollama daemon が別ホストにある場合は `config.yaml` の `ollama.base_url` で接続先を変更可能（Hyper-V ゲストからホストの Ollama を使う手順は [docs/manual_local-llm-hyperv-host.md](docs/manual_local-llm-hyperv-host.md) を参照）
 - **統合ランチャー（Windows / Linux / macOS）**: `many-ai-cli-launcher` で接続プロファイルから Hub へ接続し既定ブラウザで操作。SSH `serve` / `tunnel` プロファイルは全 OS、WSL プロファイルは Windows で WSL 内に Hub を起動
 - **リモートサーバー / Docker 運用資材**: GHCR image、ユーザー別コンテナ、loopback 限定公開、自動更新スクリプトでサーバー運用
 - **クリーン transcript 生成**: 人間が読める `.txt` を自動生成し、`log-clean` で手動再生成も可能

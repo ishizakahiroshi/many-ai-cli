@@ -72,6 +72,7 @@
   --prov-codex:          #60a5fa;
   --prov-copilot:        #7c3aed;
   --prov-ollama:         #c4973a;
+  --prov-lm-studio:      #06b6d4;
   --prov-opencode:       #22c55e;
   --prov-cursor-agent:   #94a3b8;
   --prov-grok:           #52525b;
@@ -715,6 +716,19 @@ header {
 .card-state-pill.error,
 .card-state-pill.disconnected { color: var(--danger);          background: color-mix(in srgb, var(--danger-bg) 25%, transparent);        border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
 .card-started-at { flex-shrink: 0; font-size: 0.72rem; color: var(--muted-2); margin-left: 3px; }
+/* カード 3 行目: ライブ情報（ctx 使用率% / 応答経過時間 / 長時間処理中バッジ）。 */
+.card-live-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-top: 4px; font-size: 0.66rem; color: var(--muted-2); line-height: 1.4; }
+.card-live-row[hidden] { display: none; }
+.card-ctx { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.card-ctx-gauge { display: inline-block; width: 38px; height: 6px; background: var(--bg-deep); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; vertical-align: middle; }
+.card-ctx-fill { display: block; height: 100%; border-radius: 3px; background: var(--green); transition: width 0.3s; }
+.card-ctx-fill.warn { background: var(--warn); }
+.card-ctx-fill.crit { background: var(--danger); }
+.card-ctx-pct { font-variant-numeric: tabular-nums; }
+.card-ctx-pct.crit { color: var(--danger); font-weight: 700; }
+.card-ctx-1m { font-size: 0.58rem; font-weight: 700; padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--accent); }
+.card-elapsed { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.card-longproc { white-space: nowrap; color: var(--warn-text); background: color-mix(in srgb, var(--warn-bg) 30%, transparent); border: 1px solid color-mix(in srgb, var(--warn-text) 40%, transparent); border-radius: var(--radius-sm); padding: 0 5px; font-weight: 700; }
 .card-provider-icon { flex-shrink: 0; vertical-align: middle; margin-right: 2px; }
 /* モデル名の色は下のステータスバー .tsb-model（#9ece6a）に合わせて緑系で統一。 */
 .card-model { flex-shrink: 1; font-size: 0.72rem; color: #9ece6a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; margin-left: 2px; }
@@ -869,7 +883,8 @@ header {
 .card-provider-chip.claude,   .summary-provider-name.claude,   .pane-slot .sc-provider.claude,   .prov-shape.claude,   .prov-letter.claude   { --prov: var(--prov-claude); }
 .card-provider-chip.codex,    .summary-provider-name.codex,    .pane-slot .sc-provider.codex,    .prov-shape.codex,    .prov-letter.codex    { --prov: var(--prov-codex); }
 .card-provider-chip.copilot,  .summary-provider-name.copilot,  .pane-slot .sc-provider.copilot,  .prov-shape.copilot,  .prov-letter.copilot  { --prov: var(--prov-copilot); }
-.card-provider-chip.ollama,   .summary-provider-name.ollama,   .pane-slot .sc-provider.ollama,   .prov-shape.ollama,   .prov-letter.ollama   { --prov: var(--prov-ollama); }
+.card-provider-chip.ollama,    .summary-provider-name.ollama,    .pane-slot .sc-provider.ollama,    .prov-shape.ollama,    .prov-letter.ollama    { --prov: var(--prov-ollama); }
+.card-provider-chip.lm-studio, .summary-provider-name.lm-studio, .pane-slot .sc-provider.lm-studio, .prov-shape.lm-studio, .prov-letter.lm-studio { --prov: var(--prov-lm-studio); }
 .card-provider-chip.opencode, .summary-provider-name.opencode, .pane-slot .sc-provider.opencode, .prov-shape.opencode, .prov-letter.opencode { --prov: var(--prov-opencode); }
 .card-provider-chip.cursor-agent, .summary-provider-name.cursor-agent, .pane-slot .sc-provider.cursor-agent, .prov-shape.cursor-agent, .prov-letter.cursor-agent { --prov: var(--prov-cursor-agent); }
 .card-provider-chip.grok, .summary-provider-name.grok, .pane-slot .sc-provider.grok, .prov-shape.grok, .prov-letter.grok { --prov: var(--prov-grok); }

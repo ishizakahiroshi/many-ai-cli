@@ -21,10 +21,11 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	localCfg := append([]config.LocalModel(nil), s.cfg.LocalModels...)
 	source := s.cfg.ModelsSource
 	ollamaBaseURL := s.cfg.Ollama.BaseURL
+	lmStudioBaseURL := s.cfg.LMStudio.BaseURL
 	s.cfgMu.Unlock()
 	if source == "" {
 		source = config.DefaultModelsSource
 	}
-	resp := buildModelsResponse(s.modelsCache, s.modelsRemoteCache, source, localCfg, ollamaBaseURL, force)
+	resp := buildModelsResponse(s.modelsCache, s.modelsRemoteCache, source, localCfg, ollamaBaseURL, lmStudioBaseURL, force)
 	writeJSON(w, resp)
 }
