@@ -29,6 +29,24 @@ Release artifacts are published at
   `ANTHROPIC_BASE_URL=<base_url>`, and Codex gets
   `OPENAI_BASE_URL=<base_url>/v1`.
 
+## [0.3.3] - 2026-06-20
+
+### Fixed
+- **Spawn no longer overrides the CLI's default model.** When a session was
+  spawned from the UI with the model field left on *auto*, the Hub re-injected
+  the previous `last_model` as an explicit `--model` argument. This silently
+  overrode the model the user had picked with the CLI's own `/model` command —
+  in particular it clobbered the 1M-context Opus variant on Max plans and pinned
+  the session back to a 200K window. The Hub now omits `--model` unless a model
+  is explicitly selected, so the CLI's own default (including the auto-granted
+  1M window) is respected. The spawn panel also stops pre-filling the model
+  field from the saved value (`spawn-model-override`).
+
+### Added
+- 1M-context Opus variants (`claude-opus-4-8[1m]` / `claude-opus-4-7[1m]`) are
+  now selectable in the spawn model list for users who want to pin them
+  explicitly.
+
 ## [0.3.2] - 2026-06-16
 
 ### Added
@@ -430,7 +448,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.2.2...v0.3.0
