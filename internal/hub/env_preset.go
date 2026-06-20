@@ -11,12 +11,20 @@ const (
 	RouteAnthropic = "anthropic"
 	RouteOpenAI    = "openai"
 	RouteOllama    = "ollama"
+	RouteLMStudio  = "lm-studio"
 )
+
+// isLocalRoute はローカル LLM サーバーへの route かどうかを返す。
+// Ollama と LM Studio が該当する。ローカル route は spawn 時に env を焼き付け、
+// /model コマンドをブロックし、last_model に残さない共通挙動を持つ。
+func isLocalRoute(route string) bool {
+	return route == RouteOllama || route == RouteLMStudio
+}
 
 // validRoute は spawn API で受け取り得る route 値の whitelist。
 func validRoute(route string) bool {
 	switch route {
-	case "", RouteAnthropic, RouteOpenAI, RouteOllama:
+	case "", RouteAnthropic, RouteOpenAI, RouteOllama, RouteLMStudio:
 		return true
 	default:
 		return false
@@ -44,15 +52,16 @@ func EnvPresetFor(provider, route string) []string {
 // proxyToken が非空のとき、URL に `/s/<token>` を埋め込み、MANY_AI_CLI_PROXY_TOKEN env も付与する。
 // wrapper はこの env を読んで register 時に Hub へ伝え、Hub が token → session ID を解決する。
 func EnvPresetForProxy(provider, route, proxyBaseURL, proxyToken string) []string {
-	return EnvPresetForProxyWithOllamaBase(provider, route, proxyBaseURL, proxyToken, "")
+	return EnvPresetForProxyWithOllamaBase(provider, route, proxyBaseURL, proxyToken, "", "")
 }
 
-func EnvPresetForProxyWithOllamaBase(provider, route, proxyBaseURL, proxyToken, ollamaBaseURL string) []string {
+func EnvPresetForProxyWithOllamaBase(provider, route, proxyBaseURL, proxyToken, ollamaBaseURL, lmStudioBaseURL string) []string {
 	pathPrefix := ""
 	if proxyToken != "" {
 		pathPrefix = "/s/" + proxyToken
 	}
 	ollamaBase := config.EffectiveOllamaBaseURL(ollamaBaseURL)
+	lmStudioBase := config.EffectiveLMStudioBaseURL(lmStudioBaseURL)
 	switch provider {
 	case "claude":
 		if route == RouteOllama {
@@ -60,6 +69,13 @@ func EnvPresetForProxyWithOllamaBase(provider, route, proxyBaseURL, proxyToken, 
 				"ANTHROPIC_AUTH_TOKEN=ollama",
 				"ANTHROPIC_API_KEY=",
 				"ANTHROPIC_BASE_URL=" + ollamaBase,
+			}
+		}
+		if route == RouteLMStudio {
+			return []string{
+				"ANTHROPIC_AUTH_TOKEN=lmstudio",
+				"ANTHROPIC_API_KEY=",
+				"ANTHROPIC_BASE_URL=" + lmStudioBase,
 			}
 		}
 		if proxyBaseURL != "" {
@@ -78,6 +94,12 @@ func EnvPresetForProxyWithOllamaBase(provider, route, proxyBaseURL, proxyToken, 
 				"OPENAI_BASE_URL=" + ollamaBase + "/v1",
 			}
 		}
+		if route == RouteLMStudio {
+			return []string{
+				"OPENAI_API_KEY=lmstudio",
+				"OPENAI_BASE_URL=" + lmStudioBase + "/v1",
+			}
+		}
 		if proxyBaseURL != "" {
 			out := []string{
 				"OPENAI_BASE_URL=" + proxyBaseURL + pathPrefix + "/openai/v1",
@@ -91,19 +113,23 @@ func EnvPresetForProxyWithOllamaBase(provider, route, proxyBaseURL, proxyToken, 
 	return nil
 }
 
-// RouteForModel は model 名と既知の Ollama モデル集合から route を推定する。
+// RouteForModel は model 名と既知のモデル集合から route を推定する。
 // 明示指定（API body の route フィールド）が空のときに使う。
 //
 // 判定優先順位:
-//  1. knownOllama[model] が true → "ollama"
-//  2. model に ":cloud" を含む（":120b-cloud" 等を含む）→ "ollama"
-//  3. provider == "claude" → "anthropic"
-//  4. provider == "codex"  → "openai"
-//  5. 上記いずれも非該当 → "" （env 注入なし）
-func RouteForModel(provider, model string, knownOllama map[string]bool) string {
+//  1. knownLmStudio[model] が true → "lm-studio"
+//  2. knownOllama[model] が true → "ollama"
+//  3. model に ":cloud" を含む（":120b-cloud" 等を含む）→ "ollama"
+//  4. provider == "claude" → "anthropic"
+//  5. provider == "codex"  → "openai"
+//  6. 上記いずれも非該当 → "" （env 注入なし）
+func RouteForModel(provider, model string, knownOllama map[string]bool, knownLmStudio map[string]bool) string {
 	m := strings.TrimSpace(model)
 	if m == "" {
 		return ""
+	}
+	if knownLmStudio != nil && knownLmStudio[m] {
+		return RouteLMStudio
 	}
 	if knownOllama != nil && knownOllama[m] {
 		return RouteOllama

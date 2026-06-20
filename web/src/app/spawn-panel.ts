@@ -129,7 +129,8 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         if (g.provider === provider) return 0;
         if (g.label === 'Ollama Cloud') return 1;
         if (g.label === 'Ollama Local') return 2;
-        return 3;
+        if (g.label === 'LM Studio') return 3;
+        return 4;
       };
       return rank(a) - rank(b);
     });
@@ -179,7 +180,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   function clearOllamaModelDefault() {
     const m = spawnModelInput.value.trim();
     if (!m) return;
-    if (resolveRoute(spawnProviderEl.value, m) === 'ollama') {
+    if (['ollama', 'lm-studio'].includes(resolveRoute(spawnProviderEl.value, m))) {
       setSpawnModelValue('');
       clearModelSelectionState();
     }
@@ -1342,7 +1343,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         // spawn 時 env (ANTHROPIC_BASE_URL=localhost:11434 等) が焼き付き、
         // そのセッション内で /model が blocked になる罠を踏むため。
         // Claude/Codex の純正モデル選択は引き続き sticky に残す。
-        const persistedModel = route === 'ollama' ? '' : model;
+        const persistedModel = (route === 'ollama' || route === 'lm-studio') ? '' : model;
         const openTarget = getSpawnOpenTarget();
         const gridLayout = getSpawnGridLayout();
         const detachedPreset = spawnDetachedPreset ? spawnDetachedPreset.value : 'single';

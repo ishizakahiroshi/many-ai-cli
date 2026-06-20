@@ -69,6 +69,8 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		"version":         s.version,
 		"binary_sha256":   s.binGuard.StartSHA(),
 		"binary_stale":    s.binGuard.IsStale(),
+		"web_src_hash":    s.webSrcHash,
+		"web_dist_fresh":  s.webDistFresh,
 		"active_sessions": s.activeSessionCount(),
 		"git_commit":      s.gitCommit,
 		"build_time":      s.buildTime,

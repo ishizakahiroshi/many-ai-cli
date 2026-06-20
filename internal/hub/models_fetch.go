@@ -44,9 +44,24 @@ type ModelsResponse struct {
 
 const (
 	ollamaLocalCacheTTL  = 60 * time.Second
+	lmStudioCacheTTL     = 60 * time.Second
 	openCodeModelsTTL    = 10 * time.Minute
 	openCodeModelsNegTTL = 3 * time.Minute
 )
+
+// lmStudioModelsResponse は LM Studio `/v1/models` の OpenAI 互換レスポンス構造。
+type lmStudioModelsResponse struct {
+	Data []struct {
+		ID     string `json:"id"`
+		Object string `json:"object"`
+	} `json:"data"`
+}
+
+type lmStudioModelsCacheEntry struct {
+	models    []Model
+	fetchedAt time.Time
+	err       error
+}
 
 // ollamaTagsResponse は `/api/tags` の最低限のレスポンス構造。
 // remote_host が非空のエントリは cloud にプロキシされる pull 済み alias
@@ -73,13 +88,14 @@ type openCodeModelsCacheEntry struct {
 	err       error
 }
 
-// modelsCache は Ollama Local `/api/tags` 取得結果を保持する。
+// modelsCache は Ollama Local `/api/tags` および LM Studio `/v1/models` の取得結果を保持する。
 // cloud 側のカタログは外部 fetch せず、ローカル daemon の remote_host で判定するため
 // 専用のキャッシュは持たない。
 type modelsCache struct {
 	mu         sync.Mutex
 	local      *ollamaTagsCacheEntry
 	localFetch *ollamaTagsFetch
+	lmStudio   *lmStudioModelsCacheEntry
 	openCode   *openCodeModelsCacheEntry
 	generation uint64 // invalidate() ごとに +1; force fetch が古い世代結果を受け取らないようにする
 }
@@ -287,6 +303,42 @@ func ollamaTagsURL(baseURL string) string {
 	return config.EffectiveOllamaBaseURL(baseURL) + "/api/tags"
 }
 
+// fetchLMStudioModels は LM Studio `/v1/models`（OpenAI 互換）を取得して models 列に変換する。
+func fetchLMStudioModels(url string, timeout time.Duration) ([]Model, error) {
+	client := &http.Client{Timeout: timeout}
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("fetch %s: %s", url, resp.Status)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if err != nil {
+		return nil, err
+	}
+	var parsed lmStudioModelsResponse
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", url, err)
+	}
+	out := make([]Model, 0, len(parsed.Data))
+	seen := map[string]bool{}
+	for _, m := range parsed.Data {
+		id := strings.TrimSpace(m.ID)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, Model{ID: id, Label: id})
+	}
+	return out, nil
+}
+
+func lmStudioModelsURL(baseURL string) string {
+	return config.EffectiveLMStudioBaseURL(baseURL) + "/v1/models"
+}
+
 // getOllamaLocal はキャッシュ済みのローカル daemon モデル一覧を返す。
 // force=true 時は TTL を無視し強制リフレッシュする。finding #24 対策として
 // invalidate() で進んだ世代より前の in-flight 結果を受け取らない。
@@ -358,8 +410,41 @@ func (c *modelsCache) getOllamaLocal(force bool, tagsURL string) (models []Model
 func (c *modelsCache) invalidate() {
 	c.mu.Lock()
 	c.local = nil
+	c.lmStudio = nil
 	c.generation++
 	c.mu.Unlock()
+}
+
+// getLMStudioModels は LM Studio `/v1/models` の取得結果をキャッシュ付きで返す。
+// force=true 時は TTL を無視して再取得する。
+func (c *modelsCache) getLMStudioModels(force bool, modelsURL string) ([]Model, time.Time, error) {
+	if c == nil {
+		return nil, time.Time{}, nil
+	}
+	c.mu.Lock()
+	entry := c.lmStudio
+	if entry != nil {
+		age := time.Since(entry.fetchedAt)
+		if !force && age < lmStudioCacheTTL {
+			models := append([]Model(nil), entry.models...)
+			fetchedAt := entry.fetchedAt
+			err := entry.err
+			c.mu.Unlock()
+			return models, fetchedAt, err
+		}
+	}
+	c.mu.Unlock()
+
+	models, err := fetchLMStudioModels(modelsURL, 3*time.Second)
+	entry = &lmStudioModelsCacheEntry{
+		models:    append([]Model(nil), models...),
+		fetchedAt: time.Now(),
+		err:       err,
+	}
+	c.mu.Lock()
+	c.lmStudio = entry
+	c.mu.Unlock()
+	return append([]Model(nil), models...), entry.fetchedAt, err
 }
 
 // buildModelsResponse は Anthropic / OpenAI（GitHub fetch + 24h キャッシュ）と
@@ -371,7 +456,7 @@ func (c *modelsCache) invalidate() {
 //
 // この設計により「daemon が知らない catalog 名」が選択肢に出ない（= 選んだら必ず呼べる）。
 // 新規 cloud モデルの発見は UI 側の外部リンク（https://ollama.com/search?c=cloud）に任せる。
-func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], remoteSource string, localConfig []config.LocalModel, ollamaBaseURL string, force bool) ModelsResponse {
+func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], remoteSource string, localConfig []config.LocalModel, ollamaBaseURL string, lmStudioBaseURL string, force bool) ModelsResponse {
 	if force && remote != nil {
 		remote.invalidate()
 	}
@@ -386,6 +471,7 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 			"openai":              remoteSource,
 			"opencode":            "opencode models opencode --verbose",
 			"ollama_local":        ollamaTagsURL(ollamaBaseURL),
+			"lm_studio":           lmStudioModelsURL(lmStudioBaseURL),
 			"local_models_config": "~/.many-ai-cli/config.yaml#local_models",
 		},
 	}
@@ -498,6 +584,22 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 		}
 	}
 
+	// LM Studio /v1/models を取得する
+	lmStudioModels, lmStudioAt, lmStudioErr := cache.getLMStudioModels(force, lmStudioModelsURL(lmStudioBaseURL))
+	if lmStudioErr != nil {
+		resp.Warnings = append(resp.Warnings, "lm_studio_unreachable")
+	} else if len(lmStudioModels) > 0 {
+		resp.Groups = append(resp.Groups, ModelGroup{
+			Label:    "LM Studio",
+			Provider: "",
+			Route:    RouteLMStudio,
+			Models:   lmStudioModels,
+		})
+		if lmStudioAt.After(newest) {
+			newest = lmStudioAt
+		}
+	}
+
 	if !newest.IsZero() {
 		resp.CachedAt = newest.UTC().Format(time.RFC3339)
 	}
@@ -527,6 +629,23 @@ func mergeLocalModels(daemon []Model, configList []config.LocalModel) []Model {
 		} else {
 			idx[id] = len(out)
 			out = append(out, Model{ID: id, Label: label})
+		}
+	}
+	return out
+}
+
+// collectLMStudioModelIDs は cache から既知の LM Studio モデル ID 集合を作る。
+// spawn API での route 推定に使う。stale でも返す（spawn ホットパスを止めない）。
+func collectLMStudioModelIDs(cache *modelsCache) map[string]bool {
+	out := map[string]bool{}
+	if cache != nil {
+		cache.mu.Lock()
+		lms := cache.lmStudio
+		cache.mu.Unlock()
+		if lms != nil {
+			for _, m := range lms.models {
+				out[m.ID] = true
+			}
 		}
 	}
 	return out

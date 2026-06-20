@@ -247,12 +247,13 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		localCfg := append([]config.LocalModel(nil), s.cfg.LocalModels...)
 		s.cfgMu.Unlock()
 		known := collectOllamaModelIDs(s.modelsCache, localCfg)
-		effectiveRoute = RouteForModel(body.Provider, resolvedModel, known)
+		knownLmStudio := collectLMStudioModelIDs(s.modelsCache)
+		effectiveRoute = RouteForModel(body.Provider, resolvedModel, known, knownLmStudio)
 	}
 	// Codex CLI は env (OPENAI_BASE_URL 等) だけでは provider を切り替えず、
 	// CLI 引数 --oss / --profile で OSS (Ollama) provider に切替える設計。
-	// route=ollama のときに --oss を渡さないと OpenAI 純正へ向かい認証エラーで落ちる。
-	if body.Provider == "codex" && effectiveRoute == RouteOllama {
+	// route=ollama / lm-studio のときに --oss を渡さないと OpenAI 純正へ向かい認証エラーで落ちる。
+	if body.Provider == "codex" && isLocalRoute(effectiveRoute) {
 		wrapArgs = append(wrapArgs, "--codex-oss")
 	}
 	if body.Utf8Session {
@@ -268,13 +269,14 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	}
 	s.cfgMu.Lock()
 	ollamaBaseURL := s.cfg.Ollama.BaseURL
+	lmStudioBaseURL := s.cfg.LMStudio.BaseURL
 	s.cfgMu.Unlock()
 	proxyToken := ""
-	if base := s.chatProxyBaseURL(); base != "" && effectiveRoute != RouteOllama {
+	if base := s.chatProxyBaseURL(); base != "" && !isLocalRoute(effectiveRoute) {
 		proxyToken = newProxyToken()
 		s.registerPendingProxyToken(proxyToken)
 	}
-	if envPreset := EnvPresetForProxyWithOllamaBase(body.Provider, effectiveRoute, s.chatProxyBaseURL(), proxyToken, ollamaBaseURL); len(envPreset) > 0 {
+	if envPreset := EnvPresetForProxyWithOllamaBase(body.Provider, effectiveRoute, s.chatProxyBaseURL(), proxyToken, ollamaBaseURL, lmStudioBaseURL); len(envPreset) > 0 {
 		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
 		s.logger.Debug("spawn: env preset applied",
 			"provider", body.Provider, "route", effectiveRoute, "keys", envKeyList(envPreset))
@@ -316,11 +318,11 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	}
 	s.logger.Debug("spawn: wrap process started",
 		"provider", body.Provider, "pid", cmd.Process.Pid, "spawn_log", spawnLogPath)
-	// Ollama route のモデルは last_model に保存しない。
+	// ローカル LLM route のモデルは last_model に保存しない。
 	// 残すと model 空欄の次回 spawn で fallback として再選択され、
-	// Claude/Codex の純正起動のつもりが Ollama 経由になる罠を踏むため。
+	// Claude/Codex の純正起動のつもりがローカル LLM 経由になる罠を踏むため。
 	// 純正 (anthropic/openai) のモデル選択は引き続き sticky に保存する。
-	if resolvedModel != "" && effectiveRoute != RouteOllama {
+	if resolvedModel != "" && !isLocalRoute(effectiveRoute) {
 		if err := s.setLastModel(body.Provider, resolvedModel); err != nil {
 			s.logger.Warn("failed to save last model", "provider", body.Provider, "error", err)
 		}

@@ -55,7 +55,7 @@ func TestBuildModelsResponseUsesConfiguredOllamaBaseURL(t *testing.T) {
 			tagsURL:   ollamaTagsURL(baseURL),
 		},
 	}
-	resp := buildModelsResponse(cache, nil, "", nil, baseURL, false)
+	resp := buildModelsResponse(cache, nil, "", nil, baseURL, "", false)
 	if got := resp.Sources["ollama_local"]; got != "http://192.168.11.50:11434/api/tags" {
 		t.Fatalf("ollama source = %q, want configured /api/tags URL", got)
 	}

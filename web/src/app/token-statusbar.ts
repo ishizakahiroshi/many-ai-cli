@@ -1028,6 +1028,28 @@ function openSentHistoryModal(): void {
 
 // ── 外部 API ─────────────────────────────────────────────────────────────────
 
+/**
+ * セッションカード用: context 使用率%（と 1M 窓かどうか）を返す。未取得時は null。
+ * 算出ロジックはステータスバーの ctx セグメント（renderStatusbar）と同一ソースにして
+ * カードとバーで数値が食い違わないようにする（Claude statusLine の used_percentage を
+ * 最優先、無ければ tokensIn / 実効上限 から算出）。
+ */
+export function getSessionCtxPct(sessionId: number): { pct: number; is1m: boolean } | null {
+  const entry = usageCache.get(sessionId);
+  if (!entry) return null;
+  const provider = entry.provider;
+  if (provider !== 'claude' && provider !== 'codex') return null;
+  const sess = sessions.get(sessionId);
+  const sessionModelName = sess?.model || '';
+  const ctxLimit = resolveEffectiveCtxLimit(entry, [entry.usageModel || '', sessionModelName]);
+  const ctxDirectPct = (provider === 'claude' && entry.usedPct > 0) ? entry.usedPct : null;
+  let pct: number | null = null;
+  if (ctxDirectPct !== null) pct = ctxDirectPct;
+  else if (ctxLimit && ctxLimit > 0 && entry.tokensIn > 0) pct = (entry.tokensIn / ctxLimit) * 100;
+  if (pct === null) return null;
+  return { pct: Math.max(0, Math.min(100, Math.round(pct))), is1m: entry.ctxWindow >= 1_000_000 };
+}
+
 /** WS usage_stat メッセージを受信したときに呼ぶ。 */
 export function handleUsageStatMessage(m: Message): void {
   const sid = m.session_id;
