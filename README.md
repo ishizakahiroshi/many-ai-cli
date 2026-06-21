@@ -6,7 +6,7 @@
 
 ![many-ai-cli dashboard](assets/readme-dashboard.png)
 
-**Never miss an approval prompt.** `many-ai-cli` watches your AI coding CLIs (Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / Grok Build CLI) and notifies your desktop or phone the moment one is waiting for your approval — so you don't have to babysit the terminal. It also gives you a local web dashboard to handle approvals, monitoring, and terminals across multiple sessions in one place.
+**Never miss an approval prompt — even from your phone.** Run `Claude Code`, `Codex CLI`, `GitHub Copilot CLI`, `Cursor Agent CLI`, and `Grok Build CLI` in parallel; `many-ai-cli` watches every session in a PTY and pushes a notification to your desktop or phone the moment any one is blocked waiting for your approval — so you don't have to babysit terminals. It also gives you a local web dashboard to handle approvals, monitoring, and terminals across multiple sessions in one place.
 
 [日本語版 README はこちら](README.ja.md)
 
