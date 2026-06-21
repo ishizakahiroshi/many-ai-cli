@@ -2198,15 +2198,23 @@ export function getDisplayLockedMode() {
   return '';
 }
 
+/** スマホ幅 (max-width: 720px) の場合は 'approval' をデフォルトタブにする */
+function defaultViewModeForViewport(): string {
+  if (typeof window !== 'undefined' && window.matchMedia('(max-width: 720px)').matches) {
+    return 'approval';
+  }
+  return 'terminal';
+}
+
 export function getSessionViewMode(sid) {
-  if (sid === null || sid === undefined) return 'terminal';
+  if (sid === null || sid === undefined) return defaultViewModeForViewport();
   // C5: セッション未登録 (新規 spawn / リロード後の初回) は lock 値を初期モードとして適用
   if (!sessionViewMode.has(sid)) {
     const lock = getDisplayLockedMode();
     if (lock && LOCKABLE_MODES.has(lock)) return lock;
-    return 'terminal';
+    return defaultViewModeForViewport();
   }
-  return sessionViewMode.get(sid) || 'terminal';
+  return sessionViewMode.get(sid) || defaultViewModeForViewport();
 }
 
 export function isTabLazyLoaded(sid, name) {

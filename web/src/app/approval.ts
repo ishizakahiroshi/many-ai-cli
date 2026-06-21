@@ -218,6 +218,15 @@ export function isShellProvider(provider: string): boolean {
   return provider === 'shell';
 }
 
+// \x15(Ctrl+U) を行クリアとして解釈しない provider。前置すると逆に悪さをする:
+// - shell: PowerShell 等で行クリアにならずリテラル ^U が混入してコマンドを壊す（2026-06-13 e168426 で確認）
+// - codex: Rust TUI が \x15 を行クリアとして解釈せず、続く \r がコマンド実行に至らない
+//   （2026-06-21 確認。素ターミナルで \x15 無しなら Enter 1 個で実行できる）
+// これらの provider 宛では doSend / sendQuickCommand / inputClearBtn の \x15 前置/単独送信をスキップする。
+export function shouldSkipClearPrefix(provider: string): boolean {
+  return provider === 'shell' || provider === 'codex';
+}
+
 // provider 別の承認 trigger phrase は ~/.many-ai-cli/approval-patterns/{provider}.json に外出し。
 // Hub 起動時にデフォルトをユーザー設定ディレクトリに展開（既存ファイルは尊重）し、
 // HTTP 経由で配信する。ユーザーが直接編集して文言を追加・調整できる。

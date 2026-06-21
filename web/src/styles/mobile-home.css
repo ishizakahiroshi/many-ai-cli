@@ -1,0 +1,252 @@
+/* mobile-home.css
+ * スマホホーム画面（#mobile-home）専用スタイル。
+ * 全ルールを @media (max-width: 720px) 内に閉じ込める（PC への影響ゼロ）。
+ */
+
+@media (max-width: 720px) {
+  /* ── ホーム画面コンテナ ── */
+  body.mobile-home-view #mobile-home {
+    display: block;
+  }
+
+  #mobile-home {
+    overflow-y: auto;
+    flex: 1 1 auto;
+    padding: 8px;
+    background: var(--bg-layer);
+    flex-direction: column;
+    gap: var(--space-3, 8px);
+    /* display controlled by body.mobile-home-view rule above / HTML hidden attribute */
+  }
+
+  /* ホーム表示中はサイドバーとターミナルを隠す */
+  body.mobile-home-view #session-list,
+  body.mobile-home-view #terminal-column {
+    display: none !important;
+  }
+
+  /* ← 戻るボタン：個別セッション画面でのみ表示 */
+  #mobile-back-btn {
+    display: none;
+    position: fixed;
+    top: 6px;
+    left: 8px;
+    z-index: 1100;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    color: var(--text);
+    font-size: 0.85rem;
+    padding: 4px 10px;
+    cursor: pointer;
+    min-height: 36px;
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #mobile-back-btn {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* ── ハンバーガーバッジ ── */
+  #mobile-menu-btn {
+    position: relative;
+  }
+
+  #mobile-menu-btn .mobile-badge {
+    display: none;
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    background: var(--danger, #e53e3e);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    border-radius: 9px;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #mobile-menu-btn .mobile-badge:not([hidden]) {
+    display: inline-flex;
+  }
+
+  /* ── セクション ── */
+  .mh-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2, 6px);
+  }
+
+  .mh-section--pinned {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--bg-layer);
+    padding-bottom: 4px;
+  }
+
+  .mh-section-header {
+    margin: 0 0 4px 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .mh-section--pending .mh-section-header {
+    color: var(--danger, #e53e3e);
+  }
+
+  /* ── カード ── */
+  .mh-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2, 6px);
+    padding: 10px 12px;
+    background: var(--bg);
+    border-radius: var(--radius-md);
+    border-left: 4px solid var(--line);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .mh-card:active {
+    background: var(--bg-hover, rgba(255,255,255,0.06));
+  }
+
+  .mh-card--pending {
+    border-left-color: var(--danger, #e53e3e);
+  }
+
+  .mh-card--running {
+    border-left-color: var(--warning, #d69e2e);
+  }
+
+  .mh-card--waiting {
+    border-left-color: var(--success, #38a169);
+  }
+
+  .mh-card--error {
+    border-left-color: var(--orange, #dd6b20);
+  }
+
+  /* ── カードヘッダー ── */
+  .mh-card-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 6px);
+  }
+
+  .mh-card-title {
+    flex: 1;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .mh-session-id {
+    color: var(--muted);
+    font-size: 0.8em;
+  }
+
+  .mh-session-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── 状態バッジ ── */
+  .mh-state-badge {
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: var(--radius-sm, 4px);
+    border: 1px solid currentColor;
+  }
+
+  .mh-state-badge--running { color: var(--warning, #d69e2e); }
+  .mh-state-badge--waiting,
+  .mh-state-badge--standby,
+  .mh-state-badge--done { color: var(--success, #38a169); }
+  .mh-state-badge--error,
+  .mh-state-badge--disconnected { color: var(--danger, #e53e3e); }
+
+  /* ── スニペット（最新ひと言） ── */
+  .mh-card-snippet {
+    font-size: 0.82rem;
+    color: var(--text-soft);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── 承認待ちカード: 質問テキスト ── */
+  .mh-card-preamble {
+    font-size: 0.84rem;
+    color: var(--text-soft);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .mh-card-question {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--text);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* ── 選択肢ボタン群 ── */
+  .mh-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2, 6px);
+    margin-top: 2px;
+  }
+
+  .mh-options .aqt-option-btn {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 14px;
+    font-size: 0.9rem;
+  }
+
+  /* ── fallback（batch / multiQ） ── */
+  .mh-approval-fallback {
+    font-size: 0.82rem;
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  /* ── empty state ── */
+  .mh-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 16px;
+    color: var(--muted);
+    font-size: 0.9rem;
+    text-align: center;
+  }
+}

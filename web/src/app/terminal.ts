@@ -1546,9 +1546,13 @@ export function scheduleLiveStatusExtract(id) {
 export function setSessionLiveStatus(id, text) {
   const t = terminals.get(id);
   if (!t) return;
-  // 再構成済みの綺麗なステータス行からも compact 開始を拾う（生チャンクが分割されて
-  // 「Compacting conversation」が途切れても、ここで確実に検出できる）。
-  if (text && COMPACT_DETECT_RE.test(text)) noteCompactStart(id);
+  // 再構成済みの綺麗なステータス行からも compact 開始／完了を拾う（生チャンクが分割
+  // されて「Compacting conversation」「Conversation compacted」が途切れても、ここで確実
+  // に検出できる）。完了マーカーが先に来ることはないので順序判定は不要。
+  if (text) {
+    if (COMPACT_DETECT_RE.test(text)) noteCompactStart(id);
+    else if (COMPACT_DONE_RE.test(text)) noteCompactDone(id);
+  }
   if (text) t.liveStatusText = text; // 意味のある全文だけ差し替え（記号だけの中間フレームでは前回値維持）
   // フレームが来た＝稼働中。判定タイマーをリセットして「稼働中」表示へ。
   if (t.liveStatusHideTimer) clearTimeout(t.liveStatusHideTimer);
@@ -1569,6 +1573,10 @@ export function setSessionLiveStatus(id, text) {
 // 進捗窓に「圧縮中…(Ns)」＋不定形バーを出して「動いている」ことを示す。正確な % の
 // 再現はしない（PTY に無いものは作らない）。
 const COMPACT_DETECT_RE = /Compacting conversation/i;
+// compact 完了時に Claude Code が PTY へ出す確定マーカー。これを拾えば IDLE タイムアウトを
+// 待たずに即時解除できる（compact 直後に通常応答が始まるとフレームが途切れず IDLE では
+// 解除できないため、確定マーカーが無いと「圧縮中…(Ns)」のまま秒数だけ伸び続ける）。
+const COMPACT_DONE_RE = /Conversation compacted/i;
 // compact のステータス更新が途切れた（＝完了）とみなすまでの猶予。spinner 再描画間隔より長く。
 const COMPACT_IDLE_MS = 1500;
 let compactTickTimer: ReturnType<typeof setInterval> | null = null;
@@ -1587,6 +1595,19 @@ function noteCompactStart(id) {
   }
 }
 
+// compact 完了マーカー（"Conversation compacted"）を観測した瞬間に呼ぶ。フレーム途切れ
+// による IDLE 解除に頼らず即時で通常表示へ戻す。compact 中でなければ何もしない。
+function noteCompactDone(id) {
+  const t = terminals.get(id);
+  if (!t || t.compactingSince == null) return;
+  t.compactingSince = null;
+  t.compactDetectTail = '';
+  if (id === activeSessionId) {
+    stopCompactTick();
+    syncLiveStatusDomForActive();
+  }
+}
+
 // PTY 出力チャンクから compact を追従する。
 // 注意: 「Compacting conversation」は compact の最初の数フレームにしか出ず、その後は
 // 通常ターンと同じランダムな進行語（Combobulating/Churning/Actioning 等。compact 無しでも
@@ -1597,7 +1618,19 @@ function noteCompactStart(id) {
 export function markCompactActivity(id, textChunk) {
   const t = terminals.get(id);
   if (!t) return;
-  if (t.compactingSince != null) { t.compactSeenAt = Date.now(); return; } // compact 中は任意フレームで延命
+  if (t.compactingSince != null) {
+    t.compactSeenAt = Date.now(); // compact 中は任意フレームで延命
+    // ただし完了マーカー "Conversation compacted" が同チャンクに来ていたら即解除する。
+    // compact 直後に通常応答（Read 等）が始まると PTY フレームが途切れず IDLE 解除が効か
+    // ないので、確定マーカーを直接拾う必要がある。チャンク境界分断対策は開始検出と同じ
+    // 末尾繰り越し方式。
+    if (textChunk) {
+      const probe = (t.compactDetectTail || '') + textChunk;
+      if (COMPACT_DONE_RE.test(probe)) { noteCompactDone(id); return; }
+      t.compactDetectTail = probe.slice(-24);
+    }
+    return;
+  }
   if (!textChunk) return;
   // 検出語「Compacting conversation」は compact 全体で 1 回しか出ない（その後は通常ターンと
   // 同じ汎用スピナー語へ替わる）。この 1 回をチャンク境界で分断されても確実に拾うため、
