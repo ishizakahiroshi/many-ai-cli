@@ -1204,6 +1204,7 @@ export function renderSessionStateUpdate(id) {
   const updated = updateSessionCardStateInPlace(id);
   updateMainTabStatus();
   if (typeof syncElapsedTimer === 'function') syncElapsedTimer();
+  window.updateMobileHomeCard?.(id);
   return updated;
 }
 
@@ -1221,6 +1222,7 @@ export function render() {
     return;
   }
   renderSessionList();
+  window.renderMobileHome?.();
   // C5: マルチタブが開いているときはペインスロット配列も更新
   // （セッション削除などで slots が古くなった場合に P<n> バッジと整合させる）
   const _mv5 = document.getElementById('multi-view');

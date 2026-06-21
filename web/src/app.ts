@@ -9,13 +9,15 @@ import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitA
 import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
+import { pendingSessionIds } from './app/approval-queue-tab.js';
 import { scheduleDeferredEnter, scheduleAfterOutputSettle, deferredEnterMinWaitFor } from './app/deferred-enter.js';
-import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, toggleMultiSelectFocused } from './app/approval.js';
+import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn, MAX_ATTACH_BYTES } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
 import { getExposeStatus, fetchExposeStatus, disableExpose } from './app/host-expose.js';
 import './app/detached-grid-launcher.js';
+import './app/mobile-home.js';
 
 export let _userAvatarUrl = '';
 export let _userDisplayName = '';
@@ -315,7 +317,7 @@ export async function doSend(sessionId) {
   // ただし shell provider（素のシェル）は Ink 入力欄を持たずシェル自身が行編集を担うため、
   // \x15 を本文と同一書き込みで前置すると PowerShell 等で行クリアにならずリテラル ^U が混入し
   // コマンドが壊れる（例: codex → ^Ucodex）。shell 宛ては前置せずそのまま送る。
-  const clearPrefix = isShellProvider(sessions.get(sessionId)?.provider || '') ? '' : '\x15';
+  const clearPrefix = shouldSkipClearPrefix(sessions.get(sessionId)?.provider || '') ? '' : '\x15';
   const needPasteSplit = deferEnter && injectPrefix !== '';
   const textToSend = needPasteSplit ? (clearPrefix + injectPrefix) : (clearPrefix + injectPrefix + textPart);
   clearInput();
@@ -820,8 +822,11 @@ inputClearBtn?.addEventListener('click', () => {
   // Web テキストエリアだけでなく内側 CLI の入力行も消す。ビジー時等に溜まった
   // 残骸（例: "/login/login..."）は web を空にしても TUI 側に残り続けるため、
   // doSend / sendQuickCommand と同じ \x15(Ctrl+U) を単独送信して行クリアする。
-  // セッション未選択なら no-op。
-  if (activeSessionId !== null) sendText(activeSessionId, '\x15');
+  // ただし shell / codex は \x15 が行クリアとして機能しない（リテラル混入 or 無視）ため
+  // 単独送信もスキップする（doSend / sendQuickCommand と同じ判定）。セッション未選択なら no-op。
+  if (activeSessionId !== null && !shouldSkipClearPrefix(sessions.get(activeSessionId)?.provider || '')) {
+    sendText(activeSessionId, '\x15');
+  }
   inputEl.focus();
 });
 
@@ -861,6 +866,25 @@ for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
 export function syncMobileLayoutState() {
   const hasSession = activeSessionId !== null && sessions.size > 0;
   document.body.classList.toggle('mobile-has-session', hasSession);
+  // スマホホーム画面: セッションが選択されていない場合はホームビューを表示
+  const isMobile = window.matchMedia('(max-width: 720px)').matches;
+  document.body.classList.toggle('mobile-home-view', isMobile && !hasSession);
+  // バックボタン・ホーム画面の表示切替
+  const backBtn = document.getElementById('mobile-back-btn');
+  const mobileHome = document.getElementById('mobile-home');
+  if (backBtn) backBtn.hidden = !(isMobile && hasSession);
+  if (mobileHome) mobileHome.hidden = !(isMobile && !hasSession);
+  // ハンバーガーバッジ: 個別セッションビュー中に他セッションの承認待ち数を表示
+  const badge = document.querySelector<HTMLElement>('#mobile-menu-btn .mobile-badge');
+  if (badge) {
+    if (isMobile && hasSession) {
+      const otherPending = pendingSessionIds().filter(id => id !== activeSessionId).length;
+      badge.textContent = String(otherPending);
+      badge.hidden = otherPending === 0;
+    } else {
+      badge.hidden = true;
+    }
+  }
   if (!hasSession) closeMobileSessionDrawer();
 }
 
@@ -944,6 +968,19 @@ window.closeMobileSessionDrawer = closeMobileSessionDrawer;
       keyRow?.querySelector('[data-mobile-key="ctrl"]')?.setAttribute('aria-pressed', 'false');
     }
   });
+  // #mobile-back-btn: 個別セッションビューからホームへ戻る
+  const backBtn = document.getElementById('mobile-back-btn');
+  backBtn?.addEventListener('click', () => {
+    set_activeSessionId(null);
+    closeMobileSessionDrawer();
+    syncMobileLayoutState();
+    window.renderMobileHome?.();
+  });
+
+  // ビューポート幅変化（スマホ↔PC 切替）で DOM 状態を再同期
+  const mql = window.matchMedia('(max-width: 720px)');
+  mql.addEventListener('change', syncMobileLayoutState);
+
   // NOTE: 循環 import（state.js → session-list.js → … → app.js）により、本モジュールは
   // state.js の本体評価より前に評価されうる。ここで同期的に syncMobileLayoutState() を
   // 呼ぶと activeSessionId が TDZ（Cannot access before initialization）で落ち、モジュール
@@ -987,7 +1024,7 @@ function doSendQuickCommand(sessionId, cmd) {
   // 連結され（例: "...質問/clear/clear"）独立コマンドにならない。Ctrl+U(\x15) で
   // 入力行を一度クリアしてから送り、連結を物理的に防ぐ。
   // shell provider は doSend と同理由で \x15 を前置しない（PowerShell 等で ^U 混入を防ぐ）。
-  const qcPrefix = isShellProvider(sessions.get(sessionId)?.provider || '') ? '' : '\x15';
+  const qcPrefix = shouldSkipClearPrefix(sessions.get(sessionId)?.provider || '') ? '' : '\x15';
   sendSubmittedText(sessionId, `${qcPrefix}${cmd}\r`);
   focusInputForTerminalKeys();
 }

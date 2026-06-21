@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="/vendor/xterm.min.css">
   <link rel="stylesheet" href="/vendor/hljs-github-dark.min.css">
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles/mobile-home.css">
 </head>
 <body>
   <header>
@@ -827,9 +828,11 @@
     </div>
   </div>
   <div id="app">
-    <button id="mobile-menu-btn" type="button" aria-label="Sessions" aria-expanded="false">☰</button>
+    <button id="mobile-menu-btn" type="button" aria-label="Sessions" aria-expanded="false">☰<span class="mobile-badge" hidden></span></button>
     <div id="mobile-drawer-backdrop" hidden></div>
     <button id="mobile-spawn-btn" type="button" aria-label="New Session">+</button>
+    <button id="mobile-back-btn" type="button" aria-label="Back to sessions" hidden>← <span data-i18n="mobile_back">Back</span></button>
+    <section id="mobile-home" hidden aria-label="All sessions"></section>
     <aside id="session-list">
       <div id="new-session-bar">
         <button id="kill-all-btn" data-i18n-tooltip="kill_all_tooltip" aria-label="Terminate all sessions">
