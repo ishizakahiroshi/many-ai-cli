@@ -6,7 +6,7 @@
 
 ![many-ai-cli ダッシュボード](assets/readme-dashboard.png)
 
-**AI コーディング CLI の承認待ちを見逃さない。** `many-ai-cli` は Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / Grok Build CLI を監視し、承認が必要になった瞬間にデスクトップ／スマホへ通知します。ターミナルを見張り続ける必要はありません。あわせて、複数セッションの承認・監視・ターミナルを 1 画面の Web ダッシュボードで操作できます。
+**AI コーディング CLI の承認待ちを見逃さない — スマホからでも。** `Claude Code` / `Codex CLI` / `GitHub Copilot CLI` / `Cursor Agent CLI` / `Grok Build CLI` を並列実行できる Web ダッシュボードです。`many-ai-cli` は各 CLI を PTY でラップし、承認待ちを検出した瞬間にデスクトップ／スマホへ通知します。ターミナルを見張り続ける必要はありません。あわせて、複数セッションの承認・監視・ターミナルを 1 画面の Web ダッシュボードで操作できます。
 
 [English README](README.md)
 
