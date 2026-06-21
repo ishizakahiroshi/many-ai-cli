@@ -3,7 +3,7 @@ import { t } from '../i18n.js';
 import { escapeHtml, ti18n, token } from './util.js';
 import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, favorites, groupOrder, multiQuestionVisibleCache, orderSessions, projectFavorites, saveFavorites, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, terminals } from './state.js';
 import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor, updateInputAffordance } from '../app.js';
-import { attachTerminal, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, updateScrollLockBtn } from './terminal.js';
+import { attachTerminal, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, syncLiveStatusLongproc, updateScrollLockBtn } from './terminal.js';
 import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, renderSessionInfoChip, updateChatCountBadge } from './settings.js';
 import { syncElapsedTimer } from './ws-client.js';
 import { setMultiQuestionBannerVisible } from './approval-ui.js';
@@ -313,15 +313,6 @@ const cardRunningSince = new Map<number, number>();
 // 重いターン（巨大 context × xhigh 思考）で 1 応答が 5 分以上かかる状態を可視化する。
 const CARD_LONGPROC_SEC = 300;
 
-function formatCardDurSec(sec) {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = sec % 60;
-  if (h > 0) return `${h}h${m}m`;
-  if (m > 0) return `${m}m${s}s`;
-  return `${s}s`;
-}
-
 // running 中の応答経過秒を返す（running でなければ null、追跡もクリアする）。
 function cardTurnElapsedSec(id, state) {
   if (state !== 'running') { cardRunningSince.delete(id); return null; }
@@ -338,8 +329,7 @@ function cardLiveRowHtml(s) {
   const state = s.state || 'standby';
   const sec = cardTurnElapsedSec(s.id, state);
   if (sec !== null) {
-    const tip = ti18n('card_elapsed_title', 'Elapsed time of the current response', {});
-    parts.push(`<span class="card-elapsed" data-tooltip="${escapeHtml(tip)}">⏱ ${escapeHtml(formatCardDurSec(sec))}</span>`);
+    // 稼働経過秒（⏱ 48s 等）はユーザー要望により非表示。長時間処理の⚠バッジのみ残す。
     if (sec >= CARD_LONGPROC_SEC) {
       const label = ti18n('card_longproc_label', 'Long-running', {});
       const lpTip = ti18n('card_longproc_title', 'This response has been running a long time. It may be stuck behind a heavy turn (large context × high effort). Send ESC to interrupt instead of resending.', {});
@@ -948,6 +938,10 @@ export function updateMainTabStatus() {
   // カードのライブ情報（ctx% / 応答経過 / 長時間バッジ）も毎秒・state 変化時に追従させる。
   // syncElapsedTimer の 1Hz interval がここを呼ぶため、応答経過が毎秒伸びる。
   updateAllCardsLiveInfo();
+  // ライブ帯（入力欄上）の「長時間処理中」も同じ 1Hz で更新する。応答が無音のまま
+  // 長時間続く場合は PTY フレームが来ず renderLiveStatusDom が呼ばれないため、ここで
+  // しきい値超過を毎秒判定して帯の右側へ出す。
+  if (typeof syncLiveStatusLongproc === 'function') syncLiveStatusLongproc();
 }
 
 // ---- タブ通知（保留バッジ） ----

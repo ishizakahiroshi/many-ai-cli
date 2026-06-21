@@ -807,7 +807,6 @@
   "card_branch_disabled_tooltip": "git リポジトリではありません",
   "card_branch_no_git": "(no git)",
   "card_ctx_title": "コンテキスト使用率（残量が少ないと応答が重くなり auto-compact が走ります）",
-  "card_elapsed_title": "現在の応答の経過時間（このターンが始まってからの時間）",
   "card_longproc_label": "長時間処理中",
   "card_longproc_title": "この応答が長時間続いています。巨大コンテキスト × 高 effort で 1 ターンが重くなっている可能性があります。催促を連投せず、ターミナルで ESC を送って中断してください。",
   "card_ctx_open_git": "Open Git View",

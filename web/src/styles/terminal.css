@@ -250,6 +250,26 @@
 @media (prefers-reduced-motion: reduce) {
   .live-compact-bar::before { animation-duration: 2.4s; }
 }
+/* 長時間処理中バッジ: 「実行中」テキストのすぐ右隣に出す（スピナー＝実行表示の近くに
+   置いて視線移動を最小化する）。margin-left:auto は付けない＝左グループ（スピナー・
+   実行中・本バッジ）に残し、パレットボタンだけが右端へ寄る。running が一定時間続いた
+   とき（terminal.ts の syncLiveStatusLongproc）だけ表示する。配色はサイドバーの
+   .card-longproc と揃えた警告色。帯は pointer-events:none なのでツールチップ（title）
+   だけ拾えるよう本要素は pointer-events を復活させる。 */
+.live-status-longproc {
+  flex: 0 0 auto;
+  pointer-events: auto;
+  white-space: nowrap;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--warn-text);
+  background: color-mix(in srgb, var(--warn-bg) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn-text) 40%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 0 6px;
+}
+.live-status-longproc[hidden] { display: none; }
 /* 配色パレット: 帯の右端に置く。帯は pointer-events:none なので操作要素だけ復活させる。 */
 .live-status-palette-btn {
   flex: 0 0 auto;
