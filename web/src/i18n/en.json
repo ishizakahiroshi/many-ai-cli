@@ -807,7 +807,6 @@
   "card_branch_disabled_tooltip": "Not a git repository",
   "card_branch_no_git": "(no git)",
   "card_ctx_title": "Context window usage (low headroom slows responses and triggers auto-compact)",
-  "card_elapsed_title": "Elapsed time of the current response (since this turn started)",
   "card_longproc_label": "Long-running",
   "card_longproc_title": "This response has been running a long time. It may be stuck behind a heavy turn (large context × high effort). Send ESC in the terminal to interrupt instead of resending.",
   "card_ctx_open_git": "Open Git View",

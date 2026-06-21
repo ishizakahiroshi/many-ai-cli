@@ -727,7 +727,6 @@ header {
 .card-ctx-pct { font-variant-numeric: tabular-nums; }
 .card-ctx-pct.crit { color: var(--danger); font-weight: 700; }
 .card-ctx-1m { font-size: 0.58rem; font-weight: 700; padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--accent); }
-.card-elapsed { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .card-longproc { white-space: nowrap; color: var(--warn-text); background: color-mix(in srgb, var(--warn-bg) 30%, transparent); border: 1px solid color-mix(in srgb, var(--warn-text) 40%, transparent); border-radius: var(--radius-sm); padding: 0 5px; font-weight: 700; }
 .card-provider-icon { flex-shrink: 0; vertical-align: middle; margin-right: 2px; }
 /* モデル名の色は下のステータスバー .tsb-model（#9ece6a）に合わせて緑系で統一。 */

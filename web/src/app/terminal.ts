@@ -1666,6 +1666,7 @@ function renderLiveStatusDom(mode, text) {
     el.classList.remove('idle', 'waiting');
     if (textEl) textEl.textContent = '';
     if (barEl) barEl.hidden = true;
+    syncLiveStatusLongproc();
     return;
   }
   // compact 中は経過秒ラベル＋不定形バーへ差し替える。active の特殊形として扱い、
@@ -1680,6 +1681,43 @@ function renderLiveStatusDom(mode, text) {
   el.classList.toggle('waiting', mode === 'waiting');
   if (barEl) barEl.hidden = (compactSec == null);
   if (textEl && textEl.textContent !== text) textEl.textContent = text || '';
+  syncLiveStatusLongproc();
+}
+
+// 長時間処理中インジケータ（ライブ帯の右側・パレットボタンの左隣）。
+// アクティブセッションが running に入ってから LIVE_LONGPROC_SEC を超えて応答が続くと
+// 「⚠ 長時間処理中」を帯の右側へ出す。サイドバーのカード長時間バッジ（session-list.ts の
+// CARD_LONGPROC_SEC）と同じしきい値・同じ意味で、入力欄の真上でも気付けるようにする。
+// ライブ帯はアクティブセッションぶんしか表示しないため、追跡もアクティブ分だけ持つ。
+const LIVE_LONGPROC_SEC = 300;
+const liveStatusRunningSince = new Map<number, number>();
+
+export function syncLiveStatusLongproc(): void {
+  const el = document.getElementById('terminal-live-status');
+  if (!el) return;
+  const id = activeSessionId;
+  const state = id != null ? (sessions.get(id)?.state as string) : null;
+  const lp = el.querySelector('.live-status-longproc') as HTMLElement | null;
+  // running 以外（standby/waiting/error/切断）は追跡を捨てて非表示にする。
+  if (id == null || state !== 'running') {
+    if (id != null) liveStatusRunningSince.delete(id);
+    if (lp) lp.hidden = true;
+    return;
+  }
+  let since = liveStatusRunningSince.get(id);
+  if (!since) { since = Date.now(); liveStatusRunningSince.set(id, since); }
+  const sec = Math.max(0, Math.floor((Date.now() - since) / 1000));
+  let badge = lp;
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.className = 'live-status-longproc';
+    badge.textContent = `⚠ ${ti18n('card_longproc_label')}`;
+    badge.title = ti18n('card_longproc_title');
+    // パレットボタンの左隣へ置く（パレットは buildUI で末尾に append される）。
+    const paletteBtn = el.querySelector('.live-status-palette-btn');
+    if (paletteBtn) el.insertBefore(badge, paletteBtn); else el.appendChild(badge);
+  }
+  badge.hidden = sec < LIVE_LONGPROC_SEC;
 }
 
 // セッション切替・状態変化時に、アクティブセッションの現在状態を DOM へ反映する。
