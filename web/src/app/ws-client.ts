@@ -7,7 +7,7 @@ import { activateSession, render, renderSessionList, renderSessionStateUpdate, u
 import { applyRemotePtyResize, ensureTerminal, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup } from './settings.js';
 import { setMultiQuestionBannerVisible } from './approval-ui.js';
-import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, hideActionBar, isAIProvider, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
+import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, handleHubApprovalMarker, hideActionBar, isAIProvider, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
 import { notifyDeferredEnterOutput } from './deferred-enter.js';
 import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed } from './chat-history.js';
 import { clearChatPayloadForSession, handleChatTurnMessage, initChatPayloadUI } from './chat-payload.js';
@@ -356,6 +356,11 @@ export function _connectWs() {
 
   if (m.type === 'approval_detected') {
     handleGoApprovalDetected(m);
+    return;
+  }
+
+  if (m.type === 'approval_marker') {
+    handleHubApprovalMarker(m);
     return;
   }
 

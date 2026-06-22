@@ -473,6 +473,8 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
     // doSend でテキスト送信済みの承認が Ink 再描画で再検出された場合はスキップ
     const consumed = approvalConsumedSig.get(id);
     const sig = approvalSig(markerOpts);
+    const src = approvalSourceCache.get(id);
+    if (src && src.source === 'hub_marker' && src.sig === sig) return;
     if (consumed === sig) {
       // Ink 再描画で同一ブロックが再送されている — タイマーをリセットして
       // ブロックが届かなくなるまで sig を保持し続ける（debounce 型削除）
@@ -596,10 +598,11 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
   const approvalNear = (hasCursorOption || isShortcutApprovalMenu) &&
     ((hasApprovalLikeLabel && (hasUserSpecifies || contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)))) || isHubChoice);
   const hasChoiceMenuHint = (hasCursorOption || isShortcutApprovalMenu) && options.length > 0 && hasNativePromptHint;
-  const nowVisible = (options.length > 0 && approvalNear) || hasChoiceMenuHint;
-  // 承認ではないカーソル駆動の選択メニュー（claude /model 等）にタグ付けする。
-  // 入力ガード（isSelectMenuActive）とメニュータイトル表示に使う。
+  // 全 AI で UX を統一: 承認ではないカーソル駆動の選択メニュー（claude /model 等）は
+  // action-bar に出さず端末直操作へフォールバックさせる。shortcut 駆動の承認メニュー
+  // （codex 等の (y)/(n)/(esc)）は引き続き表示する。
   const isSelectMenu = hasChoiceMenuHint && !approvalNear && hasCursorOption && !isShortcutApprovalMenu;
+  const nowVisible = ((options.length > 0 && approvalNear) || hasChoiceMenuHint) && !isSelectMenu;
   tagSelectMenuOptions(options, isSelectMenu, contextSourceLines, contextCluster);
 
   // doSend / sendChoice で消費済みの選択肢が xterm scanBuffer に残っているため
@@ -738,6 +741,43 @@ export function handleGoApprovalDetected(message) {
   }
 }
 
+export function handleHubApprovalMarker(message) {
+  const id = message && message.session_id;
+  if (!id) return;
+  const block = String(message.block || '');
+  if (!block) return;
+  const markerOpts = extractHubMarkerApproval(markerLinesFromTail(block));
+  if (!markerOpts) return;
+  if (isAnsweredMarkerSig(id, markerOpts)) return;
+
+  const sig = approvalSig(markerOpts);
+  if (approvalConsumedSig.get(id) === sig) return;
+  const prevTimer = approvalConsumedSigDeleteTimer.get(id);
+  if (prevTimer) {
+    clearTimeout(prevTimer);
+    approvalConsumedSigDeleteTimer.delete(id);
+  }
+  approvalConsumedSig.delete(id);
+
+  cancelApprovalHintConfirm(id);
+  approvalSwitchCandidates.delete(id);
+  resetBgApprovalMisses(id);
+  approvalUiAdapter.cacheApprovalOptions(id, markerOpts);
+  approvalSourceCache.set(id, {
+    source: 'hub_marker',
+    sig,
+    kind: 'marker',
+    detectedAt: message.detected_at || '',
+  });
+
+  const wasVisible = !!approvalVisibleCache.get(id);
+  approvalUiAdapter.setApprovalVisible(id, true, { sound: !wasVisible });
+  if (id === activeSessionId) {
+    const bar = document.getElementById('action-bar');
+    if (bar) approvalUiAdapter.showOptions(bar, id, markerOpts, !wasVisible);
+  }
+}
+
 export function handleGoApprovalCleared(message) {
   const id = message && message.session_id;
   if (!id) return;
@@ -873,6 +913,8 @@ export function detectApproval(id) {
       if (isAnsweredMarkerSig(id, markerOpts)) return;
       const consumed = approvalConsumedSig.get(id);
       const sig = approvalSig(markerOpts);
+      const src = approvalSourceCache.get(id);
+      if (src && src.source === 'hub_marker' && src.sig === sig) return;
       if (consumed === sig) return; // 消費済み承認の再表示をスキップ（タイマーは trackApprovalHintFromChunk 側で管理）
       const prevTimer2 = approvalConsumedSigDeleteTimer.get(id);
       if (prevTimer2) { clearTimeout(prevTimer2); approvalConsumedSigDeleteTimer.delete(id); }
@@ -1006,10 +1048,11 @@ export function detectApproval(id) {
     (hasUserSpecifies || hasNativePromptHint)) || isHubChoice || isShortcutApprovalMenu;
   const hasApproval = options.length > 0 && approvalNear && (hasCursorOption || isShortcutApprovalMenu);
   const hasChoiceMenu = (hasCursorOption || isShortcutApprovalMenu) && options.length > 0 && hasNativePromptHint;
-  const hasPrompt = hasApproval || hasChoiceMenu;
-  // 承認ではないカーソル駆動の選択メニュー（claude /model 等）にタグ付けし、
-  // action-bar にメニュータイトルを出す。承認は常に優先（hasApproval が真なら対象外）。
+  // 全 AI で UX を統一: 承認ではないカーソル駆動の選択メニュー（claude /model 等）は
+  // action-bar に出さず端末直操作へフォールバックさせる。shortcut 駆動の承認メニュー
+  // （codex 等の (y)/(n)/(esc)）は引き続き表示する。
   const isSelectMenu = hasChoiceMenu && !hasApproval && hasCursorOption && !isShortcutApprovalMenu;
+  const hasPrompt = hasApproval || (hasChoiceMenu && !isSelectMenu);
   tagSelectMenuOptions(options, isSelectMenu, contextSourceLines, contextCluster);
 
   if (!hasPrompt) {

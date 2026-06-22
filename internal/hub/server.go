@@ -133,6 +133,7 @@ type session struct {
 	nativeApprovalClearMisses int
 	nativeApprovalConsumed    string
 	nativeApprovalConsumedAt  time.Time
+	approvalMarkerSig         string
 
 	// JSON 外: wrapper に最後に送った PTY サイズ（同サイズの resize を skip して不要な SIGWINCH を防ぐ）
 	lastCols int
@@ -356,7 +357,7 @@ type Server struct {
 	webSrcHash   string // hash of web/src/ baked into dist/.src-hash at build time
 	webDistFresh bool   // true if current web/src/ matches webSrcHash (always true on VPS/Docker)
 	parentShell  string
-	instanceID  string // Hub プロセス起動ごとのランダム ID。UI が Hub 再起動（live session ID の振り直し）を検出するために snapshot に同梱する
+	instanceID   string // Hub プロセス起動ごとのランダム ID。UI が Hub 再起動（live session ID の振り直し）を検出するために snapshot に同梱する
 
 	// sessionsMu guards session/connection state (nextID, sessions, wrappers,
 	// uis, lastUICols/Rows, idleTimer, idleGen). cfgMu guards s.cfg.
@@ -1520,6 +1521,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			})
 			var provider string
 			var vtLines []string
+			var marker *approvalMarkerBlock
 			var initialModelLines []string
 			var initialModelCWD string
 			scanNativeApproval := false
@@ -1549,6 +1551,9 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 					}
 					ses.nativeApprovalScanQueued = false
 				}
+				if isAIProvider(provider) {
+					marker = extractApprovalMarkerBlock(ses.vt.TailLines(vtTailLinesForApproval))
+				}
 				// 起動バナーからの初期モデル検出（--model 指定なしのセッション向け）。
 				// Model が埋まる・上限バイト超過のどちらかで打ち切る。
 				if !ses.initialModelScanDone && ses.Model == "" && initialModelScanProviders[provider] {
@@ -1562,6 +1567,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				}
 			}
 			s.sessionsMu.Unlock()
+			s.maybeBroadcastApprovalMarker(id, marker, now)
 			s.broadcast(m)
 			if scanNativeApproval {
 				approval := detectNativeApproval(provider, vtLines)
@@ -2380,6 +2386,7 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 		ses.nativeApprovalClearMisses = 0
 		ses.nativeApprovalConsumed = ""
 		ses.nativeApprovalConsumedAt = time.Time{}
+		ses.approvalMarkerSig = ""
 		ids = append(ids, id)
 		updates = append(updates, proto.Message{Type: "session_update", SessionID: id, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt, StartedAt: ses.StartedAt})
 	}

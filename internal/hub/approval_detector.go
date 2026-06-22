@@ -473,20 +473,11 @@ func nativeApprovalLooksValid(provider string, contextLines []string, opts []pro
 	if providerSupportsShortcutApproval(provider) && approvalOptionsHaveSendText(opts) {
 		return hasHint
 	}
-	// Claude Code の /model 等のセレクタ型ダイアログは、選択肢ラベルが
-	// "Default" / "Fable" / "Sonnet" のようにモデル名等であり承認語を含まない。
-	// hasApprovalLabel を要求すると検出されず action-bar が出ないため、
-	// ユーザーが /model を再送 → その Enter が開いたままのダイアログを即確定する
-	// 事故が起きる。
-	// カーソル付き選択肢 + キー操作ヒント行（"Enter to ..." と "Esc to cancel" の併記）が
-	// 揃う場合はセレクタ UI とみなし、承認語ラベルなしでも許容する。
-	isSelectorDialog := (provider == "claude" || provider == "grok") &&
-		approvalOptionsHaveCursor(opts) &&
-		strings.Contains(context, "esc to cancel") &&
-		strings.Contains(context, "enter to")
-	if isSelectorDialog {
-		return true
-	}
+	// Claude / Grok の /model 等カーソル駆動セレクタ型ダイアログは Hub の action-bar に出さない。
+	// 全 AI で UX を統一する方針（codex / opencode の /model も isModelSelectorContext で
+	// 抑制済み）。承認語ラベルを含まない選択肢は承認ではないため、ここでも false を返し
+	// 端末直操作へフォールバックさせる（過去には isSelectorDialog 分岐で許容していたが、
+	// 「ポップアップ不要・全 AI 統一」のユーザー要望で削除）。
 	return hasHint && hasApprovalLabel
 }
 
