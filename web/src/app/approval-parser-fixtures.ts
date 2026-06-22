@@ -48,10 +48,10 @@ test('approval parser fixtures', () => {
   ]);
   assert.deepEqual(labels(plain), ['Yes (1)', 'No (0)']);
   assert.deepEqual(labels(parser.extractPlainYesNoApproval([
-    'A拠点・B拠点・C拠点の3台で連絡先関連機能をOFFにしますか？ （Y：1／N：0）',
+    'A拠点・B拠点・C拠点の3台で対象機能を無効化しますか？ （Y：1／N：0）',
   ])), ['Yes (1)', 'No (0)']);
   assert.deepEqual(labels(parser.extractPlainYesNoApproval([
-    'A拠点・B拠点・C拠点の3台で連絡先関連機能をOFFにしますか？ (Y:1/',
+    'A拠点・B拠点・C拠点の3台で対象機能を無効化しますか？ (Y:1/',
     'N:0)',
   ])), ['Yes (1)', 'No (0)']);
   assert.equal(parser.extractPlainYesNoApproval([
