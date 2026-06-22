@@ -10,6 +10,15 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-06-22
+
+### Fixed
+- Replace real-data test fixtures and docs with synthetic equivalents
+  (kb-derived names detected by the cross-repo secrets-scan sweep on
+  2026-06-22). Parser validation coverage (long Japanese preamble, full-width
+  punctuation, line-wrapped `(Y:1/N:0)` shape, 3-item `・`-separated list) is
+  preserved.
+
 ## [0.3.3] - 2026-06-20
 
 ### Fixed
