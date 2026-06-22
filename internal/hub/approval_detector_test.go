@@ -155,9 +155,10 @@ func TestDetectNativeApprovalOpenCodeShortcut(t *testing.T) {
 	}
 }
 
-func TestDetectNativeApprovalClaudeModelSelector(t *testing.T) {
+func TestDetectNativeApprovalSuppressesClaudeModelSelector(t *testing.T) {
 	// Claude Code の /model セレクタ（実機ログ claude_2026-06-11_051610_mer_s1 より）。
-	// 選択肢ラベルに承認語（yes/no/allow 等）を含まないセレクタ型ダイアログ。
+	// 選択肢ラベルに承認語（yes/no/allow 等）を含まないセレクタ型ダイアログは
+	// action-bar に出さず、端末直操作へフォールバックさせる（全 AI で UX 統一）。
 	lines := []string{
 		"Select model",
 		"Switch between Claude models. Your pick becomes the default for new sessions.",
@@ -169,18 +170,8 @@ func TestDetectNativeApprovalClaudeModelSelector(t *testing.T) {
 		"",
 		"◐ Medium effort  ←/→ to adjust  Enter to set as default · s to use this session only · Esc to cancel",
 	}
-	got := detectNativeApproval("claude", lines)
-	if got == nil {
-		t.Fatal("detectNativeApproval returned nil")
-	}
-	if got.Kind != "native" {
-		t.Fatalf("kind = %q", got.Kind)
-	}
-	if len(got.Options) != 4 {
-		t.Fatalf("options len = %d (%+v)", len(got.Options), got.Options)
-	}
-	if !got.Options[1].IsCurrent {
-		t.Fatalf("option 2 should be current: %+v", got.Options[1])
+	if got := detectNativeApproval("claude", lines); got != nil {
+		t.Fatalf("detectNativeApproval = %+v, want nil (Claude /model selector should be suppressed)", got)
 	}
 }
 

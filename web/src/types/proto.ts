@@ -30,6 +30,7 @@ export type MessageType =
   | 'pty_resize'
   | 'session_hint'
   | 'approval_detected'
+  | 'approval_marker'
   | 'approval_cleared'
   | 'approval_consumed'
   | 'approval_patterns_updated'
@@ -78,6 +79,7 @@ export interface Message {
   approval_question?: string;
   approval_context?: string;
   approval_options?: ApprovalOption[];
+  block?: string;
   sent_text?: string;
   commit_subject?: string;
   commit_body?: string;

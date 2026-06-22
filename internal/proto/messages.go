@@ -54,6 +54,7 @@ type Message struct {
 	ApprovalQuestion string           `json:"approval_question,omitempty"`
 	ApprovalContext  string           `json:"approval_context,omitempty"`
 	ApprovalOptions  []ApprovalOption `json:"approval_options,omitempty"`
+	Block            string           `json:"block,omitempty"` // approval_marker: VT tail から抽出した [MANY-AI-CLI] ブロック全文
 	SentText         string           `json:"sent_text,omitempty"`
 	DetectedAt       string           `json:"detected_at,omitempty"`
 
