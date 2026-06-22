@@ -1,6 +1,6 @@
 # many-ai-cli リリース手順
 
-> 最終更新: 2026-06-20(土) 23:52:53 — 「ブランチ運用と hotfix の develop 戻し（必須）」節を追加（v0.3.3 で hotfix を develop に戻し忘れ、develop のローカルビルド版数が v0.3.2 のままになった事故の再発防止）
+> 最終更新: 2026-06-22(月) 20:35:33 — v0.3.4 で `git merge hotfix/*` を develop で実行してしまい再び version stale が起きた事故を受けて、`.github/workflows/backport-to-develop.yml` で自動 backport を導入。手順節も「自動化済み」前提に書き換え、「hotfix を develop に直接 merge してはいけない」禁止事項とローカルビルドでの異常検知（Makefile の git describe ldflags 注入）を併記
 
 この手順は GitHub Actions の `Release` workflow と GoReleaser で GitHub Releases を作成するための恒久運用メモ。
 **特定バージョンの実行チェックリスト**は別途用意する（v0.3.0 は `docs/local/manual_release-v0-3-0_2026-06-13.md`）。本書は版に依らない方式・設計・注意点を扱う。
@@ -56,7 +56,7 @@ v0.3.2 はタグ前に `develop` だけ見て進めたため、main push で初�
 - **npm zombie 整理（試行 publish の残骸）**: 初回 publish 時に 0.0.1 を「枠取り」で出していると、本番版 publish 後も `npm view <pkg> versions` に 0.0.1 が居座る。`latest` tag は新版を指すので利用者には影響しないが、見栄え上は塞いでおく。**`npm deprecate <pkg>@0.0.1 "Use <pkg>@<NEW.VER> or later. ..."`** で塞ぐ。**2FA 有効アカウントでは `npm deprecate` ごとに毎回ブラウザ web auth が走る**（OTP 投入ではなく web 認可フロー）ので、URL を開いて Authorize → ターミナルで Enter、を**バージョン × パッケージの件数分**繰り返す。granular publish:write token を使えば省略可だが期限あり（90 日）。
 - **winget は「公開済み」と書かない**: 過去 3 リリース分（v0.3.0 / v0.3.1 / v0.3.2）の PR がすべて **microsoft/winget-pkgs 側で OPEN のまま滞留**（New-Package モデレータ承認待ち）。GoReleaser が PR は作るが、merge は Microsoft 中の人の手動承認なのでこちらから動かせない。README / note / 配布告知では「winget で入る」と書くと**嘘になる**。「申請中」表記にするか、winget 行ごと省いて npm / Homebrew / GitHub Release 直 DL の 3 経路で案内するのが安全。merge されたら追記する運用に。
 
-## ブランチ運用と hotfix の develop 戻し（必須）
+## ブランチ運用と hotfix の develop 戻し（自動化済み）
 
 このプロジェクトは main / develop の 2 ブランチで運用する。
 
@@ -64,12 +64,22 @@ v0.3.2 はタグ前に `develop` だけ見て進めたため、main push で初�
 - **develop** = 次バージョンの開発場所。完成したら main へ merge してタグを打つ。
 - **hotfix** = main に出ているバグの緊急修正。main から分岐し、直して main へ戻し、新パッチタグ（例 `v0.3.3`）を打つ。
 
-**鉄則: hotfix を main に入れたら、必ず同じ修正を develop にも戻す。** main へ commit / merge / tag したら、develop へ反映するまでが「リリース 1 セット」。これを忘れると次の 2 つが起きる:
+### 自動 backport（v0.3.4 以降）
 
-- 直したバグが次リリース（develop 由来）で**復活する**。
-- develop が新タグを知らないので、develop のローカルビルドの版数表示が**古いまま**になる（ローカル `make build` は ldflags で版数を注入せず `git describe --tags --abbrev=0` にフォールバックするため、develop から到達できる最新タグを拾う）。**v0.3.3 で実際に発生**し、develop のビルドが v0.3.2 と表示された。
+タグ `v*.*.*` を push すると `.github/workflows/backport-to-develop.yml` が起動し、main を develop へ自動マージする。手動戻しは原則不要:
 
-戻し手順（hotfix を main にマージ・タグした後）:
+- clean merge できれば develop に直接 push する
+- 競合があれば issue を作って人間に通知する（competition の出る release はまれだが、CHANGELOG `## [Unreleased]` 節と新リリース節が同時編集された等で起きる）
+
+過去事故: v0.3.3 で hotfix を develop に戻し忘れて develop のビルドが v0.3.2 表示になった。v0.3.4 では `git merge hotfix/v0.3.4` を develop で実行してしまい、内容は入ったが v0.3.4 タグ commit (`193f94f`) が develop の祖先にならず、再び古い v0.3.3 表示が出た。**自動化はこの 2 件の再発防止のために導入された**。
+
+### やってはいけないこと
+
+**hotfix を main にマージしたあと、hotfix branch を develop に**直接** merge してはいけない**（`git merge hotfix/*` を develop 上で実行しない）。内容は同じだが、v0.3.4 タグが付いている main 側の merge commit を develop の祖先に入れないため、`git describe` が新タグを認識せず、ローカルビルドの版数表示が古いまま固まる。develop 戻しは **必ず main を指定する**（`git merge main`）。自動 backport workflow も内部で `git merge origin/main` を使っているので、原則ここを触る必要はない。
+
+### 自動 backport が動かなかった場合の手動 fallback
+
+CI を一時的に止めている、または backport workflow が失敗した場合の手動手順:
 
 ```powershell
 git switch develop
@@ -84,7 +94,9 @@ git merge-base --is-ancestor (git describe --tags --abbrev=0 main) develop
 # 終了コード 0 = OK / 1 = develop が最新タグを取り込めていない
 ```
 
-> 一人開発なので PR ベースの自動戻しは入れていない。**この節の鉄則を守ること自体が再発防止策**。リリース作業の最後に必ず上の確認コマンドを 1 回通す。
+### ローカルビルドの版数表示で異常を検知する（二重の安全網）
+
+`Makefile` は `make build` のたびに `git describe --tags --always --dirty` を `-X main.version` に注入する。develop が main の最新タグを取り込み損ねていると、Hub UI の表示が `0.3.3-21-g3664cac` のように "タグから距離が離れた形" になり、目視で気付ける。クリーンに backport が済んでいれば `0.3.4-N-g<sha>` のように直近タグからの形になる。**Hub UI 設定モーダルの版数が "古いメジャー" を指していたら、まず `git merge-base --is-ancestor v<latest> develop` を確認する**。
 
 ## 現在のリリース方式
 
