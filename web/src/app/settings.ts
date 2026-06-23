@@ -918,6 +918,12 @@ export function applyLang(lang) {
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
     panel.hidden = !panel.hidden;
+    if (!panel.hidden) {
+      // 開いた瞬間に全セクションの畳み状態サマリを最新値で描画。
+      // 個別 input の change を 1 つ 1 つ拾わなくても、ここと <details> の toggle で十分。
+      attachSummaryToggleListeners();
+      renderSettingsSummary();
+    }
     if (panel.hidden) maybeAutoSwitchToNextApproval();
   });
   if (closeBtn) {
@@ -969,6 +975,7 @@ export function applyLang(lang) {
       if (!ok) return;
       try {
         if (window.__settingsResetAll) await window.__settingsResetAll();
+        renderSettingsSummary();
         showToast(t('settings_reset_done'), resetBtn);
       } catch (_) {}
     });
@@ -2982,4 +2989,253 @@ window.addEventListener('files-tab-state-changed', () => {
     });
   }
 })();
+
+// =============================================================================
+// 設定パネル 畳み状態の現在値インライン表示
+// =============================================================================
+//
+// 各 <details class="settings-section"> の <summary> 内に
+// <span class="settings-section-current" data-section="..."></span> を仕込んでおく。
+// CSS で details:not([open]) のときだけ表示される。
+// RENDERERS[sectionId]() を呼んで現在値を 1 行文字列で組み立て、textContent に入れる。
+// 値はパネル open 時点で DOM に揃っている前提（既存のロード処理が先に走る）。
+
+function _summaryIsJa(): boolean { return (window as any).__lang !== 'en'; }
+function _summaryLabel(ja: string, en: string): string { return _summaryIsJa() ? ja : en; }
+
+// パスの頭省略。末尾フォルダ名のほうが情報量が大きいため、頭を切る。
+export function shortenPath(p: string, maxChars = 24): string {
+  if (!p) return '';
+  if (p.length <= maxChars) return p;
+  return '…' + p.slice(-(maxChars - 1));
+}
+
+function _summaryBool(elId: string): boolean {
+  const el = document.getElementById(elId) as HTMLInputElement | null;
+  return !!(el && el.checked);
+}
+function _summaryVal(elId: string): string {
+  const el = document.getElementById(elId) as HTMLInputElement | null;
+  return el ? (el.value || '') : '';
+}
+function _summaryOnOff(b: boolean): string { return b ? 'ON' : 'OFF'; }
+
+type SummaryRenderer = () => string;
+
+const SUMMARY_RENDERERS: Record<string, SummaryRenderer> = {
+  general: () => {
+    const lang = localStorage.getItem(STORAGE_LANG_KEY) || 'ja';
+    const langLabel = lang === 'ja' ? '日本語' : 'English';
+    const theme = localStorage.getItem(STORAGE_THEME_KEY) || 'light';
+    const themeLabel = theme === 'dark' ? 'Dark' : 'Light';
+    const fs = localStorage.getItem(STORAGE_FONTSIZE_KEY) || 'medium';
+    const fsLabel = fs === 'large' ? 'Large' : fs === 'small' ? 'Small' : 'Medium';
+    const lk = localStorage.getItem(STORAGE_DISPLAY_LOCKED_MODE_KEY) || '';
+    const lkLabel = lk === 'terminal' ? _summaryLabel('ターミナル', 'Terminal')
+                  : lk === 'chat'     ? _summaryLabel('チャット',  'Chat')
+                  : lk === 'split'    ? _summaryLabel('分割',      'Split')
+                                      : _summaryLabel('自由切替',  'Free');
+    return [langLabel, themeLabel, fsLabel, lkLabel].join('・');
+  },
+
+  appearance: () => {
+    const nameInput = document.getElementById('display-name-input') as HTMLInputElement | null;
+    const name = (nameInput?.value || _userDisplayName || '').trim();
+    const urlInput = document.getElementById('avatar-url-input') as HTMLInputElement | null;
+    const avatarSet = !!((urlInput?.value || '').trim() || _userAvatarUrl);
+    const parts: string[] = [];
+    if (name) parts.push(name);
+    parts.push(avatarSet ? _summaryLabel('アイコン設定済', 'icon set') : _summaryLabel('アイコン未設定', 'no icon'));
+    return parts.join('・');
+  },
+
+  'token-statusbar': () => {
+    if (!isStatusbarEnabled()) return 'OFF';
+    // セグメント有効/無効は DOM チェックボックスを見る（パネル open 時に build 済み）
+    const host = document.getElementById('tsb-segments-toggles');
+    if (host) {
+      const cbs = host.querySelectorAll('input[type="checkbox"]');
+      let on = 0, total = 0;
+      cbs.forEach((cb) => { total++; if ((cb as HTMLInputElement).checked) on++; });
+      if (total > 0) return `ON・${on}/${total}`;
+    }
+    return 'ON';
+  },
+
+  session: () => {
+    const idle = _summaryVal('idle-timeout-min');
+    const grace = _summaryVal('reconnect-grace-min');
+    const parts: string[] = [];
+    if (idle !== '') parts.push(`idle:${idle}${_summaryLabel('分', 'm')}`);
+    if (grace !== '') parts.push(`grace:${grace}${_summaryLabel('分', 'm')}`);
+    return parts.join('・');
+  },
+
+  'remote-auth': () => {
+    const pinStatus = document.getElementById('remote-pin-status');
+    const txt = pinStatus?.textContent?.trim() || '';
+    if (/設定済|Set\b|有効|ON/i.test(txt)) return _summaryLabel('PIN設定済', 'PIN set');
+    return _summaryLabel('PIN未設定', 'no PIN');
+  },
+
+  log: () => {
+    const fileLog = _summaryBool('log-enabled');
+    const sessionLog = _summaryBool('log-session-enabled');
+    const dirEl = document.getElementById('log-dir-path') as HTMLAnchorElement | null;
+    const dir = (dirEl?.textContent || '').trim();
+    const parts: string[] = [];
+    parts.push(`${_summaryLabel('ファイル', 'file')}${_summaryOnOff(fileLog)}`);
+    if (sessionLog) parts.push(`${_summaryLabel('セッション', 'session')}ON`);
+    if (dir) parts.push(shortenPath(dir, 22));
+    return parts.join('・');
+  },
+
+  'approval-hub': () => {
+    const enabled = _summaryBool('approval-toggle-input');
+    if (!enabled) return 'OFF';
+    const autoSwitch = _summaryBool('approval-auto-switch-input');
+    const sub: string[] = [];
+    if (autoSwitch) sub.push(_summaryLabel('自動移動', 'auto-switch'));
+    return sub.length ? `ON・${sub.join('・')}` : 'ON';
+  },
+
+  'approval-patterns': () => {
+    const provider = _summaryVal('approval-patterns-provider');
+    const profile = _summaryVal('approval-patterns-profile');
+    const list = document.getElementById('approval-patterns-list');
+    const count = list ? list.querySelectorAll('li').length : 0;
+    const profileLabel = profile === 'custom' ? _summaryLabel('カスタム', 'custom') : _summaryLabel('公式', 'official');
+    return `${provider}・${profileLabel}・${count}${_summaryLabel('件', '')}`;
+  },
+
+  voice: () => {
+    const engine = getVoiceEngine();
+    if (engine === 'off') return 'OFF';
+    const grace = localStorage.getItem(STORAGE_VOICE_GRACE_KEY) || String(DEFAULT_VOICE_GRACE_SEC);
+    if (engine === 'browser') {
+      return `${_summaryLabel('ブラウザ内蔵', 'browser')}・${grace}${_summaryLabel('秒', 's')}`;
+    }
+    // whisper（サブ設定はエンジン=whisper のときだけ要約に出す）
+    const autoStop = localStorage.getItem(STORAGE_VOICE_WHISPER_AUTO_STOP_KEY) !== '0';
+    const autoSubmit = localStorage.getItem(STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY) === '1';
+    const modelSel = document.getElementById('voice-whisper-model-select') as HTMLSelectElement | null;
+    const model = modelSel?.value || '';
+    const parts = ['Whisper'];
+    if (model) parts.push(model);
+    if (autoStop) parts.push(_summaryLabel('自動停止', 'auto-stop'));
+    if (autoSubmit) parts.push(_summaryLabel('自動送信', 'auto-submit'));
+    parts.push(`${grace}${_summaryLabel('秒', 's')}`);
+    return parts.join('・');
+  },
+
+  trigger: () => {
+    const enabled = localStorage.getItem(STORAGE_TRIGGER_ENABLED_KEY) === '1';
+    if (!enabled) return 'OFF';
+    const phrase = (localStorage.getItem(STORAGE_TRIGGER_PHRASE_KEY) ?? getDefaultTriggerPhrase()).trim();
+    return phrase ? `ON・「${phrase}」` : 'ON';
+  },
+
+  'file-open': () => {
+    const app = _summaryVal('settings-terminal-app').trim();
+    return app ? shortenPath(app, 30) : _summaryLabel('OS既定', 'OS default');
+  },
+
+  'notify-sound': () => {
+    const desktop = _summaryBool('desktop-notify-enabled');
+    const push = _summaryBool('push-notify-enabled');
+    const sound = _summaryBool('notify-sound-enabled');
+    const doneSum = _summaryBool('done-summary-notify-toggle');
+    const parts: string[] = [];
+    parts.push(`${_summaryLabel('デスクトップ', 'desktop')}${_summaryOnOff(desktop)}`);
+    if (push) parts.push(_summaryLabel('プッシュON', 'push ON'));
+    if (sound) {
+      const type = _summaryVal('notify-sound-type') || 'default';
+      parts.push(type === 'custom' ? _summaryLabel('音:カスタム', 'sound:custom') : _summaryLabel('音:既定', 'sound:default'));
+    }
+    if (doneSum) parts.push(_summaryLabel('完了通知', 'done-notify'));
+    return parts.join('・');
+  },
+
+  'quick-cmd': () => {
+    let setCount = 0;
+    let visibleCount = 0;
+    for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
+      const cmd = getQuickCommand(slot);
+      if (cmd) {
+        setCount++;
+        if (getQuickCommandVisible(slot)) visibleCount++;
+      }
+    }
+    return _summaryLabel(
+      `${QUICK_CMD_SLOTS}枠中${setCount}個・表示${visibleCount}`,
+      `${setCount}/${QUICK_CMD_SLOTS} set, ${visibleCount} visible`
+    );
+  },
+
+  'input-tools': () => {
+    const pc = localStorage.getItem(STORAGE_PC_INPUT_TOOLS_KEY);
+    const mobile = localStorage.getItem(STORAGE_MOBILE_INPUT_TOOLS_KEY);
+    const pcOn = pc === null ? true : pc === '1';   // 既定 PC = ON
+    const mobileOn = mobile === '1';                 // 既定 mobile = OFF
+    return `PC:${_summaryOnOff(pcOn)}・${_summaryLabel('スマホ', 'mobile')}:${_summaryOnOff(mobileOn)}`;
+  },
+
+  'usage-links': () => {
+    const keys = [
+      STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY,
+      STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY,
+      STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY,
+      STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY,
+    ];
+    let custom = 0;
+    for (const k of keys) {
+      const v = (localStorage.getItem(k) || '').trim();
+      if (v) custom++;
+    }
+    if (custom === 0) return _summaryLabel(`全${keys.length}件 既定`, `${keys.length} default`);
+    return _summaryLabel(`${custom}/${keys.length} カスタム`, `${custom}/${keys.length} custom`);
+  },
+
+  'slash-src': () => {
+    const ids = ['slash-src-claude', 'slash-src-codex', 'slash-src-copilot', 'slash-src-cursor-agent'];
+    let custom = 0;
+    for (const id of ids) {
+      if (_summaryVal(id).trim()) custom++;
+    }
+    if (custom === 0) return _summaryLabel('全て既定', 'all default');
+    return _summaryLabel(`${custom}/${ids.length} カスタム`, `${custom}/${ids.length} custom`);
+  },
+};
+
+// セクション ID 単体 or 全セクションをまとめて再描画。
+export function renderSettingsSummary(sectionId?: string): void {
+  const ids = sectionId ? [sectionId] : Object.keys(SUMMARY_RENDERERS);
+  for (const id of ids) {
+    const el = document.querySelector(`.settings-section-current[data-section="${id}"]`) as HTMLElement | null;
+    if (!el) continue;
+    try {
+      el.textContent = SUMMARY_RENDERERS[id]?.() ?? '';
+    } catch (_) {
+      el.textContent = '';
+    }
+  }
+}
+
+// 各 <details> の toggle で自セクションを再描画する。
+// close 時に最新値で更新するため、個別の change ハンドラ配線が不要になる。
+let _summaryToggleAttached = false;
+export function attachSummaryToggleListeners(): void {
+  if (_summaryToggleAttached) return;
+  const sections = document.querySelectorAll<HTMLDetailsElement>('.settings-section[data-section]');
+  if (sections.length === 0) return;
+  _summaryToggleAttached = true;
+  sections.forEach((sec) => {
+    sec.addEventListener('toggle', () => {
+      if (!sec.open) {
+        const id = sec.dataset.section;
+        if (id) renderSettingsSummary(id);
+      }
+    });
+  });
+}
 

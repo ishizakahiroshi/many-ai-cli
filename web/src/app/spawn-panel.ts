@@ -738,23 +738,209 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     });
   }
 
+  // ---- C1: 検索ドリブン ロジック層 ----
+  // D9 スコアリング用の型。C2 で描画に使う。export しない（module 内参照のみ）。
+  interface SearchResult {
+    path: string;
+    basename: string;
+    isFav: boolean;
+    isHist: boolean;
+    isUnregistered: boolean;
+    score: number;
+  }
+
+  // 入力値を prefix / query / isPath の 3 値に分解する。
+  // 判定順: D2 に従い、Windows パス先頭 (<英字>:\) は isPath 扱いで prefix 抽出しない。
+  function parseCwdInput(value: string): { prefix: string | null; query: string; isPath: boolean } {
+    // \ か / を含む、もしくは Windows パス先頭 (<英字>:\) → isPath
+    if (/[/\\]/.test(value) || /^[A-Za-z]:\\/.test(value)) {
+      return { prefix: null, query: value, isPath: true };
+    }
+    // prefix 判定: 先頭が <英字 1+>: で、: 直後が \ でも / でもない場合のみ
+    const m = value.match(/^([A-Za-z]+):([^/\\].*)?$/);
+    if (m) {
+      return { prefix: m[1], query: m[2] ?? '', isPath: false };
+    }
+    return { prefix: null, query: value, isPath: false };
+  }
+
+  // お気に入りリストから既知ルートを派生させる。
+  // 各 fav の親ディレクトリの末尾セグメントを短縮名キー（値はフルパス）とする。
+  // 同名衝突時は親 1 段追加した形（例: "github\public"）に変更する。
+  function deriveRootsFromFavorites(favs: string[]): Map<string, string> {
+    // 各 fav の親ディレクトリを取得する。
+    function parentOf(p: string): string {
+      const v = p.replace(/[/\\]+$/, '');
+      const sep = v.includes('\\') ? '\\' : '/';
+      const idx = Math.max(v.lastIndexOf('\\'), v.lastIndexOf('/'));
+      if (idx < 0) return v;
+      return v.slice(0, idx) || sep;
+    }
+    function segmentOf(p: string, depth = 1): string {
+      const parts = p.replace(/[/\\]+$/, '').split(/[/\\]/);
+      return parts.slice(-depth).join('\\');
+    }
+
+    // まず全 fav の親パスを集める（重複排除）。
+    const parents = [...new Set(favs.map(parentOf))];
+    // 短縮名 → フルパスの候補マップ（衝突検出用）。
+    const nameToPath = new Map<string, string>();
+    const collisions = new Set<string>();
+    for (const p of parents) {
+      const name = segmentOf(p, 1);
+      if (nameToPath.has(name) && nameToPath.get(name) !== p) {
+        collisions.add(name);
+      } else {
+        nameToPath.set(name, p);
+      }
+    }
+    // 衝突したエントリは depth=2 で再登録する。
+    const result = new Map<string, string>();
+    for (const p of parents) {
+      const name = segmentOf(p, 1);
+      if (collisions.has(name)) {
+        result.set(segmentOf(p, 2), p);
+      } else {
+        result.set(name, p);
+      }
+    }
+    return result;
+  }
+
+  // 全ルートを並列 pre-scan して subdirsCache を充填する。
+  // dropdown が開いた瞬間に呼び出し、結果が来たら必要に応じて再描画するよう設計。
+  // TODO(D11): 隠しフォルダ除外は API 確認後（/api/list-subdirs 側の返却内容次第）
+  async function prescanRoots(roots: Map<string, string>): Promise<void> {
+    await Promise.all([...roots.values()].map(p => fetchSubdirs(p)));
+  }
+
+  // query / prefix に基づいて全ルートのサブディレクトリを横断検索し、SearchResult[] を返す。
+  // prefix 指定時はそのルートのみ検索。無指定時は全ルート。
+  // 重複パスは favSet / histSet の状態で統合される（set 内にあれば isFav/isHist が立つ）。
+  function buildSearchResults(
+    query: string,
+    prefix: string | null,
+    allSubdirs: Map<string, string>,
+    favSet: Set<string>,
+    histSet: Set<string>,
+  ): SearchResult[] {
+    const lowQuery = query.toLowerCase();
+    const seen = new Set<string>();
+    const results: SearchResult[] = [];
+
+    for (const [shortName, rootPath] of allSubdirs) {
+      // prefix が指定されていてこのルートと一致しない場合はスキップ。
+      if (prefix !== null && shortName.toLowerCase() !== prefix.toLowerCase()) continue;
+
+      const sep = rootPath.includes('\\') ? '\\' : '/';
+      const subdirs = subdirsCache.get(rootPath) ?? [];
+      for (const name of subdirs) {
+        const fullPath = rootPath + sep + name;
+        if (seen.has(fullPath)) continue;
+        // basename に query が含まれるもののみ結果対象。query が空の場合は全件。
+        if (lowQuery && !name.toLowerCase().includes(lowQuery)) continue;
+        seen.add(fullPath);
+
+        const isFav = favSet.has(fullPath);
+        const isHist = histSet.has(fullPath);
+        const isUnregistered = !isFav && !isHist;
+
+        // D9 スコアリング: 一致種別 + 登録種別の合算。
+        let matchScore = 0;
+        const lowName = name.toLowerCase();
+        if (lowQuery) {
+          if (lowName === lowQuery) matchScore = 100;
+          else if (lowName.startsWith(lowQuery)) matchScore = 50;
+          else matchScore = 10;
+        }
+        const regScore = isFav ? 5 : isHist ? 2 : 0;
+
+        results.push({
+          path: fullPath,
+          basename: name,
+          isFav,
+          isHist,
+          isUnregistered,
+          score: matchScore + regScore,
+        });
+      }
+    }
+
+    // 降順ソート（スコア同点の場合は basename アルファベット順）。
+    results.sort((a, b) => b.score - a.score || a.basename.localeCompare(b.basename));
+    return results;
+  }
+  // ---- /C1: 検索ドリブン ロジック層 ----
+
   function renderCwdDropdown(filter) {
     const favs = loadCwdFavorites();
     const favSet = new Set(favs);
     const hist = loadCwdHistory();
+    const histSet = new Set(hist);
+    const roots = deriveRootsFromFavorites(favs);
+
+    // 入力値を解析して prefix / query / isPath を得る。
+    const parsed = parseCwdInput(filter);
+
+    // isPath のときは既存の subdirs 展開ロジックに完全に委ねる。
+    // chip 行は出してもよいが検索結果セクションは出さない。
+    const isPathMode = parsed.isPath;
+
+    // subdirs 展開（末尾区切り文字入力時）。
     const subItems: string[] = subdirsCurrent
       ? subdirsCurrent.items.map(name => subdirsCurrent!.parent + subdirsCurrent!.sep + name)
       : [];
-    const favItems = (filter
-      ? favs.filter(v => v.toLowerCase().includes(filter.toLowerCase()))
-      : favs);
-    const histItems = (filter
-      ? hist.filter(v => !favSet.has(v) && v.toLowerCase().includes(filter.toLowerCase()))
-      : hist.filter(v => !favSet.has(v)));
-    const items = [...subItems, ...favItems, ...histItems];
-    if (items.length === 0) { cwdDropdown.hidden = true; return; }
 
-    function renderRow(v, fav, isSub = false) {
+    // ---- chip 行 ----
+    // お気に入りが 0 件で roots も空のときは chip 行を出さない。
+    const hasRoots = roots.size > 0;
+
+    // 各 chip のマッチ件数（キャッシュ済みサブディレクトリ数をカウント）。
+    function countForRoot(shortName: string, rootPath: string): number {
+      const subdirs = subdirsCache.get(rootPath) ?? [];
+      if (!parsed.query) return subdirs.length;
+      const low = parsed.query.toLowerCase();
+      return subdirs.filter(n => n.toLowerCase().includes(low)).join('').length > 0
+        ? subdirs.filter(n => n.toLowerCase().includes(low)).length
+        : subdirs.filter(n => n.toLowerCase().includes(low)).length;
+    }
+
+    // chip の active 判定: input が "<prefix>:" で始まっているか。
+    function isChipActive(shortName: string): boolean {
+      if (!parsed.prefix) return false;
+      return parsed.prefix.toLowerCase() === shortName.toLowerCase();
+    }
+
+    // ---- 検索結果（isPath でないとき）----
+    let searchItems: SearchResult[] = [];
+    if (!isPathMode && roots.size > 0) {
+      searchItems = buildSearchResults(parsed.query, parsed.prefix, roots, favSet, histSet);
+    }
+
+    // 検索結果に出たパスセットを記録して fav/hist から除外する。
+    const searchPathSet = new Set(searchItems.map(r => r.path));
+
+    // fav/hist の絞り込み（検索結果に出たものは除外）。
+    const favItems = (filter
+      ? favs.filter(v => !searchPathSet.has(v) && v.toLowerCase().includes(filter.toLowerCase()))
+      : favs.filter(v => !searchPathSet.has(v)));
+    const histItems = (filter
+      ? hist.filter(v => !favSet.has(v) && !searchPathSet.has(v) && v.toLowerCase().includes(filter.toLowerCase()))
+      : hist.filter(v => !favSet.has(v) && !searchPathSet.has(v)));
+
+    // isPath モードのときは検索結果を出さないので fav/hist の除外も不要にリセット。
+    const effectiveFavItems = isPathMode
+      ? (filter ? favs.filter(v => v.toLowerCase().includes(filter.toLowerCase())) : favs)
+      : favItems;
+    const effectiveHistItems = isPathMode
+      ? (filter ? hist.filter(v => !favSet.has(v) && v.toLowerCase().includes(filter.toLowerCase())) : hist.filter(v => !favSet.has(v)))
+      : histItems;
+
+    const allItems = [...subItems, ...(isPathMode ? [] : searchItems.map(r => r.path)), ...effectiveFavItems, ...effectiveHistItems];
+    const hasAny = allItems.length > 0 || hasRoots;
+    if (!hasAny) { cwdDropdown.hidden = true; return; }
+
+    function renderRow(v: string, fav: boolean, isSub = false) {
       const labelFilter = isSub ? '' : filter;
       return (
         `<li class="cwd-dropdown-item${fav ? ' is-favorite' : ''}${isSub ? ' is-subdir' : ''}" tabindex="-1"${fav ? ' draggable="true"' : ''} data-value="${escapeHtml(v)}">` +
@@ -766,25 +952,78 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       );
     }
 
-    // セクション見出し（クリック/フォーカス/キーボード移動/D&D の対象外）。
-    // 各セクション0件なら見出しは出さない。
+    function renderSearchRow(r: SearchResult) {
+      const fav = r.isFav;
+      return (
+        `<li class="cwd-dropdown-item${fav ? ' is-favorite' : ''}" tabindex="-1"${fav ? ' draggable="true"' : ''} data-value="${escapeHtml(r.path)}">` +
+        `<button class="cwd-dropdown-fav${fav ? ' is-on' : ''}" tabindex="-1" data-value="${escapeHtml(r.path)}" ` +
+        `title="${escapeHtml(t(fav ? 'spawn_cwd_unfavorite' : 'spawn_cwd_favorite'))}">${fav ? '★' : '☆'}</button>` +
+        `<span class="cwd-dropdown-mag" aria-hidden="true">🔍</span>` +
+        `<span class="cwd-dropdown-label" title="${escapeHtml(r.path)}">${buildCwdLabelHtml(r.path, parsed.query)}</span>` +
+        `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(r.path)}">×</button>` +
+        `</li>`
+      );
+    }
+
+    const noMatch = !isPathMode && searchItems.length === 0 && effectiveFavItems.length === 0 && effectiveHistItems.length === 0 && subItems.length === 0;
+
     let html = '';
+
+    // chip 行（roots がある場合のみ）。
+    if (hasRoots) {
+      const chipsClass = noMatch ? 'cwd-dropdown-chips has-no-match' : 'cwd-dropdown-chips';
+      let chipsHtml = `<li class="${chipsClass}" aria-hidden="true">`;
+      for (const [shortName, rootPath] of roots) {
+        const count = countForRoot(shortName, rootPath);
+        const activeClass = isChipActive(shortName) ? ' is-active' : '';
+        chipsHtml +=
+          `<button class="cwd-dropdown-chip${activeClass}" type="button" data-prefix="${escapeHtml(shortName)}">` +
+          `${escapeHtml(shortName)}:` +
+          `<span class="chip-count">${count}</span>` +
+          `</button>`;
+      }
+      if (noMatch) {
+        chipsHtml += `</li>` +
+          `<li class="cwd-dropdown-no-match" aria-hidden="true">${escapeHtml(t('spawn_cwd_no_match_hint'))}</li>`;
+      } else {
+        chipsHtml += `</li>`;
+      }
+      html += chipsHtml;
+    } else if (noMatch) {
+      // roots が空でも 0 件案内は出す。
+      html += `<li class="cwd-dropdown-no-match" aria-hidden="true">${escapeHtml(t('spawn_cwd_no_match_hint'))}</li>`;
+    }
+
+    // subdirs セクション（末尾区切り入力時）。
     if (subItems.length > 0) {
       html += `<li class="cwd-dropdown-header" aria-hidden="true">${escapeHtml(t('spawn_cwd_section_subdirs'))}</li>`;
       html += subItems.map(v => renderRow(v, false, true)).join('');
     }
-    if (favItems.length > 0) {
+
+    // 検索結果セクション（isPath でないとき）。
+    if (!isPathMode && searchItems.length > 0) {
+      html += `<li class="cwd-dropdown-header is-search" aria-hidden="true">${escapeHtml(t('spawn_cwd_section_search'))}</li>`;
+      html += searchItems.map(r => renderSearchRow(r)).join('');
+    }
+
+    // fav セクション。
+    if (effectiveFavItems.length > 0) {
       html += `<li class="cwd-dropdown-header" aria-hidden="true">${escapeHtml(t('spawn_cwd_section_favorites'))}</li>`;
-      html += favItems.map(v => renderRow(v, true)).join('');
+      html += effectiveFavItems.map(v => renderRow(v, true)).join('');
     }
-    if (histItems.length > 0) {
+
+    // history セクション。
+    if (effectiveHistItems.length > 0) {
       html += `<li class="cwd-dropdown-header" aria-hidden="true">${escapeHtml(t('spawn_cwd_section_history'))}</li>`;
-      html += histItems.map(v => renderRow(v, false)).join('');
+      html += effectiveHistItems.map(v => renderRow(v, false)).join('');
     }
+
     cwdDropdown.innerHTML = html;
     cwdDropdown.hidden = false;
     applyDropdownMissingStatus();
-    checkPathsExist(items).then(applyDropdownMissingStatus);
+    // chip クリックは cwdDropdown の委譲 mousedown ハンドラ（下方）で処理するため
+    // ここでの個別リスナ登録は不要。
+    checkPathsExist(allItems).then(applyDropdownMissingStatus);
   }
 
   // path existence: 作業ディレクトリが実在しないと Cmd.Dir の chdir が
@@ -909,6 +1148,8 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     updateSpawnProviderIcon();
     refreshCwdInputStatus();
     spawnCwdInput.focus();
+    // ドロップダウン開く前に全ルートをバックグラウンドで pre-scan してキャッシュを充填する。
+    { const favs = loadCwdFavorites(); prescanRoots(deriveRootsFromFavorites(favs)); }
     if (!spawnModelGroups) {
       fetchModelGroups(false).catch(() => {});
     } else {
@@ -945,9 +1186,14 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       finally { spawnCwdBrowse.disabled = false; }
     });
   }
+  // placeholder ヒント: フォーカス前に一度設定（i18n 初期化後に評価される）。
+  (spawnCwdInput as HTMLInputElement).placeholder = t('spawn_cwd_placeholder_hint') || (spawnCwdInput as HTMLInputElement).placeholder;
+
   spawnCwdInput.addEventListener('focus', () => {
     // お気に入り選択直後の再 focus では再オープンしない（選択して閉じたのに即開き直る事故を防ぐ）。
     if (cwdSuppressReopen) { cwdSuppressReopen = false; return; }
+    // ドロップダウンを開く前に全ルートをバックグラウンドで pre-scan してキャッシュを充填する。
+    { const favs = loadCwdFavorites(); prescanRoots(deriveRootsFromFavorites(favs)); }
     maybeUpdateSubdirs(spawnCwdInput.value.trim());
     renderCwdDropdown(''); refreshCwdInputStatus();
   });
@@ -973,6 +1219,28 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     }, 150);
   });
   spawnCwdInput.addEventListener('keydown', (e) => {
+    // Tab 補完: 部分 prefix → <root>: に補完。例: `pub` + Tab → `public:query` 部分を保持。
+    if (e.key === 'Tab') {
+      const cur = (spawnCwdInput as HTMLInputElement).value;
+      const parsed = parseCwdInput(cur);
+      if (!parsed.isPath) {
+        // 補完候補: parsed.prefix があれば完全一致のルートを探す。
+        // なければ parsed.query をプレフィックス前半として部分一致するルートを探す。
+        const favs = loadCwdFavorites();
+        const roots = deriveRootsFromFavorites(favs);
+        const fragment = parsed.prefix !== null ? parsed.prefix : parsed.query;
+        const low = fragment.toLowerCase();
+        const matches = [...roots.keys()].filter(k => k.toLowerCase().startsWith(low) && k.toLowerCase() !== low);
+        if (matches.length === 1) {
+          e.preventDefault();
+          const query = parsed.prefix !== null ? parsed.query : '';
+          (spawnCwdInput as HTMLInputElement).value = matches[0] + ':' + query;
+          renderCwdDropdown((spawnCwdInput as HTMLInputElement).value);
+        } else if (matches.length === 0 && parsed.prefix !== null) {
+          // 入力済み prefix が既存 root と完全一致（大文字小文字問わず）→ 何もしない。
+        }
+      }
+    }
     if (e.key === 'Enter')  { cwdDropdown.hidden = true; if (!spawnLaunchBtn.disabled) spawnSession(); }
     if (e.key === 'Escape') { cwdDropdown.hidden = true; newSessionPanel.hidden = true; }
     if (e.key === 'ArrowDown' && !cwdDropdown.hidden) {
@@ -1020,6 +1288,19 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   }
 
   cwdDropdown.addEventListener('mousedown', (e) => {
+    // chip クリック: input の prefix を insert / replace して検索を絞り込む。
+    const chipBtn = e.target.closest('.cwd-dropdown-chip');
+    if (chipBtn) {
+      e.preventDefault();
+      const prefix = (chipBtn as HTMLElement).dataset.prefix ?? '';
+      const cur = (spawnCwdInput as HTMLInputElement).value;
+      const curParsed = parseCwdInput(cur);
+      const next = prefix + ':' + curParsed.query;
+      (spawnCwdInput as HTMLInputElement).value = next;
+      spawnCwdInput.focus();
+      renderCwdDropdown(next);
+      return;
+    }
     const favBtn = e.target.closest('.cwd-dropdown-fav');
     if (favBtn) {
       e.preventDefault();
