@@ -205,7 +205,7 @@
 .cwd-dropdown {
   position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 200;
   background: var(--bg-elev); border: 1px solid var(--line-soft); border-radius: var(--radius-sm);
-  max-height: 180px; overflow-y: auto; list-style: none; padding: 2px 0; margin: 0;
+  max-height: 50vh; overflow-y: auto; list-style: none; padding: 2px 0; margin: 0;
   box-shadow: 0 4px 16px rgba(0,0,0,0.6);
 }
 .cwd-dropdown-item {
@@ -268,6 +268,41 @@
 .cwd-dropdown-item.dragging { opacity: 0.45; cursor: grabbing; }
 .cwd-dropdown-item.drop-before { box-shadow: inset 0 2px 0 var(--accent, #6ea8fe); }
 .cwd-dropdown-item.drop-after  { box-shadow: inset 0 -2px 0 var(--accent, #6ea8fe); }
+
+/* chip 行: 検索ドリブン化 C2 */
+.cwd-dropdown-chips {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 8px 6px;
+  border-bottom: 1px solid var(--line-soft); background: var(--bg-elev2, rgba(255,122,61,0.04));
+}
+.cwd-dropdown-chips.has-no-match {
+  outline: 1px solid var(--accent);
+}
+.cwd-dropdown-chip {
+  background: var(--bg); color: var(--text); border: 1px solid var(--line-soft);
+  border-radius: 999px; padding: 3px 9px; font: inherit; font-size: 0.78rem;
+  font-family: ui-monospace, Menlo, Consolas, monospace; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.cwd-dropdown-chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+.cwd-dropdown-chip.is-active {
+  border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text);
+}
+.chip-count {
+  font-size: 0.7rem; color: var(--muted); font-family: inherit;
+}
+/* 検索結果行マグニファイアアイコン */
+.cwd-dropdown-mag {
+  flex-shrink: 0; width: 18px; text-align: center; opacity: 0.8; color: var(--muted);
+}
+/* 検索結果セクション見出し */
+.cwd-dropdown-header.is-search {
+  color: var(--accent-text);
+}
+/* 0 件案内 */
+.cwd-dropdown-no-match {
+  padding: 6px 8px; font-size: 0.8rem; color: var(--muted); cursor: default; user-select: none;
+}
+.cwd-dropdown-no-match:hover { background: transparent; }
 
 .spawn-select,
 .spawn-input {

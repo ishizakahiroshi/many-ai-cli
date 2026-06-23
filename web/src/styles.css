@@ -1523,3 +1523,9 @@ header {
   letter-spacing: 0.06em;
   user-select: none;
 }
+
+/* 2026-06-23: ユーザー要望により「★ お気に入りをグリッドで開く」⊞ ボタンを非表示化
+   （生成ロジックは session-list.ts に残置。復活時はこの display:none を外す） */
+.sidebar-group-label-grid-btn {
+  display: none;
+}

@@ -7,6 +7,7 @@ import { autoExpand, inputEl, sendText, updateInputClearButton } from '../app.js
 import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerminalPathStartBoundary, resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup, trimTerminalPathCandidate } from './path-links.js';
 import { ws } from './ws-client.js';
 import { scheduleApprovalCheck } from './approval.js';
+import { ungluedApprovalLines } from './approval-parser.js';
 import { handleCrunchLinkClick } from './expand-popup.js';
 import { resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
 
@@ -281,6 +282,8 @@ export function ensureTerminal(id) {
     pendingTextTail: '',
     textDecoder: new TextDecoder('utf-8'),
     markerFilterCarry: new Uint8Array(0),
+    inMarkerBlock: false,
+    markerBlockBuf: [] as number[],
     screenClearSeqCarry: new Uint8Array(0),
     eraseScrollbackFilterCarry: new Uint8Array(0),
     crFilterCarry: new Uint8Array(0),
@@ -1046,9 +1049,60 @@ function isPossiblePrefix(bytes, offset, patterns) {
   });
 }
 
+// === 一時診断ログ: マーカー本文整形バグ調査用（原因確定後に削除） ===
+// 2026-06-23 「複数質問が CLI で全部出ない」現象の観察用。
+// 行数/バイト数/ANSIシーケンス位置/erase-below 挿入位置を可視化する。
+const DEBUG_MARKER_FLUSH = true;
+function dbgEscape(s: string, max = 400): string {
+  const escaped = String(s)
+    .replace(/\x1b/g, '\\e')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n');
+  return escaped.length > max ? escaped.slice(0, max) + `...(+${escaped.length - max} chars)` : escaped;
+}
+function dbgLog(...args: any[]) {
+  if (DEBUG_MARKER_FLUSH) console.log('[markerFlush]', ...args);
+}
+// === ここまで一時診断ログ ===
+
 export function isPossibleMarkerPrefix(bytes, offset) {
   return isPossiblePrefix(bytes, offset, hubMarkerBytePatterns) ||
     isPossiblePrefix(bytes, offset, [hubDoneMarkerOpen]);
+}
+
+// マーカーブロック本文を CLI 画面でも読める形に整える。
+// Claude Code の出力では options 1./2./3. が改行抜きで 1 行に潰れて来ることが多く、
+// xterm 上でハードラップされた長い 1 段落になり「質問が見つからない」状態になる
+// （ポップアップ側は ungluedApprovalLines で再分割するので綺麗に出る）。
+// CLI 側でも同じ整形を当てて、ポップアップと CLI で同じ質問が読めるようにする。
+// 本文はマーカー間でバッファし、close marker 到達時にまとめて整形して出力する
+// （chunk 境界が本文中に来た場合は inMarkerBlock / markerBlockBuf を carry する）。
+function flushMarkerBlockToBytes(buf) {
+  if (!buf || buf.length === 0) {
+    dbgLog('flush: empty buf');
+    return new Uint8Array(0);
+  }
+  try {
+    const bufBytes = new Uint8Array(buf);
+    const text = new TextDecoder('utf-8').decode(bufBytes);
+    const lines = text.split(/\r\n|\n/);
+    const unglued = ungluedApprovalLines(lines);
+    if (DEBUG_MARKER_FLUSH) {
+      dbgLog('flush bufBytes=', bufBytes.length,
+        'lines=', lines.length,
+        'unglued=', unglued.length,
+        'delta=', unglued.length - lines.length);
+      dbgLog('  text(full):', dbgEscape(text, 2000));
+      lines.forEach((l, idx) => dbgLog(`  line[${idx}]:`, dbgEscape(l)));
+      unglued.forEach((l, idx) => dbgLog(`  unglued[${idx}]:`, dbgEscape(l)));
+    }
+    const encoded = new TextEncoder().encode(unglued.join('\r\n'));
+    if (DEBUG_MARKER_FLUSH) dbgLog('flush encoded=', encoded.length, 'bytes');
+    return encoded;
+  } catch (e) {
+    dbgLog('flush failed:', e);
+    return new Uint8Array(buf);
+  }
 }
 
 export function filterHubMarkersForDisplay(id, bytes) {
@@ -1062,6 +1116,8 @@ export function filterHubMarkersForDisplay(id, bytes) {
   const out = [];
   let i = 0;
   let inDone = t.inDoneBlock || false;
+  let inMarker = t.inMarkerBlock || false;
+  let markerBuf: number[] = t.markerBlockBuf || [];
 
   while (i < combined.length) {
     if (inDone) {
@@ -1086,17 +1142,39 @@ export function filterHubMarkersForDisplay(id, bytes) {
     if (marker) {
       i += marker.length;
       if (marker === hubMarkerEndBytes) {
+        // close: 本文を整形して flush してから erase-below を打つ。
+        if (inMarker) {
+          if (DEBUG_MARKER_FLUSH) dbgLog('CLOSE markerBuf=', markerBuf.length, 'bytes, i=', i, 'out so far=', out.length);
+          const flushed = flushMarkerBlockToBytes(markerBuf);
+          for (const b of flushed) out.push(b);
+          markerBuf = [];
+          inMarker = false;
+        } else {
+          if (DEBUG_MARKER_FLUSH) dbgLog('CLOSE without OPEN (stray end marker), i=', i);
+        }
+        if (DEBUG_MARKER_FLUSH) dbgLog('ERASE-below inserted, out=', out.length);
         for (const b of eraseDisplayBelowBytes) out.push(b);
+      } else {
+        // open: バッファリング開始。直前の取りこぼし buf は破棄（ネスト相当の異常時保険）。
+        if (DEBUG_MARKER_FLUSH) dbgLog('OPEN i=', i, 'out so far=', out.length, 'carry=', carry.length, 'bytes=', bytes.length, 'combined=', combined.length);
+        inMarker = true;
+        markerBuf = [];
       }
       continue;
     }
     if (isPossibleMarkerPrefix(combined, i)) break;
-    out.push(combined[i]);
+    if (inMarker) {
+      markerBuf.push(combined[i]);
+    } else {
+      out.push(combined[i]);
+    }
     i++;
   }
 
   t.markerFilterCarry = combined.slice(i);
   t.inDoneBlock = inDone;
+  t.inMarkerBlock = inMarker;
+  t.markerBlockBuf = markerBuf;
   return new Uint8Array(out);
 }
 

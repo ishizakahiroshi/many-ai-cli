@@ -238,6 +238,23 @@ summary.settings-section-title::before {
 }
 .settings-section[open] > summary.settings-section-title::before { transform: rotate(90deg); }
 summary.settings-section-title:hover { background: var(--accent-soft); color: var(--text); }
+/* 畳み状態のときだけ summary 右側に現在値を 1 行で表示する。
+   開いたら本来の設定 UI に道を譲るため display:none で消す。 */
+.settings-section-current {
+  margin-left: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.7rem;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-left: 12px;
+  opacity: 0.85;
+}
+.settings-section[open] > summary.settings-section-title > .settings-section-current { display: none; }
 .settings-section-body { padding-bottom: 4px; }
 .log-dir-btn { background: none; border: none; cursor: pointer; opacity: 0.55; font-size: 0.95rem; padding: 0; line-height: 1; flex-shrink: 0; min-width: var(--control-h-sm); min-height: var(--control-h-sm); }
 .log-dir-btn:hover { opacity: 1; }
