@@ -210,7 +210,7 @@ async function hvGoto(offset: number) {
   }
 }
 
-export function openHistoryViewer(sid: number) {
+export function openHistoryViewer(sid: number, opts: { offset?: number } = {}) {
   if (!sessions.has(sid)) return;
   const root = ensureViewer();
   if (!root) return;
@@ -222,8 +222,13 @@ export function openHistoryViewer(sid: number) {
   if (term && hvFit) {
     requestAnimationFrame(() => { try { hvFit.fit(); } catch (_) {} });
   }
-  // 「上端より前が見たい」導線なので先頭ページから開く
-  hvGoto(0);
+  // 既定（ボタン経由）: 先頭ページ。
+  // offset=-1: 末尾ページ（ホイール上自動展開時の「直近の過去」起点）。
+  hvGoto(opts.offset ?? 0);
+}
+
+export function isHistoryViewerOpen(): boolean {
+  return !!(hvRoot && !hvRoot.hidden);
 }
 
 export function closeHistoryViewer() {

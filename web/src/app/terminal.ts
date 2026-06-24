@@ -7,9 +7,10 @@ import { autoExpand, inputEl, sendText, updateInputClearButton } from '../app.js
 import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerminalPathStartBoundary, resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup, trimTerminalPathCandidate } from './path-links.js';
 import { ws } from './ws-client.js';
 import { scheduleApprovalCheck } from './approval.js';
-import { ungluedApprovalLines } from './approval-parser.js';
 import { handleCrunchLinkClick } from './expand-popup.js';
-import { resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
+import { isHistoryViewerOpen, openHistoryViewer, resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
+import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
+export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossibleMarkerPrefix } from './hub-marker-filter.js';
 
 // Claude Code の折りたたみマーカー: "… +23 lines (ctrl+o to expand)"。
 // サブエージェント実行行・ツール要約行は "+N lines" 無しで "(ctrl+o to expand)" 単独で
@@ -283,7 +284,6 @@ export function ensureTerminal(id) {
     textDecoder: new TextDecoder('utf-8'),
     markerFilterCarry: new Uint8Array(0),
     inMarkerBlock: false,
-    markerBlockBuf: [] as number[],
     screenClearSeqCarry: new Uint8Array(0),
     eraseScrollbackFilterCarry: new Uint8Array(0),
     crFilterCarry: new Uint8Array(0),
@@ -667,6 +667,12 @@ export function isAlternateBuffer(t) {
 // 戻り値: 転送した場合 true（呼び元は xterm scrollback 操作等をスキップ）。
 export function scrollAltBufferPage(sessionId, t, direction) {
   if (!isAlternateBuffer(t)) return false;
+  // grok の TUI は PageUp で履歴領域に飛び、その状態で次の応答が来ると応答が画面外
+  // （履歴領域）に描画されユーザーには「Waiting のまま動かない」ように見える。
+  // trackpad 慣性や高 DPI マウスは 1 操作で wheel イベントを数発発火するため、
+  // 1 ノッチのつもりが PageUp 数連投になり確実にこの状態に陥る（s32 17:00:45〜47 に
+  // ESC[5~ が 6 回連発した実例あり）。grok 宛は wheel→PageUp 転送を停止する。
+  if (sessions.get(sessionId)?.provider === 'grok') return false;
   const key = direction < 0 ? '\x1b[5~' : '\x1b[6~';
   try { sendText(sessionId, key); } catch (_) {}
   return true;
@@ -787,6 +793,23 @@ document.addEventListener('wheel', (e) => {
   if (isWheelTargetExcluded(e.target)) return;
 
   if (forwardWheelToAltBuffer(targetSessionId, t, e.deltaY)) {
+    markTerminalManualScrollIntent();
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
+
+  // 通常バッファで上端にいる状態の上方向ホイールは、過去ログビューアを直近ページから自動展開する。
+  // Grok のように改行を出さず固定位置に上書き描画する TUI では xterm のスクロールバックが
+  // 育たないため、ホイール上は無反応のままになる（履歴ボタンも表示条件 buf.length>rows を
+  // 満たさず出ない）。「ボタンを押す」介在を挟まず、上方向ホイールで過去ログへ導線する。
+  const multiViewEl = document.getElementById('multi-view');
+  const inMultiPane = !!(multiViewEl && !multiViewEl.hidden);
+  const buf = t.term.buffer.active;
+  const atTop = buf.type !== 'alternate' && buf.viewportY === 0;
+  const isGrok = sessions.get(targetSessionId)?.provider === 'grok';
+  if (isGrok && e.deltaY < 0 && atTop && targetSessionId === activeSessionId && !inMultiPane && !isHistoryViewerOpen()) {
+    openHistoryViewer(targetSessionId, { offset: -1 });
     markTerminalManualScrollIntent();
     e.preventDefault();
     e.stopPropagation();
@@ -985,6 +1008,14 @@ document.getElementById('scroll-to-top-btn')?.addEventListener('click', () => {
     updateScrollLockBtn(true);
     return;
   }
+  // スクロールバックが無い（Grok のように改行を出さない TUI）場合、scrollToTop は無反応のままになる。
+  // ホイール経路と同じく、その状態の▲は直近過去ログを開く導線として扱う（grok のみ）。
+  const buf = t.term.buffer.active;
+  const isGrok = sessions.get(activeSessionId)?.provider === 'grok';
+  if (isGrok && buf.type !== 'alternate' && buf.length <= t.term.rows && !isHistoryViewerOpen()) {
+    openHistoryViewer(activeSessionId, { offset: -1 });
+    return;
+  }
   t.autoScroll = false;
   t.term.scrollToTop();
   updateScrollLockBtn(true);
@@ -1004,14 +1035,6 @@ document.getElementById('scroll-to-bottom-btn')?.addEventListener('click', () =>
   syncViewportScrollbarToBottom(t);
 });
 
-export const hubMarkerBytePatterns = [
-  new TextEncoder().encode('[MANY-AI-CLI]'),
-  new TextEncoder().encode('[/MANY-AI-CLI]'),
-];
-export const hubMarkerEndBytes = hubMarkerBytePatterns[1];
-export const hubDoneMarkerOpen = new TextEncoder().encode('[MANY-AI-CLI-DONE]');
-export const hubDoneMarkerClose = new TextEncoder().encode('[/MANY-AI-CLI-DONE]');
-export const eraseDisplayBelowBytes = new TextEncoder().encode('\x1b[J');
 export const screenClearSeqBytePatterns = [
   asciiBytes('\x1b[2J'),
   asciiBytes('\x1b[3J'),
@@ -1030,152 +1053,26 @@ export const synchronizedUpdateSeqCarryLength = Math.max(...synchronizedUpdateSe
 export const hideCursorSeq = asciiBytes('\x1b[?25l');
 export const showCursorSeq = asciiBytes('\x1b[?25h');
 
-export function bytesStartWith(bytes, offset, pattern) {
-  if (offset + pattern.length > bytes.length) return false;
-  for (let i = 0; i < pattern.length; i++) {
-    if (bytes[offset + i] !== pattern[i]) return false;
-  }
-  return true;
-}
-
-function isPossiblePrefix(bytes, offset, patterns) {
-  const remaining = bytes.length - offset;
-  return patterns.some((pattern) => {
-    if (remaining >= pattern.length) return false;
-    for (let i = 0; i < remaining; i++) {
-      if (bytes[offset + i] !== pattern[i]) return false;
-    }
-    return true;
-  });
-}
-
-// === 一時診断ログ: マーカー本文整形バグ調査用（原因確定後に削除） ===
-// 2026-06-23 「複数質問が CLI で全部出ない」現象の観察用。
-// 行数/バイト数/ANSIシーケンス位置/erase-below 挿入位置を可視化する。
-const DEBUG_MARKER_FLUSH = true;
-function dbgEscape(s: string, max = 400): string {
-  const escaped = String(s)
-    .replace(/\x1b/g, '\\e')
-    .replace(/\r/g, '\\r')
-    .replace(/\n/g, '\\n');
-  return escaped.length > max ? escaped.slice(0, max) + `...(+${escaped.length - max} chars)` : escaped;
-}
-function dbgLog(...args: any[]) {
-  if (DEBUG_MARKER_FLUSH) console.log('[markerFlush]', ...args);
-}
-// === ここまで一時診断ログ ===
-
-export function isPossibleMarkerPrefix(bytes, offset) {
-  return isPossiblePrefix(bytes, offset, hubMarkerBytePatterns) ||
-    isPossiblePrefix(bytes, offset, [hubDoneMarkerOpen]);
-}
-
-// マーカーブロック本文を CLI 画面でも読める形に整える。
-// Claude Code の出力では options 1./2./3. が改行抜きで 1 行に潰れて来ることが多く、
-// xterm 上でハードラップされた長い 1 段落になり「質問が見つからない」状態になる
-// （ポップアップ側は ungluedApprovalLines で再分割するので綺麗に出る）。
-// CLI 側でも同じ整形を当てて、ポップアップと CLI で同じ質問が読めるようにする。
-// 本文はマーカー間でバッファし、close marker 到達時にまとめて整形して出力する
-// （chunk 境界が本文中に来た場合は inMarkerBlock / markerBlockBuf を carry する）。
-function flushMarkerBlockToBytes(buf) {
-  if (!buf || buf.length === 0) {
-    dbgLog('flush: empty buf');
-    return new Uint8Array(0);
-  }
-  try {
-    const bufBytes = new Uint8Array(buf);
-    const text = new TextDecoder('utf-8').decode(bufBytes);
-    const lines = text.split(/\r\n|\n/);
-    const unglued = ungluedApprovalLines(lines);
-    if (DEBUG_MARKER_FLUSH) {
-      dbgLog('flush bufBytes=', bufBytes.length,
-        'lines=', lines.length,
-        'unglued=', unglued.length,
-        'delta=', unglued.length - lines.length);
-      dbgLog('  text(full):', dbgEscape(text, 2000));
-      lines.forEach((l, idx) => dbgLog(`  line[${idx}]:`, dbgEscape(l)));
-      unglued.forEach((l, idx) => dbgLog(`  unglued[${idx}]:`, dbgEscape(l)));
-    }
-    const encoded = new TextEncoder().encode(unglued.join('\r\n'));
-    if (DEBUG_MARKER_FLUSH) dbgLog('flush encoded=', encoded.length, 'bytes');
-    return encoded;
-  } catch (e) {
-    dbgLog('flush failed:', e);
-    return new Uint8Array(buf);
-  }
-}
-
+// xterm 入口の [MANY-AI-CLI] ブロック・[MANY-AI-CLI-DONE] ブロック除去は
+// hub-marker-filter.ts の純関数 filterHubMarkersPure に集約されている（DOM 非依存・
+// node:test 検証可能）。本ラッパーは terminal の state（markerFilterCarry / inMarkerBlock /
+// inDoneBlock）と純関数の state を橋渡しするだけ。
 export function filterHubMarkersForDisplay(id, bytes) {
   const t = terminals.get(id);
   if (!t) return bytes;
-  const carry = t.markerFilterCarry || new Uint8Array(0);
-  const combined = new Uint8Array(carry.length + bytes.length);
-  combined.set(carry, 0);
-  combined.set(bytes, carry.length);
-
-  const out = [];
-  let i = 0;
-  let inDone = t.inDoneBlock || false;
-  let inMarker = t.inMarkerBlock || false;
-  let markerBuf: number[] = t.markerBlockBuf || [];
-
-  while (i < combined.length) {
-    if (inDone) {
-      if (bytesStartWith(combined, i, hubDoneMarkerClose)) {
-        i += hubDoneMarkerClose.length;
-        inDone = false;
-        for (const b of eraseDisplayBelowBytes) out.push(b);
-        continue;
-      }
-      if (isPossiblePrefix(combined, i, [hubDoneMarkerClose])) break;
-      i++;
-      continue;
-    }
-
-    if (bytesStartWith(combined, i, hubDoneMarkerOpen)) {
-      i += hubDoneMarkerOpen.length;
-      inDone = true;
-      continue;
-    }
-
-    const marker = hubMarkerBytePatterns.find(pattern => bytesStartWith(combined, i, pattern));
-    if (marker) {
-      i += marker.length;
-      if (marker === hubMarkerEndBytes) {
-        // close: 本文を整形して flush してから erase-below を打つ。
-        if (inMarker) {
-          if (DEBUG_MARKER_FLUSH) dbgLog('CLOSE markerBuf=', markerBuf.length, 'bytes, i=', i, 'out so far=', out.length);
-          const flushed = flushMarkerBlockToBytes(markerBuf);
-          for (const b of flushed) out.push(b);
-          markerBuf = [];
-          inMarker = false;
-        } else {
-          if (DEBUG_MARKER_FLUSH) dbgLog('CLOSE without OPEN (stray end marker), i=', i);
-        }
-        if (DEBUG_MARKER_FLUSH) dbgLog('ERASE-below inserted, out=', out.length);
-        for (const b of eraseDisplayBelowBytes) out.push(b);
-      } else {
-        // open: バッファリング開始。直前の取りこぼし buf は破棄（ネスト相当の異常時保険）。
-        if (DEBUG_MARKER_FLUSH) dbgLog('OPEN i=', i, 'out so far=', out.length, 'carry=', carry.length, 'bytes=', bytes.length, 'combined=', combined.length);
-        inMarker = true;
-        markerBuf = [];
-      }
-      continue;
-    }
-    if (isPossibleMarkerPrefix(combined, i)) break;
-    if (inMarker) {
-      markerBuf.push(combined[i]);
-    } else {
-      out.push(combined[i]);
-    }
-    i++;
-  }
-
-  t.markerFilterCarry = combined.slice(i);
-  t.inDoneBlock = inDone;
-  t.inMarkerBlock = inMarker;
-  t.markerBlockBuf = markerBuf;
-  return new Uint8Array(out);
+  const { out, state } = filterHubMarkersPure(bytes, {
+    carry: t.markerFilterCarry || new Uint8Array(0),
+    inDone: t.inDoneBlock || false,
+    inMarker: t.inMarkerBlock || false,
+    markerBuf: t.markerBuf || new Uint8Array(0),
+    doneBuf: t.doneBuf || new Uint8Array(0),
+  });
+  t.markerFilterCarry = state.carry;
+  t.inDoneBlock = state.inDone;
+  t.inMarkerBlock = state.inMarker;
+  t.markerBuf = state.markerBuf;
+  t.doneBuf = state.doneBuf;
+  return out;
 }
 
 export function asciiBytes(str) {
@@ -1355,6 +1252,17 @@ const MAX_CURSOR_HIDE_BUF = 2048;
 export function filterCursorHideShowBlocksForDisplay(id, bytes) {
   const t = terminals.get(id);
   if (!t) return bytes;
+  // 観察用の臨時バイパス: DevTools で `window.__bypassCursorHideFilter = true` をセットすると
+  // 全バイトをそのまま xterm.js へ流す。OpenCode picker 等が描画反映されない不具合の
+  // 原因がこのフィルタの「ステータスバー誤判定」かを実機で確認するための仮説検証用。
+  if ((window as any).__bypassCursorHideFilter) {
+    t.cursorHideFilterCarry = new Uint8Array(0);
+    t.inCursorHideBlock = false;
+    t.cursorHideBlockBuf = [];
+    t.cursorHideHasAbsPos = false;
+    t.cursorHideHasNewline = false;
+    return bytes;
+  }
   const carry = t.cursorHideFilterCarry || new Uint8Array(0);
   const combined = new Uint8Array(carry.length + bytes.length);
   combined.set(carry, 0);
