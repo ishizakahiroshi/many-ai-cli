@@ -360,7 +360,10 @@ export function enqueueApprovalAutoSwitch(sessionId: number): void {
 // --- ESM cross-module setters (generated) ---
 export function set__elapsedTimerInterval(v: ReturnType<typeof setInterval> | null) { _elapsedTimerInterval = v; }
 export function set_actionBarFocusIdx(v: number) { actionBarFocusIdx = v; }
-export function set_activeSessionId(v: number | null) { activeSessionId = v; }
+export function set_activeSessionId(v: number | null) {
+  try { console.log('[approval-route] set_activeSessionId', { from: activeSessionId, to: v, stack: new Error().stack?.split('\n').slice(1, 5).join(' | ') }); } catch (_) {}
+  activeSessionId = v;
+}
 export function set_batchFocusIdx(v: number) { batchFocusIdx = v; }
 export function set_multiSelectFocusIdx(v: number) { multiSelectFocusIdx = v; }
 export function set_composeEndSendTimer(v: ReturnType<typeof setTimeout> | null) { composeEndSendTimer = v; }

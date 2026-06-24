@@ -748,6 +748,7 @@ export function handleHubApprovalMarker(message) {
   if (!block) return;
   const markerOpts = extractHubMarkerApproval(markerLinesFromTail(block));
   if (!markerOpts) return;
+  try { console.log('[approval-route] handleHubApprovalMarker', { id, activeSessionId, optsLen: markerOpts.length, q: (markerOpts as any)._question?.slice?.(0, 80) }); } catch (_) {}
   if (isAnsweredMarkerSig(id, markerOpts)) return;
 
   const sig = approvalSig(markerOpts);
@@ -1177,6 +1178,7 @@ export function setActionBarFocus(idx) {
 }
 
 export function hideActionBar(id) {
+  try { console.log('[approval-route] hideActionBar', { id, activeSessionId, stack: new Error().stack?.split('\n').slice(1, 5).join(' | ') }); } catch (_) {}
   const bar = document.getElementById('action-bar');
   const wasVisible = !!(bar && bar.classList.contains('visible'));
   if (bar) { bar.classList.remove('visible', 'batch', 'multi-select', 'single-tabs'); bar.innerHTML = ''; }
@@ -1331,6 +1333,11 @@ export function toggleActionBarCollapsed(sessionId) {
 }
 
 export function showActionBar(bar, sessionId, options, forceStickToBottom = false) {
+  try {
+    const firstLabel = Array.isArray(options) && options[0] ? String((options[0] as any).label || (options[0] as any).title || '').slice(0, 80) : '';
+    const question = options && (options as any)._question ? String((options as any)._question).slice(0, 80) : '';
+    console.log('[approval-route] showActionBar', { sessionId, activeSessionId, len: Array.isArray(options) ? options.length : 0, firstLabel, question, stack: new Error().stack?.split('\n').slice(1, 6).join(' | ') });
+  } catch (_) {}
   // 手動「✕ 承認」で抑制中は描画しない。同一承認のみ抑制し、別 sig の新しい承認は抑制解除して描画する。
   const suppressedSig = manualHideSig.get(sessionId);
   if (suppressedSig !== undefined) {
