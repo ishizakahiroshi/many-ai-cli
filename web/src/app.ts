@@ -888,6 +888,10 @@ export function syncMobileLayoutState() {
   if (!hasSession) closeMobileSessionDrawer();
 }
 
+window.addEventListener('approval-queue-updated', () => {
+  syncMobileLayoutState();
+});
+
 export function openMobileSessionDrawer() {
   document.body.classList.add('mobile-drawer-open');
   const btn = document.getElementById('mobile-menu-btn');

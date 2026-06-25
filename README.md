@@ -84,11 +84,11 @@ Gemini CLI is intentionally out of scope.
 
 ## Light orchestration
 
-`POST /api/sessions/:id/spawn-child` lets a conductor session create a child session with a role, provider, model, initial prompt, and optional cwd. The Hub creates `~/.many-ai-cli/orchestration/<orchestration_id>/board.md`, injects the board path into the child prompt, and watches the board for appended progress and `## DONE <role>` markers.
+`POST /api/sessions/:id/spawn-child` lets a conductor session create a child session with a role, provider, model, initial prompt, and optional cwd. The Hub creates `~/.many-ai-cli/orchestration/<orchestration_id>/board.md`, injects the board path into the child prompt, and watches the board for appended progress and `## DONE <role> session=<child_id>` markers.
 
 By default, child sessions run in separate git worktrees under `.many-ai-cli/worktrees/<orchestration_id>/<role>` when the parent cwd is a git repository. The Hub does not auto-merge child branches; the conductor or user decides what to merge after reviewing the board and branch.
 
-Known limits: this is intentionally lightweight. Board changes are detected by polling, completion depends on the child writing `## DONE <role>`, and there is no job DAG, retry queue, or automatic merge.
+Known limits: this is intentionally lightweight. Board changes are detected by 2-second polling and delivered with an immediate Enter-backed inject, so a board notification can interrupt an active conductor turn. Completion depends on the child writing `## DONE <role> session=<child_id>`, and there is no job DAG, retry queue, or automatic merge.
 - **Unified launcher (Windows / Linux / macOS)** — `many-ai-cli-launcher` connects to a Hub via saved profiles and opens your default browser: SSH `serve` / `tunnel` profiles work on every OS, and WSL profiles start a Hub inside WSL on Windows
 - **Remote server / Docker deployment assets** — run one Hub container per user from GHCR with loopback-only port publishing and an opt-in auto-update script
 - **Clean transcript generation** — write readable `.txt` transcripts automatically, or regenerate them with `log-clean`
