@@ -12,7 +12,7 @@ import (
 const claudeImportLine = "@~/.many-ai-cli/approval-rules.md"
 const sharedBlockStart = "<!-- any-ai-cli:approval-rules -->"
 const sharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
-const rulesVersion = "16"
+const rulesVersion = "17"
 
 var rulesFileContent = strings.Join([]string{
 	fmt.Sprintf("<!-- version: %s -->", rulesVersion),
@@ -135,6 +135,11 @@ var rulesFileContent = strings.Join([]string{
 	"  [MANY-AI-CLI-DONE] files タブの検索バグを修正し、テストを追加しました。 [/MANY-AI-CLI-DONE]",
 	"- マーカーは 1 ターン 1 回のみ、返答の末尾に出力する。",
 	"- 通常の会話・質問への回答・作業途中には出力しない（タスク完了時のみ）。",
+	"",
+	"## many-ai-cli Orchestration Error Format",
+	"",
+	"Hub から `[MANY-AI-CLI-ORCHESTRATION-ERROR]` で始まる 1 行が入力された場合、指揮者セッションは子セッションの起動上限・timeout・Hub 側 orchestration 失敗として扱うこと。",
+	"その子に依存する作業は、既存の子へ再分配するか、必要ならユーザーへ判断を求めること。通常の完了サマリーとは混同しないこと。",
 	"",
 }, "\n")
 
