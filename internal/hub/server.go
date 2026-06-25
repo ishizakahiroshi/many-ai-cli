@@ -90,24 +90,31 @@ const (
 // xterm.js のレンダリング済みバッファをスキャンして session_hint で approval_visible
 // を伝える。Hub はそれを受けて idleAfter 経過時に倒す state を決める。
 type session struct {
-	ID           int    `json:"id"`
-	Provider     string `json:"provider"`
-	Display      string `json:"display_name"`
-	CWD          string `json:"cwd"`
-	Branch       string `json:"branch,omitempty"`
-	Label        string `json:"label,omitempty"` // UI カード 3 行目に【ラベル】として表示
-	Model        string `json:"model,omitempty"` // 使用モデル名; UI カード表示用
-	Route        string `json:"route,omitempty"` // 接続経路（"ollama" 等）; UI で Ollama バックエンドの識別に使用
-	Shell        string `json:"shell,omitempty"`
-	State        string `json:"state"`
-	LastOutputAt string `json:"last_output_at,omitempty"` // ISO 8601; UI カード「最終応答時刻」用
-	StartedAt    string `json:"started_at,omitempty"`     // ISO 8601; UI カード「起動時刻」用
-	FirstMessage string `json:"first_message,omitempty"`  // 最初の確定入力; UI カード表示用
-	LastMessage  string `json:"last_message,omitempty"`   // 最新の確定入力; UI カード表示用
-	EndReason    string `json:"end_reason,omitempty"`     // session_end の reason コード（例: "exec_not_found"）。UI 側で i18n 翻訳して表示
-	HomeDir      string `json:"-"`
-	CodexHome    string `json:"-"`
-	ClaudeDir    string `json:"-"`
+	ID              int    `json:"id"`
+	Provider        string `json:"provider"`
+	Display         string `json:"display_name"`
+	CWD             string `json:"cwd"`
+	Branch          string `json:"branch,omitempty"`
+	Label           string `json:"label,omitempty"` // UI カード 3 行目に【ラベル】として表示
+	Model           string `json:"model,omitempty"` // 使用モデル名; UI カード表示用
+	Route           string `json:"route,omitempty"` // 接続経路（"ollama" 等）; UI で Ollama バックエンドの識別に使用
+	Shell           string `json:"shell,omitempty"`
+	ParentSessionID int    `json:"parent_session_id,omitempty"`
+	Role            string `json:"role,omitempty"`
+	Auto            bool   `json:"auto,omitempty"`
+	Depth           int    `json:"depth,omitempty"`
+	OrchestrationID string `json:"orchestration_id,omitempty"`
+	BoardPath       string `json:"board_path,omitempty"`
+	WorktreeBranch  string `json:"worktree_branch,omitempty"`
+	State           string `json:"state"`
+	LastOutputAt    string `json:"last_output_at,omitempty"` // ISO 8601; UI カード「最終応答時刻」用
+	StartedAt       string `json:"started_at,omitempty"`     // ISO 8601; UI カード「起動時刻」用
+	FirstMessage    string `json:"first_message,omitempty"`  // 最初の確定入力; UI カード表示用
+	LastMessage     string `json:"last_message,omitempty"`   // 最新の確定入力; UI カード表示用
+	EndReason       string `json:"end_reason,omitempty"`     // session_end の reason コード（例: "exec_not_found"）。UI 側で i18n 翻訳して表示
+	HomeDir         string `json:"-"`
+	CodexHome       string `json:"-"`
+	ClaudeDir       string `json:"-"`
 
 	// JSON 外: 状態評価用
 	lastOutputAt      time.Time // idleAfter 計算用。LastOutputAt と同期して更新する
@@ -398,6 +405,7 @@ type Server struct {
 	sessionStore      *sessionstore.Store
 	push              *pushManager
 	notifyMgr         *notify.Manager
+	orchestration     *orchestrationManager
 
 	// 任意リモート PIN（pin_auth.go）。lazy 生成のため pinLim() 経由でアクセスする。
 	pinLimiterMu sync.Mutex
@@ -682,6 +690,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		usageLinkCache:        newUsageLinkCache(),
 		modelsCache:           &modelsCache{},
 		modelsRemoteCache:     newModelsRemoteCache(),
+		orchestration:         newOrchestrationManager(),
 		branchRefreshSem:      make(chan struct{}, branchRefreshWorkers),
 		branchRefreshInFlight: map[string]struct{}{},
 		serverConns:           newServerConnManager(logger),
@@ -785,6 +794,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/avatar", s.handleAvatar)
 	mux.HandleFunc("/api/spawn", s.handleSpawn)
 	mux.HandleFunc("/api/spawn-grid", s.handleSpawnGrid)
+	mux.HandleFunc("/api/sessions/", s.handleSessionAPI)
 	mux.HandleFunc("/api/pick-directory", s.handlePickDirectory)
 	mux.HandleFunc("/api/path-exists", s.handlePathExists)
 	mux.HandleFunc("/api/list-subdirs", s.handleListSubdirs)
@@ -991,6 +1001,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	s.startChatProxy()
 	s.safeGo("state_ticker", func() { s.stateTicker(runCtx) })
+	s.safeGo("orchestration_board_loop", func() { s.orchestrationBoardLoop(runCtx) })
 	s.safeGo("clean_attachments", s.cleanAttachments)
 	s.safeGo("clean_spawn_logs", s.cleanSpawnLogs)
 	s.safeGo("clean_session_logs", s.cleanSessionLogs)
@@ -1003,6 +1014,9 @@ func (s *Server) Run(ctx context.Context) error {
 			s.removeApprovalRules()
 		}
 		s.removeAllUsageHooks()
+		if s.orchestration != nil {
+			s.orchestration.stop()
+		}
 		s.stopManagedWhisper()
 		// Stop the Hub server without marking wrapper sessions as intentionally
 		// disconnected. Closing the HTTP server drops WS connections after the
@@ -1220,23 +1234,39 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	if regRoute == "" {
 		regRoute = s.resolveRoute(reg.Provider, reg.Model)
 	}
+	childMeta := pendingChild{}
+	if s.orchestration != nil && reg.Label != "" {
+		s.orchestration.mu.Lock()
+		if meta, ok := s.orchestration.pending[reg.Label]; ok {
+			childMeta = meta
+			delete(s.orchestration.pending, reg.Label)
+		}
+		s.orchestration.mu.Unlock()
+	}
 	var storeID int64
 	if s.sessionStore != nil {
 		var storeErr error
 		storeID, storeErr = s.sessionStore.StartSession(sessionstore.SessionStart{
-			LiveSessionID: id,
-			Provider:      reg.Provider,
-			Display:       reg.Display,
-			CWD:           reg.CWD,
-			Branch:        branch,
-			Label:         reg.Label,
-			Model:         reg.Model,
-			Route:         regRoute,
-			Shell:         reg.Shell,
-			State:         "standby",
-			StartedAt:     startedAt.Format(time.RFC3339),
-			LogPath:       rawLogPath,
-			JSONLPath:     jsonlPath,
+			LiveSessionID:   id,
+			Provider:        reg.Provider,
+			Display:         reg.Display,
+			CWD:             reg.CWD,
+			Branch:          branch,
+			Label:           reg.Label,
+			Model:           reg.Model,
+			Route:           regRoute,
+			Shell:           reg.Shell,
+			State:           "standby",
+			StartedAt:       startedAt.Format(time.RFC3339),
+			LogPath:         rawLogPath,
+			JSONLPath:       jsonlPath,
+			ParentSessionID: childMeta.ParentSessionID,
+			Role:            childMeta.Role,
+			Auto:            childMeta.Auto,
+			Depth:           childMeta.Depth,
+			OrchestrationID: childMeta.OrchestrationID,
+			BoardPath:       childMeta.BoardPath,
+			WorktreeBranch:  childMeta.WorktreeBranch,
 		})
 		if storeErr != nil {
 			s.logger.Warn("sqlite session start failed", "session_id", id, "err", storeErr)
@@ -1254,6 +1284,13 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		Model:           reg.Model,
 		Route:           regRoute,
 		Shell:           reg.Shell,
+		ParentSessionID: childMeta.ParentSessionID,
+		Role:            childMeta.Role,
+		Auto:            childMeta.Auto,
+		Depth:           childMeta.Depth,
+		OrchestrationID: childMeta.OrchestrationID,
+		BoardPath:       childMeta.BoardPath,
+		WorktreeBranch:  childMeta.WorktreeBranch,
 		HomeDir:         reg.HomeDir,
 		CodexHome:       reg.CodexHome,
 		ClaudeDir:       reg.ClaudeDir,
@@ -1291,18 +1328,23 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	}
 	_ = wc.send(proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, TokenStatusbar: s.tokenStatusbarEnabled()})
 	s.logger.Info("session registered", "id", id, "provider", reg.Provider, "cwd", reg.CWD, "pid", reg.PID)
-	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Branch: branch, Label: reg.Label, Model: reg.Model, Route: regRoute, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath})
+	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Branch: branch, Label: reg.Label, Model: reg.Model, Route: regRoute, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, ParentSessionID: childMeta.ParentSessionID, Role: childMeta.Role, Auto: childMeta.Auto, Depth: childMeta.Depth, OrchestrationID: childMeta.OrchestrationID, BoardPath: childMeta.BoardPath, WorktreeBranch: childMeta.WorktreeBranch})
 	s.writeHistory(id, map[string]any{
-		"ts":         startedAt.Format(time.RFC3339),
-		"type":       "session_start",
-		"session_id": id,
-		"provider":   reg.Provider,
-		"cwd":        reg.CWD,
-		"branch":     branch,
-		"label":      reg.Label,
-		"model":      reg.Model,
-		"shell":      reg.Shell,
-		"pid":        reg.PID,
+		"ts":                startedAt.Format(time.RFC3339),
+		"type":              "session_start",
+		"session_id":        id,
+		"provider":          reg.Provider,
+		"cwd":               reg.CWD,
+		"branch":            branch,
+		"label":             reg.Label,
+		"model":             reg.Model,
+		"shell":             reg.Shell,
+		"pid":               reg.PID,
+		"parent_session_id": childMeta.ParentSessionID,
+		"role":              childMeta.Role,
+		"auto":              childMeta.Auto,
+		"orchestration_id":  childMeta.OrchestrationID,
+		"board_path":        childMeta.BoardPath,
 	})
 	s.wrapperMessageLoop(wc, id)
 }

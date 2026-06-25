@@ -67,19 +67,26 @@ type asyncEvent struct {
 }
 
 type SessionStart struct {
-	LiveSessionID int
-	Provider      string
-	Display       string
-	CWD           string
-	Branch        string
-	Label         string
-	Model         string
-	Route         string
-	Shell         string
-	State         string
-	StartedAt     string
-	LogPath       string
-	JSONLPath     string
+	LiveSessionID   int
+	Provider        string
+	Display         string
+	CWD             string
+	Branch          string
+	Label           string
+	Model           string
+	Route           string
+	Shell           string
+	State           string
+	StartedAt       string
+	LogPath         string
+	JSONLPath       string
+	ParentSessionID int
+	Role            string
+	Auto            bool
+	Depth           int
+	OrchestrationID string
+	BoardPath       string
+	WorktreeBranch  string
 }
 
 type ChatMessage struct {
@@ -119,33 +126,40 @@ type SearchResult struct {
 }
 
 type SessionOverview struct {
-	ID            int64    `json:"id"`
-	LiveSessionID int      `json:"session_id"`
-	Provider      string   `json:"provider,omitempty"`
-	Display       string   `json:"display_name,omitempty"`
-	CWD           string   `json:"cwd,omitempty"`
-	Branch        string   `json:"branch,omitempty"`
-	Label         string   `json:"label,omitempty"`
-	Model         string   `json:"model,omitempty"`
-	Route         string   `json:"route,omitempty"`
-	Shell         string   `json:"shell,omitempty"`
-	State         string   `json:"state,omitempty"`
-	StartedAt     string   `json:"started_at,omitempty"`
-	LastOutputAt  string   `json:"last_output_at,omitempty"`
-	EndedAt       string   `json:"ended_at,omitempty"`
-	FirstMessage  string   `json:"first_message,omitempty"`
-	LastMessage   string   `json:"last_message,omitempty"`
-	EndReason     string   `json:"end_reason,omitempty"`
-	Title         string   `json:"title,omitempty"`
-	Tags          []string `json:"tags,omitempty"`
-	Summary       string   `json:"summary,omitempty"`
-	Archived      bool     `json:"archived"`
-	LogPath       string   `json:"log_path,omitempty"`
-	JSONLPath     string   `json:"jsonl_path,omitempty"`
-	MessageCount  int      `json:"message_count,omitempty"`
-	EventCount    int      `json:"event_count,omitempty"`
-	ApprovalCount int      `json:"approval_count,omitempty"`
-	PendingCount  int      `json:"pending_count,omitempty"`
+	ID              int64    `json:"id"`
+	LiveSessionID   int      `json:"session_id"`
+	Provider        string   `json:"provider,omitempty"`
+	Display         string   `json:"display_name,omitempty"`
+	CWD             string   `json:"cwd,omitempty"`
+	Branch          string   `json:"branch,omitempty"`
+	Label           string   `json:"label,omitempty"`
+	Model           string   `json:"model,omitempty"`
+	Route           string   `json:"route,omitempty"`
+	Shell           string   `json:"shell,omitempty"`
+	State           string   `json:"state,omitempty"`
+	StartedAt       string   `json:"started_at,omitempty"`
+	LastOutputAt    string   `json:"last_output_at,omitempty"`
+	EndedAt         string   `json:"ended_at,omitempty"`
+	FirstMessage    string   `json:"first_message,omitempty"`
+	LastMessage     string   `json:"last_message,omitempty"`
+	EndReason       string   `json:"end_reason,omitempty"`
+	Title           string   `json:"title,omitempty"`
+	Tags            []string `json:"tags,omitempty"`
+	Summary         string   `json:"summary,omitempty"`
+	Archived        bool     `json:"archived"`
+	LogPath         string   `json:"log_path,omitempty"`
+	JSONLPath       string   `json:"jsonl_path,omitempty"`
+	ParentSessionID int      `json:"parent_session_id,omitempty"`
+	Role            string   `json:"role,omitempty"`
+	Auto            bool     `json:"auto,omitempty"`
+	Depth           int      `json:"depth,omitempty"`
+	OrchestrationID string   `json:"orchestration_id,omitempty"`
+	BoardPath       string   `json:"board_path,omitempty"`
+	WorktreeBranch  string   `json:"worktree_branch,omitempty"`
+	MessageCount    int      `json:"message_count,omitempty"`
+	EventCount      int      `json:"event_count,omitempty"`
+	ApprovalCount   int      `json:"approval_count,omitempty"`
+	PendingCount    int      `json:"pending_count,omitempty"`
 }
 
 type TimelineEvent struct {
@@ -347,6 +361,13 @@ func (s *Store) init() error {
 			title TEXT,
 			tags_json TEXT,
 			summary TEXT,
+			parent_session_id INTEGER NOT NULL DEFAULT 0,
+			role TEXT,
+			auto INTEGER NOT NULL DEFAULT 0,
+			depth INTEGER NOT NULL DEFAULT 0,
+			orchestration_id TEXT,
+			board_path TEXT,
+			worktree_branch TEXT,
 			archived INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL DEFAULT (datetime('now')),
 			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -440,6 +461,13 @@ func (s *Store) ensureSessionColumns(ctx context.Context) error {
 		{"title", `ALTER TABLE sessions ADD COLUMN title TEXT`},
 		{"tags_json", `ALTER TABLE sessions ADD COLUMN tags_json TEXT`},
 		{"summary", `ALTER TABLE sessions ADD COLUMN summary TEXT`},
+		{"parent_session_id", `ALTER TABLE sessions ADD COLUMN parent_session_id INTEGER NOT NULL DEFAULT 0`},
+		{"role", `ALTER TABLE sessions ADD COLUMN role TEXT`},
+		{"auto", `ALTER TABLE sessions ADD COLUMN auto INTEGER NOT NULL DEFAULT 0`},
+		{"depth", `ALTER TABLE sessions ADD COLUMN depth INTEGER NOT NULL DEFAULT 0`},
+		{"orchestration_id", `ALTER TABLE sessions ADD COLUMN orchestration_id TEXT`},
+		{"board_path", `ALTER TABLE sessions ADD COLUMN board_path TEXT`},
+		{"worktree_branch", `ALTER TABLE sessions ADD COLUMN worktree_branch TEXT`},
 		{"archived", `ALTER TABLE sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`},
 	}
 	for _, col := range add {
@@ -466,8 +494,9 @@ func (s *Store) StartSession(st SessionStart) (int64, error) {
 	var id int64
 	err := s.db.QueryRowContext(ctx, `INSERT INTO sessions (
 		live_session_id, provider, display_name, cwd, branch, label, model, route, shell,
-		state, started_at, log_path, jsonl_path, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		state, started_at, log_path, jsonl_path, parent_session_id, role, auto, depth,
+		orchestration_id, board_path, worktree_branch, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(jsonl_path) DO UPDATE SET
 		live_session_id=excluded.live_session_id,
 		provider=excluded.provider,
@@ -481,12 +510,21 @@ func (s *Store) StartSession(st SessionStart) (int64, error) {
 		state=excluded.state,
 		started_at=excluded.started_at,
 		log_path=excluded.log_path,
+		parent_session_id=excluded.parent_session_id,
+		role=excluded.role,
+		auto=excluded.auto,
+		depth=excluded.depth,
+		orchestration_id=excluded.orchestration_id,
+		board_path=excluded.board_path,
+		worktree_branch=excluded.worktree_branch,
 		updated_at=excluded.updated_at,
 		ended_at=NULL,
 		end_reason=NULL
 	RETURNING id`,
 		st.LiveSessionID, st.Provider, st.Display, st.CWD, st.Branch, st.Label, st.Model,
-		st.Route, st.Shell, state, st.StartedAt, st.LogPath, st.JSONLPath, time.Now().Format(time.RFC3339),
+		st.Route, st.Shell, state, st.StartedAt, st.LogPath, st.JSONLPath,
+		st.ParentSessionID, st.Role, boolInt(st.Auto), st.Depth, st.OrchestrationID,
+		st.BoardPath, st.WorktreeBranch, time.Now().Format(time.RFC3339),
 	).Scan(&id)
 	return id, err
 }
@@ -775,6 +813,9 @@ func (s *Store) ListSessions(limit int, includeArchived bool) ([]SessionOverview
 			COALESCE(se.ended_at, ''), COALESCE(se.first_message, ''), COALESCE(se.last_message, ''),
 			COALESCE(se.end_reason, ''), COALESCE(se.title, ''), COALESCE(se.tags_json, '[]'), COALESCE(se.summary, ''),
 			COALESCE(se.archived, 0), COALESCE(se.log_path, ''), COALESCE(se.jsonl_path, ''),
+			COALESCE(se.parent_session_id, 0), COALESCE(se.role, ''), COALESCE(se.auto, 0),
+			COALESCE(se.depth, 0), COALESCE(se.orchestration_id, ''), COALESCE(se.board_path, ''),
+			COALESCE(se.worktree_branch, ''),
 			(SELECT COUNT(*) FROM messages m WHERE m.session_id=se.id),
 			(SELECT COUNT(*) FROM events e WHERE e.session_id=se.id),
 			(SELECT COUNT(*) FROM approvals a WHERE a.session_id=se.id),
@@ -802,6 +843,9 @@ func (s *Store) SessionOverviewByLiveSession(liveSessionID int) (SessionOverview
 			COALESCE(se.ended_at, ''), COALESCE(se.first_message, ''), COALESCE(se.last_message, ''),
 			COALESCE(se.end_reason, ''), COALESCE(se.title, ''), COALESCE(se.tags_json, '[]'), COALESCE(se.summary, ''),
 			COALESCE(se.archived, 0), COALESCE(se.log_path, ''), COALESCE(se.jsonl_path, ''),
+			COALESCE(se.parent_session_id, 0), COALESCE(se.role, ''), COALESCE(se.auto, 0),
+			COALESCE(se.depth, 0), COALESCE(se.orchestration_id, ''), COALESCE(se.board_path, ''),
+			COALESCE(se.worktree_branch, ''),
 			(SELECT COUNT(*) FROM messages m WHERE m.session_id=se.id),
 			(SELECT COUNT(*) FROM events e WHERE e.session_id=se.id),
 			(SELECT COUNT(*) FROM approvals a WHERE a.session_id=se.id),
@@ -917,6 +961,9 @@ func (s *Store) StaleSessions(cutoff time.Time, limit int) ([]SessionOverview, e
 			COALESCE(se.ended_at, ''), COALESCE(se.first_message, ''), COALESCE(se.last_message, ''),
 			COALESCE(se.end_reason, ''), COALESCE(se.title, ''), COALESCE(se.tags_json, '[]'), COALESCE(se.summary, ''),
 			COALESCE(se.archived, 0), COALESCE(se.log_path, ''), COALESCE(se.jsonl_path, ''),
+			COALESCE(se.parent_session_id, 0), COALESCE(se.role, ''), COALESCE(se.auto, 0),
+			COALESCE(se.depth, 0), COALESCE(se.orchestration_id, ''), COALESCE(se.board_path, ''),
+			COALESCE(se.worktree_branch, ''),
 			(SELECT COUNT(*) FROM messages m WHERE m.session_id=se.id),
 			(SELECT COUNT(*) FROM events e WHERE e.session_id=se.id),
 			(SELECT COUNT(*) FROM approvals a WHERE a.session_id=se.id),
@@ -1390,7 +1437,9 @@ func scanSessionOverviews(rows *sql.Rows) ([]SessionOverview, error) {
 			&item.Label, &item.Model, &item.Route, &item.Shell, &item.State, &item.StartedAt,
 			&item.LastOutputAt, &item.EndedAt, &item.FirstMessage, &item.LastMessage,
 			&item.EndReason, &item.Title, &tagsJSON, &item.Summary, &archived, &item.LogPath,
-			&item.JSONLPath, &item.MessageCount, &item.EventCount, &item.ApprovalCount, &item.PendingCount,
+			&item.JSONLPath, &item.ParentSessionID, &item.Role, &item.Auto, &item.Depth,
+			&item.OrchestrationID, &item.BoardPath, &item.WorktreeBranch,
+			&item.MessageCount, &item.EventCount, &item.ApprovalCount, &item.PendingCount,
 		); err != nil {
 			return nil, err
 		}

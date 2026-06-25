@@ -542,6 +542,21 @@ type NotifyConfig struct {
 	Events   []string              `yaml:"events,omitempty"   json:"events,omitempty"`
 }
 
+// OrchestrationConfig controls lightweight parent/child AI session orchestration.
+type OrchestrationConfig struct {
+	MaxDepth             int    `yaml:"max_depth,omitempty" json:"max_depth,omitempty"`
+	MaxChildrenPerParent int    `yaml:"max_children_per_parent,omitempty" json:"max_children_per_parent,omitempty"`
+	MaxTotalSessions     int    `yaml:"max_total_sessions,omitempty" json:"max_total_sessions,omitempty"`
+	ChildTimeoutSeconds  int    `yaml:"child_timeout_seconds,omitempty" json:"child_timeout_seconds,omitempty"`
+	IdleDoneThresholdSec int    `yaml:"idle_done_threshold_seconds,omitempty" json:"idle_done_threshold_seconds,omitempty"`
+	WorktreeAuto         *bool  `yaml:"worktree_auto,omitempty" json:"worktree_auto,omitempty"`
+	WorktreeDirRoot      string `yaml:"worktree_dir_root,omitempty" json:"worktree_dir_root,omitempty"`
+}
+
+func (o OrchestrationConfig) WorktreeEnabled() bool {
+	return o.WorktreeAuto == nil || *o.WorktreeAuto
+}
+
 type Config struct {
 	Hub struct {
 		Port         int  `yaml:"port"`
@@ -581,13 +596,14 @@ type Config struct {
 	// RemotePINHash は任意リモート PIN（既定 OFF）の bcrypt ハッシュ。空なら PIN 無効。
 	// 非 loopback アクセス時のみ PIN ログインを要求する追加の扉（plan_hub-remote-auth.md / A）。
 	// 平文 PIN は決して保存しない。API レスポンスにも出さない（json:"-"）。
-	RemotePINHash string       `yaml:"remote_pin_hash,omitempty" json:"-"`
-	Ollama        OllamaConfig   `yaml:"ollama,omitempty" json:"ollama,omitempty"`
-	LMStudio      LMStudioConfig `yaml:"lm_studio,omitempty" json:"lm_studio,omitempty"`
-	LocalModels   []LocalModel   `yaml:"local_models,omitempty" json:"local_models,omitempty"`
-	UserPrefs     UserPrefs    `yaml:"user_prefs,omitempty" json:"user_prefs,omitempty"`
-	Voice         VoiceConfig  `yaml:"voice,omitempty" json:"voice,omitempty"`
-	Notify        NotifyConfig `yaml:"notify,omitempty" json:"notify,omitempty"`
+	RemotePINHash string              `yaml:"remote_pin_hash,omitempty" json:"-"`
+	Ollama        OllamaConfig        `yaml:"ollama,omitempty" json:"ollama,omitempty"`
+	LMStudio      LMStudioConfig      `yaml:"lm_studio,omitempty" json:"lm_studio,omitempty"`
+	LocalModels   []LocalModel        `yaml:"local_models,omitempty" json:"local_models,omitempty"`
+	UserPrefs     UserPrefs           `yaml:"user_prefs,omitempty" json:"user_prefs,omitempty"`
+	Voice         VoiceConfig         `yaml:"voice,omitempty" json:"voice,omitempty"`
+	Notify        NotifyConfig        `yaml:"notify,omitempty" json:"notify,omitempty"`
+	Orchestration OrchestrationConfig `yaml:"orchestration,omitempty" json:"orchestration,omitempty"`
 }
 
 func LoadOrCreate() (*Config, error) {
@@ -813,6 +829,10 @@ func (cfg *Config) Clone() *Config {
 	if cfg.Notify.Events != nil {
 		c.Notify.Events = cloneStringSlice(cfg.Notify.Events)
 	}
+	if cfg.Orchestration.WorktreeAuto != nil {
+		v := *cfg.Orchestration.WorktreeAuto
+		c.Orchestration.WorktreeAuto = &v
+	}
 	if cfg.Voice.Whisper.HallucinationPhrases != nil {
 		c.Voice.Whisper.HallucinationPhrases = cloneStringSlice(cfg.Voice.Whisper.HallucinationPhrases)
 	}
@@ -834,6 +854,24 @@ func (cfg *Config) applyDefaults() {
 	}
 	if cfg.Voice.Whisper.HallucinationPhrases == nil {
 		cfg.Voice.Whisper.HallucinationPhrases = cloneStringSlice(DefaultWhisperHallucinationPhrases)
+	}
+	if cfg.Orchestration.MaxDepth <= 0 {
+		cfg.Orchestration.MaxDepth = 1
+	}
+	if cfg.Orchestration.MaxChildrenPerParent <= 0 {
+		cfg.Orchestration.MaxChildrenPerParent = 4
+	}
+	if cfg.Orchestration.MaxTotalSessions <= 0 {
+		cfg.Orchestration.MaxTotalSessions = 16
+	}
+	if cfg.Orchestration.ChildTimeoutSeconds <= 0 {
+		cfg.Orchestration.ChildTimeoutSeconds = 600
+	}
+	if cfg.Orchestration.IdleDoneThresholdSec <= 0 {
+		cfg.Orchestration.IdleDoneThresholdSec = 120
+	}
+	if strings.TrimSpace(cfg.Orchestration.WorktreeDirRoot) == "" {
+		cfg.Orchestration.WorktreeDirRoot = filepath.Join(".many-ai-cli", "worktrees")
 	}
 }
 

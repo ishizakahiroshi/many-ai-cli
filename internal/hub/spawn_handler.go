@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,6 +13,171 @@ import (
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/sessionlog"
 )
+
+type spawnWrappedSpec struct {
+	Provider       string
+	CWD            string
+	Model          string
+	ModelSelection string
+	RiskConfirmed  bool
+	Label          string
+	PermissionMode string
+	Sandbox        string
+	AskForApproval string
+	Route          string
+	Utf8Session    bool
+}
+
+func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) (int, error) {
+	if !validOrchestrationProvider(spec.Provider) {
+		return 0, fmt.Errorf("invalid provider")
+	}
+	if strings.HasPrefix(spec.Model, "-") || strings.HasPrefix(spec.Label, "-") || !spawnValidModelLabel(spec.Model) || !spawnValidModelLabel(spec.Label) {
+		return 0, fmt.Errorf("invalid model or label value")
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return 0, fmt.Errorf("executable error: %w", err)
+	}
+	wrapArgs := []string{"wrap", spec.Provider}
+	resolvedModel := strings.TrimSpace(spec.Model)
+	if spec.Label != "" {
+		wrapArgs = append(wrapArgs, "--label="+spec.Label)
+	}
+	switch spec.Provider {
+	case "claude":
+		mode := spec.ModelSelection
+		if mode == "" {
+			mode = "auto"
+		}
+		currentModel := s.getLastModel("claude")
+		risk := evaluateClaudeRisk(currentModel, resolvedModel, spec.PermissionMode)
+		if risk.HighRisk && mode != "required" {
+			mode = "required"
+		}
+		if mode == "required" && !spec.RiskConfirmed {
+			return 0, fmt.Errorf("risk confirmation required")
+		}
+		if resolvedModel != "" {
+			wrapArgs = append(wrapArgs, "--model", resolvedModel)
+		}
+		if spec.PermissionMode != "" && spec.PermissionMode != "default" {
+			wrapArgs = append(wrapArgs, "--permission-mode", spec.PermissionMode)
+		}
+	case "codex":
+		mode := spec.ModelSelection
+		if mode == "" {
+			mode = "auto"
+		}
+		currentModel := s.getLastModel("codex")
+		risk := evaluateCodexRisk(currentModel, resolvedModel, spec.Sandbox, spec.AskForApproval)
+		if risk.HighRisk && mode != "required" {
+			mode = "required"
+		}
+		if mode == "required" && !spec.RiskConfirmed {
+			return 0, fmt.Errorf("risk confirmation required")
+		}
+		if resolvedModel != "" {
+			wrapArgs = append(wrapArgs, "--model", resolvedModel)
+		}
+		if spec.Sandbox != "" {
+			wrapArgs = append(wrapArgs, "--sandbox", spec.Sandbox)
+		}
+		if spec.AskForApproval != "" {
+			wrapArgs = append(wrapArgs, "--ask-for-approval", spec.AskForApproval)
+		}
+	default:
+		if resolvedModel != "" {
+			wrapArgs = append(wrapArgs, "--model", resolvedModel)
+		}
+	}
+	effectiveRoute := spec.Route
+	if effectiveRoute == "" {
+		localCfg := s.snapshotLocalModels()
+		known := collectOllamaModelIDs(s.modelsCache, localCfg)
+		knownLmStudio := collectLMStudioModelIDs(s.modelsCache)
+		effectiveRoute = RouteForModel(spec.Provider, resolvedModel, known, knownLmStudio)
+	}
+	if spec.Provider == "codex" && isLocalRoute(effectiveRoute) {
+		wrapArgs = append(wrapArgs, "--codex-oss")
+	}
+	if spec.Utf8Session {
+		wrapArgs = append(wrapArgs, "--utf8")
+	}
+
+	cmd := exec.Command(exe, wrapArgs...)
+	cmd.Dir = spec.CWD
+	hubPort := s.currentHubPort()
+	cmd.Env = append(sanitizeEnv(os.Environ()), "MANY_AI_CLI=1", fmt.Sprintf("MANY_AI_CLI_HUB_PORT=%d", hubPort))
+	if s.parentShell != "" {
+		cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
+	}
+	s.cfgMu.Lock()
+	ollamaBaseURL := s.cfg.Ollama.BaseURL
+	lmStudioBaseURL := s.cfg.LMStudio.BaseURL
+	s.cfgMu.Unlock()
+	proxyToken := ""
+	if base := s.chatProxyBaseURL(); base != "" && !isLocalRoute(effectiveRoute) {
+		proxyToken = newProxyToken()
+		s.registerPendingProxyToken(proxyToken)
+	}
+	if envPreset := EnvPresetForProxyWithOllamaBase(spec.Provider, effectiveRoute, s.chatProxyBaseURL(), proxyToken, ollamaBaseURL, lmStudioBaseURL); len(envPreset) > 0 {
+		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
+	}
+
+	var stdinNull, spawnLog *os.File
+	if f, devErr := os.OpenFile(os.DevNull, os.O_RDWR, 0); devErr == nil {
+		stdinNull = f
+		cmd.Stdin = stdinNull
+	}
+	spawnLogPath := filepath.Join(s.cfg.Hub.LogDir, "spawn", fmt.Sprintf("%s-%s.log", spec.Provider, time.Now().Format("20060102-150405.000")))
+	if err := os.MkdirAll(filepath.Dir(spawnLogPath), sessionlog.PrivateDirMode); err == nil {
+		if f, logErr := os.OpenFile(spawnLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, sessionlog.PrivateFileMode); logErr == nil {
+			spawnLog = f
+			cmd.Stdout = spawnLog
+			cmd.Stderr = spawnLog
+		}
+	}
+	setCmdSysProcAttr(cmd)
+	if err := cmd.Start(); err != nil {
+		if stdinNull != nil {
+			_ = stdinNull.Close()
+		}
+		if spawnLog != nil {
+			_ = spawnLog.Close()
+		}
+		return 0, err
+	}
+	s.safeGo("spawn_child_wait", func() {
+		_ = cmd.Wait()
+		if stdinNull != nil {
+			_ = stdinNull.Close()
+		}
+		if spawnLog != nil {
+			_ = spawnLog.Close()
+		}
+	})
+	if resolvedModel != "" && !isLocalRoute(effectiveRoute) {
+		_ = s.setLastModel(spec.Provider, resolvedModel)
+	}
+	return s.waitForSessionByLabel(spec.Label, wait)
+}
+
+func (s *Server) waitForSessionByLabel(label string, timeout time.Duration) (int, error) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		s.sessionsMu.Lock()
+		for id, ses := range s.sessions {
+			if ses.Label == label {
+				s.sessionsMu.Unlock()
+				return id, nil
+			}
+		}
+		s.sessionsMu.Unlock()
+		time.Sleep(100 * time.Millisecond)
+	}
+	return 0, context.DeadlineExceeded
+}
 
 func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {

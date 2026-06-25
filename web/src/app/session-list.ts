@@ -635,7 +635,8 @@ export function renderSessionList() {
       const c = document.createElement('div');
       const state = s.state || 'standby';
       const stateClass = (state === 'running' || state === 'waiting') ? ` ${state}` : '';
-      c.className = 'card' + stateClass + (s.id === activeSessionId ? ' active' : '');
+      const orchClass = s.parent_session_id ? ' orchestration-child' : (s.orchestration_id ? ' orchestration-parent' : '');
+      c.className = 'card' + stateClass + orchClass + (s.id === activeSessionId ? ' active' : '');
       c.tabIndex = isCollapsed ? -1 : 0;
       const label = stateLabel(state);
       const filteredMsg = filterFirstMessage(s.last_message || s.first_message || '');
@@ -646,6 +647,13 @@ export function renderSessionList() {
         : `<span class="card-msg"></span>`;
       const providerName = providerDisplayName(s.provider);
       const providerChipHtml = providerName ? `<span class="card-provider-chip ${safeClassToken(s.provider)}">${escapeHtml(providerName)}</span>` : '';
+      const roleLabel = s.role ? String(s.role) : (s.orchestration_id ? 'conductor' : '');
+      const roleHtml = roleLabel
+        ? `<span class="card-role-chip ${s.parent_session_id ? 'child' : 'parent'}" data-tooltip="${escapeHtml(s.parent_session_id ? `Parent #${s.parent_session_id}` : 'Orchestration conductor')}">${escapeHtml(roleLabel)}</span>`
+        : '';
+      const branchRoleHtml = s.worktree_branch
+        ? `<span class="card-worktree-chip" data-tooltip="${escapeHtml(s.worktree_branch)}">${escapeHtml(s.worktree_branch)}</span>`
+        : '';
       const isDeadState = state === 'error' || state === 'disconnected';
       let reasonText = '';
       if (isDeadState && s.end_reason) {
@@ -675,7 +683,7 @@ export function renderSessionList() {
       const branchLabel = branchStr || ti18n('card_branch_no_git', '(no git)');
       const branchBadge = ` <span class="card-branch" role="button" tabindex="0" data-sid="${s.id}"${branchDisabledAttr} data-tooltip="${escapeHtml(branchTip)}" aria-label="${escapeHtml(branchTip)}">${escapeHtml(branchLabel)}</span>`;
       // branch chip は title-row が混むため meta-row（2行目）の投稿指示テキスト末尾へ付ける。
-      const metaRow = `<div class="card-meta-row">${reasonHtml}${sessionLabel}${msgHtml}${branchBadge}</div>`;
+      const metaRow = `<div class="card-meta-row">${reasonHtml}${sessionLabel}${roleHtml}${msgHtml}${branchRoleHtml}${branchBadge}</div>`;
       // 状態 pill（ステータスバー .tsb-pill と同じ ●ドット付き形状）。並び順も下のバーに合わせ #N の直後に置く。
       const statePillHtml = ` <span class="card-state-pill ${safeClassToken(state)}"><span class="card-pdot"></span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
       // ライブ情報（ctx% / 応答経過 / 長時間バッジ）。中身が空なら hidden で行ごと隠す。

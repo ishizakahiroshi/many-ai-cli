@@ -707,6 +707,8 @@ header {
 .card.active::before  { background: var(--accent); opacity: 1; width: 5px; top: 4px; bottom: 4px; }
 .card-title-row { display: flex; align-items: center; gap: 2px; overflow: hidden; }
 .card-title-row > b { flex-shrink: 0; }
+.card.orchestration-child { border-left: 2px solid color-mix(in srgb, var(--accent) 65%, transparent); margin-left: 8px; }
+.card.orchestration-parent { border-left: 2px solid color-mix(in srgb, var(--warn) 70%, transparent); }
 /* 状態 pill（下のステータスバー .tsb-pill と同形状: ●ドット付き・丸み・同じ状態色）。 */
 .card-state-pill { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 0.62rem; font-weight: 700; padding: 1px 7px; border-radius: var(--radius-md); border: 1px solid transparent; line-height: 1.2; }
 .card-state-pill .card-pdot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
@@ -742,6 +744,21 @@ header {
 .card-branch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .card-branch[data-disabled="true"] { color: var(--muted); background: var(--bg-deep); border-color: var(--line); cursor: not-allowed; opacity: 0.6; }
 .card-branch[data-disabled="true"]:hover { background: var(--bg-deep); color: var(--muted); }
+.card-role-chip,
+.card-worktree-chip {
+  flex-shrink: 0;
+  max-width: 11ch;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-role-chip.parent { color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); }
+.card-role-chip.child { color: var(--accent-text); background: color-mix(in srgb, var(--accent) 16%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+.card-worktree-chip { max-width: 16ch; color: var(--green-text); background: color-mix(in srgb, var(--green-bg) 22%, transparent); border: 1px solid color-mix(in srgb, var(--green-text) 22%, transparent); font-family: Consolas, monospace; }
 
 /* カード右クリック context menu */
 .card-ctx-menu {

@@ -73,6 +73,7 @@ Gemini CLI is intentionally out of scope.
 - **Git view** — inspect branch history, commit details, changed files, diffs, fetch refs, and run `git pull --ff-only` without leaving the Hub
 - **Commit all** — stage all current working-tree changes and create a local commit after an explicit review step
 - **Workbench tab** — review stored session history, timeline events, summaries, redacted exports, prompt templates, task/policy notes, diagnostics, usage summaries, stale sessions, and worktree helpers
+- **Light orchestration API** — a conductor session can spawn child AI sessions, share `~/.many-ai-cli/orchestration/<id>/board.md`, and keep child work isolated in git worktrees by default
 - **File and image attach** — paste or drag-and-drop images and files into the terminal session
 - **Voice input** — dictate prompts through Browser recognition or local Whisper, with Windows x64 managed Whisper install
 - **PWA + opt-in Web Push** — install the Hub as a local web app and receive approval notifications after explicitly enabling push in Settings
@@ -80,6 +81,14 @@ Gemini CLI is intentionally out of scope.
 - **Server-side user preferences** — keep voice, notification, favorites, session order, spawn defaults, and avatar settings in `config.yaml`
 - **Spawn new sessions** from the UI (`/api/spawn`)
 - **Model picker with Ollama routing** — pick Anthropic / OpenAI / Ollama Cloud / Ollama Local models from the spawn form; the Hub auto-injects the right `ANTHROPIC_*` / `OPENAI_*` env vars per session, no shell setup required. If the Ollama daemon runs on another host, set `ollama.base_url` in `config.yaml`
+
+## Light orchestration
+
+`POST /api/sessions/:id/spawn-child` lets a conductor session create a child session with a role, provider, model, initial prompt, and optional cwd. The Hub creates `~/.many-ai-cli/orchestration/<orchestration_id>/board.md`, injects the board path into the child prompt, and watches the board for appended progress and `## DONE <role>` markers.
+
+By default, child sessions run in separate git worktrees under `.many-ai-cli/worktrees/<orchestration_id>/<role>` when the parent cwd is a git repository. The Hub does not auto-merge child branches; the conductor or user decides what to merge after reviewing the board and branch.
+
+Known limits: this is intentionally lightweight. Board changes are detected by polling, completion depends on the child writing `## DONE <role>`, and there is no job DAG, retry queue, or automatic merge.
 - **Unified launcher (Windows / Linux / macOS)** — `many-ai-cli-launcher` connects to a Hub via saved profiles and opens your default browser: SSH `serve` / `tunnel` profiles work on every OS, and WSL profiles start a Hub inside WSL on Windows
 - **Remote server / Docker deployment assets** — run one Hub container per user from GHCR with loopback-only port publishing and an opt-in auto-update script
 - **Clean transcript generation** — write readable `.txt` transcripts automatically, or regenerate them with `log-clean`
