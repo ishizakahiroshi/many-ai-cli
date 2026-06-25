@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/websocket"
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/proto"
-	"golang.org/x/net/websocket"
 )
 
 // newTestServer は最小構成の Server を返す。UI WebSocket が 0 件なので
@@ -29,6 +29,7 @@ func newTestServer() *Server {
 		usageLinkCache:      newUsageLinkCache(),
 		modelsCache:         &modelsCache{},
 		modelsRemoteCache:   newModelsRemoteCache(),
+		orchestration:       newOrchestrationManager(),
 	}
 }
 

@@ -89,6 +89,12 @@ export interface Message {
   label?: string;
   model?: string;
   route?: string;
+  parent_session_id?: number;
+  auto?: boolean;
+  depth?: number;
+  orchestration_id?: string;
+  board_path?: string;
+  worktree_branch?: string;
   first_message?: string;
   last_message?: string;
   inject?: string;
@@ -149,6 +155,13 @@ export interface SessionSnapshot {
   model?: string;
   route?: string;
   shell?: string;
+  parent_session_id?: number;
+  role?: string;
+  auto?: boolean;
+  depth?: number;
+  orchestration_id?: string;
+  board_path?: string;
+  worktree_branch?: string;
   state?: SessionState;
   last_output_at?: string;
   started_at?: string;

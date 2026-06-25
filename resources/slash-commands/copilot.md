@@ -35,6 +35,7 @@
 | `/mcp` | Manage MCP servers. | Inspect external tools connected to Copilot. |
 | `/model` | Select the model. | Switch model before continuing work. |
 | `/new` | Start a new session. | Reset conversation context. |
+| `/orchestrate` | Split work into child AI sessions using the Hub board API. | Coordinate design, implementation, and test workers from one conductor session. |
 | `/plan` | Enter planning mode. | Ask for a plan before implementation. |
 | `/plugin` | Manage plugins. | Inspect or configure plugin features. |
 | `/pr` | Work with pull requests. | Prepare or inspect PR-related changes. |

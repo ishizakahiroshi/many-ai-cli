@@ -437,6 +437,13 @@ export function _connectWs() {
     if (m.jsonl_path)      cur.jsonl_path      = m.jsonl_path;
     if (m.model !== undefined) cur.model       = m.model;
     if (m.route !== undefined) cur.route       = m.route;
+    if (m.parent_session_id !== undefined) cur.parent_session_id = m.parent_session_id;
+    if (m.role !== undefined) cur.role = m.role;
+    if (m.auto !== undefined) cur.auto = m.auto;
+    if (m.depth !== undefined) cur.depth = m.depth;
+    if (m.orchestration_id !== undefined) cur.orchestration_id = m.orchestration_id;
+    if (m.board_path !== undefined) cur.board_path = m.board_path;
+    if (m.worktree_branch !== undefined) cur.worktree_branch = m.worktree_branch;
     // C3: git 変更状況は git_checked=true のメッセージでのみ更新する
     // （通常の session_update では 0 を omitempty で送らないため、ここで上書きしない）。
     if (m.git_checked) {

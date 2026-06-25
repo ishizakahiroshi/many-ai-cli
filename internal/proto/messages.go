@@ -75,6 +75,14 @@ type Message struct {
 	// env preset 注入に使う。未指定なら model 名から推定する。
 	Route string `json:"route,omitempty"`
 
+	// Lightweight orchestration metadata.
+	ParentSessionID int    `json:"parent_session_id,omitempty"`
+	Auto            bool   `json:"auto,omitempty"`
+	Depth           int    `json:"depth,omitempty"`
+	OrchestrationID string `json:"orchestration_id,omitempty"`
+	BoardPath       string `json:"board_path,omitempty"`
+	WorktreeBranch  string `json:"worktree_branch,omitempty"`
+
 	// FirstMessage: セッション内で最初に確定されたユーザー入力（UI カード表示用）。
 	FirstMessage string `json:"first_message,omitempty"`
 
