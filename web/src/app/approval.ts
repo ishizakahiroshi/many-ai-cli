@@ -1405,6 +1405,16 @@ export function activateSingleFree(sessionId) {
   if (bar) showActionBar(bar, sessionId, cached); // router 経由で 1 セクションへ再変換
 }
 
+// 単一質問の自由入力テキストを外部から取得・保存するためのアクセサ。
+// mobile-home.ts のインライン自由入力 UI が再描画を跨いで値を維持するために使う
+// （PC 版 action-bar と同じ singleFreeText Map を共有する）。
+export function getSingleFreeText(sessionId: number): string {
+  return singleFreeText.get(sessionId) || '';
+}
+export function setSingleFreeText(sessionId: number, text: string): void {
+  singleFreeText.set(sessionId, text);
+}
+
 // 自由入力テキストをそのまま送信する（確認モーダルなし）。送信後は UI を消して会話へ戻る。
 export function sendSingleFreeText(sessionId) {
   const text = (singleFreeText.get(sessionId) || '').trim();

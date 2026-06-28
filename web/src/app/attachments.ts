@@ -13,6 +13,9 @@ export const attachDropZone = document.getElementById('attach-drop-zone');
 export const attachFileInput = document.getElementById('attach-file-input');
 export const attachThumbnails = document.getElementById('attach-thumbnails');
 export const attachClearBtn = document.getElementById('attach-clear-btn');
+// B2: スマホ専用カメラ撮影 input/btn（PC は CSS で非表示）。
+export const attachCameraBtn = document.getElementById('attach-camera-btn');
+export const attachCameraInput = document.getElementById('attach-camera-input');
 export const pendingAttachFiles = []; // {buf, filename, entry, wrapper} — ステージング済み未送信ファイル
 export const MAX_ATTACH_BYTES = 8 * 1024 * 1024;
 
@@ -86,6 +89,18 @@ if (attachFileInput) {
       else stageFileAttach(file);
     }
     attachFileInput.value = '';
+  });
+}
+
+// B2: スマホからの「📷 撮影」ボタン → カメラ起動 input.click()。
+// クリップボード画像と同じ normalize:true ルートで PNG 圧縮してから添付する。
+if (attachCameraBtn && attachCameraInput) {
+  attachCameraBtn.addEventListener('click', () => attachCameraInput?.click());
+  attachCameraInput.addEventListener('change', () => {
+    for (const file of attachCameraInput.files ?? []) {
+      if (isImageFile(file)) stageAttach(file, { normalize: true });
+    }
+    attachCameraInput.value = '';
   });
 }
 

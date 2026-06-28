@@ -770,6 +770,29 @@ body.pc-input-tools-off #input-tools { display: none; }
   font-size: 12px;
   line-height: 1.5;
 }
+/* A4: サマリ表示時は省略行マーカーをぼかして区別する。 */
+.expand-popup-content--summarized {
+  border-radius: 0;
+}
+/* A4: 「全文を見る」ボタン。サマリ表示の下端に出る。 */
+.expand-popup-show-full {
+  display: block;
+  margin: 0;
+  padding: 10px 12px;
+  width: 100%;
+  background: var(--bg-elev);
+  border: none;
+  border-top: 1px solid var(--line-soft);
+  border-radius: 0 0 6px 6px;
+  color: var(--accent, #2563eb);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+}
+.expand-popup-show-full:hover {
+  background: var(--bg-hover, rgba(255,255,255,0.06));
+}
 
 /* ─── 選択範囲コピーの右クリックメニュー ─── */
 .term-ctx-menu {

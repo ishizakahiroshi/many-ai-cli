@@ -832,6 +832,10 @@
     <div id="mobile-drawer-backdrop" hidden></div>
     <button id="mobile-spawn-btn" type="button" aria-label="New Session">+</button>
     <button id="mobile-back-btn" type="button" aria-label="Back to sessions" hidden>← <span data-i18n="mobile_back">Back</span></button>
+    <!-- A2/Q8: スワイプは採用しない決定（plan_mobile-ui-v0.4-scope.md C6 / Q8）。
+         代替として個別セッションビューでのみ表示する前後セッション送りボタンを置く。 -->
+    <button id="mobile-prev-btn" type="button" aria-label="Previous session" data-i18n-tooltip="mobile_prev_tooltip">◀</button>
+    <button id="mobile-next-btn" type="button" aria-label="Next session" data-i18n-tooltip="mobile_next_tooltip">▶</button>
     <section id="mobile-home" hidden aria-label="All sessions"></section>
     <aside id="session-list">
       <div id="new-session-bar">
@@ -1149,6 +1153,11 @@
             <span class="attach-sub" data-i18n="attach_sub">(Click to select file)</span>
           </div>
           <input type="file" id="attach-file-input" multiple style="display:none">
+          <!-- B2: スマホ専用カメラ撮影 input。accept="image/*" capture="environment" で
+               iOS Safari / Android Chrome ともにカメラ起動を優先させる。
+               PC では非表示（mobile-home.css の @media クエリで attach-camera-btn のみ表示する）。 -->
+          <input type="file" id="attach-camera-input" accept="image/*" capture="environment" style="display:none">
+          <button id="attach-camera-btn" type="button" data-i18n-tooltip="attach_camera_tooltip" aria-label="Camera">📷</button>
           <div id="attach-thumbnails"></div>
           <button id="attach-clear-btn" data-i18n-tooltip="attach_clear_tooltip" hidden>✕</button>
         </div>

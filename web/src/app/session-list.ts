@@ -102,6 +102,11 @@ export function activateSession(id) {
   set_activeSessionId(id);
   if (typeof window.syncMobileLayoutState === 'function') window.syncMobileLayoutState();
   if (typeof window.closeMobileSessionDrawer === 'function') window.closeMobileSessionDrawer();
+  // A3: スマホ簡易ターミナル（直近 N 行 pre）を即時更新。
+  // 1 秒間隔の定期更新を待たず、セッション切替直後に新セッションのバッファを描く。
+  if (typeof (window as any).refreshMobileTerminalLite === 'function') {
+    (window as any).refreshMobileTerminalLite();
+  }
   restoreInputStateFor(id);
   // files/git 表示からセッションカードへ戻る場合、先にターミナルを表示してから
   // attach/fit/detect しないと、承認 UI 検出と最下部スナップが hidden レイアウトを基準に走る。
