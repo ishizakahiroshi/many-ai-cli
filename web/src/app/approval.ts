@@ -1702,6 +1702,14 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   }
   lastActionBarRender.sessionId = sessionId;
   lastActionBarRender.sig = sig;
+  // 再描画前に質問タブ列の横スクロール位置を覚えておき、再構築後に復元する。
+  // これをしないとタブクリックで再描画が走るたびに scrollLeft が 0 に戻り、
+  // ユーザーがスクロールして表示していた右側のタブ（例: Q6 をクリックしたら Q1 へ戻る）に
+  // 強制的に巻き戻ってしまう。
+  const prevTabsScrollLeft = (() => {
+    const prev = bar.querySelector('.action-qtabs') as HTMLElement | null;
+    return prev ? prev.scrollLeft : 0;
+  })();
   bar.innerHTML = '';
   bar.classList.remove('single-tabs', 'multi-select');
   bar.classList.add('batch');
@@ -1737,6 +1745,21 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
     tabsEl.appendChild(tab);
   });
   bar.appendChild(tabsEl);
+  // 再描画前の横スクロール位置を復元してからアクティブタブを可視範囲に入れる。
+  // クリックは可視範囲内のタブを押したケースなので scrollLeft 復元だけで足り、
+  // キーボード（← →）で画面外へ進めた場合だけ scrollIntoView が必要分だけ動かす。
+  tabsEl.scrollLeft = prevTabsScrollLeft;
+  requestAnimationFrame(() => {
+    const active = tabsEl.querySelector('.action-qtab.active') as HTMLElement | null;
+    if (!active) return;
+    // scrollIntoView は親 bar / ページ全体まで動かしてしまうので、tabsEl 内で手動補正する。
+    const tabLeft = active.offsetLeft;
+    const tabRight = tabLeft + active.offsetWidth;
+    const viewLeft = tabsEl.scrollLeft;
+    const viewRight = viewLeft + tabsEl.clientWidth;
+    if (tabLeft < viewLeft) tabsEl.scrollLeft = tabLeft;
+    else if (tabRight > viewRight) tabsEl.scrollLeft = tabRight - tabsEl.clientWidth;
+  });
 
   // ===== アクティブ質問のパネル（選択肢 + 詳細 + 自由入力） =====
   const pane = document.createElement('div');
