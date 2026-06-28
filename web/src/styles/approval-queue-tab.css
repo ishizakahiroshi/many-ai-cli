@@ -221,6 +221,9 @@
   text-align: left;
   word-break: break-word;
 }
+/* 既定（PC）は従来の「N. label」テキスト表示を span 構造で再現する。
+   スマホでは mobile-home.css 側で丸バッジに override する（Q1 番号併記の視覚スタイル）。 */
+.aqt-option-btn .aqt-option-num::after { content: ". "; white-space: pre; }
 .aqt-option-btn:hover:not(:disabled) {
   background: var(--bg-hover);
   border-color: var(--accent);

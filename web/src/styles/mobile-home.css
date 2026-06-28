@@ -230,6 +230,40 @@
     min-height: 48px;
     padding: 12px 14px;
     font-size: 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* 番号を丸バッジ化（mockup S-06 の <span class="n">N</span> に相当・Q1 視覚スタイル）。
+     PC 側 .aqt-option-num::after の ". " もここで打ち消す。 */
+  .mh-options .aqt-option-btn .aqt-option-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--bg-elev3, rgba(255, 255, 255, 0.08));
+    color: var(--text);
+    font-size: 0.72rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+  .mh-options .aqt-option-btn .aqt-option-num::after { content: none; }
+  .mh-options .aqt-option-btn .aqt-option-label {
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+  }
+  .mh-options .aqt-option-btn.is-current .aqt-option-num {
+    background: color-mix(in srgb, var(--warn) 35%, transparent);
+    color: var(--warn-text);
+  }
+  .mh-options .aqt-option-btn.chosen .aqt-option-num {
+    background: color-mix(in srgb, var(--green) 30%, transparent);
+    color: var(--green);
   }
 
   /* ── fallback（batch / multiQ） ── */
