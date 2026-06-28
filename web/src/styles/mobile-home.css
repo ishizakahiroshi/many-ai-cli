@@ -1,7 +1,21 @@
 /* mobile-home.css
  * スマホホーム画面（#mobile-home）専用スタイル。
- * 全ルールを @media (max-width: 720px) 内に閉じ込める（PC への影響ゼロ）。
+ * 大部分のルールは @media (max-width: 720px) 内に閉じ込めている（PC への影響ゼロ）。
+ * 例外: スマホ機能要素を PC で確実に隠すための既定ルールは @media 外に置く。
  */
+
+/* B2: スマホ専用「📷 撮影」ボタンは PC で常に非表示にしておき、
+   下の @media (max-width: 720px) で display: inline-flex に上書きする。 */
+#attach-camera-btn { display: none; }
+
+/* A2/Q8: スマホ前後セッション送り（◀ ▶）も PC では非表示。
+   @media (max-width: 720px) + body.mobile-has-session で位置付きで表示する。 */
+#mobile-prev-btn,
+#mobile-next-btn { display: none; }
+
+/* A3: 簡易ターミナルビュー（mobile-terminal-lite.ts）は PC では非表示。
+   @media (max-width: 720px) + body.mobile-has-session で xterm を置き換える形で表示する。 */
+#mobile-terminal-lite { display: none; }
 
 @media (max-width: 720px) {
   /* ── ホーム画面コンテナ ── */
@@ -45,6 +59,40 @@
   body.mobile-has-session:not(.mobile-home-view) #mobile-back-btn {
     display: inline-flex;
     align-items: center;
+  }
+
+  /* A2/Q8: 前後セッション送りボタンは個別セッションビューでのみ表示し、
+     画面右上の固定位置（ハンバーガーの左隣）に並べる。 */
+  #mobile-prev-btn,
+  #mobile-next-btn {
+    position: fixed;
+    top: 6px;
+    z-index: 1100;
+    width: 38px;
+    height: 36px;
+    padding: 0;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    color: var(--text);
+    font-size: 0.95rem;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+  }
+  body.mobile-has-session:not(.mobile-home-view) #mobile-prev-btn {
+    display: inline-flex;
+    right: 90px;
+  }
+  body.mobile-has-session:not(.mobile-home-view) #mobile-next-btn {
+    display: inline-flex;
+    right: 48px;
+  }
+  /* セッションが 1 件以下なら前後送りを薄くして無効感を出す（クリックは JS 側で抑止）。 */
+  body.mobile-only-one-session #mobile-prev-btn,
+  body.mobile-only-one-session #mobile-next-btn {
+    opacity: 0.35;
+    pointer-events: none;
   }
 
   /* ── ハンバーガーバッジ ── */
@@ -273,6 +321,148 @@
     font-style: italic;
   }
 
+  /* ── A1: 自由入力インライン（N. User specifies） ── */
+  .mh-free-input {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+    align-items: stretch;
+  }
+  .mh-free-input-field {
+    flex: 1;
+    min-height: 44px;
+    padding: 10px 12px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    color: var(--text);
+    font-size: 0.9rem;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .mh-free-input-field::placeholder {
+    color: var(--muted);
+  }
+  .mh-free-input-send {
+    min-height: 44px;
+    padding: 0 14px;
+    background: var(--accent, #2563eb);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    color: #fff;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .mh-free-input-send:active {
+    filter: brightness(0.9);
+  }
+
+  /* ── A3: 簡易ターミナルビュー ── */
+  /* xterm.js のフル描画は狭い画面で読みづらいため、個別セッション + mobile 幅では
+     #terminal-area-wrapper を hidden にして #mobile-terminal-lite (直近 N 行の pre) を出す。
+     xterm.js 自身は document に attach されたまま生きているので承認検出・PTY 受信は続く。 */
+  body.mobile-has-session:not(.mobile-home-view) #terminal-area-wrapper {
+    display: none !important;
+  }
+  body.mobile-has-session:not(.mobile-home-view) #mobile-terminal-lite {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    background: var(--bg-deep, #0d1117);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .mtl-pre {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 6px 8px;
+    margin: 0;
+    color: #d8d8d8;
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: 12.5px;
+    line-height: 1.45;
+    /* 折り返さず横スクロール（プラン C2 / A3 ポイント）。 */
+    white-space: pre;
+    word-break: normal;
+  }
+  .mtl-detail-btn {
+    flex-shrink: 0;
+    padding: 10px 12px;
+    margin: 0;
+    background: var(--bg-elev, rgba(255,255,255,0.04));
+    border: none;
+    border-top: 1px solid var(--line);
+    color: var(--accent, #2563eb);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    min-height: 44px;
+  }
+  .mtl-detail-btn:active {
+    background: var(--bg-hover, rgba(255,255,255,0.08));
+  }
+
+  /* 「詳細を見る」モーダル（PTY バッファ全行を全画面 pre で表示）。 */
+  .mtl-detail-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9500;
+    background: rgba(0,0,0,0.78);
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+  }
+  .mtl-detail-box {
+    background: var(--bg);
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .mtl-detail-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-elev);
+    color: var(--text);
+    flex-shrink: 0;
+  }
+  .mtl-detail-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+  .mtl-detail-close {
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    width: 36px;
+    height: 36px;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  .mtl-detail-pre {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 8px 10px;
+    margin: 0;
+    color: #d8d8d8;
+    background: var(--bg-deep, #0d1117);
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: 12.5px;
+    line-height: 1.45;
+    white-space: pre;
+    word-break: normal;
+  }
+
   /* ── empty state ── */
   .mh-empty {
     display: flex;
@@ -282,5 +472,27 @@
     color: var(--muted);
     font-size: 0.9rem;
     text-align: center;
+  }
+
+  /* B2: スマホ専用「📷 撮影」ボタン（attach-panel 内）。
+     PC では @media 外の既定で display:none、ここで mobile 幅のみ表示に上書きする。
+     attach-drop-zone（📎 ファイル選択）と並べる形でカメラ起動を 1 タップで提供する。 */
+  #attach-camera-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    margin-left: 6px;
+    padding: 0 10px;
+    background: var(--bg-elev2, rgba(255,255,255,0.06));
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    color: var(--text);
+    font-size: 1.1rem;
+    cursor: pointer;
+  }
+  #attach-camera-btn:active {
+    background: var(--bg-hover, rgba(255,255,255,0.12));
   }
 }

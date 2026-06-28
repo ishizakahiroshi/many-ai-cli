@@ -75,6 +75,7 @@ declare global {
     closeMobileSessionDrawer?: () => void;
     renderMobileHome?: () => void;
     updateMobileHomeCard?: (id: number) => void;
+    refreshMobileTerminalLite?: () => void;
     _c5SidebarUpdating?: boolean;
 
     approvalParser?: any;

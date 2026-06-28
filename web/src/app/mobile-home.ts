@@ -8,6 +8,9 @@ import { activateSession, providerIconHtml, stateLabel, safeClassToken } from '.
 import { filterFirstMessage } from './settings.js';
 import { isBatchOptions, isMultiSelectOptions } from './approval-parser.js';
 import { sessionTitle, approvalQuestionContext, renderOptionButtons, pendingSessionIds } from './approval-queue-tab.js';
+// A1: 単一質問の「N. User specifies」自由入力をスマホカード内インラインで完結させる。
+// PC 版 action-bar と同じ singleFreeText Map を共有し、Enter or 送信ボタンで PTY へ送る。
+import { getSingleFreeText, setSingleFreeText, sendSingleFreeText } from './approval.js';
 
 // スマホ幅判定の単一情報源（このモジュール内のみ使用）
 const mobileMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
@@ -95,6 +98,42 @@ function buildCard(id: number): HTMLElement {
       optContainer.className = 'mh-options';
       renderOptionButtons(optContainer, id, options);
       card.appendChild(optContainer);
+
+      // A1: 「N. User specifies」が許容されている質問は、選択肢の下にインライン入力欄を出す。
+      // approval-parser が options 配列に _freeInput=true を付ける（_freeInput は配列プロパティ）。
+      if ((options as any)._freeInput) {
+        const freeWrap = document.createElement('div');
+        freeWrap.className = 'mh-free-input';
+
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.className = 'mh-free-input-field';
+        inp.placeholder = t('approval_free_input_placeholder');
+        inp.value = getSingleFreeText(id);
+        // カードクリックでセッション切替が走らないように propagation を止める。
+        inp.addEventListener('click', (e) => e.stopPropagation());
+        inp.addEventListener('input', () => setSingleFreeText(id, inp.value));
+        inp.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !(e as any).isComposing && !e.shiftKey) {
+            e.preventDefault();
+            e.stopPropagation();
+            sendSingleFreeText(id);
+          }
+        });
+
+        const sendBtn = document.createElement('button');
+        sendBtn.type = 'button';
+        sendBtn.className = 'mh-free-input-send';
+        sendBtn.textContent = t('send');
+        sendBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          sendSingleFreeText(id);
+        });
+
+        freeWrap.appendChild(inp);
+        freeWrap.appendChild(sendBtn);
+        card.appendChild(freeWrap);
+      }
     }
   }
 

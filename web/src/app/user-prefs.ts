@@ -37,6 +37,9 @@ export const STORAGE_QUICK_CMD_5_SHOW_KEY     = 'ai_cli_hub_quick_cmd_5_show';
 export const STORAGE_TOOLS_LEFT_KEY           = 'ai_cli_hub_tools_left';
 export const STORAGE_PC_INPUT_TOOLS_KEY       = 'ai_cli_hub_pc_input_tools';
 export const STORAGE_MOBILE_INPUT_TOOLS_KEY   = 'ai_cli_hub_mobile_input_tools';
+// スマホ入力欄の placeholder に「OS キーボードの🎤から音声入力」ヒントを初回のみ表示するためのフラグ。
+// 1 = 既に表示済み（以降は出さない）。一度フォーカス＋送信完了で立つ。
+export const STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY = 'ai_cli_hub_mobile_voice_hint_shown';
 export const STORAGE_USAGE_LINK_CLAUDE_KEY    = 'ai_cli_hub_usage_link_claude';
 export const STORAGE_USAGE_LINK_CODEX_KEY     = 'ai_cli_hub_usage_link_codex';
 export const STORAGE_USAGE_LINK_COPILOT_KEY   = 'ai_cli_hub_usage_link_copilot';
@@ -215,6 +218,7 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'approval.auto_switch':      [STORAGE_APPROVAL_AUTO_SWITCH_KEY,  (v) => v ? '1' : '0'],
   'pc.input_tools_enabled':     [STORAGE_PC_INPUT_TOOLS_KEY,       (v) => v ? '1' : '0'],
   'mobile.input_tools_enabled': [STORAGE_MOBILE_INPUT_TOOLS_KEY,   (v) => v ? '1' : '0'],
+  'mobile.voice_hint_shown':    [STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, (v) => v ? '1' : '0'],
   'spawn.defaults':            [STORAGE_SPAWN_KEY,                 JSON.stringify],
   'display.locked_mode':       [STORAGE_DISPLAY_LOCKED_MODE_KEY,   (v) => (v == null || v === '') ? '' : String(v)],
   'display.theme':             [STORAGE_THEME_KEY,                 String],

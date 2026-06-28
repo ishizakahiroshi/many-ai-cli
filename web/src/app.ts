@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from './i18n.js';
 import { cleanCopiedText, showToast, token } from './app/util.js';
-import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
+import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
 import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, answeredMarkerSigs, recordAnsweredMarkerSig, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { orderSessions } from './app/state.js';
@@ -18,6 +18,7 @@ import { FilesTabManager } from './app/files-view.js';
 import { getExposeStatus, fetchExposeStatus, disableExpose } from './app/host-expose.js';
 import './app/detached-grid-launcher.js';
 import './app/mobile-home.js';
+import './app/mobile-terminal-lite.js';
 
 export let _userAvatarUrl = '';
 export let _userDisplayName = '';
@@ -75,13 +76,29 @@ export function isActiveSessionRunning() {
   return !!s && s.state === 'running';
 }
 
+// B1a: スマホ幅判定の単一情報源。OS キーボードの🎤誘導 placeholder の表示判定にだけ使う。
+const _mobileVoiceHintMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
+  ? window.matchMedia('(max-width: 720px)') : null;
+function shouldShowMobileVoiceHintPlaceholder(): boolean {
+  if (!_mobileVoiceHintMql?.matches) return false;
+  try { return localStorage.getItem(STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY) !== '1'; }
+  catch (_) { return false; }
+}
+
 // 実行中状態に応じて入力欄プレースホルダと送信ボタンの見た目／挙動を再評価する。
 // WS の state 更新・セッション切替・i18n 適用後にこれを呼ぶことで停止導線を同期する。
 export function updateInputAffordance() {
   const running = isActiveSessionRunning();
   // C1: 実行中は「Esc で停止」、それ以外は通常文言。data-i18n-placeholder の自動適用と
   // 競合しないよう、running 状態を見て JS から明示的に上書きする。
-  inputEl.placeholder = running ? t('input_placeholder_running') : t('input_placeholder');
+  // B1a: 実行中でなく・スマホ幅で・初回ヒント未表示なら、音声入力ヒントを出す（Q12 決定）。
+  if (running) {
+    inputEl.placeholder = t('input_placeholder_running');
+  } else if (shouldShowMobileVoiceHintPlaceholder()) {
+    inputEl.placeholder = t('mobile_voice_hint_placeholder');
+  } else {
+    inputEl.placeholder = t('input_placeholder');
+  }
   // C2: 実行中でも入力欄にテキスト/チップ/ファイルがあれば ➤（送信）のまま。
   // 入力が空の場合のみ ■（停止）に切替える。ペースト・ファイル添付直後に送信できずもっさりする問題を解消。
   const hasContent = inputEl.value.length > 0 || pastedTexts.length > 0 || pendingAttachFiles.length > 0;
@@ -351,6 +368,12 @@ export async function doSend(sessionId) {
     scrollChatPaneToBottomSoon({ passes: 4, startedAt: Date.now() });
   }
   sendSubmittedText(sessionId, textToSend);
+  // B1a: スマホ幅で音声入力 placeholder を 1 回でも見せたユーザーが送信を完了した時点で
+  // hint shown フラグを立て、以降は通常 placeholder に戻す（一度の認知で十分）。
+  if (shouldShowMobileVoiceHintPlaceholder()) {
+    setUserPref('mobile.voice_hint_shown', true);
+    updateInputAffordance();
+  }
   // Codex/OpenCode は大きいペーストを無出力で即プレースホルダ化するため、確定 \r の最低待機を
   // 長めに取り早撃ち（\r 吸収による送信不発）を防ぐ。他 provider は既定値で挙動不変。
   const enterMinWait = deferredEnterMinWaitFor(sessions.get(sessionId)?.provider || '');
@@ -866,6 +889,9 @@ for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
 export function syncMobileLayoutState() {
   const hasSession = activeSessionId !== null && sessions.size > 0;
   document.body.classList.toggle('mobile-has-session', hasSession);
+  // A2: セッション数 1 件以下の時は前後送り (◀ ▶) を無効状態として薄く表示する。
+  // mobile-home.css の body.mobile-only-one-session ルールで opacity と pointer-events を制御。
+  document.body.classList.toggle('mobile-only-one-session', sessions.size <= 1);
   // スマホホーム画面: セッションが選択されていない場合はホームビューを表示
   const isMobile = window.matchMedia('(max-width: 720px)').matches;
   document.body.classList.toggle('mobile-home-view', isMobile && !hasSession);
@@ -979,6 +1005,17 @@ window.closeMobileSessionDrawer = closeMobileSessionDrawer;
     closeMobileSessionDrawer();
     syncMobileLayoutState();
     window.renderMobileHome?.();
+  });
+
+  // A2/Q8: 個別セッション画面の前後セッション送り。switchSessionByTab(true=前 / false=次)。
+  // スワイプジェスチャを採用しない代わりに、明示ボタンで前後セッションへ移動する。
+  document.getElementById('mobile-prev-btn')?.addEventListener('click', () => {
+    if (sessions.size <= 1) return;
+    switchSessionByTab(true);
+  });
+  document.getElementById('mobile-next-btn')?.addEventListener('click', () => {
+    if (sessions.size <= 1) return;
+    switchSessionByTab(false);
   });
 
   // ビューポート幅変化（スマホ↔PC 切替）で DOM 状態を再同期
