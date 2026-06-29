@@ -18,6 +18,40 @@ import { scanBuffer } from './terminal.js';
 // 既定 N（プラン推奨値）。設定 UI は v0.4.1。
 const DEFAULT_TAIL_LINES = 40;
 
+// C3: スマホでは可視行数が稼げないため、CLI の装飾出力 (連続空行・水平線) を畳んで密度を上げる。
+//   - 2 行以上連続する空行は 1 行に集約 (まず情報量を残す方向で 2 行→ 1 行から始める)
+//   - 連続する水平線 (`_`, `-`, `─`, `=`, `*` のみで構成) は 1 本に集約
+// xterm.js のスクロールバックは触らず、表示用バッファだけ整形する。
+const _RULE_RE = /^[\s_\-─=*]+$/;
+function _isRuleLine(s: string): boolean {
+  const t2 = s.trim();
+  return t2.length >= 3 && _RULE_RE.test(t2);
+}
+function collapseDecorations(lines: string[]): string[] {
+  const out: string[] = [];
+  let blankRun = 0;
+  let prevRule = false;
+  for (const raw of lines) {
+    const isBlank = raw.trim() === '';
+    if (isBlank) {
+      blankRun++;
+      if (blankRun === 1) out.push(raw); // 最初の 1 行は残す
+      prevRule = false;
+      continue;
+    }
+    blankRun = 0;
+    if (_isRuleLine(raw)) {
+      if (prevRule) continue; // 連続水平線は 1 本に集約
+      prevRule = true;
+      out.push(raw);
+      continue;
+    }
+    prevRule = false;
+    out.push(raw);
+  }
+  return out;
+}
+
 // スマホ幅判定（モジュール内のみ使用）。
 const _mtlMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
   ? window.matchMedia('(max-width: 720px)') : null;
@@ -34,18 +68,22 @@ function getOrCreateLiteContainer(): HTMLElement | null {
   el = document.createElement('div');
   el.id = 'mobile-terminal-lite';
 
+  // C4: 「詳細を見る (全画面)」を中央配置の幅広ボタンから、ターミナル右上の小さなアイコンに変更。
+  // ターミナル本文と入力欄の間にあった大きなボタン帯を撤去して視線の流れを途切れさせない。
+  const detailBtn = document.createElement('button');
+  detailBtn.id = 'mobile-terminal-lite-detail';
+  detailBtn.type = 'button';
+  detailBtn.className = 'mtl-detail-icon';
+  detailBtn.textContent = '⛶';
+  detailBtn.title = t('mobile_terminal_lite_show_detail');
+  detailBtn.setAttribute('aria-label', t('mobile_terminal_lite_show_detail'));
+  detailBtn.addEventListener('click', openDetailModal);
+  el.appendChild(detailBtn);
+
   const pre = document.createElement('pre');
   pre.id = 'mobile-terminal-lite-pre';
   pre.className = 'mtl-pre';
   el.appendChild(pre);
-
-  const detailBtn = document.createElement('button');
-  detailBtn.id = 'mobile-terminal-lite-detail';
-  detailBtn.type = 'button';
-  detailBtn.className = 'mtl-detail-btn';
-  detailBtn.textContent = t('mobile_terminal_lite_show_detail');
-  detailBtn.addEventListener('click', openDetailModal);
-  el.appendChild(detailBtn);
 
   // terminal-area-wrapper の直後に挿入（同じ階層）。CSS で個別セッション + mobile 幅時のみ表示。
   wrapper.appendChild(el);
@@ -61,9 +99,14 @@ export function refreshMobileTerminalLite(): void {
   if (!el) return;
   const pre = el.querySelector<HTMLElement>('#mobile-terminal-lite-pre');
   if (!pre) return;
-  const lines = scanBuffer(activeSessionId, DEFAULT_TAIL_LINES);
-  // 末尾の空行を削って密度を上げる（PTY バッファは末尾が空行で埋まりがち）。
-  while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
+  // C3: 末尾余裕を見て多めに取り、collapse 後に末尾 N 行へ切る。
+  //   scanBuffer(N) だと collapse で行数が減ったとき表示が痩せる。
+  const raw = scanBuffer(activeSessionId, DEFAULT_TAIL_LINES * 2);
+  while (raw.length > 0 && raw[raw.length - 1].trim() === '') raw.pop();
+  const collapsed = collapseDecorations(raw);
+  const lines = collapsed.length > DEFAULT_TAIL_LINES
+    ? collapsed.slice(collapsed.length - DEFAULT_TAIL_LINES)
+    : collapsed;
   pre.textContent = lines.join('\n');
   // 末尾追従。
   pre.scrollTop = pre.scrollHeight;
@@ -73,6 +116,7 @@ export function refreshMobileTerminalLite(): void {
 function openDetailModal(e?: Event): void {
   if (e) e.stopPropagation();
   if (activeSessionId === null) return;
+  // 詳細モーダルは「全行を確認できる」が目的なので collapse は適用しない（生のログを保つ）。
   const allLines = scanBuffer(activeSessionId);
   while (allLines.length > 0 && allLines[allLines.length - 1].trim() === '') allLines.pop();
 

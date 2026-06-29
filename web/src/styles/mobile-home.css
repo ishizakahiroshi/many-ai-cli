@@ -374,6 +374,8 @@
     background: var(--bg-deep, #0d1117);
     border-radius: var(--radius-md);
     overflow: hidden;
+    /* C4: 詳細ボタンをアイコン化してターミナル右上に絶対配置するためのアンカー。 */
+    position: relative;
   }
   .mtl-pre {
     flex: 1 1 auto;
@@ -389,22 +391,36 @@
     white-space: pre;
     word-break: normal;
   }
-  .mtl-detail-btn {
-    flex-shrink: 0;
-    padding: 10px 12px;
+  /* C4: 詳細を見る (全画面) — 中央配置の幅広ボタンからターミナル右上の小さなアイコンへ変更。
+     幅広ボタンがあった頃はターミナル本文と入力欄の間に大きな帯ができ視線の流れが切れていた。 */
+  .mtl-detail-icon {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    z-index: 2;
+    width: 32px;
+    height: 32px;
+    padding: 0;
     margin: 0;
-    background: var(--bg-elev, rgba(255,255,255,0.04));
-    border: none;
-    border-top: 1px solid var(--line);
-    color: var(--accent, #2563eb);
-    font-size: 0.85rem;
-    font-weight: 600;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm, 6px);
+    color: #d8d8d8;
+    font-size: 14px;
+    line-height: 1;
     cursor: pointer;
-    text-align: center;
-    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
   }
-  .mtl-detail-btn:active {
-    background: var(--bg-hover, rgba(255,255,255,0.08));
+  .mtl-detail-icon:hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+  }
+  .mtl-detail-icon:active {
+    background: rgba(255, 255, 255, 0.20);
   }
 
   /* 「詳細を見る」モーダル（PTY バッファ全行を全画面 pre で表示）。 */
