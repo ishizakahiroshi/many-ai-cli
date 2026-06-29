@@ -20,6 +20,11 @@
   bottom: 0;
   left: 0;
   right: 0;
+  /* iOS Safari の下部ナビ・ホームインジケータと重ならないようにセーフエリア分だけ
+     高さを伸ばし、内容は上端側へ寄せる（既存セグメントの位置は変えない）。 */
+  height: calc(22px + env(safe-area-inset-bottom));
+  min-height: calc(22px + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* セグメント共通 */
