@@ -969,10 +969,25 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 
     let html = '';
 
-    // chip 行（roots がある場合のみ）。
+    // chip 行（roots がある場合のみ）。launcher chip 1 個に圧縮し hover/click で popover を開く。
     if (hasRoots) {
       const chipsClass = noMatch ? 'cwd-dropdown-chips has-no-match' : 'cwd-dropdown-chips';
-      let chipsHtml = `<li class="${chipsClass}" aria-hidden="true">`;
+      // active root と合計件数を集計。launcher の表示に使う。
+      let activeRoot: string | null = null;
+      let totalCount = 0;
+      for (const [shortName, rootPath] of roots) {
+        if (isChipActive(shortName)) activeRoot = shortName;
+        totalCount += countForRoot(shortName, rootPath);
+      }
+      const launcherInner = activeRoot
+        ? `${escapeHtml(activeRoot)}:`
+        : `<span class="chip-count">${totalCount}</span>`;
+      let chipsHtml = `<li class="${chipsClass}">` +
+        `<div class="cwd-dropdown-chip-collapsed">` +
+        `<button class="cwd-dropdown-chip-launcher${activeRoot ? ' is-active' : ''}" type="button" aria-haspopup="true">` +
+        `<span class="chip-icon" aria-hidden="true">🗂</span> ${launcherInner} <span class="chip-caret" aria-hidden="true">▾</span>` +
+        `</button>` +
+        `<div class="cwd-dropdown-chip-popover" role="menu">`;
       for (const [shortName, rootPath] of roots) {
         const count = countForRoot(shortName, rootPath);
         const activeClass = isChipActive(shortName) ? ' is-active' : '';
@@ -982,6 +997,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
           `<span class="chip-count">${count}</span>` +
           `</button>`;
       }
+      chipsHtml += `</div></div>`;
       if (noMatch) {
         chipsHtml += `</li>` +
           `<li class="cwd-dropdown-no-match" aria-hidden="true">${escapeHtml(t('spawn_cwd_no_match_hint'))}</li>`;
@@ -1288,6 +1304,14 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   }
 
   cwdDropdown.addEventListener('mousedown', (e) => {
+    // launcher chip クリック: popover を toggle 表示する（hover でも開くが、タッチ環境向けの保険）。
+    const launcherBtn = e.target.closest('.cwd-dropdown-chip-launcher');
+    if (launcherBtn) {
+      e.preventDefault();
+      const collapsed = launcherBtn.closest('.cwd-dropdown-chip-collapsed');
+      collapsed?.classList.toggle('is-open');
+      return;
+    }
     // chip クリック: input の prefix を insert / replace して検索を絞り込む。
     const chipBtn = e.target.closest('.cwd-dropdown-chip');
     if (chipBtn) {
@@ -1295,7 +1319,9 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       const prefix = (chipBtn as HTMLElement).dataset.prefix ?? '';
       const cur = (spawnCwdInput as HTMLInputElement).value;
       const curParsed = parseCwdInput(cur);
-      const next = prefix + ':' + curParsed.query;
+      // 入力がフルパス（isPath=true）のときは query にパス全体が入っているため、
+      // chip と連結すると `public:C:\...` のような壊れた値になる。空クエリへ戻す。
+      const next = prefix + ':' + (curParsed.isPath ? '' : curParsed.query);
       (spawnCwdInput as HTMLInputElement).value = next;
       spawnCwdInput.focus();
       renderCwdDropdown(next);

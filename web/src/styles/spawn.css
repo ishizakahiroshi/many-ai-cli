@@ -290,6 +290,45 @@
 .chip-count {
   font-size: 0.7rem; color: var(--muted); font-family: inherit;
 }
+/* chip 圧縮 UI: launcher 1 個＋ホバー/クリックで popover 展開 */
+.cwd-dropdown-chip-collapsed {
+  position: relative;
+}
+.cwd-dropdown-chip-launcher {
+  background: var(--bg); color: var(--text); border: 1px solid var(--line-soft);
+  border-radius: 999px; padding: 3px 9px; font: inherit; font-size: 0.78rem;
+  font-family: ui-monospace, Menlo, Consolas, monospace; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.cwd-dropdown-chip-launcher:hover {
+  border-color: var(--accent); background: var(--accent-soft);
+}
+.cwd-dropdown-chip-launcher.is-active {
+  border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text);
+}
+.cwd-dropdown-chip-launcher .chip-icon { font-size: 0.85rem; line-height: 1; }
+.cwd-dropdown-chip-launcher .chip-caret { font-size: 0.7rem; opacity: 0.7; }
+.cwd-dropdown-chip-popover {
+  display: none;
+  position: absolute; top: 100%; left: 0;
+  margin-top: 4px; padding: 6px;
+  background: var(--bg); border: 1px solid var(--line-soft); border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  flex-wrap: wrap; gap: 6px;
+  min-width: 220px; max-width: 360px;
+  z-index: 10;
+}
+/* マウスが launcher と popover の間を渡る橋（透明な hover hit area） */
+.cwd-dropdown-chip-collapsed::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 6px;
+  pointer-events: none;
+}
+.cwd-dropdown-chip-collapsed:hover::after { pointer-events: auto; }
+.cwd-dropdown-chip-collapsed:hover .cwd-dropdown-chip-popover,
+.cwd-dropdown-chip-collapsed:focus-within .cwd-dropdown-chip-popover,
+.cwd-dropdown-chip-collapsed.is-open .cwd-dropdown-chip-popover {
+  display: flex;
+}
 /* 検索結果行マグニファイアアイコン */
 .cwd-dropdown-mag {
   flex-shrink: 0; width: 18px; text-align: center; opacity: 0.8; color: var(--muted);

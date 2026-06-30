@@ -827,6 +827,14 @@ export function maybeSendDirectApprovalConsumed(sessionId, rawText, sentText) {
 }
 
 export function detectApproval(id) {
+  // 非アクティブセッションに対する検出は #action-bar DOM を取り違える原因になるため早期 return。
+  // setTimeout 経由（suppress 解除後の再スキャン等）でこの関数が呼ばれる間に
+  // ユーザーがセッションを切り替えると、捕捉した id は非アクティブで、`#action-bar` は
+  // 全セッション共有なので、id の pendingTextTail / cache の内容が現アクティブ画面に
+  // 描画されてしまう（bugfix: 別セッションの承認ポップアップが表示される現象）。
+  // 該当セッションに戻った時に activateSession() が detectApproval(new active) を呼ぶため、
+  // 早期 return しても検出機会は失われない。
+  if (id !== activeSessionId) return;
   // Shell session は approval parser の対象外
   const provider = sessions.get(id)?.provider;
   if (!isAIProvider(provider || '')) return;
