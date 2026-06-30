@@ -481,6 +481,8 @@
   "stale_binary_banner_close_tooltip": "Dismiss",
   "approval_batch_label": "⚠ Batch approval ({n} questions)",
   "approval_batch_progress": "{done}/{total} selected",
+  "approval_batch_todo_badge": "{n} unanswered",
+  "approval_batch_all_done": "✓ All answered",
   "approval_batch_clear": "Clear",
   "approval_batch_submit": "Submit all",
   "approval_batch_confirm": "Review & send",

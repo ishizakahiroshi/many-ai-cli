@@ -1737,6 +1737,10 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   label.textContent = t('approval_batch_label', { n: sections.length });
   bar.appendChild(label);
 
+  const todoBadge = document.createElement('span');
+  todoBadge.className = 'action-batch-todo-badge';
+  bar.appendChild(todoBadge);
+
   // 承認ブロック直前の地の文（前置き説明）があれば先頭に表示する。
   appendApprovalPreamble(bar, (sections as any)._preamble);
 
@@ -1786,7 +1790,7 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
 
   const head = document.createElement('div');
   head.className = 'action-qhead';
-  head.textContent = `Q${activeQ + 1} ${activeSec.title}`;
+  head.textContent = `Q${activeQ + 1}/${sections.length} ${activeSec.title}`;
   head.title = activeSec.title;
   pane.appendChild(head);
 
@@ -1919,6 +1923,9 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
       if (st) { st.textContent = ok ? '✓' : '未'; st.className = 'st ' + (ok ? 'done' : 'todo'); }
     });
     progress.textContent = t('approval_batch_progress', { done, total: sections.length });
+    const todo = sections.length - done;
+    todoBadge.textContent = todo > 0 ? t('approval_batch_todo_badge', { n: todo }) : t('approval_batch_all_done');
+    todoBadge.classList.toggle('done', todo === 0);
     submitBtn.disabled = done < sections.length;
   };
   updateBatchStatus();

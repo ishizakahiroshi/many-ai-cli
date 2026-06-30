@@ -481,6 +481,8 @@
   "stale_binary_banner_close_tooltip": "閉じる",
   "approval_batch_label": "⚠ 一括承認 ({n} 件)",
   "approval_batch_progress": "{done}/{total} 選択済み",
+  "approval_batch_todo_badge": "未回答 {n} 件",
+  "approval_batch_all_done": "✓ 全件回答済み",
   "approval_batch_clear": "クリア",
   "approval_batch_submit": "まとめて送信",
   "approval_batch_confirm": "送信確認",
