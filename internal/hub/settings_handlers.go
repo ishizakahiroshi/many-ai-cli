@@ -199,8 +199,14 @@ func (s *Server) handleNotifyTest(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	if body.Backend.Type != "ntfy" && body.Backend.Type != "webhook" {
-		writeJSONError(w, http.StatusBadRequest, "invalid_type", "backend type must be ntfy or webhook")
+	// finding #35 の validateNotifyBackend を配線する（従来はここで Type のみ検査し、
+	// 用意された validator が呼ばれず dead code だった）。テスト送信は完全に設定済みの
+	// バックエンドに対してのみ意味を持つため、scheme/host/topic を満たさない要求を
+	// 送信前に 400 で弾く（未設定バックエンドのテストは元々成功しないため非破壊）。
+	// 注: private ネット宛の SSRF 遮断はここでは行わない。ntfy/webhook は localhost/LAN
+	// への自己ホストが正規ユースケースであり、一律ブロックは機能を壊すため（進言参照）。
+	if err := validateNotifyBackend(body.Backend); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid_backend", err.Error())
 		return
 	}
 	bc := notifyPkg.BackendConfig{

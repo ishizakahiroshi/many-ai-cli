@@ -10,6 +10,22 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Removed
+- **Workbench tab and Hub-internal chat proxy retired.** The `Workbench` tab
+  (SQLite-backed session history browser, timeline/summaries/redacted exports,
+  prompt templates, task/policy notes, diagnostics, usage summaries,
+  stale-session and worktree helpers) and the associated `/api/workbench/*`
+  routes have been removed. The Hub-internal chat proxy that intercepted
+  `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` to capture request payloads
+  (`internal/proxy/`, `internal/hub/chat_proxy*.go`) has also been removed;
+  wrapped `claude` / `codex` sessions now talk directly to the upstream API.
+- **Side effect: Sonnet 5+ default 1M context restored under the Hub.** Because
+  Claude Code no longer sees a rewritten `ANTHROPIC_BASE_URL` pointing at an
+  unknown gateway, it stops downgrading to the 200K cap and honours the
+  Sonnet 5-era default 1M context window again. No more per-model
+  `claude-sonnet-5[1m]` workaround. Ollama / LM Studio routing (which legitimately
+  needs a rewritten base URL) is unaffected.
+
 ### Added
 - **Grok Build CLI provider support.** `many-ai-cli grok` (and `wrap grok`)
   now wraps xAI's official `grok` terminal coding agent in a PTY, joining

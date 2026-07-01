@@ -2,24 +2,24 @@ package hub
 
 import "testing"
 
-func TestEnvPresetForProxyWithConfiguredOllamaBase(t *testing.T) {
+func TestEnvPresetForWithConfiguredOllamaBase(t *testing.T) {
 	baseURL := "http://192.168.11.50:11434"
 
-	claude := EnvPresetForProxyWithOllamaBase("claude", RouteOllama, "", "", baseURL, "")
+	claude := EnvPresetForWithOllamaBase("claude", RouteOllama, baseURL, "")
 	if !containsEnv(claude, "ANTHROPIC_BASE_URL="+baseURL) {
 		t.Fatalf("claude ollama env = %v, want configured base URL", claude)
 	}
 
-	codex := EnvPresetForProxyWithOllamaBase("codex", RouteOllama, "", "", baseURL, "")
+	codex := EnvPresetForWithOllamaBase("codex", RouteOllama, baseURL, "")
 	if !containsEnv(codex, "OPENAI_BASE_URL="+baseURL+"/v1") {
 		t.Fatalf("codex ollama env = %v, want configured /v1 base URL", codex)
 	}
 }
 
-func TestEnvPresetForProxyWithConfiguredLMStudioBase(t *testing.T) {
+func TestEnvPresetForWithConfiguredLMStudioBase(t *testing.T) {
 	baseURL := "http://192.168.11.50:1234"
 
-	claude := EnvPresetForProxyWithOllamaBase("claude", RouteLMStudio, "", "", "", baseURL)
+	claude := EnvPresetForWithOllamaBase("claude", RouteLMStudio, "", baseURL)
 	if !containsEnv(claude, "ANTHROPIC_BASE_URL="+baseURL) {
 		t.Fatalf("claude lm-studio env = %v, want configured base URL", claude)
 	}
@@ -27,7 +27,7 @@ func TestEnvPresetForProxyWithConfiguredLMStudioBase(t *testing.T) {
 		t.Fatalf("claude lm-studio env = %v, want ANTHROPIC_AUTH_TOKEN=lmstudio", claude)
 	}
 
-	codex := EnvPresetForProxyWithOllamaBase("codex", RouteLMStudio, "", "", "", baseURL)
+	codex := EnvPresetForWithOllamaBase("codex", RouteLMStudio, "", baseURL)
 	if !containsEnv(codex, "OPENAI_BASE_URL="+baseURL+"/v1") {
 		t.Fatalf("codex lm-studio env = %v, want configured /v1 base URL", codex)
 	}

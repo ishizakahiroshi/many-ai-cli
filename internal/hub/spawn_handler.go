@@ -116,12 +116,7 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 	ollamaBaseURL := s.cfg.Ollama.BaseURL
 	lmStudioBaseURL := s.cfg.LMStudio.BaseURL
 	s.cfgMu.Unlock()
-	proxyToken := ""
-	if base := s.chatProxyBaseURL(); base != "" && !isLocalRoute(effectiveRoute) {
-		proxyToken = newProxyToken()
-		s.registerPendingProxyToken(proxyToken)
-	}
-	if envPreset := EnvPresetForProxyWithOllamaBase(spec.Provider, effectiveRoute, s.chatProxyBaseURL(), proxyToken, ollamaBaseURL, lmStudioBaseURL); len(envPreset) > 0 {
+	if envPreset := EnvPresetForWithOllamaBase(spec.Provider, effectiveRoute, ollamaBaseURL, lmStudioBaseURL); len(envPreset) > 0 {
 		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
 	}
 
@@ -437,12 +432,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	ollamaBaseURL := s.cfg.Ollama.BaseURL
 	lmStudioBaseURL := s.cfg.LMStudio.BaseURL
 	s.cfgMu.Unlock()
-	proxyToken := ""
-	if base := s.chatProxyBaseURL(); base != "" && !isLocalRoute(effectiveRoute) {
-		proxyToken = newProxyToken()
-		s.registerPendingProxyToken(proxyToken)
-	}
-	if envPreset := EnvPresetForProxyWithOllamaBase(body.Provider, effectiveRoute, s.chatProxyBaseURL(), proxyToken, ollamaBaseURL, lmStudioBaseURL); len(envPreset) > 0 {
+	if envPreset := EnvPresetForWithOllamaBase(body.Provider, effectiveRoute, ollamaBaseURL, lmStudioBaseURL); len(envPreset) > 0 {
 		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
 		s.logger.Debug("spawn: env preset applied",
 			"provider", body.Provider, "route", effectiveRoute, "keys", envKeyList(envPreset))
@@ -667,12 +657,7 @@ func (s *Server) handleSpawnGrid(w http.ResponseWriter, r *http.Request) {
 		if s.parentShell != "" {
 			cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 		}
-		gridProxyToken := ""
-		if base := s.chatProxyBaseURL(); base != "" {
-			gridProxyToken = newProxyToken()
-			s.registerPendingProxyToken(gridProxyToken)
-		}
-		if envPreset := EnvPresetForProxy(spec.provider, "", s.chatProxyBaseURL(), gridProxyToken); len(envPreset) > 0 {
+		if envPreset := EnvPresetFor(spec.provider, ""); len(envPreset) > 0 {
 			cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
 		}
 		// stdin を DevNull に、stdout/stderr をログファイルに向ける（handleSpawn と同様）

@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,6 +40,7 @@ func registerTestSession(s *Server, id int, provider string) *session {
 		ID:       id,
 		Provider: provider,
 		State:    "running",
+		inputMu:  new(sync.Mutex), // AUDIT-11: inputMu はポインタ。本番の session 生成と同様 allocate する
 	}
 	s.sessionsMu.Lock()
 	s.sessions[id] = ses
