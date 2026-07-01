@@ -382,7 +382,7 @@ func TestRegisteredAPIRoutesRequireToken(t *testing.T) {
 func registeredAPIRoutes(t *testing.T) []string {
 	t.Helper()
 	seen := map[string]struct{}{}
-	for _, name := range []string{"server.go", "workbench_handlers.go"} {
+	for _, name := range []string{"server.go"} {
 		path := filepath.Join("..", "..", "internal", "hub", name)
 		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
 		if err != nil {

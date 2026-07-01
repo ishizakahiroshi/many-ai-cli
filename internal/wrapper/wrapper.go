@@ -727,7 +727,6 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model st
 		ClaudeDir:  claudeDir,
 		Cols:       termCols,
 		Rows:       termRows,
-		ProxyToken: os.Getenv("MANY_AI_CLI_PROXY_TOKEN"),
 	}); err != nil {
 		_ = conn.Close()
 		return nil, proto.Message{}, err

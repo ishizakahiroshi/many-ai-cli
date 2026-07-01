@@ -1552,7 +1552,6 @@ inputEl.addEventListener('blur', (e) => {
         }
         resetAllLocalSessionHistory();
         showToast(t('settings_history_reset_done'), sessionStoreResetBtn);
-        window.dispatchEvent(new CustomEvent('workbench-session-store-reset'));
       } catch (_) {
         showToast(t('settings_history_reset_failed'), sessionStoreResetBtn);
       } finally {
@@ -1582,7 +1581,6 @@ inputEl.addEventListener('blur', (e) => {
         }
         resetAllLocalSessionHistory();
         showToast(t('settings_logs_purge_done'), logsPurgeBtn);
-        window.dispatchEvent(new CustomEvent('workbench-session-store-reset'));
       } catch (_) {
         showToast(t('settings_logs_purge_failed'), logsPurgeBtn);
       } finally {
@@ -1855,8 +1853,7 @@ inputEl.addEventListener('blur', (e) => {
         const results = await Promise.all(tasks);
         if (choice.deleteLogs) {
           resetAllLocalSessionHistory();
-          window.dispatchEvent(new CustomEvent('workbench-session-store-reset'));
-        }
+          }
         showToast(results.every(r => r.ok) ? t('legacy_logs_notice_done') : t('legacy_logs_notice_failed'));
       } catch (_) {
         showToast(t('legacy_logs_notice_failed'));

@@ -72,7 +72,6 @@ Gemini CLI は意図的に対象外です。
 - **Files タブ**: プロジェクトファイルをツリー表示し、Markdown / コードのプレビュー、パスコピー、フォルダ作成、競合検出付き保存、リネーム、移動、空フォルダ削除を実行
 - **Git ビュー**: ブランチ履歴、commit 詳細、変更ファイル、diff、fetch、`git pull --ff-only` を checkout なしで実行
 - **Commit all**: 明示的な Review 後に working tree 全体を `git add -A` してローカル commit（push は実行しません）
-- **Workbench タブ**: 保存済みセッション履歴、タイムライン、要約、redact 済み export、prompt template、task/policy メモ、diagnostics、usage 集計、stale session、worktree helper を扱う
 - **ファイル / 画像添付**: ファイルや画像の paste / D&D からローカル保存し、セッションへパスを inject
 - **音声入力**: ブラウザ内蔵認識またはローカル Whisper でプロンプトを入力（Windows x64 では Whisper 管理インストール対応）
 - **PWA + opt-in Web Push**: Hub をローカル Web アプリとしてインストールし、Settings で明示的に有効化した場合だけ承認待ち通知を受け取る
@@ -1073,7 +1072,7 @@ Hub サーバは PTY セッションとブラウザ UI の間のリレーとし�
 - **`.jsonl`** は構造化されたイベント時系列（入力・出力・セッション境界・タイムスタンプ）です。出力バイトはエスケープして格納されるため、直接読むとやはりノイズだらけに見えます。出力・入力は格納前にヒューリスティックな token redaction を通します。これが正本であり、transcript の再生成やクラッシュ復旧の入力になります。
 - **`.txt`** は人間向けの形式です。制御コードを除去し、（`.jsonl` から派生するため）既知の token 形式はマスクされています。色付き再生や構造化イベントが特に必要でない限り、**読むのはこれ** です。
 
-セッションログと SQLite ベースの Workbench 履歴はローカルの private storage（可能な箇所は directory `0700` / file `0600`）に保存されますが、プロンプト、ファイルパス、ユーザー入力テキストを含み得ます。既知の token 形式は `.jsonl` / `.txt` の本文・ユーザー入力履歴の保存前に redaction し、Workbench export も既定で redaction しますが、これはヒューリスティックで、生ログ（`.log`）は一切 redaction されません。セッションログをオプトインにしている主因がこれです。誤って機密情報を貼った場合は、設定から保存済み履歴を削除するか `~/.many-ai-cli/logs/` を削除してください。
+セッションログはローカルの private storage（可能な箇所は directory `0700` / file `0600`）に保存されますが、プロンプト、ファイルパス、ユーザー入力テキストを含み得ます。既知の token 形式は `.jsonl` / `.txt` の本文・ユーザー入力履歴の保存前に redaction されますが、これはヒューリスティックで、生ログ（`.log`）は一切 redaction されません。セッションログをオプトインにしている主因がこれです。誤って機密情報を貼った場合は `~/.many-ai-cli/logs/` を削除してください。
 
 Hub UI のログパスボタンでログディレクトリのパスをクリップボードにコピーできます。
 

@@ -448,7 +448,9 @@ export function renderStatusbar(): void {
   const showAiLines = !!(provider === 'claude' && entry && (entry.linesAdded > 0 || entry.linesRemoved > 0));
   const aiLinesEl = setSeg(bar, 'tsb-seg-ailines', showAiLines);
   if (aiLinesEl && entry) {
-    aiLinesEl.innerHTML = `AI <span class="tsb-add">+${entry.linesAdded}</span> <span class="tsb-del">-${entry.linesRemoved}</span>`;
+    // linesAdded/Removed は数値強制してから埋め込む。他フィールドは escapeHtml 済みだが
+    // ここだけ生挿入だったため、Hub が万一非数値を送っても DOM 注入にならないよう Number() で固める。
+    aiLinesEl.innerHTML = `AI <span class="tsb-add">+${Number(entry.linesAdded) || 0}</span> <span class="tsb-del">-${Number(entry.linesRemoved) || 0}</span>`;
     aiLinesEl.title = t('tsb_ailines_title');
   }
 

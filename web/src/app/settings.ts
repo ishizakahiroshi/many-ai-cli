@@ -2179,11 +2179,11 @@ export async function loadSlashCmdSources() {
 
 // ─── C2: 統合タブバー (setActiveTab) ───────────────────────────────────
 // セッション毎の表示モード (D13: in-memory, リロードで初期化)
-export const sessionViewMode = new Map(); // sid -> 'terminal' | 'chat' | 'split' | 'files' | 'git' | 'workbench'
+export const sessionViewMode = new Map(); // sid -> 'terminal' | 'chat' | 'split' | 'files' | 'git'
 // Files/Git の遅延ロード状態 (sid -> Set<'files'|'git'>)
 export const sessionLazyLoaded = new Map();
 
-export const VALID_TAB_NAMES = new Set(['terminal', 'chat', 'split', 'files', 'git', 'workbench', 'multi', 'approval']);
+export const VALID_TAB_NAMES = new Set(['terminal', 'chat', 'split', 'files', 'git', 'multi', 'approval']);
 // C5: lock の対象モード (Files/Git は lock 対象外: D10 の lazy 読み込みと相性が悪い)
 export const LOCKABLE_MODES = new Set(['terminal', 'chat', 'split']);
 export const RESPONSIVE_WIDE_MODE_MIN = 1001;
@@ -2372,42 +2372,7 @@ export function setActiveTab(sid, name) {
     return;
   }
 
-  if (name === 'workbench') {
-    const area = document.getElementById('display-area');
-    if (!area) return;
-    const multiView = document.getElementById('multi-view');
-    const mgr = window.multiPaneManager;
-    const prevMultiOpen = (multiView && !multiView.hidden);
-    if (multiView) multiView.hidden = true;
-    if (mgr && mgr.picker) mgr.picker.hide();
-    if (prevMultiOpen && mgr) {
-      mgr.teardown();
-      sessions.forEach(s => {
-        const t = terminals.get(s.id);
-        if (t && t.term) {
-          try { t.term.options.scrollback = TERMINAL_SCROLLBACK_LINES; } catch (_) {}
-        }
-      });
-      if (activeSessionId !== null && activeSessionId !== undefined) {
-        attachTerminal(activeSessionId);
-      }
-    }
-    area.hidden = false;
-    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-workbench', 'mode-approval');
-    area.classList.add('mode-workbench');
-    document.querySelectorAll('#unified-tab-bar .view-tab').forEach(b => {
-      b.classList.toggle('active', b.dataset.tab === 'workbench');
-    });
-    if (activeSessionId !== null && activeSessionId !== undefined) {
-      sessionViewMode.set(activeSessionId, name);
-    }
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('workbench-opened'));
-    }
-    return;
-  }
-
-  // 承認タブ: セッション非依存のビュー（workbench と同様の扱い）
+  // 承認タブ: セッション非依存のビュー
   if (name === 'approval') {
     const area = document.getElementById('display-area');
     if (!area) return;
@@ -2429,7 +2394,7 @@ export function setActiveTab(sid, name) {
       }
     }
     area.hidden = false;
-    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-workbench', 'mode-approval');
+    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval');
     area.classList.add('mode-approval');
     document.querySelectorAll('#unified-tab-bar .view-tab').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === 'approval');
@@ -2479,7 +2444,7 @@ export function setActiveTab(sid, name) {
   }
   area.hidden = false;
 
-  area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-workbench', 'mode-approval');
+  area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval');
   area.classList.add('mode-' + name);
 
   // タブボタンの active 切替

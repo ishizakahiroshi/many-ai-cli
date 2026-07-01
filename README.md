@@ -72,7 +72,6 @@ Gemini CLI is intentionally out of scope.
 - **Files tab** — browse project files, preview Markdown/code, copy paths, create folders, save text files with conflict detection, rename/move, and delete empty folders from the Hub
 - **Git view** — inspect branch history, commit details, changed files, diffs, fetch refs, and run `git pull --ff-only` without leaving the Hub
 - **Commit all** — stage all current working-tree changes and create a local commit after an explicit review step
-- **Workbench tab** — review stored session history, timeline events, summaries, redacted exports, prompt templates, task/policy notes, diagnostics, usage summaries, stale sessions, and worktree helpers
 - **Light orchestration API** — a conductor session can spawn child AI sessions, share `~/.many-ai-cli/orchestration/<id>/board.md`, and keep child work isolated in git worktrees by default
 - **File and image attach** — paste or drag-and-drop images and files into the terminal session
 - **Voice input** — dictate prompts through Browser recognition or local Whisper, with Windows x64 managed Whisper install
@@ -1093,7 +1092,7 @@ Each wrapped session produces **three files that share the same basename** (`.lo
 - **`.jsonl`** is the structured event timeline (input, output, session boundaries, timestamps). The output bytes are stored escaped here, so it also looks noisy when read directly. Output and input pass through the heuristic token redactor before being written. It is the source of truth and the input for regenerating the transcript and for crash recovery.
 - **`.txt`** is the one meant for humans: control codes are stripped, and (because it is derived from `.jsonl`) known token patterns are masked. **Read this one** unless you specifically need the colored replay or the structured events.
 
-Session logs and the SQLite-backed Workbench history are local private storage (`0700` directories / `0600` files where applicable), but they can still contain prompts, file paths, and other user-provided text. Known token patterns are redacted before `.jsonl` / `.txt` content and user-input history are stored, and Workbench exports are redacted by default, but this is heuristic and the raw `.log` is not redacted at all — which is the main reason session logging is opt-in. Delete saved history from Settings or remove `~/.many-ai-cli/logs/` if you accidentally paste sensitive material.
+Session logs are local private storage (`0700` directories / `0600` files where applicable), but they can still contain prompts, file paths, and other user-provided text. Known token patterns are redacted before `.jsonl` / `.txt` content and user-input history are stored, but this is heuristic and the raw `.log` is not redacted at all — which is the main reason session logging is opt-in. Remove `~/.many-ai-cli/logs/` if you accidentally paste sensitive material.
 
 The Hub UI log-path button copies the log directory path to your clipboard.
 

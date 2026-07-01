@@ -15,7 +15,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	neturl "net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,7 +30,6 @@ import (
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/notify"
 	"many-ai-cli/internal/proto"
-	"many-ai-cli/internal/proxy"
 	"many-ai-cli/internal/sessionlog"
 	"many-ai-cli/internal/sessionstore"
 	"many-ai-cli/internal/wrapper"
@@ -169,11 +167,6 @@ type session struct {
 	JSONLPath string             `json:"jsonl_path,omitempty"`
 	History   *sessionlog.Writer `json:"-"`
 
-	// JSON 外: 内蔵プロキシ経由で捕捉した API リクエスト/レスポンスのリングバッファ。
-	// chat 履歴 UI が payload ベースのクリーン表示を行うためのソース。
-	// Hub プロセス終了で揮発（永続化は将来 opt-in）。
-	chatTurns []*proto.ChatTurn
-
 	// JSON 外: per-session 入力直列化ロック（#18）。
 	// 複数 UI が同一セッションへ同時入力した場合に、hasPending チェック〜
 	// trySendInput（50ms sleep を含む bracketd-paste 二段送信）が
@@ -182,7 +175,11 @@ type session struct {
 	// sessionsMu を 50ms sleep 中に保持しないよう、per-session の別ロックで分離する。
 	// ロック順序: inputMu は sessionsMu の外側でのみ取得する
 	//（sessionsMu 保持中に inputMu を取得しない）。
-	inputMu sync.Mutex
+	// ポインタで保持する（AUDIT-11）: session を JSON スナップショット用に値コピーする
+	// 箇所（orchestration.go の cp := *ses）で sync.Mutex を値コピーすると go vet の
+	// copylocks に触れるため。session 生成時に必ず new(sync.Mutex) を設定すること
+	//（未設定＝nil のまま Lock すると nil pointer panic になる）。
+	inputMu *sync.Mutex
 }
 
 func (s *session) idleStateName() string {
@@ -444,11 +441,6 @@ type Server struct {
 
 	// sshdProber: OpenSSH Server 状態検知の抽象（テストでモック注入）。nil なら OS 実装。
 	sshdProber sshdProber
-
-	// chatProxy: wrap 対象 CLI（Claude / Codex）の API リクエストを透過プロキシし、
-	// payload を構造化チャット履歴として捕捉する内蔵プロキシ。
-	// 起動失敗時は nil（payload 取得 OFF。PTY スクレイプにフォールバック）。
-	chatProxy *proxy.Server
 }
 
 type branchRefreshRequest struct {
@@ -871,7 +863,6 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/servers/connect/status", s.handleServerConnectStatus)
 	mux.HandleFunc("/api/servers/disconnect", s.handleServerDisconnect)
 	mux.HandleFunc("/api/profiles/fetch", s.handleProfilesFetch)
-	s.registerWorkbenchRoutes(mux)
 	s.httpSrv = &http.Server{
 		Addr:    fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port),
 		Handler: withSecurityHeaders(mux),
@@ -984,7 +975,10 @@ func (s *Server) Run(ctx context.Context) error {
 	}()
 	setConsoleTitle("many-ai-cli [hub] - DO NOT CLOSE")
 	setConsoleIcon()
-	s.logger.Info("MANY-AI-CLI started", "url", fmt.Sprintf("http://%s/?token=%s", s.httpSrv.Addr, neturl.QueryEscape(s.cfg.Token)))
+	// 永続ログ（hub.log）にはトークンを平文で残さない。ライブの全権トークンが
+	// ローテーション済みログに残ると、トラブルシュートでログを共有した際に漏洩する。
+	// 実トークン入りの URL は stdout の起動バナー（下記 startupBanner）だけに出す。
+	s.logger.Info("MANY-AI-CLI started", "url", fmt.Sprintf("http://%s/?token=***", s.httpSrv.Addr))
 	cfgSnapshot := s.snapshotCfg()
 	fmt.Print(startupBanner(s.version, s.httpSrv.Addr, cfgSnapshot.Token, startupBannerAccess{
 		AllowLoopbackWithoutToken: cfgSnapshot.Hub.AllowLoopbackWithoutToken,
@@ -1000,7 +994,6 @@ func (s *Server) Run(ctx context.Context) error {
 	if s.tokenStatusbarEnabled() {
 		s.injectUsageHooks()
 	}
-	s.startChatProxy()
 	s.safeGo("state_ticker", func() { s.stateTicker(runCtx) })
 	s.safeGo("orchestration_board_loop", func() { s.orchestrationBoardLoop(runCtx) })
 	s.safeGo("clean_attachments", s.cleanAttachments)
@@ -1025,7 +1018,6 @@ func (s *Server) Run(ctx context.Context) error {
 		// reconnect grace period. Explicit session termination still goes through
 		// /api/kill-all, dismiss, or idle-timeout.
 		_ = s.httpSrv.Close()
-		s.stopChatProxy()
 		// 内蔵リモート接続の SSH/WSL 子プロセスを全て落とし、launcher-active.json の
 		// 自 PID 分を掃除する（Hub 終了でトンネルも落ちるのが期待動作）。
 		// httpSrv.Close() の後に呼ぶこと: 先に HTTP を閉じれば、shutdown 中に新規
@@ -1302,13 +1294,11 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		JSONLPath:       jsonlPath,
 		History:         history,
 	}
+	ses.inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
 	s.sessions[id] = ses
 	wc := newWrapperConn(conn)
 	s.wrappers[id] = wc
 	s.sessionsMu.Unlock()
-	// register 時に wrapper から渡された proxy token を session ID と紐付ける
-	// （chat_proxy.go: 内蔵プロキシ捕捉 payload を session ringbuffer へ振り分けるため）。
-	s.linkProxyTokenToSession(reg.ProxyToken, id)
 	if initCols == 0 || initRows == 0 {
 		// UIが未接続の場合はラッパーが報告した呼び出し元端末サイズを優先する
 		if cols, rows, ok := usableInitPTYSize(reg.Cols, reg.Rows); ok {
@@ -1502,6 +1492,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		JSONLPath:       jsonlPath,
 		History:         history,
 	}
+	s.sessions[acceptedID].inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
 	if s.sessions[acceptedID].vt != nil && len(replay) > 0 {
 		s.sessions[acceptedID].vt.Write(replay)
 	}
@@ -2489,8 +2480,6 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	// セッション破棄時に usageStat も解放する（メモリ無制限増加を防ぐ）。
 	// usageStatsMu のロック順序のため sessionsMu 解放後に呼ぶ。
 	DeleteSessionUsageStat(m.SessionID)
-	// chat proxy token 紐付けも掃除
-	s.unlinkProxyTokensForSession(m.SessionID)
 	if historyToClose != nil {
 		_ = historyToClose.Event(map[string]any{
 			"ts":         time.Now().Format(time.RFC3339),
@@ -2962,17 +2951,6 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 		}
 	}
 	usageStatsMu.Unlock()
-
-	// chat proxy 履歴のスナップショット配信（payload ベースのチャット履歴復元用）。
-	for _, id := range sessionIDs {
-		if turns := s.snapshotChatTurns(id); len(turns) > 0 {
-			_ = uc.send(proto.Message{
-				Type:      "chat_turns_snapshot",
-				SessionID: id,
-				ChatTurns: turns,
-			})
-		}
-	}
 }
 
 func (s *Server) broadcast(m any) {

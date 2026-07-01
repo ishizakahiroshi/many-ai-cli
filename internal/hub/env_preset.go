@@ -34,32 +34,19 @@ func validRoute(route string) bool {
 // EnvPresetFor は provider × route の組み合わせから子プロセスへ追加注入すべき
 // env 変数列を返す。`KEY=VALUE` 形式。route が空 / provider 既定の場合は nil。
 //
-// proxyBaseURL が非空の場合、route が anthropic/openai/空 のときに ANTHROPIC_BASE_URL /
-// OPENAI_BASE_URL を内蔵プロキシ宛て（`<proxyBaseURL>/anthropic` / `<proxyBaseURL>/openai/v1`）
-// に差し替える。これにより wrap 対象 CLI の API リクエストが Hub 内プロキシ経由になり、
-// payload を構造化済みチャット履歴として捕捉できる。Ollama route のときは差し替えない
-// （ローカル Ollama が正本のため）。
+// Ollama / LM Studio route のときのみ ANTHROPIC_BASE_URL / OPENAI_BASE_URL を
+// ローカル LLM サーバー宛てに差し替える。Anthropic / OpenAI 公式接続では
+// BASE_URL を注入しない（純正エンドポイントへ素通しし、Sonnet 5 以降の 1M
+// コンテキスト等のクライアント側判定を阻害しないため）。
 //
-// 注: Anthropic 公式接続では ANTHROPIC_API_KEY をユーザー shell の値からそのまま継承する。
-// Ollama route では `ANTHROPIC_API_KEY=` を明示空文字で上書きしないと Claude Code が
-// 純正 Anthropic にフォールバックする実装がある（manual_ollama-cloud-routing.md 参照）。
+// 注: Ollama route では `ANTHROPIC_API_KEY=` を明示空文字で上書きしないと
+// Claude Code が純正 Anthropic にフォールバックする実装がある
+// （manual_ollama-cloud-routing.md 参照）。
 func EnvPresetFor(provider, route string) []string {
-	return EnvPresetForProxy(provider, route, "", "")
+	return EnvPresetForWithOllamaBase(provider, route, "", "")
 }
 
-// EnvPresetForProxy は EnvPresetFor のプロキシ対応版。proxyBaseURL は
-// `http://127.0.0.1:<port>` 形式（末尾スラッシュなし）。空なら従来挙動。
-// proxyToken が非空のとき、URL に `/s/<token>` を埋め込み、MANY_AI_CLI_PROXY_TOKEN env も付与する。
-// wrapper はこの env を読んで register 時に Hub へ伝え、Hub が token → session ID を解決する。
-func EnvPresetForProxy(provider, route, proxyBaseURL, proxyToken string) []string {
-	return EnvPresetForProxyWithOllamaBase(provider, route, proxyBaseURL, proxyToken, "", "")
-}
-
-func EnvPresetForProxyWithOllamaBase(provider, route, proxyBaseURL, proxyToken, ollamaBaseURL, lmStudioBaseURL string) []string {
-	pathPrefix := ""
-	if proxyToken != "" {
-		pathPrefix = "/s/" + proxyToken
-	}
+func EnvPresetForWithOllamaBase(provider, route, ollamaBaseURL, lmStudioBaseURL string) []string {
 	ollamaBase := config.EffectiveOllamaBaseURL(ollamaBaseURL)
 	lmStudioBase := config.EffectiveLMStudioBaseURL(lmStudioBaseURL)
 	switch provider {
@@ -78,15 +65,6 @@ func EnvPresetForProxyWithOllamaBase(provider, route, proxyBaseURL, proxyToken, 
 				"ANTHROPIC_BASE_URL=" + lmStudioBase,
 			}
 		}
-		if proxyBaseURL != "" {
-			out := []string{
-				"ANTHROPIC_BASE_URL=" + proxyBaseURL + pathPrefix + "/anthropic",
-			}
-			if proxyToken != "" {
-				out = append(out, "MANY_AI_CLI_PROXY_TOKEN="+proxyToken)
-			}
-			return out
-		}
 	case "codex":
 		if route == RouteOllama {
 			return []string{
@@ -99,15 +77,6 @@ func EnvPresetForProxyWithOllamaBase(provider, route, proxyBaseURL, proxyToken, 
 				"OPENAI_API_KEY=lmstudio",
 				"OPENAI_BASE_URL=" + lmStudioBase + "/v1",
 			}
-		}
-		if proxyBaseURL != "" {
-			out := []string{
-				"OPENAI_BASE_URL=" + proxyBaseURL + pathPrefix + "/openai/v1",
-			}
-			if proxyToken != "" {
-				out = append(out, "MANY_AI_CLI_PROXY_TOKEN="+proxyToken)
-			}
-			return out
 		}
 	}
 	return nil
