@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   filterHubMarkersPure,
   stripAnsiFromString,
+  MAX_MARKER_BUFFER_BYTES,
   type HubMarkerFilterState,
 } from './hub-marker-filter.js';
 
@@ -178,4 +179,34 @@ test('filterHubMarkersPure: 開きマーカー文字列の途中で chunk が割
   const { out: out2, state: state2 } = filterHubMarkersPure(part2, state1);
   assert.equal(str(out2), `body${ERASE_BELOW}post`);
   assert.equal(state2.inMarker, false);
+});
+
+test('filterHubMarkersPure セーフガード: DONE close が typo で来ない場合、閾値超過で強制 flush＋状態リセット', () => {
+  // 2026-07-01 セッション #16 実測の実例: [/MANARY-AI-CLI-DONE] とタイポし close 不一致
+  const summary = 'サマリー本文';
+  const filler = 'x'.repeat(MAX_MARKER_BUFFER_BYTES + 100);
+  const input = bytes(`[MANY-AI-CLI-DONE]${summary} ${filler}[/MANARY-AI-CLI-DONE]after`);
+  const { out, state } = filterHubMarkersPure(input, initialState());
+  const text = str(out);
+  // 強制 flush により本文と filler が xterm へ届く（凍結しない）
+  assert.equal(text.includes(summary), true);
+  // 状態は復帰しており、後続の 'after' も出力に含まれる
+  assert.equal(state.inDone, false);
+  assert.equal(state.doneBuf.length, 0);
+  // typo の close マーカーは剥がれず素通しされるが、[/MANARY-... の部分文字列が text 末尾側に残る
+  // （フィルタの責務は「凍結させない」ことで、typo の可読性は AI 側の責任）
+});
+
+test('filterHubMarkersPure セーフガード: マーカー close が来ない場合も閾値超過で強制 flush＋状態リセット', () => {
+  const body = 'Q1 質問? 1. 選択肢';
+  const filler = 'y'.repeat(MAX_MARKER_BUFFER_BYTES + 100);
+  // close が来ないまま追加のバイト列（Claude Code TUI が絶え間なく吐く spinner 相当）
+  const input = bytes(`[MANY-AI-CLI]${body} ${filler}`);
+  const { out, state } = filterHubMarkersPure(input, initialState());
+  const text = str(out);
+  // 強制 flush により本文が xterm へ届く（凍結しない）
+  assert.equal(text.includes(body), true);
+  // 状態が復帰している
+  assert.equal(state.inMarker, false);
+  assert.equal(state.markerBuf.length, 0);
 });
