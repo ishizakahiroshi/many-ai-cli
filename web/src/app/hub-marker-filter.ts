@@ -23,6 +23,13 @@ export const hubDoneMarkerOpen = new TextEncoder().encode('[MANY-AI-CLI-DONE]');
 export const hubDoneMarkerClose = new TextEncoder().encode('[/MANY-AI-CLI-DONE]');
 export const eraseDisplayBelowBytes = new TextEncoder().encode('\x1b[J');
 
+// 案 E セーフガード（2026-07-01）: 実運用のマーカー本文は数百 B〜数 KB。
+// close マーカー typo（例: [/MANARY-AI-CLI-DONE]）や AI 側の切断で close が来ないと、
+// inMarker / inDone 状態のまま bytes が永久蓄積し、以降の CLI 側描画が全部 buf に飲まれて
+// xterm が凍結する（2026-07-01 セッション #16 実測で確認）。閾値を超えたら諦めて
+// 強制 flush + 状態リセットして描画を復帰させる。閾値は正常運用の 10 倍以上のマージン。
+export const MAX_MARKER_BUFFER_BYTES = 32 * 1024;
+
 const utf8Encoder = new TextEncoder();
 const utf8Decoder = new TextDecoder('utf-8');
 
@@ -116,6 +123,13 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
       // 案 E: DONE 本文は buf に貯める（次チャンク跨ぎでも累積）
       doneBufArr.push(combined[i]);
       i++;
+      if (doneBufArr.length > MAX_MARKER_BUFFER_BYTES) {
+        // typo/欠落/切断で close が来ない: 諦めて強制 flush＋状態リセット
+        inDone = false;
+        flushBufToOut(doneBufArr, out);
+        doneBufArr.length = 0;
+        for (const b of eraseDisplayBelowBytes) out.push(b);
+      }
       continue;
     }
 
@@ -144,10 +158,18 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
     // 案 E: in-marker / in-done 中は本文を buf へ、外は out へ
     if (inMarker) {
       markerBufArr.push(combined[i]);
+      i++;
+      if (markerBufArr.length > MAX_MARKER_BUFFER_BYTES) {
+        // typo/欠落/切断で close が来ない: 諦めて強制 flush＋状態リセット
+        inMarker = false;
+        flushBufToOut(markerBufArr, out);
+        markerBufArr.length = 0;
+        for (const b of eraseDisplayBelowBytes) out.push(b);
+      }
     } else {
       out.push(combined[i]);
+      i++;
     }
-    i++;
   }
 
   return {
