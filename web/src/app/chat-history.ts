@@ -505,7 +505,7 @@ export function getAiDisplayName(provider) {
     case 'ollama':     return ti18n('chat_ai_name_ollama', 'Ollama');
     case 'lm-studio':  return ti18n('chat_ai_name_lm_studio', 'LM Studio');
     case 'opencode': return ti18n('chat_ai_name_opencode', 'OpenCode');
-    case 'grok':     return ti18n('chat_ai_name_grok', 'Grok');
+    case 'grok':     return ti18n('chat_ai_name_grok', 'Grok Build');
     default: return provider ? String(provider) : 'AI';
   }
 }
