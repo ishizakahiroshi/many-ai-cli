@@ -1,5 +1,5 @@
 // --- ESM imports (generated) ---
-import { cleanCopiedText, cleanOneLineText, showToast } from './util.js';
+import { cleanCopiedText, cleanOneLineText, showToast, token } from './util.js';
 import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
 import { activeSessionId, approvalRawOptionsCache, approvalVisibleCache, sessions, terminals, utf8Decoder } from './state.js';
@@ -1249,6 +1249,28 @@ export function snapToBottomAfterScreenClear(id) {
 // 次の PTY 出力が来るまでダイアログが画面に一切表示されない
 // （承認バーには出るのにターミナルには出ない、の原因）。
 const MAX_CURSOR_HIDE_BUF = 2048;
+
+// 一時デバッグ用: grok の応答が本フィルタで破棄され extractAndSetLiveStatus 経由に
+// のみ渡っているという仮説を実機で確認するための計装。検証後に削除予定
+// （internal/hub/debug_cursor_hide.go とセットで撤去する）。
+function debugLogCursorHide(id, source: string, hasAbsPos: boolean, hasNewline: boolean, text: string) {
+  try {
+    const provider = String(sessions.get(id)?.provider || '');
+    fetch(`/api/debug/cursor-hide-log?token=${encodeURIComponent(token)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: id,
+        provider,
+        source,
+        has_abs_pos: hasAbsPos,
+        has_newline: hasNewline,
+        text,
+      }),
+    }).catch(() => {});
+  } catch (_) { /* デバッグ計装の失敗でメイン機能を壊さない */ }
+}
+
 export function filterCursorHideShowBlocksForDisplay(id, bytes) {
   const t = terminals.get(id);
   if (!t) return bytes;
@@ -1315,6 +1337,7 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
         } else {
           // ステータスバー更新（スピナー進捗等）は scrollback へ描かず破棄するが、
           // 可読テキストを抽出して専用ライブ行に出し、進捗を可視化する。
+          debugLogCursorHide(id, 'filter-discard', hasAbsPos, hasNewline, utf8Decoder.decode(new Uint8Array(blockBuf)));
           extractAndSetLiveStatus(id, blockBuf);
         }
         inBlock = false;
@@ -1477,6 +1500,7 @@ export function extractAndSetLiveStatus(id, blockBuf) {
   if (!LIVE_STATUS_ENABLED) return; // 無効時はステータスバーブロックの破棄のみ行い、ライブ行へは出さない
   if (!blockBuf || blockBuf.length === 0) return;
   const text = reconstructLiveLine(id, blockBuf);
+  debugLogCursorHide(id, 'live-status-extract', false, false, text);
   // text が '' でも「ステータス更新フレームが来た」事実＝稼働中なので窓は出し続ける（くるくる継続）。
   setSessionLiveStatus(id, text);
 }

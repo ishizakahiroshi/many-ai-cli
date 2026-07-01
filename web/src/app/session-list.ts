@@ -205,7 +205,7 @@ export function providerDisplayName(provider) {
     ollama: 'Ollama',
     'lm-studio': 'LM Studio',
     opencode: 'OpenCode',
-    grok: 'Grok',
+    grok: 'Grok Build',
   };
   return labels[key] || String(provider || '');
 }

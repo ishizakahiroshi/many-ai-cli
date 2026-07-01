@@ -519,7 +519,7 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 	// Route は空: grok は env 注入せず `grok --model <id>` へ素通しする。
 	if len(defaults.Grok) > 0 {
 		resp.Groups = append(resp.Groups, ModelGroup{
-			Label:    "Grok",
+			Label:    "Grok Build",
 			Provider: "grok",
 			Route:    "",
 			Models:   append([]Model{}, defaults.Grok...),
