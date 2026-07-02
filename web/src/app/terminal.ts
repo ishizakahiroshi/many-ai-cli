@@ -1253,22 +1253,57 @@ const MAX_CURSOR_HIDE_BUF = 2048;
 // 一時デバッグ用: grok の応答が本フィルタで破棄され extractAndSetLiveStatus 経由に
 // のみ渡っているという仮説を実機で確認するための計装。検証後に削除予定
 // （internal/hub/debug_cursor_hide.go とセットで撤去する）。
-function debugLogCursorHide(id, source: string, hasAbsPos: boolean, hasNewline: boolean, text: string) {
+function debugLogCursorHide(id, source: string, hasAbsPos: boolean, hasNewline: boolean, text: string, metrics?: Record<string, number>) {
   try {
     const provider = String(sessions.get(id)?.provider || '');
+    const payload: Record<string, unknown> = {
+      session_id: id,
+      provider,
+      source,
+      has_abs_pos: hasAbsPos,
+      has_newline: hasNewline,
+      text,
+    };
+    if (metrics) Object.assign(payload, metrics);
     fetch(`/api/debug/cursor-hide-log?token=${encodeURIComponent(token)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: id,
-        provider,
-        source,
-        has_abs_pos: hasAbsPos,
-        has_newline: hasNewline,
-        text,
-      }),
+      body: JSON.stringify(payload),
     }).catch(() => {});
   } catch (_) { /* デバッグ計装の失敗でメイン機能を壊さない */ }
+}
+
+// 観測強化用: ?25l...?25h ブロック終端で terminal サイズ・CUP 最大座標・LF 数を採取する。
+// 2026-07-02 spinner-scrollback-fossilization 調査。真の根本原因（サイズ整合 vs 分類粗さ）を
+// 実データで切り分ける目的なので、単発フィールドが軽い方が Grep しやすい。
+function computeBlockMetrics(blockBuf: number[], term: any): Record<string, number> {
+  let maxRow = 0, maxCol = 0, lfCount = 0;
+  const n = blockBuf.length;
+  for (let i = 0; i < n; i++) {
+    if (blockBuf[i] === 0x0A) lfCount++;
+    if (blockBuf[i] === 0x1b && i + 4 < n && blockBuf[i + 1] === 0x5b) {
+      let j = i + 2;
+      let row = 0;
+      while (j < n && blockBuf[j] >= 0x30 && blockBuf[j] <= 0x39) { row = row * 10 + (blockBuf[j] - 0x30); j++; }
+      if (row > 0 && j < n && blockBuf[j] === 0x3b) {
+        j++;
+        let col = 0;
+        while (j < n && blockBuf[j] >= 0x30 && blockBuf[j] <= 0x39) { col = col * 10 + (blockBuf[j] - 0x30); j++; }
+        if (col > 0 && j < n && blockBuf[j] === 0x48) {
+          if (row > maxRow) maxRow = row;
+          if (col > maxCol) maxCol = col;
+        }
+      }
+    }
+  }
+  return {
+    terminal_rows: term?.rows || 0,
+    terminal_cols: term?.cols || 0,
+    max_cup_row: maxRow,
+    max_cup_col: maxCol,
+    lf_count: lfCount,
+    block_bytes: n,
+  };
 }
 
 export function filterCursorHideShowBlocksForDisplay(id, bytes) {
@@ -1320,6 +1355,7 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
     } else {
       // バッファ上限超過時は非ステータス扱いで通過
       if (blockBuf.length >= MAX_CURSOR_HIDE_BUF) {
+        debugLogCursorHide(id, 'block-passthrough-overflow', hasAbsPos, hasNewline, '', computeBlockMetrics(blockBuf, t.term));
         for (const b of hideCursorSeq) out.push(b);
         for (const b of blockBuf) out.push(b);
         inBlock = false;
@@ -1331,13 +1367,14 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
       if (bytesStartWith(combined, i, showCursorSeq)) {
         if (!hasAbsPos || hasNewline) {
           // ステータスバー更新でない（絶対移動なし or 複数行の本文描画） → 通過
+          debugLogCursorHide(id, 'block-passthrough-show', hasAbsPos, hasNewline, '', computeBlockMetrics(blockBuf, t.term));
           for (const b of hideCursorSeq) out.push(b);
           for (const b of blockBuf) out.push(b);
           for (const b of showCursorSeq) out.push(b);
         } else {
           // ステータスバー更新（スピナー進捗等）は scrollback へ描かず破棄するが、
           // 可読テキストを抽出して専用ライブ行に出し、進捗を可視化する。
-          debugLogCursorHide(id, 'filter-discard', hasAbsPos, hasNewline, utf8Decoder.decode(new Uint8Array(blockBuf)));
+          debugLogCursorHide(id, 'filter-discard', hasAbsPos, hasNewline, utf8Decoder.decode(new Uint8Array(blockBuf)), computeBlockMetrics(blockBuf, t.term));
           extractAndSetLiveStatus(id, blockBuf);
         }
         inBlock = false;
@@ -1377,6 +1414,7 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
         // 以降のバイトは生のまま通過し、後続の ?25h も（来れば）そのまま流れる。
         blockBuf.push(combined[i]);
         i++;
+        debugLogCursorHide(id, 'block-passthrough-lf', hasAbsPos, true, '', computeBlockMetrics(blockBuf, t.term));
         for (const b of hideCursorSeq) out.push(b);
         for (const b of blockBuf) out.push(b);
         inBlock = false;
