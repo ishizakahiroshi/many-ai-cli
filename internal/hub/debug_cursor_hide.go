@@ -25,6 +25,14 @@ type debugCursorHideEntry struct {
 	HasAbsPos  bool   `json:"has_abs_pos"`
 	HasNewline bool   `json:"has_newline"`
 	Text       string `json:"text"`
+	// 観測強化フィールド（2026-07-02 spinner-scrollback-fossilization 調査）。
+	// 未設定時は 0/空文字（既存 jsonl と互換）。
+	TerminalRows int `json:"terminal_rows,omitempty"`
+	TerminalCols int `json:"terminal_cols,omitempty"`
+	MaxCUPRow    int `json:"max_cup_row,omitempty"`
+	MaxCUPCol    int `json:"max_cup_col,omitempty"`
+	LFCount      int `json:"lf_count,omitempty"`
+	BlockBytes   int `json:"block_bytes,omitempty"`
 }
 
 func (s *Server) handleDebugCursorHideLog(w http.ResponseWriter, r *http.Request) {
