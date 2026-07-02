@@ -836,6 +836,18 @@ inputEl.addEventListener('keydown', (e) => {
     applyToolsPosition(isLeft);
     localStorage.setItem(STORAGE_TOOLS_LEFT_KEY, isLeft ? '1' : '0');
   });
+
+  // 入力欄の空白（ボタン以外＝paddingや flex 余白）をクリックしたら textarea に
+  // フォーカスを移す。ネイティブでは textarea の矩形上しか focus されず、行間や
+  // ボタン列左側の空きは死に領域になっていた（2026-07-02 report）。
+  wrap.addEventListener('mousedown', (e) => {
+    const t = e.target as HTMLElement | null;
+    if (!t) return;
+    if (t === inputEl) return; // textarea 自身は既定挙動
+    if (t.closest('button, a, input, select, textarea, [contenteditable="true"], .paste-chip')) return;
+    e.preventDefault();
+    inputEl.focus();
+  });
 })();
 
 inputClearBtn?.addEventListener('click', () => {
