@@ -80,13 +80,15 @@
     align-items: center;
     justify-content: center;
   }
+  /* C1: 右上固定列は +(right:8) / ⋯(right:52) の後ろに続くため、prev/next はさらに外側へ押し出す
+     (docs/local/plan_mobile-ui-rework.md C1)。 */
   body.mobile-has-session:not(.mobile-home-view) #mobile-prev-btn {
     display: inline-flex;
-    right: 90px;
+    right: 138px;
   }
   body.mobile-has-session:not(.mobile-home-view) #mobile-next-btn {
     display: inline-flex;
-    right: 48px;
+    right: 94px;
   }
   /* セッションが 1 件以下なら前後送りを薄くして無効感を出す（クリックは JS 側で抑止）。 */
   body.mobile-only-one-session #mobile-prev-btn,

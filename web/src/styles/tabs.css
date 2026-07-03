@@ -289,9 +289,25 @@ body.pane-resizing .xterm { pointer-events: none; }
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    scroll-snap-type: x mandatory;
+  }
+  .view-tab {
+    scroll-snap-align: start;
   }
   #unified-tab-bar::-webkit-scrollbar {
     display: none;
+  }
+  /* B: タブの右切れ対策 — 横スクロール可能なことを示すフェードグラデ
+     (docs/mockups/mobile-ui-rework/index.html「B. タブの右切れ」)。 */
+  #unified-tab-bar::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 20px;
+    background: linear-gradient(to right, transparent, var(--bg-elev));
+    pointer-events: none;
   }
   .view-tab {
     min-width: 44px;

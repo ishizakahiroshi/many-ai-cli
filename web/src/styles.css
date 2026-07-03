@@ -441,6 +441,8 @@ header {
 
 #mobile-menu-btn,
 #mobile-spawn-btn,
+#mobile-overflow-btn,
+#mobile-overflow-menu,
 #mobile-drawer-backdrop {
   display: none;
 }
@@ -532,9 +534,18 @@ header {
   .header-logo span,
   .header-sep,
   #global-wakeword-btn,
-  #settings-btn span,
   #main-tab-status,
-  .session-info-chip {
+  .session-info-chip,
+  /* A: ヘッダー密集対策 — プロバイダ利用状況リンク集とランタイム表示は
+     PC向けの補助情報でスマホでは優先度が低いため非表示にする。
+     🌐公開切替 / ⏻停止 / ⚙設定 は固定オーバーレイの ⋯ メニュー（#mobile-overflow-menu）
+     に集約したため、ヘッダー本来の並び順の実体ボタンはここで隠す
+     (docs/mockups/mobile-ui-rework/index.html「A. ヘッダー密集」)。 */
+  #usage-menu,
+  #runtime-badge,
+  #expose-btn,
+  #shutdown-btn,
+  #settings-btn {
     display: none !important;
   }
 
@@ -568,29 +579,89 @@ header {
     cursor: pointer;
   }
 
+  /* E: 入力欄FAB被り対策 — 旧来は右下固定の大型FABで送信ボタン/textareaに常時重なっていた
+     (docs/mockups/mobile-ui-rework/index.html の「E. 入力欄FAB被り」に該当)。
+     ◀▶ セッション送りボタンと同じ上段固定列（右端の空き 8px〜48px）へ移し、入力欄と物理的に重ならなくする。 */
   #mobile-spawn-btn {
     position: fixed;
-    right: 16px;
-    bottom: calc(16px + env(safe-area-inset-bottom));
-    z-index: 1400;
+    top: 6px;
+    right: 8px;
+    z-index: 1500;
     display: none;
     align-items: center;
     justify-content: center;
-    width: 54px;
-    height: 54px;
-    min-width: 54px;
-    min-height: 54px;
+    width: 36px;
+    height: 32px;
+    min-width: 36px;
+    min-height: 32px;
     border: 1px solid var(--accent);
-    border-radius: 50%;
+    border-radius: var(--radius-md);
     background: var(--accent);
     color: #fff;
-    font-size: 1.7rem;
+    font-size: 1.2rem;
     line-height: 1;
-    box-shadow: 0 12px 28px rgba(0,0,0,0.38);
     cursor: pointer;
   }
   body.mobile-has-session #mobile-spawn-btn {
     display: flex;
+  }
+
+  /* A: 🌐公開切替 / ⏻停止 / ⚙設定 を集約した ⋯ オーバーフローメニュー。
+     ホーム画面では right:8（唯一の右上ボタン）、セッション画面では + の隣（right:52）に寄せる。 */
+  #mobile-overflow-btn {
+    position: fixed;
+    top: 6px;
+    right: 8px;
+    z-index: 1500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 32px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg-elev);
+    color: var(--text);
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  body.mobile-has-session #mobile-overflow-btn {
+    right: 52px;
+  }
+
+  #mobile-overflow-menu {
+    position: fixed;
+    top: 42px;
+    right: 8px;
+    z-index: 1500;
+    display: flex;
+    flex-direction: column;
+    min-width: 160px;
+    padding: 4px;
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  }
+  #mobile-overflow-menu[hidden] {
+    display: none;
+  }
+  #mobile-overflow-menu button {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 8px 10px;
+    min-height: 40px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm, 6px);
+    color: var(--text);
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+  }
+  #mobile-overflow-menu button:active {
+    background: var(--bg-hover, rgba(255,255,255,0.08));
   }
 
   #mobile-drawer-backdrop {
