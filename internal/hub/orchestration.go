@@ -20,6 +20,14 @@ import (
 
 const orchestrationPollInterval = 2 * time.Second
 
+// orchestrationInjectQuiet / orchestrationInjectMaxWait は spawn 直後の初期案内文注入前に
+// 起動アニメーションの静止を待つ上限。quiet 続けば十分とみなし、静止しなくても maxWait で
+// 諦めて注入する（プロバイダ起動が異常に遅い場合でも無期限に待たない）。
+const (
+	orchestrationInjectQuiet   = 300 * time.Millisecond
+	orchestrationInjectMaxWait = 5 * time.Second
+)
+
 var safeOrchestrationToken = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 
 type orchestrationManager struct {
@@ -317,6 +325,7 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 	s.registerBoardSession(orchestrationID, boardPath, parentID, "conductor")
 	s.registerBoardChild(orchestrationID, boardPath, childID, parentID, body.Role, spawnedAt)
 	prompt := buildChildInitialPrompt(body.InitialPrompt, boardPath, body.Role, branch, childID)
+	s.waitForInputReady(childID, orchestrationInjectQuiet, orchestrationInjectMaxWait)
 	s.injectText(childID, prompt, true, false)
 	writeJSON(w, map[string]any{"ok": true, "session_id": childID, "board_path": boardPath, "cwd": childCWD, "worktree_branch": branch})
 }
@@ -763,6 +772,33 @@ func sessionUpdateMessage(ses *session) proto.Message {
 
 func (s *Server) notifyOrchestrationError(parentID int, limit, detail string) {
 	s.injectText(parentID, fmt.Sprintf("\n[MANY-AI-CLI-ORCHESTRATION-ERROR] limit=%s detail=%s\n", safeToken(limit), strings.ReplaceAll(detail, "\n", " ")), true, false)
+}
+
+// waitForInputReady は spawn 直後の起動アニメーション（スプラッシュ・Tips バナー等）が
+// 描画し終わるまで待つ。この静止を待たずに注入すると、readline がまだ起動しきっていない
+// タイミングで Enter が飲み込まれ、案内文だけが入力欄に残って未送信のまま停止する
+// （conductor セッションが起動時に何も実行しない不具合の原因）。
+func (s *Server) waitForInputReady(sessionID int, quiet, maxWait time.Duration) {
+	deadline := time.Now().Add(maxWait)
+	for {
+		s.sessionsMu.Lock()
+		ses := s.sessions[sessionID]
+		var last time.Time
+		if ses != nil {
+			last = ses.lastOutputAt
+		}
+		s.sessionsMu.Unlock()
+		if ses == nil {
+			return
+		}
+		if !last.IsZero() && time.Since(last) >= quiet {
+			return
+		}
+		if time.Now().After(deadline) {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 func (s *Server) injectText(sessionID int, text string, pressEnter bool, interrupt bool) {

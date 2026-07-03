@@ -1333,6 +1333,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	// buildChildInitialPrompt を既に注入済みなのでここでは対象外。
 	if childMeta.OrchestrationID != "" && !childMeta.Auto {
 		roles := s.orchestrationRolesFor(childMeta.OrchestrationID)
+		s.waitForInputReady(id, orchestrationInjectQuiet, orchestrationInjectMaxWait)
 		s.injectText(id, buildConductorInitialPrompt(childMeta.OrchestrationID, roles), true, false)
 	}
 	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Branch: branch, Label: reg.Label, Model: reg.Model, Route: regRoute, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, ParentSessionID: childMeta.ParentSessionID, Role: childMeta.Role, Auto: childMeta.Auto, Depth: childMeta.Depth, OrchestrationID: childMeta.OrchestrationID, BoardPath: childMeta.BoardPath, WorktreeBranch: childMeta.WorktreeBranch})
