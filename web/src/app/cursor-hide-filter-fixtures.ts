@@ -115,6 +115,49 @@ test('回帰: バッファ上限超過ブロックは通過する', () => {
   assert.equal(events[0].kind, 'block-passthrough-overflow');
 });
 
+// opencode（opentui）実セッション（s9・2026-07-03）と同形の起動シーケンス:
+// ?25l ブロックの内側で OSC 群に続けて ?1049h（alt screen 進入）を発行する。
+// OSC 本文・モデル名は合成データ。
+const OPENCODE_STYLE_STARTUP = `${HIDE}\x1b]1337;Capabilities\x1b\\\x1b]66;w=1; \x1b\\${ALT_ENTER}\x1b[>4;1m\x1b[?2027h`;
+// モデルピッカーのハイライト移動相当（CUP 絶対移動・LF なし）の再描画ブロック。
+const OPENCODE_STYLE_PICKER_REDRAW = `${HIDE}\x1b[38;2;200;200;200m\x1b[18;5Hmodel-alpha\x1b[19;5Hmodel-beta\x1b[25;42H${SHOW}`;
+
+test('opencode 形: ?25l ブロック内の ?1049h でも alt 突入が検出される', () => {
+  const first = filterCursorHideBlocksPure(bytes(OPENCODE_STYLE_STARTUP), initialState());
+  assert.equal(first.state.altScreen, true);
+  assert.equal(first.state.inBlock, true);
+  // 起動ブロックを ?25h で閉じ、続くピッカー再描画（CUP・LF なし）が破棄されないこと
+  const second = filterCursorHideBlocksPure(bytes(`${SHOW}${OPENCODE_STYLE_PICKER_REDRAW}`), first.state);
+  const text = str(second.out);
+  assert.equal(text.includes('model-alpha'), true);
+  assert.equal(text.includes('model-beta'), true);
+  assert.equal(text.includes(ALT_ENTER), true, 'ブロック内の ?1049h が通過時に再生されること');
+  const kinds = second.events.map((e) => e.kind);
+  assert.equal(kinds.includes('filter-discard'), false, `discard されないこと kinds=${kinds}`);
+  assert.equal(kinds[kinds.length - 1], 'block-passthrough-alt');
+});
+
+test('opencode 形: ブロック内で分断された ?1049h も carry で検出される', () => {
+  const whole = bytes(`${HIDE}abc${ALT_ENTER}def`);
+  const cut = bytes(`${HIDE}abc`).length + 4; // '\x1b[?1' | '049h'
+  const first = filterCursorHideBlocksPure(whole.slice(0, cut), initialState());
+  assert.equal(first.state.altScreen, false);
+  assert.equal(first.state.inBlock, true);
+  const second = filterCursorHideBlocksPure(whole.slice(cut), first.state);
+  assert.equal(second.state.altScreen, true);
+  const third = filterCursorHideBlocksPure(bytes(SHOW), second.state);
+  assert.equal(str(third.out), `${HIDE}abc${ALT_ENTER}def${SHOW}`);
+  assert.equal(third.events[0].kind, 'block-passthrough-show');
+});
+
+test('opencode 形: ブロック内の ?1049l で alt 退出も検出される', () => {
+  const input = bytes(`${ALT_ENTER}${HIDE}\x1b[3;3Hbye${ALT_EXIT}${SHOW}${SPINNER_BLOCK}`);
+  const { events, state } = filterCursorHideBlocksPure(input, initialState());
+  assert.equal(state.altScreen, false);
+  // 退出後のスピナーブロックは従来どおり破棄される
+  assert.equal(events[events.length - 1].kind, 'filter-discard');
+});
+
 test('回帰: ブロック途中でチャンクが切れても discard 判定が維持される', () => {
   const whole = bytes(`${SPINNER_BLOCK}tail`);
   const cut = bytes(HIDE).length + 10; // ブロック本文の途中

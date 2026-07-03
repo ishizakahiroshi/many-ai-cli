@@ -343,6 +343,23 @@ func nextPTYInputChunkLen(data []byte, limit int) int {
 	return n
 }
 
+// clearPrefixSplitDelay は先頭 Ctrl+U を単独書き込みした後、本文を書くまでの待ち時間。
+// 別チャンク化さえされていれば間隔ほぼ 0ms でも取り込まれることを実測済みだが、
+// パイプ内での結合を避けるため trailingEnterDelay の既定と同じ 20ms を置く。
+const clearPrefixSplitDelay = 20 * time.Millisecond
+
+// splitLeadingClearControl は入力先頭の行クリア用 Ctrl+U(0x15) を本文と別書き込みに
+// 分離すべきケースを判定し、分離する場合は (先頭 1 バイト, 残り) を返す（不要なら lead=nil）。
+// cursor-agent の TUI（v2026.07.01 で実測）は「制御文字＋本文」が同一チャンクで届くと
+// チャンク全体を入力として捨てるため、UI が前置する Ctrl+U を単独チャンクで先行送信する。
+// claude / codex 等は同一チャンクでも取り込めるため対象外（挙動不変）。
+func splitLeadingClearControl(provider string, data []byte) (lead []byte, rest []byte) {
+	if provider == "cursor-agent" && len(data) > 1 && data[0] == 0x15 {
+		return data[:1], data[1:]
+	}
+	return nil, data
+}
+
 func writeWithTrailingEnter(ps processSession, data []byte, delay time.Duration) error {
 	if len(data) > 1 && data[len(data)-1] == '\r' {
 		if err := writePTYChunked(ps, data[:len(data)-1]); err != nil {
@@ -593,6 +610,13 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 				case "pty_input":
 					if len(m.Data) > 0 {
 						data := m.Data
+						if lead, rest := splitLeadingClearControl(provider, data); lead != nil {
+							if err := writePTY(ps, lead); err != nil {
+								logPTYWriteError(logger, wses.getSID(), "clear_prefix", err)
+							}
+							time.Sleep(clearPrefixSplitDelay)
+							data = rest
+						}
 						if provider == "claude" && len(data) > 1 && data[0] == '@' {
 							// 旧形式の inject (@path\rtext\r) は互換のため分割する。
 							// 新形式 (@path text\r) は画像参照と本文を同じ入力行に残し、最後の Enter だけ分離する。
