@@ -27,8 +27,19 @@ type orchestrationManager struct {
 	appendMu sync.Mutex
 	pending  map[string]pendingChild
 	boards   map[string]*orchestrationBoard
+	// roles は C1 (plan_orchestration-spawn-ui-exposure.md) で起動時に受け取った
+	// 役割マッピングを orchestration_id ごとに保持する。conductor への instruction file
+	// 注入（C2）はここから読み出す想定。
+	roles    map[string]map[string]orchestrationRoleAssignment
 	stopOnce sync.Once
 	stopCh   chan struct{}
+}
+
+// orchestrationRoleAssignment は起動フォームの「子役割の詳細設定」アコーディオンで
+// 役割ごとに指定された CLI + モデルの組。
+type orchestrationRoleAssignment struct {
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
 }
 
 type pendingChild struct {
@@ -100,8 +111,39 @@ func newOrchestrationManager() *orchestrationManager {
 	return &orchestrationManager{
 		pending: map[string]pendingChild{},
 		boards:  map[string]*orchestrationBoard{},
+		roles:   map[string]map[string]orchestrationRoleAssignment{},
 		stopCh:  make(chan struct{}),
 	}
+}
+
+// reserveOrchestrationConductor は「オーケストレーション」ボタン経由の起動リクエストを
+// 受け取った時点で conductor 用の orchestration_id を予約する（plan_orchestration-spawn-ui-exposure.md
+// C1）。board.md の実体生成は最初の spawn-child 呼び出し時（ensureOrchestrationBoard）まで遅延させる
+// 軽量な処理にとどめる。予約は spawn 時に決めた label をキーにした pending map 経由で、
+// wrapperLoop の WS register 時（reg.Label 一致）に session へ適用される。
+func (s *Server) reserveOrchestrationConductor(label string, roles map[string]orchestrationRoleAssignment) string {
+	orchestrationID := fmt.Sprintf("o%d", time.Now().UnixNano())
+	s.orchestration.mu.Lock()
+	s.orchestration.pending[label] = pendingChild{
+		OrchestrationID: orchestrationID,
+		SpawnedAt:       time.Now(),
+	}
+	if len(roles) > 0 {
+		if s.orchestration.roles == nil {
+			s.orchestration.roles = map[string]map[string]orchestrationRoleAssignment{}
+		}
+		s.orchestration.roles[orchestrationID] = roles
+	}
+	s.orchestration.mu.Unlock()
+	return orchestrationID
+}
+
+// orchestrationRolesFor は C1 で予約された役割マッピングの取得口。
+// conductor への instruction file 注入（C2）から参照される想定で、C1 時点では未使用。
+func (s *Server) orchestrationRolesFor(id string) map[string]orchestrationRoleAssignment {
+	s.orchestration.mu.Lock()
+	defer s.orchestration.mu.Unlock()
+	return s.orchestration.roles[id]
 }
 
 func (m *orchestrationManager) stop() {
@@ -155,6 +197,30 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "role is required")
 		return
 	}
+
+	cfg := s.snapshotCfg().Orchestration
+	parent, childCount, totalSessions := s.orchestrationParentState(parentID)
+	if parent == nil {
+		writeJSONError(w, http.StatusNotFound, "not_found", "parent session not found")
+		return
+	}
+
+	// C2 (plan_orchestration-spawn-ui-exposure.md): `many-ai-cli orchestrate spawn`
+	// は provider/model を省略できる。省略時は起動フォームの詳細設定で決めた
+	// role→provider/model マッピングから自動解決する（AI に provider/model を
+	// 判断させたくない「詳細設定あり」ケース向け）。明示指定があれば常に優先する。
+	if body.Provider == "" || body.Model == "" {
+		if roles := s.orchestrationRolesFor(parent.OrchestrationID); roles != nil {
+			if ra, ok := roles[body.Role]; ok {
+				if body.Provider == "" {
+					body.Provider = ra.Provider
+				}
+				if body.Model == "" {
+					body.Model = ra.Model
+				}
+			}
+		}
+	}
 	if body.Provider == "" {
 		body.Provider = "codex"
 	}
@@ -164,13 +230,6 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 	}
 	if !spawnValidModelLabel(body.Model) || strings.HasPrefix(body.Model, "-") {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid model value")
-		return
-	}
-
-	cfg := s.snapshotCfg().Orchestration
-	parent, childCount, totalSessions := s.orchestrationParentState(parentID)
-	if parent == nil {
-		writeJSONError(w, http.StatusNotFound, "not_found", "parent session not found")
 		return
 	}
 	if parent.Depth >= cfg.MaxDepth {
@@ -215,6 +274,7 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 		writeJSONError(w, http.StatusInternalServerError, "board_error", errorDetail("board error", err))
 		return
 	}
+	s.markConductor(parentID, orchestrationID, boardPath)
 	childCWD, branch, worktreeNote := s.prepareChildWorktree(cwd, orchestrationID, body.Role, cfg)
 	if worktreeNote != "" {
 		_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("%s\n", worktreeNote))
@@ -322,12 +382,22 @@ func (s *Server) orchestrationParentState(parentID int) (*session, int, int) {
 	return parentCopy, childCount, len(s.sessions)
 }
 
-func (s *Server) ensureOrchestrationBoard(id string, parent *session, body spawnChildRequest) (string, error) {
+// orchestrationDir は board.md 一式を格納する `~/.many-ai-cli/orchestration` を返す。
+// files-list / files-content の許可ルート拡張（board.md 閲覧導線）でも参照する。
+func orchestrationDir() (string, error) {
 	base, err := config.Dir()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(base, "orchestration", safeToken(id))
+	return filepath.Join(base, "orchestration"), nil
+}
+
+func (s *Server) ensureOrchestrationBoard(id string, parent *session, body spawnChildRequest) (string, error) {
+	base, err := orchestrationDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(base, safeToken(id))
 	if err := os.MkdirAll(dir, sessionlog.PrivateDirMode); err != nil {
 		return "", err
 	}
@@ -635,6 +705,24 @@ func parseBoardSessionID(fields []string) int {
 	return 0
 }
 
+// markConductor は spawn-child の親セッションに orchestration_id / board_path を
+// 記録し、conductor カード用の情報をフロントへ配信する。子セッションと異なり
+// 親は spawnWrappedSession を経由しないため、ここで初めて自身が conductor である
+// ことを session_update として通知する必要がある。
+func (s *Server) markConductor(parentID int, orchestrationID, boardPath string) {
+	s.sessionsMu.Lock()
+	ses := s.sessions[parentID]
+	if ses == nil || (ses.OrchestrationID == orchestrationID && ses.BoardPath == boardPath) {
+		s.sessionsMu.Unlock()
+		return
+	}
+	ses.OrchestrationID = orchestrationID
+	ses.BoardPath = boardPath
+	msg := sessionUpdateMessage(ses)
+	s.sessionsMu.Unlock()
+	s.broadcast(msg)
+}
+
 func (s *Server) markChildState(sessionID int, state string) {
 	s.sessionsMu.Lock()
 	ses := s.sessions[sessionID]
@@ -705,6 +793,31 @@ func buildChildInitialPrompt(base, boardPath, role, branch string, sessionID int
 	}
 	b.WriteString("Read the board before acting. Append progress as `## " + role + " session=" + strconv.Itoa(sessionID) + " <RFC3339 time>` sections. When complete, append `## DONE " + role + " session=" + strconv.Itoa(sessionID) + "` and a concise summary.\n\n")
 	b.WriteString(base)
+	return b.String()
+}
+
+// buildConductorInitialPrompt は plan_orchestration-spawn-ui-exposure.md C2 の
+// conductor 向け起動時案内。詳細設定（roles）の有無で内容を分岐する:
+//   - あり: role→provider/model の対応表をそのまま提示し、
+//     `many-ai-cli orchestrate spawn --role <role> "<prompt>"` だけで済むことを案内する
+//   - なし: 子が必要になった時点で provider/model を明示指定する自律運用を案内する
+func buildConductorInitialPrompt(orchestrationID string, roles map[string]orchestrationRoleAssignment) string {
+	var b strings.Builder
+	b.WriteString("You are an orchestration conductor session (many-ai-cli).\n")
+	b.WriteString("Orchestration ID: " + orchestrationID + "\n")
+	if len(roles) > 0 {
+		b.WriteString("Configured child roles (provider/model already decided by the user):\n")
+		for role, ra := range roles {
+			b.WriteString(fmt.Sprintf("- %s: provider=%s model=%s\n", role, ra.Provider, ra.Model))
+		}
+		b.WriteString("To spawn a child for a role above, run:\n")
+		b.WriteString("  many-ai-cli orchestrate spawn --role <role> \"<prompt>\"\n")
+		b.WriteString("(provider/model are resolved automatically from the mapping above; pass --provider/--model to override a specific spawn.)\n")
+	} else {
+		b.WriteString("No child role mapping was configured. Decide provider/model yourself whenever a child is needed and run:\n")
+		b.WriteString("  many-ai-cli orchestrate spawn --role <role> --provider <provider> --model <model> \"<prompt>\"\n")
+	}
+	b.WriteString("Do not call the Hub HTTP API or handle any auth token directly; this subcommand does it for you.\n")
 	return b.String()
 }
 

@@ -190,6 +190,11 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		AskForApproval string `json:"ask_for_approval"`
 		Route          string `json:"route"`
 		Utf8Session    bool   `json:"utf8_session"`
+		// C1: plan_orchestration-spawn-ui-exposure.md — ツールバーの「オーケストレーション」
+		// ボタン経由の起動でのみ true。詳細設定アコーディオンで役割を設定した場合のみ
+		// OrchestrationRoles が埋まる（未設定ロールは省略 or nil）。
+		Orchestration      bool                                    `json:"orchestration"`
+		OrchestrationRoles map[string]*orchestrationRoleAssignment `json:"orchestration_roles"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
@@ -249,6 +254,32 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if spawnCwdTooBroad(cwd) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "cwd is too broad (system root or home root)")
 		return
+	}
+
+	// C1: plan_orchestration-spawn-ui-exposure.md — オーケストレーション起動の場合、
+	// 起動時点で conductor 用の orchestration_id を予約する。label が未指定なら生成して
+	// 以降の wrapArgs 組み立て（--label=...）にもそのまま乗せる。
+	var orchestrationID string
+	if body.Orchestration {
+		roles := make(map[string]orchestrationRoleAssignment, len(body.OrchestrationRoles))
+		for role, ra := range body.OrchestrationRoles {
+			if ra == nil {
+				continue
+			}
+			if ra.Provider != "" && !validOrchestrationProvider(ra.Provider) {
+				writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid orchestration role provider")
+				return
+			}
+			if strings.HasPrefix(ra.Model, "-") || !spawnValidModelLabel(ra.Model) {
+				writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid orchestration role model")
+				return
+			}
+			roles[role] = *ra
+		}
+		if body.Label == "" {
+			body.Label = fmt.Sprintf("orch-conductor-%d", time.Now().UnixNano())
+		}
+		orchestrationID = s.reserveOrchestrationConductor(body.Label, roles)
 	}
 
 	exe, err := os.Executable()
@@ -498,6 +529,10 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 			_ = spawnLog.Close()
 		}
 	})
+	if orchestrationID != "" {
+		writeJSON(w, map[string]any{"ok": true, "orchestration_id": orchestrationID})
+		return
+	}
 	writeJSON(w, map[string]bool{"ok": true})
 }
 

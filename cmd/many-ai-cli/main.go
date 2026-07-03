@@ -18,6 +18,7 @@ import (
 	"many-ai-cli/internal/hub"
 	"many-ai-cli/internal/launcher"
 	hublog "many-ai-cli/internal/log"
+	"many-ai-cli/internal/orchestrate"
 	"many-ai-cli/internal/sessionlog"
 	"many-ai-cli/internal/shell"
 	"many-ai-cli/internal/uninstall"
@@ -285,6 +286,14 @@ func run(args []string) error {
 		// 隠しサブコマンド: Claude statusLine / Codex Stop フックから呼び出される。
 		// usage() ヘルプには載せない。
 		return usagerelay.Run(args[1:])
+	case "orchestrate":
+		// 隠しサブコマンド: orchestration conductor / child セッションの AI が
+		// `many-ai-cli orchestrate spawn --role ... "prompt"` で子を起動するために使う
+		// （plan_orchestration-spawn-ui-exposure.md C2）。usage() ヘルプには載せない。
+		if len(args) < 2 {
+			return errors.New("orchestrate <spawn>")
+		}
+		return orchestrate.Run(args[1:])
 	case "-h", "--help", "help":
 		return usage()
 	default:

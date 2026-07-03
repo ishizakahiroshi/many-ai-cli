@@ -12,6 +12,7 @@ import { onActiveSessionChanged } from './token-statusbar.js';
 import { rewireChatHistorySub } from './chat-history.js';
 import { setActiveSessionForPayload } from './chat-payload.js';
 import { FilesTabManager } from './files-view.js';
+import { dirnameForPath } from './path-links.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -735,6 +736,20 @@ export function renderSessionList() {
         requestSessionHistoryReset(s.id);
       };
       actions.appendChild(resetBtn);
+
+      // conductor カード（orchestration_id あり・子ではない）にのみ「board を開く」ボタンを出す
+      if (s.orchestration_id && !s.parent_session_id && s.board_path) {
+        const boardBtn = document.createElement('button');
+        boardBtn.className = 'session-board-open-btn';
+        boardBtn.textContent = '📋';
+        boardBtn.title = t('card_board_button_tooltip');
+        boardBtn.onclick = (e) => {
+          e.stopPropagation();
+          const boardDir = dirnameForPath(s.board_path) || s.board_path;
+          FilesTabManager.openFilesTabAtFile(s.id, s.orchestration_id, boardDir, boardDir, s.board_path);
+        };
+        actions.appendChild(boardBtn);
+      }
 
       const xBtn = document.createElement('button');
       xBtn.className = 'dismiss-btn';

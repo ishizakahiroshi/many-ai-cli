@@ -521,7 +521,20 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 			defer cleanupCfg()
 		}
 	}
-	ps, err := startProcess(provider, providerArgs, cwd, initCols, initRows)
+	// C2 (plan_orchestration-spawn-ui-exposure.md): conductor / orchestration child
+	// セッションの実 CLI プロセスにだけ、`many-ai-cli orchestrate spawn` が自力で
+	// Hub API を叩けるよう session ID と Hub token を env 経由で渡す。AI がプロンプト上で
+	// token を扱わずに済むよう、コマンドライン引数ではなく継承 env に載せる（usage-relay と
+	// 同じ受け渡しパターン）。オーケストレーション対象外セッションには一切付与しない
+	// （既存セッションの env 露出面を広げないため）。
+	var providerExtraEnv []string
+	if reg.OrchestrationID != "" {
+		providerExtraEnv = []string{
+			fmt.Sprintf("MANY_AI_CLI_SESSION_ID=%d", sessionID),
+			fmt.Sprintf("%s=%s", hubTokenEnvName, cfg.Token),
+		}
+	}
+	ps, err := startProcess(provider, providerArgs, cwd, initCols, initRows, providerExtraEnv)
 	if err != nil {
 		// Hub 側の spawn ログ (~/.many-ai-cli/logs/spawn/<provider>-<ts>.log) に
 		// 何が起きたかを残し、Hub UI のセッションカード「Disconnected」表示に

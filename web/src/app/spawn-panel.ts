@@ -11,6 +11,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 // ---- 新規セッション spawn panel ----
 (function () {
   const newSessionBtn   = document.getElementById('new-session-btn');
+  const orchestrationBtn = document.getElementById('orchestration-btn');
   const newSessionPanel = document.getElementById('new-session-panel');
   const spawnCwdInput   = document.getElementById('spawn-cwd');
   const spawnCwdBrowse  = document.getElementById('spawn-cwd-browse');
@@ -31,6 +32,96 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   const spawnModelRefreshBtn = document.getElementById('spawn-model-refresh');
   let codexModelSelection: any = null;
   let claudeModelSelection: any = null;
+
+  // ---- C1: オーケストレーション（plan_orchestration-spawn-ui-exposure.md） ----
+  // 「オーケストレーション」ボタンから開いたときだけ true。同じ起動フォームを共用し、
+  // true のときだけ子役割の詳細設定アコーディオンを見せ、spawn リクエストに
+  // orchestration フラグ（+ 設定されていれば役割マッピング）を載せる。
+  let spawnOrchestrationMode = false;
+  const spawnOrchestrationSection  = document.getElementById('spawn-orchestration-section');
+  const spawnOrchestrationSummary  = document.getElementById('spawn-orchestration-summary');
+  const spawnRoleTableBody         = document.getElementById('spawn-role-table-body');
+
+  const ORCHESTRATION_ROLE_DEFS = [
+    { key: 'implementation', labelKey: 'spawn_role_implementation' },
+    { key: 'test',           labelKey: 'spawn_role_test' },
+    { key: 'review',         labelKey: 'spawn_role_review' },
+  ];
+  // Shell はロールの CLI 候補としては意味を持たないため除外。
+  const ORCHESTRATION_CLI_OPTIONS = [
+    { value: '',             labelKey: 'spawn_role_cli_none' },
+    { value: 'claude',       label: 'Claude Code' },
+    { value: 'codex',        label: 'Codex CLI' },
+    { value: 'copilot',      label: 'GitHub Copilot' },
+    { value: 'cursor-agent', label: 'Cursor Agent' },
+    { value: 'opencode',     label: 'OpenCode' },
+    { value: 'grok',         label: 'Grok Build' },
+  ];
+
+  function syncRoleModelDisabledState(): void {
+    spawnRoleTableBody?.querySelectorAll('tr').forEach(tr => {
+      const cli = tr.querySelector<HTMLSelectElement>('.spawn-role-cli');
+      const model = tr.querySelector<HTMLInputElement>('.spawn-role-model');
+      if (!cli || !model) return;
+      model.disabled = !cli.value;
+      if (!cli.value) model.value = '';
+    });
+  }
+
+  // role → {provider, model} | null のマッピングと、実際に設定された件数を返す。
+  function collectOrchestrationRoles(): { roles: Record<string, { provider: string; model: string } | null>; count: number } {
+    const roles: Record<string, { provider: string; model: string } | null> = {};
+    let count = 0;
+    spawnRoleTableBody?.querySelectorAll('tr').forEach(tr => {
+      const role = (tr as HTMLElement).dataset.role;
+      const cli = tr.querySelector<HTMLSelectElement>('.spawn-role-cli');
+      const model = tr.querySelector<HTMLInputElement>('.spawn-role-model');
+      if (!role || !cli) return;
+      if (!cli.value) { roles[role] = null; return; }
+      roles[role] = { provider: cli.value, model: (model?.value || '').trim() };
+      count++;
+    });
+    return { roles, count };
+  }
+
+  function updateOrchestrationSummary(): void {
+    if (!spawnOrchestrationSummary) return;
+    const { count } = collectOrchestrationRoles();
+    spawnOrchestrationSummary.textContent = count > 0
+      ? t('spawn_orchestration_roles_summary_set', { count })
+      : t('spawn_orchestration_roles_summary_empty');
+  }
+
+  function buildOrchestrationRoleTable(): void {
+    if (!spawnRoleTableBody) return;
+    spawnRoleTableBody.innerHTML = ORCHESTRATION_ROLE_DEFS.map(r => {
+      const cliOptions = ORCHESTRATION_CLI_OPTIONS.map(o =>
+        `<option value="${o.value}">${escapeHtml(o.label || t(o.labelKey))}</option>`
+      ).join('');
+      return (
+        `<tr data-role="${r.key}">` +
+        `<td>${escapeHtml(t(r.labelKey))}</td>` +
+        `<td><select class="spawn-role-cli">${cliOptions}</select></td>` +
+        `<td><input type="text" class="spawn-role-model" data-i18n-placeholder="spawn_role_model_placeholder" placeholder="${escapeHtml(t('spawn_role_model_placeholder'))}" disabled></td>` +
+        `</tr>`
+      );
+    }).join('');
+    spawnRoleTableBody.querySelectorAll('.spawn-role-cli').forEach(sel => {
+      sel.addEventListener('change', () => { syncRoleModelDisabledState(); updateOrchestrationSummary(); });
+    });
+    spawnRoleTableBody.querySelectorAll('.spawn-role-model').forEach(inp => {
+      inp.addEventListener('input', updateOrchestrationSummary);
+    });
+    syncRoleModelDisabledState();
+    updateOrchestrationSummary();
+  }
+
+  function setSpawnOrchestrationMode(on: boolean): void {
+    spawnOrchestrationMode = on;
+    if (spawnOrchestrationSection) (spawnOrchestrationSection as HTMLDetailsElement).hidden = !on;
+    if (on && spawnRoleTableBody && !spawnRoleTableBody.children.length) buildOrchestrationRoleTable();
+    if (spawnOrchestrationSection) (spawnOrchestrationSection as HTMLDetailsElement).open = false;
+  }
 
   // ---- C2: Detached 設定 ----
   const spawnDetachedOpts   = document.getElementById('spawn-detached-opts');
@@ -1120,8 +1211,9 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   }
 
   // ボタン押下: パネル表示 + 保存設定を復元 / 未保存時は /api/info から CWD を取得
-  newSessionBtn.addEventListener('click', async () => {
+  async function openSpawnPanelForMode(orchestration: boolean): Promise<void> {
     if (!newSessionPanel.hidden) { newSessionPanel.hidden = true; return; }
+    setSpawnOrchestrationMode(orchestration);
     const hasSavedCwd = loadSpawnSettings();
     if (!hasSavedCwd) {
       try {
@@ -1141,11 +1233,20 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       populateModelDatalist();
       clearOllamaModelDefault();
     }
-  });
+  }
+
+  newSessionBtn.addEventListener('click', () => { openSpawnPanelForMode(false); });
+  // C1: plan_orchestration-spawn-ui-exposure.md — 通常の起動フォームを共用しつつ、
+  // このボタン経由の起動だけ orchestration フラグを立てる。
+  if (orchestrationBtn) {
+    orchestrationBtn.addEventListener('click', () => { openSpawnPanelForMode(true); });
+  }
 
   // app.ts（shell セッション内で AI CLI 起動コマンドを検知した誘導）から呼ばれる。
   // 検知した provider と元 shell セッションの cwd をプリセットして新規セッションパネルを開く。
   async function openSpawnFor(provider: string, cwd: string): Promise<void> {
+    // shell セッションからの誘導起動は常に通常モード（オーケストレーションではない）。
+    setSpawnOrchestrationMode(false);
     loadSpawnSettings();
     if (cwd) {
       spawnCwdInput.value = cwd;
@@ -1175,7 +1276,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   }
   (window as any).openSpawnFor = openSpawnFor;
 
-  spawnCancelBtn.addEventListener('click', () => { newSessionPanel.hidden = true; });
+  spawnCancelBtn.addEventListener('click', () => { newSessionPanel.hidden = true; setSpawnOrchestrationMode(false); });
   spawnLaunchBtn.addEventListener('click', spawnSession);
   if (spawnCwdBrowse) {
     spawnCwdBrowse.addEventListener('click', async () => {
@@ -1638,6 +1739,13 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         bodyObj.sandbox = sandbox;
         bodyObj.ask_for_approval = approval;
       }
+      // C1: plan_orchestration-spawn-ui-exposure.md — 「オーケストレーション」ボタン経由の起動
+      // だけ orchestration フラグを立てる。役割マッピングは詳細設定を開いて設定した場合のみ添える。
+      if (spawnOrchestrationMode) {
+        bodyObj.orchestration = true;
+        const { roles, count } = collectOrchestrationRoles();
+        if (count > 0) bodyObj.orchestration_roles = roles;
+      }
       const res = await fetch(`/api/spawn?token=${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1668,6 +1776,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         codexModelSelection  = null;
         claudeModelSelection = null;
         newSessionPanel.hidden = true;
+        setSpawnOrchestrationMode(false);
 
         // C2 / C5: Detached window 選択時 — preset に応じた起動フローを実行する
         if (openTarget === 'detached') {

@@ -505,6 +505,7 @@ header {
   .dismiss-btn,
   .star-btn,
   .session-history-reset-btn,
+  .session-board-open-btn,
   .project-group-files-btn,
   .quick-cmd-btn,
   .spawn-btn-browse {
@@ -1132,7 +1133,8 @@ header {
 
 /* お気に入りボタン */
 .star-btn,
-.session-history-reset-btn {
+.session-history-reset-btn,
+.session-board-open-btn {
   position: static;
   background: none;
   appearance: none;
@@ -1152,6 +1154,7 @@ header {
 .star-btn.starred { color: var(--warn); }
 .star-btn:hover { color: var(--warn); }
 .session-history-reset-btn:hover { color: var(--accent-text); }
+.session-board-open-btn:hover { color: var(--accent-text); }
 
 /* ドラッグ状態 */
 .card.dragging { opacity: 0.4; cursor: grabbing; }
