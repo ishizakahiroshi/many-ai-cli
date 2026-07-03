@@ -1325,8 +1325,16 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	if s.tokenStatusbarEnabled() {
 		s.injectUsageHooks()
 	}
-	_ = wc.send(proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, TokenStatusbar: s.tokenStatusbarEnabled()})
+	_ = wc.send(proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, TokenStatusbar: s.tokenStatusbarEnabled(), OrchestrationID: childMeta.OrchestrationID, BoardPath: childMeta.BoardPath})
 	s.logger.Info("session registered", "id", id, "provider", reg.Provider, "cwd", reg.CWD, "pid", reg.PID)
+	// C2 (plan_orchestration-spawn-ui-exposure.md): conductor セッション（ツールバーの
+	// 「オーケストレーション」ボタン経由・Auto=false）にだけ役割マッピングの案内を注入する。
+	// spawn-child で自動生成される子（Auto=true）は handleSpawnChild 側で
+	// buildChildInitialPrompt を既に注入済みなのでここでは対象外。
+	if childMeta.OrchestrationID != "" && !childMeta.Auto {
+		roles := s.orchestrationRolesFor(childMeta.OrchestrationID)
+		s.injectText(id, buildConductorInitialPrompt(childMeta.OrchestrationID, roles), true, false)
+	}
 	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Branch: branch, Label: reg.Label, Model: reg.Model, Route: regRoute, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, ParentSessionID: childMeta.ParentSessionID, Role: childMeta.Role, Auto: childMeta.Auto, Depth: childMeta.Depth, OrchestrationID: childMeta.OrchestrationID, BoardPath: childMeta.BoardPath, WorktreeBranch: childMeta.WorktreeBranch})
 	s.writeHistory(id, map[string]any{
 		"ts":                startedAt.Format(time.RFC3339),

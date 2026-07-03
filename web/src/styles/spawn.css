@@ -71,6 +71,58 @@
 }
 #kill-all-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
+/* C1: plan_orchestration-spawn-ui-exposure.md — オーケストレーション独立ボタン。
+   停止/gridと同じ丸アイコンスタイルに揃える。 */
+.orchestration-sidebar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  opacity: 0.82;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+}
+.orchestration-icon { width: 17px; height: 17px; display: block; }
+.orchestration-sidebar-btn:hover { background: var(--accent); color: var(--bg); opacity: 1; }
+.orchestration-sidebar-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* C1: 子役割の詳細設定アコーディオン内の役割×CLI×モデル表 */
+.spawn-orchestration-section { margin-top: 6px; }
+.spawn-role-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0 4px;
+  font-size: 0.8rem;
+}
+.spawn-role-table th, .spawn-role-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+.spawn-role-table th { color: var(--muted); font-weight: 600; font-size: 0.74rem; }
+.spawn-role-table tr:last-child td { border-bottom: none; }
+.spawn-role-table td:first-child { white-space: nowrap; font-weight: 600; }
+.spawn-role-cli, .spawn-role-model {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 3px 5px;
+  font-size: 0.78rem;
+  font-family: inherit;
+}
+.spawn-role-model:disabled { opacity: 0.4; cursor: not-allowed; }
+
 #new-session-panel {
   background: var(--bg-elev);
   border: 1px solid var(--line);

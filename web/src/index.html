@@ -854,8 +854,18 @@
             <rect x="9" y="9" width="6" height="6" rx="1.2" fill="currentColor"/>
           </svg>
         </button>
-        <button id="new-session-btn" data-i18n="new_session">+ New Session</button>
         <button id="detached-grid-launcher-btn" class="detached-grid-launcher-sidebar-btn" data-i18n-tooltip="dgl_sidebar_btn_tooltip" aria-label="Open Detached Grid Launcher" title="Open Detached Grid">⊞</button>
+        <!-- C1: plan_orchestration-spawn-ui-exposure.md — 停止/gridと同じ丸アイコンボタンで
+             オーケストレーション導線を追加。クリックで通常の起動フォームを開く（spawn-panel.ts）。 -->
+        <button id="orchestration-btn" class="orchestration-sidebar-btn" data-i18n-tooltip="orchestration_tooltip" aria-label="Start orchestration conductor session">
+          <svg class="orchestration-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <circle cx="12" cy="5" r="2.4"></circle>
+            <circle cx="5" cy="19" r="2.4"></circle>
+            <circle cx="19" cy="19" r="2.4"></circle>
+            <path d="M12 7.4V12M12 12L6.6 17M12 12L17.4 17"></path>
+          </svg>
+        </button>
+        <button id="new-session-btn" data-i18n="new_session">+ New Session</button>
       </div>
       <div id="new-session-panel" hidden>
         <div class="new-session-form">
@@ -1007,6 +1017,28 @@
               </div>
             </div>
           </div>
+
+          <!-- C1: plan_orchestration-spawn-ui-exposure.md — 「オーケストレーション」ボタンから開いた
+               ときだけ表示する任意設定。既定は閉じたまま（AI任せの軽量フロー）。 -->
+          <details class="settings-section spawn-orchestration-section" id="spawn-orchestration-section" hidden>
+            <summary class="settings-section-title">
+              <span data-i18n="spawn_orchestration_roles_title">子役割の詳細設定（任意）</span>
+              <span class="settings-section-current" id="spawn-orchestration-summary" data-i18n="spawn_orchestration_roles_summary_empty">未設定（AIが都度判断）</span>
+            </summary>
+            <div class="settings-section-body">
+              <table class="spawn-role-table" id="spawn-role-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="spawn_role_table_role">役割</th>
+                    <th data-i18n="spawn_role_table_cli">CLI</th>
+                    <th data-i18n="spawn_role_table_model">モデル</th>
+                  </tr>
+                </thead>
+                <tbody id="spawn-role-table-body"></tbody>
+              </table>
+              <div class="settings-note" data-i18n="spawn_orchestration_roles_note">ここで決めた役割は conductor に伝わり、以後 AI はこの対応表を優先して子を生成します。使わない役割は CLI 欄を「使わない」のままにしてください。</div>
+            </div>
+          </details>
 
           <div class="new-session-actions">
             <button id="spawn-cancel-btn" class="spawn-btn-cancel" data-i18n="spawn_cancel">Cancel</button>
