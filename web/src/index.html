@@ -831,6 +831,15 @@
     <button id="mobile-menu-btn" type="button" aria-label="Sessions" aria-expanded="false">☰<span class="mobile-badge" hidden></span></button>
     <div id="mobile-drawer-backdrop" hidden></div>
     <button id="mobile-spawn-btn" type="button" aria-label="New Session">+</button>
+    <!-- C1: ヘッダー密集対策の続き — expose/shutdown/settings をこの⋯メニューに集約し、
+         元のボタンは対応するクリックハンドラを流用するため hidden のまま残す
+         (docs/mockups/mobile-ui-rework/index.html「A. ヘッダー密集」)。 -->
+    <button id="mobile-overflow-btn" type="button" aria-label="More" aria-haspopup="true" aria-expanded="false">⋯</button>
+    <div id="mobile-overflow-menu" hidden>
+      <button id="mobile-overflow-expose" type="button" data-proxy-for="expose-btn">🌐 <span data-i18n="expose_btn">Expose</span></button>
+      <button id="mobile-overflow-shutdown" type="button" data-proxy-for="shutdown-btn">⏻ <span data-i18n="shutdown_tooltip">Shutdown</span></button>
+      <button id="mobile-overflow-settings" type="button" data-proxy-for="settings-btn">⚙ <span data-i18n="settings">Settings</span></button>
+    </div>
     <button id="mobile-back-btn" type="button" aria-label="Back to sessions" hidden>← <span data-i18n="mobile_back">Back</span></button>
     <!-- A2/Q8: スワイプは採用しない決定（plan_mobile-ui-v0.4-scope.md C6 / Q8）。
          代替として個別セッションビューでのみ表示する前後セッション送りボタンを置く。 -->

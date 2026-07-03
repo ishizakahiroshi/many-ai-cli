@@ -1019,6 +1019,30 @@ window.closeMobileSessionDrawer = closeMobileSessionDrawer;
     window.renderMobileHome?.();
   });
 
+  // C1: ヘッダー ⋯ メニュー — expose/shutdown/settings を集約表示。項目クリックで元ボタンへプロキシする。
+  const overflowBtn = document.getElementById('mobile-overflow-btn');
+  const overflowMenu = document.getElementById('mobile-overflow-menu');
+  const closeMobileOverflowMenu = () => {
+    if (!overflowMenu || overflowMenu.hidden) return;
+    overflowMenu.hidden = true;
+    overflowBtn?.setAttribute('aria-expanded', 'false');
+  };
+  overflowBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!overflowMenu) return;
+    const willOpen = overflowMenu.hidden;
+    overflowMenu.hidden = !willOpen;
+    overflowBtn.setAttribute('aria-expanded', String(willOpen));
+  });
+  overflowMenu?.addEventListener('click', (e) => {
+    const t = e.target as HTMLElement | null;
+    const target = t?.closest<HTMLElement>('button[data-proxy-for]');
+    if (!target) return;
+    closeMobileOverflowMenu();
+    document.getElementById(target.dataset.proxyFor!)?.click();
+  });
+  document.addEventListener('click', closeMobileOverflowMenu);
+
   // A2/Q8: 個別セッション画面の前後セッション送り。switchSessionByTab(true=前 / false=次)。
   // スワイプジェスチャを採用しない代わりに、明示ボタンで前後セッションへ移動する。
   document.getElementById('mobile-prev-btn')?.addEventListener('click', () => {
