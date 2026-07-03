@@ -331,7 +331,7 @@
   "settings_usage_links_ollama_placeholder": "Default: https://ollama.com/settings",
   "settings_usage_links_lm_studio_placeholder": "Default: http://localhost:1234",
   "settings_usage_links_opencode_placeholder": "OpenCode URL",
-  "settings_usage_links_grok_placeholder": "Default: https://grok.com",
+  "settings_usage_links_grok_placeholder": "Default: https://grok.com/?_s=usage",
   "settings_usage_links_reset": "Reset to defaults",
   "settings_usage_links_reset_done": "Usage Links reset to defaults",
   "settings_readme_btn": "README",

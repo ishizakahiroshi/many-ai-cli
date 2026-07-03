@@ -160,7 +160,7 @@ export const DEFAULT_USAGE_LINKS = {
   ollama:      'https://ollama.com/settings',
   'lm-studio': 'http://localhost:1234',
   opencode: 'https://opencode.ai/go',
-  grok:     'https://grok.com',
+  grok:     'https://grok.com/?_s=usage',
 };
 
 export const FONTSIZE_MAP = { large: 15, medium: 13, small: 11 };

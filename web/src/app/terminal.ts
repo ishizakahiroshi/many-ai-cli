@@ -807,7 +807,10 @@ document.addEventListener('wheel', (e) => {
   const multiViewEl = document.getElementById('multi-view');
   const inMultiPane = !!(multiViewEl && !multiViewEl.hidden);
   const buf = t.term.buffer.active;
-  const atTop = buf.type !== 'alternate' && buf.viewportY === 0;
+  // alt buffer でここに到達するのは grok のみ（他 provider は forwardWheelToAltBuffer が
+  // PgUp/PgDn 転送で return 済み。grok 宛転送は事故防止で停止中 → scrollAltBufferPage 参照）。
+  // alt buffer は scrollback を持たず「上端」概念が無いので、常にビューア導線の対象にする。
+  const atTop = buf.type === 'alternate' || buf.viewportY === 0;
   const isGrok = sessions.get(targetSessionId)?.provider === 'grok';
   if (isGrok && e.deltaY < 0 && atTop && targetSessionId === activeSessionId && !inMultiPane && !isHistoryViewerOpen()) {
     openHistoryViewer(targetSessionId, { offset: -1 });
@@ -1009,11 +1012,13 @@ document.getElementById('scroll-to-top-btn')?.addEventListener('click', () => {
     updateScrollLockBtn(true);
     return;
   }
-  // スクロールバックが無い（Grok のように改行を出さない TUI）場合、scrollToTop は無反応のままになる。
-  // ホイール経路と同じく、その状態の▲は直近過去ログを開く導線として扱う（grok のみ）。
+  // スクロールバックが無い（Grok のように改行を出さない TUI / alt buffer）場合、
+  // scrollToTop は無反応のままになる。ホイール経路と同じく、その状態の▲は
+  // 直近過去ログを開く導線として扱う（grok のみ。alt buffer 中の grok は
+  // PgUp 転送も事故防止で停止しているため、ここが唯一の履歴導線）。
   const buf = t.term.buffer.active;
   const isGrok = sessions.get(activeSessionId)?.provider === 'grok';
-  if (isGrok && buf.type !== 'alternate' && buf.length <= t.term.rows && !isHistoryViewerOpen()) {
+  if (isGrok && (buf.type === 'alternate' || buf.length <= t.term.rows) && !isHistoryViewerOpen()) {
     openHistoryViewer(activeSessionId, { offset: -1 });
     return;
   }

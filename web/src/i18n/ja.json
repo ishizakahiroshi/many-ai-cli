@@ -331,7 +331,7 @@
   "settings_usage_links_ollama_placeholder": "デフォルト: https://ollama.com/settings",
   "settings_usage_links_lm_studio_placeholder": "デフォルト: http://localhost:1234",
   "settings_usage_links_opencode_placeholder": "OpenCode URL",
-  "settings_usage_links_grok_placeholder": "デフォルト: https://grok.com",
+  "settings_usage_links_grok_placeholder": "デフォルト: https://grok.com/?_s=usage",
   "settings_usage_links_reset": "デフォルトに戻す",
   "settings_usage_links_reset_done": "Usage Links をデフォルトに戻しました",
   "settings_readme_btn": "README",

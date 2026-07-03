@@ -1213,6 +1213,14 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	jsonlMaxBytes := int64(s.cfg.Log.SessionMaxSizeMB) * 1024 * 1024
 	sessionLogEnabled := s.cfg.Log.SessionEnabled
 	s.cfgMu.Unlock()
+	s.logger.Info("session_log_gate",
+		"stage", "register",
+		"session_id", id,
+		"provider", reg.Provider,
+		"enabled", sessionLogEnabled,
+		"raw_log_path", rawLogPath,
+		"jsonl_path", jsonlPath,
+		"jsonl_max_bytes", jsonlMaxBytes)
 	// セッションログが無効（既定）なら .jsonl を作らない（空ファイルも残さない）。
 	var history *sessionlog.Writer
 	if sessionLogEnabled {
@@ -1383,6 +1391,14 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		CWD:       req.CWD,
 		StartedAt: startedAt,
 	})
+	s.logger.Info("session_log_gate",
+		"stage", "reattach",
+		"requested_session_id", req.SessionID,
+		"provider", req.Provider,
+		"enabled", sessionLogEnabled,
+		"raw_log_path", rawLogPath,
+		"jsonl_path", jsonlPath,
+		"jsonl_max_bytes", jsonlMaxBytesReattach)
 	// セッションログが無効（既定）なら .jsonl を作らない。
 	var history *sessionlog.Writer
 	if sessionLogEnabled {
@@ -1419,6 +1435,15 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 			CWD:       req.CWD,
 			StartedAt: startedAt,
 		})
+		s.logger.Info("session_log_gate",
+			"stage", "reattach_renumbered",
+			"requested_session_id", req.SessionID,
+			"session_id", acceptedID,
+			"provider", req.Provider,
+			"enabled", sessionLogEnabled,
+			"raw_log_path", rawLogPath,
+			"jsonl_path", jsonlPath,
+			"jsonl_max_bytes", jsonlMaxBytesReattach)
 		if sessionLogEnabled {
 			if history != nil {
 				_ = history.Close()

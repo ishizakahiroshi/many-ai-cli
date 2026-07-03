@@ -13,7 +13,12 @@
 //   （bugfix_grok-response-discarded-by-cursor-hide-filter_2026-07-03.md）。
 //   alt buffer 判定は xterm の buffer.active.type ではなく本ストリーム内の ?1049h/l を
 //   自前追跡する（write キューの遅延でストリーム位置とずれるため）。
-//   ?1049h/l の検出は ?25l ブロック外のみ（Grok はセッション開始直後・ブロック外で発行する）。
+//   ?1049h/l は ?25l ブロック外・内の両方で検出する。Grok はブロック外で発行するが、
+//   opencode（opentui）は起動時に ?25l → OSC 群 → ?1049h の順でブロック内に発行するため、
+//   ブロック外のみの検出だと altScreen=false のままモデルピッカー等の再描画
+//   （CUP・LF なし）が全て filter-discard され、上下キーの反応が数秒単位で欠落する
+//   （bugfix_opencode-picker-discarded-by-cursor-hide-filter_2026-07-03.md）。
+//   ブロック内で検出したシーケンスは blockBuf に積み、通過時にそのまま再生される。
 
 import { bytesStartWith, isPossiblePrefix } from './hub-marker-filter.js';
 
@@ -137,7 +142,21 @@ export function filterCursorHideBlocksPure(
         i += showCursorSeq.length;
         continue;
       }
-      if (isPossiblePrefix(combined, i, [showCursorSeq])) {
+      // ブロック内の alt screen enter/exit も altScreen 状態へ反映する（opencode 対応）。
+      // シーケンス自体は blockBuf に積み、ブロック通過時にそのまま再生される。
+      if (bytesStartWith(combined, i, altScreenEnterSeq)) {
+        altScreen = true;
+        for (const b of altScreenEnterSeq) blockBuf.push(b);
+        i += altScreenEnterSeq.length;
+        continue;
+      }
+      if (bytesStartWith(combined, i, altScreenExitSeq)) {
+        altScreen = false;
+        for (const b of altScreenExitSeq) blockBuf.push(b);
+        i += altScreenExitSeq.length;
+        continue;
+      }
+      if (isPossiblePrefix(combined, i, [showCursorSeq, altScreenEnterSeq, altScreenExitSeq])) {
         return {
           out: new Uint8Array(out),
           state: { carry: combined.slice(i), inBlock: true, blockBuf, hasAbsPos, hasNewline, altScreen },
