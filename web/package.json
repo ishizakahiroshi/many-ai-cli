@@ -5,7 +5,7 @@
     "build": "node scripts/build.mjs",
     "check": "tsc --noEmit",
     "watch": "node scripts/build.mjs --watch",
-    "test": "bun run build && node --test dist/app/approval-parser-fixtures.js dist/app/workflow-progress-fixtures.js dist/app/hub-marker-filter-fixtures.js"
+    "test": "bun run build && node --test dist/app/approval-parser-fixtures.js dist/app/workflow-progress-fixtures.js dist/app/hub-marker-filter-fixtures.js dist/app/cursor-hide-filter-fixtures.js"
   },
   "type": "module",
   "devDependencies": {

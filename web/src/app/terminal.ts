@@ -10,6 +10,7 @@ import { scheduleApprovalCheck } from './approval.js';
 import { handleCrunchLinkClick } from './expand-popup.js';
 import { isHistoryViewerOpen, openHistoryViewer, resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
 import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
+import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, showCursorSeq } from './cursor-hide-filter.js';
 export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossibleMarkerPrefix } from './hub-marker-filter.js';
 
 // Claude Code の折りたたみマーカー: "… +23 lines (ctrl+o to expand)"。
@@ -1041,8 +1042,8 @@ export const screenClearSeqBytePatterns = [
   asciiBytes('\x1b[H'),
   asciiBytes('\x1b[0;0H'),
   asciiBytes('\x1b[1;1H'),
-  asciiBytes('\x1b[?1049h'),
-  asciiBytes('\x1b[?1049l'),
+  altScreenEnterSeq,
+  altScreenExitSeq,
 ];
 export const screenClearSeqCarryLength = Math.max(...screenClearSeqBytePatterns.map(pattern => pattern.length)) - 1;
 export const synchronizedUpdateSeqBytePatterns = [
@@ -1050,8 +1051,7 @@ export const synchronizedUpdateSeqBytePatterns = [
   asciiBytes('\x1b[?2026l'),
 ];
 export const synchronizedUpdateSeqCarryLength = Math.max(...synchronizedUpdateSeqBytePatterns.map(pattern => pattern.length)) - 1;
-export const hideCursorSeq = asciiBytes('\x1b[?25l');
-export const showCursorSeq = asciiBytes('\x1b[?25h');
+export { hideCursorSeq, showCursorSeq };
 
 // xterm 入口の [MANY-AI-CLI] ブロック・[MANY-AI-CLI-DONE] ブロック除去は
 // hub-marker-filter.ts の純関数 filterHubMarkersPure に集約されている（DOM 非依存・
@@ -1233,22 +1233,11 @@ export function snapToBottomAfterScreenClear(id) {
   if (id === activeSessionId) updateScrollLockBtn(false);
 }
 
-// \x1b[?25l（カーソル非表示）〜 \x1b[?25h（表示）ブロックの中に row;col 形式の
-// 絶対カーソル移動（\x1b[row;colH）が含まれる場合はブロック全体をフィルタする。
-// Claude Code がステータスバーをこのパターンで書き込んでおり、xterm.js の
-// スクロールバックに混入してツール呼び出し行の文字が壊れる原因になる。
-// 絶対移動を含まない（初期化の cursor home 等）は通過させる。
-// 改行（LF）を含むブロックも通過させる。ステータスバー更新は 1 行内の
-// 書き換えで改行を含まない一方、Claude Code の起動バナー等の本文描画は
-// 同じ ?25l〜?25h + 絶対移動パターンかつ複数行で、破棄すると spawn 直後の
-// 画面が真っ黒になる（jsonl 実測: バナー約1.3〜1.5KB は改行入り、
-// 破棄すべきステータス更新 30B は改行なし）。
-// 改行を見つけた時点で「破棄対象でない」と確定するため、?25h を待たず即 flush する。
-// Claude Code の /model 等のセレクタダイアログは描画後カーソルを非表示のままにして
-// ?25h を送らないため、閉じを待つ実装だと描画全体（<2KB）が blockBuf に滞留し、
-// 次の PTY 出力が来るまでダイアログが画面に一切表示されない
-// （承認バーには出るのにターミナルには出ない、の原因）。
-const MAX_CURSOR_HIDE_BUF = 2048;
+// \x1b[?25l（カーソル非表示）〜 \x1b[?25h（表示）ブロックの分類・破棄ロジック本体は
+// cursor-hide-filter.ts の filterCursorHideBlocksPure に切り出した（node:test 検証のため）。
+// 分類ルール・alt buffer 素通しの背景コメントもそちらを参照。
+// 下のラッパーは terminal の state と純関数の state を橋渡しし、破棄/通過イベントを
+// debug 計装とライブ進捗行抽出（extractAndSetLiveStatus）へ配線するだけ。
 
 // 一時デバッグ用: grok の応答が本フィルタで破棄され extractAndSetLiveStatus 経由に
 // のみ渡っているという仮説を実機で確認するための計装。検証後に削除予定
@@ -1320,120 +1309,30 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
     t.cursorHideHasNewline = false;
     return bytes;
   }
-  const carry = t.cursorHideFilterCarry || new Uint8Array(0);
-  const combined = new Uint8Array(carry.length + bytes.length);
-  combined.set(carry, 0);
-  combined.set(bytes, carry.length);
-
-  const out: number[] = [];
-  let i = 0;
-  let inBlock: boolean = t.inCursorHideBlock || false;
-  let blockBuf: number[] = [...(t.cursorHideBlockBuf || [])];
-  let hasAbsPos: boolean = t.cursorHideHasAbsPos || false;
-  let hasNewline: boolean = t.cursorHideHasNewline || false;
-
-  while (i < combined.length) {
-    if (!inBlock) {
-      if (bytesStartWith(combined, i, hideCursorSeq)) {
-        inBlock = true;
-        blockBuf = [];
-        hasAbsPos = false;
-        hasNewline = false;
-        i += hideCursorSeq.length;
-        continue;
-      }
-      if (isPossiblePrefix(combined, i, [hideCursorSeq])) {
-        t.cursorHideFilterCarry = combined.slice(i);
-        t.inCursorHideBlock = false;
-        t.cursorHideBlockBuf = [];
-        t.cursorHideHasAbsPos = false;
-        t.cursorHideHasNewline = false;
-        return new Uint8Array(out);
-      }
-      out.push(combined[i]);
-      i++;
-    } else {
-      // バッファ上限超過時は非ステータス扱いで通過
-      if (blockBuf.length >= MAX_CURSOR_HIDE_BUF) {
-        debugLogCursorHide(id, 'block-passthrough-overflow', hasAbsPos, hasNewline, '', computeBlockMetrics(blockBuf, t.term));
-        for (const b of hideCursorSeq) out.push(b);
-        for (const b of blockBuf) out.push(b);
-        inBlock = false;
-        blockBuf = [];
-        hasAbsPos = false;
-        hasNewline = false;
-        continue;
-      }
-      if (bytesStartWith(combined, i, showCursorSeq)) {
-        if (!hasAbsPos || hasNewline) {
-          // ステータスバー更新でない（絶対移動なし or 複数行の本文描画） → 通過
-          debugLogCursorHide(id, 'block-passthrough-show', hasAbsPos, hasNewline, '', computeBlockMetrics(blockBuf, t.term));
-          for (const b of hideCursorSeq) out.push(b);
-          for (const b of blockBuf) out.push(b);
-          for (const b of showCursorSeq) out.push(b);
-        } else {
-          // ステータスバー更新（スピナー進捗等）は scrollback へ描かず破棄するが、
-          // 可読テキストを抽出して専用ライブ行に出し、進捗を可視化する。
-          debugLogCursorHide(id, 'filter-discard', hasAbsPos, hasNewline, utf8Decoder.decode(new Uint8Array(blockBuf)), computeBlockMetrics(blockBuf, t.term));
-          extractAndSetLiveStatus(id, blockBuf);
-        }
-        inBlock = false;
-        blockBuf = [];
-        hasAbsPos = false;
-        hasNewline = false;
-        i += showCursorSeq.length;
-        continue;
-      }
-      if (isPossiblePrefix(combined, i, [showCursorSeq])) {
-        t.cursorHideFilterCarry = combined.slice(i);
-        t.inCursorHideBlock = true;
-        t.cursorHideBlockBuf = blockBuf;
-        t.cursorHideHasAbsPos = hasAbsPos;
-        t.cursorHideHasNewline = hasNewline;
-        return new Uint8Array(out);
-      }
-      // \x1b[row;colH（row・col ともに数字あり）を検出したらステータス更新とみなす
-      if (!hasAbsPos && combined[i] === 0x1b && i + 4 < combined.length && combined[i + 1] === 0x5b) {
-        let j = i + 2;
-        let rowDigits = 0;
-        while (j < combined.length && combined[j] >= 0x30 && combined[j] <= 0x39) { j++; rowDigits++; }
-        if (rowDigits > 0 && j < combined.length && combined[j] === 0x3b) {
-          j++;
-          let colDigits = 0;
-          while (j < combined.length && combined[j] >= 0x30 && combined[j] <= 0x39) { j++; colDigits++; }
-          if (colDigits > 0 && j < combined.length && combined[j] === 0x48) {
-            hasAbsPos = true;
-            for (let k = i; k <= j; k++) blockBuf.push(combined[k]);
-            i = j + 1;
-            continue;
-          }
-        }
-      }
-      if (combined[i] === 0x0A) {
-        // 改行入り = 本文描画と確定。?25h を待たずに通過させてブロックを抜ける。
-        // 以降のバイトは生のまま通過し、後続の ?25h も（来れば）そのまま流れる。
-        blockBuf.push(combined[i]);
-        i++;
-        debugLogCursorHide(id, 'block-passthrough-lf', hasAbsPos, true, '', computeBlockMetrics(blockBuf, t.term));
-        for (const b of hideCursorSeq) out.push(b);
-        for (const b of blockBuf) out.push(b);
-        inBlock = false;
-        blockBuf = [];
-        hasAbsPos = false;
-        hasNewline = false;
-        continue;
-      }
-      blockBuf.push(combined[i]);
-      i++;
+  const { out, state, events } = filterCursorHideBlocksPure(bytes, {
+    carry: t.cursorHideFilterCarry || new Uint8Array(0),
+    inBlock: t.inCursorHideBlock || false,
+    blockBuf: t.cursorHideBlockBuf || [],
+    hasAbsPos: t.cursorHideHasAbsPos || false,
+    hasNewline: t.cursorHideHasNewline || false,
+    altScreen: t.cursorHideAltScreen || false,
+  });
+  for (const ev of events) {
+    const text = ev.kind === 'filter-discard' ? utf8Decoder.decode(new Uint8Array(ev.blockBuf)) : '';
+    debugLogCursorHide(id, ev.kind, ev.hasAbsPos, ev.hasNewline, text, computeBlockMetrics(ev.blockBuf, t.term));
+    // filter-discard: 従来どおり破棄ブロックからライブ進捗行を抽出。
+    // block-passthrough-alt: alt buffer 中は画面にも描くが、ピル表示は従来どおり更新する。
+    if (ev.kind === 'filter-discard' || ev.kind === 'block-passthrough-alt') {
+      extractAndSetLiveStatus(id, ev.blockBuf);
     }
   }
-
-  t.cursorHideFilterCarry = new Uint8Array(0);
-  t.inCursorHideBlock = inBlock;
-  t.cursorHideBlockBuf = blockBuf;
-  t.cursorHideHasAbsPos = hasAbsPos;
-  t.cursorHideHasNewline = hasNewline;
-  return new Uint8Array(out);
+  t.cursorHideFilterCarry = state.carry;
+  t.inCursorHideBlock = state.inBlock;
+  t.cursorHideBlockBuf = state.blockBuf;
+  t.cursorHideHasAbsPos = state.hasAbsPos;
+  t.cursorHideHasNewline = state.hasNewline;
+  t.cursorHideAltScreen = state.altScreen;
+  return out;
 }
 
 // ── スピナー等のライブ進捗行 ───────────────────────────────────────────────
