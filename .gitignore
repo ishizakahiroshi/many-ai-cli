@@ -33,6 +33,8 @@ Thumbs.db
 *.local.json
 docs/local/
 *gopty_lic.json
+# orchestration の子セッション用 git worktree 置き場（hub が実行時に生成する作業領域）
+.many-ai-cli/
 
 # --- 認証情報・secrets・鍵（public へ絶対に出さない）---
 *.pem
