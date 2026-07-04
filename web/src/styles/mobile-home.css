@@ -8,16 +8,17 @@
    下の @media (max-width: 720px) で display: inline-flex に上書きする。 */
 #attach-camera-btn { display: none; }
 
-/* A2/Q8: スマホ前後セッション送り（◀ ▶）も PC では非表示。
-   @media (max-width: 720px) + body.mobile-has-session で位置付きで表示する。 */
-#mobile-prev-btn,
-#mobile-next-btn { display: none; }
-
 /* A3: 簡易ターミナルビュー（mobile-terminal-lite.ts）は PC では非表示。
    @media (max-width: 720px) + body.mobile-has-session で xterm を置き換える形で表示する。 */
 #mobile-terminal-lite { display: none; }
 
 @media (max-width: 720px) {
+  /* C6: タップ時の灰色ハイライトを全体で消す（ボタン・カード・行の :active スタイルで代替済み）。
+     -webkit-tap-highlight-color は継承されるため html に 1 箇所で足りる。 */
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   /* ── ホーム画面コンテナ ── */
   body.mobile-home-view #mobile-home {
     display: block;
@@ -26,7 +27,8 @@
   #mobile-home {
     overflow-y: auto;
     flex: 1 1 auto;
-    padding: 8px;
+    /* C6 PWA safe-area: 横ノッチ（landscape）で本文が欠けないよう左右 inset を加算。 */
+    padding: 8px calc(8px + env(safe-area-inset-right)) 8px calc(8px + env(safe-area-inset-left));
     background: var(--bg-layer);
     flex-direction: column;
     gap: var(--space-3, 8px);
@@ -34,67 +36,9 @@
   }
 
   /* ホーム表示中はサイドバーとターミナルを隠す */
-  body.mobile-home-view #session-list,
+  body.mobile-home-view:not(.mobile-drawer-open) #session-list,
   body.mobile-home-view #terminal-column {
     display: none !important;
-  }
-
-  /* ← 戻るボタン：個別セッション画面でのみ表示 */
-  #mobile-back-btn {
-    display: none;
-    position: fixed;
-    top: 6px;
-    left: 8px;
-    z-index: 1100;
-    background: var(--bg);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    color: var(--text);
-    font-size: 0.85rem;
-    padding: 4px 10px;
-    cursor: pointer;
-    min-height: 36px;
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #mobile-back-btn {
-    display: inline-flex;
-    align-items: center;
-  }
-
-  /* A2/Q8: 前後セッション送りボタンは個別セッションビューでのみ表示し、
-     画面右上の固定位置（ハンバーガーの左隣）に並べる。 */
-  #mobile-prev-btn,
-  #mobile-next-btn {
-    position: fixed;
-    top: 6px;
-    z-index: 1100;
-    width: 38px;
-    height: 36px;
-    padding: 0;
-    background: var(--bg);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    color: var(--text);
-    font-size: 0.95rem;
-    cursor: pointer;
-    align-items: center;
-    justify-content: center;
-  }
-  /* C1: 右上固定列は +(right:8) / ⋯(right:52) の後ろに続くため、prev/next はさらに外側へ押し出す
-     (docs/local/plan_mobile-ui-rework.md C1)。 */
-  body.mobile-has-session:not(.mobile-home-view) #mobile-prev-btn {
-    display: inline-flex;
-    right: 138px;
-  }
-  body.mobile-has-session:not(.mobile-home-view) #mobile-next-btn {
-    display: inline-flex;
-    right: 94px;
-  }
-  /* セッションが 1 件以下なら前後送りを薄くして無効感を出す（クリックは JS 側で抑止）。 */
-  body.mobile-only-one-session #mobile-prev-btn,
-  body.mobile-only-one-session #mobile-next-btn {
-    opacity: 0.35;
-    pointer-events: none;
   }
 
   /* ── ハンバーガーバッジ ── */
@@ -125,11 +69,36 @@
     display: inline-flex;
   }
 
+  body.mobile-home-view #mobile-spawn-btn {
+    display: inline-flex;
+    position: fixed;
+    top: auto;
+    right: calc(14px + env(safe-area-inset-right));
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    z-index: 1200;
+    width: auto;
+    min-width: 96px;
+    height: 48px;
+    min-height: 48px;
+    padding: 0 16px;
+    border-radius: 999px;
+    font-size: 0.95rem;
+    font-weight: 800;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+  }
+
   /* ── セクション ── */
   .mh-section {
     display: flex;
     flex-direction: column;
     gap: var(--space-2, 6px);
+  }
+
+  .mh-results,
+  .mobile-drawer-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3, 8px);
   }
 
   .mh-section--pinned {
@@ -151,8 +120,34 @@
     border-bottom: 1px solid var(--line);
   }
 
-  .mh-section--pending .mh-section-header {
+  .mh-section--pinned .mh-section-header {
     color: var(--danger, #e53e3e);
+  }
+
+  .mh-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 0 10px;
+    margin-bottom: 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg);
+    color: var(--muted);
+  }
+  .mh-search input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--text);
+    font-size: 16px;
+  }
+  .mh-search-icon {
+    flex: 0 0 auto;
+    font-size: 1rem;
   }
 
   /* ── カード ── */
@@ -188,6 +183,57 @@
     border-left-color: var(--orange, #dd6b20);
   }
 
+  .mh-session-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 56px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+  }
+  .mh-session-row--running { border-left-color: var(--warning, #d69e2e); }
+  .mh-session-row--waiting { border-left-color: var(--success, #38a169); }
+  .mh-session-row--error {
+    border-left-color: var(--danger, #e53e3e);
+    opacity: 0.76;
+  }
+  .mh-session-row.is-active {
+    border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+    background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  }
+  .mh-session-row--compact {
+    min-height: 48px;
+    padding: 7px 8px;
+  }
+  .mh-row-main {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .mh-row-title {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    /* C6: スマホ本文 16px 基準（リスト行の主テキスト）。 */
+    font-size: 16px;
+    font-weight: 650;
+  }
+  .mh-row-progress {
+    margin-top: 2px;
+    color: var(--text-soft);
+    font-size: 0.76rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   /* ── カードヘッダー ── */
   .mh-card-header {
     display: flex;
@@ -197,7 +243,8 @@
 
   .mh-card-title {
     flex: 1;
-    font-size: 0.88rem;
+    /* C6: スマホ本文 16px 基準（承認カードのタイトル行）。 */
+    font-size: 16px;
     font-weight: 600;
     color: var(--text);
     overflow: hidden;
@@ -220,7 +267,8 @@
   }
 
   /* ── 状態バッジ ── */
-  .mh-state-badge {
+  .mh-state-badge,
+  .mh-state-chip {
     flex-shrink: 0;
     font-size: 0.72rem;
     font-weight: 600;
@@ -229,12 +277,22 @@
     border: 1px solid currentColor;
   }
 
-  .mh-state-badge--running { color: var(--warning, #d69e2e); }
+  .mh-state-chip--pending { color: var(--danger, #e53e3e); }
+  .mh-state-badge--running,
+  .mh-state-chip--running { color: var(--warning, #d69e2e); }
   .mh-state-badge--waiting,
   .mh-state-badge--standby,
-  .mh-state-badge--done { color: var(--success, #38a169); }
+  .mh-state-badge--done,
+  .mh-state-chip--waiting { color: var(--success, #38a169); }
   .mh-state-badge--error,
-  .mh-state-badge--disconnected { color: var(--danger, #e53e3e); }
+  .mh-state-badge--disconnected,
+  .mh-state-chip--error { color: var(--danger, #e53e3e); }
+
+  .mh-progress-line,
+  .mh-pending-empty {
+    color: var(--text-soft);
+    font-size: 0.82rem;
+  }
 
   /* ── スニペット（最新ひと言） ── */
   .mh-card-snippet {
@@ -385,7 +443,7 @@
     display: flex;
     flex-direction: column;
     max-height: min(78dvh, 620px);
-    padding: 8px 14px calc(14px + env(safe-area-inset-bottom));
+    padding: 8px calc(14px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
     border-radius: 18px 18px 0 0;
     border: 1px solid var(--line);
     background: var(--bg, #111827);
@@ -568,7 +626,7 @@
 
   /* ── A3: 簡易ターミナルビュー ── */
   /* xterm.js のフル描画は狭い画面で読みづらいため、個別セッション + mobile 幅では
-     #terminal-area-wrapper を hidden にして #mobile-terminal-lite (直近 N 行の pre) を出す。
+     #terminal-area-wrapper を hidden にして #mobile-terminal-lite（チャットトランスクリプト表示）を出す。
      xterm.js 自身は document に attach されたまま生きているので承認検出・PTY 受信は続く。 */
   body.mobile-has-session:not(.mobile-home-view) #terminal-area-wrapper {
     display: none !important;
@@ -707,6 +765,9 @@
     height: 100%;
     display: flex;
     flex-direction: column;
+    /* C6 PWA safe-area: 全画面モーダルのヘッド行がノッチ、下端がホームバーに被らないようにする。 */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
   }
   .mtl-detail-head {
     display: flex;
@@ -767,6 +828,54 @@
     color: var(--muted);
     font-size: 0.9rem;
     text-align: center;
+  }
+
+  .mh-empty--compact {
+    padding: 14px 8px;
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  #mobile-drawer-content[hidden] {
+    display: none !important;
+  }
+  body.mobile-drawer-open #mobile-drawer-content {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  body.mobile-drawer-open #session-list {
+    background: var(--bg-layer);
+  }
+  body.mobile-drawer-open #sessions {
+    display: none;
+  }
+  body.mobile-drawer-open #new-session-bar {
+    display: none;
+  }
+  body.mobile-drawer-open #new-session-panel:not([hidden]) {
+    display: block;
+    margin-top: 10px;
+  }
+  .mobile-drawer-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .mobile-drawer-actions {
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+  }
+  .mobile-drawer-action {
+    width: 100%;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg);
+    color: var(--text);
+    font-weight: 650;
+    text-align: left;
   }
 
   /* B2: スマホ専用「📷 撮影」ボタン（attach-panel 内）。

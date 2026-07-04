@@ -979,16 +979,22 @@ for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
 export function syncMobileLayoutState() {
   const hasSession = activeSessionId !== null && sessions.size > 0;
   document.body.classList.toggle('mobile-has-session', hasSession);
-  // A2: セッション数 1 件以下の時は前後送り (◀ ▶) を無効状態として薄く表示する。
-  // mobile-home.css の body.mobile-only-one-session ルールで opacity と pointer-events を制御。
-  document.body.classList.toggle('mobile-only-one-session', sessions.size <= 1);
   // スマホホーム画面: セッションが選択されていない場合はホームビューを表示
   const isMobile = window.matchMedia('(max-width: 720px)').matches;
   document.body.classList.toggle('mobile-home-view', isMobile && !hasSession);
   // バックボタン・ホーム画面の表示切替
-  const backBtn = document.getElementById('mobile-back-btn');
+  const titleBtn = document.getElementById('mobile-session-title-btn');
+  const logBtn = document.getElementById('mobile-log-btn');
   const mobileHome = document.getElementById('mobile-home');
-  if (backBtn) backBtn.hidden = !(isMobile && hasSession);
+  if (titleBtn) {
+    titleBtn.hidden = !(isMobile && hasSession);
+    titleBtn.setAttribute('aria-expanded', String(isMobile && hasSession && document.body.classList.contains('mobile-drawer-open')));
+    if (isMobile && hasSession && activeSessionId !== null) {
+      const s = sessions.get(activeSessionId);
+      titleBtn.textContent = s ? `#${activeSessionId} ${s.label || s.cwd?.split(/[\\/]/).filter(Boolean).pop() || s.provider || ''}` : `#${activeSessionId}`;
+    }
+  }
+  if (logBtn) logBtn.hidden = !(isMobile && hasSession);
   if (mobileHome) mobileHome.hidden = !(isMobile && !hasSession);
   // ハンバーガーバッジ: 個別セッションビュー中に他セッションの承認待ち数を表示
   const badge = document.querySelector<HTMLElement>('#mobile-menu-btn .mobile-badge');
@@ -1001,7 +1007,8 @@ export function syncMobileLayoutState() {
       badge.hidden = true;
     }
   }
-  if (!hasSession) closeMobileSessionDrawer();
+  if (sessions.size === 0) closeMobileSessionDrawer();
+  if (isMobile) (window as any).renderMobileSessionDrawer?.();
 }
 
 window.addEventListener('approval-queue-updated', () => {
@@ -1009,28 +1016,117 @@ window.addEventListener('approval-queue-updated', () => {
 });
 
 export function openMobileSessionDrawer() {
+  if (!isMobileViewport()) return;
+  (window as any).renderMobileSessionDrawer?.();
   document.body.classList.add('mobile-drawer-open');
   const btn = document.getElementById('mobile-menu-btn');
+  const titleBtn = document.getElementById('mobile-session-title-btn');
   const backdrop = document.getElementById('mobile-drawer-backdrop');
   if (btn) btn.setAttribute('aria-expanded', 'true');
+  if (titleBtn) titleBtn.setAttribute('aria-expanded', 'true');
   if (backdrop) backdrop.hidden = false;
 }
 
 export function closeMobileSessionDrawer() {
   document.body.classList.remove('mobile-drawer-open');
   const btn = document.getElementById('mobile-menu-btn');
+  const titleBtn = document.getElementById('mobile-session-title-btn');
   const backdrop = document.getElementById('mobile-drawer-backdrop');
   if (btn) btn.setAttribute('aria-expanded', 'false');
+  if (titleBtn) titleBtn.setAttribute('aria-expanded', 'false');
   if (backdrop) backdrop.hidden = true;
 }
 
 window.syncMobileLayoutState = syncMobileLayoutState;
 window.closeMobileSessionDrawer = closeMobileSessionDrawer;
 
+function mobileSessionToastTitle(id: number): string {
+  const s = sessions.get(id);
+  if (!s) return `#${id}`;
+  const name = s.label || String(s.cwd || '').replace(/\\/g, '/').split('/').filter(Boolean).pop() || s.provider || '';
+  return name ? `#${id} ${name}` : `#${id}`;
+}
+
+function activateNextMobileSession(): void {
+  if (sessions.size <= 1 || activeSessionId === null) return;
+  const all = orderSessions();
+  const currentIdx = all.findIndex(s => s.id === activeSessionId);
+  if (currentIdx === -1) return;
+  const next = all[(currentIdx + 1) % all.length];
+  if (!next) return;
+  activateSession(next.id);
+  showToast(t('session_switch_toast', { name: mobileSessionToastTitle(next.id) }));
+}
+
+function initMobileEdgeGestures(): void {
+  let startX = 0;
+  let startY = 0;
+  let edge: 'left' | 'right' | null = null;
+  let consumed = false;
+  const EDGE_PX = 24;
+  const MIN_DX = 54;
+  // スクロールコンテナ（.mtl-chat-view / #mobile-home / .mobile-drawer-body）は
+  // 起点ブロックしない: 画面端 EDGE_PX 内の touchstart は常にジェスチャー候補とし、
+  // 縦スクロールとの競合は touchmove の縦優先キャンセル（|dy| > |dx| → edge=null）で防ぐ。
+  const blockedSelector = [
+    '#mobile-approval-sheet',
+    '#mobile-approval-sheet-backdrop',
+    '.mas-grab',
+    '.mas-content',
+  ].join(', ');
+  const isGestureBlocked = (target: EventTarget | null): boolean => {
+    const el = target instanceof HTMLElement ? target : null;
+    return !!el?.closest(blockedSelector) || document.body.classList.contains('mobile-drawer-open') || document.body.classList.contains('mobile-approval-sheet-open');
+  };
+
+  document.addEventListener('touchstart', (ev) => {
+    if (!isMobileViewport()) return;
+    if (document.querySelector('.mtl-detail-overlay')) return;
+    if (isGestureBlocked(ev.target)) return;
+    if ((ev.target as HTMLElement | null)?.closest('input, textarea, select, a')) return;
+    const touch = ev.touches[0];
+    if (!touch) return;
+    const width = window.innerWidth || document.documentElement.clientWidth;
+    startX = touch.clientX;
+    startY = touch.clientY;
+    consumed = false;
+    if (startX <= EDGE_PX) edge = 'left';
+    else if (width - startX <= EDGE_PX) edge = 'right';
+    else edge = null;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', (ev) => {
+    if (!edge || consumed || !isMobileViewport()) return;
+    if (document.querySelector('.mtl-detail-overlay') || document.body.classList.contains('mobile-drawer-open') || document.body.classList.contains('mobile-approval-sheet-open')) { edge = null; return; }
+    const touch = ev.touches[0];
+    if (!touch) return;
+    const dx = touch.clientX - startX;
+    const dy = touch.clientY - startY;
+    if (Math.abs(dy) > Math.abs(dx)) {
+      edge = null;
+      return;
+    }
+    if (edge === 'left' && dx > MIN_DX) {
+      consumed = true;
+      openMobileSessionDrawer();
+    } else if (edge === 'right' && dx < -MIN_DX) {
+      consumed = true;
+      activateNextMobileSession();
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', () => {
+    edge = null;
+    consumed = false;
+  }, { passive: true });
+}
+
 (function initMobileControls() {
   const menuBtn = document.getElementById('mobile-menu-btn');
   const backdrop = document.getElementById('mobile-drawer-backdrop');
   const spawnBtn = document.getElementById('mobile-spawn-btn');
+  const titleBtn = document.getElementById('mobile-session-title-btn');
+  const logBtn = document.getElementById('mobile-log-btn');
   const keyboardToggle = document.getElementById('mobile-keyboard-toggle');
   const keyboardPanel = document.getElementById('mobile-keyboard-panel');
   const keyRow = document.getElementById('mobile-key-row');
@@ -1046,6 +1142,15 @@ window.closeMobileSessionDrawer = closeMobileSessionDrawer;
     e.stopPropagation();
     openMobileSessionDrawer();
     document.getElementById('new-session-btn')?.click();
+  });
+  titleBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openMobileSessionDrawer();
+  });
+  logBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!isMobileViewport()) return;
+    document.querySelector<HTMLElement>('.mtl-detail-icon')?.click();
   });
   keyboardToggle?.addEventListener('click', () => {
     const nextHidden = !keyboardPanel.hidden;
@@ -1088,49 +1193,7 @@ window.closeMobileSessionDrawer = closeMobileSessionDrawer;
       keyRow?.querySelector('[data-mobile-key="ctrl"]')?.setAttribute('aria-pressed', 'false');
     }
   });
-  // #mobile-back-btn: 個別セッションビューからホームへ戻る
-  const backBtn = document.getElementById('mobile-back-btn');
-  backBtn?.addEventListener('click', () => {
-    set_activeSessionId(null);
-    closeMobileSessionDrawer();
-    syncMobileLayoutState();
-    window.renderMobileHome?.();
-  });
-
-  // C1: ヘッダー ⋯ メニュー — expose/shutdown/settings を集約表示。項目クリックで元ボタンへプロキシする。
-  const overflowBtn = document.getElementById('mobile-overflow-btn');
-  const overflowMenu = document.getElementById('mobile-overflow-menu');
-  const closeMobileOverflowMenu = () => {
-    if (!overflowMenu || overflowMenu.hidden) return;
-    overflowMenu.hidden = true;
-    overflowBtn?.setAttribute('aria-expanded', 'false');
-  };
-  overflowBtn?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (!overflowMenu) return;
-    const willOpen = overflowMenu.hidden;
-    overflowMenu.hidden = !willOpen;
-    overflowBtn.setAttribute('aria-expanded', String(willOpen));
-  });
-  overflowMenu?.addEventListener('click', (e) => {
-    const t = e.target as HTMLElement | null;
-    const target = t?.closest<HTMLElement>('button[data-proxy-for]');
-    if (!target) return;
-    closeMobileOverflowMenu();
-    document.getElementById(target.dataset.proxyFor!)?.click();
-  });
-  document.addEventListener('click', closeMobileOverflowMenu);
-
-  // A2/Q8: 個別セッション画面の前後セッション送り。switchSessionByTab(true=前 / false=次)。
-  // スワイプジェスチャを採用しない代わりに、明示ボタンで前後セッションへ移動する。
-  document.getElementById('mobile-prev-btn')?.addEventListener('click', () => {
-    if (sessions.size <= 1) return;
-    switchSessionByTab(true);
-  });
-  document.getElementById('mobile-next-btn')?.addEventListener('click', () => {
-    if (sessions.size <= 1) return;
-    switchSessionByTab(false);
-  });
+  initMobileEdgeGestures();
 
   // ビューポート幅変化（スマホ↔PC 切替）で DOM 状態を再同期
   const mql = window.matchMedia('(max-width: 720px)');

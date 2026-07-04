@@ -7,7 +7,8 @@
   <link id="app-favicon" rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <meta name="theme-color" content="#08090d">
+  <!-- C6: theme-color はヘッダー/ボディ基調色 --bg (#0d0f17) に同期（manifest 側も同値） -->
+  <meta name="theme-color" content="#0d0f17">
   <!-- 標準の mobile-web-app-capable を併記（apple- 版のみだと Chrome が deprecation 警告を出す） -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -829,24 +830,13 @@
   </div>
   <div id="app">
     <button id="mobile-menu-btn" type="button" aria-label="Sessions" aria-expanded="false">☰<span class="mobile-badge" hidden></span></button>
+    <button id="mobile-session-title-btn" type="button" hidden aria-haspopup="true" aria-expanded="false"></button>
+    <button id="mobile-log-btn" type="button" hidden aria-label="Raw log">⛶</button>
     <div id="mobile-drawer-backdrop" hidden></div>
-    <button id="mobile-spawn-btn" type="button" aria-label="New Session">+</button>
-    <!-- C1: ヘッダー密集対策の続き — expose/shutdown/settings をこの⋯メニューに集約し、
-         元のボタンは対応するクリックハンドラを流用するため hidden のまま残す
-         (docs/mockups/mobile-ui-rework/index.html「A. ヘッダー密集」)。 -->
-    <button id="mobile-overflow-btn" type="button" aria-label="More" aria-haspopup="true" aria-expanded="false">⋯</button>
-    <div id="mobile-overflow-menu" hidden>
-      <button id="mobile-overflow-expose" type="button" data-proxy-for="expose-btn">🌐 <span data-i18n="expose_btn">Expose</span></button>
-      <button id="mobile-overflow-shutdown" type="button" data-proxy-for="shutdown-btn">⏻ <span data-i18n="shutdown_tooltip">Shutdown</span></button>
-      <button id="mobile-overflow-settings" type="button" data-proxy-for="settings-btn">⚙ <span data-i18n="settings">Settings</span></button>
-    </div>
-    <button id="mobile-back-btn" type="button" aria-label="Back to sessions" hidden>← <span data-i18n="mobile_back">Back</span></button>
-    <!-- A2/Q8: スワイプは採用しない決定（plan_mobile-ui-v0.4-scope.md C6 / Q8）。
-         代替として個別セッションビューでのみ表示する前後セッション送りボタンを置く。 -->
-    <button id="mobile-prev-btn" type="button" aria-label="Previous session" data-i18n-tooltip="mobile_prev_tooltip">◀</button>
-    <button id="mobile-next-btn" type="button" aria-label="Next session" data-i18n-tooltip="mobile_next_tooltip">▶</button>
+    <button id="mobile-spawn-btn" type="button" aria-label="New Session" data-i18n="mobile_new_session">＋ 新規</button>
     <section id="mobile-home" hidden aria-label="All sessions"></section>
     <aside id="session-list">
+      <div id="mobile-drawer-content" hidden></div>
       <div id="new-session-bar">
         <button id="kill-all-btn" data-i18n-tooltip="kill_all_tooltip" aria-label="Terminate all sessions">
           <svg class="kill-all-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">

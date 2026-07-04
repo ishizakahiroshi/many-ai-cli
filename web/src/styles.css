@@ -441,8 +441,8 @@ header {
 
 #mobile-menu-btn,
 #mobile-spawn-btn,
-#mobile-overflow-btn,
-#mobile-overflow-menu,
+#mobile-session-title-btn,
+#mobile-log-btn,
 #mobile-drawer-backdrop {
   display: none;
 }
@@ -527,9 +527,16 @@ header {
 }
 
 @media (max-width: 720px) {
+  /* C6 PWA safe-area: ノッチ端末の standalone 表示でヘッダーがステータスバー下に潜らないよう、
+     ヘッダー高さ変数に inset-top を含める（PC・非ノッチ端末では env() が 0px なので無変化）。
+     var(--app-header-h) を参照する #app / ドロワー / backdrop も自動で追従する。 */
+  :root {
+    --app-header-h: calc(44px + env(safe-area-inset-top));
+  }
+
   header {
     gap: var(--space-2);
-    padding: 0 8px 0 52px;
+    padding: env(safe-area-inset-top) calc(8px + env(safe-area-inset-right)) 0 calc(52px + env(safe-area-inset-left));
   }
 
   .header-logo span,
@@ -539,8 +546,8 @@ header {
   .session-info-chip,
   /* A: ヘッダー密集対策 — プロバイダ利用状況リンク集とランタイム表示は
      PC向けの補助情報でスマホでは優先度が低いため非表示にする。
-     🌐公開切替 / ⏻停止 / ⚙設定 は固定オーバーレイの ⋯ メニュー（#mobile-overflow-menu）
-     に集約したため、ヘッダー本来の並び順の実体ボタンはここで隠す
+     🌐公開切替 / ⏻停止 / ⚙設定 はモバイルドロワーへ集約したため、
+     ヘッダー本来の並び順の実体ボタンはここで隠す
      (docs/mockups/mobile-ui-rework/index.html「A. ヘッダー密集」)。 */
   #usage-menu,
   #runtime-badge,
@@ -564,8 +571,8 @@ header {
 
   #mobile-menu-btn {
     position: fixed;
-    top: 6px;
-    left: 8px;
+    top: calc(6px + env(safe-area-inset-top));
+    left: calc(8px + env(safe-area-inset-left));
     z-index: 1500;
     display: flex;
     align-items: center;
@@ -585,8 +592,8 @@ header {
      ◀▶ セッション送りボタンと同じ上段固定列（右端の空き 8px〜48px）へ移し、入力欄と物理的に重ならなくする。 */
   #mobile-spawn-btn {
     position: fixed;
-    top: 6px;
-    right: 8px;
+    top: calc(6px + env(safe-area-inset-top));
+    right: calc(8px + env(safe-area-inset-right));
     z-index: 1500;
     display: none;
     align-items: center;
@@ -604,15 +611,37 @@ header {
     cursor: pointer;
   }
   body.mobile-has-session #mobile-spawn-btn {
-    display: flex;
+    display: none;
   }
 
-  /* A: 🌐公開切替 / ⏻停止 / ⚙設定 を集約した ⋯ オーバーフローメニュー。
-     ホーム画面では right:8（唯一の右上ボタン）、セッション画面では + の隣（right:52）に寄せる。 */
-  #mobile-overflow-btn {
+  body.mobile-has-session:not(.mobile-home-view) #mobile-session-title-btn {
     position: fixed;
-    top: 6px;
-    right: 8px;
+    top: calc(6px + env(safe-area-inset-top));
+    left: calc(52px + env(safe-area-inset-left));
+    right: calc(52px + env(safe-area-inset-right));
+    z-index: 1500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    min-width: 0;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg-elev);
+    color: var(--text);
+    font-size: 0.85rem;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #mobile-log-btn {
+    position: fixed;
+    top: calc(6px + env(safe-area-inset-top));
+    right: calc(8px + env(safe-area-inset-right));
     z-index: 1500;
     display: flex;
     align-items: center;
@@ -625,44 +654,6 @@ header {
     color: var(--text);
     font-size: 1rem;
     cursor: pointer;
-  }
-  body.mobile-has-session #mobile-overflow-btn {
-    right: 52px;
-  }
-
-  #mobile-overflow-menu {
-    position: fixed;
-    top: 42px;
-    right: 8px;
-    z-index: 1500;
-    display: flex;
-    flex-direction: column;
-    min-width: 160px;
-    padding: 4px;
-    background: var(--bg-elev);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-  }
-  #mobile-overflow-menu[hidden] {
-    display: none;
-  }
-  #mobile-overflow-menu button {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: 8px 10px;
-    min-height: 40px;
-    background: transparent;
-    border: none;
-    border-radius: var(--radius-sm, 6px);
-    color: var(--text);
-    font-size: 0.85rem;
-    text-align: left;
-    cursor: pointer;
-  }
-  #mobile-overflow-menu button:active {
-    background: var(--bg-hover, rgba(255,255,255,0.08));
   }
 
   #mobile-drawer-backdrop {
@@ -689,7 +680,8 @@ header {
     -webkit-overflow-scrolling: touch;
   }
 
-  body.mobile-has-session #session-list {
+  body.mobile-has-session #session-list,
+  body.mobile-drawer-open #session-list {
     position: fixed;
     top: var(--app-header-h);
     bottom: 0;
@@ -703,8 +695,11 @@ header {
     transition: transform 0.18s ease;
     border-right: 1px solid var(--line);
     box-shadow: 14px 0 36px rgba(0,0,0,0.36);
+    /* C6 PWA safe-area: 左端ドロワーが横ノッチ・ホームバーに被らないよう内側に逃がす。 */
+    padding-left: calc(10px + env(safe-area-inset-left));
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
   }
-  body.mobile-has-session.mobile-drawer-open #session-list {
+  body.mobile-drawer-open #session-list {
     transform: translateX(0);
   }
 
@@ -735,7 +730,7 @@ header {
     background: var(--bg);
   }
 
-  body.mobile-has-session #new-session-btn {
+  body.mobile-drawer-open #new-session-btn {
     width: 100%;
   }
 

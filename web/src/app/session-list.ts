@@ -103,7 +103,7 @@ export function activateSession(id) {
   set_activeSessionId(id);
   if (typeof window.syncMobileLayoutState === 'function') window.syncMobileLayoutState();
   if (typeof window.closeMobileSessionDrawer === 'function') window.closeMobileSessionDrawer();
-  // A3: スマホ簡易ターミナル（直近 N 行 pre）を即時更新。
+  // A3: スマホ簡易ターミナル（チャットトランスクリプト表示）を即時更新。
   // 1 秒間隔の定期更新を待たず、セッション切替直後に新セッションのバッファを描く。
   if (typeof (window as any).refreshMobileTerminalLite === 'function') {
     (window as any).refreshMobileTerminalLite();
