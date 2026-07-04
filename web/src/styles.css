@@ -694,30 +694,15 @@ header {
     height: 100%;
   }
 
-  /* C7: #unified-tab-bar が fixed 化してヘッダー行に重なるため、表示エリアの先頭が
-     隠れないよう同じ高さ分の余白を確保する。 */
+  /* C7指摘: 常時表示のタブ帯は撤去し、ハンバーガー/展開アイコンだけをフロート表示にする。
+     ビュー切り替えはドロワーの「表示切り替え」セクション（mobile-home.ts の
+     buildViewSwitchSection）へ移設したため、帯の分の余白確保も不要になった。 */
   body.mobile-has-session:not(.mobile-home-view) #display-area {
-    padding-top: calc(32px + 12px + env(safe-area-inset-top));
+    padding-top: calc(6px + env(safe-area-inset-top));
   }
 
-  /* C7: 旧タイトルバー行を吸収し、ハンバーガー〜展開ボタンの間の1行に統合する。
-     ジオメトリは旧 #mobile-session-title-btn と同一（styles.css 参照）。 */
-  body.mobile-has-session:not(.mobile-home-view) #unified-tab-bar {
-    position: fixed;
-    top: calc(6px + env(safe-area-inset-top));
-    left: calc(52px + env(safe-area-inset-left));
-    right: calc(52px + env(safe-area-inset-right));
-    z-index: 1500;
-    height: 32px;
-    padding: 0 4px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-  }
-
-  .view-tab {
-    padding: 0 10px;
-    gap: var(--space-1);
-    font-size: 0.75rem;
+  #unified-tab-bar {
+    display: none;
   }
 
   #new-session-bar {

@@ -218,6 +218,36 @@ function buildSectionHeader(labelKey: string, count?: number): HTMLElement {
   return h;
 }
 
+// C7: unified-tab-bar は常時表示のバー行を廃止し(モバイルはハンバーガー/展開アイコンのみを
+// フロート表示)、ビュー切り替え自体はドロワー内のこのセクションへ移した。既存の .view-tab
+// ボタンをそのまま click() することで、承認バッジ等の状態管理ロジックは重複させない。
+function buildViewSwitchSection(): HTMLElement | null {
+  if (!document.body.classList.contains('mobile-has-session')) return null;
+  const bar = document.getElementById('unified-tab-bar');
+  const tabs = bar ? Array.from(bar.querySelectorAll<HTMLButtonElement>('.view-tab')) : [];
+  if (tabs.length === 0) return null;
+
+  const section = document.createElement('section');
+  section.className = 'mobile-drawer-section mobile-drawer-views';
+  section.appendChild(buildSectionHeader('mobile_drawer_section_views'));
+  const grid = document.createElement('div');
+  grid.className = 'mobile-drawer-views-grid';
+  for (const tab of tabs) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'mobile-drawer-view-btn';
+    if (tab.classList.contains('active')) btn.classList.add('active');
+    btn.innerHTML = tab.innerHTML;
+    btn.addEventListener('click', () => {
+      tab.click();
+      (window as any).closeMobileSessionDrawer?.();
+    });
+    grid.appendChild(btn);
+  }
+  section.appendChild(grid);
+  return section;
+}
+
 function buildSearchInput(value: string, onChange: (value: string) => void, placeholderKey = 'mobile_home_search_placeholder'): HTMLElement {
   const wrap = document.createElement('label');
   wrap.className = 'mh-search';
@@ -354,6 +384,9 @@ function renderMobileDrawerResults(): void {
     root.appendChild(body);
   }
   body.innerHTML = '';
+
+  const viewSection = buildViewSwitchSection();
+  if (viewSection) body.appendChild(viewSection);
 
   const ids = filteredOrderedIds(mobileDrawerSearch);
   const pendingIds = ids.filter(id => getSessionBucket(id) === 'pending');
