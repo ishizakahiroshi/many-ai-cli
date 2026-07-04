@@ -39,6 +39,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   // orchestration フラグ（+ 設定されていれば役割マッピング）を載せる。
   let spawnOrchestrationMode = false;
   const spawnOrchestrationSection  = document.getElementById('spawn-orchestration-section');
+  const spawnOrchestrationBypassNote = document.getElementById('spawn-orchestration-bypass-note');
   const spawnOrchestrationSummary  = document.getElementById('spawn-orchestration-summary');
   const spawnRoleTableBody         = document.getElementById('spawn-role-table-body');
 
@@ -119,6 +120,8 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   function setSpawnOrchestrationMode(on: boolean): void {
     spawnOrchestrationMode = on;
     if (spawnOrchestrationSection) (spawnOrchestrationSection as HTMLDetailsElement).hidden = !on;
+    // 子セッションが承認スキップ（全許可）で自走する旨の注意はオーケストレーション時のみ見せる
+    if (spawnOrchestrationBypassNote) spawnOrchestrationBypassNote.hidden = !on;
     if (on && spawnRoleTableBody && !spawnRoleTableBody.children.length) buildOrchestrationRoleTable();
     if (spawnOrchestrationSection) (spawnOrchestrationSection as HTMLDetailsElement).open = false;
   }

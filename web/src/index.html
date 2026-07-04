@@ -925,7 +925,7 @@
               <option value="plan" data-i18n="spawn_permission_plan">plan (confirm before changes)</option>
               <option value="acceptEdits" data-i18n="spawn_permission_accept_edits">acceptEdits (auto-allow edits only)</option>
               <option value="auto" data-i18n="spawn_permission_auto">auto (auto-allow safe operations)</option>
-              <option value="bypassPermissions" data-i18n="spawn_permission_bypass">⚠ bypassPermissions (skip all)</option>
+              <option value="bypassPermissions" data-i18n="spawn_permission_bypass">⚠ Full access (bypassPermissions)</option>
             </select>
           </div>
 
@@ -935,12 +935,12 @@
             <select id="spawn-sandbox" class="spawn-select">
               <option value="workspace-write" data-i18n="spawn_sandbox_workspace">sandbox: workspace-write (default)</option>
               <option value="read-only" data-i18n="spawn_sandbox_readonly">read-only (read only)</option>
-              <option value="danger-full-access" data-i18n="spawn_sandbox_full">⚠ danger-full-access (unrestricted)</option>
+              <option value="danger-full-access" data-i18n="spawn_sandbox_full">⚠ Full access (danger-full-access)</option>
             </select>
             <select id="spawn-ask-approval" class="spawn-select">
               <option value="on-request" data-i18n="spawn_approval_on_request">approval: on-request (default)</option>
               <option value="untrusted" data-i18n="spawn_approval_untrusted">untrusted (confirm untrusted only)</option>
-              <option value="never" data-i18n="spawn_approval_never">⚠ never (no approval)</option>
+              <option value="never" data-i18n="spawn_approval_never">⚠ Skip approvals (never)</option>
             </select>
           </div>
           <div id="spawn-claude-note" class="settings-note" data-i18n="spawn_claude_note" hidden>Uses the installed Claude Code. Authentication and permissions are managed by Claude.</div>
@@ -1017,6 +1017,10 @@
               </div>
             </div>
           </div>
+
+          <!-- 子セッションは承認バイパス（全許可）で自走する旨の注意。オーケストレーションモード時のみ表示
+               （bugfix_orchestration-codex-child-spawn-failures_2026-07-04.md: 子 spawn は全プロバイダで承認スキップが既定） -->
+          <div id="spawn-orchestration-bypass-note" class="settings-note" data-i18n="spawn_orchestration_bypass_note" hidden>⚠ Orchestration child sessions launch with approvals skipped (full access). Control comes from worktree isolation and your instructions.</div>
 
           <!-- C1: plan_orchestration-spawn-ui-exposure.md — 「オーケストレーション」ボタンから開いた
                ときだけ表示する任意設定。既定は閉じたまま（AI任せの軽量フロー）。 -->

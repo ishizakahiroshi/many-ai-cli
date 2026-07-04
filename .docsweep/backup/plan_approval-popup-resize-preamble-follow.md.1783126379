@@ -1,0 +1,49 @@
+# [様子見] 確認ポップアップの縦リサイズに質問欄（経緯ボックス）を追従させる
+
+> 最終更新: 2026-06-17(水) 12:55:48
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | fix | 上端ドラッグの伸縮量を `.action-preamble-body` へ同量注いで追従させる | — |
+
+実行順序: `C1`
+
+---
+
+## 概要
+
+承認確認ポップアップ（`#action-bar`）は上端ドラッグで縦に伸縮できるが、中の質問欄（「経緯（クリックで全文）」＝ `.action-preamble-body`）は `max-height: 5.5em`（展開時 22em）固定のため、ポップアップを大きくしても追従せず下部に空白ができていた。ポップアップを広げた分だけ質問欄も同量伸び、縮めた分は戻る「ドラッグ追従」方式で解消する。レイアウト構造（flex-wrap 行方向）は変えず、リサイズ JS で質問欄の `max-height` を制御するスコープに限定する。
+
+## 現状と問題
+
+- リサイズ実装: `web/src/app/action-bar-resize.ts` — pointermove で `#action-bar` の `height`/`max-height` のみ変更
+- 質問欄: `web/src/styles/approval.css` の `.action-preamble-body { max-height: 5.5em }` 固定。ポップアップを伸ばしても伸びず、`#action-bar` 下部に空白が残る（ユーザー報告スクショの状態）
+
+## 方針
+
+- 採用: **ドラッグ追従**。pointerdown 時の質問欄実描画高さを基準に、バーの実伸縮量（クランプ後 `next - startHeight`）を質問欄 `max-height` に加算（最小 44px）
+- 不採用: 「下部の余白だけ吸収」（他要素が多いと伸びが鈍く直感に反する）／「max-height 上限を単純拡大」（追従が緩い）
+- レイアウトを column flex へ作り替える案は影響範囲が広いため見送り（リサイズ JS 内に閉じる）
+
+---
+
+## C1: リサイズ JS に質問欄追従を追加
+
+### 作業内容
+
+- pointerdown: `bar.querySelector('.action-preamble-body')` を取得し、`getBoundingClientRect().height` を `startPreambleHeight` として記録（質問欄なしの承認は従来どおりバーのみ伸縮）
+- pointermove: `barDelta = next - startHeight` を質問欄 `max-height` に加算（`Math.max(44, startPreambleHeight + barDelta)`）
+- dblclick リセット: バーに加え質問欄のインライン `max-height` も空に戻し CSS デフォルト（5.5em / 22em）へ復帰
+
+### 変更ファイル
+
+- `web/src/app/action-bar-resize.ts` — pointerdown/move/dblclick に質問欄追従ロジックを追加
+
+### 完了条件
+
+- ポップアップを上端ドラッグで広げると経緯ボックスが同量で伸び下部空白が消える
+- 縮めると経緯ボックスも戻る（最小 44px でクランプ）
+- ダブルクリックでバー・質問欄ともデフォルト高さに戻る
+- 質問欄のない承認でも従来どおりバーのみ伸縮する

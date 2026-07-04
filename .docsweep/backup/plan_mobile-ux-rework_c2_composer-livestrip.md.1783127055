@@ -1,0 +1,85 @@
+---
+due: 2026-07-11
+---
+
+# [計画] C2: 下部コンポーザー + ライブストリップ縮退
+
+> 最終更新: 2026-07-04(土) 09:41:20
+> 親: [`plan_mobile-ux-rework.md`](plan_mobile-ux-rework.md)
+> 親 plan の C2 を担当する子 plan。
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | plan | コンポーザー（入力ピル + 添付統合 + キーボード追従） | — |
+| C2 | plan | ライブストリップ縮退（1 行化 + 長押しパレット + ⚠ 短縮） | — |
+
+実行順序: `C1 → C2`
+
+---
+
+## 目的
+
+個別セッション画面の下部に、ネイティブ AI アプリと同じ常駐コンポーザー（大きな角丸入力ピル）を置き、既存のライブ進捗帯 `#terminal-live-status` をその直上の「枠なし 1 行ストリップ」に縮退させる。「動いているか」の実データ表示を残したまま、画面 1 段を占有しない。
+
+## 前提（確定済み設計決定）
+
+- 送信は **送信ボタン（▲）のみ**。Enter は改行（親 plan 方針 #6）。IME composing 中の keydown は一切送信に使わない
+- 配色変更は **ストリップ長押し** で `live-status-color.ts` の既存パレットポップオーバーを開く（親 plan 方針 #8）
+- safe-area（`env(safe-area-inset-bottom)`）はここで最初から仕込む（親 plan 方針 #7、C6 で全体確認）
+- スマホ幅のみ。PC の入力行・ライブ帯（`terminal.css:154` の `#terminal-live-status`）は現状維持
+
+---
+
+## C1: コンポーザー
+
+### 作業内容
+
+- 個別セッション画面下部に `#mobile-composer` を新設: 角丸ピル内に「＋（添付メニュー: ファイル / 📷 カメラ）」「textarea（1 行開始・最大 6 行自動拡張）」「▲ 送信」
+- 送信で PTY へテキスト + 改行を送出（既存の入力送信経路を流用）し、C1 子 plan の transcript へ user メッセージを push。送信後は textarea をクリアして 1 行へ戻す
+- 既存 `#attach-camera-btn`（mobile-home.css:9, B2）と添付パネルの動線を「＋」メニューへ統合。画像添付の保存 → PTY inject 経路（internal/attach）は既存のまま
+- キーボード追従: `visualViewport` の resize / scroll でコンポーザー位置を追従（iOS Safari のキーボードでピルが隠れないこと）
+- 特殊キー行（既存 `#mobile-key-row`: Esc / Ctrl / Tab / ↑ / ↓）は入力フォーカス時のみコンポーザー下に 1 列表示
+- 下端は `padding-bottom: calc(8px + env(safe-area-inset-bottom))`
+
+### 変更予定ファイル
+
+- `web/src/index.html` — コンポーザー DOM
+- `web/src/app.ts` — 送信・添付メニュー・visualViewport・キー行トグル
+- `web/src/styles/mobile-home.css` — ピル / キー行 / safe-area（@media 720px 内）
+- `web/src/i18n/ja.json` / `en.json` — placeholder 等
+
+### 完了条件
+
+- スマホ幅の個別セッションで、入力 → ▲ で送信でき、Enter では送信されない（改行される）
+- キーボード表示中もピルが視認・操作できる。PC 幅では従来の入力行のまま
+
+---
+
+## C2: ライブストリップ縮退
+
+### 作業内容
+
+- `@media (max-width: 720px)` で `#terminal-live-status` を縮退スタイルに切替: 枠 / 背景 / パレットボタン非表示、高さ約 18px・等幅 10.5px・1 行 ellipsis、コンポーザー直上に密着
+- 色ルール継承: active = ユーザー配色（既定 青系）+ スピナー回転 / idle = 灰色・スピナー停止（「待機中（送信待ち）」）/ waiting = アンバー。既存の `renderLiveStatusDom`（terminal.ts:1644）のクラス切替をそのまま使い、CSS のみで見た目を差し替える（JS 分岐は追加しない方向を優先）
+- 長時間処理 `⚠ 長時間処理中`（`.live-status-longproc`）はスマホではテキスト末尾に「⚠5m+」の短縮表記で合流
+- compact 進行バー（`.live-compact-bar`）はストリップ下端 1.5px のスライドバーに縮小
+- 長押し（約 500ms・touchstart/touchend）で `live-status-palette-popover` を開く。既存ポップオーバーは body 直下 fixed なのでスマホでもそのまま出る（位置だけストリップ上へ調整）
+
+### 変更予定ファイル
+
+- `web/src/styles/terminal.css` — @media 720px の縮退ルール追加
+- `web/src/app/live-status-color.ts` — 長押しトリガー追加
+- `web/src/app/terminal.ts` — longproc 短縮表記のスマホ分岐（必要最小限）
+
+### 完了条件
+
+- スマホ幅でライブ表示がコンポーザー直上の 1 行に収まり、実行中 / 待機 / 承認待ち / compact の 4 状態が判別できる
+- 長押しでパレットが開き配色変更が反映される。PC 幅の帯は従来どおり
+
+---
+
+## 完了報告フォーマット
+
+子 2 C 完了時に親 plan の C2 行を `plan` → `fix` に更新。本書の表も同期。報告は 3 点（fix/plan・変更ファイル・検証 1 行）のみ。

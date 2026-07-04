@@ -1,0 +1,29 @@
+# [保留] AskUserQuestion ネイティブピッカー流出と複数質問バナーの二重表示
+
+## 概要
+
+`MANY_AI_CLI=1` セッション中、design-html skill 起動の流れで AI が `AskUserQuestion`（ネイティブの複数質問 TUI ピッカー）を呼び、Hub がそれを検知して下段に「複数質問プロンプトです — 画面のボタンでは操作できません」バナーを表示。同時にターミナルでは Bash 承認待ち（`mkdir -p .../mobile-ui-rework`）の action-bar（↻承認 / ×承認）も表示されており、UI 上に承認系の表示が二重で出てユーザーから見て状態が矛盾していた。
+
+事象スクショ: `C:\Users\ishiz\.many-ai-cli\attachments\3\20260629090402_027994800_image.png`
+
+## 保留理由
+
+- 発生条件と再現手順がまだ未特定（design-html skill 内の挙動なのか、AI が個別にルール違反したのかが切り分けられていない）
+- 修正対象が複数レイヤに跨る可能性があり、いま着手すると影響範囲が読めない
+  - skill 側（`C:\dev\workshop\skills\design-html\SKILL.md`）の AskUserQuestion 呼び出し有無
+  - approval-rules.md の徹底周知（AI が読まずに違反したケースの可能性）
+  - Hub 側の「複数質問バナー」と Bash 承認 action-bar の排他制御ロジック
+- ユーザー判断で今回は調査のみで止めた（修正は別タイミング）
+
+## 着手条件
+
+- 同じ事象を再現できる最小手順が取れたとき（どの skill / どのターンで AskUserQuestion が呼ばれるか）
+- design-html skill の SKILL.md を Read して AskUserQuestion 呼び出しがあるか確認できたとき
+- Hub の action-bar / 複数質問バナーの表示判定コード（おそらく `web/src/` 配下の approval 系）を読んで二重表示の根本原因を特定する余裕ができたとき
+- ユーザーから「直していい」と明示指示があったとき
+
+## 関連情報
+
+- 承認マーカー仕様（AskUserQuestion 禁止の根拠）: `~/.many-ai-cli/approval-rules.md`
+- 過去の類似事象（prose 内マーカー混入）: `docs/local/bugfix_hub-marker-filter-prose-literal-collision_2026-06-23.md`
+- design-html skill: `C:\dev\workshop\skills\design-html\SKILL.md`

@@ -1,0 +1,169 @@
+# [対応中] 障害対応記録: OpenCode の `/model` picker が画面上で動かない（キー操作は届いている）
+
+## 症状
+
+OpenCode セッションで `/model` を実行してモデル選択 picker を開き、矢印キー（↑↓）でモデル間カーソルを動かそうとしても、Hub UI のターミナル画面ではカーソル位置が変化しないように見える。
+
+再現手順:
+1. Hub UI で OpenCode セッション（例: セッション #20）を起動
+2. ターミナルに `/model` を送信 → モデル選択 picker が開く
+3. ↑↓ キーを連打する
+4. 画面上は Recent セクションのトップ（例: `Gemini 3.5 Flash Google`）でカーソルが固定されているように見え、別のモデルに移動しない
+
+ただし観測上、
+
+- PTY 入力ログ（`~/.many-ai-cli/logs/sessions/opencode_2026-06-23_162341_tmp_s20.jsonl`）には `\x1b[A` / `\x1b[B` が正しく記録されており Hub → PTY の送信は成立している
+- PTY 出力ログには picker 描画の差分（モデル一覧のセクション切替・ハイライト位置変更）が完全に記録されている
+- ユーザーが Enter を押すと、画面に見えていない位置にあったモデル（実例として Gemini）が選択された ⇒ OpenCode 内部のカーソルは動いていた
+
+影響: OpenCode セッション全般。`/model` picker のほか、Bubbletea ベースの TUI が「`\x1b[?25l` … 絶対位置指定描画 … `\x1b[?25h`、改行なし、~2KB 未満」のパターンで描画する画面は同様に Hub UI で再描画されない可能性。Claude / Codex / Copilot / Cursor Agent（Ink ベース、`\n` 含む or alt buffer 使用）では発生していない。
+
+### 2026-06-23 17:18 追加観察: Permission required ダイアログでも同症状
+
+OpenCode セッション #33 で「今日は何日？」と質問したところ、AI が `Get-Date -Format "yyyy-MM-dd dddd"` を実行しようとして OpenCode 側の Permission required ダイアログが PTY に送信された。many-ai-cli の action-bar（APPROVAL NEEDED）は画面下に出たが、**ターミナル本体には `Writing command...` と `Id · GPT-5.5 Fast` しか表示されず、`Allow once / Allow always / Reject` のダイアログ本文が xterm.js に出ない**現象を確認。
+
+裏取り済の観測:
+
+- PTY 生ログ（`~/.many-ai-cli/logs/sessions/opencode_2026-06-23_165843_tmp_s33.log` および `.jsonl`）に `"~ Writing command...┃┃  △ Permission required┃    # Shell command┃┃            ┃   Allow once   Allow always   Reject    ctrl+f fullscreen  ⇆ select  enter confirm   ┃"` という文字列が確実に来ている（`grep -oE '"text":"[^"]*[Aa]llow[^"]*"' opencode_2026-06-23_165843_tmp_s33.jsonl` で確認）
+- ユーザーが Allow を押した後の続報出力（コマンド結果 `2026-06-23 火曜日` および AI 応答テキスト「今日は 2026年6月23日（火曜日）です。」）は改行 `\n` を含むのでフィルタを素通り → 画面に表示される（スクショ 2 枚目で確認）
+
+つまり Permission required ダイアログも `/model` picker と同じ Bubbletea 描画パターン（`?25l` 開始・絶対位置指定・改行なし・~2KB 未満）で出ており、`filterCursorHideShowBlocksForDisplay` の同じ誤判定で丸ごと破棄されている。**`/model` picker と Permission required は同根のため、本修正一発で両方治る想定**。
+
+### 2026-06-23 17:18 別件で気づいた症状（同根ではない可能性）
+
+承認後のスクショ 2 枚目で AI 応答末尾に `MANY-AI-CLI-DONE 今日の日` というプレーンテキストが表示されている。本来 `filterHubMarkersForDisplay` が `[MANY-AI-CLI-DONE] … [/MANY-AI-CLI-DONE]` ブロックを除去するはずだが、OpenCode が alt buffer 上で文字を 1 文字ずつ絶対位置指定で描く特性から、`[MANY-AI-CLI-DONE]` パターンが連続バイトとしてフィルタに渡らず素通りしている可能性。
+
+この件は本修正（filterCursorHideShowBlocksForDisplay の OpenCode 用 no-op 化）とは別フィルタ・別経路なので、本 bugfix では扱わない（別 bugfix doc 起票候補）。
+
+## 根本原因（root cause・仮説、実機確証は未取得）
+
+`web/src/app/terminal.ts:1355` の `filterCursorHideShowBlocksForDisplay` が、xterm.js への書き込み前段で OpenCode picker フレームを「Claude Code のスピナー / ステータスバー更新」と誤判定して破棄している。
+
+該当フィルタの判定ロジック（`web/src/app/terminal.ts:1355-1468`）:
+
+- `\x1b[?25l`（hide cursor）で始まるブロックを蓄積する
+- ブロック内に「絶対位置指定 `\x1b[row;colH`」があり、かつ「改行 `\n`」が **無い** 場合 → ステータスバー更新とみなしてブロックごと破棄（L1408-L1411）
+- 改行を含めば本文描画として通過（L1444-L1455）
+- ブロックサイズが `MAX_CURSOR_HIDE_BUF = 2048` バイトを超えた場合のみ通過（L1392-L1399）
+
+OpenCode（Bubbletea TUI）の picker は、
+
+- 各フレームを `\x1b[?25l` + 色指定 + `\x1b[15;42H Recent` `\x1b[16;39H Gemini 3.5 Flash Google` … と **絶対位置指定で 1 ブロックに集約描画** + `\x1b[?25h` で閉じる
+- 改行は含めない（main buffer 上での位置指定描画）
+- 1 フレームあたり ~1KB（2048 以下）
+
+このため OpenCode の picker フレームが上記「ステータスバー更新」判定の条件をすべて満たし、丸ごと破棄されている。PTY ログには差分が出ているのに xterm.js には届かない、という観測症状と整合する。
+
+このフィルタは元々 Claude Code の `Worked for Xs` 等のスピナー行を本文（scrollback）から除く目的で導入されたもの（同ファイル L1470-L1478、`bugfix_live-status-spinner-fragments_2026-06-12.md` 参照）。Ink ベースの Claude では本文描画に `\n` が入るため誤爆しないが、Bubbletea ベースの OpenCode では誤爆する。
+
+## 修正内容
+
+現時点（2026-06-23）では **観察用の臨時バイパスのみ** を投入。本修正は実機で仮説確証を取った後、provider 別判定で `opencode` だけこのフィルタを no-op にする方向で進める予定。
+
+### 観察用パッチ（コミット禁止・実機検証専用）
+
+`web/src/app/terminal.ts:1355` 直下に `window.__bypassCursorHideFilter` でフィルタをバイパスする分岐を追加した。
+
+```ts
+// before
+export function filterCursorHideShowBlocksForDisplay(id, bytes) {
+  const t = terminals.get(id);
+  if (!t) return bytes;
+  const carry = t.cursorHideFilterCarry || new Uint8Array(0);
+
+// after
+export function filterCursorHideShowBlocksForDisplay(id, bytes) {
+  const t = terminals.get(id);
+  if (!t) return bytes;
+  if ((window as any).__bypassCursorHideFilter) {
+    t.cursorHideFilterCarry = new Uint8Array(0);
+    t.inCursorHideBlock = false;
+    t.cursorHideBlockBuf = [];
+    t.cursorHideHasAbsPos = false;
+    t.cursorHideHasNewline = false;
+    return bytes;
+  }
+  const carry = t.cursorHideFilterCarry || new Uint8Array(0);
+```
+
+carry 系を同時に空に倒すことで、バイパス ON/OFF を切り替えても残留状態がぶつからないようにしている。
+
+### 本修正の方針（未着手）
+
+`web/src/app/terminal.ts:1355` の `filterCursorHideShowBlocksForDisplay` 入口で provider を引き、`opencode` の場合は carry 系を空のまま `return bytes;` する分岐を入れる。Claude スピナー除去の挙動は変えない。
+
+呼び出し元（`writePTYChunk` → 各フィルタチェーン）は session id しか持たないため、`sessions.get(id)?.provider` を取り出して判定するか、もしくは `terminals` 側に provider をキャッシュするかを後段で決める。
+
+## 変更ファイル
+
+| ファイル | 内容 |
+|---|---|
+| `web/src/app/terminal.ts` | `filterCursorHideShowBlocksForDisplay` 先頭に `window.__bypassCursorHideFilter` バイパスを追加（観察用・コミット禁止）|
+
+## 検証
+
+実機検証は未実施。バイパスのコードは入っているが「DevTools で `window.__bypassCursorHideFilter = true` を立てて再現確認」がまだ。次セッションで以下を順に確認する:
+
+- <TODO: `make build` でフロント＋バイナリをビルドし Hub を再起動・ブラウザリロード>
+- <TODO: DevTools コンソールで `window.__bypassCursorHideFilter = true` をセット>
+- <TODO: OpenCode セッションで `/model` を開き ↑↓ で画面上のカーソルが動くか確認（`/model` picker 経路の確証）>
+- <TODO: OpenCode セッションで「今日は何日？」を投げ、Permission required ダイアログ本文（`Allow once / Allow always / Reject` 行を含む）が xterm.js 上に表示されるか確認（承認ダイアログ経路の確証 = 今回の追加観察）>
+- <TODO: バイパス ON で Claude セッションのスピナー行（`Worked for Xs` 等）が本文 scrollback に混入することを確認（フィルタの本来の効用を逆再現）>
+- <TODO: バイパス ON で OpenCode picker と承認ダイアログが両方とも動くことを確証したら、本修正（provider 別判定 or Claude 限定の逆条件）を実装し直す>
+- <TODO: 本修正適用後、観察用バイパスを削除>
+- <TODO: 別件で気づいた `MANY-AI-CLI-DONE 今日の日` プレーンテキスト露出（filterHubMarkersForDisplay 素通り疑い）の調査は別 bugfix doc に起票>
+
+## 備忘
+
+- 仮説の根拠は「PTY 出力ログ上は picker 描画が来ている」「ユーザー実証で Enter キーは効いた（内部カーソルは動いていた）」「該当フィルタが picker パターンを誤判定する条件を全て満たす」の 3 点の組み合わせ。実機で観察用バイパスを ON にして画面が動くことを確認したら確証になる。
+- このフィルタは Claude Code のステータスバー（hide → 絶対位置 → show、改行なし、小サイズ）を破棄する目的で導入された。Bubbletea TUI が同パターンで「本文・選択 UI」を描画してくると意図せず誤爆する設計上の制約がある。`copilot` / `cursor-agent` などほかの provider でも同じ形の TUI が出てきた場合に同様の症状が出る可能性があるため、provider allowlist より「Claude のときだけ filter ON にする」逆条件の方が将来の追加 provider に対して安全かもしれない（要検討）。
+- OpenCode の picker 描画パターンの実例は PTY ログ `~/.many-ai-cli/logs/sessions/opencode_2026-06-23_162341_tmp_s20.jsonl` の 16:24:07 前後を base64 デコードして確認した。
+- `MAX_CURSOR_HIDE_BUF` を下げて picker フレームを通過させる方法もあるが、Claude スピナーが本文に混入するリスクが上がるため避けたい。
+- 関連する過去の bugfix: `bugfix_live-status-spinner-fragments_2026-06-12.md`（このフィルタの動機）、`bugfix_opencode-enter-lost-conpty_2026-06-17.md`（OpenCode の別の入力経路問題）。
+
+## 次セッション引き継ぎ（2026-06-23 17:30 時点）
+
+`make build` でこのセッションが切れるため、次セッションがこの doc 単体で再開できるよう状態を明記する。
+
+### 直前までの作業内容（このセッションでやったこと）
+
+1. ユーザー報告: 「opencode 今日は何日と聞いているのに承認画面がでるしCLI画面になにもでない」
+2. PTY 生ログ・jsonl を grep して `Permission required` / `Allow once / Allow always / Reject` が PTY ストリームに来ていることを確認
+3. terminal.ts の未コミット diff を確認 → 既存 bugfix doc（本 doc）の観察用バイパスがコミット前に投入済と判明
+4. 今回の現象は `/model` picker と同根（同じ `filterCursorHideShowBlocksForDisplay` 誤爆）と特定 → 本 doc の「症状」「検証」セクションに追加観察を追記済（このコミット）
+5. 別件として `MANY-AI-CLI-DONE` 文字列露出を発見 → 検証 TODO に別 bugfix 起票候補として記載
+
+### 未コミットの作業ツリー状態（git status）
+
+```
+ M web/package.json                     # 内容未確認・本件関係不明・要確認
+ M web/src/app/history-viewer.ts        # 本件関係: ホイール上で履歴ビューア開く改修
+ M web/src/app/terminal.ts              # 本件関係: 観察用バイパス + filterHubMarkers のリファクタ
+?? web/src/app/hub-marker-filter.ts     # ★ terminal.ts が import している新規ファイル（未追跡なので git add 必須）
+?? web/src/app/hub-marker-filter-fixtures.ts  # 上記のテスト fixture
+```
+
+注意点:
+
+- `hub-marker-filter.ts` は terminal.ts の import 先。**この untracked ファイルが消えるとビルドが落ちる**。`make build` 前に削除しないこと。
+- バイパス（terminal.ts:1240 付近 `__bypassCursorHideFilter`）は**コミット禁止**。実機検証後に削除する。本修正実装と同じコミットで一緒に消す。
+- `web/package.json` の修正は内容未確認。本件と関係するかは次セッションで `git diff web/package.json` を見て判断。
+
+### 次セッションが最初にやること
+
+1. このセッション開始時の `git status` を確認し、上記の未コミット状態と一致しているか目視
+2. `make build` 実行（ユーザーが OK したら）
+3. ブラウザで Hub を開き直し、DevTools コンソールで `window.__bypassCursorHideFilter = true` をセット
+4. OpenCode セッション（tmp 配下で新規 spawn でも、または既存セッションでも可）で 2 種類のテスト:
+   - `/model` 送信 → ↑↓ で画面上のカーソル位置が動くか
+   - 「今日は何日？」送信 → AI が `Get-Date` を打とうとした瞬間に Permission required ダイアログ本文（`Allow once / Allow always / Reject` 行）が xterm.js 上に表示されるか
+5. 両方確認できたら仮説確証完了 → 本修正（`filterCursorHideShowBlocksForDisplay` 入口で OpenCode のときは no-op、または Claude 限定にする逆条件）を実装
+6. 本修正コミット時に観察用バイパスのコードも一緒に削除
+7. 本 doc の H1 ラベルを `[対応中]` → `[様子見]` に変更し、検証 TODO を順次チェック化
+
+### 関連ファイルクイックリンク
+
+- 本 doc: `docs/local/bugfix_opencode-model-picker-no-redraw_2026-06-23.md`
+- 修正対象: `web/src/app/terminal.ts:1240` 付近（`filterCursorHideShowBlocksForDisplay`）
+- 観察エビデンス: `~/.many-ai-cli/logs/sessions/opencode_2026-06-23_165843_tmp_s33.log` / `.jsonl`（今回の Permission required 観測）、`~/.many-ai-cli/logs/sessions/opencode_2026-06-23_162341_tmp_s20.jsonl`（`/model` picker 観測）
+- スクショ: `~/.many-ai-cli/attachments/34/20260623171149_765538600_image.png`（承認待ち中・画面真っ黒）、`~/.many-ai-cli/attachments/34/20260623171828_722168200_image.png`（承認後・本文表示あり・`MANY-AI-CLI-DONE` 露出あり）

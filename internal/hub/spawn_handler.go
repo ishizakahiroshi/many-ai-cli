@@ -90,6 +90,11 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 		if resolvedModel != "" {
 			wrapArgs = append(wrapArgs, "--model", resolvedModel)
 		}
+		// copilot / cursor-agent / grok / opencode も permission mode を wrapper へ渡す
+		// （wrapper 側で各 CLI の承認バイパス指定に変換される）。shell は AI 固有フラグを使わない。
+		if spec.Provider != "shell" && spec.PermissionMode != "" && spec.PermissionMode != "default" {
+			wrapArgs = append(wrapArgs, "--permission-mode", spec.PermissionMode)
+		}
 	}
 	effectiveRoute := spec.Route
 	if effectiveRoute == "" {
