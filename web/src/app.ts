@@ -11,6 +11,7 @@ import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { pendingSessionIds } from './app/approval-queue-tab.js';
 import { scheduleDeferredEnter, scheduleAfterOutputSettle, deferredEnterMinWaitFor } from './app/deferred-enter.js';
+import { clearMobileTranscriptSession, recordMobileTranscriptUserSubmission } from './app/mobile-transcript.js';
 import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn, MAX_ATTACH_BYTES } from './app/attachments.js';
@@ -18,7 +19,8 @@ import { FilesTabManager } from './app/files-view.js';
 import { getExposeStatus, fetchExposeStatus, disableExpose } from './app/host-expose.js';
 import './app/detached-grid-launcher.js';
 import './app/mobile-home.js';
-import './app/mobile-terminal-lite.js';
+import { mobileApprovalActiveBadgeCount } from './app/mobile-approval-sheet.js';
+import { clearMobileTerminalLiteSession } from './app/mobile-terminal-lite.js';
 
 export let _userAvatarUrl = '';
 export let _userDisplayName = '';
@@ -79,8 +81,11 @@ export function isActiveSessionRunning() {
 // B1a: スマホ幅判定の単一情報源。OS キーボードの🎤誘導 placeholder の表示判定にだけ使う。
 const _mobileVoiceHintMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
   ? window.matchMedia('(max-width: 720px)') : null;
+function isMobileViewport(): boolean {
+  return !!_mobileVoiceHintMql?.matches;
+}
 function shouldShowMobileVoiceHintPlaceholder(): boolean {
-  if (!_mobileVoiceHintMql?.matches) return false;
+  if (!isMobileViewport()) return false;
   try { return localStorage.getItem(STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY) !== '1'; }
   catch (_) { return false; }
 }
@@ -780,6 +785,12 @@ inputEl.addEventListener('keydown', (e) => {
   // ctrl+o: Claude Code の折りたたみ展開（ターミナル直接操作と同等）
   if (e.ctrlKey && e.key === 'o') { sendText(activeSessionId, '\x0f'); e.preventDefault(); return; }
   if (e.key === 'Enter') {
+    if (isMobileViewport()) {
+      // Mobile C2 uses button-only send. Enter stays a textarea newline here,
+      // so action-bar Enter execution and IME pendingSend remain desktop-only.
+      autoExpand({ suppressPtyResize: true });
+      return;
+    }
     if (e.isComposing || isComposing) { set_pendingSend(true); return; } // IME確定後に送信
     if (e.shiftKey) { autoExpand(); return; } // Shift+Enter: 改行
     // action-bar 表示中かつ入力が空 → フォーカス中ボタン（未指定なら先頭）を実行
@@ -850,10 +861,77 @@ inputEl.addEventListener('keydown', (e) => {
   });
 })();
 
+(function initMobileComposer() {
+  const attachBtn = document.getElementById('mobile-composer-attach-btn');
+  const attachMenu = document.getElementById('mobile-composer-attach-menu');
+  const fileBtn = document.getElementById('mobile-composer-file-btn');
+  const cameraBtn = document.getElementById('mobile-composer-camera-btn');
+  const keyboardPanel = document.getElementById('mobile-keyboard-panel');
+  if (!attachBtn || !attachMenu || !keyboardPanel) return;
+
+  const closeAttachMenu = () => {
+    attachMenu.hidden = true;
+    attachBtn.setAttribute('aria-expanded', 'false');
+  };
+  const toggleAttachMenu = (ev?: Event) => {
+    ev?.stopPropagation();
+    if (!isMobileViewport()) return;
+    attachMenu.hidden = !attachMenu.hidden;
+    attachBtn.setAttribute('aria-expanded', attachMenu.hidden ? 'false' : 'true');
+  };
+  attachBtn.addEventListener('click', toggleAttachMenu);
+  fileBtn?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    closeAttachMenu();
+    document.getElementById('attach-file-input')?.click();
+  });
+  cameraBtn?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    closeAttachMenu();
+    document.getElementById('attach-camera-input')?.click();
+  });
+  document.addEventListener('click', (ev) => {
+    if (attachMenu.hidden) return;
+    const target = ev.target as Node | null;
+    if (target && (attachMenu.contains(target) || attachBtn.contains(target))) return;
+    closeAttachMenu();
+  });
+
+  const syncKeyboardPanel = () => {
+    if (!isMobileViewport()) return;
+    const active = document.activeElement;
+    const shouldShow = activeSessionId !== null
+      && !!active
+      && (active === inputEl || keyboardPanel.contains(active));
+    keyboardPanel.hidden = !shouldShow;
+  };
+  inputEl.addEventListener('focus', syncKeyboardPanel);
+  inputEl.addEventListener('blur', () => setTimeout(syncKeyboardPanel, 80));
+  keyboardPanel.addEventListener('focusout', () => setTimeout(syncKeyboardPanel, 80));
+  _mobileVoiceHintMql?.addEventListener('change', syncKeyboardPanel);
+
+  const syncVisualViewportOffset = () => {
+    const vv = window.visualViewport;
+    if (!vv || !isMobileViewport()) {
+      document.documentElement.style.removeProperty('--mobile-vv-bottom-offset');
+      return;
+    }
+    const offset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty('--mobile-vv-bottom-offset', `${Math.round(offset)}px`);
+  };
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', syncVisualViewportOffset);
+    window.visualViewport.addEventListener('scroll', syncVisualViewportOffset);
+  }
+  window.addEventListener('resize', syncVisualViewportOffset);
+  syncVisualViewportOffset();
+})();
+
 inputClearBtn?.addEventListener('click', () => {
   inputEl.value = '';
   autoExpand();
   updateInputClearButton();
+  if (isMobileViewport()) window.dispatchEvent(new CustomEvent('mobile-composer-idle'));
   // Web テキストエリアだけでなく内側 CLI の入力行も消す。ビジー時等に溜まった
   // 残骸（例: "/login/login..."）は web を空にしても TUI 側に残り続けるため、
   // doSend / sendQuickCommand と同じ \x15(Ctrl+U) を単独送信して行クリアする。
@@ -916,9 +994,9 @@ export function syncMobileLayoutState() {
   const badge = document.querySelector<HTMLElement>('#mobile-menu-btn .mobile-badge');
   if (badge) {
     if (isMobile && hasSession) {
-      const otherPending = pendingSessionIds().filter(id => id !== activeSessionId).length;
-      badge.textContent = String(otherPending);
-      badge.hidden = otherPending === 0;
+      const pendingCount = pendingSessionIds().filter(id => id !== activeSessionId).length + mobileApprovalActiveBadgeCount();
+      badge.textContent = String(pendingCount);
+      badge.hidden = pendingCount === 0;
     } else {
       badge.hidden = true;
     }
@@ -1115,7 +1193,11 @@ export function focusInputForTerminalKeys() {
   }
 }
 
-export function sendSubmittedText(sessionId, text) {
+export function sendSubmittedText(sessionId, text, opts: any = {}) {
+  if (opts.recordMobileTranscript !== false) {
+    recordMobileTranscriptUserSubmission(sessionId, text);
+  }
+  if (isMobileViewport()) window.dispatchEvent(new CustomEvent('mobile-composer-idle'));
   // 送信操作は最新出力を見たい意図なので、スクロールアップ中でも最下部へ戻して追従を再開する
   const t = terminals.get(sessionId);
   if (t) {
@@ -1283,6 +1365,7 @@ export function removeLocalSession(id) {
   try { FilesTabManager.onSessionRemoved(id); } catch (_) {}
   // C1/C2: チャット store とビューモード state をクリーンアップ
   try { if (typeof onChatHistorySessionRemoved === 'function') onChatHistorySessionRemoved(id); } catch (_) {}
+  try { clearMobileTranscriptSession(id); clearMobileTerminalLiteSession(id); } catch (_) {}
   try { if (typeof sessionViewMode !== 'undefined') sessionViewMode.delete(id); } catch (_) {}
   try { if (typeof sessionLazyLoaded !== 'undefined') sessionLazyLoaded.delete(id); } catch (_) {}
   sessions.delete(id);
