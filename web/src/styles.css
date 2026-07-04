@@ -529,12 +529,13 @@ header {
 }
 
 @media (max-width: 720px) {
-  /* C6 PWA safe-area: ノッチ端末の standalone 表示で内容がステータスバー下に潜らないよう、
-     ヘッダー高さ変数に inset-top のみを含める（PC・非ノッチ端末では env() が 0px なので無変化）。
-     var(--app-header-h) を参照する #app / ドロワー / backdrop も自動で追従する。
+  /* 2026-07-04 修正: header はもう帯としてもスペースとしても存在しない（height:0）。
+     ☰ / #reconnect-btn は各々 position:fixed + 自前の env(safe-area-inset-top) で
+     ノッチ回避しており、header の高さに依存していない。ノッチ回避が必要な残り箇所
+     （ドロワー背景・ドロワー展開時のセッション一覧の上端）は下記で env() を直接参照する。
      --mobile-float-clear は ☰ 等の浮遊ボタンの下端+余白ぶん、本文側で確保するクリアランス。 */
   :root {
-    --app-header-h: env(safe-area-inset-top);
+    --app-header-h: 0px;
     --mobile-float-clear: 40px;
   }
 
@@ -545,8 +546,8 @@ header {
      visibility:hidden にして必要な子だけ visibility:visible で個別に復帰させる）。 */
   header {
     visibility: hidden;
-    height: var(--app-header-h);
-    min-height: var(--app-header-h);
+    height: 0;
+    min-height: 0;
     padding: 0;
     margin: 0;
     border-bottom: none;
@@ -665,7 +666,7 @@ header {
 
   #mobile-drawer-backdrop {
     position: fixed;
-    inset: var(--app-header-h) 0 0;
+    inset: env(safe-area-inset-top) 0 0;
     z-index: 1090;
     display: none;
     background: rgba(0,0,0,0.48);
@@ -690,7 +691,7 @@ header {
   body.mobile-has-session #session-list,
   body.mobile-drawer-open #session-list {
     position: fixed;
-    top: var(--app-header-h);
+    top: env(safe-area-inset-top);
     bottom: 0;
     /* base mobile の height:100% を打ち消す。height と top/bottom の過剰指定だと
        height が優先され、ドロワー下端がビューポートを 44px はみ出して見切れる。 */
