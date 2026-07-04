@@ -1,56 +1,13 @@
 // mobile-terminal-lite.ts
-// スマホ幅で xterm.js のフル描画を隠し、scanBuffer(activeSessionId) の末尾 N 行を
-// プレーン pre 表示する簡易ターミナルビュー（plan_mobile-ui-v0.4-scope.md A3）。
+// スマホ幅で xterm.js のフル描画を隠し、Web UI 送信イベントと scanBuffer(activeSessionId)
+// のクリーンテキスト差分からチャットトランスクリプトを表示するモバイルビュー。
 // xterm.js 自身は背後で生きているため、承認検出・PTY 受信・スクロールバック保持は
 // すべてそのまま動く。本ビューは「見せ方の置き換え」だけで、データ経路には触れない。
-//
-// プラン記載:
-//   - 既定は「直近 N 行のプレーンテキスト」表示
-//   - 折り返しはしない（横スクロール許容）
-//   - 承認時のみ詳細展開ボタンで xterm.js モーダルを開く
-//
-// MVP では「詳細を見る」モーダルを全行 pre で出すだけ（v0.4.1 で xterm 詳細表示に拡張余地）。
 
 import { t } from '../i18n.js';
 import { activeSessionId } from './state.js';
+import { getMobileTranscriptMessages, mobileTranscriptStatusText, syncMobileTranscriptFromBuffer } from './mobile-transcript.js';
 import { scanBuffer } from './terminal.js';
-
-// 既定 N（プラン推奨値）。設定 UI は v0.4.1。
-const DEFAULT_TAIL_LINES = 40;
-
-// C3: スマホでは可視行数が稼げないため、CLI の装飾出力 (連続空行・水平線) を畳んで密度を上げる。
-//   - 2 行以上連続する空行は 1 行に集約 (まず情報量を残す方向で 2 行→ 1 行から始める)
-//   - 連続する水平線 (`_`, `-`, `─`, `=`, `*` のみで構成) は 1 本に集約
-// xterm.js のスクロールバックは触らず、表示用バッファだけ整形する。
-const _RULE_RE = /^[\s_\-─=*]+$/;
-function _isRuleLine(s: string): boolean {
-  const t2 = s.trim();
-  return t2.length >= 3 && _RULE_RE.test(t2);
-}
-function collapseDecorations(lines: string[]): string[] {
-  const out: string[] = [];
-  let blankRun = 0;
-  let prevRule = false;
-  for (const raw of lines) {
-    const isBlank = raw.trim() === '';
-    if (isBlank) {
-      blankRun++;
-      if (blankRun === 1) out.push(raw); // 最初の 1 行は残す
-      prevRule = false;
-      continue;
-    }
-    blankRun = 0;
-    if (_isRuleLine(raw)) {
-      if (prevRule) continue; // 連続水平線は 1 本に集約
-      prevRule = true;
-      out.push(raw);
-      continue;
-    }
-    prevRule = false;
-    out.push(raw);
-  }
-  return out;
-}
 
 // スマホ幅判定（モジュール内のみ使用）。
 const _mtlMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
@@ -58,6 +15,7 @@ const _mtlMql = (typeof window !== 'undefined' && typeof window.matchMedia === '
 function isMobileViewport(): boolean { return !!_mtlMql?.matches; }
 
 let _refreshTimer: number | null = null;
+const lastRenderedMessageId = new Map<number, number>();
 
 function getOrCreateLiteContainer(): HTMLElement | null {
   let el = document.getElementById('mobile-terminal-lite');
@@ -80,10 +38,35 @@ function getOrCreateLiteContainer(): HTMLElement | null {
   detailBtn.addEventListener('click', openDetailModal);
   el.appendChild(detailBtn);
 
-  const pre = document.createElement('pre');
-  pre.id = 'mobile-terminal-lite-pre';
-  pre.className = 'mtl-pre';
-  el.appendChild(pre);
+  const chat = document.createElement('div');
+  chat.id = 'mobile-chat-view';
+  chat.className = 'mtl-chat-view';
+
+  const messages = document.createElement('div');
+  messages.className = 'mtl-chat-messages';
+  chat.appendChild(messages);
+
+  const status = document.createElement('div');
+  status.className = 'mtl-chat-status';
+  status.innerHTML = '<span class="mtl-chat-status-dot" aria-hidden="true"></span><span class="mtl-chat-status-text"></span>';
+  chat.appendChild(status);
+
+  const jump = document.createElement('button');
+  jump.type = 'button';
+  jump.className = 'mtl-jump-latest';
+  jump.textContent = t('mobile_chat_jump_latest');
+  jump.hidden = true;
+  jump.addEventListener('click', () => {
+    chat.scrollTop = chat.scrollHeight;
+    jump.hidden = true;
+  });
+  chat.appendChild(jump);
+
+  chat.addEventListener('scroll', () => {
+    const distance = chat.scrollHeight - chat.scrollTop - chat.clientHeight;
+    jump.hidden = distance < 80;
+  }, { passive: true });
+  el.appendChild(chat);
 
   // terminal-area-wrapper の直後に挿入（同じ階層）。CSS で個別セッション + mobile 幅時のみ表示。
   wrapper.appendChild(el);
@@ -97,19 +80,60 @@ export function refreshMobileTerminalLite(): void {
   if (activeSessionId === null) return;
   const el = getOrCreateLiteContainer();
   if (!el) return;
-  const pre = el.querySelector<HTMLElement>('#mobile-terminal-lite-pre');
-  if (!pre) return;
-  // C3: 末尾余裕を見て多めに取り、collapse 後に末尾 N 行へ切る。
-  //   scanBuffer(N) だと collapse で行数が減ったとき表示が痩せる。
-  const raw = scanBuffer(activeSessionId, DEFAULT_TAIL_LINES * 2);
-  while (raw.length > 0 && raw[raw.length - 1].trim() === '') raw.pop();
-  const collapsed = collapseDecorations(raw);
-  const lines = collapsed.length > DEFAULT_TAIL_LINES
-    ? collapsed.slice(collapsed.length - DEFAULT_TAIL_LINES)
-    : collapsed;
-  pre.textContent = lines.join('\n');
-  // 末尾追従。
-  pre.scrollTop = pre.scrollHeight;
+  syncMobileTranscriptFromBuffer(activeSessionId);
+  renderChatView(el, activeSessionId);
+}
+
+function renderChatView(root: HTMLElement, sessionId: number): void {
+  const chat = root.querySelector<HTMLElement>('#mobile-chat-view');
+  const list = root.querySelector<HTMLElement>('.mtl-chat-messages');
+  const status = root.querySelector<HTMLElement>('.mtl-chat-status');
+  const statusText = root.querySelector<HTMLElement>('.mtl-chat-status-text');
+  const jump = root.querySelector<HTMLButtonElement>('.mtl-jump-latest');
+  if (!chat || !list || !status || !statusText) return;
+
+  const previousSession = Number(root.dataset.sessionId || 0);
+  if (previousSession !== sessionId) {
+    root.dataset.sessionId = String(sessionId);
+    list.replaceChildren();
+    lastRenderedMessageId.set(sessionId, 0);
+  }
+
+  const distance = chat.scrollHeight - chat.scrollTop - chat.clientHeight;
+  const shouldFollow = distance < 80 || list.childElementCount === 0;
+  const messages = getMobileTranscriptMessages(sessionId);
+  const renderedId = lastRenderedMessageId.get(sessionId) || 0;
+
+  const validIds = new Set(messages.map((msg) => String(msg.id)));
+  list.querySelectorAll<HTMLElement>('.mtl-msg').forEach((el) => {
+    const id = el.dataset.msgId || '';
+    if (!validIds.has(id)) el.remove();
+  });
+
+  for (const msg of messages) {
+    if (msg.id <= renderedId && list.querySelector(`.mtl-msg[data-msg-id="${msg.id}"]`)) continue;
+    const item = document.createElement('div');
+    item.className = `mtl-msg mtl-msg-${msg.role}`;
+    item.dataset.msgId = String(msg.id);
+    item.textContent = msg.text;
+    list.appendChild(item);
+  }
+  lastRenderedMessageId.set(sessionId, messages.length > 0 ? messages[messages.length - 1].id : 0);
+
+  const last = messages[messages.length - 1];
+  if (last && last.role === 'ai') {
+    const lastEl = list.querySelector<HTMLElement>(`.mtl-msg[data-msg-id="${last.id}"]`);
+    if (lastEl && lastEl.textContent !== last.text) lastEl.textContent = last.text;
+  }
+
+  statusText.textContent = mobileTranscriptStatusText(sessionId);
+  list.appendChild(status);
+  if (shouldFollow) {
+    chat.scrollTop = chat.scrollHeight;
+    if (jump) jump.hidden = true;
+  } else if (jump) {
+    jump.hidden = false;
+  }
 }
 
 // 「詳細を見る」モーダル: scanBuffer 全行を pre で全画面表示する。
@@ -134,12 +158,18 @@ function openDetailModal(e?: Event): void {
   title.textContent = t('mobile_terminal_lite_detail_title', { n: String(allLines.length) });
   head.appendChild(title);
 
+  const tailBtn = document.createElement('button');
+  tailBtn.type = 'button';
+  tailBtn.className = 'mtl-detail-tail';
+  tailBtn.textContent = t('mobile_terminal_lite_tail');
+  tailBtn.addEventListener('click', () => { pre.scrollTop = pre.scrollHeight; });
+  head.appendChild(tailBtn);
+
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'mtl-detail-close';
   closeBtn.textContent = '✕';
   closeBtn.setAttribute('aria-label', t('settings_close'));
-  closeBtn.addEventListener('click', () => overlay.remove());
   head.appendChild(closeBtn);
 
   box.appendChild(head);
@@ -149,17 +179,47 @@ function openDetailModal(e?: Event): void {
   pre.textContent = allLines.join('\n');
   box.appendChild(pre);
 
+  let detailFontSize = 12.5;
+  const setDetailFontSize = (next: number) => {
+    detailFontSize = Math.max(10, Math.min(16, next));
+    pre.style.fontSize = `${detailFontSize}px`;
+  };
+  let pinchStartDistance = 0;
+  let pinchStartFontSize = detailFontSize;
+  pre.addEventListener('touchstart', (ev) => {
+    if (ev.touches.length !== 2) return;
+    pinchStartDistance = Math.hypot(
+      ev.touches[0].clientX - ev.touches[1].clientX,
+      ev.touches[0].clientY - ev.touches[1].clientY,
+    );
+    pinchStartFontSize = detailFontSize;
+  }, { passive: true });
+  pre.addEventListener('touchmove', (ev) => {
+    if (ev.touches.length !== 2 || pinchStartDistance <= 0) return;
+    ev.preventDefault();
+    const distance = Math.hypot(
+      ev.touches[0].clientX - ev.touches[1].clientX,
+      ev.touches[0].clientY - ev.touches[1].clientY,
+    );
+    setDetailFontSize(pinchStartFontSize * (distance / pinchStartDistance));
+  }, { passive: false });
+
   overlay.appendChild(box);
+  const close = () => {
+    document.removeEventListener('keydown', onKey, true);
+    overlay.remove();
+  };
   overlay.addEventListener('click', (ev) => {
-    if (ev.target === overlay) overlay.remove();
+    if (ev.target === overlay) close();
   });
-  document.addEventListener('keydown', function onKey(ev) {
+  function onKey(ev: KeyboardEvent): void {
     if (ev.key !== 'Escape') return;
     ev.preventDefault();
     ev.stopPropagation();
-    overlay.remove();
-    document.removeEventListener('keydown', onKey, true);
-  }, true);
+    close();
+  }
+  closeBtn.addEventListener('click', close);
+  document.addEventListener('keydown', onKey, true);
 
   document.body.appendChild(overlay);
   // 末尾追従。
@@ -185,3 +245,7 @@ if (_mtlMql) {
 
 // 他モジュール（activateSession 後の即時 refresh 用）から呼べるよう公開。
 (window as any).refreshMobileTerminalLite = refreshMobileTerminalLite;
+
+export function clearMobileTerminalLiteSession(sessionId: number): void {
+  lastRenderedMessageId.delete(sessionId);
+}

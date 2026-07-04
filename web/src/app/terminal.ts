@@ -1682,6 +1682,12 @@ function renderLiveStatusDom(mode, text) {
 // ライブ帯はアクティブセッションぶんしか表示しないため、追跡もアクティブ分だけ持つ。
 const LIVE_LONGPROC_SEC = 300;
 const liveStatusRunningSince = new Map<number, number>();
+const liveStatusMobileMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
+  ? window.matchMedia('(max-width: 720px)') : null;
+
+function isLiveStatusMobileViewport(): boolean {
+  return !!liveStatusMobileMql?.matches;
+}
 
 export function syncLiveStatusLongproc(): void {
   const el = document.getElementById('terminal-live-status');
@@ -1699,15 +1705,18 @@ export function syncLiveStatusLongproc(): void {
   if (!since) { since = Date.now(); liveStatusRunningSince.set(id, since); }
   const sec = Math.max(0, Math.floor((Date.now() - since) / 1000));
   let badge = lp;
+  const compactLabel = '⚠5m+';
+  const fullLabel = `⚠ ${ti18n('card_longproc_label')}`;
   if (!badge) {
     badge = document.createElement('span');
     badge.className = 'live-status-longproc';
-    badge.textContent = `⚠ ${ti18n('card_longproc_label')}`;
     badge.title = ti18n('card_longproc_title');
     // パレットボタンの左隣へ置く（パレットは buildUI で末尾に append される）。
     const paletteBtn = el.querySelector('.live-status-palette-btn');
     if (paletteBtn) el.insertBefore(badge, paletteBtn); else el.appendChild(badge);
   }
+  const label = isLiveStatusMobileViewport() ? compactLabel : fullLabel;
+  if (badge.textContent !== label) badge.textContent = label;
   badge.hidden = sec < LIVE_LONGPROC_SEC;
 }
 
