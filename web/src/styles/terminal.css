@@ -337,7 +337,7 @@
 
 @media (max-width: 720px) {
   body.mobile-has-session:not(.mobile-home-view) #input-bar-outer {
-    padding-bottom: calc(8px + env(safe-area-inset-bottom) + var(--mobile-vv-bottom-offset, 0px));
+    padding-bottom: calc(8px + var(--tsb-bottom-offset, 22px) + env(safe-area-inset-bottom) + var(--mobile-vv-bottom-offset, 0px));
     background: var(--bg-deep, #0d1117);
   }
 
