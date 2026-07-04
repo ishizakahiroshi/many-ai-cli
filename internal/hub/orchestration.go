@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/proto"
@@ -26,6 +27,16 @@ const orchestrationPollInterval = 2 * time.Second
 const (
 	orchestrationInjectQuiet   = 300 * time.Millisecond
 	orchestrationInjectMaxWait = 5 * time.Second
+)
+
+// injectInitialPrompt のエコー検証パラメータ。静止時間だけの判定は codex 等の
+// 起動シーケンス途中の静止窓で誤発火し、readline 未起動の TUI に注入バイトが
+// 捨てられる（bugfix_orchestration-codex-child-spawn-failures_2026-07-04.md 根本原因 A）。
+// 注入後に PTY 画面へ注入テキストのエコーが現れることを実観測し、現れなければ再注入する。
+const (
+	orchestrationInjectEchoWait    = 3 * time.Second
+	orchestrationInjectMaxAttempts = 4
+	orchestrationInjectEchoPoll    = 100 * time.Millisecond
 )
 
 var safeOrchestrationToken = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
@@ -326,8 +337,10 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 	s.registerBoardSession(orchestrationID, boardPath, parentID, "conductor")
 	s.registerBoardChild(orchestrationID, boardPath, childID, parentID, body.Role, spawnedAt)
 	prompt := buildChildInitialPrompt(body.InitialPrompt, boardPath, body.Role, branch, childID)
-	s.waitForInputReady(childID, orchestrationInjectQuiet, orchestrationInjectMaxWait)
-	s.injectText(childID, prompt, true, false)
+	// goroutine で注入する: エコー検証リトライは数十秒かかりうるため、conductor の
+	// spawn 呼び出し（HTTP レスポンス）をブロックしない。注入完了までのユーザー入力は
+	// initialInjectPending ゲート（registerLoop で設定）が pendingInput へ保留する。
+	go s.injectInitialPrompt(childID, prompt)
 	writeJSON(w, map[string]any{"ok": true, "session_id": childID, "board_path": boardPath, "cwd": childCWD, "worktree_branch": branch})
 }
 
@@ -847,6 +860,119 @@ func (s *Server) injectRaw(sessionID int, text string) {
 	wc := s.wrappers[sessionID]
 	s.sessionsMu.Unlock()
 	s.submitInput(wc, sessionID, text)
+}
+
+// injectRawBypassGate は初期プロンプト注入（injectInitialPrompt）専用の送信経路。
+// initialInjectPending ゲート中でも wrapper へ直接届ける（通常経路だと注入自体が
+// pendingInput へ回ってデッドロックするため）。
+func (s *Server) injectRawBypassGate(sessionID int, text string) {
+	s.sessionsMu.Lock()
+	wc := s.wrappers[sessionID]
+	s.sessionsMu.Unlock()
+	s.submitInputWithGate(wc, sessionID, text, true)
+}
+
+// injectInitialPrompt は orchestration セッション（conductor / 子）への初期プロンプトを、
+// CLI の入力受付開始を実観測しながら注入する。手順:
+//  1. waitForInputReady で出力静止を待つ（従来判定・早期注入の目安）
+//  2. 注入し、PTY 画面（VT バッファ）に注入テキストのエコーが現れるかを確認
+//  3. 現れなければ CLI 起動途中で入力が捨てられたとみなし再注入（最大 MaxAttempts 回）
+//
+// 完了・断念にかかわらず initialInjectPending ゲートを解除し、保留中のユーザー入力を
+// 順番どおり flush する。goroutine で呼ぶこと（エコー検証で数十秒ブロックしうる）。
+func (s *Server) injectInitialPrompt(sessionID int, prompt string) {
+	defer s.clearInitialInjectGate(sessionID)
+	marker := injectEchoMarker(prompt)
+	text := prompt
+	if !strings.HasSuffix(text, "\r") {
+		text += "\r"
+	}
+	for attempt := 1; attempt <= orchestrationInjectMaxAttempts; attempt++ {
+		s.waitForInputReady(sessionID, orchestrationInjectQuiet, orchestrationInjectMaxWait)
+		if attempt > 1 && s.waitForInjectEcho(sessionID, marker, 0) {
+			// 前回注入分のエコーが遅れて描画された場合は再注入しない（二重送信防止）
+			s.logger.Info("initial prompt echo observed late", "session_id", sessionID, "attempt", attempt)
+			return
+		}
+		s.injectRawBypassGate(sessionID, text)
+		if s.waitForInjectEcho(sessionID, marker, orchestrationInjectEchoWait) {
+			if attempt > 1 {
+				s.logger.Info("initial prompt injected after retry", "session_id", sessionID, "attempt", attempt)
+			}
+			return
+		}
+		s.logger.Warn("initial prompt echo not observed; retrying", "session_id", sessionID, "attempt", attempt)
+	}
+	s.logger.Warn("initial prompt injection gave up", "session_id", sessionID, "attempts", orchestrationInjectMaxAttempts)
+}
+
+// clearInitialInjectGate は初期注入ゲートを解除し、ゲート中に溜まったユーザー入力を flush する。
+func (s *Server) clearInitialInjectGate(sessionID int) {
+	s.sessionsMu.Lock()
+	ses := s.sessions[sessionID]
+	if ses != nil {
+		ses.initialInjectPending = false
+	}
+	s.sessionsMu.Unlock()
+	if ses == nil {
+		return
+	}
+	s.flushPendingInput(sessionID)
+}
+
+// waitForInjectEcho は注入テキストのエコー（marker）が PTY 画面に現れるまで待つ。
+// TUI の折り返しに影響されないよう、画面テキストと marker の双方から空白を除いて比較する。
+func (s *Server) waitForInjectEcho(sessionID int, marker string, maxWait time.Duration) bool {
+	if marker == "" {
+		return true
+	}
+	deadline := time.Now().Add(maxWait)
+	for {
+		s.sessionsMu.Lock()
+		ses := s.sessions[sessionID]
+		var screen string
+		if ses != nil && ses.vt != nil {
+			screen = collapseWhitespace(strings.Join(ses.vt.Lines(), ""))
+		}
+		s.sessionsMu.Unlock()
+		if ses == nil {
+			return false
+		}
+		if strings.Contains(screen, marker) {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(orchestrationInjectEchoPoll)
+	}
+}
+
+// injectEchoMarker は注入テキストの先頭行から、エコー検出用の空白除去済み部分文字列を作る。
+func injectEchoMarker(prompt string) string {
+	line := prompt
+	if i := strings.IndexByte(line, '\n'); i >= 0 {
+		line = line[:i]
+	}
+	line = collapseWhitespace(line)
+	const maxMarkerRunes = 32
+	runes := []rune(line)
+	if len(runes) > maxMarkerRunes {
+		runes = runes[:maxMarkerRunes]
+	}
+	return string(runes)
+}
+
+// collapseWhitespace は全空白文字（改行含む）を除去する。
+func collapseWhitespace(text string) string {
+	var b strings.Builder
+	b.Grow(len(text))
+	for _, r := range text {
+		if !unicode.IsSpace(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func buildChildInitialPrompt(base, boardPath, role, branch string, sessionID int) string {

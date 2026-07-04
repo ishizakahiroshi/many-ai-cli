@@ -285,6 +285,8 @@ export function ensureTerminal(id) {
     textDecoder: new TextDecoder('utf-8'),
     markerFilterCarry: new Uint8Array(0),
     inMarkerBlock: false,
+    markerLineStart: true,
+    markerEscPhase: 0,
     screenClearSeqCarry: new Uint8Array(0),
     eraseScrollbackFilterCarry: new Uint8Array(0),
     crFilterCarry: new Uint8Array(0),
@@ -1071,12 +1073,16 @@ export function filterHubMarkersForDisplay(id, bytes) {
     inMarker: t.inMarkerBlock || false,
     markerBuf: t.markerBuf || new Uint8Array(0),
     doneBuf: t.doneBuf || new Uint8Array(0),
+    lineStart: t.markerLineStart ?? true,
+    escPhase: t.markerEscPhase ?? 0,
   });
   t.markerFilterCarry = state.carry;
   t.inDoneBlock = state.inDone;
   t.inMarkerBlock = state.inMarker;
   t.markerBuf = state.markerBuf;
   t.doneBuf = state.doneBuf;
+  t.markerLineStart = state.lineStart;
+  t.markerEscPhase = state.escPhase;
   return out;
 }
 
