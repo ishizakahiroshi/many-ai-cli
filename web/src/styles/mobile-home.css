@@ -878,6 +878,36 @@
     text-align: left;
   }
 
+  /* C7指摘: ドロワーの「表示切り替え」セクション。旧 #unified-tab-bar の帯撤去に伴い、
+     ターミナル/マルチ/チャット/分割/Files/Git/承認 の切り替えをここへ移設。 */
+  .mobile-drawer-views {
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .mobile-drawer-views-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  .mobile-drawer-view-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 40px;
+    padding: 0 6px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .mobile-drawer-view-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
   /* B2: スマホ専用「📷 撮影」ボタン（attach-panel 内）。
      PC では @media 外の既定で display:none、ここで mobile 幅のみ表示に上書きする。
      attach-drop-zone（📎 ファイル選択）と並べる形でカメラ起動を 1 タップで提供する。 */

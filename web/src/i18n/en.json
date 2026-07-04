@@ -870,6 +870,7 @@
   "approval_tab_expand": "Show full",
   "approval_tab_collapse": "Collapse",
   "mobile_home_section_pending_count": "Awaiting approval ({n})",
+  "mobile_drawer_section_views": "Views",
   "mobile_home_section_sessions": "Sessions",
   "mobile_home_search_placeholder": "Search title / folder",
   "mobile_home_search_empty": "No matching sessions",
