@@ -864,11 +864,14 @@ func (cfg *Config) applyDefaults() {
 	if cfg.Orchestration.MaxTotalSessions <= 0 {
 		cfg.Orchestration.MaxTotalSessions = 16
 	}
+	// orchestration の時間閾値は 2026-07-04 実測（実装子が 40 分正常稼働・
+	// 120s idle 警告は 3 連続偽陽性）に基づく。短い時間駆動閾値は AI 子セッション
+	// の作業実態に合わない（plan_orchestration-conductor-improvements.md C1）。
 	if cfg.Orchestration.ChildTimeoutSeconds <= 0 {
-		cfg.Orchestration.ChildTimeoutSeconds = 600
+		cfg.Orchestration.ChildTimeoutSeconds = 3600
 	}
 	if cfg.Orchestration.IdleDoneThresholdSec <= 0 {
-		cfg.Orchestration.IdleDoneThresholdSec = 120
+		cfg.Orchestration.IdleDoneThresholdSec = 600
 	}
 	if strings.TrimSpace(cfg.Orchestration.WorktreeDirRoot) == "" {
 		cfg.Orchestration.WorktreeDirRoot = filepath.Join(".many-ai-cli", "worktrees")

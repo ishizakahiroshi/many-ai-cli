@@ -31,14 +31,33 @@ const (
 // Run は "many-ai-cli orchestrate <subcommand>" のエントリポイント。
 func Run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("orchestrate <spawn>")
+		return errors.New("orchestrate <spawn|send>")
 	}
 	switch args[0] {
 	case "spawn":
 		return runSpawn(args[1:])
+	case "send":
+		return runSend(args[1:])
 	default:
 		return fmt.Errorf("orchestrate: unknown subcommand %q", args[0])
 	}
+}
+
+// hubEnv は conductor / child セッションの env から Hub 接続情報を解決する。
+func hubEnv(subcommand string) (hubURL, token string, sessionID int, err error) {
+	sessionID, convErr := strconv.Atoi(os.Getenv(sessionIDEnv))
+	if convErr != nil || sessionID <= 0 {
+		return "", "", 0, fmt.Errorf("orchestrate %s: this session is not an orchestration session (missing/invalid %s)", subcommand, sessionIDEnv)
+	}
+	hubPort := os.Getenv(hubPortEnv)
+	if hubPort == "" {
+		return "", "", 0, fmt.Errorf("orchestrate %s: %s is not set", subcommand, hubPortEnv)
+	}
+	token = os.Getenv(hubTokenEnv)
+	if token == "" {
+		return "", "", 0, fmt.Errorf("orchestrate %s: %s is not set", subcommand, hubTokenEnv)
+	}
+	return fmt.Sprintf("http://127.0.0.1:%s", hubPort), token, sessionID, nil
 }
 
 func runSpawn(args []string) error {
@@ -47,30 +66,22 @@ func runSpawn(args []string) error {
 	provider := fs.String("provider", "", "override provider (default: resolved from the role mapping decided at conductor launch)")
 	model := fs.String("model", "", "override model (default: resolved from the role mapping decided at conductor launch)")
 	cwd := fs.String("cwd", "", "child working directory (default: parent session cwd)")
+	force := fs.Bool("force", false, "spawn a new child even if a live child already exists for the role (default: rejected; use `orchestrate send` instead)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() < 1 {
-		return errors.New(`orchestrate spawn --role <role> [--provider <provider> --model <model>] "<prompt>"`)
+		return errors.New(`orchestrate spawn --role <role> [--provider <provider> --model <model>] [--force] "<prompt>"`)
 	}
 	if *role == "" {
 		return errors.New("orchestrate spawn: --role is required")
 	}
 	prompt := fs.Arg(0)
 
-	sessionID, err := strconv.Atoi(os.Getenv(sessionIDEnv))
-	if err != nil || sessionID <= 0 {
-		return fmt.Errorf("orchestrate spawn: this session is not an orchestration session (missing/invalid %s)", sessionIDEnv)
+	hubURL, token, sessionID, err := hubEnv("spawn")
+	if err != nil {
+		return err
 	}
-	hubPort := os.Getenv(hubPortEnv)
-	if hubPort == "" {
-		return fmt.Errorf("orchestrate spawn: %s is not set", hubPortEnv)
-	}
-	token := os.Getenv(hubTokenEnv)
-	if token == "" {
-		return fmt.Errorf("orchestrate spawn: %s is not set", hubTokenEnv)
-	}
-	hubURL := fmt.Sprintf("http://127.0.0.1:%s", hubPort)
 
 	result, err := spawnChild(hubURL, token, sessionID, spawnChildRequest{
 		Role:          *role,
@@ -78,11 +89,41 @@ func runSpawn(args []string) error {
 		Model:         *model,
 		InitialPrompt: prompt,
 		CWD:           *cwd,
+		Force:         *force,
 	})
 	if err != nil {
 		return err
 	}
 	fmt.Printf("spawned child session #%d role=%s board=%s cwd=%s\n", result.SessionID, *role, result.BoardPath, result.CWD)
+	return nil
+}
+
+// runSend は既存の子セッションへ追加指示を送る。同 role の生存子がいる限り spawn は
+// 使わずこちらを使う（生存子の枠を消費せず、board へ宛先付き conductor 記帳が自動で残る）。
+func runSend(args []string) error {
+	fs := flag.NewFlagSet("orchestrate send", flag.ContinueOnError)
+	role := fs.String("role", "", "target child role (required)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() < 1 {
+		return errors.New(`orchestrate send --role <role> "<text>"`)
+	}
+	if *role == "" {
+		return errors.New("orchestrate send: --role is required")
+	}
+	text := fs.Arg(0)
+
+	hubURL, token, sessionID, err := hubEnv("send")
+	if err != nil {
+		return err
+	}
+
+	result, err := sendChild(hubURL, token, sessionID, sendChildRequest{Role: *role, Text: text})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("sent instruction to child session #%d role=%s board=%s\n", result.SessionID, *role, result.BoardPath)
 	return nil
 }
 
@@ -92,9 +133,15 @@ type spawnChildRequest struct {
 	Model         string `json:"model,omitempty"`
 	InitialPrompt string `json:"initial_prompt"`
 	CWD           string `json:"cwd,omitempty"`
+	Force         bool   `json:"force,omitempty"`
 }
 
-type spawnChildResponse struct {
+type sendChildRequest struct {
+	Role string `json:"role"`
+	Text string `json:"text"`
+}
+
+type childAPIResponse struct {
 	OK        bool   `json:"ok"`
 	SessionID int    `json:"session_id"`
 	BoardPath string `json:"board_path"`
@@ -104,14 +151,23 @@ type spawnChildResponse struct {
 }
 
 // spawnChild は POST /api/sessions/:id/spawn-child を叩く。
+func spawnChild(hubURL, token string, sessionID int, body spawnChildRequest) (*childAPIResponse, error) {
+	return postChildAPI(fmt.Sprintf("%s/api/sessions/%d/spawn-child", hubURL, sessionID), token, body)
+}
+
+// sendChild は POST /api/sessions/:id/send-child を叩く。
+func sendChild(hubURL, token string, sessionID int, body sendChildRequest) (*childAPIResponse, error) {
+	return postChildAPI(fmt.Sprintf("%s/api/sessions/%d/send-child", hubURL, sessionID), token, body)
+}
+
+// postChildAPI は orchestration API への JSON POST 共通部。
 // token は Authorization: Bearer ヘッダのみで渡し、argv / URL には一切乗せない
 // （usage-relay と同じ、procfs/ps 経由の漏洩を避けるパターン）。
-func spawnChild(hubURL, token string, sessionID int, body spawnChildRequest) (*spawnChildResponse, error) {
+func postChildAPI(url, token string, body any) (*childAPIResponse, error) {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
-	url := fmt.Sprintf("%s/api/sessions/%d/spawn-child", hubURL, sessionID)
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
@@ -129,7 +185,7 @@ func spawnChild(hubURL, token string, sessionID int, body spawnChildRequest) (*s
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
-	var result spawnChildResponse
+	var result childAPIResponse
 	if err := json.Unmarshal(raw, &result); err != nil {
 		return nil, fmt.Errorf("parse response (status %d): %w", resp.StatusCode, err)
 	}

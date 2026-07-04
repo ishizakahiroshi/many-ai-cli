@@ -288,10 +288,12 @@ func run(args []string) error {
 		return usagerelay.Run(args[1:])
 	case "orchestrate":
 		// 隠しサブコマンド: orchestration conductor / child セッションの AI が
-		// `many-ai-cli orchestrate spawn --role ... "prompt"` で子を起動するために使う
-		// （plan_orchestration-spawn-ui-exposure.md C2）。usage() ヘルプには載せない。
+		// `many-ai-cli orchestrate spawn --role ... "prompt"`（子の起動）と
+		// `many-ai-cli orchestrate send --role ... "text"`（既存子への追加指示）に使う
+		// （plan_orchestration-spawn-ui-exposure.md C2 / plan_orchestration-conductor-improvements.md C2）。
+		// usage() ヘルプには載せない。
 		if len(args) < 2 {
-			return errors.New("orchestrate <spawn>")
+			return errors.New("orchestrate <spawn|send>")
 		}
 		return orchestrate.Run(args[1:])
 	case "-h", "--help", "help":

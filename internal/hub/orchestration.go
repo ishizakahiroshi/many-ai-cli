@@ -92,6 +92,13 @@ type orchestrationChild struct {
 	SpawnedAt      time.Time
 	LastBoardWrite time.Time
 	Done           bool
+	// FilePath は子専用の進捗ファイル（board と同じディレクトリの child-<ID>.md）。
+	// 子の進捗・DONE 記帳を board.md から分離し、共有ファイルの追記競合と
+	// 記帳名義ゆれを構造的に解消する（plan_orchestration-conductor-improvements.md C4）。
+	// 旧プロンプトで動く子（board.md へ直接記帳）は従来の writer 検出で追従する。
+	FilePath string
+	FileSize int64
+	FileMod  time.Time
 }
 
 type boardDoneEvent struct {
@@ -117,6 +124,16 @@ type spawnChildRequest struct {
 	Route          string `json:"route"`
 	ModelSelection string `json:"model_selection_mode"`
 	RiskConfirmed  bool   `json:"risk_confirmed"`
+	// Force は同 role の生存子がいても新規 spawn を許可する（重複 spawn ガードの明示迂回。
+	// plan_orchestration-conductor-improvements.md C2）。
+	Force bool `json:"force"`
+}
+
+// sendChildRequest は POST /api/sessions/:id/send-child のリクエスト。
+// conductor が既存の子へ追加指示を送る（spawn 枠を消費しない指示経路）。
+type sendChildRequest struct {
+	Role string `json:"role"`
+	Text string `json:"text"`
 }
 
 type injectRequest struct {
@@ -190,6 +207,8 @@ func (s *Server) handleSessionAPI(w http.ResponseWriter, r *http.Request) {
 	switch parts[1] {
 	case "spawn-child":
 		s.handleSpawnChild(w, r, id)
+	case "send-child":
+		s.handleSendChild(w, r, id)
 	case "inject":
 		s.handleSessionInject(w, r, id)
 	case "children":
@@ -266,6 +285,15 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 		s.notifyOrchestrationError(parentID, "total_sessions", "max total sessions reached")
 		writeJSONStatus(w, http.StatusTooManyRequests, httpErrorResp{OK: false, Error: "orchestration_limit", Detail: "max total sessions reached"})
 		return
+	}
+	// 同 role の生存子がいる場合の重複 spawn ガード。conductor が修正指示・再確認指示を
+	// 毎回 spawn で出すと生存子数が max_children_per_parent に到達して詰まる実測があった
+	// （plan_orchestration-conductor-improvements.md C2）。既存子への指示は send を使わせる。
+	if !body.Force {
+		if live := s.liveChildForRole(parentID, body.Role); live != nil {
+			writeJSONStatus(w, http.StatusConflict, httpErrorResp{OK: false, Error: "duplicate_role_child", Detail: fmt.Sprintf("live child #%d already exists for role %q; use `many-ai-cli orchestrate send --role %s \"<text>\"` to instruct it, or pass --force to spawn another", live.ID, body.Role, body.Role)})
+			return
+		}
 	}
 
 	cwd := strings.TrimSpace(body.CWD)
@@ -372,6 +400,77 @@ func applyChildApprovalDefaults(body *spawnChildRequest) {
 		}
 	}
 	body.RiskConfirmed = true
+}
+
+// liveChildForRole は parentID の子のうち role が一致し、done / timeout になっていない
+// セッションのコピーを返す。複数いる場合は最新 spawn（ID 最大）を選ぶ。いなければ nil。
+func (s *Server) liveChildForRole(parentID int, role string) *session {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	var found *session
+	for _, ses := range s.sessions {
+		if ses.ParentSessionID != parentID || ses.Role != role {
+			continue
+		}
+		if ses.State == "done" || ses.State == "timeout" {
+			continue
+		}
+		if found == nil || ses.ID > found.ID {
+			found = ses
+		}
+	}
+	if found == nil {
+		return nil
+	}
+	cp := *found
+	return &cp
+}
+
+// handleSendChild は conductor から既存の子セッションへ追加指示を送る。
+// board へ宛先付き conductor 記帳を残してから子 PTY へ注入する（spawn 枠を消費しない
+// 指示経路。plan_orchestration-conductor-improvements.md C2）。
+func (s *Server) handleSendChild(w http.ResponseWriter, r *http.Request, parentID int) {
+	if !s.guard(w, r, http.MethodPost) {
+		return
+	}
+	var body sendChildRequest
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	body.Role = sanitizeRole(body.Role)
+	if body.Role == "" {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "role is required")
+		return
+	}
+	if strings.TrimSpace(body.Text) == "" {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "text is required")
+		return
+	}
+	s.sessionsMu.Lock()
+	parent := s.sessions[parentID]
+	boardPath := ""
+	if parent != nil {
+		boardPath = parent.BoardPath
+	}
+	s.sessionsMu.Unlock()
+	if parent == nil {
+		writeJSONError(w, http.StatusNotFound, "not_found", "parent session not found")
+		return
+	}
+	child := s.liveChildForRole(parentID, body.Role)
+	if child == nil {
+		writeJSONError(w, http.StatusNotFound, "no_live_child", fmt.Sprintf("no live child for role %q; use `many-ai-cli orchestrate spawn --role %s \"<prompt>\"`", body.Role, body.Role))
+		return
+	}
+	// board への記録が先。子が更新通知を受けて board を読むとき、指示本文が既に載っている
+	// ようにする（注入が先だと子が board を読んでも指示が見つからない窓ができる）。
+	if boardPath != "" {
+		if err := s.appendBoardSection(boardPath, "conductor", fmt.Sprintf("@%s session=%d への指示:\n%s\n", child.Role, child.ID, body.Text)); err != nil {
+			s.logger.Warn("send-child board append failed", "board", boardPath, "err", err)
+		}
+	}
+	s.injectText(child.ID, fmt.Sprintf("\n[orchestration] instruction from conductor (session=%d):\n%s\n", parentID, body.Text), true, false)
+	writeJSON(w, map[string]any{"ok": true, "session_id": child.ID, "role": child.Role, "board_path": boardPath})
 }
 
 func (s *Server) handleSessionInject(w http.ResponseWriter, r *http.Request, id int) {
@@ -493,8 +592,14 @@ func (s *Server) registerBoardChild(id, path string, sessionID, parentID int, ro
 		Role:           role,
 		SpawnedAt:      spawnedAt,
 		LastBoardWrite: spawnedAt,
+		FilePath:       childProgressPath(path, sessionID),
 	}
 	s.orchestration.mu.Unlock()
+}
+
+// childProgressPath は子専用進捗ファイルのパス（board と同じディレクトリ）。
+func childProgressPath(boardPath string, sessionID int) string {
+	return filepath.Join(filepath.Dir(boardPath), fmt.Sprintf("child-%d.md", sessionID))
 }
 
 func newOrchestrationBoard(id, path string) *orchestrationBoard {
@@ -536,6 +641,7 @@ func (s *Server) scanOrchestrationBoards() {
 	}
 	s.orchestration.mu.Unlock()
 	for _, b := range boards {
+		s.scanOrchestrationChildFiles(b.ID, now)
 		info, err := os.Stat(b.Path)
 		if err != nil {
 			s.checkOrchestrationChildTimers(b.ID, now, cfg)
@@ -552,6 +658,101 @@ func (s *Server) scanOrchestrationBoards() {
 			}
 		}
 		s.checkOrchestrationChildTimers(b.ID, now, cfg)
+	}
+}
+
+// scanOrchestrationChildFiles は子専用進捗ファイル（child-<ID>.md）を監視する。
+// mtime / サイズの変化だけで子の活動（LastBoardWrite）を更新し、変化があったときのみ
+// 内容を読んで DONE 検出と関係セッションへの更新通知を行う（C4: 子ごとファイル分離）。
+func (s *Server) scanOrchestrationChildFiles(boardID string, now time.Time) {
+	type childFile struct {
+		id   int
+		path string
+		size int64
+		mod  time.Time
+	}
+	s.orchestration.mu.Lock()
+	b := s.orchestration.boards[boardID]
+	if b == nil {
+		s.orchestration.mu.Unlock()
+		return
+	}
+	files := make([]childFile, 0, len(b.Children))
+	for id, child := range b.Children {
+		if child.FilePath == "" {
+			continue
+		}
+		files = append(files, childFile{id: id, path: child.FilePath, size: child.FileSize, mod: child.FileMod})
+	}
+	s.orchestration.mu.Unlock()
+
+	type update struct {
+		id    int
+		info  os.FileInfo
+		text  string
+		dones []boardDoneEvent
+	}
+	var updates []update
+	for _, f := range files {
+		info, err := os.Stat(f.path)
+		if err != nil {
+			continue // 進捗ファイル未作成（spawn 直後 or 旧プロンプトの子）
+		}
+		if info.Size() == f.size && info.ModTime().Equal(f.mod) {
+			continue
+		}
+		data, err := os.ReadFile(f.path)
+		if err != nil {
+			continue
+		}
+		updates = append(updates, update{id: f.id, info: info, text: string(data), dones: detectBoardDoneEvents(string(data))})
+	}
+	if len(updates) == 0 {
+		return
+	}
+
+	type notice struct {
+		sessionID int
+		text      string
+	}
+	var notices []notice
+	var doneIDs []int
+	s.orchestration.mu.Lock()
+	b = s.orchestration.boards[boardID]
+	if b == nil {
+		s.orchestration.mu.Unlock()
+		return
+	}
+	for _, u := range updates {
+		child := b.Children[u.id]
+		if child == nil {
+			continue
+		}
+		child.FileSize = u.info.Size()
+		child.FileMod = u.info.ModTime()
+		child.LastBoardWrite = now
+		for _, ev := range u.dones {
+			// 自ファイルなので session id 表記が欠けていても本人の DONE とみなす
+			if ev.SessionID == 0 || ev.SessionID == u.id {
+				b.Done[u.id] = true
+				child.Done = true
+				doneIDs = append(doneIDs, u.id)
+				break
+			}
+		}
+		for sessionID := range b.Sessions {
+			if sessionID == u.id {
+				continue
+			}
+			notices = append(notices, notice{sessionID: sessionID, text: fmt.Sprintf("\n[orchestration] progress updated by %s (session=%d): %s\n", child.Role, u.id, child.FilePath)})
+		}
+	}
+	s.orchestration.mu.Unlock()
+	for _, n := range notices {
+		s.injectText(n.sessionID, n.text, true, false)
+	}
+	for _, id := range doneIDs {
+		s.markChildState(id, "done")
 	}
 }
 
@@ -654,6 +855,16 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 		threshold int
 	}
 	var notices []notice
+	// PTY 出力時刻のスナップショット。board 記帳が止まっていても PTY 出力が動いている子は
+	// 作業中（plan 読込・実装・レビュー等）とみなし idle warning を出さない。board 記帳時刻
+	// だけの判定は実測で偽陽性を連発した（plan_orchestration-conductor-improvements.md C1）。
+	// sessionsMu → orchestration.mu の順に短く取り、入れ子にしない。
+	lastOutputs := map[int]time.Time{}
+	s.sessionsMu.Lock()
+	for id, ses := range s.sessions {
+		lastOutputs[id] = ses.lastOutputAt
+	}
+	s.sessionsMu.Unlock()
 	s.orchestration.mu.Lock()
 	b := s.orchestration.boards[boardID]
 	if b != nil {
@@ -666,9 +877,22 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 				notices = append(notices, notice{parentID: child.ParentID, childID: id, role: child.Role, kind: "timeout", state: "timeout", threshold: cfg.ChildTimeoutSeconds})
 				continue
 			}
-			if cfg.IdleDoneThresholdSec > 0 && !b.IdleWarned[id] && now.Sub(child.LastBoardWrite) > time.Duration(cfg.IdleDoneThresholdSec)*time.Second {
-				b.IdleWarned[id] = true
-				notices = append(notices, notice{parentID: child.ParentID, childID: id, role: child.Role, kind: "idle", threshold: cfg.IdleDoneThresholdSec})
+			if cfg.IdleDoneThresholdSec > 0 {
+				threshold := time.Duration(cfg.IdleDoneThresholdSec) * time.Second
+				boardIdle := now.Sub(child.LastBoardWrite) > threshold
+				ptyIdle := true
+				if last, ok := lastOutputs[id]; ok && !last.IsZero() {
+					ptyIdle = now.Sub(last) > threshold
+				}
+				if boardIdle && ptyIdle {
+					if !b.IdleWarned[id] {
+						b.IdleWarned[id] = true
+						notices = append(notices, notice{parentID: child.ParentID, childID: id, role: child.Role, kind: "idle", threshold: cfg.IdleDoneThresholdSec})
+					}
+				} else if b.IdleWarned[id] {
+					// board か PTY の活動が再開したらラッチを解除し、再び沈黙したら改めて 1 回警告する
+					delete(b.IdleWarned, id)
+				}
 			}
 		}
 	}
@@ -679,7 +903,7 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 			s.notifyOrchestrationError(n.parentID, "timeout", fmt.Sprintf("role=%s id=%d threshold=%ds", n.role, n.childID, n.threshold))
 			s.markChildState(n.childID, n.state)
 		case "idle":
-			s.injectText(n.parentID, fmt.Sprintf("\n[orchestration] idle warning role=%s id=%d no board update for %ds\n", n.role, n.childID, n.threshold), true, false)
+			s.injectText(n.parentID, fmt.Sprintf("\n[orchestration] idle warning role=%s id=%d no board update and no PTY output for %ds\n", n.role, n.childID, n.threshold), true, false)
 		}
 	}
 }
@@ -976,15 +1200,19 @@ func collapseWhitespace(text string) string {
 }
 
 func buildChildInitialPrompt(base, boardPath, role, branch string, sessionID int) string {
+	id := strconv.Itoa(sessionID)
 	var b strings.Builder
 	b.WriteString("You are an orchestration child session.\n")
 	b.WriteString("Role: " + role + "\n")
-	b.WriteString("Session ID: " + strconv.Itoa(sessionID) + "\n")
-	b.WriteString("Shared board: " + boardPath + "\n")
+	b.WriteString("Session ID: " + id + "\n")
+	b.WriteString("Shared board (read-only for you): " + boardPath + "\n")
+	b.WriteString("Your progress file (write here): " + childProgressPath(boardPath, sessionID) + "\n")
 	if branch != "" {
 		b.WriteString("Worktree branch: " + branch + "\n")
 	}
-	b.WriteString("Read the board before acting. Append progress as `## " + role + " session=" + strconv.Itoa(sessionID) + " <RFC3339 time>` sections. When complete, append `## DONE " + role + " session=" + strconv.Itoa(sessionID) + "` and a concise summary.\n\n")
+	// 進捗・DONE は子専用ファイルへ。board.md は conductor の指示・全体状況の読み取り専用に
+	// することで、共有 board への同時書き込み競合と記帳名義ゆれを避ける（C4）。
+	b.WriteString("Read the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## " + role + " session=" + id + " <RFC3339 time>` sections, each including a `status: running|blocked|done|failed` line. When complete, append `## DONE " + role + " session=" + id + "` and a concise summary to your progress file. Do not write to the shared board.\n\n")
 	b.WriteString(base)
 	return b.String()
 }
@@ -1011,6 +1239,13 @@ func buildConductorInitialPrompt(orchestrationID string, roles map[string]orches
 		b.WriteString("  many-ai-cli orchestrate spawn --role <role> --provider <provider> --model <model> \"<prompt>\"\n")
 	}
 	b.WriteString("Do not call the Hub HTTP API or handle any auth token directly; this subcommand does it for you.\n")
+	// 2026-07-04 の実運用（plan_orchestration-conductor-improvements.md C3）で確立した
+	// conductor 運用ルール。spawn 反復による枠涸渇・停止指示の解釈違い・レビューと修正の
+	// レースを構造的に防ぐ。
+	b.WriteString("Operating rules:\n")
+	b.WriteString("- To give follow-up instructions to an existing live child, run `many-ai-cli orchestrate send --role <role> \"<text>\"` instead of spawning again. spawn is rejected (409) while a live child exists for the role; send injects the text into the child and records it on the board automatically.\n")
+	b.WriteString("- When the user asks you to stop, confirm in one line whether they mean immediately or after the current work unit completes (default: after completion).\n")
+	b.WriteString("- Do not dispatch a reviewer while the implementation child is still working on fixes; wait for its `## DONE` entry on the board first.\n")
 	return b.String()
 }
 
