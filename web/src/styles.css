@@ -531,7 +531,7 @@ header {
      ヘッダー高さ変数に inset-top を含める（PC・非ノッチ端末では env() が 0px なので無変化）。
      var(--app-header-h) を参照する #app / ドロワー / backdrop も自動で追従する。 */
   :root {
-    --app-header-h: calc(44px + env(safe-area-inset-top));
+    --app-header-h: calc(36px + env(safe-area-inset-top));
   }
 
   header {
@@ -562,6 +562,11 @@ header {
     gap: var(--space-1);
   }
 
+  .header-logo-icon {
+    width: 26px;
+    height: 26px;
+  }
+
   #app {
     display: block;
     position: relative;
@@ -577,8 +582,8 @@ header {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 32px;
+    width: 32px;
+    height: 26px;
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
     background: var(--bg-elev);
@@ -625,8 +630,8 @@ header {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    width: 36px;
-    height: 32px;
+    width: 32px;
+    height: 26px;
     margin-left: auto;
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
