@@ -13,6 +13,7 @@ import {
 import {
   activeSessionId,
   approvalRawOptionsCache,
+  approvalSig,
   approvalVisibleCache,
   batchActiveQ,
   batchFreeText,
@@ -33,6 +34,7 @@ let contentEl: HTMLElement | null = null;
 let openSessionId: number | null = null;
 let suppressedActiveApproval = false;
 let touchStartY: number | null = null;
+const manuallyDismissedApprovalSigs = new Map<number, string>();
 
 function isMobileViewport(): boolean {
   return !!mobileMql?.matches;
@@ -41,6 +43,32 @@ function isMobileViewport(): boolean {
 function isApprovalPending(sessionId: number | null): boolean {
   if (sessionId === null) return false;
   return !!(approvalVisibleCache.get(sessionId) || multiQuestionVisibleCache.get(sessionId));
+}
+
+function approvalDismissSig(sessionId: number): string {
+  const options = approvalRawOptionsCache.get(sessionId);
+  return Array.isArray(options) ? approvalSig(options) : `session:${sessionId}`;
+}
+
+function isApprovalManuallyDismissed(sessionId: number): boolean {
+  const dismissedSig = manuallyDismissedApprovalSigs.get(sessionId);
+  const currentSig = approvalDismissSig(sessionId);
+  if (dismissedSig === `session:${sessionId}` && currentSig !== dismissedSig) {
+    manuallyDismissedApprovalSigs.set(sessionId, currentSig);
+    return true;
+  }
+  return dismissedSig === currentSig;
+}
+
+function clearDismissedResolvedApprovals(): void {
+  manuallyDismissedApprovalSigs.forEach((_sig, sessionId) => {
+    if (!isApprovalPending(sessionId)) manuallyDismissedApprovalSigs.delete(sessionId);
+  });
+}
+
+function latchManualDismissal(sessionId: number | null): void {
+  if (sessionId === null || !isApprovalPending(sessionId)) return;
+  manuallyDismissedApprovalSigs.set(sessionId, approvalDismissSig(sessionId));
 }
 
 function isComposerBusy(): boolean {
@@ -67,6 +95,7 @@ function syncMobileBadgeSoon(): void {
 }
 
 function ensureSheet(): void {
+  if (!isMobileViewport()) return;
   if (sheetEl && backdropEl && contentEl) return;
 
   backdropEl = document.createElement('div');
@@ -82,7 +111,17 @@ function ensureSheet(): void {
   grab.type = 'button';
   grab.className = 'mas-grab';
   grab.setAttribute('aria-label', t('mobile_approval_sheet_close'));
-  grab.addEventListener('click', () => closeApprovalSheet());
+  grab.addEventListener('click', () => closeApprovalSheet({ manual: true }));
+  grab.addEventListener('touchstart', (ev) => {
+    if (!isMobileViewport()) return;
+    touchStartY = ev.touches[0]?.clientY ?? null;
+  }, { passive: true });
+  grab.addEventListener('touchend', (ev) => {
+    if (touchStartY === null) return;
+    const endY = ev.changedTouches[0]?.clientY ?? touchStartY;
+    if (endY - touchStartY > 56) closeApprovalSheet({ manual: true });
+    touchStartY = null;
+  }, { passive: true });
 
   contentEl = document.createElement('div');
   contentEl.className = 'mas-content';
@@ -90,21 +129,24 @@ function ensureSheet(): void {
   sheetEl.append(grab, contentEl);
   document.body.append(backdropEl, sheetEl);
 
-  backdropEl.addEventListener('click', () => closeApprovalSheet());
-  sheetEl.addEventListener('touchstart', (ev) => {
-    if (!isMobileViewport()) return;
-    touchStartY = ev.touches[0]?.clientY ?? null;
-  }, { passive: true });
-  sheetEl.addEventListener('touchend', (ev) => {
-    if (touchStartY === null) return;
-    const endY = ev.changedTouches[0]?.clientY ?? touchStartY;
-    if (endY - touchStartY > 56) closeApprovalSheet();
-    touchStartY = null;
-  }, { passive: true });
+  backdropEl.addEventListener('click', () => closeApprovalSheet({ manual: true }));
+}
+
+function hideExistingSheet(): void {
+  if (sheetEl) sheetEl.hidden = true;
+  if (backdropEl) backdropEl.hidden = true;
+  document.body.classList.remove('mobile-approval-sheet-open');
+  openSessionId = null;
+  touchStartY = null;
+  syncMobileBadgeSoon();
 }
 
 function setSheetOpen(open: boolean): void {
-  ensureSheet();
+  if (!isMobileViewport()) {
+    if (!open) hideExistingSheet();
+    return;
+  }
+  if (open) ensureSheet();
   if (!sheetEl || !backdropEl) return;
   sheetEl.hidden = !open;
   backdropEl.hidden = !open;
@@ -113,13 +155,15 @@ function setSheetOpen(open: boolean): void {
   syncMobileBadgeSoon();
 }
 
-export function closeApprovalSheet(): void {
+export function closeApprovalSheet(options: { manual?: boolean } = {}): void {
+  if (options.manual) latchManualDismissal(openSessionId);
   setSheetOpen(false);
 }
 
 export function openApprovalSheet(sessionId: number | null = activeSessionId): void {
   if (!isMobileViewport()) return;
   if (sessionId === null || !isApprovalPending(sessionId)) return;
+  manuallyDismissedApprovalSigs.delete(sessionId);
   openSessionId = sessionId;
   suppressedActiveApproval = false;
   renderSheet();
@@ -144,7 +188,7 @@ function renderHeader(parent: HTMLElement, sessionId: number, titleText: string)
   close.className = 'mas-close';
   close.textContent = '×';
   close.setAttribute('aria-label', t('mobile_approval_sheet_close'));
-  close.addEventListener('click', () => closeApprovalSheet());
+  close.addEventListener('click', () => closeApprovalSheet({ manual: true }));
 
   const text = document.createElement('div');
   text.className = 'mas-header-text';
@@ -186,9 +230,7 @@ function optionButton(label: string, num: string | number): HTMLButtonElement {
 }
 
 function isRecommendedOption(opt: any, options: any[]): boolean {
-  const isSessionAllowLabel = (s: unknown) => /during this session|allow.*session|yes.*allow/i.test(String(s || ''));
-  const hasSessionAllow = options.some(o => isSessionAllowLabel(o.label));
-  return hasSessionAllow ? isSessionAllowLabel(opt.label) : !!opt.isCurrent;
+  return !!opt.isCurrent;
 }
 
 function renderSingle(sessionId: number, options: any[]): void {
@@ -405,6 +447,7 @@ function renderFallback(sessionId: number): void {
 }
 
 function renderSheet(): void {
+  if (!isMobileViewport()) return;
   ensureSheet();
   if (!contentEl || openSessionId === null) return;
   contentEl.innerHTML = '';
@@ -417,9 +460,10 @@ function renderSheet(): void {
 
 function maybeAutoOpen(): void {
   if (!isMobileViewport()) {
-    closeApprovalSheet();
+    hideExistingSheet();
     return;
   }
+  clearDismissedResolvedApprovals();
   if (openSessionId !== null && !isApprovalPending(openSessionId)) {
     closeApprovalSheet();
     showToast(t('mobile_approval_resolved_toast'));
@@ -434,6 +478,11 @@ function maybeAutoOpen(): void {
     syncMobileBadgeSoon();
     return;
   }
+  if (isApprovalManuallyDismissed(activeSessionId)) {
+    suppressedActiveApproval = false;
+    syncMobileBadgeSoon();
+    return;
+  }
   if (isComposerBusy()) {
     suppressedActiveApproval = true;
     syncMobileBadgeSoon();
@@ -443,8 +492,14 @@ function maybeAutoOpen(): void {
 }
 
 function retrySuppressedOpen(): void {
+  if (!isMobileViewport()) return;
   if (!suppressedActiveApproval) return;
   if (activeSessionId === null || !isApprovalPending(activeSessionId)) {
+    suppressedActiveApproval = false;
+    syncMobileBadgeSoon();
+    return;
+  }
+  if (isApprovalManuallyDismissed(activeSessionId)) {
     suppressedActiveApproval = false;
     syncMobileBadgeSoon();
     return;
@@ -454,8 +509,10 @@ function retrySuppressedOpen(): void {
 }
 
 function openAfterComposerIdle(): void {
+  if (!isMobileViewport()) return;
   if (!suppressedActiveApproval) return;
   if (activeSessionId === null || !isApprovalPending(activeSessionId)) return;
+  if (isApprovalManuallyDismissed(activeSessionId)) return;
   if (!hasComposerDraft()) openApprovalSheet(activeSessionId);
 }
 
