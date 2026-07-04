@@ -71,11 +71,16 @@ function buildCard(id: number): HTMLElement {
 
   // ── 承認待ちカード: 質問テキスト + 選択肢（or フォールバック） ──
   if (isPending) {
-    // batch / multiQ は inline 描画せず「承認タブで開く」フォールバック
+    // batch / multiQ / #multi はシート内で回答する。
     if (isMultiQ || isBatch || isMultiSel) {
-      const fallback = document.createElement('div');
+      const fallback = document.createElement('button');
+      fallback.type = 'button';
       fallback.className = 'mh-approval-fallback';
-      fallback.textContent = t('approval_tab_multiq_hint');
+      fallback.textContent = t('mobile_approval_open_sheet');
+      fallback.addEventListener('click', (e) => {
+        e.stopPropagation();
+        (window as any).openMobileApprovalSheetForSession?.(id);
+      });
       card.appendChild(fallback);
     } else if (Array.isArray(options) && options.length > 0) {
       // 質問テキスト

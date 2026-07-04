@@ -10,6 +10,7 @@ import { pushMessage } from './chat-history.js';
 // ---- ファイル転送 (attach) ----
 
 export const attachDropZone = document.getElementById('attach-drop-zone');
+export const attachPanel = document.getElementById('attach-panel');
 export const attachFileInput = document.getElementById('attach-file-input');
 export const attachThumbnails = document.getElementById('attach-thumbnails');
 export const attachClearBtn = document.getElementById('attach-clear-btn');
@@ -24,8 +25,10 @@ export function isImageFile(file) {
 }
 
 export function updateAttachClearBtn() {
-  if (!attachClearBtn || !attachThumbnails) return;
-  attachClearBtn.hidden = attachThumbnails.querySelectorAll('.attach-thumb-wrapper').length === 0;
+  if (!attachThumbnails) return;
+  const hasAttachments = attachThumbnails.querySelectorAll('.attach-thumb-wrapper').length > 0;
+  attachPanel?.classList.toggle('has-attachments', hasAttachments);
+  if (attachClearBtn) attachClearBtn.hidden = !hasAttachments;
 }
 
 if (attachClearBtn) {
