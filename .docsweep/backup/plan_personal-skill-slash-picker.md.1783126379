@@ -1,0 +1,124 @@
+# 個人別 Skill を many-ai-cli のスラッシュ候補に出す
+
+> 最終更新: 2026-06-17(水) 14:36:19
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | fix | wrapper register/reattach でセッション本人の HOME / CODEX_HOME / CLAUDE_CONFIG_DIR を Hub へ渡す | — |
+| C2 | fix | Hub の `/api/slash-commands` を session_id 対応にし、本人 Skill を slash 候補へ merge する | C1 後 |
+| C3 | fix | Web の slash 補完・ピッカーを active session_id 付きで取得し、session単位キャッシュにする | C2 後 |
+| C4 | fix | 個人別 Skill 探索と session context 分離のテストを追加する | C2 後 |
+
+実行順序: `C1 → C2 → (C3, C4)`
+
+---
+
+## 概要
+
+many-ai-cli の Web 入力欄は内側 CLI をラップしているため、Codex / Claude のネイティブ Skill 選択 UI を直接操作しにくい。Web 側のスラッシュ候補に各ユーザー本人の Skill を出し、クリックまたは補完選択でそのまま送信できるようにする。
+
+重要なのは Hub プロセスのユーザーではなく、各 AI CLI セッションを実行している本人の Skill を読むこと。Docker / VPS / multiuser では Hub とセッション実行ユーザーがずれるため、provider 単位の固定キャッシュや Hub の `os.UserHomeDir()` 基準では誤った候補が出る。
+
+## 現状と問題
+
+- 既存の slash command 一覧は `resources/slash-commands/*.md` または設定済み remote/local source から provider 単位で取得している。
+- Skill はローカル filesystem 上の `SKILL.md` にあるため、remote markdown 取得だけでは拾えない。
+- Hub 基準で `~/.codex` / `~/.claude` を読むと、multiuser 環境で「本人の Skill」にならない。
+- provider 単位キャッシュだと、同じ provider の別ユーザーセッション間で Skill 候補が混ざる。
+
+## 方針
+
+- wrapper が register / reattach 時に、自分の実行環境から `HOME` / `CODEX_HOME` / `CLAUDE_CONFIG_DIR` を Hub へ送る。
+- Hub は session にその値を保持する。ただし UI へ broadcast する session_update には載せない。
+- Web は `/api/slash-commands` 呼び出しに active `session_id` を付ける。
+- Hub は `session_id` と provider が一致する場合、その session 本人の Skill root を探索する。
+- キャッシュキーは provider だけでなく本人 context を含める。
+- `SKILL.md` frontmatter の `name` / `description` を読み、候補にする。
+- Claude は `/skill-name`、Codex は `$skill-name` として送信する。
+- Claude の `user-invokable: false` は slash 候補から除外する。
+- remote slash source 取得が失敗しても、本人 Skill が読めるなら Skill 候補だけは返す。
+
+## C1: wrapper が本人ディレクトリを渡す
+
+### 変更ファイル
+
+- `internal/proto/messages.go`
+- `internal/wrapper/wrapper.go`
+- `internal/hub/server.go`
+
+### 作業内容
+
+- `proto.Message` に `home_dir` / `codex_home` / `claude_dir` を追加する。
+- `dialAndRegister` / `dialAndReattach` で `os.UserHomeDir()`、`CODEX_HOME`、`CLAUDE_CONFIG_DIR` を取得して送信する。
+- Hub の `session` に JSON 非公開フィールドとして保持する。
+
+### 完了条件
+
+- 新規セッションと reattach セッションの両方で本人 directory context が Hub に残る。
+- UI の session_update に個人パスを出さない。
+
+## C2: Hub API が本人 Skill を merge する
+
+### 変更ファイル
+
+- `internal/hub/slash_cmd_fetch.go`
+- `internal/hub/slash_handlers.go`
+
+### 作業内容
+
+- `session_id` query を受け取り、該当 session の本人 context を取得する。
+- `~/.codex/skills` / `CODEX_HOME/skills` / `CODEX_HOME/plugins/cache` を Codex 用 root とする。
+- `~/.claude/skills` / `CLAUDE_CONFIG_DIR/skills` / `CLAUDE_CONFIG_DIR/plugins` を Claude 用 root とする。
+- `SKILL.md` の YAML frontmatter を上限付きで読み、`name` と `description` を候補化する。
+- 安全な skill name のみ候補にする。
+- provider と本人 context を含む cache key にする。
+
+### 完了条件
+
+- 同じ provider でも session本人が違えば候補が混ざらない。
+- remote source 取得失敗時も、本人 Skill があれば 502 ではなく Skill 候補を返す。
+
+## C3: Web 補完とピッカーを session 単位にする
+
+### 変更ファイル
+
+- `web/src/app.ts`
+
+### 作業内容
+
+- `/api/slash-commands` 呼び出しに active `session_id` を付ける。
+- dynamic slash cache / loading / retry を provider 単位から `provider#sessionId` 単位へ変更する。
+- `$` 入力でも補完メニューを開く。
+- `/ ▾` ピッカーの再取得も同じ session_id を使う。
+
+### 完了条件
+
+- active session を切り替えたとき、別ユーザー・別セッションの Skill 候補が流用されない。
+- Codex の `$skill-name` 候補が入力補完から選べる。
+- ピッカーから選んだ Skill が既存 `sendQuickCommand` 経由で対象 CLI に送られる。
+
+## C4: テスト
+
+### 変更ファイル
+
+- `internal/hub/slash_cmd_fetch_test.go`
+
+### 作業内容
+
+- Codex の `SKILL.md` から `$skill-name` を作るテストを追加する。
+- Claude の `user-invokable: false` を除外するテストを追加する。
+- Hub HOME と session本人 HOME が違うケースで、明示 context 側の Skill だけを読むことを確認する。
+- `session_id` から session本人 context を引く分岐を確認する。
+
+### 完了条件
+
+- `go test ./internal/hub ./internal/wrapper ./internal/proto` が通る。
+- `web/` で `bun run check` が通る。
+
+## 実装メモ
+
+- 既存セッションは古い wrapper register 情報しか持たないため、本人 Skill の完全反映は新規セッションからになる。
+- `SlashCmd.Path` は内部保持のみで `json:"-"` とし、UI/API へローカル絶対パスを出さない。
+- remote slash command のキャッシュ無効化は provider prefix でまとめて消す。

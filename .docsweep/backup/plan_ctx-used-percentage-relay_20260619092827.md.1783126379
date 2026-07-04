@@ -1,0 +1,110 @@
+# [様子見] ctx 使用率を Claude statusLine の used_percentage 直結に切替
+
+> 最終更新: 2026-06-19(金) 09:28:27
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | fix | 共有型に `ctx_used_pct` フィールドを追加（proto/messages.go + web/src/types/proto.ts） | — |
+| C2 | fix | relay→Hub 中継経路で `used_percentage` を取り出して伝搬（usagerelay.go / usage_stat.go / server.go + テスト） | — |
+| C3 | fix | Web 下部バーの ctx% を `used_percentage` 直結に切替・自前分母推定(Math.max)を廃止（token-statusbar.ts） | — |
+
+実行順序: `C1 → C2 → C3`（後段が前段で足したフィールドに依存するため直列）
+
+---
+
+## 概要
+
+many-ai-cli の Web ダッシュボード下部バーの `ctx` 使用率が、Claude Code 本体ステータスラインの「context used」と大きく食い違う（実測: 本体 68% に対し下部バー 12%）。原因は Web 側が Opus 4.8 を無条件で 1M コンテキストとみなし、relay が中継した正しい上限(200k)を `Math.max` で 1M に底上げして分母にしていること。
+
+Claude Code の statusLine JSON には `context_window.used_percentage`（**Claude Code 自身が、実際に有効なコンテキスト窓 200k/1M を判定した上で算出済みの使用率%**）が公式に存在する（公式ドキュメント `https://code.claude.com/docs/en/statusline.md` で確認済み）。これを relay→Hub→Web へ中継し、Claude セッションの ctx% はこの値を直結表示することで、本体表示と同一数値源にして食い違いを根絶する。
+
+**スコープ外**: Codex（token_count イベントに `used_percentage` が無いため従来の `input_tokens / model_context_window` 計算を維持）。`remaining_percentage`・`exceeds_200k_tokens` の中継（今回は使わない。残りは 100−used で導出可）。cost/cache/burn 等の他セグメント（変更しない）。
+
+## 現状と問題
+
+- relay（`internal/usagerelay/usagerelay.go:104-112,131,154`）は Claude statusLine から `total_input_tokens` と `context_window_size`(=200000) を**正しく**取り出し中継している。`used_percentage` は現状パースしていない。
+- Web（`web/src/app/token-statusbar.ts:123-131` `resolveEffectiveCtxLimit`）が `Math.max(relayLimit=200k, modelLimit=Opus4.8→1M)=1M` を分母に採用（`CTX_LIMIT_TABLE` 52-56行で Opus 4.8 を無条件 1M 判定）。
+- 結果、`pct = round(tokensIn / 1,000,000 * 100)` となり、1M ベータが実際には効いていない 200k 運用セッションで使用率が過小表示される（123.2k → 12%）。
+
+公式仕様（裏取り済みの要点）:
+- `context_window.used_percentage` = "Pre-calculated percentage of context window used"。input 系トークンのみ（`input_tokens + cache_creation + cache_read`、output 非含）で算出。
+- `context_window.context_window_size` = "200000 by default, or 1000000 for models with extended context"（**Claude Code が実窓を判定済み**）。
+- `used_percentage` は初回API応答前・`/compact` 直後に `null` になりうる → フォールバック必須。
+- 公式トラブルシュート: "Use `used_percentage` for the simplest accurate context state"。`/context` とは算出タイミングの差で多少ずれることがある旨も明記。
+
+## 方針
+
+1. relay が `used_percentage` を取り出し、既存の `tokens_in` 等と並べて Hub へ POST。
+2. Hub は新フィールド `ctx_used_pct`（float, 0–100, omitempty）を保持し usage_stat メッセージへ載せる。
+3. Web は **Claude かつ `ctx_used_pct` が有効（>0 で送られてきた）なら ctx% にそれを直結**。Codex / 値なし(null・early-session) のときのみ従来の `tokensIn / ctxLimit` 計算へフォールバック。
+4. あわせて `resolveEffectiveCtxLimit` の `Math.max(relayLimit, modelLimit)` を廃止し、**relay 実値(`ctxWindow`)を優先**（compact 残量セグメントの分母、及びフォールバック時の分母を正す）。モデル名テーブルは relay が上限を返さないときだけのフォールバックに降格。
+
+不採用案: 前回検討した「relay 優先(Math.max廃止)だけ」案は分母を正すが、Web が依然 input トークンから %を再計算するため本体と端数がずれうる。`used_percentage` 直結は本体と同一の算出済み値を使うため一致度が最も高く、上位互換のため本案を採用する。
+
+---
+
+## C1: 共有型に `ctx_used_pct` を追加
+
+### 作業内容
+
+- Go 側 proto に Claude 算出済み使用率フィールドを追加（0 は「未取得」を意味する omitempty）。
+- TS 側 Message 型に対応する optional フィールドを追加（Go/TS の型同期を保つ）。
+
+### 変更予定ファイル
+
+- `internal/proto/messages.go` — usage_stat 系メッセージ構造体に `CtxUsedPct float64 \`json:"ctx_used_pct,omitempty"\`` を追加（既存 `CtxWindow` 近傍）。
+- `web/src/types/proto.ts` — `Message` 型に `ctx_used_pct?: number` を追加。
+
+### 完了条件
+
+- `go build ./...` と `tsc`（web ビルド）が型エラーなく通る。
+- 既存フィールドの JSON タグ・命名規則（snake_case）と整合。
+
+---
+
+## C2: relay→Hub 中継経路で `used_percentage` を伝搬
+
+### 作業内容
+
+- relay の Claude statusLine パース構造体 `claudeStatusLineInput.ContextWindow` に `UsedPercentage float64 \`json:"used_percentage"\`` を追加し、`hubUsagePayload` に乗せて POST。
+- Hub 側 usage_stat の受信 req 構造体・内部保持構造体・WS へ流す Message 構築に `ctx_used_pct` を通す。
+- 受信時バリデーション（0–100 の範囲、範囲外は 0 にクランプ or 無視）。
+
+### 変更予定ファイル
+
+- `internal/usagerelay/usagerelay.go` — 構造体フィールド追加・`hubUsagePayload` へ反映（`runClaude` 内 144-156 近傍）。`hubUsagePayload` 定義(420-428近傍)にも `CtxUsedPct` 追加。
+- `internal/hub/usage_stat.go` — HTTP req 構造体(184近傍)・内部 `UsageStat`(52近傍)・Message 構築(259,292近傍)に `ctx_used_pct` を追加。range チェック追加。
+- `internal/hub/server.go` — usage_stat→Message 変換箇所(2812近傍)に `CtxUsedPct` を反映。
+- `internal/usagerelay/usagerelay_test.go` — `used_percentage` を含むサンプル statusLine JSON を足し、payload に値が乗ることを検証。
+
+### 完了条件
+
+- `go test ./internal/usagerelay/... ./internal/hub/...` が通る。
+- 追加テストで Claude statusLine の `used_percentage` が payload→Message まで欠落なく伝わることを確認。
+- Codex 経路（`used_percentage` なし）は従来どおり `ctx_used_pct` が 0(=未取得) のまま流れることを確認。
+
+---
+
+## C3: Web 下部バー ctx% を `used_percentage` 直結に切替
+
+### 作業内容
+
+- `UsageCacheEntry` に `usedPct: number` を追加し、`handleUsageStatMessage` で `m.ctx_used_pct ?? 0` を格納。
+- `renderStatusbar` の ctx セグメント（343-357近傍）を分岐:
+  - **Claude かつ `usedPct > 0`** → `pct = Math.round(usedPct)` を直結。ゲージ色・tooltip も既存ロジックを流用。
+  - それ以外（Codex / `usedPct==0`=未取得） → 従来の `tokensIn / ctxLimit` 計算にフォールバック。
+- `resolveEffectiveCtxLimit`（123-131）の `Math.max(relayLimit, modelLimit)` を撤廃し、`relayLimit`（`entry.ctxWindow>0`）があればそれを優先。`relayLimit` が無いときのみ `modelLimit`。これで compact 残量セグメント・フォールバック分母も実窓基準になる。
+- 128-130 のコメント（statusLine が 200k を返すから max で底上げ、の旧前提）を新方針に合わせて書き換え。
+
+### 変更予定ファイル
+
+- `web/src/app/token-statusbar.ts` — 上記の `UsageCacheEntry` / `handleUsageStatMessage` / `renderStatusbar` ctx セグメント / `resolveEffectiveCtxLimit` の改修。
+
+### 完了条件
+
+- 同一 Claude セッションで、下部バー ctx% と本体ステータスライン「context used」が一致（±1% の端数差以内）。
+- 200k 運用セッションで過小表示(12%)が解消され実態(≈68%)になる。1M ベータ有効セッションでは本体同様に小さい%が出る。
+- Codex セッション・初回API応答前(`used_percentage` null) は従来表示にフォールバックして破綻しない。
+- `tsc`（web ビルド）が通る。

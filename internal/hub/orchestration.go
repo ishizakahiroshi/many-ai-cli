@@ -240,6 +240,7 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid model value")
 		return
 	}
+	applyChildApprovalDefaults(&body)
 	if parent.Depth >= cfg.MaxDepth {
 		s.notifyOrchestrationError(parentID, "depth", "max orchestration depth reached")
 		writeJSONStatus(w, http.StatusTooManyRequests, httpErrorResp{OK: false, Error: "orchestration_limit", Detail: "max orchestration depth reached"})
@@ -328,6 +329,36 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 	s.waitForInputReady(childID, orchestrationInjectQuiet, orchestrationInjectMaxWait)
 	s.injectText(childID, prompt, true, false)
 	writeJSON(w, map[string]any{"ok": true, "session_id": childID, "board_path": boardPath, "cwd": childCWD, "worktree_branch": branch})
+}
+
+// applyChildApprovalDefaults は orchestration 子セッションの承認モード既定値を埋める。
+// 子は自走が前提のため、呼び出し側（conductor）が指定しない場合はプロバイダごとの
+// 全許可（承認バイパス相当）を既定にする。子の承認プロンプトを人間が張り付いて
+// 処理する運用は自走目的と矛盾するため。危険操作の抑制は承認ではなく worktree 隔離と
+// board の禁止事項で行う。承認バイパスは spawn リスクゲート（evaluateClaudeRisk /
+// evaluateCodexRisk）で HighRisk 扱いになるが、人間の同意はオーケストレーション開始時に
+// 済んでいるため子 spawn では確認済みとして扱う
+// （docs/local/bugfix_orchestration-codex-child-spawn-failures_2026-07-04.md）。
+func applyChildApprovalDefaults(body *spawnChildRequest) {
+	switch body.Provider {
+	case "shell":
+		return
+	case "codex":
+		if body.AskForApproval == "" {
+			body.AskForApproval = "never"
+		}
+		if body.Sandbox == "" {
+			body.Sandbox = "danger-full-access"
+		}
+	default:
+		// claude / grok は --permission-mode をネイティブサポート。
+		// copilot / cursor-agent / opencode は wrapper 側で各 CLI の全許可指定
+		// （--allow-all / --force / opencode.json permission "*":"allow"）に変換される。
+		if body.PermissionMode == "" {
+			body.PermissionMode = "bypassPermissions"
+		}
+	}
+	body.RiskConfirmed = true
 }
 
 func (s *Server) handleSessionInject(w http.ResponseWriter, r *http.Request, id int) {

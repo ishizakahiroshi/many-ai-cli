@@ -1,0 +1,87 @@
+# [様子見] 障害対応記録: 通常バッファ上端の上ホイールで Claude/Codex でも過去ログが勝手に展開される
+
+## 症状
+
+Claude（や Codex 等）セッションで普通にスクロールしているだけで、画面上端まで来た瞬間に **過去ログビューア（`過去ログ（読み取り専用）`）が勝手にオーバーレイ展開** される。展開された中身も Hashing アニメや thinking 表示の絶対カーソル位置指定が並列化されて読めない断片の山（"Hashing-" / 数字 / "thinking with xhigh effort" が縦に散る）になる。
+
+再現手順:
+1. Hub を起動して Claude セッションを attach
+2. 通常バッファ状態で `viewportY === 0`（上端）に到達する
+3. その状態で上方向にマウスホイールを 1 ノッチ動かす
+4. 触ってないのに過去ログビューアが offset=-1（直近ページ）で展開され、読めない断片が出る
+
+影響: develop ブランチの未コミット変更を取り込んだローカル環境（grok 対策を入れた版）。Claude / Codex / Copilot / Cursor Agent 等 grok 以外の全プロバイダ。
+
+## 根本原因（root cause）
+
+未コミットの `web/src/app/terminal.ts` に grok の TUI 問題（PageUp で履歴領域に飛ぶ → 改行を出さない描画方式のため scrollback が育たない）への対策として **2 系統の新導線** が追加されている:
+
+1. `scrollAltBufferPage`（L667〜）の grok 早期 return — wheel→PageUp 転送を停止
+2. `document.addEventListener('wheel', ...)` 内の **通常バッファ上端での上ホイール → `openHistoryViewer(sid, { offset: -1 })`** 自動展開（L802〜）
+3. `scroll-to-top-btn` の click ハンドラで scrollback が無いときの **自動展開フォールバック**（L1011〜）
+
+このうち (2) と (3) は **コメントには「Grok のように改行を出さず固定位置に上書き描画する TUI では…履歴ボタンも表示条件 buf.length>rows を満たさず出ない」と grok 専用の意図が明記されている** のに、実装の条件式から `provider === 'grok'` の AND 条件が **抜け落ちていた**。発火条件は実質 `buf.type !== 'alternate' && buf.viewportY === 0`（と `scroll-to-top-btn` 側は `buf.length <= t.term.rows`）のみで、プロバイダを問わず発火する状態だった。
+
+結果として Claude / Codex のような alt-buffer ベースの TUI でも、attach 直後・モード遷移・small screen で alt から戻った瞬間など通常バッファで上端に居る瞬間にホイール上 1 ノッチで自動展開され、しかも展開先の `history-viewer.ts` の `hvSanitize` は絶対カーソル移動・画面消去シーケンスを改行に強制置換するため、Hashing アニメ等の連続フレームが並列展開されて読めない断片の山になる、という二重苦になっていた。
+
+`scrollAltBufferPage` の (1) には provider チェックが正しく入っていたので、コメント宣言と実装が食い違っていたのは (2) (3) のみ。
+
+## 修正内容
+
+`wheel` ハンドラと `scroll-to-top-btn` の自動展開条件に `provider === 'grok'` の AND を追加。
+
+```typescript
+// before (wheel ハンドラ)
+const buf = t.term.buffer.active;
+const atTop = buf.type !== 'alternate' && buf.viewportY === 0;
+if (e.deltaY < 0 && atTop && targetSessionId === activeSessionId && !inMultiPane && !isHistoryViewerOpen()) {
+  openHistoryViewer(targetSessionId, { offset: -1 });
+  ...
+}
+
+// after
+const buf = t.term.buffer.active;
+const atTop = buf.type !== 'alternate' && buf.viewportY === 0;
+const isGrok = sessions.get(targetSessionId)?.provider === 'grok';
+if (isGrok && e.deltaY < 0 && atTop && targetSessionId === activeSessionId && !inMultiPane && !isHistoryViewerOpen()) {
+  openHistoryViewer(targetSessionId, { offset: -1 });
+  ...
+}
+```
+
+```typescript
+// before (scroll-to-top-btn)
+const buf = t.term.buffer.active;
+if (buf.type !== 'alternate' && buf.length <= t.term.rows && !isHistoryViewerOpen()) {
+  openHistoryViewer(activeSessionId, { offset: -1 });
+  return;
+}
+
+// after
+const buf = t.term.buffer.active;
+const isGrok = sessions.get(activeSessionId)?.provider === 'grok';
+if (isGrok && buf.type !== 'alternate' && buf.length <= t.term.rows && !isHistoryViewerOpen()) {
+  openHistoryViewer(activeSessionId, { offset: -1 });
+  return;
+}
+```
+
+## 変更ファイル
+
+| ファイル | 内容 |
+|---|---|
+| `web/src/app/terminal.ts` | wheel ハンドラと scroll-to-top-btn の自動展開条件に `provider === 'grok'` の AND を追加（2 箇所） |
+
+## 検証
+
+- [ ] `make build` でビルドが通る
+- [ ] Claude セッションで上端まで上スクロールしても過去ログが自動展開されない（従来通り「▲過去ログ」ボタンが出る経路のみで開ける）
+- [ ] Codex / Copilot / Cursor Agent セッションでも同様に自動展開されない
+- [ ] grok セッションでは従来通り上ホイールで過去ログが自動展開される（grok 向けの導線は維持されている）
+- [ ] grok セッションで `scroll-to-top-btn`（▲）クリック時、scrollback が無い状態なら過去ログが直近ページから自動展開される
+- [ ] grok 以外のプロバイダで `scroll-to-top-btn` クリックは従来通り `term.scrollToTop()` 動作のみ（過去ログを開かない）
+
+## 備忘
+
+- コメントには grok 専用と書いてあるのに provider チェックが抜けるパターンは、`scrollAltBufferPage` の (1) のように「関数全体が grok 用」だと早期 return で1箇所で済むが、(2) (3) のように **既存の汎用ハンドラに条件分岐として後付け** したケースで漏れやすい。後付けの場合、コメントだけでなく **条件式の先頭に provider check を明示** する規律にしておくと再発しにくい。
+- 「触ってないのに勝手に飛ぶ」と「飛んだ先が読めない」の二重苦のうち、後者（`hvSanitize` が連続フレームを並列展開する問題）は今回の修正範囲外。grok でも開いた直後の表示が読みにくい可能性は残るが、grok 自体が改行を出さない描画方式なので元々相性が悪い領域。改善が必要なら別 plan で `hvSanitize` の戦略（例: 同位置上書きを最終フレームだけ残す）を検討する。

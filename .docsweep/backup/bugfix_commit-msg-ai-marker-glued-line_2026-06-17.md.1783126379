@@ -1,0 +1,94 @@
+# [様子見] 障害対応記録: Commit all「Ask AI」がフォームに反映されず「AI 応答受信中…」のまま固まる
+
+> 最終更新: 2026-06-17(水) 14:01:06
+
+## 症状
+
+Git タブ → Commit all モーダルで「Ask AI」を押すと、接続中の Claude セッションは
+コミットメッセージ案を `[MANY-AI-CLI-COMMIT]` … `[/MANY-AI-CLI-COMMIT]` マーカー付きで
+正しく出力しているのに、モーダルの subject / body フィールドが空のまま埋まらず、
+「Ask AI」ボタンが「AI 応答受信中…」表示のまま固まる（最終的にフロント側タイムアウトまで放置される）。
+
+再現手順:
+1. Claude セッションを接続した状態で Git タブを開き「Commit all」を押す
+2. モーダルで「Ask AI」を押す
+3. ターミナル側では AI が `[MANY-AI-CLI-COMMIT]` ブロックを完成させ Whisking 完了するが、
+   モーダルはフィールド空・ボタン「AI 応答受信中…」のまま反映されない
+
+影響: v0.3.2 時点の Git タブ「Ask AI」コミットメッセージ生成機能（Claude provider）。
+決定論生成（Generate）と Review/Commit には影響なし。
+
+## 根本原因（root cause）
+
+実セッションログ（`~/.many-ai-cli/logs/sessions/claude_2026-06-17_132852_ai-audit-prompts_s12.jsonl`）の
+ANSI 除去済み `text` を直接確認したところ、Claude Code の TUI 再描画 + `StripANSI` により、
+**OPEN マーカーと subject が同一行へ連結**されていた（マーカー間の改行が実 `\n` ではなく
+カーソル移動エスケープで、StripANSI 後に改行へ変換されず消えるため）:
+
+```
+●[MANY-AI-CLI-COMMIT]docs:確定finding…に追加     ← OPEN マーカー + subject が連結
+（空行）
+  正本 README_invariants.md に「finding ごと…    ← 本文（ここは実 \n 維持）
+  …
+  [/MANY-AI-CLI-COMMIT]                          ← CLOSE は単独行
+```
+
+`internal/hub/git_commit_ai.go` の `extractCommitMarker` は OPEN マーカーを
+「`cleanTUILine` 後に完全一致する単独行」でしか拾わない実装だった
+（`strings.TrimSpace(lines[i]) == commitMsgMarkerOpen`）。連結行
+`[MANY-AI-CLI-COMMIT]docs:…` は完全一致しないため `openIdx` が見つからず、
+`ok=false` で抜け続け、`commit_msg_suggested` を一切ブロードキャストしない。
+結果フロント（`web/src/app/git-view.ts` `_handleCommitMsgEvent`）へ確定イベントが届かず、
+`aiGenerating` が解除されないままになる。
+
+## 修正内容
+
+OPEN マーカーを「単独行の完全一致」から「行頭プレフィックス一致」に変更し、
+マーカー語より後ろのテキストを subject 先頭として取り込む。CLOSE も行内連結に備え、
+語を含む行までを inner とし語より前のテキストを inner 末尾へ取り込む。
+注入プロンプトのエコーはマーカー語が文中（行頭でない）に出るため、行頭一致では
+拾われず誤検出しない（既存ガードを維持）。
+
+```go
+// before
+if strings.TrimSpace(lines[i]) == commitMsgMarkerOpen { openIdx = i; break }
+// …
+if strings.TrimSpace(lines[i]) == commitMsgMarkerClose { closeIdx = i; break }
+inner := lines[openIdx+1 : closeIdx]
+
+// after
+if strings.HasPrefix(strings.TrimSpace(lines[i]), commitMsgMarkerOpen) { openIdx = i; break }
+openRemainder := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(lines[openIdx]), commitMsgMarkerOpen))
+// …
+if idx := strings.Index(lines[i], commitMsgMarkerClose); idx >= 0 {
+    closeIdx = i; closeLeading = strings.TrimSpace(lines[i][:idx]); break
+}
+inner := make([]string, 0, closeIdx-openIdx+1)
+if openRemainder != "" { inner = append(inner, openRemainder) }
+inner = append(inner, lines[openIdx+1:closeIdx]...)
+if closeLeading != "" { inner = append(inner, closeLeading) }
+```
+
+## 変更ファイル
+
+| ファイル | 内容 |
+|---|---|
+| `internal/hub/git_commit_ai.go` | `extractCommitMarker` を行頭プレフィックス一致へ変更。連結された subject / 本文末尾を inner へ取り込む |
+| `internal/hub/git_commit_test.go` | 連結 OPEN・連結 CLOSE・連結 OPEN でのエコー誤検出回避の再現テスト 3 件を追加 |
+
+## 検証
+
+- `go test ./internal/hub/ -run TestExtractCommitMarker -v` で新規 3 件含む全 8 サブテスト合格
+- 既存ガード（「プロンプトエコーを取り違えない」「エコー単独窓では未確定」）も維持して合格を確認
+- 連結ケースの入力は実セッションログの壊れ方をそのまま再現（`●[MANY-AI-CLI-COMMIT]docs: …`）
+
+## 備忘
+
+- 関連: [bugfix_commit-msg-ai-no-progress-feedback_2026-06-16.md](bugfix_commit-msg-ai-no-progress-feedback_2026-06-16.md)（同機能の進捗フィードバック側の対応）
+- 連結された OPEN 行は TUI 再描画フレーム由来のため、subject 内の半角スペースが
+  カーソル移動に置換されて欠落することがある（例: 「確定 finding ごと」→「確定findingごと」）。
+  本文（実 `\n` で届くストリーム部分）はスペース保持される。subject の体裁劣化は
+  「下書きレベル」の許容範囲で、ユーザーが Review 前に編集する前提（決定論生成と同じ方針）。
+  完全な復元が必要なら raw フレームのデコードが要るが本対応のスコープ外。
+- マーカー語自体を文中に含むテキスト（プロンプト本文など）を AI が応答の **行頭** に
+  出すと誤検出し得るが、運用上ほぼ起き得ないため許容。

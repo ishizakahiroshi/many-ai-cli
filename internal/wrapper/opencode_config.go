@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 )
 
-// prepareOpenCodeConfig は cwd/opencode.json に {"permission":{"*":"ask"}} をマージして
-// 書き込み、元のファイルを復元するクリーンアップ関数を返す。
+// prepareOpenCodeConfig は cwd/opencode.json に {"permission":{"*":<permissionValue>}} を
+// マージして書き込み、元のファイルを復元するクリーンアップ関数を返す。
+// permissionValue は通常セッションでは "ask"（承認を Hub UI に出す）、orchestration 子など
+// 承認バイパスセッションでは "allow"（全許可）を渡す。
 // opencode.json が存在しない場合はファイルを新規作成し、クリーンアップ時に削除する。
-func prepareOpenCodeConfig(cwd string) (cleanup func(), err error) {
+func prepareOpenCodeConfig(cwd string, permissionValue string) (cleanup func(), err error) {
 	cfgPath := filepath.Join(cwd, "opencode.json")
 
 	orig, readErr := os.ReadFile(cfgPath)
@@ -28,12 +30,12 @@ func prepareOpenCodeConfig(cwd string) (cleanup func(), err error) {
 		merged = map[string]any{}
 	}
 
-	// permission フィールドをマージ。既存エントリを保持しつつ "*": "ask" を追加する。
+	// permission フィールドをマージ。既存エントリを保持しつつ "*" を追加する。
 	perm, _ := merged["permission"].(map[string]any)
 	if perm == nil {
 		perm = map[string]any{}
 	}
-	perm["*"] = "ask"
+	perm["*"] = permissionValue
 	merged["permission"] = perm
 
 	data, marshalErr := json.MarshalIndent(merged, "", "  ")

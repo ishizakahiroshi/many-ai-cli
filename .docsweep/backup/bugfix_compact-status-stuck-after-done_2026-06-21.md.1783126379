@@ -1,0 +1,51 @@
+# [様子見] compact 完了後も「圧縮中…(Ns)」が居座り秒数だけ伸び続ける
+
+> 最終更新: 2026-06-21(日) 22:13:34
+
+## 症状
+
+Claude Code セッションで `/compact` を実行（または auto-compact が走った）後、ライブ進捗帯に「圧縮中… (853s)」のように経過秒だけが伸び続け、本来の `Composing…` 等の状態に戻らない。実際の compact 自体は数十秒で完了しており、ターミナル領域には `*Conversation compacted (ctrl+o for history)` が表示されているのに、many-ai-cli 側の状態表示だけが居座る現象。
+
+再現セッションのスクリーンショットでは compact 完了後に通常応答（Read 数件 → `*Composing... (20m 40s) ↓33.5k tokens almost done thinking`）が走っている状態で、ライブ帯は「圧縮中… (853s) ⚠ 長時間処理中」のままだった。
+
+## 根本原因
+
+`web/src/app/terminal.ts` の compact 状態解除ロジックが **「PTY フレームが `COMPACT_IDLE_MS = 1500ms` 以上途切れること」のみを完了条件にしていた**。
+
+`Compacting conversation` 検出後、ステータス更新が途切れたら完了とみなす設計（`ensureCompactTick` 内 1625 行付近）だが、Claude Code は compact 完了後に間髪入れず次の応答（Read / Composing スピナー再描画 等）を吐き出すため、PTY フレームが 1.5 秒も途切れない。結果として `compactingSince` が解除されず、`activeCompactElapsedSec()` が `Date.now() - compactingSince` を返し続けて「圧縮中… (Ns)」が無限に伸び続けていた。
+
+`COMPACT_DETECT_RE = /Compacting conversation/i` の検出語は compact の最初の数フレームにしか出ないため、語が出続けるかでは判定できず、開始検出と対称な「確定完了マーカー」での解除が必要だった。Claude Code は compact 完了時に `Conversation compacted` を必ず出力するので、これを直接拾えば IDLE タイムアウト待ちを完全に省ける。
+
+## 修正内容
+
+`web/src/app/terminal.ts` の compact 状態管理に **完了マーカー検知** を追加した。
+
+1. `COMPACT_DONE_RE = /Conversation compacted/i` を新設（開始検出と対称）
+2. `noteCompactDone(id)` ヘルパーを追加 — `compactingSince` を即 null にして `stopCompactTick()` → `syncLiveStatusDomForActive()` で通常表示へ戻す
+3. `markCompactActivity()` の compact 中分岐を拡張 — 延命する前に末尾繰り越し方式（開始検出と同じ 24 文字バッファ）で完了マーカーをチェック。チャンク境界で分断されても拾える
+4. `setSessionLiveStatus()` の検出ブロックに対称的に完了マーカー判定を追加 — 再構成済みステータス行からも拾える
+
+これで `Conversation compacted` が PTY に流れた瞬間にライブ帯が `live_status_compacting` から通常のセッション状態（running / Composing 等）へ即時復帰する。
+
+## 変更ファイル
+
+- `web/src/app/terminal.ts`
+  - L1575-1581 付近: `COMPACT_DONE_RE` 定数追加
+  - L1598-1609: `noteCompactDone()` 追加
+  - L1618-1639: `markCompactActivity()` の compact 中分岐を拡張
+  - L1551-1556: `setSessionLiveStatus()` の検出ブロックに完了マーカー判定追加
+
+## 検証
+
+- [ ] `make build` でビルド成功
+- [ ] Claude Code セッションで `/compact` 実行 → 「圧縮中… (Ns)」が表示される
+- [ ] compact 完了直後（`*Conversation compacted` が表示された瞬間）にライブ帯の「圧縮中…」が消え、通常の `Composing…` / `running` 表示へ切り替わる
+- [ ] 開始検出（compact 開始時の「圧縮中…」表示）にデグレが無いこと
+- [ ] auto-compact（コンテキスト上限による自動 compact）でも同じく完了直後に解除されること
+
+## 備忘
+
+- 開始検出と完了検出で **同じ `compactDetectTail` フィールドを再利用** している。開始時に `tail` がクリアされ（`noteCompactStart` 経由で `compactDetectTail = ''` セット）、compact 中は完了マーカー用に末尾繰り越しが再開される設計。両方で 24 文字繰り越せば「Compacting conversation」(23) と「Conversation compacted」(22) の両方をカバーできる
+- `COMPACT_IDLE_MS = 1500ms` の IDLE 解除は今回も残してある。Claude Code 側の出力形式が将来変わって完了マーカーが出なくなっても、最低限のフォールバックとして機能する
+- 「長時間処理中」バッジ（`LIVE_LONGPROC_SEC = 300`）は別ロジック（`syncLiveStatusLongproc`）で、本修正の対象外。これは running 状態が 5 分超で出るもので、圧縮中表示の居座りとは独立した警告
+- 報告された 853s 表示と Composing の `20m 40s` の差は、`Composing` の開始時刻が compact 完了直後ではなく数百秒ずれていたためと考えられる（厳密な突き合わせはしていない）

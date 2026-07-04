@@ -1,0 +1,191 @@
+# [様子見] many-ai-cli を LM Studio 対応にする（Claude / Codex 両対応）
+
+> 最終更新: 2026-06-19(金) 23:10:51
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | plan | config 拡張（`lm_studio.base_url`）＋ route 定数 `lm-studio` 追加（土台） | — |
+| C2 | plan | モデル一覧取得（`/v1/models`）と models レスポンスへ LM Studio group 追加 | [並列OK with C3] |
+| C3 | plan | route 注入・判定（env_preset / spawn_handler を claude・codex 両対応で拡張） | [並列OK with C2] |
+| C4 | plan | フロントのモデルピッカー・ローカル route 共通化 ＋ 実機検証（Claude / Codex 両方） | — |
+
+実行順序: `C1 → (C2, C3) → C4`
+
+---
+
+## 概要
+
+many-ai-cli は現状 Ollama（独自 API `/api/tags`）にのみルーティングできる。これを LM Studio にも向けられるようにし、Hub の spawn フォームから LM Studio のローカルモデルを選んで **Claude Code / Codex 両方**のセッションを起動できるようにする。
+
+LM Studio も Ollama も中身は llama.cpp で同じ GGUF モデルを動かす。違いは「外側の API 形式」と「モデル一覧の取り方」。LM Studio は既定ポート 1234 で **OpenAI 互換**（`/v1/models` `/v1/chat/completions`）に加え、**0.4.1（2026-01-30）以降は Anthropic 互換 `/v1/messages`**（streaming・tool calls 対応）も出す。これにより Ollama とほぼ同型で claude / codex 両対応に作れる。
+
+最小改修方針は維持する（現状のべた書き構造に倣って分岐を足す）。provider×route のテーブル化など全面リファクタはしない。
+
+### 接続経路（設計の核・再調査で確定した新事実）
+
+- **Claude × LM Studio は env 注入だけで完結する**（Ollama×Claude と同形・確実）。
+  - `ANTHROPIC_AUTH_TOKEN=lmstudio`（ダミー）/ `ANTHROPIC_API_KEY=`（空・純正フォールバック防止）/ `ANTHROPIC_BASE_URL=<base>`（**`/v1` を付けない**。SDK が `/v1/messages` を付与）
+  - 前提: LM Studio **0.4.1 以降**。それ未満は Anthropic 互換が無く Claude 直結不可。
+- **Codex × LM Studio は注意点あり**（OpenAI 互換だが Responses API 要件）。
+  - 注入する env: `OPENAI_API_KEY=lmstudio`（ダミー）/ `OPENAI_BASE_URL=<base>/v1`
+  - 落とし穴: Codex は OpenAI の **Responses API** を要求するため、`OPENAI_BASE_URL` 差し替えだけだと「`/v1/responses` が無い」→ 404・空ストリームになり得る。Codex には予約済み組み込み provider `lmstudio` があり、`--oss` + `~/.codex/config.toml` の `oss_provider = "lmstudio"` 経由が正道。
+  - 既存 Ollama 実装は `route=ollama` の codex に `--codex-oss`（= `codex --oss`）を付けている（`spawn_handler.go` 行262-264）。LM Studio でも `--oss` は要るが、`--oss` の既定 provider は ollama のため、LM Studio へ向けるには `oss_provider=lmstudio` 設定 or codex 側の provider 指定が必要。**C3/C4 の実機検証で経路を確定する**（env+フラグだけで通るか、config.toml 前提が残るか）。
+
+### スコープ外（やらないこと）
+
+- route 判定の Go/TS 二重実装の解消（`/api/route-for-model` 化）。
+- provider×route のテーブル化・provider interface 化。Explore 提案の抽象化は魅力的だが今回は見送り、最小拡張に留める。
+- `/api/v0/models`（LM Studio native・`type`/`state`/`max_context_length` 付き）での embeddings 除外・ロード済み判定。MVP は OpenAI 互換 `/v1/models` で足りる（将来課題）。
+- token-statusbar への LM Studio 専用 context window 表示。
+
+## 現状と問題（参照行は調査時点）
+
+- config は `OllamaConfig{ BaseURL }` のみ（`internal/config/config.go` 行503-505、既定 `http://localhost:11434` 行96、Config の `Ollama` フィールド行569）。`EffectiveOllamaBaseURL` 行507-513、`validateOllama` 行842-861、`Validate` 呼び出し行836-838。
+- モデル一覧は Ollama 専用 `/api/tags`（`internal/hub/models_fetch.go`）。`fetchOllamaTags` 行252-284、`ollamaTagsURL` 行286-288、60秒 TTL の `getOllamaLocal` 行293-354、`modelsCache` struct 行79-85、`buildModelsResponse` 行374-505、`collectOllamaModelIDs` 行540-559。
+- route は `RouteForModel(provider, model, knownOllama)`（`env_preset.go` 行103-121）で `""`/`anthropic`/`openai`/`ollama` を優先順位ベースで推定。`RouteOllama` 定数 行13、`validRoute` 行17-24。env 注入は `EnvPresetForProxyWithOllamaBase()` 行50-92（claude+ollama 行56-64 / codex+ollama 行74-80）。
+- spawn は `spawn_handler.go` 行249-258 で route 推定（`collectOllamaModelIDs` 行256）、codex `--codex-oss` 付与 行262-264、env preset 適用 行284-288、proxyToken の `effectiveRoute != RouteOllama` ガード 行280、last_model に Ollama を保存しない 行330、claude/codex の Ollama fallback 復活防止 行182-184 / 209-211。
+- `handleModels`（`models_handlers.go` 行12-30）が `ollamaBaseURL` を `buildModelsResponse` へ渡す（行23・28）。
+- フロントは Go と同じ route 判定を TS で再実装。`spawn-panel.ts` の `rebuildModelRouteMap` 行104-113、`getModelGroupsForProvider`（rank 関数 行127-135）、`resolveRoute` 行210-230、`populateModelDatalist` 行188-208、`clearOllamaModelDefault` 行179-186、`fetchModelGroups` 行232-253。
+- ローカル route の周辺挙動: `app.ts` の `isOllamaModelCommandBlocked`（route==='ollama' で `/model` ブロック）行198-200 / 253-255 / 958-960。`session-list.ts` の `/model` 無効化 行166-168・provider chip 行199/224-225・route==='ollama' グルーピング 行590-594 / 1010-1017。`chat-history.ts` 行505/517。i18n `toast_model_blocked_on_ollama`・`chat_ai_name_ollama`。`styles.css` 行74/872、`index.html` provider アイコン 行46-47。
+
+## 方針
+
+- config に `lm_studio.base_url`（既定 `http://localhost:1234`）を追加。Ollama と同じく末尾スラッシュ正規化・scheme/host バリデーション。`base_url` に `/v1` や path は付けない（Effective 側で付与）。
+- route に `"lm-studio"` を追加（env token は `lmstudio`）。env 注入は **claude / codex 両対応**:
+  - claude: `ANTHROPIC_AUTH_TOKEN=lmstudio` / `ANTHROPIC_API_KEY=` / `ANTHROPIC_BASE_URL=<lmStudioBase>`（`/v1` なし）
+  - codex: `OPENAI_API_KEY=lmstudio` / `OPENAI_BASE_URL=<lmStudioBase>/v1`
+- モデル一覧は `/v1/models`（OpenAI 形式 `{ data: [{ id, object:"model" }] }`）を新パーサで取得し、`buildModelsResponse()` に「LM Studio」group を Ollama と並べて追加。group は **`provider=""`・`route="lm-studio"`**（`provider=""` にすることで Ollama 同様 claude/codex 両ピッカーに出る）。
+- LM Studio のモデル ID は名前から機械判定できないため、`/v1/models` の ID 集合（`knownLmStudio`）を `RouteForModel` に渡して判定する（Ollama の `knownOllama` と同方式）。
+- Ollama route と同じ「spawn 時 env 焼き付け＝`/model` 不可・last_model に残さない・fallback 復活させない」挙動を `lm-studio` にも適用する。可能な箇所は「ローカル route 共通判定」に小さく一般化する。
+
+---
+
+## C1: config 拡張と route 定数の追加
+
+### 作業内容
+
+- `internal/config/config.go`:
+  - `LMStudioConfig{ BaseURL string yaml:"base_url,omitempty" }` を追加し、Config に `LMStudio LMStudioConfig yaml:"lm_studio,omitempty"` を生やす。
+  - `DefaultLMStudioBaseURL = "http://localhost:1234"` を行96 付近に追加。
+  - `EffectiveLMStudioBaseURL(baseURL)` を `EffectiveOllamaBaseURL`（行507-513）に倣って実装。
+  - `validateLMStudio()` を `validateOllama()`（行842-861）に倣って追加し、`Validate()`（行823-840）に呼び出しを足す。
+- `internal/hub/env_preset.go`: `RouteLMStudio = "lm-studio"` を const ブロック（行10-14）に追加し、`validRoute()`（行17-24）の許可値に加える。
+
+### 変更予定ファイル
+
+- `internal/config/config.go` — struct・既定値・Effective/validate 関数
+- `internal/hub/env_preset.go` — `RouteLMStudio` 定数・`validRoute()`
+
+### 完了条件
+
+- `lm_studio.base_url` を書いた config.yaml が読め、未指定時は `http://localhost:1234` に解決される。
+- 不正な base_url（scheme 欠落・path 付き等）でバリデーションエラーになる。
+- `validRoute("lm-studio")` が true を返す。
+
+---
+
+## C2: モデル一覧取得（/v1/models）と models レスポンス拡張
+
+### 作業内容
+
+- `internal/hub/models_fetch.go`:
+  - `fetchLMStudioModels(url, timeout)` を `fetchOllamaTags`（行252-284）に倣って実装。`<base>/v1/models` を GET し OpenAI 形式 `{ data: [{ id, object }] }` をパース（新 struct `lmStudioModelsResponse`）。タイムアウト・ステータス検証・レスポンス上限は Ollama 実装に合わせる。空 id・重複は除外。
+  - `lmStudioModelsURL(baseURL)` を `ollamaTagsURL`（行286-288）に倣って追加（`EffectiveLMStudioBaseURL + "/v1/models"`）。
+  - `modelsCache`（行79-85）に LM Studio 用エントリと取得関数を追加（`getOllamaLocal` 行293-354 の 60秒 TTL に倣う。force/世代管理は同等か簡略版でよい）。
+  - `buildModelsResponse()`（行374-505）に「LM Studio」group を追加（`provider=""`・`route="lm-studio"`）。base_url 未設定・疎通失敗時は group を出さず、`warnings` に `lm_studio_unreachable` を足す（Ollama Local の握り 行482-499 と同様）。`Sources` に `lm_studio` を追加（行384-391）。
+  - `buildModelsResponse` のシグネチャに `lmStudioBaseURL string` を追加（呼び出し元と test を更新）。
+  - `collectLMStudioModelIDs()` を `collectOllamaModelIDs()`（行540-559）に倣って追加（C3 の route 判定で使用）。
+- `internal/hub/models_handlers.go`: `handleModels`（行12-30）で `s.cfg.LMStudio.BaseURL` を取り出し `buildModelsResponse` へ渡す（行23・28 付近）。
+
+### 変更予定ファイル
+
+- `internal/hub/models_fetch.go` — fetch/URL/キャッシュ/group/ID 集合・`buildModelsResponse` シグネチャ
+- `internal/hub/models_handlers.go` — base_url 受け渡し
+- 既存 test（`models_fetch_test.go` 等）— シグネチャ変更追従
+
+### 完了条件
+
+- LM Studio が起動していれば `/api/models` のレスポンスに「LM Studio」group が現れ、ロード中モデルの id が並ぶ。
+- LM Studio 未起動・base_url 空のときは group が出ず（`warnings` に `lm_studio_unreachable`）、既存の Ollama / 公式モデル一覧に影響しない。
+
+---
+
+## C3: route 注入・判定の拡張（claude / codex 両対応）
+
+### 作業内容
+
+- `internal/hub/env_preset.go`:
+  - `EnvPresetForProxyWithOllamaBase()`（行50-92）に `lmStudioBaseURL` 引数を足す（関数名は据え置きで引数追加、または `...WithLocalBases` に改名し旧名を委譲）。`config.EffectiveLMStudioBaseURL` で解決。
+  - `route == RouteLMStudio` の case を **claude・codex 両方**に追加:
+    - claude: `ANTHROPIC_AUTH_TOKEN=lmstudio` / `ANTHROPIC_API_KEY=` / `ANTHROPIC_BASE_URL=<lmStudioBase>`（claude+ollama 行56-64 と同形・`/v1` なし）
+    - codex: `OPENAI_API_KEY=lmstudio` / `OPENAI_BASE_URL=<lmStudioBase>/v1`（codex+ollama 行74-80 と同形）
+  - proxy 差し替え（行65-89）は `lm-studio` では行わない（ローカルが正本。Ollama と同じ扱い）。
+  - `RouteForModel(provider, model, knownOllama, knownLmStudio)`（行103-121）に判定を追加: `knownLmStudio[model]` が true なら `"lm-studio"`。優先順位は Ollama 既知判定と同列（`:cloud` 判定や provider 既定より前）。シグネチャ変更に伴い呼び出し元・test を更新。
+- `internal/hub/spawn_handler.go`:
+  - route 推定（行256-257）で `collectLMStudioModelIDs()` の結果を `RouteForModel` へ渡す。
+  - env preset 呼び出し（行284）に `s.cfg.LMStudio.BaseURL` を渡す。
+  - proxyToken ガード（行280）の条件に `effectiveRoute != RouteLMStudio` を追加。
+  - last_model 非保存（行330）・claude/codex の fallback 復活防止（行182-184 / 209-211）に `lm-studio` も含める（`RouteOllama` 単独判定を「ローカル route か」の小ヘルパに一般化すると分岐が増えない）。
+  - **codex フラグ経路の確定**: `route=lm-studio` × codex のとき codex に何を渡すか。`--codex-oss`（= `--oss`）が要るが既定 provider は ollama のため、(a) env+`--oss` だけで LM Studio へ通るか、(b) `oss_provider=lmstudio` を要求するか、を C4 実機検証で確定。当面は Ollama 同様 `--oss` を付け、不足分は config.toml 前提として README/manual で案内する。
+
+### 変更予定ファイル
+
+- `internal/hub/env_preset.go` — env case・`EnvPreset...` 引数・`RouteForModel` シグネチャ/判定
+- `internal/hub/spawn_handler.go` — knownLmStudio 受け渡し・base_url・ガード条件・codex フラグ
+- 既存 test（`env_preset_test.go` / `audit_*_test.go` 等）— シグネチャ・期待値追従
+
+### 完了条件
+
+- LM Studio モデルを選んで **Claude** を spawn すると子 env に `ANTHROPIC_BASE_URL=<base>` / `ANTHROPIC_AUTH_TOKEN=lmstudio` / `ANTHROPIC_API_KEY=`（空）が入る。
+- LM Studio モデルで **Codex** を spawn すると子 env に `OPENAI_BASE_URL=<base>/v1` が入る（実応答可否は C4 で確認）。
+- `RouteForModel` が LM Studio の id に `"lm-studio"` を返し、純正 anthropic/openai の挙動は不変。
+
+---
+
+## C4: フロント対応（ローカル route 共通化）と実機検証
+
+### 作業内容（必須: route が機能する分）
+
+- `web/src/app/spawn-panel.ts`: `getModelGroupsForProvider` の rank 関数（行127-135）に「LM Studio」を追加（Ollama 系の後ろに並べる）。group が `provider=""` のため claude/codex 両方に出る。`resolveRoute`（行210-230）は group ベースで route を返すのでデータ経由で `lm-studio` を解決（末尾 fallback は変更不要）。`clearOllamaModelDefault`（行179-186）を「ローカル route（ollama / lm-studio）なら毎回選び直す」共通判定に広げる。`populateModelDatalist`（行188-208）は `[LM Studio] <id>` ラベルを自動表示。
+- `web/src/app.ts`: `isOllamaModelCommandBlocked`（行198-200 ほか）の `route === 'ollama'` を `ollama | lm-studio` に拡張（spawn 時 env 固定のため `/model` をブロック）。対応 toast を追加。
+- `web/src/app/session-list.ts`: `/model` 無効化（行166-168）・provider chip（行224-225）・route グルーピング（行590-594 / 1010-1017）の Ollama 判定を「ローカル route」に一般化し `lm-studio` を含める。
+- `web/src/app/chat-history.ts`: `lm-studio` の AI 名・letter（行505/517）を追加。
+
+### 作業内容（仕上げ: 体裁）
+
+- i18n（`en.json` / `ja.json`）: `chat_ai_name_lm_studio`、`/model` ブロック toast、provider 表示名等。`toast_model_blocked_on_ollama` は文言共通化を検討。
+- `styles.css`（行74/872）: `--prov-lm-studio` 配色と `.lm-studio` chip。`index.html`: provider アイコン（行46-47 に倣う）と usage-link（既定 `http://localhost:1234`）。
+
+### 実機検証（ユーザー実施。`make build`・Hub 起動・LM Studio 起動はユーザー）
+
+> ネットワーク前提（ホスト側のローカルネットワーク公開・Firewall 1234 開放・config の `lm_studio.base_url`）は [docs/manual_local-llm-hyperv-host.md](../manual_local-llm-hyperv-host.md) の「LM Studio の場合」を参照。
+
+1. LM Studio **0.4.1+** を起動 → Developer でローカルサーバー有効化（1234）→ モデルを1つロード → verify: `http://localhost:1234/v1/models` が JSON を返す（Codex 用）。Anthropic 互換が要るので `/v1/messages` を持つバージョンか確認（Claude 用）。
+2. config.yaml に `lm_studio.base_url`（Hyper-V 等別ホストならホスト IP:1234）→ verify: ピッカーに「LM Studio」group とモデル id が出る。
+3. **Claude** を LM Studio モデルで spawn → 応答が返る → verify: 子 env に `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN=lmstudio` / `ANTHROPIC_API_KEY` 空。
+4. **Codex** を LM Studio モデルで spawn → verify: `OPENAI_BASE_URL=.../v1` が入る。404・空ストリームなら Responses API 非対応 → `~/.codex/config.toml` に `oss_provider=lmstudio`（+ `--oss`）経路へ切替して再確認。**ここで env だけで通るか／config.toml 前提かを確定し、本文「接続経路」と manual を更新する**。
+5. ローカル route の `/model` がブロックされる（ollama / lm-studio 両方）。
+6. Ollama / 公式ルートの既存挙動が無回帰。
+
+### 変更予定ファイル
+
+- `web/src/app/spawn-panel.ts` / `web/src/app.ts` / `web/src/app/session-list.ts` / `web/src/app/chat-history.ts`
+- `web/src/i18n/en.json` / `ja.json`、`web/src/styles.css`、`web/src/index.html`
+
+### 完了条件
+
+- ピッカーに LM Studio モデルが出て、**Claude / Codex 両方**のセッションがそのモデルで起動できる（Claude は応答まで確認、Codex は経路確定後に応答確認）。
+- ローカル route（ollama / lm-studio）の `/model` ブロック・グルーピング・chip が共通に効く。
+- Ollama / 公式ルートの既存挙動が壊れていない。
+
+---
+
+## 備考
+
+- **context window 設定が実用性の鍵**: Claude Code は context-heavy のため、LM Studio 側でロードモデルの context を 25K 以上（推奨 32K–64K）に上げないと実用にならない。32K 未満は「チャットのデモ」レベル（公式・コミュニティ guide の指摘）。これは設定案内事項で、本 plan のコード変更対象ではない。
+- 手元実験メモ: LM Studio も中身 llama.cpp のため、8GB VRAM の物理制約・8B モデルの tool call 不安定さは Ollama と同じ（[[local-llm-8gb-claude-code-unusable]]）。本 plan は「接続できるようにする」のが目的で、ローカルモデルの賢さ改善が目的ではない。
+- バージョン依存: LM Studio **0.4.1 未満は Anthropic 互換が無く Claude 不可**（Codex は OpenAI 互換のため古くても可だが Responses API 要件あり）。`lm_studio_unreachable` とは別に、Claude で `/v1/messages` 404 が出たらバージョン不足を疑う。
+- 参考: [Claude Code 連携](https://lmstudio.ai/docs/integrations/claude-code) / [Anthropic 互換エンドポイント](https://lmstudio.ai/docs/developer/anthropic-compat) / [Codex × LM Studio（OpenAI Developer Community）](https://community.openai.com/t/how-can-codex-cli-be-used-with-oss-models-in-lm-studio/1356708)。
+- 将来課題（本 plan スコープ外）: ①`/api/v0/models` で `type`/`state` フィルタ（embeddings 除外・ロード済み判定）②route 判定の Go/TS 二重実装の解消（`/api/route-for-model` 化）③provider×route のテーブル化 ④token-statusbar の LM Studio context 表示 ⑤Codex を config.toml なしで通すための provider 自動構成。

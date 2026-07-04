@@ -1,0 +1,63 @@
+# [様子見] 障害対応記録: v0.3.4 hotfix が develop に戻されておらず、develop のローカルビルドが v0.3.3 表示のまま
+
+## 症状
+
+`make build` した最新バイナリ（`dist/many-ai-cli.exe`, ビルド時刻 2026-06-22 19:19, `git_commit=3664cac`）を `serve` で起動すると、Hub UI 設定モーダルのバージョン表示が `v0.3.3 [Hub UI]` のまま。`/api/info` でも以下：
+
+```json
+{
+  "version": "0.3.3",
+  "git_commit": "3664cac",
+  "build_time": "2026-06-22T19:19:14+09:00",
+  "binary_sha256": "1acaee37...",
+  "binary_stale": false
+}
+```
+
+`binary_stale: false` でディスクと走行プロセスは一致しており、バイナリは確かに今日 v0.3.4 hotfix マージ後の develop（`3664cac`）から建てられている。にもかかわらず version 文字列は v0.3.3。
+
+## 根本原因（root cause）
+
+ローカル `make build` は `-X main.version=...` を **注入しない**（`Makefile:13-15` は `gitCommit` と `buildTime` のみ）。よって `cmd/many-ai-cli/main.go:54 displayVersion()` は `version == "dev"` の fallback パスに入り、`git describe --tags --abbrev=0` を呼ぶ。
+
+そして v0.3.4 タグの実体（commit `193f94f` = main の Merge hotfix/v0.3.4: secrets leak fix）は **develop の祖先ではない**：
+
+- `git merge-base --is-ancestor v0.3.4 HEAD` → no
+- `git describe --tags --abbrev=0` on develop → v0.3.3
+- `git describe --tags --abbrev=0 main` → v0.3.4
+
+`develop` には `3664cac Merge hotfix/v0.3.4 into develop` という merge コミットがあり、hotfix の中身（`0b5acf2`）は取り込み済み。しかし main 側で v0.3.4 タグが付いた merge commit `193f94f` 自体は develop に取り込まれていない。タグはコミットを指す名前なので、別ルートで同じ内容を合流させても `git describe` 的には v0.3.4 を知らないままになる。
+
+これは `docs/manual_release.md:59-85`「ブランチ運用と hotfix の develop 戻し（必須）」節に既に記録されている **v0.3.3 リリース時と全く同じ事故の再発**。前回も「develop のビルドが v0.3.2 と表示された」と記録されている。
+
+## 修正内容
+
+`docs/manual_release.md` 記載の戻し手順をそのまま実行する：
+
+```powershell
+git switch develop
+git merge main --no-edit
+git push origin develop
+```
+
+CHANGELOG.md の Unreleased 節と [0.3.4] 節は両方残す形で競合を解消（あれば）。マージ後、`git merge-base --is-ancestor v0.3.4 develop` が exit 0 になることを確認。
+
+ユーザー側で `make build` を再実行し、Hub プロセスを再起動して `/api/info` の `version` が `0.3.4` になることを確認する。
+
+## 変更ファイル
+
+- なし（コードは変更せず、ブランチ取り込みのみ）。
+- 実施した git 操作: `git merge main --no-edit` → merge commit `63fbf87 Merge branch 'main' into develop` が develop に追加され、main の `193f94f`（v0.3.4 タグ commit）が develop の祖先になった。`git push origin develop` 済み（`3664cac..63fbf87`）。
+
+## 検証
+
+- [x] `git merge-base --is-ancestor v0.3.4 develop && echo OK` → `OK`（実施済み）
+- [x] `git describe --tags --abbrev=0` on develop → `v0.3.4`（実施済み。long 形式は `v0.3.4-20-g63fbf87`）
+- [ ] `make build` 後の `dist/many-ai-cli.exe` を再起動し、`/api/info` の `version` が `"0.3.4"` になる（ユーザー側で確認）
+- [ ] Hub UI 設定モーダルの表示が `v0.3.4 [Hub UI]` になる（ユーザー側で確認）
+
+## 備忘
+
+- v0.3.3 で同じ事故、v0.3.4 で再発。**hotfix 後の `git merge main --no-edit` を release skill の前提チェックに組み込めないか** が次の検討点。`docs/manual_release.md` の手順は人間の規律に依存しているため、`gh pr merge` 直後に automated reminder か、CI で「main の最新タグが develop の祖先か」を週次チェックする等の機械化が望ましい。
+- 恒久対策として Makefile に `-X main.version=$(shell git describe --tags --abbrev=0)` 注入を入れる案もあるが、これだと develop 上でも v0.3.4 を表示してしまい「develop はまだ v0.3.5-dev」が分からなくなる。`git describe`（abbrev 付き）にして `v0.3.4-21-g3664cac` 形式で出す方が正確。別 PR で検討する。
+- 過去の参照: `docs/manual_release.md` の v0.3.3 事故記録（59-85行）/ `cmd/many-ai-cli/main.go:54 displayVersion()` / `Makefile:13-15` / `internal/hub/buildinfo.go`（binaryGuard は今回無実）

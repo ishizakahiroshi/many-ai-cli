@@ -1,0 +1,81 @@
+# [計画] 長時間処理中（running 5分超）を検知して Web Push / ntfy 通知を送る
+
+> 最終更新: 2026-06-21(日) 11:40:50
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | plan | Hub 側で running 経過を監視し、しきい値超過で1回だけ通知送出（Web Push + ntfy/webhook 両系）。dedup・設定値追加 | — |
+| C2 | plan | 通知文言（i18n）追加と設定 UI（ON/OFF・しきい値）。既定 ON/OFF や説明文の整備 | — |
+
+実行順序: `C1 → C2`
+
+---
+
+## 概要
+
+セッションの応答が長時間（既定 running 5 分超）続いたときに、承認待ちと同じ経路で Web Push / ntfy・webhook 通知を送り、ユーザーが別画面・外出先でも「1ターンが重くなっている」ことに気付けるようにする。現状は長時間処理中の表示がフロント（サイドバーカードのバッジ＋ライブ帯のバッジ）に限られ、PC を見ていないと気付けない。スコープは「Hub 側での経過検知」と「既存通知基盤への送出追加」。長時間ターンの**自動中断（ESC 送信）は行わない**（通知のみ）。スマホ受信の前提（Hub 稼働必須）は既存 Web Push と同じ。
+
+## 現状と問題
+
+- 長時間判定はフロントのみ。`web/src/app/session-list.ts` の `CARD_LONGPROC_SEC = 300`、`web/src/app/terminal.ts` の `LIVE_LONGPROC_SEC = 300` でそれぞれ表示バッジを出しているだけで、サーバーへは伝わらない。
+- 通知送出は `internal/hub/push.go` に実装済みだが、起点は**承認イベントのみ**:
+  - `notifyApprovalPush(id, approvalID, provider, question, contextText)`（push.go:468・Web Push / VAPID）
+  - `notifyApprovalOutbound(...)`（push.go:531・ntfy / webhook、`internal/notify/notify.go` 経由）
+  - いずれも本文を `sessionlog.MaskSecrets` でマスクしてから外部送出（push.go:494 付近。全外部送出の単一ボトルネック）。
+- フロントは送信元になれない（Web Push の送信は Hub のみ）。よって**長時間検知を Hub 側に持たせる必要がある**。
+
+## 方針
+
+- フロントの判定を流用せず、Hub に独立した経過監視を持たせる（送信元が Hub のため）。
+- 既存の `notifyApprovalPush` / `notifyApprovalOutbound` を雛形に `notifyLongRunning` を追加し、**同じ MaskSecrets 経路**で送出する。本文はセッションタイトル中心で PTY 生テキストを極力含めない（誤マスク・情報漏れリスク低減）が、安全側で MaskSecrets は必ず通す。
+- **dedup**: 1 つの running ターンにつき通知は 1 回だけ（running を抜けたらフラグをリセット）。`audit_push_dedup_test.go` が既にあるため、同様の重複防止テスト方針に合わせる。
+- しきい値・ON/OFF は config 化（既定: しきい値 300 秒、機能 ON/OFF はユーザー設定）。フロントの 300 と意味を揃える。
+- 採用しない案: フロントから「長時間になった」と Hub へ通知する方式 → タブを閉じていると検知できず本末転倒なので不採用。Hub 単独で完結させる。
+
+---
+
+## C1: Hub 側の running 経過監視と通知送出
+
+### 作業内容
+
+- Hub に running 経過を定期チェックするティッカー（既存の状態管理・ロックに合わせる。`sessionsMu` 配下のセッション構造体に「running 開始時刻」「長時間通知済みフラグ」を持たせる）。
+- 状態が running に入った時刻を記録し、`now - 開始 >= しきい値` かつ未通知なら `notifyLongRunning` を 1 回呼ぶ。running を抜けたらフラグと開始時刻をリセット。
+- `notifyLongRunning(id)` を push.go に追加。`notifyApprovalPush` / `notifyApprovalOutbound` と同形でタイトル生成 → 本文 → `MaskSecrets` → Web Push（`s.push.send...`）と ntfy/webhook（`s.notifyMgr` / `internal/notify`）の両系へ送出。Tag/ID は `aacli-longproc-<id>-<turn>` 等で承認通知と衝突しないキーにする。
+- しきい値を config から読む（C2 で追加するキーを参照。未設定時は 300 秒）。
+
+### 変更予定ファイル
+
+- `internal/hub/push.go` — `notifyLongRunning` 追加（Web Push + ntfy/webhook 両系）
+- `internal/hub/*.go`（セッション状態管理・ティッカーを持つ箇所） — running 開始時刻・通知済みフラグの保持と判定呼び出し
+- `internal/notify/notify.go` — 長時間用の送出に既存 API で足りなければ最小追加（原則流用）
+- `internal/config/*.go` — しきい値・ON/OFF のフィールド追加（C2 と分担。C1 では読み取り側）
+- `internal/hub/push_test.go` / `audit_push_dedup_test.go` 近辺 — dedup（1ターン1回）テスト
+
+### 完了条件
+
+- running が しきい値秒 を超えたセッションで、Web Push と ntfy/webhook の両方に 1 回だけ通知が飛ぶ（手動 or テストで確認）。
+- running を抜けて再度 running に入ると、次のターンで再び 1 回だけ飛ぶ（フラグが正しくリセットされる）。
+- 本文が `MaskSecrets` を通っている（外部送出ボトルネックを迂回しない）。
+
+---
+
+## C2: 通知文言（i18n）と設定 UI
+
+### 作業内容
+
+- 通知タイトル/本文の i18n キーを追加（例: `push_body_longproc` / 説明文）。承認通知の既存キー命名に揃える。
+- 設定画面に「長時間処理中の通知」ON/OFF と, しきい値（秒）入力を追加。既定 OFF か ON かは UX 判断（承認通知の既定に合わせる方針で確認）。
+- config に対応キーを追加し、サーバー側（C1 の読み取り側）と整合させる。
+
+### 変更予定ファイル
+
+- `web/src/i18n/ja.json` / `web/src/i18n/en.json` — 通知文言・設定ラベル追加
+- `web/src/app/settings.ts` 周辺 — 設定トグル・しきい値入力の UI とユーザー設定保存
+- `internal/config/*.go` — しきい値・ON/OFF のスキーマ確定（C1 と同じキー）
+
+### 完了条件
+
+- 設定 UI から ON/OFF としきい値を変更でき、保存後に挙動へ反映される。
+- 既定値（しきい値 300 秒）でフロント表示バッジ（`LIVE_LONGPROC_SEC` / `CARD_LONGPROC_SEC`）と意味が一致している。

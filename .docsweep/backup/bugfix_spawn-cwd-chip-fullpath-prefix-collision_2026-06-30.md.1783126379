@@ -1,0 +1,69 @@
+# [様子見] spawn cwd の root chip クリックでフルパスに `public:` などが前置される
+
+## 症状
+
+新しいセッションパネルの cwd 入力欄に既存のフルパス（例: `C:\dev\github\private\mer`）が入っている状態で、ドロップダウンの root chip（`public` / `workshop` / `dev` / `private`）をクリックすると、入力値が
+
+```
+public:C:\dev\github\private\mer
+```
+
+のようになり、ディレクトリ指定として無効な文字列ができてしまう。本来 chip は「そのルート配下を検索する短縮プレフィックス」として動くべきなのに、フルパスを保持したまま `public:` を前置していた。
+
+## 根本原因
+
+`web/src/app/spawn-panel.ts` の chip クリックハンドラ（`mousedown`）が、`parseCwdInput()` の戻り値の `query` を無条件に再利用していたため。
+
+`parseCwdInput()` は入力に `\` `/` または `<英字>:\` を含むと `isPath: true` を立て、入力全体を `query` に格納する仕様（`spawn-panel.ts` の `parseCwdInput` 定義参照）。chip クリック側はこの分岐を考慮せず、
+
+```ts
+const next = prefix + ':' + curParsed.query;
+```
+
+としていたため、`isPath` 入力に対して `public:` + `C:\dev\github\private\mer` が連結されていた。
+
+## 修正内容
+
+`isPath` のときは `query` を捨てて空クエリへ戻すよう 1 行修正。
+
+```ts
+// 入力がフルパス（isPath=true）のときは query にパス全体が入っているため、
+// chip と連結すると `public:C:\...` のような壊れた値になる。空クエリへ戻す。
+const next = prefix + ':' + (curParsed.isPath ? '' : curParsed.query);
+```
+
+これにより、フルパス入力中に chip を押すと `public:` だけになり、そのまま検索状態に戻る（=想定どおり）。
+
+## 変更ファイル
+
+web/src/app/spawn-panel.ts（chip クリックハンドラ 1 行）
+
+## 検証
+
+ロジック自動テストは導入せず、ブラウザで launcher を一目見て動作していれば OK とする方針（2026-06-30 ユーザー合意）。再発時に追検証が必要になったら、その時点で `parseCwdInput` を別ファイルへ抽出して `node:test` fixtures に乗せる。
+
+## 備忘
+
+- chip は「`<root>:` プレフィックスで検索状態を切り替える」UI なので、入力欄に既にフルパスがある時点でユーザーの操作意図は「ルートを切り替えて検索し直す」と解釈してよい（パス全体を残す価値はない）。
+- Tab 補完側（`keydown` の `Tab` 分岐）は `parsed.isPath` のとき早期に何もしないので影響なし。問題は chip クリック側だけだった。
+
+## 追加対応: chip 圧縮 UI（同日合流）
+
+同セッションで「chip が並びすぎて邪魔」というユーザー指摘を受け、chip 行を 1 個の launcher chip に圧縮し、ホバーまたはクリック/タップで popover として展開する形に再設計した。本バグの根本対処（フルパス前置の阻止）とは別軸だが、chip 領域の挙動を 1 ファイルで追える方が後の読者に親切なため同 md に記録する。
+
+### 仕様
+
+- 平常時: `🗂 <合計件数> ▾` の launcher chip 1 個だけを表示
+- active root があるとき（入力が `public:foo` 等）: `🗂 public: ▾` のように root 名へ切り替え、アクセント色を当てる
+- 展開トリガ: PC は launcher への hover、モバイル/タッチは launcher の click toggle（`.cwd-dropdown-chip-collapsed.is-open` クラス）の両対応
+- launcher と popover の 4px ギャップを `::after` の透明な「橋」で繋ぎ、マウス移動中に hover が切れる事故を防止
+- popover 内の chip 自体は従来挙動を維持（既存の `.cwd-dropdown-chip` ハンドラがそのまま動く）
+
+### 変更ファイル（追加分）
+
+web/src/app/spawn-panel.ts（chip 行レンダリングを `cwd-dropdown-chip-collapsed` ラッパ＋launcher＋popover 構造に置換 / mousedown ハンドラに launcher トグル分岐を追加）
+web/src/styles/spawn.css（`.cwd-dropdown-chip-launcher` / `.cwd-dropdown-chip-popover` / hover 橋の CSS 追加）
+
+### 検証（追加分）
+
+上記「検証」節と合わせ、起動時にブラウザでドロップダウンを開いて launcher 1 個＋ホバー展開が見えれば OK。詳細な手順チェックリストは作らない。

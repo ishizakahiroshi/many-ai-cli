@@ -1,0 +1,87 @@
+# [様子見] 障害対応記録: Codex に長文を貼り付けても送信されない
+
+> 最終更新: 2026-06-18(木) 15:02:40
+
+## 症状
+
+Hub UI の入力欄から Codex セッションへ長文（数千字・複数行）を貼り付けて送信すると、Codex の入力欄に `[Pasted Content N chars]`（例: `[Pasted Content 8826 chars]`）のプレースホルダが張り付いたまま実行が始まらない。
+
+再現手順:
+1. Codex セッションを開く。
+2. 数千字・複数行のテキストを入力欄に貼り付ける（長文はチップに畳まれる）。
+3. 送信する。
+4. Codex 側は `[Pasted Content N chars]` を入力欄に表示したまま、確定（送信）されず固着する。
+
+影響: Codex / OpenCode（Rust TUI 系）で、大きい複数行ペーストの送信。短い入力や Claude Code では再現しない。
+
+実測ログ `~/.many-ai-cli/logs/sessions/codex_2026-06-17_203153_write-article_s4.jsonl` で、ペースト本文がブラケットペースト（`\x15\x1b[200~ … \x1b[201~`、8909 バイト・改行 260）として正しく送られ、その直後に確定 `\r` が早撃ちされている事実を確認済み。
+
+**第1次対応（タイミング療法）後も再発**: `SLOW_PASTE_MIN_WAIT_MS=700` 導入後も、約2700字（`[Pasted Content 1343 chars]` + `[Pasted Content 1400 chars]` の2チップ分）程度の貼り付けで、Codex 入力欄にプレースホルダが2つ積み上がったまま送信されない事象を確認（2026-06-18）。固定待機を伸ばす対症療法ではペースト長・環境速度・ConPTY のチャンク境界に依存して当たり外れが消えないことが裏付けられた。
+
+## 根本原因（root cause）
+
+本質は「ブラケットペースト本体と確定 `\r` を分離して送り、その確定タイミングを内側 CLI の状態を見ずに**外から推測している**（オープンループ制御）」点にある。
+
+Codex / OpenCode（Rust TUI）は大きいペーストを `[Pasted Content N chars]` のプレースホルダへ **ほぼ無出力で即座に畳み込む**。`web/src/app/deferred-enter.ts` は「PTY 出力が一定時間静止したら取り込みが落ち着いたとみなし確定 `\r` を1回だけ撃つ」出力駆動の設計だが、Codex は出力静止がほぼ瞬時に成立するため、まだ畳み込み確定処理の最中に `\r` が早撃ちされ、Codex がそれを吸収する。`\r` は二重送信防止のため単発設計なので、一度吸収されると二度と確定されず固着する。
+
+`web/src/app.ts` の `doSend()` で複数行ペースト（`rawText.includes('\n')`）が `\x1b[200~ … \x1b[201~` でラップされ確定 `\r` を別送する経路に入るのが起点。**閾値（最低待機）をいくつにしても「推測」である限り当たり外れは消えない** — これは定数の問題ではなく制御方式の問題。
+
+## 修正内容
+
+### 第1次対応（タイミング療法・部分緩和）— 残置
+
+Codex / OpenCode のときだけ確定 `\r` の最低待機を 120ms → 700ms に延ばした（`deferred-enter.ts` の `SLOW_PASTE_MIN_WAIT_MS` / `deferredEnterMinWaitFor()`）。早撃ちの頻度は下がるが**根本解ではなく再発した**。この経路自体はブラケットペースト送信が残る短〜中文・8MB 超のフォールバックで今も使うため残置する。
+
+### 第2次対応（根本対処）— 長文は @path 参照で送る
+
+長文を「内側 CLI へペーストとして送る」のをやめ、**一時テキストファイル化して画像添付と同じ `@path` 参照で渡す**経路に変えた。内側 CLI に渡るのは `@C:/.../paste-N.txt ` という短い1行だけになり、`[Pasted Content]` 畳み込みがそもそも起きない＝確定 `\r` を吸収する処理が発生しないため、通常の `\r` で確実に送信される。タイミング推測を排除する根本対処。
+
+- 閾値: ペーストチップが **10行以上 または 1500字以上** で一時 `.txt` 化（行数だけだと1行巨大ペーストを取りこぼすため文字数も併用）。
+- 既存の `pendingAttachFiles` → `/api/attach` → `internal/attach/store.go` の `Save()` 経路に相乗り。`store.go` は `.txt` を含むテキストを保存対象として既に対応済み（サーバ側変更なし）。inject は Codex/Claude とも `@絶対パス `。
+- 閾値未満のチップ・入力欄の指示文は本文として従来どおり送るので、「長文は `@paste-N.txt` 参照＋短い指示文は本文」の混在も自然（例: `@paste-3.txt これ直して`）。
+
+```ts
+// app.ts buildSendText() の直後（after）
+const PASTE_FILE_MIN_LINES = 10;
+const PASTE_FILE_MIN_CHARS = 1500;
+
+export async function stageLongPastesAsFiles() {
+  for (let i = pastedTexts.length - 1; i >= 0; i--) {
+    const pt = pastedTexts[i];
+    if (pt.lineCount < PASTE_FILE_MIN_LINES && pt.text.length < PASTE_FILE_MIN_CHARS) continue;
+    const bytes = new TextEncoder().encode(pt.text);
+    if (bytes.byteLength > MAX_ATTACH_BYTES) continue; // 8MB 超は従来経路へ残す
+    pendingAttachFiles.push({ buf: bytes.buffer, filename: `paste-${pt.id}.txt`, entry: {}, wrapper: null });
+    pastedTexts.splice(i, 1);
+  }
+  renderPasteChips();
+  updateInputAffordance();
+}
+
+// doSend()（after）: flushPendingAttach より前に積んで画像添付経路へ合流
+await stageLongPastesAsFiles();
+const injects = await flushPendingAttach(sessionId);
+```
+
+## 変更ファイル
+
+| ファイル | 内容 |
+|---|---|
+| `web/src/app.ts` | `MAX_ATTACH_BYTES` を import。`stageLongPastesAsFiles()`（閾値 10行/1500字で長文チップを `.txt` 添付化）と閾値定数を追加。`doSend()` で `flushPendingAttach` 直前に呼び出し |
+| `web/src/app/deferred-enter.ts` | 第1次対応（残置）。最低待機 per-pending 可変化・`SLOW_PASTE_MIN_WAIT_MS=700` / `deferredEnterMinWaitFor()` |
+
+## 検証
+
+- <TODO: `make build` 後、Codex に長文（10行超 or 1500字超）を貼り付け送信 → `@paste-N.txt` 参照として一発で送信されることを確認>
+- <TODO: 長文＋短い指示文の混在（`@paste-N.txt これ直して`）が意図どおり送られることを確認>
+- <TODO: 閾値未満の短い貼り付けは従来どおり本文として送られる（リグレッションなし）ことを確認>
+- <TODO: Claude Code でも長文が `@path` 参照で送れることを確認>
+- <TODO: チャット履歴に長文がファイル添付（`paste-N.txt`）として残ることを確認>
+
+## 備忘
+
+- 意味的に「貼った長文＝本文」から「貼った長文＝参照ファイル」へ変わる。これは画像 D&D と同じ扱いで、ユーザー合意済みの挙動。
+- WSL では `@path` 参照が検出されない既知バグ（openai/codex Issue #19296）があるが、今回は特別分岐せず一律適用（不具合が出たら対応する方針）。画像添付と同一経路なので、画像が WSL で動けば text も動く想定。
+- 8MB 超のテキストは添付保存失敗でテキストを失う恐れがあるため、ファイル化せず従来のブラケットペースト経路に残す（`MAX_ATTACH_BYTES` guard）。
+- 同根の先行対応: `docs/local/bugfix_opencode-enter-lost-conpty_2026-06-17.md`（wrapper 側 `trailingEnterDelay(codex/opencode)=180ms`）。単一行の超長文ペースト（改行なし・1500字未満）は deferEnter 経路にも @path 経路にも入らず wrapper 側 `trailingEnterDelay` 経由になる。単一行超長文で再発する場合はその経路の手当てが必要。
+- 検討して見送った代替案: Codex の `@` はインタラクティブなファジーファイルピッカーUIだが、フルパス＋末尾スペースで送ると実用上ピッカーを素通り確定できる（画像添付で実証済み）。非対話実行（`codex exec`）はセッション継続性を壊すため不採用。

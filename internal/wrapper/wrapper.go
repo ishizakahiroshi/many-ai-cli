@@ -384,7 +384,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	fs := flag.NewFlagSet("wrap", flag.ContinueOnError)
 	label := fs.String("label", "", "session label shown in UI card")
 	model := fs.String("model", "", "model override")
-	permissionMode := fs.String("permission-mode", "", "claude permission mode")
+	permissionMode := fs.String("permission-mode", "", "permission mode (claude/grok: passed through; copilot/cursor-agent/opencode: bypassPermissions maps to each CLI's full-allow option)")
 	sandbox := fs.String("sandbox", "", "codex sandbox mode")
 	askForApproval := fs.String("ask-for-approval", "", "codex ask-for-approval")
 	codexOSS := fs.Bool("codex-oss", false, "codex: use --oss to route via local Ollama daemon")
@@ -398,7 +398,8 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		extra = append(extra, "--model", *model)
 	}
 	switch provider {
-	case "claude":
+	case "claude", "grok":
+		// grok CLI は claude 互換の --permission-mode（bypassPermissions 含む）をネイティブサポートする
 		if *permissionMode != "" && *permissionMode != "default" {
 			extra = append(extra, "--permission-mode", *permissionMode)
 		}
@@ -411,6 +412,16 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		}
 		if *askForApproval != "" {
 			extra = append(extra, "--ask-for-approval", *askForApproval)
+		}
+	case "copilot":
+		// --allow-all = --allow-all-tools --allow-all-paths --allow-all-urls の一括指定
+		if *permissionMode == "bypassPermissions" {
+			extra = append(extra, "--allow-all")
+		}
+	case "cursor-agent":
+		// --force: Force allow commands unless explicitly denied
+		if *permissionMode == "bypassPermissions" {
+			extra = append(extra, "--force")
 		}
 	}
 	providerArgs = append(extra, providerArgs...)
@@ -515,7 +526,11 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		applyUTF8Session()
 	}
 	if provider == "opencode" {
-		if cleanupCfg, cfgErr := prepareOpenCodeConfig(cwd); cfgErr != nil {
+		permValue := "ask"
+		if *permissionMode == "bypassPermissions" {
+			permValue = "allow"
+		}
+		if cleanupCfg, cfgErr := prepareOpenCodeConfig(cwd, permValue); cfgErr != nil {
 			logger.Warn("opencode: failed to prepare opencode.json permission config", "session_id", sessionID, "err", cfgErr)
 		} else {
 			defer cleanupCfg()
