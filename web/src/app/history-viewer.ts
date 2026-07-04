@@ -162,7 +162,10 @@ function hvSanitize(text: string, offset: number): string {
     const nl = text.indexOf('\n');
     if (nl >= 0 && nl < text.length - 1) text = text.slice(nl + 1);
   }
-  return text.replace(HV_REWRITE_RE, '\r\n').replace(HV_DROP_RE, '');
+  // 変換前のフレームで設定された色(SGR)状態が次のフレームへ持ち越されないよう、
+  // 改行への置換と同時に色をリセットする（Grok Build 等、絶対座標描画+truecolor
+  // で「ほぼ黒 on 黒」のような一時状態を挟む出力が積み重なって不可視化するのを防ぐ）
+  return text.replace(HV_REWRITE_RE, '\x1b[0m\r\n').replace(HV_DROP_RE, '');
 }
 
 function hvUpdateRangeLabel() {
