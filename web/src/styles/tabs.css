@@ -285,6 +285,14 @@ body.pane-resizing .xterm { pointer-events: none; }
 }
 
 @media (max-width: 720px) {
+  /* C6: モック決定事項（論点5）— Files / Git / Chat タブはスマホに出さない。
+     マルチ / 分割は max-width:1000px 側で既に非表示のため、ここでは 3 タブのみ隠す。 */
+  .view-tab[data-tab="files"],
+  .view-tab[data-tab="git"],
+  .view-tab[data-tab="chat"] {
+    display: none !important;
+  }
+
   #unified-tab-bar {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
