@@ -73,7 +73,7 @@ function getOrCreateLiteContainer(): HTMLElement | null {
   return el;
 }
 
-// PTY バッファの末尾 N 行を pre に流し込む。1 秒ごとの定期更新と、
+// PTY バッファのクリーンテキスト差分をチャットビューへ反映する。1 秒ごとの定期更新と、
 // activateSession 直後の明示呼び出しから入る。
 export function refreshMobileTerminalLite(): void {
   if (!isMobileViewport()) return;
