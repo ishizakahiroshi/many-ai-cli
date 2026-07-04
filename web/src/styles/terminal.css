@@ -334,6 +334,236 @@
   border-radius: var(--radius-sm);
 }
 .live-status-palette-reset:hover { background: rgba(148, 163, 184, 0.22); }
+
+@media (max-width: 720px) {
+  body.mobile-has-session:not(.mobile-home-view) #input-bar-outer {
+    padding-bottom: calc(8px + env(safe-area-inset-bottom) + var(--mobile-vv-bottom-offset, 0px));
+    background: var(--bg-deep, #0d1117);
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #input-bar {
+    position: relative;
+    padding: 0 10px;
+    background: transparent;
+    border-top: 0;
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #input-wrap {
+    flex-wrap: nowrap;
+    align-items: flex-end;
+    justify-content: flex-start;
+    gap: 8px;
+    min-height: 52px;
+    padding: 8px 10px;
+    border-radius: 24px;
+    border: 1px solid var(--line-soft);
+    background: var(--bg, #111827);
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.22);
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #input-wrap:focus-within {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #mobile-composer-attach-btn {
+    display: inline-flex;
+    flex: 0 0 34px;
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    min-height: 34px;
+    align-self: flex-end;
+    border-radius: 50%;
+    background: var(--bg-elev2, rgba(255, 255, 255, 0.08));
+    color: var(--text);
+    font-size: 1.05rem;
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #input-area {
+    order: 0;
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    gap: 4px;
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #input {
+    max-height: calc(1.5em * 6 + 4px);
+    min-height: 28px;
+    padding: 3px 0;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #input::placeholder {
+    color: var(--muted);
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #send-btn {
+    flex: 0 0 34px;
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    min-height: 34px;
+    align-self: flex-end;
+    border-radius: 50%;
+    font-size: 0;
+  }
+  body.mobile-has-session:not(.mobile-home-view) #send-btn::before {
+    content: "▲";
+    font-size: 0.82rem;
+    line-height: 1;
+  }
+  body.mobile-has-session:not(.mobile-home-view) #send-btn.is-stopping::before {
+    content: "■";
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #mobile-keyboard-toggle,
+  body.mobile-has-session:not(.mobile-home-view) #input-clear-btn,
+  body.mobile-has-session:not(.mobile-home-view) #input-tools,
+  body.mobile-has-session:not(.mobile-home-view) #voice-btn,
+  body.mobile-has-session:not(.mobile-home-view) #tools-flip-btn {
+    display: none !important;
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #paste-chips {
+    max-height: 42px;
+    overflow-y: auto;
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #mobile-composer-attach-menu {
+    position: absolute;
+    left: 12px;
+    bottom: calc(100% + 8px);
+    z-index: 1200;
+    min-width: 150px;
+    padding: 6px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg-elev, #161b22);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
+  }
+  body.mobile-has-session:not(.mobile-home-view) #mobile-composer-attach-menu:not([hidden]) {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  body.mobile-has-session:not(.mobile-home-view) #mobile-composer-attach-menu button {
+    min-height: 40px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+  }
+  body.mobile-has-session:not(.mobile-home-view) #mobile-composer-attach-menu button:active {
+    background: var(--bg-hover, rgba(255,255,255,0.1));
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #attach-panel {
+    display: none;
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #attach-panel.has-attachments {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 42px;
+    margin: 0 12px 6px;
+    padding: 5px 8px;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-md);
+    background: var(--bg, #111827);
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #attach-panel.has-attachments #attach-drop-zone,
+  body.mobile-has-session:not(.mobile-home-view) #attach-panel.has-attachments #attach-camera-btn {
+    display: none;
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #attach-panel.has-attachments #attach-thumbnails {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #attach-panel.has-attachments #attach-clear-btn {
+    flex: 0 0 auto;
+    min-height: 32px;
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #mobile-keyboard-panel {
+    order: 2;
+    padding: 6px 10px 0;
+    background: var(--bg-deep, #0d1117);
+    border-top: 0;
+  }
+  body.mobile-has-session:not(.mobile-home-view) #mobile-key-row button {
+    min-height: 34px;
+    min-width: 46px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status {
+    margin: 0 14px 3px;
+    min-height: 18px;
+    max-height: 18px;
+    padding: 0 2px 2px;
+    gap: 6px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--live-status-fg, rgba(147, 197, 253, 0.92));
+    font-size: 10.5px;
+    line-height: 1;
+    pointer-events: auto;
+    touch-action: manipulation;
+  }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.idle {
+    color: rgba(148, 163, 184, 0.78);
+    opacity: 0.78;
+  }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.waiting {
+    color: rgba(251, 191, 36, 0.95);
+  }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status .live-spinner {
+    width: 10px;
+    height: 10px;
+    border-width: 1.5px;
+  }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status .live-status-text {
+    flex: 1 1 auto;
+  }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status .live-status-palette-btn {
+    display: none;
+  }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status .live-status-longproc {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--warn-text);
+    font-size: 10.5px;
+  }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status .live-compact-bar {
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    bottom: 0;
+    width: auto;
+    height: 1.5px;
+    border-radius: 0;
+  }
+}
+
 .xterm { height: 100%; }
 .xterm-viewport {
   overflow-y: scroll !important;
@@ -608,6 +838,11 @@ body.pc-input-tools-off #input-tools { display: none; }
 #quick-cmd-btn-3,
 #quick-cmd-btn-4,
 #quick-cmd-btn-5 { margin-left: 6px; }
+
+#mobile-composer-attach-btn,
+#mobile-composer-attach-menu {
+  display: none;
+}
 
 @media (max-width: 720px), (pointer: coarse) {
   #mobile-keyboard-toggle {

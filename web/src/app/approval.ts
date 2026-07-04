@@ -1454,7 +1454,7 @@ export function sendSingleFreeText(sessionId) {
 // 質問数が増えても縦の高さが一定で、上のターミナル（文脈）が隠れない。
 // 全問回答後に「送信確認」→ モーダルで内容＋実送信文字列を確認 →「送信」で確定する。
 
-const BATCH_FREE = -1; // 自由入力肢を選択中であることを示す selections センチネル
+export const BATCH_FREE = -1; // 自由入力肢を選択中であることを示す selections センチネル
 
 // アクティブな質問タブ index を範囲内に正規化して返す（未設定/範囲外は 0）。
 function getBatchActiveQ(sessionId, n) {
@@ -2068,7 +2068,7 @@ export function sendBatchChoices(sessionId) {
   approvalConsumedSig.set(sessionId, approvalSig(cached));
   recordAnsweredMarkerSig(sessionId, cached);
   sendApprovalConsumed(sessionId, cached, text);
-  sendSubmittedText(sessionId, `${text}\r`);
+  sendSubmittedText(sessionId, `${text}\r`, { recordMobileTranscript: false });
   removeBatchConfirmModal();
   hideActionBar(sessionId);
   approvalSuppressUntil.set(sessionId, Date.now() + 400);
@@ -2309,7 +2309,7 @@ export function sendMultiSelectChoices(sessionId) {
   sendApprovalConsumed(sessionId, prevOpts, text);
   multiQuestionDismissedCache.delete(sessionId);
   multiQuestionLatchAt.delete(sessionId);
-  sendSubmittedText(sessionId, `${text}\r`);
+  sendSubmittedText(sessionId, `${text}\r`, { recordMobileTranscript: false });
   hideActionBar(sessionId);
   approvalSuppressUntil.set(sessionId, Date.now() + 400);
   multiSelectSelections.delete(sessionId);
@@ -2363,7 +2363,7 @@ export function sendChoice(sessionId, targetNum) {
     recordAnsweredMarkerSig(sessionId, prevOpts);
     multiQuestionDismissedCache.delete(sessionId);
     multiQuestionLatchAt.delete(sessionId);
-    sendSubmittedText(sessionId, response);
+    sendSubmittedText(sessionId, response, { recordMobileTranscript: false });
     hideActionBar(sessionId);
     approvalSuppressUntil.set(sessionId, Date.now() + 400);
     setTimeout(() => {
@@ -2397,7 +2397,7 @@ export function sendChoice(sessionId, targetNum) {
   if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
   recordAnsweredMarkerSig(sessionId, prevOpts);
   sendApprovalConsumed(sessionId, prevOpts, choiceText);
-  sendSubmittedText(sessionId, choiceText);
+  sendSubmittedText(sessionId, choiceText, { recordMobileTranscript: false });
   hideActionBar(sessionId);
   // PTY エコーバックによる誤再表示を短時間抑制（approvalConsumedSig が同一選択肢の再検出を防ぐため短くてよい）
   approvalSuppressUntil.set(sessionId, Date.now() + 400);
