@@ -614,28 +614,10 @@ header {
     display: none;
   }
 
-  body.mobile-has-session:not(.mobile-home-view) #mobile-session-title-btn {
-    position: fixed;
-    top: calc(6px + env(safe-area-inset-top));
-    left: calc(52px + env(safe-area-inset-left));
-    right: calc(52px + env(safe-area-inset-right));
-    z-index: 1500;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 32px;
-    min-width: 0;
-    padding: 0 10px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    background: var(--bg-elev);
-    color: var(--text);
-    font-size: 0.85rem;
-    font-weight: 700;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    cursor: pointer;
+  /* C7: ヘッダー行とタブ行の統合により、セッション名表示ボタンは廃止（ハンバーガーから
+     同じセッション一覧を開けるため機能は失われない）。#unified-tab-bar がこのスロットを引き継ぐ。 */
+  #mobile-session-title-btn {
+    display: none !important;
   }
 
   body.mobile-has-session:not(.mobile-home-view) #mobile-log-btn {
@@ -712,9 +694,24 @@ header {
     height: 100%;
   }
 
-  #unified-tab-bar {
-    height: 40px;
-    padding: 0 6px;
+  /* C7: #unified-tab-bar が fixed 化してヘッダー行に重なるため、表示エリアの先頭が
+     隠れないよう同じ高さ分の余白を確保する。 */
+  body.mobile-has-session:not(.mobile-home-view) #display-area {
+    padding-top: calc(32px + 12px + env(safe-area-inset-top));
+  }
+
+  /* C7: 旧タイトルバー行を吸収し、ハンバーガー〜展開ボタンの間の1行に統合する。
+     ジオメトリは旧 #mobile-session-title-btn と同一（styles.css 参照）。 */
+  body.mobile-has-session:not(.mobile-home-view) #unified-tab-bar {
+    position: fixed;
+    top: calc(6px + env(safe-area-inset-top));
+    left: calc(52px + env(safe-area-inset-left));
+    right: calc(52px + env(safe-area-inset-right));
+    z-index: 1500;
+    height: 32px;
+    padding: 0 4px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
   }
 
   .view-tab {
