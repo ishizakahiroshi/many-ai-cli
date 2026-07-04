@@ -29,6 +29,7 @@ rsrc_windows_*.syso
 .DS_Store
 Thumbs.db
 .claude/
+opencode.json
 *.local.md
 *.local.json
 docs/local/

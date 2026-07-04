@@ -42,10 +42,6 @@
   }
 
   /* ── ハンバーガーバッジ ── */
-  #mobile-menu-btn {
-    position: relative;
-  }
-
   #mobile-menu-btn .mobile-badge {
     display: none;
     position: absolute;
