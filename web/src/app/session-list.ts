@@ -1169,6 +1169,8 @@ export function renderSummaryAndNotifications() {
   }
   if (providerParts) summary += `<span class="summary-sep">|</span>${providerParts}`;
   document.getElementById('summary').innerHTML = summary;
+  const drawerSummary = document.getElementById('mobile-drawer-summary');
+  if (drawerSummary) drawerSummary.innerHTML = summary;
   ensureSummaryResizeObserver();
   updateSummaryCompactMode();
   updateTabNotification(totalWaiting);

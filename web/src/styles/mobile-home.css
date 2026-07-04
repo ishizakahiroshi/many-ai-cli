@@ -27,8 +27,9 @@
   #mobile-home {
     overflow-y: auto;
     flex: 1 1 auto;
-    /* C6 PWA safe-area: 横ノッチ（landscape）で本文が欠けないよう左右 inset を加算。 */
-    padding: 8px calc(8px + env(safe-area-inset-right)) 8px calc(8px + env(safe-area-inset-left));
+    /* C6 PWA safe-area: 横ノッチ（landscape）で本文が欠けないよう左右 inset を加算。
+       上端は header ではなく #app 直下の浮遊 ☰ ボタンと重ならないよう --mobile-float-clear を使う。 */
+    padding: var(--mobile-float-clear, 40px) calc(8px + env(safe-area-inset-right)) 8px calc(8px + env(safe-area-inset-left));
     background: var(--bg-layer);
     flex-direction: column;
     gap: var(--space-3, 8px);
