@@ -120,6 +120,15 @@ type session struct {
 	approvalVisibleAt time.Time // approvalVisible=true を最後に受信した時刻（approvalVisibleLease 判定用）
 	branchCheckedAt   time.Time
 
+	// JSON 外: 初期プロンプト注入ゲート。orchestration セッション（conductor / 子）の
+	// spawn 直後〜injectInitialPrompt 完了までユーザー入力を pendingInput へ保留する。
+	// CLI 起動途中の TUI は入力バイトを捨てるため、注入前に届いた入力は黙って失われる
+	// （docs/local/bugfix_orchestration-codex-child-spawn-failures_2026-07-04.md）。
+	// initialInjectGateAt は注入経路の事故でゲートが張り付いたまま残った場合の
+	// 期限判定（initialInjectGateMaxAge）に使う。
+	initialInjectPending bool
+	initialInjectGateAt  time.Time
+
 	// JSON 外: git 変更統計（直近の refreshBranchForCWD で取得した値）
 	gitChecked bool
 	gitFiles   int
@@ -1303,6 +1312,13 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		History:         history,
 	}
 	ses.inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
+	if childMeta.OrchestrationID != "" {
+		// orchestration セッションは登録直後に初期プロンプト注入（conductor は本関数末尾、
+		// 子は handleSpawnChild の injectInitialPrompt）が走る。注入完了までユーザー入力を
+		// 保留し、起動途中の CLI に入力が捨てられる・注入と混線するのを防ぐ。
+		ses.initialInjectPending = true
+		ses.initialInjectGateAt = time.Now()
+	}
 	s.sessions[id] = ses
 	wc := newWrapperConn(conn)
 	s.wrappers[id] = wc
@@ -1333,8 +1349,10 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	// buildChildInitialPrompt を既に注入済みなのでここでは対象外。
 	if childMeta.OrchestrationID != "" && !childMeta.Auto {
 		roles := s.orchestrationRolesFor(childMeta.OrchestrationID)
-		s.waitForInputReady(id, orchestrationInjectQuiet, orchestrationInjectMaxWait)
-		s.injectText(id, buildConductorInitialPrompt(childMeta.OrchestrationID, roles), true, false)
+		// goroutine で注入する: ここは wrapperMessageLoop 開始前のため、同期で
+		// waitForInputReady を呼ぶと出力が観測できず常に maxWait までブロックし、
+		// その間 PTY 出力の中継も止まる。
+		go s.injectInitialPrompt(id, buildConductorInitialPrompt(childMeta.OrchestrationID, roles))
 	}
 	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Branch: branch, Label: reg.Label, Model: reg.Model, Route: regRoute, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, ParentSessionID: childMeta.ParentSessionID, Role: childMeta.Role, Auto: childMeta.Auto, Depth: childMeta.Depth, OrchestrationID: childMeta.OrchestrationID, BoardPath: childMeta.BoardPath, WorktreeBranch: childMeta.WorktreeBranch})
 	s.writeHistory(id, map[string]any{
@@ -2269,6 +2287,16 @@ func splitBracketedPasteSubmit(text string) (first string, delayed string) {
 // wrapper が長時間戻らないケースで無制限に溜まるのを防ぐ。超過時は古い方から捨てる。
 const maxPendingInputPerSession = 100
 
+// initialInjectGateMaxAge は初期プロンプト注入ゲートの生存上限。注入経路の事故
+// （spawn タイムアウト後の遅延登録等）で clearInitialInjectGate が呼ばれないまま
+// ゲートが張り付いても、この時間を超えたら入力保留をやめて通常送信に戻す保険。
+const initialInjectGateMaxAge = 90 * time.Second
+
+// sessionInjectGated は初期プロンプト注入ゲートが有効かを返す。sessionsMu 保持下で呼ぶ。
+func sessionInjectGated(ses *session, now time.Time) bool {
+	return ses.initialInjectPending && now.Sub(ses.initialInjectGateAt) < initialInjectGateMaxAge
+}
+
 // submitInput はユーザー入力を wrapper へ届ける。wrapper 未接続・送信失敗時は
 // 入力を順序保持でバッファし、wrapper の (再)接続時に flushPendingInput が自動再送する
 // （= 黙って捨てない）。既に保留中の入力があるセッションでは、新規入力を直送せず
@@ -2279,6 +2307,12 @@ const maxPendingInputPerSession = 100
 // 直列化され、bracketed-paste 本文と確定 CR のインターリーブが起きない。
 // sessionsMu は inputMu の外側でのみ取得し、50ms sleep 中に保持しない。
 func (s *Server) submitInput(wc *wrapperConn, sessionID int, combined string) {
+	s.submitInputWithGate(wc, sessionID, combined, false)
+}
+
+// submitInputWithGate は submitInput の実体。bypassGate=true は初期プロンプト注入
+// （injectInitialPrompt）専用で、注入ゲート中でも wrapper へ直接送る。
+func (s *Server) submitInputWithGate(wc *wrapperConn, sessionID int, combined string, bypassGate bool) {
 	// session ポインタを短期間だけ sessionsMu で取得する。
 	// session が既に削除済みの場合は nil になるので早期リターンする。
 	s.sessionsMu.Lock()
@@ -2297,12 +2331,13 @@ func (s *Server) submitInput(wc *wrapperConn, sessionID int, combined string) {
 	defer ses.inputMu.Unlock()
 
 	s.sessionsMu.Lock()
+	gated := !bypassGate && sessionInjectGated(ses, time.Now())
 	hasPending := len(s.pendingInput[sessionID]) > 0
-	if hasPending {
+	if gated || hasPending {
 		s.pendingInput[sessionID] = appendPendingInput(s.pendingInput[sessionID], combined)
 	}
 	s.sessionsMu.Unlock()
-	if hasPending {
+	if gated || hasPending {
 		s.notifyInputDeferred(sessionID)
 		return
 	}
@@ -2356,6 +2391,13 @@ func (s *Server) flushPendingInput(sessionID int) {
 	defer ses.inputMu.Unlock()
 
 	s.sessionsMu.Lock()
+	if sessionInjectGated(ses, time.Now()) {
+		// 初期プロンプト注入ゲート中は保留したまま何もしない（wrapper 再接続時の
+		// フラッシュで注入前にユーザー入力が流れるのを防ぐ）。ゲート解除時に
+		// clearInitialInjectGate が再度フラッシュする。
+		s.sessionsMu.Unlock()
+		return
+	}
 	pending := s.pendingInput[sessionID]
 	delete(s.pendingInput, sessionID)
 	wc := s.wrappers[sessionID]

@@ -27,7 +27,12 @@ export const eraseDisplayBelowBytes = new TextEncoder().encode('\x1b[J');
 // close マーカー typo（例: [/MANARY-AI-CLI-DONE]）や AI 側の切断で close が来ないと、
 // inMarker / inDone 状態のまま bytes が永久蓄積し、以降の CLI 側描画が全部 buf に飲まれて
 // xterm が凍結する（2026-07-01 セッション #16 実測で確認）。閾値を超えたら諦めて
-// 強制 flush + 状態リセットして描画を復帰させる。閾値は正常運用の 10 倍以上のマージン。
+// 状態リセットして描画を復帰させる。閾値は正常運用の 10 倍以上のマージン。
+// 2026-07-04: 超過時の扱いを「強制 flush（剥離テキスト一括ダンプ）」から「破棄」へ変更。
+// close が 32KB 来ない時点で buf の中身は本文ではなく、Ink が interleave した
+// スピナー再描画・ステータス行の堆積であり、剥離ダンプすると 32KB のゴミテキストが
+// scrollback に化石化する（bugfix_spinner-cup-not-consumed-in-webui_2026-07-02.md で実測）。
+// 承認 UI は Hub 側 Go の PTY 解析から出るため、破棄しても承認ボタンには影響しない。
 export const MAX_MARKER_BUFFER_BYTES = 32 * 1024;
 
 const utf8Encoder = new TextEncoder();
@@ -81,6 +86,14 @@ export type HubMarkerFilterState = {
   inMarker: boolean;
   markerBuf: Uint8Array;
   doneBuf: Uint8Array;
+  // 行頭ゲート（2026-07-04）: OPEN マーカーは「行頭（空白のみ先行）」でのみラッチする。
+  // AI が地の文でマーカーをリテラル引用した場合（例:「…はすべて [MANY-AI-CLI] マーカー形式で…」）、
+  // close が来ないまま inMarker にラッチし、後続の画面再描画 32KB を飲み込む事故の再発防止
+  // （2026-07-04 orchestration 指揮者セッションで実測）。正規マーカーは Claude Code の描画上
+  // 必ず「行境界（\r\n または CUP）＋インデント空白」の直後に現れることをログで確認済み。
+  lineStart?: boolean;
+  // lineStart 判定用の ESC シーケンス解析フェーズ（0=通常 / 1=ESC 直後 / 2=CSI 中 / 3=OSC 中）
+  escPhase?: number;
 };
 
 function flushBufToOut(buf: number[], out: number[]): void {
@@ -107,12 +120,44 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
   let inMarker = state.inMarker;
   const markerBufArr: number[] = Array.from(state.markerBuf || new Uint8Array(0));
   const doneBufArr: number[] = Array.from(state.doneBuf || new Uint8Array(0));
+  let lineStart = state.lineStart ?? true;
+  let escPhase = state.escPhase ?? 0;
+
+  // 行頭ゲート用の per-byte 状態機械。\r・\n・CUP/HVP（CSI ... H / f）で行頭に復帰し、
+  // 空白・制御文字・ESC シーケンスは中立、印字文字（マルチバイト含む）で行頭を解除する。
+  // Ink はインデントを空白または CUP の列指定で描くため、これで
+  // 「行境界＋空白のみ先行」= 正規マーカー位置 と「文中」= prose リテラル を区別できる。
+  const trackByte = (b: number): void => {
+    switch (escPhase) {
+      case 1: // ESC 直後
+        if (b === 0x5b) escPhase = 2;        // CSI
+        else if (b === 0x5d) escPhase = 3;   // OSC
+        else escPhase = 0;                    // ESC+単一バイト（中立）
+        return;
+      case 2: // CSI 中
+        if (b >= 0x40 && b <= 0x7e) {
+          escPhase = 0;
+          if (b === 0x48 || b === 0x66) lineStart = true; // CUP 'H' / HVP 'f'
+        }
+        return;
+      case 3: // OSC 中
+        if (b === 0x07) escPhase = 0;
+        else if (b === 0x1b) escPhase = 1;
+        return;
+      default:
+        if (b === 0x1b) { escPhase = 1; return; }
+        if (b === 0x0a || b === 0x0d) { lineStart = true; return; }
+        if (b === 0x20 || b === 0x09 || b < 0x20) return; // 空白・制御文字は中立
+        lineStart = false;
+    }
+  };
 
   while (i < combined.length) {
     if (inDone) {
       if (bytesStartWith(combined, i, hubDoneMarkerClose)) {
         i += hubDoneMarkerClose.length;
         inDone = false;
+        lineStart = false;
         // 案 E: 貯めた DONE 本文を ANSI 剥離してから out へ
         flushBufToOut(doneBufArr, out);
         doneBufArr.length = 0;
@@ -124,49 +169,69 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
       doneBufArr.push(combined[i]);
       i++;
       if (doneBufArr.length > MAX_MARKER_BUFFER_BYTES) {
-        // typo/欠落/切断で close が来ない: 諦めて強制 flush＋状態リセット
+        // typo/欠落/切断で close が来ない: 本文ではなく再描画の堆積とみなし破棄＋状態リセット
         inDone = false;
-        flushBufToOut(doneBufArr, out);
+        lineStart = false;
         doneBufArr.length = 0;
-        for (const b of eraseDisplayBelowBytes) out.push(b);
       }
       continue;
     }
 
     if (bytesStartWith(combined, i, hubDoneMarkerOpen)) {
-      i += hubDoneMarkerOpen.length;
-      inDone = true;
+      if (lineStart) {
+        i += hubDoneMarkerOpen.length;
+        inDone = true;
+        lineStart = false;
+        continue;
+      }
+      // 文中の prose リテラルはマーカー扱いせず素通し（'[' 1 バイトだけ進めて再走査）
+      trackByte(combined[i]);
+      out.push(combined[i]);
+      i++;
       continue;
     }
 
     const marker = hubMarkerBytePatterns.find(pattern => bytesStartWith(combined, i, pattern));
     if (marker) {
-      i += marker.length;
-      if (marker === hubMarkerEndBytes) {
-        // close: 貯めた本文を ANSI 剥離して out へ
-        inMarker = false;
-        flushBufToOut(markerBufArr, out);
-        markerBufArr.length = 0;
-        for (const b of eraseDisplayBelowBytes) out.push(b);
-      } else {
-        // open: 以降の close までの本文は markerBufArr に貯める
-        inMarker = true;
+      const isClose = marker === hubMarkerEndBytes;
+      // 行頭ゲート: OPEN は行頭のみラッチ。close は inMarker 中なら位置を問わず受理し、
+      // stray close（開きなし）は行頭のみマーカー扱い（文中の prose リテラルは素通し）。
+      if (inMarker || lineStart) {
+        i += marker.length;
+        lineStart = false;
+        if (isClose) {
+          // close: 貯めた本文を ANSI 剥離して out へ
+          inMarker = false;
+          flushBufToOut(markerBufArr, out);
+          markerBufArr.length = 0;
+          for (const b of eraseDisplayBelowBytes) out.push(b);
+        } else {
+          // open: 以降の close までの本文は markerBufArr に貯める
+          inMarker = true;
+        }
+        continue;
       }
-      continue;
+      if (!inMarker) {
+        trackByte(combined[i]);
+        out.push(combined[i]);
+        i++;
+        continue;
+      }
     }
-    if (isPossibleMarkerPrefix(combined, i)) break;
+    // マーカー prefix の carry は「ラッチし得る文脈」のときだけ行う（文中は素通しでよい）
+    if ((inMarker || lineStart) && isPossibleMarkerPrefix(combined, i)) break;
     // 案 E: in-marker / in-done 中は本文を buf へ、外は out へ
     if (inMarker) {
       markerBufArr.push(combined[i]);
       i++;
       if (markerBufArr.length > MAX_MARKER_BUFFER_BYTES) {
-        // typo/欠落/切断で close が来ない: 諦めて強制 flush＋状態リセット
+        // typo/欠落/切断で close が来ない: 本文ではなく再描画の堆積とみなし破棄＋状態リセット
         inMarker = false;
-        flushBufToOut(markerBufArr, out);
+        lineStart = false;
         markerBufArr.length = 0;
-        for (const b of eraseDisplayBelowBytes) out.push(b);
       }
     } else {
+      trackByte(combined[i]);
       out.push(combined[i]);
       i++;
     }
@@ -180,6 +245,8 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
       inMarker,
       markerBuf: new Uint8Array(markerBufArr),
       doneBuf: new Uint8Array(doneBufArr),
+      lineStart,
+      escPhase,
     },
   };
 }
