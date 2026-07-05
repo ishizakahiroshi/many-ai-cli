@@ -645,8 +645,12 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 							time.Sleep(clearPrefixSplitDelay)
 							data = rest
 						}
-						if provider == "claude" && len(data) > 1 && data[0] == '@' {
+						if provider == "claude" && len(data) > 1 && data[0] == '@' && looksLikeInjectPath(data[1:]) {
+							// PTYW-7 (report_bug_security_quality_audit_2026-07-05.md):
 							// 旧形式の inject (@path\rtext\r) は互換のため分割する。
+							// 単に data[0] == '@' で判定していた頃は、@user_mention 等の一般テキストも
+							// 誤って分割対象になっていた。@ 直後が絶対パスの形状 (POSIX の `/` 始まり or
+							// Windows のドライブレター `[A-Za-z]:[\\/]`) の時のみ旧経路とみなすよう狭めた。
 							// 新形式 (@path text\r) は画像参照と本文を同じ入力行に残し、最後の Enter だけ分離する。
 							if idx := bytes.IndexByte(data, '\r'); idx >= 0 && idx < len(data)-1 {
 								if err := writeWithTrailingEnter(ps, data[:idx+1], 150*time.Millisecond); err != nil {
