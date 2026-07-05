@@ -522,6 +522,7 @@
   "action_bar_expand": "Restore full view",
   "approval_multi_label": "⚠ Multi-select",
   "approval_multi_progress": "{n} selected",
+  "approval_multi_select_all": "Select all",
   "approval_toast_msg": "Enable approval buttons?\n\nWhen enabled, AI agent approvals can be operated via on-screen buttons. Rules are injected into each AI's instruction file and automatically removed when the last active session for that file ends or many-ai-cli stops.\n\nYou can change this setting anytime in the settings panel.",
   "approval_toast_yes": "Yes, enable",
   "approval_toast_later": "Later",

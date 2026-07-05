@@ -2185,6 +2185,16 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
   progress.textContent = t('approval_multi_progress', { n: selected.size });
   footer.appendChild(progress);
 
+  const selectAllBtn = document.createElement('button');
+  selectAllBtn.className = 'action-clear-btn';
+  selectAllBtn.textContent = t('approval_multi_select_all');
+  selectAllBtn.disabled = selected.size === options.length;
+  selectAllBtn.onclick = (e) => {
+    e.stopPropagation();
+    selectAllMultiSelectOptions(sessionId);
+  };
+  footer.appendChild(selectAllBtn);
+
   const submitBtn = document.createElement('button');
   submitBtn.className = 'action-submit-btn';
   submitBtn.textContent = t('approval_batch_submit');
@@ -2198,6 +2208,7 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
   const clearBtn = document.createElement('button');
   clearBtn.className = 'action-clear-btn';
   clearBtn.textContent = t('approval_batch_clear');
+  clearBtn.disabled = selected.size === 0;
   clearBtn.onclick = (e) => {
     e.stopPropagation();
     clearMultiSelectSelections(sessionId);
@@ -2249,6 +2260,15 @@ export function clearMultiSelectSelections(sessionId) {
   if (!isMultiSelectOptions(cached)) return;
   multiSelectSelections.set(sessionId, new Set());
   set_multiSelectFocusIdx(0);
+  const bar = document.getElementById('action-bar');
+  if (bar) showMultiSelectActionBar(bar, sessionId, cached);
+  setTimeout(() => inputEl.focus(), 0);
+}
+
+export function selectAllMultiSelectOptions(sessionId) {
+  const cached = approvalRawOptionsCache.get(sessionId);
+  if (!isMultiSelectOptions(cached)) return;
+  multiSelectSelections.set(sessionId, new Set(cached.map(o => o.num)));
   const bar = document.getElementById('action-bar');
   if (bar) showMultiSelectActionBar(bar, sessionId, cached);
   setTimeout(() => inputEl.focus(), 0);

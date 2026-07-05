@@ -420,11 +420,28 @@
   }
 
   body.mobile-has-session:not(.mobile-home-view) #mobile-keyboard-toggle,
-  body.mobile-has-session:not(.mobile-home-view) #input-clear-btn,
   body.mobile-has-session:not(.mobile-home-view) #input-tools,
   body.mobile-has-session:not(.mobile-home-view) #voice-btn,
   body.mobile-has-session:not(.mobile-home-view) #tools-flip-btn {
     display: none !important;
+  }
+
+  /* 入力クリア × : デスクトップは opacity 切替（幅 26px 常時確保）だが、
+     モバイル composer は横幅が惜しいので「テキストがあるときだけ幅ごと表示」にする */
+  body.mobile-has-session:not(.mobile-home-view) #input-clear-btn {
+    display: none;
+  }
+  body.mobile-has-session:not(.mobile-home-view) #input-clear-btn.has-text {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 34px;
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    min-height: 34px;
+    align-self: flex-end;
+    border-radius: 50%;
   }
 
   body.mobile-has-session:not(.mobile-home-view) #paste-chips {
@@ -502,8 +519,18 @@
   body.mobile-has-session:not(.mobile-home-view) #mobile-keyboard-panel {
     order: 2;
     padding: 6px 10px 0;
+    /* order:2 で #input-bar-outer より後ろ（画面最下部）に並ぶため、fixed な
+       #token-statusbar に覆われないよう自前で逃げ余白を持つ（statusbar OFF 時は
+       --tsb-bottom-offset が 0px になるため二重余白にならない）。 */
+    padding-bottom: calc(6px + var(--tsb-bottom-offset, 22px) + env(safe-area-inset-bottom));
     background: var(--bg-deep, #0d1117);
     border-top: 0;
+  }
+  /* パネルが最後尾に来て自前で逃げ余白を持つ場合、#input-bar-outer 側の逃げ余白は
+     不要（二重余白防止）。パネルが隠れている時は #input-bar-outer が最下段のまま
+     なので、通常の逃げ余白（line 339 相当）を維持する。 */
+  body.mobile-has-session:not(.mobile-home-view) #mobile-keyboard-panel:not([hidden]) ~ #input-bar-outer {
+    padding-bottom: 8px;
   }
   body.mobile-has-session:not(.mobile-home-view) #mobile-key-row button {
     min-height: 34px;

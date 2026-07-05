@@ -68,7 +68,7 @@ last_reviewed: 2026-07-04
 
 - C3 で「INK 衝突が実害として出たら案 D/案 2 などへ切替」としていたが、ユーザーから「ホバー化で根本解決できないか」の追加質問
 - 案 A（action-bar のホバー化）は 2026-06-23 時点で検証済みで効かない（マーカー本文は AI が PTY に流す生バイト。action-bar の DOM 配置と関係なく xterm に届く）
-- そこから「Web 側フィルタ層で衝突を生む ESC シーケンスだけ剥がせば根本解決」と整理し、検討シート `docs/local/marker-ansi-cleanup_review.html` を作成して意思決定
+- そこから「Web 側フィルタ層で衝突を生む ESC シーケンスだけ剥がせば根本解決」と整理し、検討シート `docs/local/marker-ansi-cleanup/index.html` を作成して意思決定
 - 決定: A1=案 E（全 ANSI 剥離） / A2=MANY-AI-CLI と DONE 両方に適用 / B1=テスト追加 / B2=本 plan に C4 追記
 
 ### 実装

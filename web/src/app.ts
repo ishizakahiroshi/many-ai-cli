@@ -866,8 +866,7 @@ inputEl.addEventListener('keydown', (e) => {
   const attachMenu = document.getElementById('mobile-composer-attach-menu');
   const fileBtn = document.getElementById('mobile-composer-file-btn');
   const cameraBtn = document.getElementById('mobile-composer-camera-btn');
-  const keyboardPanel = document.getElementById('mobile-keyboard-panel');
-  if (!attachBtn || !attachMenu || !keyboardPanel) return;
+  if (!attachBtn || !attachMenu) return;
 
   const closeAttachMenu = () => {
     attachMenu.hidden = true;
@@ -896,19 +895,6 @@ inputEl.addEventListener('keydown', (e) => {
     if (target && (attachMenu.contains(target) || attachBtn.contains(target))) return;
     closeAttachMenu();
   });
-
-  const syncKeyboardPanel = () => {
-    if (!isMobileViewport()) return;
-    const active = document.activeElement;
-    const shouldShow = activeSessionId !== null
-      && !!active
-      && (active === inputEl || keyboardPanel.contains(active));
-    keyboardPanel.hidden = !shouldShow;
-  };
-  inputEl.addEventListener('focus', syncKeyboardPanel);
-  inputEl.addEventListener('blur', () => setTimeout(syncKeyboardPanel, 80));
-  keyboardPanel.addEventListener('focusout', () => setTimeout(syncKeyboardPanel, 80));
-  _mobileVoiceHintMql?.addEventListener('change', syncKeyboardPanel);
 
   const syncVisualViewportOffset = () => {
     const vv = window.visualViewport;

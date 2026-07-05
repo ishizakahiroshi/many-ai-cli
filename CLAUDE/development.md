@@ -1,6 +1,6 @@
 # many-ai-cli 実装規約・context分割・AI作業モデル
 
-> 最終更新: 2026-06-07(日) 12:57:07
+> 最終更新: 2026-07-05(日) 10:50:11 — 旧設計書パス・Vue 分割例・モデル名の旧世代表記を修正
 
 ## context分割計画（plan_*.md）への対応
 
@@ -33,7 +33,7 @@
 - **停止条件は次の3つのみ：**
   1. plan 記載と矛盾する破壊的変更が必要になった
   2. 外部依存の致命的障害（ビルド不能・PTY ライブラリの不適合など plan 内で解決不能）
-  3. 重大なテスト退行・設計書（`docs/v0.2.x-any-ai-cli-design.md`）と矛盾する実装が必要になった
+  3. 重大なテスト退行・設計書（`docs/v0.3.x-many-ai-cli-design.md`）と矛盾する実装が必要になった
 - 上記以外（軽微な迷い・選択肢の優劣判断・命名揺れ等）は plan 記載 or 既存実装に倣って自走する。確認に倒さない
 - **subagent 種別の使い分け：** 実装は `general-purpose`、設計検討が必要なら `Plan`、軽い調査は `Explore` を使い分ける
 - **親 → ユーザーへの最終報告**は `CLAUDE/operations.md` の「出力ルール（ターン終端）」と、利用中 AI のグローバル指示に従う（subagent → 親への内部報告である3点軽量報告とは別物）
@@ -70,7 +70,7 @@
 - C1: `internal/proto/messages.go` 定義（Hub・ラッパー・UI が依存）
 - C2: `internal/hub/server.go` HTTP+WS 起動 [C1 完了後]
 - C3: `internal/wrapper/wrapper.go` PTY ラップ + 接続 [C1 完了後、C2 と並列OK]
-- C4: `web/src/` Vue UI 骨組み [C1 と TypeScript 型同期、C2/C3 と並列OK]
+- C4: `web/src/` 静的 TypeScript（ESM）UI 骨組み [C1 と TypeScript 型同期、C2/C3 と並列OK]
 
 **親子計画：**
 - 大規模計画は、親 `plan_*.md` をハブにして、各contextの詳細を子 `plan_*.md` に分割してよい
@@ -101,9 +101,9 @@
 
 モデルは Agent ツール経由で指定。
 
-- **計画・設計・立案：** `claude-opus-4-7` のサブエージェントに委ねること（Codexは適宜判断）
-- **実装・コーディング：** `claude-sonnet-4-6` で直接実施（Codexは適宜判断）
-- **簡単な調査・bash確認：** `claude-haiku-4-5-20251001` のサブエージェント（ls, cat, grep, find 等。メインcontext節約。複数コマンドはまとめて効率化）
+- **計画・設計・立案：** その時点の最新 Opus 世代のサブエージェントに委ねること（Codexは適宜判断）
+- **実装・コーディング：** その時点の最新 Sonnet 世代で直接実施（Codexは適宜判断）
+- **簡単な調査・bash確認：** その時点の最新 Haiku 世代のサブエージェント（ls, cat, grep, find 等。メインcontext節約。複数コマンドはまとめて効率化）
 - **単純な Edit/Grep/Glob/Read：** ツールを直接実行（モデル消費なし）
 
 **作業規模に応じた判断：**
@@ -116,7 +116,6 @@
 - 大きめの作業はタスクを分割してPDCAで進める（TodoWriteで進捗管理）
 - 作成したプランファイルは `docs/` 配下の適切なサブディレクトリに保存
 - ソースコード修正前に develop ブランチにいることを確認（main にいる場合は develop へ切り替え）
-  - 本リポジトリはまだ Git 初期化されていない可能性あり。`git status` で初期確認
 - 複数の修正が並列で必要な場合は `develop-機能名` のブランチを作成可（コンフリクト注意）
 - developブランチからmainへのマージはユーザーが実施
 

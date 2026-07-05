@@ -1,5 +1,5 @@
 // --- ESM imports (generated) ---
-import { cleanCopiedText, cleanOneLineText, showToast, token } from './util.js';
+import { cleanCopiedText, cleanOneLineText, showToast } from './util.js';
 import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
 import { activeSessionId, approvalRawOptionsCache, approvalVisibleCache, sessions, terminals, utf8Decoder } from './state.js';
@@ -1249,63 +1249,7 @@ export function snapToBottomAfterScreenClear(id) {
 // cursor-hide-filter.ts の filterCursorHideBlocksPure に切り出した（node:test 検証のため）。
 // 分類ルール・alt buffer 素通しの背景コメントもそちらを参照。
 // 下のラッパーは terminal の state と純関数の state を橋渡しし、破棄/通過イベントを
-// debug 計装とライブ進捗行抽出（extractAndSetLiveStatus）へ配線するだけ。
-
-// 一時デバッグ用: grok の応答が本フィルタで破棄され extractAndSetLiveStatus 経由に
-// のみ渡っているという仮説を実機で確認するための計装。検証後に削除予定
-// （internal/hub/debug_cursor_hide.go とセットで撤去する）。
-function debugLogCursorHide(id, source: string, hasAbsPos: boolean, hasNewline: boolean, text: string, metrics?: Record<string, number>) {
-  try {
-    const provider = String(sessions.get(id)?.provider || '');
-    const payload: Record<string, unknown> = {
-      session_id: id,
-      provider,
-      source,
-      has_abs_pos: hasAbsPos,
-      has_newline: hasNewline,
-      text,
-    };
-    if (metrics) Object.assign(payload, metrics);
-    fetch(`/api/debug/cursor-hide-log?token=${encodeURIComponent(token)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }).catch(() => {});
-  } catch (_) { /* デバッグ計装の失敗でメイン機能を壊さない */ }
-}
-
-// 観測強化用: ?25l...?25h ブロック終端で terminal サイズ・CUP 最大座標・LF 数を採取する。
-// 2026-07-02 spinner-scrollback-fossilization 調査。真の根本原因（サイズ整合 vs 分類粗さ）を
-// 実データで切り分ける目的なので、単発フィールドが軽い方が Grep しやすい。
-function computeBlockMetrics(blockBuf: number[], term: any): Record<string, number> {
-  let maxRow = 0, maxCol = 0, lfCount = 0;
-  const n = blockBuf.length;
-  for (let i = 0; i < n; i++) {
-    if (blockBuf[i] === 0x0A) lfCount++;
-    if (blockBuf[i] === 0x1b && i + 4 < n && blockBuf[i + 1] === 0x5b) {
-      let j = i + 2;
-      let row = 0;
-      while (j < n && blockBuf[j] >= 0x30 && blockBuf[j] <= 0x39) { row = row * 10 + (blockBuf[j] - 0x30); j++; }
-      if (row > 0 && j < n && blockBuf[j] === 0x3b) {
-        j++;
-        let col = 0;
-        while (j < n && blockBuf[j] >= 0x30 && blockBuf[j] <= 0x39) { col = col * 10 + (blockBuf[j] - 0x30); j++; }
-        if (col > 0 && j < n && blockBuf[j] === 0x48) {
-          if (row > maxRow) maxRow = row;
-          if (col > maxCol) maxCol = col;
-        }
-      }
-    }
-  }
-  return {
-    terminal_rows: term?.rows || 0,
-    terminal_cols: term?.cols || 0,
-    max_cup_row: maxRow,
-    max_cup_col: maxCol,
-    lf_count: lfCount,
-    block_bytes: n,
-  };
-}
+// ライブ進捗行抽出（extractAndSetLiveStatus）へ配線するだけ。
 
 export function filterCursorHideShowBlocksForDisplay(id, bytes) {
   const t = terminals.get(id);
@@ -1330,8 +1274,6 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
     altScreen: t.cursorHideAltScreen || false,
   });
   for (const ev of events) {
-    const text = ev.kind === 'filter-discard' ? utf8Decoder.decode(new Uint8Array(ev.blockBuf)) : '';
-    debugLogCursorHide(id, ev.kind, ev.hasAbsPos, ev.hasNewline, text, computeBlockMetrics(ev.blockBuf, t.term));
     // filter-discard: 従来どおり破棄ブロックからライブ進捗行を抽出。
     // block-passthrough-alt: alt buffer 中は画面にも描くが、ピル表示は従来どおり更新する。
     if (ev.kind === 'filter-discard' || ev.kind === 'block-passthrough-alt') {
@@ -1449,7 +1391,6 @@ export function extractAndSetLiveStatus(id, blockBuf) {
   if (!LIVE_STATUS_ENABLED) return; // 無効時はステータスバーブロックの破棄のみ行い、ライブ行へは出さない
   if (!blockBuf || blockBuf.length === 0) return;
   const text = reconstructLiveLine(id, blockBuf);
-  debugLogCursorHide(id, 'live-status-extract', false, false, text);
   // text が '' でも「ステータス更新フレームが来た」事実＝稼働中なので窓は出し続ける（くるくる継続）。
   setSessionLiveStatus(id, text);
 }

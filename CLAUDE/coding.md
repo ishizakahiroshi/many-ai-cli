@@ -1,8 +1,8 @@
 # many-ai-cli コーディング規約
 
-> 最終更新: 2026-06-05(金) 05:42:17
+> 最終更新: 2026-07-05(日) 10:50:11 — 旧設計書パス・旧環境変数名を修正
 
-`many-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ 静的 TypeScript フロント（`web/dist/` を `go:embed`）。設計書: [../docs/v0.2.x-any-ai-cli-design.md](../docs/v0.2.x-any-ai-cli-design.md)
+`many-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ 静的 TypeScript フロント（`web/dist/` を `go:embed`）。設計書: [../docs/v0.3.x-many-ai-cli-design.md](../docs/v0.3.x-many-ai-cli-design.md)
 
 ## 言語別コーディング規約
 
@@ -61,7 +61,7 @@
 
 - **バインドは `127.0.0.1` 固定。`0.0.0.0` / 外部 IP へバインドしない**
 - **トークンなしのリクエストは 401 で弾く**（`?token=` または `Authorization: Bearer` どちらか）
-- **永続シェル設定（`.bashrc` / `.zshrc` / PowerShell プロファイル）を改変しない**。透過化は `AI_HUB_AUTO=1` + `eval "$(many-ai-cli shell-init)"` のオプトインのみ
+- **永続シェル設定（`.bashrc` / `.zshrc` / PowerShell プロファイル）を改変しない**。透過化は `MANY_AI_CLI_AUTO=1` + `eval "$(many-ai-cli shell-init)"` のオプトインのみ
 - **CLI プロセスを孤児化しない**（ラッパー終了時は子 CLI にもシグナル伝播）
 - **PTY の生バイト列を WS の JSON にそのまま入れない**（base64 エンコード）
 

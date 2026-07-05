@@ -821,7 +821,6 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/notify-test", s.handleNotifyTest)
 	mux.HandleFunc("/api/notify-generate-topic", s.handleNotifyGenerateTopic)
 	mux.HandleFunc("/api/encoding-check", s.handleEncodingCheck)
-	mux.HandleFunc("/api/debug/cursor-hide-log", s.handleDebugCursorHideLog) // 一時デバッグ用（検証後に削除予定）
 	mux.HandleFunc("/api/approval/status", s.handleApprovalStatus)
 	mux.HandleFunc("/api/approval/enable", s.handleApprovalEnable)
 	mux.HandleFunc("/api/approval/disable", s.handleApprovalDisable)
