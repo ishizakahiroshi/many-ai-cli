@@ -123,7 +123,12 @@ func WriteTranscript(r io.Reader, w io.Writer) error {
 	for sc.Scan() {
 		var ev transcriptEvent
 		if err := json.Unmarshal(sc.Bytes(), &ev); err != nil {
-			return fmt.Errorf("parse jsonl: %w", err)
+			// クラッシュ復旧経路（Hub の maintenance.recoverTranscripts）は
+			// まさに .jsonl 末尾行が書き込み途中で切れた状態で呼ばれるため、
+			// 1 行の破損で return するとその手前まで書けていた行を含めて
+			// トランスクリプト全体を捨ててしまう。破損行はスキップして継続する
+			// （usagerelay.scanLastTokenCount と同型の防御的パーサ挙動）。
+			continue
 		}
 		switch ev.Type {
 		case "pty_output":

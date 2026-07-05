@@ -64,7 +64,14 @@ func MaskSecrets(s string) string {
 			s = re.ReplaceAllStringFunc(s, func(m string) string {
 				sub := re.FindStringSubmatchIndex(m)
 				if len(sub) >= 4 && sub[2] >= 0 {
-					prefix := m[:sub[3]-sub[2]] // group[1] の文字数分
+					// prefix はマッチ内の「group[1] より前 + group[1] 自体」を残す
+					// （group[1] がマッチ先頭にある必要はない・将来のパターンで
+					//  group[1] が中盤にあっても正しく動くよう一般化）。
+					// 従来は `m[:sub[3]-sub[2]]` と group[1] の「長さ」だけを
+					// 先頭から切り出しており、group[1] がマッチの先頭でない
+					// パターンを追加した瞬間に秘密値の大部分がログに残る潜在
+					// バグがあった（現行 3 パターンは group[1] が先頭のため未発火）。
+					prefix := m[:sub[3]]
 					return prefix + "***"
 				}
 				return "***"

@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"io/fs"
 	"log/slog"
 	"net"
@@ -164,6 +163,11 @@ type session struct {
 	commitMsgLang       string          // 生成言語（ja/en）。タイムアウト文言に使用
 	commitMsgBuf        strings.Builder // ANSI 除去済み出力の蓄積（マーカー抽出用・上限つき）
 	commitMsgProgressed bool            // AI からの最初の非空出力で 1 回だけ commit_msg_progress を送る
+	// doneMsgBuf は [MANY-AI-CLI-DONE]…[/MANY-AI-CLI-DONE] のマーカーが 4096 バイトの
+	// PTY 読み取りチャンク境界をまたいでも検出できるよう、ANSI 除去済み出力を
+	// セッション単位で累積するスキャンバッファ。commitMsgBuf と同型で上限つき。
+	// マーカー検出（あるいは十分な余白蓄積）でリセットする。
+	doneMsgBuf strings.Builder
 
 	// JSON 外: 起動バナーからの初期モデル検出用。
 	// Model が空のセッションのみ対象。検出成功 or 累計バイト超過で打ち切る。
@@ -426,6 +430,10 @@ type Server struct {
 	whisperCmd       *exec.Cmd
 	whisperJob       whisperProcessJob
 	whisperServerURL string
+	// whisperStarting は startManagedWhisper 中の TOCTOU (HUB-3) を防ぐ排他フラグ。
+	// 未起動判定と cmd.Start() の間で別リクエストが並走して二重起動しないよう、
+	// 予約 → 起動 → 登録 の一連を単一クリティカルセクション相当にする。
+	whisperStarting bool
 
 	branchRefreshMu       sync.Mutex
 	branchRefreshSem      chan struct{}
@@ -442,6 +450,10 @@ type Server struct {
 	// serverConns: 内蔵リモート接続マネージャ（SSH/WSL トンネルを Hub 子プロセス
 	// として無窓で抱える）。servers.go 参照。
 	serverConns *serverConnManager
+
+	// profileSaveMu は launcher-profiles.yaml への Load→Modify→Save を直列化する
+	// （HUB-8）。/api/servers POST が並行呼びされたときのロストアップデートを防ぐ。
+	profileSaveMu sync.Mutex
 
 	autoOpenBrowser bool
 
@@ -555,6 +567,12 @@ const doneNotifyMinInterval = 60 * time.Second
 
 var doneSummaryMarkerOpen = []byte("[MANY-AI-CLI-DONE]")
 var doneSummaryMarkerClose = []byte("[/MANY-AI-CLI-DONE]")
+
+// doneMsgScanBufMax は doneMsgBuf の上限。commitMsgBuf と同じ発想で、
+// マーカーがチャンク境界をまたいでも検出できる程度に大きく、かつ長時間の
+// アイドル出力でメモリを圧迫しない値。数 KB あれば通常の 1〜2 文の DONE
+// サマリー全体を余裕でカバーできる。
+const doneMsgScanBufMax = 16 * 1024
 
 var (
 	modelChangeTokens = [][]byte{
@@ -790,6 +808,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/auth/revoke-all", s.handleAuthRevokeAll)
 	mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
 	mux.HandleFunc("/api/auth/login", s.handleAuthLogin)
+	mux.HandleFunc("/api/auth/logout", s.handleAuthLogout)
 	mux.HandleFunc("/api/auth/set-pin", s.handleAuthSetPIN)
 	mux.HandleFunc("/api/net-hint", s.handleNetHint)
 	mux.HandleFunc("/api/avatar", s.handleAvatar)
@@ -1351,7 +1370,10 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		// goroutine で注入する: ここは wrapperMessageLoop 開始前のため、同期で
 		// waitForInputReady を呼ぶと出力が観測できず常に maxWait までブロックし、
 		// その間 PTY 出力の中継も止まる。
-		go s.injectInitialPrompt(id, buildConductorInitialPrompt(childMeta.OrchestrationID, roles))
+		// safeGo で panic を recover する（素の go だと injectInitialPrompt 中の panic が
+		// Hub プロセス全体を落とし、稼働中の全セッションが同時に切断される）。
+		prompt := buildConductorInitialPrompt(childMeta.OrchestrationID, roles)
+		s.safeGo("inject_initial_prompt_conductor", func() { s.injectInitialPrompt(id, prompt) })
 	}
 	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Branch: branch, Label: reg.Label, Model: reg.Model, Route: regRoute, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, ParentSessionID: childMeta.ParentSessionID, Role: childMeta.Role, Auto: childMeta.Auto, Depth: childMeta.Depth, OrchestrationID: childMeta.OrchestrationID, BoardPath: childMeta.BoardPath, WorktreeBranch: childMeta.WorktreeBranch})
 	s.writeHistory(id, map[string]any{
@@ -1667,8 +1689,30 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			if initialModelLines != nil {
 				s.detectInitialModel(id, provider, initialModelCWD, initialModelLines)
 			}
-			if bytes.Contains(m.Data, doneSummaryMarkerOpen) {
-				s.handleDoneSummaryMarker(id, m.Data)
+			// [MANY-AI-CLI-DONE] は wrapper 側 PTY 読み取り 4096 バイトの
+			// チャンク境界をまたぐことがあるため、m.Data 単体を走査すると
+			// OPEN と CLOSE が別チャンクへ落ちた瞬間に取りこぼす。git_commit_ai.go
+			// の commitMsgBuf と同型の累積スキャンバッファでチャンク境界を吸収する。
+			var doneSnap []byte
+			s.sessionsMu.Lock()
+			if ses := s.sessions[id]; ses != nil {
+				ses.doneMsgBuf.WriteString(cleanText)
+				if ses.doneMsgBuf.Len() > doneMsgScanBufMax {
+					trimmed := ses.doneMsgBuf.String()
+					trimmed = trimmed[len(trimmed)-doneMsgScanBufMax:]
+					ses.doneMsgBuf.Reset()
+					ses.doneMsgBuf.WriteString(trimmed)
+				}
+				buf := ses.doneMsgBuf.String()
+				if strings.Contains(buf, string(doneSummaryMarkerOpen)) && strings.Contains(buf, string(doneSummaryMarkerClose)) {
+					// 二重通知防止のため走査前にバッファをリセットする。
+					ses.doneMsgBuf.Reset()
+					doneSnap = []byte(buf)
+				}
+			}
+			s.sessionsMu.Unlock()
+			if doneSnap != nil {
+				s.handleDoneSummaryMarker(id, doneSnap)
 			}
 			s.handleCommitMsgChunk(id, cleanText)
 		case "session_end":
@@ -1750,263 +1794,11 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	s.broadcast(proto.Message{Type: "session_end", SessionID: id, State: endState, Reason: endReason})
 }
 
-func (s *Server) resetNativeApprovalClearMisses(id int) {
-	s.sessionsMu.Lock()
-	if ses := s.sessions[id]; ses != nil {
-		ses.nativeApprovalClearMisses = 0
-	}
-	s.sessionsMu.Unlock()
-}
-
-func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval) {
-	now := time.Now()
-	var msg *proto.Message
-	s.sessionsMu.Lock()
-	ses := s.sessions[id]
-	if ses == nil {
-		s.sessionsMu.Unlock()
-		return
-	}
-	if now.Before(ses.vtResizeDebounceUntil) {
-		s.sessionsMu.Unlock()
-		return
-	}
-	if approval == nil {
-		if ses.nativeApprovalSig != "" {
-			ses.nativeApprovalClearMisses++
-			if ses.nativeApprovalClearMisses >= nativeApprovalClearMissLimit {
-				sig := ses.nativeApprovalSig
-				ses.nativeApprovalSig = ""
-				ses.nativeApprovalClearMisses = 0
-				msg = &proto.Message{
-					Type:           "approval_cleared",
-					SessionID:      id,
-					Provider:       ses.Provider,
-					ApprovalSig:    sig,
-					ApprovalSource: approvalSourceGoVT,
-				}
-			}
-		}
-		s.sessionsMu.Unlock()
-		if msg != nil {
-			s.broadcast(*msg)
-		}
-		return
-	}
-	if ses.nativeApprovalConsumed == approval.Sig && now.Sub(ses.nativeApprovalConsumedAt) < approvalConsumedTTL {
-		s.sessionsMu.Unlock()
-		return
-	}
-	ses.nativeApprovalClearMisses = 0
-	if ses.nativeApprovalSig != approval.Sig {
-		ses.nativeApprovalSig = approval.Sig
-		msg = &proto.Message{
-			Type:             "approval_detected",
-			SessionID:        id,
-			Provider:         ses.Provider,
-			ApprovalSig:      approval.Sig,
-			ApprovalKind:     approval.Kind,
-			ApprovalSource:   approvalSourceGoVT,
-			ApprovalQuestion: approval.Question,
-			ApprovalContext:  approval.Context,
-			ApprovalOptions:  approval.Options,
-			DetectedAt:       now.Format(time.RFC3339),
-		}
-	}
-	s.sessionsMu.Unlock()
-	if msg != nil {
-		if s.sessionStore != nil && msg.Type == "approval_detected" {
-			s.sessionStore.StoreApprovalDetected(id, approval.Sig, approvalSourceGoVT, approval.Kind, approval.Question, approval.Context, approval.Options, now)
-		}
-		s.broadcast(*msg)
-		if msg.Type == "approval_detected" {
-			s.notifyApprovalPush(id, approval.Sig, msg.Provider, approval.Question, approval.Context)
-			s.notifyApprovalOutbound(id, approval.Sig, msg.Provider, approval.Question, approval.Context)
-		}
-	}
-}
-
-// handleDoneSummaryMarker は PTY データから [MANY-AI-CLI-DONE] マーカーを検出し、
-// 完了サマリー通知を発火する。設定が OFF のセッション・連投抑制中はスキップ。
-func (s *Server) handleDoneSummaryMarker(id int, data []byte) {
-	open := bytes.Index(data, doneSummaryMarkerOpen)
-	if open < 0 {
-		return
-	}
-	start := open + len(doneSummaryMarkerOpen)
-	closeIdx := bytes.Index(data[start:], doneSummaryMarkerClose)
-	if closeIdx < 0 {
-		return
-	}
-	summary := strings.TrimSpace(string(data[start : start+closeIdx]))
-	if summary == "" {
-		return
-	}
-
-	now := time.Now()
-	s.cfgMu.Lock()
-	doneSummaryEnabled := s.cfg.UserPrefs.DoneSummaryNotify.Enabled
-	s.cfgMu.Unlock()
-	if !doneSummaryEnabled {
-		return
-	}
-
-	s.sessionsMu.Lock()
-	ses := s.sessions[id]
-	if ses == nil {
-		s.sessionsMu.Unlock()
-		return
-	}
-	// Shell session は done summary push notification の対象外
-	if !isAIProvider(ses.Provider) {
-		s.sessionsMu.Unlock()
-		return
-	}
-	if !ses.lastDoneNotifyAt.IsZero() && now.Sub(ses.lastDoneNotifyAt) < doneNotifyMinInterval {
-		s.sessionsMu.Unlock()
-		return
-	}
-	ses.lastDoneNotifyAt = now
-	titleName := strings.TrimSpace(ses.Display)
-	if titleName == "" {
-		titleName = strings.TrimSpace(ses.Provider)
-	}
-	if titleName == "" {
-		titleName = "many-ai-cli"
-	}
-	if ses.Label != "" {
-		titleName = fmt.Sprintf("%s #%d [%s]", titleName, id, ses.Label)
-	} else {
-		titleName = fmt.Sprintf("%s #%d", titleName, id)
-	}
-	provider := ses.Provider
-	s.sessionsMu.Unlock()
-
-	s.notifyDoneOutbound(id, provider, titleName, summary)
-	s.notifyDonePush(id, provider, titleName, summary)
-}
-
-// notifyDoneOutbound は ntfy/webhook バックエンドへのタスク完了通知を行う。
-func (s *Server) notifyDoneOutbound(id int, provider, titleName, summary string) {
-	if s.notifyMgr == nil {
-		return
-	}
-	s.notifyMgr.SendDone(notify.DonePayload{
-		SessionID: id,
-		Provider:  provider,
-		Title:     titleName,
-		Summary:   summary,
-	})
-}
-
-// notifyDonePush は Web Push でタスク完了通知を送信する。
-// Web Push 経路は notifyApprovalPush を流用する（同じ Web Push チャンネルを使う）。
-func (s *Server) notifyDonePush(id int, provider, titleName, summary string) {
-	s.notifyApprovalPush(id, fmt.Sprintf("done-%d-%d", id, time.Now().UnixNano()), provider, summary, "")
-}
-
-func (s *Server) markNativeApprovalConsumed(m proto.Message) {
-	if m.SessionID <= 0 || m.ApprovalSig == "" {
-		return
-	}
-	now := time.Now()
-	var clearMsg *proto.Message
-	s.sessionsMu.Lock()
-	ses := s.sessions[m.SessionID]
-	if ses == nil {
-		s.sessionsMu.Unlock()
-		return
-	}
-	ses.nativeApprovalConsumed = m.ApprovalSig
-	ses.nativeApprovalConsumedAt = now
-	if ses.nativeApprovalSig == m.ApprovalSig {
-		ses.nativeApprovalSig = ""
-		ses.nativeApprovalClearMisses = 0
-		clearMsg = &proto.Message{
-			Type:           "approval_cleared",
-			SessionID:      m.SessionID,
-			Provider:       ses.Provider,
-			ApprovalSig:    m.ApprovalSig,
-			ApprovalSource: approvalSourceGoVT,
-		}
-	}
-	s.sessionsMu.Unlock()
-	if s.sessionStore != nil {
-		s.sessionStore.StoreApprovalConsumed(m.SessionID, m.ApprovalSig, m.SentText, now)
-	}
-	if clearMsg != nil {
-		s.broadcast(*clearMsg)
-	}
-}
-
-func appendPTYReplay(buf, data []byte) []byte {
-	if len(data) == 0 {
-		return buf
-	}
-	if cap(buf) > maxPTYBuf {
-		if len(buf) > maxPTYBuf {
-			buf = buf[len(buf)-maxPTYBuf:]
-		}
-		compact := make([]byte, len(buf), maxPTYBuf)
-		copy(compact, buf)
-		buf = compact
-	}
-	if len(data) >= maxPTYBuf {
-		if cap(buf) < maxPTYBuf {
-			buf = make([]byte, maxPTYBuf)
-		} else {
-			buf = buf[:maxPTYBuf]
-		}
-		copy(buf, data[len(data)-maxPTYBuf:])
-		return buf
-	}
-	if len(buf)+len(data) <= maxPTYBuf {
-		return append(buf, data...)
-	}
-	keep := maxPTYBuf - len(data)
-	if keep > 0 {
-		copy(buf, buf[len(buf)-keep:])
-		buf = buf[:keep]
-	} else {
-		buf = buf[:0]
-	}
-	return append(buf, data...)
-}
-
-func ptyChunkContainsAny(data []byte, tokens [][]byte) bool {
-	for _, token := range tokens {
-		if bytes.Contains(data, token) {
-			return true
-		}
-	}
-	return false
-}
-
-func nativeApprovalTailSignature(lines []string) string {
-	h := fnv.New64a()
-	for _, line := range lines {
-		_, _ = h.Write([]byte(line))
-		_, _ = h.Write([]byte{0})
-	}
-	return strconv.FormatUint(h.Sum64(), 16)
-}
-
-func shouldSuppressNativeApprovalClearMiss(provider string, lines []string) bool {
-	if !providerSupportsShortcutApproval(provider) {
-		return false
-	}
-	nonEmpty := 0
-	for _, line := range lines {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		nonEmpty++
-		if nonEmpty > nativeApprovalBlankLineLimit {
-			return false
-		}
-	}
-	return true
-}
+// 承認検出まわりの 9 関数 (resetNativeApprovalClearMisses / handleNativeApprovalDetection /
+// handleDoneSummaryMarker / notifyDoneOutbound / notifyDonePush /
+// markNativeApprovalConsumed / appendPTYReplay / ptyChunkContainsAny /
+// nativeApprovalTailSignature / shouldSuppressNativeApprovalClearMiss) は
+// C4 リファクタで internal/hub/approval_native.go へ移動した。
 
 // detectModelChange は PTY 出力からモデル変更を検出し、
 // セッションの Model フィールドを更新して UI に session_update を送る。
@@ -2509,7 +2301,12 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 	s.sessionsMu.Unlock()
 	for _, id := range ids {
 		if s.sessionStore != nil {
-			s.sessionStore.ClearSessionHistory(id)
+			if err := s.sessionStore.ClearSessionHistory(id); err != nil {
+				// 失敗しても broadcast は継続する（現行 UI 挙動維持）が、
+				// 記録は必ず残す。以前は void 呼び出しで握り潰されており、
+				// SQLite クリア失敗時にも UI へ「削除成功」を通知していた。
+				s.logger.Warn("clear session history failed", "session_id", id, "err", err)
+			}
 		}
 		s.writeHistory(id, map[string]any{
 			"ts":         time.Now().Format(time.RFC3339),

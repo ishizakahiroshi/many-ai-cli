@@ -233,6 +233,14 @@ func (b *vtBuffer) escapeComplete() bool {
 		return false
 	}
 	if b.esc[1] != '[' {
+		// SCS（G0..G3 文字集合指定）は 3 バイト必要: `ESC ( <designator>` /
+		// `)` / `*` / `+`。2 バイトで完了扱いにすると次の designator が通常
+		// テキストとしてグリッドに書き込まれ、承認検出のテール文字列が
+		// 1 文字ずれる（terminfo `sgr0` に含まれる `ESC ( B` 等が該当）。
+		switch b.esc[1] {
+		case '(', ')', '*', '+':
+			return len(b.esc) >= 3
+		}
 		return true
 	}
 	if len(b.esc) < 3 {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -840,12 +841,24 @@ func spawnCwdTooBroad(cwd string) bool {
 	if unixBroad[cwd] {
 		return true
 	}
-	// Windows 主要システムディレクトリ
+	// Windows 主要システムディレクトリ。NTFS はケースインセンシティブなので
+	// `c:\windows` のような小文字入力でも `os.Stat` は同じ実体を返す一方、
+	// map lookup は case-sensitive でガードをすり抜ける。approval_handler.go の
+	// approvalTargetKey と同様、Windows パス判定で正規化してから照合する。
 	winBroad := map[string]bool{
 		`C:\Windows`:             true,
 		`C:\Program Files`:       true,
 		`C:\Program Files (x86)`: true,
 		`C:\Users`:               true,
+	}
+	if runtime.GOOS == "windows" || isWindowsPath(cwd) {
+		lower := strings.ToLower(cwd)
+		for k := range winBroad {
+			if strings.ToLower(k) == lower {
+				return true
+			}
+		}
+		return false
 	}
 	return winBroad[cwd]
 }

@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { token, showToast } from './util.js';
+import { token, showToast, el } from './util.js';
 
 // ---- 🌐 外部公開（Tailscale serve）トグル — plan_tailscale-serve-host-toggle.md C1 ----
 //
@@ -229,14 +229,7 @@ async function onClick(): Promise<void> {
   }
 }
 
-function el(tag: string, opts?: { class?: string; text?: string; html?: string; attrs?: Record<string, string> }): HTMLElement {
-  const node = document.createElement(tag);
-  if (opts?.class) node.className = opts.class;
-  if (opts?.text != null) node.textContent = opts.text;
-  if (opts?.html != null) node.innerHTML = opts.html;
-  if (opts?.attrs) for (const [k, v] of Object.entries(opts.attrs)) node.setAttribute(k, v);
-  return node;
-}
+// `el()` は util.ts に集約済み（旧・非 generics 版と挙動同一、戻り型はより厳密に）。
 
 // 要ログイン / serve 未有効 / 未導入 時の案内ポップオーバー（admin_url / アプリ導線を再利用）。
 function openPopover(): void {

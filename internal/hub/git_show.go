@@ -34,8 +34,11 @@ const (
 	// 1 ファイル diff の上限。超えたら "\n(truncated)" を末尾に付与。
 	gitShowDiffMaxBytes = 256 * 1024
 	// メタ取得の pretty format。subject と body は \x1f (US) で分離する。
-	// %H \t %P \t %an \t %ae \t %aI \t %D \t %s \x1f %B
-	gitShowMetaFormat = "%H%x09%P%x09%an%x09%ae%x09%aI%x09%D%x09%s%x1f%B"
+	// %H \t %P \t %an \t %ae \t %aI \t %D \t %s \x1f %b
+	// body は %b（subject を除いた本文）を使う。%B（subject 込み生メッセージ）
+	// にすると subject が body 側に二重で載り、Git タブのコミット詳細と
+	// 「メッセージをコピー」で件名が二重表示される。
+	gitShowMetaFormat = "%H%x09%P%x09%an%x09%ae%x09%aI%x09%D%x09%s%x1f%b"
 )
 
 // handleGitShow は GET /api/git-show を処理する。
@@ -143,7 +146,7 @@ type gitShowMeta struct {
 }
 
 // parseGitShowMeta は gitShowMetaFormat の出力をパースする。
-// フォーマット: %H \t %P \t %an \t %ae \t %aI \t %D \t %s \x1f %B
+// フォーマット: %H \t %P \t %an \t %ae \t %aI \t %D \t %s \x1f %b
 func parseGitShowMeta(raw string) (gitShowMeta, error) {
 	raw = strings.TrimRight(raw, "\n\r")
 	// %B の最後に末尾改行が付くことがあるため、まず \x1f で subject / body 分離

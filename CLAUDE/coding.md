@@ -27,8 +27,9 @@
 ### Web TypeScript
 
 - **構成:** `web/src/` が静的 HTML/CSS/TypeScript ソース。`bun run build` が esbuild でファイル単位に `web/dist/` へ出力し、Go は `web/dist/` を `go:embed` で取り込む。
+- **パッケージマネージャ (C8):** **`web/` 以下は bun のみを使う。npm / pnpm / yarn は使わない。** 依存の追加・更新は必ず `bun add` / `bun install` 経由で行い、`bun.lock` を唯一の真実として扱う。`web/package-lock.json` が残っているのは互換性のためだが**手動で更新しない**（drift 検知 CI job が warning を出す・詳細は `web/README.md`）。
 - **モジュール:** app コードは native ESM。import パスは出力後に有効な `.js` 拡張子を維持する（例: `import './state.js'`）。
-- **vendor:** xterm / marked / DOMPurify / highlight は `web/src/vendor/` の classic script を維持し、型は `web/src/types/vendor.d.ts` で補う。
+- **vendor:** xterm / marked / DOMPurify / highlight は `web/src/vendor/` の classic script を維持し、型は `web/src/types/vendor.d.ts` で補う。バージョンと upstream URL は `web/src/vendor/THIRD_PARTY_LICENSES.txt` に集約（CVE 手動照合用）。
 - **型安全:** `tsconfig.json` は `strict: true` / `allowJs: false`。難所の動的 DOM・window 互換は明示 `any` と `TODO(ts)` で棚卸しし、無断で `// @ts-nocheck` に逃がさない。
 - **WS メッセージ型:** `web/src/types/proto.ts` は `internal/proto/messages.go` の手書きミラー。Go 側 Message フィールドを追加・改名したら同時に追従する。
 

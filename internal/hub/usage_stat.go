@@ -247,11 +247,33 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 	// session_id 実在チェック: 認証済みでも未知の session_id で usageStats を膨張させ
 	// られないようにする（OOM 抑止）。relay は wrapper が登録した直後に POST するため
 	// 通常は実在するが、登録直前の窓では 404 が出る（relay 側は exit 0 で吸収する設計）。
+	//
+	// C7 短期 mitigation (plan_audit_score_s_promotion_2026-07-05.md):
+	// HUB-1 の Codex usage 誤帰属問題への抜本改修 (CODEX_HOME 分離) を待つ間の
+	// mitigation として、req.Provider と session の Provider を照合する。
+	// 不一致（例: Codex Stop hook が別セッション ID を書いた config.toml で発火し、
+	// claude セッションの usage として POST される）なら drift として warn ログを
+	// 残し、200 OK を返しつつ usage 記録はスキップする。relay 側の Retry を誘発
+	// しないため 4xx は避ける（invalid session_id ではないため）。
 	s.sessionsMu.Lock()
-	knownSession := s.sessions[req.SessionID] != nil
+	sessInfo := s.sessions[req.SessionID]
+	sessionProvider := ""
+	if sessInfo != nil {
+		sessionProvider = sessInfo.Provider
+	}
 	s.sessionsMu.Unlock()
-	if !knownSession {
+	if sessInfo == nil {
 		writeJSONError(w, http.StatusNotFound, "not_found", "session not found")
+		return
+	}
+	if req.Provider != "" && sessionProvider != "" && req.Provider != sessionProvider {
+		s.logger.Warn(
+			"usage-relay provider mismatch (HUB-1 drift): ignoring usage record",
+			"session_id", req.SessionID,
+			"reported_provider", req.Provider,
+			"actual_provider", sessionProvider,
+		)
+		writeJSON(w, map[string]any{"ok": true, "ignored": "provider_mismatch"})
 		return
 	}
 	// トークン数・コストの値域チェック（負値・極大値・NaN/Inf を弾く）。

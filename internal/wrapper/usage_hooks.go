@@ -198,9 +198,14 @@ func InjectCodexStopHook(p UsageHookParams) error {
 	// already 注入済みかどうか確認。
 	if strings.Contains(content, usageHookBlockStart) {
 		// 注入済み: コマンドだけ更新（セッション ID が変わる場合を考慮）。
+		// ReplaceAllLiteralString を使う。ReplaceAllString だと newBlock 中の
+		// `$name` / `${name}` が Regexp.Expand ルールで解釈され、many-ai-cli の
+		// 実行ファイルパスに `$` を含むディレクトリ（例:
+		// `C:\Users\alice\$portable\many-ai-cli.exe`）があると、対応するキャプチャ
+		// グループが無いため無言で消える（TOML 上は構文的に壊れないので気づけない）。
 		newBlock := codexStopHookBlock(p)
 		blockRe := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(usageHookBlockStart) + `.*?` + regexp.QuoteMeta(usageHookBlockEnd) + `\n?`)
-		content = blockRe.ReplaceAllString(content, newBlock)
+		content = blockRe.ReplaceAllLiteralString(content, newBlock)
 		return writeCodexConfig(path, content)
 	}
 

@@ -13,6 +13,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"many-ai-cli/internal/securefile"
 	"many-ai-cli/internal/wslutil"
 )
 
@@ -798,7 +799,17 @@ func writeConfigAtomic(dir, path string, out []byte) error {
 	if err := os.Chmod(tmpName, 0o600); err != nil {
 		return fmt.Errorf("chmod temp config: %w", err)
 	}
-	return os.Rename(tmpName, path)
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	// C6 (plan_audit_score_s_promotion_2026-07-05.md): Windows は os.Chmod 0o600 が
+	// NTFS DACL を狭めないため、rename 後の実 path に対して DACL 明示制限を掛ける
+	// (config.yaml は token / AuthCookieSecret / RemotePINHash を持つ)。
+	// 制限に失敗しても書き込み自体は成功しているので、log ノイズを避けて silently 続行する
+	// (呼び出し元は書き込み成功として扱う)。誤 DACL 適用で読めなくなった場合の復旧は
+	// `icacls <path> /reset` を README に案内する運用でカバーする。
+	_ = securefile.RestrictFile(path)
+	return nil
 }
 
 // Clone returns a deep copy of cfg safe to pass to Save without holding s.mu.
@@ -1057,6 +1068,9 @@ func ensurePrivateDir(dir string) error {
 	if err := os.Chmod(dir, DirMode); err != nil {
 		return fmt.Errorf("chmod config dir: %w", err)
 	}
+	// C6: Windows で親ディレクトリの DACL を明示制限する (継承された ACE を切る)。
+	// 失敗しても mkdir/chmod は成功しているので silent 続行。
+	_ = securefile.EnsurePrivateDir(dir)
 	return nil
 }
 

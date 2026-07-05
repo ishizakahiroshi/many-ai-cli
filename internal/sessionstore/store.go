@@ -580,16 +580,24 @@ func (s *Store) EndSession(liveSessionID int, state, reason string, endedAt time
 		state, reason, endedAt.Format(time.RFC3339), time.Now().Format(time.RFC3339), liveSessionID)
 }
 
-func (s *Store) ClearSessionHistory(liveSessionID int) {
+// ClearSessionHistory は指定 live_session_id の messages/events/approvals/attachments と
+// 対応する messages_fts を削除する。エラーは呼び出し元へ返す（従来 void で
+// 握り潰されており、呼び出し元は失敗時にも「削除成功」を UI へブロードキャスト
+// してしまっていた）。sessionIDForLive が対象を見つけられない場合は 何もしない
+// で nil を返す（対象なしは冪等な no-op として扱う）。
+func (s *Store) ClearSessionHistory(liveSessionID int) error {
 	id, err := s.sessionIDForLive(liveSessionID)
-	if err != nil || id == 0 {
-		return
+	if err != nil {
+		return fmt.Errorf("resolve live session %d: %w", liveSessionID, err)
+	}
+	if id == 0 {
+		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return
+		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
 	// 各 DELETE のエラーを拾い、いずれか失敗したら Commit せず return（defer Rollback に委ねる）。
@@ -597,26 +605,29 @@ func (s *Store) ClearSessionHistory(liveSessionID int) {
 	// 全文検索が削除済みメッセージにヒットし得る。
 	if s.ftsEnabled {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM messages_fts WHERE rowid IN (SELECT id FROM messages WHERE session_id=?)`, id); err != nil {
-			return
+			return fmt.Errorf("delete messages_fts: %w", err)
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM messages WHERE session_id=?`, id); err != nil {
-		return
+		return fmt.Errorf("delete messages: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM events WHERE session_id=?`, id); err != nil {
-		return
+		return fmt.Errorf("delete events: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM approvals WHERE session_id=?`, id); err != nil {
-		return
+		return fmt.Errorf("delete approvals: %w", err)
 	}
 	// attachments も同 Tx 内で削除する。sessions 行は残す（per-session 履歴クリアのため）ので
 	// attachments.session_id の ON DELETE CASCADE は発火せず、ここで明示削除しないと
 	// 孤児 attachments 行（添付の path/filename/mime/size）が残留する。
 	// pruneSessionRow / resetHistorySQL と削除対象を揃える。
 	if _, err := tx.ExecContext(ctx, `DELETE FROM attachments WHERE session_id=?`, id); err != nil {
-		return
+		return fmt.Errorf("delete attachments: %w", err)
 	}
-	_ = tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) StoreEvent(liveSessionID int, event map[string]any) error {
@@ -1135,16 +1146,16 @@ func (s *Store) resetHistorySQL(preserveLiveIDs []int) (ResetResult, error) {
 	if s == nil || s.db == nil {
 		return out, nil
 	}
-	// 利用者が明示的に押す全削除なので、肥大化した DB でも完走できるよう
-	// defaultTimeout ではなく resetTimeout を使う。
-	ctx, cancel := context.WithTimeout(context.Background(), resetTimeout)
-	defer cancel()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return out, err
-	}
-	defer tx.Rollback()
+	// HUB-11: 単一の長時間トランザクションで SQLite の唯一の接続を専有し、他 API
+	// (3s デフォルトタイムアウト) が接続待ちで軒並み失敗する問題を避けるため、
+	// resetHistorySQL を「短い独立 Tx の連鎖」に分割する。原子性は失われるが、
+	// 呼び出し元 ResetHistory は失敗時 ScheduleFileReset でファイル再作成を予約する
+	// 最終保証を持つので、途中失敗の孤児行は次回起動で解消される。
+	deadline := time.Now().Add(resetTimeout)
 
+	// 事前 COUNT。ResetResult の Sessions/Events/... は「Reset 呼び出し時点の総数」
+	// を表す既存契約に合わせる（実削除数ではない）。
+	ctxCount, cancelCount := context.WithTimeout(context.Background(), defaultTimeout)
 	for _, table := range []struct {
 		name string
 		dst  *int
@@ -1155,10 +1166,14 @@ func (s *Store) resetHistorySQL(preserveLiveIDs []int) (ResetResult, error) {
 		{"approvals", &out.Approvals},
 		{"attachments", &out.Attachments},
 	} {
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+table.name).Scan(table.dst); err != nil {
+		if err := s.db.QueryRowContext(ctxCount, `SELECT COUNT(*) FROM `+table.name).Scan(table.dst); err != nil { // #nosec G202 -- table は固定リスト
+			cancelCount()
 			return out, err
 		}
 	}
+	cancelCount()
+
+	// preserve リスト取得（Tx なし・純粋読み取り）。
 	preserveSet := make(map[int]bool, len(preserveLiveIDs))
 	for _, id := range preserveLiveIDs {
 		if id > 0 {
@@ -1166,34 +1181,48 @@ func (s *Store) resetHistorySQL(preserveLiveIDs []int) (ResetResult, error) {
 		}
 	}
 	preserved := make([]int64, 0, len(preserveSet))
-	for id := range preserveSet {
-		var dbID int64
-		err := tx.QueryRowContext(ctx, `SELECT id FROM sessions WHERE live_session_id=? ORDER BY id DESC LIMIT 1`, id).Scan(&dbID)
-		if err == nil && dbID > 0 {
-			preserved = append(preserved, dbID)
-		} else if err != nil && err != sql.ErrNoRows {
-			return out, err
-		}
-	}
-	out.Preserved = len(preserved)
-
-	if s.ftsEnabled {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM messages_fts`); err != nil {
-			return out, err
-		}
-	}
-	if len(preserved) == 0 {
-		// 子テーブルを先に空にしておくと、sessions の DELETE で CASCADE が
-		// 空振りになり、行数が多くても完走しやすい。
-		for _, table := range []string{"events", "messages", "approvals", "attachments"} {
-			if _, err := tx.ExecContext(ctx, `DELETE FROM `+table); err != nil { // #nosec G202 -- table は固定リスト
+	if len(preserveSet) > 0 {
+		ctxPreserve, cancelPreserve := context.WithTimeout(context.Background(), defaultTimeout)
+		for id := range preserveSet {
+			var dbID int64
+			err := s.db.QueryRowContext(ctxPreserve, `SELECT id FROM sessions WHERE live_session_id=? ORDER BY id DESC LIMIT 1`, id).Scan(&dbID)
+			if err == nil && dbID > 0 {
+				preserved = append(preserved, dbID)
+			} else if err != nil && err != sql.ErrNoRows {
+				cancelPreserve()
 				return out, err
 			}
 		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM sessions`); err != nil {
+		cancelPreserve()
+	}
+	out.Preserved = len(preserved)
+
+	// FTS 全消し (独立 Tx)。
+	if s.ftsEnabled {
+		ctxFTS, cancelFTS := context.WithTimeout(context.Background(), defaultTimeout)
+		_, err := s.db.ExecContext(ctxFTS, `DELETE FROM messages_fts`)
+		cancelFTS()
+		if err != nil {
 			return out, err
 		}
-		return out, tx.Commit()
+	}
+
+	// 子テーブルはチャンク削除。preserved の有無に関わらず全消しなのは、
+	// preserve は「sessions 行のメタ枠を残す＋新しいメッセージを続けて記録できる」
+	// のみを意味し、Reset 前の messages/events/approvals/attachments は消える
+	// (TestResetHistoryPreservesActiveSessionRows の期待挙動と一致)。
+	for _, table := range []string{"events", "messages", "approvals", "attachments"} {
+		if err := s.deleteAllChildRowsChunked(table, deadline); err != nil {
+			return out, err
+		}
+	}
+
+	// sessions 削除は行数が少ないので単一 Exec。preserved が空なら全消し、そうでなければ WHERE 句付き。
+	if len(preserved) == 0 {
+		ctxS, cancelS := context.WithTimeout(context.Background(), defaultTimeout)
+		_, err := s.db.ExecContext(ctxS, `DELETE FROM sessions`)
+		cancelS()
+		return out, err
 	}
 
 	placeholders := make([]string, len(preserved))
@@ -1203,27 +1232,79 @@ func (s *Store) resetHistorySQL(preserveLiveIDs []int) (ResetResult, error) {
 		args[i] = id
 	}
 	inClause := strings.Join(placeholders, ",")
-	// #nosec G202 -- table は固定リスト、inClause は "?" プレースホルダの連結のみ（値は args で束縛）
-	for _, table := range []string{"events", "messages", "approvals", "attachments"} {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE session_id IN (`+inClause+`)`, args...); err != nil { // #nosec G202 -- 同上
-			return out, err
-		}
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE id NOT IN (`+inClause+`)`, args...); err != nil { // #nosec G202 -- inClause はプレースホルダのみ
+
+	ctxDel, cancelDel := context.WithTimeout(context.Background(), defaultTimeout)
+	_, err := s.db.ExecContext(ctxDel, `DELETE FROM sessions WHERE id NOT IN (`+inClause+`)`, args...) // #nosec G202 -- inClause はプレースホルダのみ
+	cancelDel()
+	if err != nil {
 		return out, err
 	}
-	// #nosec G202 -- inClause はプレースホルダのみ
-	if _, err := tx.ExecContext(ctx, `UPDATE sessions SET
+
+	ctxUpd, cancelUpd := context.WithTimeout(context.Background(), defaultTimeout)
+	_, err = s.db.ExecContext(ctxUpd, `UPDATE sessions SET
 		first_message=NULL,
 		last_message=NULL,
 		title=NULL,
 		tags_json=NULL,
 		summary=NULL,
 		updated_at=?
-		WHERE id IN (`+inClause+`)`, append([]any{time.Now().Format(time.RFC3339)}, args...)...); err != nil {
-		return out, err
+		WHERE id IN (`+inClause+`)`, append([]any{time.Now().Format(time.RFC3339)}, args...)...) // #nosec G202 -- inClause はプレースホルダのみ
+	cancelUpd()
+	return out, err
+}
+
+// deleteAllChildRowsChunked は table の全行を pruneChildRowBatch チャンクで削除する。
+// resetHistorySQL 専用ヘルパで、単一長時間 Tx が SQLite の唯一の接続を専有する
+// 問題（HUB-11）を避けるため、各チャンクを短い独立 Tx で削除する。
+// deleteChildRowsChunked と違い session_id 絞りは行わない (Reset は全消し)。
+func (s *Store) deleteAllChildRowsChunked(table string, deadline time.Time) error {
+	for {
+		if time.Now().After(deadline) {
+			return errPruneBudgetExhausted
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+		// #nosec G202 -- table は呼び元の固定リストのみ
+		rows, err := s.db.QueryContext(ctx, `SELECT id FROM `+table+` LIMIT ?`, pruneChildRowBatch)
+		if err != nil {
+			cancel()
+			return err
+		}
+		var ids []int64
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				cancel()
+				return err
+			}
+			ids = append(ids, id)
+		}
+		err = rows.Err()
+		rows.Close()
+		cancel()
+		if err != nil {
+			return err
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		placeholders := make([]string, len(ids))
+		args := make([]any, len(ids))
+		for i, id := range ids {
+			placeholders[i] = "?"
+			args[i] = id
+		}
+		inClause := strings.Join(placeholders, ",")
+		ctx2, cancel2 := context.WithTimeout(context.Background(), defaultTimeout)
+		if table == "messages" && s.ftsEnabled {
+			_, _ = s.db.ExecContext(ctx2, `DELETE FROM messages_fts WHERE rowid IN (`+inClause+`)`, args...) // #nosec G202 -- inClause はプレースホルダのみ
+		}
+		_, err = s.db.ExecContext(ctx2, `DELETE FROM `+table+` WHERE id IN (`+inClause+`)`, args...) // #nosec G202 -- 同上
+		cancel2()
+		if err != nil {
+			return err
+		}
 	}
-	return out, tx.Commit()
 }
 
 // vacuumAfterReset は全削除後にファイルを物理的に縮める。
