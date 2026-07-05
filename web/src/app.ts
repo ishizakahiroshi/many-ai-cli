@@ -61,7 +61,14 @@ export function autoExpand(opts: any = {}) {
     suppressPtyResizeForInputLayout();
   }
   inputEl.style.height = 'auto';
-  inputEl.style.height = Math.min(inputEl.scrollHeight, Math.floor(window.innerHeight * 0.3)) + 'px';
+  if (inputEl.value === '') {
+    // 空のときは高さを CSS の min-height に任せる。Chrome は placeholder の折り返しも
+    // scrollHeight に含めるため、狭い画面で placeholder が 2 行に折り返すと
+    // 未入力なのにバーが 2 行分に育ってしまう。
+    inputEl.style.height = '';
+  } else {
+    inputEl.style.height = Math.min(inputEl.scrollHeight, Math.floor(window.innerHeight * 0.3)) + 'px';
+  }
   updateInputClearButton();
   refitActiveTerminalAfterLayout(shouldStickToBottom);
 }
@@ -994,7 +1001,15 @@ export function syncMobileLayoutState() {
     }
   }
   if (sessions.size === 0) closeMobileSessionDrawer();
-  if (isMobile) (window as any).renderMobileSessionDrawer?.();
+  if (isMobile) {
+    (window as any).renderMobileSessionDrawer?.();
+  } else {
+    // PC 幅へ戻ったらドロワーを閉じ、renderMobileSessionDrawer() が外した hidden を戻す。
+    // 戻さないと PC サイドバー #session-list 内にドロワー中身が露出したまま残る。
+    closeMobileSessionDrawer();
+    const drawerContent = document.getElementById('mobile-drawer-content');
+    if (drawerContent) drawerContent.hidden = true;
+  }
 }
 
 window.addEventListener('approval-queue-updated', () => {

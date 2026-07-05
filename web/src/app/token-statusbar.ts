@@ -235,6 +235,12 @@ function formatCost(costUSD: number, costKnown: boolean): string {
   return '$' + costUSD.toFixed(4);
 }
 
+// モバイル用の短縮コスト表記（小数2桁）。today 累計にのみ使う。
+function formatCostShort(costUSD: number): string {
+  if (costUSD < 0.01) return '$<0.01';
+  return '$' + costUSD.toFixed(2);
+}
+
 function formatTok(n: number): string {
   if (n === 0) return '0';
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
@@ -524,6 +530,8 @@ export function renderStatusbar(): void {
       const pctCls = reachPct >= 90 ? 'tsb-pct crit' : 'tsb-pct';
       compactEl.innerHTML = `⌛ ${gaugeHtml(reachPct, fill)}<span class="${pctCls}">${reachPct}%</span>`;
     }
+    // モバイルは crit（発動間近）のときだけ表示する（CSS @media が :not(.tsb-crit) を隠す）。
+    compactEl.classList.toggle('tsb-crit', left <= 0 || reachPct >= 90);
     compactEl.title = `auto-compact しきい値到達率 ${reachPct}%（100% で発動）`
       + `\n残り ${formatTok(Math.max(0, left))} tokens`
       + `\nしきい値 ~${Math.round(COMPACT_TRIGGER_RATIO * 100)}% = ${formatTok(threshold)} / ${formatTok(ctxLimit)}、現在 ${formatTok(entry.tokensIn)}`;
@@ -534,10 +542,13 @@ export function renderStatusbar(): void {
   const showCost = !!(isTokenProvider && entry);
   const costEl = setSeg(bar, 'tsb-seg-cost', showCost);
   if (costEl && entry) {
-    let html = escapeHtml(formatCost(entry.costUSD, entry.costKnown));
+    // モバイルではセッション個別コストを隠して today 短縮表記だけ出すため、span で分離する
+    // （CSS の @media + :has で切替。today 不明時はモバイルでもセッションコストを出す）。
+    let html = `<span class="tsb-cost-session">${escapeHtml(formatCost(entry.costUSD, entry.costKnown))}</span>`;
     const today = todayCostSum();
     if (today.known && today.sum > 0) {
       html += ` <span class="tsb-today">· today ${escapeHtml(formatCost(today.sum, true))}</span>`;
+      html += `<span class="tsb-today-short">today ${escapeHtml(formatCostShort(today.sum))}</span>`;
     }
     costEl.innerHTML = html;
   }
@@ -597,6 +608,8 @@ export function renderStatusbar(): void {
   const showRl = !!(provider === 'claude' && entry && (entry.rl5hPct > 0 || entry.rl7dPct > 0));
   const rlEl = setSeg(bar, 'tsb-seg-ratelimit', showRl);
   if (rlEl && entry) {
+    // モバイルは crit（残量 90% 超）のときだけ表示する（CSS @media が :not(.tsb-crit) を隠す）。
+    rlEl.classList.toggle('tsb-crit', entry.rl5hPct >= 90 || entry.rl7dPct >= 90);
     const cls5 = entry.rl5hPct >= 90 ? 'tsb-pct crit' : 'tsb-pct';
     const cls7 = entry.rl7dPct >= 90 ? 'tsb-pct crit' : 'tsb-pct';
     const seg5 = entry.rl5hPct > 0 ? `<span class="${cls5}">5h ${Math.round(entry.rl5hPct)}%</span>` : '';
