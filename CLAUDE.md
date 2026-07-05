@@ -1,6 +1,6 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-07-05(日) 10:50:11 — バージョン記述・実装状態・ローカルパス記述の陳腐化を修正
+> 最終更新: 2026-07-05(日) — 監査反映（opencode provider 追記・subcommand 一覧・internal/log 実装済み化・archive パス修正）
 
 > 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。
 
@@ -14,11 +14,9 @@
 
 **設計書（正本）**: [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md)
 
-> AI の個人グローバルルール（言語・確認・質問フォーマット・ターン終端の出力ルール・スクリーンショット規約等）は、各利用者が使う AI ツールのグローバル設定に置く。公開リポジトリ内の `CLAUDE.md` / `AGENTS.md` はプロジェクト固有ルールだけを扱う。
-
 ## 現在の実装状態
 
-v0.3.x（最新タグ v0.3.4）までに以下がすべて実装済み（v0.4.0 Unreleased では Workbench / chat_proxy 撤去に加え Grok Build CLI provider・Ollama `base_url` 設定を追加済み）：
+v0.3.x（最新タグ v0.3.4）までに以下がすべて実装済み（v0.4.0 Unreleased では Workbench / chat_proxy 撤去に加え opencode / Grok Build CLI provider・Ollama `base_url` 設定を追加済み）：
 
 - `many-ai-cli serve` で Hub が起動する
 - `many-ai-cli claude` / `codex` / `copilot` / `cursor-agent` が Hub 未起動時に自動起動し接続する
@@ -37,12 +35,12 @@ v0.3.x（最新タグ v0.3.4）までに以下がすべて実装済み（v0.4.0 
 |------|------|
 | プロダクト名 | `many-ai-cli` |
 | バイナリ名 | `many-ai-cli`（Windows: `many-ai-cli.exe`） |
-| サブコマンド | `serve` / `wrap <provider>` / `shell-init` / `stop` / `status` |
+| サブコマンド | `serve` / `wrap <provider>` / `shell-init` / `stop` / `status` / `uninstall` / `version` |
 | Hub URL | `http://127.0.0.1:47777/?token=<random>` |
 | 設定ファイル | `~/.many-ai-cli/config.yaml`（Win: `%USERPROFILE%\.many-ai-cli\config.yaml`） |
 | ログ | `~/.many-ai-cli/logs/sessions/<provider>_<日時>_<folder>_s<id>.log/.jsonl/.txt`（PTY生ログ + イベント履歴JSONL + クリーンテキスト） |
 | 透過化環境変数 | `MANY_AI_CLI_AUTO=1` |
-| Provider | `claude` / `codex` / `copilot` / `cursor-agent`（v0.4.0 Unreleased で `grok` 追加。`gemini` は対象外、上記スコープ更新参照） |
+| Provider | `claude` / `codex` / `copilot` / `cursor-agent`（v0.4.0 Unreleased で `opencode` / `grok` 追加。`gemini` は対象外、上記スコープ更新参照） |
 
 > md 内の参照は `many-ai-cli` に統一（旧名 `any-ai-cli` は履歴記述を除き使わない）。ローカルのプロジェクト配置パスは `CLAUDE.local.md` に記載する。
 
@@ -72,7 +70,8 @@ many-ai-cli/
 │  ├─ proto/      # WSメッセージ定義
 │  ├─ attach/     # 画像保存・inject生成
 │  ├─ config/
-│  └─ log/        # プレースホルダ（未実装）
+│  ├─ log/        # slog ファイルロガー（lumberjack ローテーション）
+│  └─ ...         # ほか launcher / notify / orchestrate / sessionlog / sessionstore / uninstall / usagerelay / whisperruntime / wslutil
 ├─ web/src/       # 静的HTML/CSS/TypeScript + vendored xterm.js（フロントソース）
 ├─ web/dist/      # bun run build の生成物（go:embed対象 / gitignore）
 └─ docs/local/    # 設計書・ロードマップ等（非公開）
@@ -93,14 +92,14 @@ many-ai-cli/
 - **外部公開しない**（`127.0.0.1` 固定）。`many-ai-cli` 自身はテレメトリを送信しないが、スラッシュコマンド一覧取得で GitHub へ HTTPS 通信する場合がある（README のセキュリティ節参照）
 - **`.bashrc` 等への永続書き込みなし**（透過化は環境変数 + `eval "$(many-ai-cli shell-init)"` のオプトイン方式のみ）
 
-## 作業運用ルール（AI 共通）
+## AI 作業共通ルール
 
-- **ビルド・実行・Hub 起動・ブラウザリロードは全てユーザーが行う**。AI からは提案しない・確認質問もしない。
-  - 例外: ユーザーが明示的に「ビルドして」「`go build` 走らせて」等と指示した場合のみ。
-  - 対象コマンド: `go build` / `go run` / `make` / `many-ai-cli serve` / `many-ai-cli stop` / Hub プロセスの起動・終了・再起動・ブラウザリロード等。
-  - 完了報告では「再ビルドしますか？」のような提案を出さず、コード変更の要約だけ伝える。
-- **ビルドコマンドは `make build` が基本**。`bun run build` 単体は使わない（ユーザーへの案内でも `make build` を示す）。`make build` が web ビルド（bun install + bun run build）〜 Windows/Linux バイナリ生成 〜 WSL 配備まで一括で行う。
-  - ユーザーの「ビルドして」という指示は **`make build` の実行指示** を意味する。
+ビルド・コミット禁止、secrets-scan 責務、plan/bugfix/pending md の作成ルール等の AI 作業共通ルールは、各利用者のグローバル AI 設定に従う（作者環境の例: `~/.claude/CLAUDE.md` および `~/.claude/guides/`）。AI の個人グローバルルール（言語・確認・質問フォーマット等）も各利用者のグローバル設定に置き、本ファイルはプロジェクト固有ルールだけを扱う。
+
+プロジェクト固有の追加ルール:
+
+- ビルドだけでなく **実行・Hub 起動・ブラウザリロードも全てユーザーが行う**（`go run` / `many-ai-cli serve` / `many-ai-cli stop` / Hub プロセスの起動・終了・再起動・ブラウザリロード等も対象）。
+- **ビルドコマンドは `make build` が基本**。`bun run build` 単体は使わない（ユーザーへの案内でも `make build` を示す）。`make build` が web ビルド（bun install + bun run build）〜 Windows/Linux バイナリ生成 〜 WSL 配備まで一括で行う。ユーザーの「ビルドして」という指示は **`make build` の実行指示** を意味する。
 
 ## 詳細ガイド（タスク種別ベース）
 
@@ -125,6 +124,6 @@ many-ai-cli/
 |------|------|
 | 設計書 v0.3.0（現行・正本） | [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) |
 | 設計書 v0.2.0（履歴） | [docs/v0.2.x-any-ai-cli-design.md](docs/v0.2.x-any-ai-cli-design.md) |
-| 設計書 v1（履歴） | [docs/local/archive/cli-popup-design-v1.md](docs/local/archive/cli-popup-design-v1.md) |
+| 設計書 v1（履歴） | [docs/local/archive/v0.1.3/cli-popup-design-v1.md](docs/local/archive/v0.1.3/cli-popup-design-v1.md) |
 | Codex 用補足 | [AGENTS.md](AGENTS.md)（ローカル補足があれば `AGENTS.local.md`） |
 | Gemini 用補足 | [GEMINI.md](GEMINI.md)（**many-ai-cli の wrap 対象外**。本リポジトリで Gemini CLI を開発補助に使う場合の手引きとして残置） |

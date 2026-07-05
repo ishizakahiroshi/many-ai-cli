@@ -53,6 +53,7 @@ Terminal pane #1              Terminal pane #2
 | GitHub Copilot CLI | `copilot` | 公式 CLI。OAuth token / PAT / 認証情報は読み取り・保存・代理利用しません |
 | Cursor Agent CLI | `cursor-agent` | 公式 CLI。事前にサインインが必要 |
 | Grok Build CLI | `grok` | xAI 公式のターミナル型コーディングエージェント。事前にサインインが必要（**SuperGrok** または **X Premium+** のサブスクリプションが必要。base の X Premium では使えません） |
+| opencode | `opencode` | コミュニティ CLI。事前にサインインが必要。承認プロンプトのスクレイプではなく、Hub が `opencode.json` の `permission` を書き換えて制御します（通常セッションは `ask` で Hub UI へ、オーケストレーション子セッションは `allow` でバイパス）。元の `opencode.json` はセッション終了時に復元します |
 
 **Ollama** は独立したラッパーではありません。`claude` または `codex` のラッパー経由で Ollama のモデルを使います（spawn フォームのモデルピッカーで **Ollama Cloud / Ollama Local** を選ぶと、Hub が Anthropic / OpenAI 互換エンドポイントを Ollama に向けます。「主な機能」の「モデルピッカー + Ollama route 自動切替」参照）。
 

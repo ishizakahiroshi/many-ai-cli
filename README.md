@@ -53,6 +53,7 @@ Each pane can run any supported provider — `claude`, `codex`, `copilot`, `curs
 | GitHub Copilot CLI | `copilot` | official CLI; OAuth tokens / PATs / credentials are never read, stored, or proxied |
 | Cursor Agent CLI | `cursor-agent` | official CLI; sign in first |
 | Grok Build CLI | `grok` | xAI's official terminal coding agent; sign in first (requires a **SuperGrok** or **X Premium+** subscription — base X Premium does not include it) |
+| opencode | `opencode` | community CLI; sign in first. Instead of pattern-scraping approval prompts, the Hub writes `opencode.json` (`permission: ask` for interactive sessions, `permission: allow` for orchestration children) into the session cwd and restores the original file on session end |
 
 **Ollama** is not a separate wrapper. Run Ollama models *through* the `claude` or `codex` wrapper — pick **Ollama Cloud / Ollama Local** in the spawn form's model picker, and the Hub points the Anthropic/OpenAI-compatible endpoint at Ollama (see "Model picker with Ollama routing" in Features).
 
