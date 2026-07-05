@@ -533,7 +533,8 @@ header {
      ☰ / #reconnect-btn は各々 position:fixed + 自前の env(safe-area-inset-top) で
      ノッチ回避しており、header の高さに依存していない。ノッチ回避が必要な残り箇所
      （ドロワー背景・ドロワー展開時のセッション一覧の上端）は下記で env() を直接参照する。
-     --mobile-float-clear は ☰ 等の浮遊ボタンの下端+余白ぶん、本文側で確保するクリアランス。 */
+     --mobile-float-clear は ☰ 等の浮遊ボタンの下端+余白ぶん。ドロワー先頭・モバイルホームの
+     上端だけで使う（ターミナル本文には使わない — 本文は最上端から描画し ☰ が上に浮く）。 */
   :root {
     --app-header-h: 0px;
     --mobile-float-clear: 40px;
@@ -588,7 +589,9 @@ header {
     height: 32px;
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
-    background: var(--bg-elev);
+    /* 本文の上に浮くフローティングボタン。下のターミナル文字を完全に潰さないよう半透明 + blur。 */
+    background: rgba(13, 15, 23, 0.7);
+    backdrop-filter: blur(4px);
     color: var(--text);
     font-size: 1rem;
     cursor: pointer;
@@ -725,11 +728,10 @@ header {
 
   /* C7指摘: 常時表示のタブ帯は撤去し、ビュー切り替えはドロワーの「表示切り替え」セクション
      （mobile-home.ts の buildViewSwitchSection）へ移設した。
-     ヘッダーが視覚的に無くなった（visibility:hidden）ため、セッション表示中の本文
-     （#display-area）は ☰ の浮遊ボタンと重ならないよう自前でクリアランスを確保する。 */
-  body.mobile-has-session:not(.mobile-home-view) #display-area {
-    padding-top: var(--mobile-float-clear);
-  }
+     2026-07-04 ユーザー指示: 本文側にクリアランス（padding-top: 40px）を取ると
+     「空のヘッダー帯が残った」ように見えるため取らない。☰ は本文の上に純粋に
+     フローティングさせ、ターミナルは画面最上端から描画する（最上行の左端が
+     ☰ の下に潜るのは許容 — 半透明背景で下の文字も透かす）。 */
 
   #unified-tab-bar {
     display: none;

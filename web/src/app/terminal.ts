@@ -11,6 +11,7 @@ import { handleCrunchLinkClick } from './expand-popup.js';
 import { isHistoryViewerOpen, openHistoryViewer, resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
 import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
 import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, showCursorSeq } from './cursor-hide-filter.js';
+import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
 export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossibleMarkerPrefix } from './hub-marker-filter.js';
 
 // Claude Code の折りたたみマーカー: "… +23 lines (ctrl+o to expand)"。
@@ -1461,28 +1462,11 @@ export function extractAndSetLiveStatus(id, blockBuf) {
 // そこで本文（xterm バッファ）末尾を走査して進捗行を拾い、同じピルへ流し表示を統一する。
 // スピナー回転自体は state=running 由来で別に回るため、ここでは中のテキストだけ補う。
 
-// Codex: 「• Working (12s • esc to interrupt)」等のステータス行を最優先で拾い、
-// 無ければ直近のアクション行（• Running/Ran/Reading …）を返す。どちらも無ければ
-// '' を返し、setSessionLiveStatus 側で前回値を維持する。
-function extractCodexLiveStatus(id) {
-  const lines = scanBuffer(id, 48); // 末尾 48 行（おおむね 1 画面ぶん）を後方優先で見る
-  let action = '';
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const raw = lines[i].replace(/\s+/g, ' ').trim();
-    if (!raw) continue;
-    const stripped = raw.replace(/^[•·]\s*/, '').trim();
-    if (/^Working\b/i.test(stripped)) return stripped;           // 稼働ステータス行（経過秒つき）
-    if (!action && /^(Running|Ran|Reading|Read|Editing|Edited|Searching|Thinking)\b/i.test(stripped)) {
-      action = stripped;                                          // 直近アクション行（最初の 1 件を控える）
-    }
-  }
-  return action;
-}
-
 // provider（小文字）→ 抽出関数。Claude は既存のブロック抽出経路を使うため載せない。
-// Copilot/Cursor は実機ログ採取後、同形式の抽出関数をここへ足すだけで載る拡張ポイント。
 const liveStatusExtractors: Record<string, (id: number) => string> = {
-  codex: extractCodexLiveStatus,
+  codex: id => extractCodexLiveStatusFromLines(scanBuffer(id, 48)),
+  copilot: id => extractCopilotLiveStatusFromLines(scanBuffer(id, 48)),
+  'cursor-agent': id => extractCursorAgentLiveStatusFromLines(scanBuffer(id, 64)),
 };
 
 // provider 別抽出を 250ms に間引いて実行し、ピル内テキストへ流す。leading 抑制
@@ -1603,6 +1587,11 @@ function activeCompactElapsedSec(): number | null {
   const id = activeSessionId;
   const t = id != null ? terminals.get(id) : null;
   if (!t || t.compactingSince == null) return null;
+  if (Date.now() - t.compactSeenAt > COMPACT_IDLE_MS) {
+    t.compactingSince = null;
+    t.compactDetectTail = '';
+    return null;
+  }
   return Math.max(0, Math.floor((Date.now() - t.compactingSince) / 1000));
 }
 
@@ -1616,6 +1605,7 @@ function ensureCompactTick() {
     if (Date.now() - t.compactSeenAt > COMPACT_IDLE_MS) {
       // compact のステータス更新が途切れた＝完了とみなし、通常表示へ戻す。
       t.compactingSince = null;
+      t.compactDetectTail = '';
       stopCompactTick();
       syncLiveStatusDomForActive();
       return;
