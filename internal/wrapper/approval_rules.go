@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"many-ai-cli/internal/securefile"
 )
 
 const claudeImportLine = "@~/.many-ai-cli/approval-rules.md"
@@ -165,6 +167,11 @@ func SyncRulesFile() error {
 	if err := os.Chmod(dir, 0o700); err != nil { // #nosec G302 -- ディレクトリには実行ビットが必要（0700 は所有者限定で適切）
 		return fmt.Errorf("chmod %s: %w", dir, err)
 	}
+	// C6 (plan_audit_score_s_promotion_2026-07-05.md): Windows で NTFS DACL を明示
+	// 制限する。rules ファイル自体は 0o644 で書かれるが、ディレクトリを狭めることで
+	// 他ユーザーが不正内容を書き込む経路を防ぐ (承認バイパス誘導への防御)。
+	// 失敗しても mkdir/chmod は成功しているので silent 続行。
+	_ = securefile.EnsurePrivateDir(dir)
 	if data, err := os.ReadFile(path); err == nil {
 		firstLine := ""
 		if idx := strings.IndexByte(string(data), '\n'); idx >= 0 {

@@ -19,12 +19,20 @@ import (
 	webpush "github.com/SherClockHolmes/webpush-go"
 	"many-ai-cli/internal/config"
 	notifyPkg "many-ai-cli/internal/notify"
+	"many-ai-cli/internal/securefile"
 	"many-ai-cli/internal/sessionlog"
 )
 
 const (
 	pushStoreFilename = "push_store.json"
 	pushSendTimeout   = 10 * time.Second
+	// pushPerSubTimeout は購読 1 件あたりの Web Push 送信タイムアウト。
+	// pushSendTimeout（親コンテキストの全体上限）を購読リスト全体で共有すると、
+	// リスト先頭側の遅い購読者（低速回線・古いデバイス）に上限秒数を使い切られ、
+	// 後続の購読者への送信が select で打ち切られる head-of-line blocking が
+	// 発生する。ループ内で毎回この個別タイムアウトを作り直すことで、遅い購読者
+	// があっても他の購読者への送信は継続する。
+	pushPerSubTimeout = 5 * time.Second
 	pushPayloadMaxLen = 180
 )
 
@@ -219,7 +227,9 @@ func (pm *pushManager) sendApproval(ctx context.Context, payload pushApprovalPay
 			return
 		default:
 		}
-		resp, err := webpush.SendNotificationWithContext(ctx, body, &webpush.Subscription{
+		// 各購読者へ独立したタイムアウトを与える（HoL blocking 防止）。
+		subCtx, cancelSub := context.WithTimeout(ctx, pushPerSubTimeout)
+		resp, err := webpush.SendNotificationWithContext(subCtx, body, &webpush.Subscription{
 			Endpoint: sub.Endpoint,
 			Keys:     sub.Keys,
 		}, &webpush.Options{
@@ -230,6 +240,7 @@ func (pm *pushManager) sendApproval(ctx context.Context, payload pushApprovalPay
 			TTL:             300,
 			Topic:           topicForPush(payload.ID),
 		})
+		cancelSub()
 		if err != nil {
 			if pm.logger != nil {
 				pm.logger.Warn("web push send failed", "endpoint_hash", endpointHash(sub.Endpoint), "err", pushSanitizeErr(err))
@@ -290,7 +301,9 @@ func (pm *pushManager) sendSecurity(ctx context.Context, title, body string) {
 			return
 		default:
 		}
-		resp, err := webpush.SendNotificationWithContext(ctx, payload, &webpush.Subscription{
+		// 各購読者へ独立したタイムアウトを与える（HoL blocking 防止）。
+		subCtx, cancelSub := context.WithTimeout(ctx, pushPerSubTimeout)
+		resp, err := webpush.SendNotificationWithContext(subCtx, payload, &webpush.Subscription{
 			Endpoint: sub.Endpoint,
 			Keys:     sub.Keys,
 		}, &webpush.Options{
@@ -301,6 +314,7 @@ func (pm *pushManager) sendSecurity(ctx context.Context, title, body string) {
 			TTL:             300,
 			Topic:           topicForPush(id),
 		})
+		cancelSub()
 		if err != nil {
 			if pm.logger != nil {
 				pm.logger.Warn("web push security send failed", "endpoint_hash", endpointHash(sub.Endpoint), "err", pushSanitizeErr(err))
@@ -399,7 +413,13 @@ func (pm *pushManager) saveLocked() error {
 	if err := os.Chmod(tmpName, 0o600); err != nil {
 		return fmt.Errorf("chmod temp push store: %w", err)
 	}
-	return os.Rename(tmpName, pm.path)
+	if err := os.Rename(tmpName, pm.path); err != nil {
+		return err
+	}
+	// C6: Windows で NTFS DACL を明示制限（VAPID private key を持つため）。
+	// 失敗しても書き込み自体は成功なので silent 続行。
+	_ = securefile.RestrictFile(pm.path)
+	return nil
 }
 
 func topicForPush(id string) string {

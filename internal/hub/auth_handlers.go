@@ -17,6 +17,39 @@ func randomHex(n int) (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
+// handleAuthLogout は MANY_AI_CLI_token / MANY_AI_CLI_pin Cookie を MaxAge=-1 で
+// 明示失効させる。C5 (plan_audit_score_s_promotion_2026-07-05.md) のロールバック用:
+// 端末を貸した後などに「発行済み HttpOnly Cookie を今すぐ切りたい」需要に応える。
+// token は revoke-all で消えるが、logout は revoke なしで手元の Cookie だけ捨てる軽い経路。
+//
+// 認証は guardBase（token + method + Host + Origin）で PIN ゲート抜きに課す:
+// - Cookie を持つ = 認証済み → その Cookie で認証が通り自分の Cookie を失効させられる
+// - Cookie 無し = そもそも logout 対象がない → 401 で拒否しても意味は変わらない
+// これにより CSRF / 他人による強制ログアウト経路を閉じる（TestRegisteredAPIRoutesRequireToken の期待も満たす）。
+func (s *Server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
+	if !s.guardBase(w, r, http.MethodPost) {
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     tokenCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   -1, // -1 → Max-Age=0 を送出しブラウザは即削除
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     pinCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   -1,
+	})
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, map[string]any{"ok": true})
+}
+
 // handleAuthRevokeAll は「全アクセス失効」キルスイッチ
 // （plan_hub-remote-auth.md / B）。cfg.Token と AuthCookieSecret を再生成して
 // 永続化する。これにより既存の token URL・token cookie・（将来の）認証 cookie が
@@ -49,10 +82,19 @@ func (s *Server) handleAuthRevokeAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.cfgMu.Lock()
+	prevToken := s.cfg.Token
+	prevSecret := s.cfg.AuthCookieSecret
 	s.cfg.Token = newToken
 	s.cfg.AuthCookieSecret = newSecret
 	s.cfgMu.Unlock()
 	if err := s.persistConfig(); err != nil {
+		// persist に失敗するとディスクは旧値のまま、in-memory は新値になり、
+		// 新 token はレスポンスにも載らないので Hub への外部アクセスが完全に
+		// 塞がる（プロセス再起動が必要）。in-memory を巻き戻して失敗を返す。
+		s.cfgMu.Lock()
+		s.cfg.Token = prevToken
+		s.cfg.AuthCookieSecret = prevSecret
+		s.cfgMu.Unlock()
 		writeJSONError(w, http.StatusInternalServerError, "internal", "failed to persist config")
 		return
 	}

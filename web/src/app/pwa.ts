@@ -1,4 +1,4 @@
-import { token } from './util.js';
+import { token, apiFetch } from './util.js';
 import { activateSession } from './session-list.js';
 
 let serviceWorkerReadyPromise = null;
@@ -88,13 +88,17 @@ export async function unsubscribeWebPush() {
 }
 
 export async function fetchPushStatus() {
-  const res = await fetch(`/api/push/status?token=${encodeURIComponent(token || '')}`);
+  // C5: `?token=` を URL から外し、Cookie (MANY_AI_CLI_token) 主体化。互換のため
+  // Cookie 未発行のリロード等では Bearer / query fallback が requestToken に残るが、
+  // 通常の PWA/mobile 経路では handleIndex が Cookie を先に発行しているのでこの経路で通る。
+  const res = await apiFetch('/api/push/status');
   if (!res.ok) return { supported: false, subscriptions: 0 };
   return res.json();
 }
 
 async function fetchPushPublicKey() {
-  const res = await fetch(`/api/push/vapid-public-key?token=${encodeURIComponent(token || '')}`);
+  // C5: same-origin Cookie 認証に切替
+  const res = await apiFetch('/api/push/vapid-public-key');
   if (!res.ok) throw new Error(`vapid key ${res.status}`);
   const data = await res.json();
   if (!data.public_key) throw new Error('missing_vapid_key');
@@ -102,7 +106,8 @@ async function fetchPushPublicKey() {
 }
 
 async function savePushSubscription(subscription) {
-  const res = await fetch(`/api/push/subscriptions?token=${encodeURIComponent(token || '')}`, {
+  // C5: same-origin Cookie 認証に切替
+  const res = await apiFetch('/api/push/subscriptions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(subscription.toJSON ? subscription.toJSON() : subscription),
@@ -112,7 +117,8 @@ async function savePushSubscription(subscription) {
 
 async function deletePushSubscription(subscription) {
   const json = subscription.toJSON ? subscription.toJSON() : subscription;
-  const res = await fetch(`/api/push/subscriptions?token=${encodeURIComponent(token || '')}`, {
+  // C5: same-origin Cookie 認証に切替
+  const res = await apiFetch('/api/push/subscriptions', {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys || {} }),

@@ -315,7 +315,9 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 
 	orchestrationID := parent.OrchestrationID
 	if orchestrationID == "" {
-		orchestrationID = fmt.Sprintf("s%d", parentID)
+		// UnixNano を混ぜて Hub 再起動でセッション番号が再割当されても
+		// `~/.many-ai-cli/orchestration/<id>/board.md` が過去実行と衝突しないようにする。
+		orchestrationID = fmt.Sprintf("s%d-%d", parentID, time.Now().UnixNano())
 	}
 	boardPath, err := s.ensureOrchestrationBoard(orchestrationID, parent, body)
 	if err != nil {
@@ -368,7 +370,9 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 	// goroutine で注入する: エコー検証リトライは数十秒かかりうるため、conductor の
 	// spawn 呼び出し（HTTP レスポンス）をブロックしない。注入完了までのユーザー入力は
 	// initialInjectPending ゲート（registerLoop で設定）が pendingInput へ保留する。
-	go s.injectInitialPrompt(childID, prompt)
+	// safeGo で panic を recover する（素の go だと injectInitialPrompt 中の panic が
+	// Hub プロセス全体を落とし、稼働中の全セッションが同時に切断される）。
+	s.safeGo("inject_initial_prompt_child", func() { s.injectInitialPrompt(childID, prompt) })
 	writeJSON(w, map[string]any{"ok": true, "session_id": childID, "board_path": boardPath, "cwd": childCWD, "worktree_branch": branch})
 }
 
@@ -462,14 +466,17 @@ func (s *Server) handleSendChild(w http.ResponseWriter, r *http.Request, parentI
 		writeJSONError(w, http.StatusNotFound, "no_live_child", fmt.Sprintf("no live child for role %q; use `many-ai-cli orchestrate spawn --role %s \"<prompt>\"`", body.Role, body.Role))
 		return
 	}
+	// body.Text は conductor 経由でユーザー由来のフリーテキストが入るため、
+	// BEL/ESC 等の C0 制御文字を除去してから board 記録と PTY 注入の両方に使う。
+	safeText := sanitizeInjectText(body.Text)
 	// board への記録が先。子が更新通知を受けて board を読むとき、指示本文が既に載っている
 	// ようにする（注入が先だと子が board を読んでも指示が見つからない窓ができる）。
 	if boardPath != "" {
-		if err := s.appendBoardSection(boardPath, "conductor", fmt.Sprintf("@%s session=%d への指示:\n%s\n", child.Role, child.ID, body.Text)); err != nil {
+		if err := s.appendBoardSection(boardPath, "conductor", fmt.Sprintf("@%s session=%d への指示:\n%s\n", child.Role, child.ID, safeText)); err != nil {
 			s.logger.Warn("send-child board append failed", "board", boardPath, "err", err)
 		}
 	}
-	s.injectText(child.ID, fmt.Sprintf("\n[orchestration] instruction from conductor (session=%d):\n%s\n", parentID, body.Text), true, false)
+	s.injectText(child.ID, fmt.Sprintf("\n[orchestration] instruction from conductor (session=%d):\n%s\n", parentID, safeText), true, false)
 	writeJSON(w, map[string]any{"ok": true, "session_id": child.ID, "role": child.Role, "board_path": boardPath})
 }
 
@@ -779,13 +786,20 @@ func (s *Server) handleBoardChange(boardID, boardPath string, info os.FileInfo, 
 		if sessionID == 0 {
 			sessionID = uniqueChildSessionForRole(stored, ev.Role)
 		}
-		if sessionID != 0 {
-			stored.Done[sessionID] = true
-			if child := stored.Children[sessionID]; child != nil {
-				child.Done = true
-				child.LastBoardWrite = now
-			}
+		if sessionID == 0 {
+			continue
 		}
+		// board.md への `## DONE ... session=<N>` 行は、bypassPermissions で動く
+		// 子セッションが（プロンプトインジェクション等により）他ボードや無関係
+		// セッションの ID を書き込めるため、必ずこのボードに登録された子で
+		// あることを確認してから状態を書き換える（IDOR 防止）。
+		child, ok := stored.Children[sessionID]
+		if !ok {
+			continue
+		}
+		stored.Done[sessionID] = true
+		child.Done = true
+		child.LastBoardWrite = now
 	}
 	sessions := map[int]string{}
 	for id, role := range stored.Sessions {
@@ -805,15 +819,24 @@ func (s *Server) handleBoardChange(boardID, boardPath string, info os.FileInfo, 
 	}
 	for _, ev := range dones {
 		sessionID := ev.SessionID
-		if sessionID == 0 {
-			s.orchestration.mu.Lock()
-			stored := s.orchestration.boards[boardID]
-			if stored != nil {
+		// board.md への `## DONE ... session=<N>` は攻撃者が任意の ID を書ける
+		// ため、ロック内でこのボードの子リストと突き合わせて認可する
+		// （IDOR 防止）。SessionID 明示分も含めて必ずこの検証を通す。
+		var authorized bool
+		s.orchestration.mu.Lock()
+		stored := s.orchestration.boards[boardID]
+		if stored != nil {
+			if sessionID == 0 {
 				sessionID = uniqueChildSessionForRole(stored, ev.Role)
 			}
-			s.orchestration.mu.Unlock()
+			if sessionID != 0 {
+				if _, ok := stored.Children[sessionID]; ok {
+					authorized = true
+				}
+			}
 		}
-		if sessionID != 0 {
+		s.orchestration.mu.Unlock()
+		if authorized {
 			s.markChildState(sessionID, "done")
 		}
 	}
@@ -1213,8 +1236,27 @@ func buildChildInitialPrompt(base, boardPath, role, branch string, sessionID int
 	// 進捗・DONE は子専用ファイルへ。board.md は conductor の指示・全体状況の読み取り専用に
 	// することで、共有 board への同時書き込み競合と記帳名義ゆれを避ける（C4）。
 	b.WriteString("Read the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## " + role + " session=" + id + " <RFC3339 time>` sections, each including a `status: running|blocked|done|failed` line. When complete, append `## DONE " + role + " session=" + id + "` and a concise summary to your progress file. Do not write to the shared board.\n\n")
-	b.WriteString(base)
+	// base はユーザー・conductor 由来のフリーテキスト。BEL/ESC 等の C0 制御文字が
+	// 混入していると PTY 経由で子セッションの端末エコー・Hub UI レンダリングに
+	// エスケープシーケンス（タイトル詐称・画面クリア等）を注入できてしまうため
+	// git_common.go の sanitizeCommitMessage と同型のフィルタで除去する。
+	b.WriteString(sanitizeInjectText(base))
 	return b.String()
+}
+
+// sanitizeInjectText は orchestration 経由で PTY へ inject する任意テキストから
+// C0 制御文字と DEL を除去する（\t / \n は保持し、\r は \n に正規化する）。
+// git_common.go の sanitizeCommitMessage と同じ規準・目的だが、こちらは長さ
+// 上限を持たず・末尾 TrimSpace もしない（プロンプトの改行構造を保つため）。
+func sanitizeInjectText(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	return strings.Map(func(r rune) rune {
+		if (r < 0x20 && r != '\t' && r != '\n') || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // buildConductorInitialPrompt は plan_orchestration-spawn-ui-exposure.md C2 の
