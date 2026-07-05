@@ -1293,6 +1293,16 @@ func (s *Server) handleResize(m proto.Message) {
 	}
 	if !skip {
 		s.broadcast(proto.Message{Type: "pty_resize", SessionID: m.SessionID, Cols: m.Cols, Rows: m.Rows})
+		// PTY サイズ変更の履歴を .jsonl に残す。表示崩れ（xterm と PTY の
+		// サイズ不一致）の再発時に、いつ・どのサイズへ変わったかを生ログと
+		// 突き合わせるための観測用（bugfix_codex-terminal-gap-resize-mismatch_2026-07-05.md）。
+		s.writeHistory(m.SessionID, map[string]any{
+			"ts":         time.Now().Format(time.RFC3339),
+			"type":       "pty_resize",
+			"session_id": m.SessionID,
+			"cols":       m.Cols,
+			"rows":       m.Rows,
+		})
 	}
 }
 
