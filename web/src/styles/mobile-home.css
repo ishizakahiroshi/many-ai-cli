@@ -12,6 +12,11 @@
    @media (max-width: 720px) + body.mobile-has-session で xterm を置き換える形で表示する。 */
 #mobile-terminal-lite { display: none; }
 
+/* 左ドロワー中身は PC では常に非表示（mobile-home.ts の renderMobileSessionDrawer() が
+   hidden 属性を外すため、属性だけに頼ると PC 幅へ戻した時にサイドバー内へ露出する）。
+   下の @media 内 body.mobile-drawer-open ルールが display: flex に上書きする。 */
+#mobile-drawer-content { display: none; }
+
 @media (max-width: 720px) {
   /* C6: タップ時の灰色ハイライトを全体で消す（ボタン・カード・行の :active スタイルで代替済み）。
      -webkit-tap-highlight-color は継承されるため html に 1 箇所で足りる。 */
