@@ -1,10 +1,10 @@
 # many-ai-cli ビルド・配布・デプロイ
 
-> 最終更新: 2026-06-13(土) 14:00:52
+> 最終更新: 2026-07-05(日) 10:50:11 — 旧設計書パス・CI/CD 配布の実装済み反映・Vite 記述を修正
 
 `many-ai-cli` は **Go 単一バイナリ + go:embed フロント** の構成。サーバーへのデプロイは無し（ユーザー PC にバイナリを置くだけ）。
 
-設計書: [../docs/v0.2.x-any-ai-cli-design.md §4・§17](../docs/v0.2.x-any-ai-cli-design.md)
+設計書: [../docs/v0.3.x-many-ai-cli-design.md](../docs/v0.3.x-many-ai-cli-design.md)
 
 ## ビルド前提
 
@@ -125,17 +125,16 @@ npm package を作る場合は platform 別 optional package に Go バイナリ
 
 Hub は引き続き `127.0.0.1` 固定で bind し、外部公開用の Windows Firewall 例外を要求しない設計を維持する。
 
-### v0.4+ の CI/CD 配布（予定）
+### CI/CD 配布（v0.3.0 で実装済み）
 
-- GitHub Actions で OS 別バイナリビルド + リリースタグ自動生成
-- `goreleaser` または手書きワークフローで `dist/{win,mac,mac-arm,linux}/many-ai-cli` をリリース成果物として添付
-- 自動更新機能（`many-ai-cli update`）は MVP では作らない
+- GitHub Actions（`release.yml`）+ GoReleaser によるタグ駆動リリース（OS 別バイナリ + npm publish。詳細は `docs/manual_release.md`）
+- 自動更新機能（`many-ai-cli update`）は未実装
 
 ## go:embed の運用
 
 - `internal/hub/embed.go`（仮）に `//go:embed all:web/dist` を書く想定
 - `web/dist/` が空のままビルドすると `embed: no matching files found` で失敗するので、CI / Makefile / 手元手順で **必ず先にフロントをビルド**してから Go ビルド
-- 開発時のホットリロードは Vite dev server を別ポートで起動し、Go 側からプロキシする方法を実装時に検討（決まったらここに追記）
+- 開発時のホットリロードは未整備（Vite は不採用・esbuild のみ）。フロント変更時は `cd web && bun run build` で `web/dist/` を再生成してから Go ビルド／Hub 再起動する
 
 ## 設定ファイルとログのデフォルト位置
 

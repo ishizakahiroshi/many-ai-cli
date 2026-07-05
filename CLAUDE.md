@@ -1,6 +1,6 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-06-07(日) 12:57:07 — 公開用AI指示を個人グローバル設定から分離
+> 最終更新: 2026-07-05(日) 10:50:11 — バージョン記述・実装状態・ローカルパス記述の陳腐化を修正
 
 > 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。
 
@@ -10,15 +10,15 @@
 
 > **Gemini CLI は wrap 対象外**（2026-05-06 決定 / 利用規約上の制約）。詳細は [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) 「2. 公開スコープ」参照。
 
-**現状**: v0.3.0 を公開予定（v0.1.1 が初回正式リリース、v0.1.0 は試験扱い）。v0.1.2 でバージョン文字列を ldflags + `/api/info` 経由の single source of truth に再設計、v0.2.0 で WSL ランチャー・Files/Git/Chat/Split/Multi・Commit all・Ollama routing・サーバ側ユーザー設定を追加。v0.3.0 で Workbench（SQLite セッション履歴）・PWA/Web Push・統合ランチャーのクロスプラットフォーム化（SSH は全 OS、WSL は Windows 専用）・リモートサーバー/Docker デプロイ資産・npm 配布を追加し、プロジェクト名を any-ai-cli から many-ai-cli へリネーム。**v0.4.0（Unreleased）で Workbench 機能と Hub 内蔵チャットプロキシ（`internal/proxy/`・`chat_proxy`）を撤去済み**（Sonnet 5 以降のデフォルト 1M コンテキストが Hub 経由でも回復する副次効果あり）。設計書はソースコードを正本として更新済み。
+**現状**: v0.3.x をリリース済み（最新タグ v0.3.4 / v0.1.1 が初回正式リリース、v0.1.0 は試験扱い）。v0.1.2 でバージョン文字列を ldflags + `/api/info` 経由の single source of truth に再設計、v0.2.0 で WSL ランチャー・Files/Git/Chat/Split/Multi・Commit all・Ollama routing・サーバ側ユーザー設定を追加。v0.3.0 で Workbench（SQLite セッション履歴）・PWA/Web Push・統合ランチャーのクロスプラットフォーム化（SSH は全 OS、WSL は Windows 専用）・リモートサーバー/Docker デプロイ資産・npm 配布を追加し、プロジェクト名を any-ai-cli から many-ai-cli へリネーム。**v0.4.0（Unreleased）で Workbench 機能と Hub 内蔵チャットプロキシ（`internal/proxy/`・`chat_proxy`）を撤去済み**（Sonnet 5 以降のデフォルト 1M コンテキストが Hub 経由でも回復する副次効果あり）。設計書はソースコードを正本として更新済み。
 
 **設計書（正本）**: [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md)
 
 > AI の個人グローバルルール（言語・確認・質問フォーマット・ターン終端の出力ルール・スクリーンショット規約等）は、各利用者が使う AI ツールのグローバル設定に置く。公開リポジトリ内の `CLAUDE.md` / `AGENTS.md` はプロジェクト固有ルールだけを扱う。
 
-## 現在の実装状態（v0.2.0）
+## 現在の実装状態
 
-v0.2.0 までに以下がすべて実装済み：
+v0.3.x（最新タグ v0.3.4）までに以下がすべて実装済み（v0.4.0 Unreleased では Workbench / chat_proxy 撤去に加え Grok Build CLI provider・Ollama `base_url` 設定を追加済み）：
 
 - `many-ai-cli serve` で Hub が起動する
 - `many-ai-cli claude` / `codex` / `copilot` / `cursor-agent` が Hub 未起動時に自動起動し接続する
@@ -42,9 +42,9 @@ v0.2.0 までに以下がすべて実装済み：
 | 設定ファイル | `~/.many-ai-cli/config.yaml`（Win: `%USERPROFILE%\.many-ai-cli\config.yaml`） |
 | ログ | `~/.many-ai-cli/logs/sessions/<provider>_<日時>_<folder>_s<id>.log/.jsonl/.txt`（PTY生ログ + イベント履歴JSONL + クリーンテキスト） |
 | 透過化環境変数 | `MANY_AI_CLI_AUTO=1` |
-| Provider | `claude` / `codex`（`gemini` は対象外、上記スコープ更新参照） |
+| Provider | `claude` / `codex` / `copilot` / `cursor-agent`（v0.4.0 Unreleased で `grok` 追加。`gemini` は対象外、上記スコープ更新参照） |
 
-> プロジェクトディレクトリは `c:\dev\many-ai-cli\`。md 内の参照は `many-ai-cli` に統一。
+> md 内の参照は `many-ai-cli` に統一（旧名 `any-ai-cli` は履歴記述を除き使わない）。ローカルのプロジェクト配置パスは `CLAUDE.local.md` に記載する。
 
 ## 技術スタック
 
@@ -109,7 +109,7 @@ many-ai-cli/
 | タスク種別 | 読むファイル |
 |---|---|
 | 調査・読み取り・質問応答 | （`CLAUDE.md` root のみ。`CLAUDE/*` は読まない） |
-| 実装・コーディング（Go / Vue） | `CLAUDE/coding.md` |
+| 実装・コーディング（Go / TypeScript） | `CLAUDE/coding.md` |
 | ビルド・配布・クロスコンパイル | `CLAUDE/deployment.md` |
 | context分割・docs命名・AI作業モデル・plan自走/停止条件 | `CLAUDE/development.md` |
 | Git・コミット・出力ルール | `CLAUDE/operations.md` |
