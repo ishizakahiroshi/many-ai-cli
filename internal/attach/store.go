@@ -8,7 +8,11 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
+
+const maxSanitizedFilenameBytes = 180
 
 // detectExt returns the file extension based on magic bytes.
 // Falls back to ".bin" for unknown or unsupported formats.
@@ -49,9 +53,73 @@ func extFromFilename(filename string) string {
 	return ext
 }
 
-// Save writes data to baseDir/<sessionID>/<YYYYMMDDHHmmss_NNNNNNNNN><ext> and returns
+func sanitizeFilename(filename, ext string) string {
+	name := filename
+	if i := strings.LastIndexAny(name, `/\`); i >= 0 {
+		name = name[i+1:]
+	}
+	nameExt := filepath.Ext(name)
+	if ext != "" && strings.EqualFold(nameExt, ext) {
+		name = name[:len(name)-len(nameExt)]
+	}
+
+	var b strings.Builder
+	lastUnderscore := false
+	stemByteLimit := maxSanitizedFilenameBytes - len(ext)
+	if stemByteLimit < 1 {
+		stemByteLimit = 1
+	}
+	for _, r := range name {
+		allowed := unicode.IsLetter(r) || unicode.IsNumber(r) || unicode.IsMark(r) ||
+			r == '_' || r == '-' || r == '.'
+		replace := !allowed || unicode.IsControl(r) || unicode.Is(unicode.Cf, r)
+		if replace {
+			if b.Len() > 0 && !lastUnderscore && b.Len()+1 <= stemByteLimit {
+				b.WriteByte('_')
+				lastUnderscore = true
+			}
+			continue
+		}
+		if b.Len()+utf8.RuneLen(r) > stemByteLimit {
+			break
+		}
+		b.WriteRune(r)
+		lastUnderscore = r == '_'
+	}
+
+	sanitized := strings.Trim(b.String(), "._-")
+	if sanitized == "" {
+		return "attachment" + ext
+	}
+	return sanitized + ext
+}
+
+func attachmentInject(provider, abs string) (string, error) {
+	for _, r := range abs {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+			return "", fmt.Errorf("attachment path contains unsupported character %U", r)
+		}
+	}
+
+	switch provider {
+	case "claude":
+		// Claude Code の @mention は空白を含むパスを扱える。独自の引用符を加えると
+		// mention の一部として解釈されるため、絶対パスをそのまま渡す。
+		return "@" + abs + " ", nil
+	case "codex":
+		// Codex の @mention と同じくパスをそのまま渡し、Windows の区切りだけ
+		// composer が扱う slash 形式へ正規化する。
+		return "@" + filepath.ToSlash(abs) + " ", nil
+	default:
+		// fallback for future providers: bare path
+		return abs + " ", nil
+	}
+}
+
+// Save writes data to baseDir/<sessionID>/<YYYYMMDDHHmmss_NNNNNNNNN_sanitized-name><ext> and returns
 // the absolute file path and a provider-specific inject string.
-// filename is the original file name; its extension takes priority over magic-byte detection.
+// filename is the original file name; its sanitized form is retained and its extension takes
+// priority over magic-byte detection.
 func Save(baseDir string, sessionID int, provider string, data []byte, filename string) (path, inject string, err error) {
 	dir := filepath.Join(baseDir, fmt.Sprintf("%d", sessionID))
 	if err = os.MkdirAll(dir, 0o700); err != nil {
@@ -62,14 +130,15 @@ func Save(baseDir string, sessionID int, provider string, data []byte, filename 
 	if ext == "" {
 		ext = detectExt(data)
 	}
+	sanitizedName := sanitizeFilename(filename, ext)
 
 	now := time.Now()
 	baseName := fmt.Sprintf("%s_%09d", now.Format("20060102150405"), now.Nanosecond())
 	var abs string
 	for i := 0; ; i++ {
-		savedName := baseName + ext
+		savedName := baseName + "_" + sanitizedName
 		if i > 0 {
-			savedName = fmt.Sprintf("%s_%d%s", baseName, i, ext)
+			savedName = fmt.Sprintf("%s_%d_%s", baseName, i, sanitizedName)
 		}
 		abs = filepath.Join(dir, savedName)
 		f, openErr := os.OpenFile(abs, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
@@ -91,16 +160,10 @@ func Save(baseDir string, sessionID int, provider string, data []byte, filename 
 		break
 	}
 
-	switch provider {
-	case "claude":
-		// Claude Code は @path 直後の Enter を画像だけの送信として処理することがある。
-		// 本文と同じ入力行に残すため、Codex と同じく空白で区切る。
-		inject = "@" + abs + " "
-	case "codex":
-		inject = "@" + filepath.ToSlash(abs) + " "
-	default:
-		// fallback for future providers: bare path
-		inject = abs + " "
+	inject, err = attachmentInject(provider, abs)
+	if err != nil {
+		_ = os.Remove(abs)
+		return "", "", fmt.Errorf("attach.Save: inject path %s: %w", abs, err)
 	}
 
 	return abs, inject, nil

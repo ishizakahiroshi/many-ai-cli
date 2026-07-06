@@ -44,7 +44,13 @@ func (s *Server) processSingleMove(src, dstDir, cwd, gitRoot string) fileMoveRes
 	if res.Error != "" {
 		return res
 	}
-	if err := os.Rename(plan.SrcClean, plan.NewPath); err != nil {
+	// HUB-5: 事前 Lstat と os.Rename の 2 段階では TOCTOU で dst が同名ファイル
+	// で埋まった瞬間に無警告上書きされる。atomicRenameNoReplace は OS 別 syscall
+	// で「dst 既存なら失敗」を atomic に保証する。
+	if err := atomicRenameNoReplace(plan.SrcClean, plan.NewPath); err != nil {
+		if isRenameTargetExistsErr(err) {
+			return fileMoveResult{Src: src, Error: "target already exists: " + plan.NewPath}
+		}
 		return fileMoveResult{Src: src, Error: "rename failed: " + err.Error()}
 	}
 	return fileMoveResult{Src: src, NewAbs: plan.NewPath}
@@ -148,8 +154,13 @@ func (s *Server) processMultiMove(srcs []string, dstDirClean, cwd, gitRoot strin
 
 	completed := make([]fileMovePlan, 0, len(plans))
 	for i, plan := range plans {
-		if err := os.Rename(plan.SrcClean, plan.NewPath); err != nil {
-			results[i].Error = "rename failed: " + err.Error()
+		// HUB-5: 上書き禁止の atomic rename に置き換え。
+		if err := atomicRenameNoReplace(plan.SrcClean, plan.NewPath); err != nil {
+			if isRenameTargetExistsErr(err) {
+				results[i].Error = "target already exists: " + plan.NewPath
+			} else {
+				results[i].Error = "rename failed: " + err.Error()
+			}
 			rollbackErrs := rollbackMoves(completed)
 			errMsg := results[i].Error
 			if len(rollbackErrs) > 0 {

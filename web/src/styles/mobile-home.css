@@ -1,0 +1,934 @@
+/* mobile-home.css
+ * スマホホーム画面（#mobile-home）専用スタイル。
+ * 大部分のルールは @media (max-width: 720px) 内に閉じ込めている（PC への影響ゼロ）。
+ * 例外: スマホ機能要素を PC で確実に隠すための既定ルールは @media 外に置く。
+ */
+
+/* B2: スマホ専用「📷 撮影」ボタンは PC で常に非表示にしておき、
+   下の @media (max-width: 720px) で display: inline-flex に上書きする。 */
+#attach-camera-btn { display: none; }
+
+/* A3: 簡易ターミナルビュー（mobile-terminal-lite.ts）は PC では非表示。
+   @media (max-width: 720px) + body.mobile-has-session で xterm を置き換える形で表示する。 */
+#mobile-terminal-lite { display: none; }
+
+/* 左ドロワー中身は PC では常に非表示（mobile-home.ts の renderMobileSessionDrawer() が
+   hidden 属性を外すため、属性だけに頼ると PC 幅へ戻した時にサイドバー内へ露出する）。
+   下の @media 内 body.mobile-drawer-open ルールが display: flex に上書きする。 */
+#mobile-drawer-content { display: none; }
+
+@media (max-width: 720px) {
+  /* C6: タップ時の灰色ハイライトを全体で消す（ボタン・カード・行の :active スタイルで代替済み）。
+     -webkit-tap-highlight-color は継承されるため html に 1 箇所で足りる。 */
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ── ホーム画面コンテナ ── */
+  body.mobile-home-view #mobile-home {
+    display: block;
+  }
+
+  #mobile-home {
+    overflow-y: auto;
+    flex: 1 1 auto;
+    /* C6 PWA safe-area: 横ノッチ（landscape）で本文が欠けないよう左右 inset を加算。
+       上端は header ではなく #app 直下の浮遊 ☰ ボタンと重ならないよう --mobile-float-clear を使う。 */
+    padding: var(--mobile-float-clear, 40px) calc(8px + env(safe-area-inset-right)) 8px calc(8px + env(safe-area-inset-left));
+    background: var(--bg-layer);
+    flex-direction: column;
+    gap: var(--space-3, 8px);
+    /* display controlled by body.mobile-home-view rule above / HTML hidden attribute */
+  }
+
+  /* ホーム表示中はサイドバーとターミナルを隠す */
+  body.mobile-home-view:not(.mobile-drawer-open) #session-list,
+  body.mobile-home-view #terminal-column {
+    display: none !important;
+  }
+
+  /* ── ハンバーガーバッジ ── */
+  #mobile-menu-btn .mobile-badge {
+    display: none;
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    background: var(--danger, #e53e3e);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    border-radius: 9px;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #mobile-menu-btn .mobile-badge:not([hidden]) {
+    display: inline-flex;
+  }
+
+  body.mobile-home-view #mobile-spawn-btn {
+    display: inline-flex;
+    position: fixed;
+    top: auto;
+    right: calc(14px + env(safe-area-inset-right));
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    z-index: 1200;
+    width: auto;
+    min-width: 96px;
+    height: 48px;
+    min-height: 48px;
+    padding: 0 16px;
+    border-radius: 999px;
+    font-size: 0.95rem;
+    font-weight: 800;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+  }
+
+  /* ── セクション ── */
+  .mh-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2, 6px);
+  }
+
+  .mh-results,
+  .mobile-drawer-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3, 8px);
+  }
+
+  .mh-section--pinned {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--bg-layer);
+    padding-bottom: 4px;
+  }
+
+  .mh-section-header {
+    margin: 0 0 4px 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .mh-section--pinned .mh-section-header {
+    color: var(--danger, #e53e3e);
+  }
+
+  .mh-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 0 10px;
+    margin-bottom: 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg);
+    color: var(--muted);
+  }
+  .mh-search input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--text);
+    font-size: 16px;
+  }
+  .mh-search-icon {
+    flex: 0 0 auto;
+    font-size: 1rem;
+  }
+
+  /* ── カード ── */
+  .mh-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2, 6px);
+    padding: 10px 12px;
+    background: var(--bg);
+    border-radius: var(--radius-md);
+    border-left: 4px solid var(--line);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .mh-card:active {
+    background: var(--bg-hover, rgba(255,255,255,0.06));
+  }
+
+  .mh-card--pending {
+    border-left-color: var(--danger, #e53e3e);
+  }
+
+  .mh-card--running {
+    border-left-color: var(--warning, #d69e2e);
+  }
+
+  .mh-card--waiting {
+    border-left-color: var(--success, #38a169);
+  }
+
+  .mh-card--error {
+    border-left-color: var(--orange, #dd6b20);
+  }
+
+  .mh-session-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 56px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+  }
+  .mh-session-row--running { border-left-color: var(--warning, #d69e2e); }
+  .mh-session-row--waiting { border-left-color: var(--success, #38a169); }
+  .mh-session-row--error {
+    border-left-color: var(--danger, #e53e3e);
+    opacity: 0.76;
+  }
+  .mh-session-row.is-active {
+    border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+    background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  }
+  .mh-session-row--compact {
+    min-height: 48px;
+    padding: 7px 8px;
+  }
+  .mh-row-main {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .mh-row-title {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    /* C6: スマホ本文 16px 基準（リスト行の主テキスト）。 */
+    font-size: 16px;
+    font-weight: 650;
+  }
+  .mh-row-progress {
+    margin-top: 2px;
+    color: var(--text-soft);
+    font-size: 0.76rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── カードヘッダー ── */
+  .mh-card-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 6px);
+  }
+
+  .mh-card-title {
+    flex: 1;
+    /* C6: スマホ本文 16px 基準（承認カードのタイトル行）。 */
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .mh-session-id {
+    color: var(--muted);
+    font-size: 0.8em;
+  }
+
+  .mh-session-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── 状態バッジ ── */
+  .mh-state-badge,
+  .mh-state-chip {
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: var(--radius-sm, 4px);
+    border: 1px solid currentColor;
+  }
+
+  .mh-state-chip--pending { color: var(--danger, #e53e3e); }
+  .mh-state-badge--running,
+  .mh-state-chip--running { color: var(--warning, #d69e2e); }
+  .mh-state-badge--waiting,
+  .mh-state-badge--standby,
+  .mh-state-badge--done,
+  .mh-state-chip--waiting { color: var(--success, #38a169); }
+  .mh-state-badge--error,
+  .mh-state-badge--disconnected,
+  .mh-state-chip--error { color: var(--danger, #e53e3e); }
+
+  .mh-progress-line,
+  .mh-pending-empty {
+    color: var(--text-soft);
+    font-size: 0.82rem;
+  }
+
+  /* ── スニペット（最新ひと言） ── */
+  .mh-card-snippet {
+    font-size: 0.82rem;
+    color: var(--text-soft);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── 承認待ちカード: 質問テキスト ── */
+  .mh-card-preamble {
+    font-size: 0.84rem;
+    color: var(--text-soft);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .mh-card-question {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--text);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* ── 選択肢ボタン群 ── */
+  .mh-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2, 6px);
+    margin-top: 2px;
+  }
+
+  .mh-options .aqt-option-btn {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 14px;
+    font-size: 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* 番号を丸バッジ化（mockup S-06 の <span class="n">N</span> に相当・Q1 視覚スタイル）。
+     PC 側 .aqt-option-num::after の ". " もここで打ち消す。 */
+  .mh-options .aqt-option-btn .aqt-option-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--bg-elev3, rgba(255, 255, 255, 0.08));
+    color: var(--text);
+    font-size: 0.72rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+  .mh-options .aqt-option-btn .aqt-option-num::after { content: none; }
+  .mh-options .aqt-option-btn .aqt-option-label {
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+  }
+  .mh-options .aqt-option-btn.is-current .aqt-option-num {
+    background: color-mix(in srgb, var(--warn) 35%, transparent);
+    color: var(--warn-text);
+  }
+  .mh-options .aqt-option-btn.chosen .aqt-option-num {
+    background: color-mix(in srgb, var(--green) 30%, transparent);
+    color: var(--green);
+  }
+
+  /* ── fallback（batch / multiQ） ── */
+  .mh-approval-fallback {
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg-elev, #161b22);
+    color: var(--text);
+    font-size: 0.86rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  /* ── A1: 自由入力インライン（N. User specifies） ── */
+  .mh-free-input {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+    align-items: stretch;
+  }
+  .mh-free-input-field {
+    flex: 1;
+    min-height: 44px;
+    padding: 10px 12px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    color: var(--text);
+    font-size: 0.9rem;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .mh-free-input-field::placeholder {
+    color: var(--muted);
+  }
+  .mh-free-input-send {
+    min-height: 44px;
+    padding: 0 14px;
+    background: var(--accent, #2563eb);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    color: #fff;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .mh-free-input-send:active {
+    filter: brightness(0.9);
+  }
+
+  /* ── C3: 承認ボトムシート ── */
+  #mobile-approval-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1490;
+    background: rgba(0, 0, 0, 0.32);
+  }
+
+  #mobile-approval-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1500;
+    display: flex;
+    flex-direction: column;
+    max-height: min(78dvh, 620px);
+    padding: 8px calc(14px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
+    border-radius: 18px 18px 0 0;
+    border: 1px solid var(--line);
+    background: var(--bg, #111827);
+    box-shadow: 0 -18px 40px rgba(0, 0, 0, 0.38);
+  }
+
+  #mobile-approval-sheet[hidden],
+  #mobile-approval-sheet-backdrop[hidden] {
+    display: none !important;
+  }
+
+  .mas-grab {
+    align-self: center;
+    width: 42px;
+    height: 18px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+  .mas-grab::before {
+    content: "";
+    display: block;
+    width: 42px;
+    height: 4px;
+    margin: 7px auto;
+    border-radius: 999px;
+    background: var(--line);
+  }
+
+  .mas-content {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .mas-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .mas-header-text {
+    min-width: 0;
+  }
+  .mas-meta {
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .mas-title {
+    color: var(--text);
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+  .mas-close {
+    flex: 0 0 34px;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--bg-elev2, rgba(255, 255, 255, 0.08));
+    color: var(--text);
+    font-size: 1.2rem;
+  }
+
+  .mas-preamble,
+  .mas-question,
+  .mas-empty {
+    color: var(--text-soft);
+    font-size: 0.9rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .mas-preamble {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .mas-question {
+    color: var(--text);
+    font-weight: 650;
+  }
+  .mas-progress {
+    align-self: flex-start;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--text);
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .mas-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .mas-option {
+    width: 100%;
+    min-height: 48px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg-elev, #161b22);
+    color: var(--text);
+    text-align: left;
+    font: inherit;
+  }
+  .mas-option.is-current {
+    border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+    background: color-mix(in srgb, var(--accent) 16%, var(--bg-elev));
+  }
+  .mas-option-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 24px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--bg-elev3, rgba(255, 255, 255, 0.08));
+    font-size: 0.76rem;
+    font-weight: 800;
+  }
+  .mas-option-label {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .mas-free-row,
+  .mas-actions {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .mas-free-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 46px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg-deep, #0d1117);
+    color: var(--text);
+    font-size: 16px;
+  }
+  .mas-primary,
+  .mas-secondary {
+    min-height: 46px;
+    padding: 0 14px;
+    border-radius: var(--radius-md);
+    font-weight: 700;
+  }
+  .mas-primary {
+    flex: 1 1 auto;
+    border: 1px solid transparent;
+    background: var(--accent, #2563eb);
+    color: #fff;
+  }
+  .mas-secondary {
+    flex: 0 0 auto;
+    border: 1px solid var(--line);
+    background: var(--bg-elev, #161b22);
+    color: var(--text);
+  }
+  .mas-primary:disabled,
+  .mas-secondary:disabled {
+    opacity: 0.45;
+  }
+
+  /* ── A3: 簡易ターミナルビュー ── */
+  /* xterm.js のフル描画は狭い画面で読みづらいため、個別セッション + mobile 幅では
+     #terminal-area-wrapper を hidden にして #mobile-terminal-lite（チャットトランスクリプト表示）を出す。
+     xterm.js 自身は document に attach されたまま生きているので承認検出・PTY 受信は続く。 */
+  body.mobile-has-session:not(.mobile-home-view) #terminal-area-wrapper {
+    display: none !important;
+  }
+  body.mobile-has-session:not(.mobile-home-view) #mobile-terminal-lite {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    background: var(--bg-deep, #0d1117);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    /* C4: 詳細ボタンをアイコン化してターミナル右上に絶対配置するためのアンカー。 */
+    position: relative;
+  }
+  .mtl-chat-view {
+    flex: 1 1 auto;
+    min-height: 0;
+    position: relative;
+    overflow: auto;
+    padding: 46px 12px 14px;
+    color: var(--text);
+    font-size: 16px;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+    -webkit-overflow-scrolling: touch;
+  }
+  .mtl-chat-messages {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 100%;
+  }
+  .mtl-msg {
+    max-width: 100%;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .mtl-msg-ai {
+    align-self: stretch;
+    color: #d8d8d8;
+    padding-right: 8px;
+  }
+  .mtl-msg-user {
+    align-self: flex-end;
+    max-width: 82%;
+    padding: 10px 12px;
+    border-radius: 18px 18px 4px 18px;
+    background: color-mix(in srgb, var(--accent, #2563eb) 28%, var(--bg-elev2, #1f2937));
+    color: var(--text);
+    border: 1px solid color-mix(in srgb, var(--accent, #2563eb) 55%, transparent);
+  }
+  .mtl-chat-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    align-self: flex-start;
+    margin: 2px 0 4px;
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+  .mtl-chat-status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent, #2563eb);
+    animation: mtl-status-pulse 1.4s ease-in-out infinite;
+  }
+  .mtl-jump-latest {
+    position: sticky;
+    left: 50%;
+    bottom: 10px;
+    transform: translateX(-50%);
+    z-index: 3;
+    min-height: 34px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--bg-elev, #161b22);
+    color: var(--text);
+    font-size: 0.82rem;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
+  }
+  .mtl-jump-latest[hidden] {
+    display: none;
+  }
+  @keyframes mtl-status-pulse {
+    0%, 100% { opacity: 0.35; transform: scale(0.85); }
+    50% { opacity: 1; transform: scale(1); }
+  }
+  /* C4: 詳細を見る (全画面) — 中央配置の幅広ボタンからターミナル右上の小さなアイコンへ変更。
+     幅広ボタンがあった頃はターミナル本文と入力欄の間に大きな帯ができ視線の流れが切れていた。 */
+  .mtl-detail-icon {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    z-index: 2;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    margin: 0;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm, 6px);
+    color: #d8d8d8;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+  .mtl-detail-icon:hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+  }
+  .mtl-detail-icon:active {
+    background: rgba(255, 255, 255, 0.20);
+  }
+
+  /* 「詳細を見る」モーダル（PTY バッファ全行を全画面 pre で表示）。 */
+  .mtl-detail-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9500;
+    background: rgba(0,0,0,0.78);
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+  }
+  .mtl-detail-box {
+    background: var(--bg);
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    /* C6 PWA safe-area: 全画面モーダルのヘッド行がノッチ、下端がホームバーに被らないようにする。 */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .mtl-detail-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-elev);
+    color: var(--text);
+    flex-shrink: 0;
+  }
+  .mtl-detail-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.88rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mtl-detail-tail,
+  .mtl-detail-close {
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    min-width: 36px;
+    height: 36px;
+    padding: 0 10px;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  .mtl-detail-close {
+    width: 36px;
+    padding: 0;
+  }
+  .mtl-detail-pre {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 8px 10px;
+    margin: 0;
+    color: #d8d8d8;
+    background: var(--bg-deep, #0d1117);
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: 12.5px;
+    line-height: 1.45;
+    white-space: pre;
+    word-break: normal;
+  }
+
+  /* ── empty state ── */
+  .mh-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 16px;
+    color: var(--muted);
+    font-size: 0.9rem;
+    text-align: center;
+  }
+
+  .mh-empty--compact {
+    padding: 14px 8px;
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  #mobile-drawer-content[hidden] {
+    display: none !important;
+  }
+  body.mobile-drawer-open #mobile-drawer-content {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  body.mobile-drawer-open #session-list {
+    background: var(--bg-layer);
+  }
+  body.mobile-drawer-open #sessions {
+    display: none;
+  }
+  body.mobile-drawer-open #new-session-bar {
+    display: none;
+  }
+  body.mobile-drawer-open #new-session-panel:not([hidden]) {
+    display: block;
+    margin-top: 10px;
+  }
+  .mobile-drawer-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .mobile-drawer-actions {
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+  }
+  .mobile-drawer-action {
+    width: 100%;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg);
+    color: var(--text);
+    font-weight: 650;
+    text-align: left;
+  }
+
+  /* C7指摘: ドロワーの「表示切り替え」セクション。旧 #unified-tab-bar の帯撤去に伴い、
+     ターミナル/マルチ/チャット/分割/Files/Git/承認 の切り替えをここへ移設。 */
+  .mobile-drawer-views {
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .mobile-drawer-views-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  .mobile-drawer-view-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 40px;
+    padding: 0 6px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .mobile-drawer-view-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* B2: スマホ専用「📷 撮影」ボタン（attach-panel 内）。
+     PC では @media 外の既定で display:none、ここで mobile 幅のみ表示に上書きする。
+     attach-drop-zone（📎 ファイル選択）と並べる形でカメラ起動を 1 タップで提供する。 */
+  #attach-camera-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    margin-left: 6px;
+    padding: 0 10px;
+    background: var(--bg-elev2, rgba(255,255,255,0.06));
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    color: var(--text);
+    font-size: 1.1rem;
+    cursor: pointer;
+  }
+  #attach-camera-btn:active {
+    background: var(--bg-hover, rgba(255,255,255,0.12));
+  }
+}

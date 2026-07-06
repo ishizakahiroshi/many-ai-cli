@@ -1,0 +1,294 @@
+# [保留] 次期 AI Provider 追加候補 概要計画
+
+> 最終更新: 2026-06-07(日) 18:45:00 — v0.3.0 では scope 外。Copilot / Cursor Agent は個別 plan で実装済み扱い、OpenCode 等は future backlog
+
+## スコープ更新ログ
+
+- **2026-05-17**: **v0.2.0 メインテーマを Ollama 実装に確定**。Codex / Claude Code を Ollama（local daemon / Ollama Cloud）経由で動かすための起動プリセット・モデル選択 UI・route メタデータ表示の整備を v0.2.0 のスコープに据える。OpenCode（WSL 前提）と GitHub Copilot CLI は **v0.2.x 以降の次期計画へ移行**。OpenCode は UI / 設定 / 内部ロジックがソースに残っているが、新規追加・露出は行わず **既存箇所は非表示化のみ**（削除しない）。
+- **2026-05-31**: GitHub Copilot CLI は `docs/local/feature/plan_copilot-cli-provider_20260531085030.md` に切り出して実装対象へ移行。次期 provider 候補一覧では個別 plan 参照扱いに変更。
+- **2026-06-07**: v0.3.0 release triage で、Copilot CLI / Cursor Agent は個別 plan と source / README の公開状態に同期済み。新規 provider 拡張全体計画は v0.3.0 scope 外の future backlog とする。
+- **2026-05-16**: Ollama Cloud 経由で Codex / Claude Code / OpenCode などを起動できることを確認。ただし `any-ai-cli` 上の provider は実行する agent CLI（例: `codex`, `claude`, 将来候補 `opencode`）であり、Ollama は provider ではなく `route` / `model backend` として扱う方針に更新する。UI では `Codex (Ollama)` + `gpt-oss:120b-cloud` のように agent CLI、接続経路、LLM 名を分けて表示する。関連: `docs/local/plan_ollama-cloud-codex-claude.md`
+- **2026-05-13**: OpenCode は **WSL 上での動作を前提としている** ことが判明したため、`any-ai-cli`（Windows ネイティブ前提の単一バイナリ設計）の wrap 対象から **除外** する。本 plan の OpenCode 関連項目はすべて対象外として保留。詳細は `docs/local/feature/reference_opencode-provider-research_20260512075724.md` 冒頭の追記参照。
+
+## context配分
+
+| context | 状態 | 内容 | 備考 |
+|---|---|---|---|
+| C1 | plan | **v0.2.0 メインテーマ: Ollama 実装**（local daemon / Ollama Cloud を Codex・Claude Code の route として接続） | 起動プリセット、モデル選択 UI、route/model メタデータ表示、設定パネル統合まで。詳細は下記「Ollama 連携時の確認事項」参照 |
+| C2 | fix | GitHub Copilot CLI provider 追加 | 個別 plan `docs/local/feature/plan_copilot-cli-provider_20260531085030.md` へ移行 |
+| C3 | next | ~~OpenCode provider 追加~~（**WSL 前提のため除外維持、v0.2.x 以降の再検討枠**） | 既存ソース要素は削除せず非表示化のみ。再開判断時の参考は `docs/local/feature/reference_opencode-provider-research_20260512075724.md` |
+| C4 | plan | Cursor CLI の追加可否調査 | 2026-05-24 調査完了。技術的には実装可能だが Windows ネイティブ動作・PTY 要件・サブスクリプション必須の確認が前提。詳細は下記「Cursor CLI 導入可否チェック」参照 |
+
+## 概要
+
+Claude Code / Codex CLI が安定してきたため、次の AI CLI / local LLM 連携候補を整理する。
+
+**v0.2.0 メインテーマ: Ollama 実装**（local daemon / Ollama Cloud を Codex / Claude Code の route / model backend として接続）。Copilot CLI は個別 provider plan へ移行済み。OpenCode は次期計画（v0.2.x 以降）へ移行。
+
+優先順位は次の通り。
+
+1. **Ollama 実装**（v0.2.0 メインテーマ）— Codex / Claude Code の route / model backend として接続
+2. GitHub Copilot CLI（個別 plan で provider 追加へ移行）
+3. Cursor CLI（v0.2.x 以降）
+4. ~~OpenCode~~（WSL 前提のため除外維持、再開時は Windows ネイティブ動作の再確認が前提）
+
+## 判断
+
+v0.2.0 のメインテーマは Ollama 実装に確定。Ollama 単体は coding agent ではなく、local / cloud LLM の route / model backend として扱う。Codex は OpenAI 互換 API（`http://localhost:11434/v1`）、Claude Code は Anthropic 互換 API（`http://localhost:11434`）経由で接続できる。`any-ai-cli` の provider としては実行する agent CLI を正とし、Ollama は `route=ollama` と `model=<LLM名>` のメタデータとして表現する。
+
+OpenCode は `ollama launch opencode` で起動できるが、Windows ネイティブ動作が確認できていない（WSL 前提）。`any-ai-cli` は Windows ネイティブ単一バイナリ前提のため、wrap 対象から除外する判断を維持する。**ソースに残る OpenCode 関連の UI・設定・型定義は削除せず、UI 露出のみ抑制する**（再開判断時の復元コストを下げるため）。
+
+Copilot CLI は GitHub / PR / Issue 連携が強く、GitHub Copilot subscription 前提で使う場合に有力。2026-05-13 の規約調査で PTY wrap 構造での導入は可能と判断済み。2026-05-31 に個別 plan へ切り出し、`copilot` provider として実装へ移行した。Cursor CLI は Cursor IDE を日常利用する場合に候補。
+
+## 推奨ロードマップ
+
+```text
+v0.1.x: claude / codex 安定化（完了）
+v0.2.0: Ollama 実装（local / cloud route として Codex・Claude Code の model backend に接続）★メインテーマ
+v0.2.x以降: copilot provider 追加（`plan_copilot-cli-provider_20260531085030.md` へ移行）
+v0.2.x以降: cursor provider 追加を検討
+v0.2.x以降（再検討枠）: opencode provider 追加（Windows ネイティブ動作・PTY 表示・承認検出の再確認が前提）
+```
+
+## OpenCode 追加時の確認事項（**対象外化、2026-05-13**）
+
+> OpenCode は WSL 上での動作を前提としているため `any-ai-cli` の wrap 対象から除外。以下の確認項目は対象外化に伴い保留。再開判断時の参考として残置。
+
+- `opencode` CLI の起動引数、model 指定、provider 指定
+- TUI 出力と xterm.js 表示の相性
+- 承認プロンプトの文面と番号入力パターン
+- セッション終了検出
+- `/api/spawn` の provider 許可リスト追加
+- spawn dialog の provider / model / risk 表示追加
+- `approval-patterns/opencode.json` の初期値
+- slash command 取得を対応するかどうか
+
+## Copilot CLI 導入可否チェック
+
+規約面の調査は `docs/v0.1.x-any-ai-cli-design.md` のスコープ更新ログ（2026-05-13）に記録済み。結論として **PTY wrap 構造であれば導入可能** と判断しているが、実装に進む前に以下を確認する。
+
+### 規約・運用面（調査済み事項の最終確認）
+
+- LICENSE.md：バイナリ非同梱・改変なしの PTY wrap 構造で抵触しないことを再確認する（規約改定の有無含む）
+- AUP：bulk automation 等への抵触がないことを再確認する
+- Product Specific Terms（March 2026 版）：CLI 経由のプロンプトが GitHub 側で保持・private モデル fine-tune に利用される旨を README / 設計書 / spawn dialog のいずれで告知するか決める
+- 「規約変更により予告なくサポート終了する可能性あり」の文言を README / 設計書に明記する
+- Pre-release License Terms 下での自動化扱いを定期的に再確認する運用フローを決める
+
+### CLI 実装面
+
+- `copilot` CLI のインストール手段とバイナリパス（Windows / macOS / Linux）
+- 起動引数、認証フロー（`gh auth login` 連携の要否）、サブスクリプション前提
+- TUI 出力と xterm.js 表示の相性（ANSI シーケンス、再描画パターン）
+- 承認プロンプトの文面と入力パターン（Claude / Codex / OpenCode と異なるか）
+- セッション終了検出パターン
+- スラッシュコマンド一覧取得の可否
+- 折りたたみ展開キーバインドの有無
+
+### Hub 側で必要な変更
+
+- `/api/spawn` の provider 許可リストへ `copilot` 追加
+- spawn dialog の provider / model / risk 表示追加
+- `approval-patterns/copilot.json` の初期値定義
+- banner / shell-init の `copilot` 対応
+- 設定パネルでの copilot CLI パス指定
+
+### 将来の移行候補
+
+- PTY wrap から ACP（Agent Client Protocol）統合への移行可能性を別 plan で検討する
+
+## Ollama 連携時の確認事項
+
+Ollama は provider ではなく route / model backend として扱う。
+
+### 接続方式
+
+- Codex: OpenAI 互換 API として `http://localhost:11434/v1` を使う
+- Claude Code: Anthropic 互換 API として `http://localhost:11434` を使う
+- OpenCode: Ollama 公式の `ollama launch opencode` 統合があるが、`any-ai-cli` provider 化は Windows ネイティブ動作の再確認後に判断する
+- Ollama Cloud モデルは `ollama signin` 済みのローカル Ollama 経由で使う方針を主とする
+- ollama.com 直結は Ollama API key が必要になるため、初期対応では補足扱いにする
+
+### 表示仕様
+
+Hub UI / セッション一覧 / ログでは、実行する agent CLI、接続経路、LLM 名を分けて保持・表示する。
+
+```text
+provider = codex
+route = ollama
+model = gpt-oss:120b-cloud
+displayTitle = Codex (Ollama)
+displaySubtitle = gpt-oss:120b-cloud
+```
+
+表示例:
+
+```text
+Codex (Ollama)
+gpt-oss:120b-cloud
+```
+
+```text
+Claude Code (Ollama)
+kimi-k2.5:cloud
+```
+
+将来 OpenCode を対象に戻す場合の表示例:
+
+```text
+OpenCode (Ollama)
+qwen3-coder:480b-cloud
+```
+
+狭い表示領域では `Codex · Ollama · gpt-oss` のような短縮表示を許容する。`--profile` 経由などで model 名を安全に解決できない場合は推測せず、`Codex (Ollama)` のように route まで表示する。
+
+### 確認事項
+
+- `ollama pull <model>` 済みモデル、または cloud モデルをどう選択肢に出すか
+- context size などを Ollama 側でどう調整・案内するか
+- Codex profile、Claude Code 環境変数、`ollama launch` のどれを any-ai-cli 側で起動プリセット化するか
+- 直接 wrap 対象にする場合、coding agent としてのファイル編集・承認・ツール実行を別途設計する必要がある
+
+## Cursor CLI 導入可否チェック
+
+> 調査日: 2026-05-24
+
+### CLI の基本仕様
+
+| 項目 | 内容 |
+|---|---|
+| コマンド名 | `cursor-agent`（Cursor の installer が PATH に追加） |
+| インタラクティブ TUI | あり。プロンプト入力・変更レビュー・コマンド承認が対話型で動作 |
+| 非インタラクティブ | `cursor-agent -p "プロンプト"` / `--print` で非対話実行可能 |
+| PTY 要件 | **real TTY 必須**。PTY なし環境（直接 subprocess 呼び出し等）ではハングする。tmux / ConPTY 等の疑似端末が必要 |
+| セッション管理 | `cursor-agent ls` で過去会話一覧、`--resume <id>` / `--continue` で再開可能 |
+| 終了方法 | Ctrl+D（2回押し） |
+
+### 承認プロンプト・権限モデル
+
+- ターミナルコマンド実行前に `y`（許可） / `n`（拒否）の入力を求めるプロンプトが出る
+- `--yolo` フラグでコマンド自動承認（無承認モード）
+- `--sandbox` フラグで実行制限を強化
+- `~/.cursor/cli-config.json` に `approvalMode` 設定あり（`allowlist` 等）
+- 権限種別は Shell / Read / Write / WebFetch / MCP の 5 種
+- deny ルールが allow ルールより優先
+
+**2026-05-24 実機確認で判明した追加情報**：
+
+起動フロー（Windows ネイティブ、`C:\dev\any-ai-cli` で実行）：
+
+1. `Signing in with the browser...` → ブラウザ OAuth が開く（初回のみ or セッション切れ時）
+2. **ワークスペース信頼プロンプト**（ボックス表示）:
+   ```
+   ⚠️ Workspace Trust Required
+   Cursor Agent can execute code and access files in this directory.
+   Do you trust the contents of this directory?
+     C:\dev\any-ai-cli
+     [a] Trust this workspace
+     [q] Quit
+   ```
+   → `a` キーで承認。`⏳ Trusting workspace...` と表示されて続行
+3. 起動完了後、TUI メイン画面に遷移:
+   - ヒント: `Use /plan to iterate on an implementation plan before code changes.`
+   - 入力欄プレースホルダー: `plan, search, build anything`
+   - ステータスバー（下部）: `Composer 2.5 Fast` / `C:\dev\any-ai-cli · develop`
+
+**any-ai-cli 的影響**：
+- ワークスペース信頼プロンプトは `[a]`/`[q]` 形式（番号ではなく英字キー）。Claude Code / Codex の番号選択とは異なる別パターン
+- `approval-patterns/cursor.json` に `Workspace Trust Required` のパターンを定義し、action-bar に `[a] Trust` / `[q] Quit` を表示する設計が必要
+- **コマンド実行承認プロンプト（2026-05-24 実機確認済み）**:
+  ```
+  Run this command?
+  Not in allowlist: Get-ChildItem -Force, Format-Table Mode, ...
+  → Run (once) (y)
+    Add Shell(Get-ChildItem), Shell(Format-Table) to allowlist? (tab)
+    Auto-run everything (shift+tab)
+    Skip (esc or n)
+  ```
+  - トリガー文言: `Run this command?`
+  - デフォルト選択（`→` 表示）: `Run (once)` → `y` キー
+  - `Tab`: 実行したコマンドを allowlist に追加
+  - `Shift+Tab`: 全コマンドを自動実行（yolo 相当）
+  - `Esc` または `n`: スキップ
+  - 実行前に `Waiting for approval... in current dir` がインラインで表示される
+  - コマンドプレビューボックスあり（`$` プレフィックス付き）
+- ステータスバーの `Composer 2.5 Fast` はモデル名表示に流用できる
+
+### Windows 対応状況
+
+- 公式 Windows インストーラーあり: `irm 'https://cursor.com/install?win32=true' | iex`
+- ただし、コミュニティ報告では「公式ドキュメント手順が Windows で動作しない場合がある」との指摘あり
+- PTY 挙動（ConPTY vs Unix PTY）の差異が問題になる可能性が高い
+- **WSL 前提かどうか未確定。実機での Windows ネイティブ動作確認が必須**
+
+OpenCode（WSL 前提のため除外）と同様のリスクが存在する点に注意。
+
+### 認証・サブスクリプション
+
+- `cursor-agent login` コマンドで認証
+- `--api-key` フラグで API キー直接指定も可
+- Cursor サブスクリプション（有償プラン）が必要。無料枠の有無は pricing ページで確認要
+- spawn 時に認証状態を継承できるかどうか（環境変数 or セッション引き継ぎ）は未確認
+
+### 規約・自動化制約
+
+- ToS に PTY ラップ・サードパーティ自動化の明示的禁止条文はなし
+- 禁止事項はリバースエンジニアリング・競合モデルの訓練・スクレイピング等（Copilot CLI と同水準の制約）
+- **PTY ラップ構造での導入は規約上可能と判断**（ただし Cursor 側の規約改定を定期確認する運用フローが必要）
+- Cursor が内部で Anthropic Claude を使っている場合、Claude 側の automated wrapper 制限（2026-01 Anthropic の enforcement action）が間接的に関係する可能性があるが、Cursor CLI は公式クライアントのため直接の問題はない
+
+### any-ai-cli 実装時の確認事項
+
+#### CLI 実装面
+
+- `cursor-agent` のインストールパス確認（Windows: `%LOCALAPPDATA%\cursor-agent\` 等）
+- 起動後の TUI 出力パターンと ANSI シーケンス（xterm.js 表示との相性）
+- 承認プロンプトの正確な文面（実機確認必須）— `y/n` 入力を any-ai-cli の action-bar でどう表現するか
+- セッション終了検出パターン（Ctrl+D 2回、プロセス終了の合図）
+- `--worktree` モードとの相性
+- スラッシュコマンド一覧の取得可否（`/plan` `/ask` `/compress` 等が独自体系）
+
+#### Hub 側で必要な変更
+
+- `/api/spawn` の provider 許可リストへ `cursor` 追加
+- spawn dialog の provider / model / risk 表示追加
+- `approval-patterns/cursor.json` の初期値定義（`y/n` ベースで Claude Code / Codex と異なる体系）
+- banner / shell-init の `cursor` 対応
+- 設定パネルでの cursor-agent CLI パス指定
+
+### 実装可否サマリー
+
+| 観点 | 判断 | 備考 |
+|---|---|---|
+| 規約 | **OK** | PTY ラップ禁止条文なし。Copilot CLI と同水準 |
+| PTY 技術 | **要確認** | real TTY 必須。ConPTY（any-ai-cli の Windows PTY 実装）で動作するか実機確認が必要 |
+| Windows ネイティブ | **OK ✓** | 2026-05-24 実機確認済み。`%LOCALAPPDATA%\cursor-agent\cursor-agent.cmd` で動作 |
+| 承認検出（起動時） | **判明 ✓** | ワークスペース信頼: `[a] Trust this workspace` / `[q] Quit`。英字キー入力形式 |
+| 承認検出（実行時） | **判明 ✓** | `Run this command?` がトリガー。`y`/`Tab`/`Shift+Tab`/`n or Esc` の4択。Claude Code とは別体系 |
+| サブスクリプション | **有償必須 ✓** | 無料プランは `Auto` モデルのみ。名前付きモデル使用・実用的なエージェント操作には有償プラン必要 |
+| 実装難度 | **中** | PTY・実行時承認パターンの実機確認後、Copilot CLI と同等の実装工数で対応可能と推定 |
+
+**総合**: 技術・規約の両面で導入は現実的。2026-05-24 の実機確認で以下がすべて判明し、**承認検出の設計に必要な情報は出揃った**。
+
+- Windows ネイティブ動作 ✓
+- 起動時: `[a] Trust this workspace` / `[q] Quit`
+- コマンド実行時: `Run this command?` → `y` / `Tab` / `Shift+Tab` / `n or Esc`
+
+ただし **有償プランが実質必須**（無料枠は `Auto` モデルのみ。エラー: `Named models unavailable / Free plans can only use Auto`）。spawn dialog か README でユーザーに明記が必要。残る確認事項は ConPTY 動作検証（any-ai-cli 経由でラップしたときの表示崩れ有無）のみ。
+
+## 参考
+
+- OpenCode docs: https://opencode.ai/docs/
+- OpenCode GitHub: https://github.com/sst/opencode
+- Ollama OpenAI compatibility: https://docs.ollama.com/api/openai-compatibility
+- Ollama Codex integration: https://docs.ollama.com/integrations/codex
+- Ollama Claude Code integration: https://docs.ollama.com/integrations/claude-code
+- Ollama OpenCode integration: https://docs.ollama.com/integrations/opencode
+- Ollama Cloud: https://docs.ollama.com/cloud
+- GitHub Copilot CLI docs: https://docs.github.com/copilot/concepts/agents/copilot-cli/about-copilot-cli
+- Cursor CLI docs: https://cursor.com/docs/cli/overview
+- Cursor CLI using guide: https://cursor.com/docs/cli/using
+- Cursor CLI parameters: https://cursor.com/docs/cli/reference/parameters
+- Cursor CLI permissions: https://cursor.com/docs/cli/reference/permissions
+- Cursor Terms of Service: https://cursor.com/terms-of-service
+- Cursor CLI Jan 2026 changelog: https://cursor.com/changelog/cli-jan-16-2026

@@ -1,0 +1,124 @@
+---
+due: 2026-07-11
+---
+
+# [計画] モバイル UX 刷新 — ターミナルビューアから AI アプリへ（親 plan）
+
+> 最終更新: 2026-07-04(土) 09:41:20
+
+## context配分
+
+| C | 種別 | 内容 | 子 plan | 並列 |
+|---|---|---|---|---|
+| C1 | plan | チャットトランスクリプトビュー（mobile-terminal-lite 置換） | [`plan_mobile-ux-rework_c1_chat-view.md`](plan_mobile-ux-rework_c1_chat-view.md) | — |
+| C2 | plan | 下部コンポーザー + ライブストリップ縮退 | [`plan_mobile-ux-rework_c2_composer-livestrip.md`](plan_mobile-ux-rework_c2_composer-livestrip.md) | — |
+| C3 | plan | 承認ボトムシート | [`plan_mobile-ux-rework_c3_approval-sheet.md`](plan_mobile-ux-rework_c3_approval-sheet.md) | — |
+| C4 | plan | ホーム刷新 + ドロワー | [`plan_mobile-ux-rework_c4_home-drawer.md`](plan_mobile-ux-rework_c4_home-drawer.md) | — |
+| C5 | plan | 上部ボタン撤去 + ジェスチャー（本書 §C5） | （本書 §C5） | — |
+| C6 | plan | PWA safe-area / 仕上げ / 旧コード撤去（本書 §C6） | （本書 §C6） | — |
+
+実行順序: `C1 → C2 → C3 → C4 → C5 → C6`
+
+> 並列は組まない。i18n（`web/src/i18n/ja.json` / `en.json`）と `mobile-home.css` を複数 C が触るため、共有リソース条件で直列とする。
+
+---
+
+## 概要
+
+スマホ幅（≤720px）の Web ダッシュボードを、Claude / ChatGPT / Grok ネイティブアプリの文法（会話が主役・下部入力ピル常駐・上部ボタン最小・進行文ステータス）へ刷新する。**確定済みモック（正本）**: [`docs/local/mockups/mobile-ux-rework/index.html`](mockups/mobile-ux-rework/index.html)（v0.3・全 8 論点決定済み）。
+
+スコープ外: Files / Git / Chat タブのスマホ対応（v0.5 送り）、JSONL 配信 API によるチャット履歴の完全復元（v0.4.x 追い掛け）、PC ビューの変更（副作用ゼロ原則）。
+
+## 現状と問題
+
+- 個別セッション画面は `web/src/app/mobile-terminal-lite.ts` が PTY 末尾 40 行を等幅 12.5px・折り返しなし（横スクロール）の pre で表示 → スマホで読めない
+- 入力系は PC 共用の入力行 + 別置き 📷 ボタンで、下部常駐コンポーザーがない
+- 画面上部に戻る / ◀ / ▶ / ⋯ / ＋ の固定小ボタン 5 個（`mobile-home.css:64-98` の fixed 座標指定）
+- ライブ進捗帯 `#terminal-live-status`（`terminal.css:154`）は枠 + 背景 + パレットボタンで 1 段占有し、スマホでは大きすぎる
+- ホーム（`mobile-home.ts`）は全カードがリッチで一覧性が低い。batch / 複数質問は「承認タブで開け」フォールバック文言のみ
+
+## 方針（確定 8 論点 — モック決定事項表と同一）
+
+| # | 論点 | 決定 |
+|---|---|---|
+| 1 | チャットビューのデータ源 | C 案ハイブリッド: 右吹き出し = フロント送信イベント、左 = クリーンテキスト区間。将来 JSONL 配信 API へ移行 |
+| 2 | 承認シート自動オープン | 既定 ON + 入力中（フォーカス or 下書きあり）はバッジのみ |
+| 3 | セッション切替 | エッジスワイプ（左右端 約24px 起点）+ ヘッダータイトルタップ併設。中央スワイプ不採用 |
+| 4 | 進行文ステータス | 固定文言（i18n 3〜4 キー）で開始 |
+| 5 | Files / Git / Chat | スマホには出さない（v0.5 送り） |
+| 6 | 送信キー | 送信ボタンのみ。Enter は改行 |
+| 7 | PWA safe-area / theme-color | 今回スコープに含める（下部固定要素と同時実装） |
+| 8 | ライブストリップ配色変更 | ストリップ長押しで既存パレットポップオーバー（live-status-color.ts）を開く |
+
+共通原則:
+
+- 全モジュールは既存踏襲で `matchMedia('(max-width: 720px)')` の `isMobileViewport()` で early return し、**PC には一切副作用を与えない**
+- xterm.js は背後で生存させ、承認検出・PTY 受信・スクロールバック経路には触れない（表示層のみ置換 = mobile-terminal-lite と同じ戦略）
+- CSS はスマホ専用ルールを `@media (max-width: 720px)` に閉じ込める
+
+---
+
+## C1: チャットトランスクリプトビュー
+
+概要: mobile-terminal-lite の pre 表示を、右吹き出し（ユーザー送信）+ 左折り返しテキスト（AI 出力）のチャットビューへ置換。進行文ステータス（固定文言）と生ログ詳細モーダル（既存 ⛶ 継承 + ピンチズーム）を含む。詳細: [`plan_mobile-ux-rework_c1_chat-view.md`](plan_mobile-ux-rework_c1_chat-view.md)
+
+## C2: 下部コンポーザー + ライブストリップ縮退
+
+概要: 個別セッション画面下部に safe-area 対応の常駐コンポーザー（入力ピル: ＋添付 / 📷 / ▲送信、textarea 自動拡張、visualViewport 追従）を新設し、`#terminal-live-status` をコンポーザー直上の枠なし 1 行ストリップ（約 18px）に縮退。長押しでパレット。詳細: [`plan_mobile-ux-rework_c2_composer-livestrip.md`](plan_mobile-ux-rework_c2_composer-livestrip.md)
+
+## C3: 承認ボトムシート
+
+概要: 承認待ち発生時に画面下からシートを自動オープン（入力中は抑止 + バッジ）。単一質問 / batch（Q ステップ進行）/ #multi（チェックリスト）をシート内で完結させ、「承認タブで開け」フォールバックを廃止。詳細: [`plan_mobile-ux-rework_c3_approval-sheet.md`](plan_mobile-ux-rework_c3_approval-sheet.md)
+
+## C4: ホーム刷新 + ドロワー
+
+概要: mobile-home を「承認待ち pinned リッチカード + それ以外は 1 行リスト」の 2 層に再構成し、FAB（＋新規）と検索を追加。左ドロワー（セッション一覧 + 検索 + 新規 + 設定）を新設。詳細: [`plan_mobile-ux-rework_c4_home-drawer.md`](plan_mobile-ux-rework_c4_home-drawer.md)
+
+## C5: 上部ボタン撤去 + ジェスチャー
+
+### 作業内容
+
+- `#mobile-back-btn` / `#mobile-prev-btn` / `#mobile-next-btn` / `#mobile-overflow-btn` の固定ボタンを撤去（DOM は index.html、リスナは app.ts:1013-1056、CSS は mobile-home.css:42-98）
+- 個別セッション画面の上部を「≡（ドロワー）/ タイトル（タップでセッション選択 = ドロワー開）/ ⛶（生ログ）」の 3 要素に整理
+- エッジスワイプ実装: touchstart が画面左右端 24px 以内で始まり水平移動が優先のとき、左端→ドロワー開、右端→次セッション（`activateSession`）。切替時はタイトルをトースト表示
+- 生ログモーダル（mtl-detail 系）内ではスワイプ切替を無効化（横スクロール pre と競合するため）
+- ⋯ オーバーフローメニューの既存機能はドロワー内へ移設（C4 のドロワー項目に追記）
+
+### 変更予定ファイル
+
+- `web/src/index.html` — ボタン DOM 撤去・ヘッダー構成変更
+- `web/src/app.ts` — 旧リスナ削除、エッジスワイプ / トースト追加
+- `web/src/styles/mobile-home.css` — 固定ボタン CSS 削除
+
+### 完了条件
+
+- スマホ幅の個別セッション画面に固定小ボタンが存在せず、エッジスワイプとタイトルタップで切替・ドロワー開ができる
+- PC 幅では DOM / 挙動に変化がない
+
+## C6: PWA safe-area / 仕上げ / 旧コード撤去
+
+### 作業内容
+
+- コンポーザー・FAB・ドロワー・ヘッダーに `env(safe-area-inset-*)` を適用、`<meta name="theme-color">` と manifest の theme/background を UI 配色に同期、`viewport-fit=cover` 確認
+- `-webkit-tap-highlight-color: transparent`、スマホ本文フォントの 16px 基準化（吹き出し・リスト行）
+- 旧 mobile-terminal-lite の pre 表示コード・不要 CSS・不要 i18n キーの撤去（詳細モーダルは残す）
+- モック（決定事項表）と実装の突き合わせ最終確認
+
+### 変更予定ファイル
+
+- `web/src/index.html` / manifest — meta / theme-color
+- `web/src/styles/mobile-home.css` ほかスマホ系 CSS — safe-area / タイポ
+- `web/src/app/mobile-terminal-lite.ts` — pre 表示部の撤去
+- `web/src/i18n/ja.json` / `en.json` — キー整理
+
+### 完了条件
+
+- iOS の PWA standalone でノッチ / ホームバーに UI が被らない
+- 旧 pre 表示への参照が残っていない（grep で確認）
+
+---
+
+## 検証（全 C 共通）
+
+- ユーザーが `make build` → Hub 起動 → スマホ実機（iOS Safari / PWA standalone）で確認する（ビルド・起動はユーザー実施。AI からは提案しない）
+- PC 幅（>720px）のリグレッション確認: セッション一覧・xterm 表示・承認 action-bar・ライブ帯が従来どおり

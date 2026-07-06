@@ -1,0 +1,143 @@
+# [計画] モバイル接続の標準経路を Tailscale に明確に寄せる
+
+> 最終更新: 2026-06-21(日) 16:43:50
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | plan | モーダル初期表示で Tailscale 経路を既定にし、SSH/WireGuard は「詳細」アコーディオン送り | — |
+| C2 | plan | Tailscale 自己診断結果に応じて未導入時の導線（インストール／ログイン／serve 有効化）を一画面で完結 | C1 後 |
+| C3 | plan | `manual_mobile-access.md` と Hub 内ヘルプを「Tailscale=標準・他は特殊用途」に書き直す | C1 と並行可 |
+
+実行順序: `C1 → C2`、`C3` は C1 と並行可
+
+---
+
+## 概要
+
+ユーザー検証で「Tailscale で繋ぐのが圧倒的に楽」だと確認できたため、モバイル接続(📱モーダル)を **Tailscale 中心** に明確化する。現状でも `mobile-connect.ts` 内に `// VPN: Tailscale を第一推奨として前面に（D2）` のコメントがあり Tailscale が先頭タブだが、初見ユーザーには「経路が複数あって迷う UI」に見える。これを「Tailscale が標準。他は特殊用途のために隠してある」と見せ方ごと寄せる。
+
+並行する母艦 hub 集約 plan（`works/drive/docs/infra/plan_dev_hub_multidevice_access.md`）でも、SSH は Lubuntu↔hub 用に残しつつ、スマホ経路は many-ai-cli Web + Tailscale で完結することが実運用で確認できている。Tailscale 標準化はこの構成を Hub UI 側で素直に表現する作業に相当する。
+
+## 現状と問題
+
+- `web/src/app/mobile-connect.ts` の `renderConnect()` は `pattern: 'ssh' | 'vpn'` の二択を最初に持ち、VPN 内で `tailscale | wireguard` を切替える設計。結果として初見ユーザーには **SSH と VPN が同じ高さで並んで見える**。
+- `manual_mobile-access.md` は「§4 VPN の3方式」を WireGuard / Tailscale / Headscale 横並びで説明している。比較資料としては正しいが、入口の文書としては「どれを選べばいい?」になりやすい。
+- Tailscale 自己診断（`loadTailscale()` / `tsStatus`）はあるが、未導入時の導線（インストール→ログイン→serve）が複数 UI 要素に分散しており「1 画面で完結」になっていない。
+- 「サーバー / リモート接続」ボタン（プロファイル登録 UI）は今回の hub 構成では使わない。標準動線から外して「上級」へ。
+
+## 方針
+
+- Tailscale を「標準動線（既定で開かれる経路）」、SSH と WireGuard は「**詳細**」アコーディオン配下に格納する。撤去ではなく **目線から外す**。
+- 標準動線では「Tailscale 自己診断 → 状態に応じた次の 1 アクション」だけを大きく出す。
+  - 未導入 → インストールリンク + QR
+  - 未ログイン → `tailscale up` 案内
+  - ログイン済み・serve 未 → 「Tailscale serve を有効化」ボタン（既存の `host-expose.ts` を使う）
+  - ready → 接続用 QR を即表示
+- 「サーバー」ボタンが指す「リモート接続プロファイル」UI は別機能なので **モーダル側から導線を貼らない**（プロファイルが必要な高度ユーザーだけ設定から開く）。
+- ドキュメントは「**標準は Tailscale。SSH と WireGuard は特殊用途。Headscale は Tailscale に慣れてから**」と一本化。VPN3方式の比較表は残すが、§の順序を Tailscale 単独 → 他の選択肢の比較に並べ替える。
+
+## 非目標（やらないこと）
+
+- SSH 経路の削除。Hub→VPS 経由や Tailscale が使えない環境では今後も価値があるため残す。
+- WireGuard 経路の削除。Tailscale を業者経由に出したくない人の選択肢として残す（Headscale への布石）。
+- セキュリティポリシー本文（§1, 紛失プレイブック）の書き換え。経路推奨度の表現だけ調整する。
+- 「サーバー / リモート接続」プロファイル機能本体への手入れ。これは別の plan で扱う。
+
+---
+
+## C1: モーダル初期表示を Tailscale 既定にする
+
+### 作業内容
+
+- `mobile-connect.ts` の `renderConnect()`:
+  - 既定 `state.pattern` を `'vpn'`、`state.vpnKind` を `'tailscale'` に固定（既存の `lsSet` は維持して再訪時の選択は記憶）。
+  - 最上段の `pattern: 'ssh' | 'vpn'` セグメントを廃止し、本文最上段は Tailscale パネル単独に。
+  - 既存の SSH パネル・WireGuard パネルは「**詳細(その他の経路)**」`<details>` 内に格納し、デフォルト閉。
+  - WireGuard セグメント (`mkKind('wireguard', ...)`) は `<details>` を開いた時のみ表示する。
+- ステップ表示 `stepDots(4)` の段数は経路ごとに変えていたが、Tailscale 既定 = 「①インストール ②ログイン ③serve ④QR読取」の 4 段で固定。
+- リスク同意ゲート（S7）の文言は据え置き、ただし `mobile_connect_consent_*` に Tailscale 文脈を 1 行追加（「経路は Tailscale が標準。SSH/WireGuard は詳細から」）。
+
+### 変更/操作対象
+
+- `web/src/app/mobile-connect.ts`
+- `web/src/i18n/*.ts`（`mobile_connect_consent_*` 文言追加）
+- `web/src/css/mobile-connect.css`（`<details>` まわりの余白）
+
+### 完了条件
+
+- 📱 を初めて押した状態で **Tailscale パネルが最初に出る**（SSH/WireGuard には到達するのに 1 クリック必要）。
+- 既存の使いやすさは保持（過去に WireGuard 等を選んでいた人は `lsSet` で再現される）。
+- ヘッドレス回帰テストで「初回起動 → モーダルを開く → 既定タブは Tailscale」が拾える。
+
+---
+
+## C2: 未導入時の導線を 1 画面に集約する
+
+### 作業内容
+
+- `renderConnectTailscale()` を「状態 1 つ = 大きな次アクション 1 つ」のステップマシン化:
+  - `not_installed`: インストール URL の大きなボタン + QR、その下に「インストール後に再診断」ボタン。
+  - `installed_but_not_running`: 「Tailscale を起動」案内＋自動再診断。
+  - `not_logged_in`: `tailscale up` の OS 別案内（Windows は PowerShell コマンド、macOS/iOS はアプリ）。
+  - `logged_in_but_no_serve`: 「Tailscale serve を有効化」ボタン（`host-expose.ts` の `enableExpose()` を呼ぶ）。
+  - `ready`: 接続用 QR（`https://<name>.tailnet.ts.net/?token=...`）を即表示。
+- 自己診断ポーリングは `loadTailscale(force)` を 5 秒間隔で叩く軽量ポーリングに統一（既存の手動 Refresh ボタンは残す）。
+- ステータスバッジ `tsStateBadge()` は維持しつつ、本文の主役は「次の 1 アクション」に明確化。
+
+### 変更/操作対象
+
+- `web/src/app/mobile-connect.ts`（`renderConnectTailscale()` 周辺）
+- `web/src/app/host-expose.ts`（`enableExpose()` の戻り値で UI 即遷移できるよう状態を返す確認）
+
+### 完了条件
+
+- 各 `TailscaleStateName` で「次にやることが画面の真ん中に 1 つだけ」出る。
+- ready に到達するまでに**モーダルから出ずに**全ステップを踏める。
+- 既存の retry / refresh は維持。
+
+---
+
+## C3: ドキュメントを Tailscale 標準で書き直す
+
+### 作業内容
+
+- `docs/manual_mobile-access.md`:
+  - §4 「VPN の3方式」を `§4-A 標準: Tailscale` / `§4-B その他の選択肢（WireGuard・Headscale・素のWG）` の二部構成に再編。
+  - §5 「VPS 契約済みの人へのおすすめ順」は据え置き（既に Tailscale 第一推奨）。
+  - §3 アクセスパターン早見の表頭に「経路の難易度」列を足し、Tailscale 行を最上部に再配置。
+- README（または `docs/v0.3.x-many-ai-cli-design.md` のモバイル接続セクション）に「**標準動線: Tailscale**」の 1 段落を追加。
+- Hub 内ヘルプ（モーダル右上 `?` 等のリンク先）が `manual_mobile-access.md` を指している場合、当該アンカーを Tailscale 節に張り替える。
+
+### 変更/操作対象
+
+- `docs/manual_mobile-access.md`
+- `README.md`（モバイル接続節）
+- `docs/v0.3.x-many-ai-cli-design.md`（モバイル接続節があれば）
+
+### 完了条件
+
+- ドキュメントを上から読むと、初見の人は「Tailscale を入れればいい」と分かる。
+- WireGuard / SSH を選ぶべき条件が「特殊用途」として明示されている。
+
+---
+
+## 検証
+
+- 手元の 3 台（メイン機 Hyper-V ゲスト・Lubuntu・iPhone）で:
+  - 既存の Tailscale 構成を一旦リセットしないまま既定 UI を試す → ready で即 QR 表示
+  - LocalStorage を消した状態で開く → Tailscale パネルが既定で開く
+  - 「詳細」を開いて SSH/WireGuard も従来どおり使えることを確認
+- ドキュメント側はリンク切れ・アンカー切れ無しを `markdownlint` / 目視で確認。
+
+## 備忘
+
+- 本 plan は「UI の見せ方」と「ドキュメントの優先度」変更のみで、機能を削除しない。後で WireGuard 標準ユーザーから声があれば「Tailscale 既定」の挙動を設定で切替可にする余地は残してある（`lsSet(LS_VPN_KIND, ...)` は維持）。
+- 別件: 「サーバー / リモート接続プロファイル」UI は今回の hub 構成では使わない位置付け。`pending_*.md` で「将来 multi-hub 運用するときの設計検討」として寝かせるかは別途判断。
+
+## 参考
+
+- 元の検討文脈: `C:\dev\works\drive\docs\infra\plan_dev_hub_multidevice_access.md`（メイン機 hub 集約・Tailscale + SSH + many-ai-cli Web）。Tailscale 経路を実運用で確認した結果、標準化の手応えを得た。
+- 既存実装: `web/src/app/mobile-connect.ts`（`// VPN: Tailscale を第一推奨として前面に（D2）`）。
+- 既存ドキュメント: `docs/manual_mobile-access.md`。

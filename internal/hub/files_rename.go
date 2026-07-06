@@ -81,7 +81,12 @@ func (s *Server) handleFilesRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := os.Rename(srcClean, newPath); err != nil {
+	// HUB-5: 事前 Lstat と os.Rename の 2 段階 TOCTOU を atomic に置き換え。
+	if err := atomicRenameNoReplace(srcClean, newPath); err != nil {
+		if isRenameTargetExistsErr(err) {
+			writeRenameErr(w, http.StatusConflict, "conflict", "target already exists: "+newPath)
+			return
+		}
 		writeRenameErr(w, http.StatusInternalServerError, "rename_failed", errorDetail("rename failed", err))
 		return
 	}

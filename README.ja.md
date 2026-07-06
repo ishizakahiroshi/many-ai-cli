@@ -6,7 +6,7 @@
 
 ![many-ai-cli ダッシュボード](assets/readme-dashboard.png)
 
-**AI コーディング CLI の承認待ちを見逃さない。** `many-ai-cli` は Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI を監視し、承認が必要になった瞬間にデスクトップ／スマホへ通知します。ターミナルを見張り続ける必要はありません。あわせて、複数セッションの承認・監視・ターミナルを 1 画面の Web ダッシュボードで操作できます。
+**AI コーディング CLI の承認待ちを見逃さない — スマホからでも。** `Claude Code` / `Codex CLI` / `GitHub Copilot CLI` / `Cursor Agent CLI` / `Grok Build CLI` を並列実行できる Web ダッシュボードです。`many-ai-cli` は各 CLI を PTY でラップし、承認待ちを検出した瞬間にデスクトップ／スマホへ通知します。ターミナルを見張り続ける必要はありません。あわせて、複数セッションの承認・監視・ターミナルを 1 画面の Web ダッシュボードで操作できます。
 
 [English README](README.md)
 
@@ -38,7 +38,7 @@ Terminal pane #1              Terminal pane #2
             └──────────────────┘
 ```
 
-各ペインでは対応プロバイダーのいずれか（`claude` / `codex` / `copilot` / `cursor-agent`）を実行できます。図では例として2つを示しています。
+各ペインでは対応プロバイダーのいずれか（`claude` / `codex` / `copilot` / `cursor-agent` / `grok`）を実行できます。図では例として2つを示しています。
 
 ---
 
@@ -52,6 +52,8 @@ Terminal pane #1              Terminal pane #2
 | Codex CLI | `codex` | OpenAI |
 | GitHub Copilot CLI | `copilot` | 公式 CLI。OAuth token / PAT / 認証情報は読み取り・保存・代理利用しません |
 | Cursor Agent CLI | `cursor-agent` | 公式 CLI。事前にサインインが必要 |
+| Grok Build CLI | `grok` | xAI 公式のターミナル型コーディングエージェント。事前にサインインが必要（**SuperGrok** または **X Premium+** のサブスクリプションが必要。base の X Premium では使えません） |
+| opencode | `opencode` | コミュニティ CLI。事前にサインインが必要。承認プロンプトのスクレイプではなく、Hub が `opencode.json` の `permission` を書き換えて制御します（通常セッションは `ask` で Hub UI へ、オーケストレーション子セッションは `allow` でバイパス）。元の `opencode.json` はセッション終了時に復元します |
 
 **Ollama** は独立したラッパーではありません。`claude` または `codex` のラッパー経由で Ollama のモデルを使います（spawn フォームのモデルピッカーで **Ollama Cloud / Ollama Local** を選ぶと、Hub が Anthropic / OpenAI 互換エンドポイントを Ollama に向けます。「主な機能」の「モデルピッカー + Ollama route 自動切替」参照）。
 
@@ -61,7 +63,7 @@ Gemini CLI は意図的に対象外です。
 
 ## 主な機能
 
-- **承認パネル統合**: Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI の承認待ちをブラウザ上のアクションバーで処理
+- **承認パネル統合**: Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / Grok Build CLI の承認待ちをブラウザ上のアクションバーで処理
 - **複数質問の一括承認**: 1つの承認ブロック内の番号付き質問を選択し、まとめて PTY へ送信
 - **リアルタイム PTY 表示**: xterm.js + WebSocket で CLI 出力を表示
 - **チャット / 分割表示**: 会話ログを吹き出し形式で読み、検索・フィルタし、ライブターミナルと並べて表示
@@ -71,14 +73,13 @@ Gemini CLI は意図的に対象外です。
 - **Files タブ**: プロジェクトファイルをツリー表示し、Markdown / コードのプレビュー、パスコピー、フォルダ作成、競合検出付き保存、リネーム、移動、空フォルダ削除を実行
 - **Git ビュー**: ブランチ履歴、commit 詳細、変更ファイル、diff、fetch、`git pull --ff-only` を checkout なしで実行
 - **Commit all**: 明示的な Review 後に working tree 全体を `git add -A` してローカル commit（push は実行しません）
-- **Workbench タブ**: 保存済みセッション履歴、タイムライン、要約、redact 済み export、prompt template、task/policy メモ、diagnostics、usage 集計、stale session、worktree helper を扱う
 - **ファイル / 画像添付**: ファイルや画像の paste / D&D からローカル保存し、セッションへパスを inject
 - **音声入力**: ブラウザ内蔵認識またはローカル Whisper でプロンプトを入力（Windows x64 では Whisper 管理インストール対応）
 - **PWA + opt-in Web Push**: Hub をローカル Web アプリとしてインストールし、Settings で明示的に有効化した場合だけ承認待ち通知を受け取る
 - **承認検出パターン profile**: GitHub から同期する公式 trigger phrase と、ユーザー編集用 custom profile を分離
 - **サーバ側ユーザー設定**: 音声、通知音、お気に入り、セッション順、spawn 既定、アバター設定を `config.yaml` に保存
 - **UI からの新規セッション spawn**（`/api/spawn`）
-- **モデルピッカー + Ollama route 自動切替**: spawn フォームから Anthropic / OpenAI / Ollama Cloud / Ollama Local のモデルを選択でき、Hub が必要な `ANTHROPIC_*` / `OPENAI_*` 環境変数をセッションごとに自動注入（shell での事前設定不要）
+- **モデルピッカー + Ollama route 自動切替**: spawn フォームから Anthropic / OpenAI / Ollama Cloud / Ollama Local のモデルを選択でき、Hub が必要な `ANTHROPIC_*` / `OPENAI_*` 環境変数をセッションごとに自動注入（shell での事前設定不要）。Ollama daemon が別ホストにある場合は `config.yaml` の `ollama.base_url` で接続先を変更可能（Hyper-V ゲストからホストの Ollama を使う手順は [docs/manual_local-llm-hyperv-host.md](docs/manual_local-llm-hyperv-host.md) を参照）
 - **統合ランチャー（Windows / Linux / macOS）**: `many-ai-cli-launcher` で接続プロファイルから Hub へ接続し既定ブラウザで操作。SSH `serve` / `tunnel` プロファイルは全 OS、WSL プロファイルは Windows で WSL 内に Hub を起動
 - **リモートサーバー / Docker 運用資材**: GHCR image、ユーザー別コンテナ、loopback 限定公開、自動更新スクリプトでサーバー運用
 - **クリーン transcript 生成**: 人間が読める `.txt` を自動生成し、`log-clean` で手動再生成も可能
@@ -95,7 +96,7 @@ Gemini CLI は意図的に対象外です。
 | Go | 1.25 以上（ビルド時） |
 | OS | Windows 10/11、macOS、Linux |
 | ブラウザ | Chrome / Edge / Firefox / Safari |
-| AI CLI | Claude Code、Codex CLI、GitHub Copilot CLI、Cursor Agent CLI（使う provider は別途インストール済みであること） |
+| AI CLI | Claude Code、Codex CLI、GitHub Copilot CLI、Cursor Agent CLI、Grok Build CLI（使う provider は別途インストール済みであること） |
 
 ### プラットフォーム検証状況
 
@@ -407,7 +408,7 @@ Windows SmartScreen や会社 PC のポリシーで `many-ai-cli-launcher.exe` �
 - Windows 標準の OpenSSH client（`ssh.exe`）
 - 普段使っているブラウザ
 
-`many-ai-cli` 本体と provider CLI（`claude` / `codex` / `copilot` / `cursor-agent`）はリモートサーバー側で動かします。ランチャーほど自動ではありませんが、SSH トンネル用のウィンドウを 1 つ開いたままにして、ブラウザで Hub URL を開くだけです。
+`many-ai-cli` 本体と provider CLI（`claude` / `codex` / `copilot` / `cursor-agent` / `grok`）はリモートサーバー側で動かします。ランチャーほど自動ではありませんが、SSH トンネル用のウィンドウを 1 つ開いたままにして、ブラウザで Hub URL を開くだけです。
 
 **SmartScreen ダイアログを避けるより簡単な導線**
 
@@ -450,7 +451,7 @@ source ~/.bashrc
 many-ai-cli --version
 ```
 
-使う provider CLI（`claude` / `codex` / `copilot` / `cursor-agent`）もリモートサーバー側にインストールし、リモートサーバー側でログインを済ませます。AI セッションはリモートサーバー上で動くためです。
+使う provider CLI（`claude` / `codex` / `copilot` / `cursor-agent` / `grok`）もリモートサーバー側にインストールし、リモートサーバー側でログインを済ませます。AI セッションはリモートサーバー上で動くためです。
 
 **B. Hub を固定 port の loopback で起動する**
 
@@ -642,6 +643,7 @@ many-ai-cli claude      # Hub 未起動なら自動でバックグラウンド�
 many-ai-cli codex       # 同上
 many-ai-cli copilot     # 同上（インストール済み GitHub Copilot CLI を使用）
 many-ai-cli cursor-agent # 同上（インストール済み Cursor Agent CLI を使用）
+many-ai-cli grok        # 同上（インストール済み Grok Build CLI を使用）
 ```
 
 `many-ai-cli serve` を事前に実行しておく必要はありません。
@@ -653,13 +655,14 @@ many-ai-cli wrap claude
 many-ai-cli wrap codex
 many-ai-cli wrap copilot
 many-ai-cli wrap cursor-agent
+many-ai-cli wrap grok
 ```
 
 方法 A と機能は同じですが、内部実装の確認やデバッグ用途に使います。
 
 ### 方法 C: 透過モード（`MANY_AI_CLI_AUTO`）
 
-シェルで一度だけ初期化しておくと、普段の `claude` / `codex` / `copilot` / `cursor-agent` コマンドがそのままラッパー経由で起動されるようになります。
+シェルで一度だけ初期化しておくと、普段の `claude` / `codex` / `copilot` / `cursor-agent` / `grok` コマンドがそのままラッパー経由で起動されるようになります。
 
 > `many-ai-cli shell-init` は **POSIX シェル（bash / zsh）専用** の関数定義を出力します。PowerShell 用のスニペットは出力しません（後述の代替手順を参照）。
 
@@ -673,13 +676,16 @@ claude    # ← 自動でラッパー経由・Hub 未起動なら自動起動
 codex     # ← 同上
 copilot   # ← 同上
 cursor-agent # ← 同上
+grok      # ← 同上
 ```
 
-`MANY_AI_CLI_AUTO=1` が設定されていないシェルでは、`claude` / `codex` / `copilot` / `cursor-agent` はそのまま元のコマンドとして動作します。グローバルな `.bashrc` 等は改変しません。
+`MANY_AI_CLI_AUTO=1` が設定されていないシェルでは、`claude` / `codex` / `copilot` / `cursor-agent` / `grok` はそのまま元のコマンドとして動作します。グローバルな `.bashrc` 等は改変しません。
 
 GitHub Copilot 対応は、公式 CLI を PTY 内で起動するだけです。`many-ai-cli` は GitHub OAuth token / PAT / Copilot credential を読み取り・保存・代理利用しません。
 
 Cursor Agent 対応は、公式 `cursor-agent` CLI を PTY 内で起動するだけです（サインイン済みであることを前提とします）。`many-ai-cli` は Cursor のセッショントークンや認証情報を読み取り・保存・代理利用しません。
+
+Grok 対応は、公式 `grok` CLI（xAI の Grok Build CLI）を PTY 内で起動するだけです（grok.com ログイン済みであることを前提とします。利用には SuperGrok または X Premium+ のサブスクリプションが必要です）。`many-ai-cli` は xAI のセッショントークンや認証情報を読み取り・保存・代理利用しません。
 
 #### OS 別の自動化設定例
 
@@ -693,6 +699,7 @@ if ($env:MANY_AI_CLI_AUTO -eq '1') {
     function codex  { many-ai-cli codex  @args }
     function copilot { many-ai-cli copilot @args }
     function cursor-agent { many-ai-cli cursor-agent @args }
+    function grok { many-ai-cli grok @args }
 }
 ```
 
@@ -730,6 +737,7 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 | `codex [args...]` | Codex CLI を Hub 経由で起動 |
 | `copilot [args...]` | GitHub Copilot CLI を Hub 経由で起動 |
 | `cursor-agent [args...]` | Cursor Agent CLI を Hub 経由で起動 |
+| `grok [args...]` | Grok Build CLI を Hub 経由で起動 |
 | `wrap <provider> [args...]` | 任意 provider をラップ（デバッグ用） |
 | `shell-init` | 透過モード用のシェル関数スニペットを出力 |
 | `status` | Hub の起動状態を表示 |
@@ -928,6 +936,9 @@ hub:
   idle_timeout_min: 60      # アイドル状態のセッションを自動切断するまでの分数（0 = 無効）
   wrapper_reconnect_grace_sec: 3600  # Hub クラッシュ / 再起動時に wrap セッションが復帰を待つ秒数（0–86400）
 
+ollama:
+  base_url: ""              # 空 = http://localhost:11434。別ホストの Ollama を使う場合は例: http://<host-ip>:11434
+
 voice:
   whisper:
     managed: false          # true = Hub がローカル whisper.cpp server を管理
@@ -949,6 +960,8 @@ token: ""                   # 空 = 起動時にランダム生成（再起動�
 
 `token` をリセットしたい場合は `token:` 行を削除して Hub を再起動してください。
 
+`ollama.base_url` は、Hub プロセスから見た Ollama daemon の接続先です。Hyper-V / WSL / Docker / 別 PC など方式は問いません。many-ai-cli が動く側から HTTP で到達できる URL を指定すると、モデルピッカーの `[Ollama Local]` 一覧取得は `<base_url>/api/tags` を使い、Ollama route で起動した Claude Code / Codex も同じ接続先へ向かいます。`base_url` には `/v1` や `/api/tags` を付けないでください。Codex 用の `/v1` は Hub が自動で付けます。
+
 > このほか `approval` / `spawn` / `slash_cmd_sources` / `approval_pattern_sources` / `approval_profiles` / `user_prefs` セクションが UI 操作によって自動追記されることがあります（手書き不要）。
 
 ### 設定の保存場所
@@ -967,7 +980,7 @@ token: ""                   # 空 = 起動時にランダム生成（再起動�
 
 初回ロード時、ブラウザはサーバから D2 の値をミラーします。以降の変更は localStorage（キャッシュ）とサーバの両方へ同時に書き込まれます。既存の localStorage 値は初回に自動でサーバへ反映されます。
 
-承認検出パターンは provider ごとに `official` / `custom` プロファイルを持ちます。`official` は GitHub 上の `resources/approval-patterns/{claude,codex,copilot,cursor-agent,common}.md` から起動時に取得・キャッシュされ、`custom` はユーザー編集用です。
+承認検出パターンは provider ごとに `official` / `custom` プロファイルを持ちます。`official` は GitHub 上の `resources/approval-patterns/{claude,codex,copilot,cursor-agent,grok,common}.md` から起動時に取得・キャッシュされ、`custom` はユーザー編集用です。
 
 カスタム通知音は `~/.many-ai-cli/notify_sound_custom.bin` にバイナリファイルとして保存され、MIME タイプは `user_prefs.notify_sound.custom_mime` に記録されます。
 
@@ -1009,7 +1022,7 @@ wrapper の Hub への WebSocket が切れたとき、wrapper は **Hub の HTTP
 
 | シナリオ | wrapper 側の挙動 |
 |---|---|
-| **意図的な切断** — UI の `×`（dismiss）、「すべて停止」、または idle timeout 発火<br>（Hub HTTP が正常応答する） | 配下の PTY（`claude` / `codex` / `copilot` / `cursor-agent`）を**即座に**終了させる。猶予なし。 |
+| **意図的な切断** — UI の `×`（dismiss）、「すべて停止」、または idle timeout 発火<br>（Hub HTTP が正常応答する） | 配下の PTY（`claude` / `codex` / `copilot` / `cursor-agent` / `grok`）を**即座に**終了させる。猶予なし。 |
 | **Hub クラッシュ / `.exe` コンソールを閉じた**<br>（Hub HTTP に到達できない） | `wrapper_reconnect_grace_sec`（デフォルト **3600 秒 = 60 分**）まで 2 秒間隔で dial + 登録をリトライ。<br>　• Hub が復帰したら: 新しいセッションとして再登録し、直近 64KB の PTY 出力を UI に再生して再開。<br>　• 猶予が切れても Hub が落ちたままなら: PTY を kill。 |
 | **ブラウザを閉じたが Hub は稼働中**（UI 未接続） | `idle_timeout_min` 分（デフォルト 60）経過後、Hub が全 wrapper を強制切断し、上記「意図的な切断」の行として扱う。 |
 
@@ -1027,7 +1040,7 @@ wrapper の Hub への WebSocket が切れたとき、wrapper は **Hub の HTTP
 ## アーキテクチャ
 
 ```
-AI CLI (claude / codex / copilot / cursor-agent)
+AI CLI (claude / codex / copilot / cursor-agent / grok)
     └─ many-ai-cli wrap  <── PTY ラッパー
            │ WebSocket
     ┌──────▼──────┐
@@ -1060,7 +1073,7 @@ Hub サーバは PTY セッションとブラウザ UI の間のリレーとし�
 - **`.jsonl`** は構造化されたイベント時系列（入力・出力・セッション境界・タイムスタンプ）です。出力バイトはエスケープして格納されるため、直接読むとやはりノイズだらけに見えます。出力・入力は格納前にヒューリスティックな token redaction を通します。これが正本であり、transcript の再生成やクラッシュ復旧の入力になります。
 - **`.txt`** は人間向けの形式です。制御コードを除去し、（`.jsonl` から派生するため）既知の token 形式はマスクされています。色付き再生や構造化イベントが特に必要でない限り、**読むのはこれ** です。
 
-セッションログと SQLite ベースの Workbench 履歴はローカルの private storage（可能な箇所は directory `0700` / file `0600`）に保存されますが、プロンプト、ファイルパス、ユーザー入力テキストを含み得ます。既知の token 形式は `.jsonl` / `.txt` の本文・ユーザー入力履歴の保存前に redaction し、Workbench export も既定で redaction しますが、これはヒューリスティックで、生ログ（`.log`）は一切 redaction されません。セッションログをオプトインにしている主因がこれです。誤って機密情報を貼った場合は、設定から保存済み履歴を削除するか `~/.many-ai-cli/logs/` を削除してください。
+セッションログはローカルの private storage（可能な箇所は directory `0700` / file `0600`）に保存されますが、プロンプト、ファイルパス、ユーザー入力テキストを含み得ます。既知の token 形式は `.jsonl` / `.txt` の本文・ユーザー入力履歴の保存前に redaction されますが、これはヒューリスティックで、生ログ（`.log`）は一切 redaction されません。セッションログをオプトインにしている主因がこれです。誤って機密情報を貼った場合は `~/.many-ai-cli/logs/` を削除してください。
 
 Hub UI のログパスボタンでログディレクトリのパスをクリップボードにコピーできます。
 
@@ -1084,7 +1097,7 @@ Hub は起動時に親シェルの `PATH` スナップショットを継承し�
 
 1. `many-ai-cli stop` で Hub を停止
 2. `$env:PNPM_HOME` が解決される対話 PowerShell を開く（`$env:PATH -split ';' | Select-String pnpm` で確認）
-3. その PowerShell から `many-ai-cli claude` / `many-ai-cli codex` / `many-ai-cli copilot` / `many-ai-cli cursor-agent` のいずれかを実行 — Hub が新しい PATH スナップショットで再生成されます
+3. その PowerShell から `many-ai-cli claude` / `many-ai-cli codex` / `many-ai-cli copilot` / `many-ai-cli cursor-agent` / `many-ai-cli grok` のいずれかを実行 — Hub が新しい PATH スナップショットで再生成されます
 
 各 spawn の診断情報は `~/.many-ai-cli/logs/spawn/<provider>-<timestamp>.log` に出力されます（解決後の PATH エントリ数・検出されたパッケージマネージャ一覧・`executable file not found` 検知時の対処ヒントを含む）。
 
@@ -1109,18 +1122,18 @@ Hub はセッションの稼働状態を **端末（PTY）出力が直近数秒�
 
 ### ローカル instruction file への書き込み
 
-**承認ボタン機能**を有効にすると、`many-ai-cli` は active な wrapped session が読む instruction file に、many-ai-cli のマーカー付き承認ルールブロックだけを追記します。Claude Code は `~/.claude/CLAUDE.md`、Codex は `$CODEX_HOME/AGENTS.md` または `~/.codex/AGENTS.md`、GitHub Copilot / Cursor Agent は project instruction root の `AGENTS.md` が対象です。ブロックは冪等に1つだけ入り、そのファイルを使う最後の active wrapped session が終了した時、承認ボタン機能を無効化した時、または Hub 停止時に削除されます。
+**承認ボタン機能**を有効にすると、`many-ai-cli` は active な wrapped session が読む instruction file に、many-ai-cli のマーカー付き承認ルールブロックだけを追記します。Claude Code は `~/.claude/CLAUDE.md`、Codex は `$CODEX_HOME/AGENTS.md` または `~/.codex/AGENTS.md`、GitHub Copilot / Cursor Agent / Grok は project instruction root の `AGENTS.md` が対象です（Grok は Claude Code 互換 harness として `CLAUDE.md` / `AGENTS.md` の両方をネイティブに読みます）。ブロックは冪等に1つだけ入り、そのファイルを使う最後の active wrapped session が終了した時、承認ボタン機能を無効化した時、または Hub 停止時に削除されます。
 
 ### 外部への通信について
 
 `many-ai-cli` 自体はローカル動作を前提としていますが、以下の外部 HTTPS 通信が発生し得ます。
 
-- **スラッシュコマンド一覧の取得（Hub 本体の通信）**: スラッシュコマンドピッカーを開くと、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent}.md` を取得し、24 時間キャッシュします。取得元 URL は設定パネルの **スラッシュコマンドソース** から変更可能で、ローカルファイルパスを指定することもできます。
-- **承認検出パターンの取得（Hub 本体の通信）**: Hub 起動時に、公式の承認検出パターンを `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,common}.md` から取得し、24 時間キャッシュする場合があります。取得元 URL は config で上書きできます。
+- **スラッシュコマンド一覧の取得（Hub 本体の通信）**: スラッシュコマンドピッカーを開くと、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent,grok}.md` を取得し、24 時間キャッシュします。取得元 URL は設定パネルの **スラッシュコマンドソース** から変更可能で、ローカルファイルパスを指定することもできます。
+- **承認検出パターンの取得（Hub 本体の通信）**: Hub 起動時に、公式の承認検出パターンを `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,grok,common}.md` から取得し、24 時間キャッシュする場合があります。取得元 URL は config で上書きできます。
 - **Web Push 通知（Hub 本体の通信 / opt-in のみ）**: プッシュ通知を有効にした場合、Hub は暗号化された Web Push request をブラウザベンダーの push サービスへ HTTPS 送信します。payload には OS 通知表示に必要なセッション ID / 名前、provider、承認質問・文脈の短い抜粋が含まれますが、Hub URL token は含めません。VAPID 鍵と購読情報は `~/.many-ai-cli/push_store.json` にローカル保存されます。SSH トンネルが切れていても通知配送自体は届く場合がありますが、通知から Hub を開くにはトンネルと Hub に到達できる必要があります。
 - **音声入力（使用時のみ）**: ブラウザ内蔵認識は Web Speech API を使用しており、Chrome / Edge では **マイク音声がブラウザベンダー（Google / Microsoft）の音声認識サーバへ送信されます**。Whisper モードでは音声が Hub へ送られ、Hub が `voice.whisper.server_url` の Whisper サーバへ中継します。ローカル処理にしたい場合は `127.0.0.1` / `localhost` のローカルサーバだけを指定してください。外部 API URL を設定した場合、音声データはその外部サービスへ送信されます。「音声入力」節の注意書きも参照。
 - **Whisper 管理インストール（Windows x64 Hub / opt-in のみ）**: **設定パネル → 音声入力 → インストール** を押した場合だけ、Hub は whisper.cpp の Windows x64 release archive を GitHub Releases から、選択した ggml モデルを Hugging Face から `~/.many-ai-cli/whisper/` へ HTTPS ダウンロードします。release archive は展開前に SHA-256 を照合します。公開ハッシュ未設定のモデルは HTTPS ダウンロードとして扱い、UI ではハッシュ未検証として表示します。
-- **wrap 対象 CLI の API 通信（CLI 自身の通信）**: ラップ対象である Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI 自身は、それぞれのベンダー API（Anthropic / OpenAI / GitHub / Cursor）と HTTPS で直接通信します。`many-ai-cli` は PTY の入出力をローカル WebSocket で中継するだけで、これらの API 通信を傍受・記録・プロキシすることはありません。元の CLI のネットワーク挙動がそのまま適用されます。
+- **wrap 対象 CLI の API 通信（CLI 自身の通信）**: ラップ対象である Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / Grok Build CLI 自身は、それぞれのベンダー API（Anthropic / OpenAI / GitHub / Cursor / xAI）と HTTPS で直接通信します。`many-ai-cli` は PTY の入出力をローカル WebSocket で中継するだけで、これらの API 通信を傍受・記録・プロキシすることはありません。元の CLI のネットワーク挙動がそのまま適用されます。
 
 ### ⚠️ wrap 対象 CLI のデータ保持について
 
@@ -1134,6 +1147,7 @@ Hub はセッションの稼働状態を **端末（PTY）出力が直近数秒�
 | **Codex CLI**（OpenAI: ChatGPT Plus / Pro / Business プラン経由） | **使われる可能性あり**（ChatGPT 個人プラン経由のコンテンツは学習対象になり得る） | プライバシーポータルで「Do not train on my content」、Codex Settings で「環境全体のトレーニング許可」を別途制御 | abuse 監視ログ最大 30 日、ZDR / Modified Abuse Monitoring で除外可 |
 | **GitHub Copilot CLI**（GitHub: Product Specific Terms 2026/3 版） | **使われる**（プロンプトは保持され private モデルの fine-tune に利用） | 規約上の明示的な opt-out は不明（最新規約を要確認） | 明示なし |
 | **Cursor Agent CLI**（Cursor） | 最新規約を要確認 | 最新規約を要確認 | 最新規約を要確認 |
+| **Grok Build CLI**（xAI） | 最新規約を要確認 | 最新規約を要確認 | 最新規約を要確認 |
 
 ### ⚠️ 規約変更リスクについて
 
@@ -1149,6 +1163,7 @@ wrap 対象 CLI のベンダーは、第三者ツール経由のアクセスや�
 - **Claude Code（Anthropic）**: Consumer Terms によりアカウントは個人利用が前提で、認証情報（ログイン情報・OAuth トークン）の共有・譲渡は禁止されています。レート制限も個人利用を前提に設計されており、複数人での利用は異常な利用パターンとして検出・アカウント停止（返金なし）の対象になり得ます
 - **Codex CLI（OpenAI）**: ChatGPT アカウントの共有は OpenAI の利用規約で同様に禁止されています
 - **GitHub Copilot CLI / Cursor Agent CLI**: いずれもシート（個人ライセンス）単位の契約であり、共有は規約違反です
+- **Grok Build CLI（xAI）**: 利用は個人の SuperGrok / X Premium+ サブスクリプションに紐づくため、アカウントの共有は xAI の規約違反です
 
 複数人で利用したい場合は、以下の正当な手段を使ってください。
 
@@ -1326,7 +1341,7 @@ MIT
 
 ## 関連性について（非公式）
 
-`many-ai-cli` は第三者によるコミュニティメンテナンスのツールです。**Anthropic / OpenAI / GitHub / Cursor / Ollama のいずれによっても公認・公式サポートされていません**。「Claude」「Claude Code」「Codex」「ChatGPT」「GitHub Copilot」「Cursor」「Cursor Agent」「Ollama」「Gemini」等の名称・商標は各社の所有物であり、本プロジェクトでは説明・相互運用の目的でのみ言及しています。
+`many-ai-cli` は第三者によるコミュニティメンテナンスのツールです。**Anthropic / OpenAI / GitHub / Cursor / xAI / Ollama のいずれによっても公認・公式サポートされていません**。「Claude」「Claude Code」「Codex」「ChatGPT」「GitHub Copilot」「Cursor」「Cursor Agent」「Grok」「Ollama」「Gemini」等の名称・商標は各社の所有物であり、本プロジェクトでは説明・相互運用の目的でのみ言及しています。
 
 ---
 

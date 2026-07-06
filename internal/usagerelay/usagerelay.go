@@ -94,22 +94,66 @@ func Run(args []string) error {
 // （CLI ターミナルの statusLine 表示に使われる。短く 1 行で返すこと）
 
 type claudeStatusLineInput struct {
-	Model struct {
+	Version string `json:"version"`
+	Model   struct {
 		DisplayName string `json:"display_name"`
 	} `json:"model"`
+	OutputStyle struct {
+		Name string `json:"name"`
+	} `json:"output_style"`
+	Vim struct {
+		Mode string `json:"mode"`
+	} `json:"vim"`
+	Agent struct {
+		Name string `json:"name"`
+	} `json:"agent"`
+	Workspace struct {
+		Repo struct {
+			Host  string `json:"host"`
+			Owner string `json:"owner"`
+			Name  string `json:"name"`
+		} `json:"repo"`
+	} `json:"workspace"`
 	Cost struct {
-		TotalCostUSD    float64 `json:"total_cost_usd"`
-		TotalDurationMs float64 `json:"total_duration_ms"`
+		TotalCostUSD       float64 `json:"total_cost_usd"`
+		TotalDurationMs    float64 `json:"total_duration_ms"`
+		TotalAPIDurationMs float64 `json:"total_api_duration_ms"`
+		TotalLinesAdded    int     `json:"total_lines_added"`
+		TotalLinesRemoved  int     `json:"total_lines_removed"`
 	} `json:"cost"`
 	ContextWindow struct {
 		TotalInputTokens  int `json:"total_input_tokens"`
 		TotalOutputTokens int `json:"total_output_tokens"`
 		ContextWindowSize int `json:"context_window_size"`
-		CurrentUsage      struct {
+		// UsedPercentage: Claude Code が実窓(200k/1M)を判定済みで算出した
+		// context 使用率%（input 系トークンのみ。初回API応答前・/compact 直後は null→0）。
+		UsedPercentage      float64 `json:"used_percentage"`
+		RemainingPercentage float64 `json:"remaining_percentage"`
+		CurrentUsage        struct {
 			CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
 			CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 		} `json:"current_usage"`
 	} `json:"context_window"`
+	// Exceeds200kTokens: 直近 API 応答の総トークン（input+cache+output）が 200k 超か。
+	// 実窓に依らない固定しきい値（1M 窓でも 200k 超で true）。
+	Exceeds200kTokens bool `json:"exceeds_200k_tokens"`
+	Effort            struct {
+		Level string `json:"level"` // low/medium/high/xhigh/max。未対応モデルでは欠落。
+	} `json:"effort"`
+	Thinking struct {
+		Enabled bool `json:"enabled"`
+	} `json:"thinking"`
+	// RateLimits: Claude.ai Pro/Max のみ・初回 API 応答後に出現。各窓は独立に欠落しうる。
+	RateLimits struct {
+		FiveHour struct {
+			UsedPercentage float64 `json:"used_percentage"`
+			ResetsAt       int64   `json:"resets_at"`
+		} `json:"five_hour"`
+		SevenDay struct {
+			UsedPercentage float64 `json:"used_percentage"`
+			ResetsAt       int64   `json:"resets_at"`
+		} `json:"seven_day"`
+	} `json:"rate_limits"`
 }
 
 func runClaude(hubURL, token string, sessionID int, stdin io.Reader, stdout io.Writer, logger *slog.Logger) error {
@@ -152,7 +196,28 @@ func runClaude(hubURL, token string, sessionID int, stdin io.Reader, stdout io.W
 			TokensCache:   tokCache,
 			TokensTotal:   tokIn + tokOut,
 			CtxWindow:     input.ContextWindow.ContextWindowSize,
+			CtxUsedPct:    input.ContextWindow.UsedPercentage,
 			StartedAt:     time.Now().Format(time.RFC3339),
+			// statusbar 追加メタ（Claude statusLine ネイティブ算出値）。
+			RateLimit5hPct:   input.RateLimits.FiveHour.UsedPercentage,
+			RateLimit5hReset: input.RateLimits.FiveHour.ResetsAt,
+			RateLimit7dPct:   input.RateLimits.SevenDay.UsedPercentage,
+			RateLimit7dReset: input.RateLimits.SevenDay.ResetsAt,
+			LinesAdded:       input.Cost.TotalLinesAdded,
+			LinesRemoved:     input.Cost.TotalLinesRemoved,
+			EffortLevel:      input.Effort.Level,
+			Thinking:         input.Thinking.Enabled,
+			Exceeds200k:      input.Exceeds200kTokens,
+			DurationMs:       int64(input.Cost.TotalDurationMs),
+			APIDurationMs:    int64(input.Cost.TotalAPIDurationMs),
+			Version:          input.Version,
+			OutputStyle:      input.OutputStyle.Name,
+			VimMode:          input.Vim.Mode,
+			AgentName:        input.Agent.Name,
+			RepoHost:         input.Workspace.Repo.Host,
+			RepoOwner:        input.Workspace.Repo.Owner,
+			RepoName:         input.Workspace.Repo.Name,
+			RemainingPct:     input.ContextWindow.RemainingPercentage,
 		}
 		if err := postUsage(hubURL, token, payload, logger); err != nil {
 			logger.Warn("usage-relay(claude): post failed", "err", err)
@@ -222,15 +287,16 @@ type tokenUsageNumbers struct {
 	ReasoningOutputTokens int `json:"reasoning_output_tokens"`
 }
 
-func (u tokenUsageNumbers) resolve() (in, out, cache, total int) {
+func (u tokenUsageNumbers) resolve() (in, out, cache, total, reasoningOut int) {
 	in = firstNonZero(u.InputTokens, u.Input, u.PromptTokens)
 	out = firstNonZero(u.OutputTokens, u.Output, u.CompletionTokens)
 	cache = firstNonZero(u.CachedInputTokens, u.Cached, u.CachedTokens)
 	total = firstNonZero(u.TotalTokens, u.Total)
+	reasoningOut = u.ReasoningOutputTokens
 	if total == 0 && (in > 0 || out > 0) {
 		total = in + out
 	}
-	return in, out, cache, total
+	return in, out, cache, total, reasoningOut
 }
 
 func firstNonZero(vals ...int) int {
@@ -278,39 +344,39 @@ type tokenCountEvent struct {
 // 各フォーマット内で TotalTokenUsage が空（累計未集計の初回ラウンド等）の場合は
 // LastTokenUsage にフォールバックする。これがないと最初のターンの使用量が常にゼロ
 // 表示になり、ステータスバーが沈黙する。
-func (e *tokenCountEvent) resolve() (in, out, cache, total, ctxWindow int) {
+func (e *tokenCountEvent) resolve() (in, out, cache, total, ctxWindow, reasoningOut int) {
 	// 現行 Codex rollout の event_msg.payload ネストを最優先する。
 	if e.Payload.Type == "token_count" {
-		in, out, cache, total = e.Payload.Info.TotalTokenUsage.resolve()
+		in, out, cache, total, reasoningOut = e.Payload.Info.TotalTokenUsage.resolve()
 		if in > 0 || out > 0 || total > 0 {
-			return in, out, cache, total, firstNonZero(e.Payload.Info.ModelContextWindow, e.Payload.ModelContextWindow)
+			return in, out, cache, total, firstNonZero(e.Payload.Info.ModelContextWindow, e.Payload.ModelContextWindow), reasoningOut
 		}
 		// TotalTokenUsage が空なら LastTokenUsage を試す。
-		in, out, cache, total = e.Payload.Info.LastTokenUsage.resolve()
+		in, out, cache, total, reasoningOut = e.Payload.Info.LastTokenUsage.resolve()
 		if in > 0 || out > 0 || total > 0 {
-			return in, out, cache, total, firstNonZero(e.Payload.Info.ModelContextWindow, e.Payload.ModelContextWindow)
+			return in, out, cache, total, firstNonZero(e.Payload.Info.ModelContextWindow, e.Payload.ModelContextWindow), reasoningOut
 		}
 	}
 	// フォーマット A
-	in, out, cache, total = e.tokenUsageNumbers.resolve()
+	in, out, cache, total, reasoningOut = e.tokenUsageNumbers.resolve()
 	if in > 0 || out > 0 || total > 0 {
-		return in, out, cache, total, e.ModelContextWindow
+		return in, out, cache, total, e.ModelContextWindow, reasoningOut
 	}
 	// フォーマット B
-	in, out, cache, total = e.Info.TotalTokenUsage.resolve()
+	in, out, cache, total, reasoningOut = e.Info.TotalTokenUsage.resolve()
 	if in > 0 || out > 0 || total > 0 {
-		return in, out, cache, total, e.Info.ModelContextWindow
+		return in, out, cache, total, e.Info.ModelContextWindow, reasoningOut
 	}
-	in, out, cache, total = e.Info.LastTokenUsage.resolve()
+	in, out, cache, total, reasoningOut = e.Info.LastTokenUsage.resolve()
 	if in > 0 || out > 0 || total > 0 {
-		return in, out, cache, total, e.Info.ModelContextWindow
+		return in, out, cache, total, e.Info.ModelContextWindow, reasoningOut
 	}
 	// フォーマット C (OpenAI 互換)
-	in, out, cache, total = e.Usage.resolve()
+	in, out, cache, total, reasoningOut = e.Usage.resolve()
 	if in > 0 || out > 0 || total > 0 {
-		return in, out, cache, total, 0
+		return in, out, cache, total, 0, reasoningOut
 	}
-	return 0, 0, 0, 0, 0
+	return 0, 0, 0, 0, 0, 0
 }
 
 // scanLastTokenCount は rollout JSONL を末尾から走査し、
@@ -318,14 +384,14 @@ func (e *tokenCountEvent) resolve() (in, out, cache, total, ctxWindow int) {
 //
 // セキュリティ要件: 会話本文の行はメモリに保持しない。
 // 各行を読んだら type フィールドを確認し、token_count 以外は即座に破棄する。
-func scanLastTokenCount(path string) (in, out, cache, total, ctxWindow int, err error) {
+func scanLastTokenCount(path string) (in, out, cache, total, ctxWindow, reasoningOut int, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return 0, 0, 0, 0, 0, fmt.Errorf("open rollout: %w", err)
+		return 0, 0, 0, 0, 0, 0, fmt.Errorf("open rollout: %w", err)
 	}
 	defer f.Close()
 
-	var lastIn, lastOut, lastCache, lastTotal, lastCtxWindow int
+	var lastIn, lastOut, lastCache, lastTotal, lastCtxWindow, lastReasoningOut int
 	scanner := bufio.NewScanner(f)
 	// バッファを 256 KB に制限（1 行が異常に長い場合の保護）
 	scanner.Buffer(make([]byte, 256*1024), 256*1024)
@@ -342,18 +408,19 @@ func scanLastTokenCount(path string) (in, out, cache, total, ctxWindow int, err 
 		if err := json.Unmarshal(line, &ev); err != nil {
 			continue
 		}
-		i, o, c, t, ctx := ev.resolve()
+		i, o, c, t, ctx, r := ev.resolve()
 		if i > 0 || o > 0 || t > 0 {
 			lastIn, lastOut, lastCache, lastTotal = i, o, c, t
+			lastReasoningOut = r
 			if ctx > 0 {
 				lastCtxWindow = ctx
 			}
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return 0, 0, 0, 0, 0, fmt.Errorf("scan rollout: %w", err)
+		return 0, 0, 0, 0, 0, 0, fmt.Errorf("scan rollout: %w", err)
 	}
-	return lastIn, lastOut, lastCache, lastTotal, lastCtxWindow, nil
+	return lastIn, lastOut, lastCache, lastTotal, lastCtxWindow, lastReasoningOut, nil
 }
 
 // isTokenCountLine は行が token_count イベントかどうかを JSON 全パース前に
@@ -381,7 +448,7 @@ func runCodex(hubURL, token string, sessionID int, stdin io.Reader, logger *slog
 	}
 
 	// rollout JSONL から token_count の数値のみを抽出。本文行は読み捨て。
-	tokIn, tokOut, tokCache, tokTotal, ctxWindow, err := scanLastTokenCount(input.TranscriptPath)
+	tokIn, tokOut, tokCache, tokTotal, ctxWindow, reasoningOut, err := scanLastTokenCount(input.TranscriptPath)
 	if err != nil {
 		logger.Warn("usage-relay(codex): rollout scan failed", "path", input.TranscriptPath, "err", err)
 		return nil
@@ -399,6 +466,7 @@ func runCodex(hubURL, token string, sessionID int, stdin io.Reader, logger *slog
 			TokensTotal:   tokTotal,
 			CtxWindow:     ctxWindow,
 			StartedAt:     time.Now().Format(time.RFC3339),
+			ReasoningOut:  reasoningOut,
 		}
 		if err := postUsage(hubURL, token, payload, logger); err != nil {
 			logger.Warn("usage-relay(codex): post failed", "err", err)
@@ -425,8 +493,32 @@ type hubUsagePayload struct {
 	TokensTotal   int     `json:"tokens_total,omitempty"`
 	// CtxWindow: モデルのコンテキストウィンドウ上限（Claude statusline の
 	// context_window_size をそのまま中継。取得できないプロバイダは 0）。
-	CtxWindow int    `json:"ctx_window,omitempty"`
-	StartedAt string `json:"started_at,omitempty"`
+	CtxWindow int `json:"ctx_window,omitempty"`
+	// CtxUsedPct: Claude Code statusLine 算出済みの context 使用率%（0=未取得）。
+	// Hub 側で 0–100 にクランプして UI へ中継する。
+	CtxUsedPct float64 `json:"ctx_used_pct,omitempty"`
+	StartedAt  string  `json:"started_at,omitempty"`
+	// statusbar 追加メタ（Claude statusLine ネイティブ算出値。Claude のみ）。
+	RateLimit5hPct   float64 `json:"rl_5h_pct,omitempty"`
+	RateLimit5hReset int64   `json:"rl_5h_reset,omitempty"`
+	RateLimit7dPct   float64 `json:"rl_7d_pct,omitempty"`
+	RateLimit7dReset int64   `json:"rl_7d_reset,omitempty"`
+	LinesAdded       int     `json:"lines_added,omitempty"`
+	LinesRemoved     int     `json:"lines_removed,omitempty"`
+	EffortLevel      string  `json:"effort_level,omitempty"`
+	Thinking         bool    `json:"thinking,omitempty"`
+	Exceeds200k      bool    `json:"exceeds_200k,omitempty"`
+	DurationMs       int64   `json:"duration_ms,omitempty"`
+	APIDurationMs    int64   `json:"api_duration_ms,omitempty"`
+	Version          string  `json:"version,omitempty"`
+	OutputStyle      string  `json:"output_style,omitempty"`
+	VimMode          string  `json:"vim_mode,omitempty"`
+	AgentName        string  `json:"agent_name,omitempty"`
+	RepoHost         string  `json:"repo_host,omitempty"`
+	RepoOwner        string  `json:"repo_owner,omitempty"`
+	RepoName         string  `json:"repo_name,omitempty"`
+	RemainingPct     float64 `json:"remaining_pct,omitempty"`
+	ReasoningOut     int     `json:"reasoning_output_tokens,omitempty"`
 }
 
 func postUsage(hubURL, token string, payload hubUsagePayload, logger *slog.Logger) error {

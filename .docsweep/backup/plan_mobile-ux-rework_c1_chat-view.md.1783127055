@@ -1,0 +1,100 @@
+---
+due: 2026-07-11
+---
+
+# [計画] C1: チャットトランスクリプトビュー
+
+> 最終更新: 2026-07-04(土) 09:41:20
+> 親: [`plan_mobile-ux-rework.md`](plan_mobile-ux-rework.md)
+> 親 plan の C1 を担当する子 plan。
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | plan | トランスクリプト状態管理（送信イベント記録 + クリーンテキスト区間分割） | — |
+| C2 | plan | チャットビュー描画（吹き出し UI + 進行文 + 追記型更新） | — |
+| C3 | plan | 生ログ詳細モーダルの継承強化（ピンチズーム + 末尾へボタン） | — |
+
+実行順序: `C1 → C2 → C3`
+
+---
+
+## 目的
+
+スマホ幅の個別セッション画面を「PTY 末尾 40 行の pre（横スクロール）」から「右吹き出し = 自分の指示 / 左折り返しテキスト = AI 出力」のチャットトランスクリプトへ置き換え、横スクロールなしで読める画面にする。
+
+## 前提（確定済み設計決定）
+
+- データ源は **C 案ハイブリッド**（親 plan 方針 #1）: 右吹き出しはフロントが自分で PTY へ送った入力イベント、左は送信イベント間のクリーンテキスト区間。境界のヒューリスティック推定はしない
+- 端末直打ちの入力は右吹き出しにならない（左区間に混ざる）ことを許容する。リロード後は「以降の会話から」表示でよい（履歴の完全復元は JSONL 配信 API 実装後）
+- 進行文ステータスは固定文言（親 plan 方針 #4）: `実行中…（N 分経過）` / `承認を待っています` / `切断されました` 程度の i18n キーで開始
+- xterm.js・scanBuffer・承認検出には触れない（表示層のみ）。`isMobileViewport()`（max-width: 720px）で early return し PC 副作用ゼロ
+
+---
+
+## C1: トランスクリプト状態管理
+
+### 作業内容
+
+- 新規 `web/src/app/mobile-transcript.ts` を作成。セッション ID ごとに `{ role: 'user' | 'ai', text, at }[]` を保持
+- 「ユーザー送信」フック: Web UI から PTY へテキストを送る既存経路（コンポーザー送信 / 承認自由入力 `sendSingleFreeText` 等）に、送信テキストを transcript へ push する呼び出しを追加。制御キー（Esc / Ctrl 系 / 矢印）は記録しない
+- 「AI 出力区間」: 送信イベントを区切りとして、`scanBuffer(id)` のクリーンテキスト差分を左メッセージとして確定する。表示用整形は mobile-terminal-lite の `collapseDecorations`（連続空行・水平線の集約）を移設して流用
+- メモリ上限: 1 セッションあたり直近 200 メッセージで打ち切り（xterm スクロールバックが正本、transcript は表示キャッシュ）
+
+### 変更予定ファイル
+
+- `web/src/app/mobile-transcript.ts` — 新規（状態管理）
+- `web/src/app/terminal.ts` or 送信経路モジュール — 送信フック 1 行ずつ
+- `web/src/app/mobile-terminal-lite.ts` — `collapseDecorations` の移設元
+
+### 完了条件
+
+- Web からの送信が user メッセージとして、その後の出力が ai メッセージとして transcript に積まれる（console 確認レベルで可）
+
+---
+
+## C2: チャットビュー描画
+
+### 作業内容
+
+- `#mobile-terminal-lite` の pre 部分をチャットビュー DOM（`#mobile-chat-view`）に置換。右吹き出し（角丸・最大幅 82%）/ 左は装飾なし折り返しテキスト、本文 16px
+- 追記型更新: 全再描画せず新規メッセージのみ append。進行中の ai メッセージ（未確定区間）は末尾要素の textContent 差し替えで更新（1 秒間隔の既存 refresh タイマーを流用）
+- 進行文ステータス行: 会話末尾にパルス + 固定文言 + 経過分数。セッション state（running / waiting / error / disconnected）から `liveStatusViewFor` と同じ分類で文言を引く
+- 末尾追従: ユーザーが上へスクロール中は自動追従を止め、「↓ 最新へ」ピルを表示
+- i18n キー追加（ja / en）: `mobile_status_running` `mobile_status_waiting_approval` `mobile_status_disconnected` `mobile_chat_jump_latest` 等
+
+### 変更予定ファイル
+
+- `web/src/app/mobile-terminal-lite.ts` — ビュー生成・refresh の置換（ファイル名は据え置き、C6 で整理）
+- `web/src/styles/mobile-home.css` — 吹き出し・ステータス行・「↓ 最新へ」CSS（@media 720px 内）
+- `web/src/i18n/ja.json` / `en.json`
+
+### 完了条件
+
+- スマホ幅の個別セッションで横スクロールが発生せず、指示と応答が吹き出しで時系列表示される
+- PC 幅では従来の xterm 表示のまま
+
+---
+
+## C3: 生ログ詳細モーダルの継承強化
+
+### 作業内容
+
+- 既存 `openDetailModal`（mtl-detail-overlay、全行 pre）を維持しつつ、ピンチズームでフォントサイズ変更（10〜16px クランプ）と「末尾へ」ボタンを追加
+- チャットビュー右上（ヘッダーの ⛶）から開く動線を維持
+
+### 変更予定ファイル
+
+- `web/src/app/mobile-terminal-lite.ts` — モーダル拡張
+- `web/src/styles/mobile-home.css` — ボタン CSS
+
+### 完了条件
+
+- ⛶ から生ログ全文が開き、ピンチでフォントサイズが変わり、「末尾へ」で最下部へ飛べる
+
+---
+
+## 完了報告フォーマット
+
+各 C 完了時に親 plan の `## context配分` 表で C1 行を（子 3 C すべて完了時に）`plan` → `fix` に更新。本書の表も該当行を更新。報告は `fix:完了/plan:未完了`・変更ファイル一覧・検証結果 1 行のみ。

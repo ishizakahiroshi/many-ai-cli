@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	neturl "net/url"
@@ -204,10 +205,36 @@ func PrintStatus(cfg *config.Config) error {
 	defer resp.Body.Close()
 	if resp.StatusCode == 200 {
 		fmt.Println("running", url)
+		if stale, ok := probeBinaryStale(cfg.Hub.Port, cfg.Token); ok && stale {
+			fmt.Println("WARNING: running Hub is a STALE binary (the on-disk exe differs from the one this Hub started with).")
+			fmt.Println("         Restart the Hub to apply your rebuild: `many-ai-cli stop` then start it again.")
+		}
 		return nil
 	}
 	fmt.Println("stopped")
 	return nil
+}
+
+// probeBinaryStale は /api/info の binary_stale を取得する。
+// 取得・パースに失敗したら ok=false（status は警告を出さない）。
+func probeBinaryStale(port int, token string) (stale bool, ok bool) {
+	url := localHubURL(port, "/api/info", token)
+	client := &http.Client{Timeout: hubProbeTimeout}
+	resp, err := client.Get(url)
+	if err != nil {
+		return false, false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false, false
+	}
+	var info struct {
+		BinaryStale bool `json:"binary_stale"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return false, false
+	}
+	return info.BinaryStale, true
 }
 
 func localHubURL(port int, path string, token string) string {

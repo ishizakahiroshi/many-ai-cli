@@ -1,0 +1,589 @@
+# [計画] スマホ ダッシュボード MVP
+
+> 最終更新: 2026-06-25(木) 17:12:10
+
+正本: [reference_mobile-ui-strategy.md](reference_mobile-ui-strategy.md)。
+本 plan は戦略書 Phase 2「ダッシュボード MVP」の実装計画。P2（保留バッジ）と P3（承認カード全文展開）を統合し、ホーム画面・個別セッション画面のタブ構成を再設計する。
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | plan | 画面構成・遷移・コンポーネント分担の確定（HTML モック視認 → 仕様確定） | — |
+| C2 | fix  | ホーム画面（セッション一覧カード）の実装仕様 | — |
+| C3 | fix  | 個別セッション「承認」タブの実装仕様（P3 全文展開を吸収） | — |
+| C4 | fix  | 既存 web/src/app/ 構造への組み込み方針（DOM 増減・ルーティング・破壊度の局所化） | — |
+| C5 | fix  | C2〜C4 確定後の実装 | — |
+| C6 | fix  | 実機検証（スマホ実機 + DevTools エミュレーション） | — |
+
+実行順序: `C1 → C2/C3/C4 並行確定 → C5 → C6`
+
+## 概要
+
+戦略書（reference_mobile-ui-strategy.md）に基づき、スマホ UI を「ダッシュボード型」に切り替える MVP。中核は 2 つ:
+
+1. **ホーム / セッション一覧画面**（新規） — スマホ起動時のデフォルト画面。全セッションをカード状に縦並びし、承認待ちは上部固定 + inline 操作可能
+2. **個別セッション画面のタブ再構成** — 「承認 / チャット / ターミナル」の 3 タブ。スマホ既定タブは「承認」、PC 既定は従来通り「ターミナル」
+
+PC レイアウトは MVP では原則変更しない（戦略書 §5 Phase 4 で別検討）。
+
+## スコープ
+
+含む:
+- スマホ判定（`@media (pointer: coarse)`）でのホーム画面追加
+- セッション一覧カードの再設計（承認待ち inline 操作）
+- 個別セッション画面のタブ既定値変更（スマホのみ）
+- P3 承認キュー全文展開（カード内）の統合
+- P2 ハンバーガー件数バッジ（ホーム画面で意味が変わるため、見直す）
+
+含まない:
+- xterm.js の挙動変更（ターミナルタブはそのまま）
+- payload renderer の品質改善（戦略書 §5 Phase 3 = P4 に分離）
+- PC レイアウトの大改造
+- 廃止 4 proposal（P1/P7/P8/P6 大部分）の機能取り込み（戦略書で廃止確定）
+
+---
+
+## C1: 画面構成・遷移・コンポーネント分担の確定（確定済 2026-06-16）
+
+HTML モック `plan_mobile-dashboard-mvp-mockup.html` をユーザー視認 → 以下で確定。本節は C5 実装の入力仕様となる。
+
+### 確定事項
+
+| 項目 | 確定値 |
+|---|---|
+| ホーム起動 | スマホ判定（`@media (pointer: coarse)`）時のデフォルト画面はホーム / セッション一覧 |
+| カード並び順 | 状態順セクション化: ①承認待ち（上部固定） → ②実行中 → ③入力待ち/完了 → ④エラー |
+| 承認待ちカード | 上部固定セクションに集約。セクション見出しに件数表記 |
+| カード inline 操作 | カード上で承認の選択肢ボタンを直接描画・送信パスは既存承認送信を流用 |
+| 個別セッション既定タブ | スマホ = 「承認」タブ、PC = 従来通り「ターミナル」タブ |
+| 戻る動線 | 個別セッション画面の左上 ← ボタンでホームへ。ハンバーガーはサイドメニュー専用に役割分離 |
+| 入力欄の置き場所 | 個別セッション「チャット」タブ内のフッター固定。ホーム / 承認タブには入力欄を出さない |
+| 件数バッジ | ホーム画面ではセクション見出しに件数表記。ハンバーガー右上バッジは「個別セッション画面に居る時の他セッション承認待ち数」専用 |
+| 承認待ち 0 件時 | empty state 文言を出す（文言は C5 実装時に i18n キーで決定） |
+| カード表示要素 | provider アイコン / セッション名 / 状態バッジ / 最新ひと言（PTY 最終行 or payload 最終 message 冒頭） |
+| 状態色 | 承認待ち=赤 / 実行中=黄 / 完了=緑 / エラー=橙（カード左ボーダー + バッジで二重表現） |
+
+### モックで決めていない項目（C5 実装前に追加で詰める）
+
+C2〜C4 で各々詰める or 別途確認:
+
+- サイドメニュー（ハンバーガー展開）の中身 → C4 で既存実装と擦り合わせ
+- カード長押し時のメニュー（再起動 / 停止 / 削除） → C5 着手前にユーザー確認
+- 承認待ちが 5 件以上溜まったときの上部固定セクションの高さ制限・スクロール挙動 → C2 で仕様化
+- provider アイコンのデザイン（モックは CL/CX/CP/CU の文字仮置き） → C5 実装時に確定
+
+### 変更予定ファイル
+
+- 本 plan を更新（完了済）
+
+### 完了条件
+
+達成済。C2/C3/C4 へ並行確定段階へ移行可能。
+
+---
+
+## C2: ホーム画面（セッション一覧カード）
+
+### 設計方針（最小破壊）
+
+- 既存 `#session-list` / `#sessions`（`session-list.ts` の `renderSessionList()`）はサイドバー専用としてそのまま温存する。スマホ用ホームは **別 DOM ツリー** として `#app` 直下に `#mobile-home` を新設し、`@media (pointer: coarse)` でのみ表示する。
+- PC レイアウトは `#mobile-home` を `display:none` で完全に無視。スマホでは逆に `#session-list`（既存ドロワー）と `#terminal-column` を `body:not(.mobile-session-open)` の間だけ隠してホームのみ全画面に出す。
+- ホーム ⇄ 個別セッション画面の切替は **既存 `body.mobile-has-session` の意味を上書きせず**、ホーム表示専用フラグ `body.mobile-home-view`（または `:not(.mobile-session-open)`）を 1 つ追加して `syncMobileLayoutState()` 内で更新する。`activateSession()` を呼んだら個別画面へ・左上 ← ボタンで「アクティブ解除（`set_activeSessionId(null)`）」してホームへ戻す。
+- 承認 inline 操作は `approval-queue-tab.ts` の `renderOptionButtons()` と `sendChoice()` を再利用する。新規送信パスは作らない。
+
+### 作業内容
+
+#### 1. DOM 追加（`web/src/index.html`）
+
+`#app` の直下、`<aside id="session-list">` の前に以下を追加する:
+
+```html
+<section id="mobile-home" hidden>
+  <div id="mobile-home-pinned"
+       data-section="pending"
+       aria-label="承認待ち"></div>
+  <div id="mobile-home-scroll">
+    <div class="mh-section" data-section="running"></div>
+    <div class="mh-section" data-section="waiting"></div>
+    <div class="mh-section" data-section="error"></div>
+    <div id="mobile-home-empty" hidden></div>
+  </div>
+</section>
+```
+
+- `#mobile-home-pinned`: 上部固定セクション（position:sticky; top:0;）。承認待ちカード専用。
+- `#mobile-home-scroll`: 通常スクロール領域。実行中／入力待ち・完了／エラーの順で 3 セクションを縦配置。
+- `#mobile-home-empty`: セッション 0 件時のメッセージ表示エリア。
+- 既存 `#mobile-menu-btn` は残置（サイドメニューとして再定義は C4 で扱う）。
+
+#### 2. 新規モジュール `web/src/app/mobile-home.ts`
+
+責務:
+- `renderMobileHome()` — 全カード描画。`orderSessions()` を取得し state でバケット分割して 4 セクションへ振り分ける。
+- `updateMobileHomeCard(id)` — 単一セッションの差分更新（state 変化・最新ひと言更新）。`renderSessionStateUpdate()` と同じく `renderSummaryAndNotifications()` 経由で呼ぶ。
+- `attachMobileHomeListeners()` — `approval-queue-updated` / `session-view-mode-changed` / `session_update` ws イベントで `renderMobileHome()` を呼び直す。`approval-queue-tab.ts` の `_lastPaneSig` と同じく署名キャッシュで死にクリック回避。
+
+カード DOM 構造（モック準拠）:
+
+```html
+<article class="mh-card mh-card--<state>" data-session-id="...">
+  <header class="mh-card-head">
+    <span class="mh-card-provider"> <!-- providerIconHtml(provider, 24) を流用 --> </span>
+    <span class="mh-card-title"><!-- sessionTitle(s) (approval-queue-tab.ts の関数を export 化して共用) --></span>
+    <span class="mh-card-status mh-card-status--<state>"><!-- stateLabel(state) --></span>
+  </header>
+  <div class="mh-card-snippet"><!-- filterFirstMessage(last_message||first_message) 1〜2行 line-clamp --></div>
+  <!-- pending のみ inline 承認エリア -->
+  <div class="mh-card-approve">
+    <div class="mh-card-qbody"><!-- approvalQuestionContext(opts).question (line-clamp:3 + 全文展開) --></div>
+    <div class="mh-card-qchoices"><!-- renderOptionButtons() を呼ぶ --></div>
+  </div>
+</article>
+```
+
+タップ動作:
+- `mh-card` 全体 click → `activateSession(id)` を呼ぶ（既存 `onSessionCardActivate` ではなくスマホ用は直接 `activateSession()` を呼ぶ。マルチペインはスマホ非対象）。`syncMobileLayoutState()` が `mobile-has-session` を立て、追加で `mobile-home-view` を外す → ホーム非表示・個別画面表示へ切り替わる。
+- `mh-card-approve` 内のボタンは `stopPropagation()` し、`sendChoice(id, opt.num)` のみ実行（カード遷移しない）。
+- `mh-card-qbody` の全文展開トグルは `approval-queue-tab.css` の clamp と同じパターンを採用（C3 で確定する共通 CSS を流用）。
+
+#### 3. 共用化（`web/src/app/session-list.ts` と `approval-queue-tab.ts`）
+
+| 関数 | 現状 | 改修 |
+|---|---|---|
+| `providerIconHtml(provider, size)` | session-list.ts に export 済 | そのまま再利用 |
+| `safeClassToken` / `stateLabel` | session-list.ts に export 済 | そのまま再利用 |
+| `filterFirstMessage` | settings.ts に export 済 | そのまま再利用 |
+| `sessionTitle(s)` | approval-queue-tab.ts 内 private | **`export` 化** して mobile-home.ts から import |
+| `approvalQuestionContext(options)` | 同上 private | **`export` 化** |
+| `renderOptionButtons(container, id, options)` | 同上 private | **`export` 化** |
+
+新規共用関数の追加はしない。既存 private 3 つを export するだけで mobile-home.ts は組み立てられる。
+
+#### 4. 状態取得経路
+
+- セッション一覧: `orderSessions()` (state.js)
+- 承認待ち判定: `approvalVisibleCache.get(id) || multiQuestionVisibleCache.get(id)` (`approval-queue-tab.ts` の `pendingSessionIds()` と同条件)
+- 承認 options: `approvalRawOptionsCache.get(id)`（`isBatchOptions` / `isMultiSelectOptions` は C3 でケアし、C2 では batch/multiQ は inline 描画せず「承認タブで開く」リンクへフォールバック）
+- セッション state バケット振り分け:
+  - `pending` = approvalVisible || multiQuestionVisible
+  - `running` = `state === 'running'` かつ非 pending
+  - `waiting/standby/done` = `state === 'waiting'` または `(state||'standby') === 'standby'` かつ非 pending・非 running
+  - `error` = `state === 'error' || state === 'disconnected'`
+
+#### 5. 上部固定セクションのスクロール挙動（5 件以上時）
+
+- `#mobile-home-pinned` は `position: sticky; top: 0;` で上部に貼り付ける。
+- カード件数が増えても **高さ制限は設けず** ページ全体スクロールで自然に流す（モック検討項目を「上限なし・自然スクロール」で確定）。理由: スマホで上部固定領域だけ独立スクロールにすると 2 重スクロールで操作性が悪化。
+- 承認待ち 0 件時は `#mobile-home-pinned` を `hidden` 属性で完全に隠す（セクション見出し含む）。
+
+#### 6. empty state（i18n）
+
+- セッション 0 件: 既存 `no_sessions`（「セッションなし」/ "No sessions"）を流用。`#mobile-home-empty` に表示。
+- 承認待ち 0 件時の `#mobile-home-pinned` 内見出し: モックでは「⚠ 承認待ち（N 件）」だが 0 件時はセクションごと非表示。0 件専用の文言は不要。
+- 各セクション見出し文言キー候補（新規・ja/en に追加）:
+  - `mobile_home_section_pending` = 「⚠ 承認待ち」/ "Awaiting approval"
+  - `mobile_home_section_running` = 「実行中」/ "Running"
+  - `mobile_home_section_waiting` = 「完了 / 入力待ち」/ "Done / Waiting for input"
+  - `mobile_home_section_error` = 「エラー」/ "Errors"
+  - 見出しテキストは `{label}（{count} 件）` 形式で count をプレースホルダ展開。
+
+#### 7. provider アイコン暫定方針
+
+- `providerIconHtml()` の既存 SVG（円形/角丸 + 1 文字）をそのまま流用。モックの CL/CX/CP/CU 文字仮置きは採用せず、PC サイドバーと同じアイコンで統一する（design 一貫性 + C5 実装時の追加コスト 0）。サイズだけ 24px に指定。
+
+#### 8. ← 戻る動線
+
+- 個別セッション画面の左上 ← ボタンは既存 `#mobile-menu-btn` を兼用せず、新規 `#mobile-back-btn` を `#app` 直下に `position:fixed; top:6px; left:8px;` で追加（モックの `.hd-back` 相当）。
+- クリックハンドラ: `set_activeSessionId(null)` → `syncMobileLayoutState()` で `mobile-has-session` が外れ、`mobile-home-view` が立ち、ホーム再表示。`closeMobileSessionDrawer()` も同時に呼ぶ。
+- 既存 `#mobile-menu-btn`（☰）はサイドメニュー専用に役割固定（C4 で詳細）。スマホでホーム表示中は `#mobile-menu-btn` のみ表示・`#mobile-back-btn` は非表示。個別セッション画面では逆。
+
+#### 9. ハンバーガー件数バッジ（P2 統合）
+
+- ホーム表示中（`body.mobile-home-view`）: `#mobile-menu-btn` のバッジは **非表示**（ホーム自体に承認待ちカードが見えるため二重表示防止）。
+- 個別セッション画面（`body.mobile-has-session:not(.mobile-home-view)`）: 「他セッションの承認待ち数（自セッションを除外）」を `#mobile-menu-btn` に赤バッジで表示。集計は `pendingSessionIds().filter(id => id !== activeSessionId).length`。
+
+### 変更予定ファイル
+
+追加:
+- `web/src/app/mobile-home.ts` — ホーム描画モジュール（新規）
+- `web/src/styles/mobile-home.css` — ホーム専用 CSS（新規）
+
+変更:
+- `web/src/index.html` — `<section id="mobile-home">` ブロック + `<button id="mobile-back-btn">` 追加、`<link rel="stylesheet" href="styles/mobile-home.css">` 追加
+- `web/src/app/approval-queue-tab.ts` — `sessionTitle` / `approvalQuestionContext` / `renderOptionButtons` を `export` 化
+- `web/src/app.ts` — `syncMobileLayoutState()` に `mobile-home-view` クラス切替を追加、`#mobile-back-btn` の click ハンドラ追加、`renderMobileHome()` 初期呼び出し
+- `web/src/app/session-list.ts` — `render()` / `renderSessionStateUpdate()` から `mobile-home.ts` の `renderMobileHome()` を `pointer: coarse` 時のみ呼ぶ薄いフック（matchMedia 判定）
+- `web/src/app/approval-ui.ts` — 既存の `approval-queue-updated` カスタムイベントを mobile-home.ts も購読するため、ディスパッチ箇所は無改変（mobile-home.ts 側で `window.addEventListener` するだけ）
+- `web/src/i18n/ja.json` / `en.json` — `mobile_home_section_pending` ほか 4 キー追加
+- `web/src/types/window.d.ts` — `renderMobileHome` を `window` プロパティとして型定義（必要なら）
+
+削除: なし
+
+### 完了条件
+
+- スマホ幅（`matchMedia('(pointer: coarse)')`）でアクセスするとホーム画面が初期表示される（既存ドロワーは隠れる）
+- 承認待ちが発生したら即 `#mobile-home-pinned` セクションにカードが追加され、inline ボタンで `sendChoice()` 経由で承認送信できる（PC ターミナルと結果一致）
+- カードタップで個別セッション画面へ遷移し、左上 ← ボタンでホームへ戻れる
+- ホーム表示中はハンバーガー右上バッジ非表示・個別セッション画面では「他セッションの承認待ち数」が表示
+- セッション 0 件で `no_sessions` empty state が表示
+- PC（pointer: fine）で従来通り `#session-list` ベースのサイドバー UI が動作（`#mobile-home` は `display:none`）
+
+### 確定事項
+
+| 項目 | 確定値 |
+|---|---|
+| 配置 DOM | `#app` 直下に新規 `<section id="mobile-home">` を追加（既存 `#session-list` / `#terminal-column` は無改変） |
+| 表示分岐 | `@media (pointer: coarse)` + body class `mobile-home-view` の AND で表示 |
+| ホーム ⇄ 個別 遷移 | ホーム→個別は `activateSession(id)`、個別→ホームは `set_activeSessionId(null)` + `syncMobileLayoutState()` |
+| カード共用関数 | `providerIconHtml` / `stateLabel` / `safeClassToken` / `filterFirstMessage` をそのまま import、`sessionTitle` / `approvalQuestionContext` / `renderOptionButtons` は `approval-queue-tab.ts` から export 化して再利用 |
+| 承認送信パス | `sendChoice(id, opt.num)`（`approval.ts` 既存関数）を流用。新規送信パスなし |
+| 状態バケット | pending / running / waiting(=standby+waiting+done) / error の 4 つ。pending は他バケットより優先 |
+| 上部固定 | `position: sticky; top: 0;` のみ。高さ制限なし・ページ全体スクロールに任せる |
+| 承認 0 件時 | `#mobile-home-pinned` をセクションごと `hidden` で完全非表示 |
+| empty state | セッション 0 件は既存 `no_sessions` を流用。セクション見出しは `mobile_home_section_*` 4 キーを新規追加 |
+| provider アイコン | `providerIconHtml()` の既存 SVG をそのまま使用（CL/CX/CP/CU 仮置きは不採用） |
+| 戻る動線 | 新規 `#mobile-back-btn`（モック `.hd-back` 相当）を `position:fixed` で追加。`#mobile-menu-btn` は ☰ サイドメニュー専用に分離 |
+| ハンバーガー件数バッジ | ホーム表示中は非表示。個別画面時のみ「他セッションの承認待ち数」を表示 |
+| batch / multiQ 承認 | C2 では inline 描画せず、カードをタップして個別画面の承認タブへ誘導するフォールバック（既存 `approval-queue-tab.ts` 同様の挙動） |
+| カード長押しメニュー | C2 では実装しない（C1 で「C5 着手前にユーザー確認」と記載済。C5 着手時に再判断） |
+
+---
+
+## C3: 個別セッション「承認」タブ（P3 統合）
+
+### 設計方針（最小破壊）
+
+- 既存「承認キュータブ」（`#unified-tab-bar` の `data-tab="approval"` ＋ `#approval-pane`）はそのまま流用する。タブ自体を新設・移設しない（既に「セッション非依存ビュー」として `setActiveTab('approval')` で全画面表示される実装が `web/src/app/settings.ts:2396` 周辺にあり、これを継続利用）。
+- C3 で書き換えるのは `renderApprovalPane()` 内のカード本体レンダラ（`approval-queue-tab.ts:137-265`）のみ。`approvalPaneSig()` の署名キーに「展開状態」「質問本文ハッシュ」を追加して死にクリック防止ロジックを維持する。
+- P3「全文展開」: 質問本文（`approvalQuestionContext(opts).question` / `.preamble`）は **既定で line-clamp（3 行）**、超過時のみ「全文表示」トグルを出す。展開状態はカード DOM 上の `data-expanded="1"` 属性で保持し、再描画でも同一 sessionId は展開状態を引き継ぐ（`_expandedCards: Set<number>` モジュールローカル）。
+- 選択肢ボタンのカード内直接配置は **既に実装済**（`renderOptionButtons()`）。C3 では「`isBatchOptions` のカードもターミナル誘導をやめ、preamble + 各 sub-question を縦に並べたカード内描画にする」拡張だけ追加（フェーズ分離可能。MVP では既存のターミナル誘導維持で可）。
+- スマホ既定タブ「承認」: `getSessionViewMode(sid)` (`settings.ts:2201-2210`) のフォールバック `'terminal'` を、`matchMedia('(pointer: coarse)').matches` 時のみ `'approval'` に差し替える。**lock 値**（`getDisplayLockedMode()`）が設定されていればそちらを優先（既存仕様維持）。`sessionViewMode` Map に明示登録された値はそのまま尊重する（ユーザーがタブを切替えた後は維持）。
+- PC（pointer: fine）は無改変 → 従来通り `'terminal'` 既定。
+- 送信パス: `sendChoice(id, opt.num)` (`approval.ts`) を再利用。新規送信パスなし。`approval-ui.ts` の action-bar 表示／消去は元のまま動く。
+
+### 作業内容
+
+#### 1. 質問本文 line-clamp + 「全文表示」トグル
+
+- 既存 `appendApprovalQuestionContext(card, options)` を以下に差し替え:
+  - preamble がある場合は `<div class="aqt-question aqt-question--preamble is-clamped">` で描画。**既存の `max-height: 9em; overflow-y:auto`（CSS）から clamp 方式に変更**: `display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;`。
+  - 直後に `<button class="aqt-question-toggle">全文表示</button>` を **テキストが clamp 限界を超えた場合のみ** 追加（描画後 `scrollHeight > clientHeight + 1` を判定）。
+  - question 行も同じパターンで `--question-clamped`（2 行）+ トグル。
+  - トグルクリックで `card.classList.toggle('aqt-card--expanded')` し、`_expandedCards: Set<number>` を更新。トグルラベルは「全文表示 ⇄ 折りたたむ」で切替（i18n キー `approval_tab_expand` / `approval_tab_collapse` を新規追加）。
+- 展開判定行数: 既定 preamble=3 行 / question=2 行。CSS 変数 `--aqt-clamp-pre` / `--aqt-clamp-q` で上書き可能にしておく（将来調整しやすく）。
+- `approvalPaneSig()` に `expanded: _expandedCards.has(id)` を含める。
+
+#### 2. スマホ既定タブを「承認」へ
+
+`web/src/app/settings.ts` の `getSessionViewMode()` を以下に変更:
+
+```ts
+export function getSessionViewMode(sid) {
+  if (sid === null || sid === undefined) return defaultViewModeForViewport();
+  if (!sessionViewMode.has(sid)) {
+    const lock = getDisplayLockedMode();
+    if (lock && LOCKABLE_MODES.has(lock)) return lock;
+    return defaultViewModeForViewport();
+  }
+  return sessionViewMode.get(sid) || defaultViewModeForViewport();
+}
+
+function defaultViewModeForViewport(): string {
+  try {
+    if (typeof window !== 'undefined'
+        && typeof window.matchMedia === 'function'
+        && window.matchMedia('(pointer: coarse)').matches) {
+      return 'approval';
+    }
+  } catch (_) {}
+  return 'terminal';
+}
+```
+
+- 既存呼び出し（`applyActiveSessionViewMode()` / `setActiveTab()` 内の fallback `'terminal'` リテラル）は触らない。`getSessionViewMode()` が単一の真実源なので、ここだけ差し替えれば全経路でスマホ既定が「承認」になる。
+- `window.addEventListener('resize', …)` (`settings.ts:2570`) でスマホ幅 → 強制 `'terminal'` 切替している箇所は **そのまま**（split/multi からの強制脱出用で、approval 強制ではない）。挙動への悪影響なし。
+
+#### 3. PC 維持の担保
+
+- `defaultViewModeForViewport()` は `(pointer: coarse)` 一致時のみ `'approval'` を返す。デスクトップは fine pointer なので必ず `'terminal'`。
+- ユーザーがスマホでタブを手動切替したら `sessionViewMode.set(targetSid, name)` が走り、以降はその値が優先（既存仕様 `settings.ts:2435`）。
+
+#### 4. ターミナルへの動線
+
+- カード右上の `aqt-go-terminal-btn`（「ターミナル」ボタン）は既存維持。
+- カード本文 click（ボタン以外）でターミナルタブへ切替は **追加しない**（誤タップ防止。明示ボタンのみ）。
+
+#### 5. CSS
+
+`web/src/styles/approval-queue-tab.css`:
+- `.aqt-question--preamble` の `max-height: 9em; overflow-y: auto;` を削除し、line-clamp 方式へ。展開時 `.aqt-card--expanded .aqt-question--preamble { display: block; -webkit-line-clamp: unset; max-height: none; }`。
+- `.aqt-question--batch.is-clamped` も同様（2 行）。
+- `.aqt-question-toggle` を新規追加（小さめのテキストボタン。`background: none; border: none; color: var(--accent); font-size: 0.78rem; padding: 2px 0; cursor: pointer; min-height: 32px`）。
+- `@media (max-width: 720px)` 内の `.aqt-question--preamble { max-height: 7.5em; }` も clamp 方式に合わせ削除。
+
+#### 6. i18n キー追加
+
+`web/src/i18n/ja.json` / `en.json`:
+- `approval_tab_expand` = 「全文表示」/ "Show full"
+- `approval_tab_collapse` = 「折りたたむ」/ "Collapse"
+
+### 変更予定ファイル
+
+変更:
+- `web/src/app/approval-queue-tab.ts` — `appendApprovalQuestionContext()` 書き換え、`_expandedCards: Set<number>` 追加、`approvalPaneSig()` に expanded 状態追加、`renderOptionButtons` への影響なし
+- `web/src/app/settings.ts` — `getSessionViewMode()` を `defaultViewModeForViewport()` 経由に変更（追加関数 1 つ）
+- `web/src/styles/approval-queue-tab.css` — preamble の max-height/overflow を line-clamp に置換、`.aqt-question-toggle` 追加、`.aqt-card--expanded` ルール追加
+- `web/src/i18n/ja.json` / `en.json` — `approval_tab_expand` / `approval_tab_collapse` 2 キー追加
+
+追加: なし（既存タブ流用）
+
+削除: なし（C2 の mobile-home 経由でタブ自体は触らないため `approval-pane` / `approval-tab-btn` はそのまま）
+
+無改変（重要・確認済）:
+- `web/src/app/approval-parser.ts`（マーカーパーサ）
+- `web/src/app/approval-ui.ts`（action-bar）
+- `web/src/app/approval.ts`（`sendChoice` 送信パス）
+- `web/src/styles/approval.css`（共用化は不要・action-bar 専用）
+- `web/src/index.html`（`approval-pane` / `approval-tab-btn` は既存のまま）
+
+### 完了条件
+
+- 承認タブのカードに preamble + question + 選択肢がターミナルを開かず全件見える
+- 長文質問は 3 行で clamp され、「全文表示」ボタンで展開・折りたたみができる（同セッション ID は再描画で展開状態維持）
+- カードボタンタップで `sendChoice()` 経由の承認が PC ターミナル直接操作と結果一致（既存挙動踏襲）
+- 「ターミナル」ボタンで個別セッションのターミナルタブへ動線が残る
+- スマホ（`pointer: coarse`）で新規セッションを開いた直後の既定タブが「承認」になる
+- PC（`pointer: fine`）の既定タブは従来通り「ターミナル」（regression なし）
+- lock 値（`getDisplayLockedMode()`）が設定されている場合はスマホでも lock 値を優先（既存仕様維持）
+
+### 確定事項
+
+| 項目 | 確定値 |
+|---|---|
+| 配置 | 既存 `#approval-pane` / `data-tab="approval"` を流用（タブ新設なし） |
+| 質問本文展開方式 | line-clamp（preamble 3 行 / question 2 行）+ 超過時のみ表示する `.aqt-question-toggle` ボタン |
+| 展開状態保持 | モジュールローカル `_expandedCards: Set<number>`。`approvalPaneSig()` に含めて死にクリック防止と両立 |
+| 選択肢ボタン共用 | 既存 `renderOptionButtons()` をそのまま流用（C2 と同関数）。export 化は C2 側で実施 |
+| 送信パス | `sendChoice(id, opt.num)`（`approval.ts`）。新規送信パスなし |
+| スマホ既定タブ判定 | `settings.ts` に `defaultViewModeForViewport()` を新設し `matchMedia('(pointer: coarse)').matches` 一致時のみ `'approval'` を返す。`getSessionViewMode()` のフォールバックリテラル `'terminal'` 1 か所だけを差し替え |
+| PC 既定タブ | `defaultViewModeForViewport()` は fine pointer で `'terminal'` を返すため無改変・regression なし |
+| lock 値優先 | `getDisplayLockedMode()` を従来通り最優先（スマホ既定より上位） |
+| ユーザー手動切替 | `sessionViewMode.set()` 後は登録値を尊重（既存挙動維持） |
+| batch / multi-select 承認 | C3 では現状の「ターミナルで開く」誘導を維持（拡張は後続フェーズ。MVP スコープ外） |
+| ターミナル動線 | カード右上 `aqt-go-terminal-btn` のみ。カード本文タップは無反応（誤タップ防止） |
+| 新規 i18n キー | `approval_tab_expand` / `approval_tab_collapse` の 2 つ（ja/en） |
+| CSS 変更 | `.aqt-question--preamble` の `max-height/overflow-y` を削除し line-clamp 化。`.aqt-card--expanded` / `.aqt-question-toggle` ルール追加 |
+
+---
+
+## C4: 既存構造への組み込み方針
+
+### 設計方針（最小破壊・PC 0 影響）
+
+C2/C3 の前提を既存実装と突合した結果、以下 5 点が「最小破壊で PC を 0 影響にする」要件として確定する。
+
+1. **既存スマホ分岐は幅ベース** — `web/src/styles.css` の主分岐は `@media (max-width: 720px)`（L527〜）であり、`(pointer: coarse)` ブロック（L483〜）はタッチターゲット拡大専用。C2/C3 の表現「`@media (pointer: coarse)` で表示」は **実体としては `(max-width: 720px)` ブロックに同居** させる（pointer 判定だと iPad Pro 横画面など意図しない端末でホーム化する事故が起きる）。
+2. **DOM 追加は `#app` 直下に水平挿入** — `#app` (`index.html:829`) はフレックスコンテナで子に `#mobile-menu-btn` / `#mobile-drawer-backdrop` / `#mobile-spawn-btn` / `#session-list` / `#sidebar-resizer` / `#terminal-column` を並べている。`#mobile-home` は `#mobile-spawn-btn` の **直後・`#session-list` の直前** に挿入する（PC は `#mobile-home { display: none }` で無視。フレックスの flex-basis 計算にも影響しない）。
+3. **スマホ判定の単一情報源は CSS のみ** — JS では `matchMedia('(max-width: 720px)')` を 1 か所（mobile-home.ts の private helper `isMobileViewport()`）に集約し、それ以外の場所は `body.mobile-home-view` クラスの有無で分岐する。`syncMobileLayoutState()` のみが本クラスを toggle する（情報源の二重化防止）。
+4. **ルーティングは内部 state（URL ハッシュ不使用）** — 既に `activeSessionId` (`state.ts`) と `body.mobile-has-session` が「個別セッション展開中か」の真実源として機能している。URL ハッシュ追加は (a) 既存 deep-link 機構と競合、(b) PC でハッシュ変更を観測する必要が出るため副作用大、(c) スマホ戻るボタンの履歴肥大化、を理由に **採用しない**。`body.mobile-home-view = (isMobileViewport && activeSessionId === null)` の派生クラスのみで表現する。
+5. **既存「ホーム代わり」の暗黙動線を温存** — `styles.css:640` の `body:not(.mobile-has-session) #terminal-column { display: none; }` は「スマホで未選択時はサイドバー一覧をフル表示」の既存ホーム代替動線。これは触らず、その手前に `#mobile-home` を上書き表示するレイヤを追加する形にする（万一 mobile-home が壊れても既存動線にフォールバックできる安全策）。
+
+### 作業内容
+
+#### 1. DOM 追加位置（`web/src/index.html`）
+
+`#app` (L829) の子として、以下の順序で挿入する:
+
+```
+<div id="app">
+  <button id="mobile-menu-btn">              ← 既存 (L830)
+  <div id="mobile-drawer-backdrop" hidden>   ← 既存 (L831)
+  <button id="mobile-spawn-btn">             ← 既存 (L832)
+  <button id="mobile-back-btn" hidden>       ← ★ 新規（C2 §8 で定義した ← 戻るボタン）
+  <section id="mobile-home" hidden>          ← ★ 新規（C2 §1 の構造）
+  <aside id="session-list">                  ← 既存 (L833)
+  ...
+```
+
+- `#mobile-back-btn` と `#mobile-home` は **HTML 上は `hidden` 属性で初期非表示**。CSS の `(max-width: 720px)` 分岐内で `body.mobile-home-view #mobile-home { display: block }` 等で出す。PC では HTML の `hidden` のままなので 0 影響。
+- `#mobile-home` の中身は C2 §1 の構造をそのまま採用（変更なし）。
+
+#### 2. スマホ判定の単一情報源
+
+`mobile-home.ts` 内に private helper を 1 つ置く:
+
+```ts
+const mobileMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
+  ? window.matchMedia('(max-width: 720px)')
+  : null;
+function isMobileViewport(): boolean { return !!mobileMql?.matches; }
+```
+
+- `syncMobileLayoutState()` (`app.ts:861`) を以下に拡張: 既存の `mobile-has-session` toggle に加え、`body.classList.toggle('mobile-home-view', isMobileViewport() && activeSessionId === null)` を 1 行追加する。
+- C3 の `defaultViewModeForViewport()` も `matchMedia('(pointer: coarse)')` から **`matchMedia('(max-width: 720px)')` に変更** する（C2/C3 の確定事項のうち pointer 判定の箇所はこの C4 確定でリビジョンする）。
+- `mobileMql.addEventListener('change', syncMobileLayoutState)` で回転・リサイズへも追従。
+
+#### 3. ルーティング（内部 state）
+
+- ホーム → 個別: `mobile-home.ts` のカード click ハンドラが `activateSession(id)` を呼ぶ → 既存経路で `set_activeSessionId(id)` → `syncMobileLayoutState()` 呼出 → `mobile-has-session` が立ち、`mobile-home-view` が外れる → CSS 切替でホーム非表示・個別画面表示。
+- 個別 → ホーム: `#mobile-back-btn` の click ハンドラ（`app.ts` の `initMobileControls` IIFE 内に追加）が `set_activeSessionId(null)` → `syncMobileLayoutState()` → `mobile-has-session` が外れ `mobile-home-view` が立つ。同時に `closeMobileSessionDrawer()` も呼ぶ（ドロワー開状態の取りこぼし防止）。
+- ブラウザ「戻る」ボタンの扱いは MVP では対応しない（URL 変化させないため戻る押下でセッション一覧に戻らず、ページ自体を離脱する）。Phase 後続で `history.pushState` ベースに拡張する想定だけ備忘へ残す。
+
+#### 4. state 取得経路（ホーム描画の購読フック）
+
+`mobile-home.ts` は以下の 3 経路で再描画される:
+
+| 経路 | 起点 | フック方法 |
+|---|---|---|
+| セッション追加/削除/state 変化 | `ws-client.ts:411` の `session_update` → `renderSessionStateUpdate(id)` (`session-list.ts:1201`) → `renderSummaryAndNotifications()` (L1089) | `session-list.ts` の `render()` / `renderSessionStateUpdate()` 末尾から `mobile-home.ts:renderMobileHome()` を呼ぶ薄いフック追加。`isMobileViewport()` で early-return |
+| 承認待ち発生/解決 | `approval-ui.ts:14` の `approval-queue-updated` CustomEvent | `mobile-home.ts` 側で `window.addEventListener('approval-queue-updated', renderMobileHome)`。dispatch 側は無改変 |
+| ビューモード変更（タブ切替時） | `chat-history.ts:1036` 同様の `session-view-mode-changed` | mobile-home.ts は購読不要（タブ切替はホーム外の話） |
+
+差分更新は C2 §2 の `updateMobileHomeCard(id)` を `renderSessionStateUpdate(id)` フックから呼ぶ二段構成（全件再描画 = render / 単一更新 = updateCard）。
+
+| データ | 取得元 |
+|---|---|
+| セッション順序 | `orderSessions()` (`state.ts`) |
+| 承認 pending 判定 | `approvalVisibleCache` / `multiQuestionVisibleCache` (`approval-queue-tab.ts`) — C2 §4 で確定済 |
+| 選択肢 options | `approvalRawOptionsCache.get(id)` — C2 §4 で確定済 |
+| 最新ひと言 | `s.last_message || s.first_message` を `filterFirstMessage()` で整形 |
+
+#### 5. PC 0 影響の保証戦略
+
+| レイヤ | PC への影響 | 担保方法 |
+|---|---|---|
+| HTML | 新規 `#mobile-home` / `#mobile-back-btn` は `hidden` 属性で出荷 | `hidden` の HTML 規範上 `display: none` と等価。PC で `(max-width: 720px)` 分岐に入らない限り表示されない |
+| CSS | 新ファイル `mobile-home.css` は全ルールを `@media (max-width: 720px)` 内に閉じ込める | グローバルセレクタは書かない。ファイル末尾に `:where()` も使わない（specificity 干渉防止） |
+| JS | `mobile-home.ts` の全エントリーポイントは `if (!isMobileViewport()) return;` で早期離脱 | 重複コード削減より「PC は何もしない」を最優先 |
+| 既存関数の改修 | `approval-queue-tab.ts` の private 3 関数を export 化（C2 §3）/ `getSessionViewMode()` のフォールバック差し替え（C3 §2）/ `syncMobileLayoutState()` への 1 行追加 | いずれも既存呼出元の引数・戻り値・副作用を変えない。`defaultViewModeForViewport()` は fine pointer & wide viewport で `'terminal'` を返すため PC 既定タブは regression なし |
+| event 追加 | `mobile-home.ts` が新規購読する `approval-queue-updated` は既に dispatch されている既存イベント | dispatch 側無改変 = PC への副作用ゼロ |
+
+#### 6. ハンバーガー件数バッジ仕様（P2 統合・C4 確定）
+
+C2 §9 で方針定義済の内容を C4 で具体仕様化:
+
+- DOM: `#mobile-menu-btn` 内に `<span class="mobile-badge" hidden>0</span>` を追加（バッジ要素を 1 つだけ）。`position: absolute; top: -4px; right: -4px;` で右上配置。
+- 集計: `pendingSessionIds(): Set<number>` を新規 export（`approval-queue-tab.ts` 内に既ロジックあり → export 化）。
+- 更新タイミング: `approval-queue-updated` イベント購読時と `syncMobileLayoutState()` 末尾で計算。
+- ロジック:
+  ```ts
+  const ids = pendingSessionIds();
+  const count = (activeSessionId !== null)
+    ? Array.from(ids).filter(id => id !== activeSessionId).length
+    : 0;  // ホーム表示中 (= activeSessionId===null) は常に 0 = 非表示
+  badge.hidden = count === 0;
+  badge.textContent = count > 9 ? '9+' : String(count);
+  ```
+- CSS:
+  - 既定: `display: none`（PC ・PC・ホーム表示時すべて隠す）
+  - `@media (max-width: 720px) { body.mobile-has-session:not(.mobile-home-view) #mobile-menu-btn .mobile-badge:not([hidden]) { display: inline-flex } }`
+- PC では `#mobile-menu-btn` 自体が `display: none`（`styles.css:443`）なのでバッジも自動で隠れる。
+
+### 変更予定ファイル
+
+追加:
+- `web/src/app/mobile-home.ts` — ホーム描画モジュール（C2 §2 で既出）
+- `web/src/styles/mobile-home.css` — ホーム CSS（C2 §2 で既出。全ルール `@media (max-width: 720px)` 内）
+
+変更:
+- `web/src/index.html` — `#app` 直下に `<button id="mobile-back-btn" hidden>` と `<section id="mobile-home" hidden>` を `#mobile-spawn-btn` の直後・`#session-list` の直前に挿入。`#mobile-menu-btn` 内に `<span class="mobile-badge" hidden>` を追加。`<link rel="stylesheet" href="styles/mobile-home.css">` を `<head>` に追加
+- `web/src/app.ts` — `syncMobileLayoutState()` に `mobile-home-view` クラス toggle + バッジ更新の 2 行追加。`initMobileControls()` IIFE に `#mobile-back-btn` の click ハンドラ追加。`mobileMql.addEventListener('change', syncMobileLayoutState)` の登録
+- `web/src/app/session-list.ts` — `render()` / `renderSessionStateUpdate(id)` 末尾から `mobile-home.ts` の `renderMobileHome()` / `updateMobileHomeCard(id)` を呼ぶフック追加（`isMobileViewport()` ガードは呼び先側）
+- `web/src/app/approval-queue-tab.ts` — `sessionTitle` / `approvalQuestionContext` / `renderOptionButtons` / `pendingSessionIds` を `export` 化（C2 §3 + C4 §6）
+- `web/src/app/settings.ts` — `getSessionViewMode()` のフォールバック差し替え（C3 §2 の `defaultViewModeForViewport()` を `matchMedia('(max-width: 720px)')` ベースに変更）
+- `web/src/styles.css` — `#mobile-menu-btn` のバッジ位置の relative 親指定が必要なら `position: relative` を追加（既存 `position: fixed` なので相対基準は OK・追加不要の見込み・確認のみ）
+- `web/src/i18n/ja.json` / `en.json` — C2 §6 / C3 §6 のキーをまとめて追加
+- `web/src/types/window.d.ts` — 必要なら `renderMobileHome` の型追加（mobile-home.ts 内で window 経由 export しない方針なら不要）
+
+削除: なし
+
+### 完了条件
+
+- スマホ（`max-width: 720px`）で初回ロード時、`#mobile-home` が表示され `#terminal-column` / `#session-list` は隠れる
+- PC（`min-width: 721px`）で `#mobile-home` / `#mobile-back-btn` が DOM 上は存在するが `hidden` 属性のままで完全非表示・既存レイアウト一切変化なし
+- スマホでカードタップ → `activateSession()` 経由で個別画面遷移 → 左上 ← で `set_activeSessionId(null)` してホーム復帰
+- `approval-queue-updated` 発火で `#mobile-home-pinned` が差分更新される
+- `#mobile-menu-btn` のバッジは「個別画面 & 他セッションの承認待ち数 > 0」のときだけ可視
+- リサイズ・回転で `mobile-home-view` クラスが追従する（mobileMql の change イベントで確認）
+- `make build` でエラー・警告なし
+
+### 確定事項
+
+| 項目 | 確定値 |
+|---|---|
+| DOM 追加位置 | `#app` の子として `#mobile-spawn-btn` の直後・`#session-list` の直前に `#mobile-back-btn`（button）と `#mobile-home`（section）を挿入。両者とも `hidden` 属性で出荷 |
+| スマホ判定の単一情報源 | CSS は `@media (max-width: 720px)`、JS は `mobile-home.ts` の private `isMobileViewport()`（`matchMedia('(max-width: 720px)')`）のみ。`syncMobileLayoutState()` が `body.mobile-home-view` を唯一 toggle する |
+| C2/C3 のリビジョン | C2/C3 の「`@media (pointer: coarse)`」「`matchMedia('(pointer: coarse)')`」記述は本 C4 確定により全て `(max-width: 720px)` 相当に読み替える（理由: iPad Pro 横などの誤判定回避） |
+| ルーティング方式 | 内部 state のみ（`activeSessionId` + `body.mobile-home-view`）。URL ハッシュは MVP では使わない（既存 deep-link 競合・PC 副作用・履歴肥大の 3 点を回避） |
+| ホーム ⇄ 個別 遷移 | ホーム → 個別: カード click で `activateSession(id)`。個別 → ホーム: `#mobile-back-btn` click で `set_activeSessionId(null)` → `syncMobileLayoutState()` → `closeMobileSessionDrawer()` |
+| state 取得経路 | セッション一覧 = `orderSessions()` / pending 判定 = `approvalVisibleCache` ∪ `multiQuestionVisibleCache` / options = `approvalRawOptionsCache`（C2 §4 で確定済を継承）。再描画フックは session-list.ts の `render()` / `renderSessionStateUpdate()` 末尾と `window:approval-queue-updated` の 2 系統 |
+| PC 0 影響戦略 | HTML は `hidden` 属性で出荷 / CSS は新ファイルを `@media (max-width: 720px)` 内に全閉じ込め / JS は `isMobileViewport()` 早期離脱 / 既存関数の改修は引数・戻り値・副作用不変。`defaultViewModeForViewport()` は wide viewport で `'terminal'` を返すため PC 既定タブ regression なし |
+| 既存 `body.mobile-has-session #terminal-column` 動線 | 触らず温存（mobile-home 表示はその上書きレイヤ）。万一 mobile-home が壊れた場合のフォールバック動線として残す |
+| ハンバーガー件数バッジ DOM | `#mobile-menu-btn` の子に `<span class="mobile-badge" hidden>`。`pendingSessionIds()` を `approval-queue-tab.ts` から新規 export し集計に使う |
+| バッジ表示条件 | ホーム表示時（`activeSessionId === null`）は常に非表示。個別画面時のみ「他セッション pending 数（自セッション除外）> 0」で表示。10+ は `9+` 表示 |
+| バッジ更新タイミング | `syncMobileLayoutState()` 末尾 + `approval-queue-updated` 購読時 |
+| viewport 変化追従 | `mobileMql.addEventListener('change', syncMobileLayoutState)` で回転・リサイズに追従 |
+| 戻る履歴（ブラウザ ←） | MVP では対応しない（ページ離脱する）。Phase 後続で `history.pushState` 化検討 |
+
+---
+
+## C5: 実装
+
+C2/C3/C4 確定後に着手。
+
+### 実装確認（2026-06-25）
+
+以下は `web/src` 上で実装済みであることを確認済み。
+
+- `web/src/app/mobile-home.ts` / `web/src/styles/mobile-home.css` にスマホホーム画面を追加
+- `web/src/index.html` に `#mobile-back-btn` / `#mobile-home` / `.mobile-badge` / `mobile-home.css` 読み込みを追加
+- `web/src/app.ts` に `mobile-home-view` 切替、戻るボタン、viewport 変化追従、ハンバーガーバッジ更新を追加
+- `web/src/app/session-list.ts` に mobile-home 再描画フックを追加
+- `web/src/app/approval-queue-tab.ts` に `sessionTitle` / `approvalQuestionContext` / `renderOptionButtons` / `pendingSessionIds` の export と全文展開 UI を追加
+- `web/src/app/settings.ts` にスマホ幅時の既定タブ `approval` 化を追加
+- `web/src/i18n/ja.json` / `web/src/i18n/en.json` に必要文言を追加
+
+### 完了条件
+
+- C2/C3 の全完了条件を満たす
+- PC で従来通り動作（regression なし）
+- `make build` で警告・エラーなし
+
+### 検証結果（2026-06-25）
+
+- `web` ディレクトリで `bun run check` を実行し、TypeScript 型チェックは成功。
+- プロジェクト運用ルールにより、ユーザー明示なしの `make build` / Hub 起動 / ブラウザリロードは未実施。
+
+---
+
+## C6: 検証
+
+### 作業内容
+
+- スマホ実機（Tailscale 経由）で:
+  - ホーム画面起動
+  - 承認待ち発生 → 上部固定カード → inline ボタンで承認 → カード消滅
+  - 複数セッションを横断的に監視
+  - 個別セッション展開 → タブ切替（承認 ⇆ チャット ⇆ ターミナル）
+- DevTools モバイルエミュレーションで補完
+- PC で既存挙動の regression チェック
+
+### 完了条件
+
+- 戦略書 §1 ゴール「スマホ単独で全作業完結」を満たす最小機能セットが動く
+- 検証結果を本 plan の末尾「備忘」節に記録
+
+---
+
+## 関連
+
+- [[reference_mobile-ui-strategy.md]] — 戦略書（正本）
+- [[proposal_mobile-pending-session-visibility]] — P2（本 plan に統合）
+- [[proposal_approval-queue-question-visible]] — P3（本 plan に統合）
+- [[plan_chat-history-via-api-proxy]] — payload プロキシ（チャットタブ品質は別 plan）
+- HTML モック: `plan_mobile-dashboard-mvp-mockup.html`（本 plan と同階層）
+
+## 備忘 / 検証メモ
+
+C5 実装は確認済み。C6 のスマホ実機検証と DevTools モバイルエミュレーション確認は未実施。

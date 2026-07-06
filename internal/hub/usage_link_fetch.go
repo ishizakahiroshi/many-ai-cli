@@ -13,6 +13,7 @@ type UsageLinkDefaults struct {
 	Codex       string `json:"codex"`
 	Copilot     string `json:"copilot"`
 	CursorAgent string `json:"cursor-agent"`
+	Grok        string `json:"grok"`
 	Ollama      string `json:"ollama"`
 	OpenCode    string `json:"opencode"`
 }
@@ -29,8 +30,9 @@ var hardcodedUsageLinkDefaults = UsageLinkDefaults{
 	Codex:       "https://chatgpt.com/codex/cloud/settings/analytics#usage",
 	Copilot:     "https://github.com/settings/billing",
 	CursorAgent: "https://cursor.com/dashboard",
+	Grok:        "https://grok.com",
 	Ollama:      "https://ollama.com/settings",
-	OpenCode:    "",
+	OpenCode:    "https://opencode.ai/go",
 }
 
 // newUsageLinkCache は usage リンクデフォルトの TTL キャッシュを生成する。

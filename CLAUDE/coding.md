@@ -1,8 +1,8 @@
 # many-ai-cli コーディング規約
 
-> 最終更新: 2026-06-05(金) 05:42:17
+> 最終更新: 2026-07-05(日) 10:50:11 — 旧設計書パス・旧環境変数名を修正
 
-`many-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ 静的 TypeScript フロント（`web/dist/` を `go:embed`）。設計書: [../docs/v0.2.x-any-ai-cli-design.md](../docs/v0.2.x-any-ai-cli-design.md)
+`many-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ 静的 TypeScript フロント（`web/dist/` を `go:embed`）。設計書: [../docs/v0.3.x-many-ai-cli-design.md](../docs/v0.3.x-many-ai-cli-design.md)
 
 ## 言語別コーディング規約
 
@@ -27,8 +27,9 @@
 ### Web TypeScript
 
 - **構成:** `web/src/` が静的 HTML/CSS/TypeScript ソース。`bun run build` が esbuild でファイル単位に `web/dist/` へ出力し、Go は `web/dist/` を `go:embed` で取り込む。
+- **パッケージマネージャ (C8):** **`web/` 以下は bun のみを使う。npm / pnpm / yarn は使わない。** 依存の追加・更新は必ず `bun add` / `bun install` 経由で行い、`bun.lock` を唯一の真実として扱う。`web/package-lock.json` が残っているのは互換性のためだが**手動で更新しない**（drift 検知 CI job が warning を出す・詳細は `web/README.md`）。
 - **モジュール:** app コードは native ESM。import パスは出力後に有効な `.js` 拡張子を維持する（例: `import './state.js'`）。
-- **vendor:** xterm / marked / DOMPurify / highlight は `web/src/vendor/` の classic script を維持し、型は `web/src/types/vendor.d.ts` で補う。
+- **vendor:** xterm / marked / DOMPurify / highlight は `web/src/vendor/` の classic script を維持し、型は `web/src/types/vendor.d.ts` で補う。バージョンと upstream URL は `web/src/vendor/THIRD_PARTY_LICENSES.txt` に集約（CVE 手動照合用）。
 - **型安全:** `tsconfig.json` は `strict: true` / `allowJs: false`。難所の動的 DOM・window 互換は明示 `any` と `TODO(ts)` で棚卸しし、無断で `// @ts-nocheck` に逃がさない。
 - **WS メッセージ型:** `web/src/types/proto.ts` は `internal/proto/messages.go` の手書きミラー。Go 側 Message フィールドを追加・改名したら同時に追従する。
 
@@ -61,7 +62,7 @@
 
 - **バインドは `127.0.0.1` 固定。`0.0.0.0` / 外部 IP へバインドしない**
 - **トークンなしのリクエストは 401 で弾く**（`?token=` または `Authorization: Bearer` どちらか）
-- **永続シェル設定（`.bashrc` / `.zshrc` / PowerShell プロファイル）を改変しない**。透過化は `AI_HUB_AUTO=1` + `eval "$(many-ai-cli shell-init)"` のオプトインのみ
+- **永続シェル設定（`.bashrc` / `.zshrc` / PowerShell プロファイル）を改変しない**。透過化は `MANY_AI_CLI_AUTO=1` + `eval "$(many-ai-cli shell-init)"` のオプトインのみ
 - **CLI プロセスを孤児化しない**（ラッパー終了時は子 CLI にもシグナル伝播）
 - **PTY の生バイト列を WS の JSON にそのまま入れない**（base64 エンコード）
 

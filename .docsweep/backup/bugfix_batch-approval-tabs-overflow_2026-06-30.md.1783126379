@@ -1,0 +1,69 @@
+# [様子見] 一括承認パネルの質問タブが横にあふれて見切れる
+
+## 症状
+
+複数質問（例: 15件）の一括承認ポップアップを開くと、Q1〜Q6 程度しか表示されず Q7 以降が画面外に隠れる。横スクロールバーが 6px と細く、スクロールできることに気付けない。
+
+結果としてユーザーは「複数選択肢のはずなのに質問が1個しか出ていない」と誤認し、最初の質問だけ回答して送信ボタンが活性化しない状態で詰まる（送信ボタンは全件回答必須）。
+
+トリガー画像: `attachments/10/20260630095519_211884600_image.png`（1問しか見えない錯覚） / `20260630095543_467566000_image.png`（スクロールでタブが続いていることが判明）
+
+## 根本原因
+
+`web/src/styles/approval.css:257` の `.action-qtabs` が以下の構成だった:
+
+- `overflow-x: auto` で 1 段固定の横スクロール
+- `::-webkit-scrollbar { height: 6px }` で控えめなスクロールバー
+- フェードグラデーション・矢印・件数バッジなど「右にまだある」ことを示す視覚手がかりなし
+
+質問数が 5〜6 件を超えると物理的にあふれるが、UI 上は「全部出している」ように見えてしまう。ユーザーが scroll behavior を試すまで隠れた質問の存在に気付けない設計。
+
+加えて、全体の未回答件数を示す指標がなく、「あと何問残っているか」を把握する手段がパネル下部の `0/15 選択済み` テキスト 1 箇所しかなかった。
+
+## 修正内容
+
+ユーザー選択方針: 折返し + Q1/15 位置表示 + 未回答バッジ。
+
+1. **タブを折返しに変更** (`web/src/styles/approval.css`):
+   - `.action-qtabs` を `overflow-x: auto` から `flex-wrap: wrap` に変更し、Q1〜Q15 が常に全部見える状態に
+   - スクロールバー指定（`::-webkit-scrollbar`）削除
+   - タブ形状を「上だけ丸い」（`border-radius: 8px 8px 0 0` + `border-bottom: none` + `margin-bottom: -1px`）から「全周丸いピル」（`border-radius: 6px`）に統一。折返し時に下辺の繋ぎ目が崩れない
+   - `.action-qpane` の `border-radius: 0 8px 8px 8px`（左上だけ角ばっていた）を `border-radius: 8px` に統一
+
+2. **アクティブ質問見出しに位置表示** (`web/src/app/approval.ts:1789`):
+   - `Q1 媒体は?` → `Q1/15 媒体は?` の形式。15 件中いま何問目かが一目で分かる
+
+3. **未回答件数バッジ追加** (`web/src/app/approval.ts:1740` 付近 + `updateBatchStatus`):
+   - 一括承認ラベル `⚠ 一括承認 (15件)` の右に `.action-batch-todo-badge` を新設
+   - 未回答時: 警告色（オレンジ）で「未回答 N 件」
+   - 全件回答済: 緑色で「✓ 全件回答済み」に切り替え
+   - 既存の `0/15 選択済み` インジケータより目立つ位置（パネル上部）に置くことで進捗を即把握できる
+
+4. **i18n キー追加** (`web/src/i18n/ja.json` / `en.json`):
+   - `approval_batch_todo_badge`: `未回答 {n} 件` / `{n} unanswered`
+   - `approval_batch_all_done`: `✓ 全件回答済み` / `✓ All answered`
+
+## 変更ファイル
+
+- `web/src/styles/approval.css` — `.action-qtabs` を折返しに変更、タブ形状をピル化、`.action-batch-todo-badge` 新設、`.action-qpane` の角丸統一
+- `web/src/app/approval.ts` — 見出しに位置表示 `Q{n}/{total}`、ラベル右に未回答バッジ要素を追加、`updateBatchStatus` でバッジ更新
+- `web/src/i18n/ja.json` — `approval_batch_todo_badge` / `approval_batch_all_done` 追加
+- `web/src/i18n/en.json` — 同上の英語版追加
+
+## 検証
+
+- [ ] `make build` 後、Hub をブラウザでリロード
+- [ ] 15 件規模の複数質問を AI から投げ、タブが折返しで全 15 件可視になることを確認（横スクロール不要）
+- [ ] 見出しが `Q3/15 ...` 形式で表示されることを確認（タブ切替で位置数値が更新）
+- [ ] パネル上部に「未回答 N 件」（オレンジ）が表示され、回答が進むと N が減ることを確認
+- [ ] 全件回答すると「✓ 全件回答済み」（緑）に切り替わり、送信ボタンが活性化することを確認
+- [ ] 英語ロケールでも `15 unanswered` → `✓ All answered` に切り替わること
+- [ ] 単一質問（n=1）モード・複数選択（#multi）モードに影響していないこと
+- [ ] モバイル幅（`@media` ブレイクポイント `.action-qtab { max-width: 96px }`）で 2 段以上に折返しても崩れないこと
+
+## 備忘
+
+- 折返しに切替えたことで、旧コードの横スクロール位置復元ロジック（`prevTabsScrollLeft` / `requestAnimationFrame` の `scrollIntoView` 補正、`approval.ts:1727-1779`）は実質的に no-op になる。`scrollLeft = 0` 固定で害はないため今回は残置。後日タブ UI を再設計する際に削除して構わない
+- `plan_choice-tab-ui.md`（タブ UI 初期設計の plan）にも「横スクロール前提」の記述が残っている可能性あり。次回触る際に折返し方針へ追記すること
+- 元方針が横スクロールだったのは「縦の高さを一定に保ち上のターミナル文脈を隠さない」目的（CSS コメント参照）。折返しで縦高が伸びる懸念はあるが、タブ自体は `padding: 6px 10px` と低背で、15 件でも 2〜3 段に収まる想定。問題があれば「N 件超で折返し、それ以下は 1 段」のハイブリッド方針に切替（Q1 選択肢 3 番）を検討
+- 関連: many-ai-cli の承認マーカー仕様で 1 ブロック当たり質問数の上限は 8 件推奨（`~/.many-ai-cli/approval-rules.md`）。15 件は推奨を超えているが、AI が出してくる以上 UI 側で耐えるべき

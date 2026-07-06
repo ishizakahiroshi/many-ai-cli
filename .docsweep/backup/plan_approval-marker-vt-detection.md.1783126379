@@ -1,0 +1,150 @@
+# [様子見] 承認マーカー検出を Hub 側 VT tail に切り替える
+
+> 最終更新: 2026-06-22(月) 10:42:36
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | fix | Hub 側で VT tail からマーカーブロック抽出 + 構造化 WS イベント送出 | — |
+| C2 | fix | Web 側 approval.ts で構造化イベントを受信し parseHubBlock へ流す | — |
+| C3 | fix | 既存 pendingTextTail 経由のマーカー検出をフォールバックとして温存 + 回帰テスト | — |
+
+実行順序: `C1 → C2 → C3`
+
+---
+
+## 概要
+
+Claude Code（Ink TUI）が `[MANY-AI-CLI]…[/MANY-AI-CLI]` ブロックを PTY へ書き出すとき、改行を絶対カーソル位置移動 `ESC[r;cH` (CUP) に、語間スペースをカーソル前進 `ESC[1C` (CUF) に置換する。Hub 側 `sessionlog.StripANSI` は ANSI 列を削除するだけで改行を補わないため、Web 側 `pendingTextTail` には改行ゼロ・空白潰れの 1 本糸テキストが届く。結果 `web/src/app/approval-parser.ts` の `splitUserSpecifiesAnchor` / `headingRe` が空白前提でマッチ失敗し、Q1 質問見出しが option 1 ラベルに飲み込まれ、`N. User specifies` 行が option 2 末尾に混入する＝「action-bar で質問が途切れて見える」症状になる。
+
+本 plan では parser のデータソースを **生 PTY → VT 描画後グリッド** に切り替えて根本対策する。Hub には既に `ses.vt = newVTBuffer(...)` があり native approval 検出で `vt.TailLines(N)` が使われている。同じ VT tail からマーカーブロックを抽出して構造化 WebSocket イベント (`approval_marker`) として push し、Web 側 parser はそれを直接 `parseHubBlock` へ流す。approval-parser.ts の正規表現は触らない（band-aid 化を避ける）。
+
+スコープ外：承認マーカー以外の検出経路（multiQuestion 見出し折り返し連結 / sequential choice 連結 / shortcut 承認 `(y)/(n)/(esc)` 等）。これらは `pendingTextTail` 経由のまま残す。Ink 圧縮が他経路でも問題化したら別途 [pending_approval-parser-vt-tail-source.md](pending_approval-parser-vt-tail-source.md)（案2: parser ソース全体を VT tail に置換）を昇格させる。
+
+## 現状と問題
+
+検証ログ（`~/.many-ai-cli/logs/sessions/claude_2026-06-22_075004_many-ai-cli_s2.jsonl` line 2315 該当部分、CSI を `<…>` で可視化）:
+
+```
+[MANY-AI-CLI]<H22;3>Claude<C1>の<C1>/model<C1>が…OpenCode<H23;3>と同じ「ターミナル直操作」…
+…<H30;3>Q1<C1>抑制対象の範囲は？<H31;3>1.<C1>[モデルのみ]<C1>/model<C1>だけ抑制（推奨）…
+…<H34;4>N.<C1>User<C1>specifies<H35;3>[/MANY-AI-CLI]
+```
+
+`\n` / `\r` は皆無。`<H{r};{c}>` (CUP) と `<C1>` (CUF) で行と空白を表現している。`StripANSI` 後の `text` フィールド:
+
+```
+[MANY-AI-CLI]Claudeの/model…Q1抑制対象の範囲は？1.[モデルのみ]/modelだけ抑制（推奨）…N.Userspecifies[/MANY-AI-CLI]
+```
+
+parser 側で詰まる箇所（`web/src/app/approval-parser.ts`）:
+
+- `splitUserSpecifiesAnchor` (line 251): `/\s*\b(N\.[ \t]*(?:User specifies|その他指定))\b\s*/i` — `User specifies` の語間スペース必須でマッチ失敗
+- `parseHubBlock` の `headingRe` (line 350): `Q1` 直後にピリオド/コロン+空白必須で `Q1抑制対象` がマッチ失敗
+
+## 方針
+
+1. Hub 側で VT tail を読んで `[MANY-AI-CLI]…[/MANY-AI-CLI]` を抽出（VT は CUP/CUF を行・空白として正しく再現済み）
+2. 構造化 WS イベント `approval_marker` を新設し、ブロック本文（改行・空白入り）を Web へ broadcast
+3. Web 側 `approval.ts` で受信し既存 `parseHubBlock` をそのまま呼ぶ
+4. 既存 `pendingTextTail` 経由のマーカー検出は温存（イベント未到達時のフォールバック）
+
+採用しない選択肢:
+
+- approval-parser.ts の正規表現緩和 — band-aid。Codex / OpenCode 等で同種の崩れが起きた時に再発する
+- `pty_output` WS イベントに `vt_tail` 同梱（案2 = [pending_approval-parser-vt-tail-source.md](pending_approval-parser-vt-tail-source.md)） — 影響範囲が広く工数大、案1 安定まで保留
+
+---
+
+## C1: Hub 側で VT tail からマーカー抽出 + WS イベント送出 ✅ 実装済み
+
+### 作業内容
+
+- `internal/hub/server.go` の `wrapperMessageLoop` 内 `pty_data` 受信処理で、`shouldCheckApproval` と同じタイミングで AI provider セッションに対して `ses.vt.TailLines(N)` を取得し `[MANY-AI-CLI]…[/MANY-AI-CLI]` を regex 抽出
+- 抽出 regex は `\[MANY-AI-CLI\]([\s\S]*?)\[\/MANY-AI-CLI\]`。同一 tail 内に複数ヒットがあれば末尾優先（approval-parser.ts の `extractHubMarkerApproval` と挙動を揃える）
+- 抽出できたブロック本文（マーカー開始〜終了タグまでを含む VT 復元済みテキスト）を WS イベント `approval_marker` として該当 session へ broadcast
+- 同一ブロックを連続送信しないように本文の sha256 等で署名し、直近送出済み署名を 1 件だけセッションに保持して重複抑止
+- N（tail 行数）は既存 `vtTailLinesForApproval` と同じ値か、それより少し大きめ（マーカーブロックが折返しで膨らんだケースを救う）
+
+### 変更予定ファイル
+
+- `internal/hub/server.go` — マーカー抽出呼び出し、`approval_marker` broadcast、sig 重複抑止フィールド追加
+- `internal/proto/proto.go`（または相当） — `approval_marker` type 定義
+- `internal/hub/approval_marker.go`（新規） — 抽出ロジックを単体テスト可能な関数として切り出し
+- `internal/hub/approval_marker_test.go`（新規） — VT tail テキスト（改行・空白入り）から正しくブロックを取り出すユニットテスト
+
+### 完了条件
+
+- 単体テストで「複数行のマーカーブロック」「マーカーが tail 途中から始まるケース」「閉じマーカー無しのとき検出しない」「同一ブロックは連続送出しない」が通る
+- 実機: Claude セッションで `[MANY-AI-CLI]…[/MANY-AI-CLI]` を含む応答が来たとき、Web devtools の WS フレームで `approval_marker` イベントが流れていることを確認
+
+---
+
+## C2: Web 側で `approval_marker` イベントを受信して parseHubBlock へ流す ✅ 実装済み
+
+### 作業内容
+
+- Web 側 WebSocket メッセージハンドラ（`web/src/app/state.ts` 周辺）に `approval_marker` 受信口を追加
+- 受信した `block` 文字列を `\n` で split → `parseHubBlock(lines)` を呼ぶ
+- 返ってきた options を既存の承認 UI 経路（approval.ts の `nowVisible` / `hasPrompt` ロジック）へ流し込む
+- 同じ承認 sig が Hub-pushed 経路と pendingTextTail フォールバック経路で二重表示にならないよう、`answeredMarkerSigs` と同じ仕組みの sig キャッシュで源泉を区別
+
+### 変更予定ファイル
+
+- `web/src/app/state.ts` — `approval_marker` イベント受信ハンドラ
+- `web/src/app/approval.ts` — Hub-pushed marker 経路の組み込み、既存 fallback との合流ロジック
+
+### 完了条件
+
+- Claude `/MANY-AI-CLI/` 質問で action-bar に「Q1 / 選択肢 1 / 選択肢 2 / N. User specifies」が改行・空白正しく分かれて表示される
+- 既存の Codex / OpenCode の `[MANY-AI-CLI]` マーカー出力でも崩れない（同経路で恩恵を受ける、または既存 fallback で対応）
+
+---
+
+## C3: フォールバック温存と回帰テスト ✅ 実装済み
+
+### 作業内容
+
+- 既存 `pendingTextTail` 経由の `extractHubMarkerApproval` 呼び出しはそのまま残す（Hub-pushed イベントが起動直後で取りこぼしたケースの救済）
+- C2 で入れた sig キャッシュにより「Hub 経由→ Web 経由」の二重表示が無いことをユニット観点で確認
+- approval-parser.ts の既存テストはすべてパスしたまま（regex 不変）
+- 統合動作確認: Claude `/model` セレクタ抑制（develop で対応済み）が引き続き機能している
+
+### 変更予定ファイル
+
+- `web/src/app/approval.ts` — 二重表示防止の sig キャッシュ（C2 と同じファイル。C2 と分けて段階コミットする場合のみ独立 C）
+- 既存テスト変更なし（regex 不変）
+
+### 完了条件
+
+- 既存 `make test` パス
+- 実機 Claude で「Q1 / 選択肢 / N. User specifies」が正しく改行されて action-bar に出る
+- 実機 Codex で既存承認動作が変わっていない
+
+---
+
+## 実装サマリ（2026-06-22 完了）
+
+- `internal/hub/approval_marker.go` 新規: `extractApprovalMarkerBlock`（regex 末尾優先抽出）+ `approvalMarkerSignature`（sha256）+ `Server.maybeBroadcastApprovalMarker`（sig dedup + `approval_marker` broadcast）
+- `internal/hub/approval_marker_test.go` 新規: 複数行ブロック / 末尾優先 / 閉じマーカー無視 / 重複抑止の 4 ケース
+- `internal/hub/server.go`: `session.approvalMarkerSig` 追加・`wrapperMessageLoop` の `pty_data` 処理で AI provider 限定で `ses.vt.TailLines(vtTailLinesForApproval)` から抽出 → broadcast、`handleHistoryReset` で sig リセット
+- `internal/proto/messages.go`: `Message.Block` フィールド追加
+- `web/src/types/proto.ts`: MessageType に `approval_marker` 追加・`block?: string` 追加
+- `web/src/app/ws-client.ts`: `approval_marker` を `handleHubApprovalMarker` へディスパッチ
+- `web/src/app/approval.ts`: `handleHubApprovalMarker`（VT tail block → `extractHubMarkerApproval` → UI 反映）、`approvalSourceCache.source='hub_marker'` で `trackApprovalHintFromChunk` / `detectApproval` の fallback 経路と二重表示防止
+- 副次変更: `approval_detector.go` / `approval_detector_test.go` で Claude /model 等カーソル駆動セレクタの action-bar 表示を全 AI で抑制（UX 統一）。これに合わせて `approval.ts` も `isSelectMenu` を `nowVisible` / `hasPrompt` から除外
+
+### 検証
+
+- `go test ./internal/hub/...` 全パス（approval_marker テスト 4 件含む）
+- `go vet ./...` 警告なし
+- `bun run check`（TypeScript noEmit）パス
+- `bun run test`（approval-parser-fixtures + workflow-progress-fixtures）15/15 パス
+- 実機 Claude `[MANY-AI-CLI]…[/MANY-AI-CLI]` での action-bar 描画は未検証（ユーザー側で `make build` → 実機確認）
+
+## 関連
+
+- 保留中の代替案（VT tail を parser ソース全体に張り替える広範改修）: [pending_approval-parser-vt-tail-source.md](pending_approval-parser-vt-tail-source.md)
+- 原因調査ログ: 2026-06-22 セッション（生 PTY バイト列で CUP/CUF による行・空白圧縮が起きていることを `claude_2026-06-22_075004_many-ai-cli_s2.jsonl` line 2315 で実証）
+- 関連実装: `internal/hub/server.go:1513` (`sessionlog.StripANSI`), `internal/hub/server.go:1532` (`ses.vt = newVTBuffer(...)`), `web/src/app/approval-parser.ts:251` (`splitUserSpecifiesAnchor`), `web/src/app/approval-parser.ts:350` (`parseHubBlock` 内 `headingRe`)

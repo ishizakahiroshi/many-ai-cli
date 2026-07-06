@@ -1,0 +1,153 @@
+# [様子見] フォルダ選択ドロップダウン 検索ドリブン化（案3）
+
+> 最終更新: 2026-06-23(火) 13:01:13
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | fix | ロジック層: 入力パース・ルート推定・並列 pre-scan・結果統合・並び順 | — |
+| C2 | fix | UI 層: chip 描画・検索結果セクション・☆ボタン・拡大・Tab 補完・placeholder・0 件案内 | — |
+
+実行順序: `C1 → C2`
+
+---
+
+## 概要
+
+「新しいセッション」パネルの cwd（作業フォルダ）コンボボックスを、お気に入り/履歴の絞り込みだけから **ファイルシステム実フォルダを横断検索できる** 形に作り変える。入力欄に `many` と打てば、未登録の `many-ai-time` のような実フォルダも候補化される。`public:many` のようにプレフィックスを付ければ public 配下のみにスコープを絞れる。発見性のため chip 行を上段に常時表示し、件数バッジでルートの中身が見える。
+
+検討経緯と画面イメージは [dropdown-redesign-mockup/index.html](dropdown-redesign-mockup/index.html) 参照。
+
+### スコープ外
+
+- 1 階層を超える recursive scan（必要なら配下展開で既存 subdirs 機能に渡す）
+- 設定ファイルでのルート明示指定（v1 はお気に入り親から自動派生のみ）
+- chip のドラッグ並び替え（v1 はマッチ件数降順 or アルファベット順）
+
+## 現状と問題
+
+- 実装: `web/src/app/spawn-panel.ts` L605-790 / `web/src/styles/spawn.css` L205-270
+- 既存挙動: `cwd-input` に文字を打つと、お気に入り＋履歴を `v.toLowerCase().includes(filter.toLowerCase())` でフィルタ（spawn-panel.ts L749 / L752）
+- 問題1: **登録していない実フォルダは絶対に出てこない**。「many と打ったら全部 many を出してほしい」が叶わない
+- 問題2: ドロップダウン高 180px（spawn.css L208）。お気に入りが 10 件超えると一画面に収まらない
+
+## 方針
+
+採用は **案3 検索ドリブン**（[モック](dropdown-redesign-mockup/index.html) S-03 参照）。案1（拡大）は同作業に併合、案2（グループ化）は見送り。
+
+### 設計決定
+
+| ID | 決定 |
+|---|---|
+| D1 | プレフィックス区切り文字は `:` |
+| D2 | `<英字>+:<英字以外>` のときだけ prefix 扱い、`C:\` のように直後 `\` ならパス扱い（パース時点で除外） |
+| D3 | 既知ルートはお気に入りの **親フォルダ末尾セグメント** から自動派生（unique 化、衝突したら親 1 段追加） |
+| D4 | スキャンはルート 1 階層のみ（`/api/list-subdirs` 既存 API 流用） |
+| D5 | ドロップダウン開いた瞬間に全ルートを並列 pre-scan してキャッシュ充填 |
+| D6 | chip は常時表示・件数バッジ付き・クリックで `<prefix>:` insert/replace |
+| D7 | Tab 補完: `pub`+Tab → `public:` |
+| D8 | 検索結果行に ☆ ボタン（クリックでお気に入り化） |
+| D9 | 並び順: 完全一致 → 先頭一致 → 部分一致、各内では fav > hist > 未登録 |
+| D10 | 最大高さ 50vh に拡張（案1 を併合） |
+| D11 | スキャン対象から `.git` `node_modules` `.svn` `.hg` 等は除外（`/api/list-subdirs` 側の挙動確認後、必要ならクライアント側フィルタ追加） |
+
+---
+
+## C1: ロジック層
+
+### 作業内容
+
+- **入力パース** `parseCwdInput(value: string): { prefix: string|null, query: string, isPath: boolean }` を追加
+  - `isPath` 判定: 値に `\` または `/` が含まれる、もしくは Windows パス先頭 `<英字>:\` パターン（D2）
+  - prefix 判定: 先頭が `<英字 1+>:` で、`:` の直後が `\` でも `/` でもなければ prefix とみなす
+- **ルート推定** `deriveRootsFromFavorites(favs: string[]): Map<string, string>` を追加
+  - 各 fav の親フォルダを取り、末尾セグメントを短縮名キーに（値はフルパス）
+  - 同名衝突時は親 1 段追加（例: 2 つの `public` があれば `github\public` 表記に）
+- **並列 pre-scan** `prescanRoots(roots: Map<string,string>): Promise<void>` を追加
+  - dropdown 開いた瞬間に `Promise.all([...roots.values()].map(p => fetchSubdirs(p)))`
+  - 既存 `subdirsCache` 流用。結果が来たら開いている場合は `renderCwdDropdown` を再描画
+- **結果統合** `buildSearchResults(query, prefix, allSubdirs, favSet, histSet)` を追加
+  - prefix 指定時はそのルートのみ、無指定時は全ルート
+  - basename に `query.toLowerCase()` includes でマッチ → SearchResult[] を返す
+- **並び順** D9 のスコアリング: `{exact:100, startsWith:50, contains:10} + {fav:5, hist:2, unregistered:0}` で降順
+- 既存の `renderCwdDropdown` (L741) は C2 で書き換えるが、ロジック関数は先に切り出して単体動作テスト可能な形にする
+
+### 変更予定ファイル
+
+- `web/src/app/spawn-panel.ts` — 新規ヘルパー関数 5 つを追加（`renderCwdDropdown` の手前 L605 周辺に集約）
+
+### 完了条件
+
+- 入力パース動作確認: `many` → `{prefix:null, query:'many', isPath:false}` / `public:many` → `{prefix:'public', query:'many', isPath:false}` / `C:\dev` → `{isPath:true}`
+- ルート推定が現状のお気に入りで `public`, `private`, `workshop` の 3 つを返す（衝突なし）
+- pre-scan 呼び出し後に `subdirsCache` に該当ルート分のエントリが入っている（ブラウザ DevTools で確認）
+- 結果統合が `many` 入力で実フォルダ・お気に入り・履歴を統合した SearchResult[] を返す（重複なし・D9 順）
+
+---
+
+## C2: UI 層
+
+### 作業内容
+
+- **ドロップダウン高拡張** `.cwd-dropdown { max-height: 50vh; }` に変更（spawn.css L208）
+- **chip 行描画** `renderCwdDropdown` 内で chip 行を最上段に追加
+  - 各 chip: `<button class="cwd-dropdown-chip" data-prefix="public">public: <span class="chip-count">5</span></button>`
+  - クリック: input.value の prefix 部分を置換（既存 prefix あり時）または `<prefix>:` を先頭挿入。フォーカスは input に残す
+  - active 判定: 現在の input が `<prefix>:` で始まっていれば該当 chip を `.is-active` に
+- **検索結果セクション描画** 既存 `subItems` / `favItems` / `histItems` の上に `searchItems` セクションを追加
+  - `renderSearchRow(v, isFav, isHist)`: `☆/★` ボタン + 🔍 アイコン + label
+  - お気に入りなら ★ 表示、未登録なら ☆。クリックで `toggleCwdFavorite(v)` 呼んで再描画
+  - 重複: 検索結果に出たパスは fav/hist セクションから除外
+- **Tab 補完** `spawnCwdInput` の keydown ハンドラに Tab フック追加
+  - input value から prefix 部分（colon 前まで）を取り、唯一マッチする root があれば `<root>:` に補完
+  - 既存 ArrowDown ハンドラ（L976〜L1005）の手前に挿入
+- **placeholder ヒント** `cwd-input` の placeholder に i18n キー `spawn_cwd_placeholder_hint` で `フォルダ名 / 例: public:many` 等を出す
+- **0 件案内** `searchItems.length === 0 && favItems.length === 0 && histItems.length === 0` のとき、空表示ではなく chip 行を強調 + `spawn_cwd_no_match_hint` テキストを表示（「該当なし。プレフィックス試す？」）
+- **既存挙動の温存**:
+  - キーボード ↑↓ ナビは chip 行をスキップして既存リスト項目だけを走査
+  - subdirs 展開（`/` `\` 末尾入力時）は現状通り
+  - お気に入り D&D 並び替え（L1067 周辺）は壊さない
+  - 実在しないパスの取り消し線表示（L851〜）は維持
+
+### 変更予定ファイル
+
+- `web/src/app/spawn-panel.ts` — `renderCwdDropdown` 改修、chip クリック / Tab 補完 / ☆ ボタンクリックの event handler 追加。`openSpawnFor` / `spawnCwdInput` focus ハンドラから pre-scan 呼び出しをフック
+- `web/src/styles/spawn.css` — `.cwd-dropdown-chip` `.chip-count` `.cwd-dropdown-search-item` `.dd-mag` 等の新スタイル、`max-height: 50vh`、active/no-match の強調スタイル
+- `web/src/i18n/ja.json` / `web/src/i18n/en.json` — 翻訳キー追加:
+  - `spawn_cwd_section_search` = 「🔍 検索結果」
+  - `spawn_cwd_chip_label` = 「ルートで絞り込み」
+  - `spawn_cwd_no_match_hint` = 「該当なし。プレフィックスで試せます」
+  - `spawn_cwd_placeholder_hint` = 「フォルダ名 / 例: public:many」
+
+### 完了条件
+
+ユーザーがブラウザで以下を全て確認できること:
+
+- ドロップダウンを開くと chip 行 `[public: N] [private: N] [workshop: N]` が最上段に出る
+- 入力欄に `many` と打つと「🔍 検索結果」セクションが上に、お気に入り・履歴が下に並ぶ
+- 未登録の実フォルダ（例: `many-ai-time`）が検索結果に ☆ アイコン付きで出る
+- `public:many` と打つと検索結果が public 配下のみに絞られ、`[public:]` chip が active 表示
+- `pub` + Tab で `public:` に補完される
+- 検索結果行の ☆ をクリックすると ★ に変わり、お気に入り側に永続化される
+- 何も入っていない状態で `xyzqwer` のような無マッチ語を打つと、chip 行が強調 + 案内文が出る
+- input が空のとき、placeholder にヒント文が表示される
+- ドロップダウンの高さが画面の約半分まで広がる
+- 既存挙動の温存（↑↓ ナビ・subdirs 展開・D&D 並び替え・取り消し線）が壊れていない
+
+---
+
+## 検証ポイント（C1/C2 共通）
+
+- `:` を含む実パス（例: `C:\dev\github`）入力時に prefix と誤認しないか
+- お気に入り 0 件のときは chip 行が空になり崩れない（chip 行ごと非表示にする）
+- pre-scan が遅延（>500ms）した場合の見え方: 来た順に逐次再描画されるか
+- 既存の subdirs 展開（末尾 `\` 入力時に出る `subdirsCurrent`）と検索結果セクションが共存できる
+- お気に入りに同名の `many-ai-cli` が `public` と `private` 両方にあるとき、重複排除しすぎず両方表示
+- 大量結果（50 件超）の表示遅延がないか・スクロール挙動が壊れないか
+
+## 関連
+
+- 検討経緯と画面モック: [`dropdown-redesign-mockup/index.html`](dropdown-redesign-mockup/index.html)
+- 既存実装: `web/src/app/spawn-panel.ts` L605-1100 / `web/src/styles/spawn.css` L204-270
+- 既存 API: `POST /api/list-subdirs` （Hub 側で 1 階層 subdir 列挙）

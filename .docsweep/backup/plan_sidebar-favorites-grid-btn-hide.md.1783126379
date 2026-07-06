@@ -1,0 +1,75 @@
+# [様子見] サイドバー「★ お気に入り」横の ⊞ ボタン非表示化
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | fix | `.sidebar-group-label-grid-btn` を CSS `display: none` で非表示化（生成ロジックは残置） | — |
+
+実行順序: `C1`
+
+---
+
+## 概要
+
+サイドバーの「★ お気に入り」グループラベル右側にある ⊞（お気に入りセッションをマルチウィンドウ＝detached grid で開く）ボタンが不要との判断。ただし機能自体を完全に消すのは惜しいので、生成ロジックは残したまま CSS で見えなくする方針。
+
+スコープ外:
+- 「★ お気に入り」ラベル文字自体は残す
+- 「Others」グループラベルも残す
+- 各カード右上の ★ トグル、お気に入り順並べ替え（D&D）、お気に入り一覧表示など、お気に入り機能本体には手を付けない
+
+## 現状と問題
+
+`web/src/app/session-list.ts` の `_addSidebarGroupLabels`（L877〜）が、★お気に入りグループの先頭に区切りラベルを挿入する際、ラベル要素内に「お気に入り全件を detached grid で開く」⊞ ボタン（class: `sidebar-group-label-grid-btn`、L908〜L920）を生成している。これがユーザーにとって不要 UI。
+
+- 完全削除すると、後で「やっぱり欲しい」となった時の復活コストが上がる
+- 単に CSS で消すだけなら、display 1 行外せば即復活できる
+
+## 方針
+
+CSS `.sidebar-group-label-grid-btn { display: none; }` で非表示化する。
+
+- 生成側コード（`session-list.ts` の `favGridBtn` 関連）は **触らない**
+- ラベル本体（`.sidebar-group-label`）も触らない（Others 側にも同クラスが付くため、こちらをいじると Others まで消える）
+- 復活時は `web/src/styles.css` の該当ブロックから `display: none;` 行を外すだけ
+
+---
+
+## C1: ⊞ ボタン CSS 非表示化
+
+### 作業内容
+
+- `web/src/styles.css` の `.sidebar-group-label` 定義の直下に、`.sidebar-group-label-grid-btn { display: none; }` を追加
+- 復活手順がわかるよう、日付と理由をコメントで残す
+
+### 変更ファイル
+
+- `web/src/styles.css` — `.sidebar-group-label-grid-btn` セレクタを追加（コメント付き）
+
+### 完了条件
+
+- `make build` 後、ブラウザリロードでサイドバー「★ お気に入り」ラベル横の ⊞ ボタンが消えていること
+- 「★ お気に入り」「Others」ラベル文字自体は従来通り表示されていること
+- 各カード右上の ★ トグル等、お気に入り機能本体に変化がないこと
+
+### 実装結果（2026-06-23）
+
+- `web/src/styles.css` L1518 付近に下記を追加済み:
+
+  ```css
+  /* 2026-06-23: ユーザー要望により「★ お気に入りをグリッドで開く」⊞ ボタンを非表示化
+     （生成ロジックは session-list.ts に残置。復活時はこの display:none を外す） */
+  .sidebar-group-label-grid-btn {
+    display: none;
+  }
+  ```
+
+- 生成側 `session-list.ts` には手を入れていない（`favGridBtn` 生成・click ハンドラはそのまま）
+
+---
+
+## 様子見の打ち切り判断
+
+- しばらく使ってみて「やはり不要」が確定したら、`session-list.ts` の `favGridBtn` 生成ブロック（L908〜L920）と本 CSS をまとめて削除し、H1 を `[完了]` に更新
+- 「やっぱり使いたい」となったら、本 CSS から `display: none;` 行を外して H1 を `[廃止]` に更新（plan の役目終了）

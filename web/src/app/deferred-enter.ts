@@ -18,6 +18,18 @@ import { sendText } from '../app.js';
 
 const IDLE_SETTLE_MS = 120; // この時間 新たな出力が来なければ「描画が落ち着いた」とみなす
 const MIN_WAIT_MS = 120;    // 送出直後はまだ再描画が始まっていないため、最低この時間は待つ
+// Codex / OpenCode（Rust TUI）は大きいペーストを [Pasted Content N chars] のプレースホルダへ
+// ほぼ無出力で即座に畳み込むため、出力静止が瞬時に成立し、上の MIN_WAIT(120ms) では確定 \r を
+// 早撃ちしてしまう。すると CLI がペースト確定処理の最中で \r を吸収し、入力欄に張り付いたまま
+// 送信されない（実測: 8900 字・260 行で再発）。これらの provider は確定 \r の最低待機を長く取り、
+// ペースト確定が落ち着いてから Enter を撃つ。Claude Code 等は畳み込み中に出力が出続けるため
+// 既定の MIN_WAIT のままで idle 側が正しく発火する（挙動不変）。
+const SLOW_PASTE_MIN_WAIT_MS = 700;
+const SLOW_PASTE_PROVIDERS = new Set(['codex', 'opencode']);
+
+export function deferredEnterMinWaitFor(provider: string): number {
+  return SLOW_PASTE_PROVIDERS.has(provider) ? SLOW_PASTE_MIN_WAIT_MS : MIN_WAIT_MS;
+}
 // 出力が止まらなくても、この時間で必ず action を実行する（保険）。
 // これは「出力が永久に止まらない病的ケース」専用の安全網であって、通常の取り込み・畳み込み
 // 時間と競合させてはいけない。短すぎると、巨大ペースト（実測 422 行）の畳み込みが終わる前に
@@ -35,6 +47,7 @@ type Pending = {
   idleTimer: ReturnType<typeof setTimeout> | null;
   maxTimer: ReturnType<typeof setTimeout> | null;
   fired: boolean;
+  minWaitMs: number;
   action: () => void;
 };
 
@@ -55,24 +68,26 @@ function armIdle(id: number) {
   if (!p || p.fired) return;
   if (p.idleTimer) clearTimeout(p.idleTimer);
   const elapsed = Date.now() - p.startedAt;
-  // 最低 MIN_WAIT は確保しつつ、以降は出力静止 IDLE_SETTLE ごとに送出判定する
-  const wait = Math.max(IDLE_SETTLE_MS, MIN_WAIT_MS - elapsed);
+  // 最低 minWaitMs は確保しつつ、以降は出力静止 IDLE_SETTLE ごとに送出判定する
+  const wait = Math.max(IDLE_SETTLE_MS, p.minWaitMs - elapsed);
   p.idleTimer = setTimeout(() => fire(id), wait);
 }
 
 // 出力が一定時間静止してから action を 1 回だけ実行する予約。\r 確定・ペースト本体送出など
 // 「内側 CLI の取り込み・再描画が落ち着いてから撃ちたい」操作の共通土台。
-function schedule(id: number, action: () => void, maxWaitMs: number) {
+function schedule(id: number, action: () => void, maxWaitMs: number, minWaitMs: number = MIN_WAIT_MS) {
   cancelDeferredEnter(id);
-  const p: Pending = { startedAt: Date.now(), idleTimer: null, maxTimer: null, fired: false, action };
+  const p: Pending = { startedAt: Date.now(), idleTimer: null, maxTimer: null, fired: false, minWaitMs, action };
   pending.set(id, p);
   p.maxTimer = setTimeout(() => fire(id), maxWaitMs);
   armIdle(id);
 }
 
 // doSend の deferEnter 分岐から呼ぶ。確定 \r を出力静止後に 1 回だけ送る予約を張る。
-export function scheduleDeferredEnter(id: number) {
-  schedule(id, () => { try { sendText(id, '\r'); } catch (_) {} }, MAX_WAIT_MS);
+// minWaitMs に provider 別の最低待機（Codex/OpenCode は長め）を渡し、無出力で畳み込む CLI への
+// 早撃ち（\r 吸収による送信不発）を防ぐ。省略時は既定の MIN_WAIT。
+export function scheduleDeferredEnter(id: number, minWaitMs: number = MIN_WAIT_MS) {
+  schedule(id, () => { try { sendText(id, '\r'); } catch (_) {} }, MAX_WAIT_MS, minWaitMs);
 }
 
 // 画像 inject（@path）に複数行ペーストが続くケースで、画像取り込みが落ち着いてから

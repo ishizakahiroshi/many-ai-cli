@@ -27,13 +27,38 @@ interface UsageCacheEntry {
   tokensCache: number;
   tokensTotal: number;
   ctxWindow: number;
+  // usedPct: Claude Code statusLine 算出済みの context 使用率%（0=未取得。Claude のみ）。
+  usedPct: number;
+  // statusbar 追加メタ（Claude statusLine ネイティブ算出値。Claude のみ・0/false=未取得）。
+  rl5hPct: number;
+  rl5hReset: number;
+  rl7dPct: number;
+  rl7dReset: number;
+  linesAdded: number;
+  linesRemoved: number;
+  effortLevel: string;
+  thinking: boolean;
+  exceeds200k: boolean;
+  durationMs: number;
+  apiDurationMs: number;
+  version: string;
+  outputStyle: string;
+  vimMode: string;
+  agentName: string;
+  repoHost: string;
+  repoOwner: string;
+  repoName: string;
+  remainingPct: number;
+  reasoningOut: number;
   usageModel: string;
   usageStartedAt: string;
 }
 
 const usageCache = new Map<number, UsageCacheEntry>();
 
-// セッションごとの「このターン」開始時刻（state==running になった時点）。
+// セッションごとの「このターン」開始時刻フォールバック。
+// 基本は chatHistory の直近 user/approval 時刻を使う。履歴がまだ無いセッションでは
+// state==running になった時点を暫定起点として使う。
 const turnStartAt = new Map<number, number>();
 
 // 毎秒の経過時間更新用 timer。
@@ -48,6 +73,10 @@ let _clickWired = false;
 // ここは「ID→数値上限」の純粋なデータマップなので許容範囲。前方一致で解決する。
 // ヒットしないモデルは null を返し、ctx 率セグメントを非表示にする（誤分母回避）。
 const CTX_LIMIT_TABLE: Array<{ prefix: string; limit: number }> = [
+  { prefix: 'claude-opus-4-8', limit: 1_000_000 },
+  { prefix: 'claude-opus-4.8', limit: 1_000_000 },
+  { prefix: 'claude opus 4.8', limit: 1_000_000 },
+  { prefix: 'opus 4.8',        limit: 1_000_000 },
   { prefix: 'claude-opus',   limit: 200_000 },
   { prefix: 'claude-sonnet', limit: 200_000 },
   { prefix: 'claude-haiku',  limit: 200_000 },
@@ -94,11 +123,35 @@ function resolveCtxLimit(model: string): number | null {
   const id = String(model || '').toLowerCase().trim();
   if (!id) return null;
   // 1M コンテキスト版（"[1m]" / "1m" / "1-million" 等のマーカー）は上限を底上げ。
-  const oneM = /\[1m\]|(^|[^0-9a-z])1m([^0-9a-z]|$)|1-?million/.test(id);
+  const oneM = /\[1m\]|(^|[^0-9a-z])1m([^0-9a-z]|$)|1-?million/.test(id)
+    || /(^|[^0-9a-z])(?:claude\s+)?opus\s*4[.-]8([^0-9a-z]|$)/.test(id)
+    || id.startsWith('claude-opus-4-8')
+    || id.startsWith('claude-opus-4.8');
   for (const { prefix, limit } of CTX_LIMIT_TABLE) {
     if (id.startsWith(prefix)) return oneM ? Math.max(limit, 1_000_000) : limit;
   }
   return null;
+}
+
+function resolveCtxLimitFromModels(models: string[]): number | null {
+  let best: number | null = null;
+  for (const model of models) {
+    const limit = resolveCtxLimit(model);
+    if (!limit) continue;
+    best = best === null ? limit : Math.max(best, limit);
+  }
+  return best;
+}
+
+function resolveEffectiveCtxLimit(entry: UsageCacheEntry | undefined, models: string[]): number | null {
+  // relay が中継する statusLine 実値（context_window_size）は、Claude Code が
+  // 実窓 200k/1M を判定済みの上限なので最優先で採用する。
+  // 旧実装はモデル名テーブル（Opus 4.8→1M）と Math.max を取って分母を底上げしていたが、
+  // 1M ベータが効いていない 200k セッションで分母が過大になり ctx% が過小表示になっていた。
+  // relay が上限を返さないプロバイダ／タイミングのときだけモデル名推定にフォールバックする。
+  const relayLimit = entry && entry.ctxWindow > 0 ? entry.ctxWindow : null;
+  if (relayLimit !== null) return relayLimit;
+  return resolveCtxLimitFromModels(models);
 }
 
 // ── DOM 要素参照 ──────────────────────────────────────────────────────────────
@@ -127,11 +180,65 @@ function formatDurSec(elapsedSec: number): string {
   return `${s}s`;
 }
 
+// 残り時間の短縮表記（"2h13m" / "45m" / "<1m"）。レート制限リセットまでの目安表示用。
+function formatDurShort(sec: number): string {
+  if (sec <= 0) return '0m';
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0) return `${h}h${m}m`;
+  if (m > 0) return `${m}m`;
+  return '<1m';
+}
+
+// unix epoch 秒から「今からの残り時間」を短縮表記で返す。0/過去は空文字。
+function formatResetIn(epochSec: number): string {
+  if (!epochSec || epochSec <= 0) return '';
+  const remainMs = epochSec * 1000 - Date.now();
+  if (remainMs <= 0) return '0m';
+  return formatDurShort(Math.floor(remainMs / 1000));
+}
+
+function parseEpochMs(ts: unknown): number {
+  if (typeof ts === 'number' && Number.isFinite(ts)) return ts;
+  if (ts instanceof Date) {
+    const n = ts.getTime();
+    return Number.isFinite(n) ? n : 0;
+  }
+  if (typeof ts === 'string' && ts.trim() !== '') {
+    const n = Date.parse(ts);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
+function latestInteractionAt(sessionId: number): number | null {
+  const arr = chatHistory.get(sessionId) || [];
+  for (let i = arr.length - 1; i >= 0; i--) {
+    const msg = arr[i];
+    if (!msg) continue;
+    const role = String(msg.role || '');
+    const kind = String(msg.kind || '');
+    if (role !== 'user' && kind !== 'approval') continue;
+    const text = String(msg.normalizedText || msg.rawText || '').trim();
+    const hasAttachment = Array.isArray(msg.attachments) && msg.attachments.length > 0;
+    if (!text && !hasAttachment) continue;
+    const ts = parseEpochMs(msg.ts);
+    if (ts > 0) return ts;
+  }
+  return null;
+}
+
 function formatCost(costUSD: number, costKnown: boolean): string {
   if (!costKnown) return '$ —';
   if (costUSD === 0) return '$0.0000';
   if (costUSD < 0.0001) return '$<0.0001';
   return '$' + costUSD.toFixed(4);
+}
+
+// モバイル用の短縮コスト表記（小数2桁）。today 累計にのみ使う。
+function formatCostShort(costUSD: number): string {
+  if (costUSD < 0.01) return '$<0.01';
+  return '$' + costUSD.toFixed(2);
 }
 
 function formatTok(n: number): string {
@@ -192,12 +299,50 @@ function todayCostSum(): { sum: number; known: boolean } {
   return { sum, known };
 }
 
-// セグメント表示ユーティリティ。
+// ユーザー設定で非表示にされたセグメントの短いキー集合（'ctx' / 'ratelimit' 等）。
+// 明示的に false のセグメントだけ入る（未設定 = デフォルト表示）。
+const disabledSegments = new Set<string>();
+
+// セグメント表示ユーティリティ。ユーザー設定で OFF のセグメントは show 引数に関わらず隠す。
 function setSeg(bar: HTMLElement, cls: string, show: boolean): HTMLElement | null {
   const el = bar.querySelector<HTMLElement>('.' + cls);
   if (!el) return null;
-  el.style.display = show ? '' : 'none';
-  return show ? el : null;
+  const key = cls.replace('tsb-seg-', '');
+  const visible = show && !disabledSegments.has(key);
+  el.style.display = visible ? '' : 'none';
+  return visible ? el : null;
+}
+
+// 設定 UI で表示/非表示を切り替えられるセグメント一覧（短いキー + 二言語ラベル）。
+// id / status / conn は常時表示（コア情報）のため対象外。ラベルは i18n.json に増やさず
+// ここで二言語を持つ（DETAIL_SEGMENTS が JP ラベル直書きなのと同じ方針）。
+export const TOGGLEABLE_SEGMENTS: Array<{ key: string; ja: string; en: string }> = [
+  { key: 'agent',     ja: 'AI / モデル',   en: 'AI / model' },
+  { key: 'effort',    ja: 'effort / 思考', en: 'effort / thinking' },
+  { key: 'label',     ja: '作業ラベル',    en: 'work label' },
+  { key: 'project',   ja: 'プロジェクト',  en: 'project' },
+  { key: 'ailines',   ja: 'AI 編集行数',   en: 'AI lines' },
+  { key: 'ctx',       ja: 'ctx 使用率',    en: 'ctx usage' },
+  { key: 'tok',       ja: 'トークン',      en: 'tokens' },
+  { key: 'cache',     ja: 'キャッシュ率',  en: 'cache' },
+  { key: 'compact',   ja: 'compact 残量',  en: 'compact' },
+  { key: 'cost',      ja: 'コスト',        en: 'cost' },
+  { key: 'burn',      ja: 'バーンレート',  en: 'burn rate' },
+  { key: 'elapsed',   ja: '経過時間',      en: 'elapsed' },
+  { key: 'ratelimit', ja: 'レート制限',    en: 'rate limit' },
+  { key: 'fleet',     ja: '横断バッジ',    en: 'fleet' },
+];
+
+// ユーザー設定のセグメント表示マップ（key→表示）を適用して再描画する。
+// 値が false のキーのみ非表示にする（未設定・true はデフォルト表示）。
+export function applySegmentVisibility(segments: Record<string, boolean> | undefined | null): void {
+  disabledSegments.clear();
+  if (segments) {
+    for (const [k, v] of Object.entries(segments)) {
+      if (v === false) disabledSegments.add(k);
+    }
+  }
+  renderStatusbar();
 }
 
 // ── ステータスバー描画 ────────────────────────────────────────────────────────
@@ -230,7 +375,8 @@ export function renderStatusbar(): void {
   wireClicks(bar);
 
   const isTokenProvider = provider === 'claude' || provider === 'codex';
-  const modelName = entry?.usageModel || sesData?.model || '';
+  const sessionModelName = sesData?.model || '';
+  const modelName = entry?.usageModel || sessionModelName || '';
 
   // ---- #N セッション番号 ----
   const idEl = setSeg(bar, 'tsb-seg-id', true);
@@ -248,7 +394,26 @@ export function renderStatusbar(): void {
   if (agentEl) {
     const chip = `<span class="card-provider-chip ${safeClassToken(provider)}">${escapeHtml(providerDisplayName(provider))}</span>`;
     const model = modelName ? `<span class="tsb-model" title="${escapeHtml(modelName)}">${escapeHtml(modelName)}</span>` : '';
-    agentEl.innerHTML = `${providerIconHtml(provider, 13)}${chip}${model}`;
+    const agentName = entry?.agentName ? `<span class="tsb-agent-name" title="${escapeHtml(entry.agentName)}">${escapeHtml(entry.agentName)}</span>` : '';
+    agentEl.innerHTML = `${providerIconHtml(provider, 13)}${chip}${agentName}${model}`;
+    const titleLines: string[] = [];
+    if (modelName) titleLines.push(t('tsb_agent_model_title', { model: modelName }));
+    if (entry?.agentName) titleLines.push(t('tsb_agent_name_title', { name: entry.agentName }));
+    if (entry?.version) titleLines.push(t('tsb_agent_version_title', { version: entry.version }));
+    if (entry?.outputStyle) titleLines.push(t('tsb_agent_output_style_title', { style: entry.outputStyle }));
+    if (entry?.vimMode) titleLines.push(t('tsb_agent_vim_mode_title', { mode: entry.vimMode }));
+    agentEl.title = titleLines.join('\n');
+  }
+
+  // ---- effort / thinking バッジ（Claude statusLine 算出値）----
+  const showEffort = !!(provider === 'claude' && entry && (entry.effortLevel || entry.thinking));
+  const effortEl = setSeg(bar, 'tsb-seg-effort', showEffort);
+  if (effortEl && entry) {
+    let html = '';
+    if (entry.effortLevel) html += `<span class="tsb-effort-lvl">${escapeHtml(entry.effortLevel)}</span>`;
+    if (entry.thinking) html += `<span class="tsb-thinking">🧠</span>`;
+    effortEl.innerHTML = html;
+    effortEl.title = entry.effortLevel ? t('tsb_effort_title', { level: entry.effortLevel }) : t('tsb_thinking_title');
   }
 
   // ---- 作業ラベル（E）----
@@ -277,23 +442,54 @@ export function renderStatusbar(): void {
     }
     projectEl.innerHTML = html;
     // クリックで Files タブを開く導線（旧プロジェクトグループ header の「📁 Files」ボタンの代替）。
-    projectEl.title = t('files_group_btn_tooltip');
+    const titleLines = [t('files_group_btn_tooltip')];
+    if (entry?.repoOwner || entry?.repoName) {
+      const repo = [entry.repoOwner, entry.repoName].filter(Boolean).join('/');
+      titleLines.push(entry.repoHost ? `${entry.repoHost}:${repo}` : repo);
+    }
+    projectEl.title = titleLines.join('\n');
+  }
+
+  // ---- AI 編集行数（Claude statusLine 算出。作業ツリー git diff とは別軸）----
+  const showAiLines = !!(provider === 'claude' && entry && (entry.linesAdded > 0 || entry.linesRemoved > 0));
+  const aiLinesEl = setSeg(bar, 'tsb-seg-ailines', showAiLines);
+  if (aiLinesEl && entry) {
+    // linesAdded/Removed は数値強制してから埋め込む。他フィールドは escapeHtml 済みだが
+    // ここだけ生挿入だったため、Hub が万一非数値を送っても DOM 注入にならないよう Number() で固める。
+    aiLinesEl.innerHTML = `AI <span class="tsb-add">+${Number(entry.linesAdded) || 0}</span> <span class="tsb-del">-${Number(entry.linesRemoved) || 0}</span>`;
+    aiLinesEl.title = t('tsb_ailines_title');
   }
 
   // ---- ctx 使用率（塗りゲージ + %）----
-  // 上限は relay 経由の実値（Claude statusline の context_window_size）を最優先し、
-  // 取得できないプロバイダのみモデル名テーブルにフォールバックする。
-  const ctxLimit = (entry && entry.ctxWindow > 0) ? entry.ctxWindow : resolveCtxLimit(modelName);
-  const showCtx = !!(isTokenProvider && entry && ctxLimit && ctxLimit > 0);
+  // Claude は statusLine 算出済みの used_percentage を最優先で直結する
+  // （Claude Code 本体の「context used」と同一数値源にして食い違いを根絶）。
+  // それ以外（Codex / used_percentage 未取得＝初回API応答前・/compact 直後）は
+  // tokensIn / 実効上限 から算出してフォールバックする。
+  const ctxLimit = resolveEffectiveCtxLimit(entry, [entry?.usageModel || '', sessionModelName]);
+  const ctxDirectPct = (provider === 'claude' && entry && entry.usedPct > 0) ? entry.usedPct : null;
+  const showCtx = !!(isTokenProvider && entry && (ctxDirectPct !== null || (ctxLimit && ctxLimit > 0)));
   const ctxEl = setSeg(bar, 'tsb-seg-ctx', showCtx);
-  if (ctxEl && entry && ctxLimit) {
+  if (ctxEl && entry) {
     const used = entry.tokensIn;
-    const pct = Math.max(0, Math.min(100, Math.round((used / ctxLimit) * 100)));
+    const pct = ctxDirectPct !== null
+      ? Math.max(0, Math.min(100, Math.round(ctxDirectPct)))
+      : Math.max(0, Math.min(100, Math.round((used / (ctxLimit as number)) * 100)));
     const fill = pct >= 90 ? 'crit' : pct >= 80 ? 'warn' : 'ok';
     const pctCls = pct >= 90 ? 'tsb-pct crit' : 'tsb-pct';
-    ctxEl.innerHTML = `ctx ${gaugeHtml(pct, fill)}<span class="${pctCls}">${pct}%</span>`;
-    ctxEl.title = `${formatTok(used)} / ${formatTok(ctxLimit)} tokens`;
-    ctxEl.dataset.copy = `${used}/${ctxLimit}`;
+    // 拡張コンテキスト（1M 窓）で動作中ならバッジを添える。relay 中継の実窓サイズで判定。
+    const ctxMark = entry.ctxWindow >= 1_000_000 ? ` <span class="tsb-1m" title="${escapeHtml(t('tsb_ctx_1m_title'))}">1M</span>` : '';
+    ctxEl.innerHTML = `ctx ${gaugeHtml(pct, fill)}<span class="${pctCls}">${pct}%</span>${ctxMark}`;
+    if (ctxDirectPct !== null) {
+      // 直結時: Claude 算出値であることを明示。上限が分かるならトークン内訳も併記。
+      const remainingLine = entry.remainingPct > 0 ? `\n${t('tsb_ctx_remaining_title', { pct: Math.round(entry.remainingPct) })}` : '';
+      ctxEl.title = ctxLimit
+        ? `${pct}% used (Claude statusLine)\n~${formatTok(used)} / ${formatTok(ctxLimit)} tokens${remainingLine}`
+        : `${pct}% used (Claude statusLine)${remainingLine}`;
+      ctxEl.dataset.copy = ctxLimit ? `${used}/${ctxLimit}` : `${pct}%`;
+    } else {
+      ctxEl.title = `${formatTok(used)} / ${formatTok(ctxLimit as number)} tokens`;
+      ctxEl.dataset.copy = `${used}/${ctxLimit}`;
+    }
   }
 
   // ---- tok ↑in ↓out ----
@@ -301,6 +497,9 @@ export function renderStatusbar(): void {
   const tokEl = setSeg(bar, 'tsb-seg-tok', showTok);
   if (tokEl && entry) {
     tokEl.textContent = `tok ↑${formatTok(entry.tokensIn)} ↓${formatTok(entry.tokensOut)}`;
+    tokEl.title = entry.reasoningOut > 0
+      ? `in=${formatTok(entry.tokensIn)} out=${formatTok(entry.tokensOut)}\n${t('tsb_tok_reasoning_title', { tokens: formatTok(entry.reasoningOut) })}`
+      : `in=${formatTok(entry.tokensIn)} out=${formatTok(entry.tokensOut)}`;
     tokEl.dataset.copy = `in=${entry.tokensIn} out=${entry.tokensOut}`;
   }
 
@@ -331,6 +530,8 @@ export function renderStatusbar(): void {
       const pctCls = reachPct >= 90 ? 'tsb-pct crit' : 'tsb-pct';
       compactEl.innerHTML = `⌛ ${gaugeHtml(reachPct, fill)}<span class="${pctCls}">${reachPct}%</span>`;
     }
+    // モバイルは crit（発動間近）のときだけ表示する（CSS @media が :not(.tsb-crit) を隠す）。
+    compactEl.classList.toggle('tsb-crit', left <= 0 || reachPct >= 90);
     compactEl.title = `auto-compact しきい値到達率 ${reachPct}%（100% で発動）`
       + `\n残り ${formatTok(Math.max(0, left))} tokens`
       + `\nしきい値 ~${Math.round(COMPACT_TRIGGER_RATIO * 100)}% = ${formatTok(threshold)} / ${formatTok(ctxLimit)}、現在 ${formatTok(entry.tokensIn)}`;
@@ -341,10 +542,13 @@ export function renderStatusbar(): void {
   const showCost = !!(isTokenProvider && entry);
   const costEl = setSeg(bar, 'tsb-seg-cost', showCost);
   if (costEl && entry) {
-    let html = escapeHtml(formatCost(entry.costUSD, entry.costKnown));
+    // モバイルではセッション個別コストを隠して today 短縮表記だけ出すため、span で分離する
+    // （CSS の @media + :has で切替。today 不明時はモバイルでもセッションコストを出す）。
+    let html = `<span class="tsb-cost-session">${escapeHtml(formatCost(entry.costUSD, entry.costKnown))}</span>`;
     const today = todayCostSum();
     if (today.known && today.sum > 0) {
       html += ` <span class="tsb-today">· today ${escapeHtml(formatCost(today.sum, true))}</span>`;
+      html += `<span class="tsb-today-short">today ${escapeHtml(formatCostShort(today.sum))}</span>`;
     }
     costEl.innerHTML = html;
   }
@@ -374,8 +578,7 @@ export function renderStatusbar(): void {
   }
   if (!showBurn) setSeg(bar, 'tsb-seg-burn', false);
 
-  // ---- elapsed（+ このターン経過）----
-  // ターン境界: state==running 中だけ ▷ を併記する。
+  // ---- elapsed（+ 直近の送信/承認から AI が動いている時間）----
   if (stateKey === 'running') {
     if (!turnStartAt.has(sid)) turnStartAt.set(sid, Date.now());
   } else {
@@ -384,12 +587,44 @@ export function renderStatusbar(): void {
   const elapsedEl = setSeg(bar, 'tsb-seg-elapsed', !!startedAt);
   if (elapsedEl) {
     let html = `⏱ ${escapeHtml(formatElapsed(startedAt))}`;
-    const ts = turnStartAt.get(sid);
+    const ts = latestInteractionAt(sid) || turnStartAt.get(sid);
     if (ts) {
       const turnSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-      html += ` <span class="tsb-turn">· ▷${escapeHtml(formatDurSec(turnSec))}</span>`;
+      html += ` <span class="tsb-turn" title="${escapeHtml(t('tsb_turn_elapsed_title'))}">· AI ${escapeHtml(formatDurSec(turnSec))}</span>`;
     }
     elapsedEl.innerHTML = html;
+    // API 待ち比率（本体算出の total/api duration から。Claude のみ）。
+    if (entry && entry.durationMs > 0 && entry.apiDurationMs > 0) {
+      const apiPct = Math.max(0, Math.min(100, Math.round((entry.apiDurationMs / entry.durationMs) * 100)));
+      elapsedEl.title = t('tsb_elapsed_api_title', {
+        total: formatDurSec(Math.floor(entry.durationMs / 1000)),
+        api: formatDurSec(Math.floor(entry.apiDurationMs / 1000)),
+        pct: apiPct,
+      });
+    }
+  }
+
+  // ---- レート制限残量（Claude.ai Pro/Max のみ・statusLine 算出値の直結）----
+  const showRl = !!(provider === 'claude' && entry && (entry.rl5hPct > 0 || entry.rl7dPct > 0));
+  const rlEl = setSeg(bar, 'tsb-seg-ratelimit', showRl);
+  if (rlEl && entry) {
+    // モバイルは crit（残量 90% 超）のときだけ表示する（CSS @media が :not(.tsb-crit) を隠す）。
+    rlEl.classList.toggle('tsb-crit', entry.rl5hPct >= 90 || entry.rl7dPct >= 90);
+    const cls5 = entry.rl5hPct >= 90 ? 'tsb-pct crit' : 'tsb-pct';
+    const cls7 = entry.rl7dPct >= 90 ? 'tsb-pct crit' : 'tsb-pct';
+    const seg5 = entry.rl5hPct > 0 ? `<span class="${cls5}">5h ${Math.round(entry.rl5hPct)}%</span>` : '';
+    const seg7 = entry.rl7dPct > 0 ? `<span class="${cls7}">7d ${Math.round(entry.rl7dPct)}%</span>` : '';
+    rlEl.innerHTML = `⏳ ${seg5}${seg5 && seg7 ? ' · ' : ''}${seg7}`;
+    const lines: string[] = [t('tsb_ratelimit_title')];
+    if (entry.rl5hPct > 0) {
+      const r = formatResetIn(entry.rl5hReset);
+      lines.push(t('tsb_ratelimit_5h', { p: Math.round(entry.rl5hPct) }) + (r ? ` · ${t('tsb_ratelimit_reset', { t: r })}` : ''));
+    }
+    if (entry.rl7dPct > 0) {
+      const r = formatResetIn(entry.rl7dReset);
+      lines.push(t('tsb_ratelimit_7d', { p: Math.round(entry.rl7dPct) }) + (r ? ` · ${t('tsb_ratelimit_reset', { t: r })}` : ''));
+    }
+    rlEl.title = lines.join('\n');
   }
 
   // ---- 接続状態 ----
@@ -469,20 +704,23 @@ function wireClicks(bar: HTMLElement): void {
 // バーの現在 DOM をそのままクローンしてラベルを添える方式で、表示ロジックを二重化しない。
 
 const DETAIL_SEGMENTS: Array<{ cls: string; label: string }> = [
-  { cls: 'tsb-seg-id',      label: 'ID' },
-  { cls: 'tsb-seg-status',  label: '状態' },
-  { cls: 'tsb-seg-agent',   label: 'AI' },
-  { cls: 'tsb-seg-label',   label: '作業' },
-  { cls: 'tsb-seg-project', label: 'プロジェクト' },
-  { cls: 'tsb-seg-ctx',     label: 'ctx' },
-  { cls: 'tsb-seg-tok',     label: 'tok' },
-  { cls: 'tsb-seg-cache',   label: 'cache' },
-  { cls: 'tsb-seg-compact', label: 'compact' },
-  { cls: 'tsb-seg-cost',    label: 'cost' },
-  { cls: 'tsb-seg-burn',    label: 'burn' },
-  { cls: 'tsb-seg-elapsed', label: '経過' },
-  { cls: 'tsb-seg-conn',    label: '接続' },
-  { cls: 'tsb-seg-fleet',   label: '横断' },
+  { cls: 'tsb-seg-id',        label: 'ID' },
+  { cls: 'tsb-seg-status',    label: '状態' },
+  { cls: 'tsb-seg-agent',     label: 'AI' },
+  { cls: 'tsb-seg-effort',    label: 'effort' },
+  { cls: 'tsb-seg-label',     label: '作業' },
+  { cls: 'tsb-seg-project',   label: 'プロジェクト' },
+  { cls: 'tsb-seg-ailines',   label: 'AI 編集' },
+  { cls: 'tsb-seg-ctx',       label: 'ctx' },
+  { cls: 'tsb-seg-tok',       label: 'tok' },
+  { cls: 'tsb-seg-cache',     label: 'cache' },
+  { cls: 'tsb-seg-compact',   label: 'compact' },
+  { cls: 'tsb-seg-cost',      label: 'cost' },
+  { cls: 'tsb-seg-burn',      label: 'burn' },
+  { cls: 'tsb-seg-elapsed',   label: '経過' },
+  { cls: 'tsb-seg-ratelimit', label: 'レート制限' },
+  { cls: 'tsb-seg-conn',      label: '接続' },
+  { cls: 'tsb-seg-fleet',     label: '横断' },
 ];
 
 let _detailDownHandler: ((e: MouseEvent | TouchEvent) => void) | null = null;
@@ -805,6 +1043,28 @@ function openSentHistoryModal(): void {
 
 // ── 外部 API ─────────────────────────────────────────────────────────────────
 
+/**
+ * セッションカード用: context 使用率%（と 1M 窓かどうか）を返す。未取得時は null。
+ * 算出ロジックはステータスバーの ctx セグメント（renderStatusbar）と同一ソースにして
+ * カードとバーで数値が食い違わないようにする（Claude statusLine の used_percentage を
+ * 最優先、無ければ tokensIn / 実効上限 から算出）。
+ */
+export function getSessionCtxPct(sessionId: number): { pct: number; is1m: boolean } | null {
+  const entry = usageCache.get(sessionId);
+  if (!entry) return null;
+  const provider = entry.provider;
+  if (provider !== 'claude' && provider !== 'codex') return null;
+  const sess = sessions.get(sessionId);
+  const sessionModelName = sess?.model || '';
+  const ctxLimit = resolveEffectiveCtxLimit(entry, [entry.usageModel || '', sessionModelName]);
+  const ctxDirectPct = (provider === 'claude' && entry.usedPct > 0) ? entry.usedPct : null;
+  let pct: number | null = null;
+  if (ctxDirectPct !== null) pct = ctxDirectPct;
+  else if (ctxLimit && ctxLimit > 0 && entry.tokensIn > 0) pct = (entry.tokensIn / ctxLimit) * 100;
+  if (pct === null) return null;
+  return { pct: Math.max(0, Math.min(100, Math.round(pct))), is1m: entry.ctxWindow >= 1_000_000 };
+}
+
 /** WS usage_stat メッセージを受信したときに呼ぶ。 */
 export function handleUsageStatMessage(m: Message): void {
   const sid = m.session_id;
@@ -818,6 +1078,27 @@ export function handleUsageStatMessage(m: Message): void {
     tokensCache:    m.tokens_cache   ?? 0,
     tokensTotal:    m.tokens_total   ?? 0,
     ctxWindow:      m.ctx_window     ?? 0,
+    usedPct:        m.ctx_used_pct   ?? 0,
+    rl5hPct:        m.rl_5h_pct      ?? 0,
+    rl5hReset:      m.rl_5h_reset    ?? 0,
+    rl7dPct:        m.rl_7d_pct      ?? 0,
+    rl7dReset:      m.rl_7d_reset    ?? 0,
+    linesAdded:     m.lines_added    ?? 0,
+    linesRemoved:   m.lines_removed  ?? 0,
+    effortLevel:    m.effort_level   || '',
+    thinking:       m.thinking       ?? false,
+    exceeds200k:    m.exceeds_200k   ?? false,
+    durationMs:     m.duration_ms    ?? 0,
+    apiDurationMs:  m.api_duration_ms ?? 0,
+    version:        m.version        || '',
+    outputStyle:    m.output_style    || '',
+    vimMode:        m.vim_mode        || '',
+    agentName:      m.agent_name      || '',
+    repoHost:       m.repo_host       || '',
+    repoOwner:      m.repo_owner      || '',
+    repoName:       m.repo_name       || '',
+    remainingPct:   m.remaining_pct   ?? 0,
+    reasoningOut:   m.reasoning_output_tokens ?? 0,
     usageModel:     m.usage_model    || '',
     usageStartedAt: m.usage_started_at || '',
   });
@@ -889,6 +1170,7 @@ export async function initTokenStatusbar(): Promise<void> {
     const data = await res.json();
     const tsb = data?.token_statusbar;
     const enabled = tsb == null || tsb.enabled == null ? true : !!tsb.enabled;
+    applySegmentVisibility(tsb?.segments);
     setStatusbarEnabled(enabled);
   } catch (_) {
     setStatusbarEnabled(true);

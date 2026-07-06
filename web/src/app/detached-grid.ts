@@ -10,6 +10,7 @@ import {
   disableWebglRenderer,
   enableWebglRenderer,
   releaseHiddenWebglRenderers,
+  scrollAltBufferPage,
 } from './terminal.js';
 import { sessions } from './state.js';
 import type { SessionSnapshot } from '../types/proto.js';
@@ -238,6 +239,7 @@ export class DetachedGridManager {
     : session.provider === 'codex'         ? 'X'
     : session.provider === 'copilot'       ? 'P'
     : session.provider === 'cursor-agent'  ? 'r'
+    : session.provider === 'grok'          ? 'G'
     : session.provider === 'ollama'        ? 'O'
     : (session.provider || '?')[0].toUpperCase();
     header.appendChild(provBadge);
@@ -340,9 +342,17 @@ export class DetachedGridManager {
             : (window.terminals ? window.terminals.get(sessionId) : null);
     if (!t || !t.term) return;
     if (edge === 'top') {
+      if (scrollAltBufferPage(sessionId, t, -1)) {
+        t.autoScroll = false;
+        return;
+      }
       t.autoScroll = false;
       t.term.scrollToTop();
     } else {
+      if (scrollAltBufferPage(sessionId, t, 1)) {
+        t.autoScroll = true;
+        return;
+      }
       t.autoScroll = true;
       t.term.scrollToBottom();
     }
