@@ -1,0 +1,78 @@
+---
+due: 2026-06-22
+---
+# [様子見] 障害対応記録: 承認ポップアップを縮めてもターミナルが追従せず手動スクロールが必要
+
+> 最終更新: 2026-06-17(水) 13:03:19
+
+## 症状
+
+承認ポップアップ（`#action-bar` / APPROVAL NEEDED バー）を大きく広げた状態から手動で小さくしても、上のターミナル（CLI 画面）の表示がその空いた領域に追従しない。CLI の最新行はポップアップに隠れた位置のまま残り、最新行を見るにはユーザーが毎回手動でターミナルを下までスクロールする必要があった。
+
+再現手順:
+1. 承認待ち（APPROVAL NEEDED）が出てポップアップが表示される
+2. ポップアップ上端帯をドラッグして大きく広げる
+3. 広げたポップアップを再び小さく縮める
+4. この状態でターミナルの最新行が空いた領域に降りてこず、隠れたまま残る → 手動スクロールが必要
+
+影響: 承認ポップアップ表示中の Web ダッシュボード全般（承認操作のたびに発生する常用フロー）。
+
+## 根本原因（root cause）
+
+`#action-bar` は `display-area` の外・入力欄の上に置かれた独立要素（`web/src/index.html:1050`）で、ターミナル領域（`#terminal-area`）とは別フローにある。ターミナルの再フィットは `resizeObserver`（`web/src/app/terminal.ts:1712`）が `#terminal-area` を監視して発火するが、その中で呼ぶ `fitTerminalPreservingBottom` は `forceVisualFit` を渡していない（`terminal.ts:1727`）。
+
+`fitTerminalPreservingBottom`（`terminal.ts:620`）は冒頭で「承認表示中（`isPtyResizeSuppressed()` が true）かつ `forceVisualFit=false` なら早期 return」する設計になっている（`terminal.ts:627`）。承認ポップアップ表示中は常に `isPtyResizeSuppressed()` が true のため、ポップアップを縮めて表示領域が広がっても xterm の再フィット・最下部スクロールが一切走らず、最新行が降りてこなかった。
+
+つまり「ポップアップ出現でターミナルが縮むケース」はケアされていたが、「ポップアップを手動リサイズして表示領域が変わるケース」に追従処理が無かったのが原因。
+
+## 修正内容
+
+ターミナル側に承認表示中でも見た目だけ強制フィットする公開関数を追加し、action-bar のリサイズイベントから呼ぶようにした。
+
+```ts
+// terminal.ts（追加）
+// 承認表示中でも forceVisualFit=true で見た目のフィットだけ強制し、最下部へ追従させる。
+export function followActionBarResize(): void {
+  if (activeSessionId === null) return;
+  const t = terminals.get(activeSessionId);
+  if (!canFitTerminal(t)) return;
+  t.autoScroll = true;
+  fitTerminalPreservingBottom(t, activeSessionId, true);
+}
+```
+
+```ts
+// action-bar-resize.ts（追加）
+import { followActionBarResize } from './terminal';
+
+// pointermove は高頻度なので rAF で 1 フレーム 1 回に間引く。
+let followRafPending = false;
+const followTerminal = (): void => {
+  if (followRafPending) return;
+  followRafPending = true;
+  requestAnimationFrame(() => {
+    followRafPending = false;
+    followActionBarResize();
+  });
+};
+```
+
+`followTerminal()` を、リサイズ中（`pointermove`）・ドラッグ終了（`pointerup` / `pointercancel` の `end`）・ダブルクリックでのデフォルト高さ復帰、の各タイミングで呼ぶ。これでポップアップを縮めた瞬間に CLI 最新行が空いた領域へ降りてくる。
+
+## 変更ファイル
+
+| ファイル | 内容 |
+|---|---|
+| `web/src/app/terminal.ts` | `followActionBarResize()` を追加。`forceVisualFit=true` でアクティブ端末を強制再フィット＆最下部スクロール |
+| `web/src/app/action-bar-resize.ts` | `followActionBarResize` を import。rAF スロットルの `followTerminal()` を pointermove / end / dblclick で呼ぶ |
+
+## 検証
+
+- <TODO: make build 後にブラウザをリロードし、承認ポップアップを大きくしてから縮め、CLI 最新行が手動スクロールなしで追従するか確認>
+- <TODO: ドラッグ中のリアルタイム追従が rAF 間引きでカクつかないか確認>
+- <TODO: 上端帯ダブルクリックでデフォルト高さに戻したときも追従するか確認>
+
+## 備忘
+
+- `terminal.ts` と `action-bar-resize.ts` の間に循環 import は無い（terminal.ts 側は action-bar-resize を import していないことを確認済み）。
+- `fitTerminalPreservingBottom` の `forceVisualFit=true` は「xterm の見た目の行数調整」のみ行い、PTY への SIGWINCH（`sendResize`）は送らない設計。承認表示中の PTY リサイズ抑制（`isPtyResizeSuppressed()`）の意図はそのまま維持している。

@@ -118,8 +118,19 @@ func DetectShell() string {
 		return v
 	}
 
+	// PTYW-8 (report_bug_security_quality_audit_2026-07-05.md): 訪問済み PID の記録
+	// と最大遡り深度を持たせて、PID 再利用（既に終了した親の PID が別プロセスに
+	// 再割り当てされ、shouldSkipWindowsShellProcess 対象で構成された連鎖が同じ PID
+	// 集合を巡回する）による無限ループを防ぐ。実運用ではまず起きないが、詰まった
+	// 場合 CLI 起動不能になるので保険を入れる。
+	const maxAncestorHops = 32
+	visited := make(map[uint32]struct{}, maxAncestorHops)
 	pid := uint32(os.Getppid())
-	for pid != 0 {
+	for hops := 0; pid != 0 && hops < maxAncestorHops; hops++ {
+		if _, seen := visited[pid]; seen {
+			break
+		}
+		visited[pid] = struct{}{}
 		exe, grandpid := processExeAndParent(pid)
 		if exe == "" {
 			break

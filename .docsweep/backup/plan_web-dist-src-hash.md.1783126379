@@ -1,0 +1,76 @@
+# [様子見] web/dist ビルド鮮度チェック機構（.src-hash）
+
+> 最終更新: 2026-06-20(土) 09:50:16
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | fix | build.mjs にハッシュ生成を追加し `web/dist/.src-hash` を出力 | — |
+| C2 | fix | Go 側: 起動時鮮度チェック・`/api/info` への公開 | — |
+
+実行順序: `C1 → C2`
+
+---
+
+## 概要
+
+`web/src/` の TypeScript ソースを変更した後に `make build` を忘れると、`web/dist/` が古いままで Hub が古い JS を返す。  
+この問題を起動時にすぐ検出できるよう、ビルド時に `web/dist/.src-hash`（SHA256 先頭12桁）を生成し、Hub 起動時に現在のソースと比較する機構を追加した。  
+VPS/Docker など `web/src/` が存在しない環境ではチェックをスキップして誤警告を防ぐ。  
+スコープ外: UI 上への警告バナー表示（`/api/info` で `web_dist_fresh` を返すため UI 側はいつでも実装可能）。
+
+## 現状と問題
+
+- `web/dist/` は `go:embed all:dist` でバイナリに焼き込まれる
+- `web/src/` を変更しても `make build` を忘れると dist が古いまま Hub に組み込まれる
+- 実際に Grok スクロールバグ修正（`scrollAltBufferPage` 追加）が dist に反映されずに問題の発見が遅れた
+- どのソース状態でビルドされたかを確認する手段がなかった
+
+## 方針
+
+**ビルド時**: `web/scripts/build.mjs` の esbuild 完了後に `generateSrcHash()` を呼び出す。  
+`web/src/` の `.ts`/`.js` ファイル（vendor/ 除外・.d.ts 除外）をソート順に SHA256 ハッシュし、先頭 12 文字を `web/dist/.src-hash` に書き出す。`//go:embed all:dist` の `all:` プレフィックスがドットファイルを含めるため自動で Go バイナリに同梱される。
+
+**Go 起動時**: embedded FS の `dist/.src-hash` (bakedHash) を読み、現在の `web/src/` から同アルゴリズムで currentHash を計算。不一致なら `logger.Warn("web/dist is stale: run make build", ...)` を出力。`/api/info` に `web_src_hash` / `web_dist_fresh` を追加して UI からも確認可能にする。
+
+---
+
+## C1: build.mjs にハッシュ生成を追加
+
+### 作業内容
+
+- `node:crypto` の `createHash`、`node:fs/promises` の `readFile`/`writeFile` を import
+- `generateSrcHash()` 関数: `walk(srcDir)` でファイル一覧→ソート→SHA256 → `dist/.src-hash` 書き出し
+- 非 watch ビルド時（`make build`）のみ呼び出す（watch モードは生成しない）
+
+### 変更ファイル
+
+- `web/scripts/build.mjs` — import 追加・`generateSrcHash()` 関数追加・呼び出し追加
+
+### 完了条件
+
+- `bun run build` 後に `web/dist/.src-hash` が 12 桁の hex 文字列として生成されること
+- watch モードでは生成されないこと
+
+---
+
+## C2: Go 側 実装
+
+### 作業内容
+
+- `Server` struct に `webSrcHash string` / `webDistFresh bool` フィールドを追加
+- `computeWebSrcHash(srcDir string) string` 関数を `server.go` に追加（C1 と同じアルゴリズム）
+- `NewServer` 内: embedded `dist/.src-hash` 読み込み → `web/src/` が存在する場合のみ比較 → 不一致で Warn
+- `handleInfo` の `writeJSON` に `web_src_hash` / `web_dist_fresh` を追加
+
+### 変更ファイル
+
+- `internal/hub/server.go` — `crypto/sha256` import 追加・フィールド追加・`computeWebSrcHash` 関数追加・`NewServer` 内チェックブロック追加
+- `internal/hub/misc_handlers.go` — `handleInfo` の JSON に 2 フィールド追加
+
+### 完了条件
+
+- `go build ./...` が通ること
+- Hub 起動後 `/api/info` に `web_src_hash`・`web_dist_fresh` が含まれること
+- `make build` 後に起動すると `web_dist_fresh: true`、dist が古い状態では `false` かつ Warn ログが出ること

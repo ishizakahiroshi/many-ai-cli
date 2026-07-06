@@ -248,7 +248,10 @@
   function splitUserSpecifiesAnchor(lines) {
     // 「N. User specifies / その他指定」を区切りアンカーにする（行頭・行中問わず）。
     // \b 直前判定で "PLAN." 等の語中 N は誤マッチしない。
-    const splitRe = /\s*\b(N\.[ \t]*(?:User specifies|その他指定))\b\s*/i;
+    // `User` と `specifies` の間の空白は AI 出力で落ちることがある（観測: `N.Userspecifies`）。
+    // そのため `User\s*specifies` で空白省略形も受理する。マッチ結果は正規化して
+    // 「N. User specifies」固定文字列で出力し、後段の userSpecifiesLineRe と一致させる。
+    const splitRe = /\s*\bN\.[ \t]*(User\s*specifies|その他指定)\b\s*/i;
     const out = [];
     const expand = (line) => {
       const m = line.match(splitRe);
@@ -256,10 +259,41 @@
       const before = line.slice(0, m.index).trim();         // 連結されていた選択肢/本文
       const after = line.slice(m.index + m[0].length).trim(); // 後続の見出し等
       if (before) out.push(before);
-      out.push(m[1]);                                        // N. User specifies
+      // 正規化（`N.Userspecifies` → `N. User specifies` / `N.その他指定` → `N. その他指定`）。
+      const kind = /その他指定/.test(m[1]) ? 'その他指定' : 'User specifies';
+      out.push(`N. ${kind}`);
       if (after) expand(after);                             // 後続をさらに分割
     };
     for (const raw of (lines || [])) expand(String(raw || ''));
+    return out;
+  }
+
+  // 行内に紛れた `Q\d+` 見出しを直前で改行する。AI が前置き文末尾と Q1 を改行なしで
+  // 続けて出力すると（観測例: `...確認したい情報）:Q1「セッションが切れる」とは...`）、
+  // 後段の splitGluedNumberedLine が Q1 配下の選択肢を見つけられても、見出しが見つからず
+  // 「単一質問・複数選択肢」として誤解釈され、Q1 と Q2 の選択肢が 1 つの質問に混じる。
+  // 行内の `Q\d+` を見つけたら、その直前で行を切って独立した見出し行として後段へ渡す。
+  // 注意: 行頭が既に `Q\d+` の正規見出しは触らない（slice(1) で先頭を除外して検索する）。
+  // 全角 `Ｑ` も拾うが、直後が英数字（`Q1A` 等の識別子）の場合は見出し扱いしない。
+  function splitInlineQuestionHeading(lines) {
+    const out = [];
+    for (const raw of (lines || [])) {
+      let rest = String(raw || '');
+      while (true) {
+        if (rest.length <= 1) break;
+        const m = /[QＱ]\d{1,2}(?![A-Za-z\d])/.exec(rest.slice(1));
+        if (!m) break;
+        const at = m.index + 1;
+        // 直前文字が開き括弧（`[「『【（(`）のときはラベル/装飾内の `Q1` 言及とみなして
+        // 見出し分割を諦め、ループを抜ける（残りの行に他の候補があってもこの行では切らない）。
+        const prev = rest.charAt(at - 1);
+        if (/[\[「『【（(]/.test(prev)) break;
+        const head = rest.slice(0, at).trim();
+        if (head) out.push(head);
+        rest = rest.slice(at);
+      }
+      if (rest.trim()) out.push(rest);
+    }
     return out;
   }
 
@@ -277,6 +311,45 @@
   //（=「ハブの質問が途切れる／選択肢の頭が欠ける」症状）。連番チェック③が誤分割を抑える。
   function splitGluedNumberedLine(rawLine) {
     const line = String(rawLine == null ? '' : rawLine);
+    // 強パターン: `N.[短ラベル]` は marker block の選択肢規約そのもの。
+    // 直前文字が漢字/かな（境界文字集合に入っていない）でも、`.[…]` が続けばほぼ確実に選択肢開始。
+    // 観測例: `...失敗する3.[両方混在]...両方が混在4.[その他]...` — 弱パターン側は境界不足で
+    // 3, 4 を拾えず marks=[1,2,5] となり連番チェックで原文返却していた。
+    // 強パターン側は前文字を問わないので 1,2,3,4,5 を全て検出できる。
+    // 監督条件: 単調非減少（重複は許容しない・降順は除外）。連番強制までは課さない
+    //（弱パターンは課すが、強パターンは bracket suffix 自体が誤検出の盾になるため緩める）。
+    const strongRe = /(\d{1,2})\.\[([^\][\n]{1,16})\]/g;
+    const strongMarks = [];
+    let smOk = true;
+    let sm;
+    while ((sm = strongRe.exec(line)) !== null) {
+      const num = parseInt(sm[1], 10);
+      if (strongMarks.length > 0 && num <= strongMarks[strongMarks.length - 1].num) { smOk = false; break; }
+      strongMarks.push({ at: sm.index, num });
+      if (sm.index === strongRe.lastIndex) strongRe.lastIndex++;
+    }
+    if (smOk && strongMarks.length >= 2) {
+      const out = [];
+      const head = line.slice(0, strongMarks[0].at).trim();
+      if (head) out.push(head);
+      for (let i = 0; i < strongMarks.length; i++) {
+        const end = i + 1 < strongMarks.length ? strongMarks[i + 1].at : line.length;
+        const seg = line.slice(strongMarks[i].at, end).trim();
+        if (seg) out.push(seg);
+      }
+      return out;
+    }
+    // 強パターン 1 つだけ＋見出し連結のケース（`Q2 ...? 5.[短時間ランダム]...` を想定）。
+    // 見出し（headingRe）と option（optionRe）の境界で切り、parseHubBlock 側が独立した
+    // 要素として認識できるようにする。head が空 or 数字始まりだけの場合は触らない
+    //（=「先頭が `5.[…]` の正規行」では head 空のため不変）。
+    if (strongMarks.length === 1) {
+      const head = line.slice(0, strongMarks[0].at).trim();
+      const seg = line.slice(strongMarks[0].at).trim();
+      if (head && seg && !/^\d/.test(head)) {
+        return [head, seg];
+      }
+    }
     const re = /(^|[\s)）」』】。．？?！!…])(\d{1,2})\.(?:\s+|(?=\D))/g;
     const marks = [];
     let m;
@@ -321,7 +394,13 @@
   // 先に「N. User specifies」アンカーで切り、その後で行内連番を分割する
   //（N. を先に切らないと最後の選択肢ラベルへ「N. User specifies」が混入するため）。
   function ungluedApprovalLines(lines) {
-    return splitUserSpecifiesAnchor(lines).flatMap(splitGluedNumberedLine);
+    // 行内に紛れた `Q\d+` 見出しを先に切り出し、各セグメント内で
+    // 「N. User specifies」アンカー → 連結された連番選択肢、の順に分解する。
+    // Q-split を最先にするのは、Q1〜Q4 の選択肢番号が広域で（1〜16 等）連続するため
+    // 弱パターン側の連番チェックが大ジャンプで失敗するのを防ぐため。
+    const afterQ = splitInlineQuestionHeading(lines);
+    const afterN = splitUserSpecifiesAnchor(afterQ);
+    return afterN.flatMap(splitGluedNumberedLine);
   }
 
   // 複数選択ディレクティブ「#multi 質問文?」。これがブロック内にあると、後続の
@@ -346,8 +425,11 @@
     // 見出しは `Q1 質問文?`（Q + 連番）を正とする。選択肢 `1.`（数字+ピリオド）と区別するため。
     // 後方互換: 旧 `1 質問文?`（プレフィックスなし数字+スペース）も引き続き受理する。
     // 区切りゆれ吸収: 数字直後の `:` `：` `.` は任意（`Q1: 質問` / `Q1. 質問` も可）。
+    // Q プレフィックス有りの場合は空白省略形も受理する（`Q2切れるまでの…?` のように
+    // AI が空白なしで質問本文を続け書きするケースの救済。No-Q 側で同じ緩和をすると
+    // `1abc` のような誤マッチを生むため、Q 有り側だけ空白省略を許す）。
     // optionRe を先に評価するので `1. 選択肢` は見出しに誤マッチしない（順序維持が前提）。
-    const headingRe = /^(?:[QＱ][ \t]*)?(\d+)[ \t]*[.:：]?[ \t]+(.+?)\s*$/i;
+    const headingRe = /^(?:[QＱ][ \t]*(\d+)[ \t]*[.:：]?[ \t]*(\S.*?)|(\d+)[ \t]*[.:：]?[ \t]+(.+?))\s*$/i;
     const preambleLines = [];
     let preambleEnd = 0;
     for (let i = 0; i < lines.length; i++) {
@@ -432,7 +514,10 @@
       }
       const hm = line.match(headingRe);
       if (hm) {
-        cur = { num: parseInt(hm[1], 10), title: hm[2].trim(), options: [] };
+        // headingRe は Q 有り（group 1,2）と Q 無し（group 3,4）の二択 alternation。
+        const num = parseInt(hm[1] != null ? hm[1] : hm[3], 10);
+        const title = String(hm[2] != null ? hm[2] : hm[4]).trim();
+        cur = { num, title, options: [] };
         sections.push(cur);
         lastOpt = null;
         continue;
@@ -654,6 +739,7 @@
     matchNativeApprovalTrigger,
     hasApprovalLikeLabel,
     userSpecifiesRe,
+    ungluedApprovalLines,
   };
 
   root.approvalParser = api;
@@ -666,5 +752,5 @@
 const __esmRoot = (typeof window !== 'undefined') ? window : globalThis;
 export const approvalParser = __esmRoot.approvalParser;
 export const {
-  lineHasHint, linesHaveHint, approvalLineHasHint, approvalLinesHaveHint, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, extractApprovalOptions, approvalContextLines, isBatchOptions, isMultiSelectOptions, isMultiQuestionPrompt, isHubChoicePrompt, markHubChoiceDefault, matchNativeApprovalTrigger, hasApprovalLikeLabel, userSpecifiesRe,
+  lineHasHint, linesHaveHint, approvalLineHasHint, approvalLinesHaveHint, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, extractApprovalOptions, approvalContextLines, isBatchOptions, isMultiSelectOptions, isMultiQuestionPrompt, isHubChoicePrompt, markHubChoiceDefault, matchNativeApprovalTrigger, hasApprovalLikeLabel, userSpecifiesRe, ungluedApprovalLines,
 } = __esmRoot.approvalParser;

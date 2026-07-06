@@ -122,20 +122,25 @@ func (s *Server) handleCommitMsgChunk(id int, cleanText string) {
 
 // extractCommitMarker はバッファから最新のマーカー対を探して subject/body を取り出す。
 //
-// マーカーは「行頭・単独・装飾なし」で出力させる仕様（aiCommitPrompt）なので、
-// マーカー語を含む行ではなく "マーカー語だけの行"（TUI ガター除去後）で一致させる。
-// これにより、注入プロンプトのエコーがマーカー語を文中にインラインで含んでいても
-// （AI の本応答が届く前の中間状態でも）プロンプト指示文を subject に取り違えない。
+// マーカーは「行頭・単独・装飾なし」で出力させる仕様（aiCommitPrompt）だが、Claude Code 等の
+// TUI は応答を再描画する都合で、StripANSI 後に OPEN マーカーと subject が同一行へ連結される
+// ことがある（例: "●[MANY-AI-CLI-COMMIT]docs: ..."）。そのため「マーカー単独行」完全一致では
+// なく "行頭が OPEN マーカーで始まる行"（TUI ガター除去後）で一致させ、マーカー語より後ろの
+// テキストを subject 先頭として拾う。CLOSE も同様に行内に連結され得るため、語を含む行までを
+// inner とし、語より前のテキストを inner 末尾へ取り込む。
+//
+// 注入プロンプトのエコーはマーカー語を文中（日本語/英語の文の途中）にインラインで含むため
+// 行頭一致せず、AI の本応答が届く前の中間状態でもプロンプト指示文を subject に取り違えない。
 func extractCommitMarker(buf string) (subject, body string, ok bool) {
 	rawLines := strings.Split(buf, "\n")
 	lines := make([]string, len(rawLines))
 	for i, ln := range rawLines {
 		lines[i] = cleanTUILine(ln)
 	}
-	// 最後の「OPEN マーカー単独行」を基点にする。
+	// 最後の「OPEN マーカーで始まる行」を基点にする。
 	openIdx := -1
 	for i := len(lines) - 1; i >= 0; i-- {
-		if strings.TrimSpace(lines[i]) == commitMsgMarkerOpen {
+		if strings.HasPrefix(strings.TrimSpace(lines[i]), commitMsgMarkerOpen) {
 			openIdx = i
 			break
 		}
@@ -143,18 +148,29 @@ func extractCommitMarker(buf string) (subject, body string, ok bool) {
 	if openIdx < 0 {
 		return "", "", false
 	}
-	// その後ろの最初の「CLOSE マーカー単独行」までを inner とする。
+	// OPEN マーカー語より後ろのテキスト（連結された subject 先頭。単独行なら空文字）。
+	openRemainder := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(lines[openIdx]), commitMsgMarkerOpen))
+	// その後ろの最初の「CLOSE マーカーを含む行」までを inner とする。
 	closeIdx := -1
+	closeLeading := ""
 	for i := openIdx + 1; i < len(lines); i++ {
-		if strings.TrimSpace(lines[i]) == commitMsgMarkerClose {
+		if idx := strings.Index(lines[i], commitMsgMarkerClose); idx >= 0 {
 			closeIdx = i
+			closeLeading = strings.TrimSpace(lines[i][:idx])
 			break
 		}
 	}
 	if closeIdx < 0 {
 		return "", "", false
 	}
-	inner := lines[openIdx+1 : closeIdx]
+	inner := make([]string, 0, closeIdx-openIdx+1)
+	if openRemainder != "" {
+		inner = append(inner, openRemainder)
+	}
+	inner = append(inner, lines[openIdx+1:closeIdx]...)
+	if closeLeading != "" {
+		inner = append(inner, closeLeading)
+	}
 	for len(inner) > 0 && strings.TrimSpace(inner[0]) == "" {
 		inner = inner[1:]
 	}

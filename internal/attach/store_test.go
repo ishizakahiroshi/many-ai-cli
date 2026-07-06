@@ -92,16 +92,142 @@ func TestSaveDoesNotOverwriteRepeatedAttachments(t *testing.T) {
 func TestSaveUsesTimestampWithNanosecondsInFilename(t *testing.T) {
 	baseDir := t.TempDir()
 
-	// .png は allowlist に含まれるので拡張子がそのまま使われる
-	path, _, err := Save(baseDir, 42, "codex", []byte("data"), "note.png")
+	path, _, err := Save(baseDir, 42, "codex", []byte("data"), "売上 report?.PNG")
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
 	name := filepath.Base(path)
-	// 拡張子は allowlist に含まれるもの（.png 等）か magic-byte 判定結果
-	if !regexp.MustCompile(`^\d{14}_\d{9}\.[a-z]+$`).MatchString(name) {
-		t.Fatalf("saved filename %q does not match timestamp_nanoseconds format", name)
+	if !regexp.MustCompile(`^\d{14}_\d{9}_売上_report\.png$`).MatchString(name) {
+		t.Fatalf("saved filename %q does not retain sanitized original name", name)
+	}
+}
+
+func TestSanitizeFilename(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		ext      string
+		want     string
+	}{
+		{name: "japanese", filename: "月次 売上.csv", ext: ".csv", want: "月次_売上.csv"},
+		{name: "path traversal", filename: `..\secret/report?.CSV`, ext: ".csv", want: "report.csv"},
+		{name: "windows invalid characters", filename: `a<b>:c"d|e?f*.txt`, ext: ".txt", want: "a_b_c_d_e_f.txt"},
+		{name: "empty", filename: `../...`, ext: ".bin", want: "attachment.bin"},
+		{name: "repeated separators", filename: "a \t ? b.csv", ext: ".csv", want: "a_b.csv"},
+		{name: "cli punctuation", filename: `a&b;c#d@e(f)[g]{h}!$'i.png`, ext: ".png", want: "a_b_c_d_e_f_g_h_i.png"},
+		{name: "unicode letters and marks", filename: "cafe\u0301_日本語.pdf", ext: ".pdf", want: "cafe\u0301_日本語.pdf"},
+		{name: "emoji", filename: "diagram📎final.png", ext: ".png", want: "diagram_final.png"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sanitizeFilename(tc.filename, tc.ext); got != tc.want {
+				t.Fatalf("sanitizeFilename(%q, %q) = %q, want %q", tc.filename, tc.ext, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSanitizeFilenameLimitsUTF8ByteLength(t *testing.T) {
+	got := sanitizeFilename(strings.Repeat("長", maxSanitizedFilenameBytes)+".csv", ".csv")
+	if len(got) > maxSanitizedFilenameBytes {
+		t.Fatalf("sanitized filename byte length = %d, want <= %d", len(got), maxSanitizedFilenameBytes)
+	}
+	if !strings.HasSuffix(got, ".csv") {
+		t.Fatalf("sanitized filename %q lost extension", got)
+	}
+}
+
+func TestSavePreservesSupportedAttachmentTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		data     []byte
+		wantExt  string
+	}{
+		{name: "csv filename", filename: "売上.CSV", data: []byte("a,b\n1,2\n"), wantExt: ".csv"},
+		{name: "png magic", data: []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}, wantExt: ".png"},
+		{name: "jpeg magic", data: []byte{0xFF, 0xD8, 0xFF, 0xE0}, wantExt: ".jpg"},
+		{name: "gif magic", data: []byte("GIF89a"), wantExt: ".gif"},
+		{name: "webp magic", data: []byte("RIFFxxxxWEBP"), wantExt: ".webp"},
+		{name: "pdf magic", data: []byte("%PDF-1.7"), wantExt: ".pdf"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path, _, err := Save(t.TempDir(), 1, "codex", tc.data, tc.filename)
+			if err != nil {
+				t.Fatalf("Save: %v", err)
+			}
+			if got := filepath.Ext(path); got != tc.wantExt {
+				t.Fatalf("saved extension = %q, want %q (path %q)", got, tc.wantExt, path)
+			}
+			if tc.filename == "" && !strings.Contains(filepath.Base(path), "_attachment"+tc.wantExt) {
+				t.Fatalf("unnamed attachment path %q does not use fallback name", path)
+			}
+		})
+	}
+}
+
+func TestSavePrefixPreventsWindowsReservedBasename(t *testing.T) {
+	path, _, err := Save(t.TempDir(), 1, "codex", []byte("data"), "CON.txt")
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	name := filepath.Base(path)
+	if strings.EqualFold(name, "CON.txt") || !strings.HasSuffix(name, "_CON.txt") {
+		t.Fatalf("saved filename %q does not safely prefix reserved basename", name)
+	}
+}
+
+func TestAttachmentInject(t *testing.T) {
+	windowsLikePath := `C:\Users\John Smith\開発 (試験)\file.png`
+	tests := []struct {
+		provider string
+		path     string
+		want     string
+	}{
+		{provider: "claude", path: windowsLikePath, want: "@" + windowsLikePath + " "},
+		{provider: "codex", path: windowsLikePath, want: "@C:/Users/John Smith/開発 (試験)/file.png "},
+		{provider: "other", path: windowsLikePath, want: windowsLikePath + " "},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.provider, func(t *testing.T) {
+			got, err := attachmentInject(tc.provider, tc.path)
+			if err != nil {
+				t.Fatalf("attachmentInject: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("attachmentInject(%q, %q) = %q, want %q", tc.provider, tc.path, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAttachmentInjectRejectsControlCharacters(t *testing.T) {
+	if _, err := attachmentInject("codex", "C:/tmp/bad\nname.png"); err == nil {
+		t.Fatal("attachmentInject accepted a path containing a newline")
+	}
+}
+
+func TestSaveRemovesFileWhenInjectPathIsUnsafe(t *testing.T) {
+	baseDir := filepath.Join(t.TempDir(), "bad\u200bparent")
+	path, inject, err := Save(baseDir, 1, "codex", []byte("data"), "note.txt")
+	if err == nil {
+		t.Fatal("Save accepted an unsafe attachment path")
+	}
+	if path != "" || inject != "" {
+		t.Fatalf("Save returned path=%q inject=%q on error", path, inject)
+	}
+	sessionDir := filepath.Join(baseDir, "1")
+	entries, readErr := os.ReadDir(sessionDir)
+	if readErr != nil && !os.IsNotExist(readErr) {
+		t.Fatalf("ReadDir: %v", readErr)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("unsafe attachment left %d file(s) behind", len(entries))
 	}
 }
 

@@ -1,0 +1,68 @@
+# [様子見] 障害対応記録: OpenCode が many-ai-cli 経由だと入力後に固まる
+
+> 最終更新: 2026-06-17(水) 19:22:12
+
+## 症状
+
+Hub UI から OpenCode セッションへ「ハロー」などの単発入力を送ると、画面上は入力欄に本文が反映されるが、OpenCode 側の応答が始まらない。
+
+同じディレクトリ・同じモデルで PowerShell から `opencode` を直接起動すると、数秒で通常どおり応答する。
+
+## 調査メモ
+
+- Hub のセッションログでは OpenCode の `.log` / `.jsonl` が 0 byte のものが複数あり、many-ai-cli 側の PTY 生ログだけでは原因を確認できなかった。
+- OpenCode 自身のログ `C:\Users\ishiz\.local\share\opencode\log\2026-06-17T101533.log` では、起動後に `file.watcher.updated` が繰り返されるだけで、ユーザープロンプト実行の記録が無かった。
+- `C:\Users\ishiz\.local\state\opencode\prompt-history.jsonl` には PowerShell 直起動時の「ハロー」が記録されており、OpenCode 本体・モデル・認証ではなく many-ai-cli 経由の入力確定経路が原因と判断した。
+- `opencode debug config` では直接起動時も `permission: {"*":"ask"}` が有効であり、`opencode.json` の権限設定が固着原因ではなかった。
+
+## 根本原因
+
+many-ai-cli は Hub 入力欄から送信するとき、通常入力に `Ctrl+U + 本文 + \r` を送り、wrapper 側で末尾 `\r` だけを本文と別チャンクに分離して PTY へ書き込む。
+
+Windows ConPTY では `text+\r` を 1 チャンクで書くと Enter が改行扱いになる場合があるため、この分離自体は必要。ただし OpenCode では本文反映直後の Enter が早すぎると取りこぼされ、本文だけが OpenCode の入力欄に残って実行が始まらない状態になる。
+
+既存実装では Codex だけ 180ms 待つ特例があり、OpenCode は既定の 20ms のままだった。
+
+## 修正内容
+
+`internal/wrapper/wrapper.go` に provider 別の末尾 Enter 遅延を返す `trailingEnterDelay()` を追加し、OpenCode も Codex と同じ 180ms にした。
+
+```go
+func trailingEnterDelay(provider string) time.Duration {
+	switch provider {
+	case "codex", "opencode":
+		return 180 * time.Millisecond
+	default:
+		return 20 * time.Millisecond
+	}
+}
+```
+
+入力処理側は固定値・分岐の直書きをやめ、`trailingEnterDelay(provider)` を使うようにした。
+
+## 変更ファイル
+
+- `internal/wrapper/wrapper.go`
+- `internal/wrapper/reconnect_supervisor_test.go`
+
+## 検証
+
+実行済み:
+
+```powershell
+go test ./internal/wrapper
+```
+
+結果:
+
+```text
+ok many-ai-cli/internal/wrapper
+```
+
+Hub の再ビルド・再起動・ブラウザリロードは、このリポジトリの運用ルールに従い未実施。
+
+## 備忘
+
+- PowerShell 直起動では人間の入力間隔により Enter が自然に遅れるため、同じ OpenCode 本体でも再現しにくい。
+- OpenCode のログにプロンプト実行が出ない場合、モデル待ちではなく Enter 確定が届いていない可能性がある。
+- 180ms は既存の Codex 向け実測対策と同じ値。OpenCode も Ink/TUI 系の入力反映直後に Enter を取りこぼす挙動があるため同じ扱いにした。

@@ -112,7 +112,10 @@ func (s *Server) resolveAllowedFilePath(r *http.Request) (string, bool, error) {
 	// プレビュー / ダウンロードできるようにするため（CWD/git root の外にあるため
 	// 従来は 403 になっていた）。open 系ハンドラと同じ扱い（read-only の GET 専用）。
 	attachDir, _ := attachmentsDir()
-	allowed, err := isPathUnderAllowedRoots(pathParam, cwd, gitRoot, attachDir)
+	// orchestration board（~/.many-ai-cli/orchestration/<id>/board.md）も同様に許可する。
+	// conductor カードの「board を開く」導線は cwd/git root の外を指すため。
+	orchDir, _ := orchestrationDir()
+	allowed, err := isPathUnderAllowedRoots(pathParam, cwd, gitRoot, attachDir, orchDir)
 	if err == nil && allowed {
 		return pathParam, false, nil
 	}

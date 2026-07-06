@@ -1,0 +1,216 @@
+# [様子見] 設定パネル 畳み状態の現在値インライン表示
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | fix | 共通基盤（DOM 16 箇所・CSS・JS 骨格・呼び出し配線）＋「全般」セクション先行実装 | — |
+| C2 | fix | 残り 15 セクションの描画関数を順次実装 | — |
+| C3 | fix | 仕上げ（パス頭省略・サブ設定間引き・スクショ確認・モックと突合せ） | — |
+
+実行順序: `C1 → C2 → C3`
+
+> 実装メモ（2026-06-23 完了）:
+> - 個別 change ハンドラ配線は採用せず、各 `<details>` の `toggle` イベントで自セクションを再描画する方式に変更（attachSummaryToggleListeners）。閉じた瞬間に最新値で更新されるため、16 個の input の change を 1 つ 1 つ拾う必要がなくなった。
+> - 実コード側のセクション ID は `slash-cmd-source` ではなく `slash-src`。plan 内 C2 表記は plan 当初メモ。実装は `slash-src` で記述。
+> - スクショ突合せはユーザー側の動作確認待ち（ビルド未実施）。
+
+参照モック: [`mockups/settings-section-summary/index.html`](mockups/settings-section-summary/index.html)
+
+---
+
+## 概要
+
+設定パネル（右上歯車から開く縦長 dark panel）の 16 セクションは `<details>/<summary>` のアコーディオン。畳んだ状態だと「今どういう設定になっているか」が一切見えず、ユーザーは規定値も覚えていない。
+
+各 `<summary>` 行の右側の空きスペースに **現在値を 1 行で詰めて表示** する。区切りは中黒「・」、はみ出しは末尾 `…` で省略（パス系は別途頭省略）。展開すると要約は消えて通常 UI が出る。
+
+スコープ外:
+- 「既定値と異なる項目」の視覚区別（バッジ等）— ユーザーが規定値を覚えていない前提のため不要
+- 設定パネルのレイアウト全体の再設計
+- セクションの並び順変更
+- セクション分割の見直し
+
+## 現状と問題
+
+- `web/src/index.html` 128〜末尾の 16 セクションは `<details class="settings-section">` で構成
+- `<summary class="settings-section-title">` の中はセクションラベル 1 つだけで、右側は完全に空（ハイライト hover の色帯のみ）
+- 規定値を覚えていないユーザーは、確認のために 16 セクションを 1 つずつ開閉する必要がある
+- 設定 1 個変更したいだけでも目的のセクションを探すために何度か開く操作が要る
+
+## 方針
+
+- **採用案**: 横並びインライン（モック v2）。summary 行内の右側に flex で詰め、`text-overflow:ellipsis` で末尾省略
+- **不採用案 1**: 見出し下に縦積み（モック v1）— 16 セクション×4 行 ≈ 700px の高さ増になり却下
+- **不採用案 2**: 「既定」バッジ表示 — ユーザーが規定値を覚えていない前提で情報量ゼロ
+- **不採用案 3**: 「カスタム化された項目だけマーク」— 値そのものが見えないため目的を果たさない
+
+確定した表記ルール（モック v2 採用）:
+
+| 項目 | 値 |
+|---|---|
+| 区切り文字 | 中黒「・」 |
+| キー名 | 原則なし（値のみ）。ON/OFF など単独で曖昧なものはキー付き |
+| 長いパスの省略 | 頭省略（`…\.many-ai-cli\logs`）。JS の `shortenPath(maxChars)` で実施 |
+| 長い URL の省略 | 末尾省略（CSS 標準） |
+| サブ設定の扱い | 親が OFF / 非表示のときは要約からも除外（自然な間引き） |
+| 開いた時 | `details[open] > summary > .settings-section-current { display:none }` で消す |
+| 個人情報を含む値 | 表示名・アイコン URL はそのまま表示（オーナー本人しか見ない前提・スクショ共有時は本人が判断） |
+
+---
+
+## C1: 共通基盤 + 全般セクション先行実装
+
+### 作業内容
+
+1. **DOM 追加**: `web/src/index.html` の 16 セクションすべての `<summary>` 末尾に空 `<span>` を追加
+   ```html
+   <summary class="settings-section-title">
+     <span data-i18n="settings_general">全般</span>
+     <span class="settings-section-current" data-section="general"></span>
+   </summary>
+   ```
+   `data-section` 値は既存 `<details data-section="...">` と揃える（grep で対応関係を確認）
+2. **CSS 追加**: `web/src/styles/settings.css` の `summary.settings-section-title` 周辺に追記
+   ```css
+   .settings-section-current {
+     margin-left: auto;
+     flex: 1 1 auto;
+     min-width: 0;
+     color: var(--muted);
+     font-weight: 400;
+     font-size: 0.7rem;
+     text-align: right;
+     overflow: hidden;
+     text-overflow: ellipsis;
+     white-space: nowrap;
+     padding-left: 12px;
+   }
+   .settings-section[open] > summary > .settings-section-current { display: none; }
+   ```
+3. **JS 骨格**: `web/src/app/settings.ts` に `renderSettingsSummary(sectionId?: string)` と `RENDERERS` レジストリを追加
+   - `RENDERERS` は `Record<sectionId, () => string>` 型
+   - 未登録セクションは空文字を返して何も表示しない（C2 で順次埋める）
+4. **全般セクションの描画関数**: `RENDERERS.general` を実装
+   - 言語: `STORAGE_LANG_KEY` → `日本語` / `English`
+   - テーマ: `STORAGE_THEME_KEY` → `Light` / `Dark`
+   - フォントサイズ: `STORAGE_FONTSIZE_KEY` → `Large` / `Medium` / `Small`
+   - 表示モード固定: `STORAGE_DISPLAY_LOCKED_MODE_KEY` → `自由切替` / `ターミナル` / `チャット` / `分割`
+   - i18n: 英語表示時は `日本語` → `Japanese`、`自由切替` → `Free switch` 等。`window.__lang` を見て分岐
+5. **呼び出し配線**: 既存の以下 4 箇所に `renderSettingsSummary()` を追加
+   - パネル open 時（`settings-btn` click ハンドラ、既存 panel.hidden トグル直後）→ 引数なし（全セクション）
+   - 各 select の change 後（`themeEl` / `fontsizeEl` / `langEl` / `locked-mode-select`）→ `renderSettingsSummary('general')`
+   - `__settingsResetAll()` の完了後 → 引数なし
+   - `setLang()` 直後はリロードされるので不要
+
+### 変更予定ファイル
+
+- `web/src/index.html` — 16 セクションの `<summary>` 末尾に `<span class="settings-section-current" data-section="..."></span>` を追加
+- `web/src/styles/settings.css` — `.settings-section-current` ルールを `summary.settings-section-title` 周辺に追加
+- `web/src/app/settings.ts` — `renderSettingsSummary()` 関数・`RENDERERS` レジストリ・`RENDERERS.general` 実装・既存 change ハンドラへの呼び出し追加
+
+### 完了条件
+
+- `make build` 成功
+- 設定パネルを開いたとき「▶ 全般」の右に `日本語・Light・Medium・自由切替` のような現在値が 1 行で表示される
+- 「全般」を展開すると要約が消える
+- 各 select で値を変えると、その場で要約も更新される（パネルを閉じ直す不要）
+- 「リセット」ボタンで規定値に戻すと要約も規定値表示に戻る
+- 他 15 セクションの `<summary>` 右側は空（何も表示されない）
+- 言語切替（日本語/English）すると、ページリロード後に英語表記に切り替わる
+
+---
+
+## C2: 残り 15 セクションの描画関数
+
+### 作業内容
+
+`RENDERERS` レジストリに以下 15 セクション分の関数を追加する。値の取り方は既存のローカルストレージキー / `user-prefs` API を流用（新規エンドポイントは作らない）。
+
+サブ設定の間引きルール: 親トグルが OFF のとき、その配下の値は要約から除外する（例: 音声入力=OFF のとき Whisper モデル・自動送信・待ち時間は出さない）。
+
+| section data-id | キー | 表示する値（合成例） |
+|---|---|---|
+| `appearance` | 表示名 / アイコン URL | `ishizakahiroshi・アイコン設定済` (URL 設定済) / `ishizakahiroshi` (URL 未設定) |
+| `token-statusbar` | enabled / segments | `ON・in/out/cost` (有効セグメント名) / `OFF` |
+| `session` | 履歴件数 / 自動切替 | `履歴100件・自動切替ON` |
+| `remote-auth` | ON/OFF / パスワード設定有無 | `OFF` / `ON・パスワード設定済` |
+| `log` | ロギング ON/OFF / ログディレクトリ / 保持期間 | `ON・…\.many-ai-cli\logs・保持30日` |
+| `approval-hub` | ON/OFF / 完了サマリ通知 | `ON・タスク完了通知ON` |
+| `approval-patterns` | プロバイダ別パターン件数 | `claude:8件・codex:3件・copilot:2件` |
+| `voice` | エンジン / モデル / 自動送信 / 待ち時間 | `Whisper・small・自動送信ON・5秒` (エンジン=Whisper 時) / `Chrome内蔵・5秒` (browser 時) / `OFF` |
+| `trigger` | ON/OFF / トリガーフレーズ | `ON・「えんたー」` / `OFF` |
+| `file-open` | ファイルリンクスキーム | `vscode://file/{path}:{line}` |
+| `notify-sound` | デスクトップ通知 / サウンド / カスタム音 | `デスクトップON・サウンドON・既定` / `デスクトップOFF・サウンドOFF` |
+| `quick-cmd` | 設定済スロット数 / 全スロット数 | `5枠中3個設定済` |
+| `input-tools` | PC 表示数 / モバイル表示数 | `PC: 全表示 / モバイル: 4個` |
+| `usage-links` | 全件数 / 既定 or カスタム件数 | `全8件 既定` / `全8件 中3個カスタム` |
+| `slash-cmd-source` | ソース種別 | `github+local` / `local のみ` |
+
+各描画関数の呼び出しは「対応する select / input の change ハンドラ」末尾に追加する（C1 と同様の配線）。
+
+### 変更予定ファイル
+
+- `web/src/app/settings.ts` — `RENDERERS` に 15 セクション分の関数を追加、各 change ハンドラに呼び出しを追加
+- （必要に応じて）`web/src/app/user-prefs.ts` — 描画関数からアクセスする値の getter を整理
+
+### 完了条件
+
+- `make build` 成功
+- パネル open 時、16 セクションすべてに何らかの要約が表示される（OFF のセクションは `OFF` の 1 語のみ）
+- 各セクション内の設定を変更すると即時要約に反映される
+- 「リセット」で全要約が規定値表示に戻る
+- パネル全高がモック S-03 と概ね一致する（現状から伸びていない）
+
+---
+
+## C3: 仕上げ（パス省略・サブ設定間引き・検証）
+
+### 作業内容
+
+1. **`shortenPath(path: string, maxChars=24)` 実装**: パスの頭を `…` で削って末尾フォルダ名が残る形にする
+   ```typescript
+   export function shortenPath(p: string, maxChars = 24): string {
+     if (p.length <= maxChars) return p;
+     return '…' + p.slice(-(maxChars - 1));
+   }
+   ```
+   `RENDERERS.log` から呼ぶ。他のパス系（`file-open` のスキーム文字列は短いので不要）も必要なら適用
+2. **サブ設定間引きの最終確認**: C2 で間引き済みのはずだが、`voice` `notify-sound` などで OFF 時のクリーンさを目視確認
+3. **モックとの突合せ**: ブラウザで実画面を開き、`docs/local/mockups/settings-section-summary/index.html` の S-03 と並べて比較
+4. **スクショ撮影**: パネル全景のスクショを撮り、モック S-03 との差分（行高・余白・色味）を確認
+5. **i18n 確認**: 英語切替後、各セクションのキー名 / 値が英語表記になることを確認（例: `Japanese・Light・Medium・Free switch`）。違和感ある訳語があれば微修正
+
+### 変更予定ファイル
+
+- `web/src/app/settings.ts` — `shortenPath()` 追加、`RENDERERS.log` で適用
+- `web/src/i18n/ja.json` / `en.json` — 必要に応じて要約用ラベル（`日本語` / `Japanese` 等の値ラベル）を追加
+
+### 完了条件
+
+- `make build` 成功
+- 設定パネルを実画面で開いて、16 セクションの要約がモック S-03 と概ね同じ詰まり方をしている
+- 長いログパスが頭省略で末尾フォルダ名が見えている
+- 英語切替時の表記に違和感がない
+- スクショ取得（実装報告に添付）
+
+---
+
+## 検証手順（C1〜C3 共通）
+
+1. `make build` 通る
+2. Hub 再起動（ユーザー操作）→ ブラウザリロード（ユーザー操作）
+3. 右上歯車クリック → 設定パネル open
+4. 各セクションの右側に現在値が出ているか確認
+5. 1 セクション開閉して要約が消える / 戻ることを確認
+6. 設定を 1 つ変更（例: テーマ Light → Dark）して要約が即時更新されることを確認
+7. パネル外クリックで閉じて、再度開いて変更後の値が要約に反映されていることを確認
+8. リセット → 規定値表示に戻ることを確認
+9. （C3）日本語 → English 切替 → リロード後の英語表記を確認
+
+## リスク / 注意点
+
+- `<summary>` 内に `<span>` を追加すると、既存の i18n ラベル span との flex 配置がずれる可能性 → C1 完了時点で flex の伸縮を必ず確認
+- `user-prefs` の値がサーバー側に persist される非同期処理の途中に要約描画が走ると、古い値が出る可能性 → 描画関数は **localStorage** を参照（同期）、サーバ反映と独立
+- 言語切替は `setLang()` 内で `location.reload()` するため、要約再描画の特別対応は不要
+- 「外観」セクションの表示名・アバター URL は個人情報。社外スクショ共有の機会がある場合は本人判断（plan の責務外）

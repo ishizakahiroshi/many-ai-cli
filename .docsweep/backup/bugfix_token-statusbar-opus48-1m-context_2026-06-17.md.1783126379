@@ -1,0 +1,63 @@
+# [様子見] 障害対応記録: Opus 4.8 1M context が 200k として満杯表示される
+
+> 最終更新: 2026-06-17(水) 14:13:33
+
+## 症状
+
+Hub 画面下部のトークンステータスバーで、Claude Opus 4.8 の 1M context セッションが 200k context として扱われていた。
+
+実例:
+
+- ステータスバー: `tok ↑287.0k ↓2.1k`
+- ctx tooltip: `287.0k / 200.0k tokens`
+- ctx ゲージ: 100%
+
+本来は Opus 4.8 1M context のため、287k 入力時点では約 29% 程度として表示されるべきだった。
+
+## 根本原因
+
+`web/src/app/token-statusbar.ts` の context 上限解決で、モデル名テーブルが `claude-opus` を 200k として持っていた。
+
+Opus 4.8 には次のような複数の表記が存在する。
+
+- `claude-opus-4-8`
+- `claude-opus-4.8`
+- `Opus 4.8`
+- `Opus 4.8 (1M context)`
+
+しかしステータスバー側では Opus 4.8 専用の 1M 判定がなく、`claude-opus` の汎用 200k に落ちていた。また Claude Code の statusLine が `context_window_size=200000` を返すケースがあり、relay 経由の値をそのまま最優先すると、モデル名から 1M と分かる場合でも 200k が採用されていた。
+
+## 修正内容
+
+`web/src/app/token-statusbar.ts` で、Opus 4.8 系を 1M context として解決するようにした。
+
+- `claude-opus-4-8` / `claude-opus-4.8` / `claude opus 4.8` / `opus 4.8` を 1,000,000 tokens としてテーブルに追加
+- `1m` / `1-million` などの既存判定に加えて、Opus 4.8 表記そのものでも 1M と判定
+- relay の `ctx_window` とモデル名テーブル推定値の大きい方を採用
+- `entry.usageModel` と `session.model` の両方を見て、statusLine 側と起動バナー検出側のどちらかが 1M を示していれば 1M を採用
+
+これにより、`ctx_window_size=200000` が届いても、モデル名が Opus 4.8 系なら `287.0k / 1.0M tokens` 相当の表示になる。
+
+## 変更ファイル
+
+- `web/src/app/token-statusbar.ts`
+  - Opus 4.8 系の context 上限を 1M として追加
+  - `resolveCtxLimitFromModels()` を追加
+  - `resolveEffectiveCtxLimit()` を追加
+  - ctx 上限算出を relay 値単独ではなく、relay 値とモデル名推定値の最大値に変更
+
+## 検証
+
+- `bun run check`
+  - 成功。TypeScript 型チェックは通過。
+
+手動確認 TODO:
+
+- Opus 4.8 1M context のセッションで、ctx tooltip が `... / 1.0M tokens` 系の表示になること
+- 287k 前後の使用量で ctx ゲージが 100% ではなく約 29% になること
+- Sonnet / Haiku / Claude 3 系など、従来 200k として扱うモデルの表示が変わらないこと
+
+## 備忘
+
+- Claude Code の statusLine が返す `context_window_size` は、実際のモデル上限と一致しないケースがあるため、UI 表示ではモデル名から明確に分かる上限を下限として使う。
+- 将来的にモデル一覧 JSON に context window を持たせるなら、ステータスバー側の固定テーブルをリモート定義へ寄せる余地がある。

@@ -1,0 +1,36 @@
+# [様子見] セッションカード左下の稼働経過時間表示を削除
+
+> 最終更新: 2026-06-21(日) 11:12:37
+
+## 症状
+
+セッションカードの左下に、現在の応答の稼働経過時間（`⏱ 48s` 等）が常時表示されていた。ユーザー要望により、この表示は不要で目障りなため消したい。
+
+## 根本原因
+
+`web/src/app/session-list.ts` の `cardLiveRowHtml()` が、running 中のカードに対して経過秒を計算し `<span class="card-elapsed">⏱ ...</span>` を出力していた（仕様としてそうなっていた）。バグというより仕様変更（表示の取りやめ）。
+
+## 修正内容
+
+- `cardLiveRowHtml()` から `card-elapsed` span の出力を削除。経過秒の計算（`cardTurnElapsedSec`）は長時間処理⚠バッジ（`CARD_LONGPROC_SEC = 300s` 超で表示）の判定に引き続き使うため残置。
+- 未使用になった `formatCardDurSec()` 関数を削除。
+- 未使用になった `.card-elapsed` の CSS ルールを削除。
+- 未使用になった i18n キー `card_elapsed_title`（ja/en）を削除。
+
+## 変更ファイル
+
+- `web/src/app/session-list.ts`
+- `web/src/styles.css`
+- `web/src/i18n/ja.json`
+- `web/src/i18n/en.json`
+
+## 検証
+
+- `make build` でビルドが通ること（i18n キー削除・未使用関数削除で型/lint エラーが出ないこと）。
+- ブラウザをリロードし、セッションカード左下から `⏱ <秒>` 表示が消えていること。
+- running を 300 秒以上継続させ、長時間処理の `⚠ 長時間処理中` バッジは従来どおり出ること（経過秒の内部計算が生きていることの確認）。
+
+## 備忘
+
+- `card-live-row` 自体は longproc バッジ用に残っている。経過時間が唯一の中身だったため、通常時はこの行は空（非表示）になる。
+- 関連: `bugfix_ai-working-elapsed-after-user-post_2026-06-17.md`（同じ経過時間表示まわりの過去対応）。

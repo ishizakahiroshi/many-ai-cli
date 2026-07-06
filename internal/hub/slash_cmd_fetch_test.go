@@ -122,6 +122,109 @@ func TestFetchAndParseSlashCmdsFromLocalFile(t *testing.T) {
 	}
 }
 
+func TestDiscoverSkillSlashCmdsFromCodexHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("CODEX_HOME", "")
+	dir := filepath.Join(home, ".codex", "skills", "my-skill")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "SKILL.md")
+	text := "---\nname: my-skill\ndescription: Use this for focused work.\n---\n# My Skill\n"
+	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmds := discoverSkillSlashCmds("codex", skillSearchContext{HomeDir: home})
+	if len(cmds) != 1 {
+		t.Fatalf("expected 1 skill command, got %#v", cmds)
+	}
+	if cmds[0].Cmd != "$my-skill" || cmds[0].Kind != "skill" || cmds[0].Name != "my-skill" {
+		t.Fatalf("unexpected skill command: %#v", cmds[0])
+	}
+	if !strings.Contains(cmds[0].Desc, "focused work") {
+		t.Fatalf("unexpected desc: %q", cmds[0].Desc)
+	}
+}
+
+func TestDiscoverSkillSlashCmdsFromClaudeHomeHonorsUserInvokable(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	visibleDir := filepath.Join(home, ".claude", "skills", "release")
+	hiddenDir := filepath.Join(home, ".claude", "skills", "internal-only")
+	for _, dir := range []string{visibleDir, hiddenDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(visibleDir, "SKILL.md"), []byte("---\nname: release\ndescription: Ship a release.\n---\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hiddenDir, "SKILL.md"), []byte("---\nname: internal-only\ndescription: Hidden.\nuser-invokable: false\n---\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmds := discoverSkillSlashCmds("claude", skillSearchContext{HomeDir: home})
+	if len(cmds) != 1 {
+		t.Fatalf("expected 1 skill command, got %#v", cmds)
+	}
+	if cmds[0].Cmd != "/release" || cmds[0].Kind != "skill" || cmds[0].Name != "release" {
+		t.Fatalf("unexpected skill command: %#v", cmds[0])
+	}
+}
+
+func TestDiscoverSkillSlashCmdsUsesExplicitUserContext(t *testing.T) {
+	hubHome := t.TempDir()
+	userHome := t.TempDir()
+	t.Setenv("HOME", hubHome)
+	t.Setenv("USERPROFILE", hubHome)
+	t.Setenv("CODEX_HOME", "")
+
+	userSkillDir := filepath.Join(userHome, ".codex", "skills", "personal")
+	if err := os.MkdirAll(userSkillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userSkillDir, "SKILL.md"), []byte("---\nname: personal\ndescription: User-owned skill.\n---\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmds := discoverSkillSlashCmds("codex", skillSearchContext{HomeDir: userHome})
+	if len(cmds) != 1 || cmds[0].Cmd != "$personal" {
+		t.Fatalf("expected user personal skill, got %#v", cmds)
+	}
+
+	hubCmds := discoverSkillSlashCmds("codex", skillSearchContext{})
+	if len(hubCmds) != 0 {
+		t.Fatalf("expected hub home fallback to be isolated, got %#v", hubCmds)
+	}
+}
+
+func TestSkillSearchContextForRequestUsesSessionOwner(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+	s.sessions[42] = &session{
+		ID:        42,
+		Provider:  "codex",
+		HomeDir:   "/home/alice",
+		CodexHome: "/home/alice/.codex-custom",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/slash-commands?provider=codex&session_id=42&token=tok", nil)
+	req.Host = "127.0.0.1:47777"
+
+	ctx := s.skillSearchContextForRequest("codex", req)
+	if ctx.HomeDir != "/home/alice" || ctx.CodexHome != "/home/alice/.codex-custom" {
+		t.Fatalf("unexpected session owner context: %#v", ctx)
+	}
+
+	wrongProvider := s.skillSearchContextForRequest("claude", req)
+	if wrongProvider != (skillSearchContext{}) {
+		t.Fatalf("provider mismatch should not use session context: %#v", wrongProvider)
+	}
+}
+
 func TestValidateSlashCmdSourceAllowsRawGitHubHTTPS(t *testing.T) {
 	src := "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/codex.md"
 	if err := validateSlashCmdSource(src); err != nil {

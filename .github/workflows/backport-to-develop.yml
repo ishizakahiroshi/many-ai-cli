@@ -1,0 +1,107 @@
+name: Backport to develop
+
+# Release タグ (v*.*.*) push の直後に main を develop へ自動 backport する。
+# hotfix を develop に戻し忘れる / hotfix branch を直接 develop に merge してしまう
+# 事故（v0.3.3, v0.3.4 で連続再発）の根本対策。
+#
+# clean merge できれば develop に直接 push する。競合があれば issue を作って
+# 手動マージを促す。release.yml と並行起動するが、互いに独立（こちらは develop に
+# しか触らない）なので順序依存はない。
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  backport:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+          # backport の push を CI から行うので、トリガー権限を持つ token が必要。
+          # 既定の GITHUB_TOKEN で contents:write スコープを使う（branch protection
+          # が develop に掛かっていない前提。掛けるときは別途 PAT に切り替えること）。
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch main
+        run: git fetch origin main:main
+
+      - name: Skip if already up-to-date
+        id: precheck
+        run: |
+          if git merge-base --is-ancestor main HEAD; then
+            echo "main は既に develop の祖先。backport 不要。"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Try clean merge
+        if: steps.precheck.outputs.skip != 'true'
+        id: merge
+        run: |
+          if git merge --no-ff main \
+              -m "Merge branch 'main' into develop (automated backport for ${{ github.ref_name }})"; then
+            echo "result=clean" >> "$GITHUB_OUTPUT"
+          else
+            git merge --abort || true
+            echo "result=conflict" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push develop on clean merge
+        if: steps.merge.outputs.result == 'clean'
+        run: git push origin develop
+
+      - name: Verify tag is ancestor of develop
+        if: steps.merge.outputs.result == 'clean'
+        run: |
+          if git merge-base --is-ancestor "${{ github.ref_name }}" develop; then
+            echo "OK: ${{ github.ref_name }} は develop の祖先。"
+          else
+            echo "::error::backport は成功したが ${{ github.ref_name }} が develop の祖先に入っていない。手動確認が必要。"
+            exit 1
+          fi
+
+      - name: Open issue on conflict
+        if: steps.merge.outputs.result == 'conflict'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --title "[backport needed] ${{ github.ref_name }}: main → develop merge conflict" \
+            --label "release" \
+            --body "$(cat <<'EOF'
+          自動 backport workflow が main → develop のマージで競合を検知しました。
+          手動でマージしてください。
+
+          ```powershell
+          git switch develop
+          git pull
+          git merge main --no-edit
+          # 競合を解消（CHANGELOG の Unreleased 節とリリース節は両方残す）
+          git push origin develop
+          ```
+
+          確認（最新タグが develop の祖先になっていれば OK）:
+
+          ```powershell
+          git merge-base --is-ancestor (git describe --tags --abbrev=0 main) develop
+          # 終了コード 0 = OK / 1 = develop が最新タグを取り込めていない
+          ```
+
+          関連 workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EOF
+          )"

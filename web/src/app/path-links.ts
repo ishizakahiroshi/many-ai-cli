@@ -11,15 +11,23 @@ import { FilesTabManager, FilesPreview } from './files-view.js';
 export let pathPopupEl = null;
 export let pathPopupHideTimer = null;
 
+export function cancelPathPopupHideTimer() {
+  if (pathPopupHideTimer) {
+    clearTimeout(pathPopupHideTimer);
+    pathPopupHideTimer = null;
+  }
+}
+
 export function getOrCreatePathPopup() {
   if (pathPopupEl) return pathPopupEl;
   pathPopupEl = document.createElement('div');
   pathPopupEl.id = 'path-link-popup';
   pathPopupEl.className = 'path-link-popup';
-  pathPopupEl.addEventListener('mouseenter', () => {
-    if (pathPopupHideTimer) { clearTimeout(pathPopupHideTimer); pathPopupHideTimer = null; }
-  });
+  pathPopupEl.addEventListener('mouseenter', () => { cancelPathPopupHideTimer(); });
   pathPopupEl.addEventListener('mouseleave', () => { scheduleHidePathPopup(); });
+  pathPopupEl.addEventListener('mousedown', (e) => { e.stopPropagation(); });
+  pathPopupEl.addEventListener('click', (e) => { e.stopPropagation(); });
+  pathPopupEl.addEventListener('contextmenu', (e) => { e.stopPropagation(); });
   document.body.appendChild(pathPopupEl);
   return pathPopupEl;
 }
@@ -77,6 +85,7 @@ export function getPathOpenItem(filePath, sessionId) {
 }
 
 export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 'file') {
+  cancelPathPopupHideTimer();
   const popup = getOrCreatePathPopup();
   popup.innerHTML = '';
   popup.hidden = false;
@@ -145,7 +154,8 @@ export function renderPathPopupItems(popup, items, clientX, clientY) {
     const btn = document.createElement('button');
     btn.className = 'path-link-popup-item';
     btn.textContent = item.icon + ' ' + t(item.key);
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       Promise.resolve(item.action(btn)).finally(() => {
         popup.hidden = true;
       });
@@ -171,6 +181,7 @@ export function renderPathPopupItems(popup, items, clientX, clientY) {
 // 「🗔 モーダルで開く」「🚀 既定のアプリで開く」の 2 つだけに絞る。
 // プレビュー不能な拡張子のときはモーダル項目を出さず既定アプリのみにする。
 export function showFileActionsPopup(filePath, clientX, clientY, sessionId) {
+  cancelPathPopupHideTimer();
   const popup = getOrCreatePathPopup();
   popup.innerHTML = '';
   popup.hidden = false;
@@ -477,7 +488,16 @@ export function appendLinkedText(container, text, sessionId) {
     link.className = 'tool-output-path-link';
     link.textContent = c.text;
     link.tabIndex = 0;
-    link.addEventListener('click', (e) => showPathPopup(resolvedPath, e.clientX, e.clientY, sessionId));
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showPathPopup(resolvedPath, e.clientX, e.clientY, sessionId);
+    });
+    link.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showPathPopup(resolvedPath, e.clientX, e.clientY, sessionId);
+    });
     link.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();

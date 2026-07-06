@@ -1,0 +1,85 @@
+# [様子見] 障害対応記録: UI spawn が last_model を再注入し CLI 既定モデル（Opus 4.8 1M 窓）を 200K へ上書き
+
+> 最終更新: 2026-06-20(土) 20:59:37
+
+## 症状
+
+many-ai-cli ダッシュボードの spawn パネルから新規に開いた Claude セッションが、ターミナルで `many-ai-cli claude` を直接起動した場合と違って **200K 窓の `claude-opus-4-8`** で開いてしまう。`/model` の既定は「Opus 4.8 (1M context) (default)」なのに、UI から開くと毎回 200K になる。
+
+その結果、固定オーバーヘッド（System tools 37k + Memory/CLAUDE.md @imports 32.6k ≈ 70k）＋ファイル全文 Read ＋ xhigh 思考だけで 200K 窓がすぐ逼迫し、1 ターンが極端に重くなって「無反応」に見える（別記録 `bugfix_claude-no-response-heavy-turn-card-viz_2026-06-20.md` の症状の上流原因）。
+
+再現手順:
+1. ターミナルで一度 `many-ai-cli claude` を起動し、`/model` で「Opus 4.8 (1M context)」を選ぶ（または既定のまま）
+2. ダッシュボードの spawn パネルからモデル欄を空（auto）にして Claude を新規起動する
+3. その新規セッションで `/context` を見ると `claude-opus-4-8` / `200k tokens` になっている（1M にならない）
+
+影響: UI から開く全 AI プロバイダの新規セッション。特に Claude の 1M 窓が 200K へ縮められる点が実害。ターミナル直起動（wrapper 経由・`--model` 注入なし）は影響を受けない。
+
+## 根本原因（root cause）
+
+UI spawn が「前回使ったモデル（last_model）」を `--model` フラグで**黙って再注入**し、CLI 自身の既定モデルを上書きしていた。
+
+- `internal/hub/spawn_handler.go` の `case "claude":` が `s.getLastModel("claude")` の値を、モデル未選択（auto）でも `resolvedModel` に流し込み `--model` で付与していた。last_model には過去に保存された `claude-opus-4-8`（200K）が入っていたため、CLI 既定の 1M 窓を 200K へ縮めていた。
+- `case "codex":` も同型で `if resolvedModel == "" { resolvedModel = currentModel }` により last_model を再注入していた。
+- クライアント `web/src/app/spawn-panel.ts` の `loadSpawnSettings()` が保存済み `s.model` をモデル欄へ prefill して明示送信していたため、サーバ側が空欄前提でも結局モデルが送られていた（サーバ・クライアント両輪で上書きが成立）。
+- copilot / cursor-agent / grok / opencode は元々 `resolvedModel != ""` のときだけ `--model` を付ける実装で、サーバ側の last_model 再注入は無かった（ただしクライアント prefill の影響は受けていた）。
+
+要するに「前回モデルを覚えて復元する」便利機能が、CLI が `/model` で持っている既定を侵食する設計ミスだった。
+
+## 修正内容
+
+「明示選択が無ければ `--model` を付けず、各 CLI 自身の既定を尊重する」方針へ統一。last_model は risk 判定の基準値としてのみ残す。
+
+```go
+// before（claude / codex とも last_model を resolvedModel へ再注入）
+currentModel := s.getLastModel("codex")
+if currentModel != "" && isLocalRoute(s.resolveRoute("codex", currentModel)) {
+    currentModel = ""
+}
+if resolvedModel == "" {
+    resolvedModel = currentModel   // ← CLI 既定を上書きする原因
+}
+risk := evaluateCodexRisk(currentModel, resolvedModel, body.Sandbox, body.AskForApproval)
+
+// after（再注入を撤去。空欄なら --model を付けない）
+currentModel := s.getLastModel("codex")
+risk := evaluateCodexRisk(currentModel, resolvedModel, body.Sandbox, body.AskForApproval)
+```
+
+claude ケースも同様に last_model フォールバックを撤去し、`resolvedModel != ""`（明示選択）のときだけ `--model` を付ける形に統一した。
+
+クライアント側は prefill を停止:
+
+```ts
+// before
+if (s.model !== undefined) setSpawnModelValue(s.model);
+
+// after（モデル欄は空＝CLI 既定。保存自体は後方互換で残すが読み込まない）
+// （prefill コードを削除し、コメントで意図を明記）
+```
+
+加えて `resources/models/defaults.json` の anthropic 一覧に 1M 変種（`claude-opus-4-8[1m]` / `claude-opus-4-7[1m]`）を追加し、「明示的に 1M を選びたい」ケースの候補を用意した（このファイルは GitHub から取得・24h TTL のため、選択肢への反映には push が要る。既定の 1M 化自体はサーバ・クライアント修正だけで達成される）。
+
+## 変更ファイル
+
+| ファイル | 内容 |
+|---|---|
+| `internal/hub/spawn_handler.go` | claude / codex の last_model 再注入を撤去。明示選択時のみ `--model` を付与。copilot/cursor/grok/opencode は元から無いため変更なし |
+| `web/src/app/spawn-panel.ts` | `loadSpawnSettings()` のモデル prefill を停止（欄は空＝CLI 既定）。保存は後方互換で残置 |
+| `resources/models/defaults.json` | anthropic 一覧に `Claude Opus 4.8 (1M)` / `Opus 4.7 (1M)` を追加 |
+
+## 検証
+
+- `go vet ./internal/hub/` 通過（EXIT=0）
+- `tsc --noEmit` 型チェック通過（EXIT=0）
+- `defaults.json` JSON パース OK
+- <TODO: `make build` ＋リロード後、UI から Claude を新規起動し `/context` が 1M（1000000 / `claude-opus-4-8[1m]` 相当）で開くことを確認>
+- <TODO: UI から codex を新規起動し、意図しない `--model` が付かない（CLI 既定で起動する）ことを spawn ログで確認>
+- <TODO: defaults.json を push して 24h 以内に spawn パネルの datalist に「Claude Opus 4.8 (1M)」が出ることを確認>
+
+## 備忘
+
+- ターミナル直起動（`many-ai-cli claude`）は元から `--model` を注入しないため CLI 既定を尊重していた。UI 経由だけが上書きしていた＝「ターミナルだと 1M、UI だと 200K」という非対称の正体。
+- last_model の sticky 保存（`setLastModel`）と env preset / ローカル LLM route の扱いは従来どおり。今回外したのは「空欄時のフォールバック復元」だけ。
+- 関連記録: `bugfix_claude-no-response-heavy-turn-card-viz_2026-06-20.md`（無反応の症状とカード可視化）。本記録はその**上流の真因と恒久対策**にあたる。
+- 1M 窓利用時は `% context used` ゲージが入力トークンのみカウントする既知挙動（GitHub issue #28167）が残るため、可視化側の注意書きはそのまま有効。

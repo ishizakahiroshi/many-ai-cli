@@ -26,6 +26,7 @@
 | `/mention` | Attach a file to the conversation. | Point Codex at specific files to inspect. |
 | `/model` | Choose the active model and reasoning effort. | Switch models or reasoning effort before running a task. |
 | `/new` | Start a new conversation in the same CLI session. | Reset chat context without leaving the terminal. |
+| `/orchestrate` | Split work into child AI sessions using the Hub board API. | Coordinate design, implementation, and test workers from one conductor session. |
 | `/permissions` | Set what Codex can do without asking first. | Relax or tighten approval requirements mid-session. |
 | `/personality` | Choose a communication style for responses. | Make Codex more concise, explanatory, or collaborative. |
 | `/plan` | Switch to plan mode and optionally send a prompt. | Request an execution plan before implementation work. |

@@ -71,6 +71,58 @@
 }
 #kill-all-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
+/* C1: plan_orchestration-spawn-ui-exposure.md — オーケストレーション独立ボタン。
+   停止/gridと同じ丸アイコンスタイルに揃える。 */
+.orchestration-sidebar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  opacity: 0.82;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+}
+.orchestration-icon { width: 17px; height: 17px; display: block; }
+.orchestration-sidebar-btn:hover { background: var(--accent); color: var(--bg); opacity: 1; }
+.orchestration-sidebar-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* C1: 子役割の詳細設定アコーディオン内の役割×CLI×モデル表 */
+.spawn-orchestration-section { margin-top: 6px; }
+.spawn-role-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0 4px;
+  font-size: 0.8rem;
+}
+.spawn-role-table th, .spawn-role-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+.spawn-role-table th { color: var(--muted); font-weight: 600; font-size: 0.74rem; }
+.spawn-role-table tr:last-child td { border-bottom: none; }
+.spawn-role-table td:first-child { white-space: nowrap; font-weight: 600; }
+.spawn-role-cli, .spawn-role-model {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 3px 5px;
+  font-size: 0.78rem;
+  font-family: inherit;
+}
+.spawn-role-model:disabled { opacity: 0.4; cursor: not-allowed; }
+
 #new-session-panel {
   background: var(--bg-elev);
   border: 1px solid var(--line);
@@ -205,7 +257,7 @@
 .cwd-dropdown {
   position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 200;
   background: var(--bg-elev); border: 1px solid var(--line-soft); border-radius: var(--radius-sm);
-  max-height: 180px; overflow-y: auto; list-style: none; padding: 2px 0; margin: 0;
+  max-height: 50vh; overflow-y: auto; list-style: none; padding: 2px 0; margin: 0;
   box-shadow: 0 4px 16px rgba(0,0,0,0.6);
 }
 .cwd-dropdown-item {
@@ -268,6 +320,80 @@
 .cwd-dropdown-item.dragging { opacity: 0.45; cursor: grabbing; }
 .cwd-dropdown-item.drop-before { box-shadow: inset 0 2px 0 var(--accent, #6ea8fe); }
 .cwd-dropdown-item.drop-after  { box-shadow: inset 0 -2px 0 var(--accent, #6ea8fe); }
+
+/* chip 行: 検索ドリブン化 C2 */
+.cwd-dropdown-chips {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 8px 6px;
+  border-bottom: 1px solid var(--line-soft); background: var(--bg-elev2, rgba(255,122,61,0.04));
+}
+.cwd-dropdown-chips.has-no-match {
+  outline: 1px solid var(--accent);
+}
+.cwd-dropdown-chip {
+  background: var(--bg); color: var(--text); border: 1px solid var(--line-soft);
+  border-radius: 999px; padding: 3px 9px; font: inherit; font-size: 0.78rem;
+  font-family: ui-monospace, Menlo, Consolas, monospace; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.cwd-dropdown-chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+.cwd-dropdown-chip.is-active {
+  border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text);
+}
+.chip-count {
+  font-size: 0.7rem; color: var(--muted); font-family: inherit;
+}
+/* chip 圧縮 UI: launcher 1 個＋ホバー/クリックで popover 展開 */
+.cwd-dropdown-chip-collapsed {
+  position: relative;
+}
+.cwd-dropdown-chip-launcher {
+  background: var(--bg); color: var(--text); border: 1px solid var(--line-soft);
+  border-radius: 999px; padding: 3px 9px; font: inherit; font-size: 0.78rem;
+  font-family: ui-monospace, Menlo, Consolas, monospace; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.cwd-dropdown-chip-launcher:hover {
+  border-color: var(--accent); background: var(--accent-soft);
+}
+.cwd-dropdown-chip-launcher.is-active {
+  border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text);
+}
+.cwd-dropdown-chip-launcher .chip-icon { font-size: 0.85rem; line-height: 1; }
+.cwd-dropdown-chip-launcher .chip-caret { font-size: 0.7rem; opacity: 0.7; }
+.cwd-dropdown-chip-popover {
+  display: none;
+  position: absolute; top: 100%; left: 0;
+  margin-top: 4px; padding: 6px;
+  background: var(--bg); border: 1px solid var(--line-soft); border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  flex-wrap: wrap; gap: 6px;
+  min-width: 220px; max-width: 360px;
+  z-index: 10;
+}
+/* マウスが launcher と popover の間を渡る橋（透明な hover hit area） */
+.cwd-dropdown-chip-collapsed::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 6px;
+  pointer-events: none;
+}
+.cwd-dropdown-chip-collapsed:hover::after { pointer-events: auto; }
+.cwd-dropdown-chip-collapsed:hover .cwd-dropdown-chip-popover,
+.cwd-dropdown-chip-collapsed:focus-within .cwd-dropdown-chip-popover,
+.cwd-dropdown-chip-collapsed.is-open .cwd-dropdown-chip-popover {
+  display: flex;
+}
+/* 検索結果行マグニファイアアイコン */
+.cwd-dropdown-mag {
+  flex-shrink: 0; width: 18px; text-align: center; opacity: 0.8; color: var(--muted);
+}
+/* 検索結果セクション見出し */
+.cwd-dropdown-header.is-search {
+  color: var(--accent-text);
+}
+/* 0 件案内 */
+.cwd-dropdown-no-match {
+  padding: 6px 8px; font-size: 0.8rem; color: var(--muted); cursor: default; user-select: none;
+}
+.cwd-dropdown-no-match:hover { background: transparent; }
 
 .spawn-select,
 .spawn-input {

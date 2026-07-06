@@ -1,0 +1,226 @@
+# [様子見] C2: GitHub 表側の即効改修（homepageUrl / description / topics / README 冒頭）
+
+> 親: [`plan_promotion-campaign.md`](plan_promotion-campaign.md)
+> 最終更新: 2026-06-21(日) 22:02:56
+> 親 plan の C2「リポジトリ即効改修」のうち、**他工程に依存せず今すぐ実行できる部分** を切り出した子 plan。ヒーロー GIF/画像差し替え（C3 デモ素材依存）はスコープ外。
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | fix | `homepageUrl` の旧名残骸を修正 | [並列OK with C2, C3, C4] |
+| C2 | fix | `description` を新フックに刷新 | [並列OK with C1, C3, C4] |
+| C3 | fix | `repositoryTopics` 追加（8 → 16） | [並列OK with C1, C2, C4] |
+| C4 | fix | README.md / README.ja.md 冒頭の 1 行目刷新 | [並列OK with C1, C2, C3] |
+
+実行順序: 全 C 並列可。1 セッションで一気にやってよい。
+
+---
+
+## 目的
+
+GitHub リポジトリの **「初訪問者が 3 秒で見る情報」** を、確定済みの売り文句（[`plan_promotion-campaign.md`](plan_promotion-campaign.md) 概要参照）に合わせて即時更新する。スマホ UI 完成や素材撮影を待たず、いつでも刈れる「実行容易・効果持続」な打ち手だけを集約。
+
+スコープ外（親 plan C2 の残務として残す）:
+- ヒーロー GIF/スクショ差し替え（親 C3 デモ素材完成後に親 C2 で実施）
+- README 中盤以降の構成見直し（必要なら別子 plan で別途）
+
+## 前提
+
+- リポジトリ実体: `ishizakahiroshi/many-ai-cli`（`git remote get-url origin` で確認）
+- gh CLI は認証済み（`local-accounts.md` 参照）
+- 親 plan で確定済みの「一行フック」「媒体ごとのヒーロー素材使い分け」を踏襲する
+- ビルド・コミット・push は本子 plan の範囲外。**作業は worktree ローカル編集と `gh repo edit` まで**
+
+## 実行前チェック
+
+開始前に以下を 1 回だけ確認:
+
+```powershell
+# 現在地確認
+gh repo view ishizakahiroshi/many-ai-cli --json description,homepageUrl,repositoryTopics
+```
+
+期待される現状（変更前）:
+- `description`: "Local web dashboard for managing approvals and monitoring parallel AI coding CLI sessions."
+- `homepageUrl`: `https://github.com/ishizakahiroshi/ai-cli-hub/releases` ← 旧名残骸
+- `topics`: ai-cli, claude-code, codex-cli, coding-agent, dashboard, developer-tools, websocket, xtermjs（8 個）
+
+---
+
+## C1: `homepageUrl` の旧名残骸を修正
+
+### 作業内容
+
+- `homepageUrl` が `ishizakahiroshi/ai-cli-hub/releases`（リネーム前の旧名）を指している残骸を、現リポジトリの releases に修正
+
+### コマンド
+
+```powershell
+gh repo edit ishizakahiroshi/many-ai-cli --homepage "https://github.com/ishizakahiroshi/many-ai-cli/releases"
+```
+
+### 完了条件
+
+- `gh repo view ishizakahiroshi/many-ai-cli --json homepageUrl` の出力が `https://github.com/ishizakahiroshi/many-ai-cli/releases` になっている
+
+---
+
+## C2: `description` を新フックに刷新
+
+### 採用文面（350 字制限内 / 約 142 字）
+
+```
+Run Claude Code, Codex, Copilot, Cursor, and Grok CLIs in parallel — approve every session from one browser tab, even from your phone.
+```
+
+採用根拠:
+- プロダクト名を列挙して GitHub 検索の発見性を上げる
+- 「parallel」「one browser tab」で確定済みフックを再現
+- 「even from your phone」で実績ある集客角度を冒頭近くに残す
+
+### コマンド
+
+```powershell
+gh repo edit ishizakahiroshi/many-ai-cli --description "Run Claude Code, Codex, Copilot, Cursor, and Grok CLIs in parallel — approve every session from one browser tab, even from your phone."
+```
+
+### 完了条件
+
+- `gh repo view` の `description` が上記文面と一致する
+
+---
+
+## C3: `repositoryTopics` 追加（8 → 16）
+
+### 追加するトピック（8 個）
+
+```
+copilot-cli
+cursor-agent
+grok-cli
+multi-provider
+parallel-agents
+web-push
+pwa
+approval-ui
+```
+
+### 維持するトピック（8 個・既存）
+
+```
+ai-cli
+claude-code
+codex-cli
+coding-agent
+dashboard
+developer-tools
+websocket
+xtermjs
+```
+
+### コマンド
+
+gh の `--add-topic` は複数渡せる。1 回で済ませる:
+
+```powershell
+gh repo edit ishizakahiroshi/many-ai-cli `
+  --add-topic copilot-cli `
+  --add-topic cursor-agent `
+  --add-topic grok-cli `
+  --add-topic multi-provider `
+  --add-topic parallel-agents `
+  --add-topic web-push `
+  --add-topic pwa `
+  --add-topic approval-ui
+```
+
+### 完了条件
+
+- `gh repo view ... --json repositoryTopics` の出力が 16 個（または 17, 18 — GitHub 側の自動補完がある場合）
+- 上記追加分 8 個がすべて含まれている
+
+### 注意
+
+- GitHub のトピックは小文字英数とハイフンのみ。上記 8 個は適合済み
+- 既存トピックは触らない（`--remove-topic` は使わない）
+- 上限は 20 個。16 個なら余裕
+
+---
+
+## C4: README.md / README.ja.md 冒頭刷新
+
+### 採用文面
+
+#### README.md（英）
+
+```markdown
+**Never miss an approval prompt — even from your phone.** Run `Claude Code`, `Codex CLI`, `GitHub Copilot CLI`, `Cursor Agent CLI`, and `Grok Build CLI` in parallel; `many-ai-cli` watches every session in a PTY and pushes a notification to your desktop or phone the moment any one is blocked waiting for your approval — so you don't have to babysit terminals. It also gives you a local web dashboard to handle approvals, monitoring, and terminals across multiple sessions in one place.
+```
+
+差分のポイント:
+- 1 文目末尾に「— even from your phone」を追加（実績ある集客角度）
+- 「Run ... in parallel」を 2 文目冒頭に前出し（製品差別化軸を強調）
+- CLI 名を ``` ` ``` で囲んでコード調にし、プロダクト名としての強さを足す
+- 残り（"so you don't have to babysit terminals" 以降）は現状維持
+
+#### README.ja.md
+
+```markdown
+**AI コーディング CLI の承認待ちを見逃さない — スマホからでも。** `Claude Code` / `Codex CLI` / `GitHub Copilot CLI` / `Cursor Agent CLI` / `Grok Build CLI` を並列実行できる Web ダッシュボードです。`many-ai-cli` は各 CLI を PTY でラップし、承認待ちを検出した瞬間にデスクトップ／スマホへ通知します。ターミナルを見張り続ける必要はありません。あわせて、複数セッションの承認・監視・ターミナルを 1 画面の Web ダッシュボードで操作できます。
+```
+
+差分のポイント:
+- 1 文目末尾に「— スマホからでも」を追加
+- 「並列実行できる Web ダッシュボードです」を 2 文目に前出し
+- CLI 名を ``` ` ``` で囲んでコード調に統一
+- 残りは現状維持
+
+### 編集方法
+
+両ファイルとも 9 行目（最初の太字段落）を対象に Edit ツールで置換する。
+
+```
+README.md 9 行目: 上記英文に置換
+README.ja.md 9 行目: 上記和文に置換
+```
+
+### 注意
+
+- 言語切替リンク（[日本語版 README はこちら] / [English README]）の位置・形式は触らない
+- バッジ・画像（assets/readme-dashboard.png）の場所は触らない
+- アーキ図（```` ```...``` ````）は触らない
+
+### 完了条件
+
+- README.md 9 行目が新英文と一致
+- README.ja.md 9 行目が新和文と一致
+- 他の行に副作用が無い（git diff で 1 行差分のみであること）
+
+---
+
+## 終了後の手続き
+
+すべての C 完了後、以下を実施:
+
+1. **自身の `## context配分` 表** を `plan` → `fix` に更新（4 行とも）
+2. **自身の H1 ラベル** を `[計画]` → `[様子見]` に変更（全 C `fix` なので自動）
+3. **親 plan [`plan_promotion-campaign.md`](plan_promotion-campaign.md)** の `## context配分` 表で C2 行を `plan` → `fix` に更新
+4. 親 plan の C2 セクションにも完了済みであることを 1 行で追記（例: 「本子 plan で homepageUrl / description / topics / README 冒頭を完了。ヒーロー画像差し替えは C3 完了後に親側で残務として実施」）
+5. 親 plan の H1 ラベルは触らない（他 C が残っているため `[計画]` のまま）
+
+### 完了報告フォーマット（親 / ユーザーへ返す形）
+
+3 点だけ:
+
+- 完了: C1〜C4 すべて fix
+- 変更ファイル: GitHub repo settings (homepageUrl, description, 8 topics added) / README.md / README.ja.md
+- 検証: `gh repo view ... --json description,homepageUrl,repositoryTopics` で期待値一致を確認 / `git diff README.md README.ja.md` で意図通り 1 行ずつの変更
+
+## 自走運用の境界線
+
+- 親 plan の停止条件はそのまま継承
+- 本子 plan で追加の停止条件:
+  - `gh repo edit` が認証エラー（401/403）で失敗した場合は停止しユーザー報告（`local-accounts.md` の認証復旧手順参照）
+  - GitHub 側がトピックを拒否した場合（自動補完で重複認識される等）は該当トピックだけスキップして続行
+  - README.md の 9 行目が想定と異なる構造になっていた場合は停止しユーザー確認（過去の編集で文面がずれている可能性）

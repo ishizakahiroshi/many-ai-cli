@@ -48,6 +48,7 @@
 | `/memory` | Edit `CLAUDE.md` memory files and manage auto-memory. | When updating project knowledge or context. |
 | `/mobile` | Show a QR code to download the Claude mobile app. | When you want to access Claude on your phone. |
 | `/model` | Change model selection. | Switch models for speed, quality, or cost tradeoffs. |
+| `/orchestrate` | Split work into child AI sessions using the Hub board API. | Coordinate design, implementation, and test workers from one conductor session. |
 | `/passes` | Share a free week of Claude Code with friends. | When inviting others to try Claude Code. |
 | `/permissions` | Manage allow, ask, and deny rules for tool permissions. | When configuring security and access controls. |
 | `/plan` | Enter plan mode directly from the prompt. | When you want to review planned changes before execution. |
