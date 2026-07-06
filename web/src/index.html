@@ -2,13 +2,12 @@
 <html lang="">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
   <title>MANY-AI-CLI</title>
   <link id="app-favicon" rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <!-- C6: theme-color はヘッダー/ボディ基調色 --bg (#0d0f17) に同期（manifest 側も同値） -->
-  <meta name="theme-color" content="#0d0f17">
+  <meta name="theme-color" content="#08090d">
   <!-- 標準の mobile-web-app-capable を併記（apple- 版のみだと Chrome が deprecation 警告を出す） -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,7 +16,6 @@
   <link rel="stylesheet" href="/vendor/xterm.min.css">
   <link rel="stylesheet" href="/vendor/hljs-github-dark.min.css">
   <link rel="stylesheet" href="/styles.css">
-  <link rel="stylesheet" href="/styles/mobile-home.css">
 </head>
 <body>
   <header>
@@ -32,7 +30,7 @@
     <button id="reconnect-btn" hidden>↺ <span data-i18n="reconnect">reconnect</span></button>
     <div class="usage-menu" id="usage-menu">
       <button class="usage-menu-btn" id="usage-menu-btn" aria-haspopup="true" aria-expanded="false">
-        <svg class="usage-menu-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 14" width="80" height="14" aria-hidden="true">
+        <svg class="usage-menu-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 14" width="50" height="14" aria-hidden="true">
           <circle class="prov-shape claude" cx="5" cy="7" r="4.5" stroke-width="1.6"/>
           <text class="prov-letter claude" x="5" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">C</text>
           <circle class="prov-shape codex" cx="15" cy="7" r="4.5" stroke-width="1.6"/>
@@ -41,14 +39,12 @@
           <text class="prov-letter copilot" x="25" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">P</text>
           <circle class="prov-shape cursor-agent" cx="35" cy="7" r="4.5" stroke-width="1.6"/>
           <text class="prov-letter cursor-agent" x="35" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">r</text>
-          <circle class="prov-shape opencode" cx="45" cy="7" r="4.5" stroke-width="1.6"/>
-          <text class="prov-letter opencode" x="45" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
-          <circle class="prov-shape grok" cx="55" cy="7" r="4.5" stroke-width="1.6"/>
-          <text class="prov-letter grok" x="55" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">G</text>
-          <rect class="prov-shape ollama" x="60.5" y="2.5" width="9" height="9" rx="2" stroke-width="1.6"/>
-          <text class="prov-letter ollama" x="65" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
-          <rect class="prov-shape lm-studio" x="70.5" y="2.5" width="9" height="9" rx="2" stroke-width="1.6"/>
-          <text class="prov-letter lm-studio" x="75" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">L</text>
+          <g style="display:none">
+            <circle class="prov-shape opencode" cx="45" cy="7" r="4.5" stroke-width="1.6"/>
+            <text class="prov-letter opencode" x="45" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
+          </g>
+          <rect class="prov-shape ollama" x="40.5" y="2.5" width="9" height="9" rx="2" stroke-width="1.6"/>
+          <text class="prov-letter ollama" x="45" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
         </svg>
         <span data-i18n="usage_menu_btn">Usage</span>
         <svg class="usage-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -75,24 +71,14 @@
           <span class="usage-item-name">Cursor Agent</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
-        <a id="usage-link-opencode" class="usage-dropdown-item" href="https://opencode.ai/go" target="_blank" rel="noopener noreferrer">
+        <a id="usage-link-opencode" class="usage-dropdown-item" href="#" target="_blank" rel="noopener noreferrer" hidden>
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape opencode" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter opencode" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">O</text></svg>
           <span class="usage-item-name">OpenCode</span>
-          <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-        </a>
-        <a id="usage-link-grok" class="usage-dropdown-item" href="https://grok.com/?_s=usage" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape grok" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter grok" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">G</text></svg>
-          <span class="usage-item-name">Grok Build</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
         <a id="usage-link-ollama" class="usage-dropdown-item" href="http://localhost:11434" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect class="prov-shape ollama" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter ollama" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">O</text></svg>
           <span class="usage-item-name">Ollama</span>
-          <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-        </a>
-        <a id="usage-link-lm-studio" class="usage-dropdown-item" href="http://localhost:1234" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect class="prov-shape lm-studio" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter lm-studio" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">L</text></svg>
-          <span class="usage-item-name">LM Studio</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
       </div>
@@ -127,7 +113,7 @@
     </div>
     <div class="settings-body">
       <details class="settings-section" data-section="general">
-        <summary class="settings-section-title"><span data-i18n="settings_general">General</span><span class="settings-section-current" data-section="general"></span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_general">General</span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_language">Language</span>
@@ -164,7 +150,7 @@
         </div>
       </details>
       <details class="settings-section" data-section="appearance">
-        <summary class="settings-section-title"><span data-i18n="settings_appearance">外観</span><span class="settings-section-current" data-section="appearance"></span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_appearance">外観</span></summary>
         <div class="settings-section-body">
           <div class="settings-row settings-avatar-preview-row">
             <div id="settings-avatar-preview" class="settings-avatar-circle"></div>
@@ -189,7 +175,7 @@
         </div>
       </details>
       <details class="settings-section" data-section="token-statusbar">
-        <summary class="settings-section-title"><span data-i18n="settings_token_statusbar">Token/Cost Statusbar</span><span class="settings-section-current" data-section="token-statusbar"></span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_token_statusbar">Token/Cost Statusbar</span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_token_statusbar_toggle">トークン/コスト バー</span>
@@ -199,12 +185,10 @@
             </label>
           </div>
           <div class="settings-note" data-i18n="settings_token_statusbar_desc">画面下部にアクティブセッションのコスト・モデル・経過時間を常時表示します。</div>
-          <div class="settings-subhead" data-i18n="settings_token_statusbar_segments">表示するセグメント</div>
-          <div id="tsb-segments-toggles" class="tsb-segments-toggles"></div>
         </div>
       </details>
       <details class="settings-section" data-section="session">
-        <summary class="settings-section-title"><span data-i18n="settings_session">Session</span><span class="settings-section-current" data-section="session"></span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_session">Session</span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_idle_timeout">Idle timeout (min)</span>
@@ -219,7 +203,7 @@
         </div>
       </details>
       <details class="settings-section" data-section="remote-auth">
-        <summary class="settings-section-title"><span data-i18n="settings_remote_auth">リモートアクセス保護</span><span class="settings-section-current" data-section="remote-auth"></span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_remote_auth">リモートアクセス保護</span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_revoke_all">全アクセスを失効</span>
@@ -243,7 +227,7 @@
         </div>
       </details>
       <details class="settings-section" data-section="log">
-        <summary class="settings-section-title"><span data-i18n="settings_log">Log Settings</span><button id="log-dir-btn" class="log-dir-btn" data-i18n-tooltip="loading">📁</button><a id="log-dir-path" class="log-dir-path"></a><span class="settings-section-current" data-section="log"></span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_log">Log Settings</span><button id="log-dir-btn" class="log-dir-btn" data-i18n-tooltip="loading">📁</button></summary>
         <div class="settings-section-body">
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_file_log">File log</span>
@@ -302,7 +286,7 @@
         </div>
       </details>
       <details class="settings-section" data-section="approval-hub">
-        <summary class="settings-section-title"><span data-i18n="settings_approval_hub">承認ボタン機能</span><span class="settings-section-current" data-section="approval-hub"></span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_approval_hub">承認ボタン機能</span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_approval_toggle">承認ボタン</span>
@@ -323,7 +307,7 @@
         </div>
       </details>
       <details class="settings-section" data-section="approval-patterns">
-        <summary class="settings-section-title"><span data-i18n="settings_approval_patterns_title">承認検出パターン</span><span class="settings-section-current" data-section="approval-patterns"></span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_approval_patterns_title">承認検出パターン</span></summary>
         <div class="settings-section-body">
           <div class="settings-note" data-i18n="settings_approval_patterns_desc">承認 UI を検出するための文言。CLI のメッセージが変わったり、誤検出する場合に調整できます。</div>
           <div class="settings-row">
@@ -333,8 +317,6 @@
               <option value="codex" data-i18n="settings_approval_patterns_codex">Codex</option>
               <option value="copilot" data-i18n="settings_approval_patterns_copilot">GitHub Copilot</option>
               <option value="cursor-agent" data-i18n="settings_approval_patterns_cursor_agent">Cursor Agent</option>
-              <option value="opencode" data-i18n="settings_approval_patterns_opencode">OpenCode</option>
-              <option value="grok" data-i18n="settings_approval_patterns_grok">Grok Build</option>
               <option value="common" data-i18n="settings_approval_patterns_common">共通</option>
             </select>
           </div>
@@ -357,7 +339,7 @@
         </div>
       </details>
       <details class="settings-section" data-section="voice">
-        <summary class="settings-section-title"><span data-i18n="settings_voice_title">音声入力</span><span class="settings-section-current" data-section="voice"></span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_voice_title">音声入力</span></summary>
         <div class="settings-section-body">
           <div class="settings-row settings-row--stacked">
             <span class="settings-label" data-i18n="settings_voice_engine">認識エンジン</span>
@@ -460,7 +442,7 @@
         </div>
       </details>
       <details class="settings-section" data-section="trigger">
-        <summary class="settings-section-title"><span data-i18n="settings_trigger_title">自動送信トリガー</span><span class="settings-section-current" data-section="trigger"></span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_trigger_title">自動送信トリガー</span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_trigger_toggle">自動送信</span>
@@ -476,7 +458,7 @@
         </div>
       </details>
       <details class="settings-section" data-section="file-open">
-        <summary class="settings-section-title"><span data-i18n="settings_file_open_title">ファイルリンク</span><span class="settings-section-current" data-section="file-open"></span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_file_open_title">ファイルリンク</span></summary>
         <div class="settings-section-body">
           <div class="settings-note" data-i18n="settings_file_open_desc">ターミナルや Files のファイルパスは OS 既定の関連付けアプリで開きます。ターミナルアプリのみ指定できます。</div>
           <div class="settings-row">
@@ -491,7 +473,7 @@
         </div>
       </details>
       <details class="settings-section" data-section="notify-sound">
-        <summary class="settings-section-title"><span data-i18n="settings_notify_sound">通知音</span><span class="settings-section-current" data-section="notify-sound"></span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_notify_sound">通知音</span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_desktop_notifications">デスクトップ通知</span>
@@ -584,7 +566,7 @@
         </div>
       </details>
       <details class="settings-section" data-section="quick-cmd">
-        <summary class="settings-section-title"><span data-i18n="settings_quick_cmd_title">クイックコマンド</span><span class="settings-section-current" data-section="quick-cmd"></span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_quick_cmd_title">クイックコマンド</span></summary>
         <div class="settings-section-body">
           <datalist id="quick-cmd-presets">
             <option value="/clear"></option>
@@ -654,7 +636,7 @@
         </div>
       </details>
       <details class="settings-section" data-section="input-tools">
-        <summary class="settings-section-title"><span data-i18n="settings_input_tools_title">入力補助ツール表示</span><span class="settings-section-current" data-section="input-tools"></span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_input_tools_title">入力補助ツール表示</span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_input_tools_pc">PC（広い画面）</span>
@@ -668,7 +650,7 @@
         </div>
       </details>
       <details class="settings-section" data-section="usage-links">
-        <summary class="settings-section-title"><span data-i18n="settings_usage_links_title">Usage Links</span><span class="settings-section-current" data-section="usage-links"></span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_usage_links_title">Usage Links</span></summary>
         <div class="settings-section-body">
           <div class="settings-note" data-i18n="settings_usage_links_desc">Header usage links. Leave blank to use the default URL.</div>
           <div class="settings-row">
@@ -692,16 +674,8 @@
             <input type="text" id="usage-link-opencode-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_opencode_placeholder" placeholder="OpenCode URL">
           </div>
           <div class="settings-row">
-            <span class="settings-label">Grok Build</span>
-            <input type="text" id="usage-link-grok-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_grok_placeholder" placeholder="Default: https://grok.com/?_s=usage">
-          </div>
-          <div class="settings-row">
             <span class="settings-label">Ollama</span>
             <input type="text" id="usage-link-ollama-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_ollama_placeholder" placeholder="Default: http://localhost:11434">
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">LM Studio</span>
-            <input type="text" id="usage-link-lm-studio-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_lm_studio_placeholder" placeholder="Default: http://localhost:1234">
           </div>
           <div class="settings-row">
             <button id="usage-links-reset-btn" class="slash-src-save-btn" data-i18n="settings_usage_links_reset">デフォルトに戻す</button>
@@ -709,7 +683,7 @@
         </div>
       </details>
       <details class="settings-section" data-section="slash-src">
-        <summary class="settings-section-title"><span data-i18n="settings_slash_src_title">スラッシュコマンドソース</span><span class="settings-section-current" data-section="slash-src"></span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_slash_src_title">スラッシュコマンドソース</span></summary>
         <div class="settings-section-body">
           <div class="settings-note" data-i18n="settings_slash_src_note">公式ドキュメントから自動取得します。必要な場合だけ URL を上書きしてください。</div>
           <div class="settings-row">
@@ -829,18 +803,10 @@
     </div>
   </div>
   <div id="app">
-    <button id="mobile-menu-btn" type="button" aria-label="Sessions" aria-expanded="false">☰<span class="mobile-badge" hidden></span></button>
-    <button id="mobile-session-title-btn" type="button" hidden aria-haspopup="true" aria-expanded="false"></button>
+    <button id="mobile-menu-btn" type="button" aria-label="Sessions" aria-expanded="false">☰</button>
     <div id="mobile-drawer-backdrop" hidden></div>
-    <button id="mobile-spawn-btn" type="button" aria-label="New Session" data-i18n="mobile_new_session">＋ 新規</button>
-    <section id="mobile-home" hidden aria-label="All sessions"></section>
+    <button id="mobile-spawn-btn" type="button" aria-label="New Session">+</button>
     <aside id="session-list">
-      <div id="mobile-drawer-content" hidden>
-        <div class="mobile-drawer-topbar">
-          <div id="mobile-drawer-summary" data-i18n="loading">...</div>
-          <button id="mobile-log-btn" type="button" hidden aria-label="Raw log">⛶</button>
-        </div>
-      </div>
       <div id="new-session-bar">
         <button id="kill-all-btn" data-i18n-tooltip="kill_all_tooltip" aria-label="Terminate all sessions">
           <svg class="kill-all-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
@@ -848,18 +814,8 @@
             <rect x="9" y="9" width="6" height="6" rx="1.2" fill="currentColor"/>
           </svg>
         </button>
-        <button id="detached-grid-launcher-btn" class="detached-grid-launcher-sidebar-btn" data-i18n-tooltip="dgl_sidebar_btn_tooltip" aria-label="Open Detached Grid Launcher" title="Open Detached Grid">⊞</button>
-        <!-- C1: plan_orchestration-spawn-ui-exposure.md — 停止/gridと同じ丸アイコンボタンで
-             オーケストレーション導線を追加。クリックで通常の起動フォームを開く（spawn-panel.ts）。 -->
-        <button id="orchestration-btn" class="orchestration-sidebar-btn" data-i18n-tooltip="orchestration_tooltip" aria-label="Start orchestration conductor session">
-          <svg class="orchestration-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-            <circle cx="12" cy="5" r="2.4"></circle>
-            <circle cx="5" cy="19" r="2.4"></circle>
-            <circle cx="19" cy="19" r="2.4"></circle>
-            <path d="M12 7.4V12M12 12L6.6 17M12 12L17.4 17"></path>
-          </svg>
-        </button>
         <button id="new-session-btn" data-i18n="new_session">+ New Session</button>
+        <button id="detached-grid-launcher-btn" class="detached-grid-launcher-sidebar-btn" data-i18n-tooltip="dgl_sidebar_btn_tooltip" aria-label="Open Detached Grid Launcher" title="Open Detached Grid">⊞</button>
       </div>
       <div id="new-session-panel" hidden>
         <div class="new-session-form">
@@ -869,8 +825,6 @@
               <option value="codex">Codex CLI</option>
               <option value="copilot">GitHub Copilot</option>
               <option value="cursor-agent">Cursor Agent</option>
-              <option value="opencode">OpenCode</option>
-              <option value="grok">Grok Build</option>
               <option value="shell">Shell</option>
             </select>
             <div id="spawn-provider-combobox" class="spawn-provider-combobox">
@@ -919,7 +873,7 @@
               <option value="plan" data-i18n="spawn_permission_plan">plan (confirm before changes)</option>
               <option value="acceptEdits" data-i18n="spawn_permission_accept_edits">acceptEdits (auto-allow edits only)</option>
               <option value="auto" data-i18n="spawn_permission_auto">auto (auto-allow safe operations)</option>
-              <option value="bypassPermissions" data-i18n="spawn_permission_bypass">⚠ Full access (bypassPermissions)</option>
+              <option value="bypassPermissions" data-i18n="spawn_permission_bypass">⚠ bypassPermissions (skip all)</option>
             </select>
           </div>
 
@@ -929,20 +883,18 @@
             <select id="spawn-sandbox" class="spawn-select">
               <option value="workspace-write" data-i18n="spawn_sandbox_workspace">sandbox: workspace-write (default)</option>
               <option value="read-only" data-i18n="spawn_sandbox_readonly">read-only (read only)</option>
-              <option value="danger-full-access" data-i18n="spawn_sandbox_full">⚠ Full access (danger-full-access)</option>
+              <option value="danger-full-access" data-i18n="spawn_sandbox_full">⚠ danger-full-access (unrestricted)</option>
             </select>
             <select id="spawn-ask-approval" class="spawn-select">
               <option value="on-request" data-i18n="spawn_approval_on_request">approval: on-request (default)</option>
               <option value="untrusted" data-i18n="spawn_approval_untrusted">untrusted (confirm untrusted only)</option>
-              <option value="never" data-i18n="spawn_approval_never">⚠ Skip approvals (never)</option>
+              <option value="never" data-i18n="spawn_approval_never">⚠ never (no approval)</option>
             </select>
           </div>
           <div id="spawn-claude-note" class="settings-note" data-i18n="spawn_claude_note" hidden>Uses the installed Claude Code. Authentication and permissions are managed by Claude.</div>
           <div id="spawn-codex-note" class="settings-note" data-i18n="spawn_codex_note" hidden>Uses the installed Codex CLI. Authentication and permissions are managed by Codex.</div>
           <div id="spawn-copilot-note" class="settings-note" data-i18n="spawn_copilot_note" hidden>Uses the installed GitHub Copilot CLI. Authentication and permissions are managed by Copilot.</div>
           <div id="spawn-cursor-agent-note" class="settings-note" data-i18n="spawn_cursor_agent_note" hidden>Uses the installed Cursor Agent CLI. Authentication and permissions are managed by Cursor.</div>
-          <div id="spawn-opencode-note" class="settings-note" data-i18n="spawn_opencode_note" hidden>Uses the installed OpenCode CLI. Run `opencode auth login` before starting. Free-tier models may take 1–2 minutes to respond.</div>
-          <div id="spawn-grok-note" class="settings-note" data-i18n="spawn_grok_note" hidden>Uses the installed Grok Build CLI (xAI). Requires a SuperGrok or X Premium+ subscription — the base X Premium plan cannot use it. Sign-in and quota stay in Grok.</div>
           <div id="spawn-shell-note" class="settings-note" data-i18n="spawn_shell_note" hidden>Opens the OS default shell (pwsh / bash). No AI-specific options apply.</div>
 
           <!-- C2: Detached 設定セクション -->
@@ -1012,32 +964,6 @@
             </div>
           </div>
 
-          <!-- 子セッションは承認バイパス（全許可）で自走する旨の注意。オーケストレーションモード時のみ表示
-               （bugfix_orchestration-codex-child-spawn-failures_2026-07-04.md: 子 spawn は全プロバイダで承認スキップが既定） -->
-          <div id="spawn-orchestration-bypass-note" class="settings-note" data-i18n="spawn_orchestration_bypass_note" hidden>⚠ Orchestration child sessions launch with approvals skipped (full access). Control comes from worktree isolation and your instructions.</div>
-
-          <!-- C1: plan_orchestration-spawn-ui-exposure.md — 「オーケストレーション」ボタンから開いた
-               ときだけ表示する任意設定。既定は閉じたまま（AI任せの軽量フロー）。 -->
-          <details class="settings-section spawn-orchestration-section" id="spawn-orchestration-section" hidden>
-            <summary class="settings-section-title">
-              <span data-i18n="spawn_orchestration_roles_title">子役割の詳細設定（任意）</span>
-              <span class="settings-section-current" id="spawn-orchestration-summary" data-i18n="spawn_orchestration_roles_summary_empty">未設定（AIが都度判断）</span>
-            </summary>
-            <div class="settings-section-body">
-              <table class="spawn-role-table" id="spawn-role-table">
-                <thead>
-                  <tr>
-                    <th data-i18n="spawn_role_table_role">役割</th>
-                    <th data-i18n="spawn_role_table_cli">CLI</th>
-                    <th data-i18n="spawn_role_table_model">モデル</th>
-                  </tr>
-                </thead>
-                <tbody id="spawn-role-table-body"></tbody>
-              </table>
-              <div class="settings-note" data-i18n="spawn_orchestration_roles_note">ここで決めた役割は conductor に伝わり、以後 AI はこの対応表を優先して子を生成します。使わない役割は CLI 欄を「使わない」のままにしてください。</div>
-            </div>
-          </details>
-
           <div class="new-session-actions">
             <button id="spawn-cancel-btn" class="spawn-btn-cancel" data-i18n="spawn_cancel">Cancel</button>
             <button id="spawn-launch-btn" class="spawn-btn-launch" data-i18n="spawn_launch">Launch</button>
@@ -1058,6 +984,7 @@
       <button class="view-tab" data-tab="split" type="button"><span>⇿</span> <span data-i18n="tab_split">分割</span></button>
       <button class="view-tab lazy" data-tab="files" type="button" data-i18n-tooltip="tab_files_lazy_tooltip"><span>📁</span> <span data-i18n="tab_files">Files</span></button>
       <button class="view-tab lazy" data-tab="git" type="button" data-i18n-tooltip="tab_git_lazy_tooltip"><span>⎇</span> <span data-i18n="tab_git">Git</span></button>
+      <button class="view-tab" data-tab="workbench" type="button"><span>▣</span> <span>Workbench</span></button>
       <button class="view-tab" data-tab="approval" type="button" id="approval-tab-btn"><span>⚡</span> <span data-i18n="tab_approval">承認</span><span id="approval-tab-badge" hidden>0</span></button>
 
       <!-- 旧 #main-tab-bar / #main-tab-list: FilesTabManager の DOM 状態保持用に残置(非表示) -->
@@ -1108,6 +1035,7 @@
       <div id="files-tab-contents"></div>
     </div>
     <div id="git-pane"></div>
+    <div id="workbench-pane"></div>
     <!-- 承認キュータブ -->
     <div id="approval-pane"></div>
     </div><!-- /#display-area -->
@@ -1118,7 +1046,6 @@
     <!-- D7/D8: 共有 action-bar (display-area 外, input の上) -->
     <div id="action-bar"></div>
     <div id="multi-question-banner" hidden data-i18n="multi_question_banner"></div>
-    <div id="stale-binary-banner" hidden></div>
     <div id="mobile-keyboard-panel" hidden>
       <div id="mobile-key-row" aria-label="Terminal keys">
         <button type="button" data-mobile-key="esc">Esc</button>
@@ -1153,11 +1080,10 @@
              CLI のステータス更新を抽出して表示し、稼働中はスピナーが回る。更新が途切れると
              グレーの待機表示(idle)へ変わるが枠は消さず常時残す＝「何も送られていない＝終わってる」
              を一目で判別できる（terminal.ts の setSessionLiveStatus / renderLiveStatusDom）。 -->
-        <div id="terminal-live-status" hidden><span class="live-spinner" aria-hidden="true"></span><span class="live-status-text"></span><span class="live-compact-bar" aria-hidden="true" hidden></span></div>
+        <div id="terminal-live-status" hidden><span class="live-spinner" aria-hidden="true"></span><span class="live-status-text"></span></div>
         <div id="input-bar">
           <div id="input-wrap">
             <button id="tools-flip-btn" class="quick-cmd-btn" data-i18n-tooltip="tools_flip_tooltip" aria-label="Toggle tools position">⇄</button>
-            <button id="mobile-composer-attach-btn" class="quick-cmd-btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-tooltip="mobile_composer_attach_tooltip" aria-label="Add attachment">＋</button>
             <div id="input-area">
               <div id="paste-chips"></div>
               <textarea id="input" rows="1" data-i18n-placeholder="input_placeholder"></textarea>
@@ -1183,10 +1109,6 @@
               <button id="buf-clear-btn" class="quick-cmd-btn" data-i18n-tooltip="buf_clear_tooltip">⌫</button>
             </div>
           </div>
-          <div id="mobile-composer-attach-menu" hidden>
-            <button id="mobile-composer-file-btn" type="button"><span aria-hidden="true">📎</span><span data-i18n="mobile_composer_attach_file">File</span></button>
-            <button id="mobile-composer-camera-btn" type="button"><span aria-hidden="true">📷</span><span data-i18n="mobile_composer_attach_camera">Camera</span></button>
-          </div>
         </div>
         <div id="attach-panel">
           <div id="attach-drop-zone">
@@ -1195,11 +1117,6 @@
             <span class="attach-sub" data-i18n="attach_sub">(Click to select file)</span>
           </div>
           <input type="file" id="attach-file-input" multiple style="display:none">
-          <!-- B2: スマホ専用カメラ撮影 input。accept="image/*" capture="environment" で
-               iOS Safari / Android Chrome ともにカメラ起動を優先させる。
-               PC では非表示（mobile-home.css の @media クエリで attach-camera-btn のみ表示する）。 -->
-          <input type="file" id="attach-camera-input" accept="image/*" capture="environment" style="display:none">
-          <button id="attach-camera-btn" type="button" data-i18n-tooltip="attach_camera_tooltip" aria-label="Camera">📷</button>
           <div id="attach-thumbnails"></div>
           <button id="attach-clear-btn" data-i18n-tooltip="attach_clear_tooltip" hidden>✕</button>
         </div>
@@ -1403,10 +1320,8 @@
     <span class="tsb-seg tsb-seg-id"></span>
     <span class="tsb-seg tsb-seg-status"></span>
     <span class="tsb-seg tsb-seg-agent"></span>
-    <span class="tsb-seg tsb-seg-effort"></span>
     <span class="tsb-seg tsb-seg-label"></span>
     <span class="tsb-seg tsb-seg-project"></span>
-    <span class="tsb-seg tsb-seg-ailines"></span>
     <span class="tsb-seg tsb-seg-ctx"></span>
     <span class="tsb-seg tsb-seg-tok"></span>
     <span class="tsb-seg tsb-seg-cache"></span>
@@ -1414,7 +1329,6 @@
     <span class="tsb-seg tsb-seg-cost"></span>
     <span class="tsb-seg tsb-seg-burn"></span>
     <span class="tsb-seg tsb-seg-elapsed"></span>
-    <span class="tsb-seg tsb-seg-ratelimit"></span>
     <span class="tsb-seg tsb-seg-conn"></span>
     <span class="tsb-seg tsb-seg-fleet"></span>
     <button type="button" class="tsb-seg tsb-seg-more" aria-label="詳細">…</button>

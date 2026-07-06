@@ -20,11 +20,11 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"golang.org/x/net/websocket"
-	"golang.org/x/term"
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/sessionlog"
+	"golang.org/x/net/websocket"
+	"golang.org/x/term"
 )
 
 const (
@@ -343,23 +343,6 @@ func nextPTYInputChunkLen(data []byte, limit int) int {
 	return n
 }
 
-// clearPrefixSplitDelay は先頭 Ctrl+U を単独書き込みした後、本文を書くまでの待ち時間。
-// 別チャンク化さえされていれば間隔ほぼ 0ms でも取り込まれることを実測済みだが、
-// パイプ内での結合を避けるため trailingEnterDelay の既定と同じ 20ms を置く。
-const clearPrefixSplitDelay = 20 * time.Millisecond
-
-// splitLeadingClearControl は入力先頭の行クリア用 Ctrl+U(0x15) を本文と別書き込みに
-// 分離すべきケースを判定し、分離する場合は (先頭 1 バイト, 残り) を返す（不要なら lead=nil）。
-// cursor-agent の TUI（v2026.07.01 で実測）は「制御文字＋本文」が同一チャンクで届くと
-// チャンク全体を入力として捨てるため、UI が前置する Ctrl+U を単独チャンクで先行送信する。
-// claude / codex 等は同一チャンクでも取り込めるため対象外（挙動不変）。
-func splitLeadingClearControl(provider string, data []byte) (lead []byte, rest []byte) {
-	if provider == "cursor-agent" && len(data) > 1 && data[0] == 0x15 {
-		return data[:1], data[1:]
-	}
-	return nil, data
-}
-
 func writeWithTrailingEnter(ps processSession, data []byte, delay time.Duration) error {
 	if len(data) > 1 && data[len(data)-1] == '\r' {
 		if err := writePTYChunked(ps, data[:len(data)-1]); err != nil {
@@ -371,20 +354,11 @@ func writeWithTrailingEnter(ps processSession, data []byte, delay time.Duration)
 	return writePTYChunked(ps, data)
 }
 
-func trailingEnterDelay(provider string) time.Duration {
-	switch provider {
-	case "codex", "opencode":
-		return 180 * time.Millisecond
-	default:
-		return 20 * time.Millisecond
-	}
-}
-
 func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string) error {
 	fs := flag.NewFlagSet("wrap", flag.ContinueOnError)
 	label := fs.String("label", "", "session label shown in UI card")
 	model := fs.String("model", "", "model override")
-	permissionMode := fs.String("permission-mode", "", "permission mode (claude/grok: passed through; copilot/cursor-agent/opencode: bypassPermissions maps to each CLI's full-allow option)")
+	permissionMode := fs.String("permission-mode", "", "claude permission mode")
 	sandbox := fs.String("sandbox", "", "codex sandbox mode")
 	askForApproval := fs.String("ask-for-approval", "", "codex ask-for-approval")
 	codexOSS := fs.Bool("codex-oss", false, "codex: use --oss to route via local Ollama daemon")
@@ -398,8 +372,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		extra = append(extra, "--model", *model)
 	}
 	switch provider {
-	case "claude", "grok":
-		// grok CLI は claude 互換の --permission-mode（bypassPermissions 含む）をネイティブサポートする
+	case "claude":
 		if *permissionMode != "" && *permissionMode != "default" {
 			extra = append(extra, "--permission-mode", *permissionMode)
 		}
@@ -413,16 +386,6 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		if *askForApproval != "" {
 			extra = append(extra, "--ask-for-approval", *askForApproval)
 		}
-	case "copilot":
-		// --allow-all = --allow-all-tools --allow-all-paths --allow-all-urls の一括指定
-		if *permissionMode == "bypassPermissions" {
-			extra = append(extra, "--allow-all")
-		}
-	case "cursor-agent":
-		// --force: Force allow commands unless explicitly denied
-		if *permissionMode == "bypassPermissions" {
-			extra = append(extra, "--force")
-		}
 	}
 	providerArgs = append(extra, providerArgs...)
 
@@ -434,11 +397,11 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		}
 	}
 
-	if err := ensureHub(cfg, logger); err != nil {
+	if err := ensureHub(cfg); err != nil {
 		return err
 	}
 	cwd, _ := os.Getwd()
-	display := map[string]string{"claude": "Claude", "codex": "Codex", "copilot": "GitHub Copilot", "cursor-agent": "Cursor Agent", "opencode": "OpenCode", "grok": "Grok Build", "shell": "Shell"}[provider]
+	display := map[string]string{"claude": "Claude", "codex": "Codex", "copilot": "GitHub Copilot", "cursor-agent": "Cursor Agent", "shell": "Shell"}[provider]
 	termCols, termRows := 0, 0
 	if w, h, err := term.GetSize(int(os.Stdin.Fd())); err == nil && w > 0 && h > 0 {
 		termCols, termRows = w, h
@@ -479,7 +442,6 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// オプトインした利用者のみ記録する。lf == nil 時は以降の書き込みが
 	// すべてスキップされる（ptyPump 側で nil チェック済み）。
 	var lf *os.File
-	logger.Info("session_log_gate", "session_id", sessionID, "provider", provider, "enabled", cfg.Log.SessionEnabled, "raw_log_path", rawLogPath)
 	if cfg.Log.SessionEnabled {
 		_ = os.MkdirAll(filepath.Dir(rawLogPath), sessionlog.PrivateDirMode)
 		f, err := os.OpenFile(rawLogPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, sessionlog.PrivateFileMode)
@@ -525,31 +487,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	if *utf8Session {
 		applyUTF8Session()
 	}
-	if provider == "opencode" {
-		permValue := "ask"
-		if *permissionMode == "bypassPermissions" {
-			permValue = "allow"
-		}
-		if cleanupCfg, cfgErr := prepareOpenCodeConfig(cwd, permValue); cfgErr != nil {
-			logger.Warn("opencode: failed to prepare opencode.json permission config", "session_id", sessionID, "err", cfgErr)
-		} else {
-			defer cleanupCfg()
-		}
-	}
-	// C2 (plan_orchestration-spawn-ui-exposure.md): conductor / orchestration child
-	// セッションの実 CLI プロセスにだけ、`many-ai-cli orchestrate spawn` が自力で
-	// Hub API を叩けるよう session ID と Hub token を env 経由で渡す。AI がプロンプト上で
-	// token を扱わずに済むよう、コマンドライン引数ではなく継承 env に載せる（usage-relay と
-	// 同じ受け渡しパターン）。オーケストレーション対象外セッションには一切付与しない
-	// （既存セッションの env 露出面を広げないため）。
-	var providerExtraEnv []string
-	if reg.OrchestrationID != "" {
-		providerExtraEnv = []string{
-			fmt.Sprintf("MANY_AI_CLI_SESSION_ID=%d", sessionID),
-			fmt.Sprintf("%s=%s", hubTokenEnvName, cfg.Token),
-		}
-	}
-	ps, err := startProcess(provider, providerArgs, cwd, initCols, initRows, providerExtraEnv)
+	ps, err := startProcess(provider, providerArgs, cwd, initCols, initRows)
 	if err != nil {
 		// Hub 側の spawn ログ (~/.many-ai-cli/logs/spawn/<provider>-<ts>.log) に
 		// 何が起きたかを残し、Hub UI のセッションカード「Disconnected」表示に
@@ -638,19 +576,8 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 				case "pty_input":
 					if len(m.Data) > 0 {
 						data := m.Data
-						if lead, rest := splitLeadingClearControl(provider, data); lead != nil {
-							if err := writePTY(ps, lead); err != nil {
-								logPTYWriteError(logger, wses.getSID(), "clear_prefix", err)
-							}
-							time.Sleep(clearPrefixSplitDelay)
-							data = rest
-						}
-						if provider == "claude" && len(data) > 1 && data[0] == '@' && looksLikeInjectPath(data[1:]) {
-							// PTYW-7 (report_bug_security_quality_audit_2026-07-05.md):
+						if provider == "claude" && len(data) > 1 && data[0] == '@' {
 							// 旧形式の inject (@path\rtext\r) は互換のため分割する。
-							// 単に data[0] == '@' で判定していた頃は、@user_mention 等の一般テキストも
-							// 誤って分割対象になっていた。@ 直後が絶対パスの形状 (POSIX の `/` 始まり or
-							// Windows のドライブレター `[A-Za-z]:[\\/]`) の時のみ旧経路とみなすよう狭めた。
 							// 新形式 (@path text\r) は画像参照と本文を同じ入力行に残し、最後の Enter だけ分離する。
 							if idx := bytes.IndexByte(data, '\r'); idx >= 0 && idx < len(data)-1 {
 								if err := writeWithTrailingEnter(ps, data[:idx+1], 150*time.Millisecond); err != nil {
@@ -669,8 +596,11 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 						} else if len(data) > 1 && data[len(data)-1] == '\r' {
 							// Windows ConPTY では text+\r を1チャンクで書き込むと
 							// \r が Enter ではなく改行として処理される場合がある。
-							// Codex / OpenCode は入力反映直後の Enter を取りこぼすことがあるため長めに待つ。
-							delay := trailingEnterDelay(provider)
+							// Codex は入力反映直後の Enter を取りこぼすことがあるため長めに待つ。
+							delay := 20 * time.Millisecond
+							if provider == "codex" {
+								delay = 180 * time.Millisecond
+							}
 							if err := writeWithTrailingEnter(ps, data, delay); err != nil {
 								logPTYWriteError(logger, wses.getSID(), "input_enter", err)
 							}
@@ -766,7 +696,6 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model st
 	if err != nil {
 		return nil, proto.Message{}, err
 	}
-	homeDir, codexHome, claudeDir := userSkillDirs()
 	if err := websocket.JSON.Send(conn, proto.Message{
 		Type:       "register",
 		Role:       "wrapper",
@@ -778,11 +707,9 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model st
 		PID:        os.Getpid(),
 		Shell:      DetectShell(),
 		Token:      cfg.Token,
-		HomeDir:    homeDir,
-		CodexHome:  codexHome,
-		ClaudeDir:  claudeDir,
 		Cols:       termCols,
 		Rows:       termRows,
+		ProxyToken: os.Getenv("MANY_AI_CLI_PROXY_TOKEN"),
 	}); err != nil {
 		_ = conn.Close()
 		return nil, proto.Message{}, err
@@ -803,7 +730,6 @@ func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, 
 	if err != nil {
 		return nil, 0, err
 	}
-	homeDir, codexHome, claudeDir := userSkillDirs()
 	if err := websocket.JSON.Send(conn, proto.Message{
 		Type:      "reattach",
 		Role:      "wrapper",
@@ -816,9 +742,6 @@ func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, 
 		PID:       os.Getpid(),
 		Shell:     DetectShell(),
 		Token:     cfg.Token,
-		HomeDir:   homeDir,
-		CodexHome: codexHome,
-		ClaudeDir: claudeDir,
 		Cols:      termCols,
 		Rows:      termRows,
 		StartedAt: startedAt,
@@ -843,11 +766,6 @@ func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, 
 		return nil, 0, fmt.Errorf("unexpected reattach response: %s", resp.Type)
 	}
 	return conn, resp.SessionID, nil
-}
-
-func userSkillDirs() (homeDir, codexHome, claudeDir string) {
-	homeDir, _ = os.UserHomeDir()
-	return homeDir, os.Getenv("CODEX_HOME"), os.Getenv("CLAUDE_CONFIG_DIR")
 }
 
 // probeHubAlive returns true if the Hub HTTP server responds at 127.0.0.1:port.
@@ -877,7 +795,7 @@ func waitForHubReady(cfg *config.Config, timeout time.Duration) bool {
 	}
 }
 
-func ensureHub(cfg *config.Config, logger *slog.Logger) error {
+func ensureHub(cfg *config.Config) error {
 	// Hub にスポーンされた場合（MANY_AI_CLI=1）、Hub は既に動いている。
 	// 新 Hub を起動すると PID ファイル経由で実際の Hub が kill される危険があるため
 	// プローブと起動を一切スキップする。
@@ -885,12 +803,7 @@ func ensureHub(cfg *config.Config, logger *slog.Logger) error {
 		return nil
 	}
 	if probeHubAlive(cfg) {
-		// 既存 Hub が古いバイナリ（ディスクの exe と内容が食い違う）で、かつ
-		// アクティブセッションが無ければ自動で停止する。停止できたら下の spawn
-		// 経路で新バイナリの Hub を起動し直す。そうでなければ既存 Hub を使う。
-		if !maybeRestartStaleHub(cfg, logger) {
-			return nil
-		}
+		return nil
 	}
 	// 設定ポートが WSL 側 Hub など別プロセスに使用されている場合に備え、
 	// 実際にバインドできるポートを確認してから Hub を起動する。

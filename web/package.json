@@ -5,7 +5,7 @@
     "build": "node scripts/build.mjs",
     "check": "tsc --noEmit",
     "watch": "node scripts/build.mjs --watch",
-    "test": "bun run build && node --test dist/app/approval-parser-fixtures.js dist/app/workflow-progress-fixtures.js dist/app/hub-marker-filter-fixtures.js dist/app/cursor-hide-filter-fixtures.js dist/app/live-status-fixtures.js"
+    "test": "bun run build && node --test dist/app/approval-parser-fixtures.js dist/app/workflow-progress-fixtures.js"
   },
   "type": "module",
   "devDependencies": {
@@ -14,7 +14,6 @@
     "@xterm/addon-unicode11": "^0.9.0",
     "@xterm/addon-web-links": "^0.12.0",
     "@xterm/addon-webgl": "^0.19.0",
-    "@xterm/headless": "^6.0.0",
     "@xterm/xterm": "^6.0.0",
     "esbuild": "^0.28.1",
     "typescript": "^6.0.3"

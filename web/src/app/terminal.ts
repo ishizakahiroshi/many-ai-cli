@@ -8,11 +8,7 @@ import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerm
 import { ws } from './ws-client.js';
 import { scheduleApprovalCheck } from './approval.js';
 import { handleCrunchLinkClick } from './expand-popup.js';
-import { isHistoryViewerOpen, openHistoryViewer, resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
-import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
-import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, showCursorSeq } from './cursor-hide-filter.js';
-import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
-export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossibleMarkerPrefix } from './hub-marker-filter.js';
+import { resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
 
 // Claude Code の折りたたみマーカー: "… +23 lines (ctrl+o to expand)"。
 // サブエージェント実行行・ツール要約行は "+N lines" 無しで "(ctrl+o to expand)" 単独で
@@ -207,8 +203,6 @@ export function ensureTerminal(id) {
             scheduleHidePathPopup();
           },
           activate(_event, _text) {
-            _event.preventDefault();
-            _event.stopPropagation();
             showPathPopup(capturedPath, _event.clientX, _event.clientY, id);
           }
         });
@@ -264,21 +258,12 @@ export function ensureTerminal(id) {
     try {
       new Unicode11Addon.Unicode11Addon().activate({ unicode: { register(p) { v11 = p; } } } as any);
     } catch (_) { /* 捕捉失敗時は version '11' のまま（重なりは残るが描画は維持） */ }
-    if (v11 && typeof v11.wcwidth === 'function' && typeof v11.charProperties === 'function') {
+    if (v11 && typeof v11.wcwidth === 'function') {
       const isAmbiguousWide = (cp) =>
         (cp >= 0x2160 && cp <= 0x217F) || (cp >= 0x2460 && cp <= 0x24FF);
       term.unicode.register({
         version: '11-aacli',
         wcwidth(cp) { return isAmbiguousWide(cp) ? 2 : v11.wcwidth(cp); },
-        // xterm コアは print 経路で provider の charProperties を必須で呼ぶ
-        // （欠けていると最初の 1 文字で TypeError となり描画が全停止する）。
-        // 戻り値は packed 形式: bit0=shouldJoin / bit1-2=width / bit3以降=charKind
-        // （UnicodeService.createPropertyValue / extractWidth と同一レイアウト）。
-        // width 上書き対象だけ width ビットを 2 へ差し替え、他は unicode11 へ委譲する。
-        charProperties(cp, preceding) {
-          const p = v11.charProperties(cp, preceding);
-          return isAmbiguousWide(cp) ? ((p & ~0b110) | (2 << 1)) : p;
-        },
       } as any);
       term.unicode.activeVersion = '11-aacli';
     }
@@ -296,9 +281,6 @@ export function ensureTerminal(id) {
     pendingTextTail: '',
     textDecoder: new TextDecoder('utf-8'),
     markerFilterCarry: new Uint8Array(0),
-    inMarkerBlock: false,
-    markerLineStart: true,
-    markerEscPhase: 0,
     screenClearSeqCarry: new Uint8Array(0),
     eraseScrollbackFilterCarry: new Uint8Array(0),
     crFilterCarry: new Uint8Array(0),
@@ -311,8 +293,6 @@ export function ensureTerminal(id) {
     liveStatusHideTimer: null,
     liveLineRow: null,
     liveLineCells: [],
-    compactingSince: null,
-    compactSeenAt: 0,
     autoScroll: true,
     everAttached: false,
   });
@@ -331,16 +311,15 @@ export function attachTerminal(id) {
     // DOM 再配置で WebGL canvas の描画バッファが失われるため、移動前に破棄する
     disableWebglRenderer(t);
     area.innerHTML = '';
+    area.appendChild(t.container);
+    releaseHiddenWebglRenderers();
     t.autoScroll = true;
     updateScrollLockBtn(false);
-    // 非アクティブ中の chunks は DOM へ戻す前に反映する。
-    // 表示後に flush すると、古い viewport から最新行までスクロールしていく様子が見えてしまう。
-    flushPending(id, () => {
-      if (!terminals.has(id) || activeSessionId !== id) return;
-      area.appendChild(t.container);
-      releaseHiddenWebglRenderers();
-      t.term.scrollToBottom();
-      syncViewportScrollbarToBottom(t);
+    requestAnimationFrame(() => {
+      if (!terminals.has(id)) return;
+      // 非アクティブ中の chunks は、その間 PTY が使っていた旧 cols/rows のまま先に反映する。
+      // 先に fit すると、TUI の古い幅の再描画フレームが別幅で解釈されて上部に残像が出る。
+      flushPending(id);
       const prevCols = t.term.cols;
       const prevRows = t.term.rows;
       fitTerminalPreservingBottom(t, id);
@@ -559,7 +538,7 @@ export function queuePendingTerminalChunk(id, bytes) {
   }
 }
 
-export function flushPending(id, onDrained: (() => void) | null = null) {
+export function flushPending(id) {
   const t = terminals.get(id);
   if (!t) return;
   const chunks = t.pendingChunks;
@@ -568,7 +547,6 @@ export function flushPending(id, onDrained: (() => void) | null = null) {
   if (chunks.length === 0) {
     if (t.autoScroll) { t.term.scrollToBottom(); syncViewportScrollbarToBottom(t); }
     scheduleApprovalCheck(id);
-    if (onDrained) onDrained();
     return;
   }
   const seq = (t.pendingFlushSeq || 0) + 1;
@@ -591,12 +569,11 @@ export function flushPending(id, onDrained: (() => void) | null = null) {
     }
     latest.pendingFlushActive = false;
     if (latest.pendingChunks.length > 0) {
-      requestAnimationFrame(() => flushPending(id, onDrained));
+      requestAnimationFrame(() => flushPending(id));
       return;
     }
     if (latest.autoScroll) { latest.term.scrollToBottom(); syncViewportScrollbarToBottom(latest); }
     scheduleApprovalCheck(id);
-    if (onDrained) onDrained();
   };
   t.pendingFlushWatchdog = setTimeout(finish, TERMINAL_WRITE_FLUSH_WATCHDOG_MS);
 
@@ -658,19 +635,6 @@ export function fitTerminalPreservingBottom(t, id, forceVisualFit = false) {
   }
 }
 
-// action-bar（承認ポップアップ）の手動リサイズに追従して、アクティブセッションの
-// xterm を現在の表示領域へ再フィットし、最下部へスクロールする。
-// 承認表示中は isPtyResizeSuppressed() が true で通常の fit はスキップされるため、
-// forceVisualFit=true で「見た目のフィット」だけ強制し、ポップアップを縮めた瞬間に
-// CLI 最新行が空いた領域へ降りてくるようにする（ユーザーが手動スクロールせずに済む）。
-export function followActionBarResize(): void {
-  if (activeSessionId === null) return;
-  const t = terminals.get(activeSessionId);
-  if (!canFitTerminal(t)) return;
-  t.autoScroll = true;
-  fitTerminalPreservingBottom(t, activeSessionId, true);
-}
-
 // xterm が alternate screen buffer（TUI モード, Codex 等）に居るかを判定。
 // alt buffer は scrollback を持たないため term.scrollLines は no-op となり、
 export function isAlternateBuffer(t) {
@@ -679,25 +643,18 @@ export function isAlternateBuffer(t) {
   return !!(active && active.type === 'alternate');
 }
 
-// alt buffer 中のスクロール操作は PTY 側アプリ（Codex / Grok 等の TUI）に
-// PgUp/PgDn として転送する。xterm は disableStdin:true のため、mouse tracking が
-// ON でも wheel を PTY へ送らない。
-// 戻り値: 転送した場合 true（呼び元は xterm scrollback 操作等をスキップ）。
-export function scrollAltBufferPage(sessionId, t, direction) {
+// alt buffer 中の wheel は PTY 側アプリ（Codex の TUI 等）に PgUp/PgDn として転送する。
+// 戻り値: 転送した場合 true（呼び元はそれ以降の autoScroll 操作等をスキップ）。
+// mouse tracking が ON の場合は xterm が wheel を mouse escape として送るため二重送信を避ける。
+export function forwardWheelToAltBuffer(sessionId, t, deltaY) {
   if (!isAlternateBuffer(t)) return false;
-  // grok の TUI は PageUp で履歴領域に飛び、その状態で次の応答が来ると応答が画面外
-  // （履歴領域）に描画されユーザーには「Waiting のまま動かない」ように見える。
-  // trackpad 慣性や高 DPI マウスは 1 操作で wheel イベントを数発発火するため、
-  // 1 ノッチのつもりが PageUp 数連投になり確実にこの状態に陥る（s32 17:00:45〜47 に
-  // ESC[5~ が 6 回連発した実例あり）。grok 宛は wheel→PageUp 転送を停止する。
-  if (sessions.get(sessionId)?.provider === 'grok') return false;
-  const key = direction < 0 ? '\x1b[5~' : '\x1b[6~';
+  try {
+    const mode = t.term.modes && t.term.modes.mouseTrackingMode;
+    if (mode && mode !== 'none') return true; // xterm 自身が送るのでこちらは何もしない（が転送扱いで他処理を抑止）
+  } catch (_) {}
+  const key = deltaY < 0 ? '\x1b[5~' : '\x1b[6~';
   try { sendText(sessionId, key); } catch (_) {}
   return true;
-}
-
-export function forwardWheelToAltBuffer(sessionId, t, deltaY) {
-  return scrollAltBufferPage(sessionId, t, deltaY < 0 ? -1 : 1);
 }
 
 export function isWheelTargetExcluded(target) {
@@ -811,26 +768,6 @@ document.addEventListener('wheel', (e) => {
   if (isWheelTargetExcluded(e.target)) return;
 
   if (forwardWheelToAltBuffer(targetSessionId, t, e.deltaY)) {
-    markTerminalManualScrollIntent();
-    e.preventDefault();
-    e.stopPropagation();
-    return;
-  }
-
-  // 通常バッファで上端にいる状態の上方向ホイールは、過去ログビューアを直近ページから自動展開する。
-  // Grok のように改行を出さず固定位置に上書き描画する TUI では xterm のスクロールバックが
-  // 育たないため、ホイール上は無反応のままになる（履歴ボタンも表示条件 buf.length>rows を
-  // 満たさず出ない）。「ボタンを押す」介在を挟まず、上方向ホイールで過去ログへ導線する。
-  const multiViewEl = document.getElementById('multi-view');
-  const inMultiPane = !!(multiViewEl && !multiViewEl.hidden);
-  const buf = t.term.buffer.active;
-  // alt buffer でここに到達するのは grok のみ（他 provider は forwardWheelToAltBuffer が
-  // PgUp/PgDn 転送で return 済み。grok 宛転送は事故防止で停止中 → scrollAltBufferPage 参照）。
-  // alt buffer は scrollback を持たず「上端」概念が無いので、常にビューア導線の対象にする。
-  const atTop = buf.type === 'alternate' || buf.viewportY === 0;
-  const isGrok = sessions.get(targetSessionId)?.provider === 'grok';
-  if (isGrok && e.deltaY < 0 && atTop && targetSessionId === activeSessionId && !inMultiPane && !isHistoryViewerOpen()) {
-    openHistoryViewer(targetSessionId, { offset: -1 });
     markTerminalManualScrollIntent();
     e.preventDefault();
     e.stopPropagation();
@@ -1024,21 +961,6 @@ document.getElementById('scroll-to-top-btn')?.addEventListener('click', () => {
   const t = terminals.get(activeSessionId);
   if (!t) return;
   markTerminalManualScrollIntent();
-  if (scrollAltBufferPage(activeSessionId, t, -1)) {
-    t.autoScroll = false;
-    updateScrollLockBtn(true);
-    return;
-  }
-  // スクロールバックが無い（Grok のように改行を出さない TUI / alt buffer）場合、
-  // scrollToTop は無反応のままになる。ホイール経路と同じく、その状態の▲は
-  // 直近過去ログを開く導線として扱う（grok のみ。alt buffer 中の grok は
-  // PgUp 転送も事故防止で停止しているため、ここが唯一の履歴導線）。
-  const buf = t.term.buffer.active;
-  const isGrok = sessions.get(activeSessionId)?.provider === 'grok';
-  if (isGrok && (buf.type === 'alternate' || buf.length <= t.term.rows) && !isHistoryViewerOpen()) {
-    openHistoryViewer(activeSessionId, { offset: -1 });
-    return;
-  }
   t.autoScroll = false;
   t.term.scrollToTop();
   updateScrollLockBtn(true);
@@ -1048,24 +970,27 @@ document.getElementById('scroll-to-bottom-btn')?.addEventListener('click', () =>
   if (activeSessionId === null) return;
   const t = terminals.get(activeSessionId);
   if (!t) return;
-  if (scrollAltBufferPage(activeSessionId, t, 1)) {
-    t.autoScroll = true;
-    updateScrollLockBtn(false);
-    return;
-  }
   t.autoScroll = true;
   t.term.scrollToBottom();
   syncViewportScrollbarToBottom(t);
 });
 
+export const hubMarkerBytePatterns = [
+  new TextEncoder().encode('[MANY-AI-CLI]'),
+  new TextEncoder().encode('[/MANY-AI-CLI]'),
+];
+export const hubMarkerEndBytes = hubMarkerBytePatterns[1];
+export const hubDoneMarkerOpen = new TextEncoder().encode('[MANY-AI-CLI-DONE]');
+export const hubDoneMarkerClose = new TextEncoder().encode('[/MANY-AI-CLI-DONE]');
+export const eraseDisplayBelowBytes = new TextEncoder().encode('\x1b[J');
 export const screenClearSeqBytePatterns = [
   asciiBytes('\x1b[2J'),
   asciiBytes('\x1b[3J'),
   asciiBytes('\x1b[H'),
   asciiBytes('\x1b[0;0H'),
   asciiBytes('\x1b[1;1H'),
-  altScreenEnterSeq,
-  altScreenExitSeq,
+  asciiBytes('\x1b[?1049h'),
+  asciiBytes('\x1b[?1049l'),
 ];
 export const screenClearSeqCarryLength = Math.max(...screenClearSeqBytePatterns.map(pattern => pattern.length)) - 1;
 export const synchronizedUpdateSeqBytePatterns = [
@@ -1073,32 +998,80 @@ export const synchronizedUpdateSeqBytePatterns = [
   asciiBytes('\x1b[?2026l'),
 ];
 export const synchronizedUpdateSeqCarryLength = Math.max(...synchronizedUpdateSeqBytePatterns.map(pattern => pattern.length)) - 1;
-export { hideCursorSeq, showCursorSeq };
+export const hideCursorSeq = asciiBytes('\x1b[?25l');
+export const showCursorSeq = asciiBytes('\x1b[?25h');
 
-// xterm 入口の [MANY-AI-CLI] ブロック・[MANY-AI-CLI-DONE] ブロック除去は
-// hub-marker-filter.ts の純関数 filterHubMarkersPure に集約されている（DOM 非依存・
-// node:test 検証可能）。本ラッパーは terminal の state（markerFilterCarry / inMarkerBlock /
-// inDoneBlock）と純関数の state を橋渡しするだけ。
+export function bytesStartWith(bytes, offset, pattern) {
+  if (offset + pattern.length > bytes.length) return false;
+  for (let i = 0; i < pattern.length; i++) {
+    if (bytes[offset + i] !== pattern[i]) return false;
+  }
+  return true;
+}
+
+function isPossiblePrefix(bytes, offset, patterns) {
+  const remaining = bytes.length - offset;
+  return patterns.some((pattern) => {
+    if (remaining >= pattern.length) return false;
+    for (let i = 0; i < remaining; i++) {
+      if (bytes[offset + i] !== pattern[i]) return false;
+    }
+    return true;
+  });
+}
+
+export function isPossibleMarkerPrefix(bytes, offset) {
+  return isPossiblePrefix(bytes, offset, hubMarkerBytePatterns) ||
+    isPossiblePrefix(bytes, offset, [hubDoneMarkerOpen]);
+}
+
 export function filterHubMarkersForDisplay(id, bytes) {
   const t = terminals.get(id);
   if (!t) return bytes;
-  const { out, state } = filterHubMarkersPure(bytes, {
-    carry: t.markerFilterCarry || new Uint8Array(0),
-    inDone: t.inDoneBlock || false,
-    inMarker: t.inMarkerBlock || false,
-    markerBuf: t.markerBuf || new Uint8Array(0),
-    doneBuf: t.doneBuf || new Uint8Array(0),
-    lineStart: t.markerLineStart ?? true,
-    escPhase: t.markerEscPhase ?? 0,
-  });
-  t.markerFilterCarry = state.carry;
-  t.inDoneBlock = state.inDone;
-  t.inMarkerBlock = state.inMarker;
-  t.markerBuf = state.markerBuf;
-  t.doneBuf = state.doneBuf;
-  t.markerLineStart = state.lineStart;
-  t.markerEscPhase = state.escPhase;
-  return out;
+  const carry = t.markerFilterCarry || new Uint8Array(0);
+  const combined = new Uint8Array(carry.length + bytes.length);
+  combined.set(carry, 0);
+  combined.set(bytes, carry.length);
+
+  const out = [];
+  let i = 0;
+  let inDone = t.inDoneBlock || false;
+
+  while (i < combined.length) {
+    if (inDone) {
+      if (bytesStartWith(combined, i, hubDoneMarkerClose)) {
+        i += hubDoneMarkerClose.length;
+        inDone = false;
+        for (const b of eraseDisplayBelowBytes) out.push(b);
+        continue;
+      }
+      if (isPossiblePrefix(combined, i, [hubDoneMarkerClose])) break;
+      i++;
+      continue;
+    }
+
+    if (bytesStartWith(combined, i, hubDoneMarkerOpen)) {
+      i += hubDoneMarkerOpen.length;
+      inDone = true;
+      continue;
+    }
+
+    const marker = hubMarkerBytePatterns.find(pattern => bytesStartWith(combined, i, pattern));
+    if (marker) {
+      i += marker.length;
+      if (marker === hubMarkerEndBytes) {
+        for (const b of eraseDisplayBelowBytes) out.push(b);
+      }
+      continue;
+    }
+    if (isPossibleMarkerPrefix(combined, i)) break;
+    out.push(combined[i]);
+    i++;
+  }
+
+  t.markerFilterCarry = combined.slice(i);
+  t.inDoneBlock = inDone;
+  return new Uint8Array(out);
 }
 
 export function asciiBytes(str) {
@@ -1259,48 +1232,135 @@ export function snapToBottomAfterScreenClear(id) {
   if (id === activeSessionId) updateScrollLockBtn(false);
 }
 
-// \x1b[?25l（カーソル非表示）〜 \x1b[?25h（表示）ブロックの分類・破棄ロジック本体は
-// cursor-hide-filter.ts の filterCursorHideBlocksPure に切り出した（node:test 検証のため）。
-// 分類ルール・alt buffer 素通しの背景コメントもそちらを参照。
-// 下のラッパーは terminal の state と純関数の state を橋渡しし、破棄/通過イベントを
-// ライブ進捗行抽出（extractAndSetLiveStatus）へ配線するだけ。
-
+// \x1b[?25l（カーソル非表示）〜 \x1b[?25h（表示）ブロックの中に row;col 形式の
+// 絶対カーソル移動（\x1b[row;colH）が含まれる場合はブロック全体をフィルタする。
+// Claude Code がステータスバーをこのパターンで書き込んでおり、xterm.js の
+// スクロールバックに混入してツール呼び出し行の文字が壊れる原因になる。
+// 絶対移動を含まない（初期化の cursor home 等）は通過させる。
+// 改行（LF）を含むブロックも通過させる。ステータスバー更新は 1 行内の
+// 書き換えで改行を含まない一方、Claude Code の起動バナー等の本文描画は
+// 同じ ?25l〜?25h + 絶対移動パターンかつ複数行で、破棄すると spawn 直後の
+// 画面が真っ黒になる（jsonl 実測: バナー約1.3〜1.5KB は改行入り、
+// 破棄すべきステータス更新 30B は改行なし）。
+// 改行を見つけた時点で「破棄対象でない」と確定するため、?25h を待たず即 flush する。
+// Claude Code の /model 等のセレクタダイアログは描画後カーソルを非表示のままにして
+// ?25h を送らないため、閉じを待つ実装だと描画全体（<2KB）が blockBuf に滞留し、
+// 次の PTY 出力が来るまでダイアログが画面に一切表示されない
+// （承認バーには出るのにターミナルには出ない、の原因）。
+const MAX_CURSOR_HIDE_BUF = 2048;
 export function filterCursorHideShowBlocksForDisplay(id, bytes) {
   const t = terminals.get(id);
   if (!t) return bytes;
-  // 観察用の臨時バイパス: DevTools で `window.__bypassCursorHideFilter = true` をセットすると
-  // 全バイトをそのまま xterm.js へ流す。OpenCode picker 等が描画反映されない不具合の
-  // 原因がこのフィルタの「ステータスバー誤判定」かを実機で確認するための仮説検証用。
-  if ((window as any).__bypassCursorHideFilter) {
-    t.cursorHideFilterCarry = new Uint8Array(0);
-    t.inCursorHideBlock = false;
-    t.cursorHideBlockBuf = [];
-    t.cursorHideHasAbsPos = false;
-    t.cursorHideHasNewline = false;
-    return bytes;
-  }
-  const { out, state, events } = filterCursorHideBlocksPure(bytes, {
-    carry: t.cursorHideFilterCarry || new Uint8Array(0),
-    inBlock: t.inCursorHideBlock || false,
-    blockBuf: t.cursorHideBlockBuf || [],
-    hasAbsPos: t.cursorHideHasAbsPos || false,
-    hasNewline: t.cursorHideHasNewline || false,
-    altScreen: t.cursorHideAltScreen || false,
-  });
-  for (const ev of events) {
-    // filter-discard: 従来どおり破棄ブロックからライブ進捗行を抽出。
-    // block-passthrough-alt: alt buffer 中は画面にも描くが、ピル表示は従来どおり更新する。
-    if (ev.kind === 'filter-discard' || ev.kind === 'block-passthrough-alt') {
-      extractAndSetLiveStatus(id, ev.blockBuf);
+  const carry = t.cursorHideFilterCarry || new Uint8Array(0);
+  const combined = new Uint8Array(carry.length + bytes.length);
+  combined.set(carry, 0);
+  combined.set(bytes, carry.length);
+
+  const out: number[] = [];
+  let i = 0;
+  let inBlock: boolean = t.inCursorHideBlock || false;
+  let blockBuf: number[] = [...(t.cursorHideBlockBuf || [])];
+  let hasAbsPos: boolean = t.cursorHideHasAbsPos || false;
+  let hasNewline: boolean = t.cursorHideHasNewline || false;
+
+  while (i < combined.length) {
+    if (!inBlock) {
+      if (bytesStartWith(combined, i, hideCursorSeq)) {
+        inBlock = true;
+        blockBuf = [];
+        hasAbsPos = false;
+        hasNewline = false;
+        i += hideCursorSeq.length;
+        continue;
+      }
+      if (isPossiblePrefix(combined, i, [hideCursorSeq])) {
+        t.cursorHideFilterCarry = combined.slice(i);
+        t.inCursorHideBlock = false;
+        t.cursorHideBlockBuf = [];
+        t.cursorHideHasAbsPos = false;
+        t.cursorHideHasNewline = false;
+        return new Uint8Array(out);
+      }
+      out.push(combined[i]);
+      i++;
+    } else {
+      // バッファ上限超過時は非ステータス扱いで通過
+      if (blockBuf.length >= MAX_CURSOR_HIDE_BUF) {
+        for (const b of hideCursorSeq) out.push(b);
+        for (const b of blockBuf) out.push(b);
+        inBlock = false;
+        blockBuf = [];
+        hasAbsPos = false;
+        hasNewline = false;
+        continue;
+      }
+      if (bytesStartWith(combined, i, showCursorSeq)) {
+        if (!hasAbsPos || hasNewline) {
+          // ステータスバー更新でない（絶対移動なし or 複数行の本文描画） → 通過
+          for (const b of hideCursorSeq) out.push(b);
+          for (const b of blockBuf) out.push(b);
+          for (const b of showCursorSeq) out.push(b);
+        } else {
+          // ステータスバー更新（スピナー進捗等）は scrollback へ描かず破棄するが、
+          // 可読テキストを抽出して専用ライブ行に出し、進捗を可視化する。
+          extractAndSetLiveStatus(id, blockBuf);
+        }
+        inBlock = false;
+        blockBuf = [];
+        hasAbsPos = false;
+        hasNewline = false;
+        i += showCursorSeq.length;
+        continue;
+      }
+      if (isPossiblePrefix(combined, i, [showCursorSeq])) {
+        t.cursorHideFilterCarry = combined.slice(i);
+        t.inCursorHideBlock = true;
+        t.cursorHideBlockBuf = blockBuf;
+        t.cursorHideHasAbsPos = hasAbsPos;
+        t.cursorHideHasNewline = hasNewline;
+        return new Uint8Array(out);
+      }
+      // \x1b[row;colH（row・col ともに数字あり）を検出したらステータス更新とみなす
+      if (!hasAbsPos && combined[i] === 0x1b && i + 4 < combined.length && combined[i + 1] === 0x5b) {
+        let j = i + 2;
+        let rowDigits = 0;
+        while (j < combined.length && combined[j] >= 0x30 && combined[j] <= 0x39) { j++; rowDigits++; }
+        if (rowDigits > 0 && j < combined.length && combined[j] === 0x3b) {
+          j++;
+          let colDigits = 0;
+          while (j < combined.length && combined[j] >= 0x30 && combined[j] <= 0x39) { j++; colDigits++; }
+          if (colDigits > 0 && j < combined.length && combined[j] === 0x48) {
+            hasAbsPos = true;
+            for (let k = i; k <= j; k++) blockBuf.push(combined[k]);
+            i = j + 1;
+            continue;
+          }
+        }
+      }
+      if (combined[i] === 0x0A) {
+        // 改行入り = 本文描画と確定。?25h を待たずに通過させてブロックを抜ける。
+        // 以降のバイトは生のまま通過し、後続の ?25h も（来れば）そのまま流れる。
+        blockBuf.push(combined[i]);
+        i++;
+        for (const b of hideCursorSeq) out.push(b);
+        for (const b of blockBuf) out.push(b);
+        inBlock = false;
+        blockBuf = [];
+        hasAbsPos = false;
+        hasNewline = false;
+        continue;
+      }
+      blockBuf.push(combined[i]);
+      i++;
     }
   }
-  t.cursorHideFilterCarry = state.carry;
-  t.inCursorHideBlock = state.inBlock;
-  t.cursorHideBlockBuf = state.blockBuf;
-  t.cursorHideHasAbsPos = state.hasAbsPos;
-  t.cursorHideHasNewline = state.hasNewline;
-  t.cursorHideAltScreen = state.altScreen;
-  return out;
+
+  t.cursorHideFilterCarry = new Uint8Array(0);
+  t.inCursorHideBlock = inBlock;
+  t.cursorHideBlockBuf = blockBuf;
+  t.cursorHideHasAbsPos = hasAbsPos;
+  t.cursorHideHasNewline = hasNewline;
+  return new Uint8Array(out);
 }
 
 // ── スピナー等のライブ進捗行 ───────────────────────────────────────────────
@@ -1409,47 +1469,9 @@ export function extractAndSetLiveStatus(id, blockBuf) {
   setSessionLiveStatus(id, text);
 }
 
-// ── provider 別ライブステータス抽出（Codex/Copilot/Cursor 用） ─────────────────
-// Claude は filterCursorHideShowBlocksForDisplay がステータスバーブロックを本文から
-// 抜き取り、extractAndSetLiveStatus でピル内テキストを埋める。一方 Codex 等は別方式
-// （Synchronized Update + 絶対カーソル移動でメインバッファへインライン全画面描画）の
-// ため、このブロック抽出に乗らず liveStatusText が空になり「中のテキスト」が出ない。
-// そこで本文（xterm バッファ）末尾を走査して進捗行を拾い、同じピルへ流し表示を統一する。
-// スピナー回転自体は state=running 由来で別に回るため、ここでは中のテキストだけ補う。
-
-// provider（小文字）→ 抽出関数。Claude は既存のブロック抽出経路を使うため載せない。
-const liveStatusExtractors: Record<string, (id: number) => string> = {
-  codex: id => extractCodexLiveStatusFromLines(scanBuffer(id, 48)),
-  copilot: id => extractCopilotLiveStatusFromLines(scanBuffer(id, 48)),
-  'cursor-agent': id => extractCursorAgentLiveStatusFromLines(scanBuffer(id, 64)),
-};
-
-// provider 別抽出を 250ms に間引いて実行し、ピル内テキストへ流す。leading 抑制
-// （予約中は新規予約しない）で Codex の毎秒大量フレームでもバッファ走査を間引く。
-const liveStatusExtractTimers = new Map();
-export function scheduleLiveStatusExtract(id) {
-  if (!LIVE_STATUS_ENABLED) return;
-  if (liveStatusExtractTimers.has(id)) return;
-  const provider = String(sessions.get(id)?.provider || '').toLowerCase();
-  const extractor = liveStatusExtractors[provider];
-  if (!extractor) return; // Claude 等は既存経路に任せる
-  liveStatusExtractTimers.set(id, setTimeout(() => {
-    liveStatusExtractTimers.delete(id);
-    if (!terminals.get(id)) return;
-    setSessionLiveStatus(id, extractor(id));
-  }, 250));
-}
-
 export function setSessionLiveStatus(id, text) {
   const t = terminals.get(id);
   if (!t) return;
-  // 再構成済みの綺麗なステータス行からも compact 開始／完了を拾う（生チャンクが分割
-  // されて「Compacting conversation」「Conversation compacted」が途切れても、ここで確実
-  // に検出できる）。完了マーカーが先に来ることはないので順序判定は不要。
-  if (text) {
-    if (COMPACT_DETECT_RE.test(text)) noteCompactStart(id);
-    else if (COMPACT_DONE_RE.test(text)) noteCompactDone(id);
-  }
   if (text) t.liveStatusText = text; // 意味のある全文だけ差し替え（記号だけの中間フレームでは前回値維持）
   // フレームが来た＝稼働中。判定タイマーをリセットして「稼働中」表示へ。
   if (t.liveStatusHideTimer) clearTimeout(t.liveStatusHideTimer);
@@ -1462,115 +1484,6 @@ export function setSessionLiveStatus(id, text) {
     if (id === activeSessionId) { const v = liveStatusViewFor(id); renderLiveStatusDom(v.mode, v.text); }
   }, LIVE_STATUS_HIDE_MS);
   if (id === activeSessionId) renderLiveStatusDom('active', t.liveStatusText || '');
-}
-
-// ── compact（Claude /compact）専用のライブ表示 ────────────────────────────────
-// Claude Code は compact の中間進捗（10%,20%…）を PTY へ出さず 0%→100% に飛ぶため、
-// ターミナル内のバーは固まって見える。そこで many-ai-cli 側で経過秒を発番し、ライブ
-// 進捗窓に「圧縮中…(Ns)」＋不定形バーを出して「動いている」ことを示す。正確な % の
-// 再現はしない（PTY に無いものは作らない）。
-const COMPACT_DETECT_RE = /Compacting conversation/i;
-// compact 完了時に Claude Code が PTY へ出す確定マーカー。これを拾えば IDLE タイムアウトを
-// 待たずに即時解除できる（compact 直後に通常応答が始まるとフレームが途切れず IDLE では
-// 解除できないため、確定マーカーが無いと「圧縮中…(Ns)」のまま秒数だけ伸び続ける）。
-const COMPACT_DONE_RE = /Conversation compacted/i;
-// compact のステータス更新が途切れた（＝完了）とみなすまでの猶予。spinner 再描画間隔より長く。
-const COMPACT_IDLE_MS = 1500;
-let compactTickTimer: ReturnType<typeof setInterval> | null = null;
-
-// compact 開始を記録し、ライブ表示（不定形バー）を起動する。生チャンク・再構成済み
-// ステータス行のどちらから検出しても通れるよう共通化する（チャンク分割での取りこぼし防止）。
-function noteCompactStart(id) {
-  const t = terminals.get(id);
-  if (!t) return;
-  const justStarted = t.compactingSince == null;
-  if (justStarted) t.compactingSince = Date.now();
-  t.compactSeenAt = Date.now();
-  if (id === activeSessionId && justStarted) {
-    ensureCompactTick();
-    renderLiveStatusDom('active', ''); // text は renderLiveStatusDom 側で compact 文言へ差し替え
-  }
-}
-
-// compact 完了マーカー（"Conversation compacted"）を観測した瞬間に呼ぶ。フレーム途切れ
-// による IDLE 解除に頼らず即時で通常表示へ戻す。compact 中でなければ何もしない。
-function noteCompactDone(id) {
-  const t = terminals.get(id);
-  if (!t || t.compactingSince == null) return;
-  t.compactingSince = null;
-  t.compactDetectTail = '';
-  if (id === activeSessionId) {
-    stopCompactTick();
-    syncLiveStatusDomForActive();
-  }
-}
-
-// PTY 出力チャンクから compact を追従する。
-// 注意: 「Compacting conversation」は compact の最初の数フレームにしか出ず、その後は
-// 通常ターンと同じランダムな進行語（Combobulating/Churning/Actioning 等。compact 無しでも
-// 出る汎用スピナー語）へ切り替わる。よって「この語が出続ける限り表示」だと 1.5s で消え、
-// 長い compact 本体の間ずっと何も出ない。開始を一度捉えたら、以降は内容を問わず当該
-// セッションのフレーム到来で生存を更新し（＝処理が続く限り表示）、フレームが
-// COMPACT_IDLE_MS 途切れたら完了とみなす（tick 側で判定）。
-export function markCompactActivity(id, textChunk) {
-  const t = terminals.get(id);
-  if (!t) return;
-  if (t.compactingSince != null) {
-    t.compactSeenAt = Date.now(); // compact 中は任意フレームで延命
-    // ただし完了マーカー "Conversation compacted" が同チャンクに来ていたら即解除する。
-    // compact 直後に通常応答（Read 等）が始まると PTY フレームが途切れず IDLE 解除が効か
-    // ないので、確定マーカーを直接拾う必要がある。チャンク境界分断対策は開始検出と同じ
-    // 末尾繰り越し方式。
-    if (textChunk) {
-      const probe = (t.compactDetectTail || '') + textChunk;
-      if (COMPACT_DONE_RE.test(probe)) { noteCompactDone(id); return; }
-      t.compactDetectTail = probe.slice(-24);
-    }
-    return;
-  }
-  if (!textChunk) return;
-  // 検出語「Compacting conversation」は compact 全体で 1 回しか出ない（その後は通常ターンと
-  // 同じ汎用スピナー語へ替わる）。この 1 回をチャンク境界で分断されても確実に拾うため、
-  // 直前チャンク末尾を前置して判定し、未検出なら末尾だけ次回へ繰り越す。
-  const probe = (t.compactDetectTail || '') + textChunk;
-  if (COMPACT_DETECT_RE.test(probe)) { t.compactDetectTail = ''; noteCompactStart(id); return; }
-  t.compactDetectTail = probe.slice(-24); // 検出語長(23)+余裕ぶんだけ繰り越す
-}
-
-// activeSession が compact 中なら経過秒（整数）、そうでなければ null。
-function activeCompactElapsedSec(): number | null {
-  const id = activeSessionId;
-  const t = id != null ? terminals.get(id) : null;
-  if (!t || t.compactingSince == null) return null;
-  if (Date.now() - t.compactSeenAt > COMPACT_IDLE_MS) {
-    t.compactingSince = null;
-    t.compactDetectTail = '';
-    return null;
-  }
-  return Math.max(0, Math.floor((Date.now() - t.compactingSince) / 1000));
-}
-
-// 経過秒を毎秒更新する単一タイマー。activeSession の compact が解除されたら停止する。
-function ensureCompactTick() {
-  if (compactTickTimer != null) return;
-  compactTickTimer = setInterval(() => {
-    const id = activeSessionId;
-    const t = id != null ? terminals.get(id) : null;
-    if (!t || t.compactingSince == null) { stopCompactTick(); return; }
-    if (Date.now() - t.compactSeenAt > COMPACT_IDLE_MS) {
-      // compact のステータス更新が途切れた＝完了とみなし、通常表示へ戻す。
-      t.compactingSince = null;
-      t.compactDetectTail = '';
-      stopCompactTick();
-      syncLiveStatusDomForActive();
-      return;
-    }
-    renderLiveStatusDom('active', ''); // 経過秒を再計算して再描画
-  }, 1000);
-}
-
-function stopCompactTick() {
-  if (compactTickTimer != null) { clearInterval(compactTickTimer); compactTickTimer = null; }
 }
 
 // 現在のピル表示（mode + ラベル）を決める。フレーム流入中はライブテキスト、
@@ -1596,81 +1509,22 @@ function renderLiveStatusDom(mode, text) {
   const el = document.getElementById('terminal-live-status');
   if (!el) return;
   const textEl = el.querySelector('.live-status-text') as HTMLElement | null;
-  const barEl = el.querySelector('.live-compact-bar') as HTMLElement | null;
   if (!LIVE_STATUS_ENABLED || mode === 'hidden') {
     el.hidden = true;
     el.classList.remove('idle', 'waiting');
     if (textEl) textEl.textContent = '';
-    if (barEl) barEl.hidden = true;
-    syncLiveStatusLongproc();
     return;
-  }
-  // compact 中は経過秒ラベル＋不定形バーへ差し替える。active の特殊形として扱い、
-  // idle/waiting には落とさない（処理中であることを優先表示）。
-  const compactSec = activeCompactElapsedSec();
-  if (compactSec != null) {
-    mode = 'active';
-    text = ti18n('live_status_compacting', { sec: compactSec });
   }
   el.hidden = false;
   el.classList.toggle('idle', mode === 'idle');
   el.classList.toggle('waiting', mode === 'waiting');
-  if (barEl) barEl.hidden = (compactSec == null);
   if (textEl && textEl.textContent !== text) textEl.textContent = text || '';
-  syncLiveStatusLongproc();
-}
-
-// 長時間処理中インジケータ（ライブ帯の右側・パレットボタンの左隣）。
-// アクティブセッションが running に入ってから LIVE_LONGPROC_SEC を超えて応答が続くと
-// 「⚠ 長時間処理中」を帯の右側へ出す。サイドバーのカード長時間バッジ（session-list.ts の
-// CARD_LONGPROC_SEC）と同じしきい値・同じ意味で、入力欄の真上でも気付けるようにする。
-// ライブ帯はアクティブセッションぶんしか表示しないため、追跡もアクティブ分だけ持つ。
-const LIVE_LONGPROC_SEC = 300;
-const liveStatusRunningSince = new Map<number, number>();
-const liveStatusMobileMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
-  ? window.matchMedia('(max-width: 720px)') : null;
-
-function isLiveStatusMobileViewport(): boolean {
-  return !!liveStatusMobileMql?.matches;
-}
-
-export function syncLiveStatusLongproc(): void {
-  const el = document.getElementById('terminal-live-status');
-  if (!el) return;
-  const id = activeSessionId;
-  const state = id != null ? (sessions.get(id)?.state as string) : null;
-  const lp = el.querySelector('.live-status-longproc') as HTMLElement | null;
-  // running 以外（standby/waiting/error/切断）は追跡を捨てて非表示にする。
-  if (id == null || state !== 'running') {
-    if (id != null) liveStatusRunningSince.delete(id);
-    if (lp) lp.hidden = true;
-    return;
-  }
-  let since = liveStatusRunningSince.get(id);
-  if (!since) { since = Date.now(); liveStatusRunningSince.set(id, since); }
-  const sec = Math.max(0, Math.floor((Date.now() - since) / 1000));
-  let badge = lp;
-  const compactLabel = '⚠5m+';
-  const fullLabel = `⚠ ${ti18n('card_longproc_label')}`;
-  if (!badge) {
-    badge = document.createElement('span');
-    badge.className = 'live-status-longproc';
-    badge.title = ti18n('card_longproc_title');
-    // パレットボタンの左隣へ置く（パレットは buildUI で末尾に append される）。
-    const paletteBtn = el.querySelector('.live-status-palette-btn');
-    if (paletteBtn) el.insertBefore(badge, paletteBtn); else el.appendChild(badge);
-  }
-  const label = isLiveStatusMobileViewport() ? compactLabel : fullLabel;
-  if (badge.textContent !== label) badge.textContent = label;
-  badge.hidden = sec < LIVE_LONGPROC_SEC;
 }
 
 // セッション切替・状態変化時に、アクティブセッションの現在状態を DOM へ反映する。
 // 枠は常時表示。アクティブセッションが無いときだけ枠ごと消す(hidden)。
 export function syncLiveStatusDomForActive() {
-  if (activeSessionId === null || !terminals.get(activeSessionId)) { stopCompactTick(); renderLiveStatusDom('hidden', ''); return; }
-  // 切替先が compact 中なら経過秒タイマーを再開（非アクティブ中は tick を回していないため）。
-  if (activeCompactElapsedSec() != null) ensureCompactTick();
+  if (activeSessionId === null || !terminals.get(activeSessionId)) { renderLiveStatusDom('hidden', ''); return; }
   const v = liveStatusViewFor(activeSessionId);
   renderLiveStatusDom(v.mode, v.text);
 }

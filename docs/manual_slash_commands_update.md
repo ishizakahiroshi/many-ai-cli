@@ -1,26 +1,8 @@
 # many-ai-cli スラッシュコマンド一覧の更新手順
 
-> 最終更新: 2026-06-19(金) 08:06:57 — 半自動の `slash-commands-update` スキル連携と freshness レポート運用を追記
+> 最終更新: 2026-06-14(日) 04:20:51 — Cursor Agent CLI の slash command source を追加・配信元 URL を many-ai-cli にリネーム反映
 
 Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI に新しいスラッシュコマンドが追加された際、ダッシュボードのスラッシュコマンドピッカーに反映させるための運用メモ。
-
-## 推奨: `slash-commands-update` スキルで半自動化する
-
-手作業で本家を追う前に、`C:\dev\workshop\skills\slash-commands-update` スキルを使うのが基本。本家との差分検出・md 形式への正規化案・人間確認用レポート作成を半自動化する（採否は人間が差分だけ見て決める）。
-
-- 起動: 「スラッシュコマンド鮮度確認」「slash-commands-update」等。
-- モード:
-  - `report`（既定）: 全 provider の差分を検出し `docs/local/slash-command-freshness_YYYY-MM-DD.md` を作る。`resources/slash-commands/` の `*.md` から provider を動的検出するので、`opencode.md` など新 provider も自動で対象に入る。
-  - `apply`: レポートで `decision = accepted` にした差分だけを `resources/slash-commands/*.md` へ反映する（`pending` / `unknown` / `deferred` は触らない）。
-  - `preflight`: release 前のゲート判定（後述の release 連携）。
-- スクリプト:
-  - `scripts/freshness-report.ps1`: ローカルインベントリ抽出＋レポート雛形生成。実機 `copilot help commands` は自動 diff まで行う。docs ベース（codex / cursor-agent）と claude / opencode は誤検出を避けるため `unknown` とし、AI が `report` モードで WebFetch / claude-code-guide / 実機採取により確認する。**commit / push は一切しない**。
-  - `scripts/freshness-preflight.ps1`: 最新レポートの鮮度（既定 7 日）と未判断差分（`pending`）を判定し、exit code でゲート結果を返す（0=可 / 2=要対応 / 3=stale・要 report）。
-- 契約の正本: スキルの `references/provider-sources.md`（provider 別の source-of-truth・md 形式制約・レポート形式）。
-
-下記 C1〜C6 は、スキルが内部で踏む手順の詳細（手で回す場合の正本でもある）。
-
-## 仕組み（前提）
 
 ## 仕組み（前提）
 
@@ -107,7 +89,6 @@ Hub は 24h キャッシュのため、即時反映には手動で強制再取�
 
 ## 関連
 
-- 半自動化スキル: `C:\dev\workshop\skills\slash-commands-update\SKILL.md`（契約: `references/provider-sources.md`）
 - パーサ実装: `internal/hub/slash_cmd_fetch.go`
 - API ハンドラ: `internal/hub/slash_handlers.go`(`handleSlashCommands` が GET=キャッシュ / POST=強制再取得)
 - 取得元 URL 定義: `internal/config/config.go`

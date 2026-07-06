@@ -6,6 +6,7 @@
 @import url("/styles/files.css");
 @import url("/styles/git.css");
 @import url("/styles/chat.css");
+@import url("/styles/workbench.css");
 @import url("/styles/voice.css");
 @import url("/styles/token-statusbar.css");
 @import url("/styles/workflow-progress.css");
@@ -22,7 +23,6 @@
   color-scheme: dark;
   --chat-font-size:      13px;
   --bg:                  #0d0f17;
-  --bg-layer:            var(--bg);
   --bg-elev:             #131726;
   --bg-elev2:            #1a2030;
   --bg-deep:             #08090d;
@@ -72,10 +72,8 @@
   --prov-codex:          #60a5fa;
   --prov-copilot:        #7c3aed;
   --prov-ollama:         #c4973a;
-  --prov-lm-studio:      #06b6d4;
   --prov-opencode:       #22c55e;
   --prov-cursor-agent:   #94a3b8;
-  --prov-grok:           #52525b;
 
   /* Git graph lane colors (dark) */
   --lane-1:              #38bdf8;  /* 青系: HEAD/develop/main 系の主軸 */
@@ -121,7 +119,6 @@
 [data-theme="light"] {
   color-scheme: light;
   --bg:                  #f1f5f9;
-  --bg-layer:            var(--bg);
   --bg-elev:             #ffffff;
   --bg-elev2:            #e2e8f0;
   --bg-deep:             #e2e8f0;
@@ -443,8 +440,6 @@ header {
 
 #mobile-menu-btn,
 #mobile-spawn-btn,
-#mobile-session-title-btn,
-#mobile-log-btn,
 #mobile-drawer-backdrop {
   display: none;
 }
@@ -498,16 +493,9 @@ header {
     display: none;
   }
 
-  /* スマホからは無意味なので非表示（reference_mobile-ui-strategy.md P6-C1） */
-  #server-btn,
-  #mobile-connect-btn {
-    display: none;
-  }
-
   .dismiss-btn,
   .star-btn,
   .session-history-reset-btn,
-  .session-board-open-btn,
   .project-group-files-btn,
   .quick-cmd-btn,
   .spawn-btn-browse {
@@ -529,43 +517,23 @@ header {
 }
 
 @media (max-width: 720px) {
-  /* 2026-07-04 修正: header はもう帯としてもスペースとしても存在しない（height:0）。
-     ☰ / #reconnect-btn は各々 position:fixed + 自前の env(safe-area-inset-top) で
-     ノッチ回避しており、header の高さに依存していない。ノッチ回避が必要な残り箇所
-     （ドロワー背景・ドロワー展開時のセッション一覧の上端）は下記で env() を直接参照する。
-     --mobile-float-clear は ☰ 等の浮遊ボタンの下端+余白ぶん。ドロワー先頭・モバイルホームの
-     上端だけで使う（ターミナル本文には使わない — 本文は最上端から描画し ☰ が上に浮く）。 */
-  :root {
-    --app-header-h: 0px;
-    --mobile-float-clear: 40px;
-  }
-
-  /* あるべき姿（2026-07-04 ユーザー指示）: モバイルではヘッダーを帯として表示しない。
-     ☰ だけを #app 直下の独立した浮遊ボタンとして描画し、standby件数/展開アイコンは
-     ドロワー先頭（.mobile-drawer-topbar）へ移す。header 自体は PC 用の DOM 構造を保ったまま
-     視覚的に消す（display:none だと #reconnect-btn 等の子要素も描画自体できなくなるため、
-     visibility:hidden にして必要な子だけ visibility:visible で個別に復帰させる）。 */
   header {
-    visibility: hidden;
-    height: 0;
-    min-height: 0;
-    padding: 0;
-    margin: 0;
-    border-bottom: none;
-    background: transparent;
-    backdrop-filter: none;
-    overflow: visible;
+    gap: var(--space-2);
+    padding: 0 8px 0 52px;
   }
 
-  #reconnect-btn {
-    visibility: visible;
+  .header-logo span,
+  .header-sep,
+  #global-wakeword-btn,
+  #settings-btn span,
+  #main-tab-status,
+  .session-info-chip {
+    display: none !important;
   }
-  #reconnect-btn:not([hidden]) {
-    position: fixed;
-    top: calc(6px + env(safe-area-inset-top));
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1600;
+
+  #summary {
+    font-size: 0.7rem;
+    gap: var(--space-1);
   }
 
   #app {
@@ -575,90 +543,16 @@ header {
     overflow: hidden;
   }
 
-  /* ☰ は header の子ではなく #app 直下（フロー外・visibility:hidden の影響を受けない）。
-     ヘッダーが見えなくても左上に単独で浮く（ユーザー指定の「あるべき姿」）。 */
   #mobile-menu-btn {
     position: fixed;
-    top: calc(6px + env(safe-area-inset-top));
-    left: calc(8px + env(safe-area-inset-left));
+    top: 6px;
+    left: 8px;
     z-index: 1500;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 36px;
     height: 32px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    /* 本文の上に浮くフローティングボタン。下のターミナル文字を完全に潰さないよう半透明 + blur。 */
-    background: rgba(13, 15, 23, 0.7);
-    backdrop-filter: blur(4px);
-    color: var(--text);
-    font-size: 1rem;
-    cursor: pointer;
-  }
-
-  /* E: 入力欄FAB被り対策 — 旧来は右下固定の大型FABで送信ボタン/textareaに常時重なっていた
-     (docs/mockups/mobile-ui-rework/index.html の「E. 入力欄FAB被り」に該当)。
-     ◀▶ セッション送りボタンと同じ上段固定列（右端の空き 8px〜48px）へ移し、入力欄と物理的に重ならなくする。 */
-  #mobile-spawn-btn {
-    position: fixed;
-    top: calc(6px + env(safe-area-inset-top));
-    right: calc(8px + env(safe-area-inset-right));
-    z-index: 1500;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 32px;
-    min-width: 36px;
-    min-height: 32px;
-    border: 1px solid var(--accent);
-    border-radius: var(--radius-md);
-    background: var(--accent);
-    color: #fff;
-    font-size: 1.2rem;
-    line-height: 1;
-    cursor: pointer;
-  }
-  body.mobile-has-session #mobile-spawn-btn {
-    display: none;
-  }
-
-  /* C7: ヘッダー行とタブ行の統合により、セッション名表示ボタンは廃止（ハンバーガーから
-     同じセッション一覧を開けるため機能は失われない）。#unified-tab-bar がこのスロットを引き継ぐ。 */
-  #mobile-session-title-btn {
-    display: none !important;
-  }
-
-  /* standby件数/展開アイコンはヘッダーではなくドロワー先頭（#mobile-drawer-content 直下の
-     .mobile-drawer-topbar）に置く。#mobile-log-btn 自体はセッション表示中のみ出す
-     既存ロジック（body.mobile-has-session:not(.mobile-home-view)）を維持。 */
-  .mobile-drawer-topbar {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin-bottom: 10px;
-  }
-
-  #mobile-drawer-summary {
-    color: var(--muted);
-    font-size: 0.75rem;
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #mobile-log-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    width: 32px;
-    height: 26px;
-    margin-left: auto;
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
     background: var(--bg-elev);
@@ -667,9 +561,34 @@ header {
     cursor: pointer;
   }
 
+  #mobile-spawn-btn {
+    position: fixed;
+    right: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    z-index: 1400;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 54px;
+    height: 54px;
+    min-width: 54px;
+    min-height: 54px;
+    border: 1px solid var(--accent);
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 1.7rem;
+    line-height: 1;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.38);
+    cursor: pointer;
+  }
+  body.mobile-has-session #mobile-spawn-btn {
+    display: flex;
+  }
+
   #mobile-drawer-backdrop {
     position: fixed;
-    inset: env(safe-area-inset-top) 0 0;
+    inset: var(--app-header-h) 0 0;
     z-index: 1090;
     display: none;
     background: rgba(0,0,0,0.48);
@@ -691,10 +610,9 @@ header {
     -webkit-overflow-scrolling: touch;
   }
 
-  body.mobile-has-session #session-list,
-  body.mobile-drawer-open #session-list {
+  body.mobile-has-session #session-list {
     position: fixed;
-    top: env(safe-area-inset-top);
+    top: var(--app-header-h);
     bottom: 0;
     /* base mobile の height:100% を打ち消す。height と top/bottom の過剰指定だと
        height が優先され、ドロワー下端がビューポートを 44px はみ出して見切れる。 */
@@ -706,14 +624,8 @@ header {
     transition: transform 0.18s ease;
     border-right: 1px solid var(--line);
     box-shadow: 14px 0 36px rgba(0,0,0,0.36);
-    /* C6 PWA safe-area: 左端ドロワーが横ノッチ・ホームバーに被らないよう内側に逃がす。 */
-    padding-left: calc(10px + env(safe-area-inset-left));
-    padding-bottom: calc(10px + env(safe-area-inset-bottom));
-    /* ☰ が header ではなく #app 直下の浮遊ボタンになったため、ドロワー先頭
-       （.mobile-drawer-topbar）がそれと重ならないよう本文側でクリアランスを確保する。 */
-    padding-top: var(--mobile-float-clear);
   }
-  body.mobile-drawer-open #session-list {
+  body.mobile-has-session.mobile-drawer-open #session-list {
     transform: translateX(0);
   }
 
@@ -726,15 +638,15 @@ header {
     height: 100%;
   }
 
-  /* C7指摘: 常時表示のタブ帯は撤去し、ビュー切り替えはドロワーの「表示切り替え」セクション
-     （mobile-home.ts の buildViewSwitchSection）へ移設した。
-     2026-07-04 ユーザー指示: 本文側にクリアランス（padding-top: 40px）を取ると
-     「空のヘッダー帯が残った」ように見えるため取らない。☰ は本文の上に純粋に
-     フローティングさせ、ターミナルは画面最上端から描画する（最上行の左端が
-     ☰ の下に潜るのは許容 — 半透明背景で下の文字も透かす）。 */
-
   #unified-tab-bar {
-    display: none;
+    height: 40px;
+    padding: 0 6px;
+  }
+
+  .view-tab {
+    padding: 0 10px;
+    gap: var(--space-1);
+    font-size: 0.75rem;
   }
 
   #new-session-bar {
@@ -744,7 +656,7 @@ header {
     background: var(--bg);
   }
 
-  body.mobile-drawer-open #new-session-btn {
+  body.mobile-has-session #new-session-btn {
     width: 100%;
   }
 
@@ -787,8 +699,6 @@ header {
 .card.active::before  { background: var(--accent); opacity: 1; width: 5px; top: 4px; bottom: 4px; }
 .card-title-row { display: flex; align-items: center; gap: 2px; overflow: hidden; }
 .card-title-row > b { flex-shrink: 0; }
-.card.orchestration-child { border-left: 2px solid color-mix(in srgb, var(--accent) 65%, transparent); margin-left: 8px; }
-.card.orchestration-parent { border-left: 2px solid color-mix(in srgb, var(--warn) 70%, transparent); }
 /* 状態 pill（下のステータスバー .tsb-pill と同形状: ●ドット付き・丸み・同じ状態色）。 */
 .card-state-pill { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 0.62rem; font-weight: 700; padding: 1px 7px; border-radius: var(--radius-md); border: 1px solid transparent; line-height: 1.2; }
 .card-state-pill .card-pdot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
@@ -798,18 +708,6 @@ header {
 .card-state-pill.error,
 .card-state-pill.disconnected { color: var(--danger);          background: color-mix(in srgb, var(--danger-bg) 25%, transparent);        border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
 .card-started-at { flex-shrink: 0; font-size: 0.72rem; color: var(--muted-2); margin-left: 3px; }
-/* カード 3 行目: ライブ情報（ctx 使用率% / 応答経過時間 / 長時間処理中バッジ）。 */
-.card-live-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-top: 4px; font-size: 0.66rem; color: var(--muted-2); line-height: 1.4; }
-.card-live-row[hidden] { display: none; }
-.card-ctx { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
-.card-ctx-gauge { display: inline-block; width: 38px; height: 6px; background: var(--bg-deep); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; vertical-align: middle; }
-.card-ctx-fill { display: block; height: 100%; border-radius: 3px; background: var(--green); transition: width 0.3s; }
-.card-ctx-fill.warn { background: var(--warn); }
-.card-ctx-fill.crit { background: var(--danger); }
-.card-ctx-pct { font-variant-numeric: tabular-nums; }
-.card-ctx-pct.crit { color: var(--danger); font-weight: 700; }
-.card-ctx-1m { font-size: 0.58rem; font-weight: 700; padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--accent); }
-.card-longproc { white-space: nowrap; color: var(--warn-text); background: color-mix(in srgb, var(--warn-bg) 30%, transparent); border: 1px solid color-mix(in srgb, var(--warn-text) 40%, transparent); border-radius: var(--radius-sm); padding: 0 5px; font-weight: 700; }
 .card-provider-icon { flex-shrink: 0; vertical-align: middle; margin-right: 2px; }
 /* モデル名の色は下のステータスバー .tsb-model（#9ece6a）に合わせて緑系で統一。 */
 .card-model { flex-shrink: 1; font-size: 0.72rem; color: #9ece6a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; margin-left: 2px; }
@@ -824,21 +722,6 @@ header {
 .card-branch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .card-branch[data-disabled="true"] { color: var(--muted); background: var(--bg-deep); border-color: var(--line); cursor: not-allowed; opacity: 0.6; }
 .card-branch[data-disabled="true"]:hover { background: var(--bg-deep); color: var(--muted); }
-.card-role-chip,
-.card-worktree-chip {
-  flex-shrink: 0;
-  max-width: 11ch;
-  padding: 1px 5px;
-  border-radius: var(--radius-sm);
-  font-size: 0.68rem;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.card-role-chip.parent { color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); }
-.card-role-chip.child { color: var(--accent-text); background: color-mix(in srgb, var(--accent) 16%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
-.card-worktree-chip { max-width: 16ch; color: var(--green-text); background: color-mix(in srgb, var(--green-bg) 22%, transparent); border: 1px solid color-mix(in srgb, var(--green-text) 22%, transparent); font-family: Consolas, monospace; }
 
 /* カード右クリック context menu */
 .card-ctx-menu {
@@ -979,11 +862,9 @@ header {
 .card-provider-chip.claude,   .summary-provider-name.claude,   .pane-slot .sc-provider.claude,   .prov-shape.claude,   .prov-letter.claude   { --prov: var(--prov-claude); }
 .card-provider-chip.codex,    .summary-provider-name.codex,    .pane-slot .sc-provider.codex,    .prov-shape.codex,    .prov-letter.codex    { --prov: var(--prov-codex); }
 .card-provider-chip.copilot,  .summary-provider-name.copilot,  .pane-slot .sc-provider.copilot,  .prov-shape.copilot,  .prov-letter.copilot  { --prov: var(--prov-copilot); }
-.card-provider-chip.ollama,    .summary-provider-name.ollama,    .pane-slot .sc-provider.ollama,    .prov-shape.ollama,    .prov-letter.ollama    { --prov: var(--prov-ollama); }
-.card-provider-chip.lm-studio, .summary-provider-name.lm-studio, .pane-slot .sc-provider.lm-studio, .prov-shape.lm-studio, .prov-letter.lm-studio { --prov: var(--prov-lm-studio); }
+.card-provider-chip.ollama,   .summary-provider-name.ollama,   .pane-slot .sc-provider.ollama,   .prov-shape.ollama,   .prov-letter.ollama   { --prov: var(--prov-ollama); }
 .card-provider-chip.opencode, .summary-provider-name.opencode, .pane-slot .sc-provider.opencode, .prov-shape.opencode, .prov-letter.opencode { --prov: var(--prov-opencode); }
 .card-provider-chip.cursor-agent, .summary-provider-name.cursor-agent, .pane-slot .sc-provider.cursor-agent, .prov-shape.cursor-agent, .prov-letter.cursor-agent { --prov: var(--prov-cursor-agent); }
-.card-provider-chip.grok, .summary-provider-name.grok, .pane-slot .sc-provider.grok, .prov-shape.grok, .prov-letter.grok { --prov: var(--prov-grok); }
 
 /* チップ（プロバイダーチップ / サマリ名）: メイン色文字 + 12%背景 */
 .card-provider-chip, .summary-provider-name {
@@ -1142,8 +1023,7 @@ header {
 
 /* お気に入りボタン */
 .star-btn,
-.session-history-reset-btn,
-.session-board-open-btn {
+.session-history-reset-btn {
   position: static;
   background: none;
   appearance: none;
@@ -1163,7 +1043,6 @@ header {
 .star-btn.starred { color: var(--warn); }
 .star-btn:hover { color: var(--warn); }
 .session-history-reset-btn:hover { color: var(--accent-text); }
-.session-board-open-btn:hover { color: var(--accent-text); }
 
 /* ドラッグ状態 */
 .card.dragging { opacity: 0.4; cursor: grabbing; }
@@ -1621,10 +1500,4 @@ header {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   user-select: none;
-}
-
-/* 2026-06-23: ユーザー要望により「★ お気に入りをグリッドで開く」⊞ ボタンを非表示化
-   （生成ロジックは session-list.ts に残置。復活時はこの display:none を外す） */
-.sidebar-group-label-grid-btn {
-  display: none;
 }

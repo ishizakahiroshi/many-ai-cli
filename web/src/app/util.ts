@@ -13,12 +13,6 @@ import { t } from '../i18n.js';
 // 端末に token が永続保存される点はトレードオフ（自分専用端末・VPN 網内アクセス前提）。
 // Hub の token がローテートしたら保存値は無効になり、再度 token 付き URL が必要。
 // SW 側の token キャッシュ（pwa.ts → sw.ts postMessage）は従来通り別系統で保持。
-//
-// C5 (plan_audit_score_s_promotion_2026-07-05.md) 縮退方針:
-// サーバ側は既に HttpOnly Cookie (MANY_AI_CLI_token) を handleIndex で発行しており、
-// 以降の同一 origin fetch は自動で Cookie を送るため、URL の ?token= や
-// localStorage 値は「Cookie が失効/未発行のリロード」向け PWA fallback 用に縮退できる。
-// 新規 fetch は下記 apiFetch() を使い、query token を経由しない Cookie 主体化を進める。
 const TOKEN_STORAGE_KEY = 'many-ai-cli-token';
 
 function initToken(): string | null {
@@ -44,22 +38,6 @@ function initToken(): string | null {
 // unauthorized になる（特にスマホ/PWA でタブを開き直し sessionStorage が消えた場合）。
 // 空文字なら `?token=` となりサーバーが認証 cookie へ正しくフォールバックする。
 export const token = initToken() ?? '';
-
-// apiFetch は Hub の `/api/*` を Cookie 主体で呼ぶための共通ヘルパ。
-// 同一 origin では credentials 既定値 'same-origin' で Cookie は既に送られるが、
-// 将来 credentials を厳しく設定する箇所（PWA fallback / manifest 経由 fetch 等）でも
-// 一貫して Cookie を送るように 'same-origin' を明示する。
-// URL に `?token=` を付けないことで、ブラウザ history / server access log / crash
-// report への token 露出を減らす（C5 縮退の第一歩）。
-// Bearer 経由や旧来の `?token=` fetch も requestToken 側で並列に受理される
-// ので、本ヘルパを使わない fetch は現状維持で回帰しない。
-export function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const merged: RequestInit = {
-    ...init,
-    credentials: init.credentials ?? 'same-origin',
-  };
-  return fetch(path, merged);
-}
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -193,22 +171,6 @@ export async function copyOneLineText(text: string | null | undefined, anchor?: 
   if (!oneLine) return;
   await navigator.clipboard.writeText(oneLine);
   showToast(t('copied_to_clipboard'), anchor);
-}
-
-// ── DOM ヘルパ ────────────────────────────────────────────────────────────────
-// `document.createElement` に class / text / html / attrs を一括で渡す薄いラッパー。
-// mobile-connect.ts / host-expose.ts に同じ定義が並んでいたので集約した。
-// generics 版で受けるとタグごとの正しい戻り型（HTMLDivElement 等）が伝播する。
-export function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  opts?: { class?: string; text?: string; html?: string; attrs?: Record<string, string> },
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  if (opts?.class) node.className = opts.class;
-  if (opts?.text != null) node.textContent = opts.text;
-  if (opts?.html != null) node.innerHTML = opts.html;
-  if (opts?.attrs) for (const [k, v] of Object.entries(opts.attrs)) node.setAttribute(k, v);
-  return node;
 }
 
 // --- ESM window-interop publish (generated; preserves dynamic window.* lookups) ---

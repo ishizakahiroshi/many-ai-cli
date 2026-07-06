@@ -9,21 +9,6 @@ import (
 const (
 	defaultVTCols = 200
 	defaultVTRows = 50
-	// maxEscapeSeqBytes は蓄積中のエスケープシーケンス（b.esc）の上限バイト数。
-	// CSI（ESC [）は最終バイト 0x40-0x7e で終端するが、未終端のままパラメータ/中間
-	// バイト（0x20-0x3f）を延々と送られると escapeComplete が永久に false になり、
-	// 永続フィールド b.esc が Write（WS フレーム）をまたいで無制限に増加する
-	// （悪意ある/プロンプトインジェクションされた AI 出力によるメモリ枯渇 DoS）。
-	// 実端末同様、上限超過の過長シーケンスは破棄する。正規の CSI は数十バイトに
-	// 収まるため、この上限で正常な画面描画が壊れることはない。
-	maxEscapeSeqBytes = 256
-	// maxStringSeqSkipBytes は OSC/DCS/SOS/PM/APC スキップ中に読み飛ばすバイト数の上限。
-	// これらは BEL / ST（ESC \）で終端されるまでペイロードを破棄する（メモリは増えない）が、
-	// 未終端の導入子（ESC ] 等）を送られると inOSC/inStringSeq が永続 true になり、以降の
-	// 全出力が破棄されて承認検知が盲目化する（AUDIT-9）。上限を超えたら未終端とみなして
-	// スキップを打ち切り検知を回復させる。正規の（終端される）OSC/DCS はこの上限に達しない
-	// よう十分大きく取る（読み飛ばしはメモリを消費しないため大きめでよい）。
-	maxStringSeqSkipBytes = 1 << 20 // 1 MiB
 )
 
 type vtBuffer struct {
@@ -43,9 +28,6 @@ type vtBuffer struct {
 	// inStringSeq は OSC 以外の文字列シーケンス（DCS/SOS/PM/APC）の
 	// ペイロードをスキップ中かを示す（finding #: DCS Sixel 等を画面に出力しない）。
 	inStringSeq bool
-	// stringSeqSkipBytes は inOSC/inStringSeq スキップ中に読み飛ばしたバイト数。
-	// maxStringSeqSkipBytes を超えたら未終端シーケンスとみなしてスキップを打ち切る（AUDIT-9）。
-	stringSeqSkipBytes int
 }
 
 // isStringSequenceIntroducer は ESC の次のバイトが文字列シーケンス（OSC/DCS/SOS/PM/APC）を
@@ -127,46 +109,30 @@ func (b *vtBuffer) Write(data []byte) {
 		if b.inOSC {
 			if buf[0] == 0x07 {
 				b.inOSC = false
-				b.stringSeqSkipBytes = 0
 				buf = buf[1:]
 				continue
 			}
 			if len(buf) >= 2 && buf[0] == 0x1b && buf[1] == '\\' {
 				b.inOSC = false
-				b.stringSeqSkipBytes = 0
 				buf = buf[2:]
 				continue
 			}
 			buf = buf[1:]
-			b.stringSeqSkipBytes++
-			if b.stringSeqSkipBytes > maxStringSeqSkipBytes {
-				// 未終端 OSC を打ち切り、承認検知の永続的な盲目化を防ぐ（AUDIT-9）。
-				b.inOSC = false
-				b.stringSeqSkipBytes = 0
-			}
 			continue
 		}
 		// DCS/SOS/PM/APC (ESC P/X/^/_) スキップ: ST (ESC \) または BEL で終端。
 		if b.inStringSeq {
 			if buf[0] == 0x07 {
 				b.inStringSeq = false
-				b.stringSeqSkipBytes = 0
 				buf = buf[1:]
 				continue
 			}
 			if len(buf) >= 2 && buf[0] == 0x1b && buf[1] == '\\' {
 				b.inStringSeq = false
-				b.stringSeqSkipBytes = 0
 				buf = buf[2:]
 				continue
 			}
 			buf = buf[1:]
-			b.stringSeqSkipBytes++
-			if b.stringSeqSkipBytes > maxStringSeqSkipBytes {
-				// 未終端 DCS/SOS/PM/APC を打ち切り、承認検知の盲目化を防ぐ（AUDIT-9）。
-				b.inStringSeq = false
-				b.stringSeqSkipBytes = 0
-			}
 			continue
 		}
 		if len(b.esc) > 0 {
@@ -175,23 +141,16 @@ func (b *vtBuffer) Write(data []byte) {
 			if b.esc[0] == 0x1b && len(b.esc) >= 2 && b.esc[1] == ']' {
 				b.esc = nil
 				b.inOSC = true
-				b.stringSeqSkipBytes = 0
 				continue
 			}
 			// DCS/SOS/PM/APC 導入文字の検出
 			if b.esc[0] == 0x1b && len(b.esc) >= 2 && isStringSequenceIntroducer(b.esc[1]) {
 				b.esc = nil
 				b.inStringSeq = true
-				b.stringSeqSkipBytes = 0
 				continue
 			}
 			if b.escapeComplete() {
 				b.processEscape(string(b.esc))
-				b.esc = nil
-			} else if len(b.esc) > maxEscapeSeqBytes {
-				// 未終端の過長エスケープを破棄する（b.esc 無制限増加による
-				// メモリ枯渇 DoS の防止）。以降のバイトは通常テキストとして処理され、
-				// 描画先の cells グリッドは固定サイズなのでメモリは有界に保たれる。
 				b.esc = nil
 			}
 			continue
@@ -233,14 +192,6 @@ func (b *vtBuffer) escapeComplete() bool {
 		return false
 	}
 	if b.esc[1] != '[' {
-		// SCS（G0..G3 文字集合指定）は 3 バイト必要: `ESC ( <designator>` /
-		// `)` / `*` / `+`。2 バイトで完了扱いにすると次の designator が通常
-		// テキストとしてグリッドに書き込まれ、承認検出のテール文字列が
-		// 1 文字ずれる（terminfo `sgr0` に含まれる `ESC ( B` 等が該当）。
-		switch b.esc[1] {
-		case '(', ')', '*', '+':
-			return len(b.esc) >= 3
-		}
 		return true
 	}
 	if len(b.esc) < 3 {

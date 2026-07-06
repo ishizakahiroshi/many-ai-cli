@@ -1,11 +1,11 @@
 {
   "name": "MANY-AI-CLI",
-  "short_name": "MANY-AI",
+  "short_name": "ANY-AI",
   "description": "Local Hub UI for AI CLI sessions and approvals.",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0d0f17",
-  "theme_color": "#0d0f17",
+  "background_color": "#08090d",
+  "theme_color": "#08090d",
   "icons": [
     {
       "src": "/icons/icon-192.png",

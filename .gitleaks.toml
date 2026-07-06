@@ -41,9 +41,6 @@ description = "ルール定義自身・サンプル記載・バイナリのた�
 paths = [
   '''^\.gitleaks\.toml$''',
   '''^\.github/workflows/secret-scan\.yml$''',
-  # Vendored 3rd party（minified xterm.js 等）。難読化済みリテラルが
-  # generic-api-key の entropy 判定に引っかかる誤検知の温床のため一括除外。
-  '''^web/src/vendor/''',
   # バイナリ（ランダムバイトが IP 正規表現に偶然マッチするため除外）
   '''\.syso$''',
   '''\.(?:png|jpe?g|webp|gif|ico|woff2?|ttf|otf|eot|wasm)$''',

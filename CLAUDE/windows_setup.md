@@ -1,6 +1,6 @@
 # many-ai-cli Windows 開発環境
 
-> 最終更新: 2026-07-05(日) 10:50:11 — 旧パス cli-popup・Vue 拡張・Vite/旧環境変数の陳腐化記述を修正
+> 最終更新: 2026-06-07(日) 01:46:08
 
 開発端末は Windows 11。`many-ai-cli` 自体はクロスプラットフォーム（Win/Mac/Linux）だが、本ドキュメントは作者の環境固有の手順をまとめる。
 
@@ -12,7 +12,7 @@
 | Node.js 20+ | フロント (`web/`) ビルドスクリプト実行 | `winget install OpenJS.NodeJS.LTS` |
 | Bun 1.3+ | フロント (`web/`) 依存取得・スクリプト起動 | `winget install Oven-sh.Bun` |
 | Git | バージョン管理 | Git Bash (MSYS2) 同梱 |
-| VS Code | エディタ | Go・ESLint 拡張 |
+| VS Code | エディタ | Go・Vue Language Features・ESLint 拡張 |
 | PowerShell 7+ (`pwsh`) | スクリプト・タイムスタンプ取得 | 本リポジトリのコマンドはすべて `pwsh` 想定 |
 | Git Bash (MSYS2) | bash 互換シェル | 設計書のクロスコンパイルコマンド実行用 |
 
@@ -21,8 +21,9 @@
 ### 初回セットアップ
 
 ```bash
-# Git Bash で（リポジトリルートにて）
-go mod download
+# Git Bash で
+cd /c/dev/cli-popup
+go mod download         # go.mod が用意されたら
 cd web
 bun install             # npm / pnpm は使わない（bun.lock が正）
 ```
@@ -46,7 +47,7 @@ go test ./...
 
 ### ホットリロード（フロント開発時）
 
-未整備（Vite は不採用・esbuild のみ）。フロント変更時は `cd web && bun run build` で都度ビルドする（`deployment.md` 参照）。
+実装方針は `deployment.md` 参照。Vite dev server を別ポート（例: 5173）で起動し、Hub は dev mode のときだけ Vite へプロキシする想定。
 
 ## PowerShell でのタイムスタンプ取得
 
@@ -75,7 +76,7 @@ $d = Get-Date; "{0}({1}) {2}" -f $d.ToString("yyyy-MM-dd"), "日月火水木金�
 
 - 自前ビルドの `many-ai-cli.exe` は署名なしのため初回起動時に警告が出る可能性
 - `127.0.0.1` バインドのため Defender Firewall の警告は出ない見込み（出たら `localhost のみ` で許可）
-- 配布導線の原則（npm / winget / Scoop / GitHub Releases zip）は `deployment.md` の「Windows 配布導線の原則」を参照。Authenticode 署名は未導入
+- 詳細は v0.4 で署名 / 配布方針を決める
 
 ### ConPTY（Windows 10 1809+）
 
@@ -91,6 +92,7 @@ $d = Get-Date; "{0}({1}) {2}" -f $d.ToString("yyyy-MM-dd"), "日月火水木金�
   "go.formatTool": "gofmt",
   "go.lintTool": "golangci-lint",
   "[go]": { "editor.defaultFormatter": "golang.go" },
+  "[vue]": { "editor.defaultFormatter": "Vue.volar" },
   "files.eol": "\n"
 }
 ```
@@ -100,6 +102,6 @@ $d = Get-Date; "{0}({1}) {2}" -f $d.ToString("yyyy-MM-dd"), "日月火水木金�
 設計書 §9 の Hub UI 動作確認用：
 
 1. Windows Terminal で 4 ペイン分割
-2. 各ペインで `cd C:\dev\project-X` してから `many-ai-cli.exe wrap <provider>` を起動（または `MANY_AI_CLI_AUTO=1` + `eval "$(many-ai-cli.exe shell-init)"` 経由）
+2. 各ペインで `cd C:\dev\project-X` してから `many-ai-cli.exe wrap <provider>` を起動（または `AI_HUB_AUTO=1` + `eval "$(many-ai-cli.exe shell-init)"` 経由）
 3. 別ウィンドウでブラウザを開き `http://127.0.0.1:47777/?token=<起動時に表示>` を表示
 4. ブラウザを画面下部または右側に常時固定し、4 ペインが上に並ぶレイアウトで動作確認

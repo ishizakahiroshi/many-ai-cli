@@ -162,10 +162,7 @@ function hvSanitize(text: string, offset: number): string {
     const nl = text.indexOf('\n');
     if (nl >= 0 && nl < text.length - 1) text = text.slice(nl + 1);
   }
-  // 変換前のフレームで設定された色(SGR)状態が次のフレームへ持ち越されないよう、
-  // 改行への置換と同時に色をリセットする（Grok Build 等、絶対座標描画+truecolor
-  // で「ほぼ黒 on 黒」のような一時状態を挟む出力が積み重なって不可視化するのを防ぐ）
-  return text.replace(HV_REWRITE_RE, '\x1b[0m\r\n').replace(HV_DROP_RE, '');
+  return text.replace(HV_REWRITE_RE, '\r\n').replace(HV_DROP_RE, '');
 }
 
 function hvUpdateRangeLabel() {
@@ -213,7 +210,7 @@ async function hvGoto(offset: number) {
   }
 }
 
-export function openHistoryViewer(sid: number, opts: { offset?: number } = {}) {
+export function openHistoryViewer(sid: number) {
   if (!sessions.has(sid)) return;
   const root = ensureViewer();
   if (!root) return;
@@ -225,13 +222,8 @@ export function openHistoryViewer(sid: number, opts: { offset?: number } = {}) {
   if (term && hvFit) {
     requestAnimationFrame(() => { try { hvFit.fit(); } catch (_) {} });
   }
-  // 既定（ボタン経由）: 先頭ページ。
-  // offset=-1: 末尾ページ（ホイール上自動展開時の「直近の過去」起点）。
-  hvGoto(opts.offset ?? 0);
-}
-
-export function isHistoryViewerOpen(): boolean {
-  return !!(hvRoot && !hvRoot.hidden);
+  // 「上端より前が見たい」導線なので先頭ページから開く
+  hvGoto(0);
 }
 
 export function closeHistoryViewer() {

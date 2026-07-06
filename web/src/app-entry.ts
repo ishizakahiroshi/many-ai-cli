@@ -23,6 +23,7 @@ import './app/voice.js';
 import './app/voice-whisper.js';
 import './app/git-view.js';
 import './app/files-view.js';
+import './app/workbench.js';
 import './app/pwa.js';
 import { initTokenStatusbar } from './app/token-statusbar.js';
 import { initDetachedGridMode } from './app/detached-grid.js';

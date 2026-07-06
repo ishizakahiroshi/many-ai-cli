@@ -151,6 +151,8 @@
   margin-top: 4px;
 }
 .aqt-question--preamble {
+  max-height: 9em;
+  overflow-y: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   padding: 8px 10px;
@@ -158,41 +160,6 @@
   border-radius: var(--radius-md);
   background: var(--bg);
   color: var(--text-soft);
-}
-/* clamp 行数は CSS 変数で上書き可能（preamble=3 / question=2 を既定） */
-.aqt-card {
-  --aqt-clamp-pre: 3;
-  --aqt-clamp-q: 2;
-}
-.aqt-question--preamble.is-clamped {
-  display: -webkit-box;
-  -webkit-line-clamp: var(--aqt-clamp-pre);
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.aqt-question--batch.is-clamped {
-  display: -webkit-box;
-  -webkit-line-clamp: var(--aqt-clamp-q);
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.aqt-question-toggle {
-  margin-top: 2px;
-  background: none;
-  border: none;
-  color: var(--accent);
-  cursor: pointer;
-  font-size: 0.8em;
-  padding: 2px 0;
-  min-height: 32px;
-}
-.aqt-question-toggle[hidden] {
-  display: none !important;
-}
-.aqt-card--expanded .aqt-question--preamble,
-.aqt-card--expanded .aqt-question--batch {
-  -webkit-line-clamp: unset;
-  overflow: visible;
 }
 .aqt-question--detecting,
 .aqt-question--multiq {
@@ -221,9 +188,6 @@
   text-align: left;
   word-break: break-word;
 }
-/* 既定（PC）は従来の「N. label」テキスト表示を span 構造で再現する。
-   スマホでは mobile-home.css 側で丸バッジに override する（Q1 番号併記の視覚スタイル）。 */
-.aqt-option-btn .aqt-option-num::after { content: ". "; white-space: pre; }
 .aqt-option-btn:hover:not(:disabled) {
   background: var(--bg-hover);
   border-color: var(--accent);
@@ -313,6 +277,9 @@
   }
   .aqt-question {
     font-size: 0.86rem;
+  }
+  .aqt-question--preamble {
+    max-height: 7.5em;
   }
   .aqt-option-btn {
     width: 100%;

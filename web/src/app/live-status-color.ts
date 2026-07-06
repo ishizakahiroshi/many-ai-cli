@@ -65,26 +65,9 @@ function resetColors(): void {
 }
 
 let popoverEl: HTMLElement | null = null;
-let paletteButtonEl: HTMLElement | null = null;
-let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-let suppressDocumentClickUntil = 0;
-
-const mobileMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
-  ? window.matchMedia('(max-width: 720px)') : null;
-
-function isMobileViewport(): boolean {
-  return !!mobileMql?.matches;
-}
 
 function closePopover(): void {
   if (popoverEl) popoverEl.hidden = true;
-}
-
-function openPalette(anchor: HTMLElement, syncInputs: () => void, positionPopover: (anchor: HTMLElement) => void): void {
-  if (!popoverEl) return;
-  syncInputs();
-  popoverEl.hidden = false;
-  positionPopover(anchor);
 }
 
 function buildUI(): void {
@@ -97,7 +80,6 @@ function buildUI(): void {
   btn.textContent = '🎨';
   btn.setAttribute('aria-label', ti18n('live_status_palette_tooltip'));
   btn.title = ti18n('live_status_palette_tooltip');
-  paletteButtonEl = btn;
 
   const pop = document.createElement('div');
   pop.className = 'live-status-palette-popover';
@@ -138,8 +120,8 @@ function buildUI(): void {
   };
 
   // ボタンの右上にポップオーバーを配置（帯の上側に出す）。
-  const positionPopover = (anchor: HTMLElement = btn) => {
-    const r = anchor.getBoundingClientRect();
+  const positionPopover = () => {
+    const r = btn.getBoundingClientRect();
     pop.style.left = 'auto';
     pop.style.right = `${Math.max(6, window.innerWidth - r.right)}px`;
     // 一旦表示してから高さを測り、ボタンの上に重ならないよう持ち上げる。
@@ -149,29 +131,9 @@ function buildUI(): void {
 
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (pop.hidden) openPalette(btn, syncInputs, positionPopover);
+    if (pop.hidden) { syncInputs(); pop.hidden = false; positionPopover(); }
     else pop.hidden = true;
   });
-
-  const cancelLongPress = () => {
-    if (longPressTimer !== null) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-    }
-  };
-  bar.addEventListener('touchstart', (e) => {
-    if (!isMobileViewport()) return;
-    if (e.target === btn || pop.contains(e.target as Node)) return;
-    cancelLongPress();
-    longPressTimer = setTimeout(() => {
-      longPressTimer = null;
-      openPalette(bar, syncInputs, positionPopover);
-      suppressDocumentClickUntil = Date.now() + 450;
-    }, 500);
-  }, { passive: true });
-  bar.addEventListener('touchmove', cancelLongPress, { passive: true });
-  bar.addEventListener('touchend', cancelLongPress, { passive: true });
-  bar.addEventListener('touchcancel', cancelLongPress, { passive: true });
   // 入力中（input）でライブプレビュー、確定（change）で保存
   bgInput.addEventListener('input', () => document.documentElement.style.setProperty('--live-status-bg', bgInput.value));
   fgInput.addEventListener('input', () => document.documentElement.style.setProperty('--live-status-fg', fgInput.value));
@@ -181,7 +143,6 @@ function buildUI(): void {
 
   pop.addEventListener('click', (e) => e.stopPropagation());
   document.addEventListener('click', (e) => {
-    if (Date.now() < suppressDocumentClickUntil) return;
     if (!pop.hidden && e.target !== btn && !pop.contains(e.target as Node)) closePopover();
   });
 }
@@ -189,9 +150,4 @@ function buildUI(): void {
 export function initLiveStatusColor(): void {
   applyLiveStatusColors();
   buildUI();
-}
-
-export function openLiveStatusPalette(): void {
-  if (!popoverEl || !paletteButtonEl) return;
-  paletteButtonEl.click();
 }

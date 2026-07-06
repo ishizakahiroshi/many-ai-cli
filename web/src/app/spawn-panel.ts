@@ -11,7 +11,6 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 // ---- 新規セッション spawn panel ----
 (function () {
   const newSessionBtn   = document.getElementById('new-session-btn');
-  const orchestrationBtn = document.getElementById('orchestration-btn');
   const newSessionPanel = document.getElementById('new-session-panel');
   const spawnCwdInput   = document.getElementById('spawn-cwd');
   const spawnCwdBrowse  = document.getElementById('spawn-cwd-browse');
@@ -32,99 +31,6 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   const spawnModelRefreshBtn = document.getElementById('spawn-model-refresh');
   let codexModelSelection: any = null;
   let claudeModelSelection: any = null;
-
-  // ---- C1: オーケストレーション（plan_orchestration-spawn-ui-exposure.md） ----
-  // 「オーケストレーション」ボタンから開いたときだけ true。同じ起動フォームを共用し、
-  // true のときだけ子役割の詳細設定アコーディオンを見せ、spawn リクエストに
-  // orchestration フラグ（+ 設定されていれば役割マッピング）を載せる。
-  let spawnOrchestrationMode = false;
-  const spawnOrchestrationSection  = document.getElementById('spawn-orchestration-section');
-  const spawnOrchestrationBypassNote = document.getElementById('spawn-orchestration-bypass-note');
-  const spawnOrchestrationSummary  = document.getElementById('spawn-orchestration-summary');
-  const spawnRoleTableBody         = document.getElementById('spawn-role-table-body');
-
-  const ORCHESTRATION_ROLE_DEFS = [
-    { key: 'implementation', labelKey: 'spawn_role_implementation' },
-    { key: 'test',           labelKey: 'spawn_role_test' },
-    { key: 'review',         labelKey: 'spawn_role_review' },
-  ];
-  // Shell はロールの CLI 候補としては意味を持たないため除外。
-  const ORCHESTRATION_CLI_OPTIONS = [
-    { value: '',             labelKey: 'spawn_role_cli_none' },
-    { value: 'claude',       label: 'Claude Code' },
-    { value: 'codex',        label: 'Codex CLI' },
-    { value: 'copilot',      label: 'GitHub Copilot' },
-    { value: 'cursor-agent', label: 'Cursor Agent' },
-    { value: 'opencode',     label: 'OpenCode' },
-    { value: 'grok',         label: 'Grok Build' },
-  ];
-
-  function syncRoleModelDisabledState(): void {
-    spawnRoleTableBody?.querySelectorAll('tr').forEach(tr => {
-      const cli = tr.querySelector<HTMLSelectElement>('.spawn-role-cli');
-      const model = tr.querySelector<HTMLInputElement>('.spawn-role-model');
-      if (!cli || !model) return;
-      model.disabled = !cli.value;
-      if (!cli.value) model.value = '';
-    });
-  }
-
-  // role → {provider, model} | null のマッピングと、実際に設定された件数を返す。
-  function collectOrchestrationRoles(): { roles: Record<string, { provider: string; model: string } | null>; count: number } {
-    const roles: Record<string, { provider: string; model: string } | null> = {};
-    let count = 0;
-    spawnRoleTableBody?.querySelectorAll('tr').forEach(tr => {
-      const role = (tr as HTMLElement).dataset.role;
-      const cli = tr.querySelector<HTMLSelectElement>('.spawn-role-cli');
-      const model = tr.querySelector<HTMLInputElement>('.spawn-role-model');
-      if (!role || !cli) return;
-      if (!cli.value) { roles[role] = null; return; }
-      roles[role] = { provider: cli.value, model: (model?.value || '').trim() };
-      count++;
-    });
-    return { roles, count };
-  }
-
-  function updateOrchestrationSummary(): void {
-    if (!spawnOrchestrationSummary) return;
-    const { count } = collectOrchestrationRoles();
-    spawnOrchestrationSummary.textContent = count > 0
-      ? t('spawn_orchestration_roles_summary_set', { count })
-      : t('spawn_orchestration_roles_summary_empty');
-  }
-
-  function buildOrchestrationRoleTable(): void {
-    if (!spawnRoleTableBody) return;
-    spawnRoleTableBody.innerHTML = ORCHESTRATION_ROLE_DEFS.map(r => {
-      const cliOptions = ORCHESTRATION_CLI_OPTIONS.map(o =>
-        `<option value="${o.value}">${escapeHtml(o.label || t(o.labelKey))}</option>`
-      ).join('');
-      return (
-        `<tr data-role="${r.key}">` +
-        `<td>${escapeHtml(t(r.labelKey))}</td>` +
-        `<td><select class="spawn-role-cli">${cliOptions}</select></td>` +
-        `<td><input type="text" class="spawn-role-model" data-i18n-placeholder="spawn_role_model_placeholder" placeholder="${escapeHtml(t('spawn_role_model_placeholder'))}" disabled></td>` +
-        `</tr>`
-      );
-    }).join('');
-    spawnRoleTableBody.querySelectorAll('.spawn-role-cli').forEach(sel => {
-      sel.addEventListener('change', () => { syncRoleModelDisabledState(); updateOrchestrationSummary(); });
-    });
-    spawnRoleTableBody.querySelectorAll('.spawn-role-model').forEach(inp => {
-      inp.addEventListener('input', updateOrchestrationSummary);
-    });
-    syncRoleModelDisabledState();
-    updateOrchestrationSummary();
-  }
-
-  function setSpawnOrchestrationMode(on: boolean): void {
-    spawnOrchestrationMode = on;
-    if (spawnOrchestrationSection) (spawnOrchestrationSection as HTMLDetailsElement).hidden = !on;
-    // 子セッションが承認スキップ（全許可）で自走する旨の注意はオーケストレーション時のみ見せる
-    if (spawnOrchestrationBypassNote) spawnOrchestrationBypassNote.hidden = !on;
-    if (on && spawnRoleTableBody && !spawnRoleTableBody.children.length) buildOrchestrationRoleTable();
-    if (spawnOrchestrationSection) (spawnOrchestrationSection as HTMLDetailsElement).open = false;
-  }
 
   // ---- C2: Detached 設定 ----
   const spawnDetachedOpts   = document.getElementById('spawn-detached-opts');
@@ -214,17 +120,13 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     if (provider === 'cursor-agent') {
       return spawnModelGroups.filter(g => g && g.provider === 'cursor-agent' && Array.isArray(g.models));
     }
-    if (provider === 'grok') {
-      return spawnModelGroups.filter(g => g && g.provider === 'grok' && Array.isArray(g.models));
-    }
     const groups = spawnModelGroups.filter(g => g && Array.isArray(g.models) && (!g.provider || g.provider === provider));
     groups.sort((a, b) => {
       const rank = (g) => {
         if (g.provider === provider) return 0;
         if (g.label === 'Ollama Cloud') return 1;
         if (g.label === 'Ollama Local') return 2;
-        if (g.label === 'LM Studio') return 3;
-        return 4;
+        return 3;
       };
       return rank(a) - rank(b);
     });
@@ -274,7 +176,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   function clearOllamaModelDefault() {
     const m = spawnModelInput.value.trim();
     if (!m) return;
-    if (['ollama', 'lm-studio'].includes(resolveRoute(spawnProviderEl.value, m))) {
+    if (resolveRoute(spawnProviderEl.value, m) === 'ollama') {
       setSpawnModelValue('');
       clearModelSelectionState();
     }
@@ -309,9 +211,6 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       return '';
     }
     if (provider === 'cursor-agent') {
-      return '';
-    }
-    if (provider === 'grok') {
       return '';
     }
     for (const g of getModelGroupsForProvider(provider)) {
@@ -530,15 +429,11 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     const codexNote = document.getElementById('spawn-codex-note');
     const copilotNote = document.getElementById('spawn-copilot-note');
     const cursorAgentNote = document.getElementById('spawn-cursor-agent-note');
-    const opencodeNote = document.getElementById('spawn-opencode-note');
-    const grokNote = document.getElementById('spawn-grok-note');
     const shellNote = document.getElementById('spawn-shell-note');
     if (claudeNote) claudeNote.hidden = (p !== 'claude');
     if (codexNote) codexNote.hidden = (p !== 'codex');
     if (copilotNote) copilotNote.hidden = (p !== 'copilot');
     if (cursorAgentNote) cursorAgentNote.hidden = (p !== 'cursor-agent');
-    if (opencodeNote) opencodeNote.hidden = (p !== 'opencode');
-    if (grokNote) grokNote.hidden = (p !== 'grok');
     if (shellNote) shellNote.hidden = !isShell;
     if (p !== 'codex')  codexModelSelection  = null;
     if (p !== 'claude') claudeModelSelection = null;
@@ -597,15 +492,11 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         const codexNote = document.getElementById('spawn-codex-note');
         const copilotNote = document.getElementById('spawn-copilot-note');
         const cursorAgentNote = document.getElementById('spawn-cursor-agent-note');
-        const opencodeNote = document.getElementById('spawn-opencode-note');
-        const grokNote = document.getElementById('spawn-grok-note');
         const shellNote = document.getElementById('spawn-shell-note');
         if (claudeNote) claudeNote.hidden = (p !== 'claude');
         if (codexNote) codexNote.hidden = (p !== 'codex');
         if (copilotNote) copilotNote.hidden = (p !== 'copilot');
         if (cursorAgentNote) cursorAgentNote.hidden = (p !== 'cursor-agent');
-        if (opencodeNote) opencodeNote.hidden = (p !== 'opencode');
-        if (grokNote) grokNote.hidden = (p !== 'grok');
         if (shellNote) shellNote.hidden = !isShell;
       }
       if (s.cwd)              spawnCwdInput.value = s.cwd;
@@ -832,209 +723,23 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     });
   }
 
-  // ---- C1: 検索ドリブン ロジック層 ----
-  // D9 スコアリング用の型。C2 で描画に使う。export しない（module 内参照のみ）。
-  interface SearchResult {
-    path: string;
-    basename: string;
-    isFav: boolean;
-    isHist: boolean;
-    isUnregistered: boolean;
-    score: number;
-  }
-
-  // 入力値を prefix / query / isPath の 3 値に分解する。
-  // 判定順: D2 に従い、Windows パス先頭 (<英字>:\) は isPath 扱いで prefix 抽出しない。
-  function parseCwdInput(value: string): { prefix: string | null; query: string; isPath: boolean } {
-    // \ か / を含む、もしくは Windows パス先頭 (<英字>:\) → isPath
-    if (/[/\\]/.test(value) || /^[A-Za-z]:\\/.test(value)) {
-      return { prefix: null, query: value, isPath: true };
-    }
-    // prefix 判定: 先頭が <英字 1+>: で、: 直後が \ でも / でもない場合のみ
-    const m = value.match(/^([A-Za-z]+):([^/\\].*)?$/);
-    if (m) {
-      return { prefix: m[1], query: m[2] ?? '', isPath: false };
-    }
-    return { prefix: null, query: value, isPath: false };
-  }
-
-  // お気に入りリストから既知ルートを派生させる。
-  // 各 fav の親ディレクトリの末尾セグメントを短縮名キー（値はフルパス）とする。
-  // 同名衝突時は親 1 段追加した形（例: "github\public"）に変更する。
-  function deriveRootsFromFavorites(favs: string[]): Map<string, string> {
-    // 各 fav の親ディレクトリを取得する。
-    function parentOf(p: string): string {
-      const v = p.replace(/[/\\]+$/, '');
-      const sep = v.includes('\\') ? '\\' : '/';
-      const idx = Math.max(v.lastIndexOf('\\'), v.lastIndexOf('/'));
-      if (idx < 0) return v;
-      return v.slice(0, idx) || sep;
-    }
-    function segmentOf(p: string, depth = 1): string {
-      const parts = p.replace(/[/\\]+$/, '').split(/[/\\]/);
-      return parts.slice(-depth).join('\\');
-    }
-
-    // まず全 fav の親パスを集める（重複排除）。
-    const parents = [...new Set(favs.map(parentOf))];
-    // 短縮名 → フルパスの候補マップ（衝突検出用）。
-    const nameToPath = new Map<string, string>();
-    const collisions = new Set<string>();
-    for (const p of parents) {
-      const name = segmentOf(p, 1);
-      if (nameToPath.has(name) && nameToPath.get(name) !== p) {
-        collisions.add(name);
-      } else {
-        nameToPath.set(name, p);
-      }
-    }
-    // 衝突したエントリは depth=2 で再登録する。
-    const result = new Map<string, string>();
-    for (const p of parents) {
-      const name = segmentOf(p, 1);
-      if (collisions.has(name)) {
-        result.set(segmentOf(p, 2), p);
-      } else {
-        result.set(name, p);
-      }
-    }
-    return result;
-  }
-
-  // 全ルートを並列 pre-scan して subdirsCache を充填する。
-  // dropdown が開いた瞬間に呼び出し、結果が来たら必要に応じて再描画するよう設計。
-  // TODO(D11): 隠しフォルダ除外は API 確認後（/api/list-subdirs 側の返却内容次第）
-  async function prescanRoots(roots: Map<string, string>): Promise<void> {
-    await Promise.all([...roots.values()].map(p => fetchSubdirs(p)));
-  }
-
-  // query / prefix に基づいて全ルートのサブディレクトリを横断検索し、SearchResult[] を返す。
-  // prefix 指定時はそのルートのみ検索。無指定時は全ルート。
-  // 重複パスは favSet / histSet の状態で統合される（set 内にあれば isFav/isHist が立つ）。
-  function buildSearchResults(
-    query: string,
-    prefix: string | null,
-    allSubdirs: Map<string, string>,
-    favSet: Set<string>,
-    histSet: Set<string>,
-  ): SearchResult[] {
-    const lowQuery = query.toLowerCase();
-    const seen = new Set<string>();
-    const results: SearchResult[] = [];
-
-    for (const [shortName, rootPath] of allSubdirs) {
-      // prefix が指定されていてこのルートと一致しない場合はスキップ。
-      if (prefix !== null && shortName.toLowerCase() !== prefix.toLowerCase()) continue;
-
-      const sep = rootPath.includes('\\') ? '\\' : '/';
-      const subdirs = subdirsCache.get(rootPath) ?? [];
-      for (const name of subdirs) {
-        const fullPath = rootPath + sep + name;
-        if (seen.has(fullPath)) continue;
-        // basename に query が含まれるもののみ結果対象。query が空の場合は全件。
-        if (lowQuery && !name.toLowerCase().includes(lowQuery)) continue;
-        seen.add(fullPath);
-
-        const isFav = favSet.has(fullPath);
-        const isHist = histSet.has(fullPath);
-        const isUnregistered = !isFav && !isHist;
-
-        // D9 スコアリング: 一致種別 + 登録種別の合算。
-        let matchScore = 0;
-        const lowName = name.toLowerCase();
-        if (lowQuery) {
-          if (lowName === lowQuery) matchScore = 100;
-          else if (lowName.startsWith(lowQuery)) matchScore = 50;
-          else matchScore = 10;
-        }
-        const regScore = isFav ? 5 : isHist ? 2 : 0;
-
-        results.push({
-          path: fullPath,
-          basename: name,
-          isFav,
-          isHist,
-          isUnregistered,
-          score: matchScore + regScore,
-        });
-      }
-    }
-
-    // 降順ソート（スコア同点の場合は basename アルファベット順）。
-    results.sort((a, b) => b.score - a.score || a.basename.localeCompare(b.basename));
-    return results;
-  }
-  // ---- /C1: 検索ドリブン ロジック層 ----
-
   function renderCwdDropdown(filter) {
     const favs = loadCwdFavorites();
     const favSet = new Set(favs);
     const hist = loadCwdHistory();
-    const histSet = new Set(hist);
-    const roots = deriveRootsFromFavorites(favs);
-
-    // 入力値を解析して prefix / query / isPath を得る。
-    const parsed = parseCwdInput(filter);
-
-    // isPath のときは既存の subdirs 展開ロジックに完全に委ねる。
-    // chip 行は出してもよいが検索結果セクションは出さない。
-    const isPathMode = parsed.isPath;
-
-    // subdirs 展開（末尾区切り文字入力時）。
     const subItems: string[] = subdirsCurrent
       ? subdirsCurrent.items.map(name => subdirsCurrent!.parent + subdirsCurrent!.sep + name)
       : [];
-
-    // ---- chip 行 ----
-    // お気に入りが 0 件で roots も空のときは chip 行を出さない。
-    const hasRoots = roots.size > 0;
-
-    // 各 chip のマッチ件数（キャッシュ済みサブディレクトリ数をカウント）。
-    function countForRoot(shortName: string, rootPath: string): number {
-      const subdirs = subdirsCache.get(rootPath) ?? [];
-      if (!parsed.query) return subdirs.length;
-      const low = parsed.query.toLowerCase();
-      return subdirs.filter(n => n.toLowerCase().includes(low)).join('').length > 0
-        ? subdirs.filter(n => n.toLowerCase().includes(low)).length
-        : subdirs.filter(n => n.toLowerCase().includes(low)).length;
-    }
-
-    // chip の active 判定: input が "<prefix>:" で始まっているか。
-    function isChipActive(shortName: string): boolean {
-      if (!parsed.prefix) return false;
-      return parsed.prefix.toLowerCase() === shortName.toLowerCase();
-    }
-
-    // ---- 検索結果（isPath でないとき）----
-    let searchItems: SearchResult[] = [];
-    if (!isPathMode && roots.size > 0) {
-      searchItems = buildSearchResults(parsed.query, parsed.prefix, roots, favSet, histSet);
-    }
-
-    // 検索結果に出たパスセットを記録して fav/hist から除外する。
-    const searchPathSet = new Set(searchItems.map(r => r.path));
-
-    // fav/hist の絞り込み（検索結果に出たものは除外）。
     const favItems = (filter
-      ? favs.filter(v => !searchPathSet.has(v) && v.toLowerCase().includes(filter.toLowerCase()))
-      : favs.filter(v => !searchPathSet.has(v)));
+      ? favs.filter(v => v.toLowerCase().includes(filter.toLowerCase()))
+      : favs);
     const histItems = (filter
-      ? hist.filter(v => !favSet.has(v) && !searchPathSet.has(v) && v.toLowerCase().includes(filter.toLowerCase()))
-      : hist.filter(v => !favSet.has(v) && !searchPathSet.has(v)));
+      ? hist.filter(v => !favSet.has(v) && v.toLowerCase().includes(filter.toLowerCase()))
+      : hist.filter(v => !favSet.has(v)));
+    const items = [...subItems, ...favItems, ...histItems];
+    if (items.length === 0) { cwdDropdown.hidden = true; return; }
 
-    // isPath モードのときは検索結果を出さないので fav/hist の除外も不要にリセット。
-    const effectiveFavItems = isPathMode
-      ? (filter ? favs.filter(v => v.toLowerCase().includes(filter.toLowerCase())) : favs)
-      : favItems;
-    const effectiveHistItems = isPathMode
-      ? (filter ? hist.filter(v => !favSet.has(v) && v.toLowerCase().includes(filter.toLowerCase())) : hist.filter(v => !favSet.has(v)))
-      : histItems;
-
-    const allItems = [...subItems, ...(isPathMode ? [] : searchItems.map(r => r.path)), ...effectiveFavItems, ...effectiveHistItems];
-    const hasAny = allItems.length > 0 || hasRoots;
-    if (!hasAny) { cwdDropdown.hidden = true; return; }
-
-    function renderRow(v: string, fav: boolean, isSub = false) {
+    function renderRow(v, fav, isSub = false) {
       const labelFilter = isSub ? '' : filter;
       return (
         `<li class="cwd-dropdown-item${fav ? ' is-favorite' : ''}${isSub ? ' is-subdir' : ''}" tabindex="-1"${fav ? ' draggable="true"' : ''} data-value="${escapeHtml(v)}">` +
@@ -1046,94 +751,25 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       );
     }
 
-    function renderSearchRow(r: SearchResult) {
-      const fav = r.isFav;
-      return (
-        `<li class="cwd-dropdown-item${fav ? ' is-favorite' : ''}" tabindex="-1"${fav ? ' draggable="true"' : ''} data-value="${escapeHtml(r.path)}">` +
-        `<button class="cwd-dropdown-fav${fav ? ' is-on' : ''}" tabindex="-1" data-value="${escapeHtml(r.path)}" ` +
-        `title="${escapeHtml(t(fav ? 'spawn_cwd_unfavorite' : 'spawn_cwd_favorite'))}">${fav ? '★' : '☆'}</button>` +
-        `<span class="cwd-dropdown-mag" aria-hidden="true">🔍</span>` +
-        `<span class="cwd-dropdown-label" title="${escapeHtml(r.path)}">${buildCwdLabelHtml(r.path, parsed.query)}</span>` +
-        `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(r.path)}">×</button>` +
-        `</li>`
-      );
-    }
-
-    const noMatch = !isPathMode && searchItems.length === 0 && effectiveFavItems.length === 0 && effectiveHistItems.length === 0 && subItems.length === 0;
-
+    // セクション見出し（クリック/フォーカス/キーボード移動/D&D の対象外）。
+    // 各セクション0件なら見出しは出さない。
     let html = '';
-
-    // chip 行（roots がある場合のみ）。launcher chip 1 個に圧縮し hover/click で popover を開く。
-    if (hasRoots) {
-      const chipsClass = noMatch ? 'cwd-dropdown-chips has-no-match' : 'cwd-dropdown-chips';
-      // active root と合計件数を集計。launcher の表示に使う。
-      let activeRoot: string | null = null;
-      let totalCount = 0;
-      for (const [shortName, rootPath] of roots) {
-        if (isChipActive(shortName)) activeRoot = shortName;
-        totalCount += countForRoot(shortName, rootPath);
-      }
-      const launcherInner = activeRoot
-        ? `${escapeHtml(activeRoot)}:`
-        : `<span class="chip-count">${totalCount}</span>`;
-      let chipsHtml = `<li class="${chipsClass}">` +
-        `<div class="cwd-dropdown-chip-collapsed">` +
-        `<button class="cwd-dropdown-chip-launcher${activeRoot ? ' is-active' : ''}" type="button" aria-haspopup="true">` +
-        `<span class="chip-icon" aria-hidden="true">🗂</span> ${launcherInner} <span class="chip-caret" aria-hidden="true">▾</span>` +
-        `</button>` +
-        `<div class="cwd-dropdown-chip-popover" role="menu">`;
-      for (const [shortName, rootPath] of roots) {
-        const count = countForRoot(shortName, rootPath);
-        const activeClass = isChipActive(shortName) ? ' is-active' : '';
-        chipsHtml +=
-          `<button class="cwd-dropdown-chip${activeClass}" type="button" data-prefix="${escapeHtml(shortName)}">` +
-          `${escapeHtml(shortName)}:` +
-          `<span class="chip-count">${count}</span>` +
-          `</button>`;
-      }
-      chipsHtml += `</div></div>`;
-      if (noMatch) {
-        chipsHtml += `</li>` +
-          `<li class="cwd-dropdown-no-match" aria-hidden="true">${escapeHtml(t('spawn_cwd_no_match_hint'))}</li>`;
-      } else {
-        chipsHtml += `</li>`;
-      }
-      html += chipsHtml;
-    } else if (noMatch) {
-      // roots が空でも 0 件案内は出す。
-      html += `<li class="cwd-dropdown-no-match" aria-hidden="true">${escapeHtml(t('spawn_cwd_no_match_hint'))}</li>`;
-    }
-
-    // subdirs セクション（末尾区切り入力時）。
     if (subItems.length > 0) {
       html += `<li class="cwd-dropdown-header" aria-hidden="true">${escapeHtml(t('spawn_cwd_section_subdirs'))}</li>`;
       html += subItems.map(v => renderRow(v, false, true)).join('');
     }
-
-    // 検索結果セクション（isPath でないとき）。
-    if (!isPathMode && searchItems.length > 0) {
-      html += `<li class="cwd-dropdown-header is-search" aria-hidden="true">${escapeHtml(t('spawn_cwd_section_search'))}</li>`;
-      html += searchItems.map(r => renderSearchRow(r)).join('');
-    }
-
-    // fav セクション。
-    if (effectiveFavItems.length > 0) {
+    if (favItems.length > 0) {
       html += `<li class="cwd-dropdown-header" aria-hidden="true">${escapeHtml(t('spawn_cwd_section_favorites'))}</li>`;
-      html += effectiveFavItems.map(v => renderRow(v, true)).join('');
+      html += favItems.map(v => renderRow(v, true)).join('');
     }
-
-    // history セクション。
-    if (effectiveHistItems.length > 0) {
+    if (histItems.length > 0) {
       html += `<li class="cwd-dropdown-header" aria-hidden="true">${escapeHtml(t('spawn_cwd_section_history'))}</li>`;
-      html += effectiveHistItems.map(v => renderRow(v, false)).join('');
+      html += histItems.map(v => renderRow(v, false)).join('');
     }
-
     cwdDropdown.innerHTML = html;
     cwdDropdown.hidden = false;
     applyDropdownMissingStatus();
-    // chip クリックは cwdDropdown の委譲 mousedown ハンドラ（下方）で処理するため
-    // ここでの個別リスナ登録は不要。
-    checkPathsExist(allItems).then(applyDropdownMissingStatus);
+    checkPathsExist(items).then(applyDropdownMissingStatus);
   }
 
   // path existence: 作業ディレクトリが実在しないと Cmd.Dir の chdir が
@@ -1214,9 +850,8 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   }
 
   // ボタン押下: パネル表示 + 保存設定を復元 / 未保存時は /api/info から CWD を取得
-  async function openSpawnPanelForMode(orchestration: boolean): Promise<void> {
+  newSessionBtn.addEventListener('click', async () => {
     if (!newSessionPanel.hidden) { newSessionPanel.hidden = true; return; }
-    setSpawnOrchestrationMode(orchestration);
     const hasSavedCwd = loadSpawnSettings();
     if (!hasSavedCwd) {
       try {
@@ -1236,20 +871,11 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       populateModelDatalist();
       clearOllamaModelDefault();
     }
-  }
-
-  newSessionBtn.addEventListener('click', () => { openSpawnPanelForMode(false); });
-  // C1: plan_orchestration-spawn-ui-exposure.md — 通常の起動フォームを共用しつつ、
-  // このボタン経由の起動だけ orchestration フラグを立てる。
-  if (orchestrationBtn) {
-    orchestrationBtn.addEventListener('click', () => { openSpawnPanelForMode(true); });
-  }
+  });
 
   // app.ts（shell セッション内で AI CLI 起動コマンドを検知した誘導）から呼ばれる。
   // 検知した provider と元 shell セッションの cwd をプリセットして新規セッションパネルを開く。
   async function openSpawnFor(provider: string, cwd: string): Promise<void> {
-    // shell セッションからの誘導起動は常に通常モード（オーケストレーションではない）。
-    setSpawnOrchestrationMode(false);
     loadSpawnSettings();
     if (cwd) {
       spawnCwdInput.value = cwd;
@@ -1268,8 +894,6 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     updateSpawnProviderIcon();
     refreshCwdInputStatus();
     spawnCwdInput.focus();
-    // ドロップダウン開く前に全ルートをバックグラウンドで pre-scan してキャッシュを充填する。
-    { const favs = loadCwdFavorites(); prescanRoots(deriveRootsFromFavorites(favs)); }
     if (!spawnModelGroups) {
       fetchModelGroups(false).catch(() => {});
     } else {
@@ -1279,7 +903,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   }
   (window as any).openSpawnFor = openSpawnFor;
 
-  spawnCancelBtn.addEventListener('click', () => { newSessionPanel.hidden = true; setSpawnOrchestrationMode(false); });
+  spawnCancelBtn.addEventListener('click', () => { newSessionPanel.hidden = true; });
   spawnLaunchBtn.addEventListener('click', spawnSession);
   if (spawnCwdBrowse) {
     spawnCwdBrowse.addEventListener('click', async () => {
@@ -1306,14 +930,9 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       finally { spawnCwdBrowse.disabled = false; }
     });
   }
-  // placeholder ヒント: フォーカス前に一度設定（i18n 初期化後に評価される）。
-  (spawnCwdInput as HTMLInputElement).placeholder = t('spawn_cwd_placeholder_hint') || (spawnCwdInput as HTMLInputElement).placeholder;
-
   spawnCwdInput.addEventListener('focus', () => {
     // お気に入り選択直後の再 focus では再オープンしない（選択して閉じたのに即開き直る事故を防ぐ）。
     if (cwdSuppressReopen) { cwdSuppressReopen = false; return; }
-    // ドロップダウンを開く前に全ルートをバックグラウンドで pre-scan してキャッシュを充填する。
-    { const favs = loadCwdFavorites(); prescanRoots(deriveRootsFromFavorites(favs)); }
     maybeUpdateSubdirs(spawnCwdInput.value.trim());
     renderCwdDropdown(''); refreshCwdInputStatus();
   });
@@ -1339,28 +958,6 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     }, 150);
   });
   spawnCwdInput.addEventListener('keydown', (e) => {
-    // Tab 補完: 部分 prefix → <root>: に補完。例: `pub` + Tab → `public:query` 部分を保持。
-    if (e.key === 'Tab') {
-      const cur = (spawnCwdInput as HTMLInputElement).value;
-      const parsed = parseCwdInput(cur);
-      if (!parsed.isPath) {
-        // 補完候補: parsed.prefix があれば完全一致のルートを探す。
-        // なければ parsed.query をプレフィックス前半として部分一致するルートを探す。
-        const favs = loadCwdFavorites();
-        const roots = deriveRootsFromFavorites(favs);
-        const fragment = parsed.prefix !== null ? parsed.prefix : parsed.query;
-        const low = fragment.toLowerCase();
-        const matches = [...roots.keys()].filter(k => k.toLowerCase().startsWith(low) && k.toLowerCase() !== low);
-        if (matches.length === 1) {
-          e.preventDefault();
-          const query = parsed.prefix !== null ? parsed.query : '';
-          (spawnCwdInput as HTMLInputElement).value = matches[0] + ':' + query;
-          renderCwdDropdown((spawnCwdInput as HTMLInputElement).value);
-        } else if (matches.length === 0 && parsed.prefix !== null) {
-          // 入力済み prefix が既存 root と完全一致（大文字小文字問わず）→ 何もしない。
-        }
-      }
-    }
     if (e.key === 'Enter')  { cwdDropdown.hidden = true; if (!spawnLaunchBtn.disabled) spawnSession(); }
     if (e.key === 'Escape') { cwdDropdown.hidden = true; newSessionPanel.hidden = true; }
     if (e.key === 'ArrowDown' && !cwdDropdown.hidden) {
@@ -1408,29 +1005,6 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   }
 
   cwdDropdown.addEventListener('mousedown', (e) => {
-    // launcher chip クリック: popover を toggle 表示する（hover でも開くが、タッチ環境向けの保険）。
-    const launcherBtn = e.target.closest('.cwd-dropdown-chip-launcher');
-    if (launcherBtn) {
-      e.preventDefault();
-      const collapsed = launcherBtn.closest('.cwd-dropdown-chip-collapsed');
-      collapsed?.classList.toggle('is-open');
-      return;
-    }
-    // chip クリック: input の prefix を insert / replace して検索を絞り込む。
-    const chipBtn = e.target.closest('.cwd-dropdown-chip');
-    if (chipBtn) {
-      e.preventDefault();
-      const prefix = (chipBtn as HTMLElement).dataset.prefix ?? '';
-      const cur = (spawnCwdInput as HTMLInputElement).value;
-      const curParsed = parseCwdInput(cur);
-      // 入力がフルパス（isPath=true）のときは query にパス全体が入っているため、
-      // chip と連結すると `public:C:\...` のような壊れた値になる。空クエリへ戻す。
-      const next = prefix + ':' + (curParsed.isPath ? '' : curParsed.query);
-      (spawnCwdInput as HTMLInputElement).value = next;
-      spawnCwdInput.focus();
-      renderCwdDropdown(next);
-      return;
-    }
     const favBtn = e.target.closest('.cwd-dropdown-fav');
     if (favBtn) {
       e.preventDefault();
@@ -1742,13 +1316,6 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         bodyObj.sandbox = sandbox;
         bodyObj.ask_for_approval = approval;
       }
-      // C1: plan_orchestration-spawn-ui-exposure.md — 「オーケストレーション」ボタン経由の起動
-      // だけ orchestration フラグを立てる。役割マッピングは詳細設定を開いて設定した場合のみ添える。
-      if (spawnOrchestrationMode) {
-        bodyObj.orchestration = true;
-        const { roles, count } = collectOrchestrationRoles();
-        if (count > 0) bodyObj.orchestration_roles = roles;
-      }
       const res = await fetch(`/api/spawn?token=${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1761,7 +1328,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         // spawn 時 env (ANTHROPIC_BASE_URL=localhost:11434 等) が焼き付き、
         // そのセッション内で /model が blocked になる罠を踏むため。
         // Claude/Codex の純正モデル選択は引き続き sticky に残す。
-        const persistedModel = (route === 'ollama' || route === 'lm-studio') ? '' : model;
+        const persistedModel = route === 'ollama' ? '' : model;
         const openTarget = getSpawnOpenTarget();
         const gridLayout = getSpawnGridLayout();
         const detachedPreset = spawnDetachedPreset ? spawnDetachedPreset.value : 'single';
@@ -1779,7 +1346,6 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         codexModelSelection  = null;
         claudeModelSelection = null;
         newSessionPanel.hidden = true;
-        setSpawnOrchestrationMode(false);
 
         // C2 / C5: Detached window 選択時 — preset に応じた起動フローを実行する
         if (openTarget === 'detached') {

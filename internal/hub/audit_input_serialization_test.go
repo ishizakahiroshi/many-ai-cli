@@ -33,8 +33,7 @@ func TestSubmitInputSerializedConcurrent(t *testing.T) {
 	const sessionID = 1
 
 	// セッションを登録（wrapper は nil = 未接続とし、すべて pending へ行く）。
-	// inputMu はポインタ（AUDIT-11）なので生成時に allocate する（本番の session 生成と同じ）。
-	ses := &session{ID: sessionID, State: "standby", inputMu: new(sync.Mutex)}
+	ses := &session{ID: sessionID, State: "standby"}
 	s.sessionsMu.Lock()
 	s.sessions[sessionID] = ses
 	// wrappers[sessionID] は設定しない（nil）
@@ -74,7 +73,7 @@ func TestSubmitInputBracketedPasteNoConcurrentInterleave(t *testing.T) {
 	s := auditInputServer(t)
 	const sessionID = 2
 
-	ses := &session{ID: sessionID, State: "standby", inputMu: new(sync.Mutex)} // AUDIT-11: inputMu を allocate
+	ses := &session{ID: sessionID, State: "standby"}
 	s.sessionsMu.Lock()
 	s.sessions[sessionID] = ses
 	s.sessionsMu.Unlock()
@@ -121,8 +120,7 @@ func TestSubmitInputNilSessionDropped(t *testing.T) {
 // TestInputMuExistsOnSession は session 構造体が inputMu フィールドを持つことを
 // コンパイル時に保証する回帰テスト（#18）。
 func TestInputMuExistsOnSession(t *testing.T) {
-	// inputMu はポインタ（AUDIT-11）なので生成時に allocate する。
-	ses := session{inputMu: new(sync.Mutex)}
+	var ses session
 	// inputMu に対して Lock/Unlock が呼べることをコンパイル・実行レベルで確認する。
 	// 空クリティカルセクションは意図的（フィールド存在のコンパイル時保証）なので
 	// staticcheck SA2001 を無効化する。

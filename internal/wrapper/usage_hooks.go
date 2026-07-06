@@ -106,23 +106,9 @@ func WriteClaudeStatuslineSettings(p UsageHookParams) (path string, cleanup func
 	}
 	name := fmt.Sprintf("aac-claude-statusline-s%d-%d.json", p.SessionID, os.Getpid())
 	path = filepath.Join(os.TempDir(), name)
-	// 共用 /tmp での symlink 追従を防ぐ（AUDIT-4）: 既存（stale or 他ユーザーが張った
-	// symlink）を除去してから O_EXCL で排他生成する。O_EXCL は symlink 先へ追従して書き込まず、
-	// 競合時は失敗するため、事前に張られたリンク経由で任意ファイルを truncate されない。
 	// 0600: Hub URL と token を含むため他ユーザーに読ませない。
-	_ = os.Remove(path)
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) // #nosec G304 -- 固定名の wrapper 専用 temp（token を含むため 0600 が意図）
-	if err != nil {
-		return "", nil, fmt.Errorf("create statusline settings: %w", err)
-	}
-	if _, err := f.Write(append(body, '\n')); err != nil {
-		_ = f.Close()
-		_ = os.Remove(path)
+	if err := os.WriteFile(path, append(body, '\n'), 0o600); err != nil { // #nosec G306 -- wrapper 専用 temp（token を含むため 0600 が意図）
 		return "", nil, fmt.Errorf("write statusline settings: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(path)
-		return "", nil, fmt.Errorf("close statusline settings: %w", err)
 	}
 	cleanup = func() { _ = os.Remove(path) }
 	return path, cleanup, nil
@@ -198,14 +184,9 @@ func InjectCodexStopHook(p UsageHookParams) error {
 	// already 注入済みかどうか確認。
 	if strings.Contains(content, usageHookBlockStart) {
 		// 注入済み: コマンドだけ更新（セッション ID が変わる場合を考慮）。
-		// ReplaceAllLiteralString を使う。ReplaceAllString だと newBlock 中の
-		// `$name` / `${name}` が Regexp.Expand ルールで解釈され、many-ai-cli の
-		// 実行ファイルパスに `$` を含むディレクトリ（例:
-		// `C:\Users\alice\$portable\many-ai-cli.exe`）があると、対応するキャプチャ
-		// グループが無いため無言で消える（TOML 上は構文的に壊れないので気づけない）。
 		newBlock := codexStopHookBlock(p)
 		blockRe := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(usageHookBlockStart) + `.*?` + regexp.QuoteMeta(usageHookBlockEnd) + `\n?`)
-		content = blockRe.ReplaceAllLiteralString(content, newBlock)
+		content = blockRe.ReplaceAllString(content, newBlock)
 		return writeCodexConfig(path, content)
 	}
 

@@ -23,9 +23,6 @@ type Message struct {
 	State     string `json:"state,omitempty"`
 	ExitCode  int    `json:"exit_code,omitempty"`
 	Token     string `json:"token,omitempty"`
-	HomeDir   string `json:"home_dir,omitempty"`
-	CodexHome string `json:"codex_home,omitempty"`
-	ClaudeDir string `json:"claude_dir,omitempty"`
 	Data      []byte `json:"data,omitempty"` // wrapper内部用: PTY生バイト列（base64エンコード）
 	Text      string `json:"text,omitempty"` // pty_output: ANSIを除去したプレーンテキスト / pty_input: ユーザー入力文字列
 	Cols      int    `json:"cols,omitempty"` // pty_resize / register / registered
@@ -54,7 +51,6 @@ type Message struct {
 	ApprovalQuestion string           `json:"approval_question,omitempty"`
 	ApprovalContext  string           `json:"approval_context,omitempty"`
 	ApprovalOptions  []ApprovalOption `json:"approval_options,omitempty"`
-	Block            string           `json:"block,omitempty"` // approval_marker: VT tail から抽出した [MANY-AI-CLI] ブロック全文
 	SentText         string           `json:"sent_text,omitempty"`
 	DetectedAt       string           `json:"detected_at,omitempty"`
 
@@ -74,14 +70,6 @@ type Message struct {
 	// Route: spawn 時に明示された接続経路（"anthropic" / "openai" / "ollama"）。
 	// env preset 注入に使う。未指定なら model 名から推定する。
 	Route string `json:"route,omitempty"`
-
-	// Lightweight orchestration metadata.
-	ParentSessionID int    `json:"parent_session_id,omitempty"`
-	Auto            bool   `json:"auto,omitempty"`
-	Depth           int    `json:"depth,omitempty"`
-	OrchestrationID string `json:"orchestration_id,omitempty"`
-	BoardPath       string `json:"board_path,omitempty"`
-	WorktreeBranch  string `json:"worktree_branch,omitempty"`
 
 	// FirstMessage: セッション内で最初に確定されたユーザー入力（UI カード表示用）。
 	FirstMessage string `json:"first_message,omitempty"`
@@ -134,33 +122,48 @@ type Message struct {
 	TokensOut      int     `json:"tokens_out,omitempty"`
 	TokensCache    int     `json:"tokens_cache,omitempty"`
 	TokensTotal    int     `json:"tokens_total,omitempty"`
-	CtxWindow      int     `json:"ctx_window,omitempty"`   // モデルのコンテキストウィンドウ上限（不明なら省略）
-	CtxUsedPct     float64 `json:"ctx_used_pct,omitempty"` // Claude statusLine 算出済みの context 使用率%（0=未取得・Claude のみ）
+	CtxWindow      int     `json:"ctx_window,omitempty"` // モデルのコンテキストウィンドウ上限（不明なら省略）
 	UsageModel     string  `json:"usage_model,omitempty"`
 	UsageStartedAt string  `json:"usage_started_at,omitempty"`
 
-	// statusbar 追加メタ（Claude statusLine ネイティブ算出値。Claude のみ・C2 relay 中継）。
-	// rate_limits は Pro/Max のみ／early-session は 0。lines は AI 編集量（作業ツリー git diff とは別軸）。
-	RateLimit5hPct   float64 `json:"rl_5h_pct,omitempty"`
-	RateLimit5hReset int64   `json:"rl_5h_reset,omitempty"`
-	RateLimit7dPct   float64 `json:"rl_7d_pct,omitempty"`
-	RateLimit7dReset int64   `json:"rl_7d_reset,omitempty"`
-	LinesAdded       int     `json:"lines_added,omitempty"`
-	LinesRemoved     int     `json:"lines_removed,omitempty"`
-	EffortLevel      string  `json:"effort_level,omitempty"`
-	Thinking         bool    `json:"thinking,omitempty"`
-	Exceeds200k      bool    `json:"exceeds_200k,omitempty"`
-	DurationMs       int64   `json:"duration_ms,omitempty"`
-	APIDurationMs    int64   `json:"api_duration_ms,omitempty"`
-	OutputStyle      string  `json:"output_style,omitempty"`
-	VimMode          string  `json:"vim_mode,omitempty"`
-	AgentName        string  `json:"agent_name,omitempty"`
-	RepoHost         string  `json:"repo_host,omitempty"`
-	RepoOwner        string  `json:"repo_owner,omitempty"`
-	RepoName         string  `json:"repo_name,omitempty"`
-	RemainingPct     float64 `json:"remaining_pct,omitempty"`
-	ReasoningOut     int     `json:"reasoning_output_tokens,omitempty"`
+	// ProxyToken: register 時に wrapper が伝える内蔵プロキシ用ランダムトークン。
+	// Hub は spawn 時にこれを env (MANY_AI_CLI_PROXY_TOKEN) として注入し、
+	// ANTHROPIC_BASE_URL / OPENAI_BASE_URL のパス要素にも埋め込む。
+	// 同じ token を register で受け取ることで、プロキシ捕捉した payload を
+	// どの session の履歴に積むか解決する。
+	ProxyToken string `json:"proxy_token,omitempty"`
 
+	// chat:turn: Hub → UI。内蔵プロキシが捕捉した 1 リクエスト/レスポンスの組。
+	// payload 由来のクリーンなチャット履歴として UI が描画する。
+	ChatTurn *ChatTurn `json:"chat_turn,omitempty"`
+
+	// chat:turns_snapshot: Hub → UI。WS 接続 / セッション切替時のスナップショット配信。
+	ChatTurns []*ChatTurn `json:"chat_turns,omitempty"`
+}
+
+// ChatTurn は内蔵プロキシ経由で捕捉した 1 リクエスト/レスポンスの構造化データ。
+// RAM 上のセッションリングバッファに保持され、WS で UI に配信される。
+//
+// RequestJSON / ResponseJSON は raw payload（マスキング後）。UI 側で `Raw` トグル時に
+// 表示する。Summary 系フィールドは UI 側のレンダリングを軽くするための事前抽出。
+type ChatTurn struct {
+	ID           int64  `json:"id"` // セッション内連番（リングバッファ index ではなく単調増加）
+	Provider     string `json:"provider"` // "anthropic" | "openai"
+	Endpoint     string `json:"endpoint"` // "/v1/messages" など
+	ReceivedAt   string `json:"received_at"`
+	DurationMS   int64  `json:"duration_ms,omitempty"`
+	StatusCode   int    `json:"status_code,omitempty"`
+	IsStream     bool   `json:"is_stream,omitempty"`
+	Truncated    bool   `json:"truncated,omitempty"`
+	Model        string `json:"model,omitempty"`
+	MessageCount int    `json:"message_count,omitempty"`
+	ToolCount    int    `json:"tool_count,omitempty"`
+	HasSystem    bool   `json:"has_system,omitempty"`
+	TokensIn     int    `json:"tokens_in,omitempty"`
+	TokensOut    int    `json:"tokens_out,omitempty"`
+	RequestJSON  string `json:"request_json,omitempty"`  // マスキング済み raw JSON
+	ResponseJSON string `json:"response_json,omitempty"` // マスキング済み raw JSON / SSE 結合後
+	ErrorText    string `json:"error_text,omitempty"`
 }
 
 type ApprovalOption struct {

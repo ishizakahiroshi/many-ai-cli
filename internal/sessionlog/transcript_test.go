@@ -32,31 +32,3 @@ func TestWriteTranscript(t *testing.T) {
 		t.Fatalf("transcript still contains escape bytes: %q", got)
 	}
 }
-
-func TestIsThinkingNoiseLine(t *testing.T) {
-	noise := []string{
-		"✳ Imploring… (12s · ↑3.2k tokens · esc to interrupt)",
-		"thinking with medium effort✳3thinking with medium effort",
-		"Imp·rmpovri✶osviisng✶i...n*g...",
-		"1.8924  Opus 4.8  ↑111.0k ↓764",
-		"auto mode on (shift+tab to cycle)",
-		"⠋⠙ working...", // braille スピナーが 2 個以上並ぶ進捗フレーム
-	}
-	for _, s := range noise {
-		if !IsThinkingNoiseLine(s) {
-			t.Errorf("IsThinkingNoiseLine(%q) = false, want true", s)
-		}
-	}
-	keep := []string{
-		"I am thinking about the architecture here.", // "thinking" だがスピナーグリフ無し
-		"Done. Updated 3 files ✓",                     // ✓ は対象外の dingbat
-		"● Read(internal/hub/server.go)",              // ツール呼び出し行
-		"Here is the summary of the changes:",
-		"  - item one",
-	}
-	for _, s := range keep {
-		if IsThinkingNoiseLine(s) {
-			t.Errorf("IsThinkingNoiseLine(%q) = true, want false", s)
-		}
-	}
-}

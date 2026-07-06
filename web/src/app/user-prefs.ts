@@ -37,17 +37,12 @@ export const STORAGE_QUICK_CMD_5_SHOW_KEY     = 'ai_cli_hub_quick_cmd_5_show';
 export const STORAGE_TOOLS_LEFT_KEY           = 'ai_cli_hub_tools_left';
 export const STORAGE_PC_INPUT_TOOLS_KEY       = 'ai_cli_hub_pc_input_tools';
 export const STORAGE_MOBILE_INPUT_TOOLS_KEY   = 'ai_cli_hub_mobile_input_tools';
-// スマホ入力欄の placeholder に「OS キーボードの🎤から音声入力」ヒントを初回のみ表示するためのフラグ。
-// 1 = 既に表示済み（以降は出さない）。一度フォーカス＋送信完了で立つ。
-export const STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY = 'ai_cli_hub_mobile_voice_hint_shown';
 export const STORAGE_USAGE_LINK_CLAUDE_KEY    = 'ai_cli_hub_usage_link_claude';
 export const STORAGE_USAGE_LINK_CODEX_KEY     = 'ai_cli_hub_usage_link_codex';
 export const STORAGE_USAGE_LINK_COPILOT_KEY   = 'ai_cli_hub_usage_link_copilot';
 export const STORAGE_USAGE_LINK_CURSOR_AGENT_KEY = 'ai_cli_hub_usage_link_cursor_agent';
 export const STORAGE_USAGE_LINK_OLLAMA_KEY    = 'ai_cli_hub_usage_link_ollama';
-export const STORAGE_USAGE_LINK_LM_STUDIO_KEY = 'ai_cli_hub_usage_link_lm_studio';
 export const STORAGE_USAGE_LINK_OPENCODE_KEY  = 'ai_cli_hub_usage_link_opencode';
-export const STORAGE_USAGE_LINK_GROK_KEY      = 'ai_cli_hub_usage_link_grok';
 export const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds';
 export const STORAGE_VOICE_INPUT_DISABLED_KEY = 'ai_cli_hub_voice_input_disabled';
 export const STORAGE_VOICE_ENGINE_KEY         = 'anyai.voiceEngine';
@@ -157,10 +152,8 @@ export const DEFAULT_USAGE_LINKS = {
   codex:    'https://chatgpt.com/codex/cloud/settings/analytics#usage',
   copilot:  'https://github.com/settings/billing',
   'cursor-agent': 'https://cursor.com/dashboard',
-  ollama:      'https://ollama.com/settings',
-  'lm-studio': 'http://localhost:1234',
-  opencode: 'https://opencode.ai/go',
-  grok:     'https://grok.com/?_s=usage',
+  ollama:   'https://ollama.com/settings',
+  opencode: '',
 };
 
 export const FONTSIZE_MAP = { large: 15, medium: 13, small: 11 };
@@ -206,9 +199,7 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'usage_links.copilot':       [STORAGE_USAGE_LINK_COPILOT_KEY,    String],
   'usage_links.cursor-agent':  [STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, String],
   'usage_links.ollama':        [STORAGE_USAGE_LINK_OLLAMA_KEY,     String],
-  'usage_links.lm-studio':     [STORAGE_USAGE_LINK_LM_STUDIO_KEY,  String],
   'usage_links.opencode':      [STORAGE_USAGE_LINK_OPENCODE_KEY,   String],
-  'usage_links.grok':          [STORAGE_USAGE_LINK_GROK_KEY,       String],
   'favorites':                 [STORAGE_FAVORITES_KEY,             JSON.stringify],
   'session_order':             [STORAGE_ORDER_KEY,                 JSON.stringify],
   'group_order':               [STORAGE_GROUP_ORDER_KEY,           JSON.stringify],
@@ -218,7 +209,6 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'approval.auto_switch':      [STORAGE_APPROVAL_AUTO_SWITCH_KEY,  (v) => v ? '1' : '0'],
   'pc.input_tools_enabled':     [STORAGE_PC_INPUT_TOOLS_KEY,       (v) => v ? '1' : '0'],
   'mobile.input_tools_enabled': [STORAGE_MOBILE_INPUT_TOOLS_KEY,   (v) => v ? '1' : '0'],
-  'mobile.voice_hint_shown':    [STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, (v) => v ? '1' : '0'],
   'spawn.defaults':            [STORAGE_SPAWN_KEY,                 JSON.stringify],
   'display.locked_mode':       [STORAGE_DISPLAY_LOCKED_MODE_KEY,   (v) => (v == null || v === '') ? '' : String(v)],
   'display.theme':             [STORAGE_THEME_KEY,                 String],
@@ -242,7 +232,6 @@ export const _USER_PREFS_STRING_PATHS = new Set([
   'usage_links.cursor-agent',
   'usage_links.ollama',
   'usage_links.opencode',
-  'usage_links.grok',
   'display.locked_mode',
   'display.theme',
   'display.font_size',

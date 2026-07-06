@@ -130,7 +130,6 @@ func newPINLimiter() *pinLimiter {
 }
 
 // retryAfter は >0 ならロック中で、その残り秒数を返す。0 なら試行可。
-// 状態を変えない読み取り専用。handleAuthStatus のような UI 表示照会用。
 func (l *pinLimiter) retryAfter(ip string, now time.Time) int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -144,55 +143,6 @@ func (l *pinLimiter) retryAfter(ip string, now time.Time) int {
 	return 0
 }
 
-// beginAttempt はロック中でなければ「これから 1 回試行するつもり」として
-// 失敗カウンタを先に進めてロック閾値に達したらロックを開始し、retry>0 を返す。
-// 返値 0 なら呼び出し元は verify に進み、成功なら recordSuccess を呼ぶ
-// （その時点で予約分の失敗カウンタは delete で丸ごと消える）。
-// 従来は retryAfter → verify（bcrypt cost 10 = 数十 ms） → recordFailure と
-// 段階が別々のロック区間になっていたため、並行度 N の wrong-PIN バーストで
-// verify 中の窓に別リクエストが retryAfter=0 を通過してしまい、実効閾値が
-// 並行度倍まで緩んでいた（HUB-13）。beginAttempt は「予約時点で++」する
-// ことでロック判定を先取りし、bcrypt 進行中に来た次リクエストは既にロック
-// 状態と一致するように直す。
-func (l *pinLimiter) beginAttempt(ip string, now time.Time) int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.pruneLocked(now)
-	if now.Before(l.globalUntil) {
-		return int(l.globalUntil.Sub(now).Seconds()) + 1
-	}
-	if a := l.perIP[ip]; a != nil && now.Before(a.lockedUntil) {
-		return int(a.lockedUntil.Sub(now).Seconds()) + 1
-	}
-	a := l.perIP[ip]
-	if a == nil {
-		a = &pinAttempt{}
-		l.perIP[ip] = a
-	}
-	a.lastSeen = now
-	a.fails++
-	if a.fails >= pinLockThreshold {
-		a.lockedUntil = now.Add(pinLockDurations[min(a.lockLevel, len(pinLockDurations)-1)])
-		if a.lockLevel < len(pinLockDurations)-1 {
-			a.lockLevel++
-		}
-		a.fails = 0
-	}
-	// 全体カウンタ（分散ブルートフォース対策）。pinAttemptTTL 経過でリセット。
-	if now.Sub(l.globalSeen) > pinAttemptTTL {
-		l.globalFails = 0
-	}
-	l.globalSeen = now
-	l.globalFails++
-	if l.globalFails >= pinGlobalFailCap {
-		l.globalUntil = now.Add(pinLockDurations[0])
-		l.globalFails = 0
-	}
-	return 0
-}
-
-// recordFailure は既存 API 互換のため残す（内部的には beginAttempt と同じ処理を
-// 予約なしで呼び直す形。新規呼び出しは beginAttempt を使うこと）。
 func (l *pinLimiter) recordFailure(ip string, now time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -211,6 +161,7 @@ func (l *pinLimiter) recordFailure(ip string, now time.Time) {
 		}
 		a.fails = 0
 	}
+	// 全体カウンタ（分散ブルートフォース対策）。pinAttemptTTL 経過でリセット。
 	if now.Sub(l.globalSeen) > pinAttemptTTL {
 		l.globalFails = 0
 	}
@@ -347,21 +298,19 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	ip := clientIPKey(r.RemoteAddr)
 	now := time.Now()
+	if retry := s.pinLim().retryAfter(ip, now); retry > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(retry))
+		writeJSONError(w, http.StatusTooManyRequests, "locked_out", "too many attempts")
+		return
+	}
 	var body struct {
 		PIN string `json:"pin"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	// 失敗を先に予約する（HUB-13）。ロック中なら verify に入らず即弾く。
-	// 予約成功後は verifyPIN の結果に応じて recordSuccess で丸ごとクリアする。
-	if retry := s.pinLim().beginAttempt(ip, now); retry > 0 {
-		w.Header().Set("Retry-After", strconv.Itoa(retry))
-		writeJSONError(w, http.StatusTooManyRequests, "locked_out", "too many attempts")
-		return
-	}
 	if !verifyPIN(pinHash, body.PIN) {
-		// beginAttempt で既に失敗計上済み。ここでは追加でカウントしない。
+		s.pinLim().recordFailure(ip, now)
 		retry := s.pinLim().retryAfter(ip, now)
 		// 失敗ログは件数/ロックアウト状態のみ。PIN 値・入力は決して残さない。
 		if s.logger != nil {

@@ -524,29 +524,13 @@ func (s *Server) ensureManagedWhisper(ctx context.Context) (config.VoiceWhisperC
 }
 
 func (s *Server) startManagedWhisper(ctx context.Context, cfg config.VoiceWhisperConfig, binaryPath, modelPath string) (string, error) {
-	// HUB-3: 「未起動判定 → cmd.Start() → 登録」の間に別リクエストが並走して
-	// 二重起動する TOCTOU を防ぐ。単一クリティカルセクションで
-	// (a) 既に起動済みなら URL を返す
-	// (b) 他リクエストが起動中なら 409 相当を返して呼び元の再試行に任せる
-	// (c) 未起動なら whisperStarting フラグを立てて先に「予約」する
-	// のいずれかを決定する。予約成功パス (c) は defer で必ずフラグを戻す。
 	s.whisperMu.Lock()
 	if s.whisperCmd != nil && s.whisperServerURL != "" {
 		url := s.whisperServerURL
 		s.whisperMu.Unlock()
 		return url, nil
 	}
-	if s.whisperStarting {
-		s.whisperMu.Unlock()
-		return "", whisperProxyError{status: http.StatusConflict, code: "whisper_starting", detail: "whisper server is starting"}
-	}
-	s.whisperStarting = true
 	s.whisperMu.Unlock()
-	defer func() {
-		s.whisperMu.Lock()
-		s.whisperStarting = false
-		s.whisperMu.Unlock()
-	}()
 
 	port := cfg.ServerPort
 	if port == 0 || !tcpPortFree(port) {
@@ -624,11 +608,7 @@ func (s *Server) startManagedWhisper(ctx context.Context, cfg config.VoiceWhispe
 	readyCtx, cancel := context.WithTimeout(ctx, whisperServerReadyWait)
 	defer cancel()
 	if err := waitTCPReady(readyCtx, "127.0.0.1", port); err != nil {
-		// HUB-3: 「自分が起動した cmd」だけを kill する。無条件に s.whisperCmd を
-		// 触ると、二重起動の窓を潜って正常起動した別リクエストの cmd を巻き添え
-		// にする恐れがあった (whisperStarting 予約でその窓自体は塞いだが、念のため
-		// cmd 特定の kill 経路も残しておく)。
-		s.stopManagedWhisperCmd(cmd)
+		s.stopManagedWhisper()
 		return "", whisperProxyError{status: http.StatusBadGateway, code: "whisper_start_failed", detail: err.Error()}
 	}
 	s.cfgMu.Lock()
@@ -649,27 +629,6 @@ func (s *Server) stopManagedWhisper() {
 	s.whisperCmd = nil
 	s.whisperJob = 0
 	s.whisperServerURL = ""
-	s.whisperMu.Unlock()
-	killWhisperProcess(cmd)
-	closeWhisperProcessJob(job)
-}
-
-// stopManagedWhisperCmd は特定の *exec.Cmd と一致するときだけ登録を解除して kill する。
-// startManagedWhisper 内の失敗パス（waitTCPReady タイムアウト等）から呼ばれ、
-// 万一二重起動レースの残り香で s.whisperCmd が別プロセスに置き換わっていても、
-// 無関係な現行プロセスを巻き添え kill しない (HUB-3)。
-func (s *Server) stopManagedWhisperCmd(cmd *exec.Cmd) {
-	if cmd == nil {
-		return
-	}
-	var job whisperProcessJob
-	s.whisperMu.Lock()
-	if s.whisperCmd == cmd {
-		s.whisperCmd = nil
-		job = s.whisperJob
-		s.whisperJob = 0
-		s.whisperServerURL = ""
-	}
 	s.whisperMu.Unlock()
 	killWhisperProcess(cmd)
 	closeWhisperProcessJob(job)

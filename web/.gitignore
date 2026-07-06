@@ -1,6 +1,0 @@
-# C8 (plan_audit_score_s_promotion_2026-07-05.md): このディレクトリは bun のみを使う。
-# npm install で誤って生成される package-lock.json は git に追跡させない。
-# CI (`.github/workflows/validate.yml` の `web-package-manager-consistency` job) が
-# PR で package-lock.json が変更されたら warning を出す仕組みも別途ある。
-# 詳細は web/README.md 参照。
-package-lock.json
