@@ -73,6 +73,7 @@ Gemini CLI は意図的に対象外です。
 - **Files タブ**: プロジェクトファイルをツリー表示し、Markdown / コードのプレビュー、パスコピー、フォルダ作成、競合検出付き保存、リネーム、移動、空フォルダ削除を実行
 - **Git ビュー**: ブランチ履歴、commit 詳細、変更ファイル、diff、fetch、`git pull --ff-only` を checkout なしで実行
 - **Commit all**: 明示的な Review 後に working tree 全体を `git add -A` してローカル commit（push は実行しません）
+- **軽量オーケストレーション API**: 指揮者セッションが子 AI セッションを spawn し、`~/.many-ai-cli/orchestration/<id>/board.md` を共有、既定で git worktree に隔離して並行作業させる
 - **ファイル / 画像添付**: ファイルや画像の paste / D&D からローカル保存し、セッションへパスを inject
 - **音声入力**: ブラウザ内蔵認識またはローカル Whisper でプロンプトを入力（Windows x64 では Whisper 管理インストール対応）
 - **PWA + opt-in Web Push**: Hub をローカル Web アプリとしてインストールし、Settings で明示的に有効化した場合だけ承認待ち通知を受け取る
@@ -80,6 +81,14 @@ Gemini CLI は意図的に対象外です。
 - **サーバ側ユーザー設定**: 音声、通知音、お気に入り、セッション順、spawn 既定、アバター設定を `config.yaml` に保存
 - **UI からの新規セッション spawn**（`/api/spawn`）
 - **モデルピッカー + Ollama route 自動切替**: spawn フォームから Anthropic / OpenAI / Ollama Cloud / Ollama Local のモデルを選択でき、Hub が必要な `ANTHROPIC_*` / `OPENAI_*` 環境変数をセッションごとに自動注入（shell での事前設定不要）。Ollama daemon が別ホストにある場合は `config.yaml` の `ollama.base_url` で接続先を変更可能（Hyper-V ゲストからホストの Ollama を使う手順は [docs/manual_local-llm-hyperv-host.md](docs/manual_local-llm-hyperv-host.md) を参照）
+
+## 軽量オーケストレーション
+
+`POST /api/sessions/:id/spawn-child` により、指揮者セッションはロール・provider・モデル・初期プロンプト・任意の cwd を指定して子セッションを spawn できます。Hub は `~/.many-ai-cli/orchestration/<orchestration_id>/board.md` を作成し、そのパスを子プロンプトへ注入して、追記される進捗と `## DONE <role> session=<child_id>` マーカーを監視します。
+
+親 cwd が git リポジトリのとき、子セッションは既定で `.many-ai-cli/worktrees/<orchestration_id>/<role>` の独立した git worktree で動作します。Hub は子ブランチを自動 merge しません。指揮者またはユーザーが board とブランチを確認したうえで、何を merge するかを決めます。
+
+既知の制約: 意図的に軽量な仕組みです。board の変更は 2 秒ポーリングで検知され、即時 Enter 付き inject で通知されるため、進行中の指揮者ターンを割り込みで中断する可能性があります。完了判定は子が `## DONE <role> session=<child_id>` を書き込むことに依存し、job DAG・retry キュー・自動 merge はありません。
 - **統合ランチャー（Windows / Linux / macOS）**: `many-ai-cli-launcher` で接続プロファイルから Hub へ接続し既定ブラウザで操作。SSH `serve` / `tunnel` プロファイルは全 OS、WSL プロファイルは Windows で WSL 内に Hub を起動
 - **リモートサーバー / Docker 運用資材**: GHCR image、ユーザー別コンテナ、loopback 限定公開、自動更新スクリプトでサーバー運用
 - **クリーン transcript 生成**: 人間が読める `.txt` を自動生成し、`log-clean` で手動再生成も可能
