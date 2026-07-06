@@ -22,6 +22,7 @@ export let _wsIntentionalClose = false; // ページ遷移など意図的クロ�
 export let _wsRetryDelay = 500; // 初期バックオフ ms
 export const _wsRetryMax = 10000; // 上限 ms
 let _wsReconnectTimer = null;
+let _lastActiveSessionIdBeforeDisconnect = 0;
 
 // ---- WS 死活監視（モバイルの half-open / ゾンビ接続対策） ----
 // スマホは画面ロック・アプリ切替・Wi-Fi⇄モバイル回線のハンドオーバ等で、
@@ -142,7 +143,7 @@ window.addEventListener('pageshow', _ensureWsAlive);
 
 export function _sendRegister() {
   const { cols, rows } = estimateRegisterTerminalSize();
-  ws.send(JSON.stringify({ type: 'register', role: 'ui', token, cols, rows, ui_active_session_id: activeSessionId || 0 }));
+  ws.send(JSON.stringify({ type: 'register', role: 'ui', token, cols, rows, ui_active_session_id: activeSessionId || _lastActiveSessionIdBeforeDisconnect || 0 }));
 }
 
 function estimateRegisterTerminalSize(): { cols: number; rows: number } {
@@ -201,6 +202,7 @@ export function _connectWs() {
     if (ws !== _ws) return;
     if (_wsWatchdog) { clearInterval(_wsWatchdog); _wsWatchdog = null; }
     if (_elapsedTimerInterval) { clearInterval(_elapsedTimerInterval); set__elapsedTimerInterval(null); }
+    if (activeSessionId !== null) _lastActiveSessionIdBeforeDisconnect = activeSessionId;
     sessions.clear();
     autoDismissTimers.forEach(t => clearTimeout(t));
     autoDismissTimers.clear();
@@ -242,6 +244,14 @@ export function _connectWs() {
     const nsBtn = document.getElementById('new-session-btn') as HTMLButtonElement | null;
     if (nsBtn) nsBtn.disabled = false;
     document.getElementById('reconnect-btn').hidden = true;
+    if (!_pendingOpenSessionId && _lastActiveSessionIdBeforeDisconnect) {
+      _pendingOpenSessionId = _lastActiveSessionIdBeforeDisconnect;
+    }
+    // Hub は UI 接続ごとに ptyBuf を履歴リプレイする。同じ Hub への再接続では
+    // 既存 xterm/chat バッファを先に空にしないと、履歴が末尾へ追記されて二重表示になる。
+    if (terminals.size > 0 || chatHistory.size > 0) {
+      resetAllLocalSessionHistory();
+    }
     _sendRegister();
     // 再接続直後に承認可視ヒントを即時再主張する（Hub 側リースの取りこぼし修復。
     // リロード後はキャッシュが空なので no-op）。

@@ -207,6 +207,8 @@ export function ensureTerminal(id) {
             scheduleHidePathPopup();
           },
           activate(_event, _text) {
+            _event.preventDefault();
+            _event.stopPropagation();
             showPathPopup(capturedPath, _event.clientX, _event.clientY, id);
           }
         });
