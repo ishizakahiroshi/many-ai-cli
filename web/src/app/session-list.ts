@@ -3,7 +3,7 @@ import { t } from '../i18n.js';
 import { escapeHtml, ti18n, token } from './util.js';
 import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, favorites, groupOrder, multiQuestionVisibleCache, orderSessions, projectFavorites, saveFavorites, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, terminals } from './state.js';
 import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor, updateInputAffordance } from '../app.js';
-import { attachTerminal, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, syncLiveStatusLongproc, updateScrollLockBtn } from './terminal.js';
+import { attachTerminal, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, updateScrollLockBtn } from './terminal.js';
 import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, renderSessionInfoChip, updateChatCountBadge } from './settings.js';
 import { syncElapsedTimer } from './ws-client.js';
 import { setMultiQuestionBannerVisible } from './approval-ui.js';
@@ -12,7 +12,6 @@ import { onActiveSessionChanged } from './token-statusbar.js';
 import { rewireChatHistorySub } from './chat-history.js';
 import { setActiveSessionForPayload } from './chat-payload.js';
 import { FilesTabManager } from './files-view.js';
-import { dirnameForPath } from './path-links.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -103,11 +102,6 @@ export function activateSession(id) {
   set_activeSessionId(id);
   if (typeof window.syncMobileLayoutState === 'function') window.syncMobileLayoutState();
   if (typeof window.closeMobileSessionDrawer === 'function') window.closeMobileSessionDrawer();
-  // A3: スマホ簡易ターミナル（チャットトランスクリプト表示）を即時更新。
-  // 1 秒間隔の定期更新を待たず、セッション切替直後に新セッションのバッファを描く。
-  if (typeof (window as any).refreshMobileTerminalLite === 'function') {
-    (window as any).refreshMobileTerminalLite();
-  }
   restoreInputStateFor(id);
   // files/git 表示からセッションカードへ戻る場合、先にターミナルを表示してから
   // attach/fit/detect しないと、承認 UI 検出と最下部スナップが hidden レイアウトを基準に走る。
@@ -169,10 +163,9 @@ export function updateShellBadge(id) {
 export function updateQuickCmdButtons(id) {
   const s = id !== null ? sessions.get(id) : null;
   const provider = s?.provider || '';
-  const isOllama   = provider === 'ollama';
-  const isLMStudio = s?.route === 'lm-studio';
-  const isShell    = provider === 'shell';
-  const shouldDisable = isOllama || isLMStudio || isShell;
+  const isOllama = provider === 'ollama';
+  const isShell  = provider === 'shell';
+  const shouldDisable = isOllama || isShell;
   const modelBtn  = document.getElementById('quick-model-btn');
   const pickerBtn = document.getElementById('slash-picker-btn');
   for (const btn of [modelBtn, pickerBtn]) {
@@ -204,9 +197,7 @@ export function providerDisplayName(provider) {
     copilot: 'Copilot',
     'cursor-agent': 'Cursor Agent',
     ollama: 'Ollama',
-    'lm-studio': 'LM Studio',
     opencode: 'OpenCode',
-    grok: 'Grok Build',
   };
   return labels[key] || String(provider || '');
 }
@@ -232,14 +223,8 @@ export function providerIconHtml(provider, size = 16) {
   if (key === 'ollama') {
     return `<svg ${base}><rect class="prov-shape ollama" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter ollama" x="8" y="8" ${txt}>O</text></svg>`;
   }
-  if (key === 'lm-studio') {
-    return `<svg ${base}><rect class="prov-shape lm-studio" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter lm-studio" x="8" y="8" ${txt}>L</text></svg>`;
-  }
   if (key === 'opencode') {
-    return `<svg ${base}><circle class="prov-shape opencode" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter opencode" x="8" y="8" ${txt}>O</text></svg>`;
-  }
-  if (key === 'grok') {
-    return `<svg ${base}><circle class="prov-shape grok" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter grok" x="8" y="8" ${txt}>G</text></svg>`;
+    return `<svg ${base}><rect class="prov-shape opencode" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter opencode" x="8" y="8" ${txt}>O</text></svg>`;
   }
   const letter = escapeHtml((String(provider || '?').trim()[0] || '?').toUpperCase());
   return `<svg ${base}><circle class="prov-shape" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter" x="8" y="8" ${txt}>${letter}</text></svg>`;
@@ -308,72 +293,6 @@ export function onSessionCardActivate(id) {
   }
   // シングルビュー: 既存の動作
   activateSession(id);
-}
-
-// ─── セッションカードのライブ情報（ctx% / 応答経過 / 長時間バッジ）──────────
-// 「応答経過時間」は running 状態に入った時刻をローカル追跡して算出する。
-// プロトコルに「ターン開始」専用の時刻が無い（started_at は起動時刻、last_output_at は
-// 最終出力時刻）ため。token-statusbar の turnStartAt と同方式。running を抜けたら破棄。
-const cardRunningSince = new Map<number, number>();
-// 「長時間処理中」警告バッジを出すしきい値（秒）。これを超えて running が続くと⚠を出す。
-// 重いターン（巨大 context × xhigh 思考）で 1 応答が 5 分以上かかる状態を可視化する。
-const CARD_LONGPROC_SEC = 300;
-
-// running 中の応答経過秒を返す（running でなければ null、追跡もクリアする）。
-function cardTurnElapsedSec(id, state) {
-  if (state !== 'running') { cardRunningSince.delete(id); return null; }
-  let since = cardRunningSince.get(id);
-  if (!since) { since = Date.now(); cardRunningSince.set(id, since); }
-  return Math.max(0, Math.floor((Date.now() - since) / 1000));
-}
-
-// カード 3 行目（ライブ情報）の中身 HTML を生成する。空文字なら行を隠す。
-// ctx%（コンテキスト残量）は下部ステータスバーに常時出ているため、カード側では
-// 重複表示しない。ここでは応答経過と長時間バッジ（running 中のみ）だけを出す。
-function cardLiveRowHtml(s) {
-  const parts = [];
-  const state = s.state || 'standby';
-  const sec = cardTurnElapsedSec(s.id, state);
-  if (sec !== null) {
-    // 稼働経過秒（⏱ 48s 等）はユーザー要望により非表示。長時間処理の⚠バッジのみ残す。
-    if (sec >= CARD_LONGPROC_SEC) {
-      const label = ti18n('card_longproc_label', 'Long-running', {});
-      const lpTip = ti18n('card_longproc_title', 'This response has been running a long time. It may be stuck behind a heavy turn (large context × high effort). Send ESC to interrupt instead of resending.', {});
-      parts.push(`<span class="card-longproc" data-tooltip="${escapeHtml(lpTip)}">⚠ ${escapeHtml(label)}</span>`);
-    }
-  }
-  return parts.join('');
-}
-
-// 1 枚のカードのライブ行を in-place で更新する（フル再描画を避け、スクロール位置・
-// 入力フォーカス・D&D 状態を保つため）。行が無ければ card-actions の前に作る。
-export function updateCardLiveInfo(id) {
-  const root = document.getElementById('sessions');
-  if (!root) return;
-  const s = sessions.get(id);
-  if (!s) return;
-  const card = root.querySelector(`.card[data-session-id="${CSS.escape(String(id))}"]`);
-  if (!card) return;
-  let row = card.querySelector('.card-live-row') as HTMLElement | null;
-  if (!row) {
-    row = document.createElement('div');
-    row.className = 'card-live-row';
-    const actions = card.querySelector('.card-actions');
-    if (actions) card.insertBefore(row, actions); else card.appendChild(row);
-  }
-  const inner = cardLiveRowHtml(s);
-  row.innerHTML = inner;
-  row.hidden = !inner;
-}
-
-// 全カードのライブ行を更新する（1Hz タイマー等から呼ぶ）。
-export function updateAllCardsLiveInfo() {
-  const root = document.getElementById('sessions');
-  if (!root) return;
-  root.querySelectorAll('.card').forEach(card => {
-    const id = parseInt((card as HTMLElement).dataset.sessionId || '', 10);
-    if (!isNaN(id)) updateCardLiveInfo(id);
-  });
 }
 
 export let _sessionListClickDelegated = false;
@@ -641,8 +560,7 @@ export function renderSessionList() {
       const c = document.createElement('div');
       const state = s.state || 'standby';
       const stateClass = (state === 'running' || state === 'waiting') ? ` ${state}` : '';
-      const orchClass = s.parent_session_id ? ' orchestration-child' : (s.orchestration_id ? ' orchestration-parent' : '');
-      c.className = 'card' + stateClass + orchClass + (s.id === activeSessionId ? ' active' : '');
+      c.className = 'card' + stateClass + (s.id === activeSessionId ? ' active' : '');
       c.tabIndex = isCollapsed ? -1 : 0;
       const label = stateLabel(state);
       const filteredMsg = filterFirstMessage(s.last_message || s.first_message || '');
@@ -653,13 +571,6 @@ export function renderSessionList() {
         : `<span class="card-msg"></span>`;
       const providerName = providerDisplayName(s.provider);
       const providerChipHtml = providerName ? `<span class="card-provider-chip ${safeClassToken(s.provider)}">${escapeHtml(providerName)}</span>` : '';
-      const roleLabel = s.role ? String(s.role) : (s.orchestration_id ? 'conductor' : '');
-      const roleHtml = roleLabel
-        ? `<span class="card-role-chip ${s.parent_session_id ? 'child' : 'parent'}" data-tooltip="${escapeHtml(s.parent_session_id ? `Parent #${s.parent_session_id}` : 'Orchestration conductor')}">${escapeHtml(roleLabel)}</span>`
-        : '';
-      const branchRoleHtml = s.worktree_branch
-        ? `<span class="card-worktree-chip" data-tooltip="${escapeHtml(s.worktree_branch)}">${escapeHtml(s.worktree_branch)}</span>`
-        : '';
       const isDeadState = state === 'error' || state === 'disconnected';
       let reasonText = '';
       if (isDeadState && s.end_reason) {
@@ -672,11 +583,11 @@ export function renderSessionList() {
         ? `<span class="card-end-reason" data-tooltip="${escapeHtml(reasonText)}">${escapeHtml(reasonText)}</span>`
         : '';
       c.dataset.sessionId = s.id;
-      const localRoute = (s.route === 'ollama' || s.route === 'lm-studio') ? s.route : null;
+      const isOllamaBackedSess = (s.route === 'ollama');
       let modelBadge = '';
       if (s.model) {
-        const badgeProviderKey = localRoute || (s.provider || '');
-        const badgeProviderLabel = localRoute ? providerDisplayName(localRoute) : providerName;
+        const badgeProviderKey = isOllamaBackedSess ? 'ollama' : (s.provider || '');
+        const badgeProviderLabel = isOllamaBackedSess ? 'Ollama' : providerName;
         const tip = badgeProviderLabel ? `${badgeProviderLabel} · ${s.model}` : s.model;
         modelBadge = ` <span class="card-model card-model--with-icon" data-tooltip="${escapeHtml(tip)}">${providerIconHtml(badgeProviderKey)}<span class="card-model-text">${escapeHtml(s.model)}</span></span>`;
       }
@@ -689,15 +600,12 @@ export function renderSessionList() {
       const branchLabel = branchStr || ti18n('card_branch_no_git', '(no git)');
       const branchBadge = ` <span class="card-branch" role="button" tabindex="0" data-sid="${s.id}"${branchDisabledAttr} data-tooltip="${escapeHtml(branchTip)}" aria-label="${escapeHtml(branchTip)}">${escapeHtml(branchLabel)}</span>`;
       // branch chip は title-row が混むため meta-row（2行目）の投稿指示テキスト末尾へ付ける。
-      const metaRow = `<div class="card-meta-row">${reasonHtml}${sessionLabel}${roleHtml}${msgHtml}${branchRoleHtml}${branchBadge}</div>`;
+      const metaRow = `<div class="card-meta-row">${reasonHtml}${sessionLabel}${msgHtml}${branchBadge}</div>`;
       // 状態 pill（ステータスバー .tsb-pill と同じ ●ドット付き形状）。並び順も下のバーに合わせ #N の直後に置く。
       const statePillHtml = ` <span class="card-state-pill ${safeClassToken(state)}"><span class="card-pdot"></span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
-      // ライブ情報（ctx% / 応答経過 / 長時間バッジ）。中身が空なら hidden で行ごと隠す。
-      const liveInner = cardLiveRowHtml(s);
-      const liveRow = `<div class="card-live-row"${liveInner ? '' : ' hidden'}>${liveInner}</div>`;
       c.innerHTML =
         `<div class="card-title-row"><b>#${s.id}</b>${statePillHtml} ${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}</div>` +
-        metaRow + liveRow;
+        metaRow;
 
       const actions = document.createElement('div');
       actions.className = 'card-actions';
@@ -736,20 +644,6 @@ export function renderSessionList() {
         requestSessionHistoryReset(s.id);
       };
       actions.appendChild(resetBtn);
-
-      // conductor カード（orchestration_id あり・子ではない）にのみ「board を開く」ボタンを出す
-      if (s.orchestration_id && !s.parent_session_id && s.board_path) {
-        const boardBtn = document.createElement('button');
-        boardBtn.className = 'session-board-open-btn';
-        boardBtn.textContent = '📋';
-        boardBtn.title = t('card_board_button_tooltip');
-        boardBtn.onclick = (e) => {
-          e.stopPropagation();
-          const boardDir = dirnameForPath(s.board_path) || s.board_path;
-          FilesTabManager.openFilesTabAtFile(s.id, s.orchestration_id, boardDir, boardDir, s.board_path);
-        };
-        actions.appendChild(boardBtn);
-      }
 
       const xBtn = document.createElement('button');
       xBtn.className = 'dismiss-btn';
@@ -963,13 +857,6 @@ export function _addSidebarGroupLabels(root) {
 export function updateMainTabStatus() {
   // D11: セッション情報チップも同タイミングで更新 (state badge を反映)
   if (typeof renderSessionInfoChip === 'function') renderSessionInfoChip();
-  // カードのライブ情報（ctx% / 応答経過 / 長時間バッジ）も毎秒・state 変化時に追従させる。
-  // syncElapsedTimer の 1Hz interval がここを呼ぶため、応答経過が毎秒伸びる。
-  updateAllCardsLiveInfo();
-  // ライブ帯（入力欄上）の「長時間処理中」も同じ 1Hz で更新する。応答が無音のまま
-  // 長時間続く場合は PTY フレームが来ず renderLiveStatusDom が呼ばれないため、ここで
-  // しきい値超過を毎秒判定して帯の右側へ出す。
-  if (typeof syncLiveStatusLongproc === 'function') syncLiveStatusLongproc();
 }
 
 // ---- タブ通知（保留バッジ） ----
@@ -1116,18 +1003,18 @@ export function updateSummaryCompactMode() {
 
 export function renderSummaryAndNotifications() {
   const stateCounts = { running: 0, waiting: 0, standby: 0 };
-  // groupKey -> { provider, model, localRoute, count }
-  // Local backend (Ollama / LM Studio) sessions are split per-model so each model gets its own chip.
+  // groupKey -> { provider, model, isOllamaBacked, count }
+  // Ollama backend sessions are split per-model so each model gets its own chip.
   const providerGroups = new Map();
   sessions.forEach(s => {
     const provider = s.provider || 'unknown';
     const route = s.route || '';
     const model = s.model || '';
-    const localRoute = (route === 'ollama' || route === 'lm-studio') ? route : null;
-    const key = localRoute ? `${localRoute}::${model}` : provider;
+    const isOllamaBacked = route === 'ollama';
+    const key = isOllamaBacked ? `ollama::${model}` : provider;
     const g = providerGroups.get(key);
     if (g) g.count++;
-    else providerGroups.set(key, { provider, model, localRoute, count: 1 });
+    else providerGroups.set(key, { provider, model, isOllamaBacked, count: 1 });
     const st = s.state || 'standby';
     if (st === 'running') stateCounts.running++;
     else if (st === 'waiting') stateCounts.waiting++;
@@ -1135,21 +1022,21 @@ export function renderSummaryAndNotifications() {
   });
   const totalWaiting = stateCounts.waiting;
 
-  const PROVIDER_ORDER = { claude: 0, ollama: 1, 'lm-studio': 2, codex: 3, copilot: 4, opencode: 5, 'cursor-agent': 6, grok: 7 };
+  const PROVIDER_ORDER = { claude: 0, ollama: 1, codex: 2, copilot: 3, opencode: 4, 'cursor-agent': 5 };
   const sortedGroups = Array.from(providerGroups.values()).sort((a, b) => {
-    const ka = a.localRoute || a.provider;
-    const kb = b.localRoute || b.provider;
+    const ka = a.isOllamaBacked ? 'ollama' : a.provider;
+    const kb = b.isOllamaBacked ? 'ollama' : b.provider;
     const oa = ka in PROVIDER_ORDER ? PROVIDER_ORDER[ka] : 99;
     const ob = kb in PROVIDER_ORDER ? PROVIDER_ORDER[kb] : 99;
     if (oa !== ob) return oa - ob;
     return (a.model || '').localeCompare(b.model || '');
   });
   const providerParts = sortedGroups.map(g => {
-    if (g.localRoute) {
-      const label = providerDisplayName(g.localRoute);
+    if (g.isOllamaBacked) {
+      const label = providerDisplayName('ollama');
       const modelHtml = g.model ? `<span class="summary-ollama-model">${escapeHtml(g.model)}</span>` : '';
-      const tip = g.model ? `${label} · ${g.model} : ${g.count}` : `${label} : ${g.count}`;
-      return `<span class="summary-provider-chip" data-tooltip="${escapeHtml(tip)}">${providerIconHtml(g.localRoute)}<span class="compact-hide"><span class="summary-provider-name ${safeClassToken(g.localRoute)}">${escapeHtml(label)}</span>${modelHtml}<span class="summary-provider-count">: ${g.count}</span></span><span class="compact-count">${g.count}</span></span>`;
+      const tip = g.model ? `Ollama · ${g.model} : ${g.count}` : `Ollama : ${g.count}`;
+      return `<span class="summary-provider-chip" data-tooltip="${escapeHtml(tip)}">${providerIconHtml('ollama')}<span class="compact-hide"><span class="summary-provider-name ollama">${escapeHtml(label)}</span>${modelHtml}<span class="summary-provider-count">: ${g.count}</span></span><span class="compact-count">${g.count}</span></span>`;
     }
     const provider = g.provider;
     const label = providerDisplayName(provider);
@@ -1169,8 +1056,6 @@ export function renderSummaryAndNotifications() {
   }
   if (providerParts) summary += `<span class="summary-sep">|</span>${providerParts}`;
   document.getElementById('summary').innerHTML = summary;
-  const drawerSummary = document.getElementById('mobile-drawer-summary');
-  if (drawerSummary) drawerSummary.innerHTML = summary;
   ensureSummaryResizeObserver();
   updateSummaryCompactMode();
   updateTabNotification(totalWaiting);
@@ -1234,7 +1119,6 @@ export function renderSessionStateUpdate(id) {
   const updated = updateSessionCardStateInPlace(id);
   updateMainTabStatus();
   if (typeof syncElapsedTimer === 'function') syncElapsedTimer();
-  window.updateMobileHomeCard?.(id);
   return updated;
 }
 
@@ -1252,7 +1136,6 @@ export function render() {
     return;
   }
   renderSessionList();
-  window.renderMobileHome?.();
   // C5: マルチタブが開いているときはペインスロット配列も更新
   // （セッション削除などで slots が古くなった場合に P<n> バッジと整合させる）
   const _mv5 = document.getElementById('multi-view');

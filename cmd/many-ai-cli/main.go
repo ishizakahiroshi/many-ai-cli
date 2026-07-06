@@ -18,7 +18,6 @@ import (
 	"many-ai-cli/internal/hub"
 	"many-ai-cli/internal/launcher"
 	hublog "many-ai-cli/internal/log"
-	"many-ai-cli/internal/orchestrate"
 	"many-ai-cli/internal/sessionlog"
 	"many-ai-cli/internal/shell"
 	"many-ai-cli/internal/uninstall"
@@ -31,19 +30,6 @@ import (
 // これがバイナリ・Web UI・Windows メタデータ越しでバージョンを参照する
 // single source of truth。
 var version = "dev"
-
-// gitCommit / buildTime はビルド時に ldflags (-X main.gitCommit=... /
-// -X main.buildTime=...) で注入される人間可読のビルド識別子。同一 version 内の
-// ビルド差を識別するための付加情報で、/api/info に出す。未注入なら空文字。
-var (
-	gitCommit = ""
-	buildTime = ""
-)
-
-// buildInfo は Hub へ渡すビルド識別子をまとめる。
-func buildInfo() hub.BuildInfo {
-	return hub.BuildInfo{GitCommit: gitCommit, BuildTime: buildTime}
-}
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -127,7 +113,7 @@ func run(args []string) error {
 		// CREATE_NEW_CONSOLE で新規コンソールが割り当てられるので、stderr 出力も
 		// banner と同じ「Hub 専用ターミナル」に表示される。
 		logger := hublog.NewFileLogger(cfg.Hub.LogDir, cfg.Log, false, true)
-		s, err := hub.NewServer(cfg, logger, false, displayVersion(), buildInfo())
+		s, err := hub.NewServer(cfg, logger, false, displayVersion())
 		if err != nil {
 			return err
 		}
@@ -166,7 +152,7 @@ func run(args []string) error {
 		// Hub 用コンソール（CREATE_NEW_CONSOLE で割り当てられた窓 or 直接起動された
 		// シェル）でリアルタイムに動作状況を確認するため。
 		logger = hublog.NewFileLogger(cfg.Hub.LogDir, cfg.Log, *debug, true)
-		s, err := hub.NewServer(cfg, logger, *dev, displayVersion(), buildInfo())
+		s, err := hub.NewServer(cfg, logger, *dev, displayVersion())
 		if err != nil {
 			return err
 		}
@@ -280,22 +266,12 @@ func run(args []string) error {
 			return errors.New("wrap <provider>")
 		}
 		return wrapper.Run(cfg, logger, args[1], args[2:])
-	case "claude", "codex", "copilot", "cursor-agent", "opencode", "grok":
+	case "claude", "codex", "copilot", "cursor-agent":
 		return wrapper.Run(cfg, logger, cmd, args[1:])
 	case "usage-relay":
 		// 隠しサブコマンド: Claude statusLine / Codex Stop フックから呼び出される。
 		// usage() ヘルプには載せない。
 		return usagerelay.Run(args[1:])
-	case "orchestrate":
-		// 隠しサブコマンド: orchestration conductor / child セッションの AI が
-		// `many-ai-cli orchestrate spawn --role ... "prompt"`（子の起動）と
-		// `many-ai-cli orchestrate send --role ... "text"`（既存子への追加指示）に使う
-		// （plan_orchestration-spawn-ui-exposure.md C2 / plan_orchestration-conductor-improvements.md C2）。
-		// usage() ヘルプには載せない。
-		if len(args) < 2 {
-			return errors.New("orchestrate <spawn|send>")
-		}
-		return orchestrate.Run(args[1:])
 	case "-h", "--help", "help":
 		return usage()
 	default:
@@ -304,6 +280,6 @@ func run(args []string) error {
 }
 
 func usage() error {
-	fmt.Println("many-ai-cli <serve|connect|wrap|claude|codex|copilot|cursor-agent|opencode|grok|shell-init|stop|status|profile-export|log-clean|uninstall|version>")
+	fmt.Println("many-ai-cli <serve|connect|wrap|claude|codex|copilot|cursor-agent|shell-init|stop|status|profile-export|log-clean|uninstall|version>")
 	return nil
 }

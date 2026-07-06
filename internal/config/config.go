@@ -13,7 +13,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"many-ai-cli/internal/securefile"
 	"many-ai-cli/internal/wslutil"
 )
 
@@ -76,8 +75,6 @@ type SlashCmdSources struct {
 	Codex       string `yaml:"codex"   json:"codex"`
 	Copilot     string `yaml:"copilot" json:"copilot"`
 	CursorAgent string `yaml:"cursor-agent" json:"cursor-agent"`
-	Opencode    string `yaml:"opencode" json:"opencode"`
-	Grok        string `yaml:"grok" json:"grok"`
 }
 
 const (
@@ -86,17 +83,11 @@ const (
 	DefaultCodexSlashCmdSource       = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/codex.md"
 	DefaultCopilotSlashCmdSource     = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/copilot.md"
 	DefaultCursorAgentSlashCmdSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/cursor-agent.md"
-	DefaultOpenCodeSlashCmdSource    = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/opencode.md"
-	DefaultGrokSlashCmdSource        = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/grok.md"
 )
 
 const DefaultUsageLinkSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/defaults.json"
 
 const DefaultModelsSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/models/defaults.json"
-
-const DefaultOllamaBaseURL = "http://localhost:11434"
-
-const DefaultLMStudioBaseURL = "http://localhost:1234"
 
 func DefaultSlashCmdSources() SlashCmdSources {
 	return SlashCmdSources{
@@ -104,8 +95,6 @@ func DefaultSlashCmdSources() SlashCmdSources {
 		Codex:       DefaultCodexSlashCmdSource,
 		Copilot:     DefaultCopilotSlashCmdSource,
 		CursorAgent: DefaultCursorAgentSlashCmdSource,
-		Opencode:    DefaultOpenCodeSlashCmdSource,
-		Grok:        DefaultGrokSlashCmdSource,
 	}
 }
 
@@ -126,12 +115,6 @@ func EffectiveSlashCmdSources(src SlashCmdSources) SlashCmdSources {
 	if src.CursorAgent == "" {
 		src.CursorAgent = defaults.CursorAgent
 	}
-	if src.Opencode == "" {
-		src.Opencode = defaults.Opencode
-	}
-	if src.Grok == "" {
-		src.Grok = defaults.Grok
-	}
 	return src
 }
 
@@ -142,8 +125,6 @@ type ApprovalPatternSources struct {
 	Codex       string `yaml:"codex,omitempty"   json:"codex,omitempty"`
 	Copilot     string `yaml:"copilot,omitempty" json:"copilot,omitempty"`
 	CursorAgent string `yaml:"cursor-agent,omitempty" json:"cursor-agent,omitempty"`
-	Opencode    string `yaml:"opencode,omitempty" json:"opencode,omitempty"`
-	Grok        string `yaml:"grok,omitempty" json:"grok,omitempty"`
 	Common      string `yaml:"common,omitempty"  json:"common,omitempty"`
 }
 
@@ -153,8 +134,6 @@ const (
 	DefaultCopilotApprovalPatternSource     = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/copilot.md"
 	DefaultCursorAgentApprovalPatternSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/cursor-agent.md"
 	DefaultCommonApprovalPatternSource      = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/common.md"
-	DefaultOpenCodeApprovalPatternSource    = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/opencode.md"
-	DefaultGrokApprovalPatternSource        = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/grok.md"
 )
 
 func DefaultApprovalPatternSources() ApprovalPatternSources {
@@ -163,8 +142,6 @@ func DefaultApprovalPatternSources() ApprovalPatternSources {
 		Codex:       DefaultCodexApprovalPatternSource,
 		Copilot:     DefaultCopilotApprovalPatternSource,
 		CursorAgent: DefaultCursorAgentApprovalPatternSource,
-		Opencode:    DefaultOpenCodeApprovalPatternSource,
-		Grok:        DefaultGrokApprovalPatternSource,
 		Common:      DefaultCommonApprovalPatternSource,
 	}
 }
@@ -182,12 +159,6 @@ func EffectiveApprovalPatternSources(src ApprovalPatternSources) ApprovalPattern
 	}
 	if src.CursorAgent == "" {
 		src.CursorAgent = defaults.CursorAgent
-	}
-	if src.Opencode == "" {
-		src.Opencode = defaults.Opencode
-	}
-	if src.Grok == "" {
-		src.Grok = defaults.Grok
 	}
 	if src.Common == "" {
 		src.Common = defaults.Common
@@ -209,8 +180,6 @@ type ApprovalProfiles struct {
 	Codex       ApprovalProfileName `yaml:"codex,omitempty"   json:"codex,omitempty"`
 	Copilot     ApprovalProfileName `yaml:"copilot,omitempty" json:"copilot,omitempty"`
 	CursorAgent ApprovalProfileName `yaml:"cursor-agent,omitempty" json:"cursor-agent,omitempty"`
-	Opencode    ApprovalProfileName `yaml:"opencode,omitempty" json:"opencode,omitempty"`
-	Grok        ApprovalProfileName `yaml:"grok,omitempty" json:"grok,omitempty"`
 	Common      ApprovalProfileName `yaml:"common,omitempty"  json:"common,omitempty"`
 }
 
@@ -221,8 +190,6 @@ func DefaultApprovalProfiles() ApprovalProfiles {
 		Codex:       ApprovalProfileOfficial,
 		Copilot:     ApprovalProfileOfficial,
 		CursorAgent: ApprovalProfileOfficial,
-		Opencode:    ApprovalProfileOfficial,
-		Grok:        ApprovalProfileOfficial,
 		Common:      ApprovalProfileOfficial,
 	}
 }
@@ -240,12 +207,6 @@ func EffectiveApprovalProfiles(p ApprovalProfiles) ApprovalProfiles {
 	}
 	if p.CursorAgent == "" {
 		p.CursorAgent = ApprovalProfileOfficial
-	}
-	if p.Opencode == "" {
-		p.Opencode = ApprovalProfileOfficial
-	}
-	if p.Grok == "" {
-		p.Grok = ApprovalProfileOfficial
 	}
 	if p.Common == "" {
 		p.Common = ApprovalProfileOfficial
@@ -272,14 +233,6 @@ func (p ApprovalProfiles) For(provider string) ApprovalProfileName {
 		if p.CursorAgent != "" {
 			return p.CursorAgent
 		}
-	case "opencode":
-		if p.Opencode != "" {
-			return p.Opencode
-		}
-	case "grok":
-		if p.Grok != "" {
-			return p.Grok
-		}
 	case "common":
 		if p.Common != "" {
 			return p.Common
@@ -299,10 +252,6 @@ func (p ApprovalProfiles) WithProvider(provider string, name ApprovalProfileName
 		p.Copilot = name
 	case "cursor-agent":
 		p.CursorAgent = name
-	case "opencode":
-		p.Opencode = name
-	case "grok":
-		p.Grok = name
 	case "common":
 		p.Common = name
 	}
@@ -360,8 +309,6 @@ type UserPrefsUsageLinks struct {
 	Codex       string `yaml:"codex,omitempty"   json:"codex,omitempty"`
 	Copilot     string `yaml:"copilot,omitempty" json:"copilot,omitempty"`
 	CursorAgent string `yaml:"cursor-agent,omitempty" json:"cursor-agent,omitempty"`
-	Opencode    string `yaml:"opencode,omitempty" json:"opencode,omitempty"`
-	Grok        string `yaml:"grok,omitempty" json:"grok,omitempty"`
 }
 
 // UserPrefsVoice は音声入力の設定。
@@ -390,9 +337,6 @@ type UserPrefsDoneSummaryNotify struct {
 // bool のゼロ値が false なため *bool ポインタで三値（nil=未設定/true/false）を表現する。
 type UserPrefsTokenStatusbar struct {
 	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
-	// Segments: セグメント名(short, 例 "ctx"/"ratelimit"/"ailines") → 表示するか。
-	// キー未設定 = デフォルト表示。明示的に false のセグメントだけ UI 側で非表示にする。
-	Segments map[string]bool `yaml:"segments,omitempty" json:"segments,omitempty"`
 }
 
 // IsEnabled は Enabled が nil（未設定）または true のとき true を返す（既定 ON）。
@@ -483,13 +427,6 @@ func (p UserPrefs) Clone() UserPrefs {
 	c.CwdFavorites = cloneStringSlice(p.CwdFavorites)
 	c.Spawn.Defaults = cloneStringMap(p.Spawn.Defaults)
 	c.Spawn.LastModel = cloneStringMap(p.Spawn.LastModel)
-	if p.TokenStatusbar.Segments != nil {
-		m := make(map[string]bool, len(p.TokenStatusbar.Segments))
-		for k, v := range p.TokenStatusbar.Segments {
-			m[k] = v
-		}
-		c.TokenStatusbar.Segments = m
-	}
 	return c
 }
 
@@ -499,34 +436,6 @@ func (p UserPrefs) Clone() UserPrefs {
 type LocalModel struct {
 	ID    string `yaml:"id"             json:"id"`
 	Label string `yaml:"label,omitempty" json:"label,omitempty"`
-}
-
-// OllamaConfig は Ollama daemon への接続先設定。
-// 空なら DefaultOllamaBaseURL を使う。
-type OllamaConfig struct {
-	BaseURL string `yaml:"base_url,omitempty" json:"base_url,omitempty"`
-}
-
-func EffectiveOllamaBaseURL(baseURL string) string {
-	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	if baseURL == "" {
-		return DefaultOllamaBaseURL
-	}
-	return baseURL
-}
-
-// LMStudioConfig は LM Studio ローカルサーバーへの接続先設定。
-// 空なら DefaultLMStudioBaseURL を使う。base_url に /v1 や path は付けない。
-type LMStudioConfig struct {
-	BaseURL string `yaml:"base_url,omitempty" json:"base_url,omitempty"`
-}
-
-func EffectiveLMStudioBaseURL(baseURL string) string {
-	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	if baseURL == "" {
-		return DefaultLMStudioBaseURL
-	}
-	return baseURL
 }
 
 // NotifyBackendConfig は通知バックエンド 1 件の設定。
@@ -543,31 +452,11 @@ type NotifyConfig struct {
 	Events   []string              `yaml:"events,omitempty"   json:"events,omitempty"`
 }
 
-// OrchestrationConfig controls lightweight parent/child AI session orchestration.
-type OrchestrationConfig struct {
-	MaxDepth             int    `yaml:"max_depth,omitempty" json:"max_depth,omitempty"`
-	MaxChildrenPerParent int    `yaml:"max_children_per_parent,omitempty" json:"max_children_per_parent,omitempty"`
-	MaxTotalSessions     int    `yaml:"max_total_sessions,omitempty" json:"max_total_sessions,omitempty"`
-	ChildTimeoutSeconds  int    `yaml:"child_timeout_seconds,omitempty" json:"child_timeout_seconds,omitempty"`
-	IdleDoneThresholdSec int    `yaml:"idle_done_threshold_seconds,omitempty" json:"idle_done_threshold_seconds,omitempty"`
-	WorktreeAuto         *bool  `yaml:"worktree_auto,omitempty" json:"worktree_auto,omitempty"`
-	WorktreeDirRoot      string `yaml:"worktree_dir_root,omitempty" json:"worktree_dir_root,omitempty"`
-}
-
-func (o OrchestrationConfig) WorktreeEnabled() bool {
-	return o.WorktreeAuto == nil || *o.WorktreeAuto
-}
-
 type Config struct {
 	Hub struct {
-		Port         int  `yaml:"port"`
-		OpenBrowser  bool `yaml:"open_browser"`
-		AutoShutdown bool `yaml:"auto_shutdown"`
-		// StaleBinaryAutoRestart: 既定 true。`many-ai-cli claude` 等の起動時に
-		// 「ディスクの exe ≠ 稼働中 Hub のバイナリ」かつアクティブセッション 0 の
-		// とき、古い Hub を自動で停止→再起動して新バイナリに載せ替える。
-		// false にすると載せ替えず警告ログのみ（手動再起動に委ねる）。
-		StaleBinaryAutoRestart    bool     `yaml:"stale_binary_auto_restart"`
+		Port                      int      `yaml:"port"`
+		OpenBrowser               bool     `yaml:"open_browser"`
+		AutoShutdown              bool     `yaml:"auto_shutdown"`
 		LogDir                    string   `yaml:"log_dir"`
 		IdleTimeoutMin            int      `yaml:"idle_timeout_min"`
 		WrapperReconnectGraceSec  int      `yaml:"wrapper_reconnect_grace_sec"`
@@ -597,14 +486,11 @@ type Config struct {
 	// RemotePINHash は任意リモート PIN（既定 OFF）の bcrypt ハッシュ。空なら PIN 無効。
 	// 非 loopback アクセス時のみ PIN ログインを要求する追加の扉（plan_hub-remote-auth.md / A）。
 	// 平文 PIN は決して保存しない。API レスポンスにも出さない（json:"-"）。
-	RemotePINHash string              `yaml:"remote_pin_hash,omitempty" json:"-"`
-	Ollama        OllamaConfig        `yaml:"ollama,omitempty" json:"ollama,omitempty"`
-	LMStudio      LMStudioConfig      `yaml:"lm_studio,omitempty" json:"lm_studio,omitempty"`
-	LocalModels   []LocalModel        `yaml:"local_models,omitempty" json:"local_models,omitempty"`
-	UserPrefs     UserPrefs           `yaml:"user_prefs,omitempty" json:"user_prefs,omitempty"`
-	Voice         VoiceConfig         `yaml:"voice,omitempty" json:"voice,omitempty"`
-	Notify        NotifyConfig        `yaml:"notify,omitempty" json:"notify,omitempty"`
-	Orchestration OrchestrationConfig `yaml:"orchestration,omitempty" json:"orchestration,omitempty"`
+	RemotePINHash string       `yaml:"remote_pin_hash,omitempty" json:"-"`
+	LocalModels   []LocalModel `yaml:"local_models,omitempty" json:"local_models,omitempty"`
+	UserPrefs     UserPrefs    `yaml:"user_prefs,omitempty" json:"user_prefs,omitempty"`
+	Voice         VoiceConfig  `yaml:"voice,omitempty" json:"voice,omitempty"`
+	Notify        NotifyConfig `yaml:"notify,omitempty" json:"notify,omitempty"`
 }
 
 func LoadOrCreate() (*Config, error) {
@@ -717,7 +603,6 @@ func defaultConfig(home string) *Config {
 	cfg.Hub.Port = 47777
 	cfg.Hub.OpenBrowser = true
 	cfg.Hub.AutoShutdown = true
-	cfg.Hub.StaleBinaryAutoRestart = true
 	// When invoked via the many-ai-cli-launcher.exe Windows launcher's WSL
 	// profile (and only then — not for plain `many-ai-cli serve` inside a WSL
 	// shell), place logs under the
@@ -799,17 +684,7 @@ func writeConfigAtomic(dir, path string, out []byte) error {
 	if err := os.Chmod(tmpName, 0o600); err != nil {
 		return fmt.Errorf("chmod temp config: %w", err)
 	}
-	if err := os.Rename(tmpName, path); err != nil {
-		return err
-	}
-	// C6 (plan_audit_score_s_promotion_2026-07-05.md): Windows は os.Chmod 0o600 が
-	// NTFS DACL を狭めないため、rename 後の実 path に対して DACL 明示制限を掛ける
-	// (config.yaml は token / AuthCookieSecret / RemotePINHash を持つ)。
-	// 制限に失敗しても書き込み自体は成功しているので、log ノイズを避けて silently 続行する
-	// (呼び出し元は書き込み成功として扱う)。誤 DACL 適用で読めなくなった場合の復旧は
-	// `icacls <path> /reset` を README に案内する運用でカバーする。
-	_ = securefile.RestrictFile(path)
-	return nil
+	return os.Rename(tmpName, path)
 }
 
 // Clone returns a deep copy of cfg safe to pass to Save without holding s.mu.
@@ -840,10 +715,6 @@ func (cfg *Config) Clone() *Config {
 	if cfg.Notify.Events != nil {
 		c.Notify.Events = cloneStringSlice(cfg.Notify.Events)
 	}
-	if cfg.Orchestration.WorktreeAuto != nil {
-		v := *cfg.Orchestration.WorktreeAuto
-		c.Orchestration.WorktreeAuto = &v
-	}
 	if cfg.Voice.Whisper.HallucinationPhrases != nil {
 		c.Voice.Whisper.HallucinationPhrases = cloneStringSlice(cfg.Voice.Whisper.HallucinationPhrases)
 	}
@@ -866,27 +737,6 @@ func (cfg *Config) applyDefaults() {
 	if cfg.Voice.Whisper.HallucinationPhrases == nil {
 		cfg.Voice.Whisper.HallucinationPhrases = cloneStringSlice(DefaultWhisperHallucinationPhrases)
 	}
-	if cfg.Orchestration.MaxDepth <= 0 {
-		cfg.Orchestration.MaxDepth = 1
-	}
-	if cfg.Orchestration.MaxChildrenPerParent <= 0 {
-		cfg.Orchestration.MaxChildrenPerParent = 4
-	}
-	if cfg.Orchestration.MaxTotalSessions <= 0 {
-		cfg.Orchestration.MaxTotalSessions = 16
-	}
-	// orchestration の時間閾値は 2026-07-04 実測（実装子が 40 分正常稼働・
-	// 120s idle 警告は 3 連続偽陽性）に基づく。短い時間駆動閾値は AI 子セッション
-	// の作業実態に合わない（plan_orchestration-conductor-improvements.md C1）。
-	if cfg.Orchestration.ChildTimeoutSeconds <= 0 {
-		cfg.Orchestration.ChildTimeoutSeconds = 3600
-	}
-	if cfg.Orchestration.IdleDoneThresholdSec <= 0 {
-		cfg.Orchestration.IdleDoneThresholdSec = 600
-	}
-	if strings.TrimSpace(cfg.Orchestration.WorktreeDirRoot) == "" {
-		cfg.Orchestration.WorktreeDirRoot = filepath.Join(".many-ai-cli", "worktrees")
-	}
 }
 
 func (cfg *Config) Validate() error {
@@ -901,54 +751,6 @@ func (cfg *Config) Validate() error {
 	}
 	if err := validateVoiceWhisper(cfg.Voice.Whisper); err != nil {
 		return err
-	}
-	if err := validateOllama(cfg.Ollama); err != nil {
-		return err
-	}
-	if err := validateLMStudio(cfg.LMStudio); err != nil {
-		return err
-	}
-	return nil
-}
-
-func validateOllama(ollama OllamaConfig) error {
-	baseURL := strings.TrimSpace(ollama.BaseURL)
-	if baseURL == "" {
-		return nil
-	}
-	u, err := neturl.Parse(baseURL)
-	if err != nil || u.Scheme == "" || u.Host == "" {
-		return fmt.Errorf("ollama.base_url must be an http or https base URL")
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("ollama.base_url must use http or https")
-	}
-	if u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return fmt.Errorf("ollama.base_url must not include credentials, query, or fragment")
-	}
-	if u.Path != "" && u.Path != "/" {
-		return fmt.Errorf("ollama.base_url must not include a path")
-	}
-	return nil
-}
-
-func validateLMStudio(lms LMStudioConfig) error {
-	baseURL := strings.TrimSpace(lms.BaseURL)
-	if baseURL == "" {
-		return nil
-	}
-	u, err := neturl.Parse(baseURL)
-	if err != nil || u.Scheme == "" || u.Host == "" {
-		return fmt.Errorf("lm_studio.base_url must be an http or https base URL")
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("lm_studio.base_url must use http or https")
-	}
-	if u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return fmt.Errorf("lm_studio.base_url must not include credentials, query, or fragment")
-	}
-	if u.Path != "" && u.Path != "/" {
-		return fmt.Errorf("lm_studio.base_url must not include a path")
 	}
 	return nil
 }
@@ -1068,9 +870,6 @@ func ensurePrivateDir(dir string) error {
 	if err := os.Chmod(dir, DirMode); err != nil {
 		return fmt.Errorf("chmod config dir: %w", err)
 	}
-	// C6: Windows で親ディレクトリの DACL を明示制限する (継承された ACE を切る)。
-	// 失敗しても mkdir/chmod は成功しているので silent 続行。
-	_ = securefile.EnsurePrivateDir(dir)
 	return nil
 }
 

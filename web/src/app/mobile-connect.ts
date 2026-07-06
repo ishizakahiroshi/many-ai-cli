@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { token, showToast, el } from './util.js';
+import { token, showToast } from './util.js';
 // serve 状態の取得は外部公開トグルと共有（plan_tailscale-serve-host-toggle.md C2）。
 // 有効化/停止操作はツールバーの 🌐外部公開へ一本化したため、ここでは状態取得のみ参照する。
 import { fetchExposeStatus, enableExpose, type TailscaleStatus, type TailscaleStateName } from './host-expose.js';
@@ -104,7 +104,18 @@ function lsSet(key: string, value: string): void {
 }
 
 // ── DOM ヘルパ ────────────────────────────────────────────────────────────────
-// `el()` は util.ts に集約済み（host-expose.ts と共有）。
+
+function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  opts?: { class?: string; text?: string; html?: string; attrs?: Record<string, string> },
+): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  if (opts?.class) node.className = opts.class;
+  if (opts?.text != null) node.textContent = opts.text;
+  if (opts?.html != null) node.innerHTML = opts.html;
+  if (opts?.attrs) for (const [k, v] of Object.entries(opts.attrs)) node.setAttribute(k, v);
+  return node;
+}
 
 // ── QR 描画（vendored qrcode-generator）────────────────────────────────────────
 // typeNumber=0（自動）, errorCorrectionLevel 'M'。長い文字列でも収まるよう自動サイズ。

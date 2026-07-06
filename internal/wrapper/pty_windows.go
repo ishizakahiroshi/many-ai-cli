@@ -65,7 +65,7 @@ func (p *conPtyProcess) Resize(cols, rows uint16) error {
 	return p.pty.Resize(int(cols), int(rows))
 }
 
-func startProcess(provider string, args []string, cwd string, cols, rows int, extraEnv []string) (processSession, error) {
+func startProcess(provider string, args []string, cwd string, cols, rows int) (processSession, error) {
 	cmdName, cmdArgs := resolveCmd(provider, args)
 
 	pt, err := gopty.New()
@@ -81,7 +81,6 @@ func startProcess(provider string, args []string, cwd string, cols, rows int, ex
 	cmd := pt.Command(cmdName, cmdArgs...)
 	cmd.Dir = cwd
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor", "MANY_AI_CLI=1")
-	cmd.Env = append(cmd.Env, extraEnv...)
 
 	if err := cmd.Start(); err != nil {
 		_ = pt.Close()

@@ -18,7 +18,6 @@
 | `/mcp` | List, enable, or disable MCP servers. | When managing external tool integrations. |
 | `/model` | Set or list the active model. | When switching which model you work with. |
 | `/new-chat` | Start a new chat session. | When beginning a fresh conversation. |
-| `/orchestrate` | Split work into child AI sessions using the Hub board API. | Coordinate design, implementation, and test workers from one conductor session. |
 | `/plan` | Switch to Plan mode to design an approach before coding. | When outlining strategy before implementation. |
 | `/quit` | Exit the CLI. | When closing the session. |
 | `/resume` | Resume a previous chat by folder name. | When returning to an earlier conversation. |

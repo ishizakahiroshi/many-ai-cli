@@ -1,17 +1,20 @@
 package hub
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,6 +30,7 @@ import (
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/notify"
 	"many-ai-cli/internal/proto"
+	"many-ai-cli/internal/proxy"
 	"many-ai-cli/internal/sessionlog"
 	"many-ai-cli/internal/sessionstore"
 	"many-ai-cli/internal/wrapper"
@@ -85,46 +89,27 @@ const (
 // xterm.js のレンダリング済みバッファをスキャンして session_hint で approval_visible
 // を伝える。Hub はそれを受けて idleAfter 経過時に倒す state を決める。
 type session struct {
-	ID              int    `json:"id"`
-	Provider        string `json:"provider"`
-	Display         string `json:"display_name"`
-	CWD             string `json:"cwd"`
-	Branch          string `json:"branch,omitempty"`
-	Label           string `json:"label,omitempty"` // UI カード 3 行目に【ラベル】として表示
-	Model           string `json:"model,omitempty"` // 使用モデル名; UI カード表示用
-	Route           string `json:"route,omitempty"` // 接続経路（"ollama" 等）; UI で Ollama バックエンドの識別に使用
-	Shell           string `json:"shell,omitempty"`
-	ParentSessionID int    `json:"parent_session_id,omitempty"`
-	Role            string `json:"role,omitempty"`
-	Auto            bool   `json:"auto,omitempty"`
-	Depth           int    `json:"depth,omitempty"`
-	OrchestrationID string `json:"orchestration_id,omitempty"`
-	BoardPath       string `json:"board_path,omitempty"`
-	WorktreeBranch  string `json:"worktree_branch,omitempty"`
-	State           string `json:"state"`
-	LastOutputAt    string `json:"last_output_at,omitempty"` // ISO 8601; UI カード「最終応答時刻」用
-	StartedAt       string `json:"started_at,omitempty"`     // ISO 8601; UI カード「起動時刻」用
-	FirstMessage    string `json:"first_message,omitempty"`  // 最初の確定入力; UI カード表示用
-	LastMessage     string `json:"last_message,omitempty"`   // 最新の確定入力; UI カード表示用
-	EndReason       string `json:"end_reason,omitempty"`     // session_end の reason コード（例: "exec_not_found"）。UI 側で i18n 翻訳して表示
-	HomeDir         string `json:"-"`
-	CodexHome       string `json:"-"`
-	ClaudeDir       string `json:"-"`
+	ID           int    `json:"id"`
+	Provider     string `json:"provider"`
+	Display      string `json:"display_name"`
+	CWD          string `json:"cwd"`
+	Branch       string `json:"branch,omitempty"`
+	Label        string `json:"label,omitempty"` // UI カード 3 行目に【ラベル】として表示
+	Model        string `json:"model,omitempty"` // 使用モデル名; UI カード表示用
+	Route        string `json:"route,omitempty"` // 接続経路（"ollama" 等）; UI で Ollama バックエンドの識別に使用
+	Shell        string `json:"shell,omitempty"`
+	State        string `json:"state"`
+	LastOutputAt string `json:"last_output_at,omitempty"` // ISO 8601; UI カード「最終応答時刻」用
+	StartedAt    string `json:"started_at,omitempty"`     // ISO 8601; UI カード「起動時刻」用
+	FirstMessage string `json:"first_message,omitempty"`  // 最初の確定入力; UI カード表示用
+	LastMessage  string `json:"last_message,omitempty"`   // 最新の確定入力; UI カード表示用
+	EndReason    string `json:"end_reason,omitempty"`     // session_end の reason コード（例: "exec_not_found"）。UI 側で i18n 翻訳して表示
 
 	// JSON 外: 状態評価用
 	lastOutputAt      time.Time // idleAfter 計算用。LastOutputAt と同期して更新する
 	approvalVisible   bool
 	approvalVisibleAt time.Time // approvalVisible=true を最後に受信した時刻（approvalVisibleLease 判定用）
 	branchCheckedAt   time.Time
-
-	// JSON 外: 初期プロンプト注入ゲート。orchestration セッション（conductor / 子）の
-	// spawn 直後〜injectInitialPrompt 完了までユーザー入力を pendingInput へ保留する。
-	// CLI 起動途中の TUI は入力バイトを捨てるため、注入前に届いた入力は黙って失われる
-	// （docs/local/bugfix_orchestration-codex-child-spawn-failures_2026-07-04.md）。
-	// initialInjectGateAt は注入経路の事故でゲートが張り付いたまま残った場合の
-	// 期限判定（initialInjectGateMaxAge）に使う。
-	initialInjectPending bool
-	initialInjectGateAt  time.Time
 
 	// JSON 外: git 変更統計（直近の refreshBranchForCWD で取得した値）
 	gitChecked bool
@@ -144,7 +129,6 @@ type session struct {
 	nativeApprovalClearMisses int
 	nativeApprovalConsumed    string
 	nativeApprovalConsumedAt  time.Time
-	approvalMarkerSig         string
 
 	// JSON 外: wrapper に最後に送った PTY サイズ（同サイズの resize を skip して不要な SIGWINCH を防ぐ）
 	lastCols int
@@ -161,11 +145,6 @@ type session struct {
 	commitMsgLang       string          // 生成言語（ja/en）。タイムアウト文言に使用
 	commitMsgBuf        strings.Builder // ANSI 除去済み出力の蓄積（マーカー抽出用・上限つき）
 	commitMsgProgressed bool            // AI からの最初の非空出力で 1 回だけ commit_msg_progress を送る
-	// doneMsgBuf は [MANY-AI-CLI-DONE]…[/MANY-AI-CLI-DONE] のマーカーが 4096 バイトの
-	// PTY 読み取りチャンク境界をまたいでも検出できるよう、ANSI 除去済み出力を
-	// セッション単位で累積するスキャンバッファ。commitMsgBuf と同型で上限つき。
-	// マーカー検出（あるいは十分な余白蓄積）でリセットする。
-	doneMsgBuf strings.Builder
 
 	// JSON 外: 起動バナーからの初期モデル検出用。
 	// Model が空のセッションのみ対象。検出成功 or 累計バイト超過で打ち切る。
@@ -178,6 +157,11 @@ type session struct {
 	JSONLPath string             `json:"jsonl_path,omitempty"`
 	History   *sessionlog.Writer `json:"-"`
 
+	// JSON 外: 内蔵プロキシ経由で捕捉した API リクエスト/レスポンスのリングバッファ。
+	// chat 履歴 UI が payload ベースのクリーン表示を行うためのソース。
+	// Hub プロセス終了で揮発（永続化は将来 opt-in）。
+	chatTurns []*proto.ChatTurn
+
 	// JSON 外: per-session 入力直列化ロック（#18）。
 	// 複数 UI が同一セッションへ同時入力した場合に、hasPending チェック〜
 	// trySendInput（50ms sleep を含む bracketd-paste 二段送信）が
@@ -186,11 +170,7 @@ type session struct {
 	// sessionsMu を 50ms sleep 中に保持しないよう、per-session の別ロックで分離する。
 	// ロック順序: inputMu は sessionsMu の外側でのみ取得する
 	//（sessionsMu 保持中に inputMu を取得しない）。
-	// ポインタで保持する（AUDIT-11）: session を JSON スナップショット用に値コピーする
-	// 箇所（orchestration.go の cp := *ses）で sync.Mutex を値コピーすると go vet の
-	// copylocks に触れるため。session 生成時に必ず new(sync.Mutex) を設定すること
-	//（未設定＝nil のまま Lock すると nil pointer panic になる）。
-	inputMu *sync.Mutex
+	inputMu sync.Mutex
 }
 
 func (s *session) idleStateName() string {
@@ -209,8 +189,7 @@ func (s *Server) resolveRoute(provider, model string) string {
 	}
 	localCfg := s.snapshotLocalModels()
 	known := collectOllamaModelIDs(s.modelsCache, localCfg)
-	knownLmStudio := collectLMStudioModelIDs(s.modelsCache)
-	return RouteForModel(provider, model, known, knownLmStudio)
+	return RouteForModel(provider, model, known)
 }
 
 func gitBranch(cwd string) string {
@@ -357,22 +336,14 @@ func (c *wrapperConn) close() {
 }
 
 type Server struct {
-	cfg       *config.Config
-	logger    *slog.Logger
-	httpSrv   *http.Server
-	devMode   bool   // --dev: web/ をファイルシステムから直接サーブ（再コンパイル不要）
-	hubCWD    string // serve 起動時の os.Getwd() を保存
-	version   string // main.version (ldflags 経由) を保持し /api/info で返す
-	gitCommit string // main.gitCommit (ldflags 経由・任意)。/api/info で返す
-	buildTime string // main.buildTime (ldflags 経由・任意)。/api/info で返す
-	// binGuard は「稼働中 Hub が起動時のバイナリのままか」を判定する。
-	// /api/info が binary_sha256 と binary_stale を申告するのに使い、
-	// wrapper・launcher・status・UI はこのフラグを読むだけで stale を扱える。
-	binGuard     *binaryGuard
-	webSrcHash   string // hash of web/src/ baked into dist/.src-hash at build time
-	webDistFresh bool   // true if current web/src/ matches webSrcHash (always true on VPS/Docker)
-	parentShell  string
-	instanceID   string // Hub プロセス起動ごとのランダム ID。UI が Hub 再起動（live session ID の振り直し）を検出するために snapshot に同梱する
+	cfg         *config.Config
+	logger      *slog.Logger
+	httpSrv     *http.Server
+	devMode     bool   // --dev: web/ をファイルシステムから直接サーブ（再コンパイル不要）
+	hubCWD      string // serve 起動時の os.Getwd() を保存
+	version     string // main.version (ldflags 経由) を保持し /api/info で返す
+	parentShell string
+	instanceID  string // Hub プロセス起動ごとのランダム ID。UI が Hub 再起動（live session ID の振り直し）を検出するために snapshot に同梱する
 
 	// sessionsMu guards session/connection state (nextID, sessions, wrappers,
 	// uis, lastUICols/Rows, idleTimer, idleGen). cfgMu guards s.cfg.
@@ -413,7 +384,6 @@ type Server struct {
 	sessionStore      *sessionstore.Store
 	push              *pushManager
 	notifyMgr         *notify.Manager
-	orchestration     *orchestrationManager
 
 	// 任意リモート PIN（pin_auth.go）。lazy 生成のため pinLim() 経由でアクセスする。
 	pinLimiterMu sync.Mutex
@@ -428,10 +398,6 @@ type Server struct {
 	whisperCmd       *exec.Cmd
 	whisperJob       whisperProcessJob
 	whisperServerURL string
-	// whisperStarting は startManagedWhisper 中の TOCTOU (HUB-3) を防ぐ排他フラグ。
-	// 未起動判定と cmd.Start() の間で別リクエストが並走して二重起動しないよう、
-	// 予約 → 起動 → 登録 の一連を単一クリティカルセクション相当にする。
-	whisperStarting bool
 
 	branchRefreshMu       sync.Mutex
 	branchRefreshSem      chan struct{}
@@ -449,10 +415,6 @@ type Server struct {
 	// として無窓で抱える）。servers.go 参照。
 	serverConns *serverConnManager
 
-	// profileSaveMu は launcher-profiles.yaml への Load→Modify→Save を直列化する
-	// （HUB-8）。/api/servers POST が並行呼びされたときのロストアップデートを防ぐ。
-	profileSaveMu sync.Mutex
-
 	autoOpenBrowser bool
 
 	// tsRunner: tailscale CLI 実行の抽象（テストでモック注入）。nil なら exec 実装。
@@ -460,6 +422,11 @@ type Server struct {
 
 	// sshdProber: OpenSSH Server 状態検知の抽象（テストでモック注入）。nil なら OS 実装。
 	sshdProber sshdProber
+
+	// chatProxy: wrap 対象 CLI（Claude / Codex）の API リクエストを透過プロキシし、
+	// payload を構造化チャット履歴として捕捉する内蔵プロキシ。
+	// 起動失敗時は nil（payload 取得 OFF。PTY スクレイプにフォールバック）。
+	chatProxy *proxy.Server
 }
 
 type branchRefreshRequest struct {
@@ -566,12 +533,6 @@ const doneNotifyMinInterval = 60 * time.Second
 var doneSummaryMarkerOpen = []byte("[MANY-AI-CLI-DONE]")
 var doneSummaryMarkerClose = []byte("[/MANY-AI-CLI-DONE]")
 
-// doneMsgScanBufMax は doneMsgBuf の上限。commitMsgBuf と同じ発想で、
-// マーカーがチャンク境界をまたいでも検出できる程度に大きく、かつ長時間の
-// アイドル出力でメモリを圧迫しない値。数 KB あれば通常の 1〜2 文の DONE
-// サマリー全体を余裕でカバーできる。
-const doneMsgScanBufMax = 16 * 1024
-
 var (
 	modelChangeTokens = [][]byte{
 		[]byte("Set model to "),
@@ -622,53 +583,6 @@ func init() {
 	}
 }
 
-// computeWebSrcHash は srcDir 配下の .ts/.js ファイル（vendor/ 除外・.d.ts 除外）を
-// ソート順に SHA256 ハッシュし、先頭 12 文字の hex 文字列を返す。
-// build.mjs の generateSrcHash() と同じアルゴリズムで、両者の出力を直接比較できる。
-func computeWebSrcHash(srcDir string) string {
-	var files []string
-	_ = filepath.WalkDir(srcDir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if d.IsDir() {
-			if d.Name() == "vendor" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		name := d.Name()
-		if strings.HasSuffix(name, ".d.ts") {
-			return nil
-		}
-		if strings.HasSuffix(name, ".ts") || strings.HasSuffix(name, ".js") {
-			files = append(files, p)
-		}
-		return nil
-	})
-	if len(files) == 0 {
-		return ""
-	}
-	sort.Strings(files)
-	h := sha256.New()
-	for _, f := range files {
-		rel, _ := filepath.Rel(srcDir, f)
-		rel = filepath.ToSlash(rel)
-		content, err := os.ReadFile(f)
-		if err != nil {
-			return ""
-		}
-		_, _ = h.Write([]byte(rel + "\n"))
-		_, _ = h.Write(content)
-		_, _ = h.Write([]byte("\n"))
-	}
-	result := fmt.Sprintf("%x", h.Sum(nil))
-	if len(result) > 12 {
-		return result[:12]
-	}
-	return result
-}
-
 // newInstanceID は Hub プロセス起動ごとのランダム ID を生成する。
 // 乱数取得に失敗した場合は起動時刻ナノ秒で代替する（識別できれば十分なため）。
 func newInstanceID() string {
@@ -679,23 +593,14 @@ func newInstanceID() string {
 	return hex.EncodeToString(b)
 }
 
-func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version string, build BuildInfo) (*Server, error) {
+func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version string) (*Server, error) {
 	hubCWD, _ := os.Getwd()
-	binGuard := newBinaryGuard()
-	if binGuard.StartSHA() == "" {
-		// 致命的にはしない。binary_sha256 が空でも Hub は起動でき、
-		// stale 検知が無効化されるだけ。
-		logger.Warn("self binary hash unavailable; stale-binary detection disabled")
-	}
 	s := &Server{
 		cfg:                   cfg,
 		logger:                logger,
 		devMode:               devMode,
 		hubCWD:                hubCWD,
 		version:               version,
-		gitCommit:             build.GitCommit,
-		buildTime:             build.BuildTime,
-		binGuard:              binGuard,
 		instanceID:            newInstanceID(),
 		parentShell:           wrapper.DetectShell(),
 		sessions:              map[int]*session{},
@@ -707,34 +612,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		usageLinkCache:        newUsageLinkCache(),
 		modelsCache:           &modelsCache{},
 		modelsRemoteCache:     newModelsRemoteCache(),
-		orchestration:         newOrchestrationManager(),
 		branchRefreshSem:      make(chan struct{}, branchRefreshWorkers),
 		branchRefreshInFlight: map[string]struct{}{},
 		serverConns:           newServerConnManager(logger),
-	}
-	// web/dist 鮮度チェック: dist/.src-hash (ビルド時焼き付け) と現在の web/src/ を比較。
-	// web/src/ が存在しない環境（VPS/Docker）ではチェックをスキップし fresh 扱いとする。
-	{
-		bakedHash := ""
-		if hashBytes, err := web.FS.ReadFile("dist/.src-hash"); err == nil {
-			bakedHash = strings.TrimSpace(string(hashBytes))
-		}
-		s.webSrcHash = bakedHash
-		webSrcDir := filepath.Join(hubCWD, "web", "src")
-		if bakedHash == "" {
-			s.webDistFresh = true // hash 未生成（初回ビルド前等）は誤警告を避けて fresh 扱い
-		} else if _, err := os.Stat(webSrcDir); err != nil {
-			s.webDistFresh = true // web/src/ が無い環境（VPS/Docker）はチェック不可
-		} else {
-			currentHash := computeWebSrcHash(webSrcDir)
-			s.webDistFresh = currentHash == bakedHash
-			if !s.webDistFresh {
-				logger.Warn("web/dist is stale: run make build",
-					"dist_hash", bakedHash,
-					"src_hash", currentHash,
-				)
-			}
-		}
 	}
 	if store, err := sessionstore.OpenForLogDir(cfg.Hub.LogDir); err != nil {
 		logger.Warn("sqlite session store disabled", "err", err)
@@ -806,13 +686,11 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/auth/revoke-all", s.handleAuthRevokeAll)
 	mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
 	mux.HandleFunc("/api/auth/login", s.handleAuthLogin)
-	mux.HandleFunc("/api/auth/logout", s.handleAuthLogout)
 	mux.HandleFunc("/api/auth/set-pin", s.handleAuthSetPIN)
 	mux.HandleFunc("/api/net-hint", s.handleNetHint)
 	mux.HandleFunc("/api/avatar", s.handleAvatar)
 	mux.HandleFunc("/api/spawn", s.handleSpawn)
 	mux.HandleFunc("/api/spawn-grid", s.handleSpawnGrid)
-	mux.HandleFunc("/api/sessions/", s.handleSessionAPI)
 	mux.HandleFunc("/api/pick-directory", s.handlePickDirectory)
 	mux.HandleFunc("/api/path-exists", s.handlePathExists)
 	mux.HandleFunc("/api/list-subdirs", s.handleListSubdirs)
@@ -888,6 +766,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/servers/connect/status", s.handleServerConnectStatus)
 	mux.HandleFunc("/api/servers/disconnect", s.handleServerDisconnect)
 	mux.HandleFunc("/api/profiles/fetch", s.handleProfilesFetch)
+	s.registerWorkbenchRoutes(mux)
 	s.httpSrv = &http.Server{
 		Addr:    fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port),
 		Handler: withSecurityHeaders(mux),
@@ -1000,10 +879,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}()
 	setConsoleTitle("many-ai-cli [hub] - DO NOT CLOSE")
 	setConsoleIcon()
-	// 永続ログ（hub.log）にはトークンを平文で残さない。ライブの全権トークンが
-	// ローテーション済みログに残ると、トラブルシュートでログを共有した際に漏洩する。
-	// 実トークン入りの URL は stdout の起動バナー（下記 startupBanner）だけに出す。
-	s.logger.Info("MANY-AI-CLI started", "url", fmt.Sprintf("http://%s/?token=***", s.httpSrv.Addr))
+	s.logger.Info("MANY-AI-CLI started", "url", fmt.Sprintf("http://%s/?token=%s", s.httpSrv.Addr, neturl.QueryEscape(s.cfg.Token)))
 	cfgSnapshot := s.snapshotCfg()
 	fmt.Print(startupBanner(s.version, s.httpSrv.Addr, cfgSnapshot.Token, startupBannerAccess{
 		AllowLoopbackWithoutToken: cfgSnapshot.Hub.AllowLoopbackWithoutToken,
@@ -1019,8 +895,8 @@ func (s *Server) Run(ctx context.Context) error {
 	if s.tokenStatusbarEnabled() {
 		s.injectUsageHooks()
 	}
+	s.startChatProxy()
 	s.safeGo("state_ticker", func() { s.stateTicker(runCtx) })
-	s.safeGo("orchestration_board_loop", func() { s.orchestrationBoardLoop(runCtx) })
 	s.safeGo("clean_attachments", s.cleanAttachments)
 	s.safeGo("clean_spawn_logs", s.cleanSpawnLogs)
 	s.safeGo("clean_session_logs", s.cleanSessionLogs)
@@ -1033,9 +909,6 @@ func (s *Server) Run(ctx context.Context) error {
 			s.removeApprovalRules()
 		}
 		s.removeAllUsageHooks()
-		if s.orchestration != nil {
-			s.orchestration.stop()
-		}
 		s.stopManagedWhisper()
 		// Stop the Hub server without marking wrapper sessions as intentionally
 		// disconnected. Closing the HTTP server drops WS connections after the
@@ -1043,6 +916,7 @@ func (s *Server) Run(ctx context.Context) error {
 		// reconnect grace period. Explicit session termination still goes through
 		// /api/kill-all, dismiss, or idle-timeout.
 		_ = s.httpSrv.Close()
+		s.stopChatProxy()
 		// 内蔵リモート接続の SSH/WSL 子プロセスを全て落とし、launcher-active.json の
 		// 自 PID 分を掃除する（Hub 終了でトンネルも落ちるのが期待動作）。
 		// httpSrv.Close() の後に呼ぶこと: 先に HTTP を閉じれば、shutdown 中に新規
@@ -1218,21 +1092,884 @@ func limitWSReceive(conn *websocket.Conn) {
 	conn.MaxPayloadBytes = wsMaxPayloadBytes
 }
 
-// wrapper 接続ライフサイクル関連の 3 関数 (wrapperLoop / reattachLoop /
-// wrapperMessageLoop) は C4 追加分割で internal/hub/wrapper_loop.go へ移動した。
+func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
+	startedAt := time.Now()
+	branch := gitBranch(reg.CWD)
+	s.sessionsMu.Lock()
+	s.nextID++
+	id := s.nextID
+	initCols, initRows := s.lastUICols, s.lastUIRows
+	initCols, initRows, _ = usableInitPTYSize(initCols, initRows)
+	s.sessionsMu.Unlock()
 
-// 承認検出まわりの 9 関数 (resetNativeApprovalClearMisses / handleNativeApprovalDetection /
-// handleDoneSummaryMarker / notifyDoneOutbound / notifyDonePush /
-// markNativeApprovalConsumed / appendPTYReplay / ptyChunkContainsAny /
-// nativeApprovalTailSignature / shouldSuppressNativeApprovalClearMiss) は
-// C4 リファクタで internal/hub/approval_native.go へ移動した。
+	rawLogPath, jsonlPath := sessionlog.Paths(s.cfg.Hub.LogDir, sessionlog.Metadata{
+		SessionID: id,
+		Provider:  reg.Provider,
+		CWD:       reg.CWD,
+		StartedAt: startedAt,
+	})
+	s.cfgMu.Lock()
+	jsonlMaxBytes := int64(s.cfg.Log.SessionMaxSizeMB) * 1024 * 1024
+	sessionLogEnabled := s.cfg.Log.SessionEnabled
+	s.cfgMu.Unlock()
+	// セッションログが無効（既定）なら .jsonl を作らない（空ファイルも残さない）。
+	var history *sessionlog.Writer
+	if sessionLogEnabled {
+		var histErr error
+		history, histErr = sessionlog.NewJSONLWriter(jsonlPath, jsonlMaxBytes)
+		if histErr != nil {
+			s.logger.Warn("session history create failed", "path", jsonlPath, "err", histErr)
+		}
+	}
+
+	regRoute := strings.TrimSpace(reg.Route)
+	if regRoute == "" {
+		regRoute = s.resolveRoute(reg.Provider, reg.Model)
+	}
+	var storeID int64
+	if s.sessionStore != nil {
+		var storeErr error
+		storeID, storeErr = s.sessionStore.StartSession(sessionstore.SessionStart{
+			LiveSessionID: id,
+			Provider:      reg.Provider,
+			Display:       reg.Display,
+			CWD:           reg.CWD,
+			Branch:        branch,
+			Label:         reg.Label,
+			Model:         reg.Model,
+			Route:         regRoute,
+			Shell:         reg.Shell,
+			State:         "standby",
+			StartedAt:     startedAt.Format(time.RFC3339),
+			LogPath:       rawLogPath,
+			JSONLPath:     jsonlPath,
+		})
+		if storeErr != nil {
+			s.logger.Warn("sqlite session start failed", "session_id", id, "err", storeErr)
+		}
+	}
+	s.sessionsMu.Lock()
+	ses := &session{
+		ID:              id,
+		StoreID:         storeID,
+		Provider:        reg.Provider,
+		Display:         reg.Display,
+		CWD:             reg.CWD,
+		Branch:          branch,
+		Label:           reg.Label,
+		Model:           reg.Model,
+		Route:           regRoute,
+		Shell:           reg.Shell,
+		State:           "standby",
+		StartedAt:       startedAt.Format(time.RFC3339),
+		branchCheckedAt: startedAt,
+		LogPath:         rawLogPath,
+		JSONLPath:       jsonlPath,
+		History:         history,
+	}
+	s.sessions[id] = ses
+	wc := newWrapperConn(conn)
+	s.wrappers[id] = wc
+	s.sessionsMu.Unlock()
+	// register 時に wrapper から渡された proxy token を session ID と紐付ける
+	// （chat_proxy.go: 内蔵プロキシ捕捉 payload を session ringbuffer へ振り分けるため）。
+	s.linkProxyTokenToSession(reg.ProxyToken, id)
+	if initCols == 0 || initRows == 0 {
+		// UIが未接続の場合はラッパーが報告した呼び出し元端末サイズを優先する
+		if cols, rows, ok := usableInitPTYSize(reg.Cols, reg.Rows); ok {
+			initCols, initRows = cols, rows
+		} else {
+			initCols, initRows = defaultInitCols, defaultInitRows
+		}
+	}
+	s.sessionsMu.Lock()
+	ses.lastCols, ses.lastRows = initCols, initRows
+	ses.vt = newVTBuffer(initCols, initRows)
+	s.sessionsMu.Unlock()
+	if s.approvalRulesEnabled() {
+		s.injectApprovalRules()
+	}
+	if s.tokenStatusbarEnabled() {
+		s.injectUsageHooks()
+	}
+	_ = wc.send(proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, TokenStatusbar: s.tokenStatusbarEnabled()})
+	s.logger.Info("session registered", "id", id, "provider", reg.Provider, "cwd", reg.CWD, "pid", reg.PID)
+	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Branch: branch, Label: reg.Label, Model: reg.Model, Route: regRoute, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath})
+	s.writeHistory(id, map[string]any{
+		"ts":         startedAt.Format(time.RFC3339),
+		"type":       "session_start",
+		"session_id": id,
+		"provider":   reg.Provider,
+		"cwd":        reg.CWD,
+		"branch":     branch,
+		"label":      reg.Label,
+		"model":      reg.Model,
+		"shell":      reg.Shell,
+		"pid":        reg.PID,
+	})
+	s.wrapperMessageLoop(wc, id)
+}
+
+func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
+	if req.SessionID <= 0 {
+		_ = websocket.JSON.Send(conn, proto.Message{Type: "reattach_reject", Reason: "invalid session_id"})
+		return
+	}
+	startedAt := time.Now()
+	startedAtText := req.StartedAt
+	if startedAtText != "" {
+		if parsed, err := time.Parse(time.RFC3339, startedAtText); err == nil {
+			startedAt = parsed
+		} else {
+			startedAtText = startedAt.Format(time.RFC3339)
+		}
+	} else {
+		startedAtText = startedAt.Format(time.RFC3339)
+	}
+	branch := gitBranch(req.CWD)
+
+	replay, err := base64.StdEncoding.DecodeString(req.ReplayB64)
+	if err != nil {
+		_ = websocket.JSON.Send(conn, proto.Message{Type: "reattach_reject", SessionID: req.SessionID, Reason: "invalid replay_b64"})
+		return
+	}
+	if len(replay) > maxPTYBuf {
+		replay = replay[len(replay)-maxPTYBuf:]
+	}
+
+	// LogPath / JSONLPath は wrapper からの提案値を信用せず、常に Hub 側の
+	// LogDir + Metadata から決定的に再構築する（リモート token 保持者による
+	// 任意ファイル append プリミティブを閉じるため）。req.LogPath / req.JSONLPath
+	// は無視する。06-15 監査の F2 と同様の方針（attacker-controlled パスを read/write
+	// プリミティブにしない）。
+	s.cfgMu.Lock()
+	logDir := s.cfg.Hub.LogDir
+	jsonlMaxBytesReattach := int64(s.cfg.Log.SessionMaxSizeMB) * 1024 * 1024
+	sessionLogEnabled := s.cfg.Log.SessionEnabled
+	s.cfgMu.Unlock()
+	rawLogPath, jsonlPath := sessionlog.Paths(logDir, sessionlog.Metadata{
+		SessionID: req.SessionID,
+		Provider:  req.Provider,
+		CWD:       req.CWD,
+		StartedAt: startedAt,
+	})
+	// セッションログが無効（既定）なら .jsonl を作らない。
+	var history *sessionlog.Writer
+	if sessionLogEnabled {
+		var histErr error
+		history, histErr = sessionlog.NewJSONLWriterAppend(jsonlPath, jsonlMaxBytesReattach)
+		if histErr != nil {
+			s.logger.Warn("session history append failed", "path", jsonlPath, "err", histErr)
+		}
+	}
+
+	reqRoute := strings.TrimSpace(req.Route)
+	if reqRoute == "" {
+		reqRoute = s.resolveRoute(req.Provider, req.Model)
+	}
+	// renumber 判定（既存 wrapper と衝突する場合は新 ID を割り当てる）を SQLite
+	// アクセスより前に行い、StartSession を 1 回だけ呼ぶ（重複 INSERT による orphan
+	// 行の発生を防ぐ）。
+	s.sessionsMu.Lock()
+	acceptedID := req.SessionID
+	if s.wrappers[acceptedID] != nil {
+		s.nextID++
+		acceptedID = s.nextID
+	}
+	if s.nextID < acceptedID {
+		s.nextID = acceptedID
+	}
+	s.sessionsMu.Unlock()
+	if acceptedID != req.SessionID {
+		// renumber が確定したら JSONLPath も新 ID で再計算する（旧 ID のパスは
+		// 既に他 wrapper が使っている可能性がある）。
+		rawLogPath, jsonlPath = sessionlog.Paths(logDir, sessionlog.Metadata{
+			SessionID: acceptedID,
+			Provider:  req.Provider,
+			CWD:       req.CWD,
+			StartedAt: startedAt,
+		})
+		if sessionLogEnabled {
+			if history != nil {
+				_ = history.Close()
+			}
+			var histErr error
+			history, histErr = sessionlog.NewJSONLWriterAppend(jsonlPath, jsonlMaxBytesReattach)
+			if histErr != nil {
+				s.logger.Warn("session history append failed (renumbered)", "path", jsonlPath, "err", histErr)
+				history = nil
+			}
+		}
+	}
+	var storeID int64
+	if s.sessionStore != nil {
+		var storeErr error
+		storeID, storeErr = s.sessionStore.StartSession(sessionstore.SessionStart{
+			LiveSessionID: acceptedID,
+			Provider:      req.Provider,
+			Display:       req.Display,
+			CWD:           req.CWD,
+			Branch:        branch,
+			Label:         req.Label,
+			Model:         req.Model,
+			Route:         reqRoute,
+			Shell:         req.Shell,
+			State:         "running",
+			StartedAt:     startedAtText,
+			LogPath:       rawLogPath,
+			JSONLPath:     jsonlPath,
+		})
+		if storeErr != nil {
+			s.logger.Warn("sqlite session reattach failed", "session_id", acceptedID, "err", storeErr)
+		}
+	}
+	s.sessionsMu.Lock()
+	var oldHistory *sessionlog.Writer
+	if cur := s.sessions[acceptedID]; cur != nil {
+		oldHistory = cur.History
+	}
+	now := time.Now()
+	lastOutputAt := ""
+	var lastOutputAtTime time.Time
+	if len(replay) > 0 {
+		lastOutputAtTime = now
+		lastOutputAt = now.Format(time.RFC3339)
+	}
+	s.sessions[acceptedID] = &session{
+		ID:              acceptedID,
+		StoreID:         storeID,
+		Provider:        req.Provider,
+		Display:         req.Display,
+		CWD:             req.CWD,
+		Branch:          branch,
+		Label:           req.Label,
+		Model:           req.Model,
+		Route:           reqRoute,
+		Shell:           req.Shell,
+		State:           "running",
+		LastOutputAt:    lastOutputAt,
+		StartedAt:       startedAtText,
+		lastOutputAt:    lastOutputAtTime,
+		branchCheckedAt: now,
+		ptyBuf:          replay,
+		vt:              newVTBuffer(req.Cols, req.Rows),
+		lastCols:        req.Cols,
+		lastRows:        req.Rows,
+		LogPath:         rawLogPath,
+		JSONLPath:       jsonlPath,
+		History:         history,
+	}
+	if s.sessions[acceptedID].vt != nil && len(replay) > 0 {
+		s.sessions[acceptedID].vt.Write(replay)
+	}
+	wc := newWrapperConn(conn)
+	s.wrappers[acceptedID] = wc
+	if s.nextID < acceptedID {
+		s.nextID = acceptedID
+	}
+	s.sessionsMu.Unlock()
+	// wrapper が一時切断中に届かなかった保留入力を、再接続したこの wrapper へ順番に再送する。
+	// 他のバックグラウンド goroutine と同様 safeGo で起動し、panic で Hub 全体を巻き込まないようにする。
+	s.safeGo("flush_pending_input", func() { s.flushPendingInput(acceptedID) })
+	if oldHistory != nil {
+		_ = oldHistory.Close()
+	}
+	if s.approvalRulesEnabled() {
+		s.injectApprovalRules()
+	}
+	if s.tokenStatusbarEnabled() {
+		s.injectUsageHooks()
+	}
+	_ = wc.send(proto.Message{Type: "reattach_ack", SessionID: acceptedID})
+	s.broadcast(proto.Message{Type: "session_update", SessionID: acceptedID, Provider: req.Provider, Display: req.Display, CWD: req.CWD, Branch: branch, Label: req.Label, Model: req.Model, Route: reqRoute, Shell: req.Shell, State: "running", LastOutputAt: lastOutputAt, StartedAt: startedAtText, LogPath: rawLogPath, JSONLPath: jsonlPath})
+	s.writeHistory(acceptedID, map[string]any{
+		"ts":             now.Format(time.RFC3339),
+		"type":           "session_reattach",
+		"session_id":     acceptedID,
+		"old_session_id": req.SessionID,
+		"provider":       req.Provider,
+		"cwd":            req.CWD,
+		"branch":         branch,
+		"label":          req.Label,
+		"model":          req.Model,
+		"shell":          req.Shell,
+		"pid":            req.PID,
+		"renumbered":     acceptedID != req.SessionID,
+	})
+	s.wrapperMessageLoop(wc, acceptedID)
+}
+
+func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
+	for {
+		var m proto.Message
+		if err := websocket.JSON.Receive(wc.ws, &m); err != nil {
+			s.logger.Debug("wrapper WS closed", "session_id", id, "err", err)
+			break
+		}
+		m.SessionID = id
+		switch m.Type {
+		case "pty_data":
+			now := time.Now()
+			maskedRaw := sessionlog.MaskSecrets(string(m.Data))
+			cleanText := sessionlog.StripANSI(maskedRaw)
+			s.writeHistory(id, map[string]any{
+				"ts":         now.Format(time.RFC3339),
+				"type":       "pty_output",
+				"session_id": id,
+				"data_b64":   sessionlog.EncodeBase64([]byte(maskedRaw)),
+				"text":       cleanText,
+			})
+			var provider string
+			var vtLines []string
+			var initialModelLines []string
+			var initialModelCWD string
+			scanNativeApproval := false
+			hadNativeApprovalSig := false
+			chunkHasApprovalTrigger := ptyChunkContainsAny(m.Data, nativeApprovalTriggerTokens)
+			s.sessionsMu.Lock()
+			if ses := s.sessions[id]; ses != nil {
+				ses.ptyBuf = appendPTYReplay(ses.ptyBuf, m.Data)
+				if ses.vt == nil {
+					ses.vt = newVTBuffer(ses.lastCols, ses.lastRows)
+				}
+				ses.vt.Write(m.Data)
+				provider = ses.Provider
+				if chunkHasApprovalTrigger && now.Before(ses.vtResizeDebounceUntil) {
+					ses.nativeApprovalScanQueued = true
+				}
+				shouldCheckApproval := isAIProvider(provider) &&
+					now.After(ses.vtResizeDebounceUntil) &&
+					(chunkHasApprovalTrigger || ses.nativeApprovalSig != "" || ses.nativeApprovalScanQueued)
+				if shouldCheckApproval {
+					hadNativeApprovalSig = ses.nativeApprovalSig != ""
+					vtLines = ses.vt.TailLines(vtTailLinesForApproval)
+					tailSig := nativeApprovalTailSignature(vtLines)
+					if tailSig != ses.nativeApprovalTailSig {
+						ses.nativeApprovalTailSig = tailSig
+						scanNativeApproval = true
+					}
+					ses.nativeApprovalScanQueued = false
+				}
+				// 起動バナーからの初期モデル検出（--model 指定なしのセッション向け）。
+				// Model が埋まる・上限バイト超過のどちらかで打ち切る。
+				if !ses.initialModelScanDone && ses.Model == "" && initialModelScanProviders[provider] {
+					ses.initialModelScanBytes += len(m.Data)
+					if ses.initialModelScanBytes > initialModelScanMaxBytes {
+						ses.initialModelScanDone = true
+					} else {
+						initialModelCWD = ses.CWD
+						initialModelLines = ses.vt.Lines()
+					}
+				}
+			}
+			s.sessionsMu.Unlock()
+			s.broadcast(m)
+			if scanNativeApproval {
+				approval := detectNativeApproval(provider, vtLines)
+				if approval == nil && hadNativeApprovalSig && shouldSuppressNativeApprovalClearMiss(provider, vtLines) {
+					s.resetNativeApprovalClearMisses(id)
+				} else {
+					s.handleNativeApprovalDetection(id, approval)
+				}
+			}
+			s.markRunning(id)
+			s.detectModelChange(id, m.Data, cleanText)
+			if initialModelLines != nil {
+				s.detectInitialModel(id, provider, initialModelCWD, initialModelLines)
+			}
+			if bytes.Contains(m.Data, doneSummaryMarkerOpen) {
+				s.handleDoneSummaryMarker(id, m.Data)
+			}
+			s.handleCommitMsgChunk(id, cleanText)
+		case "session_end":
+			histEvent := map[string]any{
+				"ts":         time.Now().Format(time.RFC3339),
+				"type":       "session_end",
+				"session_id": id,
+				"state":      m.State,
+				"exit_code":  m.ExitCode,
+			}
+			if m.Reason != "" {
+				histEvent["reason"] = m.Reason
+			}
+			s.writeHistory(id, histEvent)
+			if m.State == "completed" || m.State == "error" {
+				s.sessionsMu.Lock()
+				if cur := s.sessions[id]; cur != nil {
+					cur.State = m.State
+					if m.Reason != "" {
+						cur.EndReason = m.Reason
+					}
+				}
+				s.sessionsMu.Unlock()
+			}
+		}
+	}
+
+	// wrapper 切断
+	s.sessionsMu.Lock()
+	if s.wrappers[id] == wc {
+		delete(s.wrappers, id)
+	}
+	var historyToClose *sessionlog.Writer
+	var jsonlPathForTranscript string
+	var endedProvider, endedCWD string
+	if cur := s.sessions[id]; cur != nil && cur.State != "completed" && cur.State != "error" {
+		cur.State = "disconnected"
+	}
+	endState := "disconnected"
+	endReason := ""
+	if cur := s.sessions[id]; cur != nil {
+		endState = cur.State
+		historyToClose = cur.History
+		cur.History = nil
+		jsonlPathForTranscript = cur.JSONLPath
+		endReason = cur.EndReason
+		endedProvider = cur.Provider
+		endedCWD = cur.CWD
+	}
+	s.sessionsMu.Unlock()
+	if endState == "disconnected" {
+		if historyToClose != nil {
+			ev := map[string]any{
+				"ts":         time.Now().Format(time.RFC3339),
+				"type":       "session_end",
+				"session_id": id,
+				"state":      endState,
+				"exit_code":  0,
+			}
+			if endReason != "" {
+				ev["reason"] = endReason
+			}
+			_ = historyToClose.Event(ev)
+		}
+	}
+	if historyToClose != nil {
+		_ = historyToClose.Close()
+	}
+	if s.sessionStore != nil {
+		s.sessionStore.EndSession(id, endState, endReason, time.Now())
+	}
+	s.removeInactiveApprovalRules(providerApprovalRuleTargets(endedProvider, endedCWD))
+	s.removeInactiveUsageHooks(endedProvider, endedCWD)
+	s.finalizeTranscript(id, jsonlPathForTranscript)
+	// usage 集計マップから当該セッションのエントリを掃除する。dismiss 経路だけでなく
+	// completed/error/disconnected の wrapper 切断時にも削除しないと、長期稼働 Hub
+	// (VPS / docker) で線形にメモリが累積する。
+	DeleteSessionUsageStat(id)
+	s.broadcast(proto.Message{Type: "session_end", SessionID: id, State: endState, Reason: endReason})
+}
+
+func (s *Server) resetNativeApprovalClearMisses(id int) {
+	s.sessionsMu.Lock()
+	if ses := s.sessions[id]; ses != nil {
+		ses.nativeApprovalClearMisses = 0
+	}
+	s.sessionsMu.Unlock()
+}
+
+func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval) {
+	now := time.Now()
+	var msg *proto.Message
+	s.sessionsMu.Lock()
+	ses := s.sessions[id]
+	if ses == nil {
+		s.sessionsMu.Unlock()
+		return
+	}
+	if now.Before(ses.vtResizeDebounceUntil) {
+		s.sessionsMu.Unlock()
+		return
+	}
+	if approval == nil {
+		if ses.nativeApprovalSig != "" {
+			ses.nativeApprovalClearMisses++
+			if ses.nativeApprovalClearMisses >= nativeApprovalClearMissLimit {
+				sig := ses.nativeApprovalSig
+				ses.nativeApprovalSig = ""
+				ses.nativeApprovalClearMisses = 0
+				msg = &proto.Message{
+					Type:           "approval_cleared",
+					SessionID:      id,
+					Provider:       ses.Provider,
+					ApprovalSig:    sig,
+					ApprovalSource: approvalSourceGoVT,
+				}
+			}
+		}
+		s.sessionsMu.Unlock()
+		if msg != nil {
+			s.broadcast(*msg)
+		}
+		return
+	}
+	if ses.nativeApprovalConsumed == approval.Sig && now.Sub(ses.nativeApprovalConsumedAt) < approvalConsumedTTL {
+		s.sessionsMu.Unlock()
+		return
+	}
+	ses.nativeApprovalClearMisses = 0
+	if ses.nativeApprovalSig != approval.Sig {
+		ses.nativeApprovalSig = approval.Sig
+		msg = &proto.Message{
+			Type:             "approval_detected",
+			SessionID:        id,
+			Provider:         ses.Provider,
+			ApprovalSig:      approval.Sig,
+			ApprovalKind:     approval.Kind,
+			ApprovalSource:   approvalSourceGoVT,
+			ApprovalQuestion: approval.Question,
+			ApprovalContext:  approval.Context,
+			ApprovalOptions:  approval.Options,
+			DetectedAt:       now.Format(time.RFC3339),
+		}
+	}
+	s.sessionsMu.Unlock()
+	if msg != nil {
+		if s.sessionStore != nil && msg.Type == "approval_detected" {
+			s.sessionStore.StoreApprovalDetected(id, approval.Sig, approvalSourceGoVT, approval.Kind, approval.Question, approval.Context, approval.Options, now)
+		}
+		s.broadcast(*msg)
+		if msg.Type == "approval_detected" {
+			s.notifyApprovalPush(id, approval.Sig, msg.Provider, approval.Question, approval.Context)
+			s.notifyApprovalOutbound(id, approval.Sig, msg.Provider, approval.Question, approval.Context)
+		}
+	}
+}
+
+// handleDoneSummaryMarker は PTY データから [MANY-AI-CLI-DONE] マーカーを検出し、
+// 完了サマリー通知を発火する。設定が OFF のセッション・連投抑制中はスキップ。
+func (s *Server) handleDoneSummaryMarker(id int, data []byte) {
+	open := bytes.Index(data, doneSummaryMarkerOpen)
+	if open < 0 {
+		return
+	}
+	start := open + len(doneSummaryMarkerOpen)
+	closeIdx := bytes.Index(data[start:], doneSummaryMarkerClose)
+	if closeIdx < 0 {
+		return
+	}
+	summary := strings.TrimSpace(string(data[start : start+closeIdx]))
+	if summary == "" {
+		return
+	}
+
+	now := time.Now()
+	s.cfgMu.Lock()
+	doneSummaryEnabled := s.cfg.UserPrefs.DoneSummaryNotify.Enabled
+	s.cfgMu.Unlock()
+	if !doneSummaryEnabled {
+		return
+	}
+
+	s.sessionsMu.Lock()
+	ses := s.sessions[id]
+	if ses == nil {
+		s.sessionsMu.Unlock()
+		return
+	}
+	// Shell session は done summary push notification の対象外
+	if !isAIProvider(ses.Provider) {
+		s.sessionsMu.Unlock()
+		return
+	}
+	if !ses.lastDoneNotifyAt.IsZero() && now.Sub(ses.lastDoneNotifyAt) < doneNotifyMinInterval {
+		s.sessionsMu.Unlock()
+		return
+	}
+	ses.lastDoneNotifyAt = now
+	titleName := strings.TrimSpace(ses.Display)
+	if titleName == "" {
+		titleName = strings.TrimSpace(ses.Provider)
+	}
+	if titleName == "" {
+		titleName = "many-ai-cli"
+	}
+	if ses.Label != "" {
+		titleName = fmt.Sprintf("%s #%d [%s]", titleName, id, ses.Label)
+	} else {
+		titleName = fmt.Sprintf("%s #%d", titleName, id)
+	}
+	provider := ses.Provider
+	s.sessionsMu.Unlock()
+
+	s.notifyDoneOutbound(id, provider, titleName, summary)
+	s.notifyDonePush(id, provider, titleName, summary)
+}
+
+// notifyDoneOutbound は ntfy/webhook バックエンドへのタスク完了通知を行う。
+func (s *Server) notifyDoneOutbound(id int, provider, titleName, summary string) {
+	if s.notifyMgr == nil {
+		return
+	}
+	s.notifyMgr.SendDone(notify.DonePayload{
+		SessionID: id,
+		Provider:  provider,
+		Title:     titleName,
+		Summary:   summary,
+	})
+}
+
+// notifyDonePush は Web Push でタスク完了通知を送信する。
+// Web Push 経路は notifyApprovalPush を流用する（同じ Web Push チャンネルを使う）。
+func (s *Server) notifyDonePush(id int, provider, titleName, summary string) {
+	s.notifyApprovalPush(id, fmt.Sprintf("done-%d-%d", id, time.Now().UnixNano()), provider, summary, "")
+}
+
+func (s *Server) markNativeApprovalConsumed(m proto.Message) {
+	if m.SessionID <= 0 || m.ApprovalSig == "" {
+		return
+	}
+	now := time.Now()
+	var clearMsg *proto.Message
+	s.sessionsMu.Lock()
+	ses := s.sessions[m.SessionID]
+	if ses == nil {
+		s.sessionsMu.Unlock()
+		return
+	}
+	ses.nativeApprovalConsumed = m.ApprovalSig
+	ses.nativeApprovalConsumedAt = now
+	if ses.nativeApprovalSig == m.ApprovalSig {
+		ses.nativeApprovalSig = ""
+		ses.nativeApprovalClearMisses = 0
+		clearMsg = &proto.Message{
+			Type:           "approval_cleared",
+			SessionID:      m.SessionID,
+			Provider:       ses.Provider,
+			ApprovalSig:    m.ApprovalSig,
+			ApprovalSource: approvalSourceGoVT,
+		}
+	}
+	s.sessionsMu.Unlock()
+	if s.sessionStore != nil {
+		s.sessionStore.StoreApprovalConsumed(m.SessionID, m.ApprovalSig, m.SentText, now)
+	}
+	if clearMsg != nil {
+		s.broadcast(*clearMsg)
+	}
+}
+
+func appendPTYReplay(buf, data []byte) []byte {
+	if len(data) == 0 {
+		return buf
+	}
+	if cap(buf) > maxPTYBuf {
+		if len(buf) > maxPTYBuf {
+			buf = buf[len(buf)-maxPTYBuf:]
+		}
+		compact := make([]byte, len(buf), maxPTYBuf)
+		copy(compact, buf)
+		buf = compact
+	}
+	if len(data) >= maxPTYBuf {
+		if cap(buf) < maxPTYBuf {
+			buf = make([]byte, maxPTYBuf)
+		} else {
+			buf = buf[:maxPTYBuf]
+		}
+		copy(buf, data[len(data)-maxPTYBuf:])
+		return buf
+	}
+	if len(buf)+len(data) <= maxPTYBuf {
+		return append(buf, data...)
+	}
+	keep := maxPTYBuf - len(data)
+	if keep > 0 {
+		copy(buf, buf[len(buf)-keep:])
+		buf = buf[:keep]
+	} else {
+		buf = buf[:0]
+	}
+	return append(buf, data...)
+}
+
+func ptyChunkContainsAny(data []byte, tokens [][]byte) bool {
+	for _, token := range tokens {
+		if bytes.Contains(data, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func nativeApprovalTailSignature(lines []string) string {
+	h := fnv.New64a()
+	for _, line := range lines {
+		_, _ = h.Write([]byte(line))
+		_, _ = h.Write([]byte{0})
+	}
+	return strconv.FormatUint(h.Sum64(), 16)
+}
+
+func shouldSuppressNativeApprovalClearMiss(provider string, lines []string) bool {
+	if !providerSupportsShortcutApproval(provider) {
+		return false
+	}
+	nonEmpty := 0
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		nonEmpty++
+		if nonEmpty > nativeApprovalBlankLineLimit {
+			return false
+		}
+	}
+	return true
+}
 
 // detectModelChange は PTY 出力からモデル変更を検出し、
 // セッションの Model フィールドを更新して UI に session_update を送る。
 // Claude Code の "Set model to <name>" / Codex CLI の "Model changed to <name>" を対象とする。
-// モデル検出まわりの 4 関数 (detectModelChange / detectInitialModel /
-// extractBannerModel / applyDetectedModel) は C4 追加分割で
-// internal/hub/model_detect.go へ移動した。
+func (s *Server) detectModelChange(id int, data []byte, cleanText string) {
+	if !ptyChunkContainsAny(data, modelChangeTokens) {
+		return
+	}
+	s.sessionsMu.Lock()
+	ses := s.sessions[id]
+	if ses == nil {
+		s.sessionsMu.Unlock()
+		return
+	}
+	provider := ses.Provider
+	s.sessionsMu.Unlock()
+
+	var match []string
+	switch provider {
+	case "claude":
+		match = reSetModelTo.FindStringSubmatch(cleanText)
+	case "codex":
+		match = reCodexModelChanged.FindStringSubmatch(cleanText)
+	default:
+		return
+	}
+	if match == nil {
+		return
+	}
+	newModel := strings.TrimSpace(match[1])
+	if newModel == "" {
+		return
+	}
+	s.applyDetectedModel(id, provider, newModel, false)
+}
+
+// detectInitialModel は VT バッファのレンダリング済み行から起動バナーの
+// モデル名を抽出し、Model が空のセッションに反映する。
+// /model 変更（detectModelChange）と違い既存値は上書きしない。
+func (s *Server) detectInitialModel(id int, provider, cwd string, vtLines []string) {
+	model := extractBannerModel(provider, cwd, vtLines)
+	if model == "" {
+		return
+	}
+	s.applyDetectedModel(id, provider, model, true)
+}
+
+// extractBannerModel は起動バナー / ステータス行からモデル名を抽出する
+// （見つからなければ ""）。cwd は cursor-agent のステータス行アンカーに使う。
+func extractBannerModel(provider, cwd string, lines []string) string {
+	switch provider {
+	case "claude":
+		for _, line := range lines {
+			idx := strings.Index(line, claudeBannerLogoRow2)
+			if idx < 0 {
+				continue
+			}
+			rest := strings.TrimSpace(line[idx+len(claudeBannerLogoRow2):])
+			// " · Claude Max" 等のプラン表記を落とす
+			if before, _, found := strings.Cut(rest, "·"); found {
+				rest = strings.TrimSpace(before)
+			}
+			rest = reClaudeBannerEffort.ReplaceAllString(rest, "")
+			if rest != "" {
+				return rest
+			}
+		}
+	case "codex":
+		for _, line := range lines {
+			m := reCodexBannerModel.FindStringSubmatch(line)
+			if m == nil {
+				continue
+			}
+			model := strings.TrimSpace(m[1])
+			if model != "" && !strings.EqualFold(model, "loading") {
+				return model
+			}
+		}
+	case "copilot":
+		// 最下部の非空行（ステータス行）の右端セグメントを候補にする。
+		// ラベルが無いため、モデル名らしさの検査で誤検出を防ぐ。
+		for i := len(lines) - 1; i >= 0; i-- {
+			line := strings.TrimSpace(lines[i])
+			if line == "" {
+				continue
+			}
+			segs := reCopilotStatusSplit.Split(line, -1)
+			seg := strings.TrimSpace(segs[len(segs)-1])
+			seg = reCopilotEffortSuffix.ReplaceAllString(seg, "")
+			if seg == "Auto" || (len(seg) <= 40 && reCopilotModelLike.MatchString(seg)) {
+				return seg
+			}
+			return "" // 最下部の非空行のみ見る（それより上はステータス行ではない）
+		}
+	case "cursor-agent":
+		if cwd == "" {
+			return ""
+		}
+		// "<cwd> · <branch>" 行を探し、その直上の非空行をモデル名とみなす。
+		for i, line := range lines {
+			t := strings.TrimSpace(line)
+			if !strings.HasPrefix(t, cwd+" · ") && t != cwd {
+				continue
+			}
+			for j := i - 1; j >= 0; j-- {
+				above := strings.TrimSpace(lines[j])
+				if above == "" {
+					continue
+				}
+				above = reCursorPercentSuffix.ReplaceAllString(above, "")
+				// プロンプト残骸（"→ ..." 等）は除外
+				if above != "" && !strings.ContainsAny(above, "→❯") && len(above) <= 60 {
+					return above
+				}
+				break
+			}
+		}
+	}
+	return ""
+}
+
+// applyDetectedModel はセッションの Model / Route を更新して session_update を
+// broadcast する。onlyIfEmpty=true のときは Model 未設定のセッションのみ更新する
+// （起動バナー検出が /model 変更や --model 指定を上書きしないため）。
+func (s *Server) applyDetectedModel(id int, provider, newModel string, onlyIfEmpty bool) {
+	newRoute := s.resolveRoute(provider, newModel)
+	s.sessionsMu.Lock()
+	ses := s.sessions[id]
+	if ses == nil || ses.Model == newModel || (onlyIfEmpty && ses.Model != "") {
+		s.sessionsMu.Unlock()
+		return
+	}
+	ses.Model = newModel
+	ses.Route = newRoute
+	ses.initialModelScanDone = true
+	update := proto.Message{
+		Type:         "session_update",
+		SessionID:    id,
+		Provider:     ses.Provider,
+		Display:      ses.Display,
+		CWD:          ses.CWD,
+		Branch:       ses.Branch,
+		Label:        ses.Label,
+		Model:        ses.Model,
+		Route:        ses.Route,
+		State:        ses.State,
+		LastOutputAt: ses.LastOutputAt,
+		FirstMessage: ses.FirstMessage,
+		LastMessage:  ses.LastMessage,
+	}
+	s.sessionsMu.Unlock()
+	s.broadcast(update)
+}
 
 func (s *Server) uiLoop(conn *websocket.Conn) {
 	for {
@@ -1293,24 +2030,212 @@ func (s *Server) handleResize(m proto.Message) {
 	}
 	if !skip {
 		s.broadcast(proto.Message{Type: "pty_resize", SessionID: m.SessionID, Cols: m.Cols, Rows: m.Rows})
-		// PTY サイズ変更の履歴を .jsonl に残す。表示崩れ（xterm と PTY の
-		// サイズ不一致）の再発時に、いつ・どのサイズへ変わったかを生ログと
-		// 突き合わせるための観測用（bugfix_codex-terminal-gap-resize-mismatch_2026-07-05.md）。
-		s.writeHistory(m.SessionID, map[string]any{
-			"ts":         time.Now().Format(time.RFC3339),
-			"type":       "pty_resize",
-			"session_id": m.SessionID,
-			"cols":       m.Cols,
-			"rows":       m.Rows,
-		})
 	}
 }
 
-// 入力ゲートまわりの 10 関数 (handleInput / splitBracketedPasteSubmit /
-// sessionInjectGated / submitInput / submitInputWithGate / trySendInput /
-// flushPendingInput / requeuePendingInput / appendPendingInput /
-// notifyInputDeferred) と定数 (maxPendingInputPerSession / initialInjectGateMaxAge)
-// は C4 追加分割で internal/hub/input_gate.go へ移動した。
+// handleInput は pty_input メッセージを処理する。
+// UI から Text フィールドで受け取り、wrapper には Data ([]byte) に変換して転送する。
+// Enter 確定時はセッション概要（FirstMessage/LastMessage）を更新し、
+// ユーザーターン境界マーカーを ptyBuf に注入する。
+func (s *Server) handleInput(m proto.Message) {
+	s.sessionsMu.Lock()
+	wc := s.wrappers[m.SessionID]
+	ses := s.sessions[m.SessionID]
+	combined := m.Text
+	var firstMsgBroadcast *proto.Message
+	var injectMarker bool
+	if ses != nil && strings.HasSuffix(m.Text, "\r") {
+		text := strings.TrimRight(m.Text, "\r\n")
+		if text == "/clear" {
+			// /clear でセッション概要をリセット（次の入力が新しい概要になる）
+			ses.FirstMessage = ""
+			ses.LastMessage = ""
+			msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt}
+			firstMsgBroadcast = &msg
+		} else if text != "" {
+			maskedText := sessionlog.MaskSecrets(text)
+			if ses.FirstMessage == "" {
+				ses.FirstMessage = maskedText
+			}
+			// 数字のみ（選択肢番号）は LastMessage を更新しない
+			if !isDigitsOnly(text) {
+				ses.LastMessage = maskedText
+			}
+			msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt, FirstMessage: ses.FirstMessage, LastMessage: ses.LastMessage}
+			firstMsgBroadcast = &msg
+			// ユーザーターン境界マーカーを ptyBuf に注入する
+			marker := []byte(chatHistoryUserTurnMarker)
+			ses.ptyBuf = appendPTYReplay(ses.ptyBuf, marker)
+			injectMarker = true
+		}
+	}
+	s.sessionsMu.Unlock()
+	if injectMarker {
+		s.broadcast(proto.Message{Type: "pty_data", SessionID: m.SessionID, Data: []byte(chatHistoryUserTurnMarker)})
+	}
+	s.submitInput(wc, m.SessionID, combined)
+	s.writeHistory(m.SessionID, map[string]any{
+		"ts":         time.Now().Format(time.RFC3339),
+		"type":       "user_input",
+		"session_id": m.SessionID,
+		"text":       sessionlog.MaskSecrets(m.Text),
+	})
+	if firstMsgBroadcast != nil {
+		s.broadcast(*firstMsgBroadcast)
+	}
+}
+
+func splitBracketedPasteSubmit(text string) (first string, delayed string) {
+	if !strings.HasSuffix(text, bracketedPasteEnd+"\r") {
+		return text, ""
+	}
+	return strings.TrimSuffix(text, "\r"), "\r"
+}
+
+// maxPendingInputPerSession は 1 セッションあたりの保留入力の上限。
+// wrapper が長時間戻らないケースで無制限に溜まるのを防ぐ。超過時は古い方から捨てる。
+const maxPendingInputPerSession = 100
+
+// submitInput はユーザー入力を wrapper へ届ける。wrapper 未接続・送信失敗時は
+// 入力を順序保持でバッファし、wrapper の (再)接続時に flushPendingInput が自動再送する
+// （= 黙って捨てない）。既に保留中の入力があるセッションでは、新規入力を直送せず
+// 末尾へ積んで順序を保つ。
+//
+// per-session inputMu (#18) により、複数 UI が同一セッションへ同時に入力しても
+// hasPending チェック〜trySendInput（50ms sleep 含む bracketd-paste 二段送信）が
+// 直列化され、bracketed-paste 本文と確定 CR のインターリーブが起きない。
+// sessionsMu は inputMu の外側でのみ取得し、50ms sleep 中に保持しない。
+func (s *Server) submitInput(wc *wrapperConn, sessionID int, combined string) {
+	// session ポインタを短期間だけ sessionsMu で取得する。
+	// session が既に削除済みの場合は nil になるので早期リターンする。
+	s.sessionsMu.Lock()
+	ses := s.sessions[sessionID]
+	s.sessionsMu.Unlock()
+
+	if ses == nil {
+		// セッションが既に終了している場合は入力を捨てる（黙って失わない挙動は
+		// 存在するセッションへの入力に限る）。
+		return
+	}
+
+	// per-session 入力直列化ロック: hasPending チェック〜trySendInput 完了まで保持。
+	// 複数 UI が同時にこの関数を呼んでも、同一 sessionID に対しては 1 件ずつ処理される。
+	ses.inputMu.Lock()
+	defer ses.inputMu.Unlock()
+
+	s.sessionsMu.Lock()
+	hasPending := len(s.pendingInput[sessionID]) > 0
+	if hasPending {
+		s.pendingInput[sessionID] = appendPendingInput(s.pendingInput[sessionID], combined)
+	}
+	s.sessionsMu.Unlock()
+	if hasPending {
+		s.notifyInputDeferred(sessionID)
+		return
+	}
+	if rem := s.trySendInput(wc, sessionID, combined); rem != "" {
+		s.sessionsMu.Lock()
+		s.pendingInput[sessionID] = appendPendingInput(s.pendingInput[sessionID], rem)
+		s.sessionsMu.Unlock()
+		s.notifyInputDeferred(sessionID)
+	}
+}
+
+// trySendInput は combined を wrapper へ送る。届けられなかった残り（未送信部分）を返す
+// （"" = 全て送信済み）。bracketed-paste の確定 \r は別書き込み + 50ms 遅延で送る従来挙動を保つ。
+// first まで送れて delayed(\r) だけ失敗した場合は \r のみを残りとして返し、本文の二重送信を避ける。
+func (s *Server) trySendInput(wc *wrapperConn, sessionID int, combined string) (remaining string) {
+	if wc == nil {
+		s.logger.Warn("pty_input deferred: no wrapper connected", "session_id", sessionID)
+		return combined
+	}
+	first, delayed := splitBracketedPasteSubmit(combined)
+	if err := wc.send(proto.Message{Type: "pty_input", SessionID: sessionID, Data: []byte(first)}); err != nil {
+		s.logger.Warn("pty_input deferred: send failed", "session_id", sessionID, "stage", "first", "err", err)
+		return combined
+	}
+	if delayed != "" {
+		time.Sleep(bracketedPasteSubmitDelay)
+		if err := wc.send(proto.Message{Type: "pty_input", SessionID: sessionID, Data: []byte(delayed)}); err != nil {
+			s.logger.Warn("pty_input deferred: send failed", "session_id", sessionID, "stage", "delayed", "err", err)
+			return delayed
+		}
+	}
+	return ""
+}
+
+// flushPendingInput は wrapper の (再)接続後に保留入力を順番に再送する。
+// trySendInput が遅延 sleep しうるため goroutine で呼ぶ前提。再送に失敗した場合は
+// 残りを先頭へ戻し、次の接続でリトライする。
+// per-session inputMu (#18) を保持して実行するため、フラッシュ中に submitInput が
+// 割り込んで入力順序が乱れることはない。
+func (s *Server) flushPendingInput(sessionID int) {
+	// session ポインタを短期間だけ sessionsMu で取得する。
+	s.sessionsMu.Lock()
+	ses := s.sessions[sessionID]
+	s.sessionsMu.Unlock()
+	if ses == nil {
+		return
+	}
+
+	// per-session 入力直列化ロック: pending ドレイン中に submitInput が割り込まないよう保持。
+	ses.inputMu.Lock()
+	defer ses.inputMu.Unlock()
+
+	s.sessionsMu.Lock()
+	pending := s.pendingInput[sessionID]
+	delete(s.pendingInput, sessionID)
+	wc := s.wrappers[sessionID]
+	s.sessionsMu.Unlock()
+	if len(pending) == 0 {
+		return
+	}
+	if wc == nil {
+		s.requeuePendingInput(sessionID, pending)
+		return
+	}
+	var remainder []string
+	for i, combined := range pending {
+		if rem := s.trySendInput(wc, sessionID, combined); rem != "" {
+			remainder = append(remainder, rem)
+			remainder = append(remainder, pending[i+1:]...)
+			break
+		}
+	}
+	if len(remainder) > 0 {
+		s.requeuePendingInput(sessionID, remainder)
+		return
+	}
+	s.logger.Info("flushed deferred pty_input", "session_id", sessionID, "count", len(pending))
+}
+
+// requeuePendingInput は再送できなかった残りを保留キューの先頭へ戻す
+// （フラッシュ中に新規到着した入力は後ろに残す）。
+func (s *Server) requeuePendingInput(sessionID int, queue []string) {
+	s.sessionsMu.Lock()
+	if existing := s.pendingInput[sessionID]; len(existing) > 0 {
+		queue = append(queue, existing...)
+	}
+	if len(queue) > maxPendingInputPerSession {
+		queue = queue[len(queue)-maxPendingInputPerSession:]
+	}
+	s.pendingInput[sessionID] = queue
+	s.sessionsMu.Unlock()
+}
+
+// appendPendingInput は保留キューへ 1 件積み、上限超過分を古い方から捨てる。
+func appendPendingInput(q []string, item string) []string {
+	q = append(q, item)
+	if len(q) > maxPendingInputPerSession {
+		q = q[len(q)-maxPendingInputPerSession:]
+	}
+	return q
+}
+
+// notifyInputDeferred は UI へ「入力を保留した（wrapper 未接続/送信失敗）」を通知する。
+func (s *Server) notifyInputDeferred(sessionID int) {
+	s.broadcast(proto.Message{Type: "input_deferred", SessionID: sessionID})
+}
 
 // handleHint は session_hint メッセージを処理する。
 // UI が xterm.js バッファをスキャンして判定した approval_visible を受け取り、
@@ -1356,7 +2281,6 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 		ses.nativeApprovalClearMisses = 0
 		ses.nativeApprovalConsumed = ""
 		ses.nativeApprovalConsumedAt = time.Time{}
-		ses.approvalMarkerSig = ""
 		ids = append(ids, id)
 		updates = append(updates, proto.Message{Type: "session_update", SessionID: id, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt, StartedAt: ses.StartedAt})
 	}
@@ -1370,12 +2294,7 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 	s.sessionsMu.Unlock()
 	for _, id := range ids {
 		if s.sessionStore != nil {
-			if err := s.sessionStore.ClearSessionHistory(id); err != nil {
-				// 失敗しても broadcast は継続する（現行 UI 挙動維持）が、
-				// 記録は必ず残す。以前は void 呼び出しで握り潰されており、
-				// SQLite クリア失敗時にも UI へ「削除成功」を通知していた。
-				s.logger.Warn("clear session history failed", "session_id", id, "err", err)
-			}
+			s.sessionStore.ClearSessionHistory(id)
 		}
 		s.writeHistory(id, map[string]any{
 			"ts":         time.Now().Format(time.RFC3339),
@@ -1421,6 +2340,8 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	// セッション破棄時に usageStat も解放する（メモリ無制限増加を防ぐ）。
 	// usageStatsMu のロック順序のため sessionsMu 解放後に呼ぶ。
 	DeleteSessionUsageStat(m.SessionID)
+	// chat proxy token 紐付けも掃除
+	s.unlinkProxyTokensForSession(m.SessionID)
 	if historyToClose != nil {
 		_ = historyToClose.Event(map[string]any{
 			"ts":         time.Now().Format(time.RFC3339),
@@ -1498,13 +2419,406 @@ func (s *Server) handleAttachRequest(m proto.Message) (skip bool) {
 // lastOutputAt を現在時刻に進める。状態遷移があった場合のみ broadcast する。
 // approvalVisible=true の間は running への強制遷移を行わない（カーソルブリンク等の
 // 継続的な PTY データで "待機中" 判定が阻害されるのを防ぐ）。
-// アイドル状態機械の 5 関数 (markRunning / stateTicker / evaluateIdle /
-// startIdleTimerLocked / stopIdleTimerLocked) は C4 追加分割で
-// internal/hub/idle_state.go へ移動した。
-// branch 再取得の 2 関数 (queueBranchRefreshes / refreshBranchForCWD) は
-// internal/hub/branch_refresh.go へ移動した。
-// UI broadcast の 5 関数 (addUIWithHistory / removeUI / pingLoop / sendSnapshot /
-// broadcast) は internal/hub/ui_broadcast.go へ移動した。
+func (s *Server) markRunning(id int) {
+	s.sessionsMu.Lock()
+	ses := s.sessions[id]
+	if ses == nil {
+		s.sessionsMu.Unlock()
+		return
+	}
+	now := time.Now()
+	ses.lastOutputAt = now
+	ses.LastOutputAt = now.Format(time.RFC3339)
+	if ses.approvalVisible {
+		s.sessionsMu.Unlock()
+		return
+	}
+	changed := ses.State != "running"
+	if changed {
+		ses.State = "running"
+	}
+	provider, display, cwd, branch, label, model, route, lastOutputAt := ses.Provider, ses.Display, ses.CWD, ses.Branch, ses.Label, ses.Model, ses.Route, ses.LastOutputAt
+	s.sessionsMu.Unlock()
+	if changed {
+		s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: provider, Display: display, CWD: cwd, Branch: branch, Label: label, Model: model, Route: route, State: "running", LastOutputAt: lastOutputAt})
+	}
+	if s.sessionStore != nil {
+		s.sessionStore.UpdateSessionState(id, "running", lastOutputAt)
+	}
+}
+
+// stateTicker は idleAfter 経過後の running → waiting 遷移を担う。
+func (s *Server) stateTicker(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.logger.Error("stateTicker panic recovered", "recover", fmt.Sprintf("%v", r))
+		}
+	}()
+	t := time.NewTicker(tickerInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.evaluateIdle()
+		}
+	}
+}
+
+func (s *Server) evaluateIdle() {
+	now := time.Now()
+	s.sessionsMu.Lock()
+	type change struct {
+		id           int
+		provider     string
+		display      string
+		cwd          string
+		branch       string
+		label        string
+		model        string
+		route        string
+		state        string
+		lastOutputAt string
+		approvalWait bool
+	}
+	var changes []change
+	var branchChecks []branchRefreshRequest
+	for id, ses := range s.sessions {
+		if now.Sub(ses.branchCheckedAt) >= branchRefreshAfter {
+			ses.branchCheckedAt = now
+			branchChecks = append(branchChecks, branchRefreshRequest{id: id, cwd: ses.CWD})
+		}
+		// approvalVisible リース切れの自動クリア:
+		// UI からの false ヒントが失われても（リロード desync・複数クライアント等）
+		// 再主張が止まれば waiting 固着から自動回復する。
+		// go_vt detector がまだ native prompt を見ている間は UI 不在でも維持する。
+		if ses.approvalVisible && ses.nativeApprovalSig == "" && now.Sub(ses.approvalVisibleAt) >= approvalVisibleLease {
+			ses.approvalVisible = false
+			ses.approvalVisibleAt = time.Time{}
+		}
+		var newState string
+		switch ses.State {
+		case "running":
+			if ses.approvalVisible {
+				// 承認UI表示中はアイドルタイマーを待たず即 waiting に遷移
+				newState = "waiting"
+			} else if !ses.lastOutputAt.IsZero() && now.Sub(ses.lastOutputAt) >= idleAfter {
+				newState = ses.idleStateName()
+			}
+		case "waiting", "standby":
+			// approvalVisible のフリップに追従（UI hint 反映）
+			newState = ses.idleStateName()
+		}
+		if newState != "" && newState != ses.State {
+			ses.State = newState
+			changes = append(changes, change{id: id, provider: ses.Provider, display: ses.Display, cwd: ses.CWD, branch: ses.Branch, label: ses.Label, model: ses.Model, route: ses.Route, state: newState, lastOutputAt: ses.LastOutputAt, approvalWait: newState == "waiting" && ses.approvalVisible})
+		}
+	}
+	s.sessionsMu.Unlock()
+	for _, c := range changes {
+		s.broadcast(proto.Message{Type: "session_update", SessionID: c.id, Provider: c.provider, Display: c.display, CWD: c.cwd, Branch: c.branch, Label: c.label, Model: c.model, Route: c.route, State: c.state, LastOutputAt: c.lastOutputAt})
+		if s.sessionStore != nil {
+			s.sessionStore.UpdateSessionState(c.id, c.state, c.lastOutputAt)
+		}
+		if c.approvalWait {
+			approvalID := fmt.Sprintf("ui-%d-%s", c.id, c.lastOutputAt)
+			s.notifyApprovalPush(c.id, approvalID, c.provider, "", "")
+			s.notifyApprovalOutbound(c.id, approvalID, c.provider, "", "")
+		}
+	}
+	s.queueBranchRefreshes(branchChecks)
+}
+
+func (s *Server) queueBranchRefreshes(checks []branchRefreshRequest) {
+	if len(checks) == 0 {
+		return
+	}
+	byCWD := make(map[string][]int, len(checks))
+	for _, check := range checks {
+		cwd := strings.TrimSpace(check.cwd)
+		if cwd == "" {
+			continue
+		}
+		byCWD[cwd] = append(byCWD[cwd], check.id)
+	}
+	if len(byCWD) == 0 {
+		return
+	}
+	s.branchRefreshMu.Lock()
+	if s.branchRefreshSem == nil {
+		s.branchRefreshSem = make(chan struct{}, branchRefreshWorkers)
+	}
+	if s.branchRefreshInFlight == nil {
+		s.branchRefreshInFlight = make(map[string]struct{})
+	}
+	for cwd, ids := range byCWD {
+		if _, ok := s.branchRefreshInFlight[cwd]; ok {
+			continue
+		}
+		s.branchRefreshInFlight[cwd] = struct{}{}
+		cwd := cwd
+		ids := append([]int(nil), ids...)
+		sem := s.branchRefreshSem
+		s.safeGo("branch refresh", func() {
+			sem <- struct{}{}
+			defer func() {
+				<-sem
+				s.branchRefreshMu.Lock()
+				delete(s.branchRefreshInFlight, cwd)
+				s.branchRefreshMu.Unlock()
+			}()
+			s.refreshBranchForCWD(cwd, ids)
+		})
+	}
+	s.branchRefreshMu.Unlock()
+}
+
+func (s *Server) refreshBranchForCWD(cwd string, ids []int) {
+	branch := gitBranch(cwd)
+	gitFiles, gitAdded, gitDeleted := gitChangeStats(cwd)
+	msgs := make([]proto.Message, 0, len(ids))
+	s.sessionsMu.Lock()
+	for _, id := range ids {
+		ses := s.sessions[id]
+		if ses == nil || ses.CWD != cwd {
+			continue
+		}
+		branchChanged := ses.Branch != branch
+		gitChanged := !ses.gitChecked || ses.gitFiles != gitFiles || ses.gitAdded != gitAdded || ses.gitDeleted != gitDeleted
+		if !branchChanged && !gitChanged {
+			continue
+		}
+		ses.Branch = branch
+		ses.gitChecked = true
+		ses.gitFiles = gitFiles
+		ses.gitAdded = gitAdded
+		ses.gitDeleted = gitDeleted
+		msgs = append(msgs, proto.Message{
+			Type:         "session_update",
+			SessionID:    id,
+			Provider:     ses.Provider,
+			Display:      ses.Display,
+			CWD:          ses.CWD,
+			Branch:       ses.Branch,
+			Label:        ses.Label,
+			Model:        ses.Model,
+			Route:        ses.Route,
+			State:        ses.State,
+			LastOutputAt: ses.LastOutputAt,
+			StartedAt:    ses.StartedAt,
+			FirstMessage: ses.FirstMessage,
+			LastMessage:  ses.LastMessage,
+			GitChecked:   true,
+			GitFiles:     gitFiles,
+			GitAdded:     gitAdded,
+			GitDeleted:   gitDeleted,
+		})
+	}
+	s.sessionsMu.Unlock()
+	for _, msg := range msgs {
+		s.broadcast(msg)
+	}
+}
+
+// addUIWithHistory atomically registers c in the broadcast set and captures a
+// snapshot of every session's ptyBuf at the same instant, then returns those
+// snapshots as ready-to-send messages. Callers must send the returned messages
+// to c after this call; any PTY data arriving after the lock is released is
+// delivered via broadcast, so the snapshot and live stream do not overlap.
+// activeSessionID は UI が現在表示中のセッション ID。このセッションは全量 replay し、
+// 他は replayTailForNonActive バイトの tail のみ送信する（UI 接続時のメモリ・帯域削減）。
+func (s *Server) addUIWithHistory(c *websocket.Conn, activeSessionID int) (*uiConn, []proto.Message) {
+	var items []proto.Message
+	s.sessionsMu.Lock()
+	uc := newUIConn(c)
+	s.uis[c] = uc
+	s.stopIdleTimerLocked()
+	for id, ses := range s.sessions {
+		if len(ses.ptyBuf) == 0 {
+			continue
+		}
+		raw := ses.ptyBuf
+		if id != activeSessionID && len(raw) > replayTailForNonActive {
+			tail := raw[len(raw)-replayTailForNonActive:]
+			marker := []byte(chatHistoryUserTurnMarker)
+			if !bytes.Contains(tail, marker) {
+				// 64KB 末尾にマーカーがない場合、最後のマーカー位置まで遡って含める
+				if lastIdx := bytes.LastIndex(raw, marker); lastIdx >= 0 {
+					raw = raw[lastIdx:]
+				} else {
+					raw = tail
+				}
+			} else {
+				raw = tail
+			}
+		}
+		buf := make([]byte, len(raw))
+		copy(buf, raw)
+		items = append(items, proto.Message{Type: "pty_data", SessionID: id, Data: buf})
+		// lastCols/lastRows はリセットしない。ここで 0 にすると attach 直後の
+		// fit → pty_resize が handleResize の skip 判定を必ず通過し、サイズ未変更でも
+		// PTY へ resize（SIGWINCH 相当）が届いて TUI が全画面再描画する。replay 済みの
+		// 旧フレーム（フッター等）はスクロールバックに残るため二重描画になる。
+		// lastCols は「PTY に最後に送った実サイズ」なので保持したままで正しく、
+		// 新 UI のサイズが本当に異なる場合のみ resize が通る。
+	}
+	count := len(s.uis)
+	s.sessionsMu.Unlock()
+	s.logger.Info("UI connected", "ui_count", count, "active_session", activeSessionID)
+	return uc, items
+}
+
+func (s *Server) removeUI(c *websocket.Conn) {
+	idleMin := s.idleTimeoutMin()
+	s.sessionsMu.Lock()
+	uc, ok := s.uis[c]
+	if !ok {
+		s.sessionsMu.Unlock()
+		return
+	}
+	delete(s.uis, c)
+	count := len(s.uis)
+	if count == 0 {
+		s.startIdleTimerLocked(idleMin)
+	}
+	s.sessionsMu.Unlock()
+	// Ensure the underlying TCP connection is closed so that any goroutine
+	// blocked on Receive (e.g. uiLoop) unblocks and exits.
+	uc.close()
+	s.logger.Info("UI disconnected", "ui_count", count)
+}
+
+// startIdleTimerLocked starts the idle-timeout timer. Caller must hold
+// sessionsMu. idleMin is the configured timeout, snapshotted via idleTimeoutMin
+// before taking sessionsMu so cfgMu is never held under sessionsMu.
+func (s *Server) startIdleTimerLocked(idleMin int) {
+	if idleMin <= 0 || s.idleTimer != nil {
+		return
+	}
+	s.idleGen++
+	gen := s.idleGen
+	d := time.Duration(idleMin) * time.Minute
+	s.idleTimer = time.AfterFunc(d, func() {
+		s.sessionsMu.Lock()
+		if s.idleGen != gen {
+			// A newer timer was started (UI reconnected) or the timer was
+			// stopped; skip the kill to avoid evicting a just-reconnected UI.
+			s.sessionsMu.Unlock()
+			return
+		}
+		s.idleTimer = nil
+		s.sessionsMu.Unlock()
+		s.logger.Info("idle timeout reached, killing all wrappers", "minutes", idleMin)
+		s.killAllWrappers()
+	})
+}
+
+func (s *Server) stopIdleTimerLocked() {
+	if s.idleTimer == nil {
+		return
+	}
+	s.idleGen++ // invalidate any in-flight AfterFunc callback
+	s.idleTimer.Stop()
+	s.idleTimer = nil
+}
+
+// pingLoop は uiPingInterval ごとに UI WebSocket へ JSON ping を送り続ける。
+// keepalive として機能し、dead connection を検出したら s.uis から除去して終了する。
+func (s *Server) pingLoop(ctx context.Context, uc *uiConn) {
+	t := time.NewTicker(uiPingInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if err := uc.send(map[string]string{"type": "ping"}); err != nil {
+				s.logger.Warn("ping failed, removing dead UI connection", "err", err)
+				s.removeUI(uc.ws)
+				return
+			}
+		}
+	}
+}
+
+func (s *Server) sendSnapshot(uc *uiConn) {
+	s.sessionsMu.Lock()
+	list := make([]*session, 0, len(s.sessions))
+	sessionIDs := make([]int, 0, len(s.sessions))
+	providerByID := make(map[int]string, len(s.sessions))
+	for _, ses := range s.sessions {
+		list = append(list, ses)
+		sessionIDs = append(sessionIDs, ses.ID)
+		providerByID[ses.ID] = ses.Provider
+	}
+	// Go の map イテレーションは順序が不定なため、ID 昇順へ決定的にソートしてから送る。
+	// UI 側はまだ sessionOrder に載っていないセッションをこの配列順で並べる（state.ts
+	// orderSessions の末尾フォールバック）。ソートしないと再接続のたびにカードの並びが
+	// バラバラに変わり、固定したはずの順序が崩れて見える。
+	sort.Slice(list, func(i, j int) bool { return list[i].ID < list[j].ID })
+	// json.Marshal は sessionsMu 保持下で行う。list は *session ポインタを保持し、
+	// markRunning / evaluateIdle / applyDetectedModel 等が sessionsMu 下で同じフィールド
+	// （State / Model / Branch 等）を書き換えるため、ロック外で Marshal すると read/write
+	// data race になる（-race ビルドで検出可能）。
+	b, _ := json.Marshal(list)
+	s.sessionsMu.Unlock()
+	// hub_instance: Hub 再起動を UI が検出するための起動毎 ID。
+	// UI 側は前回値と異なる場合に live session ID キーのローカル状態
+	// （チャット・ターミナルバッファ等）を破棄してから snapshot を適用する。
+	_ = uc.send(map[string]any{"type": "snapshot", "sessions": json.RawMessage(b), "hub_instance": s.instanceID})
+
+	// C3: UI 接続時に既存セッションの usageStat をまとめて送る。
+	// これにより再接続時・リロード時にステータスバーが即座に復元される。
+	// ロック順序（usage_stat.go の不変条件）: usageStatsMu 保持中に sessionsMu を取得しない。
+	// provider は上の sessionsMu 区間で確定済みの providerByID から引く（ネスト取得を避ける）。
+	usageStatsMu.Lock()
+	for _, id := range sessionIDs {
+		if stat, ok := usageStats[id]; ok {
+			_ = uc.send(proto.Message{
+				Type:           "usage_stat",
+				SessionID:      id,
+				Provider:       providerByID[id],
+				CostUSD:        stat.CostUSD,
+				CostKnown:      stat.CostKnown,
+				TokensIn:       stat.TokensIn,
+				TokensOut:      stat.TokensOut,
+				TokensCache:    stat.TokensCache,
+				TokensTotal:    stat.TokensTotal,
+				CtxWindow:      stat.CtxWindow,
+				UsageModel:     stat.UsageModel,
+				UsageStartedAt: stat.StartedAt,
+			})
+		}
+	}
+	usageStatsMu.Unlock()
+
+	// chat proxy 履歴のスナップショット配信（payload ベースのチャット履歴復元用）。
+	for _, id := range sessionIDs {
+		if turns := s.snapshotChatTurns(id); len(turns) > 0 {
+			_ = uc.send(proto.Message{
+				Type:      "chat_turns_snapshot",
+				SessionID: id,
+				ChatTurns: turns,
+			})
+		}
+	}
+}
+
+func (s *Server) broadcast(m any) {
+	s.sessionsMu.Lock()
+	ucs := make([]*uiConn, 0, len(s.uis))
+	for _, uc := range s.uis {
+		ucs = append(ucs, uc)
+	}
+	s.sessionsMu.Unlock()
+	for _, uc := range ucs {
+		if err := uc.send(m); err != nil {
+			s.logger.Warn("broadcast: UI send failed, removing dead connection", "err", err)
+			s.removeUI(uc.ws)
+		}
+	}
+}
 
 // persistConfig takes a snapshot of s.cfg under cfgMu and saves it to disk
 // outside the lock to avoid holding cfgMu during file I/O and to prevent

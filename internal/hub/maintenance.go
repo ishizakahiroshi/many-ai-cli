@@ -73,9 +73,6 @@ func (s *Server) cleanSpawnLogs() {
 // cleanSessionLogs removes session log triplets (.log / .jsonl / .txt) in
 // logs/sessions/ that are older than cfg.Log.SessionRetentionDays days.
 // A retention of 0 disables cleanup; negative values are treated as 0.
-// 稼働中セッションのログ三つ組は保持日数を超えていても削除しない
-// （長時間 idle で attach 継続中のセッションの実行履歴が消える事故を防ぐ。
-//  handleLogsPurge と同型の除外ロジック）。
 func (s *Server) cleanSessionLogs() {
 	s.logMaintenanceMu.Lock()
 	defer s.logMaintenanceMu.Unlock()
@@ -97,7 +94,6 @@ func (s *Server) cleanSessionLogs() {
 			s.logger.Warn("sqlite session store cleanup failed", "err", err)
 		}
 	}
-	activeBases := s.activeLogBases()
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -106,17 +102,9 @@ func (s *Server) cleanSessionLogs() {
 		if err != nil {
 			continue
 		}
-		if !info.ModTime().Before(cutoff) {
-			continue
+		if info.ModTime().Before(cutoff) {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
 		}
-		// 稼働中セッションの三つ組（.log/.jsonl/.txt）は絶対パスの基底名で除外する
-		// （handleLogsPurge と同一の base 計算ロジック）。
-		full := filepath.Join(dir, e.Name())
-		base := filepath.Clean(strings.TrimSuffix(full, filepath.Ext(full)))
-		if _, ok := activeBases[base]; ok {
-			continue
-		}
-		_ = os.Remove(full)
 	}
 }
 

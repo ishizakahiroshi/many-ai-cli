@@ -683,29 +683,3 @@ test('detached-grid layout parse', () => {
   assert.deepEqual(parseSessionIds('0,1,2'), [1, 2]); // 0 は除外（n > 0）
   assert.deepEqual(parseSessionIds('-1,1'), [1]);
 });
-
-test('ungluedApprovalLines splits glued numbered options for CLI display', () => {
-  // CLI 側マーカーフィルタ（terminal.ts の flushMarkerBlockToBytes）が呼ぶ公開関数。
-  // ポップアップ用に既に内部利用されているが、export 経由でも同じ挙動になることを担保する
-  // （CLI と popup で同じ整形結果＝同じ質問が読めることが「ちぐはぐ」修正の核）。
-  const glued = [
-    '  どの方向でいきますか？',
-    '1. [A] 説明A (Recommended)2. [B] 説明B3. [C] 説明C',
-  ];
-  const result = parser.ungluedApprovalLines(glued);
-  // 連結された 1./2./3. が独立した行へ分割されること。
-  assert.ok(result.some(l => /^1\./.test(l)));
-  assert.ok(result.some(l => /^2\./.test(l)));
-  assert.ok(result.some(l => /^3\./.test(l)));
-
-  // 既に改行された入力は壊れない（重複/再分割しない）。
-  const proper = [
-    '  Q1 進め方',
-    '  1. [A] 説明A (Recommended)',
-    '  2. [B] 説明B',
-    '   N. User specifies',
-  ];
-  const properResult = parser.ungluedApprovalLines(proper);
-  assert.equal(properResult.filter(l => /^\s*1\./.test(l)).length, 1);
-  assert.equal(properResult.filter(l => /^\s*2\./.test(l)).length, 1);
-});

@@ -360,7 +360,7 @@ func TestRegisteredAPIRoutesRequireToken(t *testing.T) {
 	cfg := &config.Config{Token: "tok"}
 	cfg.Hub.Port = 47777
 	cfg.Hub.LogDir = t.TempDir()
-	s, err := NewServer(cfg, slog.Default(), true, "test", BuildInfo{})
+	s, err := NewServer(cfg, slog.Default(), true, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -382,7 +382,7 @@ func TestRegisteredAPIRoutesRequireToken(t *testing.T) {
 func registeredAPIRoutes(t *testing.T) []string {
 	t.Helper()
 	seen := map[string]struct{}{}
-	for _, name := range []string{"server.go"} {
+	for _, name := range []string{"server.go", "workbench_handlers.go"} {
 		path := filepath.Join("..", "..", "internal", "hub", name)
 		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
 		if err != nil {

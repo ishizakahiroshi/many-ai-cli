@@ -220,56 +220,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* compact（Claude /compact）中の不定形プログレスバー。中間 % が PTY に来ないため、
-   光点が左右に流れる帯で「処理中」を直感的に示す。色はユーザー配色変数を流用。 */
-.live-compact-bar {
-  flex: 0 0 auto;
-  width: 72px;
-  height: 4px;
-  border-radius: 2px;
-  overflow: hidden;
-  position: relative;
-  background: rgba(147, 197, 253, 0.18);
-}
-.live-compact-bar[hidden] { display: none; }
-.live-compact-bar::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -40%;
-  width: 40%;
-  height: 100%;
-  border-radius: 2px;
-  background: var(--live-status-fg, rgba(147, 197, 253, 0.92));
-  animation: aacli-compact-slide 1.1s ease-in-out infinite;
-}
-@keyframes aacli-compact-slide {
-  0%   { left: -40%; }
-  100% { left: 100%; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .live-compact-bar::before { animation-duration: 2.4s; }
-}
-/* 長時間処理中バッジ: 「実行中」テキストのすぐ右隣に出す（スピナー＝実行表示の近くに
-   置いて視線移動を最小化する）。margin-left:auto は付けない＝左グループ（スピナー・
-   実行中・本バッジ）に残し、パレットボタンだけが右端へ寄る。running が一定時間続いた
-   とき（terminal.ts の syncLiveStatusLongproc）だけ表示する。配色はサイドバーの
-   .card-longproc と揃えた警告色。帯は pointer-events:none なのでツールチップ（title）
-   だけ拾えるよう本要素は pointer-events を復活させる。 */
-.live-status-longproc {
-  flex: 0 0 auto;
-  pointer-events: auto;
-  white-space: nowrap;
-  font-size: 0.7rem;
-  font-weight: 700;
-  line-height: 1.3;
-  color: var(--warn-text);
-  background: color-mix(in srgb, var(--warn-bg) 30%, transparent);
-  border: 1px solid color-mix(in srgb, var(--warn-text) 40%, transparent);
-  border-radius: var(--radius-sm);
-  padding: 0 6px;
-}
-.live-status-longproc[hidden] { display: none; }
 /* 配色パレット: 帯の右端に置く。帯は pointer-events:none なので操作要素だけ復活させる。 */
 .live-status-palette-btn {
   flex: 0 0 auto;
@@ -334,263 +284,6 @@
   border-radius: var(--radius-sm);
 }
 .live-status-palette-reset:hover { background: rgba(148, 163, 184, 0.22); }
-
-@media (max-width: 720px) {
-  body.mobile-has-session:not(.mobile-home-view) #input-bar-outer {
-    padding-bottom: calc(8px + var(--tsb-bottom-offset, 22px) + env(safe-area-inset-bottom) + var(--mobile-vv-bottom-offset, 0px));
-    background: var(--bg-deep, #0d1117);
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #input-bar {
-    position: relative;
-    padding: 0 10px;
-    background: transparent;
-    border-top: 0;
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #input-wrap {
-    flex-wrap: nowrap;
-    align-items: flex-end;
-    justify-content: flex-start;
-    gap: 8px;
-    min-height: 52px;
-    padding: 8px 10px;
-    border-radius: 24px;
-    border: 1px solid var(--line-soft);
-    background: var(--bg, #111827);
-    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.22);
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #input-wrap:focus-within {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #mobile-composer-attach-btn {
-    display: inline-flex;
-    flex: 0 0 34px;
-    width: 34px;
-    height: 34px;
-    min-width: 34px;
-    min-height: 34px;
-    align-self: flex-end;
-    border-radius: 50%;
-    background: var(--bg-elev2, rgba(255, 255, 255, 0.08));
-    color: var(--text);
-    font-size: 1.05rem;
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #input-area {
-    order: 0;
-    flex: 1 1 auto;
-    width: auto;
-    min-width: 0;
-    gap: 4px;
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #input {
-    max-height: calc(1.5em * 6 + 4px);
-    min-height: 28px;
-    padding: 3px 0;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    font-size: 16px;
-    line-height: 1.5;
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #input::placeholder {
-    color: var(--muted);
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #send-btn {
-    flex: 0 0 34px;
-    width: 34px;
-    height: 34px;
-    min-width: 34px;
-    min-height: 34px;
-    align-self: flex-end;
-    border-radius: 50%;
-    font-size: 0;
-  }
-  body.mobile-has-session:not(.mobile-home-view) #send-btn::before {
-    content: "▲";
-    font-size: 0.82rem;
-    line-height: 1;
-  }
-  body.mobile-has-session:not(.mobile-home-view) #send-btn.is-stopping::before {
-    content: "■";
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #mobile-keyboard-toggle,
-  body.mobile-has-session:not(.mobile-home-view) #input-tools,
-  body.mobile-has-session:not(.mobile-home-view) #voice-btn,
-  body.mobile-has-session:not(.mobile-home-view) #tools-flip-btn {
-    display: none !important;
-  }
-
-  /* 入力クリア × : デスクトップは opacity 切替（幅 26px 常時確保）だが、
-     モバイル composer は横幅が惜しいので「テキストがあるときだけ幅ごと表示」にする */
-  body.mobile-has-session:not(.mobile-home-view) #input-clear-btn {
-    display: none;
-  }
-  body.mobile-has-session:not(.mobile-home-view) #input-clear-btn.has-text {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 34px;
-    width: 34px;
-    height: 34px;
-    min-width: 34px;
-    min-height: 34px;
-    align-self: flex-end;
-    border-radius: 50%;
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #paste-chips {
-    max-height: 42px;
-    overflow-y: auto;
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #mobile-composer-attach-menu {
-    position: absolute;
-    left: 12px;
-    bottom: calc(100% + 8px);
-    z-index: 1200;
-    min-width: 150px;
-    padding: 6px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    background: var(--bg-elev, #161b22);
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
-  }
-  body.mobile-has-session:not(.mobile-home-view) #mobile-composer-attach-menu:not([hidden]) {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  body.mobile-has-session:not(.mobile-home-view) #mobile-composer-attach-menu button {
-    min-height: 40px;
-    padding: 0 10px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text);
-    font: inherit;
-    text-align: left;
-  }
-  body.mobile-has-session:not(.mobile-home-view) #mobile-composer-attach-menu button:active {
-    background: var(--bg-hover, rgba(255,255,255,0.1));
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #attach-panel {
-    display: none;
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #attach-panel.has-attachments {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 42px;
-    margin: 0 12px 6px;
-    padding: 5px 8px;
-    border: 1px solid var(--line-soft);
-    border-radius: var(--radius-md);
-    background: var(--bg, #111827);
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #attach-panel.has-attachments #attach-drop-zone,
-  body.mobile-has-session:not(.mobile-home-view) #attach-panel.has-attachments #attach-camera-btn {
-    display: none;
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #attach-panel.has-attachments #attach-thumbnails {
-    display: flex;
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow-x: auto;
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #attach-panel.has-attachments #attach-clear-btn {
-    flex: 0 0 auto;
-    min-height: 32px;
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #mobile-keyboard-panel {
-    order: 2;
-    padding: 6px 10px 0;
-    /* order:2 で #input-bar-outer より後ろ（画面最下部）に並ぶため、fixed な
-       #token-statusbar に覆われないよう自前で逃げ余白を持つ（statusbar OFF 時は
-       --tsb-bottom-offset が 0px になるため二重余白にならない）。 */
-    padding-bottom: calc(6px + var(--tsb-bottom-offset, 22px) + env(safe-area-inset-bottom));
-    background: var(--bg-deep, #0d1117);
-    border-top: 0;
-  }
-  /* パネルが最後尾に来て自前で逃げ余白を持つ場合、#input-bar-outer 側の逃げ余白は
-     不要（二重余白防止）。パネルが隠れている時は #input-bar-outer が最下段のまま
-     なので、通常の逃げ余白（line 339 相当）を維持する。 */
-  body.mobile-has-session:not(.mobile-home-view) #mobile-keyboard-panel:not([hidden]) ~ #input-bar-outer {
-    padding-bottom: 8px;
-  }
-  body.mobile-has-session:not(.mobile-home-view) #mobile-key-row button {
-    min-height: 34px;
-    min-width: 46px;
-    border-radius: 999px;
-    font-size: 0.78rem;
-  }
-
-  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status {
-    margin: 0 14px 3px;
-    min-height: 18px;
-    max-height: 18px;
-    padding: 0 2px 2px;
-    gap: 6px;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-    color: var(--live-status-fg, rgba(147, 197, 253, 0.92));
-    font-size: 10.5px;
-    line-height: 1;
-    pointer-events: auto;
-    touch-action: manipulation;
-  }
-  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.idle {
-    color: rgba(148, 163, 184, 0.78);
-    opacity: 0.78;
-  }
-  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.waiting {
-    color: rgba(251, 191, 36, 0.95);
-  }
-  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status .live-spinner {
-    width: 10px;
-    height: 10px;
-    border-width: 1.5px;
-  }
-  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status .live-status-text {
-    flex: 1 1 auto;
-  }
-  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status .live-status-palette-btn {
-    display: none;
-  }
-  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status .live-status-longproc {
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--warn-text);
-    font-size: 10.5px;
-  }
-  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status .live-compact-bar {
-    position: absolute;
-    left: 2px;
-    right: 2px;
-    bottom: 0;
-    width: auto;
-    height: 1.5px;
-    border-radius: 0;
-  }
-}
-
 .xterm { height: 100%; }
 .xterm-viewport {
   overflow-y: scroll !important;
@@ -690,22 +383,14 @@
 #input-wrap {
   flex: 1;
   display: flex;
-  /* テキスト欄(#input-area)を常に上段フル幅にし、操作ボタン群を下段へ回す。
-     order:-1 + flex-basis:100% を #input-area に与えることで、flip(左右切替)
-     どちらの DOM 順でもテキスト欄が必ず最初の行（フル幅）に来る。これにより
-     長文でも横幅を使い切り、左に文字が積み上がって見づらくなる問題を解消する。 */
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
+  align-items: flex-end;
   gap: var(--space-2);
-  row-gap: 6px;
   background: var(--bg);
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-lg);
   padding: 8px 10px 8px 14px;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
-#input-wrap.tools-left { justify-content: flex-start; }
 #input-wrap:focus-within {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow);
@@ -722,10 +407,7 @@
 body.pc-input-tools-off #input-tools { display: none; }
 
 #input-area {
-  /* 常に最初の行へ・フル幅。下段に操作ボタンが回る（#input-wrap のコメント参照） */
-  order: -1;
-  flex: 1 1 100%;
-  width: 100%;
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -866,11 +548,6 @@ body.pc-input-tools-off #input-tools { display: none; }
 #quick-cmd-btn-4,
 #quick-cmd-btn-5 { margin-left: 6px; }
 
-#mobile-composer-attach-btn,
-#mobile-composer-attach-menu {
-  display: none;
-}
-
 @media (max-width: 720px), (pointer: coarse) {
   #mobile-keyboard-toggle {
     display: flex;
@@ -882,8 +559,12 @@ body.pc-input-tools-off #input-tools { display: none; }
     gap: var(--space-2);
     padding-left: 10px;
     padding-right: 8px;
-    /* テキスト欄フル幅＋ツール下段化は基底ルール（#input-wrap）で全画面共通。
-       モバイル固有はパディング/ギャップの微調整のみ。 */
+    /* 固定幅ボタン群が幅を食い尽くすと #input-area (min-width:0) がゼロ幅に
+       潰れるため、折り返しを許可してツール行を2段目へ逃がす */
+    flex-wrap: wrap;
+  }
+  #input-area {
+    min-width: 140px;
   }
   /* iOS WebKit は font-size 16px 未満の入力欄にフォーカスすると自動ズームし、
      実効ビューポートが縮んで入力欄が潰れるため 16px を確保する */
@@ -1031,29 +712,6 @@ body.pc-input-tools-off #input-tools { display: none; }
   font-family: Consolas, "Cascadia Mono", monospace;
   font-size: 12px;
   line-height: 1.5;
-}
-/* A4: サマリ表示時は省略行マーカーをぼかして区別する。 */
-.expand-popup-content--summarized {
-  border-radius: 0;
-}
-/* A4: 「全文を見る」ボタン。サマリ表示の下端に出る。 */
-.expand-popup-show-full {
-  display: block;
-  margin: 0;
-  padding: 10px 12px;
-  width: 100%;
-  background: var(--bg-elev);
-  border: none;
-  border-top: 1px solid var(--line-soft);
-  border-radius: 0 0 6px 6px;
-  color: var(--accent, #2563eb);
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  text-align: center;
-}
-.expand-popup-show-full:hover {
-  background: var(--bg-hover, rgba(255,255,255,0.06));
 }
 
 /* ─── 選択範囲コピーの右クリックメニュー ─── */

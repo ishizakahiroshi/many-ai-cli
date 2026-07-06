@@ -71,12 +71,11 @@ func (p *ptyProcess) Resize(cols, rows uint16) error {
 	return pty.Setsize(p.f, &pty.Winsize{Rows: rows, Cols: cols})
 }
 
-func startProcess(provider string, args []string, cwd string, cols, rows int, extraEnv []string) (processSession, error) {
+func startProcess(provider string, args []string, cwd string, cols, rows int) (processSession, error) {
 	cmdName, cmdArgs := resolveCmd(provider, args)
 	cmd := exec.Command(cmdName, cmdArgs...)
 	cmd.Dir = cwd
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor", "MANY_AI_CLI=1")
-	cmd.Env = append(cmd.Env, extraEnv...)
 	var (
 		f   *os.File
 		err error

@@ -77,11 +77,8 @@ func (s *Server) handleFilesList(w http.ResponseWriter, r *http.Request) {
 		}
 		// git ルートを検出して許可範囲を確定
 		gitRoot := findGitRoot(cwd)
-		// orchestration board ディレクトリ（~/.many-ai-cli/orchestration）も許可ルートに含める。
-		// conductor カードの「board を開く」導線が cwd/git root の外を指すため。
-		orchDir, _ := orchestrationDir()
-		// path traversal 防止: 許可ルートは cwd / gitRoot / orchestration board dir
-		allowed, err := isPathUnderAllowedRoots(rootParam, cwd, gitRoot, orchDir)
+		// path traversal 防止: 許可ルートは cwd または gitRoot
+		allowed, err := isPathUnderAllowedRoots(rootParam, cwd, gitRoot)
 		if err != nil || !allowed {
 			writeJSONError(w, http.StatusForbidden, "forbidden", "path is outside allowed roots")
 			return

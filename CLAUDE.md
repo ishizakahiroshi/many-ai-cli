@@ -1,6 +1,6 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-07-05(日) — 監査反映（opencode provider 追記・subcommand 一覧・internal/log 実装済み化・archive パス修正）
+> 最終更新: 2026-06-07(日) 12:57:07 — 公開用AI指示を個人グローバル設定から分離
 
 > 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。
 
@@ -10,13 +10,15 @@
 
 > **Gemini CLI は wrap 対象外**（2026-05-06 決定 / 利用規約上の制約）。詳細は [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) 「2. 公開スコープ」参照。
 
-**現状**: v0.3.x をリリース済み（最新タグ v0.3.4 / v0.1.1 が初回正式リリース、v0.1.0 は試験扱い）。v0.1.2 でバージョン文字列を ldflags + `/api/info` 経由の single source of truth に再設計、v0.2.0 で WSL ランチャー・Files/Git/Chat/Split/Multi・Commit all・Ollama routing・サーバ側ユーザー設定を追加。v0.3.0 で Workbench（SQLite セッション履歴）・PWA/Web Push・統合ランチャーのクロスプラットフォーム化（SSH は全 OS、WSL は Windows 専用）・リモートサーバー/Docker デプロイ資産・npm 配布を追加し、プロジェクト名を any-ai-cli から many-ai-cli へリネーム。**v0.4.0（Unreleased）で Workbench 機能と Hub 内蔵チャットプロキシ（`internal/proxy/`・`chat_proxy`）を撤去済み**（Sonnet 5 以降のデフォルト 1M コンテキストが Hub 経由でも回復する副次効果あり）。設計書はソースコードを正本として更新済み。
+**現状**: v0.3.0 を公開予定（v0.1.1 が初回正式リリース、v0.1.0 は試験扱い）。v0.1.2 でバージョン文字列を ldflags + `/api/info` 経由の single source of truth に再設計、v0.2.0 で WSL ランチャー・Files/Git/Chat/Split/Multi・Commit all・Ollama routing・サーバ側ユーザー設定を追加。v0.3.0 で Workbench（SQLite セッション履歴）・PWA/Web Push・統合ランチャーのクロスプラットフォーム化（SSH は全 OS、WSL は Windows 専用）・リモートサーバー/Docker デプロイ資産・npm 配布を追加し、プロジェクト名を any-ai-cli から many-ai-cli へリネーム。設計書はソースコードを正本として更新済み。
 
 **設計書（正本）**: [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md)
 
-## 現在の実装状態
+> AI の個人グローバルルール（言語・確認・質問フォーマット・ターン終端の出力ルール・スクリーンショット規約等）は、各利用者が使う AI ツールのグローバル設定に置く。公開リポジトリ内の `CLAUDE.md` / `AGENTS.md` はプロジェクト固有ルールだけを扱う。
 
-v0.3.x（最新タグ v0.3.4）までに以下がすべて実装済み（v0.4.0 Unreleased では Workbench / chat_proxy 撤去に加え opencode / Grok Build CLI provider・Ollama `base_url` 設定を追加済み）：
+## 現在の実装状態（v0.2.0）
+
+v0.2.0 までに以下がすべて実装済み：
 
 - `many-ai-cli serve` で Hub が起動する
 - `many-ai-cli claude` / `codex` / `copilot` / `cursor-agent` が Hub 未起動時に自動起動し接続する
@@ -35,14 +37,14 @@ v0.3.x（最新タグ v0.3.4）までに以下がすべて実装済み（v0.4.0 
 |------|------|
 | プロダクト名 | `many-ai-cli` |
 | バイナリ名 | `many-ai-cli`（Windows: `many-ai-cli.exe`） |
-| サブコマンド | `serve` / `wrap <provider>` / `shell-init` / `stop` / `status` / `uninstall` / `version` |
+| サブコマンド | `serve` / `wrap <provider>` / `shell-init` / `stop` / `status` |
 | Hub URL | `http://127.0.0.1:47777/?token=<random>` |
 | 設定ファイル | `~/.many-ai-cli/config.yaml`（Win: `%USERPROFILE%\.many-ai-cli\config.yaml`） |
 | ログ | `~/.many-ai-cli/logs/sessions/<provider>_<日時>_<folder>_s<id>.log/.jsonl/.txt`（PTY生ログ + イベント履歴JSONL + クリーンテキスト） |
 | 透過化環境変数 | `MANY_AI_CLI_AUTO=1` |
-| Provider | `claude` / `codex` / `copilot` / `cursor-agent`（v0.4.0 Unreleased で `opencode` / `grok` 追加。`gemini` は対象外、上記スコープ更新参照） |
+| Provider | `claude` / `codex`（`gemini` は対象外、上記スコープ更新参照） |
 
-> md 内の参照は `many-ai-cli` に統一（旧名 `any-ai-cli` は履歴記述を除き使わない）。ローカルのプロジェクト配置パスは `CLAUDE.local.md` に記載する。
+> プロジェクトディレクトリは `c:\dev\many-ai-cli\`。md 内の参照は `many-ai-cli` に統一。
 
 ## 技術スタック
 
@@ -70,8 +72,7 @@ many-ai-cli/
 │  ├─ proto/      # WSメッセージ定義
 │  ├─ attach/     # 画像保存・inject生成
 │  ├─ config/
-│  ├─ log/        # slog ファイルロガー（lumberjack ローテーション）
-│  └─ ...         # ほか launcher / notify / orchestrate / sessionlog / sessionstore / uninstall / usagerelay / whisperruntime / wslutil
+│  └─ log/        # プレースホルダ（未実装）
 ├─ web/src/       # 静的HTML/CSS/TypeScript + vendored xterm.js（フロントソース）
 ├─ web/dist/      # bun run build の生成物（go:embed対象 / gitignore）
 └─ docs/local/    # 設計書・ロードマップ等（非公開）
@@ -92,14 +93,14 @@ many-ai-cli/
 - **外部公開しない**（`127.0.0.1` 固定）。`many-ai-cli` 自身はテレメトリを送信しないが、スラッシュコマンド一覧取得で GitHub へ HTTPS 通信する場合がある（README のセキュリティ節参照）
 - **`.bashrc` 等への永続書き込みなし**（透過化は環境変数 + `eval "$(many-ai-cli shell-init)"` のオプトイン方式のみ）
 
-## AI 作業共通ルール
+## 作業運用ルール（AI 共通）
 
-ビルド・コミット禁止、secrets-scan 責務、plan/bugfix/pending md の作成ルール等の AI 作業共通ルールは、各利用者のグローバル AI 設定に従う（作者環境の例: `~/.claude/CLAUDE.md` および `~/.claude/guides/`）。AI の個人グローバルルール（言語・確認・質問フォーマット等）も各利用者のグローバル設定に置き、本ファイルはプロジェクト固有ルールだけを扱う。
-
-プロジェクト固有の追加ルール:
-
-- ビルドだけでなく **実行・Hub 起動・ブラウザリロードも全てユーザーが行う**（`go run` / `many-ai-cli serve` / `many-ai-cli stop` / Hub プロセスの起動・終了・再起動・ブラウザリロード等も対象）。
-- **ビルドコマンドは `make build` が基本**。`bun run build` 単体は使わない（ユーザーへの案内でも `make build` を示す）。`make build` が web ビルド（bun install + bun run build）〜 Windows/Linux バイナリ生成 〜 WSL 配備まで一括で行う。ユーザーの「ビルドして」という指示は **`make build` の実行指示** を意味する。
+- **ビルド・実行・Hub 起動・ブラウザリロードは全てユーザーが行う**。AI からは提案しない・確認質問もしない。
+  - 例外: ユーザーが明示的に「ビルドして」「`go build` 走らせて」等と指示した場合のみ。
+  - 対象コマンド: `go build` / `go run` / `make` / `many-ai-cli serve` / `many-ai-cli stop` / Hub プロセスの起動・終了・再起動・ブラウザリロード等。
+  - 完了報告では「再ビルドしますか？」のような提案を出さず、コード変更の要約だけ伝える。
+- **ビルドコマンドは `make build` が基本**。`bun run build` 単体は使わない（ユーザーへの案内でも `make build` を示す）。`make build` が web ビルド（bun install + bun run build）〜 Windows/Linux バイナリ生成 〜 WSL 配備まで一括で行う。
+  - ユーザーの「ビルドして」という指示は **`make build` の実行指示** を意味する。
 
 ## 詳細ガイド（タスク種別ベース）
 
@@ -108,7 +109,7 @@ many-ai-cli/
 | タスク種別 | 読むファイル |
 |---|---|
 | 調査・読み取り・質問応答 | （`CLAUDE.md` root のみ。`CLAUDE/*` は読まない） |
-| 実装・コーディング（Go / TypeScript） | `CLAUDE/coding.md` |
+| 実装・コーディング（Go / Vue） | `CLAUDE/coding.md` |
 | ビルド・配布・クロスコンパイル | `CLAUDE/deployment.md` |
 | context分割・docs命名・AI作業モデル・plan自走/停止条件 | `CLAUDE/development.md` |
 | Git・コミット・出力ルール | `CLAUDE/operations.md` |
@@ -124,6 +125,6 @@ many-ai-cli/
 |------|------|
 | 設計書 v0.3.0（現行・正本） | [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) |
 | 設計書 v0.2.0（履歴） | [docs/v0.2.x-any-ai-cli-design.md](docs/v0.2.x-any-ai-cli-design.md) |
-| 設計書 v1（履歴） | [docs/local/archive/v0.1.3/cli-popup-design-v1.md](docs/local/archive/v0.1.3/cli-popup-design-v1.md) |
+| 設計書 v1（履歴） | [docs/local/archive/cli-popup-design-v1.md](docs/local/archive/cli-popup-design-v1.md) |
 | Codex 用補足 | [AGENTS.md](AGENTS.md)（ローカル補足があれば `AGENTS.local.md`） |
 | Gemini 用補足 | [GEMINI.md](GEMINI.md)（**many-ai-cli の wrap 対象外**。本リポジトリで Gemini CLI を開発補助に使う場合の手引きとして残置） |

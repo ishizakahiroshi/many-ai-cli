@@ -4,10 +4,10 @@ import { showToast, token } from './util.js';
 import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, approvalVisibleCache, autoDismissTimers, chatHistory, deriveProjectKeyFromCwd, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, multiQuestionLatchAt, multiQuestionVisibleCache, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
 import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLocalSessionHistory, resetLocalSessionHistory, updateInputAffordance } from '../app.js';
 import { activateSession, render, renderSessionList, renderSessionStateUpdate, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
-import { applyRemotePtyResize, ensureTerminal, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
+import { applyRemotePtyResize, ensureTerminal, queuePendingTerminalChunk, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup } from './settings.js';
 import { setMultiQuestionBannerVisible } from './approval-ui.js';
-import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, handleHubApprovalMarker, hideActionBar, isAIProvider, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
+import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, hideActionBar, isAIProvider, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
 import { notifyDeferredEnterOutput } from './deferred-enter.js';
 import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed } from './chat-history.js';
 import { clearChatPayloadForSession, handleChatTurnMessage, initChatPayloadUI } from './chat-payload.js';
@@ -22,7 +22,6 @@ export let _wsIntentionalClose = false; // ページ遷移など意図的クロ�
 export let _wsRetryDelay = 500; // 初期バックオフ ms
 export const _wsRetryMax = 10000; // 上限 ms
 let _wsReconnectTimer = null;
-let _lastActiveSessionIdBeforeDisconnect = 0;
 
 // ---- WS 死活監視（モバイルの half-open / ゾンビ接続対策） ----
 // スマホは画面ロック・アプリ切替・Wi-Fi⇄モバイル回線のハンドオーバ等で、
@@ -143,7 +142,7 @@ window.addEventListener('pageshow', _ensureWsAlive);
 
 export function _sendRegister() {
   const { cols, rows } = estimateRegisterTerminalSize();
-  ws.send(JSON.stringify({ type: 'register', role: 'ui', token, cols, rows, ui_active_session_id: activeSessionId || _lastActiveSessionIdBeforeDisconnect || 0 }));
+  ws.send(JSON.stringify({ type: 'register', role: 'ui', token, cols, rows, ui_active_session_id: activeSessionId || 0 }));
 }
 
 function estimateRegisterTerminalSize(): { cols: number; rows: number } {
@@ -202,7 +201,6 @@ export function _connectWs() {
     if (ws !== _ws) return;
     if (_wsWatchdog) { clearInterval(_wsWatchdog); _wsWatchdog = null; }
     if (_elapsedTimerInterval) { clearInterval(_elapsedTimerInterval); set__elapsedTimerInterval(null); }
-    if (activeSessionId !== null) _lastActiveSessionIdBeforeDisconnect = activeSessionId;
     sessions.clear();
     autoDismissTimers.forEach(t => clearTimeout(t));
     autoDismissTimers.clear();
@@ -244,14 +242,6 @@ export function _connectWs() {
     const nsBtn = document.getElementById('new-session-btn') as HTMLButtonElement | null;
     if (nsBtn) nsBtn.disabled = false;
     document.getElementById('reconnect-btn').hidden = true;
-    if (!_pendingOpenSessionId && _lastActiveSessionIdBeforeDisconnect) {
-      _pendingOpenSessionId = _lastActiveSessionIdBeforeDisconnect;
-    }
-    // Hub は UI 接続ごとに ptyBuf を履歴リプレイする。同じ Hub への再接続では
-    // 既存 xterm/chat バッファを先に空にしないと、履歴が末尾へ追記されて二重表示になる。
-    if (terminals.size > 0 || chatHistory.size > 0) {
-      resetAllLocalSessionHistory();
-    }
     _sendRegister();
     // 再接続直後に承認可視ヒントを即時再主張する（Hub 側リースの取りこぼし修復。
     // リロード後はキャッシュが空なので no-op）。
@@ -306,10 +296,7 @@ export function _connectWs() {
       queuePendingTerminalChunk(id, xtermBytes);
     }
     trackApprovalHintFromChunk(id, xtermBytes, approvalTextChunk);
-    markCompactActivity(id, approvalTextChunk);
     if (isLiveRendered) scheduleApprovalCheck(id);
-    // Codex 等 provider 別のピル内テキストを本文から抽出（Claude は既存ブロック抽出経路）。
-    if (isActive) scheduleLiveStatusExtract(id);
     // chat_turn / chat_turns_snapshot は早期 return しないが、ここで早期処理する
     // ためのフックを別途下に置く。
     // 複数行ペースト送信後の確定 \r は、この出力が静止する（取り込み・再描画完了）まで遅延させる。
@@ -366,11 +353,6 @@ export function _connectWs() {
 
   if (m.type === 'approval_detected') {
     handleGoApprovalDetected(m);
-    return;
-  }
-
-  if (m.type === 'approval_marker') {
-    handleHubApprovalMarker(m);
     return;
   }
 
@@ -447,13 +429,6 @@ export function _connectWs() {
     if (m.jsonl_path)      cur.jsonl_path      = m.jsonl_path;
     if (m.model !== undefined) cur.model       = m.model;
     if (m.route !== undefined) cur.route       = m.route;
-    if (m.parent_session_id !== undefined) cur.parent_session_id = m.parent_session_id;
-    if (m.role !== undefined) cur.role = m.role;
-    if (m.auto !== undefined) cur.auto = m.auto;
-    if (m.depth !== undefined) cur.depth = m.depth;
-    if (m.orchestration_id !== undefined) cur.orchestration_id = m.orchestration_id;
-    if (m.board_path !== undefined) cur.board_path = m.board_path;
-    if (m.worktree_branch !== undefined) cur.worktree_branch = m.worktree_branch;
     // C3: git 変更状況は git_checked=true のメッセージでのみ更新する
     // （通常の session_update では 0 を omitempty で送らないため、ここで上書きしない）。
     if (m.git_checked) {
