@@ -165,6 +165,12 @@ func (s *Server) handleServers(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSON(w, r, &req) {
 			return
 		}
+		// Load→Validate→Save を単一クリティカルセクションで直列化する（HUB-8）。
+		// 従来は複数タブが同時に POST するとロストアップデート（後着が先着の
+		// 追加分を無警告で消す）が起きていた。楽観排他（ETag/If-Match）ではなく
+		// mutex による pessimistic serialization で最小差分の修正としている。
+		s.profileSaveMu.Lock()
+		defer s.profileSaveMu.Unlock()
 		pf, err := launcher.LoadProfiles()
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "load_failed", err.Error())
@@ -202,6 +208,15 @@ func (s *Server) handleServerConnect(w http.ResponseWriter, r *http.Request) {
 	pf, err := launcher.LoadProfiles()
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "load_failed", err.Error())
+		return
+	}
+	// ディスク上のプロファイルは通常 POST /api/servers 経由で validate 済みだが、
+	// 手編集・古いバージョンで書かれた YAML・別ホストから import された残骸などで
+	// 検証されていないエントリが残る可能性がある。SSH の `-oProxyCommand=...`
+	// 等の引数注入を防ぐため、接続前にディスク上の全プロファイルを再検証する
+	// （validateSSH は Host/User/Binary/IdentityFile が `-` で始まる値を拒否）。
+	if err := launcher.Validate(pf); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid_profile", err.Error())
 		return
 	}
 	var profile launcher.Profile

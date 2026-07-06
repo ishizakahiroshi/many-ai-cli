@@ -1,0 +1,100 @@
+# [計画] クラウドのモデル候補を廃止し、起動は CLI 既定・選択はセッション内へ（ローカル/Ollama だけ残す）
+
+> 最終更新: 2026-06-20(土) 21:54:59
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | plan | 各 provider の in-session モデル切替可否を確認（廃止の前提検証） | — |
+| C2 | plan | spawn からクラウドのモデル注入・候補・last_model を撤去 | — |
+| C3 | plan | モデル目録のメンテ廃止（クラウド一覧を削除、ローカルだけ残す） | [並列OK with C2] |
+
+実行順序: `C1 → (C2, C3)`
+
+---
+
+## 概要
+
+many-ai-cli が「クラウドモデルの候補一覧を持ち、選択値を記憶して `--model` で注入する」設計が、200K/1M 取り違えバグ（`bugfix_spawn-model-override_2026-06-20.md`）の温床だった。**クラウドはモデルに一切触らず CLI 既定で起動し、切替はセッション内（`/model` 等）に委ねる**設計へ変更する。モデル指定が技術的に必須な **ローカル LLM（Ollama / LM Studio）route だけ**、モデル選択 UI とルーティングを残す。
+
+狙い:
+- 候補ドリフト・`last_model` 再注入・窓サイズ取り違えという**バグのクラス全体を消す**
+- `defaults.json` / `models_remote_fetch.go` のクラウドモデル一覧の**追従メンテを不要化**
+- ツールが CLI 既定（Max なら Opus 1M）を上書きしない安全な既定
+
+スコープ外: 緊急 hotfix v0.3.3（`--model` 注入を止めるだけの最小修正）は別途先行。本 plan はその思想を develop で本実装する設計変更。
+
+## 現状（確認済み）
+
+- クラウドのモデル候補は `resources/models/defaults.json` と Go フォールバック `internal/hub/models_remote_fetch.go`（anthropic 先頭が素の `claude-opus-4-8`＝200K、`[1m]` 無し）。
+- spawn は `last_model` を記憶（`config.yaml` の `userPrefs.spawn.last_model`）し、旧コードは `--model` で再注入していた。
+- UI: `web/src/app/spawn-panel.ts` の model row + datalist（`populateModelDatalist`）。
+- ローカル route は env 注入（`OPENAI_BASE_URL` 等）+ codex `--oss` + モデル ID 指定が必須（`EnvPresetForProxyWithOllamaBase` / `isLocalRoute`）。
+
+## 方針
+
+- **クラウド provider（claude/codex/copilot/cursor-agent/grok）: モデル UI・注入・記憶を全廃。** `--model` は渡さない。
+- **ローカル route（ollama/lm-studio）: モデル選択 UI とルーティングは残す。** ここだけ `--model` + env 注入が要る。
+- 採用しない案: 「候補を [1m] 込みで正しく保つ」= 追従メンテが永続し、また陳腐化する。根治しないので不可。
+
+---
+
+## C1: in-session モデル切替の可否を確認（前提検証）
+
+### 作業内容
+
+- claude（`/model`）・cursor-agent: 可（既知）
+- codex / copilot / grok: セッション内でモデルを切り替えられるか実機 or docs で確認
+- 切替不可の provider があれば扱いを決める（例: その provider だけ起動時の単発指定を残す / 既定固定で割り切る）
+
+### 完了条件
+
+- 各 provider の可否表ができ、C2 の撤去範囲が確定
+
+---
+
+## C2: spawn からクラウドのモデル注入・候補・記憶を撤去
+
+### 作業内容
+
+- `internal/hub/spawn_handler.go`: クラウド provider では `--model` を一切付けない。`getLastModel`/`setLastModel` はローカル route 専用に縮小（or 廃止）。risk 判定はモデル非依存（permission/sandbox/approval）へ。
+- `web/src/app/spawn-panel.ts`: model row + datalist を **route=local のときだけ表示**。クラウド選択時は隠す。
+- `config`: `userPrefs.spawn.last_model` のクラウド分は使わない（移行で無視・残骸は掃除）。
+
+### 変更予定ファイル
+
+- `internal/hub/spawn_handler.go`
+- `web/src/app/spawn-panel.ts`
+- `internal/config/config.go`（last_model の扱い）
+
+### 完了条件
+
+- クラウド spawn で `--model` が付かず CLI 既定で起動、UI にクラウドのモデル欄が出ない。go vet / tsc 通過
+
+---
+
+## C3: モデル目録のメンテ廃止（クラウド削除・ローカルのみ残す）
+
+### 作業内容
+
+- `resources/models/defaults.json`: クラウド一覧を削除し、ローカル（ollama/lm-studio）系のみ残す（or 役割をルーティング設定に寄せる）。
+- `internal/hub/models_remote_fetch.go`: クラウドのフォールバック一覧を削除。`models_handlers.go` / `models_fetch.go` の参照を整理。
+- 不要になった datalist 取得経路・型・i18n を掃除。
+
+### 変更予定ファイル
+
+- `resources/models/defaults.json`
+- `internal/hub/models_remote_fetch.go` / `models_handlers.go` / `models_fetch.go`
+
+### 完了条件
+
+- クラウドのモデル目録が無くなり、ローカルのみ残る。リモート取得失敗時も 200K 版が選ばれる経路が消える
+
+---
+
+## 関連
+
+- 緊急 hotfix（先行）: `plan_hotfix-v0.3.3-spawn-model-override.md`
+- 不具合記録: `bugfix_spawn-model-override_2026-06-20.md`
+- 顛末記事: `article_claude-frozen-spawn-model-override.md`

@@ -1,0 +1,230 @@
+# [実行中] Codex「今日は何日」承認ポップアップ問題 — 全 AI 横並び調査
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | fix | Codex 単体での生ログ解析（s19）→ 根本原因仮説立て | — |
+| C2 | fix | 全 AI（claude/codex/copilot/cursor-agent/grok/opencode）で「今日は何日」実測（s1〜s6） | — |
+| C3 | plan | C2 結果整理：問題分類・修正対象候補の洗い出し | — |
+| C4 | plan | 設計確定（X1/X2/X3 のいずれか or 別案） | — |
+| C5 | plan | 設計に基づく実装と検証 | — |
+
+実行順序: `C1 → C2 → C3 → C4 → C5`
+
+---
+
+## 経緯（次セッション用引き継ぎ）
+
+このファイルは前セッションが context 限界に近づいたため、新セッションへの引き継ぎ用に作成。
+新セッションは本ファイルを冒頭で Read してから C2 に進むこと。
+
+### 元の症状
+
+ユーザーが Codex セッションで「今日は何日」とだけ聞いたら、回答前に `$env:MANY_AI_CLI` を実行していいかという承認ダイアログが出てきた。「わけのわからない動き」と認識。
+
+スクショ証跡: `C:\Users\ishiz\.many-ai-cli\attachments\36\20260623172510_573175000_image.png`
+
+該当セッション: `~/.many-ai-cli/logs/sessions/codex_2026-06-23_153825_tmp_s19.txt`（解析済み）
+
+## C1 解析結果（fix 完了済み）
+
+### Codex s19 ログから判明した実情報
+
+ユーザー入力「今日は何日」(17:15:20) 後の Codex の挙動:
+
+1. Codex は 3 つのコマンドをサンドボックスで実行しようとした:
+   - `$env:MANY_AI_CLI` （AGENTS.md の指示由来）
+   - `Get-Date -Format 'yyyy年M月d日 dddd'` （日付答えるため）
+   - `docsweep triage` （`~/.docsweep/guidance.md` の指示由来）
+
+2. 3 つとも全部失敗。失敗理由は全て同じ:
+   ```
+   Io(Custom { kind: Other, error: "windows sandbox: runner error: CreateProcessAsUserW failed: 1312" })
+   ```
+
+3. Windows error 1312 = `ERROR_NO_SUCH_LOGON_SESSION`
+
+4. サンドボックス失敗 → Codex は approval mode へフォールバック → 3 つそれぞれ承認ポップアップ表示
+
+5. ユーザーが y を 3 回連打した後、Codex はようやく回答を出した（合計 11 分以上経過）
+
+### 根本原因（多層）
+
+- 表層: 承認ポップアップが連続で 3 つ出る
+- 中層: Codex の Windows サンドボックスが起動失敗してフォールバックしてる
+- 根本 (1): AGENTS.md（many-ai-cli が注入）の冒頭に「env チェックしろ」と書いてある
+- 根本 (2): `~/.docsweep/guidance.md`（ユーザーのグローバル）に「作業開始前に triage 実行しろ」と書いてある
+- 根本 (3): Codex の Windows サンドボックスが、Microsoft Store 版 pwsh.exe（activation stub）を起動できない仕様。本来サンドボックスで静かに通るはずが失敗してフォールバック
+
+### Codex Windows サンドボックスの確認結果
+
+- PowerShell 7 MSI 版は未インストール（`C:\Program Files\PowerShell\7\pwsh.exe` 不在）
+- 入っているのは Store 版のみ（`C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.3.0_x64_*\pwsh.exe`）
+- これが GitHub issue [openai/codex #22428](https://github.com/openai/codex/issues/22428) / [openai/codex-plugin-cc #336](https://github.com/openai/codex-plugin-cc/issues/336) の既知問題に合致
+
+### Codex の prompt 注入機能（調査済み）
+
+公式ドキュメント ([config-reference](https://developers.openai.com/codex/config-reference)) より:
+- `developer_instructions` (string): Additional developer instructions injected into the session (optional)
+- `--config developer_instructions="..."` の形で CLI 経由で渡せる
+- session スコープ、permanent config への書き込み不要
+- これを使えば「session 開始時に Codex に直接 MANY_AI_CLI=1 を告知」できる
+- → env チェック実行が不要になる、ポップアップ消える
+
+## 議論で却下された案（再検討禁止）
+
+新セッションが同じ堂々巡りに陥らないよう、却下済み案を記録:
+
+却下 1: 全マーカー主義（条件チェック撤廃して常にマーカー出力）
+   - 理由: many-ai-cli の外で Claude Code 等を使ったときも `[MANY-AI-CLI]` マーカーで囲まれてしまう。視覚的に「邪魔」ではなく「ダメ」とユーザー判定
+   - 引用ユーザー発言: 「こんなもん 視覚的にちょっと邪魔っていうか ダメに決まってんだろ」
+
+却下 2: PTY での最初メッセージ prepend
+   - 理由: 検証結果、PTY に書き込んだバイト列 = AI への user input として扱われる。「隠しチャネル」ではない。AI が prefix を user message として認識して応答に混入する可能性。多 AI でばらつく
+   - 検証経路: `internal/wrapper/wrapper.go:298-354` の `writePTY` / `writePTYChunked` / `writeWithTrailingEnter`
+
+却下 3: AGENTS.md 注入版だけ「常に marker」に書き換える（条件チェック削除）
+   - 理由: AGENTS.md は git にコミットされる。クローンした他開発者が many-ai-cli を介さず Codex を直接使ったときも常にマーカー出力してしまう。OSS リポジトリで困る
+   - これは却下 1 の AGENTS.md 経路バージョン
+
+却下 4: home dir マーカーファイル方式（B 案）
+   - 理由: 部分採用検討。ただし Codex の Read ツールが home dir 外のパスを読むときに承認要求するか不明。検証必要だった
+   - 却下に至らず、後から「視点 D（初回チェックの存在自体を見直す）」へ昇格して話が進んだ
+
+## 視点 D（採用方向）
+
+ユーザーが提案: 「最初の質問の前に必ずこれをやれ」という指示自体を見直す。
+
+- env チェック: そもそも AI に確認させる必要が無い。wrapper は MANY_AI_CLI=1 を起動時から知ってるので、Codex の `developer_instructions` 経由で直接告知すればよい
+- docsweep triage: 「作業開始前」の定義が曖昧。「ファイル変更を伴うタスクの前」のように軽量質問では走らないように書き換える（別件・別ファイル `~/.docsweep/guidance.md`）
+
+## 他 AI の挙動（部分実測済み）
+
+過去ログから観測できた範囲:
+
+- **Grok** (s32): ツール呼び出し一切なし。考えて「今日は2026年6月23日です」と返答。承認ポップアップ 0 回
+- **OpenCode** (s33): `Get-Date` 実行で「Permission required」ポップアップ 1 回。env チェック / docsweep triage はやってない
+- **Codex** (s19): 上記の通り 3 ポップアップ
+- **Claude** (s37): 私自身（Claude Code）。設定で PowerShell を許可しているので env チェックは静かに通過。0 回
+- **Cursor Agent** (s28): Workspace Trust 確認画面で session dismiss されたため実データなし
+- **Copilot**: 直近の wrap セッションログなし、未確認
+
+wrapper の `providerUsesSharedBlock` (`internal/wrapper/approval_rules.go:168-175`) では:
+- shared block 注入対象: `codex`, `copilot`, `cursor-agent`
+- claude は CLAUDE.md @import 方式（別経路）
+- grok, opencode は **rules injection 対象外**（よって env チェックも docsweep も指示されない）
+
+## C2: 全 AI 実測（実施結果・2026-06-23 19:02〜19:09）
+
+ユーザーが Hub UI から 6 セッションを spawn し「今日は何日」を一斉入力。subagent でログ横断解析。
+
+| s# | provider | 入力到達 | 試行内容 | 承認回数 | 最終応答 | マーカー |
+|---|---|---|---|---|---|---|
+| s1 | claude | yes | ツール 0 | 0 | 2 秒で「2026-06-23（火）」 | なし |
+| s2 | codex | yes | sandbox(env/docsweep/Get-Date) → 1312 失敗 | 4 | 2m28s で「2026年6月23日（火）」 | `[MANY-AI-CLI-DONE]` あり |
+| s3 | copilot | yes | folder trust 確認 | 1 (Copilot 内部) | 「2026年6月23日（火）」 | なし |
+| s4 | cursor-agent | 一部 | 起動直後の自己更新 (Expand-Archive) で入力消失 | 0 | **応答なし**（.txt 未生成） | なし |
+| s5 | opencode | yes | ツール 0 | 0 | 7.2 秒で「2026年6月23日（火曜日）」 | なし |
+| s6 | grok | yes | ツール 0（always-approve） | 0 | 2.9 秒で「2026年6月23日（火）」 | なし |
+
+（s7 claude はユーザーが結果を見て調査依頼のために別 spawn した管理用セッション。本調査の対象外）
+
+### ユーザー認識とのズレ
+
+ユーザー認識: 「claude / codex 以外ほぼ正しく動かない」
+実態: 6 中 5 は応答済み。真の停止は **s4 cursor-agent のみ**。
+
+ズレの原因（推測）:
+- 全 6 セッションが Hub UI 上で standby 表示のまま見えた
+- マーカー欠落 provider（claude/opencode/grok）で Web UI の完了検知が走らない疑い
+- → C3 で UI 状態判定ロジックを再確認する
+
+## C3: 結果整理（問題分類と修正対象候補）
+
+C2 の実測結果を分類すると、性質の違う 3 種類の課題が混ざっている。
+
+### 問題カテゴリ
+
+カテゴリ I: AI 本体の挙動
+- s4 cursor-agent: 起動直後の自己更新で入力消失（CLI 仕様の問題・wrapper では捌けない可能性）
+- s2 codex: Windows sandbox 1312（既知。plan の本来目的）
+- s3 copilot: 初回 folder trust（実害なし・wrap 機構の外）
+
+カテゴリ II: wrap 注入の冗長さ
+- codex で承認 4 回（env チェック ×2、docsweep triage ×2）= 不要な指示の二重発火
+- shared block 注入対象 (codex/copilot/cursor-agent) と非対象 (opencode/grok) の差で、AI ごとの挙動がばらつく
+- これは元 plan の本来狙い（developer_instructions 経由で env チェック撤廃）に近い
+
+カテゴリ III: UI 状態判定
+- 全 6 セッションが Hub UI 上で standby に見えた
+- 完了検知が走らない疑い（マーカー欠落 provider 全般）
+- 修正対象は wrapper / Web UI 側のロジック（codex 修正とは別軸）
+
+### 修正対象候補（C4 で選ぶ）
+
+- 候補 A: cursor-agent の自己更新時入力ハンドリング調査
+- 候補 B: codex の developer_instructions 経由 env 撤廃（plan の本来目的）
+- 候補 C: Hub UI の standby 判定をマーカー以外でも完了検知できるよう拡張
+- 候補 D: shared block 注入の対象範囲再検討（opencode/grok への extending or codex から削減）
+
+優先度と実装順は C4 で決定。
+
+## C4: 設計確定
+
+C3 の修正対象候補 A/B/C/D から優先度と実装順を決定する。優先度評価軸:
+
+- 影響度: cursor-agent (s4) は完全停止だが他は応答済み → 体感ノイズは大きい
+- 既知性: codex (s2) は plan 当初からの本命課題、対処方針も既に立案済み
+- UI 起因: standby 表示の嘘は全 provider で発生 → UX への効果は最大の可能性
+- 工数: 候補 B (codex developer_instructions) は最も具体的・短時間で着手可能
+
+ユーザーと相談の上、優先度を確定して C5 へ。
+
+## C5: 実装と検証
+
+設計確定後の実装方針（候補 B 採用前提のドラフト・C4 確定で更新する）:
+
+1. `internal/wrapper/approval_rules.go` の rules content を分離:
+   - 中央ファイル `~/.many-ai-cli/approval-rules.md`（Claude @import 用）: env チェック付きで維持
+   - shared block 注入用（Codex 等）: env チェック削除、`developer_instructions` 由来の前提を仮定
+
+2. Codex 起動引数に `--config developer_instructions="..."` を追加:
+   - 該当コード: `internal/wrapper/wrapper.go` の Codex spawn ロジック（C2 着手前にコード再読が必要）
+   - 内容: 「MANY_AI_CLI=1. あなたは many-ai-cli Hub 内で動作中。応答は [MANY-AI-CLI] マーカー形式で出力。env 確認は不要。」（ただし最終文言は要確定）
+
+3. `rulesVersion` を 15 → 16 に上げて既存 AGENTS.md の旧ブロック自動差し替え発火
+
+4. テスト追加: `internal/wrapper/approval_rules_test.go` への単体テスト
+
+5. 実機検証: Codex セッションで「今日は何日」聞いて env のポップアップが出ないこと確認
+
+## 重要な参考リンク
+
+- Codex Configuration Reference: https://developers.openai.com/codex/config-reference
+- Codex CLI Reference: https://developers.openai.com/codex/cli/reference
+- Codex Windows サンドボックス: https://developers.openai.com/codex/windows
+- openai/codex #22428 (Windows sandbox 1312): https://github.com/openai/codex/issues/22428
+- openai/codex-plugin-cc #336 (Store pwsh.exe spawn): https://github.com/openai/codex-plugin-cc/issues/336
+
+## 関連コードとファイル
+
+- `internal/wrapper/approval_rules.go` — rules content、shared block 注入ロジック、provider 判定
+- `internal/wrapper/wrapper.go` — PTY ラッパー、入力ハンドリング（`writePTYChunked` 等）
+- `~/.many-ai-cli/approval-rules.md` — 中央 rules ファイル（Claude @import target）
+- `~/.codex/config.toml` — Codex 個人 config
+- `~/.docsweep/guidance.md` — docsweep triage rule（ユーザーのグローバル）
+- `~/.many-ai-cli/logs/sessions/` — セッションログ全体
+- `docs/local/explain_codex-approval-popup_2026-06-23/index.html` — 前セッションで作成した解説 HTML
+
+## このセッションで作成したもの
+
+- `docs/local/explain_codex-approval-popup_2026-06-23/index.html` — ユーザー向けの問題説明 HTML（design-html スキルで生成）
+- 本 plan ファイル
+
+## 注意事項（再発防止）
+
+- ユーザーは長文の Japanese 1 行を嫌う（Web ダッシュボードの xterm スクレイプで順序ズレが発生）。短い段落 or 箇条書きで書く
+- `[MANY-AI-CLI]` マーカー内で罫線・表組み禁止（同上の理由）
+- AskUserQuestion ツール使用禁止。確認は `[MANY-AI-CLI]` マーカーの YES/NO or 番号付き選択肢
+- ユーザーが「1 行で決めさせる」を好む（多選択肢マトリクスより「A 案でいいですか?」の一行確認）

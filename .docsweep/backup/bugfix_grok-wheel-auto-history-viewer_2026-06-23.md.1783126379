@@ -1,0 +1,89 @@
+# [様子見] 障害対応記録: Grok でターミナルをホイール上しても過去出力が見えない
+
+> 最終更新: 2026-07-03(金) 09:52:00
+
+## 症状
+
+Hub UI で Grok セッションを開いたあと、ターミナル上でマウスホイールを上に回しても直近のやり取り以外が一切表示されない。右上の「最上部へ▲」ボタンを押しても反応せず、上端到達時に出るはずの「▲ 過去ログ」ボタンも一度も出ない。長時間の対話だと数ターン前の応答すら追えなくなる。
+
+再現手順:
+1. Hub UI で Grok セッションを開く
+2. 数ターン会話し、画面内に収まらない量の応答を出させる
+3. ターミナル領域でマウスホイールを上方向に回す
+4. 何も動かない / 「▲ 過去ログ」ボタンも出ない
+
+影響: Grok provider の閲覧性。
+
+## 根本原因
+
+これまで「Grok は alternate screen buffer に入るタイプ」と推定して `bugfix_grok-alt-buffer-scroll_2026-06-19.md` で PageUp/PageDown forwarding を入れていたが、今回 2026-06-23 時点のセッションログ（`~/.many-ai-cli/logs/sessions/grok_2026-06-23_165832_tmp_s32.log`, 20201 バイト）を実測したところ実態が違った:
+
+- `\x1b[?1049h` / `\x1b[?1049l` / `\x1b[?1047*` / `\x1b[?47*` (alt buffer 切替): **0 件**
+- 改行 `\n`: **0 件**
+- 復帰 `\r`: **0 件**
+- ESC シーケンス: 1413 件、内訳の大半が `\x1b[31;7H` `\x1b[8;3H` `\x1b[28;5H` 等の絶対カーソル位置指定
+
+つまり Grok の TUI は **通常バッファのまま、newline も CR も一切出さず、絶対カーソル位置指定だけで視覚上の同じ行に上書き描画している**。結果:
+
+- xterm.js のスクロールバックは行が追加されないので育たない（`buf.length` は常に `t.term.rows` 以下）
+- ホイール上の `scrollLines()` は対象が無く no-op
+- 「▲ 過去ログ」ボタンの表示条件 `buf.length > t.term.rows`（`web/src/app/history-viewer.ts:59`）が永遠に偽 → ボタンも出ない
+- 右上「最上部へ▲」ボタンも alt buffer 経路（PgUp 転送）に乗らず、`scrollToTop()` が no-op で終わる
+
+PTY 生ログ自体は `/api/session-log` で取れる状態にあり、history-viewer 側には `\x1b[*H` を改行へ書き換える整形（`HV_REWRITE_RE`）も入っているため、過去ログビューア自体は機能する。**入口の出し方** だけが落ちていた。
+
+## 修正内容
+
+「過去ログを見るためにボタンを押す」体験そのものを廃し、上方向ホイール（および▲ボタン）から過去ログビューアへ直接導線する。
+
+1. `web/src/app/history-viewer.ts`
+   - `openHistoryViewer(sid, opts: { offset?: number } = {})` に拡張。`offset=-1` で末尾ページ（直近の過去）から開けるようにする
+   - `isHistoryViewerOpen()` を export
+
+2. `web/src/app/terminal.ts`
+   - `import` に `isHistoryViewerOpen, openHistoryViewer` を追加
+   - document の wheel ハンドラに、alt buffer 転送を抜けた直後で次の条件を全て満たすときに `openHistoryViewer(sid, { offset: -1 })` を呼ぶ分岐を追加（その時点で `preventDefault` してリターン）:
+     - `e.deltaY < 0`（上方向）
+     - 通常バッファ（`buf.type !== 'alternate'`）かつ `buf.viewportY === 0`（既に上端）
+     - `targetSessionId === activeSessionId`
+     - マルチペイン非表示
+     - ビューア未オープン
+   - 右上「最上部へ▲」ボタンも、alt buffer 経路に乗らず通常バッファでスクロールバックが空（`buf.length <= rows`）なら同じく `openHistoryViewer(activeSessionId, { offset: -1 })` を呼ぶように分岐追加
+
+これで Grok（スクロールバックが育たない）では最初の上ホイールで直近過去ログが出る。Claude 等通常バッファ＋スクロールバック有りの provider でも、xterm スクロールバック上端まで届いた後に更に上ホイールすると同じ動線に乗る（連続スクロール感）。Codex 等 alt buffer 利用 provider は従来通り PageUp/PageDown を PTY 転送する経路を先に通るので影響なし。
+
+## 再発と追修正（2026-07-03）
+
+Grok Build 0.2.82 で TUI が再び alternate screen buffer（`?1049h`）へ入る挙動に戻り（s6 jsonl 実測・備忘の予見どおり）、本 md の導線が全滅した:
+
+- ホイール上: `forwardWheelToAltBuffer` → `scrollAltBufferPage` は grok 宛 PgUp 転送を事故防止で停止済み（false）→ ビューア自動オープン条件 `buf.type !== 'alternate'` が偽 → 何も起きない
+- ▲ボタン: 同様に `buf.type !== 'alternate'` 条件で弾かれ `scrollToTop()` no-op
+
+追修正: grok のビューア導線条件から「通常バッファ限定」を外し、alt buffer 中も対象にした。
+
+- wheel 経路: `atTop = buf.type === 'alternate' || buf.viewportY === 0`（alt buffer でここへ到達するのは grok のみ。他 provider は PgUp/PgDn 転送で return 済み）
+- ▲ボタン: `isGrok && (buf.type === 'alternate' || buf.length <= t.term.rows)`
+
+これで grok は「通常バッファ（06-23 時点の挙動）」「alt buffer（06-19 と現行 0.2.82 の挙動）」のどちらでもホイール上/▲で過去ログビューアが開く。
+
+## 変更ファイル
+
+- `web/src/app/history-viewer.ts`
+- `web/src/app/terminal.ts`（2026-07-03 追修正も同ファイル）
+
+## 検証
+
+未検証（make build 後にユーザー側で実機確認予定）。確認項目:
+
+- Grok セッションでホイール上 → 過去ログビューアが直近ページから開く
+- 同じく右上「最上部へ▲」ボタンでも開く
+- Claude セッションで通常スクロールバック内のスクロールは従来通り、上端到達後の追加上ホイールでビューアが開く
+- Codex セッション（alt buffer）はビューアが出ず、PageUp/PageDown が PTY に送られる従来挙動
+- マルチペイン表示中はビューアが暴発しない
+- Escape / ✕ 閉じる でビューアが閉じる
+
+## 備忘
+
+- 2026-06-19 の `bugfix_grok-alt-buffer-scroll_2026-06-19.md` は当時の Grok が alt buffer に入る前提で書かれていたが、2026-06-23 時点の Grok バイナリでは通常バッファ + 絶対カーソル位置指定で描画している。Grok 側のバージョンアップで挙動が変わった可能性が高い。alt buffer に戻った場合は 2026-06-19 の経路（PageUp 転送）が引き続き有効
+- v1 では「ビューアを閉じる」操作は Escape / ✕ ボタン依存のまま残した。「下ホイールで自動クローズ」「ビューア内上端でさらに上ホイール → 前ページ自動ロード」は連続スクロール感を更に高めるが、エッジケース（途中で止めたい場合のロック）まで詰める必要があるため follow-up
+- 過去ログが空のセッションでビューアを開くと「0 KB」が出るだけになる。本来は事前にサイズチェックして開かない方が親切だが、`/api/session-log` への往復が増えるため v1 では割愛

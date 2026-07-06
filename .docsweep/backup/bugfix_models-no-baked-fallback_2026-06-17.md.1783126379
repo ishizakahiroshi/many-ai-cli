@@ -1,0 +1,57 @@
+# [修正済み] モデル一覧をコードに焼かず、取得失敗時は空表示にする
+
+> 最終更新: 2026-06-17(水) 19:49:46
+
+## 症状
+
+spawn パネルのモデル候補が、GitHub 上の静的 JSON やコード内の固定配列に依存していた。
+
+そのため、ベンダー側でモデル名や提供一覧が更新されると、Hub が古い候補を出してしまい、選んでも通らない状態が起きうる。
+
+## 根本原因
+
+`/api/models` が「最後の保険」として静的 fallback を持っていた。
+
+その fallback は、実運用では更新に追従できず、正しい候補よりも誤った候補を出すリスクのほうが大きかった。
+
+OpenCode についても同じで、固定の候補を焼くより、`opencode models opencode --verbose` から毎回実一覧を取るほうが実態に合っていた。
+
+## 修正内容
+
+- `internal/hub/models_remote_fetch.go` の baked-in fallback を削除
+- `internal/hub/models_fetch.go` の `/api/models` を「取れたものだけ返す」動作へ変更
+- `internal/hub/models_fetch.go` に OpenCode の動的取得を追加
+- `internal/hub/approval_detector.go` と `web/src/app/approval.ts` で OpenCode の `Select model` 画面を承認誤検出しないよう調整
+- `internal/hub/fetch_test.go` に、取得失敗時は空配列になることを確認する回帰テストを追加
+
+## 変更ファイル
+
+- `internal/hub/models_fetch.go`
+- `internal/hub/models_remote_fetch.go`
+- `internal/hub/approval_detector.go`
+- `internal/hub/approval_detector_test.go`
+- `internal/hub/fetch_test.go`
+- `internal/hub/models_fetch_test.go`
+- `web/src/app/approval.ts`
+
+## 検証
+
+実行済み:
+
+```powershell
+go test ./...
+bun run check
+bun run test
+```
+
+結果:
+
+- Go 全体テスト成功
+- Web TypeScript 型チェック成功
+- Web fixture テスト成功
+
+## 備忘
+
+- ここでいう「空表示」は、古い候補を出さないことを優先した振る舞い。
+- モデルが取れない時に、古い一覧でユーザーを誤誘導するほうが危険。
+- OpenCode の候補は固定化せず、CLI の実出力を正本にする。

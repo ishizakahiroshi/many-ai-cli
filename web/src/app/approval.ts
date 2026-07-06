@@ -206,6 +206,8 @@ export function isAIProvider(provider: string): boolean {
     case 'codex':
     case 'copilot':
     case 'cursor-agent':
+    case 'opencode':
+    case 'grok':
       return true;
     default:
       return false;
@@ -216,11 +218,20 @@ export function isShellProvider(provider: string): boolean {
   return provider === 'shell';
 }
 
+// \x15(Ctrl+U) を行クリアとして解釈しない provider。前置すると逆に悪さをする:
+// - shell: PowerShell 等で行クリアにならずリテラル ^U が混入してコマンドを壊す（2026-06-13 e168426 で確認）
+// - codex: Rust TUI が \x15 を行クリアとして解釈せず、続く \r がコマンド実行に至らない
+//   （2026-06-21 確認。素ターミナルで \x15 無しなら Enter 1 個で実行できる）
+// これらの provider 宛では doSend / sendQuickCommand / inputClearBtn の \x15 前置/単独送信をスキップする。
+export function shouldSkipClearPrefix(provider: string): boolean {
+  return provider === 'shell' || provider === 'codex';
+}
+
 // provider 別の承認 trigger phrase は ~/.many-ai-cli/approval-patterns/{provider}.json に外出し。
 // Hub 起動時にデフォルトをユーザー設定ディレクトリに展開（既存ファイルは尊重）し、
 // HTTP 経由で配信する。ユーザーが直接編集して文言を追加・調整できる。
 // claude / codex は英語固定（Anthropic/OpenAI が国際化していない）、common は多言語混在。
-export const providerApprovalTriggers = { claude: [], codex: [], copilot: [], 'cursor-agent': [], common: [] };
+export const providerApprovalTriggers = { claude: [], codex: [], copilot: [], 'cursor-agent': [], opencode: [], grok: [], common: [] };
 
 (async function loadApprovalPatterns() {
   const fetchJson = async (name) => {
@@ -233,24 +244,32 @@ export const providerApprovalTriggers = { claude: [], codex: [], copilot: [], 'c
       return [];
     }
   };
-  const [claude, codex, copilot, cursorAgent, common] = await Promise.all([
-    fetchJson('claude'), fetchJson('codex'), fetchJson('copilot'), fetchJson('cursor-agent'), fetchJson('common'),
+  const [claude, codex, copilot, cursorAgent, opencode, grok, common] = await Promise.all([
+    fetchJson('claude'), fetchJson('codex'), fetchJson('copilot'), fetchJson('cursor-agent'), fetchJson('opencode'), fetchJson('grok'), fetchJson('common'),
   ]);
   const norm = arr => (Array.isArray(arr) ? arr : []).map(s => String(s).toLowerCase()).filter(Boolean);
   providerApprovalTriggers.claude = norm(claude);
   providerApprovalTriggers.codex  = norm(codex);
   providerApprovalTriggers.copilot = norm(copilot);
   providerApprovalTriggers['cursor-agent'] = norm(cursorAgent);
+  providerApprovalTriggers.opencode = norm(opencode);
+  providerApprovalTriggers.grok = norm(grok);
   providerApprovalTriggers.common = norm(common);
 })();
 
 export function matchProviderApprovalTrigger(provider, line) {
   if (!line) return false;
   const lower = String(line).toLowerCase();
-  if (provider === 'codex' && isCodexModelSelectorHint(lower)) return false;
+  if (isModelSelectorHint(provider, lower)) return false;
   const list = providerApprovalTriggers[provider] || [];
   for (const s of list) if (lower.includes(s)) return true;
   for (const s of providerApprovalTriggers.common) if (lower.includes(s)) return true;
+  return false;
+}
+
+function isModelSelectorHint(provider, lower) {
+  if (provider === 'codex') return isCodexModelSelectorHint(lower);
+  if (provider === 'opencode') return isOpenCodeModelSelectorHint(lower);
   return false;
 }
 
@@ -264,14 +283,32 @@ function isCodexModelSelectorHint(lower) {
     lower.includes('arrow keys');
 }
 
-function isCodexModelSelectorContext(provider, lines) {
-  if (provider !== 'codex') return false;
+function isOpenCodeModelSelectorHint(lower) {
+  return lower.includes('select model') ||
+    lower.includes('connect provider') ||
+    lower.includes('favorite ctrl+f') ||
+    lower.includes('opencode zen') ||
+    lower.includes('ollama (local)');
+}
+
+function isModelSelectorContext(provider, lines) {
   const text = (lines || []).map(line => String(line || '').toLowerCase()).join('\n');
-  return text.includes('select model') ||
-    text.includes('select effort') ||
-    text.includes('model and effort') ||
-    text.includes('reasoning effort') ||
-    ((text.includes('gpt-') || text.includes('effort')) && (text.includes('esc to go back') || text.includes('press enter to confirm')));
+  if (provider === 'codex') {
+    return text.includes('select model') ||
+      text.includes('select effort') ||
+      text.includes('model and effort') ||
+      text.includes('reasoning effort') ||
+      ((text.includes('gpt-') || text.includes('effort')) && (text.includes('esc to go back') || text.includes('press enter to confirm')));
+  }
+  if (provider === 'opencode') {
+    return text.includes('select model') &&
+      (text.includes('connect provider') ||
+        text.includes('favorite') ||
+        text.includes('opencode zen') ||
+        text.includes('ollama (local)') ||
+        text.includes('recent'));
+  }
+  return false;
 }
 
 // /model 等のカーソル駆動 TUI 選択メニュー（承認ではない）を action-bar に出す際の
@@ -436,6 +473,8 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
     // doSend でテキスト送信済みの承認が Ink 再描画で再検出された場合はスキップ
     const consumed = approvalConsumedSig.get(id);
     const sig = approvalSig(markerOpts);
+    const src = approvalSourceCache.get(id);
+    if (src && src.source === 'hub_marker' && src.sig === sig) return;
     if (consumed === sig) {
       // Ink 再描画で同一ブロックが再送されている — タイマーをリセットして
       // ブロックが届かなくなるまで sig を保持し続ける（debounce 型削除）
@@ -553,16 +592,17 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
   const approvalLabelRe = /\b(yes|no|allow|deny|proceed|abort|don[''']t ask|cancel|once|always|permission|confirm|details)\b/i;
   const hasApprovalLikeLabel = options.some((opt) => approvalLabelRe.test(opt.label));
   const isHubChoice = isHubChoicePrompt(contextLines, options);
-  const suppressCodexModelSelector = isCodexModelSelectorContext(provider, contextLines);
-  const hasNativePromptHint = !suppressCodexModelSelector && contextLines.some((line) => !String(line || '').toLowerCase().includes('esc to go back') && (matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)));
-  const isShortcutApprovalMenu = (provider === 'codex' || provider === 'copilot' || provider === 'cursor-agent') && options.some(o => o._sendText) && hasNativePromptHint;
+  const suppressModelSelector = isModelSelectorContext(provider, contextLines);
+  const hasNativePromptHint = !suppressModelSelector && contextLines.some((line) => !String(line || '').toLowerCase().includes('esc to go back') && (matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)));
+  const isShortcutApprovalMenu = (provider === 'codex' || provider === 'copilot' || provider === 'cursor-agent' || provider === 'opencode' || provider === 'grok') && options.some(o => o._sendText) && hasNativePromptHint;
   const approvalNear = (hasCursorOption || isShortcutApprovalMenu) &&
     ((hasApprovalLikeLabel && (hasUserSpecifies || contextLines.some((line) => matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)))) || isHubChoice);
   const hasChoiceMenuHint = (hasCursorOption || isShortcutApprovalMenu) && options.length > 0 && hasNativePromptHint;
-  const nowVisible = (options.length > 0 && approvalNear) || hasChoiceMenuHint;
-  // 承認ではないカーソル駆動の選択メニュー（claude /model 等）にタグ付けする。
-  // 入力ガード（isSelectMenuActive）とメニュータイトル表示に使う。
+  // 全 AI で UX を統一: 承認ではないカーソル駆動の選択メニュー（claude /model 等）は
+  // action-bar に出さず端末直操作へフォールバックさせる。shortcut 駆動の承認メニュー
+  // （codex 等の (y)/(n)/(esc)）は引き続き表示する。
   const isSelectMenu = hasChoiceMenuHint && !approvalNear && hasCursorOption && !isShortcutApprovalMenu;
+  const nowVisible = ((options.length > 0 && approvalNear) || hasChoiceMenuHint) && !isSelectMenu;
   tagSelectMenuOptions(options, isSelectMenu, contextSourceLines, contextCluster);
 
   // doSend / sendChoice で消費済みの選択肢が xterm scanBuffer に残っているため
@@ -701,6 +741,44 @@ export function handleGoApprovalDetected(message) {
   }
 }
 
+export function handleHubApprovalMarker(message) {
+  const id = message && message.session_id;
+  if (!id) return;
+  const block = String(message.block || '');
+  if (!block) return;
+  const markerOpts = extractHubMarkerApproval(markerLinesFromTail(block));
+  if (!markerOpts) return;
+  try { console.log('[approval-route] handleHubApprovalMarker', { id, activeSessionId, optsLen: markerOpts.length, q: (markerOpts as any)._question?.slice?.(0, 80) }); } catch (_) {}
+  if (isAnsweredMarkerSig(id, markerOpts)) return;
+
+  const sig = approvalSig(markerOpts);
+  if (approvalConsumedSig.get(id) === sig) return;
+  const prevTimer = approvalConsumedSigDeleteTimer.get(id);
+  if (prevTimer) {
+    clearTimeout(prevTimer);
+    approvalConsumedSigDeleteTimer.delete(id);
+  }
+  approvalConsumedSig.delete(id);
+
+  cancelApprovalHintConfirm(id);
+  approvalSwitchCandidates.delete(id);
+  resetBgApprovalMisses(id);
+  approvalUiAdapter.cacheApprovalOptions(id, markerOpts);
+  approvalSourceCache.set(id, {
+    source: 'hub_marker',
+    sig,
+    kind: 'marker',
+    detectedAt: message.detected_at || '',
+  });
+
+  const wasVisible = !!approvalVisibleCache.get(id);
+  approvalUiAdapter.setApprovalVisible(id, true, { sound: !wasVisible });
+  if (id === activeSessionId) {
+    const bar = document.getElementById('action-bar');
+    if (bar) approvalUiAdapter.showOptions(bar, id, markerOpts, !wasVisible);
+  }
+}
+
 export function handleGoApprovalCleared(message) {
   const id = message && message.session_id;
   if (!id) return;
@@ -749,6 +827,14 @@ export function maybeSendDirectApprovalConsumed(sessionId, rawText, sentText) {
 }
 
 export function detectApproval(id) {
+  // 非アクティブセッションに対する検出は #action-bar DOM を取り違える原因になるため早期 return。
+  // setTimeout 経由（suppress 解除後の再スキャン等）でこの関数が呼ばれる間に
+  // ユーザーがセッションを切り替えると、捕捉した id は非アクティブで、`#action-bar` は
+  // 全セッション共有なので、id の pendingTextTail / cache の内容が現アクティブ画面に
+  // 描画されてしまう（bugfix: 別セッションの承認ポップアップが表示される現象）。
+  // 該当セッションに戻った時に activateSession() が detectApproval(new active) を呼ぶため、
+  // 早期 return しても検出機会は失われない。
+  if (id !== activeSessionId) return;
   // Shell session は approval parser の対象外
   const provider = sessions.get(id)?.provider;
   if (!isAIProvider(provider || '')) return;
@@ -836,6 +922,8 @@ export function detectApproval(id) {
       if (isAnsweredMarkerSig(id, markerOpts)) return;
       const consumed = approvalConsumedSig.get(id);
       const sig = approvalSig(markerOpts);
+      const src = approvalSourceCache.get(id);
+      if (src && src.source === 'hub_marker' && src.sig === sig) return;
       if (consumed === sig) return; // 消費済み承認の再表示をスキップ（タイマーは trackApprovalHintFromChunk 側で管理）
       const prevTimer2 = approvalConsumedSigDeleteTimer.get(id);
       if (prevTimer2) { clearTimeout(prevTimer2); approvalConsumedSigDeleteTimer.delete(id); }
@@ -962,17 +1050,18 @@ export function detectApproval(id) {
   const approvalLabelRe = /\b(yes|no|allow|deny|proceed|abort|don[''']t ask|cancel)\b/i;
   const hasApprovalLikeLabel = options.some((opt) => approvalLabelRe.test(opt.label));
   const isHubChoice = isHubChoicePrompt(contextLines, options);
-  const suppressCodexModelSelector = isCodexModelSelectorContext(provider, contextLines);
-  const hasNativePromptHint = !suppressCodexModelSelector && contextLines.some((line) => !String(line || '').toLowerCase().includes('esc to go back') && (matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)));
-  const isShortcutApprovalMenu = (provider === 'codex' || provider === 'copilot' || provider === 'cursor-agent') && options.some(o => o._sendText) && hasNativePromptHint;
+  const suppressModelSelector = isModelSelectorContext(provider, contextLines);
+  const hasNativePromptHint = !suppressModelSelector && contextLines.some((line) => !String(line || '').toLowerCase().includes('esc to go back') && (matchProviderApprovalTrigger(provider, line) || matchNativeApprovalTrigger(line)));
+  const isShortcutApprovalMenu = (provider === 'codex' || provider === 'copilot' || provider === 'cursor-agent' || provider === 'opencode' || provider === 'grok') && options.some(o => o._sendText) && hasNativePromptHint;
   const approvalNear = (hasApprovalLikeLabel &&
     (hasUserSpecifies || hasNativePromptHint)) || isHubChoice || isShortcutApprovalMenu;
   const hasApproval = options.length > 0 && approvalNear && (hasCursorOption || isShortcutApprovalMenu);
   const hasChoiceMenu = (hasCursorOption || isShortcutApprovalMenu) && options.length > 0 && hasNativePromptHint;
-  const hasPrompt = hasApproval || hasChoiceMenu;
-  // 承認ではないカーソル駆動の選択メニュー（claude /model 等）にタグ付けし、
-  // action-bar にメニュータイトルを出す。承認は常に優先（hasApproval が真なら対象外）。
+  // 全 AI で UX を統一: 承認ではないカーソル駆動の選択メニュー（claude /model 等）は
+  // action-bar に出さず端末直操作へフォールバックさせる。shortcut 駆動の承認メニュー
+  // （codex 等の (y)/(n)/(esc)）は引き続き表示する。
   const isSelectMenu = hasChoiceMenu && !hasApproval && hasCursorOption && !isShortcutApprovalMenu;
+  const hasPrompt = hasApproval || (hasChoiceMenu && !isSelectMenu);
   tagSelectMenuOptions(options, isSelectMenu, contextSourceLines, contextCluster);
 
   if (!hasPrompt) {
@@ -1097,6 +1186,7 @@ export function setActionBarFocus(idx) {
 }
 
 export function hideActionBar(id) {
+  try { console.log('[approval-route] hideActionBar', { id, activeSessionId, stack: new Error().stack?.split('\n').slice(1, 5).join(' | ') }); } catch (_) {}
   const bar = document.getElementById('action-bar');
   const wasVisible = !!(bar && bar.classList.contains('visible'));
   if (bar) { bar.classList.remove('visible', 'batch', 'multi-select', 'single-tabs'); bar.innerHTML = ''; }
@@ -1251,6 +1341,11 @@ export function toggleActionBarCollapsed(sessionId) {
 }
 
 export function showActionBar(bar, sessionId, options, forceStickToBottom = false) {
+  try {
+    const firstLabel = Array.isArray(options) && options[0] ? String((options[0] as any).label || (options[0] as any).title || '').slice(0, 80) : '';
+    const question = options && (options as any)._question ? String((options as any)._question).slice(0, 80) : '';
+    console.log('[approval-route] showActionBar', { sessionId, activeSessionId, len: Array.isArray(options) ? options.length : 0, firstLabel, question, stack: new Error().stack?.split('\n').slice(1, 6).join(' | ') });
+  } catch (_) {}
   // 手動「✕ 承認」で抑制中は描画しない。同一承認のみ抑制し、別 sig の新しい承認は抑制解除して描画する。
   const suppressedSig = manualHideSig.get(sessionId);
   if (suppressedSig !== undefined) {
@@ -1318,6 +1413,16 @@ export function activateSingleFree(sessionId) {
   if (bar) showActionBar(bar, sessionId, cached); // router 経由で 1 セクションへ再変換
 }
 
+// 単一質問の自由入力テキストを外部から取得・保存するためのアクセサ。
+// mobile-home.ts のインライン自由入力 UI が再描画を跨いで値を維持するために使う
+// （PC 版 action-bar と同じ singleFreeText Map を共有する）。
+export function getSingleFreeText(sessionId: number): string {
+  return singleFreeText.get(sessionId) || '';
+}
+export function setSingleFreeText(sessionId: number, text: string): void {
+  singleFreeText.set(sessionId, text);
+}
+
 // 自由入力テキストをそのまま送信する（確認モーダルなし）。送信後は UI を消して会話へ戻る。
 export function sendSingleFreeText(sessionId) {
   const text = (singleFreeText.get(sessionId) || '').trim();
@@ -1349,7 +1454,7 @@ export function sendSingleFreeText(sessionId) {
 // 質問数が増えても縦の高さが一定で、上のターミナル（文脈）が隠れない。
 // 全問回答後に「送信確認」→ モーダルで内容＋実送信文字列を確認 →「送信」で確定する。
 
-const BATCH_FREE = -1; // 自由入力肢を選択中であることを示す selections センチネル
+export const BATCH_FREE = -1; // 自由入力肢を選択中であることを示す selections センチネル
 
 // アクティブな質問タブ index を範囲内に正規化して返す（未設定/範囲外は 0）。
 function getBatchActiveQ(sessionId, n) {
@@ -1615,6 +1720,14 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   }
   lastActionBarRender.sessionId = sessionId;
   lastActionBarRender.sig = sig;
+  // 再描画前に質問タブ列の横スクロール位置を覚えておき、再構築後に復元する。
+  // これをしないとタブクリックで再描画が走るたびに scrollLeft が 0 に戻り、
+  // ユーザーがスクロールして表示していた右側のタブ（例: Q6 をクリックしたら Q1 へ戻る）に
+  // 強制的に巻き戻ってしまう。
+  const prevTabsScrollLeft = (() => {
+    const prev = bar.querySelector('.action-qtabs') as HTMLElement | null;
+    return prev ? prev.scrollLeft : 0;
+  })();
   bar.innerHTML = '';
   bar.classList.remove('single-tabs', 'multi-select');
   bar.classList.add('batch');
@@ -1623,6 +1736,10 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   label.className = 'action-bar-label';
   label.textContent = t('approval_batch_label', { n: sections.length });
   bar.appendChild(label);
+
+  const todoBadge = document.createElement('span');
+  todoBadge.className = 'action-batch-todo-badge';
+  bar.appendChild(todoBadge);
 
   // 承認ブロック直前の地の文（前置き説明）があれば先頭に表示する。
   appendApprovalPreamble(bar, (sections as any)._preamble);
@@ -1650,6 +1767,21 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
     tabsEl.appendChild(tab);
   });
   bar.appendChild(tabsEl);
+  // 再描画前の横スクロール位置を復元してからアクティブタブを可視範囲に入れる。
+  // クリックは可視範囲内のタブを押したケースなので scrollLeft 復元だけで足り、
+  // キーボード（← →）で画面外へ進めた場合だけ scrollIntoView が必要分だけ動かす。
+  tabsEl.scrollLeft = prevTabsScrollLeft;
+  requestAnimationFrame(() => {
+    const active = tabsEl.querySelector('.action-qtab.active') as HTMLElement | null;
+    if (!active) return;
+    // scrollIntoView は親 bar / ページ全体まで動かしてしまうので、tabsEl 内で手動補正する。
+    const tabLeft = active.offsetLeft;
+    const tabRight = tabLeft + active.offsetWidth;
+    const viewLeft = tabsEl.scrollLeft;
+    const viewRight = viewLeft + tabsEl.clientWidth;
+    if (tabLeft < viewLeft) tabsEl.scrollLeft = tabLeft;
+    else if (tabRight > viewRight) tabsEl.scrollLeft = tabRight - tabsEl.clientWidth;
+  });
 
   // ===== アクティブ質問のパネル（選択肢 + 詳細 + 自由入力） =====
   const pane = document.createElement('div');
@@ -1658,7 +1790,7 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
 
   const head = document.createElement('div');
   head.className = 'action-qhead';
-  head.textContent = `Q${activeQ + 1} ${activeSec.title}`;
+  head.textContent = `Q${activeQ + 1}/${sections.length} ${activeSec.title}`;
   head.title = activeSec.title;
   pane.appendChild(head);
 
@@ -1730,6 +1862,10 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   } else {
     detail.className = 'action-qdetail empty';
     detail.textContent = t('approval_batch_detail_empty');
+    if (activeSec._freeInput) {
+      detail.classList.add('clickable');
+      detail.onclick = (e) => { e.stopPropagation(); selectBatchOption(sessionId, activeQ, BATCH_FREE); };
+    }
   }
   // ===== 詳細メッセージ＋送信バーを横並びに =====
   // 左に「送信確認 / クリア」、右にメッセージ詳細を置く。縦積みの送信バー行を無くし、
@@ -1787,6 +1923,9 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
       if (st) { st.textContent = ok ? '✓' : '未'; st.className = 'st ' + (ok ? 'done' : 'todo'); }
     });
     progress.textContent = t('approval_batch_progress', { done, total: sections.length });
+    const todo = sections.length - done;
+    todoBadge.textContent = todo > 0 ? t('approval_batch_todo_badge', { n: todo }) : t('approval_batch_all_done');
+    todoBadge.classList.toggle('done', todo === 0);
     submitBtn.disabled = done < sections.length;
   };
   updateBatchStatus();
@@ -1929,7 +2068,7 @@ export function sendBatchChoices(sessionId) {
   approvalConsumedSig.set(sessionId, approvalSig(cached));
   recordAnsweredMarkerSig(sessionId, cached);
   sendApprovalConsumed(sessionId, cached, text);
-  sendSubmittedText(sessionId, `${text}\r`);
+  sendSubmittedText(sessionId, `${text}\r`, { recordMobileTranscript: false });
   removeBatchConfirmModal();
   hideActionBar(sessionId);
   approvalSuppressUntil.set(sessionId, Date.now() + 400);
@@ -2046,6 +2185,16 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
   progress.textContent = t('approval_multi_progress', { n: selected.size });
   footer.appendChild(progress);
 
+  const selectAllBtn = document.createElement('button');
+  selectAllBtn.className = 'action-clear-btn';
+  selectAllBtn.textContent = t('approval_multi_select_all');
+  selectAllBtn.disabled = selected.size === options.length;
+  selectAllBtn.onclick = (e) => {
+    e.stopPropagation();
+    selectAllMultiSelectOptions(sessionId);
+  };
+  footer.appendChild(selectAllBtn);
+
   const submitBtn = document.createElement('button');
   submitBtn.className = 'action-submit-btn';
   submitBtn.textContent = t('approval_batch_submit');
@@ -2059,6 +2208,7 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
   const clearBtn = document.createElement('button');
   clearBtn.className = 'action-clear-btn';
   clearBtn.textContent = t('approval_batch_clear');
+  clearBtn.disabled = selected.size === 0;
   clearBtn.onclick = (e) => {
     e.stopPropagation();
     clearMultiSelectSelections(sessionId);
@@ -2110,6 +2260,15 @@ export function clearMultiSelectSelections(sessionId) {
   if (!isMultiSelectOptions(cached)) return;
   multiSelectSelections.set(sessionId, new Set());
   set_multiSelectFocusIdx(0);
+  const bar = document.getElementById('action-bar');
+  if (bar) showMultiSelectActionBar(bar, sessionId, cached);
+  setTimeout(() => inputEl.focus(), 0);
+}
+
+export function selectAllMultiSelectOptions(sessionId) {
+  const cached = approvalRawOptionsCache.get(sessionId);
+  if (!isMultiSelectOptions(cached)) return;
+  multiSelectSelections.set(sessionId, new Set(cached.map(o => o.num)));
   const bar = document.getElementById('action-bar');
   if (bar) showMultiSelectActionBar(bar, sessionId, cached);
   setTimeout(() => inputEl.focus(), 0);
@@ -2170,7 +2329,7 @@ export function sendMultiSelectChoices(sessionId) {
   sendApprovalConsumed(sessionId, prevOpts, text);
   multiQuestionDismissedCache.delete(sessionId);
   multiQuestionLatchAt.delete(sessionId);
-  sendSubmittedText(sessionId, `${text}\r`);
+  sendSubmittedText(sessionId, `${text}\r`, { recordMobileTranscript: false });
   hideActionBar(sessionId);
   approvalSuppressUntil.set(sessionId, Date.now() + 400);
   multiSelectSelections.delete(sessionId);
@@ -2224,7 +2383,7 @@ export function sendChoice(sessionId, targetNum) {
     recordAnsweredMarkerSig(sessionId, prevOpts);
     multiQuestionDismissedCache.delete(sessionId);
     multiQuestionLatchAt.delete(sessionId);
-    sendSubmittedText(sessionId, response);
+    sendSubmittedText(sessionId, response, { recordMobileTranscript: false });
     hideActionBar(sessionId);
     approvalSuppressUntil.set(sessionId, Date.now() + 400);
     setTimeout(() => {
@@ -2258,7 +2417,7 @@ export function sendChoice(sessionId, targetNum) {
   if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
   recordAnsweredMarkerSig(sessionId, prevOpts);
   sendApprovalConsumed(sessionId, prevOpts, choiceText);
-  sendSubmittedText(sessionId, choiceText);
+  sendSubmittedText(sessionId, choiceText, { recordMobileTranscript: false });
   hideActionBar(sessionId);
   // PTY エコーバックによる誤再表示を短時間抑制（approvalConsumedSig が同一選択肢の再検出を防ぐため短くてよい）
   approvalSuppressUntil.set(sessionId, Date.now() + 400);

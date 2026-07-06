@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from './i18n.js';
 import { cleanCopiedText, showToast, token } from './app/util.js';
-import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
+import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
 import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, answeredMarkerSigs, recordAnsweredMarkerSig, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { orderSessions } from './app/state.js';
@@ -9,13 +9,18 @@ import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitA
 import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
-import { scheduleDeferredEnter, scheduleAfterOutputSettle } from './app/deferred-enter.js';
-import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, toggleMultiSelectFocused } from './app/approval.js';
+import { pendingSessionIds } from './app/approval-queue-tab.js';
+import { scheduleDeferredEnter, scheduleAfterOutputSettle, deferredEnterMinWaitFor } from './app/deferred-enter.js';
+import { clearMobileTranscriptSession, recordMobileTranscriptUserSubmission } from './app/mobile-transcript.js';
+import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
-import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn } from './app/attachments.js';
+import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn, MAX_ATTACH_BYTES } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
 import { getExposeStatus, fetchExposeStatus, disableExpose } from './app/host-expose.js';
 import './app/detached-grid-launcher.js';
+import './app/mobile-home.js';
+import { mobileApprovalActiveBadgeCount } from './app/mobile-approval-sheet.js';
+import { clearMobileTerminalLiteSession } from './app/mobile-terminal-lite.js';
 
 export let _userAvatarUrl = '';
 export let _userDisplayName = '';
@@ -56,7 +61,14 @@ export function autoExpand(opts: any = {}) {
     suppressPtyResizeForInputLayout();
   }
   inputEl.style.height = 'auto';
-  inputEl.style.height = Math.min(inputEl.scrollHeight, Math.floor(window.innerHeight * 0.3)) + 'px';
+  if (inputEl.value === '') {
+    // 空のときは高さを CSS の min-height に任せる。Chrome は placeholder の折り返しも
+    // scrollHeight に含めるため、狭い画面で placeholder が 2 行に折り返すと
+    // 未入力なのにバーが 2 行分に育ってしまう。
+    inputEl.style.height = '';
+  } else {
+    inputEl.style.height = Math.min(inputEl.scrollHeight, Math.floor(window.innerHeight * 0.3)) + 'px';
+  }
   updateInputClearButton();
   refitActiveTerminalAfterLayout(shouldStickToBottom);
 }
@@ -73,13 +85,32 @@ export function isActiveSessionRunning() {
   return !!s && s.state === 'running';
 }
 
+// B1a: スマホ幅判定の単一情報源。OS キーボードの🎤誘導 placeholder の表示判定にだけ使う。
+const _mobileVoiceHintMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
+  ? window.matchMedia('(max-width: 720px)') : null;
+function isMobileViewport(): boolean {
+  return !!_mobileVoiceHintMql?.matches;
+}
+function shouldShowMobileVoiceHintPlaceholder(): boolean {
+  if (!isMobileViewport()) return false;
+  try { return localStorage.getItem(STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY) !== '1'; }
+  catch (_) { return false; }
+}
+
 // 実行中状態に応じて入力欄プレースホルダと送信ボタンの見た目／挙動を再評価する。
 // WS の state 更新・セッション切替・i18n 適用後にこれを呼ぶことで停止導線を同期する。
 export function updateInputAffordance() {
   const running = isActiveSessionRunning();
   // C1: 実行中は「Esc で停止」、それ以外は通常文言。data-i18n-placeholder の自動適用と
   // 競合しないよう、running 状態を見て JS から明示的に上書きする。
-  inputEl.placeholder = running ? t('input_placeholder_running') : t('input_placeholder');
+  // B1a: 実行中でなく・スマホ幅で・初回ヒント未表示なら、音声入力ヒントを出す（Q12 決定）。
+  if (running) {
+    inputEl.placeholder = t('input_placeholder_running');
+  } else if (shouldShowMobileVoiceHintPlaceholder()) {
+    inputEl.placeholder = t('mobile_voice_hint_placeholder');
+  } else {
+    inputEl.placeholder = t('input_placeholder');
+  }
   // C2: 実行中でも入力欄にテキスト/チップ/ファイルがあれば ➤（送信）のまま。
   // 入力が空の場合のみ ■（停止）に切替える。ペースト・ファイル添付直後に送信できずもっさりする問題を解消。
   const hasContent = inputEl.value.length > 0 || pastedTexts.length > 0 || pendingAttachFiles.length > 0;
@@ -166,22 +197,48 @@ export function buildSendText() {
   return parts.join('\n');
 }
 
+// 長文ペースト（10行以上 または 1500字以上）を一時 .txt 添付へ変換して @path 参照で送るための閾値。
+// 巨大なブラケットペーストを内側 CLI へ送らなくなるため、Codex の [Pasted Content] 畳み込みと、
+// それに伴う確定 \r の吸収（入力欄にテキストが張り付いたまま送信されない不具合）が原理的に発生しない。
+// タイミングを推測して確定 \r を撃つ（オープンループ）のではなく、そもそも畳み込みを起こさない経路へ
+// 変える根本対処。閾値未満のチップは従来どおり本文へ結合する（短い貼り付けまで参照化しない）。
+const PASTE_FILE_MIN_LINES = 10;
+const PASTE_FILE_MIN_CHARS = 1500;
+
+// 長文ペーストチップを一時テキストファイル化し、画像添付と同じ pendingAttachFiles 経路へ積む。
+// flushPendingAttach が provider 別の inject（codex/claude は `@絶対パス `）へ変換するため、内側 CLI へ
+// 渡るのは短い 1 行の @path だけになり、畳み込みも確定 \r 吸収も起きない。確定は通常の \r で済む。
+// 閾値未満のチップ・入力欄テキストは pastedTexts に残し、本文として従来経路で送る（混在も自然）。
+export async function stageLongPastesAsFiles() {
+  for (let i = pastedTexts.length - 1; i >= 0; i--) {
+    const pt = pastedTexts[i];
+    if (pt.lineCount < PASTE_FILE_MIN_LINES && pt.text.length < PASTE_FILE_MIN_CHARS) continue;
+    const bytes = new TextEncoder().encode(pt.text);
+    // 8MB 超は添付保存に失敗してテキストを失う恐れがあるため、ファイル化せず従来のブラケットペースト経路に残す。
+    if (bytes.byteLength > MAX_ATTACH_BYTES) continue;
+    pendingAttachFiles.push({ buf: bytes.buffer, filename: `paste-${pt.id}.txt`, entry: {}, wrapper: null });
+    pastedTexts.splice(i, 1);
+  }
+  renderPasteChips();
+  updateInputAffordance();
+}
+
 // Ollama route で起動したセッションでは Claude Code / Codex 側の /model コマンドが
 // spawn 時固定の env (ANTHROPIC_BASE_URL=http://localhost:11434 等) と整合しないため
 // 純正モデルに切替えるとエラーになる。行頭 /model 入力は送信前にブロックする。
 export function isOllamaModelCommandBlocked(sessionId, text) {
   const s = sessions.get(sessionId);
-  if (!s || s.route !== 'ollama') return false;
+  if (!s || (s.route !== 'ollama' && s.route !== 'lm-studio')) return false;
   const trimmed = String(text || '').replace(/^[\s\x00-\x1f]+/, '');
   return /^\/model(\b|\s|$)/i.test(trimmed);
 }
 
-// shell（素のシェル）セッション内で AI CLI（claude/codex/copilot/cursor-agent）の
+// shell（素のシェル）セッション内で AI CLI（claude/codex/copilot/cursor-agent/grok）の
 // 起動コマンドを直接打つと、provider=shell 用にチューニングされた入力・承認処理
 // （\x15 前置なし・マーカー未注入・shell 用承認検出）と二重ラップになり、スラッシュ
 // コマンドの文字化けや承認ボタンの不動作を招く。先頭トークンが起動コマンドのときは
 // 検知して provider 名を返す（パス前置・.cmd/.exe 等の拡張子も許容）。該当なしは null。
-const AI_CLI_LAUNCH_RE = /^(?:[^\s]*[\\/])?(claude|codex|copilot|cursor-agent)(?:\.(?:cmd|exe|bat|ps1))?(?=\s|$)/i;
+const AI_CLI_LAUNCH_RE = /^(?:[^\s]*[\\/])?(claude|codex|copilot|cursor-agent|grok)(?:\.(?:cmd|exe|bat|ps1))?(?=\s|$)/i;
 // 「このまま続行」を選んだ shell セッションでは以後ナグを出さない（セッション単位で抑止）。
 const aiCliLaunchNudgeSuppressed = new Set();
 
@@ -244,6 +301,9 @@ export async function doSend(sessionId) {
     return;
   }
   set_lastDoSendAt(Date.now());
+  // 長文ペーストチップを一時 .txt 化して @path 参照で送る（Codex の畳み込みによる確定 \r 吸収を回避）。
+  // flushPendingAttach より前に積むことで、画像添付と同一の inject 経路へ合流させる。
+  await stageLongPastesAsFiles();
   const injects = await flushPendingAttach(sessionId);
   const injectPrefix = injects.join('');
   let rawText = buildSendText();
@@ -286,7 +346,7 @@ export async function doSend(sessionId) {
   // ただし shell provider（素のシェル）は Ink 入力欄を持たずシェル自身が行編集を担うため、
   // \x15 を本文と同一書き込みで前置すると PowerShell 等で行クリアにならずリテラル ^U が混入し
   // コマンドが壊れる（例: codex → ^Ucodex）。shell 宛ては前置せずそのまま送る。
-  const clearPrefix = isShellProvider(sessions.get(sessionId)?.provider || '') ? '' : '\x15';
+  const clearPrefix = shouldSkipClearPrefix(sessions.get(sessionId)?.provider || '') ? '' : '\x15';
   const needPasteSplit = deferEnter && injectPrefix !== '';
   const textToSend = needPasteSplit ? (clearPrefix + injectPrefix) : (clearPrefix + injectPrefix + textPart);
   clearInput();
@@ -320,6 +380,15 @@ export async function doSend(sessionId) {
     scrollChatPaneToBottomSoon({ passes: 4, startedAt: Date.now() });
   }
   sendSubmittedText(sessionId, textToSend);
+  // B1a: スマホ幅で音声入力 placeholder を 1 回でも見せたユーザーが送信を完了した時点で
+  // hint shown フラグを立て、以降は通常 placeholder に戻す（一度の認知で十分）。
+  if (shouldShowMobileVoiceHintPlaceholder()) {
+    setUserPref('mobile.voice_hint_shown', true);
+    updateInputAffordance();
+  }
+  // Codex/OpenCode は大きいペーストを無出力で即プレースホルダ化するため、確定 \r の最低待機を
+  // 長めに取り早撃ち（\r 吸収による送信不発）を防ぐ。他 provider は既定値で挙動不変。
+  const enterMinWait = deferredEnterMinWaitFor(sessions.get(sessionId)?.provider || '');
   if (needPasteSplit) {
     // 段1: 画像 inject（@path）の取り込み（[Image #N] 畳み込み・@ 補完ポップアップ閉じ）が
     // 出力静止で落ち着くのを待ち、段2: ペースト本体を送り、段3: 確定 \r を予約する。確定 \r の
@@ -327,13 +396,13 @@ export async function doSend(sessionId) {
     // 「Pasting…」固着するのを断つ。ペースト送出以降は画像なし複数行ペーストと同一経路で確定する。
     scheduleAfterOutputSettle(sessionId, () => {
       sendText(sessionId, textPart);
-      scheduleDeferredEnter(sessionId);
+      scheduleDeferredEnter(sessionId, enterMinWait);
     });
   } else if (deferEnter) {
     // 複数行ペーストの確定 \r は、内側 CLI の畳み込み・再描画が落ち着いてから別書き込みで送る。
     // 同一書き込みに含めると \r が吸収され送信されない。固定遅延では大きなペーストの取り込み時間を
     // 当てられず取りこぼすため、PTY 出力が静止するのを待ってから 1 回だけ送る（deferred-enter.ts）。
-    scheduleDeferredEnter(sessionId);
+    scheduleDeferredEnter(sessionId, enterMinWait);
   }
 }
 
@@ -427,45 +496,52 @@ function getSlashCommandsFallback() {
 
 // provider 単位の動的スラッシュコマンドキャッシュ。スラッシュピッカー（/ ▾）と
 // /api/slash-commands を共有し、取得済みなら /入力補完にも英語フルリストを出す。
-export const slashCmdDynamic = new Map(); // provider -> [{cmd, desc}]
-const slashCmdRetryAfter = new Map();     // provider -> epoch ms（失敗時の再試行抑止）
-const slashCmdLoading = new Set();        // 取得中の provider
+export const slashCmdDynamic = new Map(); // cache key -> [{cmd, desc}]
+const slashCmdRetryAfter = new Map();     // cache key -> epoch ms（失敗時の再試行抑止）
+const slashCmdLoading = new Set();        // 取得中の cache key
 
 function activeProvider() {
   return sessions.get(activeSessionId)?.provider || 'claude';
 }
 
+function slashCmdCacheKey(provider, sessionId = activeSessionId) {
+  return `${provider}#${sessionId || 0}`;
+}
+
 // ピッカー／/入力補完の双方から呼べるキャッシュ充填。
-export function setSlashCmdCache(provider, cmds) {
+export function setSlashCmdCache(provider, cmds, sessionId = activeSessionId) {
   const list = (cmds || []).filter(c => c && c.cmd);
   if (list.length > 0) {
-    slashCmdDynamic.set(provider, list);
-    slashCmdRetryAfter.delete(provider);
+    const key = slashCmdCacheKey(provider, sessionId);
+    slashCmdDynamic.set(key, list);
+    slashCmdRetryAfter.delete(key);
   }
 }
 
 // /入力補完用にフルリストを遅延取得する。取得済み・取得中・抑止中は何もしない。
 // 取得完了時、メニューが開いていれば再描画する。
-async function ensureSlashCommands(provider) {
-  if (slashCmdDynamic.has(provider) || slashCmdLoading.has(provider)) return;
-  const retryAt = slashCmdRetryAfter.get(provider) || 0;
+async function ensureSlashCommands(provider, sessionId = activeSessionId) {
+  const key = slashCmdCacheKey(provider, sessionId);
+  if (slashCmdDynamic.has(key) || slashCmdLoading.has(key)) return;
+  const retryAt = slashCmdRetryAfter.get(key) || 0;
   if (Date.now() < retryAt) return;
-  slashCmdLoading.add(provider);
+  slashCmdLoading.add(key);
   try {
-    const resp = await fetch(`/api/slash-commands?provider=${provider}&token=${token}`);
-    if (!resp.ok) { slashCmdRetryAfter.set(provider, Date.now() + 60_000); return; }
+    const sidParam = sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : '';
+    const resp = await fetch(`/api/slash-commands?provider=${provider}${sidParam}&token=${token}`);
+    if (!resp.ok) { slashCmdRetryAfter.set(key, Date.now() + 60_000); return; }
     const data = await resp.json();
-    setSlashCmdCache(provider, data.cmds);
-    if (slashCmdDynamic.has(provider) && !slashMenuEl.hidden) updateSlashMenu();
+    setSlashCmdCache(provider, data.cmds, sessionId);
+    if (slashCmdDynamic.has(key) && !slashMenuEl.hidden) updateSlashMenu();
   } catch (_) {
-    slashCmdRetryAfter.set(provider, Date.now() + 60_000);
+    slashCmdRetryAfter.set(key, Date.now() + 60_000);
   } finally {
-    slashCmdLoading.delete(provider);
+    slashCmdLoading.delete(key);
   }
 }
 
 export function getSlashCommands() {
-  const dyn = slashCmdDynamic.get(activeProvider());
+  const dyn = slashCmdDynamic.get(slashCmdCacheKey(activeProvider()));
   if (dyn && dyn.length > 0) return dyn;
   return getSlashCommandsFallback();
 }
@@ -476,8 +552,8 @@ export let slashIndex = -1;
 
 export function updateSlashMenu() {
   const val = inputEl.value;
-  if (!val.startsWith('/')) { hideSlashMenu(); return; }
-  ensureSlashCommands(activeProvider()); // 非同期: 取得完了時に自動で再描画
+  if (!val.startsWith('/') && !val.startsWith('$')) { hideSlashMenu(); return; }
+  ensureSlashCommands(activeProvider(), activeSessionId); // 非同期: 取得完了時に自動で再描画
   const filtered = getSlashCommands().filter(c => c.cmd.startsWith(val));
   if (filtered.length === 0) { hideSlashMenu(); return; }
   slashItems = filtered;
@@ -716,6 +792,12 @@ inputEl.addEventListener('keydown', (e) => {
   // ctrl+o: Claude Code の折りたたみ展開（ターミナル直接操作と同等）
   if (e.ctrlKey && e.key === 'o') { sendText(activeSessionId, '\x0f'); e.preventDefault(); return; }
   if (e.key === 'Enter') {
+    if (isMobileViewport()) {
+      // Mobile C2 uses button-only send. Enter stays a textarea newline here,
+      // so action-bar Enter execution and IME pendingSend remain desktop-only.
+      autoExpand({ suppressPtyResize: true });
+      return;
+    }
     if (e.isComposing || isComposing) { set_pendingSend(true); return; } // IME確定後に送信
     if (e.shiftKey) { autoExpand(); return; } // Shift+Enter: 改行
     // action-bar 表示中かつ入力が空 → フォーカス中ボタン（未指定なら先頭）を実行
@@ -772,17 +854,85 @@ inputEl.addEventListener('keydown', (e) => {
     applyToolsPosition(isLeft);
     localStorage.setItem(STORAGE_TOOLS_LEFT_KEY, isLeft ? '1' : '0');
   });
+
+  // 入力欄の空白（ボタン以外＝paddingや flex 余白）をクリックしたら textarea に
+  // フォーカスを移す。ネイティブでは textarea の矩形上しか focus されず、行間や
+  // ボタン列左側の空きは死に領域になっていた（2026-07-02 report）。
+  wrap.addEventListener('mousedown', (e) => {
+    const t = e.target as HTMLElement | null;
+    if (!t) return;
+    if (t === inputEl) return; // textarea 自身は既定挙動
+    if (t.closest('button, a, input, select, textarea, [contenteditable="true"], .paste-chip')) return;
+    e.preventDefault();
+    inputEl.focus();
+  });
+})();
+
+(function initMobileComposer() {
+  const attachBtn = document.getElementById('mobile-composer-attach-btn');
+  const attachMenu = document.getElementById('mobile-composer-attach-menu');
+  const fileBtn = document.getElementById('mobile-composer-file-btn');
+  const cameraBtn = document.getElementById('mobile-composer-camera-btn');
+  if (!attachBtn || !attachMenu) return;
+
+  const closeAttachMenu = () => {
+    attachMenu.hidden = true;
+    attachBtn.setAttribute('aria-expanded', 'false');
+  };
+  const toggleAttachMenu = (ev?: Event) => {
+    ev?.stopPropagation();
+    if (!isMobileViewport()) return;
+    attachMenu.hidden = !attachMenu.hidden;
+    attachBtn.setAttribute('aria-expanded', attachMenu.hidden ? 'false' : 'true');
+  };
+  attachBtn.addEventListener('click', toggleAttachMenu);
+  fileBtn?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    closeAttachMenu();
+    document.getElementById('attach-file-input')?.click();
+  });
+  cameraBtn?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    closeAttachMenu();
+    document.getElementById('attach-camera-input')?.click();
+  });
+  document.addEventListener('click', (ev) => {
+    if (attachMenu.hidden) return;
+    const target = ev.target as Node | null;
+    if (target && (attachMenu.contains(target) || attachBtn.contains(target))) return;
+    closeAttachMenu();
+  });
+
+  const syncVisualViewportOffset = () => {
+    const vv = window.visualViewport;
+    if (!vv || !isMobileViewport()) {
+      document.documentElement.style.removeProperty('--mobile-vv-bottom-offset');
+      return;
+    }
+    const offset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty('--mobile-vv-bottom-offset', `${Math.round(offset)}px`);
+  };
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', syncVisualViewportOffset);
+    window.visualViewport.addEventListener('scroll', syncVisualViewportOffset);
+  }
+  window.addEventListener('resize', syncVisualViewportOffset);
+  syncVisualViewportOffset();
 })();
 
 inputClearBtn?.addEventListener('click', () => {
   inputEl.value = '';
   autoExpand();
   updateInputClearButton();
+  if (isMobileViewport()) window.dispatchEvent(new CustomEvent('mobile-composer-idle'));
   // Web テキストエリアだけでなく内側 CLI の入力行も消す。ビジー時等に溜まった
   // 残骸（例: "/login/login..."）は web を空にしても TUI 側に残り続けるため、
   // doSend / sendQuickCommand と同じ \x15(Ctrl+U) を単独送信して行クリアする。
-  // セッション未選択なら no-op。
-  if (activeSessionId !== null) sendText(activeSessionId, '\x15');
+  // ただし shell / codex は \x15 が行クリアとして機能しない（リテラル混入 or 無視）ため
+  // 単独送信もスキップする（doSend / sendQuickCommand と同じ判定）。セッション未選択なら no-op。
+  if (activeSessionId !== null && !shouldSkipClearPrefix(sessions.get(activeSessionId)?.provider || '')) {
+    sendText(activeSessionId, '\x15');
+  }
   inputEl.focus();
 });
 
@@ -822,32 +972,162 @@ for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
 export function syncMobileLayoutState() {
   const hasSession = activeSessionId !== null && sessions.size > 0;
   document.body.classList.toggle('mobile-has-session', hasSession);
-  if (!hasSession) closeMobileSessionDrawer();
+  // スマホホーム画面: セッションが選択されていない場合はホームビューを表示
+  const isMobile = window.matchMedia('(max-width: 720px)').matches;
+  document.body.classList.toggle('mobile-home-view', isMobile && !hasSession);
+  // バックボタン・ホーム画面の表示切替
+  const titleBtn = document.getElementById('mobile-session-title-btn');
+  const logBtn = document.getElementById('mobile-log-btn');
+  const mobileHome = document.getElementById('mobile-home');
+  if (titleBtn) {
+    titleBtn.hidden = !(isMobile && hasSession);
+    titleBtn.setAttribute('aria-expanded', String(isMobile && hasSession && document.body.classList.contains('mobile-drawer-open')));
+    if (isMobile && hasSession && activeSessionId !== null) {
+      const s = sessions.get(activeSessionId);
+      titleBtn.textContent = s ? `#${activeSessionId} ${s.label || s.cwd?.split(/[\\/]/).filter(Boolean).pop() || s.provider || ''}` : `#${activeSessionId}`;
+    }
+  }
+  if (logBtn) logBtn.hidden = !(isMobile && hasSession);
+  if (mobileHome) mobileHome.hidden = !(isMobile && !hasSession);
+  // ハンバーガーバッジ: 個別セッションビュー中に他セッションの承認待ち数を表示
+  const badge = document.querySelector<HTMLElement>('#mobile-menu-btn .mobile-badge');
+  if (badge) {
+    if (isMobile && hasSession) {
+      const pendingCount = pendingSessionIds().filter(id => id !== activeSessionId).length + mobileApprovalActiveBadgeCount();
+      badge.textContent = String(pendingCount);
+      badge.hidden = pendingCount === 0;
+    } else {
+      badge.hidden = true;
+    }
+  }
+  if (sessions.size === 0) closeMobileSessionDrawer();
+  if (isMobile) {
+    (window as any).renderMobileSessionDrawer?.();
+  } else {
+    // PC 幅へ戻ったらドロワーを閉じ、renderMobileSessionDrawer() が外した hidden を戻す。
+    // 戻さないと PC サイドバー #session-list 内にドロワー中身が露出したまま残る。
+    closeMobileSessionDrawer();
+    const drawerContent = document.getElementById('mobile-drawer-content');
+    if (drawerContent) drawerContent.hidden = true;
+  }
 }
 
+window.addEventListener('approval-queue-updated', () => {
+  syncMobileLayoutState();
+});
+
 export function openMobileSessionDrawer() {
+  if (!isMobileViewport()) return;
+  (window as any).renderMobileSessionDrawer?.();
   document.body.classList.add('mobile-drawer-open');
   const btn = document.getElementById('mobile-menu-btn');
+  const titleBtn = document.getElementById('mobile-session-title-btn');
   const backdrop = document.getElementById('mobile-drawer-backdrop');
   if (btn) btn.setAttribute('aria-expanded', 'true');
+  if (titleBtn) titleBtn.setAttribute('aria-expanded', 'true');
   if (backdrop) backdrop.hidden = false;
 }
 
 export function closeMobileSessionDrawer() {
   document.body.classList.remove('mobile-drawer-open');
   const btn = document.getElementById('mobile-menu-btn');
+  const titleBtn = document.getElementById('mobile-session-title-btn');
   const backdrop = document.getElementById('mobile-drawer-backdrop');
   if (btn) btn.setAttribute('aria-expanded', 'false');
+  if (titleBtn) titleBtn.setAttribute('aria-expanded', 'false');
   if (backdrop) backdrop.hidden = true;
 }
 
 window.syncMobileLayoutState = syncMobileLayoutState;
 window.closeMobileSessionDrawer = closeMobileSessionDrawer;
 
+function mobileSessionToastTitle(id: number): string {
+  const s = sessions.get(id);
+  if (!s) return `#${id}`;
+  const name = s.label || String(s.cwd || '').replace(/\\/g, '/').split('/').filter(Boolean).pop() || s.provider || '';
+  return name ? `#${id} ${name}` : `#${id}`;
+}
+
+function activateNextMobileSession(): void {
+  if (sessions.size <= 1 || activeSessionId === null) return;
+  const all = orderSessions();
+  const currentIdx = all.findIndex(s => s.id === activeSessionId);
+  if (currentIdx === -1) return;
+  const next = all[(currentIdx + 1) % all.length];
+  if (!next) return;
+  activateSession(next.id);
+  showToast(t('session_switch_toast', { name: mobileSessionToastTitle(next.id) }));
+}
+
+function initMobileEdgeGestures(): void {
+  let startX = 0;
+  let startY = 0;
+  let edge: 'left' | 'right' | null = null;
+  let consumed = false;
+  const EDGE_PX = 24;
+  const MIN_DX = 54;
+  // スクロールコンテナ（.mtl-chat-view / #mobile-home / .mobile-drawer-body）は
+  // 起点ブロックしない: 画面端 EDGE_PX 内の touchstart は常にジェスチャー候補とし、
+  // 縦スクロールとの競合は touchmove の縦優先キャンセル（|dy| > |dx| → edge=null）で防ぐ。
+  const blockedSelector = [
+    '#mobile-approval-sheet',
+    '#mobile-approval-sheet-backdrop',
+    '.mas-grab',
+    '.mas-content',
+  ].join(', ');
+  const isGestureBlocked = (target: EventTarget | null): boolean => {
+    const el = target instanceof HTMLElement ? target : null;
+    return !!el?.closest(blockedSelector) || document.body.classList.contains('mobile-drawer-open') || document.body.classList.contains('mobile-approval-sheet-open');
+  };
+
+  document.addEventListener('touchstart', (ev) => {
+    if (!isMobileViewport()) return;
+    if (document.querySelector('.mtl-detail-overlay')) return;
+    if (isGestureBlocked(ev.target)) return;
+    if ((ev.target as HTMLElement | null)?.closest('input, textarea, select, a')) return;
+    const touch = ev.touches[0];
+    if (!touch) return;
+    const width = window.innerWidth || document.documentElement.clientWidth;
+    startX = touch.clientX;
+    startY = touch.clientY;
+    consumed = false;
+    if (startX <= EDGE_PX) edge = 'left';
+    else if (width - startX <= EDGE_PX) edge = 'right';
+    else edge = null;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', (ev) => {
+    if (!edge || consumed || !isMobileViewport()) return;
+    if (document.querySelector('.mtl-detail-overlay') || document.body.classList.contains('mobile-drawer-open') || document.body.classList.contains('mobile-approval-sheet-open')) { edge = null; return; }
+    const touch = ev.touches[0];
+    if (!touch) return;
+    const dx = touch.clientX - startX;
+    const dy = touch.clientY - startY;
+    if (Math.abs(dy) > Math.abs(dx)) {
+      edge = null;
+      return;
+    }
+    if (edge === 'left' && dx > MIN_DX) {
+      consumed = true;
+      openMobileSessionDrawer();
+    } else if (edge === 'right' && dx < -MIN_DX) {
+      consumed = true;
+      activateNextMobileSession();
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', () => {
+    edge = null;
+    consumed = false;
+  }, { passive: true });
+}
+
 (function initMobileControls() {
   const menuBtn = document.getElementById('mobile-menu-btn');
   const backdrop = document.getElementById('mobile-drawer-backdrop');
   const spawnBtn = document.getElementById('mobile-spawn-btn');
+  const titleBtn = document.getElementById('mobile-session-title-btn');
+  const logBtn = document.getElementById('mobile-log-btn');
   const keyboardToggle = document.getElementById('mobile-keyboard-toggle');
   const keyboardPanel = document.getElementById('mobile-keyboard-panel');
   const keyRow = document.getElementById('mobile-key-row');
@@ -863,6 +1143,15 @@ window.closeMobileSessionDrawer = closeMobileSessionDrawer;
     e.stopPropagation();
     openMobileSessionDrawer();
     document.getElementById('new-session-btn')?.click();
+  });
+  titleBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openMobileSessionDrawer();
+  });
+  logBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!isMobileViewport()) return;
+    document.querySelector<HTMLElement>('.mtl-detail-icon')?.click();
   });
   keyboardToggle?.addEventListener('click', () => {
     const nextHidden = !keyboardPanel.hidden;
@@ -905,6 +1194,12 @@ window.closeMobileSessionDrawer = closeMobileSessionDrawer;
       keyRow?.querySelector('[data-mobile-key="ctrl"]')?.setAttribute('aria-pressed', 'false');
     }
   });
+  initMobileEdgeGestures();
+
+  // ビューポート幅変化（スマホ↔PC 切替）で DOM 状態を再同期
+  const mql = window.matchMedia('(max-width: 720px)');
+  mql.addEventListener('change', syncMobileLayoutState);
+
   // NOTE: 循環 import（state.js → session-list.js → … → app.js）により、本モジュールは
   // state.js の本体評価より前に評価されうる。ここで同期的に syncMobileLayoutState() を
   // 呼ぶと activeSessionId が TDZ（Cannot access before initialization）で落ち、モジュール
@@ -948,7 +1243,7 @@ function doSendQuickCommand(sessionId, cmd) {
   // 連結され（例: "...質問/clear/clear"）独立コマンドにならない。Ctrl+U(\x15) で
   // 入力行を一度クリアしてから送り、連結を物理的に防ぐ。
   // shell provider は doSend と同理由で \x15 を前置しない（PowerShell 等で ^U 混入を防ぐ）。
-  const qcPrefix = isShellProvider(sessions.get(sessionId)?.provider || '') ? '' : '\x15';
+  const qcPrefix = shouldSkipClearPrefix(sessions.get(sessionId)?.provider || '') ? '' : '\x15';
   sendSubmittedText(sessionId, `${qcPrefix}${cmd}\r`);
   focusInputForTerminalKeys();
 }
@@ -962,7 +1257,11 @@ export function focusInputForTerminalKeys() {
   }
 }
 
-export function sendSubmittedText(sessionId, text) {
+export function sendSubmittedText(sessionId, text, opts: any = {}) {
+  if (opts.recordMobileTranscript !== false) {
+    recordMobileTranscriptUserSubmission(sessionId, text);
+  }
+  if (isMobileViewport()) window.dispatchEvent(new CustomEvent('mobile-composer-idle'));
   // 送信操作は最新出力を見たい意図なので、スクロールアップ中でも最下部へ戻して追従を再開する
   const t = terminals.get(sessionId);
   if (t) {
@@ -1130,6 +1429,7 @@ export function removeLocalSession(id) {
   try { FilesTabManager.onSessionRemoved(id); } catch (_) {}
   // C1/C2: チャット store とビューモード state をクリーンアップ
   try { if (typeof onChatHistorySessionRemoved === 'function') onChatHistorySessionRemoved(id); } catch (_) {}
+  try { clearMobileTranscriptSession(id); clearMobileTerminalLiteSession(id); } catch (_) {}
   try { if (typeof sessionViewMode !== 'undefined') sessionViewMode.delete(id); } catch (_) {}
   try { if (typeof sessionLazyLoaded !== 'undefined') sessionLazyLoaded.delete(id); } catch (_) {}
   sessions.delete(id);
@@ -1360,6 +1660,11 @@ inputEl.addEventListener('blur', (e) => {
       if (logDirBtn && cfg.log_dir) {
         logDirBtn.dataset.tooltip = cfg.log_dir;
       }
+      const logDirPath = document.getElementById('log-dir-path') as HTMLAnchorElement | null;
+      if (logDirPath && cfg.log_dir) {
+        logDirPath.textContent = cfg.log_dir;
+        logDirPath.title = cfg.log_dir;
+      }
       const attachDirBtn = document.getElementById('attach-dir-btn');
       if (attachDirBtn && cfg.attach_dir) {
         attachDirBtn.dataset.tooltip = cfg.attach_dir;
@@ -1393,6 +1698,13 @@ inputEl.addEventListener('blur', (e) => {
       openDirOrCopy(logDirBtn, 'log');
     });
   }
+  const logDirPath = document.getElementById('log-dir-path');
+  if (logDirPath) {
+    logDirPath.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (logDirBtn) openDirOrCopy(logDirBtn, 'log');
+    });
+  }
 
   const attachDirBtn = document.getElementById('attach-dir-btn');
   if (attachDirBtn) {
@@ -1423,7 +1735,6 @@ inputEl.addEventListener('blur', (e) => {
         }
         resetAllLocalSessionHistory();
         showToast(t('settings_history_reset_done'), sessionStoreResetBtn);
-        window.dispatchEvent(new CustomEvent('workbench-session-store-reset'));
       } catch (_) {
         showToast(t('settings_history_reset_failed'), sessionStoreResetBtn);
       } finally {
@@ -1453,7 +1764,6 @@ inputEl.addEventListener('blur', (e) => {
         }
         resetAllLocalSessionHistory();
         showToast(t('settings_logs_purge_done'), logsPurgeBtn);
-        window.dispatchEvent(new CustomEvent('workbench-session-store-reset'));
       } catch (_) {
         showToast(t('settings_logs_purge_failed'), logsPurgeBtn);
       } finally {
@@ -1594,6 +1904,7 @@ inputEl.addEventListener('blur', (e) => {
     setUserPref('usage_links.cursor-agent', '');
     setUserPref('usage_links.ollama', '');
     setUserPref('usage_links.opencode', '');
+    setUserPref('usage_links.grok', '');
     setUserPref('voice.grace_seconds', DEFAULT_VOICE_GRACE_SEC);
 
     const triggerEnabled = document.getElementById('trigger-enabled');
@@ -1725,8 +2036,7 @@ inputEl.addEventListener('blur', (e) => {
         const results = await Promise.all(tasks);
         if (choice.deleteLogs) {
           resetAllLocalSessionHistory();
-          window.dispatchEvent(new CustomEvent('workbench-session-store-reset'));
-        }
+          }
         showToast(results.every(r => r.ok) ? t('legacy_logs_notice_done') : t('legacy_logs_notice_failed'));
       } catch (_) {
         showToast(t('legacy_logs_notice_failed'));
@@ -1826,19 +2136,20 @@ inputEl.addEventListener('blur', (e) => {
   if (!pickerEl || !pickerBtn) return;
 
   let pickerProvider = null;
+  let pickerSessionId = null;
   let pickerData     = null; // { cmds, fetched_at, source_url }
 
   pickerBtn.addEventListener('click', async () => {
     if (!pickerEl.hidden) { hidePicker(); return; }
     const sess = sessions.get(activeSessionId);
     const provider = sess?.provider || 'claude';
-    await openPicker(provider, false);
+    await openPicker(provider, activeSessionId, false);
   });
 
   refreshBtn.addEventListener('click', async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (pickerProvider) await openPicker(pickerProvider, true);
+    if (pickerProvider) await openPicker(pickerProvider, pickerSessionId, true);
   });
 
   closeBtn.addEventListener('click', (e) => {
@@ -1859,8 +2170,9 @@ inputEl.addEventListener('blur', (e) => {
     }
   });
 
-  async function openPicker(provider, forceRefresh) {
+  async function openPicker(provider, sessionId, forceRefresh) {
     pickerProvider = provider;
+    pickerSessionId = sessionId || null;
     pickerEl.hidden = false;
     titleEl.textContent = provider === 'claude' ? 'Claude Code'
                         : provider === 'copilot' ? 'GitHub Copilot'
@@ -1871,7 +2183,8 @@ inputEl.addEventListener('blur', (e) => {
     searchEl.value = '';
     try {
       const method = forceRefresh ? 'POST' : 'GET';
-      const resp = await fetch(`/api/slash-commands?provider=${provider}&token=${token}`, { method });
+      const sidParam = sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : '';
+      const resp = await fetch(`/api/slash-commands?provider=${provider}${sidParam}&token=${token}`, { method });
       if (!resp.ok) {
         const txt = await resp.text();
         if (resp.status === 404) {
@@ -1882,7 +2195,7 @@ inputEl.addEventListener('blur', (e) => {
         return;
       }
       pickerData = await resp.json();
-      setSlashCmdCache(provider, pickerData.cmds); // /入力補完と一覧を共有
+      setSlashCmdCache(provider, pickerData.cmds, sessionId); // /入力補完と一覧を共有
       timeEl.textContent = formatAge(pickerData.fetched_at);
       renderList('');
       setTimeout(() => searchEl.focus(), 0);

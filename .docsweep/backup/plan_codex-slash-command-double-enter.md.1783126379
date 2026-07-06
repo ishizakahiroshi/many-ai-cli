@@ -1,0 +1,208 @@
+# [様子見] Codex slash command が WebUI 経由だと実行されない件（原因: \x15 前置）
+
+> 最終更新: 2026-06-21(日) 23:01:21
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | fix | Codex CLI の slash command popup 仕様調査と PTY ログ突合 | — |
+| C2 | fix | 送信側修正方針の決定（Codex 宛は `\x15` 前置をやめる）と実装案 | — |
+
+実行順序: `C1 → C2`
+
+---
+
+## 概要
+
+WebUI のチャット欄から Codex セッションに `/clear` 等の slash command を送ったとき、Codex 側で実行されず入力欄に文字が残ったままになる事象が再現した。`docs/local/bugfix_codex-large-paste-enter-lost_2026-06-18.md` と類似の Enter 消失系だが、トリガーは「大量ペースト」ではなく「slash command popup の候補確定」と推定される。本 plan で原因を確定させ、Hub 側送信方法の修正方針を確定する。実装は確定後に別 bugfix で行う。
+
+スコープ外: Claude Code / Copilot / Cursor Agent への波及。Codex 専用の対処として先行検討する。
+
+## 現状と問題
+
+### 観測事実（2026-06-21 22:09 前後の codex セッション s26）
+
+セッションログ `~/.many-ai-cli/logs/sessions/codex_2026-06-21_220055_many-ai-cli_s26.jsonl` の `user_input` イベントに以下が記録されている。
+
+| 時刻 | text(エスケープ表記) |
+|---|---|
+| 22:09:41 | `/clear\r` |
+| 22:09:45 | `/clear\r` |
+| 22:10:01 | `/model\r` |
+
+`` は Ctrl+U(行頭まで削除)、`\r` は CR(Enter)。WebUI → Hub → PTY write は 3 回とも成功している。
+
+### 画面側の症状
+
+- Codex 画面に `/clear/clear   clear the terminal and start a new chat` の連結表示
+- `Find and fix a bug in @filename` のウェルカム placeholder が縦に 2 段並ぶ alternate buffer 残像
+- 何度送っても `/clear` も `/model` もコマンド実行に至らない
+
+### 原因仮説（未検証）
+
+1. Codex CLI の slash command popup は `/c` 等で表示され、最初の Enter は popup の候補確定に消費される
+2. 結果 Hub が送った 1 個の `\r` ではコマンド実行用の Enter が足りず、`/clear` が入力欄に残る
+3. ユーザーが再送すると 2 個目の `/clear` が積み重なり `/clear/clear` 連結になる
+4. Ctrl+U(``) は popup 表示中に行頭クリアとして効かない可能性がある
+
+bugfix_codex-large-paste-enter-lost_2026-06-18.md で「ConPTY 経由の Enter が条件付きで消える」既知問題に対処済みだが、本件はペースト経路ではなく通常チャット送信経路（`` プレフィックス + テキスト + `\r`）で再現している点が異なる。
+
+## 方針
+
+C1 で popup 仕様と入力欄の状態遷移を実機で確定させ、C2 で送信側の対処方法を決める。
+
+候補対処（C2 で取捨選択）:
+
+1. slash command 検出時のみ `\r` を 2 個送る（popup 確定 + コマンド実行）
+2. `\r` の前に Esc を送って popup を閉じてから `\r` で実行
+3. `` を別のクリア手段（複数 BS など）に置き換える
+4. 送信間に短い遅延を挟む
+
+判断材料: ①Codex 以外への副作用 ②既存 bugfix(`codex-large-paste-enter-lost`)で導入済みの送信ロジックとの整合 ③ユーザー直接入力時との振る舞い差分。
+
+---
+
+## C1: Codex slash command popup 仕様調査と PTY ログ突合
+
+### 作業内容
+
+- 素のターミナル（WebUI を経由しない直接の Codex CLI）で `/clear` を打ち、popup 表示・候補確定・コマンド実行に要するキー数を確認する
+- 同操作中の入力に `` を挟んだ場合、`Esc` を挟んだ場合の挙動差を記録する
+- `~/.many-ai-cli/logs/sessions/codex_2026-06-21_220055_many-ai-cli_s26.jsonl` の `pty_output` を時系列に追い、22:09:41 / 22:09:45 / 22:10:01 の各送信直後に Codex がどの ANSI シーケンスを返したかを抽出する（popup 描画 / 入力欄更新 / alternate buffer 切替の有無）
+- 内部既存 bugfix `bugfix_codex-large-paste-enter-lost_2026-06-18.md` の対応箇所（Codex 専用の送信ロジック）を `internal/hub/` 配下から特定し、本件の対象範囲を絞る
+
+### 変更予定ファイル
+
+- なし（調査のみ。確認結果はこの plan の「## 調査結果」セクション(C1 完了時に追記) と必要なら本文に反映）
+
+### 完了条件
+
+- 「Hub が `\r` を 1 個しか送らないことが原因か」「Codex popup が要求する Enter 数」「Ctrl+U / Esc の挙動差」の 3 点が事実として確定する
+- 対処すべき送信ロジックの所在（ファイル・関数名）が特定できる
+
+### 調査結果（2026-06-21 22:30 時点 / C1 fix。一部 C2 で訂正）
+
+確定した事実:
+
+1. **Hub → PTY は `\r` を 1 個しか送らない** — `web/src/app.ts:307` の `doSend` で `textPart = rawText + '\r'` と組み立て、`internal/hub/server.go:2139` の `handleInput` はそのまま wrapper へ流す。Codex 専用の追加 Enter 送出ロジックはアプリ層には無い（後述する wrapper 層には別の 180ms 遅延特例あり）
+2. **Codex の slash command popup は Enter を「消費」しているのではない**（当初仮説は C2 の素ターミナル検証で否定）— セッション s26 の jsonl 22:09:41 直後の `pty_output` (line 37214) の text に `\n/clear ... /clear  clear the terminal and start a new chat` の popup 候補表示が観測されたのは事実。ただし「popup が Enter を消費するから実行されない」とする仮説は素ターミナル実機検証で否定された（C2 §素ターミナル検証）。真の阻害要因は `\x15` 前置側にある
+3. **`\x15` (Ctrl+U) は Codex で行クリアとして効かず、リテラル `^U` 混入もしない** — 22:09:45 の 2 回目 `\x15/clear\r` 送信直後の `pty_output` (line 37273) text に `\n/clear/clear  clear the terminal and start a new chat` が出ており、1 回目で残った `/clear` の上に 2 回目の `/clear` が連結している（行クリアとして機能していない）。ログに `^U` 文字は混入していない（shell ケースとは挙動が異なる。C2 §経緯調査参照）
+
+対処すべき送信ロジックの所在:
+
+- `web/src/app.ts` `doSend` (行 300-322 周辺) — チャット欄通常送信。`clearPrefix(\x15) + injectPrefix + textPart(rawText + '\r')` を組み立て
+- `web/src/app.ts` `sendQuickCommand` (行 1024 周辺) — クイックコマンド。`${qcPrefix(\x15)}${cmd}\r` を組み立て
+- `web/src/app.ts` `inputClearBtn` の click handler (行 818-828) — `\x15` 単独送信
+- いずれも `isShellProvider` で shell を除外する以外は全プロバイダ共通。Codex 専用分岐は無い
+
+関連だが独立な既存対応:
+
+- `bugfix_codex-large-paste-enter-lost_2026-06-18.md` は「長文ペースト時の確定 `\r` 早撃ち」問題で、対処は長文を `@paste-N.txt` 添付化する経路変更。本件の slash command popup 問題とは別経路（短いテキスト送信）
+
+未確定（C2 で素ターミナル検証が必要）:
+
+- popup を「閉じてコマンド実行」するために必要なキー数（Enter 連打 2 個か、Esc → Enter か、Tab → Enter か）
+- popup 表示中の `Esc` の挙動（popup を閉じて入力欄テキストを残すのか、入力欄もクリアするのか）
+- popup 表示中の `Tab` の挙動（候補確定 → コマンド実行のフローがあるか）
+
+---
+
+## C2: 送信側修正方針の決定と実装案
+
+### 作業内容
+
+- `\x15` 前置の導入経緯・shell 除外の経緯・既存の関連特例（trailingEnterDelay）を git log で辿り、本件と整合する方針を確定する
+- 仮説と確定事実を分けて記載し、未確認事項を明示する
+- 副作用評価: Claude / Copilot / Cursor Agent への波及がないことを設計で担保する
+- 後続 bugfix の着手単位を確定する
+
+### 経緯調査（2026-06-21 23:00 グローバル CLAUDE.md「## 場当たり対応の再発防止」適用）
+
+`web/src/app.ts` の `\x15` 出現箇所を `git log -S "\\x15"` で全コミット遡及した結果:
+
+1. **2026-06-09 `f3ce8c9`** — `sendQuickCommand` に `\x15` 前置を**初導入**。当時のコメントに「ビジー時に内側 CLI の入力行に残骸が残ると `/clear/clear` のように連結されるのを防ぐため Ctrl+U で行クリアする」と明記
+2. **2026-06-09 `90e7e97`** — 同じ思想を `doSend` にも拡張
+3. **2026-06-10 `ff05e29`** — 同じ思想を `inputClearBtn` クリック時の単独送信にも拡張
+4. **2026-06-13 `e168426`** — shell セッションでは `\x15` を抜く分岐（`isShellProvider`）を導入。理由「shell では `\x15` が行クリアにならずリテラル `^U` が混入してコマンドを壊す（例: `^Ucodex`）」
+5. **2026-06-13 `44258b5` / 2026-06-14 `fabdbaa`** — ペースト分割対応・shell 内 AI CLI 起動の警告追加（本件と独立）
+
+`\x15` 前置の **設計意図**: 「内側 CLI（Ink ベース TUI 等）がビジー状態のとき、入力欄に前回の未確定入力が残ったまま新規送信が連結されるのを防ぐ保険」。`/clear/clear` 連結の症状を解消する目的で導入された。
+
+**並行する別の特例の存在（新規発見）**: `bugfix_opencode-enter-lost-conpty_2026-06-17.md` に記載のとおり、`internal/wrapper/wrapper.go` の `trailingEnterDelay(provider)` で **Codex / OpenCode には末尾 `\r` 別チャンク送出に 180ms 遅延を入れている**。Codex は「Enter が早すぎると取りこぼされる provider」として既に認識されており、wrapper 層で個別対処済み。アプリ層（app.ts）の `\x15` 前置とは別経路・別レイヤの対処。
+
+### 仮説と確定事実の整理
+
+| 項目 | 確定 / 仮説 | 確定方法 |
+|---|---|---|
+| Hub → PTY は `\r` を 1 個しか送らない（アプリ層） | 確定 | コード読解（`web/src/app.ts:307`, `internal/hub/server.go:2139`） |
+| 素ターミナルで `/clear + Enter 1 個` でコマンド実行できる | 確定 | ユーザー実機検証（2026-06-21 22:35。`/model` → 選択画面遷移を観測） |
+| WebUI から `\x15/clear\r` を送ると `/clear/clear` 連結が起きる | 確定 | jsonl 実測（s26 22:09:41 / 22:09:45 の pty_output text） |
+| `\x15` が Codex でリテラル `^U` 混入しない | 確定 | jsonl 実測（連結部に `^U` 文字なし） |
+| `\x15` が Codex で「行クリアとして機能しない」 | 確定 | 上記連結が起きる事実から導出 |
+| `\x15` の前置が Codex のコマンド実行を「直接阻害している」 | **仮説** | 素ターミナル（`\x15` 無し）で実行可・WebUI（`\x15` あり）で実行不可、という差分は確認した。ただし「`\x15` を受けた Codex Rust TUI がどんなモードに遷移するか」は Codex のソース未確認・実機検証も `\x15` 単独投入の挙動は未確認 |
+| Codex で「ビジー時の入力行残骸連結」が実際に起きるか | **未確認** | f3ce8c9 当時にどの provider で連結が起きたかを記録した bugfix は docs/local に無し。Codex で実際に発生したかは不明 |
+
+### 採用方針
+
+**Codex セッション宛の送信では `\x15` 前置をやめる。**
+
+採用根拠（場当たり対応にしないための論拠）:
+
+1. **起源と整合**: `\x15` の本来目的は「ビジー時の入力行残骸クリア」。しかし Codex では `\x15` が行クリアとして機能していない事実が C1 で確定している。つまり Codex にとってこの前置は **元から保険になっていなかった**。前置の効力が無い provider で前置を外すのは、設計意図と矛盾しない
+2. **shell の事例と整合**: 2026-06-13 の `e168426` で shell を除外した先例がある。理由は「行クリアとして機能しない」点で本件と共通。症状の細部（shell はリテラル混入、Codex は無視）は違うが、「`\x15` が行クリアとして機能しない provider は前置から除外する」という抽象原則で統一できる
+3. **wrapper 層の特例とも矛盾しない**: `trailingEnterDelay` で Codex には既に 180ms 遅延の特例が入っており、Codex を「個別対処が必要な provider」として扱う先例が wrapper 層にもある。アプリ層でも同じ姿勢で前置を外すのは整合的
+4. **症状解消の見込み**: 素ターミナル(`\x15` 無し)と WebUI(`\x15` あり)の差分は `\x15` の前置のみ。これを除けば素ターミナルと同じ振る舞いに収束する蓋然性が高い（**ただし仮説**。Codex Rust TUI のキーマップを未確認なので 100% ではない。実装後の検証で確定させる）
+
+不採用となった案と理由:
+
+| 不採用案 | 理由 |
+|---|---|
+| `\r` を 2 個送る | 素ターミナルで Enter 1 個で実行された事実と矛盾。次の popup や選択画面で誤確定が起きる |
+| Esc → `\r` 連打 | 上と同じ理由（不要な Enter 数の前提が崩れた） |
+| 送信間に追加遅延を挟む | wrapper 層に既に 180ms 遅延が入っており、それで足りていない事実がある。タイミング療法を重ねるのは根本ではない |
+| `\x15` を全 provider で抜く | f3ce8c9 で対応した「ビジー時残骸連結」が他 provider で再発するリスクあり。当時の対応の効力が確認できている provider（Claude 等）では維持する |
+
+### 影響範囲と実装の所在
+
+| ファイル | 該当 | 変更内容 |
+|---|---|---|
+| `web/src/app.ts` | `doSend` 内 `clearPrefix` 算出（行 320 周辺） | `isShellProvider` 判定に加えて Codex も `''` を返すよう拡張 |
+| `web/src/app.ts` | `sendQuickCommand` 内 `qcPrefix` 算出（行 1024 周辺） | 同上 |
+| `web/src/app.ts` | `inputClearBtn` の click handler（行 818-828） | Codex セッション活性時は `\x15` 単独送信をスキップ（WebUI の入力欄クリアだけ行う） |
+
+実装の見通し: 既存の `isShellProvider(provider)` を呼んでいる 3 箇所を、`shouldSkipClearPrefix(provider)` のような小さなヘルパに置き換え、shell と codex を「`\x15` が行クリアとして機能しない provider」として一括で除外する設計。命名で「個別ハードコードではなく抽象原則」を表現する。
+
+### 副作用評価
+
+- **Claude / Copilot / Cursor Agent**: 影響なし（従来通り `\x15` 前置で残骸クリアの効力を維持）
+- **Codex**: 「ビジー時の入力行残骸連結クリア」が効かなくなる。ただし C1 で `\x15` が Codex で行クリアとして機能していない事実が確定しているため、**機能喪失ではなく「効いていなかった保険を外すだけ」**。Codex で実際に残骸連結が起きるかは未確認のため、もし発生したら別タスクで対処（pending として後述）
+- **shell**: 影響なし（既に `\x15` を送っていない）
+- **wrapper 層の 180ms 遅延（`trailingEnterDelay`）**: 触らない。本件の修正はアプリ層のみで、wrapper 層の特例と独立に効く
+
+### 未確認事項（pending として残す）
+
+採用方針で進めるが、以下は本 plan では確定させない。実装後の検証 or 別タスクで扱う:
+
+1. **Codex Rust TUI が `\x15` を受けたときの厳密な内部挙動** — モード遷移しているのか・完全無視なのか。今回は「行クリアとして機能しない」「リテラル混入もしない」「コマンド実行を阻害している（仮説）」までを確定。`\x15` を抜けば実行できる蓋然性が高い前提で進めるが、もし実装後も実行されない場合は再調査が必要
+2. **Codex で「ビジー時残骸連結」が実際に起きる条件** — 起きたら別 `pending_codex-input-busy-residue.md` で代替手段（BS 連打・CSI K・別タイミングの送信等）を検討
+3. **f3ce8c9 当時 `/clear/clear` 連結が起きた provider** — Claude / Codex / Copilot / Cursor のどれだったかが特定できなかった。当時の `\x15` 対応が本当に効いた provider を 1 件でも実機再現できれば「`\x15` の効力前提」が強化される（本 plan では未実施）
+
+### 検証手順（後続 bugfix で実施）
+
+1. Codex セッションで WebUI から `/clear` 送信 → コマンド実行されて入力欄が空に戻ること（**主目的**）
+2. Codex セッションで WebUI から `/model` 送信 → model 選択画面に進むこと
+3. Codex の通常テキスト送信（非 slash command）が regression なく動作すること
+4. Claude / Copilot / Cursor Agent で `/clear` 等が従来通り動作すること（`\x15` 前置を維持）
+5. shell セッションで `\x15` が送られないこと（従来通り）
+6. **検証 #1 が NG だった場合**: 仮説（`\x15` が阻害している）が崩れる。実装をロールバックして再調査（別 plan で `\x15` 受信時の Codex モード解析へ進む）
+
+### 後続 bugfix の単位
+
+実装は 1 つの `bugfix_codex-slash-command-clear-prefix_YYYY-MM-DD.md` で完結可能（変更は `web/src/app.ts` の 3 箇所 + 抽象ヘルパ追加）。subagent 委託する場合は `general-purpose` 1 件で足りる。
+
+### 完了条件
+
+- 採用する対処案が 1 つに絞られ、影響範囲・実装ファイル・検証手順がこの plan に書かれている → ✅
+- 経緯・前提・仮説と確定事実が分離して記載されている（新ルール「## 場当たり対応の再発防止」を満たす） → ✅
+- 後続 bugfix を着手できる状態 → ✅

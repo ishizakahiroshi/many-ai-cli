@@ -1,0 +1,34 @@
+# [様子見] Usage ボタン横の小アイコン群に opencode が表示されない
+
+> 最終更新: 2026-06-17(水) 13:55:56
+
+## 症状
+
+ヘッダーの「Usage」ボタン左に並ぶ小さなプロバイダアイコン群（`usage-menu-icon` SVG）に opencode のアイコンだけが出ていなかった。ドロップダウン（`usage-dropdown`）には Claude / Codex / Copilot / Cursor Agent / OpenCode / Ollama の 6 件が並んでいるのに、小アイコン群は claude / codex / copilot / cursor-agent / ollama の 5 件のみで opencode が欠けており、ドロップダウンと並びが一致しなかった。
+
+## 根本原因
+
+`web/src/index.html` の `usage-menu-icon` SVG 内で、opencode の `<circle>`/`<text>` が `<g style="display:none">` で明示的に非表示にされていた。さらに ollama の矩形が opencode と同じ cx=45 のスロットを占有しており、opencode を単に表示するだけでは ollama と重なる状態だった。SVG の `viewBox`/`width` も 50 で 5 スロット（cx=5,15,25,35,45）分しか領域が無く、6 個目を置く横幅が確保されていなかった。
+
+## 修正内容
+
+opencode を表示し、ollama の左隣（cx=45）に配置。ollama を 1 スロット右（cx=55）へずらし、SVG 領域を 6 スロット分に拡張した。
+
+- opencode を囲っていた `<g style="display:none">` を除去（opencode は cx=45 のまま表示）
+- ollama 矩形を x=40.5 → x=50.5、ollama テキストを x=45 → x=55 へ移動（cx=45 → cx=55）
+- SVG の `viewBox="0 0 50 14"` → `0 0 60 14`、`width="50"` → `width="60"` に拡張
+
+結果、小アイコン群が claude → codex → copilot → cursor-agent → opencode → ollama の順となり、ドロップダウンの並びと一致。色・識別形状（`prov-shape`/`prov-letter`）には一切手を加えていない。CSS（`web/src/styles.css`）の `.usage-menu-icon` は `flex-shrink: 0` のみで幅を固定していないため、`width` 属性の拡張がそのまま反映される。
+
+## 変更ファイル
+
+web/src/index.html
+
+## 検証
+
+<TODO: make build 後にブラウザをリロードし、小アイコン群に opencode（O）が Ollama の左隣に表示され、全 6 アイコンがドロップダウンと同順で並ぶことを目視確認>
+
+## 備忘
+
+- opencode の usage ドロップダウンリンク（`#usage-link-opencode`）の href は現状 `#` のまま。usage ページ URL が確定したら設定する。
+- なぜ当初 opencode が `display:none` で隠されていたかの経緯は未確認（opencode 追加時に小アイコン群の横幅拡張が漏れた可能性が高い）。

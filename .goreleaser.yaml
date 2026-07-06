@@ -16,7 +16,9 @@ before:
     # map 形式(dir:)も非対応。Release workflow は ubuntu 上で走るため sh -c で
     # web へ cd し、Validate と同じく素の bun install/build を実行する。
     - sh -c 'cd web && bun install --frozen-lockfile && bun run build'
-    - go install github.com/tc-hib/go-winres@latest
+    # C1 (plan_audit_score_s_promotion_2026-07-05.md): supply-chain 防御として
+    # @latest を避け固定タグを使う。更新は Dependabot 相当の定期 PR で行う運用。
+    - go install github.com/tc-hib/go-winres@v0.3.3
     - go-winres make --in winres/winres.json --out cmd/many-ai-cli/rsrc --product-version={{ .Version }} --file-version={{ .Version }}
     - go-winres make --in winres/winres-launcher.json --out cmd/many-ai-cli-launcher/rsrc --product-version={{ .Version }} --file-version={{ .Version }}
 
@@ -41,6 +43,8 @@ builds:
     ldflags:
       - -s -w
       - -X main.version={{ .Version }}
+      - -X main.gitCommit={{ .ShortCommit }}
+      - -X main.buildTime={{ .Date }}
   - id: many-ai-cli-launcher
     main: ./cmd/many-ai-cli-launcher
     binary: many-ai-cli-launcher

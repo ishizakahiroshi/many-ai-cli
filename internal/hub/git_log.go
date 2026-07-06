@@ -103,21 +103,26 @@ func (s *Server) handleGitLog(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// git log 実行（-- で revision とファイルパス境界を明示）
-	args := []string{"log"}
+	// git log 実行。git log のオプション（--max-count 等）は必ず `--` の
+	// 前に置く。`git log <ref> -- <arg>` の `--` 以降は pathspec として
+	// 解釈されるため、以前は `--max-count=N` 等が「そのファイル名」の
+	// pathspec になって log が常に 0 件返る症状があった（デフォルト ref=HEAD
+	// でコミットが表示されない）。--all 経路は `--` を挿入していないため
+	// 影響を受けていなかったので、それが「デフォルト表示だけ壊れる」形で
+	// 発現していた。
+	args := []string{"log",
+		"--max-count=" + strconv.Itoa(limit),
+		"--skip=" + strconv.Itoa(skip),
+		"--date-order",
+		"--decorate=short",
+		"--pretty=format:" + gitLogPrettyFormat,
+	}
 	if ref == "--all" {
 		args = append(args, "--all")
 	} else {
-		// -- を前に置いて ref をオプションと誤解させない
+		// -- を後に置いて ref をオプションと誤解させない
 		args = append(args, ref, "--")
 	}
-	args = append(args,
-		"--max-count="+strconv.Itoa(limit),
-		"--skip="+strconv.Itoa(skip),
-		"--date-order",
-		"--decorate=short",
-		"--pretty=format:"+gitLogPrettyFormat,
-	)
 	out, err := runGit(ctx, cwd, args...)
 	if err != nil {
 		s.logger.Warn("git log failed", "session_id", sid, "err", err)

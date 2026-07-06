@@ -1,0 +1,481 @@
+# [様子見] セッション間オーケストレーション（指揮者自動 spawn 案）
+
+> 最終更新: 2026-06-28(日) — UX 議論を踏まえて C10〜C12 を追記（UI トグル + 承認スキップ既定 + Hub 内蔵指揮者プロンプト）。需要疑問の経緯メモも追加。C7 実機 1 周回しは C10〜C12 完了後に再計画。
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | fix | 既存 inject / spawn / session 管理 / マーカー検出の境界整理と role / 親子情報の置き場決定 | — |
+| C2 | fix | 指揮者用「spawn + inject」一括 API と、走行中セッションへの inject API（**C8 で簡素化・後述参照**） | — |
+| C3 | fix | 子セッション完了マーカーの Hub 内転送と親通知（**C8 で board.md 末尾の `## DONE` 行に置換・PTY 転送は廃止**） | [並列OK with C2] |
+| C4 | fix | 再帰 spawn の上限・並列数・タイムアウトのハードガード | [並列OK with C2] |
+| C5 | fix | 親子セッション関係（`parent_session_id` / `auto` タグ）の保存と UI 表示（オーケストラビュー） | — |
+| C6 | fix | 指揮者用スラッシュコマンド `/orchestrate` 本文（**C8 を踏まえ board 運用版**）と各 Provider 配置 | — |
+| C7 | plan | 動作確認（異種混成: Claude 指揮者 + Codex 実装 + Copilot テスト で 1 周回し） | — |
+| C8 | fix | 伝言板（`~/.many-ai-cli/orchestration/<orchestration_id>/board.md`）方式の採用と fsnotify 監視・更新通知 inject | — |
+| C9 | fix | 子セッションごとの git worktree 自動分離（spawn-child 既定動作）と完了時の親への merge 経路 | [並列OK with C8] |
+| C10 | fix | UI トグル方式の指揮者起動（既存セッションを指揮者化）と子の既定承認スキップ。worktree skip 時は都度承認に降格 | — |
+| C11 | fix | Hub 内蔵の指揮者プロンプト本文と実値（session_id / port / token / board_path）テンプレ展開 | [並列OK with C10] |
+| C12 | fix | スラッシュコマンド `/orchestrate` 一覧表記の削除と README/docs の UI トグル運用への書き換え | — |
+
+実行順序: `C1 → (C2, C4, C8, C9) → C3 → C5 → (C10, C11) → C12 → C6 撤回 → C7`（C6 は C10〜C12 で実質置換、C3 は C8 を反映した「board 末尾 DONE 行検出」相当に縮退）
+
+## 実装結果（2026-06-25）
+
+- `POST /api/sessions/:id/spawn-child` / `POST /api/sessions/:id/inject` / `GET /api/sessions/:id/children` を追加。
+- `~/.many-ai-cli/orchestration/<orchestration_id>/board.md` を作成し、2 秒 polling で `## DONE <role> session=<child_id>` を検出する。fsnotify 依存は追加せず、外部依存を増やさない実装にした。
+- board 更新通知は Enter 付きで指揮者へ inject する。暫定仕様として、指揮者の応答中でも通知が割り込む可能性がある。
+- `child_timeout_seconds` / `idle_done_threshold_seconds` を scanner で監視し、timeout は orchestration error として親へ通知、idle は warning として親へ通知する。
+- 同 role の子が複数いても、DONE 行の `session=<child_id>` で完了セッションを特定する。旧形式の DONE 行は、その role の子が 1 つだけなら後方互換で扱う。
+- board 追記は Hub 内 mutex で直列化し、scanner は更新を書いた session 自身への自己通知を避ける。
+- 子セッションは既定で `.many-ai-cli/worktrees/<orchestration_id>/<role>` の git worktree へ分離する。非 Git / 設定無効時は親 cwd を使い、board に skip 理由を追記する。
+- `session` / `sessionstore` / WS `session_update` に `parent_session_id` / `role` / `auto` / `depth` / `orchestration_id` / `board_path` / `worktree_branch` を追加。
+- UI は子カードを左罫線と role/worktree タグで最小表示する。完全な折りたたみツリーは未実装。
+- `/orchestrate` は各 provider の slash command 一覧へ候補として追加。CLI 側の実体カスタムコマンド本文配布は今後の slash-command 配布方式に合わせて別途拡張余地あり。
+- 検証: `go test ./...`、`bun run check` 成功。
+- 未実施: C7 の実機 1 周回し（Hub 起動・ブラウザ操作・異 Provider spawn）は、このリポジトリ規約によりユーザー実行領域。
+
+---
+
+## 概要
+
+many-ai-cli の Hub 上で **指揮者セッションを 1 つ立てるだけ** で、設計・実装・テスト等のサブタスクを指揮者が自分で分解し、必要な数の子セッションを **自動 spawn**・依頼・完了監視・集約まで一周回せる最小プロトを入れる。子は **異なる AI Provider** でもよい（Claude を指揮者、Codex に実装、Copilot にテスト、等）。契約は「PTY 入力テキスト」と「`[MANY-AI-CLI-DONE]` マーカー」の 2 つだけに絞り、Provider 非依存を維持する。Workbench / SQLite ジョブ DAG・リトライ機構は本スコープ外。
+
+## 現状と問題
+
+- `/api/spawn` で UI からセッション生成は可能だが、**他セッション（指揮者）から呼ぶ規約が無い**。
+- 既存 PTY inject は attach inject（画像）と action-bar 返送に使われているが、**指揮者 → 演奏者の一般テキスト inject 経路が無い**。
+- `[MANY-AI-CLI-DONE]` は AI 応答末尾に出ているが、**他セッション宛てに転送する仕組みが無い**。
+- セッション間の **親子関係・タグ** を保持する仕組みが無く、指揮者配下のセッション群を UI で群として扱えない。
+- 結果: ユーザーが手動で 4 セッション立てて手動で依頼・完了確認をする必要がある。
+
+## 方針
+
+- **指揮者 1 つ立てれば回る** を最終形にする。ユーザーは指揮者に依頼するだけ、子の起動・依頼・完了監視は指揮者がやる。
+- 既存契約を Provider 非依存に保つために、追加するのは以下 4 本だけ:
+  - `POST /api/sessions/:id/spawn-child` — 指揮者が「役割・provider・model・初回プロンプト」を指定して子を立てる。内部的には `/api/spawn` を呼び、親子関係を記録、初回プロンプトを inject。
+  - `POST /api/sessions/:id/inject` — 走行中の任意セッションへテキストを差し込む（割り込み可）。
+  - 子 done イベントの **親への自動通知**（`[MANY-AI-CLI-CHILD-DONE] {child_id} {role} {summary}` を親 PTY へ inject）。
+  - 親子情報の `GET /api/sessions/:id/children` と既存 sessions 一覧への `parent_session_id` / `role` / `auto` フィールド追加。
+- 指揮者側のロジックは **スラッシュコマンド `/orchestrate`** に閉じ込め、Provider 別 md（`resources/slash-commands/<provider>/orchestrate.md`）で配る。
+- **クロスエージェントが成立する根拠**:
+  - 入力は普通のプロンプトテキスト → どの AI CLI も標準入力で受ける。
+  - 出力は `[MANY-AI-CLI-DONE]` マーカー → 既に `~/.many-ai-cli/approval-rules.md` で全 Provider 共通規約として AI 側に注入される。
+  - Hub 側のマーカー検出は xterm.js バッファ全文 grep で Provider 非依存。
+- ハードガード: 子は親より深く spawn 禁止（深さ 1）、1 親あたり同時 N 並列まで（既定 4）、子のターン上限 / タイムアウト（既定 600 秒）、同時総セッション数上限。
+- リトライ・依存 DAG・履歴・自動再開は対象外（指揮者 AI のターン内ループで完結。落ちたらユーザーが指揮者に再依頼）。
+
+採用しない選択肢:
+- Workbench / SQLite にジョブテーブルを足す → v0.3.x スコープ超。
+- 子セッションが MCP ツール経由で互いを呼ぶ → Provider 依存（Codex / Copilot で MCP 形態が違う）。
+- 指揮者専用の独立プロセス / 別バイナリ → Hub 内ロジックで十分。
+
+---
+
+## C1: 既存 inject / spawn / session 管理 / マーカー検出の境界整理
+
+### 作業内容
+
+- `internal/hub/` のルーティング表を読み、`/api/spawn` と PTY inject 経路を一覧化する。
+- attach inject（画像）と通常テキスト inject の経路差を確認し、共通化できる範囲を見極める。
+- `[MANY-AI-CLI-DONE]` マーカー検出位置（xterm.js バッファスキャン側）を特定する。
+- `internal/sessionstore` の Session struct に追加するフィールド（`parent_session_id` / `role` / `auto` / `depth`）の置き場と DB 列追加方針を決める。
+- 既存の `MANY_AI_CLI=1` 環境変数注入が **子セッションにも伝わっているか** を確認（done マーカーが出る前提条件）。
+
+### 変更予定ファイル
+
+- なし（調査のみ）。判明事項は本 plan の「方針」末尾に箇条書きで追記する。
+
+### 完了条件
+
+- inject / spawn / done マーカー / session struct の現状と、C2〜C5 で触る具体ファイルが plan に列挙されている。
+
+---
+
+## C2: 指揮者用「spawn + inject」一括 API と inject API
+
+### 作業内容
+
+- `POST /api/sessions/:id/spawn-child` を追加（body: `{ "role": "designer|implementer|tester|...", "provider": "claude|codex|copilot|cursor-agent", "model": "...", "initial_prompt": "...", "cwd": "...", "auto": true }`）。
+  - 内部で `/api/spawn` を呼び、戻った子 session_id に親 id・role・auto フラグ・depth を記録。
+  - 子 PTY 起動完了を待ってから `initial_prompt` を inject。
+- `POST /api/sessions/:id/inject` を追加（body: `{ "text": "...", "from_session_id": "...", "press_enter": true }`）。
+  - 既存 PTY inject 経路（wrapper 層）に薄く委譲。
+  - 認可: 同一 Hub token 必須。自己ループ inject は 400。
+  - 走行中 AI の応答中でも差し込み可（割り込み）。明示的に止めたい場合用に `interrupt: true` で先に ESC を送るオプションを足す。
+- `GET /api/sessions/:id/children` を追加（指揮者が子の状態を polling できるように。WS で既存イベントを購読する形でも可だが REST のほうが slash-command 側が楽）。
+
+### 変更予定ファイル
+
+- `internal/hub/<該当ルータ>.go` — エンドポイント 3 本追加
+- `internal/wrapper/<inject 実装>.go` — テキスト inject の共通関数化・ESC 送信オプション
+- `internal/sessionstore/store.go` — Session struct に `ParentSessionID` / `Role` / `Auto` / `Depth` 追加 + マイグレーション
+
+### 完了条件
+
+- 指揮者セッションから 1 リクエストで子セッションが立ち、初回プロンプトまで流れる。
+- 走行中セッションへ inject で割り込める。`interrupt: true` で ESC 先送りも動く。
+- `/children` で親から見た子の状態（live / done / timeout）が取れる。
+
+---
+
+## C3: 子完了マーカーの Hub 内転送と親通知
+
+### 作業内容
+
+- 既存の `[MANY-AI-CLI-DONE]` 検出位置を Hub 内部イベント（`SessionDoneEvent { session_id, role, summary }`）として発火するよう拡張。
+- 親子関係を引いて、子の done イベントが上がったら親セッションの PTY へ `[MANY-AI-CLI-CHILD-DONE] {child_id} {role} {summary}` を inject する。
+- タイムアウト（既定 600 秒・C4 で設定可能化）で「未完了」相当のメッセージを親へ流す経路も入れる。
+- マーカー欠落で永遠に done が出ないリスクへの対処として、子セッションのアイドル検知（一定時間 PTY 出力なし）を二次的な完了サインとして親通知の選択肢に入れる（**実装は最小、検知ルールはコメントで明示**）。
+
+### 変更予定ファイル
+
+- `internal/hub/<session 管理>.go` — done イベント配線・親への inject 呼び出し
+- `internal/sessionstore/store.go` — 親子関係 lookup ヘルパ
+- マーカー検出側ファイル — 内部イベント発火追加
+
+### 完了条件
+
+- 子が done マーカーを出した瞬間、親 PTY に `[MANY-AI-CLI-CHILD-DONE] ...` が流れる。
+- タイムアウト時に親へ「未完了」メッセージが流れる。
+- アイドル検知が二次サインとして動く（ON/OFF は設定で切れる）。
+
+---
+
+## C4: 再帰 spawn の上限・並列数・タイムアウトのハードガード
+
+### 作業内容
+
+- Hub に以下のハードリミットを実装(設定は `~/.many-ai-cli/config.yaml` で上書き可、既定値は安全側):
+  - `orchestration.max_depth`: 1（親 → 子のみ。孫禁止）
+  - `orchestration.max_children_per_parent`: 4
+  - `orchestration.max_total_sessions`: 16
+  - `orchestration.child_timeout_seconds`: 600
+  - `orchestration.idle_done_threshold_seconds`: 120（C3 のアイドル検知）
+- `POST /api/sessions/:id/spawn-child` 側で上限超過時は 429 を返す（親 AI が認識できる JSON エラー本文）。
+- 親通知時、上限到達は `[MANY-AI-CLI-CHILD-DONE]` ではなく `[MANY-AI-CLI-ORCHESTRATION-ERROR]` で区別する。
+
+### 変更予定ファイル
+
+- `internal/config/<config struct>.go` — `orchestration` セクション追加
+- `internal/hub/<該当ルータ>.go` — 上限チェック
+- `internal/hub/<該当タイマ>.go` — タイムアウト・アイドル検知
+
+### 完了条件
+
+- 設定なしで起動すると既定の上限で動く。
+- 上限超過時に 429 / `[MANY-AI-CLI-ORCHESTRATION-ERROR]` が出る。
+- config.yaml で値を変更すると反映される。
+
+---
+
+## C5: 親子セッション関係・タグの保存と UI 表示（オーケストラビュー）
+
+### 作業内容
+
+- 既存 `/api/sessions` 一覧 / WS イベントに `parent_session_id` / `role` / `auto` フィールドを追加。
+- Web UI のセッションリスト（`web/src/app/state.ts` 周辺、および Multi / Split / Detached grid 系）で:
+  - `auto` タグがついた子セッションを **親の下に折りたたみ表示**（オーケストラビュー）。
+  - role を **タグチップ**（設計 / 実装 / テスト / 指揮者）として表示。
+  - 親子ツリー表示（インデント or グルーピングタブ）。
+- 既存の手動 spawn セッションは `auto=false` で従来どおりフラット表示。
+
+### 変更予定ファイル
+
+- `web/src/app/state.ts` — session model 拡張
+- `web/src/app/spawn-panel.ts` — 手動 spawn 側でも role を選べる UI（任意。当面なしでも C7 は通せる）
+- `web/src/app/detached-grid.ts` / `detached-grid-launcher.ts` — 親子グルーピング表示
+- `web/src/styles.css` / `styles/spawn.css` — タグチップ・親子インデントの最小スタイル
+- `web/src/i18n/{ja,en}.json` — ロール / タグ文言
+
+### 完了条件
+
+- 指揮者が `/orchestrate` を打って子を spawn すると、UI 上で **親 1 タブ配下に子がぶら下がる** ビューになる。
+- 役割タグチップ・指揮者バッジが見える。
+- 手動 spawn の挙動は従来どおり（regression なし）。
+
+---
+
+## C6: 指揮者用スラッシュコマンド `/orchestrate`（自動 spawn 運用）
+
+### 作業内容
+
+- `resources/slash-commands/<provider>/orchestrate.md` を 4 つ用意（claude / codex / copilot / cursor-agent）。
+- 本文には以下を AI 向け手順として記述:
+  - 「あなたは指揮者。ユーザー依頼を分解し、必要な役割（設計 / 実装 / テスト 等）の子セッションを `POST /api/sessions/:id/spawn-child` で立てる。1 役割につき 1 子。」
+  - 「provider / model はタスク特性で選ぶ（設計は重いモデル、機械的実装は軽いモデル、等）。」
+  - 「依頼後は `[MANY-AI-CLI-CHILD-DONE] {id} {role} {summary}` を待つ。並列依頼可。」
+  - 「途中で役割追加が必要なら同 API で追加 spawn。割り込み修正は `POST /api/sessions/:id/inject` で `interrupt: true`。」
+  - 「全子の done を集約してユーザーへ最終報告。最後に `[MANY-AI-CLI-DONE]` を出して終了。」
+  - 「上限超過 / タイムアウト時の `[MANY-AI-CLI-ORCHESTRATION-ERROR]` を見たらユーザーへ判断を返す。自動リトライはしない。」
+- README に「オーケストレーション」節を追加し、軽い案の既知制約（マーカー / アイドル検知頼り、リトライなし）と Provider 非依存性を明記。
+- slash-commands-update スキルの追従対象外であることを README で注記。
+
+### 変更予定ファイル
+
+- `resources/slash-commands/claude/orchestrate.md`
+- `resources/slash-commands/codex/orchestrate.md`
+- `resources/slash-commands/copilot/orchestrate.md`
+- `resources/slash-commands/cursor-agent/orchestrate.md`
+- `README.md`
+
+### 完了条件
+
+- 指揮者セッションで `/orchestrate` を打つと、上記運用手順が AI に流れ、AI が `spawn-child` API を実際に叩く挙動になる。
+- README に既知制約と Provider 非依存性が明記されている。
+
+---
+
+## C8: 伝言板 hybrid（採用方針・2026-06-25 追加）
+
+### 採用に至った検討経緯
+
+ツイートで見かけた「分割ターミナルで Claude Code と Codex を全許可モードで走らせ、`伝言板.md` を介して互いにやり取りさせる」方式を踏まえて、当初案（spawn-child API + PTY マーカー転送）を見直した。比較した 3 案と判断は以下。
+
+- 案 A: 当初案のまま（spawn-child + PTY で `[MANY-AI-CLI-CHILD-DONE]` を親に inject）
+- 案 B: 伝言板 hybrid（spawn-child は残し、親子通信はすべて board.md に集約。Hub は fsnotify で監視して更新通知だけ inject）
+- 案 C: A と B を併存（spawn-child + PTY マーカー転送と board.md の両方を用意し、AI 側に選択させる）
+
+採用: **案 B**。理由:
+
+1. **過去の実害を構造的に回避できる**。2026-06-23 の `bugfix_hub-marker-filter-prose-literal-collision_2026-06-23.md` で、AI 応答中に承認マーカーが混入すると Web UI が応答を途中で隠す事故が確認済み。案 A の `[MANY-AI-CLI-CHILD-DONE]` 親 inject は、親 AI が応答中だと同じ衝突を再生産する。案 B では完了通知が「board が更新された」という 1 行の中性的通知だけになるため、衝突面が極小。
+2. **実装量が最小**。案 A は spawn-child / inject / children / done 転送配線 / アイドル検知の 5 つを実装するが、案 B は spawn-child / inject / board fsnotify の 3 つで済む。`/children` polling もアイドル検知も不要（board 末尾の `## DONE <role>` 行が一次サイン、そもそも polling せず inject 通知で起こされる）。
+3. **Hub 再起動で親が記憶を失う問題が副作用で解決**。当初案はメモリ上の親子テーブルに依存していたが、board はファイルなので Hub 落ち→再起動後に親が読み戻せる。永続化のために SQLite 拡張する手間が消える。
+4. **子同士の横通信が自然に成立**。当初案は必ず親経由だったので、設計担当の出力を実装担当が直接見る経路がなかった。同一 board を全子が参照できることで、ツイートの「2 人の部下がお互いに見ながら進める」感覚をそのまま再現できる。
+5. **案 C は退ける**。二系統メンテで debt が二重になる。Provider 非依存性は案 B 単独でも十分達成できる（どの AI CLI も普通のファイル読み書きツールを持っている）。
+
+### 採用しない 5 つの代替案（記録）
+
+採用しなかった選択肢は当初案の「採用しない選択肢」節に加えて以下:
+
+- AI 同士に MCP server を経由させて message passing する → Provider ごとに MCP 形態が違う（Codex / Copilot で差）。Provider 非依存崩壊。
+- Redis / NATS pubsub を Hub に組み込む → v0.3.x スコープ超。依存追加が重い。
+- 専用ジョブキュー DB（SQLite ジョブ DAG）で完了通知 → 当初案 §49〜52 で既に却下。本改訂でも同じ理由で却下。
+- 親 AI に `/children` を polling させる → AI のターン消費が増えコスト悪化。inject 通知の push 型のほうが安い。
+- 子完了時に Hub が **親を強制再起動**して board を読ませる → 親の文脈崩壊が許容できない。
+
+### 作業内容
+
+- `~/.many-ai-cli/orchestration/<orchestration_id>/board.md` を spawn-child 時に Hub が新規作成する。`orchestration_id` は親セッション id ベース。
+- board.md の冒頭テンプレ:
+  - 役割一覧（指揮者・各子の role と provider / model）
+  - 共有目的（指揮者が記述）
+  - 以降は時系列の追記式（`## <role> <timestamp>` セクション）
+- 子完了は `## DONE <role>` 行を末尾に追記するだけ。Hub の board scanner がこの行を検出して当該 child を `done` 状態にする（C3 の `[MANY-AI-CLI-CHILD-DONE]` 転送配線は不要化）。
+- Hub は `fsnotify` で board.md を監視。更新があったら、その orchestration に属する全セッションへ「board updated by <role>」の 1 行通知を `/api/sessions/:id/inject` 経由で送る。`interrupt: true` は付けない（応答中なら通知はキューイングし、ターン終端で流す）。
+- スラッシュコマンド `/orchestrate` の手順は「board.md のパスを子に伝え、結果も中間メモも board に追記させる」運用に簡素化（C6 を本方針で書き直す）。
+- `[MANY-AI-CLI-DONE]` は引き続き AI 応答末尾に出るが、これは **指揮者セッション自体の完了サイン**として使う（最終レポート出力後）。子の完了は board 行に置換。
+
+### 変更予定ファイル
+
+- `internal/hub/<該当ルータ>.go` — spawn-child 時に board.md を新規作成。fsnotify watcher 起動。
+- `internal/hub/board_scanner.go`（新規） — board.md の末尾追記を tail し、`## DONE <role>` 検出で child 状態遷移、全関係セッションへ inject 通知。
+- `internal/sessionstore/store.go` — Session struct に `OrchestrationID` を追加（`ParentSessionID` と並列）。
+- `resources/slash-commands/<provider>/orchestrate.md` — C6 の本文を board 運用版で書く。
+
+### 完了条件
+
+- 指揮者が `/orchestrate` を打つと board.md が作られ、子セッションに board のパスだけが伝わる。
+- 子が結果を board に追記すると、親と他子の PTY に通知 1 行が流れる。
+- 子が `## DONE <role>` を書くと Hub が child 状態を done にし、指揮者へ通知する。
+- `[MANY-AI-CLI-CHILD-DONE]` の PTY 転送は実装しない（C3 はこの方針でクローズ）。
+
+---
+
+## C9: 子セッションの git worktree 自動分離（採用方針・2026-06-25 追加）
+
+### 採用に至った検討経緯
+
+複数子セッションの cwd 設計で 3 案を比較:
+
+- 案 A: 子ごとに `git worktree add` で別ブランチ・別ディレクトリを切る（spawn-child 既定）
+- 案 B: 全子が親と同 cwd。役割で衝突しない前提を AI 側に委ねる
+- 案 C: spawn-child の body で都度 cwd を明示。既定なし
+
+採用: **案 A**。理由:
+
+1. **同 cwd 並列はファイル上書き事故がほぼ確実**。実装担当の Codex とテスト担当の Copilot が同時に同じファイルを編集すると、Git の merge 競合ではなく **後勝ち上書き** が起きる。AI は通常 `git status` を見ずに書き換えるので検知できない。
+2. **worktree なら親ブランチから clean に切れる**。完了時に親が `git merge` または cherry-pick で取り込むだけ。失敗子は worktree 削除で巻き戻し簡単。
+3. **既存 plan が利用可能**。`docs/local/plan_session-worktree-isolation.md` が別件で存在。共通実装に乗れる可能性が高い。実装重複を避けるため C9 着手前にこちらを読む。
+4. **案 B / C は退ける**。案 B は事故待ち。案 C は AI に毎回 cwd を考えさせて UX が荒れる（指揮者プロンプトに毎回 cwd を書かせるのは現実的でない）。
+
+### 作業内容
+
+- `POST /api/sessions/:id/spawn-child` の既定動作で、Hub が `git worktree add .many-ai-cli/worktrees/<orchestration_id>/<role> -b orch/<orchestration_id>/<role>` 相当を実行し、子の cwd をその worktree に設定する。
+- 子完了時、Hub は worktree のブランチ名を `## DONE <role>` 行に併記して board.md に書かせる（指揮者へのレポートに分岐情報を残す）。
+- 指揮者は子の完了後に worktree のブランチを取り込む（merge / cherry-pick）かどうかを `/orchestrate` 手順内で判断する。Hub は自動 merge しない（事故時の巻き戻しを単純化）。
+- 親 cwd が Git リポジトリでない場合は worktree 分離を skip し、子は親と同 cwd で動かす（board.md に「worktree skip」を明示）。
+- 後始末: orchestration 終了時に未取り込み worktree を残す（ユーザーが手動で確認・削除できるように）。自動削除はオプション設定で出す。
+
+### 変更予定ファイル
+
+- `internal/hub/spawn_child.go`（新規想定） — worktree add の実行と cwd 設定。
+- `internal/config/<config struct>.go` — `orchestration.worktree_auto`（既定 `true`）・`orchestration.worktree_dir_root`（既定 `.many-ai-cli/worktrees`）。
+- 既存 `plan_session-worktree-isolation.md` との共通実装ヘルパへの委譲を検討。
+
+### 完了条件
+
+- spawn-child を叩くと子の cwd が worktree 配下になる。
+- 親 cwd が非 Git の場合は skip され、board.md にその旨が記録される。
+- 子完了時にブランチ名が board.md に出る。
+- 既定で自動 merge しない（指揮者の判断を経由）。
+
+---
+
+## 2026-06-28 判断経緯メモ（C10〜C12 着手前）
+
+C10〜C12 着手前に「各 AI CLI 単体が既に subagent / 並列タスク分割を持っているのに、本機能の需要があるか」を再評価した。CLI 単体機能と重複する部分が大きく、ライト・ミドル層には overkill。差別化できるのは (a) 異種 Provider 混在 (b) ホスト UI で複数子の作業を可視化 (c) board.md による子同士の横通信 — の 3 点のみで、ヘビーユース機能と認識する。それでも続行判断としたのは、(a) 異種 Provider 混在は本機能だけが提供できる唯一無二の体験で、自分（ishizakahiroshi）の評価・比較ワークフローに需要があるため。利用頻度が想定より低かった場合は、C7 実機 1 周回し後に B 案（異種 Provider 比較ツールへの縮小）または A 案（撤退）に切り替える判断余地を残す。
+
+---
+
+## C10: UI トグル方式の指揮者起動と子の既定承認スキップ
+
+### 採用に至った検討経緯（2026-06-28 UX 議論）
+
+`/orchestrate` スラッシュコマンドを各 CLI に配布する案（C6）は次の 3 点で UX が破綻していた:
+
+1. **起動コスト**: 「セッション立てる → `/orchestrate` 打つ → 依頼する」の 3 アクションが必要。トグル 1 つで済むはず。
+2. **配布の煩雑さ**: Claude / Codex / Copilot / Cursor Agent でカスタムコマンドの置き場が違う。Hub から自動配布するにはユーザーのホームディレクトリへ書き込む必要がある。
+3. **子セッションの承認分散**: 子は普通のセッションとして起動するので承認待ち（action-bar）が子ごとに出る。3 子並列なら 3 か所で承認が要る。並列分業の旨味が「承認の分散」で相殺される。
+
+採用方針: **UI 入力欄横の「分業」トグルで既存セッションを指揮者化し、子は既定で承認スキップ（worktree 隔離が安全弁）**。
+
+### 設計
+
+- セッション入力欄右端に「分業」トグル + プルダウン（「承認スキップ」/「都度承認」）。既定: 分業 OFF、ON 時の承認モード既定: 承認スキップ。
+- トグル ON にした瞬間、Hub がそのセッションを **指揮者として永続記録**（候補 Y 採用）。session struct に `IsConductor bool` を追加。
+- ON 後の最初の inject 時に、Hub が指揮者プロンプト（C11）を `prepend` で 1 回流す。以降は通常 inject。
+- トグル OFF で記録解除。動いてる子は kill しない。親に「指揮者モード解除（子は継続実行）」を 1 行通知。
+- 親カードに「指揮者」バッジ、子数 `[+ N]` を表示。子カードは既存通り親の下にぶら下げる。
+
+### 子の既定承認スキップ
+
+- `spawn-child` の既定値を変更:
+  - `permission_mode`: `bypass`（Claude Code 流の語彙。Codex は `--full-auto` 相当、Copilot は `--allow-all-tools` 相当、Cursor Agent は該当フラグへ Hub がマッピング）
+  - `ask_for_approval`: `never`
+  - `sandbox`: `workspace-write`（worktree 配下のみ書ける。Claude Code / Codex 対応、未対応 provider は warning ログ）
+- **worktree skip 時は強制都度承認に降格**: 親 cwd が非 Git で worktree が切れなかった場合、安全弁が外れるので `permission_mode: ask` に自動降格。board.md に降格理由を記録。
+- 設定で既定を反転できる:
+  ```yaml
+  orchestration:
+    default_permission_mode: bypass  # bypass / ask
+  ```
+- 根拠: orchestration の子は (a) worktree 隔離で親ブランチ・親 cwd を触れない (b) board.md に全行動が残る (c) 親への merge は人間判断 — の 3 重防御があり、単独 YOLO セッションと安全性が異なる。
+
+### UI 文言
+
+- 日本語: 「分業」「承認スキップ（推奨・速い）」「都度承認（安全・遅い）」
+- 英語: `Conductor mode` / `Auto-approve (recommended, fast)` / `Manual approval (safe, slower)`
+- ツールチップで「子は worktree 隔離されるため親ブランチは保護されます。ネットワーク呼び出し等の外部副作用は走るため、慣れるまでは都度承認を推奨」と補足。
+- 「YOLO」表記は README / リリースノートで「= いわゆる YOLO mode」と 1 回併記して検索性のみ確保。UI には出さない。
+
+### 変更予定ファイル
+
+- `internal/sessionstore/store.go` — `IsConductor` フィールド追加
+- `internal/hub/orchestration.go` — トグル ON/OFF API、初回 prepend、降格ロジック
+- `internal/hub/<provider 起動経路>.go` — provider 別 YOLO フラグマッピング
+- `internal/config/config.go` — `default_permission_mode` 追加
+- `web/src/app/<セッション入力欄 / カード>.ts` — トグル UI、プルダウン、バッジ
+- `web/src/i18n/{ja,en}.json` — 文言追加
+
+### 完了条件
+
+- セッション入力欄のトグルを ON にして依頼を送ると、子が承認スキップで spawn される。
+- 親 cwd が非 Git なら自動的に都度承認に降格し、board.md に記録される。
+- UI 上で親カードに「指揮者」バッジ、子カードに「自動承認 / 都度承認」のチップが見える。
+- トグル OFF で指揮者状態が解除される（子は走行継続）。
+
+---
+
+## C11: Hub 内蔵の指揮者プロンプトと実値テンプレ展開
+
+### 作業内容
+
+- 指揮者プロンプト本文を `internal/orchestration/conductor_prompt.md` に置き、`go:embed` でバイナリ同梱する。
+- C10 のトグル ON 後初回 inject 時に、Hub が以下の実値を埋めてから prepend する:
+  - `{{SESSION_ID}}` — 親自身の session id
+  - `{{HUB_BASE_URL}}` — `http://127.0.0.1:<port>`
+  - `{{HUB_TOKEN}}` — 起動時 token
+  - `{{BOARD_PATH}}` — `~/.many-ai-cli/orchestration/s<id>/board.md`
+  - `{{MAX_CHILDREN}}` / `{{CHILD_TIMEOUT}}` 等の運用上限
+- プロンプトの中身は Provider 非依存（普通の自然言語で curl 例を示す）。CLI ごとの構文差異には踏み込まない。
+- 上級ユーザーは `~/.many-ai-cli/conductor_prompt.md` を置けばオーバーライド可能（v1 は実装するが UI からは隠す）。
+- 内蔵プロンプトの骨子:
+  - あなたは指揮者役。タスクを役割分担して子を spawn できる。
+  - 子の spawn: `POST {{HUB_BASE_URL}}/api/sessions/{{SESSION_ID}}/spawn-child`（curl 例つき）
+  - 共有メモ: `{{BOARD_PATH}}`（あなたも子も読み書き可）
+  - 子の完了は「board updated by <role>」通知で検知。`## DONE <role> session=<id>` を末尾に書いたら完了。
+  - 上限: 並列最大 {{MAX_CHILDREN}}、子 1 つあたり timeout {{CHILD_TIMEOUT}} 秒、深さ 1（孫禁止）。
+  - 全子 done で集約レポート → `[MANY-AI-CLI-DONE]` を吐いて終了。
+
+### 変更予定ファイル
+
+- `internal/orchestration/conductor_prompt.md`（新規）— 雛形本文
+- `internal/orchestration/prompt.go`（新規）— テンプレ展開 + オーバーライド読み込み
+- `internal/hub/orchestration.go` — トグル ON 経路から呼び出し
+
+### 完了条件
+
+- トグル ON 後の初回 inject 時に、実値が埋まった指揮者プロンプトが親 PTY に流れる。
+- `~/.many-ai-cli/conductor_prompt.md` を置くとそちらが優先される。
+- 内蔵プロンプトの本文に Provider 名（claude/codex 等）は登場しない（Provider 非依存）。
+
+---
+
+## C12: スラッシュコマンド `/orchestrate` 廃止と docs 書き換え
+
+### 作業内容
+
+- `resources/slash-commands/{claude,codex,copilot,cursor-agent}.md` の一覧表から `/orchestrate` 行を削除。
+- `README.md` のオーケストレーション節を、`/orchestrate` 起動ではなく「UI 入力欄のトグルで指揮者化」運用へ書き換え。
+- C6 は本 plan 内で **撤回** とマーク（実装結果セクションには「C10〜C12 で置換」を追記）。
+- slash-commands-update スキルへの追従対象外注記は維持（指揮者プロンプトは Hub 同梱なので元から CLI 追従と無関係）。
+
+### 変更予定ファイル
+
+- `resources/slash-commands/claude.md`
+- `resources/slash-commands/codex.md`
+- `resources/slash-commands/copilot.md`
+- `resources/slash-commands/cursor-agent.md`
+- `README.md`
+
+### 完了条件
+
+- slash-commands 一覧表から `/orchestrate` 表記が消えている。
+- README に UI トグル運用が明記され、スクリーンショット差し替え or 文言更新済み。
+- C6 が「撤回」とマークされ、後から読む人が経緯を追える。
+
+---
+
+## 未決事項（C10〜C12 で扱わない / 別タスク化候補）
+
+- **worktree 自動掃除**: 変更なし worktree だけ自動 remove する案（前回議論の案 A）を既定 ON にするか。実装規模 50〜100 行。本 plan の C9 末尾「自動削除はオプション設定で出す」が未実装のまま残っている。
+- **子の provider 固定**: UI で「実装担当 = codex」のような固定指定 UI を出すか、AI 完全自動に任せるか。案 1 のシンプルさを保つなら AI 任せ。
+- **承認集約パネル**: 都度承認モード時に、全セッションの承認待ちを 1 か所にリスト表示する UI を別途用意するか。承認スキップ既定が UX を救えていれば優先度は低い。
+
+これらは C10〜C12 完了後の運用感を見て判断する。
+
+---
+
+## C7: 動作確認（異種混成 1 周回し）
+
+### 作業内容
+
+- 手動で指揮者セッション 1 つだけ起動（provider: Claude）。
+- ユーザーから「small な機能 X を設計 → 実装 → テスト まで通して」と依頼。
+- 指揮者が自動で:
+  - 設計担当 = Claude（重め）を spawn
+  - 実装担当 = Codex を spawn
+  - テスト担当 = Copilot を spawn
+- 各 done を受けて指揮者が最終レポート。UI 上で親子ツリーが見えること、タグチップが見えることを確認。
+- 想定外（マーカー欠落・タイムアウト・provider 起動失敗・並列上限超過）を `bugfix_*.md` または本 plan の追記で記録。
+
+### 変更予定ファイル
+
+- なし（動作確認のみ）。気付きは本 plan に追記。
+
+### 完了条件
+
+- 指揮者 1 セッションだけのスタートで、3 子（異 Provider 含む）の起動・依頼・done 集約が成立。
+- 既知の脆さ（マーカー欠落時挙動、長時間タスクのアイドル誤検知等）が plan 末尾に列挙されている。

@@ -1,0 +1,46 @@
+# [様子見] 別セッションの承認ポップアップが現在セッションに表示される
+
+## 症状
+
+session #1 (sab/develop) を選択中、左サイドバーや APPROVAL NEEDED パネルに session #2 (docsweep/main) の承認待ち内容（docsweep scan 名前衝突の Q1/Q2/Q3 質問）が表示される。 #1 を見ているのに #2 の質問が #1 の `#action-bar` 領域に描画されてしまう。
+
+## 根本原因
+
+`#action-bar` は全セッション共有の単一 DOM 要素。
+`detectApproval(id)` は内部で `id === activeSessionId` を確認せず、最終的に `approvalUiAdapter.showOptions(bar, id, ...)` で共有 DOM に書き込む。
+呼び出し側（setTimeout 経由が多い）は `setTimeout` スケジュール時点の id をクロージャでキャプチャしているため、タイマー発火までにユーザーがセッションを切り替えると、id は **非アクティブセッション** を指しているのに `detectApproval(id)` が走り、id の `pendingTextTail` / `approvalRawOptionsCache` の内容が現アクティブ画面の action-bar に描画される。
+
+`detectApproval(id)` をゲート無しで呼んでいた経路（特定済み・全て setTimeout 経由）
+
+- `approval.ts:371` — `scheduleApprovalSuppressRescan`
+- `approval.ts:1438`, `:2065`, `:2302`, `:2355`, `:2391` — sendChoice / doSend / multi-select / 自由入力後の suppress 解除後再スキャン
+- `app.ts:357`, `:1061` — 同上（app.ts 側）
+- `approval.ts:1279` — `reshowActionBar`（手動「↻ 承認」ボタン）
+
+## 修正内容
+
+`web/src/app/approval.ts` の `detectApproval(id)` 冒頭に
+`if (id !== activeSessionId) return;` を追加。
+全呼出元の責務にせず関数本体で根治した。
+セッションを再度アクティブにすると `activateSession()` が `detectApproval(new active)` を呼び直すため、検出機会は失われない。
+
+## 変更ファイル
+
+- `web/src/app/approval.ts` (detectApproval 冒頭ガード追加)
+
+## 検証
+
+- session #1 と #2 で同時に承認待ちを起こし、#2 で送信 → 即 #1 へ切替して、#1 の APPROVAL NEEDED に #2 の質問が漏れないこと
+- #1 単独で承認待ち → 送信 → action-bar が正常に消えて再表示されないこと（suppress リスキャンが正しく自身に作用）
+- session 切替時にバッジ・waiting カウントが正しいこと
+
+## 備忘
+
+`detectApproval` は副作用（`approvalUiAdapter.setApprovalVisible(id, ...)` でサイドバー badge 更新 等）も持つが、これらは非アクティブ id に対しても本来呼べる API。
+今回はバグの大本である DOM 書き込みを止めるため関数全体を active 限定にした。
+将来、非アクティブセッションの状態だけ更新したい用途が出たら関数分割を検討する。
+
+---
+
+実行ファイル: なし
+変更ファイル: web/src/app/approval.ts

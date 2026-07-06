@@ -1,0 +1,114 @@
+# [計画] develop ビルド限定の approval-route ログ収集機構
+
+> 最終更新: 2026-06-30(火)
+
+## context配分
+
+| context | 種別 | 内容 |
+|---|---|---|
+| C1 | plan | ビルド時フラグ（ldflags）で develop/release を切替 |
+| C2 | plan | Go 側: `/api/info` に `dev_logs` フィールド追加 |
+| C3 | plan | Web 側: console.log 横取りリングバッファ + 表示 UI |
+
+## 背景・目的
+
+別セッションの承認ポップアップが現在表示中のセッションに混入するバグ（`bugfix_approval-popup-cross-session-leak_2026-06-29.md` 着地済み・`[様子見]`）が再発。原因追跡には既に `[approval-route]` プレフィックスの console.log が `approval.ts` / `state.ts` に仕込まれているが、DevTools (F12) を毎回開かないと読めず、再現時の採取コストが高い。
+
+ユーザー要望:
+- develop ブランチ（実装中）は **DevTools 不要** でログを Hub UI から確認したい
+- main ブランチ・リリースタグでは収集機構自体を無効化（コード上は no-op）したい
+- 切替は手動ではなくビルド時に自動
+
+本機構は今回の cross-session leak バグ調査だけでなく、今後の `[approval-route]` 系・将来の `[xxx-route]` 系の調査全般で再利用する。
+
+## 設計方針
+
+- ビルド時 ldflags で develop/release を切替（実行時環境変数や設定ファイルではなく **ビルド時静的決定**）
+- release ビルドでは web 側のラップ関数自体を呼ばないので、性能・バンドルサイズへの影響を最小化
+- 採取対象は当面 `[approval-route]` プレフィックスで始まる console.log のみ（他のログでバッファを汚さない）
+- 上限 500 行のリングバッファ（古い行から捨てる）
+
+## C1: ビルド時フラグ（ldflags）
+
+### 変更
+
+- `Makefile` の `GO_LDFLAGS` に `-X main.devLogs=true` を追加
+- release CI（`.github/workflows/release.yml` / GoReleaser）では注入しない → 空文字 = false 扱い
+
+### 期待動作
+
+| ビルド経路 | `devLogs` 値 |
+|---|---|
+| `make build` | `"true"` |
+| `go install` 単独 | `""`（=false 扱い・誤って手元で go install しても release 相当） |
+| GoReleaser / release CI | `""` |
+
+### verify
+
+- `many-ai-cli serve` 起動後 `curl http://127.0.0.1:47777/api/info?token=<tok>` で `"dev_logs": true` が返る
+- release ビルドで同コマンド → `"dev_logs": false`
+
+## C2: Go 側（main + hub）
+
+### 変更ファイル
+
+- `cmd/many-ai-cli/main.go`: `var devLogs = ""` を追加し、`hub.Run` 系へ渡す
+- `internal/hub/server.go`: `Server` に `devLogs bool` フィールド追加
+- `internal/hub/misc_handlers.go`: `/api/info` の JSON map に `"dev_logs": s.devLogs` を追加
+
+### 注意
+
+- `devLogs` 文字列 → bool 変換は `strings.EqualFold(devLogs, "true")` で受ける（"1" / "TRUE" は許容しない方が事故が少ない）
+- 既存の `version` / `gitCommit` / `buildTime` の渡し方と同じ経路に乗せる（`BuildInfo` 構造体に足すか・別引数か）→ シンプルな別引数で良い
+
+### verify
+
+- 既存テスト `internal/hub/net_hint_test.go` の `callInfo` 経由で `dev_logs` キーが存在することを 1 行追加して確認
+- 既存テスト全 pass
+
+## C3: Web 側（収集 + 表示 UI）
+
+### 構成
+
+- 新設: `web/src/app/devlog.ts`
+  - `installDevLogCollector()` をエクスポート
+  - 内部で `console.log` を wrap し、第 1 引数が文字列で `[approval-route]` で始まるときだけリングバッファに積む（タイムスタンプ + 引数全体を `JSON.stringify` 風に直列化）
+  - 上限 500 行（超えたら古い順に捨てる）
+  - `getDevLogEntries()` / `clearDevLogEntries()` / `subscribeDevLog(cb)` を export
+- `web/src/app/app.ts` 起動シーケンス
+  - 起動時 `/api/info` を読んで `dev_logs === true` なら `installDevLogCollector()` を呼ぶ
+  - false なら一切ロードしない（dynamic import で release ビルドにバンドルだけは入るが実行されない・将来必要なら tree-shake 検討）
+
+### 表示 UI（Q1 で決定後に追記）
+
+未決定: フローティング案 / タブ案。決まり次第ここを埋める。
+
+共通要件:
+- フィルタ入力（部分一致・即時反映）
+- 全コピー（クリップボード）
+- クリア
+- 最新追従トグル（off にすると自動スクロールしない）
+- セッション ID 別の色分け（`sessionId` キーが含まれる行を highlight）
+
+### verify
+
+- develop ビルドで再現操作 → UI に `[approval-route] showActionBar { sessionId: X, activeSessionId: Y, ... }` が時系列で表示される
+- フィルタに `sessionId !==` 系の語を入れて漏洩経路の行だけ絞り込める
+- release ビルドで `dev_logs: false` → UI に debug ボタン / タブが現れない・`console.log` の挙動も変わらない
+
+## 停止条件
+
+以下のいずれかが満たされない場合は AI 自走を停止し、ユーザーに確認:
+
+1. C1 の Makefile 修正で既存ビルドが壊れる
+2. C2 で `/api/info` の既存キーを誤って削除・改名する
+3. C3 の `console.log` ラップで既存の `console.log` 出力が消える・順序が変わる
+4. UI 形式（Q1）が未決定のまま C4 着手が必要になった
+5. release ビルドで誤って `dev_logs: true` になる挙動が観測された
+
+## 関連
+
+- `bugfix_approval-popup-cross-session-leak_2026-06-29.md`（`[様子見]` — 本機構で原因再追跡する）
+- `bugfix_cross-session-approval-popup-leak_2026-06-24.md`（`[対応中]` — 診断ログ仕込みの初回。本 plan が回収）
+- `internal/hub/buildinfo.go`（既存 ldflags 注入の参考）
+- `Makefile` の `GO_LDFLAGS` 行（C1 で touch）

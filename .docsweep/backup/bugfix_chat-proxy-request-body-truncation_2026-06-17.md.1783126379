@@ -1,0 +1,102 @@
+# [様子見] 障害対応記録: チャットプロキシが大きな request body を 1MiB で切って Anthropic に送る
+
+> 最終更新: 2026-06-17(水) 21:16:47
+
+## 症状
+
+Claude Code を many-ai-cli 経由で動かしているセッションで、画像ファイルを `Read` した直後に Anthropic API から次のエラーが返った。
+
+```text
+API Error: 400 The request body is not valid JSON: unexpected end of data: line 1 column 962568 (char 962567)
+```
+
+観測した実例:
+
+- セッション: `claude_2026-06-17_132852_ai-audit-prompts_s12`
+- 直前操作: `2026-06-17_Claudeが途中で力尽きた_hero.png` の `Read`
+- 対象画像サイズ: `1,081,131 bytes`
+- 直前の token 表示: `↑159.7k` / `89% context used`
+- Hub log 上の最終 usage: `tokens_in=159675 tokens_out=122 tokens_total=159797`
+
+再現手順:
+
+1. many-ai-cli の内蔵チャットプロキシ経由で Claude Code セッションを起動する。
+2. セッション内で、base64 化されると request body が 1MiB を超える画像または大きな入力を読み込ませる。
+3. 次の `/v1/messages` 送信時に、Anthropic 側で JSON parse error が発生する。
+
+影響: Claude Code / Codex など、many-ai-cli の `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` 差し替えプロキシを経由するセッション。特に画像読み込み・大きなツール結果・長い会話履歴で request body が 1MiB を超える場合に顕在化する。
+
+## 根本原因（root cause）
+
+`internal/proxy/proxy.go:37` の `maxCaptureBytes` は、本来 Sink へ渡す request/response body の記録上限として定義されている。
+
+```go
+// maxCaptureBytes は Sink へ渡す request/response body の上限。
+// これを超えた分は捕捉せず、Truncated=true で通知する。
+maxCaptureBytes = 1 << 20 // 1 MiB
+```
+
+しかし `internal/proxy/proxy.go:184` と `internal/proxy/proxy.go:293` では、上流へ送る本物の request body も `readCappedBody(r.Body, maxCaptureBytes)` で読んでいる。
+
+```go
+reqBody, reqTruncated, reqErr := readCappedBody(r.Body, maxCaptureBytes)
+_ = r.Body.Close()
+r.Body = io.NopCloser(bytes.NewReader(reqBody))
+r.ContentLength = int64(len(reqBody))
+```
+
+さらに `internal/proxy/proxy.go:334` のコメントどおり、`readCappedBody` は上限を超えた残りを破棄する。
+
+```go
+// readCappedBody は body を最大 maxBytes 読む。超過分は破棄して truncated=true を返す。
+// 上流送出には ここで読んだ範囲しか渡らないため、超過時の上流動作はベストエフォート。
+```
+
+つまり「記録用に 1MiB で切る」つもりの上限が、「Anthropic / OpenAI へ転送する request body の上限」にもなっている。1MiB を超えた JSON は途中で切られた状態で上流へ届くため、Anthropic が `unexpected end of data` を返す。
+
+今回のスクリーンショットに出ていた `159.7k / 200.0k tokens` は近い値だが、エラー文は context exceeded ではなく JSON parse error なので、直接原因ではない。
+
+## 修正内容
+
+方針（採用）: request body は **捕捉せず素通し**する。当初案（full body を読んで上流へ戻し、記録用に capped copy を作る）も検討したが、request 捕捉の見返りは model 名・message 数サマリ程度（`SummarizeAnthropicRequest`）で、usage の token 数はレスポンス側（`extractTokenUsage(... turn.ResponseBody)`）から取れるため冗長。よって「壊しうる転送経路」を作り込む代わりに、request 捕捉そのものを廃止して `httputil.ReverseProxy` に全文を無加工でストリーム転送させる方針を採った。
+
+- `readCappedBody`（request 専用ヘルパ）を **削除**。未使用化した `io` import も除去。
+- `makeReverseProxy` / `proxyOnceWithToken` の両経路で、request body を読まず・cap せず、`r.Body` / `r.ContentLength` に触れない（ReverseProxy が原 `Content-Length` のまま全文を上流へ流す）。
+- `CapturedTurn.RequestBody` は常に nil、`RequestErr` 廃止、`Truncated` は response 側のみ反映。
+- response 捕捉（`captureWriter`）は従来どおり非破壊（client へ全文素通し、コピーだけ cap）＝今回は変更なし。
+
+```go
+// before（makeReverseProxy / proxyOnceWithToken 共通）
+reqBody, reqTruncated, reqErr := readCappedBody(r.Body, maxCaptureBytes)
+_ = r.Body.Close()
+r.Body = io.NopCloser(bytes.NewReader(reqBody))   // ← 1MiB で切れた body を上流へ送っていた
+r.ContentLength = int64(len(reqBody))
+
+// after
+// request body は読まず ReverseProxy に素通しさせる（上流へ無加工で全文転送）。捕捉は response のみ。
+```
+
+副作用（許容済み）: request を捕捉しないため `chat_proxy.go` の `RequestJSON`（リクエスト表示）と `SummarizeAnthropicRequest` 由来の **model 名・message 数サマリが空**になる。usage の token 数は維持される。model 名ラベルも残したい場合は、レスポンス（Anthropic は `message_start` / 非ストリーム応答に `model` フィールド）から拾う小改修で復元可能だが、今回は未実施。
+
+## 変更ファイル
+
+| ファイル | 内容 |
+|---|---|
+| `internal/proxy/proxy.go` | request 捕捉を廃止し素通し化。`readCappedBody` と `io` import を削除、両経路で `r.Body`/`r.ContentLength` を非加工に。`CapturedTurn.RequestBody` は常に nil、`RequestErr` 廃止、`Truncated` は response のみ反映 |
+
+## 検証
+
+- `go vet ./internal/proxy/` → exit 0（`io` import 除去を含めコンパイル OK）。
+- 手動確認 TODO（Hub を再ビルド・再起動し、セッションを再 spawn した後）:
+  - many-ai-cli 経由の Claude Code で 1MiB 超のリクエスト（画像 Read・長い会話履歴）でも `unexpected end of data` が出ないこと。
+  - usage の token 数（↑/↓ 表示）が従来どおり出ること（レスポンス由来なので残るはず）。
+  - Chat/Workbench のリクエスト表示・model ラベルが空になる程度に留まり、token 数表示は壊れないこと。
+- 自動テスト: 当初案の `proxy_test.go`（1MiB 超転送＋Sink truncate 検証）は、request 捕捉廃止により検証対象自体が消滅。素通しの回帰テストを足すかは保留。
+
+## 備忘
+
+- `maxCaptureBytes` は response 捕捉のみで存続。「観測・保存・表示のための上限」であり「AI API へ転送してよい最大サイズ」ではない、という原則は不変。
+- response body は `captureWriter` が書き込みを素通ししつつ捕捉だけ cap しているため、今回の問題は request body 側だけで起きていた。
+- 当初の修正案は「full body を上流へ、記録用に capped copy」だったが、request 捕捉の価値が低い（model/msg数サマリのみ・token はレスポンス由来）と判断し、**捕捉廃止＋素通し**に変更した（2026-06-17 21:16、ユーザー判断）。これにより「上流を壊しうる転送経路」自体が消えた。
+- なぜ起きたか: response 側は正しく非破壊だったのに request 側だけ「観測用 cap で 1 回読む → その slice を巻き戻して上流へ」と 2 役を融合させたのが原因。1MiB 閾値は育ったセッションでしか超えないため、短いテストでは踏まれず長期間潜伏した。
+- `[様子見]` 理由: コンパイルは通ったが、Hub 再ビルド後の実セッションで 400 が消えること・usage 表示が壊れないことの実機確認が未了。再発なしを確認したら `[完了]` へ。

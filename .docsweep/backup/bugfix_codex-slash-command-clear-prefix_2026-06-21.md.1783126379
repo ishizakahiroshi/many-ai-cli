@@ -1,0 +1,88 @@
+# [対応中] 障害対応記録: Codex で WebUI 経由の slash command が実行されない（`\x15` 前置が阻害）
+
+> 最終更新: 2026-06-21(日) 23:08:54
+
+## 症状
+
+many-ai-cli の WebUI チャット欄から Codex セッションへ `/clear` や `/model` などの slash command を送信しても、Codex 側でコマンドが実行されない。何度送信しても入力欄に `/clear/clear` のように積み重なるだけで、Codex は無応答のまま固まったように見える。
+
+再現手順:
+1. Codex セッションを開く（spawn or attach）
+2. WebUI のチャット欄に `/clear` と入力して Enter
+3. PTY 画面上に `/clear  clear the terminal and start a new chat` の slash command popup が表示される
+4. Codex はコマンド実行に至らず、入力欄に `/clear` が残ったまま
+5. 同じ操作を再度行うと、入力欄に `/clear/clear` と連結される
+
+影響: Codex セッションで slash command が一切使えない。`/model`・`/clear`・その他組み込みコマンドすべて。素ターミナルから直接 `codex` を起動した場合は問題なく動作するため、many-ai-cli 経由のみで発生。
+
+実測ログ `~/.many-ai-cli/logs/sessions/codex_2026-06-21_220055_many-ai-cli_s26.jsonl` に下記 user_input が記録されている:
+
+- 22:09:41 `/clear\r`
+- 22:09:45 `/clear\r`（手動再送）
+- 22:10:01 `/model\r`
+
+それぞれの直後の `pty_output` で popup 表示は確認できるが、コマンド実行用の ANSI 描画は一度も発生していない。
+
+## 根本原因（root cause）
+
+`web/src/app.ts` の入力送信経路が、shell 以外の全 provider 宛に **`\x15`(Ctrl+U) を先頭に前置** している。これは「ビジー時の入力行残骸クリア」を目的に 2026-06-09 `f3ce8c9` で導入された保険的処理で、Claude Code 等の Ink 系 TUI では行クリアとして機能する。
+
+しかし Codex の Rust TUI では `\x15` が行クリアとして解釈されない。実測ログで `\x15/clear` を 2 回送ったところ、`/clear/clear` のように 1 回目の入力が残ったまま 2 回目が連結している事実が観測されており、Codex 側で `\x15` が行クリアとして機能していないことは確定。さらに、この `\x15` 前置の直後に送られる `\r` が Codex 側でコマンド実行に至らない。素ターミナルから `\x15` 無しで `/clear + Enter` を打つと Enter 1 個で実行されるため、差分は `\x15` 前置のみ。
+
+該当箇所:
+
+- `web/src/app.ts:320` `doSend` 内: `const clearPrefix = isShellProvider(...) ? '' : '\x15';`
+- `web/src/app.ts:1024` `sendQuickCommand` 内: `const qcPrefix = isShellProvider(...) ? '' : '\x15';`
+- `web/src/app.ts:818-828` `inputClearBtn` の click handler: `sendText(activeSessionId, '\x15')` を無条件で送信
+
+shell については 2026-06-13 `e168426` で「PowerShell 等で `\x15` がリテラル `^U` 混入する」を理由に既に除外済み。Codex は症状が違うが（リテラル混入ではなく無視）、「`\x15` が行クリアとして機能しない」という抽象原則は shell と共通。
+
+詳細な経緯調査と仮説と確定事実の整理は `docs/local/plan_codex-slash-command-double-enter.md` 参照。
+
+## 修正内容
+
+`web/src/app/approval.ts` に「`\x15` が行クリアとして機能しない provider」を表す抽象ヘルパ `shouldSkipClearPrefix(provider)` を追加し、shell と codex を一括で除外する。`web/src/app.ts` の 3 箇所を新ヘルパに置き換える。`isShellProvider` は他用途（shell 限定の launcher 検知等）で引き続き使われるため残置する。
+
+```typescript
+// before（web/src/app.ts:320）
+const clearPrefix = isShellProvider(sessions.get(sessionId)?.provider || '') ? '' : '\x15';
+
+// after
+const clearPrefix = shouldSkipClearPrefix(sessions.get(sessionId)?.provider || '') ? '' : '\x15';
+```
+
+```typescript
+// added（web/src/app/approval.ts）
+// \x15(Ctrl+U) を行クリアとして解釈しない provider。前置すると逆に悪さをする:
+// - shell: PowerShell 等で行クリアにならずリテラル ^U が混入してコマンドを壊す（2026-06-13 確認）
+// - codex: Rust TUI が \x15 を行クリアとして解釈せず、その上で続く \r がコマンド実行に
+//   至らない（2026-06-21 確認。素ターミナルで \x15 無しなら Enter 1 個で実行できる）
+export function shouldSkipClearPrefix(provider: string): boolean {
+  return provider === 'shell' || provider === 'codex';
+}
+```
+
+`inputClearBtn` の click handler は、Codex セッション活性時に `\x15` 単独送信をスキップ（WebUI のテキストエリアクリアは従来通り行う）。
+
+## 変更ファイル
+
+| ファイル | 内容 |
+|---|---|
+| `web/src/app/approval.ts` | `shouldSkipClearPrefix(provider)` を追加（shell と codex を「`\x15` 前置をスキップする provider」として返す） |
+| `web/src/app.ts` | `doSend` の `clearPrefix` 算出を `shouldSkipClearPrefix` に置き換え。`sendQuickCommand` の `qcPrefix` も同じ。`inputClearBtn` の click handler で codex 活性時は `\x15` 送信をスキップ。`approval.js` の import に `shouldSkipClearPrefix` を追加 |
+
+## 検証
+
+- <TODO: `make build` 後、Codex セッションで WebUI から `/clear` を送信し、コマンド実行されて入力欄が空になることを確認>
+- <TODO: Codex セッションで WebUI から `/model` を送信し、model 選択画面に進むことを確認>
+- <TODO: Codex の通常テキスト送信（非 slash command）が regression なく動作することを確認>
+- <TODO: Claude Code セッションで `/clear` 等が従来通り動作することを確認（`\x15` 前置を維持）>
+- <TODO: shell セッションで `\x15` が送られないことを確認（従来通り）>
+- <TODO: 検証 #1（Codex `/clear` 実行）が NG だった場合の挙動を確認。NG なら仮説（`\x15` 阻害）が崩れるためロールバックして plan に戻る>
+
+## 備忘
+
+- 関連 plan: `docs/local/plan_codex-slash-command-double-enter.md`（経緯調査・仮説と確定事実・採用方針の論拠 4 点を記載）
+- wrapper 層には Codex 向けに別の特例 `internal/wrapper/wrapper.go` の `trailingEnterDelay()` で末尾 `\r` 別チャンク送出に 180ms 遅延が入っている（`bugfix_opencode-enter-lost-conpty_2026-06-17.md` 由来）。本修正はアプリ層のみで wrapper 層には触らない
+- `\x15` 前置の本来目的は「ビジー時の入力行残骸クリア」（`f3ce8c9` のコメント）。Codex で「ビジー時残骸連結」が起きるかは未確認。万一発生したら別 `pending_codex-input-busy-residue.md` を立てて代替手段（BS 連打 / CSI K / 別タイミング送信等）を検討する
+- 「効いていなかった保険を外す」修正のため副作用は無いはずだが、`\x15` を抜くと実行できる蓋然性自体は仮説（Codex Rust TUI のキーマップ未確認）。実装後の検証 #1 が決め手

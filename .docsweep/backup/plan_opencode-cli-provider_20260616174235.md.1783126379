@@ -1,0 +1,254 @@
+# [様子見] OpenCode CLI provider 追加実装計画
+
+> 最終更新: 2026-06-16(火) 18:08:08
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | plan | provider 基盤の再露出（spawn 許可・wrap ディスパッチ・display 名・resolveCmd）+ **承認強制のための `opencode.json` 注入方式の調査と実装** | — |
+| C2 | plan | 承認検出（実機採取済み prompt の実装・矢印+Enter キーマップ）+ slash command / usage link の provider 資源 | C1 完了後 |
+| C3 | plan | Hub UI の OpenCode 再露出（既存痕跡の非表示解除 + spawn dialog / カード / 設定パネル） | C2 完了後 |
+| C4 | plan | README / 設計書を「spawn 非対応（非公開）」から公開 provider へ反映、テスト追加、実機検証項目整理 | C1〜C3 完了後 |
+
+実行順序: `C1 → C2 → C3 → C4`
+
+---
+
+## 概要
+
+AI コーディング CLI **OpenCode**（[sst/opencode](https://github.com/sst/opencode) / 実体 `anomalyco/opencode`、[opencode.ai](https://opencode.ai/)）を many-ai-cli の wrap 対象 provider として **公開**する。既存の `claude` / `codex` / `copilot` / `cursor-agent` と同じく、公式 CLI を PTY で起動し、Hub UI からセッション起動・監視・承認操作を行えるようにする。
+
+**最新データ（2026-06-16 調査・[plan_wrap-candidate-clis-survey.md](../plan_wrap-candidate-clis-survey.md)）**: OpenCode は wrap 候補のうち最有力。MIT・★175k・最終 push 2026-06-16（候補中で最もアクティブ）。`AGENTS.md` instruction file・`opencode run` 非対話・permission "ask" 承認の3点が揃い、wrap 互換性は「可」と評価済み。プロバイダ非依存（Claude/GPT/Gemini/ローカル可）で既存4種と性格がかぶらない。
+
+**重要な経緯**: OpenCode は 2026-05-13 に「WSL 前提」として除外されたが、**2026-05-16 に winget（`SST.opencode`）の Windows ネイティブパッケージが PowerShell / ConPTY で崩れず動作することを確認済み**（[reference_opencode_windows_smoke.md](../reference/reference_opencode_windows_smoke.md)）。除外理由は解消済み。さらに承認 prompt 構造・permission モデル・config 注入の足がかりまで実機採取済みのため、cursor-agent 追加より既知情報が多い。
+
+現状ソースには OpenCode の UI / config / usage-links / 型定義の痕跡が**非表示化された状態で残存**している（設計書 v0.3.x §「OpenCode は spawn 非対応（非公開）」）。本 plan はゼロからの追加ではなく、**既存痕跡の再露出 + spawn 許可リスト追加 + OpenCode 固有の承認・config 注入の実装**が主となる。
+
+provider 名は内部的に `opencode`、表示名は `OpenCode` とする。`cursor-agent` と異なりハイフンを含まないため、JS object キーのクォート等の特殊対応は不要。
+
+---
+
+## 前提（着手前の必須確認）
+
+- **ToS 確認**: OpenCode は MIT ライセンスの OSS であり、公式 CLI を改変せず PTY wrap する構造に規約上の障害は想定しにくいが、`docs/local/reference/reference_provider_tos_review.md` に OpenCode 項目があるか確認する。無ければ MIT / opencode.ai の利用条件を確認し、結論を C1 で plan に追記する（**Gemini CLI が規約上 wrap 対象外となった前例があるため飛ばさない**）。
+- **既存痕跡の棚卸し**: `rg -i opencode` で source / web / config / resources / docs の OpenCode 痕跡をすべて洗い出し、「非表示化されているだけで再利用できる箇所」と「新規追加が必要な箇所」を C1 着手時に仕分ける。削除はしない。
+- **承認集約コンセプトとの整合（最重要設計判断）**: OpenCode の既定 `Build` agent は **書き込み・コマンド実行・削除すべてを承認スキップで自走する**（実機確認済み）。many-ai-cli の「人手承認を 1 画面に集約」というコンセプトを成立させるには、spawn 時にプロジェクトローカル `opencode.json` へ `{"permission": {"*": "ask"}}` を注入し、Build agent でも承認 prompt を強制する必要がある。**この注入方式（ユーザー既存 config を壊さない手段）の確定が本 plan の肝**。C1 で調査・実装する。
+
+---
+
+## 現状と問題
+
+- 現在の公開 provider は `claude` / `codex` / `copilot` / `cursor-agent`。`/api/spawn` のバリデーションはこの 4 provider のみ許可（設計書 v0.3.x §2）。
+- OpenCode は UI / config / usage-links / 型定義に痕跡が残るが spawn 非対応・非公開。
+- provider 文字列は約 30 箇所に分散してハードコードされている（cursor-agent / copilot 追加調査で確認済み）。主な集中点（cursor-agent plan で確認された箇所。**行番号は陳腐化している可能性が高いので着手時に `rg` で再特定する**）:
+  - `cmd/many-ai-cli/main.go` の wrap ディスパッチ `case "claude", "codex", "copilot", "cursor-agent"`、usage 表示
+  - `internal/hub/spawn_handler.go` の provider 許可リスト、provider 別パラメータ処理
+  - `internal/config/config.go` の SlashCmdSources / ApprovalPatternSources / ApprovalProfiles 構造体と `For()`/`WithProvider()` switch、デフォルト URL・Effective 埋め込み
+  - `internal/hub/approval_patterns.go` の `defaultApprovalPatterns` map と `KnownApprovalProviders()`
+  - `internal/wrapper/wrapper.go` の表示名 map・provider 固有引数
+  - `internal/wrapper/pty_windows.go` / `pty_unix.go` の `resolveCmd()`
+  - `internal/hub/approval_detector.go` の native approval 判定・ショートカットキー
+  - web 側: `approval.js` / `spawn-panel.js` / `session-list.js` / `multi-pane.js` / `user-prefs.js` / `settings.js` / `chat-history.js` / `index.html`
+- これらは copilot / cursor-agent 追加で一巡しているため、**cursor-agent の差分コミットを `git log --oneline --all | rg -i cursor` → `git show` で確認すると、opencode で触るべき箇所がほぼ機械的に特定できる**。
+
+---
+
+## 方針
+
+- `many-ai-cli opencode` と `many-ai-cli wrap opencode` を追加する。
+- provider CLI 本体は同梱しない。ユーザーが winget（`SST.opencode`）等で opencode をインストールし、必要なら `opencode providers login` 済みの状態を前提にする。
+- OpenCode の認証情報（`~/.local/share/opencode/auth.json`）には触れず、既存 provider と同じ PTY 素通し構造を維持する。
+- provider 名は内部的に `opencode`、表示名は `OpenCode` に統一する。
+- **PTY ラップ方針（A）を採用**する。`opencode serve` の HTTP API で構造化承認イベントを取る方針（B）は OpenCode の server API 仕様調査が必要なため、本 plan ではスコープ外（将来別 plan）。
+- 承認 UI は **実機採取済みパターンを正本**にする。未採取の文面（bash/shell 系・Reject 応答等）は推測で hardcode せず、実機採取まで TODO として残す。
+- モデル選択は初期版では OpenCode 側の既定に委ねる。安定して使える `-m provider/model` フラグがあるため、spawn dialog でのモデル指定対応は C3 で余裕があれば追加（無ければ既定）。
+- 実装は **cursor-agent / copilot 追加の差分を写経し `opencode` に読み替える**ことを基本戦略とする。新規発明は OpenCode 固有部分（config 注入・矢印 Enter 承認）に限定する。
+
+---
+
+## C1: provider 基盤の再露出 + opencode.json 注入
+
+### 作業内容
+
+- ToS 判定（前提セクション）を確定し、plan 本文に結論を追記する。
+- `rg -i opencode` で既存痕跡を全洗い出しし、再利用箇所と新規箇所を仕分ける。
+- `many-ai-cli opencode` サブコマンドと usage 表示を追加する（`cmd/many-ai-cli/main.go` の wrap ディスパッチ case）。
+- `wrapper.Run` の provider display map に `"opencode": "OpenCode"` を追加する（既存痕跡があれば再有効化）。
+- `resolveCmd()`（`pty_windows.go` / `pty_unix.go`）で `opencode` を解決できるか確認する。winget インストール先 `%LOCALAPPDATA%\Microsoft\WinGet\Packages\SST.opencode_*\opencode.exe` が PATH 経由で引けることは実機確認済み。汎用 `exec.LookPath` 経路で足りるか検証し、必要時のみ Windows PATH fallback を追加する。
+- `/api/spawn` の provider 許可リストに `opencode` を追加する（非公開化されている場合は解除）。
+- spawn 時の引数変換を opencode に合わせて分岐追加する。`opencode [project]`（TUI default）起動 + 必要に応じて `-m provider/model` / `--agent`。
+- **opencode.json 注入の調査と実装（本 C の肝）**:
+  - 注入方式の候補を実機で確認する（[reference_opencode_windows_smoke.md](../reference/reference_opencode_windows_smoke.md) の宿題）:
+    - `--config <path>` 相当のフラグが存在するか（`opencode --help` で確認）
+    - `OPENCODE_CONFIG` 系の環境変数が読まれるか
+    - プロジェクトローカル `<cwd>/opencode.json` の merge 挙動（ユーザー既存設定との合成可否）
+  - いずれかで、ユーザー既存 config を壊さずに `{"permission": {"*": "ask"}}` を注入する方式を確定し実装する。
+  - プロジェクトに既存 `opencode.json` がある場合の扱い（merge / 一時 config 優先 / 環境変数）を決める。
+- session log / transcript / route / model の扱いで `opencode` が未知 provider にならないようにする。
+
+### 変更予定ファイル
+
+- `cmd/many-ai-cli/main.go` — `opencode` サブコマンドと usage 表示
+- `internal/wrapper/wrapper.go` — display 名、provider 固有引数
+- `internal/wrapper/pty_windows.go` / `internal/wrapper/pty_unix.go` — `resolveCmd()` 分岐（必要時のみ）
+- `internal/wrapper/opencode_command.go`（新設・必要時のみ）+ `_test.go` — config 注入・起動引数組み立て
+- `internal/hub/spawn_handler.go` — provider 許可、spawn 引数、risk 判定
+
+### 完了条件
+
+- ToS 判定結果が plan に明記され wrap 可と確定。
+- `many-ai-cli wrap opencode` と `many-ai-cli opencode` が provider `opencode` として Hub に register される。
+- spawn 時にプロジェクトローカルへ承認強制 config が注入され、Build agent でも承認 prompt が出る（または注入方式が確定し実装済み）。
+- ユーザー既存の `opencode.json` を破壊しない。
+- provider CLI が見つからない場合、既存 provider と同等の診断が spawn log / UI に出る。
+- 既存の `claude` / `codex` / `copilot` / `cursor-agent` 起動挙動が変わらない。
+
+---
+
+## C2: 承認検出・provider 資源追加
+
+### 作業内容
+
+- **実機採取済みの承認 prompt（Edit 系）を正本に実装する**（[reference_opencode_windows_smoke.md](../reference/reference_opencode_windows_smoke.md) §「強制 ask モードでの承認 prompt 採取」）:
+  - ヘッダ: `⚠ Permission required`（警告アイコン除く `Permission required` を trigger に）
+  - アクション行: `→ (?P<tool>\S+) (?P<target>.+)` 形式
+  - 選択肢: 固定 3 値 `Allow once` / `Allow always` / `Reject`（横並び 3 ボタン。Claude/Codex とは別ラベルなので個別実装）
+  - 選択方式: **左右矢印で select → Enter で confirm**（数字キー不使用。Claude/Codex の番号体系と別物）
+  - PTY 返送キー: 左右矢印 `\x1b[C` / `\x1b[D` + Enter `\r`
+  - diff プレビュー（`1 + hi` 形式）は Hub UI 承認画面へ転送材料として活用
+- native approval が必要なため `detectNativeApproval("opencode", ...)` に分岐を追加し、`providerSupportsShortcutApproval()` / `approvalShortcutNum()` 相当に opencode のキーマッピング（矢印 + Enter）を追加する。数字ショートカット体系に乗らない場合は cursor-agent の英字キー実装を参考にする。
+- `defaultApprovalPatterns` に `"opencode"` エントリ、`KnownApprovalProviders()` に `"opencode"` を追加する（既存痕跡があれば再有効化）。
+- `config.go` の SlashCmdSources / ApprovalPatternSources / ApprovalProfiles 各構造体・デフォルト定数・`DefaultXxx()`・`EffectiveXxx()`・`For()`/`WithProvider()` に `opencode` を追加する。
+- `approval_patterns_sync.go` の `approvalSourceFor()` に case を追加する。
+- slash command: OpenCode は `ctrl+p` で commands 一覧、`/` の挙動は未採取。取得・整理できる場合は `resources/slash-commands/opencode.md` を追加。無い場合は slash picker 上で「未設定」として扱う。
+- usage link default（`usage_link_fetch.go` / `resources/usage-links/defaults.json`）に OpenCode の usage / billing（`opencode stats` 相当、または opencode.ai のダッシュボード）を追加する。
+
+### 変更予定ファイル
+
+- `internal/hub/approval_detector.go` + `approval_detector_test.go` — opencode 承認 parser（矢印+Enter）とサンプルテスト
+- `internal/hub/approval_patterns.go` — `opencode` を管理対象 provider に追加
+- `internal/hub/approval_patterns_sync.go` — `approvalSourceFor()` に case 追加
+- `internal/config/config.go` + `config_test.go` — approval / slash / usage link / profiles に `opencode` を追加
+- `internal/hub/slash_handlers.go` — slash command 取得対象に `opencode` を追加（取得可能な場合）
+- `internal/hub/usage_link_fetch.go` — usage link default に `opencode` を追加
+- `resources/approval-patterns/opencode.md` — 承認 trigger phrase（採取済み Edit 系を記述。bash/shell 系は実機採取後追記）
+- `resources/slash-commands/opencode.md` — opencode のコマンド一覧（取得可能な場合）
+- `resources/usage-links/defaults.json` — OpenCode usage / billing link
+
+### 完了条件
+
+- 実機で採取済みの opencode Edit 承認 prompt を Hub action-bar として検出できる。
+- action-bar の各ボタンが opencode の期待する矢印 + Enter を送信する。
+- opencode の approval profile が `official` / `custom` の既存運用に乗る。
+- slash command が未対応でも既存 UI がエラー表示で壊れない。
+
+---
+
+## C3: Hub UI 対応（既存痕跡の再露出）
+
+### 作業内容
+
+- **既存の非表示化された OpenCode UI 要素を再露出する**（`opencode-ui-hidden` 系の隠蔽処理を解除。bugfix `bugfix_opencode-ui-hidden-not-applied_2026-05-17.md` の逆操作に相当）。`rg -i opencode web/src` で隠蔽箇所を特定する。
+- spawn dialog の provider 選択肢に OpenCode を追加・露出する（`spawn-panel.js` の visibility toggle、確認ダイアログ分岐）。
+- approval triggers（`approval.js`）に `'opencode'` を追加する。
+- セッションカード / summary chip / model badge / usage menu / settings panel に `opencode` 表示を追加・再露出する:
+  - `session-list.js`（アイコン色・表示名・PROVIDER_LABELS/ORDER）
+  - `multi-pane.js`（バッジ文字）
+  - `chat-history.js`（表示名・バッジ）
+  - `user-prefs.js`（storage key・デフォルト usage link）
+  - `settings.js`（usage link mapping・provider ループ・approval profiles・slash 設定 UI）
+  - `index.html`（usage dropdown に `usage-link-opencode` の `<a>`）
+- 公式ブランドロゴは使わず、既存方針に合わせたカスタムアイコンまたはテキストチップで表示する。
+- provider 色は既存テーマ（claude/codex/copilot/cursor-agent）と衝突しない控えめな色にする（既存痕跡に色定義が残っていれば流用）。
+- opencode 固有の前提（`opencode providers login` 推奨・無料モデルは応答が数分かかり得る旨）を spawn dialog または help text に短く表示する。
+  - 実機知見: 無料モデルは応答に 1〜2 分かかり「ツール発火後の沈黙」が hang に見える。進捗ヒント（spinner / thinking）の継続表示を尊重し、長めのタイムアウトを許容する。
+
+### 変更予定ファイル
+
+- `web/src/app/approval.js` — approval triggers / shortcut 判定に `opencode`
+- `web/src/app/spawn-panel.js` — spawn dialog の選択肢・options toggle・確認文言
+- `web/src/app/session-list.js` — labels/order/icon/色/表示名
+- `web/src/app/multi-pane.js` — バッジ文字
+- `web/src/app/chat-history.js` — 表示名・バッジ
+- `web/src/app/user-prefs.js` — storage key・デフォルト usage link
+- `web/src/app/settings.js` — usage link mapping・provider ループ・approval profiles・slash 設定 UI
+- `web/src/index.html` — provider 選択肢・usage menu link・説明文
+- `web/src/styles/*.css` — `opencode` provider chip / icon / badge のスタイル（既存痕跡があれば流用）
+- `web/src/i18n/en.json` / `web/src/i18n/ja.json` — provider 名・説明の文言
+
+### 完了条件
+
+- Hub UI から `opencode` provider の新規セッションを spawn できる。
+- セッションカードと summary に OpenCode が既存 provider と同じ粒度で表示される。
+- opencode セッションで approval action-bar・slash picker・usage menu が表示崩れしない。
+- モバイル幅・狭い split pane でも provider 名やボタン文言がはみ出さない。
+- 非表示化されていた痕跡が再露出され、隠蔽処理の残骸が UI に矛盾を生まない。
+
+---
+
+## C4: docs・テスト・検証
+
+### 作業内容
+
+- **設計書 `docs/v0.3.x-many-ai-cli-design.md` の §2 公開スコープと §「OpenCode は spawn 非対応（非公開）」を、公開 provider として反映する**（spawn 許可 4 provider → 5 provider、OpenCode 非公開記述の更新）。
+- README / README.ja に opencode provider を追加する（install は winget `SST.opencode` を案内、`opencode providers login` 前提、認証情報に触れない旨）。
+- `docs/local/feature/plan_next-ai-provider-expansion_20260512075539.md` の OpenCode 項目（C3 / 除外維持）を本 plan 参照・実装移行に更新する。
+- `docs/local/feature/plan_wrap-candidate-clis-survey.md` の OpenCode 行を「実装着手・本 plan へ」に更新する。
+- provider 追加で影響する Go 単体テストを追加・更新する（`config_test.go` の default 値、`approval_detector_test.go` の opencode 検出、`server_test.go` のテストセッション）。
+- フロントエンドの静的確認（対象 JS の `node --check`、i18n / usage-link JSON parse、approval parser fixtures）で provider 表示を確認する。
+- 実機検証ログとして、Windows native / Git Bash / WSL launcher 経由のうち今回確認できた範囲を plan に追記する。
+
+### 変更予定ファイル
+
+- `README.md` / `README.ja.md` — provider 一覧、install/usage、security note
+- `docs/v0.3.x-many-ai-cli-design.md` — 公開スコープ・OpenCode 非公開記述の更新
+- `docs/local/feature/plan_next-ai-provider-expansion_20260512075539.md` — OpenCode を本 plan へリンク・実装移行
+- `docs/local/feature/plan_wrap-candidate-clis-survey.md` — OpenCode 行を実装着手に更新
+- `internal/**/*_test.go` — provider 許可・approval parser・config default のテスト
+
+### 完了条件
+
+- `go test ./...` が通る。
+- opencode 未インストール環境で spawn した場合の失敗表示が確認できる。
+- opencode インストール済み環境で Hub への register と PTY 表示が確認できる。
+- README に「公式 CLI をサブプロセス起動するだけで、OpenCode の認証情報には触れない」旨が明記される。
+- 設計書の公開スコープが OpenCode を公開 provider として反映している。
+
+---
+
+## スコープ外
+
+- opencode 本体の同梱・自動インストール
+- OpenCode の認証 token / `auth.json` の読み取り・保存・代理利用
+- `opencode serve` の HTTP API による構造化承認イベント統合（方針 B。将来別 plan）
+- `opencode acp` / `opencode mcp` 等 PTY wrap 以外の統合方式
+- `--dangerously-skip-permissions` の UI 露出（承認集約コンセプトと矛盾するため初期は出さない）
+- 他 provider（Gemini / Antigravity 等）の同時追加
+
+---
+
+## 実装時の注意
+
+- **cursor-agent 追加（[plan_cursor-agent-cli-provider_20260531110517.md](plan_cursor-agent-cli-provider_20260531110517.md)）と copilot 追加の差分を `git show` で確認し `opencode` に読み替えて写経する**のが最短かつ漏れが少ない。
+- provider 追加に伴う許可リストは散在するので、C1 着手時に `rg -i opencode` と `rg "cursor-agent"` の両方で全箇所を洗い出してから着手する。
+- **OpenCode は既存痕跡が非表示化された状態で残るため、ゼロ追加ではなく「再露出」が基本**。削除された前提で新規追加すると重複・矛盾を生む。まず既存痕跡を活かす。
+- **承認集約のための `opencode.json` 注入が成立しないと、Build agent が無承認で自走し many-ai-cli の存在意義が消える**。C1 の注入方式確定を最優先する。
+- opencode の承認は **矢印 + Enter**（数字キーでない）。Claude/Codex の番号体系をそのまま流用しない。cursor-agent の英字キー実装が近い参考。
+- 承認 prompt の未採取分（bash/shell 系・`Allow always` 後の省略挙動・`Reject` の PTY 戻り）は推測で hardcode せず、実機採取まで TODO として残す。
+- ブランド資産は使わず、既存の custom SVG / text chip 方針を守る。
+- README にはインストール前提（winget `SST.opencode`）と、規約変更時にサポート終了し得る旨を既存 provider と同じトーンで入れる。
+
+---
+
+## 関連情報
+
+- 正本テンプレート: [plan_cursor-agent-cli-provider_20260531110517.md](plan_cursor-agent-cli-provider_20260531110517.md)（直近完了した同型 plan）
+- OpenCode 実機調査（Windows ネイティブ・承認 prompt・permission・config 注入の宿題）: [reference_opencode_windows_smoke.md](../reference/reference_opencode_windows_smoke.md)
+- 最新候補調査・確信度: [plan_wrap-candidate-clis-survey.md](../plan_wrap-candidate-clis-survey.md)
+- provider 拡張の総合計画: [plan_next-ai-provider-expansion_20260512075539.md](plan_next-ai-provider-expansion_20260512075539.md)
+- OpenCode provider 旧調査（対象外化前）: `docs/local/archive/v0.2.2/reference_opencode-provider-research_20260512075724.md`
+- OpenCode / Ollama 位置づけ: `docs/local/reference/reference_opencode_ollama_provider_research.md`
+- ToS 判定: `docs/local/reference/reference_provider_tos_review.md`（OpenCode 項目の有無を C1 で確認）
+- 公式 CLI docs: https://opencode.ai/docs/cli/ ／ permissions: https://opencode.ai/docs/permissions/
+- GitHub: https://github.com/sst/opencode ／ winget: `SST.opencode`

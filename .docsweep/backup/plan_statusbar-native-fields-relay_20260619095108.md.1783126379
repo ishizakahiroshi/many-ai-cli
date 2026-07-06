@@ -1,0 +1,151 @@
+# [様子見] ステータスバーに Claude statusLine ネイティブ算出値をさらに引き継ぐ
+
+> 最終更新: 2026-06-19(金) 09:51:08
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | fix | 共有型に新フィールド群を追加（proto/messages.go + web/src/types/proto.ts）— rate_limits / lines / effort / thinking / exceeds_200k / durations | — |
+| C2 | fix | relay→Hub 中継（usagerelay.go パース+payload / usage_stat.go req・struct・clamp・broadcast / server.go snapshot）+ テスト | — |
+| C3 | fix | Web セグメント追加（token-statusbar.ts: rate-limit / AI lines / effort・thinking / 1M マーク / duration 直結 + i18n + css + DETAIL_SEGMENTS） | — |
+| C4 | fix | セグメント表示/非表示トグル設定（config.go / settings.ts / index.html + token-statusbar.ts gate。PUT は read-modify-write で全置換ハンドラに対応） | — |
+
+実行順序: `C1 → C2 → C3 → C4`（全て同一の共有ファイル群を触るため直列。C4 は C3 のセグメントが確定してからトグル対象を結線）
+
+---
+
+## 概要
+
+直前の `plan_ctx-used-percentage-relay` で確立した「Claude Code statusLine が**算出済みの値**を relay→Hub→Web で直結し、Web 側で再計算しない」というパイプを再利用し、同 statusLine が提供する他の有用フィールドを下部バーへ引き継ぐ。公式ドキュメント（`https://code.claude.com/docs/en/statusline.md`）でフィールド一覧を裏取り済み。
+
+引き継ぐ対象（ユーザー選択 1〜6 すべて）:
+
+1. レート制限残量 — `rate_limits.five_hour/seven_day` の `used_percentage` + `resets_at`
+2. AI 編集行数 — `cost.total_lines_added` / `total_lines_removed`
+3. reasoning effort / thinking — `effort.level` / `thinking.enabled`
+4. 1M モード明示フラグ — `exceeds_200k_tokens`（ctx ゲージ強調）
+5. 経過/API 時間の本体直結 — `cost.total_duration_ms` / `total_api_duration_ms`
+6. セグメント表示/非表示トグル（ユーザー設定）
+
+**スコープ外**: 低優先フィールド（`version` / `output_style.name` / `vim.mode` / `agent.name` / `workspace.repo.*`）。`remaining_percentage`（100−used で導出可）。Codex 経路（これらは Claude statusLine 固有で Codex rollout JSONL には無いため、ctx% と同じく Claude 専用＝Codex はフォールバックで該当セグメント非表示）。
+
+## 現状と問題
+
+- 下部バー（`web/src/app/token-statusbar.ts`）は ctx% を `used_percentage` 直結にしたばかり。同じ配管に他フィールドが乗っていない。
+- レート制限の枯渇は many-ai-cli の並列運用で最も重要な情報だが、現状どこにも出ていない。
+- `±git` セグメントは作業ツリー `git diff` 由来で人間/AI の編集が混在。AI 編集量（statusLine の lines）とは別軸。
+- elapsed は `started_at` から Web 自前計算で、本体の `total_duration_ms` とは独立（ずれうる）。
+- relay のパース構造体（`claudeStatusLineInput`）・`hubUsagePayload`・Hub の usage_stat 経路・`proto.Message` はいずれも上記フィールドを持っていない。
+
+## 方針
+
+1. relay が statusLine の対象フィールドを追加パースし、`hubUsagePayload` に乗せて POST。
+2. Hub は新フィールドを受信時にバリデーション/クランプし、`usageStat` 保持 + `usage_stat` メッセージ broadcast + 接続時 snapshot に載せる。
+3. Web は **Claude かつ値が有効なときのみ**各セグメントを表示し、Codex/未取得時は非表示（ctx% と同型）。
+4. セグメント増加で横幅が逼迫するため、ユーザー設定でセグメント単位の表示/非表示を可能にする。デフォルト表示は厳選（重要なものだけ ON）。
+5. 命名は既存規則（Go=パスカル/JSON=snake_case）に倣う。クランプ方針は直前 plan の `ctx_used_pct`（0–100、範囲外→0）に倣う。
+
+不採用: 各項目を個別 context に分ける案。同一共有ファイル（messages.go / usagerelay.go / usage_stat.go / token-statusbar.ts）を全項目が触るため並列不可で、レイヤー別にまとめた方が編集回数が最小で効率的。
+
+---
+
+## C1: 共有型に新フィールド群を追加
+
+### 作業内容
+
+`internal/proto/messages.go` の usage_stat 系 Message と `web/src/types/proto.ts` の `Message` に、以下を追加（全て omitempty / optional、Claude のみ供給）。命名は既存 `ctx_used_pct` 近傍に並べる。
+
+- `rl_5h_pct` (float64) / `rl_5h_reset` (int64, unix epoch) / `rl_7d_pct` (float64) / `rl_7d_reset` (int64)
+- `lines_added` (int) / `lines_removed` (int)
+- `effort_level` (string) / `thinking` (bool)
+- `exceeds_200k` (bool)
+- `duration_ms` (int64) / `api_duration_ms` (int64)
+
+### 変更予定ファイル
+
+- `internal/proto/messages.go` — Message 構造体に上記フィールド追加（struct タグ整列に注意。gofmt は LF 正規化で確認）。
+- `web/src/types/proto.ts` — `Message` 型に対応する optional フィールドを snake_case で追加。
+
+### 完了条件
+
+- `go build ./...` と `bun run check`（tsc）が型エラーなく通る。
+- JSON タグ命名が既存（snake_case）と整合し、Go/TS がミラー一致。
+
+---
+
+## C2: relay→Hub 中継経路で新フィールドを伝搬
+
+### 作業内容
+
+- `claudeStatusLineInput` に対応するパース構造体を追加（`RateLimits.FiveHour/SevenDay.{UsedPercentage,ResetsAt}` / `Cost.{TotalLinesAdded,TotalLinesRemoved,TotalDurationMs,TotalAPIDurationMs}` / `Effort.Level` / `Thinking.Enabled` / `Exceeds200kTokens`）。
+- `hubUsagePayload` に各フィールドを追加し `runClaude` で詰める。
+- `usage_stat.go`: `sessionUsageRequest`・内部 `usageStat`・broadcast Message・range/クランプを追加（pct 0–100→範囲外0 / reset・lines・duration は負値と過大値を弾く、reset は 0=未送）。
+- `server.go`: 接続時 snapshot 送信（`uc.send(proto.Message{...})`）に新フィールドを反映。
+- `usagerelay_test.go`: rate_limits / lines / effort 等を含むサンプル statusLine JSON を足し、payload まで欠落なく伝わることをテーブル駆動で検証（既存 `TestRunClaudePropagatesUsedPercentage` に倣う）。
+
+### 変更予定ファイル
+
+- `internal/usagerelay/usagerelay.go` — パース構造体・`hubUsagePayload`・`runClaude` 詰め込み。
+- `internal/usagerelay/usagerelay_test.go` — 検証ケース追加。
+- `internal/hub/usage_stat.go` — req 構造体・`usageStat`・クランプ・broadcast。
+- `internal/hub/server.go` — snapshot 送信箇所。
+
+### 完了条件
+
+- `go test -count=1 ./internal/usagerelay/... ./internal/hub/...` が通る。
+- Claude statusLine の各フィールドが payload→Message まで欠落なく伝わる（テストで確認）。
+- Codex 経路（該当フィールドなし）は 0/空のまま流れる。
+
+---
+
+## C3: Web セグメント追加（表示層）
+
+### 作業内容
+
+`UsageCacheEntry` に新フィールドを追加し `handleUsageStatMessage` で格納。`renderStatusbar` に以下のセグメントを追加/改修（いずれも `provider==='claude'` かつ値有効時のみ表示、Codex/未取得は `setSeg(..., false)`）:
+
+- **rate-limit**（新規 `tsb-seg-ratelimit`）: `5h 23% · 7d 41%`、tooltip に `resets_at` から相対時刻（「あと2h13mでリセット」）。pct≥90 で crit 色。横断バッジ手前に配置。
+- **AI lines**（新規 `tsb-seg-ailines`）: `AI +156 -23`。project セグメント隣。`±git`（人間/AI 混在）とは別物である旨を tooltip に明記。
+- **effort / thinking**（新規 `tsb-seg-effort`）: `max` バッジ + thinking 有効時 🧠。agent（モデルチップ）セグメント隣。
+- **1M マーク**: 既存 ctx セグメントに `exceeds_200k` で `1M` バッジ/色強調を付与。
+- **duration 直結**: 既存 elapsed を本体 `duration_ms` 優先に（無ければ従来の `started_at` 自前計算へフォールバック）。tooltip に `api_duration_ms / duration_ms` の API 待ち比率。
+- `DETAIL_SEGMENTS`（モバイル詳細モーダル）に新セグメントを追加。
+- i18n キー（`tsb_ratelimit_*` / `tsb_ailines_*` / `tsb_effort_*` 等）を `ja.json` / `en.json` に追加。CSS を `token-statusbar.css` に追加。
+
+### 変更予定ファイル
+
+- `web/src/app/token-statusbar.ts` — `UsageCacheEntry` / `handleUsageStatMessage` / `renderStatusbar` / `DETAIL_SEGMENTS`。
+- `web/src/i18n/ja.json` / `web/src/i18n/en.json` — 新規キー。
+- `web/src/styles/token-statusbar.css` — 新セグメントのスタイル。
+- `web/src/index.html` — 新セグメントの `<span class="tsb-seg-*">` プレースホルダ（既存セグメントに倣う）。
+
+### 完了条件
+
+- `bun run check`（tsc）が通る。
+- Claude セッションで rate-limit / AI lines / effort / 1M / duration が表示され、本体 statusLine と数値が一致。
+- Codex セッション・未取得（null/early-session）で該当セグメントが非表示になり破綻しない。
+
+---
+
+## C4: セグメント表示/非表示トグル設定
+
+### 作業内容
+
+- `config.go`: `UserPrefsTokenStatusbar` に `Segments map[string]bool`（キー=セグメント名 `ctx/tok/cache/compact/cost/burn/ratelimit/ailines/effort/...`、値=表示）を追加。未設定キーはデフォルト表示ポリシーに従う（rate-limit・AI lines・effort・ctx 系は default ON、api 比率など細かいものは default OFF）。
+- `user_prefs_handlers.go`: PUT で `token_statusbar.segments` をマージ保存（既存 `enabled` と同経路）。
+- `settings.ts` / `index.html`: 既存 `token-statusbar-toggle-input` の下にセグメント別チェックボックス群を追加し、`PUT /api/user-prefs` で `{token_statusbar:{segments:{...}}}` を送る。
+- `token-statusbar.ts`: `renderStatusbar` の各セグメント表示判定にユーザー設定 gate を噛ませる。`initTokenStatusbar` で segments を読み込みキャッシュ。
+
+### 変更予定ファイル
+
+- `internal/config/config.go` — `UserPrefsTokenStatusbar` 拡張 + デフォルト判定ヘルパ。
+- `internal/hub/user_prefs_handlers.go` — segments のマージ保存。
+- `web/src/app/settings.ts` / `web/src/index.html` — セグメント別トグル UI。
+- `web/src/app/token-statusbar.ts` — 表示 gate + 設定読み込み。
+
+### 完了条件
+
+- `go test -count=1 ./internal/config/... ./internal/hub/...` と `bun run check` が通る。
+- 設定でセグメントを OFF にすると下部バーから消え、リロード後も維持される。
+- デフォルト（未設定）で重要セグメントが ON、横幅が破綻しない構成で初期表示される。

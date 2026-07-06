@@ -1,0 +1,95 @@
+# [対応中] 障害対応記録: オーケストレーション conductor / 子セッションの起動時案内文が実行されない
+
+## 症状
+
+「オーケストレーション」機能で conductor セッション（ツールバーの「オーケストレーション」ボタン経由で起動、または `orchestrate spawn` で自動生成される子セッション）を spawn しても、起動時に自動投入されるはずの案内文（役割マッピング・`many-ai-cli orchestrate spawn --role <role> "<prompt>"` の使い方など）がターミナル入力欄に文字として表示されるだけで、実際には送信・実行されない。
+
+再現手順:
+1. Hub UI の「オーケストレーション」ボタンから conductor セッションを spawn する
+2. セッション起動直後のターミナル画面を見ると、`❯` の後ろに案内文（"You are an orchestration conductor session…"）が表示されている
+3. ステータスバーが `$0.0000 Sonnet 5 ↑0 ↓0` のままで、Claude 側が何も処理していない（トークン消費ゼロ）。ユーザーが手動でテキストを追加入力するか Enter を押さない限りいつまでも動き出さない
+
+影響: conductor セッション（`internal/hub/server.go` の登録処理で注入）・`orchestrate spawn` で生成される自動子セッション（`internal/hub/orchestration.go` の `handleSpawnChild`）の両方。オーケストレーション機能全体が実質使えない状態だった。
+
+## 根本原因（root cause）
+
+`internal/hub/server.go:1334-1336`（conductor 向け）と `internal/hub/orchestration.go:298-320`（自動子セッション向け）の両方で、案内文の注入 (`injectText(..., true, false)`) が「wrapper が Hub に接続した（＝プロセスが起動した）直後」のタイミングで即座に呼ばれていた。
+
+呼び出し元の `waitForSessionByLabel`（`internal/hub/spawn_handler.go:161-175`）は「wrapper が接続したか」だけをポーリングしており、Claude Code CLI 自身のスプラッシュ描画（ロゴ・Tips バナー・Fable 5 告知等）が終わって readline が実際に入力を受け付ける状態になるまでは待っていない。
+
+`injectText`（`internal/hub/orchestration.go:768-776`）は案内文の末尾に `\r`（Enter）を付けて PTY へ書き込むが、この `\r` が readline 起動前に届くと無視・空撃ちされ、その後に本文テキストだけが入力欄に残る（Enter は既に消費済みのため再送されない）という競合状態になっていた。
+
+実測で裏付けた事実: 実際に起きた conductor セッション（`code_s6` / `many-ai-cli_s9` ログ）では、`pty_output` イベントのみが記録され `user_input` イベントが一件も無く、ステータスバーのトークン消費が 0 のまま数分間停止していた。
+
+## 修正内容
+
+`internal/hub/orchestration.go` に、PTY 出力が一定時間（quiet）静止するまで待つ `waitForInputReady` を追加し、案内文注入の直前に呼び出すようにした。
+
+```go
+// before（server.go 抜粋）
+if childMeta.OrchestrationID != "" && !childMeta.Auto {
+	roles := s.orchestrationRolesFor(childMeta.OrchestrationID)
+	s.injectText(id, buildConductorInitialPrompt(childMeta.OrchestrationID, roles), true, false)
+}
+
+// after
+if childMeta.OrchestrationID != "" && !childMeta.Auto {
+	roles := s.orchestrationRolesFor(childMeta.OrchestrationID)
+	s.waitForInputReady(id, orchestrationInjectQuiet, orchestrationInjectMaxWait)
+	s.injectText(id, buildConductorInitialPrompt(childMeta.OrchestrationID, roles), true, false)
+}
+```
+
+```go
+// orchestration.go に追加した待機ヘルパー
+const (
+	orchestrationInjectQuiet   = 300 * time.Millisecond
+	orchestrationInjectMaxWait = 5 * time.Second
+)
+
+func (s *Server) waitForInputReady(sessionID int, quiet, maxWait time.Duration) {
+	deadline := time.Now().Add(maxWait)
+	for {
+		s.sessionsMu.Lock()
+		ses := s.sessions[sessionID]
+		var last time.Time
+		if ses != nil {
+			last = ses.lastOutputAt
+		}
+		s.sessionsMu.Unlock()
+		if ses == nil {
+			return
+		}
+		if !last.IsZero() && time.Since(last) >= quiet {
+			return
+		}
+		if time.Now().After(deadline) {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+```
+
+`lastOutputAt` は PTY 出力受信のたびに `markRunning`（`server.go:2589-2614`）で更新されるフィールドを流用しており、スプラッシュ描画バーストが収まって 300ms 静止したら注入する。最大 5 秒待っても静止しなければ諦めて注入し、無期限待機は避けている。
+
+同じ注入直前待ちを `handleSpawnChild`（自動子セッション、`orchestration.go:320` 付近）にも適用した。
+
+## 変更ファイル
+
+| ファイル | 内容 |
+|---|---|
+| `internal/hub/orchestration.go` | `waitForInputReady` ヘルパーと `orchestrationInjectQuiet` / `orchestrationInjectMaxWait` 定数を追加。`handleSpawnChild` の注入前に呼び出し |
+| `internal/hub/server.go` | conductor 向け案内文注入の直前に `waitForInputReady` を呼び出すよう変更 |
+
+## 検証
+
+- `go vet ./internal/hub/...` は通過済み
+- <TODO: `make build` で再ビルドし、実際に「オーケストレーション」ボタンから conductor を spawn して案内文が自動実行される（Doodling/思考が始まる）ことを確認する>
+- <TODO: `orchestrate spawn --role <role>` で自動子セッションを生成し、同様に案内文が自動実行されることを確認する>
+- <TODO: 低速環境・重い CWD 等でスプラッシュ描画が 5 秒を超えるケースが無いか確認する（`orchestrationInjectMaxWait` の妥当性）>
+
+## 備忘
+
+- 同種の「spawn 直後にPTYへ即注入する」パターンが他にも無いか（例: `injectApprovalRules` / `injectUsageHooks` はファイル書き込みでありPTY注入ではないため対象外）は今回は未確認。将来 PTY 直接注入を追加する箇所ではこの競合を踏まえること
+- `orchestrationInjectQuiet=300ms` / `orchestrationInjectMaxWait=5s` は経験則による初期値。実機で描画完了までの時間を計測できれば調整余地あり

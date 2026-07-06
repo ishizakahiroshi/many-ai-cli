@@ -22,11 +22,11 @@ const approvalSourceGoVT = "go_vt"
 // PTY チャンクをトリガーにして VT テールを再スキャンする別経路。
 // 同一 sig が検出されても Hub は sig 一致で重複送信をスキップするため二重発火しない。
 var nativeApprovalJaTokens = []string{
-	"許可",           // 「この操作を許可しますか」等
-	"承認",           // 「承認しますか」等
-	"続行",           // 「続行しますか」等
+	"許可",       // 「この操作を許可しますか」等
+	"承認",       // 「承認しますか」等
+	"続行",       // 「続行しますか」等
 	"実行しますか",   // 「コマンドを実行しますか」等
-	"よろしいですか", // 「よろしいですか？」等
+	"よろしいですか",  // 「よろしいですか？」等
 	"確認してください", // 「操作を確認してください」等
 }
 
@@ -78,6 +78,9 @@ func detectNativeApproval(provider string, lines []string) *nativeApproval {
 	contextLines := recent[contextStart:contextEnd]
 	context := strings.Join(contextLines, "\n")
 	question := nativeApprovalQuestion(contextLines, start-contextStart)
+	if provider == "opencode" && looksLikeOpenCodeModelSelector(contextLines) {
+		return nil
+	}
 	if !nativeApprovalLooksValid(provider, contextLines, opts) {
 		return nil
 	}
@@ -96,6 +99,8 @@ func detectNativeApproval(provider string, lines []string) *nativeApproval {
 		kind = "native_copilot_shortcut"
 	} else if provider == "cursor-agent" && approvalOptionsHaveSendText(opts) {
 		kind = "native_cursor_agent_shortcut"
+	} else if provider == "opencode" && approvalOptionsHaveSendText(opts) {
+		kind = "native_opencode_shortcut"
 	}
 	approval := &nativeApproval{
 		Kind:     kind,
@@ -119,7 +124,42 @@ func compactRecentLines(lines []string, limit int) []string {
 	return out
 }
 
+// extractOpenCodeApprovalOptions は OpenCode の水平 3 ボタン UI
+// (Allow once / Allow always / Reject) を検出し合成オプションを返す。
+// "allow once" の文言が PTY バッファに現れた時点でオプションを確定する
+// (初期フォーカスは常に "Allow once"。矢印 + Enter で移動・確定)。
+func extractOpenCodeApprovalOptions(lines []string) []proto.ApprovalOption {
+	for _, line := range lines {
+		if strings.Contains(strings.ToLower(line), "allow once") {
+			return []proto.ApprovalOption{
+				{Num: 1, Label: "Allow once", SendText: "\r", IsCurrent: true, PreserveOrder: true},
+				{Num: 2, Label: "Allow always", SendText: "\x1b[C\r", PreserveOrder: true},
+				{Num: 3, Label: "Reject", SendText: "\x1b[C\x1b[C\r", PreserveOrder: true},
+			}
+		}
+	}
+	return nil
+}
+
+func looksLikeOpenCodeModelSelector(lines []string) bool {
+	context := strings.ToLower(strings.Join(lines, "\n"))
+	if !strings.Contains(context, "select model") {
+		return false
+	}
+	return strings.Contains(context, "connect provider") ||
+		strings.Contains(context, "favorite") ||
+		strings.Contains(context, "opencode zen") ||
+		strings.Contains(context, "ollama (local)") ||
+		strings.Contains(context, "recent")
+}
+
 func extractNativeApprovalOptions(provider string, lines []string) ([]proto.ApprovalOption, int, int) {
+	if provider == "opencode" {
+		if opts := extractOpenCodeApprovalOptions(lines); len(opts) >= 2 {
+			return opts, 0, len(lines) - 1
+		}
+		return nil, -1, -1
+	}
 	type parsedLine struct {
 		opt proto.ApprovalOption
 		idx int
@@ -433,20 +473,11 @@ func nativeApprovalLooksValid(provider string, contextLines []string, opts []pro
 	if providerSupportsShortcutApproval(provider) && approvalOptionsHaveSendText(opts) {
 		return hasHint
 	}
-	// Claude Code の /model 等のセレクタ型ダイアログは、選択肢ラベルが
-	// "Default" / "Fable" / "Sonnet" のようにモデル名等であり承認語を含まない。
-	// hasApprovalLabel を要求すると検出されず action-bar が出ないため、
-	// ユーザーが /model を再送 → その Enter が開いたままのダイアログを即確定する
-	// 事故が起きる。
-	// カーソル付き選択肢 + キー操作ヒント行（"Enter to ..." と "Esc to cancel" の併記）が
-	// 揃う場合はセレクタ UI とみなし、承認語ラベルなしでも許容する。
-	isSelectorDialog := provider == "claude" &&
-		approvalOptionsHaveCursor(opts) &&
-		strings.Contains(context, "esc to cancel") &&
-		strings.Contains(context, "enter to")
-	if isSelectorDialog {
-		return true
-	}
+	// Claude / Grok の /model 等カーソル駆動セレクタ型ダイアログは Hub の action-bar に出さない。
+	// 全 AI で UX を統一する方針（codex / opencode の /model も isModelSelectorContext で
+	// 抑制済み）。承認語ラベルを含まない選択肢は承認ではないため、ここでも false を返し
+	// 端末直操作へフォールバックさせる（過去には isSelectorDialog 分岐で許容していたが、
+	// 「ポップアップ不要・全 AI 統一」のユーザー要望で削除）。
 	return hasHint && hasApprovalLabel
 }
 
