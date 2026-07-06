@@ -331,15 +331,16 @@ export function attachTerminal(id) {
     // DOM 再配置で WebGL canvas の描画バッファが失われるため、移動前に破棄する
     disableWebglRenderer(t);
     area.innerHTML = '';
-    area.appendChild(t.container);
-    releaseHiddenWebglRenderers();
     t.autoScroll = true;
     updateScrollLockBtn(false);
-    requestAnimationFrame(() => {
-      if (!terminals.has(id)) return;
-      // 非アクティブ中の chunks は、その間 PTY が使っていた旧 cols/rows のまま先に反映する。
-      // 先に fit すると、TUI の古い幅の再描画フレームが別幅で解釈されて上部に残像が出る。
-      flushPending(id);
+    // 非アクティブ中の chunks は DOM へ戻す前に反映する。
+    // 表示後に flush すると、古い viewport から最新行までスクロールしていく様子が見えてしまう。
+    flushPending(id, () => {
+      if (!terminals.has(id) || activeSessionId !== id) return;
+      area.appendChild(t.container);
+      releaseHiddenWebglRenderers();
+      t.term.scrollToBottom();
+      syncViewportScrollbarToBottom(t);
       const prevCols = t.term.cols;
       const prevRows = t.term.rows;
       fitTerminalPreservingBottom(t, id);
@@ -558,7 +559,7 @@ export function queuePendingTerminalChunk(id, bytes) {
   }
 }
 
-export function flushPending(id) {
+export function flushPending(id, onDrained: (() => void) | null = null) {
   const t = terminals.get(id);
   if (!t) return;
   const chunks = t.pendingChunks;
@@ -567,6 +568,7 @@ export function flushPending(id) {
   if (chunks.length === 0) {
     if (t.autoScroll) { t.term.scrollToBottom(); syncViewportScrollbarToBottom(t); }
     scheduleApprovalCheck(id);
+    if (onDrained) onDrained();
     return;
   }
   const seq = (t.pendingFlushSeq || 0) + 1;
@@ -589,11 +591,12 @@ export function flushPending(id) {
     }
     latest.pendingFlushActive = false;
     if (latest.pendingChunks.length > 0) {
-      requestAnimationFrame(() => flushPending(id));
+      requestAnimationFrame(() => flushPending(id, onDrained));
       return;
     }
     if (latest.autoScroll) { latest.term.scrollToBottom(); syncViewportScrollbarToBottom(latest); }
     scheduleApprovalCheck(id);
+    if (onDrained) onDrained();
   };
   t.pendingFlushWatchdog = setTimeout(finish, TERMINAL_WRITE_FLUSH_WATCHDOG_MS);
 

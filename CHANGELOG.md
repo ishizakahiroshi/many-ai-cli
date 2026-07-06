@@ -10,30 +10,6 @@ Release artifacts are published at
 
 ## [Unreleased]
 
-### Fixed
-- **WebGL terminal renderer works again (vendored xterm.js generation mismatch).**
-  The vendored `xterm-addon-webgl.min.js` had been updated to 0.19.0 (the
-  xterm.js 6.0.0 generation, which requires the `mainDocument` API of the
-  terminal core), while `xterm.min.js` and the fit / unicode11 / web-links
-  addons were still the older 5.x-generation files — only the license ledger
-  and the About dialog had been bumped to 6.0.0. Every `loadAddon` call then
-  threw `Cannot read properties of undefined (reading 'createElement')` inside
-  the addon, so the UI silently fell back to the DOM renderer on each session
-  switch, re-introducing the fullwidth-glyph / selection-highlight drift the
-  WebGL renderer exists to fix. The vendored core (`xterm.min.js`,
-  `xterm.min.css`) and the three addons are now the actual 6.0.0-generation
-  artifacts, matching the ledger.
-- **Orchestration fallback ID no longer collides across Hub restarts.** When a
-  conductor started a child via `spawn-child` without going through
-  `/api/orchestration/create`, the orchestration ID was `s<parentSessionID>`
-  (e.g. `s3`). After a Hub restart the session number was reassigned from #1,
-  so the same conductor session ID could reuse the previous run's
-  `~/.many-ai-cli/orchestration/s<N>/board.md` (header/purpose stayed from the
-  old run) and its `child-<sessionID>.md` history. The fallback is now
-  `s<parentSessionID>-<UnixNano>`, which is unique per Hub start. Existing
-  `s<N>/` folders are harmless leftovers and can be moved aside or deleted
-  manually.
-
 ## [0.4.0] - 2026-07-05
 
 ### Removed
@@ -170,6 +146,36 @@ Release artifacts are published at
   (`approval-popup-cross-session-leak`).
 - Local-LLM routing fixes for Qwen via LM Studio / Ollama
   (`local-llm-qwen-lmstudio-ollama-unusable`).
+- **WebGL terminal renderer works again (vendored xterm.js generation mismatch).**
+  The vendored `xterm-addon-webgl.min.js` had been updated to 0.19.0 (the
+  xterm.js 6.0.0 generation, which requires the `mainDocument` API of the
+  terminal core), while `xterm.min.js` and the fit / unicode11 / web-links
+  addons were still the older 5.x-generation files — only the license ledger
+  and the About dialog had been bumped to 6.0.0. Every `loadAddon` call then
+  threw `Cannot read properties of undefined (reading 'createElement')` inside
+  the addon, so the UI silently fell back to the DOM renderer on each session
+  switch, re-introducing the fullwidth-glyph / selection-highlight drift the
+  WebGL renderer exists to fix. The vendored core (`xterm.min.js`,
+  `xterm.min.css`) and the three addons are now the actual 6.0.0-generation
+  artifacts, matching the ledger.
+- **Orchestration fallback ID no longer collides across Hub restarts.** When a
+  conductor started a child via `spawn-child` without going through
+  `/api/orchestration/create`, the orchestration ID was `s<parentSessionID>`
+  (e.g. `s3`). After a Hub restart the session number was reassigned from #1,
+  so the same conductor session ID could reuse the previous run's
+  `~/.many-ai-cli/orchestration/s<N>/board.md` (header/purpose stayed from the
+  old run) and its `child-<sessionID>.md` history. The fallback is now
+  `s<parentSessionID>-<UnixNano>`, which is unique per Hub start. Existing
+  `s<N>/` folders are harmless leftovers and can be moved aside or deleted
+  manually.
+- **No more scroll residue when switching between terminals.** `attachTerminal`
+  used to append the terminal DOM node first and then flush the buffered
+  chunks that had accumulated while the tab was hidden, which made the target
+  tab briefly show the pre-switch viewport and then scroll down through the
+  buffered output. `flushPending` now takes an `onDrained` callback, and
+  `attachTerminal` flushes first — appending the container, releasing hidden
+  WebGL renderers, scrolling to the bottom, and fitting the terminal only
+  after the buffered chunks are fully written.
 
 ## [0.3.4] - 2026-06-22
 
