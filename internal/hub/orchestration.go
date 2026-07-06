@@ -931,19 +931,6 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 	}
 }
 
-func detectBoardDoneRoles(text string) []string {
-	events := detectBoardDoneEvents(text)
-	var roles []string
-	seen := map[string]bool{}
-	for _, ev := range events {
-		if ev.Role != "" && !seen[ev.Role] {
-			roles = append(roles, ev.Role)
-			seen[ev.Role] = true
-		}
-	}
-	return roles
-}
-
 func detectBoardDoneEvents(text string) []boardDoneEvent {
 	var events []boardDoneEvent
 	seen := map[boardDoneEvent]bool{}
@@ -967,14 +954,6 @@ func detectBoardDoneEvents(text string) []boardDoneEvent {
 		}
 	}
 	return events
-}
-
-func detectLastBoardRole(text string) string {
-	writer := detectLastBoardWriter(text)
-	if writer.Role == "" {
-		return "unknown"
-	}
-	return writer.Role
 }
 
 func detectLastBoardWriter(text string) boardWriter {
@@ -1314,6 +1293,9 @@ func (s *Server) prepareChildWorktree(cwd, orchestrationID, role string, cfg con
 	}
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel2()
+	// #nosec G702 -- exec.CommandContext は argv 直接渡しで shell を介さないため
+	// 「コマンド注入」経路が無い。branch と childDir は safeToken() 済み、cwd は自ホストの
+	// session cwd（ユーザー本人が指定した自マシンのパス）。
 	cmd := exec.CommandContext(ctx2, "git", "-C", cwd, "worktree", "add", "-b", branch, childDir)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return cwd, "", "worktree skip: " + strings.TrimSpace(string(out)) + " " + err.Error()

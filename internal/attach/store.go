@@ -108,8 +108,10 @@ func attachmentInject(provider, abs string) (string, error) {
 		return "@" + abs + " ", nil
 	case "codex":
 		// Codex の @mention と同じくパスをそのまま渡し、Windows の区切りだけ
-		// composer が扱う slash 形式へ正規化する。
-		return "@" + filepath.ToSlash(abs) + " ", nil
+		// composer が扱う slash 形式へ正規化する。ToSlash はホスト OS が Unix
+		// だと no-op になるため（Linux/macOS の CI で Windows 由来パスの変換が
+		// 効かない）、明示的に "\\" を "/" へ置換する。
+		return "@" + strings.ReplaceAll(abs, `\`, "/") + " ", nil
 	default:
 		// fallback for future providers: bare path
 		return abs + " ", nil
