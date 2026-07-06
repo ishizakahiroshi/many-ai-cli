@@ -87,7 +87,10 @@ func prepareOpenCodeConfig(cwd string, permissionValue string) (cleanup func(), 
 
 	cleanup = func() {
 		if existed {
-			_ = os.WriteFile(cfgPath, orig, 0o600)
+			// cfgPath は起動時に読み込んだのと同じ session cwd + "opencode.json" で、
+			// orig もそのファイルから読み込んだ元の内容。ユーザーが自分のマシンで自分の
+			// cwd を指定しているため path traversal のリスクは無い。
+			_ = os.WriteFile(cfgPath, orig, 0o600) // #nosec G703 -- cfgPath は起動時に読んだのと同じ session cwd + opencode.json、orig は同ファイル由来
 		} else {
 			_ = os.Remove(cfgPath)
 		}
