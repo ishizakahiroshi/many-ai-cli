@@ -10,6 +10,8 @@ import (
 	"unicode"
 
 	"gopkg.in/yaml.v3"
+
+	"many-ai-cli/internal/securefile"
 )
 
 const (
@@ -155,7 +157,14 @@ func SaveProfiles(pf *ProfilesFile) error {
 	if err := os.Chmod(tmpName, 0o600); err != nil {
 		return fmt.Errorf("chmod temp launcher profiles: %w", err)
 	}
-	return os.Rename(tmpName, path)
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	// C6 (plan_audit_score_s_promotion_2026-07-05.md): Windows NTFS DACL 明示制限。
+	// launcher-profiles.yaml は identity_file / host / user / token_command を含む
+	// ため他ローカルユーザーに読ませない。失敗しても書き込み自体は成功なので silent 続行。
+	_ = securefile.RestrictFile(path)
+	return nil
 }
 
 // Validate checks all profiles in pf for correctness.
@@ -207,7 +216,39 @@ func validateWSL(p Profile, idx int) error {
 	if err := validatePort(p.HubPort, false, "hub_port", p.Name, idx); err != nil {
 		return err
 	}
+	// wsl.exe argument-injection 対策。Distro / CWD / Binary は wsl.exe に
+	// `-d <Distro>` / `--cd <CWD>` / `<Binary>` として素通しで渡すため、
+	// `-` 始まりを拒否する（validateSSH と同型に SSH 側と非対称だった穴を埋める）。
+	for _, f := range []struct{ name, val string }{
+		{"distro", p.Distro},
+		{"cwd", p.CWD},
+		{"binary", p.Binary},
+	} {
+		if strings.HasPrefix(f.val, "-") {
+			return fmt.Errorf("profile[%d] %q: %s must not start with '-' (got %q)", idx, p.Name, f.name, f.val)
+		}
+	}
+	// 制御文字は wsl.exe への argv 分割を狂わせるため常に拒否する。
+	// Distro（Linux ディストリ名）と Binary（実行ファイル名）は空白も拒否する
+	// が、CWD は Windows パス（`C:\Program Files\...`）や Linux パス（スペース
+	// 込みのディレクトリ名）を含み得るので空白は許容し制御文字だけ弾く。
+	for _, f := range []struct{ name, val string }{
+		{"distro", p.Distro},
+		{"binary", p.Binary},
+	} {
+		if strings.IndexFunc(f.val, isSpaceOrControl) >= 0 {
+			return fmt.Errorf("profile[%d] %q: %s must not contain whitespace or control characters", idx, p.Name, f.name)
+		}
+	}
+	if strings.IndexFunc(p.CWD, isControlChar) >= 0 {
+		return fmt.Errorf("profile[%d] %q: cwd must not contain control characters", idx, p.Name)
+	}
 	return nil
+}
+
+// isControlChar は ASCII 制御文字（0x00-0x1F と DEL）のみを拒否する。空白は許可する。
+func isControlChar(r rune) bool {
+	return r < 0x20 || r == 0x7f
 }
 
 func validateSSH(p Profile, idx int) error {

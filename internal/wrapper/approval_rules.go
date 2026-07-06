@@ -7,12 +7,14 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"many-ai-cli/internal/securefile"
 )
 
 const claudeImportLine = "@~/.many-ai-cli/approval-rules.md"
 const sharedBlockStart = "<!-- any-ai-cli:approval-rules -->"
 const sharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
-const rulesVersion = "15"
+const rulesVersion = "17"
 
 var rulesFileContent = strings.Join([]string{
 	fmt.Sprintf("<!-- version: %s -->", rulesVersion),
@@ -41,6 +43,15 @@ var rulesFileContent = strings.Join([]string{
 	"理由: これらは Web ダッシュボードの xterm.js 上で文字化けし、再描画されるピッカーを VT スクレイプで Web ボタン化する過程で**選択肢の番号が Web 側ボタンとズレ、ユーザーが誤った項目を選んでしまう**（過去に繰り返し発生）。",
 	"ユーザーへの確認・選択は、例外なく下記 [MANY-AI-CLI] マーカー（YES/NO・番号付き選択肢・複数質問・#multi 複数選択）のテキストで出力すること。`AskUserQuestion` は呼ばない。",
 	"（例外: CLI 本体がツール実行許可のために出すネイティブ承認プロンプトはこの限りではない。禁止対象は AI が自発的に出す選択 UI のみ。）",
+	"",
+	"**⚠️ もう一つの禁止事項: 説明文（prose）の中で承認マーカー文字列を「リテラル」で引用しないこと。**",
+	"承認マーカーとは本ファイル冒頭で定義した OPEN（開始マーカー） / CLOSE（終了マーカー） / DONE-OPEN（完了マーカー開始） / DONE-CLOSE（完了マーカー終了）の 4 文字列を指す（具体形は本ファイル中の例示部分を参照）。これらを **承認マーカーブロックの外、つまり通常の説明文として AI がターン出力するときは絶対にリテラルで書かないこと**。バッククォート囲み・コードブロック・引用ブロックでも区別されない（hub-marker-filter は装飾を見ず生バイト列でマーカー出現を判定する）。",
+	"説明したいときの代替表記:",
+	"- 「OPEN マーカー」「CLOSE マーカー」（または「開始マーカー」「終了マーカー」）",
+	"- 「DONE 開始マーカー」「DONE 終了マーカー」",
+	"- 「承認マーカー」「完了マーカー」と総称で済ませる",
+	"理由: Web ダッシュボード側の hub-marker-filter は prose 内のリテラル引用を本物マーカーと区別できず、開始マーカーが現れた瞬間から対応する終了マーカーまで（あるいは終了マーカーが来ないまま応答が終わる場合は応答末尾まで）の本文を UI に表示しなくなる。結果、ユーザーから見ると AI 応答が途中でぷっつり切れて再送を強いられる（2026-06-23 セッション #8 で多発・docs/local/bugfix_hub-marker-filter-prose-literal-collision_2026-06-23.md）。",
+	"なお、本ファイル `approval-rules.md` 自身は AI に承認マーカー仕様を教える文書として例示が必要なため、本文中にリテラルがそのまま現れる。これは AI が本ファイルを Read する瞬間の話であり、AI のターン出力に乗らない限り filter には届かない。AI は本ファイルを Read した後の **自分のターン出力で同じ引用を真似しない** こと。",
 	"",
 	"- YES/NO:",
 	"  [MANY-AI-CLI]",
@@ -127,6 +138,11 @@ var rulesFileContent = strings.Join([]string{
 	"- マーカーは 1 ターン 1 回のみ、返答の末尾に出力する。",
 	"- 通常の会話・質問への回答・作業途中には出力しない（タスク完了時のみ）。",
 	"",
+	"## many-ai-cli Orchestration Error Format",
+	"",
+	"Hub から `[MANY-AI-CLI-ORCHESTRATION-ERROR]` で始まる 1 行が入力された場合、指揮者セッションは子セッションの起動上限・timeout・Hub 側 orchestration 失敗として扱うこと。",
+	"その子に依存する作業は、既存の子へ再分配するか、必要ならユーザーへ判断を求めること。通常の完了サマリーとは混同しないこと。",
+	"",
 }, "\n")
 
 // centralRulesPath は ~/.many-ai-cli/approval-rules.md のパスを返す
@@ -151,6 +167,11 @@ func SyncRulesFile() error {
 	if err := os.Chmod(dir, 0o700); err != nil { // #nosec G302 -- ディレクトリには実行ビットが必要（0700 は所有者限定で適切）
 		return fmt.Errorf("chmod %s: %w", dir, err)
 	}
+	// C6 (plan_audit_score_s_promotion_2026-07-05.md): Windows で NTFS DACL を明示
+	// 制限する。rules ファイル自体は 0o644 で書かれるが、ディレクトリを狭めることで
+	// 他ユーザーが不正内容を書き込む経路を防ぐ (承認バイパス誘導への防御)。
+	// 失敗しても mkdir/chmod は成功しているので silent 続行。
+	_ = securefile.EnsurePrivateDir(dir)
 	if data, err := os.ReadFile(path); err == nil {
 		firstLine := ""
 		if idx := strings.IndexByte(string(data), '\n'); idx >= 0 {

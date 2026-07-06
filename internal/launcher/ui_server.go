@@ -351,6 +351,15 @@ func (s *UIServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 		writeUIError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// ディスク上のプロファイルは通常 POST /save 経由で validate 済みだが、
+	// 手編集や古いバージョンで書かれた YAML が残る可能性がある。SSH の
+	// `-oProxyCommand=...` 等の引数注入を防ぐため、接続前に全プロファイルを
+	// 再検証する（validateSSH は Host/User/Binary/IdentityFile が `-` で始まる
+	// 値を拒否）。
+	if err := Validate(pf); err != nil {
+		writeUIError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	var profile Profile
 	found := false
 	for _, p := range pf.Profiles {

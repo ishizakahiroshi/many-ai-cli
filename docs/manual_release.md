@@ -1,6 +1,6 @@
 # many-ai-cli リリース手順
 
-> 最終更新: 2026-06-14(日) 03:22:52 — 「落とし穴と再発防止」節を追加（v0.3.0 公開で踏んだ goreleaser/npm/CI 検証の問題を再発防止用に集約）
+> 最終更新: 2026-06-22(月) 20:35:33 — v0.3.4 で `git merge hotfix/*` を develop で実行してしまい再び version stale が起きた事故を受けて、`.github/workflows/backport-to-develop.yml` で自動 backport を導入。手順節も「自動化済み」前提に書き換え、「hotfix を develop に直接 merge してはいけない」禁止事項とローカルビルドでの異常検知（Makefile の git describe ldflags 注入）を併記
 
 この手順は GitHub Actions の `Release` workflow と GoReleaser で GitHub Releases を作成するための恒久運用メモ。
 **特定バージョンの実行チェックリスト**は別途用意する（v0.3.0 は `docs/local/manual_release-v0-3-0_2026-06-13.md`）。本書は版に依らない方式・設計・注意点を扱う。
@@ -55,6 +55,48 @@ v0.3.2 はタグ前に `develop` だけ見て進めたため、main push で初�
 - **`THIRD_PARTY_NOTICES.md` と `CHANGELOG.md` の link refs は手動更新が必要**: 前者は `go.sum` が動いていれば必ず再生成（v0.3.2 では `golang-jwt/jwt/v5` が v5.2.1→v5.2.2 にズレて Validate で落ちた）。後者は `[Unreleased]: compare/vX.Y.Z...HEAD` の更新と `[NEW.VER]: compare/...` 行の追加が**毎回**要る（v0.3.2 では忘れて事後 patch commit が必要に）。⚠️ 対策: 既述の「タグを打つ前の確認」リストに「`scripts/local/gen-third-party-notices.ps1` を実行して `git status` clean」「CHANGELOG.md 末尾の link refs に `[NEW.VER]` を追加」を明示。
 - **npm zombie 整理（試行 publish の残骸）**: 初回 publish 時に 0.0.1 を「枠取り」で出していると、本番版 publish 後も `npm view <pkg> versions` に 0.0.1 が居座る。`latest` tag は新版を指すので利用者には影響しないが、見栄え上は塞いでおく。**`npm deprecate <pkg>@0.0.1 "Use <pkg>@<NEW.VER> or later. ..."`** で塞ぐ。**2FA 有効アカウントでは `npm deprecate` ごとに毎回ブラウザ web auth が走る**（OTP 投入ではなく web 認可フロー）ので、URL を開いて Authorize → ターミナルで Enter、を**バージョン × パッケージの件数分**繰り返す。granular publish:write token を使えば省略可だが期限あり（90 日）。
 - **winget は「公開済み」と書かない**: 過去 3 リリース分（v0.3.0 / v0.3.1 / v0.3.2）の PR がすべて **microsoft/winget-pkgs 側で OPEN のまま滞留**（New-Package モデレータ承認待ち）。GoReleaser が PR は作るが、merge は Microsoft 中の人の手動承認なのでこちらから動かせない。README / note / 配布告知では「winget で入る」と書くと**嘘になる**。「申請中」表記にするか、winget 行ごと省いて npm / Homebrew / GitHub Release 直 DL の 3 経路で案内するのが安全。merge されたら追記する運用に。
+
+## ブランチ運用と hotfix の develop 戻し（自動化済み）
+
+このプロジェクトは main / develop の 2 ブランチで運用する。
+
+- **main** = 安定リリース版。タグ（`vX.Y.Z`）を打つのは常に main 上。
+- **develop** = 次バージョンの開発場所。完成したら main へ merge してタグを打つ。
+- **hotfix** = main に出ているバグの緊急修正。main から分岐し、直して main へ戻し、新パッチタグ（例 `v0.3.3`）を打つ。
+
+### 自動 backport（v0.3.4 以降）
+
+タグ `v*.*.*` を push すると `.github/workflows/backport-to-develop.yml` が起動し、main を develop へ自動マージする。手動戻しは原則不要:
+
+- clean merge できれば develop に直接 push する
+- 競合があれば issue を作って人間に通知する（competition の出る release はまれだが、CHANGELOG `## [Unreleased]` 節と新リリース節が同時編集された等で起きる）
+
+過去事故: v0.3.3 で hotfix を develop に戻し忘れて develop のビルドが v0.3.2 表示になった。v0.3.4 では `git merge hotfix/v0.3.4` を develop で実行してしまい、内容は入ったが v0.3.4 タグ commit (`193f94f`) が develop の祖先にならず、再び古い v0.3.3 表示が出た。**自動化はこの 2 件の再発防止のために導入された**。
+
+### やってはいけないこと
+
+**hotfix を main にマージしたあと、hotfix branch を develop に**直接** merge してはいけない**（`git merge hotfix/*` を develop 上で実行しない）。内容は同じだが、v0.3.4 タグが付いている main 側の merge commit を develop の祖先に入れないため、`git describe` が新タグを認識せず、ローカルビルドの版数表示が古いまま固まる。develop 戻しは **必ず main を指定する**（`git merge main`）。自動 backport workflow も内部で `git merge origin/main` を使っているので、原則ここを触る必要はない。
+
+### 自動 backport が動かなかった場合の手動 fallback
+
+CI を一時的に止めている、または backport workflow が失敗した場合の手動手順:
+
+```powershell
+git switch develop
+git merge main --no-edit   # CHANGELOG 等が競合したら、両方の節（Unreleased とリリース節）を残す形で解消
+git push origin develop
+```
+
+戻せているかの確認（最新タグが develop の祖先になっていれば OK）:
+
+```powershell
+git merge-base --is-ancestor (git describe --tags --abbrev=0 main) develop
+# 終了コード 0 = OK / 1 = develop が最新タグを取り込めていない
+```
+
+### ローカルビルドの版数表示で異常を検知する（二重の安全網）
+
+`Makefile` は `make build` のたびに `git describe --tags --always --dirty` を `-X main.version` に注入する。develop が main の最新タグを取り込み損ねていると、Hub UI の表示が `0.3.3-21-g3664cac` のように "タグから距離が離れた形" になり、目視で気付ける。クリーンに backport が済んでいれば `0.3.4-N-g<sha>` のように直近タグからの形になる。**Hub UI 設定モーダルの版数が "古いメジャー" を指していたら、まず `git merge-base --is-ancestor v<latest> develop` を確認する**。
 
 ## 現在のリリース方式
 
@@ -251,19 +293,23 @@ git tag v0.3.0  ── push ──┐
 
 `resources/` 配下の以下は、リリースのタグやバイナリとは独立に、実行時に GitHub の `main` ブランチから raw fetch される（リビルド不要・トークン消費 0 で更新できる仕組み。実装は `internal/config/config.go` の `Default*Source` と `internal/hub/slash_cmd_fetch.go` 等を参照）。
 
-- `resources/slash-commands/claude.md` / `codex.md` / `copilot.md`
+- `resources/slash-commands/claude.md` / `codex.md` / `copilot.md` / `cursor-agent.md` / `opencode.md`
 - `resources/approval-patterns/claude.md` / `codex.md` / `copilot.md` / `common.md`
 - `resources/usage-links/defaults.json`
 - `resources/models/defaults.json`
 
 取得元はいずれも `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/...`。つまり **`main` に push した瞬間、全ユーザーの取得元が切り替わる**（Hub 側 24h キャッシュ TTL の範囲で順次反映）。バイナリの version とは無関係に live に効くため、リリース commit を `main` に入れる前に、ローカル作業ツリーと GitHub `main` 公開分の差分を必ず確認する。
 
-> **鮮度の再チェックは別オペ**: 以下の差分確認は「ローカルと公開分が食い違っていないか（drift）」を見るもので、「`resources/slash-commands/*.md` そのものが各プロバイダー本家の最新コマンドに対して古くないか（freshness）」は別の話。リリース前に本家コマンドの追加・削除を取り込みたい場合は先に [manual_slash_commands_update.md](manual_slash_commands_update.md) の C1〜C2 を実施し、その結果をこの差分確認に通すこと。
+> **鮮度（freshness）と drift は別オペ**: 以下の差分確認は「ローカルと公開分が食い違っていないか（drift）」を見るもので、「`resources/slash-commands/*.md` そのものが各プロバイダー本家の最新コマンドに対して古くないか（freshness）」は別の話。
+>
+> freshness は `release` スキルの前提チェックに組み込み済み: `repo == many-ai-cli` のとき `slash-commands-update` の **preflight** が走り、最新 `docs/local/slash-command-freshness_YYYY-MM-DD.md` が期限内に存在し、**未判断差分（`decision = pending`）が残っていないこと**を確認する。pending が残るとタグを打たせない（採否＝`accepted` / `deferred: 理由` を release md に書くまでブロック）。`unknown`（source 取得不能・opencode 等）は既定で警告のみ。
+>
+> リリース前に本家コマンドの追加・削除を取り込みたい場合は、先に `slash-commands-update` の `report` モード（手順詳細は [manual_slash_commands_update.md](manual_slash_commands_update.md) の C1〜C2）で鮮度レポートを作り、差分の採否を決めて `apply` で `resources/slash-commands/*.md` に反映してから、下記の drift 差分確認に通すこと。freshness 結果は release md の `## 申し送り` に「Slash command freshness」表として残す。
 
 スラッシュコマンドの差分確認（PowerShell）:
 
 ```powershell
-foreach ($p in 'claude','codex','copilot') {
+foreach ($p in 'claude','codex','copilot','cursor-agent','opencode') {
   $remote = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/$p.md"
   $gh = (Invoke-WebRequest -UseBasicParsing $remote).Content
   $local = Get-Content -Raw "resources/slash-commands/$p.md"
@@ -275,7 +321,7 @@ foreach ($p in 'claude','codex','copilot') {
 bash の場合:
 
 ```bash
-for p in claude codex copilot; do
+for p in claude codex copilot cursor-agent opencode; do
   curl -s "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/$p.md" -o "/tmp/gh_$p.md"
   diff "/tmp/gh_$p.md" "resources/slash-commands/$p.md" && echo "$p: 差分なし"
 done
@@ -327,7 +373,7 @@ goreleaser check
 
 vendored browser library は `npm audit` の対象外なので、更新した実体・`web/src/vendor/THIRD_PARTY_LICENSES.txt`・About 画面の版数を一致させる。v0.3.0 で更新を defer する場合は、既知脆弱性確認結果と defer 理由を `docs/local/bugfix_v0-3-0-release-precheck_YYYY-MM-DD.md` に残す。
 
-Hub UI smoke では少なくとも spawn（Ollama Cloud route を含む）、reconnect、Files preview、path open、Git tab、approval action bar、settings save、Workbench history/export を確認し、同じ precheck 記録に結果を書く。
+Hub UI smoke では少なくとも spawn（Ollama Cloud route を含む）、reconnect、Files preview、path open、Git tab、approval action bar、settings save を確認し、同じ precheck 記録に結果を書く。
 
 ## CHANGELOG.md の更新
 

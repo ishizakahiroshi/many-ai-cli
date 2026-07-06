@@ -1,6 +1,6 @@
 # Ollama Cloud 経由で Codex / Claude Code を使う運用手順
 
-> 最終更新: 2026-05-16(土) 21:35:00
+> 最終更新: 2026-06-19(金) 07:51:46
 
 ## 概要
 
@@ -131,12 +131,12 @@ ollama cp qwen3-coder claude-3-5-sonnet
 - Hub UI の spawn フォームで「Model」コンボボックスを開くと `[Anthropic]` / `[OpenAI]` / `[Ollama Cloud]` / `[Ollama Local]` の各グループからモデルを選択できる
 - バックエンド `/api/models` が以下を集約して返す:
   - Anthropic / OpenAI: ハードコード一覧
-  - Ollama Cloud: `https://ollama.com/api/tags`（24h キャッシュ）
-  - Ollama Local: `http://localhost:11434/api/tags`（60s キャッシュ） + `~/.many-ai-cli/config.yaml` の `local_models:` 手書きを merge
+  - Ollama Cloud: local daemon `/api/tags` の `remote_host` 付き alias
+  - Ollama Local: `ollama.base_url` の `/api/tags`（既定 `http://localhost:11434/api/tags`、60s キャッシュ） + `~/.many-ai-cli/config.yaml` の `local_models:` 手書きを merge
 - 選択したモデルから route を自動判定し、spawn payload の `route` フィールドに付与
 - Hub が route に応じた env preset を子プロセスに注入:
-  - `route=ollama` × claude → `ANTHROPIC_AUTH_TOKEN=ollama` / `ANTHROPIC_API_KEY=` (空文字) / `ANTHROPIC_BASE_URL=http://localhost:11434`
-  - `route=ollama` × codex → `OPENAI_API_KEY=ollama` / `OPENAI_BASE_URL=http://localhost:11434/v1`
+  - `route=ollama` × claude → `ANTHROPIC_AUTH_TOKEN=ollama` / `ANTHROPIC_API_KEY=` (空文字) / `ANTHROPIC_BASE_URL=<ollama.base_url>`
+  - `route=ollama` × codex → `OPENAI_API_KEY=ollama` / `OPENAI_BASE_URL=<ollama.base_url>/v1`
   - `route=anthropic` / `route=openai` → 既存 shell env をそのまま継承（env 注入なし）
 
 ### Codex を Ollama Cloud で起動する手順（Hub 画面）
@@ -153,6 +153,24 @@ ollama cp qwen3-coder claude-3-5-sonnet
 2. Model 欄から `[Ollama Cloud]` グループの `kimi-k2.5:cloud` 等を選ぶ
 3. Launch
 4. `ANTHROPIC_BASE_URL=http://localhost:11434` 等が自動注入される
+
+### Ollama daemon が別ホストにある場合
+
+Hub を Hyper-V ゲスト内で動かし、Ollama と GPU をホスト Windows 側で動かす場合などは、`~/.many-ai-cli/config.yaml` に接続先を設定する:
+
+```yaml
+ollama:
+  base_url: "http://192.168.11.50:11434"
+```
+
+Default Switch 側を使う場合の例:
+
+```yaml
+ollama:
+  base_url: "http://172.20.224.1:11434"
+```
+
+この値は `/api/models` の `/api/tags` 取得と、spawn 時に注入する `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` の両方に使われる。`base_url` には `/v1` や `/api/tags` を付けない。
 
 ### Local LLM（pull 済み）を使う
 

@@ -1,0 +1,115 @@
+# [保留] OS デスクトップ通知（承認待ちプッシュ）実装計画
+
+> 最終更新: 2026-06-07(日) 18:45:00 — v0.3.0 では scope 外。Web Push 実装済みのため OS desktop notification は future backlog
+
+## v0.3.0 release triage
+
+- v0.3.0 前作業では Web Push による承認待ち通知を優先し、OS デスクトップ通知は未実装のまま公開 blocker にしない。
+- ブラウザ内通知・タブバッジ・favicon バッジが必要になった場合に本 plan を再開する。
+
+## context配分
+
+| C | 種別 | 担当作業 | 並列OK | 状態 |
+|---|---|---|---|---|
+| C1 | plan | 通知モジュール `web/src/notifier.js` 新規作成 + 設定パネルへ ON/OFF と permission 状態表示を追加 | — | plan |
+| C2 | plan | 承認発生フックから通知発火・連投抑制・クリックで該当セッションへフォーカス | — | plan |
+| C3 | plan | favicon / tab title への承認待ち件数バッジ反映、未承認件数を集約 | C2 と独立して着手可（別ファイル中心） | plan |
+
+実行順序: `C1 → C2 → C3`（C2 と C3 は依存関係が薄いため C2 完了見込みが立てば C3 並列着手可）
+
+## 目的
+
+並列で複数 AI CLI を回している間、Hub UI のブラウザタブが非アクティブだと承認待ち発生に気付けない問題を解消する。Web Notifications API でブラウザ通知を出し、タブを覗かなくても承認発生を検知できるようにする。これは any-ai-cli のコアバリュー（並列承認の見落とし防止）を OS レベルまで延伸する一手。
+
+## 機能要件
+
+### 通知発火条件
+
+- セッションで承認待ち（action-bar 表示）が **新規に発生** した瞬間に通知を出す
+- 同一セッションで承認が連続発生しても、前回通知から短時間（既定 5 秒）以内は抑制する
+- ユーザーがそのタブをアクティブに見ている間は通知を出さない（`document.visibilityState === 'visible'` かつ当該タブがフォーカス）
+  - ただし「常に通知する」モードも設定でオプトイン可能にする（マルチモニター運用向け）
+
+### 通知内容
+
+- タイトル: `any-ai-cli: <provider> セッション #<id> が承認待ち`
+- 本文: 直近の承認プロンプト要約（既存の action-bar が拾うテキストの先頭 1 行、最大 120 字程度で切る）
+- アイコン: any-ai-cli の favicon を再利用（埋め込み済み資産で完結、新規バイナリアセット追加なし）
+- クリック挙動: ブラウザタブをフォーカスし、当該セッションカードを active 表示にしてスクロールイン
+
+### permission UX
+
+- 通知 ON を初めて有効化した時に `Notification.requestPermission()` を呼ぶ
+- 設定パネルに以下を表示
+  - 通知 ON/OFF トグル（既定: OFF）
+  - 現在の `Notification.permission` 状態（`default` / `granted` / `denied`）
+  - `denied` の場合はブラウザ設定から許可する案内文を出す（プログラム的に変更不可なため）
+- 設定値は localStorage に永続化（既存の設定永続化ハンドラに合わせる）
+
+### バッジ・タイトル（C3）
+
+- ブラウザタブの `document.title` を `(N) any-ai-cli` 形式に書き換え（N=未承認セッション数、0 のときは元タイトル）
+- favicon に件数バッジを動的描画（canvas で生成した data URL を差し替え）または視覚的に判別しやすい色違い favicon に切替
+  - 実装難度に応じてどちらか軽い方を採用
+
+## 非要件（やらないこと）
+
+- サーバー（Hub）からの push 通知（Web Push API + VAPID）はやらない。すべてブラウザ側で完結する。
+- 音声通知（ding / TTS）は別タスクとして扱い、本 plan には含めない（バックログ B 系で別途検討）。
+- スマホへのリモート通知はやらない（any-ai-cli は `127.0.0.1` 固定運用が前提）。
+
+## 設計メモ
+
+### 通知モジュール `web/src/notifier.js`（新規）
+
+公開する API は以下に限定する。
+
+```js
+notifier.init();                       // localStorage から設定読み込み、permission 状態を再評価
+notifier.setEnabled(boolean);          // ON/OFF 切替。ON 化時に requestPermission を呼ぶ
+notifier.isEnabled();                  // 現在の有効状態
+notifier.permissionState();            // 'default' | 'granted' | 'denied' | 'unsupported'
+notifier.notifyApprovalPending({ sessionId, provider, summary });
+                                       // 重複抑制・visibility 判定を内部で行う
+```
+
+### 承認発生フックとの結線（C2）
+
+- 既存の承認検出は `web/src/app.js` 内で xterm.js バッファをスキャンし action-bar を表示する経路（v0.1.3 までに実装済み）。
+- その action-bar 表示の「立ち上がりエッジ」（`未承認 → 承認待ち` への遷移）でのみ `notifier.notifyApprovalPending(...)` を呼ぶ。
+- action-bar が消える側（ターミナル直接入力で承認解決された場合 / Hub UI で送信完了した場合）でフラグをリセットし、次回の立ち上がりエッジを検出可能にする。
+- 連投抑制の最終ガードは notifier 側に閉じ込め、呼び出し側は素直にイベントを上げるだけにする。
+
+### バッジ・タイトル（C3）
+
+- 未承認セッション数の集計は既存のセッション state（`web/src/app.js` 内のセッションマップ）から派生して算出
+- favicon バッジは新規 `web/src/favicon-badge.js` を切る案と、`notifier.js` 内に同居させる案がある。実装時に判断
+- タブタイトル書き換えは元タイトルを `notifier.init()` 時にキャプチャしておき、件数 0 時に復元する
+
+## 影響範囲（想定編集ファイル）
+
+| ファイル | 役割 |
+|---|---|
+| `web/src/notifier.js`（新規） | 通知 API ラッパ・permission・連投抑制・タイトル/favicon バッジ |
+| `web/src/app.js` | 承認発生エッジで notifier 呼び出し、設定 ON/OFF 配線 |
+| `web/src/index.html` | 設定パネルに通知トグルと permission 状態表示 |
+| `web/src/styles.css` | 設定パネル微調整（必要に応じて） |
+
+Hub 側（Go）には変更を入れない見込み。go:embed の対象ディレクトリは既に `web/src/` 配下なので、新規 JS ファイルもビルドで自動同梱される。
+
+## 検証観点
+
+- 通知 OFF 状態で承認発生 → 通知が出ない
+- 通知 ON + permission granted + タブ非アクティブで承認発生 → 通知が出る
+- 通知 ON + permission granted + タブアクティブで承認発生 → 通知が出ない（既定動作）
+- 同一セッションで 1 秒間に複数回承認が立ち上がっても通知は 1 回に抑制される
+- 通知クリックでタブがフォーカスされ、該当セッションカードへスクロール・active 化
+- permission denied 状態でトグル ON を試みても再要求せず、UI に denied 表示が出る
+- 未承認セッション数 N がタブタイトルに反映され、0 で元タイトルへ戻る（C3）
+
+## 関連参照
+
+- 設計書: [docs/v0.1.x-any-ai-cli-design.md](../v0.1.x-any-ai-cli-design.md)
+- 既存承認検出経路: `web/src/app.js`（xterm.js バッファスキャン → action-bar 表示）
+- 設定永続化の既存パターン: 設定パネル関連の v0.1.3 実装（`docs/local/archive/v0.1.3/plan_settings_save_reset_ui.md`）
+- バックログ（本 plan で扱わない案件）: [pending_v0.1.x-feature-backlog.md](pending_v0.1.x-feature-backlog.md)

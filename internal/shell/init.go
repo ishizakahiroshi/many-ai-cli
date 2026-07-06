@@ -7,6 +7,7 @@ if [ "${MANY_AI_CLI_AUTO:-0}" = "1" ]; then
   codex(){ many-ai-cli codex "$@"; }
   copilot(){ many-ai-cli copilot "$@"; }
   cursor-agent(){ many-ai-cli cursor-agent "$@"; }
+  grok(){ many-ai-cli grok "$@"; }
 fi
 `
 }

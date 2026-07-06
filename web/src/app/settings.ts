@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, showToast, ti18n, token } from './util.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, openDetachedGridForSessions, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
@@ -11,7 +11,7 @@ import { providerApprovalTriggers } from './approval.js';
 import { MULTI_SCROLLBACK, getMessages } from './chat-history.js';
 import { FilesTabManager } from './files-view.js';
 import { fetchPushStatus, getPushSubscription, isLikelyIOSBrowserTabWithoutStandalone, pushNotificationsSupported, subscribeWebPush, unsubscribeWebPush } from './pwa.js';
-import { setStatusbarEnabled, isStatusbarEnabled } from './token-statusbar.js';
+import { setStatusbarEnabled, isStatusbarEnabled, TOGGLEABLE_SEGMENTS, applySegmentVisibility } from './token-statusbar.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -102,6 +102,25 @@ export function updateTokenStatusbarToggle(enabled: boolean): void {
   setStatusbarEnabled(enabled);
 }
 
+// token_statusbar 設定を read-modify-write で保存する。
+// PUT /api/user-prefs は UserPrefs を全置換するため、partial を送ると他フィールド
+// （enabled / segments / 他の prefs）を消してしまう。必ず現在値を GET → マージ → full PUT。
+async function saveTokenStatusbarPrefs(patch: { enabled?: boolean; segments?: Record<string, boolean> }): Promise<void> {
+  try {
+    const res = await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`);
+    const cur = res.ok ? await res.json() : {};
+    const tsb = { ...(cur.token_statusbar || {}) };
+    if (patch.enabled !== undefined) tsb.enabled = patch.enabled;
+    if (patch.segments !== undefined) tsb.segments = { ...(tsb.segments || {}), ...patch.segments };
+    const next = { ...cur, token_statusbar: tsb };
+    await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(next),
+    });
+  } catch (_) {}
+}
+
 // 設定パネルのトグルが DOM に存在する時点（パネル open 時）に一度だけ配線する。
 let _tokenStatusbarToggleAttached = false;
 export function attachTokenStatusbarToggle(): void {
@@ -111,18 +130,53 @@ export function attachTokenStatusbarToggle(): void {
   _tokenStatusbarToggleAttached = true;
   // 現在値を反映
   toggle.checked = isStatusbarEnabled();
-  toggle.addEventListener('change', async () => {
+  toggle.addEventListener('change', () => {
     const enabled = toggle.checked;
     setStatusbarEnabled(enabled);
-    // /api/user-prefs に保存
-    try {
-      await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token_statusbar: { enabled } }),
-      });
-    } catch (_) {}
+    void saveTokenStatusbarPrefs({ enabled });
   });
+  // セグメント表示/非表示トグル群を構築。
+  void buildSegmentToggles();
+}
+
+// セグメント表示/非表示のチェックボックス群を #tsb-segments-toggles に構築する。
+// 現在の prefs を読んで初期チェック状態を反映し、変更時は read-modify-write で保存しつつ
+// ステータスバーへ即時反映する。
+let _segmentTogglesBuilt = false;
+async function buildSegmentToggles(): Promise<void> {
+  if (_segmentTogglesBuilt) return;
+  const host = document.getElementById('tsb-segments-toggles');
+  if (!host) return;
+  _segmentTogglesBuilt = true;
+
+  let segments: Record<string, boolean> = {};
+  try {
+    const res = await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`);
+    if (res.ok) {
+      const data = await res.json();
+      segments = (data?.token_statusbar?.segments as Record<string, boolean>) || {};
+    }
+  } catch (_) {}
+
+  const lang = window.__lang === 'en' ? 'en' : 'ja';
+  host.textContent = '';
+  for (const seg of TOGGLEABLE_SEGMENTS) {
+    const label = document.createElement('label');
+    label.className = 'tsb-seg-toggle';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = segments[seg.key] !== false; // 未設定 = 表示
+    cb.addEventListener('change', () => {
+      segments[seg.key] = cb.checked;
+      applySegmentVisibility(segments);
+      void saveTokenStatusbarPrefs({ segments: { [seg.key]: cb.checked } });
+    });
+    const span = document.createElement('span');
+    span.textContent = lang === 'en' ? seg.en : seg.ja;
+    label.appendChild(cb);
+    label.appendChild(span);
+    host.appendChild(label);
+  }
 }
 
 // ---- タスク完了サマリー通知トグル ----
@@ -322,8 +376,10 @@ export function getUsageLinkUrl(provider) {
     codex:    STORAGE_USAGE_LINK_CODEX_KEY,
     copilot:  STORAGE_USAGE_LINK_COPILOT_KEY,
     'cursor-agent': STORAGE_USAGE_LINK_CURSOR_AGENT_KEY,
-    ollama:   STORAGE_USAGE_LINK_OLLAMA_KEY,
+    ollama:        STORAGE_USAGE_LINK_OLLAMA_KEY,
+    'lm-studio':   STORAGE_USAGE_LINK_LM_STUDIO_KEY,
     opencode: STORAGE_USAGE_LINK_OPENCODE_KEY,
+    grok:     STORAGE_USAGE_LINK_GROK_KEY,
   };
   const key = keyMap[provider];
   if (!key) return DEFAULT_USAGE_LINKS[provider] || '#';
@@ -331,7 +387,7 @@ export function getUsageLinkUrl(provider) {
 }
 
 export function applyUsageLinks() {
-  for (const p of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'opencode']) {
+  for (const p of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok']) {
     const el = document.getElementById(`usage-link-${p}`);
     if (el) el.href = getUsageLinkUrl(p);
   }
@@ -343,8 +399,10 @@ export function loadUsageLinkSettings() {
     codex:    STORAGE_USAGE_LINK_CODEX_KEY,
     copilot:  STORAGE_USAGE_LINK_COPILOT_KEY,
     'cursor-agent': STORAGE_USAGE_LINK_CURSOR_AGENT_KEY,
-    ollama:   STORAGE_USAGE_LINK_OLLAMA_KEY,
+    ollama:        STORAGE_USAGE_LINK_OLLAMA_KEY,
+    'lm-studio':   STORAGE_USAGE_LINK_LM_STUDIO_KEY,
     opencode: STORAGE_USAGE_LINK_OPENCODE_KEY,
+    grok:     STORAGE_USAGE_LINK_GROK_KEY,
   };
   for (const [p, k] of Object.entries(keyMap)) {
     const el = document.getElementById(`usage-link-${p}-url`);
@@ -359,8 +417,10 @@ export function saveUsageLinkSettings() {
     ['codex',    'usage_links.codex',    STORAGE_USAGE_LINK_CODEX_KEY],
     ['copilot',  'usage_links.copilot',  STORAGE_USAGE_LINK_COPILOT_KEY],
     ['cursor-agent', 'usage_links.cursor-agent', STORAGE_USAGE_LINK_CURSOR_AGENT_KEY],
-    ['ollama',   'usage_links.ollama',   STORAGE_USAGE_LINK_OLLAMA_KEY],
+    ['ollama',      'usage_links.ollama',     STORAGE_USAGE_LINK_OLLAMA_KEY],
+    ['lm-studio',   'usage_links.lm-studio',  STORAGE_USAGE_LINK_LM_STUDIO_KEY],
     ['opencode', 'usage_links.opencode', STORAGE_USAGE_LINK_OPENCODE_KEY],
+    ['grok',     'usage_links.grok',     STORAGE_USAGE_LINK_GROK_KEY],
   ];
   for (const [p, prefPath, key] of pairs) {
     const input = document.getElementById(`usage-link-${p}-url`);
@@ -858,6 +918,12 @@ export function applyLang(lang) {
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
     panel.hidden = !panel.hidden;
+    if (!panel.hidden) {
+      // 開いた瞬間に全セクションの畳み状態サマリを最新値で描画。
+      // 個別 input の change を 1 つ 1 つ拾わなくても、ここと <details> の toggle で十分。
+      attachSummaryToggleListeners();
+      renderSettingsSummary();
+    }
     if (panel.hidden) maybeAutoSwitchToNextApproval();
   });
   if (closeBtn) {
@@ -909,6 +975,7 @@ export function applyLang(lang) {
       if (!ok) return;
       try {
         if (window.__settingsResetAll) await window.__settingsResetAll();
+        renderSettingsSummary();
         showToast(t('settings_reset_done'), resetBtn);
       } catch (_) {}
     });
@@ -937,6 +1004,7 @@ export function applyLang(lang) {
       setUserPref('usage_links.cursor-agent', '');
       setUserPref('usage_links.ollama', '');
       setUserPref('usage_links.opencode', '');
+      setUserPref('usage_links.grok', '');
       loadUsageLinkSettings();
       showToast(t('settings_usage_links_reset_done'), usageLinksResetBtn);
     });
@@ -1657,7 +1725,7 @@ export function applyLang(lang) {
     const res = await fetch(`/api/usage-link-defaults?token=${encodeURIComponent(token || '')}`);
     if (!res.ok) return;
     const d = await res.json();
-    for (const k of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'opencode']) {
+    for (const k of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok']) {
       // 空文字は無視（GitHub 側が古くキーを欠く場合に空で返るため、
       // ローカルの正しいデフォルト値を潰さない）
       if (typeof d[k] === 'string' && d[k] !== '') DEFAULT_USAGE_LINKS[k] = d[k];
@@ -1665,6 +1733,36 @@ export function applyLang(lang) {
     applyUsageLinks();
   } catch (_) {}
 })();
+
+// renderStaleBinaryBanner は #stale-binary-banner を stale フラグに応じて出し分ける。
+// 常設・dismissible。multi-question-banner と同じ -text / -close クラスを流用する。
+function renderStaleBinaryBanner(stale: boolean): void {
+  const banner = document.getElementById('stale-binary-banner');
+  if (!banner) return;
+  const tr = (key: string, fallback: string): string => {
+    if (typeof window.t !== 'function') return fallback;
+    const v = window.t(key);
+    return v && v !== key ? v : fallback;
+  };
+  if (!stale) {
+    banner.hidden = true;
+    banner.innerHTML = '';
+    return;
+  }
+  banner.innerHTML = '';
+  const msg = document.createElement('span');
+  msg.className = 'multi-question-banner-text';
+  msg.textContent = tr('stale_binary_banner', 'This Hub is running an old build; restart it to apply your rebuild.');
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'multi-question-banner-close';
+  closeBtn.textContent = '×';
+  closeBtn.title = tr('stale_binary_banner_close_tooltip', 'Dismiss');
+  closeBtn.addEventListener('click', () => { banner.hidden = true; });
+  banner.appendChild(msg);
+  banner.appendChild(closeBtn);
+  banner.hidden = false;
+}
 
 // ---- Hub 情報表示（single source: main.version / runtime → /api/info → ここ） ----
 (async () => {
@@ -1675,6 +1773,9 @@ export function applyLang(lang) {
     set__userAvatarUrl(info.userAvatar || '');
     set__userDisplayName(info.userDisplayName || '');
     document.dispatchEvent(new CustomEvent('user-info-ready'));
+    // 稼働中 Hub が古いバイナリ（起動後にディスクの exe が差し替わった）なら
+    // 常設バナーで再起動を促す。multi-question-banner と同じ構造・クラスを流用。
+    renderStaleBinaryBanner(!!info.binary_stale);
     const ver = 'v' + (info.version || 'dev');
     const runtimeMode = info.runtime_mode || '';
     const runtimeLabel = () => {
@@ -1815,10 +1916,11 @@ window.approvalPatternsUI = (function () {
     codex:  { official: [], custom: [] },
     copilot: { official: [], custom: [] },
     'cursor-agent': { official: [], custom: [] },
+    grok: { official: [], custom: [] },
     common: { official: [], custom: [] },
   };
   // アクティブプロファイル設定（サーバ側 ApprovalProfiles と同期）
-  let activeProfiles = { claude: 'official', codex: 'official', copilot: 'official', 'cursor-agent': 'official', common: 'official' };
+  let activeProfiles = { claude: 'official', codex: 'official', copilot: 'official', 'cursor-agent': 'official', grok: 'official', common: 'official' };
 
   function currentProvider() { return providerEl.value; }
   function currentProfile() { return profileEl.value; }
@@ -1834,6 +1936,7 @@ window.approvalPatternsUI = (function () {
           codex:  p.codex  || 'official',
           copilot: p.copilot || 'official',
           'cursor-agent': p['cursor-agent'] || 'official',
+          grok: p.grok || 'official',
           common: p.common || 'official',
         };
       }
@@ -1849,6 +1952,7 @@ window.approvalPatternsUI = (function () {
         providerApprovalTriggers.codex  = norm(data.codex);
         providerApprovalTriggers.copilot = norm(data.copilot);
         providerApprovalTriggers['cursor-agent'] = norm(data['cursor-agent']);
+        providerApprovalTriggers.grok = norm(data.grok);
         providerApprovalTriggers.common = norm(data.common);
       }
     } catch (e) {
@@ -2075,11 +2179,11 @@ export async function loadSlashCmdSources() {
 
 // ─── C2: 統合タブバー (setActiveTab) ───────────────────────────────────
 // セッション毎の表示モード (D13: in-memory, リロードで初期化)
-export const sessionViewMode = new Map(); // sid -> 'terminal' | 'chat' | 'split' | 'files' | 'git' | 'workbench'
+export const sessionViewMode = new Map(); // sid -> 'terminal' | 'chat' | 'split' | 'files' | 'git'
 // Files/Git の遅延ロード状態 (sid -> Set<'files'|'git'>)
 export const sessionLazyLoaded = new Map();
 
-export const VALID_TAB_NAMES = new Set(['terminal', 'chat', 'split', 'files', 'git', 'workbench', 'multi', 'approval']);
+export const VALID_TAB_NAMES = new Set(['terminal', 'chat', 'split', 'files', 'git', 'multi', 'approval']);
 // C5: lock の対象モード (Files/Git は lock 対象外: D10 の lazy 読み込みと相性が悪い)
 export const LOCKABLE_MODES = new Set(['terminal', 'chat', 'split']);
 export const RESPONSIVE_WIDE_MODE_MIN = 1001;
@@ -2101,15 +2205,23 @@ export function getDisplayLockedMode() {
   return '';
 }
 
+/** スマホ幅 (max-width: 720px) の場合は 'approval' をデフォルトタブにする */
+function defaultViewModeForViewport(): string {
+  if (typeof window !== 'undefined' && window.matchMedia('(max-width: 720px)').matches) {
+    return 'approval';
+  }
+  return 'terminal';
+}
+
 export function getSessionViewMode(sid) {
-  if (sid === null || sid === undefined) return 'terminal';
+  if (sid === null || sid === undefined) return defaultViewModeForViewport();
   // C5: セッション未登録 (新規 spawn / リロード後の初回) は lock 値を初期モードとして適用
   if (!sessionViewMode.has(sid)) {
     const lock = getDisplayLockedMode();
     if (lock && LOCKABLE_MODES.has(lock)) return lock;
-    return 'terminal';
+    return defaultViewModeForViewport();
   }
-  return sessionViewMode.get(sid) || 'terminal';
+  return sessionViewMode.get(sid) || defaultViewModeForViewport();
 }
 
 export function isTabLazyLoaded(sid, name) {
@@ -2260,42 +2372,7 @@ export function setActiveTab(sid, name) {
     return;
   }
 
-  if (name === 'workbench') {
-    const area = document.getElementById('display-area');
-    if (!area) return;
-    const multiView = document.getElementById('multi-view');
-    const mgr = window.multiPaneManager;
-    const prevMultiOpen = (multiView && !multiView.hidden);
-    if (multiView) multiView.hidden = true;
-    if (mgr && mgr.picker) mgr.picker.hide();
-    if (prevMultiOpen && mgr) {
-      mgr.teardown();
-      sessions.forEach(s => {
-        const t = terminals.get(s.id);
-        if (t && t.term) {
-          try { t.term.options.scrollback = TERMINAL_SCROLLBACK_LINES; } catch (_) {}
-        }
-      });
-      if (activeSessionId !== null && activeSessionId !== undefined) {
-        attachTerminal(activeSessionId);
-      }
-    }
-    area.hidden = false;
-    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-workbench', 'mode-approval');
-    area.classList.add('mode-workbench');
-    document.querySelectorAll('#unified-tab-bar .view-tab').forEach(b => {
-      b.classList.toggle('active', b.dataset.tab === 'workbench');
-    });
-    if (activeSessionId !== null && activeSessionId !== undefined) {
-      sessionViewMode.set(activeSessionId, name);
-    }
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('workbench-opened'));
-    }
-    return;
-  }
-
-  // 承認タブ: セッション非依存のビュー（workbench と同様の扱い）
+  // 承認タブ: セッション非依存のビュー
   if (name === 'approval') {
     const area = document.getElementById('display-area');
     if (!area) return;
@@ -2317,7 +2394,7 @@ export function setActiveTab(sid, name) {
       }
     }
     area.hidden = false;
-    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-workbench', 'mode-approval');
+    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval');
     area.classList.add('mode-approval');
     document.querySelectorAll('#unified-tab-bar .view-tab').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === 'approval');
@@ -2367,7 +2444,7 @@ export function setActiveTab(sid, name) {
   }
   area.hidden = false;
 
-  area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-workbench', 'mode-approval');
+  area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval');
   area.classList.add('mode-' + name);
 
   // タブボタンの active 切替
@@ -2877,4 +2954,253 @@ window.addEventListener('files-tab-state-changed', () => {
     });
   }
 })();
+
+// =============================================================================
+// 設定パネル 畳み状態の現在値インライン表示
+// =============================================================================
+//
+// 各 <details class="settings-section"> の <summary> 内に
+// <span class="settings-section-current" data-section="..."></span> を仕込んでおく。
+// CSS で details:not([open]) のときだけ表示される。
+// RENDERERS[sectionId]() を呼んで現在値を 1 行文字列で組み立て、textContent に入れる。
+// 値はパネル open 時点で DOM に揃っている前提（既存のロード処理が先に走る）。
+
+function _summaryIsJa(): boolean { return (window as any).__lang !== 'en'; }
+function _summaryLabel(ja: string, en: string): string { return _summaryIsJa() ? ja : en; }
+
+// パスの頭省略。末尾フォルダ名のほうが情報量が大きいため、頭を切る。
+export function shortenPath(p: string, maxChars = 24): string {
+  if (!p) return '';
+  if (p.length <= maxChars) return p;
+  return '…' + p.slice(-(maxChars - 1));
+}
+
+function _summaryBool(elId: string): boolean {
+  const el = document.getElementById(elId) as HTMLInputElement | null;
+  return !!(el && el.checked);
+}
+function _summaryVal(elId: string): string {
+  const el = document.getElementById(elId) as HTMLInputElement | null;
+  return el ? (el.value || '') : '';
+}
+function _summaryOnOff(b: boolean): string { return b ? 'ON' : 'OFF'; }
+
+type SummaryRenderer = () => string;
+
+const SUMMARY_RENDERERS: Record<string, SummaryRenderer> = {
+  general: () => {
+    const lang = localStorage.getItem(STORAGE_LANG_KEY) || 'ja';
+    const langLabel = lang === 'ja' ? '日本語' : 'English';
+    const theme = localStorage.getItem(STORAGE_THEME_KEY) || 'light';
+    const themeLabel = theme === 'dark' ? 'Dark' : 'Light';
+    const fs = localStorage.getItem(STORAGE_FONTSIZE_KEY) || 'medium';
+    const fsLabel = fs === 'large' ? 'Large' : fs === 'small' ? 'Small' : 'Medium';
+    const lk = localStorage.getItem(STORAGE_DISPLAY_LOCKED_MODE_KEY) || '';
+    const lkLabel = lk === 'terminal' ? _summaryLabel('ターミナル', 'Terminal')
+                  : lk === 'chat'     ? _summaryLabel('チャット',  'Chat')
+                  : lk === 'split'    ? _summaryLabel('分割',      'Split')
+                                      : _summaryLabel('自由切替',  'Free');
+    return [langLabel, themeLabel, fsLabel, lkLabel].join('・');
+  },
+
+  appearance: () => {
+    const nameInput = document.getElementById('display-name-input') as HTMLInputElement | null;
+    const name = (nameInput?.value || _userDisplayName || '').trim();
+    const urlInput = document.getElementById('avatar-url-input') as HTMLInputElement | null;
+    const avatarSet = !!((urlInput?.value || '').trim() || _userAvatarUrl);
+    const parts: string[] = [];
+    if (name) parts.push(name);
+    parts.push(avatarSet ? _summaryLabel('アイコン設定済', 'icon set') : _summaryLabel('アイコン未設定', 'no icon'));
+    return parts.join('・');
+  },
+
+  'token-statusbar': () => {
+    if (!isStatusbarEnabled()) return 'OFF';
+    // セグメント有効/無効は DOM チェックボックスを見る（パネル open 時に build 済み）
+    const host = document.getElementById('tsb-segments-toggles');
+    if (host) {
+      const cbs = host.querySelectorAll('input[type="checkbox"]');
+      let on = 0, total = 0;
+      cbs.forEach((cb) => { total++; if ((cb as HTMLInputElement).checked) on++; });
+      if (total > 0) return `ON・${on}/${total}`;
+    }
+    return 'ON';
+  },
+
+  session: () => {
+    const idle = _summaryVal('idle-timeout-min');
+    const grace = _summaryVal('reconnect-grace-min');
+    const parts: string[] = [];
+    if (idle !== '') parts.push(`idle:${idle}${_summaryLabel('分', 'm')}`);
+    if (grace !== '') parts.push(`grace:${grace}${_summaryLabel('分', 'm')}`);
+    return parts.join('・');
+  },
+
+  'remote-auth': () => {
+    const pinStatus = document.getElementById('remote-pin-status');
+    const txt = pinStatus?.textContent?.trim() || '';
+    if (/設定済|Set\b|有効|ON/i.test(txt)) return _summaryLabel('PIN設定済', 'PIN set');
+    return _summaryLabel('PIN未設定', 'no PIN');
+  },
+
+  log: () => {
+    const fileLog = _summaryBool('log-enabled');
+    const sessionLog = _summaryBool('log-session-enabled');
+    const dirEl = document.getElementById('log-dir-path') as HTMLAnchorElement | null;
+    const dir = (dirEl?.textContent || '').trim();
+    const parts: string[] = [];
+    parts.push(`${_summaryLabel('ファイル', 'file')}${_summaryOnOff(fileLog)}`);
+    if (sessionLog) parts.push(`${_summaryLabel('セッション', 'session')}ON`);
+    if (dir) parts.push(shortenPath(dir, 22));
+    return parts.join('・');
+  },
+
+  'approval-hub': () => {
+    const enabled = _summaryBool('approval-toggle-input');
+    if (!enabled) return 'OFF';
+    const autoSwitch = _summaryBool('approval-auto-switch-input');
+    const sub: string[] = [];
+    if (autoSwitch) sub.push(_summaryLabel('自動移動', 'auto-switch'));
+    return sub.length ? `ON・${sub.join('・')}` : 'ON';
+  },
+
+  'approval-patterns': () => {
+    const provider = _summaryVal('approval-patterns-provider');
+    const profile = _summaryVal('approval-patterns-profile');
+    const list = document.getElementById('approval-patterns-list');
+    const count = list ? list.querySelectorAll('li').length : 0;
+    const profileLabel = profile === 'custom' ? _summaryLabel('カスタム', 'custom') : _summaryLabel('公式', 'official');
+    return `${provider}・${profileLabel}・${count}${_summaryLabel('件', '')}`;
+  },
+
+  voice: () => {
+    const engine = getVoiceEngine();
+    if (engine === 'off') return 'OFF';
+    const grace = localStorage.getItem(STORAGE_VOICE_GRACE_KEY) || String(DEFAULT_VOICE_GRACE_SEC);
+    if (engine === 'browser') {
+      return `${_summaryLabel('ブラウザ内蔵', 'browser')}・${grace}${_summaryLabel('秒', 's')}`;
+    }
+    // whisper（サブ設定はエンジン=whisper のときだけ要約に出す）
+    const autoStop = localStorage.getItem(STORAGE_VOICE_WHISPER_AUTO_STOP_KEY) !== '0';
+    const autoSubmit = localStorage.getItem(STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY) === '1';
+    const modelSel = document.getElementById('voice-whisper-model-select') as HTMLSelectElement | null;
+    const model = modelSel?.value || '';
+    const parts = ['Whisper'];
+    if (model) parts.push(model);
+    if (autoStop) parts.push(_summaryLabel('自動停止', 'auto-stop'));
+    if (autoSubmit) parts.push(_summaryLabel('自動送信', 'auto-submit'));
+    parts.push(`${grace}${_summaryLabel('秒', 's')}`);
+    return parts.join('・');
+  },
+
+  trigger: () => {
+    const enabled = localStorage.getItem(STORAGE_TRIGGER_ENABLED_KEY) === '1';
+    if (!enabled) return 'OFF';
+    const phrase = (localStorage.getItem(STORAGE_TRIGGER_PHRASE_KEY) ?? getDefaultTriggerPhrase()).trim();
+    return phrase ? `ON・「${phrase}」` : 'ON';
+  },
+
+  'file-open': () => {
+    const app = _summaryVal('settings-terminal-app').trim();
+    return app ? shortenPath(app, 30) : _summaryLabel('OS既定', 'OS default');
+  },
+
+  'notify-sound': () => {
+    const desktop = _summaryBool('desktop-notify-enabled');
+    const push = _summaryBool('push-notify-enabled');
+    const sound = _summaryBool('notify-sound-enabled');
+    const doneSum = _summaryBool('done-summary-notify-toggle');
+    const parts: string[] = [];
+    parts.push(`${_summaryLabel('デスクトップ', 'desktop')}${_summaryOnOff(desktop)}`);
+    if (push) parts.push(_summaryLabel('プッシュON', 'push ON'));
+    if (sound) {
+      const type = _summaryVal('notify-sound-type') || 'default';
+      parts.push(type === 'custom' ? _summaryLabel('音:カスタム', 'sound:custom') : _summaryLabel('音:既定', 'sound:default'));
+    }
+    if (doneSum) parts.push(_summaryLabel('完了通知', 'done-notify'));
+    return parts.join('・');
+  },
+
+  'quick-cmd': () => {
+    let setCount = 0;
+    let visibleCount = 0;
+    for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
+      const cmd = getQuickCommand(slot);
+      if (cmd) {
+        setCount++;
+        if (getQuickCommandVisible(slot)) visibleCount++;
+      }
+    }
+    return _summaryLabel(
+      `${QUICK_CMD_SLOTS}枠中${setCount}個・表示${visibleCount}`,
+      `${setCount}/${QUICK_CMD_SLOTS} set, ${visibleCount} visible`
+    );
+  },
+
+  'input-tools': () => {
+    const pc = localStorage.getItem(STORAGE_PC_INPUT_TOOLS_KEY);
+    const mobile = localStorage.getItem(STORAGE_MOBILE_INPUT_TOOLS_KEY);
+    const pcOn = pc === null ? true : pc === '1';   // 既定 PC = ON
+    const mobileOn = mobile === '1';                 // 既定 mobile = OFF
+    return `PC:${_summaryOnOff(pcOn)}・${_summaryLabel('スマホ', 'mobile')}:${_summaryOnOff(mobileOn)}`;
+  },
+
+  'usage-links': () => {
+    const keys = [
+      STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY,
+      STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY,
+      STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY,
+      STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY,
+    ];
+    let custom = 0;
+    for (const k of keys) {
+      const v = (localStorage.getItem(k) || '').trim();
+      if (v) custom++;
+    }
+    if (custom === 0) return _summaryLabel(`全${keys.length}件 既定`, `${keys.length} default`);
+    return _summaryLabel(`${custom}/${keys.length} カスタム`, `${custom}/${keys.length} custom`);
+  },
+
+  'slash-src': () => {
+    const ids = ['slash-src-claude', 'slash-src-codex', 'slash-src-copilot', 'slash-src-cursor-agent'];
+    let custom = 0;
+    for (const id of ids) {
+      if (_summaryVal(id).trim()) custom++;
+    }
+    if (custom === 0) return _summaryLabel('全て既定', 'all default');
+    return _summaryLabel(`${custom}/${ids.length} カスタム`, `${custom}/${ids.length} custom`);
+  },
+};
+
+// セクション ID 単体 or 全セクションをまとめて再描画。
+export function renderSettingsSummary(sectionId?: string): void {
+  const ids = sectionId ? [sectionId] : Object.keys(SUMMARY_RENDERERS);
+  for (const id of ids) {
+    const el = document.querySelector(`.settings-section-current[data-section="${id}"]`) as HTMLElement | null;
+    if (!el) continue;
+    try {
+      el.textContent = SUMMARY_RENDERERS[id]?.() ?? '';
+    } catch (_) {
+      el.textContent = '';
+    }
+  }
+}
+
+// 各 <details> の toggle で自セクションを再描画する。
+// close 時に最新値で更新するため、個別の change ハンドラ配線が不要になる。
+let _summaryToggleAttached = false;
+export function attachSummaryToggleListeners(): void {
+  if (_summaryToggleAttached) return;
+  const sections = document.querySelectorAll<HTMLDetailsElement>('.settings-section[data-section]');
+  if (sections.length === 0) return;
+  _summaryToggleAttached = true;
+  sections.forEach((sec) => {
+    sec.addEventListener('toggle', () => {
+      if (!sec.open) {
+        const id = sec.dataset.section;
+        if (id) renderSettingsSummary(id);
+      }
+    });
+  });
+}
 

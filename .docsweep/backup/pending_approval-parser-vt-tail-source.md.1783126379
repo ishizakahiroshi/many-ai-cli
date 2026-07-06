@@ -1,0 +1,32 @@
+# [保留] 承認 parser のデータソースを VT tail 全置換に切り替える
+
+> 最終更新: 2026-06-22(月) 08:44:29
+
+## 概要
+
+`pty_output` WebSocket イベントに「VT 復元済みの末尾 N 行」を同梱し、Web 側 `pendingTextTail` を参照しているすべての箇所（`web/src/app/approval.ts` 内 12+ 箇所）をそちらへ張り替える案。承認マーカー (`[MANY-AI-CLI]…`) に限らず multiQuestion 見出し折り返し連結 / sequential choice 連結 / Codex / OpenCode 等 Ink 系 TUI 全般の「Ink 圧縮（改行→CUP・空白→CUF）」クセを一括で塞げる。
+
+承認マーカーだけを狙い撃ちで直す案 1（[plan_approval-marker-vt-detection.md](plan_approval-marker-vt-detection.md)）と対をなす広範改修案。
+
+## 保留理由
+
+- 短期の症状（`[MANY-AI-CLI]` ブロックの改行潰れによる action-bar 表示崩れ）は案 1（[plan_approval-marker-vt-detection.md](plan_approval-marker-vt-detection.md)）で十分塞げる
+- 案 2 は影響範囲が大きい。`pendingTextTail` を読んでいる approval.ts の経路は概算 12+ 箇所あり、shortcut 承認 / multiQuestion / sequential choice / Hub-choice / native approval 等それぞれのフォールバック動作の再設計が必要
+- `pty_output` ペイロードの増加（VT tail = 約 80 行 × 端末幅 ≒ 数 KiB / event）の影響が未測定。多セッション・高頻度更新時の WS 帯域とブラウザ側パース負荷の評価が必要
+- 案 1 が安定して稼働し、かつ案 1 で塞ぎきれない別経路の Ink 圧縮バグが具体的事例として再現しない限り、案 2 を入れる動機が弱い
+
+## 着手条件
+
+- 案 1（[plan_approval-marker-vt-detection.md](plan_approval-marker-vt-detection.md)）が `[完了]` に到達している
+- 以下のいずれかが具体的に観測された:
+  - shortcut 承認 `(y)/(n)/(esc)` で Ink 圧縮起因の検出失敗が再現
+  - multiQuestion 見出しの折り返し連結による誤分割が再現
+  - sequential choice で見出しと選択肢が同行に連結されて取り違いが再発
+  - Codex / OpenCode 系のマーカー以外検出経路で同等の問題が報告された
+- 上記が確認された上で、`pty_output` への tail 同梱がもたらす帯域影響を見積もる（多セッション × 端末幅 × イベント頻度の試算）
+
+## 関連情報
+
+- 先行案: [plan_approval-marker-vt-detection.md](plan_approval-marker-vt-detection.md)
+- 原因調査: 2026-06-22 セッション。Claude Code (Ink TUI) が `[MANY-AI-CLI]…[/MANY-AI-CLI]` ブロックの改行を `ESC[r;cH` (CUP)、語間スペースを `ESC[1C` (CUF) に置換することを `claude_2026-06-22_075004_many-ai-cli_s2.jsonl` line 2315 で実証
+- 関連実装: `internal/hub/server.go:1513` (`sessionlog.StripANSI`), `internal/hub/server.go:1532` (`ses.vt = newVTBuffer(...)`), `web/src/app/approval.ts` 内 `pendingTextTail` 参照箇所（12+）

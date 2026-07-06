@@ -21,6 +21,7 @@ func auditModelsSeedEntry(c *modelsCache, gen uint64, fetchedAt time.Time) *olla
 		models:     []Model{{ID: "stale:latest", Label: "stale"}},
 		fetchedAt:  fetchedAt,
 		err:        nil,
+		tagsURL:    ollamaTagsURL(""),
 		generation: gen,
 	}
 	c.mu.Lock()
@@ -56,7 +57,7 @@ func TestForceDoesNotAcceptStaleInFlightResult(t *testing.T) {
 	)
 	go func() {
 		// force=true。c.localFetch!=nil なので待機 path に入る。
-		forceModels, forceFetchedAt, _ = c.getOllamaLocal(true)
+		forceModels, forceFetchedAt, _ = c.getOllamaLocal(true, "")
 		close(done)
 	}()
 
@@ -73,6 +74,7 @@ func TestForceDoesNotAcceptStaleInFlightResult(t *testing.T) {
 		models:     []Model{{ID: "old:latest", Label: "old"}},
 		fetchedAt:  staleAt,
 		err:        nil,
+		tagsURL:    ollamaTagsURL(""),
 		generation: oldFetch.startGen, // = 0（invalidate 前）
 	}
 	if c.localFetch == oldFetch {
@@ -107,7 +109,7 @@ func TestNonForceServesFreshCachedEntry(t *testing.T) {
 	freshAt := time.Now()
 	seeded := auditModelsSeedEntry(c, 3, freshAt)
 
-	models, fetchedAt, err := c.getOllamaLocal(false)
+	models, fetchedAt, err := c.getOllamaLocal(false, "")
 	if err != nil {
 		t.Fatalf("unexpected error from cached non-force get: %v", err)
 	}
@@ -130,7 +132,7 @@ func TestForceAcceptsCurrentGenerationEntry(t *testing.T) {
 	at := time.Now()
 	auditModelsSeedEntry(c, 1, at) // generation=1, fetchedAt=now
 
-	models, fetchedAt, err := c.getOllamaLocal(true)
+	models, fetchedAt, err := c.getOllamaLocal(true, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

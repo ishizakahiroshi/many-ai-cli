@@ -1,17 +1,184 @@
 package hub
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/sessionlog"
 )
+
+type spawnWrappedSpec struct {
+	Provider       string
+	CWD            string
+	Model          string
+	ModelSelection string
+	RiskConfirmed  bool
+	Label          string
+	PermissionMode string
+	Sandbox        string
+	AskForApproval string
+	Route          string
+	Utf8Session    bool
+}
+
+func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) (int, error) {
+	if !validOrchestrationProvider(spec.Provider) {
+		return 0, fmt.Errorf("invalid provider")
+	}
+	if strings.HasPrefix(spec.Model, "-") || strings.HasPrefix(spec.Label, "-") || !spawnValidModelLabel(spec.Model) || !spawnValidModelLabel(spec.Label) {
+		return 0, fmt.Errorf("invalid model or label value")
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return 0, fmt.Errorf("executable error: %w", err)
+	}
+	wrapArgs := []string{"wrap", spec.Provider}
+	resolvedModel := strings.TrimSpace(spec.Model)
+	if spec.Label != "" {
+		wrapArgs = append(wrapArgs, "--label="+spec.Label)
+	}
+	switch spec.Provider {
+	case "claude":
+		mode := spec.ModelSelection
+		if mode == "" {
+			mode = "auto"
+		}
+		currentModel := s.getLastModel("claude")
+		risk := evaluateClaudeRisk(currentModel, resolvedModel, spec.PermissionMode)
+		if risk.HighRisk && mode != "required" {
+			mode = "required"
+		}
+		if mode == "required" && !spec.RiskConfirmed {
+			return 0, fmt.Errorf("risk confirmation required")
+		}
+		if resolvedModel != "" {
+			wrapArgs = append(wrapArgs, "--model", resolvedModel)
+		}
+		if spec.PermissionMode != "" && spec.PermissionMode != "default" {
+			wrapArgs = append(wrapArgs, "--permission-mode", spec.PermissionMode)
+		}
+	case "codex":
+		mode := spec.ModelSelection
+		if mode == "" {
+			mode = "auto"
+		}
+		currentModel := s.getLastModel("codex")
+		risk := evaluateCodexRisk(currentModel, resolvedModel, spec.Sandbox, spec.AskForApproval)
+		if risk.HighRisk && mode != "required" {
+			mode = "required"
+		}
+		if mode == "required" && !spec.RiskConfirmed {
+			return 0, fmt.Errorf("risk confirmation required")
+		}
+		if resolvedModel != "" {
+			wrapArgs = append(wrapArgs, "--model", resolvedModel)
+		}
+		if spec.Sandbox != "" {
+			wrapArgs = append(wrapArgs, "--sandbox", spec.Sandbox)
+		}
+		if spec.AskForApproval != "" {
+			wrapArgs = append(wrapArgs, "--ask-for-approval", spec.AskForApproval)
+		}
+	default:
+		if resolvedModel != "" {
+			wrapArgs = append(wrapArgs, "--model", resolvedModel)
+		}
+		// copilot / cursor-agent / grok / opencode も permission mode を wrapper へ渡す
+		// （wrapper 側で各 CLI の承認バイパス指定に変換される）。shell は AI 固有フラグを使わない。
+		if spec.Provider != "shell" && spec.PermissionMode != "" && spec.PermissionMode != "default" {
+			wrapArgs = append(wrapArgs, "--permission-mode", spec.PermissionMode)
+		}
+	}
+	effectiveRoute := spec.Route
+	if effectiveRoute == "" {
+		localCfg := s.snapshotLocalModels()
+		known := collectOllamaModelIDs(s.modelsCache, localCfg)
+		knownLmStudio := collectLMStudioModelIDs(s.modelsCache)
+		effectiveRoute = RouteForModel(spec.Provider, resolvedModel, known, knownLmStudio)
+	}
+	if spec.Provider == "codex" && isLocalRoute(effectiveRoute) {
+		wrapArgs = append(wrapArgs, "--codex-oss")
+	}
+	if spec.Utf8Session {
+		wrapArgs = append(wrapArgs, "--utf8")
+	}
+
+	cmd := exec.Command(exe, wrapArgs...)
+	cmd.Dir = spec.CWD
+	hubPort := s.currentHubPort()
+	cmd.Env = append(sanitizeEnv(os.Environ()), "MANY_AI_CLI=1", fmt.Sprintf("MANY_AI_CLI_HUB_PORT=%d", hubPort))
+	if s.parentShell != "" {
+		cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
+	}
+	s.cfgMu.Lock()
+	ollamaBaseURL := s.cfg.Ollama.BaseURL
+	lmStudioBaseURL := s.cfg.LMStudio.BaseURL
+	s.cfgMu.Unlock()
+	if envPreset := EnvPresetForWithOllamaBase(spec.Provider, effectiveRoute, ollamaBaseURL, lmStudioBaseURL); len(envPreset) > 0 {
+		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
+	}
+
+	var stdinNull, spawnLog *os.File
+	if f, devErr := os.OpenFile(os.DevNull, os.O_RDWR, 0); devErr == nil {
+		stdinNull = f
+		cmd.Stdin = stdinNull
+	}
+	spawnLogPath := filepath.Join(s.cfg.Hub.LogDir, "spawn", fmt.Sprintf("%s-%s.log", spec.Provider, time.Now().Format("20060102-150405.000")))
+	if err := os.MkdirAll(filepath.Dir(spawnLogPath), sessionlog.PrivateDirMode); err == nil {
+		if f, logErr := os.OpenFile(spawnLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, sessionlog.PrivateFileMode); logErr == nil {
+			spawnLog = f
+			cmd.Stdout = spawnLog
+			cmd.Stderr = spawnLog
+		}
+	}
+	setCmdSysProcAttr(cmd)
+	if err := cmd.Start(); err != nil {
+		if stdinNull != nil {
+			_ = stdinNull.Close()
+		}
+		if spawnLog != nil {
+			_ = spawnLog.Close()
+		}
+		return 0, err
+	}
+	s.safeGo("spawn_child_wait", func() {
+		_ = cmd.Wait()
+		if stdinNull != nil {
+			_ = stdinNull.Close()
+		}
+		if spawnLog != nil {
+			_ = spawnLog.Close()
+		}
+	})
+	if resolvedModel != "" && !isLocalRoute(effectiveRoute) {
+		_ = s.setLastModel(spec.Provider, resolvedModel)
+	}
+	return s.waitForSessionByLabel(spec.Label, wait)
+}
+
+func (s *Server) waitForSessionByLabel(label string, timeout time.Duration) (int, error) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		s.sessionsMu.Lock()
+		for id, ses := range s.sessions {
+			if ses.Label == label {
+				s.sessionsMu.Unlock()
+				return id, nil
+			}
+		}
+		s.sessionsMu.Unlock()
+		time.Sleep(100 * time.Millisecond)
+	}
+	return 0, context.DeadlineExceeded
+}
 
 func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
@@ -29,11 +196,16 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		AskForApproval string `json:"ask_for_approval"`
 		Route          string `json:"route"`
 		Utf8Session    bool   `json:"utf8_session"`
+		// C1: plan_orchestration-spawn-ui-exposure.md — ツールバーの「オーケストレーション」
+		// ボタン経由の起動でのみ true。詳細設定アコーディオンで役割を設定した場合のみ
+		// OrchestrationRoles が埋まる（未設定ロールは省略 or nil）。
+		Orchestration      bool                                    `json:"orchestration"`
+		OrchestrationRoles map[string]*orchestrationRoleAssignment `json:"orchestration_roles"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	if body.Provider != "claude" && body.Provider != "codex" && body.Provider != "copilot" && body.Provider != "cursor-agent" && body.Provider != "shell" {
+	if body.Provider != "claude" && body.Provider != "codex" && body.Provider != "copilot" && body.Provider != "cursor-agent" && body.Provider != "opencode" && body.Provider != "grok" && body.Provider != "shell" {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
 		return
 	}
@@ -88,6 +260,32 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if spawnCwdTooBroad(cwd) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "cwd is too broad (system root or home root)")
 		return
+	}
+
+	// C1: plan_orchestration-spawn-ui-exposure.md — オーケストレーション起動の場合、
+	// 起動時点で conductor 用の orchestration_id を予約する。label が未指定なら生成して
+	// 以降の wrapArgs 組み立て（--label=...）にもそのまま乗せる。
+	var orchestrationID string
+	if body.Orchestration {
+		roles := make(map[string]orchestrationRoleAssignment, len(body.OrchestrationRoles))
+		for role, ra := range body.OrchestrationRoles {
+			if ra == nil {
+				continue
+			}
+			if ra.Provider != "" && !validOrchestrationProvider(ra.Provider) {
+				writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid orchestration role provider")
+				return
+			}
+			if strings.HasPrefix(ra.Model, "-") || !spawnValidModelLabel(ra.Model) {
+				writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid orchestration role model")
+				return
+			}
+			roles[role] = *ra
+		}
+		if body.Label == "" {
+			body.Label = fmt.Sprintf("orch-conductor-%d", time.Now().UnixNano())
+		}
+		orchestrationID = s.reserveOrchestrationConductor(body.Label, roles)
 	}
 
 	exe, err := os.Executable()
@@ -230,6 +428,14 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		if resolvedModel != "" {
 			wrapArgs = append(wrapArgs, "--model", resolvedModel)
 		}
+	case "opencode":
+		if resolvedModel != "" {
+			wrapArgs = append(wrapArgs, "--model", resolvedModel)
+		}
+	case "grok":
+		if resolvedModel != "" {
+			wrapArgs = append(wrapArgs, "--model", resolvedModel)
+		}
 	}
 	// route が未指定の場合は model 名から推定する。Anthropic / OpenAI の
 	// 既定 route は env 注入を行わない（ユーザー shell の値を継承）。
@@ -239,12 +445,13 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		localCfg := append([]config.LocalModel(nil), s.cfg.LocalModels...)
 		s.cfgMu.Unlock()
 		known := collectOllamaModelIDs(s.modelsCache, localCfg)
-		effectiveRoute = RouteForModel(body.Provider, resolvedModel, known)
+		knownLmStudio := collectLMStudioModelIDs(s.modelsCache)
+		effectiveRoute = RouteForModel(body.Provider, resolvedModel, known, knownLmStudio)
 	}
 	// Codex CLI は env (OPENAI_BASE_URL 等) だけでは provider を切り替えず、
 	// CLI 引数 --oss / --profile で OSS (Ollama) provider に切替える設計。
-	// route=ollama のときに --oss を渡さないと OpenAI 純正へ向かい認証エラーで落ちる。
-	if body.Provider == "codex" && effectiveRoute == RouteOllama {
+	// route=ollama / lm-studio のときに --oss を渡さないと OpenAI 純正へ向かい認証エラーで落ちる。
+	if body.Provider == "codex" && isLocalRoute(effectiveRoute) {
 		wrapArgs = append(wrapArgs, "--codex-oss")
 	}
 	if body.Utf8Session {
@@ -258,12 +465,11 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if s.parentShell != "" {
 		cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}
-	proxyToken := ""
-	if base := s.chatProxyBaseURL(); base != "" && effectiveRoute != RouteOllama {
-		proxyToken = newProxyToken()
-		s.registerPendingProxyToken(proxyToken)
-	}
-	if envPreset := EnvPresetForProxy(body.Provider, effectiveRoute, s.chatProxyBaseURL(), proxyToken); len(envPreset) > 0 {
+	s.cfgMu.Lock()
+	ollamaBaseURL := s.cfg.Ollama.BaseURL
+	lmStudioBaseURL := s.cfg.LMStudio.BaseURL
+	s.cfgMu.Unlock()
+	if envPreset := EnvPresetForWithOllamaBase(body.Provider, effectiveRoute, ollamaBaseURL, lmStudioBaseURL); len(envPreset) > 0 {
 		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
 		s.logger.Debug("spawn: env preset applied",
 			"provider", body.Provider, "route", effectiveRoute, "keys", envKeyList(envPreset))
@@ -305,11 +511,11 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	}
 	s.logger.Debug("spawn: wrap process started",
 		"provider", body.Provider, "pid", cmd.Process.Pid, "spawn_log", spawnLogPath)
-	// Ollama route のモデルは last_model に保存しない。
+	// ローカル LLM route のモデルは last_model に保存しない。
 	// 残すと model 空欄の次回 spawn で fallback として再選択され、
-	// Claude/Codex の純正起動のつもりが Ollama 経由になる罠を踏むため。
+	// Claude/Codex の純正起動のつもりがローカル LLM 経由になる罠を踏むため。
 	// 純正 (anthropic/openai) のモデル選択は引き続き sticky に保存する。
-	if resolvedModel != "" && effectiveRoute != RouteOllama {
+	if resolvedModel != "" && !isLocalRoute(effectiveRoute) {
 		if err := s.setLastModel(body.Provider, resolvedModel); err != nil {
 			s.logger.Warn("failed to save last model", "provider", body.Provider, "error", err)
 		}
@@ -329,6 +535,10 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 			_ = spawnLog.Close()
 		}
 	})
+	if orchestrationID != "" {
+		writeJSON(w, map[string]any{"ok": true, "orchestration_id": orchestrationID})
+		return
+	}
 	writeJSON(w, map[string]bool{"ok": true})
 }
 
@@ -426,7 +636,7 @@ func (s *Server) handleSpawnGrid(w http.ResponseWriter, r *http.Request) {
 		aiProvider = "claude"
 	}
 	validAIProviders := map[string]bool{
-		"claude": true, "codex": true, "copilot": true, "cursor-agent": true,
+		"claude": true, "codex": true, "copilot": true, "cursor-agent": true, "opencode": true, "grok": true,
 	}
 	if body.Preset == "ai+shell" && !validAIProviders[aiProvider] {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid ai provider for ai+shell preset")
@@ -488,12 +698,7 @@ func (s *Server) handleSpawnGrid(w http.ResponseWriter, r *http.Request) {
 		if s.parentShell != "" {
 			cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 		}
-		gridProxyToken := ""
-		if base := s.chatProxyBaseURL(); base != "" {
-			gridProxyToken = newProxyToken()
-			s.registerPendingProxyToken(gridProxyToken)
-		}
-		if envPreset := EnvPresetForProxy(spec.provider, "", s.chatProxyBaseURL(), gridProxyToken); len(envPreset) > 0 {
+		if envPreset := EnvPresetFor(spec.provider, ""); len(envPreset) > 0 {
 			cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
 		}
 		// stdin を DevNull に、stdout/stderr をログファイルに向ける（handleSpawn と同様）
@@ -636,12 +841,24 @@ func spawnCwdTooBroad(cwd string) bool {
 	if unixBroad[cwd] {
 		return true
 	}
-	// Windows 主要システムディレクトリ
+	// Windows 主要システムディレクトリ。NTFS はケースインセンシティブなので
+	// `c:\windows` のような小文字入力でも `os.Stat` は同じ実体を返す一方、
+	// map lookup は case-sensitive でガードをすり抜ける。approval_handler.go の
+	// approvalTargetKey と同様、Windows パス判定で正規化してから照合する。
 	winBroad := map[string]bool{
 		`C:\Windows`:             true,
 		`C:\Program Files`:       true,
 		`C:\Program Files (x86)`: true,
 		`C:\Users`:               true,
+	}
+	if runtime.GOOS == "windows" || isWindowsPath(cwd) {
+		lower := strings.ToLower(cwd)
+		for k := range winBroad {
+			if strings.ToLower(k) == lower {
+				return true
+			}
+		}
+		return false
 	}
 	return winBroad[cwd]
 }

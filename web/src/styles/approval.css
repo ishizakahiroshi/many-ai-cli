@@ -20,26 +20,44 @@
 }
 #action-bar.visible { display: flex; border-left-color: var(--warn); background: rgba(245,158,11,0.04); }
 
-/* 上端ドラッグハンドル（マウスで縦に伸ばせる）。
-   実体は #action-bar 自身の上端 6px 帯で pointerdown を拾う JS と組で動く。
-   ::before は視覚的なグリップだけを描く（pointer-events:none でクリックを邪魔しない）。
-   ダブルクリック（上端帯）でユーザー指定高さを解除しデフォルトに戻す。 */
+/* 上端ドラッグハンドル（マウスで縦に伸縮）。
+   ::before = 当たり判定＋カーソル変更用の上端 8px 帯。pointer-events:auto にしないと
+             ns-resize カーソルが出ない（過去 none のままでカーソルが変わらなかった）。
+   ::after  = 中央の「掴めるよ」グリップ表示（ピル型マーキング）。視覚専用なので
+             pointer-events:none にして当たり判定は ::before 帯に任せる。
+   JS(action-bar-resize.ts) は e.target===bar で判定するが、擬似要素のイベントは
+   host(bar) が target になるため JS 変更は不要（HANDLE_ZONE_PX を 8 に合わせるのみ）。
+   上端帯のダブルクリックでユーザー指定高さを解除しデフォルトに戻す。 */
 #action-bar::before {
   content: "";
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 6px;
+  height: 8px;
   cursor: ns-resize;
-  background: linear-gradient(to bottom, rgba(255,255,255,0.08), transparent);
-  border-top: 1px solid var(--line-soft);
+  background: transparent;
+  pointer-events: auto;
+  z-index: 5;
+}
+#action-bar::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 44px;
+  height: 4px;
+  border-radius: 3px;
+  background: var(--line-soft);
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.12s;
+  transition: opacity 0.12s, background 0.12s, width 0.12s;
+  z-index: 6;
 }
-#action-bar.visible::before { opacity: 0.6; }
-#action-bar:hover::before { opacity: 1; }
+#action-bar.visible::after { opacity: 0.85; }
+#action-bar.visible:hover::after { background: var(--accent); width: 60px; opacity: 1; }
+#action-bar.resizing::after { background: var(--accent); width: 60px; opacity: 1; }
 #action-bar.resizing { user-select: none; }
 
 .action-bar-label {
@@ -82,6 +100,22 @@
   flex-shrink: 0;
 }
 #multi-question-banner[hidden] { display: none; }
+/* stale-binary-banner: 稼働中 Hub が古いバイナリのとき常設表示する警告。
+   multi-question-banner と同じ構造・クラス（-text / -close）を流用し、
+   左ボーダーだけ警告色にする。 */
+#stale-binary-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: 8px 12px;
+  background: var(--bg-elev);
+  border-top: 1px solid var(--line);
+  border-left: 3px solid #ef4444;
+  color: var(--text);
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+#stale-binary-banner[hidden] { display: none; }
 .multi-question-banner-text {
   flex: 1 1 auto;
   white-space: pre-wrap;
@@ -217,30 +251,43 @@
 }
 .action-btn.batch-option.selected:hover { background: rgba(255,255,255,0.08); color: var(--text); }
 
+.action-batch-todo-badge {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--warn);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+.action-batch-todo-badge.done {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--green);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
 /* ===== 一括承認: 質問タブUI（plan_choice-tab-ui.md） ===== */
 /* 質問そのものを横タブにし、選択中 1 問分の選択肢だけを下のパネルに出す。
    質問数が増えても縦の高さは一定で、上のターミナル（文脈）が隠れない。 */
 .action-qtabs {
   display: flex;
-  gap: var(--space-1);
-  overflow-x: auto;
-  margin-bottom: -1px;
-  scrollbar-width: thin;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-1);
+  margin-bottom: var(--space-1);
   position: relative;
   z-index: 2;
 }
-.action-qtabs::-webkit-scrollbar { height: 6px; }
-.action-qtabs::-webkit-scrollbar-thumb { background: var(--line); border-radius: var(--radius-sm); }
 .action-qtab {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  max-width: 160px;
-  padding: 7px 12px;
+  max-width: 200px;
+  padding: 6px 10px;
   border: 1px solid var(--line);
-  border-bottom: none;
-  border-radius: 8px 8px 0 0;
+  border-radius: 6px;
   background: var(--bg-elev);
   color: var(--muted-2);
   cursor: pointer;
@@ -262,7 +309,7 @@
 
 .action-qpane {
   border: 1px solid rgba(99,102,241,0.45);
-  border-radius: 0 8px 8px 8px;
+  border-radius: 8px;
   background: var(--accent-soft);
   padding: 10px 12px;
   position: relative;
@@ -305,6 +352,8 @@
   min-height: 42px;
 }
 .action-qdetail.empty { color: var(--muted-2); }
+.action-qdetail.empty.clickable { cursor: text; }
+.action-qdetail.empty.clickable:hover { border-color: var(--accent); color: var(--text); }
 .action-qdetail .detail-lab {
   display: block;
   color: var(--muted-2);
@@ -443,7 +492,8 @@
   font-family: inherit;
   transition: background 0.12s, border-color 0.12s, color 0.12s, opacity 0.12s;
 }
-.action-clear-btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); }
+.action-clear-btn:hover:not(:disabled) { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); }
+.action-clear-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .action-submit-btn {
   background: var(--accent);
   color: #fff;

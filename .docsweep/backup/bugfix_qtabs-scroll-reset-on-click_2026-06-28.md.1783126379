@@ -1,0 +1,30 @@
+# [様子見] 一括承認の質問タブをクリックすると横スクロールが左端に戻る
+
+## 症状
+
+一括承認バー（複数質問 UI）で質問数が多く `.action-qtabs` が横スクロールする状態のとき、右側のタブ（例: Q6）をクリックすると、再描画後に scrollLeft が 0 へ戻ってしまい、押した直後に Q1 付近まで巻き戻る。ユーザー操作で右へスクロールしていた位置が毎クリック失われる。
+
+## 根本原因
+
+`showBatchActionBar` はクリック→`setBatchActiveQ`→自身を再呼び出し→`bar.innerHTML = ''` でバー全体を消去 → `.action-qtabs` を再構築する設計。新しく生成された tabs コンテナの scrollLeft は当然 0 で始まるため、ユーザーがスクロールしていた位置が捨てられていた。
+
+## 修正内容
+
+`web/src/app/approval.ts` の `showBatchActionBar` で、
+
+1. `bar.innerHTML = ''` の直前に既存 `.action-qtabs` の `scrollLeft` を捕まえる。
+2. 新しい tabs を append した直後に同じ値を書き戻す。
+3. `requestAnimationFrame` でアクティブタブが可視範囲外（キーボード ← → で進めた場合など）に出ていれば、`tabsEl` 内だけで最小限スクロールして可視化する（`scrollIntoView` は使わない — 親 bar / ページまで巻き込むため）。
+
+## 変更ファイル
+
+web/src/app/approval.ts
+
+## 検証
+
+- `make build` → ブラウザでリロード → 質問数 14 件の一括承認を出し、右側のタブ（Q6 / Q11 等）をクリックして scrollLeft が維持されることを確認する（ユーザー手元）。
+- キーボード ← → で Q1 → Q14 まで進めた時にアクティブタブが視界に追従することを確認する。
+
+## 備忘
+
+`showSingleSectionBar`（single-tabs モード）は質問タブ列を持たないため対象外。`showMultiSelectActionBar` も同様にチェックすべきか別途確認（本件のスクショは batch モード）。

@@ -55,6 +55,33 @@ func TestExtractCommitMarker(t *testing.T) {
 			t.Fatalf("expected ok=false while close marker is absent")
 		}
 	})
+
+	t.Run("OPEN マーカーに subject が連結（Claude TUI 再描画の実再現）", func(t *testing.T) {
+		// Claude Code の TUI 再描画 + StripANSI で、行頭バレット直後に OPEN マーカーと
+		// subject が同一行へ連結される（実セッションログで確認した壊れ方）。
+		buf := "noise\n●" + commitMsgMarkerOpen + "docs: add guide\n\nbody line 1\nbody line 2\n  " + commitMsgMarkerClose + "\ntrailing"
+		sub, body, ok := extractCommitMarker(buf)
+		if !ok || sub != "docs: add guide" || body != "body line 1\nbody line 2" {
+			t.Fatalf("got ok=%v sub=%q body=%q", ok, sub, body)
+		}
+	})
+
+	t.Run("CLOSE マーカーが本文末尾に連結", func(t *testing.T) {
+		buf := commitMsgMarkerOpen + "\nfix: x\nbody" + commitMsgMarkerClose
+		sub, body, ok := extractCommitMarker(buf)
+		if !ok || sub != "fix: x" || body != "body" {
+			t.Fatalf("got ok=%v sub=%q body=%q", ok, sub, body)
+		}
+	})
+
+	t.Run("連結 OPEN でもプロンプトエコーを取り違えない", func(t *testing.T) {
+		// エコー（マーカー語は文中インライン）の後に、連結 OPEN 形式の本応答が届くケース。
+		buf := aiCommitPrompt(true) + "\n●" + commitMsgMarkerOpen + "feat: real\n" + commitMsgMarkerClose
+		sub, _, ok := extractCommitMarker(buf)
+		if !ok || sub != "feat: real" {
+			t.Fatalf("got ok=%v sub=%q", ok, sub)
+		}
+	})
 }
 
 func sf(status, path string) gitStatusFile {

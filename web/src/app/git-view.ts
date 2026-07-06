@@ -487,7 +487,7 @@ import { showFileActionsPopup, joinPath } from './path-links.js';
             <div class="git-commit-error" data-commit-error hidden></div>
             <div class="git-commit-actions">
               <button class="git-secondary-btn" data-commit-generate>${_esc(_gt('git_commit_generate_message', 'Generate'))}</button>
-              <button class="git-secondary-btn" data-commit-ai title="${_esc(_gt('git_commit_ai_note', 'Ask the connected AI agent to read the diff and draft a commit message. Review it before committing.'))}">${_esc(_gt('git_commit_ai_message', 'Ask AI'))}</button>
+              <button class="git-secondary-btn" data-commit-ai hidden title="${_esc(_gt('git_commit_ai_note', 'Ask the connected AI agent to read the diff and draft a commit message. Review it before committing.'))}">${_esc(_gt('git_commit_ai_message', 'Ask AI'))}</button>
               <div class="git-commit-action-spacer"></div>
               <button class="git-secondary-btn" data-commit-cancel>${_esc(_gt('confirm_cancel', 'Cancel'))}</button>
               <button class="git-secondary-btn" data-commit-review>${_esc(_gt('git_commit_review', 'Review'))}</button>

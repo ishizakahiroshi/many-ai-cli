@@ -1,0 +1,217 @@
+# [計画] Workbench 機能と内蔵プロキシの廃止
+
+## context配分
+
+| C | 種別 | 内容 | 並列 |
+|---|---|---|---|
+| C1 | fix | env_preset の Anthropic/OpenAI 経路プロキシ差し替え撤去（1M 問題の根治・最小差分） | — |
+| C2 | fix | Hub 側 chat_proxy 配線撤去（server.go の startChatProxy 系・chatProxy field・chat_proxy.go / chat_proxy_usage.go 削除） | — |
+| C3 | fix | internal/proxy/ パッケージ削除・依存 import 掃除 | — |
+| C4 | fix | Workbench UI / API 撤去（workbench_handlers.go・workbench.ts・workbench.css・タブ登録・ルート登録） | [並列OK with C3] |
+| C5 | fix | docs / README / CHANGELOG 更新（設計書 v0.3.x・README 機能表・Workbench 節削除） | — |
+| C6 | plan | 動作確認（claude spawn → /model で Sonnet 5 が 1M 表示・BASE_URL 未設定確認・codex も同様） | — |
+
+実行順序: `C1 → C2 → (C3, C4) → C5 → C6`
+
+---
+
+## 概要
+
+many-ai-cli の Hub 内蔵プロキシ（`internal/proxy/`）と Workbench 機能を全撤去する。プロキシは wrap 対象 CLI の `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` を差し替えて payload を捕捉し、Workbench タブで構造化チャット履歴として閲覧させるための機構だが、以下の理由で廃止する:
+
+- Claude Code は BASE_URL が api.anthropic.com 以外だとゲートウェイ判定して 1M コンテキストを 200k に丸めるため、Sonnet 5 以降のデフォルト 1M が Hub 経由だけ効かない
+- 対症療法（`ANTHROPIC_MODEL=claude-sonnet-5[1m]` 注入）は新モデル追加のたびに追従が要り持続不可能
+- Workbench 自体を利用していないので機能維持コストに見合わない
+
+スコープ外:
+- Ollama / LM Studio ルーティングの BASE_URL 差し替え（ローカル LLM 側は BASE_URL 差し替えが本質機能なので温存）
+- セッションログ（`~/.many-ai-cli/logs/sessions/*`）— PTY 生ログ / JSONL イベント履歴は別系統なので影響しない
+
+## 現状と問題
+
+`internal/hub/env_preset.go:81-89` で `proxyBaseURL != ""` のとき Anthropic 経路に対して `ANTHROPIC_BASE_URL=<proxy>/anthropic` を注入している。この結果:
+
+- Claude Code の起動時判定で「未知のゲートウェイ」扱い → Sonnet 5 でも 200k キャップ
+- 素の `claude` 直起動なら BASE_URL 未設定 → 1M デフォルト
+- ユーザー体験としては many-ai-cli を通すと性能が劣化する
+
+同じ差し替えが Codex（`OPENAI_BASE_URL=<proxy>/openai/v1`）にも入っている（同ファイル L103-111）。
+
+コード規模:
+- `internal/proxy/proxy.go` 446 行
+- `internal/hub/chat_proxy.go` 229 行
+- `internal/hub/chat_proxy_usage.go` 112 行
+- `internal/hub/workbench_handlers.go` 1083 行
+- `internal/hub/workbench_handlers_test.go` 48 行
+- `web/src/app/workbench.ts` 504 行
+- `web/src/styles/workbench.css` 297 行
+- 合計 約 2700 行
+
+`internal/hub/server.go` のフック点:
+- L450: `chatProxy *proxy.Server` field
+- L873: `s.registerWorkbenchRoutes(mux)`
+- L1005: `s.startChatProxy()`
+- L1030: `s.stopChatProxy()`
+
+## 方針
+
+削除は上流から。env_preset の差し替えを止めた瞬間に Claude Code は BASE_URL を持たない起動になり 1M 問題は解消する（C1 単独でユーザー影響は解決）。C2 以降は死んだ配線を掃除するリファクタで、機能的な追加変更はない。
+
+代替方式:
+- チャット履歴が将来必要になった場合は PTY ログ + JSONL イベント履歴（既存）で代用する。API payload 単位の構造化捕捉は再導入しない前提で消す
+- Workbench タブが担っていた UI 上の役割は他タブに吸収しない（純粋な削除）
+
+---
+
+## C1: env_preset の Anthropic/OpenAI プロキシ差し替え撤去
+
+### 作業内容
+
+- `internal/hub/env_preset.go` の `EnvPresetForProxyWithOllamaBase` から Anthropic route の `proxyBaseURL != ""` 分岐（L81-89）を削除
+- 同関数の Codex route の `proxyBaseURL != ""` 分岐（L103-111）も削除
+- `MANY_AI_CLI_PROXY_TOKEN` 注入も同時撤去（wrapper 側で参照している場合は C2 で対応）
+- 関数シグネチャは `proxyBaseURL` / `proxyToken` 引数を残したまま無視するのではなく、引数自体を削除して `EnvPresetForProxyWithOllamaBase` → `EnvPresetForWithOllamaBase` へ改名。呼び出し側（server.go）も追随
+- Ollama / LM Studio route の分岐はそのまま維持
+- `internal/hub/env_preset_test.go` の proxy 系テストケースを削除
+
+### 変更予定ファイル
+
+- `internal/hub/env_preset.go` — Anthropic/OpenAI proxy 分岐削除・関数シグネチャ整理
+- `internal/hub/env_preset_test.go` — proxy テストケース削除
+- `internal/hub/server.go` — 呼び出し側の proxyBaseURL 引数除去（chatProxy field への依存も後で C2 で消える）
+
+### 完了条件
+
+- `go build ./...` が通る
+- `many-ai-cli claude` を wrap 起動したときに ANTHROPIC_BASE_URL が env に出ない（Ollama/LMStudio 経路は今まで通り）
+- `go test ./internal/hub/...` が通る
+
+---
+
+## C2: Hub 側 chat_proxy 配線撤去
+
+### 作業内容
+
+- `internal/hub/server.go` の以下を削除:
+  - `chatProxy *proxy.Server` field
+  - `s.registerWorkbenchRoutes(mux)` 呼び出し（C4 で関数側も削除）
+  - `s.startChatProxy()` / `s.stopChatProxy()` 呼び出し
+  - proxy パッケージ import
+- `internal/hub/chat_proxy.go` 削除
+- `internal/hub/chat_proxy_usage.go` 削除
+- `internal/proto/messages.go` の ProxyToken 系 field（wrapper register で送られてくる token）は wrapper 側整理と合わせて削除
+- `internal/wrapper/wrapper.go` の `MANY_AI_CLI_PROXY_TOKEN` 読み取り / register 送信部を削除
+
+### 変更予定ファイル
+
+- `internal/hub/server.go`
+- `internal/hub/chat_proxy.go`（削除）
+- `internal/hub/chat_proxy_usage.go`（削除）
+- `internal/proto/messages.go`
+- `internal/wrapper/wrapper.go`
+
+### 完了条件
+
+- `go build ./...` が通る
+- `go vet ./...` が通る
+- 未使用 import が残らない
+
+---
+
+## C3: internal/proxy/ パッケージ削除
+
+### 作業内容
+
+- `internal/proxy/` ディレクトリごと削除（`proxy.go` 446 行 + テスト）
+- 参照が残っていないことを `grep -r "internal/proxy" .` で確認
+
+### 変更予定ファイル
+
+- `internal/proxy/` ディレクトリ削除
+
+### 完了条件
+
+- `go build ./...` が通る
+- `internal/proxy` への参照がリポ内 0 件
+
+---
+
+## C4: Workbench UI / API 撤去 [並列OK with C3]
+
+### 作業内容
+
+- `internal/hub/workbench_handlers.go` 削除
+- `internal/hub/workbench_handlers_test.go` 削除
+- `web/src/app/workbench.ts` 削除
+- `web/src/styles/workbench.css` 削除
+- `web/src/app.ts` / `web/src/app-entry.ts` から Workbench タブ登録・import・遷移ロジック削除
+- `web/src/index.html` から Workbench タブの DOM を削除
+- `web/src/styles.css` / `web/src/styles/tabs.css` の Workbench 参照を除去
+- `web/src/app/settings.ts` に Workbench 設定があれば削除
+- `web/src/app/spawn-panel.ts` に Workbench 参照があれば整理
+
+### 変更予定ファイル
+
+- `internal/hub/workbench_handlers.go`（削除）
+- `internal/hub/workbench_handlers_test.go`（削除）
+- `web/src/app/workbench.ts`（削除）
+- `web/src/styles/workbench.css`（削除）
+- `web/src/app.ts`
+- `web/src/app-entry.ts`
+- `web/src/index.html`
+- `web/src/styles.css`
+- `web/src/styles/tabs.css`
+- `web/src/app/settings.ts`
+- `web/src/app/spawn-panel.ts`
+
+### 完了条件
+
+- `make build` が通る（Go + web 両方）
+- ブラウザで Hub を開いた時に Workbench タブが表示されない
+- 他タブ（sessions / files / chat / git / split / multi）が今まで通り動く
+
+---
+
+## C5: docs / README / CHANGELOG 更新
+
+### 作業内容
+
+- `docs/v0.3.x-many-ai-cli-design.md` から Workbench / 内蔵プロキシに関する記述を削除または「v0.4.0 で廃止」の注記に置換
+- `README.md` / `README.ja.md` の機能一覧から Workbench を除外・セキュリティ節の「内蔵プロキシで payload を捕捉する」記述を削除
+- `CHANGELOG.md` に次リリースエントリを追加（Workbench 機能廃止・Sonnet 5 以降 1M デフォルト回復）
+- `docs/manual_release.md` に Workbench 参照があれば整理
+- `CLAUDE.md` の「現在の実装状態（v0.2.0）」節に Workbench 撤去済みの旨追記
+
+### 変更予定ファイル
+
+- `docs/v0.3.x-many-ai-cli-design.md`
+- `README.md`
+- `README.ja.md`
+- `CHANGELOG.md`
+- `docs/manual_release.md`
+- `CLAUDE.md`
+
+### 完了条件
+
+- docs 内に「Workbench」「chat_proxy」「内蔵プロキシで payload」等の残置が無い
+- README の機能表と実装が一致する
+
+---
+
+## C6: 動作確認
+
+### 作業内容
+
+- `make build` してビルド生成物を差し替え
+- Hub を起動（ユーザー実施）
+- `many-ai-cli claude` を新規 spawn し、`/model` で「Sonnet 5」を選択して `/context` の総トークンが 200k ではなく 1M ベース表示になることを確認
+- shell から `echo $ANTHROPIC_BASE_URL` が空であることを確認
+- `many-ai-cli codex` を新規 spawn し、OPENAI_BASE_URL が空であることを確認
+- Ollama / LM Studio route は従来通り BASE_URL が指定 URL に向くことを確認（回帰していない）
+- Workbench タブが UI から消えていることを確認
+
+### 完了条件
+
+- Sonnet 5 が 1M でユーザーの手元で動く
+- Ollama/LMStudio ルート回帰なし
+- ビルド・起動でエラーなし

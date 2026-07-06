@@ -20,6 +20,11 @@
   bottom: 0;
   left: 0;
   right: 0;
+  /* iOS Safari の下部ナビ・ホームインジケータと重ならないようにセーフエリア分だけ
+     高さを伸ばし、内容は上端側へ寄せる（既存セグメントの位置は変えない）。 */
+  height: calc(22px + env(safe-area-inset-bottom));
+  min-height: calc(22px + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* セグメント共通 */
@@ -90,6 +95,44 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.tsb-agent-name {
+  color: #7dcfff;
+  max-width: 10ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* effort / thinking バッジ（モデルチップ隣） */
+.tsb-seg-effort { gap: 4px; }
+.tsb-effort-lvl {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #e0af68;
+  background: color-mix(in srgb, #e0af68 18%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 1px 5px;
+  text-transform: uppercase;
+}
+.tsb-thinking { font-size: 0.7rem; }
+
+/* AI 編集行数（project 隣・追加=緑 / 削除=赤） */
+.tsb-seg-ailines { color: #565f89; }
+.tsb-seg-ailines .tsb-add { color: #9ece6a; }
+.tsb-seg-ailines .tsb-del { color: #f7768e; }
+
+/* 拡張コンテキスト（1M 窓）バッジ */
+.tsb-1m {
+  font-size: 0.56rem;
+  font-weight: 700;
+  color: #7dcfff;
+  background: color-mix(in srgb, #7dcfff 18%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+}
+
+/* レート制限残量（接続状態の手前・hourglass + 5h/7d %） */
+.tsb-seg-ratelimit { color: #9aa5ce; gap: 4px; }
 
 /* 作業ラベル（一押しE・薄字イタリック・クリックで送信履歴モーダル） */
 .tsb-seg-label {
@@ -140,6 +183,8 @@
 /* cost: purple（+ today / クリックで内訳） */
 .tsb-seg-cost { color: #bb9af7; cursor: pointer; }
 .tsb-today { color: #9d7cd8; }
+/* モバイル専用の today 短縮表記（デスクトップ・詳細モーダルでは出さない） */
+.tsb-today-short { display: none; color: #9d7cd8; }
 
 /* burn rate: amber */
 .tsb-seg-burn { color: #e0af68; }
@@ -316,19 +361,47 @@
 }
 .tsb-seg-more:hover { background: #2a2f45; }
 
-/* ── モバイル（640px 以下）: 最重要セグメントだけに絞る ─────────────────
-   表示: #N / 状態 / ctx / cost / conn / fleet / …（詳細ボタン）
-   非表示: agent / label / project / tok / cache / compact / burn / elapsed */
+/* ── モバイル（640px 以下）: 監視・割り込み用に絞る ─────────────────
+   表示: #N / 状態 / providerアイコンのみ / ctx(%のみ) / cost(today短縮のみ) /
+         conn / fleet / …（詳細ボタン）
+   条件付き表示: compact / ratelimit は crit（90%超・発動間近）のときだけ出す
+   非表示: label / project / ailines / tok / cache / burn / elapsed */
 @media (max-width: 640px) {
-  #token-statusbar .tsb-seg-agent,
+  #token-statusbar .tsb-seg-effort,
   #token-statusbar .tsb-seg-label,
   #token-statusbar .tsb-seg-project,
+  #token-statusbar .tsb-seg-ailines,
   #token-statusbar .tsb-seg-tok,
   #token-statusbar .tsb-seg-cache,
-  #token-statusbar .tsb-seg-compact,
   #token-statusbar .tsb-seg-burn,
   #token-statusbar .tsb-seg-elapsed {
     display: none !important;
+  }
+  /* compact / ratelimit: 危険域（.tsb-crit は TS 側で付与）だけ表示する */
+  #token-statusbar .tsb-seg-compact:not(.tsb-crit),
+  #token-statusbar .tsb-seg-ratelimit:not(.tsb-crit) {
+    display: none !important;
+  }
+  /* agent はチップ・モデル名・エージェント名を落として provider アイコン 1 個だけ残す */
+  #token-statusbar .tsb-seg-agent .card-provider-chip,
+  #token-statusbar .tsb-seg-agent .tsb-model,
+  #token-statusbar .tsb-seg-agent .tsb-agent-name {
+    display: none;
+  }
+  /* ctx / compact はゲージバー・1M バッジを落として % テキストだけにする */
+  #token-statusbar .tsb-seg-ctx .tsb-gauge,
+  #token-statusbar .tsb-seg-compact .tsb-gauge,
+  #token-statusbar .tsb-seg-ctx .tsb-1m {
+    display: none;
+  }
+  /* cost はセッション個別コストと通常 today を落とし、today 短縮表記 1 個に絞る。
+     today 不明（tsb-today-short 不在）のときはセッションコストを残す */
+  #token-statusbar .tsb-seg-cost:has(.tsb-today-short) .tsb-cost-session,
+  #token-statusbar .tsb-seg-cost .tsb-today {
+    display: none;
+  }
+  #token-statusbar .tsb-seg-cost .tsb-today-short {
+    display: inline;
   }
   #token-statusbar .tsb-seg-more {
     display: inline-flex;
@@ -410,3 +483,27 @@
   word-break: break-word;
   min-width: 0;
 }
+
+/* 設定パネル: ステータスバー セグメント表示トグル群 */
+.settings-subhead {
+  margin-top: 10px;
+  margin-bottom: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #7aa2f7;
+}
+.tsb-segments-toggles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 12px;
+}
+.tsb-seg-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: #c0caf5;
+  cursor: pointer;
+  padding: 2px 0;
+}
+.tsb-seg-toggle input { cursor: pointer; }

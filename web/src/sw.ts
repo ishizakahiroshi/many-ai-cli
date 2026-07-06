@@ -1,6 +1,11 @@
 const CACHE_VERSION = 'many-ai-cli-sw-v1';
 const TOKEN_CACHE = 'many-ai-cli-token-v1';
 const TOKEN_URL = '/__many-ai-cli-token__';
+// C5 (plan_audit_score_s_promotion_2026-07-05.md) 縮退: SW に永続保存された
+// token が使い回されないよう TTL を導入。24h を超えた保存値は無効扱いとし、
+// notification click 側は Cookie (MANY_AI_CLI_token) fallback に倒れる。
+// Hub の handleIndex は 24h の HttpOnly Cookie を発行するので実運用で不整合になりにくい。
+const TOKEN_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
@@ -19,7 +24,10 @@ self.addEventListener('message', (event) => {
   if (data.type !== 'many-ai-cli-token' || !data.token) return;
   event.waitUntil((async () => {
     const cache = await caches.open(TOKEN_CACHE);
-    await cache.put(TOKEN_URL, new Response(JSON.stringify({ token: data.token }), {
+    // C5: token と一緒に expires (絶対時刻 ms) を保存し、readHubToken 側で TTL check する。
+    // 旧形式 `{ token }` のみでも readHubToken は expires 未設定として扱い期限切れ判定する。
+    const payload = { token: data.token, expires: Date.now() + TOKEN_CACHE_TTL_MS };
+    await cache.put(TOKEN_URL, new Response(JSON.stringify(payload), {
       headers: { 'Content-Type': 'application/json' },
     }));
   })());
@@ -113,6 +121,12 @@ async function readHubToken() {
     const res = await cache.match(TOKEN_URL);
     if (!res) return '';
     const data = await res.json();
+    // C5: expires が無い旧レコード or 期限切れは失効扱いにして、notification click は
+    // Cookie fallback（handleIndex 発行の HttpOnly Cookie）に倒れる。
+    const expires = typeof data.expires === 'number' ? data.expires : 0;
+    if (!expires || expires <= Date.now()) {
+      return '';
+    }
     return data.token || '';
   } catch (_) {
     return '';

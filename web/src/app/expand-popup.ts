@@ -53,7 +53,13 @@ function positionPopupNear(popup) {
   popup.style.transform = 'translate(-50%, -50%)';
 }
 
-function renderExpandPopup(sessionId, lines, clientX, clientY, loading) {
+// A4: 長文（diff 等）はそのままだとスマホで読めなくなる量になるため、既定でサマリ表示にする。
+// 先頭 SUMMARY_HEAD 行 + 末尾 SUMMARY_TAIL 行を残し、間を省略する。閾値以下はそのまま全文。
+const SUMMARY_HEAD = 50;
+const SUMMARY_TAIL = 10;
+const SUMMARY_THRESHOLD = SUMMARY_HEAD + SUMMARY_TAIL + 5;
+
+function renderExpandPopup(sessionId, lines, clientX, clientY, loading, opts: { showFull?: boolean } = {}) {
   const popup = getOrCreateExpandPopup();
   popup.innerHTML = '';
   popup.hidden = false;
@@ -95,10 +101,33 @@ function renderExpandPopup(sessionId, lines, clientX, clientY, loading) {
   popup.appendChild(header);
 
   if (!loading && lines.length > 0) {
+    const showFull = !!opts.showFull;
+    const needsSummary = lines.length > SUMMARY_THRESHOLD && !showFull;
+
     const pre = document.createElement('pre');
-    pre.className = 'expand-popup-content';
-    appendLinkedText(pre, lines.join('\n'), sessionId);
-    popup.appendChild(pre);
+    pre.className = 'expand-popup-content' + (needsSummary ? ' expand-popup-content--summarized' : '');
+
+    if (needsSummary) {
+      const head = lines.slice(0, SUMMARY_HEAD);
+      const tail = lines.slice(-SUMMARY_TAIL);
+      const omitted = lines.length - SUMMARY_HEAD - SUMMARY_TAIL;
+      const omittedMarker = `… ${t('expand_popup_summary_omitted', { n: String(omitted) })} …`;
+      const summary = [...head, '', omittedMarker, '', ...tail].join('\n');
+      appendLinkedText(pre, summary, sessionId);
+      popup.appendChild(pre);
+
+      const showFullBtn = document.createElement('button');
+      showFullBtn.type = 'button';
+      showFullBtn.className = 'expand-popup-show-full';
+      showFullBtn.textContent = t('expand_popup_show_full');
+      showFullBtn.addEventListener('click', () => {
+        renderExpandPopup(sessionId, lines, clientX, clientY, false, { showFull: true });
+      });
+      popup.appendChild(showFullBtn);
+    } else {
+      appendLinkedText(pre, lines.join('\n'), sessionId);
+      popup.appendChild(pre);
+    }
   }
 
   positionPopupNear(popup);
