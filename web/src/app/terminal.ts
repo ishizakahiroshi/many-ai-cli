@@ -262,12 +262,21 @@ export function ensureTerminal(id) {
     try {
       new Unicode11Addon.Unicode11Addon().activate({ unicode: { register(p) { v11 = p; } } } as any);
     } catch (_) { /* 捕捉失敗時は version '11' のまま（重なりは残るが描画は維持） */ }
-    if (v11 && typeof v11.wcwidth === 'function') {
+    if (v11 && typeof v11.wcwidth === 'function' && typeof v11.charProperties === 'function') {
       const isAmbiguousWide = (cp) =>
         (cp >= 0x2160 && cp <= 0x217F) || (cp >= 0x2460 && cp <= 0x24FF);
       term.unicode.register({
         version: '11-aacli',
         wcwidth(cp) { return isAmbiguousWide(cp) ? 2 : v11.wcwidth(cp); },
+        // xterm コアは print 経路で provider の charProperties を必須で呼ぶ
+        // （欠けていると最初の 1 文字で TypeError となり描画が全停止する）。
+        // 戻り値は packed 形式: bit0=shouldJoin / bit1-2=width / bit3以降=charKind
+        // （UnicodeService.createPropertyValue / extractWidth と同一レイアウト）。
+        // width 上書き対象だけ width ビットを 2 へ差し替え、他は unicode11 へ委譲する。
+        charProperties(cp, preceding) {
+          const p = v11.charProperties(cp, preceding);
+          return isAmbiguousWide(cp) ? ((p & ~0b110) | (2 << 1)) : p;
+        },
       } as any);
       term.unicode.activeVersion = '11-aacli';
     }

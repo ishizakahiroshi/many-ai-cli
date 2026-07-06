@@ -11,6 +11,18 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Fixed
+- **WebGL terminal renderer works again (vendored xterm.js generation mismatch).**
+  The vendored `xterm-addon-webgl.min.js` had been updated to 0.19.0 (the
+  xterm.js 6.0.0 generation, which requires the `mainDocument` API of the
+  terminal core), while `xterm.min.js` and the fit / unicode11 / web-links
+  addons were still the older 5.x-generation files — only the license ledger
+  and the About dialog had been bumped to 6.0.0. Every `loadAddon` call then
+  threw `Cannot read properties of undefined (reading 'createElement')` inside
+  the addon, so the UI silently fell back to the DOM renderer on each session
+  switch, re-introducing the fullwidth-glyph / selection-highlight drift the
+  WebGL renderer exists to fix. The vendored core (`xterm.min.js`,
+  `xterm.min.css`) and the three addons are now the actual 6.0.0-generation
+  artifacts, matching the ledger.
 - **Orchestration fallback ID no longer collides across Hub restarts.** When a
   conductor started a child via `spawn-child` without going through
   `/api/orchestration/create`, the orchestration ID was `s<parentSessionID>`
