@@ -191,37 +191,6 @@ func (l *pinLimiter) beginAttempt(ip string, now time.Time) int {
 	return 0
 }
 
-// recordFailure は既存 API 互換のため残す（内部的には beginAttempt と同じ処理を
-// 予約なしで呼び直す形。新規呼び出しは beginAttempt を使うこと）。
-func (l *pinLimiter) recordFailure(ip string, now time.Time) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.pruneLocked(now)
-	a := l.perIP[ip]
-	if a == nil {
-		a = &pinAttempt{}
-		l.perIP[ip] = a
-	}
-	a.lastSeen = now
-	a.fails++
-	if a.fails >= pinLockThreshold {
-		a.lockedUntil = now.Add(pinLockDurations[min(a.lockLevel, len(pinLockDurations)-1)])
-		if a.lockLevel < len(pinLockDurations)-1 {
-			a.lockLevel++
-		}
-		a.fails = 0
-	}
-	if now.Sub(l.globalSeen) > pinAttemptTTL {
-		l.globalFails = 0
-	}
-	l.globalSeen = now
-	l.globalFails++
-	if l.globalFails >= pinGlobalFailCap {
-		l.globalUntil = now.Add(pinLockDurations[0])
-		l.globalFails = 0
-	}
-}
-
 func (l *pinLimiter) recordSuccess(ip string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
