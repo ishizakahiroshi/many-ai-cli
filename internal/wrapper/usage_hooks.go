@@ -6,8 +6,15 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
+
+// codexConfigMu は同一プロセス内の ~/.codex/config.toml RMW を直列化する。
+// クロスプロセスは codexConfigFileLock で保護する。
+var codexConfigMu sync.Mutex
 
 // ---------------------------------------------------------------------------
 // 共通定数・型
@@ -185,62 +192,103 @@ func codexStopHookBlock(p UsageHookParams) string {
 
 // InjectCodexStopHook は ~/.codex/config.toml に Stop フックを冪等注入する。
 func InjectCodexStopHook(p UsageHookParams) error {
+	codexConfigMu.Lock()
+	defer codexConfigMu.Unlock()
 	path := codexConfigPath()
+	return withCodexConfigFileLock(path, func() error {
+		// 既存ファイルを読む（無ければ空）。
+		var content string
+		if data, err := os.ReadFile(path); err == nil {
+			content = string(data)
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("read %s: %w", path, err)
+		}
 
-	// 既存ファイルを読む（無ければ空）。
-	var content string
-	if data, err := os.ReadFile(path); err == nil {
-		content = string(data)
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("read %s: %w", path, err)
-	}
+		// already 注入済みかどうか確認。
+		if strings.Contains(content, usageHookBlockStart) {
+			// 注入済み: コマンドだけ更新（セッション ID が変わる場合を考慮）。
+			// ReplaceAllLiteralString を使う。ReplaceAllString だと newBlock 中の
+			// `$name` / `${name}` が Regexp.Expand ルールで解釈され、many-ai-cli の
+			// 実行ファイルパスに `$` を含むディレクトリ（例:
+			// `C:\Users\alice\$portable\many-ai-cli.exe`）があると、対応するキャプチャ
+			// グループが無いため無言で消える（TOML 上は構文的に壊れないので気づけない）。
+			newBlock := codexStopHookBlock(p)
+			blockRe := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(usageHookBlockStart) + `.*?` + regexp.QuoteMeta(usageHookBlockEnd) + `\n?`)
+			content = blockRe.ReplaceAllLiteralString(content, newBlock)
+			return writeCodexConfig(path, content)
+		}
 
-	// already 注入済みかどうか確認。
-	if strings.Contains(content, usageHookBlockStart) {
-		// 注入済み: コマンドだけ更新（セッション ID が変わる場合を考慮）。
-		// ReplaceAllLiteralString を使う。ReplaceAllString だと newBlock 中の
-		// `$name` / `${name}` が Regexp.Expand ルールで解釈され、many-ai-cli の
-		// 実行ファイルパスに `$` を含むディレクトリ（例:
-		// `C:\Users\alice\$portable\many-ai-cli.exe`）があると、対応するキャプチャ
-		// グループが無いため無言で消える（TOML 上は構文的に壊れないので気づけない）。
-		newBlock := codexStopHookBlock(p)
-		blockRe := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(usageHookBlockStart) + `.*?` + regexp.QuoteMeta(usageHookBlockEnd) + `\n?`)
-		content = blockRe.ReplaceAllLiteralString(content, newBlock)
+		// 末尾に追記。
+		if !strings.HasSuffix(content, "\n") && len(content) > 0 {
+			content += "\n"
+		}
+		content += "\n" + codexStopHookBlock(p)
+
 		return writeCodexConfig(path, content)
-	}
-
-	// 末尾に追記。
-	if !strings.HasSuffix(content, "\n") && len(content) > 0 {
-		content += "\n"
-	}
-	content += "\n" + codexStopHookBlock(p)
-
-	return writeCodexConfig(path, content)
+	})
 }
 
 // RemoveCodexStopHook は注入した Stop フックブロックを除去する。
 func RemoveCodexStopHook() error {
+	codexConfigMu.Lock()
+	defer codexConfigMu.Unlock()
 	path := codexConfigPath()
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read %s: %w", path, err)
-	}
+	return withCodexConfigFileLock(path, func() error {
+		data, err := os.ReadFile(path)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read %s: %w", path, err)
+		}
 
-	content := string(data)
-	if !strings.Contains(content, usageHookBlockStart) {
-		return nil
-	}
+		content := string(data)
+		if !strings.Contains(content, usageHookBlockStart) {
+			return nil
+		}
 
-	blockRe := regexp.MustCompile(`(?s)\n?` + regexp.QuoteMeta(usageHookBlockStart) + `.*?` + regexp.QuoteMeta(usageHookBlockEnd) + `\n?`)
-	newContent := blockRe.ReplaceAllString(content, "")
-	if newContent == content {
-		return nil
-	}
+		blockRe := regexp.MustCompile(`(?s)\n?` + regexp.QuoteMeta(usageHookBlockStart) + `.*?` + regexp.QuoteMeta(usageHookBlockEnd) + `\n?`)
+		newContent := blockRe.ReplaceAllString(content, "")
+		if newContent == content {
+			return nil
+		}
 
-	return writeCodexConfig(path, newContent)
+		return writeCodexConfig(path, newContent)
+	})
+}
+
+// withCodexConfigFileLock は config.toml 隣の .lock を O_EXCL で取り、RMW 区間を
+// プロセス横断で直列化する。取得できなければ短時間リトライする。
+func withCodexConfigFileLock(configPath string, fn func() error) error {
+	lockPath := configPath + ".many-ai-cli.lock"
+	const attempts = 50
+	const delay = 20 * time.Millisecond
+	var lockFile *os.File
+	var err error
+	for i := 0; i < attempts; i++ {
+		lockFile, err = os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err == nil {
+			break
+		}
+		if !os.IsExist(err) {
+			return fmt.Errorf("open codex config lock: %w", err)
+		}
+		// 生存 PID なし / 壊れたロックは奪取
+		if data, rErr := os.ReadFile(lockPath); rErr == nil {
+			if pid, cErr := strconv.Atoi(strings.TrimSpace(string(data))); cErr == nil && pid > 0 && processAlive(pid) {
+				time.Sleep(delay)
+				continue
+			}
+		}
+		_ = os.Remove(lockPath)
+	}
+	if lockFile == nil {
+		return fmt.Errorf("codex config lock busy: %s", lockPath)
+	}
+	_, _ = fmt.Fprintf(lockFile, "%d\n", os.Getpid())
+	_ = lockFile.Close()
+	defer func() { _ = os.Remove(lockPath) }()
+	return fn()
 }
 
 // ScanCodexStopHookInjected は注入済みかどうかを確認する。

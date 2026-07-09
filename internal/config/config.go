@@ -662,6 +662,15 @@ func LoadOrCreate() (*Config, error) {
 		if err := ensureToken(cfg); err != nil {
 			return nil, err
 		}
+		// 既存 config で token が空だった場合もディスクへ永続化する。
+		// メモリ上だけだと起動ごとにトークンが変わり Hub URL / wrapper 認証が食い違う。
+		out, mErr := yaml.Marshal(cfg)
+		if mErr != nil {
+			return nil, fmt.Errorf("marshal config after token fill: %w", mErr)
+		}
+		if err := writeConfigAtomic(dir, path, out); err != nil {
+			return nil, fmt.Errorf("write config after token fill: %w", err)
+		}
 	}
 	// 旧 cfg.Spawn.LastModel → UserPrefs.Spawn.LastModel へ移行
 	// 読み込み時に旧位置に値があり新位置が空なら移送し、旧位置を空にする

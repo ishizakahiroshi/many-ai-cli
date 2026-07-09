@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/sessionlog"
@@ -1423,10 +1424,12 @@ func updateSessionForEvent(ctx context.Context, tx *sql.Tx, liveSessionID int, t
 			stringValue(event["branch"]), stringValue(event["label"]), stringValue(event["model"]), stringValue(event["shell"]), now, liveSessionID)
 		return err
 	case "session_end":
+		// ended_at=COALESCE(NULLIF(?, ''), ?) で event ts とフォールバック now の 2 引数、
+		// 加えて updated_at=? と live_session_id=? で計 6 プレースホルダ。
 		_, err := tx.ExecContext(ctx, `UPDATE sessions SET state=COALESCE(NULLIF(?, ''), state),
 			end_reason=COALESCE(NULLIF(?, ''), end_reason), ended_at=COALESCE(NULLIF(?, ''), ?), updated_at=?
 			WHERE live_session_id=? AND ended_at IS NULL`,
-			stringValue(event["state"]), stringValue(event["reason"]), stringValue(event["ts"]), now, liveSessionID)
+			stringValue(event["state"]), stringValue(event["reason"]), stringValue(event["ts"]), now, now, liveSessionID)
 		return err
 	case "user_input":
 		text := strings.TrimRight(stringValue(event["text"]), "\r\n")
@@ -1617,25 +1620,40 @@ func isNoiseOutput(s string) bool {
 	if t == "" {
 		return true
 	}
-	if len([]rune(t)) <= 2 {
-		return true
-	}
+	// 既知の単発スピナー語。
 	switch t {
 	case "Boot", "Boo", "Bo", "Thinking", "Working":
+		return true
+	}
+	// 長さだけでは落とさない（"OK" / "No" / "はい" 等の短い実応答を保持）。
+	// ただし文字・数字を含まない極短行（"·" / スピナー1文字）はノイズ。
+	runes := []rune(t)
+	if len(runes) <= 2 && !containsLetterOrNumber(runes) {
 		return true
 	}
 	// 全行が「思考中」スピナー再描画フレームだけのメッセージは保存しない。
 	// 1 行でも実本文を含むチャンクは保存し（情報損失を避ける）、混入した
 	// ノイズ行は表示側 normalizeChatText が落とす。
+	sawContent := false
 	for _, line := range strings.Split(t, "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
+		sawContent = true
 		if !sessionlog.IsThinkingNoiseLine(line) {
 			return false
 		}
 	}
-	return true
+	return sawContent
+}
+
+func containsLetterOrNumber(rs []rune) bool {
+	for _, r := range rs {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) {
+			return true
+		}
+	}
+	return false
 }
 
 func isDigitsText(s string) bool {

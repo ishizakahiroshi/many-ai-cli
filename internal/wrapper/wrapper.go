@@ -905,7 +905,19 @@ func ensureHub(cfg *config.Config, logger *slog.Logger) error {
 	if err := serve.Start(); err != nil {
 		return err
 	}
+	// 親 wrapper が Wait しないと Unix でゾンビ化する。reaper は成功・失敗両方で必須。
+	go func() {
+		_ = serve.Wait()
+	}()
 	if !waitForHubReady(cfg, hubStartupTimeout) {
+		if serve.Process != nil {
+			_ = serve.Process.Kill()
+		}
+		// Wait は上の reaper が回収する。短い猶予でプロセス消滅を待つ。
+		deadline := time.Now().Add(2 * time.Second)
+		for serve.ProcessState == nil && time.Now().Before(deadline) {
+			time.Sleep(20 * time.Millisecond)
+		}
 		return fmt.Errorf("hub did not become ready on port %d within %s", cfg.Hub.Port, hubStartupTimeout)
 	}
 	return nil

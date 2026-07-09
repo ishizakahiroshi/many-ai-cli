@@ -10,8 +10,9 @@ import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appLegacyResetNotice, 
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { pendingSessionIds } from './app/approval-queue-tab.js';
-import { scheduleDeferredEnter, scheduleAfterOutputSettle, deferredEnterMinWaitFor } from './app/deferred-enter.js';
-import { scheduleResidueSweep } from './app/residue-sweep.js';
+import { scheduleDeferredEnter, scheduleAfterOutputSettle, deferredEnterMinWaitFor, cancelDeferredEnter } from './app/deferred-enter.js';
+import { scheduleResidueSweep, cancelResidueSweep } from './app/residue-sweep.js';
+import { cancelExpandCapture } from './app/expand-popup.js';
 import { clearMobileTranscriptSession, recordMobileTranscriptUserSubmission } from './app/mobile-transcript.js';
 import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
@@ -290,7 +291,16 @@ export function clearInput() {
   clearAllPastes();
 }
 
+// doSend の session 単位 in-flight ロック（Enter / 音声 / autosend 再入防止）
+const doSendInFlight = new Set<number>();
+
 export async function doSend(sessionId) {
+  // 直前の doSend（Enter/音声/ボタン）と async 中の再入を抑止
+  if (Date.now() - lastDoSendAt < DOUBLE_SEND_GUARD_MS) return;
+  if (doSendInFlight.has(sessionId)) return;
+  // 後続の単行送信が deferred-enter 予約をキャンセルしないと、遅延 \r / ペースト本体が
+  // 次メッセージの後ろに注入される。送信確定の直前に必ず消す。
+  cancelDeferredEnter(sessionId);
   // Ollama route セッションで /model 始まりはブロック（spawn 時固定 env と不整合のため）
   if (isOllamaModelCommandBlocked(sessionId, buildSendText())) {
     showToast(t('toast_model_blocked_on_ollama'));
@@ -310,109 +320,114 @@ export async function doSend(sessionId) {
   if (await maybeNudgeAiCliLaunchInShell(sessionId, buildSendText())) {
     return;
   }
+  doSendInFlight.add(sessionId);
   set_lastDoSendAt(Date.now());
-  // 長文ペーストチップを一時 .txt 化して @path 参照で送る（Codex の畳み込みによる確定 \r 吸収を回避）。
-  // flushPendingAttach より前に積むことで、画像添付と同一の inject 経路へ合流させる。
-  await stageLongPastesAsFiles();
-  const injects = await flushPendingAttach(sessionId);
-  const injectPrefix = injects.join('');
-  let rawText = buildSendText();
-  // トリガーフレーズを末尾から除去（PTY・AI には送らない）
-  const _tp = getActiveTriggerPhrase();
-  if (_tp && textEndsWithTriggerPhrase(rawText, _tp)) {
-    rawText = stripTrailingTriggerPhrase(rawText, _tp);
-  }
-  // 外部クリップボードからのペーストは CRLF(\r\n) を保持する。ブラケットペースト
-  // 本体に生の \r が残ると、内側 CLI（Claude Code 等）が paste 内の \r を確定キーと
-  // 誤解し、末尾に付与した本来の確定 \r が無効化されて入力欄に残る（pasted text が
-  // 実行されない）。確定はこちらが末尾に付ける \r のみが担うべきなので、本文中の CR は
-  // すべて LF に正規化する。入力欄で打った複数行は元々 \n のみなので影響を受けない。
-  rawText = rawText.replace(/\r\n?/g, '\n');
-  // 改行を含む場合はブラケットペーストモードでラップ（\n が途中 Enter と解釈されるのを防ぐ）
-  // ブラケットペーストはテキスト部分のみに適用し、injectPrefix は前置する
-  let textPart;
-  // 確定 \r をブラケットペースト終端 \x1b[201~ と同一書き込みに含めると、内側 CLI
-  // （Claude Code v2 等）が大きい/複数行ペーストを [Pasted text #N] に畳み込む処理中に
-  // 直後の \r を吸収し、確定キーとして登録されない（pasted text が入力欄に張り付いたまま
-  // 送信されない）。複数行のときは確定 \r を本文と別書き込みに分離し、畳み込み確定後に送る。
-  let deferEnter = false;
-  if (rawText === '' && injectPrefix !== '') {
-    // 画像のみ（テキストなし）: inject 末尾の \r or スペースで確定済み → 追加の \r で送信
-    textPart = '\r';
-  } else if (rawText.includes('\n')) {
-    textPart = '\x1b[200~' + rawText + '\x1b[201~';
-    deferEnter = true;
-  } else {
-    textPart = rawText + '\r';
-  }
-  // 残骸（前回の未確定入力）への連結対策は、かつての「全送信への \x15(Ctrl+U) 盲目前置」を
-  // やめ、送信後に張り付きを実測してから掃除する residue-sweep.ts へ移行した。
-  // 前置方式は「相手プロンプトが Ctrl+U を行クリアと解釈する」仮定に依存し、shell / codex に
-  // 加えて claude /login のコード入力欄でもリテラル ^U 混入（OAuth 400）を起こしたため。
-  // 画像 inject（@path）を複数行ペーストに前置すると、@path エコー由来の早期 idle で確定 \r が
-  // 前倒し発火し、内側 CLI がペースト取り込み中（「Pasting…」）のまま \r を吸収して固着する。
-  // injectPrefix がある複数行ペーストでは、まず画像 inject だけ送り、取り込みが落ち着いてから
-  // ペースト本体＋確定 \r を送る（下記 needPasteSplit 分岐）。それ以外は従来通り 1 書き込みにまとめる。
-  const needPasteSplit = deferEnter && injectPrefix !== '';
-  const textToSend = needPasteSplit ? injectPrefix : (injectPrefix + textPart);
-  clearInput();
-  hideSlashMenu();
-  // 送信したら次のプロンプトは別物の可能性があるため dismiss フラグ・multiQ ラッチをクリア
-  multiQuestionDismissedCache.delete(sessionId);
-  multiQuestionLatchAt.delete(sessionId);
-  // テキスト送信で承認ポップアップをバイパスした場合、Ink 再描画による
-  // 同一選択肢の再検出・再表示を防ぐため消費済み署名を保存する
-  const prevOpts = approvalRawOptionsCache.get(sessionId);
-  if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
-  recordAnsweredMarkerSig(sessionId, prevOpts);
-  if (typeof maybeSendDirectApprovalConsumed === 'function') {
-    maybeSendDirectApprovalConsumed(sessionId, rawText, textToSend);
-  }
-  hideActionBar(sessionId);
-  // PTY エコーバックによる誤再表示を抑制（sendChoice と同様）
-  approvalSuppressUntil.set(sessionId, Date.now() + 2000);
-  setTimeout(() => {
-    detectApproval(sessionId);
-    maybeAutoSwitchToNextApproval();
-  }, 2050);
-  // chatHistory: ユーザー送信は AI ターンの境界。
-  // まず蓄積中の AI 出力チャンクを即 commit してから user 入力を push する。
-  chatHistoryCommitOutput(sessionId);
-  if (rawText && rawText !== '') {
-    pushMessage(sessionId, { role: 'user', kind: 'text', rawText });
-  }
-  if (sessionId === activeSessionId) {
-    // 送信後は新しいターンを見る意図なので、chat/split 側もレイアウト確定まで末尾へ張り付かせる。
-    scrollChatPaneToBottomSoon({ passes: 4, startedAt: Date.now() });
-  }
-  sendSubmittedText(sessionId, textToSend);
-  // B1a: スマホ幅で音声入力 placeholder を 1 回でも見せたユーザーが送信を完了した時点で
-  // hint shown フラグを立て、以降は通常 placeholder に戻す（一度の認知で十分）。
-  if (shouldShowMobileVoiceHintPlaceholder()) {
-    setUserPref('mobile.voice_hint_shown', true);
-    updateInputAffordance();
-  }
-  // Codex/OpenCode は大きいペーストを無出力で即プレースホルダ化するため、確定 \r の最低待機を
-  // 長めに取り早撃ち（\r 吸収による送信不発）を防ぐ。他 provider は既定値で挙動不変。
-  const enterMinWait = deferredEnterMinWaitFor(sessions.get(sessionId)?.provider || '');
-  if (needPasteSplit) {
-    // 段1: 画像 inject（@path）の取り込み（[Image #N] 畳み込み・@ 補完ポップアップ閉じ）が
-    // 出力静止で落ち着くのを待ち、段2: ペースト本体を送り、段3: 確定 \r を予約する。確定 \r の
-    // 予約をペースト送出後まで遅らせることで、@path エコー由来の早期静止で \r が前倒し発火して
-    // 「Pasting…」固着するのを断つ。ペースト送出以降は画像なし複数行ペーストと同一経路で確定する。
-    scheduleAfterOutputSettle(sessionId, () => {
-      sendText(sessionId, textPart);
+  try {
+    // 長文ペーストチップを一時 .txt 化して @path 参照で送る（Codex の畳み込みによる確定 \r 吸収を回避）。
+    // flushPendingAttach より前に積むことで、画像添付と同一の inject 経路へ合流させる。
+    await stageLongPastesAsFiles();
+    const injects = await flushPendingAttach(sessionId);
+    const injectPrefix = injects.join('');
+    let rawText = buildSendText();
+    // トリガーフレーズを末尾から除去（PTY・AI には送らない）
+    const _tp = getActiveTriggerPhrase();
+    if (_tp && textEndsWithTriggerPhrase(rawText, _tp)) {
+      rawText = stripTrailingTriggerPhrase(rawText, _tp);
+    }
+    // 外部クリップボードからのペーストは CRLF(\r\n) を保持する。ブラケットペースト
+    // 本体に生の \r が残ると、内側 CLI（Claude Code 等）が paste 内の \r を確定キーと
+    // 誤解し、末尾に付与した本来の確定 \r が無効化されて入力欄に残る（pasted text が
+    // 実行されない）。確定はこちらが末尾に付ける \r のみが担うべきなので、本文中の CR は
+    // すべて LF に正規化する。入力欄で打った複数行は元々 \n のみなので影響を受けない。
+    rawText = rawText.replace(/\r\n?/g, '\n');
+    // 改行を含む場合はブラケットペーストモードでラップ（\n が途中 Enter と解釈されるのを防ぐ）
+    // ブラケットペーストはテキスト部分のみに適用し、injectPrefix は前置する
+    let textPart;
+    // 確定 \r をブラケットペースト終端 \x1b[201~ と同一書き込みに含めると、内側 CLI
+    // （Claude Code v2 等）が大きい/複数行ペーストを [Pasted text #N] に畳み込む処理中に
+    // 直後の \r を吸収し、確定キーとして登録されない（pasted text が入力欄に張り付いたまま
+    // 送信されない）。複数行のときは確定 \r を本文と別書き込みに分離し、畳み込み確定後に送る。
+    let deferEnter = false;
+    if (rawText === '' && injectPrefix !== '') {
+      // 画像のみ（テキストなし）: inject 末尾の \r or スペースで確定済み → 追加の \r で送信
+      textPart = '\r';
+    } else if (rawText.includes('\n')) {
+      textPart = '\x1b[200~' + rawText + '\x1b[201~';
+      deferEnter = true;
+    } else {
+      textPart = rawText + '\r';
+    }
+    // 残骸（前回の未確定入力）への連結対策は、かつての「全送信への \x15(Ctrl+U) 盲目前置」を
+    // やめ、送信後に張り付きを実測してから掃除する residue-sweep.ts へ移行した。
+    // 前置方式は「相手プロンプトが Ctrl+U を行クリアと解釈する」仮定に依存し、shell / codex に
+    // 加えて claude /login のコード入力欄でもリテラル ^U 混入（OAuth 400）を起こしたため。
+    // 画像 inject（@path）を複数行ペーストに前置すると、@path エコー由来の早期 idle で確定 \r が
+    // 前倒し発火し、内側 CLI がペースト取り込み中（「Pasting…」）のまま \r を吸収して固着する。
+    // injectPrefix がある複数行ペーストでは、まず画像 inject だけ送り、取り込みが落ち着いてから
+    // ペースト本体＋確定 \r を送る（下記 needPasteSplit 分岐）。それ以外は従来通り 1 書き込みにまとめる。
+    const needPasteSplit = deferEnter && injectPrefix !== '';
+    const textToSend = needPasteSplit ? injectPrefix : (injectPrefix + textPart);
+    clearInput();
+    hideSlashMenu();
+    // 送信したら次のプロンプトは別物の可能性があるため dismiss フラグ・multiQ ラッチをクリア
+    multiQuestionDismissedCache.delete(sessionId);
+    multiQuestionLatchAt.delete(sessionId);
+    // テキスト送信で承認ポップアップをバイパスした場合、Ink 再描画による
+    // 同一選択肢の再検出・再表示を防ぐため消費済み署名を保存する
+    const prevOpts = approvalRawOptionsCache.get(sessionId);
+    if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
+    recordAnsweredMarkerSig(sessionId, prevOpts);
+    if (typeof maybeSendDirectApprovalConsumed === 'function') {
+      maybeSendDirectApprovalConsumed(sessionId, rawText, textToSend);
+    }
+    hideActionBar(sessionId);
+    // PTY エコーバックによる誤再表示を抑制（sendChoice と同様）
+    approvalSuppressUntil.set(sessionId, Date.now() + 2000);
+    setTimeout(() => {
+      detectApproval(sessionId);
+      maybeAutoSwitchToNextApproval();
+    }, 2050);
+    // chatHistory: ユーザー送信は AI ターンの境界。
+    // まず蓄積中の AI 出力チャンクを即 commit してから user 入力を push する。
+    chatHistoryCommitOutput(sessionId);
+    if (rawText && rawText !== '') {
+      pushMessage(sessionId, { role: 'user', kind: 'text', rawText });
+    }
+    if (sessionId === activeSessionId) {
+      // 送信後は新しいターンを見る意図なので、chat/split 側もレイアウト確定まで末尾へ張り付かせる。
+      scrollChatPaneToBottomSoon({ passes: 4, startedAt: Date.now() });
+    }
+    sendSubmittedText(sessionId, textToSend);
+    // B1a: スマホ幅で音声入力 placeholder を 1 回でも見せたユーザーが送信を完了した時点で
+    // hint shown フラグを立て、以降は通常 placeholder に戻す（一度の認知で十分）。
+    if (shouldShowMobileVoiceHintPlaceholder()) {
+      setUserPref('mobile.voice_hint_shown', true);
+      updateInputAffordance();
+    }
+    // Codex/OpenCode は大きいペーストを無出力で即プレースホルダ化するため、確定 \r の最低待機を
+    // 長めに取り早撃ち（\r 吸収による送信不発）を防ぐ。他 provider は既定値で挙動不変。
+    const enterMinWait = deferredEnterMinWaitFor(sessions.get(sessionId)?.provider || '');
+    if (needPasteSplit) {
+      // 段1: 画像 inject（@path）の取り込み（[Image #N] 畳み込み・@ 補完ポップアップ閉じ）が
+      // 出力静止で落ち着くのを待ち、段2: ペースト本体を送り、段3: 確定 \r を予約する。確定 \r の
+      // 予約をペースト送出後まで遅らせることで、@path エコー由来の早期静止で \r が前倒し発火して
+      // 「Pasting…」固着するのを断つ。ペースト送出以降は画像なし複数行ペーストと同一経路で確定する。
+      scheduleAfterOutputSettle(sessionId, () => {
+        sendText(sessionId, textPart);
+        scheduleDeferredEnter(sessionId, enterMinWait);
+      });
+    } else if (deferEnter) {
+      // 複数行ペーストの確定 \r は、内側 CLI の畳み込み・再描画が落ち着いてから別書き込みで送る。
+      // 同一書き込みに含めると \r が吸収され送信されない。固定遅延では大きなペーストの取り込み時間を
+      // 当てられず取りこぼすため、PTY 出力が静止するのを待ってから 1 回だけ送る（deferred-enter.ts）。
       scheduleDeferredEnter(sessionId, enterMinWait);
-    });
-  } else if (deferEnter) {
-    // 複数行ペーストの確定 \r は、内側 CLI の畳み込み・再描画が落ち着いてから別書き込みで送る。
-    // 同一書き込みに含めると \r が吸収され送信されない。固定遅延では大きなペーストの取り込み時間を
-    // 当てられず取りこぼすため、PTY 出力が静止するのを待ってから 1 回だけ送る（deferred-enter.ts）。
-    scheduleDeferredEnter(sessionId, enterMinWait);
+    }
+    // 送信テキストが確定されず入力行に張り付いたままになっていないかを事後観測し、
+    // 張り付きを実際に見たときだけ \x15 で掃除する（盲目前置の置き換え。residue-sweep.ts）。
+    scheduleResidueSweep(sessionId, rawText, deferEnter);
+  } finally {
+    doSendInFlight.delete(sessionId);
   }
-  // 送信テキストが確定されず入力行に張り付いたままになっていないかを事後観測し、
-  // 張り付きを実際に見たときだけ \x15 で掃除する（盲目前置の置き換え。residue-sweep.ts）。
-  scheduleResidueSweep(sessionId, rawText, deferEnter);
 }
 
 export function saveInputStateFor(id) {
@@ -1296,6 +1311,7 @@ export function sendSubmittedText(sessionId, text, opts: any = {}) {
 }
 
 export function sendText(sessionId, text) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
   ws.send(JSON.stringify({ type: 'pty_input', session_id: sessionId, text }));
 }
 
@@ -1413,6 +1429,10 @@ export function cleanupRemovedSessionState(id) {
     if (sigTimer) clearTimeout(sigTimer);
     approvalConsumedSigDeleteTimer.delete(id);
   } catch (_) {}
+  try { cancelDeferredEnter(id); } catch (_) {}
+  try { cancelResidueSweep(id); } catch (_) {}
+  try { cancelExpandCapture(id); } catch (_) {}
+  try { doSendInFlight.delete(id); } catch (_) {}
   try { if (typeof window._wakewordSessionRemoved === 'function') window._wakewordSessionRemoved(id); } catch (_) {}
 }
 

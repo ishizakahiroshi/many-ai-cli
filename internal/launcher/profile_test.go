@@ -177,10 +177,11 @@ func TestValidate_Valid(t *testing.T) {
 		Version: 1,
 		Profiles: []Profile{
 			{Name: "wsl-local", Type: ProfileTypeWSL},
-			{Name: "remote-serve", Type: ProfileTypeSSH, Mode: SSHModeServe, HubPort: 47777},
+			{Name: "remote-serve", Type: ProfileTypeSSH, Host: "example.com", Mode: SSHModeServe, HubPort: 47777},
 			{
 				Name:         "remote-tunnel",
 				Type:         ProfileTypeSSH,
+				Host:         "example.com",
 				Mode:         SSHModeTunnel,
 				HubPort:      47801,
 				TokenCommand: "echo token123",

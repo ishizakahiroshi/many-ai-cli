@@ -19,10 +19,14 @@ func TestIsNoiseOutput(t *testing.T) {
 		}
 	}
 	// 実本文を含むメッセージは保存する（混在チャンクも 1 行でも本文があれば残す）。
+	// 短い実応答（"OK" / "No" / "はい"）も長さだけでは落とさない。
 	keep := []string{
 		"Here is the summary of the changes.",
 		"✳ thinking with medium effort\nDone. Updated server.go and added a test.",
 		"● Read(internal/hub/server.go)",
+		"OK",
+		"No",
+		"はい",
 	}
 	for _, s := range keep {
 		if isNoiseOutput(s) {

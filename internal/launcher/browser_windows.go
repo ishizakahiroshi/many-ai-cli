@@ -5,9 +5,9 @@ package launcher
 import "os/exec"
 
 // OpenBrowser launches the Windows default browser at url.
-// Uses `cmd /c start "" <url>` which is the documented stable way to invoke
-// the user's registered URL handler. The empty "" is start's window-title
-// argument and prevents start from treating the URL itself as a title.
+// Uses rundll32 url.dll,FileProtocolHandler so query strings with '&'
+// (e.g. tunnel URLs: ?token=...&via=ssh&host_label=...) are not re-parsed
+// by cmd.exe as command separators. Same approach as internal/hub.
 func OpenBrowser(url string) error {
-	return exec.Command("cmd", "/c", "start", "", url).Start()
+	return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 }

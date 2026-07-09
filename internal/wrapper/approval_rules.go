@@ -208,6 +208,9 @@ func ScanClaudeConfigured(path string) (bool, error) {
 			return true, nil
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return false, err
+	}
 	return false, nil
 }
 
@@ -223,6 +226,9 @@ func ScanSharedBlockConfigured(path string) (bool, error) {
 		if strings.TrimSpace(scanner.Text()) == sharedBlockStart {
 			return true, nil
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		return false, err
 	}
 	return false, nil
 }

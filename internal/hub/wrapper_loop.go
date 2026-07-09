@@ -548,7 +548,8 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	var historyToClose *sessionlog.Writer
 	var jsonlPathForTranscript string
 	var endedProvider, endedCWD string
-	if cur := s.sessions[id]; cur != nil && cur.State != "completed" && cur.State != "error" {
+	// done/timeout も終端として保持する（オーケストレーション完了状態を disconnected で潰さない）。
+	if cur := s.sessions[id]; cur != nil && !isTerminalSessionState(cur.State) {
 		cur.State = "disconnected"
 	}
 	endState := "disconnected"

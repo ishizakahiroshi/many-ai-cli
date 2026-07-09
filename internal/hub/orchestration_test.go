@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/websocket"
 	"many-ai-cli/internal/config"
 )
 
@@ -207,6 +208,7 @@ func Test_handleSendChild(t *testing.T) {
 	child.ParentSessionID = parent.ID
 	child.Role = "implementation"
 	child.State = "running"
+	s.wrappers[child.ID] = newWrapperConn(&websocket.Conn{})
 	boardPath := filepath.Join(t.TempDir(), "board.md")
 	if err := os.WriteFile(boardPath, []byte("# board\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -258,6 +260,8 @@ func Test_handleSpawnChild_duplicateRoleGuard(t *testing.T) {
 	child.ParentSessionID = parent.ID
 	child.Role = "implementation"
 	child.State = "running"
+	// liveChildForRole は wrapper 接続中を必須とするため、ガード試験でも stub を置く
+	s.wrappers[child.ID] = newWrapperConn(&websocket.Conn{})
 
 	// 同 role の生存子あり → 409 + send 案内（--force なし。done 後に spawn が通ることは
 	// liveChildForRole のユニットテストで担保する — handler を通すと実 spawn が走るため）
@@ -282,6 +286,8 @@ func Test_liveChildForRole_picksLatestAndSkipsDone(t *testing.T) {
 		child.Role = "implementation"
 		child.State = "running"
 		children[id] = child
+		// live 判定は wrapper 接続中も必須
+		s.wrappers[id] = newWrapperConn(&websocket.Conn{})
 	}
 	got := s.liveChildForRole(parent.ID, "implementation")
 	if got == nil || got.ID != 12 {
@@ -293,6 +299,17 @@ func Test_liveChildForRole_picksLatestAndSkipsDone(t *testing.T) {
 	if got == nil || got.ID != 10 {
 		t.Fatalf("liveChildForRole after done = %#v, want session 10", got)
 	}
+	// completed / disconnected / wrapper 無しも終端扱い
+	children[10].State = "completed"
+	if s.liveChildForRole(parent.ID, "implementation") != nil {
+		t.Fatalf("liveChildForRole with completed should be nil")
+	}
+	children[10].State = "running"
+	delete(s.wrappers, 10)
+	if s.liveChildForRole(parent.ID, "implementation") != nil {
+		t.Fatalf("liveChildForRole without wrapper should be nil")
+	}
+	s.wrappers[10] = newWrapperConn(&websocket.Conn{})
 	// 全員 done なら nil（= spawn ガードが解除され新規 spawn が通る条件）
 	children[10].State = "done"
 	if s.liveChildForRole(parent.ID, "implementation") != nil {

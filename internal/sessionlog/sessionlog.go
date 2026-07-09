@@ -145,8 +145,14 @@ func SanitizeFilePart(s string) string {
 	if s == "" {
 		return "no-project"
 	}
-	if len(s) > 80 {
-		s = s[:80]
+	// バイト長ではなく rune 単位で切り、UTF-8 マルチバイトの途中切断を避ける。
+	runes := []rune(s)
+	if len(runes) > 80 {
+		s = string(runes[:80])
+		s = strings.Trim(s, ". ")
+		if s == "" {
+			return "no-project"
+		}
 	}
 	return s
 }

@@ -1,4 +1,5 @@
 import { sendText } from '../app.js';
+import { sessions } from './state.js';
 
 // 複数行ペースト送信の確定 \r を「いつ送るか」を出力駆動で決めるモジュール。
 //
@@ -60,6 +61,8 @@ function fire(id: number) {
   if (p.idleTimer) clearTimeout(p.idleTimer);
   if (p.maxTimer) clearTimeout(p.maxTimer);
   pending.delete(id);
+  // セッション削除後に遅延 \r が別 ID 再利用先へ飛ばないようガード
+  if (!sessions.has(id)) return;
   try { p.action(); } catch (_) {}
 }
 
