@@ -118,6 +118,43 @@ func TestInjectRulesSharedBlockRefreshesStaleVersion(t *testing.T) {
 	}
 }
 
+func TestInjectRulesMigratesLegacyNamedBlock(t *testing.T) {
+	withTempHome(t)
+	path := filepath.Join(t.TempDir(), "AGENTS.md")
+	legacy := strings.Join([]string{
+		"before",
+		"",
+		legacySharedBlockStart,
+		"<!-- version: " + rulesVersion + " -->",
+		"## many-ai-cli Approval Format",
+		"(rules injected by old any-ai-cli binary)",
+		legacySharedBlockEnd,
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := InjectRules("codex", path); err != nil {
+		t.Fatalf("InjectRules failed: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	if strings.Contains(content, legacySharedBlockStart) {
+		t.Fatalf("legacy named block was not removed:\n%s", content)
+	}
+	if got := strings.Count(content, sharedBlockStart); got != 1 {
+		t.Fatalf("shared block count = %d, want 1\n%s", got, content)
+	}
+	if !strings.Contains(content, "before") {
+		t.Fatalf("original content was not preserved:\n%s", content)
+	}
+}
+
 func TestInjectRulesClaudeImportIsIdempotent(t *testing.T) {
 	withTempHome(t)
 	path := filepath.Join(t.TempDir(), "CLAUDE.md")

@@ -17,7 +17,7 @@ Personal/global AI rules are intentionally kept outside this repository. Use eac
 
 If any project guidance conflicts, follow `CLAUDE.md`.
 
-<!-- any-ai-cli:approval-rules -->
+<!-- many-ai-cli:approval-rules -->
 <!-- version: 17 -->
 ## many-ai-cli Approval Format
 
@@ -145,4 +145,4 @@ If any project guidance conflicts, follow `CLAUDE.md`.
 
 Hub から `[MANY-AI-CLI-ORCHESTRATION-ERROR]` で始まる 1 行が入力された場合、指揮者セッションは子セッションの起動上限・timeout・Hub 側 orchestration 失敗として扱うこと。
 その子に依存する作業は、既存の子へ再分配するか、必要ならユーザーへ判断を求めること。通常の完了サマリーとは混同しないこと。
-<!-- /any-ai-cli:approval-rules -->
+<!-- /many-ai-cli:approval-rules -->

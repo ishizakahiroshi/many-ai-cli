@@ -12,8 +12,13 @@ import (
 )
 
 const claudeImportLine = "@~/.many-ai-cli/approval-rules.md"
-const sharedBlockStart = "<!-- any-ai-cli:approval-rules -->"
-const sharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
+const sharedBlockStart = "<!-- many-ai-cli:approval-rules -->"
+const sharedBlockEnd = "<!-- /many-ai-cli:approval-rules -->"
+
+// 旧名 any-ai-cli 時代（v0.3.x 以前のバイナリ）が注入したブロックの検出・除去用。
+// 新規注入には使わない。検出されたら Remove + 再注入で新マーカーへ移行される。
+const legacySharedBlockStart = "<!-- any-ai-cli:approval-rules -->"
+const legacySharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
 const rulesVersion = "17"
 
 var rulesFileContent = strings.Join([]string{
@@ -223,7 +228,8 @@ func ScanSharedBlockConfigured(path string) (bool, error) {
 	defer f.Close()
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		if strings.TrimSpace(scanner.Text()) == sharedBlockStart {
+		line := strings.TrimSpace(scanner.Text())
+		if line == sharedBlockStart || line == legacySharedBlockStart {
 			return true, nil
 		}
 	}
@@ -358,7 +364,10 @@ func RemoveRules(provider, path string) error {
 		}
 		newContent = strings.Join(kept, "\n")
 	case providerUsesSharedBlock(provider):
-		blockRe := regexp.MustCompile(`(?s)\n?` + regexp.QuoteMeta(sharedBlockStart) + `.*?` + regexp.QuoteMeta(sharedBlockEnd) + `\n?`)
+		// 旧名 any-ai-cli マーカーのブロックも除去対象（旧バイナリからの移行）。
+		blockRe := regexp.MustCompile(`(?s)\n?(?:` +
+			regexp.QuoteMeta(sharedBlockStart) + `.*?` + regexp.QuoteMeta(sharedBlockEnd) + `|` +
+			regexp.QuoteMeta(legacySharedBlockStart) + `.*?` + regexp.QuoteMeta(legacySharedBlockEnd) + `)\n?`)
 		newContent = blockRe.ReplaceAllString(string(content), "")
 	default:
 		return fmt.Errorf("unknown provider: %s", provider)

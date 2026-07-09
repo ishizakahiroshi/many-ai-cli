@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"many-ai-cli/internal/wrapper"
 )
@@ -271,20 +272,31 @@ func (s *Server) injectApprovalTargets(targets []approvalRuleTarget) {
 	if len(targets) == 0 {
 		return
 	}
+	syncT0 := time.Now()
 	if err := wrapper.SyncRulesFile(); err != nil {
 		s.logger.Warn("sync rules file failed", "err", err)
 		return
 	}
+	syncDur := time.Since(syncT0)
 	var injected []approvalRuleTarget
+	perTargetT0 := time.Now()
 	for _, target := range targets {
 		provider := target.wrapperProvider()
+		fileT0 := time.Now()
 		if err := wrapper.InjectRules(provider, target.Path); err != nil {
 			s.logger.Warn("inject rules failed", "providers", strings.Join(target.Providers, ","), "path", target.Path, "err", err)
 			continue
 		}
-		s.logger.Debug("inject rules ok", "providers", strings.Join(target.Providers, ","), "path", target.Path)
+		s.logger.Info("startup_latency_probe_inject_rules_file",
+			"path", target.Path,
+			"providers", strings.Join(target.Providers, ","),
+			"ms", time.Since(fileT0).Milliseconds())
 		injected = append(injected, target)
 	}
+	s.logger.Info("startup_latency_probe_inject_targets",
+		"target_count", len(targets),
+		"sync_rules_file_ms", syncDur.Milliseconds(),
+		"per_target_total_ms", time.Since(perTargetT0).Milliseconds())
 	s.rememberApprovalTargets(injected)
 }
 
