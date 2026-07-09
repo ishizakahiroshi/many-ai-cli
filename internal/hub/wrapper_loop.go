@@ -152,13 +152,39 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	s.sessionsMu.Lock()
 	ses.lastCols, ses.lastRows = initCols, initRows
 	ses.vt = newVTBuffer(initCols, initRows)
+	activeSessionCount := 0
+	for sid, cur := range s.sessions {
+		if cur == nil || s.wrappers[sid] == nil {
+			continue
+		}
+		if cur.State == "completed" || cur.State == "error" || cur.State == "disconnected" {
+			continue
+		}
+		activeSessionCount++
+	}
 	s.sessionsMu.Unlock()
+	// startup_latency_probe: register→registered ack の間で走る同期 I/O を計測する
+	// （新セッション起動遅延の切り分け用。挙動は変えない）。
+	registerT0 := time.Now()
+	var approvalDur, usageDur time.Duration
 	if s.approvalRulesEnabled() {
+		t := time.Now()
 		s.injectApprovalRules()
+		approvalDur = time.Since(t)
 	}
 	if s.tokenStatusbarEnabled() {
+		t := time.Now()
 		s.injectUsageHooks()
+		usageDur = time.Since(t)
 	}
+	totalPreAck := time.Since(registerT0)
+	s.logger.Info("startup_latency_probe",
+		"session_id", id,
+		"provider", reg.Provider,
+		"active_sessions", activeSessionCount,
+		"inject_approval_ms", approvalDur.Milliseconds(),
+		"inject_usage_ms", usageDur.Milliseconds(),
+		"pre_ack_total_ms", totalPreAck.Milliseconds())
 	_ = wc.send(proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, TokenStatusbar: s.tokenStatusbarEnabled(), OrchestrationID: childMeta.OrchestrationID, BoardPath: childMeta.BoardPath})
 	s.logger.Info("session registered", "id", id, "provider", reg.Provider, "cwd", reg.CWD, "pid", reg.PID)
 	// C2 (plan_orchestration-spawn-ui-exposure.md): conductor セッション（ツールバーの

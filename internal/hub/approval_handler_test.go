@@ -154,7 +154,10 @@ func assertApprovalBlockCount(t *testing.T, path string, want int) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Count(string(data), "<!-- any-ai-cli:approval-rules -->"); got != want {
+	// 新旧マーカー両方を数える（旧名 any-ai-cli ブロックの残存も検出するため）。
+	got := strings.Count(string(data), "<!-- many-ai-cli:approval-rules -->") +
+		strings.Count(string(data), "<!-- any-ai-cli:approval-rules -->")
+	if got != want {
 		t.Fatalf("approval block count = %d, want %d\n%s", got, want, string(data))
 	}
 }

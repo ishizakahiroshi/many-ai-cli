@@ -21,8 +21,13 @@ var codexConfigMu sync.Mutex
 // ---------------------------------------------------------------------------
 
 const (
-	usageHookBlockStart = "# any-ai-cli:usage-hook-start"
-	usageHookBlockEnd   = "# any-ai-cli:usage-hook-end"
+	usageHookBlockStart = "# many-ai-cli:usage-hook-start"
+	usageHookBlockEnd   = "# many-ai-cli:usage-hook-end"
+
+	// 旧名 any-ai-cli 時代（v0.3.x 以前のバイナリ）が注入したブロックの検出・除去用。
+	// 新規注入には使わない。
+	legacyUsageHookBlockStart = "# any-ai-cli:usage-hook-start"
+	legacyUsageHookBlockEnd   = "# any-ai-cli:usage-hook-end"
 )
 
 // UsageHookParams は注入時に埋め込む接続パラメータ。
@@ -204,6 +209,13 @@ func InjectCodexStopHook(p UsageHookParams) error {
 			return fmt.Errorf("read %s: %w", path, err)
 		}
 
+		// 旧名 any-ai-cli マーカーのブロックが残っていれば先に除去する
+		// （残したまま新マーカーで追記すると Stop フックが二重登録になる）。
+		if strings.Contains(content, legacyUsageHookBlockStart) {
+			legacyRe := regexp.MustCompile(`(?s)\n?` + regexp.QuoteMeta(legacyUsageHookBlockStart) + `.*?` + regexp.QuoteMeta(legacyUsageHookBlockEnd) + `\n?`)
+			content = legacyRe.ReplaceAllString(content, "")
+		}
+
 		// already 注入済みかどうか確認。
 		if strings.Contains(content, usageHookBlockStart) {
 			// 注入済み: コマンドだけ更新（セッション ID が変わる場合を考慮）。
@@ -243,11 +255,14 @@ func RemoveCodexStopHook() error {
 		}
 
 		content := string(data)
-		if !strings.Contains(content, usageHookBlockStart) {
+		if !strings.Contains(content, usageHookBlockStart) && !strings.Contains(content, legacyUsageHookBlockStart) {
 			return nil
 		}
 
-		blockRe := regexp.MustCompile(`(?s)\n?` + regexp.QuoteMeta(usageHookBlockStart) + `.*?` + regexp.QuoteMeta(usageHookBlockEnd) + `\n?`)
+		// 旧名 any-ai-cli マーカーのブロックも除去対象（旧バイナリからの移行）。
+		blockRe := regexp.MustCompile(`(?s)\n?(?:` +
+			regexp.QuoteMeta(usageHookBlockStart) + `.*?` + regexp.QuoteMeta(usageHookBlockEnd) + `|` +
+			regexp.QuoteMeta(legacyUsageHookBlockStart) + `.*?` + regexp.QuoteMeta(legacyUsageHookBlockEnd) + `)\n?`)
 		newContent := blockRe.ReplaceAllString(content, "")
 		if newContent == content {
 			return nil
@@ -324,7 +339,8 @@ func ScanCodexStopHookInjected() (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("read %s: %w", path, err)
 	}
-	return strings.Contains(string(data), usageHookBlockStart), nil
+	content := string(data)
+	return strings.Contains(content, usageHookBlockStart) || strings.Contains(content, legacyUsageHookBlockStart), nil
 }
 
 func writeCodexConfig(path, content string) error {
