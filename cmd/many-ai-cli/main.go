@@ -20,6 +20,7 @@ import (
 	hublog "many-ai-cli/internal/log"
 	"many-ai-cli/internal/orchestrate"
 	"many-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/setupcmd"
 	"many-ai-cli/internal/shell"
 	"many-ai-cli/internal/uninstall"
 	"many-ai-cli/internal/usagerelay"
@@ -275,6 +276,15 @@ func run(args []string) error {
 	case "shell-init":
 		fmt.Print(shell.InitScript())
 		return nil
+	case "setup":
+		fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+		if err := fs.Parse(args[1:]); err != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				return nil
+			}
+			return err
+		}
+		return setupcmd.Run()
 	case "wrap":
 		if len(args) < 2 {
 			return errors.New("wrap <provider>")
@@ -304,6 +314,6 @@ func run(args []string) error {
 }
 
 func usage() error {
-	fmt.Println("many-ai-cli <serve|connect|wrap|claude|codex|copilot|cursor-agent|opencode|grok|shell-init|stop|status|profile-export|log-clean|uninstall|version>")
+	fmt.Println("many-ai-cli <serve|connect|setup|wrap|claude|codex|copilot|cursor-agent|opencode|grok|shell-init|stop|status|profile-export|log-clean|uninstall|version>")
 	return nil
 }

@@ -378,6 +378,33 @@ export function updateAllCardsLiveInfo() {
 
 export let _sessionListClickDelegated = false;
 export let _sessionCardPointerDown = null;
+let _sessionCardPointerActivatedAt = 0;
+let _sessionCardPointerActivatedId = null;
+
+function isSessionCardInteractiveTarget(target) {
+  return target?.closest?.('.card-actions, .card-branch');
+}
+
+function sessionCardTapMoveLimit() {
+  try {
+    return window.matchMedia?.('(pointer: coarse)')?.matches ? 18 : 8;
+  } catch (_) {
+    return 8;
+  }
+}
+
+function markSessionCardPointerActivated(id) {
+  _sessionCardPointerActivatedId = id;
+  _sessionCardPointerActivatedAt = Date.now();
+}
+
+function consumeDuplicateSessionCardClick(id) {
+  if (_sessionCardPointerActivatedId !== id) return false;
+  if (Date.now() - _sessionCardPointerActivatedAt > 700) return false;
+  _sessionCardPointerActivatedId = null;
+  _sessionCardPointerActivatedAt = 0;
+  return true;
+}
 
 export function renderSessionList() {
   const root = document.getElementById('sessions');
@@ -390,7 +417,7 @@ export function renderSessionList() {
     root.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       const card = e.target.closest('.card');
-      if (!card || e.target.closest('.card-actions') || e.target.closest('.card-branch')) {
+      if (!card || isSessionCardInteractiveTarget(e.target)) {
         _sessionCardPointerDown = null;
         return;
       }
@@ -405,11 +432,17 @@ export function renderSessionList() {
       _sessionCardPointerDown = null;
       if (!down || isNaN(down.id)) return;
       const card = e.target.closest('.card');
-      if (!card || e.target.closest('.card-actions') || e.target.closest('.card-branch')) return;
+      if (!card || isSessionCardInteractiveTarget(e.target)) return;
       const id = parseInt(card.dataset.sessionId, 10);
       if (id !== down.id) return;
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
-      if (moved <= 8) onSessionCardActivate(id);
+      if (moved <= sessionCardTapMoveLimit()) {
+        markSessionCardPointerActivated(id);
+        onSessionCardActivate(id);
+      }
+    });
+    root.addEventListener('pointercancel', () => {
+      _sessionCardPointerDown = null;
     });
     root.addEventListener('click', (e) => {
       const card = e.target.closest('.card');
@@ -430,10 +463,17 @@ export function renderSessionList() {
         return;
       }
       const id = parseInt(card.dataset.sessionId, 10);
-      if (!isNaN(id)) onSessionCardActivate(id);
+      if (!isNaN(id) && !consumeDuplicateSessionCardClick(id)) onSessionCardActivate(id);
     });
     // branch バッジのキーボード操作 (Enter / Space)
     root.addEventListener('keydown', (e) => {
+      const card = e.target.closest && e.target.closest('.card');
+      if (card && !isSessionCardInteractiveTarget(e.target) && (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')) {
+        e.preventDefault();
+        const id = parseInt(card.dataset.sessionId, 10);
+        if (!isNaN(id)) onSessionCardActivate(id);
+        return;
+      }
       const branchEl = e.target.closest && e.target.closest('.card-branch');
       if (!branchEl) return;
       if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
@@ -644,6 +684,7 @@ export function renderSessionList() {
       const orchClass = s.parent_session_id ? ' orchestration-child' : (s.orchestration_id ? ' orchestration-parent' : '');
       c.className = 'card' + stateClass + orchClass + (s.id === activeSessionId ? ' active' : '');
       c.tabIndex = isCollapsed ? -1 : 0;
+      c.setAttribute('role', 'button');
       const label = stateLabel(state);
       const filteredMsg = filterFirstMessage(s.last_message || s.first_message || '');
       const cwdStr = s.cwd || '';
