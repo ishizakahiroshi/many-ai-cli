@@ -1418,6 +1418,10 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 // handleDismiss は session_dismiss メッセージを処理する。
 // セッションを削除し、JSONL を閉じてトランスクリプトを生成する。
 // 戻り値が true の場合、呼び出し元の uiLoop は当該ターンを continue する。
+//
+// Hub map に既に無い ID でも session_removed を broadcast する（冪等 dismiss）。
+// 理由: inject 中 dismiss → 後続 session_update で UI だけ幽霊化したケースや、
+// session_removed 取りこぼし後の再 × で、UI が永遠に消えないのを防ぐ。
 func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	s.sessionsMu.Lock()
 	wc := s.wrappers[m.SessionID]
@@ -1438,6 +1442,8 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	}
 	s.sessionsMu.Unlock()
 	if !exists {
+		// map には無いが UI 側に残っている幽霊カードを落とす。
+		s.broadcast(proto.Message{Type: "session_removed", SessionID: m.SessionID})
 		return true
 	}
 	// セッション破棄時に usageStat も解放する（メモリ無制限増加を防ぐ）。

@@ -272,12 +272,8 @@ func (s *Server) injectApprovalTargets(targets []approvalRuleTarget) {
 	if len(targets) == 0 {
 		return
 	}
-	syncT0 := time.Now()
-	if err := wrapper.SyncRulesFile(); err != nil {
-		s.logger.Warn("sync rules file failed", "err", err)
-		return
-	}
-	syncDur := time.Since(syncT0)
+	// SyncRulesFile は InjectRules が内部で毎回実行するため、ここでの事前実行は
+	// 重複（bugfix_new-session-startup-latency-3x_2026-07-10.md で除去）。
 	var injected []approvalRuleTarget
 	perTargetT0 := time.Now()
 	for _, target := range targets {
@@ -295,7 +291,6 @@ func (s *Server) injectApprovalTargets(targets []approvalRuleTarget) {
 	}
 	s.logger.Info("startup_latency_probe_inject_targets",
 		"target_count", len(targets),
-		"sync_rules_file_ms", syncDur.Milliseconds(),
 		"per_target_total_ms", time.Since(perTargetT0).Milliseconds())
 	s.rememberApprovalTargets(injected)
 }
