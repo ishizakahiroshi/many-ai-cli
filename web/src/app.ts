@@ -86,6 +86,14 @@ export function isActiveSessionRunning() {
   return !!s && s.state === 'running';
 }
 
+// 停止ボタン（■）が PTY へ送る中断キーを provider 別に返す。
+// grok（Grok Build CLI）は Esc では生成を中断できず Ctrl+C(0x03) のみ有効
+// （Windows 実機 v0.2.93 で確認）。他 provider は従来どおり Esc(0x1b)。
+export function stopKeyForActiveSession(): string {
+  const s = activeSessionId !== null ? sessions.get(activeSessionId) : undefined;
+  return s?.provider === 'grok' ? '\x03' : '\x1b';
+}
+
 // B1a: スマホ幅判定の単一情報源。OS キーボードの🎤誘導 placeholder の表示判定にだけ使う。
 const _mobileVoiceHintMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
   ? window.matchMedia('(max-width: 720px)') : null;
@@ -105,8 +113,9 @@ export function updateInputAffordance() {
   // C1: 実行中は「Esc で停止」、それ以外は通常文言。data-i18n-placeholder の自動適用と
   // 競合しないよう、running 状態を見て JS から明示的に上書きする。
   // B1a: 実行中でなく・スマホ幅で・初回ヒント未表示なら、音声入力ヒントを出す（Q12 決定）。
+  const stopViaCtrlC = stopKeyForActiveSession() === '\x03';
   if (running) {
-    inputEl.placeholder = t('input_placeholder_running');
+    inputEl.placeholder = t(stopViaCtrlC ? 'input_placeholder_running_ctrlc' : 'input_placeholder_running');
   } else if (shouldShowMobileVoiceHintPlaceholder()) {
     inputEl.placeholder = t('mobile_voice_hint_placeholder');
   } else {
@@ -120,7 +129,7 @@ export function updateInputAffordance() {
   if (sendBtn) {
     sendBtn.textContent = showStop ? '■' : '➤';
     sendBtn.classList.toggle('is-stopping', showStop);
-    const title = showStop ? t('stop_btn_title') : t('send_btn_title');
+    const title = showStop ? t(stopViaCtrlC ? 'stop_btn_title_ctrlc' : 'stop_btn_title') : t('send_btn_title');
     sendBtn.title = title;
     sendBtn.setAttribute('aria-label', title);
   }
@@ -768,7 +777,12 @@ inputEl.addEventListener('keydown', (e) => {
   if (specialKeys[e.key]) {
     // 入力テキストあり + 矢印キーはブラウザのカーソル移動に委譲する
     if (inputEl.value !== '' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown')) return;
-    sendText(activeSessionId, specialKeys[e.key]);
+    // 実行中 + 入力欄が空の Esc は停止操作とみなし、停止ボタン（■）と同じ
+    // provider 別停止キーを送る（grok は Esc 非対応・Ctrl+C のみ有効のため）。
+    const keyText = (e.key === 'Escape' && inputEl.value === '' && isActiveSessionRunning())
+      ? stopKeyForActiveSession()
+      : specialKeys[e.key];
+    sendText(activeSessionId, keyText);
     inputEl.value = ''; // TUI 操作中の誤入力を流さないようにクリア
     updateInputClearButton();
     e.preventDefault(); return;
@@ -946,7 +960,7 @@ document.getElementById('send-btn').addEventListener('click', () => {
   // C2: 実行中 + 入力なし → 停止（Esc）。実行中 + 入力あり → そのまま送信（Claude に割り込み）。
   const hasContent = inputEl.value.length > 0 || pastedTexts.length > 0 || pendingAttachFiles.length > 0;
   if (isActiveSessionRunning() && !hasContent) {
-    sendText(activeSessionId, '\x1b');
+    sendText(activeSessionId, stopKeyForActiveSession());
     return;
   }
   if (isComposing) return; // compositionend 側で処理する
