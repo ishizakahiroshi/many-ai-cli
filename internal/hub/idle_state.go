@@ -31,6 +31,12 @@ func (s *Server) markRunning(id int) {
 		s.sessionsMu.Unlock()
 		return
 	}
+	// 終端状態は PTY 残余チャンクで running に戻さない（オーケストレーション DONE/timeout 含む）。
+	// lastOutputAt は上で既に更新済み。State だけ触らない。
+	if isTerminalSessionState(ses.State) {
+		s.sessionsMu.Unlock()
+		return
+	}
 	changed := ses.State != "running"
 	if changed {
 		ses.State = "running"

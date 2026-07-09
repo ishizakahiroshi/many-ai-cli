@@ -406,8 +406,19 @@ func applyChildApprovalDefaults(body *spawnChildRequest) {
 	body.RiskConfirmed = true
 }
 
-// liveChildForRole は parentID の子のうち role が一致し、done / timeout になっていない
-// セッションのコピーを返す。複数いる場合は最新 spawn（ID 最大）を選ぶ。いなければ nil。
+// isTerminalSessionState は再起動・追加指示の対象にしない終端状態。
+func isTerminalSessionState(state string) bool {
+	switch state {
+	case "completed", "error", "disconnected", "done", "timeout", "dismissed":
+		return true
+	default:
+		return false
+	}
+}
+
+// liveChildForRole は parentID の子のうち role が一致し、終端状態でなく wrapper が
+// 接続中のセッションのコピーを返す。複数いる場合は最新 spawn（ID 最大）を選ぶ。
+// いなければ nil。
 func (s *Server) liveChildForRole(parentID int, role string) *session {
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()
@@ -416,7 +427,11 @@ func (s *Server) liveChildForRole(parentID int, role string) *session {
 		if ses.ParentSessionID != parentID || ses.Role != role {
 			continue
 		}
-		if ses.State == "done" || ses.State == "timeout" {
+		if isTerminalSessionState(ses.State) {
+			continue
+		}
+		// wrapper 未接続の子へ inject しても pending に積むだけなので live としない。
+		if s.wrappers[ses.ID] == nil {
 			continue
 		}
 		if found == nil || ses.ID > found.ID {

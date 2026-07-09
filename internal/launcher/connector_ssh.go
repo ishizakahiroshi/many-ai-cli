@@ -95,6 +95,9 @@ func (c *SSHConnector) runServe(ctx context.Context, p Profile, urlCh chan<- str
 		url, cmd, waitCh, err := c.tryServe(ctx, p, binary, port)
 		if err != nil {
 			lastErr = err
+			// tryServe 失敗後もリモート側に serve が残っている可能性があるため best-effort 掃除。
+			// （port mismatch で Kill 済みでも、daemon 化・SIGHUP 未伝播の孤児に備える）
+			cleanupSSHOrphans(p, binary, port)
 			if ctx.Err() != nil {
 				break
 			}

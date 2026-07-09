@@ -337,15 +337,32 @@ type wrapperConn struct {
 
 func newWrapperConn(ws *websocket.Conn) *wrapperConn { return &wrapperConn{ws: ws} }
 
-func (c *wrapperConn) send(m any) error {
+func (c *wrapperConn) send(m any) (err error) {
+	if c == nil || c.ws == nil {
+		return fmt.Errorf("wrapper not connected")
+	}
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
+	// ゼロ値 Conn や切断済みは x/net/websocket が panic することがあるため回収する。
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("wrapper send failed: %v", r)
+		}
+	}()
 	return websocket.JSON.Send(c.ws, m)
 }
 
-func (c *wrapperConn) sendWithDeadline(m any, deadline time.Time) error {
+func (c *wrapperConn) sendWithDeadline(m any, deadline time.Time) (err error) {
+	if c == nil || c.ws == nil {
+		return fmt.Errorf("wrapper not connected")
+	}
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("wrapper send failed: %v", r)
+		}
+	}()
 	if err := c.ws.SetWriteDeadline(deadline); err != nil {
 		return err
 	}
@@ -353,7 +370,11 @@ func (c *wrapperConn) sendWithDeadline(m any, deadline time.Time) error {
 }
 
 func (c *wrapperConn) close() {
-	c.closeOnce.Do(func() { _ = c.ws.Close() })
+	c.closeOnce.Do(func() {
+		if c.ws != nil {
+			_ = c.ws.Close()
+		}
+	})
 }
 
 type Server struct {
@@ -1444,6 +1465,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		_ = historyToClose.Close()
 	}
 	s.removeInactiveApprovalRules(providerApprovalRuleTargets(endedProvider, endedCWD))
+	s.removeInactiveUsageHooks(endedProvider, endedCWD)
 	s.finalizeTranscript(m.SessionID, jsonlPathForTranscript)
 	s.broadcast(proto.Message{Type: "session_removed", SessionID: m.SessionID})
 	return false
