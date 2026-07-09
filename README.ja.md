@@ -134,31 +134,40 @@ bun install -g many-ai-cli
 npm install -g many-ai-cli
 ```
 
+インストールできたら → 次の「[はじめる（インストール直後にやること）](#はじめるインストール直後にやること)」へ。PATH が通っていなくても `pnpm exec many-ai-cli setup` でショートカットを作れます。
+
 > v0.3.0 以降、`many-ai-cli` は npm registry で公開されています。各プラットフォーム向けの Go ネイティブバイナリを optional dependency として同梱するため、ブラウザでのダウンロードは発生せず、起動 shim はインストール時にローカル生成されるので Mark-of-the-Web が付かず、その SmartScreen トリガーを回避できます。これは Authenticode 署名の代替ではありません（Smart App Control / WDAC / AppLocker / EDR / ウイルス対策のポリシーは別問題）。インストール後にグローバルコマンドが見つからない場合は `pnpm setup` を実行する（またはシェルを開き直す）と、グローバル bin ディレクトリが `PATH` に載ります。
 
-**Windows (winget):**
+**Windows (winget) — 1 行貼り付け:**
 
 ```powershell
-winget install ishizakahiroshi.many-ai-cli
+winget install ishizakahiroshi.many-ai-cli; & "$env:LOCALAPPDATA\Microsoft\WinGet\Links\many-ai-cli.exe" setup
 ```
 
+インストールできたら → 「[はじめる](#はじめるインストール直後にやること)」へ。
+
+> `winget install` 直後は現在のウィンドウに PATH が反映されないため、`setup` は winget の shim ディレクトリからフルパスで呼び出します（新しいターミナルを開き直してから `many-ai-cli setup` を実行しても同じです）。
 > 初回の winget manifest PR が `microsoft/winget-pkgs` にマージされてから利用可能になります。それまでは下記の zip ダウンロードを使ってください。
 > Windows では、利用可能になり次第 package manager 経由を推奨します。ブラウザで zip / exe を直接ダウンロードする導線に比べ、Mark-of-the-Web 起因の警告に入りにくくなります。ただし Authenticode コード署名や組織の許可リスト登録の代替ではありません。
 
-**macOS (Homebrew):**
+**macOS (Homebrew) — 1 行貼り付け:**
 
 ```bash
-brew install --cask ishizakahiroshi/tap/many-ai-cli
+brew install --cask ishizakahiroshi/tap/many-ai-cli && many-ai-cli setup
 ```
+
+インストールできたら → 「[はじめる](#はじめるインストール直後にやること)」へ。
 
 **Linux — Debian / Ubuntu (.deb)・RHEL 系 (.rpm):**
 
 リリースページからパッケージをダウンロードして:
 
 ```bash
-sudo dpkg -i many-ai-cli_<version>_amd64.deb   # Debian / Ubuntu
-sudo rpm -i many-ai-cli-<version>.x86_64.rpm   # RHEL 系
+sudo dpkg -i many-ai-cli_<version>_amd64.deb && many-ai-cli setup   # Debian / Ubuntu
+sudo rpm -i many-ai-cli-<version>.x86_64.rpm && many-ai-cli setup   # RHEL 系
 ```
+
+インストールできたら → 「[はじめる](#はじめるインストール直後にやること)」へ。
 
 ### 手動ダウンロード（全プラットフォーム）
 
@@ -197,6 +206,19 @@ Windows zip の推奨手順:
 4. `unblock-windows.cmd` を実行する
 5. `many-ai-cli.exe` または `many-ai-cli-launcher.exe` を手動で起動する
 
+#### exe を直接ダブルクリックで起動する（非推奨）
+
+> **非推奨:** ブラウザで直接ダウンロードした zip / exe は Mark-of-the-Web や SmartScreen 警告の対象になりやすくなります。可能なら package manager でのインストール + `many-ai-cli setup` 経由（下の「[はじめる](#はじめるインストール直後にやること)」）を使ってください。
+
+どうしても zip 展開ままで使いたい場合の従来手順:
+
+1. zip を展開し、必要に応じて `unblock-windows.cmd` を実行する
+2. **`many-ai-cli.exe` をダブルクリックして起動する**（または引数なしで `many-ai-cli` を実行）
+   - Hub が起動し、ブラウザが自動で開きます（`http://127.0.0.1:47777/?token=<token>`）
+   - すでに Hub が起動済みの場合は、ブラウザを開くだけで終了します
+3. ブラウザの Hub UI 左下の **「+ 新しいセッション」** をクリックし、使う AI CLI のセッションを起動する
+4. Hub を意図的に停止するときは、Hub UI 右上の `⏻` ボタン、または別ターミナルで `many-ai-cli stop` を使う
+
 ### リリース成果物の検証（チェックサム + 署名）
 
 `v0.1.2` 以降の正式リリースには以下が含まれます。
@@ -224,23 +246,26 @@ sha256sum -c SHA256SUMS.txt
 
 ---
 
-## クイックスタート（推奨）
+## はじめる（インストール直後にやること）
 
-通常はこれだけです。CLI を直接叩く必要はありません。
+どのインストール方法でも、このあとの手順は同じです。
 
-1. リリースページから自分の OS 向け zip をダウンロードして展開する
-2. **`many-ai-cli.exe` をダブルクリックして起動する**（または引数なしで `many-ai-cli` を実行）
-   - Hub が起動し、ブラウザが自動で開きます（`http://127.0.0.1:47777/?token=<token>`）
-   - すでに Hub が起動済みの場合は、ブラウザを開くだけで終了します
-3. ブラウザの Hub UI 左下の **「+ 新しいセッション」** をクリックし、使う AI CLI のセッションを起動する
-4. セッションが UI に表示されれば運用開始。承認待ちが発生すると入力欄の下にアクションバーが出るので、クリックまたはキーボードで操作する
+1. ターミナルで **1 回だけ** 実行します:
 
-ターミナルを別途開かなくても、セッションの起動・操作・承認はすべて Hub UI から行えます。
+   ```
+   many-ai-cli setup
+   ```
+
+   デスクトップに **「Many AI Hub Start」「Many AI Hub Stop」** のショートカットが作成されます（Windows は `.lnk`、macOS は `.command`、Linux は `.desktop`）。
+2. 以後はデスクトップの **「Many AI Hub Start」をダブルクリック**するだけです。黒いコンソールウィンドウと一緒にブラウザで Hub が開きます（`http://127.0.0.1:47777/?token=<token>`）。
+3. ブラウザの Hub UI 左下の **「+ 新しいセッション」** をクリックし、使う AI CLI（claude / codex / copilot / cursor-agent / opencode / grok）のセッションを起動します。承認待ちが発生すると入力欄の下にアクションバーが出るので、クリックまたはキーボードで操作します。
+
+止めるときは、デスクトップの **「Many AI Hub Stop」**、Hub UI 右上の `⏻` ボタン、または別ターミナルで `many-ai-cli stop` を使います。ターミナルから直接起動したい場合は従来どおり `many-ai-cli serve --open` も使えます。
 
 > **⚠ コンソールウィンドウについて**
-> `.exe` を起動すると黒いコンソールウィンドウがブラウザと一緒に開きますが、**これが Hub サーバの実体プロセスです**。ウィンドウを `×` で閉じると Hub が終了します（邪魔な場合は閉じずに **最小化** してください）。
+> 「Many AI Hub Start」を起動すると黒いコンソールウィンドウがブラウザと一緒に開きますが、**これが Hub サーバの実体プロセスです**。ウィンドウを `×` で閉じると Hub が終了します（邪魔な場合は閉じずに **最小化** してください）。
 > なお Hub が落ちた場合でも、走行中の AI セッションはデフォルトで **60 分間 Hub の復帰を待つ**ようになっています（`config.yaml` で 0–86400 秒 = 最大 24 時間まで変更可、長時間タスクを走らせる場合は伸ばせます）。間に合わなければ自動で終了するので、Web UI 側のバグや再起動で AI 作業が即座に道連れにはなりません。詳細は「[シャットダウン・ゾンビセッション対策・Hub クラッシュ耐性](#シャットダウンゾンビセッション対策hub-クラッシュ耐性)」を参照してください。
-> Hub を意図的に停止するときは、Hub UI 右上の `⏻` ボタン、または別ターミナルで `many-ai-cli stop` を使ってください。
+> Linux（GNOME）の場合、デスクトップに作成された `.desktop` ショートカットは初回に右クリック → **「起動を許可（Allow Launching）」** を選ぶ必要があります（OS 仕様）。
 
 ### 統合ランチャー（Windows / Linux / macOS）
 

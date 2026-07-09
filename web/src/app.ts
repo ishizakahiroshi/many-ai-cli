@@ -11,6 +11,7 @@ import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { pendingSessionIds } from './app/approval-queue-tab.js';
 import { scheduleDeferredEnter, scheduleAfterOutputSettle, deferredEnterMinWaitFor } from './app/deferred-enter.js';
+import { scheduleResidueSweep } from './app/residue-sweep.js';
 import { clearMobileTranscriptSession, recordMobileTranscriptUserSubmission } from './app/mobile-transcript.js';
 import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
@@ -335,20 +336,16 @@ export async function doSend(sessionId) {
   } else {
     textPart = rawText + '\r';
   }
-  // 内側 CLI がビジー等で入力行に残骸（前回の未確定入力）があると、本送信が
-  // その後ろへ連結されてしまう（例: "残骸質問"）。sendQuickCommand と同じく
-  // \x15(Ctrl+U) を先頭に置き、inject/本文を送る前に入力行を一度クリアする。
-  // 入力行が空なら no-op なので無害。claude/codex/copilot/cursor 共通に送る。
+  // 残骸（前回の未確定入力）への連結対策は、かつての「全送信への \x15(Ctrl+U) 盲目前置」を
+  // やめ、送信後に張り付きを実測してから掃除する residue-sweep.ts へ移行した。
+  // 前置方式は「相手プロンプトが Ctrl+U を行クリアと解釈する」仮定に依存し、shell / codex に
+  // 加えて claude /login のコード入力欄でもリテラル ^U 混入（OAuth 400）を起こしたため。
   // 画像 inject（@path）を複数行ペーストに前置すると、@path エコー由来の早期 idle で確定 \r が
   // 前倒し発火し、内側 CLI がペースト取り込み中（「Pasting…」）のまま \r を吸収して固着する。
   // injectPrefix がある複数行ペーストでは、まず画像 inject だけ送り、取り込みが落ち着いてから
   // ペースト本体＋確定 \r を送る（下記 needPasteSplit 分岐）。それ以外は従来通り 1 書き込みにまとめる。
-  // ただし shell provider（素のシェル）は Ink 入力欄を持たずシェル自身が行編集を担うため、
-  // \x15 を本文と同一書き込みで前置すると PowerShell 等で行クリアにならずリテラル ^U が混入し
-  // コマンドが壊れる（例: codex → ^Ucodex）。shell 宛ては前置せずそのまま送る。
-  const clearPrefix = shouldSkipClearPrefix(sessions.get(sessionId)?.provider || '') ? '' : '\x15';
   const needPasteSplit = deferEnter && injectPrefix !== '';
-  const textToSend = needPasteSplit ? (clearPrefix + injectPrefix) : (clearPrefix + injectPrefix + textPart);
+  const textToSend = needPasteSplit ? injectPrefix : (injectPrefix + textPart);
   clearInput();
   hideSlashMenu();
   // 送信したら次のプロンプトは別物の可能性があるため dismiss フラグ・multiQ ラッチをクリア
@@ -404,6 +401,9 @@ export async function doSend(sessionId) {
     // 当てられず取りこぼすため、PTY 出力が静止するのを待ってから 1 回だけ送る（deferred-enter.ts）。
     scheduleDeferredEnter(sessionId, enterMinWait);
   }
+  // 送信テキストが確定されず入力行に張り付いたままになっていないかを事後観測し、
+  // 張り付きを実際に見たときだけ \x15 で掃除する（盲目前置の置き換え。residue-sweep.ts）。
+  scheduleResidueSweep(sessionId, rawText, deferEnter);
 }
 
 export function saveInputStateFor(id) {
@@ -927,9 +927,10 @@ inputClearBtn?.addEventListener('click', () => {
   if (isMobileViewport()) window.dispatchEvent(new CustomEvent('mobile-composer-idle'));
   // Web テキストエリアだけでなく内側 CLI の入力行も消す。ビジー時等に溜まった
   // 残骸（例: "/login/login..."）は web を空にしても TUI 側に残り続けるため、
-  // doSend / sendQuickCommand と同じ \x15(Ctrl+U) を単独送信して行クリアする。
+  // \x15(Ctrl+U) を単独送信して行クリアする（ユーザー明示操作なのでここは前置方式のまま。
+  // 送信経路の自動前置は residue-sweep.ts の事後掃除へ移行済み）。
   // ただし shell / codex は \x15 が行クリアとして機能しない（リテラル混入 or 無視）ため
-  // 単独送信もスキップする（doSend / sendQuickCommand と同じ判定）。セッション未選択なら no-op。
+  // 単独送信もスキップする。セッション未選択なら no-op。
   if (activeSessionId !== null && !shouldSkipClearPrefix(sessions.get(activeSessionId)?.provider || '')) {
     sendText(activeSessionId, '\x15');
   }
@@ -1239,12 +1240,9 @@ function doSendQuickCommand(sessionId, cmd) {
     detectApproval(sessionId);
     maybeAutoSwitchToNextApproval();
   }, 2050);
-  // 内側 CLI がビジー等で入力行に残骸があると、クイックコマンドが既存テキストへ
-  // 連結され（例: "...質問/clear/clear"）独立コマンドにならない。Ctrl+U(\x15) で
-  // 入力行を一度クリアしてから送り、連結を物理的に防ぐ。
-  // shell provider は doSend と同理由で \x15 を前置しない（PowerShell 等で ^U 混入を防ぐ）。
-  const qcPrefix = shouldSkipClearPrefix(sessions.get(sessionId)?.provider || '') ? '' : '\x15';
-  sendSubmittedText(sessionId, `${qcPrefix}${cmd}\r`);
+  // 残骸への連結対策の \x15 前置は廃止（doSend と同じく residue-sweep.ts の事後掃除へ移行）。
+  sendSubmittedText(sessionId, `${cmd}\r`);
+  scheduleResidueSweep(sessionId, cmd);
   focusInputForTerminalKeys();
 }
 

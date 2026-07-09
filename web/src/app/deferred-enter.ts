@@ -103,6 +103,12 @@ export function notifyDeferredEnterOutput(id: number) {
   armIdle(id);
 }
 
+// 確定 \r / ペースト本体送出の予約が残っているか（residue-sweep が送信途中の内容を
+// 誤って掃除しないためのガードに使う）。
+export function hasPendingDeferredEnter(id: number): boolean {
+  return pending.has(id);
+}
+
 export function cancelDeferredEnter(id: number) {
   const p = pending.get(id);
   if (!p) return;

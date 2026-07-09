@@ -218,11 +218,14 @@ export function isShellProvider(provider: string): boolean {
   return provider === 'shell';
 }
 
-// \x15(Ctrl+U) を行クリアとして解釈しない provider。前置すると逆に悪さをする:
+// \x15(Ctrl+U) を行クリアとして解釈しない provider。送ると逆に悪さをする:
 // - shell: PowerShell 等で行クリアにならずリテラル ^U が混入してコマンドを壊す（2026-06-13 e168426 で確認）
 // - codex: Rust TUI が \x15 を行クリアとして解釈せず、続く \r がコマンド実行に至らない
 //   （2026-06-21 確認。素ターミナルで \x15 無しなら Enter 1 個で実行できる）
-// これらの provider 宛では doSend / sendQuickCommand / inputClearBtn の \x15 前置/単独送信をスキップする。
+// かつては doSend / sendQuickCommand の全送信に \x15 を前置していたが、claude /login の
+// コード入力欄でもリテラル混入（OAuth 400）を起こしたため前置は全廃し、residue-sweep.ts の
+// 事後掃除へ移行した。現在この判定を使うのは inputClearBtn の単独 \x15 送信と
+// residue-sweep の掃除スキップの 2 箇所。
 export function shouldSkipClearPrefix(provider: string): boolean {
   return provider === 'shell' || provider === 'codex';
 }

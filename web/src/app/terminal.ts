@@ -32,6 +32,14 @@ export const TERMINAL_SCROLLBACK_LINES = 10000;
 // 長時間放置後のセッション切替で UI スレッドを詰まらせない。
 export const TERMINAL_PENDING_MAX_BYTES = 100 * 1024;
 export const TERMINAL_WRITE_FLUSH_WATCHDOG_MS = 5000;
+// resize（SIGWINCH）直後は TUI（Codex 等）がトランスクリプト全体を再描画する。
+// このバーストをライブ描画すると全文が上から下へ流れて見えるため、resize 後の
+// 一定時間は出力を pendingChunks に溜めて 1 回の write で一括描画する。
+export const LIVE_BATCH_AFTER_RESIZE_MS = 400;
+// 一括描画バッファの上限。全画面再描画は数百 KB になるため通常の
+// TERMINAL_PENDING_MAX_BYTES より大きく取る。先頭チャンク（カーソルホーム等の
+// 制御列）を捨てると描画が崩れるので、超過時はトリムせず即時 flush する。
+export const LIVE_BATCH_MAX_BYTES = 4 * 1024 * 1024;
 
 async function copyTerminalSelectionText(text, opts: any = {}) {
   const cleaned = opts.oneLine ? cleanOneLineText(text) : cleanCopiedText(text);
@@ -315,6 +323,8 @@ export function ensureTerminal(id) {
     compactSeenAt: 0,
     autoScroll: true,
     everAttached: false,
+    liveBatchUntil: 0,
+    liveBatchFlushTimer: null,
   });
 }
 
@@ -553,10 +563,48 @@ export function queuePendingTerminalChunk(id, bytes) {
   if (!t || !bytes) return;
   t.pendingChunks.push(bytes);
   t.pendingTotalBytes = (t.pendingTotalBytes || 0) + bytes.length;
+  if (isLiveOutputBatching(t)) {
+    // 一括描画中は全画面再描画を丸ごと保持する必要がある（先頭を捨てると
+    // カーソルホーム等の制御列が失われて描画が崩れる）。上限超過時はトリム
+    // せずバッチを打ち切って即時 flush する。
+    if (t.pendingTotalBytes > LIVE_BATCH_MAX_BYTES) {
+      endLiveOutputBatch(t);
+      flushPending(id);
+    }
+    return;
+  }
   while (t.pendingTotalBytes > TERMINAL_PENDING_MAX_BYTES && t.pendingChunks.length > 1) {
     t.pendingTotalBytes -= t.pendingChunks[0].length;
     t.pendingChunks.shift();
   }
+}
+
+// resize（SIGWINCH）送信・受信直後の出力バーストを一括描画するバッチを開始する。
+// 期間中のライブ出力は pendingChunks に溜まり、期限で flushPending が 1 回の
+// write に結合して描画する（セッション切替の flushPending と同じ仕組み）。
+export function beginLiveOutputBatchForResize(id) {
+  const t = terminals.get(id);
+  if (!t) return;
+  t.liveBatchUntil = Date.now() + LIVE_BATCH_AFTER_RESIZE_MS;
+  if (t.liveBatchFlushTimer) clearTimeout(t.liveBatchFlushTimer);
+  t.liveBatchFlushTimer = setTimeout(() => {
+    const latest = terminals.get(id);
+    if (!latest) return;
+    endLiveOutputBatch(latest);
+    flushPending(id);
+  }, LIVE_BATCH_AFTER_RESIZE_MS);
+}
+
+function endLiveOutputBatch(t) {
+  if (t.liveBatchFlushTimer) {
+    clearTimeout(t.liveBatchFlushTimer);
+    t.liveBatchFlushTimer = null;
+  }
+  t.liveBatchUntil = 0;
+}
+
+export function isLiveOutputBatching(t) {
+  return !!t && Date.now() < (t.liveBatchUntil || 0);
 }
 
 export function flushPending(id, onDrained: (() => void) | null = null) {
@@ -1744,6 +1792,9 @@ export function scanBuffer(id, limit?: number) {
 export function sendResize(sessionId, cols, rows) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'pty_resize', session_id: sessionId, cols, rows }));
+    // SIGWINCH を受けた TUI（Codex 等）はトランスクリプト全体を再描画する。
+    // 直後のバーストを一括描画して、全文が上から下へ流れて見えるのを防ぐ。
+    beginLiveOutputBatchForResize(sessionId);
   }
 }
 
@@ -1754,6 +1805,9 @@ export function applyRemotePtyResize(sessionId, cols, rows) {
   if (!id || nextCols <= 0 || nextRows <= 0) return;
   const t = terminals.get(id);
   if (!t || !t.term) return;
+  // Hub が pty_resize を broadcast してきた = PTY へ SIGWINCH が届いた直後。
+  // 他 UI 発の resize でも TUI の全画面再描画バーストが来るため一括描画する。
+  beginLiveOutputBatchForResize(id);
   if (t.term.cols === nextCols && t.term.rows === nextRows) return;
   const wasAtBottom = isTerminalAtBottom(t) || t.autoScroll;
   try {
