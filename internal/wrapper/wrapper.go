@@ -496,6 +496,10 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// Claude: 共有 .claude/settings.local.json を一切触らず、wrapper 所有の temp
 	// settings を `--settings` で渡して statusLine（usage-relay）を有効化する。
 	// reg.TokenStatusbar が false（UI バー無効）なら付けない＝従来の挙動を維持。
+	// diag: docs/local/bugfix_statusline-settings-skip_2026-07-10.md — セッション毎に
+	// 到達判定と reg.TokenStatusbar 実測値を残し、同条件で「出るとき/出ないとき」の
+	// 分岐を再現から確定するための診断ログ。恒久的なログではなく原因確定後に外す。
+	logger.Info("statusline_gate_wrapper", "session_id", sessionID, "provider", provider, "reg_token_statusbar", reg.TokenStatusbar)
 	if provider == "claude" && reg.TokenStatusbar {
 		exe, exeErr := os.Executable()
 		if exeErr != nil {

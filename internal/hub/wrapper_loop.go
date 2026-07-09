@@ -185,7 +185,13 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		"inject_approval_ms", approvalDur.Milliseconds(),
 		"inject_usage_ms", usageDur.Milliseconds(),
 		"pre_ack_total_ms", totalPreAck.Milliseconds())
-	_ = wc.send(proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, TokenStatusbar: s.tokenStatusbarEnabled(), OrchestrationID: childMeta.OrchestrationID, BoardPath: childMeta.BoardPath})
+	// diag: docs/local/bugfix_statusline-settings-skip_2026-07-10.md — Hub 側で register ack
+	// に載せる TokenStatusbar 実測値を残す。wrapper 側 statusline_gate_wrapper と突き合わせて
+	// 「送信時 true → 受信時 false」の JSON パス経由劣化があるか確定するための診断ログ。
+	// 恒久的なログではなく原因確定後に外す。
+	tokenStatusbarForAck := s.tokenStatusbarEnabled()
+	s.logger.Info("statusline_gate_hub", "session_id", id, "provider", reg.Provider, "token_statusbar_send", tokenStatusbarForAck)
+	_ = wc.send(proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, TokenStatusbar: tokenStatusbarForAck, OrchestrationID: childMeta.OrchestrationID, BoardPath: childMeta.BoardPath})
 	s.logger.Info("session registered", "id", id, "provider", reg.Provider, "cwd", reg.CWD, "pid", reg.PID)
 	// C2 (plan_orchestration-spawn-ui-exposure.md): conductor セッション（ツールバーの
 	// 「オーケストレーション」ボタン経由・Auto=false）にだけ役割マッピングの案内を注入する。
