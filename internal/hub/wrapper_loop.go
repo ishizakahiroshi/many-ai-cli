@@ -185,6 +185,14 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		"inject_approval_ms", approvalDur.Milliseconds(),
 		"inject_usage_ms", usageDur.Milliseconds(),
 		"pre_ack_total_ms", totalPreAck.Milliseconds())
+	// inject 中に UI の ×（session_dismiss）が走ると sessions/wrappers から消える。
+	// その後も session_update を送ると UI に幽霊カードが復活し、以降の dismiss が
+	// Hub !exists で session_removed を返せない経路と結合して消えない（観察: #2/#13/#14）。
+	if !s.wrapperStillRegistered(id, wc) {
+		s.logger.Info("session dismissed during register; skip announce",
+			"session_id", id, "provider", reg.Provider)
+		return
+	}
 	// diag: docs/local/bugfix_statusline-settings-skip_2026-07-10.md — Hub 側で register ack
 	// に載せる TokenStatusbar 実測値を残す。wrapper 側 statusline_gate_wrapper と突き合わせて
 	// 「送信時 true → 受信時 false」の JSON パス経由劣化があるか確定するための診断ログ。
@@ -206,6 +214,12 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		// Hub プロセス全体を落とし、稼働中の全セッションが同時に切断される）。
 		prompt := buildConductorInitialPrompt(childMeta.OrchestrationID, roles)
 		s.safeGo("inject_initial_prompt_conductor", func() { s.injectInitialPrompt(id, prompt) })
+	}
+	// announce 直前に再確認（inject 後〜ここまでの狭い窓での dismiss も拾う）。
+	if !s.wrapperStillRegistered(id, wc) {
+		s.logger.Info("session dismissed before announce; skip session_update",
+			"session_id", id, "provider", reg.Provider)
+		return
 	}
 	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Branch: branch, Label: reg.Label, Model: reg.Model, Route: regRoute, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, ParentSessionID: childMeta.ParentSessionID, Role: childMeta.Role, Auto: childMeta.Auto, Depth: childMeta.Depth, OrchestrationID: childMeta.OrchestrationID, BoardPath: childMeta.BoardPath, WorktreeBranch: childMeta.WorktreeBranch})
 	s.writeHistory(id, map[string]any{
@@ -419,6 +433,12 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	if s.tokenStatusbarEnabled() {
 		s.injectUsageHooks()
 	}
+	// inject 中に dismiss されたら reattach 完了を UI に告知しない（wrapperLoop と同趣旨）。
+	if !s.wrapperStillRegistered(acceptedID, wc) {
+		s.logger.Info("session dismissed during reattach inject; skip announce",
+			"session_id", acceptedID, "provider", req.Provider)
+		return
+	}
 	_ = wc.send(proto.Message{Type: "reattach_ack", SessionID: acceptedID})
 	s.broadcast(proto.Message{Type: "session_update", SessionID: acceptedID, Provider: req.Provider, Display: req.Display, CWD: req.CWD, Branch: branch, Label: req.Label, Model: req.Model, Route: reqRoute, Shell: req.Shell, State: "running", LastOutputAt: lastOutputAt, StartedAt: startedAtText, LogPath: rawLogPath, JSONLPath: jsonlPath})
 	s.writeHistory(acceptedID, map[string]any{
@@ -436,6 +456,14 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		"renumbered":     acceptedID != req.SessionID,
 	})
 	s.wrapperMessageLoop(wc, acceptedID)
+}
+
+// wrapperStillRegistered は inject 等の遅い処理の後で、当該 wrapper がまだ
+// sessions/wrappers に載っているか（dismiss されていないか）を返す。
+func (s *Server) wrapperStillRegistered(id int, wc *wrapperConn) bool {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	return s.sessions[id] != nil && s.wrappers[id] == wc
 }
 
 func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
