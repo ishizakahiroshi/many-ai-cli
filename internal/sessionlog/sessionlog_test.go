@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestBaseName(t *testing.T) {
@@ -33,6 +34,14 @@ func TestSanitizeFilePart(t *testing.T) {
 	long := strings.Repeat("a", 120)
 	if got := SanitizeFilePart(long); len(got) != 80 {
 		t.Fatalf("expected 80 chars, got %d", len(got))
+	}
+	longJP := strings.Repeat("あ", 40)
+	gotJP := SanitizeFilePart(longJP)
+	if len(gotJP) > 80 {
+		t.Fatalf("expected <= 80 bytes, got %d", len(gotJP))
+	}
+	if !utf8.ValidString(gotJP) {
+		t.Fatalf("expected valid UTF-8, got %q", gotJP)
 	}
 }
 

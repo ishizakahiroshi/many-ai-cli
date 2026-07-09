@@ -260,6 +260,9 @@ func RemoveCodexStopHook() error {
 // withCodexConfigFileLock は config.toml 隣の .lock を O_EXCL で取り、RMW 区間を
 // プロセス横断で直列化する。取得できなければ短時間リトライする。
 func withCodexConfigFileLock(configPath string, fn func() error) error {
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil { // #nosec G301 -- ~/.codex は秘密情報を持つ可能性があるため 0700
+		return fmt.Errorf("mkdir %s: %w", filepath.Dir(configPath), err)
+	}
 	lockPath := configPath + ".many-ai-cli.lock"
 	const attempts = 50
 	const delay = 20 * time.Millisecond
@@ -273,14 +276,10 @@ func withCodexConfigFileLock(configPath string, fn func() error) error {
 		if !os.IsExist(err) {
 			return fmt.Errorf("open codex config lock: %w", err)
 		}
-		// 生存 PID なし / 壊れたロックは奪取
-		if data, rErr := os.ReadFile(lockPath); rErr == nil {
-			if pid, cErr := strconv.Atoi(strings.TrimSpace(string(data))); cErr == nil && pid > 0 && processAlive(pid) {
-				time.Sleep(delay)
-				continue
-			}
+		if !tryStealCodexConfigLock(lockPath) {
+			time.Sleep(delay)
+			continue
 		}
-		_ = os.Remove(lockPath)
 	}
 	if lockFile == nil {
 		return fmt.Errorf("codex config lock busy: %s", lockPath)
@@ -289,6 +288,30 @@ func withCodexConfigFileLock(configPath string, fn func() error) error {
 	_ = lockFile.Close()
 	defer func() { _ = os.Remove(lockPath) }()
 	return fn()
+}
+
+func tryStealCodexConfigLock(lockPath string) bool {
+	data, err := os.ReadFile(lockPath)
+	if err == nil {
+		pidStr := strings.TrimSpace(string(data))
+		if pid, convErr := strconv.Atoi(pidStr); convErr == nil && pid > 0 {
+			if processAlive(pid) {
+				return false
+			}
+			_ = os.Remove(lockPath)
+			return true
+		}
+	}
+	info, statErr := os.Stat(lockPath)
+	if statErr != nil {
+		return false
+	}
+	// PID 書き込み前の新しいロックは、作成直後の正規状態として待つ。
+	if time.Since(info.ModTime()) <= opencodeLockStaleAfter {
+		return false
+	}
+	_ = os.Remove(lockPath)
+	return true
 }
 
 // ScanCodexStopHookInjected は注入済みかどうかを確認する。
