@@ -8,7 +8,8 @@ import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerm
 import { ws } from './ws-client.js';
 import { scheduleApprovalCheck } from './approval.js';
 import { handleCrunchLinkClick } from './expand-popup.js';
-import { isHistoryViewerOpen, openHistoryViewer, resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
+import { resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
+import { isGrokChatViewerOpen, openGrokChatViewer, resetGrokChatViewerForSessionChange } from './grok-chat-viewer.js';
 import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
 import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, showCursorSeq } from './cursor-hide-filter.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
@@ -335,6 +336,7 @@ export function attachTerminal(id) {
   if (!t) return;
   // セッション切替・タブ復帰時は過去ログビューアを閉じる（別セッションの誤表示防止）
   resetHistoryViewerForSessionChange();
+  resetGrokChatViewerForSessionChange();
   // 切替先セッションの最新ライブ進捗を反映（無ければ hidden に戻す）
   syncLiveStatusDomForActive();
   if (t.container) {
@@ -865,10 +867,12 @@ document.addEventListener('wheel', (e) => {
     return;
   }
 
-  // 通常バッファで上端にいる状態の上方向ホイールは、過去ログビューアを直近ページから自動展開する。
+  // Grok で上端にいる状態の上方向ホイールは、Grok 会話履歴ビューアを自動展開する。
   // Grok のように改行を出さず固定位置に上書き描画する TUI では xterm のスクロールバックが
   // 育たないため、ホイール上は無反応のままになる（履歴ボタンも表示条件 buf.length>rows を
-  // 満たさず出ない）。「ボタンを押す」介在を挟まず、上方向ホイールで過去ログへ導線する。
+  // 満たさず出ない）。「ボタンを押す」介在を挟まず、上方向ホイールで会話履歴へ導線する。
+  // 生 PTY ログ再生（history-viewer）は絶対座標フレームの機械置換で読めない表示になるため、
+  // Grok は chat_history.jsonl 由来の整形ビューア（grok-chat-viewer）を使う。
   const multiViewEl = document.getElementById('multi-view');
   const inMultiPane = !!(multiViewEl && !multiViewEl.hidden);
   const buf = t.term.buffer.active;
@@ -877,8 +881,8 @@ document.addEventListener('wheel', (e) => {
   // alt buffer は scrollback を持たず「上端」概念が無いので、常にビューア導線の対象にする。
   const atTop = buf.type === 'alternate' || buf.viewportY === 0;
   const isGrok = sessions.get(targetSessionId)?.provider === 'grok';
-  if (isGrok && e.deltaY < 0 && atTop && targetSessionId === activeSessionId && !inMultiPane && !isHistoryViewerOpen()) {
-    openHistoryViewer(targetSessionId, { offset: -1 });
+  if (isGrok && e.deltaY < 0 && atTop && targetSessionId === activeSessionId && !inMultiPane && !isGrokChatViewerOpen()) {
+    openGrokChatViewer(targetSessionId);
     markTerminalManualScrollIntent();
     e.preventDefault();
     e.stopPropagation();
@@ -1079,12 +1083,12 @@ document.getElementById('scroll-to-top-btn')?.addEventListener('click', () => {
   }
   // スクロールバックが無い（Grok のように改行を出さない TUI / alt buffer）場合、
   // scrollToTop は無反応のままになる。ホイール経路と同じく、その状態の▲は
-  // 直近過去ログを開く導線として扱う（grok のみ。alt buffer 中の grok は
+  // Grok 会話履歴ビューアを開く導線として扱う（grok のみ。alt buffer 中の grok は
   // PgUp 転送も事故防止で停止しているため、ここが唯一の履歴導線）。
   const buf = t.term.buffer.active;
   const isGrok = sessions.get(activeSessionId)?.provider === 'grok';
-  if (isGrok && (buf.type === 'alternate' || buf.length <= t.term.rows) && !isHistoryViewerOpen()) {
-    openHistoryViewer(activeSessionId, { offset: -1 });
+  if (isGrok && (buf.type === 'alternate' || buf.length <= t.term.rows) && !isGrokChatViewerOpen()) {
+    openGrokChatViewer(activeSessionId);
     return;
   }
   t.autoScroll = false;

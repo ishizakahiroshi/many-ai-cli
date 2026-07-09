@@ -3,7 +3,7 @@
   "codex":    "https://chatgpt.com/codex/cloud/settings/analytics#usage",
   "copilot":  "https://github.com/settings/billing",
   "cursor-agent": "https://cursor.com/dashboard",
-  "grok":     "https://grok.com",
+  "grok":     "https://grok.com/?_s=usage",
   "ollama":   "https://ollama.com/settings",
   "opencode": "https://opencode.ai/go"
 }
