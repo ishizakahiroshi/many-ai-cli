@@ -1,0 +1,174 @@
+/* ---- Review タブ（作業ツリー vs HEAD の diff ビューア・Phase 1） ----
+   親 plan: docs/local/plan_turn-diff-viewer.md
+   file-status / file-stat-add / file-stat-del / diff-file-header / git-icon-btn は
+   git.css の既存クラスを流用する。 */
+
+.review-tab-content {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  flex-direction: column;
+}
+.review-tab-content.active { display: flex; }
+
+.review-root {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.review-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--muted) 35%, transparent);
+  flex: none;
+  flex-wrap: wrap;
+}
+.review-title { font-weight: 700; font-size: 13px; }
+.review-repo {
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40%;
+}
+.review-branch { color: var(--muted); font-size: 11px; }
+.review-spacer { flex: 1; }
+.review-stat { font-size: 12px; color: var(--muted); }
+.review-mode-group { display: flex; gap: 4px; }
+.review-mode-group .git-icon-btn.active {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.review-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.review-diff-pane {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 8px;
+}
+.review-message { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
+.review-message.error { color: var(--danger); }
+
+.review-file { margin-bottom: 12px; border-radius: 6px; }
+.review-file.selected .review-file-header {
+  outline: 1.5px solid var(--accent);
+}
+.review-file-header { position: sticky; top: 0; z-index: 1; }
+.review-file-path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.review-empty-diff { padding: 8px 12px; color: var(--muted); font-size: 12px; }
+.review-raw {
+  margin: 0;
+  padding: 8px 12px;
+  font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+  color: var(--muted);
+}
+
+/* inline 表示 */
+.review-code {
+  margin: 0;
+  font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+.review-line { display: flex; white-space: pre; }
+.review-ln {
+  flex: none;
+  width: 3.2em;
+  text-align: right;
+  padding-right: 6px;
+  color: var(--muted);
+  opacity: 0.7;
+  user-select: none;
+}
+.review-tx { flex: 1; padding-left: 6px; }
+.review-line.hunk { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--muted); }
+.review-line.add  { background: color-mix(in srgb, var(--green) 12%, transparent); color: var(--green-text); }
+.review-line.del  { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+.review-line.ctx  { color: var(--muted); }
+.review-line.meta { color: var(--muted); opacity: 0.7; }
+
+/* side-by-side 表示 */
+.review-sbs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+.review-cell { display: flex; white-space: pre; min-width: 0; overflow: hidden; }
+.review-cell.l { border-right: 1px solid color-mix(in srgb, var(--muted) 30%, transparent); }
+.review-cell.hunk { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--muted); }
+.review-cell.add  { background: color-mix(in srgb, var(--green) 12%, transparent); color: var(--green-text); }
+.review-cell.del  { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+.review-cell.ctx  { color: var(--muted); }
+.review-cell.meta { color: var(--muted); opacity: 0.7; }
+.review-cell.blank {
+  background: repeating-linear-gradient(45deg, transparent, transparent 6px,
+    color-mix(in srgb, var(--muted) 8%, transparent) 6px,
+    color-mix(in srgb, var(--muted) 8%, transparent) 12px);
+}
+
+/* 右側ファイルツリー */
+.review-tree-pane {
+  flex: none;
+  width: 260px;
+  border-left: 1px solid color-mix(in srgb, var(--muted) 35%, transparent);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 8px;
+  gap: 6px;
+}
+.review-tree-pane input[type="search"] {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+.review-tree { flex: 1; overflow: auto; }
+.review-tree-dir {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 2px 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.review-tree-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 6px 3px 14px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace);
+  font-size: 12px;
+}
+.review-tree-file:hover { background: color-mix(in srgb, var(--muted) 14%, transparent); }
+.review-tree-file.selected { outline: 1.5px solid var(--accent); }
+.review-tree-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.review-tree-empty { color: var(--muted); font-size: 12px; padding: 8px 4px; }
+
+@media (max-width: 768px) {
+  .review-tree-pane { display: none; }
+}
