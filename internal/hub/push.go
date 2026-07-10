@@ -17,8 +17,10 @@ import (
 	"time"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
+	"many-ai-cli/internal/approval"
 	"many-ai-cli/internal/config"
 	notifyPkg "many-ai-cli/internal/notify"
+	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/securefile"
 	"many-ai-cli/internal/sessionlog"
 )
@@ -51,12 +53,15 @@ type pushStoreFile struct {
 }
 
 type pushApprovalPayload struct {
-	ID        string `json:"id"`
-	SessionID int    `json:"session_id"`
-	Provider  string `json:"provider,omitempty"`
-	Title     string `json:"title"`
-	Body      string `json:"body"`
-	URL       string `json:"url,omitempty"`
+	ID           string                 `json:"id"`
+	SessionID    int                    `json:"session_id"`
+	Provider     string                 `json:"provider,omitempty"`
+	Title        string                 `json:"title"`
+	Body         string                 `json:"body"`
+	URL          string                 `json:"url,omitempty"`
+	Risk         proto.ApprovalRiskTier `json:"risk,omitempty"`
+	ApproveToken string                 `json:"approve_token,omitempty"`
+	RejectToken  string                 `json:"reject_token,omitempty"`
 }
 
 type pushStatus struct {
@@ -207,13 +212,16 @@ func (pm *pushManager) sendApproval(ctx context.Context, payload pushApprovalPay
 	}
 	payload.Body = truncateUTF8Bytes(payload.Body, pushPayloadMaxLen)
 	body, err := json.Marshal(map[string]any{
-		"type":       "approval_waiting",
-		"id":         payload.ID,
-		"session_id": payload.SessionID,
-		"provider":   payload.Provider,
-		"title":      payload.Title,
-		"body":       payload.Body,
-		"url":        payload.URL,
+		"type":          "approval_waiting",
+		"id":            payload.ID,
+		"session_id":    payload.SessionID,
+		"provider":      payload.Provider,
+		"title":         payload.Title,
+		"body":          payload.Body,
+		"url":           payload.URL,
+		"risk":          payload.Risk,
+		"approve_token": payload.ApproveToken,
+		"reject_token":  payload.RejectToken,
 	})
 	if err != nil {
 		return
@@ -508,23 +516,37 @@ func (s *Server) notifyApprovalPush(id int, approvalID, provider, question, cont
 		titleName = fmt.Sprintf("%s #%d", titleName, id)
 	}
 	body := firstNonEmpty(question, contextText, ses.LastMessage, ses.FirstMessage, ses.CWD, "Approval is waiting.")
+	approvalID = strings.TrimSpace(approvalID)
+	activeNativeApproval := approvalID != "" && ses.nativeApprovalSig == approvalID
 	s.sessionsMu.Unlock()
 	// 承認 question/context は生 PTY テキスト由来で未マスク。ntfy/webhook/Web Push
 	// という端末外の第三者へ送出する前に MaskSecrets を通す（全外部送出の単一ボトルネック）。
 	body = sessionlog.MaskSecrets(body)
-	approvalID = strings.TrimSpace(approvalID)
 	if approvalID == "" {
 		approvalID = fmt.Sprintf("session-%d-%s", id, body)
 	}
 	body = strings.Join(strings.Fields(body), " ")
 	url := approvalPushURL(id)
+	summary := approval.Summarize(question, contextText)
+	approveToken, rejectToken := "", ""
+	if activeNativeApproval && s.oneTapApprovals != nil {
+		// Reject is allowed at every tier; approve is withheld for high risk and
+		// independently rejected by the action endpoint as defense in depth.
+		rejectToken, _ = s.oneTapApprovals.issue(id, approvalID, approvalID, oneTapReject)
+		if summary.Risk != proto.ApprovalRiskHigh {
+			approveToken, _ = s.oneTapApprovals.issue(id, approvalID, approvalID, oneTapApprove)
+		}
+	}
 	payload := pushApprovalPayload{
-		ID:        approvalID,
-		SessionID: id,
-		Provider:  provider,
-		Title:     titleName,
-		Body:      body,
-		URL:       url,
+		ID:           approvalID,
+		SessionID:    id,
+		Provider:     provider,
+		Title:        titleName,
+		Body:         body,
+		URL:          url,
+		Risk:         summary.Risk,
+		ApproveToken: approveToken,
+		RejectToken:  rejectToken,
 	}
 	s.safeGo("web push approval", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), pushSendTimeout)
@@ -571,19 +593,63 @@ func (s *Server) notifyApprovalOutbound(id int, approvalID, provider, question, 
 		titleName = fmt.Sprintf("%s #%d", titleName, id)
 	}
 	body := firstNonEmpty(question, contextText, ses.LastMessage, ses.FirstMessage, ses.CWD, "Approval is waiting.")
+	approvalID = strings.TrimSpace(approvalID)
+	activeNativeApproval := approvalID != "" && ses.nativeApprovalSig == approvalID
 	s.sessionsMu.Unlock()
 	// 承認 question/context は生 PTY テキスト由来で未マスク。ntfy/webhook という
 	// 端末外の第三者へ送出する前に MaskSecrets を通す（全外部送出の単一ボトルネック）。
 	body = sessionlog.MaskSecrets(body)
 	body = strings.Join(strings.Fields(body), " ")
+	if approvalID == "" {
+		approvalID = fmt.Sprintf("session-%d-%s", id, body)
+	}
+	summary := approval.Summarize(question, contextText)
+	approveURL, rejectURL := "", ""
+	if activeNativeApproval && s.oneTapApprovals != nil {
+		if token, err := s.oneTapApprovals.issue(id, approvalID, approvalID, oneTapReject); err == nil {
+			rejectURL = s.oneTapExternalURL(token)
+		}
+		if summary.Risk != proto.ApprovalRiskHigh {
+			if token, err := s.oneTapApprovals.issue(id, approvalID, approvalID, oneTapApprove); err == nil {
+				approveURL = s.oneTapExternalURL(token)
+			}
+		}
+	}
 
 	s.notifyMgr.SendApproval(notifyPkg.ApprovalPayload{
-		ID:        approvalID,
-		SessionID: id,
-		Provider:  provider,
-		Title:     titleName,
-		Body:      body,
+		ID:         approvalID,
+		SessionID:  id,
+		Provider:   provider,
+		Title:      titleName,
+		Body:       body,
+		Risk:       string(summary.Risk),
+		ApproveURL: approveURL,
+		RejectURL:  rejectURL,
+		OpenURL:    s.oneTapExternalOpenURL(id),
 	})
+}
+
+// oneTapExternalURL returns a Tailscale-style HTTPS endpoint only when an
+// explicit allowed host exists. Falling back to loopback would make a phone
+// action target itself, so in that case ntfy intentionally receives Open only.
+func (s *Server) oneTapExternalURL(token string) string {
+	s.cfgMu.Lock()
+	hosts := append([]string(nil), s.cfg.Hub.AllowedHosts...)
+	s.cfgMu.Unlock()
+	if len(hosts) != 1 || strings.TrimSpace(hosts[0]) == "" {
+		return ""
+	}
+	return "https://" + strings.TrimSpace(hosts[0]) + "/api/approval-action/" + url.PathEscape(token)
+}
+
+func (s *Server) oneTapExternalOpenURL(sessionID int) string {
+	s.cfgMu.Lock()
+	hosts := append([]string(nil), s.cfg.Hub.AllowedHosts...)
+	s.cfgMu.Unlock()
+	if len(hosts) != 1 || strings.TrimSpace(hosts[0]) == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://%s/?session_id=%d", strings.TrimSpace(hosts[0]), sessionID)
 }
 
 // configToNotify は config.NotifyConfig を notify.Config に変換する。

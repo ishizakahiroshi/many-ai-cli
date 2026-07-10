@@ -54,9 +54,13 @@ type Message struct {
 	ApprovalQuestion string           `json:"approval_question,omitempty"`
 	ApprovalContext  string           `json:"approval_context,omitempty"`
 	ApprovalOptions  []ApprovalOption `json:"approval_options,omitempty"`
-	Block            string           `json:"block,omitempty"` // approval_marker: VT tail から抽出した [MANY-AI-CLI] ブロック全文
-	SentText         string           `json:"sent_text,omitempty"`
-	DetectedAt       string           `json:"detected_at,omitempty"`
+	ApprovalSummary  *ApprovalSummary `json:"approval_summary,omitempty"`
+	// DoneSummary is emitted when an AI task reaches a terminal-looking state.
+	// It is display-only and never authorizes an action.
+	DoneSummary *DoneSummary `json:"done_summary,omitempty"`
+	Block       string       `json:"block,omitempty"` // approval_marker: VT tail から抽出した [MANY-AI-CLI] ブロック全文
+	SentText    string       `json:"sent_text,omitempty"`
+	DetectedAt  string       `json:"detected_at,omitempty"`
 
 	// LastOutputAt: PTY 出力が最後に届いた時刻（ISO 8601 / RFC 3339）。
 	// session_update で standby/waiting 遷移時に付与し、UI カードに「最終応答時刻」として表示する。
@@ -68,6 +72,10 @@ type Message struct {
 	// Label: セッション識別用の任意ラベル（UI カード 3 行目に【ラベル】として表示）。
 	Label string `json:"label,omitempty"`
 
+	// SessionMeta はカード識別用の永続メタデータ。label を空文字へ戻す更新も
+	// 確実に伝えるため、session_update ではこの入れ子オブジェクトで送る。
+	SessionMeta *SessionMeta `json:"session_meta,omitempty"`
+
 	// Model: 使用モデル名（例: "claude-sonnet-4-5", "gpt-5.5"）。UI カードに表示する。
 	Model string `json:"model,omitempty"`
 
@@ -76,12 +84,13 @@ type Message struct {
 	Route string `json:"route,omitempty"`
 
 	// Lightweight orchestration metadata.
-	ParentSessionID int    `json:"parent_session_id,omitempty"`
-	Auto            bool   `json:"auto,omitempty"`
-	Depth           int    `json:"depth,omitempty"`
-	OrchestrationID string `json:"orchestration_id,omitempty"`
-	BoardPath       string `json:"board_path,omitempty"`
-	WorktreeBranch  string `json:"worktree_branch,omitempty"`
+	ParentSessionID    int    `json:"parent_session_id,omitempty"`
+	Auto               bool   `json:"auto,omitempty"`
+	Depth              int    `json:"depth,omitempty"`
+	OrchestrationID    string `json:"orchestration_id,omitempty"`
+	BoardPath          string `json:"board_path,omitempty"`
+	WorktreeBranch     string `json:"worktree_branch,omitempty"`
+	BoardNotifyPending bool   `json:"board_notify_pending,omitempty"`
 
 	// FirstMessage: セッション内で最初に確定されたユーザー入力（UI カード表示用）。
 	FirstMessage string `json:"first_message,omitempty"`
@@ -160,7 +169,49 @@ type Message struct {
 	RepoName         string  `json:"repo_name,omitempty"`
 	RemainingPct     float64 `json:"remaining_pct,omitempty"`
 	ReasoningOut     int     `json:"reasoning_output_tokens,omitempty"`
+}
 
+// SessionMeta is user-editable, server-persisted identification metadata for a
+// live session. AutoTitle is derived from the first user input and is displayed
+// only when Label is empty.
+type SessionMeta struct {
+	Label     string `json:"label"`
+	Pinned    bool   `json:"pinned"`
+	Color     string `json:"color"`
+	Note      string `json:"note"`
+	AutoTitle string `json:"auto_title"`
+}
+
+// ApprovalRiskTier is the stable, provider-neutral risk contract shared by
+// approval UI, auto-approval policy, and outbound notifications.
+type ApprovalRiskTier string
+
+const (
+	ApprovalRiskLow  ApprovalRiskTier = "low"
+	ApprovalRiskMid  ApprovalRiskTier = "mid"
+	ApprovalRiskHigh ApprovalRiskTier = "high"
+)
+
+// ApprovalSummary is derived from ANSI-stripped VT text. Raw is supplied for
+// disclosure only; consumers must not use it to grant an approval.
+type ApprovalSummary struct {
+	Command string           `json:"command,omitempty"`
+	Paths   []string         `json:"paths,omitempty"`
+	Risk    ApprovalRiskTier `json:"risk"`
+	Raw     string           `json:"raw,omitempty"`
+}
+
+// DoneSummary is a normalized, secret-masked terminal summary. Kind is one of
+// success, failure, aborted, or needs_action; Fallback marks an idle-derived
+// summary created when the provider omitted the DONE marker.
+type DoneSummary struct {
+	SessionID int    `json:"session_id"`
+	Provider  string `json:"provider,omitempty"`
+	Title     string `json:"title,omitempty"`
+	Text      string `json:"text"`
+	Kind      string `json:"kind"`
+	At        string `json:"at"`
+	Fallback  bool   `json:"fallback,omitempty"`
 }
 
 type ApprovalOption struct {

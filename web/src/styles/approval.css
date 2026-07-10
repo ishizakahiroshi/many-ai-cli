@@ -20,6 +20,72 @@
 }
 #action-bar.visible { display: flex; border-left-color: var(--warn); background: rgba(245,158,11,0.04); }
 
+/* P-03: compact, provider-neutral approval context. The command remains a
+   single readable line; raw VT context is available only on demand. */
+.approval-summary-card {
+  flex: 1 1 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  overflow: hidden;
+}
+.approval-summary-card.risk-low { border-color: color-mix(in srgb, var(--green) 55%, var(--line)); }
+.approval-summary-card.risk-mid { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
+.approval-summary-card.risk-high { border-color: #ef4444; }
+.approval-risk-badge,
+.approval-path-badge {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 2px 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.risk-low .approval-risk-badge { color: var(--green); background: color-mix(in srgb, var(--green) 16%, transparent); }
+.risk-mid .approval-risk-badge { color: var(--warn-text); background: rgba(245,158,11,0.16); }
+.risk-high .approval-risk-badge { color: #fecaca; background: rgba(239,68,68,0.18); }
+.approval-summary-command {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+  color: var(--text);
+}
+.approval-path-badge {
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted-2);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  font-weight: 500;
+}
+.approval-summary-raw { flex: 0 0 auto; font-size: 0.72rem; color: var(--muted-2); }
+.approval-summary-raw summary { cursor: pointer; }
+.approval-summary-raw pre {
+  position: absolute;
+  right: 12px;
+  z-index: 10;
+  width: min(560px, calc(100vw - 32px));
+  max-height: 24vh;
+  overflow: auto;
+  margin: 6px 0 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* 上端ドラッグハンドル（マウスで縦に伸縮）。
    ::before = 当たり判定＋カーソル変更用の上端 8px 帯。pointer-events:auto にしないと
              ns-resize カーソルが出ない（過去 none のままでカーソルが変わらなかった）。
@@ -664,6 +730,8 @@
     display: flex;
     align-items: center;
   }
+  .approval-summary-card { flex-wrap: nowrap; min-height: 44px; }
+  .approval-path-badge { display: none; }
   .action-preamble-body { max-height: 4.5em; }
   .action-qpane { padding: 8px; }
   .action-single-qhead {

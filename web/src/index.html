@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="/vendor/hljs-github-dark.min.css">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/styles/mobile-home.css">
+  <link rel="stylesheet" href="/styles/first-run-tour.css">
 </head>
 <body>
   <header>
@@ -105,6 +106,7 @@
     <span id="mic-status-chip" class="status-chip" hidden></span>
     <!-- 📱 モバイル接続（QR ウィザード）。SSH ローカルフォワード / VPN 前提で 127.0.0.1 URL の QR を出す。bind は 127.0.0.1 不変。 -->
     <button id="mobile-connect-btn" data-i18n-tooltip="mobile_connect_tooltip" aria-haspopup="dialog" aria-expanded="false">📱</button>
+    <button id="first-run-tour-btn" class="header-help-btn" data-i18n-tooltip="first_run_tour_open_tooltip" aria-label="Help">?</button>
     <button id="shutdown-btn" data-i18n-tooltip="shutdown_tooltip">⏻</button>
     <button id="settings-btn">
       <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -216,6 +218,15 @@
             <input type="number" id="reconnect-grace-min" min="0" max="1440" value="60" class="settings-input-number">
           </div>
           <div class="settings-note" data-i18n="settings_reconnect_grace_desc">0 = disable reconnect. How long wrappers wait for the Hub to come back after a crash before terminating their PTY. Applies to NEW sessions only — running sessions keep the value at the time they were spawned.</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_board_notify_mode">Board update notification</span>
+            <select id="board-notify-mode" class="settings-select">
+              <option value="queue-until-idle" data-i18n="settings_board_notify_queue">Queue until conductor is idle (recommended)</option>
+              <option value="soft-notify" data-i18n="settings_board_notify_soft">Badge only</option>
+              <option value="interrupt" data-i18n="settings_board_notify_interrupt">Interrupt immediately</option>
+            </select>
+          </div>
+          <div class="settings-note" data-i18n="settings_board_notify_mode_desc">Applies only to orchestration conductors. Queue keeps the latest board update and sends one Enter after output is idle.</div>
         </div>
       </details>
       <details class="settings-section" data-section="remote-auth">
@@ -319,6 +330,18 @@
             </label>
           </div>
           <div class="settings-note" data-i18n="settings_approval_auto_switch_desc">承認待ちが出たセッションへ自動で移動します。現在のセッションが承認中の場合は完了まで移動しません。</div>
+          <div class="settings-row">
+            <span class="settings-label">安全な自動承認（既定OFF）</span>
+            <label class="approval-toggle">
+              <input type="checkbox" id="auto-approval-enabled-input">
+              <span class="approval-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-note">low リスクかつ <code>~/.many-ai-cli/auto-approval.yaml</code> のホワイトリストに一致する承認だけを処理します。破壊操作・外部送信は常に手動確認です。</div>
+          <div class="settings-row">
+            <button type="button" id="auto-approval-simulate-btn" class="settings-link-btn">過去100件で試す</button>
+            <span id="auto-approval-simulate-result" class="settings-note"></span>
+          </div>
           <div class="settings-note" data-i18n="settings_approval_hub_desc">AI の承認を画面のボタンで操作できます。</div>
         </div>
       </details>

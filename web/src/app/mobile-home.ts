@@ -3,12 +3,9 @@
 // PC には一切副作用を与えない。全エントリーポイントは isMobileViewport() で early return する。
 
 import { t } from '../i18n.js';
-import { orderSessions, sessions, approvalVisibleCache, multiQuestionVisibleCache, approvalRawOptionsCache, activeSessionId, set_activeSessionId } from './state.js';
+import { orderSessions, sessions, approvalVisibleCache, multiQuestionVisibleCache, activeSessionId, set_activeSessionId } from './state.js';
 import { activateSession, providerIconHtml } from './session-list.js';
-import { filterFirstMessage } from './settings.js';
-import { isBatchOptions, isMultiSelectOptions } from './approval-parser.js';
-import { sessionTitle, approvalQuestionContext, renderOptionButtons } from './approval-queue-tab.js';
-import { getSingleFreeText, setSingleFreeText, sendSingleFreeText } from './approval.js';
+import { sessionTitle } from './approval-queue-tab.js';
 
 const mobileMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
   ? window.matchMedia('(max-width: 720px)')
@@ -19,6 +16,9 @@ type SessionBucket = 'pending' | 'running' | 'waiting' | 'error';
 
 let mobileHomeSearch = '';
 let mobileDrawerSearch = '';
+// This is deliberately not persisted: the default must remain "all sessions" every
+// time a mobile monitoring home is opened.
+let mobilePendingOnly = false;
 
 function getSessionBucket(id: number): SessionBucket {
   const s = sessions.get(id);
@@ -65,31 +65,6 @@ function buildTitleHtml(id: number, iconSize = 20): string {
   return `${iconHtml}<span class="mh-session-id">#${id}</span><span class="mh-session-name">${escapeHtml(sessionTitle(s))}</span>`;
 }
 
-function appendCardHeader(parent: HTMLElement, id: number, bucket: SessionBucket): void {
-  const header = document.createElement('div');
-  header.className = 'mh-card-header';
-
-  const titleEl = document.createElement('div');
-  titleEl.className = 'mh-card-title';
-  titleEl.innerHTML = buildTitleHtml(id);
-
-  const stateChip = document.createElement('span');
-  stateChip.className = `mh-state-chip mh-state-chip--${bucket}`;
-  stateChip.textContent = statusChipText(bucket);
-
-  header.append(titleEl, stateChip);
-  parent.appendChild(header);
-}
-
-function appendProgressLine(parent: HTMLElement, id: number, bucket: SessionBucket): void {
-  const s = sessions.get(id);
-  const line = document.createElement('div');
-  line.className = 'mh-progress-line';
-  const snippet = filterFirstMessage(s?.last_message || s?.first_message || '');
-  line.textContent = snippet || progressText(bucket);
-  parent.appendChild(line);
-}
-
 function buildSessionRow(id: number, compact = false): HTMLElement {
   const bucket = getSessionBucket(id);
   const row = document.createElement('button');
@@ -123,92 +98,69 @@ function buildSessionRow(id: number, compact = false): HTMLElement {
   return row;
 }
 
-function buildCard(id: number): HTMLElement {
+function projectName(id: number): string {
+  const cwd = sessions.get(id)?.cwd || '';
+  const name = cwd.replace(/\\/g, '/').split('/').filter(Boolean).pop();
+  return name || t('mobile_project_unknown');
+}
+
+function providerModelText(id: number): string {
+  const s = sessions.get(id);
+  const provider = String(s?.provider || 'unknown');
+  const model = String(s?.model || '').trim();
+  return model ? `${provider} · ${model}` : provider;
+}
+
+// P-25 monitoring home deliberately has no direct Yes/No controls. A pending
+// row opens the approval sheet, leaving P-09's high-risk confirmation gate as
+// the single approval path once it is introduced.
+function buildMonitoringRow(id: number): HTMLElement {
   const bucket = getSessionBucket(id);
-  if (bucket !== 'pending') return buildSessionRow(id);
+  const s = sessions.get(id);
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = `mh-monitor-row mh-monitor-row--${bucket}${s?.color ? ` mh-monitor-row--${s.color}` : ''}`;
+  row.dataset.sessionId = String(id);
+  row.classList.toggle('is-active', id === activeSessionId);
+  row.setAttribute('aria-label', `${sessionTitle(s)}, ${providerModelText(id)}, ${statusChipText(bucket)}`);
 
-  const options = approvalRawOptionsCache.get(id);
-  const isMultiQ = !!multiQuestionVisibleCache.get(id);
-  const isBatch = Array.isArray(options) && isBatchOptions(options);
-  const isMultiSel = Array.isArray(options) && isMultiSelectOptions?.(options);
-
-  const card = document.createElement('div');
-  card.className = 'mh-card mh-card--pending';
-  card.dataset.sessionId = String(id);
-
-  appendCardHeader(card, id, bucket);
-
-  if (isMultiQ || isBatch || isMultiSel) {
-    const fallback = document.createElement('button');
-    fallback.type = 'button';
-    fallback.className = 'mh-approval-fallback';
-    fallback.textContent = t('mobile_approval_open_sheet');
-    fallback.addEventListener('click', (e) => {
-      e.stopPropagation();
-      (window as any).openMobileApprovalSheetForSession?.(id);
-    });
-    card.appendChild(fallback);
-  } else if (Array.isArray(options) && options.length > 0) {
-    const { preamble, question } = approvalQuestionContext(options);
-    if (preamble) {
-      const preEl = document.createElement('div');
-      preEl.className = 'mh-card-preamble';
-      preEl.textContent = preamble;
-      card.appendChild(preEl);
-    }
-    if (question) {
-      const qEl = document.createElement('div');
-      qEl.className = 'mh-card-question';
-      qEl.textContent = question;
-      card.appendChild(qEl);
-    }
-
-    const optContainer = document.createElement('div');
-    optContainer.className = 'mh-options';
-    renderOptionButtons(optContainer, id, options);
-    card.appendChild(optContainer);
-
-    if ((options as any)._freeInput) {
-      const freeWrap = document.createElement('div');
-      freeWrap.className = 'mh-free-input';
-
-      const inp = document.createElement('input');
-      inp.type = 'text';
-      inp.className = 'mh-free-input-field';
-      inp.placeholder = t('approval_free_input_placeholder');
-      inp.value = getSingleFreeText(id);
-      inp.addEventListener('click', (e) => e.stopPropagation());
-      inp.addEventListener('input', () => setSingleFreeText(id, inp.value));
-      inp.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !(e as any).isComposing && !e.shiftKey) {
-          e.preventDefault();
-          e.stopPropagation();
-          sendSingleFreeText(id);
-        }
-      });
-
-      const sendBtn = document.createElement('button');
-      sendBtn.type = 'button';
-      sendBtn.className = 'mh-free-input-send';
-      sendBtn.textContent = t('send');
-      sendBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        sendSingleFreeText(id);
-      });
-
-      freeWrap.append(inp, sendBtn);
-      card.appendChild(freeWrap);
-    }
-  } else {
-    appendProgressLine(card, id, bucket);
+  const main = document.createElement('div');
+  main.className = 'mh-monitor-main';
+  const title = document.createElement('div');
+  title.className = 'mh-monitor-title';
+  title.innerHTML = buildTitleHtml(id, 16);
+  if (s?.note) {
+    const note = document.createElement('span');
+    note.className = 'mh-note-indicator';
+    note.textContent = '•';
+    note.title = s.note;
+    note.setAttribute('aria-label', s.note);
+    title.appendChild(note);
   }
+  const meta = document.createElement('div');
+  meta.className = 'mh-monitor-meta';
+  meta.textContent = providerModelText(id);
+  main.append(title, meta);
 
-  card.addEventListener('click', (e) => {
-    if ((e.target as HTMLElement).closest('button, input')) return;
-    activateSession(id);
+  const status = document.createElement('div');
+  status.className = 'mh-monitor-status';
+  if (bucket === 'pending') {
+    const approval = document.createElement('span');
+    approval.className = 'mh-approval-badge';
+    approval.textContent = t('mobile_state_pending');
+    status.appendChild(approval);
+  }
+  const chip = document.createElement('span');
+  chip.className = `mh-state-chip mh-state-chip--${bucket}`;
+  chip.textContent = statusChipText(bucket);
+  status.appendChild(chip);
+  row.append(main, status);
+
+  row.addEventListener('click', () => {
+    if (bucket === 'pending') (window as any).openMobileApprovalSheetForSession?.(id);
+    else activateSession(id);
   });
-
-  return card;
+  return row;
 }
 
 function buildSectionHeader(labelKey: string, count?: number): HTMLElement {
@@ -272,8 +224,41 @@ function ensureSearchInput(parent: HTMLElement, id: string, value: string, onCha
   parent.prepend(search);
 }
 
-function filteredOrderedIds(query: string): number[] {
-  return orderSessions().filter(Boolean).map(s => s.id).filter(id => matchesSearch(id, query));
+function filteredOrderedIds(query: string, pendingOnly = false): number[] {
+  return orderSessions()
+    .filter(Boolean)
+    .map(s => s.id)
+    .filter(id => matchesSearch(id, query))
+    .filter(id => !pendingOnly || getSessionBucket(id) === 'pending');
+}
+
+function ensurePendingOnlyToggle(parent: HTMLElement): void {
+  let toggle = parent.querySelector<HTMLButtonElement>('#mobile-pending-only-toggle');
+  if (!toggle) {
+    toggle = document.createElement('button');
+    toggle.id = 'mobile-pending-only-toggle';
+    toggle.type = 'button';
+    toggle.className = 'mh-pending-filter';
+    toggle.addEventListener('click', () => {
+      mobilePendingOnly = !mobilePendingOnly;
+      renderMobileHomeResults();
+    });
+    parent.appendChild(toggle);
+  }
+  toggle.setAttribute('aria-pressed', String(mobilePendingOnly));
+  toggle.textContent = t('mobile_pending_only');
+  toggle.classList.toggle('is-active', mobilePendingOnly);
+}
+
+function appendProjectGroup(parent: HTMLElement, name: string, ids: number[]): void {
+  const section = document.createElement('section');
+  section.className = 'mh-section mh-project-group';
+  const header = document.createElement('h3');
+  header.className = 'mh-project-header';
+  header.textContent = name;
+  section.appendChild(header);
+  for (const id of ids) section.appendChild(buildMonitoringRow(id));
+  parent.appendChild(section);
 }
 
 export function renderMobileHome() {
@@ -285,6 +270,7 @@ export function renderMobileHome() {
     mobileHomeSearch = value;
     renderMobileHomeResults();
   });
+  ensurePendingOnlyToggle(container);
   renderMobileHomeResults();
 }
 
@@ -300,9 +286,8 @@ function renderMobileHomeResults(): void {
   }
   results.innerHTML = '';
 
-  const allIds = filteredOrderedIds(mobileHomeSearch);
-  const pendingIds = allIds.filter(id => getSessionBucket(id) === 'pending');
-  const sessionIds = allIds.filter(id => getSessionBucket(id) !== 'pending');
+  const allIds = filteredOrderedIds(mobileHomeSearch, mobilePendingOnly);
+  const pendingCount = filteredOrderedIds(mobileHomeSearch).filter(id => getSessionBucket(id) === 'pending').length;
 
   if (sessions.size === 0) {
     const empty = document.createElement('div');
@@ -312,53 +297,46 @@ function renderMobileHomeResults(): void {
     return;
   }
 
-  const pinnedSection = document.createElement('section');
-  pinnedSection.id = 'mobile-home-pinned';
-  pinnedSection.className = 'mh-section mh-section--pinned';
-  pinnedSection.appendChild(buildSectionHeader('mobile_home_section_pending_count', pendingIds.length));
-  if (pendingIds.length === 0) {
-    const emptyPending = document.createElement('div');
-    emptyPending.className = 'mh-pending-empty';
-    emptyPending.textContent = t('approval_tab_empty');
-    pinnedSection.appendChild(emptyPending);
-  } else {
-    for (const id of pendingIds) pinnedSection.appendChild(buildCard(id));
-  }
-  results.appendChild(pinnedSection);
+  const summary = document.createElement('div');
+  summary.className = 'mh-monitor-summary';
+  summary.textContent = t('mobile_home_section_pending_count', { n: pendingCount });
+  results.appendChild(summary);
 
-  const sessionsSection = document.createElement('section');
-  sessionsSection.className = 'mh-section mh-section--sessions';
-  sessionsSection.appendChild(buildSectionHeader('mobile_home_section_sessions'));
-  if (sessionIds.length === 0) {
+  const pinnedIds = allIds.filter(id => !!sessions.get(id)?.pinned);
+  if (pinnedIds.length > 0) {
+    const pinned = document.createElement('section');
+    pinned.id = 'mobile-home-pinned';
+    pinned.className = 'mh-section mh-section--pinned';
+    pinned.appendChild(buildSectionHeader('mobile_pinned_sessions'));
+    for (const id of pinnedIds) pinned.appendChild(buildMonitoringRow(id));
+    results.appendChild(pinned);
+  }
+
+  const remainingIds = allIds.filter(id => !sessions.get(id)?.pinned);
+  if (remainingIds.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'mh-empty mh-empty--compact';
     empty.textContent = t('mobile_home_search_empty');
-    sessionsSection.appendChild(empty);
+    results.appendChild(empty);
   } else {
-    for (const id of sessionIds) sessionsSection.appendChild(buildCard(id));
+    const groups = new Map<string, number[]>();
+    for (const id of remainingIds) {
+      const name = projectName(id);
+      const group = groups.get(name) || [];
+      group.push(id);
+      groups.set(name, group);
+    }
+    groups.forEach((ids, name) => appendProjectGroup(results, name, ids));
   }
-  results.appendChild(sessionsSection);
 }
 
 export function updateMobileHomeCard(id: number) {
   if (!isMobileViewport()) return;
   const container = document.getElementById('mobile-home');
   if (!container) return;
-  const existing = container.querySelector<HTMLElement>(`[data-session-id="${id}"]`);
-  if (!existing || !sessions.has(id) || !matchesSearch(id, mobileHomeSearch)) {
-    renderMobileHome();
-    return;
-  }
-  const newBucket = getSessionBucket(id);
-  const existingBucket = Array.from(existing.classList)
-    .find(c => c.startsWith('mh-card--') || c.startsWith('mh-session-row--'))
-    ?.replace('mh-card--', '')
-    ?.replace('mh-session-row--', '') as SessionBucket | undefined;
-  if (existingBucket !== newBucket) {
-    renderMobileHome();
-    return;
-  }
-  existing.replaceWith(buildCard(id));
+  // A session can cross the pinned/project/filter boundaries, so a complete
+  // monitoring-list refresh is safer than replacing one row in place.
+  renderMobileHome();
 }
 
 export function renderMobileSessionDrawer() {

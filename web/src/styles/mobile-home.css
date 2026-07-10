@@ -130,7 +130,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    min-height: 42px;
+    min-height: 44px;
     padding: 0 10px;
     margin-bottom: 8px;
     border: 1px solid var(--line);
@@ -150,6 +150,32 @@
   .mh-search-icon {
     flex: 0 0 auto;
     font-size: 1rem;
+  }
+
+  .mh-pending-filter {
+    width: 100%;
+    min-height: 44px;
+    margin: 0 0 8px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    font-weight: 700;
+    text-align: left;
+  }
+  .mh-pending-filter.is-active {
+    border-color: var(--danger, #e53e3e);
+    background: color-mix(in srgb, var(--danger, #e53e3e) 12%, var(--bg));
+    color: var(--danger, #e53e3e);
+  }
+
+  .mh-monitor-summary {
+    color: var(--text-soft);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
   }
 
   /* ── カード ── */
@@ -214,6 +240,80 @@
     min-height: 48px;
     padding: 7px 8px;
   }
+
+  /* P-25: the monitoring home has one dense, predictable row per session.
+     The entire row is the (at least 56px high) target; pending rows open the
+     approval sheet rather than placing a destructive control in the list. */
+  .mh-monitor-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 56px;
+    padding: 7px 10px;
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg);
+    color: var(--text);
+    text-align: left;
+    font: inherit;
+  }
+  .mh-monitor-row:active { background: var(--bg-hover, rgba(255,255,255,0.06)); }
+  .mh-monitor-row.is-active {
+    border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+    background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  }
+  .mh-monitor-row--pending { border-left-color: var(--danger, #e53e3e); }
+  .mh-monitor-row--running { border-left-color: var(--warning, #d69e2e); }
+  .mh-monitor-row--waiting { border-left-color: var(--success, #38a169); }
+  .mh-monitor-row--error { border-left-color: var(--danger, #e53e3e); opacity: 0.76; }
+  /* C5 session card colors remain visible on mobile. */
+  .mh-monitor-row--blue { border-left-color: #3b82f6; }
+  .mh-monitor-row--green { border-left-color: #22c55e; }
+  .mh-monitor-row--orange { border-left-color: #f97316; }
+  .mh-monitor-row--red { border-left-color: #ef4444; }
+  .mh-monitor-row--purple { border-left-color: #a855f7; }
+  .mh-monitor-main { flex: 1 1 auto; min-width: 0; }
+  .mh-monitor-title {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 4px;
+    font-size: 0.92rem;
+    font-weight: 700;
+  }
+  .mh-monitor-title .mh-session-name { flex: 1 1 auto; min-width: 0; }
+  .mh-monitor-meta {
+    margin-top: 2px;
+    overflow: hidden;
+    color: var(--text-soft);
+    font-size: 0.72rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mh-note-indicator {
+    flex: 0 0 auto;
+    color: var(--accent);
+    font-size: 1.2rem;
+    line-height: 0.6;
+  }
+  .mh-monitor-status {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+  .mh-approval-badge {
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: var(--danger, #e53e3e);
+    color: #fff;
+    font-size: 0.66rem;
+    font-weight: 800;
+    line-height: 1.2;
+  }
   .mh-row-main {
     flex: 1 1 auto;
     min-width: 0;
@@ -263,6 +363,24 @@
   }
 
   .mh-session-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mh-project-group { gap: 4px; }
+  .mh-project-header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    margin: 0;
+    padding: 7px 0 5px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-layer);
+    color: var(--text-soft);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -459,8 +577,8 @@
 
   .mas-grab {
     align-self: center;
-    width: 42px;
-    height: 18px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     border: 0;
     background: transparent;
@@ -471,7 +589,7 @@
     display: block;
     width: 42px;
     height: 4px;
-    margin: 7px auto;
+    margin: 20px auto;
     border-radius: 999px;
     background: var(--line);
   }
@@ -507,9 +625,9 @@
     overflow-wrap: anywhere;
   }
   .mas-close {
-    flex: 0 0 34px;
-    width: 34px;
-    height: 34px;
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
     background: var(--bg-elev2, rgba(255, 255, 255, 0.08));
     color: var(--text);
@@ -896,7 +1014,7 @@
     align-items: center;
     justify-content: center;
     gap: 4px;
-    min-height: 40px;
+    min-height: 44px;
     padding: 0 6px;
     border: 1px solid var(--line);
     border-radius: var(--radius-md);

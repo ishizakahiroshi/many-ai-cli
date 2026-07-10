@@ -72,6 +72,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		s.orchestration.mu.Unlock()
 	}
 	var storeID int64
+	cardMeta := sessionstore.SessionCardMeta{Label: reg.Label}
 	if s.sessionStore != nil {
 		var storeErr error
 		storeID, storeErr = s.sessionStore.StartSession(sessionstore.SessionStart{
@@ -98,6 +99,12 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		})
 		if storeErr != nil {
 			s.logger.Warn("sqlite session start failed", "session_id", id, "err", storeErr)
+		} else if storeID != 0 {
+			if saved, metaErr := s.sessionStore.SessionCardMetaByLiveSession(id); metaErr != nil {
+				s.logger.Warn("session card meta restore failed", "session_id", id, "err", metaErr)
+			} else {
+				cardMeta = saved
+			}
 		}
 	}
 	s.sessionsMu.Lock()
@@ -108,7 +115,11 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		Display:         reg.Display,
 		CWD:             reg.CWD,
 		Branch:          branch,
-		Label:           reg.Label,
+		Label:           cardMeta.Label,
+		Pinned:          cardMeta.Pinned,
+		Color:           cardMeta.Color,
+		Note:            cardMeta.Note,
+		AutoTitle:       cardMeta.AutoTitle,
 		Model:           reg.Model,
 		Route:           regRoute,
 		Shell:           reg.Shell,
@@ -236,7 +247,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		"parent_session_id": childMeta.ParentSessionID,
 		"role":              childMeta.Role,
 		"auto":              childMeta.Auto,
-		"orchestration_id": childMeta.OrchestrationID,
+		"orchestration_id":  childMeta.OrchestrationID,
 		"board_path":        childMeta.BoardPath,
 	})
 	s.wrapperMessageLoop(wc, id)
@@ -351,6 +362,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		}
 	}
 	var storeID int64
+	cardMeta := sessionstore.SessionCardMeta{Label: req.Label}
 	if s.sessionStore != nil {
 		var storeErr error
 		storeID, storeErr = s.sessionStore.StartSession(sessionstore.SessionStart{
@@ -370,6 +382,12 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		})
 		if storeErr != nil {
 			s.logger.Warn("sqlite session reattach failed", "session_id", acceptedID, "err", storeErr)
+		} else if storeID != 0 {
+			if saved, metaErr := s.sessionStore.SessionCardMetaByLiveSession(acceptedID); metaErr != nil {
+				s.logger.Warn("session card meta restore failed", "session_id", acceptedID, "err", metaErr)
+			} else {
+				cardMeta = saved
+			}
 		}
 	}
 	s.sessionsMu.Lock()
@@ -391,7 +409,11 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		Display:         req.Display,
 		CWD:             req.CWD,
 		Branch:          branch,
-		Label:           req.Label,
+		Label:           cardMeta.Label,
+		Pinned:          cardMeta.Pinned,
+		Color:           cardMeta.Color,
+		Note:            cardMeta.Note,
+		AutoTitle:       cardMeta.AutoTitle,
 		Model:           req.Model,
 		Route:           reqRoute,
 		Shell:           req.Shell,

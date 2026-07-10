@@ -50,11 +50,15 @@ func GenerateRandomTopic() (string, error) {
 
 // ApprovalPayload は承認通知の本文。Hub URL / token は含めない。
 type ApprovalPayload struct {
-	ID        string // 重複送信防止用。空の場合は自動生成
-	SessionID int
-	Provider  string
-	Title     string
-	Body      string
+	ID         string // 重複送信防止用。空の場合は自動生成
+	SessionID  int
+	Provider   string
+	Title      string
+	Body       string
+	Risk       string
+	ApproveURL string
+	RejectURL  string
+	OpenURL    string
 }
 
 // DonePayload はタスク完了通知の本文。Hub URL / token は含めない。
@@ -64,6 +68,7 @@ type DonePayload struct {
 	Provider  string
 	Title     string
 	Summary   string
+	Kind      string // success | failure | aborted | needs_action
 }
 
 // Manager は ntfy/webhook 通知の送信管理を行う。
@@ -125,7 +130,7 @@ func (m *Manager) SendApproval(payload ApprovalPayload) {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
 			defer cancel()
-			if err := send(ctx, m.client, b, payload.Title, body); err != nil {
+			if err := sendApproval(ctx, m.client, b, payload, body); err != nil {
 				m.logger.Warn("notify send failed",
 					"type", b.Type,
 					"host", notifyHostOf(b.URL),
@@ -133,6 +138,13 @@ func (m *Manager) SendApproval(payload ApprovalPayload) {
 			}
 		}()
 	}
+}
+
+func sendApproval(ctx context.Context, client *http.Client, backend BackendConfig, payload ApprovalPayload, body string) error {
+	if strings.EqualFold(strings.TrimSpace(backend.Type), "ntfy") {
+		return sendNtfyApproval(ctx, client, backend, payload, body)
+	}
+	return send(ctx, client, backend, payload.Title, body)
 }
 
 // SendDone はタスク完了通知をすべての有効 backend に非同期送信する。
@@ -159,13 +171,14 @@ func (m *Manager) SendDone(payload DonePayload) {
 	m.mu.Unlock()
 
 	body := truncateUTF8(payload.Summary, payloadMaxBytes)
+	title := doneNotificationTitle(payload.Title, payload.Kind)
 
 	for _, backend := range cfg.Backends {
 		b := backend
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
 			defer cancel()
-			if err := send(ctx, m.client, b, payload.Title, body); err != nil {
+			if err := sendDone(ctx, m.client, b, title, body, payload.Kind); err != nil {
 				m.logger.Warn("notify done send failed",
 					"type", b.Type,
 					"host", notifyHostOf(b.URL),
@@ -173,6 +186,76 @@ func (m *Manager) SendDone(payload DonePayload) {
 			}
 		}()
 	}
+}
+
+func doneNotificationTitle(title, kind string) string {
+	label := map[string]string{"success": "成功", "failure": "失敗", "aborted": "中断", "needs_action": "要判断"}[strings.ToLower(strings.TrimSpace(kind))]
+	if label == "" {
+		label = "完了"
+	}
+	return "[" + label + "] " + title
+}
+
+func sendDone(ctx context.Context, client *http.Client, backend BackendConfig, title, body, kind string) error {
+	if strings.EqualFold(strings.TrimSpace(backend.Type), "ntfy") {
+		return sendNtfyDone(ctx, client, backend, title, body, kind)
+	}
+	if strings.EqualFold(strings.TrimSpace(backend.Type), "webhook") {
+		return sendWebhookDone(ctx, client, backend, title, body, kind)
+	}
+	return fmt.Errorf("unknown backend type: %q", backend.Type)
+}
+
+func sendNtfyDone(ctx context.Context, client *http.Client, backend BackendConfig, title, body, kind string) error {
+	topicURL := strings.TrimRight(backend.URL, "/") + "/" + strings.TrimSpace(backend.Topic)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, topicURL, strings.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("ntfy: build request: %w", err)
+	}
+	tags, priority := "white_check_mark", "default"
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "failure":
+		tags, priority = "x", "high"
+	case "aborted":
+		tags, priority = "pause_button", "default"
+	case "needs_action":
+		tags, priority = "warning", "high"
+	}
+	req.Header.Set("Title", title)
+	req.Header.Set("Priority", priority)
+	req.Header.Set("Tags", tags)
+	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("ntfy: send: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("ntfy: unexpected status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func sendWebhookDone(ctx context.Context, client *http.Client, backend BackendConfig, title, body, kind string) error {
+	payload := map[string]string{"title": title, "body": body, "kind": kind}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("webhook: marshal: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, backend.URL, bytes.NewReader(b))
+	if err != nil {
+		return fmt.Errorf("webhook: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("webhook: send: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("webhook: unexpected status %d", resp.StatusCode)
+	}
+	return nil
 }
 
 // SendSecurity はセキュリティ警告（SEC-C 新規デバイス接続など）を全 backend に送る。
@@ -248,6 +331,54 @@ func sendNtfy(ctx context.Context, client *http.Client, backend BackendConfig, t
 		return fmt.Errorf("ntfy: unexpected status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// sendNtfyApproval adds notification actions only for absolute HTTPS/HTTP
+// targets supplied by the Hub. The Hub omits them when no mobile-reachable
+// secure URL is configured, rather than accidentally pointing a phone at its
+// own localhost. The short-lived action token is contained only in the action
+// URL; the Hub token is never present.
+func sendNtfyApproval(ctx context.Context, client *http.Client, backend BackendConfig, payload ApprovalPayload, body string) error {
+	topicURL := strings.TrimRight(backend.URL, "/") + "/" + strings.TrimSpace(backend.Topic)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, topicURL, strings.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("ntfy: build request: %w", err)
+	}
+	req.Header.Set("Title", payload.Title)
+	req.Header.Set("Priority", "high")
+	req.Header.Set("Tags", "bell")
+	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
+	if actions := ntfyApprovalActions(payload); actions != "" {
+		req.Header.Set("Actions", actions)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("ntfy: send: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("ntfy: unexpected status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func ntfyApprovalActions(payload ApprovalPayload) string {
+	actions := make([]string, 0, 3)
+	if isSafeActionURL(payload.ApproveURL) && strings.ToLower(strings.TrimSpace(payload.Risk)) != "high" {
+		actions = append(actions, "http, Approve, "+payload.ApproveURL+", method=POST")
+	}
+	if isSafeActionURL(payload.RejectURL) {
+		actions = append(actions, "http, Reject, "+payload.RejectURL+", method=POST")
+	}
+	if isSafeActionURL(payload.OpenURL) {
+		actions = append(actions, "view, Open, "+payload.OpenURL)
+	}
+	return strings.Join(actions, "; ")
+}
+
+func isSafeActionURL(raw string) bool {
+	u, err := neturl.Parse(strings.TrimSpace(raw))
+	return err == nil && u != nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != "" && u.User == nil && u.Fragment == ""
 }
 
 // sendWebhook は汎用 webhook へ JSON POST する。

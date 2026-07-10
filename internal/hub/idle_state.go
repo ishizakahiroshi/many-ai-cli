@@ -85,6 +85,7 @@ func (s *Server) evaluateIdle() {
 		state        string
 		lastOutputAt string
 		approvalWait bool
+		fallbackDone bool
 	}
 	var changes []change
 	var branchChecks []branchRefreshRequest
@@ -116,7 +117,7 @@ func (s *Server) evaluateIdle() {
 		}
 		if newState != "" && newState != ses.State {
 			ses.State = newState
-			changes = append(changes, change{id: id, provider: ses.Provider, display: ses.Display, cwd: ses.CWD, branch: ses.Branch, label: ses.Label, model: ses.Model, route: ses.Route, state: newState, lastOutputAt: ses.LastOutputAt, approvalWait: newState == "waiting" && ses.approvalVisible})
+			changes = append(changes, change{id: id, provider: ses.Provider, display: ses.Display, cwd: ses.CWD, branch: ses.Branch, label: ses.Label, model: ses.Model, route: ses.Route, state: newState, lastOutputAt: ses.LastOutputAt, approvalWait: newState == "waiting" && ses.approvalVisible, fallbackDone: newState == "standby"})
 		}
 	}
 	s.sessionsMu.Unlock()
@@ -129,6 +130,9 @@ func (s *Server) evaluateIdle() {
 			approvalID := fmt.Sprintf("ui-%d-%s", c.id, c.lastOutputAt)
 			s.notifyApprovalPush(c.id, approvalID, c.provider, "", "")
 			s.notifyApprovalOutbound(c.id, approvalID, c.provider, "", "")
+		}
+		if c.fallbackDone {
+			s.maybeCreateFallbackDoneSummary(c.id)
 		}
 	}
 	s.queueBranchRefreshes(branchChecks)

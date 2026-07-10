@@ -21,6 +21,11 @@ import (
 
 const orchestrationPollInterval = 2 * time.Second
 
+// P-47 の workflow-idle は未実装のため、P-19 は直近 PTY 出力の静止だけを
+// 暫定 idle 判定にする。1 ポーリング間を丸ごと静かだった conductor にだけ
+// 保留 Enter を送ることで、思考・描画の途中への割り込みを避ける。
+const orchestrationConductorOutputIdle = 2 * time.Second
+
 // orchestrationInjectQuiet / orchestrationInjectMaxWait は spawn 直後の初期案内文注入前に
 // 起動アニメーションの静止を待つ上限。quiet 続けば十分とみなし、静止しなくても maxWait で
 // 諦めて注入する（プロバイダ起動が異常に遅い場合でも無期限に待たない）。
@@ -83,6 +88,9 @@ type orchestrationBoard struct {
 	LastSize   int64
 	LastMod    time.Time
 	LastWrite  time.Time
+	// PendingNotices は queue-until-idle の conductor ごとの最新通知。連続した
+	// board 更新はここで上書きし、idle 復帰時に Enter を 1 回だけ送る。
+	PendingNotices map[int]string
 }
 
 type orchestrationChild struct {
@@ -205,6 +213,8 @@ func (s *Server) handleSessionAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch parts[1] {
+	case "meta":
+		s.handleSessionMeta(w, r, id)
 	case "spawn-child":
 		s.handleSpawnChild(w, r, id)
 	case "send-child":
@@ -627,14 +637,15 @@ func childProgressPath(boardPath string, sessionID int) string {
 func newOrchestrationBoard(id, path string) *orchestrationBoard {
 	now := time.Now()
 	return &orchestrationBoard{
-		ID:         id,
-		Path:       path,
-		Sessions:   map[int]string{},
-		Children:   map[int]*orchestrationChild{},
-		Done:       map[int]bool{},
-		IdleWarned: map[int]bool{},
-		TimedOut:   map[int]bool{},
-		LastWrite:  now,
+		ID:             id,
+		Path:           path,
+		Sessions:       map[int]string{},
+		Children:       map[int]*orchestrationChild{},
+		Done:           map[int]bool{},
+		IdleWarned:     map[int]bool{},
+		TimedOut:       map[int]bool{},
+		PendingNotices: map[int]string{},
+		LastWrite:      now,
 	}
 }
 
@@ -681,6 +692,7 @@ func (s *Server) scanOrchestrationBoards() {
 		}
 		s.checkOrchestrationChildTimers(b.ID, now, cfg)
 	}
+	s.flushQueuedBoardNotices(now)
 }
 
 // scanOrchestrationChildFiles は子専用進捗ファイル（child-<ID>.md）を監視する。
@@ -771,7 +783,7 @@ func (s *Server) scanOrchestrationChildFiles(boardID string, now time.Time) {
 	}
 	s.orchestration.mu.Unlock()
 	for _, n := range notices {
-		s.injectText(n.sessionID, n.text, true, false)
+		s.notifyBoardSession(boardID, n.sessionID, n.text)
 	}
 	for _, id := range doneIDs {
 		s.markChildState(id, "done")
@@ -830,7 +842,7 @@ func (s *Server) handleBoardChange(boardID, boardPath string, info os.FileInfo, 
 		if writerID != 0 && sessionID == writerID {
 			continue
 		}
-		s.injectText(sessionID, fmt.Sprintf("\n[orchestration] board updated by %s: %s\n", updatedBy, boardPath), true, false)
+		s.notifyBoardSession(boardID, sessionID, fmt.Sprintf("\n[orchestration] board updated by %s: %s\n", updatedBy, boardPath))
 	}
 	for _, ev := range dones {
 		sessionID := ev.SessionID
@@ -855,6 +867,105 @@ func (s *Server) handleBoardChange(boardID, boardPath string, info os.FileInfo, 
 			s.markChildState(sessionID, "done")
 		}
 	}
+}
+
+// notifyBoardSession applies board_notify_mode to conductor notifications only.
+// Child and ordinary session behavior remains unchanged; this is deliberately
+// scoped so P-19 does not alter normal terminal input delivery.
+func (s *Server) notifyBoardSession(boardID string, sessionID int, text string) {
+	mode := config.EffectiveBoardNotifyMode(s.snapshotCfg().Orchestration.BoardNotifyMode)
+	s.sessionsMu.Lock()
+	ses := s.sessions[sessionID]
+	isConductor := ses != nil && ses.OrchestrationID != "" && ses.ParentSessionID == 0
+	s.sessionsMu.Unlock()
+	if !isConductor {
+		s.injectText(sessionID, text, true, false)
+		return
+	}
+
+	switch mode {
+	case config.BoardNotifySoft:
+		s.setBoardNotifyPending(sessionID, true)
+	case config.BoardNotifyQueueUntilIdle:
+		s.orchestration.mu.Lock()
+		if board := s.orchestration.boards[boardID]; board != nil {
+			if board.PendingNotices == nil {
+				board.PendingNotices = map[int]string{}
+			}
+			board.PendingNotices[sessionID] = text
+		}
+		s.orchestration.mu.Unlock()
+		s.setBoardNotifyPending(sessionID, true)
+	case config.BoardNotifyInterrupt:
+		s.setBoardNotifyPending(sessionID, false)
+		s.injectText(sessionID, text, true, false)
+	}
+}
+
+// flushQueuedBoardNotices sends one latest board notification after the
+// conductor has been output-idle. Workflow-idle will be added by P-47; until
+// then this intentionally conservative output-only gate is the sole criterion.
+func (s *Server) flushQueuedBoardNotices(now time.Time) {
+	type queuedNotice struct {
+		boardID   string
+		sessionID int
+		text      string
+	}
+	var pending []queuedNotice
+	s.orchestration.mu.Lock()
+	for boardID, board := range s.orchestration.boards {
+		for sessionID, text := range board.PendingNotices {
+			pending = append(pending, queuedNotice{boardID: boardID, sessionID: sessionID, text: text})
+		}
+	}
+	s.orchestration.mu.Unlock()
+
+	for _, notice := range pending {
+		if !s.conductorOutputIdle(notice.sessionID, now) {
+			continue
+		}
+		s.orchestration.mu.Lock()
+		board := s.orchestration.boards[notice.boardID]
+		text, stillPending := "", false
+		if board != nil {
+			text, stillPending = board.PendingNotices[notice.sessionID]
+			if stillPending {
+				delete(board.PendingNotices, notice.sessionID)
+			}
+		}
+		s.orchestration.mu.Unlock()
+		if !stillPending {
+			continue
+		}
+		s.setBoardNotifyPending(notice.sessionID, false)
+		s.injectText(notice.sessionID, text, true, false)
+	}
+}
+
+func (s *Server) conductorOutputIdle(sessionID int, now time.Time) bool {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[sessionID]
+	if ses == nil || ses.ParentSessionID != 0 || ses.OrchestrationID == "" || ses.State != "running" {
+		return false
+	}
+	if ses.initialInjectPending || ses.approvalVisible || ses.lastOutputAt.IsZero() {
+		return false
+	}
+	return now.Sub(ses.lastOutputAt) >= orchestrationConductorOutputIdle
+}
+
+func (s *Server) setBoardNotifyPending(sessionID int, pending bool) {
+	s.sessionsMu.Lock()
+	ses := s.sessions[sessionID]
+	if ses == nil || ses.BoardNotifyPending == pending {
+		s.sessionsMu.Unlock()
+		return
+	}
+	ses.BoardNotifyPending = pending
+	msg := sessionUpdateMessage(ses)
+	s.sessionsMu.Unlock()
+	s.broadcast(msg)
 }
 
 func (s *Server) resolveBoardWriterLocked(b *orchestrationBoard, writer boardWriter) int {
@@ -1035,23 +1146,24 @@ func (s *Server) markChildState(sessionID int, state string) {
 
 func sessionUpdateMessage(ses *session) proto.Message {
 	return proto.Message{
-		Type:            "session_update",
-		SessionID:       ses.ID,
-		Provider:        ses.Provider,
-		Display:         ses.Display,
-		CWD:             ses.CWD,
-		Branch:          ses.Branch,
-		Label:           ses.Label,
-		Model:           ses.Model,
-		Route:           ses.Route,
-		State:           ses.State,
-		ParentSessionID: ses.ParentSessionID,
-		Role:            ses.Role,
-		Auto:            ses.Auto,
-		Depth:           ses.Depth,
-		OrchestrationID: ses.OrchestrationID,
-		BoardPath:       ses.BoardPath,
-		WorktreeBranch:  ses.WorktreeBranch,
+		Type:               "session_update",
+		SessionID:          ses.ID,
+		Provider:           ses.Provider,
+		Display:            ses.Display,
+		CWD:                ses.CWD,
+		Branch:             ses.Branch,
+		Label:              ses.Label,
+		Model:              ses.Model,
+		Route:              ses.Route,
+		State:              ses.State,
+		ParentSessionID:    ses.ParentSessionID,
+		Role:               ses.Role,
+		Auto:               ses.Auto,
+		Depth:              ses.Depth,
+		OrchestrationID:    ses.OrchestrationID,
+		BoardPath:          ses.BoardPath,
+		WorktreeBranch:     ses.WorktreeBranch,
+		BoardNotifyPending: ses.BoardNotifyPending,
 	}
 }
 

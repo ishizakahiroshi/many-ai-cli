@@ -14,6 +14,7 @@ import (
 
 	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/sessionstore"
 )
 
 // handleInput は pty_input メッセージを wrapper へ届ける。
@@ -26,6 +27,7 @@ func (s *Server) handleInput(m proto.Message) {
 	combined := m.Text
 	var firstMsgBroadcast *proto.Message
 	var injectMarker bool
+	var autoTitleMeta *sessionstore.SessionCardMeta
 	if ses != nil && strings.HasSuffix(m.Text, "\r") {
 		text := strings.TrimRight(m.Text, "\r\n")
 		if text == "/clear" {
@@ -38,12 +40,20 @@ func (s *Server) handleInput(m proto.Message) {
 			maskedText := sessionlog.MaskSecrets(text)
 			if ses.FirstMessage == "" {
 				ses.FirstMessage = maskedText
+				// 最初の依頼を短い自動タイトルにする。ラベルは wrapper /
+				// orchestration の識別子も兼ねるため書き換えず、UI では手動
+				// label を優先して AutoTitle をフォールバックとして使う。
+				if ses.AutoTitle == "" {
+					ses.AutoTitle = normalizeSessionMetaText(maskedText, 40)
+					meta := sessionStoreMeta(ses)
+					autoTitleMeta = &meta
+				}
 			}
 			// 数字のみ（選択肢番号）は LastMessage を更新しない
 			if !isDigitsOnly(text) {
 				ses.LastMessage = maskedText
 			}
-			msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt, FirstMessage: ses.FirstMessage, LastMessage: ses.LastMessage}
+			msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt, FirstMessage: ses.FirstMessage, LastMessage: ses.LastMessage, SessionMeta: sessionMetaFor(ses)}
 			firstMsgBroadcast = &msg
 			// ユーザーターン境界マーカーを ptyBuf に注入する
 			marker := []byte(chatHistoryUserTurnMarker)
@@ -64,6 +74,11 @@ func (s *Server) handleInput(m proto.Message) {
 	})
 	if firstMsgBroadcast != nil {
 		s.broadcast(*firstMsgBroadcast)
+	}
+	if autoTitleMeta != nil && s.sessionStore != nil {
+		// AutoTitle は first message の確定時だけ変化する。入力ホットパスで
+		// SQLite を待たないよう既存のメッセージ更新と同じ軽量更新に留める。
+		_ = s.sessionStore.UpdateSessionCardMeta(m.SessionID, *autoTitleMeta)
 	}
 }
 

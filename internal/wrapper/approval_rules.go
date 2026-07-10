@@ -19,7 +19,7 @@ const sharedBlockEnd = "<!-- /many-ai-cli:approval-rules -->"
 // 新規注入には使わない。検出されたら Remove + 再注入で新マーカーへ移行される。
 const legacySharedBlockStart = "<!-- any-ai-cli:approval-rules -->"
 const legacySharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
-const rulesVersion = "17"
+const rulesVersion = "18"
 
 var rulesFileContent = strings.Join([]string{
 	fmt.Sprintf("<!-- version: %s -->", rulesVersion),
@@ -138,8 +138,12 @@ var rulesFileContent = strings.Join([]string{
 	"  [MANY-AI-CLI-DONE] <1〜2 文の完了サマリー> [/MANY-AI-CLI-DONE]",
 	"",
 	"- 条件: `MANY_AI_CLI=1` の場合のみ出力する（承認マーカーと同じ確認済みの値を使用）。",
-	"- サマリーは「何を完了したか」を端的に 1〜2 文で記述する。例:",
-	"  [MANY-AI-CLI-DONE] files タブの検索バグを修正し、テストを追加しました。 [/MANY-AI-CLI-DONE]",
+	"- 1 文目は必ず結論にする（完了内容・失敗・中断・ユーザー判断待ちのいずれか）。2 文目は変更ファイル、テスト結果、残作業を短く補足する。",
+	"- Good（成功）: [MANY-AI-CLI-DONE] files タブの検索バグを修正しました。変更: web/src/app/files-view.ts。テスト: bun run check は成功しました。 [/MANY-AI-CLI-DONE]",
+	"- Good（失敗）: [MANY-AI-CLI-DONE] テスト追加は未完了です。internal/hub/server_test.go の既存失敗 3 件を確認しました。 [/MANY-AI-CLI-DONE]",
+	"- Good（要判断）: [MANY-AI-CLI-DONE] 実装は停止しています。破壊的な migration の適用可否についてユーザー判断が必要です。 [/MANY-AI-CLI-DONE]",
+	"- Bad: [MANY-AI-CLI-DONE] 完了しました [/MANY-AI-CLI-DONE]（何をしたか・検証・残作業が分からないため不可）。",
+	"- Bad: [MANY-AI-CLI-DONE] いろいろ直しました [/MANY-AI-CLI-DONE]（対象が曖昧なため不可）。",
 	"- マーカーは 1 ターン 1 回のみ、返答の末尾に出力する。",
 	"- 通常の会話・質問への回答・作業途中には出力しない（タスク完了時のみ）。",
 	"",

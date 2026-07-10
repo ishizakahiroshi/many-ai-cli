@@ -719,6 +719,8 @@ export function handleGoApprovalDetected(message) {
   const options = normalizeGoApprovalOptions(message.approval_options);
   if (options.length === 0) return;
   const sig = String(message.approval_sig || approvalSig(options));
+	const summary = normalizeApprovalSummary(message.approval_summary, message.approval_context, message.approval_question);
+	if (summary) (options as any)._summary = summary;
   options.forEach((opt: any) => {
     opt._approvalSource = 'go_vt';
     opt._approvalSig = sig;
@@ -742,6 +744,18 @@ export function handleGoApprovalDetected(message) {
     const bar = document.getElementById('action-bar');
     if (bar) approvalUiAdapter.showOptions(bar, id, options, !wasVisible);
   }
+}
+
+function normalizeApprovalSummary(raw, fallbackRaw, fallbackQuestion) {
+  if (!raw || typeof raw !== 'object') return null;
+  const risk = raw.risk === 'low' || raw.risk === 'high' ? raw.risk : 'mid';
+  const command = String(raw.command || fallbackQuestion || '').trim();
+  const paths = Array.isArray(raw.paths)
+    ? raw.paths.map((path) => String(path || '').trim()).filter(Boolean).slice(0, 4)
+    : [];
+  const context = String(raw.raw || fallbackRaw || '').trim();
+  if (!command && !context) return null;
+  return { command, paths, risk, raw: context };
 }
 
 export function handleHubApprovalMarker(message) {
@@ -1386,7 +1400,8 @@ export function showActionBar(bar, sessionId, options, forceStickToBottom = fals
     _labelKind: sequentialQuestion ? 'sequential' : (isSelectMenu ? 'select-menu' : 'approval'),
     _labelTitle: sequentialQuestion || menuTitle || '',
     // 質問本文（承認系のみ；sequential/select-menu は title 側で表示済み）。
-    _question: hubQuestion,
+	_question: hubQuestion,
+	_summary: (options as any)._summary || null,
     // 配列プロパティの _preamble は [section] 変換で失われるためセクションへも引き継ぐ。
     _preamble: (options && (options as any)._preamble) ? (options as any)._preamble : '',
   };
@@ -1531,6 +1546,7 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   const question = (labelKind === 'approval' && section._question) ? String(section._question).trim() : '';
   const preamble = section._preamble ? String(section._preamble).trim() : '';
   const freeActive = allowFree && !!singleFreeActive.get(sessionId);
+	const summary = section._summary || null;
 
   const sig = JSON.stringify({
     s: sessionId,
@@ -1539,6 +1555,7 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
     lk: labelKind,
     q: question,
     pre: preamble,
+		approvalSummary: summary ? { c: summary.command, p: summary.paths, r: summary.risk, raw: summary.raw } : null,
     opts: options.map(o => ({ n: o.num, l: o.label, c: !!o.isCurrent, p: !!o.preserveOrder })),
     free: allowFree,
     fa: freeActive,
@@ -1575,6 +1592,8 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
     label.textContent = '⚠ Approval needed';
   }
   bar.appendChild(label);
+
+	if (summary) appendApprovalSummaryCard(bar, summary);
 
   // 承認ブロック直前の地の文（前置き説明）があれば先頭に表示する（バッチ/複数選択と対称）。
   // 単一質問だけここが抜けていたため、AI の質問文・文脈がポップアップに出ず CLI 画面を
@@ -1674,6 +1693,43 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   actionBarShownAt.set(sessionId, Date.now());
   if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
   if (chatWasAtBottomB && chatTlB) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlB));
+}
+
+function appendApprovalSummaryCard(bar, summary) {
+  const card = document.createElement('div');
+  card.className = `approval-summary-card risk-${summary.risk || 'mid'}`;
+
+  const risk = document.createElement('span');
+  risk.className = 'approval-risk-badge';
+  risk.textContent = summary.risk === 'high' ? 'HIGH' : summary.risk === 'low' ? 'LOW' : 'MID';
+  card.appendChild(risk);
+
+  const command = document.createElement('span');
+  command.className = 'approval-summary-command';
+  command.textContent = summary.command ? `${summary.command} を実行してよいか` : 'この操作を実行してよいか';
+  command.title = command.textContent;
+  card.appendChild(command);
+
+  for (const path of summary.paths || []) {
+    const badge = document.createElement('span');
+    badge.className = 'approval-path-badge';
+    badge.textContent = path;
+    badge.title = path;
+    card.appendChild(badge);
+  }
+
+  if (summary.raw) {
+    const raw = document.createElement('details');
+    raw.className = 'approval-summary-raw';
+    const rawTitle = document.createElement('summary');
+    rawTitle.textContent = 'raw';
+    raw.appendChild(rawTitle);
+    const rawBody = document.createElement('pre');
+    rawBody.textContent = summary.raw;
+    raw.appendChild(rawBody);
+    card.appendChild(raw);
+  }
+  bar.appendChild(card);
 }
 
 export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom = false) {
