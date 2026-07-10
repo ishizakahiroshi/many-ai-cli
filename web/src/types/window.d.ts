@@ -91,6 +91,7 @@ declare global {
     _chatC4OnAppend?: AnyFn;
 
     GitGraphView?: any;
+    ReviewView?: any;
 
     __settingsSaveAll?: () => Promise<void>;
     __settingsResetAll?: () => Promise<void>;

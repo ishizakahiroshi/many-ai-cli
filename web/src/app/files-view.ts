@@ -90,6 +90,7 @@ export const FilesTabManager = (function () {
     return {
       openFilesTab: () => null,
       openGitTab: () => null,
+      openReviewTab: () => null,
       closeFilesTab: () => {},
       closeMainTab: () => {},
       switchToSessionView: () => {},
@@ -281,7 +282,7 @@ export const FilesTabManager = (function () {
     terminalWrapper.style.display = '';
     if (isSession) {
       filesContents.classList.remove('visible');
-      filesContents.querySelectorAll('.files-tab-content, .git-tab-content').forEach(el => el.classList.remove('active'));
+      filesContents.querySelectorAll('.files-tab-content, .git-tab-content, .review-tab-content').forEach(el => el.classList.remove('active'));
       // display:none で隠れていた間に ResizeObserver が 0 幅で fit() を呼んでいる可能性があるため、
       // 表示復帰後にレイアウト確定を待って refit する。これをしないと xterm の cols が極小のまま残り、
       // 文字が縦に細く折り返される（depth padding 修正と同系統の "MD で出した narrow 表示" 事象）。
@@ -290,7 +291,7 @@ export const FilesTabManager = (function () {
       }
     } else {
       filesContents.classList.add('visible');
-      filesContents.querySelectorAll('.files-tab-content, .git-tab-content').forEach(el => {
+      filesContents.querySelectorAll('.files-tab-content, .git-tab-content, .review-tab-content').forEach(el => {
         el.classList.toggle('active', el.dataset.tabId === tabId);
       });
       // C2: 外部から openFilesTab / openGitTab が呼ばれた場合は統合タブバーも追随
@@ -468,6 +469,13 @@ export const FilesTabManager = (function () {
           tabObj.gitView.dispose();
         }
       } catch (_) {}
+    } else if (kind === 'review') {
+      // ReviewView インスタンスがあれば dispose（LS 復元対象外なので DOM 掃除のみ）
+      try {
+        if (tabObj.reviewView && typeof tabObj.reviewView.dispose === 'function') {
+          tabObj.reviewView.dispose();
+        }
+      } catch (_) {}
     }
     // アクティブだったら session ビューに戻る
     if (activeTabId === id) {
@@ -514,6 +522,7 @@ export const FilesTabManager = (function () {
     const sessId = (typeof activeSessionId !== 'undefined') ? activeSessionId : null;
     menu.innerHTML =
       `<button data-act="add-git" type="button"><span class="ico">⎇</span><span>${escapeHtml(ti18n('add_git_tab', 'Add Git tab'))}</span></button>` +
+      `<button data-act="add-review" type="button"><span class="ico">±</span><span>${escapeHtml(ti18n('add_review_tab', 'Add Review tab'))}</span></button>` +
       `<button data-act="add-files" type="button"><span class="ico">📁</span><span>${escapeHtml(ti18n('add_files_tab', 'Add Files tab'))}</span></button>`;
     document.body.appendChild(menu);
     const r = menu.getBoundingClientRect();
@@ -534,6 +543,10 @@ export const FilesTabManager = (function () {
           const gr = sess.git_root || sess.cwd || '';
           if (!gr) return;
           openGitTab(sessId, gr, sess.branch || '');
+        } else if (act === 'add-review') {
+          const gr = sess.git_root || sess.cwd || '';
+          if (!gr) return;
+          openReviewTab(sessId, gr);
         } else if (act === 'add-files') {
           const gr = sess.git_root || sess.cwd || '';
           const pk = sess.project || (gr ? gr.split(/[\\/]/).filter(Boolean).pop() : '__no_project__');
@@ -699,6 +712,121 @@ export const FilesTabManager = (function () {
     return id;
   }
 
+  // ─── review タブを開く（Phase 1: 作業ツリー vs HEAD の diff ビューア）──
+  // 親 plan: docs/local/plan_turn-diff-viewer.md（localStorage 復元は対象外）
+  function openReviewTab(sessionId, gitRoot) {
+    if (!gitRoot) return null;
+    ensureSessionTab();
+    showTabBar();
+    ensureAddTabButton();
+
+    let projectKey = '';
+    if (sessionsRef && sessionId != null) {
+      const s = sessionsRef.get(sessionId);
+      if (s) projectKey = s.project || '';
+    }
+    const hasProject = projectKey && projectKey !== '__no_project__';
+
+    // 同 gitRoot の review タブがあれば activate + session 付け替え
+    const existing = tabs.find(t => {
+      if ((t.kind || t.type) !== 'review') return false;
+      if (t.gitRoot !== gitRoot) return false;
+      if (hasProject) return t.projectKey === projectKey;
+      return sameSessionId(t.sessionId, sessionId);
+    });
+    if (existing) {
+      if (sessionId != null && !sameSessionId(existing.sessionId, sessionId)) {
+        existing.sessionId = sessionId;
+        if (existing.contentEl) existing.contentEl.dataset.sessionId = String(sessionId);
+        updateTabLabelPrefix(existing, sessionId);
+        try {
+          if (existing.reviewView && typeof existing.reviewView.setSessionId === 'function') {
+            existing.reviewView.setSessionId(sessionId);
+          }
+        } catch (_) {}
+      } else {
+        // 再度開いたときは最新の作業ツリーを取り直す
+        try {
+          if (existing.reviewView && typeof existing.reviewView.refresh === 'function') {
+            existing.reviewView.refresh();
+          }
+        } catch (_) {}
+      }
+      setActive(existing.id);
+      notifyTabStateChanged();
+      return existing.id;
+    }
+
+    // 新規作成
+    const id = makeid();
+    let projectName = hasProject ? projectKey : '';
+    if (!projectName) {
+      projectName = (gitRoot || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || gitRoot;
+    }
+
+    const tabBtn = document.createElement('button');
+    tabBtn.className = 'main-tab main-tab-review';
+    tabBtn.dataset.tabId = id;
+    tabBtn.type = 'button';
+
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'icon';
+    iconSpan.textContent = '±';
+    tabBtn.appendChild(iconSpan);
+
+    const labelSpan = document.createElement('span');
+    labelSpan.dataset.tabLabel = '1';
+    labelSpan.textContent = sessionTabPrefix(sessionId) + 'Review: ' + projectName + ' ';
+    tabBtn.appendChild(labelSpan);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'main-tab-close';
+    closeBtn.type = 'button';
+    closeBtn.textContent = '×';
+    closeBtn.title = (typeof t === 'function' ? t('files_tab_close_tooltip') : 'Close');
+    closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeMainTab(id); });
+    tabBtn.appendChild(closeBtn);
+
+    tabBtn.addEventListener('click', () => setActive(id));
+    tabList.appendChild(tabBtn);
+
+    // コンテンツ DOM
+    const contentEl = document.createElement('div');
+    contentEl.className = 'review-tab-content';
+    contentEl.dataset.tabId = id;
+    contentEl.dataset.gitRoot = gitRoot;
+    contentEl.dataset.sessionId = sessionId != null ? String(sessionId) : '';
+    contentEl.innerHTML =
+      `<div class="git-tab-placeholder-body" data-review-placeholder-body>${escapeHtml(ti18n('review_tab_loading', 'Loading Review view...'))}</div>`;
+    filesContents.appendChild(contentEl);
+
+    const tabObj = {
+      id, kind: 'review', type: 'review',
+      label: 'review: ' + projectName,
+      sessionId: sessionId != null ? sessionId : null,
+      gitRoot, projectName,
+      projectKey: hasProject ? projectKey : '',
+      el: tabBtn, contentEl, labelEl: labelSpan,
+      reviewView: null,
+    };
+    tabs.push(tabObj);
+
+    // ReviewView インスタンス化（クラスが存在する場合のみ）
+    try {
+      if (typeof window.ReviewView === 'function' && sessionId != null) {
+        const body = contentEl.querySelector('[data-review-placeholder-body]');
+        if (body) body.remove();
+        tabObj.reviewView = new window.ReviewView(contentEl, { sessionId, gitRoot });
+      }
+    } catch (err) {
+      console.warn('[FilesTabManager] ReviewView mount failed:', err);
+    }
+
+    setActive(id);
+    notifyTabStateChanged();
+    return id;
+  }
+
   // ─── カード open マーカー再描画通知 ───────────────────────────────────
   // 外部で listen する用。renderSessionList を直接呼ぶと循環するため
   // setTimeout で非同期化。
@@ -729,7 +857,7 @@ export const FilesTabManager = (function () {
     for (const tab of tabs) {
       if (tab.sessionId !== removedSessionId) continue;
       const kind = tab.kind || tab.type;
-      if (kind !== 'git' && kind !== 'files') continue;
+      if (kind !== 'git' && kind !== 'files' && kind !== 'review') continue;
       // 同 gitRoot の別セッションを探す
       let candidate = null;
       if (tab.gitRoot && sessionsRef) {
@@ -756,6 +884,12 @@ export const FilesTabManager = (function () {
               tab.gitView.setSessionId(candidate.id);
             }
           } catch (_) {}
+        } else if (kind === 'review') {
+          try {
+            if (tab.reviewView && typeof tab.reviewView.setSessionId === 'function') {
+              tab.reviewView.setSessionId(candidate.id);
+            }
+          } catch (_) {}
         }
       } else {
         // 付け替え不可
@@ -774,8 +908,8 @@ export const FilesTabManager = (function () {
             }
           }
           mutated = true;
-        } else if (kind === 'files') {
-          // files タブはセッションがないと操作不能なので閉じる
+        } else if (kind === 'files' || kind === 'review') {
+          // files / review タブはセッションがないと操作不能なので閉じる
           closeMainTab(tab.id);
         }
       }
@@ -920,6 +1054,7 @@ export const FilesTabManager = (function () {
     openFilesTab,
     openFilesTabAtFile,
     openGitTab,
+    openReviewTab,
     closeFilesTab,
     closeMainTab,
     switchToSessionView,

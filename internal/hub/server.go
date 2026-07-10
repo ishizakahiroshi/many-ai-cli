@@ -886,6 +886,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/git-show", s.handleGitShow)
 	mux.HandleFunc("/api/git-refs", s.handleGitRefs)
 	mux.HandleFunc("/api/git-status", s.handleGitStatus)
+	mux.HandleFunc("/api/git-diff", s.handleGitDiff)
 	mux.HandleFunc("/api/git-commit-all", s.handleGitCommitAll)
 	mux.HandleFunc("/api/git-commit-message", s.handleGitCommitMessage)
 	mux.HandleFunc("/api/git-fetch", s.handleGitFetch)
