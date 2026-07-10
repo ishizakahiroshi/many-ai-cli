@@ -160,6 +160,69 @@ func Test_handleBoardChange_doneOnlyMatchingSession(t *testing.T) {
 	}
 }
 
+func Test_notifyBoardSession_queueUntilOutputIdle(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Orchestration.BoardNotifyMode = config.BoardNotifyQueueUntilIdle
+	conductor := registerTestSession(s, 1, "codex")
+	conductor.OrchestrationID = "s1"
+	conductor.lastOutputAt = time.Now()
+	path := filepath.Join(t.TempDir(), "board.md")
+	s.registerBoardSession("s1", path, conductor.ID, "conductor")
+
+	s.notifyBoardSession("s1", conductor.ID, "board update one")
+	s.notifyBoardSession("s1", conductor.ID, "board update latest")
+
+	s.orchestration.mu.Lock()
+	queued := s.orchestration.boards["s1"].PendingNotices[conductor.ID]
+	s.orchestration.mu.Unlock()
+	if queued != "board update latest" {
+		t.Fatalf("queued notice = %q, want latest update", queued)
+	}
+	if !conductor.BoardNotifyPending {
+		t.Fatal("BoardNotifyPending = false, want true while queued")
+	}
+
+	// Recent output keeps the notification queued.
+	s.flushQueuedBoardNotices(time.Now())
+	s.orchestration.mu.Lock()
+	_, stillQueued := s.orchestration.boards["s1"].PendingNotices[conductor.ID]
+	s.orchestration.mu.Unlock()
+	if !stillQueued {
+		t.Fatal("queue flushed while conductor still had recent output")
+	}
+
+	// The temporary server has no wrapper; flush therefore leaves the text in
+	// normal pending input, but consumes the board-notification queue exactly once.
+	conductor.lastOutputAt = time.Now().Add(-orchestrationConductorOutputIdle - time.Millisecond)
+	s.flushQueuedBoardNotices(time.Now())
+	s.orchestration.mu.Lock()
+	_, stillQueued = s.orchestration.boards["s1"].PendingNotices[conductor.ID]
+	s.orchestration.mu.Unlock()
+	if stillQueued || conductor.BoardNotifyPending {
+		t.Fatalf("queued=%v pendingBadge=%v, want both false after idle flush", stillQueued, conductor.BoardNotifyPending)
+	}
+}
+
+func Test_notifyBoardSession_softNotifyDoesNotQueueEnter(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Orchestration.BoardNotifyMode = config.BoardNotifySoft
+	conductor := registerTestSession(s, 1, "codex")
+	conductor.OrchestrationID = "s1"
+	path := filepath.Join(t.TempDir(), "board.md")
+	s.registerBoardSession("s1", path, conductor.ID, "conductor")
+
+	s.notifyBoardSession("s1", conductor.ID, "board update")
+	if !conductor.BoardNotifyPending {
+		t.Fatal("soft-notify did not set the board update badge")
+	}
+	s.orchestration.mu.Lock()
+	queued := len(s.orchestration.boards["s1"].PendingNotices)
+	s.orchestration.mu.Unlock()
+	if queued != 0 {
+		t.Fatalf("soft-notify queued %d Enter notifications, want 0", queued)
+	}
+}
+
 func Test_prepareChildWorktree_nonGit(t *testing.T) {
 	s := newTestServer()
 	cwd := t.TempDir()

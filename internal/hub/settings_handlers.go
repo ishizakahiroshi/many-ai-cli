@@ -148,6 +148,7 @@ func (s *Server) handleIdleTimeout(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]bool{"ok": true})
 	}
 }
+
 // handleNotifyConfig は GET/POST で ntfy/webhook 通知設定を読み書きする。
 // POST body: { backends: [...], events: [...] }
 func (s *Server) handleNotifyConfig(w http.ResponseWriter, r *http.Request) {
@@ -264,6 +265,40 @@ func (s *Server) handleReconnectGrace(w http.ResponseWriter, r *http.Request) {
 		}
 		s.cfgMu.Lock()
 		s.cfg.Hub.WrapperReconnectGraceSec = body.WrapperReconnectGraceSec
+		s.cfgMu.Unlock()
+		if err := s.persistConfig(); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "save_failed", errorDetail("save failed", err))
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+	}
+}
+
+// handleOrchestrationConfig exposes only the UI-safe orchestration preference.
+// Limits and worktree fields intentionally remain config-file managed.
+func (s *Server) handleOrchestrationConfig(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		s.cfgMu.Lock()
+		mode := config.EffectiveBoardNotifyMode(s.cfg.Orchestration.BoardNotifyMode)
+		s.cfgMu.Unlock()
+		writeJSON(w, map[string]string{"board_notify_mode": string(mode)})
+	case http.MethodPost:
+		var body struct {
+			BoardNotifyMode config.BoardNotifyMode `json:"board_notify_mode"`
+		}
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		if !body.BoardNotifyMode.Valid() {
+			writeJSONError(w, http.StatusBadRequest, "invalid_board_notify_mode", "board_notify_mode must be soft-notify, queue-until-idle, or interrupt")
+			return
+		}
+		s.cfgMu.Lock()
+		s.cfg.Orchestration.BoardNotifyMode = body.BoardNotifyMode
 		s.cfgMu.Unlock()
 		if err := s.persistConfig(); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "save_failed", errorDetail("save failed", err))

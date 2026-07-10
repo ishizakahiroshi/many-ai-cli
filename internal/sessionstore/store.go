@@ -90,6 +90,16 @@ type SessionStart struct {
 	WorktreeBranch  string
 }
 
+// SessionCardMeta はライブセッションに紐づくカード識別情報。カードの並び替え・
+// 色分けに使う値だけを保持し、PTY 本文は保存しない。
+type SessionCardMeta struct {
+	Label     string
+	Pinned    bool
+	Color     string
+	Note      string
+	AutoTitle string
+}
+
 type ChatMessage struct {
 	ID             int64           `json:"id"`
 	SessionID      int64           `json:"session_db_id,omitempty"`
@@ -369,6 +379,10 @@ func (s *Store) init() error {
 			orchestration_id TEXT,
 			board_path TEXT,
 			worktree_branch TEXT,
+			pinned INTEGER NOT NULL DEFAULT 0,
+			color TEXT,
+			note TEXT,
+			auto_title TEXT,
 			archived INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL DEFAULT (datetime('now')),
 			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -469,6 +483,10 @@ func (s *Store) ensureSessionColumns(ctx context.Context) error {
 		{"orchestration_id", `ALTER TABLE sessions ADD COLUMN orchestration_id TEXT`},
 		{"board_path", `ALTER TABLE sessions ADD COLUMN board_path TEXT`},
 		{"worktree_branch", `ALTER TABLE sessions ADD COLUMN worktree_branch TEXT`},
+		{"pinned", `ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`},
+		{"color", `ALTER TABLE sessions ADD COLUMN color TEXT`},
+		{"note", `ALTER TABLE sessions ADD COLUMN note TEXT`},
+		{"auto_title", `ALTER TABLE sessions ADD COLUMN auto_title TEXT`},
 		{"archived", `ALTER TABLE sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`},
 	}
 	for _, col := range add {
@@ -504,7 +522,8 @@ func (s *Store) StartSession(st SessionStart) (int64, error) {
 		display_name=excluded.display_name,
 		cwd=excluded.cwd,
 		branch=excluded.branch,
-		label=excluded.label,
+		-- jsonl_path が同一の再接続では、利用者が編集したカード名を wrapper の
+		-- register label で上書きしない。
 		model=excluded.model,
 		route=excluded.route,
 		shell=excluded.shell,
@@ -569,6 +588,35 @@ func (s *Store) UpdateSessionState(liveSessionID int, state, lastOutputAt string
 		last_output_at=COALESCE(NULLIF(?, ''), last_output_at), updated_at=?
 		WHERE live_session_id=? AND ended_at IS NULL`,
 		state, lastOutputAt, time.Now().Format(time.RFC3339), liveSessionID)
+}
+
+// SessionCardMetaByLiveSession returns the card metadata for the newest row of
+// a live session. A missing row is represented by the zero value.
+func (s *Store) SessionCardMetaByLiveSession(liveSessionID int) (SessionCardMeta, error) {
+	if s == nil || s.db == nil || liveSessionID <= 0 {
+		return SessionCardMeta{}, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	var meta SessionCardMeta
+	var pinned int
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(label, ''), COALESCE(pinned, 0), COALESCE(color, ''), COALESCE(note, ''), COALESCE(auto_title, '')
+		FROM sessions WHERE live_session_id=? ORDER BY id DESC LIMIT 1`, liveSessionID).
+		Scan(&meta.Label, &pinned, &meta.Color, &meta.Note, &meta.AutoTitle)
+	if err == sql.ErrNoRows {
+		return SessionCardMeta{}, nil
+	}
+	meta.Pinned = pinned != 0
+	return meta, err
+}
+
+// UpdateSessionCardMeta persists the complete card metadata. The caller has
+// already merged a PATCH with the live session under the Hub lock.
+func (s *Store) UpdateSessionCardMeta(liveSessionID int, meta SessionCardMeta) error {
+	return s.exec(`UPDATE sessions SET label=?, pinned=?, color=?, note=?, auto_title=?, updated_at=?
+		WHERE live_session_id=? AND ended_at IS NULL`,
+		meta.Label, boolInt(meta.Pinned), meta.Color, meta.Note, meta.AutoTitle,
+		time.Now().Format(time.RFC3339), liveSessionID)
 }
 
 func (s *Store) EndSession(liveSessionID int, state, reason string, endedAt time.Time) {

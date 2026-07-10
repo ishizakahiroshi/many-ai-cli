@@ -42,6 +42,33 @@ export const LIVE_BATCH_AFTER_RESIZE_MS = 400;
 // 制御列）を捨てると描画が崩れるので、超過時はトリムせず即時 flush する。
 export const LIVE_BATCH_MAX_BYTES = 4 * 1024 * 1024;
 
+// セッション横断検索（P-11）から、現在の xterm scrollback に残っている一致行へ
+// 移動する。検索結果は保存済みメッセージ単位なので厳密な物理行番号を持たない。
+// ここで表示バッファを逆順に走査すれば、通常は最新の該当出力へ戻れる。
+export function scrollTerminalToSearchMatch(sessionID: number, query: string): boolean {
+  const term = terminals.get(sessionID)?.term;
+  const needle = String(query || '').trim().toLocaleLowerCase();
+  if (!term || !needle) return false;
+  const buffer = term.buffer?.active;
+  if (!buffer || buffer.type === 'alternate') return false;
+  for (let line = buffer.length - 1; line >= 0; line--) {
+    const text = buffer.getLine(line)?.translateToString(true) || '';
+    if (!text.toLocaleLowerCase().includes(needle)) continue;
+    try {
+      term.scrollToLine(line);
+      // xterm の選択色を短時間だけ使い、対応行を見失わないようにする。
+      term.select(0, line, Math.max(1, Math.min(text.length, term.cols || text.length)));
+      window.setTimeout(() => {
+        try { term.clearSelection(); } catch (_) {}
+      }, 1800);
+    } catch (_) { /* scroll API 非対応時は下の成功扱いを避ける */
+      return false;
+    }
+    return true;
+  }
+  return false;
+}
+
 async function copyTerminalSelectionText(text, opts: any = {}) {
   const cleaned = opts.oneLine ? cleanOneLineText(text) : cleanCopiedText(text);
   if (!cleaned) return;

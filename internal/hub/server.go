@@ -24,6 +24,7 @@ import (
 
 	"golang.org/x/net/websocket"
 	"many-ai-cli/internal/attach"
+	"many-ai-cli/internal/autoapproval"
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/notify"
 	"many-ai-cli/internal/proto"
@@ -85,31 +86,36 @@ const (
 // xterm.js のレンダリング済みバッファをスキャンして session_hint で approval_visible
 // を伝える。Hub はそれを受けて idleAfter 経過時に倒す state を決める。
 type session struct {
-	ID              int    `json:"id"`
-	Provider        string `json:"provider"`
-	Display         string `json:"display_name"`
-	CWD             string `json:"cwd"`
-	Branch          string `json:"branch,omitempty"`
-	Label           string `json:"label,omitempty"` // UI カード 3 行目に【ラベル】として表示
-	Model           string `json:"model,omitempty"` // 使用モデル名; UI カード表示用
-	Route           string `json:"route,omitempty"` // 接続経路（"ollama" 等）; UI で Ollama バックエンドの識別に使用
-	Shell           string `json:"shell,omitempty"`
-	ParentSessionID int    `json:"parent_session_id,omitempty"`
-	Role            string `json:"role,omitempty"`
-	Auto            bool   `json:"auto,omitempty"`
-	Depth           int    `json:"depth,omitempty"`
-	OrchestrationID string `json:"orchestration_id,omitempty"`
-	BoardPath       string `json:"board_path,omitempty"`
-	WorktreeBranch  string `json:"worktree_branch,omitempty"`
-	State           string `json:"state"`
-	LastOutputAt    string `json:"last_output_at,omitempty"` // ISO 8601; UI カード「最終応答時刻」用
-	StartedAt       string `json:"started_at,omitempty"`     // ISO 8601; UI カード「起動時刻」用
-	FirstMessage    string `json:"first_message,omitempty"`  // 最初の確定入力; UI カード表示用
-	LastMessage     string `json:"last_message,omitempty"`   // 最新の確定入力; UI カード表示用
-	EndReason       string `json:"end_reason,omitempty"`     // session_end の reason コード（例: "exec_not_found"）。UI 側で i18n 翻訳して表示
-	HomeDir         string `json:"-"`
-	CodexHome       string `json:"-"`
-	ClaudeDir       string `json:"-"`
+	ID                 int    `json:"id"`
+	Provider           string `json:"provider"`
+	Display            string `json:"display_name"`
+	CWD                string `json:"cwd"`
+	Branch             string `json:"branch,omitempty"`
+	Label              string `json:"label,omitempty"` // UI カード 3 行目に【ラベル】として表示
+	Pinned             bool   `json:"pinned,omitempty"`
+	Color              string `json:"color,omitempty"`
+	Note               string `json:"note,omitempty"`
+	AutoTitle          string `json:"auto_title,omitempty"`
+	Model              string `json:"model,omitempty"` // 使用モデル名; UI カード表示用
+	Route              string `json:"route,omitempty"` // 接続経路（"ollama" 等）; UI で Ollama バックエンドの識別に使用
+	Shell              string `json:"shell,omitempty"`
+	ParentSessionID    int    `json:"parent_session_id,omitempty"`
+	Role               string `json:"role,omitempty"`
+	Auto               bool   `json:"auto,omitempty"`
+	Depth              int    `json:"depth,omitempty"`
+	OrchestrationID    string `json:"orchestration_id,omitempty"`
+	BoardPath          string `json:"board_path,omitempty"`
+	WorktreeBranch     string `json:"worktree_branch,omitempty"`
+	BoardNotifyPending bool   `json:"board_notify_pending,omitempty"`
+	State              string `json:"state"`
+	LastOutputAt       string `json:"last_output_at,omitempty"` // ISO 8601; UI カード「最終応答時刻」用
+	StartedAt          string `json:"started_at,omitempty"`     // ISO 8601; UI カード「起動時刻」用
+	FirstMessage       string `json:"first_message,omitempty"`  // 最初の確定入力; UI カード表示用
+	LastMessage        string `json:"last_message,omitempty"`   // 最新の確定入力; UI カード表示用
+	EndReason          string `json:"end_reason,omitempty"`     // session_end の reason コード（例: "exec_not_found"）。UI 側で i18n 翻訳して表示
+	HomeDir            string `json:"-"`
+	CodexHome          string `json:"-"`
+	ClaudeDir          string `json:"-"`
 
 	// JSON 外: 状態評価用
 	lastOutputAt      time.Time // idleAfter 計算用。LastOutputAt と同期して更新する
@@ -418,6 +424,12 @@ type Server struct {
 	approvalRulesMu     sync.Mutex
 	approvalRuleTargets map[string]approvalRuleTarget // key: normalized path
 
+	// autoApprovalMu guards the local, explicitly enabled whitelist policy and
+	// the bounded runtime history used by Settings simulation.
+	autoApprovalMu      sync.Mutex
+	autoApprovalPolicy  *autoapproval.Policy
+	autoApprovalHistory []autoApprovalCandidate
+
 	// netHint: launcher（SSH tunnel モード）が /api/net-hint で登録する接続元情報。
 	// tunnel モードでは既起動の Hub に MANY_AI_CLI_HOST_LABEL を注入できないため、
 	// API 経由でサーバ側に保持し、URL クエリヒントを持たないクライアント
@@ -434,6 +446,7 @@ type Server struct {
 	sessionStore      *sessionstore.Store
 	push              *pushManager
 	notifyMgr         *notify.Manager
+	oneTapApprovals   *oneTapApprovalManager
 	orchestration     *orchestrationManager
 
 	// 任意リモート PIN（pin_auth.go）。lazy 生成のため pinLim() 経由でアクセスする。
@@ -725,6 +738,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		pendingInput:          map[int][]string{},
 		slashCmdCache:         map[string]*slashCmdCacheEntry{},
 		approvalRuleTargets:   map[string]approvalRuleTarget{},
+		autoApprovalHistory:   make([]autoApprovalCandidate, 0, 100),
 		usageLinkCache:        newUsageLinkCache(),
 		modelsCache:           &modelsCache{},
 		modelsRemoteCache:     newModelsRemoteCache(),
@@ -732,6 +746,20 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		branchRefreshSem:      make(chan struct{}, branchRefreshWorkers),
 		branchRefreshInFlight: map[string]struct{}{},
 		serverConns:           newServerConnManager(logger),
+	}
+	if actions, err := newOneTapApprovalManager(); err != nil {
+		return nil, err
+	} else {
+		s.oneTapApprovals = actions
+	}
+	if policy, err := autoapproval.Load(); err != nil {
+		logger.Warn("auto approval policy unavailable", "err", err)
+		s.autoApprovalPolicy = &autoapproval.Policy{}
+	} else {
+		s.autoApprovalPolicy = policy
+		for _, warning := range policy.Warnings {
+			logger.Warn("auto approval rule disabled", "warning", warning)
+		}
 	}
 	// web/dist 鮮度チェック: dist/.src-hash (ビルド時焼き付け) と現在の web/src/ を比較。
 	// web/src/ が存在しない環境（VPS/Docker）ではチェックをスキップし fresh 扱いとする。
@@ -833,6 +861,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/avatar", s.handleAvatar)
 	mux.HandleFunc("/api/spawn", s.handleSpawn)
 	mux.HandleFunc("/api/spawn-grid", s.handleSpawnGrid)
+	// /api/session/:id/meta is the public singular route described in the UX
+	// contract. Keep the older plural /api/sessions/ namespace for orchestration.
+	mux.HandleFunc("/api/session/", s.handleSessionMetaAPI)
 	mux.HandleFunc("/api/sessions/", s.handleSessionAPI)
 	mux.HandleFunc("/api/pick-directory", s.handlePickDirectory)
 	mux.HandleFunc("/api/path-exists", s.handlePathExists)
@@ -856,6 +887,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/open-dir", s.handleOpenDir)
 	mux.HandleFunc("/api/idle-timeout", s.handleIdleTimeout)
 	mux.HandleFunc("/api/reconnect-grace", s.handleReconnectGrace)
+	mux.HandleFunc("/api/orchestration-config", s.handleOrchestrationConfig)
 	mux.HandleFunc("/api/notify-config", s.handleNotifyConfig)
 	mux.HandleFunc("/api/notify-test", s.handleNotifyTest)
 	mux.HandleFunc("/api/notify-generate-topic", s.handleNotifyGenerateTopic)
@@ -864,6 +896,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/approval/enable", s.handleApprovalEnable)
 	mux.HandleFunc("/api/approval/disable", s.handleApprovalDisable)
 	mux.HandleFunc("/api/approval/dismiss", s.handleApprovalDismiss)
+	mux.HandleFunc("/api/approval-action/", s.handleOneTapApproval)
 	mux.HandleFunc("/api/attach", s.handleAttach)
 	mux.HandleFunc("/api/slash-cmd-sources", s.handleSlashCmdSources)
 	mux.HandleFunc("/api/slash-commands", s.handleSlashCommands)
@@ -895,6 +928,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/user-prefs/notify-sound-custom", s.handleUserPrefsNotifySoundCustom)
 	mux.HandleFunc("/api/user-prefs/avatar", s.handleUserPrefsAvatarUpload)
 	mux.HandleFunc("/api/user-prefs", s.handleUserPrefs)
+	mux.HandleFunc("/api/auto-approval/status", s.handleAutoApprovalStatus)
+	mux.HandleFunc("/api/auto-approval/simulate", s.handleAutoApprovalSimulation)
 	mux.HandleFunc("/api/push/status", s.handlePushStatus)
 	mux.HandleFunc("/api/push/vapid-public-key", s.handlePushVAPIDPublicKey)
 	mux.HandleFunc("/api/push/subscriptions", s.handlePushSubscriptions)

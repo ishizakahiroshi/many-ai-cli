@@ -382,6 +382,17 @@ export function _connectWs() {
     return;
   }
 
+  if (m.type === 'auto_approval_applied') {
+    const command = String(m.approval_summary?.command || '').trim();
+    showToast(command ? `自動承認: ${command}` : 'ホワイトリストで自動承認しました');
+    return;
+  }
+
+  if (m.type === 'done_summary' && m.done_summary) {
+    window.dispatchEvent(new CustomEvent('many-done-summary', { detail: m.done_summary }));
+    return;
+  }
+
   if (m.type === 'session_history_reset') {
     if (m.session_id) resetLocalSessionHistory(m.session_id);
     else resetAllLocalSessionHistory();
@@ -440,6 +451,13 @@ export function _connectWs() {
     if (m.cwd)            { cur.cwd = m.cwd; cur.project = deriveProjectKeyFromCwd(m.cwd); }
     if (m.branch !== undefined) cur.branch      = m.branch;
     if (m.label !== undefined) cur.label       = m.label;
+	if (m.session_meta) {
+	  cur.label = m.session_meta.label;
+	  cur.pinned = m.session_meta.pinned;
+	  cur.color = m.session_meta.color;
+	  cur.note = m.session_meta.note;
+	  cur.auto_title = m.session_meta.auto_title;
+	}
     if (m.shell)           cur.shell           = m.shell;
     if (m.state)           cur.state           = m.state;
     if (m.last_output_at)  cur.last_output_at  = m.last_output_at;
@@ -457,6 +475,7 @@ export function _connectWs() {
     if (m.orchestration_id !== undefined) cur.orchestration_id = m.orchestration_id;
     if (m.board_path !== undefined) cur.board_path = m.board_path;
     if (m.worktree_branch !== undefined) cur.worktree_branch = m.worktree_branch;
+	if (m.board_notify_pending !== undefined) cur.board_notify_pending = m.board_notify_pending;
     // C3: git 変更状況は git_checked=true のメッセージでのみ更新する
     // （通常の session_update では 0 を omitempty で送らないため、ここで上書きしない）。
     if (m.git_checked) {

@@ -17,6 +17,23 @@ func TestDefaultConfigOpensBrowser(t *testing.T) {
 	}
 }
 
+func TestBoardNotifyModeDefaultsAndValidation(t *testing.T) {
+	cfg := defaultConfig(t.TempDir())
+	if cfg.Orchestration.BoardNotifyMode != BoardNotifyQueueUntilIdle {
+		t.Fatalf("default board notify mode = %q, want %q", cfg.Orchestration.BoardNotifyMode, BoardNotifyQueueUntilIdle)
+	}
+	for _, mode := range []BoardNotifyMode{BoardNotifySoft, BoardNotifyQueueUntilIdle, BoardNotifyInterrupt} {
+		cfg.Orchestration.BoardNotifyMode = mode
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("Validate() mode %q: %v", mode, err)
+		}
+	}
+	cfg.Orchestration.BoardNotifyMode = "immediately"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() accepted invalid board notify mode")
+	}
+}
+
 func TestProviderDefaultsIncludeCopilot(t *testing.T) {
 	slash := DefaultSlashCmdSources()
 	if slash.Copilot == "" || !strings.Contains(slash.Copilot, "/copilot.md") {

@@ -20,7 +20,6 @@ import (
 	"strings"
 	"time"
 
-	"many-ai-cli/internal/notify"
 	"many-ai-cli/internal/proto"
 )
 
@@ -84,11 +83,15 @@ func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval)
 			ApprovalQuestion: approval.Question,
 			ApprovalContext:  approval.Context,
 			ApprovalOptions:  approval.Options,
+			ApprovalSummary:  &approval.Summary,
 			DetectedAt:       now.Format(time.RFC3339),
 		}
 	}
 	s.sessionsMu.Unlock()
 	if msg != nil {
+		if msg.Type == "approval_detected" && s.maybeAutoApprove(id, approval) {
+			return
+		}
 		if s.sessionStore != nil && msg.Type == "approval_detected" {
 			s.sessionStore.StoreApprovalDetected(id, approval.Sig, approvalSourceGoVT, approval.Kind, approval.Question, approval.Context, approval.Options, now)
 		}
@@ -101,7 +104,7 @@ func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval)
 }
 
 // handleDoneSummaryMarker は PTY データから [MANY-AI-CLI-DONE] マーカーを検出し、
-// 完了サマリー通知を発火する。設定が OFF のセッション・連投抑制中はスキップ。
+// 完了サマリーを履歴と通知へ発行する。外部通知が OFF でも Hub 履歴は残す。
 func (s *Server) handleDoneSummaryMarker(id int, data []byte) {
 	open := bytes.Index(data, doneSummaryMarkerOpen)
 	if open < 0 {
@@ -118,20 +121,13 @@ func (s *Server) handleDoneSummaryMarker(id int, data []byte) {
 	}
 
 	now := time.Now()
-	s.cfgMu.Lock()
-	doneSummaryEnabled := s.cfg.UserPrefs.DoneSummaryNotify.Enabled
-	s.cfgMu.Unlock()
-	if !doneSummaryEnabled {
-		return
-	}
-
 	s.sessionsMu.Lock()
 	ses := s.sessions[id]
 	if ses == nil {
 		s.sessionsMu.Unlock()
 		return
 	}
-	// Shell session は done summary push notification の対象外
+	// Shell session は AI タスク完了サマリーの対象外
 	if !isAIProvider(ses.Provider) {
 		s.sessionsMu.Unlock()
 		return
@@ -141,42 +137,19 @@ func (s *Server) handleDoneSummaryMarker(id int, data []byte) {
 		return
 	}
 	ses.lastDoneNotifyAt = now
-	titleName := strings.TrimSpace(ses.Display)
-	if titleName == "" {
-		titleName = strings.TrimSpace(ses.Provider)
-	}
-	if titleName == "" {
-		titleName = "many-ai-cli"
-	}
-	if ses.Label != "" {
-		titleName = fmt.Sprintf("%s #%d [%s]", titleName, id, ses.Label)
-	} else {
-		titleName = fmt.Sprintf("%s #%d", titleName, id)
-	}
+	titleName := doneSummaryTitle(ses)
 	provider := ses.Provider
 	s.sessionsMu.Unlock()
-
-	s.notifyDoneOutbound(id, provider, titleName, summary)
-	s.notifyDonePush(id, provider, titleName, summary)
-}
-
-// notifyDoneOutbound は ntfy/webhook バックエンドへのタスク完了通知を行う。
-func (s *Server) notifyDoneOutbound(id int, provider, titleName, summary string) {
-	if s.notifyMgr == nil {
-		return
-	}
-	s.notifyMgr.SendDone(notify.DonePayload{
-		SessionID: id,
-		Provider:  provider,
-		Title:     titleName,
-		Summary:   summary,
-	})
+	s.publishDoneSummary(proto.DoneSummary{SessionID: id, Provider: provider, Title: titleName, Text: summary, At: now.Format(time.RFC3339)})
 }
 
 // notifyDonePush は Web Push でタスク完了通知を送信する。
 // Web Push 経路は notifyApprovalPush を流用する（同じ Web Push チャンネルを使う）。
-func (s *Server) notifyDonePush(id int, provider, titleName, summary string) {
-	s.notifyApprovalPush(id, fmt.Sprintf("done-%d-%d", id, time.Now().UnixNano()), provider, summary, "")
+func (s *Server) notifyDonePush(summary proto.DoneSummary) {
+	// Web Push currently shares the delivery channel and click target with an
+	// approval notification. C4's service-worker action templates consume the
+	// same title/body shape; no approval token is attached to DONE events.
+	s.notifyApprovalPush(summary.SessionID, fmt.Sprintf("done-%d-%d", summary.SessionID, time.Now().UnixNano()), summary.Provider, summary.Text, "")
 }
 
 func (s *Server) markNativeApprovalConsumed(m proto.Message) {

@@ -2,13 +2,50 @@ package hub
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"many-ai-cli/internal/proto"
 )
+
+type approvalSummaryFixture struct {
+	Name     string   `json:"name"`
+	Provider string   `json:"provider"`
+	Lines    []string `json:"lines"`
+	Command  string   `json:"command"`
+	Risk     string   `json:"risk"`
+	Paths    []string `json:"paths"`
+}
+
+// TestApprovalSummaryFixtures is the extension point for provider-specific
+// terminal captures. Adding a case states both the expected extraction and the
+// expected safety tier, so a failure says which provider contract regressed.
+func TestApprovalSummaryFixtures(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "approval_summary_cases.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases []approvalSummaryFixture
+	if err := json.Unmarshal(data, &cases); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			got := detectNativeApproval(tc.Provider, tc.Lines)
+			if got == nil {
+				t.Fatalf("detectNativeApproval(%s) returned nil; fixture's approval pattern needs support", tc.Provider)
+			}
+			if got.Summary.Command != tc.Command || string(got.Summary.Risk) != tc.Risk || !reflect.DeepEqual(got.Summary.Paths, tc.Paths) {
+				t.Fatalf("summary = %+v, want command=%q risk=%q paths=%#v", got.Summary, tc.Command, tc.Risk, tc.Paths)
+			}
+		})
+	}
+}
 
 func TestDetectNativeApprovalClaude(t *testing.T) {
 	lines := []string{
@@ -62,6 +99,9 @@ func TestDetectNativeApprovalCodexShortcut(t *testing.T) {
 	}
 	if got.Options[3].SendText != "\x1b" {
 		t.Fatalf("option 4 send_text = %q", got.Options[3].SendText)
+	}
+	if got.Summary.Command != "rm -rf ./tmp" || got.Summary.Risk != proto.ApprovalRiskHigh {
+		t.Fatalf("summary = %+v, want destructive command/high risk", got.Summary)
 	}
 }
 

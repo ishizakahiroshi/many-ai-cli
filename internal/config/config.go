@@ -325,7 +325,8 @@ type UserPrefsTrigger struct {
 
 // UserPrefsApproval は承認関連のユーザー設定。
 type UserPrefsApproval struct {
-	AutoSwitch bool `yaml:"auto_switch,omitempty" json:"auto_switch,omitempty"`
+	AutoSwitch          bool `yaml:"auto_switch,omitempty" json:"auto_switch,omitempty"`
+	AutoApprovalEnabled bool `yaml:"auto_approval_enabled,omitempty" json:"auto_approval_enabled,omitempty"`
 }
 
 // UserPrefsDesktopNotifications はページ内 Notification API の設定。
@@ -543,15 +544,38 @@ type NotifyConfig struct {
 	Events   []string              `yaml:"events,omitempty"   json:"events,omitempty"`
 }
 
+// BoardNotifyMode controls how board.md updates reach an orchestration conductor.
+// QueueUntilIdle is the safe default: AI turns are never interrupted just because a
+// child updated its progress.
+type BoardNotifyMode string
+
+const (
+	BoardNotifySoft           BoardNotifyMode = "soft-notify"
+	BoardNotifyQueueUntilIdle BoardNotifyMode = "queue-until-idle"
+	BoardNotifyInterrupt      BoardNotifyMode = "interrupt"
+)
+
+func (m BoardNotifyMode) Valid() bool {
+	return m == BoardNotifySoft || m == BoardNotifyQueueUntilIdle || m == BoardNotifyInterrupt
+}
+
+func EffectiveBoardNotifyMode(raw BoardNotifyMode) BoardNotifyMode {
+	if raw.Valid() {
+		return raw
+	}
+	return BoardNotifyQueueUntilIdle
+}
+
 // OrchestrationConfig controls lightweight parent/child AI session orchestration.
 type OrchestrationConfig struct {
-	MaxDepth             int    `yaml:"max_depth,omitempty" json:"max_depth,omitempty"`
-	MaxChildrenPerParent int    `yaml:"max_children_per_parent,omitempty" json:"max_children_per_parent,omitempty"`
-	MaxTotalSessions     int    `yaml:"max_total_sessions,omitempty" json:"max_total_sessions,omitempty"`
-	ChildTimeoutSeconds  int    `yaml:"child_timeout_seconds,omitempty" json:"child_timeout_seconds,omitempty"`
-	IdleDoneThresholdSec int    `yaml:"idle_done_threshold_seconds,omitempty" json:"idle_done_threshold_seconds,omitempty"`
-	WorktreeAuto         *bool  `yaml:"worktree_auto,omitempty" json:"worktree_auto,omitempty"`
-	WorktreeDirRoot      string `yaml:"worktree_dir_root,omitempty" json:"worktree_dir_root,omitempty"`
+	MaxDepth             int             `yaml:"max_depth,omitempty" json:"max_depth,omitempty"`
+	MaxChildrenPerParent int             `yaml:"max_children_per_parent,omitempty" json:"max_children_per_parent,omitempty"`
+	MaxTotalSessions     int             `yaml:"max_total_sessions,omitempty" json:"max_total_sessions,omitempty"`
+	ChildTimeoutSeconds  int             `yaml:"child_timeout_seconds,omitempty" json:"child_timeout_seconds,omitempty"`
+	IdleDoneThresholdSec int             `yaml:"idle_done_threshold_seconds,omitempty" json:"idle_done_threshold_seconds,omitempty"`
+	WorktreeAuto         *bool           `yaml:"worktree_auto,omitempty" json:"worktree_auto,omitempty"`
+	WorktreeDirRoot      string          `yaml:"worktree_dir_root,omitempty" json:"worktree_dir_root,omitempty"`
+	BoardNotifyMode      BoardNotifyMode `yaml:"board_notify_mode,omitempty" json:"board_notify_mode,omitempty"`
 }
 
 func (o OrchestrationConfig) WorktreeEnabled() bool {
@@ -758,6 +782,7 @@ func defaultConfig(home string) *Config {
 	cfg.SlashCmdSources = DefaultSlashCmdSources()
 	cfg.ApprovalPatternSources = DefaultApprovalPatternSources()
 	cfg.ApprovalProfiles = DefaultApprovalProfiles()
+	cfg.Orchestration.BoardNotifyMode = BoardNotifyQueueUntilIdle
 	return cfg
 }
 
@@ -896,6 +921,9 @@ func (cfg *Config) applyDefaults() {
 	if strings.TrimSpace(cfg.Orchestration.WorktreeDirRoot) == "" {
 		cfg.Orchestration.WorktreeDirRoot = filepath.Join(".many-ai-cli", "worktrees")
 	}
+	if cfg.Orchestration.BoardNotifyMode == "" {
+		cfg.Orchestration.BoardNotifyMode = BoardNotifyQueueUntilIdle
+	}
 }
 
 func (cfg *Config) Validate() error {
@@ -916,6 +944,9 @@ func (cfg *Config) Validate() error {
 	}
 	if err := validateLMStudio(cfg.LMStudio); err != nil {
 		return err
+	}
+	if !cfg.Orchestration.BoardNotifyMode.Valid() {
+		return fmt.Errorf("orchestration.board_notify_mode must be soft-notify, queue-until-idle, or interrupt")
 	}
 	return nil
 }

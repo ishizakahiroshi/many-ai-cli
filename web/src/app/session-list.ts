@@ -18,6 +18,67 @@ import { dirnameForPath } from './path-links.js';
 
 // ---- セッション管理 ----
 
+const SESSION_CARD_COLORS = ['blue', 'green', 'orange', 'red', 'purple'];
+let activeSessionColorFilter = '';
+
+export async function patchSessionMeta(id: number, patch: Record<string, unknown>): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/sessions/${encodeURIComponent(String(id))}/meta?token=${encodeURIComponent(token || '')}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    const session = sessions.get(id) as any;
+    if (session && data?.session_meta) Object.assign(session, data.session_meta);
+    renderSessionList();
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function sessionDisplayTitle(s: any): string {
+  return String(s?.label || s?.auto_title || '');
+}
+
+function compareSessionCards(a: any, b: any): number {
+  if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+  const aWaiting = a.state === 'waiting';
+  const bWaiting = b.state === 'waiting';
+  if (aWaiting !== bWaiting) return aWaiting ? -1 : 1;
+  const providerCmp = String(a.provider || '').localeCompare(String(b.provider || ''));
+  if (providerCmp !== 0) return providerCmp;
+  const aStarted = Date.parse(String(a.started_at || '')) || 0;
+  const bStarted = Date.parse(String(b.started_at || '')) || 0;
+  if (aStarted !== bStarted) return bStarted - aStarted;
+  return Number(a.id || 0) - Number(b.id || 0);
+}
+
+function appendSessionColorFilters(root: HTMLElement): void {
+  const used = SESSION_CARD_COLORS.filter(color => Array.from(sessions.values()).some((s: any) => s.color === color));
+  if (used.length === 0) return;
+  const filters = document.createElement('div');
+  filters.className = 'session-color-filters';
+  const all = document.createElement('button');
+  all.type = 'button';
+  all.className = 'session-color-filter' + (!activeSessionColorFilter ? ' active' : '');
+  all.textContent = ti18n('session_color_all', 'All');
+  all.onclick = () => { activeSessionColorFilter = ''; renderSessionList(); };
+  filters.appendChild(all);
+  used.forEach(color => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `session-color-filter color-${color}` + (activeSessionColorFilter === color ? ' active' : '');
+    button.textContent = ti18n(`session_color_${color}`, color);
+    button.setAttribute('aria-label', ti18n('session_color_filter', `Filter by ${color}`, { color }));
+    button.onclick = () => { activeSessionColorFilter = activeSessionColorFilter === color ? '' : color; renderSessionList(); };
+    filters.appendChild(button);
+  });
+  root.appendChild(filters);
+}
+
 export function updateSessionListActiveCard(id) {
   const root = document.getElementById('sessions');
   if (!root) return;
@@ -508,9 +569,21 @@ export function renderSessionList() {
     return;
   }
 
-  // セッションをプロジェクト別にグループ化
+  appendSessionColorFilters(root);
+
+  // ピン → 承認待ち → provider → 起動時刻の順で並べ、必要なら色で絞り込む。
+  // favorites/sessionOrder は任意の手動並び替えとして残すが、この識別優先順が
+  // セッションカードの実表示順の正本になる。
+  const displayedSessions = getOrderedSessions()
+    .filter((s: any) => !activeSessionColorFilter || s.color === activeSessionColorFilter)
+    .sort(compareSessionCards);
+
+  // ピンはプロジェクト境界を越えて最上位に置く。そうしないと「別プロジェクトの
+  // ピンより、先に出たプロジェクトの非ピン」が上に残ってしまう。
   const groups = new Map();
-  getOrderedSessions().forEach(s => {
+  const pinnedSessions = displayedSessions.filter((s: any) => s.pinned);
+  if (pinnedSessions.length > 0) groups.set('__pinned__', pinnedSessions);
+  displayedSessions.filter((s: any) => !s.pinned).forEach(s => {
     const cwdStr = s.cwd || '';
     const name = cwdStr
       ? cwdStr.replace(/\\/g, '/').split('/').filter(p => p.length > 0).pop() || ''
@@ -524,6 +597,8 @@ export function renderSessionList() {
   const _projectFavIdx = new Map(projectFavorites.map((k, i) => [k, i]));
   const _groupOrderIdx = new Map(groupOrder.map((k, i) => [k, i]));
   const sortedGroupKeys = [...groups.keys()].sort((a, b) => {
+    if (a === '__pinned__') return -1;
+    if (b === '__pinned__') return 1;
     const aPin = _projectFavIdx.has(a);
     const bPin = _projectFavIdx.has(b);
     if (aPin !== bPin) return aPin ? -1 : 1;
@@ -538,7 +613,8 @@ export function renderSessionList() {
 
   sortedGroupKeys.forEach(key => {
     const groupSessions = groups.get(key);
-    const projectDisplayName = key === '__no_project__' ? t('no_project') : key;
+    const isPinnedGroup = key === '__pinned__';
+    const projectDisplayName = isPinnedGroup ? ti18n('session_pinned_group', 'Pinned') : (key === '__no_project__' ? t('no_project') : key);
     const isCollapsed = collapsedGroups.has(key);
     const groupEl = document.createElement('div');
     groupEl.className = 'project-group' + (projectFavorites.includes(key) ? ' project-group--pinned' : '');
@@ -560,7 +636,7 @@ export function renderSessionList() {
     // ここ（プロジェクトグループ header）の「📁 Files」ボタンは廃止した。
     // C3: "Open running sessions in grid" ボタンは projActions（☆ の左隣）へ配置する。
     let gridBtn: HTMLButtonElement | null = null;
-    if (key !== '__no_project__') {
+    if (!isPinnedGroup && key !== '__no_project__') {
       const runningSessionsInGroup = groupSessions.filter(s => s.state === 'running' || s.state === 'waiting' || (s.state || 'standby') === 'standby');
       if (runningSessionsInGroup.length > 0) {
         gridBtn = document.createElement('button');
@@ -594,28 +670,30 @@ export function renderSessionList() {
     if (gridBtn) projActions.appendChild(gridBtn);
 
     const projStarBtn = document.createElement('button');
-    const isProjFav = projectFavorites.includes(key);
-    projStarBtn.className = 'star-btn' + (isProjFav ? ' starred' : '');
-    projStarBtn.textContent = isProjFav ? '★' : '☆';
-    projStarBtn.title = isProjFav ? t('project_favorite_remove') : t('project_favorite_add');
-    projStarBtn.onclick = (e) => {
-      e.stopPropagation();
-      const idx = projectFavorites.indexOf(key);
-      if (idx !== -1) { projectFavorites.splice(idx, 1); } else { projectFavorites.push(key); }
-      saveProjectFavorites();
-      renderSessionList();
-    };
-    projActions.appendChild(projStarBtn);
+    if (!isPinnedGroup) {
+      const isProjFav = projectFavorites.includes(key);
+      projStarBtn.className = 'star-btn' + (isProjFav ? ' starred' : '');
+      projStarBtn.textContent = isProjFav ? '★' : '☆';
+      projStarBtn.title = isProjFav ? t('project_favorite_remove') : t('project_favorite_add');
+      projStarBtn.onclick = (e) => {
+        e.stopPropagation();
+        const idx = projectFavorites.indexOf(key);
+        if (idx !== -1) { projectFavorites.splice(idx, 1); } else { projectFavorites.push(key); }
+        saveProjectFavorites();
+        renderSessionList();
+      };
+      projActions.appendChild(projStarBtn);
 
-    const projXBtn = document.createElement('button');
-    projXBtn.className = 'dismiss-btn';
-    projXBtn.textContent = t('remove');
-    projXBtn.title = t('project_dismiss');
-    projXBtn.onclick = (e) => {
-      e.stopPropagation();
-      groupSessions.forEach(s => dismissSession(s.id));
-    };
-    projActions.appendChild(projXBtn);
+      const projXBtn = document.createElement('button');
+      projXBtn.className = 'dismiss-btn';
+      projXBtn.textContent = t('remove');
+      projXBtn.title = t('project_dismiss');
+      projXBtn.onclick = (e) => {
+        e.stopPropagation();
+        groupSessions.forEach(s => dismissSession(s.id));
+      };
+      projActions.appendChild(projXBtn);
+    }
 
     header.appendChild(projActions);
 
@@ -630,7 +708,7 @@ export function renderSessionList() {
     });
 
     // グループD&D
-    header.draggable = true;
+    header.draggable = !isPinnedGroup;
     header.addEventListener('dragstart', (e) => {
       set_dragSrcGroupKey(key);
       set_dragSrcId(null);
@@ -682,13 +760,16 @@ export function renderSessionList() {
       const state = s.state || 'standby';
       const stateClass = (state === 'running' || state === 'waiting') ? ` ${state}` : '';
       const orchClass = s.parent_session_id ? ' orchestration-child' : (s.orchestration_id ? ' orchestration-parent' : '');
-      c.className = 'card' + stateClass + orchClass + (s.id === activeSessionId ? ' active' : '');
+      const colorClass = s.color ? ` card-color-${safeClassToken(s.color)}` : '';
+      c.className = 'card' + stateClass + orchClass + colorClass + (s.id === activeSessionId ? ' active' : '');
       c.tabIndex = isCollapsed ? -1 : 0;
       c.setAttribute('role', 'button');
       const label = stateLabel(state);
       const filteredMsg = filterFirstMessage(s.last_message || s.first_message || '');
       const cwdStr = s.cwd || '';
-      const sessionLabel = s.label ? `<span class="card-label">[${escapeHtml(s.label)}]</span>` : '';
+      const title = sessionDisplayTitle(s);
+      const sessionLabel = title ? `<span class="card-label" data-tooltip="${escapeHtml(title)}">${s.label ? '' : '⌁ '}${escapeHtml(title)}</span>` : '';
+      const noteHtml = s.note ? `<span class="card-note" data-tooltip="${escapeHtml(s.note)}">${escapeHtml(s.note)}</span>` : '';
       const msgHtml = filteredMsg
         ? `<span class="card-msg" data-tooltip="${escapeHtml(filteredMsg)}">${escapeHtml(filteredMsg)}</span>`
         : `<span class="card-msg"></span>`;
@@ -701,6 +782,9 @@ export function renderSessionList() {
       const branchRoleHtml = s.worktree_branch
         ? `<span class="card-worktree-chip" data-tooltip="${escapeHtml(s.worktree_branch)}">${escapeHtml(s.worktree_branch)}</span>`
         : '';
+	const boardPendingHtml = s.board_notify_pending
+		? `<span class="card-role-chip parent" data-tooltip="${escapeHtml(t('card_board_update_pending_tooltip'))}">${escapeHtml(t('card_board_update_pending'))}</span>`
+		: '';
       const isDeadState = state === 'error' || state === 'disconnected';
       let reasonText = '';
       if (isDeadState && s.end_reason) {
@@ -730,14 +814,14 @@ export function renderSessionList() {
       const branchLabel = branchStr || ti18n('card_branch_no_git', '(no git)');
       const branchBadge = ` <span class="card-branch" role="button" tabindex="0" data-sid="${s.id}"${branchDisabledAttr} data-tooltip="${escapeHtml(branchTip)}" aria-label="${escapeHtml(branchTip)}">${escapeHtml(branchLabel)}</span>`;
       // branch chip は title-row が混むため meta-row（2行目）の投稿指示テキスト末尾へ付ける。
-      const metaRow = `<div class="card-meta-row">${reasonHtml}${sessionLabel}${roleHtml}${msgHtml}${branchRoleHtml}${branchBadge}</div>`;
+      const metaRow = `<div class="card-meta-row">${s.pinned ? '<span class="card-pin" aria-label="Pinned">📌</span>' : ''}${reasonHtml}${sessionLabel}${noteHtml}${roleHtml}${msgHtml}${branchRoleHtml}${branchBadge}</div>`;
       // 状態 pill（ステータスバー .tsb-pill と同じ ●ドット付き形状）。並び順も下のバーに合わせ #N の直後に置く。
       const statePillHtml = ` <span class="card-state-pill ${safeClassToken(state)}"><span class="card-pdot"></span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
       // ライブ情報（ctx% / 応答経過 / 長時間バッジ）。中身が空なら hidden で行ごと隠す。
       const liveInner = cardLiveRowHtml(s);
       const liveRow = `<div class="card-live-row"${liveInner ? '' : ' hidden'}>${liveInner}</div>`;
       c.innerHTML =
-        `<div class="card-title-row"><b>#${s.id}</b>${statePillHtml} ${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}</div>` +
+		`<div class="card-title-row"><b>#${s.id}</b>${statePillHtml} ${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${boardPendingHtml}</div>` +
         metaRow + liveRow;
 
       const actions = document.createElement('div');
@@ -766,6 +850,29 @@ export function renderSessionList() {
         renderSessionList();
       };
       actions.appendChild(starBtn);
+
+      const pinBtn = document.createElement('button');
+      pinBtn.className = 'session-pin-btn' + (s.pinned ? ' pinned' : '');
+      pinBtn.textContent = s.pinned ? '📌' : '⌑';
+      pinBtn.title = s.pinned ? ti18n('session_unpin', 'Unpin session') : ti18n('session_pin', 'Pin session');
+      pinBtn.setAttribute('aria-label', pinBtn.title);
+      pinBtn.onclick = async (e) => {
+        e.stopPropagation();
+        await patchSessionMeta(s.id, { pinned: !s.pinned });
+      };
+      actions.appendChild(pinBtn);
+
+      const metaBtn = document.createElement('button');
+      metaBtn.className = 'session-meta-btn';
+      metaBtn.textContent = '⋯';
+      metaBtn.title = ti18n('session_edit_meta', 'Edit session details');
+      metaBtn.setAttribute('aria-label', metaBtn.title);
+      metaBtn.onclick = (e) => {
+        e.stopPropagation();
+        const rect = metaBtn.getBoundingClientRect();
+        openCardCtxMenu(rect.left, rect.bottom, s.id);
+      };
+      actions.appendChild(metaBtn);
 
 
       const resetBtn = document.createElement('button');

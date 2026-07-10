@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from './i18n.js';
 import { cleanCopiedText, showToast, token } from './app/util.js';
-import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
+import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_AUTO_APPROVAL_ENABLED_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
 import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, answeredMarkerSigs, recordAnsweredMarkerSig, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { orderSessions } from './app/state.js';
@@ -1617,6 +1617,7 @@ inputEl.addEventListener('blur', (e) => {
 (function () {
   const idleTimeoutEl     = document.getElementById('idle-timeout-min');
   const reconnectGraceEl  = document.getElementById('reconnect-grace-min');
+	const boardNotifyModeEl = document.getElementById('board-notify-mode') as HTMLSelectElement | null;
   const logEnabledEl               = document.getElementById('log-enabled');
   const logSessionEnabledEl        = document.getElementById('log-session-enabled');
   const logMaxSizeEl               = document.getElementById('log-max-size');
@@ -1864,6 +1865,44 @@ inputEl.addEventListener('blur', (e) => {
     });
   }
 
+	async function loadBoardNotifyMode() {
+		if (!boardNotifyModeEl) return;
+		try {
+			const res = await fetch(`/api/orchestration-config?token=${token}`);
+			if (!res.ok) return;
+			const cfg = await res.json();
+			const mode = String(cfg.board_notify_mode || 'queue-until-idle');
+			boardNotifyModeEl.value = ['soft-notify', 'queue-until-idle', 'interrupt'].includes(mode) ? mode : 'queue-until-idle';
+		} catch (_) {}
+	}
+
+	async function saveBoardNotifyMode() {
+		if (!boardNotifyModeEl) return;
+		try {
+			await fetch(`/api/orchestration-config?token=${token}`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ board_notify_mode: boardNotifyModeEl.value }),
+			});
+		} catch (_) {}
+	}
+  const autoApprovalInput = document.getElementById('auto-approval-enabled-input');
+  if (autoApprovalInput) {
+    autoApprovalInput.checked = localStorage.getItem(STORAGE_AUTO_APPROVAL_ENABLED_KEY) === '1';
+    autoApprovalInput.addEventListener('change', () => setUserPref('approval.auto_approval_enabled', autoApprovalInput.checked));
+  }
+  const autoApprovalSimulateBtn = document.getElementById('auto-approval-simulate-btn');
+  if (autoApprovalSimulateBtn) {
+    autoApprovalSimulateBtn.addEventListener('click', async () => {
+      const result = document.getElementById('auto-approval-simulate-result');
+      try {
+        const res = await fetch(`/api/auto-approval/simulate?token=${encodeURIComponent(token || '')}&n=100`);
+        const data = res.ok ? await res.json() : null;
+        if (result) result.textContent = data ? `${data.total || 0}件中 ${data.matched || 0}件が一致（危険操作は除外）` : 'シミュレーションに失敗しました';
+      } catch (_) { if (result) result.textContent = 'シミュレーションに失敗しました'; }
+    });
+  }
+
   async function saveLogConfig() {
     try {
       await fetch(`/api/log-config?token=${token}`, {
@@ -1903,6 +1942,7 @@ inputEl.addEventListener('blur', (e) => {
   window.__settingsSaveAll = async () => {
     await saveIdleTimeout();
     await saveReconnectGrace();
+		await saveBoardNotifyMode();
     await saveLogConfig();
     await saveSlashCmdSources();
     saveUsageLinkSettings();
@@ -1926,6 +1966,7 @@ inputEl.addEventListener('blur', (e) => {
     setUserPref('notify_sound.type', 'default');
     try { localStorage.removeItem(STORAGE_NOTIFY_SOUND_CUSTOM_KEY); } catch (_) {}
     setUserPref('approval.auto_switch', false);
+	setUserPref('approval.auto_approval_enabled', false);
     for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
       setUserPref(`quick_cmds.cmd${slot}`, quickCommandDefault(slot));
       setUserPref(`quick_cmds.show${slot}`, true);
@@ -1981,6 +2022,8 @@ inputEl.addEventListener('blur', (e) => {
 
     const approvalAutoSwitchInput = document.getElementById('approval-auto-switch-input');
     if (approvalAutoSwitchInput) approvalAutoSwitchInput.checked = false;
+	const autoApprovalInput = document.getElementById('auto-approval-enabled-input');
+	if (autoApprovalInput) autoApprovalInput.checked = false;
 
     const idleTimeoutEl = document.getElementById('idle-timeout-min');
     const reconnectGraceEl = document.getElementById('reconnect-grace-min');
@@ -2081,6 +2124,7 @@ inputEl.addEventListener('blur', (e) => {
     if (!document.getElementById('settings-panel').hidden) {
       loadIdleTimeout();
       loadReconnectGrace();
+		loadBoardNotifyMode();
       loadLogConfig();
       loadApprovalSettings();
       loadSlashCmdSources();
@@ -2092,6 +2136,7 @@ inputEl.addEventListener('blur', (e) => {
 
   if (idleTimeoutEl) idleTimeoutEl.addEventListener('change', saveIdleTimeout);
   if (reconnectGraceEl) reconnectGraceEl.addEventListener('change', saveReconnectGrace);
+	if (boardNotifyModeEl) boardNotifyModeEl.addEventListener('change', saveBoardNotifyMode);
   logEnabledEl.addEventListener('change', saveLogConfig);
   if (logSessionEnabledEl) logSessionEnabledEl.addEventListener('change', saveLogConfig);
   logMaxSizeEl.addEventListener('change', saveLogConfig);
