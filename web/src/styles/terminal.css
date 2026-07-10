@@ -1210,6 +1210,16 @@ body.pc-input-tools-off #input-tools { display: none; }
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* パスリンクは .tool-output-path-link（path-links.appendLinkedText）を流用。
+   URL は Chat タブ .url-link と同系の見た目で別タブオープン */
+#grok-chat-viewer .gcv-url-link {
+  color: #93c5fd;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  word-break: break-all;
+}
+#grok-chat-viewer .gcv-url-link:hover { color: #bfdbfe; }
 #grok-chat-viewer .gcv-empty {
   color: var(--muted);
   text-align: center;

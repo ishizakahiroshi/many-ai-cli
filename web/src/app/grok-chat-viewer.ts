@@ -3,11 +3,18 @@
 // Grok は alt screen 上の全画面上書き描画で xterm のスクロールバックが育たないため、
 // 生 PTY ログ再生（history-viewer.ts）では読める表示にならない。many-ai-cli 側では
 // 何も保存せず、Grok が元々持つ構造化ログを読み取り専用で参照する。
+//
+// パス・URL は Chat タブ相当のクリック／右クリック操作を提供する（読み取り専用でも
+// ファイルを開く・コピーする導線は必要。textContent 直書きだとプレーン文字列のまま）。
 import { showToast, ti18n, token } from './util.js';
 import { sessions } from './state.js';
+import { appendLinkedText } from './path-links.js';
 
 // 1 リクエストで取得するメッセージ件数（サーバ側上限 200 以内）
 const GCV_PAGE_MESSAGES = 100;
+
+// Chat タブ (_appendPlainWithLinks) と同系の URL 検出。末尾句読点は本文側に残す。
+const GCV_URL_RE = /(https?:\/\/[^\s<>"'`)\]]+)/g;
 
 let gcvRoot: any = null;
 let gcvState: { sid: number; total: number; offset: number } | null = null;
@@ -92,7 +99,57 @@ async function gcvFetchPage(sid: number, offset: number, limit: number) {
   return res.json();
 }
 
-function gcvRenderMessage(msg: { role: string; text: string }) {
+// URL とファイルパスをリンク化し、クリック／右クリックで開く・コピーできるようにする。
+// パスは path-links.appendLinkedText（showPathPopup 付き）を流用。URL は別タブで開く <a>。
+function gcvFillTextWithLinks(container: HTMLElement, raw: string, sessionId: number) {
+  const text = String(raw || '');
+  if (!text) {
+    container.textContent = '';
+    return;
+  }
+
+  const parts: Array<{ kind: 'url' | 'text'; value: string }> = [];
+  GCV_URL_RE.lastIndex = 0;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = GCV_URL_RE.exec(text)) !== null) {
+    if (m.index > last) parts.push({ kind: 'text', value: text.slice(last, m.index) });
+    let token = m[0];
+    let trail = '';
+    while (token.length > 0 && /[.,;:!?)\]}>]/.test(token[token.length - 1]!)) {
+      trail = token[token.length - 1] + trail;
+      token = token.slice(0, -1);
+    }
+    if (token) parts.push({ kind: 'url', value: token });
+    if (trail) parts.push({ kind: 'text', value: trail });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push({ kind: 'text', value: text.slice(last) });
+  if (parts.length === 0) {
+    appendLinkedText(container, text, sessionId);
+    return;
+  }
+
+  container.textContent = '';
+  for (const part of parts) {
+    if (part.kind === 'url') {
+      const a = document.createElement('a');
+      a.className = 'gcv-url-link';
+      a.href = part.value;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = part.value;
+      container.appendChild(a);
+      continue;
+    }
+    // appendLinkedText は container を空にしてから埋めるため、区間ごとに一時ノードへ書く
+    const span = document.createElement('span');
+    appendLinkedText(span, part.value, sessionId);
+    while (span.firstChild) container.appendChild(span.firstChild);
+  }
+}
+
+function gcvRenderMessage(msg: { role: string; text: string }, sessionId: number) {
   const item = document.createElement('div');
   item.className = 'gcv-msg ' + (msg.role === 'user' ? 'gcv-user' : 'gcv-assistant');
   const role = document.createElement('div');
@@ -102,7 +159,7 @@ function gcvRenderMessage(msg: { role: string; text: string }) {
     : gcvLabel('gcv_role_assistant', 'Grok');
   const text = document.createElement('div');
   text.className = 'gcv-text';
-  text.textContent = msg.text;
+  gcvFillTextWithLinks(text, msg.text, sessionId);
   item.appendChild(role);
   item.appendChild(text);
   return item;
@@ -132,7 +189,7 @@ async function gcvLoadLatest(sid: number) {
       empty.textContent = gcvLabel('gcv_empty', '表示できる会話がまだありません');
       list.appendChild(empty);
     }
-    for (const m of msgs) list.appendChild(gcvRenderMessage(m));
+    for (const m of msgs) list.appendChild(gcvRenderMessage(m, sid));
     gcvSyncOlderBtn();
     gcvUpdateRangeLabel();
     const body = gcvRoot.querySelector('.gcv-body');
@@ -149,10 +206,11 @@ async function gcvLoadLatest(sid: number) {
 async function gcvLoadOlder() {
   if (!gcvState || gcvLoading || gcvState.offset <= 0) return;
   gcvLoading = true;
+  const sid = gcvState.sid;
   try {
     const limit = Math.min(GCV_PAGE_MESSAGES, gcvState.offset);
     const offset = gcvState.offset - limit;
-    const resp = await gcvFetchPage(gcvState.sid, offset, limit);
+    const resp = await gcvFetchPage(sid, offset, limit);
     if (!gcvState) return;
     gcvState.total = resp.total || gcvState.total;
     gcvState.offset = resp.offset ?? offset;
@@ -162,7 +220,7 @@ async function gcvLoadOlder() {
     // 先頭に差し込んでもスクロール位置（見えている行）が動かないよう補正する
     const prevHeight = body.scrollHeight;
     const frag = document.createDocumentFragment();
-    for (const m of (resp.messages || [])) frag.appendChild(gcvRenderMessage(m));
+    for (const m of (resp.messages || [])) frag.appendChild(gcvRenderMessage(m, sid));
     list.insertBefore(frag, list.firstChild);
     body.scrollTop += body.scrollHeight - prevHeight;
     gcvSyncOlderBtn();
