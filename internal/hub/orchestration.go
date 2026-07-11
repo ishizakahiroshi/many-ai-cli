@@ -1434,10 +1434,30 @@ func (s *Server) injectText(sessionID int, text string, pressEnter bool, interru
 	if interrupt {
 		s.injectRaw(sessionID, "\x1b")
 	}
-	if pressEnter && !strings.HasSuffix(text, "\r") {
-		text += "\r"
+	if !pressEnter {
+		s.injectRaw(sessionID, text)
+		return
 	}
-	s.injectRaw(sessionID, text)
+	// 本文と確定 \r を同一チャンクで送ると、内側 CLI がペースト取り込み中の \r を確定キーと
+	// 扱わず入力欄に張り付いたまま送信されない（Grok 実測 2026-07-11・チャット送信と同根）。
+	// AI CLI（全 wrap 対象が ?2004h 宣言済み）はブラケットペーストで包み、確定 \r は
+	// trySendInput の splitBracketedPasteSubmit が別書き込み + 遅延で送る。
+	// shell は 2004 未宣言（素の PowerShell 等でマーカーがリテラル混入）がありうるため従来どおり。
+	s.sessionsMu.Lock()
+	ses := s.sessions[sessionID]
+	isShell := ses != nil && ses.Provider == "shell"
+	s.sessionsMu.Unlock()
+	if isShell {
+		if !strings.HasSuffix(text, "\r") {
+			text += "\r"
+		}
+		s.injectRaw(sessionID, text)
+		return
+	}
+	// ペースト本体に生の \r が残ると一部 CLI が確定キーと誤解するため末尾の改行類は落とす
+	// （確定は末尾に付ける \r だけが担う）。
+	text = strings.TrimRight(text, "\r\n")
+	s.injectRaw(sessionID, bracketedPasteStart+text+bracketedPasteEnd+"\r")
 }
 
 func (s *Server) injectRaw(sessionID int, text string) {
@@ -1468,10 +1488,12 @@ func (s *Server) injectRawBypassGate(sessionID int, text string) {
 func (s *Server) injectInitialPrompt(sessionID int, prompt string) {
 	defer s.clearInitialInjectGate(sessionID)
 	marker := injectEchoMarker(prompt)
-	text := prompt
-	if !strings.HasSuffix(text, "\r") {
-		text += "\r"
-	}
+	// チャット送信・injectText と同じくブラケットペーストで包み、確定 \r は
+	// splitBracketedPasteSubmit（trySendInput）が別書き込み + 遅延で送る。
+	// 「本文+\r」同一チャンクだと本文がエコーされても \r が確定キーとして
+	// 処理されないことがある（Grok 実測 2026-07-11）。エコー検証（marker）は
+	// 可視テキストで行うためマーカー包みの影響を受けない。
+	text := bracketedPasteStart + strings.TrimRight(prompt, "\r\n") + bracketedPasteEnd + "\r"
 	for attempt := 1; attempt <= orchestrationInjectMaxAttempts; attempt++ {
 		s.waitForInputReady(sessionID, orchestrationInjectQuiet, orchestrationInjectMaxWait)
 		if attempt > 1 && s.waitForInjectEcho(sessionID, marker, 0) {

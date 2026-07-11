@@ -359,6 +359,41 @@ function effectiveDeferredEnterWait(sessionId: number): number {
   return deferredEnterOverrideMs > 0 ? deferredEnterOverrideMs : deferredEnterMinWaitFor(sessions.get(sessionId)?.provider || '');
 }
 
+// 本文送信の共通判定: ブラケットペーストで包むか（deferEnter=確定 \r を出力静止後に別送するか）。
+// 「本文+\r」を同一チャンクで送ると、内側 CLI がチャンク一括入力をペーストとして取り込む過程で
+// 末尾 \r を確定キーと扱わず、入力欄に張り付いたまま送信されない（Grok 実測 2026-07-11:
+// 全文エコー後に Enter 不発・8 分沈黙）。wrap 対象 6 CLI すべてが ?2004h（ブラケットペースト
+// 受け入れ）を宣言していることをログで確認済みのため、本文はペーストで包んで正体を正しく伝える。
+// 生送信（本文+\r 同梱）のまま残す例外は「キー入力として届くべきもの」だけ:
+// - shell: 素の PowerShell / cmd 等はブラケットペースト未宣言がありうる（マーカーがリテラル混入する）
+// - "/" 始まりの単一行: スラッシュコマンド（CLI のコマンドメニュー操作）
+// - 数字のみ / 1 文字: 承認メニュー等へのホットキー応答。ペーストで包むとメニューが受理しない
+//   恐れがあり、かつ数バイトのチャンクはタイプと区別されないため生送信で安全
+function buildBodySubmitPart(sessionId, rawText) {
+  if (rawText.includes('\n')) {
+    // 複数行は provider を問わず従来どおりペースト包み（\n の途中 Enter 解釈を防ぐ）
+    return { textPart: '\x1b[200~' + rawText + '\x1b[201~', deferEnter: true };
+  }
+  const provider = sessions.get(sessionId)?.provider || '';
+  const keyLike = rawText === '' || rawText.length === 1 || /^[0-9]+$/.test(rawText) || rawText.startsWith('/');
+  if (isShellProvider(provider) || keyLike) {
+    return { textPart: rawText + '\r', deferEnter: false };
+  }
+  return { textPart: '\x1b[200~' + rawText + '\x1b[201~', deferEnter: true };
+}
+
+// 「本文」を 1 件送信する共通経路（チャット自由入力以外＝クイックコマンド・承認 UI の
+// 自由回答/複数質問回答から使う）。buildBodySubmitPart の判定でペースト包み＋確定 \r
+// 別送（deferred-enter）にし、キー入力相当は従来どおり本文+\r で送る。
+// 直前の deferred-enter 予約が残っていると遅延 \r がこの送信の後ろに混ざるため先に消す。
+export function sendSubmittedBody(sessionId, bodyText, opts: any = {}) {
+  cancelDeferredEnter(sessionId);
+  const { textPart, deferEnter } = buildBodySubmitPart(sessionId, bodyText);
+  sendSubmittedText(sessionId, textPart, opts);
+  if (deferEnter) scheduleDeferredEnter(sessionId, effectiveDeferredEnterWait(sessionId));
+  scheduleResidueSweep(sessionId, bodyText, deferEnter);
+}
+
 export async function doSend(sessionId) {
   // 直前の doSend（Enter/音声/ボタン）と async 中の再入を抑止
   if (Date.now() - lastDoSendAt < DOUBLE_SEND_GUARD_MS) return;
@@ -406,22 +441,15 @@ export async function doSend(sessionId) {
     // 実行されない）。確定はこちらが末尾に付ける \r のみが担うべきなので、本文中の CR は
     // すべて LF に正規化する。入力欄で打った複数行は元々 \n のみなので影響を受けない。
     rawText = rawText.replace(/\r\n?/g, '\n');
-    // 改行を含む場合はブラケットペーストモードでラップ（\n が途中 Enter と解釈されるのを防ぐ）
-    // ブラケットペーストはテキスト部分のみに適用し、injectPrefix は前置する
+    // ペースト包み・確定 \r 分離の判定は buildBodySubmitPart に共通化（クイックコマンドと共用）。
+    // ブラケットペーストはテキスト部分のみに適用し、injectPrefix は前置する。
     let textPart;
-    // 確定 \r をブラケットペースト終端 \x1b[201~ と同一書き込みに含めると、内側 CLI
-    // （Claude Code v2 等）が大きい/複数行ペーストを [Pasted text #N] に畳み込む処理中に
-    // 直後の \r を吸収し、確定キーとして登録されない（pasted text が入力欄に張り付いたまま
-    // 送信されない）。複数行のときは確定 \r を本文と別書き込みに分離し、畳み込み確定後に送る。
     let deferEnter = false;
     if (rawText === '' && injectPrefix !== '') {
       // 画像のみ（テキストなし）: inject 末尾の \r or スペースで確定済み → 追加の \r で送信
       textPart = '\r';
-    } else if (rawText.includes('\n')) {
-      textPart = '\x1b[200~' + rawText + '\x1b[201~';
-      deferEnter = true;
     } else {
-      textPart = rawText + '\r';
+      ({ textPart, deferEnter } = buildBodySubmitPart(sessionId, rawText));
     }
     // 残骸（前回の未確定入力）への連結対策は、かつての「全送信への \x15(Ctrl+U) 盲目前置」を
     // やめ、送信後に張り付きを実測してから掃除する residue-sweep.ts へ移行した。
@@ -1342,8 +1370,8 @@ function doSendQuickCommand(sessionId, cmd) {
     maybeAutoSwitchToNextApproval();
   }, 2050);
   // 残骸への連結対策の \x15 前置は廃止（doSend と同じく residue-sweep.ts の事後掃除へ移行）。
-  sendSubmittedText(sessionId, `${cmd}\r`);
-  scheduleResidueSweep(sessionId, cmd);
+  // 本文の送り方（ペースト包み・確定 \r 分離）も doSend と同じ共通経路に従う。
+  sendSubmittedBody(sessionId, cmd);
   focusInputForTerminalKeys();
 }
 

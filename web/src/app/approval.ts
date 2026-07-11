@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, isAnsweredMarkerSig, recordAnsweredMarkerSig, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchActiveQ, batchFreeText, batchSelections, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectFocusIdx, multiSelectSelections, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, utf8Decoder } from './state.js';
-import { inputEl, sendSubmittedText } from '../app.js';
+import { inputEl, sendSubmittedText, sendSubmittedBody } from '../app.js';
 import { clearSuppressPtyResize, isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout } from './terminal.js';
 import { stripAnsi } from './settings.js';
 import { ws } from './ws-client.js';
@@ -1460,7 +1460,9 @@ export function sendSingleFreeText(sessionId) {
   if (cachedOpts) approvalConsumedSig.set(sessionId, approvalSig(cachedOpts));
   recordAnsweredMarkerSig(sessionId, cachedOpts);
   sendApprovalConsumed(sessionId, cachedOpts, `${text}\r`);
-  sendSubmittedText(sessionId, `${text}\r`);
+  // 自由回答は文章なのでチャット本文と同じ共通経路（ペースト包み＋確定 \r 別送）で送る。
+  // 「本文+\r」同梱は内側 CLI に \r を吸収され送信不発になる（Grok 実測 2026-07-11）。
+  sendSubmittedBody(sessionId, text);
   hideActionBar(sessionId);
   approvalSuppressUntil.set(sessionId, Date.now() + 400);
   multiQuestionDismissedCache.delete(sessionId);
@@ -2210,7 +2212,9 @@ export function sendBatchChoices(sessionId) {
   approvalConsumedSig.set(sessionId, approvalSig(cached));
   recordAnsweredMarkerSig(sessionId, cached);
   sendApprovalConsumed(sessionId, cached, text);
-  sendSubmittedText(sessionId, `${text}\r`, { recordMobileTranscript: false });
+  // 一括回答は改行区切りの複数行（buildBatchPayload）。生送信だと \n が行ごとの途中送信に
+  // なるため、チャット本文と同じ共通経路（ペースト包み＋確定 \r 別送）で 1 メッセージとして送る。
+  sendSubmittedBody(sessionId, text, { recordMobileTranscript: false });
   removeBatchConfirmModal();
   hideActionBar(sessionId);
   approvalSuppressUntil.set(sessionId, Date.now() + 400);
@@ -2507,13 +2511,13 @@ export function sendChoice(sessionId, targetNum, highRiskConfirmed = false) {
 
     const response = seqState.prompts
       .map(p => `${p.key}: ${seqState.answers.get(p.key)}`)
-      .join('\n') + '\r';
+      .join('\n');
     // chatHistory: 複数質問への一括回答を system/approval として push
     chatHistoryCommitOutput(sessionId);
     pushMessage(sessionId, {
       role: 'system',
       kind: 'approval',
-      rawText: response.replace(/\r$/, ''),
+      rawText: response,
       meta: {
         kind: 'batch',
         answers: seqState.prompts.map(p => ({
@@ -2529,7 +2533,8 @@ export function sendChoice(sessionId, targetNum, highRiskConfirmed = false) {
     recordAnsweredMarkerSig(sessionId, prevOpts);
     multiQuestionDismissedCache.delete(sessionId);
     multiQuestionLatchAt.delete(sessionId);
-    sendSubmittedText(sessionId, response, { recordMobileTranscript: false });
+    // 改行区切りの複数行回答は共通経路（ペースト包み＋確定 \r 別送）で 1 メッセージとして送る。
+    sendSubmittedBody(sessionId, response, { recordMobileTranscript: false });
     hideActionBar(sessionId);
     approvalSuppressUntil.set(sessionId, Date.now() + 400);
     setTimeout(() => {

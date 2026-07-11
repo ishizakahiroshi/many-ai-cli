@@ -64,6 +64,7 @@ const (
 	approvalVisibleLease = 15 * time.Second
 	wsMaxPayloadBytes    = 2 << 20 // 2 MiB: UI/wrapper JSON frame receive cap
 
+	bracketedPasteStart       = "\x1b[200~"
 	bracketedPasteEnd         = "\x1b[201~"
 	bracketedPasteSubmitDelay = 50 * time.Millisecond
 
