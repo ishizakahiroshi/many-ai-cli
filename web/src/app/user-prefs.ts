@@ -24,6 +24,7 @@ export const STORAGE_DESKTOP_NOTIFY_ENABLED_KEY = 'ai_cli_hub_desktop_notify_ena
 export const STORAGE_PUSH_NOTIFY_ENABLED_KEY = 'ai_cli_hub_push_notify_enabled';
 export const STORAGE_APPROVAL_AUTO_SWITCH_KEY = 'ai_cli_hub_approval_auto_switch';
 export const STORAGE_AUTO_APPROVAL_ENABLED_KEY = 'ai_cli_hub_auto_approval_enabled';
+export const STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY = 'ai_cli_hub_high_risk_confirmation_mode';
 export const STORAGE_QUICK_CMD_1_KEY          = 'ai_cli_hub_quick_cmd_1';
 export const STORAGE_QUICK_CMD_2_KEY          = 'ai_cli_hub_quick_cmd_2';
 export const STORAGE_QUICK_CMD_3_KEY          = 'ai_cli_hub_quick_cmd_3';
@@ -218,6 +219,7 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'cwd_favorites':             [STORAGE_CWD_FAVORITES_KEY,         JSON.stringify],
   'approval.auto_switch':      [STORAGE_APPROVAL_AUTO_SWITCH_KEY,  (v) => v ? '1' : '0'],
   'approval.auto_approval_enabled': [STORAGE_AUTO_APPROVAL_ENABLED_KEY, (v) => v ? '1' : '0'],
+  'approval.high_risk_confirmation_mode': [STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY, String],
   'pc.input_tools_enabled':     [STORAGE_PC_INPUT_TOOLS_KEY,       (v) => v ? '1' : '0'],
   'mobile.input_tools_enabled': [STORAGE_MOBILE_INPUT_TOOLS_KEY,   (v) => v ? '1' : '0'],
   'mobile.voice_hint_shown':    [STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, (v) => v ? '1' : '0'],
@@ -283,6 +285,9 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
   if (path === 'voice.grace_seconds') {
     const n = parseInt(String(parsed), 10);
     return { ok: true, value: Number.isFinite(n) ? Math.max(0, n) : 0 };
+  }
+  if (path === 'approval.high_risk_confirmation_mode') {
+    return { ok: true, value: raw === 'dialog' ? 'dialog' : 'hold' };
   }
   if (_USER_PREFS_STRING_PATHS.has(path)) {
     return { ok: true, value: parsed == null ? '' : String(parsed) };

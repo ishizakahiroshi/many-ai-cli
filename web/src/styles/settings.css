@@ -721,3 +721,13 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
 }
 .settings-input-row .settings-input-url {
   flex: 1;
+}
+
+.doctor-result { display: grid; gap: 6px; margin: 8px 0; }
+.doctor-check { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; padding: 7px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); font-size: 0.8rem; }
+.doctor-level { font-weight: 700; }
+.doctor-level--OK { color: var(--green); }
+.doctor-level--WARN { color: var(--warn-text); }
+.doctor-level--FAIL { color: var(--danger); }
+.doctor-fix { grid-column: 2; color: var(--muted); font-size: 0.75rem; }
+.doctor-copy { margin-left: 6px; font-size: 0.72rem; }

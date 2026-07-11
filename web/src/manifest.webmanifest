@@ -25,5 +25,14 @@
       "type": "image/svg+xml",
       "purpose": "any maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Approval queue",
+      "short_name": "Approvals",
+      "description": "Open the approval-only queue.",
+      "url": "/mobile/approvals",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
   ]
 }

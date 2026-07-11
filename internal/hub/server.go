@@ -73,18 +73,8 @@ const (
 	chatHistoryUserTurnMarker = "\x1b]47777;user-turn\x07"
 )
 
-// session の State は次のいずれか:
-//
-//	"standby"   : wrapper 接続済み・出力静止 + 承認 UI 不可視
-//	"running"   : 直近 idleAfter 以内に PTY 出力あり
-//	"waiting"   : 出力静止 + 承認 UI 可視（UI からの session_hint で確定）
-//	"completed" : プロセス正常終了
-//	"error"     : プロセス異常終了
-//	"disconnected" : wrapper WebSocket 切断
-//
-// standby/waiting の振り分けは「PTY バイトのみでは不可能」なため、UI が
-// xterm.js のレンダリング済みバッファをスキャンして session_hint で approval_visible
-// を伝える。Hub はそれを受けて idleAfter 経過時に倒す state を決める。
+// SessionActivity が状態の正本で、State は互換表示用の派生値である。
+// approval_visible は UI が xterm.js バッファをスキャンして session_hint で伝える。
 type session struct {
 	ID                 int    `json:"id"`
 	Provider           string `json:"provider"`
@@ -107,15 +97,18 @@ type session struct {
 	BoardPath          string `json:"board_path,omitempty"`
 	WorktreeBranch     string `json:"worktree_branch,omitempty"`
 	BoardNotifyPending bool   `json:"board_notify_pending,omitempty"`
-	State              string `json:"state"`
-	LastOutputAt       string `json:"last_output_at,omitempty"` // ISO 8601; UI カード「最終応答時刻」用
-	StartedAt          string `json:"started_at,omitempty"`     // ISO 8601; UI カード「起動時刻」用
-	FirstMessage       string `json:"first_message,omitempty"`  // 最初の確定入力; UI カード表示用
-	LastMessage        string `json:"last_message,omitempty"`   // 最新の確定入力; UI カード表示用
-	EndReason          string `json:"end_reason,omitempty"`     // session_end の reason コード（例: "exec_not_found"）。UI 側で i18n 翻訳して表示
-	HomeDir            string `json:"-"`
-	CodexHome          string `json:"-"`
-	ClaudeDir          string `json:"-"`
+	// Activity is the authoritative three-axis activity model. State is kept
+	// below only as a compatibility display label for older clients.
+	Activity     SessionActivity `json:"activity"`
+	State        string          `json:"state"`
+	LastOutputAt string          `json:"last_output_at,omitempty"` // ISO 8601; UI カード「最終応答時刻」用
+	StartedAt    string          `json:"started_at,omitempty"`     // ISO 8601; UI カード「起動時刻」用
+	FirstMessage string          `json:"first_message,omitempty"`  // 最初の確定入力; UI カード表示用
+	LastMessage  string          `json:"last_message,omitempty"`   // 最新の確定入力; UI カード表示用
+	EndReason    string          `json:"end_reason,omitempty"`     // session_end の reason コード（例: "exec_not_found"）。UI 側で i18n 翻訳して表示
+	HomeDir      string          `json:"-"`
+	CodexHome    string          `json:"-"`
+	ClaudeDir    string          `json:"-"`
 
 	// JSON 外: 状態評価用
 	lastOutputAt      time.Time // idleAfter 計算用。LastOutputAt と同期して更新する
@@ -200,10 +193,7 @@ type session struct {
 }
 
 func (s *session) idleStateName() string {
-	if s.approvalVisible {
-		return "waiting"
-	}
-	return "standby"
+	return s.Activity.DisplayState()
 }
 
 // resolveRoute は provider + model から route を推定する。
@@ -849,6 +839,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		Handler:   s.handleWS,
 	})
 	mux.HandleFunc("/api/info", s.handleInfo)
+	mux.HandleFunc("/api/doctor", s.handleDoctor)
 	mux.HandleFunc("/api/mobile-connect", s.handleMobileConnect)
 	mux.HandleFunc("/api/mobile-connect/tailscale", s.handleTailscaleStatus)
 	mux.HandleFunc("/api/mobile-connect/tailscale/serve", s.handleTailscaleServe)
@@ -880,6 +871,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/session-log", s.handleSessionLog)
 	mux.HandleFunc("/api/grok-history", s.handleGrokHistory)
 	mux.HandleFunc("/api/session-search", s.handleSessionSearch)
+	mux.HandleFunc("/api/session-history", s.handleSessionHistory)
 	mux.HandleFunc("/api/session-store/reset", s.handleSessionStoreReset)
 	mux.HandleFunc("/api/logs/purge", s.handleLogsPurge)
 	mux.HandleFunc("/api/logs/legacy-notice", s.handleLegacyLogsNotice)
@@ -1370,12 +1362,11 @@ func (s *Server) handleResize(m proto.Message) {
 // notifyInputDeferred) と定数 (maxPendingInputPerSession / initialInjectGateMaxAge)
 // は C4 追加分割で internal/hub/input_gate.go へ移動した。
 
-// handleHint は session_hint メッセージを処理する。
-// UI が xterm.js バッファをスキャンして判定した approval_visible を受け取り、
-// セッションの approvalVisible フィールドを更新する。
+// handleHint は session_hint メッセージを処理し、待機軸と派生 State を即時更新する。
 func (s *Server) handleHint(m proto.Message) {
 	s.sessionsMu.Lock()
 	ses := s.sessions[m.SessionID]
+	var update proto.Message
 	if ses != nil {
 		ses.approvalVisible = m.ApprovalVisible
 		if m.ApprovalVisible {
@@ -1383,8 +1374,18 @@ func (s *Server) handleHint(m proto.Message) {
 		} else {
 			ses.approvalVisibleAt = time.Time{}
 		}
+		if !isTerminalSessionState(ses.State) {
+			ses.Activity.AwaitingApproval = ses.approvalVisible
+			ses.Activity.AwaitingUser = ses.approvalVisible
+			ses.Activity.Normalize()
+			ses.State = ses.Activity.DisplayState()
+			update = sessionUpdateMessage(ses)
+		}
 	}
 	s.sessionsMu.Unlock()
+	if update.SessionID != 0 {
+		s.broadcast(update)
+	}
 }
 
 // handleConsumed は approval_consumed メッセージを処理する。

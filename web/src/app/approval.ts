@@ -9,7 +9,11 @@ import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, ex
 import { approvalUiAdapter, setMultiQuestionBannerVisible } from './approval-ui.js';
 import { chatHistoryCommitOutput, chatPaneAtBottom, getChatTimelineEl, pushMessage, scrollChatPaneToBottom } from './chat-history.js';
 import { token } from './util.js';
-import { isActionBarCollapsed, setActionBarCollapsed } from './user-prefs.js';
+import { appConfirm } from './settings.js';
+import { isActionBarCollapsed, setActionBarCollapsed, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY } from './user-prefs.js';
+
+const HIGH_RISK_HOLD_MS = 1200;
+const highRiskConfirmationInFlight = new Set<number>();
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -1622,6 +1626,8 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   const hasSessionAllow = options.some(o => isSessionAllowLabel(o.label));
   const isRecommendedOpt = (o) => hasSessionAllow ? isSessionAllowLabel(o.label) : o.isCurrent;
 
+  const isHighRiskApprove = (opt) => isHighRiskApprovalSelection(sessionId, opt.num);
+
   // 選択肢ボタンは全文表示（短ラベル圧縮なし）。.action-btn の通常スタイルで折り返す
   //（詳細パネルでのプレビューが不要になり、見て 1 クリックで送れる）。
   const optsEl = document.createElement('div');
@@ -1637,7 +1643,12 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
     btn.className = cls;
     btn.textContent = `${opt.num}. ${opt.label}` + (isRecommendedOpt(opt) ? ` (${t('approval_recommended')})` : '');
     btn.title = `${opt.num}. ${opt.label}`;
-    btn.onclick = () => sendChoice(sessionId, opt.num); // 即送信（確認モーダルなし）
+    if (isHighRiskApprove(opt)) {
+      btn.classList.add('high-risk-approval');
+      bindHighRiskApproval(btn, sessionId, opt.num);
+    } else {
+      btn.onclick = () => sendChoice(sessionId, opt.num); // 即送信（確認モーダルなし）
+    }
     optsEl.appendChild(btn);
   }
 
@@ -1693,6 +1704,78 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   actionBarShownAt.set(sessionId, Date.now());
   if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
   if (chatWasAtBottomB && chatTlB) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlB));
+}
+
+function highRiskConfirmationMode() {
+  try {
+    return localStorage.getItem(STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY) === 'dialog' ? 'dialog' : 'hold';
+  } catch (_) {
+    return 'hold';
+  }
+}
+
+function isHighRiskApprovalSelection(sessionId, targetNum) {
+  const cached = approvalRawOptionsCache.get(sessionId);
+  if (!Array.isArray(cached) || isBatchOptions(cached) || isMultiSelectOptions(cached)) return false;
+  const summary = (cached as any)._summary;
+  if (!summary || summary.risk !== 'high') return false;
+  const opt = cached.find((item) => item && item.num === targetNum);
+  if (!opt) return false;
+  // Deny/reject actions remain immediate: the guard exists only to prevent an
+  // accidental affirmative action from executing a destructive command.
+  return !/\b(no|deny|reject|skip|cancel|abort|decline)\b|don't\s+allow/i.test(String(opt.label || ''));
+}
+
+export function bindHighRiskApproval(btn, sessionId, targetNum) {
+  if (highRiskConfirmationMode() === 'dialog') {
+    btn.textContent += ' (confirm)';
+    btn.onclick = () => void requestHighRiskConfirmation(sessionId, targetNum);
+    return;
+  }
+
+  btn.classList.add('hold-to-approve');
+  btn.title = `${btn.title} — hold for 1.2 seconds`;
+  let timer = null;
+  const cancel = () => {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+    btn.classList.remove('holding');
+    btn.style.removeProperty('--hold-progress-duration');
+  };
+  btn.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || timer !== null) return;
+    event.preventDefault();
+    btn.setPointerCapture?.(event.pointerId);
+    btn.classList.add('holding');
+    btn.style.setProperty('--hold-progress-duration', `${HIGH_RISK_HOLD_MS}ms`);
+    timer = window.setTimeout(() => {
+      timer = null;
+      btn.classList.remove('holding');
+      btn.style.removeProperty('--hold-progress-duration');
+      sendChoice(sessionId, targetNum, true);
+    }, HIGH_RISK_HOLD_MS);
+  });
+  btn.addEventListener('pointerup', cancel);
+  btn.addEventListener('pointercancel', cancel);
+  btn.addEventListener('pointerleave', (event) => { if (event.buttons === 0) cancel(); });
+  btn.onclick = (event) => { event.preventDefault(); }; // suppress synthetic click after a released hold
+}
+
+async function requestHighRiskConfirmation(sessionId, targetNum) {
+  if (highRiskConfirmationInFlight.has(sessionId)) return;
+  highRiskConfirmationInFlight.add(sessionId);
+  try {
+    const ok = await appConfirm({
+      title: 'High-risk approval',
+      message: 'This approval can run a destructive or externally visible operation. Continue only if you have checked the command and target paths.',
+      confirmText: 'Approve',
+      cancelText: 'Cancel',
+      kind: 'danger',
+    });
+    if (ok) sendChoice(sessionId, targetNum, true);
+  } finally {
+    highRiskConfirmationInFlight.delete(sessionId);
+  }
 }
 
 function appendApprovalSummaryCard(bar, summary) {
@@ -2399,7 +2482,11 @@ export function sendMultiSelectChoices(sessionId) {
   setTimeout(() => inputEl.focus(), 0);
 }
 
-export function sendChoice(sessionId, targetNum) {
+export function sendChoice(sessionId, targetNum, highRiskConfirmed = false) {
+  if (!highRiskConfirmed && isHighRiskApprovalSelection(sessionId, targetNum)) {
+    if (highRiskConfirmationMode() === 'dialog') void requestHighRiskConfirmation(sessionId, targetNum);
+    return;
+  }
   const seqState = sequentialChoiceCache.get(sessionId);
   if (seqState && seqState.index < seqState.prompts.length) {
     const prompt = seqState.prompts[seqState.index];

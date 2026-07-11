@@ -327,6 +327,9 @@ type UserPrefsTrigger struct {
 type UserPrefsApproval struct {
 	AutoSwitch          bool `yaml:"auto_switch,omitempty" json:"auto_switch,omitempty"`
 	AutoApprovalEnabled bool `yaml:"auto_approval_enabled,omitempty" json:"auto_approval_enabled,omitempty"`
+	// HighRiskConfirmationMode is "hold" (default) or "dialog". It only
+	// affects approvals classified as high risk by internal/approval.
+	HighRiskConfirmationMode string `yaml:"high_risk_confirmation_mode,omitempty" json:"high_risk_confirmation_mode,omitempty"`
 }
 
 // UserPrefsDesktopNotifications はページ内 Notification API の設定。
@@ -566,16 +569,42 @@ func EffectiveBoardNotifyMode(raw BoardNotifyMode) BoardNotifyMode {
 	return BoardNotifyQueueUntilIdle
 }
 
+// SpawnConfirmMode controls whether an orchestration child spawn waits for a
+// browser decision. The zero value deliberately means enabled: upgrading must
+// not silently reintroduce unattended child creation.
+type SpawnConfirmMode string
+
+const (
+	SpawnConfirmOn        SpawnConfirmMode = "on"
+	SpawnConfirmOff       SpawnConfirmMode = "off"
+	SpawnConfirmProviders SpawnConfirmMode = "providers"
+)
+
+func (m SpawnConfirmMode) Valid() bool {
+	return m == SpawnConfirmOn || m == SpawnConfirmOff || m == SpawnConfirmProviders
+}
+
+func EffectiveSpawnConfirmMode(raw SpawnConfirmMode) SpawnConfirmMode {
+	if raw.Valid() {
+		return raw
+	}
+	return SpawnConfirmOn
+}
+
 // OrchestrationConfig controls lightweight parent/child AI session orchestration.
 type OrchestrationConfig struct {
-	MaxDepth             int             `yaml:"max_depth,omitempty" json:"max_depth,omitempty"`
-	MaxChildrenPerParent int             `yaml:"max_children_per_parent,omitempty" json:"max_children_per_parent,omitempty"`
-	MaxTotalSessions     int             `yaml:"max_total_sessions,omitempty" json:"max_total_sessions,omitempty"`
-	ChildTimeoutSeconds  int             `yaml:"child_timeout_seconds,omitempty" json:"child_timeout_seconds,omitempty"`
-	IdleDoneThresholdSec int             `yaml:"idle_done_threshold_seconds,omitempty" json:"idle_done_threshold_seconds,omitempty"`
-	WorktreeAuto         *bool           `yaml:"worktree_auto,omitempty" json:"worktree_auto,omitempty"`
-	WorktreeDirRoot      string          `yaml:"worktree_dir_root,omitempty" json:"worktree_dir_root,omitempty"`
-	BoardNotifyMode      BoardNotifyMode `yaml:"board_notify_mode,omitempty" json:"board_notify_mode,omitempty"`
+	MaxDepth              int              `yaml:"max_depth,omitempty" json:"max_depth,omitempty"`
+	MaxChildrenPerParent  int              `yaml:"max_children_per_parent,omitempty" json:"max_children_per_parent,omitempty"`
+	MaxTotalSessions      int              `yaml:"max_total_sessions,omitempty" json:"max_total_sessions,omitempty"`
+	ChildTimeoutSeconds   int              `yaml:"child_timeout_seconds,omitempty" json:"child_timeout_seconds,omitempty"`
+	TimeoutRespawn        bool             `yaml:"timeout_respawn,omitempty" json:"timeout_respawn,omitempty"`
+	MaxTimeoutRespawns    int              `yaml:"max_timeout_respawns,omitempty" json:"max_timeout_respawns,omitempty"`
+	IdleDoneThresholdSec  int              `yaml:"idle_done_threshold_seconds,omitempty" json:"idle_done_threshold_seconds,omitempty"`
+	WorktreeAuto          *bool            `yaml:"worktree_auto,omitempty" json:"worktree_auto,omitempty"`
+	WorktreeDirRoot       string           `yaml:"worktree_dir_root,omitempty" json:"worktree_dir_root,omitempty"`
+	BoardNotifyMode       BoardNotifyMode  `yaml:"board_notify_mode,omitempty" json:"board_notify_mode,omitempty"`
+	SpawnConfirmMode      SpawnConfirmMode `yaml:"spawn_confirm_mode,omitempty" json:"spawn_confirm_mode,omitempty"`
+	SpawnConfirmProviders []string         `yaml:"spawn_confirm_providers,omitempty" json:"spawn_confirm_providers,omitempty"`
 }
 
 func (o OrchestrationConfig) WorktreeEnabled() bool {
@@ -878,6 +907,7 @@ func (cfg *Config) Clone() *Config {
 		v := *cfg.Orchestration.WorktreeAuto
 		c.Orchestration.WorktreeAuto = &v
 	}
+	c.Orchestration.SpawnConfirmProviders = cloneStringSlice(cfg.Orchestration.SpawnConfirmProviders)
 	if cfg.Voice.Whisper.HallucinationPhrases != nil {
 		c.Voice.Whisper.HallucinationPhrases = cloneStringSlice(cfg.Voice.Whisper.HallucinationPhrases)
 	}
@@ -913,7 +943,10 @@ func (cfg *Config) applyDefaults() {
 	// 120s idle 警告は 3 連続偽陽性）に基づく。短い時間駆動閾値は AI 子セッション
 	// の作業実態に合わない（plan_orchestration-conductor-improvements.md C1）。
 	if cfg.Orchestration.ChildTimeoutSeconds <= 0 {
-		cfg.Orchestration.ChildTimeoutSeconds = 3600
+		cfg.Orchestration.ChildTimeoutSeconds = 900
+	}
+	if cfg.Orchestration.MaxTimeoutRespawns <= 0 {
+		cfg.Orchestration.MaxTimeoutRespawns = 1
 	}
 	if cfg.Orchestration.IdleDoneThresholdSec <= 0 {
 		cfg.Orchestration.IdleDoneThresholdSec = 600
@@ -923,6 +956,9 @@ func (cfg *Config) applyDefaults() {
 	}
 	if cfg.Orchestration.BoardNotifyMode == "" {
 		cfg.Orchestration.BoardNotifyMode = BoardNotifyQueueUntilIdle
+	}
+	if cfg.Orchestration.SpawnConfirmMode == "" {
+		cfg.Orchestration.SpawnConfirmMode = SpawnConfirmOn
 	}
 }
 
@@ -947,6 +983,9 @@ func (cfg *Config) Validate() error {
 	}
 	if !cfg.Orchestration.BoardNotifyMode.Valid() {
 		return fmt.Errorf("orchestration.board_notify_mode must be soft-notify, queue-until-idle, or interrupt")
+	}
+	if cfg.Orchestration.SpawnConfirmMode != "" && !cfg.Orchestration.SpawnConfirmMode.Valid() {
+		return fmt.Errorf("orchestration.spawn_confirm_mode must be on, off, or providers")
 	}
 	return nil
 }

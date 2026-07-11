@@ -27,9 +27,18 @@
       <span>MANY-AI-CLI</span>
       <span id="env-badge" class="env-badge" hidden></span>
     </div>
+    <button id="mobile-approval-mode-btn" class="mobile-approval-mode-btn" type="button" hidden>承認専用</button>
     <span id="runtime-badge" class="runtime-badge" hidden></span>
     <div class="header-sep"></div>
     <div id="summary" data-i18n="loading">...</div>
+    <div id="global-todo-indicator" class="global-todo-indicator" hidden>
+      <button id="global-todo-indicator-btn" class="global-todo-indicator-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="global-todo-indicator-menu">
+        <span class="global-todo-indicator-wait">待機 0</span>
+        <span class="global-todo-indicator-sep" aria-hidden="true">·</span>
+        <span class="global-todo-indicator-approval">承認 0</span>
+      </button>
+      <div id="global-todo-indicator-menu" class="global-todo-indicator-menu" role="menu" hidden></div>
+    </div>
     <button id="reconnect-btn" hidden>↺ <span data-i18n="reconnect">reconnect</span></button>
     <div class="usage-menu" id="usage-menu">
       <button class="usage-menu-btn" id="usage-menu-btn" aria-haspopup="true" aria-expanded="false">
@@ -227,6 +236,24 @@
             </select>
           </div>
           <div class="settings-note" data-i18n="settings_board_notify_mode_desc">Applies only to orchestration conductors. Queue keeps the latest board update and sends one Enter after output is idle.</div>
+          <div class="settings-row">
+            <span class="settings-label">Child spawn confirmation</span>
+            <select id="spawn-confirm-mode" class="settings-select">
+              <option value="on">Always ask (recommended)</option>
+              <option value="off">Never ask</option>
+              <option value="providers">Only these providers</option>
+            </select>
+          </div>
+          <div class="settings-row" id="spawn-confirm-providers-row">
+            <span class="settings-label">Providers</span>
+            <input id="spawn-confirm-providers" class="settings-input" placeholder="codex, claude">
+          </div>
+          <div class="settings-note">Before an orchestration child starts, approve it, adjust its provider/model, or refuse it. Refusals are written to the orchestration board.</div>
+          <div class="settings-row">
+            <span class="settings-label">Child timeout (seconds)</span>
+            <input id="orchestration-child-timeout" type="number" min="60" max="86400" class="settings-input-number" value="900">
+            <label><input id="orchestration-timeout-respawn" type="checkbox"> Retry once</label>
+          </div>
         </div>
       </details>
       <details class="settings-section" data-section="remote-auth">
@@ -251,6 +278,17 @@
             <button id="remote-pin-clear-btn" class="settings-inline-btn danger" data-i18n="settings_remote_pin_clear" hidden>解除</button>
           </div>
           <div class="settings-note" data-i18n="settings_remote_pin_desc">既定 OFF。設定すると非 loopback（スマホ/VPN）からのアクセス時に PIN ログインを要求します。loopback（このPC）は従来どおり token のみで通ります。VPN 専用で SSH を置かない運用の追加の鍵向けです。</div>
+        </div>
+      </details>
+      <details class="settings-section" data-section="doctor">
+        <summary class="settings-section-title"><span data-i18n="settings_doctor_title">環境診断</span><span class="settings-section-current" data-section="doctor"></span></summary>
+        <div class="settings-section-body">
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_doctor_label">many-ai-cli doctor</span>
+            <button id="doctor-run-btn" type="button" class="settings-inline-btn" data-i18n="settings_doctor_run">診断を実行</button>
+          </div>
+          <div id="doctor-result" class="doctor-result" hidden aria-live="polite"></div>
+          <div class="settings-note" data-i18n="settings_doctor_desc">この端末だけを確認します。トークンや個人情報は表示・送信しません。</div>
         </div>
       </details>
       <details class="settings-section" data-section="log">
@@ -338,6 +376,14 @@
             </label>
           </div>
           <div class="settings-note">low リスクかつ <code>~/.many-ai-cli/auto-approval.yaml</code> のホワイトリストに一致する承認だけを処理します。破壊操作・外部送信は常に手動確認です。</div>
+          <div class="settings-row">
+            <label class="settings-label" for="approval-high-risk-mode">高リスク承認</label>
+            <select id="approval-high-risk-mode" class="settings-select">
+              <option value="hold">1.2秒長押し（推奨）</option>
+              <option value="dialog">確認ダイアログ</option>
+            </select>
+          </div>
+          <div class="settings-note">HIGH の実行許可だけを二段階にします。拒否はすぐに実行できます。</div>
           <div class="settings-row">
             <button type="button" id="auto-approval-simulate-btn" class="settings-link-btn">過去100件で試す</button>
             <span id="auto-approval-simulate-result" class="settings-note"></span>
@@ -686,6 +732,10 @@
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_input_tools_mobile">スマホ（狭い画面）</span>
             <input type="checkbox" id="mobile-input-tools-enabled" class="settings-checkbox">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">短指示チップをすぐ送信</span>
+            <input type="checkbox" id="mobile-nudge-instant-send" class="settings-checkbox">
           </div>
           <div class="settings-note" data-i18n="settings_input_tools_desc">入力欄の /clear・/model・/ ▾・⌫ ボタンの表示を画面幅ごとに切り替えます。既定は PC=表示・スマホ=非表示（省スペース）です。</div>
         </div>
@@ -1081,7 +1131,8 @@
       <button class="view-tab" data-tab="split" type="button"><span>⇿</span> <span data-i18n="tab_split">分割</span></button>
       <button class="view-tab lazy" data-tab="files" type="button" data-i18n-tooltip="tab_files_lazy_tooltip"><span>📁</span> <span data-i18n="tab_files">Files</span></button>
       <button class="view-tab lazy" data-tab="git" type="button" data-i18n-tooltip="tab_git_lazy_tooltip"><span>⎇</span> <span data-i18n="tab_git">Git</span></button>
-      <button class="view-tab" data-tab="approval" type="button" id="approval-tab-btn"><span>⚡</span> <span data-i18n="tab_approval">承認</span><span id="approval-tab-badge" hidden>0</span></button>
+        <button class="view-tab" data-tab="approval" type="button" id="approval-tab-btn"><span>⚡</span> <span data-i18n="tab_approval">承認</span><span id="approval-tab-badge" hidden>0</span></button>
+        <button class="view-tab" data-tab="history" type="button" id="history-tab-btn"><span>◷</span> <span>履歴</span></button>
 
       <!-- 旧 #main-tab-bar / #main-tab-list: FilesTabManager の DOM 状態保持用に残置(非表示) -->
       <div id="main-tab-bar" hidden><div id="main-tab-list"></div></div>
@@ -1132,7 +1183,8 @@
     </div>
     <div id="git-pane"></div>
     <!-- 承認キュータブ -->
-    <div id="approval-pane"></div>
+      <div id="approval-pane"></div>
+      <section id="history-pane" aria-label="セッション履歴"></section>
     </div><!-- /#display-area -->
     <!-- マルチビューコンテナ（#display-area の兄弟, マルチタブ選択時のみ表示） -->
     <div id="multi-view" hidden>
@@ -1177,6 +1229,11 @@
              グレーの待機表示(idle)へ変わるが枠は消さず常時残す＝「何も送られていない＝終わってる」
              を一目で判別できる（terminal.ts の setSessionLiveStatus / renderLiveStatusDom）。 -->
         <div id="terminal-live-status" hidden><span class="live-spinner" aria-hidden="true"></span><span class="live-status-text"></span><span class="live-compact-bar" aria-hidden="true" hidden></span></div>
+        <div id="mobile-nudge-panel" aria-label="Short instructions">
+          <div id="mobile-nudge-chips" aria-label="Quick instructions"></div>
+          <button id="mobile-nudge-voice-btn" type="button" aria-label="Hold to speak">押して話す</button>
+          <div id="mobile-nudge-history" aria-label="Recent short instructions" hidden></div>
+        </div>
         <div id="input-bar">
           <div id="input-wrap">
             <button id="tools-flip-btn" class="quick-cmd-btn" data-i18n-tooltip="tools_flip_tooltip" aria-label="Toggle tools position">⇄</button>

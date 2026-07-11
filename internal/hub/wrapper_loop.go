@@ -133,6 +133,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		HomeDir:         reg.HomeDir,
 		CodexHome:       reg.CodexHome,
 		ClaudeDir:       reg.ClaudeDir,
+		Activity:        SessionActivity{OutputIdle: true},
 		State:           "standby",
 		StartedAt:       startedAt.Format(time.RFC3339),
 		branchCheckedAt: startedAt,
@@ -232,7 +233,11 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 			"session_id", id, "provider", reg.Provider)
 		return
 	}
-	s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: reg.Provider, Display: reg.Display, CWD: reg.CWD, Branch: branch, Label: reg.Label, Model: reg.Model, Route: regRoute, Shell: reg.Shell, State: "standby", StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, ParentSessionID: childMeta.ParentSessionID, Role: childMeta.Role, Auto: childMeta.Auto, Depth: childMeta.Depth, OrchestrationID: childMeta.OrchestrationID, BoardPath: childMeta.BoardPath, WorktreeBranch: childMeta.WorktreeBranch})
+	announce := sessionUpdateMessage(ses)
+	announce.Shell = reg.Shell
+	announce.LogPath = rawLogPath
+	announce.JSONLPath = jsonlPath
+	s.broadcast(announce)
 	s.writeHistory(id, map[string]any{
 		"ts":                startedAt.Format(time.RFC3339),
 		"type":              "session_start",
@@ -420,6 +425,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		HomeDir:         req.HomeDir,
 		CodexHome:       req.CodexHome,
 		ClaudeDir:       req.ClaudeDir,
+		Activity:        SessionActivity{OutputIdle: len(replay) == 0, WorkflowActive: len(replay) > 0},
 		State:           "running",
 		LastOutputAt:    lastOutputAt,
 		StartedAt:       startedAtText,
@@ -462,7 +468,13 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		return
 	}
 	_ = wc.send(proto.Message{Type: "reattach_ack", SessionID: acceptedID})
-	s.broadcast(proto.Message{Type: "session_update", SessionID: acceptedID, Provider: req.Provider, Display: req.Display, CWD: req.CWD, Branch: branch, Label: req.Label, Model: req.Model, Route: reqRoute, Shell: req.Shell, State: "running", LastOutputAt: lastOutputAt, StartedAt: startedAtText, LogPath: rawLogPath, JSONLPath: jsonlPath})
+	s.sessionsMu.Lock()
+	announce := sessionUpdateMessage(s.sessions[acceptedID])
+	s.sessionsMu.Unlock()
+	announce.Shell = req.Shell
+	announce.LogPath = rawLogPath
+	announce.JSONLPath = jsonlPath
+	s.broadcast(announce)
 	s.writeHistory(acceptedID, map[string]any{
 		"ts":             now.Format(time.RFC3339),
 		"type":           "session_reattach",
@@ -618,6 +630,10 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 					}
 				}
 				s.sessionsMu.Unlock()
+				// A child may terminate before it emits the voluntary DONE marker.
+				// EOF is nevertheless conclusive: notify the conductor through the
+				// same board path and stop waiting for that child.
+				s.completeOrchestrationChildOnSessionEnd(id, m.State)
 			}
 		}
 	}
