@@ -49,7 +49,8 @@ declare global {
     notification: any;
   }
 
-  interface Window {
+interface Window {
+  renderOrchestrationDashboard?: () => void;
     __lang?: 'ja' | 'en' | string;
     t?: (key: string, vars?: Record<string, unknown> | string) => string;
     setLang?: (lang: string) => void;

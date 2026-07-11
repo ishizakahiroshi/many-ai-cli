@@ -21,6 +21,10 @@ const LS_CONSENT = 'ai_cli_hub_mobile_connect_consent';     // '1' = 同意済�
 const LS_PATTERN = 'ai_cli_hub_mobile_connect_pattern';     // 'ssh' | 'vpn' | 'done'
 const LS_PLATFORM = 'ai_cli_hub_mobile_connect_platform';   // 'ios' | 'android'
 const LS_VPN_KIND = 'ai_cli_hub_mobile_connect_vpn_kind';   // 'tailscale' | 'wireguard'
+// P-29 の最短接続フローは、閉じても次の未完了手順から再開する。
+// 接続URLや token は保存しない（Hub が毎回発行する値だけを QR に使う）。
+const LS_SETUP_STEP = 'ai_cli_hub_mobile_connect_setup_step';
+const LS_TEST_APPROVAL = 'ai_cli_hub_mobile_connect_test_approval';
 
 // token 入り QR を自動再ぼかしするまでの猶予（SEC-D）。
 const REVEAL_TIMEOUT_MS = 30000;
@@ -57,6 +61,8 @@ interface WizardState {
   reveal: boolean;       // token QR を表示中か（click-to-reveal）
   wgConfig: string;      // WireGuard 設定（クライアントサイドのみ・サーバー送信なし）
   wgServerIp: string;    // WG サーバ IP（ユーザー入力・D4: ダミー撤廃）
+  setupStep: 1 | 2 | 3 | 4;
+  testApproval: 'pending' | 'approved' | 'rejected';
 }
 
 const APP_LINKS = {
@@ -83,6 +89,8 @@ let downHandler: ((e: MouseEvent | TouchEvent) => void) | null = null;
 let visibilityHandler: (() => void) | null = null;
 
 function freshState(): WizardState {
+  const savedStep = Number(lsGet(LS_SETUP_STEP));
+  const setupStep: 1 | 2 | 3 | 4 = savedStep >= 1 && savedStep <= 4 ? savedStep as 1 | 2 | 3 | 4 : 1;
   return {
     consented: lsGet(LS_CONSENT) === '1',
     pattern: (lsGet(LS_PATTERN) as Pattern) || null,
@@ -93,6 +101,8 @@ function freshState(): WizardState {
     reveal: false,
     wgConfig: '',
     wgServerIp: '',
+    setupStep,
+    testApproval: (lsGet(LS_TEST_APPROVAL) as WizardState['testApproval']) || 'pending',
   };
 }
 
@@ -301,6 +311,11 @@ function render(): void {
     return;
   }
 
+  // P-29: 初めてのモバイル接続を一本道にする。既存の Tailscale/QR 実装を
+  // 部品として再利用し、途中で閉じても localStorage の手順番号から再開する。
+  renderSetupWizard(body);
+  return;
+
   if (state.help) { renderHelp(body); return; }
   if (!state.pattern) { renderPattern(body); return; }
   if (state.pattern === 'done') { renderDone(body); return; }
@@ -332,6 +347,132 @@ function renderConsent(body: HTMLElement): void {
   nav.append(el('span'), goBtn);
   body.appendChild(nav);
   setTimeout(() => chk.focus(), 0);
+}
+
+// ── P-29: 4 ステップのモバイル接続セットアップ ───────────────────────────────
+
+function setSetupStep(step: 1 | 2 | 3 | 4): void {
+  state.setupStep = step;
+  lsSet(LS_SETUP_STEP, String(step));
+  state.reveal = false;
+  render();
+}
+
+function setupProgress(active: number): HTMLElement {
+  const labels = [
+    t('mobile_setup_step_tailscale'),
+    t('mobile_setup_step_serve'),
+    t('mobile_setup_step_qr'),
+    t('mobile_setup_step_test'),
+  ];
+  const nav = el('ol', { class: 'mc-setup-progress', attrs: { 'aria-label': t('mobile_setup_progress_label') } });
+  labels.forEach((label, index) => {
+    const n = index + 1;
+    nav.appendChild(el('li', { class: 'mc-setup-progress-item' + (n === active ? ' active' : '') + (n < active ? ' done' : ''), text: `${n}. ${label}` }));
+  });
+  return nav;
+}
+
+function renderSetupWizard(body: HTMLElement): void {
+  body.appendChild(setupProgress(state.setupStep));
+  if (state.setupStep === 1) renderSetupTailscale(body);
+  else if (state.setupStep === 2) renderSetupServe(body);
+  else if (state.setupStep === 3) renderSetupQR(body);
+  else renderSetupTestApproval(body);
+}
+
+function appendSetupBack(body: HTMLElement): void {
+  if (state.setupStep <= 1) return;
+  const back = el('button', { class: 'mc-link mc-setup-back', text: t('mobile_connect_back'), attrs: { type: 'button' } });
+  back.addEventListener('click', () => setSetupStep((state.setupStep - 1) as 1 | 2 | 3));
+  body.appendChild(back);
+}
+
+function renderSetupTailscale(body: HTMLElement): void {
+  body.appendChild(el('div', { class: 'mc-q', text: t('mobile_setup_tailscale_title') }));
+  body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_setup_tailscale_desc') }));
+  if (!tsStatus && !tsLoading) void loadTailscale(false);
+  if (tsLoading || !tsStatus) {
+    body.appendChild(el('div', { class: 'mc-loading', text: t('mobile_connect_ts_loading') }));
+    return;
+  }
+  body.appendChild(tsStateBadge(tsStatus.state));
+  if (tsStatus.state === 'not_installed' || tsStatus.state === 'not_logged_in') {
+    body.appendChild(el('div', { class: 'mc-ctx-note mc-ctx-ng', text: tsStatus.state === 'not_installed' ? t('mobile_connect_ts_not_installed') : t('mobile_connect_ts_not_logged_in') }));
+    appendTailscaleAppLink(body);
+  } else {
+    body.appendChild(el('div', { class: 'mc-ctx-note mc-ctx-ok', text: t('mobile_setup_tailscale_ready') }));
+  }
+  const refresh = el('button', { class: 'mc-link', text: t('mobile_connect_ts_refresh'), attrs: { type: 'button' } });
+  refresh.addEventListener('click', () => { void loadTailscale(true); });
+  body.appendChild(refresh);
+  body.appendChild(navRow({ primary: { text: t('mobile_setup_next'), onClick: () => setSetupStep(2) } }));
+}
+
+function renderSetupServe(body: HTMLElement): void {
+  body.appendChild(el('div', { class: 'mc-q', text: t('mobile_setup_serve_title') }));
+  body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_setup_serve_desc') }));
+  appendSetupBack(body);
+  if (!tsStatus && !tsLoading) void loadTailscale(false);
+  if (tsLoading || !tsStatus) { body.appendChild(el('div', { class: 'mc-loading', text: t('mobile_connect_ts_loading') })); return; }
+  body.appendChild(tsStateBadge(tsStatus.state));
+  if (tsStatus.state === 'ready') {
+    body.appendChild(el('div', { class: 'mc-ctx-note mc-ctx-ok', text: t('mobile_setup_serve_ready') }));
+    body.appendChild(navRow({ primary: { text: t('mobile_setup_next'), onClick: () => setSetupStep(3) } }));
+    return;
+  }
+  if (tsStatus.state === 'serve_inactive') {
+    body.appendChild(buildEnableServeButton());
+    body.appendChild(el('div', { class: 'mc-cap', text: t('mobile_setup_allowed_hosts_note') }));
+  } else if (tsStatus.state === 'serve_disabled_on_tailnet' && tsStatus.admin_url) {
+    const admin = el('a', { class: 'mc-applink', text: t('mobile_connect_ts_admin_open'), attrs: { href: tsStatus.admin_url, target: '_blank', rel: 'noopener noreferrer' } });
+    body.appendChild(admin);
+  } else {
+    body.appendChild(el('div', { class: 'mc-ctx-note mc-ctx-ng', text: t('mobile_setup_serve_blocked') }));
+  }
+  const refresh = el('button', { class: 'mc-link', text: t('mobile_connect_ts_refresh'), attrs: { type: 'button' } });
+  refresh.addEventListener('click', () => { void loadTailscale(true); });
+  body.appendChild(refresh);
+}
+
+function renderSetupQR(body: HTMLElement): void {
+  body.appendChild(el('div', { class: 'mc-q', text: t('mobile_setup_qr_title') }));
+  body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_setup_qr_desc') }));
+  appendSetupBack(body);
+  if (!tsStatus || tsStatus.state !== 'ready' || !tsStatus.https_url) {
+    body.appendChild(el('div', { class: 'mc-ctx-note mc-ctx-ng', text: t('mobile_setup_qr_needs_serve') }));
+    body.appendChild(navRow({ primary: { text: t('mobile_setup_return_serve'), onClick: () => setSetupStep(2) } }));
+    return;
+  }
+  body.appendChild(qrBlock(tsStatus.https_url, t('mobile_connect_ts_url_cap'), true));
+  body.appendChild(el('div', { class: 'mc-cap mc-cap-warn', text: t('mobile_setup_qr_warning') }));
+  body.appendChild(navRow({ primary: { text: t('mobile_setup_next'), onClick: () => setSetupStep(4) } }));
+}
+
+function renderSetupTestApproval(body: HTMLElement): void {
+  body.appendChild(el('div', { class: 'mc-q', text: t('mobile_setup_test_title') }));
+  body.appendChild(el('div', { class: 'mc-sub', text: t('mobile_setup_test_desc') }));
+  appendSetupBack(body);
+  const card = el('div', { class: 'mc-test-approval' });
+  card.appendChild(el('div', { class: 'mc-test-approval-title', text: t('mobile_setup_test_card') }));
+  const outcome = state.testApproval === 'pending' ? t('mobile_setup_test_pending') : state.testApproval === 'approved' ? t('mobile_setup_test_approved') : t('mobile_setup_test_rejected');
+  card.appendChild(el('div', { class: 'mc-test-approval-state', text: outcome }));
+  if (state.testApproval === 'pending') {
+    const actions = el('div', { class: 'mc-test-approval-actions' });
+    (['approved', 'rejected'] as const).forEach((result) => {
+      const btn = el('button', { class: 'mc-nav-btn ' + (result === 'approved' ? 'mc-nav-primary' : ''), text: result === 'approved' ? t('mobile_setup_test_approve') : t('mobile_setup_test_reject'), attrs: { type: 'button' } });
+      btn.addEventListener('click', () => { state.testApproval = result; lsSet(LS_TEST_APPROVAL, result); render(); });
+      actions.appendChild(btn);
+    });
+    card.appendChild(actions);
+  }
+  body.appendChild(card);
+  if (state.testApproval !== 'pending') {
+    body.appendChild(el('div', { class: 'mc-ctx-note mc-ctx-ok', text: t('mobile_setup_complete') }));
+    const reset = el('button', { class: 'mc-link', text: t('mobile_setup_test_again'), attrs: { type: 'button' } });
+    reset.addEventListener('click', () => { state.testApproval = 'pending'; lsSet(LS_TEST_APPROVAL, 'pending'); render(); });
+    body.appendChild(reset);
+  }
 }
 
 function renderHelp(body: HTMLElement): void {
@@ -902,7 +1043,7 @@ async function loadTailscale(force: boolean): Promise<void> {
   tsLoading = true;
   tsError = '';
   if (force) tsStatus = null;
-  if (modalOpen && state.vpnKind === 'tailscale') render();
+  if (modalOpen) render();
   const r = await fetchExposeStatus(force);
   if (r.ok) {
     tsStatus = r.status;
@@ -914,7 +1055,7 @@ async function loadTailscale(force: boolean): Promise<void> {
         : t('mobile_connect_error_http', { status: String(r.httpStatus) });
   }
   tsLoading = false;
-  if (modalOpen && state.vpnKind === 'tailscale') render();
+  if (modalOpen) render();
 }
 
 // ── モーダル開閉 ──────────────────────────────────────────────────────────────

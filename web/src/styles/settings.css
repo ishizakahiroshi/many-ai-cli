@@ -108,6 +108,50 @@
   overscroll-behavior: contain;
 }
 
+/* P-53: 日常設定だけを先に見せ、必要な場合だけ全項目へ広げる。 */
+.settings-ia-toolbar {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 7px 10px;
+  padding: 8px 14px 10px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+}
+.settings-ia-level { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+.settings-ia-level-btn {
+  min-height: var(--control-h-sm);
+  padding: 2px 9px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.settings-ia-level-btn:last-child { border-right: 0; }
+.settings-ia-level-btn.active { background: var(--accent-soft); color: var(--accent-text); font-weight: 700; }
+.settings-ia-search-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.settings-ia-search {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--control-h-sm);
+  padding: 3px 8px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 0.78rem;
+}
+.settings-ia-search:focus { outline: none; border-color: var(--accent); }
+.settings-search-status { grid-column: 1 / -1; min-height: 1em; margin: 0; color: var(--muted); font-size: 0.7rem; }
+.settings-section.settings-ia-hidden { display: none; }
+.settings-section.settings-search-match > summary { color: var(--accent-text); }
+.settings-section--danger > summary.settings-section-title { color: var(--danger); }
+.settings-section--danger > summary.settings-section-title:hover { background: var(--danger-bg); }
+.settings-danger-intro { margin: 0 14px 5px; padding: 7px 8px; border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent); border-radius: var(--radius-sm); color: var(--danger); background: color-mix(in srgb, var(--danger-bg) 55%, transparent); font-size: 0.76rem; line-height: 1.45; }
+
 .settings-row {
   display: flex;
   align-items: center;
@@ -522,6 +566,9 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
     padding-left: 5px;
     padding-right: 5px;
   }
+  .settings-ia-toolbar { grid-template-columns: 1fr; gap: 7px; }
+  .settings-ia-level { width: 100%; }
+  .settings-ia-level-btn { flex: 1 1 50%; }
 }
 
 /* ---- 承認検出パターン編集 ---- */
@@ -663,6 +710,9 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   line-height: 1.45;
 }
 .confirm-check input { margin-top: 2px; flex: 0 0 auto; cursor: pointer; }
+.confirm-type-label { display: grid; gap: 5px; margin-top: 11px; color: var(--text); font-size: 0.8rem; }
+.confirm-type-label code { color: var(--danger); font-weight: 700; }
+.confirm-type-label .settings-input-text { width: 100%; box-sizing: border-box; }
 .confirm-actions {
   grid-column: 1 / -1;
   display: flex;

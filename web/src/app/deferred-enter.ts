@@ -50,6 +50,8 @@ type Pending = {
   fired: boolean;
   minWaitMs: number;
   action: () => void;
+  onInjected?: () => void;
+  onAcked?: () => void;
 };
 
 const pending = new Map<number, Pending>();
@@ -63,7 +65,11 @@ function fire(id: number) {
   pending.delete(id);
   // セッション削除後に遅延 \r が別 ID 再利用先へ飛ばないようガード
   if (!sessions.has(id)) return;
-  try { p.action(); } catch (_) {}
+  try {
+    p.onInjected?.();
+    p.action();
+    p.onAcked?.();
+  } catch (_) {}
 }
 
 function armIdle(id: number) {
@@ -78,9 +84,9 @@ function armIdle(id: number) {
 
 // 出力が一定時間静止してから action を 1 回だけ実行する予約。\r 確定・ペースト本体送出など
 // 「内側 CLI の取り込み・再描画が落ち着いてから撃ちたい」操作の共通土台。
-function schedule(id: number, action: () => void, maxWaitMs: number, minWaitMs: number = MIN_WAIT_MS) {
+function schedule(id: number, action: () => void, maxWaitMs: number, minWaitMs: number = MIN_WAIT_MS, onInjected?: () => void, onAcked?: () => void) {
   cancelDeferredEnter(id);
-  const p: Pending = { startedAt: Date.now(), idleTimer: null, maxTimer: null, fired: false, minWaitMs, action };
+  const p: Pending = { startedAt: Date.now(), idleTimer: null, maxTimer: null, fired: false, minWaitMs, action, onInjected, onAcked };
   pending.set(id, p);
   p.maxTimer = setTimeout(() => fire(id), maxWaitMs);
   armIdle(id);
@@ -89,8 +95,8 @@ function schedule(id: number, action: () => void, maxWaitMs: number, minWaitMs: 
 // doSend の deferEnter 分岐から呼ぶ。確定 \r を出力静止後に 1 回だけ送る予約を張る。
 // minWaitMs に provider 別の最低待機（Codex/OpenCode は長め）を渡し、無出力で畳み込む CLI への
 // 早撃ち（\r 吸収による送信不発）を防ぐ。省略時は既定の MIN_WAIT。
-export function scheduleDeferredEnter(id: number, minWaitMs: number = MIN_WAIT_MS) {
-  schedule(id, () => { try { sendText(id, '\r'); } catch (_) {} }, MAX_WAIT_MS, minWaitMs);
+export function scheduleDeferredEnter(id: number, minWaitMs: number = MIN_WAIT_MS, onInjected?: () => void, onAcked?: () => void) {
+  schedule(id, () => { try { sendText(id, '\r'); } catch (_) {} }, MAX_WAIT_MS, minWaitMs, onInjected, onAcked);
 }
 
 // 画像 inject（@path）に複数行ペーストが続くケースで、画像取り込みが落ち着いてから

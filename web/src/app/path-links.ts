@@ -84,7 +84,7 @@ export function getPathOpenItem(filePath, sessionId) {
   return { icon: '🚀', key: 'link_open_default', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error', sessionId) };
 }
 
-export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 'file') {
+export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 'file', extraItems: any[] = []) {
   cancelPathPopupHideTimer();
   const popup = getOrCreatePathPopup();
   popup.innerHTML = '';
@@ -92,6 +92,8 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
 
   const items = [];
   const isDir = pathType === 'dir';
+  // 呼び出し側固有の操作は、既存の共通メニューへ任意に追加する。
+  if (Array.isArray(extraItems)) items.push(...extraItems);
   if (!isDir && isAnyAiCliPreviewable(filePath)) {
     items.push({
       icon: '📖',
@@ -153,7 +155,7 @@ export function renderPathPopupItems(popup, items, clientX, clientY) {
   for (const item of items) {
     const btn = document.createElement('button');
     btn.className = 'path-link-popup-item';
-    btn.textContent = item.icon + ' ' + t(item.key);
+    btn.textContent = item.icon + ' ' + (item.label || t(item.key));
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       Promise.resolve(item.action(btn)).finally(() => {

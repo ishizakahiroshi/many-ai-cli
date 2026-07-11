@@ -36,6 +36,7 @@ export const STORAGE_QUICK_CMD_2_SHOW_KEY     = 'ai_cli_hub_quick_cmd_2_show';
 export const STORAGE_QUICK_CMD_3_SHOW_KEY     = 'ai_cli_hub_quick_cmd_3_show';
 export const STORAGE_QUICK_CMD_4_SHOW_KEY     = 'ai_cli_hub_quick_cmd_4_show';
 export const STORAGE_QUICK_CMD_5_SHOW_KEY     = 'ai_cli_hub_quick_cmd_5_show';
+export const STORAGE_TEMPLATES_KEY            = 'ai_cli_hub_prompt_templates';
 export const STORAGE_TOOLS_LEFT_KEY           = 'ai_cli_hub_tools_left';
 export const STORAGE_PC_INPUT_TOOLS_KEY       = 'ai_cli_hub_pc_input_tools';
 export const STORAGE_MOBILE_INPUT_TOOLS_KEY   = 'ai_cli_hub_mobile_input_tools';
@@ -203,6 +204,7 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'quick_cmds.show3':          [STORAGE_QUICK_CMD_3_SHOW_KEY,      (v) => v ? '1' : '0'],
   'quick_cmds.show4':          [STORAGE_QUICK_CMD_4_SHOW_KEY,      (v) => v ? '1' : '0'],
   'quick_cmds.show5':          [STORAGE_QUICK_CMD_5_SHOW_KEY,      (v) => v ? '1' : '0'],
+  'templates':                 [STORAGE_TEMPLATES_KEY,             JSON.stringify],
   'usage_links.claude':        [STORAGE_USAGE_LINK_CLAUDE_KEY,     String],
   'usage_links.codex':         [STORAGE_USAGE_LINK_CODEX_KEY,      String],
   'usage_links.copilot':       [STORAGE_USAGE_LINK_COPILOT_KEY,    String],
@@ -295,6 +297,17 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
   if (_USER_PREFS_STRING_ARRAY_PATHS.has(path)) {
     if (!Array.isArray(parsed)) return { ok: false };
     return { ok: true, value: parsed.filter((v) => typeof v === 'string') };
+  }
+  if (path === 'templates') {
+    if (!Array.isArray(parsed)) return { ok: false };
+    const value = parsed.filter((item) => item && typeof item === 'object' &&
+      typeof item.label === 'string' && typeof item.body === 'string').slice(0, 100).map((item) => ({
+      label: item.label.slice(0, 80), body: item.body.slice(0, 8000),
+      providers: Array.isArray(item.providers) ? item.providers.filter((p) => typeof p === 'string').slice(0, 10) : [],
+      tags: Array.isArray(item.tags) ? item.tags.filter((tag) => typeof tag === 'string').slice(0, 10) : [],
+      frequency: Math.max(0, Math.min(100000, Number(item.frequency) || 0)),
+    }));
+    return { ok: true, value };
   }
   if (path === 'spawn.defaults') {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ok: false };
@@ -407,6 +420,7 @@ export async function _mirrorUserPrefsFromServer() {
         }
       } catch (_) {}
     }
+    document.dispatchEvent(new CustomEvent('user-prefs-mirrored', { detail: prefs }));
     return prefs;
   } catch (_) {
     return null;
