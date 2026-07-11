@@ -15,6 +15,28 @@ import { clearChatPayloadForSession, handleChatTurnMessage, initChatPayloadUI } 
 import { handleUsageStatMessage, removeUsageCacheEntry } from './token-statusbar.js';
 import { removeWorkflowSnapshot } from './workflow-modal.js';
 
+function showSpawnConfirmation(m) {
+  const id = String(m.spawn_confirmation_id || '');
+  if (!id || document.querySelector(`[data-spawn-confirmation-id="${CSS.escape(id)}"]`)) return;
+  const dialog = document.createElement('dialog');
+  dialog.className = 'spawn-confirm-dialog';
+  dialog.dataset.spawnConfirmationId = id;
+  const escapeHtml = (value) => { const el = document.createElement('span'); el.textContent = value; return el.innerHTML; };
+  const prompt = String(m.initial_prompt || '').trim();
+  dialog.innerHTML = `<form method="dialog"><h2>Approve child session?</h2><p><b>Role:</b> ${escapeHtml(String(m.role || 'child'))}</p><label>Provider <input name="provider" value="${escapeHtml(String(m.provider || 'codex'))}"></label><label>Model <input name="model" value="${escapeHtml(String(m.model || ''))}"></label><p><b>Worktree:</b> ${escapeHtml(String(m.cwd || 'parent working directory'))}</p><pre>${escapeHtml(prompt.slice(0, 1200))}</pre><menu><button value="refuse">Refuse</button><button value="approve" class="primary">Approve</button></menu></form>`;
+  dialog.addEventListener('close', async () => {
+    const provider = (dialog.querySelector('[name=provider]') as HTMLInputElement)?.value || '';
+    const model = (dialog.querySelector('[name=model]') as HTMLInputElement)?.value || '';
+    const approved = dialog.returnValue === 'approve';
+    dialog.remove();
+    try {
+      await fetch(`/api/sessions/${m.session_id}/spawn-confirm?token=${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmation_id: id, approved, provider, model }) });
+    } catch (_) { showToast('Could not submit the spawn decision'); }
+  }, { once: true });
+  document.body.appendChild(dialog);
+  dialog.showModal();
+}
+
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
 // ---- WebSocket 自動再接続（指数バックオフ） ----
@@ -382,6 +404,11 @@ export function _connectWs() {
     return;
   }
 
+  if (m.type === 'spawn_confirmation_requested') {
+    showSpawnConfirmation(m);
+    return;
+  }
+
   if (m.type === 'auto_approval_applied') {
     const command = String(m.approval_summary?.command || '').trim();
     showToast(command ? `自動承認: ${command}` : 'ホワイトリストで自動承認しました');
@@ -424,6 +451,13 @@ export function _connectWs() {
         requestSessionDismiss(s.id);
         return;
       }
+		// snapshot は activity を入れ子で返す。差分更新と同じ読み出し口に揃える。
+		if (s.activity) {
+			s.output_idle = s.activity.output_idle;
+			s.workflow_active = s.activity.workflow_active;
+			s.awaiting_user = s.activity.awaiting_user;
+			s.awaiting_approval = s.activity.awaiting_approval;
+		}
       s.project = deriveProjectKeyFromCwd(s.cwd);
       sessions.set(s.id, s);
       addToSessionOrder(s.id);
@@ -460,6 +494,16 @@ export function _connectWs() {
 	}
     if (m.shell)           cur.shell           = m.shell;
     if (m.state)           cur.state           = m.state;
+		if (m.activity) {
+			cur.output_idle = m.activity.output_idle;
+			cur.workflow_active = m.activity.workflow_active;
+			cur.awaiting_user = m.activity.awaiting_user;
+			cur.awaiting_approval = m.activity.awaiting_approval;
+		}
+		if (m.output_idle !== undefined) cur.output_idle = m.output_idle;
+		if (m.workflow_active !== undefined) cur.workflow_active = m.workflow_active;
+		if (m.awaiting_user !== undefined) cur.awaiting_user = m.awaiting_user;
+		if (m.awaiting_approval !== undefined) cur.awaiting_approval = m.awaiting_approval;
     if (m.last_output_at)  cur.last_output_at  = m.last_output_at;
     if (m.started_at)      cur.started_at      = m.started_at;
     if (m.first_message)   cur.first_message   = m.first_message;

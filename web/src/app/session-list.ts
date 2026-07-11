@@ -3,6 +3,7 @@ import { t } from '../i18n.js';
 import { escapeHtml, ti18n, token } from './util.js';
 import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, favorites, groupOrder, multiQuestionVisibleCache, orderSessions, projectFavorites, saveFavorites, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, terminals } from './state.js';
 import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor, updateInputAffordance } from '../app.js';
+import { renderZeroSessionEmptyState } from './zero-session-empty-state.js';
 import { attachTerminal, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, syncLiveStatusLongproc, updateScrollLockBtn } from './terminal.js';
 import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, renderSessionInfoChip, updateChatCountBadge } from './settings.js';
 import { syncElapsedTimer } from './ws-client.js';
@@ -246,6 +247,13 @@ export function updateQuickCmdButtons(id) {
 
 export function stateLabel(state) {
   return t('state_' + state) || state;
+}
+
+function stateActivityDecoration(s) {
+  if (s.awaiting_approval) return { className: 'awaiting-approval', icon: '⚑', label: '承認待ち' };
+  if (s.awaiting_user) return { className: 'awaiting-input', icon: '⌨', label: '入力待ち' };
+  if (s.workflow_active) return { className: 'workflow-active', icon: '◌', label: '処理中' };
+  return { className: '', icon: '', label: '' };
 }
 
 export function safeClassToken(value) {
@@ -561,6 +569,7 @@ export function renderSessionList() {
     });
   }
   root.innerHTML = '';
+  renderZeroSessionEmptyState(sessions.values());
   if (sessions.size === 0) {
     const p = document.createElement('div');
     p.className = 'no-sessions';
@@ -816,7 +825,8 @@ export function renderSessionList() {
       // branch chip は title-row が混むため meta-row（2行目）の投稿指示テキスト末尾へ付ける。
       const metaRow = `<div class="card-meta-row">${s.pinned ? '<span class="card-pin" aria-label="Pinned">📌</span>' : ''}${reasonHtml}${sessionLabel}${noteHtml}${roleHtml}${msgHtml}${branchRoleHtml}${branchBadge}</div>`;
       // 状態 pill（ステータスバー .tsb-pill と同じ ●ドット付き形状）。並び順も下のバーに合わせ #N の直後に置く。
-      const statePillHtml = ` <span class="card-state-pill ${safeClassToken(state)}"><span class="card-pdot"></span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
+			const activity = stateActivityDecoration(s);
+      const statePillHtml = ` <span class="card-state-pill ${safeClassToken(state)} ${activity.className}"${activity.label ? ` title="${activity.label}"` : ''}><span class="card-pdot"></span><span class="card-state-icon">${activity.icon}</span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
       // ライブ情報（ctx% / 応答経過 / 長時間バッジ）。中身が空なら hidden で行ごと隠す。
       const liveInner = cardLiveRowHtml(s);
       const liveRow = `<div class="card-live-row"${liveInner ? '' : ' hidden'}>${liveInner}</div>`;
@@ -1228,18 +1238,92 @@ export function setFaviconEnvBadge(short, color) {
   drawFavicon(_faviconPendingCount, true);
 }
 
-export function updateTabNotification(pendingCount) {
-  const faviconChanged = _faviconPendingCount !== pendingCount;
-  _faviconPendingCount = pendingCount;
+export function updateTabNotification(pendingCount, approvalCount = pendingCount) {
+	const faviconChanged = _faviconPendingCount !== approvalCount;
+	_faviconPendingCount = approvalCount;
 
-  if (pendingCount > 0) {
-    startTitleBlink(pendingCount);
-  } else {
-    stopTitleBlink();
-    document.title = 'MANY-AI-CLI';
-  }
+	if (pendingCount > 0 || approvalCount > 0) {
+		stopTitleBlink();
+		document.title = `待機 ${pendingCount} · 承認 ${approvalCount} | MANY-AI-CLI`;
+	} else {
+		stopTitleBlink();
+		document.title = 'MANY-AI-CLI';
+	}
 
-  if (faviconChanged) drawFavicon(pendingCount);
+	if (faviconChanged) drawFavicon(approvalCount);
+}
+
+let globalTodoIndicatorWired = false;
+
+function closeGlobalTodoIndicator(): void {
+  const button = document.getElementById('global-todo-indicator-btn');
+  const menu = document.getElementById('global-todo-indicator-menu');
+  if (!button || !menu) return;
+  button.setAttribute('aria-expanded', 'false');
+  menu.hidden = true;
+}
+
+function openGlobalTodoIndicator(): void {
+  const button = document.getElementById('global-todo-indicator-btn');
+  const menu = document.getElementById('global-todo-indicator-menu');
+  if (!button || !menu) return;
+  menu.hidden = false;
+  button.setAttribute('aria-expanded', 'true');
+  const rect = button.getBoundingClientRect();
+  menu.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - menu.offsetHeight - 10)}px`;
+  menu.style.left = `${Math.min(Math.max(10, rect.right - menu.offsetWidth), window.innerWidth - menu.offsetWidth - 10)}px`;
+}
+
+function wireGlobalTodoIndicator(): void {
+  if (globalTodoIndicatorWired) return;
+  const button = document.getElementById('global-todo-indicator-btn');
+  const menu = document.getElementById('global-todo-indicator-menu');
+  if (!button || !menu) return;
+  globalTodoIndicatorWired = true;
+  button.addEventListener('click', () => menu.hidden ? openGlobalTodoIndicator() : closeGlobalTodoIndicator());
+  document.addEventListener('pointerdown', event => {
+    const target = event.target as Node;
+    if (!button.contains(target) && !menu.contains(target)) closeGlobalTodoIndicator();
+  });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeGlobalTodoIndicator(); });
+}
+
+function renderGlobalTodoIndicator(waitingCount: number, approvalCount: number): void {
+  const root = document.getElementById('global-todo-indicator');
+  const button = document.getElementById('global-todo-indicator-btn');
+  const waiting = root?.querySelector('.global-todo-indicator-wait');
+  const approvals = root?.querySelector('.global-todo-indicator-approval');
+  const menu = document.getElementById('global-todo-indicator-menu');
+  if (!root || !button || !waiting || !approvals || !menu) return;
+  wireGlobalTodoIndicator();
+  root.hidden = false;
+  root.classList.toggle('global-todo-indicator--quiet', waitingCount === 0 && approvalCount === 0);
+  waiting.textContent = `待機 ${waitingCount}`;
+  approvals.textContent = `承認 ${approvalCount}`;
+  button.setAttribute('aria-label', `待機 ${waitingCount} 件、承認 ${approvalCount} 件。対象セッションを開く`);
+
+  const targets = Array.from(sessions.values())
+    .filter((session: any) => session.state === 'waiting' || session.awaiting_approval === true)
+    .sort((a: any, b: any) => Number(b.awaiting_approval === true) - Number(a.awaiting_approval === true) || compareSessionCards(a, b));
+  menu.replaceChildren();
+  const title = document.createElement('div');
+  title.className = 'global-todo-indicator-menu-title';
+  title.textContent = targets.length ? '要対応セッション' : '要対応セッションはありません';
+  menu.append(title);
+  targets.forEach((session: any) => {
+    const item = document.createElement('button');
+    item.type = 'button'; item.className = 'global-todo-indicator-item'; item.setAttribute('role', 'menuitem');
+    const kind = document.createElement('span'); kind.className = 'global-todo-indicator-item-kind'; kind.textContent = session.awaiting_approval ? '承認' : '待機';
+    const label = document.createElement('span'); label.className = 'global-todo-indicator-item-title';
+    label.textContent = `#${session.id} ${sessionDisplayTitle(session) || session.cwd || session.provider || 'session'}`;
+    item.append(kind, label);
+    item.addEventListener('click', () => {
+      closeGlobalTodoIndicator();
+      activateSession(session.id);
+      requestAnimationFrame(() => document.querySelector(`.card[data-session-id="${CSS.escape(String(session.id))}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+    });
+    menu.append(item);
+  });
 }
 
 export let _summaryResizeObserver = null;
@@ -1281,7 +1365,8 @@ export function renderSummaryAndNotifications() {
     else if (st === 'waiting') stateCounts.waiting++;
     else stateCounts.standby++;
   });
-  const totalWaiting = stateCounts.waiting;
+	const totalWaiting = stateCounts.waiting;
+	const totalApprovals = Array.from(sessions.values()).filter(s => s.awaiting_approval === true).length;
 
   const PROVIDER_ORDER = { claude: 0, ollama: 1, 'lm-studio': 2, codex: 3, copilot: 4, opencode: 5, 'cursor-agent': 6, grok: 7 };
   const sortedGroups = Array.from(providerGroups.values()).sort((a, b) => {
@@ -1321,7 +1406,8 @@ export function renderSummaryAndNotifications() {
   if (drawerSummary) drawerSummary.innerHTML = summary;
   ensureSummaryResizeObserver();
   updateSummaryCompactMode();
-  updateTabNotification(totalWaiting);
+	updateTabNotification(totalWaiting, totalApprovals);
+	renderGlobalTodoIndicator(totalWaiting, totalApprovals);
 }
 
 export function sessionProjectKey(s) {
@@ -1368,7 +1454,11 @@ export function updateSessionCardStateInPlace(id) {
   card.classList.toggle('active', id === activeSessionId);
   const pill = card.querySelector('.card-state-pill');
   if (pill) {
-    pill.className = `card-state-pill ${safeClassToken(state)}`;
+    const activity = stateActivityDecoration(s);
+    pill.className = `card-state-pill ${safeClassToken(state)} ${activity.className}`;
+		if (activity.label) pill.setAttribute('title', activity.label); else pill.removeAttribute('title');
+		const icon = pill.querySelector('.card-state-icon');
+		if (icon) icon.textContent = activity.icon;
     const txt = pill.querySelector('.card-state-text');
     if (txt) txt.textContent = stateLabel(state);
   }

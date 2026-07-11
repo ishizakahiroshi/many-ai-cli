@@ -37,6 +37,9 @@ import { initActionBarResize } from './app/action-bar-resize.js';
 import { initDoneSummaryHistory } from './app/done-summary-history.js';
 import { initSessionSearchPalette } from './app/session-search-palette.js';
 import { initFirstRunTour } from './app/first-run-tour.js';
+import { initHistoryLite } from './app/history-lite.js';
+import { initMobileShortNudge } from './app/mobile-short-nudge.js';
+import { initMobileApprovalOnly } from './app/mobile-approval-only.js';
 // ステータスバー初期化（/api/user-prefs から enabled を読む）
 initTokenStatusbar();
 // detached-grid モード判定（/?view=detached-grid の場合のみ初期化）
@@ -58,3 +61,6 @@ initActionBarResize();
 initDoneSummaryHistory();
 initSessionSearchPalette();
 initFirstRunTour();
+initHistoryLite();
+initMobileShortNudge();
+initMobileApprovalOnly();

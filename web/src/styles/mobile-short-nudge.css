@@ -1,0 +1,12 @@
+/* P-27: short steering controls are intentionally mobile-only. */
+#mobile-nudge-panel { display: none; }
+@media (max-width: 720px) {
+  #mobile-nudge-panel { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 7px; align-items: center; padding: 6px 10px 2px; background: var(--bg, #111827); }
+  #mobile-nudge-chips, #mobile-nudge-history { grid-column: 1 / -1; display: flex; gap: 7px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  #mobile-nudge-chips::-webkit-scrollbar, #mobile-nudge-history::-webkit-scrollbar { display: none; }
+  .mobile-nudge-chip, .mobile-nudge-history-item { flex: 0 0 auto; min-height: 36px; border: 1px solid var(--line, #334155); border-radius: 18px; padding: 0 12px; color: var(--text, #e5e7eb); background: var(--bg-elev, #1f2937); font: inherit; font-size: 13px; }
+  .mobile-nudge-history-item { color: var(--muted, #94a3b8); }
+  #mobile-nudge-voice-btn { grid-row: 1; grid-column: 2; min-width: 88px; min-height: 88px; border: 1px solid var(--accent, #3b82f6); border-radius: 50%; background: rgba(59, 130, 246, .15); color: var(--accent-text, #93c5fd); font: inherit; font-size: 13px; font-weight: 600; touch-action: none; }
+  #mobile-nudge-voice-btn.recording { background: rgba(239, 68, 68, .2); border-color: #ef4444; color: #fecaca; }
+  #mobile-nudge-history[hidden] { display: none; }
+}

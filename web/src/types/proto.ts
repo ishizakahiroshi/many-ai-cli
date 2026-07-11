@@ -42,7 +42,8 @@ export type MessageType =
   | 'hub_shutdown'
   | 'ping'
   | 'usage_stat'
-  | 'done_summary';
+  | 'done_summary'
+  | 'spawn_confirmation_requested';
 
 export type DoneSummaryKind = 'success' | 'failure' | 'aborted' | 'needs_action' | string;
 export interface DoneSummary {
@@ -82,6 +83,13 @@ export interface SessionMeta {
   auto_title: string;
 }
 
+export interface SessionActivity {
+  output_idle: boolean;
+  workflow_active: boolean;
+  awaiting_user: boolean;
+  awaiting_approval: boolean;
+}
+
 export interface Message {
   type: MessageType;
   role?: string;
@@ -94,6 +102,11 @@ export interface Message {
   shell?: string;
   version?: string;
   state?: SessionState;
+	output_idle?: boolean;
+	workflow_active?: boolean;
+	awaiting_user?: boolean;
+	awaiting_approval?: boolean;
+	activity?: SessionActivity;
   exit_code?: number;
   token?: string | null;
   data?: string | Uint8Array;
@@ -131,6 +144,8 @@ export interface Message {
   board_path?: string;
   worktree_branch?: string;
 	board_notify_pending?: boolean;
+	spawn_confirmation_id?: string;
+	initial_prompt?: string;
   first_message?: string;
   last_message?: string;
   inject?: string;
@@ -204,6 +219,11 @@ export interface SessionSnapshot {
   worktree_branch?: string;
 	board_notify_pending?: boolean;
   state?: SessionState;
+	activity?: SessionActivity;
+	output_idle?: boolean;
+	workflow_active?: boolean;
+	awaiting_user?: boolean;
+	awaiting_approval?: boolean;
   last_output_at?: string;
   started_at?: string;
   first_message?: string;

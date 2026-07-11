@@ -193,7 +193,9 @@ func Test_notifyBoardSession_queueUntilOutputIdle(t *testing.T) {
 
 	// The temporary server has no wrapper; flush therefore leaves the text in
 	// normal pending input, but consumes the board-notification queue exactly once.
-	conductor.lastOutputAt = time.Now().Add(-orchestrationConductorOutputIdle - time.Millisecond)
+	// P-47: queue flush uses the three-axis idle predicate rather than a
+	// duplicate output-age threshold.
+	conductor.Activity = SessionActivity{OutputIdle: true}
 	s.flushQueuedBoardNotices(time.Now())
 	s.orchestration.mu.Lock()
 	_, stillQueued = s.orchestration.boards["s1"].PendingNotices[conductor.ID]
@@ -260,6 +262,43 @@ func Test_scanOrchestrationBoards_timeoutMarksChild(t *testing.T) {
 
 	if child.State != "timeout" {
 		t.Fatalf("child state = %q, want timeout", child.State)
+	}
+}
+
+func Test_completeOrchestrationChildOnSessionEnd_marksDoneWithoutMarker(t *testing.T) {
+	s := newTestServer()
+	parent := registerTestSession(s, 1, "codex")
+	child := registerTestSession(s, 10, "codex")
+	child.ParentSessionID = parent.ID
+	child.Role = "implementation"
+	path := filepath.Join(t.TempDir(), "board.md")
+	if err := os.WriteFile(path, []byte("# board\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.registerBoardSession("s1", path, parent.ID, "conductor")
+	s.registerBoardChild("s1", path, child.ID, parent.ID, child.Role, time.Now())
+
+	s.completeOrchestrationChildOnSessionEnd(child.ID, "completed")
+
+	s.orchestration.mu.Lock()
+	done := s.orchestration.boards["s1"].Done[child.ID]
+	s.orchestration.mu.Unlock()
+	if !done {
+		t.Fatal("child EOF did not mark orchestration completion")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "completed without DONE marker") {
+		t.Fatalf("board missing EOF completion record: %s", data)
+	}
+}
+
+func Test_detectBoardDoneEvents_acceptsSuccess(t *testing.T) {
+	events := detectBoardDoneEvents("## SUCCESS review session=42\n")
+	if len(events) != 1 || events[0].Role != "review" || events[0].SessionID != 42 {
+		t.Fatalf("SUCCESS events = %#v, want review/session 42", events)
 	}
 }
 

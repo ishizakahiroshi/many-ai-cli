@@ -52,6 +52,26 @@ func (s *Server) handleSessionSearch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true, "results": results})
 }
 
+// handleSessionHistory lists persisted sessions, including sessions no longer
+// attached to this Hub. Transcript contents stay on the existing endpoints.
+func (s *Server) handleSessionHistory(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodGet) {
+		return
+	}
+	if s.sessionStore == nil {
+		writeJSON(w, map[string]any{"ok": true, "sessions": []any{}})
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	items, err := s.sessionStore.ListSessions(limit, true)
+	if err != nil {
+		s.logger.Warn("session history list failed", "err", err)
+		writeJSONError(w, http.StatusInternalServerError, "session_history_failed", "failed to list saved sessions")
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "sessions": items})
+}
+
 func (s *Server) handleSessionStoreReset(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
 		return

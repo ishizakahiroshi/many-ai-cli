@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from './i18n.js';
 import { cleanCopiedText, showToast, token } from './app/util.js';
-import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_AUTO_APPROVAL_ENABLED_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
+import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_AUTO_APPROVAL_ENABLED_KEY, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
 import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, answeredMarkerSigs, recordAnsweredMarkerSig, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { orderSessions } from './app/state.js';
@@ -1618,6 +1618,11 @@ inputEl.addEventListener('blur', (e) => {
   const idleTimeoutEl     = document.getElementById('idle-timeout-min');
   const reconnectGraceEl  = document.getElementById('reconnect-grace-min');
 	const boardNotifyModeEl = document.getElementById('board-notify-mode') as HTMLSelectElement | null;
+	const spawnConfirmModeEl = document.getElementById('spawn-confirm-mode') as HTMLSelectElement | null;
+	const spawnConfirmProvidersEl = document.getElementById('spawn-confirm-providers') as HTMLInputElement | null;
+	const spawnConfirmProvidersRow = document.getElementById('spawn-confirm-providers-row');
+	const orchestrationChildTimeoutEl = document.getElementById('orchestration-child-timeout') as HTMLInputElement | null;
+	const orchestrationTimeoutRespawnEl = document.getElementById('orchestration-timeout-respawn') as HTMLInputElement | null;
   const logEnabledEl               = document.getElementById('log-enabled');
   const logSessionEnabledEl        = document.getElementById('log-session-enabled');
   const logMaxSizeEl               = document.getElementById('log-max-size');
@@ -1873,6 +1878,14 @@ inputEl.addEventListener('blur', (e) => {
 			const cfg = await res.json();
 			const mode = String(cfg.board_notify_mode || 'queue-until-idle');
 			boardNotifyModeEl.value = ['soft-notify', 'queue-until-idle', 'interrupt'].includes(mode) ? mode : 'queue-until-idle';
+			if (spawnConfirmModeEl) {
+				const spawnMode = String(cfg.spawn_confirm_mode || 'on');
+				spawnConfirmModeEl.value = ['on', 'off', 'providers'].includes(spawnMode) ? spawnMode : 'on';
+				if (spawnConfirmProvidersEl) spawnConfirmProvidersEl.value = Array.isArray(cfg.spawn_confirm_providers) ? cfg.spawn_confirm_providers.join(', ') : '';
+				if (spawnConfirmProvidersRow) spawnConfirmProvidersRow.hidden = spawnConfirmModeEl.value !== 'providers';
+			}
+			if (orchestrationChildTimeoutEl) orchestrationChildTimeoutEl.value = String(cfg.child_timeout_seconds || 900);
+			if (orchestrationTimeoutRespawnEl) orchestrationTimeoutRespawnEl.checked = Boolean(cfg.timeout_respawn);
 		} catch (_) {}
 	}
 
@@ -1882,7 +1895,7 @@ inputEl.addEventListener('blur', (e) => {
 			await fetch(`/api/orchestration-config?token=${token}`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ board_notify_mode: boardNotifyModeEl.value }),
+				body: JSON.stringify({ board_notify_mode: boardNotifyModeEl.value, spawn_confirm_mode: spawnConfirmModeEl?.value || 'on', spawn_confirm_providers: (spawnConfirmProvidersEl?.value || '').split(',').map(v => v.trim()).filter(Boolean), child_timeout_seconds: Math.max(60, Math.min(86400, Number(orchestrationChildTimeoutEl?.value || 900))), timeout_respawn: Boolean(orchestrationTimeoutRespawnEl?.checked) }),
 			});
 		} catch (_) {}
 	}
@@ -1890,6 +1903,14 @@ inputEl.addEventListener('blur', (e) => {
   if (autoApprovalInput) {
     autoApprovalInput.checked = localStorage.getItem(STORAGE_AUTO_APPROVAL_ENABLED_KEY) === '1';
     autoApprovalInput.addEventListener('change', () => setUserPref('approval.auto_approval_enabled', autoApprovalInput.checked));
+  }
+  const highRiskModeInput = document.getElementById('approval-high-risk-mode') as HTMLSelectElement | null;
+  if (highRiskModeInput) {
+    highRiskModeInput.value = localStorage.getItem(STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY) === 'dialog' ? 'dialog' : 'hold';
+    highRiskModeInput.addEventListener('change', () => {
+      const mode = highRiskModeInput.value === 'dialog' ? 'dialog' : 'hold';
+      setUserPref('approval.high_risk_confirmation_mode', mode);
+    });
   }
   const autoApprovalSimulateBtn = document.getElementById('auto-approval-simulate-btn');
   if (autoApprovalSimulateBtn) {
@@ -2024,6 +2045,9 @@ inputEl.addEventListener('blur', (e) => {
     if (approvalAutoSwitchInput) approvalAutoSwitchInput.checked = false;
 	const autoApprovalInput = document.getElementById('auto-approval-enabled-input');
 	if (autoApprovalInput) autoApprovalInput.checked = false;
+	const highRiskModeInput = document.getElementById('approval-high-risk-mode') as HTMLSelectElement | null;
+	if (highRiskModeInput) highRiskModeInput.value = 'hold';
+	setUserPref('approval.high_risk_confirmation_mode', 'hold');
 
     const idleTimeoutEl = document.getElementById('idle-timeout-min');
     const reconnectGraceEl = document.getElementById('reconnect-grace-min');
@@ -2137,6 +2161,10 @@ inputEl.addEventListener('blur', (e) => {
   if (idleTimeoutEl) idleTimeoutEl.addEventListener('change', saveIdleTimeout);
   if (reconnectGraceEl) reconnectGraceEl.addEventListener('change', saveReconnectGrace);
 	if (boardNotifyModeEl) boardNotifyModeEl.addEventListener('change', saveBoardNotifyMode);
+	if (spawnConfirmModeEl) spawnConfirmModeEl.addEventListener('change', () => { if (spawnConfirmProvidersRow) spawnConfirmProvidersRow.hidden = spawnConfirmModeEl.value !== 'providers'; void saveBoardNotifyMode(); });
+	if (spawnConfirmProvidersEl) spawnConfirmProvidersEl.addEventListener('change', () => void saveBoardNotifyMode());
+	if (orchestrationChildTimeoutEl) orchestrationChildTimeoutEl.addEventListener('change', () => void saveBoardNotifyMode());
+	if (orchestrationTimeoutRespawnEl) orchestrationTimeoutRespawnEl.addEventListener('change', () => void saveBoardNotifyMode());
   logEnabledEl.addEventListener('change', saveLogConfig);
   if (logSessionEnabledEl) logSessionEnabledEl.addEventListener('change', saveLogConfig);
   logMaxSizeEl.addEventListener('change', saveLogConfig);
@@ -2145,6 +2173,60 @@ inputEl.addEventListener('blur', (e) => {
   if (logSessionMaxSizeEl) logSessionMaxSizeEl.addEventListener('change', saveLogConfig);
   if (attachRetentionDaysEl) attachRetentionDaysEl.addEventListener('change', saveLogConfig);
   if (attachMaxTotalMbEl) attachMaxTotalMbEl.addEventListener('change', saveLogConfig);
+})();
+
+(function () {
+  const runButton = document.getElementById('doctor-run-btn') as HTMLButtonElement | null;
+  const result = document.getElementById('doctor-result');
+  if (!runButton || !result) return;
+
+  function addText(parent: HTMLElement, className: string, value: string) {
+    const el = document.createElement('span');
+    el.className = className;
+    el.textContent = value;
+    parent.append(el);
+  }
+
+  async function runDoctor() {
+    runButton.disabled = true;
+    result.hidden = false;
+    result.replaceChildren();
+    addText(result, 'settings-note', t('settings_doctor_running'));
+    try {
+      const response = await fetch(`/api/doctor?token=${encodeURIComponent(token || '')}`);
+      if (!response.ok) throw new Error(String(response.status));
+      const report = await response.json();
+      result.replaceChildren();
+      for (const check of report.checks || []) {
+        const card = document.createElement('div');
+        card.className = 'doctor-check';
+        addText(card, `doctor-level doctor-level--${check.level}`, `[${check.level}] ${check.name}`);
+        addText(card, 'doctor-message', check.message || '');
+        if (check.fix) {
+          const fix = document.createElement('div');
+          fix.className = 'doctor-fix';
+          addText(fix, '', check.fix);
+          const copy = document.createElement('button');
+          copy.type = 'button';
+          copy.className = 'settings-inline-btn doctor-copy';
+          copy.textContent = t('settings_doctor_copy');
+          copy.addEventListener('click', async () => {
+            try { await navigator.clipboard.writeText(check.fix); showToast(t('settings_doctor_copied')); } catch (_) { showToast(t('settings_doctor_copy_failed')); }
+          });
+          fix.append(copy);
+          card.append(fix);
+        }
+        result.append(card);
+      }
+    } catch (_) {
+      result.replaceChildren();
+      addText(result, 'settings-note settings-note-warn', t('settings_doctor_failed'));
+    } finally {
+      runButton.disabled = false;
+    }
+  }
+
+  runButton.addEventListener('click', runDoctor);
 })();
 
 (function () {

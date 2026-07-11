@@ -284,21 +284,37 @@ func (s *Server) handleOrchestrationConfig(w http.ResponseWriter, r *http.Reques
 	case http.MethodGet:
 		s.cfgMu.Lock()
 		mode := config.EffectiveBoardNotifyMode(s.cfg.Orchestration.BoardNotifyMode)
+		spawnMode := config.EffectiveSpawnConfirmMode(s.cfg.Orchestration.SpawnConfirmMode)
+		providers := append([]string(nil), s.cfg.Orchestration.SpawnConfirmProviders...)
+		childTimeout := s.cfg.Orchestration.ChildTimeoutSeconds
+		timeoutRespawn := s.cfg.Orchestration.TimeoutRespawn
 		s.cfgMu.Unlock()
-		writeJSON(w, map[string]string{"board_notify_mode": string(mode)})
+		writeJSON(w, map[string]any{"board_notify_mode": string(mode), "spawn_confirm_mode": string(spawnMode), "spawn_confirm_providers": providers, "child_timeout_seconds": childTimeout, "timeout_respawn": timeoutRespawn})
 	case http.MethodPost:
 		var body struct {
-			BoardNotifyMode config.BoardNotifyMode `json:"board_notify_mode"`
+			BoardNotifyMode       config.BoardNotifyMode  `json:"board_notify_mode"`
+			SpawnConfirmMode      config.SpawnConfirmMode `json:"spawn_confirm_mode"`
+			SpawnConfirmProviders []string                `json:"spawn_confirm_providers"`
+			ChildTimeoutSeconds   int                     `json:"child_timeout_seconds"`
+			TimeoutRespawn        bool                    `json:"timeout_respawn"`
 		}
 		if !decodeJSON(w, r, &body) {
 			return
 		}
-		if !body.BoardNotifyMode.Valid() {
+		if !body.BoardNotifyMode.Valid() || !body.SpawnConfirmMode.Valid() {
 			writeJSONError(w, http.StatusBadRequest, "invalid_board_notify_mode", "board_notify_mode must be soft-notify, queue-until-idle, or interrupt")
+			return
+		}
+		if body.ChildTimeoutSeconds < 60 || body.ChildTimeoutSeconds > 86400 {
+			writeJSONError(w, http.StatusBadRequest, "invalid_child_timeout", "child_timeout_seconds must be between 60 and 86400")
 			return
 		}
 		s.cfgMu.Lock()
 		s.cfg.Orchestration.BoardNotifyMode = body.BoardNotifyMode
+		s.cfg.Orchestration.SpawnConfirmMode = body.SpawnConfirmMode
+		s.cfg.Orchestration.SpawnConfirmProviders = append([]string(nil), body.SpawnConfirmProviders...)
+		s.cfg.Orchestration.ChildTimeoutSeconds = body.ChildTimeoutSeconds
+		s.cfg.Orchestration.TimeoutRespawn = body.TimeoutRespawn
 		s.cfgMu.Unlock()
 		if err := s.persistConfig(); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "save_failed", errorDetail("save failed", err))

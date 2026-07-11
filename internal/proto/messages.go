@@ -2,13 +2,8 @@ package proto
 
 // Message は Hub・Wrapper・UI 間で交わす WebSocket メッセージ。
 //
-// 状態モデルは「PTY 出力の有無」だけで決まる 4 状態:
-//
-//	standby   : wrapper 接続済み・初回 PTY 出力前
-//	running   : 直近 IdleAfter 内に PTY 出力あり
-//	waiting   : 出力静止 ≥ IdleAfter（承認待ち / プロンプト待ち / 通常停止 を区別しない）
-//	completed : プロセス終了
-//	error / disconnected : 異常終了 / 接続断
+// 状態モデルは output_idle / workflow_active / awaiting_user の 3 軸を正本とし、
+// State は旧クライアント互換の表示ラベルとしてのみ残す。
 type Message struct {
 	Type      string `json:"type"`
 	Role      string `json:"role,omitempty"`
@@ -21,15 +16,24 @@ type Message struct {
 	Shell     string `json:"shell,omitempty"`
 	Version   string `json:"version,omitempty"`
 	State     string `json:"state,omitempty"`
-	ExitCode  int    `json:"exit_code,omitempty"`
-	Token     string `json:"token,omitempty"`
-	HomeDir   string `json:"home_dir,omitempty"`
-	CodexHome string `json:"codex_home,omitempty"`
-	ClaudeDir string `json:"claude_dir,omitempty"`
-	Data      []byte `json:"data,omitempty"` // wrapper内部用: PTY生バイト列（base64エンコード）
-	Text      string `json:"text,omitempty"` // pty_output: ANSIを除去したプレーンテキスト / pty_input: ユーザー入力文字列
-	Cols      int    `json:"cols,omitempty"` // pty_resize / register / registered
-	Rows      int    `json:"rows,omitempty"` // pty_resize / register / registered
+	// Three orthogonal session activity signals. State remains a compatibility
+	// display label; consumers that need a safe interruption point use
+	// output_idle && !workflow_active.
+	OutputIdle       bool `json:"output_idle,omitempty"`
+	WorkflowActive   bool `json:"workflow_active,omitempty"`
+	AwaitingUser     bool `json:"awaiting_user,omitempty"`
+	AwaitingApproval bool `json:"awaiting_approval,omitempty"`
+	// Activity carries all four flags atomically, including false transitions.
+	Activity  *SessionActivity `json:"activity,omitempty"`
+	ExitCode  int              `json:"exit_code,omitempty"`
+	Token     string           `json:"token,omitempty"`
+	HomeDir   string           `json:"home_dir,omitempty"`
+	CodexHome string           `json:"codex_home,omitempty"`
+	ClaudeDir string           `json:"claude_dir,omitempty"`
+	Data      []byte           `json:"data,omitempty"` // wrapper内部用: PTY生バイト列（base64エンコード）
+	Text      string           `json:"text,omitempty"` // pty_output: ANSIを除去したプレーンテキスト / pty_input: ユーザー入力文字列
+	Cols      int              `json:"cols,omitempty"` // pty_resize / register / registered
+	Rows      int              `json:"rows,omitempty"` // pty_resize / register / registered
 
 	// reattach: wrapper が Hub クラッシュ後に元セッション情報を復元するための情報。
 	LogPath   string `json:"log_path,omitempty"`
@@ -91,6 +95,11 @@ type Message struct {
 	BoardPath          string `json:"board_path,omitempty"`
 	WorktreeBranch     string `json:"worktree_branch,omitempty"`
 	BoardNotifyPending bool   `json:"board_notify_pending,omitempty"`
+	// spawn_confirmation_requested is sent to browser UIs before an
+	// orchestration child is created. The response travels by HTTP, never via
+	// the conductor PTY, so the user remains the authority for the decision.
+	SpawnConfirmationID string `json:"spawn_confirmation_id,omitempty"`
+	InitialPrompt       string `json:"initial_prompt,omitempty"`
 
 	// FirstMessage: セッション内で最初に確定されたユーザー入力（UI カード表示用）。
 	FirstMessage string `json:"first_message,omitempty"`
@@ -169,6 +178,14 @@ type Message struct {
 	RepoName         string  `json:"repo_name,omitempty"`
 	RemainingPct     float64 `json:"remaining_pct,omitempty"`
 	ReasoningOut     int     `json:"reasoning_output_tokens,omitempty"`
+}
+
+// SessionActivity is the wire representation of a session's activity axes.
+type SessionActivity struct {
+	OutputIdle       bool `json:"output_idle"`
+	WorkflowActive   bool `json:"workflow_active"`
+	AwaitingUser     bool `json:"awaiting_user"`
+	AwaitingApproval bool `json:"awaiting_approval"`
 }
 
 // SessionMeta is user-editable, server-persisted identification metadata for a

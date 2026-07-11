@@ -62,6 +62,12 @@ func sessionStoreMeta(ses *session) sessionstore.SessionCardMeta {
 }
 
 func (s *Server) handleSessionMetaAPI(w http.ResponseWriter, r *http.Request) {
+	// Authenticate the route before parsing its dynamic path. Apart from keeping
+	// malformed paths private, this makes the registered /api/session/ prefix
+	// follow the same token contract as every other API route.
+	if !s.requireToken(w, r) {
+		return
+	}
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/session/"), "/"), "/")
 	if len(parts) != 2 || parts[1] != "meta" {
 		writeJSONError(w, http.StatusNotFound, "not_found", "not found")

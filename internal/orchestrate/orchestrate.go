@@ -175,7 +175,10 @@ func postChildAPI(url, token string, body any) (*childAPIResponse, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	client := &http.Client{Timeout: 25 * time.Second}
+	// A user-facing spawn confirmation can legitimately take longer than the
+	// old request timeout. Keep this bounded so a disconnected Hub still does
+	// not leave the conductor command hanging indefinitely.
+	client := &http.Client{Timeout: 3 * time.Minute}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("http post: %w", err)
