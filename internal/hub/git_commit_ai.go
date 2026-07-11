@@ -53,8 +53,12 @@ func (s *Server) startAICommitMessage(w http.ResponseWriter, sessionID int, lang
 	ses.commitMsgProgressed = false
 	s.sessionsMu.Unlock()
 
+	// 長文プロンプトを「本文+\r」同一チャンクで送ると、内側 CLI がペースト取り込み中の
+	// \r を確定キーと扱わず入力欄に張り付いたまま送信されない（Grok 実測 2026-07-11・
+	// チャット送信と同根）。対象は isAIProvider 確認済み（全 wrap 対象 CLI が ?2004h 宣言済み）
+	// のため、ブラケットペーストで包み確定 \r は trySendInput が別書き込み + 遅延で送る。
 	prompt := aiCommitPrompt(ja)
-	s.submitInput(wc, sessionID, prompt+"\r")
+	s.submitInput(wc, sessionID, bracketedPasteStart+prompt+bracketedPasteEnd+"\r")
 
 	writeJSON(w, gitCommitMessageResp{OK: true, Pending: true})
 }

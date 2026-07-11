@@ -28,8 +28,17 @@ func (s *Server) handleInput(m proto.Message) {
 	var firstMsgBroadcast *proto.Message
 	var injectMarker bool
 	var autoTitleMeta *sessionstore.SessionCardMeta
-	if ses != nil && strings.HasSuffix(m.Text, "\r") {
+	// チャット本文はブラケットペースト包み（... \x1b[201~）+ 確定 \r 別送で届くため、
+	// 末尾 \r だけでなくペースト終端もユーザーターンの確定として扱う。従来の
+	// 「末尾 \r のみ」判定では、ペースト送信のセッション概要（FirstMessage 等）と
+	// ターン境界マーカーが一切更新されなかった（複数行送信の既存ギャップ。単一行も
+	// ペースト経路に統一した 2026-07-11 以降は全チャット送信が該当するため必須）。
+	// メタデータ用テキストはペーストマーカーを剥がして評価する。後続の確定 \r は
+	// 剥がした後に空文字となり、二重更新・二重マーカーにはならない。
+	if ses != nil && (strings.HasSuffix(m.Text, "\r") || strings.HasSuffix(m.Text, bracketedPasteEnd)) {
 		text := strings.TrimRight(m.Text, "\r\n")
+		text = strings.ReplaceAll(text, bracketedPasteStart, "")
+		text = strings.ReplaceAll(text, bracketedPasteEnd, "")
 		if text == "/clear" {
 			// /clear でセッション概要をリセット（次の入力が新しい概要になる）
 			ses.FirstMessage = ""
