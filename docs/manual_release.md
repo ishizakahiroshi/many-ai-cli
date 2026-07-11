@@ -1,6 +1,6 @@
 # many-ai-cli リリース手順
 
-> 最終更新: 2026-06-22(月) 20:35:33 — v0.3.4 で `git merge hotfix/*` を develop で実行してしまい再び version stale が起きた事故を受けて、`.github/workflows/backport-to-develop.yml` で自動 backport を導入。手順節も「自動化済み」前提に書き換え、「hotfix を develop に直接 merge してはいけない」禁止事項とローカルビルドでの異常検知（Makefile の git describe ldflags 注入）を併記
+> 最終更新: 2026-07-11(土) 10:43:23 — Authenticode / notarization の有効化前提、canonical artifact の署名順序、fail-closed 検証を追記
 
 この手順は GitHub Actions の `Release` workflow と GoReleaser で GitHub Releases を作成するための恒久運用メモ。
 **特定バージョンの実行チェックリスト**は別途用意する（v0.3.0 は `docs/local/manual_release-v0-3-0_2026-06-13.md`）。本書は版に依らない方式・設計・注意点を扱う。
@@ -117,6 +117,32 @@ GoReleaser が同時に動かす配布チャネル（`.goreleaser.yaml`）:
 | winget（`ishizakahiroshi/winget-pkgs` fork→upstream PR） | Windows x64 | `PUBLISH_GITHUB_TOKEN` |
 | Homebrew cask（`ishizakahiroshi/homebrew-tap`） | macOS | `PUBLISH_GITHUB_TOKEN` |
 | deb / rpm（nfpms、本体+ランチャー） | Linux x64 | なし |
+
+### ネイティブ署名・notarization の有効化条件
+
+Windows Authenticode と macOS notarization は、証明書・署名バックエンドを決定して CI に設定した後に有効化する。**現時点では未有効化**であり、package manager、checksum、cosign、`unblock-windows.cmd` は Authenticode / Gatekeeper の代替ではない。
+
+有効化後の release workflow は次を守る。
+
+1. Windows は両方の配布 `.exe` を Authenticode 署名・タイムスタンプ検証してから archive する。
+2. macOS は Developer ID 署名（hardened runtime）→ `notarytool submit --wait` → `stapler` → `codesign` / `spctl` 検証を archive 前に完了する。
+3. archive 後に `SHA256SUMS.txt` と cosign 署名を作る。npm の platform package は canonical GitHub Release archive から取り出し、同じ checksum で検証する。
+4. 署名を有効にした release で検証に失敗した場合は fail closed とし、同じ tag へ unsigned asset を公開しない。
+
+CI に入れるのは secret 名だけで、PFX/p12、パスワード、Apple private key、Apple ID はリポジトリ・release md・Actions log に書かない。証明書の提供元（OV/EV）・保管方式・Apple 認証情報の最終選定と投入は運用者の保留事項である。
+
+リリース後には展開済み asset を次で確認する（CI でも同等の検証を必須にする）。
+
+```powershell
+Get-AuthenticodeSignature .\many-ai-cli.exe
+Get-AuthenticodeSignature .\many-ai-cli-launcher.exe
+```
+
+```sh
+codesign --verify --deep --strict many-ai-cli
+spctl --assess --type execute --verbose=4 many-ai-cli
+xcrun stapler validate many-ai-cli
+```
 
 prerelease タグ（`v0.3.0-rc.1` 等）は npm が dist-tag `next`、winget/homebrew は `skip_upload: auto` で push されない。
 

@@ -2,6 +2,7 @@
 package autoapproval
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -113,6 +114,53 @@ func Load() (*Policy, error) {
 		p.Rules = append(p.Rules, compiledRule{rule: rule, re: re})
 	}
 	return p, nil
+}
+
+// AddRule appends a narrowly scoped low-risk rule to the local policy file.
+// The command is quoted so it can only match this normalized command.
+func AddRule(command, workingDir string) (Rule, error) {
+	command = strings.TrimSpace(command)
+	if command == "" || matchesHardBlock(command) {
+		return Rule{}, fmt.Errorf("unsafe or empty command cannot be auto-approved")
+	}
+	path, err := Path()
+	if err != nil {
+		return Rule{}, err
+	}
+	var f File
+	if data, readErr := os.ReadFile(path); readErr == nil {
+		if err := yaml.Unmarshal(data, &f); err != nil {
+			return Rule{}, fmt.Errorf("read auto approval policy: %w", err)
+		}
+	} else if !os.IsNotExist(readErr) {
+		return Rule{}, readErr
+	}
+	if f.Version == 0 {
+		f.Version = 1
+	}
+	for _, existing := range f.Rules {
+		if existing.Command == "^"+regexp.QuoteMeta(command)+"$" && existing.WorkingDir == workingDir {
+			return existing, nil
+		}
+	}
+	rule := Rule{
+		ID:         fmt.Sprintf("batch-%x", sha256.Sum256([]byte(command+"\x00"+workingDir)))[:18],
+		Command:    "^" + regexp.QuoteMeta(command) + "$",
+		Risk:       []string{"low"},
+		WorkingDir: workingDir,
+	}
+	f.Rules = append(f.Rules, rule)
+	data, err := yaml.Marshal(f)
+	if err != nil {
+		return Rule{}, err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return Rule{}, err
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return Rule{}, err
+	}
+	return rule, nil
 }
 
 // Evaluate is safe by construction: unknown/mid/high risk and every hard

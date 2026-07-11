@@ -96,7 +96,9 @@ type session struct {
 	OrchestrationID    string `json:"orchestration_id,omitempty"`
 	BoardPath          string `json:"board_path,omitempty"`
 	WorktreeBranch     string `json:"worktree_branch,omitempty"`
-	BoardNotifyPending bool   `json:"board_notify_pending,omitempty"`
+	NormalWorktree     normalWorktree
+	WorktreeCleanup    string
+	BoardNotifyPending bool `json:"board_notify_pending,omitempty"`
 	// Activity is the authoritative three-axis activity model. State is kept
 	// below only as a compatibility display label for older clients.
 	Activity     SessionActivity `json:"activity"`
@@ -879,6 +881,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/open-dir", s.handleOpenDir)
 	mux.HandleFunc("/api/idle-timeout", s.handleIdleTimeout)
 	mux.HandleFunc("/api/reconnect-grace", s.handleReconnectGrace)
+	mux.HandleFunc("/api/input-config", s.handleInputConfig)
 	mux.HandleFunc("/api/orchestration-config", s.handleOrchestrationConfig)
 	mux.HandleFunc("/api/notify-config", s.handleNotifyConfig)
 	mux.HandleFunc("/api/notify-test", s.handleNotifyTest)
@@ -888,6 +891,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/approval/enable", s.handleApprovalEnable)
 	mux.HandleFunc("/api/approval/disable", s.handleApprovalDisable)
 	mux.HandleFunc("/api/approval/dismiss", s.handleApprovalDismiss)
+	mux.HandleFunc("/api/approval/batch", s.handleApprovalBatch)
 	mux.HandleFunc("/api/approval-action/", s.handleOneTapApproval)
 	mux.HandleFunc("/api/attach", s.handleAttach)
 	mux.HandleFunc("/api/slash-cmd-sources", s.handleSlashCmdSources)
@@ -1466,12 +1470,16 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	var historyToClose *sessionlog.Writer
 	var jsonlPathForTranscript string
 	var endedProvider, endedCWD string
+	var endedWorktree normalWorktree
+	var endedWorktreeCleanup string
 	if exists {
 		ses := s.sessions[m.SessionID]
 		historyToClose = ses.History
 		jsonlPathForTranscript = ses.JSONLPath
 		endedProvider = ses.Provider
 		endedCWD = ses.CWD
+		endedWorktree = ses.NormalWorktree
+		endedWorktreeCleanup = ses.WorktreeCleanup
 		ses.History = nil
 		delete(s.sessions, m.SessionID)
 		delete(s.wrappers, m.SessionID)
@@ -1509,6 +1517,9 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	}
 	s.removeInactiveApprovalRules(providerApprovalRuleTargets(endedProvider, endedCWD))
 	s.removeInactiveUsageHooks(endedProvider, endedCWD)
+	if err := cleanupNormalWorktree(endedWorktree, endedWorktreeCleanup); err != nil {
+		s.logger.Warn("worktree retained after session dismissal", "path", endedWorktree.Path, "err", err)
+	}
 	s.finalizeTranscript(m.SessionID, jsonlPathForTranscript)
 	s.broadcast(proto.Message{Type: "session_removed", SessionID: m.SessionID})
 	return false

@@ -1,14 +1,13 @@
 import { autoExpand, doSend, inputEl, updateInputClearButton } from '../app.js';
 import { activeSessionId, sessions } from './state.js';
 import { showToast } from './util.js';
+import { insertPromptTemplate, templatesForProvider } from './prompt-templates.js';
 
 const HISTORY_DB = 'many-ai-cli-mobile-nudges';
 const HISTORY_STORE = 'recent';
 const HISTORY_MAX = 20;
 const STORAGE_INSTANT_SEND = 'ai_cli_hub_mobile_nudge_instant_send';
 type NudgeRecord = { text: string; usedAt: number; count: number };
-const genericChips = ['続けて', 'diff 見せて', 'テスト通して', '状況教えて', '要約して', 'stop', 'commit して', 'PR にして'];
-const codexChips = ['続けて', '/diff', '/status', 'テスト通して', '要約して', 'stop', 'commit して', 'PR にして'];
 
 function isMobile(): boolean { return window.matchMedia('(max-width: 720px)').matches; }
 function openHistoryDb(): Promise<IDBDatabase | null> {
@@ -53,9 +52,9 @@ function renderChips(): void {
   const container = document.getElementById('mobile-nudge-chips'); if (!container) return;
   container.replaceChildren();
   const provider = activeSessionId === null ? '' : sessions.get(activeSessionId)?.provider;
-  for (const text of provider === 'codex' ? codexChips : genericChips) {
-    const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'mobile-nudge-chip'; chip.textContent = text;
-    chip.addEventListener('click', () => { void insertOrSend(text, localStorage.getItem(STORAGE_INSTANT_SEND) === '1'); }); container.append(chip);
+  for (const template of templatesForProvider(provider)) {
+    const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'mobile-nudge-chip'; chip.textContent = template.label; chip.title = template.body;
+    chip.addEventListener('click', () => { insertPromptTemplate(template); void rememberNudge(template.body); void renderHistory(); }); container.append(chip);
   }
 }
 async function renderHistory(): Promise<void> {
@@ -98,5 +97,5 @@ function initHoldToTalk(): void {
 export function initMobileShortNudge(): void {
   const instant = document.getElementById('mobile-nudge-instant-send') as HTMLInputElement | null;
   if (instant) { instant.checked = localStorage.getItem(STORAGE_INSTANT_SEND) === '1'; instant.addEventListener('change', () => localStorage.setItem(STORAGE_INSTANT_SEND, instant.checked ? '1' : '0')); }
-  renderChips(); void renderHistory(); initHoldToTalk(); window.addEventListener('resize', renderChips); document.addEventListener('session:activated', renderChips);
+  renderChips(); void renderHistory(); initHoldToTalk(); window.addEventListener('resize', renderChips); document.addEventListener('session:activated', renderChips); window.addEventListener('prompt-templates:changed', renderChips);
 }

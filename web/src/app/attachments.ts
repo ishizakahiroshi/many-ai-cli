@@ -1,7 +1,8 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
-import { activeSessionId, terminals } from './state.js';
+import { activeSessionId, sessions, terminals } from './state.js';
+import { copyPathText } from './path-links.js';
 import { inputEl, isInteractiveFocusTarget, stagePastedText, updateInputAffordance } from '../app.js';
 import { pushMessage } from './chat-history.js';
 
@@ -42,6 +43,17 @@ if (attachClearBtn) {
     });
     updateAttachClearBtn();
     updateInputAffordance();
+  });
+}
+
+// 📁: アクティブセッションの作業ディレクトリパスをクリップボードへコピーするだけの常設ボタン。
+// エクスプローラーを自前で開かない（利用者が常駐させている既存ウィンドウへ貼る運用のため）。
+export const attachCopyCwdBtn = document.getElementById('attach-copy-cwd-btn');
+if (attachCopyCwdBtn) {
+  attachCopyCwdBtn.addEventListener('click', () => {
+    const cwd = activeSessionId !== null ? sessions.get(activeSessionId)?.cwd : '';
+    if (!cwd) return;
+    void copyPathText(cwd, attachCopyCwdBtn).catch(() => {});
   });
 }
 

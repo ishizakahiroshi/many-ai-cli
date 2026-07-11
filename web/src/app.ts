@@ -6,7 +6,7 @@ import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessio
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { orderSessions } from './app/state.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, resumeTerminalBottomFollow, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
-import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
+import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appConfirmTypedDanger, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { pendingSessionIds } from './app/approval-queue-tab.js';
@@ -23,6 +23,9 @@ import './app/detached-grid-launcher.js';
 import './app/mobile-home.js';
 import { mobileApprovalActiveBadgeCount } from './app/mobile-approval-sheet.js';
 import { clearMobileTerminalLiteSession } from './app/mobile-terminal-lite.js';
+import './app/orchestration-dashboard.js';
+import './app/prompt-templates.js';
+import { setActiveTab } from './app/settings.js';
 
 export let _userAvatarUrl = '';
 export let _userDisplayName = '';
@@ -42,6 +45,13 @@ document.addEventListener('i18n-ready', () => {
   updateInputAffordance();
 });
 
+window.addEventListener('orchestration-dashboard-open-session', (event: Event) => {
+  const sessionID = Number((event as CustomEvent<{ sessionID?: number }>).detail?.sessionID);
+  if (!Number.isInteger(sessionID) || !sessions.has(sessionID)) return;
+  activateSession(sessionID);
+  setActiveTab(sessionID, 'terminal');
+});
+
 
 // moved to /app/approval.js
 
@@ -55,6 +65,26 @@ export const pasteChipsEl = document.getElementById('paste-chips');
 // ペースト折りたたみ状態
 export const pastedTexts = []; // [{id, text, lineCount}]
 export let pasteCounter = 0;
+
+// Files タブは app.ts に依存しない。イベントで常に現在の入力欄へ @path を渡す。
+window.addEventListener('many-ai-cli:insert-file-prompt', (event: Event) => {
+  const text = String((event as CustomEvent<{ text?: string }>).detail?.text || '').trim();
+  if (!text) return;
+  inputEl.value += inputEl.value && !inputEl.value.endsWith('\n') ? `\n${text}` : text;
+  inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+  inputEl.focus();
+});
+
+// Desktop palette and mobile chips use one insertion boundary so multiline
+// templates retain the same focus and textarea sizing behavior as file prompts.
+window.addEventListener('many-ai-cli:insert-template', (event: Event) => {
+  const text = String((event as CustomEvent<{ text?: string }>).detail?.text || '');
+  if (!text) return;
+  inputEl.value += inputEl.value && !inputEl.value.endsWith('\n') ? `\n${text}` : text;
+  inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+  autoExpand();
+  inputEl.focus();
+});
 
 export function autoExpand(opts: any = {}) {
   const t = activeSessionId === null ? null : terminals.get(activeSessionId);
@@ -294,6 +324,41 @@ export function clearInput() {
 // doSend の session 単位 in-flight ロック（Enter / 音声 / autosend 再入防止）
 const doSendInFlight = new Set<number>();
 
+type DeferredSendState = 'queued' | 'sending' | 'injected' | 'acked';
+let deferredEnterOverrideMs = 0;
+let deferredSendSessionId: number | null = null;
+let deferredSendHideTimer: ReturnType<typeof setTimeout> | null = null;
+
+function setDeferredSendStatus(sessionId: number, state: DeferredSendState): void {
+  deferredSendSessionId = sessionId;
+  if (deferredSendHideTimer) clearTimeout(deferredSendHideTimer);
+  const el = document.getElementById('deferred-send-status');
+  const label = el?.querySelector('.deferred-send-label');
+  if (!el || !label) return;
+  const labels: Record<DeferredSendState, string> = {
+    queued: '送信を準備中', sending: '入力欄の安定を待機中', injected: '確定 Enter を送信', acked: '送信しました',
+  };
+  el.hidden = false;
+  el.dataset.state = state;
+  label.textContent = labels[state];
+  if (state === 'acked') {
+    deferredSendHideTimer = setTimeout(() => { if (deferredSendSessionId === sessionId) el.hidden = true; }, 1100);
+  }
+}
+
+function clearDeferredSendStatus(sessionId?: number): void {
+  if (sessionId != null && deferredSendSessionId !== sessionId) return;
+  if (deferredSendHideTimer) clearTimeout(deferredSendHideTimer);
+  deferredSendHideTimer = null;
+  const el = document.getElementById('deferred-send-status');
+  if (el) el.hidden = true;
+  deferredSendSessionId = null;
+}
+
+function effectiveDeferredEnterWait(sessionId: number): number {
+  return deferredEnterOverrideMs > 0 ? deferredEnterOverrideMs : deferredEnterMinWaitFor(sessions.get(sessionId)?.provider || '');
+}
+
 export async function doSend(sessionId) {
   // 直前の doSend（Enter/音声/ボタン）と async 中の再入を抑止
   if (Date.now() - lastDoSendAt < DOUBLE_SEND_GUARD_MS) return;
@@ -301,6 +366,7 @@ export async function doSend(sessionId) {
   // 後続の単行送信が deferred-enter 予約をキャンセルしないと、遅延 \r / ペースト本体が
   // 次メッセージの後ろに注入される。送信確定の直前に必ず消す。
   cancelDeferredEnter(sessionId);
+  clearDeferredSendStatus(sessionId);
   // Ollama route セッションで /model 始まりはブロック（spawn 時固定 env と不整合のため）
   if (isOllamaModelCommandBlocked(sessionId, buildSendText())) {
     showToast(t('toast_model_blocked_on_ollama'));
@@ -397,7 +463,9 @@ export async function doSend(sessionId) {
       // 送信後は新しいターンを見る意図なので、chat/split 側もレイアウト確定まで末尾へ張り付かせる。
       scrollChatPaneToBottomSoon({ passes: 4, startedAt: Date.now() });
     }
+    if (deferEnter) setDeferredSendStatus(sessionId, 'queued');
     sendSubmittedText(sessionId, textToSend);
+    if (deferEnter) setDeferredSendStatus(sessionId, 'sending');
     // B1a: スマホ幅で音声入力 placeholder を 1 回でも見せたユーザーが送信を完了した時点で
     // hint shown フラグを立て、以降は通常 placeholder に戻す（一度の認知で十分）。
     if (shouldShowMobileVoiceHintPlaceholder()) {
@@ -406,7 +474,7 @@ export async function doSend(sessionId) {
     }
     // Codex/OpenCode は大きいペーストを無出力で即プレースホルダ化するため、確定 \r の最低待機を
     // 長めに取り早撃ち（\r 吸収による送信不発）を防ぐ。他 provider は既定値で挙動不変。
-    const enterMinWait = deferredEnterMinWaitFor(sessions.get(sessionId)?.provider || '');
+    const enterMinWait = effectiveDeferredEnterWait(sessionId);
     if (needPasteSplit) {
       // 段1: 画像 inject（@path）の取り込み（[Image #N] 畳み込み・@ 補完ポップアップ閉じ）が
       // 出力静止で落ち着くのを待ち、段2: ペースト本体を送り、段3: 確定 \r を予約する。確定 \r の
@@ -414,13 +482,17 @@ export async function doSend(sessionId) {
       // 「Pasting…」固着するのを断つ。ペースト送出以降は画像なし複数行ペーストと同一経路で確定する。
       scheduleAfterOutputSettle(sessionId, () => {
         sendText(sessionId, textPart);
-        scheduleDeferredEnter(sessionId, enterMinWait);
+        scheduleDeferredEnter(sessionId, enterMinWait,
+          () => setDeferredSendStatus(sessionId, 'injected'),
+          () => setDeferredSendStatus(sessionId, 'acked'));
       });
     } else if (deferEnter) {
       // 複数行ペーストの確定 \r は、内側 CLI の畳み込み・再描画が落ち着いてから別書き込みで送る。
       // 同一書き込みに含めると \r が吸収され送信されない。固定遅延では大きなペーストの取り込み時間を
       // 当てられず取りこぼすため、PTY 出力が静止するのを待ってから 1 回だけ送る（deferred-enter.ts）。
-      scheduleDeferredEnter(sessionId, enterMinWait);
+      scheduleDeferredEnter(sessionId, enterMinWait,
+        () => setDeferredSendStatus(sessionId, 'injected'),
+        () => setDeferredSendStatus(sessionId, 'acked'));
     }
     // 送信テキストが確定されず入力行に張り付いたままになっていないかを事後観測し、
     // 張り付きを実際に見たときだけ \x15 で掃除する（盲目前置の置き換え。residue-sweep.ts）。
@@ -1559,24 +1631,25 @@ inputEl.addEventListener('blur', (e) => {
 })();
 
 (function () {
-  const killAllBtn = document.getElementById('kill-all-btn');
-  if (!killAllBtn) return;
+  const killAllBtns = [document.getElementById('kill-all-btn'), document.getElementById('settings-kill-all-btn')]
+    .filter((button): button is HTMLButtonElement => button instanceof HTMLButtonElement);
+  if (killAllBtns.length === 0) return;
 
-  killAllBtn.addEventListener('click', async () => {
-    const ok = await appConfirm({
+  killAllBtns.forEach((killAllBtn) => killAllBtn.addEventListener('click', async () => {
+    const ok = await appConfirmTypedDanger({
       title: t('kill_all_confirm_title'),
       message: t('kill_all_confirm'),
       confirmText: t('kill_all_confirm_run'),
       cancelText: t('spawn_cancel'),
-      kind: 'danger',
+      phrase: 'KILL ALL',
     });
     if (!ok) return;
-    killAllBtn.disabled = true;
+    killAllBtns.forEach((button) => { button.disabled = true; });
     try {
       await fetch(`/api/kill-all?token=${token}`, { method: 'POST' });
     } catch (_) {}
-    killAllBtn.disabled = false;
-  });
+    killAllBtns.forEach((button) => { button.disabled = false; });
+  }));
 })();
 
 (function () {
@@ -1756,12 +1829,12 @@ inputEl.addEventListener('blur', (e) => {
   if (sessionStoreResetBtn) {
     sessionStoreResetBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const ok = await appConfirm({
+      const ok = await appConfirmTypedDanger({
         title: t('settings_history_reset_confirm_title'),
         message: t('settings_history_reset_confirm_message'),
         confirmText: t('settings_history_reset_confirm_run'),
         cancelText: t('confirm_cancel'),
-        kind: 'danger',
+        phrase: 'RESET HISTORY',
       });
       if (!ok) return;
       sessionStoreResetBtn.disabled = true;
@@ -1785,12 +1858,12 @@ inputEl.addEventListener('blur', (e) => {
   if (logsPurgeBtn) {
     logsPurgeBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const ok = await appConfirm({
+      const ok = await appConfirmTypedDanger({
         title: t('settings_logs_purge_confirm_title'),
         message: t('settings_logs_purge_confirm_message'),
         confirmText: t('settings_history_reset_confirm_run'),
         cancelText: t('confirm_cancel'),
-        kind: 'danger',
+        phrase: 'PURGE LOGS',
       });
       if (!ok) return;
       logsPurgeBtn.disabled = true;
@@ -1814,12 +1887,12 @@ inputEl.addEventListener('blur', (e) => {
   if (attachmentsPurgeBtn) {
     attachmentsPurgeBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const ok = await appConfirm({
+      const ok = await appConfirmTypedDanger({
         title: t('settings_attachments_purge_confirm_title'),
         message: t('settings_attachments_purge_confirm_message'),
         confirmText: t('settings_history_reset_confirm_run'),
         cancelText: t('confirm_cancel'),
-        kind: 'danger',
+        phrase: 'PURGE ATTACHMENTS',
       });
       if (!ok) return;
       attachmentsPurgeBtn.disabled = true;
@@ -2155,6 +2228,7 @@ inputEl.addEventListener('blur', (e) => {
       loadUsageLinkSettings();
       attachTokenStatusbarToggle();
       attachDoneSummaryNotifyToggle();
+      void loadDeferredEnterConfig();
     }
   });
 
@@ -2173,6 +2247,42 @@ inputEl.addEventListener('blur', (e) => {
   if (logSessionMaxSizeEl) logSessionMaxSizeEl.addEventListener('change', saveLogConfig);
   if (attachRetentionDaysEl) attachRetentionDaysEl.addEventListener('change', saveLogConfig);
   if (attachMaxTotalMbEl) attachMaxTotalMbEl.addEventListener('change', saveLogConfig);
+
+  const deferredEnterEl = document.getElementById('deferred-enter-ms') as HTMLSelectElement | null;
+  async function loadDeferredEnterConfig() {
+    if (!deferredEnterEl) return;
+    try {
+      const res = await fetch(`/api/input-config?token=${encodeURIComponent(token || '')}`);
+      if (!res.ok) return;
+      const cfg = await res.json();
+      deferredEnterOverrideMs = Number(cfg?.deferred_enter_ms) || 0;
+      deferredEnterEl.value = String(deferredEnterOverrideMs);
+    } catch (_) {}
+  }
+  if (deferredEnterEl) {
+    deferredEnterEl.addEventListener('change', async () => {
+      const ms = Number(deferredEnterEl.value) || 0;
+      try {
+        const res = await fetch(`/api/input-config?token=${encodeURIComponent(token || '')}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deferred_enter_ms: ms }),
+        });
+        if (!res.ok) throw new Error('save failed');
+        deferredEnterOverrideMs = ms;
+      } catch (_) {
+        showToast('複数行ペーストの設定を保存できませんでした');
+      }
+    });
+    void loadDeferredEnterConfig();
+  }
+
+  const deferredCancel = document.getElementById('deferred-send-cancel');
+  if (deferredCancel) deferredCancel.addEventListener('click', () => {
+    if (deferredSendSessionId == null) return;
+    const id = deferredSendSessionId;
+    cancelDeferredEnter(id);
+    clearDeferredSendStatus(id);
+    showToast('複数行ペーストの確定送信をキャンセルしました');
+  });
 })();
 
 (function () {

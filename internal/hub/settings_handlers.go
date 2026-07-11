@@ -274,6 +274,40 @@ func (s *Server) handleReconnectGrace(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleInputConfig exposes the bounded, UI-safe input timing settings.
+// 0 deliberately means "provider default" so new providers keep their own safe baseline.
+func (s *Server) handleInputConfig(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		s.cfgMu.Lock()
+		ms := s.cfg.Input.DeferredEnterMS
+		s.cfgMu.Unlock()
+		writeJSON(w, map[string]int{"deferred_enter_ms": ms})
+	case http.MethodPost:
+		var body struct {
+			DeferredEnterMS int `json:"deferred_enter_ms"`
+		}
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		if body.DeferredEnterMS < 0 || body.DeferredEnterMS > 10000 {
+			writeJSONError(w, http.StatusBadRequest, "invalid_deferred_enter_ms", "deferred_enter_ms must be between 0 and 10000")
+			return
+		}
+		s.cfgMu.Lock()
+		s.cfg.Input.DeferredEnterMS = body.DeferredEnterMS
+		s.cfgMu.Unlock()
+		if err := s.persistConfig(); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "save_failed", errorDetail("save failed", err))
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+	}
+}
+
 // handleOrchestrationConfig exposes only the UI-safe orchestration preference.
 // Limits and worktree fields intentionally remain config-file managed.
 func (s *Server) handleOrchestrationConfig(w http.ResponseWriter, r *http.Request) {

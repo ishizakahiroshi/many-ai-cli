@@ -72,6 +72,8 @@ type pendingChild struct {
 	OrchestrationID string
 	BoardPath       string
 	WorktreeBranch  string
+	NormalWorktree  normalWorktree
+	WorktreeCleanup string
 	SpawnedAt       time.Time
 }
 

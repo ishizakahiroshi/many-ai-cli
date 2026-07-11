@@ -1490,6 +1490,7 @@ export function render() {
     return;
   }
   renderSessionList();
+  window.renderOrchestrationDashboard?.();
   window.renderMobileHome?.();
   // C5: マルチタブが開いているときはペインスロット配列も更新
   // （セッション削除などで slots が古くなった場合に P<n> バッジと整合させる）

@@ -130,6 +130,8 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		OrchestrationID: childMeta.OrchestrationID,
 		BoardPath:       childMeta.BoardPath,
 		WorktreeBranch:  childMeta.WorktreeBranch,
+		NormalWorktree:  childMeta.NormalWorktree,
+		WorktreeCleanup: childMeta.WorktreeCleanup,
 		HomeDir:         reg.HomeDir,
 		CodexHome:       reg.CodexHome,
 		ClaudeDir:       reg.ClaudeDir,

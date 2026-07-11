@@ -1411,6 +1411,12 @@ export const FilesTreeView = (function () {
     moveBtn.textContent = '↗';
     moveBtn.disabled = true;
 
+    const insertPromptBtn = document.createElement('button');
+    insertPromptBtn.className = 'files-tree-toolbar-btn files-tree-insert-prompt-btn';
+    insertPromptBtn.title = 'Insert selected file path into the active prompt';
+    insertPromptBtn.textContent = '@';
+    insertPromptBtn.disabled = true;
+
     const newFileBtn = document.createElement('button');
     newFileBtn.className = 'files-tree-toolbar-btn';
     newFileBtn.title = t('files_tree_new_file_tooltip') || 'Create new file';
@@ -1430,6 +1436,7 @@ export const FilesTreeView = (function () {
     toolbar.appendChild(openFolderBtn);
     toolbar.appendChild(searchBtn);
     toolbar.appendChild(moveBtn);
+    toolbar.appendChild(insertPromptBtn);
     toolbar.appendChild(newFileBtn);
     toolbar.appendChild(newFolderBtn);
 
@@ -1731,7 +1738,13 @@ export const FilesTreeView = (function () {
           }
         },
         onContextMenu: (e, node) => {
-          if (node.absPath) showPathPopup(node.absPath, e.clientX, e.clientY, sessionId || '', node.type || 'file');
+          if (!node.absPath) return;
+          const paths = selectedAbsPaths.has(node.absPath) ? [...selectedAbsPaths] : [node.absPath];
+          showPathPopup(node.absPath, e.clientX, e.clientY, sessionId || '', node.type || 'file', [{
+            icon: '@',
+            label: paths.length > 1 ? 'Insert selected files into prompt' : 'Insert @path into prompt',
+            action: () => insertSelectedPaths(paths),
+          }]);
         },
       });
       treeArea.innerHTML = '';
@@ -1764,7 +1777,29 @@ export const FilesTreeView = (function () {
 
     function updateMoveBtn() {
       moveBtn.disabled = selectedAbsPaths.size === 0;
+      insertPromptBtn.disabled = selectedAbsPaths.size === 0;
     }
+
+    function selectedPromptText(paths = [...selectedAbsPaths]) {
+      const relPaths = paths
+        .filter(Boolean)
+        .map(path => computeRelPath(filesRoot, path).replace(/\\/g, '/'));
+      if (relPaths.length === 0) return '';
+      if (relPaths.length > 20) {
+        showToast('Select up to 20 files to insert into the prompt.');
+        return '';
+      }
+      if (relPaths.length === 1) return `@${relPaths[0]}`;
+      return `以下のファイルを見て:\n${relPaths.map(path => `- @${path}`).join('\n')}`;
+    }
+
+    function insertSelectedPaths(paths?: string[]) {
+      const text = selectedPromptText(paths);
+      if (!text) return;
+      window.dispatchEvent(new CustomEvent('many-ai-cli:insert-file-prompt', { detail: { text } }));
+    }
+
+    insertPromptBtn.addEventListener('click', () => insertSelectedPaths());
 
     function selectCreatedFile(absPath, name) {
       if (!absPath) return;

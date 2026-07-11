@@ -358,6 +358,16 @@ type UserPrefsQuickCmds struct {
 	Show5 *bool  `yaml:"show5,omitempty" json:"show5,omitempty"`
 }
 
+// UserPrefsTemplate is a reusable prompt. Providers is empty when the prompt
+// applies to every provider; Frequency is incremented whenever it is inserted.
+type UserPrefsTemplate struct {
+	Label     string   `yaml:"label" json:"label"`
+	Body      string   `yaml:"body" json:"body"`
+	Providers []string `yaml:"providers,omitempty" json:"providers,omitempty"`
+	Tags      []string `yaml:"tags,omitempty" json:"tags,omitempty"`
+	Frequency int      `yaml:"frequency,omitempty" json:"frequency,omitempty"`
+}
+
 // UserPrefsUsageLinks は使用量リンクの設定。
 type UserPrefsUsageLinks struct {
 	Claude      string `yaml:"claude,omitempty"  json:"claude,omitempty"`
@@ -380,8 +390,10 @@ type UserPrefsVoice struct {
 
 // UserPrefsSpawn はセッション起動のデフォルト設定。
 type UserPrefsSpawn struct {
-	Defaults  map[string]string `yaml:"defaults,omitempty"   json:"defaults,omitempty"`
-	LastModel map[string]string `yaml:"last_model,omitempty" json:"last_model,omitempty"`
+	Defaults        map[string]string `yaml:"defaults,omitempty"          json:"defaults,omitempty"`
+	LastModel       map[string]string `yaml:"last_model,omitempty"        json:"last_model,omitempty"`
+	WorktreeAuto    bool              `yaml:"worktree_auto,omitempty"     json:"worktree_auto,omitempty"`
+	WorktreeCleanup string            `yaml:"worktree_cleanup,omitempty"  json:"worktree_cleanup,omitempty"`
 }
 
 // UserPrefsDoneSummaryNotify はタスク完了サマリー通知の設定。
@@ -458,6 +470,7 @@ type UserPrefs struct {
 	PushNotifications        UserPrefsPushNotifications    `yaml:"push_notifications,omitempty" json:"push_notifications,omitempty"`
 	Approval                 UserPrefsApproval             `yaml:"approval,omitempty"     json:"approval,omitempty"`
 	QuickCmds                UserPrefsQuickCmds            `yaml:"quick_cmds,omitempty"   json:"quick_cmds,omitempty"`
+	Templates                []UserPrefsTemplate           `yaml:"templates,omitempty"    json:"templates,omitempty"`
 	UsageLinks               UserPrefsUsageLinks           `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
 	Voice                    UserPrefsVoice                `yaml:"voice,omitempty"        json:"voice,omitempty"`
 	Favorites                []string                      `yaml:"favorites,omitempty"        json:"favorites,omitempty"`
@@ -485,6 +498,11 @@ func (p UserPrefs) Clone() UserPrefs {
 	c.ProjectFavorites = cloneStringSlice(p.ProjectFavorites)
 	c.CwdHistory = cloneStringSlice(p.CwdHistory)
 	c.CwdFavorites = cloneStringSlice(p.CwdFavorites)
+	c.Templates = append([]UserPrefsTemplate(nil), p.Templates...)
+	for i := range c.Templates {
+		c.Templates[i].Providers = cloneStringSlice(p.Templates[i].Providers)
+		c.Templates[i].Tags = cloneStringSlice(p.Templates[i].Tags)
+	}
 	c.Spawn.Defaults = cloneStringMap(p.Spawn.Defaults)
 	c.Spawn.LastModel = cloneStringMap(p.Spawn.LastModel)
 	if p.TokenStatusbar.Segments != nil {
@@ -629,7 +647,13 @@ type Config struct {
 		AllowedHosts              []string `yaml:"allowed_hosts,omitempty" json:"allowed_hosts,omitempty"`
 		EnvKind                   string   `yaml:"env_kind,omitempty" json:"env_kind,omitempty"`
 	} `yaml:"hub"`
-	Log   LogConfig `yaml:"log"`
+	Log LogConfig `yaml:"log"`
+	// Input はブラウザ入力欄から PTY へ送る際の調整値。
+	// DeferredEnterMS は複数行ペーストの確定 Enter 前の最低待機時間。
+	// 0 は provider 別の安全な既定値を使う。
+	Input struct {
+		DeferredEnterMS int `yaml:"deferred_enter_ms,omitempty" json:"deferred_enter_ms,omitempty"`
+	} `yaml:"input,omitempty" json:"input,omitempty"`
 	Spawn struct {
 		LastModel map[string]string `yaml:"last_model,omitempty" json:"last_model,omitempty"`
 	} `yaml:"spawn,omitempty" json:"spawn,omitempty"`

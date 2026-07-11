@@ -389,6 +389,7 @@ body.pane-resizing .xterm { pointer-events: none; }
 #display-area.mode-files    { grid-template-columns: minmax(0, 1fr); }
 #display-area.mode-git      { grid-template-columns: minmax(0, 1fr); }
 #display-area.mode-history  { grid-template-columns: minmax(0, 1fr); }
+#display-area.mode-orchestration { grid-template-columns: minmax(0, 1fr); }
 
 /* ペイン表示制御 (active モードに対応する pane だけ display) */
 #display-area > #terminal-wrapper,
@@ -396,6 +397,7 @@ body.pane-resizing .xterm { pointer-events: none; }
 #display-area > #files-pane,
 #display-area > #git-pane { display: none; min-width: 0; min-height: 0; overflow: hidden; }
 #display-area > #history-pane { display: none; min-width: 0; min-height: 0; overflow: hidden; }
+#display-area > #orchestration-dashboard-pane { display: none; min-width: 0; min-height: 0; overflow: auto; }
 #display-area.mode-terminal > #terminal-wrapper { display: flex; }
 #display-area.mode-chat     > #chat-pane        { display: flex; height: 100%; }
 #display-area.mode-split    > #terminal-wrapper { display: flex; }
@@ -403,6 +405,35 @@ body.pane-resizing .xterm { pointer-events: none; }
 #display-area.mode-files    > #files-pane       { display: flex; }
 #display-area.mode-git      > #files-pane        { display: flex; }
 #display-area.mode-history  > #history-pane      { display: flex; }
+#display-area.mode-orchestration > #orchestration-dashboard-pane { display: flex; }
+
+/* P-18 C1: conductor ごとの子カード一覧。最大6枚を 1 画面で見渡せる密度にする。 */
+#orchestration-dashboard-pane { flex-direction: column; gap: 12px; padding: 18px; background: var(--bg-deep); }
+.orchestration-dashboard-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.orchestration-dashboard-heading h2 { margin: 0; font-size: 1rem; }
+.orchestration-dashboard-heading p { margin: 3px 0 0; color: var(--muted); font-size: .78rem; }
+.orchestration-conductor-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.orchestration-conductor-tab { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-elev); color: var(--muted); padding: 6px 9px; cursor: pointer; font: inherit; font-size: .75rem; }
+.orchestration-conductor-tab.active { color: var(--accent-text); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--bg-elev)); }
+.orchestration-conductor-detail { display: flex; flex-wrap: wrap; gap: 6px 12px; color: var(--muted); font-size: .75rem; }
+.orchestration-conductor-detail span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: min(560px, 100%); }
+.orchestration-detail-role { color: var(--text); font-weight: 700; }
+.orchestration-child-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-content: start; }
+.orchestration-child-card { min-height: 150px; text-align: left; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--bg-elev); color: var(--text); padding: 12px; cursor: pointer; font: inherit; }
+.orchestration-child-card:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-elev)); }
+.orchestration-child-card.done { border-color: color-mix(in srgb, var(--green) 65%, var(--line)); }
+.orchestration-child-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.orchestration-child-card-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orchestration-done-badge { border-radius: 999px; padding: 2px 6px; font-size: .65rem; font-weight: 700; white-space: nowrap; }
+.orchestration-done-badge.done { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
+.orchestration-done-badge.pending { color: var(--warn-text); background: color-mix(in srgb, var(--warn) 15%, transparent); }
+.orchestration-child-card dl { display: grid; gap: 7px; margin: 0; }
+.orchestration-child-card dl div { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px; }
+.orchestration-child-card dt { color: var(--muted); font-size: .68rem; }
+.orchestration-child-card dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .72rem; }
+.orchestration-dashboard-empty { display: grid; place-items: center; min-height: 160px; border: 1px dashed var(--line); border-radius: var(--radius-md); color: var(--muted); font-size: .82rem; padding: 20px; text-align: center; }
+@media (max-width: 1100px) { .orchestration-child-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 720px) { .orchestration-child-grid { grid-template-columns: 1fr; } }
 #display-area.mode-split > #terminal-wrapper { border-right: 1px solid var(--line); }
 
 #chat-pane { flex-direction: column; background: var(--bg-deep); position: relative; }

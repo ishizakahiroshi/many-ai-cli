@@ -1015,6 +1015,123 @@ export function applyLang(lang) {
   });
 })();
 
+// =============================================================================
+// P-53: Settings の情報設計（かんたん/すべて、検索、直リンク）
+// =============================================================================
+const SETTINGS_IA_LEVEL_KEY = 'many-ai-cli.settings-level';
+
+function initSettingsInformationArchitecture(): void {
+  const panel = document.getElementById('settings-panel');
+  const search = document.getElementById('settings-search-input') as HTMLInputElement | null;
+  const status = document.getElementById('settings-search-status');
+  const levelButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-settings-level]'));
+  const sections = Array.from(document.querySelectorAll<HTMLDetailsElement>('.settings-section[data-section]'));
+  if (!panel || !search || levelButtons.length === 0 || sections.length === 0) return;
+
+  let level = localStorage.getItem(SETTINGS_IA_LEVEL_KEY) === 'all' ? 'all' : 'basic';
+  const apply = () => {
+    const query = search.value.trim().toLocaleLowerCase();
+    let matches = 0;
+    sections.forEach((section) => {
+      const isBasic = section.dataset.settingsLevel === 'basic';
+      const currentValues = Array.from(section.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select'))
+        .map((control) => control instanceof HTMLInputElement && control.type === 'checkbox'
+          ? (control.checked ? 'on enabled' : 'off disabled')
+          : control.value)
+        .join(' ');
+      const text = `${section.textContent || ''} ${currentValues}`.toLocaleLowerCase();
+      const matched = !query || text.includes(query);
+      const visible = query ? matched : (level === 'all' || isBasic);
+      section.classList.toggle('settings-ia-hidden', !visible);
+      section.classList.toggle('settings-search-match', !!query && matched);
+      if (query && matched) {
+        matches++;
+        section.open = true;
+      }
+    });
+    levelButtons.forEach((button) => button.classList.toggle('active', button.dataset.settingsLevel === level));
+    if (query) {
+      status.textContent = matches ? `${matches} 件のセクションに一致` : '一致する設定はありません';
+    } else {
+      status.textContent = level === 'basic' ? 'よく使う設定を表示中。詳細は「すべて」から開けます。' : 'すべての設定を表示中。';
+    }
+  };
+
+  levelButtons.forEach((button) => button.addEventListener('click', () => {
+    level = button.dataset.settingsLevel === 'all' ? 'all' : 'basic';
+    try { localStorage.setItem(SETTINGS_IA_LEVEL_KEY, level); } catch (_) {}
+    apply();
+  }));
+  search.addEventListener('input', apply);
+  document.getElementById('settings-btn')?.addEventListener('click', () => requestAnimationFrame(apply));
+
+  const openDeepLink = () => {
+    const match = /^#settings(?:[=/]([a-z0-9-]+))?$/i.exec(window.location.hash);
+    if (!match) return;
+    panel.hidden = false;
+    const sectionId = match[1];
+    if (!sectionId) { apply(); return; }
+    const section = sections.find((item) => item.dataset.section === sectionId);
+    if (!section) return;
+    level = 'all';
+    search.value = '';
+    section.open = true;
+    apply();
+    requestAnimationFrame(() => {
+      section.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      (section.querySelector('input, select, button') as HTMLElement | null)?.focus();
+    });
+  };
+  window.addEventListener('hashchange', openDeepLink);
+  requestAnimationFrame(() => { apply(); openDeepLink(); });
+}
+
+// データ削除は確認ダイアログを通過しても、操作名の入力が一致するまで実行しない。
+export function appConfirmTypedDanger(opts: { title: string; message: string; confirmText: string; cancelText: string; phrase: string }): Promise<boolean> {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById('model-picker-overlay');
+    if (!overlay) { resolve(false); return; }
+    const close = (confirmed: boolean) => {
+      overlay.removeEventListener('click', onOverlayClick);
+      document.removeEventListener('keydown', onKeyDown);
+      overlay.hidden = true;
+      overlay.innerHTML = '';
+      resolve(confirmed);
+    };
+    const onOverlayClick = (event: MouseEvent) => { if (event.target === overlay) close(false); };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') close(false); };
+    overlay.innerHTML = '';
+    overlay.hidden = false;
+    const dialog = document.createElement('div');
+    dialog.className = 'confirm-dialog confirm-dialog--danger';
+    dialog.innerHTML = `
+      <div class="confirm-icon" aria-hidden="true">!</div>
+      <div class="confirm-body">
+        <div class="confirm-title">${escapeHtml(opts.title)}</div>
+        <div class="confirm-message">${escapeHtml(opts.message)}</div>
+        <label class="confirm-type-label">確認のため <code>${escapeHtml(opts.phrase)}</code> と入力
+          <input id="app-confirm-type-input" class="settings-input-text" autocomplete="off" spellcheck="false">
+        </label>
+      </div>
+      <div class="confirm-actions">
+        <button class="confirm-btn" id="app-confirm-type-cancel">${escapeHtml(opts.cancelText)}</button>
+        <button class="confirm-btn primary" id="app-confirm-type-ok" disabled>${escapeHtml(opts.confirmText)}</button>
+      </div>`;
+    overlay.appendChild(dialog);
+    const input = document.getElementById('app-confirm-type-input') as HTMLInputElement;
+    const ok = document.getElementById('app-confirm-type-ok') as HTMLButtonElement;
+    input.addEventListener('input', () => { ok.disabled = input.value.trim() !== opts.phrase; });
+    input.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !ok.disabled) close(true); });
+    document.getElementById('app-confirm-type-cancel')?.addEventListener('click', () => close(false));
+    ok.addEventListener('click', () => { if (!ok.disabled) close(true); });
+    overlay.addEventListener('click', onOverlayClick);
+    document.addEventListener('keydown', onKeyDown);
+    input.focus();
+  });
+}
+
+initSettingsInformationArchitecture();
+
 // ---- C5: 表示モード固定 (soft lock) 設定 ----
 (function () {
   const sel = document.getElementById('locked-mode-select');
@@ -2183,7 +2300,7 @@ export const sessionViewMode = new Map(); // sid -> 'terminal' | 'chat' | 'split
 // Files/Git の遅延ロード状態 (sid -> Set<'files'|'git'>)
 export const sessionLazyLoaded = new Map();
 
-export const VALID_TAB_NAMES = new Set(['terminal', 'chat', 'split', 'files', 'git', 'multi', 'approval', 'history']);
+export const VALID_TAB_NAMES = new Set(['terminal', 'chat', 'split', 'files', 'git', 'multi', 'approval', 'history', 'orchestration']);
 // C5: lock の対象モード (Files/Git は lock 対象外: D10 の lazy 読み込みと相性が悪い)
 export const LOCKABLE_MODES = new Set(['terminal', 'chat', 'split']);
 export const RESPONSIVE_WIDE_MODE_MIN = 1001;
@@ -2408,6 +2525,25 @@ export function setActiveTab(sid, name) {
     return;
   }
 
+  // P-18 C1: オーケストレーションはセッション非依存の集約ビュー。
+  if (name === 'orchestration') {
+    const area = document.getElementById('display-area');
+    if (!area) return;
+    const multiView = document.getElementById('multi-view');
+    const mgr = window.multiPaneManager;
+    const prevMultiOpen = multiView && !multiView.hidden;
+    if (multiView) multiView.hidden = true;
+    if (mgr?.picker) mgr.picker.hide();
+    if (prevMultiOpen && mgr) mgr.teardown();
+    area.hidden = false;
+    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval', 'mode-history', 'mode-orchestration');
+    area.classList.add('mode-orchestration');
+    document.querySelectorAll('#unified-tab-bar .view-tab').forEach(button => button.classList.toggle('active', (button as HTMLElement).dataset.tab === name));
+    window.renderOrchestrationDashboard?.();
+    if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
+    return;
+  }
+
   const targetSid = (sid !== null && sid !== undefined) ? sid : activeSessionId;
   if (targetSid === null || targetSid === undefined) return;
 
@@ -2444,7 +2580,7 @@ export function setActiveTab(sid, name) {
   }
   area.hidden = false;
 
-  area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval', 'mode-history');
+  area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval', 'mode-history', 'mode-orchestration');
   area.classList.add('mode-' + name);
 
   // タブボタンの active 切替
