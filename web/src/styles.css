@@ -31,35 +31,17 @@
 #deferred-send-status[data-state="injected"] #deferred-send-cancel, #deferred-send-status[data-state="acked"] #deferred-send-cancel { display:none; }
 @keyframes deferred-send-pulse { 0%,100% { transform:translateX(-55%); } 50% { transform:translateX(90%); } }
 
-/* DONE summary history: reachable from every tab without opening a terminal. */
-.done-summary-trigger { margin-left: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 5px; font-size: .75rem; padding: 3px 7px; cursor: pointer; white-space: nowrap; flex: none; }
-.done-summary-trigger:hover { color: var(--text); border-color: var(--accent); }
-.done-summary-panel { position: fixed; z-index: 80; top: 12px; right: 12px; width: min(420px, calc(100vw - 24px)); max-height: min(75vh, 720px); overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 36px rgba(0,0,0,.32); padding: 12px; }
-.done-summary-panel[hidden] { display: none; }
-.done-summary-panel-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
-.done-summary-panel-header button, .done-summary-actions button { border: 0; background: transparent; color: var(--accent); cursor: pointer; padding: 3px; }
-.done-summary-item { border-top: 1px solid var(--line); padding: 9px 0; }
-.done-summary-item-head { display:flex; gap:8px; font-size:.78rem; color:var(--muted); }
-.done-summary-kind { font-weight:700; }
-.done-summary-success .done-summary-kind { color:var(--green); }
-.done-summary-failure .done-summary-kind { color:#ef4444; }
-.done-summary-aborted .done-summary-kind { color:var(--muted); }
-.done-summary-needs_action .done-summary-kind { color:var(--warn); }
-.done-summary-item p { margin:5px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
-.done-summary-actions { display:flex; gap:10px; font-size:.78rem; }
-.done-summary-empty { color:var(--muted); font-size:.85rem; }
-
 /* ============================================================
    テーマ変数（Dark / Light）
    ============================================================ */
 :root {
   color-scheme: dark;
   --chat-font-size:      13px;
-  --bg:                  #0d0f17;
+  --bg:                  #0e0f12;
   --bg-layer:            var(--bg);
-  --bg-elev:             #131726;
-  --bg-elev2:            #1a2030;
-  --bg-deep:             #08090d;
+  --bg-elev:             #15171c;
+  --bg-elev2:            #1d2025;
+  --bg-deep:             #08090b;
   --bg-soft:             rgba(255,255,255,0.04);
   --bg-hover:            rgba(255,255,255,0.06);
   --bg-2:                var(--bg-elev);
@@ -72,8 +54,8 @@
   --text-dim:            #94a3b8;
   --fg:                  var(--text);
   --fg-muted:            var(--muted);
-  --muted:               #8892b4;
-  --muted-2:             #4a5278;
+  --muted:               #8994a3;
+  --muted-2:             #475569;
   --accent:              #6366f1;
   --accent-2:            #8b5cf6;
   --accent-soft:         rgba(99,102,241,0.12);
@@ -120,7 +102,7 @@
   /* Git graph 補助 */
   --hash-color:          #c4b5fd;
   --author-color:        #7dd3fc;
-  --chip-bg:             #1f2a3d;
+  --chip-bg:             #22262c;
   --remote-bg:           #2a3a4d;
   --remote-text:         #9cdcfe;
   --row-hover:           rgba(255,255,255,0.04);
@@ -360,29 +342,6 @@ header {
 }
 #reconnect-btn:hover { background: var(--accent); color: var(--bg); }
 #reconnect-btn[hidden] { display: none; }
-.global-todo-indicator { position: relative; flex: 0 0 auto; }
-.global-todo-indicator[hidden] { display: none; }
-.global-todo-indicator-btn {
-  display: inline-flex; align-items: center; gap: 4px; min-height: var(--control-h-sm);
-  padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--warn) 48%, transparent);
-  border-radius: var(--radius-xl); background: color-mix(in srgb, var(--warn-bg) 28%, transparent);
-  color: var(--warn-text); font: 600 .7rem/1 inherit; white-space: nowrap; cursor: pointer;
-}
-.global-todo-indicator-btn:hover,
-.global-todo-indicator-btn[aria-expanded="true"] { border-color: var(--warn); background: color-mix(in srgb, var(--warn-bg) 50%, transparent); }
-.global-todo-indicator--quiet .global-todo-indicator-btn { border-color: var(--line); background: transparent; color: var(--muted); }
-.global-todo-indicator-menu {
-  position: fixed; z-index: 1300; width: min(340px, calc(100vw - 20px)); max-height: min(360px, calc(100vh - 20px)); overflow: auto;
-  padding: 5px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--bg-elev); box-shadow: 0 8px 20px rgba(0,0,0,.4);
-}
-.global-todo-indicator-menu[hidden] { display: none; }
-.global-todo-indicator-menu-title { padding: 5px 7px; color: var(--muted); font-size: .66rem; font-weight: 700; letter-spacing: .04em; }
-.global-todo-indicator-item { display: grid; grid-template-columns: auto 1fr; gap: 7px; width: 100%; padding: 7px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
-.global-todo-indicator-item:hover, .global-todo-indicator-item:focus-visible { background: var(--bg-hover); outline: none; }
-.global-todo-indicator-item-kind { color: var(--warn); font-size: .72rem; font-weight: 700; }
-.global-todo-indicator-item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .75rem; }
-@media (max-width: 980px) { .global-todo-indicator-sep { display: none; } .global-todo-indicator-approval { display: none; } }
-@media (max-width: 720px) { .global-todo-indicator { display: none; } }
 .header-icon { width: 32px; height: 32px; vertical-align: middle; margin-right: 8px; }
 /* Usage ドロップダウンメニュー */
 .usage-menu {
@@ -556,7 +515,6 @@ header {
   }
 
   /* スマホからは無意味なので非表示（reference_mobile-ui-strategy.md P6-C1） */
-  #server-btn,
   #mobile-connect-btn {
     display: none;
   }
@@ -1020,7 +978,7 @@ header {
 .card-note { flex: 1; min-width: 0; color: var(--muted); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: italic; }
 .card-pin { flex-shrink: 0; font-size: 0.74rem; }
 .card-end-reason { flex-shrink: 0; font-size: 0.72rem; color: var(--danger, #ef4444); font-weight: 500; white-space: nowrap; max-width: 18rem; overflow: hidden; text-overflow: ellipsis; }
-.card-msg { flex: 1; min-width: 0; font-size: 0.78rem; color: var(--muted-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: inherit; }
+.card-msg { flex: 1; min-width: 0; font-size: 0.78rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: inherit; }
 .card-actions {
   position: absolute;
   top: 6px;

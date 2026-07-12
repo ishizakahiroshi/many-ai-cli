@@ -7,8 +7,8 @@
   <link id="app-favicon" rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <!-- C6: theme-color はヘッダー/ボディ基調色 --bg (#0d0f17) に同期（manifest 側も同値） -->
-  <meta name="theme-color" content="#0d0f17">
+  <!-- C6: theme-color はヘッダー/ボディ基調色 --bg (#0e0f12) に同期（manifest 側も同値） -->
+  <meta name="theme-color" content="#0e0f12">
   <!-- 標準の mobile-web-app-capable を併記（apple- 版のみだと Chrome が deprecation 警告を出す） -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -27,18 +27,9 @@
       <span>MANY-AI-CLI</span>
       <span id="env-badge" class="env-badge" hidden></span>
     </div>
-    <button id="mobile-approval-mode-btn" class="mobile-approval-mode-btn" type="button" hidden>承認専用</button>
     <span id="runtime-badge" class="runtime-badge" hidden></span>
     <div class="header-sep"></div>
     <div id="summary" data-i18n="loading">...</div>
-    <div id="global-todo-indicator" class="global-todo-indicator" hidden>
-      <button id="global-todo-indicator-btn" class="global-todo-indicator-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="global-todo-indicator-menu">
-        <span class="global-todo-indicator-wait">待機 0</span>
-        <span class="global-todo-indicator-sep" aria-hidden="true">·</span>
-        <span class="global-todo-indicator-approval">承認 0</span>
-      </button>
-      <div id="global-todo-indicator-menu" class="global-todo-indicator-menu" role="menu" hidden></div>
-    </div>
     <button id="reconnect-btn" hidden>↺ <span data-i18n="reconnect">reconnect</span></button>
     <div class="usage-menu" id="usage-menu">
       <button class="usage-menu-btn" id="usage-menu-btn" aria-haspopup="true" aria-expanded="false">
@@ -109,8 +100,6 @@
     </div>
     <!-- 🌐 外部公開（Tailscale serve）トグル＋状態ドット。ホスト直下から tailnet 公開を on/off。bind は 127.0.0.1 不変。 -->
     <button id="expose-btn" data-i18n-tooltip="expose_tooltip" aria-haspopup="dialog" aria-pressed="false">🌐 <span data-i18n="expose_btn">Expose</span><span id="expose-dot" class="expose-dot expose-dot-off"></span></button>
-    <!-- 🖥 Server（内蔵リモート接続）。スマホ QR 接続ボタン(📱)を将来ここ(server-btn の直前)に挿す想定。 -->
-    <button id="server-btn" data-i18n-tooltip="server_tooltip" aria-haspopup="dialog" aria-expanded="false">🖥 <span data-i18n="server_btn">Server</span></button>
     <button id="global-wakeword-btn" hidden>🎧</button>
     <span id="mic-status-chip" class="status-chip" hidden></span>
     <!-- 📱 モバイル接続（QR ウィザード）。SSH ローカルフォワード / VPN 前提で 127.0.0.1 URL の QR を出す。bind は 127.0.0.1 不変。 -->
@@ -262,6 +251,19 @@
             <input id="orchestration-child-timeout" type="number" min="60" max="86400" class="settings-input-number" value="900">
             <label><input id="orchestration-timeout-respawn" type="checkbox"> Retry once</label>
           </div>
+        </div>
+      </details>
+      <!-- 🖥 内蔵リモート接続（SSH / WSL）。旧ヘッダー Server ボタンから移設（利用頻度が低いため設定内へ）。 -->
+      <details class="settings-section" data-section="server-connections">
+        <summary class="settings-section-title"><span data-i18n="settings_server_section">リモート接続（SSH / WSL）</span><span class="settings-section-current" data-section="server-connections"></span></summary>
+        <div class="settings-section-body">
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_server_manage_label">接続プロファイル</span>
+            <div class="settings-row-actions">
+              <button id="server-manage-btn" class="settings-inline-btn" data-i18n="settings_server_manage_btn" aria-haspopup="dialog">管理を開く</button>
+            </div>
+          </div>
+          <div class="settings-note" data-i18n="settings_server_manage_desc">SSH / WSL 先の Hub への接続プロファイルの追加・接続・切断を行います。</div>
         </div>
       </details>
       <details class="settings-section" data-section="remote-auth">
