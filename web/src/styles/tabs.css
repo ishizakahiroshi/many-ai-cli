@@ -126,7 +126,7 @@ body.pane-resizing .xterm { pointer-events: none; }
 
 /* ── マルチタブ内のレイアウトバッジ ── */
 .multi-layout-badge {
-  font-size: 0.62rem; padding: 1px 5px; border-radius: var(--radius-sm);
+  font-size: var(--header-font-size); padding: 1px 5px; border-radius: var(--radius-sm);
   background: rgba(91,124,246,0.2); color: var(--accent-text);
   margin-left: 3px;
 }
@@ -223,16 +223,22 @@ body.pane-resizing .xterm { pointer-events: none; }
   margin-right: 4px;
   height: 100%;
   border-right: 1px solid var(--line);
-  font-size: 0.72rem;
+  font-size: var(--header-font-size);
   white-space: nowrap;
   flex-shrink: 0;
 }
 .session-info-chip[hidden] { display: none !important; }
 .session-info-chip .sid {
   color: var(--text);
-  font-weight: 700;
-  font-family: "Cascadia Code", Consolas, monospace;
 }
+/* チップ内の共有クラス（状態pill/プロバイダ/モデル名）は app header と同じ
+   フォントサイズ・非太字に揃える（footer 側 token-statusbar には影響させない） */
+.session-info-chip .tsb-pill,
+.session-info-chip .card-provider-chip {
+  font-size: var(--header-font-size);
+  font-weight: normal;
+}
+.session-info-chip .card-model { font-size: var(--header-font-size); }
 /* 表示モード系タブ */
 .view-tab {
   padding: 0 14px;
@@ -242,7 +248,7 @@ body.pane-resizing .xterm { pointer-events: none; }
   background: transparent;
   border: none;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: var(--header-font-size);
   cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
@@ -255,7 +261,6 @@ body.pane-resizing .xterm { pointer-events: none; }
 .view-tab.active {
   color: var(--accent-text);
   border-bottom-color: var(--accent);
-  font-weight: 600;
 }
 .view-tab:hover:not(.active) { color: var(--text); }
 .view-tab .badge {
@@ -266,8 +271,8 @@ body.pane-resizing .xterm { pointer-events: none; }
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--accent) 20%, transparent);
   color: var(--accent-text);
-  font-size: 0.62rem;
-  font-weight: 700;
+  font-size: var(--header-font-size);
+  font-weight: normal;
   align-items: center;
   justify-content: center;
 }
@@ -349,7 +354,7 @@ body.pane-resizing .xterm { pointer-events: none; }
   border: 1px solid var(--line);
   background: transparent;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: var(--header-font-size);
   cursor: pointer;
   display: inline-flex;
   align-items: center;

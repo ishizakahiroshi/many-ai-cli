@@ -109,6 +109,7 @@
 
   --app-header-h:        44px;
   /* ヘッダー内の文字系要素（バッジ・チップ・ボタン）の統一フォントサイズ。
+     セッション内ヘッダー（#unified-tab-bar のタブ・セッション情報チップ）も同じ変数で揃える。
      ロゴ（MANY-AI-CLI）とアイコングリフ（⏻ 等）は対象外。 */
   --header-font-size:    0.72rem;
   /* フッター（token statusbar）内の統一フォントサイズ。バー本体とピル・
@@ -980,7 +981,8 @@ header {
    はみ出させてブランチバッジを右端近くまで寄せる（上段アクションとは縦に重ならない）。 */
 .card-meta-row { display: flex; align-items: center; gap: var(--space-2); margin-top: 3px; margin-right: -30px; }
 .card-last-output { flex-shrink: 0; font-size: 0.72rem; color: var(--muted-2); margin-left: 2px; }
-.card-label { flex-shrink: 0; font-size: 0.75rem; color: var(--accent, #7aa2f7); font-weight: 600; white-space: nowrap; }
+/* 長い自動タイトルはブランチバッジを押し出さず … で省略（全文は data-tooltip で表示） */
+.card-label { flex-shrink: 1; min-width: 0; font-size: 0.75rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-note { flex: 1; min-width: 0; color: var(--muted); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: italic; }
 .card-pin { flex-shrink: 0; font-size: 0.74rem; }
 .card-end-reason { flex-shrink: 0; font-size: 0.72rem; color: var(--danger, #ef4444); font-weight: 500; white-space: nowrap; max-width: 18rem; overflow: hidden; text-overflow: ellipsis; }
