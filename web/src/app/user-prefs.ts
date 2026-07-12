@@ -8,7 +8,6 @@ import { showToast, token } from './util.js';
 export const STORAGE_THEME_KEY      = 'ai_cli_hub_theme';
 export const STORAGE_FONTSIZE_KEY   = 'ai_cli_hub_fontsize';
 export const STORAGE_LANG_KEY       = 'ai_cli_hub_lang';
-export const STORAGE_FAVORITES_KEY         = 'ai_cli_hub_favorites';
 export const STORAGE_ORDER_KEY             = 'ai_cli_hub_session_order';
 export const STORAGE_GROUP_ORDER_KEY       = 'ai_cli_hub_group_order';
 export const STORAGE_PROJECT_FAVORITES_KEY = 'ai_cli_hub_project_favorites';
@@ -213,7 +212,6 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'usage_links.lm-studio':     [STORAGE_USAGE_LINK_LM_STUDIO_KEY,  String],
   'usage_links.opencode':      [STORAGE_USAGE_LINK_OPENCODE_KEY,   String],
   'usage_links.grok':          [STORAGE_USAGE_LINK_GROK_KEY,       String],
-  'favorites':                 [STORAGE_FAVORITES_KEY,             JSON.stringify],
   'session_order':             [STORAGE_ORDER_KEY,                 JSON.stringify],
   'group_order':               [STORAGE_GROUP_ORDER_KEY,           JSON.stringify],
   'project_favorites':         [STORAGE_PROJECT_FAVORITES_KEY,     JSON.stringify],
@@ -257,7 +255,6 @@ export const _USER_PREFS_STRING_PATHS = new Set([
   'display.live_status_fg',
 ]);
 export const _USER_PREFS_STRING_ARRAY_PATHS = new Set([
-  'favorites',
   'session_order',
   'group_order',
   'project_favorites',

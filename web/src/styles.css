@@ -108,6 +108,12 @@
   --row-hover:           rgba(255,255,255,0.04);
 
   --app-header-h:        44px;
+  /* ヘッダー内の文字系要素（バッジ・チップ・ボタン）の統一フォントサイズ。
+     ロゴ（MANY-AI-CLI）とアイコングリフ（⏻ 等）は対象外。 */
+  --header-font-size:    0.72rem;
+  /* フッター（token statusbar）内の統一フォントサイズ。バー本体とピル・
+     バッジ類（状態/プロバイダ/HIGH/1M/%）を全て同じサイズに揃える。 */
+  --statusbar-font-size: 0.72rem;
   --control-h-sm:        32px;
   --control-h-md:        36px;
   --control-h-lg:        40px;
@@ -289,7 +295,7 @@ header {
 }
 #summary {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: var(--header-font-size);
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -304,7 +310,7 @@ header {
   gap: var(--space-1);
   padding: 2px 8px;
   border-radius: var(--radius-xl);
-  font-size: 0.7rem;
+  font-size: var(--header-font-size);
   font-weight: 600;
   border: 1px solid;
 }
@@ -335,7 +341,7 @@ header {
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   padding: 3px 9px;
-  font-size: 0.8rem;
+  font-size: var(--header-font-size);
   cursor: pointer;
   font-family: inherit;
   min-height: var(--control-h-sm);
@@ -359,7 +365,7 @@ header {
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
-  font-size: 0.72rem;
+  font-size: var(--header-font-size);
   font-family: inherit;
   line-height: 1;
   white-space: nowrap;
@@ -442,7 +448,7 @@ header {
 #shutdown-btn:hover { color: #e57373; border-color: rgba(229,115,115,0.4); background: rgba(229,115,115,0.08); }
 #settings-btn {
   padding: 4px 9px;
-  font-size: 0.72rem;
+  font-size: var(--header-font-size);
   white-space: nowrap;
 }
 #settings-btn:hover { color: var(--text); border-color: var(--line); background: var(--bg-elev); }
@@ -1590,10 +1596,10 @@ header {
   50%       { opacity: 0.6; }
 }
 .summary-sep { color: var(--line-soft); align-self: center; font-size: 0.9rem; padding: 0 2px; }
-.summary-provider-chip { display: inline-flex; align-items: center; gap: var(--space-1); font-size: 0.78rem; color: var(--text); white-space: nowrap; flex-shrink: 0; }
+.summary-provider-chip { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--header-font-size); color: var(--text); white-space: nowrap; flex-shrink: 0; }
 .summary-provider-chip .card-provider-icon { flex-shrink: 0; }
 .summary-provider-chip .compact-hide { display: inline-flex; align-items: center; gap: var(--space-1); }
-.summary-provider-chip .compact-count { display: none; color: var(--muted); font-size: 0.78rem; }
+.summary-provider-chip .compact-count { display: none; color: var(--muted); font-size: var(--header-font-size); }
 .summary-provider-name { display: inline-flex; align-items: center; font-size: 0.7rem; font-weight: 700; padding: 1px 6px; border-radius: var(--radius-sm); letter-spacing: 0.04em; }
 /* プロバイダ別の color/background はプロバイダ識別色ユーティリティで適用 */
 .summary-provider-count { color: var(--muted); font-size: 0.78rem; }
@@ -1663,18 +1669,3 @@ header {
 }
 .card[draggable=true]:hover::before { opacity: 0.5; }
 
-/* ★/非★ グループの区切りラベル */
-.sidebar-group-label {
-  font-size: 0.6rem;
-  color: var(--muted);
-  padding: 4px 8px 2px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  user-select: none;
-}
-
-/* 2026-06-23: ユーザー要望により「★ お気に入りをグリッドで開く」⊞ ボタンを非表示化
-   （生成ロジックは session-list.ts に残置。復活時はこの display:none を外す） */
-.sidebar-group-label-grid-btn {
-  display: none;
-}

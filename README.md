@@ -803,15 +803,15 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 │ [+ New Session]          │ ● Codex  cwd: C:\dev\many-ai-cli  [↑ to top] │
 │ 📁 many-ai-cli  [1][0][6] │ Terminal output — Windows PowerShell         │
 │ ─────────────────────── │                                              │
-│ ★ #7 ● Codex  Running × │   (xterm.js terminal output)                │
+│ 📌 #7 ● Codex Running × │   (xterm.js terminal output)                │
 │    Last: 00:11:57       │                                              │
 │    docs/local/plan_…    │                                              │
 │                         │                                              │
-│ ☆ #6 ● Codex  Standby × │                                              │
+│ #6 ● Codex   Standby × │                                              │
 │    Last: 00:05:48       │   ┌─ Approval (only when waiting) ──────┐    │
 │    docs/local/plan_…    │   │ Command: npm install axios          │    │
 │                         │   │ Risk: MEDIUM                        │    │
-│ ☆ #4 ● Claude Standby × │   │ [YES (y)] [NO (n)]                  │    │
+│ #4 ● Claude  Standby × │   │ [YES (y)] [NO (n)]                  │    │
 │    Last: 23:00:38       │   └─────────────────────────────────────┘    │
 │    Mostly local exec…   │ ─────────────────────────────────────────── │
 │                         │ [📎] Input  auto mode on (shift+tab)        │
@@ -828,7 +828,7 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 - **Left sidebar (session list)**
   - Top: `+ New Session` button (opens the spawn dialog).
   - Sessions are grouped by **project folder** (the directory where the wrapper was launched). Each group shows its own session-count chips and a Files entry.
-  - Each session card: `★` (favorite) / `×` (close) / provider-colored dot + ID + state badge (Running / Standby / Waiting / Completed / Error / Disconnected) / branch badge when Git is available / last response time / one-line preview of recent output.
+  - Each session card: `📌` (pin to the top "Pinned" group) / `×` (close) / provider-colored dot + ID + state badge (Running / Standby / Waiting / Completed / Error / Disconnected) / branch badge when Git is available / last response time / one-line preview of recent output.
   - Right-click a card to open the Git view, open the Files tab, activate the session, or copy the session ID.
   - Completed and errored sessions stay in the list until you click `×`.
 - **Right pane (terminal + input)**

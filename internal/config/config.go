@@ -473,7 +473,6 @@ type UserPrefs struct {
 	Templates                []UserPrefsTemplate           `yaml:"templates,omitempty"    json:"templates,omitempty"`
 	UsageLinks               UserPrefsUsageLinks           `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
 	Voice                    UserPrefsVoice                `yaml:"voice,omitempty"        json:"voice,omitempty"`
-	Favorites                []string                      `yaml:"favorites,omitempty"        json:"favorites,omitempty"`
 	SessionOrder             []string                      `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
 	GroupOrder               []string                      `yaml:"group_order,omitempty"      json:"group_order,omitempty"`
 	ProjectFavorites         []string                      `yaml:"project_favorites,omitempty" json:"project_favorites,omitempty"`
@@ -492,7 +491,6 @@ type UserPrefs struct {
 // marshal or mutate the result without racing with the live server config.
 func (p UserPrefs) Clone() UserPrefs {
 	c := p
-	c.Favorites = cloneStringSlice(p.Favorites)
 	c.SessionOrder = cloneStringSlice(p.SessionOrder)
 	c.GroupOrder = cloneStringSlice(p.GroupOrder)
 	c.ProjectFavorites = cloneStringSlice(p.ProjectFavorites)
