@@ -56,7 +56,6 @@
   line-height: 1.55;
 }
 .first-run-tour-preview--2 { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
-.first-run-tour-action,
 .first-run-tour-next {
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
@@ -67,12 +66,9 @@
   font-weight: 600;
   padding: 8px 12px;
 }
-.first-run-tour-action { width: 100%; }
-.first-run-tour-action:hover,
 .first-run-tour-next:hover { filter: brightness(1.1); }
 .first-run-tour-footer { margin-top: 20px; }
 .first-run-tour-later { margin-right: auto; }
-.first-run-tour-highlight { outline: 3px solid var(--warn); outline-offset: 4px; }
 
 @media (max-width: 600px) {
   #first-run-tour { padding: 12px; align-items: end; }

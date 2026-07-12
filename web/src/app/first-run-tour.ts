@@ -1,6 +1,4 @@
 import { t } from '../i18n.js';
-import { showToast, token } from './util.js';
-import { setUserPref } from './user-prefs.js';
 
 type TourState = {
   completed?: boolean;
@@ -56,54 +54,6 @@ function makeButton(label: string, className: string): HTMLButtonElement {
   return button;
 }
 
-async function startClaudeSession(): Promise<void> {
-  try {
-    const info = await fetch(`/api/info?token=${encodeURIComponent(token || '')}`);
-    const { cwd } = info.ok ? await info.json() : {};
-    if (!cwd) throw new Error('cwd unavailable');
-    const res = await fetch(`/api/spawn?token=${encodeURIComponent(token || '')}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider: 'claude', cwd, label: 'First run tour' }),
-    });
-    if (!res.ok) throw new Error(`spawn ${res.status}`);
-    showToast(t('first_run_tour_spawned'));
-  } catch (_) {
-    showToast(t('first_run_tour_spawn_failed'));
-  }
-}
-
-function showApprovalPreview(): void {
-  const approval = document.querySelector<HTMLElement>('#action-bar, .action-bar, .approval-card');
-  if (approval) {
-    approval.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    approval.classList.add('first-run-tour-highlight');
-    window.setTimeout(() => approval.classList.remove('first-run-tour-highlight'), 1800);
-  }
-}
-
-function openMobileConnect(): void {
-  (document.getElementById('mobile-connect-btn') as HTMLButtonElement | null)?.click();
-}
-
-async function enableDesktopNotifications(): Promise<void> {
-  if (!('Notification' in window)) {
-    showToast(t('first_run_tour_notification_unsupported'));
-    return;
-  }
-  const permission = Notification.permission === 'granted'
-    ? 'granted'
-    : await Notification.requestPermission();
-  if (permission === 'granted') {
-    setUserPref('desktop_notifications.enabled', true);
-    const toggle = document.getElementById('desktop-notify-enabled') as HTMLInputElement | null;
-    if (toggle) toggle.checked = true;
-    showToast(t('first_run_tour_notification_enabled'));
-  } else {
-    showToast(t('first_run_tour_notification_declined'));
-  }
-}
-
 export function initFirstRunTour(): void {
   const start = () => {
     const helpButton = document.getElementById('first-run-tour-btn') as HTMLButtonElement | null;
@@ -113,10 +63,10 @@ export function initFirstRunTour(): void {
     let overlay: HTMLElement | null = null;
     let slideIndex = 0;
     const slides = [
-      { title: 'first_run_tour_slide1_title', body: 'first_run_tour_slide1_body', action: 'first_run_tour_slide1_action', run: startClaudeSession },
-      { title: 'first_run_tour_slide2_title', body: 'first_run_tour_slide2_body', action: 'first_run_tour_slide2_action', run: showApprovalPreview },
-      { title: 'first_run_tour_slide3_title', body: 'first_run_tour_slide3_body', action: 'first_run_tour_slide3_action', run: openMobileConnect },
-      { title: 'first_run_tour_slide4_title', body: 'first_run_tour_slide4_body', action: 'first_run_tour_slide4_action', run: enableDesktopNotifications },
+      { title: 'first_run_tour_slide1_title', body: 'first_run_tour_slide1_body' },
+      { title: 'first_run_tour_slide2_title', body: 'first_run_tour_slide2_body' },
+      { title: 'first_run_tour_slide3_title', body: 'first_run_tour_slide3_body' },
+      { title: 'first_run_tour_slide4_title', body: 'first_run_tour_slide4_body' },
     ];
 
     const close = () => {
@@ -165,14 +115,6 @@ export function initFirstRunTour(): void {
       preview.className = `first-run-tour-preview first-run-tour-preview--${slideIndex + 1}`;
       preview.textContent = t(`first_run_tour_slide${slideIndex + 1}_preview`);
 
-      const action = makeButton(t(slide.action), 'first-run-tour-action');
-      action.addEventListener('click', () => {
-        // 実画面へ移動する導線はツアーの背面で隠さない。
-        // Help ボタンからいつでも最初から再表示できる。
-        if (slideIndex === 1 || slideIndex === 2) close();
-        void slide.run();
-      });
-
       const footer = document.createElement('div');
       footer.className = 'first-run-tour-footer';
       const laterButton = makeButton(t('first_run_tour_later'), 'first-run-tour-later');
@@ -186,7 +128,7 @@ export function initFirstRunTour(): void {
         else { slideIndex++; render(); }
       });
       footer.append(laterButton, previous, next);
-      dialog.append(head, title, body, preview, action, footer);
+      dialog.append(head, title, body, preview, footer);
       overlay.appendChild(dialog);
       next.focus();
     };
