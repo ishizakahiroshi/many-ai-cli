@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, ti18n, token } from './util.js';
-import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, favorites, groupOrder, multiQuestionVisibleCache, orderSessions, projectFavorites, saveFavorites, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, terminals } from './state.js';
+import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, groupOrder, multiQuestionVisibleCache, orderSessions, projectFavorites, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, terminals } from './state.js';
 import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor, updateInputAffordance } from '../app.js';
 import { renderZeroSessionEmptyState } from './zero-session-empty-state.js';
 import { attachTerminal, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, syncLiveStatusLongproc, updateScrollLockBtn } from './terminal.js';
@@ -581,7 +581,7 @@ export function renderSessionList() {
   appendSessionColorFilters(root);
 
   // ピン → 承認待ち → provider → 起動時刻の順で並べ、必要なら色で絞り込む。
-  // favorites/sessionOrder は任意の手動並び替えとして残すが、この識別優先順が
+  // sessionOrder は任意の手動並び替えとして残すが、この識別優先順が
   // セッションカードの実表示順の正本になる。
   const displayedSessions = getOrderedSessions()
     .filter((s: any) => !activeSessionColorFilter || s.color === activeSessionColorFilter)
@@ -838,29 +838,6 @@ export function renderSessionList() {
       actions.className = 'card-actions';
       c.appendChild(actions);
 
-      // ☆/★ボタン
-      const starBtn = document.createElement('button');
-      const isFav = favorites.includes(s.id);
-      starBtn.className = 'star-btn' + (isFav ? ' starred' : '');
-      starBtn.textContent = isFav ? '★' : '☆';
-      starBtn.title = isFav ? t('favorite_remove') : t('favorite_add');
-      starBtn.onclick = (e) => {
-        e.stopPropagation();
-        const idx = favorites.indexOf(s.id);
-        if (idx !== -1) { favorites.splice(idx, 1); } else { favorites.push(s.id); }
-        saveFavorites();
-        // C5: マルチタブが開いているときはペインスロット順も更新
-        // render() → renderSessionList() の再帰を防ぐため _c5SidebarUpdating フラグを立てておく
-        const _mv = document.getElementById('multi-view');
-        if (_mv && !_mv.hidden && window.multiPaneManager) {
-          window._c5SidebarUpdating = true;
-          try { window.multiPaneManager.render(); }
-          finally { window._c5SidebarUpdating = false; }
-        }
-        renderSessionList();
-      };
-      actions.appendChild(starBtn);
-
       const pinBtn = document.createElement('button');
       pinBtn.className = 'session-pin-btn' + (s.pinned ? ' pinned' : '');
       pinBtn.textContent = s.pinned ? '📌' : '⌑';
@@ -869,6 +846,15 @@ export function renderSessionList() {
       pinBtn.onclick = async (e) => {
         e.stopPropagation();
         await patchSessionMeta(s.id, { pinned: !s.pinned });
+        // ピンは orderSessions（swipe / multi-pane スロット順）にも影響するため、
+        // マルチタブが開いているときはペインスロット順も更新する。
+        // render() → renderSessionList() の再帰を防ぐため _c5SidebarUpdating フラグを立てておく
+        const _mv = document.getElementById('multi-view');
+        if (_mv && !_mv.hidden && window.multiPaneManager) {
+          window._c5SidebarUpdating = true;
+          try { window.multiPaneManager.render(); }
+          finally { window._c5SidebarUpdating = false; }
+        }
       };
       actions.appendChild(pinBtn);
 
@@ -934,7 +920,7 @@ export function renderSessionList() {
       c.addEventListener('dragover', (e) => {
         if (dragSrcGroupKey) { e.dataTransfer.dropEffect = 'none'; return; }
         if (!dragSrcId || dragSrcId === s.id) return;
-        // C5: グループ跨ぎドロップを許可（★→非★ / 非★→★ の自動切替）
+        // C5: グループ跨ぎドロップを許可（Pinned ⇄ 通常グループはピン状態を自動切替）
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         if (dragOverCardEl !== c) {
@@ -959,60 +945,22 @@ export function renderSessionList() {
         // C5: ドロップ位置（上半分=before / 下半分=after）を判定
         const rect = c.getBoundingClientRect();
         const dropAfter = e.clientY >= rect.top + rect.height / 2;
-        const srcIsStarred = favorites.includes(srcId);
-        const dstIsStarred = favorites.includes(s.id);
-        if (srcIsStarred === dstIsStarred) {
-          // 同一グループ内の並び替え
-          if (srcIsStarred) {
-            const srcIdx = favorites.indexOf(srcId);
-            let dstIdx = favorites.indexOf(s.id);
-            favorites.splice(srcIdx, 1);
-            // srcIdx 削除後に dstIdx がずれる場合を補正
-            if (srcIdx < dstIdx) dstIdx--;
-            const insertAt = dropAfter ? dstIdx + 1 : dstIdx;
-            favorites.splice(insertAt, 0, srcId);
-            saveFavorites();
-          } else {
-            if (!sessionOrder.includes(srcId)) sessionOrder.push(srcId);
-            if (!sessionOrder.includes(s.id)) sessionOrder.push(s.id);
-            const srcIdx = sessionOrder.indexOf(srcId);
-            let dstIdx = sessionOrder.indexOf(s.id);
-            sessionOrder.splice(srcIdx, 1);
-            if (srcIdx < dstIdx) dstIdx--;
-            const insertAt = dropAfter ? dstIdx + 1 : dstIdx;
-            sessionOrder.splice(insertAt, 0, srcId);
-            saveSessionOrder();
-          }
-        } else {
-          // C5: グループ跨ぎ → ★/非★ を自動切替
-          if (srcIsStarred) {
-            // ★ → 非★グループ: favorites から除外し、sessionOrder の dstId 位置に挿入
-            const favIdx = favorites.indexOf(srcId);
-            if (favIdx !== -1) favorites.splice(favIdx, 1);
-            saveFavorites();
-            if (!sessionOrder.includes(srcId)) sessionOrder.push(srcId);
-            if (!sessionOrder.includes(s.id)) sessionOrder.push(s.id);
-            const srcSoIdx = sessionOrder.indexOf(srcId);
-            let dstSoIdx = sessionOrder.indexOf(s.id);
-            sessionOrder.splice(srcSoIdx, 1);
-            if (srcSoIdx < dstSoIdx) dstSoIdx--;
-            const insertAt = dropAfter ? dstSoIdx + 1 : dstSoIdx;
-            sessionOrder.splice(insertAt, 0, srcId);
-            saveSessionOrder();
-          } else {
-            // 非★ → ★グループ: favorites の dstId 位置に挿入し、sessionOrder から除外
-            const soIdx = sessionOrder.indexOf(srcId);
-            if (soIdx !== -1) sessionOrder.splice(soIdx, 1);
-            saveSessionOrder();
-            let dstFavIdx = favorites.indexOf(s.id);
-            const insertAt = dropAfter ? dstFavIdx + 1 : dstFavIdx;
-            if (dstFavIdx !== -1) {
-              favorites.splice(insertAt, 0, srcId);
-            } else {
-              favorites.push(srcId);
-            }
-            saveFavorites();
-          }
+        // 並び順は sessionOrder に一本化して更新する
+        if (!sessionOrder.includes(srcId)) sessionOrder.push(srcId);
+        if (!sessionOrder.includes(s.id)) sessionOrder.push(s.id);
+        const srcIdx = sessionOrder.indexOf(srcId);
+        let dstIdx = sessionOrder.indexOf(s.id);
+        sessionOrder.splice(srcIdx, 1);
+        // srcIdx 削除後に dstIdx がずれる場合を補正
+        if (srcIdx < dstIdx) dstIdx--;
+        const insertAt = dropAfter ? dstIdx + 1 : dstIdx;
+        sessionOrder.splice(insertAt, 0, srcId);
+        saveSessionOrder();
+        // C5: グループ跨ぎ（Pinned ⇄ 通常）→ ドロップ先に合わせてピン状態を自動切替
+        const srcPinned = !!sessions.get(srcId)?.pinned;
+        const dstPinned = !!s.pinned;
+        if (srcPinned !== dstPinned) {
+          patchSessionMeta(srcId, { pinned: dstPinned });
         }
         // C5: マルチタブが開いているときはペインスロット順も更新
         // render() → renderSessionList() の再帰を防ぐため _c5SidebarUpdating フラグを立てておく
@@ -1045,10 +993,6 @@ export function renderSessionList() {
     root.appendChild(groupEl);
   });
 
-  // C5: ★/非★ グループ区切りラベルをサイドバーに追加
-  // （プロジェクトグループ化の後で、全体の先頭付近に挿入する）
-  _addSidebarGroupLabels(root);
-
   if (scrollEl) {
     const max = scrollEl.scrollHeight - scrollEl.clientHeight;
     scrollEl.scrollTop = Math.max(0, Math.min(prevScrollTop, max));
@@ -1057,66 +1001,6 @@ export function renderSessionList() {
   updateMainTabStatus();
 }
 
-// C5: ★/非★ グループ区切りラベルをサイドバー（#sessions）に挿入する。
-// renderSessionList() 後に呼ばれる。favorites に含まれるセッションを持つグループの
-// カードに .is-favorite-group クラスを付け、最初の非★グループの直前に区切りを挿入する。
-export function _addSidebarGroupLabels(root) {
-  if (!root) return;
-  const hasAnyFav = favorites.length > 0 && Array.from(sessions.keys()).some(id => favorites.includes(id));
-  if (!hasAnyFav) return;
-  // 全 .card を走査して最初の非★カードの直前に区切りを挿入する。
-  // プロジェクトグループ構造の中に挿入するため、最初の非★セッションを含む
-  // .project-group-body を特定して、その直前（project-group 要素）の直前に区切りを置く。
-  const cards = root.querySelectorAll('.card');
-  let firstNonFavCard = null;
-  let firstFavCard = null;
-  for (const card of cards) {
-    const sid = parseInt(card.dataset.sessionId, 10);
-    if (isNaN(sid)) continue;
-    if (favorites.includes(sid)) {
-      if (!firstFavCard) firstFavCard = card;
-    } else {
-      if (!firstNonFavCard) firstNonFavCard = card;
-    }
-  }
-  if (!firstFavCard || !firstNonFavCard) return;
-
-  // ★グループラベル: #sessions の最初の子要素の直前に挿入
-  const firstChild = root.firstElementChild;
-  if (firstChild) {
-    const starLabel = document.createElement('div');
-    starLabel.className = 'sidebar-group-label';
-    const starText = document.createElement('span');
-    starText.textContent = '★ ' + (window.t ? window.t('sidebar_favorites', 'Favorites') : 'Favorites');
-    starLabel.appendChild(starText);
-
-    // C3: ★ セッションを別窓 Grid で開くボタン
-    const favGridBtn = document.createElement('button');
-    favGridBtn.className = 'sidebar-group-label-grid-btn';
-    favGridBtn.type = 'button';
-    favGridBtn.textContent = '⊞';
-    const favGridLabel = window.t ? window.t('ctx_open_selected_in_grid', 'Open selected in grid') : 'Open selected in grid';
-    favGridBtn.title = favGridLabel;
-    favGridBtn.setAttribute('aria-label', favGridLabel);
-    favGridBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const activeFavIds = favorites.filter(id => sessions.has(id));
-      openDetachedGridForSessions(activeFavIds);
-    });
-    starLabel.appendChild(favGridBtn);
-
-    root.insertBefore(starLabel, firstChild);
-  }
-
-  // 非★グループラベル: 最初の非★カードの所属する .project-group の直前に挿入
-  const nonFavGroup = firstNonFavCard.closest('.project-group');
-  if (nonFavGroup) {
-    const otherLabel = document.createElement('div');
-    otherLabel.className = 'sidebar-group-label';
-    otherLabel.textContent = window.t ? window.t('sidebar_others', 'Others') : 'Others';
-    root.insertBefore(otherLabel, nonFavGroup);
-  }
-}
 
 export function updateMainTabStatus() {
   // D11: セッション情報チップも同タイミングで更新 (state badge を反映)
