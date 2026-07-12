@@ -1,6 +1,7 @@
 {
   "loading": "読み込み中...",
   "first_run_tour_open_tooltip": "60 秒ツアーを開く",
+  "first_run_tour_settings_btn": "60 秒ツアー",
   "first_run_tour_progress": "{current} / {total}",
   "first_run_tour_skip": "スキップ",
   "first_run_tour_later": "後で見る",

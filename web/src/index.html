@@ -115,7 +115,6 @@
     <span id="mic-status-chip" class="status-chip" hidden></span>
     <!-- 📱 モバイル接続（QR ウィザード）。SSH ローカルフォワード / VPN 前提で 127.0.0.1 URL の QR を出す。bind は 127.0.0.1 不変。 -->
     <button id="mobile-connect-btn" data-i18n-tooltip="mobile_connect_tooltip" aria-haspopup="dialog" aria-expanded="false">📱</button>
-    <button id="first-run-tour-btn" class="header-help-btn" data-i18n-tooltip="first_run_tour_open_tooltip" aria-label="Help">?</button>
     <button id="shutdown-btn" data-i18n-tooltip="shutdown_tooltip">⏻</button>
     <button id="settings-btn">
       <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -845,6 +844,8 @@
         </div>
       </details>
       <div class="settings-footer">
+        <!-- ツアー起動ボタン。id は first-run-tour.ts / zero-session-empty-state.ts が参照するため変更不可 -->
+        <button class="settings-link-btn" id="first-run-tour-btn" data-i18n="first_run_tour_settings_btn">60 秒ツアー</button>
         <button class="settings-link-btn" id="settings-readme-btn" data-i18n="settings_readme_btn">README</button>
         <button class="settings-link-btn" id="settings-licenses-btn" data-i18n="settings_about_btn">About &amp; Licenses</button>
       </div>

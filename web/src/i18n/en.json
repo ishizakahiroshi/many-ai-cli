@@ -1,6 +1,7 @@
 {
   "loading": "Loading...",
   "first_run_tour_open_tooltip": "Open the 60-second tour",
+  "first_run_tour_settings_btn": "60-second tour",
   "first_run_tour_progress": "{current} / {total}",
   "first_run_tour_skip": "Skip",
   "first_run_tour_later": "Show later",
