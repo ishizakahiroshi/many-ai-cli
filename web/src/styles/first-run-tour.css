@@ -1,12 +1,3 @@
-.header-help-btn {
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border-radius: 50%;
-  font-weight: 700;
-  font-size: 0.9rem;
-}
-
 #first-run-tour {
   position: fixed;
   inset: 0;

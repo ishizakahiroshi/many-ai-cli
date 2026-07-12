@@ -32,7 +32,7 @@
 @keyframes deferred-send-pulse { 0%,100% { transform:translateX(-55%); } 50% { transform:translateX(90%); } }
 
 /* DONE summary history: reachable from every tab without opening a terminal. */
-.done-summary-trigger { margin-left: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 5px; font-size: .75rem; padding: 3px 7px; cursor: pointer; }
+.done-summary-trigger { margin-left: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 5px; font-size: .75rem; padding: 3px 7px; cursor: pointer; white-space: nowrap; flex: none; }
 .done-summary-trigger:hover { color: var(--text); border-color: var(--accent); }
 .done-summary-panel { position: fixed; z-index: 80; top: 12px; right: 12px; width: min(420px, calc(100vw - 24px)); max-height: min(75vh, 720px); overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 36px rgba(0,0,0,.32); padding: 12px; }
 .done-summary-panel[hidden] { display: none; }

@@ -1,6 +1,6 @@
 /* P-81 approval-only PWA route. It remains usable at 375px and does not
    depend on the full terminal grid. */
-.mobile-approval-mode-btn { margin-left: auto; min-height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--radius-md, 6px); background: var(--bg-elev); color: var(--text); font: inherit; cursor: pointer; }
+.mobile-approval-mode-btn { margin-left: auto; min-height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--radius-md, 6px); background: var(--bg-elev); color: var(--text); font: inherit; cursor: pointer; white-space: nowrap; flex: none; }
 body.mobile-approval-only-view > header, body.mobile-approval-only-view > #app, body.mobile-approval-only-view > .modal-overlay, body.mobile-approval-only-view > #toast { display: none !important; }
 #mobile-approval-only { min-height: 100dvh; padding: calc(14px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left)); background: var(--bg, #0d0f17); color: var(--text, #e5e7eb); }
 .mao-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }.mao-header strong, .mao-header span { display: block; }.mao-header strong { font-size: 1.15rem; }.mao-header span { margin-top: 2px; color: var(--muted); font-size: .78rem; }
