@@ -140,7 +140,7 @@
   right: 10px;
   background: rgba(15, 23, 42, 0.75);
   color: var(--line-soft);
-  font-size: 0.7rem;
+  font-size: var(--header-font-size);
   padding: 2px 7px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
