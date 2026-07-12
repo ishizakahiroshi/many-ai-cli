@@ -6,6 +6,7 @@ import { t } from '../i18n.js';
 import { orderSessions, sessions, approvalVisibleCache, multiQuestionVisibleCache, activeSessionId, set_activeSessionId } from './state.js';
 import { activateSession, providerIconHtml } from './session-list.js';
 import { sessionTitle } from './approval-queue-tab.js';
+import { openServerModal } from './server-modal.js';
 
 const mobileMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
   ? window.matchMedia('(max-width: 720px)')
@@ -438,7 +439,7 @@ function renderMobileDrawerResults(): void {
   server.textContent = t('server_btn');
   server.addEventListener('click', () => {
     (window as any).closeMobileSessionDrawer?.();
-    document.getElementById('server-btn')?.click();
+    openServerModal();
   });
   actions.append(home, spawn, expose, shutdown, settings, server);
   body.appendChild(actions);

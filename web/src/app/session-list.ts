@@ -1253,79 +1253,6 @@ export function updateTabNotification(pendingCount, approvalCount = pendingCount
 	if (faviconChanged) drawFavicon(approvalCount);
 }
 
-let globalTodoIndicatorWired = false;
-
-function closeGlobalTodoIndicator(): void {
-  const button = document.getElementById('global-todo-indicator-btn');
-  const menu = document.getElementById('global-todo-indicator-menu');
-  if (!button || !menu) return;
-  button.setAttribute('aria-expanded', 'false');
-  menu.hidden = true;
-}
-
-function openGlobalTodoIndicator(): void {
-  const button = document.getElementById('global-todo-indicator-btn');
-  const menu = document.getElementById('global-todo-indicator-menu');
-  if (!button || !menu) return;
-  menu.hidden = false;
-  button.setAttribute('aria-expanded', 'true');
-  const rect = button.getBoundingClientRect();
-  menu.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - menu.offsetHeight - 10)}px`;
-  menu.style.left = `${Math.min(Math.max(10, rect.right - menu.offsetWidth), window.innerWidth - menu.offsetWidth - 10)}px`;
-}
-
-function wireGlobalTodoIndicator(): void {
-  if (globalTodoIndicatorWired) return;
-  const button = document.getElementById('global-todo-indicator-btn');
-  const menu = document.getElementById('global-todo-indicator-menu');
-  if (!button || !menu) return;
-  globalTodoIndicatorWired = true;
-  button.addEventListener('click', () => menu.hidden ? openGlobalTodoIndicator() : closeGlobalTodoIndicator());
-  document.addEventListener('pointerdown', event => {
-    const target = event.target as Node;
-    if (!button.contains(target) && !menu.contains(target)) closeGlobalTodoIndicator();
-  });
-  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeGlobalTodoIndicator(); });
-}
-
-function renderGlobalTodoIndicator(waitingCount: number, approvalCount: number): void {
-  const root = document.getElementById('global-todo-indicator');
-  const button = document.getElementById('global-todo-indicator-btn');
-  const waiting = root?.querySelector('.global-todo-indicator-wait');
-  const approvals = root?.querySelector('.global-todo-indicator-approval');
-  const menu = document.getElementById('global-todo-indicator-menu');
-  if (!root || !button || !waiting || !approvals || !menu) return;
-  wireGlobalTodoIndicator();
-  root.hidden = false;
-  root.classList.toggle('global-todo-indicator--quiet', waitingCount === 0 && approvalCount === 0);
-  waiting.textContent = `待機 ${waitingCount}`;
-  approvals.textContent = `承認 ${approvalCount}`;
-  button.setAttribute('aria-label', `待機 ${waitingCount} 件、承認 ${approvalCount} 件。対象セッションを開く`);
-
-  const targets = Array.from(sessions.values())
-    .filter((session: any) => session.state === 'waiting' || session.awaiting_approval === true)
-    .sort((a: any, b: any) => Number(b.awaiting_approval === true) - Number(a.awaiting_approval === true) || compareSessionCards(a, b));
-  menu.replaceChildren();
-  const title = document.createElement('div');
-  title.className = 'global-todo-indicator-menu-title';
-  title.textContent = targets.length ? '要対応セッション' : '要対応セッションはありません';
-  menu.append(title);
-  targets.forEach((session: any) => {
-    const item = document.createElement('button');
-    item.type = 'button'; item.className = 'global-todo-indicator-item'; item.setAttribute('role', 'menuitem');
-    const kind = document.createElement('span'); kind.className = 'global-todo-indicator-item-kind'; kind.textContent = session.awaiting_approval ? '承認' : '待機';
-    const label = document.createElement('span'); label.className = 'global-todo-indicator-item-title';
-    label.textContent = `#${session.id} ${sessionDisplayTitle(session) || session.cwd || session.provider || 'session'}`;
-    item.append(kind, label);
-    item.addEventListener('click', () => {
-      closeGlobalTodoIndicator();
-      activateSession(session.id);
-      requestAnimationFrame(() => document.querySelector(`.card[data-session-id="${CSS.escape(String(session.id))}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
-    });
-    menu.append(item);
-  });
-}
-
 export let _summaryResizeObserver = null;
 export function ensureSummaryResizeObserver() {
   if (_summaryResizeObserver) return;
@@ -1407,7 +1334,6 @@ export function renderSummaryAndNotifications() {
   ensureSummaryResizeObserver();
   updateSummaryCompactMode();
 	updateTabNotification(totalWaiting, totalApprovals);
-	renderGlobalTodoIndicator(totalWaiting, totalApprovals);
 }
 
 export function sessionProjectKey(s) {

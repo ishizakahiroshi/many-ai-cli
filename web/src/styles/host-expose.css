@@ -2,7 +2,7 @@
    親 plan: docs/local/plan_tailscale-serve-host-toggle.md（C1）。
    配色は :root テーマ変数と mobile-connect.css の .mc-status 配色トークンに合わせる。 */
 
-/* ── ヘッダーボタン（#server-btn と同じ見た目） ── */
+/* ── ヘッダーボタン（#settings-btn と同じ見た目） ── */
 #expose-btn {
   display: flex;
   align-items: center;

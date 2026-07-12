@@ -415,11 +415,6 @@ export function _connectWs() {
     return;
   }
 
-  if (m.type === 'done_summary' && m.done_summary) {
-    window.dispatchEvent(new CustomEvent('many-done-summary', { detail: m.done_summary }));
-    return;
-  }
-
   if (m.type === 'session_history_reset') {
     if (m.session_id) resetLocalSessionHistory(m.session_id);
     else resetAllLocalSessionHistory();

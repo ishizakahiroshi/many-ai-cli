@@ -125,17 +125,9 @@ function escapeHtml(value: string): string {
 
 export function initMobileApprovalOnly(): void {
   const route = isApprovalRoute();
-  const modeButton = document.getElementById('mobile-approval-mode-btn') as HTMLButtonElement | null;
   if (!route && mode() === 'approval') {
     window.location.replace(approvalUrl());
     return;
-  }
-  if (modeButton) {
-    modeButton.hidden = route;
-    modeButton.addEventListener('click', () => {
-      setMode('approval');
-      window.location.assign(approvalUrl());
-    });
   }
   if (!route) return;
   setMode('approval');

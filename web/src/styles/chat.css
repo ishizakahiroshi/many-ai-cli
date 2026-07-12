@@ -54,7 +54,7 @@
   font-family: ui-monospace, monospace;
   padding: 2px 8px;
   border-radius: 8px;
-  background: #1a2030;
+  background: var(--bg-elev2);
   color: #6cf;
 }
 #chat-pane .chat-source-badge[hidden] { display: none; }
@@ -113,7 +113,7 @@
 }
 .chat-payload-turn-footer .cp-usage { font-family: ui-monospace, monospace; }
 .cp-raw-toggle {
-  background: #1a2030;
+  background: var(--bg-elev2);
   border: 1px solid rgba(255,255,255,0.1);
   color: #ccc;
   font-size: 11px;
@@ -296,7 +296,7 @@
   padding: 0 4px;
   flex-wrap: wrap;
 }
-#chat-pane .bubble-meta .name { color: #8892b4; font-weight: 600; }
+#chat-pane .bubble-meta .name { color: var(--muted); font-weight: 600; }
 #chat-pane .bubble-meta .stat {
   display: inline-flex;
   align-items: center;
@@ -401,7 +401,7 @@
   font-weight: 700;
 }
 #chat-pane .tool-call-header .tdesc {
-  color: #8892b4;
+  color: var(--muted);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -616,7 +616,7 @@
   border-radius: var(--radius-pill);
   border: 1px solid rgba(255,255,255,0.1);
   background: transparent;
-  color: #8892b4;
+  color: var(--muted);
   font-size: 12px;
   cursor: pointer;
   display: inline-flex;
