@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -134,7 +135,12 @@ func (s *Server) handleGitDiff(w http.ResponseWriter, r *http.Request) {
 // 読めないファイル（削除競合・権限等）は diff 空・追加 0 行で返す。
 func synthesizeUntrackedDiff(gitRoot, relPath string) (string, int) {
 	abs := filepath.Join(gitRoot, filepath.FromSlash(relPath))
-	data, err := os.ReadFile(abs)
+	f, err := os.Open(abs)
+	if err != nil {
+		return "", 0
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, gitShowDiffMaxBytes+1))
 	if err != nil {
 		return "", 0
 	}

@@ -665,8 +665,9 @@ func configToNotify(cfg config.NotifyConfig) notifyPkg.Config {
 	events := make([]string, len(cfg.Events))
 	copy(events, cfg.Events)
 	return notifyPkg.Config{
-		Backends: backends,
-		Events:   events,
+		Backends:    backends,
+		Events:      events,
+		IncludeBody: cfg.IncludeBody,
 	}
 }
 

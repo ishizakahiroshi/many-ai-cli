@@ -250,16 +250,24 @@ func (s *Server) applyOneTapApproval(claim oneTapApprovalClaim) error {
 		ses.inputMu.Unlock()
 		return errOneTapNoInput
 	}
-	if err := s.oneTapApprovals.consume(claim); err != nil {
-		s.sessionsMu.Unlock()
-		ses.inputMu.Unlock()
-		return err
-	}
 	wc = s.wrappers[claim.SessionID]
 	if wc == nil {
 		s.sessionsMu.Unlock()
 		ses.inputMu.Unlock()
 		return errOneTapNoInput
+	}
+	// Keep the one-shot nonce and native approval state intact until the PTY
+	// accepts the input.  A disconnected wrapper must leave the action
+	// retryable instead of consuming a notification action and dropping input.
+	if rem := s.trySendInput(wc, claim.SessionID, input); rem != "" {
+		s.sessionsMu.Unlock()
+		ses.inputMu.Unlock()
+		return errOneTapNoInput
+	}
+	if err := s.oneTapApprovals.consume(claim); err != nil {
+		s.sessionsMu.Unlock()
+		ses.inputMu.Unlock()
+		return err
 	}
 	provider = ses.Provider
 	ses.nativeApprovalConsumed = claim.ApprovalSig
@@ -268,11 +276,6 @@ func (s *Server) applyOneTapApproval(claim oneTapApprovalClaim) error {
 	ses.nativeApprovalClearMisses = 0
 	clearMsg = &proto.Message{Type: "approval_cleared", SessionID: claim.SessionID, Provider: provider, ApprovalSig: claim.ApprovalSig, ApprovalSource: approvalSourceGoVT}
 	s.sessionsMu.Unlock()
-	// Keep the state transition and PTY write serialized with normal user input.
-	if rem := s.trySendInput(wc, claim.SessionID, input); rem != "" {
-		ses.inputMu.Unlock()
-		return errOneTapNoInput
-	}
 	ses.inputMu.Unlock()
 	if s.sessionStore != nil {
 		s.sessionStore.StoreApprovalConsumed(claim.SessionID, claim.ApprovalSig, input, time.Now())

@@ -110,3 +110,42 @@ func TestOneTapApprovalTokenRejectsTamperAndExpiry(t *testing.T) {
 		t.Fatalf("expired verify = %v, want expired", err)
 	}
 }
+
+func TestApplyOneTapApprovalRevertsOnSendFailure(t *testing.T) {
+	s := newTestServer()
+	now := time.Unix(1_700_000_000, 0)
+	s.oneTapApprovals = newTestOneTapApprovalManager(t, now)
+	ses := registerTestSession(s, 12, "codex")
+	raw, err := os.ReadFile("testdata/approval_codex_shortcut_ansi.ansi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = bytes.ReplaceAll(raw, []byte(`\x1b`), []byte{0x1b})
+	raw = bytes.ReplaceAll(raw, []byte("\n"), []byte("\r\n"))
+	ses.vt = newVTBuffer(120, 30)
+	ses.vt.Write(raw)
+	pending := detectNativeApproval("codex", ses.vt.TailLines(vtTailLinesForApproval))
+	if pending == nil {
+		t.Fatal("pending approval = nil")
+	}
+	ses.nativeApprovalSig = pending.Sig
+	token, err := s.oneTapApprovals.issue(12, pending.Sig, pending.Sig, oneTapReject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim, err := s.oneTapApprovals.verify(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = s.applyOneTapApproval(claim)
+	if !errors.Is(err, errOneTapNoInput) {
+		t.Fatalf("applyOneTapApproval error = %v, want errOneTapNoInput", err)
+	}
+	if ses.nativeApprovalSig != pending.Sig {
+		t.Fatalf("nativeApprovalSig = %q, want %q after send failure", ses.nativeApprovalSig, pending.Sig)
+	}
+	if err := s.oneTapApprovals.consume(claim); err != nil {
+		t.Fatalf("consume after send failure = %v, want token to remain retryable", err)
+	}
+}

@@ -103,6 +103,53 @@ func TestClearSessionHistory_DeletesAttachments(t *testing.T) {
 	}
 }
 
+func TestClearSessionHistoryNullsDerivedColumns(t *testing.T) {
+	store := startAuditSession(t, 20)
+	store.UpdateSessionMessages(20, "first", "last")
+	if _, err := store.UpdateSessionMeta(20, "title", []string{"tag"}, "summary", false); err != nil {
+		t.Fatalf("UpdateSessionMeta: %v", err)
+	}
+
+	if err := store.ClearSessionHistory(20); err != nil {
+		t.Fatalf("ClearSessionHistory: %v", err)
+	}
+	var first, last, title, tags, summary string
+	if err := store.db.QueryRow(`SELECT COALESCE(first_message, ''), COALESCE(last_message, ''),
+		COALESCE(title, ''), COALESCE(tags_json, ''), COALESCE(summary, '')
+		FROM sessions WHERE live_session_id=?`, 20).Scan(&first, &last, &title, &tags, &summary); err != nil {
+		t.Fatalf("query derived columns: %v", err)
+	}
+	if first != "" || last != "" || title != "" || tags != "" || summary != "" {
+		t.Fatalf("derived columns after clear = %q, %q, %q, %q, %q; want all empty", first, last, title, tags, summary)
+	}
+}
+
+func TestStartSessionUsesUniqueVirtualJSONLPath(t *testing.T) {
+	store := startAuditSession(t, 21)
+	first, err := store.StartSession(SessionStart{LiveSessionID: 21, Provider: "claude"})
+	if err != nil {
+		t.Fatalf("first StartSession: %v", err)
+	}
+	second, err := store.StartSession(SessionStart{LiveSessionID: 22, Provider: "codex"})
+	if err != nil {
+		t.Fatalf("second StartSession: %v", err)
+	}
+	if first == second {
+		t.Fatalf("empty JSONLPath sessions collided: first=%d second=%d", first, second)
+	}
+}
+
+func TestStoreEventSkipsEndedSession(t *testing.T) {
+	store := startAuditSession(t, 23)
+	store.EndSession(23, "completed", "done", time.Now())
+	if err := store.StoreEvent(23, map[string]any{"ts": time.Now().Format(time.RFC3339), "type": "late"}); err != nil {
+		t.Fatalf("StoreEvent after EndSession: %v", err)
+	}
+	if got := auditCountRows(t, store, "SELECT COUNT(*) FROM events"); got != 0 {
+		t.Fatalf("late event count = %d, want 0", got)
+	}
+}
+
 // TestSearchLike_EscapesUnderscore は LIKE フォールバックがリテラル '_' を
 // ワイルドカードとして扱わず（過剰一致しない）厳密に部分一致することを確認する。
 func TestSearchLike_EscapesUnderscore(t *testing.T) {

@@ -160,6 +160,37 @@ func Test_handleBoardChange_doneOnlyMatchingSession(t *testing.T) {
 	}
 }
 
+func TestBoardDoneIDORRejected(t *testing.T) {
+	s := newTestServer()
+	parent := registerTestSession(s, 1, "codex")
+	childA := registerTestSession(s, 10, "codex")
+	childB := registerTestSession(s, 11, "codex")
+	for _, child := range []*session{childA, childB} {
+		child.ParentSessionID = parent.ID
+		child.OrchestrationID = "idor-board"
+		child.State = "running"
+	}
+	childA.Role = "implementer"
+	childB.Role = "reviewer"
+	path := filepath.Join(t.TempDir(), "board.md")
+	content := "## implementer session=10 2026-06-25T00:00:00Z\nwork\n## DONE reviewer session=11\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.registerBoardSession("idor-board", path, parent.ID, "conductor")
+	s.registerBoardChild("idor-board", path, childA.ID, parent.ID, childA.Role, time.Now())
+	s.registerBoardChild("idor-board", path, childB.ID, parent.ID, childB.Role, time.Now())
+
+	s.handleBoardChange("idor-board", path, info, content, time.Now())
+	if childA.State == "done" || childB.State == "done" {
+		t.Fatalf("sibling DONE spoof changed state: A=%q B=%q", childA.State, childB.State)
+	}
+}
+
 func Test_notifyBoardSession_queueUntilOutputIdle(t *testing.T) {
 	s := newTestServer()
 	s.cfg.Orchestration.BoardNotifyMode = config.BoardNotifyQueueUntilIdle
