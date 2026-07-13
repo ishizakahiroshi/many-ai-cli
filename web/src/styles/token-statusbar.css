@@ -10,7 +10,7 @@
   border-top: 1px solid #292e42;
   height: 22px;
   min-height: 22px;
-  font-size: 0.72rem;
+  font-size: var(--statusbar-font-size);
   line-height: 22px;
   user-select: none;
   flex-shrink: 0;
@@ -56,7 +56,7 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 0.62rem;
+  font-size: var(--statusbar-font-size);
   font-weight: 700;
   padding: 1px 7px;
   border-radius: var(--radius-md);
@@ -87,7 +87,7 @@
 
 /* provider アイコン + ラベルチップ + モデル名 */
 .tsb-seg-agent .card-provider-icon { width: 13px; height: 13px; }
-.tsb-seg-agent .card-provider-chip { font-size: 0.6rem; padding: 1px 6px; }
+.tsb-seg-agent .card-provider-chip { font-size: var(--statusbar-font-size); padding: 1px 6px; }
 .tsb-model {
   color: #9ece6a;
   max-width: 16ch;
@@ -106,7 +106,7 @@
 /* effort / thinking バッジ（モデルチップ隣） */
 .tsb-seg-effort { gap: 4px; }
 .tsb-effort-lvl {
-  font-size: 0.6rem;
+  font-size: var(--statusbar-font-size);
   font-weight: 700;
   color: #e0af68;
   background: color-mix(in srgb, #e0af68 18%, transparent);
@@ -114,7 +114,7 @@
   padding: 1px 5px;
   text-transform: uppercase;
 }
-.tsb-thinking { font-size: 0.7rem; }
+.tsb-thinking { font-size: var(--statusbar-font-size); }
 
 /* AI 編集行数（project 隣・追加=緑 / 削除=赤） */
 .tsb-seg-ailines { color: #565f89; }
@@ -123,7 +123,7 @@
 
 /* 拡張コンテキスト（1M 窓）バッジ */
 .tsb-1m {
-  font-size: 0.56rem;
+  font-size: var(--statusbar-font-size);
   font-weight: 700;
   color: #7dcfff;
   background: color-mix(in srgb, #7dcfff 18%, transparent);
@@ -167,7 +167,7 @@
 .tsb-fill.warn  { background: #e0af68; }
 .tsb-fill.crit  { background: #f7768e; }
 .tsb-fill.cache { background: #7dcfff; }
-.tsb-pct { font-size: 0.62rem; }
+.tsb-pct { font-size: var(--statusbar-font-size); }
 .tsb-pct.crit { color: #f7768e; font-weight: 700; }
 
 .tsb-seg-ctx   { color: #9aa5ce; cursor: pointer; }

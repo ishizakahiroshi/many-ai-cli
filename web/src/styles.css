@@ -2,9 +2,11 @@
 @import url("/styles/terminal.css");
 @import url("/styles/approval.css");
 @import url("/styles/spawn.css");
+@import url("/styles/zero-session.css");
 @import url("/styles/tabs.css");
 @import url("/styles/files.css");
 @import url("/styles/git.css");
+@import url("/styles/review.css");
 @import url("/styles/chat.css");
 @import url("/styles/voice.css");
 @import url("/styles/token-statusbar.css");
@@ -14,6 +16,20 @@
 @import url("/styles/server-modal.css");
 @import url("/styles/mobile-connect.css");
 @import url("/styles/host-expose.css");
+@import url("/styles/session-search-palette.css");
+@import url("/styles/history-lite.css");
+@import url("/styles/mobile-short-nudge.css");
+@import url("/styles/prompt-templates.css");
+@import url("/styles/mobile-approval-only.css");
+
+#deferred-send-status { order:2; flex:1 1 100%; display:flex; align-items:center; gap:7px; font-size:.72rem; color:var(--muted); }
+#deferred-send-status[hidden] { display:none; }
+.deferred-send-track { flex:1; height:3px; overflow:hidden; border-radius:999px; background:var(--line); }
+.deferred-send-progress { display:block; width:55%; height:100%; border-radius:inherit; background:var(--accent); animation:deferred-send-pulse 1.1s ease-in-out infinite; }
+#deferred-send-status[data-state="injected"] .deferred-send-progress, #deferred-send-status[data-state="acked"] .deferred-send-progress { width:100%; animation:none; }
+#deferred-send-cancel { border:0; border-radius:4px; padding:2px 6px; color:var(--text); background:var(--line); cursor:pointer; font:inherit; }
+#deferred-send-status[data-state="injected"] #deferred-send-cancel, #deferred-send-status[data-state="acked"] #deferred-send-cancel { display:none; }
+@keyframes deferred-send-pulse { 0%,100% { transform:translateX(-55%); } 50% { transform:translateX(90%); } }
 
 /* ============================================================
    テーマ変数（Dark / Light）
@@ -21,11 +37,11 @@
 :root {
   color-scheme: dark;
   --chat-font-size:      13px;
-  --bg:                  #0d0f17;
+  --bg:                  #0e0f12;
   --bg-layer:            var(--bg);
-  --bg-elev:             #131726;
-  --bg-elev2:            #1a2030;
-  --bg-deep:             #08090d;
+  --bg-elev:             #15171c;
+  --bg-elev2:            #1d2025;
+  --bg-deep:             #08090b;
   --bg-soft:             rgba(255,255,255,0.04);
   --bg-hover:            rgba(255,255,255,0.06);
   --bg-2:                var(--bg-elev);
@@ -38,8 +54,8 @@
   --text-dim:            #94a3b8;
   --fg:                  var(--text);
   --fg-muted:            var(--muted);
-  --muted:               #8892b4;
-  --muted-2:             #4a5278;
+  --muted:               #8994a3;
+  --muted-2:             #475569;
   --accent:              #6366f1;
   --accent-2:            #8b5cf6;
   --accent-soft:         rgba(99,102,241,0.12);
@@ -86,12 +102,19 @@
   /* Git graph 補助 */
   --hash-color:          #c4b5fd;
   --author-color:        #7dd3fc;
-  --chip-bg:             #1f2a3d;
+  --chip-bg:             #22262c;
   --remote-bg:           #2a3a4d;
   --remote-text:         #9cdcfe;
   --row-hover:           rgba(255,255,255,0.04);
 
   --app-header-h:        44px;
+  /* ヘッダー内の文字系要素（バッジ・チップ・ボタン）の統一フォントサイズ。
+     セッション内ヘッダー（#unified-tab-bar のタブ・セッション情報チップ）も同じ変数で揃える。
+     ロゴ（MANY-AI-CLI）とアイコングリフ（⏻ 等）は対象外。 */
+  --header-font-size:    0.72rem;
+  /* フッター（token statusbar）内の統一フォントサイズ。バー本体とピル・
+     バッジ類（状態/プロバイダ/HIGH/1M/%）を全て同じサイズに揃える。 */
+  --statusbar-font-size: 0.72rem;
   --control-h-sm:        32px;
   --control-h-md:        36px;
   --control-h-lg:        40px;
@@ -273,7 +296,7 @@ header {
 }
 #summary {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: var(--header-font-size);
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -288,7 +311,7 @@ header {
   gap: var(--space-1);
   padding: 2px 8px;
   border-radius: var(--radius-xl);
-  font-size: 0.7rem;
+  font-size: var(--header-font-size);
   font-weight: 600;
   border: 1px solid;
 }
@@ -319,7 +342,7 @@ header {
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   padding: 3px 9px;
-  font-size: 0.8rem;
+  font-size: var(--header-font-size);
   cursor: pointer;
   font-family: inherit;
   min-height: var(--control-h-sm);
@@ -343,7 +366,7 @@ header {
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
-  font-size: 0.72rem;
+  font-size: var(--header-font-size);
   font-family: inherit;
   line-height: 1;
   white-space: nowrap;
@@ -426,7 +449,7 @@ header {
 #shutdown-btn:hover { color: #e57373; border-color: rgba(229,115,115,0.4); background: rgba(229,115,115,0.08); }
 #settings-btn {
   padding: 4px 9px;
-  font-size: 0.72rem;
+  font-size: var(--header-font-size);
   white-space: nowrap;
 }
 #settings-btn:hover { color: var(--text); border-color: var(--line); background: var(--bg-elev); }
@@ -499,7 +522,6 @@ header {
   }
 
   /* スマホからは無意味なので非表示（reference_mobile-ui-strategy.md P6-C1） */
-  #server-btn,
   #mobile-connect-btn {
     display: none;
   }
@@ -769,6 +791,13 @@ header {
   background: color-mix(in srgb, var(--accent) 18%, var(--bg-elev));
 }
 .card.active.waiting { border-color: var(--warn); }
+.card.card-color-blue { --card-ident-color: #60a5fa; }
+.card.card-color-green { --card-ident-color: #34d399; }
+.card.card-color-orange { --card-ident-color: #fb923c; }
+.card.card-color-red { --card-ident-color: #f87171; }
+.card.card-color-purple { --card-ident-color: #c084fc; }
+.card[class*="card-color-"] { border-color: color-mix(in srgb, var(--card-ident-color) 65%, var(--line)); }
+.card[class*="card-color-"]::before { background: var(--card-ident-color); opacity: 1; }
 
 /* カード左ボーダーライン（ステータス表示用擬似要素） */
 .card::before {
@@ -792,6 +821,13 @@ header {
 /* 状態 pill（下のステータスバー .tsb-pill と同形状: ●ドット付き・丸み・同じ状態色）。 */
 .card-state-pill { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 0.62rem; font-weight: 700; padding: 1px 7px; border-radius: var(--radius-md); border: 1px solid transparent; line-height: 1.2; }
 .card-state-pill .card-pdot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.card-state-icon { font-size: 0.68rem; line-height: 1; }
+.card-state-pill.awaiting-approval { animation: state-attention 1.4s ease-in-out infinite; }
+.card-state-pill.awaiting-input { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.card-state-pill.workflow-active .card-pdot { animation: state-pulse 1s ease-in-out infinite; }
+@keyframes state-attention { 50% { filter: brightness(1.22); } }
+@keyframes state-pulse { 50% { transform: scale(1.45); opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .card-state-pill.awaiting-approval, .card-state-pill.workflow-active .card-pdot { animation: none; } }
 .card-state-pill.running  { color: var(--badge-running-text); background: color-mix(in srgb, var(--badge-running-bg) 25%, transparent); border-color: color-mix(in srgb, var(--badge-running-text) 35%, transparent); }
 .card-state-pill.waiting  { color: var(--warn-text);          background: color-mix(in srgb, var(--warn-bg) 25%, transparent);          border-color: color-mix(in srgb, var(--warn-text) 35%, transparent); }
 .card-state-pill.standby  { color: var(--badge-standby-text); background: color-mix(in srgb, var(--badge-standby-bg) 25%, transparent); border-color: color-mix(in srgb, var(--badge-standby-text) 35%, transparent); }
@@ -945,9 +981,12 @@ header {
    はみ出させてブランチバッジを右端近くまで寄せる（上段アクションとは縦に重ならない）。 */
 .card-meta-row { display: flex; align-items: center; gap: var(--space-2); margin-top: 3px; margin-right: -30px; }
 .card-last-output { flex-shrink: 0; font-size: 0.72rem; color: var(--muted-2); margin-left: 2px; }
-.card-label { flex-shrink: 0; font-size: 0.75rem; color: var(--accent, #7aa2f7); font-weight: 600; white-space: nowrap; }
+/* 長い自動タイトルはブランチバッジを押し出さず … で省略（全文は data-tooltip で表示） */
+.card-label { flex-shrink: 1; min-width: 0; font-size: 0.75rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-note { flex: 1; min-width: 0; color: var(--muted); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: italic; }
+.card-pin { flex-shrink: 0; font-size: 0.74rem; }
 .card-end-reason { flex-shrink: 0; font-size: 0.72rem; color: var(--danger, #ef4444); font-weight: 500; white-space: nowrap; max-width: 18rem; overflow: hidden; text-overflow: ellipsis; }
-.card-msg { flex: 1; min-width: 0; font-size: 0.78rem; color: var(--muted-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: inherit; }
+.card-msg { flex: 1; min-width: 0; font-size: 0.78rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: inherit; }
 .card-actions {
   position: absolute;
   top: 6px;
@@ -970,6 +1009,12 @@ header {
   opacity: 1;
 }
 .card-dir-icon:hover { opacity: 1; }
+.session-pin-btn, .session-meta-btn { border: 0; background: transparent; color: var(--muted); padding: 2px; min-width: 20px; min-height: 20px; cursor: pointer; font: inherit; }
+.session-pin-btn:hover, .session-meta-btn:hover, .session-pin-btn.pinned { color: var(--warn); }
+.session-color-filters { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 0 8px; }
+.session-color-filter { border: 1px solid var(--line); border-radius: 999px; background: var(--bg-elev); color: var(--muted); cursor: pointer; padding: 2px 8px; font: inherit; font-size: 0.7rem; }
+.session-color-filter.active { border-color: var(--accent); color: var(--text); }
+.session-color-filter.color-blue { color: #60a5fa; }.session-color-filter.color-green { color: #34d399; }.session-color-filter.color-orange { color: #fb923c; }.session-color-filter.color-red { color: #f87171; }.session-color-filter.color-purple { color: #c084fc; }
 
 /* ============================================================
    プロバイダ識別色ユーティリティ
@@ -1280,6 +1325,19 @@ header {
 }
 #attach-clear-btn:hover { color: var(--danger); border-color: var(--danger-bg); background: var(--danger-bg); }
 
+#attach-copy-cwd-btn {
+  background: transparent;
+  color: var(--muted-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 2px 7px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  align-self: center;
+}
+#attach-copy-cwd-btn:hover { color: var(--fg); border-color: var(--muted-2); background: var(--bg-2); }
+
 /* アプリ情報モーダル */
 #about-panel {
   position: fixed;
@@ -1540,10 +1598,10 @@ header {
   50%       { opacity: 0.6; }
 }
 .summary-sep { color: var(--line-soft); align-self: center; font-size: 0.9rem; padding: 0 2px; }
-.summary-provider-chip { display: inline-flex; align-items: center; gap: var(--space-1); font-size: 0.78rem; color: var(--text); white-space: nowrap; flex-shrink: 0; }
+.summary-provider-chip { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--header-font-size); color: var(--text); white-space: nowrap; flex-shrink: 0; }
 .summary-provider-chip .card-provider-icon { flex-shrink: 0; }
 .summary-provider-chip .compact-hide { display: inline-flex; align-items: center; gap: var(--space-1); }
-.summary-provider-chip .compact-count { display: none; color: var(--muted); font-size: 0.78rem; }
+.summary-provider-chip .compact-count { display: none; color: var(--muted); font-size: var(--header-font-size); }
 .summary-provider-name { display: inline-flex; align-items: center; font-size: 0.7rem; font-weight: 700; padding: 1px 6px; border-radius: var(--radius-sm); letter-spacing: 0.04em; }
 /* プロバイダ別の color/background はプロバイダ識別色ユーティリティで適用 */
 .summary-provider-count { color: var(--muted); font-size: 0.78rem; }
@@ -1613,18 +1671,3 @@ header {
 }
 .card[draggable=true]:hover::before { opacity: 0.5; }
 
-/* ★/非★ グループの区切りラベル */
-.sidebar-group-label {
-  font-size: 0.6rem;
-  color: var(--muted);
-  padding: 4px 8px 2px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  user-select: none;
-}
-
-/* 2026-06-23: ユーザー要望により「★ お気に入りをグリッドで開く」⊞ ボタンを非表示化
-   （生成ロジックは session-list.ts に残置。復活時はこの display:none を外す） */
-.sidebar-group-label-grid-btn {
-  display: none;
-}

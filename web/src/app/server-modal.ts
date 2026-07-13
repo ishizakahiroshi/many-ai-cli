@@ -1,4 +1,6 @@
-// server-modal.ts — ヘッダー 🖥 Server ボタンのモーダル制御 + /api/servers クライアント。
+// server-modal.ts — 内蔵リモート接続モーダル制御 + /api/servers クライアント。
+// 入口は設定パネル内の #server-manage-btn（旧ヘッダー 🖥 Server ボタンから移設）と
+// モバイルドロワー（openServerModal を直接呼ぶ）。
 //
 // 内蔵リモート接続（internal/hub/servers.go）の UI。プロファイル一覧の取得・
 // 接続/切断・追加を行う。接続成功時は対象 Hub URL を **新規タブ**で開く
@@ -40,7 +42,6 @@ interface ServersResponse {
 const CONNECT_POLL_MS = 1000;
 const CONNECT_POLL_MAX = 125;
 
-let modalOpen = false;
 let lastProfiles: ServerProfile[] = [];
 let connectAbort = false;
 let downHandler: ((e: MouseEvent | TouchEvent) => void) | null = null;
@@ -442,13 +443,10 @@ function resetAddForm(): void {
 
 // ── モーダル開閉 ──────────────────────────────────────────────────────────────
 
-function openServerModal(): void {
+export function openServerModal(): void {
   const modal = document.getElementById('server-modal');
-  const btn = document.getElementById('server-btn');
   if (!modal) return;
   modal.hidden = false;
-  modalOpen = true;
-  btn?.setAttribute('aria-expanded', 'true');
   setStatus('');
   applyAddFormVisibility();
   void loadServers();
@@ -457,7 +455,6 @@ function openServerModal(): void {
     const target = e.target as Node;
     const box = modal.querySelector('.server-modal-box');
     if (box && box.contains(target)) return;
-    if ((target as HTMLElement).closest?.('#server-btn')) return; // 再クリックは toggle に委ねる
     closeServerModal();
   };
   keyHandler = (e: KeyboardEvent) => {
@@ -477,11 +474,8 @@ function openServerModal(): void {
 
 function closeServerModal(): void {
   const modal = document.getElementById('server-modal');
-  const btn = document.getElementById('server-btn');
-  modalOpen = false;
   connectAbort = true;
   if (modal) modal.hidden = true;
-  btn?.setAttribute('aria-expanded', 'false');
   if (keyHandler) { document.removeEventListener('keydown', keyHandler, true); keyHandler = null; }
   if (downHandler) {
     document.removeEventListener('mousedown', downHandler, true);
@@ -490,17 +484,18 @@ function closeServerModal(): void {
   }
 }
 
-function toggleServerModal(): void {
-  if (modalOpen) closeServerModal();
-  else openServerModal();
-}
-
 // ── 初期化（app-entry から呼ぶ） ──────────────────────────────────────────────
 
 export function initServerModal(): void {
-  const btn = document.getElementById('server-btn');
+  const btn = document.getElementById('server-manage-btn');
   if (!btn) return;
-  btn.addEventListener('click', (e) => { e.stopPropagation(); toggleServerModal(); });
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    // 設定パネルの上に重ねず、閉じてからモーダルを開く（About パネルと同じ流儀）。
+    const settingsPanel = document.getElementById('settings-panel');
+    if (settingsPanel) settingsPanel.hidden = true;
+    openServerModal();
+  });
 
   document.getElementById('server-modal-close')?.addEventListener('click', closeServerModal);
   document.getElementById('server-modal-refresh')?.addEventListener('click', () => { void loadServers(); });

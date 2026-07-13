@@ -17,6 +17,23 @@ func TestDefaultConfigOpensBrowser(t *testing.T) {
 	}
 }
 
+func TestBoardNotifyModeDefaultsAndValidation(t *testing.T) {
+	cfg := defaultConfig(t.TempDir())
+	if cfg.Orchestration.BoardNotifyMode != BoardNotifyQueueUntilIdle {
+		t.Fatalf("default board notify mode = %q, want %q", cfg.Orchestration.BoardNotifyMode, BoardNotifyQueueUntilIdle)
+	}
+	for _, mode := range []BoardNotifyMode{BoardNotifySoft, BoardNotifyQueueUntilIdle, BoardNotifyInterrupt} {
+		cfg.Orchestration.BoardNotifyMode = mode
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("Validate() mode %q: %v", mode, err)
+		}
+	}
+	cfg.Orchestration.BoardNotifyMode = "immediately"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() accepted invalid board notify mode")
+	}
+}
+
 func TestProviderDefaultsIncludeCopilot(t *testing.T) {
 	slash := DefaultSlashCmdSources()
 	if slash.Copilot == "" || !strings.Contains(slash.Copilot, "/copilot.md") {
@@ -486,7 +503,7 @@ func TestVoiceWhisperConfigDefaultsAndValidation(t *testing.T) {
 func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	cfg := &Config{}
 	cfg.Spawn.LastModel = map[string]string{"legacy": "a"}
-	cfg.UserPrefs.Favorites = []string{"one"}
+	cfg.UserPrefs.ProjectFavorites = []string{"one"}
 	cfg.UserPrefs.CwdHistory = []string{"C:/dev/one"}
 	cfg.UserPrefs.Spawn.Defaults = map[string]string{"claude": "default"}
 	cfg.UserPrefs.Spawn.LastModel = map[string]string{"claude": "sonnet"}
@@ -495,7 +512,7 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 
 	clone := cfg.Clone()
 	cfg.Spawn.LastModel["legacy"] = "b"
-	cfg.UserPrefs.Favorites[0] = "two"
+	cfg.UserPrefs.ProjectFavorites[0] = "two"
 	cfg.UserPrefs.CwdHistory[0] = "C:/dev/two"
 	cfg.UserPrefs.Spawn.Defaults["claude"] = "changed"
 	cfg.UserPrefs.Spawn.LastModel["claude"] = "opus"
@@ -505,8 +522,8 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	if clone.Spawn.LastModel["legacy"] != "a" {
 		t.Fatalf("legacy spawn map was aliased")
 	}
-	if clone.UserPrefs.Favorites[0] != "one" {
-		t.Fatalf("favorites slice was aliased")
+	if clone.UserPrefs.ProjectFavorites[0] != "one" {
+		t.Fatalf("project favorites slice was aliased")
 	}
 	if clone.UserPrefs.CwdHistory[0] != "C:/dev/one" {
 		t.Fatalf("cwd history slice was aliased")

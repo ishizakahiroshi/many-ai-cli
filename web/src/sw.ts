@@ -42,6 +42,13 @@ self.addEventListener('push', (event) => {
     }
     const title = payload.title || 'MANY-AI-CLI';
     const body = payload.body || 'Approval is waiting.';
+    const actions = [];
+    // high-risk approvals intentionally receive no approve action. This is
+    // enforced again by the Hub endpoint; the client-side omission is only the
+    // first layer of the guard.
+    if (payload.approve_token && payload.risk !== 'high') actions.push({ action: 'approve', title: 'Approve' });
+    if (payload.reject_token) actions.push({ action: 'reject', title: 'Reject' });
+    actions.push({ action: 'open', title: 'Open' });
     await self.registration.showNotification(title, {
       body,
       icon: '/icon.svg',
@@ -50,7 +57,10 @@ self.addEventListener('push', (event) => {
       data: {
         session_id: payload.session_id || 0,
         url: payload.url || '',
+        approve_token: payload.approve_token || '',
+        reject_token: payload.reject_token || '',
       },
+      actions,
       requireInteraction: false,
     });
   })());
@@ -61,6 +71,22 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil((async () => {
     const data = event.notification.data || {};
     const sessionId = Number(data.session_id || 0);
+    const action = (event as any).action || 'open';
+    const actionToken = action === 'approve' ? data.approve_token : action === 'reject' ? data.reject_token : '';
+    if (actionToken) {
+      try {
+        const response = await fetch(`/api/approval-action/${encodeURIComponent(actionToken)}`, {
+          method: 'POST',
+          credentials: 'omit',
+        });
+        // A one-tap request is intentionally fire-and-forget. On expiry,
+        // replay, or a high-risk refusal, open the Hub so the user can safely
+        // inspect the current approval instead of retrying the bearer token.
+        if (response.ok) return;
+      } catch (_) {
+        // Fall through to the Hub UI; offline delivery must not loop retries.
+      }
+    }
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of windows) {
       client.postMessage({ type: 'many-ai-cli-open-session', session_id: sessionId });

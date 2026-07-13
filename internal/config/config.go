@@ -325,7 +325,11 @@ type UserPrefsTrigger struct {
 
 // UserPrefsApproval は承認関連のユーザー設定。
 type UserPrefsApproval struct {
-	AutoSwitch bool `yaml:"auto_switch,omitempty" json:"auto_switch,omitempty"`
+	AutoSwitch          bool `yaml:"auto_switch,omitempty" json:"auto_switch,omitempty"`
+	AutoApprovalEnabled bool `yaml:"auto_approval_enabled,omitempty" json:"auto_approval_enabled,omitempty"`
+	// HighRiskConfirmationMode is "hold" (default) or "dialog". It only
+	// affects approvals classified as high risk by internal/approval.
+	HighRiskConfirmationMode string `yaml:"high_risk_confirmation_mode,omitempty" json:"high_risk_confirmation_mode,omitempty"`
 }
 
 // UserPrefsDesktopNotifications はページ内 Notification API の設定。
@@ -354,6 +358,16 @@ type UserPrefsQuickCmds struct {
 	Show5 *bool  `yaml:"show5,omitempty" json:"show5,omitempty"`
 }
 
+// UserPrefsTemplate is a reusable prompt. Providers is empty when the prompt
+// applies to every provider; Frequency is incremented whenever it is inserted.
+type UserPrefsTemplate struct {
+	Label     string   `yaml:"label" json:"label"`
+	Body      string   `yaml:"body" json:"body"`
+	Providers []string `yaml:"providers,omitempty" json:"providers,omitempty"`
+	Tags      []string `yaml:"tags,omitempty" json:"tags,omitempty"`
+	Frequency int      `yaml:"frequency,omitempty" json:"frequency,omitempty"`
+}
+
 // UserPrefsUsageLinks は使用量リンクの設定。
 type UserPrefsUsageLinks struct {
 	Claude      string `yaml:"claude,omitempty"  json:"claude,omitempty"`
@@ -376,8 +390,10 @@ type UserPrefsVoice struct {
 
 // UserPrefsSpawn はセッション起動のデフォルト設定。
 type UserPrefsSpawn struct {
-	Defaults  map[string]string `yaml:"defaults,omitempty"   json:"defaults,omitempty"`
-	LastModel map[string]string `yaml:"last_model,omitempty" json:"last_model,omitempty"`
+	Defaults        map[string]string `yaml:"defaults,omitempty"          json:"defaults,omitempty"`
+	LastModel       map[string]string `yaml:"last_model,omitempty"        json:"last_model,omitempty"`
+	WorktreeAuto    bool              `yaml:"worktree_auto,omitempty"     json:"worktree_auto,omitempty"`
+	WorktreeCleanup string            `yaml:"worktree_cleanup,omitempty"  json:"worktree_cleanup,omitempty"`
 }
 
 // UserPrefsDoneSummaryNotify はタスク完了サマリー通知の設定。
@@ -454,9 +470,9 @@ type UserPrefs struct {
 	PushNotifications        UserPrefsPushNotifications    `yaml:"push_notifications,omitempty" json:"push_notifications,omitempty"`
 	Approval                 UserPrefsApproval             `yaml:"approval,omitempty"     json:"approval,omitempty"`
 	QuickCmds                UserPrefsQuickCmds            `yaml:"quick_cmds,omitempty"   json:"quick_cmds,omitempty"`
+	Templates                []UserPrefsTemplate           `yaml:"templates,omitempty"    json:"templates,omitempty"`
 	UsageLinks               UserPrefsUsageLinks           `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
 	Voice                    UserPrefsVoice                `yaml:"voice,omitempty"        json:"voice,omitempty"`
-	Favorites                []string                      `yaml:"favorites,omitempty"        json:"favorites,omitempty"`
 	SessionOrder             []string                      `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
 	GroupOrder               []string                      `yaml:"group_order,omitempty"      json:"group_order,omitempty"`
 	ProjectFavorites         []string                      `yaml:"project_favorites,omitempty" json:"project_favorites,omitempty"`
@@ -475,12 +491,16 @@ type UserPrefs struct {
 // marshal or mutate the result without racing with the live server config.
 func (p UserPrefs) Clone() UserPrefs {
 	c := p
-	c.Favorites = cloneStringSlice(p.Favorites)
 	c.SessionOrder = cloneStringSlice(p.SessionOrder)
 	c.GroupOrder = cloneStringSlice(p.GroupOrder)
 	c.ProjectFavorites = cloneStringSlice(p.ProjectFavorites)
 	c.CwdHistory = cloneStringSlice(p.CwdHistory)
 	c.CwdFavorites = cloneStringSlice(p.CwdFavorites)
+	c.Templates = append([]UserPrefsTemplate(nil), p.Templates...)
+	for i := range c.Templates {
+		c.Templates[i].Providers = cloneStringSlice(p.Templates[i].Providers)
+		c.Templates[i].Tags = cloneStringSlice(p.Templates[i].Tags)
+	}
 	c.Spawn.Defaults = cloneStringMap(p.Spawn.Defaults)
 	c.Spawn.LastModel = cloneStringMap(p.Spawn.LastModel)
 	if p.TokenStatusbar.Segments != nil {
@@ -541,17 +561,69 @@ type NotifyBackendConfig struct {
 type NotifyConfig struct {
 	Backends []NotifyBackendConfig `yaml:"backends,omitempty" json:"backends,omitempty"`
 	Events   []string              `yaml:"events,omitempty"   json:"events,omitempty"`
+	// IncludeBody keeps approval question text out of external notifications
+	// unless the user explicitly opts in.
+	IncludeBody bool `yaml:"include_body,omitempty" json:"include_body,omitempty"`
+}
+
+// BoardNotifyMode controls how board.md updates reach an orchestration conductor.
+// QueueUntilIdle is the safe default: AI turns are never interrupted just because a
+// child updated its progress.
+type BoardNotifyMode string
+
+const (
+	BoardNotifySoft           BoardNotifyMode = "soft-notify"
+	BoardNotifyQueueUntilIdle BoardNotifyMode = "queue-until-idle"
+	BoardNotifyInterrupt      BoardNotifyMode = "interrupt"
+)
+
+func (m BoardNotifyMode) Valid() bool {
+	return m == BoardNotifySoft || m == BoardNotifyQueueUntilIdle || m == BoardNotifyInterrupt
+}
+
+func EffectiveBoardNotifyMode(raw BoardNotifyMode) BoardNotifyMode {
+	if raw.Valid() {
+		return raw
+	}
+	return BoardNotifyQueueUntilIdle
+}
+
+// SpawnConfirmMode controls whether an orchestration child spawn waits for a
+// browser decision. The zero value deliberately means enabled: upgrading must
+// not silently reintroduce unattended child creation.
+type SpawnConfirmMode string
+
+const (
+	SpawnConfirmOn        SpawnConfirmMode = "on"
+	SpawnConfirmOff       SpawnConfirmMode = "off"
+	SpawnConfirmProviders SpawnConfirmMode = "providers"
+)
+
+func (m SpawnConfirmMode) Valid() bool {
+	return m == SpawnConfirmOn || m == SpawnConfirmOff || m == SpawnConfirmProviders
+}
+
+func EffectiveSpawnConfirmMode(raw SpawnConfirmMode) SpawnConfirmMode {
+	if raw.Valid() {
+		return raw
+	}
+	return SpawnConfirmOn
 }
 
 // OrchestrationConfig controls lightweight parent/child AI session orchestration.
 type OrchestrationConfig struct {
-	MaxDepth             int    `yaml:"max_depth,omitempty" json:"max_depth,omitempty"`
-	MaxChildrenPerParent int    `yaml:"max_children_per_parent,omitempty" json:"max_children_per_parent,omitempty"`
-	MaxTotalSessions     int    `yaml:"max_total_sessions,omitempty" json:"max_total_sessions,omitempty"`
-	ChildTimeoutSeconds  int    `yaml:"child_timeout_seconds,omitempty" json:"child_timeout_seconds,omitempty"`
-	IdleDoneThresholdSec int    `yaml:"idle_done_threshold_seconds,omitempty" json:"idle_done_threshold_seconds,omitempty"`
-	WorktreeAuto         *bool  `yaml:"worktree_auto,omitempty" json:"worktree_auto,omitempty"`
-	WorktreeDirRoot      string `yaml:"worktree_dir_root,omitempty" json:"worktree_dir_root,omitempty"`
+	MaxDepth              int              `yaml:"max_depth,omitempty" json:"max_depth,omitempty"`
+	MaxChildrenPerParent  int              `yaml:"max_children_per_parent,omitempty" json:"max_children_per_parent,omitempty"`
+	MaxTotalSessions      int              `yaml:"max_total_sessions,omitempty" json:"max_total_sessions,omitempty"`
+	ChildTimeoutSeconds   int              `yaml:"child_timeout_seconds,omitempty" json:"child_timeout_seconds,omitempty"`
+	TimeoutRespawn        bool             `yaml:"timeout_respawn,omitempty" json:"timeout_respawn,omitempty"`
+	MaxTimeoutRespawns    int              `yaml:"max_timeout_respawns,omitempty" json:"max_timeout_respawns,omitempty"`
+	IdleDoneThresholdSec  int              `yaml:"idle_done_threshold_seconds,omitempty" json:"idle_done_threshold_seconds,omitempty"`
+	WorktreeAuto          *bool            `yaml:"worktree_auto,omitempty" json:"worktree_auto,omitempty"`
+	WorktreeDirRoot       string           `yaml:"worktree_dir_root,omitempty" json:"worktree_dir_root,omitempty"`
+	BoardNotifyMode       BoardNotifyMode  `yaml:"board_notify_mode,omitempty" json:"board_notify_mode,omitempty"`
+	SpawnConfirmMode      SpawnConfirmMode `yaml:"spawn_confirm_mode,omitempty" json:"spawn_confirm_mode,omitempty"`
+	SpawnConfirmProviders []string         `yaml:"spawn_confirm_providers,omitempty" json:"spawn_confirm_providers,omitempty"`
 }
 
 func (o OrchestrationConfig) WorktreeEnabled() bool {
@@ -576,7 +648,13 @@ type Config struct {
 		AllowedHosts              []string `yaml:"allowed_hosts,omitempty" json:"allowed_hosts,omitempty"`
 		EnvKind                   string   `yaml:"env_kind,omitempty" json:"env_kind,omitempty"`
 	} `yaml:"hub"`
-	Log   LogConfig `yaml:"log"`
+	Log LogConfig `yaml:"log"`
+	// Input はブラウザ入力欄から PTY へ送る際の調整値。
+	// DeferredEnterMS は複数行ペーストの確定 Enter 前の最低待機時間。
+	// 0 は provider 別の安全な既定値を使う。
+	Input struct {
+		DeferredEnterMS int `yaml:"deferred_enter_ms,omitempty" json:"deferred_enter_ms,omitempty"`
+	} `yaml:"input,omitempty" json:"input,omitempty"`
 	Spawn struct {
 		LastModel map[string]string `yaml:"last_model,omitempty" json:"last_model,omitempty"`
 	} `yaml:"spawn,omitempty" json:"spawn,omitempty"`
@@ -661,6 +739,15 @@ func LoadOrCreate() (*Config, error) {
 	if cfg.Token == "" {
 		if err := ensureToken(cfg); err != nil {
 			return nil, err
+		}
+		// 既存 config で token が空だった場合もディスクへ永続化する。
+		// メモリ上だけだと起動ごとにトークンが変わり Hub URL / wrapper 認証が食い違う。
+		out, mErr := yaml.Marshal(cfg)
+		if mErr != nil {
+			return nil, fmt.Errorf("marshal config after token fill: %w", mErr)
+		}
+		if err := writeConfigAtomic(dir, path, out); err != nil {
+			return nil, fmt.Errorf("write config after token fill: %w", err)
 		}
 	}
 	// 旧 cfg.Spawn.LastModel → UserPrefs.Spawn.LastModel へ移行
@@ -749,6 +836,7 @@ func defaultConfig(home string) *Config {
 	cfg.SlashCmdSources = DefaultSlashCmdSources()
 	cfg.ApprovalPatternSources = DefaultApprovalPatternSources()
 	cfg.ApprovalProfiles = DefaultApprovalProfiles()
+	cfg.Orchestration.BoardNotifyMode = BoardNotifyQueueUntilIdle
 	return cfg
 }
 
@@ -844,6 +932,7 @@ func (cfg *Config) Clone() *Config {
 		v := *cfg.Orchestration.WorktreeAuto
 		c.Orchestration.WorktreeAuto = &v
 	}
+	c.Orchestration.SpawnConfirmProviders = cloneStringSlice(cfg.Orchestration.SpawnConfirmProviders)
 	if cfg.Voice.Whisper.HallucinationPhrases != nil {
 		c.Voice.Whisper.HallucinationPhrases = cloneStringSlice(cfg.Voice.Whisper.HallucinationPhrases)
 	}
@@ -879,13 +968,22 @@ func (cfg *Config) applyDefaults() {
 	// 120s idle 警告は 3 連続偽陽性）に基づく。短い時間駆動閾値は AI 子セッション
 	// の作業実態に合わない（plan_orchestration-conductor-improvements.md C1）。
 	if cfg.Orchestration.ChildTimeoutSeconds <= 0 {
-		cfg.Orchestration.ChildTimeoutSeconds = 3600
+		cfg.Orchestration.ChildTimeoutSeconds = 900
+	}
+	if cfg.Orchestration.MaxTimeoutRespawns <= 0 {
+		cfg.Orchestration.MaxTimeoutRespawns = 1
 	}
 	if cfg.Orchestration.IdleDoneThresholdSec <= 0 {
 		cfg.Orchestration.IdleDoneThresholdSec = 600
 	}
 	if strings.TrimSpace(cfg.Orchestration.WorktreeDirRoot) == "" {
 		cfg.Orchestration.WorktreeDirRoot = filepath.Join(".many-ai-cli", "worktrees")
+	}
+	if cfg.Orchestration.BoardNotifyMode == "" {
+		cfg.Orchestration.BoardNotifyMode = BoardNotifyQueueUntilIdle
+	}
+	if cfg.Orchestration.SpawnConfirmMode == "" {
+		cfg.Orchestration.SpawnConfirmMode = SpawnConfirmOn
 	}
 }
 
@@ -907,6 +1005,12 @@ func (cfg *Config) Validate() error {
 	}
 	if err := validateLMStudio(cfg.LMStudio); err != nil {
 		return err
+	}
+	if !cfg.Orchestration.BoardNotifyMode.Valid() {
+		return fmt.Errorf("orchestration.board_notify_mode must be soft-notify, queue-until-idle, or interrupt")
+	}
+	if cfg.Orchestration.SpawnConfirmMode != "" && !cfg.Orchestration.SpawnConfirmMode.Valid() {
+		return fmt.Errorf("orchestration.spawn_confirm_mode must be on, off, or providers")
 	}
 	return nil
 }

@@ -185,17 +185,19 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Provider       string `json:"provider"`
-		CWD            string `json:"cwd"`
-		Model          string `json:"model"`
-		ModelSelection string `json:"model_selection_mode"`
-		RiskConfirmed  bool   `json:"risk_confirmed"`
-		Label          string `json:"label"`
-		PermissionMode string `json:"permission_mode"`
-		Sandbox        string `json:"sandbox"`
-		AskForApproval string `json:"ask_for_approval"`
-		Route          string `json:"route"`
-		Utf8Session    bool   `json:"utf8_session"`
+		Provider        string `json:"provider"`
+		CWD             string `json:"cwd"`
+		Model           string `json:"model"`
+		ModelSelection  string `json:"model_selection_mode"`
+		RiskConfirmed   bool   `json:"risk_confirmed"`
+		Label           string `json:"label"`
+		PermissionMode  string `json:"permission_mode"`
+		Sandbox         string `json:"sandbox"`
+		AskForApproval  string `json:"ask_for_approval"`
+		Route           string `json:"route"`
+		Utf8Session     bool   `json:"utf8_session"`
+		IsolateWorktree *bool  `json:"isolate_worktree"`
+		WorktreeCleanup string `json:"worktree_cleanup"`
 		// C1: plan_orchestration-spawn-ui-exposure.md — ツールバーの「オーケストレーション」
 		// ボタン経由の起動でのみ true。詳細設定アコーディオンで役割を設定した場合のみ
 		// OrchestrationRoles が埋まる（未設定ロールは省略 or nil）。
@@ -230,6 +232,10 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid route")
 		return
 	}
+	if !validWorktreeCleanup(body.WorktreeCleanup) {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid worktree cleanup policy")
+		return
+	}
 	cwd := body.CWD
 	if cwd == "" {
 		cwd = s.hubCWD
@@ -262,6 +268,57 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// P-33 C2: ordinary sessions can opt into a dedicated worktree. Keep the
+	// metadata in the existing pending-registration path so the session is
+	// associated with the isolated directory only after its wrapper connects.
+	isolateWorktree := false
+	cleanupPolicy := body.WorktreeCleanup
+	s.cfgMu.Lock()
+	if body.IsolateWorktree == nil {
+		isolateWorktree = s.cfg.UserPrefs.Spawn.WorktreeAuto
+	} else {
+		isolateWorktree = *body.IsolateWorktree
+	}
+	if cleanupPolicy == "" {
+		cleanupPolicy = s.cfg.UserPrefs.Spawn.WorktreeCleanup
+	}
+	s.cfgMu.Unlock()
+	cleanupPolicy = effectiveWorktreeCleanup(cleanupPolicy)
+	var isolated normalWorktree
+	spawnStarted := false
+	if isolateWorktree {
+		if body.Label == "" {
+			body.Label = fmt.Sprintf("worktree-%d", time.Now().UnixNano())
+		}
+		var worktreeErr error
+		isolated, worktreeErr = prepareNormalWorktree(cwd, body.Label, time.Now())
+		if worktreeErr != nil {
+			writeJSONError(w, http.StatusBadRequest, "worktree_error", errorDetail("worktree error", worktreeErr))
+			return
+		}
+		cwd = isolated.Path
+		s.orchestration.mu.Lock()
+		s.orchestration.pending[body.Label] = pendingChild{NormalWorktree: isolated, WorktreeCleanup: cleanupPolicy, WorktreeBranch: isolated.Branch, SpawnedAt: time.Now()}
+		s.orchestration.mu.Unlock()
+	}
+	cleanupIsolated := func() {
+		if !isolated.Created {
+			return
+		}
+		if err := cleanupNormalWorktree(isolated, worktreeCleanupDelete); err != nil {
+			s.logger.Warn("failed to clean up unregistered worktree", "path", isolated.Path, "err", err)
+		}
+	}
+	defer func() {
+		if spawnStarted || !isolated.Created {
+			return
+		}
+		s.orchestration.mu.Lock()
+		delete(s.orchestration.pending, body.Label)
+		s.orchestration.mu.Unlock()
+		cleanupIsolated()
+	}()
+
 	// C1: plan_orchestration-spawn-ui-exposure.md — オーケストレーション起動の場合、
 	// 起動時点で conductor 用の orchestration_id を予約する。label が未指定なら生成して
 	// 以降の wrapArgs 組み立て（--label=...）にもそのまま乗せる。
@@ -290,6 +347,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 
 	exe, err := os.Executable()
 	if err != nil {
+		cleanupIsolated()
 		writeJSONError(w, http.StatusInternalServerError, "executable_error", errorDetail("executable error", err))
 		return
 	}
@@ -336,6 +394,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		}
 		setCmdSysProcAttr(cmd)
 		if err := cmd.Start(); err != nil {
+			cleanupIsolated()
 			if stdinNull != nil {
 				_ = stdinNull.Close()
 			}
@@ -345,6 +404,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusInternalServerError, "spawn_error", errorDetail("spawn error", err))
 			return
 		}
+		spawnStarted = true
 		s.logger.Debug("spawn: wrap process started",
 			"provider", body.Provider, "pid", cmd.Process.Pid, "spawn_log", spawnLogPath)
 		s.safeGo("spawn_wait", func() {
@@ -500,6 +560,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	}
 	setCmdSysProcAttr(cmd)
 	if err := cmd.Start(); err != nil {
+		cleanupIsolated()
 		if stdinNull != nil {
 			_ = stdinNull.Close()
 		}
@@ -509,6 +570,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "spawn_error", errorDetail("spawn error", err))
 		return
 	}
+	spawnStarted = true
 	s.logger.Debug("spawn: wrap process started",
 		"provider", body.Provider, "pid", cmd.Process.Pid, "spawn_log", spawnLogPath)
 	// ローカル LLM route のモデルは last_model に保存しない。
@@ -549,7 +611,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 // 対応 preset:
 //   - "shell"     : count 枚の Shell session を起動
 //   - "ai+shell"  : AI session 1 枚 + Shell session (count-1) 枚を起動
-//                   provider フィールドで AI provider を指定（省略時 "claude"）
+//     provider フィールドで AI provider を指定（省略時 "claude"）
 func (s *Server) handleSpawnGrid(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
 		return

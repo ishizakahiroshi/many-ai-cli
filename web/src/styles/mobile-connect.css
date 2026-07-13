@@ -101,6 +101,17 @@
 .mc-step-dot { width: 22px; height: 4px; border-radius: var(--radius-sm); background: var(--line-soft); }
 .mc-step-dot.on { background: var(--accent); }
 
+/* P-29: 途中中断しても同じ番号から再開する4手順。狭い画面では横スクロールで番号を保持する。 */
+.mc-setup-progress { display: flex; gap: 4px; list-style: none; padding: 0; margin: 0 0 14px; overflow-x: auto; }
+.mc-setup-progress-item { flex: 1 0 76px; font-size: 0.62rem; line-height: 1.3; color: var(--muted); border-bottom: 2px solid var(--line-soft); padding: 0 2px 5px; }
+.mc-setup-progress-item.active { color: var(--accent-text); border-color: var(--accent); font-weight: 700; }
+.mc-setup-progress-item.done { color: var(--green-text); border-color: var(--green); }
+.mc-setup-back { display: inline-block; margin: -2px 0 8px; }
+.mc-test-approval { background: var(--bg-elev2); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 12px; }
+.mc-test-approval-title { font-weight: 600; color: var(--text); }
+.mc-test-approval-state { color: var(--muted); font-size: 0.75rem; margin: 5px 0 10px; }
+.mc-test-approval-actions { display: flex; gap: var(--space-2); }
+
 .mc-q {
   font-size: 0.95rem;
   font-weight: 600;

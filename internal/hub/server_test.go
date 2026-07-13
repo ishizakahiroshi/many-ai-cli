@@ -18,6 +18,10 @@ import (
 func newTestServer() *Server {
 	cfg := &config.Config{}
 	cfg.Hub.Port = 47777
+	// Most unit tests exercise a spawn's downstream behavior without a browser.
+	// Production defaults are applied by config.Load; keep this bare test
+	// fixture non-interactive unless a test opts into the confirmation gate.
+	cfg.Orchestration.SpawnConfirmMode = config.SpawnConfirmOff
 	return &Server{
 		cfg:                 cfg,
 		logger:              slog.Default(),

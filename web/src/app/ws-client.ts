@@ -4,15 +4,38 @@ import { showToast, token } from './util.js';
 import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, approvalVisibleCache, autoDismissTimers, chatHistory, deriveProjectKeyFromCwd, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, multiQuestionLatchAt, multiQuestionVisibleCache, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
 import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLocalSessionHistory, resetLocalSessionHistory, updateInputAffordance } from '../app.js';
 import { activateSession, render, renderSessionList, renderSessionStateUpdate, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
-import { applyRemotePtyResize, ensureTerminal, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
+import { applyRemotePtyResize, ensureTerminal, isLiveOutputBatching, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup } from './settings.js';
 import { setMultiQuestionBannerVisible } from './approval-ui.js';
 import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, handleHubApprovalMarker, hideActionBar, isAIProvider, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
 import { notifyDeferredEnterOutput } from './deferred-enter.js';
+import { notifyResidueSweepOutput } from './residue-sweep.js';
 import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed } from './chat-history.js';
 import { clearChatPayloadForSession, handleChatTurnMessage, initChatPayloadUI } from './chat-payload.js';
 import { handleUsageStatMessage, removeUsageCacheEntry } from './token-statusbar.js';
 import { removeWorkflowSnapshot } from './workflow-modal.js';
+
+function showSpawnConfirmation(m) {
+  const id = String(m.spawn_confirmation_id || '');
+  if (!id || document.querySelector(`[data-spawn-confirmation-id="${CSS.escape(id)}"]`)) return;
+  const dialog = document.createElement('dialog');
+  dialog.className = 'spawn-confirm-dialog';
+  dialog.dataset.spawnConfirmationId = id;
+  const escapeHtml = (value) => { const el = document.createElement('span'); el.textContent = value; return el.innerHTML; };
+  const prompt = String(m.initial_prompt || '').trim();
+  dialog.innerHTML = `<form method="dialog"><h2>Approve child session?</h2><p><b>Role:</b> ${escapeHtml(String(m.role || 'child'))}</p><label>Provider <input name="provider" value="${escapeHtml(String(m.provider || 'codex'))}"></label><label>Model <input name="model" value="${escapeHtml(String(m.model || ''))}"></label><p><b>Worktree:</b> ${escapeHtml(String(m.cwd || 'parent working directory'))}</p><pre>${escapeHtml(prompt.slice(0, 1200))}</pre><menu><button value="refuse">Refuse</button><button value="approve" class="primary">Approve</button></menu></form>`;
+  dialog.addEventListener('close', async () => {
+    const provider = (dialog.querySelector('[name=provider]') as HTMLInputElement)?.value || '';
+    const model = (dialog.querySelector('[name=model]') as HTMLInputElement)?.value || '';
+    const approved = dialog.returnValue === 'approve';
+    dialog.remove();
+    try {
+      await fetch(`/api/sessions/${m.session_id}/spawn-confirm?token=${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmation_id: id, approved, provider, model }) });
+    } catch (_) { showToast('Could not submit the spawn decision'); }
+  }, { once: true });
+  document.body.appendChild(dialog);
+  dialog.showModal();
+}
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -294,7 +317,7 @@ export function _connectWs() {
       }
     } catch (_) {}
 
-    if (isLiveRendered && !t.pendingFlushActive) {
+    if (isLiveRendered && !t.pendingFlushActive && !isLiveOutputBatching(t)) {
       writePTYChunk(id, t.term, xtermBytes, () => {
         if (t.autoScroll) t.term.scrollToBottom();
       });
@@ -315,6 +338,8 @@ export function _connectWs() {
     // 複数行ペースト送信後の確定 \r は、この出力が静止する（取り込み・再描画完了）まで遅延させる。
     // 出力が来るたび待機をリセットし、止まったら deferred-enter.ts が \r を 1 回だけ送る。
     notifyDeferredEnterOutput(id);
+    // residue-sweep の張り付き判定も、出力静止（取り込み・応答完了）まで遅延させる。
+    notifyResidueSweepOutput(id);
 
     // chatHistory: マーカー検出でターン境界を確定し AI 出力を commit する。
     // Shell session は chat history extraction の対象外。
@@ -379,6 +404,17 @@ export function _connectWs() {
     return;
   }
 
+  if (m.type === 'spawn_confirmation_requested') {
+    showSpawnConfirmation(m);
+    return;
+  }
+
+  if (m.type === 'auto_approval_applied') {
+    const command = String(m.approval_summary?.command || '').trim();
+    showToast(command ? `自動承認: ${command}` : 'ホワイトリストで自動承認しました');
+    return;
+  }
+
   if (m.type === 'session_history_reset') {
     if (m.session_id) resetLocalSessionHistory(m.session_id);
     else resetAllLocalSessionHistory();
@@ -410,6 +446,13 @@ export function _connectWs() {
         requestSessionDismiss(s.id);
         return;
       }
+		// snapshot は activity を入れ子で返す。差分更新と同じ読み出し口に揃える。
+		if (s.activity) {
+			s.output_idle = s.activity.output_idle;
+			s.workflow_active = s.activity.workflow_active;
+			s.awaiting_user = s.activity.awaiting_user;
+			s.awaiting_approval = s.activity.awaiting_approval;
+		}
       s.project = deriveProjectKeyFromCwd(s.cwd);
       sessions.set(s.id, s);
       addToSessionOrder(s.id);
@@ -437,8 +480,25 @@ export function _connectWs() {
     if (m.cwd)            { cur.cwd = m.cwd; cur.project = deriveProjectKeyFromCwd(m.cwd); }
     if (m.branch !== undefined) cur.branch      = m.branch;
     if (m.label !== undefined) cur.label       = m.label;
+	if (m.session_meta) {
+	  cur.label = m.session_meta.label;
+	  cur.pinned = m.session_meta.pinned;
+	  cur.color = m.session_meta.color;
+	  cur.note = m.session_meta.note;
+	  cur.auto_title = m.session_meta.auto_title;
+	}
     if (m.shell)           cur.shell           = m.shell;
     if (m.state)           cur.state           = m.state;
+		if (m.activity) {
+			cur.output_idle = m.activity.output_idle;
+			cur.workflow_active = m.activity.workflow_active;
+			cur.awaiting_user = m.activity.awaiting_user;
+			cur.awaiting_approval = m.activity.awaiting_approval;
+		}
+		if (m.output_idle !== undefined) cur.output_idle = m.output_idle;
+		if (m.workflow_active !== undefined) cur.workflow_active = m.workflow_active;
+		if (m.awaiting_user !== undefined) cur.awaiting_user = m.awaiting_user;
+		if (m.awaiting_approval !== undefined) cur.awaiting_approval = m.awaiting_approval;
     if (m.last_output_at)  cur.last_output_at  = m.last_output_at;
     if (m.started_at)      cur.started_at      = m.started_at;
     if (m.first_message)   cur.first_message   = m.first_message;
@@ -454,6 +514,7 @@ export function _connectWs() {
     if (m.orchestration_id !== undefined) cur.orchestration_id = m.orchestration_id;
     if (m.board_path !== undefined) cur.board_path = m.board_path;
     if (m.worktree_branch !== undefined) cur.worktree_branch = m.worktree_branch;
+	if (m.board_notify_pending !== undefined) cur.board_notify_pending = m.board_notify_pending;
     // C3: git 変更状況は git_checked=true のメッセージでのみ更新する
     // （通常の session_update では 0 を omitempty で送らないため、ここで上書きしない）。
     if (m.git_checked) {

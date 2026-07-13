@@ -1,15 +1,19 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, isAnsweredMarkerSig, recordAnsweredMarkerSig, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchActiveQ, batchFreeText, batchSelections, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectFocusIdx, multiSelectSelections, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, utf8Decoder } from './state.js';
-import { inputEl, sendSubmittedText } from '../app.js';
+import { inputEl, sendSubmittedText, sendSubmittedBody } from '../app.js';
 import { clearSuppressPtyResize, isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout } from './terminal.js';
 import { stripAnsi } from './settings.js';
 import { ws } from './ws-client.js';
-import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, hasApprovalLikeLabel, isBatchOptions, isHubChoicePrompt, isMultiQuestionPrompt, isMultiSelectOptions, markHubChoiceDefault, matchNativeApprovalTrigger } from './approval-parser.js';
+import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, hasApprovalLikeLabel, isBatchOptions, isHubChoicePrompt, isMultiQuestionPrompt, isMultiSelectOptions, markHubChoiceDefault, matchNativeApprovalTrigger, normalizeVtCursorOps } from './approval-parser.js';
 import { approvalUiAdapter, setMultiQuestionBannerVisible } from './approval-ui.js';
 import { chatHistoryCommitOutput, chatPaneAtBottom, getChatTimelineEl, pushMessage, scrollChatPaneToBottom } from './chat-history.js';
 import { token } from './util.js';
-import { isActionBarCollapsed, setActionBarCollapsed } from './user-prefs.js';
+import { appConfirm } from './settings.js';
+import { isActionBarCollapsed, setActionBarCollapsed, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY } from './user-prefs.js';
+
+const HIGH_RISK_HOLD_MS = 1200;
+const highRiskConfirmationInFlight = new Set<number>();
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -96,7 +100,11 @@ const BG_APPROVAL_TAIL_LINES = 80;
 // scrollback 誤検出の懸念が無いため、ヒューリスティック scanner（40 行）と分離して全文を渡し、
 // 取りこぼし上限は pendingTextTail の保持量（APPROVAL_PENDING_TEXT_TAIL_LIMIT 文字）に一本化する。
 function markerLinesFromTail(tail) {
-  return String(tail || '').split(/\r\n|\r|\n/).map(l => stripAnsi(l));
+  // 差分再描画型 TUI（Grok CLI 等）は行境界を改行ではなく絶対カーソル移動で表現するため、
+  // stripAnsi で削除する前にカーソル制御を改行・空白へ変換する（normalizeVtCursorOps 参照）。
+  // これを挟まないとマーカーブロック全体が 1 行に連結され、番号直後の「. 」も消えて
+  // 選択肢分割が壊れる（ボタン 1 個に全選択肢が連結される症状・2026-07-12 実測）。
+  return normalizeVtCursorOps(String(tail || '')).split(/\r\n|\r|\n/).map(l => stripAnsi(l));
 }
 const bgApprovalMisses = new Map();
 const bgApprovalClearTimers = new Map();
@@ -218,11 +226,14 @@ export function isShellProvider(provider: string): boolean {
   return provider === 'shell';
 }
 
-// \x15(Ctrl+U) を行クリアとして解釈しない provider。前置すると逆に悪さをする:
+// \x15(Ctrl+U) を行クリアとして解釈しない provider。送ると逆に悪さをする:
 // - shell: PowerShell 等で行クリアにならずリテラル ^U が混入してコマンドを壊す（2026-06-13 e168426 で確認）
 // - codex: Rust TUI が \x15 を行クリアとして解釈せず、続く \r がコマンド実行に至らない
 //   （2026-06-21 確認。素ターミナルで \x15 無しなら Enter 1 個で実行できる）
-// これらの provider 宛では doSend / sendQuickCommand / inputClearBtn の \x15 前置/単独送信をスキップする。
+// かつては doSend / sendQuickCommand の全送信に \x15 を前置していたが、claude /login の
+// コード入力欄でもリテラル混入（OAuth 400）を起こしたため前置は全廃し、residue-sweep.ts の
+// 事後掃除へ移行した。現在この判定を使うのは inputClearBtn の単独 \x15 送信と
+// residue-sweep の掃除スキップの 2 箇所。
 export function shouldSkipClearPrefix(provider: string): boolean {
   return provider === 'shell' || provider === 'codex';
 }
@@ -716,6 +727,8 @@ export function handleGoApprovalDetected(message) {
   const options = normalizeGoApprovalOptions(message.approval_options);
   if (options.length === 0) return;
   const sig = String(message.approval_sig || approvalSig(options));
+	const summary = normalizeApprovalSummary(message.approval_summary, message.approval_context, message.approval_question);
+	if (summary) (options as any)._summary = summary;
   options.forEach((opt: any) => {
     opt._approvalSource = 'go_vt';
     opt._approvalSig = sig;
@@ -739,6 +752,18 @@ export function handleGoApprovalDetected(message) {
     const bar = document.getElementById('action-bar');
     if (bar) approvalUiAdapter.showOptions(bar, id, options, !wasVisible);
   }
+}
+
+function normalizeApprovalSummary(raw, fallbackRaw, fallbackQuestion) {
+  if (!raw || typeof raw !== 'object') return null;
+  const risk = raw.risk === 'low' || raw.risk === 'high' ? raw.risk : 'mid';
+  const command = String(raw.command || fallbackQuestion || '').trim();
+  const paths = Array.isArray(raw.paths)
+    ? raw.paths.map((path) => String(path || '').trim()).filter(Boolean).slice(0, 4)
+    : [];
+  const context = String(raw.raw || fallbackRaw || '').trim();
+  if (!command && !context) return null;
+  return { command, paths, risk, raw: context };
 }
 
 export function handleHubApprovalMarker(message) {
@@ -1383,7 +1408,8 @@ export function showActionBar(bar, sessionId, options, forceStickToBottom = fals
     _labelKind: sequentialQuestion ? 'sequential' : (isSelectMenu ? 'select-menu' : 'approval'),
     _labelTitle: sequentialQuestion || menuTitle || '',
     // 質問本文（承認系のみ；sequential/select-menu は title 側で表示済み）。
-    _question: hubQuestion,
+	_question: hubQuestion,
+	_summary: (options as any)._summary || null,
     // 配列プロパティの _preamble は [section] 変換で失われるためセクションへも引き継ぐ。
     _preamble: (options && (options as any)._preamble) ? (options as any)._preamble : '',
   };
@@ -1438,7 +1464,9 @@ export function sendSingleFreeText(sessionId) {
   if (cachedOpts) approvalConsumedSig.set(sessionId, approvalSig(cachedOpts));
   recordAnsweredMarkerSig(sessionId, cachedOpts);
   sendApprovalConsumed(sessionId, cachedOpts, `${text}\r`);
-  sendSubmittedText(sessionId, `${text}\r`);
+  // 自由回答は文章なのでチャット本文と同じ共通経路（ペースト包み＋確定 \r 別送）で送る。
+  // 「本文+\r」同梱は内側 CLI に \r を吸収され送信不発になる（Grok 実測 2026-07-11）。
+  sendSubmittedBody(sessionId, text);
   hideActionBar(sessionId);
   approvalSuppressUntil.set(sessionId, Date.now() + 400);
   multiQuestionDismissedCache.delete(sessionId);
@@ -1528,6 +1556,7 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   const question = (labelKind === 'approval' && section._question) ? String(section._question).trim() : '';
   const preamble = section._preamble ? String(section._preamble).trim() : '';
   const freeActive = allowFree && !!singleFreeActive.get(sessionId);
+	const summary = section._summary || null;
 
   const sig = JSON.stringify({
     s: sessionId,
@@ -1536,6 +1565,7 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
     lk: labelKind,
     q: question,
     pre: preamble,
+		approvalSummary: summary ? { c: summary.command, p: summary.paths, r: summary.risk, raw: summary.raw } : null,
     opts: options.map(o => ({ n: o.num, l: o.label, c: !!o.isCurrent, p: !!o.preserveOrder })),
     free: allowFree,
     fa: freeActive,
@@ -1573,6 +1603,8 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   }
   bar.appendChild(label);
 
+	if (summary) appendApprovalSummaryCard(bar, summary);
+
   // 承認ブロック直前の地の文（前置き説明）があれば先頭に表示する（バッチ/複数選択と対称）。
   // 単一質問だけここが抜けていたため、AI の質問文・文脈がポップアップに出ず CLI 画面を
   // 見ないと内容が分からなかった。
@@ -1600,6 +1632,8 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   const hasSessionAllow = options.some(o => isSessionAllowLabel(o.label));
   const isRecommendedOpt = (o) => hasSessionAllow ? isSessionAllowLabel(o.label) : o.isCurrent;
 
+  const isHighRiskApprove = (opt) => isHighRiskApprovalSelection(sessionId, opt.num);
+
   // 選択肢ボタンは全文表示（短ラベル圧縮なし）。.action-btn の通常スタイルで折り返す
   //（詳細パネルでのプレビューが不要になり、見て 1 クリックで送れる）。
   const optsEl = document.createElement('div');
@@ -1615,7 +1649,12 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
     btn.className = cls;
     btn.textContent = `${opt.num}. ${opt.label}` + (isRecommendedOpt(opt) ? ` (${t('approval_recommended')})` : '');
     btn.title = `${opt.num}. ${opt.label}`;
-    btn.onclick = () => sendChoice(sessionId, opt.num); // 即送信（確認モーダルなし）
+    if (isHighRiskApprove(opt)) {
+      btn.classList.add('high-risk-approval');
+      bindHighRiskApproval(btn, sessionId, opt.num);
+    } else {
+      btn.onclick = () => sendChoice(sessionId, opt.num); // 即送信（確認モーダルなし）
+    }
     optsEl.appendChild(btn);
   }
 
@@ -1671,6 +1710,115 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   actionBarShownAt.set(sessionId, Date.now());
   if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
   if (chatWasAtBottomB && chatTlB) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlB));
+}
+
+function highRiskConfirmationMode() {
+  try {
+    return localStorage.getItem(STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY) === 'dialog' ? 'dialog' : 'hold';
+  } catch (_) {
+    return 'hold';
+  }
+}
+
+function isHighRiskApprovalSelection(sessionId, targetNum) {
+  const cached = approvalRawOptionsCache.get(sessionId);
+  if (!Array.isArray(cached) || isBatchOptions(cached) || isMultiSelectOptions(cached)) return false;
+  const summary = (cached as any)._summary;
+  if (!summary || summary.risk !== 'high') return false;
+  const opt = cached.find((item) => item && item.num === targetNum);
+  if (!opt) return false;
+  // Deny/reject actions remain immediate: the guard exists only to prevent an
+  // accidental affirmative action from executing a destructive command.
+  return !/\b(no|deny|reject|skip|cancel|abort|decline)\b|don't\s+allow/i.test(String(opt.label || ''));
+}
+
+export function bindHighRiskApproval(btn, sessionId, targetNum) {
+  if (highRiskConfirmationMode() === 'dialog') {
+    btn.textContent += ' (confirm)';
+    btn.onclick = () => void requestHighRiskConfirmation(sessionId, targetNum);
+    return;
+  }
+
+  btn.classList.add('hold-to-approve');
+  btn.title = `${btn.title} — hold for 1.2 seconds`;
+  let timer = null;
+  const cancel = () => {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+    btn.classList.remove('holding');
+    btn.style.removeProperty('--hold-progress-duration');
+  };
+  btn.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || timer !== null) return;
+    event.preventDefault();
+    btn.setPointerCapture?.(event.pointerId);
+    btn.classList.add('holding');
+    btn.style.setProperty('--hold-progress-duration', `${HIGH_RISK_HOLD_MS}ms`);
+    timer = window.setTimeout(() => {
+      timer = null;
+      btn.classList.remove('holding');
+      btn.style.removeProperty('--hold-progress-duration');
+      sendChoice(sessionId, targetNum, true);
+    }, HIGH_RISK_HOLD_MS);
+  });
+  btn.addEventListener('pointerup', cancel);
+  btn.addEventListener('pointercancel', cancel);
+  btn.addEventListener('pointerleave', (event) => { if (event.buttons === 0) cancel(); });
+  btn.onclick = (event) => { event.preventDefault(); }; // suppress synthetic click after a released hold
+}
+
+async function requestHighRiskConfirmation(sessionId, targetNum) {
+  if (highRiskConfirmationInFlight.has(sessionId)) return;
+  highRiskConfirmationInFlight.add(sessionId);
+  try {
+    const ok = await appConfirm({
+      title: 'High-risk approval',
+      message: 'This approval can run a destructive or externally visible operation. Continue only if you have checked the command and target paths.',
+      confirmText: 'Approve',
+      cancelText: 'Cancel',
+      kind: 'danger',
+    });
+    if (ok) sendChoice(sessionId, targetNum, true);
+  } finally {
+    highRiskConfirmationInFlight.delete(sessionId);
+  }
+}
+
+function appendApprovalSummaryCard(bar, summary) {
+  const card = document.createElement('div');
+  card.className = `approval-summary-card risk-${summary.risk || 'mid'}`;
+
+  const risk = document.createElement('span');
+  risk.className = 'approval-risk-badge';
+  risk.textContent = summary.risk === 'high' ? 'HIGH' : summary.risk === 'low' ? 'LOW' : 'MID';
+  card.appendChild(risk);
+
+  const command = document.createElement('span');
+  command.className = 'approval-summary-command';
+  command.textContent = summary.command ? `${summary.command} を実行してよいか` : 'この操作を実行してよいか';
+  command.title = command.textContent;
+  card.appendChild(command);
+
+  for (const path of summary.paths || []) {
+    const badge = document.createElement('span');
+    badge.className = 'approval-path-badge';
+    badge.textContent = path;
+    badge.title = path;
+    card.appendChild(badge);
+  }
+
+  if (summary.raw) {
+    const raw = document.createElement('details');
+    raw.className = 'approval-summary-raw';
+    const rawTitle = document.createElement('summary');
+    rawTitle.textContent = 'raw';
+    raw.appendChild(rawTitle);
+    const rawBody = document.createElement('pre');
+    rawBody.textContent = summary.raw;
+    raw.appendChild(rawBody);
+    card.appendChild(raw);
+  }
+  bar.appendChild(card);
 }
 
 export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom = false) {
@@ -2068,7 +2216,9 @@ export function sendBatchChoices(sessionId) {
   approvalConsumedSig.set(sessionId, approvalSig(cached));
   recordAnsweredMarkerSig(sessionId, cached);
   sendApprovalConsumed(sessionId, cached, text);
-  sendSubmittedText(sessionId, `${text}\r`, { recordMobileTranscript: false });
+  // 一括回答は改行区切りの複数行（buildBatchPayload）。生送信だと \n が行ごとの途中送信に
+  // なるため、チャット本文と同じ共通経路（ペースト包み＋確定 \r 別送）で 1 メッセージとして送る。
+  sendSubmittedBody(sessionId, text, { recordMobileTranscript: false });
   removeBatchConfirmModal();
   hideActionBar(sessionId);
   approvalSuppressUntil.set(sessionId, Date.now() + 400);
@@ -2340,7 +2490,11 @@ export function sendMultiSelectChoices(sessionId) {
   setTimeout(() => inputEl.focus(), 0);
 }
 
-export function sendChoice(sessionId, targetNum) {
+export function sendChoice(sessionId, targetNum, highRiskConfirmed = false) {
+  if (!highRiskConfirmed && isHighRiskApprovalSelection(sessionId, targetNum)) {
+    if (highRiskConfirmationMode() === 'dialog') void requestHighRiskConfirmation(sessionId, targetNum);
+    return;
+  }
   const seqState = sequentialChoiceCache.get(sessionId);
   if (seqState && seqState.index < seqState.prompts.length) {
     const prompt = seqState.prompts[seqState.index];
@@ -2361,13 +2515,13 @@ export function sendChoice(sessionId, targetNum) {
 
     const response = seqState.prompts
       .map(p => `${p.key}: ${seqState.answers.get(p.key)}`)
-      .join('\n') + '\r';
+      .join('\n');
     // chatHistory: 複数質問への一括回答を system/approval として push
     chatHistoryCommitOutput(sessionId);
     pushMessage(sessionId, {
       role: 'system',
       kind: 'approval',
-      rawText: response.replace(/\r$/, ''),
+      rawText: response,
       meta: {
         kind: 'batch',
         answers: seqState.prompts.map(p => ({
@@ -2383,7 +2537,8 @@ export function sendChoice(sessionId, targetNum) {
     recordAnsweredMarkerSig(sessionId, prevOpts);
     multiQuestionDismissedCache.delete(sessionId);
     multiQuestionLatchAt.delete(sessionId);
-    sendSubmittedText(sessionId, response, { recordMobileTranscript: false });
+    // 改行区切りの複数行回答は共通経路（ペースト包み＋確定 \r 別送）で 1 メッセージとして送る。
+    sendSubmittedBody(sessionId, response, { recordMobileTranscript: false });
     hideActionBar(sessionId);
     approvalSuppressUntil.set(sessionId, Date.now() + 400);
     setTimeout(() => {

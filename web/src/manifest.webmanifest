@@ -4,8 +4,8 @@
   "description": "Local Hub UI for AI CLI sessions and approvals.",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0d0f17",
-  "theme_color": "#0d0f17",
+  "background_color": "#0e0f12",
+  "theme_color": "#0e0f12",
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -24,6 +24,15 @@
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Approval queue",
+      "short_name": "Approvals",
+      "description": "Open the approval-only queue.",
+      "url": "/mobile/approvals",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ]
 }

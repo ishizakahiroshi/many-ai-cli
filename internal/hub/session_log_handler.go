@@ -51,6 +51,11 @@ func (s *Server) handleSessionLog(w http.ResponseWriter, r *http.Request) {
 		logPath = ses.LogPath
 	}
 	s.sessionsMu.Unlock()
+	if logPath == "" && s.sessionStore != nil {
+		if overview, storeErr := s.sessionStore.SessionOverviewByLiveSession(sessionID); storeErr == nil {
+			logPath = overview.LogPath
+		}
+	}
 	if logPath == "" {
 		writeJSONError(w, http.StatusNotFound, "not_found", "session log not found")
 		return

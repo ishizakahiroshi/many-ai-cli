@@ -24,6 +24,7 @@ import (
 
 	"golang.org/x/net/websocket"
 	"many-ai-cli/internal/attach"
+	"many-ai-cli/internal/autoapproval"
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/notify"
 	"many-ai-cli/internal/proto"
@@ -63,6 +64,7 @@ const (
 	approvalVisibleLease = 15 * time.Second
 	wsMaxPayloadBytes    = 2 << 20 // 2 MiB: UI/wrapper JSON frame receive cap
 
+	bracketedPasteStart       = "\x1b[200~"
 	bracketedPasteEnd         = "\x1b[201~"
 	bracketedPasteSubmitDelay = 50 * time.Millisecond
 
@@ -72,44 +74,44 @@ const (
 	chatHistoryUserTurnMarker = "\x1b]47777;user-turn\x07"
 )
 
-// session の State は次のいずれか:
-//
-//	"standby"   : wrapper 接続済み・出力静止 + 承認 UI 不可視
-//	"running"   : 直近 idleAfter 以内に PTY 出力あり
-//	"waiting"   : 出力静止 + 承認 UI 可視（UI からの session_hint で確定）
-//	"completed" : プロセス正常終了
-//	"error"     : プロセス異常終了
-//	"disconnected" : wrapper WebSocket 切断
-//
-// standby/waiting の振り分けは「PTY バイトのみでは不可能」なため、UI が
-// xterm.js のレンダリング済みバッファをスキャンして session_hint で approval_visible
-// を伝える。Hub はそれを受けて idleAfter 経過時に倒す state を決める。
+// SessionActivity が状態の正本で、State は互換表示用の派生値である。
+// approval_visible は UI が xterm.js バッファをスキャンして session_hint で伝える。
 type session struct {
-	ID              int    `json:"id"`
-	Provider        string `json:"provider"`
-	Display         string `json:"display_name"`
-	CWD             string `json:"cwd"`
-	Branch          string `json:"branch,omitempty"`
-	Label           string `json:"label,omitempty"` // UI カード 3 行目に【ラベル】として表示
-	Model           string `json:"model,omitempty"` // 使用モデル名; UI カード表示用
-	Route           string `json:"route,omitempty"` // 接続経路（"ollama" 等）; UI で Ollama バックエンドの識別に使用
-	Shell           string `json:"shell,omitempty"`
-	ParentSessionID int    `json:"parent_session_id,omitempty"`
-	Role            string `json:"role,omitempty"`
-	Auto            bool   `json:"auto,omitempty"`
-	Depth           int    `json:"depth,omitempty"`
-	OrchestrationID string `json:"orchestration_id,omitempty"`
-	BoardPath       string `json:"board_path,omitempty"`
-	WorktreeBranch  string `json:"worktree_branch,omitempty"`
-	State           string `json:"state"`
-	LastOutputAt    string `json:"last_output_at,omitempty"` // ISO 8601; UI カード「最終応答時刻」用
-	StartedAt       string `json:"started_at,omitempty"`     // ISO 8601; UI カード「起動時刻」用
-	FirstMessage    string `json:"first_message,omitempty"`  // 最初の確定入力; UI カード表示用
-	LastMessage     string `json:"last_message,omitempty"`   // 最新の確定入力; UI カード表示用
-	EndReason       string `json:"end_reason,omitempty"`     // session_end の reason コード（例: "exec_not_found"）。UI 側で i18n 翻訳して表示
-	HomeDir         string `json:"-"`
-	CodexHome       string `json:"-"`
-	ClaudeDir       string `json:"-"`
+	ID                 int    `json:"id"`
+	Provider           string `json:"provider"`
+	Display            string `json:"display_name"`
+	CWD                string `json:"cwd"`
+	Branch             string `json:"branch,omitempty"`
+	Label              string `json:"label,omitempty"` // UI カード 3 行目に【ラベル】として表示
+	Pinned             bool   `json:"pinned,omitempty"`
+	Color              string `json:"color,omitempty"`
+	Note               string `json:"note,omitempty"`
+	AutoTitle          string `json:"auto_title,omitempty"`
+	Model              string `json:"model,omitempty"` // 使用モデル名; UI カード表示用
+	Route              string `json:"route,omitempty"` // 接続経路（"ollama" 等）; UI で Ollama バックエンドの識別に使用
+	Shell              string `json:"shell,omitempty"`
+	ParentSessionID    int    `json:"parent_session_id,omitempty"`
+	Role               string `json:"role,omitempty"`
+	Auto               bool   `json:"auto,omitempty"`
+	Depth              int    `json:"depth,omitempty"`
+	OrchestrationID    string `json:"orchestration_id,omitempty"`
+	BoardPath          string `json:"board_path,omitempty"`
+	WorktreeBranch     string `json:"worktree_branch,omitempty"`
+	NormalWorktree     normalWorktree
+	WorktreeCleanup    string
+	BoardNotifyPending bool `json:"board_notify_pending,omitempty"`
+	// Activity is the authoritative three-axis activity model. State is kept
+	// below only as a compatibility display label for older clients.
+	Activity     SessionActivity `json:"activity"`
+	State        string          `json:"state"`
+	LastOutputAt string          `json:"last_output_at,omitempty"` // ISO 8601; UI カード「最終応答時刻」用
+	StartedAt    string          `json:"started_at,omitempty"`     // ISO 8601; UI カード「起動時刻」用
+	FirstMessage string          `json:"first_message,omitempty"`  // 最初の確定入力; UI カード表示用
+	LastMessage  string          `json:"last_message,omitempty"`   // 最新の確定入力; UI カード表示用
+	EndReason    string          `json:"end_reason,omitempty"`     // session_end の reason コード（例: "exec_not_found"）。UI 側で i18n 翻訳して表示
+	HomeDir      string          `json:"-"`
+	CodexHome    string          `json:"-"`
+	ClaudeDir    string          `json:"-"`
 
 	// JSON 外: 状態評価用
 	lastOutputAt      time.Time // idleAfter 計算用。LastOutputAt と同期して更新する
@@ -194,10 +196,7 @@ type session struct {
 }
 
 func (s *session) idleStateName() string {
-	if s.approvalVisible {
-		return "waiting"
-	}
-	return "standby"
+	return s.Activity.DisplayState()
 }
 
 // resolveRoute は provider + model から route を推定する。
@@ -337,15 +336,32 @@ type wrapperConn struct {
 
 func newWrapperConn(ws *websocket.Conn) *wrapperConn { return &wrapperConn{ws: ws} }
 
-func (c *wrapperConn) send(m any) error {
+func (c *wrapperConn) send(m any) (err error) {
+	if c == nil || c.ws == nil {
+		return fmt.Errorf("wrapper not connected")
+	}
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
+	// ゼロ値 Conn や切断済みは x/net/websocket が panic することがあるため回収する。
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("wrapper send failed: %v", r)
+		}
+	}()
 	return websocket.JSON.Send(c.ws, m)
 }
 
-func (c *wrapperConn) sendWithDeadline(m any, deadline time.Time) error {
+func (c *wrapperConn) sendWithDeadline(m any, deadline time.Time) (err error) {
+	if c == nil || c.ws == nil {
+		return fmt.Errorf("wrapper not connected")
+	}
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("wrapper send failed: %v", r)
+		}
+	}()
 	if err := c.ws.SetWriteDeadline(deadline); err != nil {
 		return err
 	}
@@ -353,7 +369,11 @@ func (c *wrapperConn) sendWithDeadline(m any, deadline time.Time) error {
 }
 
 func (c *wrapperConn) close() {
-	c.closeOnce.Do(func() { _ = c.ws.Close() })
+	c.closeOnce.Do(func() {
+		if c.ws != nil {
+			_ = c.ws.Close()
+		}
+	})
 }
 
 type Server struct {
@@ -397,6 +417,12 @@ type Server struct {
 	approvalRulesMu     sync.Mutex
 	approvalRuleTargets map[string]approvalRuleTarget // key: normalized path
 
+	// autoApprovalMu guards the local, explicitly enabled whitelist policy and
+	// the bounded runtime history used by Settings simulation.
+	autoApprovalMu      sync.Mutex
+	autoApprovalPolicy  *autoapproval.Policy
+	autoApprovalHistory []autoApprovalCandidate
+
 	// netHint: launcher（SSH tunnel モード）が /api/net-hint で登録する接続元情報。
 	// tunnel モードでは既起動の Hub に MANY_AI_CLI_HOST_LABEL を注入できないため、
 	// API 経由でサーバ側に保持し、URL クエリヒントを持たないクライアント
@@ -413,6 +439,7 @@ type Server struct {
 	sessionStore      *sessionstore.Store
 	push              *pushManager
 	notifyMgr         *notify.Manager
+	oneTapApprovals   *oneTapApprovalManager
 	orchestration     *orchestrationManager
 
 	// 任意リモート PIN（pin_auth.go）。lazy 生成のため pinLim() 経由でアクセスする。
@@ -704,6 +731,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		pendingInput:          map[int][]string{},
 		slashCmdCache:         map[string]*slashCmdCacheEntry{},
 		approvalRuleTargets:   map[string]approvalRuleTarget{},
+		autoApprovalHistory:   make([]autoApprovalCandidate, 0, 100),
 		usageLinkCache:        newUsageLinkCache(),
 		modelsCache:           &modelsCache{},
 		modelsRemoteCache:     newModelsRemoteCache(),
@@ -711,6 +739,20 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		branchRefreshSem:      make(chan struct{}, branchRefreshWorkers),
 		branchRefreshInFlight: map[string]struct{}{},
 		serverConns:           newServerConnManager(logger),
+	}
+	if actions, err := newOneTapApprovalManager(); err != nil {
+		return nil, err
+	} else {
+		s.oneTapApprovals = actions
+	}
+	if policy, err := autoapproval.Load(); err != nil {
+		logger.Warn("auto approval policy unavailable", "err", err)
+		s.autoApprovalPolicy = &autoapproval.Policy{}
+	} else {
+		s.autoApprovalPolicy = policy
+		for _, warning := range policy.Warnings {
+			logger.Warn("auto approval rule disabled", "warning", warning)
+		}
 	}
 	// web/dist 鮮度チェック: dist/.src-hash (ビルド時焼き付け) と現在の web/src/ を比較。
 	// web/src/ が存在しない環境（VPS/Docker）ではチェックをスキップし fresh 扱いとする。
@@ -800,6 +842,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		Handler:   s.handleWS,
 	})
 	mux.HandleFunc("/api/info", s.handleInfo)
+	mux.HandleFunc("/api/doctor", s.handleDoctor)
 	mux.HandleFunc("/api/mobile-connect", s.handleMobileConnect)
 	mux.HandleFunc("/api/mobile-connect/tailscale", s.handleTailscaleStatus)
 	mux.HandleFunc("/api/mobile-connect/tailscale/serve", s.handleTailscaleServe)
@@ -812,6 +855,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/avatar", s.handleAvatar)
 	mux.HandleFunc("/api/spawn", s.handleSpawn)
 	mux.HandleFunc("/api/spawn-grid", s.handleSpawnGrid)
+	// /api/session/:id/meta is the public singular route described in the UX
+	// contract. Keep the older plural /api/sessions/ namespace for orchestration.
+	mux.HandleFunc("/api/session/", s.handleSessionMetaAPI)
 	mux.HandleFunc("/api/sessions/", s.handleSessionAPI)
 	mux.HandleFunc("/api/pick-directory", s.handlePickDirectory)
 	mux.HandleFunc("/api/path-exists", s.handlePathExists)
@@ -826,7 +872,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/log-config", s.handleLogConfig)
 	mux.HandleFunc("/api/session-chat", s.handleSessionChat)
 	mux.HandleFunc("/api/session-log", s.handleSessionLog)
+	mux.HandleFunc("/api/grok-history", s.handleGrokHistory)
 	mux.HandleFunc("/api/session-search", s.handleSessionSearch)
+	mux.HandleFunc("/api/session-history", s.handleSessionHistory)
 	mux.HandleFunc("/api/session-store/reset", s.handleSessionStoreReset)
 	mux.HandleFunc("/api/logs/purge", s.handleLogsPurge)
 	mux.HandleFunc("/api/logs/legacy-notice", s.handleLegacyLogsNotice)
@@ -834,6 +882,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/open-dir", s.handleOpenDir)
 	mux.HandleFunc("/api/idle-timeout", s.handleIdleTimeout)
 	mux.HandleFunc("/api/reconnect-grace", s.handleReconnectGrace)
+	mux.HandleFunc("/api/input-config", s.handleInputConfig)
+	mux.HandleFunc("/api/orchestration-config", s.handleOrchestrationConfig)
 	mux.HandleFunc("/api/notify-config", s.handleNotifyConfig)
 	mux.HandleFunc("/api/notify-test", s.handleNotifyTest)
 	mux.HandleFunc("/api/notify-generate-topic", s.handleNotifyGenerateTopic)
@@ -842,6 +892,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/approval/enable", s.handleApprovalEnable)
 	mux.HandleFunc("/api/approval/disable", s.handleApprovalDisable)
 	mux.HandleFunc("/api/approval/dismiss", s.handleApprovalDismiss)
+	mux.HandleFunc("/api/approval/batch", s.handleApprovalBatch)
+	mux.HandleFunc("/api/approval-action/", s.handleOneTapApproval)
 	mux.HandleFunc("/api/attach", s.handleAttach)
 	mux.HandleFunc("/api/slash-cmd-sources", s.handleSlashCmdSources)
 	mux.HandleFunc("/api/slash-commands", s.handleSlashCommands)
@@ -864,6 +916,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/git-show", s.handleGitShow)
 	mux.HandleFunc("/api/git-refs", s.handleGitRefs)
 	mux.HandleFunc("/api/git-status", s.handleGitStatus)
+	mux.HandleFunc("/api/git-diff", s.handleGitDiff)
 	mux.HandleFunc("/api/git-commit-all", s.handleGitCommitAll)
 	mux.HandleFunc("/api/git-commit-message", s.handleGitCommitMessage)
 	mux.HandleFunc("/api/git-fetch", s.handleGitFetch)
@@ -872,6 +925,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/user-prefs/notify-sound-custom", s.handleUserPrefsNotifySoundCustom)
 	mux.HandleFunc("/api/user-prefs/avatar", s.handleUserPrefsAvatarUpload)
 	mux.HandleFunc("/api/user-prefs", s.handleUserPrefs)
+	mux.HandleFunc("/api/auto-approval/status", s.handleAutoApprovalStatus)
+	mux.HandleFunc("/api/auto-approval/simulate", s.handleAutoApprovalSimulation)
 	mux.HandleFunc("/api/push/status", s.handlePushStatus)
 	mux.HandleFunc("/api/push/vapid-public-key", s.handlePushVAPIDPublicKey)
 	mux.HandleFunc("/api/push/subscriptions", s.handlePushSubscriptions)
@@ -1312,12 +1367,11 @@ func (s *Server) handleResize(m proto.Message) {
 // notifyInputDeferred) と定数 (maxPendingInputPerSession / initialInjectGateMaxAge)
 // は C4 追加分割で internal/hub/input_gate.go へ移動した。
 
-// handleHint は session_hint メッセージを処理する。
-// UI が xterm.js バッファをスキャンして判定した approval_visible を受け取り、
-// セッションの approvalVisible フィールドを更新する。
+// handleHint は session_hint メッセージを処理し、待機軸と派生 State を即時更新する。
 func (s *Server) handleHint(m proto.Message) {
 	s.sessionsMu.Lock()
 	ses := s.sessions[m.SessionID]
+	var update proto.Message
 	if ses != nil {
 		ses.approvalVisible = m.ApprovalVisible
 		if m.ApprovalVisible {
@@ -1325,8 +1379,18 @@ func (s *Server) handleHint(m proto.Message) {
 		} else {
 			ses.approvalVisibleAt = time.Time{}
 		}
+		if !isTerminalSessionState(ses.State) {
+			ses.Activity.AwaitingApproval = ses.approvalVisible
+			ses.Activity.AwaitingUser = ses.approvalVisible
+			ses.Activity.Normalize()
+			ses.State = ses.Activity.DisplayState()
+			update = sessionUpdateMessage(ses)
+		}
 	}
 	s.sessionsMu.Unlock()
+	if update.SessionID != 0 {
+		s.broadcast(update)
+	}
 }
 
 // handleConsumed は approval_consumed メッセージを処理する。
@@ -1396,6 +1460,10 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 // handleDismiss は session_dismiss メッセージを処理する。
 // セッションを削除し、JSONL を閉じてトランスクリプトを生成する。
 // 戻り値が true の場合、呼び出し元の uiLoop は当該ターンを continue する。
+//
+// Hub map に既に無い ID でも session_removed を broadcast する（冪等 dismiss）。
+// 理由: inject 中 dismiss → 後続 session_update で UI だけ幽霊化したケースや、
+// session_removed 取りこぼし後の再 × で、UI が永遠に消えないのを防ぐ。
 func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	s.sessionsMu.Lock()
 	wc := s.wrappers[m.SessionID]
@@ -1403,12 +1471,16 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	var historyToClose *sessionlog.Writer
 	var jsonlPathForTranscript string
 	var endedProvider, endedCWD string
+	var endedWorktree normalWorktree
+	var endedWorktreeCleanup string
 	if exists {
 		ses := s.sessions[m.SessionID]
 		historyToClose = ses.History
 		jsonlPathForTranscript = ses.JSONLPath
 		endedProvider = ses.Provider
 		endedCWD = ses.CWD
+		endedWorktree = ses.NormalWorktree
+		endedWorktreeCleanup = ses.WorktreeCleanup
 		ses.History = nil
 		delete(s.sessions, m.SessionID)
 		delete(s.wrappers, m.SessionID)
@@ -1416,6 +1488,8 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	}
 	s.sessionsMu.Unlock()
 	if !exists {
+		// map には無いが UI 側に残っている幽霊カードを落とす。
+		s.broadcast(proto.Message{Type: "session_removed", SessionID: m.SessionID})
 		return true
 	}
 	// セッション破棄時に usageStat も解放する（メモリ無制限増加を防ぐ）。
@@ -1443,6 +1517,10 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		_ = historyToClose.Close()
 	}
 	s.removeInactiveApprovalRules(providerApprovalRuleTargets(endedProvider, endedCWD))
+	s.removeInactiveUsageHooks(endedProvider, endedCWD)
+	if err := cleanupNormalWorktree(endedWorktree, endedWorktreeCleanup); err != nil {
+		s.logger.Warn("worktree retained after session dismissal", "path", endedWorktree.Path, "err", err)
+	}
 	s.finalizeTranscript(m.SessionID, jsonlPathForTranscript)
 	s.broadcast(proto.Message{Type: "session_removed", SessionID: m.SessionID})
 	return false

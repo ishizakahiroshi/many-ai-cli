@@ -8,7 +8,6 @@ import { showToast, token } from './util.js';
 export const STORAGE_THEME_KEY      = 'ai_cli_hub_theme';
 export const STORAGE_FONTSIZE_KEY   = 'ai_cli_hub_fontsize';
 export const STORAGE_LANG_KEY       = 'ai_cli_hub_lang';
-export const STORAGE_FAVORITES_KEY         = 'ai_cli_hub_favorites';
 export const STORAGE_ORDER_KEY             = 'ai_cli_hub_session_order';
 export const STORAGE_GROUP_ORDER_KEY       = 'ai_cli_hub_group_order';
 export const STORAGE_PROJECT_FAVORITES_KEY = 'ai_cli_hub_project_favorites';
@@ -23,6 +22,8 @@ export const STORAGE_NOTIFY_SOUND_CUSTOM_KEY  = 'ai_cli_hub_notify_sound_custom'
 export const STORAGE_DESKTOP_NOTIFY_ENABLED_KEY = 'ai_cli_hub_desktop_notify_enabled';
 export const STORAGE_PUSH_NOTIFY_ENABLED_KEY = 'ai_cli_hub_push_notify_enabled';
 export const STORAGE_APPROVAL_AUTO_SWITCH_KEY = 'ai_cli_hub_approval_auto_switch';
+export const STORAGE_AUTO_APPROVAL_ENABLED_KEY = 'ai_cli_hub_auto_approval_enabled';
+export const STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY = 'ai_cli_hub_high_risk_confirmation_mode';
 export const STORAGE_QUICK_CMD_1_KEY          = 'ai_cli_hub_quick_cmd_1';
 export const STORAGE_QUICK_CMD_2_KEY          = 'ai_cli_hub_quick_cmd_2';
 export const STORAGE_QUICK_CMD_3_KEY          = 'ai_cli_hub_quick_cmd_3';
@@ -34,6 +35,7 @@ export const STORAGE_QUICK_CMD_2_SHOW_KEY     = 'ai_cli_hub_quick_cmd_2_show';
 export const STORAGE_QUICK_CMD_3_SHOW_KEY     = 'ai_cli_hub_quick_cmd_3_show';
 export const STORAGE_QUICK_CMD_4_SHOW_KEY     = 'ai_cli_hub_quick_cmd_4_show';
 export const STORAGE_QUICK_CMD_5_SHOW_KEY     = 'ai_cli_hub_quick_cmd_5_show';
+export const STORAGE_TEMPLATES_KEY            = 'ai_cli_hub_prompt_templates';
 export const STORAGE_TOOLS_LEFT_KEY           = 'ai_cli_hub_tools_left';
 export const STORAGE_PC_INPUT_TOOLS_KEY       = 'ai_cli_hub_pc_input_tools';
 export const STORAGE_MOBILE_INPUT_TOOLS_KEY   = 'ai_cli_hub_mobile_input_tools';
@@ -201,6 +203,7 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'quick_cmds.show3':          [STORAGE_QUICK_CMD_3_SHOW_KEY,      (v) => v ? '1' : '0'],
   'quick_cmds.show4':          [STORAGE_QUICK_CMD_4_SHOW_KEY,      (v) => v ? '1' : '0'],
   'quick_cmds.show5':          [STORAGE_QUICK_CMD_5_SHOW_KEY,      (v) => v ? '1' : '0'],
+  'templates':                 [STORAGE_TEMPLATES_KEY,             JSON.stringify],
   'usage_links.claude':        [STORAGE_USAGE_LINK_CLAUDE_KEY,     String],
   'usage_links.codex':         [STORAGE_USAGE_LINK_CODEX_KEY,      String],
   'usage_links.copilot':       [STORAGE_USAGE_LINK_COPILOT_KEY,    String],
@@ -209,13 +212,14 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'usage_links.lm-studio':     [STORAGE_USAGE_LINK_LM_STUDIO_KEY,  String],
   'usage_links.opencode':      [STORAGE_USAGE_LINK_OPENCODE_KEY,   String],
   'usage_links.grok':          [STORAGE_USAGE_LINK_GROK_KEY,       String],
-  'favorites':                 [STORAGE_FAVORITES_KEY,             JSON.stringify],
   'session_order':             [STORAGE_ORDER_KEY,                 JSON.stringify],
   'group_order':               [STORAGE_GROUP_ORDER_KEY,           JSON.stringify],
   'project_favorites':         [STORAGE_PROJECT_FAVORITES_KEY,     JSON.stringify],
   'cwd_history':               [STORAGE_CWD_HISTORY_KEY,           JSON.stringify],
   'cwd_favorites':             [STORAGE_CWD_FAVORITES_KEY,         JSON.stringify],
   'approval.auto_switch':      [STORAGE_APPROVAL_AUTO_SWITCH_KEY,  (v) => v ? '1' : '0'],
+  'approval.auto_approval_enabled': [STORAGE_AUTO_APPROVAL_ENABLED_KEY, (v) => v ? '1' : '0'],
+  'approval.high_risk_confirmation_mode': [STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY, String],
   'pc.input_tools_enabled':     [STORAGE_PC_INPUT_TOOLS_KEY,       (v) => v ? '1' : '0'],
   'mobile.input_tools_enabled': [STORAGE_MOBILE_INPUT_TOOLS_KEY,   (v) => v ? '1' : '0'],
   'mobile.voice_hint_shown':    [STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, (v) => v ? '1' : '0'],
@@ -251,7 +255,6 @@ export const _USER_PREFS_STRING_PATHS = new Set([
   'display.live_status_fg',
 ]);
 export const _USER_PREFS_STRING_ARRAY_PATHS = new Set([
-  'favorites',
   'session_order',
   'group_order',
   'project_favorites',
@@ -274,7 +277,7 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
   let parsed: any;
   try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
 
-  if (path.endsWith('.enabled') || path === 'voice.wake_word_enabled' || path === 'voice.input_disabled' || path === 'approval.auto_switch'
+  if (path.endsWith('.enabled') || path === 'voice.wake_word_enabled' || path === 'voice.input_disabled' || path === 'approval.auto_switch' || path === 'approval.auto_approval_enabled'
       || /^quick_cmds\.show[1-5]$/.test(path)) {
     return { ok: true, value: raw === '1' || raw === 'true' || parsed === true };
   }
@@ -282,12 +285,26 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
     const n = parseInt(String(parsed), 10);
     return { ok: true, value: Number.isFinite(n) ? Math.max(0, n) : 0 };
   }
+  if (path === 'approval.high_risk_confirmation_mode') {
+    return { ok: true, value: raw === 'dialog' ? 'dialog' : 'hold' };
+  }
   if (_USER_PREFS_STRING_PATHS.has(path)) {
     return { ok: true, value: parsed == null ? '' : String(parsed) };
   }
   if (_USER_PREFS_STRING_ARRAY_PATHS.has(path)) {
     if (!Array.isArray(parsed)) return { ok: false };
     return { ok: true, value: parsed.filter((v) => typeof v === 'string') };
+  }
+  if (path === 'templates') {
+    if (!Array.isArray(parsed)) return { ok: false };
+    const value = parsed.filter((item) => item && typeof item === 'object' &&
+      typeof item.body === 'string').slice(0, 100).map((item) => ({
+      body: item.body.trim().slice(0, 8000),
+      providers: Array.isArray(item.providers) ? item.providers.filter((p) => typeof p === 'string').slice(0, 10) : [],
+      tags: Array.isArray(item.tags) ? item.tags.filter((tag) => typeof tag === 'string').slice(0, 10) : [],
+      frequency: Math.max(0, Math.min(100000, Number(item.frequency) || 0)),
+    })).filter((item) => item.body);
+    return { ok: true, value };
   }
   if (path === 'spawn.defaults') {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ok: false };
@@ -400,6 +417,7 @@ export async function _mirrorUserPrefsFromServer() {
         }
       } catch (_) {}
     }
+    document.dispatchEvent(new CustomEvent('user-prefs-mirrored', { detail: prefs }));
     return prefs;
   } catch (_) {
     return null;

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/websocket"
 	"many-ai-cli/internal/config"
 )
 
@@ -159,6 +160,102 @@ func Test_handleBoardChange_doneOnlyMatchingSession(t *testing.T) {
 	}
 }
 
+func TestBoardDoneIDORRejected(t *testing.T) {
+	s := newTestServer()
+	parent := registerTestSession(s, 1, "codex")
+	childA := registerTestSession(s, 10, "codex")
+	childB := registerTestSession(s, 11, "codex")
+	for _, child := range []*session{childA, childB} {
+		child.ParentSessionID = parent.ID
+		child.OrchestrationID = "idor-board"
+		child.State = "running"
+	}
+	childA.Role = "implementer"
+	childB.Role = "reviewer"
+	path := filepath.Join(t.TempDir(), "board.md")
+	content := "## implementer session=10 2026-06-25T00:00:00Z\nwork\n## DONE reviewer session=11\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.registerBoardSession("idor-board", path, parent.ID, "conductor")
+	s.registerBoardChild("idor-board", path, childA.ID, parent.ID, childA.Role, time.Now())
+	s.registerBoardChild("idor-board", path, childB.ID, parent.ID, childB.Role, time.Now())
+
+	s.handleBoardChange("idor-board", path, info, content, time.Now())
+	if childA.State == "done" || childB.State == "done" {
+		t.Fatalf("sibling DONE spoof changed state: A=%q B=%q", childA.State, childB.State)
+	}
+}
+
+func Test_notifyBoardSession_queueUntilOutputIdle(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Orchestration.BoardNotifyMode = config.BoardNotifyQueueUntilIdle
+	conductor := registerTestSession(s, 1, "codex")
+	conductor.OrchestrationID = "s1"
+	conductor.lastOutputAt = time.Now()
+	path := filepath.Join(t.TempDir(), "board.md")
+	s.registerBoardSession("s1", path, conductor.ID, "conductor")
+
+	s.notifyBoardSession("s1", conductor.ID, "board update one")
+	s.notifyBoardSession("s1", conductor.ID, "board update latest")
+
+	s.orchestration.mu.Lock()
+	queued := s.orchestration.boards["s1"].PendingNotices[conductor.ID]
+	s.orchestration.mu.Unlock()
+	if queued != "board update latest" {
+		t.Fatalf("queued notice = %q, want latest update", queued)
+	}
+	if !conductor.BoardNotifyPending {
+		t.Fatal("BoardNotifyPending = false, want true while queued")
+	}
+
+	// Recent output keeps the notification queued.
+	s.flushQueuedBoardNotices(time.Now())
+	s.orchestration.mu.Lock()
+	_, stillQueued := s.orchestration.boards["s1"].PendingNotices[conductor.ID]
+	s.orchestration.mu.Unlock()
+	if !stillQueued {
+		t.Fatal("queue flushed while conductor still had recent output")
+	}
+
+	// The temporary server has no wrapper; flush therefore leaves the text in
+	// normal pending input, but consumes the board-notification queue exactly once.
+	// P-47: queue flush uses the three-axis idle predicate rather than a
+	// duplicate output-age threshold.
+	conductor.Activity = SessionActivity{OutputIdle: true}
+	s.flushQueuedBoardNotices(time.Now())
+	s.orchestration.mu.Lock()
+	_, stillQueued = s.orchestration.boards["s1"].PendingNotices[conductor.ID]
+	s.orchestration.mu.Unlock()
+	if stillQueued || conductor.BoardNotifyPending {
+		t.Fatalf("queued=%v pendingBadge=%v, want both false after idle flush", stillQueued, conductor.BoardNotifyPending)
+	}
+}
+
+func Test_notifyBoardSession_softNotifyDoesNotQueueEnter(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Orchestration.BoardNotifyMode = config.BoardNotifySoft
+	conductor := registerTestSession(s, 1, "codex")
+	conductor.OrchestrationID = "s1"
+	path := filepath.Join(t.TempDir(), "board.md")
+	s.registerBoardSession("s1", path, conductor.ID, "conductor")
+
+	s.notifyBoardSession("s1", conductor.ID, "board update")
+	if !conductor.BoardNotifyPending {
+		t.Fatal("soft-notify did not set the board update badge")
+	}
+	s.orchestration.mu.Lock()
+	queued := len(s.orchestration.boards["s1"].PendingNotices)
+	s.orchestration.mu.Unlock()
+	if queued != 0 {
+		t.Fatalf("soft-notify queued %d Enter notifications, want 0", queued)
+	}
+}
+
 func Test_prepareChildWorktree_nonGit(t *testing.T) {
 	s := newTestServer()
 	cwd := t.TempDir()
@@ -199,6 +296,43 @@ func Test_scanOrchestrationBoards_timeoutMarksChild(t *testing.T) {
 	}
 }
 
+func Test_completeOrchestrationChildOnSessionEnd_marksDoneWithoutMarker(t *testing.T) {
+	s := newTestServer()
+	parent := registerTestSession(s, 1, "codex")
+	child := registerTestSession(s, 10, "codex")
+	child.ParentSessionID = parent.ID
+	child.Role = "implementation"
+	path := filepath.Join(t.TempDir(), "board.md")
+	if err := os.WriteFile(path, []byte("# board\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.registerBoardSession("s1", path, parent.ID, "conductor")
+	s.registerBoardChild("s1", path, child.ID, parent.ID, child.Role, time.Now())
+
+	s.completeOrchestrationChildOnSessionEnd(child.ID, "completed")
+
+	s.orchestration.mu.Lock()
+	done := s.orchestration.boards["s1"].Done[child.ID]
+	s.orchestration.mu.Unlock()
+	if !done {
+		t.Fatal("child EOF did not mark orchestration completion")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "completed without DONE marker") {
+		t.Fatalf("board missing EOF completion record: %s", data)
+	}
+}
+
+func Test_detectBoardDoneEvents_acceptsSuccess(t *testing.T) {
+	events := detectBoardDoneEvents("## SUCCESS review session=42\n")
+	if len(events) != 1 || events[0].Role != "review" || events[0].SessionID != 42 {
+		t.Fatalf("SUCCESS events = %#v, want review/session 42", events)
+	}
+}
+
 func Test_handleSendChild(t *testing.T) {
 	s := newTestServer()
 	s.cfg.Hub.AllowLoopbackWithoutToken = true
@@ -207,6 +341,7 @@ func Test_handleSendChild(t *testing.T) {
 	child.ParentSessionID = parent.ID
 	child.Role = "implementation"
 	child.State = "running"
+	s.wrappers[child.ID] = newWrapperConn(&websocket.Conn{})
 	boardPath := filepath.Join(t.TempDir(), "board.md")
 	if err := os.WriteFile(boardPath, []byte("# board\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -258,6 +393,8 @@ func Test_handleSpawnChild_duplicateRoleGuard(t *testing.T) {
 	child.ParentSessionID = parent.ID
 	child.Role = "implementation"
 	child.State = "running"
+	// liveChildForRole は wrapper 接続中を必須とするため、ガード試験でも stub を置く
+	s.wrappers[child.ID] = newWrapperConn(&websocket.Conn{})
 
 	// 同 role の生存子あり → 409 + send 案内（--force なし。done 後に spawn が通ることは
 	// liveChildForRole のユニットテストで担保する — handler を通すと実 spawn が走るため）
@@ -282,6 +419,8 @@ func Test_liveChildForRole_picksLatestAndSkipsDone(t *testing.T) {
 		child.Role = "implementation"
 		child.State = "running"
 		children[id] = child
+		// live 判定は wrapper 接続中も必須
+		s.wrappers[id] = newWrapperConn(&websocket.Conn{})
 	}
 	got := s.liveChildForRole(parent.ID, "implementation")
 	if got == nil || got.ID != 12 {
@@ -293,6 +432,17 @@ func Test_liveChildForRole_picksLatestAndSkipsDone(t *testing.T) {
 	if got == nil || got.ID != 10 {
 		t.Fatalf("liveChildForRole after done = %#v, want session 10", got)
 	}
+	// completed / disconnected / wrapper 無しも終端扱い
+	children[10].State = "completed"
+	if s.liveChildForRole(parent.ID, "implementation") != nil {
+		t.Fatalf("liveChildForRole with completed should be nil")
+	}
+	children[10].State = "running"
+	delete(s.wrappers, 10)
+	if s.liveChildForRole(parent.ID, "implementation") != nil {
+		t.Fatalf("liveChildForRole without wrapper should be nil")
+	}
+	s.wrappers[10] = newWrapperConn(&websocket.Conn{})
 	// 全員 done なら nil（= spawn ガードが解除され新規 spawn が通る条件）
 	children[10].State = "done"
 	if s.liveChildForRole(parent.ID, "implementation") != nil {
