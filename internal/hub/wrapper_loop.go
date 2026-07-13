@@ -349,12 +349,6 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	if acceptedID != req.SessionID {
 		// renumber が確定したら JSONLPath も新 ID で再計算する（旧 ID のパスは
 		// 既に他 wrapper が使っている可能性がある）。
-		rawLogPath, jsonlPath = sessionlog.Paths(logDir, sessionlog.Metadata{
-			SessionID: acceptedID,
-			Provider:  req.Provider,
-			CWD:       req.CWD,
-			StartedAt: startedAt,
-		})
 		if history != nil {
 			_ = history.Close()
 		}
