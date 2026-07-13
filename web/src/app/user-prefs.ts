@@ -298,12 +298,12 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
   if (path === 'templates') {
     if (!Array.isArray(parsed)) return { ok: false };
     const value = parsed.filter((item) => item && typeof item === 'object' &&
-      typeof item.label === 'string' && typeof item.body === 'string').slice(0, 100).map((item) => ({
-      label: item.label.slice(0, 80), body: item.body.slice(0, 8000),
+      typeof item.body === 'string').slice(0, 100).map((item) => ({
+      body: item.body.trim().slice(0, 8000),
       providers: Array.isArray(item.providers) ? item.providers.filter((p) => typeof p === 'string').slice(0, 10) : [],
       tags: Array.isArray(item.tags) ? item.tags.filter((tag) => typeof tag === 'string').slice(0, 10) : [],
       frequency: Math.max(0, Math.min(100000, Number(item.frequency) || 0)),
-    }));
+    })).filter((item) => item.body);
     return { ok: true, value };
   }
   if (path === 'spawn.defaults') {

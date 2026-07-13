@@ -8,6 +8,7 @@ import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerm
 import { ws } from './ws-client.js';
 import { scheduleApprovalCheck } from './approval.js';
 import { handleCrunchLinkClick } from './expand-popup.js';
+import { addPromptTemplate } from './prompt-templates.js';
 import { resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
 import { isGrokChatViewerOpen, openGrokChatViewer, resetGrokChatViewerForSessionChange } from './grok-chat-viewer.js';
 import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
@@ -555,6 +556,12 @@ function ensureTermCtxMenu() {
   mkItem('term_ctx_copy', 'コピー', '⎘', (sel, anchor) => copyTerminalSelectionText(sel, { anchor }).catch(() => {}));
   mkItem('term_ctx_copy_oneline', '1行コピー', '⇥', (sel, anchor) => copyTerminalSelectionText(sel, { oneLine: true, anchor }).catch(() => {}));
   mkItem('term_ctx_add_to_input', '入力欄に追加', '＋', (sel, anchor) => addSelectionToInput(sel, { anchor }));
+  mkItem('term_ctx_save_template', 'テンプレートに登録', '▤', (sel, anchor) => {
+    const body = cleanOneLineText(sel);
+    if (!body) return;
+    const added = addPromptTemplate(body);
+    showToast(ti18n(added ? 'template_saved' : 'template_already_exists'), anchor);
+  });
   document.body.appendChild(m);
   document.addEventListener('click', (e) => {
     if (!m.contains(e.target)) closeTermCtxMenu();

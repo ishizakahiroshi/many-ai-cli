@@ -956,7 +956,8 @@ inputEl.addEventListener('keydown', (e) => {
   const btn = document.getElementById('tools-flip-btn');
   const inputArea = document.getElementById('input-area');
   const inputTools = document.getElementById('input-tools');
-  if (!wrap || !btn || !inputArea || !inputTools) return;
+  const promptTemplateWrap = document.getElementById('prompt-template-wrap');
+  if (!wrap || !btn || !inputArea || !inputTools || !promptTemplateWrap) return;
 
   const applyToolsPosition = (isLeft) => {
     wrap.classList.toggle('tools-left', isLeft);
@@ -965,6 +966,7 @@ inputEl.addEventListener('keydown', (e) => {
     if (isLeft) {
       wrap.append(btn, inputTools);
       if (voiceBtn) wrap.append(voiceBtn);
+      wrap.append(promptTemplateWrap);
       if (sendBtn) wrap.append(sendBtn);
       if (inputClearBtn) wrap.append(inputClearBtn);
       wrap.append(inputArea);
@@ -973,7 +975,7 @@ inputEl.addEventListener('keydown', (e) => {
       if (inputClearBtn) wrap.append(inputClearBtn);
       if (sendBtn) wrap.append(sendBtn);
       if (voiceBtn) wrap.append(voiceBtn);
-      wrap.append(inputTools, btn);
+      wrap.append(promptTemplateWrap, inputTools, btn);
     }
   };
 

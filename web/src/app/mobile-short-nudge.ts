@@ -1,7 +1,7 @@
 import { autoExpand, doSend, inputEl, updateInputClearButton } from '../app.js';
 import { activeSessionId, sessions } from './state.js';
 import { showToast } from './util.js';
-import { insertPromptTemplate, templatesForProvider } from './prompt-templates.js';
+import { insertPromptTemplate, promptTemplateLabel, templatesForProvider } from './prompt-templates.js';
 
 const HISTORY_DB = 'many-ai-cli-mobile-nudges';
 const HISTORY_STORE = 'recent';
@@ -53,7 +53,7 @@ function renderChips(): void {
   container.replaceChildren();
   const provider = activeSessionId === null ? '' : sessions.get(activeSessionId)?.provider;
   for (const template of templatesForProvider(provider)) {
-    const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'mobile-nudge-chip'; chip.textContent = template.label; chip.title = template.body;
+    const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'mobile-nudge-chip'; chip.textContent = promptTemplateLabel(template.body); chip.title = template.body;
     chip.addEventListener('click', () => { insertPromptTemplate(template); void rememberNudge(template.body); void renderHistory(); }); container.append(chip);
   }
 }
