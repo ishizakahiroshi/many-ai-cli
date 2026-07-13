@@ -1203,13 +1203,13 @@ export function renderSummaryAndNotifications() {
 
   let summary = '';
   if (stateCounts.running > 0) {
-    summary += `<span class="session-chip running"><span class="chip-dot"></span>${stateCounts.running} running</span>`;
+    summary += `<span class="session-chip running"><span class="chip-dot"></span>${stateCounts.running} ${t('state_running')}</span>`;
   }
   if (stateCounts.waiting > 0) {
-    summary += `<span class="session-chip waiting"><span class="chip-dot"></span>${stateCounts.waiting} waiting</span>`;
+    summary += `<span class="session-chip waiting"><span class="chip-dot"></span>${stateCounts.waiting} ${t('state_waiting')}</span>`;
   }
   if (stateCounts.standby > 0) {
-    summary += `<span class="session-chip standby"><span class="chip-dot"></span>${stateCounts.standby} standby</span>`;
+    summary += `<span class="session-chip standby"><span class="chip-dot"></span>${stateCounts.standby} ${t('state_standby')}</span>`;
   }
   if (providerParts) summary += `<span class="summary-sep">|</span>${providerParts}`;
   document.getElementById('summary').innerHTML = summary;
