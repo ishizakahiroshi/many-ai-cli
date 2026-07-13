@@ -18,6 +18,9 @@ func runWorktreeTestGit(t *testing.T, dir string, args ...string) {
 
 func TestNormalWorktreeCreateAndSafeCleanup(t *testing.T) {
 	repo := t.TempDir()
+	if resolved, err := filepath.EvalSymlinks(repo); err == nil {
+		repo = resolved
+	}
 	runWorktreeTestGit(t, repo, "init")
 	runWorktreeTestGit(t, repo, "config", "user.name", "test")
 	runWorktreeTestGit(t, repo, "config", "user.email", "test@example.invalid")
