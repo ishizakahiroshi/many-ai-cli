@@ -840,6 +840,8 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     isFav: boolean;
     isHist: boolean;
     isUnregistered: boolean;
+    favIndex: number;
+    histIndex: number;
     score: number;
   }
 
@@ -917,6 +919,8 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     allSubdirs: Map<string, string>,
     favSet: Set<string>,
     histSet: Set<string>,
+    favIndex: Map<string, number>,
+    histIndex: Map<string, number>,
   ): SearchResult[] {
     const lowQuery = query.toLowerCase();
     const seen = new Set<string>();
@@ -938,6 +942,8 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         const isFav = favSet.has(fullPath);
         const isHist = histSet.has(fullPath);
         const isUnregistered = !isFav && !isHist;
+        const favoriteOrder = favIndex.get(fullPath) ?? Number.MAX_SAFE_INTEGER;
+        const historyOrder = histIndex.get(fullPath) ?? Number.MAX_SAFE_INTEGER;
 
         // D9 スコアリング: 一致種別 + 登録種別の合算。
         let matchScore = 0;
@@ -955,13 +961,26 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
           isFav,
           isHist,
           isUnregistered,
+          favIndex: favoriteOrder,
+          histIndex: historyOrder,
           score: matchScore + regScore,
         });
       }
     }
 
-    // 降順ソート（スコア同点の場合は basename アルファベット順）。
-    results.sort((a, b) => b.score - a.score || a.basename.localeCompare(b.basename));
+    // お気に入りは手動並び順、履歴は cwd_history の先頭（最新）から降順で出す。
+    // 未登録の候補だけ従来通りスコア優先にして、検索時の発見性を保つ。
+    results.sort((a, b) => {
+      if (a.isFav || b.isFav) {
+        if (a.isFav && b.isFav) return a.favIndex - b.favIndex || a.basename.localeCompare(b.basename);
+        return a.isFav ? -1 : 1;
+      }
+      if (a.isHist || b.isHist) {
+        if (a.isHist && b.isHist) return a.histIndex - b.histIndex || a.basename.localeCompare(b.basename);
+        return a.isHist ? -1 : 1;
+      }
+      return b.score - a.score || a.basename.localeCompare(b.basename);
+    });
     return results;
   }
   // ---- /C1: 検索ドリブン ロジック層 ----
@@ -971,6 +990,8 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     const favSet = new Set(favs);
     const hist = loadCwdHistory();
     const histSet = new Set(hist);
+    const favIndex = new Map(favs.map((v, i) => [v, i]));
+    const histIndex = new Map(hist.map((v, i) => [v, i]));
     const roots = deriveRootsFromFavorites(favs);
 
     // 入力値を解析して prefix / query / isPath を得る。
@@ -1008,7 +1029,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     // ---- 検索結果（isPath でないとき）----
     let searchItems: SearchResult[] = [];
     if (!isPathMode && roots.size > 0) {
-      searchItems = buildSearchResults(parsed.query, parsed.prefix, roots, favSet, histSet);
+      searchItems = buildSearchResults(parsed.query, parsed.prefix, roots, favSet, histSet, favIndex, histIndex);
     }
 
     // 検索結果に出たパスセットを記録して fav/hist から除外する。
