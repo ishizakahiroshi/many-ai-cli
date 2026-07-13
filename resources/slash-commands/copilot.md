@@ -43,6 +43,7 @@
 | `/plugin` | Manage plugins. | Inspect or configure plugin features. |
 | `/pr` | Work with pull requests. | Prepare or inspect PR-related changes. |
 | `/remote` | Manage remote session features. | Share or control a session remotely. |
+| `/refine` | Rewrite a rough prompt into a clearer version for review. | When you want Copilot to polish a stream-of-consciousness prompt. |
 | `/rename` | Rename the session. | Give a session a clear title. |
 | `/research` | Research a topic. | Gather background before coding. |
 | `/reset-allowed-tools` | Reset tool permission rules. | Clear remembered permission decisions. |
@@ -50,20 +51,18 @@
 | `/resume` | Resume a previous session. | Continue saved work. |
 | `/review` | Review code changes. | Ask Copilot to inspect the current diff. |
 | `/rewind` | Rewind session state. | Return to an earlier point in the conversation. |
+| `/rubber-duck` | Get an independent critique of your current work. | When you want a rubber-duck style review from another agent. |
 | `/search` | Search. | Find context or content from the CLI. |
 | `/security-review` | Analyze pending changes for security issues. | Scan the current diff for vulnerabilities. |
 | `/session` | Show session details. | Inspect current session metadata. |
 | `/settings` | Open Copilot CLI settings. | Adjust CLI preferences. |
 | `/share` | Share session output. | Create a shareable session artifact. |
-| `/sidekicks` | Manage sidekick agents. | Use helper agents for parallel work. |
 | `/skills` | Manage skills. | Inspect or load reusable instructions. |
 | `/statusline` | Configure status line fields. | Customize TUI status display. |
-| `/streamer-mode` | Toggle streamer mode. | Hide sensitive details during sharing. |
 | `/subagents` | Manage subagents. | Configure delegated helper agents. |
 | `/tasks` | Manage tasks. | Track delegated or queued work. |
 | `/terminal-setup` | Configure terminal integration. | Fix shell or terminal behavior. |
 | `/theme` | Select a theme. | Change visual appearance. |
-| `/undo` | Undo recent session action. | Back out the last operation. |
 | `/update` | Check for or apply updates. | Keep GitHub Copilot CLI current. |
 | `/usage` | Show usage information. | Inspect quota or usage stats. |
 | `/user` | Show user/account info. | Confirm which GitHub identity is active. |
