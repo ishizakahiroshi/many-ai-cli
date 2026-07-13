@@ -106,9 +106,13 @@ func TestTokenAndACLPermissions(t *testing.T) {
 			if err := os.Chmod(path, tc.mode); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.Chmod(dir, tc.mode); err != nil {
+			// Directory needs owner execute bit (+x) so os.Stat on files inside works.
+			// 0o600 on dir would prevent traversal on Unix.
+			if err := os.Chmod(dir, tc.mode|0o100); err != nil {
 				t.Fatal(err)
 			}
+			// Restore 0o700 on cleanup so t.TempDir removal succeeds.
+			t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
 			cfg := &config.Config{Token: "test"}
 			gotToken, gotACL := token(cfg), acl()
 			if runtime.GOOS == "windows" {
