@@ -386,6 +386,37 @@ test('approval parser fixtures', () => {
   assert.deepEqual(numbers(gluedSingleAfterQ), [1, 2]);
   assert.deepEqual(labels(gluedSingleAfterQ), ['A方式 (Recommended)', 'B方式']);
 
+  // 差分再描画型 TUI（Grok CLI・2026-07-12 実測）の回帰。行を絶対カーソル移動（CUP）で描画し、
+  // 前フレームと同じセル（番号直後の「. 」）をカーソル前進（CUF）でスキップするため、
+  // 単純な ANSI 削除だと「…(Recommended)2手動…3スキップ…」に連結されピリオドも失われる。
+  // normalizeVtCursorOps が CUP→改行 / CUF→空白 / ECH→空白 に変換すること。
+  assert.equal(parser.normalizeVtCursorOps('A\x1b[2;5HB'), 'A\nB');
+  assert.equal(parser.normalizeVtCursorOps('2\x1b[2C原因'), '2  原因');
+  assert.equal(parser.normalizeVtCursorOps('末尾\x1b[43X続き'), '末尾 続き');
+  // SGR（色指定）は変換対象外（後段の stripAnsi が落とす）。
+  assert.equal(parser.normalizeVtCursorOps('\x1b[38;2;1;2;3mA'), '\x1b[38;2;1;2;3mA');
+
+  // 実ログの VT 構造を合成データで再現（マーカー行 + 空行クリア + 選択肢 3 行 + N 行連結）。
+  // 選択肢 2・3 は番号のみ再描画され「. 」が CUF スキップで届かない形。
+  const grokDiffRepaint =
+    '\x1b[18;6H[MANY-AI-CLI]\x1b[1C設定ファイルの移行方式を選んでください？' +
+    '\x1b[19;6H\x1b[13X\x1b[14C\x1b[83X' +
+    '\x1b[20;6H1. 自動で移行する (Recommended)\x1b[32X' +
+    '\x1b[21;6H2\x1b[2C手動で移行する（後で案内）\x1b[34X' +
+    '\x1b[22;6H3\x1b[2Cスキップの手順だけ案内 N. User specifies\x1b[1C[/MANY-AI-CLI]';
+  const diffRepaint = parser.extractHubMarkerApproval(
+    parser.normalizeVtCursorOps(grokDiffRepaint).split(/\r\n|\r|\n/),
+  );
+  assert.equal(parser.isBatchOptions(diffRepaint), false);
+  assert.deepEqual(numbers(diffRepaint), [1, 2, 3]);
+  assert.deepEqual(labels(diffRepaint), [
+    '自動で移行する (Recommended)',
+    '手動で移行する（後で案内）',
+    'スキップの手順だけ案内',
+  ]);
+  assert.equal((diffRepaint as any)._freeInput, true);
+  assert.equal((diffRepaint as any)._question, '設定ファイルの移行方式を選んでください？');
+
   // 複数選択（#multi）: 1 問で任意個 ON/OFF。options に _multiSelect と _question が付き、
   // isMultiSelectOptions が true、isBatchOptions は false になること。
   const multi = parser.extractHubMarkerApproval([
