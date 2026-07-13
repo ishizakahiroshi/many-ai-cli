@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/sessionlog"
@@ -87,6 +88,16 @@ type SessionStart struct {
 	OrchestrationID string
 	BoardPath       string
 	WorktreeBranch  string
+}
+
+// SessionCardMeta はライブセッションに紐づくカード識別情報。カードの並び替え・
+// 色分けに使う値だけを保持し、PTY 本文は保存しない。
+type SessionCardMeta struct {
+	Label     string
+	Pinned    bool
+	Color     string
+	Note      string
+	AutoTitle string
 }
 
 type ChatMessage struct {
@@ -368,6 +379,10 @@ func (s *Store) init() error {
 			orchestration_id TEXT,
 			board_path TEXT,
 			worktree_branch TEXT,
+			pinned INTEGER NOT NULL DEFAULT 0,
+			color TEXT,
+			note TEXT,
+			auto_title TEXT,
 			archived INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL DEFAULT (datetime('now')),
 			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -468,6 +483,10 @@ func (s *Store) ensureSessionColumns(ctx context.Context) error {
 		{"orchestration_id", `ALTER TABLE sessions ADD COLUMN orchestration_id TEXT`},
 		{"board_path", `ALTER TABLE sessions ADD COLUMN board_path TEXT`},
 		{"worktree_branch", `ALTER TABLE sessions ADD COLUMN worktree_branch TEXT`},
+		{"pinned", `ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`},
+		{"color", `ALTER TABLE sessions ADD COLUMN color TEXT`},
+		{"note", `ALTER TABLE sessions ADD COLUMN note TEXT`},
+		{"auto_title", `ALTER TABLE sessions ADD COLUMN auto_title TEXT`},
 		{"archived", `ALTER TABLE sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`},
 	}
 	for _, col := range add {
@@ -484,6 +503,9 @@ func (s *Store) ensureSessionColumns(ctx context.Context) error {
 func (s *Store) StartSession(st SessionStart) (int64, error) {
 	if s == nil || s.db == nil {
 		return 0, nil
+	}
+	if st.JSONLPath == "" {
+		st.JSONLPath = fmt.Sprintf("virtual-live-%d", st.LiveSessionID)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
@@ -503,7 +525,8 @@ func (s *Store) StartSession(st SessionStart) (int64, error) {
 		display_name=excluded.display_name,
 		cwd=excluded.cwd,
 		branch=excluded.branch,
-		label=excluded.label,
+		-- jsonl_path が同一の再接続では、利用者が編集したカード名を wrapper の
+		-- register label で上書きしない。
 		model=excluded.model,
 		route=excluded.route,
 		shell=excluded.shell,
@@ -570,6 +593,35 @@ func (s *Store) UpdateSessionState(liveSessionID int, state, lastOutputAt string
 		state, lastOutputAt, time.Now().Format(time.RFC3339), liveSessionID)
 }
 
+// SessionCardMetaByLiveSession returns the card metadata for the newest row of
+// a live session. A missing row is represented by the zero value.
+func (s *Store) SessionCardMetaByLiveSession(liveSessionID int) (SessionCardMeta, error) {
+	if s == nil || s.db == nil || liveSessionID <= 0 {
+		return SessionCardMeta{}, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	var meta SessionCardMeta
+	var pinned int
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(label, ''), COALESCE(pinned, 0), COALESCE(color, ''), COALESCE(note, ''), COALESCE(auto_title, '')
+		FROM sessions WHERE live_session_id=? ORDER BY id DESC LIMIT 1`, liveSessionID).
+		Scan(&meta.Label, &pinned, &meta.Color, &meta.Note, &meta.AutoTitle)
+	if err == sql.ErrNoRows {
+		return SessionCardMeta{}, nil
+	}
+	meta.Pinned = pinned != 0
+	return meta, err
+}
+
+// UpdateSessionCardMeta persists the complete card metadata. The caller has
+// already merged a PATCH with the live session under the Hub lock.
+func (s *Store) UpdateSessionCardMeta(liveSessionID int, meta SessionCardMeta) error {
+	return s.exec(`UPDATE sessions SET label=?, pinned=?, color=?, note=?, auto_title=?, updated_at=?
+		WHERE live_session_id=? AND ended_at IS NULL`,
+		meta.Label, boolInt(meta.Pinned), meta.Color, meta.Note, meta.AutoTitle,
+		time.Now().Format(time.RFC3339), liveSessionID)
+}
+
 func (s *Store) EndSession(liveSessionID int, state, reason string, endedAt time.Time) {
 	if endedAt.IsZero() {
 		endedAt = time.Now()
@@ -623,6 +675,16 @@ func (s *Store) ClearSessionHistory(liveSessionID int) error {
 	// pruneSessionRow / resetHistorySQL と削除対象を揃える。
 	if _, err := tx.ExecContext(ctx, `DELETE FROM attachments WHERE session_id=?`, id); err != nil {
 		return fmt.Errorf("delete attachments: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE sessions SET
+		first_message=NULL,
+		last_message=NULL,
+		title=NULL,
+		tags_json=NULL,
+		summary=NULL,
+		updated_at=?
+		WHERE id=?`, time.Now().Format(time.RFC3339), id); err != nil {
+		return fmt.Errorf("clear session metadata: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit: %w", err)
@@ -1423,10 +1485,12 @@ func updateSessionForEvent(ctx context.Context, tx *sql.Tx, liveSessionID int, t
 			stringValue(event["branch"]), stringValue(event["label"]), stringValue(event["model"]), stringValue(event["shell"]), now, liveSessionID)
 		return err
 	case "session_end":
+		// ended_at=COALESCE(NULLIF(?, ''), ?) で event ts とフォールバック now の 2 引数、
+		// 加えて updated_at=? と live_session_id=? で計 6 プレースホルダ。
 		_, err := tx.ExecContext(ctx, `UPDATE sessions SET state=COALESCE(NULLIF(?, ''), state),
 			end_reason=COALESCE(NULLIF(?, ''), end_reason), ended_at=COALESCE(NULLIF(?, ''), ?), updated_at=?
 			WHERE live_session_id=? AND ended_at IS NULL`,
-			stringValue(event["state"]), stringValue(event["reason"]), stringValue(event["ts"]), now, liveSessionID)
+			stringValue(event["state"]), stringValue(event["reason"]), stringValue(event["ts"]), now, now, liveSessionID)
 		return err
 	case "user_input":
 		text := strings.TrimRight(stringValue(event["text"]), "\r\n")
@@ -1538,7 +1602,9 @@ func (s *Store) sessionIDForLive(liveSessionID int) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 	var id int64
-	err := s.db.QueryRowContext(ctx, `SELECT id FROM sessions WHERE live_session_id=? ORDER BY id DESC LIMIT 1`, liveSessionID).Scan(&id)
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM sessions
+		WHERE live_session_id=? AND ended_at IS NULL
+		ORDER BY id DESC LIMIT 1`, liveSessionID).Scan(&id)
 	if err == sql.ErrNoRows {
 		return 0, nil
 	}
@@ -1617,25 +1683,40 @@ func isNoiseOutput(s string) bool {
 	if t == "" {
 		return true
 	}
-	if len([]rune(t)) <= 2 {
-		return true
-	}
+	// 既知の単発スピナー語。
 	switch t {
 	case "Boot", "Boo", "Bo", "Thinking", "Working":
+		return true
+	}
+	// 長さだけでは落とさない（"OK" / "No" / "はい" 等の短い実応答を保持）。
+	// ただし文字・数字を含まない極短行（"·" / スピナー1文字）はノイズ。
+	runes := []rune(t)
+	if len(runes) <= 2 && !containsLetterOrNumber(runes) {
 		return true
 	}
 	// 全行が「思考中」スピナー再描画フレームだけのメッセージは保存しない。
 	// 1 行でも実本文を含むチャンクは保存し（情報損失を避ける）、混入した
 	// ノイズ行は表示側 normalizeChatText が落とす。
+	sawContent := false
 	for _, line := range strings.Split(t, "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
+		sawContent = true
 		if !sessionlog.IsThinkingNoiseLine(line) {
 			return false
 		}
 	}
-	return true
+	return sawContent
+}
+
+func containsLetterOrNumber(rs []rune) bool {
+	for _, r := range rs {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) {
+			return true
+		}
+	}
+	return false
 }
 
 func isDigitsText(s string) bool {

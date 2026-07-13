@@ -241,28 +241,30 @@ func (l *ProfileConnectLock) Release() error {
 // RegisterActiveConnection records (or replaces) the calling process's
 // connection for profile in launcher-active.json.
 func RegisterActiveConnection(profile, hubURL string) error {
-	activeFileMu.Lock()
-	defer activeFileMu.Unlock()
-	d, err := loadActiveFile()
-	if err != nil {
-		return err
-	}
-	pid := os.Getpid()
-	kept := d.Connections[:0]
-	for _, c := range d.Connections {
-		// Replace any previous record for the same (profile, pid) pair.
-		if c.Profile == profile && c.PID == pid {
-			continue
+	return withActiveFileCrossProcess(func() error {
+		activeFileMu.Lock()
+		defer activeFileMu.Unlock()
+		d, err := loadActiveFile()
+		if err != nil {
+			return err
 		}
-		kept = append(kept, c)
-	}
-	d.Connections = append(kept, ActiveConnection{
-		Profile:   profile,
-		PID:       pid,
-		HubURL:    hubURL,
-		StartedAt: time.Now(),
+		pid := os.Getpid()
+		kept := d.Connections[:0]
+		for _, c := range d.Connections {
+			// Replace any previous record for the same (profile, pid) pair.
+			if c.Profile == profile && c.PID == pid {
+				continue
+			}
+			kept = append(kept, c)
+		}
+		d.Connections = append(kept, ActiveConnection{
+			Profile:   profile,
+			PID:       pid,
+			HubURL:    hubURL,
+			StartedAt: time.Now(),
+		})
+		return saveActiveFile(d)
 	})
-	return saveActiveFile(d)
 }
 
 // UnregisterActiveConnection removes the calling process's record for
@@ -283,27 +285,29 @@ func UnregisterAllForPID() error {
 // removeOwnEntries drops entries with the calling process's PID that also
 // satisfy match.
 func removeOwnEntries(match func(ActiveConnection) bool) error {
-	activeFileMu.Lock()
-	defer activeFileMu.Unlock()
-	d, err := loadActiveFile()
-	if err != nil {
-		return err
-	}
-	pid := os.Getpid()
-	kept := d.Connections[:0]
-	changed := false
-	for _, c := range d.Connections {
-		if c.PID == pid && match(c) {
-			changed = true
-			continue
+	return withActiveFileCrossProcess(func() error {
+		activeFileMu.Lock()
+		defer activeFileMu.Unlock()
+		d, err := loadActiveFile()
+		if err != nil {
+			return err
 		}
-		kept = append(kept, c)
-	}
-	if !changed {
-		return nil
-	}
-	d.Connections = kept
-	return saveActiveFile(d)
+		pid := os.Getpid()
+		kept := d.Connections[:0]
+		changed := false
+		for _, c := range d.Connections {
+			if c.PID == pid && match(c) {
+				changed = true
+				continue
+			}
+			kept = append(kept, c)
+		}
+		if !changed {
+			return nil
+		}
+		d.Connections = kept
+		return saveActiveFile(d)
+	})
 }
 
 // ActiveConnectionsPruned returns the connections that are verifiably
@@ -337,26 +341,31 @@ func WaitForActiveConnection(profile string, timeout time.Duration) (ActiveConne
 // collectActive applies the double guard (PID alive + Hub probe) to every
 // recorded entry. alive and probe are injectable for tests.
 func collectActive(alive func(pid int) bool, probe func(hubURL string) bool) ([]ActiveConnection, error) {
-	activeFileMu.Lock()
-	defer activeFileMu.Unlock()
-	d, err := loadActiveFile()
-	if err != nil {
-		return nil, err
-	}
-	kept := make([]ActiveConnection, 0, len(d.Connections))
-	for _, c := range d.Connections {
-		if !alive(c.PID) || !probe(c.HubURL) {
-			continue
+	var result []ActiveConnection
+	err := withActiveFileCrossProcess(func() error {
+		activeFileMu.Lock()
+		defer activeFileMu.Unlock()
+		d, err := loadActiveFile()
+		if err != nil {
+			return err
 		}
-		kept = append(kept, c)
-	}
-	if len(kept) != len(d.Connections) {
-		d.Connections = kept
-		if err := saveActiveFile(d); err != nil {
-			return nil, err
+		kept := make([]ActiveConnection, 0, len(d.Connections))
+		for _, c := range d.Connections {
+			if !alive(c.PID) || !probe(c.HubURL) {
+				continue
+			}
+			kept = append(kept, c)
 		}
-	}
-	return kept, nil
+		if len(kept) != len(d.Connections) {
+			d.Connections = kept
+			if err := saveActiveFile(d); err != nil {
+				return err
+			}
+		}
+		result = kept
+		return nil
+	})
+	return result, err
 }
 
 // probeHub reports whether the Hub behind hubURL responds 200 to

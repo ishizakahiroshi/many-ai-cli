@@ -21,7 +21,7 @@
   border-radius: var(--radius-pill);
   background: var(--warn);
   color: #111;
-  font-size: 0.7rem;
+  font-size: var(--header-font-size);
   font-variant-numeric: tabular-nums;
   margin-left: 4px;
 }
@@ -68,6 +68,26 @@
   font-size: 0.9rem;
   text-align: center;
 }
+
+.aqt-batch-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft, #f4f6fa);
+  font-size: .84rem;
+}
+.aqt-batch-controls span { font-weight: 700; margin-right: auto; }
+.aqt-batch-controls button, .aqt-deny-rest-btn {
+  border: 1px solid var(--line, #c9d1db);
+  border-radius: var(--radius-sm);
+  background: var(--bg, #fff);
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.aqt-deny-rest-btn { align-self: flex-end; color: var(--danger, #b42318); font-size: .78rem; }
 
 /* 承認カード */
 .aqt-card {

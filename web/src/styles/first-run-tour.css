@@ -1,0 +1,77 @@
+#first-run-tour {
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(7, 9, 14, 0.72);
+}
+
+.first-run-tour-dialog {
+  width: min(460px, 100%);
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+.first-run-tour-head,
+.first-run-tour-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.first-run-tour-head { justify-content: space-between; }
+.first-run-tour-progress { color: var(--muted); font-size: 0.78rem; }
+.first-run-tour-close,
+.first-run-tour-later,
+.first-run-tour-secondary {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  padding: 5px 8px;
+}
+.first-run-tour-close:hover,
+.first-run-tour-later:hover,
+.first-run-tour-secondary:hover { color: var(--text); }
+.first-run-tour-secondary:disabled { cursor: default; opacity: 0.35; }
+.first-run-tour-dialog h2 { margin: 20px 0 8px; color: var(--text); font-size: 1.25rem; }
+.first-run-tour-body { margin: 0; color: var(--muted); line-height: 1.65; }
+.first-run-tour-preview {
+  min-height: 84px;
+  display: flex;
+  align-items: center;
+  margin: 18px 0 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+.first-run-tour-preview--2 { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.first-run-tour-next {
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--bg);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 8px 12px;
+}
+.first-run-tour-next:hover { filter: brightness(1.1); }
+.first-run-tour-footer { margin-top: 20px; }
+.first-run-tour-later { margin-right: auto; }
+
+@media (max-width: 600px) {
+  #first-run-tour { padding: 12px; align-items: end; }
+  .first-run-tour-dialog { padding: 20px; }
+  .first-run-tour-footer { flex-wrap: wrap; }
+}

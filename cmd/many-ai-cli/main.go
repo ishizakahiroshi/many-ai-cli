@@ -15,11 +15,13 @@ import (
 	"syscall"
 
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/doctor"
 	"many-ai-cli/internal/hub"
 	"many-ai-cli/internal/launcher"
 	hublog "many-ai-cli/internal/log"
 	"many-ai-cli/internal/orchestrate"
 	"many-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/setupcmd"
 	"many-ai-cli/internal/shell"
 	"many-ai-cli/internal/uninstall"
 	"many-ai-cli/internal/usagerelay"
@@ -239,6 +241,23 @@ func run(args []string) error {
 		return enc.Encode(exported)
 	case "status":
 		return hub.PrintStatus(cfg)
+	case "doctor":
+		fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+		asJSON := fs.Bool("json", false, "output as JSON")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		report := doctor.Run(context.Background(), cfg)
+		if *asJSON {
+			return json.NewEncoder(os.Stdout).Encode(report)
+		}
+		for _, check := range report.Checks {
+			fmt.Printf("[%s] %s: %s\n", check.Level, check.Name, check.Message)
+			if check.Fix != "" {
+				fmt.Printf("      -> %s\n", check.Fix)
+			}
+		}
+		return nil
 	case "stop":
 		return hub.Stop(cfg)
 	case "log-clean":
@@ -275,6 +294,15 @@ func run(args []string) error {
 	case "shell-init":
 		fmt.Print(shell.InitScript())
 		return nil
+	case "setup":
+		fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+		if err := fs.Parse(args[1:]); err != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				return nil
+			}
+			return err
+		}
+		return setupcmd.Run()
 	case "wrap":
 		if len(args) < 2 {
 			return errors.New("wrap <provider>")
@@ -304,6 +332,6 @@ func run(args []string) error {
 }
 
 func usage() error {
-	fmt.Println("many-ai-cli <serve|connect|wrap|claude|codex|copilot|cursor-agent|opencode|grok|shell-init|stop|status|profile-export|log-clean|uninstall|version>")
+	fmt.Println("many-ai-cli <serve|connect|setup|doctor|wrap|claude|codex|copilot|cursor-agent|opencode|grok|shell-init|stop|status|profile-export|log-clean|uninstall|version>")
 	return nil
 }

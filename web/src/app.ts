@@ -1,16 +1,18 @@
 // --- ESM imports (generated) ---
 import { t } from './i18n.js';
 import { cleanCopiedText, showToast, token } from './app/util.js';
-import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
+import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_AUTO_APPROVAL_ENABLED_KEY, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
 import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, answeredMarkerSigs, recordAnsweredMarkerSig, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { orderSessions } from './app/state.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, resumeTerminalBottomFollow, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
-import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
+import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appConfirmTypedDanger, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { pendingSessionIds } from './app/approval-queue-tab.js';
-import { scheduleDeferredEnter, scheduleAfterOutputSettle, deferredEnterMinWaitFor } from './app/deferred-enter.js';
+import { scheduleDeferredEnter, scheduleAfterOutputSettle, deferredEnterMinWaitFor, cancelDeferredEnter } from './app/deferred-enter.js';
+import { scheduleResidueSweep, cancelResidueSweep } from './app/residue-sweep.js';
+import { cancelExpandCapture } from './app/expand-popup.js';
 import { clearMobileTranscriptSession, recordMobileTranscriptUserSubmission } from './app/mobile-transcript.js';
 import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
@@ -21,6 +23,9 @@ import './app/detached-grid-launcher.js';
 import './app/mobile-home.js';
 import { mobileApprovalActiveBadgeCount } from './app/mobile-approval-sheet.js';
 import { clearMobileTerminalLiteSession } from './app/mobile-terminal-lite.js';
+import './app/orchestration-dashboard.js';
+import './app/prompt-templates.js';
+import { setActiveTab } from './app/settings.js';
 
 export let _userAvatarUrl = '';
 export let _userDisplayName = '';
@@ -40,6 +45,13 @@ document.addEventListener('i18n-ready', () => {
   updateInputAffordance();
 });
 
+window.addEventListener('orchestration-dashboard-open-session', (event: Event) => {
+  const sessionID = Number((event as CustomEvent<{ sessionID?: number }>).detail?.sessionID);
+  if (!Number.isInteger(sessionID) || !sessions.has(sessionID)) return;
+  activateSession(sessionID);
+  setActiveTab(sessionID, 'terminal');
+});
+
 
 // moved to /app/approval.js
 
@@ -53,6 +65,26 @@ export const pasteChipsEl = document.getElementById('paste-chips');
 // ペースト折りたたみ状態
 export const pastedTexts = []; // [{id, text, lineCount}]
 export let pasteCounter = 0;
+
+// Files タブは app.ts に依存しない。イベントで常に現在の入力欄へ @path を渡す。
+window.addEventListener('many-ai-cli:insert-file-prompt', (event: Event) => {
+  const text = String((event as CustomEvent<{ text?: string }>).detail?.text || '').trim();
+  if (!text) return;
+  inputEl.value += inputEl.value && !inputEl.value.endsWith('\n') ? `\n${text}` : text;
+  inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+  inputEl.focus();
+});
+
+// Desktop palette and mobile chips use one insertion boundary so multiline
+// templates retain the same focus and textarea sizing behavior as file prompts.
+window.addEventListener('many-ai-cli:insert-template', (event: Event) => {
+  const text = String((event as CustomEvent<{ text?: string }>).detail?.text || '');
+  if (!text) return;
+  inputEl.value += inputEl.value && !inputEl.value.endsWith('\n') ? `\n${text}` : text;
+  inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+  autoExpand();
+  inputEl.focus();
+});
 
 export function autoExpand(opts: any = {}) {
   const t = activeSessionId === null ? null : terminals.get(activeSessionId);
@@ -85,6 +117,14 @@ export function isActiveSessionRunning() {
   return !!s && s.state === 'running';
 }
 
+// 停止ボタン（■）が PTY へ送る中断キーを provider 別に返す。
+// grok（Grok Build CLI）は Esc では生成を中断できず Ctrl+C(0x03) のみ有効
+// （Windows 実機 v0.2.93 で確認）。他 provider は従来どおり Esc(0x1b)。
+export function stopKeyForActiveSession(): string {
+  const s = activeSessionId !== null ? sessions.get(activeSessionId) : undefined;
+  return s?.provider === 'grok' ? '\x03' : '\x1b';
+}
+
 // B1a: スマホ幅判定の単一情報源。OS キーボードの🎤誘導 placeholder の表示判定にだけ使う。
 const _mobileVoiceHintMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
   ? window.matchMedia('(max-width: 720px)') : null;
@@ -104,8 +144,9 @@ export function updateInputAffordance() {
   // C1: 実行中は「Esc で停止」、それ以外は通常文言。data-i18n-placeholder の自動適用と
   // 競合しないよう、running 状態を見て JS から明示的に上書きする。
   // B1a: 実行中でなく・スマホ幅で・初回ヒント未表示なら、音声入力ヒントを出す（Q12 決定）。
+  const stopViaCtrlC = stopKeyForActiveSession() === '\x03';
   if (running) {
-    inputEl.placeholder = t('input_placeholder_running');
+    inputEl.placeholder = t(stopViaCtrlC ? 'input_placeholder_running_ctrlc' : 'input_placeholder_running');
   } else if (shouldShowMobileVoiceHintPlaceholder()) {
     inputEl.placeholder = t('mobile_voice_hint_placeholder');
   } else {
@@ -119,7 +160,7 @@ export function updateInputAffordance() {
   if (sendBtn) {
     sendBtn.textContent = showStop ? '■' : '➤';
     sendBtn.classList.toggle('is-stopping', showStop);
-    const title = showStop ? t('stop_btn_title') : t('send_btn_title');
+    const title = showStop ? t(stopViaCtrlC ? 'stop_btn_title_ctrlc' : 'stop_btn_title') : t('send_btn_title');
     sendBtn.title = title;
     sendBtn.setAttribute('aria-label', title);
   }
@@ -280,7 +321,87 @@ export function clearInput() {
   clearAllPastes();
 }
 
+// doSend の session 単位 in-flight ロック（Enter / 音声 / autosend 再入防止）
+const doSendInFlight = new Set<number>();
+
+type DeferredSendState = 'queued' | 'sending' | 'injected' | 'acked';
+let deferredEnterOverrideMs = 0;
+let deferredSendSessionId: number | null = null;
+let deferredSendHideTimer: ReturnType<typeof setTimeout> | null = null;
+
+function setDeferredSendStatus(sessionId: number, state: DeferredSendState): void {
+  deferredSendSessionId = sessionId;
+  if (deferredSendHideTimer) clearTimeout(deferredSendHideTimer);
+  const el = document.getElementById('deferred-send-status');
+  const label = el?.querySelector('.deferred-send-label');
+  if (!el || !label) return;
+  const labels: Record<DeferredSendState, string> = {
+    queued: '送信を準備中', sending: '入力欄の安定を待機中', injected: '確定 Enter を送信', acked: '送信しました',
+  };
+  el.hidden = false;
+  el.dataset.state = state;
+  label.textContent = labels[state];
+  if (state === 'acked') {
+    deferredSendHideTimer = setTimeout(() => { if (deferredSendSessionId === sessionId) el.hidden = true; }, 1100);
+  }
+}
+
+function clearDeferredSendStatus(sessionId?: number): void {
+  if (sessionId != null && deferredSendSessionId !== sessionId) return;
+  if (deferredSendHideTimer) clearTimeout(deferredSendHideTimer);
+  deferredSendHideTimer = null;
+  const el = document.getElementById('deferred-send-status');
+  if (el) el.hidden = true;
+  deferredSendSessionId = null;
+}
+
+function effectiveDeferredEnterWait(sessionId: number): number {
+  return deferredEnterOverrideMs > 0 ? deferredEnterOverrideMs : deferredEnterMinWaitFor(sessions.get(sessionId)?.provider || '');
+}
+
+// 本文送信の共通判定: ブラケットペーストで包むか（deferEnter=確定 \r を出力静止後に別送するか）。
+// 「本文+\r」を同一チャンクで送ると、内側 CLI がチャンク一括入力をペーストとして取り込む過程で
+// 末尾 \r を確定キーと扱わず、入力欄に張り付いたまま送信されない（Grok 実測 2026-07-11:
+// 全文エコー後に Enter 不発・8 分沈黙）。wrap 対象 6 CLI すべてが ?2004h（ブラケットペースト
+// 受け入れ）を宣言していることをログで確認済みのため、本文はペーストで包んで正体を正しく伝える。
+// 生送信（本文+\r 同梱）のまま残す例外は「キー入力として届くべきもの」だけ:
+// - shell: 素の PowerShell / cmd 等はブラケットペースト未宣言がありうる（マーカーがリテラル混入する）
+// - "/" 始まりの単一行: スラッシュコマンド（CLI のコマンドメニュー操作）
+// - 数字のみ / 1 文字: 承認メニュー等へのホットキー応答。ペーストで包むとメニューが受理しない
+//   恐れがあり、かつ数バイトのチャンクはタイプと区別されないため生送信で安全
+function buildBodySubmitPart(sessionId, rawText) {
+  if (rawText.includes('\n')) {
+    // 複数行は provider を問わず従来どおりペースト包み（\n の途中 Enter 解釈を防ぐ）
+    return { textPart: '\x1b[200~' + rawText + '\x1b[201~', deferEnter: true };
+  }
+  const provider = sessions.get(sessionId)?.provider || '';
+  const keyLike = rawText === '' || rawText.length === 1 || /^[0-9]+$/.test(rawText) || rawText.startsWith('/');
+  if (isShellProvider(provider) || keyLike) {
+    return { textPart: rawText + '\r', deferEnter: false };
+  }
+  return { textPart: '\x1b[200~' + rawText + '\x1b[201~', deferEnter: true };
+}
+
+// 「本文」を 1 件送信する共通経路（チャット自由入力以外＝クイックコマンド・承認 UI の
+// 自由回答/複数質問回答から使う）。buildBodySubmitPart の判定でペースト包み＋確定 \r
+// 別送（deferred-enter）にし、キー入力相当は従来どおり本文+\r で送る。
+// 直前の deferred-enter 予約が残っていると遅延 \r がこの送信の後ろに混ざるため先に消す。
+export function sendSubmittedBody(sessionId, bodyText, opts: any = {}) {
+  cancelDeferredEnter(sessionId);
+  const { textPart, deferEnter } = buildBodySubmitPart(sessionId, bodyText);
+  sendSubmittedText(sessionId, textPart, opts);
+  if (deferEnter) scheduleDeferredEnter(sessionId, effectiveDeferredEnterWait(sessionId));
+  scheduleResidueSweep(sessionId, bodyText, deferEnter);
+}
+
 export async function doSend(sessionId) {
+  // 直前の doSend（Enter/音声/ボタン）と async 中の再入を抑止
+  if (Date.now() - lastDoSendAt < DOUBLE_SEND_GUARD_MS) return;
+  if (doSendInFlight.has(sessionId)) return;
+  // 後続の単行送信が deferred-enter 予約をキャンセルしないと、遅延 \r / ペースト本体が
+  // 次メッセージの後ろに注入される。送信確定の直前に必ず消す。
+  cancelDeferredEnter(sessionId);
+  clearDeferredSendStatus(sessionId);
   // Ollama route セッションで /model 始まりはブロック（spawn 時固定 env と不整合のため）
   if (isOllamaModelCommandBlocked(sessionId, buildSendText())) {
     showToast(t('toast_model_blocked_on_ollama'));
@@ -300,109 +421,112 @@ export async function doSend(sessionId) {
   if (await maybeNudgeAiCliLaunchInShell(sessionId, buildSendText())) {
     return;
   }
+  doSendInFlight.add(sessionId);
   set_lastDoSendAt(Date.now());
-  // 長文ペーストチップを一時 .txt 化して @path 参照で送る（Codex の畳み込みによる確定 \r 吸収を回避）。
-  // flushPendingAttach より前に積むことで、画像添付と同一の inject 経路へ合流させる。
-  await stageLongPastesAsFiles();
-  const injects = await flushPendingAttach(sessionId);
-  const injectPrefix = injects.join('');
-  let rawText = buildSendText();
-  // トリガーフレーズを末尾から除去（PTY・AI には送らない）
-  const _tp = getActiveTriggerPhrase();
-  if (_tp && textEndsWithTriggerPhrase(rawText, _tp)) {
-    rawText = stripTrailingTriggerPhrase(rawText, _tp);
-  }
-  // 外部クリップボードからのペーストは CRLF(\r\n) を保持する。ブラケットペースト
-  // 本体に生の \r が残ると、内側 CLI（Claude Code 等）が paste 内の \r を確定キーと
-  // 誤解し、末尾に付与した本来の確定 \r が無効化されて入力欄に残る（pasted text が
-  // 実行されない）。確定はこちらが末尾に付ける \r のみが担うべきなので、本文中の CR は
-  // すべて LF に正規化する。入力欄で打った複数行は元々 \n のみなので影響を受けない。
-  rawText = rawText.replace(/\r\n?/g, '\n');
-  // 改行を含む場合はブラケットペーストモードでラップ（\n が途中 Enter と解釈されるのを防ぐ）
-  // ブラケットペーストはテキスト部分のみに適用し、injectPrefix は前置する
-  let textPart;
-  // 確定 \r をブラケットペースト終端 \x1b[201~ と同一書き込みに含めると、内側 CLI
-  // （Claude Code v2 等）が大きい/複数行ペーストを [Pasted text #N] に畳み込む処理中に
-  // 直後の \r を吸収し、確定キーとして登録されない（pasted text が入力欄に張り付いたまま
-  // 送信されない）。複数行のときは確定 \r を本文と別書き込みに分離し、畳み込み確定後に送る。
-  let deferEnter = false;
-  if (rawText === '' && injectPrefix !== '') {
-    // 画像のみ（テキストなし）: inject 末尾の \r or スペースで確定済み → 追加の \r で送信
-    textPart = '\r';
-  } else if (rawText.includes('\n')) {
-    textPart = '\x1b[200~' + rawText + '\x1b[201~';
-    deferEnter = true;
-  } else {
-    textPart = rawText + '\r';
-  }
-  // 内側 CLI がビジー等で入力行に残骸（前回の未確定入力）があると、本送信が
-  // その後ろへ連結されてしまう（例: "残骸質問"）。sendQuickCommand と同じく
-  // \x15(Ctrl+U) を先頭に置き、inject/本文を送る前に入力行を一度クリアする。
-  // 入力行が空なら no-op なので無害。claude/codex/copilot/cursor 共通に送る。
-  // 画像 inject（@path）を複数行ペーストに前置すると、@path エコー由来の早期 idle で確定 \r が
-  // 前倒し発火し、内側 CLI がペースト取り込み中（「Pasting…」）のまま \r を吸収して固着する。
-  // injectPrefix がある複数行ペーストでは、まず画像 inject だけ送り、取り込みが落ち着いてから
-  // ペースト本体＋確定 \r を送る（下記 needPasteSplit 分岐）。それ以外は従来通り 1 書き込みにまとめる。
-  // ただし shell provider（素のシェル）は Ink 入力欄を持たずシェル自身が行編集を担うため、
-  // \x15 を本文と同一書き込みで前置すると PowerShell 等で行クリアにならずリテラル ^U が混入し
-  // コマンドが壊れる（例: codex → ^Ucodex）。shell 宛ては前置せずそのまま送る。
-  const clearPrefix = shouldSkipClearPrefix(sessions.get(sessionId)?.provider || '') ? '' : '\x15';
-  const needPasteSplit = deferEnter && injectPrefix !== '';
-  const textToSend = needPasteSplit ? (clearPrefix + injectPrefix) : (clearPrefix + injectPrefix + textPart);
-  clearInput();
-  hideSlashMenu();
-  // 送信したら次のプロンプトは別物の可能性があるため dismiss フラグ・multiQ ラッチをクリア
-  multiQuestionDismissedCache.delete(sessionId);
-  multiQuestionLatchAt.delete(sessionId);
-  // テキスト送信で承認ポップアップをバイパスした場合、Ink 再描画による
-  // 同一選択肢の再検出・再表示を防ぐため消費済み署名を保存する
-  const prevOpts = approvalRawOptionsCache.get(sessionId);
-  if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
-  recordAnsweredMarkerSig(sessionId, prevOpts);
-  if (typeof maybeSendDirectApprovalConsumed === 'function') {
-    maybeSendDirectApprovalConsumed(sessionId, rawText, textToSend);
-  }
-  hideActionBar(sessionId);
-  // PTY エコーバックによる誤再表示を抑制（sendChoice と同様）
-  approvalSuppressUntil.set(sessionId, Date.now() + 2000);
-  setTimeout(() => {
-    detectApproval(sessionId);
-    maybeAutoSwitchToNextApproval();
-  }, 2050);
-  // chatHistory: ユーザー送信は AI ターンの境界。
-  // まず蓄積中の AI 出力チャンクを即 commit してから user 入力を push する。
-  chatHistoryCommitOutput(sessionId);
-  if (rawText && rawText !== '') {
-    pushMessage(sessionId, { role: 'user', kind: 'text', rawText });
-  }
-  if (sessionId === activeSessionId) {
-    // 送信後は新しいターンを見る意図なので、chat/split 側もレイアウト確定まで末尾へ張り付かせる。
-    scrollChatPaneToBottomSoon({ passes: 4, startedAt: Date.now() });
-  }
-  sendSubmittedText(sessionId, textToSend);
-  // B1a: スマホ幅で音声入力 placeholder を 1 回でも見せたユーザーが送信を完了した時点で
-  // hint shown フラグを立て、以降は通常 placeholder に戻す（一度の認知で十分）。
-  if (shouldShowMobileVoiceHintPlaceholder()) {
-    setUserPref('mobile.voice_hint_shown', true);
-    updateInputAffordance();
-  }
-  // Codex/OpenCode は大きいペーストを無出力で即プレースホルダ化するため、確定 \r の最低待機を
-  // 長めに取り早撃ち（\r 吸収による送信不発）を防ぐ。他 provider は既定値で挙動不変。
-  const enterMinWait = deferredEnterMinWaitFor(sessions.get(sessionId)?.provider || '');
-  if (needPasteSplit) {
-    // 段1: 画像 inject（@path）の取り込み（[Image #N] 畳み込み・@ 補完ポップアップ閉じ）が
-    // 出力静止で落ち着くのを待ち、段2: ペースト本体を送り、段3: 確定 \r を予約する。確定 \r の
-    // 予約をペースト送出後まで遅らせることで、@path エコー由来の早期静止で \r が前倒し発火して
-    // 「Pasting…」固着するのを断つ。ペースト送出以降は画像なし複数行ペーストと同一経路で確定する。
-    scheduleAfterOutputSettle(sessionId, () => {
-      sendText(sessionId, textPart);
-      scheduleDeferredEnter(sessionId, enterMinWait);
-    });
-  } else if (deferEnter) {
-    // 複数行ペーストの確定 \r は、内側 CLI の畳み込み・再描画が落ち着いてから別書き込みで送る。
-    // 同一書き込みに含めると \r が吸収され送信されない。固定遅延では大きなペーストの取り込み時間を
-    // 当てられず取りこぼすため、PTY 出力が静止するのを待ってから 1 回だけ送る（deferred-enter.ts）。
-    scheduleDeferredEnter(sessionId, enterMinWait);
+  try {
+    // 長文ペーストチップを一時 .txt 化して @path 参照で送る（Codex の畳み込みによる確定 \r 吸収を回避）。
+    // flushPendingAttach より前に積むことで、画像添付と同一の inject 経路へ合流させる。
+    await stageLongPastesAsFiles();
+    const injects = await flushPendingAttach(sessionId);
+    const injectPrefix = injects.join('');
+    let rawText = buildSendText();
+    // トリガーフレーズを末尾から除去（PTY・AI には送らない）
+    const _tp = getActiveTriggerPhrase();
+    if (_tp && textEndsWithTriggerPhrase(rawText, _tp)) {
+      rawText = stripTrailingTriggerPhrase(rawText, _tp);
+    }
+    // 外部クリップボードからのペーストは CRLF(\r\n) を保持する。ブラケットペースト
+    // 本体に生の \r が残ると、内側 CLI（Claude Code 等）が paste 内の \r を確定キーと
+    // 誤解し、末尾に付与した本来の確定 \r が無効化されて入力欄に残る（pasted text が
+    // 実行されない）。確定はこちらが末尾に付ける \r のみが担うべきなので、本文中の CR は
+    // すべて LF に正規化する。入力欄で打った複数行は元々 \n のみなので影響を受けない。
+    rawText = rawText.replace(/\r\n?/g, '\n');
+    // ペースト包み・確定 \r 分離の判定は buildBodySubmitPart に共通化（クイックコマンドと共用）。
+    // ブラケットペーストはテキスト部分のみに適用し、injectPrefix は前置する。
+    let textPart;
+    let deferEnter = false;
+    if (rawText === '' && injectPrefix !== '') {
+      // 画像のみ（テキストなし）: inject 末尾の \r or スペースで確定済み → 追加の \r で送信
+      textPart = '\r';
+    } else {
+      ({ textPart, deferEnter } = buildBodySubmitPart(sessionId, rawText));
+    }
+    // 残骸（前回の未確定入力）への連結対策は、かつての「全送信への \x15(Ctrl+U) 盲目前置」を
+    // やめ、送信後に張り付きを実測してから掃除する residue-sweep.ts へ移行した。
+    // 前置方式は「相手プロンプトが Ctrl+U を行クリアと解釈する」仮定に依存し、shell / codex に
+    // 加えて claude /login のコード入力欄でもリテラル ^U 混入（OAuth 400）を起こしたため。
+    // 画像 inject（@path）を複数行ペーストに前置すると、@path エコー由来の早期 idle で確定 \r が
+    // 前倒し発火し、内側 CLI がペースト取り込み中（「Pasting…」）のまま \r を吸収して固着する。
+    // injectPrefix がある複数行ペーストでは、まず画像 inject だけ送り、取り込みが落ち着いてから
+    // ペースト本体＋確定 \r を送る（下記 needPasteSplit 分岐）。それ以外は従来通り 1 書き込みにまとめる。
+    const needPasteSplit = deferEnter && injectPrefix !== '';
+    const textToSend = needPasteSplit ? injectPrefix : (injectPrefix + textPart);
+    clearInput();
+    hideSlashMenu();
+    // 送信したら次のプロンプトは別物の可能性があるため dismiss フラグ・multiQ ラッチをクリア
+    multiQuestionDismissedCache.delete(sessionId);
+    multiQuestionLatchAt.delete(sessionId);
+    // テキスト送信で承認ポップアップをバイパスした場合、Ink 再描画による
+    // 同一選択肢の再検出・再表示を防ぐため消費済み署名を保存する
+    const prevOpts = approvalRawOptionsCache.get(sessionId);
+    if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
+    recordAnsweredMarkerSig(sessionId, prevOpts);
+    if (typeof maybeSendDirectApprovalConsumed === 'function') {
+      maybeSendDirectApprovalConsumed(sessionId, rawText, textToSend);
+    }
+    hideActionBar(sessionId);
+    // PTY エコーバックによる誤再表示を抑制（sendChoice と同様）
+    approvalSuppressUntil.set(sessionId, Date.now() + 2000);
+    setTimeout(() => {
+      detectApproval(sessionId);
+      maybeAutoSwitchToNextApproval();
+    }, 2050);
+    // chatHistory: ユーザー送信は AI ターンの境界。
+    // まず蓄積中の AI 出力チャンクを即 commit してから user 入力を push する。
+    chatHistoryCommitOutput(sessionId);
+    if (rawText && rawText !== '') {
+      pushMessage(sessionId, { role: 'user', kind: 'text', rawText });
+    }
+    if (sessionId === activeSessionId) {
+      // 送信後は新しいターンを見る意図なので、chat/split 側もレイアウト確定まで末尾へ張り付かせる。
+      scrollChatPaneToBottomSoon({ passes: 4, startedAt: Date.now() });
+    }
+    if (deferEnter) setDeferredSendStatus(sessionId, 'queued');
+    sendSubmittedText(sessionId, textToSend);
+    if (deferEnter) setDeferredSendStatus(sessionId, 'sending');
+    // B1a: スマホ幅で音声入力 placeholder を 1 回でも見せたユーザーが送信を完了した時点で
+    // hint shown フラグを立て、以降は通常 placeholder に戻す（一度の認知で十分）。
+    if (shouldShowMobileVoiceHintPlaceholder()) {
+      setUserPref('mobile.voice_hint_shown', true);
+      updateInputAffordance();
+    }
+    // Codex/OpenCode は大きいペーストを無出力で即プレースホルダ化するため、確定 \r の最低待機を
+    // 長めに取り早撃ち（\r 吸収による送信不発）を防ぐ。他 provider は既定値で挙動不変。
+    const enterMinWait = effectiveDeferredEnterWait(sessionId);
+    if (needPasteSplit) {
+      // 段1: 画像 inject（@path）の取り込み（[Image #N] 畳み込み・@ 補完ポップアップ閉じ）が
+      // 出力静止で落ち着くのを待ち、段2: ペースト本体を送り、段3: 確定 \r を予約する。確定 \r の
+      // 予約をペースト送出後まで遅らせることで、@path エコー由来の早期静止で \r が前倒し発火して
+      // 「Pasting…」固着するのを断つ。ペースト送出以降は画像なし複数行ペーストと同一経路で確定する。
+      scheduleAfterOutputSettle(sessionId, () => {
+        sendText(sessionId, textPart);
+        scheduleDeferredEnter(sessionId, enterMinWait,
+          () => setDeferredSendStatus(sessionId, 'injected'),
+          () => setDeferredSendStatus(sessionId, 'acked'));
+      });
+    } else if (deferEnter) {
+      // 複数行ペーストの確定 \r は、内側 CLI の畳み込み・再描画が落ち着いてから別書き込みで送る。
+      // 同一書き込みに含めると \r が吸収され送信されない。固定遅延では大きなペーストの取り込み時間を
+      // 当てられず取りこぼすため、PTY 出力が静止するのを待ってから 1 回だけ送る（deferred-enter.ts）。
+      scheduleDeferredEnter(sessionId, enterMinWait,
+        () => setDeferredSendStatus(sessionId, 'injected'),
+        () => setDeferredSendStatus(sessionId, 'acked'));
+    }
+    // 送信テキストが確定されず入力行に張り付いたままになっていないかを事後観測し、
+    // 張り付きを実際に見たときだけ \x15 で掃除する（盲目前置の置き換え。residue-sweep.ts）。
+    scheduleResidueSweep(sessionId, rawText, deferEnter);
+  } finally {
+    doSendInFlight.delete(sessionId);
   }
 }
 
@@ -768,7 +892,12 @@ inputEl.addEventListener('keydown', (e) => {
   if (specialKeys[e.key]) {
     // 入力テキストあり + 矢印キーはブラウザのカーソル移動に委譲する
     if (inputEl.value !== '' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown')) return;
-    sendText(activeSessionId, specialKeys[e.key]);
+    // 実行中 + 入力欄が空の Esc は停止操作とみなし、停止ボタン（■）と同じ
+    // provider 別停止キーを送る（grok は Esc 非対応・Ctrl+C のみ有効のため）。
+    const keyText = (e.key === 'Escape' && inputEl.value === '' && isActiveSessionRunning())
+      ? stopKeyForActiveSession()
+      : specialKeys[e.key];
+    sendText(activeSessionId, keyText);
     inputEl.value = ''; // TUI 操作中の誤入力を流さないようにクリア
     updateInputClearButton();
     e.preventDefault(); return;
@@ -827,7 +956,8 @@ inputEl.addEventListener('keydown', (e) => {
   const btn = document.getElementById('tools-flip-btn');
   const inputArea = document.getElementById('input-area');
   const inputTools = document.getElementById('input-tools');
-  if (!wrap || !btn || !inputArea || !inputTools) return;
+  const promptTemplateWrap = document.getElementById('prompt-template-wrap');
+  if (!wrap || !btn || !inputArea || !inputTools || !promptTemplateWrap) return;
 
   const applyToolsPosition = (isLeft) => {
     wrap.classList.toggle('tools-left', isLeft);
@@ -836,6 +966,7 @@ inputEl.addEventListener('keydown', (e) => {
     if (isLeft) {
       wrap.append(btn, inputTools);
       if (voiceBtn) wrap.append(voiceBtn);
+      wrap.append(promptTemplateWrap);
       if (sendBtn) wrap.append(sendBtn);
       if (inputClearBtn) wrap.append(inputClearBtn);
       wrap.append(inputArea);
@@ -844,7 +975,7 @@ inputEl.addEventListener('keydown', (e) => {
       if (inputClearBtn) wrap.append(inputClearBtn);
       if (sendBtn) wrap.append(sendBtn);
       if (voiceBtn) wrap.append(voiceBtn);
-      wrap.append(inputTools, btn);
+      wrap.append(promptTemplateWrap, inputTools, btn);
     }
   };
 
@@ -927,9 +1058,10 @@ inputClearBtn?.addEventListener('click', () => {
   if (isMobileViewport()) window.dispatchEvent(new CustomEvent('mobile-composer-idle'));
   // Web テキストエリアだけでなく内側 CLI の入力行も消す。ビジー時等に溜まった
   // 残骸（例: "/login/login..."）は web を空にしても TUI 側に残り続けるため、
-  // doSend / sendQuickCommand と同じ \x15(Ctrl+U) を単独送信して行クリアする。
+  // \x15(Ctrl+U) を単独送信して行クリアする（ユーザー明示操作なのでここは前置方式のまま。
+  // 送信経路の自動前置は residue-sweep.ts の事後掃除へ移行済み）。
   // ただし shell / codex は \x15 が行クリアとして機能しない（リテラル混入 or 無視）ため
-  // 単独送信もスキップする（doSend / sendQuickCommand と同じ判定）。セッション未選択なら no-op。
+  // 単独送信もスキップする。セッション未選択なら no-op。
   if (activeSessionId !== null && !shouldSkipClearPrefix(sessions.get(activeSessionId)?.provider || '')) {
     sendText(activeSessionId, '\x15');
   }
@@ -945,7 +1077,7 @@ document.getElementById('send-btn').addEventListener('click', () => {
   // C2: 実行中 + 入力なし → 停止（Esc）。実行中 + 入力あり → そのまま送信（Claude に割り込み）。
   const hasContent = inputEl.value.length > 0 || pastedTexts.length > 0 || pendingAttachFiles.length > 0;
   if (isActiveSessionRunning() && !hasContent) {
-    sendText(activeSessionId, '\x1b');
+    sendText(activeSessionId, stopKeyForActiveSession());
     return;
   }
   if (isComposing) return; // compositionend 側で処理する
@@ -1239,12 +1371,9 @@ function doSendQuickCommand(sessionId, cmd) {
     detectApproval(sessionId);
     maybeAutoSwitchToNextApproval();
   }, 2050);
-  // 内側 CLI がビジー等で入力行に残骸があると、クイックコマンドが既存テキストへ
-  // 連結され（例: "...質問/clear/clear"）独立コマンドにならない。Ctrl+U(\x15) で
-  // 入力行を一度クリアしてから送り、連結を物理的に防ぐ。
-  // shell provider は doSend と同理由で \x15 を前置しない（PowerShell 等で ^U 混入を防ぐ）。
-  const qcPrefix = shouldSkipClearPrefix(sessions.get(sessionId)?.provider || '') ? '' : '\x15';
-  sendSubmittedText(sessionId, `${qcPrefix}${cmd}\r`);
+  // 残骸への連結対策の \x15 前置は廃止（doSend と同じく residue-sweep.ts の事後掃除へ移行）。
+  // 本文の送り方（ペースト包み・確定 \r 分離）も doSend と同じ共通経路に従う。
+  sendSubmittedBody(sessionId, cmd);
   focusInputForTerminalKeys();
 }
 
@@ -1284,6 +1413,7 @@ export function sendSubmittedText(sessionId, text, opts: any = {}) {
 }
 
 export function sendText(sessionId, text) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
   ws.send(JSON.stringify({ type: 'pty_input', session_id: sessionId, text }));
 }
 
@@ -1401,6 +1531,10 @@ export function cleanupRemovedSessionState(id) {
     if (sigTimer) clearTimeout(sigTimer);
     approvalConsumedSigDeleteTimer.delete(id);
   } catch (_) {}
+  try { cancelDeferredEnter(id); } catch (_) {}
+  try { cancelResidueSweep(id); } catch (_) {}
+  try { cancelExpandCapture(id); } catch (_) {}
+  try { doSendInFlight.delete(id); } catch (_) {}
   try { if (typeof window._wakewordSessionRemoved === 'function') window._wakewordSessionRemoved(id); } catch (_) {}
 }
 
@@ -1527,24 +1661,25 @@ inputEl.addEventListener('blur', (e) => {
 })();
 
 (function () {
-  const killAllBtn = document.getElementById('kill-all-btn');
-  if (!killAllBtn) return;
+  const killAllBtns = [document.getElementById('kill-all-btn'), document.getElementById('settings-kill-all-btn')]
+    .filter((button): button is HTMLButtonElement => button instanceof HTMLButtonElement);
+  if (killAllBtns.length === 0) return;
 
-  killAllBtn.addEventListener('click', async () => {
-    const ok = await appConfirm({
+  killAllBtns.forEach((killAllBtn) => killAllBtn.addEventListener('click', async () => {
+    const ok = await appConfirmTypedDanger({
       title: t('kill_all_confirm_title'),
       message: t('kill_all_confirm'),
       confirmText: t('kill_all_confirm_run'),
       cancelText: t('spawn_cancel'),
-      kind: 'danger',
+      phrase: 'KILL ALL',
     });
     if (!ok) return;
-    killAllBtn.disabled = true;
+    killAllBtns.forEach((button) => { button.disabled = true; });
     try {
       await fetch(`/api/kill-all?token=${token}`, { method: 'POST' });
     } catch (_) {}
-    killAllBtn.disabled = false;
-  });
+    killAllBtns.forEach((button) => { button.disabled = false; });
+  }));
 })();
 
 (function () {
@@ -1585,6 +1720,12 @@ inputEl.addEventListener('blur', (e) => {
 (function () {
   const idleTimeoutEl     = document.getElementById('idle-timeout-min');
   const reconnectGraceEl  = document.getElementById('reconnect-grace-min');
+	const boardNotifyModeEl = document.getElementById('board-notify-mode') as HTMLSelectElement | null;
+	const spawnConfirmModeEl = document.getElementById('spawn-confirm-mode') as HTMLSelectElement | null;
+	const spawnConfirmProvidersEl = document.getElementById('spawn-confirm-providers') as HTMLInputElement | null;
+	const spawnConfirmProvidersRow = document.getElementById('spawn-confirm-providers-row');
+	const orchestrationChildTimeoutEl = document.getElementById('orchestration-child-timeout') as HTMLInputElement | null;
+	const orchestrationTimeoutRespawnEl = document.getElementById('orchestration-timeout-respawn') as HTMLInputElement | null;
   const logEnabledEl               = document.getElementById('log-enabled');
   const logSessionEnabledEl        = document.getElementById('log-session-enabled');
   const logMaxSizeEl               = document.getElementById('log-max-size');
@@ -1718,12 +1859,12 @@ inputEl.addEventListener('blur', (e) => {
   if (sessionStoreResetBtn) {
     sessionStoreResetBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const ok = await appConfirm({
+      const ok = await appConfirmTypedDanger({
         title: t('settings_history_reset_confirm_title'),
         message: t('settings_history_reset_confirm_message'),
         confirmText: t('settings_history_reset_confirm_run'),
         cancelText: t('confirm_cancel'),
-        kind: 'danger',
+        phrase: 'RESET HISTORY',
       });
       if (!ok) return;
       sessionStoreResetBtn.disabled = true;
@@ -1747,12 +1888,12 @@ inputEl.addEventListener('blur', (e) => {
   if (logsPurgeBtn) {
     logsPurgeBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const ok = await appConfirm({
+      const ok = await appConfirmTypedDanger({
         title: t('settings_logs_purge_confirm_title'),
         message: t('settings_logs_purge_confirm_message'),
         confirmText: t('settings_history_reset_confirm_run'),
         cancelText: t('confirm_cancel'),
-        kind: 'danger',
+        phrase: 'PURGE LOGS',
       });
       if (!ok) return;
       logsPurgeBtn.disabled = true;
@@ -1776,12 +1917,12 @@ inputEl.addEventListener('blur', (e) => {
   if (attachmentsPurgeBtn) {
     attachmentsPurgeBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const ok = await appConfirm({
+      const ok = await appConfirmTypedDanger({
         title: t('settings_attachments_purge_confirm_title'),
         message: t('settings_attachments_purge_confirm_message'),
         confirmText: t('settings_history_reset_confirm_run'),
         cancelText: t('confirm_cancel'),
-        kind: 'danger',
+        phrase: 'PURGE ATTACHMENTS',
       });
       if (!ok) return;
       attachmentsPurgeBtn.disabled = true;
@@ -1832,6 +1973,60 @@ inputEl.addEventListener('blur', (e) => {
     });
   }
 
+	async function loadBoardNotifyMode() {
+		if (!boardNotifyModeEl) return;
+		try {
+			const res = await fetch(`/api/orchestration-config?token=${token}`);
+			if (!res.ok) return;
+			const cfg = await res.json();
+			const mode = String(cfg.board_notify_mode || 'queue-until-idle');
+			boardNotifyModeEl.value = ['soft-notify', 'queue-until-idle', 'interrupt'].includes(mode) ? mode : 'queue-until-idle';
+			if (spawnConfirmModeEl) {
+				const spawnMode = String(cfg.spawn_confirm_mode || 'on');
+				spawnConfirmModeEl.value = ['on', 'off', 'providers'].includes(spawnMode) ? spawnMode : 'on';
+				if (spawnConfirmProvidersEl) spawnConfirmProvidersEl.value = Array.isArray(cfg.spawn_confirm_providers) ? cfg.spawn_confirm_providers.join(', ') : '';
+				if (spawnConfirmProvidersRow) spawnConfirmProvidersRow.hidden = spawnConfirmModeEl.value !== 'providers';
+			}
+			if (orchestrationChildTimeoutEl) orchestrationChildTimeoutEl.value = String(cfg.child_timeout_seconds || 900);
+			if (orchestrationTimeoutRespawnEl) orchestrationTimeoutRespawnEl.checked = Boolean(cfg.timeout_respawn);
+		} catch (_) {}
+	}
+
+	async function saveBoardNotifyMode() {
+		if (!boardNotifyModeEl) return;
+		try {
+			await fetch(`/api/orchestration-config?token=${token}`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ board_notify_mode: boardNotifyModeEl.value, spawn_confirm_mode: spawnConfirmModeEl?.value || 'on', spawn_confirm_providers: (spawnConfirmProvidersEl?.value || '').split(',').map(v => v.trim()).filter(Boolean), child_timeout_seconds: Math.max(60, Math.min(86400, Number(orchestrationChildTimeoutEl?.value || 900))), timeout_respawn: Boolean(orchestrationTimeoutRespawnEl?.checked) }),
+			});
+		} catch (_) {}
+	}
+  const autoApprovalInput = document.getElementById('auto-approval-enabled-input');
+  if (autoApprovalInput) {
+    autoApprovalInput.checked = localStorage.getItem(STORAGE_AUTO_APPROVAL_ENABLED_KEY) === '1';
+    autoApprovalInput.addEventListener('change', () => setUserPref('approval.auto_approval_enabled', autoApprovalInput.checked));
+  }
+  const highRiskModeInput = document.getElementById('approval-high-risk-mode') as HTMLSelectElement | null;
+  if (highRiskModeInput) {
+    highRiskModeInput.value = localStorage.getItem(STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY) === 'dialog' ? 'dialog' : 'hold';
+    highRiskModeInput.addEventListener('change', () => {
+      const mode = highRiskModeInput.value === 'dialog' ? 'dialog' : 'hold';
+      setUserPref('approval.high_risk_confirmation_mode', mode);
+    });
+  }
+  const autoApprovalSimulateBtn = document.getElementById('auto-approval-simulate-btn');
+  if (autoApprovalSimulateBtn) {
+    autoApprovalSimulateBtn.addEventListener('click', async () => {
+      const result = document.getElementById('auto-approval-simulate-result');
+      try {
+        const res = await fetch(`/api/auto-approval/simulate?token=${encodeURIComponent(token || '')}&n=100`);
+        const data = res.ok ? await res.json() : null;
+        if (result) result.textContent = data ? `${data.total || 0}件中 ${data.matched || 0}件が一致（危険操作は除外）` : 'シミュレーションに失敗しました';
+      } catch (_) { if (result) result.textContent = 'シミュレーションに失敗しました'; }
+    });
+  }
+
   async function saveLogConfig() {
     try {
       await fetch(`/api/log-config?token=${token}`, {
@@ -1871,6 +2066,7 @@ inputEl.addEventListener('blur', (e) => {
   window.__settingsSaveAll = async () => {
     await saveIdleTimeout();
     await saveReconnectGrace();
+		await saveBoardNotifyMode();
     await saveLogConfig();
     await saveSlashCmdSources();
     saveUsageLinkSettings();
@@ -1894,6 +2090,7 @@ inputEl.addEventListener('blur', (e) => {
     setUserPref('notify_sound.type', 'default');
     try { localStorage.removeItem(STORAGE_NOTIFY_SOUND_CUSTOM_KEY); } catch (_) {}
     setUserPref('approval.auto_switch', false);
+	setUserPref('approval.auto_approval_enabled', false);
     for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
       setUserPref(`quick_cmds.cmd${slot}`, quickCommandDefault(slot));
       setUserPref(`quick_cmds.show${slot}`, true);
@@ -1949,6 +2146,11 @@ inputEl.addEventListener('blur', (e) => {
 
     const approvalAutoSwitchInput = document.getElementById('approval-auto-switch-input');
     if (approvalAutoSwitchInput) approvalAutoSwitchInput.checked = false;
+	const autoApprovalInput = document.getElementById('auto-approval-enabled-input');
+	if (autoApprovalInput) autoApprovalInput.checked = false;
+	const highRiskModeInput = document.getElementById('approval-high-risk-mode') as HTMLSelectElement | null;
+	if (highRiskModeInput) highRiskModeInput.value = 'hold';
+	setUserPref('approval.high_risk_confirmation_mode', 'hold');
 
     const idleTimeoutEl = document.getElementById('idle-timeout-min');
     const reconnectGraceEl = document.getElementById('reconnect-grace-min');
@@ -2049,17 +2251,24 @@ inputEl.addEventListener('blur', (e) => {
     if (!document.getElementById('settings-panel').hidden) {
       loadIdleTimeout();
       loadReconnectGrace();
+		loadBoardNotifyMode();
       loadLogConfig();
       loadApprovalSettings();
       loadSlashCmdSources();
       loadUsageLinkSettings();
       attachTokenStatusbarToggle();
       attachDoneSummaryNotifyToggle();
+      void loadDeferredEnterConfig();
     }
   });
 
   if (idleTimeoutEl) idleTimeoutEl.addEventListener('change', saveIdleTimeout);
   if (reconnectGraceEl) reconnectGraceEl.addEventListener('change', saveReconnectGrace);
+	if (boardNotifyModeEl) boardNotifyModeEl.addEventListener('change', saveBoardNotifyMode);
+	if (spawnConfirmModeEl) spawnConfirmModeEl.addEventListener('change', () => { if (spawnConfirmProvidersRow) spawnConfirmProvidersRow.hidden = spawnConfirmModeEl.value !== 'providers'; void saveBoardNotifyMode(); });
+	if (spawnConfirmProvidersEl) spawnConfirmProvidersEl.addEventListener('change', () => void saveBoardNotifyMode());
+	if (orchestrationChildTimeoutEl) orchestrationChildTimeoutEl.addEventListener('change', () => void saveBoardNotifyMode());
+	if (orchestrationTimeoutRespawnEl) orchestrationTimeoutRespawnEl.addEventListener('change', () => void saveBoardNotifyMode());
   logEnabledEl.addEventListener('change', saveLogConfig);
   if (logSessionEnabledEl) logSessionEnabledEl.addEventListener('change', saveLogConfig);
   logMaxSizeEl.addEventListener('change', saveLogConfig);
@@ -2068,6 +2277,96 @@ inputEl.addEventListener('blur', (e) => {
   if (logSessionMaxSizeEl) logSessionMaxSizeEl.addEventListener('change', saveLogConfig);
   if (attachRetentionDaysEl) attachRetentionDaysEl.addEventListener('change', saveLogConfig);
   if (attachMaxTotalMbEl) attachMaxTotalMbEl.addEventListener('change', saveLogConfig);
+
+  const deferredEnterEl = document.getElementById('deferred-enter-ms') as HTMLSelectElement | null;
+  async function loadDeferredEnterConfig() {
+    if (!deferredEnterEl) return;
+    try {
+      const res = await fetch(`/api/input-config?token=${encodeURIComponent(token || '')}`);
+      if (!res.ok) return;
+      const cfg = await res.json();
+      deferredEnterOverrideMs = Number(cfg?.deferred_enter_ms) || 0;
+      deferredEnterEl.value = String(deferredEnterOverrideMs);
+    } catch (_) {}
+  }
+  if (deferredEnterEl) {
+    deferredEnterEl.addEventListener('change', async () => {
+      const ms = Number(deferredEnterEl.value) || 0;
+      try {
+        const res = await fetch(`/api/input-config?token=${encodeURIComponent(token || '')}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deferred_enter_ms: ms }),
+        });
+        if (!res.ok) throw new Error('save failed');
+        deferredEnterOverrideMs = ms;
+      } catch (_) {
+        showToast('複数行ペーストの設定を保存できませんでした');
+      }
+    });
+    void loadDeferredEnterConfig();
+  }
+
+  const deferredCancel = document.getElementById('deferred-send-cancel');
+  if (deferredCancel) deferredCancel.addEventListener('click', () => {
+    if (deferredSendSessionId == null) return;
+    const id = deferredSendSessionId;
+    cancelDeferredEnter(id);
+    clearDeferredSendStatus(id);
+    showToast('複数行ペーストの確定送信をキャンセルしました');
+  });
+})();
+
+(function () {
+  const runButton = document.getElementById('doctor-run-btn') as HTMLButtonElement | null;
+  const result = document.getElementById('doctor-result');
+  if (!runButton || !result) return;
+
+  function addText(parent: HTMLElement, className: string, value: string) {
+    const el = document.createElement('span');
+    el.className = className;
+    el.textContent = value;
+    parent.append(el);
+  }
+
+  async function runDoctor() {
+    runButton.disabled = true;
+    result.hidden = false;
+    result.replaceChildren();
+    addText(result, 'settings-note', t('settings_doctor_running'));
+    try {
+      const response = await fetch(`/api/doctor?token=${encodeURIComponent(token || '')}`);
+      if (!response.ok) throw new Error(String(response.status));
+      const report = await response.json();
+      result.replaceChildren();
+      for (const check of report.checks || []) {
+        const card = document.createElement('div');
+        card.className = 'doctor-check';
+        addText(card, `doctor-level doctor-level--${check.level}`, `[${check.level}] ${check.name}`);
+        addText(card, 'doctor-message', check.message || '');
+        if (check.fix) {
+          const fix = document.createElement('div');
+          fix.className = 'doctor-fix';
+          addText(fix, '', check.fix);
+          const copy = document.createElement('button');
+          copy.type = 'button';
+          copy.className = 'settings-inline-btn doctor-copy';
+          copy.textContent = t('settings_doctor_copy');
+          copy.addEventListener('click', async () => {
+            try { await navigator.clipboard.writeText(check.fix); showToast(t('settings_doctor_copied')); } catch (_) { showToast(t('settings_doctor_copy_failed')); }
+          });
+          fix.append(copy);
+          card.append(fix);
+        }
+        result.append(card);
+      }
+    } catch (_) {
+      result.replaceChildren();
+      addText(result, 'settings-note settings-note-warn', t('settings_doctor_failed'));
+    } finally {
+      runButton.disabled = false;
+    }
+  }
+
+  runButton.addEventListener('click', runDoctor);
 })();
 
 (function () {

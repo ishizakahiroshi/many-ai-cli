@@ -10,6 +10,125 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-XX
+
+### Added
+- **`many-ai-cli setup` subcommand.** A one-shot post-install command for all
+  three OSes (Windows / macOS / Linux). Creates a "Many AI Hub Start"
+  shortcut on the desktop that launches `many-ai-cli serve` and opens the Hub
+  in the browser. Introduced so non-technical users can go from `pnpm add -g`
+  to a running Hub without touching a terminal.
+- **`many-ai-cli doctor` subcommand.** Environment diagnostics that check
+  provider CLIs (claude / codex / copilot / cursor-agent / grok / opencode),
+  Hub port / token / ACL, Ollama and Whisper endpoints, Tailscale status,
+  session log directory, and config.yaml validity. Available both as a CLI
+  and via `/api/doctor` (`internal/doctor/doctor.go` +
+  `internal/hub/doctor_handler.go`).
+- **Auto-approval policy engine.** `~/.many-ai-cli/config.yaml` now supports
+  an `autoapproval.*` section that lets you allow-list specific approval
+  prompts by command / working-directory pattern, with hard-block guards
+  against catastrophic patterns (`.*`, empty command). Implemented in
+  `internal/autoapproval/policy.go` + `internal/hub/auto_approval.go`, with
+  a simulation endpoint so you can preview what history would have been
+  auto-approved.
+- **`/api/git-diff` endpoint + Turn Diff viewer.** The Hub can now surface
+  the working-tree git diff (tracked + untracked, with size cap and binary
+  detection) for the session's cwd, so the browser Chat pane can show what
+  a turn actually changed. Backed by `internal/hub/git_diff.go`.
+- **`/api/grok-history` endpoint.** Reads Grok Build CLI's local session
+  history (`~/.grok/`) and surfaces it in the Hub's Grok chat viewer,
+  including UUIDv7 correlation and cwd matching
+  (`internal/hub/grok_history_handler.go`).
+- **`/api/input-config` + session activity / meta / store endpoints.** Fine-
+  grained per-session metadata (labels, pin, color, note, tags, summary,
+  auto-title) and activity heartbeats are now first-class API resources
+  (`internal/hub/session_activity.go` / `session_meta.go` /
+  `session_store_handlers.go` / `settings_handlers.go`).
+- **Approval action + batch API rework.** `/api/approval/action` and
+  `/api/approval/batch` are consolidated so the Hub UI can approve /
+  reject / auto-rule single or multiple pending approvals in one round
+  trip, with low-risk gating for `auto_rule` and deny-session support
+  (`internal/hub/approval_action.go` + `approval_batch.go`).
+- **Approval AI summary.** `[MANY-AI-CLI]` approval blocks now carry a
+  short human-readable summary so the action bar / mobile sheet can show
+  "what am I approving" at a glance (`internal/approval/summary.go`).
+- **`[MANY-AI-CLI-DONE]` marker + done-summary panel.** Sessions now emit
+  a completion marker with a 1-2 sentence recap that the Hub captures and
+  persists per session (`internal/hub/done_summary.go`).
+- **Normal-worktree mode.** Non-orchestration sessions can now opt in to
+  running in a dedicated git worktree under
+  `.many-ai-cli/worktrees/normal/<label>/` so parallel work on the same
+  repo does not step on each other's branches
+  (`internal/hub/normal_worktree.go`).
+- **Commit-all rework: AI commit message + push.** The Hub's "Commit all"
+  path can now generate an AI commit message from the staged diff and
+  optionally push in the same round (`internal/hub/git_commit_ai.go` +
+  `push.go`).
+- **First-run tour.** New users are walked through the Hub's core panels
+  (session list, spawn, terminals, approvals, mobile connect) on first
+  load (`web/src/app/first-run-tour.ts` + `styles/first-run-tour.css`).
+- **Review UI + prompt templates + session-search palette + zero-session
+  empty state.** The desktop Hub gains a dedicated review view for turn
+  history, a CRUD palette for reusable prompt templates, a global
+  session-search palette, and a friendlier empty state when no sessions
+  exist yet.
+- **Launcher active-session file lock.** The unified launcher now uses a
+  cross-process file lock on Windows and Unix so multiple Hub / UI
+  instances no longer fight over PTY resize ownership
+  (`internal/launcher/active_filelock_unix.go` +
+  `active_filelock_windows.go`).
+- **Regression test additions.** `dismiss_race_test.go`,
+  `usage_hooks_test.go`, `approval_action_test.go`,
+  `approval_batch_test.go`, `approval_detector_test.go`,
+  `approval_handler_test.go`, `done_summary_test.go`,
+  `git_diff_test.go`, `grok_history_handler_test.go`,
+  `normal_worktree_test.go`, `orchestration_test.go`,
+  `session_activity_test.go`, `session_meta_test.go`, notify's
+  `approval_actions_test.go`, plus wrapper `approval_rules_test.go`.
+
+### Changed
+- **Notify subsystem.** `internal/notify/notify.go` is restructured so
+  each approval action can trigger its own event, with cleaner separation
+  between ntfy / webhook / Web Push backends.
+- **Orchestration.** `handleSpawnChild` and companion helpers gain
+  timeout retries, child-log isolation, waitForInputReady staleguard, and
+  richer board.md progress markers (`internal/hub/orchestration.go` +
+  `internal/orchestrate/orchestrate.go`).
+- **Session log / transcript pipeline.** Repetitive-progress-line
+  filtering and transcript-line size handling are now shared between the
+  live PTY stream, the persisted JSONL, and the exported `.txt`
+  (`internal/sessionlog/*` + `internal/sessionstore/store.go`).
+- **Config.** New settings (autoapproval, input-config, setup-related
+  paths, external notification body toggle) are all backward-compatible
+  additions to `~/.many-ai-cli/config.yaml`
+  (`internal/config/config.go`).
+- **Idle state / input gate.** State transitions are re-worked to
+  suppress spurious idle detections that used to cause false-positive
+  "session stuck" notifications.
+- **UX improvements batch #11-#20.** A grab-bag of desktop and mobile
+  UI refinements (app.ts / app-entry.ts / i18n / CSS) that ship together
+  under this batch label.
+- **README.ja synced.** The Japanese README gains the Light orchestration
+  section that had existed only in the English README.
+- **Spawn panel fav / history sort.** Favorites and history results in the
+  spawn cwd picker are now sorted by manual order (favorites) and most
+  recent first (history), instead of a single raw score.
+
+### Fixed
+- (TBD — populated after v0.5.0 pre-release audit findings F1-F17 are
+  applied by codex. See
+  `docs/local/report_audit-v0.5.0_2026-07-13.md`.)
+
+- Numerous mobile / desktop bugfixes documented individually in
+  `docs/local/bugfix_*_2026-07-*.md` (session card tap-miss, codex
+  SIGWINCH full-repaint scroll, OAuth login Ctrl+U prefix, Grok stop
+  key ESC vs Ctrl+C, Claude Code TUI image attach regression, statusline
+  settings skip, new-session startup latency 3x, disconnected-session
+  dismiss ghost, single-line send CR absorbed, approval-only header
+  button, done-summary history-panel removal, card message low-contrast
+  color, star/pin unification, session card label gray / branch push-
+  out, Grok approval options glued, orchestration tab icon mismatch).
+
 ## [0.4.0] - 2026-07-05
 
 ### Removed
@@ -605,7 +724,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.2...v0.3.3

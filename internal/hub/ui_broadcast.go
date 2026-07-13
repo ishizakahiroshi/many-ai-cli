@@ -97,7 +97,7 @@ func (s *Server) pingLoop(ctx context.Context, uc *uiConn) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if err := uc.send(map[string]string{"type": "ping"}); err != nil {
+			if err := uc.sendWithDeadline(map[string]string{"type": "ping"}, time.Now().Add(broadcastWriteTimeout)); err != nil {
 				s.logger.Warn("ping failed, removing dead UI connection", "err", err)
 				s.removeUI(uc.ws)
 				return
@@ -130,7 +130,12 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 	// hub_instance: Hub 再起動を UI が検出するための起動毎 ID。
 	// UI 側は前回値と異なる場合に live session ID キーのローカル状態
 	// （チャット・ターミナルバッファ等）を破棄してから snapshot を適用する。
-	_ = uc.send(map[string]any{"type": "snapshot", "sessions": json.RawMessage(b), "hub_instance": s.instanceID})
+	deadline := time.Now().Add(broadcastWriteTimeout)
+	if err := uc.sendWithDeadline(map[string]any{"type": "snapshot", "sessions": json.RawMessage(b), "hub_instance": s.instanceID}, deadline); err != nil {
+		s.logger.Warn("sendSnapshot: UI send failed, removing dead connection", "err", err)
+		s.removeUI(uc.ws)
+		return
+	}
 
 	// C3: UI 接続時に既存セッションの usageStat をまとめて送る。
 	// これにより再接続時・リロード時にステータスバーが即座に復元される。
@@ -139,7 +144,7 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 	usageStatsMu.Lock()
 	for _, id := range sessionIDs {
 		if stat, ok := usageStats[id]; ok {
-			_ = uc.send(proto.Message{
+			if err := uc.sendWithDeadline(proto.Message{
 				Type:             "usage_stat",
 				SessionID:        id,
 				Provider:         providerByID[id],
@@ -173,7 +178,12 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 				ReasoningOut:     stat.ReasoningOut,
 				UsageModel:       stat.UsageModel,
 				UsageStartedAt:   stat.StartedAt,
-			})
+			}, deadline); err != nil {
+				usageStatsMu.Unlock()
+				s.logger.Warn("sendSnapshot: usage_stat send failed, removing dead connection", "err", err)
+				s.removeUI(uc.ws)
+				return
+			}
 		}
 	}
 	usageStatsMu.Unlock()
@@ -186,8 +196,9 @@ func (s *Server) broadcast(m any) {
 		ucs = append(ucs, uc)
 	}
 	s.sessionsMu.Unlock()
+	deadline := time.Now().Add(broadcastWriteTimeout)
 	for _, uc := range ucs {
-		if err := uc.send(m); err != nil {
+		if err := uc.sendWithDeadline(m, deadline); err != nil {
 			s.logger.Warn("broadcast: UI send failed, removing dead connection", "err", err)
 			s.removeUI(uc.ws)
 		}

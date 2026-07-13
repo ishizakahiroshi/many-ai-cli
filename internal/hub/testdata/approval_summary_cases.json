@@ -1,0 +1,26 @@
+[
+  {
+    "name": "codex destructive shell command",
+    "provider": "codex",
+    "lines": ["Command requires approval", "Run: rm -rf ./dist", "", "❯ Yes (y)", "  No (n)"],
+    "command": "rm -rf ./dist",
+    "risk": "high",
+    "paths": ["./dist"]
+  },
+  {
+    "name": "copilot read-only git command",
+    "provider": "copilot",
+    "lines": ["Permission required", "Run: git status ./src", "", "❯ Allow once (y)", "  Deny once (n)"],
+    "command": "git status ./src",
+    "risk": "low",
+    "paths": ["./src"]
+  },
+  {
+    "name": "cursor agent unknown command is mid",
+    "provider": "cursor-agent",
+    "lines": ["Run this command?", "Not in allowlist: npm install package", " - Run (once) (y)", "    Skip (esc or n)"],
+    "command": "npm install package",
+    "risk": "mid",
+    "paths": []
+  }
+]

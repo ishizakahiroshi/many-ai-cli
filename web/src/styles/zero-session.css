@@ -1,0 +1,16 @@
+#terminal-area-wrapper { position: relative; }
+#zero-session-empty-state { position: absolute; inset: 0; z-index: 8; display: grid; place-items: center; padding: clamp(20px, 5vw, 56px); background: var(--bg); overflow: auto; }
+.zero-session-card { width: min(680px, 100%); text-align: center; }
+.zero-session-kicker { color: var(--accent); font-size: .78rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.zero-session-card h1 { margin: 10px 0 8px; color: var(--text); font-size: clamp(1.45rem, 3vw, 2rem); }
+.zero-session-intro { margin: 0 auto 26px; max-width: 560px; color: var(--muted); line-height: 1.65; }
+.zero-session-steps { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; counter-reset: zero-step; text-align: left; }
+.zero-session-steps li { display: flex; gap: 14px; padding: 16px 18px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 10px; counter-increment: zero-step; }
+.zero-session-steps li::before { content: counter(zero-step); flex: none; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--accent-text, #fff); font-size: .82rem; font-weight: 700; }
+.zero-session-steps li > div { flex: 1; }
+.zero-session-steps strong { display: block; font-size: .95rem; color: var(--text); }
+.zero-session-steps span { display: block; margin-top: 4px; color: var(--muted); font-size: .86rem; line-height: 1.55; }
+.zero-session-footer { display: flex; justify-content: center; gap: 10px; margin-top: 24px; color: var(--muted-2); font-size: .85rem; }
+.zero-session-footer button { border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.zero-session-footer button:hover { color: var(--text); text-decoration: underline; }
+@media (max-width: 720px) { #zero-session-empty-state { padding: 20px 16px; align-items: start; } .zero-session-card { margin-top: 22px; } }

@@ -6,16 +6,28 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
+
+// codexConfigMu は同一プロセス内の ~/.codex/config.toml RMW を直列化する。
+// クロスプロセスは codexConfigFileLock で保護する。
+var codexConfigMu sync.Mutex
 
 // ---------------------------------------------------------------------------
 // 共通定数・型
 // ---------------------------------------------------------------------------
 
 const (
-	usageHookBlockStart = "# any-ai-cli:usage-hook-start"
-	usageHookBlockEnd   = "# any-ai-cli:usage-hook-end"
+	usageHookBlockStart = "# many-ai-cli:usage-hook-start"
+	usageHookBlockEnd   = "# many-ai-cli:usage-hook-end"
+
+	// 旧名 any-ai-cli 時代（v0.3.x 以前のバイナリ）が注入したブロックの検出・除去用。
+	// 新規注入には使わない。
+	legacyUsageHookBlockStart = "# any-ai-cli:usage-hook-start"
+	legacyUsageHookBlockEnd   = "# any-ai-cli:usage-hook-end"
 )
 
 // UsageHookParams は注入時に埋め込む接続パラメータ。
@@ -185,62 +197,136 @@ func codexStopHookBlock(p UsageHookParams) string {
 
 // InjectCodexStopHook は ~/.codex/config.toml に Stop フックを冪等注入する。
 func InjectCodexStopHook(p UsageHookParams) error {
+	codexConfigMu.Lock()
+	defer codexConfigMu.Unlock()
 	path := codexConfigPath()
+	return withCodexConfigFileLock(path, func() error {
+		// 既存ファイルを読む（無ければ空）。
+		var content string
+		if data, err := os.ReadFile(path); err == nil {
+			content = string(data)
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("read %s: %w", path, err)
+		}
 
-	// 既存ファイルを読む（無ければ空）。
-	var content string
-	if data, err := os.ReadFile(path); err == nil {
-		content = string(data)
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("read %s: %w", path, err)
-	}
+		// 旧名 any-ai-cli マーカーのブロックが残っていれば先に除去する
+		// （残したまま新マーカーで追記すると Stop フックが二重登録になる）。
+		if strings.Contains(content, legacyUsageHookBlockStart) {
+			legacyRe := regexp.MustCompile(`(?s)\n?` + regexp.QuoteMeta(legacyUsageHookBlockStart) + `.*?` + regexp.QuoteMeta(legacyUsageHookBlockEnd) + `\n?`)
+			content = legacyRe.ReplaceAllString(content, "")
+		}
 
-	// already 注入済みかどうか確認。
-	if strings.Contains(content, usageHookBlockStart) {
-		// 注入済み: コマンドだけ更新（セッション ID が変わる場合を考慮）。
-		// ReplaceAllLiteralString を使う。ReplaceAllString だと newBlock 中の
-		// `$name` / `${name}` が Regexp.Expand ルールで解釈され、many-ai-cli の
-		// 実行ファイルパスに `$` を含むディレクトリ（例:
-		// `C:\Users\alice\$portable\many-ai-cli.exe`）があると、対応するキャプチャ
-		// グループが無いため無言で消える（TOML 上は構文的に壊れないので気づけない）。
-		newBlock := codexStopHookBlock(p)
-		blockRe := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(usageHookBlockStart) + `.*?` + regexp.QuoteMeta(usageHookBlockEnd) + `\n?`)
-		content = blockRe.ReplaceAllLiteralString(content, newBlock)
+		// already 注入済みかどうか確認。
+		if strings.Contains(content, usageHookBlockStart) {
+			// 注入済み: コマンドだけ更新（セッション ID が変わる場合を考慮）。
+			// ReplaceAllLiteralString を使う。ReplaceAllString だと newBlock 中の
+			// `$name` / `${name}` が Regexp.Expand ルールで解釈され、many-ai-cli の
+			// 実行ファイルパスに `$` を含むディレクトリ（例:
+			// `C:\Users\alice\$portable\many-ai-cli.exe`）があると、対応するキャプチャ
+			// グループが無いため無言で消える（TOML 上は構文的に壊れないので気づけない）。
+			newBlock := codexStopHookBlock(p)
+			blockRe := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(usageHookBlockStart) + `.*?` + regexp.QuoteMeta(usageHookBlockEnd) + `\n?`)
+			content = blockRe.ReplaceAllLiteralString(content, newBlock)
+			return writeCodexConfig(path, content)
+		}
+
+		// 末尾に追記。
+		if !strings.HasSuffix(content, "\n") && len(content) > 0 {
+			content += "\n"
+		}
+		content += "\n" + codexStopHookBlock(p)
+
 		return writeCodexConfig(path, content)
-	}
-
-	// 末尾に追記。
-	if !strings.HasSuffix(content, "\n") && len(content) > 0 {
-		content += "\n"
-	}
-	content += "\n" + codexStopHookBlock(p)
-
-	return writeCodexConfig(path, content)
+	})
 }
 
 // RemoveCodexStopHook は注入した Stop フックブロックを除去する。
 func RemoveCodexStopHook() error {
+	codexConfigMu.Lock()
+	defer codexConfigMu.Unlock()
 	path := codexConfigPath()
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read %s: %w", path, err)
-	}
+	return withCodexConfigFileLock(path, func() error {
+		data, err := os.ReadFile(path)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read %s: %w", path, err)
+		}
 
-	content := string(data)
-	if !strings.Contains(content, usageHookBlockStart) {
-		return nil
-	}
+		content := string(data)
+		if !strings.Contains(content, usageHookBlockStart) && !strings.Contains(content, legacyUsageHookBlockStart) {
+			return nil
+		}
 
-	blockRe := regexp.MustCompile(`(?s)\n?` + regexp.QuoteMeta(usageHookBlockStart) + `.*?` + regexp.QuoteMeta(usageHookBlockEnd) + `\n?`)
-	newContent := blockRe.ReplaceAllString(content, "")
-	if newContent == content {
-		return nil
-	}
+		// 旧名 any-ai-cli マーカーのブロックも除去対象（旧バイナリからの移行）。
+		blockRe := regexp.MustCompile(`(?s)\n?(?:` +
+			regexp.QuoteMeta(usageHookBlockStart) + `.*?` + regexp.QuoteMeta(usageHookBlockEnd) + `|` +
+			regexp.QuoteMeta(legacyUsageHookBlockStart) + `.*?` + regexp.QuoteMeta(legacyUsageHookBlockEnd) + `)\n?`)
+		newContent := blockRe.ReplaceAllString(content, "")
+		if newContent == content {
+			return nil
+		}
 
-	return writeCodexConfig(path, newContent)
+		return writeCodexConfig(path, newContent)
+	})
+}
+
+// withCodexConfigFileLock は config.toml 隣の .lock を O_EXCL で取り、RMW 区間を
+// プロセス横断で直列化する。取得できなければ短時間リトライする。
+func withCodexConfigFileLock(configPath string, fn func() error) error {
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil { // #nosec G301 -- ~/.codex は秘密情報を持つ可能性があるため 0700
+		return fmt.Errorf("mkdir %s: %w", filepath.Dir(configPath), err)
+	}
+	lockPath := configPath + ".many-ai-cli.lock"
+	const attempts = 50
+	const delay = 20 * time.Millisecond
+	var lockFile *os.File
+	var err error
+	for i := 0; i < attempts; i++ {
+		lockFile, err = os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err == nil {
+			break
+		}
+		if !os.IsExist(err) {
+			return fmt.Errorf("open codex config lock: %w", err)
+		}
+		if !tryStealCodexConfigLock(lockPath) {
+			time.Sleep(delay)
+			continue
+		}
+	}
+	if lockFile == nil {
+		return fmt.Errorf("codex config lock busy: %s", lockPath)
+	}
+	_, _ = fmt.Fprintf(lockFile, "%d\n", os.Getpid())
+	_ = lockFile.Close()
+	defer func() { _ = os.Remove(lockPath) }()
+	return fn()
+}
+
+func tryStealCodexConfigLock(lockPath string) bool {
+	data, err := os.ReadFile(lockPath)
+	if err == nil {
+		pidStr := strings.TrimSpace(string(data))
+		if pid, convErr := strconv.Atoi(pidStr); convErr == nil && pid > 0 {
+			if processAlive(pid) {
+				return false
+			}
+			_ = os.Remove(lockPath)
+			return true
+		}
+	}
+	info, statErr := os.Stat(lockPath)
+	if statErr != nil {
+		return false
+	}
+	// PID 書き込み前の新しいロックは、作成直後の正規状態として待つ。
+	if time.Since(info.ModTime()) <= opencodeLockStaleAfter {
+		return false
+	}
+	_ = os.Remove(lockPath)
+	return true
 }
 
 // ScanCodexStopHookInjected は注入済みかどうかを確認する。
@@ -253,7 +339,8 @@ func ScanCodexStopHookInjected() (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("read %s: %w", path, err)
 	}
-	return strings.Contains(string(data), usageHookBlockStart), nil
+	content := string(data)
+	return strings.Contains(content, usageHookBlockStart) || strings.Contains(content, legacyUsageHookBlockStart), nil
 }
 
 func writeCodexConfig(path, content string) error {

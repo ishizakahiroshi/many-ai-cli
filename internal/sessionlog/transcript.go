@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 var (
@@ -215,12 +216,24 @@ func normalizeTranscriptBlock(s string) string {
 }
 
 func isSpinnerLine(s string) bool {
-	if len([]rune(s)) <= 2 {
-		return true
-	}
+	// 長さだけでは落とさない（"OK" / "No" / "はい" 等の短い実応答を log-clean に残す）。
+	// 文字・数字を含まない極短行（"·" 等）だけ記号ノイズとして落とす。
 	switch s {
 	case "Boot", "Boo", "Bo", "Thinking", "Working":
 		return true
+	}
+	rs := []rune(s)
+	if len(rs) <= 2 {
+		hasLetterOrNumber := false
+		for _, r := range rs {
+			if unicode.IsLetter(r) || unicode.IsNumber(r) {
+				hasLetterOrNumber = true
+				break
+			}
+		}
+		if !hasLetterOrNumber {
+			return true
+		}
 	}
 	return IsThinkingNoiseLine(s)
 }

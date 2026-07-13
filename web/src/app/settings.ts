@@ -4,7 +4,7 @@ import { escapeHtml, showToast, ti18n, token } from './util.js';
 import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
-import { activateSession, openDetachedGridForSessions, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
+import { activateSession, openDetachedGridForSessions, patchSessionMeta, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
 import { pathPopupEl } from './path-links.js';
 import { TERMINAL_SCROLLBACK_LINES, attachTerminal, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, sendResize } from './terminal.js';
 import { providerApprovalTriggers } from './approval.js';
@@ -1014,6 +1014,123 @@ export function applyLang(lang) {
     if (e.target === aboutPanel) aboutPanel.hidden = true;
   });
 })();
+
+// =============================================================================
+// P-53: Settings の情報設計（かんたん/すべて、検索、直リンク）
+// =============================================================================
+const SETTINGS_IA_LEVEL_KEY = 'many-ai-cli.settings-level';
+
+function initSettingsInformationArchitecture(): void {
+  const panel = document.getElementById('settings-panel');
+  const search = document.getElementById('settings-search-input') as HTMLInputElement | null;
+  const status = document.getElementById('settings-search-status');
+  const levelButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-settings-level]'));
+  const sections = Array.from(document.querySelectorAll<HTMLDetailsElement>('.settings-section[data-section]'));
+  if (!panel || !search || levelButtons.length === 0 || sections.length === 0) return;
+
+  let level = localStorage.getItem(SETTINGS_IA_LEVEL_KEY) === 'all' ? 'all' : 'basic';
+  const apply = () => {
+    const query = search.value.trim().toLocaleLowerCase();
+    let matches = 0;
+    sections.forEach((section) => {
+      const isBasic = section.dataset.settingsLevel === 'basic';
+      const currentValues = Array.from(section.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select'))
+        .map((control) => control instanceof HTMLInputElement && control.type === 'checkbox'
+          ? (control.checked ? 'on enabled' : 'off disabled')
+          : control.value)
+        .join(' ');
+      const text = `${section.textContent || ''} ${currentValues}`.toLocaleLowerCase();
+      const matched = !query || text.includes(query);
+      const visible = query ? matched : (level === 'all' || isBasic);
+      section.classList.toggle('settings-ia-hidden', !visible);
+      section.classList.toggle('settings-search-match', !!query && matched);
+      if (query && matched) {
+        matches++;
+        section.open = true;
+      }
+    });
+    levelButtons.forEach((button) => button.classList.toggle('active', button.dataset.settingsLevel === level));
+    if (query) {
+      status.textContent = matches ? `${matches} 件のセクションに一致` : '一致する設定はありません';
+    } else {
+      status.textContent = level === 'basic' ? 'よく使う設定を表示中。詳細は「すべて」から開けます。' : 'すべての設定を表示中。';
+    }
+  };
+
+  levelButtons.forEach((button) => button.addEventListener('click', () => {
+    level = button.dataset.settingsLevel === 'all' ? 'all' : 'basic';
+    try { localStorage.setItem(SETTINGS_IA_LEVEL_KEY, level); } catch (_) {}
+    apply();
+  }));
+  search.addEventListener('input', apply);
+  document.getElementById('settings-btn')?.addEventListener('click', () => requestAnimationFrame(apply));
+
+  const openDeepLink = () => {
+    const match = /^#settings(?:[=/]([a-z0-9-]+))?$/i.exec(window.location.hash);
+    if (!match) return;
+    panel.hidden = false;
+    const sectionId = match[1];
+    if (!sectionId) { apply(); return; }
+    const section = sections.find((item) => item.dataset.section === sectionId);
+    if (!section) return;
+    level = 'all';
+    search.value = '';
+    section.open = true;
+    apply();
+    requestAnimationFrame(() => {
+      section.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      (section.querySelector('input, select, button') as HTMLElement | null)?.focus();
+    });
+  };
+  window.addEventListener('hashchange', openDeepLink);
+  requestAnimationFrame(() => { apply(); openDeepLink(); });
+}
+
+// データ削除は確認ダイアログを通過しても、操作名の入力が一致するまで実行しない。
+export function appConfirmTypedDanger(opts: { title: string; message: string; confirmText: string; cancelText: string; phrase: string }): Promise<boolean> {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById('model-picker-overlay');
+    if (!overlay) { resolve(false); return; }
+    const close = (confirmed: boolean) => {
+      overlay.removeEventListener('click', onOverlayClick);
+      document.removeEventListener('keydown', onKeyDown);
+      overlay.hidden = true;
+      overlay.innerHTML = '';
+      resolve(confirmed);
+    };
+    const onOverlayClick = (event: MouseEvent) => { if (event.target === overlay) close(false); };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') close(false); };
+    overlay.innerHTML = '';
+    overlay.hidden = false;
+    const dialog = document.createElement('div');
+    dialog.className = 'confirm-dialog confirm-dialog--danger';
+    dialog.innerHTML = `
+      <div class="confirm-icon" aria-hidden="true">!</div>
+      <div class="confirm-body">
+        <div class="confirm-title">${escapeHtml(opts.title)}</div>
+        <div class="confirm-message">${escapeHtml(opts.message)}</div>
+        <label class="confirm-type-label">確認のため <code>${escapeHtml(opts.phrase)}</code> と入力
+          <input id="app-confirm-type-input" class="settings-input-text" autocomplete="off" spellcheck="false">
+        </label>
+      </div>
+      <div class="confirm-actions">
+        <button class="confirm-btn" id="app-confirm-type-cancel">${escapeHtml(opts.cancelText)}</button>
+        <button class="confirm-btn primary" id="app-confirm-type-ok" disabled>${escapeHtml(opts.confirmText)}</button>
+      </div>`;
+    overlay.appendChild(dialog);
+    const input = document.getElementById('app-confirm-type-input') as HTMLInputElement;
+    const ok = document.getElementById('app-confirm-type-ok') as HTMLButtonElement;
+    input.addEventListener('input', () => { ok.disabled = input.value.trim() !== opts.phrase; });
+    input.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !ok.disabled) close(true); });
+    document.getElementById('app-confirm-type-cancel')?.addEventListener('click', () => close(false));
+    ok.addEventListener('click', () => { if (!ok.disabled) close(true); });
+    overlay.addEventListener('click', onOverlayClick);
+    document.addEventListener('keydown', onKeyDown);
+    input.focus();
+  });
+}
+
+initSettingsInformationArchitecture();
 
 // ---- C5: 表示モード固定 (soft lock) 設定 ----
 (function () {
@@ -2183,7 +2300,7 @@ export const sessionViewMode = new Map(); // sid -> 'terminal' | 'chat' | 'split
 // Files/Git の遅延ロード状態 (sid -> Set<'files'|'git'>)
 export const sessionLazyLoaded = new Map();
 
-export const VALID_TAB_NAMES = new Set(['terminal', 'chat', 'split', 'files', 'git', 'multi', 'approval']);
+export const VALID_TAB_NAMES = new Set(['terminal', 'chat', 'split', 'files', 'git', 'multi', 'approval', 'history', 'orchestration']);
 // C5: lock の対象モード (Files/Git は lock 対象外: D10 の lazy 読み込みと相性が悪い)
 export const LOCKABLE_MODES = new Set(['terminal', 'chat', 'split']);
 export const RESPONSIVE_WIDE_MODE_MIN = 1001;
@@ -2394,7 +2511,7 @@ export function setActiveTab(sid, name) {
       }
     }
     area.hidden = false;
-    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval');
+    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval', 'mode-history');
     area.classList.add('mode-approval');
     document.querySelectorAll('#unified-tab-bar .view-tab').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === 'approval');
@@ -2405,6 +2522,25 @@ export function setActiveTab(sid, name) {
         detail: { sid: activeSessionId, name },
       }));
     }
+    return;
+  }
+
+  // P-18 C1: オーケストレーションはセッション非依存の集約ビュー。
+  if (name === 'orchestration') {
+    const area = document.getElementById('display-area');
+    if (!area) return;
+    const multiView = document.getElementById('multi-view');
+    const mgr = window.multiPaneManager;
+    const prevMultiOpen = multiView && !multiView.hidden;
+    if (multiView) multiView.hidden = true;
+    if (mgr?.picker) mgr.picker.hide();
+    if (prevMultiOpen && mgr) mgr.teardown();
+    area.hidden = false;
+    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval', 'mode-history', 'mode-orchestration');
+    area.classList.add('mode-orchestration');
+    document.querySelectorAll('#unified-tab-bar .view-tab').forEach(button => button.classList.toggle('active', (button as HTMLElement).dataset.tab === name));
+    window.renderOrchestrationDashboard?.();
+    if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
     return;
   }
 
@@ -2444,7 +2580,7 @@ export function setActiveTab(sid, name) {
   }
   area.hidden = false;
 
-  area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval');
+  area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval', 'mode-history', 'mode-orchestration');
   area.classList.add('mode-' + name);
 
   // タブボタンの active 切替
@@ -2603,12 +2739,22 @@ export function openCardCtxMenu(x, y, sid) {
   const labelCopyId         = ti18n('ctx_copy_id',               'Copy session ID');
   const labelOpenInGrid     = ti18n('ctx_open_in_grid',          'Open in detached grid');
   const labelOpenProjectGrid = ti18n('ctx_open_project_in_grid', 'Open project in detached grid');
+  const labelRename         = ti18n('session_rename',             'Rename session');
+  const labelPin            = ti18n('session_pin',                'Pin session');
+  const labelUnpin          = ti18n('session_unpin',              'Unpin session');
+  const labelColor          = ti18n('session_set_color',          'Set color');
+  const labelNote           = ti18n('session_edit_note',          'Edit note');
   menu.innerHTML =
     `<button type="button" data-action="open-git"><span class="ico">⎇</span><span>${escapeHtml(labelOpenGit)}</span><span class="kbd">Ctrl+Shift+G</span></button>` +
     `<button type="button" data-action="open-files"><span class="ico">📁</span><span>${escapeHtml(labelOpenFiles)}</span><span class="kbd">Ctrl+Shift+F</span></button>` +
     `<div class="card-ctx-sep"></div>` +
     `<button type="button" data-action="open-in-grid"><span class="ico">⊞</span><span>${escapeHtml(labelOpenInGrid)}</span></button>` +
     `<button type="button" data-action="open-project-grid"><span class="ico">⊞</span><span>${escapeHtml(labelOpenProjectGrid)}</span></button>` +
+    `<div class="card-ctx-sep"></div>` +
+    `<button type="button" data-action="rename"><span class="ico">✎</span><span>${escapeHtml(labelRename)}</span></button>` +
+    `<button type="button" data-action="pin"><span class="ico">📌</span><span>${escapeHtml(sessForMetaLabel(sid)?.pinned ? labelUnpin : labelPin)}</span></button>` +
+    `<button type="button" data-action="color"><span class="ico">●</span><span>${escapeHtml(labelColor)}</span></button>` +
+    `<button type="button" data-action="note"><span class="ico">☰</span><span>${escapeHtml(labelNote)}</span></button>` +
     `<div class="card-ctx-sep"></div>` +
     `<button type="button" data-action="activate"><span class="ico">→</span><span>${escapeHtml(labelActivate)}</span></button>` +
     `<button type="button" data-action="copy-id"><span class="ico">#</span><span>${escapeHtml(labelCopyId)}</span></button>`;
@@ -2651,9 +2797,25 @@ export function openCardCtxMenu(x, y, sid) {
         FilesTabManager.switchToSessionView();
       } else if (action === 'copy-id') {
         try { navigator.clipboard && navigator.clipboard.writeText(String(id)); } catch (_) {}
+      } else if (action === 'rename') {
+        const value = window.prompt(labelRename, String(sess.label || ''));
+        if (value !== null) void patchSessionMeta(id, { label: value });
+      } else if (action === 'pin') {
+        void patchSessionMeta(id, { pinned: !sess.pinned });
+      } else if (action === 'color') {
+        const current = String(sess.color || '');
+        const value = window.prompt(`${labelColor} (blue / green / orange / red / purple; blank to clear)`, current);
+        if (value !== null) void patchSessionMeta(id, { color: value });
+      } else if (action === 'note') {
+        const value = window.prompt(labelNote, String(sess.note || ''));
+        if (value !== null) void patchSessionMeta(id, { note: value });
       }
     });
   });
+}
+
+function sessForMetaLabel(id) {
+  return sessions.get(id) as any;
 }
 export function closeCardCtxMenu() {
   if (_cardCtxMenuEl) { try { _cardCtxMenuEl.remove(); } catch (_) {} _cardCtxMenuEl = null; }

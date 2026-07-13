@@ -5,9 +5,17 @@ package securefile
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"golang.org/x/sys/windows"
 )
+
+// aclAppliedMarker は EnsurePrivateDir が DACL 設定済みであることを示す
+// マーカーファイル名（対象ディレクトリ直下に置く）。SetNamedSecurityInfo の
+// 継承伝播は配下の全ファイルを走査するため（数万ファイルで数秒級）、
+// 設定済みディレクトリでは stat 1 回で skip する。ACL 方式を変えたときは
+// バージョン番号を上げて再適用させる。
+const aclAppliedMarker = ".acl-applied-v1"
 
 // RestrictFile はファイル `path` の DACL を「current user + SYSTEM +
 // Administrators のみ Full Control」に明示制限する（継承は切る）。
@@ -22,11 +30,28 @@ func RestrictFile(path string) error {
 // EnsurePrivateDir はディレクトリ `path` を作成し、DACL を「current user +
 // SYSTEM + Administrators のみ Full Control」に制限する（サブディレクトリ・
 // ファイルにも継承する）。
+//
+// DACL 設定はマーカーファイルで冪等化し、設定済みなら即 return する。
+// 継承 ACE は設定後に作られる新規ファイルへ自動適用されるため、毎回の
+// 再設定は不要（再設定すると配下全ファイルへの伝播で数秒かかり、
+// バイナリ起動・セッション spawn のたびに固定コストとして乗る）。
 func EnsurePrivateDir(path string) error {
+	marker := filepath.Join(path, aclAppliedMarker)
+	if _, err := os.Stat(marker); err == nil {
+		return nil
+	}
 	if err := os.MkdirAll(path, 0o700); err != nil {
 		return fmt.Errorf("securefile.EnsurePrivateDir mkdir: %w", err)
 	}
-	return restrictACL(path, true)
+	if err := restrictACL(path, true); err != nil {
+		return err
+	}
+	// マーカーは ACL 設定成功後にのみ置く（失敗時は次回リトライさせる）。
+	// 書き込み失敗は致命ではない（次回も ACL 再設定されるだけ）ので無視する。
+	if f, err := os.Create(marker); err == nil { // #nosec G304 -- path は自プロセスの設定ディレクトリ
+		_ = f.Close()
+	}
+	return nil
 }
 
 // restrictACL は path の DACL を上記 3 SID のみに置き換える。

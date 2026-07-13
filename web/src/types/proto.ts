@@ -33,6 +33,7 @@ export type MessageType =
   | 'approval_marker'
   | 'approval_cleared'
   | 'approval_consumed'
+	| 'auto_approval_applied'
   | 'approval_patterns_updated'
   | 'commit_msg_suggested'
   | 'commit_msg_error'
@@ -40,7 +41,20 @@ export type MessageType =
   | 'attach_request'
   | 'hub_shutdown'
   | 'ping'
-  | 'usage_stat';
+  | 'usage_stat'
+  | 'done_summary'
+  | 'spawn_confirmation_requested';
+
+export type DoneSummaryKind = 'success' | 'failure' | 'aborted' | 'needs_action' | string;
+export interface DoneSummary {
+  session_id: number;
+  provider?: ProviderID;
+  title?: string;
+  text: string;
+  kind: DoneSummaryKind;
+  at: string;
+  fallback?: boolean;
+}
 
 export interface ApprovalOption {
   num: number;
@@ -48,6 +62,32 @@ export interface ApprovalOption {
   is_current?: boolean;
   send_text?: string;
   preserve_order?: boolean;
+}
+
+export type ApprovalRiskTier = 'low' | 'mid' | 'high';
+
+// Mirror of internal/proto.ApprovalSummary. Raw is disclosure-only and must
+// never be used as an authorization decision input in the browser.
+export interface ApprovalSummary {
+  command?: string;
+  paths?: string[];
+  risk: ApprovalRiskTier;
+  raw?: string;
+}
+
+export interface SessionMeta {
+  label: string;
+  pinned: boolean;
+  color: string;
+  note: string;
+  auto_title: string;
+}
+
+export interface SessionActivity {
+  output_idle: boolean;
+  workflow_active: boolean;
+  awaiting_user: boolean;
+  awaiting_approval: boolean;
 }
 
 export interface Message {
@@ -62,6 +102,11 @@ export interface Message {
   shell?: string;
   version?: string;
   state?: SessionState;
+	output_idle?: boolean;
+	workflow_active?: boolean;
+	awaiting_user?: boolean;
+	awaiting_approval?: boolean;
+	activity?: SessionActivity;
   exit_code?: number;
   token?: string | null;
   data?: string | Uint8Array;
@@ -79,6 +124,8 @@ export interface Message {
   approval_question?: string;
   approval_context?: string;
   approval_options?: ApprovalOption[];
+  approval_summary?: ApprovalSummary;
+  done_summary?: DoneSummary;
   block?: string;
   sent_text?: string;
   commit_subject?: string;
@@ -87,6 +134,7 @@ export interface Message {
   last_output_at?: string;
   started_at?: string;
   label?: string;
+	 session_meta?: SessionMeta;
   model?: string;
   route?: string;
   parent_session_id?: number;
@@ -95,6 +143,9 @@ export interface Message {
   orchestration_id?: string;
   board_path?: string;
   worktree_branch?: string;
+	board_notify_pending?: boolean;
+	spawn_confirmation_id?: string;
+	initial_prompt?: string;
   first_message?: string;
   last_message?: string;
   inject?: string;
@@ -152,6 +203,10 @@ export interface SessionSnapshot {
   project?: string;
   branch?: string;
   label?: string;
+	 pinned?: boolean;
+	 color?: string;
+	 note?: string;
+	 auto_title?: string;
   model?: string;
   route?: string;
   shell?: string;
@@ -162,7 +217,13 @@ export interface SessionSnapshot {
   orchestration_id?: string;
   board_path?: string;
   worktree_branch?: string;
+	board_notify_pending?: boolean;
   state?: SessionState;
+	activity?: SessionActivity;
+	output_idle?: boolean;
+	workflow_active?: boolean;
+	awaiting_user?: boolean;
+	awaiting_approval?: boolean;
   last_output_at?: string;
   started_at?: string;
   first_message?: string;

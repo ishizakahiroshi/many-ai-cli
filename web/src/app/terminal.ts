@@ -8,7 +8,9 @@ import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerm
 import { ws } from './ws-client.js';
 import { scheduleApprovalCheck } from './approval.js';
 import { handleCrunchLinkClick } from './expand-popup.js';
-import { isHistoryViewerOpen, openHistoryViewer, resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
+import { addPromptTemplate } from './prompt-templates.js';
+import { resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
+import { isGrokChatViewerOpen, openGrokChatViewer, resetGrokChatViewerForSessionChange } from './grok-chat-viewer.js';
 import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
 import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, showCursorSeq } from './cursor-hide-filter.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
@@ -32,6 +34,41 @@ export const TERMINAL_SCROLLBACK_LINES = 10000;
 // 長時間放置後のセッション切替で UI スレッドを詰まらせない。
 export const TERMINAL_PENDING_MAX_BYTES = 100 * 1024;
 export const TERMINAL_WRITE_FLUSH_WATCHDOG_MS = 5000;
+// resize（SIGWINCH）直後は TUI（Codex 等）がトランスクリプト全体を再描画する。
+// このバーストをライブ描画すると全文が上から下へ流れて見えるため、resize 後の
+// 一定時間は出力を pendingChunks に溜めて 1 回の write で一括描画する。
+export const LIVE_BATCH_AFTER_RESIZE_MS = 400;
+// 一括描画バッファの上限。全画面再描画は数百 KB になるため通常の
+// TERMINAL_PENDING_MAX_BYTES より大きく取る。先頭チャンク（カーソルホーム等の
+// 制御列）を捨てると描画が崩れるので、超過時はトリムせず即時 flush する。
+export const LIVE_BATCH_MAX_BYTES = 4 * 1024 * 1024;
+
+// セッション横断検索（P-11）から、現在の xterm scrollback に残っている一致行へ
+// 移動する。検索結果は保存済みメッセージ単位なので厳密な物理行番号を持たない。
+// ここで表示バッファを逆順に走査すれば、通常は最新の該当出力へ戻れる。
+export function scrollTerminalToSearchMatch(sessionID: number, query: string): boolean {
+  const term = terminals.get(sessionID)?.term;
+  const needle = String(query || '').trim().toLocaleLowerCase();
+  if (!term || !needle) return false;
+  const buffer = term.buffer?.active;
+  if (!buffer || buffer.type === 'alternate') return false;
+  for (let line = buffer.length - 1; line >= 0; line--) {
+    const text = buffer.getLine(line)?.translateToString(true) || '';
+    if (!text.toLocaleLowerCase().includes(needle)) continue;
+    try {
+      term.scrollToLine(line);
+      // xterm の選択色を短時間だけ使い、対応行を見失わないようにする。
+      term.select(0, line, Math.max(1, Math.min(text.length, term.cols || text.length)));
+      window.setTimeout(() => {
+        try { term.clearSelection(); } catch (_) {}
+      }, 1800);
+    } catch (_) { /* scroll API 非対応時は下の成功扱いを避ける */
+      return false;
+    }
+    return true;
+  }
+  return false;
+}
 
 async function copyTerminalSelectionText(text, opts: any = {}) {
   const cleaned = opts.oneLine ? cleanOneLineText(text) : cleanCopiedText(text);
@@ -315,6 +352,8 @@ export function ensureTerminal(id) {
     compactSeenAt: 0,
     autoScroll: true,
     everAttached: false,
+    liveBatchUntil: 0,
+    liveBatchFlushTimer: null,
   });
 }
 
@@ -325,6 +364,7 @@ export function attachTerminal(id) {
   if (!t) return;
   // セッション切替・タブ復帰時は過去ログビューアを閉じる（別セッションの誤表示防止）
   resetHistoryViewerForSessionChange();
+  resetGrokChatViewerForSessionChange();
   // 切替先セッションの最新ライブ進捗を反映（無ければ hidden に戻す）
   syncLiveStatusDomForActive();
   if (t.container) {
@@ -516,6 +556,12 @@ function ensureTermCtxMenu() {
   mkItem('term_ctx_copy', 'コピー', '⎘', (sel, anchor) => copyTerminalSelectionText(sel, { anchor }).catch(() => {}));
   mkItem('term_ctx_copy_oneline', '1行コピー', '⇥', (sel, anchor) => copyTerminalSelectionText(sel, { oneLine: true, anchor }).catch(() => {}));
   mkItem('term_ctx_add_to_input', '入力欄に追加', '＋', (sel, anchor) => addSelectionToInput(sel, { anchor }));
+  mkItem('term_ctx_save_template', 'テンプレートに登録', '▤', (sel, anchor) => {
+    const body = cleanOneLineText(sel);
+    if (!body) return;
+    const added = addPromptTemplate(body);
+    showToast(ti18n(added ? 'template_saved' : 'template_already_exists'), anchor);
+  });
   document.body.appendChild(m);
   document.addEventListener('click', (e) => {
     if (!m.contains(e.target)) closeTermCtxMenu();
@@ -553,10 +599,48 @@ export function queuePendingTerminalChunk(id, bytes) {
   if (!t || !bytes) return;
   t.pendingChunks.push(bytes);
   t.pendingTotalBytes = (t.pendingTotalBytes || 0) + bytes.length;
+  if (isLiveOutputBatching(t)) {
+    // 一括描画中は全画面再描画を丸ごと保持する必要がある（先頭を捨てると
+    // カーソルホーム等の制御列が失われて描画が崩れる）。上限超過時はトリム
+    // せずバッチを打ち切って即時 flush する。
+    if (t.pendingTotalBytes > LIVE_BATCH_MAX_BYTES) {
+      endLiveOutputBatch(t);
+      flushPending(id);
+    }
+    return;
+  }
   while (t.pendingTotalBytes > TERMINAL_PENDING_MAX_BYTES && t.pendingChunks.length > 1) {
     t.pendingTotalBytes -= t.pendingChunks[0].length;
     t.pendingChunks.shift();
   }
+}
+
+// resize（SIGWINCH）送信・受信直後の出力バーストを一括描画するバッチを開始する。
+// 期間中のライブ出力は pendingChunks に溜まり、期限で flushPending が 1 回の
+// write に結合して描画する（セッション切替の flushPending と同じ仕組み）。
+export function beginLiveOutputBatchForResize(id) {
+  const t = terminals.get(id);
+  if (!t) return;
+  t.liveBatchUntil = Date.now() + LIVE_BATCH_AFTER_RESIZE_MS;
+  if (t.liveBatchFlushTimer) clearTimeout(t.liveBatchFlushTimer);
+  t.liveBatchFlushTimer = setTimeout(() => {
+    const latest = terminals.get(id);
+    if (!latest) return;
+    endLiveOutputBatch(latest);
+    flushPending(id);
+  }, LIVE_BATCH_AFTER_RESIZE_MS);
+}
+
+function endLiveOutputBatch(t) {
+  if (t.liveBatchFlushTimer) {
+    clearTimeout(t.liveBatchFlushTimer);
+    t.liveBatchFlushTimer = null;
+  }
+  t.liveBatchUntil = 0;
+}
+
+export function isLiveOutputBatching(t) {
+  return !!t && Date.now() < (t.liveBatchUntil || 0);
 }
 
 export function flushPending(id, onDrained: (() => void) | null = null) {
@@ -817,10 +901,12 @@ document.addEventListener('wheel', (e) => {
     return;
   }
 
-  // 通常バッファで上端にいる状態の上方向ホイールは、過去ログビューアを直近ページから自動展開する。
+  // Grok で上端にいる状態の上方向ホイールは、Grok 会話履歴ビューアを自動展開する。
   // Grok のように改行を出さず固定位置に上書き描画する TUI では xterm のスクロールバックが
   // 育たないため、ホイール上は無反応のままになる（履歴ボタンも表示条件 buf.length>rows を
-  // 満たさず出ない）。「ボタンを押す」介在を挟まず、上方向ホイールで過去ログへ導線する。
+  // 満たさず出ない）。「ボタンを押す」介在を挟まず、上方向ホイールで会話履歴へ導線する。
+  // 生 PTY ログ再生（history-viewer）は絶対座標フレームの機械置換で読めない表示になるため、
+  // Grok は chat_history.jsonl 由来の整形ビューア（grok-chat-viewer）を使う。
   const multiViewEl = document.getElementById('multi-view');
   const inMultiPane = !!(multiViewEl && !multiViewEl.hidden);
   const buf = t.term.buffer.active;
@@ -829,8 +915,8 @@ document.addEventListener('wheel', (e) => {
   // alt buffer は scrollback を持たず「上端」概念が無いので、常にビューア導線の対象にする。
   const atTop = buf.type === 'alternate' || buf.viewportY === 0;
   const isGrok = sessions.get(targetSessionId)?.provider === 'grok';
-  if (isGrok && e.deltaY < 0 && atTop && targetSessionId === activeSessionId && !inMultiPane && !isHistoryViewerOpen()) {
-    openHistoryViewer(targetSessionId, { offset: -1 });
+  if (isGrok && e.deltaY < 0 && atTop && targetSessionId === activeSessionId && !inMultiPane && !isGrokChatViewerOpen()) {
+    openGrokChatViewer(targetSessionId);
     markTerminalManualScrollIntent();
     e.preventDefault();
     e.stopPropagation();
@@ -1031,12 +1117,12 @@ document.getElementById('scroll-to-top-btn')?.addEventListener('click', () => {
   }
   // スクロールバックが無い（Grok のように改行を出さない TUI / alt buffer）場合、
   // scrollToTop は無反応のままになる。ホイール経路と同じく、その状態の▲は
-  // 直近過去ログを開く導線として扱う（grok のみ。alt buffer 中の grok は
+  // Grok 会話履歴ビューアを開く導線として扱う（grok のみ。alt buffer 中の grok は
   // PgUp 転送も事故防止で停止しているため、ここが唯一の履歴導線）。
   const buf = t.term.buffer.active;
   const isGrok = sessions.get(activeSessionId)?.provider === 'grok';
-  if (isGrok && (buf.type === 'alternate' || buf.length <= t.term.rows) && !isHistoryViewerOpen()) {
-    openHistoryViewer(activeSessionId, { offset: -1 });
+  if (isGrok && (buf.type === 'alternate' || buf.length <= t.term.rows) && !isGrokChatViewerOpen()) {
+    openGrokChatViewer(activeSessionId);
     return;
   }
   t.autoScroll = false;
@@ -1744,6 +1830,9 @@ export function scanBuffer(id, limit?: number) {
 export function sendResize(sessionId, cols, rows) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'pty_resize', session_id: sessionId, cols, rows }));
+    // SIGWINCH を受けた TUI（Codex 等）はトランスクリプト全体を再描画する。
+    // 直後のバーストを一括描画して、全文が上から下へ流れて見えるのを防ぐ。
+    beginLiveOutputBatchForResize(sessionId);
   }
 }
 
@@ -1754,6 +1843,9 @@ export function applyRemotePtyResize(sessionId, cols, rows) {
   if (!id || nextCols <= 0 || nextRows <= 0) return;
   const t = terminals.get(id);
   if (!t || !t.term) return;
+  // Hub が pty_resize を broadcast してきた = PTY へ SIGWINCH が届いた直後。
+  // 他 UI 発の resize でも TUI の全画面再描画バーストが来るため一括描画する。
+  beginLiveOutputBatchForResize(id);
   if (t.term.cols === nextCols && t.term.rows === nextRows) return;
   const wasAtBottom = isTerminalAtBottom(t) || t.autoScroll;
   try {

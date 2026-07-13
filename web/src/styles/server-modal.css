@@ -1,31 +1,6 @@
-/* server-modal.css — ヘッダー 🖥 Server ボタン + 内蔵リモート接続モーダル。
+/* server-modal.css — 内蔵リモート接続モーダル（入口は設定パネル内 #server-manage-btn）。
    親 plan: docs/local/plan_hub-server-launcher-integration.md（C2/C3）。
    配色・角丸・トークンは settings-panel / workflow-modal と共用（CSS 変数）。 */
-
-/* ── ヘッダーボタン（#settings-btn と同じ見た目） ── */
-#server-btn {
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-family: inherit;
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: 4px 9px;
-  font-size: 0.72rem;
-  white-space: nowrap;
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
-  min-height: var(--control-h-sm);
-}
-#server-btn:hover { color: var(--text); border-color: var(--line); background: var(--bg-elev); }
-#server-btn[aria-expanded="true"] { color: var(--text); border-color: var(--line); background: var(--bg-elev); }
-
-@media (max-width: 720px) {
-  #server-btn span { display: none; }
-  #server-btn { padding: 4px 7px; }
-}
 
 /* ── モーダル（workflow-modal 踏襲） ── */
 #server-modal {

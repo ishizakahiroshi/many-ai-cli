@@ -27,21 +27,27 @@ func (s *Server) markRunning(id int) {
 	now := time.Now()
 	ses.lastOutputAt = now
 	ses.LastOutputAt = now.Format(time.RFC3339)
-	if ses.approvalVisible {
+	// 終端状態は PTY 残余チャンクで running に戻さない（オーケストレーション DONE/timeout 含む）。
+	// lastOutputAt は上で既に更新済み。State だけ触らない。
+	if isTerminalSessionState(ses.State) {
 		s.sessionsMu.Unlock()
 		return
 	}
-	changed := ses.State != "running"
-	if changed {
-		ses.State = "running"
-	}
-	provider, display, cwd, branch, label, model, route, lastOutputAt := ses.Provider, ses.Display, ses.CWD, ses.Branch, ses.Label, ses.Model, ses.Route, ses.LastOutputAt
+	before := ses.Activity
+	ses.Activity.OutputIdle = false
+	ses.Activity.WorkflowActive = !ses.approvalVisible
+	ses.Activity.AwaitingApproval = ses.approvalVisible
+	ses.Activity.AwaitingUser = ses.approvalVisible
+	ses.Activity.Normalize()
+	ses.State = ses.Activity.DisplayState()
+	changed := before != ses.Activity || ses.State != "running"
+	provider, display, cwd, branch, label, model, route, state, activity, lastOutputAt := ses.Provider, ses.Display, ses.CWD, ses.Branch, ses.Label, ses.Model, ses.Route, ses.State, ses.Activity, ses.LastOutputAt
 	s.sessionsMu.Unlock()
 	if changed {
-		s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: provider, Display: display, CWD: cwd, Branch: branch, Label: label, Model: model, Route: route, State: "running", LastOutputAt: lastOutputAt})
+		s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: provider, Display: display, CWD: cwd, Branch: branch, Label: label, Model: model, Route: route, State: state, OutputIdle: activity.OutputIdle, WorkflowActive: activity.WorkflowActive, AwaitingUser: activity.AwaitingUser, AwaitingApproval: activity.AwaitingApproval, Activity: activityMessage(activity), LastOutputAt: lastOutputAt})
 	}
 	if s.sessionStore != nil {
-		s.sessionStore.UpdateSessionState(id, "running", lastOutputAt)
+		s.sessionStore.UpdateSessionState(id, state, lastOutputAt)
 	}
 }
 
@@ -77,8 +83,10 @@ func (s *Server) evaluateIdle() {
 		model        string
 		route        string
 		state        string
+		activity     SessionActivity
 		lastOutputAt string
 		approvalWait bool
+		fallbackDone bool
 	}
 	var changes []change
 	var branchChecks []branchRefreshRequest
@@ -95,27 +103,29 @@ func (s *Server) evaluateIdle() {
 			ses.approvalVisible = false
 			ses.approvalVisibleAt = time.Time{}
 		}
-		var newState string
-		switch ses.State {
-		case "running":
-			if ses.approvalVisible {
-				// 承認UI表示中はアイドルタイマーを待たず即 waiting に遷移
-				newState = "waiting"
-			} else if !ses.lastOutputAt.IsZero() && now.Sub(ses.lastOutputAt) >= idleAfter {
-				newState = ses.idleStateName()
-			}
-		case "waiting", "standby":
-			// approvalVisible のフリップに追従（UI hint 反映）
-			newState = ses.idleStateName()
+		if isTerminalSessionState(ses.State) {
+			continue
 		}
-		if newState != "" && newState != ses.State {
+		before := ses.Activity
+		// Sessions that have not emitted PTY output yet are output-idle too.
+		// This also preserves compatibility for restored/legacy sessions that
+		// predate the activity fields and therefore have a zero timestamp.
+		if ses.lastOutputAt.IsZero() || now.Sub(ses.lastOutputAt) >= idleAfter {
+			ses.Activity.OutputIdle = true
+		}
+		ses.Activity.AwaitingApproval = ses.approvalVisible
+		ses.Activity.AwaitingUser = ses.approvalVisible
+		ses.Activity.WorkflowActive = !ses.Activity.OutputIdle && !ses.Activity.AwaitingUser
+		ses.Activity.Normalize()
+		newState := ses.Activity.DisplayState()
+		if before != ses.Activity || newState != ses.State {
 			ses.State = newState
-			changes = append(changes, change{id: id, provider: ses.Provider, display: ses.Display, cwd: ses.CWD, branch: ses.Branch, label: ses.Label, model: ses.Model, route: ses.Route, state: newState, lastOutputAt: ses.LastOutputAt, approvalWait: newState == "waiting" && ses.approvalVisible})
+			changes = append(changes, change{id: id, provider: ses.Provider, display: ses.Display, cwd: ses.CWD, branch: ses.Branch, label: ses.Label, model: ses.Model, route: ses.Route, state: newState, activity: ses.Activity, lastOutputAt: ses.LastOutputAt, approvalWait: newState == "waiting" && ses.Activity.AwaitingApproval, fallbackDone: newState == "standby"})
 		}
 	}
 	s.sessionsMu.Unlock()
 	for _, c := range changes {
-		s.broadcast(proto.Message{Type: "session_update", SessionID: c.id, Provider: c.provider, Display: c.display, CWD: c.cwd, Branch: c.branch, Label: c.label, Model: c.model, Route: c.route, State: c.state, LastOutputAt: c.lastOutputAt})
+		s.broadcast(proto.Message{Type: "session_update", SessionID: c.id, Provider: c.provider, Display: c.display, CWD: c.cwd, Branch: c.branch, Label: c.label, Model: c.model, Route: c.route, State: c.state, OutputIdle: c.activity.OutputIdle, WorkflowActive: c.activity.WorkflowActive, AwaitingUser: c.activity.AwaitingUser, AwaitingApproval: c.activity.AwaitingApproval, Activity: activityMessage(c.activity), LastOutputAt: c.lastOutputAt})
 		if s.sessionStore != nil {
 			s.sessionStore.UpdateSessionState(c.id, c.state, c.lastOutputAt)
 		}
@@ -123,6 +133,9 @@ func (s *Server) evaluateIdle() {
 			approvalID := fmt.Sprintf("ui-%d-%s", c.id, c.lastOutputAt)
 			s.notifyApprovalPush(c.id, approvalID, c.provider, "", "")
 			s.notifyApprovalOutbound(c.id, approvalID, c.provider, "", "")
+		}
+		if c.fallbackDone {
+			s.maybeCreateFallbackDoneSummary(c.id)
 		}
 	}
 	s.queueBranchRefreshes(branchChecks)

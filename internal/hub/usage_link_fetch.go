@@ -30,7 +30,7 @@ var hardcodedUsageLinkDefaults = UsageLinkDefaults{
 	Codex:       "https://chatgpt.com/codex/cloud/settings/analytics#usage",
 	Copilot:     "https://github.com/settings/billing",
 	CursorAgent: "https://cursor.com/dashboard",
-	Grok:        "https://grok.com",
+	Grok:        "https://grok.com/?_s=usage",
 	Ollama:      "https://ollama.com/settings",
 	OpenCode:    "https://opencode.ai/go",
 }

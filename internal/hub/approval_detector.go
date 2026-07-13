@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"many-ai-cli/internal/approval"
 	"many-ai-cli/internal/proto"
 )
 
@@ -54,6 +55,7 @@ type nativeApproval struct {
 	Question string
 	Context  string
 	Options  []proto.ApprovalOption
+	Summary  proto.ApprovalSummary
 }
 
 var (
@@ -107,6 +109,7 @@ func detectNativeApproval(provider string, lines []string) *nativeApproval {
 		Question: question,
 		Context:  context,
 		Options:  opts,
+		Summary:  approval.Summarize(question, context),
 	}
 	approval.Sig = nativeApprovalSig(provider, approval)
 	return approval

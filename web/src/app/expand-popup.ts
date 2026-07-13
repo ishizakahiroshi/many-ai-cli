@@ -5,6 +5,8 @@ import { appendLinkedText } from './path-links.js';
 import { sendText } from '../app.js';
 import { scanBuffer } from './terminal.js';
 import { scheduleApprovalCheck } from './approval.js';
+import { sessions } from './state.js';
+import { ws } from './ws-client.js';
 
 // ---- 折りたたみマーカー展開ポップアップ ----
 // ターミナル内の「… +N lines (ctrl+o to expand)」マーカーのクリックで起動する。
@@ -14,6 +16,7 @@ import { scheduleApprovalCheck } from './approval.js';
 
 let popupEl = null;
 let capturePending = false;
+const expandCaptureTimers = new Map(); // sessionId -> timeout id
 
 function getOrCreateExpandPopup() {
   if (popupEl) return popupEl;
@@ -133,6 +136,16 @@ function renderExpandPopup(sessionId, lines, clientX, clientY, loading, opts: { 
   positionPopupNear(popup);
 }
 
+export function cancelExpandCapture(sessionId) {
+  const t = expandCaptureTimers.get(sessionId);
+  if (t) {
+    clearTimeout(t);
+    expandCaptureTimers.delete(sessionId);
+  }
+  // 当該セッションのキャプチャ中ならフラグを下ろす（他セッションは触らない）
+  if (expandCaptureTimers.size === 0) capturePending = false;
+}
+
 export function handleCrunchLinkClick(sessionId, clientX, clientY) {
   if (capturePending) return;
   capturePending = true;
@@ -145,12 +158,17 @@ export function handleCrunchLinkClick(sessionId, clientX, clientY) {
   // 800ms 後にバッファ差分を取得して表示し、ctrl+o を再送して元のコンパクト表示へ戻す
   // （戻さないと Claude Code が「Showing detailed transcript」モードに張り付き、
   //  入力プロンプトが見えなくなって「セッション切れ？」と誤認される）
-  setTimeout(() => {
+  const timer = setTimeout(() => {
+    expandCaptureTimers.delete(sessionId);
+    capturePending = false;
+    // セッション削除・WS 切断後は ctrl+o を飛ばさない
+    if (!sessions.has(sessionId)) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
     const afterLines = scanBuffer(sessionId);
     const expanded = afterLines.filter(l => l.trim() && !beforeSet.has(l));
 
     sendText(sessionId, '\x0f'); // ctrl+o（コンパクト表示へ戻す）
-    capturePending = false;
 
     // ローディング表示中にユーザーが閉じていたら結果は表示しない
     if (!popupEl || popupEl.hidden) return;
@@ -158,4 +176,5 @@ export function handleCrunchLinkClick(sessionId, clientX, clientY) {
     // ポップアップ表示中に承認プロンプトが来ていた場合を検出するため再評価
     scheduleApprovalCheck(sessionId);
   }, 800);
+  expandCaptureTimers.set(sessionId, timer);
 }

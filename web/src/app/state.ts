@@ -1,5 +1,5 @@
 // --- ESM imports (generated) ---
-import { STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_FAVORITES_KEY, STORAGE_GROUP_ORDER_KEY, STORAGE_ORDER_KEY, STORAGE_PROJECT_FAVORITES_KEY, setUserPref } from './user-prefs.js';
+import { STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_GROUP_ORDER_KEY, STORAGE_ORDER_KEY, STORAGE_PROJECT_FAVORITES_KEY, setUserPref } from './user-prefs.js';
 import { activateSession } from './session-list.js';
 import { isBatchOptions } from './approval-parser.js';
 import type { SessionSnapshot } from '../types/proto.js';
@@ -220,15 +220,10 @@ export let actionBarFocusIdx = -1;
 export let approvalAutoSwitchInProgress = false;
 export const actionBarShownAt = new Map<number, number>(); // sessionId -> timestamp(ms), Enter即確定ガード用
 
-export let favorites: number[] = readStorageArray(STORAGE_FAVORITES_KEY);
 export let projectFavorites: string[] = readStorageArray(STORAGE_PROJECT_FAVORITES_KEY);
 export let sessionOrder: number[] = readStorageArray(STORAGE_ORDER_KEY);
 export let groupOrder: string[] = readStorageArray(STORAGE_GROUP_ORDER_KEY);
 export const collapsedGroups = new Set<string>();
-
-export function saveFavorites() {
-  setUserPref('favorites', favorites);
-}
 
 export function saveProjectFavorites() {
   setUserPref('project_favorites', projectFavorites);
@@ -273,21 +268,20 @@ export function removeFromSessionOrder(id: number): void {
 
 // orderSessions は全モジュール共通のセッション整列ロジック（C9: 旧 getSortedSessions /
 // getOrderedSessions / multi-pane フォールバックの三重定義を 1 つに集約）。
-// ★（favorites 配列順）を先頭に、非★（sessionOrder 順、未登録セッションは末尾）を後に並べる。
-// sessions / favorites / sessionOrder 未定義時は空配列または id 昇順へフォールバックする
+// 📌 ピン留めセッションを先頭に、残りを sessionOrder 順（未登録セッションは末尾）で並べる。
+// sessions / sessionOrder 未定義時は空配列または id 昇順へフォールバックする
 // （旧 multi-pane.js の防御的フォールバックを継承）。
 export function orderSessions(): SessionSnapshot[] {
   if (typeof sessions === 'undefined') return [];
-  if (typeof favorites === 'undefined' || typeof sessionOrder === 'undefined') {
+  if (typeof sessionOrder === 'undefined') {
     return Array.from(sessions.values()).sort((a, b) => a.id - b.id);
   }
-  const starredList = favorites.filter(id => sessions.has(id)).map(id => sessions.get(id)).filter(Boolean) as SessionSnapshot[];
-  const orderedIds = sessionOrder.filter(id => sessions.has(id) && !favorites.includes(id));
+  const orderedIds = sessionOrder.filter(id => sessions.has(id));
   sessions.forEach((s) => {
-    if (!favorites.includes(s.id) && !orderedIds.includes(s.id)) orderedIds.push(s.id);
+    if (!orderedIds.includes(s.id)) orderedIds.push(s.id);
   });
-  const nonStarredList = orderedIds.map(id => sessions.get(id)).filter(Boolean) as SessionSnapshot[];
-  return [...starredList, ...nonStarredList];
+  const ordered = orderedIds.map(id => sessions.get(id)).filter(Boolean) as SessionSnapshot[];
+  return [...ordered.filter(s => s.pinned), ...ordered.filter(s => !s.pinned)];
 }
 window.orderSessions = orderSessions;
 // 後方互換エイリアス: multi-pane.js など window.getSortedSessions 参照箇所のために残す。

@@ -133,31 +133,40 @@ bun install -g many-ai-cli
 npm install -g many-ai-cli
 ```
 
+Once installed → next: [Getting started (right after install)](#getting-started-right-after-install). If your shell has not picked up the global bin yet, `pnpm exec many-ai-cli setup` still creates the shortcuts.
+
 > Published to the npm registry since v0.3.0. The package ships the native Go binary for your platform as an optional dependency, so nothing is downloaded in a browser — the launcher is generated locally at install time and carries no Mark-of-the-Web, which avoids that SmartScreen trigger. This is **not** a substitute for Authenticode signing: Smart App Control / WDAC / AppLocker / EDR / antivirus policies are handled separately. If the global command is not found after install, run `pnpm setup` (or reopen your shell) so the global bin directory is on your `PATH`.
 
-**Windows (winget):**
+**Windows (winget) — one-line paste:**
 
 ```powershell
-winget install ishizakahiroshi.many-ai-cli
+winget install ishizakahiroshi.many-ai-cli; & "$env:LOCALAPPDATA\Microsoft\WinGet\Links\many-ai-cli.exe" setup
 ```
 
+Once installed → [Getting started](#getting-started-right-after-install).
+
+> Immediately after `winget install`, the current window does not have the new `PATH`, so `setup` is invoked through the winget shim directory with its full path (opening a fresh terminal and running `many-ai-cli setup` works too).
 > Available once the first winget manifest PR is merged into `microsoft/winget-pkgs`. Until then, use the zip download below.
 > On Windows, the package-manager path is preferred when available because it avoids the browser-downloaded zip/exe flow that commonly carries Mark-of-the-Web. It is still not a substitute for Authenticode code signing or organization allowlisting.
 
-**macOS (Homebrew):**
+**macOS (Homebrew) — one-line paste:**
 
 ```bash
-brew install --cask ishizakahiroshi/tap/many-ai-cli
+brew install --cask ishizakahiroshi/tap/many-ai-cli && many-ai-cli setup
 ```
+
+Once installed → [Getting started](#getting-started-right-after-install).
 
 **Linux — Debian / Ubuntu (.deb) and RHEL-family (.rpm):**
 
 Download the package from [GitHub Releases](https://github.com/ishizakahiroshi/many-ai-cli/releases/latest), then:
 
 ```bash
-sudo dpkg -i many-ai-cli_<version>_amd64.deb   # Debian / Ubuntu
-sudo rpm -i many-ai-cli-<version>.x86_64.rpm   # RHEL family
+sudo dpkg -i many-ai-cli_<version>_amd64.deb && many-ai-cli setup   # Debian / Ubuntu
+sudo rpm -i many-ai-cli-<version>.x86_64.rpm && many-ai-cli setup   # RHEL family
 ```
+
+Once installed → [Getting started](#getting-started-right-after-install).
 
 ### Manual download (all platforms)
 
@@ -209,6 +218,19 @@ Recommended Windows zip flow:
 4. Run `unblock-windows.cmd`
 5. Start `many-ai-cli.exe` or `many-ai-cli-launcher.exe` manually
 
+#### Double-clicking `many-ai-cli.exe` directly (not recommended)
+
+> **Not recommended:** browser-downloaded zip / exe files are the main trigger for Mark-of-the-Web and SmartScreen warnings. When possible, use a package manager install plus `many-ai-cli setup` (see [Getting started](#getting-started-right-after-install)) instead.
+
+If you still want to use the exe straight from the extracted zip, the previous flow is:
+
+1. Extract the zip and, if needed, run `unblock-windows.cmd`
+2. **Double-click `many-ai-cli.exe`** (or run `many-ai-cli` with no arguments)
+   - The Hub starts and your browser opens automatically at `http://127.0.0.1:47777/?token=<token>`
+   - If a Hub is already running, your browser is reopened against the existing instance
+3. In the Hub UI, click **"+ New Session"** to launch a wrapped AI CLI session
+4. To stop the Hub intentionally, use the `⏻` button in the top-right of the Hub UI, or run `many-ai-cli stop` from another terminal
+
 ### Verify Release Artifacts (Checksum + Signature)
 
 `v0.1.2` and later releases include:
@@ -236,23 +258,26 @@ sha256sum -c SHA256SUMS.txt
 
 ---
 
-## Quick Start (Recommended)
+## Getting started (right after install)
 
-The normal flow: launch the binary, then drive everything from the browser. You do not need to run any CLI command yourself.
+Whichever install path you used, the next steps are the same.
 
-1. Download and extract the zip for your platform from the table above
-2. **Double-click `many-ai-cli.exe`** (or run `many-ai-cli` with no arguments)
-   - The Hub starts and your browser opens automatically at `http://127.0.0.1:47777/?token=<token>`
-   - If a Hub is already running, your browser is reopened against the existing instance
-3. In the Hub UI, click **"+ New Session"** to launch a wrapped AI CLI session
-4. When an approval prompt appears, an action bar shows up under the input — click a button or use the keyboard to respond
+1. Run this **once**:
 
-Sessions can be created, monitored, and approved entirely from the Hub UI; you do not need to keep a separate terminal open.
+   ```
+   many-ai-cli setup
+   ```
+
+   It creates **"Many AI Hub Start"** and **"Many AI Hub Stop"** shortcuts on your desktop (`.lnk` on Windows, `.command` on macOS, `.desktop` on Linux).
+2. From now on, just **double-click "Many AI Hub Start"** on your desktop. A console window opens alongside your browser at `http://127.0.0.1:47777/?token=<token>`.
+3. In the Hub UI, click **"+ New Session"** in the lower left to launch one of the wrapped AI CLIs (claude / codex / copilot / cursor-agent / opencode / grok). When an approval prompt appears, an action bar shows up under the input — click a button or use the keyboard.
+
+To stop, use **"Many AI Hub Stop"** on your desktop, the `⏻` button in the top-right of the Hub UI, or `many-ai-cli stop` from another terminal. If you prefer a terminal, `many-ai-cli serve --open` still works.
 
 > **⚠ About the console window**
-> Double-clicking the binary opens a console window alongside the browser. **That console *is* the Hub server process** — closing it with `×` terminates the Hub. If it gets in the way, **minimize** it instead of closing it.
+> Launching "Many AI Hub Start" opens a console window alongside the browser. **That console *is* the Hub server process** — closing it with `×` terminates the Hub. If it gets in the way, **minimize** it instead of closing it.
 > If the Hub does go down (whether by `×`, a crash, or a manual restart), running AI sessions wait up to **60 minutes** for the Hub to come back before terminating themselves (configurable in `config.yaml` up to 24 hours — extend it for long-running autonomous tasks). A Web UI bug or restart will not silently kill your work. See [Shutdown, zombie protection & Hub crash resilience](#shutdown-zombie-protection--hub-crash-resilience) for details.
-> To stop the Hub intentionally, use the `⏻` button in the top-right of the Hub UI, or run `many-ai-cli stop` from another terminal.
+> On Linux (GNOME), the first time you use a `.desktop` shortcut on the desktop, right-click it and choose **"Allow Launching"** (this is an OS-level requirement).
 
 ### Unified launcher (Windows / Linux / macOS)
 
@@ -778,15 +803,15 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 │ [+ New Session]          │ ● Codex  cwd: C:\dev\many-ai-cli  [↑ to top] │
 │ 📁 many-ai-cli  [1][0][6] │ Terminal output — Windows PowerShell         │
 │ ─────────────────────── │                                              │
-│ ★ #7 ● Codex  Running × │   (xterm.js terminal output)                │
+│ 📌 #7 ● Codex Running × │   (xterm.js terminal output)                │
 │    Last: 00:11:57       │                                              │
 │    docs/local/plan_…    │                                              │
 │                         │                                              │
-│ ☆ #6 ● Codex  Standby × │                                              │
+│ #6 ● Codex   Standby × │                                              │
 │    Last: 00:05:48       │   ┌─ Approval (only when waiting) ──────┐    │
 │    docs/local/plan_…    │   │ Command: npm install axios          │    │
 │                         │   │ Risk: MEDIUM                        │    │
-│ ☆ #4 ● Claude Standby × │   │ [YES (y)] [NO (n)]                  │    │
+│ #4 ● Claude  Standby × │   │ [YES (y)] [NO (n)]                  │    │
 │    Last: 23:00:38       │   └─────────────────────────────────────┘    │
 │    Mostly local exec…   │ ─────────────────────────────────────────── │
 │                         │ [📎] Input  auto mode on (shift+tab)        │
@@ -803,7 +828,7 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 - **Left sidebar (session list)**
   - Top: `+ New Session` button (opens the spawn dialog).
   - Sessions are grouped by **project folder** (the directory where the wrapper was launched). Each group shows its own session-count chips and a Files entry.
-  - Each session card: `★` (favorite) / `×` (close) / provider-colored dot + ID + state badge (Running / Standby / Waiting / Completed / Error / Disconnected) / branch badge when Git is available / last response time / one-line preview of recent output.
+  - Each session card: `📌` (pin to the top "Pinned" group) / `×` (close) / provider-colored dot + ID + state badge (Running / Standby / Waiting / Completed / Error / Disconnected) / branch badge when Git is available / last response time / one-line preview of recent output.
   - Right-click a card to open the Git view, open the Files tab, activate the session, or copy the session ID.
   - Completed and errored sessions stay in the list until you click `×`.
 - **Right pane (terminal + input)**

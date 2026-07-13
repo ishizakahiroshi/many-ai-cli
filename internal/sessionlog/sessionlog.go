@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
 // secretPatterns は PTY 出力から既知の秘密文字列を伏字化するパターン一覧。
@@ -146,9 +147,27 @@ func SanitizeFilePart(s string) string {
 		return "no-project"
 	}
 	if len(s) > 80 {
-		s = s[:80]
+		s = truncateUTF8Bytes(s, 80)
+		s = strings.Trim(s, ". ")
+		if s == "" {
+			return "no-project"
+		}
 	}
 	return s
+}
+
+func truncateUTF8Bytes(s string, maxBytes int) string {
+	if maxBytes <= 0 || len(s) <= maxBytes {
+		return s
+	}
+	cut := maxBytes
+	for cut > 0 && !utf8.ValidString(s[:cut]) {
+		cut--
+	}
+	if cut == 0 {
+		return ""
+	}
+	return s[:cut]
 }
 
 func StripANSI(s string) string {

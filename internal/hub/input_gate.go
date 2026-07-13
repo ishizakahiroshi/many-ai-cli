@@ -14,6 +14,7 @@ import (
 
 	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/sessionstore"
 )
 
 // handleInput は pty_input メッセージを wrapper へ届ける。
@@ -26,8 +27,18 @@ func (s *Server) handleInput(m proto.Message) {
 	combined := m.Text
 	var firstMsgBroadcast *proto.Message
 	var injectMarker bool
-	if ses != nil && strings.HasSuffix(m.Text, "\r") {
+	var autoTitleMeta *sessionstore.SessionCardMeta
+	// チャット本文はブラケットペースト包み（... \x1b[201~）+ 確定 \r 別送で届くため、
+	// 末尾 \r だけでなくペースト終端もユーザーターンの確定として扱う。従来の
+	// 「末尾 \r のみ」判定では、ペースト送信のセッション概要（FirstMessage 等）と
+	// ターン境界マーカーが一切更新されなかった（複数行送信の既存ギャップ。単一行も
+	// ペースト経路に統一した 2026-07-11 以降は全チャット送信が該当するため必須）。
+	// メタデータ用テキストはペーストマーカーを剥がして評価する。後続の確定 \r は
+	// 剥がした後に空文字となり、二重更新・二重マーカーにはならない。
+	if ses != nil && (strings.HasSuffix(m.Text, "\r") || strings.HasSuffix(m.Text, bracketedPasteEnd)) {
 		text := strings.TrimRight(m.Text, "\r\n")
+		text = strings.ReplaceAll(text, bracketedPasteStart, "")
+		text = strings.ReplaceAll(text, bracketedPasteEnd, "")
 		if text == "/clear" {
 			// /clear でセッション概要をリセット（次の入力が新しい概要になる）
 			ses.FirstMessage = ""
@@ -38,12 +49,20 @@ func (s *Server) handleInput(m proto.Message) {
 			maskedText := sessionlog.MaskSecrets(text)
 			if ses.FirstMessage == "" {
 				ses.FirstMessage = maskedText
+				// 最初の依頼を短い自動タイトルにする。ラベルは wrapper /
+				// orchestration の識別子も兼ねるため書き換えず、UI では手動
+				// label を優先して AutoTitle をフォールバックとして使う。
+				if ses.AutoTitle == "" {
+					ses.AutoTitle = normalizeSessionMetaText(maskedText, 40)
+					meta := sessionStoreMeta(ses)
+					autoTitleMeta = &meta
+				}
 			}
 			// 数字のみ（選択肢番号）は LastMessage を更新しない
 			if !isDigitsOnly(text) {
 				ses.LastMessage = maskedText
 			}
-			msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt, FirstMessage: ses.FirstMessage, LastMessage: ses.LastMessage}
+			msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt, FirstMessage: ses.FirstMessage, LastMessage: ses.LastMessage, SessionMeta: sessionMetaFor(ses)}
 			firstMsgBroadcast = &msg
 			// ユーザーターン境界マーカーを ptyBuf に注入する
 			marker := []byte(chatHistoryUserTurnMarker)
@@ -64,6 +83,11 @@ func (s *Server) handleInput(m proto.Message) {
 	})
 	if firstMsgBroadcast != nil {
 		s.broadcast(*firstMsgBroadcast)
+	}
+	if autoTitleMeta != nil && s.sessionStore != nil {
+		// AutoTitle は first message の確定時だけ変化する。入力ホットパスで
+		// SQLite を待たないよう既存のメッセージ更新と同じ軽量更新に留める。
+		_ = s.sessionStore.UpdateSessionCardMeta(m.SessionID, *autoTitleMeta)
 	}
 }
 

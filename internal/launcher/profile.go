@@ -259,6 +259,9 @@ func validateSSH(p Profile, idx int) error {
 	// を通さず Validate を呼ぶため、ローカルコピーで "user@host" を分割してから検査する。
 	check := p
 	normalizeProfile(&check)
+	if strings.TrimSpace(check.Host) == "" {
+		return fmt.Errorf("profile[%d] %q: host is required", idx, p.Name)
+	}
 	for _, f := range []struct{ name, val string }{
 		{"host", check.Host},
 		{"user", check.User},

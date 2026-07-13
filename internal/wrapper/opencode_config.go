@@ -3,14 +3,16 @@ package wrapper
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 )
 
-// opencodeLockStaleAfter は opencode.json.many-ai-cli.lock を stale と判断する経過時間。
-// 通常の opencode セッションは数分〜数十分で終わる想定なので、30 分以上残っている
-// ロックは前回の SIGKILL/クラッシュ由来と判断して自分が上書きする。
+// opencodeLockStaleAfter は lock ファイルの PID が読めない／壊れているときの
+// 最終手段としての mtime フォールバック。通常は PID 生存確認で奪取可否を決める。
 const opencodeLockStaleAfter = 30 * time.Minute
 
 // prepareOpenCodeConfig は cwd/opencode.json に {"permission":{"*":<permissionValue>}} を
@@ -19,30 +21,29 @@ const opencodeLockStaleAfter = 30 * time.Minute
 // 承認バイパスセッションでは "allow"（全許可）を渡す。
 // opencode.json が存在しない場合はファイルを新規作成し、クリーンアップ時に削除する。
 //
-// PTYW-1: 同一 cwd で 2 セッションが同時に起動すると、後発が先発の書き換え後を
-// 「オリジナル」として保存し、両方 defer cleanup が動いてもファイルが真のオリジナルに
-// 戻らない競合があった。排他ロックファイル (`opencode.json.many-ai-cli.lock`) を
-// `O_EXCL` で作成し、既存ロックがあれば permission 上書きをスキップして「他セッション
-// の設定に相乗り」する動作にする（安全側フォールバック）。ロック取得できなかったときは
-// cleanup=nop で戻り、他セッション終了時に相手が復元する。
-// なお SIGKILL/電源断で defer 未実行のまま残った古いロック (30 分以上前) は stale と
-// 判定して奪う。恒久上書きの根本策 (シグナルハンドラでの cleanup) は別途進言事項として扱う。
+// 同一 cwd で 2 セッションが同時に起動すると、後発が先発の書き換え後を「オリジナル」として
+// 保存し、両方 defer cleanup が動いてもファイルが真のオリジナルに戻らない競合があった。
+// 排他ロックファイル (`opencode.json.many-ai-cli.lock`) を `O_EXCL` で作成し、中身に
+// 保持 PID を書く。既存ロックの PID が生存中なら上書きをスキップしてエラーを返す
+// （呼び出し側で Warn）。PID が死んでいる、または読めず mtime が stale のときだけ奪取する。
 func prepareOpenCodeConfig(cwd string, permissionValue string) (cleanup func(), err error) {
 	cfgPath := filepath.Join(cwd, "opencode.json")
 	lockPath := cfgPath + ".many-ai-cli.lock"
 
 	lockFile, lockErr := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if lockErr != nil {
-		// 既存ロックが stale なら奪う。それでも駄目なら nop cleanup で相乗り。
-		if os.IsExist(lockErr) {
-			if info, statErr := os.Stat(lockPath); statErr == nil && time.Since(info.ModTime()) > opencodeLockStaleAfter {
-				_ = os.Remove(lockPath)
-				lockFile, lockErr = os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-			}
+		if os.IsExist(lockErr) && tryStealOpenCodeLock(lockPath) {
+			lockFile, lockErr = os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 		}
 		if lockErr != nil {
-			return func() {}, nil
+			// スキップは黙って成功にしない（permission 上書きが効かない事実を呼び出し側へ伝える）。
+			return func() {}, fmt.Errorf("opencode.json locked by another session (permission %q not applied): %w", permissionValue, lockErr)
 		}
+	}
+	if _, wErr := fmt.Fprintf(lockFile, "%d\n", os.Getpid()); wErr != nil {
+		_ = lockFile.Close()
+		_ = os.Remove(lockPath)
+		return func() {}, fmt.Errorf("write opencode lock pid: %w", wErr)
 	}
 	_ = lockFile.Close()
 
@@ -97,4 +98,30 @@ func prepareOpenCodeConfig(cwd string, permissionValue string) (cleanup func(), 
 		cleanupLock()
 	}
 	return cleanup, nil
+}
+
+// tryStealOpenCodeLock はロック保持プロセスが死んでいる、または PID 不明で mtime が
+// stale のときだけロックを削除して true を返す。生存中 PID には触れない。
+func tryStealOpenCodeLock(lockPath string) bool {
+	data, err := os.ReadFile(lockPath)
+	if err == nil {
+		pidStr := strings.TrimSpace(string(data))
+		if pid, convErr := strconv.Atoi(pidStr); convErr == nil && pid > 0 {
+			if processAlive(pid) {
+				return false
+			}
+			_ = os.Remove(lockPath)
+			return true
+		}
+	}
+	// PID が読めない壊れたロック: mtime フォールバック
+	info, statErr := os.Stat(lockPath)
+	if statErr != nil {
+		return false
+	}
+	if time.Since(info.ModTime()) <= opencodeLockStaleAfter {
+		return false
+	}
+	_ = os.Remove(lockPath)
+	return true
 }
