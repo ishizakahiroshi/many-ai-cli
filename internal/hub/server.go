@@ -195,10 +195,6 @@ type session struct {
 	inputMu *sync.Mutex
 }
 
-func (s *session) idleStateName() string {
-	return s.Activity.DisplayState()
-}
-
 // resolveRoute は provider + model から route を推定する。
 // spawn API では body.Route が明示指定されるが、wrapper の register/reattach
 // 経路には route 情報が無いため、ここで RouteForModel と同等の推定を行う。
