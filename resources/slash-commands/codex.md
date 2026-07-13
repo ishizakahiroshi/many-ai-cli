@@ -3,12 +3,15 @@
 | Command | Purpose | When to use it |
 |---|---|---|
 | `/agent` | Switch the active agent thread. | Inspect or continue work in a spawned subagent thread. |
+| `/app` | Continue the current session in the ChatGPT desktop app. | When you want to keep the same session in the desktop app. |
 | `/apps` | Browse apps and insert them into your prompt. | Attach an app before asking Codex to use it. |
 | `/approve` | Approve one retry of a recent auto-review denial. | Retry an action that the automatic reviewer denied. |
+| `/archive` | Archive the current session and exit Codex. | Preserve a session and free the workspace before starting another. |
+| `/btw` | Start an ephemeral side conversation. | Ask focused follow-ups without disrupting the main thread. |
 | `/clear` | Clear the terminal and start a fresh chat. | Reset the UI and conversation together. |
 | `/compact` | Summarize the visible conversation to free tokens. | After long runs, to retain key points while reclaiming context. |
 | `/copy` | Copy the latest completed Codex output. | Grab finished responses without manual selection. |
-| `/debug-config` | Print config layer and requirements diagnostics. | Debug config precedence and policy requirements. |
+| `/delete` | Permanently delete the current session and exit Codex. | Discard a session and its files. |
 | `/diff` | Show the Git diff including untracked files. | Review edits before committing or testing. |
 | `/exit` | Exit the CLI. | Leave the session immediately. |
 | `/experimental` | Toggle experimental features. | Enable optional features such as subagents. |
@@ -18,6 +21,7 @@
 | `/goal` | Set, pause, resume, view, or clear a task goal. | Give Codex a persistent target to track across turns. |
 | `/hooks` | Review lifecycle hooks. | Inspect hook configuration and manage hook trust. |
 | `/ide` | Include open files and the current IDE selection. | Pull editor context into the next prompt. |
+| `/import` | Import Claude Code setup, project files, and recent chats. | When migrating from Claude Code into Codex. |
 | `/init` | Generate an `AGENTS.md` scaffold. | Capture persistent repository instructions. |
 | `/keymap` | Remap TUI keyboard shortcuts. | Inspect and persist custom shortcut bindings. |
 | `/logout` | Sign out of Codex. | Clear credentials on shared machines. |
@@ -34,14 +38,15 @@
 | `/ps` | Show background terminals and their status. | Check long-running commands without leaving the transcript. |
 | `/quit` | Exit the CLI. | Leave the session immediately. |
 | `/raw` | Toggle raw scrollback mode. | Make terminal selection and copying more direct. |
+| `/rename` | Rename the current task. | Give a session a memorable label. |
 | `/resume` | Resume a saved conversation from the session list. | Continue work from a previous CLI session. |
 | `/review` | Ask Codex to review your working tree. | Run after completion or for a second opinion on changes. |
 | `/sandbox-add-read-dir` | Grant sandbox read access to an extra directory. | Unblock reads for a directory outside the current readable roots. |
+| `/setup-default-sandbox` | Set up the elevated agent sandbox on Windows. | Bootstrap the sandbox that Codex uses for elevated actions. |
 | `/side` | Start an ephemeral side conversation. | Ask focused follow-ups without disrupting the main thread. |
 | `/skills` | Browse and use skills. | Inspect bundled or installed skills for the current task. |
 | `/status` | Display session configuration and token usage. | Confirm active model, policy, and context capacity. |
-| `/statusline` | Configure TUI status-line fields interactively. | Pick and reorder footer items. |
 | `/stop` | Stop all background terminals. | Cancel background terminal work. |
-| `/theme` | Choose a syntax-highlighting theme. | Preview and persist a terminal syntax theme. |
-| `/title` | Configure terminal title items interactively. | Pick and reorder title items. |
+| `/subagents` | Switch or manage the active subagent thread. | Coordinate work across parallel subagent threads. |
+| `/usage` | View account token usage and rate-limit reset. | Inspect quota consumption between tasks. |
 | `/vim` | Toggle Vim mode for the composer. | Switch between Vim and default editing behavior. |

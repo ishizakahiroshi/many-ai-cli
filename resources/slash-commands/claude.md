@@ -3,12 +3,14 @@
 | Command | Purpose | When to use it |
 |---|---|---|
 | `/add-dir` | Add a working directory for file access. | When Claude needs files from an external directory. |
+| `/advisor` | Toggle secondary-model advisor guidance. | When you want a second-opinion advisor on the current turn. |
 | `/agents` | Manage subagent configurations. | When delegating tasks to background agents. |
 | `/autofix-pr` | Watch the current branch's PR and push fixes when CI fails. | When you want automatic CI-driven fixes on a PR. |
 | `/background` | Detach the current session to run as a background agent. | When you need to free the terminal while work continues. |
 | `/batch` | Orchestrate large-scale changes across a codebase in parallel. | When making wide-ranging changes across many files. |
 | `/branch` | Branch the current conversation at this point. | When exploring multiple paths from the same point. |
 | `/btw` | Ask a quick side question without adding to the conversation. | When you need clarification without bloating history. |
+| `/cd` | Change the session's working directory. | When you want to switch cwd without restarting the session. |
 | `/chrome` | Configure Claude in Chrome settings. | When managing the Chrome extension integration. |
 | `/claude-api` | Load Claude API reference material or migrate API code. | When building with or upgrading Claude API code. |
 | `/clear` | Clear conversation history. | Start a clean thread without leaving the session. |
@@ -19,8 +21,11 @@
 | `/context` | Visualize current context usage as a colored grid. | When you want to see where your context window is going. |
 | `/copy` | Copy the last assistant response to the clipboard. | When you need to extract code or text from a response. |
 | `/cost` | Show token and cost usage. | Check recent usage impact while iterating. |
+| `/dataviz` | Load data visualization design guidance. | When designing charts, dashboards, or other data visuals. |
 | `/debug` | Enable debug logging and troubleshoot issues. | When diagnosing installation or runtime problems. |
 | `/deep-research` | Fan out web searches and synthesize a cited report. | When researching complex topics that need verification. |
+| `/design-login` | Authorize access to design-system assets. | When enabling design system export from a design tool. |
+| `/design-sync` | Convert a design system into React components. | When importing a design system into a React codebase. |
 | `/desktop` | Continue the current session in the Desktop app. | When switching from CLI to desktop. |
 | `/diff` | Open an interactive diff viewer of uncommitted changes. | When reviewing what code changed during a session. |
 | `/doctor` | Run environment diagnostics. | Troubleshoot local setup and runtime issues. |
@@ -31,6 +36,7 @@
 | `/feedback` | Submit feedback or report a bug to Anthropic. | When reporting issues or sharing feedback. |
 | `/fewer-permission-prompts` | Add an allowlist for common read-only calls. | When you are tired of permission prompts for safe operations. |
 | `/focus` | Toggle the focus view showing only the last prompt and response. | When you want a cleaner interface. |
+| `/fork` | Spawn a forked subagent from the current conversation. | When you want an independent thread from the same context. |
 | `/goal` | Set a completion condition and auto-continue turns until it is met. | Let Claude keep working toward a stated goal; /goal clear cancels. |
 | `/heapdump` | Write a JavaScript heap snapshot for diagnosing memory usage. | When Claude Code is using too much memory. |
 | `/help` | Show help. | Check available commands and usage. |
@@ -80,19 +86,12 @@
 | `/status` | Show current status. | Inspect account, connectivity, and runtime state. |
 | `/statusline` | Configure Claude Code's status line display. | When customizing the status bar. |
 | `/stickers` | Order Claude Code stickers. | When you want branded merchandise. |
-| `/stop` | Stop the current background session. | When terminating a running background agent. |
 | `/tasks` | List and manage background tasks. | When monitoring or controlling parallel work. |
 | `/team-onboarding` | Generate a team onboarding guide from usage history. | When sharing best practices with teammates. |
 | `/teleport` | Pull a Claude Code on the web session into this terminal. | When continuing a web session locally. |
-| `/terminal-setup` | Configure terminal keybindings for shortcuts. | When setting up Shift+Enter and other shortcuts. |
-| `/theme` | Change the color theme. | When customizing the visual appearance. |
-| `/tui` | Set the terminal UI renderer. | When switching between standard and fullscreen rendering. |
-| `/ultraplan` | Draft a plan in a cloud session and review it. | When planning complex work with deep reasoning. |
-| `/ultrareview` | Run a deep multi-agent code review in the cloud. | When getting thorough code analysis. |
+| `/thinking` | Toggle extended thinking. | When you want the model to think longer before responding. |
 | `/upgrade` | Open the upgrade page. | When switching to a higher plan tier. |
 | `/usage` | Show usage statistics. | Review limits and ongoing usage trends. |
-| `/usage-credits` | Configure usage credits for overages. | When setting up extra usage beyond your plan. |
 | `/verify` | Confirm a code change by building and running the app. | When validating changes work in the running application. |
-| `/voice` | Toggle voice dictation or set the mode. | When using voice input for prompts. |
-| `/web-setup` | Connect your GitHub account for Claude Code on the web. | When setting up web session GitHub integration. |
-| `/workflows` | Open the workflow progress view. | When monitoring and controlling dynamic workflows. |
+| `/work-with-pr` | Work on an open pull request in the current session. | When picking up an existing PR to iterate on. |
+| `/worktrees` | Manage git worktrees for parallel branches. | When juggling multiple branches without switching cwd. |
