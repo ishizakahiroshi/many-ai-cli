@@ -561,6 +561,9 @@ type NotifyBackendConfig struct {
 type NotifyConfig struct {
 	Backends []NotifyBackendConfig `yaml:"backends,omitempty" json:"backends,omitempty"`
 	Events   []string              `yaml:"events,omitempty"   json:"events,omitempty"`
+	// IncludeBody keeps approval question text out of external notifications
+	// unless the user explicitly opts in.
+	IncludeBody bool `yaml:"include_body,omitempty" json:"include_body,omitempty"`
 }
 
 // BoardNotifyMode controls how board.md updates reach an orchestration conductor.

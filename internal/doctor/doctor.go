@@ -123,7 +123,10 @@ func ollama(ctx context.Context, cfg *config.Config) Check {
 	base := config.EffectiveOllamaBaseURL(cfg.Ollama.BaseURL)
 	reqCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(reqCtx, http.MethodGet, strings.TrimRight(base, "/")+"/api/tags", nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, strings.TrimRight(base, "/")+"/api/tags", nil)
+	if err != nil {
+		return Check{"Ollama", Warn, "base_url が不正: " + err.Error(), "ollama.base_url を確認してください"}
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return Check{"Ollama", Warn, "Ollama に接続できません: " + base, "Ollama を起動するか ollama.base_url を確認してください"}
@@ -142,7 +145,10 @@ func whisper(ctx context.Context, cfg *config.Config) Check {
 	}
 	reqCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
+	if err != nil {
+		return Check{"Whisper", Warn, "server_url が不正: " + err.Error(), "voice.whisper.server_url を確認してください"}
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return Check{"Whisper", Warn, "Whisper に接続できません", "Whisper runtime を起動するか server_url を確認してください"}

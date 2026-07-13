@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"many-ai-cli/internal/sessionlog"
 )
 
 const (
@@ -35,8 +37,9 @@ type BackendConfig struct {
 
 // Config は config.yaml の notify: セクション全体に対応する。
 type Config struct {
-	Backends []BackendConfig `yaml:"backends" json:"backends"`
-	Events   []string        `yaml:"events"   json:"events"` // ["approval"]
+	Backends    []BackendConfig `yaml:"backends" json:"backends"`
+	Events      []string        `yaml:"events"   json:"events"` // ["approval"]
+	IncludeBody bool            `yaml:"include_body" json:"include_body"`
 }
 
 // GenerateRandomTopic は ntfy トピック名用の暗号学的乱数文字列を生成する。
@@ -123,7 +126,11 @@ func (m *Manager) SendApproval(payload ApprovalPayload) {
 	m.sent[id] = time.Now()
 	m.mu.Unlock()
 
-	body := truncateUTF8(payload.Body, payloadMaxBytes)
+	body := fmt.Sprintf("session #%d: 承認要求", payload.SessionID)
+	if cfg.IncludeBody {
+		body = sessionlog.MaskSecrets(payload.Body)
+	}
+	body = truncateUTF8(body, payloadMaxBytes)
 
 	for _, backend := range cfg.Backends {
 		b := backend

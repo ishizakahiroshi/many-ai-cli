@@ -8,11 +8,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/proto"
+	"many-ai-cli/internal/securefile"
 )
 
 const fileName = "auto-approval.yaml"
@@ -32,8 +34,9 @@ type File struct {
 }
 
 type compiledRule struct {
-	rule Rule
-	re   *regexp.Regexp
+	rule       Rule
+	re         *regexp.Regexp
+	workingDir *regexp.Regexp
 }
 
 type Policy struct {
@@ -101,6 +104,14 @@ func Load() (*Policy, error) {
 			p.Warnings = append(p.Warnings, fmt.Sprintf("rule %q: 危険操作に一致するため無効化しました", rule.ID))
 			continue
 		}
+		var workingDir *regexp.Regexp
+		if rule.WorkingDir != "" {
+			workingDir, err = regexp.Compile(rule.WorkingDir)
+			if err != nil {
+				p.Warnings = append(p.Warnings, fmt.Sprintf("rule %q: working_dir 正規表現が不正です", rule.ID))
+				continue
+			}
+		}
 		validRisk := true
 		for _, risk := range rule.Risk {
 			if risk != "low" {
@@ -111,7 +122,7 @@ func Load() (*Policy, error) {
 			p.Warnings = append(p.Warnings, fmt.Sprintf("rule %q: 自動承認できる risk は low のみです", rule.ID))
 			continue
 		}
-		p.Rules = append(p.Rules, compiledRule{rule: rule, re: re})
+		p.Rules = append(p.Rules, compiledRule{rule: rule, re: re, workingDir: workingDir})
 	}
 	return p, nil
 }
@@ -127,6 +138,9 @@ func AddRule(command, workingDir string) (Rule, error) {
 	if err != nil {
 		return Rule{}, err
 	}
+	pathMu := autoApprovalPathMutex(path)
+	pathMu.Lock()
+	defer pathMu.Unlock()
 	var f File
 	if data, readErr := os.ReadFile(path); readErr == nil {
 		if err := yaml.Unmarshal(data, &f); err != nil {
@@ -154,10 +168,7 @@ func AddRule(command, workingDir string) (Rule, error) {
 	if err != nil {
 		return Rule{}, err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return Rule{}, err
-	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := securefile.WriteAtomic(path, data, 0600); err != nil {
 		return Rule{}, err
 	}
 	return rule, nil
@@ -180,15 +191,19 @@ func (p *Policy) Evaluate(command, cwd string, risk proto.ApprovalRiskTier) Deci
 		if !r.re.MatchString(command) {
 			continue
 		}
-		if r.rule.WorkingDir != "" {
-			wd, err := regexp.Compile(r.rule.WorkingDir)
-			if err != nil || !wd.MatchString(cwd) {
-				continue
-			}
+		if r.workingDir != nil && !r.workingDir.MatchString(cwd) {
+			continue
 		}
 		return Decision{Allowed: true, RuleID: r.rule.ID, Reason: "ホワイトリスト規則に一致"}
 	}
 	return Decision{Reason: "一致するホワイトリスト規則がありません"}
+}
+
+var autoApprovalPathLocks sync.Map
+
+func autoApprovalPathMutex(path string) *sync.Mutex {
+	mu, _ := autoApprovalPathLocks.LoadOrStore(path, &sync.Mutex{})
+	return mu.(*sync.Mutex)
 }
 
 var hardBlocks = []*regexp.Regexp{

@@ -504,6 +504,9 @@ func (s *Store) StartSession(st SessionStart) (int64, error) {
 	if s == nil || s.db == nil {
 		return 0, nil
 	}
+	if st.JSONLPath == "" {
+		st.JSONLPath = fmt.Sprintf("virtual-live-%d", st.LiveSessionID)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 	state := strings.TrimSpace(st.State)
@@ -672,6 +675,16 @@ func (s *Store) ClearSessionHistory(liveSessionID int) error {
 	// pruneSessionRow / resetHistorySQL と削除対象を揃える。
 	if _, err := tx.ExecContext(ctx, `DELETE FROM attachments WHERE session_id=?`, id); err != nil {
 		return fmt.Errorf("delete attachments: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE sessions SET
+		first_message=NULL,
+		last_message=NULL,
+		title=NULL,
+		tags_json=NULL,
+		summary=NULL,
+		updated_at=?
+		WHERE id=?`, time.Now().Format(time.RFC3339), id); err != nil {
+		return fmt.Errorf("clear session metadata: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit: %w", err)
@@ -1589,7 +1602,9 @@ func (s *Store) sessionIDForLive(liveSessionID int) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 	var id int64
-	err := s.db.QueryRowContext(ctx, `SELECT id FROM sessions WHERE live_session_id=? ORDER BY id DESC LIMIT 1`, liveSessionID).Scan(&id)
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM sessions
+		WHERE live_session_id=? AND ended_at IS NULL
+		ORDER BY id DESC LIMIT 1`, liveSessionID).Scan(&id)
 	if err == sql.ErrNoRows {
 		return 0, nil
 	}

@@ -212,6 +212,7 @@ func ScanClaudeConfigured(path string) (bool, error) {
 	}
 	defer f.Close()
 	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 64*1024), 8*1024*1024)
 	for scanner.Scan() {
 		if strings.TrimSpace(scanner.Text()) == claudeImportLine {
 			return true, nil
@@ -231,6 +232,7 @@ func ScanSharedBlockConfigured(path string) (bool, error) {
 	}
 	defer f.Close()
 	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 64*1024), 8*1024*1024)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == sharedBlockStart || line == legacySharedBlockStart {

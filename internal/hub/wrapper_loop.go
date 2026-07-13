@@ -20,6 +20,64 @@ import (
 	"many-ai-cli/internal/sessionstore"
 )
 
+func (s *Server) startSessionLog(logDir string, meta sessionlog.Metadata, appendMode bool) (string, string, *sessionlog.Writer) {
+	rawLogPath, jsonlPath := sessionlog.Paths(logDir, meta)
+	s.cfgMu.Lock()
+	jsonlMaxBytes := int64(s.cfg.Log.SessionMaxSizeMB) * 1024 * 1024
+	sessionLogEnabled := s.cfg.Log.SessionEnabled
+	s.cfgMu.Unlock()
+	stage := "register"
+	if appendMode {
+		stage = "reattach"
+	}
+	s.logger.Info("session_log_gate",
+		"stage", stage,
+		"session_id", meta.SessionID,
+		"provider", meta.Provider,
+		"enabled", sessionLogEnabled,
+		"raw_log_path", rawLogPath,
+		"jsonl_path", jsonlPath,
+		"jsonl_max_bytes", jsonlMaxBytes)
+	if !sessionLogEnabled {
+		return rawLogPath, jsonlPath, nil
+	}
+	var history *sessionlog.Writer
+	var err error
+	if appendMode {
+		history, err = sessionlog.NewJSONLWriterAppend(jsonlPath, jsonlMaxBytes)
+	} else {
+		history, err = sessionlog.NewJSONLWriter(jsonlPath, jsonlMaxBytes)
+	}
+	if err != nil {
+		action := "create"
+		if appendMode {
+			action = "append"
+		}
+		s.logger.Warn("session history "+action+" failed", "path", jsonlPath, "err", err)
+	}
+	return rawLogPath, jsonlPath, history
+}
+
+func (s *Server) attachStore(start sessionstore.SessionStart, cardMeta sessionstore.SessionCardMeta) (int64, sessionstore.SessionCardMeta) {
+	if s.sessionStore == nil {
+		return 0, cardMeta
+	}
+	storeID, err := s.sessionStore.StartSession(start)
+	if err != nil {
+		s.logger.Warn("sqlite session start failed", "session_id", start.LiveSessionID, "err", err)
+		return 0, cardMeta
+	}
+	if storeID == 0 {
+		return 0, cardMeta
+	}
+	saved, err := s.sessionStore.SessionCardMetaByLiveSession(start.LiveSessionID)
+	if err != nil {
+		s.logger.Warn("session card meta restore failed", "session_id", start.LiveSessionID, "err", err)
+		return storeID, cardMeta
+	}
+	return storeID, saved
+}
+
 func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	startedAt := time.Now()
 	branch := gitBranch(reg.CWD)
@@ -30,33 +88,15 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	initCols, initRows, _ = usableInitPTYSize(initCols, initRows)
 	s.sessionsMu.Unlock()
 
-	rawLogPath, jsonlPath := sessionlog.Paths(s.cfg.Hub.LogDir, sessionlog.Metadata{
+	s.cfgMu.Lock()
+	logDir := s.cfg.Hub.LogDir
+	s.cfgMu.Unlock()
+	rawLogPath, jsonlPath, history := s.startSessionLog(logDir, sessionlog.Metadata{
 		SessionID: id,
 		Provider:  reg.Provider,
 		CWD:       reg.CWD,
 		StartedAt: startedAt,
-	})
-	s.cfgMu.Lock()
-	jsonlMaxBytes := int64(s.cfg.Log.SessionMaxSizeMB) * 1024 * 1024
-	sessionLogEnabled := s.cfg.Log.SessionEnabled
-	s.cfgMu.Unlock()
-	s.logger.Info("session_log_gate",
-		"stage", "register",
-		"session_id", id,
-		"provider", reg.Provider,
-		"enabled", sessionLogEnabled,
-		"raw_log_path", rawLogPath,
-		"jsonl_path", jsonlPath,
-		"jsonl_max_bytes", jsonlMaxBytes)
-	// セッションログが無効（既定）なら .jsonl を作らない（空ファイルも残さない）。
-	var history *sessionlog.Writer
-	if sessionLogEnabled {
-		var histErr error
-		history, histErr = sessionlog.NewJSONLWriter(jsonlPath, jsonlMaxBytes)
-		if histErr != nil {
-			s.logger.Warn("session history create failed", "path", jsonlPath, "err", histErr)
-		}
-	}
+	}, false)
 
 	regRoute := strings.TrimSpace(reg.Route)
 	if regRoute == "" {
@@ -71,42 +111,29 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		}
 		s.orchestration.mu.Unlock()
 	}
-	var storeID int64
 	cardMeta := sessionstore.SessionCardMeta{Label: reg.Label}
-	if s.sessionStore != nil {
-		var storeErr error
-		storeID, storeErr = s.sessionStore.StartSession(sessionstore.SessionStart{
-			LiveSessionID:   id,
-			Provider:        reg.Provider,
-			Display:         reg.Display,
-			CWD:             reg.CWD,
-			Branch:          branch,
-			Label:           reg.Label,
-			Model:           reg.Model,
-			Route:           regRoute,
-			Shell:           reg.Shell,
-			State:           "standby",
-			StartedAt:       startedAt.Format(time.RFC3339),
-			LogPath:         rawLogPath,
-			JSONLPath:       jsonlPath,
-			ParentSessionID: childMeta.ParentSessionID,
-			Role:            childMeta.Role,
-			Auto:            childMeta.Auto,
-			Depth:           childMeta.Depth,
-			OrchestrationID: childMeta.OrchestrationID,
-			BoardPath:       childMeta.BoardPath,
-			WorktreeBranch:  childMeta.WorktreeBranch,
-		})
-		if storeErr != nil {
-			s.logger.Warn("sqlite session start failed", "session_id", id, "err", storeErr)
-		} else if storeID != 0 {
-			if saved, metaErr := s.sessionStore.SessionCardMetaByLiveSession(id); metaErr != nil {
-				s.logger.Warn("session card meta restore failed", "session_id", id, "err", metaErr)
-			} else {
-				cardMeta = saved
-			}
-		}
-	}
+	storeID, cardMeta := s.attachStore(sessionstore.SessionStart{
+		LiveSessionID:   id,
+		Provider:        reg.Provider,
+		Display:         reg.Display,
+		CWD:             reg.CWD,
+		Branch:          branch,
+		Label:           reg.Label,
+		Model:           reg.Model,
+		Route:           regRoute,
+		Shell:           reg.Shell,
+		State:           "standby",
+		StartedAt:       startedAt.Format(time.RFC3339),
+		LogPath:         rawLogPath,
+		JSONLPath:       jsonlPath,
+		ParentSessionID: childMeta.ParentSessionID,
+		Role:            childMeta.Role,
+		Auto:            childMeta.Auto,
+		Depth:           childMeta.Depth,
+		OrchestrationID: childMeta.OrchestrationID,
+		BoardPath:       childMeta.BoardPath,
+		WorktreeBranch:  childMeta.WorktreeBranch,
+	}, cardMeta)
 	s.sessionsMu.Lock()
 	ses := &session{
 		ID:              id,
@@ -294,32 +321,13 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	// プリミティブにしない）。
 	s.cfgMu.Lock()
 	logDir := s.cfg.Hub.LogDir
-	jsonlMaxBytesReattach := int64(s.cfg.Log.SessionMaxSizeMB) * 1024 * 1024
-	sessionLogEnabled := s.cfg.Log.SessionEnabled
 	s.cfgMu.Unlock()
-	rawLogPath, jsonlPath := sessionlog.Paths(logDir, sessionlog.Metadata{
+	rawLogPath, jsonlPath, history := s.startSessionLog(logDir, sessionlog.Metadata{
 		SessionID: req.SessionID,
 		Provider:  req.Provider,
 		CWD:       req.CWD,
 		StartedAt: startedAt,
-	})
-	s.logger.Info("session_log_gate",
-		"stage", "reattach",
-		"requested_session_id", req.SessionID,
-		"provider", req.Provider,
-		"enabled", sessionLogEnabled,
-		"raw_log_path", rawLogPath,
-		"jsonl_path", jsonlPath,
-		"jsonl_max_bytes", jsonlMaxBytesReattach)
-	// セッションログが無効（既定）なら .jsonl を作らない。
-	var history *sessionlog.Writer
-	if sessionLogEnabled {
-		var histErr error
-		history, histErr = sessionlog.NewJSONLWriterAppend(jsonlPath, jsonlMaxBytesReattach)
-		if histErr != nil {
-			s.logger.Warn("session history append failed", "path", jsonlPath, "err", histErr)
-		}
-	}
+	}, true)
 
 	reqRoute := strings.TrimSpace(req.Route)
 	if reqRoute == "" {
@@ -347,56 +355,32 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 			CWD:       req.CWD,
 			StartedAt: startedAt,
 		})
-		s.logger.Info("session_log_gate",
-			"stage", "reattach_renumbered",
-			"requested_session_id", req.SessionID,
-			"session_id", acceptedID,
-			"provider", req.Provider,
-			"enabled", sessionLogEnabled,
-			"raw_log_path", rawLogPath,
-			"jsonl_path", jsonlPath,
-			"jsonl_max_bytes", jsonlMaxBytesReattach)
-		if sessionLogEnabled {
-			if history != nil {
-				_ = history.Close()
-			}
-			var histErr error
-			history, histErr = sessionlog.NewJSONLWriterAppend(jsonlPath, jsonlMaxBytesReattach)
-			if histErr != nil {
-				s.logger.Warn("session history append failed (renumbered)", "path", jsonlPath, "err", histErr)
-				history = nil
-			}
+		if history != nil {
+			_ = history.Close()
 		}
+		rawLogPath, jsonlPath, history = s.startSessionLog(logDir, sessionlog.Metadata{
+			SessionID: acceptedID,
+			Provider:  req.Provider,
+			CWD:       req.CWD,
+			StartedAt: startedAt,
+		}, true)
 	}
-	var storeID int64
 	cardMeta := sessionstore.SessionCardMeta{Label: req.Label}
-	if s.sessionStore != nil {
-		var storeErr error
-		storeID, storeErr = s.sessionStore.StartSession(sessionstore.SessionStart{
-			LiveSessionID: acceptedID,
-			Provider:      req.Provider,
-			Display:       req.Display,
-			CWD:           req.CWD,
-			Branch:        branch,
-			Label:         req.Label,
-			Model:         req.Model,
-			Route:         reqRoute,
-			Shell:         req.Shell,
-			State:         "running",
-			StartedAt:     startedAtText,
-			LogPath:       rawLogPath,
-			JSONLPath:     jsonlPath,
-		})
-		if storeErr != nil {
-			s.logger.Warn("sqlite session reattach failed", "session_id", acceptedID, "err", storeErr)
-		} else if storeID != 0 {
-			if saved, metaErr := s.sessionStore.SessionCardMetaByLiveSession(acceptedID); metaErr != nil {
-				s.logger.Warn("session card meta restore failed", "session_id", acceptedID, "err", metaErr)
-			} else {
-				cardMeta = saved
-			}
-		}
-	}
+	storeID, cardMeta := s.attachStore(sessionstore.SessionStart{
+		LiveSessionID: acceptedID,
+		Provider:      req.Provider,
+		Display:       req.Display,
+		CWD:           req.CWD,
+		Branch:        branch,
+		Label:         req.Label,
+		Model:         req.Model,
+		Route:         reqRoute,
+		Shell:         req.Shell,
+		State:         "running",
+		StartedAt:     startedAtText,
+		LogPath:       rawLogPath,
+		JSONLPath:     jsonlPath,
+	}, cardMeta)
 	s.sessionsMu.Lock()
 	var oldHistory *sessionlog.Writer
 	if cur := s.sessions[acceptedID]; cur != nil {
