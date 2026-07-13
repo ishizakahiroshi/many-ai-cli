@@ -391,6 +391,24 @@
     return out;
   }
 
+  // 差分再描画型 TUI（観測: Grok CLI / mer セッション 2026-07-12 実ログ）は、行を改行ではなく
+  // 絶対カーソル移動（CUP `ESC[行;列H`）で描画し、さらに前フレームから変わらないセル
+  //（選択肢番号直後の「. 」等）を書き直さずカーソル前進（CUF `ESC[nC`）でスキップする。
+  // これを stripAnsi で単純削除すると行境界と桁の隙間が同時に消え、マーカーブロック全体が
+  // 「…(Recommended)2原因…3Excel…」の 1 行に連結されて番号のピリオドまで失われる
+  //（弱パターンの連番分割が効かず、選択肢 1 のボタンへ全部飲み込まれる症状）。
+  // 削除ではなくテキスト構造へ変換してから行分割する:
+  // ・行移動（CUP H / CNL E / CPL F / VPA d）→ 改行（別の行へ描く = 行境界）
+  // ・カーソル前進（CUF C）→ スキップ桁数ぶんの空白（画面上は前フレームの文字が残る隙間）
+  // ・文字消去（ECH X）→ 空白 1 個（消去領域は空白 = 区切りとしてのみ意味を持つ）
+  // SGR・カーソル表示切替など残りのシーケンスは従来どおり呼び出し側の stripAnsi が落とす。
+  function normalizeVtCursorOps(text) {
+    return String(text == null ? '' : text)
+      .replace(/\x1b\[[0-9;]*[HEFd]/g, '\n')
+      .replace(/\x1b\[([0-9]*)C/g, (_, n) => ' '.repeat(Math.min(parseInt(n || '1', 10) || 1, 200)))
+      .replace(/\x1b\[[0-9]*X/g, ' ');
+  }
+
   // 連結された承認行を元の行構造へ復元する共通処理。
   // marker 経路（parseHubBlock）/ フォールバック経路（extractApprovalOptions）双方で使う。
   // 先に「N. User specifies」アンカーで切り、その後で行内連番を分割する
@@ -424,6 +442,12 @@
   function parseHubBlock(rawLines) {
     const lines = ungluedApprovalLines(rawLines);
     const optionRe = /^(\d+)\.\s*(.+?)\s*$/;
+    // 差分再描画のセルスキップで番号直後の「. 」が届かなかった選択肢行の救済形。
+    // normalizeVtCursorOps がスキップ桁を空白へ変換するため「2  原因…」の形で行に残る。
+    // 空白 2 個以上（=「. 」の 2 桁ぶん）を必須にして、後方互換の No-Q 見出し
+    // 「1 質問文?」（空白 1 個）とは衝突させない。グループ構成は optionRe と同じ
+    //（1=番号 / 2=ラベル）で、マッチ結果を差し替え可能にしている。
+    const dotlessOptionRe = /^(\d{1,2})[ \t]{2,}(\S.*?)\s*$/;
     // 見出しは `Q1 質問文?`（Q + 連番）を正とする。選択肢 `1.`（数字+ピリオド）と区別するため。
     // 後方互換: 旧 `1 質問文?`（プレフィックスなし数字+スペース）も引き続き受理する。
     // 区切りゆれ吸収: 数字直後の `:` `：` `.` は任意（`Q1: 質問` / `Q1. 質問` も可）。
@@ -438,7 +462,7 @@
       const raw = lines[i];
       const line = String(raw || '').trim();
       if (!line) { preambleEnd = i + 1; continue; }
-      if (optionRe.test(line) || headingRe.test(line) || multiSelectDirectiveRe.test(line) || hasYesNoApprovalMarker(line)) {
+      if (optionRe.test(line) || dotlessOptionRe.test(line) || headingRe.test(line) || multiSelectDirectiveRe.test(line) || hasYesNoApprovalMarker(line)) {
         preambleEnd = i;
         break;
       }
@@ -472,7 +496,7 @@
         if (!line) continue;
         const dm = line.match(multiSelectDirectiveRe);
         if (dm) { isMulti = true; question = dm[1].trim(); lastMultiOpt = null; continue; }
-        const om = line.match(optionRe);
+        const om = line.match(optionRe) || line.match(dotlessOptionRe);
         if (om) {
           lastMultiOpt = { num: parseInt(om[1], 10), label: om[2].trim() };
           opts.push(lastMultiOpt);
@@ -501,7 +525,7 @@
     for (const raw of lines) {
       const line = String(raw || '').trim();
       if (!line) continue;
-      const om = line.match(optionRe);
+      const om = line.match(optionRe) || line.match(dotlessOptionRe);
       if (om) {
         const opt = { num: parseInt(om[1], 10), label: om[2].trim(), isCurrent: false };
         // バッチ・単一いずれも短ラベル表記 `[短ラベル] 本文` を分離する
@@ -742,6 +766,7 @@
     hasApprovalLikeLabel,
     userSpecifiesRe,
     ungluedApprovalLines,
+    normalizeVtCursorOps,
   };
 
   root.approvalParser = api;
@@ -754,5 +779,5 @@
 const __esmRoot = (typeof window !== 'undefined') ? window : globalThis;
 export const approvalParser = __esmRoot.approvalParser;
 export const {
-  lineHasHint, linesHaveHint, approvalLineHasHint, approvalLinesHaveHint, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, extractApprovalOptions, approvalContextLines, isBatchOptions, isMultiSelectOptions, isMultiQuestionPrompt, isHubChoicePrompt, markHubChoiceDefault, matchNativeApprovalTrigger, hasApprovalLikeLabel, userSpecifiesRe, ungluedApprovalLines,
+  lineHasHint, linesHaveHint, approvalLineHasHint, approvalLinesHaveHint, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, extractApprovalOptions, approvalContextLines, isBatchOptions, isMultiSelectOptions, isMultiQuestionPrompt, isHubChoicePrompt, markHubChoiceDefault, matchNativeApprovalTrigger, hasApprovalLikeLabel, userSpecifiesRe, ungluedApprovalLines, normalizeVtCursorOps,
 } = __esmRoot.approvalParser;

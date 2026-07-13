@@ -5,7 +5,7 @@ import { inputEl, sendSubmittedText, sendSubmittedBody } from '../app.js';
 import { clearSuppressPtyResize, isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout } from './terminal.js';
 import { stripAnsi } from './settings.js';
 import { ws } from './ws-client.js';
-import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, hasApprovalLikeLabel, isBatchOptions, isHubChoicePrompt, isMultiQuestionPrompt, isMultiSelectOptions, markHubChoiceDefault, matchNativeApprovalTrigger } from './approval-parser.js';
+import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, hasApprovalLikeLabel, isBatchOptions, isHubChoicePrompt, isMultiQuestionPrompt, isMultiSelectOptions, markHubChoiceDefault, matchNativeApprovalTrigger, normalizeVtCursorOps } from './approval-parser.js';
 import { approvalUiAdapter, setMultiQuestionBannerVisible } from './approval-ui.js';
 import { chatHistoryCommitOutput, chatPaneAtBottom, getChatTimelineEl, pushMessage, scrollChatPaneToBottom } from './chat-history.js';
 import { token } from './util.js';
@@ -100,7 +100,11 @@ const BG_APPROVAL_TAIL_LINES = 80;
 // scrollback 誤検出の懸念が無いため、ヒューリスティック scanner（40 行）と分離して全文を渡し、
 // 取りこぼし上限は pendingTextTail の保持量（APPROVAL_PENDING_TEXT_TAIL_LIMIT 文字）に一本化する。
 function markerLinesFromTail(tail) {
-  return String(tail || '').split(/\r\n|\r|\n/).map(l => stripAnsi(l));
+  // 差分再描画型 TUI（Grok CLI 等）は行境界を改行ではなく絶対カーソル移動で表現するため、
+  // stripAnsi で削除する前にカーソル制御を改行・空白へ変換する（normalizeVtCursorOps 参照）。
+  // これを挟まないとマーカーブロック全体が 1 行に連結され、番号直後の「. 」も消えて
+  // 選択肢分割が壊れる（ボタン 1 個に全選択肢が連結される症状・2026-07-12 実測）。
+  return normalizeVtCursorOps(String(tail || '')).split(/\r\n|\r|\n/).map(l => stripAnsi(l));
 }
 const bgApprovalMisses = new Map();
 const bgApprovalClearTimers = new Map();
