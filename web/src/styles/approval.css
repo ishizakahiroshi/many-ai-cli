@@ -305,6 +305,10 @@
   padding: 6px 8px;
   max-height: 5.5em;
   overflow-y: auto;
+  /* 内部でスクロール可能な間は、ホイール操作が外側の #action-bar 側へ
+     伝播しないようにする（伝播すると経緯欄内で下まで読めない）。 */
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 .action-preamble.expanded .action-preamble-body { max-height: 22em; }
 
