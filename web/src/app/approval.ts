@@ -1503,9 +1503,15 @@ function appendApprovalPreamble(bar, preamble) {
   head.type = 'button';
   head.className = 'action-preamble-head';
   head.textContent = t('approval_preamble_label');
-  head.onclick = (e) => { e.stopPropagation(); wrap.classList.toggle('expanded'); };
   const body = document.createElement('div');
   body.className = 'action-preamble-body';
+  head.onclick = (e) => {
+    e.stopPropagation();
+    wrap.classList.toggle('expanded');
+    // バー上端のドラッグリサイズ（action-bar-resize.ts）が付けたインライン max-height が
+    // 残っていると、CSS クラス側の max-height（5.5em/22em）より優先されて展開が効かない。
+    body.style.maxHeight = '';
+  };
   body.textContent = text;
   wrap.appendChild(head);
   wrap.appendChild(body);
