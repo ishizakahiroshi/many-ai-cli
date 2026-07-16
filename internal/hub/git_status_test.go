@@ -82,6 +82,8 @@ func TestSuggestCommitMessage(t *testing.T) {
 		{Status: "M", Path: "web/src/i18n/ja.json"},
 	}, "3 files changed", diff, "", "ja")
 	// 追加された HTTP ルートが拾えていれば subject に反映される。
+	// scope は変更ファイルが internal/hub と web/src/i18n に分散するため空になり、
+	// prefix は素の "feat: " になる。route が最優先で主辞に載る（pickAddSymbol）。
 	if !strings.HasPrefix(subject, "feat: ") || !strings.Contains(subject, "/api/logs/purge") {
 		t.Fatalf("subject = %q", subject)
 	}
@@ -115,28 +117,29 @@ func TestSuggestCommitMessageClassification(t *testing.T) {
 			name:        "deps only",
 			files:       []gitStatusFile{{Status: "M", Path: "go.mod"}, {Status: "M", Path: "go.sum"}},
 			wantPrefix:  "chore(deps): ",
-			wantSubject: "依存関係を更新",
+			wantSubject: "go.mod",
 		},
 		{
 			name:        "style only",
 			files:       []gitStatusFile{{Status: "M", Path: "web/src/styles/spawn.css"}},
-			wantPrefix:  "style: ",
-			wantSubject: "スタイルを調整",
+			// scope=styles は prefix=style と接頭辞被りだが厳密不一致のため付く。
+			wantPrefix:  "style",
+			wantSubject: "spawn.css",
 		},
 		{
 			name:        "rename only",
 			files:       []gitStatusFile{{Status: "R", Path: "internal/hub/new.go"}},
 			diff:        "rename from internal/hub/old.go\nrename to internal/hub/new.go\n",
-			wantPrefix:  "refactor: ",
+			wantPrefix:  "refactor(hub): ",
 			wantSubject: "old.go → new.go",
 		},
 		{
-			name:        "removed route",
-			files:       []gitStatusFile{{Status: "M", Path: "internal/hub/server.go"}},
-			diff:        "+++ b/internal/hub/server.go\n-\tmux.HandleFunc(\"/api/old\", s.handleOld)\n",
-			// 新規シンボルを伴わないルート削除は refactor 扱いに変更（方針1）。
-			wantPrefix:  "refactor: ",
-			wantSubject: "/api/old エンドポイントを削除",
+			name:  "removed route",
+			files: []gitStatusFile{{Status: "M", Path: "internal/hub/server.go"}},
+			diff:  "+++ b/internal/hub/server.go\n-\tmux.HandleFunc(\"/api/old\", s.handleOld)\n",
+			// 新規シンボルを伴わないルート削除は refactor 扱い。verb=remove で主辞は削除された route。
+			wantPrefix:  "refactor(hub): ",
+			wantSubject: "/api/old",
 		},
 	}
 	for _, c := range cases {
