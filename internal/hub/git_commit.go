@@ -183,30 +183,157 @@ func (s *Server) handleGitCommitMessage(w http.ResponseWriter, r *http.Request) 
 // 解析結果。LLM を使わず status とテキスト差分のヒューリスティックで埋めるため、
 // あくまで「下書き」レベルの精度であることを前提とする。
 type commitChangeAnalysis struct {
-	added       []string // 新規追加されたファイルパス（A / 未追跡 ??）
-	deleted     []string // 削除されたファイルパス（D）
-	modified    []string // 変更されたファイルパス（M ほか）
-	renamed     []string // リネームされたファイルパス（R）
-	depFiles    []string // 依存定義ファイル（go.mod / package.json 等）
-	topScope    string   // 最も変更ファイル数が多いトップレベルディレクトリ
-	prefix      string   // conventional commit prefix（feat/fix/docs/test/style/refactor/chore）
-	routes      []string // 追加された HTTP ルート（mux.HandleFunc("...")）
-	removedRts  []string // 削除された HTTP ルート
-	funcs       []string // 追加された Go 関数名
-	types       []string // 追加された Go 型（struct / interface）
-	renamePairs []string // "旧名 → 新名"（diff の rename from/to から）
-	i18nKeys    int      // 追加された i18n キー数
-	depsOnly    bool     // 変更が依存定義ファイルのみ
-	styleOnly   bool     // 変更が CSS/SCSS のみ
+	added        []string // 新規追加されたファイルパス（A / 未追跡 ??）
+	deleted      []string // 削除されたファイルパス（D）
+	modified     []string // 変更されたファイルパス（M ほか）
+	renamed      []string // リネームされたファイルパス（R）
+	depFiles     []string // 依存定義ファイル（go.mod / package.json 等）
+	scope        string   // 変更ファイル群の最深共通ディレクトリの最終非汎用セグメント（Conventional Commits の (scope) 部分）
+	prefix       string   // conventional commit prefix（feat/fix/docs/test/style/refactor/chore）
+	routes       []string // 追加された HTTP ルート（mux.HandleFunc("...")）
+	removedRts   []string // 削除された HTTP ルート
+	funcs            []string          // 追加された Go 関数名（出現順）
+	deletedFuncs     []string          // 削除された Go 関数名（move 判定用・出現順）
+	addedFuncSites   map[string]string // 関数名 → 追加された diff の +++ b/<file>
+	deletedFuncSites map[string]string // 関数名 → 削除された diff の +++ b/<file>
+	types        []string // 追加された Go 型（struct / interface）
+	renamePairs  []string // "旧名 → 新名"（diff の rename from/to から）
+	i18nKeys     int      // 追加された i18n キー数
+	locAdded     int      // 追加行数（+++ ヘッダを除く +行）
+	locDeleted   int      // 削除行数（--- ヘッダを除く -行）
+	handleAdds   int      // 追加された err/throw/catch など handling パターン行数
+	depsOnly     bool     // 変更が依存定義ファイルのみ
+	styleOnly    bool     // 変更が CSS/SCSS のみ
+	verb         string   // subject 用に選ばれた動詞（add/remove/rename/move/bump/simplify/handle/refactor/test/update）
+	symbolHead   string   // subject の主辞（関数名 / 型名 / route / ファイル basename 等）
+	symbolCount  int      // symbolHead を含めた同種要素の総件数（1 なら "ほか N 件" 付けない）
 }
 
 var (
-	reGitRoute    = regexp.MustCompile(`mux\.HandleFunc\("([^"]+)"`)
-	reAddedGoFunc = regexp.MustCompile(`^\+func (?:\([^)]*\)\s*)?([A-Za-z0-9_]+)\(`)
-	reAddedGoType = regexp.MustCompile(`^\+type ([A-Za-z0-9_]+) (?:struct|interface)\b`)
-	reAddedI18n   = regexp.MustCompile(`^\+\s*"[A-Za-z0-9_]+":`)
-	reDiffNewFile = regexp.MustCompile(`^\+\+\+ b/(.+)$`)
+	reGitRoute      = regexp.MustCompile(`mux\.HandleFunc\("([^"]+)"`)
+	reAddedGoFunc   = regexp.MustCompile(`^\+func (?:\([^)]*\)\s*)?([A-Za-z0-9_]+)\(`)
+	reDeletedGoFunc = regexp.MustCompile(`^-func (?:\([^)]*\)\s*)?([A-Za-z0-9_]+)\(`)
+	reAddedGoType   = regexp.MustCompile(`^\+type ([A-Za-z0-9_]+) (?:struct|interface)\b`)
+	reAddedI18n     = regexp.MustCompile(`^\+\s*"[A-Za-z0-9_]+":`)
+	reDiffNewFile   = regexp.MustCompile(`^\+\+\+ b/(.+)$`)
+	reHandleErrGo   = regexp.MustCompile(`^\+\s*if\s+err\s*!=`)
+	reHandleThrow   = regexp.MustCompile(`^\+\s*throw\s`)
+	reHandleCatch   = regexp.MustCompile(`^\+\s*(?:\}\s*)?catch\b`)
 )
+
+// scope 決定時に「情報量の薄い汎用セグメント」として除外する dir 名。
+// deepestScope はここに該当しない最も深いセグメントを返す（例: web/src/app → app）。
+var genericScopeSegments = map[string]bool{
+	"src": true, "internal": true, "cmd": true, "pkg": true, "lib": true,
+}
+
+// deepestScope は変更ファイル群の最深共通ディレクトリを求め、その末尾から見て
+// 最初の非汎用セグメント（internal/src 等でないもの）を返す。全ファイルが同一
+// トップレベル配下でない場合は空文字を返す（＝ scope なし＝横断変更の合図）。
+func deepestScope(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	var common []string
+	for i, p := range paths {
+		p = strings.ReplaceAll(p, "\\", "/")
+		parts := strings.Split(p, "/")
+		if len(parts) > 0 {
+			parts = parts[:len(parts)-1]
+		}
+		if i == 0 {
+			common = append([]string(nil), parts...)
+			continue
+		}
+		n := 0
+		for n < len(common) && n < len(parts) && common[n] == parts[n] {
+			n++
+		}
+		common = common[:n]
+		if len(common) == 0 {
+			return ""
+		}
+	}
+	for i := len(common) - 1; i >= 0; i-- {
+		if !genericScopeSegments[common[i]] {
+			return common[i]
+		}
+	}
+	return ""
+}
+
+// prefixWithScope は Conventional Commits の "<type>(<scope>)" を組み立てる。
+// scope が空、prefix と一致、または prefix が既にカッコ付き（chore(deps) 等）の場合は
+// scope を付けない。
+func prefixWithScope(prefix, scope string) string {
+	if scope == "" || scope == prefix {
+		return prefix
+	}
+	if strings.Contains(prefix, "(") {
+		return prefix
+	}
+	return prefix + "(" + scope + ")"
+}
+
+// verbJa / verbEn は 9 種＋update の動詞 → 各言語の語のマッピング。
+// jaVerbPhrase / enVerbPhrase 経由で subject に埋められる。
+var verbJa = map[string]string{
+	"add":      "追加",
+	"remove":   "削除",
+	"rename":   "改名",
+	"move":     "移動",
+	"bump":     "更新",
+	"simplify": "簡潔化",
+	"handle":   "エラー処理を追加",
+	"refactor": "整理",
+	"test":     "テストを追加",
+	"update":   "更新",
+}
+
+var verbEn = map[string]string{
+	"add":      "add",
+	"remove":   "remove",
+	"rename":   "rename",
+	"move":     "move",
+	"bump":     "bump",
+	"simplify": "simplify",
+	"handle":   "handle errors in",
+	"refactor": "rework",
+	"test":     "add tests for",
+	"update":   "update",
+}
+
+// jaVerbPhrase は「<symbol>」の直後に付ける日本語述語を返す。助詞が「を」以外に
+// なる動詞（改名の「に」、handle の「に」）は個別ケースで扱う。
+func jaVerbPhrase(verb, head string) string {
+	switch verb {
+	case "handle":
+		return head + " にエラー処理を追加"
+	case "rename":
+		return head + " に改名"
+	default:
+		v := verbJa[verb]
+		if v == "" {
+			v = verbJa["refactor"]
+		}
+		return head + " を" + v
+	}
+}
+
+// enVerbPhrase は英語 subject の "<verb> <symbol>" 句を返す。handle だけは
+// "handle errors in <symbol>" と展開する。
+func enVerbPhrase(verb, head string) string {
+	switch verb {
+	case "handle":
+		return "handle errors in " + head
+	default:
+		v := verbEn[verb]
+		if v == "" {
+			v = verbEn["refactor"]
+		}
+		return v + " " + head
+	}
+}
 
 var depFileNames = map[string]struct{}{
 	"go.mod": {}, "go.sum": {}, "go.work": {}, "go.work.sum": {},
@@ -224,15 +351,15 @@ func suggestCommitMessage(files []gitStatusFile, stat, diff, diffNotice, languag
 
 func analyzeCommitChanges(files []gitStatusFile, diff string) commitChangeAnalysis {
 	a := commitChangeAnalysis{}
-	scopeCounts := map[string]int{}
-	scopeBestN := 0
 	docOnly, testOnly, depsOnly, styleOnly, codeChange, hasFile := true, true, true, true, false, false
+	allPaths := make([]string, 0, len(files))
 	for _, f := range files {
 		p := strings.ReplaceAll(f.Path, "\\", "/")
 		if p == "" {
 			continue
 		}
 		hasFile = true
+		allPaths = append(allPaths, p)
 		switch f.Status {
 		case "A", "??":
 			a.added = append(a.added, p)
@@ -259,15 +386,6 @@ func analyzeCommitChanges(files []gitStatusFile, diff string) commitChangeAnalys
 		}
 		if strings.HasPrefix(p, "web/") || strings.HasPrefix(p, "internal/") || strings.HasPrefix(p, "cmd/") || strings.HasPrefix(p, "pkg/") {
 			codeChange = true
-		}
-		scope := p
-		if idx := strings.Index(p, "/"); idx > 0 {
-			scope = p[:idx]
-		}
-		scopeCounts[scope]++
-		if scopeCounts[scope] > scopeBestN {
-			a.topScope = scope
-			scopeBestN = scopeCounts[scope]
 		}
 	}
 	a.depsOnly = hasFile && depsOnly
@@ -305,7 +423,121 @@ func analyzeCommitChanges(files []gitStatusFile, diff string) commitChangeAnalys
 	default:
 		a.prefix = "chore"
 	}
+	a.scope = deepestScope(allPaths)
+	a.determineVerbAndSymbol()
 	return a
+}
+
+// determineVerbAndSymbol は analyze の最後で呼ばれ、subject に載せる動詞と主辞を
+// 一意に決める。優先順は「情報量が多い動詞から」で、最後まで決まらなければ
+// prefix の系統（docs/style/chore は update、それ以外は refactor）にフォールバック。
+func (a *commitChangeAnalysis) determineVerbAndSymbol() {
+	hasAdditions := len(a.added) > 0 || len(a.funcs) > 0 || len(a.types) > 0 || len(a.routes) > 0
+	hasRemovals := len(a.deleted) > 0 || len(a.removedRts) > 0
+	renameOnly := len(a.renamePairs) > 0 && !hasAdditions && !hasRemovals && len(a.modified) == 0
+	// move: 同じ関数名が「別ファイル」で削除＋追加されている場合に真の "move" とみなす。
+	// 同一ファイル内の削除＋追加（＝関数本体の書き換え）は refactor 扱いで、move には
+	// 昇格させない（誤検出防止・addedFuncSites / deletedFuncSites でファイルを見る）。
+	var moved []string
+	for _, name := range a.funcs {
+		addFile, hasAdd := a.addedFuncSites[name]
+		delFile, hasDel := a.deletedFuncSites[name]
+		if hasAdd && hasDel && addFile != delFile {
+			moved = append(moved, name)
+		}
+	}
+	switch {
+	case a.depsOnly:
+		a.verb = "bump"
+		if len(a.depFiles) > 0 {
+			a.symbolHead = baseName(a.depFiles[0])
+			a.symbolCount = len(a.depFiles)
+		}
+	case renameOnly:
+		a.verb = "rename"
+		a.symbolHead = a.renamePairs[0]
+		a.symbolCount = len(a.renamePairs)
+	case len(moved) > 0:
+		a.verb = "move"
+		a.symbolHead = moved[0]
+		a.symbolCount = len(moved)
+	case hasAdditions && !hasRemovals:
+		a.verb = "add"
+		a.symbolHead, a.symbolCount = pickAddSymbol(a)
+	case hasRemovals && !hasAdditions:
+		a.verb = "remove"
+		a.symbolHead, a.symbolCount = pickRemoveSymbol(a)
+	case a.handleAdds >= 3 && a.handleAdds*2 >= a.locAdded:
+		a.verb = "handle"
+		a.symbolHead, a.symbolCount = pickChangeSymbol(a)
+	case a.locDeleted >= 15 && a.locAdded*3 < a.locDeleted*2:
+		a.verb = "simplify"
+		a.symbolHead, a.symbolCount = pickChangeSymbol(a)
+	default:
+		switch a.prefix {
+		case "docs", "style", "chore", "test":
+			a.verb = "update"
+		default:
+			a.verb = "refactor"
+		}
+		a.symbolHead, a.symbolCount = pickChangeSymbol(a)
+	}
+}
+
+// pickAddSymbol は「何が新規追加されたか」の主辞を選ぶ。API ルートはユーザー可視で
+// 最も情報量が高いので最優先、次に型 → 関数 → 追加されたファイルの順で拾う。
+func pickAddSymbol(a *commitChangeAnalysis) (string, int) {
+	if len(a.routes) > 0 {
+		return a.routes[0], len(a.routes)
+	}
+	if len(a.types) > 0 {
+		return a.types[0], len(a.types)
+	}
+	if len(a.funcs) > 0 {
+		return a.funcs[0], len(a.funcs)
+	}
+	if len(a.added) > 0 {
+		return baseName(a.added[0]), len(a.added)
+	}
+	return "", 0
+}
+
+func pickRemoveSymbol(a *commitChangeAnalysis) (string, int) {
+	if len(a.removedRts) > 0 {
+		return a.removedRts[0], len(a.removedRts)
+	}
+	if len(a.deleted) > 0 {
+		return baseName(a.deleted[0]), len(a.deleted)
+	}
+	if len(a.deletedFuncs) > 0 {
+		return a.deletedFuncs[0], len(a.deletedFuncs)
+	}
+	return "", 0
+}
+
+// pickChangeSymbol は「特定のシンボル追加/削除ではないが何かは変わった」ケースで
+// subject に載せる主辞を選ぶ。関数名 / 型名 > 変更ファイル basename > 追加/削除
+// ファイル basename の順で拾う。
+func pickChangeSymbol(a *commitChangeAnalysis) (string, int) {
+	if len(a.funcs) > 0 {
+		return a.funcs[0], len(a.funcs)
+	}
+	if len(a.types) > 0 {
+		return a.types[0], len(a.types)
+	}
+	if len(a.modified) > 0 {
+		return baseName(a.modified[0]), len(a.modified)
+	}
+	if len(a.added) > 0 {
+		return baseName(a.added[0]), len(a.added)
+	}
+	if len(a.deleted) > 0 {
+		return baseName(a.deleted[0]), len(a.deleted)
+	}
+	if len(a.renamePairs) > 0 {
+		return a.renamePairs[0], len(a.renamePairs)
+	}
+	return "", 0
 }
 
 // scanDiff は差分テキストから「追加/削除された HTTP ルート・追加された Go 関数/型・
@@ -318,6 +550,7 @@ func (a *commitChangeAnalysis) scanDiff(diff string) {
 	seenRoute := map[string]struct{}{}
 	seenRmRoute := map[string]struct{}{}
 	seenFunc := map[string]struct{}{}
+	seenDelFunc := map[string]struct{}{}
 	seenType := map[string]struct{}{}
 	cur := ""
 	renameOld := ""
@@ -342,12 +575,22 @@ func (a *commitChangeAnalysis) scanDiff(diff string) {
 		isDel := strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "--")
 		switch {
 		case isAdd:
+			a.locAdded++
+			if reHandleErrGo.MatchString(line) || reHandleThrow.MatchString(line) || reHandleCatch.MatchString(line) {
+				a.handleAdds++
+			}
 			if m := reGitRoute.FindStringSubmatch(line); m != nil {
 				addUnique(&a.routes, seenRoute, m[1])
 			}
 			if strings.HasSuffix(cur, ".go") {
 				if m := reAddedGoFunc.FindStringSubmatch(line); m != nil {
 					addUnique(&a.funcs, seenFunc, m[1])
+					if a.addedFuncSites == nil {
+						a.addedFuncSites = map[string]string{}
+					}
+					if _, ok := a.addedFuncSites[m[1]]; !ok {
+						a.addedFuncSites[m[1]] = cur
+					}
 				}
 				if m := reAddedGoType.FindStringSubmatch(line); m != nil {
 					addUnique(&a.types, seenType, m[1])
@@ -357,8 +600,20 @@ func (a *commitChangeAnalysis) scanDiff(diff string) {
 				a.i18nKeys++
 			}
 		case isDel:
+			a.locDeleted++
 			if m := reGitRoute.FindStringSubmatch(line); m != nil {
 				addUnique(&a.removedRts, seenRmRoute, m[1])
+			}
+			if strings.HasSuffix(cur, ".go") {
+				if m := reDeletedGoFunc.FindStringSubmatch(line); m != nil {
+					addUnique(&a.deletedFuncs, seenDelFunc, m[1])
+					if a.deletedFuncSites == nil {
+						a.deletedFuncSites = map[string]string{}
+					}
+					if _, ok := a.deletedFuncSites[m[1]]; !ok {
+						a.deletedFuncSites[m[1]] = cur
+					}
+				}
 			}
 		}
 	}
@@ -390,67 +645,23 @@ func filterOutSet(items []string, set map[string]struct{}) []string {
 	return out
 }
 
+// subjectLine は Conventional Commits ハイブリッド型で subject を組む：
+//   JA: "<type>(<scope>): <symbol> を<動詞>"（handle/rename は助詞と語尾を個別処理）
+//   EN: "<type>(<scope>): <verb> <symbol>"
+// scope が prefix と一致・空・prefix が既に括弧付きの場合は (scope) を付けない。
+// 変更が全く検出できないレアケースは無情報の "変更なし / no changes" にフォールバック。
 func (a commitChangeAnalysis) subjectLine(ja bool) string {
-	scope := a.topScope
-	if scope == "" {
-		scope = "working tree"
-	}
-	renameOnly := len(a.renamePairs) > 0 && len(a.added) == 0 && len(a.deleted) == 0 && len(a.modified) == 0
-	if ja {
-		var what string
-		switch {
-		case a.depsOnly:
-			what = "依存関係を更新"
-		case a.styleOnly:
-			what = "スタイルを調整"
-		case renameOnly:
-			what = withMoreJa(a.renamePairs[0], len(a.renamePairs)) + " にリネーム"
-		case len(a.routes) > 0:
-			what = withMoreJa(a.routes[0], len(a.routes)) + " エンドポイントを追加"
-		case len(a.added) > 0:
-			what = withMoreJa(baseName(a.added[0]), len(a.added)) + " を追加"
-		case len(a.funcs) > 0:
-			what = withMoreJa(a.funcs[0], len(a.funcs)) + " を追加"
-		case len(a.types) > 0:
-			what = withMoreJa(a.types[0], len(a.types)) + " 型を追加"
-		case len(a.removedRts) > 0:
-			what = withMoreJa(a.removedRts[0], len(a.removedRts)) + " エンドポイントを削除"
-		case len(a.deleted) > 0 && len(a.modified) == 0:
-			what = withMoreJa(baseName(a.deleted[0]), len(a.deleted)) + " を削除"
-		case len(a.modified) > 0:
-			// 無情報な「scope を更新」を避け、代表的な変更ファイル名で要約する（方針2）。
-			what = withMoreJa(baseName(a.modified[0]), len(a.modified)) + " を変更"
-		default:
-			what = scope + " を更新"
+	head := prefixWithScope(a.prefix, a.scope)
+	if a.symbolHead == "" {
+		if ja {
+			return head + ": 変更なし"
 		}
-		return a.prefix + ": " + what
+		return head + ": no changes"
 	}
-	var what string
-	switch {
-	case a.depsOnly:
-		what = "update dependencies"
-	case a.styleOnly:
-		what = "tweak styles"
-	case renameOnly:
-		what = "rename " + withMoreEn(a.renamePairs[0], len(a.renamePairs))
-	case len(a.routes) > 0:
-		what = "add " + withMoreEn(a.routes[0], len(a.routes)) + " endpoint(s)"
-	case len(a.added) > 0:
-		what = "add " + withMoreEn(baseName(a.added[0]), len(a.added))
-	case len(a.funcs) > 0:
-		what = "add " + withMoreEn(a.funcs[0], len(a.funcs))
-	case len(a.types) > 0:
-		what = "add " + withMoreEn(a.types[0], len(a.types)) + " type(s)"
-	case len(a.removedRts) > 0:
-		what = "remove " + withMoreEn(a.removedRts[0], len(a.removedRts)) + " endpoint(s)"
-	case len(a.deleted) > 0 && len(a.modified) == 0:
-		what = "remove " + withMoreEn(baseName(a.deleted[0]), len(a.deleted))
-	case len(a.modified) > 0:
-		what = "update " + withMoreEn(baseName(a.modified[0]), len(a.modified))
-	default:
-		what = "update " + scope
+	if ja {
+		return head + ": " + jaVerbPhrase(a.verb, withMoreJa(a.symbolHead, a.symbolCount))
 	}
-	return a.prefix + ": " + what
+	return head + ": " + enVerbPhrase(a.verb, withMoreEn(a.symbolHead, a.symbolCount))
 }
 
 func (a commitChangeAnalysis) bodyText(ja bool, stat, diffNotice string, total int) string {
