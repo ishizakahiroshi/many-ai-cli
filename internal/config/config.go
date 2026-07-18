@@ -639,14 +639,15 @@ type Config struct {
 		// 「ディスクの exe ≠ 稼働中 Hub のバイナリ」かつアクティブセッション 0 の
 		// とき、古い Hub を自動で停止→再起動して新バイナリに載せ替える。
 		// false にすると載せ替えず警告ログのみ（手動再起動に委ねる）。
-		StaleBinaryAutoRestart    bool     `yaml:"stale_binary_auto_restart"`
-		LogDir                    string   `yaml:"log_dir"`
-		IdleTimeoutMin            int      `yaml:"idle_timeout_min"`
-		WrapperReconnectGraceSec  int      `yaml:"wrapper_reconnect_grace_sec"`
-		AllowLoopbackWithoutToken bool     `yaml:"allow_loopback_without_token,omitempty" json:"allow_loopback_without_token,omitempty"`
-		TrustedNetworks           []string `yaml:"trusted_networks,omitempty" json:"trusted_networks,omitempty"`
-		AllowedHosts              []string `yaml:"allowed_hosts,omitempty" json:"allowed_hosts,omitempty"`
-		EnvKind                   string   `yaml:"env_kind,omitempty" json:"env_kind,omitempty"`
+		StaleBinaryAutoRestart     bool     `yaml:"stale_binary_auto_restart"`
+		LogDir                     string   `yaml:"log_dir"`
+		IdleTimeoutMin             int      `yaml:"idle_timeout_min"`
+		WrapperReconnectGraceSec   int      `yaml:"wrapper_reconnect_grace_sec"`
+		WrapperSendWriteTimeoutSec int      `yaml:"wrapper_send_write_timeout_sec"`
+		AllowLoopbackWithoutToken  bool     `yaml:"allow_loopback_without_token,omitempty" json:"allow_loopback_without_token,omitempty"`
+		TrustedNetworks            []string `yaml:"trusted_networks,omitempty" json:"trusted_networks,omitempty"`
+		AllowedHosts               []string `yaml:"allowed_hosts,omitempty" json:"allowed_hosts,omitempty"`
+		EnvKind                    string   `yaml:"env_kind,omitempty" json:"env_kind,omitempty"`
 	} `yaml:"hub"`
 	Log LogConfig `yaml:"log"`
 	// Input はブラウザ入力欄から PTY へ送る際の調整値。
@@ -820,6 +821,7 @@ func defaultConfig(home string) *Config {
 	cfg.Hub.LogDir = filepath.Join(logHome, ".many-ai-cli", "logs")
 	cfg.Hub.IdleTimeoutMin = 60
 	cfg.Hub.WrapperReconnectGraceSec = 3600
+	cfg.Hub.WrapperSendWriteTimeoutSec = 5
 	cfg.Log.Enabled = true
 	// セッションログは既定で無効（オプトイン）。.log に秘密情報が平文で残るリスクのため。
 	cfg.Log.SessionEnabled = false

@@ -28,14 +28,16 @@ import (
 )
 
 const (
-	reconnectDialInterval = 2 * time.Second
-	replayBufferLimit     = 64 * 1024 // bytes of recent PTY output to replay on reconnect
-	hubProbeTimeout       = 1 * time.Second
-	hubStartupTimeout     = 10 * time.Second
-	hubStartupPoll        = 100 * time.Millisecond
-	processCloseGrace     = 2 * time.Second
-	ptyInputChunkBytes    = 1024
-	ptyInputChunkDelay    = 3 * time.Millisecond
+	reconnectDialInterval          = 2 * time.Second
+	replayBufferLimit              = 64 * 1024 // bytes of recent PTY output to replay on reconnect
+	hubProbeTimeout                = 1 * time.Second
+	hubStartupTimeout              = 10 * time.Second
+	hubStartupPoll                 = 100 * time.Millisecond
+	processCloseGrace              = 2 * time.Second
+	ptyInputChunkBytes             = 1024
+	ptyInputChunkDelay             = 3 * time.Millisecond
+	defaultWrapperSendWriteTimeout = 5 * time.Second
+	ptyOutputQueueCapacity         = 64
 )
 
 // reconnectGrace returns the wrapper's grace period before giving up after Hub crash.
@@ -48,17 +50,32 @@ func reconnectGrace(cfg *config.Config) time.Duration {
 	return time.Duration(sec) * time.Second
 }
 
+func wrapperSendWriteTimeout(cfg *config.Config) time.Duration {
+	if cfg == nil || cfg.Hub.WrapperSendWriteTimeoutSec <= 0 {
+		return defaultWrapperSendWriteTimeout
+	}
+	return time.Duration(cfg.Hub.WrapperSendWriteTimeoutSec) * time.Second
+}
+
 // wrapperSession は接続状態（現在の WS conn / session ID）を管理する。
 // reconnect 時に conn と sid が入れ替わるため、stateMu で保護する。
 type wrapperSession struct {
-	stateMu     sync.Mutex
-	sendMu      sync.Mutex // websocket.JSON.Send の直列化
-	currentConn *websocket.Conn
-	currentSID  int
+	stateMu          sync.Mutex
+	sendMu           sync.Mutex // websocket.JSON.Send の直列化
+	currentConn      *websocket.Conn
+	currentSID       int
+	sendWriteTimeout time.Duration
 }
 
-func newWrapperSession(conn *websocket.Conn, sid int) *wrapperSession {
-	return &wrapperSession{currentConn: conn, currentSID: sid}
+func newWrapperSession(conn *websocket.Conn, sid int, sendWriteTimeout time.Duration) *wrapperSession {
+	if sendWriteTimeout <= 0 {
+		sendWriteTimeout = defaultWrapperSendWriteTimeout
+	}
+	return &wrapperSession{
+		currentConn:      conn,
+		currentSID:       sid,
+		sendWriteTimeout: sendWriteTimeout,
+	}
 }
 
 func (ws *wrapperSession) getSID() int {
@@ -69,7 +86,9 @@ func (ws *wrapperSession) getSID() int {
 
 // sendMsg は現在の conn にメッセージを送信する。
 // 複数 goroutine から呼んでも sendMu で直列化される。
-func (ws *wrapperSession) sendMsg(m proto.Message) {
+// 書き込みが詰まった場合に PTY 読み出し側まで巻き込まないよう、
+// 呼び出し側はエラーを transport fault として扱う。
+func (ws *wrapperSession) sendMsg(m proto.Message) error {
 	ws.sendMu.Lock()
 	defer ws.sendMu.Unlock()
 
@@ -77,9 +96,16 @@ func (ws *wrapperSession) sendMsg(m proto.Message) {
 	c := ws.currentConn
 	ws.stateMu.Unlock()
 	if c == nil {
-		return
+		return fmt.Errorf("wrapper websocket is not connected")
 	}
-	_ = websocket.JSON.Send(c, m)
+	timeout := ws.sendWriteTimeout
+	if timeout <= 0 {
+		timeout = defaultWrapperSendWriteTimeout
+	}
+	if err := c.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+		return fmt.Errorf("set wrapper websocket write deadline: %w", err)
+	}
+	return websocket.JSON.Send(c, m)
 }
 
 func (ws *wrapperSession) swapConn(c *websocket.Conn, sid int) {
@@ -103,6 +129,26 @@ func (ws *wrapperSession) swapConn(c *websocket.Conn, sid int) {
 
 func (ws *wrapperSession) clearConn(broken *websocket.Conn) {
 	ws.closeCurrentConn(broken)
+}
+
+func (ws *wrapperSession) isCurrentConn(c *websocket.Conn) bool {
+	ws.stateMu.Lock()
+	defer ws.stateMu.Unlock()
+	return c != nil && ws.currentConn == c
+}
+
+// abortCurrentConn closes the current connection without waiting for sendMu.
+// It is used by the bounded PTY output queue when a writer may be blocked in
+// websocket I/O. Closing the underlying connection interrupts that write;
+// the normal receive loop then observes the close and clears the state.
+func (ws *wrapperSession) abortCurrentConn() {
+	ws.stateMu.Lock()
+	c := ws.currentConn
+	ws.currentConn = nil
+	ws.stateMu.Unlock()
+	if c != nil {
+		_ = c.Close()
+	}
 }
 
 func (ws *wrapperSession) closeCurrentConn(c *websocket.Conn) {
@@ -159,6 +205,8 @@ type reconnectSupervisor struct {
 	reconnectCh      <-chan struct{}
 	startReceiveLoop func(c *websocket.Conn)
 	snapshotReplay   func() []byte
+	transportBroken  *atomic.Bool
+	resumeOutput     func()
 	// probeHub はテスト時に差し替えられる。nil の場合は probeHubAlive を使う。
 	probeHub func(cfg *config.Config) bool
 }
@@ -176,7 +224,8 @@ func (r *reconnectSupervisor) run() {
 		case <-r.reconnectCh:
 		}
 		intentional := r.intentional.Load()
-		if !intentional && probe(r.cfg) {
+		transportBroken := r.transportBroken != nil && r.transportBroken.Load()
+		if !intentional && !transportBroken && probe(r.cfg) {
 			r.logger.Info("hub still alive after WS close — treating as intentional disconnect", "session_id", r.ws.getSID())
 			_ = r.ps.Close()
 			r.closeDone()
@@ -231,6 +280,23 @@ func (r *reconnectSupervisor) run() {
 			}
 			r.logger.Info("wrapper reconnected to hub", "old_sid", r.ws.getSID(), "new_sid", newSID)
 			r.ws.swapConn(newConn, newSID)
+			// A receive loop for the old connection may have reported the same
+			// close while the reattach handshake was in flight. Do not let that
+			// stale signal trigger a second supervisor iteration after reattach.
+			for {
+				select {
+				case <-r.reconnectCh:
+				default:
+					goto reconnectSignalsDrained
+				}
+			}
+		reconnectSignalsDrained:
+			if r.transportBroken != nil {
+				r.transportBroken.Store(false)
+			}
+			if r.resumeOutput != nil {
+				r.resumeOutput()
+			}
 			r.startReceiveLoop(newConn)
 			r.intentional.Store(false)
 			reconnected = true
@@ -238,14 +304,135 @@ func (r *reconnectSupervisor) run() {
 	}
 }
 
-// ptyPump は PTY 出力を読み出し、Hub WS へ pty_data として送信し続ける。
+// ptyOutputWriter は PTY 出力を Hub WS へ非同期送信する。
+// queue が満杯になった場合はデータを捨てず、transport fault として
+// 接続を切断する。切断中の出力は wrapperSession の replay buffer に残り、
+// 再接続時に Hub へ再送される。
+type ptyOutputWriter struct {
+	ws                     *wrapperSession
+	outCh                  chan []byte
+	mu                     sync.Mutex
+	accepting              bool
+	closed                 bool
+	done                   chan struct{}
+	notifyTransportFailure func()
+}
+
+func newPTYOutputWriter(ws *wrapperSession, capacity int, notifyTransportFailure func()) *ptyOutputWriter {
+	if capacity <= 0 {
+		capacity = ptyOutputQueueCapacity
+	}
+	return &ptyOutputWriter{
+		ws:                     ws,
+		outCh:                  make(chan []byte, capacity),
+		accepting:              true,
+		done:                   make(chan struct{}),
+		notifyTransportFailure: notifyTransportFailure,
+	}
+}
+
+func (w *ptyOutputWriter) enqueue(chunk []byte) {
+	if len(chunk) == 0 {
+		return
+	}
+	w.mu.Lock()
+	if !w.accepting || w.closed {
+		w.mu.Unlock()
+		return
+	}
+	select {
+	case w.outCh <- chunk:
+		w.mu.Unlock()
+		return
+	default:
+		// Keep PTY reads non-blocking. Terminal byte streams cannot safely
+		// lose an arbitrary middle chunk, so disconnect and let replay/reconnect
+		// restore a coherent recent view.
+		w.accepting = false
+		w.mu.Unlock()
+		w.triggerTransportFailure()
+	}
+}
+
+func (w *ptyOutputWriter) isAccepting() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.accepting && !w.closed
+}
+
+func (w *ptyOutputWriter) failTransport() {
+	w.mu.Lock()
+	if !w.accepting || w.closed {
+		w.mu.Unlock()
+		return
+	}
+	w.accepting = false
+	w.mu.Unlock()
+	w.triggerTransportFailure()
+}
+
+func (w *ptyOutputWriter) triggerTransportFailure() {
+	if w.notifyTransportFailure != nil {
+		go w.notifyTransportFailure()
+	}
+}
+
+func (w *ptyOutputWriter) run() {
+	defer close(w.done)
+	for chunk := range w.outCh {
+		if !w.isAccepting() {
+			continue
+		}
+		if err := w.ws.sendMsg(proto.Message{
+			Type:      "pty_data",
+			SessionID: w.ws.getSID(),
+			Data:      chunk,
+		}); err != nil {
+			w.failTransport()
+		}
+	}
+}
+
+// resume discards any chunks queued before the transport fault and resumes
+// accepting fresh PTY output after a successful reattach. The replay buffer
+// carries the recent output across the gap, so stale queued chunks must not be
+// sent a second time after reattach.
+func (w *ptyOutputWriter) resume() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed {
+		return
+	}
+	for {
+		select {
+		case <-w.outCh:
+		default:
+			w.accepting = true
+			return
+		}
+	}
+}
+
+func (w *ptyOutputWriter) finish() {
+	w.mu.Lock()
+	if !w.closed {
+		w.closed = true
+		w.accepting = false
+		close(w.outCh)
+	}
+	w.mu.Unlock()
+	<-w.done
+}
+
+// ptyPump は PTY 出力を読み出し、enqueue へ渡し続ける。
 // ストリーム終端まで読み切ったら closeDone を呼んで done を閉じる。
 // 戻り値は ps.Wait() で使う waitErr。
 func ptyPump(
 	ps processSession,
 	lf *os.File,
 	rawMaxBytes int64,
-	ws *wrapperSession,
+	enqueue func([]byte),
+	finishOutput func(),
 	appendReplay func([]byte),
 	closeDone func(),
 ) {
@@ -266,7 +453,7 @@ func ptyPump(
 					rawWritten += int64(len(out))
 				}
 				appendReplay(out)
-				ws.sendMsg(proto.Message{Type: "pty_data", SessionID: ws.getSID(), Data: out})
+				enqueue(out)
 			}
 		}
 		if readErr != nil {
@@ -280,8 +467,9 @@ func ptyPump(
 			_, _ = lf.Write(flushed)
 		}
 		appendReplay(flushed)
-		ws.sendMsg(proto.Message{Type: "pty_data", SessionID: ws.getSID(), Data: flushed})
+		enqueue(flushed)
 	}
+	finishOutput()
 	closeDone()
 }
 
@@ -573,7 +761,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	}
 	defer ps.Close()
 
-	wses := newWrapperSession(conn, sessionID)
+	wses := newWrapperSession(conn, sessionID, wrapperSendWriteTimeout(cfg))
 
 	// Recent PTY output buffer: replayed to UI after a successful reconnect so
 	// the new session card has context for what happened during the gap.
@@ -607,6 +795,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// したら reattach で復活、新コンソール窓ポップアップも発生しない）。
 	// 再接続成功時に false に戻す。
 	var intentionalShutdown atomic.Bool
+	var transportBroken atomic.Bool
 
 	reconnectCh := make(chan struct{}, 1)
 	notifyReconnect := func() {
@@ -621,8 +810,11 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 			defer func() {
 				if r := recover(); r != nil {
 					logger.Error("hub-to-wrapper goroutine panic", "session_id", wses.getSID(), "recover", r)
+					wasCurrent := wses.isCurrentConn(c)
 					wses.clearConn(c)
-					notifyReconnect()
+					if wasCurrent && !transportBroken.Load() {
+						notifyReconnect()
+					}
 				}
 			}()
 			for {
@@ -634,8 +826,11 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 					default:
 					}
 					logger.Info("hub WS read failed", "session_id", wses.getSID(), "err", err)
+					wasCurrent := wses.isCurrentConn(c)
 					wses.clearConn(c)
-					notifyReconnect()
+					if wasCurrent && !transportBroken.Load() {
+						notifyReconnect()
+					}
 					return
 				}
 				switch m.Type {
@@ -709,6 +904,17 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	}
 	startReceiveLoop(conn)
 
+	transportFailure := func() {
+		// Set this before closing the socket. The receive loop may observe the
+		// close first; supervisor must still treat this as a reconnectable
+		// transport fault even while the Hub HTTP endpoint remains alive.
+		transportBroken.Store(true)
+		wses.abortCurrentConn()
+		notifyReconnect()
+	}
+	outputWriter := newPTYOutputWriter(wses, ptyOutputQueueCapacity, transportFailure)
+	go outputWriter.run()
+
 	// Reconnect supervisor: distinguishes intentional session close (Hub HTTP
 	// alive) from Hub process exit (Hub HTTP unreachable). The former kills PTY
 	// immediately (preserving dismiss / kill-all / idle-timeout UX). For a Hub
@@ -738,6 +944,8 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		reconnectCh:      reconnectCh,
 		startReceiveLoop: startReceiveLoop,
 		snapshotReplay:   snapshotReplay,
+		transportBroken:  &transportBroken,
+		resumeOutput:     outputWriter.resume,
 	}
 	go sup.run()
 
@@ -745,7 +953,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// carry holds an incomplete UTF-8 sequence from the previous read that must
 	// be prepended to the next chunk before decoding (pumpChunk handles this).
 	rawMaxBytes := int64(cfg.Log.SessionMaxSizeMB) * 1024 * 1024
-	ptyPump(ps, lf, rawMaxBytes, wses, appendReplay, closeDone)
+	ptyPump(ps, lf, rawMaxBytes, outputWriter.enqueue, outputWriter.finish, appendReplay, closeDone)
 
 	waitErr := ps.Wait()
 	state, code := "completed", 0
@@ -772,21 +980,21 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model st
 	}
 	homeDir, codexHome, claudeDir := userSkillDirs()
 	if err := websocket.JSON.Send(conn, proto.Message{
-		Type:       "register",
-		Role:       "wrapper",
-		Provider:   provider,
-		Display:    display,
-		CWD:        cwd,
-		Label:      label,
-		Model:      model,
-		PID:        os.Getpid(),
-		Shell:      DetectShell(),
-		Token:      cfg.Token,
-		HomeDir:    homeDir,
-		CodexHome:  codexHome,
-		ClaudeDir:  claudeDir,
-		Cols:       termCols,
-		Rows:       termRows,
+		Type:      "register",
+		Role:      "wrapper",
+		Provider:  provider,
+		Display:   display,
+		CWD:       cwd,
+		Label:     label,
+		Model:     model,
+		PID:       os.Getpid(),
+		Shell:     DetectShell(),
+		Token:     cfg.Token,
+		HomeDir:   homeDir,
+		CodexHome: codexHome,
+		ClaudeDir: claudeDir,
+		Cols:      termCols,
+		Rows:      termRows,
 	}); err != nil {
 		_ = conn.Close()
 		return nil, proto.Message{}, err
