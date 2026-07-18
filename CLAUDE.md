@@ -2,7 +2,8 @@
 
 > 最終更新: 2026-07-05(日) — 監査反映（opencode provider 追記・subcommand 一覧・internal/log 実装済み化・archive パス修正）
 
-> 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。
+> 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。  
+> **Vietnamese translation (team docs):** [CLAUDE.vi.md](CLAUDE.vi.md) · [README.vi.md](README.vi.md) · [docs/README.vi.md](docs/README.vi.md)
 
 ## プロジェクト概要
 

@@ -51,7 +51,7 @@ declare global {
 
 interface Window {
   renderOrchestrationDashboard?: () => void;
-    __lang?: 'ja' | 'en' | string;
+    __lang?: 'ja' | 'en' | 'vi' | string;
     t?: (key: string, vars?: Record<string, unknown> | string) => string;
     setLang?: (lang: string) => void;
     showToast?: (message: string, anchor?: Element | null) => void;
