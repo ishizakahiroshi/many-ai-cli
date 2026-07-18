@@ -1119,6 +1119,21 @@ many-ai-cli log-clean ~/.many-ai-cli/logs/sessions/<session>.jsonl -o transcript
 
 ---
 
+## バグを報告する
+
+Hub UI 右上の **バグ報告**、または `many-ai-cli issue` を使います。どちらも GitHub を開く前に送信全文を表示し、外部へ渡す直前に機密情報スクラブを再実行します。
+
+```bash
+many-ai-cli issue "承認ボタンを1回押しても閉じない"
+many-ai-cli issue --provider codex --dry-run
+```
+
+既定の報告に入るのは、症状、任意の再現手順、many-ai-cli のバージョン、OS/アーキテクチャ、provider/model、ブラウザ user agent など allowlist 済みの環境情報だけです。`config.yaml` 全体を添付することはありません。本文が長すぎる場合や GitHub を安全に開けない場合は、スクラブ済み Markdown を `~/.many-ai-cli/reports/` に保存し、内容を再確認して手動で貼り付けられます。
+
+セッションログ添付は **既定 OFF** です。プレビューで明示的に有効化し、スクラブ済みのログ末尾を確認してから確定した場合だけ動作します。`gh` CLI が必要で、添付先は secret gist です。secret gist は一覧には出ませんが、URL を知っている人は閲覧できます。スクリーンショットは自動アップロードしないため、GitHub Issue フォームが開いてから手動でドロップしてください。
+
+---
+
 ## トラブルシュート
 
 ### spawn 直後にセッションカードが `切断` 表示になる (Windows + pnpm 導入版 CLI)

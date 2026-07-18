@@ -40,6 +40,7 @@ import { initHistoryLite } from './app/history-lite.js';
 import { initMobileShortNudge } from './app/mobile-short-nudge.js';
 import { initMobileApprovalOnly } from './app/mobile-approval-only.js';
 import { initDebugApprovalOverlay } from './app/debug-approval-overlay.js';
+import { initBugReportModal } from './app/bug-report-modal.js';
 // ステータスバー初期化（/api/user-prefs から enabled を読む）
 initTokenStatusbar();
 // detached-grid モード判定（/?view=detached-grid の場合のみ初期化）
@@ -63,5 +64,6 @@ initFirstRunTour();
 initHistoryLite();
 initMobileShortNudge();
 initMobileApprovalOnly();
+initBugReportModal();
 // TEMP: v0.5.0 承認ポップアップ非表示調査用の画面右下デバッグバッジ（原因確定後に削除）
 initDebugApprovalOverlay();
