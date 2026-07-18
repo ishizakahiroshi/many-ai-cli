@@ -81,11 +81,12 @@ export const DEFAULT_TRIGGER_PHRASE_JA        = 'サウンドエンド';
 export const DEFAULT_TRIGGER_PHRASE_EN        = 'SoundEnd';
 export function getDefaultWakeWordPhrase() {
   const lang = (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_LANG_KEY)) || 'ja';
-  return lang === 'en' ? DEFAULT_WAKE_WORD_PHRASE_EN : DEFAULT_WAKE_WORD_PHRASE_JA;
+  // vi uses English phrase defaults (Latin script / SR engines handle en well).
+  return lang === 'ja' ? DEFAULT_WAKE_WORD_PHRASE_JA : DEFAULT_WAKE_WORD_PHRASE_EN;
 }
 export function getDefaultTriggerPhrase() {
   const lang = (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_LANG_KEY)) || 'ja';
-  return lang === 'en' ? DEFAULT_TRIGGER_PHRASE_EN : DEFAULT_TRIGGER_PHRASE_JA;
+  return lang === 'ja' ? DEFAULT_TRIGGER_PHRASE_JA : DEFAULT_TRIGGER_PHRASE_EN;
 }
 export const CWD_HISTORY_MAX               = 10;
 
