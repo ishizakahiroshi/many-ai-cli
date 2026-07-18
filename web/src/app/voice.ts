@@ -312,7 +312,9 @@ import { getActiveTriggerPhrase, normalizeTriggerMatchText, textEndsWithTriggerP
 
   function getLang() {
     const lang = localStorage.getItem(STORAGE_LANG_KEY) || 'ja';
-    return lang === 'ja' ? 'ja-JP' : 'en-US';
+    if (lang === 'ja') return 'ja-JP';
+    if (lang === 'vi') return 'vi-VN';
+    return 'en-US';
   }
 
   function formatVoiceError(key, code) {
@@ -686,7 +688,9 @@ import { getActiveTriggerPhrase, normalizeTriggerMatchText, textEndsWithTriggerP
 
   function getLang() {
     const lang = localStorage.getItem(STORAGE_LANG_KEY) || 'ja';
-    return lang === 'ja' ? 'ja-JP' : 'en-US';
+    if (lang === 'ja') return 'ja-JP';
+    if (lang === 'vi') return 'vi-VN';
+    return 'en-US';
   }
 
   // hw も recognition と同じく `'aborted'` 後に内部 state が "started" のまま固着し、
