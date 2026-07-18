@@ -8,7 +8,7 @@
 
 **AI コーディング CLI の承認待ちを見逃さない — スマホからでも。** `Claude Code` / `Codex CLI` / `GitHub Copilot CLI` / `Cursor Agent CLI` / `Grok Build CLI` を並列実行できる Web ダッシュボードです。`many-ai-cli` は各 CLI を PTY でラップし、承認待ちを検出した瞬間にデスクトップ／スマホへ通知します。ターミナルを見張り続ける必要はありません。あわせて、複数セッションの承認・監視・ターミナルを 1 画面の Web ダッシュボードで操作できます。
 
-[English README](README.md)
+[English README](README.md) · [README tiếng Việt](README.vi.md)
 
 ---
 
@@ -92,7 +92,7 @@ Gemini CLI は意図的に対象外です。
 - **統合ランチャー（Windows / Linux / macOS）**: `many-ai-cli-launcher` で接続プロファイルから Hub へ接続し既定ブラウザで操作。SSH `serve` / `tunnel` プロファイルは全 OS、WSL プロファイルは Windows で WSL 内に Hub を起動
 - **リモートサーバー / Docker 運用資材**: GHCR image、ユーザー別コンテナ、loopback 限定公開、自動更新スクリプトでサーバー運用
 - **クリーン transcript 生成**: 人間が読める `.txt` を自動生成し、`log-clean` で手動再生成も可能
-- **言語切替**（英語 / 日本語）
+- **言語切替**（英語 / 日本語 / ベトナム語）
 - **ローカル限定**: Hub は `127.0.0.1` のみに bind。`many-ai-cli` 自身はテレメトリを送信しません
 - **リモートアクセス保護**: 設定の「リモートアクセス保護」から、token と認証 cookie を一括再生成する**全アクセス失効**（紛失時のキルスイッチ）、非 loopback アクセス時のみ要求する**任意 PIN**（既定 OFF・ロックアウト付き）、**新規デバイス接続の通知**が使えます
 
