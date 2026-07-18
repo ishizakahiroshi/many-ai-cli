@@ -1130,6 +1130,21 @@ many-ai-cli log-clean ~/.many-ai-cli/logs/sessions/<session>.jsonl -o transcript
 
 ---
 
+## Reporting a bug
+
+Use **Report bug** in the top-right of the Hub UI, or run `many-ai-cli issue`. Both paths show the complete report before opening GitHub and run a final confidential-data scrub immediately before the handoff.
+
+```bash
+many-ai-cli issue "Approval buttons do not close after one click"
+many-ai-cli issue --provider codex --dry-run
+```
+
+The default report contains only the symptom, optional reproduction steps, and allowlisted environment details such as the many-ai-cli version, OS/architecture, provider/model, and browser user agent. The configuration file is never attached wholesale. If a report is too long or GitHub cannot be opened safely, the redacted Markdown is saved under `~/.many-ai-cli/reports/` for manual review and pasting.
+
+Session-log attachment is **off by default**. It runs only after you explicitly enable it in the preview, inspect the redacted log tail, and confirm the report. It requires the `gh` CLI and creates a secret gist; secret gists are unlisted, but anyone who knows the URL can view them. Screenshots are never uploaded automatically—drop them into the GitHub Issue form yourself after it opens.
+
+---
+
 ## Troubleshooting
 
 ### Session card shows `Disconnected` immediately after spawn (Windows + pnpm-installed CLI)

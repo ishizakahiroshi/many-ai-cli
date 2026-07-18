@@ -483,6 +483,13 @@ type Server struct {
 
 	// sshdProber: OpenSSH Server 状態検知の抽象（テストでモック注入）。nil なら OS 実装。
 	sshdProber sshdProber
+
+	// bugReportGistRunner / bugReportSaveMarkdown はバグ報告の外部送信・
+	// ローカル保存境界。テストでは必ず差し替え、gh / 実 home を触らない。
+	bugReportGistRunner   bugReportGistRunner
+	bugReportSaveMarkdown func(string) (string, error)
+	bugReportLogPreviewMu sync.Mutex
+	bugReportLogPreviews  map[string]bugReportLogPreview
 }
 
 type branchRefreshRequest struct {
@@ -838,6 +845,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		Handler:   s.handleWS,
 	})
 	mux.HandleFunc("/api/info", s.handleInfo)
+	mux.HandleFunc("/api/bug-report/preview", s.handleBugReportPreview)
+	mux.HandleFunc("/api/bug-report/finalize", s.handleBugReportFinalize)
 	mux.HandleFunc("/api/doctor", s.handleDoctor)
 	mux.HandleFunc("/api/mobile-connect", s.handleMobileConnect)
 	mux.HandleFunc("/api/mobile-connect/tailscale", s.handleTailscaleStatus)

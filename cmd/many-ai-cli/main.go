@@ -303,6 +303,8 @@ func run(args []string) error {
 			return err
 		}
 		return setupcmd.Run()
+	case "issue":
+		return runIssue(cfg, args[1:], defaultIssueDependencies())
 	case "wrap":
 		if len(args) < 2 {
 			return errors.New("wrap <provider>")
@@ -332,6 +334,6 @@ func run(args []string) error {
 }
 
 func usage() error {
-	fmt.Println("many-ai-cli <serve|connect|setup|doctor|wrap|claude|codex|copilot|cursor-agent|opencode|grok|shell-init|stop|status|profile-export|log-clean|uninstall|version>")
+	fmt.Println("many-ai-cli <serve|connect|setup|doctor|issue|wrap|claude|codex|copilot|cursor-agent|opencode|grok|shell-init|stop|status|profile-export|log-clean|uninstall|version>")
 	return nil
 }
