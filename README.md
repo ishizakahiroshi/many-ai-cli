@@ -8,7 +8,7 @@
 
 **Never miss an approval prompt — even from your phone.** Run `Claude Code`, `Codex CLI`, `GitHub Copilot CLI`, `Cursor Agent CLI`, and `Grok Build CLI` in parallel; `many-ai-cli` watches every session in a PTY and pushes a notification to your desktop or phone the moment any one is blocked waiting for your approval — so you don't have to babysit terminals. It also gives you a local web dashboard to handle approvals, monitoring, and terminals across multiple sessions in one place.
 
-[日本語版 README はこちら](README.ja.md)
+[日本語版 README はこちら](README.ja.md) · [README tiếng Việt](README.vi.md)
 
 ---
 
@@ -92,7 +92,7 @@ Known limits: this is intentionally lightweight. Board changes are detected by 2
 - **Unified launcher (Windows / Linux / macOS)** — `many-ai-cli-launcher` connects to a Hub via saved profiles and opens your default browser: SSH `serve` / `tunnel` profiles work on every OS, and WSL profiles start a Hub inside WSL on Windows
 - **Remote server / Docker deployment assets** — run one Hub container per user from GHCR with loopback-only port publishing and an opt-in auto-update script
 - **Clean transcript generation** — write readable `.txt` transcripts automatically, or regenerate them with `log-clean`
-- **Language switching** (English / Japanese)
+- **Language switching** (English / Japanese / Vietnamese)
 - **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `many-ai-cli` itself
 - **Remote access protection** — Settings → "Remote access protection" offers a **Revoke all access** kill switch (regenerates the token and auth cookie when a device is lost), an **optional PIN** required only for non-loopback access (off by default, with lockout), and **new-device connection notifications**
 
