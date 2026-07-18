@@ -158,7 +158,7 @@ async function buildSegmentToggles(): Promise<void> {
     }
   } catch (_) {}
 
-  const lang = window.__lang === 'en' ? 'en' : 'ja';
+  const lang = window.__lang === 'en' ? 'en' : window.__lang === 'vi' ? 'vi' : 'ja';
   host.textContent = '';
   for (const seg of TOGGLEABLE_SEGMENTS) {
     const label = document.createElement('label');
@@ -172,7 +172,7 @@ async function buildSegmentToggles(): Promise<void> {
       void saveTokenStatusbarPrefs({ segments: { [seg.key]: cb.checked } });
     });
     const span = document.createElement('span');
-    span.textContent = lang === 'en' ? seg.en : seg.ja;
+    span.textContent = (lang === 'ja') ? seg.ja : seg.en;
     label.appendChild(cb);
     label.appendChild(span);
     host.appendChild(label);
@@ -890,7 +890,7 @@ export function applyFontSize(size) {
 }
 
 export function applyLang(lang) {
-  const l = (lang === 'ja' || lang === 'en') ? lang : 'ja';
+  const l = (lang === 'ja' || lang === 'en' || lang === 'vi') ? lang : 'ja';
   const sel = document.getElementById('lang-select');
   if (sel) sel.value = l;
 }
@@ -985,7 +985,9 @@ export function applyLang(lang) {
   const aboutCloseBtn = document.getElementById('about-close-btn');
 
   document.getElementById('settings-readme-btn').addEventListener('click', () => {
-    const file = window.__lang === 'ja' ? 'README.ja.md' : 'README.md';
+    const file = window.__lang === 'ja' ? 'README.ja.md'
+      : window.__lang === 'vi' ? 'README.vi.md'
+      : 'README.md';
     window.open(
       'https://github.com/ishizakahiroshi/many-ai-cli/blob/main/' + file,
       '_blank', 'noopener,noreferrer'
@@ -3127,7 +3129,8 @@ window.addEventListener('files-tab-state-changed', () => {
 // RENDERERS[sectionId]() を呼んで現在値を 1 行文字列で組み立て、textContent に入れる。
 // 値はパネル open 時点で DOM に揃っている前提（既存のロード処理が先に走る）。
 
-function _summaryIsJa(): boolean { return (window as any).__lang !== 'en'; }
+// Prefer Japanese labels for ja; English labels for en/vi (vi uses English secondary labels in mixed summaries).
+function _summaryIsJa(): boolean { return (window as any).__lang === 'ja'; }
 function _summaryLabel(ja: string, en: string): string { return _summaryIsJa() ? ja : en; }
 
 // パスの頭省略。末尾フォルダ名のほうが情報量が大きいため、頭を切る。
@@ -3152,7 +3155,7 @@ type SummaryRenderer = () => string;
 const SUMMARY_RENDERERS: Record<string, SummaryRenderer> = {
   general: () => {
     const lang = localStorage.getItem(STORAGE_LANG_KEY) || 'ja';
-    const langLabel = lang === 'ja' ? '日本語' : 'English';
+    const langLabel = lang === 'ja' ? '日本語' : lang === 'vi' ? 'Tiếng Việt' : 'English';
     const theme = localStorage.getItem(STORAGE_THEME_KEY) || 'light';
     const themeLabel = theme === 'dark' ? 'Dark' : 'Light';
     const fs = localStorage.getItem(STORAGE_FONTSIZE_KEY) || 'medium';

@@ -11,8 +11,11 @@ export function setLang(v: string): void | undefined {
 
 (async () => {
   const stored = localStorage.getItem('ai_cli_hub_lang');
-  const lang = stored || (navigator.language || 'ja').slice(0, 2);
-  window.__lang = ['ja', 'en'].includes(lang) ? lang : 'ja';
+  // navigator.language: "vi", "vi-VN", "en-US", "ja-JP", ...
+  const nav = (navigator.language || 'ja').toLowerCase();
+  const nav2 = nav.startsWith('vi') ? 'vi' : nav.slice(0, 2);
+  const lang = stored || nav2;
+  window.__lang = ['ja', 'en', 'vi'].includes(lang) ? lang : 'ja';
   document.documentElement.lang = window.__lang;
 
   const res = await fetch('/i18n/' + window.__lang + '.json');

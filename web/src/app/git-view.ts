@@ -915,7 +915,12 @@ import { showFileActionsPopup, joinPath } from './path-links.js';
             session: this.sessionId,
             token: this.token,
             mode: 'generate',
-            language: (localStorage.getItem(STORAGE_LANG_KEY) || 'ja').startsWith('en') ? 'en' : 'ja',
+            language: (() => {
+              const l = (localStorage.getItem(STORAGE_LANG_KEY) || 'ja').toLowerCase();
+              if (l.startsWith('en')) return 'en';
+              if (l.startsWith('vi')) return 'en'; // AI commit message: use English when UI is Vietnamese
+              return 'ja';
+            })(),
           }),
         });
         const data = await res.json().catch(() => ({}));
@@ -961,7 +966,12 @@ import { showFileActionsPopup, joinPath } from './path-links.js';
             session: this.sessionId,
             token: this.token,
             mode: 'ai',
-            language: (localStorage.getItem(STORAGE_LANG_KEY) || 'ja').startsWith('en') ? 'en' : 'ja',
+            language: (() => {
+              const l = (localStorage.getItem(STORAGE_LANG_KEY) || 'ja').toLowerCase();
+              if (l.startsWith('en')) return 'en';
+              if (l.startsWith('vi')) return 'en'; // AI commit message: use English when UI is Vietnamese
+              return 'ja';
+            })(),
           }),
         });
         const data = await res.json().catch(() => ({}));
