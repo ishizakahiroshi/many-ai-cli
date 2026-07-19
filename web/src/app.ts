@@ -1632,7 +1632,11 @@ export function isInteractiveFocusTarget(target) {
     '#model-picker-overlay',
     '#about-panel',
     '#session-list',
-    '#topbar'
+    '#topbar',
+    // ターミナル領域上の読み取り専用オーバーレイ。本文のドラッグ選択を
+    // 入力欄フォーカス回収で潰さないため、フォーカス奪取対象外にする。
+    '#grok-chat-viewer',
+    '#history-viewer',
   ].join(','));
 }
 document.addEventListener('mousedown', () => { suppressFocusReclaim = true; });

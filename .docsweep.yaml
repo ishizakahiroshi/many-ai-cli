@@ -1,0 +1,3 @@
+# many-ai-cli: archive は docs/local 配下（gitignore）に置く。
+# ルート archive/ は使わない（誤って git 管理に載るのを防ぐ）。
+archive_dir: docs/local/archive

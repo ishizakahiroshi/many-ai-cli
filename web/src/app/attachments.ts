@@ -125,17 +125,30 @@ if (terminalWrapper) {
   terminalWrapper.addEventListener('click', (e) => {
     if (activeSessionId === null) return;
     if (isInteractiveFocusTarget(e.target)) return;
+    // DOM テキスト選択中は入力欄へフォーカスすると選択が消える
+    const domSel = window.getSelection();
+    if (domSel && !domSel.isCollapsed && String(domSel).length > 0) return;
     const xt = terminals.get(activeSessionId);
     if (!xt?.term.hasSelection()) inputEl.focus();
   });
 
   // xterm.js canvas が click イベントを止める場合のフォールバック:
-  // mouseup は canvas からもバブルするため、こちらで確実にフォーカスを戻す
-  document.getElementById('terminal-area-wrapper')?.addEventListener('mouseup', () => {
+  // mouseup は canvas からもバブルするため、こちらで確実にフォーカスを戻す。
+  // ただし Grok 会話履歴ビューア等の DOM オーバーレイ上では、xterm 未選択の
+  // まま input にフォーカスするとブラウザ選択が消えてコピー不能になる。
+  document.getElementById('terminal-area-wrapper')?.addEventListener('mouseup', (e) => {
     if (activeSessionId === null) return;
+    if (isInteractiveFocusTarget(e.target)) return;
+    const domSel = window.getSelection();
+    if (domSel && !domSel.isCollapsed && String(domSel).length > 0) return;
     const xt = terminals.get(activeSessionId);
     // 50ms 待って xterm の選択状態が確定してから判定
-    setTimeout(() => { if (!xt?.term.hasSelection()) inputEl.focus(); }, 50);
+    setTimeout(() => {
+      if (isInteractiveFocusTarget(e.target)) return;
+      const still = window.getSelection();
+      if (still && !still.isCollapsed && String(still).length > 0) return;
+      if (!xt?.term.hasSelection()) inputEl.focus();
+    }, 50);
   });
 
   terminalWrapper.addEventListener('dragenter', (e) => {
