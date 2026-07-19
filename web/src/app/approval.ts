@@ -31,10 +31,12 @@ const highRiskConfirmationInFlight = new Set<number>();
 const H9_RESTORE_MISS_LIMIT = 3;
 const h9RestoreMisses = new Map();
 
-// 手動「✕ 承認」（消す）で一時的に隠した承認の sig（sessionId → approvalSig）。
+// 手動 dismiss で一時的に隠した承認の sig（sessionId → approvalSig）。
+// 入力欄横「✕ 承認」と action-bar 右上 ✕ の両方が同じ経路（manuallyHideActionBar）を使う。
 // approvalRawOptionsCache / approvalVisibleCache は保持したまま action-bar の描画だけ抑制する。
 // showActionBar の choke point で「同一 sig の承認は描画スキップ・別 sig の新しい承認は抑制解除して描画」する。
 // 「↻ 承認」（再表示）でこのエントリを消し、承認解決（hideActionBar）でも確実に消す。
+// （旧: パネル ✕ は hideActionBar + 60s suppress だったため、抑制切れ・再検出で同一質問が戻っていた）
 const manualHideSig = new Map();
 
 // 複数質問 UI（AskUserQuestion 等）検出の窓と取りこぼし対策。
@@ -1304,9 +1306,10 @@ export function hideActionBar(id) {
   }
 }
 
-// 「✕ 承認」（消す）: action-bar の描画だけを一時的に消す。
+// 手動 dismiss（入力欄横「✕ 承認」/ action-bar 右上 ✕）: 描画だけ一時的に消す。
 // approvalRawOptionsCache / approvalVisibleCache はあえて保持し、承認は保留のまま（waiting も残す）。
 // 「↻ 承認」（reshowActionBar）で元に戻せる。承認が解決すれば hideActionBar が manualHideSig を消す。
+// hideActionBar + 時限 suppress は使わない（抑制切れや再検出で同一質問が戻るため）。
 export function manuallyHideActionBar(id) {
   if (id === undefined || id === null) return;
   const cached = approvalRawOptionsCache.get(id);
@@ -1732,15 +1735,14 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   }
   bar.appendChild(pane);
 
-  // 手動閉じボタン（誤検出時に消すため）
+  // 手動閉じボタン（誤検出時に消すため）。「✕ 承認」と同じ manualHideSig 抑止。
   const closeBtn = document.createElement('button');
   closeBtn.className = 'action-dismiss-btn';
   closeBtn.textContent = '✕';
   closeBtn.title = t('dismiss_title');
   closeBtn.onclick = (e) => {
     e.stopPropagation();
-    hideActionBar(sessionId);
-    approvalSuppressUntil.set(sessionId, Date.now() + 60000);
+    manuallyHideActionBar(sessionId);
   };
   bar.appendChild(closeBtn);
   appendCollapseToggle(bar, sessionId);
@@ -2094,14 +2096,14 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   bar.appendChild(pane);
 
   // 閉じ（✕）は position:absolute なので bar 直下に置けば右上に固定表示される。
+  // 「✕ 承認」と同じ manualHideSig 抑止（hideActionBar + 60s だと同一質問が再表示される）。
   const closeBatchBtn = document.createElement('button');
   closeBatchBtn.className = 'action-dismiss-btn';
   closeBatchBtn.textContent = '✕';
   closeBatchBtn.title = t('dismiss_title');
   closeBatchBtn.onclick = (e) => {
     e.stopPropagation();
-    hideActionBar(sessionId);
-    approvalSuppressUntil.set(sessionId, Date.now() + 60000);
+    manuallyHideActionBar(sessionId);
   };
   bar.appendChild(closeBatchBtn);
 
@@ -2412,14 +2414,14 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
   };
   footer.appendChild(clearBtn);
 
+  // 「✕ 承認」と同じ manualHideSig 抑止（hideActionBar + 60s だと同一質問が再表示される）。
   const closeMultiBtn = document.createElement('button');
   closeMultiBtn.className = 'action-dismiss-btn';
   closeMultiBtn.textContent = '✕';
   closeMultiBtn.title = t('dismiss_title');
   closeMultiBtn.onclick = (e) => {
     e.stopPropagation();
-    hideActionBar(sessionId);
-    approvalSuppressUntil.set(sessionId, Date.now() + 60000);
+    manuallyHideActionBar(sessionId);
   };
   footer.appendChild(closeMultiBtn);
 
