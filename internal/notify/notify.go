@@ -177,7 +177,13 @@ func (m *Manager) SendDone(payload DonePayload) {
 	m.sent[id] = time.Now()
 	m.mu.Unlock()
 
-	body := truncateUTF8(payload.Summary, payloadMaxBytes)
+	// SendApproval と同じ既定マスク方針: include_body が明示的に有効なときだけ
+	// 本文を載せ、その場合も MaskSecrets を通す。既定では件名相当のみ送る。
+	body := fmt.Sprintf("session #%d: %s", payload.SessionID, doneKindLabel(payload.Kind))
+	if cfg.IncludeBody {
+		body = sessionlog.MaskSecrets(payload.Summary)
+	}
+	body = truncateUTF8(body, payloadMaxBytes)
 	title := doneNotificationTitle(payload.Title, payload.Kind)
 
 	for _, backend := range cfg.Backends {
@@ -195,12 +201,16 @@ func (m *Manager) SendDone(payload DonePayload) {
 	}
 }
 
-func doneNotificationTitle(title, kind string) string {
+func doneKindLabel(kind string) string {
 	label := map[string]string{"success": "成功", "failure": "失敗", "aborted": "中断", "needs_action": "要判断"}[strings.ToLower(strings.TrimSpace(kind))]
 	if label == "" {
 		label = "完了"
 	}
-	return "[" + label + "] " + title
+	return label
+}
+
+func doneNotificationTitle(title, kind string) string {
+	return "[" + doneKindLabel(kind) + "] " + title
 }
 
 func sendDone(ctx context.Context, client *http.Client, backend BackendConfig, title, body, kind string) error {
