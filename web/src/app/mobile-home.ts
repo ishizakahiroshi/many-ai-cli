@@ -22,6 +22,106 @@ let mobileDrawerSearch = '';
 // time a mobile monitoring home is opened.
 let mobilePendingOnly = false;
 
+// ─── Session row taps that survive mid-gesture drawer rebuilds ─────────────
+// session_update / approval-queue が body.innerHTML を作り直すと、行 button が
+// 指の下で消え、iOS は click を捨てる。pointerdown で id を覚え、window の
+// pointerup で確定する（session-list.ts のカード pointer 処理と同思想）。
+const MH_TAP_MOVE_LIMIT_PX = 18;
+const MH_DUPLICATE_CLICK_MS = 700;
+
+type MhPendingTap = {
+  id: number;
+  x: number;
+  y: number;
+  pointerId: number;
+  mode: 'drawer' | 'home';
+};
+
+let mhPendingTap: MhPendingTap | null = null;
+let mhLastActivated: { id: number; at: number; mode: 'drawer' | 'home' } | null = null;
+let mhWindowTapBound = false;
+let mhDrawerRenderTimer: number | null = null;
+
+function mhSessionRowFromEvent(target: EventTarget | null, selector: string): HTMLElement | null {
+  const el = target instanceof Element ? target : null;
+  return (el?.closest?.(selector) as HTMLElement | null) || null;
+}
+
+function activateDrawerSession(id: number): void {
+  activateSession(id);
+  (window as any).closeMobileSessionDrawer?.();
+}
+
+function activateHomeSession(id: number): void {
+  if (getSessionBucket(id) === 'pending') {
+    (window as any).openMobileApprovalSheetForSession?.(id);
+  } else {
+    activateSession(id);
+  }
+}
+
+function markMhActivated(id: number, mode: 'drawer' | 'home'): void {
+  mhLastActivated = { id, at: Date.now(), mode };
+}
+
+function isDuplicateMhClick(id: number, mode: 'drawer' | 'home'): boolean {
+  if (!mhLastActivated) return false;
+  if (mhLastActivated.id !== id || mhLastActivated.mode !== mode) return false;
+  if (Date.now() - mhLastActivated.at > MH_DUPLICATE_CLICK_MS) return false;
+  mhLastActivated = null;
+  return true;
+}
+
+function ensureMhWindowTapHandlers(): void {
+  if (mhWindowTapBound) return;
+  mhWindowTapBound = true;
+  // capture: 再描画で target が消えても window まで届く。id は pointerdown 時の値。
+  window.addEventListener('pointerup', (e: PointerEvent) => {
+    const tap = mhPendingTap;
+    if (!tap || e.pointerId !== tap.pointerId) return;
+    mhPendingTap = null;
+    const moved = Math.hypot(e.clientX - tap.x, e.clientY - tap.y);
+    if (moved > MH_TAP_MOVE_LIMIT_PX) return;
+    markMhActivated(tap.id, tap.mode);
+    if (tap.mode === 'drawer') activateDrawerSession(tap.id);
+    else activateHomeSession(tap.id);
+  }, true);
+  window.addEventListener('pointercancel', (e: PointerEvent) => {
+    if (mhPendingTap && e.pointerId === mhPendingTap.pointerId) mhPendingTap = null;
+  }, true);
+}
+
+function bindMhSessionTapRoot(root: HTMLElement, mode: 'drawer' | 'home', rowSelector: string): void {
+  if (root.dataset.mhTapBound === '1') return;
+  root.dataset.mhTapBound = '1';
+  ensureMhWindowTapHandlers();
+
+  root.addEventListener('pointerdown', (e: PointerEvent) => {
+    if (e.button !== 0) return;
+    const row = mhSessionRowFromEvent(e.target, rowSelector);
+    if (!row) return;
+    const id = parseInt(row.dataset.sessionId || '', 10);
+    if (isNaN(id)) return;
+    mhPendingTap = { id, x: e.clientX, y: e.clientY, pointerId: e.pointerId, mode };
+  });
+
+  // キーボード (Enter/Space → 合成 click) と pointer 非対応環境のフォールバック。
+  // pointerup 直後の合成 click は isDuplicateMhClick で二重発火を抑止する。
+  root.addEventListener('click', (e: MouseEvent) => {
+    const row = mhSessionRowFromEvent(e.target, rowSelector);
+    if (!row) return;
+    const id = parseInt(row.dataset.sessionId || '', 10);
+    if (isNaN(id)) return;
+    if (isDuplicateMhClick(id, mode)) {
+      e.preventDefault();
+      return;
+    }
+    markMhActivated(id, mode);
+    if (mode === 'drawer') activateDrawerSession(id);
+    else activateHomeSession(id);
+  });
+}
+
 function getSessionBucket(id: number): SessionBucket {
   const s = sessions.get(id);
   if (approvalVisibleCache.get(id) || multiQuestionVisibleCache.get(id)) return 'pending';
@@ -93,10 +193,8 @@ function buildSessionRow(id: number, compact = false): HTMLElement {
   chip.textContent = statusChipText(bucket);
 
   row.append(main, chip);
-  row.addEventListener('click', () => {
-    activateSession(id);
-    (window as any).closeMobileSessionDrawer?.();
-  });
+  // タップは #mobile-drawer-content への委譲 (bindMhSessionTapRoot) が処理する。
+  // 行ごとの click は付けない（再描画で消える・二重発火の元になるため）。
   return row;
 }
 
@@ -157,11 +255,7 @@ function buildMonitoringRow(id: number): HTMLElement {
   chip.textContent = statusChipText(bucket);
   status.appendChild(chip);
   row.append(main, status);
-
-  row.addEventListener('click', () => {
-    if (bucket === 'pending') (window as any).openMobileApprovalSheetForSession?.(id);
-    else activateSession(id);
-  });
+  // タップは #mobile-home への委譲 (bindMhSessionTapRoot) が処理する。
   return row;
 }
 
@@ -268,6 +362,7 @@ export function renderMobileHome() {
   const container = document.getElementById('mobile-home');
   if (!container) return;
 
+  bindMhSessionTapRoot(container, 'home', '.mh-monitor-row');
   ensureSearchInput(container, 'mobile-home-search', mobileHomeSearch, (value) => {
     mobileHomeSearch = value;
     renderMobileHomeResults();
@@ -341,11 +436,41 @@ export function updateMobileHomeCard(id: number) {
   renderMobileHome();
 }
 
-export function renderMobileSessionDrawer() {
+/**
+ * モバイル左ドロワーを描画する。
+ * @param force true: 閉じているときでも描画（open 直前）。false: 開いているときだけ。
+ *   session_update 経路から毎回フル再描画されるとタップ中に button が消えるため、
+ *   閉じている間はスキップし、開いている間は短く debounce する。
+ */
+export function renderMobileSessionDrawer(force = false) {
+  if (!isMobileViewport()) return;
+  const drawerOpen = document.body.classList.contains('mobile-drawer-open');
+  if (!force && !drawerOpen) return;
+
+  if (force) {
+    if (mhDrawerRenderTimer !== null) {
+      clearTimeout(mhDrawerRenderTimer);
+      mhDrawerRenderTimer = null;
+    }
+    paintMobileSessionDrawer();
+    return;
+  }
+
+  // ライブ更新はまとめて描画。タップ中の DOM 破棄頻度を下げる。
+  if (mhDrawerRenderTimer !== null) clearTimeout(mhDrawerRenderTimer);
+  mhDrawerRenderTimer = window.setTimeout(() => {
+    mhDrawerRenderTimer = null;
+    if (!document.body.classList.contains('mobile-drawer-open')) return;
+    paintMobileSessionDrawer();
+  }, 120);
+}
+
+function paintMobileSessionDrawer(): void {
   if (!isMobileViewport()) return;
   const root = document.getElementById('mobile-drawer-content');
   if (!root) return;
   root.hidden = false;
+  bindMhSessionTapRoot(root, 'drawer', '.mh-session-row');
   ensureSearchInput(root, 'mobile-drawer-search', mobileDrawerSearch, (value) => {
     mobileDrawerSearch = value;
     renderMobileDrawerResults();
@@ -357,6 +482,9 @@ function renderMobileDrawerResults(): void {
   if (!isMobileViewport()) return;
   const root = document.getElementById('mobile-drawer-content');
   if (!root) return;
+  // 再描画でスクロール位置がトップへ戻るとタップが別行にずれる。
+  const scrollEl = document.getElementById('session-list');
+  const prevScrollTop = scrollEl ? scrollEl.scrollTop : 0;
   let body = root.querySelector<HTMLElement>('.mobile-drawer-body');
   if (!body) {
     body = document.createElement('div');
@@ -364,6 +492,20 @@ function renderMobileDrawerResults(): void {
     root.appendChild(body);
   }
   body.innerHTML = '';
+
+  // 新規セッションはドロワー最上部（セッション一覧より前）。
+  // 末尾だとセッションが多いときにスクロールが必要で押しにくい。
+  const spawnTop = document.createElement('section');
+  spawnTop.className = 'mobile-drawer-section mobile-drawer-spawn-top';
+  const spawn = document.createElement('button');
+  spawn.type = 'button';
+  spawn.className = 'mobile-drawer-action mobile-drawer-action--primary';
+  spawn.textContent = t('mobile_new_session');
+  spawn.addEventListener('click', () => {
+    document.getElementById('new-session-btn')?.click();
+  });
+  spawnTop.appendChild(spawn);
+  body.appendChild(spawnTop);
 
   const viewSection = buildViewSwitchSection();
   if (viewSection) body.appendChild(viewSection);
@@ -403,13 +545,6 @@ function renderMobileDrawerResults(): void {
     (window as any).syncMobileLayoutState?.();
     renderMobileHome();
   });
-  const spawn = document.createElement('button');
-  spawn.type = 'button';
-  spawn.className = 'mobile-drawer-action';
-  spawn.textContent = t('mobile_new_session');
-  spawn.addEventListener('click', () => {
-    document.getElementById('new-session-btn')?.click();
-  });
   const expose = document.createElement('button');
   expose.type = 'button';
   expose.className = 'mobile-drawer-action';
@@ -442,14 +577,22 @@ function renderMobileDrawerResults(): void {
     (window as any).closeMobileSessionDrawer?.();
     openServerModal();
   });
-  actions.append(home, spawn, expose, shutdown, settings, server);
+  actions.append(home, expose, shutdown, settings, server);
   body.appendChild(actions);
+
+  if (scrollEl) {
+    const max = scrollEl.scrollHeight - scrollEl.clientHeight;
+    scrollEl.scrollTop = Math.max(0, Math.min(prevScrollTop, max));
+  }
 }
 
 window.addEventListener('approval-queue-updated', () => {
   if (!isMobileViewport()) return;
   renderMobileHome();
-  renderMobileSessionDrawer();
+  // 閉じているドロワーを毎回フル再描画しない（open 時に force 描画する）。
+  if (document.body.classList.contains('mobile-drawer-open')) {
+    renderMobileSessionDrawer();
+  }
 });
 
 window.renderMobileHome = renderMobileHome;
