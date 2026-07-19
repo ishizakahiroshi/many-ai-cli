@@ -24,6 +24,9 @@ const (
 	// スキップを打ち切り検知を回復させる。正規の（終端される）OSC/DCS はこの上限に達しない
 	// よう十分大きく取る（読み飛ばしはメモリを消費しないため大きめでよい）。
 	maxStringSeqSkipBytes = 1 << 20 // 1 MiB
+	// maxVTScrollbackLines は newLine() で画面上端から押し出された確定行のリングバッファ上限。
+	// 承認マーカー抽出（特に Grok の画面高超え複数質問ブロック）用。clearAll では積まない。
+	maxVTScrollbackLines = 500
 )
 
 type vtBuffer struct {
@@ -33,6 +36,10 @@ type vtBuffer struct {
 	cells [][]rune
 	row   int
 	col   int
+
+	// scrollback は newLine() で上端から押し出された確定行（TrimRight 済み）。
+	// clearAll / eraseDisplay / Resize では触らない（画面クリアはスクロールアウトではない）。
+	scrollback []string
 
 	savedRow int
 	savedCol int
@@ -228,6 +235,52 @@ func (b *vtBuffer) TailLines(n int) []string {
 	return lines[len(lines)-n:]
 }
 
+// TailLinesWithScrollback は scrollback 末尾 + 現在画面の連結から末尾 n 行を返す。
+// 承認マーカー抽出向け。n <= 0 のときは利用可能な全行を返す。
+func (b *vtBuffer) TailLinesWithScrollback(n int) []string {
+	screen := b.Lines()
+	total := len(b.scrollback) + len(screen)
+	if total == 0 {
+		return nil
+	}
+	if n <= 0 || n >= total {
+		out := make([]string, 0, total)
+		out = append(out, b.scrollback...)
+		out = append(out, screen...)
+		return out
+	}
+	// 画面だけで足りるなら scrollback を触らない
+	if n <= len(screen) {
+		return screen[len(screen)-n:]
+	}
+	needFromSB := n - len(screen)
+	if needFromSB > len(b.scrollback) {
+		needFromSB = len(b.scrollback)
+	}
+	out := make([]string, 0, needFromSB+len(screen))
+	out = append(out, b.scrollback[len(b.scrollback)-needFromSB:]...)
+	out = append(out, screen...)
+	return out
+}
+
+// pushScrollback は押し出し行をリングバッファへ積む。
+// 直前が空行同士のときだけ隣接重複を潰す（TUI の余白再描画対策）。
+// 非空行の dedupe はしない: 承認マーカー内の同一選択肢行が連続するとブロックが欠けて
+// extract が壊れるため（敵対レビュー P2）。
+func (b *vtBuffer) pushScrollback(line string) {
+	line = strings.TrimRight(line, " ")
+	if line == "" && len(b.scrollback) > 0 && b.scrollback[len(b.scrollback)-1] == "" {
+		return
+	}
+	b.scrollback = append(b.scrollback, line)
+	if len(b.scrollback) > maxVTScrollbackLines {
+		// 先頭を捨てて有界を保つ
+		overflow := len(b.scrollback) - maxVTScrollbackLines
+		copy(b.scrollback, b.scrollback[overflow:])
+		b.scrollback = b.scrollback[:maxVTScrollbackLines]
+	}
+}
+
 func (b *vtBuffer) escapeComplete() bool {
 	if len(b.esc) < 2 {
 		return false
@@ -359,6 +412,8 @@ func (b *vtBuffer) newLine() {
 	if b.row < b.rows {
 		return
 	}
+	// 上端行を捨てる直前に確定行として scrollback へ積む（画面クリア経路では呼ばれない）
+	b.pushScrollback(string(b.cells[0]))
 	copy(b.cells, b.cells[1:])
 	b.cells[b.rows-1] = make([]rune, b.cols)
 	for c := range b.cells[b.rows-1] {

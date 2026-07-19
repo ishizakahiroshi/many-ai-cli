@@ -684,10 +684,16 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// Claude: 共有 .claude/settings.local.json を一切触らず、wrapper 所有の temp
 	// settings を `--settings` で渡して statusLine（usage-relay）を有効化する。
 	// reg.TokenStatusbar が false（UI バー無効）なら付けない＝従来の挙動を維持。
-	// diag: docs/local/bugfix_statusline-settings-skip_2026-07-10.md — セッション毎に
-	// 到達判定と reg.TokenStatusbar 実測値を残し、同条件で「出るとき/出ないとき」の
-	// 分岐を再現から確定するための診断ログ。恒久的なログではなく原因確定後に外す。
-	logger.Info("statusline_gate_wrapper", "session_id", sessionID, "provider", provider, "reg_token_statusbar", reg.TokenStatusbar)
+	// diag 継続: docs/local/bugfix_statusline-settings-skip_2026-07-10.md
+	// Hub 側 statusline_gate_hub と突き合わせるため、reg 受信値と reg.Type を残す。
+	// 2026-07-19 時点: hub.log では token_statusbar_send=true のみ（false 0 件）で
+	// Hub ゲートは原因候補から外れている。wrapper 側 reg=false や settings 書込失敗が
+	// 残仮説のため、再現ログが揃うまで意図的に残置（原因確定後に外す）。
+	logger.Info("statusline_gate_wrapper",
+		"session_id", sessionID,
+		"provider", provider,
+		"reg_type", reg.Type,
+		"reg_token_statusbar", reg.TokenStatusbar)
 	if provider == "claude" && reg.TokenStatusbar {
 		exe, exeErr := os.Executable()
 		if exeErr != nil {
@@ -707,6 +713,8 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 				"session_id", sessionID, "exe_path", exe)
 		}
 		if slPath, cleanup, slErr := WriteClaudeStatuslineSettings(hp); slErr == nil {
+			// 分岐到達＋temp 作成成功を stderr ログで確定できるよう 1 行残す（diag 継続）。
+			logger.Info("statusline_settings_written", "session_id", sessionID, "path", slPath)
 			providerArgs = append(providerArgs, "--settings", slPath)
 			defer cleanup()
 		} else {
@@ -1003,6 +1011,12 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model st
 	if err := websocket.JSON.Receive(conn, &reg); err != nil {
 		_ = conn.Close()
 		return nil, proto.Message{}, err
+	}
+	// registered 以外（例: エラー応答や予期しない先頭フレーム）だと TokenStatusbar 等が
+	// ゼロ値のまま残り statusline が黙って無効になる。型不一致は明示エラーにする。
+	if reg.Type != "registered" {
+		_ = conn.Close()
+		return nil, proto.Message{}, fmt.Errorf("unexpected register response type %q (want registered)", reg.Type)
 	}
 	return conn, reg, nil
 }

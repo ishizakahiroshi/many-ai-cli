@@ -44,7 +44,10 @@ type Message struct {
 	// TokenStatusbar: registered ack で Hub が返す「トークン常時表示バーが有効か」。
 	// wrapper はこれを見て claude 起動時に --settings で statusLine を渡すか決める
 	// （共有の .claude/settings.local.json は一切書き換えない方式）。
-	TokenStatusbar bool `json:"token_statusbar,omitempty"`
+	// omitempty を付けない: false が wire から消えると「意図的 OFF」と「フィールド欠落/
+	// 別 type のメッセージを受信」が区別できず、statusline 欠落の診断が潰れる
+	// （docs/local/bugfix_statusline-settings-skip_2026-07-10.md）。
+	TokenStatusbar bool `json:"token_statusbar"`
 
 	// session_hint で UI 側から送る「承認 UI が可視」フラグ。
 	ApprovalVisible bool `json:"approval_visible,omitempty"`

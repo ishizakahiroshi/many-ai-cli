@@ -629,6 +629,21 @@ test('approval parser fixtures', () => {
   assert.equal(parser.isBatchOptions(singleNoFree), false);
   assert.equal(!!(singleNoFree as any)._freeInput, false);
 
+  // 単一質問でも `Q1 見出し` 形式のときは flat に落とした後も _freeInput / _question が残る
+  // （sections[0] 経由でフラグを配列プロパティへ伝播する経路の回帰防止）。
+  const singleQ1Heading = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'Q1 次のアクション',
+    '1. 続行する (Recommended)',
+    '2. やめる',
+    'N. User specifies',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isBatchOptions(singleQ1Heading), false);
+  assert.deepEqual(numbers(singleQ1Heading), [1, 2]);
+  assert.equal((singleQ1Heading as any)._freeInput, true);
+  assert.equal((singleQ1Heading as any)._question, '次のアクション');
+
   // claude /model のような承認ではないカーソル駆動 TUI 選択メニュー。
   // フッターの「Esc to cancel」を matchNativeApprovalTrigger が拾い、❯ カーソル付き選択肢が
   // あるため detectFallback の choice-menu 経路で検出される（=action-bar が出る）。

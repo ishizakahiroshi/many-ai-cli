@@ -38,10 +38,14 @@ var nativeApprovalJaTokens = []string{
 //	TailLines が 120 行取得し、そのうち末尾 90 行を有効な承認候補として扱う。
 //	90 行は承認プロンプトが含まれる最大の行数（余白込み）の経験値。
 //
-// vtTailLinesForApproval: VT バッファから取り出す末尾行数（server.go と対応）。
+// vtTailLinesForApproval: ネイティブ承認検出向けに VT 画面から取り出す末尾行数。
+//
+// vtTailLinesForMarker: 承認マーカー抽出向け。scrollback 込みで取り出す末尾行数。
+// 画面高（~30）を超える複数質問ブロック（Grok 等）を拾うため 300 行を確保する。
 const (
 	approvalRecentLines       = 90
 	vtTailLinesForApproval    = 120
+	vtTailLinesForMarker      = 300
 	approvalMaxOptions        = 12
 	approvalContextBefore     = 12
 	approvalContextAfter      = 6

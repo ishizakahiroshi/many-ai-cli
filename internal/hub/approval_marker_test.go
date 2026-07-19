@@ -1,6 +1,9 @@
 package hub
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestExtractApprovalMarkerBlockMultiline(t *testing.T) {
 	lines := []string{
@@ -82,5 +85,89 @@ func TestMaybeBroadcastApprovalMarkerDedupesSameBlock(t *testing.T) {
 	}
 	if s.maybeBroadcastApprovalMarker(1, marker, ses.lastOutputAt) {
 		t.Fatal("same marker should be deduped")
+	}
+}
+
+func TestExtractApprovalMarkerBlockSpansScrollback(t *testing.T) {
+	// 画面高 4 行の VT に、開始〜閉じが画面をまたぐ長いマーカーブロックを流す。
+	// TailLines（現在画面のみ）では不完全、TailLinesWithScrollback では完全ブロックが取れること。
+	vt := newVTBuffer(80, 4)
+	blockLines := []string{
+		"[MANY-AI-CLI]",
+		"Q1 first long question that should scroll out of the viewport?",
+		" 1. Option A for Q1 (Recommended)",
+		" 2. Option B for Q1",
+		" N. User specifies",
+		"Q2 second question also long enough?",
+		" 3. Option C for Q2 (Recommended)",
+		" 4. Option D for Q2",
+		" N. User specifies",
+		"[/MANY-AI-CLI]",
+	}
+	for _, line := range blockLines {
+		vt.Write([]byte(line + "\r\n"))
+	}
+	// 現在画面だけでは完全ブロックが取れないこと（scrollback 経路の必要性を必須 assert）
+	screenOnly := extractApprovalMarkerBlock(vt.TailLines(vtTailLinesForApproval))
+	if screenOnly != nil && strings.Contains(screenOnly.Block, "Q1 first") && strings.Contains(screenOnly.Block, "Q2 second") {
+		t.Fatalf("screen-only extract unexpectedly got full block (scrollback path not required): %q", screenOnly.Block)
+	}
+	// 画面 4 行 + 最終空行で、開始が scrollback 側に落ちている想定
+	withSB := extractApprovalMarkerBlock(vt.TailLinesWithScrollback(vtTailLinesForMarker))
+	if withSB == nil {
+		t.Fatalf("scrollback extract returned nil; screen=%v sb=%v lines=%v", vt.Lines(), vt.scrollback, vt.TailLinesWithScrollback(50))
+	}
+	if !strings.Contains(withSB.Block, "[MANY-AI-CLI]") || !strings.Contains(withSB.Block, "[/MANY-AI-CLI]") {
+		t.Fatalf("incomplete block: %q", withSB.Block)
+	}
+	if !strings.Contains(withSB.Block, "Q1 first") || !strings.Contains(withSB.Block, "Q2 second") {
+		t.Fatalf("missing questions in block: %q", withSB.Block)
+	}
+}
+
+// clear 後も scrollback に古い完全ブロックが残るが、同一 sig は再 broadcast されないこと
+// （敵対レビュー P1: ゴースト承認の抑止）。
+func TestMaybeBroadcastApprovalMarkerNoGhostAfterScreenClear(t *testing.T) {
+	s := newTestServer()
+	ses := registerTestSession(s, 1, "claude")
+	if ses.vt == nil {
+		ses.vt = newVTBuffer(80, 4)
+	}
+	vt := ses.vt
+	blockLines := []string{
+		"[MANY-AI-CLI]",
+		"Q1 ghost candidate after clear?",
+		" 1. Yes (Recommended)",
+		" 2. No",
+		"[/MANY-AI-CLI]",
+	}
+	for _, line := range blockLines {
+		vt.Write([]byte(line + "\r\n"))
+	}
+	// 押し出して scrollback に載せる
+	for i := 0; i < 6; i++ {
+		vt.Write([]byte("noise line that scrolls\r\n"))
+	}
+	marker := extractApprovalMarkerBlock(vt.TailLinesWithScrollback(vtTailLinesForMarker))
+	if marker == nil {
+		t.Fatalf("expected marker in scrollback; sb=%v screen=%v", vt.scrollback, vt.Lines())
+	}
+	if !s.maybeBroadcastApprovalMarker(1, marker, ses.lastOutputAt) {
+		t.Fatal("first broadcast should succeed")
+	}
+	// 画面クリアしても scrollback は残る（仕様）
+	vt.Write([]byte("\x1b[2J\x1b[H"))
+	if len(vt.scrollback) == 0 {
+		t.Fatal("scrollback should survive clear")
+	}
+	again := extractApprovalMarkerBlock(vt.TailLinesWithScrollback(vtTailLinesForMarker))
+	if again == nil {
+		t.Fatal("old complete block still extractable from scrollback after clear")
+	}
+	if again.Sig != marker.Sig {
+		t.Fatalf("sig mismatch after clear: %q vs %q", again.Sig, marker.Sig)
+	}
+	if s.maybeBroadcastApprovalMarker(1, again, ses.lastOutputAt) {
+		t.Fatal("same sig after clear must be deduped (no ghost approval_marker)")
 	}
 }
