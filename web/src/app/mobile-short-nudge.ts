@@ -7,6 +7,9 @@ const HISTORY_DB = 'many-ai-cli-mobile-nudges';
 const HISTORY_STORE = 'recent';
 const HISTORY_MAX = 20;
 const STORAGE_INSTANT_SEND = 'ai_cli_hub_mobile_nudge_instant_send';
+// Keep the implementation for a future re-enable, but do not initialize the
+// mobile voice/template controls while they are intentionally hidden.
+const MOBILE_SHORT_NUDGE_ENABLED = false;
 type NudgeRecord = { text: string; usedAt: number; count: number };
 
 function isMobile(): boolean { return window.matchMedia('(max-width: 720px)').matches; }
@@ -95,6 +98,7 @@ function initHoldToTalk(): void {
   });
 }
 export function initMobileShortNudge(): void {
+  if (!MOBILE_SHORT_NUDGE_ENABLED) return;
   const instant = document.getElementById('mobile-nudge-instant-send') as HTMLInputElement | null;
   if (instant) { instant.checked = localStorage.getItem(STORAGE_INSTANT_SEND) === '1'; instant.addEventListener('change', () => localStorage.setItem(STORAGE_INSTANT_SEND, instant.checked ? '1' : '0')); }
   renderChips(); void renderHistory(); initHoldToTalk(); window.addEventListener('resize', renderChips); document.addEventListener('session:activated', renderChips); window.addEventListener('prompt-templates:changed', renderChips);
