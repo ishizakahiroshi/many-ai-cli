@@ -231,7 +231,12 @@ func (r *reconnectSupervisor) run() {
 			r.closeDone()
 			return
 		}
-		if !intentional && r.cfg.Hub.AutoShutdown {
+		// A transport fault is local to the wrapper's PTY output path. It does
+		// not prove that the Hub stopped, so it must use the reconnect grace
+		// path even when auto_shutdown is enabled. Otherwise a transient full
+		// output queue or write deadline kills the wrapped CLI and all of its
+		// child agents while the Hub is still running.
+		if !intentional && !transportBroken && r.cfg.Hub.AutoShutdown {
 			r.logger.Info("hub is down and auto_shutdown is enabled; terminating PTY", "session_id", r.ws.getSID())
 			_ = r.ps.Close()
 			r.closeDone()
@@ -246,6 +251,8 @@ func (r *reconnectSupervisor) run() {
 		}
 		if intentional {
 			r.logger.Info("intentional hub shutdown — waiting for manual hub restart within grace period", "session_id", r.ws.getSID(), "grace_sec", int(grace/time.Second))
+		} else if transportBroken {
+			r.logger.Info("PTY output transport fault — entering reconnect grace period", "session_id", r.ws.getSID(), "grace_sec", int(grace/time.Second))
 		} else {
 			r.logger.Info("hub appears down — entering reconnect grace period", "session_id", r.ws.getSID(), "grace_sec", int(grace/time.Second))
 		}
@@ -315,10 +322,17 @@ type ptyOutputWriter struct {
 	accepting              bool
 	closed                 bool
 	done                   chan struct{}
-	notifyTransportFailure func()
+	notifyTransportFailure func(ptyOutputTransportFault)
 }
 
-func newPTYOutputWriter(ws *wrapperSession, capacity int, notifyTransportFailure func()) *ptyOutputWriter {
+type ptyOutputTransportFault struct {
+	Kind          string
+	QueueCapacity int
+	ChunkBytes    int
+	Err           error
+}
+
+func newPTYOutputWriter(ws *wrapperSession, capacity int, notifyTransportFailure func(ptyOutputTransportFault)) *ptyOutputWriter {
 	if capacity <= 0 {
 		capacity = ptyOutputQueueCapacity
 	}
@@ -350,7 +364,11 @@ func (w *ptyOutputWriter) enqueue(chunk []byte) {
 		// restore a coherent recent view.
 		w.accepting = false
 		w.mu.Unlock()
-		w.triggerTransportFailure()
+		w.triggerTransportFailure(ptyOutputTransportFault{
+			Kind:          "pty_output_queue_full",
+			QueueCapacity: cap(w.outCh),
+			ChunkBytes:    len(chunk),
+		})
 	}
 }
 
@@ -360,7 +378,7 @@ func (w *ptyOutputWriter) isAccepting() bool {
 	return w.accepting && !w.closed
 }
 
-func (w *ptyOutputWriter) failTransport() {
+func (w *ptyOutputWriter) failTransport(fault ptyOutputTransportFault) {
 	w.mu.Lock()
 	if !w.accepting || w.closed {
 		w.mu.Unlock()
@@ -368,12 +386,12 @@ func (w *ptyOutputWriter) failTransport() {
 	}
 	w.accepting = false
 	w.mu.Unlock()
-	w.triggerTransportFailure()
+	w.triggerTransportFailure(fault)
 }
 
-func (w *ptyOutputWriter) triggerTransportFailure() {
+func (w *ptyOutputWriter) triggerTransportFailure(fault ptyOutputTransportFault) {
 	if w.notifyTransportFailure != nil {
-		go w.notifyTransportFailure()
+		go w.notifyTransportFailure(fault)
 	}
 }
 
@@ -388,7 +406,12 @@ func (w *ptyOutputWriter) run() {
 			SessionID: w.ws.getSID(),
 			Data:      chunk,
 		}); err != nil {
-			w.failTransport()
+			w.failTransport(ptyOutputTransportFault{
+				Kind:          "pty_output_send_failed",
+				QueueCapacity: cap(w.outCh),
+				ChunkBytes:    len(chunk),
+				Err:           err,
+			})
 		}
 	}
 }
@@ -912,7 +935,12 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	}
 	startReceiveLoop(conn)
 
-	transportFailure := func() {
+	transportFailure := func(fault ptyOutputTransportFault) {
+		if fault.Err != nil {
+			logger.Warn("PTY output transport failure", "session_id", wses.getSID(), "kind", fault.Kind, "queue_capacity", fault.QueueCapacity, "chunk_bytes", fault.ChunkBytes, "err", fault.Err)
+		} else {
+			logger.Warn("PTY output transport failure", "session_id", wses.getSID(), "kind", fault.Kind, "queue_capacity", fault.QueueCapacity, "chunk_bytes", fault.ChunkBytes)
+		}
 		// Set this before closing the socket. The receive loop may observe the
 		// close first; supervisor must still treat this as a reconnectable
 		// transport fault even while the Hub HTTP endpoint remains alive.

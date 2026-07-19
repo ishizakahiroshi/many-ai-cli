@@ -30,9 +30,9 @@ func TestWrapperSendWriteTimeout(t *testing.T) {
 }
 
 func TestPTYOutputWriterQueueOverflowDoesNotBlock(t *testing.T) {
-	failure := make(chan struct{}, 1)
-	writer := newPTYOutputWriter(&wrapperSession{currentSID: 1}, 1, func() {
-		failure <- struct{}{}
+	failure := make(chan ptyOutputTransportFault, 1)
+	writer := newPTYOutputWriter(&wrapperSession{currentSID: 1}, 1, func(fault ptyOutputTransportFault) {
+		failure <- fault
 	})
 
 	writer.enqueue([]byte("first"))
@@ -43,7 +43,10 @@ func TestPTYOutputWriterQueueOverflowDoesNotBlock(t *testing.T) {
 	}
 
 	select {
-	case <-failure:
+	case fault := <-failure:
+		if fault.Kind != "pty_output_queue_full" || fault.QueueCapacity != 1 || fault.ChunkBytes != len("second") || fault.Err != nil {
+			t.Fatalf("queue overflow fault = %#v", fault)
+		}
 	case <-time.After(time.Second):
 		t.Fatal("queue overflow did not trigger transport failure")
 	}
@@ -58,6 +61,25 @@ func TestPTYOutputWriterQueueOverflowDoesNotBlock(t *testing.T) {
 	// Start the consumer only after the overflow so the first chunk remains
 	// queued and can be discarded as stale output after the fault.
 	go writer.run()
+	writer.finish()
+}
+
+func TestPTYOutputWriterSendFailureReportsFault(t *testing.T) {
+	failure := make(chan ptyOutputTransportFault, 1)
+	writer := newPTYOutputWriter(&wrapperSession{currentSID: 1}, 1, func(fault ptyOutputTransportFault) {
+		failure <- fault
+	})
+	writer.enqueue([]byte("chunk"))
+	go writer.run()
+
+	select {
+	case fault := <-failure:
+		if fault.Kind != "pty_output_send_failed" || fault.QueueCapacity != 1 || fault.ChunkBytes != len("chunk") || fault.Err == nil {
+			t.Fatalf("send failure fault = %#v", fault)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("send failure did not trigger transport failure")
+	}
 	writer.finish()
 }
 

@@ -20,7 +20,6 @@ export interface TerminalEntry {
   textDecoder?: TextDecoder;
   markerFilterCarry?: Uint8Array;
   reverseVideoFilterCarry?: Uint8Array;
-  synchronizedUpdateFilterCarry?: Uint8Array;
   screenClearSeqCarry?: Uint8Array;
   liveStatusText?: string;
   // 更新が途切れたら稼働中→待機表示(idle)へ切替えるためのタイマー。

@@ -1154,11 +1154,6 @@ export const screenClearSeqBytePatterns = [
   altScreenExitSeq,
 ];
 export const screenClearSeqCarryLength = Math.max(...screenClearSeqBytePatterns.map(pattern => pattern.length)) - 1;
-export const synchronizedUpdateSeqBytePatterns = [
-  asciiBytes('\x1b[?2026h'),
-  asciiBytes('\x1b[?2026l'),
-];
-export const synchronizedUpdateSeqCarryLength = Math.max(...synchronizedUpdateSeqBytePatterns.map(pattern => pattern.length)) - 1;
 export { hideCursorSeq, showCursorSeq };
 
 // xterm 入口の [MANY-AI-CLI] ブロック・[MANY-AI-CLI-DONE] ブロック除去は
@@ -1239,42 +1234,6 @@ export function filterReverseVideoForDisplay(id, bytes) {
   }
 
   t.reverseVideoFilterCarry = combined.slice(i);
-  return new Uint8Array(out);
-}
-
-export function filterSynchronizedUpdateForDisplay(id, bytes) {
-  const t = terminals.get(id);
-  if (!t) return bytes;
-  const carry = t.synchronizedUpdateFilterCarry || new Uint8Array(0);
-  const combined = new Uint8Array(carry.length + bytes.length);
-  combined.set(carry, 0);
-  combined.set(bytes, carry.length);
-
-  const out = [];
-  let i = 0;
-  const carryStartLimit = Math.max(0, combined.length - synchronizedUpdateSeqCarryLength);
-  while (i < combined.length) {
-    const seq = synchronizedUpdateSeqBytePatterns.find(pattern => bytesStartWith(combined, i, pattern));
-    if (seq) {
-      i += seq.length;
-      continue;
-    }
-    if (i >= carryStartLimit) {
-      const maybePrefix = synchronizedUpdateSeqBytePatterns.some((pattern) => {
-        const remaining = combined.length - i;
-        if (remaining >= pattern.length) return false;
-        for (let j = 0; j < remaining; j++) {
-          if (combined[i + j] !== pattern[j]) return false;
-        }
-        return true;
-      });
-      if (maybePrefix) break;
-    }
-    out.push(combined[i]);
-    i++;
-  }
-
-  t.synchronizedUpdateFilterCarry = combined.slice(i);
   return new Uint8Array(out);
 }
 
@@ -1795,7 +1754,9 @@ export function filterBareCarriageReturnForDisplay(id, bytes) {
 
 export function writePTYChunk(id, term, bytes, onFlush) {
   const hasScreenClearSeq = detectScreenClearSeqForAutoScroll(id, bytes);
-  const displayBytes = filterSynchronizedUpdateForDisplay(id, filterBareCarriageReturnForDisplay(id, filterCursorHideShowBlocksForDisplay(id, filterEraseScrollbackForDisplay(id, filterReverseVideoForDisplay(id, filterHubMarkersForDisplay(id, bytes))))));
+  // Codex 等の同期描画（CSI ? 2026 h/l）は xterm.js が完成画面まで保留する。
+  // ここで除去すると途中フレームが露出し、再描画が上から下へ流れて見えるため通す。
+  const displayBytes = filterBareCarriageReturnForDisplay(id, filterCursorHideShowBlocksForDisplay(id, filterEraseScrollbackForDisplay(id, filterReverseVideoForDisplay(id, filterHubMarkersForDisplay(id, bytes)))));
   const wrappedFlush = () => {
     if (hasScreenClearSeq) snapToBottomAfterScreenClear(id);
     if (onFlush) onFlush();

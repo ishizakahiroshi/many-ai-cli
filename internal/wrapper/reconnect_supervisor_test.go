@@ -126,6 +126,36 @@ func TestReconnectSupervisor_AutoShutdown(t *testing.T) {
 	}
 }
 
+// TestReconnectSupervisor_TransportFaultBypassesAutoShutdown verifies that a
+// local PTY output transport fault uses reconnect grace even when the user has
+// enabled auto_shutdown for actual Hub process exits.
+func TestReconnectSupervisor_TransportFaultBypassesAutoShutdown(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Hub.AutoShutdown = true
+	cfg.Hub.WrapperReconnectGraceSec = 30
+
+	ps := &mockProcessSession{}
+	reconnectCh := make(chan struct{}, 1)
+	done := make(chan struct{})
+	var doneOnce sync.Once
+	closeDone := func() { doneOnce.Do(func() { close(done) }) }
+	sup := makeSupervisor(cfg, ps, false /* intentional */, false /* probeAlive */, reconnectCh, done, closeDone)
+	transportBroken := &atomic.Bool{}
+	transportBroken.Store(true)
+	sup.transportBroken = transportBroken
+
+	reconnectCh <- struct{}{}
+	go sup.run()
+
+	// The supervisor must not call ps.Close() before reconnect grace expires.
+	time.Sleep(100 * time.Millisecond)
+	if ps.closeCalled.Load() {
+		t.Fatal("ps.Close() must not be called for a transport fault while reconnect grace is active")
+	}
+
+	closeDone()
+}
+
 // TestReconnectSupervisor_HubAlive は hub が生きている場合（intentional でない WS 切断）、
 // PTY を kill することを確認する（dismiss / kill-all / idle-timeout による意図的切断）。
 func TestReconnectSupervisor_HubAlive(t *testing.T) {
