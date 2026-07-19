@@ -55,22 +55,46 @@ var makeExternalHTTPClient = newExternalHTTPClient
 
 type dialContextFunc func(ctx context.Context, network, address string) (net.Conn, error)
 
+// lookupIPAddr は DNS 解決の seam。本番では net.DefaultResolver に委譲し、
+// テストでは差し替えることで DNS 応答をコントロールする（audit_dns_rebinding_test.go）。
+var lookupIPAddr = func(ctx context.Context, host string) ([]net.IPAddr, error) {
+	return net.DefaultResolver.LookupIPAddr(ctx, host)
+}
+
 func privateNetworkBlockingDialContext(next dialContextFunc) dialContextFunc {
 	return func(ctx context.Context, network, address string) (net.Conn, error) {
-		host, _, err := net.SplitHostPort(address)
+		host, port, err := net.SplitHostPort(address)
 		if err != nil {
 			return nil, err
 		}
-		ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+		// DNS rebinding TOCTOU 対策: LookupIPAddr で検証したあと、next にホスト名を
+		// 渡すと Go 標準の dialer が再度 DNS を解決する。TTL=0 の攻撃者ドメインは
+		// 1 回目 = public、2 回目 = 127.0.0.1 / RFC1918 を返せるため、SSRF ガードが
+		// 迂回される。ここで検証済み IP を直接 dial することで、二重解決を排除する。
+		// TLS SNI は net/http Transport が URL.Host から自動設定するため、Dial 側で
+		// IP アドレスを渡しても TLS 検証は元ホスト名で正しく行われる。
+		ips, err := lookupIPAddr(ctx, host)
 		if err != nil {
 			return nil, err
+		}
+		if len(ips) == 0 {
+			return nil, errors.New("no ip resolved")
 		}
 		for _, ip := range ips {
 			if isBlockedNetworkHost(ip.IP.String()) {
 				return nil, errors.New("private network host blocked")
 			}
 		}
-		return next(ctx, network, address)
+		var lastErr error
+		for _, ip := range ips {
+			addr := net.JoinHostPort(ip.IP.String(), port)
+			conn, dialErr := next(ctx, network, addr)
+			if dialErr == nil {
+				return conn, nil
+			}
+			lastErr = dialErr
+		}
+		return nil, lastErr
 	}
 }
 

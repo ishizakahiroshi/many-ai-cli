@@ -21,7 +21,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -521,7 +523,32 @@ type hubUsagePayload struct {
 	ReasoningOut     int     `json:"reasoning_output_tokens,omitempty"`
 }
 
+// validateHubURL は親から渡された Hub URL を loopback http/https に絞る。
+// 想定より広い host（LAN / 公開 IP / 悪意ある argv）へ Authorization Bearer <token>
+// を送らないための最小防御（外部漏出の潜在経路の遮断）。
+func validateHubURL(raw string) error {
+	if strings.TrimSpace(raw) == "" {
+		return fmt.Errorf("empty hub url")
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("parse hub url: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("hub url scheme must be http or https, got %q", u.Scheme)
+	}
+	host := u.Hostname()
+	switch host {
+	case "127.0.0.1", "::1", "localhost":
+		return nil
+	}
+	return fmt.Errorf("hub url host must be loopback (127.0.0.1 / ::1 / localhost), got %q", host)
+}
+
 func postUsage(hubURL, token string, payload hubUsagePayload, logger *slog.Logger) error {
+	if err := validateHubURL(hubURL); err != nil {
+		return err
+	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
@@ -531,8 +558,8 @@ func postUsage(hubURL, token string, payload hubUsagePayload, logger *slog.Logge
 	// （HTTP アクセスログ・上流プロキシのログに ?token=<hex> が残らないようにするため）。
 	// Hub 側 requestToken() は Authorization Bearer / Cookie / URL クエリの 3 経路を
 	// サポートしているので互換性に問題はない（06-15 監査で確認済）。
-	url := hubURL + "/api/session-usage"
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	target := hubURL + "/api/session-usage"
+	req, err := http.NewRequest(http.MethodPost, target, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
