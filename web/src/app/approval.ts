@@ -2,7 +2,7 @@
 import { t } from '../i18n.js';
 import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, isAnsweredMarkerSig, recordAnsweredMarkerSig, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchActiveQ, batchFreeText, batchSelections, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectFocusIdx, multiSelectSelections, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, utf8Decoder } from './state.js';
 import { inputEl, sendSubmittedText, sendSubmittedBody } from '../app.js';
-import { clearSuppressPtyResize, isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout } from './terminal.js';
+import { clearSuppressPtyResize, isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout, syncPtySizeToViewportAfterLayout } from './terminal.js';
 import { stripAnsi } from './settings.js';
 import { ws } from './ws-client.js';
 import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, hasApprovalLikeLabel, isBatchOptions, isHubChoicePrompt, isMultiQuestionPrompt, isMultiSelectOptions, markHubChoiceDefault, matchNativeApprovalTrigger, normalizeVtCursorOps } from './approval-parser.js';
@@ -1711,8 +1711,11 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   appendCollapseToggle(bar, sessionId);
   bar.classList.toggle('collapsed', isActionBarCollapsed());
 
-  if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(60000);
+  if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(350);
   bar.classList.add('visible');
+  // 60 秒抑制で縮小サイズを Codex へ一切伝えないと、Codex が高い行数のまま再描画を続け
+  // scrollback へ空行が化石化して表示がまばらになる。短く束ねた後、確定サイズを 1 回送る。
+  syncPtySizeToViewportAfterLayout(sessionId, shouldStickToBottom);
   actionBarShownAt.set(sessionId, Date.now());
   if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
   if (chatWasAtBottomB && chatTlB) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlB));
@@ -2086,8 +2089,11 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
 
   appendCollapseToggle(bar, sessionId);
   bar.classList.toggle('collapsed', isActionBarCollapsed());
-  if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(60000);
+  if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(350);
   bar.classList.add('visible');
+  // 60 秒抑制で縮小サイズを Codex へ一切伝えないと、Codex が高い行数のまま再描画を続け
+  // scrollback へ空行が化石化して表示がまばらになる。短く束ねた後、確定サイズを 1 回送る。
+  syncPtySizeToViewportAfterLayout(sessionId, shouldStickToBottom);
   actionBarShownAt.set(sessionId, Date.now());
   if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
   if (chatWasAtBottomB && chatTlB) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlB));
@@ -2385,8 +2391,11 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
   bar.appendChild(footer);
   appendCollapseToggle(bar, sessionId);
   bar.classList.toggle('collapsed', isActionBarCollapsed());
-  if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(60000);
+  if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(350);
   bar.classList.add('visible');
+  // 60 秒抑制で縮小サイズを Codex へ一切伝えないと、Codex が高い行数のまま再描画を続け
+  // scrollback へ空行が化石化して表示がまばらになる。短く束ねた後、確定サイズを 1 回送る。
+  syncPtySizeToViewportAfterLayout(sessionId, shouldStickToBottom);
   actionBarShownAt.set(sessionId, Date.now());
   if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
   if (chatWasAtBottomM && chatTlM) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlM));

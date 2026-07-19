@@ -46,9 +46,9 @@ function sessionDisplayTitle(s: any): string {
 
 function compareSessionCards(a: any, b: any): number {
   if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
-  const aWaiting = a.state === 'waiting';
-  const bWaiting = b.state === 'waiting';
-  if (aWaiting !== bWaiting) return aWaiting ? -1 : 1;
+  // 承認待ち（保留中）を上へ持ち上げる並び替えは行わない。状態遷移でカード位置が
+  // 動くとサイドバーが読みづらくなるため、位置は固定し、承認待ちはバッジと
+  // プロジェクト見出しの保留中カウントで示す。
   const providerCmp = String(a.provider || '').localeCompare(String(b.provider || ''));
   if (providerCmp !== 0) return providerCmp;
   const aStarted = Date.parse(String(a.started_at || '')) || 0;
@@ -580,9 +580,9 @@ export function renderSessionList() {
 
   appendSessionColorFilters(root);
 
-  // ピン → 承認待ち → provider → 起動時刻の順で並べ、必要なら色で絞り込む。
-  // sessionOrder は任意の手動並び替えとして残すが、この識別優先順が
-  // セッションカードの実表示順の正本になる。
+  // ピン → provider → 起動時刻の順で並べ、必要なら色で絞り込む。状態（保留中等）は
+  // 並び順に影響させず、位置は固定する。sessionOrder は任意の手動並び替えとして残すが、
+  // この識別優先順がセッションカードの実表示順の正本になる。
   const displayedSessions = getOrderedSessions()
     .filter((s: any) => !activeSessionColorFilter || s.color === activeSessionColorFilter)
     .sort(compareSessionCards);
