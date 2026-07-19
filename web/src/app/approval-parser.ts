@@ -568,7 +568,17 @@
     }
     const filledSections = sections.filter(s => s.options.length > 0);
     if (filledSections.length >= 2) return attachPreamble(filledSections);
-    if (filledSections.length === 1) return attachPreamble(filledSections[0].options);
+    if (filledSections.length === 1) {
+      // 単一セクション（`Q1 見出し` 形式）を flat options に落とすとき、
+      // セクション上の _freeInput / title を配列プロパティへ伝播する。
+      // これを忘れると「N. User specifies」があっても action-bar に自由入力肢が出ない
+      // （pending_action-bar-invisible 副次 / 2026-07-14 観測）。
+      const sec = filledSections[0];
+      const singleOpts = sec.options;
+      if ((sec as any)._freeInput) (singleOpts as any)._freeInput = true;
+      if (sec.title) (singleOpts as any)._question = String(sec.title || '').trim();
+      return attachPreamble(singleOpts);
+    }
     if (looseOpts.length > 0) {
       // 自由入力フラグは配列プロパティで持たせる（option 構造は変えず isBatchOptions=false を維持）。
       if (looseFreeInput) (looseOpts as any)._freeInput = true;

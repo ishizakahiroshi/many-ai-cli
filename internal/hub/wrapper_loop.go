@@ -234,10 +234,11 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 			"session_id", id, "provider", reg.Provider)
 		return
 	}
-	// diag: docs/local/bugfix_statusline-settings-skip_2026-07-10.md — Hub 側で register ack
-	// に載せる TokenStatusbar 実測値を残す。wrapper 側 statusline_gate_wrapper と突き合わせて
-	// 「送信時 true → 受信時 false」の JSON パス経由劣化があるか確定するための診断ログ。
-	// 恒久的なログではなく原因確定後に外す。
+	// diag 継続: docs/local/bugfix_statusline-settings-skip_2026-07-10.md
+	// Hub が register ack に載せる TokenStatusbar 実測値。wrapper の
+	// statusline_gate_wrapper と突き合わせ「send=true → reg=false」の JSON 劣化を
+	// 確定する。2026-07-19 時点 hub.log は send=true のみ（false 0）だが wrapper 側
+	// 未突合のため残置（原因確定後に外す）。
 	tokenStatusbarForAck := s.tokenStatusbarEnabled()
 	s.logger.Info("statusline_gate_hub", "session_id", id, "provider", reg.Provider, "token_statusbar_send", tokenStatusbarForAck)
 	_ = wc.send(proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, TokenStatusbar: tokenStatusbarForAck, OrchestrationID: childMeta.OrchestrationID, BoardPath: childMeta.BoardPath})
@@ -533,7 +534,9 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 					ses.nativeApprovalScanQueued = false
 				}
 				if isAIProvider(provider) {
-					marker = extractApprovalMarkerBlock(ses.vt.TailLines(vtTailLinesForApproval))
+					// マーカー抽出は scrollback 込み（画面高超えブロック / Grok 対応）。
+					// ネイティブ承認は上の TailLines（現在画面のみ）のまま — 解決済みプロンプトの再検出を避ける。
+					marker = extractApprovalMarkerBlock(ses.vt.TailLinesWithScrollback(vtTailLinesForMarker))
 				}
 				// 起動バナーからの初期モデル検出（--model 指定なしのセッション向け）。
 				// Model が埋まる・上限バイト超過のどちらかで打ち切る。

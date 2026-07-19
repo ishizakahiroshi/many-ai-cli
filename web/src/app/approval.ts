@@ -773,7 +773,7 @@ export function handleHubApprovalMarker(message) {
   if (!block) return;
   const markerOpts = extractHubMarkerApproval(markerLinesFromTail(block));
   if (!markerOpts) return;
-  try { console.log('[approval-route] handleHubApprovalMarker', { id, activeSessionId, optsLen: markerOpts.length, q: (markerOpts as any)._question?.slice?.(0, 80) }); } catch (_) {}
+  try { console.log('[approval-route] handleHubApprovalMarker', { id, activeSessionId, optsLen: markerOpts.length, q: (markerOpts as any)._question?.slice?.(0, 80), batch: isBatchOptions(markerOpts) }); } catch (_) {}
   if (isAnsweredMarkerSig(id, markerOpts)) return;
 
   const sig = approvalSig(markerOpts);
@@ -788,6 +788,16 @@ export function handleHubApprovalMarker(message) {
   cancelApprovalHintConfirm(id);
   approvalSwitchCandidates.delete(id);
   resetBgApprovalMisses(id);
+  // 新マーカー（sig 変化）のときだけ手動 ✕ 抑制・差分スキップを解除する。
+  // 同一 sig の再配信で毎回 lastActionBarRender を潰すと、描画キャッシュが効かず
+  // 自由入力中のフォーカス喪失・点滅につながる（敵対レビュー P1 follow-up）。
+  const prevSrc = approvalSourceCache.get(id);
+  const isNewSig = !prevSrc || prevSrc.sig !== sig || prevSrc.source !== 'hub_marker';
+  if (isNewSig) {
+    manualHideSig.delete(id);
+    lastActionBarRender.sessionId = null;
+    lastActionBarRender.sig = null;
+  }
   approvalUiAdapter.cacheApprovalOptions(id, markerOpts);
   approvalSourceCache.set(id, {
     source: 'hub_marker',
@@ -948,7 +958,25 @@ export function detectApproval(id) {
       const consumed = approvalConsumedSig.get(id);
       const sig = approvalSig(markerOpts);
       const src = approvalSourceCache.get(id);
-      if (src && src.source === 'hub_marker' && src.sig === sig) return;
+      // Hub が既に approval_marker を配信済みでも、セッション切替時は action-bar を
+      // 再描画する必要がある。従来は early return のみで showOptions を呼ばず、
+      // pendingTextTail にブロックが残っているアクティブ復帰で bar が出なかった
+      // （2026-07-19 経路解析: pending_approval-marker-button-not-shown）。
+      // 敵対レビュー P1: wasVisible でも毎回 showOptions すると自由入力中フォーカス喪失や
+      // 無駄な再描画が増える。非表示 or bar が空/非 visible のときだけ再描画する。
+      if (src && src.source === 'hub_marker' && src.sig === sig) {
+        if (consumed === sig) return;
+        const wasVisible = !!approvalVisibleCache.get(id);
+        const barNeedsPaint = !bar || !bar.classList.contains('visible') || bar.children.length === 0;
+        if (!wasVisible) {
+          cancelApprovalHintConfirm(id);
+          approvalUiAdapter.setApprovalVisible(id, true);
+        }
+        if (barNeedsPaint || !wasVisible) {
+          approvalUiAdapter.showOptions(bar, id, markerOpts, !wasVisible);
+        }
+        return;
+      }
       if (consumed === sig) return; // 消費済み承認の再表示をスキップ（タイマーは trackApprovalHintFromChunk 側で管理）
       const prevTimer2 = approvalConsumedSigDeleteTimer.get(id);
       if (prevTimer2) { clearTimeout(prevTimer2); approvalConsumedSigDeleteTimer.delete(id); }
@@ -1376,6 +1404,13 @@ export function showActionBar(bar, sessionId, options, forceStickToBottom = fals
   if (suppressedSig !== undefined) {
     if (suppressedSig === approvalSig(options)) return;
     manualHideSig.delete(sessionId);
+  }
+  // ステール DOM 防御: lastActionBarRender が「描画済み」でも bar が空/非表示なら差分スキップを無効化。
+  // （visible=true なのに children=0 の action-bar-invisible パターンへの対策）
+  if (bar && lastActionBarRender.sessionId === sessionId &&
+      (!bar.classList.contains('visible') || bar.children.length === 0)) {
+    lastActionBarRender.sessionId = null;
+    lastActionBarRender.sig = null;
   }
   if (isBatchOptions(options)) {
     showBatchActionBar(bar, sessionId, options, forceStickToBottom);
