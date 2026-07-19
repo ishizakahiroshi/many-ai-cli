@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, isAnsweredMarkerSig, recordAnsweredMarkerSig, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchActiveQ, batchFreeText, batchSelections, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectFocusIdx, multiSelectSelections, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, utf8Decoder } from './state.js';
+import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, isAnsweredMarkerSig, recordAnsweredMarkerSig, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalQuestionKey, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchActiveQ, batchFreeText, batchSelections, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectFocusIdx, multiSelectSelections, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, utf8Decoder } from './state.js';
 import { inputEl, sendSubmittedText, sendSubmittedBody } from '../app.js';
 import { clearSuppressPtyResize, isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout, syncPtySizeToViewportAfterLayout } from './terminal.js';
 import { stripAnsi } from './settings.js';
@@ -31,13 +31,39 @@ const highRiskConfirmationInFlight = new Set<number>();
 const H9_RESTORE_MISS_LIMIT = 3;
 const h9RestoreMisses = new Map();
 
-// 手動 dismiss で一時的に隠した承認の sig（sessionId → approvalSig）。
+// 手動 dismiss で一時的に隠した承認（sessionId → { optionsSig, questionKey }）。
 // 入力欄横「✕ 承認」と action-bar 右上 ✕ の両方が同じ経路（manuallyHideActionBar）を使う。
 // approvalRawOptionsCache / approvalVisibleCache は保持したまま action-bar の描画だけ抑制する。
-// showActionBar の choke point で「同一 sig の承認は描画スキップ・別 sig の新しい承認は抑制解除して描画」する。
+// showActionBar の choke point で:
+//   - 同一 optionsSig → 描画スキップ
+//   - options ラベルが揺れても同一 questionKey → 描画スキップ（Grok 差分再描画対策）
+//   - 質問自体が変わったときだけ抑制解除して描画
 // 「↻ 承認」（再表示）でこのエントリを消し、承認解決（hideActionBar）でも確実に消す。
-// （旧: パネル ✕ は hideActionBar + 60s suppress だったため、抑制切れ・再検出で同一質問が戻っていた）
-const manualHideSig = new Map();
+// （旧1: パネル ✕ は hideActionBar + 60s suppress → 抑制切れで再表示）
+// （旧2: optionsSig のみ抑止 → Grok のラベル揺れで isNewSig 扱いになり再表示）
+const manualHideState = new Map(); // sessionId → { optionsSig: string, questionKey: string }
+
+function clearManualHide(id) {
+  manualHideState.delete(id);
+}
+
+function rememberManualHide(id, options) {
+  if (!Array.isArray(options) || options.length === 0) return;
+  manualHideState.set(id, {
+    optionsSig: approvalSig(options),
+    questionKey: approvalQuestionKey(options),
+  });
+}
+
+// true = まだ手動 dismiss 中なので描画しない / false = 抑制なし or 別質問なので解除してよい
+function isManualHideActive(id, options) {
+  const st = manualHideState.get(id);
+  if (!st) return false;
+  if (st.optionsSig === approvalSig(options)) return true;
+  const qk = approvalQuestionKey(options);
+  if (qk && st.questionKey && qk === st.questionKey) return true;
+  return false;
+}
 
 // 複数質問 UI（AskUserQuestion 等）検出の窓と取りこぼし対策。
 // scanBuffer の固定 40 行窓だと、端末行数(term.rows)が 40 を超える縦長ターミナルで
@@ -790,13 +816,14 @@ export function handleHubApprovalMarker(message) {
   cancelApprovalHintConfirm(id);
   approvalSwitchCandidates.delete(id);
   resetBgApprovalMisses(id);
-  // 新マーカー（sig 変化）のときだけ手動 ✕ 抑制・差分スキップを解除する。
+  // 新マーカー（options sig 変化）のときだけ差分スキップを解除する。
   // 同一 sig の再配信で毎回 lastActionBarRender を潰すと、描画キャッシュが効かず
   // 自由入力中のフォーカス喪失・点滅につながる（敵対レビュー P1 follow-up）。
+  // 手動 dismiss はここでは消さない: Grok 差分再描画でラベルが揺れると isNewSig になり、
+  // 消すと同一質問が再表示される。解除は showActionBar が questionKey 不一致のときだけ行う。
   const prevSrc = approvalSourceCache.get(id);
   const isNewSig = !prevSrc || prevSrc.sig !== sig || prevSrc.source !== 'hub_marker';
   if (isNewSig) {
-    manualHideSig.delete(id);
     lastActionBarRender.sessionId = null;
     lastActionBarRender.sig = null;
   }
@@ -1262,7 +1289,7 @@ export function hideActionBar(id) {
   if (id !== undefined) multiSelectSelections.delete(id);
   removeBatchConfirmModal();
   if (id !== undefined) {
-    manualHideSig.delete(id); // 承認が解決したら手動抑制も解除する
+    clearManualHide(id); // 承認が解決したら手動抑制も解除する
     cancelApprovalHintConfirm(id);
     approvalSwitchCandidates.delete(id);
     h9RestoreMisses.delete(id);
@@ -1308,13 +1335,13 @@ export function hideActionBar(id) {
 
 // 手動 dismiss（入力欄横「✕ 承認」/ action-bar 右上 ✕）: 描画だけ一時的に消す。
 // approvalRawOptionsCache / approvalVisibleCache はあえて保持し、承認は保留のまま（waiting も残す）。
-// 「↻ 承認」（reshowActionBar）で元に戻せる。承認が解決すれば hideActionBar が manualHideSig を消す。
+// 「↻ 承認」（reshowActionBar）で元に戻せる。承認が解決すれば hideActionBar が manualHide を消す。
 // hideActionBar + 時限 suppress は使わない（抑制切れや再検出で同一質問が戻るため）。
 export function manuallyHideActionBar(id) {
   if (id === undefined || id === null) return;
   const cached = approvalRawOptionsCache.get(id);
   if (Array.isArray(cached) && cached.length > 0) {
-    manualHideSig.set(id, approvalSig(cached));
+    rememberManualHide(id, cached);
   }
   const bar = document.getElementById('action-bar');
   const wasVisible = !!(bar && bar.classList.contains('visible'));
@@ -1339,7 +1366,7 @@ export function manuallyHideActionBar(id) {
 // 本当に保留中の承認だけが復活し、すでに解決済みなら何も表示されない（安全な再判定）。
 export function reshowActionBar(id) {
   if (id === undefined || id === null) return;
-  manualHideSig.delete(id);
+  clearManualHide(id);
   detectApproval(id);
 }
 
@@ -1402,12 +1429,11 @@ export function showActionBar(bar, sessionId, options, forceStickToBottom = fals
     const question = options && (options as any)._question ? String((options as any)._question).slice(0, 80) : '';
     console.log('[approval-route] showActionBar', { sessionId, activeSessionId, len: Array.isArray(options) ? options.length : 0, firstLabel, question, stack: new Error().stack?.split('\n').slice(1, 6).join(' | ') });
   } catch (_) {}
-  // 手動「✕ 承認」で抑制中は描画しない。同一承認のみ抑制し、別 sig の新しい承認は抑制解除して描画する。
-  const suppressedSig = manualHideSig.get(sessionId);
-  if (suppressedSig !== undefined) {
-    if (suppressedSig === approvalSig(options)) return;
-    manualHideSig.delete(sessionId);
-  }
+  // 手動「✕ 承認」で抑制中は描画しない。
+  // 同一 optionsSig、または質問キーが同じ（ラベル揺れ）ならスキップ。
+  // 質問自体が変わったときだけ抑制を解除して描画する。
+  if (isManualHideActive(sessionId, options)) return;
+  if (manualHideState.has(sessionId)) clearManualHide(sessionId);
   // ステール DOM 防御: lastActionBarRender が「描画済み」でも bar が空/非表示なら差分スキップを無効化。
   // （visible=true なのに children=0 の action-bar-invisible パターンへの対策）
   if (bar && lastActionBarRender.sessionId === sessionId &&
@@ -1735,7 +1761,7 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   }
   bar.appendChild(pane);
 
-  // 手動閉じボタン（誤検出時に消すため）。「✕ 承認」と同じ manualHideSig 抑止。
+  // 手動閉じボタン（誤検出時に消すため）。「✕ 承認」と同じ manualHide（questionKey）抑止。
   const closeBtn = document.createElement('button');
   closeBtn.className = 'action-dismiss-btn';
   closeBtn.textContent = '✕';
@@ -2096,7 +2122,7 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   bar.appendChild(pane);
 
   // 閉じ（✕）は position:absolute なので bar 直下に置けば右上に固定表示される。
-  // 「✕ 承認」と同じ manualHideSig 抑止（hideActionBar + 60s だと同一質問が再表示される）。
+  // 「✕ 承認」と同じ manualHide（questionKey）抑止。
   const closeBatchBtn = document.createElement('button');
   closeBatchBtn.className = 'action-dismiss-btn';
   closeBatchBtn.textContent = '✕';
@@ -2414,7 +2440,7 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
   };
   footer.appendChild(clearBtn);
 
-  // 「✕ 承認」と同じ manualHideSig 抑止（hideActionBar + 60s だと同一質問が再表示される）。
+  // 「✕ 承認」と同じ manualHide（questionKey）抑止。
   const closeMultiBtn = document.createElement('button');
   closeMultiBtn.className = 'action-dismiss-btn';
   closeMultiBtn.textContent = '✕';

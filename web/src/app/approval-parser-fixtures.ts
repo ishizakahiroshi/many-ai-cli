@@ -105,6 +105,27 @@ test('approval parser fixtures', () => {
   assert.equal((singleQ as any)._preamble, 'path-exists の挙動をどうしますか？');
   assert.equal((singleQ as any)._freeInput, true);
 
+  // 質問キー: ラベルが揺れても _question が同じなら同一キー（手動 dismiss 抑止用）。
+  const singleQLabelJitter = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'path-exists の挙動をどうしますか？',
+    '1. 実在判定可にする (Recommended) 追加ノイズ',
+    '2. 許可リストを維持（別表記）',
+    'N. User specifies',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal(parser.approvalQuestionKey(singleQ), parser.approvalQuestionKey(singleQLabelJitter));
+  assert.notEqual(parser.approvalSig(singleQ), parser.approvalSig(singleQLabelJitter));
+
+  // マーカー文字列が質問/ラベルに漏れ込んだ壊れたパース結果は出さない（Grok 再描画残骸）。
+  assert.equal(parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'スターター取込？ [MANY-AI-CLI] スターター取込？',
+    '1. A',
+    '2. B',
+    '[/MANY-AI-CLI]',
+  ]), null);
+
   // 複数行に折り返された質問文は 1 つに連結して捕捉する。
   const singleQWrapped = parser.extractHubMarkerApproval([
     '[MANY-AI-CLI]',
