@@ -2880,6 +2880,7 @@ window.addEventListener('files-tab-state-changed', () => {
   const addWebhookBtn = document.getElementById('ntfy-add-webhook-btn');
   const eventApprovalEl = document.getElementById('ntfy-event-approval') as HTMLInputElement | null;
   const eventDoneEl = document.getElementById('ntfy-event-done') as HTMLInputElement | null;
+  const includeBodyEl = document.getElementById('ntfy-include-body') as HTMLInputElement | null;
   const saveBtn = document.getElementById('ntfy-save-btn');
   const saveStatus = document.getElementById('ntfy-save-status');
   if (!toggleBtn || !block || !backendsList || !saveBtn) return;
@@ -2912,6 +2913,8 @@ window.addEventListener('files-tab-state-changed', () => {
           eventDoneEl.checked = events.some((e: string) => e === 'done');
         }
       }
+      // include_body は既定 false（オプトイン）。POST は全置換なので保存時に必ず送る。
+      if (includeBodyEl) includeBodyEl.checked = !!data.include_body;
       renderBackends();
     } catch (_) {}
   }
@@ -3036,7 +3039,7 @@ window.addEventListener('files-tab-state-changed', () => {
       const res = await fetch(`/api/notify-config?token=${encodeURIComponent(token || '')}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ backends, events }),
+        body: JSON.stringify({ backends, events, include_body: !!includeBodyEl?.checked }),
       });
       if (res.ok) {
         if (saveStatus) { saveStatus.textContent = t('settings_ntfy_saved') || '保存しました'; setTimeout(() => { if (saveStatus) saveStatus.textContent = ''; }, 2500); }

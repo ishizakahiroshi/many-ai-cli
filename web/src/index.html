@@ -635,6 +635,14 @@
                 </label>
               </div>
             </div>
+            <div class="settings-row" style="margin-top:4px">
+              <span class="settings-label" data-i18n="settings_ntfy_include_body">通知本文</span>
+              <label style="display:flex;align-items:center;gap:4px;font-size:0.85em">
+                <input type="checkbox" id="ntfy-include-body">
+                <span data-i18n="settings_ntfy_include_body_label">本文を含める</span>
+              </label>
+            </div>
+            <div class="settings-note" data-i18n="settings_ntfy_include_body_note">既定では件名のみ送ります。有効にすると承認質問文・完了サマリーが外部サービスへ送られます（送信前にシークレットはマスクされます）。</div>
             <div class="settings-row" style="margin-top:6px">
               <button id="ntfy-save-btn" class="settings-link-btn settings-inline-btn" data-i18n="settings_ntfy_save">保存</button>
               <span id="ntfy-save-status" class="settings-note" style="margin-left:6px"></span>
