@@ -10,7 +10,125 @@ Release artifacts are published at
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-07-XX
+### Added
+- **Bug reporting from the Hub UI and the CLI.** A "🐞 Bug report" button in
+  the Hub opens a dialog where you describe the symptom and the steps to
+  reproduce; the Hub then opens a pre-filled GitHub Issue form. Everything
+  that will leave your machine is shown in a preview first. The same flow is
+  available as `many-ai-cli issue` (`--title` / `--provider` / `--dry-run`);
+  under `MANY_AI_CLI_AUTO=1` only `--dry-run` is permitted. Environment
+  details are gathered through an explicit allow-list (version, OS, arch, Go
+  version, provider, model, User-Agent, hub port, per-provider last model) —
+  the config file is never attached. Adds `POST /api/bug-report/preview` and
+  `POST /api/bug-report/finalize`
+  (`internal/hub/bug_report_handler.go`, `internal/report/`,
+  `cmd/many-ai-cli/issue.go`, `web/src/app/bug-report-modal.ts`).
+- **Optional session-log attachment for bug reports.** Off by default. When
+  enabled, the last 200 lines are redacted and shown to you, and only after
+  you confirm are they uploaded via `gh gist create --secret` and linked from
+  the issue body. Without `gh`, or if the gist fails, or if the issue URL
+  would exceed 8192 bytes, the redacted report is written to
+  `~/.many-ai-cli/reports/` instead and GitHub opens with the title only.
+- **Vietnamese language support.** Hub UI locale (`web/src/i18n/vi.json`),
+  a `Tiếng Việt` entry in the language selector, automatic selection when
+  `navigator.language` starts with `vi`, and `vi-VN` speech recognition.
+  Vietnamese translations of the README, CLAUDE.md, and 11 manuals under
+  `docs/` are included. The UI locale is at full parity with Japanese and
+  English (1337 keys each).
+  Contributed by [@ngav1491](https://github.com/ngav1491) in
+  [#2](https://github.com/ishizakahiroshi/many-ai-cli/pull/2).
+- **Copy button on each message in the Grok conversation viewer**
+  (`web/src/app/grok-chat-viewer.ts`).
+- **`include_body` toggle in Hub Settings.** The notification section now
+  exposes the `notify.include_body` config key that was previously only
+  editable by hand in `config.yaml`, with a note explaining that enabling it
+  sends approval questions and completion summaries to an external service.
+- **`hub.wrapper_send_write_timeout_sec` setting** (default 5) for the
+  WebSocket write deadline used by the wrapper.
+
+### Changed
+- **Approval markers are now detected across scrollback.** The VT buffer keeps
+  a 500-line scrollback ring and marker extraction scans 300 lines instead of
+  the visible 120, so multi-question blocks taller than the terminal (as Grok
+  emits) are picked up. Native approval detection still looks only at the
+  current screen, to avoid re-detecting prompts that were already answered
+  (`internal/hub/vt_buffer.go`, `approval_detector.go`, `wrapper_loop.go`).
+- **The wrapper no longer blocks PTY reads on WebSocket writes.** Output now
+  goes through a bounded 64-slot queue drained by a dedicated goroutine, so a
+  stalled Hub connection can no longer freeze the wrapped CLI. If the queue
+  overflows or a send fails, the connection is dropped as a transport fault
+  rather than silently discarding output, and the existing 64 KB replay
+  buffer restores a consistent screen on reconnect. The reconnect supervisor
+  now distinguishes "Hub HTTP is alive but the WebSocket transport is broken"
+  from a deliberate disconnect (`internal/wrapper/wrapper.go`).
+- **AI-generated commit messages now follow Conventional Commits.** Subjects
+  are `<type>(<scope>): …`, where the scope is the first non-generic segment
+  of the deepest common directory (`src` / `internal` / `cmd` / `pkg` / `lib`
+  are skipped, so `web/src/app` yields `app`). The verb is chosen from ten
+  candidates including new `move`, `simplify`, and `handle` detections
+  (`internal/hub/git_commit.go`).
+- **The session list no longer reorders cards when approvals arrive.** Cards
+  keep their position; pending approvals are indicated by the badge and the
+  per-project pending count instead. Summary counts are localized and collapse
+  to numbers only when space is tight (`web/src/app/session-list.ts`).
+- **Working-directory favorites in the spawn panel are sorted automatically**
+  by folder name (ties broken by full path) instead of being manually
+  ordered, and every row now commits on mousedown
+  (`web/src/app/spawn-panel.ts`).
+- **Task-completion notifications no longer send the summary body by default.**
+  `SendDone` now follows the same opt-in rule as approval notifications: only
+  `session #<id>: <status label>` is sent unless `notify.include_body` is
+  enabled, and when it is, the summary goes through `MaskSecrets` first.
+  Previously the raw summary was sent to ntfy / webhook with truncation only.
+
+### Fixed
+- The ✕ on the action bar now suppresses the approval the same way the
+  "✕ approve" control next to the input does. Previously it only hid the bar
+  for 60 seconds, so the same question reappeared once the timer expired.
+- The action bar could stay hidden after switching back to a session when the
+  Hub had already delivered that marker. It is now redrawn whenever the bar is
+  empty or not visible (`web/src/app/approval.ts`).
+- A free-input option ("N. User specifies") was dropped when a single-section
+  `Q1`-style block was flattened, so no free-input control appeared on the
+  action bar (`web/src/app/approval-parser.ts`).
+- PTY resize suppression while the approval bar is shown was cut from 60
+  seconds to 350 ms, followed by one authoritative viewport-size update. This
+  stops Codex from redrawing against a stale row count and fossilizing blank
+  lines into the scrollback (`web/src/app/terminal.ts`).
+- The preamble panel could not be expanded after being drag-resized, because
+  the inline `max-height` survived; wheel events inside it no longer propagate
+  to the terminal.
+- Approval summary cards no longer stretch vertically and leave a large gap in
+  column layouts (`web/src/styles/approval.css`).
+- Dragging to select text in the Grok conversation and history viewers no
+  longer clears the selection through focus recovery
+  (`web/src/app.ts`, `web/src/app/attachments.ts`).
+
+### Removed
+- Drag-and-drop reordering of working-directory favorites in the spawn panel,
+  superseded by automatic sorting (see Changed).
+
+### Security
+- **All bug-report output is redacted at every boundary** — preview, finalize,
+  issue URL, and local fallback all pass through `internal/report/redact.go`.
+  It masks provider and platform tokens (`sk-` / `sk-ant-api*`, `ghp_` and the
+  other GitHub prefixes, `glpat-`, `xox[abprs]-`, `AIza`, `hf_`, `npm_`,
+  `pypi-`, `xai-`, `gsk_`, AWS key ids, JWTs, PEM private key blocks),
+  generic secrets (`?token=` / `Bearer` / `key: value` pairs / credentials in
+  URLs), private paths, home directories (so the account name never leaks),
+  non-loopback IP addresses, email addresses, and private hostnames.
+- Attaching a session log requires a single-use preview token (32 random
+  bytes, 15-minute TTL, constant-time comparison), so a gist is only created
+  for content that was actually shown to you. Log reads are restricted to
+  `.jsonl` files under `<log_dir>/sessions` after symlink resolution, capped
+  at 512 KB, and returned gist URLs are strictly validated.
+- Updated `golang.org/x/crypto` 0.52.0 → 0.54.0, `golang.org/x/net` 0.55.0 →
+  0.57.0, `golang.org/x/sys` 0.45.0 → 0.47.0, `golang.org/x/term` 0.43.0 →
+  0.45.0, and `modernc.org/sqlite` 1.51.0 → 1.54.0. Note that GO-2026-5932
+  (x/crypto) has no fixed release upstream yet; `govulncheck` reports it at
+  module level only and the affected symbols are not called by this project.
+
+## [0.5.0] - 2026-07-13
 
 ### Added
 - **`many-ai-cli setup` subcommand.** A one-shot post-install command for all
