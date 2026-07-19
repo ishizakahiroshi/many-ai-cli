@@ -1134,7 +1134,11 @@ export function syncMobileLayoutState() {
   }
   if (sessions.size === 0) closeMobileSessionDrawer();
   if (isMobile) {
-    (window as any).renderMobileSessionDrawer?.();
+    // 閉じている間はフル再描画しない（タップ中に行 DOM が消える原因になっていた）。
+    // 開いているときだけ更新。open 直前は openMobileSessionDrawer が force 描画する。
+    if (document.body.classList.contains('mobile-drawer-open')) {
+      (window as any).renderMobileSessionDrawer?.();
+    }
   } else {
     // PC 幅へ戻ったらドロワーを閉じ、renderMobileSessionDrawer() が外した hidden を戻す。
     // 戻さないと PC サイドバー #session-list 内にドロワー中身が露出したまま残る。
@@ -1150,7 +1154,8 @@ window.addEventListener('approval-queue-updated', () => {
 
 export function openMobileSessionDrawer() {
   if (!isMobileViewport()) return;
-  (window as any).renderMobileSessionDrawer?.();
+  // force: まだ mobile-drawer-open が付く前に中身を描く
+  (window as any).renderMobileSessionDrawer?.(true);
   document.body.classList.add('mobile-drawer-open');
   const btn = document.getElementById('mobile-menu-btn');
   const titleBtn = document.getElementById('mobile-session-title-btn');
