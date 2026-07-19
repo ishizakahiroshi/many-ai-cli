@@ -110,6 +110,45 @@
     return (h >>> 0).toString(36);
   }
 
+  // 手動 dismiss 抑止用の質問アイデンティティ（state.approvalQuestionKey と同契約）。
+  // option ラベル揺れに強く、_question / バッチ title を優先する。
+  function approvalQuestionKey(options) {
+    if (!options || !Array.isArray(options) || options.length === 0) return '';
+    const arr = options as any;
+    const arrQ = arr._question;
+    if (arrQ && String(arrQ).trim()) {
+      return 'q:' + approvalCtxHash(String(arrQ).replace(/\s+/g, ' ').trim().slice(0, 200));
+    }
+    const first = arr[0];
+    if (first && first._multiSelect && first._question && String(first._question).trim()) {
+      return 'q:' + approvalCtxHash(String(first._question).replace(/\s+/g, ' ').trim().slice(0, 200));
+    }
+    if (isBatchOptions(options)) {
+      const titles = options
+        .map(s => String((s && s.title) || '').replace(/\s+/g, ' ').trim())
+        .filter(Boolean)
+        .join('\n');
+      if (titles) return 'b:' + approvalCtxHash(titles.slice(0, 400));
+    }
+    return 'o:' + approvalSig(options);
+  }
+
+  // 差分再描画の残骸でマーカー文字列がラベルに混入したパース結果は出さない。
+  function isCorruptHubMarkerOptions(options) {
+    if (!options || !Array.isArray(options) || options.length === 0) return true;
+    const arr = options as any;
+    const markerLeak = /\[MANY-AI-CLI\]|\[\/MANY-AI-CLI\]/i;
+    const q = arr._question != null ? String(arr._question) : '';
+    if (markerLeak.test(q)) return true;
+    if (isBatchOptions(options)) {
+      return options.some(sec =>
+        markerLeak.test(String((sec && sec.title) || '')) ||
+        (sec.options || []).some(o => markerLeak.test(String((o && o.label) || ''))));
+    }
+    return options.some(o => markerLeak.test(String((o && o.label) || '')) ||
+      markerLeak.test(String((o && o._question) || '')));
+  }
+
   function sequentialChoiceSig(prompts) {
     return approvalCtxHash((prompts || []).map(p => `${p.key}:${p.question}:${p.options.map(o => `${o.num}.${o.label}`).join('|')}`).join('\n'));
   }
@@ -192,7 +231,8 @@
     }
     if (lastBlock !== null) {
       const inner = lastBlock.split('\n').map(l => l.trim()).filter(Boolean);
-      return withBlockSig(parseHubBlock(inner), inner);
+      const parsed = withBlockSig(parseHubBlock(inner), inner);
+      return isCorruptHubMarkerOptions(parsed) ? null : parsed;
     }
 
     // 開き/閉じが別チャンクに割れて全文一致しなかった場合の末尾アンカー・フォールバック。
@@ -203,7 +243,8 @@
       const line = source[i];
       if (/\[MANY-AI-CLI\]/.test(line) && /\[\/MANY-AI-CLI\]/.test(line)) {
         const inner = line.replace(/^[\s\S]*?\[MANY-AI-CLI\]/, '').replace(/\[\/MANY-AI-CLI\][\s\S]*$/, '').trim();
-        return withBlockSig(parseHubBlock([inner]), [inner]);
+        const parsed = withBlockSig(parseHubBlock([inner]), [inner]);
+        return isCorruptHubMarkerOptions(parsed) ? null : parsed;
       }
       if (/\[\/MANY-AI-CLI\]/.test(line) && closeIdx === -1) { closeIdx = i; continue; }
       if (/\[MANY-AI-CLI\]/.test(line) && closeIdx !== -1) { openIdx = i; break; }
@@ -211,7 +252,8 @@
 
     if (openIdx === -1 || closeIdx === -1) return null;
     const inner = source.slice(openIdx + 1, closeIdx).map(l => l.trim()).filter(Boolean);
-    return withBlockSig(parseHubBlock(inner), inner);
+    const parsed = withBlockSig(parseHubBlock(inner), inner);
+    return isCorruptHubMarkerOptions(parsed) ? null : parsed;
   }
 
   function extractPlainYesNoApproval(lines) {
@@ -766,6 +808,7 @@
     extractApprovalOptions,
     approvalContextLines,
     approvalSig,
+    approvalQuestionKey,
     sequentialChoiceSig,
     isBatchOptions,
     isMultiSelectOptions,
@@ -789,5 +832,5 @@
 const __esmRoot = (typeof window !== 'undefined') ? window : globalThis;
 export const approvalParser = __esmRoot.approvalParser;
 export const {
-  lineHasHint, linesHaveHint, approvalLineHasHint, approvalLinesHaveHint, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, extractApprovalOptions, approvalContextLines, isBatchOptions, isMultiSelectOptions, isMultiQuestionPrompt, isHubChoicePrompt, markHubChoiceDefault, matchNativeApprovalTrigger, hasApprovalLikeLabel, userSpecifiesRe, ungluedApprovalLines, normalizeVtCursorOps,
+  lineHasHint, linesHaveHint, approvalLineHasHint, approvalLinesHaveHint, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, extractApprovalOptions, approvalContextLines, isBatchOptions, isMultiSelectOptions, isMultiQuestionPrompt, isHubChoicePrompt, markHubChoiceDefault, matchNativeApprovalTrigger, hasApprovalLikeLabel, userSpecifiesRe, ungluedApprovalLines, normalizeVtCursorOps, approvalQuestionKey, approvalSig,
 } = __esmRoot.approvalParser;

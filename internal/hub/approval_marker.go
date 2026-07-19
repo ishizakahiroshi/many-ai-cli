@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"many-ai-cli/internal/proto"
+	"many-ai-cli/internal/sessionlog"
 )
 
 var approvalMarkerBlockRe = regexp.MustCompile(`(?s)\[MANY-AI-CLI\][\s\S]*?\[/MANY-AI-CLI\]`)
@@ -33,8 +34,15 @@ func extractApprovalMarkerBlock(lines []string) *approvalMarkerBlock {
 	}
 }
 
+// approvalMarkerSignature は dedupe 用シグネチャを返す。
+// Grok 等の差分再描画 TUI は同一質問でも色・余白の ANSI だけが揺れるため、
+// raw バイトの sha256 だと再 broadcast → Web 側 dismiss 抑止が外れる。
+// ANSI 除去 + 空白正規化後の本文をハッシュし、見た目同一の質問を同一 sig に寄せる。
+// Block フィールド自体は raw のまま配信し、クライアント側パース用に残す。
 func approvalMarkerSignature(block string) string {
-	sum := sha256.Sum256([]byte(block))
+	clean := sessionlog.StripANSI(block)
+	clean = strings.Join(strings.Fields(clean), " ")
+	sum := sha256.Sum256([]byte(clean))
 	return hex.EncodeToString(sum[:])
 }
 

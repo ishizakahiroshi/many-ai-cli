@@ -88,6 +88,42 @@ func TestMaybeBroadcastApprovalMarkerDedupesSameBlock(t *testing.T) {
 	}
 }
 
+// Grok 差分再描画で色 CSI だけが揺れた同一質問は、同一 sig として dedupe する。
+func TestApprovalMarkerSignatureIgnoresAnsiFlicker(t *testing.T) {
+	plain := "[MANY-AI-CLI]\nスターター取込の本線？\n1. A (Recommended)\n2. B\nN. User specifies\n[/MANY-AI-CLI]"
+	// 実測 s22: 同一 clean 本文でも \x1b[48;2;... の余白/色だけが変わる
+	coloredA := "[MANY-AI-CLI]\n\x1b[39m\x1b[48;2;1;1;1mスターター取込の本線？\x1b[K\n1. A (Recommended)\n2. B\nN. User specifies\n[/MANY-AI-CLI]"
+	coloredB := "[MANY-AI-CLI]\n\x1b[39m\x1b[48;2;20;20;20mスターター取込の本線？\x1b[K\n1. A (Recommended)\n2. B\nN. User specifies\n[/MANY-AI-CLI]"
+	sigPlain := approvalMarkerSignature(plain)
+	sigA := approvalMarkerSignature(coloredA)
+	sigB := approvalMarkerSignature(coloredB)
+	if sigPlain == "" || sigA == "" {
+		t.Fatal("empty signature")
+	}
+	if sigPlain != sigA || sigA != sigB {
+		t.Fatalf("ANSI flicker must share sig: plain=%q a=%q b=%q", sigPlain, sigA, sigB)
+	}
+
+	s := newTestServer()
+	ses := registerTestSession(s, 1, "grok")
+	first := &approvalMarkerBlock{Block: coloredA, Sig: sigA}
+	second := &approvalMarkerBlock{Block: coloredB, Sig: sigB}
+	if !s.maybeBroadcastApprovalMarker(1, first, ses.lastOutputAt) {
+		t.Fatal("first colored marker should broadcast")
+	}
+	if s.maybeBroadcastApprovalMarker(1, second, ses.lastOutputAt) {
+		t.Fatal("ANSI-only variant must be deduped (no rebroadcast)")
+	}
+}
+
+func TestApprovalMarkerSignatureDiffersForDifferentQuestions(t *testing.T) {
+	a := approvalMarkerSignature("[MANY-AI-CLI]\nQ1 first?\n1. Yes\n[/MANY-AI-CLI]")
+	b := approvalMarkerSignature("[MANY-AI-CLI]\nQ1 second?\n1. Yes\n[/MANY-AI-CLI]")
+	if a == b {
+		t.Fatalf("different questions must not share sig: %q", a)
+	}
+}
+
 func TestExtractApprovalMarkerBlockSpansScrollback(t *testing.T) {
 	// 画面高 4 行の VT に、開始〜閉じが画面をまたぐ長いマーカーブロックを流す。
 	// TailLines（現在画面のみ）では不完全、TailLinesWithScrollback では完全ブロックが取れること。
