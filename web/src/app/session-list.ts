@@ -1201,15 +1201,22 @@ export function renderSummaryAndNotifications() {
     return `<span class="summary-provider-chip" data-tooltip="${escapeHtml(tip)}">${providerIconHtml(provider)}<span class="compact-hide"><span class="summary-provider-name ${safeClassToken(provider)}">${escapeHtml(label)}</span><span class="summary-provider-count">: ${g.count}</span></span><span class="compact-count">${g.count}</span></span>`;
   }).join('');
 
+  // session-chip は通常「N 実行中」等のフルラベル。#summary が狭いときは
+  // summary--compact で .compact-hide を消し数字だけ残す（provider chip と同じ方式）。
+  // white-space:nowrap 無しだと日本語が1文字ずつ縦折りしてヘッダが崩れる。
+  const stateChip = (cls, count, label) => {
+    const full = `${count} ${label}`;
+    return `<span class="session-chip ${cls}" title="${escapeHtml(full)}"><span class="chip-dot"></span><span class="compact-hide">${escapeHtml(full)}</span><span class="compact-count">${count}</span></span>`;
+  };
   let summary = '';
   if (stateCounts.running > 0) {
-    summary += `<span class="session-chip running"><span class="chip-dot"></span>${stateCounts.running} ${t('state_running')}</span>`;
+    summary += stateChip('running', stateCounts.running, t('state_running'));
   }
   if (stateCounts.waiting > 0) {
-    summary += `<span class="session-chip waiting"><span class="chip-dot"></span>${stateCounts.waiting} ${t('state_waiting')}</span>`;
+    summary += stateChip('waiting', stateCounts.waiting, t('state_waiting'));
   }
   if (stateCounts.standby > 0) {
-    summary += `<span class="session-chip standby"><span class="chip-dot"></span>${stateCounts.standby} ${t('state_standby')}</span>`;
+    summary += stateChip('standby', stateCounts.standby, t('state_standby'));
   }
   if (providerParts) summary += `<span class="summary-sep">|</span>${providerParts}`;
   document.getElementById('summary').innerHTML = summary;
