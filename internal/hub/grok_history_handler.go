@@ -75,9 +75,16 @@ func (s *Server) handleGrokHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if homeDir == "" {
-		if h, err := os.UserHomeDir(); err == nil {
-			homeDir = h
+		// UserHomeDir が失敗すると homeDir は空のままとなり、後段の
+		// filepath.Join("", ".grok") が相対パス ".grok" となる。プロセス
+		// cwd 配下の別プロジェクトの .grok を意図せず読む恐れがあるため、
+		// ホームディレクトリを解決できない環境では 404 で早期終了する。
+		h, err := os.UserHomeDir()
+		if err != nil || strings.TrimSpace(h) == "" {
+			writeJSONError(w, http.StatusNotFound, "not_found", "user home directory unavailable")
+			return
 		}
+		homeDir = h
 	}
 	startTime, err := time.Parse(time.RFC3339, startedAt)
 	if err != nil {

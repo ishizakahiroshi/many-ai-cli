@@ -7,6 +7,7 @@ import { orderSessions, sessions, approvalVisibleCache, multiQuestionVisibleCach
 import { activateSession, providerIconHtml } from './session-list.js';
 import { sessionTitle } from './approval-queue-tab.js';
 import { openServerModal } from './server-modal.js';
+import { escapeHtml } from './util.js';
 
 const mobileMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
   ? window.matchMedia('(max-width: 720px)')
@@ -443,10 +444,6 @@ function renderMobileDrawerResults(): void {
   });
   actions.append(home, spawn, expose, shutdown, settings, server);
   body.appendChild(actions);
-}
-
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 window.addEventListener('approval-queue-updated', () => {
