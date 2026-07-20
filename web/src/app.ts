@@ -1432,6 +1432,15 @@ export function sendText(sessionId, text) {
 }
 
 export function requestSessionDismiss(id) {
+  // 「セッションが勝手に消える」事案の犯人特定用
+  // (docs/local/bugfix_session-silent-auto-dismiss_2026-07-21.md)。
+  // dismiss を投げる直前に呼び出し元スタックを console と PTY 生ログ両方へ残す。
+  // 発火経路が UI × / group × / multi-pane close / auto-dismiss / snapshot completed 等
+  // 複数あるため、再発時にどれが引いたかをここで確定させる。
+  try {
+    const stack = new Error('dismiss trace').stack || '';
+    console.warn('[session-dismiss-trace] session_id=' + id + ' ts=' + new Date().toISOString() + '\n' + stack);
+  } catch (_) {}
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'session_dismiss', session_id: id }));
   }
