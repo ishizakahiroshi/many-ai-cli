@@ -15,6 +15,20 @@ import { isActionBarCollapsed, setActionBarCollapsed, STORAGE_HIGH_RISK_CONFIRMA
 const HIGH_RISK_HOLD_MS = 1200;
 const highRiskConfirmationInFlight = new Set<number>();
 
+// 一時計装 (docs/local/bugfix_batch-approval-actionbar-not-hidden_2026-07-21.md)。
+// 原因判明後に endpoint (/api/debug/batch-log) ごと削除する。
+function dlog(tag: string, data: any): void {
+  try {
+    const payload = JSON.stringify({ tag, ts: new Date().toISOString(), ...data });
+    fetch(`/api/debug/batch-log?token=${encodeURIComponent(token || '')}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload,
+      keepalive: true,
+    }).catch(() => { /* fire-and-forget */ });
+  } catch (_) { /* fire-and-forget */ }
+}
+
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
 // ---- 承認検出 / action-bar ----
@@ -835,10 +849,20 @@ export function handleHubApprovalMarker(message) {
   const markerOpts = extractHubMarkerApproval(markerLinesFromTail(block));
   if (!markerOpts) return;
   try { console.log('[approval-route] handleHubApprovalMarker', { id, activeSessionId, optsLen: markerOpts.length, q: (markerOpts as any)._question?.slice?.(0, 80), batch: isBatchOptions(markerOpts) }); } catch (_) {}
-  if (isAnsweredMarkerSig(id, markerOpts)) return;
+  const _sig0 = approvalSig(markerOpts);
+  const _prevSrc0 = approvalSourceCache.get(id);
+  dlog('handleHubApprovalMarker.entry', {
+    id, activeSessionId, optsLen: markerOpts.length,
+    batch: isBatchOptions(markerOpts),
+    sig: _sig0,
+    consumedSigMatch: approvalConsumedSig.get(id) === _sig0,
+    answeredSig: isAnsweredMarkerSig(id, markerOpts),
+    isNewSigVsPrev: !_prevSrc0 || _prevSrc0.sig !== _sig0 || _prevSrc0.source !== 'hub_marker',
+  });
+  if (isAnsweredMarkerSig(id, markerOpts)) { dlog('handleHubApprovalMarker.skip.answered', { id, sig: _sig0 }); return; }
 
   const sig = approvalSig(markerOpts);
-  if (approvalConsumedSig.get(id) === sig) return;
+  if (approvalConsumedSig.get(id) === sig) { dlog('handleHubApprovalMarker.skip.consumed', { id, sig }); return; }
   const prevTimer = approvalConsumedSigDeleteTimer.get(id);
   if (prevTimer) {
     clearTimeout(prevTimer);
@@ -1304,6 +1328,11 @@ export function hideActionBar(id) {
   try { console.log('[approval-route] hideActionBar', { id, activeSessionId, stack: new Error().stack?.split('\n').slice(1, 5).join(' | ') }); } catch (_) {}
   const bar = document.getElementById('action-bar');
   const wasVisible = !!(bar && bar.classList.contains('visible'));
+  dlog('hideActionBar.entry', {
+    id, activeSessionId, wasVisible,
+    hadBatchClass: !!(bar && bar.classList.contains('batch')),
+    stack: new Error().stack?.split('\n').slice(1, 6).join(' | '),
+  });
   if (bar) { bar.classList.remove('visible', 'batch', 'multi-select', 'single-tabs'); bar.innerHTML = ''; }
   // action-bar 出現時に設定した PTY リサイズ抑制を解除する。
   // これにより消滅後のターミナル拡大に対して ResizeObserver が
@@ -1465,6 +1494,15 @@ export function showActionBar(bar, sessionId, options, forceStickToBottom = fals
   // 手動「✕ 承認」で抑制中は描画しない。
   // 同一 optionsSig、または質問キーが同じ（ラベル揺れ）ならスキップ。
   // 質問自体が変わったときだけ抑制を解除して描画する。
+  dlog('showActionBar.entry', {
+    sessionId, activeSessionId,
+    isBatch: isBatchOptions(options),
+    optsLen: Array.isArray(options) ? options.length : 0,
+    manualHideActive: isManualHideActive(sessionId, options),
+    consumedSigMatch: approvalConsumedSig.get(sessionId) === approvalSig(options),
+    barVisibleBefore: !!bar?.classList.contains('visible'),
+    stack: new Error().stack?.split('\n').slice(1, 6).join(' | '),
+  });
   if (isManualHideActive(sessionId, options)) return;
   if (manualHideState.has(sessionId)) clearManualHide(sessionId);
   // ステール DOM 防御: lastActionBarRender が「描画済み」でも bar が空/非表示なら差分スキップを無効化。
@@ -2265,6 +2303,11 @@ function removeBatchConfirmModal() {
 // 「送信確認」: 全問回答済みのときだけ、内容＋実送信文字列を確認するモーダルを開く。
 export function openBatchConfirm(sessionId) {
   const cached = approvalRawOptionsCache.get(sessionId);
+  dlog('openBatchConfirm.entry', {
+    sessionId, activeSessionId,
+    cachedIsBatch: isBatchOptions(cached),
+    allAnswered: isBatchOptions(cached) ? batchAllAnswered(sessionId, cached) : false,
+  });
   if (!isBatchOptions(cached)) return;
   if (!batchAllAnswered(sessionId, cached)) return;
   removeBatchConfirmModal();
@@ -2304,7 +2347,12 @@ export function openBatchConfirm(sessionId) {
   const go = document.createElement('button');
   go.className = 'action-confirm-go';
   go.textContent = t('approval_confirm_send');
-  go.onclick = (e) => { e.stopPropagation(); removeBatchConfirmModal(); sendBatchChoices(sessionId); };
+  go.onclick = (e) => {
+    e.stopPropagation();
+    dlog('openBatchConfirm.goClick', { sessionId });
+    removeBatchConfirmModal();
+    sendBatchChoices(sessionId);
+  };
   row.appendChild(back); row.appendChild(go);
   modal.appendChild(row);
 
@@ -2318,17 +2366,33 @@ export function openBatchConfirm(sessionId) {
 // 確定送信（モーダルの「送信」から呼ぶ）。送信後は完了メッセージを出さず UI を消して会話に戻る。
 export function sendBatchChoices(sessionId) {
   const cached = approvalRawOptionsCache.get(sessionId);
-  if (!isBatchOptions(cached)) return;
-  if (!batchAllAnswered(sessionId, cached)) return;
+  dlog('sendBatchChoices.entry', {
+    sessionId, activeSessionId,
+    cachedIsBatch: isBatchOptions(cached),
+    cachedLen: Array.isArray(cached) ? cached.length : -1,
+    allAnswered: isBatchOptions(cached) ? batchAllAnswered(sessionId, cached) : false,
+  });
+  if (!isBatchOptions(cached)) { dlog('sendBatchChoices.skip.notBatch', { sessionId }); return; }
+  if (!batchAllAnswered(sessionId, cached)) { dlog('sendBatchChoices.skip.notAllAnswered', { sessionId }); return; }
   const text = buildBatchPayload(sessionId);
   approvalConsumedSig.set(sessionId, approvalSig(cached));
+  dlog('sendBatchChoices.consumedSigSet', { sessionId, sig: approvalSig(cached), payload: text });
   recordAnsweredMarkerSig(sessionId, cached);
-  sendApprovalConsumed(sessionId, cached, text);
+  try { sendApprovalConsumed(sessionId, cached, text); dlog('sendBatchChoices.sendApprovalConsumed.ok', { sessionId }); }
+  catch (e) { dlog('sendBatchChoices.sendApprovalConsumed.throw', { sessionId, err: String(e) }); throw e; }
   // 一括回答は改行区切りの複数行（buildBatchPayload）。生送信だと \n が行ごとの途中送信に
   // なるため、チャット本文と同じ共通経路（ペースト包み＋確定 \r 別送）で 1 メッセージとして送る。
-  sendSubmittedBody(sessionId, text, { recordMobileTranscript: false });
+  try { sendSubmittedBody(sessionId, text, { recordMobileTranscript: false }); dlog('sendBatchChoices.sendSubmittedBody.ok', { sessionId }); }
+  catch (e) { dlog('sendBatchChoices.sendSubmittedBody.throw', { sessionId, err: String(e) }); throw e; }
   removeBatchConfirmModal();
+  dlog('sendBatchChoices.beforeHide', { sessionId });
   hideActionBar(sessionId);
+  dlog('sendBatchChoices.afterHide', {
+    sessionId,
+    barVisible: !!document.getElementById('action-bar')?.classList.contains('visible'),
+    barBatch: !!document.getElementById('action-bar')?.classList.contains('batch'),
+    maskExists: !!document.getElementById('action-confirm-mask'),
+  });
   approvalSuppressUntil.set(sessionId, Date.now() + 400);
   batchSelections.delete(sessionId);
   batchFreeText.delete(sessionId);

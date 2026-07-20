@@ -883,6 +883,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/session-log", s.handleSessionLog)
 	mux.HandleFunc("/api/agent-log", s.handleAgentLog)
 	mux.HandleFunc("/api/agent-log/open", s.handleOpenAgentLog)
+	// 一時 endpoint: 一括承認 action-bar 消失 bug 用のログ計装
+	// docs/local/bugfix_batch-approval-actionbar-not-hidden_2026-07-21.md
+	mux.HandleFunc("/api/debug/batch-log", s.handleDebugBatchLog)
 	mux.HandleFunc("/api/grok-history", s.handleGrokHistory)
 	mux.HandleFunc("/api/session-search", s.handleSessionSearch)
 	mux.HandleFunc("/api/session-history", s.handleSessionHistory)
@@ -1342,6 +1345,16 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 				continue
 			}
 		case "session_dismiss":
+			// 誰が dismiss を投げたか追う (bugfix_session-silent-auto-dismiss_2026-07-21.md)。
+			// 過去に「席を離れた 10 分の間にセッションが消えた」事案が発生し、
+			// jsonl に session_end が無いまま session_dismiss だけ残る現象を再発時に切り分けるため、
+			// UI 接続元 (RemoteAddr / User-Agent) をここで残す。
+			var uiAddr, uiUA string
+			if req := conn.Request(); req != nil {
+				uiAddr = req.RemoteAddr
+				uiUA = req.UserAgent()
+			}
+			s.logger.Info("ui session_dismiss received", "session_id", m.SessionID, "ui_addr", uiAddr, "ui_ua", uiUA)
 			if s.handleDismiss(m) {
 				continue
 			}
@@ -1520,9 +1533,14 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	s.sessionsMu.Unlock()
 	if !exists {
 		// map には無いが UI 側に残っている幽霊カードを落とす。
+		s.logger.Info("session dismiss (already gone)", "session_id", m.SessionID)
 		s.broadcast(proto.Message{Type: "session_removed", SessionID: m.SessionID})
 		return true
 	}
+	// 「消えたセッションの原因が hub.log から追えない」問題対策
+	// (bugfix_session-silent-auto-dismiss_2026-07-21.md)。
+	// UI の × / 5s auto-dismiss / group dismiss いずれでもここへ来る。
+	s.logger.Info("session dismissed", "session_id", m.SessionID, "provider", endedProvider, "cwd", endedCWD)
 	// セッション破棄時に usageStat も解放する（メモリ無制限増加を防ぐ）。
 	// usageStatsMu のロック順序のため sessionsMu 解放後に呼ぶ。
 	DeleteSessionUsageStat(m.SessionID)

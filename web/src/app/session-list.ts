@@ -603,6 +603,20 @@ export function renderSessionList() {
   });
 
   // ピン留め優先、その中で groupOrder に従ってソート（未登録キーは末尾）
+  // 未登録のプロジェクトキーを groupOrder に追記し、以降のレンダーで並び順を固定する。
+  // ここで append しないと、両プロジェクトとも未登録の状態で比較関数が 0 を返し、
+  // Map 挿入順（= 各プロジェクトの最新セッションが compareSessionCards 順で登場する位置）
+  // に依存してしまい、あるプロジェクトの最新セッションを ✕ で削除した瞬間に
+  // 他プロジェクトのグループが上下にジャンプする（削除で並び順が変わって見える）。
+  let _groupOrderChanged = false;
+  for (const k of groups.keys()) {
+    if (k === '__pinned__') continue;
+    if (!groupOrder.includes(k)) {
+      groupOrder.push(k);
+      _groupOrderChanged = true;
+    }
+  }
+  if (_groupOrderChanged) saveGroupOrder();
   const _projectFavIdx = new Map(projectFavorites.map((k, i) => [k, i]));
   const _groupOrderIdx = new Map(groupOrder.map((k, i) => [k, i]));
   const sortedGroupKeys = [...groups.keys()].sort((a, b) => {
