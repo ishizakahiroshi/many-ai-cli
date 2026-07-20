@@ -178,6 +178,10 @@ type session struct {
 	StoreID   int64              `json:"-"`
 	LogPath   string             `json:"log_path,omitempty"`
 	JSONLPath string             `json:"jsonl_path,omitempty"`
+	// NativeLogPath is the raw transcript written by the provider itself (not
+	// many-ai-cli's optional PTY session log). Currently Codex reports this via
+	// its Stop hook; other providers resolve it from their local store on demand.
+	NativeLogPath string          `json:"-"`
 	History   *sessionlog.Writer `json:"-"`
 
 	// JSON 外: per-session 入力直列化ロック（#18）。
@@ -877,6 +881,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/log-config", s.handleLogConfig)
 	mux.HandleFunc("/api/session-chat", s.handleSessionChat)
 	mux.HandleFunc("/api/session-log", s.handleSessionLog)
+	mux.HandleFunc("/api/agent-log", s.handleAgentLog)
+	mux.HandleFunc("/api/agent-log/open", s.handleOpenAgentLog)
 	mux.HandleFunc("/api/grok-history", s.handleGrokHistory)
 	mux.HandleFunc("/api/session-search", s.handleSessionSearch)
 	mux.HandleFunc("/api/session-history", s.handleSessionHistory)

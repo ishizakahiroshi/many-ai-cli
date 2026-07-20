@@ -1331,7 +1331,22 @@ header {
 }
 #attach-clear-btn:hover { color: var(--danger); border-color: var(--danger-bg); background: var(--danger-bg); }
 
+#agent-log-btn {
+  margin-left: auto;
+  background: transparent;
+  color: var(--muted-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 2px 7px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  align-self: center;
+}
+#agent-log-btn:hover { color: var(--fg); border-color: var(--muted-2); background: var(--bg-2); }
+
 #attach-copy-cwd-btn {
+  margin-left: 2px;
   background: transparent;
   color: var(--muted-2);
   border: 1px solid var(--line);
@@ -1343,6 +1358,45 @@ header {
   align-self: center;
 }
 #attach-copy-cwd-btn:hover { color: var(--fg); border-color: var(--muted-2); background: var(--bg-2); }
+
+.agent-log-popup {
+  position: fixed;
+  z-index: 2100;
+  width: min(360px, calc(100vw - 16px));
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.36);
+}
+.agent-log-popup-title { font-size: 0.78rem; color: var(--muted); margin-bottom: 6px; }
+.agent-log-popup-path {
+  display: block;
+  max-height: 56px;
+  overflow: auto;
+  padding: 7px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-deep);
+  color: var(--fg);
+  font: 0.72rem/1.35 var(--mono, ui-monospace, monospace);
+  overflow-wrap: anywhere;
+}
+.agent-log-popup-actions { display: flex; gap: 6px; margin-top: 9px; }
+.agent-log-popup-actions button {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+  color: var(--fg);
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+.agent-log-popup-actions button:hover { border-color: var(--accent); color: var(--accent-text); }
+
+@media (max-width: 600px) {
+  #agent-log-btn { font-size: 0; padding: 4px 7px; }
+  #agent-log-btn::first-letter { font-size: 1rem; }
+}
 
 /* アプリ情報モーダル */
 #about-panel {

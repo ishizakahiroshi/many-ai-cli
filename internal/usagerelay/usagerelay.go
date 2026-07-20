@@ -469,6 +469,7 @@ func runCodex(hubURL, token string, sessionID int, stdin io.Reader, logger *slog
 			CtxWindow:     ctxWindow,
 			StartedAt:     time.Now().Format(time.RFC3339),
 			ReasoningOut:  reasoningOut,
+			TranscriptPath: input.TranscriptPath,
 		}
 		if err := postUsage(hubURL, token, payload, logger); err != nil {
 			logger.Warn("usage-relay(codex): post failed", "err", err)
@@ -521,6 +522,7 @@ type hubUsagePayload struct {
 	RepoName         string  `json:"repo_name,omitempty"`
 	RemainingPct     float64 `json:"remaining_pct,omitempty"`
 	ReasoningOut     int     `json:"reasoning_output_tokens,omitempty"`
+	TranscriptPath   string  `json:"transcript_path,omitempty"`
 }
 
 // validateHubURL は親から渡された Hub URL を loopback http/https に絞る。

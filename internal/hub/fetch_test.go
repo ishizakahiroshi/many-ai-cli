@@ -71,6 +71,39 @@ func TestNewExternalHTTPClientBlocksPrivateIPLiteral(t *testing.T) {
 	}
 }
 
+func TestNewExternalHTTPClientBlocksCredentials(t *testing.T) {
+	client := newExternalHTTPClient(5 * time.Second)
+	resp, err := client.Get("https://user:pass@example.com/resource.md")
+	if resp != nil {
+		resp.Body.Close()
+	}
+	if err == nil {
+		t.Fatal("expected error for request credentials, got nil")
+	}
+}
+
+func TestLoopbackOnlyDialContextBlocksPublicAddress(t *testing.T) {
+	called := false
+	dial := loopbackOnlyDialContext(func(context.Context, string, string) (net.Conn, error) {
+		called = true
+		return nil, errors.New("dial should not be called")
+	})
+
+	prev := lookupIPAddr
+	lookupIPAddr = func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("203.0.113.10")}}, nil
+	}
+	t.Cleanup(func() { lookupIPAddr = prev })
+
+	_, err := dial(context.Background(), "tcp", "example.test:8080")
+	if err == nil {
+		t.Fatal("expected error for public address")
+	}
+	if called {
+		t.Fatal("wrapped dialer should not be called for a public address")
+	}
+}
+
 func TestPrivateNetworkBlockingDialContextBlocksResolvedLoopback(t *testing.T) {
 	called := false
 	dial := privateNetworkBlockingDialContext(func(context.Context, string, string) (net.Conn, error) {

@@ -744,6 +744,25 @@ export function normalizeGoApprovalOptions(rawOptions) {
     .filter((opt) => Number.isFinite(opt.num) && opt.label);
 }
 
+function localizeOpenCodeShortcutOptions(options) {
+  const labels = new Map([
+    ['allow once', t('approval_opencode_once')],
+    ['allow always', t('approval_opencode_always')],
+    ['reject', t('approval_opencode_reject')],
+  ]);
+  return options.map((opt) => {
+    const nativeLabel = String(opt.label || '').trim();
+    const label = labels.get(nativeLabel.toLowerCase());
+    if (!label) return opt;
+    return {
+      ...opt,
+      label,
+      title: nativeLabel,
+      _openCodeShortcut: true,
+    };
+  });
+}
+
 export function isGoNativeApprovalActive(id) {
   const src = approvalSourceCache.get(id);
   return !!(src && src.source === 'go_vt' && approvalVisibleCache.get(id));
@@ -752,7 +771,10 @@ export function isGoNativeApprovalActive(id) {
 export function handleGoApprovalDetected(message) {
   const id = message && message.session_id;
   if (!id) return;
-  const options = normalizeGoApprovalOptions(message.approval_options);
+  let options = normalizeGoApprovalOptions(message.approval_options);
+  if (message.approval_kind === 'native_opencode_shortcut') {
+    options = localizeOpenCodeShortcutOptions(options);
+  }
   if (options.length === 0) return;
   const sig = String(message.approval_sig || approvalSig(options));
 	const summary = normalizeApprovalSummary(message.approval_summary, message.approval_context, message.approval_question);
@@ -792,6 +814,17 @@ function normalizeApprovalSummary(raw, fallbackRaw, fallbackQuestion) {
   const context = String(raw.raw || fallbackRaw || '').trim();
   if (!command && !context) return null;
   return { command, paths, risk, raw: context };
+}
+
+// OpenCode の承認ダイアログは数字を受け取らず、矢印＋Enter で選ぶ。
+// action-bar 上だけは 1/2/3 を意味のあるショートカットとして提供し、
+// sendChoice が保持している _sendText（Enter / Right+Enter）へ変換して送る。
+export function handleOpenCodeApprovalNumberKey(sessionId, num) {
+  const options = approvalRawOptionsCache.get(sessionId);
+  if (!Array.isArray(options) || !options.some(opt => opt && opt._openCodeShortcut)) return false;
+  if (!options.some(opt => opt && opt.num === num)) return false;
+  sendChoice(sessionId, num);
+  return true;
 }
 
 export function handleHubApprovalMarker(message) {

@@ -119,6 +119,23 @@ func TestWhisperDownloadClientNoGlobalTimeout(t *testing.T) {
 	}
 }
 
+func TestWhisperDownloadClientBlocksUnsafeRedirect(t *testing.T) {
+	client := newWhisperDownloadClient()
+	err := client.CheckRedirect(&http.Request{URL: mustParseURL(t, "http://example.com/model.bin")}, nil)
+	if err == nil {
+		t.Fatal("CheckRedirect accepted an http redirect")
+	}
+}
+
+func mustParseURL(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("url.Parse(%q): %v", raw, err)
+	}
+	return u
+}
+
 // TestDownloadFileHashMatch はハッシュが一致するとき downloadFile が成功し、
 // 宛先ファイルが作成されることを確認する（finding #15 回帰テスト）。
 func TestDownloadFileHashMatch(t *testing.T) {
