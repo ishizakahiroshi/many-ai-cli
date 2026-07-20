@@ -39,6 +39,13 @@ const (
 	ptyInputChunkDelay             = 3 * time.Millisecond
 	defaultWrapperSendWriteTimeout = 5 * time.Second
 	ptyOutputQueueCapacity         = 64
+	// postReattachGuard は reattach 成功直後の猶予窓。この間に再度 WS が切断
+	// しても、probe(hub) が生きているというだけで「意図的切断」と即断せず、
+	// transport fault と同様に reconnect grace へ回す。理由は
+	// bugfix_codex-reattach-eof-misclassified-intentional-kill_2026-07-20.md
+	// を参照: reattach 直後の素の EOF は transportBroken を経由しないため、
+	// この窓が無いと queue-full 由来の transport fault を修正しても即死経路が残る。
+	postReattachGuard = 10 * time.Second
 )
 
 // reconnectGrace returns the wrapper's grace period before giving up after Hub crash.
@@ -208,6 +215,9 @@ type reconnectSupervisor struct {
 	snapshotReplay   func() []byte
 	transportBroken  *atomic.Bool
 	resumeOutput     func()
+	// lastReattachAt は直近の reattach 成功時刻（UnixNano）。0 は未 reattach。
+	// postReattachGuard 以内の再切断は即死させず reconnect grace へ回す。
+	lastReattachAt *atomic.Int64
 	// probeHub はテスト時に差し替えられる。nil の場合は probeHubAlive を使う。
 	probeHub func(cfg *config.Config) bool
 }
@@ -226,7 +236,13 @@ func (r *reconnectSupervisor) run() {
 		}
 		intentional := r.intentional.Load()
 		transportBroken := r.transportBroken != nil && r.transportBroken.Load()
-		if !intentional && !transportBroken && probe(r.cfg) {
+		recentlyReattached := false
+		if r.lastReattachAt != nil {
+			if last := r.lastReattachAt.Load(); last != 0 {
+				recentlyReattached = time.Since(time.Unix(0, last)) < postReattachGuard
+			}
+		}
+		if !intentional && !transportBroken && !recentlyReattached && probe(r.cfg) {
 			r.logger.Info("hub still alive after WS close — treating as intentional disconnect", "session_id", r.ws.getSID())
 			_ = r.ps.Close()
 			r.closeDone()
@@ -237,7 +253,14 @@ func (r *reconnectSupervisor) run() {
 		// path even when auto_shutdown is enabled. Otherwise a transient full
 		// output queue or write deadline kills the wrapped CLI and all of its
 		// child agents while the Hub is still running.
-		if !intentional && !transportBroken && r.cfg.Hub.AutoShutdown {
+		//
+		// A disconnect within postReattachGuard of a successful reattach gets
+		// the same benefit of the doubt: a plain WS EOF here does not go
+		// through transportFailure() (it never touched the PTY output queue),
+		// but observed behavior shows it is the same kind of transient
+		// flakiness, not a fresh dismiss/kill-all click. See
+		// bugfix_codex-reattach-eof-misclassified-intentional-kill_2026-07-20.md.
+		if !intentional && !transportBroken && !recentlyReattached && r.cfg.Hub.AutoShutdown {
 			r.logger.Info("hub is down and auto_shutdown is enabled; terminating PTY", "session_id", r.ws.getSID())
 			_ = r.ps.Close()
 			r.closeDone()
@@ -254,6 +277,8 @@ func (r *reconnectSupervisor) run() {
 			r.logger.Info("intentional hub shutdown — waiting for manual hub restart within grace period", "session_id", r.ws.getSID(), "grace_sec", int(grace/time.Second))
 		} else if transportBroken {
 			r.logger.Info("PTY output transport fault — entering reconnect grace period", "session_id", r.ws.getSID(), "grace_sec", int(grace/time.Second))
+		} else if recentlyReattached {
+			r.logger.Info("WS closed shortly after reattach — entering reconnect grace period", "session_id", r.ws.getSID(), "grace_sec", int(grace/time.Second))
 		} else {
 			r.logger.Info("hub appears down — entering reconnect grace period", "session_id", r.ws.getSID(), "grace_sec", int(grace/time.Second))
 		}
@@ -287,6 +312,9 @@ func (r *reconnectSupervisor) run() {
 				return
 			}
 			r.logger.Info("wrapper reconnected to hub", "old_sid", r.ws.getSID(), "new_sid", newSID)
+			if r.lastReattachAt != nil {
+				r.lastReattachAt.Store(time.Now().UnixNano())
+			}
 			r.ws.swapConn(newConn, newSID)
 			// A receive loop for the old connection may have reported the same
 			// close while the reattach handshake was in flight. Do not let that
@@ -828,6 +856,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// 再接続成功時に false に戻す。
 	var intentionalShutdown atomic.Bool
 	var transportBroken atomic.Bool
+	var lastReattachAt atomic.Int64
 
 	reconnectCh := make(chan struct{}, 1)
 	notifyReconnect := func() {
@@ -982,6 +1011,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		startReceiveLoop: startReceiveLoop,
 		snapshotReplay:   snapshotReplay,
 		transportBroken:  &transportBroken,
+		lastReattachAt:   &lastReattachAt,
 		resumeOutput:     outputWriter.resume,
 	}
 	go sup.run()
