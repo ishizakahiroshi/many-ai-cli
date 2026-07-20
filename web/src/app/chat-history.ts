@@ -717,7 +717,7 @@ export function renderMessageBubble(sid, msg) {
     icon.textContent = '⚠';
     ttl.appendChild(icon);
     const title = document.createElement('span');
-    title.textContent = ti18n('chat_system_approval_title', '承認待ち');
+    title.textContent = ti18n('chat_system_approval_title', 'Waiting for approval');
     ttl.appendChild(title);
     bubble.appendChild(ttl);
 
@@ -788,7 +788,7 @@ export function renderMessageBubble(sid, msg) {
   if (role === 'user') {
     const nameSpan = document.createElement('span');
     nameSpan.className = 'name';
-    nameSpan.textContent = _userDisplayName || ti18n('chat_user', 'あなた');
+    nameSpan.textContent = _userDisplayName || ti18n('chat_user', 'You');
     metaEl.appendChild(document.createTextNode(ts + ' · '));
     metaEl.appendChild(nameSpan);
   } else {
@@ -1132,7 +1132,7 @@ if (typeof window !== 'undefined') {
     const copyBtn = document.createElement('button');
     copyBtn.type = 'button';
     copyBtn.className = 'msg-action msg-action-copy';
-    copyBtn.title = ti18n('chat_copy_btn', 'コピー');
+    copyBtn.title = ti18n('chat_copy_btn', 'Copy');
     copyBtn.textContent = '📋';
     copyBtn.addEventListener('click', (e) => {
       e.preventDefault();
@@ -1151,7 +1151,7 @@ if (typeof window !== 'undefined') {
     const collBtn = document.createElement('button');
     collBtn.type = 'button';
     collBtn.className = 'msg-action msg-action-collapse';
-    collBtn.title = ti18n('chat_collapse_btn', '折りたたみ');
+    collBtn.title = ti18n('chat_collapse_btn', 'Collapse');
     collBtn.textContent = '–';
     collBtn.addEventListener('click', (e) => {
       e.preventDefault();
@@ -1165,7 +1165,7 @@ if (typeof window !== 'undefined') {
     const rawWrap = document.createElement('div');
     rawWrap.className = 'bubble-raw-link';
     rawWrap.textContent = '📄 raw';
-    rawWrap.title = ti18n('chat_raw_modal_title', '生 PTY テキスト');
+    rawWrap.title = ti18n('chat_raw_modal_title', 'Raw PTY text');
     rawWrap.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -1192,13 +1192,13 @@ if (typeof window !== 'undefined') {
     head.className = 'chat-raw-modal-head';
     const title = document.createElement('span');
     title.className = 'chat-raw-modal-title';
-    title.textContent = ti18n('chat_raw_modal_title', '生 PTY テキスト') + ' ' + (msg && msg.id != null ? '#' + String(msg.id).padStart(3, '0') : '');
+    title.textContent = ti18n('chat_raw_modal_title', 'Raw PTY text') + ' ' + (msg && msg.id != null ? '#' + String(msg.id).padStart(3, '0') : '');
     head.appendChild(title);
     const copyBtn = document.createElement('button');
     copyBtn.type = 'button';
     copyBtn.className = 'chat-raw-modal-btn';
     copyBtn.textContent = '📋';
-    copyBtn.title = ti18n('chat_copy_btn', 'コピー');
+    copyBtn.title = ti18n('chat_copy_btn', 'Copy');
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
     closeBtn.className = 'chat-raw-modal-btn chat-raw-modal-close';
@@ -1243,7 +1243,7 @@ if (typeof window !== 'undefined') {
       const sess = activeSessionId != null ? sessions.get(activeSessionId) : null;
       const targetPath = sess && (sess.jsonl_path || sess.log_path || sess.JSONLPath || sess.LogPath);
       if (!targetPath) {
-        showToast(ti18n('chat_raw_log_open_failed', '生ログを開けませんでした'));
+        showToast(ti18n('chat_raw_log_open_failed', 'Could not open raw log'));
         return;
       }
       const res = await fetch(`/api/open-dir?token=${encodeURIComponent(token)}`, {
@@ -1252,10 +1252,10 @@ if (typeof window !== 'undefined') {
         body: JSON.stringify({ kind: 'path', path: targetPath }),
       });
       if (!res.ok) {
-        showToast(ti18n('chat_raw_log_open_failed', '生ログを開けませんでした'));
+        showToast(ti18n('chat_raw_log_open_failed', 'Could not open raw log'));
       }
     } catch (_) {
-      showToast(ti18n('chat_raw_log_open_failed', '生ログを開けませんでした'));
+      showToast(ti18n('chat_raw_log_open_failed', 'Could not open raw log'));
     }
   }
 
@@ -1264,9 +1264,9 @@ if (typeof window !== 'undefined') {
     const restored = await restoreChatHistoryFromStore(activeSessionId, { force: true });
     if (restored) {
       mountChatPaneForSession(activeSessionId);
-      showToast(ti18n('chat_db_restore_done', 'SQLite からチャットを復元しました'));
+      showToast(ti18n('chat_db_restore_done', 'Chat restored from SQLite'));
     } else {
-      showToast(ti18n('chat_db_restore_empty', '復元できる履歴はありません'));
+      showToast(ti18n('chat_db_restore_empty', 'No history available to restore'));
     }
   }
 
@@ -1287,13 +1287,17 @@ if (typeof window !== 'undefined') {
   async function runGlobalSearchFromBar() {
     const q = String(_searchQuery || getFilterBarInput()?.value || '').trim();
     if (!q) {
-      showToast(ti18n('chat_global_search_needs_query', '検索語を入力してください'));
+      showToast(ti18n('chat_global_search_needs_query', 'Enter a search query'));
       return;
     }
     const box = ensureGlobalSearchBox();
     if (box) {
       box.hidden = false;
-      box.innerHTML = '<div class="chat-global-search-head">検索中...</div>';
+      box.innerHTML = '';
+      const head = document.createElement('div');
+      head.className = 'chat-global-search-head';
+      head.textContent = ti18n('chat_global_search_searching', 'Searching...');
+      box.appendChild(head);
     }
     try {
       const res = await fetch(`/api/session-search?token=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}&limit=30`);
@@ -1302,7 +1306,13 @@ if (typeof window !== 'undefined') {
       renderGlobalSearchResults(q, Array.isArray(data.results) ? data.results : []);
     } catch (err) {
       console.warn('[chatHistory] global search failed', err);
-      if (box) box.innerHTML = '<div class="chat-global-search-head">横断検索に失敗しました</div>';
+      if (box) {
+        box.innerHTML = '';
+        const head = document.createElement('div');
+        head.className = 'chat-global-search-head';
+        head.textContent = ti18n('chat_global_search_failed', 'Global search failed');
+        box.appendChild(head);
+      }
     }
   }
 
@@ -1314,10 +1324,13 @@ if (typeof window !== 'undefined') {
     const head = document.createElement('div');
     head.className = 'chat-global-search-head';
     const title = document.createElement('span');
-    title.textContent = `横断検索: ${query} (${results.length})`;
+    title.textContent = ti18n('chat_global_search_title', 'Global search: {query} ({count})', {
+      query,
+      count: results.length,
+    });
     const close = document.createElement('button');
     close.type = 'button';
-    close.textContent = '閉じる';
+    close.textContent = ti18n('chat_global_search_close', 'Close');
     close.addEventListener('click', () => { box.hidden = true; });
     head.appendChild(title);
     head.appendChild(close);
@@ -1326,7 +1339,7 @@ if (typeof window !== 'undefined') {
     if (results.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'chat-global-search-empty';
-      empty.textContent = '一致する履歴はありません';
+      empty.textContent = ti18n('chat_global_search_no_match', 'No matching history');
       box.appendChild(empty);
       return;
     }
@@ -1366,26 +1379,39 @@ if (typeof window !== 'undefined') {
   let _searchHits = []; // [el, el, ...] 表示順
   let _searchCursor = -1;
 
-  function buildFilterBar() {
+  function buildFilterBar(forceRebuild = false) {
     const pane = chatPane();
     if (!pane) return;
     const bar = pane.querySelector('.chat-filter-bar');
     if (!bar) return;
-    if (bar.dataset.c4Built === '1') return;
+    // Rebuild when i18n finishes loading so JP fallbacks baked in at module-init
+    // are replaced with the active locale (vi/en/ja). Preserve search + filter state.
+    if (bar.dataset.c4Built === '1' && !forceRebuild) return;
+    const prevInputEl = bar.querySelector('.chat-search-input');
+    const prevQuery = (prevInputEl && 'value' in prevInputEl ? String(prevInputEl.value) : '')
+      || _searchQuery
+      || '';
+    const prevFilters = new Set(_activeFilters);
+    if (forceRebuild) {
+      bar.replaceChildren();
+    }
     bar.dataset.c4Built = '1';
     bar.hidden = false;
 
     const chips = [
-      { key: 'all',      label: ti18n('chat_filter_all', 'すべて') },
-      { key: 'user',     label: '📝 ' + ti18n('chat_filter_user', '入力') },
-      { key: 'ai',       label: '🤖 ' + ti18n('chat_filter_ai', 'AI出力') },
-      { key: 'attach',   label: '📎 ' + ti18n('chat_filter_attach', '添付') },
-      { key: 'approval', label: '⚠ ' + ti18n('chat_filter_approval', '承認') },
+      { key: 'all',      label: ti18n('chat_filter_all', 'All') },
+      { key: 'user',     label: '📝 ' + ti18n('chat_filter_user', 'User') },
+      { key: 'ai',       label: '🤖 ' + ti18n('chat_filter_ai', 'AI') },
+      { key: 'attach',   label: '📎 ' + ti18n('chat_filter_attach', 'Attachments') },
+      { key: 'approval', label: '⚠ ' + ti18n('chat_filter_approval', 'Approval') },
     ];
     for (const c of chips) {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'filter-chip' + (c.key === 'all' ? ' active' : '');
+      const isActive = c.key === 'all'
+        ? prevFilters.size === 0
+        : prevFilters.has(c.key);
+      b.className = 'filter-chip' + (isActive ? ' active' : '');
       b.dataset.kind = c.key;
       b.innerHTML = '';
       const lab = document.createElement('span');
@@ -1414,18 +1440,20 @@ if (typeof window !== 'undefined') {
       });
       bar.appendChild(b);
     }
+    _activeFilters = prevFilters;
 
     // 全展開 / 全折りたたみ / 生ログ / 検索を同じ行グループにまとめる。
     const actionGroup = document.createElement('div');
     actionGroup.className = 'chat-filter-actions';
 
     // 全展開 / 全折りたたみ / 生ログ (承認チップの右隣)
+    // Fallbacks are English so missing keys never surface Japanese when locale is vi.
     const iconBtnDefs = [
-      { id: 'btn-expand-all',   icon: '⊞', label: ti18n('btn_expand_all', '全展開'),       tip: ti18n('btn_expand_all_tooltip', '全てのツール呼び出しを展開'),       fn: () => expandAllTools() },
-      { id: 'btn-collapse-all', icon: '⊟', label: ti18n('btn_collapse_all', '全折りたたみ'), tip: ti18n('btn_collapse_all_tooltip', '全てのツール呼び出しを折りたたみ'), fn: () => collapseAllTools() },
-      { id: 'btn-raw-log',      icon: '📄', label: ti18n('btn_raw_log', '生ログ'),           tip: ti18n('btn_raw_log_tooltip', '生ログを開く'),                       fn: () => openRawLog() },
-      { id: 'btn-db-restore',   icon: '↺', label: ti18n('btn_db_restore', 'DB復元'),         tip: ti18n('btn_db_restore_tooltip', 'SQLite からチャットを復元'),      fn: () => restoreCurrentChatFromStore() },
-      { id: 'btn-global-search', icon: '⌕', label: ti18n('btn_global_search', '横断'),       tip: ti18n('btn_global_search_tooltip', 'SQLite の全セッション履歴を検索'), fn: () => runGlobalSearchFromBar() },
+      { id: 'btn-expand-all',   icon: '⊞', label: ti18n('btn_expand_all', 'Expand all'),       tip: ti18n('btn_expand_all_tooltip', 'Expand all tool calls'),       fn: () => expandAllTools() },
+      { id: 'btn-collapse-all', icon: '⊟', label: ti18n('btn_collapse_all', 'Collapse all'), tip: ti18n('btn_collapse_all_tooltip', 'Collapse all tool calls'), fn: () => collapseAllTools() },
+      { id: 'btn-raw-log',      icon: '📄', label: ti18n('btn_raw_log', 'Raw log'),           tip: ti18n('btn_raw_log_tooltip', 'Open raw log'),                       fn: () => openRawLog() },
+      { id: 'btn-db-restore',   icon: '↺', label: ti18n('btn_db_restore', 'Restore DB'),         tip: ti18n('btn_db_restore_tooltip', 'Restore chat from SQLite'),      fn: () => restoreCurrentChatFromStore() },
+      { id: 'btn-global-search', icon: '⌕', label: ti18n('btn_global_search', 'Search all'),       tip: ti18n('btn_global_search_tooltip', 'Search all session history in SQLite'), fn: () => runGlobalSearchFromBar() },
     ];
     for (const def of iconBtnDefs) {
       const ib = document.createElement('button');
@@ -1441,7 +1469,11 @@ if (typeof window !== 'undefined') {
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'chat-search-input';
-    input.placeholder = ti18n('chat_search_placeholder', '履歴を検索 (Ctrl+F)');
+    input.placeholder = ti18n('chat_search_placeholder', 'Search history (Ctrl+F)');
+    if (prevQuery) {
+      input.value = prevQuery;
+      _searchQuery = prevQuery;
+    }
     input.addEventListener('input', () => {
       _searchQuery = input.value || '';
       applyFilterAndSearch();
@@ -1622,7 +1654,7 @@ if (typeof window !== 'undefined') {
     if (!mm) {
       mm = document.createElement('div');
       mm.className = 'minimap';
-      mm.title = ti18n('chat_minimap_title', 'メッセージへジャンプ');
+      mm.title = ti18n('chat_minimap_title', 'Jump to message');
       pane.appendChild(mm);
     }
     return mm;
@@ -1821,4 +1853,11 @@ if (typeof window !== 'undefined') {
 
   // 初回マウント済みの場合に備えて初期化を試みる
   try { buildFilterBar(); } catch (_) {}
+  // i18n dict loads async; rebuild once so locale-aware labels replace EN/JP fallbacks.
+  document.addEventListener('i18n-ready', () => {
+    try {
+      buildFilterBar(true);
+      applyFilterAndSearch();
+    } catch (_) {}
+  }, { once: true });
 })();

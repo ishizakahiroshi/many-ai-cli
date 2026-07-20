@@ -1052,10 +1052,16 @@ function initSettingsInformationArchitecture(): void {
       }
     });
     levelButtons.forEach((button) => button.classList.toggle('active', button.dataset.settingsLevel === level));
-    if (query) {
-      status.textContent = matches ? `${matches} 件のセクションに一致` : '一致する設定はありません';
-    } else {
-      status.textContent = level === 'basic' ? 'よく使う設定を表示中。詳細は「すべて」から開けます。' : 'すべての設定を表示中。';
+    if (status) {
+      if (query) {
+        status.textContent = matches
+          ? ti18n('settings_ia_search_matches', '{n} section(s) matched', { n: matches })
+          : ti18n('settings_ia_search_no_match', 'No matching settings');
+      } else {
+        status.textContent = level === 'basic'
+          ? ti18n('settings_ia_status_basic', 'Showing common settings. Open “All” for details.')
+          : ti18n('settings_ia_status_all', 'Showing all settings.');
+      }
     }
   };
 
@@ -1066,6 +1072,8 @@ function initSettingsInformationArchitecture(): void {
   }));
   search.addEventListener('input', apply);
   document.getElementById('settings-btn')?.addEventListener('click', () => requestAnimationFrame(apply));
+  // Re-apply after i18n dict loads so status / labels follow locale.
+  document.addEventListener('i18n-ready', () => requestAnimationFrame(apply), { once: true });
 
   const openDeepLink = () => {
     const match = /^#settings(?:[=/]([a-z0-9-]+))?$/i.exec(window.location.hash);

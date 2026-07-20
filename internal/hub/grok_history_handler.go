@@ -139,26 +139,31 @@ type grokActiveSession struct {
 	OpenedAt  string `json:"opened_at"`
 }
 
+// grokHistCandidate は findGrokChatHistory が窓内で集めた候補 1 件。
+type grokHistCandidate struct {
+	path  string
+	delta time.Duration
+}
+
 // findGrokChatHistory は many-ai-cli セッション（cwd + 開始時刻）に対応する
 // Grok セッションディレクトリを特定し、chat_history.jsonl のパスを返す。
 //
-// 対応付けは 2 段:
+// 対応付けは 2 段（いずれも grokHistoryMatchWindow 内のみ）:
 //  1. active_sessions.json（実行中の Grok が自己申告する session_id/cwd/opened_at）
-//     から cwd 一致 かつ opened_at が開始時刻に最も近いものを取る。
-//     ここに載る PID は grok プロセス自身のもので wrapper の PID とは別物のため、
-//     PID 突合ではなく時刻近傍で対応付ける。
-//  2. 終了済みで 1. に無い場合、セッションディレクトリ名（UUIDv7・先頭 48bit が
-//     生成時刻 ms）を復号して開始時刻に最も近いものを取る。
+//  2. セッションディレクトリ名（UUIDv7・先頭 48bit が生成時刻 ms）
 //
-// どちらも grokHistoryMatchWindow を超える差は不一致として扱う（同一 cwd で
-// many-ai-cli 外の Grok セッションを誤って拾わないため）。
+// 同一 cwd に複数候補があるとき、開始時刻に最も近い「空の stub」を掴むと
+// UI が「表示できる会話がまだありません」になる（spawn 直後の短い jsonl と、
+// 後から会話が入った別 Grok session が並立するケース）。そのため候補のうち
+// 表示可能メッセージ（user/assistant）が 1 件以上あるものを優先し、同点なら
+// 時刻差が小さい方を取る。表示可能が 1 件も無い場合のみ従来どおり最寄りを返す。
 func findGrokChatHistory(grokDir, cwd string, startedAt time.Time) (string, bool) {
 	cwdDir, ok := findGrokCwdDir(filepath.Join(grokDir, "sessions"), cwd)
 	if !ok {
 		return "", false
 	}
 
-	pick := func(sessionID string) (string, bool) {
+	pickPath := func(sessionID string) (string, bool) {
 		p := filepath.Join(cwdDir, sessionID, "chat_history.jsonl")
 		if info, err := os.Stat(p); err == nil && !info.IsDir() {
 			return p, true
@@ -166,12 +171,27 @@ func findGrokChatHistory(grokDir, cwd string, startedAt time.Time) (string, bool
 		return "", false
 	}
 
+	seen := map[string]struct{}{}
+	var cands []grokHistCandidate
+	add := func(sessionID string, delta time.Duration) {
+		if delta < 0 || delta > grokHistoryMatchWindow {
+			return
+		}
+		if _, dup := seen[sessionID]; dup {
+			return
+		}
+		p, ok := pickPath(sessionID)
+		if !ok {
+			return
+		}
+		seen[sessionID] = struct{}{}
+		cands = append(cands, grokHistCandidate{path: p, delta: delta})
+	}
+
 	// 1. active_sessions.json（実行中セッション）
 	if data, err := os.ReadFile(filepath.Join(grokDir, "active_sessions.json")); err == nil {
 		var actives []grokActiveSession
 		if json.Unmarshal(data, &actives) == nil {
-			bestDelta := grokHistoryMatchWindow
-			bestID := ""
 			for _, a := range actives {
 				if !grokPathsEquivalent(a.CWD, cwd) {
 					continue
@@ -180,43 +200,67 @@ func findGrokChatHistory(grokDir, cwd string, startedAt time.Time) (string, bool
 				if err != nil {
 					continue
 				}
-				if d := opened.Sub(startedAt).Abs(); d <= bestDelta {
-					bestDelta = d
-					bestID = a.SessionID
-				}
-			}
-			if bestID != "" {
-				if p, ok := pick(bestID); ok {
-					return p, true
-				}
+				add(a.SessionID, opened.Sub(startedAt).Abs())
 			}
 		}
 	}
 
 	// 2. ディレクトリ名（UUIDv7）の埋め込み時刻で近傍一致
-	entries, err := os.ReadDir(cwdDir)
+	if entries, err := os.ReadDir(cwdDir); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			ts, ok := uuidV7Time(e.Name())
+			if !ok {
+				continue
+			}
+			add(e.Name(), ts.Sub(startedAt).Abs())
+		}
+	}
+
+	return pickBestGrokHistCandidate(cands)
+}
+
+// pickBestGrokHistCandidate は窓内候補から表示可能な会話がある path を優先して返す。
+func pickBestGrokHistCandidate(cands []grokHistCandidate) (string, bool) {
+	if len(cands) == 0 {
+		return "", false
+	}
+	bestPath := ""
+	bestDelta := time.Duration(0)
+	bestMsgs := -1
+	for _, c := range cands {
+		msgs := grokChatHistoryDisplayableCount(c.path)
+		// Prefer: any displayable content over empty; then more messages;
+		// then closer to hub session start time.
+		better := false
+		if bestMsgs < 0 {
+			better = true
+		} else if (msgs > 0) != (bestMsgs > 0) {
+			better = msgs > 0
+		} else if msgs != bestMsgs {
+			better = msgs > bestMsgs
+		} else if c.delta < bestDelta {
+			better = true
+		}
+		if better {
+			bestPath = c.path
+			bestDelta = c.delta
+			bestMsgs = msgs
+		}
+	}
+	return bestPath, bestPath != ""
+}
+
+// grokChatHistoryDisplayableCount は chat_history.jsonl のうち UI に出る
+// user/assistant 件数を返す（readGrokChatHistory と同じ抽出規則・軽量カウント）。
+func grokChatHistoryDisplayableCount(path string) int {
+	msgs, err := readGrokChatHistory(path)
 	if err != nil {
-		return "", false
+		return 0
 	}
-	bestDelta := grokHistoryMatchWindow
-	bestID := ""
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		ts, ok := uuidV7Time(e.Name())
-		if !ok {
-			continue
-		}
-		if d := ts.Sub(startedAt).Abs(); d <= bestDelta {
-			bestDelta = d
-			bestID = e.Name()
-		}
-	}
-	if bestID == "" {
-		return "", false
-	}
-	return pick(bestID)
+	return len(msgs)
 }
 
 // findGrokCwdDir は ~/.grok/sessions/ 直下から cwd に対応するディレクトリを探す。
