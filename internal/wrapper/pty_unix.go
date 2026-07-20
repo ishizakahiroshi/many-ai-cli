@@ -67,6 +67,18 @@ func (p *ptyProcess) Wait() error {
 	return p.waitErr
 }
 
+// exitSignalInfo reports whether exitErr represents a process terminated by
+// a signal (e.g. OOM kill, SIGTERM/SIGKILL) and, if so, the signal's name.
+// Used by classifyExit (wrapper.go) to distinguish signal-killed children
+// from an ordinary non-zero exit in session_end logging.
+func exitSignalInfo(exitErr *exec.ExitError) (bool, string) {
+	ws, ok := exitErr.Sys().(syscall.WaitStatus)
+	if !ok || !ws.Signaled() {
+		return false, ""
+	}
+	return true, ws.Signal().String()
+}
+
 func (p *ptyProcess) Resize(cols, rows uint16) error {
 	return pty.Setsize(p.f, &pty.Winsize{Rows: rows, Cols: cols})
 }

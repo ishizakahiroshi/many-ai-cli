@@ -3,6 +3,7 @@ package wrapper
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -992,15 +993,41 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	ptyPump(ps, lf, rawMaxBytes, outputWriter.enqueue, outputWriter.finish, appendReplay, closeDone)
 
 	waitErr := ps.Wait()
-	state, code := "completed", 0
-	if waitErr != nil {
-		state, code = "error", 1
+	state, code, signal := classifyExit(waitErr)
+	endMsg := proto.Message{Type: "session_end", SessionID: wses.getSID(), State: state, ExitCode: code}
+	if signal != "" {
+		endMsg.Signal = signal
 	}
-	wses.sendMsg(proto.Message{Type: "session_end", SessionID: wses.getSID(), State: state, ExitCode: code})
+	wses.sendMsg(endMsg)
 	// Close the current conn after the final message is sent.
 	wses.closeAnyConn()
-	logger.Info("wrapper exit", "session_id", wses.getSID(), "state", state)
+	if signal != "" {
+		logger.Info("wrapper exit", "session_id", wses.getSID(), "state", state, "exit_code", code, "signal", signal)
+	} else {
+		logger.Info("wrapper exit", "session_id", wses.getSID(), "state", state, "exit_code", code)
+	}
 	return waitErr
+}
+
+// classifyExit turns ps.Wait()'s error into a coarse state label
+// ("completed"/"error") plus the concrete exit code and, on Unix when the
+// child was terminated by a signal (e.g. OOM kill, SIGTERM/SIGKILL), the
+// signal name. This lets session_end logging distinguish a clean non-zero
+// exit from a forcibly killed process instead of collapsing both into a
+// fixed code=1.
+func classifyExit(waitErr error) (state string, code int, signal string) {
+	if waitErr == nil {
+		return "completed", 0, ""
+	}
+	state, code = "error", 1
+	var exitErr *exec.ExitError
+	if errors.As(waitErr, &exitErr) {
+		code = exitErr.ExitCode()
+		if signaled, name := exitSignalInfo(exitErr); signaled {
+			signal = name
+		}
+	}
+	return state, code, signal
 }
 
 // dialAndRegister opens a WS to the Hub and performs the register handshake.

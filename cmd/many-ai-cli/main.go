@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"syscall"
 
@@ -47,11 +48,65 @@ func buildInfo() hub.BuildInfo {
 	return hub.BuildInfo{GitCommit: gitCommit, BuildTime: buildTime}
 }
 
+// waitForShutdownSignal は SIGINT/SIGTERM を待ち受ける context を返す。
+// 起動ログ（"MANY-AI-CLI started"）と対になる終了ログを、シグナルが実際に
+// 届いた時点で reason="signal" ＋ 具体的なシグナル名付きで残す
+//（plan_hub-lifecycle-logging.md C1）。返り値の cancel は defer で必ず呼ぶこと
+// （シグナル未着のまま return するパスでも goroutine と signal.Notify 登録を解放する）。
+func waitForShutdownSignal(logger *slog.Logger, instanceID string) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.Background())
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		select {
+		case sig := <-sigCh:
+			logger.Info("MANY-AI-CLI stopping", "reason", "signal", "signal", sig.String(), "pid", os.Getpid(), "instance_id", instanceID)
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	return ctx, func() {
+		cancel()
+		signal.Stop(sigCh)
+	}
+}
+
 func main() {
+	// トップレベルの panic recovery（plan_hub-lifecycle-logging.md C4）。
+	// internal/hub/safe_go.go の safeGo はバックグラウンド goroutine 単位の
+	// panic しか拾わない設計のため、main の実行パス自体（serve のブロッキング
+	// Run() 呼び出し含む）で起きた panic はここで拾ってスタックトレース込みで
+	// hub.log に記録してから異常終了する。recover してプロセスを継続させる
+	// 必要はない（記録できれば目的は達成）。
+	defer func() {
+		if r := recover(); r != nil {
+			logPanic(r)
+			os.Exit(1)
+		}
+	}()
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// logPanic writes a panic + stack trace to hub.log (falling back to stderr
+// only if the config/log dir can't be resolved at all) so a crash leaves a
+// diagnostic trail instead of vanishing silently
+// (plan_hub-lifecycle-logging.md C4).
+func logPanic(r any) {
+	logDir := ""
+	var logCfg config.LogConfig
+	if cfg, err := config.LoadOrCreate(); err == nil {
+		logDir = cfg.Hub.LogDir
+		logCfg = cfg.Log
+	}
+	logger := hublog.NewFileLogger(logDir, logCfg, false, true)
+	logger.Error("MANY-AI-CLI panic",
+		"recover", fmt.Sprintf("%v", r),
+		"stack", string(debug.Stack()),
+		"pid", os.Getpid(),
+	)
 }
 
 func displayVersion() string {
@@ -134,7 +189,7 @@ func run(args []string) error {
 			return err
 		}
 		s.SetAutoOpenBrowser(true)
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		ctx, stop := waitForShutdownSignal(logger, s.InstanceID())
 		defer stop()
 		return s.Run(ctx)
 	}
@@ -175,12 +230,8 @@ func run(args []string) error {
 		if *open {
 			s.SetAutoOpenBrowser(true)
 		}
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		ctx, stop := waitForShutdownSignal(logger, s.InstanceID())
 		defer stop()
-		go func() {
-			<-ctx.Done()
-			logger.Info("shutdown signal received, shutting down")
-		}()
 		return s.Run(ctx)
 	case "connect":
 		// リモート Hub へターミナルから接続する（SmartScreen フォールバックの正規手順）。

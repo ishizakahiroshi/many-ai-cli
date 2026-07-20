@@ -1054,22 +1054,34 @@ func (s *Server) Run(ctx context.Context) error {
 	if err := writeHubRuntime(boundPort); err != nil {
 		s.logger.Warn("failed to write hub runtime file", "err", err)
 	}
+	// 「前回起動は正常終了だったか」を、今回のマーカー書き込みで上書きする前に
+	// 判定しておく（plan_hub-lifecycle-logging.md C4）。
+	prevShutdown := previousShutdownStatus()
+	writeHubStateMarker()
 	// shutdown_wait ゴルーチン内の Remove は Serve が戻った直後にプロセスが
 	// 終了すると実行されないことがある（競合）。PID ファイルが残ると次回 boot の
 	// killStalePid が再利用 PID の無関係プロセスを kill しうるため、run() の
-	// return で必ず消えるよう同期的にも削除する（二重削除は無害）。
+	// return で必ず消えるよう同期的にも削除する（二重削除は無害）。同じ理由で
+	// hub.state マーカーも defer で必ず消す（プロセスの異常終了以外は消える）。
 	defer func() {
 		_ = os.Remove(pidPath)
 		// hub-runtime.json は自 PID 記録時のみ削除（新しい Hub が上書き済みなら
 		// 残す）。強制終了の残骸は読み取り側の二重ガードで除外される。
 		removeHubRuntimeIfPID(os.Getpid())
+		removeHubStateMarker()
 	}()
 	setConsoleTitle("many-ai-cli [hub] - DO NOT CLOSE")
 	setConsoleIcon()
 	// 永続ログ（hub.log）にはトークンを平文で残さない。ライブの全権トークンが
 	// ローテーション済みログに残ると、トラブルシュートでログを共有した際に漏洩する。
 	// 実トークン入りの URL は stdout の起動バナー（下記 startupBanner）だけに出す。
-	s.logger.Info("MANY-AI-CLI started", "url", fmt.Sprintf("http://%s/?token=***", s.httpSrv.Addr))
+	startArgs := []any{"url", fmt.Sprintf("http://%s/?token=***", s.httpSrv.Addr), "pid", os.Getpid(), "instance_id", s.instanceID}
+	if prevShutdown == "unclean" {
+		// 前回 run のマーカーが残っていた＝クラッシュ/panic/強制終了の疑いがある
+		// （plan_hub-lifecycle-logging.md C4）。
+		startArgs = append(startArgs, "previous_shutdown", "unclean")
+	}
+	s.logger.Info("MANY-AI-CLI started", startArgs...)
 	cfgSnapshot := s.snapshotCfg()
 	fmt.Print(startupBanner(s.version, s.httpSrv.Addr, cfgSnapshot.Token, startupBannerAccess{
 		AllowLoopbackWithoutToken: cfgSnapshot.Hub.AllowLoopbackWithoutToken,
@@ -1120,6 +1132,7 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		_ = os.Remove(pidPath)
 		removeHubRuntimeIfPID(os.Getpid())
+		removeHubStateMarker()
 	})
 	err := s.httpSrv.Serve(ln)
 	if errors.Is(err, http.ErrServerClosed) {
@@ -1136,6 +1149,13 @@ func (s *Server) OpenBrowser() error {
 // ポートスキャンで実際のポートが確定してから開くため、引数なし起動や serve --open で使う。
 func (s *Server) SetAutoOpenBrowser(v bool) {
 	s.autoOpenBrowser = v
+}
+
+// InstanceID は Hub プロセス起動ごとのランダム ID を返す。
+// main.go のシグナルハンドラが終了理由ログへ含めるために公開する
+//（plan_hub-lifecycle-logging.md C1）。
+func (s *Server) InstanceID() string {
+	return s.instanceID
 }
 
 // OpenBrowserForConfig opens the browser to the Hub URL without needing a running Server.
