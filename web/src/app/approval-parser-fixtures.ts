@@ -488,6 +488,25 @@ test('approval parser fixtures', () => {
   assert.deepEqual(detectFallback('claude', numberedList, triggerMatcher), []);
   assert.equal(parser.linesHaveHint('claude', numberedList, triggerMatcher), false);
 
+  // 通常の手順説明に Q1 と「（推奨）」が混ざっても、確認待ちにはしない。
+  // 2026-07-20 実測: 質問が選択肢の後ろにあるだけの応答を Hub がポップアップ化していた。
+  const proseWithQuestionWord = [
+    '1. metricId 一致のみでマージ判定する（推奨）— データ消失の責任範囲を除去する。',
+    '2. 上記に加えて週利用量誤命名の根本原因も追加調査する。',
+    '3. 結果、月間利用量は普通に追加し、ローリング利用量は表示名だけ直す。',
+    'Q1 どちらで進めますか？',
+  ];
+  assert.deepEqual(detectFallback('claude', proseWithQuestionWord, triggerMatcher), []);
+
+  // マーカー移行前の旧形式は、質問→選択肢→自由入力行という明確な構造に限って救済する。
+  const legacyHubChoice = [
+    'Q1 どちらで進めますか？',
+    '1. 最小修正 (Recommended)',
+    '2. 原因調査も行う',
+    'N. User specifies',
+  ];
+  assert.deepEqual(numbers(detectFallback('claude', legacyHubChoice, triggerMatcher)), [1, 2]);
+
   // Ink のカーソル位置制御描画で選択肢間の改行が失われ「1. … 2. … 3. … N. User specifies」が
   // 1行へ連結されたケースの回帰（=「承認ボタンが全部1つに潰れる」症状）。
   // フォールパック経路（extractApprovalOptions）で 3 選択肢へ復元でき、

@@ -781,10 +781,22 @@
 
   function isHubChoicePrompt(contextLines, options) {
     if (!options.length) return false;
-    const hasPrompt = contextLines.some(line => hubChoiceQuestionRe.test(line));
-    const hasChoiceMarker = contextLines.some(line => userSpecifiesRe.test(line)) ||
-      options.some(opt => userSpecifiesRe.test(opt.label) || recommendedChoiceRe.test(opt.label));
-    return hasPrompt && hasChoiceMarker;
+    // Hub の正規経路は [MANY-AI-CLI] マーカーで先に処理される。ここは旧形式の
+    // 非マーカー質問だけを救済するため、自由入力行を必須にする。単なる手順文に
+    // 「どちらで進めますか」と「（推奨）」が共存しても、承認ポップアップへ
+    // 誤変換してはならない（2026-07-20 実測）。
+    //
+    // 選択肢に入った `推奨` は設計上の推奨を説明しているだけの場合があるため、
+    // これを旧形式の選択マーカーとしては使わない。旧形式でも質問は選択肢より前に
+    // 出るため、順序も確認して本文末尾の Q1 を誤って結び付けない。
+    const lines = contextLines || [];
+    const firstOption = lines.findIndex(line => /^\s*(?:[>❯›❱]\s*)?\d{1,2}\.\s*\S/.test(String(line || '')));
+    const hasPromptBeforeOptions = lines.some((line, index) =>
+      (firstOption === -1 || index < firstOption) && hubChoiceQuestionRe.test(String(line || '')),
+    );
+    const hasUserSpecifies = lines.some(line => userSpecifiesRe.test(String(line || ''))) ||
+      options.some(opt => userSpecifiesRe.test(String(opt?.label || '')));
+    return hasPromptBeforeOptions && hasUserSpecifies;
   }
 
   function markHubChoiceDefault(options, contextLines) {
