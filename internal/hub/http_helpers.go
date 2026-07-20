@@ -30,28 +30,60 @@ const (
 // - リダイレクトは最大 3 回まで
 // - https 以外へのリダイレクトは拒否（スキームダウングレード防止）
 func newExternalHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: newExternalHTTPTransport(timeout),
+		CheckRedirect: externalHTTPCheckRedirect,
+	}
+}
+
+var makeExternalHTTPClient = newExternalHTTPClient
+
+// newExternalHTTPTransport returns a transport that rejects non-HTTPS and
+// private-network requests before dialing. Keep this separate from the client
+// so long-running downloads can use the same guard without a global timeout.
+func newExternalHTTPTransport(timeout time.Duration) http.RoundTripper {
+	return externalHTTPTransport{base: newPrivateNetworkBlockingTransport(timeout)}
+}
+
+func newPrivateNetworkBlockingTransport(timeout time.Duration) *http.Transport {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	dialer := &net.Dialer{
 		Timeout:   timeout,
 		KeepAlive: 30 * time.Second,
 	}
 	transport.DialContext = privateNetworkBlockingDialContext(dialer.DialContext)
+	return transport
+}
+
+func externalHTTPCheckRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 3 {
+		return errors.New("too many redirects")
+	}
+	return validateExternalHTTPSURL(req.URL)
+}
+
+// newLoopbackHTTPClient is for Hub-managed services that must remain on this
+// machine. It allows HTTP for the local Whisper server, while enforcing the
+// loopback boundary on both the initial request and redirects.
+func newLoopbackHTTPClient(timeout time.Duration) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	dialer := &net.Dialer{
+		Timeout:   timeout,
+		KeepAlive: 30 * time.Second,
+	}
+	transport.DialContext = loopbackOnlyDialContext(dialer.DialContext)
 	return &http.Client{
 		Timeout:   timeout,
-		Transport: externalHTTPTransport{base: transport},
+		Transport: loopbackHTTPTransport{base: transport},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 3 {
 				return errors.New("too many redirects")
 			}
-			if err := validateExternalHTTPSURL(req.URL); err != nil {
-				return err
-			}
-			return nil
+			return validateLoopbackHTTPURL(req.URL)
 		},
 	}
 }
-
-var makeExternalHTTPClient = newExternalHTTPClient
 
 type dialContextFunc func(ctx context.Context, network, address string) (net.Conn, error)
 
@@ -98,12 +130,56 @@ func privateNetworkBlockingDialContext(next dialContextFunc) dialContextFunc {
 	}
 }
 
+func loopbackOnlyDialContext(next dialContextFunc) dialContextFunc {
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, err
+		}
+		ips, err := lookupIPAddr(ctx, host)
+		if err != nil {
+			return nil, err
+		}
+		if len(ips) == 0 {
+			return nil, errors.New("no ip resolved")
+		}
+		var lastErr error
+		for _, ip := range ips {
+			addr := netip.AddrFromSlice(ip.IP)
+			if !addr.IsValid() || !addr.Unmap().IsLoopback() {
+				return nil, errors.New("non-loopback host blocked")
+			}
+			conn, dialErr := next(ctx, network, net.JoinHostPort(ip.IP.String(), port))
+			if dialErr == nil {
+				return conn, nil
+			}
+			lastErr = dialErr
+		}
+		return nil, lastErr
+	}
+}
+
 type externalHTTPTransport struct {
 	base http.RoundTripper
 }
 
 func (t externalHTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err := validateExternalHTTPSURL(req.URL); err != nil {
+		return nil, err
+	}
+	base := t.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base.RoundTrip(req)
+}
+
+type loopbackHTTPTransport struct {
+	base http.RoundTripper
+}
+
+func (t loopbackHTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if err := validateLoopbackHTTPURL(req.URL); err != nil {
 		return nil, err
 	}
 	base := t.base
@@ -120,8 +196,30 @@ func validateExternalHTTPSURL(u *url.URL) error {
 	if strings.ToLower(u.Scheme) != "https" {
 		return errors.New("non-https request blocked")
 	}
+	if u.Hostname() == "" {
+		return errors.New("missing request host")
+	}
+	if u.User != nil {
+		return errors.New("request credentials blocked")
+	}
 	if isBlockedNetworkHost(u.Hostname()) {
 		return errors.New("private network host blocked")
+	}
+	return nil
+}
+
+func validateLoopbackHTTPURL(u *url.URL) error {
+	if u == nil {
+		return errors.New("missing request URL")
+	}
+	if strings.ToLower(u.Scheme) != "http" {
+		return errors.New("non-http loopback request blocked")
+	}
+	if u.Hostname() == "" {
+		return errors.New("missing request host")
+	}
+	if u.User != nil {
+		return errors.New("request credentials blocked")
 	}
 	return nil
 }

@@ -14,7 +14,7 @@ import { scheduleDeferredEnter, scheduleAfterOutputSettle, deferredEnterMinWaitF
 import { scheduleResidueSweep, cancelResidueSweep } from './app/residue-sweep.js';
 import { cancelExpandCapture } from './app/expand-popup.js';
 import { clearMobileTranscriptSession, recordMobileTranscriptUserSubmission } from './app/mobile-transcript.js';
-import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
+import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, handleOpenCodeApprovalNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn, MAX_ATTACH_BYTES } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
@@ -855,6 +855,15 @@ inputEl.addEventListener('keydown', (e) => {
       sendMultiSelectChoices(activeSessionId);
       e.preventDefault(); return;
     }
+  }
+
+  // OpenCode の Allow once / Allow always / Reject はネイティブ側では
+  // 矢印＋Enter 操作だが、承認バーでは 1/2/3 で即決できるようにする。
+  // OpenCode の承認を検出しているときだけ変換するため、通常の入力は横取りしない。
+  if (inputEl.value === '' && !e.isComposing && /^[1-3]$/.test(e.key) &&
+      !e.ctrlKey && !e.metaKey && !e.altKey &&
+      handleOpenCodeApprovalNumberKey(activeSessionId, parseInt(e.key, 10))) {
+    e.preventDefault(); return;
   }
 
   // 複数質問プロンプト（AskUserQuestion 等の複数選択）はバナー表示のみで

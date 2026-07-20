@@ -19,6 +19,7 @@ func (s *Server) handleKillAll(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
+	s.logger.Info("kill all wrappers requested via UI")
 	s.killAllWrappers()
 	writeJSON(w, map[string]bool{"ok": true})
 }
