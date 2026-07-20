@@ -24,16 +24,20 @@ type Message struct {
 	AwaitingUser     bool `json:"awaiting_user,omitempty"`
 	AwaitingApproval bool `json:"awaiting_approval,omitempty"`
 	// Activity carries all four flags atomically, including false transitions.
-	Activity  *SessionActivity `json:"activity,omitempty"`
-	ExitCode  int              `json:"exit_code,omitempty"`
-	Token     string           `json:"token,omitempty"`
-	HomeDir   string           `json:"home_dir,omitempty"`
-	CodexHome string           `json:"codex_home,omitempty"`
-	ClaudeDir string           `json:"claude_dir,omitempty"`
-	Data      []byte           `json:"data,omitempty"` // wrapper内部用: PTY生バイト列（base64エンコード）
-	Text      string           `json:"text,omitempty"` // pty_output: ANSIを除去したプレーンテキスト / pty_input: ユーザー入力文字列
-	Cols      int              `json:"cols,omitempty"` // pty_resize / register / registered
-	Rows      int              `json:"rows,omitempty"` // pty_resize / register / registered
+	Activity *SessionActivity `json:"activity,omitempty"`
+	ExitCode int              `json:"exit_code,omitempty"`
+	// Signal carries the POSIX signal name (e.g. "killed", "terminated") when
+	// session_end's process was terminated by a signal rather than exiting
+	// normally with a non-zero code. Unix-only; always empty on Windows.
+	Signal    string `json:"signal,omitempty"`
+	Token     string `json:"token,omitempty"`
+	HomeDir   string `json:"home_dir,omitempty"`
+	CodexHome string `json:"codex_home,omitempty"`
+	ClaudeDir string `json:"claude_dir,omitempty"`
+	Data      []byte `json:"data,omitempty"` // wrapper内部用: PTY生バイト列（base64エンコード）
+	Text      string `json:"text,omitempty"` // pty_output: ANSIを除去したプレーンテキスト / pty_input: ユーザー入力文字列
+	Cols      int    `json:"cols,omitempty"` // pty_resize / register / registered
+	Rows      int    `json:"rows,omitempty"` // pty_resize / register / registered
 
 	// reattach: wrapper が Hub クラッシュ後に元セッション情報を復元するための情報。
 	LogPath   string `json:"log_path,omitempty"`

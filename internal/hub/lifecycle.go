@@ -3,6 +3,7 @@ package hub
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	neturl "net/url"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"many-ai-cli/internal/config"
+	hublog "many-ai-cli/internal/log"
 	"many-ai-cli/internal/proto"
 )
 
@@ -40,7 +42,10 @@ func (s *Server) handleShutdown(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
-	s.logger.Info("shutdown requested via UI")
+	// 起動ログ（"MANY-AI-CLI started"）と対になる終了ログ。reason で3経路
+	// （cli_stop / ui_shutdown / signal）を判別できるようにする
+	//（plan_hub-lifecycle-logging.md C1）。
+	s.logger.Info("MANY-AI-CLI stopping", "reason", "ui_shutdown", "pid", os.Getpid(), "instance_id", s.instanceID)
 	s.broadcastHubShutdown("ui_shutdown")
 	writeJSON(w, map[string]bool{"ok": true})
 	s.safeGo("request_stop", s.requestStop)
@@ -73,12 +78,37 @@ func (s *Server) requestStop() {
 	}
 }
 
+// gracefulShutdownWait bounds how long stopWithPIDPath waits for the Hub
+// process to actually exit after an /api/shutdown request before giving up
+// and falling back to SIGKILL (plan_hub-lifecycle-logging.md C2).
+const gracefulShutdownWait = 5 * time.Second
+
+// gracefulShutdownPoll is the polling interval used while waiting for the
+// Hub PID to disappear during gracefulShutdownWait.
+const gracefulShutdownPoll = 100 * time.Millisecond
+
+// gracefulShutdownReqTimeout bounds the /api/shutdown POST itself, separate
+// from gracefulShutdownWait which bounds the wait for the process to exit.
+const gracefulShutdownReqTimeout = 2 * time.Second
+
 func Stop(cfg *config.Config) error {
 	pidPath := filepath.Join(os.TempDir(), "many-ai-cli.pid")
-	return stopWithPIDPath(pidPath)
+	// stop コマンドを実行している側（Hub 本体とは別プロセス）のログに
+	// 「stop 要求を送った」ことを残す。SIGKILL 自体は Go ランタイムで捕捉不可能
+	// なため、この一行（と gracefulStop 内のログ）が cli_stop 経路で残る記録に
+	// なる（plan_hub-lifecycle-logging.md C1）。
+	logger := hublog.NewFileLogger(cfg.Hub.LogDir, cfg.Log, false, false)
+	// 設定済みポートが古い（auto-port-move後）場合に備え、hub-runtime.json 経由
+	// の実ポートも確認する。見つからなければ設定値のまま試し、それも失敗すれば
+	// gracefulStop が false を返して force kill にフォールバックする。
+	port, ok := runningHubPort(cfg)
+	if !ok {
+		port = cfg.Hub.Port
+	}
+	return stopWithPIDPath(pidPath, logger, port, cfg.Token)
 }
 
-func stopWithPIDPath(pidPath string) error {
+func stopWithPIDPath(pidPath string, logger *slog.Logger, port int, token string) error {
 	b, err := os.ReadFile(pidPath)
 	if err != nil {
 		return fmt.Errorf("hub pid not found")
@@ -88,6 +118,22 @@ func stopWithPIDPath(pidPath string) error {
 		_ = os.Remove(pidPath)
 		return err
 	}
+
+	if gracefulStop(pid, port, token, logger) {
+		_ = os.Remove(pidPath)
+		return nil
+	}
+
+	if logger != nil {
+		logger.Info("MANY-AI-CLI stopping", "reason", "cli_stop", "pid", pid)
+	}
+	// This is still an intentional stop (the user ran `many-ai-cli stop`),
+	// even though the graceful request failed and we're falling back to
+	// SIGKILL. The Hub process itself can't clean up after a SIGKILL, so
+	// this CLI process clears the marker on its behalf — otherwise the next
+	// startup would misreport a deliberate forced-stop as a crash
+	// (plan_hub-lifecycle-logging.md C4).
+	removeHubStateMarker()
 	p, err := os.FindProcess(pid)
 	if err != nil {
 		return err
@@ -95,6 +141,62 @@ func stopWithPIDPath(pidPath string) error {
 	err = p.Kill()
 	_ = os.Remove(pidPath)
 	return err
+}
+
+// gracefulStop asks the running Hub to shut itself down via the same
+// /api/shutdown endpoint the UI's shutdown button uses, then waits up to
+// gracefulShutdownWait for the PID to actually disappear. It returns true
+// only when the process is confirmed gone; stopWithPIDPath falls back to
+// SIGKILL for every other outcome (unreachable port, non-200 response,
+// process still alive after the wait).
+//
+// This is what lets `many-ai-cli stop` produce a real "MANY-AI-CLI
+// stopping" / reason=ui_shutdown-style log entry from the Hub's own
+// process (via handleShutdown) before this CLI process ever resorts to a
+// SIGKILL the Hub cannot log for itself (plan_hub-lifecycle-logging.md C2).
+func gracefulStop(pid, port int, token string, logger *slog.Logger) bool {
+	if port <= 0 {
+		return false
+	}
+	if logger != nil {
+		logger.Info("graceful shutdown requested", "reason", "cli_stop", "pid", pid, "port", port)
+	}
+	url := localHubURL(port, "/api/shutdown", token)
+	client := &http.Client{Timeout: gracefulShutdownReqTimeout}
+	resp, err := client.Post(url, "application/json", nil)
+	if err != nil {
+		if logger != nil {
+			logger.Info("falling back to force kill", "reason", "cli_stop", "pid", pid, "error", err.Error())
+		}
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		if logger != nil {
+			logger.Info("falling back to force kill", "reason", "cli_stop", "pid", pid, "status", resp.StatusCode)
+		}
+		return false
+	}
+	if waitForPIDExit(pid, gracefulShutdownWait, gracefulShutdownPoll) {
+		return true
+	}
+	if logger != nil {
+		logger.Info("falling back to force kill", "reason", "cli_stop", "pid", pid, "timeout", gracefulShutdownWait.String())
+	}
+	return false
+}
+
+// waitForPIDExit polls pidAlive until pid disappears or timeout elapses,
+// returning true iff the process was confirmed gone within timeout.
+func waitForPIDExit(pid int, timeout, interval time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if !pidAlive(pid) {
+			return true
+		}
+		time.Sleep(interval)
+	}
+	return !pidAlive(pid)
 }
 
 // killStalePid reads the PID file and kills the process if it is still running.
@@ -132,6 +234,60 @@ func parseHubPID(b []byte) (int, error) {
 		return 0, fmt.Errorf("invalid hub pid file")
 	}
 	return pid, nil
+}
+
+// hubStateMarkerName is the "still running" marker file written on Hub
+// startup and removed on every clean shutdown path (cli_stop / ui_shutdown /
+// signal). If it is still present at the next startup, the previous run
+// never reached a clean shutdown — most likely a crash/panic or a forced
+// kill from outside `many-ai-cli stop` (plan_hub-lifecycle-logging.md C4).
+const hubStateMarkerName = "hub.state"
+
+// hubStateMarkerPath returns the path of the marker file under ~/.many-ai-cli.
+// Returns an empty string if the home directory cannot be resolved; callers
+// treat that as "skip the check" rather than an error, since this is a
+// best-effort diagnostic, not a correctness-critical mechanism.
+func hubStateMarkerPath() string {
+	dir, err := config.Dir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, hubStateMarkerName)
+}
+
+// previousShutdownStatus inspects (without removing) the marker file left
+// behind by a prior Hub run. It must be called before writeHubStateMarker
+// so it observes the *previous* run's marker, not the current one.
+func previousShutdownStatus() string {
+	path := hubStateMarkerPath()
+	if path == "" {
+		return ""
+	}
+	if _, err := os.Stat(path); err == nil {
+		return "unclean"
+	}
+	return "clean"
+}
+
+// writeHubStateMarker records that a Hub instance is running. It is written
+// once the listener is bound (mirroring pidPath) and removed on every clean
+// shutdown path.
+func writeHubStateMarker() {
+	path := hubStateMarkerPath()
+	if path == "" {
+		return
+	}
+	_ = os.WriteFile(path, []byte(strconv.Itoa(os.Getpid())), 0o600)
+}
+
+// removeHubStateMarker clears the "still running" marker. Safe to call
+// multiple times or when the file doesn't exist.
+func removeHubStateMarker() {
+	path := hubStateMarkerPath()
+	if path == "" {
+		return
+	}
+	_ = os.Remove(path)
 }
 
 // hubProbeTimeout bounds each /api/info liveness probe in IsRunning /
