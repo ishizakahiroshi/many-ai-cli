@@ -127,11 +127,11 @@
     <div class="settings-body">
       <div class="settings-ia-toolbar" role="search">
         <div class="settings-ia-level" role="group" aria-label="Settings level">
-          <button type="button" class="settings-ia-level-btn active" data-settings-level="basic">かんたん</button>
-          <button type="button" class="settings-ia-level-btn" data-settings-level="all">すべて</button>
+          <button type="button" class="settings-ia-level-btn active" data-settings-level="basic" data-i18n="settings_ia_level_basic">Simple</button>
+          <button type="button" class="settings-ia-level-btn" data-settings-level="all" data-i18n="settings_ia_level_all">All</button>
         </div>
-        <label class="settings-ia-search-label" for="settings-search-input">設定を検索</label>
-        <input id="settings-search-input" class="settings-ia-search" type="search" placeholder="項目名・現在値・説明を検索" autocomplete="off">
+        <label class="settings-ia-search-label" for="settings-search-input" data-i18n="settings_ia_search_label">Search settings</label>
+        <input id="settings-search-input" class="settings-ia-search" type="search" data-i18n-placeholder="settings_ia_search_placeholder" placeholder="Search names, values, descriptions" autocomplete="off">
         <p id="settings-search-status" class="settings-search-status" aria-live="polite"></p>
       </div>
       <details class="settings-section" data-section="general" data-settings-level="basic">
@@ -347,14 +347,14 @@
         </div>
       </details>
       <details class="settings-section settings-section--danger" data-section="danger" data-settings-level="all">
-        <summary class="settings-section-title"><span>危険な操作</span><span class="settings-section-current" data-section="danger">データの削除・リセット</span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_danger_section">Dangerous actions</span><span class="settings-section-current" data-section="danger" data-i18n="settings_danger_section_current">Delete / reset data</span></summary>
         <div class="settings-section-body">
-          <p class="settings-danger-intro">復元できない操作です。実行前に対象の確認と操作名の入力が必要です。</p>
+          <p class="settings-danger-intro" data-i18n="settings_danger_intro">These actions cannot be undone. Confirm the target and type the action name before running.</p>
           <div class="settings-row">
-            <span class="settings-label">実行中の全セッションを終了</span>
-            <button id="settings-kill-all-btn" class="settings-inline-btn settings-danger-btn">すべて終了</button>
+            <span class="settings-label" data-i18n="settings_kill_all_label">End all running sessions</span>
+            <button id="settings-kill-all-btn" class="settings-inline-btn settings-danger-btn" data-i18n="settings_kill_all_btn">End all</button>
           </div>
-          <div class="settings-note">すべての AI CLI セッションを直ちに終了します。保存されていない作業が失われる場合があります。</div>
+          <div class="settings-note" data-i18n="settings_kill_all_desc">Immediately ends all AI CLI sessions. Unsaved work may be lost.</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_saved_history">Saved session history</span>
             <button id="session-store-reset-btn" class="settings-inline-btn settings-danger-btn" data-i18n="settings_history_reset">Delete history</button>
@@ -763,21 +763,21 @@
         </div>
       </details>
       <details class="settings-section" data-section="deferred-enter">
-        <summary class="settings-section-title"><span>複数行ペースト送信</span><span class="settings-section-current">安全な確定待ち</span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_deferred_enter_title">Multi-line paste send</span><span class="settings-section-current" data-i18n="settings_deferred_enter_current">Safe confirm wait</span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
-            <label class="settings-label" for="deferred-enter-ms">確定 Enter の最低待機</label>
+            <label class="settings-label" for="deferred-enter-ms" data-i18n="settings_deferred_enter_label">Minimum wait before confirm Enter</label>
             <select id="deferred-enter-ms" class="settings-input-text">
-              <option value="0">プロバイダー推奨（既定）</option>
+              <option value="0" data-i18n="settings_deferred_enter_provider_default">Provider recommended (default)</option>
               <option value="120">120 ms</option>
               <option value="300">300 ms</option>
               <option value="700">700 ms</option>
-              <option value="1000">1 秒</option>
-              <option value="1500">1.5 秒</option>
-              <option value="2000">2 秒</option>
+              <option value="1000" data-i18n="settings_deferred_enter_1s">1 s</option>
+              <option value="1500" data-i18n="settings_deferred_enter_1_5s">1.5 s</option>
+              <option value="2000" data-i18n="settings_deferred_enter_2s">2 s</option>
             </select>
           </div>
-          <div class="settings-note">長い複数行ペーストは、CLI の入力欄が落ち着いてから確定します。送信中は入力欄の下からキャンセルできます。</div>
+          <div class="settings-note" data-i18n="settings_deferred_enter_desc">Long multi-line pastes are confirmed only after the CLI input settles. You can cancel from under the input while sending.</div>
         </div>
       </details>
       <details class="settings-section" data-section="usage-links">
@@ -1175,7 +1175,7 @@
       <button class="view-tab lazy" data-tab="git" type="button" data-i18n-tooltip="tab_git_lazy_tooltip"><span>⎇</span> <span data-i18n="tab_git">Git</span></button>
       <button class="view-tab" data-tab="orchestration" type="button" data-i18n-tooltip="orchestration_tooltip" aria-label="Orchestration"><svg class="orchestration-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="5" r="2.4"></circle><circle cx="5" cy="19" r="2.4"></circle><circle cx="19" cy="19" r="2.4"></circle><path d="M12 7.4V12M12 12L6.6 17M12 12L17.4 17"></path></svg></button>
         <button class="view-tab" data-tab="approval" type="button" id="approval-tab-btn"><span>⚡</span> <span data-i18n="tab_approval">承認</span><span id="approval-tab-badge" hidden>0</span></button>
-        <button class="view-tab" data-tab="history" type="button" id="history-tab-btn"><span>◷</span> <span>履歴</span></button>
+        <button class="view-tab" data-tab="history" type="button" id="history-tab-btn"><span>◷</span> <span data-i18n="tab_history">History</span></button>
 
       <!-- 旧 #main-tab-bar / #main-tab-list: FilesTabManager の DOM 状態保持用に残置(非表示) -->
       <div id="main-tab-bar" hidden><div id="main-tab-list"></div></div>

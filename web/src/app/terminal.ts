@@ -1365,6 +1365,15 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
     t.cursorHideHasNewline = false;
     return bytes;
   }
+  // Grok Build: fullscreen alt-screen + CUP-heavy overlays (/resume picker, /history,
+  // /help). The discard path exists to keep spinner fossil out of *main-buffer*
+  // scrollback — Grok has no useful main-buffer scrollback. When altScreen tracking
+  // lags a chunk boundary, status-like blocks for the session/history pickers can be
+  // dropped and the Hub shows an empty panel even though `grok sessions list` has
+  // data. Always passthrough for grok (same class as opencode picker bugs).
+  if (sessions.get(id)?.provider === 'grok') {
+    return bytes;
+  }
   const { out, state, events } = filterCursorHideBlocksPure(bytes, {
     carry: t.cursorHideFilterCarry || new Uint8Array(0),
     inBlock: t.inCursorHideBlock || false,
