@@ -145,8 +145,8 @@ func loopbackOnlyDialContext(next dialContextFunc) dialContextFunc {
 		}
 		var lastErr error
 		for _, ip := range ips {
-			addr := netip.AddrFromSlice(ip.IP)
-			if !addr.IsValid() || !addr.Unmap().IsLoopback() {
+			addr, ok := netip.AddrFromSlice(ip.IP)
+			if !ok || !addr.Unmap().IsLoopback() {
 				return nil, errors.New("non-loopback host blocked")
 			}
 			conn, dialErr := next(ctx, network, net.JoinHostPort(ip.IP.String(), port))
