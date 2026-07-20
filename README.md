@@ -75,6 +75,7 @@ Gemini CLI is intentionally out of scope.
 - **Commit all** — stage all current working-tree changes and create a local commit after an explicit review step
 - **Light orchestration API** — a conductor session can spawn child AI sessions, share `~/.many-ai-cli/orchestration/<id>/board.md`, and keep child work isolated in git worktrees by default
 - **File and image attach** — paste or drag-and-drop images and files into the terminal session
+- **Raw-log shortcuts** — from a session's raw transcript, copy its full path or open the containing folder in the system file manager
 - **Voice input** — dictate prompts through Browser recognition or local Whisper, with Windows x64 managed Whisper install
 - **PWA + opt-in Web Push** — install the Hub as a local web app and receive approval notifications after explicitly enabling push in Settings
 - **Approval pattern profiles** — keep official remote-synced trigger phrases separate from local custom edits
@@ -1120,7 +1121,7 @@ Each wrapped session produces **three files that share the same basename** (`.lo
 
 Session logs are local private storage (`0700` directories / `0600` files where applicable), but they can still contain prompts, file paths, and other user-provided text. Known token patterns are redacted before `.jsonl` / `.txt` content and user-input history are stored, but this is heuristic and the raw `.log` is not redacted at all — which is the main reason session logging is opt-in. Remove `~/.many-ai-cli/logs/` if you accidentally paste sensitive material.
 
-The Hub UI log-path button copies the log directory path to your clipboard.
+From a session's raw-transcript dialog, the Hub UI lets you copy the full raw-log path or open its containing folder in the system file manager.
 
 You can also regenerate a clean transcript manually:
 
