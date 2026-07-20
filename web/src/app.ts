@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from './i18n.js';
-import { cleanCopiedText, showToast, token } from './app/util.js';
+import { cleanCopiedText, showToast, ti18n, token } from './app/util.js';
 import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_AUTO_APPROVAL_ENABLED_KEY, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
 import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, answeredMarkerSigs, recordAnsweredMarkerSig, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
@@ -2299,7 +2299,7 @@ inputEl.addEventListener('blur', (e) => {
         if (!res.ok) throw new Error('save failed');
         deferredEnterOverrideMs = ms;
       } catch (_) {
-        showToast('複数行ペーストの設定を保存できませんでした');
+        showToast(ti18n('settings_deferred_enter_save_failed', 'Could not save multi-line paste settings'));
       }
     });
     void loadDeferredEnterConfig();
@@ -2311,7 +2311,7 @@ inputEl.addEventListener('blur', (e) => {
     const id = deferredSendSessionId;
     cancelDeferredEnter(id);
     clearDeferredSendStatus(id);
-    showToast('複数行ペーストの確定送信をキャンセルしました');
+    showToast(ti18n('settings_deferred_enter_cancelled', 'Cancelled multi-line paste confirm send'));
   });
 })();
 

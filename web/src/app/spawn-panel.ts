@@ -1302,10 +1302,248 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 
   spawnCancelBtn.addEventListener('click', () => { newSessionPanel.hidden = true; setSpawnOrchestrationMode(false); });
   spawnLaunchBtn.addEventListener('click', spawnSession);
+  // Web folder browser — used when the OS native picker is unavailable
+  // (headless Linux / remote Hub with no zenity|kdialog) or when env_kind is
+  // remote (native dialogs would open on the server, not the user's browser).
+  // Navigates via /api/list-subdirs and writes the chosen path into #spawn-cwd.
+  let webDirBrowserEl: HTMLElement | null = null;
+  let webDirBrowserPath = '';
+
+  function webDirSep(p: string): string {
+    return p.includes('\\') && !p.startsWith('/') ? '\\' : '/';
+  }
+  function webDirJoin(parent: string, name: string): string {
+    const sep = webDirSep(parent);
+    if (!parent) return name;
+    if (parent.endsWith('/') || parent.endsWith('\\')) return parent + name;
+    return parent + sep + name;
+  }
+  function webDirParent(p: string): string {
+    const clean = stripTrailingSep(p);
+    if (!clean) return p;
+    // Windows drive root "C:\"
+    if (/^[A-Za-z]:$/.test(clean)) return clean + '\\';
+    if (/^[A-Za-z]:\\$/.test(p) || clean === '/' || /^[A-Za-z]:$/.test(clean)) return clean.includes(':') ? clean + '\\' : '/';
+    const sep = webDirSep(clean);
+    const idx = Math.max(clean.lastIndexOf('/'), clean.lastIndexOf('\\'));
+    if (idx <= 0) return sep === '/' ? '/' : clean;
+    // Keep "C:\" not "C:"
+    if (/^[A-Za-z]:$/.test(clean.slice(0, idx))) return clean.slice(0, idx + 1);
+    return clean.slice(0, idx) || (sep === '/' ? '/' : clean);
+  }
+
+  function ensureWebDirBrowser(): HTMLElement {
+    if (webDirBrowserEl) return webDirBrowserEl;
+    const overlay = document.createElement('div');
+    overlay.id = 'spawn-web-dir-browser';
+    overlay.className = 'spawn-web-dir-overlay';
+    overlay.hidden = true;
+    overlay.innerHTML =
+      `<div class="spawn-web-dir-modal" role="dialog" aria-modal="true" aria-labelledby="spawn-web-dir-title">` +
+      `<div class="spawn-web-dir-header">` +
+      `<strong id="spawn-web-dir-title" class="spawn-web-dir-title"></strong>` +
+      `<button type="button" class="spawn-web-dir-close" data-action="close" aria-label="Close">✕</button>` +
+      `</div>` +
+      `<div class="spawn-web-dir-pathrow">` +
+      `<button type="button" class="spawn-web-dir-up" data-action="up" title="..">⬆</button>` +
+      `<input type="text" class="spawn-web-dir-path" spellcheck="false" autocomplete="off">` +
+      `<button type="button" class="spawn-web-dir-go" data-action="go">→</button>` +
+      `</div>` +
+      `<div class="spawn-web-dir-status" hidden></div>` +
+      `<ul class="spawn-web-dir-list" role="listbox"></ul>` +
+      `<div class="spawn-web-dir-actions">` +
+      `<button type="button" class="spawn-web-dir-cancel" data-action="close"></button>` +
+      `<button type="button" class="spawn-web-dir-select" data-action="select"></button>` +
+      `</div>` +
+      `</div>`;
+    document.body.appendChild(overlay);
+
+    const applyLabels = () => {
+      const title = overlay.querySelector('.spawn-web-dir-title');
+      const cancel = overlay.querySelector('.spawn-web-dir-cancel');
+      const select = overlay.querySelector('.spawn-web-dir-select');
+      const up = overlay.querySelector('.spawn-web-dir-up') as HTMLButtonElement | null;
+      if (title) title.textContent = t('spawn_web_dir_title') || 'Browse folder';
+      if (cancel) cancel.textContent = t('spawn_web_dir_cancel') || 'Cancel';
+      if (select) select.textContent = t('spawn_web_dir_select') || 'Select this folder';
+      if (up) up.title = t('spawn_web_dir_up') || 'Parent folder';
+    };
+    applyLabels();
+    document.addEventListener('i18n-ready', applyLabels);
+
+    const pathInput = overlay.querySelector('.spawn-web-dir-path') as HTMLInputElement;
+    const listEl = overlay.querySelector('.spawn-web-dir-list') as HTMLElement;
+    const statusEl = overlay.querySelector('.spawn-web-dir-status') as HTMLElement;
+
+    const setStatus = (msg: string, isError = false) => {
+      if (!statusEl) return;
+      if (!msg) { statusEl.hidden = true; statusEl.textContent = ''; return; }
+      statusEl.hidden = false;
+      statusEl.textContent = msg;
+      statusEl.classList.toggle('is-error', isError);
+    };
+
+    const renderList = (parent: string, subdirs: string[]) => {
+      listEl.innerHTML = '';
+      if (subdirs.length === 0) {
+        const empty = document.createElement('li');
+        empty.className = 'spawn-web-dir-empty';
+        empty.textContent = t('spawn_web_dir_empty') || 'No subfolders';
+        listEl.appendChild(empty);
+        return;
+      }
+      for (const name of subdirs) {
+        const li = document.createElement('li');
+        li.className = 'spawn-web-dir-item';
+        li.setAttribute('role', 'option');
+        li.tabIndex = 0;
+        const full = webDirJoin(parent, name);
+        li.dataset.path = full;
+        li.innerHTML =
+          `<span class="spawn-web-dir-icon" aria-hidden="true">📁</span>` +
+          `<span class="spawn-web-dir-name"></span>`;
+        const nameEl = li.querySelector('.spawn-web-dir-name');
+        if (nameEl) nameEl.textContent = name;
+        const enter = () => { void navigateWebDir(full); };
+        li.addEventListener('click', enter);
+        li.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); enter(); }
+        });
+        listEl.appendChild(li);
+      }
+    };
+
+    async function navigateWebDir(path: string): Promise<void> {
+      const target = stripTrailingSep(String(path || '').trim());
+      if (!target) return;
+      setStatus(t('spawn_web_dir_loading') || 'Loading…');
+      listEl.innerHTML = '';
+      try {
+        const res = await fetch(`/api/list-subdirs?token=${token}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: target }),
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok) {
+          const detail = data?.detail || data?.error || res.statusText;
+          setStatus(String(detail || (t('spawn_web_dir_load_failed') || 'Failed to list folder')), true);
+          return;
+        }
+        if (data.ok === false && (!Array.isArray(data.subdirs) || data.subdirs.length === 0)) {
+          setStatus(t('spawn_web_dir_not_dir') || 'Not a directory or inaccessible', true);
+          return;
+        }
+        const resolved = String(data.path || target);
+        webDirBrowserPath = resolved;
+        pathInput.value = resolved;
+        setStatus('');
+        renderList(resolved, Array.isArray(data.subdirs) ? data.subdirs : []);
+        // Warm the spawn dropdown cache for this parent.
+        subdirsCache.set(stripTrailingSep(resolved), Array.isArray(data.subdirs) ? data.subdirs : []);
+      } catch (_) {
+        setStatus(t('spawn_web_dir_load_failed') || 'Failed to list folder', true);
+      }
+    }
+
+    const closeBrowser = () => {
+      overlay.hidden = true;
+      spawnCwdBrowse && (spawnCwdBrowse.disabled = false);
+    };
+
+    const selectCurrent = () => {
+      if (!webDirBrowserPath) return;
+      spawnCwdInput.value = webDirBrowserPath;
+      refreshCwdInputStatus();
+      closeBrowser();
+      spawnCwdInput.focus();
+      // Show subfolders under the selected path in the combobox.
+      const withSep = webDirBrowserPath.endsWith('/') || webDirBrowserPath.endsWith('\\')
+        ? webDirBrowserPath
+        : webDirBrowserPath + webDirSep(webDirBrowserPath);
+      maybeUpdateSubdirs(withSep);
+      renderCwdDropdown(spawnCwdInput.value.trim());
+    };
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeBrowser();
+    });
+    overlay.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('[data-action]') as HTMLElement | null;
+      if (!btn || !overlay.contains(btn)) return;
+      const action = btn.dataset.action;
+      if (action === 'close') closeBrowser();
+      else if (action === 'select') selectCurrent();
+      else if (action === 'up') void navigateWebDir(webDirParent(webDirBrowserPath || pathInput.value));
+      else if (action === 'go') void navigateWebDir(pathInput.value.trim());
+    });
+    pathInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        void navigateWebDir(pathInput.value.trim());
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeBrowser();
+      }
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !overlay.hidden) {
+        e.preventDefault();
+        closeBrowser();
+      }
+    });
+
+    (overlay as any)._navigate = navigateWebDir;
+    webDirBrowserEl = overlay;
+    return overlay;
+  }
+
+  async function openWebDirBrowser(startPath?: string): Promise<void> {
+    const overlay = ensureWebDirBrowser();
+    overlay.hidden = false;
+    let start = String(startPath || spawnCwdInput.value || '').trim();
+    if (!start || !/[/\\]/.test(start) && !/^[A-Za-z]:/.test(start)) {
+      try {
+        const res = await fetch(`/api/info?token=${token}`);
+        if (res.ok) {
+          const info = await res.json();
+          if (info?.cwd) start = String(info.cwd);
+        }
+      } catch (_) { /* keep start */ }
+    }
+    if (!start) {
+      const favs = loadCwdFavorites();
+      const hist = loadCwdHistory();
+      start = favs[0] || hist[0] || '/';
+    }
+    // Prefer the parent if the typed value looks like a file path without trailing sep
+    // and isn't itself a known directory — still try the path as-is first.
+    await (overlay as any)._navigate(start);
+    const pathInput = overlay.querySelector('.spawn-web-dir-path') as HTMLInputElement | null;
+    pathInput?.focus();
+    pathInput?.select();
+  }
+
+  async function shouldPreferWebDirBrowser(): Promise<boolean> {
+    // Remote Hub: native OS dialogs open on the server host, never in the user's browser.
+    try {
+      const res = await fetch(`/api/info?token=${token}`);
+      if (res.ok) {
+        const info = await res.json();
+        if (info?.env_kind === 'remote') return true;
+      }
+    } catch (_) { /* fall through */ }
+    return false;
+  }
+
   if (spawnCwdBrowse) {
     spawnCwdBrowse.addEventListener('click', async () => {
       spawnCwdBrowse.disabled = true;
       try {
+        if (await shouldPreferWebDirBrowser()) {
+          await openWebDirBrowser();
+          return;
+        }
         const res = await fetch(`/api/pick-directory?token=${token}`, { method: 'POST' });
         if (res.ok) {
           const data = await res.json();
@@ -1314,17 +1552,26 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
             refreshCwdInputStatus();
             spawnCwdInput.focus();
             renderCwdDropdown('');
+            return;
           }
-        } else {
-          // Non-2xx (typically 500 when no native folder picker is available,
-          // e.g. Linux without zenity/kdialog). Surface the server message so
-          // the click isn't silently ignored.
-          let msg = '';
-          try { msg = (await res.text()).trim(); } catch (_) {}
-          showToast(msg ? `${t('link_open_error')}: ${msg}` : t('link_open_error'));
+          // User cancelled native dialog (ok:false, no path) — do nothing.
+          if (data && data.ok === false && !data.path) return;
         }
-      } catch (_) { showToast(t('link_open_error')); }
-      finally { spawnCwdBrowse.disabled = false; }
+        // Native picker unavailable (Linux without zenity/kdialog, etc.) → web browser.
+        await openWebDirBrowser();
+      } catch (_) {
+        try {
+          await openWebDirBrowser();
+        } catch (_) {
+          showToast(t('link_open_error'));
+        }
+      } finally {
+        // openWebDirBrowser keeps the button disabled while modal is open;
+        // re-enable only when modal was not shown (native success/cancel).
+        if (!webDirBrowserEl || webDirBrowserEl.hidden) {
+          spawnCwdBrowse.disabled = false;
+        }
+      }
     });
   }
   // placeholder ヒント: フォーカス前に一度設定（i18n 初期化後に評価される）。
