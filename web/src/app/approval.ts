@@ -519,15 +519,28 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
   // 40 行の lines ではなく pendingTextTail 全体（markerLinesFromTail）から抽出する。
   const markerOpts = extractHubMarkerApproval(markerLinesFromTail(t.pendingTextTail));
   if (markerOpts) {
+    const _sigT = approvalSig(markerOpts);
+    const _blockSigT = markerOpts[0]?._blockSig;
+    dlog('trackChunk.marker.detected', {
+      id, activeSessionId,
+      optsLen: markerOpts.length,
+      batch: isBatchOptions(markerOpts),
+      sig: _sigT,
+      blockSig: _blockSigT,
+      answered: isAnsweredMarkerSig(id, markerOpts),
+      consumedSigMatch: approvalConsumedSig.get(id) === _sigT,
+      srcSigMatch: approvalSourceCache.get(id)?.sig === _sigT,
+      visibleBefore: !!approvalVisibleCache.get(id),
+    });
     // 回答済みの [MANY-AI-CLI] ブロックは恒久的に承認 UI を出さない（タブ切替の SIGWINCH
     // 再描画で画面に残った回答済みブロックが再流入しても再表示しない）。質問文込みのハッシュ
     // で判定するため、別質問を誤って抑制することはない。
-    if (isAnsweredMarkerSig(id, markerOpts)) return;
+    if (isAnsweredMarkerSig(id, markerOpts)) { dlog('trackChunk.marker.skip.answered', { id, sig: _sigT, blockSig: _blockSigT }); return; }
     // doSend でテキスト送信済みの承認が Ink 再描画で再検出された場合はスキップ
     const consumed = approvalConsumedSig.get(id);
     const sig = approvalSig(markerOpts);
     const src = approvalSourceCache.get(id);
-    if (src && src.source === 'hub_marker' && src.sig === sig) return;
+    if (src && src.source === 'hub_marker' && src.sig === sig) { dlog('trackChunk.marker.skip.srcSig', { id, sig }); return; }
     if (consumed === sig) {
       // Ink 再描画で同一ブロックが再送されている — タイマーをリセットして
       // ブロックが届かなくなるまで sig を保持し続ける（debounce 型削除）
@@ -1039,8 +1052,21 @@ export function detectApproval(id) {
     const pendingLines = markerLinesFromTail(t.pendingTextTail);
     const markerOpts = extractHubMarkerApproval(pendingLines);
     if (markerOpts) {
+      const _sigD = approvalSig(markerOpts);
+      const _blockSigD = markerOpts[0]?._blockSig;
+      dlog('detectApproval.marker.detected', {
+        id, activeSessionId,
+        optsLen: markerOpts.length,
+        batch: isBatchOptions(markerOpts),
+        sig: _sigD,
+        blockSig: _blockSigD,
+        answered: isAnsweredMarkerSig(id, markerOpts),
+        consumedSigMatch: approvalConsumedSig.get(id) === _sigD,
+        srcSigMatch: approvalSourceCache.get(id)?.sig === _sigD,
+        visibleBefore: !!approvalVisibleCache.get(id),
+      });
       // 回答済みブロックは恒久的にスキップ（タブ切替の再描画で再流入しても出さない）
-      if (isAnsweredMarkerSig(id, markerOpts)) return;
+      if (isAnsweredMarkerSig(id, markerOpts)) { dlog('detectApproval.marker.skip.answered', { id, sig: _sigD, blockSig: _blockSigD }); return; }
       const consumed = approvalConsumedSig.get(id);
       const sig = approvalSig(markerOpts);
       const src = approvalSourceCache.get(id);
@@ -2744,8 +2770,21 @@ export function sendChoice(sessionId, targetNum, highRiskConfirmed = false) {
   });
   // doSend と同様に消費済み署名を記録（Ink 再描画による同一ブロックの再検出・再表示を防ぐ）
   const prevOpts = cachedOpts;
+  dlog('sendChoice.single.entry', {
+    sessionId, targetNum,
+    prevOptsLen: Array.isArray(prevOpts) ? prevOpts.length : -1,
+    prevBlockSig: prevOpts?.[0]?._blockSig,
+    prevSig: prevOpts ? approvalSig(prevOpts) : null,
+    prevSource: approvalSourceCache.get(sessionId)?.source,
+    isBatch: isBatchOptions(prevOpts),
+  });
   if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
   recordAnsweredMarkerSig(sessionId, prevOpts);
+  dlog('sendChoice.single.recorded', {
+    sessionId,
+    blockSig: prevOpts?.[0]?._blockSig,
+    answeredNow: prevOpts ? isAnsweredMarkerSig(sessionId, prevOpts) : false,
+  });
   sendApprovalConsumed(sessionId, prevOpts, choiceText);
   sendSubmittedText(sessionId, choiceText, { recordMobileTranscript: false });
   hideActionBar(sessionId);
