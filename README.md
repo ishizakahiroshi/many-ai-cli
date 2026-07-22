@@ -75,6 +75,7 @@ Gemini CLI is intentionally out of scope.
 - **Commit all** — stage all current working-tree changes and create a local commit after an explicit review step
 - **Light orchestration API** — a conductor session can spawn child AI sessions, share `~/.many-ai-cli/orchestration/<id>/board.md`, and keep child work isolated in git worktrees by default
 - **File and image attach** — paste or drag-and-drop images and files into the terminal session
+- **Raw-log shortcuts** — from a session's raw transcript, copy its full path or open the containing folder in the system file manager
 - **Voice input** — dictate prompts through Browser recognition or local Whisper, with Windows x64 managed Whisper install
 - **PWA + opt-in Web Push** — install the Hub as a local web app and receive approval notifications after explicitly enabling push in Settings
 - **Approval pattern profiles** — keep official remote-synced trigger phrases separate from local custom edits
@@ -1120,13 +1121,28 @@ Each wrapped session produces **three files that share the same basename** (`.lo
 
 Session logs are local private storage (`0700` directories / `0600` files where applicable), but they can still contain prompts, file paths, and other user-provided text. Known token patterns are redacted before `.jsonl` / `.txt` content and user-input history are stored, but this is heuristic and the raw `.log` is not redacted at all — which is the main reason session logging is opt-in. Remove `~/.many-ai-cli/logs/` if you accidentally paste sensitive material.
 
-The Hub UI log-path button copies the log directory path to your clipboard.
+From a session's raw-transcript dialog, the Hub UI lets you copy the full raw-log path or open its containing folder in the system file manager.
 
 You can also regenerate a clean transcript manually:
 
 ```bash
 many-ai-cli log-clean ~/.many-ai-cli/logs/sessions/<session>.jsonl -o transcript.txt
 ```
+
+---
+
+## Reporting a bug
+
+Use **Report bug** in the top-right of the Hub UI, or run `many-ai-cli issue`. Both paths show the complete report before opening GitHub and run a final confidential-data scrub immediately before the handoff.
+
+```bash
+many-ai-cli issue "Approval buttons do not close after one click"
+many-ai-cli issue --provider codex --dry-run
+```
+
+The default report contains only the symptom, optional reproduction steps, and allowlisted environment details such as the many-ai-cli version, OS/architecture, provider/model, and browser user agent. The configuration file is never attached wholesale. If a report is too long or GitHub cannot be opened safely, the redacted Markdown is saved under `~/.many-ai-cli/reports/` for manual review and pasting.
+
+Session-log attachment is **off by default**. It runs only after you explicitly enable it in the preview, inspect the redacted log tail, and confirm the report. It requires the `gh` CLI and creates a secret gist; secret gists are unlisted, but anyone who knows the URL can view them. Screenshots are never uploaded automatically—drop them into the GitHub Issue form yourself after it opens.
 
 ---
 

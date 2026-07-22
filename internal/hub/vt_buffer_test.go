@@ -1,6 +1,9 @@
 package hub
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestVTBufferCursorAndErase(t *testing.T) {
 	vt := newVTBuffer(20, 5)
@@ -136,5 +139,101 @@ func TestVTBufferIgnoresOSCSequences(t *testing.T) {
 
 	if got := vt.Lines()[0]; got != "ok!" {
 		t.Fatalf("line 0 = %q, want ok!", got)
+	}
+}
+
+func TestVTBufferScrollbackOnPushOut(t *testing.T) {
+	vt := newVTBuffer(20, 3)
+	// 3 行画面: 5 行流すと先頭 2 行が scrollback へ
+	vt.Write([]byte("A0\r\nB1\r\nC2\r\nD3\r\nE4"))
+	if len(vt.scrollback) != 2 {
+		t.Fatalf("scrollback len = %d, want 2; scrollback=%v lines=%v", len(vt.scrollback), vt.scrollback, vt.Lines())
+	}
+	if vt.scrollback[0] != "A0" || vt.scrollback[1] != "B1" {
+		t.Fatalf("scrollback = %v, want [A0 B1]", vt.scrollback)
+	}
+	got := vt.TailLinesWithScrollback(5)
+	if len(got) != 5 {
+		t.Fatalf("TailLinesWithScrollback(5) len = %d, want 5; got=%v", len(got), got)
+	}
+	want := []string{"A0", "B1", "C2", "D3", "E4"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got[%d]=%q want %q (full=%v)", i, got[i], want[i], got)
+		}
+	}
+	// n が画面内なら scrollback を混ぜない
+	screenOnly := vt.TailLinesWithScrollback(2)
+	if len(screenOnly) != 2 || screenOnly[0] != "D3" || screenOnly[1] != "E4" {
+		t.Fatalf("screen-only tail = %v", screenOnly)
+	}
+}
+
+func TestVTBufferScrollbackNotFilledOnClear(t *testing.T) {
+	vt := newVTBuffer(20, 3)
+	vt.Write([]byte("A0\r\nB1\r\nC2\r\nD3"))
+	if len(vt.scrollback) == 0 {
+		t.Fatal("expected scrollback before clear")
+	}
+	before := append([]string(nil), vt.scrollback...)
+	vt.Write([]byte("\x1b[2J\x1b[H"))
+	if len(vt.scrollback) != len(before) {
+		t.Fatalf("scrollback changed on clear: before=%v after=%v", before, vt.scrollback)
+	}
+	for i := range before {
+		if vt.scrollback[i] != before[i] {
+			t.Fatalf("scrollback[%d] changed on clear", i)
+		}
+	}
+	vt.Write([]byte("new"))
+	if got := vt.Lines()[0]; got != "new" {
+		t.Fatalf("line0 after clear = %q", got)
+	}
+}
+
+func TestVTBufferScrollbackAdjacentDedupeEmptyOnly(t *testing.T) {
+	vt := newVTBuffer(10, 2)
+	// 非空の同一行は保持する（マーカー本文の連続同一行を壊さない）
+	vt.Write([]byte("DUP\r\nX\r\nDUP\r\nDUP\r\nY"))
+	dupCount := 0
+	for _, line := range vt.scrollback {
+		if line == "DUP" {
+			dupCount++
+		}
+	}
+	if dupCount < 2 {
+		t.Fatalf("expected non-empty DUP lines kept in scrollback, got %v", vt.scrollback)
+	}
+
+	// 空行の隣接重複だけ潰す
+	vt2 := newVTBuffer(10, 2)
+	vt2.Write([]byte("A\r\n\r\n\r\n\r\nB\r\nC"))
+	emptyRun := 0
+	maxEmptyRun := 0
+	for _, line := range vt2.scrollback {
+		if line == "" {
+			emptyRun++
+			if emptyRun > maxEmptyRun {
+				maxEmptyRun = emptyRun
+			}
+		} else {
+			emptyRun = 0
+		}
+	}
+	if maxEmptyRun > 1 {
+		t.Fatalf("adjacent empty lines should be collapsed, scrollback=%v", vt2.scrollback)
+	}
+}
+
+func TestVTBufferScrollbackCap(t *testing.T) {
+	vt := newVTBuffer(8, 2)
+	for i := 0; i < maxVTScrollbackLines+50; i++ {
+		vt.Write([]byte(fmt.Sprintf("L%04d\r\n", i)))
+	}
+	if len(vt.scrollback) > maxVTScrollbackLines {
+		t.Fatalf("scrollback len = %d, want <= %d", len(vt.scrollback), maxVTScrollbackLines)
+	}
+	if len(vt.scrollback) < maxVTScrollbackLines {
+		t.Fatalf("scrollback len = %d, want %d (should be full)", len(vt.scrollback), maxVTScrollbackLines)
 	}
 }

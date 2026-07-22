@@ -1,10 +1,15 @@
 package hub
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 )
 
 func TestParseHubPIDRejectsInvalidValues(t *testing.T) {
@@ -30,7 +35,7 @@ func TestStopWithPIDPathInvalidPIDRemovesFile(t *testing.T) {
 	if err := os.WriteFile(pidPath, []byte("not-a-pid"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := stopWithPIDPath(pidPath); err == nil {
+	if err := stopWithPIDPath(pidPath, nil, 0, ""); err == nil {
 		t.Fatal("stopWithPIDPath returned nil error for invalid pid")
 	}
 	if _, err := os.Stat(pidPath); !os.IsNotExist(err) {
@@ -63,4 +68,69 @@ func TestKillStalePid_RemovesInvalidFile(t *testing.T) {
 	if _, err := os.Stat(pidPath); !os.IsNotExist(err) {
 		t.Errorf("pid file should be removed, stat err=%v", err)
 	}
+}
+
+// gracefulStop はポートが不明（<=0）なら HTTP を叩かず即 false を返し、
+// stopWithPIDPath 側の force-kill フォールバックに委ねる
+//（plan_hub-lifecycle-logging.md C2）。
+func TestGracefulStop_NoPortFallsBackImmediately(t *testing.T) {
+	if gracefulStop(12345, 0, "tok", nil) {
+		t.Fatal("gracefulStop with port<=0 should return false")
+	}
+}
+
+// /api/shutdown 相当が 200 以外を返したら gracefulStop は false を返す
+//（force kill へのフォールバック対象）。
+func TestGracefulStop_NonOKStatusFallsBack(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse test server URL: %v", err)
+	}
+	port, err := strconv.Atoi(u.Port())
+	if err != nil {
+		t.Fatalf("parse test server port: %v", err)
+	}
+
+	if gracefulStop(os.Getpid(), port, "tok", nil) {
+		t.Fatal("gracefulStop should return false on non-200 response")
+	}
+}
+
+// waitForPIDExit は生存し続けるプロセス（自分自身）に対しては、タイムアウトまで
+// ポーリングして false を返す。
+func TestWaitForPIDExit_TimesOutWhenProcessStillAlive(t *testing.T) {
+	if waitForPIDExit(os.Getpid(), 150*time.Millisecond, 20*time.Millisecond) {
+		t.Fatal("waitForPIDExit should be false for a still-alive process")
+	}
+}
+
+// waitForPIDExit は既に終了した PID に対しては即 true を返す。
+func TestWaitForPIDExit_TrueForAlreadyExitedProcess(t *testing.T) {
+	cmd := exec.Command(os.Args[0], "-test.run=TestHelperProcessNoop")
+	cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start helper process: %v", err)
+	}
+	pid := cmd.Process.Pid
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("wait helper process: %v", err)
+	}
+	if !waitForPIDExit(pid, gracefulShutdownPoll, 10*time.Millisecond) {
+		t.Fatal("waitForPIDExit should be true for an already-exited pid")
+	}
+}
+
+// TestHelperProcessNoop is not a real test — it is exec'd by
+// TestWaitForPIDExit_TrueForAlreadyExitedProcess as a disposable child
+// process that exits immediately (standard os/exec test helper pattern).
+func TestHelperProcessNoop(t *testing.T) {
+	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
+		return
+	}
+	os.Exit(0)
 }

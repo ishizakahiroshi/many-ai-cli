@@ -329,6 +329,16 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusTooManyRequests, "locked_out", "too many attempts")
 		return
 	}
+	// PIN フォーマット違反（空文字・非数字・72B 超）は bcrypt へ到達させない。
+	// beginAttempt で既に失敗計上済みなので、追加カウントは行わず「bad_pin」で返す。
+	// handleAuthSetPIN 側と対称にする。
+	if !isValidPINFormat(body.PIN) {
+		if s.logger != nil {
+			s.logger.Warn("remote pin login rejected", "reason", "invalid_format")
+		}
+		writeJSONError(w, http.StatusUnauthorized, "bad_pin", "incorrect pin")
+		return
+	}
 	if !verifyPIN(pinHash, body.PIN) {
 		// beginAttempt で既に失敗計上済み。ここでは追加でカウントしない。
 		retry := s.pinLim().retryAfter(ip, now)

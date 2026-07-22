@@ -1198,17 +1198,42 @@ body.pc-input-tools-off #input-tools { display: none; }
 }
 #grok-chat-viewer .gcv-user { background: rgba(22, 30, 43, 0.92); }
 #grok-chat-viewer .gcv-assistant { background: transparent; }
+#grok-chat-viewer .gcv-msg-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
 #grok-chat-viewer .gcv-role {
   color: var(--muted);
   font-size: 11px;
-  margin-bottom: 4px;
+  flex: 1;
+  min-width: 0;
 }
+#grok-chat-viewer .gcv-msg-copy {
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+#grok-chat-viewer .gcv-msg:hover .gcv-msg-copy,
+#grok-chat-viewer .gcv-msg-copy:focus-visible {
+  opacity: 1;
+}
+#grok-chat-viewer .gcv-msg-copy.copied {
+  opacity: 1;
+  color: var(--green-text, #6ee7b7);
+}
+/* 読み取り専用でもドラッグ選択・コピー可能にする */
 #grok-chat-viewer .gcv-text {
   color: var(--text);
   font-size: 13px;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
 }
 /* パスリンクは .tool-output-path-link（path-links.appendLinkedText）を流用。
    URL は Chat タブ .url-link と同系の見た目で別タブオープン */

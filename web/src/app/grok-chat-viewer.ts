@@ -152,15 +152,43 @@ function gcvFillTextWithLinks(container: HTMLElement, raw: string, sessionId: nu
 function gcvRenderMessage(msg: { role: string; text: string }, sessionId: number) {
   const item = document.createElement('div');
   item.className = 'gcv-msg ' + (msg.role === 'user' ? 'gcv-user' : 'gcv-assistant');
+  const head = document.createElement('div');
+  head.className = 'gcv-msg-head';
   const role = document.createElement('div');
   role.className = 'gcv-role';
   role.textContent = msg.role === 'user'
     ? gcvLabel('gcv_role_user', 'あなた')
     : gcvLabel('gcv_role_assistant', 'Grok');
+  const copyBtn = document.createElement('button');
+  copyBtn.type = 'button';
+  copyBtn.className = 'gcv-btn gcv-msg-copy';
+  copyBtn.textContent = '📋';
+  copyBtn.title = gcvLabel('gcv_copy', 'コピー');
+  copyBtn.setAttribute('aria-label', gcvLabel('gcv_copy', 'コピー'));
+  copyBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const body = String(msg.text || '');
+    if (!body) return;
+    navigator.clipboard.writeText(body).then(() => {
+      const prev = copyBtn.textContent;
+      copyBtn.textContent = '✓';
+      copyBtn.classList.add('copied');
+      showToast(gcvLabel('gcv_copied', 'コピーしました'));
+      setTimeout(() => {
+        copyBtn.textContent = prev;
+        copyBtn.classList.remove('copied');
+      }, 1000);
+    }).catch(() => {
+      showToast(gcvLabel('gcv_copy_failed', 'コピーに失敗しました'));
+    });
+  });
+  head.appendChild(role);
+  head.appendChild(copyBtn);
   const text = document.createElement('div');
   text.className = 'gcv-text';
   gcvFillTextWithLinks(text, msg.text, sessionId);
-  item.appendChild(role);
+  item.appendChild(head);
   item.appendChild(text);
   return item;
 }

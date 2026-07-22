@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { showToast, token } from './util.js';
+import { apiFetch, showToast, token } from './util.js';
 import { activeSessionId, sessions, terminals } from './state.js';
 import { copyPathText } from './path-links.js';
 import { inputEl, isInteractiveFocusTarget, stagePastedText, updateInputAffordance } from '../app.js';
@@ -55,6 +55,100 @@ if (attachCopyCwdBtn) {
     if (!cwd) return;
     void copyPathText(cwd, attachCopyCwdBtn).catch(() => {});
   });
+}
+
+type AgentLogResponse = {
+  available?: boolean;
+  path?: string;
+  label?: string;
+  reason?: string;
+};
+
+export const agentLogBtn = document.getElementById('agent-log-btn') as HTMLButtonElement | null;
+let agentLogPopup: HTMLDivElement | null = null;
+
+function closeAgentLogPopup() {
+  if (agentLogPopup) agentLogPopup.hidden = true;
+  agentLogBtn?.setAttribute('aria-expanded', 'false');
+}
+
+function getAgentLogPopup() {
+  if (agentLogPopup) return agentLogPopup;
+  const popup = document.createElement('div');
+  popup.className = 'agent-log-popup';
+  popup.hidden = true;
+  popup.setAttribute('role', 'dialog');
+  popup.setAttribute('aria-label', t('agent_log_button'));
+  popup.addEventListener('click', (e) => e.stopPropagation());
+  document.body.appendChild(popup);
+  agentLogPopup = popup;
+  return popup;
+}
+
+function showAgentLogPopup(anchor: HTMLButtonElement, sessionId: number, detail: AgentLogResponse) {
+  const path = String(detail.path || '');
+  if (!path) return;
+  const popup = getAgentLogPopup();
+  popup.replaceChildren();
+
+  const title = document.createElement('div');
+  title.className = 'agent-log-popup-title';
+  title.textContent = detail.label || t('agent_log_location');
+  const pathEl = document.createElement('code');
+  pathEl.className = 'agent-log-popup-path';
+  pathEl.textContent = path;
+  const actions = document.createElement('div');
+  actions.className = 'agent-log-popup-actions';
+
+  const copyBtn = document.createElement('button');
+  copyBtn.type = 'button';
+  copyBtn.textContent = `📋 ${t('agent_log_copy_path')}`;
+  copyBtn.addEventListener('click', () => {
+    void copyPathText(path, copyBtn).catch(() => showToast(t('agent_log_copy_error'), copyBtn));
+  });
+  const openBtn = document.createElement('button');
+  openBtn.type = 'button';
+  openBtn.textContent = `📁 ${t('agent_log_open_folder')}`;
+  openBtn.addEventListener('click', async () => {
+    try {
+      const res = await apiFetch(`/api/agent-log/open?session_id=${encodeURIComponent(sessionId)}`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (_) {
+      showToast(t('agent_log_open_error'), openBtn);
+    }
+  });
+  actions.append(copyBtn, openBtn);
+  popup.append(title, pathEl, actions);
+  popup.hidden = false;
+  const rect = anchor.getBoundingClientRect();
+  const width = popup.offsetWidth;
+  popup.style.left = `${Math.max(8, Math.min(window.innerWidth - width - 8, rect.right - width))}px`;
+  popup.style.top = `${Math.max(8, rect.top - popup.offsetHeight - 8)}px`;
+  anchor.setAttribute('aria-expanded', 'true');
+}
+
+if (agentLogBtn) {
+  agentLogBtn.addEventListener('click', async (event) => {
+    event.stopPropagation();
+    const sessionId = activeSessionId;
+    if (sessionId === null) {
+      showToast(t('agent_log_no_session'), agentLogBtn);
+      return;
+    }
+    try {
+      const res = await apiFetch(`/api/agent-log?session_id=${encodeURIComponent(sessionId)}`);
+      const detail = await res.json() as AgentLogResponse;
+      if (!res.ok || !detail.available) {
+        showToast(detail.reason || t('agent_log_unavailable'), agentLogBtn);
+        return;
+      }
+      showAgentLogPopup(agentLogBtn, sessionId, detail);
+    } catch (_) {
+      showToast(t('agent_log_unavailable'), agentLogBtn);
+    }
+  });
+  document.addEventListener('click', closeAgentLogPopup);
+  window.addEventListener('resize', closeAgentLogPopup);
 }
 
 window.addEventListener('paste', (e) => {
@@ -125,17 +219,30 @@ if (terminalWrapper) {
   terminalWrapper.addEventListener('click', (e) => {
     if (activeSessionId === null) return;
     if (isInteractiveFocusTarget(e.target)) return;
+    // DOM テキスト選択中は入力欄へフォーカスすると選択が消える
+    const domSel = window.getSelection();
+    if (domSel && !domSel.isCollapsed && String(domSel).length > 0) return;
     const xt = terminals.get(activeSessionId);
     if (!xt?.term.hasSelection()) inputEl.focus();
   });
 
   // xterm.js canvas が click イベントを止める場合のフォールバック:
-  // mouseup は canvas からもバブルするため、こちらで確実にフォーカスを戻す
-  document.getElementById('terminal-area-wrapper')?.addEventListener('mouseup', () => {
+  // mouseup は canvas からもバブルするため、こちらで確実にフォーカスを戻す。
+  // ただし Grok 会話履歴ビューア等の DOM オーバーレイ上では、xterm 未選択の
+  // まま input にフォーカスするとブラウザ選択が消えてコピー不能になる。
+  document.getElementById('terminal-area-wrapper')?.addEventListener('mouseup', (e) => {
     if (activeSessionId === null) return;
+    if (isInteractiveFocusTarget(e.target)) return;
+    const domSel = window.getSelection();
+    if (domSel && !domSel.isCollapsed && String(domSel).length > 0) return;
     const xt = terminals.get(activeSessionId);
     // 50ms 待って xterm の選択状態が確定してから判定
-    setTimeout(() => { if (!xt?.term.hasSelection()) inputEl.focus(); }, 50);
+    setTimeout(() => {
+      if (isInteractiveFocusTarget(e.target)) return;
+      const still = window.getSelection();
+      if (still && !still.isCollapsed && String(still).length > 0) return;
+      if (!xt?.term.hasSelection()) inputEl.focus();
+    }, 50);
   });
 
   terminalWrapper.addEventListener('dragenter', (e) => {

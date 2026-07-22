@@ -579,11 +579,15 @@ export function _connectWs() {
     removeApprovalAutoSwitchTarget(m.session_id);
     maybeAutoSwitchToNextApproval();
     const deadStates = ['error', 'disconnected'];
+    // 記事書き等の長寿命セッションが席を離れた数分〜数十分の隙に消えていた事故
+    // (docs/local/bugfix_session-silent-auto-dismiss_2026-07-21.md) を受け、
+    // 元の 5s から 24h へ延長。実質「席を戻したときはまだ残っている」を確保しつつ、
+    // 何日も放置した死セッションは翌日には自動で片付く。
     if (deadStates.includes(m.state) && !autoDismissTimers.has(m.session_id)) {
       const timer = setTimeout(() => {
         autoDismissTimers.delete(m.session_id);
         dismissSession(m.session_id);
-      }, 5000);
+      }, 24 * 60 * 60 * 1000);
       autoDismissTimers.set(m.session_id, timer);
     }
   } else if (m.type === 'session_removed') {

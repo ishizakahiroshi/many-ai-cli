@@ -78,6 +78,7 @@ Gemini CLI **cố ý ngoài phạm vi**.
 - **Commit all** — stage toàn working tree và tạo commit local sau bước Review tường minh
 - **Light orchestration API** — session conductor spawn session con, chia sẻ `~/.many-ai-cli/orchestration/<id>/board.md`, cô lập worktree git mặc định
 - **Đính kèm file/ảnh** — paste hoặc kéo-thả vào session
+- **Phím tắt log thô** — từ transcript thô của một session, copy đường dẫn đầy đủ hoặc mở thư mục chứa nó bằng trình quản lý tệp của hệ điều hành
 - **Nhập giọng** — nhận dạng trình duyệt hoặc Whisper local; Windows x64 có cài Whisper managed
 - **PWA + Web Push opt-in** — cài Hub như web app local; nhận thông báo phê duyệt sau khi bật push trong Settings
 - **Profile pattern phê duyệt** — tách cụm trigger official đồng bộ remote với chỉnh sửa custom local

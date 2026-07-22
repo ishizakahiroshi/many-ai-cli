@@ -105,6 +105,27 @@ test('approval parser fixtures', () => {
   assert.equal((singleQ as any)._preamble, 'path-exists の挙動をどうしますか？');
   assert.equal((singleQ as any)._freeInput, true);
 
+  // 質問キー: ラベルが揺れても _question が同じなら同一キー（手動 dismiss 抑止用）。
+  const singleQLabelJitter = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'path-exists の挙動をどうしますか？',
+    '1. 実在判定可にする (Recommended) 追加ノイズ',
+    '2. 許可リストを維持（別表記）',
+    'N. User specifies',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal(parser.approvalQuestionKey(singleQ), parser.approvalQuestionKey(singleQLabelJitter));
+  assert.notEqual(parser.approvalSig(singleQ), parser.approvalSig(singleQLabelJitter));
+
+  // マーカー文字列が質問/ラベルに漏れ込んだ壊れたパース結果は出さない（Grok 再描画残骸）。
+  assert.equal(parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'スターター取込？ [MANY-AI-CLI] スターター取込？',
+    '1. A',
+    '2. B',
+    '[/MANY-AI-CLI]',
+  ]), null);
+
   // 複数行に折り返された質問文は 1 つに連結して捕捉する。
   const singleQWrapped = parser.extractHubMarkerApproval([
     '[MANY-AI-CLI]',
@@ -467,6 +488,25 @@ test('approval parser fixtures', () => {
   assert.deepEqual(detectFallback('claude', numberedList, triggerMatcher), []);
   assert.equal(parser.linesHaveHint('claude', numberedList, triggerMatcher), false);
 
+  // 通常の手順説明に Q1 と「（推奨）」が混ざっても、確認待ちにはしない。
+  // 2026-07-20 実測: 質問が選択肢の後ろにあるだけの応答を Hub がポップアップ化していた。
+  const proseWithQuestionWord = [
+    '1. metricId 一致のみでマージ判定する（推奨）— データ消失の責任範囲を除去する。',
+    '2. 上記に加えて週利用量誤命名の根本原因も追加調査する。',
+    '3. 結果、月間利用量は普通に追加し、ローリング利用量は表示名だけ直す。',
+    'Q1 どちらで進めますか？',
+  ];
+  assert.deepEqual(detectFallback('claude', proseWithQuestionWord, triggerMatcher), []);
+
+  // マーカー移行前の旧形式は、質問→選択肢→自由入力行という明確な構造に限って救済する。
+  const legacyHubChoice = [
+    'Q1 どちらで進めますか？',
+    '1. 最小修正 (Recommended)',
+    '2. 原因調査も行う',
+    'N. User specifies',
+  ];
+  assert.deepEqual(numbers(detectFallback('claude', legacyHubChoice, triggerMatcher)), [1, 2]);
+
   // Ink のカーソル位置制御描画で選択肢間の改行が失われ「1. … 2. … 3. … N. User specifies」が
   // 1行へ連結されたケースの回帰（=「承認ボタンが全部1つに潰れる」症状）。
   // フォールパック経路（extractApprovalOptions）で 3 選択肢へ復元でき、
@@ -628,6 +668,21 @@ test('approval parser fixtures', () => {
   ]);
   assert.equal(parser.isBatchOptions(singleNoFree), false);
   assert.equal(!!(singleNoFree as any)._freeInput, false);
+
+  // 単一質問でも `Q1 見出し` 形式のときは flat に落とした後も _freeInput / _question が残る
+  // （sections[0] 経由でフラグを配列プロパティへ伝播する経路の回帰防止）。
+  const singleQ1Heading = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'Q1 次のアクション',
+    '1. 続行する (Recommended)',
+    '2. やめる',
+    'N. User specifies',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isBatchOptions(singleQ1Heading), false);
+  assert.deepEqual(numbers(singleQ1Heading), [1, 2]);
+  assert.equal((singleQ1Heading as any)._freeInput, true);
+  assert.equal((singleQ1Heading as any)._question, '次のアクション');
 
   // claude /model のような承認ではないカーソル駆動 TUI 選択メニュー。
   // フッターの「Esc to cancel」を matchNativeApprovalTrigger が拾い、❯ カーソル付き選択肢が

@@ -1,6 +1,8 @@
 package hub
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -79,5 +81,38 @@ func TestSynthesizeAddDiffTruncation(t *testing.T) {
 	// 上限 + マーカー + 1 行分程度に収まっていること（無制限に膨らんでいない）
 	if len(diff) > gitShowDiffMaxBytes+512 {
 		t.Errorf("diff too large after truncation: %d bytes", len(diff))
+	}
+}
+
+// synthesizeUntrackedDiff は LimitReader で gitShowDiffMaxBytes+1 までしか読まない。
+// 上限超過の untracked ファイルが truncated 扱いになり、Hub のメモリを
+// ファイルサイズ分食い潰さないことを確認する。
+func TestSynthesizeUntrackedDiffTruncatesHugeFile(t *testing.T) {
+	root := t.TempDir()
+	rel := "big-untracked.txt"
+	content := strings.Repeat(strings.Repeat("y", 99)+"\n", 4000) // ≒400KB > 256KB
+	if err := os.WriteFile(filepath.Join(root, rel), []byte(content), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	diff, added := synthesizeUntrackedDiff(root, rel)
+	if !strings.Contains(diff, "(truncated)") {
+		t.Errorf("truncation marker missing (len=%d)", len(diff))
+	}
+	if len(diff) > gitShowDiffMaxBytes+512 {
+		t.Errorf("diff too large after truncation: %d bytes", len(diff))
+	}
+	// LimitReader が gitShowDiffMaxBytes+1 で切るため、行数はファイル全体の
+	// 4000 行ではなく読み込めた範囲の行数になる。
+	if added <= 0 || added >= 4000 {
+		t.Errorf("added = %d, want 0 < added < 4000 (limited read)", added)
+	}
+}
+
+// 読めないパス（存在しない）は diff 空・0 行で返す。
+func TestSynthesizeUntrackedDiffMissingFile(t *testing.T) {
+	diff, added := synthesizeUntrackedDiff(t.TempDir(), "no-such-file.txt")
+	if diff != "" || added != 0 {
+		t.Errorf("got (%q, %d), want (\"\", 0)", diff, added)
 	}
 }

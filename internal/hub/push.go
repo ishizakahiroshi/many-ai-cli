@@ -152,6 +152,13 @@ func (pm *pushManager) upsertSubscription(sub pushSubscription) error {
 	if sub.Endpoint == "" || sub.Keys.Auth == "" || sub.Keys.P256dh == "" {
 		return errors.New("subscription endpoint and keys are required")
 	}
+	endpoint, err := url.Parse(sub.Endpoint)
+	if err != nil {
+		return fmt.Errorf("parse subscription endpoint: %w", err)
+	}
+	if err := validateExternalHTTPSURL(endpoint); err != nil {
+		return fmt.Errorf("invalid subscription endpoint: %w", err)
+	}
 	now := time.Now().Format(time.RFC3339)
 	pm.mu.Lock()
 	defer pm.mu.Unlock()

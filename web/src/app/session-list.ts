@@ -46,9 +46,9 @@ function sessionDisplayTitle(s: any): string {
 
 function compareSessionCards(a: any, b: any): number {
   if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
-  const aWaiting = a.state === 'waiting';
-  const bWaiting = b.state === 'waiting';
-  if (aWaiting !== bWaiting) return aWaiting ? -1 : 1;
+  // 承認待ち（保留中）を上へ持ち上げる並び替えは行わない。状態遷移でカード位置が
+  // 動くとサイドバーが読みづらくなるため、位置は固定し、承認待ちはバッジと
+  // プロジェクト見出しの保留中カウントで示す。
   const providerCmp = String(a.provider || '').localeCompare(String(b.provider || ''));
   if (providerCmp !== 0) return providerCmp;
   const aStarted = Date.parse(String(a.started_at || '')) || 0;
@@ -580,9 +580,9 @@ export function renderSessionList() {
 
   appendSessionColorFilters(root);
 
-  // ピン → 承認待ち → provider → 起動時刻の順で並べ、必要なら色で絞り込む。
-  // sessionOrder は任意の手動並び替えとして残すが、この識別優先順が
-  // セッションカードの実表示順の正本になる。
+  // ピン → provider → 起動時刻の順で並べ、必要なら色で絞り込む。状態（保留中等）は
+  // 並び順に影響させず、位置は固定する。sessionOrder は任意の手動並び替えとして残すが、
+  // この識別優先順がセッションカードの実表示順の正本になる。
   const displayedSessions = getOrderedSessions()
     .filter((s: any) => !activeSessionColorFilter || s.color === activeSessionColorFilter)
     .sort(compareSessionCards);
@@ -603,6 +603,20 @@ export function renderSessionList() {
   });
 
   // ピン留め優先、その中で groupOrder に従ってソート（未登録キーは末尾）
+  // 未登録のプロジェクトキーを groupOrder に追記し、以降のレンダーで並び順を固定する。
+  // ここで append しないと、両プロジェクトとも未登録の状態で比較関数が 0 を返し、
+  // Map 挿入順（= 各プロジェクトの最新セッションが compareSessionCards 順で登場する位置）
+  // に依存してしまい、あるプロジェクトの最新セッションを ✕ で削除した瞬間に
+  // 他プロジェクトのグループが上下にジャンプする（削除で並び順が変わって見える）。
+  let _groupOrderChanged = false;
+  for (const k of groups.keys()) {
+    if (k === '__pinned__') continue;
+    if (!groupOrder.includes(k)) {
+      groupOrder.push(k);
+      _groupOrderChanged = true;
+    }
+  }
+  if (_groupOrderChanged) saveGroupOrder();
   const _projectFavIdx = new Map(projectFavorites.map((k, i) => [k, i]));
   const _groupOrderIdx = new Map(groupOrder.map((k, i) => [k, i]));
   const sortedGroupKeys = [...groups.keys()].sort((a, b) => {
@@ -1201,15 +1215,22 @@ export function renderSummaryAndNotifications() {
     return `<span class="summary-provider-chip" data-tooltip="${escapeHtml(tip)}">${providerIconHtml(provider)}<span class="compact-hide"><span class="summary-provider-name ${safeClassToken(provider)}">${escapeHtml(label)}</span><span class="summary-provider-count">: ${g.count}</span></span><span class="compact-count">${g.count}</span></span>`;
   }).join('');
 
+  // session-chip は通常「N 実行中」等のフルラベル。#summary が狭いときは
+  // summary--compact で .compact-hide を消し数字だけ残す（provider chip と同じ方式）。
+  // white-space:nowrap 無しだと日本語が1文字ずつ縦折りしてヘッダが崩れる。
+  const stateChip = (cls, count, label) => {
+    const full = `${count} ${label}`;
+    return `<span class="session-chip ${cls}" title="${escapeHtml(full)}"><span class="chip-dot"></span><span class="compact-hide">${escapeHtml(full)}</span><span class="compact-count">${count}</span></span>`;
+  };
   let summary = '';
   if (stateCounts.running > 0) {
-    summary += `<span class="session-chip running"><span class="chip-dot"></span>${stateCounts.running} running</span>`;
+    summary += stateChip('running', stateCounts.running, t('state_running'));
   }
   if (stateCounts.waiting > 0) {
-    summary += `<span class="session-chip waiting"><span class="chip-dot"></span>${stateCounts.waiting} waiting</span>`;
+    summary += stateChip('waiting', stateCounts.waiting, t('state_waiting'));
   }
   if (stateCounts.standby > 0) {
-    summary += `<span class="session-chip standby"><span class="chip-dot"></span>${stateCounts.standby} standby</span>`;
+    summary += stateChip('standby', stateCounts.standby, t('state_standby'));
   }
   if (providerParts) summary += `<span class="summary-sep">|</span>${providerParts}`;
   document.getElementById('summary').innerHTML = summary;

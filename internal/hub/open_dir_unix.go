@@ -60,10 +60,14 @@ func openFileNative(filePath string) error {
 		return exec.Command("open", filePath).Start()
 	default:
 		if wslutil.IsWindowsLauncherMode() {
-			// cmd.exe /c start "" <path> dispatches to the Windows default
-			// handler for files and folders alike. The empty "" is start's
-			// window-title argument.
-			return exec.Command("cmd.exe", "/c", "start", "", wslutil.ToWindowsPath(filePath)).Start()
+			// 以前は cmd.exe /c start "" <path> を使っていたが、Linux/WSL 上で
+			// 作られたファイル名に cmd.exe メタキャラ（&, |, ^, <, >, %, (, ), "）
+			// が含まれると cmd.exe が再解釈しコマンド注入経路になる（Files タブから
+			// 「デフォルトアプリで開く」がトリガ）。
+			// explorer.exe は引数を shell として再解釈せず、Windows のデフォルト
+			// ハンドラへ ShellExecute 相当でディスパッチするので、ファイル名メタ
+			// キャラの再解釈は起きない。ディレクトリ用の openDirNative と同型。
+			return exec.Command("explorer.exe", wslutil.ToWindowsPath(filePath)).Start()
 		}
 		return linuxOpenDefault(filePath)
 	}

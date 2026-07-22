@@ -47,12 +47,17 @@ const (
 // http.DefaultClient（Timeout:0=無制限）と異なり、ヘッダ受信・TLS ハンドシェイクに
 // 上限を設けて stall による恒久ハングを防ぐ。本文全体への一律 Timeout は付けない
 // （488MB の正常な低速転送を中断しないため。idle/stall はウォッチドッグで検出する）。
-var whisperDownloadClient = func() *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+var whisperDownloadClient = newWhisperDownloadClient()
+
+func newWhisperDownloadClient() *http.Client {
+	transport := newPrivateNetworkBlockingTransport(whisperDownloadHeaderTimeout)
 	transport.ResponseHeaderTimeout = whisperDownloadHeaderTimeout
 	transport.TLSHandshakeTimeout = whisperDownloadTLSTimeout
-	return &http.Client{Transport: transport}
-}()
+	return &http.Client{
+		Transport:     externalHTTPTransport{base: transport},
+		CheckRedirect: externalHTTPCheckRedirect,
+	}
+}
 
 // whisperBinaryEntry は OS/arch ごとの managed Whisper バイナリ入手定義。
 // ServerNames は実行ファイル候補名、KeepFromArchive が非空ならアーカイブから
