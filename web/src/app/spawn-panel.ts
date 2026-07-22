@@ -727,9 +727,6 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     setUserPref('cwd_favorites', next);
   }
 
-  // D&D（お気に入り並び替え）用の状態。
-  let cwdDragValue = null;      // ドラッグ中のお気に入りパス（非ドラッグ時 null）
-  let cwdDragMoved = false;     // 並び替え直後に発火する click 選択を1回抑止する
   let cwdSuppressReopen = false; // お気に入り選択で入力欄を再 focus する際の自動再オープンを1回抑止する
 
   // パス文字列を「親ディレクトリ」「末尾セグメント（basename）」に分割する。
@@ -742,6 +739,13 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     let start = end;
     while (start > 0 && v[start - 1] !== '/' && v[start - 1] !== '\\') start--;
     return { parent: v.slice(0, start), basename: v.slice(start) };
+  }
+
+  // お気に入り表示順: 最終フォルダ名（basename）昇順。同名時はフルパスで安定化。
+  function compareCwdByBasename(a: string, b: string): number {
+    const ba = splitCwdPath(a).basename;
+    const bb = splitCwdPath(b).basename;
+    return ba.localeCompare(bb) || a.localeCompare(b);
   }
 
   // 生テキスト raw を escapeHtml した上で、filter にマッチする部分のみ <mark> で囲む。
@@ -840,7 +844,6 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     isFav: boolean;
     isHist: boolean;
     isUnregistered: boolean;
-    favIndex: number;
     histIndex: number;
     score: number;
   }
@@ -919,7 +922,6 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     allSubdirs: Map<string, string>,
     favSet: Set<string>,
     histSet: Set<string>,
-    favIndex: Map<string, number>,
     histIndex: Map<string, number>,
   ): SearchResult[] {
     const lowQuery = query.toLowerCase();
@@ -942,7 +944,6 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         const isFav = favSet.has(fullPath);
         const isHist = histSet.has(fullPath);
         const isUnregistered = !isFav && !isHist;
-        const favoriteOrder = favIndex.get(fullPath) ?? Number.MAX_SAFE_INTEGER;
         const historyOrder = histIndex.get(fullPath) ?? Number.MAX_SAFE_INTEGER;
 
         // D9 スコアリング: 一致種別 + 登録種別の合算。
@@ -961,18 +962,17 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
           isFav,
           isHist,
           isUnregistered,
-          favIndex: favoriteOrder,
           histIndex: historyOrder,
           score: matchScore + regScore,
         });
       }
     }
 
-    // お気に入りは手動並び順、履歴は cwd_history の先頭（最新）から降順で出す。
+    // お気に入りは最終フォルダ名昇順、履歴は cwd_history の先頭（最新）から降順で出す。
     // 未登録の候補だけ従来通りスコア優先にして、検索時の発見性を保つ。
     results.sort((a, b) => {
       if (a.isFav || b.isFav) {
-        if (a.isFav && b.isFav) return a.favIndex - b.favIndex || a.basename.localeCompare(b.basename);
+        if (a.isFav && b.isFav) return a.basename.localeCompare(b.basename) || a.path.localeCompare(b.path);
         return a.isFav ? -1 : 1;
       }
       if (a.isHist || b.isHist) {
@@ -990,7 +990,6 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     const favSet = new Set(favs);
     const hist = loadCwdHistory();
     const histSet = new Set(hist);
-    const favIndex = new Map(favs.map((v, i) => [v, i]));
     const histIndex = new Map(hist.map((v, i) => [v, i]));
     const roots = deriveRootsFromFavorites(favs);
 
@@ -1029,23 +1028,27 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     // ---- 検索結果（isPath でないとき）----
     let searchItems: SearchResult[] = [];
     if (!isPathMode && roots.size > 0) {
-      searchItems = buildSearchResults(parsed.query, parsed.prefix, roots, favSet, histSet, favIndex, histIndex);
+      searchItems = buildSearchResults(parsed.query, parsed.prefix, roots, favSet, histSet, histIndex);
     }
 
     // 検索結果に出たパスセットを記録して fav/hist から除外する。
     const searchPathSet = new Set(searchItems.map(r => r.path));
 
     // fav/hist の絞り込み（検索結果に出たものは除外）。
+    // お気に入りは最終フォルダ名（basename）昇順で固定表示する。
     const favItems = (filter
       ? favs.filter(v => !searchPathSet.has(v) && v.toLowerCase().includes(filter.toLowerCase()))
-      : favs.filter(v => !searchPathSet.has(v)));
+      : favs.filter(v => !searchPathSet.has(v)))
+      .slice()
+      .sort(compareCwdByBasename);
     const histItems = (filter
       ? hist.filter(v => !favSet.has(v) && !searchPathSet.has(v) && v.toLowerCase().includes(filter.toLowerCase()))
       : hist.filter(v => !favSet.has(v) && !searchPathSet.has(v)));
 
     // isPath モードのときは検索結果を出さないので fav/hist の除外も不要にリセット。
     const effectiveFavItems = isPathMode
-      ? (filter ? favs.filter(v => v.toLowerCase().includes(filter.toLowerCase())) : favs)
+      ? (filter ? favs.filter(v => v.toLowerCase().includes(filter.toLowerCase())) : favs.slice())
+          .sort(compareCwdByBasename)
       : favItems;
     const effectiveHistItems = isPathMode
       ? (filter ? hist.filter(v => !favSet.has(v) && v.toLowerCase().includes(filter.toLowerCase())) : hist.filter(v => !favSet.has(v)))
@@ -1058,7 +1061,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     function renderRow(v: string, fav: boolean, isSub = false) {
       const labelFilter = isSub ? '' : filter;
       return (
-        `<li class="cwd-dropdown-item${fav ? ' is-favorite' : ''}${isSub ? ' is-subdir' : ''}" tabindex="-1"${fav ? ' draggable="true"' : ''} data-value="${escapeHtml(v)}">` +
+        `<li class="cwd-dropdown-item${fav ? ' is-favorite' : ''}${isSub ? ' is-subdir' : ''}" tabindex="-1" data-value="${escapeHtml(v)}">` +
         `<button class="cwd-dropdown-fav${fav ? ' is-on' : ''}" tabindex="-1" data-value="${escapeHtml(v)}" ` +
         `title="${escapeHtml(t(fav ? 'spawn_cwd_unfavorite' : 'spawn_cwd_favorite'))}">${fav ? '★' : '☆'}</button>` +
         `<span class="cwd-dropdown-label" title="${escapeHtml(v)}">${buildCwdLabelHtml(v, labelFilter)}</span>` +
@@ -1070,7 +1073,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     function renderSearchRow(r: SearchResult) {
       const fav = r.isFav;
       return (
-        `<li class="cwd-dropdown-item${fav ? ' is-favorite' : ''}" tabindex="-1"${fav ? ' draggable="true"' : ''} data-value="${escapeHtml(r.path)}">` +
+        `<li class="cwd-dropdown-item${fav ? ' is-favorite' : ''}" tabindex="-1" data-value="${escapeHtml(r.path)}">` +
         `<button class="cwd-dropdown-fav${fav ? ' is-on' : ''}" tabindex="-1" data-value="${escapeHtml(r.path)}" ` +
         `title="${escapeHtml(t(fav ? 'spawn_cwd_unfavorite' : 'spawn_cwd_favorite'))}">${fav ? '★' : '☆'}</button>` +
         `<span class="cwd-dropdown-mag" aria-hidden="true">🔍</span>` +
@@ -1354,7 +1357,6 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     // リストが消えて「上下キーで動かせない」状態になる。
     if (e.relatedTarget && cwdDropdown.contains(e.relatedTarget)) return;
     setTimeout(() => {
-      if (cwdDragValue != null) return;                          // D&D 中は閉じない
       if (cwdDropdown.contains(document.activeElement)) return;  // フォーカスがまだ中にある
       cwdDropdown.hidden = true;
     }, 150);
@@ -1470,73 +1472,9 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     }
     const item = e.target.closest('.cwd-dropdown-item');
     if (!item) { e.preventDefault(); return; }   // 余白クリックは入力欄フォーカス維持
-    // お気に入り行は preventDefault しない: mousedown で preventDefault すると Chromium で
-    // ネイティブ D&D が開始できなくなるため。選択確定は click 側に委ねる。
-    if (item.classList.contains('is-favorite')) return;
-    // 履歴行は従来どおり mousedown 即確定（フォーカス維持のため preventDefault）。
+    // mousedown 即確定（フォーカス維持のため preventDefault）。
     e.preventDefault();
     selectCwdItem(item);
-  });
-
-  // お気に入り行の選択確定は click で行う（mousedown で確定するとドラッグ開始前に
-  // ドロップダウンが閉じてしまうため）。ドラッグで並び替えた直後の click は抑止する。
-  cwdDropdown.addEventListener('click', (e) => {
-    if (cwdDragMoved) { cwdDragMoved = false; return; }
-    if (e.target.closest('.cwd-dropdown-fav') || e.target.closest('.cwd-dropdown-del')) return;
-    const item = e.target.closest('.cwd-dropdown-item.is-favorite');
-    if (item) selectCwdItem(item);
-  });
-
-  // --- お気に入りの D&D 並び替え（C4）---
-  function clearCwdDropIndicators() {
-    cwdDropdown.querySelectorAll('.drop-before, .drop-after, .dragging')
-      .forEach(el => el.classList.remove('drop-before', 'drop-after', 'dragging'));
-  }
-  function cwdDropIsAfter(item, clientY) {
-    const r = item.getBoundingClientRect();
-    return clientY > r.top + r.height / 2;
-  }
-  cwdDropdown.addEventListener('dragstart', (e) => {
-    const item = e.target.closest('.cwd-dropdown-item.is-favorite');
-    if (!item) { e.preventDefault(); return; }   // お気に入り以外はドラッグ不可
-    cwdDragValue = item.dataset.value;
-    cwdDragMoved = false;
-    item.classList.add('dragging');
-    try {
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', cwdDragValue);
-    } catch (_) {}
-  });
-  cwdDropdown.addEventListener('dragover', (e) => {
-    if (cwdDragValue == null) return;
-    const item = e.target.closest('.cwd-dropdown-item.is-favorite');
-    if (!item || item.dataset.value === cwdDragValue) return;
-    e.preventDefault();                          // drop を許可
-    try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
-    cwdDropdown.querySelectorAll('.drop-before, .drop-after')
-      .forEach(el => el.classList.remove('drop-before', 'drop-after'));
-    item.classList.add(cwdDropIsAfter(item, e.clientY) ? 'drop-after' : 'drop-before');
-  });
-  cwdDropdown.addEventListener('drop', (e) => {
-    if (cwdDragValue == null) return;
-    const item = e.target.closest('.cwd-dropdown-item.is-favorite');
-    if (!item || item.dataset.value === cwdDragValue) { clearCwdDropIndicators(); return; }
-    e.preventDefault();
-    const after = cwdDropIsAfter(item, e.clientY);
-    const next = loadCwdFavorites().filter(v => v !== cwdDragValue);
-    let ti = next.indexOf(item.dataset.value);
-    if (ti < 0) { clearCwdDropIndicators(); return; }
-    if (after) ti += 1;
-    next.splice(ti, 0, cwdDragValue);
-    cwdDragMoved = true;
-    setUserPref('cwd_favorites', next);
-    renderCwdDropdown(spawnCwdInput.value.trim());
-    // 並び替え後もリストは開いたまま見せる。focus による再オープン(空フィルタ再描画)は抑止。
-    focusInputNoReopen();
-  });
-  cwdDropdown.addEventListener('dragend', () => {
-    clearCwdDropIndicators();
-    cwdDragValue = null;
   });
 
   function isCodexHighRisk(currentModel, nextModel, sandbox, approval) {

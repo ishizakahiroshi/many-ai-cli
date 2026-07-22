@@ -14,7 +14,7 @@ import { scheduleDeferredEnter, scheduleAfterOutputSettle, deferredEnterMinWaitF
 import { scheduleResidueSweep, cancelResidueSweep } from './app/residue-sweep.js';
 import { cancelExpandCapture } from './app/expand-popup.js';
 import { clearMobileTranscriptSession, recordMobileTranscriptUserSubmission } from './app/mobile-transcript.js';
-import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
+import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, handleOpenCodeApprovalNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn, MAX_ATTACH_BYTES } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
@@ -857,6 +857,15 @@ inputEl.addEventListener('keydown', (e) => {
     }
   }
 
+  // OpenCode の Allow once / Allow always / Reject はネイティブ側では
+  // 矢印＋Enter 操作だが、承認バーでは 1/2/3 で即決できるようにする。
+  // OpenCode の承認を検出しているときだけ変換するため、通常の入力は横取りしない。
+  if (inputEl.value === '' && !e.isComposing && /^[1-3]$/.test(e.key) &&
+      !e.ctrlKey && !e.metaKey && !e.altKey &&
+      handleOpenCodeApprovalNumberKey(activeSessionId, parseInt(e.key, 10))) {
+    e.preventDefault(); return;
+  }
+
   // 複数質問プロンプト（AskUserQuestion 等の複数選択）はバナー表示のみで
   // action-bar を出さないため、ターミナルへ直接キーを送って操作する。
   // ↑↓←→/Esc は specialKeys で転送されるが、複数選択のチェックボックス
@@ -1134,7 +1143,11 @@ export function syncMobileLayoutState() {
   }
   if (sessions.size === 0) closeMobileSessionDrawer();
   if (isMobile) {
-    (window as any).renderMobileSessionDrawer?.();
+    // 閉じている間はフル再描画しない（タップ中に行 DOM が消える原因になっていた）。
+    // 開いているときだけ更新。open 直前は openMobileSessionDrawer が force 描画する。
+    if (document.body.classList.contains('mobile-drawer-open')) {
+      (window as any).renderMobileSessionDrawer?.();
+    }
   } else {
     // PC 幅へ戻ったらドロワーを閉じ、renderMobileSessionDrawer() が外した hidden を戻す。
     // 戻さないと PC サイドバー #session-list 内にドロワー中身が露出したまま残る。
@@ -1150,7 +1163,8 @@ window.addEventListener('approval-queue-updated', () => {
 
 export function openMobileSessionDrawer() {
   if (!isMobileViewport()) return;
-  (window as any).renderMobileSessionDrawer?.();
+  // force: まだ mobile-drawer-open が付く前に中身を描く
+  (window as any).renderMobileSessionDrawer?.(true);
   document.body.classList.add('mobile-drawer-open');
   const btn = document.getElementById('mobile-menu-btn');
   const titleBtn = document.getElementById('mobile-session-title-btn');
@@ -1418,6 +1432,15 @@ export function sendText(sessionId, text) {
 }
 
 export function requestSessionDismiss(id) {
+  // 「セッションが勝手に消える」事案の犯人特定用
+  // (docs/local/bugfix_session-silent-auto-dismiss_2026-07-21.md)。
+  // dismiss を投げる直前に呼び出し元スタックを console と PTY 生ログ両方へ残す。
+  // 発火経路が UI × / group × / multi-pane close / auto-dismiss / snapshot completed 等
+  // 複数あるため、再発時にどれが引いたかをここで確定させる。
+  try {
+    const stack = new Error('dismiss trace').stack || '';
+    console.warn('[session-dismiss-trace] session_id=' + id + ' ts=' + new Date().toISOString() + '\n' + stack);
+  } catch (_) {}
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'session_dismiss', session_id: id }));
   }
@@ -1632,7 +1655,11 @@ export function isInteractiveFocusTarget(target) {
     '#model-picker-overlay',
     '#about-panel',
     '#session-list',
-    '#topbar'
+    '#topbar',
+    // ターミナル領域上の読み取り専用オーバーレイ。本文のドラッグ選択を
+    // 入力欄フォーカス回収で潰さないため、フォーカス奪取対象外にする。
+    '#grok-chat-viewer',
+    '#history-viewer',
   ].join(','));
 }
 document.addEventListener('mousedown', () => { suppressFocusReclaim = true; });

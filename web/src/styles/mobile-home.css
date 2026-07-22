@@ -71,22 +71,24 @@
     display: inline-flex;
   }
 
+  /* 新規セッションは右下 FAB だとスクロール末尾まで指が届きにくい。
+     ☰ と同じ上段固定列（右端）へ置き、ホームを開いた瞬間にすぐ押せる位置にする。 */
   body.mobile-home-view #mobile-spawn-btn {
     display: inline-flex;
     position: fixed;
-    top: auto;
-    right: calc(14px + env(safe-area-inset-right));
-    bottom: calc(16px + env(safe-area-inset-bottom));
-    z-index: 1200;
+    top: calc(6px + env(safe-area-inset-top));
+    right: calc(8px + env(safe-area-inset-right));
+    bottom: auto;
+    z-index: 1500;
     width: auto;
-    min-width: 96px;
-    height: 48px;
-    min-height: 48px;
-    padding: 0 16px;
+    min-width: 72px;
+    height: 32px;
+    min-height: 32px;
+    padding: 0 12px;
     border-radius: 999px;
-    font-size: 0.95rem;
+    font-size: 0.85rem;
     font-weight: 800;
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
   }
 
   /* ── セクション ── */
@@ -965,6 +967,8 @@
     gap: 10px;
   }
   body.mobile-drawer-open #session-list {
+    display: flex;
+    flex-direction: column;
     background: var(--bg-layer);
   }
   body.mobile-drawer-open #sessions {
@@ -973,9 +977,17 @@
   body.mobile-drawer-open #new-session-bar {
     display: none;
   }
+  /* 起動フォームはドロワー内の最上段へ（DOM 上は drawer-content の後ろでも
+     flex order で先頭に出す。セッションが多いとき末尾だと見つけられない）。 */
   body.mobile-drawer-open #new-session-panel:not([hidden]) {
     display: block;
-    margin-top: 10px;
+    order: -1;
+    margin: 0 0 10px;
+    flex-shrink: 0;
+  }
+  body.mobile-drawer-open #mobile-drawer-content {
+    order: 0;
+    min-height: 0;
   }
   .mobile-drawer-section {
     display: flex;
@@ -985,6 +997,9 @@
   .mobile-drawer-actions {
     padding-top: 8px;
     border-top: 1px solid var(--line);
+  }
+  .mobile-drawer-spawn-top {
+    margin-bottom: 2px;
   }
   .mobile-drawer-action {
     width: 100%;
@@ -996,6 +1011,13 @@
     color: var(--text);
     font-weight: 650;
     text-align: left;
+  }
+  .mobile-drawer-action--primary {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+    font-weight: 800;
+    text-align: center;
   }
 
   /* C7指摘: ドロワーの「表示切り替え」セクション。旧 #unified-tab-bar の帯撤去に伴い、

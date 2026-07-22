@@ -1154,11 +1154,6 @@ export const screenClearSeqBytePatterns = [
   altScreenExitSeq,
 ];
 export const screenClearSeqCarryLength = Math.max(...screenClearSeqBytePatterns.map(pattern => pattern.length)) - 1;
-export const synchronizedUpdateSeqBytePatterns = [
-  asciiBytes('\x1b[?2026h'),
-  asciiBytes('\x1b[?2026l'),
-];
-export const synchronizedUpdateSeqCarryLength = Math.max(...synchronizedUpdateSeqBytePatterns.map(pattern => pattern.length)) - 1;
 export { hideCursorSeq, showCursorSeq };
 
 // xterm 入口の [MANY-AI-CLI] ブロック・[MANY-AI-CLI-DONE] ブロック除去は
@@ -1239,42 +1234,6 @@ export function filterReverseVideoForDisplay(id, bytes) {
   }
 
   t.reverseVideoFilterCarry = combined.slice(i);
-  return new Uint8Array(out);
-}
-
-export function filterSynchronizedUpdateForDisplay(id, bytes) {
-  const t = terminals.get(id);
-  if (!t) return bytes;
-  const carry = t.synchronizedUpdateFilterCarry || new Uint8Array(0);
-  const combined = new Uint8Array(carry.length + bytes.length);
-  combined.set(carry, 0);
-  combined.set(bytes, carry.length);
-
-  const out = [];
-  let i = 0;
-  const carryStartLimit = Math.max(0, combined.length - synchronizedUpdateSeqCarryLength);
-  while (i < combined.length) {
-    const seq = synchronizedUpdateSeqBytePatterns.find(pattern => bytesStartWith(combined, i, pattern));
-    if (seq) {
-      i += seq.length;
-      continue;
-    }
-    if (i >= carryStartLimit) {
-      const maybePrefix = synchronizedUpdateSeqBytePatterns.some((pattern) => {
-        const remaining = combined.length - i;
-        if (remaining >= pattern.length) return false;
-        for (let j = 0; j < remaining; j++) {
-          if (combined[i + j] !== pattern[j]) return false;
-        }
-        return true;
-      });
-      if (maybePrefix) break;
-    }
-    out.push(combined[i]);
-    i++;
-  }
-
-  t.synchronizedUpdateFilterCarry = combined.slice(i);
   return new Uint8Array(out);
 }
 
@@ -1795,7 +1754,9 @@ export function filterBareCarriageReturnForDisplay(id, bytes) {
 
 export function writePTYChunk(id, term, bytes, onFlush) {
   const hasScreenClearSeq = detectScreenClearSeqForAutoScroll(id, bytes);
-  const displayBytes = filterSynchronizedUpdateForDisplay(id, filterBareCarriageReturnForDisplay(id, filterCursorHideShowBlocksForDisplay(id, filterEraseScrollbackForDisplay(id, filterReverseVideoForDisplay(id, filterHubMarkersForDisplay(id, bytes))))));
+  // Codex 等の同期描画（CSI ? 2026 h/l）は xterm.js が完成画面まで保留する。
+  // ここで除去すると途中フレームが露出し、再描画が上から下へ流れて見えるため通す。
+  const displayBytes = filterBareCarriageReturnForDisplay(id, filterCursorHideShowBlocksForDisplay(id, filterEraseScrollbackForDisplay(id, filterReverseVideoForDisplay(id, filterHubMarkersForDisplay(id, bytes)))));
   const wrappedFlush = () => {
     if (hasScreenClearSeq) snapToBottomAfterScreenClear(id);
     if (onFlush) onFlush();
@@ -1881,6 +1842,34 @@ export function clearSuppressPtyResize() {
 
 export function isPtyResizeSuppressed() {
   return Date.now() < suppressPtyResizeUntil;
+}
+
+// 承認バー（action-bar）等の確定的なレイアウト変更後に、縮小/復帰した実 viewport の
+// 行数を PTY(SIGWINCH) へ 1 回だけ反映して Codex 等を実サイズへ同期させる。
+//
+// 背景: 承認バー表示中に PTY リサイズを長時間抑制すると、Codex は元の（高い）行数の
+// まま main buffer 上へ絶対位置で composer を再描画し続け、縮んだ viewport の下端を
+// はみ出すたびにスクロールして空行が scrollback へ大量に化石化する（表示がまばらに
+// なる）。そこでレイアウトが落ち着いた後に現在の viewport サイズを確実に送って不一致
+// を解消する。fitTerminalPreservingBottom は抑制中でも「見た目のフィット」で xterm の
+// 行数を縮めるため local 側は既に縮小済みのことがある。差分ではなく現在サイズを無条件
+// に送る（reassertActivePtySize と同方針）。連続呼び出しは 1 本のタイマーへ束ねる。
+let settlePtyResizeTimer: any = null;
+export function syncPtySizeToViewportAfterLayout(id, stick = true, delayMs = 400) {
+  if (settlePtyResizeTimer) { clearTimeout(settlePtyResizeTimer); settlePtyResizeTimer = null; }
+  settlePtyResizeTimer = setTimeout(() => {
+    settlePtyResizeTimer = null;
+    if (id !== activeSessionId) return;
+    const t = terminals.get(id);
+    if (!canFitTerminal(t)) return;
+    clearSuppressPtyResize();
+    if (stick) t.autoScroll = true;
+    fitTerminalPreservingBottom(t, id, true);
+    // local が既に縮小済みでも Codex へ未通知の可能性があるため無条件に送る。
+    sendResize(id, t.term.cols, t.term.rows);
+    // Codex は SIGWINCH で全画面再描画しスクロールが飛ぶため、確定後に最下部へ張り直す。
+    if (stick) scrollTerminalToBottomSoon(id, { force: true, passes: 2, startedAt: Date.now() });
+  }, delayMs);
 }
 
 export function refitAllTerminals(refreshRows = false) {

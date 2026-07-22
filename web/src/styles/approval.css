@@ -266,6 +266,12 @@
    100% のままだと前置きが縦に伸びてタブ列を圧迫する。 */
 #action-bar.batch .action-preamble,
 #action-bar.single-tabs .action-preamble { flex-basis: auto; }
+/* 承認サマリカード（.approval-summary-card）も同じ罠。row+wrap 前提の flex:1 1 100% が
+   column レイアウトでは「親の高さいっぱいまで伸びる」意味になり、カードが max-height:60vh
+   近くまで縦に膨張して選択肢との間に巨大な空白が出る（v0.5.0 で顕在化）。auto に戻して
+   内容サイズだけ占有させる。 */
+#action-bar.batch .approval-summary-card,
+#action-bar.single-tabs .approval-summary-card { flex: 0 0 auto; }
 
 /* 承認ブロック直前の前置き説明。文脈を CLI スクロールなしで見せる。
    既定は高さ上限つきスクロール枠、ヘッダクリックで .expanded を付けて広げる。 */
@@ -299,6 +305,10 @@
   padding: 6px 8px;
   max-height: 5.5em;
   overflow-y: auto;
+  /* 内部でスクロール可能な間は、ホイール操作が外側の #action-bar 側へ
+     伝播しないようにする（伝播すると経緯欄内で下まで読めない）。 */
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 .action-preamble.expanded .action-preamble-body { max-height: 22em; }
 

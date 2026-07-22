@@ -101,6 +101,7 @@ many-ai-cli/
 
 - ビルドだけでなく **実行・Hub 起動・ブラウザリロードも全てユーザーが行う**（`go run` / `many-ai-cli serve` / `many-ai-cli stop` / Hub プロセスの起動・終了・再起動・ブラウザリロード等も対象）。
 - **ビルドコマンドは `make build` が基本**。`bun run build` 単体は使わない（ユーザーへの案内でも `make build` を示す）。`make build` が web ビルド（bun install + bun run build）〜 Windows/Linux バイナリ生成 〜 WSL 配備まで一括で行う。ユーザーの「ビルドして」という指示は **`make build` の実行指示** を意味する。
+- `many-ai-cli` 自身のセッションログ保持機能（`~/.many-ai-cli/logs/sessions/`）は非推奨の機能。承認検出まわりのバグ調査でも、このログではなく実際に動いている AI エージェント本体（Claude Code / Codex CLI 等）が書き出す生ログを見ること。ラッパー層のログは情報密度が低く、原因特定に向かない。
 
 ## 詳細ガイド（タスク種別ベース）
 

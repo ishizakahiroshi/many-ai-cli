@@ -3,6 +3,7 @@ package wrapper
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -28,14 +29,23 @@ import (
 )
 
 const (
-	reconnectDialInterval = 2 * time.Second
-	replayBufferLimit     = 64 * 1024 // bytes of recent PTY output to replay on reconnect
-	hubProbeTimeout       = 1 * time.Second
-	hubStartupTimeout     = 10 * time.Second
-	hubStartupPoll        = 100 * time.Millisecond
-	processCloseGrace     = 2 * time.Second
-	ptyInputChunkBytes    = 1024
-	ptyInputChunkDelay    = 3 * time.Millisecond
+	reconnectDialInterval          = 2 * time.Second
+	replayBufferLimit              = 64 * 1024 // bytes of recent PTY output to replay on reconnect
+	hubProbeTimeout                = 1 * time.Second
+	hubStartupTimeout              = 10 * time.Second
+	hubStartupPoll                 = 100 * time.Millisecond
+	processCloseGrace              = 2 * time.Second
+	ptyInputChunkBytes             = 1024
+	ptyInputChunkDelay             = 3 * time.Millisecond
+	defaultWrapperSendWriteTimeout = 5 * time.Second
+	ptyOutputQueueCapacity         = 64
+	// postReattachGuard は reattach 成功直後の猶予窓。この間に再度 WS が切断
+	// しても、probe(hub) が生きているというだけで「意図的切断」と即断せず、
+	// transport fault と同様に reconnect grace へ回す。理由は
+	// bugfix_codex-reattach-eof-misclassified-intentional-kill_2026-07-20.md
+	// を参照: reattach 直後の素の EOF は transportBroken を経由しないため、
+	// この窓が無いと queue-full 由来の transport fault を修正しても即死経路が残る。
+	postReattachGuard = 10 * time.Second
 )
 
 // reconnectGrace returns the wrapper's grace period before giving up after Hub crash.
@@ -48,17 +58,32 @@ func reconnectGrace(cfg *config.Config) time.Duration {
 	return time.Duration(sec) * time.Second
 }
 
+func wrapperSendWriteTimeout(cfg *config.Config) time.Duration {
+	if cfg == nil || cfg.Hub.WrapperSendWriteTimeoutSec <= 0 {
+		return defaultWrapperSendWriteTimeout
+	}
+	return time.Duration(cfg.Hub.WrapperSendWriteTimeoutSec) * time.Second
+}
+
 // wrapperSession は接続状態（現在の WS conn / session ID）を管理する。
 // reconnect 時に conn と sid が入れ替わるため、stateMu で保護する。
 type wrapperSession struct {
-	stateMu     sync.Mutex
-	sendMu      sync.Mutex // websocket.JSON.Send の直列化
-	currentConn *websocket.Conn
-	currentSID  int
+	stateMu          sync.Mutex
+	sendMu           sync.Mutex // websocket.JSON.Send の直列化
+	currentConn      *websocket.Conn
+	currentSID       int
+	sendWriteTimeout time.Duration
 }
 
-func newWrapperSession(conn *websocket.Conn, sid int) *wrapperSession {
-	return &wrapperSession{currentConn: conn, currentSID: sid}
+func newWrapperSession(conn *websocket.Conn, sid int, sendWriteTimeout time.Duration) *wrapperSession {
+	if sendWriteTimeout <= 0 {
+		sendWriteTimeout = defaultWrapperSendWriteTimeout
+	}
+	return &wrapperSession{
+		currentConn:      conn,
+		currentSID:       sid,
+		sendWriteTimeout: sendWriteTimeout,
+	}
 }
 
 func (ws *wrapperSession) getSID() int {
@@ -69,7 +94,9 @@ func (ws *wrapperSession) getSID() int {
 
 // sendMsg は現在の conn にメッセージを送信する。
 // 複数 goroutine から呼んでも sendMu で直列化される。
-func (ws *wrapperSession) sendMsg(m proto.Message) {
+// 書き込みが詰まった場合に PTY 読み出し側まで巻き込まないよう、
+// 呼び出し側はエラーを transport fault として扱う。
+func (ws *wrapperSession) sendMsg(m proto.Message) error {
 	ws.sendMu.Lock()
 	defer ws.sendMu.Unlock()
 
@@ -77,9 +104,16 @@ func (ws *wrapperSession) sendMsg(m proto.Message) {
 	c := ws.currentConn
 	ws.stateMu.Unlock()
 	if c == nil {
-		return
+		return fmt.Errorf("wrapper websocket is not connected")
 	}
-	_ = websocket.JSON.Send(c, m)
+	timeout := ws.sendWriteTimeout
+	if timeout <= 0 {
+		timeout = defaultWrapperSendWriteTimeout
+	}
+	if err := c.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+		return fmt.Errorf("set wrapper websocket write deadline: %w", err)
+	}
+	return websocket.JSON.Send(c, m)
 }
 
 func (ws *wrapperSession) swapConn(c *websocket.Conn, sid int) {
@@ -103,6 +137,26 @@ func (ws *wrapperSession) swapConn(c *websocket.Conn, sid int) {
 
 func (ws *wrapperSession) clearConn(broken *websocket.Conn) {
 	ws.closeCurrentConn(broken)
+}
+
+func (ws *wrapperSession) isCurrentConn(c *websocket.Conn) bool {
+	ws.stateMu.Lock()
+	defer ws.stateMu.Unlock()
+	return c != nil && ws.currentConn == c
+}
+
+// abortCurrentConn closes the current connection without waiting for sendMu.
+// It is used by the bounded PTY output queue when a writer may be blocked in
+// websocket I/O. Closing the underlying connection interrupts that write;
+// the normal receive loop then observes the close and clears the state.
+func (ws *wrapperSession) abortCurrentConn() {
+	ws.stateMu.Lock()
+	c := ws.currentConn
+	ws.currentConn = nil
+	ws.stateMu.Unlock()
+	if c != nil {
+		_ = c.Close()
+	}
 }
 
 func (ws *wrapperSession) closeCurrentConn(c *websocket.Conn) {
@@ -159,6 +213,11 @@ type reconnectSupervisor struct {
 	reconnectCh      <-chan struct{}
 	startReceiveLoop func(c *websocket.Conn)
 	snapshotReplay   func() []byte
+	transportBroken  *atomic.Bool
+	resumeOutput     func()
+	// lastReattachAt は直近の reattach 成功時刻（UnixNano）。0 は未 reattach。
+	// postReattachGuard 以内の再切断は即死させず reconnect grace へ回す。
+	lastReattachAt *atomic.Int64
 	// probeHub はテスト時に差し替えられる。nil の場合は probeHubAlive を使う。
 	probeHub func(cfg *config.Config) bool
 }
@@ -176,13 +235,32 @@ func (r *reconnectSupervisor) run() {
 		case <-r.reconnectCh:
 		}
 		intentional := r.intentional.Load()
-		if !intentional && probe(r.cfg) {
+		transportBroken := r.transportBroken != nil && r.transportBroken.Load()
+		recentlyReattached := false
+		if r.lastReattachAt != nil {
+			if last := r.lastReattachAt.Load(); last != 0 {
+				recentlyReattached = time.Since(time.Unix(0, last)) < postReattachGuard
+			}
+		}
+		if !intentional && !transportBroken && !recentlyReattached && probe(r.cfg) {
 			r.logger.Info("hub still alive after WS close — treating as intentional disconnect", "session_id", r.ws.getSID())
 			_ = r.ps.Close()
 			r.closeDone()
 			return
 		}
-		if !intentional && r.cfg.Hub.AutoShutdown {
+		// A transport fault is local to the wrapper's PTY output path. It does
+		// not prove that the Hub stopped, so it must use the reconnect grace
+		// path even when auto_shutdown is enabled. Otherwise a transient full
+		// output queue or write deadline kills the wrapped CLI and all of its
+		// child agents while the Hub is still running.
+		//
+		// A disconnect within postReattachGuard of a successful reattach gets
+		// the same benefit of the doubt: a plain WS EOF here does not go
+		// through transportFailure() (it never touched the PTY output queue),
+		// but observed behavior shows it is the same kind of transient
+		// flakiness, not a fresh dismiss/kill-all click. See
+		// bugfix_codex-reattach-eof-misclassified-intentional-kill_2026-07-20.md.
+		if !intentional && !transportBroken && !recentlyReattached && r.cfg.Hub.AutoShutdown {
 			r.logger.Info("hub is down and auto_shutdown is enabled; terminating PTY", "session_id", r.ws.getSID())
 			_ = r.ps.Close()
 			r.closeDone()
@@ -197,6 +275,10 @@ func (r *reconnectSupervisor) run() {
 		}
 		if intentional {
 			r.logger.Info("intentional hub shutdown — waiting for manual hub restart within grace period", "session_id", r.ws.getSID(), "grace_sec", int(grace/time.Second))
+		} else if transportBroken {
+			r.logger.Info("PTY output transport fault — entering reconnect grace period", "session_id", r.ws.getSID(), "grace_sec", int(grace/time.Second))
+		} else if recentlyReattached {
+			r.logger.Info("WS closed shortly after reattach — entering reconnect grace period", "session_id", r.ws.getSID(), "grace_sec", int(grace/time.Second))
 		} else {
 			r.logger.Info("hub appears down — entering reconnect grace period", "session_id", r.ws.getSID(), "grace_sec", int(grace/time.Second))
 		}
@@ -230,7 +312,27 @@ func (r *reconnectSupervisor) run() {
 				return
 			}
 			r.logger.Info("wrapper reconnected to hub", "old_sid", r.ws.getSID(), "new_sid", newSID)
+			if r.lastReattachAt != nil {
+				r.lastReattachAt.Store(time.Now().UnixNano())
+			}
 			r.ws.swapConn(newConn, newSID)
+			// A receive loop for the old connection may have reported the same
+			// close while the reattach handshake was in flight. Do not let that
+			// stale signal trigger a second supervisor iteration after reattach.
+			for {
+				select {
+				case <-r.reconnectCh:
+				default:
+					goto reconnectSignalsDrained
+				}
+			}
+		reconnectSignalsDrained:
+			if r.transportBroken != nil {
+				r.transportBroken.Store(false)
+			}
+			if r.resumeOutput != nil {
+				r.resumeOutput()
+			}
 			r.startReceiveLoop(newConn)
 			r.intentional.Store(false)
 			reconnected = true
@@ -238,14 +340,151 @@ func (r *reconnectSupervisor) run() {
 	}
 }
 
-// ptyPump は PTY 出力を読み出し、Hub WS へ pty_data として送信し続ける。
+// ptyOutputWriter は PTY 出力を Hub WS へ非同期送信する。
+// queue が満杯になった場合はデータを捨てず、transport fault として
+// 接続を切断する。切断中の出力は wrapperSession の replay buffer に残り、
+// 再接続時に Hub へ再送される。
+type ptyOutputWriter struct {
+	ws                     *wrapperSession
+	outCh                  chan []byte
+	mu                     sync.Mutex
+	accepting              bool
+	closed                 bool
+	done                   chan struct{}
+	notifyTransportFailure func(ptyOutputTransportFault)
+}
+
+type ptyOutputTransportFault struct {
+	Kind          string
+	QueueCapacity int
+	ChunkBytes    int
+	Err           error
+}
+
+func newPTYOutputWriter(ws *wrapperSession, capacity int, notifyTransportFailure func(ptyOutputTransportFault)) *ptyOutputWriter {
+	if capacity <= 0 {
+		capacity = ptyOutputQueueCapacity
+	}
+	return &ptyOutputWriter{
+		ws:                     ws,
+		outCh:                  make(chan []byte, capacity),
+		accepting:              true,
+		done:                   make(chan struct{}),
+		notifyTransportFailure: notifyTransportFailure,
+	}
+}
+
+func (w *ptyOutputWriter) enqueue(chunk []byte) {
+	if len(chunk) == 0 {
+		return
+	}
+	w.mu.Lock()
+	if !w.accepting || w.closed {
+		w.mu.Unlock()
+		return
+	}
+	select {
+	case w.outCh <- chunk:
+		w.mu.Unlock()
+		return
+	default:
+		// Keep PTY reads non-blocking. Terminal byte streams cannot safely
+		// lose an arbitrary middle chunk, so disconnect and let replay/reconnect
+		// restore a coherent recent view.
+		w.accepting = false
+		w.mu.Unlock()
+		w.triggerTransportFailure(ptyOutputTransportFault{
+			Kind:          "pty_output_queue_full",
+			QueueCapacity: cap(w.outCh),
+			ChunkBytes:    len(chunk),
+		})
+	}
+}
+
+func (w *ptyOutputWriter) isAccepting() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.accepting && !w.closed
+}
+
+func (w *ptyOutputWriter) failTransport(fault ptyOutputTransportFault) {
+	w.mu.Lock()
+	if !w.accepting || w.closed {
+		w.mu.Unlock()
+		return
+	}
+	w.accepting = false
+	w.mu.Unlock()
+	w.triggerTransportFailure(fault)
+}
+
+func (w *ptyOutputWriter) triggerTransportFailure(fault ptyOutputTransportFault) {
+	if w.notifyTransportFailure != nil {
+		go w.notifyTransportFailure(fault)
+	}
+}
+
+func (w *ptyOutputWriter) run() {
+	defer close(w.done)
+	for chunk := range w.outCh {
+		if !w.isAccepting() {
+			continue
+		}
+		if err := w.ws.sendMsg(proto.Message{
+			Type:      "pty_data",
+			SessionID: w.ws.getSID(),
+			Data:      chunk,
+		}); err != nil {
+			w.failTransport(ptyOutputTransportFault{
+				Kind:          "pty_output_send_failed",
+				QueueCapacity: cap(w.outCh),
+				ChunkBytes:    len(chunk),
+				Err:           err,
+			})
+		}
+	}
+}
+
+// resume discards any chunks queued before the transport fault and resumes
+// accepting fresh PTY output after a successful reattach. The replay buffer
+// carries the recent output across the gap, so stale queued chunks must not be
+// sent a second time after reattach.
+func (w *ptyOutputWriter) resume() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed {
+		return
+	}
+	for {
+		select {
+		case <-w.outCh:
+		default:
+			w.accepting = true
+			return
+		}
+	}
+}
+
+func (w *ptyOutputWriter) finish() {
+	w.mu.Lock()
+	if !w.closed {
+		w.closed = true
+		w.accepting = false
+		close(w.outCh)
+	}
+	w.mu.Unlock()
+	<-w.done
+}
+
+// ptyPump は PTY 出力を読み出し、enqueue へ渡し続ける。
 // ストリーム終端まで読み切ったら closeDone を呼んで done を閉じる。
 // 戻り値は ps.Wait() で使う waitErr。
 func ptyPump(
 	ps processSession,
 	lf *os.File,
 	rawMaxBytes int64,
-	ws *wrapperSession,
+	enqueue func([]byte),
+	finishOutput func(),
 	appendReplay func([]byte),
 	closeDone func(),
 ) {
@@ -266,7 +505,7 @@ func ptyPump(
 					rawWritten += int64(len(out))
 				}
 				appendReplay(out)
-				ws.sendMsg(proto.Message{Type: "pty_data", SessionID: ws.getSID(), Data: out})
+				enqueue(out)
 			}
 		}
 		if readErr != nil {
@@ -280,8 +519,9 @@ func ptyPump(
 			_, _ = lf.Write(flushed)
 		}
 		appendReplay(flushed)
-		ws.sendMsg(proto.Message{Type: "pty_data", SessionID: ws.getSID(), Data: flushed})
+		enqueue(flushed)
 	}
+	finishOutput()
 	closeDone()
 }
 
@@ -496,10 +736,16 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// Claude: 共有 .claude/settings.local.json を一切触らず、wrapper 所有の temp
 	// settings を `--settings` で渡して statusLine（usage-relay）を有効化する。
 	// reg.TokenStatusbar が false（UI バー無効）なら付けない＝従来の挙動を維持。
-	// diag: docs/local/bugfix_statusline-settings-skip_2026-07-10.md — セッション毎に
-	// 到達判定と reg.TokenStatusbar 実測値を残し、同条件で「出るとき/出ないとき」の
-	// 分岐を再現から確定するための診断ログ。恒久的なログではなく原因確定後に外す。
-	logger.Info("statusline_gate_wrapper", "session_id", sessionID, "provider", provider, "reg_token_statusbar", reg.TokenStatusbar)
+	// diag 継続: docs/local/bugfix_statusline-settings-skip_2026-07-10.md
+	// Hub 側 statusline_gate_hub と突き合わせるため、reg 受信値と reg.Type を残す。
+	// 2026-07-19 時点: hub.log では token_statusbar_send=true のみ（false 0 件）で
+	// Hub ゲートは原因候補から外れている。wrapper 側 reg=false や settings 書込失敗が
+	// 残仮説のため、再現ログが揃うまで意図的に残置（原因確定後に外す）。
+	logger.Info("statusline_gate_wrapper",
+		"session_id", sessionID,
+		"provider", provider,
+		"reg_type", reg.Type,
+		"reg_token_statusbar", reg.TokenStatusbar)
 	if provider == "claude" && reg.TokenStatusbar {
 		exe, exeErr := os.Executable()
 		if exeErr != nil {
@@ -519,6 +765,8 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 				"session_id", sessionID, "exe_path", exe)
 		}
 		if slPath, cleanup, slErr := WriteClaudeStatuslineSettings(hp); slErr == nil {
+			// 分岐到達＋temp 作成成功を stderr ログで確定できるよう 1 行残す（diag 継続）。
+			logger.Info("statusline_settings_written", "session_id", sessionID, "path", slPath)
 			providerArgs = append(providerArgs, "--settings", slPath)
 			defer cleanup()
 		} else {
@@ -573,7 +821,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	}
 	defer ps.Close()
 
-	wses := newWrapperSession(conn, sessionID)
+	wses := newWrapperSession(conn, sessionID, wrapperSendWriteTimeout(cfg))
 
 	// Recent PTY output buffer: replayed to UI after a successful reconnect so
 	// the new session card has context for what happened during the gap.
@@ -607,6 +855,8 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// したら reattach で復活、新コンソール窓ポップアップも発生しない）。
 	// 再接続成功時に false に戻す。
 	var intentionalShutdown atomic.Bool
+	var transportBroken atomic.Bool
+	var lastReattachAt atomic.Int64
 
 	reconnectCh := make(chan struct{}, 1)
 	notifyReconnect := func() {
@@ -621,8 +871,11 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 			defer func() {
 				if r := recover(); r != nil {
 					logger.Error("hub-to-wrapper goroutine panic", "session_id", wses.getSID(), "recover", r)
+					wasCurrent := wses.isCurrentConn(c)
 					wses.clearConn(c)
-					notifyReconnect()
+					if wasCurrent && !transportBroken.Load() {
+						notifyReconnect()
+					}
 				}
 			}()
 			for {
@@ -634,8 +887,11 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 					default:
 					}
 					logger.Info("hub WS read failed", "session_id", wses.getSID(), "err", err)
+					wasCurrent := wses.isCurrentConn(c)
 					wses.clearConn(c)
-					notifyReconnect()
+					if wasCurrent && !transportBroken.Load() {
+						notifyReconnect()
+					}
 					return
 				}
 				switch m.Type {
@@ -709,6 +965,22 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	}
 	startReceiveLoop(conn)
 
+	transportFailure := func(fault ptyOutputTransportFault) {
+		if fault.Err != nil {
+			logger.Warn("PTY output transport failure", "session_id", wses.getSID(), "kind", fault.Kind, "queue_capacity", fault.QueueCapacity, "chunk_bytes", fault.ChunkBytes, "err", fault.Err)
+		} else {
+			logger.Warn("PTY output transport failure", "session_id", wses.getSID(), "kind", fault.Kind, "queue_capacity", fault.QueueCapacity, "chunk_bytes", fault.ChunkBytes)
+		}
+		// Set this before closing the socket. The receive loop may observe the
+		// close first; supervisor must still treat this as a reconnectable
+		// transport fault even while the Hub HTTP endpoint remains alive.
+		transportBroken.Store(true)
+		wses.abortCurrentConn()
+		notifyReconnect()
+	}
+	outputWriter := newPTYOutputWriter(wses, ptyOutputQueueCapacity, transportFailure)
+	go outputWriter.run()
+
 	// Reconnect supervisor: distinguishes intentional session close (Hub HTTP
 	// alive) from Hub process exit (Hub HTTP unreachable). The former kills PTY
 	// immediately (preserving dismiss / kill-all / idle-timeout UX). For a Hub
@@ -738,6 +1010,9 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		reconnectCh:      reconnectCh,
 		startReceiveLoop: startReceiveLoop,
 		snapshotReplay:   snapshotReplay,
+		transportBroken:  &transportBroken,
+		lastReattachAt:   &lastReattachAt,
+		resumeOutput:     outputWriter.resume,
 	}
 	go sup.run()
 
@@ -745,18 +1020,44 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// carry holds an incomplete UTF-8 sequence from the previous read that must
 	// be prepended to the next chunk before decoding (pumpChunk handles this).
 	rawMaxBytes := int64(cfg.Log.SessionMaxSizeMB) * 1024 * 1024
-	ptyPump(ps, lf, rawMaxBytes, wses, appendReplay, closeDone)
+	ptyPump(ps, lf, rawMaxBytes, outputWriter.enqueue, outputWriter.finish, appendReplay, closeDone)
 
 	waitErr := ps.Wait()
-	state, code := "completed", 0
-	if waitErr != nil {
-		state, code = "error", 1
+	state, code, signal := classifyExit(waitErr)
+	endMsg := proto.Message{Type: "session_end", SessionID: wses.getSID(), State: state, ExitCode: code}
+	if signal != "" {
+		endMsg.Signal = signal
 	}
-	wses.sendMsg(proto.Message{Type: "session_end", SessionID: wses.getSID(), State: state, ExitCode: code})
+	wses.sendMsg(endMsg)
 	// Close the current conn after the final message is sent.
 	wses.closeAnyConn()
-	logger.Info("wrapper exit", "session_id", wses.getSID(), "state", state)
+	if signal != "" {
+		logger.Info("wrapper exit", "session_id", wses.getSID(), "state", state, "exit_code", code, "signal", signal)
+	} else {
+		logger.Info("wrapper exit", "session_id", wses.getSID(), "state", state, "exit_code", code)
+	}
 	return waitErr
+}
+
+// classifyExit turns ps.Wait()'s error into a coarse state label
+// ("completed"/"error") plus the concrete exit code and, on Unix when the
+// child was terminated by a signal (e.g. OOM kill, SIGTERM/SIGKILL), the
+// signal name. This lets session_end logging distinguish a clean non-zero
+// exit from a forcibly killed process instead of collapsing both into a
+// fixed code=1.
+func classifyExit(waitErr error) (state string, code int, signal string) {
+	if waitErr == nil {
+		return "completed", 0, ""
+	}
+	state, code = "error", 1
+	var exitErr *exec.ExitError
+	if errors.As(waitErr, &exitErr) {
+		code = exitErr.ExitCode()
+		if signaled, name := exitSignalInfo(exitErr); signaled {
+			signal = name
+		}
+	}
+	return state, code, signal
 }
 
 // dialAndRegister opens a WS to the Hub and performs the register handshake.
@@ -772,21 +1073,21 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model st
 	}
 	homeDir, codexHome, claudeDir := userSkillDirs()
 	if err := websocket.JSON.Send(conn, proto.Message{
-		Type:       "register",
-		Role:       "wrapper",
-		Provider:   provider,
-		Display:    display,
-		CWD:        cwd,
-		Label:      label,
-		Model:      model,
-		PID:        os.Getpid(),
-		Shell:      DetectShell(),
-		Token:      cfg.Token,
-		HomeDir:    homeDir,
-		CodexHome:  codexHome,
-		ClaudeDir:  claudeDir,
-		Cols:       termCols,
-		Rows:       termRows,
+		Type:      "register",
+		Role:      "wrapper",
+		Provider:  provider,
+		Display:   display,
+		CWD:       cwd,
+		Label:     label,
+		Model:     model,
+		PID:       os.Getpid(),
+		Shell:     DetectShell(),
+		Token:     cfg.Token,
+		HomeDir:   homeDir,
+		CodexHome: codexHome,
+		ClaudeDir: claudeDir,
+		Cols:      termCols,
+		Rows:      termRows,
 	}); err != nil {
 		_ = conn.Close()
 		return nil, proto.Message{}, err
@@ -795,6 +1096,12 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model st
 	if err := websocket.JSON.Receive(conn, &reg); err != nil {
 		_ = conn.Close()
 		return nil, proto.Message{}, err
+	}
+	// registered 以外（例: エラー応答や予期しない先頭フレーム）だと TokenStatusbar 等が
+	// ゼロ値のまま残り statusline が黙って無効になる。型不一致は明示エラーにする。
+	if reg.Type != "registered" {
+		_ = conn.Close()
+		return nil, proto.Message{}, fmt.Errorf("unexpected register response type %q (want registered)", reg.Type)
 	}
 	return conn, reg, nil
 }

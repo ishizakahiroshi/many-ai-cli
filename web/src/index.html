@@ -104,6 +104,9 @@
     <span id="mic-status-chip" class="status-chip" hidden></span>
     <!-- 📱 モバイル接続（QR ウィザード）。SSH ローカルフォワード / VPN 前提で 127.0.0.1 URL の QR を出す。bind は 127.0.0.1 不変。 -->
     <button id="mobile-connect-btn" data-i18n-tooltip="mobile_connect_tooltip" aria-haspopup="dialog" aria-expanded="false">📱</button>
+    <button id="bug-report-btn" type="button" data-i18n-tooltip="bug_report_tooltip" aria-haspopup="dialog">
+      <span aria-hidden="true">🐞</span><span data-i18n="bug_report_button">バグ報告</span>
+    </button>
     <button id="shutdown-btn" data-i18n-tooltip="shutdown_tooltip">⏻</button>
     <button id="settings-btn">
       <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -632,6 +635,14 @@
                 </label>
               </div>
             </div>
+            <div class="settings-row" style="margin-top:4px">
+              <span class="settings-label" data-i18n="settings_ntfy_include_body">通知本文</span>
+              <label style="display:flex;align-items:center;gap:4px;font-size:0.85em">
+                <input type="checkbox" id="ntfy-include-body">
+                <span data-i18n="settings_ntfy_include_body_label">本文を含める</span>
+              </label>
+            </div>
+            <div class="settings-note" data-i18n="settings_ntfy_include_body_note">既定では件名のみ送ります。有効にすると承認質問文・完了サマリーが外部サービスへ送られます（送信前にシークレットはマスクされます）。</div>
             <div class="settings-row" style="margin-top:6px">
               <button id="ntfy-save-btn" class="settings-link-btn settings-inline-btn" data-i18n="settings_ntfy_save">保存</button>
               <span id="ntfy-save-status" class="settings-note" style="margin-left:6px"></span>
@@ -1336,6 +1347,7 @@
           <button id="attach-camera-btn" type="button" data-i18n-tooltip="attach_camera_tooltip" aria-label="Camera">📷</button>
           <div id="attach-thumbnails"></div>
           <button id="attach-clear-btn" data-i18n-tooltip="attach_clear_tooltip" hidden>✕</button>
+          <button id="agent-log-btn" type="button" data-i18n="agent_log_button" data-i18n-tooltip="agent_log_tooltip" aria-haspopup="dialog" aria-expanded="false">📄 Raw log</button>
           <button id="attach-copy-cwd-btn" type="button" data-i18n-tooltip="attach_copy_cwd_tooltip" aria-label="Copy working directory path">📁</button>
         </div>
       </div>

@@ -110,6 +110,45 @@
     return (h >>> 0).toString(36);
   }
 
+  // 手動 dismiss 抑止用の質問アイデンティティ（state.approvalQuestionKey と同契約）。
+  // option ラベル揺れに強く、_question / バッチ title を優先する。
+  function approvalQuestionKey(options) {
+    if (!options || !Array.isArray(options) || options.length === 0) return '';
+    const arr = options as any;
+    const arrQ = arr._question;
+    if (arrQ && String(arrQ).trim()) {
+      return 'q:' + approvalCtxHash(String(arrQ).replace(/\s+/g, ' ').trim().slice(0, 200));
+    }
+    const first = arr[0];
+    if (first && first._multiSelect && first._question && String(first._question).trim()) {
+      return 'q:' + approvalCtxHash(String(first._question).replace(/\s+/g, ' ').trim().slice(0, 200));
+    }
+    if (isBatchOptions(options)) {
+      const titles = options
+        .map(s => String((s && s.title) || '').replace(/\s+/g, ' ').trim())
+        .filter(Boolean)
+        .join('\n');
+      if (titles) return 'b:' + approvalCtxHash(titles.slice(0, 400));
+    }
+    return 'o:' + approvalSig(options);
+  }
+
+  // 差分再描画の残骸でマーカー文字列がラベルに混入したパース結果は出さない。
+  function isCorruptHubMarkerOptions(options) {
+    if (!options || !Array.isArray(options) || options.length === 0) return true;
+    const arr = options as any;
+    const markerLeak = /\[MANY-AI-CLI\]|\[\/MANY-AI-CLI\]/i;
+    const q = arr._question != null ? String(arr._question) : '';
+    if (markerLeak.test(q)) return true;
+    if (isBatchOptions(options)) {
+      return options.some(sec =>
+        markerLeak.test(String((sec && sec.title) || '')) ||
+        (sec.options || []).some(o => markerLeak.test(String((o && o.label) || ''))));
+    }
+    return options.some(o => markerLeak.test(String((o && o.label) || '')) ||
+      markerLeak.test(String((o && o._question) || '')));
+  }
+
   function sequentialChoiceSig(prompts) {
     return approvalCtxHash((prompts || []).map(p => `${p.key}:${p.question}:${p.options.map(o => `${o.num}.${o.label}`).join('|')}`).join('\n'));
   }
@@ -192,7 +231,8 @@
     }
     if (lastBlock !== null) {
       const inner = lastBlock.split('\n').map(l => l.trim()).filter(Boolean);
-      return withBlockSig(parseHubBlock(inner), inner);
+      const parsed = withBlockSig(parseHubBlock(inner), inner);
+      return isCorruptHubMarkerOptions(parsed) ? null : parsed;
     }
 
     // 開き/閉じが別チャンクに割れて全文一致しなかった場合の末尾アンカー・フォールバック。
@@ -203,7 +243,8 @@
       const line = source[i];
       if (/\[MANY-AI-CLI\]/.test(line) && /\[\/MANY-AI-CLI\]/.test(line)) {
         const inner = line.replace(/^[\s\S]*?\[MANY-AI-CLI\]/, '').replace(/\[\/MANY-AI-CLI\][\s\S]*$/, '').trim();
-        return withBlockSig(parseHubBlock([inner]), [inner]);
+        const parsed = withBlockSig(parseHubBlock([inner]), [inner]);
+        return isCorruptHubMarkerOptions(parsed) ? null : parsed;
       }
       if (/\[\/MANY-AI-CLI\]/.test(line) && closeIdx === -1) { closeIdx = i; continue; }
       if (/\[MANY-AI-CLI\]/.test(line) && closeIdx !== -1) { openIdx = i; break; }
@@ -211,7 +252,8 @@
 
     if (openIdx === -1 || closeIdx === -1) return null;
     const inner = source.slice(openIdx + 1, closeIdx).map(l => l.trim()).filter(Boolean);
-    return withBlockSig(parseHubBlock(inner), inner);
+    const parsed = withBlockSig(parseHubBlock(inner), inner);
+    return isCorruptHubMarkerOptions(parsed) ? null : parsed;
   }
 
   function extractPlainYesNoApproval(lines) {
@@ -568,7 +610,17 @@
     }
     const filledSections = sections.filter(s => s.options.length > 0);
     if (filledSections.length >= 2) return attachPreamble(filledSections);
-    if (filledSections.length === 1) return attachPreamble(filledSections[0].options);
+    if (filledSections.length === 1) {
+      // 単一セクション（`Q1 見出し` 形式）を flat options に落とすとき、
+      // セクション上の _freeInput / title を配列プロパティへ伝播する。
+      // これを忘れると「N. User specifies」があっても action-bar に自由入力肢が出ない
+      // （pending_action-bar-invisible 副次 / 2026-07-14 観測）。
+      const sec = filledSections[0];
+      const singleOpts = sec.options;
+      if ((sec as any)._freeInput) (singleOpts as any)._freeInput = true;
+      if (sec.title) (singleOpts as any)._question = String(sec.title || '').trim();
+      return attachPreamble(singleOpts);
+    }
     if (looseOpts.length > 0) {
       // 自由入力フラグは配列プロパティで持たせる（option 構造は変えず isBatchOptions=false を維持）。
       if (looseFreeInput) (looseOpts as any)._freeInput = true;
@@ -729,10 +781,22 @@
 
   function isHubChoicePrompt(contextLines, options) {
     if (!options.length) return false;
-    const hasPrompt = contextLines.some(line => hubChoiceQuestionRe.test(line));
-    const hasChoiceMarker = contextLines.some(line => userSpecifiesRe.test(line)) ||
-      options.some(opt => userSpecifiesRe.test(opt.label) || recommendedChoiceRe.test(opt.label));
-    return hasPrompt && hasChoiceMarker;
+    // Hub の正規経路は [MANY-AI-CLI] マーカーで先に処理される。ここは旧形式の
+    // 非マーカー質問だけを救済するため、自由入力行を必須にする。単なる手順文に
+    // 「どちらで進めますか」と「（推奨）」が共存しても、承認ポップアップへ
+    // 誤変換してはならない（2026-07-20 実測）。
+    //
+    // 選択肢に入った `推奨` は設計上の推奨を説明しているだけの場合があるため、
+    // これを旧形式の選択マーカーとしては使わない。旧形式でも質問は選択肢より前に
+    // 出るため、順序も確認して本文末尾の Q1 を誤って結び付けない。
+    const lines = contextLines || [];
+    const firstOption = lines.findIndex(line => /^\s*(?:[>❯›❱]\s*)?\d{1,2}\.\s*\S/.test(String(line || '')));
+    const hasPromptBeforeOptions = lines.some((line, index) =>
+      (firstOption === -1 || index < firstOption) && hubChoiceQuestionRe.test(String(line || '')),
+    );
+    const hasUserSpecifies = lines.some(line => userSpecifiesRe.test(String(line || ''))) ||
+      options.some(opt => userSpecifiesRe.test(String(opt?.label || '')));
+    return hasPromptBeforeOptions && hasUserSpecifies;
   }
 
   function markHubChoiceDefault(options, contextLines) {
@@ -756,6 +820,7 @@
     extractApprovalOptions,
     approvalContextLines,
     approvalSig,
+    approvalQuestionKey,
     sequentialChoiceSig,
     isBatchOptions,
     isMultiSelectOptions,
@@ -779,5 +844,5 @@
 const __esmRoot = (typeof window !== 'undefined') ? window : globalThis;
 export const approvalParser = __esmRoot.approvalParser;
 export const {
-  lineHasHint, linesHaveHint, approvalLineHasHint, approvalLinesHaveHint, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, extractApprovalOptions, approvalContextLines, isBatchOptions, isMultiSelectOptions, isMultiQuestionPrompt, isHubChoicePrompt, markHubChoiceDefault, matchNativeApprovalTrigger, hasApprovalLikeLabel, userSpecifiesRe, ungluedApprovalLines, normalizeVtCursorOps,
+  lineHasHint, linesHaveHint, approvalLineHasHint, approvalLinesHaveHint, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, extractApprovalOptions, approvalContextLines, isBatchOptions, isMultiSelectOptions, isMultiQuestionPrompt, isHubChoicePrompt, markHubChoiceDefault, matchNativeApprovalTrigger, hasApprovalLikeLabel, userSpecifiesRe, ungluedApprovalLines, normalizeVtCursorOps, approvalQuestionKey, approvalSig,
 } = __esmRoot.approvalParser;

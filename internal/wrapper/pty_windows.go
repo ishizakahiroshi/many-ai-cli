@@ -61,6 +61,16 @@ func (p *conPtyProcess) Wait() error {
 	<-p.waitDone
 	return p.waitErr
 }
+
+// exitSignalInfo always reports "no signal" on Windows: exec.ExitError.Sys()
+// is not a syscall.WaitStatus on this platform, and Windows process exit
+// reporting has no POSIX-signal concept. Kept as a same-named counterpart to
+// the Unix implementation in pty_unix.go so classifyExit (wrapper.go) can
+// call it without build tags.
+func exitSignalInfo(exitErr *exec.ExitError) (bool, string) {
+	return false, ""
+}
+
 func (p *conPtyProcess) Resize(cols, rows uint16) error {
 	return p.pty.Resize(int(cols), int(rows))
 }

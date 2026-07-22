@@ -228,6 +228,10 @@ type sessionUsageRequest struct {
 	RepoName         string  `json:"repo_name"`
 	RemainingPct     float64 `json:"remaining_pct"`
 	ReasoningOut     int     `json:"reasoning_output_tokens"`
+	// TranscriptPath is supplied only by the Codex Stop hook. It is retained in
+	// memory for the active session so the UI can lead the user to the provider's
+	// source-of-truth rollout JSONL without storing its contents in the Hub.
+	TranscriptPath string `json:"transcript_path"`
 }
 
 // handleSessionUsage は POST /api/session-usage を処理する。
@@ -275,6 +279,9 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 		)
 		writeJSON(w, map[string]any{"ok": true, "ignored": "provider_mismatch"})
 		return
+	}
+	if sessionProvider == "codex" && req.TranscriptPath != "" {
+		s.setCodexNativeLogPath(req.SessionID, req.TranscriptPath)
 	}
 	// トークン数・コストの値域チェック（負値・極大値・NaN/Inf を弾く）。
 	const (

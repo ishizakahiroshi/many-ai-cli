@@ -66,3 +66,6 @@ desktop.ini
 *.swp
 # 広範な *token* / *secret* は web/src の token-statusbar.* 等ソースを巻き込むため
 # 採用しない（秘匿は上の鍵・secrets.* / *.secret.* / *credential* で担保）。
+
+# docsweep: local backup/state dir (v0.4+ is a no-op but kept for older runs)
+.docsweep/

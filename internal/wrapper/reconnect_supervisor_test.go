@@ -126,6 +126,36 @@ func TestReconnectSupervisor_AutoShutdown(t *testing.T) {
 	}
 }
 
+// TestReconnectSupervisor_TransportFaultBypassesAutoShutdown verifies that a
+// local PTY output transport fault uses reconnect grace even when the user has
+// enabled auto_shutdown for actual Hub process exits.
+func TestReconnectSupervisor_TransportFaultBypassesAutoShutdown(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Hub.AutoShutdown = true
+	cfg.Hub.WrapperReconnectGraceSec = 30
+
+	ps := &mockProcessSession{}
+	reconnectCh := make(chan struct{}, 1)
+	done := make(chan struct{})
+	var doneOnce sync.Once
+	closeDone := func() { doneOnce.Do(func() { close(done) }) }
+	sup := makeSupervisor(cfg, ps, false /* intentional */, false /* probeAlive */, reconnectCh, done, closeDone)
+	transportBroken := &atomic.Bool{}
+	transportBroken.Store(true)
+	sup.transportBroken = transportBroken
+
+	reconnectCh <- struct{}{}
+	go sup.run()
+
+	// The supervisor must not call ps.Close() before reconnect grace expires.
+	time.Sleep(100 * time.Millisecond)
+	if ps.closeCalled.Load() {
+		t.Fatal("ps.Close() must not be called for a transport fault while reconnect grace is active")
+	}
+
+	closeDone()
+}
+
 // TestReconnectSupervisor_HubAlive は hub が生きている場合（intentional でない WS 切断）、
 // PTY を kill することを確認する（dismiss / kill-all / idle-timeout による意図的切断）。
 func TestReconnectSupervisor_HubAlive(t *testing.T) {
@@ -155,6 +185,43 @@ func TestReconnectSupervisor_HubAlive(t *testing.T) {
 	if !ps.closeCalled.Load() {
 		t.Error("ps.Close() should have been called")
 	}
+}
+
+// TestReconnectSupervisor_RecentlyReattachedBypassesImmediateKill verifies that
+// a plain WS disconnect shortly after a successful reattach does not trigger
+// the immediate "hub still alive → intentional disconnect" kill, even though
+// probeHub reports the Hub as alive. See
+// bugfix_codex-reattach-eof-misclassified-intentional-kill_2026-07-20.md:
+// this disconnect never goes through transportFailure() (it is a plain EOF,
+// not a PTY output queue fault), so without the post-reattach guard it would
+// be misclassified as a dismiss/kill-all click and kill the wrapped CLI.
+func TestReconnectSupervisor_RecentlyReattachedBypassesImmediateKill(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Hub.AutoShutdown = true
+	cfg.Hub.WrapperReconnectGraceSec = 30
+
+	ps := &mockProcessSession{}
+	reconnectCh := make(chan struct{}, 1)
+	done := make(chan struct{})
+	var doneOnce sync.Once
+	closeDone := func() { doneOnce.Do(func() { close(done) }) }
+
+	// probeAlive=true would normally trigger the immediate-kill branch.
+	sup := makeSupervisor(cfg, ps, false /* intentional */, true /* probeAlive */, reconnectCh, done, closeDone)
+	var lastReattachAt atomic.Int64
+	lastReattachAt.Store(time.Now().UnixNano())
+	sup.lastReattachAt = &lastReattachAt
+
+	reconnectCh <- struct{}{}
+	go sup.run()
+
+	// The supervisor must not call ps.Close() while inside the post-reattach guard.
+	time.Sleep(100 * time.Millisecond)
+	if ps.closeCalled.Load() {
+		t.Fatal("ps.Close() must not be called for a disconnect shortly after reattach")
+	}
+
+	closeDone()
 }
 
 // TestReconnectSupervisor_GraceDisabled は grace 期間が 0 のとき、

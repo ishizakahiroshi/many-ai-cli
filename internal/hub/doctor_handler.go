@@ -1,7 +1,6 @@
 package hub
 
 import (
-	"context"
 	"net/http"
 
 	"many-ai-cli/internal/doctor"
@@ -13,5 +12,7 @@ func (s *Server) handleDoctor(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodGet) {
 		return
 	}
-	writeJSON(w, doctor.Run(context.Background(), s.snapshotCfg()))
+	// クライアント切断時に外部プロセス probe を中断できるよう、
+	// context.Background() ではなく r.Context() を伝播する。
+	writeJSON(w, doctor.Run(r.Context(), s.snapshotCfg()))
 }

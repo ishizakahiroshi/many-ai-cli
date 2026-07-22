@@ -20,7 +20,6 @@ export interface TerminalEntry {
   textDecoder?: TextDecoder;
   markerFilterCarry?: Uint8Array;
   reverseVideoFilterCarry?: Uint8Array;
-  synchronizedUpdateFilterCarry?: Uint8Array;
   screenClearSeqCarry?: Uint8Array;
   liveStatusText?: string;
   // 更新が途切れたら稼働中→待機表示(idle)へ切替えるためのタイマー。
@@ -135,6 +134,30 @@ export function _approvalCtxHash(s: unknown): string {
     h = (((h << 5) + h) + text.charCodeAt(i)) | 0;
   }
   return (h >>> 0).toString(36);
+}
+
+// 手動 dismiss 抑止用の「質問アイデンティティ」。
+// Grok 差分再描画では option ラベルが欠け・重複して approvalSig が揺れるが、
+// 質問文（_question）は比較的安定するため、同一質問の再表示抑止に使う。
+// 質問が取れない経路（ネイティブ承認等）は options の approvalSig にフォールバック。
+export function approvalQuestionKey(options: ApprovalOptionLike[] | any[] | null | undefined): string {
+  if (!options || !Array.isArray(options) || options.length === 0) return '';
+  const arrQ = (options as any)._question;
+  if (arrQ && String(arrQ).trim()) {
+    return 'q:' + _approvalCtxHash(String(arrQ).replace(/\s+/g, ' ').trim().slice(0, 200));
+  }
+  const first = options[0] as any;
+  if (first && first._multiSelect && first._question && String(first._question).trim()) {
+    return 'q:' + _approvalCtxHash(String(first._question).replace(/\s+/g, ' ').trim().slice(0, 200));
+  }
+  if (isBatchOptions(options)) {
+    const titles = options
+      .map((s: any) => String(s?.title || '').replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .join('\n');
+    if (titles) return 'b:' + _approvalCtxHash(titles.slice(0, 400));
+  }
+  return 'o:' + approvalSig(options);
 }
 
 export function sequentialChoiceSig(prompts: SequentialChoicePrompt[] | any[]): string {

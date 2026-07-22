@@ -24,16 +24,20 @@ type Message struct {
 	AwaitingUser     bool `json:"awaiting_user,omitempty"`
 	AwaitingApproval bool `json:"awaiting_approval,omitempty"`
 	// Activity carries all four flags atomically, including false transitions.
-	Activity  *SessionActivity `json:"activity,omitempty"`
-	ExitCode  int              `json:"exit_code,omitempty"`
-	Token     string           `json:"token,omitempty"`
-	HomeDir   string           `json:"home_dir,omitempty"`
-	CodexHome string           `json:"codex_home,omitempty"`
-	ClaudeDir string           `json:"claude_dir,omitempty"`
-	Data      []byte           `json:"data,omitempty"` // wrapper内部用: PTY生バイト列（base64エンコード）
-	Text      string           `json:"text,omitempty"` // pty_output: ANSIを除去したプレーンテキスト / pty_input: ユーザー入力文字列
-	Cols      int              `json:"cols,omitempty"` // pty_resize / register / registered
-	Rows      int              `json:"rows,omitempty"` // pty_resize / register / registered
+	Activity *SessionActivity `json:"activity,omitempty"`
+	ExitCode int              `json:"exit_code,omitempty"`
+	// Signal carries the POSIX signal name (e.g. "killed", "terminated") when
+	// session_end's process was terminated by a signal rather than exiting
+	// normally with a non-zero code. Unix-only; always empty on Windows.
+	Signal    string `json:"signal,omitempty"`
+	Token     string `json:"token,omitempty"`
+	HomeDir   string `json:"home_dir,omitempty"`
+	CodexHome string `json:"codex_home,omitempty"`
+	ClaudeDir string `json:"claude_dir,omitempty"`
+	Data      []byte `json:"data,omitempty"` // wrapper内部用: PTY生バイト列（base64エンコード）
+	Text      string `json:"text,omitempty"` // pty_output: ANSIを除去したプレーンテキスト / pty_input: ユーザー入力文字列
+	Cols      int    `json:"cols,omitempty"` // pty_resize / register / registered
+	Rows      int    `json:"rows,omitempty"` // pty_resize / register / registered
 
 	// reattach: wrapper が Hub クラッシュ後に元セッション情報を復元するための情報。
 	LogPath   string `json:"log_path,omitempty"`
@@ -44,7 +48,10 @@ type Message struct {
 	// TokenStatusbar: registered ack で Hub が返す「トークン常時表示バーが有効か」。
 	// wrapper はこれを見て claude 起動時に --settings で statusLine を渡すか決める
 	// （共有の .claude/settings.local.json は一切書き換えない方式）。
-	TokenStatusbar bool `json:"token_statusbar,omitempty"`
+	// omitempty を付けない: false が wire から消えると「意図的 OFF」と「フィールド欠落/
+	// 別 type のメッセージを受信」が区別できず、statusline 欠落の診断が潰れる
+	// （docs/local/bugfix_statusline-settings-skip_2026-07-10.md）。
+	TokenStatusbar bool `json:"token_statusbar"`
 
 	// session_hint で UI 側から送る「承認 UI が可視」フラグ。
 	ApprovalVisible bool `json:"approval_visible,omitempty"`

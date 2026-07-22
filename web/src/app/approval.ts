@@ -1,8 +1,8 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, isAnsweredMarkerSig, recordAnsweredMarkerSig, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchActiveQ, batchFreeText, batchSelections, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectFocusIdx, multiSelectSelections, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, utf8Decoder } from './state.js';
+import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, isAnsweredMarkerSig, recordAnsweredMarkerSig, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalQuestionKey, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchActiveQ, batchFreeText, batchSelections, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectFocusIdx, multiSelectSelections, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, utf8Decoder } from './state.js';
 import { inputEl, sendSubmittedText, sendSubmittedBody } from '../app.js';
-import { clearSuppressPtyResize, isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout } from './terminal.js';
+import { clearSuppressPtyResize, isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout, syncPtySizeToViewportAfterLayout } from './terminal.js';
 import { stripAnsi } from './settings.js';
 import { ws } from './ws-client.js';
 import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, hasApprovalLikeLabel, isBatchOptions, isHubChoicePrompt, isMultiQuestionPrompt, isMultiSelectOptions, markHubChoiceDefault, matchNativeApprovalTrigger, normalizeVtCursorOps } from './approval-parser.js';
@@ -14,6 +14,20 @@ import { isActionBarCollapsed, setActionBarCollapsed, STORAGE_HIGH_RISK_CONFIRMA
 
 const HIGH_RISK_HOLD_MS = 1200;
 const highRiskConfirmationInFlight = new Set<number>();
+
+// 一時計装 (docs/local/bugfix_batch-approval-actionbar-not-hidden_2026-07-21.md)。
+// 原因判明後に endpoint (/api/debug/batch-log) ごと削除する。
+function dlog(tag: string, data: any): void {
+  try {
+    const payload = JSON.stringify({ tag, ts: new Date().toISOString(), ...data });
+    fetch(`/api/debug/batch-log?token=${encodeURIComponent(token || '')}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload,
+      keepalive: true,
+    }).catch(() => { /* fire-and-forget */ });
+  } catch (_) { /* fire-and-forget */ }
+}
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -31,11 +45,39 @@ const highRiskConfirmationInFlight = new Set<number>();
 const H9_RESTORE_MISS_LIMIT = 3;
 const h9RestoreMisses = new Map();
 
-// 手動「✕ 承認」（消す）で一時的に隠した承認の sig（sessionId → approvalSig）。
+// 手動 dismiss で一時的に隠した承認（sessionId → { optionsSig, questionKey }）。
+// 入力欄横「✕ 承認」と action-bar 右上 ✕ の両方が同じ経路（manuallyHideActionBar）を使う。
 // approvalRawOptionsCache / approvalVisibleCache は保持したまま action-bar の描画だけ抑制する。
-// showActionBar の choke point で「同一 sig の承認は描画スキップ・別 sig の新しい承認は抑制解除して描画」する。
+// showActionBar の choke point で:
+//   - 同一 optionsSig → 描画スキップ
+//   - options ラベルが揺れても同一 questionKey → 描画スキップ（Grok 差分再描画対策）
+//   - 質問自体が変わったときだけ抑制解除して描画
 // 「↻ 承認」（再表示）でこのエントリを消し、承認解決（hideActionBar）でも確実に消す。
-const manualHideSig = new Map();
+// （旧1: パネル ✕ は hideActionBar + 60s suppress → 抑制切れで再表示）
+// （旧2: optionsSig のみ抑止 → Grok のラベル揺れで isNewSig 扱いになり再表示）
+const manualHideState = new Map(); // sessionId → { optionsSig: string, questionKey: string }
+
+function clearManualHide(id) {
+  manualHideState.delete(id);
+}
+
+function rememberManualHide(id, options) {
+  if (!Array.isArray(options) || options.length === 0) return;
+  manualHideState.set(id, {
+    optionsSig: approvalSig(options),
+    questionKey: approvalQuestionKey(options),
+  });
+}
+
+// true = まだ手動 dismiss 中なので描画しない / false = 抑制なし or 別質問なので解除してよい
+function isManualHideActive(id, options) {
+  const st = manualHideState.get(id);
+  if (!st) return false;
+  if (st.optionsSig === approvalSig(options)) return true;
+  const qk = approvalQuestionKey(options);
+  if (qk && st.questionKey && qk === st.questionKey) return true;
+  return false;
+}
 
 // 複数質問 UI（AskUserQuestion 等）検出の窓と取りこぼし対策。
 // scanBuffer の固定 40 行窓だと、端末行数(term.rows)が 40 を超える縦長ターミナルで
@@ -477,15 +519,28 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
   // 40 行の lines ではなく pendingTextTail 全体（markerLinesFromTail）から抽出する。
   const markerOpts = extractHubMarkerApproval(markerLinesFromTail(t.pendingTextTail));
   if (markerOpts) {
+    const _sigT = approvalSig(markerOpts);
+    const _blockSigT = markerOpts[0]?._blockSig;
+    dlog('trackChunk.marker.detected', {
+      id, activeSessionId,
+      optsLen: markerOpts.length,
+      batch: isBatchOptions(markerOpts),
+      sig: _sigT,
+      blockSig: _blockSigT,
+      answered: isAnsweredMarkerSig(id, markerOpts),
+      consumedSigMatch: approvalConsumedSig.get(id) === _sigT,
+      srcSigMatch: approvalSourceCache.get(id)?.sig === _sigT,
+      visibleBefore: !!approvalVisibleCache.get(id),
+    });
     // 回答済みの [MANY-AI-CLI] ブロックは恒久的に承認 UI を出さない（タブ切替の SIGWINCH
     // 再描画で画面に残った回答済みブロックが再流入しても再表示しない）。質問文込みのハッシュ
     // で判定するため、別質問を誤って抑制することはない。
-    if (isAnsweredMarkerSig(id, markerOpts)) return;
+    if (isAnsweredMarkerSig(id, markerOpts)) { dlog('trackChunk.marker.skip.answered', { id, sig: _sigT, blockSig: _blockSigT }); return; }
     // doSend でテキスト送信済みの承認が Ink 再描画で再検出された場合はスキップ
     const consumed = approvalConsumedSig.get(id);
     const sig = approvalSig(markerOpts);
     const src = approvalSourceCache.get(id);
-    if (src && src.source === 'hub_marker' && src.sig === sig) return;
+    if (src && src.source === 'hub_marker' && src.sig === sig) { dlog('trackChunk.marker.skip.srcSig', { id, sig }); return; }
     if (consumed === sig) {
       // Ink 再描画で同一ブロックが再送されている — タイマーをリセットして
       // ブロックが届かなくなるまで sig を保持し続ける（debounce 型削除）
@@ -716,6 +771,25 @@ export function normalizeGoApprovalOptions(rawOptions) {
     .filter((opt) => Number.isFinite(opt.num) && opt.label);
 }
 
+function localizeOpenCodeShortcutOptions(options) {
+  const labels = new Map([
+    ['allow once', t('approval_opencode_once')],
+    ['allow always', t('approval_opencode_always')],
+    ['reject', t('approval_opencode_reject')],
+  ]);
+  return options.map((opt) => {
+    const nativeLabel = String(opt.label || '').trim();
+    const label = labels.get(nativeLabel.toLowerCase());
+    if (!label) return opt;
+    return {
+      ...opt,
+      label,
+      title: nativeLabel,
+      _openCodeShortcut: true,
+    };
+  });
+}
+
 export function isGoNativeApprovalActive(id) {
   const src = approvalSourceCache.get(id);
   return !!(src && src.source === 'go_vt' && approvalVisibleCache.get(id));
@@ -724,7 +798,10 @@ export function isGoNativeApprovalActive(id) {
 export function handleGoApprovalDetected(message) {
   const id = message && message.session_id;
   if (!id) return;
-  const options = normalizeGoApprovalOptions(message.approval_options);
+  let options = normalizeGoApprovalOptions(message.approval_options);
+  if (message.approval_kind === 'native_opencode_shortcut') {
+    options = localizeOpenCodeShortcutOptions(options);
+  }
   if (options.length === 0) return;
   const sig = String(message.approval_sig || approvalSig(options));
 	const summary = normalizeApprovalSummary(message.approval_summary, message.approval_context, message.approval_question);
@@ -766,6 +843,17 @@ function normalizeApprovalSummary(raw, fallbackRaw, fallbackQuestion) {
   return { command, paths, risk, raw: context };
 }
 
+// OpenCode の承認ダイアログは数字を受け取らず、矢印＋Enter で選ぶ。
+// action-bar 上だけは 1/2/3 を意味のあるショートカットとして提供し、
+// sendChoice が保持している _sendText（Enter / Right+Enter）へ変換して送る。
+export function handleOpenCodeApprovalNumberKey(sessionId, num) {
+  const options = approvalRawOptionsCache.get(sessionId);
+  if (!Array.isArray(options) || !options.some(opt => opt && opt._openCodeShortcut)) return false;
+  if (!options.some(opt => opt && opt.num === num)) return false;
+  sendChoice(sessionId, num);
+  return true;
+}
+
 export function handleHubApprovalMarker(message) {
   const id = message && message.session_id;
   if (!id) return;
@@ -773,11 +861,21 @@ export function handleHubApprovalMarker(message) {
   if (!block) return;
   const markerOpts = extractHubMarkerApproval(markerLinesFromTail(block));
   if (!markerOpts) return;
-  try { console.log('[approval-route] handleHubApprovalMarker', { id, activeSessionId, optsLen: markerOpts.length, q: (markerOpts as any)._question?.slice?.(0, 80) }); } catch (_) {}
-  if (isAnsweredMarkerSig(id, markerOpts)) return;
+  try { console.log('[approval-route] handleHubApprovalMarker', { id, activeSessionId, optsLen: markerOpts.length, q: (markerOpts as any)._question?.slice?.(0, 80), batch: isBatchOptions(markerOpts) }); } catch (_) {}
+  const _sig0 = approvalSig(markerOpts);
+  const _prevSrc0 = approvalSourceCache.get(id);
+  dlog('handleHubApprovalMarker.entry', {
+    id, activeSessionId, optsLen: markerOpts.length,
+    batch: isBatchOptions(markerOpts),
+    sig: _sig0,
+    consumedSigMatch: approvalConsumedSig.get(id) === _sig0,
+    answeredSig: isAnsweredMarkerSig(id, markerOpts),
+    isNewSigVsPrev: !_prevSrc0 || _prevSrc0.sig !== _sig0 || _prevSrc0.source !== 'hub_marker',
+  });
+  if (isAnsweredMarkerSig(id, markerOpts)) { dlog('handleHubApprovalMarker.skip.answered', { id, sig: _sig0 }); return; }
 
   const sig = approvalSig(markerOpts);
-  if (approvalConsumedSig.get(id) === sig) return;
+  if (approvalConsumedSig.get(id) === sig) { dlog('handleHubApprovalMarker.skip.consumed', { id, sig }); return; }
   const prevTimer = approvalConsumedSigDeleteTimer.get(id);
   if (prevTimer) {
     clearTimeout(prevTimer);
@@ -788,6 +886,17 @@ export function handleHubApprovalMarker(message) {
   cancelApprovalHintConfirm(id);
   approvalSwitchCandidates.delete(id);
   resetBgApprovalMisses(id);
+  // 新マーカー（options sig 変化）のときだけ差分スキップを解除する。
+  // 同一 sig の再配信で毎回 lastActionBarRender を潰すと、描画キャッシュが効かず
+  // 自由入力中のフォーカス喪失・点滅につながる（敵対レビュー P1 follow-up）。
+  // 手動 dismiss はここでは消さない: Grok 差分再描画でラベルが揺れると isNewSig になり、
+  // 消すと同一質問が再表示される。解除は showActionBar が questionKey 不一致のときだけ行う。
+  const prevSrc = approvalSourceCache.get(id);
+  const isNewSig = !prevSrc || prevSrc.sig !== sig || prevSrc.source !== 'hub_marker';
+  if (isNewSig) {
+    lastActionBarRender.sessionId = null;
+    lastActionBarRender.sig = null;
+  }
   approvalUiAdapter.cacheApprovalOptions(id, markerOpts);
   approvalSourceCache.set(id, {
     source: 'hub_marker',
@@ -943,12 +1052,43 @@ export function detectApproval(id) {
     const pendingLines = markerLinesFromTail(t.pendingTextTail);
     const markerOpts = extractHubMarkerApproval(pendingLines);
     if (markerOpts) {
+      const _sigD = approvalSig(markerOpts);
+      const _blockSigD = markerOpts[0]?._blockSig;
+      dlog('detectApproval.marker.detected', {
+        id, activeSessionId,
+        optsLen: markerOpts.length,
+        batch: isBatchOptions(markerOpts),
+        sig: _sigD,
+        blockSig: _blockSigD,
+        answered: isAnsweredMarkerSig(id, markerOpts),
+        consumedSigMatch: approvalConsumedSig.get(id) === _sigD,
+        srcSigMatch: approvalSourceCache.get(id)?.sig === _sigD,
+        visibleBefore: !!approvalVisibleCache.get(id),
+      });
       // 回答済みブロックは恒久的にスキップ（タブ切替の再描画で再流入しても出さない）
-      if (isAnsweredMarkerSig(id, markerOpts)) return;
+      if (isAnsweredMarkerSig(id, markerOpts)) { dlog('detectApproval.marker.skip.answered', { id, sig: _sigD, blockSig: _blockSigD }); return; }
       const consumed = approvalConsumedSig.get(id);
       const sig = approvalSig(markerOpts);
       const src = approvalSourceCache.get(id);
-      if (src && src.source === 'hub_marker' && src.sig === sig) return;
+      // Hub が既に approval_marker を配信済みでも、セッション切替時は action-bar を
+      // 再描画する必要がある。従来は early return のみで showOptions を呼ばず、
+      // pendingTextTail にブロックが残っているアクティブ復帰で bar が出なかった
+      // （2026-07-19 経路解析: pending_approval-marker-button-not-shown）。
+      // 敵対レビュー P1: wasVisible でも毎回 showOptions すると自由入力中フォーカス喪失や
+      // 無駄な再描画が増える。非表示 or bar が空/非 visible のときだけ再描画する。
+      if (src && src.source === 'hub_marker' && src.sig === sig) {
+        if (consumed === sig) return;
+        const wasVisible = !!approvalVisibleCache.get(id);
+        const barNeedsPaint = !bar || !bar.classList.contains('visible') || bar.children.length === 0;
+        if (!wasVisible) {
+          cancelApprovalHintConfirm(id);
+          approvalUiAdapter.setApprovalVisible(id, true);
+        }
+        if (barNeedsPaint || !wasVisible) {
+          approvalUiAdapter.showOptions(bar, id, markerOpts, !wasVisible);
+        }
+        return;
+      }
       if (consumed === sig) return; // 消費済み承認の再表示をスキップ（タイマーは trackApprovalHintFromChunk 側で管理）
       const prevTimer2 = approvalConsumedSigDeleteTimer.get(id);
       if (prevTimer2) { clearTimeout(prevTimer2); approvalConsumedSigDeleteTimer.delete(id); }
@@ -1214,6 +1354,11 @@ export function hideActionBar(id) {
   try { console.log('[approval-route] hideActionBar', { id, activeSessionId, stack: new Error().stack?.split('\n').slice(1, 5).join(' | ') }); } catch (_) {}
   const bar = document.getElementById('action-bar');
   const wasVisible = !!(bar && bar.classList.contains('visible'));
+  dlog('hideActionBar.entry', {
+    id, activeSessionId, wasVisible,
+    hadBatchClass: !!(bar && bar.classList.contains('batch')),
+    stack: new Error().stack?.split('\n').slice(1, 6).join(' | '),
+  });
   if (bar) { bar.classList.remove('visible', 'batch', 'multi-select', 'single-tabs'); bar.innerHTML = ''; }
   // action-bar 出現時に設定した PTY リサイズ抑制を解除する。
   // これにより消滅後のターミナル拡大に対して ResizeObserver が
@@ -1232,7 +1377,7 @@ export function hideActionBar(id) {
   if (id !== undefined) multiSelectSelections.delete(id);
   removeBatchConfirmModal();
   if (id !== undefined) {
-    manualHideSig.delete(id); // 承認が解決したら手動抑制も解除する
+    clearManualHide(id); // 承認が解決したら手動抑制も解除する
     cancelApprovalHintConfirm(id);
     approvalSwitchCandidates.delete(id);
     h9RestoreMisses.delete(id);
@@ -1276,14 +1421,15 @@ export function hideActionBar(id) {
   }
 }
 
-// 「✕ 承認」（消す）: action-bar の描画だけを一時的に消す。
+// 手動 dismiss（入力欄横「✕ 承認」/ action-bar 右上 ✕）: 描画だけ一時的に消す。
 // approvalRawOptionsCache / approvalVisibleCache はあえて保持し、承認は保留のまま（waiting も残す）。
-// 「↻ 承認」（reshowActionBar）で元に戻せる。承認が解決すれば hideActionBar が manualHideSig を消す。
+// 「↻ 承認」（reshowActionBar）で元に戻せる。承認が解決すれば hideActionBar が manualHide を消す。
+// hideActionBar + 時限 suppress は使わない（抑制切れや再検出で同一質問が戻るため）。
 export function manuallyHideActionBar(id) {
   if (id === undefined || id === null) return;
   const cached = approvalRawOptionsCache.get(id);
   if (Array.isArray(cached) && cached.length > 0) {
-    manualHideSig.set(id, approvalSig(cached));
+    rememberManualHide(id, cached);
   }
   const bar = document.getElementById('action-bar');
   const wasVisible = !!(bar && bar.classList.contains('visible'));
@@ -1308,7 +1454,7 @@ export function manuallyHideActionBar(id) {
 // 本当に保留中の承認だけが復活し、すでに解決済みなら何も表示されない（安全な再判定）。
 export function reshowActionBar(id) {
   if (id === undefined || id === null) return;
-  manualHideSig.delete(id);
+  clearManualHide(id);
   detectApproval(id);
 }
 
@@ -1371,11 +1517,26 @@ export function showActionBar(bar, sessionId, options, forceStickToBottom = fals
     const question = options && (options as any)._question ? String((options as any)._question).slice(0, 80) : '';
     console.log('[approval-route] showActionBar', { sessionId, activeSessionId, len: Array.isArray(options) ? options.length : 0, firstLabel, question, stack: new Error().stack?.split('\n').slice(1, 6).join(' | ') });
   } catch (_) {}
-  // 手動「✕ 承認」で抑制中は描画しない。同一承認のみ抑制し、別 sig の新しい承認は抑制解除して描画する。
-  const suppressedSig = manualHideSig.get(sessionId);
-  if (suppressedSig !== undefined) {
-    if (suppressedSig === approvalSig(options)) return;
-    manualHideSig.delete(sessionId);
+  // 手動「✕ 承認」で抑制中は描画しない。
+  // 同一 optionsSig、または質問キーが同じ（ラベル揺れ）ならスキップ。
+  // 質問自体が変わったときだけ抑制を解除して描画する。
+  dlog('showActionBar.entry', {
+    sessionId, activeSessionId,
+    isBatch: isBatchOptions(options),
+    optsLen: Array.isArray(options) ? options.length : 0,
+    manualHideActive: isManualHideActive(sessionId, options),
+    consumedSigMatch: approvalConsumedSig.get(sessionId) === approvalSig(options),
+    barVisibleBefore: !!bar?.classList.contains('visible'),
+    stack: new Error().stack?.split('\n').slice(1, 6).join(' | '),
+  });
+  if (isManualHideActive(sessionId, options)) return;
+  if (manualHideState.has(sessionId)) clearManualHide(sessionId);
+  // ステール DOM 防御: lastActionBarRender が「描画済み」でも bar が空/非表示なら差分スキップを無効化。
+  // （visible=true なのに children=0 の action-bar-invisible パターンへの対策）
+  if (bar && lastActionBarRender.sessionId === sessionId &&
+      (!bar.classList.contains('visible') || bar.children.length === 0)) {
+    lastActionBarRender.sessionId = null;
+    lastActionBarRender.sig = null;
   }
   if (isBatchOptions(options)) {
     showBatchActionBar(bar, sessionId, options, forceStickToBottom);
@@ -1503,9 +1664,15 @@ function appendApprovalPreamble(bar, preamble) {
   head.type = 'button';
   head.className = 'action-preamble-head';
   head.textContent = t('approval_preamble_label');
-  head.onclick = (e) => { e.stopPropagation(); wrap.classList.toggle('expanded'); };
   const body = document.createElement('div');
   body.className = 'action-preamble-body';
+  head.onclick = (e) => {
+    e.stopPropagation();
+    wrap.classList.toggle('expanded');
+    // バー上端のドラッグリサイズ（action-bar-resize.ts）が付けたインライン max-height が
+    // 残っていると、CSS クラス側の max-height（5.5em/22em）より優先されて展開が効かない。
+    body.style.maxHeight = '';
+  };
   body.textContent = text;
   wrap.appendChild(head);
   wrap.appendChild(body);
@@ -1691,22 +1858,24 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   }
   bar.appendChild(pane);
 
-  // 手動閉じボタン（誤検出時に消すため）
+  // 手動閉じボタン（誤検出時に消すため）。「✕ 承認」と同じ manualHide（questionKey）抑止。
   const closeBtn = document.createElement('button');
   closeBtn.className = 'action-dismiss-btn';
   closeBtn.textContent = '✕';
   closeBtn.title = t('dismiss_title');
   closeBtn.onclick = (e) => {
     e.stopPropagation();
-    hideActionBar(sessionId);
-    approvalSuppressUntil.set(sessionId, Date.now() + 60000);
+    manuallyHideActionBar(sessionId);
   };
   bar.appendChild(closeBtn);
   appendCollapseToggle(bar, sessionId);
   bar.classList.toggle('collapsed', isActionBarCollapsed());
 
-  if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(60000);
+  if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(350);
   bar.classList.add('visible');
+  // 60 秒抑制で縮小サイズを Codex へ一切伝えないと、Codex が高い行数のまま再描画を続け
+  // scrollback へ空行が化石化して表示がまばらになる。短く束ねた後、確定サイズを 1 回送る。
+  syncPtySizeToViewportAfterLayout(sessionId, shouldStickToBottom);
   actionBarShownAt.set(sessionId, Date.now());
   if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
   if (chatWasAtBottomB && chatTlB) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlB));
@@ -2050,14 +2219,14 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   bar.appendChild(pane);
 
   // 閉じ（✕）は position:absolute なので bar 直下に置けば右上に固定表示される。
+  // 「✕ 承認」と同じ manualHide（questionKey）抑止。
   const closeBatchBtn = document.createElement('button');
   closeBatchBtn.className = 'action-dismiss-btn';
   closeBatchBtn.textContent = '✕';
   closeBatchBtn.title = t('dismiss_title');
   closeBatchBtn.onclick = (e) => {
     e.stopPropagation();
-    hideActionBar(sessionId);
-    approvalSuppressUntil.set(sessionId, Date.now() + 60000);
+    manuallyHideActionBar(sessionId);
   };
   bar.appendChild(closeBatchBtn);
 
@@ -2080,8 +2249,11 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
 
   appendCollapseToggle(bar, sessionId);
   bar.classList.toggle('collapsed', isActionBarCollapsed());
-  if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(60000);
+  if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(350);
   bar.classList.add('visible');
+  // 60 秒抑制で縮小サイズを Codex へ一切伝えないと、Codex が高い行数のまま再描画を続け
+  // scrollback へ空行が化石化して表示がまばらになる。短く束ねた後、確定サイズを 1 回送る。
+  syncPtySizeToViewportAfterLayout(sessionId, shouldStickToBottom);
   actionBarShownAt.set(sessionId, Date.now());
   if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
   if (chatWasAtBottomB && chatTlB) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlB));
@@ -2157,6 +2329,11 @@ function removeBatchConfirmModal() {
 // 「送信確認」: 全問回答済みのときだけ、内容＋実送信文字列を確認するモーダルを開く。
 export function openBatchConfirm(sessionId) {
   const cached = approvalRawOptionsCache.get(sessionId);
+  dlog('openBatchConfirm.entry', {
+    sessionId, activeSessionId,
+    cachedIsBatch: isBatchOptions(cached),
+    allAnswered: isBatchOptions(cached) ? batchAllAnswered(sessionId, cached) : false,
+  });
   if (!isBatchOptions(cached)) return;
   if (!batchAllAnswered(sessionId, cached)) return;
   removeBatchConfirmModal();
@@ -2196,7 +2373,12 @@ export function openBatchConfirm(sessionId) {
   const go = document.createElement('button');
   go.className = 'action-confirm-go';
   go.textContent = t('approval_confirm_send');
-  go.onclick = (e) => { e.stopPropagation(); removeBatchConfirmModal(); sendBatchChoices(sessionId); };
+  go.onclick = (e) => {
+    e.stopPropagation();
+    dlog('openBatchConfirm.goClick', { sessionId });
+    removeBatchConfirmModal();
+    sendBatchChoices(sessionId);
+  };
   row.appendChild(back); row.appendChild(go);
   modal.appendChild(row);
 
@@ -2210,17 +2392,33 @@ export function openBatchConfirm(sessionId) {
 // 確定送信（モーダルの「送信」から呼ぶ）。送信後は完了メッセージを出さず UI を消して会話に戻る。
 export function sendBatchChoices(sessionId) {
   const cached = approvalRawOptionsCache.get(sessionId);
-  if (!isBatchOptions(cached)) return;
-  if (!batchAllAnswered(sessionId, cached)) return;
+  dlog('sendBatchChoices.entry', {
+    sessionId, activeSessionId,
+    cachedIsBatch: isBatchOptions(cached),
+    cachedLen: Array.isArray(cached) ? cached.length : -1,
+    allAnswered: isBatchOptions(cached) ? batchAllAnswered(sessionId, cached) : false,
+  });
+  if (!isBatchOptions(cached)) { dlog('sendBatchChoices.skip.notBatch', { sessionId }); return; }
+  if (!batchAllAnswered(sessionId, cached)) { dlog('sendBatchChoices.skip.notAllAnswered', { sessionId }); return; }
   const text = buildBatchPayload(sessionId);
   approvalConsumedSig.set(sessionId, approvalSig(cached));
+  dlog('sendBatchChoices.consumedSigSet', { sessionId, sig: approvalSig(cached), payload: text });
   recordAnsweredMarkerSig(sessionId, cached);
-  sendApprovalConsumed(sessionId, cached, text);
+  try { sendApprovalConsumed(sessionId, cached, text); dlog('sendBatchChoices.sendApprovalConsumed.ok', { sessionId }); }
+  catch (e) { dlog('sendBatchChoices.sendApprovalConsumed.throw', { sessionId, err: String(e) }); throw e; }
   // 一括回答は改行区切りの複数行（buildBatchPayload）。生送信だと \n が行ごとの途中送信に
   // なるため、チャット本文と同じ共通経路（ペースト包み＋確定 \r 別送）で 1 メッセージとして送る。
-  sendSubmittedBody(sessionId, text, { recordMobileTranscript: false });
+  try { sendSubmittedBody(sessionId, text, { recordMobileTranscript: false }); dlog('sendBatchChoices.sendSubmittedBody.ok', { sessionId }); }
+  catch (e) { dlog('sendBatchChoices.sendSubmittedBody.throw', { sessionId, err: String(e) }); throw e; }
   removeBatchConfirmModal();
+  dlog('sendBatchChoices.beforeHide', { sessionId });
   hideActionBar(sessionId);
+  dlog('sendBatchChoices.afterHide', {
+    sessionId,
+    barVisible: !!document.getElementById('action-bar')?.classList.contains('visible'),
+    barBatch: !!document.getElementById('action-bar')?.classList.contains('batch'),
+    maskExists: !!document.getElementById('action-confirm-mask'),
+  });
   approvalSuppressUntil.set(sessionId, Date.now() + 400);
   batchSelections.delete(sessionId);
   batchFreeText.delete(sessionId);
@@ -2365,22 +2563,25 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
   };
   footer.appendChild(clearBtn);
 
+  // 「✕ 承認」と同じ manualHide（questionKey）抑止。
   const closeMultiBtn = document.createElement('button');
   closeMultiBtn.className = 'action-dismiss-btn';
   closeMultiBtn.textContent = '✕';
   closeMultiBtn.title = t('dismiss_title');
   closeMultiBtn.onclick = (e) => {
     e.stopPropagation();
-    hideActionBar(sessionId);
-    approvalSuppressUntil.set(sessionId, Date.now() + 60000);
+    manuallyHideActionBar(sessionId);
   };
   footer.appendChild(closeMultiBtn);
 
   bar.appendChild(footer);
   appendCollapseToggle(bar, sessionId);
   bar.classList.toggle('collapsed', isActionBarCollapsed());
-  if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(60000);
+  if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(350);
   bar.classList.add('visible');
+  // 60 秒抑制で縮小サイズを Codex へ一切伝えないと、Codex が高い行数のまま再描画を続け
+  // scrollback へ空行が化石化して表示がまばらになる。短く束ねた後、確定サイズを 1 回送る。
+  syncPtySizeToViewportAfterLayout(sessionId, shouldStickToBottom);
   actionBarShownAt.set(sessionId, Date.now());
   if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
   if (chatWasAtBottomM && chatTlM) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlM));
@@ -2569,8 +2770,21 @@ export function sendChoice(sessionId, targetNum, highRiskConfirmed = false) {
   });
   // doSend と同様に消費済み署名を記録（Ink 再描画による同一ブロックの再検出・再表示を防ぐ）
   const prevOpts = cachedOpts;
+  dlog('sendChoice.single.entry', {
+    sessionId, targetNum,
+    prevOptsLen: Array.isArray(prevOpts) ? prevOpts.length : -1,
+    prevBlockSig: prevOpts?.[0]?._blockSig,
+    prevSig: prevOpts ? approvalSig(prevOpts) : null,
+    prevSource: approvalSourceCache.get(sessionId)?.source,
+    isBatch: isBatchOptions(prevOpts),
+  });
   if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
   recordAnsweredMarkerSig(sessionId, prevOpts);
+  dlog('sendChoice.single.recorded', {
+    sessionId,
+    blockSig: prevOpts?.[0]?._blockSig,
+    answeredNow: prevOpts ? isAnsweredMarkerSig(sessionId, prevOpts) : false,
+  });
   sendApprovalConsumed(sessionId, prevOpts, choiceText);
   sendSubmittedText(sessionId, choiceText, { recordMobileTranscript: false });
   hideActionBar(sessionId);

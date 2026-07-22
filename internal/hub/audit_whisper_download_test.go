@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -117,6 +118,23 @@ func TestWhisperDownloadClientNoGlobalTimeout(t *testing.T) {
 	if whisperDownloadClient.Timeout != 0 {
 		t.Fatalf("whisperDownloadClient.Timeout = %v, want 0 (no global timeout)", whisperDownloadClient.Timeout)
 	}
+}
+
+func TestWhisperDownloadClientBlocksUnsafeRedirect(t *testing.T) {
+	client := newWhisperDownloadClient()
+	err := client.CheckRedirect(&http.Request{URL: mustParseURL(t, "http://example.com/model.bin")}, nil)
+	if err == nil {
+		t.Fatal("CheckRedirect accepted an http redirect")
+	}
+}
+
+func mustParseURL(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("url.Parse(%q): %v", raw, err)
+	}
+	return u
 }
 
 // TestDownloadFileHashMatch はハッシュが一致するとき downloadFile が成功し、

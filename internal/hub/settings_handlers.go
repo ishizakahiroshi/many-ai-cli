@@ -166,10 +166,12 @@ func (s *Server) handleNotifyConfig(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSON(w, r, &body) {
 			return
 		}
-		// 簡易バリデーション
+		// バリデーション: /api/notify-test 用の validateNotifyBackend を永続化側でも
+		// 通し、handleNotifyTest と非対称にならないようにする。無効な backend が
+		// config.yaml に残ると次回起動から silent send-fail になり切り分けが困難。
 		for _, b := range body.Backends {
-			if b.Type != "ntfy" && b.Type != "webhook" {
-				writeJSONError(w, http.StatusBadRequest, "invalid_type", "backend type must be ntfy or webhook")
+			if err := validateNotifyBackend(b); err != nil {
+				writeJSONError(w, http.StatusBadRequest, "invalid_backend", errorDetail("backend validation failed", err))
 				return
 			}
 		}

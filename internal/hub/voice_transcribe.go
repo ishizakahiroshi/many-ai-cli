@@ -117,7 +117,7 @@ func transcribeWithWhisper(parent context.Context, cfg config.VoiceWhisperConfig
 	}
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
-	client := &http.Client{Timeout: timeout}
+	client := newLoopbackHTTPClient(timeout)
 
 	paths := whisperRequestPaths(cfg.RequestPath)
 	var lastErr error

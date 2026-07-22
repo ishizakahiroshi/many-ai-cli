@@ -178,6 +178,10 @@ type session struct {
 	StoreID   int64              `json:"-"`
 	LogPath   string             `json:"log_path,omitempty"`
 	JSONLPath string             `json:"jsonl_path,omitempty"`
+	// NativeLogPath is the raw transcript written by the provider itself (not
+	// many-ai-cli's optional PTY session log). Currently Codex reports this via
+	// its Stop hook; other providers resolve it from their local store on demand.
+	NativeLogPath string          `json:"-"`
 	History   *sessionlog.Writer `json:"-"`
 
 	// JSON 外: per-session 入力直列化ロック（#18）。
@@ -483,6 +487,13 @@ type Server struct {
 
 	// sshdProber: OpenSSH Server 状態検知の抽象（テストでモック注入）。nil なら OS 実装。
 	sshdProber sshdProber
+
+	// bugReportGistRunner / bugReportSaveMarkdown はバグ報告の外部送信・
+	// ローカル保存境界。テストでは必ず差し替え、gh / 実 home を触らない。
+	bugReportGistRunner   bugReportGistRunner
+	bugReportSaveMarkdown func(string) (string, error)
+	bugReportLogPreviewMu sync.Mutex
+	bugReportLogPreviews  map[string]bugReportLogPreview
 }
 
 type branchRefreshRequest struct {
@@ -838,6 +849,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		Handler:   s.handleWS,
 	})
 	mux.HandleFunc("/api/info", s.handleInfo)
+	mux.HandleFunc("/api/bug-report/preview", s.handleBugReportPreview)
+	mux.HandleFunc("/api/bug-report/finalize", s.handleBugReportFinalize)
 	mux.HandleFunc("/api/doctor", s.handleDoctor)
 	mux.HandleFunc("/api/mobile-connect", s.handleMobileConnect)
 	mux.HandleFunc("/api/mobile-connect/tailscale", s.handleTailscaleStatus)
@@ -868,6 +881,11 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/log-config", s.handleLogConfig)
 	mux.HandleFunc("/api/session-chat", s.handleSessionChat)
 	mux.HandleFunc("/api/session-log", s.handleSessionLog)
+	mux.HandleFunc("/api/agent-log", s.handleAgentLog)
+	mux.HandleFunc("/api/agent-log/open", s.handleOpenAgentLog)
+	// 一時 endpoint: 一括承認 action-bar 消失 bug 用のログ計装
+	// docs/local/bugfix_batch-approval-actionbar-not-hidden_2026-07-21.md
+	mux.HandleFunc("/api/debug/batch-log", s.handleDebugBatchLog)
 	mux.HandleFunc("/api/grok-history", s.handleGrokHistory)
 	mux.HandleFunc("/api/session-search", s.handleSessionSearch)
 	mux.HandleFunc("/api/session-history", s.handleSessionHistory)
@@ -1039,22 +1057,34 @@ func (s *Server) Run(ctx context.Context) error {
 	if err := writeHubRuntime(boundPort); err != nil {
 		s.logger.Warn("failed to write hub runtime file", "err", err)
 	}
+	// 「前回起動は正常終了だったか」を、今回のマーカー書き込みで上書きする前に
+	// 判定しておく（plan_hub-lifecycle-logging.md C4）。
+	prevShutdown := previousShutdownStatus()
+	writeHubStateMarker()
 	// shutdown_wait ゴルーチン内の Remove は Serve が戻った直後にプロセスが
 	// 終了すると実行されないことがある（競合）。PID ファイルが残ると次回 boot の
 	// killStalePid が再利用 PID の無関係プロセスを kill しうるため、run() の
-	// return で必ず消えるよう同期的にも削除する（二重削除は無害）。
+	// return で必ず消えるよう同期的にも削除する（二重削除は無害）。同じ理由で
+	// hub.state マーカーも defer で必ず消す（プロセスの異常終了以外は消える）。
 	defer func() {
 		_ = os.Remove(pidPath)
 		// hub-runtime.json は自 PID 記録時のみ削除（新しい Hub が上書き済みなら
 		// 残す）。強制終了の残骸は読み取り側の二重ガードで除外される。
 		removeHubRuntimeIfPID(os.Getpid())
+		removeHubStateMarker()
 	}()
 	setConsoleTitle("many-ai-cli [hub] - DO NOT CLOSE")
 	setConsoleIcon()
 	// 永続ログ（hub.log）にはトークンを平文で残さない。ライブの全権トークンが
 	// ローテーション済みログに残ると、トラブルシュートでログを共有した際に漏洩する。
 	// 実トークン入りの URL は stdout の起動バナー（下記 startupBanner）だけに出す。
-	s.logger.Info("MANY-AI-CLI started", "url", fmt.Sprintf("http://%s/?token=***", s.httpSrv.Addr))
+	startArgs := []any{"url", fmt.Sprintf("http://%s/?token=***", s.httpSrv.Addr), "pid", os.Getpid(), "instance_id", s.instanceID}
+	if prevShutdown == "unclean" {
+		// 前回 run のマーカーが残っていた＝クラッシュ/panic/強制終了の疑いがある
+		// （plan_hub-lifecycle-logging.md C4）。
+		startArgs = append(startArgs, "previous_shutdown", "unclean")
+	}
+	s.logger.Info("MANY-AI-CLI started", startArgs...)
 	cfgSnapshot := s.snapshotCfg()
 	fmt.Print(startupBanner(s.version, s.httpSrv.Addr, cfgSnapshot.Token, startupBannerAccess{
 		AllowLoopbackWithoutToken: cfgSnapshot.Hub.AllowLoopbackWithoutToken,
@@ -1105,6 +1135,7 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		_ = os.Remove(pidPath)
 		removeHubRuntimeIfPID(os.Getpid())
+		removeHubStateMarker()
 	})
 	err := s.httpSrv.Serve(ln)
 	if errors.Is(err, http.ErrServerClosed) {
@@ -1121,6 +1152,13 @@ func (s *Server) OpenBrowser() error {
 // ポートスキャンで実際のポートが確定してから開くため、引数なし起動や serve --open で使う。
 func (s *Server) SetAutoOpenBrowser(v bool) {
 	s.autoOpenBrowser = v
+}
+
+// InstanceID は Hub プロセス起動ごとのランダム ID を返す。
+// main.go のシグナルハンドラが終了理由ログへ含めるために公開する
+//（plan_hub-lifecycle-logging.md C1）。
+func (s *Server) InstanceID() string {
+	return s.instanceID
 }
 
 // OpenBrowserForConfig opens the browser to the Hub URL without needing a running Server.
@@ -1307,6 +1345,16 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 				continue
 			}
 		case "session_dismiss":
+			// 誰が dismiss を投げたか追う (bugfix_session-silent-auto-dismiss_2026-07-21.md)。
+			// 過去に「席を離れた 10 分の間にセッションが消えた」事案が発生し、
+			// jsonl に session_end が無いまま session_dismiss だけ残る現象を再発時に切り分けるため、
+			// UI 接続元 (RemoteAddr / User-Agent) をここで残す。
+			var uiAddr, uiUA string
+			if req := conn.Request(); req != nil {
+				uiAddr = req.RemoteAddr
+				uiUA = req.UserAgent()
+			}
+			s.logger.Info("ui session_dismiss received", "session_id", m.SessionID, "ui_addr", uiAddr, "ui_ua", uiUA)
 			if s.handleDismiss(m) {
 				continue
 			}
@@ -1485,9 +1533,14 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	s.sessionsMu.Unlock()
 	if !exists {
 		// map には無いが UI 側に残っている幽霊カードを落とす。
+		s.logger.Info("session dismiss (already gone)", "session_id", m.SessionID)
 		s.broadcast(proto.Message{Type: "session_removed", SessionID: m.SessionID})
 		return true
 	}
+	// 「消えたセッションの原因が hub.log から追えない」問題対策
+	// (bugfix_session-silent-auto-dismiss_2026-07-21.md)。
+	// UI の × / 5s auto-dismiss / group dismiss いずれでもここへ来る。
+	s.logger.Info("session dismissed", "session_id", m.SessionID, "provider", endedProvider, "cwd", endedCWD)
 	// セッション破棄時に usageStat も解放する（メモリ無制限増加を防ぐ）。
 	// usageStatsMu のロック順序のため sessionsMu 解放後に呼ぶ。
 	DeleteSessionUsageStat(m.SessionID)

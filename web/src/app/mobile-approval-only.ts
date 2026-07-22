@@ -4,6 +4,7 @@
 import { approvalQuestionContext, pendingSessionIds, sessionTitle } from './approval-queue-tab.js';
 import { bindHighRiskApproval, sendChoice } from './approval.js';
 import { approvalRawOptionsCache, sessions } from './state.js';
+import { escapeHtml } from './util.js';
 
 const ROUTE = '/mobile/approvals';
 const MODE_KEY = 'many-ai-cli.mobile.approval-only';
@@ -117,10 +118,6 @@ function renderApprovalOnly(): void {
     list.appendChild(card);
   }
   root.appendChild(list);
-}
-
-function escapeHtml(value: string): string {
-  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 export function initMobileApprovalOnly(): void {
