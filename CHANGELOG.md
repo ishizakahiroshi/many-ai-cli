@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release artifacts are published at
 <https://github.com/ishizakahiroshi/many-ai-cli/releases>.
 
-## [Unreleased]
+## [0.5.1] - 2026-07-22
 
 ### Added
 - **Bug reporting from the Hub UI and the CLI.** A "🐞 Bug report" button in
@@ -103,6 +103,22 @@ Release artifacts are published at
 - Dragging to select text in the Grok conversation and history viewers no
   longer clears the selection through focus recovery
   (`web/src/app.ts`, `web/src/app/attachments.ts`).
+- **Session-dismiss no longer reorders other project groups.** Dismissing a
+  session in one project group used to bump neighbouring groups up/down
+  because their keys were not yet registered in `groupOrder`. Unknown keys
+  are now auto-appended so the visible ordering is stable across dismiss /
+  spawn cycles (`web/src/app/session-list.ts`).
+- **Auto-dismiss after Claude Code exits is now 24 h, not 5 s.** The
+  previous 5-second timer removed sessions from the list while the user
+  was away from the desk, hiding recent exit context. Long-running desks
+  now keep the finished session visible for up to a day.
+- **Codex synchronized-update sequences pass through to xterm.js 6.0.0.**
+  `ESC[?2026h` / `ESC[?2026l` were being stripped, causing Codex to
+  redraw past output line-by-line on every turn. The sequence is now
+  forwarded so xterm.js batches the repaint as intended.
+- **`/api/debug/batch-log` diagnostic endpoint.** Temporary read-only
+  endpoint for investigating the batch-approval action-bar redraw path;
+  it will be removed once the underlying issue is confirmed fixed.
 
 ### Removed
 - Drag-and-drop reordering of working-directory favorites in the spawn panel,
@@ -122,6 +138,33 @@ Release artifacts are published at
   for content that was actually shown to you. Log reads are restricted to
   `.jsonl` files under `<log_dir>/sessions` after symlink resolution, capped
   at 512 KB, and returned gist URLs are strictly validated.
+- **Second-pass audit fixes from `plan_bughunt_audit_2026-07-19.md`
+  (F1 / F3 / F9 / F10 / F14 / F15 / F18 / F35).**
+  - **F1**: `internal/hub/doctor_handler.go` now threads `r.Context()`
+    through the diagnostics HTTP calls instead of `context.Background()`,
+    so a cancelled client no longer leaks probe goroutines.
+  - **F3**: `internal/hub/grok_history_handler.go` returns early when
+    `os.UserHomeDir` fails instead of walking an empty root, which used
+    to expand into the process CWD on some Windows setups.
+  - **F9**: `internal/usagerelay` validates that the injected `hubURL`
+    resolves to a loopback address before forwarding, closing an SSRF
+    surface exposed to co-tenant processes.
+  - **F10**: HTML escaping for approval / bug-report previews is now
+    served by a single local `escapeHtml` helper that also escapes
+    single quotes, replacing three drifting per-file copies.
+  - **F14**: `privateNetworkBlockingDialContext` now resolves the
+    hostname itself and dials the verified IP directly, eliminating a
+    DNS-rebinding TOCTOU window between the allow-list check and the
+    real dial.
+  - **F15**: `handleNotifyConfig` now routes the incoming payload
+    through `validateNotifyBackend`, so an invalid backend combination
+    can no longer be persisted to `config.yaml` and crash on next load.
+  - **F18**: `handleAuthLogin` performs a strict PIN pre-format check
+    before hitting the crypto compare path, rejecting malformed input
+    without touching timing-sensitive code.
+  - **F35**: WSL "open dir" now spawns `explorer.exe <path>` directly
+    instead of `cmd.exe /c start "" <path>`, closing a
+    command-injection surface on paths containing `&` / `|` / `"`.
 - Updated `golang.org/x/crypto` 0.52.0 → 0.54.0, `golang.org/x/net` 0.55.0 →
   0.57.0, `golang.org/x/sys` 0.45.0 → 0.47.0, `golang.org/x/term` 0.43.0 →
   0.45.0, and `modernc.org/sqlite` 1.51.0 → 1.54.0. Note that GO-2026-5932
@@ -233,9 +276,64 @@ Release artifacts are published at
   recent first (history), instead of a single raw score.
 
 ### Fixed
-- (TBD — populated after v0.5.0 pre-release audit findings F1-F17 are
-  applied by codex. See
-  `docs/local/report_audit-v0.5.0_2026-07-13.md`.)
+- **Pre-release audit findings F1-F17** (see
+  `docs/local/report_audit-v0.5.0_2026-07-13.md`).
+  - **F1 / F3**: Bumped Go toolchain to 1.25.12 to clear
+    `GO-2026-5856` (crypto/tls ECH privacy leak) and `GO-2026-4970`
+    (os symlink + trailing slash root escape). `govulncheck ./...`
+    now reports zero reachable findings (`go.mod`).
+  - **F2**: `applyOneTapApproval` no longer leaves the pending map
+    inconsistent when the PTY send fails; the pending entry is now
+    restored so a retry is possible
+    (`internal/hub/approval_action.go`).
+  - **F4**: Orchestration board `## DONE` markers are validated
+    against the emitting child's source file, closing an IDOR that
+    let a sibling child forge another child's completion
+    (`internal/hub/orchestration.go`).
+  - **F5**: `ClearSessionHistory` now nulls the derived columns
+    (`summary`, `auto_title`, `last_event_at`) so the session card
+    does not keep displaying stale metadata after a clear
+    (`internal/sessionstore/store.go`).
+  - **F6**: Approval-rules injection uses an 8 MiB `bufio.Scanner`
+    buffer so long AGENTS.md / CLAUDE.md files no longer fail
+    silently at the 64 KiB default limit
+    (`internal/wrapper/approval_rules.go`).
+  - **F7**: ntfy / webhook approval and done-summary bodies are now
+    opt-in via `notify.include_body` and pass through `MaskSecrets`
+    when enabled (`internal/config/config.go`,
+    `internal/notify/notify.go`, `internal/hub/push.go`).
+  - **F8**: `internal/doctor` now checks the `http.NewRequestWithContext`
+    error before use, eliminating a nil-panic path on malformed URLs
+    (`internal/doctor/doctor.go`).
+  - **F9**: Autoapproval `working_dir` regexes are compiled once at
+    `Load` time and validated up front, instead of being recompiled
+    on every evaluation (`internal/autoapproval/policy.go`).
+  - **F10**: `autoapproval.AddRule` writes through a path-scoped
+    mutex and a temp-file + rename atomic write, so concurrent rule
+    edits can no longer corrupt `config.yaml`
+    (`internal/autoapproval/policy.go`, `internal/securefile/atomic.go`).
+  - **F11**: Added dedicated tests for `approval_batch.go`
+    (`TestApprovalBatchAutoRuleRequiresLow`,
+    `TestApprovalBatchDenySession`,
+    `TestApprovalBatchApproveSkipsMidHigh`).
+  - **F12**: Added `internal/doctor` test coverage
+    (`TestOllamaHTTPChecks`, `TestWhisperHTTPChecks`,
+    `TestTokenAndACLPermissions`).
+  - **F13**: Consolidated duplicated code between `wrapperLoop` and
+    `reattachLoop` in `internal/hub/wrapper_loop.go`.
+  - **F14**: Split `handleSpawnChild` (cyclomatic > 15) into smaller
+    helpers (`internal/hub/orchestration.go`).
+  - **F15**: `pruneSessionRow` no longer races with in-flight
+    `StoreEvent` calls; events for ended sessions are now skipped
+    instead of resurrecting the row
+    (`internal/sessionstore/store.go`).
+  - **F16**: `/api/git-diff` now streams untracked files through
+    `io.LimitReader` at the size cap, so a large untracked binary
+    can no longer OOM the Hub (`internal/hub/git_diff.go`).
+  - **F17**: `StartSession` picks a unique `virtual-live-<ts>` value
+    for the `jsonl_path` column when the session has no on-disk
+    log, avoiding a UNIQUE-constraint collision when multiple such
+    sessions coexist (`internal/sessionstore/store.go`).
 
 - Numerous mobile / desktop bugfixes documented individually in
   `docs/local/bugfix_*_2026-07-*.md` (session card tap-miss, codex
@@ -842,7 +940,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.3...v0.3.4
