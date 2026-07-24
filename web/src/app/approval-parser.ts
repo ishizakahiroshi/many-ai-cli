@@ -319,8 +319,16 @@
   // 全角 `Ｑ` も拾うが、直後が英数字（`Q1A` 等の識別子）の場合は見出し扱いしない。
   function splitInlineQuestionHeading(lines) {
     const out = [];
+    // 番号付き選択肢行（`1. ラベル本文`）はラベル本文が自然文であり、
+    // AI が「Q1 のフォームを外す」の意で `Q1フォームを外し…` と書いた `Q1` を
+    // 見出しとして分離すると、選択肢が疑似 Q セクション化されて質問ポップアップが
+    // 重複する（bugfix_hub-approval-q-split-inside-option_2026-07-24.md）。
+    // 選択肢行内の `Q\d+` はすべて本文扱いとし、この行では一切分割しない。
+    // マーカー規約は全 AI エージェント共通なので、この防御は provider を問わない。
+    const numberedOptionRe = /^\s*\d{1,2}\.\s+\S/;
     for (const raw of (lines || [])) {
       let rest = String(raw || '');
+      if (numberedOptionRe.test(rest)) { if (rest.trim()) out.push(rest); continue; }
       while (true) {
         if (rest.length <= 1) break;
         const m = /[QＱ]\d{1,2}(?![A-Za-z\d])/.exec(rest.slice(1));

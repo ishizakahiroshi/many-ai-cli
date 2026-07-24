@@ -684,6 +684,24 @@ test('approval parser fixtures', () => {
   assert.equal((singleQ1Heading as any)._freeInput, true);
   assert.equal((singleQ1Heading as any)._question, '次のアクション');
 
+  // 選択肢本文に `Q1` を含む自然文（`Q1フォームを外し…` = 「Q1 のフォームを外し」の意）を
+  // 疑似見出しとして分離すると、Q1 セクションが複数生成されて質問ポップアップが重複する
+  // （bugfix_hub-approval-q-split-inside-option_2026-07-24.md の再発防止）。
+  // 全 AI エージェント共通のマーカー規約なので、この防御は provider を問わず効く。
+  const qInsideOption = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'Q1 どうする？（複数選択可）',
+    '1. [HTML修正] Q1フォームを外し、「再実行で即時反映」の記述を訂正 (Recommended)',
+    '2. [課題化] pending/plan として起票',
+    '3. [今は口頭共有のみ] HTMLはこのまま',
+    'N. User specifies',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isBatchOptions(qInsideOption), false);
+  assert.deepEqual(numbers(qInsideOption), [1, 2, 3]);
+  assert.equal((qInsideOption as any)._question, 'どうする？（複数選択可）');
+  assert.equal((qInsideOption as any)._freeInput, true);
+
   // claude /model のような承認ではないカーソル駆動 TUI 選択メニュー。
   // フッターの「Esc to cancel」を matchNativeApprovalTrigger が拾い、❯ カーソル付き選択肢が
   // あるため detectFallback の choice-menu 経路で検出される（=action-bar が出る）。
