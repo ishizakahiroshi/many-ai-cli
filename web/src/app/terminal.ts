@@ -1,5 +1,5 @@
 // --- ESM imports (generated) ---
-import { cleanCopiedText, cleanOneLineText, showToast } from './util.js';
+import { cleanCopiedText, cleanOneLineText, showToast, apiFetch } from './util.js';
 import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
 import { activeSessionId, approvalRawOptionsCache, approvalVisibleCache, sessions, terminals, utf8Decoder } from './state.js';
@@ -1332,6 +1332,11 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
     hasNewline: t.cursorHideHasNewline || false,
     altScreen: t.cursorHideAltScreen || false,
   });
+  // 一時計装: cursor-hide-filter が codex のフレームを破棄していないかの裏取り
+  // (bugfix_codex-web-terminal-midline-gap_2026-07-24.md)。原因判明後に削除する。
+  if (sessions.get(id)?.provider === 'codex') {
+    probeCursorHideDiscard(id, bytes.length, out.length, events, state.altScreen);
+  }
   for (const ev of events) {
     // filter-discard: 従来どおり破棄ブロックからライブ進捗行を抽出。
     // block-passthrough-alt: alt buffer 中は画面にも描くが、ピル表示は従来どおり更新する。
@@ -1752,7 +1757,106 @@ export function filterBareCarriageReturnForDisplay(id, bytes) {
   return new Uint8Array(out);
 }
 
+// === 一時計装: codex Web ターミナルの文中 gap 調査 ===
+// (docs/local/bugfix_codex-web-terminal-midline-gap_2026-07-24.md)
+// codex が旧サイズの絶対座標で再描画し xterm の桁/行とズレて空白・空行が
+// 残る仮説の裏取り。原因判明後は probeMidlineGap / sendResize のログ /
+// apiFetch import ごと削除する。
+let _gapProbeCount = 0;
+const GAP_PROBE_MAX = 80;
+const _gapProbeDecoder = new TextDecoder('utf-8');
+function batchDebugLog(payload) {
+  try {
+    apiFetch('/api/debug/batch-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    }).catch(() => { /* fire-and-forget */ });
+  } catch (_) { /* fire-and-forget */ }
+}
+// 一時計装: cursor-hide-filter が codex のフレームを丸ごと破棄していないか測る。
+// 「最新が出てこない／↓down でも出ない」症状が、サイズずれ（off-viewport）由来か
+// フィルタ破棄由来かを 1 回の再現で切り分けるための計器。原因判明後に削除する。
+let _discardProbeCount = 0;
+const DISCARD_PROBE_MAX = 80;
+function probeCursorHideDiscard(id, inLen, outLen, events, altScreen) {
+  if (_discardProbeCount >= DISCARD_PROBE_MAX) return;
+  let discardBytes = 0, discardBlocks = 0, passAlt = 0, passShow = 0, passLf = 0, passOverflow = 0;
+  for (const ev of events) {
+    if (ev.kind === 'filter-discard') { discardBlocks++; discardBytes += ev.blockBuf.length; }
+    else if (ev.kind === 'block-passthrough-alt') passAlt++;
+    else if (ev.kind === 'block-passthrough-show') passShow++;
+    else if (ev.kind === 'block-passthrough-lf') passLf++;
+    else if (ev.kind === 'block-passthrough-overflow') passOverflow++;
+  }
+  if (discardBlocks === 0) return;
+  _discardProbeCount++;
+  batchDebugLog({
+    tag: 'codexDiscard.probe',
+    ts: new Date().toISOString(),
+    sid: id,
+    inLen,
+    outLen,
+    discardBytes,
+    discardBlocks,
+    passAlt,
+    passShow,
+    passLf,
+    passOverflow,
+    altScreen,
+  });
+}
+function probeMidlineGap(id, term, bytes) {
+  if (_gapProbeCount >= GAP_PROBE_MAX) return;
+  let text = '';
+  try { text = _gapProbeDecoder.decode(bytes); } catch (_) { return; }
+  // 絶対カーソル移動 CUP: ESC[<row>;<col>H|f の最大 row
+  let maxCupRow = 0;
+  const cupRe = /\x1b\[(\d+);(\d+)[Hf]/g;
+  let mm;
+  while ((mm = cupRe.exec(text)) !== null) {
+    const r = Number(mm[1]) || 0;
+    if (r > maxCupRow) maxCupRow = r;
+  }
+  // 連続スペース（半角 2 個以上）の最長ラン
+  let maxSpaceRun = 0;
+  const spRe = /  +/g;
+  let sm;
+  while ((sm = spRe.exec(text)) !== null) {
+    if (sm[0].length > maxSpaceRun) maxSpaceRun = sm[0].length;
+  }
+  // 連続空行の最長ラン
+  let maxBlankRun = 0;
+  const nlRe = /\n(?:[ \t]*\n)+/g;
+  let nm;
+  while ((nm = nlRe.exec(text)) !== null) {
+    const cnt = (nm[0].match(/\n/g) || []).length;
+    if (cnt > maxBlankRun) maxBlankRun = cnt;
+  }
+  const cols = term.cols || 0;
+  const rows = term.rows || 0;
+  const cupBeyondViewport = maxCupRow > rows;
+  if (!cupBeyondViewport && maxSpaceRun < 12 && maxBlankRun < 3) return;
+  _gapProbeCount++;
+  const preview = text.replace(/\x1b/g, '\\e').replace(/\r/g, '\\r').replace(/\n/g, '\\n').slice(0, 240);
+  batchDebugLog({
+    tag: 'codexGap.probe',
+    ts: new Date().toISOString(),
+    sid: id,
+    xtermCols: cols,
+    xtermRows: rows,
+    maxCupRow,
+    cupBeyondViewport,
+    maxSpaceRun,
+    maxBlankRun,
+    bytesLen: bytes.length,
+    preview,
+  });
+}
+
 export function writePTYChunk(id, term, bytes, onFlush) {
+  probeMidlineGap(id, term, bytes);
   const hasScreenClearSeq = detectScreenClearSeqForAutoScroll(id, bytes);
   // Codex 等の同期描画（CSI ? 2026 h/l）は xterm.js が完成画面まで保留する。
   // ここで除去すると途中フレームが露出し、再描画が上から下へ流れて見えるため通す。
@@ -1790,6 +1894,9 @@ export function scanBuffer(id, limit?: number) {
 
 export function sendResize(sessionId, cols, rows) {
   if (ws && ws.readyState === WebSocket.OPEN) {
+    // 一時計装: gap 発生時刻と resize タイムラインの突き合わせ用
+    // (bugfix_codex-web-terminal-midline-gap_2026-07-24.md)。原因判明後に削除する。
+    batchDebugLog({ tag: 'codexResize.sent', ts: new Date().toISOString(), sid: sessionId, cols, rows });
     ws.send(JSON.stringify({ type: 'pty_resize', session_id: sessionId, cols, rows }));
     // SIGWINCH を受けた TUI（Codex 等）はトランスクリプト全体を再描画する。
     // 直後のバーストを一括描画して、全文が上から下へ流れて見えるのを防ぐ。
