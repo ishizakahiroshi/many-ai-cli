@@ -1324,6 +1324,12 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
     t.cursorHideHasNewline = false;
     return bytes;
   }
+  // Grok Build は /resume・/history・/help などのフルスクリーン TUI を
+  // CUP 中心で再描画する。カーソル非表示フィルタが alt buffer の追跡に
+  // 失敗したチャンクを進捗行として捨てると、画面が空白になるため素通しする。
+  if (sessions.get(id)?.provider === 'grok') {
+    return bytes;
+  }
   const { out, state, events } = filterCursorHideBlocksPure(bytes, {
     carry: t.cursorHideFilterCarry || new Uint8Array(0),
     inBlock: t.inCursorHideBlock || false,
