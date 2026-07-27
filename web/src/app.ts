@@ -328,6 +328,18 @@ type DeferredSendState = 'queued' | 'sending' | 'injected' | 'acked';
 let deferredEnterOverrideMs = 0;
 let deferredSendSessionId: number | null = null;
 let deferredSendHideTimer: ReturnType<typeof setTimeout> | null = null;
+let sendFailureToastAt = 0;
+
+function notifySendFailure(): void {
+  // 切断中にキー操作が連続しても、トーストを毎回積み重ねない。
+  if (Date.now() - sendFailureToastAt < 1500) return;
+  sendFailureToastAt = Date.now();
+  showToast(t('toast_input_send_failed'), undefined, 4500);
+}
+
+function isWebSocketSendReady(): boolean {
+  return !!ws && ws.readyState === WebSocket.OPEN;
+}
 
 function setDeferredSendStatus(sessionId: number, state: DeferredSendState): void {
   deferredSendSessionId = sessionId;
@@ -389,9 +401,10 @@ function buildBodySubmitPart(sessionId, rawText) {
 export function sendSubmittedBody(sessionId, bodyText, opts: any = {}) {
   cancelDeferredEnter(sessionId);
   const { textPart, deferEnter } = buildBodySubmitPart(sessionId, bodyText);
-  sendSubmittedText(sessionId, textPart, opts);
+  if (!sendSubmittedText(sessionId, textPart, opts)) return false;
   if (deferEnter) scheduleDeferredEnter(sessionId, effectiveDeferredEnterWait(sessionId));
   scheduleResidueSweep(sessionId, bodyText, deferEnter);
+  return true;
 }
 
 export async function doSend(sessionId) {
@@ -413,6 +426,12 @@ export async function doSend(sessionId) {
   // ユーザーは下の action-bar ボタンか端末ペインで選択を解決する。
   if (isSelectMenuActive(sessionId)) {
     showToast(t('toast_select_menu_active'));
+    return;
+  }
+  // 非接続時は長文ペーストを添付へ移したり、入力 state を変更したりする前に止める。
+  // 再接続後に同じ入力をそのまま再送できるよう、送信前の state を保つ。
+  if (!isWebSocketSendReady()) {
+    notifySendFailure();
     return;
   }
   // shell セッション内で AI CLI 起動コマンドを検知 → 専用セッション spawn を誘導。
@@ -461,6 +480,10 @@ export async function doSend(sessionId) {
     // ペースト本体＋確定 \r を送る（下記 needPasteSplit 分岐）。それ以外は従来通り 1 書き込みにまとめる。
     const needPasteSplit = deferEnter && injectPrefix !== '';
     const textToSend = needPasteSplit ? injectPrefix : (injectPrefix + textPart);
+    // 入力欄・貼り付けチップの消去は、PTY への最初の書き込みが成功してから行う。
+    // sendText は接続断や send() の例外を false で返すため、失敗時は doSend の
+    // 後続状態更新にも入らず、ユーザーが同じ内容を再送できる。
+    if (!sendSubmittedText(sessionId, textToSend)) return false;
     clearInput();
     hideSlashMenu();
     // 送信したら次のプロンプトは別物の可能性があるため dismiss フラグ・multiQ ラッチをクリア
@@ -492,7 +515,6 @@ export async function doSend(sessionId) {
       scrollChatPaneToBottomSoon({ passes: 4, startedAt: Date.now() });
     }
     if (deferEnter) setDeferredSendStatus(sessionId, 'queued');
-    sendSubmittedText(sessionId, textToSend);
     if (deferEnter) setDeferredSendStatus(sessionId, 'sending');
     // B1a: スマホ幅で音声入力 placeholder を 1 回でも見せたユーザーが送信を完了した時点で
     // hint shown フラグを立て、以降は通常 placeholder に戻す（一度の認知で十分）。
@@ -509,10 +531,11 @@ export async function doSend(sessionId) {
       // 予約をペースト送出後まで遅らせることで、@path エコー由来の早期静止で \r が前倒し発火して
       // 「Pasting…」固着するのを断つ。ペースト送出以降は画像なし複数行ペーストと同一経路で確定する。
       scheduleAfterOutputSettle(sessionId, () => {
-        sendText(sessionId, textPart);
+        if (!sendText(sessionId, textPart)) return false;
         scheduleDeferredEnter(sessionId, enterMinWait,
           () => setDeferredSendStatus(sessionId, 'injected'),
           () => setDeferredSendStatus(sessionId, 'acked'));
+        return true;
       });
     } else if (deferEnter) {
       // 複数行ペーストの確定 \r は、内側 CLI の畳み込み・再描画が落ち着いてから別書き込みで送る。
@@ -593,6 +616,32 @@ export const specialKeys = {
   'ArrowLeft':  '\x1b[D',
   'Escape':     '\x1b',
 };
+
+// /config・/model など「矢印で選ぶ」タイプの Claude 側メニューが、今まさに画面に
+// 出ているかを端末ビューポート末尾のヒント行から検出する。
+// これらのメニュー（Ink インライン描画で alternate-screen を使わず、承認 UI としても
+// 検出されない）が出ている間は、入力欄に打ちかけの文字が残っていても ↑↓←→ を
+// ブラウザのカーソル移動へ横取りせず PTY へ転送する必要がある（下の specialKeys 処理で
+// 矢印送出時に入力欄がクリアされるため、最初の 1 押しで残り文字も消え以後は通常経路で通る）。
+// ヒント例: "Type to filter · Enter/↓ to select · ↑ to tabs · Esc to clear" /
+//           "Enter/Space to change · / to search · Esc to close"
+const cursorMenuHintRe = /\besc to (?:close|clear|cancel|exit)\b|(?:↑|↓|←|→)\s*to\s*(?:tabs|select|change|search)|\btype to filter\b/i;
+function activeSessionShowsCursorMenu() {
+  if (activeSessionId === null) return false;
+  const entry = terminals.get(activeSessionId);
+  const term = entry && entry.term;
+  const buf = term && term.buffer && term.buffer.active;
+  if (!buf) return false;
+  const rows = term.rows || 24;
+  const top = buf.baseY;
+  for (let y = top + rows - 1; y >= top; y--) {
+    const line = buf.getLine(y);
+    if (!line) continue;
+    const text = line.translateToString(true);
+    if (text && cursorMenuHintRe.test(text)) return true;
+  }
+  return false;
+}
 
 // ---- スラッシュコマンドメニュー ----
 
@@ -899,8 +948,12 @@ inputEl.addEventListener('keydown', (e) => {
   }
 
   if (specialKeys[e.key]) {
-    // 入力テキストあり + 矢印キーはブラウザのカーソル移動に委譲する
-    if (inputEl.value !== '' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown')) return;
+    // 入力テキストあり + 矢印キーはブラウザのカーソル移動に委譲する。
+    // ただし /config・/model 等の矢印駆動メニューが画面に出ている間は、打ちかけの
+    // 文字が残っていても矢印を PTY へ転送する（そうしないとメニューのタブ切替・項目選択が
+    // 一切効かなくなる。alternate-screen も承認 UI 検出も使えないためヒント行で判定する）。
+    if (inputEl.value !== '' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown')
+        && !activeSessionShowsCursorMenu()) return;
     // 実行中 + 入力欄が空の Esc は停止操作とみなし、停止ボタン（■）と同じ
     // provider 別停止キーを送る（grok は Esc 非対応・Ctrl+C のみ有効のため）。
     const keyText = (e.key === 'Escape' && inputEl.value === '' && isActiveSessionRunning())
@@ -1378,6 +1431,8 @@ function doSendQuickCommand(sessionId, cmd) {
   // /clear 等で画面がリセットされた後も approvalVisibleCache=true が残ると、
   // セッションカードの "Pending" バッジが消えなくなる。
   const prevOpts = approvalRawOptionsCache.get(sessionId);
+  // 本文送信が失敗した場合は承認 UI と消費済み state を保持する。
+  if (!sendSubmittedBody(sessionId, cmd)) return false;
   if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
   hideActionBar(sessionId);
   approvalSuppressUntil.set(sessionId, Date.now() + 2000);
@@ -1387,8 +1442,8 @@ function doSendQuickCommand(sessionId, cmd) {
   }, 2050);
   // 残骸への連結対策の \x15 前置は廃止（doSend と同じく residue-sweep.ts の事後掃除へ移行）。
   // 本文の送り方（ペースト包み・確定 \r 分離）も doSend と同じ共通経路に従う。
-  sendSubmittedBody(sessionId, cmd);
   focusInputForTerminalKeys();
+  return true;
 }
 
 export function focusInputForTerminalKeys() {
@@ -1401,6 +1456,7 @@ export function focusInputForTerminalKeys() {
 }
 
 export function sendSubmittedText(sessionId, text, opts: any = {}) {
+  if (!sendText(sessionId, text)) return false;
   if (opts.recordMobileTranscript !== false) {
     recordMobileTranscriptUserSubmission(sessionId, text);
   }
@@ -1423,12 +1479,21 @@ export function sendSubmittedText(sessionId, text, opts: any = {}) {
       resumeTerminalBottomFollow(sessionId, { startedAt });
     }
   }
-  sendText(sessionId, text);
+  return true;
 }
 
 export function sendText(sessionId, text) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  ws.send(JSON.stringify({ type: 'pty_input', session_id: sessionId, text }));
+  if (!isWebSocketSendReady()) {
+    notifySendFailure();
+    return false;
+  }
+  try {
+    ws.send(JSON.stringify({ type: 'pty_input', session_id: sessionId, text }));
+    return true;
+  } catch (_) {
+    notifySendFailure();
+    return false;
+  }
 }
 
 export function requestSessionDismiss(id) {

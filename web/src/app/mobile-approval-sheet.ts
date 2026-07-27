@@ -248,8 +248,8 @@ function renderSingle(sessionId: number, options: any[]): void {
     if (isRecommendedOption(opt, options)) btn.classList.add('is-current');
     btn.addEventListener('click', () => {
       btn.disabled = true;
-      sendChoice(sessionId, opt.num);
-      closeApprovalSheet();
+      if (sendChoice(sessionId, opt.num) === false) btn.disabled = false;
+      else closeApprovalSheet();
     });
     list.appendChild(btn);
   }
@@ -265,10 +265,9 @@ function renderSingle(sessionId: number, options: any[]): void {
     input.value = getSingleFreeText(sessionId);
     input.addEventListener('input', () => setSingleFreeText(sessionId, input.value));
     input.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter' && !ev.shiftKey && !(ev as any).isComposing) {
+      if (ev.key === 'Enter' && !ev.shiftKey && !(ev as any).isComposing && (ev as any).keyCode !== 229) {
         ev.preventDefault();
-        sendSingleFreeText(sessionId);
-        closeApprovalSheet();
+        if (sendSingleFreeText(sessionId)) closeApprovalSheet();
       }
     });
     const send = document.createElement('button');
@@ -276,8 +275,7 @@ function renderSingle(sessionId: number, options: any[]): void {
     send.className = 'mas-primary';
     send.textContent = t('send');
     send.addEventListener('click', () => {
-      sendSingleFreeText(sessionId);
-      closeApprovalSheet();
+      if (sendSingleFreeText(sessionId)) closeApprovalSheet();
     });
     row.append(input, send);
     contentEl.appendChild(row);

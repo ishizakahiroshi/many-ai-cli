@@ -49,7 +49,7 @@ type Pending = {
   maxTimer: ReturnType<typeof setTimeout> | null;
   fired: boolean;
   minWaitMs: number;
-  action: () => void;
+  action: () => void | boolean;
   onInjected?: () => void;
   onAcked?: () => void;
 };
@@ -66,8 +66,9 @@ function fire(id: number) {
   // セッション削除後に遅延 \r が別 ID 再利用先へ飛ばないようガード
   if (!sessions.has(id)) return;
   try {
+    const result = p.action();
+    if (result === false) return;
     p.onInjected?.();
-    p.action();
     p.onAcked?.();
   } catch (_) {}
 }
@@ -84,7 +85,7 @@ function armIdle(id: number) {
 
 // 出力が一定時間静止してから action を 1 回だけ実行する予約。\r 確定・ペースト本体送出など
 // 「内側 CLI の取り込み・再描画が落ち着いてから撃ちたい」操作の共通土台。
-function schedule(id: number, action: () => void, maxWaitMs: number, minWaitMs: number = MIN_WAIT_MS, onInjected?: () => void, onAcked?: () => void) {
+function schedule(id: number, action: () => void | boolean, maxWaitMs: number, minWaitMs: number = MIN_WAIT_MS, onInjected?: () => void, onAcked?: () => void) {
   cancelDeferredEnter(id);
   const p: Pending = { startedAt: Date.now(), idleTimer: null, maxTimer: null, fired: false, minWaitMs, action, onInjected, onAcked };
   pending.set(id, p);
@@ -96,12 +97,12 @@ function schedule(id: number, action: () => void, maxWaitMs: number, minWaitMs: 
 // minWaitMs に provider 別の最低待機（Codex/OpenCode は長め）を渡し、無出力で畳み込む CLI への
 // 早撃ち（\r 吸収による送信不発）を防ぐ。省略時は既定の MIN_WAIT。
 export function scheduleDeferredEnter(id: number, minWaitMs: number = MIN_WAIT_MS, onInjected?: () => void, onAcked?: () => void) {
-  schedule(id, () => { try { sendText(id, '\r'); } catch (_) {} }, MAX_WAIT_MS, minWaitMs, onInjected, onAcked);
+  schedule(id, () => sendText(id, '\r'), MAX_WAIT_MS, minWaitMs, onInjected, onAcked);
 }
 
 // 画像 inject（@path）に複数行ペーストが続くケースで、画像取り込みが落ち着いてから
 // ペースト本体＋確定 \r を撃つために使う。出力静止後に action を 1 回だけ実行する。
-export function scheduleAfterOutputSettle(id: number, action: () => void) {
+export function scheduleAfterOutputSettle(id: number, action: () => void | boolean) {
   schedule(id, action, INJECT_SETTLE_MAX_WAIT_MS);
 }
 

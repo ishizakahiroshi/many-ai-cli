@@ -14,6 +14,7 @@ import { isActionBarCollapsed, setActionBarCollapsed, STORAGE_HIGH_RISK_CONFIRMA
 
 const HIGH_RISK_HOLD_MS = 1200;
 const highRiskConfirmationInFlight = new Set<number>();
+const singleFreeTextSendInFlight = new Set<number>();
 
 // 一時計装 (docs/local/bugfix_batch-approval-actionbar-not-hidden_2026-07-21.md)。
 // 原因判明後に endpoint (/api/debug/batch-log) ごと削除する。
@@ -932,18 +933,25 @@ export function handleGoApprovalCleared(message) {
   }
 }
 
-export function sendApprovalConsumed(sessionId, options, sentText) {
+export function sendApprovalConsumed(sessionId, options, sentText): boolean {
   const src = approvalSourceCache.get(sessionId);
-  if (!src || src.source !== 'go_vt' || !src.sig) return;
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  ws.send(JSON.stringify({
-    type: 'approval_consumed',
-    session_id: sessionId,
-    approval_sig: src.sig,
-    approval_source: 'go_vt',
-    sent_text: sentText || '',
-  }));
+  // マーカー承認には Hub の consumed 通知が不要。本文送信の成否とは独立した
+  // 補助通知なので、対象外なら成功扱いにして呼び出し側を止めない。
+  if (!src || src.source !== 'go_vt' || !src.sig) return true;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+  try {
+    ws.send(JSON.stringify({
+      type: 'approval_consumed',
+      session_id: sessionId,
+      approval_sig: src.sig,
+      approval_source: 'go_vt',
+      sent_text: sentText || '',
+    }));
+  } catch (_) {
+    return false;
+  }
   if (options) approvalConsumedSig.set(sessionId, approvalSig(options));
+  return true;
 }
 
 export function maybeSendDirectApprovalConsumed(sessionId, rawText, sentText) {
@@ -1612,22 +1620,31 @@ export function setSingleFreeText(sessionId: number, text: string): void {
 
 // 自由入力テキストをそのまま送信する（確認モーダルなし）。送信後は UI を消して会話へ戻る。
 export function sendSingleFreeText(sessionId) {
+  if (singleFreeTextSendInFlight.has(sessionId)) return false;
   const text = (singleFreeText.get(sessionId) || '').trim();
-  if (!text) return;
+  if (!text) return false;
+  singleFreeTextSendInFlight.add(sessionId);
   const cachedOpts = approvalRawOptionsCache.get(sessionId);
-  chatHistoryCommitOutput(sessionId);
-  pushMessage(sessionId, {
-    role: 'system',
-    kind: 'approval',
-    rawText: text,
-    meta: { kind: 'single', answer: null, label: text },
-  });
-  if (cachedOpts) approvalConsumedSig.set(sessionId, approvalSig(cachedOpts));
-  recordAnsweredMarkerSig(sessionId, cachedOpts);
-  sendApprovalConsumed(sessionId, cachedOpts, `${text}\r`);
-  // 自由回答は文章なのでチャット本文と同じ共通経路（ペースト包み＋確定 \r 別送）で送る。
-  // 「本文+\r」同梱は内側 CLI に \r を吸収され送信不発になる（Grok 実測 2026-07-11）。
-  sendSubmittedBody(sessionId, text);
+  try {
+    // 本文が送れた後にだけ承認済み state・チャット履歴・action-bar を更新する。
+    // 接続断時は sendSubmittedBody が false を返し、入力 state を保持したまま戻る。
+    // 自由回答は文章なのでチャット本文と同じ共通経路（ペースト包み＋確定 \r 別送）で送る。
+    // 「本文+\r」同梱は内側 CLI に \r を吸収され送信不発になる（Grok 実測 2026-07-11）。
+    if (!sendSubmittedBody(sessionId, text)) return false;
+    chatHistoryCommitOutput(sessionId);
+    pushMessage(sessionId, {
+      role: 'system',
+      kind: 'approval',
+      rawText: text,
+      meta: { kind: 'single', answer: null, label: text },
+    });
+    if (cachedOpts) approvalConsumedSig.set(sessionId, approvalSig(cachedOpts));
+    recordAnsweredMarkerSig(sessionId, cachedOpts);
+    // 補助通知の失敗は本文送信成功と混同しない。再表示抑制は本文送信後だけ行う。
+    sendApprovalConsumed(sessionId, cachedOpts, `${text}\r`);
+  } finally {
+    singleFreeTextSendInFlight.delete(sessionId);
+  }
   hideActionBar(sessionId);
   approvalSuppressUntil.set(sessionId, Date.now() + 400);
   multiQuestionDismissedCache.delete(sessionId);
@@ -1636,6 +1653,7 @@ export function sendSingleFreeText(sessionId) {
     maybeAutoSwitchToNextApproval();
   }, 450);
   setTimeout(() => inputEl.focus(), 0);
+  return true;
 }
 
 // ---- 一括承認: 質問タブUI（plan_choice-tab-ui.md）----
@@ -1847,7 +1865,10 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
     inp.value = singleFreeText.get(sessionId) || '';
     inp.oninput = () => singleFreeText.set(sessionId, inp.value);
     inp.onkeydown = (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      // 日本語 IME の変換確定 Enter は、この input の送信 Enter と区別する。
+      // isComposing が取れないブラウザでは keyCode 229 が最後の保険になる。
+      const imeComposing = e.isComposing || (e as any).keyCode === 229;
+      if (e.key === 'Enter' && !e.shiftKey && !imeComposing) {
         e.preventDefault();
         e.stopPropagation();
         sendSingleFreeText(sessionId);
@@ -2025,7 +2046,6 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
       o: (sec.options || []).map(o => ({ n: o.num, l: o.label, s: o.shortLabel || '', c: !!o.isCurrent })),
     })),
     sel: selections,
-    ft: freeTexts,
     aq: activeQ,
     v: bar.classList.contains('visible'),
     col: isActionBarCollapsed(),
@@ -2376,7 +2396,6 @@ export function openBatchConfirm(sessionId) {
   go.onclick = (e) => {
     e.stopPropagation();
     dlog('openBatchConfirm.goClick', { sessionId });
-    removeBatchConfirmModal();
     sendBatchChoices(sessionId);
   };
   row.appendChild(back); row.appendChild(go);
@@ -2401,15 +2420,18 @@ export function sendBatchChoices(sessionId) {
   if (!isBatchOptions(cached)) { dlog('sendBatchChoices.skip.notBatch', { sessionId }); return; }
   if (!batchAllAnswered(sessionId, cached)) { dlog('sendBatchChoices.skip.notAllAnswered', { sessionId }); return; }
   const text = buildBatchPayload(sessionId);
+  // 本文送信に成功するまで、消費済み署名・確認モーダル・入力 state を変更しない。
+  if (!sendSubmittedBody(sessionId, text, { recordMobileTranscript: false })) {
+    dlog('sendBatchChoices.sendSubmittedBody.failed', { sessionId });
+    return false;
+  }
   approvalConsumedSig.set(sessionId, approvalSig(cached));
   dlog('sendBatchChoices.consumedSigSet', { sessionId, sig: approvalSig(cached), payload: text });
   recordAnsweredMarkerSig(sessionId, cached);
   try { sendApprovalConsumed(sessionId, cached, text); dlog('sendBatchChoices.sendApprovalConsumed.ok', { sessionId }); }
   catch (e) { dlog('sendBatchChoices.sendApprovalConsumed.throw', { sessionId, err: String(e) }); throw e; }
-  // 一括回答は改行区切りの複数行（buildBatchPayload）。生送信だと \n が行ごとの途中送信に
-  // なるため、チャット本文と同じ共通経路（ペースト包み＋確定 \r 別送）で 1 メッセージとして送る。
-  try { sendSubmittedBody(sessionId, text, { recordMobileTranscript: false }); dlog('sendBatchChoices.sendSubmittedBody.ok', { sessionId }); }
-  catch (e) { dlog('sendBatchChoices.sendSubmittedBody.throw', { sessionId, err: String(e) }); throw e; }
+  // 一括回答は改行区切りの複数行（buildBatchPayload）。本文は上で共通経路へ送っている。
+  dlog('sendBatchChoices.sendSubmittedBody.ok', { sessionId });
   removeBatchConfirmModal();
   dlog('sendBatchChoices.beforeHide', { sessionId });
   hideActionBar(sessionId);
@@ -2429,6 +2451,7 @@ export function sendBatchChoices(sessionId) {
     maybeAutoSwitchToNextApproval();
   }, 450);
   setTimeout(() => inputEl.focus(), 0);
+  return true;
 }
 
 export function isBatchActionBarVisible() {
@@ -2664,6 +2687,7 @@ export function sendMultiSelectChoices(sessionId) {
   // 選択番号をカンマ連結で返す（例 "1,3"）。エージェントが提示した実番号をそのまま使う。
   const text = nums.join(',');
   const labelMap = new Map((isMultiSelectOptions(prevOpts) ? prevOpts : []).map(o => [o.num, o.label]));
+  if (!sendSubmittedText(sessionId, `${text}\r`, { recordMobileTranscript: false })) return false;
   chatHistoryCommitOutput(sessionId);
   pushMessage(sessionId, {
     role: 'system',
@@ -2680,7 +2704,6 @@ export function sendMultiSelectChoices(sessionId) {
   sendApprovalConsumed(sessionId, prevOpts, text);
   multiQuestionDismissedCache.delete(sessionId);
   multiQuestionLatchAt.delete(sessionId);
-  sendSubmittedText(sessionId, `${text}\r`, { recordMobileTranscript: false });
   hideActionBar(sessionId);
   approvalSuppressUntil.set(sessionId, Date.now() + 400);
   multiSelectSelections.delete(sessionId);
@@ -2698,6 +2721,8 @@ export function sendChoice(sessionId, targetNum, highRiskConfirmed = false) {
   }
   const seqState = sequentialChoiceCache.get(sessionId);
   if (seqState && seqState.index < seqState.prompts.length) {
+    const previousIndex = seqState.index;
+    const previousAnswers = new Map(seqState.answers);
     const prompt = seqState.prompts[seqState.index];
     seqState.answers.set(prompt.key, targetNum);
     seqState.index++;
@@ -2717,6 +2742,14 @@ export function sendChoice(sessionId, targetNum, highRiskConfirmed = false) {
     const response = seqState.prompts
       .map(p => `${p.key}: ${seqState.answers.get(p.key)}`)
       .join('\n');
+    // 改行区切りの複数行回答は共通経路（ペースト包み＋確定 \r 別送）で 1 メッセージとして送る。
+    // 失敗時は回答 state を残し、再接続後に同じ確定操作をやり直せるようにする。
+    if (!sendSubmittedBody(sessionId, response, { recordMobileTranscript: false })) {
+      seqState.index = previousIndex;
+      seqState.answers.clear();
+      previousAnswers.forEach((answer, key) => seqState.answers.set(key, answer));
+      return false;
+    }
     // chatHistory: 複数質問への一括回答を system/approval として push
     chatHistoryCommitOutput(sessionId);
     pushMessage(sessionId, {
@@ -2738,8 +2771,6 @@ export function sendChoice(sessionId, targetNum, highRiskConfirmed = false) {
     recordAnsweredMarkerSig(sessionId, prevOpts);
     multiQuestionDismissedCache.delete(sessionId);
     multiQuestionLatchAt.delete(sessionId);
-    // 改行区切りの複数行回答は共通経路（ペースト包み＋確定 \r 別送）で 1 メッセージとして送る。
-    sendSubmittedBody(sessionId, response, { recordMobileTranscript: false });
     hideActionBar(sessionId);
     approvalSuppressUntil.set(sessionId, Date.now() + 400);
     setTimeout(() => {
@@ -2756,6 +2787,7 @@ export function sendChoice(sessionId, targetNum, highRiskConfirmed = false) {
     ? cachedOpts.find(o => o && o.num === targetNum)
     : null;
   const choiceText = targetOpt && targetOpt._sendText ? targetOpt._sendText : `${targetNum}\r`;
+  if (!sendSubmittedText(sessionId, choiceText, { recordMobileTranscript: false })) return false;
   // chatHistory: 単問への回答を system/approval として push
   chatHistoryCommitOutput(sessionId);
   pushMessage(sessionId, {
@@ -2786,7 +2818,6 @@ export function sendChoice(sessionId, targetNum, highRiskConfirmed = false) {
     answeredNow: prevOpts ? isAnsweredMarkerSig(sessionId, prevOpts) : false,
   });
   sendApprovalConsumed(sessionId, prevOpts, choiceText);
-  sendSubmittedText(sessionId, choiceText, { recordMobileTranscript: false });
   hideActionBar(sessionId);
   // PTY エコーバックによる誤再表示を短時間抑制（approvalConsumedSig が同一選択肢の再検出を防ぐため短くてよい）
   approvalSuppressUntil.set(sessionId, Date.now() + 400);
