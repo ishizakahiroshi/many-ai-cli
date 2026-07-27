@@ -376,7 +376,9 @@ export function attachTerminal(id) {
     // 非アクティブ中の chunks は DOM へ戻す前に反映する。
     // 表示後に flush すると、古い viewport から最新行までスクロールしていく様子が見えてしまう。
     flushPending(id, () => {
-      if (!terminals.has(id) || activeSessionId !== id) return;
+      const guardOk = terminals.has(id) && activeSessionId === id;
+      probeFlushSwitch('flushSwitch.callback', { sid: id, guardOk, activeSessionIdAtCallback: activeSessionId });
+      if (!guardOk) return;
       area.appendChild(t.container);
       releaseHiddenWebglRenderers();
       t.term.scrollToBottom();
@@ -390,7 +392,7 @@ export function attachTerminal(id) {
       }
       // 配置・fit 確定後に WebGL レンダラを再生成する
       enableWebglRenderer(t);
-    });
+    }, 'switch');
     return;
   }
   const container = document.createElement('div');
@@ -505,7 +507,7 @@ export function whenLayoutReady(id, container) {
         }
       }, { capture: true, passive: false });
     }
-    flushPending(id);
+    flushPending(id, null, 'first-attach');
     t.everAttached = true;
     if (!isPtyResizeSuppressed()) {
       sendResize(id, t.term.cols, t.term.rows);
@@ -605,7 +607,7 @@ export function queuePendingTerminalChunk(id, bytes) {
     // せずバッチを打ち切って即時 flush する。
     if (t.pendingTotalBytes > LIVE_BATCH_MAX_BYTES) {
       endLiveOutputBatch(t);
-      flushPending(id);
+      flushPending(id, null, 'live-batch-overflow');
     }
     return;
   }
@@ -627,7 +629,7 @@ export function beginLiveOutputBatchForResize(id) {
     const latest = terminals.get(id);
     if (!latest) return;
     endLiveOutputBatch(latest);
-    flushPending(id);
+    flushPending(id, null, 'resize-batch-timeout');
   }, LIVE_BATCH_AFTER_RESIZE_MS);
 }
 
@@ -643,21 +645,37 @@ export function isLiveOutputBatching(t) {
   return !!t && Date.now() < (t.liveBatchUntil || 0);
 }
 
-export function flushPending(id, onDrained: (() => void) | null = null) {
+// 一時計装: セッション切替時、flushPending の完了コールバック（DOM 再アタッチ）が
+// 別トリガーの flushPending 再入（resize バッチ・live-batch オーバーフロー等）と
+// pendingFlushSeq が競合して握り潰されていないか調べる。
+// (docs/local/bugfix_codex-session-switch-not-updated_2026-07-27.md)
+// 原因判明後は probeFlushSwitch 呼び出し・reason 引数・本ブロックごと削除する。
+let _flushSwitchProbeCount = 0;
+const FLUSH_SWITCH_PROBE_MAX = 300;
+function probeFlushSwitch(tag, payload) {
+  if (_flushSwitchProbeCount >= FLUSH_SWITCH_PROBE_MAX) return;
+  _flushSwitchProbeCount++;
+  batchDebugLog({ tag, ts: new Date().toISOString(), ...payload });
+}
+
+export function flushPending(id, onDrained: (() => void) | null = null, reason: string = 'unknown') {
   const t = terminals.get(id);
   if (!t) return;
   const chunks = t.pendingChunks;
   t.pendingChunks = [];
   t.pendingTotalBytes = 0;
   if (chunks.length === 0) {
+    if (reason === 'switch') probeFlushSwitch('flushSwitch.empty', { sid: id, reason });
     if (t.autoScroll) { t.term.scrollToBottom(); syncViewportScrollbarToBottom(t); }
     scheduleApprovalCheck(id);
     if (onDrained) onDrained();
     return;
   }
+  const wasActive = !!t.pendingFlushActive;
   const seq = (t.pendingFlushSeq || 0) + 1;
   t.pendingFlushSeq = seq;
   t.pendingFlushActive = true;
+  probeFlushSwitch('flushSwitch.start', { sid: id, reason, seq, wasActive, hadOnDrained: !!onDrained, chunkCount: chunks.length });
   if (t.pendingFlushWatchdog) {
     clearTimeout(t.pendingFlushWatchdog);
     t.pendingFlushWatchdog = null;
@@ -668,14 +686,17 @@ export function flushPending(id, onDrained: (() => void) | null = null) {
     if (finished) return;
     finished = true;
     const latest = terminals.get(id);
-    if (!latest || latest.pendingFlushSeq !== seq) return;
+    if (!latest || latest.pendingFlushSeq !== seq) {
+      probeFlushSwitch('flushSwitch.mismatch', { sid: id, reason, seq, currentSeq: latest ? latest.pendingFlushSeq : null, hadOnDrained: !!onDrained });
+      return;
+    }
     if (latest.pendingFlushWatchdog) {
       clearTimeout(latest.pendingFlushWatchdog);
       latest.pendingFlushWatchdog = null;
     }
     latest.pendingFlushActive = false;
     if (latest.pendingChunks.length > 0) {
-      requestAnimationFrame(() => flushPending(id, onDrained));
+      requestAnimationFrame(() => flushPending(id, onDrained, reason));
       return;
     }
     if (latest.autoScroll) { latest.term.scrollToBottom(); syncViewportScrollbarToBottom(latest); }
