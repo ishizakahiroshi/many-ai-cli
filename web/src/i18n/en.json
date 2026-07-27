@@ -370,6 +370,7 @@
   "settings_approval_patterns_saved": "Saved",
   "toast_approval_patterns_updated": "Approval patterns (official) updated",
   "toast_input_deferred": "Session #{id}: input held (wrapper not connected). It will be sent automatically on reconnect.",
+  "toast_input_send_failed": "Input was not sent because the connection is unavailable. Reconnect, then send it again.",
   "toast_model_blocked_on_ollama": "/model is disabled for sessions launched on Ollama or LM Studio. Start a new session to switch models.",
   "toast_select_menu_active": "A select menu is open. Pick an option from the buttons below or in the terminal pane (your input was held).",
   "shell_ai_launch_title": "Open a dedicated session?",

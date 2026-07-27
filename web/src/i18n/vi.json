@@ -370,6 +370,7 @@
   "settings_approval_patterns_saved": "Đã lưu",
   "toast_approval_patterns_updated": "Đã cập nhật mẫu phê duyệt (chính thức)",
   "toast_input_deferred": "Session #{id}: đã giữ input (wrapper chưa kết nối). Sẽ tự gửi khi kết nối lại.",
+  "toast_input_send_failed": "Không thể gửi input vì kết nối không khả dụng. Hãy kết nối lại rồi gửi lại nội dung.",
   "toast_model_blocked_on_ollama": "/model bị tắt với session chạy trên Ollama hoặc LM Studio. Khởi động session mới để đổi model.",
   "toast_select_menu_active": "Menu chọn đang mở. Chọn tùy chọn từ nút bên dưới hoặc khung terminal (input của bạn đã được giữ).",
   "shell_ai_launch_title": "Mở session riêng?",

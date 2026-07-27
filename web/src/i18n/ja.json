@@ -370,6 +370,7 @@
   "settings_approval_patterns_saved": "保存しました",
   "toast_approval_patterns_updated": "承認検出パターン (公式) が更新されました",
   "toast_input_deferred": "セッション #{id}: wrapper 未接続のため入力を保留しました。再接続時に自動送信します。",
+  "toast_input_send_failed": "接続できないため入力を送信できませんでした。再接続後、同じ内容をもう一度送信してください。",
   "toast_model_blocked_on_ollama": "Ollama または LM Studio で起動中のセッションでは /model を実行できません。モデルを変えたい場合は新しいセッションを起動してください。",
   "toast_select_menu_active": "選択メニュー表示中です。下のボタンか端末ペインで選択してください（送信は保留しました）。",
   "shell_ai_launch_title": "専用セッションで起動しますか？",
