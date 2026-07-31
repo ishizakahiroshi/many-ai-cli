@@ -709,6 +709,10 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     setUserPref('cwd_history', hist);
   }
 
+  function clearCwdHistory() {
+    setUserPref('cwd_history', []);
+  }
+
   function loadCwdFavorites() {
     try {
       const v = JSON.parse(localStorage.getItem(STORAGE_CWD_FAVORITES_KEY) || '[]');
@@ -725,6 +729,10 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     const favs = loadCwdFavorites();
     const next = favs.includes(cwd) ? favs.filter(v => v !== cwd) : [cwd, ...favs];
     setUserPref('cwd_favorites', next);
+  }
+
+  function clearCwdFavorites() {
+    setUserPref('cwd_favorites', []);
   }
 
   let cwdSuppressReopen = false; // お気に入り選択で入力欄を再 focus する際の自動再オープンを1回抑止する
@@ -1087,35 +1095,50 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 
     let html = '';
 
-    // chip 行（roots がある場合のみ）。launcher chip 1 個に圧縮し hover/click で popover を開く。
-    if (hasRoots) {
+    // chip 行（roots がある場合、または履歴/お気に入りの一括削除ボタンを出す場合）。
+    // launcher chip 1 個に圧縮し hover/click で popover を開く。
+    const showChipsRow = hasRoots || hist.length > 0 || favs.length > 0;
+    if (showChipsRow) {
       const chipsClass = noMatch ? 'cwd-dropdown-chips has-no-match' : 'cwd-dropdown-chips';
-      // active root と合計件数を集計。launcher の表示に使う。
-      let activeRoot: string | null = null;
-      let totalCount = 0;
-      for (const [shortName, rootPath] of roots) {
-        if (isChipActive(shortName)) activeRoot = shortName;
-        totalCount += countForRoot(shortName, rootPath);
+      let chipsHtml = `<li class="${chipsClass}">`;
+      if (hasRoots) {
+        // active root と合計件数を集計。launcher の表示に使う。
+        let activeRoot: string | null = null;
+        let totalCount = 0;
+        for (const [shortName, rootPath] of roots) {
+          if (isChipActive(shortName)) activeRoot = shortName;
+          totalCount += countForRoot(shortName, rootPath);
+        }
+        const launcherInner = activeRoot
+          ? `${escapeHtml(activeRoot)}:`
+          : `<span class="chip-count">${totalCount}</span>`;
+        chipsHtml += `<div class="cwd-dropdown-chip-collapsed">` +
+          `<button class="cwd-dropdown-chip-launcher${activeRoot ? ' is-active' : ''}" type="button" aria-haspopup="true">` +
+          `<span class="chip-icon" aria-hidden="true">🗂</span> ${launcherInner} <span class="chip-caret" aria-hidden="true">▾</span>` +
+          `</button>` +
+          `<div class="cwd-dropdown-chip-popover" role="menu">`;
+        for (const [shortName, rootPath] of roots) {
+          const count = countForRoot(shortName, rootPath);
+          const activeClass = isChipActive(shortName) ? ' is-active' : '';
+          chipsHtml +=
+            `<button class="cwd-dropdown-chip${activeClass}" type="button" data-prefix="${escapeHtml(shortName)}">` +
+            `${escapeHtml(shortName)}:` +
+            `<span class="chip-count">${count}</span>` +
+            `</button>`;
+        }
+        chipsHtml += `</div></div>`;
       }
-      const launcherInner = activeRoot
-        ? `${escapeHtml(activeRoot)}:`
-        : `<span class="chip-count">${totalCount}</span>`;
-      let chipsHtml = `<li class="${chipsClass}">` +
-        `<div class="cwd-dropdown-chip-collapsed">` +
-        `<button class="cwd-dropdown-chip-launcher${activeRoot ? ' is-active' : ''}" type="button" aria-haspopup="true">` +
-        `<span class="chip-icon" aria-hidden="true">🗂</span> ${launcherInner} <span class="chip-caret" aria-hidden="true">▾</span>` +
-        `</button>` +
-        `<div class="cwd-dropdown-chip-popover" role="menu">`;
-      for (const [shortName, rootPath] of roots) {
-        const count = countForRoot(shortName, rootPath);
-        const activeClass = isChipActive(shortName) ? ' is-active' : '';
-        chipsHtml +=
-          `<button class="cwd-dropdown-chip${activeClass}" type="button" data-prefix="${escapeHtml(shortName)}">` +
-          `${escapeHtml(shortName)}:` +
-          `<span class="chip-count">${count}</span>` +
-          `</button>`;
+      // 履歴/お気に入りの一括削除ボタン（chip 行の右寄せ）。
+      if (hist.length > 0 || favs.length > 0) {
+        chipsHtml += `<div class="cwd-dropdown-chip-actions">`;
+        if (hist.length > 0) {
+          chipsHtml += `<button class="cwd-dropdown-clear-history" type="button" title="${escapeHtml(t('spawn_cwd_clear_history'))}">${escapeHtml(t('spawn_cwd_clear_history'))}</button>`;
+        }
+        if (favs.length > 0) {
+          chipsHtml += `<button class="cwd-dropdown-clear-favorites" type="button" title="${escapeHtml(t('spawn_cwd_clear_favorites'))}">${escapeHtml(t('spawn_cwd_clear_favorites'))}</button>`;
+        }
+        chipsHtml += `</div>`;
       }
-      chipsHtml += `</div></div>`;
       if (noMatch) {
         chipsHtml += `</li>` +
           `<li class="cwd-dropdown-no-match" aria-hidden="true">${escapeHtml(t('spawn_cwd_no_match_hint'))}</li>`;
@@ -1124,7 +1147,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       }
       html += chipsHtml;
     } else if (noMatch) {
-      // roots が空でも 0 件案内は出す。
+      // roots・履歴・お気に入りが全て空でも 0 件案内は出す。
       html += `<li class="cwd-dropdown-no-match" aria-hidden="true">${escapeHtml(t('spawn_cwd_no_match_hint'))}</li>`;
     }
 
@@ -1702,6 +1725,26 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       (spawnCwdInput as HTMLInputElement).value = next;
       spawnCwdInput.focus();
       renderCwdDropdown(next);
+      return;
+    }
+    const clearHistBtn = e.target.closest('.cwd-dropdown-clear-history');
+    if (clearHistBtn) {
+      e.preventDefault();
+      if (window.confirm(t('spawn_cwd_clear_history_confirm'))) {
+        clearCwdHistory();
+        renderCwdDropdown(spawnCwdInput.value.trim());
+      }
+      spawnCwdInput.focus();
+      return;
+    }
+    const clearFavBtn = e.target.closest('.cwd-dropdown-clear-favorites');
+    if (clearFavBtn) {
+      e.preventDefault();
+      if (window.confirm(t('spawn_cwd_clear_favorites_confirm'))) {
+        clearCwdFavorites();
+        renderCwdDropdown(spawnCwdInput.value.trim());
+      }
+      spawnCwdInput.focus();
       return;
     }
     const favBtn = e.target.closest('.cwd-dropdown-fav');
