@@ -101,6 +101,25 @@
     }));
   }
 
+  // Hub marker 由来の options が、同じ質問を拾った fallback parser の options で
+  // cache 更新されると _blockSig が失われる。回答時に recordAnsweredMarkerSig が
+  // no-op となり、Ink/SIGWINCH の再描画で同じマーカーが復活するため、選択肢 sig と
+  // 質問 identity の両方が同じ cache 更新に限って marker identity を引き継ぐ。
+  // Yes/No 等の選択肢が同じでも質問文が違う別質問には決して継承しない。
+  function inheritMarkerBlockSig(options, previousOptions) {
+    if (!Array.isArray(options) || options.length === 0) return options;
+    if (!Array.isArray(previousOptions) || previousOptions.length === 0) return options;
+    if (options[0]?._blockSig) return options;
+    const blockSig = previousOptions[0]?._blockSig;
+    if (!blockSig || approvalSig(options) !== approvalSig(previousOptions)) return options;
+    const questionKey = approvalQuestionKey(options);
+    if (!questionKey || questionKey !== approvalQuestionKey(previousOptions)) return options;
+    for (const option of options) {
+      if (option && typeof option === 'object') option._blockSig = blockSig;
+    }
+    return options;
+  }
+
   function approvalCtxHash(s) {
     const text = String(s || '').replace(/\s+/g, ' ').trim();
     let h = 5381;
@@ -828,6 +847,7 @@
     extractApprovalOptions,
     approvalContextLines,
     approvalSig,
+    inheritMarkerBlockSig,
     approvalQuestionKey,
     sequentialChoiceSig,
     isBatchOptions,
@@ -852,5 +872,5 @@
 const __esmRoot = (typeof window !== 'undefined') ? window : globalThis;
 export const approvalParser = __esmRoot.approvalParser;
 export const {
-  lineHasHint, linesHaveHint, approvalLineHasHint, approvalLinesHaveHint, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, extractApprovalOptions, approvalContextLines, isBatchOptions, isMultiSelectOptions, isMultiQuestionPrompt, isHubChoicePrompt, markHubChoiceDefault, matchNativeApprovalTrigger, hasApprovalLikeLabel, userSpecifiesRe, ungluedApprovalLines, normalizeVtCursorOps, approvalQuestionKey, approvalSig,
+  lineHasHint, linesHaveHint, approvalLineHasHint, approvalLinesHaveHint, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, extractApprovalOptions, approvalContextLines, isBatchOptions, isMultiSelectOptions, isMultiQuestionPrompt, isHubChoicePrompt, markHubChoiceDefault, matchNativeApprovalTrigger, hasApprovalLikeLabel, userSpecifiesRe, ungluedApprovalLines, normalizeVtCursorOps, approvalQuestionKey, approvalSig, inheritMarkerBlockSig,
 } = __esmRoot.approvalParser;
