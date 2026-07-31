@@ -1,5 +1,5 @@
 // --- ESM imports (generated) ---
-import { escapeHtml, showToast, ti18n, token } from './util.js';
+import { escapeHtml, openExternalLinkWithConfirmation, showToast, ti18n, token } from './util.js';
 import { activeSessionId, chatHistory, chatHistoryAutoCommitTimers, chatHistoryIdSeq, chatHistoryOutputBuffers, chatHistorySubs, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName } from '../app.js';
 import { activateSession, providerIconHtml, renderSessionList } from './session-list.js';
@@ -624,6 +624,8 @@ export function _appendPlainWithLinks(frag, text) {
       a.href = token;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
+      a.title = `External link: ${token}`;
+      a.addEventListener('click', (event) => openExternalLinkWithConfirmation(event, token));
       a.textContent = token;
       frag.appendChild(a);
     } else {

@@ -268,6 +268,26 @@ func TestMaskSecrets(t *testing.T) {
 			input: "OPENAI_API_KEY=sk-testkey1234567890abcdef",
 			want:  "sk-testkey1234567890abcdef",
 		},
+		{
+			name:  "xAI key",
+			input: "xai-ABCDEFGHIJKLMNOPQRSTUVWXYZ123456",
+			want:  "xai-ABCDEFGHIJKLMNOPQRSTUVWXYZ123456",
+		},
+		{
+			name:  "Grok key",
+			input: "gsk_ABCDEFGHIJKLMNOPQRSTUVWXYZ123456",
+			want:  "gsk_ABCDEFGHIJKLMNOPQRSTUVWXYZ123456",
+		},
+		{
+			name:  "Cohere key",
+			input: "cohere-api-key-ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+			want:  "cohere-api-key-ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+		},
+		{
+			name:  "Mistral key",
+			input: "mistral_api_key_ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+			want:  "mistral_api_key_ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

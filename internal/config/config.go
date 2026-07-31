@@ -524,7 +524,8 @@ type LocalModel struct {
 // OllamaConfig は Ollama daemon への接続先設定。
 // 空なら DefaultOllamaBaseURL を使う。
 type OllamaConfig struct {
-	BaseURL string `yaml:"base_url,omitempty" json:"base_url,omitempty"`
+	BaseURL           string `yaml:"base_url,omitempty" json:"base_url,omitempty"`
+	AllowPrivateHosts bool   `yaml:"allow_private_hosts,omitempty" json:"allow_private_hosts,omitempty"`
 }
 
 func EffectiveOllamaBaseURL(baseURL string) string {
@@ -538,7 +539,8 @@ func EffectiveOllamaBaseURL(baseURL string) string {
 // LMStudioConfig は LM Studio ローカルサーバーへの接続先設定。
 // 空なら DefaultLMStudioBaseURL を使う。base_url に /v1 や path は付けない。
 type LMStudioConfig struct {
-	BaseURL string `yaml:"base_url,omitempty" json:"base_url,omitempty"`
+	BaseURL           string `yaml:"base_url,omitempty" json:"base_url,omitempty"`
+	AllowPrivateHosts bool   `yaml:"allow_private_hosts,omitempty" json:"allow_private_hosts,omitempty"`
 }
 
 func EffectiveLMStudioBaseURL(baseURL string) string {
@@ -1035,6 +1037,9 @@ func validateOllama(ollama OllamaConfig) error {
 	if u.Path != "" && u.Path != "/" {
 		return fmt.Errorf("ollama.base_url must not include a path")
 	}
+	if !ollama.AllowPrivateHosts && isPrivateModelHost(u.Hostname()) {
+		return fmt.Errorf("ollama.base_url private hosts require allow_private_hosts: true")
+	}
 	return nil
 }
 
@@ -1056,7 +1061,19 @@ func validateLMStudio(lms LMStudioConfig) error {
 	if u.Path != "" && u.Path != "/" {
 		return fmt.Errorf("lm_studio.base_url must not include a path")
 	}
+	if !lms.AllowPrivateHosts && isPrivateModelHost(u.Hostname()) {
+		return fmt.Errorf("lm_studio.base_url private hosts require allow_private_hosts: true")
+	}
 	return nil
+}
+
+func isPrivateModelHost(host string) bool {
+	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && (ip.IsUnspecified() || ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast())
 }
 
 func validateVoiceWhisper(whisper VoiceWhisperConfig) error {

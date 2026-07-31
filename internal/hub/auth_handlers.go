@@ -30,11 +30,18 @@ func (s *Server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 	if !s.guardBase(w, r, http.MethodPost) {
 		return
 	}
+	s.cfgMu.Lock()
+	secret := s.cfg.AuthCookieSecret
+	s.cfgMu.Unlock()
+	if c, err := r.Cookie(pinCookieName); err == nil {
+		s.revokePINCookie(c.Value, secret)
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     tokenCookieName,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   requestUsesHTTPS(r),
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   -1, // -1 → Max-Age=0 を送出しブラウザは即削除
 	})
@@ -43,6 +50,7 @@ func (s *Server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   requestUsesHTTPS(r),
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   -1,
 	})
@@ -98,6 +106,9 @@ func (s *Server) handleAuthRevokeAll(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "internal", "failed to persist config")
 		return
 	}
+	s.pinSessionsMu.Lock()
+	s.pinSessions = map[string]pinCookieSession{}
+	s.pinSessionsMu.Unlock()
 	port := s.currentHubPort()
 	// 新 token を含むためキャッシュ禁止。
 	w.Header().Set("Cache-Control", "no-store")

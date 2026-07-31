@@ -644,6 +644,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 		endedProvider = cur.Provider
 		endedCWD = cur.CWD
 	}
+	delete(s.pendingInput, id)
 	s.sessionsMu.Unlock()
 	if endState == "disconnected" {
 		if historyToClose != nil {

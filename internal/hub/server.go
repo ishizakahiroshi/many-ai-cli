@@ -443,8 +443,10 @@ type Server struct {
 	orchestration     *orchestrationManager
 
 	// 任意リモート PIN（pin_auth.go）。lazy 生成のため pinLim() 経由でアクセスする。
-	pinLimiterMu sync.Mutex
-	pinLimiter   *pinLimiter
+	pinLimiterMu  sync.Mutex
+	pinLimiter    *pinLimiter
+	pinSessionsMu sync.Mutex
+	pinSessions   map[string]pinCookieSession
 	// SEC-C: 既知デバイス（IP+UA ハッシュ → 最終接続時刻）。未知デバイスの初回 remote 接続で通知。
 	devicesMu    sync.Mutex
 	knownDevices map[string]time.Time
@@ -736,6 +738,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		wrappers:              map[int]*wrapperConn{},
 		uis:                   map[*websocket.Conn]*uiConn{},
 		pendingInput:          map[int][]string{},
+		pinSessions:           map[string]pinCookieSession{},
 		slashCmdCache:         map[string]*slashCmdCacheEntry{},
 		approvalRuleTargets:   map[string]approvalRuleTarget{},
 		autoApprovalHistory:   make([]autoApprovalCandidate, 0, 100),
@@ -1198,6 +1201,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			Value:    tok,
 			Path:     "/",
 			HttpOnly: true,
+			Secure:   requestUsesHTTPS(r),
 			SameSite: http.SameSiteStrictMode,
 			// 永続セッション Cookie 化を避け、失効口を与える。起動毎 token と
 			// 不一致になれば（Hub 再起動で token がローテートされた等）期限切れ後に
@@ -1241,7 +1245,11 @@ func (s *Server) wsHandshake(cfg *websocket.Config, req *http.Request) error {
 	}
 	origin := req.Header.Get("Origin")
 	if origin == "" {
-		// CLI / ラッパー由来の接続は Origin を持たないため許可する。
+		// CLI / ラッパー由来の接続は Origin を持たない。ローカル peer のみ
+		// 許可し、公開リバースプロキシ経由の origin-less probe は拒否する。
+		if s.isLogicallyRemote(req) {
+			return fmt.Errorf("origin required for remote websocket clients")
+		}
 		return nil
 	}
 	if isAllowedHubOrigin(origin, port, allowedHosts...) {
