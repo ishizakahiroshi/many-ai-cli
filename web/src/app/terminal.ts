@@ -1812,6 +1812,17 @@ export function sendResize(sessionId, cols, rows) {
   }
 }
 
+export function claimPtyResizeOwnership(sessionId) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const t = terminals.get(sessionId);
+  const message: any = { type: 'ui_active_session', session_id: sessionId };
+  if (canFitTerminal(t)) {
+    message.cols = t.term.cols;
+    message.rows = t.term.rows;
+  }
+  ws.send(JSON.stringify(message));
+}
+
 export function applyRemotePtyResize(sessionId, cols, rows) {
   const id = Number(sessionId || 0);
   const nextCols = Number(cols || 0);
@@ -1941,22 +1952,20 @@ window.addEventListener('resize', () => {
   refitAllTerminals(true);
 });
 
-// 別窓 Session Grid（detached-grid）と通常 Hub は同一セッションの PTY を共有する。
-// 別窓側は自スロットの小さいサイズに PTY をフィットさせるため、別窓を操作した後
-// 通常 Hub に戻ると PTY が縮んだまま（このウィンドウの xterm の cols/rows は変わって
-// いないので resizeObserver は発火せず、PTY が再アサートされない）。
-// ウィンドウがフォーカス/可視に戻ったタイミングで、アクティブセッションの正しい
-// サイズへ PTY を取り戻す（local の cols/rows 変化に依らず無条件で sendResize する）。
+// フォーカス復帰時は visual fit のみ行い、実寸が変わった場合だけ resize を送る。
+// サイズ権の取得はセッション操作または入力時に行うため、複数 UI がフォーカス移動
+// だけで互いの PTY サイズを押し付け合うことはない。
 export function reassertActivePtySize() {
-  // detached-grid ウィンドウ自身では実行しない（PTY 主導権を奪い合わないため）。
-  if (window.detachedGridManager) return;
   if (activeSessionId === null) return;
   if (isPtyResizeSuppressed()) return;
   const t = terminals.get(activeSessionId);
   if (!canFitTerminal(t)) return;
+  const prevCols = t.term.cols;
+  const prevRows = t.term.rows;
   fitTerminalPreservingBottom(t, activeSessionId);
-  // PTY は別窓に縮められている可能性があるため、local 変化に関わらず再送する。
-  sendResize(activeSessionId, t.term.cols, t.term.rows);
+  if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
+    sendResize(activeSessionId, t.term.cols, t.term.rows);
+  }
 }
 
 window.addEventListener('focus', reassertActivePtySize);

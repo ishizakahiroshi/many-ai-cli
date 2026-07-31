@@ -1,6 +1,8 @@
 package hub
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -176,11 +178,11 @@ func TestSuggestCommitMessageDefaultSubject(t *testing.T) {
 // を代表ケースで検証する。
 func TestSuggestCommitMessageVerbs(t *testing.T) {
 	cases := []struct {
-		name    string
-		files   []gitStatusFile
-		diff    string
-		wantJa  string
-		wantEn  string
+		name   string
+		files  []gitStatusFile
+		diff   string
+		wantJa string
+		wantEn string
 	}{
 		{
 			name:   "add: 新規ファイル 1 件",
@@ -279,4 +281,163 @@ func TestSuggestCommitMessageVerbs(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSuggestCommitMessageUsesDominantChange(t *testing.T) {
+	files := []gitStatusFile{sf("A", "web/src/data/admission.ts")}
+	weights := map[string]int{"web/src/data/admission.ts": 3}
+	for i := 0; i < 10; i++ {
+		path := "web/src/components/Changed" + string(rune('A'+i)) + ".tsx"
+		if i == 0 {
+			path = "web/src/components/SchoolDetailSheet.tsx"
+			weights[path] = 48
+		} else {
+			weights[path] = i + 4
+		}
+		files = append(files, sf("M", path))
+	}
+	diff := "+++ b/web/src/data/admission.ts\n" +
+		"+export interface AdmissionInfo { score: number }\n" +
+		"+++ b/web/src/components/SchoolDetailSheet.tsx\n" +
+		"+const title = formatSchoolTitle(school)\n"
+
+	gotJa, _ := suggestCommitMessageWithWeights(files, "", diff, "", "ja", weights)
+	wantJa := "feat(web): SchoolDetailSheet.tsx ほか 9 件 を変更（admission.ts 新規）"
+	if gotJa != wantJa {
+		t.Fatalf("ja: got %q, want %q", gotJa, wantJa)
+	}
+	gotEn, _ := suggestCommitMessageWithWeights(files, "", diff, "", "en", weights)
+	wantEn := "feat(web): change SchoolDetailSheet.tsx (+9 more) (new: admission.ts)"
+	if gotEn != wantEn {
+		t.Fatalf("en: got %q, want %q", gotEn, wantEn)
+	}
+}
+
+func TestSuggestCommitMessageUsesSymbolFromDominantModifiedFile(t *testing.T) {
+	files := []gitStatusFile{
+		sf("A", "web/src/data/admission.ts"),
+		sf("M", "web/src/components/SchoolDetailSheet.tsx"),
+	}
+	weights := map[string]int{
+		"web/src/data/admission.ts":                3,
+		"web/src/components/SchoolDetailSheet.tsx": 48,
+	}
+	diff := "+++ b/web/src/data/admission.ts\n" +
+		"+export interface AdmissionInfo { score: number }\n" +
+		"+++ b/web/src/components/SchoolDetailSheet.tsx\n" +
+		"+export function renderSchoolDetail() {}\n"
+
+	for _, language := range []string{"ja", "en"} {
+		subject, _ := suggestCommitMessageWithWeights(files, "", diff, "", language, weights)
+		if !strings.Contains(subject, "renderSchoolDetail") {
+			t.Fatalf("%s subject did not use the dominant file's symbol: %q", language, subject)
+		}
+		if strings.Contains(subject, "AdmissionInfo") {
+			t.Fatalf("%s subject used a symbol from the smaller new file: %q", language, subject)
+		}
+	}
+}
+
+func TestSuggestCommitMessageKeepsDominantAddedFile(t *testing.T) {
+	files := []gitStatusFile{
+		sf("A", "web/src/new-feature.ts"),
+		sf("M", "web/src/existing.ts"),
+	}
+	weights := map[string]int{
+		"web/src/new-feature.ts": 80,
+		"web/src/existing.ts":    5,
+	}
+	for _, language := range []string{"ja", "en"} {
+		subject, _ := suggestCommitMessageWithWeights(files, "", "", "", language, weights)
+		if !strings.Contains(subject, "new-feature.ts") {
+			t.Fatalf("%s subject did not use dominant added file: %q", language, subject)
+		}
+	}
+}
+
+func TestAnalyzeCommitChangesExtractsMultipleLanguages(t *testing.T) {
+	files := []gitStatusFile{
+		sf("M", "web/src/feature.ts"),
+		sf("M", "tools/report.py"),
+	}
+	diff := "+++ b/web/src/feature.ts\n" +
+		"+export async function loadFeature() {\n" +
+		"+export const featureName = 'x'\n" +
+		"+export default class FeatureController {}\n" +
+		"+export interface FeatureOptions {}\n" +
+		"+++ b/tools/report.py\n" +
+		"+def render_report():\n" +
+		"+class ReportBuilder:\n"
+	a := analyzeCommitChanges(files, diff)
+
+	for _, want := range []string{"loadFeature", "featureName", "FeatureController", "render_report"} {
+		if !containsString(a.funcs, want) {
+			t.Errorf("funcs %v do not contain %q", a.funcs, want)
+		}
+	}
+	for _, want := range []string{"FeatureOptions", "ReportBuilder"} {
+		if !containsString(a.types, want) {
+			t.Errorf("types %v do not contain %q", a.types, want)
+		}
+	}
+}
+
+func TestAnalyzeCommitChangesExtractsRoutesAndI18n(t *testing.T) {
+	files := []gitStatusFile{
+		sf("M", "web/src/server.ts"),
+		sf("M", "api/routes.py"),
+		sf("M", "web/src/i18n/en.ts"),
+	}
+	diff := "+++ b/web/src/server.ts\n" +
+		"+router.get('/health', handler)\n" +
+		"-router.post('/moved', oldHandler)\n" +
+		"+router.post('/moved', newHandler)\n" +
+		"+++ b/api/routes.py\n" +
+		"+@app.post('/items')\n" +
+		"+++ b/web/src/i18n/en.ts\n" +
+		"+  'setup.ready': 'Ready',\n" +
+		"+  setup_failed: 'Failed',\n"
+	a := analyzeCommitChanges(files, diff)
+
+	if !containsString(a.routes, "/health") || !containsString(a.routes, "/items") {
+		t.Fatalf("routes = %v, want /health and /items", a.routes)
+	}
+	if containsString(a.routes, "/moved") || containsString(a.removedRts, "/moved") {
+		t.Fatalf("moved route was not cancelled: added=%v removed=%v", a.routes, a.removedRts)
+	}
+	if a.i18nKeys != 2 {
+		t.Fatalf("i18nKeys = %d, want 2", a.i18nKeys)
+	}
+	for _, language := range []string{"ja", "en"} {
+		subject, _ := suggestCommitMessage(files, "", diff, "", language)
+		if !strings.Contains(subject, "/health") {
+			t.Fatalf("%s subject did not use extracted route: %q", language, subject)
+		}
+	}
+}
+
+func TestCountUntrackedFileLines(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "new.ts")
+	if err := os.WriteFile(path, []byte("one\ntwo\nthree"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := countUntrackedFileLines(root, "new.ts"); got != 3 {
+		t.Fatalf("line count = %d, want 3", got)
+	}
+	if err := os.WriteFile(filepath.Join(root, "binary.dat"), []byte{'a', 0, 'b'}, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := countUntrackedFileLines(root, "binary.dat"); got != 0 {
+		t.Fatalf("binary line count = %d, want 0", got)
+	}
+}
+
+func containsString(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
 }
