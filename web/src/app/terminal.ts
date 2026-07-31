@@ -1,5 +1,5 @@
 // --- ESM imports (generated) ---
-import { cleanCopiedText, cleanOneLineText, showToast, apiFetch } from './util.js';
+import { cleanCopiedText, cleanOneLineText, showToast } from './util.js';
 import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
 import { activeSessionId, approvalRawOptionsCache, approvalVisibleCache, sessions, terminals, utf8Decoder } from './state.js';
@@ -12,7 +12,7 @@ import { addPromptTemplate } from './prompt-templates.js';
 import { resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
 import { isGrokChatViewerOpen, openGrokChatViewer, resetGrokChatViewerForSessionChange } from './grok-chat-viewer.js';
 import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
-import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, showCursorSeq } from './cursor-hide-filter.js';
+import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, shouldBypassCursorHideFilterForProvider, showCursorSeq } from './cursor-hide-filter.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
 export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossibleMarkerPrefix } from './hub-marker-filter.js';
 
@@ -330,6 +330,7 @@ export function ensureTerminal(id) {
     pendingFlushActive: false,
     pendingFlushSeq: 0,
     pendingFlushWatchdog: null,
+    pendingFlushCallbacks: [],
     pendingTextTail: '',
     textDecoder: new TextDecoder('utf-8'),
     markerFilterCarry: new Uint8Array(0),
@@ -376,9 +377,7 @@ export function attachTerminal(id) {
     // 非アクティブ中の chunks は DOM へ戻す前に反映する。
     // 表示後に flush すると、古い viewport から最新行までスクロールしていく様子が見えてしまう。
     flushPending(id, () => {
-      const guardOk = terminals.has(id) && activeSessionId === id;
-      probeFlushSwitch('flushSwitch.callback', { sid: id, guardOk, activeSessionIdAtCallback: activeSessionId });
-      if (!guardOk) return;
+      if (!terminals.has(id) || activeSessionId !== id) return;
       area.appendChild(t.container);
       releaseHiddenWebglRenderers();
       t.term.scrollToBottom();
@@ -392,7 +391,7 @@ export function attachTerminal(id) {
       }
       // 配置・fit 確定後に WebGL レンダラを再生成する
       enableWebglRenderer(t);
-    }, 'switch');
+    });
     return;
   }
   const container = document.createElement('div');
@@ -507,7 +506,7 @@ export function whenLayoutReady(id, container) {
         }
       }, { capture: true, passive: false });
     }
-    flushPending(id, null, 'first-attach');
+    flushPending(id);
     t.everAttached = true;
     if (!isPtyResizeSuppressed()) {
       sendResize(id, t.term.cols, t.term.rows);
@@ -607,7 +606,7 @@ export function queuePendingTerminalChunk(id, bytes) {
     // せずバッチを打ち切って即時 flush する。
     if (t.pendingTotalBytes > LIVE_BATCH_MAX_BYTES) {
       endLiveOutputBatch(t);
-      flushPending(id, null, 'live-batch-overflow');
+      flushPending(id);
     }
     return;
   }
@@ -629,7 +628,7 @@ export function beginLiveOutputBatchForResize(id) {
     const latest = terminals.get(id);
     if (!latest) return;
     endLiveOutputBatch(latest);
-    flushPending(id, null, 'resize-batch-timeout');
+    flushPending(id);
   }, LIVE_BATCH_AFTER_RESIZE_MS);
 }
 
@@ -645,37 +644,30 @@ export function isLiveOutputBatching(t) {
   return !!t && Date.now() < (t.liveBatchUntil || 0);
 }
 
-// 一時計装: セッション切替時、flushPending の完了コールバック（DOM 再アタッチ）が
-// 別トリガーの flushPending 再入（resize バッチ・live-batch オーバーフロー等）と
-// pendingFlushSeq が競合して握り潰されていないか調べる。
-// (docs/local/bugfix_codex-session-switch-not-updated_2026-07-27.md)
-// 原因判明後は probeFlushSwitch 呼び出し・reason 引数・本ブロックごと削除する。
-let _flushSwitchProbeCount = 0;
-const FLUSH_SWITCH_PROBE_MAX = 300;
-function probeFlushSwitch(tag, payload) {
-  if (_flushSwitchProbeCount >= FLUSH_SWITCH_PROBE_MAX) return;
-  _flushSwitchProbeCount++;
-  batchDebugLog({ tag, ts: new Date().toISOString(), ...payload });
+function runPendingFlushCallbacks(t) {
+  const callbacks = t.pendingFlushCallbacks.splice(0);
+  for (const callback of callbacks) callback();
 }
 
-export function flushPending(id, onDrained: (() => void) | null = null, reason: string = 'unknown') {
+export function flushPending(id, onDrained: (() => void) | null = null) {
   const t = terminals.get(id);
   if (!t) return;
+  if (onDrained) t.pendingFlushCallbacks.push(onDrained);
+  // xterm の write 完了前に resize タイマー等が再入しても、新しい flush は開始しない。
+  // pendingChunks と完了コールバックは現在の write が終わった後にまとめて drain する。
+  if (t.pendingFlushActive) return;
   const chunks = t.pendingChunks;
   t.pendingChunks = [];
   t.pendingTotalBytes = 0;
   if (chunks.length === 0) {
-    if (reason === 'switch') probeFlushSwitch('flushSwitch.empty', { sid: id, reason });
     if (t.autoScroll) { t.term.scrollToBottom(); syncViewportScrollbarToBottom(t); }
     scheduleApprovalCheck(id);
-    if (onDrained) onDrained();
+    runPendingFlushCallbacks(t);
     return;
   }
-  const wasActive = !!t.pendingFlushActive;
   const seq = (t.pendingFlushSeq || 0) + 1;
   t.pendingFlushSeq = seq;
   t.pendingFlushActive = true;
-  probeFlushSwitch('flushSwitch.start', { sid: id, reason, seq, wasActive, hadOnDrained: !!onDrained, chunkCount: chunks.length });
   if (t.pendingFlushWatchdog) {
     clearTimeout(t.pendingFlushWatchdog);
     t.pendingFlushWatchdog = null;
@@ -686,22 +678,19 @@ export function flushPending(id, onDrained: (() => void) | null = null, reason: 
     if (finished) return;
     finished = true;
     const latest = terminals.get(id);
-    if (!latest || latest.pendingFlushSeq !== seq) {
-      probeFlushSwitch('flushSwitch.mismatch', { sid: id, reason, seq, currentSeq: latest ? latest.pendingFlushSeq : null, hadOnDrained: !!onDrained });
-      return;
-    }
+    if (!latest || latest.pendingFlushSeq !== seq) return;
     if (latest.pendingFlushWatchdog) {
       clearTimeout(latest.pendingFlushWatchdog);
       latest.pendingFlushWatchdog = null;
     }
     latest.pendingFlushActive = false;
     if (latest.pendingChunks.length > 0) {
-      requestAnimationFrame(() => flushPending(id, onDrained, reason));
+      requestAnimationFrame(() => flushPending(id));
       return;
     }
     if (latest.autoScroll) { latest.term.scrollToBottom(); syncViewportScrollbarToBottom(latest); }
     scheduleApprovalCheck(id);
-    if (onDrained) onDrained();
+    runPendingFlushCallbacks(latest);
   };
   t.pendingFlushWatchdog = setTimeout(finish, TERMINAL_WRITE_FLUSH_WATCHDOG_MS);
 
@@ -1345,10 +1334,9 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
     t.cursorHideHasNewline = false;
     return bytes;
   }
-  // Grok Build は /resume・/history・/help などのフルスクリーン TUI を
-  // CUP 中心で再描画する。カーソル非表示フィルタが alt buffer の追跡に
-  // 失敗したチャンクを進捗行として捨てると、画面が空白になるため素通しする。
-  if (sessions.get(id)?.provider === 'grok') {
+  // Grok/Codex は CUP を本文・フルフレーム描画にも使うため素通しする。
+  // Claude のメインバッファ上のスピナー除去と OpenCode の alt buffer 保護は維持する。
+  if (shouldBypassCursorHideFilterForProvider(sessions.get(id)?.provider)) {
     return bytes;
   }
   const { out, state, events } = filterCursorHideBlocksPure(bytes, {
@@ -1359,11 +1347,6 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
     hasNewline: t.cursorHideHasNewline || false,
     altScreen: t.cursorHideAltScreen || false,
   });
-  // 一時計装: cursor-hide-filter が codex のフレームを破棄していないかの裏取り
-  // (bugfix_codex-web-terminal-midline-gap_2026-07-24.md)。原因判明後に削除する。
-  if (sessions.get(id)?.provider === 'codex') {
-    probeCursorHideDiscard(id, bytes.length, out.length, events, state.altScreen);
-  }
   for (const ev of events) {
     // filter-discard: 従来どおり破棄ブロックからライブ進捗行を抽出。
     // block-passthrough-alt: alt buffer 中は画面にも描くが、ピル表示は従来どおり更新する。
@@ -1784,106 +1767,7 @@ export function filterBareCarriageReturnForDisplay(id, bytes) {
   return new Uint8Array(out);
 }
 
-// === 一時計装: codex Web ターミナルの文中 gap 調査 ===
-// (docs/local/bugfix_codex-web-terminal-midline-gap_2026-07-24.md)
-// codex が旧サイズの絶対座標で再描画し xterm の桁/行とズレて空白・空行が
-// 残る仮説の裏取り。原因判明後は probeMidlineGap / sendResize のログ /
-// apiFetch import ごと削除する。
-let _gapProbeCount = 0;
-const GAP_PROBE_MAX = 80;
-const _gapProbeDecoder = new TextDecoder('utf-8');
-function batchDebugLog(payload) {
-  try {
-    apiFetch('/api/debug/batch-log', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      keepalive: true,
-    }).catch(() => { /* fire-and-forget */ });
-  } catch (_) { /* fire-and-forget */ }
-}
-// 一時計装: cursor-hide-filter が codex のフレームを丸ごと破棄していないか測る。
-// 「最新が出てこない／↓down でも出ない」症状が、サイズずれ（off-viewport）由来か
-// フィルタ破棄由来かを 1 回の再現で切り分けるための計器。原因判明後に削除する。
-let _discardProbeCount = 0;
-const DISCARD_PROBE_MAX = 80;
-function probeCursorHideDiscard(id, inLen, outLen, events, altScreen) {
-  if (_discardProbeCount >= DISCARD_PROBE_MAX) return;
-  let discardBytes = 0, discardBlocks = 0, passAlt = 0, passShow = 0, passLf = 0, passOverflow = 0;
-  for (const ev of events) {
-    if (ev.kind === 'filter-discard') { discardBlocks++; discardBytes += ev.blockBuf.length; }
-    else if (ev.kind === 'block-passthrough-alt') passAlt++;
-    else if (ev.kind === 'block-passthrough-show') passShow++;
-    else if (ev.kind === 'block-passthrough-lf') passLf++;
-    else if (ev.kind === 'block-passthrough-overflow') passOverflow++;
-  }
-  if (discardBlocks === 0) return;
-  _discardProbeCount++;
-  batchDebugLog({
-    tag: 'codexDiscard.probe',
-    ts: new Date().toISOString(),
-    sid: id,
-    inLen,
-    outLen,
-    discardBytes,
-    discardBlocks,
-    passAlt,
-    passShow,
-    passLf,
-    passOverflow,
-    altScreen,
-  });
-}
-function probeMidlineGap(id, term, bytes) {
-  if (_gapProbeCount >= GAP_PROBE_MAX) return;
-  let text = '';
-  try { text = _gapProbeDecoder.decode(bytes); } catch (_) { return; }
-  // 絶対カーソル移動 CUP: ESC[<row>;<col>H|f の最大 row
-  let maxCupRow = 0;
-  const cupRe = /\x1b\[(\d+);(\d+)[Hf]/g;
-  let mm;
-  while ((mm = cupRe.exec(text)) !== null) {
-    const r = Number(mm[1]) || 0;
-    if (r > maxCupRow) maxCupRow = r;
-  }
-  // 連続スペース（半角 2 個以上）の最長ラン
-  let maxSpaceRun = 0;
-  const spRe = /  +/g;
-  let sm;
-  while ((sm = spRe.exec(text)) !== null) {
-    if (sm[0].length > maxSpaceRun) maxSpaceRun = sm[0].length;
-  }
-  // 連続空行の最長ラン
-  let maxBlankRun = 0;
-  const nlRe = /\n(?:[ \t]*\n)+/g;
-  let nm;
-  while ((nm = nlRe.exec(text)) !== null) {
-    const cnt = (nm[0].match(/\n/g) || []).length;
-    if (cnt > maxBlankRun) maxBlankRun = cnt;
-  }
-  const cols = term.cols || 0;
-  const rows = term.rows || 0;
-  const cupBeyondViewport = maxCupRow > rows;
-  if (!cupBeyondViewport && maxSpaceRun < 12 && maxBlankRun < 3) return;
-  _gapProbeCount++;
-  const preview = text.replace(/\x1b/g, '\\e').replace(/\r/g, '\\r').replace(/\n/g, '\\n').slice(0, 240);
-  batchDebugLog({
-    tag: 'codexGap.probe',
-    ts: new Date().toISOString(),
-    sid: id,
-    xtermCols: cols,
-    xtermRows: rows,
-    maxCupRow,
-    cupBeyondViewport,
-    maxSpaceRun,
-    maxBlankRun,
-    bytesLen: bytes.length,
-    preview,
-  });
-}
-
 export function writePTYChunk(id, term, bytes, onFlush) {
-  probeMidlineGap(id, term, bytes);
   const hasScreenClearSeq = detectScreenClearSeqForAutoScroll(id, bytes);
   // Codex 等の同期描画（CSI ? 2026 h/l）は xterm.js が完成画面まで保留する。
   // ここで除去すると途中フレームが露出し、再描画が上から下へ流れて見えるため通す。
@@ -1921,9 +1805,6 @@ export function scanBuffer(id, limit?: number) {
 
 export function sendResize(sessionId, cols, rows) {
   if (ws && ws.readyState === WebSocket.OPEN) {
-    // 一時計装: gap 発生時刻と resize タイムラインの突き合わせ用
-    // (bugfix_codex-web-terminal-midline-gap_2026-07-24.md)。原因判明後に削除する。
-    batchDebugLog({ tag: 'codexResize.sent', ts: new Date().toISOString(), sid: sessionId, cols, rows });
     ws.send(JSON.stringify({ type: 'pty_resize', session_id: sessionId, cols, rows }));
     // SIGWINCH を受けた TUI（Codex 等）はトランスクリプト全体を再描画する。
     // 直後のバーストを一括描画して、全文が上から下へ流れて見えるのを防ぐ。
