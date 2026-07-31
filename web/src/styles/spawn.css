@@ -336,6 +336,21 @@
 .chip-count {
   font-size: 0.7rem; color: var(--muted); font-family: inherit;
 }
+/* chip 行右側: 履歴/お気に入りの一括削除ボタン群 */
+.cwd-dropdown-chip-actions {
+  margin-left: auto; display: flex; gap: 4px; align-items: center;
+}
+.cwd-dropdown-clear-history,
+.cwd-dropdown-clear-favorites {
+  background: transparent; color: var(--muted); border: 1px solid var(--line-soft);
+  border-radius: 999px; padding: 3px 8px; font: inherit; font-size: 0.72rem;
+  cursor: pointer; line-height: 1; white-space: nowrap;
+}
+.cwd-dropdown-clear-history:hover,
+.cwd-dropdown-clear-favorites:hover {
+  border-color: var(--danger, #ff6b6b); color: var(--danger, #ff6b6b);
+  background: rgba(255, 107, 107, 0.08);
+}
 /* chip 圧縮 UI: launcher 1 個＋ホバー/クリックで popover 展開 */
 .cwd-dropdown-chip-collapsed {
   position: relative;
