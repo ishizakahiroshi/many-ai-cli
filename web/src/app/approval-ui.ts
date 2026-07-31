@@ -4,6 +4,7 @@ import { actionBarShownAt, activeSessionId, approvalRawOptionsCache, approvalSou
 import { playNotificationSound, showDesktopApprovalNotification } from './settings.js';
 import { ws } from './ws-client.js';
 import { showActionBar } from './approval.js';
+import { inheritMarkerBlockSig } from './approval-parser.js';
 
 // UI/cache adapter for approval detection. Parser code must not depend on this.
 (function (root) {
@@ -37,9 +38,13 @@ import { showActionBar } from './approval.js';
   }
 
   function cacheApprovalOptions(id, options) {
+    inheritMarkerBlockSig(options, approvalRawOptionsCache.get(id));
     approvalRawOptionsCache.set(id, options);
     const source = Array.isArray(options) && options[0] && options[0]._approvalSource;
-    if (source !== 'go_vt') approvalSourceCache.delete(id);
+    const hasMarkerIdentity = !!(Array.isArray(options) && options[0] && options[0]._blockSig);
+    // 同一マーカーを fallback parser が再抽出した cache 更新では hub_marker provenance を
+    // 保持する。これを消すと回答時の恒久抑止と Hub push の重複防止が同時に外れる。
+    if (source !== 'go_vt' && !hasMarkerIdentity) approvalSourceCache.delete(id);
     notifyApprovalQueue();
   }
 

@@ -813,3 +813,34 @@ test('ungluedApprovalLines splits glued numbered options for CLI display', () =>
   assert.equal(properResult.filter(l => /^\s*1\./.test(l)).length, 1);
   assert.equal(properResult.filter(l => /^\s*2\./.test(l)).length, 1);
 });
+
+test('fallback cache inherits marker block signature only for the same approval', () => {
+  const marker = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'Proceed with this change?',
+    '1. Yes (Recommended)',
+    '2. No',
+    'N. User specifies',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.ok(marker?.[0]?._blockSig);
+
+  const sameFallback = marker.map(({ _blockSig: _ignored, ...option }) => ({ ...option }));
+  (sameFallback as any)._question = (marker as any)._question;
+  assert.equal(sameFallback[0]._blockSig, undefined);
+  parser.inheritMarkerBlockSig(sameFallback, marker);
+  assert.equal(sameFallback[0]._blockSig, marker[0]._blockSig);
+  assert.equal(sameFallback[1]._blockSig, marker[0]._blockSig);
+
+  const differentQuestion = sameFallback.map(({ _blockSig: _ignored, ...option }) => ({ ...option }));
+  (differentQuestion as any)._question = 'Deploy this change now?';
+  assert.equal(parser.approvalSig(differentQuestion), parser.approvalSig(marker));
+  parser.inheritMarkerBlockSig(differentQuestion, marker);
+  assert.equal(differentQuestion[0]._blockSig, undefined);
+
+  const differentFallback = sameFallback.map(({ _blockSig: _ignored, ...option }) => ({ ...option }));
+  (differentFallback as any)._question = (marker as any)._question;
+  differentFallback[0].label = 'Choose another action';
+  parser.inheritMarkerBlockSig(differentFallback, marker);
+  assert.equal(differentFallback[0]._blockSig, undefined);
+});
