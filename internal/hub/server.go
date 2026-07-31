@@ -155,6 +155,16 @@ type session struct {
 	// JSON 外: 完了サマリー通知の連投抑制用
 	lastDoneNotifyAt time.Time
 
+	// JSON 外: Review タブ Phase 2 のターン単位 Git スナップショット。
+	// 確定したユーザー入力の直前を start tree、DONE/idle fallback を end tree とし、
+	// gitTurns には完了済みターンだけを保持する。全フィールドを sessionsMu で保護する。
+	gitTurnStartTree       string
+	gitTurnStartedAt       time.Time
+	gitTurnCaptureInFlight bool
+	gitTurnCaptureDone     chan struct{}
+	gitTurnCaptureWaiters  int
+	gitTurns               []gitTurnSnapshot
+
 	// JSON 外: Git タブ「Ask AI」コミットメッセージ生成の待ち受け状態。
 	// 接続中の AI セッションへ生成プロンプトを注入し、PTY 出力から
 	// [MANY-AI-CLI-COMMIT] マーカーを拾ってフォームへ反映する。
@@ -934,6 +944,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/git-refs", s.handleGitRefs)
 	mux.HandleFunc("/api/git-status", s.handleGitStatus)
 	mux.HandleFunc("/api/git-diff", s.handleGitDiff)
+	mux.HandleFunc("/api/git-turns", s.handleGitTurns)
+	mux.HandleFunc("/api/git-turn-diff", s.handleGitTurnDiff)
 	mux.HandleFunc("/api/git-commit-all", s.handleGitCommitAll)
 	mux.HandleFunc("/api/git-commit-message", s.handleGitCommitMessage)
 	mux.HandleFunc("/api/git-fetch", s.handleGitFetch)

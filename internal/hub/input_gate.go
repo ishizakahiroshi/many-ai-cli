@@ -72,6 +72,10 @@ func (s *Server) handleInput(m proto.Message) {
 	}
 	s.sessionsMu.Unlock()
 	if injectMarker {
+		// Review Phase 2: AI へ入力を渡す前の作業ツリーを、このターンの開始点として
+		// 記録する。既に開始点がある場合（承認回答などターン途中の追加入力）は
+		// captureGitTurnStart 側で維持し、途中までの編集を取りこぼさない。
+		s.captureGitTurnStart(m.SessionID)
 		s.broadcast(proto.Message{Type: "pty_data", SessionID: m.SessionID, Data: []byte(chatHistoryUserTurnMarker)})
 	}
 	s.submitInput(wc, m.SessionID, combined)

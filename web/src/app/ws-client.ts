@@ -363,6 +363,13 @@ export function _connectWs() {
     return;
   }
 
+  if (m.type === 'git_turn') {
+    // Review Phase 2: the view module owns the completion card and caches the
+    // compact event. Reload recovery uses /api/git-turns.
+    try { window.dispatchEvent(new CustomEvent('many-git-turn', { detail: m })); } catch (_) {}
+    return;
+  }
+
   if (m.type === 'approval_patterns_updated') {
     showToast(t('toast_approval_patterns_updated'));
     if (window.approvalPatternsUI && typeof window.approvalPatternsUI.onOfficialUpdated === 'function') {

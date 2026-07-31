@@ -30,6 +30,19 @@
   flex-wrap: wrap;
 }
 .review-title { font-weight: 700; font-size: 13px; }
+.review-scope-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.review-scope-label select {
+  max-width: 250px;
+  min-width: 170px;
+  font-size: 12px;
+  padding: 3px 7px;
+}
 .review-repo {
   color: var(--muted);
   font-size: 11px;
@@ -169,6 +182,46 @@
 .review-tree-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .review-tree-empty { color: var(--muted); font-size: 12px; padding: 8px 4px; }
 
+.git-turn-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 6px 10px;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--muted) 38%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel, var(--bg)) 92%, var(--accent) 8%);
+  flex: none;
+}
+.git-turn-card[hidden] { display: none; }
+.git-turn-card-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+}
+.git-turn-card-summary strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.git-turn-review-btn {
+  flex: none;
+  border: 1px solid color-mix(in srgb, var(--muted) 45%, transparent);
+  border-radius: 999px;
+  padding: 4px 14px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 @media (max-width: 768px) {
   .review-tree-pane { display: none; }
+  .review-scope-label span { display: none; }
+  .review-scope-label select { min-width: 135px; max-width: 180px; }
+  .git-turn-card { margin: 4px 6px; padding: 8px 9px; }
 }

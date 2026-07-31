@@ -297,13 +297,27 @@ export const FilesTabManager = (function () {
       // C2: 外部から openFilesTab / openGitTab が呼ばれた場合は統合タブバーも追随
       if (targetTab) {
         const kind = targetTab.kind || targetTab.type;
-        if (kind === 'files' || kind === 'git') {
+        if (kind === 'files' || kind === 'git' || kind === 'review') {
           if (typeof window !== 'undefined' && typeof window.setActiveTab === 'function') {
             const sid = (typeof activeSessionId !== 'undefined') ? activeSessionId : null;
             if (sid !== null && sid !== undefined) {
-              if (typeof markTabLazyLoaded === 'function') markTabLazyLoaded(sid, kind);
+              const unifiedKind = kind === 'review' ? 'files' : kind;
+              if (typeof markTabLazyLoaded === 'function') markTabLazyLoaded(sid, unifiedKind);
               if (typeof refreshLazyTabClasses === 'function') refreshLazyTabClasses(sid);
-              window.setActiveTab(sid, kind);
+              window.setActiveTab(sid, unifiedKind);
+              // Review は統合バー上では Files pane を借りる。setActiveTab('files')
+              // の初回 lazy open が Files 子タブを activate するため、戻った後に
+              // Review 子タブをもう一度権威状態へ戻す。
+              if (kind === 'review') {
+                activeTabId = tabId;
+                tabList.querySelectorAll('.main-tab').forEach(el => {
+                  el.classList.toggle('active', el.dataset.tabId === tabId);
+                });
+                filesContents.classList.add('visible');
+                filesContents.querySelectorAll('.files-tab-content, .git-tab-content, .review-tab-content').forEach(el => {
+                  el.classList.toggle('active', el.dataset.tabId === tabId);
+                });
+              }
             }
           }
         }
@@ -714,7 +728,7 @@ export const FilesTabManager = (function () {
 
   // ─── review タブを開く（Phase 1: 作業ツリー vs HEAD の diff ビューア）──
   // 親 plan: docs/local/plan_turn-diff-viewer.md（localStorage 復元は対象外）
-  function openReviewTab(sessionId, gitRoot) {
+  function openReviewTab(sessionId, gitRoot, turnNo = null) {
     if (!gitRoot) return null;
     ensureSessionTab();
     showTabBar();
@@ -745,10 +759,17 @@ export const FilesTabManager = (function () {
           }
         } catch (_) {}
       } else {
-        // 再度開いたときは最新の作業ツリーを取り直す
+        // 再度開いたときは指定スコープ（無指定なら現在スコープ）を取り直す
         try {
-          if (existing.reviewView && typeof existing.reviewView.refresh === 'function') {
+          if (turnNo == null && existing.reviewView && typeof existing.reviewView.refresh === 'function') {
             existing.reviewView.refresh();
+          }
+        } catch (_) {}
+      }
+      if (turnNo != null) {
+        try {
+          if (existing.reviewView && typeof existing.reviewView.setScope === 'function') {
+            existing.reviewView.setScope(turnNo);
           }
         } catch (_) {}
       }
@@ -816,7 +837,7 @@ export const FilesTabManager = (function () {
       if (typeof window.ReviewView === 'function' && sessionId != null) {
         const body = contentEl.querySelector('[data-review-placeholder-body]');
         if (body) body.remove();
-        tabObj.reviewView = new window.ReviewView(contentEl, { sessionId, gitRoot });
+        tabObj.reviewView = new window.ReviewView(contentEl, { sessionId, gitRoot, turn: turnNo });
       }
     } catch (err) {
       console.warn('[FilesTabManager] ReviewView mount failed:', err);
@@ -1076,6 +1097,17 @@ export const FilesTabManager = (function () {
 // (Cannot access 'sessions' before initialization) になるため、評価完了後のマイクロタスク
 // に遅延する。sessionsRef の実利用は Files タブ初回クリック以降なので遅延しても影響しない。
 queueMicrotask(() => { FilesTabManager.setSessionsRef(sessions); });
+
+// Review Phase 2 completion card → exact turn scope.
+window.addEventListener('many-ai-cli:review-turn-request', (event: any) => {
+  const detail = event?.detail || {};
+  const sid = Number(detail.sessionId || 0);
+  const turn = Number(detail.turn || 0);
+  const sess = sessions.get(sid);
+  const gitRoot = detail.gitRoot || sess?.git_root || sess?.cwd || '';
+  if (!sid || !turn || !gitRoot) return;
+  FilesTabManager.openReviewTab(sid, gitRoot, turn);
+});
 
 // ---- Files tree / preview ----
 // ---- v2: Files ビュー本体 ----

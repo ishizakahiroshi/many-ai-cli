@@ -43,6 +43,7 @@ export type MessageType =
   | 'ping'
   | 'usage_stat'
   | 'done_summary'
+  | 'git_turn'
   | 'spawn_confirmation_requested';
 
 export type DoneSummaryKind = 'success' | 'failure' | 'aborted' | 'needs_action' | string;
@@ -126,6 +127,11 @@ export interface Message {
   approval_options?: ApprovalOption[];
   approval_summary?: ApprovalSummary;
   done_summary?: DoneSummary;
+  turn?: number;
+  files_changed?: number;
+  added?: number;
+  removed?: number;
+  ended_at?: string;
   block?: string;
   sent_text?: string;
   commit_subject?: string;
