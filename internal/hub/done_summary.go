@@ -27,6 +27,10 @@ func (s *Server) publishDoneSummary(summary proto.DoneSummary) {
 	if summary.At == "" {
 		summary.At = time.Now().Format(time.RFC3339)
 	}
+	// 次ターン入力が DONE 通知直後に届いても baseline を取りこぼさないよう、
+	// 完了 snapshot を「処理中」と同期的に確定してから UI へ通知する。
+	// Git I/O 自体は captureGitTurnEnd が内部 goroutine で行う。
+	s.captureGitTurnEnd(summary.SessionID, summary.At)
 	s.broadcast(proto.Message{Type: "done_summary", SessionID: summary.SessionID, Provider: summary.Provider, DoneSummary: &summary})
 
 	s.cfgMu.Lock()
