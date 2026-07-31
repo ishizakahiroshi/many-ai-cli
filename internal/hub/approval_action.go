@@ -241,7 +241,7 @@ func (s *Server) applyOneTapApproval(claim oneTapApprovalClaim) error {
 		return errOneTapHighRisk
 	}
 	if claim.Action == oneTapApprove {
-		input = oneTapApproveInput(approval.Options)
+		input = autoApprovalInput(approval.Options)
 	} else {
 		input = oneTapRejectInput(approval.Options)
 	}
@@ -282,10 +282,6 @@ func (s *Server) applyOneTapApproval(claim oneTapApprovalClaim) error {
 	}
 	s.broadcast(*clearMsg)
 	return nil
-}
-
-func oneTapApproveInput(options []proto.ApprovalOption) string {
-	return autoApprovalInput(options)
 }
 
 func oneTapRejectInput(options []proto.ApprovalOption) string {

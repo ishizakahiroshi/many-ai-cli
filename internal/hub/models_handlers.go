@@ -21,11 +21,13 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	localCfg := append([]config.LocalModel(nil), s.cfg.LocalModels...)
 	source := s.cfg.ModelsSource
 	ollamaBaseURL := s.cfg.Ollama.BaseURL
+	ollamaAllowPrivate := s.cfg.Ollama.AllowPrivateHosts
 	lmStudioBaseURL := s.cfg.LMStudio.BaseURL
+	lmStudioAllowPrivate := s.cfg.LMStudio.AllowPrivateHosts
 	s.cfgMu.Unlock()
 	if source == "" {
 		source = config.DefaultModelsSource
 	}
-	resp := buildModelsResponse(s.modelsCache, s.modelsRemoteCache, source, localCfg, ollamaBaseURL, lmStudioBaseURL, force)
+	resp := buildModelsResponse(s.modelsCache, s.modelsRemoteCache, source, localCfg, ollamaBaseURL, lmStudioBaseURL, force, ollamaAllowPrivate, lmStudioAllowPrivate)
 	writeJSON(w, resp)
 }

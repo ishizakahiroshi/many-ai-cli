@@ -95,6 +95,14 @@ func TestBakedWhisperServerPath(t *testing.T) {
 	if bakedWhisperServerPath() != "" {
 		t.Fatal("bakedWhisperServerPath should be empty when the file is absent")
 	}
+	other := filepath.Join(dir, "not-whisper")
+	if err := os.WriteFile(other, []byte("no"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(whisperServerEnvVar, other)
+	if bakedWhisperServerPath() != "" {
+		t.Fatal("bakedWhisperServerPath should reject an unexpected executable basename")
+	}
 }
 
 func TestExtractZipSelectedFlattens(t *testing.T) {

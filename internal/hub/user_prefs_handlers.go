@@ -118,6 +118,7 @@ func (s *Server) handleUserPrefsPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	prefs.Avatar = sanitizeAvatarPref(prefs.Avatar)
+	prefs.NotifySound = sanitizeNotifySoundPref(prefs.NotifySound)
 	s.cfgMu.Lock()
 	s.cfg.UserPrefs = prefs
 	s.cfgMu.Unlock()
@@ -130,6 +131,20 @@ func (s *Server) handleUserPrefsPut(w http.ResponseWriter, r *http.Request) {
 	saved := s.cfg.UserPrefs.Clone()
 	s.cfgMu.Unlock()
 	writeJSON(w, saved)
+}
+
+func sanitizeNotifySoundPref(sound config.UserPrefsNotifySound) config.UserPrefsNotifySound {
+	if sound.CustomFile == "" && sound.CustomMime == "" {
+		return sound
+	}
+	path, err := notifySoundCustomPath()
+	if err != nil || pathExistsCandidateKey(sound.CustomFile) != pathExistsCandidateKey(path) || !notifySoundAllowed(sound.CustomMime) {
+		sound.CustomFile = ""
+		sound.CustomMime = ""
+		return sound
+	}
+	sound.CustomFile = path
+	return sound
 }
 
 // handleUserPrefsNotifySoundCustom は GET / PUT /api/user-prefs/notify-sound-custom を処理する。

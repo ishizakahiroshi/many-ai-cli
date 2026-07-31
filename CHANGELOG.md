@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release artifacts are published at
 <https://github.com/ishizakahiroshi/many-ai-cli/releases>.
 
+## [Unreleased]
+
+### Security
+
+- **Breaking:** Explicit private-network `ollama.base_url` and
+  `lm_studio.base_url` values now require `allow_private_hosts: true` in the
+  corresponding config section. Only an omitted base URL keeps using the
+  built-in loopback default without opt-in. Every explicitly configured
+  private or loopback address—including `localhost`, `127.0.0.1`, `::1`, and
+  loopback services on non-default ports—must opt in explicitly.
+
 ## [0.5.1] - 2026-07-22
 
 ### Added

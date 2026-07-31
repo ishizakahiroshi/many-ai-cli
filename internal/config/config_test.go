@@ -431,6 +431,7 @@ func TestOllamaBaseURLRoundTripAndValidation(t *testing.T) {
 		t.Fatalf("LoadOrCreate: %v", err)
 	}
 	cfg1.Ollama.BaseURL = "http://192.168.11.50:11434"
+	cfg1.Ollama.AllowPrivateHosts = true
 	if err := Save(cfg1); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -441,6 +442,9 @@ func TestOllamaBaseURLRoundTripAndValidation(t *testing.T) {
 	}
 	if cfg2.Ollama.BaseURL != "http://192.168.11.50:11434" {
 		t.Fatalf("Ollama.BaseURL = %q", cfg2.Ollama.BaseURL)
+	}
+	if !cfg2.Ollama.AllowPrivateHosts {
+		t.Fatal("Ollama.AllowPrivateHosts = false, want true")
 	}
 	if got := EffectiveOllamaBaseURL(""); got != DefaultOllamaBaseURL {
 		t.Fatalf("EffectiveOllamaBaseURL(\"\") = %q", got)
@@ -456,6 +460,19 @@ func TestOllamaBaseURLRoundTripAndValidation(t *testing.T) {
 		cfg.Ollama.BaseURL = raw
 		if err := cfg.Validate(); err == nil {
 			t.Fatalf("Validate() with ollama.base_url %q succeeded, want error", raw)
+		}
+	}
+	for _, target := range []struct {
+		name string
+		set  func(*Config)
+	}{
+		{"ollama", func(cfg *Config) { cfg.Ollama.BaseURL = "http://10.0.0.20:11434" }},
+		{"lm_studio", func(cfg *Config) { cfg.LMStudio.BaseURL = "http://192.168.1.20:1234" }},
+	} {
+		cfg := defaultConfig(t.TempDir())
+		target.set(cfg)
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("Validate() with private %s host succeeded without opt-in", target.name)
 		}
 	}
 }

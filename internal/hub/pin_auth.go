@@ -35,6 +35,9 @@ const (
 	pinCookieName = "MANY_AI_CLI_pin"
 	// pinCookieTTL は PIN 認証セッションの有効期間。
 	pinCookieTTL = 12 * time.Hour
+	// maxPINSessions は nonce レジストリの上限。成功ログインの連打で
+	// cookie TTL 中のエントリが無制限に増えないようにする。
+	maxPINSessions = 256
 	// pinLockThreshold は連続失敗で次のロックに入るまでの回数。
 	pinLockThreshold = 5
 	// pinGlobalFailCap は全 IP 合計でこの失敗数を超えたら一時的に全 PIN 受付を止める閾値
@@ -77,35 +80,60 @@ func verifyPIN(hash, plain string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(plain)) == nil
 }
 
-// signPINCookie は expiry（unix 秒）を secret で HMAC-SHA256 署名した cookie 値を返す。
-func signPINCookie(secret string, expiry int64) string {
+// signPINCookie は expiry.nonce.deviceHash を HMAC-SHA256 署名する。
+// payloadParts を省略した expiry-only 形式は既存 unit test と旧 cookie の検証互換専用。
+func signPINCookie(secret string, expiry int64, payloadParts ...string) string {
 	payload := strconv.FormatInt(expiry, 10)
+	if len(payloadParts) == 2 {
+		payload += "." + payloadParts[0] + "." + payloadParts[1]
+	}
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(payload))
 	return payload + "." + hex.EncodeToString(mac.Sum(nil))
 }
 
 // verifyPINCookie は cookie 値の署名と有効期限を検証する。
-func verifyPINCookie(secret, value string, now time.Time) bool {
-	if secret == "" || value == "" {
+func verifyPINCookie(secret, value string, now time.Time, expectedDeviceHash ...string) bool {
+	expiry, _, deviceHash, ok := parsePINCookie(secret, value)
+	if !ok || now.Unix() >= expiry {
 		return false
+	}
+	return len(expectedDeviceHash) == 0 || (deviceHash != "" && subtle.ConstantTimeCompare([]byte(deviceHash), []byte(expectedDeviceHash[0])) == 1)
+}
+
+func parsePINCookie(secret, value string) (int64, string, string, bool) {
+	if secret == "" || value == "" {
+		return 0, "", "", false
 	}
 	dot := strings.LastIndex(value, ".")
 	if dot <= 0 || dot == len(value)-1 {
-		return false
+		return 0, "", "", false
 	}
 	payload, sig := value[:dot], value[dot+1:]
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(payload))
 	want := hex.EncodeToString(mac.Sum(nil))
 	if subtle.ConstantTimeCompare([]byte(sig), []byte(want)) != 1 {
-		return false
+		return 0, "", "", false
 	}
-	expiry, err := strconv.ParseInt(payload, 10, 64)
+	parts := strings.Split(payload, ".")
+	expiry, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
-		return false
+		return 0, "", "", false
 	}
-	return now.Unix() < expiry
+	if len(parts) == 1 {
+		return expiry, "", "", true
+	}
+	if len(parts) != 3 || parts[1] == "" || parts[2] == "" {
+		return 0, "", "", false
+	}
+	return expiry, parts[1], parts[2], true
+}
+
+type pinCookieSession struct {
+	expiry     int64
+	deviceHash string
+	issuedAt   int64
 }
 
 // --- ロックアウト（レート制限） ---
@@ -138,8 +166,10 @@ func (l *pinLimiter) retryAfter(ip string, now time.Time) int {
 	if now.Before(l.globalUntil) {
 		return int(l.globalUntil.Sub(now).Seconds()) + 1
 	}
-	if a := l.perIP[ip]; a != nil && now.Before(a.lockedUntil) {
-		return int(a.lockedUntil.Sub(now).Seconds()) + 1
+	if ip != "" {
+		if a := l.perIP[ip]; a != nil && now.Before(a.lockedUntil) {
+			return int(a.lockedUntil.Sub(now).Seconds()) + 1
+		}
 	}
 	return 0
 }
@@ -161,22 +191,24 @@ func (l *pinLimiter) beginAttempt(ip string, now time.Time) int {
 	if now.Before(l.globalUntil) {
 		return int(l.globalUntil.Sub(now).Seconds()) + 1
 	}
-	if a := l.perIP[ip]; a != nil && now.Before(a.lockedUntil) {
-		return int(a.lockedUntil.Sub(now).Seconds()) + 1
-	}
-	a := l.perIP[ip]
-	if a == nil {
-		a = &pinAttempt{}
-		l.perIP[ip] = a
-	}
-	a.lastSeen = now
-	a.fails++
-	if a.fails >= pinLockThreshold {
-		a.lockedUntil = now.Add(pinLockDurations[min(a.lockLevel, len(pinLockDurations)-1)])
-		if a.lockLevel < len(pinLockDurations)-1 {
-			a.lockLevel++
+	if ip != "" {
+		if a := l.perIP[ip]; a != nil && now.Before(a.lockedUntil) {
+			return int(a.lockedUntil.Sub(now).Seconds()) + 1
 		}
-		a.fails = 0
+		a := l.perIP[ip]
+		if a == nil {
+			a = &pinAttempt{}
+			l.perIP[ip] = a
+		}
+		a.lastSeen = now
+		a.fails++
+		if a.fails >= pinLockThreshold {
+			a.lockedUntil = now.Add(pinLockDurations[min(a.lockLevel, len(pinLockDurations)-1)])
+			if a.lockLevel < len(pinLockDurations)-1 {
+				a.lockLevel++
+			}
+			a.fails = 0
+		}
 	}
 	// 全体カウンタ（分散ブルートフォース対策）。pinAttemptTTL 経過でリセット。
 	if now.Sub(l.globalSeen) > pinAttemptTTL {
@@ -192,6 +224,9 @@ func (l *pinLimiter) beginAttempt(ip string, now time.Time) int {
 }
 
 func (l *pinLimiter) recordSuccess(ip string) {
+	if ip == "" {
+		return
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	delete(l.perIP, ip)
@@ -222,6 +257,25 @@ func clientIPKey(remoteAddr string) string {
 	return strings.TrimSpace(remoteAddr)
 }
 
+// pinRateLimitKey avoids collapsing every Tailscale Serve client into the
+// proxy's 127.0.0.1 bucket. A Tailscale identity header is trusted only when
+// the TCP peer is loopback and the request is logically remote; otherwise the
+// per-client bucket is skipped and the global failure cap remains in force.
+func (s *Server) pinRateLimitKey(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if isLoopbackRemote(r.RemoteAddr) && s.isLogicallyRemote(r) {
+		login := strings.ToLower(strings.TrimSpace(r.Header.Get("Tailscale-User-Login")))
+		if login == "" {
+			return ""
+		}
+		sum := sha256.Sum256([]byte("tailscale:" + login))
+		return "ts:" + hex.EncodeToString(sum[:8])
+	}
+	return clientIPKey(r.RemoteAddr)
+}
+
 // --- ゲート ---
 
 // hasValidPINCookie はリクエストが有効な PIN セッション cookie を提示しているか返す。
@@ -236,7 +290,75 @@ func (s *Server) hasValidPINCookie(r *http.Request) bool {
 	s.cfgMu.Lock()
 	secret := s.cfg.AuthCookieSecret
 	s.cfgMu.Unlock()
-	return verifyPINCookie(secret, c.Value, time.Now())
+	deviceHash := requestDeviceHash(r)
+	if !verifyPINCookie(secret, c.Value, time.Now(), deviceHash) {
+		return false
+	}
+	expiry, nonce, signedDeviceHash, ok := parsePINCookie(secret, c.Value)
+	if !ok || nonce == "" {
+		return false
+	}
+	s.pinSessionsMu.Lock()
+	defer s.pinSessionsMu.Unlock()
+	now := time.Now().Unix()
+	s.pruneExpiredPINSessionsLocked(now)
+	session, ok := s.pinSessions[nonce]
+	return ok && session.expiry == expiry && session.deviceHash == signedDeviceHash
+}
+
+func (s *Server) issuePINCookie(secret string, r *http.Request, expiry int64) (string, error) {
+	nonce, err := randomHex(16)
+	if err != nil {
+		return "", err
+	}
+	deviceHash := requestDeviceHash(r)
+	now := time.Now()
+	s.pinSessionsMu.Lock()
+	if s.pinSessions == nil {
+		s.pinSessions = map[string]pinCookieSession{}
+	}
+	s.pruneExpiredPINSessionsLocked(now.Unix())
+	s.evictPINSessionsForInsertLocked()
+	s.pinSessions[nonce] = pinCookieSession{expiry: expiry, deviceHash: deviceHash, issuedAt: now.UnixNano()}
+	s.pinSessionsMu.Unlock()
+	return signPINCookie(secret, expiry, nonce, deviceHash), nil
+}
+
+func (s *Server) pruneExpiredPINSessionsLocked(now int64) {
+	for nonce, session := range s.pinSessions {
+		if session.expiry <= now {
+			delete(s.pinSessions, nonce)
+		}
+	}
+}
+
+// evictPINSessionsForInsertLocked reserves one slot for a new PIN session.
+// The caller holds pinSessionsMu.
+func (s *Server) evictPINSessionsForInsertLocked() {
+	for len(s.pinSessions) >= maxPINSessions {
+		oldestNonce := ""
+		var oldestIssuedAt int64
+		for nonce, session := range s.pinSessions {
+			if oldestNonce == "" || session.issuedAt < oldestIssuedAt {
+				oldestNonce = nonce
+				oldestIssuedAt = session.issuedAt
+			}
+		}
+		if oldestNonce == "" {
+			return
+		}
+		delete(s.pinSessions, oldestNonce)
+	}
+}
+
+func (s *Server) revokePINCookie(value, secret string) {
+	_, nonce, _, ok := parsePINCookie(secret, value)
+	if !ok || nonce == "" {
+		return
+	}
+	s.pinSessionsMu.Lock()
+	delete(s.pinSessions, nonce)
+	s.pinSessionsMu.Unlock()
 }
 
 // remotePINRequired は「論理的に remote かつ PIN 設定済み」を返す。
@@ -282,7 +404,7 @@ func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 	authed := !pinSet || !remote || s.hasValidPINCookie(r)
 	retry := 0
 	if pinSet && remote {
-		retry = s.pinLim().retryAfter(clientIPKey(r.RemoteAddr), time.Now())
+		retry = s.pinLim().retryAfter(s.pinRateLimitKey(r), time.Now())
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, map[string]any{
@@ -314,7 +436,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "internal", "pin not configured")
 		return
 	}
-	ip := clientIPKey(r.RemoteAddr)
+	ip := s.pinRateLimitKey(r)
 	now := time.Now()
 	var body struct {
 		PIN string `json:"pin"`
@@ -356,11 +478,17 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	s.pinLim().recordSuccess(ip)
 	expiry := now.Add(pinCookieTTL).Unix()
+	cookieValue, err := s.issuePINCookie(secret, r, expiry)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "internal", "failed to create pin session")
+		return
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     pinCookieName,
-		Value:    signPINCookie(secret, expiry),
+		Value:    cookieValue,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   requestUsesHTTPS(r),
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   int(pinCookieTTL / time.Second),
 	})
@@ -433,11 +561,17 @@ func (s *Server) handleAuthSetPIN(w http.ResponseWriter, r *http.Request) {
 	}
 	// 設定/変更した本人（このリクエスト元）が直後に弾かれないよう PIN cookie を発行する。
 	expiry := time.Now().Add(pinCookieTTL).Unix()
+	cookieValue, err := s.issuePINCookie(effSecret, r, expiry)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "internal", "failed to create pin session")
+		return
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     pinCookieName,
-		Value:    signPINCookie(effSecret, expiry),
+		Value:    cookieValue,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   requestUsesHTTPS(r),
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   int(pinCookieTTL / time.Second),
 	})
@@ -453,14 +587,47 @@ const (
 	knownDeviceTTL = 24 * time.Hour
 )
 
-// deviceKey は IP + UA から不可逆なデバイス識別子（先頭 16 hex）を作る。
+// deviceKey は IP + browser brand/OS の粗い bucket から不可逆な識別子を作る。
 func deviceKey(remoteAddr, ua string) string {
-	ipStr := ""
+	ipStr := strings.TrimSpace(remoteAddr)
 	if ip := remoteAddrIP(remoteAddr); ip != nil {
 		ipStr = ip.String()
 	}
-	sum := sha256.Sum256([]byte(ipStr + "\x00" + ua))
+	sum := sha256.Sum256([]byte(ipStr + "\x00" + userAgentBucket(ua)))
 	return hex.EncodeToString(sum[:])[:16]
+}
+
+func requestDeviceHash(r *http.Request) string {
+	if r == nil {
+		return deviceKey("", "")
+	}
+	identity := r.RemoteAddr
+	if isLoopbackRemote(r.RemoteAddr) {
+		login := strings.ToLower(strings.TrimSpace(r.Header.Get("Tailscale-User-Login")))
+		if login != "" {
+			identity = "tailscale:" + login
+		}
+	}
+	return deviceKey(identity, r.UserAgent())
+}
+
+func userAgentBucket(ua string) string {
+	lower := strings.ToLower(ua)
+	brand := "other"
+	for _, candidate := range []string{"edg/", "chrome/", "firefox/", "safari/", "curl/", "many-ai-cli"} {
+		if strings.Contains(lower, candidate) {
+			brand = strings.TrimSuffix(candidate, "/")
+			break
+		}
+	}
+	osName := "other"
+	for _, candidate := range []string{"windows", "android", "iphone", "ipad", "mac os", "linux"} {
+		if strings.Contains(lower, candidate) {
+			osName = candidate
+			break
+		}
+	}
+	return brand + "/" + osName
 }
 
 // noteRemoteDevice は remote（非 loopback）からの認証済みアクセスを記録し、
@@ -474,7 +641,7 @@ func (s *Server) noteRemoteDevice(r *http.Request, via string) {
 		return
 	}
 	ua := strings.TrimSpace(r.UserAgent())
-	key := deviceKey(r.RemoteAddr, ua)
+	key := requestDeviceHash(r)
 	now := time.Now()
 
 	s.devicesMu.Lock()

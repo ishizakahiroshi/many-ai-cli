@@ -2,6 +2,7 @@ package autoapproval
 
 import (
 	"many-ai-cli/internal/proto"
+	"os"
 	"regexp"
 	"testing"
 )
@@ -31,6 +32,56 @@ func TestRuleMatchesHardBlock(t *testing.T) {
 	}
 	if ruleMatchesHardBlock(mustRegexp(`^git status$`)) {
 		t.Fatal("read-only rule must remain valid")
+	}
+}
+
+func TestLoadReadFailureReturnsDisabledPolicy(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	path, err := Path()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	p, err := Load()
+	if err == nil || p == nil || len(p.Rules) != 0 || len(p.Warnings) == 0 {
+		t.Fatalf("Load read failure = policy=%+v err=%v", p, err)
+	}
+}
+
+func TestAddRuleReusesDuplicate(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	first, err := AddRule("go test ./...", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := AddRule("go test ./...", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.ID != second.ID {
+		t.Fatalf("duplicate rule IDs differ: %q vs %q", first.ID, second.ID)
+	}
+	p, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Rules) != 1 {
+		t.Fatalf("rules = %d, want 1", len(p.Rules))
+	}
+}
+
+func TestAddRuleRejectsHardBlock(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	if _, err := AddRule("git push origin main", home); err == nil {
+		t.Fatal("hard-blocked command was added")
 	}
 }
 

@@ -2,6 +2,7 @@ package hub
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -64,6 +65,40 @@ func TestPINCookieRoundTrip(t *testing.T) {
 	}
 	if verifyPINCookie(secret, "garbage", now) {
 		t.Fatal("malformed cookie must not verify")
+	}
+}
+
+func TestPINCookieCarriesNonceAndDeviceHash(t *testing.T) {
+	secret := "abc-secret"
+	now := time.Now()
+	expiry := now.Add(time.Hour).Unix()
+	val := signPINCookie(secret, expiry, "nonce-1", "device-1")
+	gotExpiry, nonce, deviceHash, ok := parsePINCookie(secret, val)
+	if !ok || gotExpiry != expiry || nonce != "nonce-1" || deviceHash != "device-1" {
+		t.Fatalf("parsePINCookie = (%d,%q,%q,%v)", gotExpiry, nonce, deviceHash, ok)
+	}
+	if !verifyPINCookie(secret, val, now, "device-1") {
+		t.Fatal("cookie should verify for its issuing device")
+	}
+	if verifyPINCookie(secret, val, now, "device-2") {
+		t.Fatal("cookie must not verify for another device")
+	}
+}
+
+func TestPINRateLimitKeyForLoopbackProxy(t *testing.T) {
+	s := newTestServer()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
+	req.RemoteAddr = testLoopbackAddr
+	req.Host = "host.example.ts.net"
+	if got := s.pinRateLimitKey(req); got != "" {
+		t.Fatalf("anonymous proxy key = %q, want global-only empty key", got)
+	}
+	req.Header.Set("Tailscale-User-Login", "alice@example.com")
+	alice := s.pinRateLimitKey(req)
+	req.Header.Set("Tailscale-User-Login", "bob@example.com")
+	bob := s.pinRateLimitKey(req)
+	if alice == "" || bob == "" || alice == bob {
+		t.Fatalf("identity keys must be non-empty and distinct: alice=%q bob=%q", alice, bob)
 	}
 }
 
@@ -161,6 +196,137 @@ func TestAuthLogin_WrongThenCorrect(t *testing.T) {
 	w3 := httptest.NewRecorder()
 	if !s.requireRemotePIN(w3, req) {
 		t.Fatalf("valid PIN cookie should pass gate, got %d", w3.Code)
+	}
+}
+
+func TestAuthLoginSecureCookieThroughHTTPSProxy(t *testing.T) {
+	s := newPINTestServer(t, "123456")
+	s.cfg.Hub.AllowedHosts = []string{"host.example.ts.net"}
+	req := loginReq("123456")
+	req.RemoteAddr = testLoopbackAddr
+	req.Host = "host.example.ts.net"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	w := httptest.NewRecorder()
+	s.handleAuthLogin(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("login code = %d, want 200", w.Code)
+	}
+	for _, cookie := range w.Result().Cookies() {
+		if cookie.Name == pinCookieName && !cookie.Secure {
+			t.Fatal("PIN cookie over an HTTPS proxy must be Secure")
+		}
+	}
+}
+
+func TestAuthLogoutRevokesOnlyPresentedPINSession(t *testing.T) {
+	s := newPINTestServer(t, "123456")
+	login := func() *http.Cookie {
+		w := httptest.NewRecorder()
+		s.handleAuthLogin(w, loginReq("123456"))
+		for _, c := range w.Result().Cookies() {
+			if c.Name == pinCookieName {
+				return c
+			}
+		}
+		t.Fatal("PIN cookie missing")
+		return nil
+	}
+	first := login()
+	second := login()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/logout?token=tok", nil)
+	req.Host = testHubHost
+	req.RemoteAddr = testRemoteAddr
+	req.AddCookie(first)
+	w := httptest.NewRecorder()
+	s.handleAuthLogout(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("logout code = %d", w.Code)
+	}
+	check := func(cookie *http.Cookie) bool {
+		r := httptest.NewRequest(http.MethodGet, "/api/anything", nil)
+		r.RemoteAddr = testRemoteAddr
+		r.AddCookie(cookie)
+		return s.hasValidPINCookie(r)
+	}
+	if check(first) {
+		t.Fatal("presented PIN session remained valid after logout")
+	}
+	if !check(second) {
+		t.Fatal("logout revoked an unrelated PIN session")
+	}
+}
+
+func TestIssuePINCookieEvictsOldestSessionAtCapacity(t *testing.T) {
+	s := newTestServer()
+	now := time.Now()
+	expiry := now.Add(pinCookieTTL).Unix()
+	s.pinSessions = make(map[string]pinCookieSession, maxPINSessions)
+	for i := 0; i < maxPINSessions; i++ {
+		nonce := fmt.Sprintf("nonce-%03d", i)
+		s.pinSessions[nonce] = pinCookieSession{
+			expiry:     expiry,
+			deviceHash: "device",
+			issuedAt:   int64(i + 1),
+		}
+	}
+	req := httptest.NewRequest(http.MethodPost, "https://example.test/api/auth/login", nil)
+	req.RemoteAddr = testRemoteAddr
+	value, err := s.issuePINCookie("secret", req, expiry)
+	if err != nil {
+		t.Fatalf("issuePINCookie: %v", err)
+	}
+	if got := len(s.pinSessions); got != maxPINSessions {
+		t.Fatalf("pin session count = %d, want %d", got, maxPINSessions)
+	}
+	if _, exists := s.pinSessions["nonce-000"]; exists {
+		t.Fatal("oldest PIN session was not evicted")
+	}
+	_, nonce, _, ok := parsePINCookie("secret", value)
+	if !ok || nonce == "" {
+		t.Fatalf("issued cookie is invalid: ok=%v nonce=%q", ok, nonce)
+	}
+	if _, exists := s.pinSessions[nonce]; !exists {
+		t.Fatal("new PIN session was not retained")
+	}
+}
+
+func TestIssuePINCookiePrunesExpiredBeforeEviction(t *testing.T) {
+	s := newTestServer()
+	now := time.Now()
+	s.pinSessions = map[string]pinCookieSession{
+		"expired": {
+			expiry:     now.Add(-time.Minute).Unix(),
+			deviceHash: "device",
+			issuedAt:   1,
+		},
+		"active": {
+			expiry:     now.Add(time.Hour).Unix(),
+			deviceHash: "device",
+			issuedAt:   2,
+		},
+	}
+	req := httptest.NewRequest(http.MethodPost, "https://example.test/api/auth/login", nil)
+	req.RemoteAddr = testRemoteAddr
+	if _, err := s.issuePINCookie("secret", req, now.Add(pinCookieTTL).Unix()); err != nil {
+		t.Fatalf("issuePINCookie: %v", err)
+	}
+	if _, exists := s.pinSessions["expired"]; exists {
+		t.Fatal("expired PIN session was not pruned")
+	}
+	if _, exists := s.pinSessions["active"]; !exists {
+		t.Fatal("active PIN session was evicted while capacity was available")
+	}
+}
+
+func TestDeviceKeyUsesCoarseUserAgentBucket(t *testing.T) {
+	a := deviceKey(testRemoteAddr, "Mozilla/5.0 (Windows NT 10.0) Chrome/120.0")
+	b := deviceKey(testRemoteAddr, "Mozilla/5.0 (Windows NT 10.0) Chrome/999.0")
+	if a != b {
+		t.Fatalf("Chrome version churn changed device bucket: %q vs %q", a, b)
+	}
+	c := deviceKey(testRemoteAddr, "Mozilla/5.0 (Windows NT 10.0) Firefox/120.0")
+	if a == c {
+		t.Fatal("different browser brands collapsed into one device bucket")
 	}
 }
 

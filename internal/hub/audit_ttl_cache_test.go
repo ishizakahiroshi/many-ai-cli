@@ -53,8 +53,8 @@ func TestTTLCacheGetSingleFlight(t *testing.T) {
 
 	// 1 本目の fetch が始まるのを待つ。
 	<-started
-	// 残り caller が fetchCond.Wait() に入る猶予を与える。
-	time.Sleep(50 * time.Millisecond)
+	// release 後に到着した caller も成功キャッシュを共有するため、waiter の
+	// scheduling を sleep で推測する必要はない。
 	close(release)
 	wg.Wait()
 

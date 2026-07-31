@@ -27,6 +27,8 @@ import (
 )
 
 const activeFile = "launcher-active.json"
+
+const activeTempStaleAfter = time.Hour
 const connectLockPrefix = "launcher-connect-"
 
 // activeProbeTimeout bounds the /api/info liveness probe per entry.
@@ -135,6 +137,10 @@ func saveActiveFile(d *activeFileData) error {
 	if err != nil {
 		return fmt.Errorf("marshal launcher active file: %w", err)
 	}
+	// A process killed between CreateTemp and Rename cannot run its defer.
+	// Do not remove fresh artifacts: another launcher process may still be
+	// writing one and needs it for the subsequent atomic Rename.
+	cleanupStaleActiveTemps(dir, time.Now())
 
 	tmp, err := os.CreateTemp(dir, "launcher-active-*.json.tmp")
 	if err != nil {
@@ -158,6 +164,20 @@ func saveActiveFile(d *activeFileData) error {
 		return fmt.Errorf("chmod temp launcher active file: %w", err)
 	}
 	return os.Rename(tmpName, path)
+}
+
+func cleanupStaleActiveTemps(dir string, now time.Time) {
+	names, err := filepath.Glob(filepath.Join(dir, "launcher-active-*.json.tmp"))
+	if err != nil {
+		return
+	}
+	for _, name := range names {
+		info, statErr := os.Stat(name)
+		if statErr != nil || now.Sub(info.ModTime()) < activeTempStaleAfter {
+			continue
+		}
+		_ = os.Remove(name)
+	}
 }
 
 // TryAcquireProfileConnectLock creates a startup lock for profile. If another

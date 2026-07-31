@@ -7,8 +7,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
+
+var normalWorktreeCreateMu sync.Mutex
 
 const (
 	worktreeCleanupDelete = "delete"
@@ -38,6 +41,8 @@ func effectiveWorktreeCleanup(value string) string {
 // session. Its directory deliberately stays below the repository root so it
 // remains easy to discover and prune with standard git commands.
 func prepareNormalWorktree(cwd, label string, now time.Time) (normalWorktree, error) {
+	normalWorktreeCreateMu.Lock()
+	defer normalWorktreeCreateMu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "git", "-C", cwd, "rev-parse", "--show-toplevel").Output()

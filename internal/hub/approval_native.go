@@ -106,17 +106,8 @@ func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval)
 // handleDoneSummaryMarker は PTY データから [MANY-AI-CLI-DONE] マーカーを検出し、
 // 完了サマリーを履歴と通知へ発行する。外部通知が OFF でも Hub 履歴は残す。
 func (s *Server) handleDoneSummaryMarker(id int, data []byte) {
-	open := bytes.Index(data, doneSummaryMarkerOpen)
-	if open < 0 {
-		return
-	}
-	start := open + len(doneSummaryMarkerOpen)
-	closeIdx := bytes.Index(data[start:], doneSummaryMarkerClose)
-	if closeIdx < 0 {
-		return
-	}
-	summary := strings.TrimSpace(string(data[start : start+closeIdx]))
-	if summary == "" {
+	summaries := extractDoneSummaryTexts(data)
+	if len(summaries) == 0 {
 		return
 	}
 
@@ -140,7 +131,30 @@ func (s *Server) handleDoneSummaryMarker(id int, data []byte) {
 	titleName := doneSummaryTitle(ses)
 	provider := ses.Provider
 	s.sessionsMu.Unlock()
-	s.publishDoneSummary(proto.DoneSummary{SessionID: id, Provider: provider, Title: titleName, Text: summary, At: now.Format(time.RFC3339)})
+	for _, summary := range summaries {
+		s.publishDoneSummary(proto.DoneSummary{SessionID: id, Provider: provider, Title: titleName, Text: summary, At: now.Format(time.RFC3339)})
+	}
+}
+
+func extractDoneSummaryTexts(data []byte) []string {
+	var summaries []string
+	remaining := data
+	for {
+		open := bytes.Index(remaining, doneSummaryMarkerOpen)
+		if open < 0 {
+			break
+		}
+		start := open + len(doneSummaryMarkerOpen)
+		closeIdx := bytes.Index(remaining[start:], doneSummaryMarkerClose)
+		if closeIdx < 0 {
+			break
+		}
+		if summary := strings.TrimSpace(string(remaining[start : start+closeIdx])); summary != "" {
+			summaries = append(summaries, summary)
+		}
+		remaining = remaining[start+closeIdx+len(doneSummaryMarkerClose):]
+	}
+	return summaries
 }
 
 // notifyDonePush は Web Push でタスク完了通知を送信する。

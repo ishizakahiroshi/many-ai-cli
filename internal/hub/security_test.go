@@ -17,10 +17,10 @@ import (
 	"testing"
 	"time"
 
-	"many-ai-cli/internal/config"
-	"many-ai-cli/internal/proto"
 	"golang.org/x/net/websocket"
 	"log/slog"
+	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/proto"
 )
 
 // newSecTestServer は token="tok"、hubCWD=<tmp> の最小 Server を生成する。
@@ -320,6 +320,7 @@ func TestWSHandshakeAllowsLoopbackHostAndOrigin(t *testing.T) {
 	s := newSecTestServer(t, t.TempDir())
 	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
 	req.Host = "127.0.0.1:47777"
+	req.RemoteAddr = "127.0.0.1:40000"
 	req.Header.Set("Origin", "http://127.0.0.1:47777")
 	if err := s.wsHandshake(&websocket.Config{}, req); err != nil {
 		t.Fatalf("expected loopback Host/Origin to pass: %v", err)
@@ -351,8 +352,20 @@ func TestWSHandshakeAllowsEmptyOriginForCLI(t *testing.T) {
 	s := newSecTestServer(t, t.TempDir())
 	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
 	req.Host = "127.0.0.1:47777"
+	req.RemoteAddr = "127.0.0.1:40000"
 	if err := s.wsHandshake(&websocket.Config{}, req); err != nil {
 		t.Fatalf("expected empty Origin to pass for CLI clients: %v", err)
+	}
+}
+
+func TestWSHandshakeRejectsEmptyOriginForRemoteProxy(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Hub.AllowedHosts = []string{"host.example.ts.net"}
+	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
+	req.RemoteAddr = "127.0.0.1:40000"
+	req.Host = "host.example.ts.net"
+	if err := s.wsHandshake(nil, req); err == nil {
+		t.Fatal("expected an origin-less remote proxy websocket to be rejected")
 	}
 }
 

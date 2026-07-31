@@ -53,6 +53,7 @@ func createShortcuts(exe string) []Result {
 }
 
 func writeLinuxDesktop(path, exe, name, args string) error {
+	exe = strings.ReplaceAll(exe, "%", "%%")
 	body := "[Desktop Entry]\n" +
 		"Type=Application\n" +
 		"Name=" + name + "\n" +
