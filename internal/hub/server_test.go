@@ -731,31 +731,31 @@ func TestExtractBannerModel(t *testing.T) {
 		{
 			name:     "cursor-agent: cwd·branch 行直上",
 			provider: "cursor-agent",
-			cwd:      `C:\dev\many-ai-cli`,
+			cwd:      `D:\dev\many-ai-cli`,
 			lines: []string{
 				"  → Plan, search, build anything",
 				"   Auto",
-				`  C:\dev\many-ai-cli · develop`,
+				`  D:\dev\many-ai-cli · develop`,
 			},
 			want: "Auto",
 		},
 		{
 			name:     "cursor-agent: 使用率サフィックスを除去",
 			provider: "cursor-agent",
-			cwd:      `C:\dev\many-ai-cli`,
+			cwd:      `D:\dev\many-ai-cli`,
 			lines: []string{
 				"  Auto · 7.4%",
-				`  C:\dev\many-ai-cli · develop`,
+				`  D:\dev\many-ai-cli · develop`,
 			},
 			want: "Auto",
 		},
 		{
 			name:     "cursor-agent: 直上がプロンプト残骸なら除外",
 			provider: "cursor-agent",
-			cwd:      `C:\dev\many-ai-cli`,
+			cwd:      `D:\dev\many-ai-cli`,
 			lines: []string{
 				"  → 今日の日時は？",
-				`  C:\dev\many-ai-cli · develop`,
+				`  D:\dev\many-ai-cli · develop`,
 			},
 			want: "",
 		},

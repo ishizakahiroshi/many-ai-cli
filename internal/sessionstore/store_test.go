@@ -131,7 +131,7 @@ func TestMessagesMentionText(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("StartSession: %v", err)
 	}
-	mentioned := `C:\dev\works\plans\plan_outside.md`
+	mentioned := `D:\dev\works\plans\plan_outside.md`
 	// MessagesMentionText は role='user'（人間の入力）のみを照合対象にするため、
 	// ユーザー入力イベント（user_input → role='user'）で言及を記録する。
 	// pty_output（role='ai'）は意図的に除外される（read-only バイパス悪用防止、#8）。
@@ -144,7 +144,7 @@ func TestMessagesMentionText(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("MessagesMentionText(mentioned) = %v, %v; want true, nil", ok, err)
 	}
-	ok, err = store.MessagesMentionText(1, []string{`C:\dev\works\plans\never_mentioned.md`})
+	ok, err = store.MessagesMentionText(1, []string{`D:\dev\works\plans\never_mentioned.md`})
 	if err != nil || ok {
 		t.Fatalf("MessagesMentionText(not mentioned) = %v, %v; want false, nil", ok, err)
 	}

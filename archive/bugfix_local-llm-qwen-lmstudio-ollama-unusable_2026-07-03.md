@@ -36,7 +36,7 @@ Claude Code が送るシステムプロンプト(ツール定義・Skill一覧�
 1. LM Studio単体チャット(短文)は正常応答 → LM Studio/モデル自体は健全
 2. サーバーロード設定の `Parallel`(Max Concurrent Predictions)を4→1に変更しても同じ500が再発 → 「contextがParallel数で分割される」という仮説は誤りと判明(未検証のまま提示してしまった点は反省)
 3. Sonnet 5(Anthropic本家)セッションの `/context` 実測: ロード時点(メッセージ0件)で System prompt 8.9k + System tools 14.1k + Memory files 19.5k + Skills 4.8k = 合計47.3kトークン。ただしこれは **many-ai-cliプロジェクト(巨大CLAUDE.md込み)** での実測値であり、後述の通り条件の異なるqwenセッションにそのまま適用するのは早計だった
-4. CLAUDE.md無しの別プロジェクト(`C:\dev\nursery\code`, no git)でも同じ500が再発 → CLAUDE.mdの分量が主因ではなく、Claude Code本体のtools/skills一覧などの固定オーバーヘッドが相応に効いている
+4. CLAUDE.md無しの別プロジェクト(`D:\dev\nursery\code`, no git)でも同じ500が再発 → CLAUDE.mdの分量が主因ではなく、Claude Code本体のtools/skills一覧などの固定オーバーヘッドが相応に効いている
 5. MCPを切っても改善せず(LM Studio側では)
 
 追試: CLAUDE.md無しプロジェクトのSonnet 5(本家Anthropic)セッションで `/context` を再実測したところ、やはり合計47.3kトークン(内訳も System prompt 8.9k / System tools 14.1k / Memory files 19.5k / Skills 4.8kと完全一致)。「Memory files」の内訳は `~/.claude/CLAUDE.md`(11.9k)等の**グローバル設定のみ**で、プロジェクト固有のCLAUDE.mdは0件。つまり47.3kという床はプロジェクトのCLAUDE.mdに依存せず、グローバル設定だけで決まる**プロジェクト非依存の固定値**と確認できた。同条件(CLAUDE.md無しプロジェクト)でLM Studio + Qwen2.5-7B-Instructを再度動かしても同じ500エラーが再発することも確認済み。

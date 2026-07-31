@@ -59,10 +59,10 @@ type UsageHookParams struct {
 //
 // Claude Code は Windows で statusLine コマンドを Git Bash（無ければ PowerShell）
 // 経由で実行する。Git Bash はバックスラッシュをエスケープ文字として扱うため、
-// `C:\dev\foo\many-ai-cli.exe` のような生の Windows パスはセパレータが消えて
+// `D:\dev\foo\many-ai-cli.exe` のような生の Windows パスはセパレータが消えて
 // パスが壊れ、コマンドが「エラーも出さずに実行されない」（＝relay が一度も
 // POST せずトークンがステータスバーに出ない症状の根本原因）。
-// 正スラッシュ（`C:/dev/foo/many-ai-cli.exe`）なら Git Bash / PowerShell とも
+// 正スラッシュ（`D:/dev/foo/many-ai-cli.exe`）なら Git Bash / PowerShell とも
 // 引用符なしで実行でき、Codex の config.toml（TOML 文字列でも `\d` 等が不正
 // エスケープになる）でも同じ変換で破損を回避できる。
 // 公式ドキュメント: https://code.claude.com/docs/en/statusline.md の

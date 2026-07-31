@@ -6,7 +6,7 @@ Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI に新しいス�
 
 ## 推奨: `slash-commands-update` スキルで半自動化する
 
-手作業で本家を追う前に、`C:\dev\workshop\skills\slash-commands-update` スキルを使うのが基本。本家との差分検出・md 形式への正規化案・人間確認用レポート作成を半自動化する（採否は人間が差分だけ見て決める）。
+手作業で本家を追う前に、`D:\dev\workshop\skills\slash-commands-update` スキルを使うのが基本。本家との差分検出・md 形式への正規化案・人間確認用レポート作成を半自動化する（採否は人間が差分だけ見て決める）。
 
 - 起動: 「スラッシュコマンド鮮度確認」「slash-commands-update」等。
 - モード:
@@ -107,7 +107,7 @@ Hub は 24h キャッシュのため、即時反映には手動で強制再取�
 
 ## 関連
 
-- 半自動化スキル: `C:\dev\workshop\skills\slash-commands-update\SKILL.md`（契約: `references/provider-sources.md`）
+- 半自動化スキル: `D:\dev\workshop\skills\slash-commands-update\SKILL.md`（契約: `references/provider-sources.md`）
 - パーサ実装: `internal/hub/slash_cmd_fetch.go`
 - API ハンドラ: `internal/hub/slash_handlers.go`(`handleSlashCommands` が GET=キャッシュ / POST=強制再取得)
 - 取得元 URL 定義: `internal/config/config.go`

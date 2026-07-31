@@ -21,7 +21,7 @@
 | 変数 | 説明 | 例 |
 |---|---|---|
 | `SSH_TARGET` | SSH 接続先（`user@host` または `~/.ssh/config` のエイリアス） | `your-user@remote.example.com` |
-| `SSH_KEY` | 秘密鍵パス（config で指定済みなら空でよい） | `C:\dev\.ssh\id_ed25519` |
+| `SSH_KEY` | 秘密鍵パス（config で指定済みなら空でよい） | `D:\dev\.ssh\id_ed25519` |
 | `HUB_PORT` | Hub のポート（手元・リモートで同番号にする） | `47777` |
 | `REMOTE_CWD` | リモートでセッションを動かす作業ディレクトリ | `~/work` |
 | `PROVIDERS` | 入れる provider CLI | `claude codex` |

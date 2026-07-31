@@ -801,7 +801,7 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 ```
 ┌─ MANY-AI-CLI  [1][0][6] │ ● Claude:2  ● Codex:5         [⏻] [Settings] ─┐
 ├──────────────────────────┬──────────────────────────────────────────────┤
-│ [+ New Session]          │ ● Codex  cwd: C:\dev\many-ai-cli  [↑ to top] │
+│ [+ New Session]          │ ● Codex  cwd: D:\dev\many-ai-cli  [↑ to top] │
 │ 📁 many-ai-cli  [1][0][6] │ Terminal output — Windows PowerShell         │
 │ ─────────────────────── │                                              │
 │ 📌 #7 ● Codex Running × │   (xterm.js terminal output)                │

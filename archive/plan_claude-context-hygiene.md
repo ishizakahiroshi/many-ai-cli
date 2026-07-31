@@ -58,7 +58,7 @@
 大枠の方向性（詳細は各 C 着手時に確定）:
 
 - **機密は @import から外し、必要時に取得する経路へ寄せる**。候補:
-  - 必要なときだけ Read するルールに変える（@import を消し、CLAUDE.md には「接続情報は `C:\dev\.ssh\serverpass.toml` を Read」と場所だけ書く）
+  - 必要なときだけ Read するルールに変える（@import を消し、CLAUDE.md には「接続情報は `D:\dev\.ssh\serverpass.toml` を Read」と場所だけ書く）
   - もしくは専用 MCP / ローカルツール越しに「必要なキーだけ」引く
 - **MCP は使用頻度で判定**。常用しない Google Drive / meijie-mcp は既定で無効化し、使うセッションだけ有効化（遅延ロード）する設定にできないか調べる。
 - **family CSV は tier=high をコミット禁止の本則は維持**しつつ、常時 @import の必要性を再評価（オンデマンド or family MCP 経由に寄せる）。
@@ -86,7 +86,7 @@
 
 - `serverpass.toml` / `serverpass.ishiz.toml` の `@import` を CLAUDE.md から除去し、「必要時に Read する」運用へ置換（場所のポインタだけ残す）
 - 既存の振る舞いルール（「リポは git remote から判定」等）で @import 前提のものが壊れないか確認・追従
-- ジャンクション（`~/.claude/.ssh` → `C:\dev\.ssh`）はそのまま。@import 行のみ撤去
+- ジャンクション（`~/.claude/.ssh` → `D:\dev\.ssh`）はそのまま。@import 行のみ撤去
 
 ### 完了条件
 
