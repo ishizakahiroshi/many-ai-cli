@@ -147,6 +147,9 @@ type session struct {
 	nativeApprovalConsumed    string
 	nativeApprovalConsumedAt  time.Time
 	approvalMarkerSig         string
+	// 構造が壊れていて配信を抑止した直近のマーカー sig。同一ブロックが
+	// PTY チャンクごとに再抽出されるため、ログを 1 ブロック 1 回に絞る用途のみ。
+	approvalMarkerSuppressedSig string
 
 	// JSON 外: wrapper に最後に送った PTY サイズ（同サイズの resize を skip して不要な SIGWINCH を防ぐ）
 	lastCols      int

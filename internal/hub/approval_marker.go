@@ -51,6 +51,33 @@ func (s *Server) maybeBroadcastApprovalMarker(id int, marker *approvalMarkerBloc
 		return false
 	}
 
+	// 構造が壊れたブロックは配信しない。
+	// VT ミラーの乖離で選択肢行が欠けたまま両端マーカーだけ揃うことがあり、そのまま送ると
+	// Web に「選択肢が 3 から始まる承認パネル」が出る（bugfix_codex-approval-marker-vt-wrap-corruption_2026-07-31.md）。
+	// ここで approvalMarkerSig を書き換えないのが要点 — 書き換えると後続の正常なブロックが
+	// dedupe で潰れて承認が二度と出なくなる。
+	if reason := classifyApprovalMarkerBlock(marker.Block); reason != "" {
+		s.sessionsMu.Lock()
+		ses := s.sessions[id]
+		if ses == nil {
+			s.sessionsMu.Unlock()
+			return false
+		}
+		alreadyLogged := ses.approvalMarkerSuppressedSig == marker.Sig
+		ses.approvalMarkerSuppressedSig = marker.Sig
+		provider := ses.Provider
+		s.sessionsMu.Unlock()
+		if !alreadyLogged && s.logger != nil {
+			s.logger.Warn("approval marker suppressed: corrupt block",
+				"session_id", id,
+				"provider", provider,
+				"reason", reason,
+				"sig", shortSig(marker.Sig),
+				"lines", strings.Count(marker.Block, "\n")+1)
+		}
+		return false
+	}
+
 	s.sessionsMu.Lock()
 	ses := s.sessions[id]
 	if ses == nil {
