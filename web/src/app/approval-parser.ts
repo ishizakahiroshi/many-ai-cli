@@ -153,6 +153,26 @@
   }
 
   // 差分再描画の残骸でマーカー文字列がラベルに混入したパース結果は出さない。
+  function optionNumSeq(opts) {
+    return (opts || [])
+      .map(o => (o && typeof o.num === 'number') ? o.num : NaN)
+      .filter(n => Number.isFinite(n));
+  }
+
+  // 最初の 1 以降だけを見て重複を判定する。前置き（経緯）の地の文に行頭数字が混じると
+  // parseHubBlock がそれを擬似 option として拾うため（実例: 前置きの IP アドレス
+  // 192.168.68.100 が num=192 になる）、先頭から見ると正常なブロックを弾いてしまう。
+  function hasDuplicateNumFromFirstOne(nums) {
+    const i1 = nums.indexOf(1);
+    if (i1 < 0) return false;
+    const seen = new Set();
+    for (const n of nums.slice(i1)) {
+      if (seen.has(n)) return true;
+      seen.add(n);
+    }
+    return false;
+  }
+
   function isCorruptHubMarkerOptions(options) {
     if (!options || !Array.isArray(options) || options.length === 0) return true;
     const arr = options as any;
@@ -160,12 +180,31 @@
     const q = arr._question != null ? String(arr._question) : '';
     if (markerLeak.test(q)) return true;
     if (isBatchOptions(options)) {
-      return options.some(sec =>
+      if (options.some(sec =>
         markerLeak.test(String((sec && sec.title) || '')) ||
-        (sec.options || []).some(o => markerLeak.test(String((o && o.label) || ''))));
+        (sec.options || []).some(o => markerLeak.test(String((o && o.label) || ''))))) return true;
+      // バッチは「ブロック通し番号」「質問ごとに 1 から振り直し」の両方が許容されるため
+      // （approval-rules.md）、先頭セクションが 1 を含むかだけを検査する。
+      const firstSec = optionNumSeq(options[0] && options[0].options);
+      if (firstSec.length > 0 && firstSec.indexOf(1) < 0) return true;
+      // 質問をまたいだ番号の再利用（Q1 が 1,2,3 / Q2 が 3,4,5）は approval-rules.md が
+      // 許容しているため、重複検査はセクション内に閉じる。
+      return options.some(sec => hasDuplicateNumFromFirstOne(optionNumSeq(sec && sec.options)));
     }
-    return options.some(o => markerLeak.test(String((o && o.label) || '')) ||
-      markerLeak.test(String((o && o._question) || '')));
+    if (options.some(o => markerLeak.test(String((o && o.label) || '')) ||
+      markerLeak.test(String((o && o._question) || '')))) return true;
+    // 選択肢番号の構造検査。
+    // 背景: docs/local/bugfix_codex-approval-marker-vt-wrap-corruption_2026-07-31.md
+    // Hub の VT ミラーが実端末と乖離すると、開始/終了マーカーは揃ったまま選択肢行だけが
+    // 失われ、「選択肢が 3 から始まるパネル」「ボタン 1 個だけのパネル」が描画される。
+    // approval-rules.md はブロック通し番号も質問ごとの振り直しも認めるが、どちらの書式でも
+    // 選択肢番号 1 は必ずどこかに現れる。1 が 1 つも無いのは欠落の証拠。
+    // 「先頭が 1」で判定しないのが要点 — 前置きの地の文に行頭数字（IP アドレス・版数など）が
+    // あると parseHubBlock がそれを擬似 option として拾い、正常なブロックを弾いてしまう。
+    // Y/N 形式は yesNoApprovalOptions が [1, 0] を合成するので誤爆しない。
+    const nums = optionNumSeq(options);
+    if (nums.length > 0 && nums.indexOf(1) < 0) return true;
+    return hasDuplicateNumFromFirstOne(nums);
   }
 
   function sequentialChoiceSig(prompts) {

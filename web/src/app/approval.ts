@@ -861,7 +861,9 @@ export function handleHubApprovalMarker(message) {
   const block = String(message.block || '');
   if (!block) return;
   const markerOpts = extractHubMarkerApproval(markerLinesFromTail(block));
-  if (!markerOpts) return;
+  // 構造が壊れたブロックはここで落ちる（isCorruptHubMarkerOptions）。Hub 側でも抑止しているが、
+  // 旧 Hub と新 UI の組み合わせでも症状が出ないようクライアント側にも同じ判定を置く。
+  if (!markerOpts) { dlog('handleHubApprovalMarker.skip.corrupt', { id, blockLen: block.length }); return; }
   try { console.log('[approval-route] handleHubApprovalMarker', { id, activeSessionId, optsLen: markerOpts.length, q: (markerOpts as any)._question?.slice?.(0, 80), batch: isBatchOptions(markerOpts) }); } catch (_) {}
   const _sig0 = approvalSig(markerOpts);
   const _prevSrc0 = approvalSourceCache.get(id);
