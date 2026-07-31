@@ -4,7 +4,7 @@ import { escapeHtml, ti18n, token } from './util.js';
 import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, groupOrder, multiQuestionVisibleCache, orderSessions, projectFavorites, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, terminals } from './state.js';
 import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor, updateInputAffordance } from '../app.js';
 import { renderZeroSessionEmptyState } from './zero-session-empty-state.js';
-import { attachTerminal, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, syncLiveStatusLongproc, updateScrollLockBtn } from './terminal.js';
+import { attachTerminal, claimPtyResizeOwnership, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, syncLiveStatusLongproc, updateScrollLockBtn } from './terminal.js';
 import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, renderSessionInfoChip, updateChatCountBadge } from './settings.js';
 import { syncElapsedTimer } from './ws-client.js';
 import { setMultiQuestionBannerVisible } from './approval-ui.js';
@@ -103,6 +103,7 @@ export function activateSessionForMultiPane(id) {
     saveInputStateFor(activeSessionId);
   }
   set_activeSessionId(id);
+  claimPtyResizeOwnership(id);
   if (typeof window.syncMobileLayoutState === 'function') window.syncMobileLayoutState();
   if (typeof window.closeMobileSessionDrawer === 'function') window.closeMobileSessionDrawer();
   restoreInputStateFor(id);
@@ -163,6 +164,7 @@ export function activateSession(id) {
     saveInputStateFor(activeSessionId);
   }
   set_activeSessionId(id);
+  claimPtyResizeOwnership(id);
   if (typeof window.syncMobileLayoutState === 'function') window.syncMobileLayoutState();
   if (typeof window.closeMobileSessionDrawer === 'function') window.closeMobileSessionDrawer();
   // A3: スマホ簡易ターミナル（チャットトランスクリプト表示）を即時更新。

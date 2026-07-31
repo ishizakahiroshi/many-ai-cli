@@ -149,8 +149,9 @@ type session struct {
 	approvalMarkerSig         string
 
 	// JSON 外: wrapper に最後に送った PTY サイズ（同サイズの resize を skip して不要な SIGWINCH を防ぐ）
-	lastCols int
-	lastRows int
+	lastCols      int
+	lastRows      int
+	controllingUI *websocket.Conn
 
 	// JSON 外: 完了サマリー通知の連投抑制用
 	lastDoneNotifyAt time.Time
@@ -185,14 +186,14 @@ type session struct {
 	initialModelScanDone  bool
 
 	// JSON 外: セッション履歴（JSONL）
-	StoreID   int64              `json:"-"`
-	LogPath   string             `json:"log_path,omitempty"`
-	JSONLPath string             `json:"jsonl_path,omitempty"`
+	StoreID   int64  `json:"-"`
+	LogPath   string `json:"log_path,omitempty"`
+	JSONLPath string `json:"jsonl_path,omitempty"`
 	// NativeLogPath is the raw transcript written by the provider itself (not
 	// many-ai-cli's optional PTY session log). Currently Codex reports this via
 	// its Stop hook; other providers resolve it from their local store on demand.
-	NativeLogPath string          `json:"-"`
-	History   *sessionlog.Writer `json:"-"`
+	NativeLogPath string             `json:"-"`
+	History       *sessionlog.Writer `json:"-"`
 
 	// JSON 外: per-session 入力直列化ロック（#18）。
 	// 複数 UI が同一セッションへ同時入力した場合に、hasPending チェック〜
@@ -303,16 +304,25 @@ func gitChangeStats(cwd string) (files, added, deleted int) {
 // closeOnce guarantees conn.Close is called at most once regardless of how
 // many goroutines detect a dead connection simultaneously.
 type uiConn struct {
-	ws        *websocket.Conn
-	sendMu    sync.Mutex
-	closeOnce sync.Once
+	ws              *websocket.Conn
+	sendMu          sync.Mutex
+	closeOnce       sync.Once
+	activeSessionID int
+	ptySizes        map[int]ptySize
 }
 
 // broadcastWriteTimeout は UI WebSocket への JSON フレーム書き込みデッドライン。
 // 受信側が詰まっている場合にサーバー全体がブロックされないための上限（finding #4）。
 const broadcastWriteTimeout = 5 * time.Second
 
-func newUIConn(ws *websocket.Conn) *uiConn { return &uiConn{ws: ws} }
+type ptySize struct {
+	cols int
+	rows int
+}
+
+func newUIConn(ws *websocket.Conn) *uiConn {
+	return &uiConn{ws: ws, ptySizes: map[int]ptySize{}}
+}
 
 func (c *uiConn) send(m any) error {
 	c.sendMu.Lock()
@@ -1171,7 +1181,7 @@ func (s *Server) SetAutoOpenBrowser(v bool) {
 
 // InstanceID は Hub プロセス起動ごとのランダム ID を返す。
 // main.go のシグナルハンドラが終了理由ログへ含めるために公開する
-//（plan_hub-lifecycle-logging.md C1）。
+// （plan_hub-lifecycle-logging.md C1）。
 func (s *Server) InstanceID() string {
 	return s.instanceID
 }
@@ -1303,6 +1313,7 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 			s.sessionsMu.Unlock()
 		}
 		uc, historyItems := s.addUIWithHistory(conn, m.UIActiveSessionID)
+		s.claimResizeOwnership(conn, m.UIActiveSessionID, m.Cols, m.Rows)
 		s.sendSnapshot(uc)
 		for _, item := range historyItems {
 			_ = uc.send(item)
@@ -1353,9 +1364,12 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 		}
 		switch m.Type {
 		case "pty_resize":
-			s.handleResize(m)
+			s.handleResizeFromUI(conn, m)
 		case "pty_input":
+			s.claimResizeOwnership(conn, m.SessionID, 0, 0)
 			s.handleInput(m)
+		case "ui_active_session":
+			s.claimResizeOwnership(conn, m.SessionID, m.Cols, m.Rows)
 		case "session_hint":
 			s.handleHint(m)
 		case "approval_consumed":
@@ -1389,12 +1403,32 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 // handleResize は pty_resize メッセージを処理する。
 // UI 側の端末サイズ変更を受け、セッションの VT バッファをリサイズして wrapper へ転送する。
 func (s *Server) handleResize(m proto.Message) {
+	s.handleResizeFromUI(nil, m)
+}
+
+func (s *Server) handleResizeFromUI(conn *websocket.Conn, m proto.Message) {
 	if m.Cols <= 0 || m.Rows <= 0 {
 		return
 	}
 	s.sessionsMu.Lock()
-	s.lastUICols, s.lastUIRows = m.Cols, m.Rows
 	ses := s.sessions[m.SessionID]
+	if conn != nil {
+		uc := s.uis[conn]
+		if uc != nil {
+			uc.ptySizes[m.SessionID] = ptySize{cols: m.Cols, rows: m.Rows}
+		}
+		if ses != nil {
+			if ses.controllingUI == nil && uc != nil {
+				ses.controllingUI = conn
+			}
+			if ses.controllingUI != nil && ses.controllingUI != conn {
+				s.sessionsMu.Unlock()
+				s.logger.Debug("pty_resize ignored from non-controlling UI", "session_id", m.SessionID)
+				return
+			}
+		}
+	}
+	s.lastUICols, s.lastUIRows = m.Cols, m.Rows
 	skip := ses != nil && ses.lastCols == m.Cols && ses.lastRows == m.Rows
 	if ses != nil && !skip {
 		ses.lastCols, ses.lastRows = m.Cols, m.Rows
@@ -1407,6 +1441,10 @@ func (s *Server) handleResize(m proto.Message) {
 	}
 	wc := s.wrappers[m.SessionID]
 	s.sessionsMu.Unlock()
+	s.forwardResize(m, wc, skip)
+}
+
+func (s *Server) forwardResize(m proto.Message, wc *wrapperConn, skip bool) {
 	if wc != nil && !skip {
 		_ = wc.send(m)
 	}
@@ -1423,6 +1461,58 @@ func (s *Server) handleResize(m proto.Message) {
 			"rows":       m.Rows,
 		})
 	}
+}
+
+// claimResizeOwnership transfers a session's PTY resize authority to conn.
+// The new owner's latest known size is applied once so ownership transfer and
+// terminal geometry stay in sync. A missing size is harmless: the next
+// pty_resize from the owner supplies it.
+func (s *Server) claimResizeOwnership(conn *websocket.Conn, sessionID, cols, rows int) {
+	if conn == nil || sessionID <= 0 {
+		return
+	}
+	s.sessionsMu.Lock()
+	size, wc, skip, ok := s.claimResizeOwnershipLocked(conn, sessionID, cols, rows)
+	s.sessionsMu.Unlock()
+	if !ok {
+		return
+	}
+	s.forwardResize(proto.Message{
+		Type:      "pty_resize",
+		SessionID: sessionID,
+		Cols:      size.cols,
+		Rows:      size.rows,
+	}, wc, skip)
+}
+
+func (s *Server) claimResizeOwnershipLocked(conn *websocket.Conn, sessionID, cols, rows int) (ptySize, *wrapperConn, bool, bool) {
+	uc := s.uis[conn]
+	ses := s.sessions[sessionID]
+	if uc == nil || ses == nil {
+		return ptySize{}, nil, false, false
+	}
+	uc.activeSessionID = sessionID
+	if cols > 0 && rows > 0 {
+		uc.ptySizes[sessionID] = ptySize{cols: cols, rows: rows}
+	}
+	ses.controllingUI = conn
+	size := uc.ptySizes[sessionID]
+	if size.cols <= 0 || size.rows <= 0 {
+		return ptySize{}, nil, false, false
+	}
+	s.lastUICols, s.lastUIRows = size.cols, size.rows
+	skip := ses.lastCols == size.cols && ses.lastRows == size.rows
+	if !skip {
+		ses.lastCols, ses.lastRows = size.cols, size.rows
+		if ses.vt == nil {
+			ses.vt = newVTBuffer(size.cols, size.rows)
+		} else {
+			ses.vt.Resize(size.cols, size.rows)
+		}
+		ses.vtResizeDebounceUntil = time.Now().Add(vtResizeDebounce)
+	}
+	wc := s.wrappers[sessionID]
+	return size, wc, skip, true
 }
 
 // 入力ゲートまわりの 10 関数 (handleInput / splitBracketedPasteSubmit /

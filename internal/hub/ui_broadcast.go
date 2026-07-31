@@ -30,6 +30,7 @@ func (s *Server) addUIWithHistory(c *websocket.Conn, activeSessionID int) (*uiCo
 	var items []proto.Message
 	s.sessionsMu.Lock()
 	uc := newUIConn(c)
+	uc.activeSessionID = activeSessionID
 	s.uis[c] = uc
 	s.stopIdleTimerLocked()
 	for id, ses := range s.sessions {
@@ -76,6 +77,7 @@ func (s *Server) removeUI(c *websocket.Conn) {
 		return
 	}
 	delete(s.uis, c)
+	s.releaseResizeOwnershipLocked(c)
 	count := len(s.uis)
 	if count == 0 {
 		s.startIdleTimerLocked(idleMin)
@@ -85,6 +87,14 @@ func (s *Server) removeUI(c *websocket.Conn) {
 	// blocked on Receive (e.g. uiLoop) unblocks and exits.
 	uc.close()
 	s.logger.Info("UI disconnected", "ui_count", count)
+}
+
+func (s *Server) releaseResizeOwnershipLocked(c *websocket.Conn) {
+	for _, ses := range s.sessions {
+		if ses.controllingUI == c {
+			ses.controllingUI = nil
+		}
+	}
 }
 
 // pingLoop は uiPingInterval ごとに UI WebSocket へ JSON ping を送り続ける。
