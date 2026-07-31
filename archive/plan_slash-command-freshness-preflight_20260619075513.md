@@ -17,7 +17,7 @@
 | C | 種別 | 内容 | 並列 |
 |---|---|---|---|
 | C1 | plan | 現行運用と更新対象を整理し、`slash-commands-update` skill の入出力契約を作る | — |
-| C2 | plan | `C:\dev\workshop\skills\slash-commands-update` を作り、差分検出・正規化・レポート作成の手順を入れる | C1 後 |
+| C2 | plan | `D:\dev\workshop\skills\slash-commands-update` を作り、差分検出・正規化・レポート作成の手順を入れる | C1 後 |
 | C3 | plan | 日次バッチ用の実行入口を作り、差分がある時だけ人間確認用レポートを残す | C2 後 |
 | C4 | plan | `release` skill に many-ai-cli 専用 preflight を追加し、リリース前に鮮度確認済みか検査する | C2 後 |
 | C5 | plan | many-ai-cli 側の手順書を更新し、release md に鮮度確認結果を残す運用に揃える | C3, C4 後 |
@@ -28,7 +28,7 @@
 
 many-ai-cli のスラッシュコマンドピッカーは、`resources/slash-commands/*.md` を GitHub `main` の raw URL から実行時取得する。これはリビルド不要で更新できる一方、各 AI CLI の本家 `/` コマンドが頻繁に変わるため、リリース直前に手作業で追う運用だと漏れや差異が出やすい。
 
-本計画では、`C:\dev\workshop\skills` に専用 skill を追加し、調査・差分抽出・md 正規化・レポート作成を半自動化する。自動で `main` へ push するのではなく、日次バッチは差分レポートまでに留める。採用判断は人間が差分だけ確認し、release skill は「鮮度確認済みか」を preflight として扱う。
+本計画では、`D:\dev\workshop\skills` に専用 skill を追加し、調査・差分抽出・md 正規化・レポート作成を半自動化する。自動で `main` へ push するのではなく、日次バッチは差分レポートまでに留める。採用判断は人間が差分だけ確認し、release skill は「鮮度確認済みか」を preflight として扱う。
 
 ## 背景
 
@@ -39,7 +39,7 @@ many-ai-cli のスラッシュコマンドピッカーは、`resources/slash-com
 - `develop` で更新しただけではユーザーには反映されず、`main` へ入った時点で live 配信される
 - `docs/manual_release.md` では、release 前の差分確認は drift 確認であり、本家コマンドに対する freshness は別オペとされている
 
-一方、`C:\dev\workshop\skills\release\SKILL.md` の preflight には、`CHANGELOG.md` や `repo-consistency` はあるが、スラッシュコマンド鮮度チェックはまだ入っていない。
+一方、`D:\dev\workshop\skills\release\SKILL.md` の preflight には、`CHANGELOG.md` や `repo-consistency` はあるが、スラッシュコマンド鮮度チェックはまだ入っていない。
 
 ## 方針
 
@@ -55,8 +55,8 @@ many-ai-cli のスラッシュコマンドピッカーは、`resources/slash-com
 
 - `docs/manual_slash_commands_update.md`
 - `docs/manual_release.md`
-- `C:\dev\workshop\skills\release\SKILL.md`
-- `C:\dev\workshop\skills\SKILLS.md`
+- `D:\dev\workshop\skills\release\SKILL.md`
+- `D:\dev\workshop\skills\SKILLS.md`
 
 ### 作業内容
 
@@ -83,10 +83,10 @@ many-ai-cli のスラッシュコマンドピッカーは、`resources/slash-com
 
 ### 対象ファイル
 
-- `C:\dev\workshop\skills\slash-commands-update\SKILL.md`
-- 必要なら `C:\dev\workshop\skills\slash-commands-update\scripts\*.ps1`
-- 必要なら `C:\dev\workshop\skills\slash-commands-update\references\*.md`
-- `C:\dev\workshop\skills\SKILLS.md`
+- `D:\dev\workshop\skills\slash-commands-update\SKILL.md`
+- 必要なら `D:\dev\workshop\skills\slash-commands-update\scripts\*.ps1`
+- 必要なら `D:\dev\workshop\skills\slash-commands-update\references\*.md`
+- `D:\dev\workshop\skills\SKILLS.md`
 
 ### 作業内容
 
@@ -110,17 +110,17 @@ many-ai-cli のスラッシュコマンドピッカーは、`resources/slash-com
 
 ### 完了条件
 
-- Claude Code から明示起動できる skill として `C:\dev\workshop\skills` に追加されている。
+- Claude Code から明示起動できる skill として `D:\dev\workshop\skills` に追加されている。
 - `SKILLS.md` のルーティング表に `slash-commands-update` が追加されている。
-- Codex でも使う場合の配置方針がメモされている。現状 `C:\dev\workshop\skills` は Claude 用 junction の実体なので、Codex 用には `~\.codex\skills` 側の junction またはコピーが別途必要。
+- Codex でも使う場合の配置方針がメモされている。現状 `D:\dev\workshop\skills` は Claude 用 junction の実体なので、Codex 用には `~\.codex\skills` 側の junction またはコピーが別途必要。
 
 ## C3: 日次バッチ入口を作る
 
 ### 対象ファイル
 
-- `C:\dev\workshop\skills\slash-commands-update\scripts\*.ps1`
-- 必要なら `C:\dev\workshop\scheduled-tasks\*.ps1`
-- 必要なら `C:\dev\workshop\release-registry.json`
+- `D:\dev\workshop\skills\slash-commands-update\scripts\*.ps1`
+- 必要なら `D:\dev\workshop\scheduled-tasks\*.ps1`
+- 必要なら `D:\dev\workshop\release-registry.json`
 
 ### 作業内容
 
@@ -146,8 +146,8 @@ many-ai-cli のスラッシュコマンドピッカーは、`resources/slash-com
 
 ### 対象ファイル
 
-- `C:\dev\workshop\skills\release\SKILL.md`
-- 必要なら `C:\dev\workshop\skills\release\references\*.md`
+- `D:\dev\workshop\skills\release\SKILL.md`
+- 必要なら `D:\dev\workshop\skills\release\references\*.md`
 
 ### 作業内容
 
@@ -202,7 +202,7 @@ many-ai-cli のスラッシュコマンドピッカーは、`resources/slash-com
 
 - `resources/slash-commands/*.md` は `main` raw URL で live 配信されるため、日次バッチによる自動 main push は避ける。
 - provider ごとに正本の強さが違うため、完全自動採用ではなく人間が差分だけ承認する。
-- `C:\dev\workshop\skills` は現状 Claude Code 用 junction の実体として運用されている。Codex でも同じ skill を使うなら、Codex skill 探索パスへの展開を別途決める。
+- `D:\dev\workshop\skills` は現状 Claude Code 用 junction の実体として運用されている。Codex でも同じ skill を使うなら、Codex skill 探索パスへの展開を別途決める。
 - release skill へ直接巨大な provider 別調査手順を入れると肥大化するため、専用 `slash-commands-update` skill に分離する。
 
 ## 非対象

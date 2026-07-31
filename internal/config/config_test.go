@@ -521,7 +521,7 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	cfg := &Config{}
 	cfg.Spawn.LastModel = map[string]string{"legacy": "a"}
 	cfg.UserPrefs.ProjectFavorites = []string{"one"}
-	cfg.UserPrefs.CwdHistory = []string{"C:/dev/one"}
+	cfg.UserPrefs.CwdHistory = []string{"D:/dev/one"}
 	cfg.UserPrefs.Spawn.Defaults = map[string]string{"claude": "default"}
 	cfg.UserPrefs.Spawn.LastModel = map[string]string{"claude": "sonnet"}
 	cfg.Hub.TrustedNetworks = []string{"172.19.0.1/32"}
@@ -530,7 +530,7 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	clone := cfg.Clone()
 	cfg.Spawn.LastModel["legacy"] = "b"
 	cfg.UserPrefs.ProjectFavorites[0] = "two"
-	cfg.UserPrefs.CwdHistory[0] = "C:/dev/two"
+	cfg.UserPrefs.CwdHistory[0] = "D:/dev/two"
 	cfg.UserPrefs.Spawn.Defaults["claude"] = "changed"
 	cfg.UserPrefs.Spawn.LastModel["claude"] = "opus"
 	cfg.Hub.TrustedNetworks[0] = "172.19.0.2/32"
@@ -542,7 +542,7 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	if clone.UserPrefs.ProjectFavorites[0] != "one" {
 		t.Fatalf("project favorites slice was aliased")
 	}
-	if clone.UserPrefs.CwdHistory[0] != "C:/dev/one" {
+	if clone.UserPrefs.CwdHistory[0] != "D:/dev/one" {
 		t.Fatalf("cwd history slice was aliased")
 	}
 	if clone.UserPrefs.Spawn.Defaults["claude"] != "default" {

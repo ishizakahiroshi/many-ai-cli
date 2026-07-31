@@ -22,7 +22,7 @@ Bạn là AI agent chạy trên PC local. Theo các bước dưới, cài `many-
 | Biến | Mô tả | Ví dụ |
 |---|---|---|
 | `SSH_TARGET` | Đích SSH (`user@host` hoặc alias `~/.ssh/config`) | `your-user@remote.example.com` |
-| `SSH_KEY` | Đường dẫn private key (để trống nếu đã khai trong config) | `C:\dev\.ssh\id_ed25519` |
+| `SSH_KEY` | Đường dẫn private key (để trống nếu đã khai trong config) | `D:\dev\.ssh\id_ed25519` |
 | `HUB_PORT` | Cổng Hub (cùng số trên local và remote) | `47777` |
 | `REMOTE_CWD` | Thư mục làm việc remote cho session | `~/work` |
 | `PROVIDERS` | Provider CLI cần cài | `claude codex` |

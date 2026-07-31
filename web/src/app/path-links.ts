@@ -424,7 +424,7 @@ export function resolveTerminalPathCandidate(path, sessionId) {
 }
 
 // Windows drive paths can appear with either backslashes or forward slashes
-// in terminal output, e.g. C:\dev\app.go or C:/Users/me/.claude/CLAUDE.md.
+// in terminal output, e.g. D:\dev\app.go or C:/Users/me/.claude/CLAUDE.md.
 export const ABS_WIN_PATH_RE = /([A-Za-z]:[\\/](?:(?!\s+[A-Za-z]:[\\/])[^\x00-\x1f<>:"|?*(])+)/g;
 // 空白を挟んだ説明文中の区切り（例: "hljs / highlight / prism"）を
 // Unix 絶対パスとして誤検出しないよう、セグメント内の空白は許可しない。

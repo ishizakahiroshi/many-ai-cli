@@ -789,7 +789,7 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 ```
 ┌─ MANY-AI-CLI  [1][0][6] │ ● Claude:2  ● Codex:5            [⏻] [設定] ─┐
 ├──────────────────────────┬──────────────────────────────────────────────┤
-│ [+ 新しいセッション]     │ ● Codex  cwd: C:\dev\many-ai-cli   [↑最上部へ]│
+│ [+ 新しいセッション]     │ ● Codex  cwd: D:\dev\many-ai-cli   [↑最上部へ]│
 │ 📁 many-ai-cli  [1][0][6] │ ターミナル出力 — Windows PowerShell          │
 │ ─────────────────────── │                                              │
 │ 📌 #7 ● Codex 実行中  × │   (xterm.js のターミナル出力)               │

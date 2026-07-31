@@ -36,7 +36,7 @@ worklog-bridge セッションで working tree 編集を試行したが、本 pl
 - 既存タグ: `v0.3.0` 〜 `v0.3.3`。次は **`v0.3.4`**
 - remote: `https://github.com/ishizakahiroshi/many-ai-cli.git`
 - 修正案 4 件は worklog-bridge セッションでユーザー承認済（synthetic 置換）
-- secrets-scan: worklog-bridge の `scripts/secrets-scan.mjs` を流用（`KB_ROOT=C:/dev/kb` 既定で動作）
+- secrets-scan: worklog-bridge の `scripts/secrets-scan.mjs` を流用（`KB_ROOT=D:/dev/kb` 既定で動作）
 - fork: ボット 1 件のみ → 履歴 force push の影響なし
 
 ## C1: hotfix/v0.3.4 ブランチ作成
@@ -44,7 +44,7 @@ worklog-bridge セッションで working tree 編集を試行したが、本 pl
 ### 作業手順
 
 ```bash
-cd C:/dev/github/public/many-ai-cli
+cd D:/dev/github/public/many-ai-cli
 
 # 0. 現状確認（worklog-bridge セッションで working tree に試行編集を残していたら破棄）
 git status
@@ -124,8 +124,8 @@ assert.deepEqual(labels(parser.extractPlainYesNoApproval([
 
 ```bash
 # worklog-bridge の共通スクリプトを流用
-cd C:/dev/github/public/many-ai-cli
-node C:/dev/github/public/worklog-bridge/scripts/secrets-scan.mjs --all-tracked --dry-run --format=json \
+cd D:/dev/github/public/many-ai-cli
+node D:/dev/github/public/worklog-bridge/scripts/secrets-scan.mjs --all-tracked --dry-run --format=json \
   | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{const j=JSON.parse(d);const w=(j.hits||[]).filter(h=>h.kind==='watchlist');console.log('watchlist hits: '+w.length);for(const h of w)console.log('  '+h.matched+' @ '+h.file+':'+h.lineNumber);});"
 ```
 
@@ -237,10 +237,10 @@ git push origin develop
 ```bash
 # 0. バックアップ（万一に備えて）
 cd /tmp
-git clone --mirror C:/dev/github/public/many-ai-cli many-ai-cli-backup-2026-06-22.git
+git clone --mirror D:/dev/github/public/many-ai-cli many-ai-cli-backup-2026-06-22.git
 
 # 1. 履歴書き換え（全ブランチ・全タグの全コミットに適用）
-cd C:/dev/github/public/many-ai-cli
+cd D:/dev/github/public/many-ai-cli
 git filter-repo --replace-text <(cat <<'EOF'
 マーキュリー==>A拠点
 メイジ==>B拠点
@@ -320,10 +320,10 @@ done
 
 ## 関連リンク
 
-- 設計議論整理（worklog-bridge）: `C:/dev/github/public/worklog-bridge/docs/local/secrets-scan-design/index.html`
-- インシデント本体: `C:/dev/github/public/worklog-bridge/docs/local/incident-public-repo-leak/index.html`
-- sweep レポート: `C:/dev/github/public/worklog-bridge/docs/local/sweep-report_2026-06-22/index.html`
-- 共通 scan スクリプト: `C:/dev/github/public/worklog-bridge/scripts/secrets-scan.mjs`
+- 設計議論整理（worklog-bridge）: `D:/dev/github/public/worklog-bridge/docs/local/secrets-scan-design/index.html`
+- インシデント本体: `D:/dev/github/public/worklog-bridge/docs/local/incident-public-repo-leak/index.html`
+- sweep レポート: `D:/dev/github/public/worklog-bridge/docs/local/sweep-report_2026-06-22/index.html`
+- 共通 scan スクリプト: `D:/dev/github/public/worklog-bridge/scripts/secrets-scan.mjs`
 - release 原則 P10: `~/.claude/guides/reference_release-pipeline.md`
-- release スキル前提チェック: `C:/dev/workshop/skills/release/SKILL.md`（secrets-scan 追記済）
+- release スキル前提チェック: `D:/dev/workshop/skills/release/SKILL.md`（secrets-scan 追記済）
 - 既存 hotfix/v0.3.3 ブランチ（参考運用例）: remote に存在

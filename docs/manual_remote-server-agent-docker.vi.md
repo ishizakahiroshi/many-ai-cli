@@ -35,7 +35,7 @@ Bạn là AI agent chạy trên PC local. Theo các bước dưới, dựng **m�
 | Biến | Mô tả | Ví dụ |
 |---|---|---|
 | `SSH_TARGET` | Đích SSH (`user@host` hoặc alias). Cần quyền chạy docker | `your-user@remote.example.com` |
-| `SSH_KEY` | Đường dẫn private key (để trống nếu đã khai trong config) | `C:\dev\.ssh\id_ed25519` |
+| `SSH_KEY` | Đường dẫn private key (để trống nếu đã khai trong config) | `D:\dev\.ssh\id_ed25519` |
 | `USER_TAG` | Tên phân biệt service/container/volume | `user1` |
 | `HUB_PORT` | Cổng publish phía host (cùng số với local) | `47801` |
 | `AAC_TAG` | Tag image theo dõi (`latest`=main / `develop`=thử) | `latest` |

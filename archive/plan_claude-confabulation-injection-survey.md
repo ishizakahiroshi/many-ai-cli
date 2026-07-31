@@ -43,7 +43,7 @@
 
 ### many-ai-cli は原因ではない（実証済み）
 
-- 10 件中 5 件（6/9〜6/10）は **DONE マーカー無し＝素の Claude Code を直接使用**。cwd も `C:\dev\mer` 等を直接指す。
+- 10 件中 5 件（6/9〜6/10）は **DONE マーカー無し＝素の Claude Code を直接使用**。cwd も `D:\dev\mer` 等を直接指す。
 - many-ai-cli のセッションログ（`~/.many-ai-cli/logs/sessions/`）は **最古が 06-15**。6/9〜6/12 の暴走は many-ai-cli が記録を取る前＝事実上 many-ai-cli を介さない時期に発生。
 - → many-ai-cli 経由・非経由のどちらでも同型の暴走が起きており、many-ai-cli は誘発要因ではない。当初の「hook 環境が再現条件」という見立ては、相関を因果と取り違えた誤り。
 
