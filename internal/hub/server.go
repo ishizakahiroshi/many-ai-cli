@@ -150,6 +150,9 @@ type session struct {
 	// 構造が壊れていて配信を抑止した直近のマーカー sig。同一ブロックが
 	// PTY チャンクごとに再抽出されるため、ログを 1 ブロック 1 回に絞る用途のみ。
 	approvalMarkerSuppressedSig string
+	// 抑止を UI へ告知した最終時刻。破損形が交互に揺れて sig が変わり続けても
+	// バナーを積み上げないための時間スロットル基準。
+	approvalMarkerSuppressedAt time.Time
 
 	// JSON 外: wrapper に最後に送った PTY サイズ（同サイズの resize を skip して不要な SIGWINCH を防ぐ）
 	lastCols      int
@@ -909,9 +912,6 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/session-log", s.handleSessionLog)
 	mux.HandleFunc("/api/agent-log", s.handleAgentLog)
 	mux.HandleFunc("/api/agent-log/open", s.handleOpenAgentLog)
-	// 一時 endpoint: 一括承認 action-bar 消失 bug 用のログ計装
-	// docs/local/bugfix_batch-approval-actionbar-not-hidden_2026-07-21.md
-	mux.HandleFunc("/api/debug/batch-log", s.handleDebugBatchLog)
 	mux.HandleFunc("/api/grok-history", s.handleGrokHistory)
 	mux.HandleFunc("/api/session-search", s.handleSessionSearch)
 	mux.HandleFunc("/api/session-history", s.handleSessionHistory)
@@ -1578,6 +1578,8 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 		ses.nativeApprovalConsumed = ""
 		ses.nativeApprovalConsumedAt = time.Time{}
 		ses.approvalMarkerSig = ""
+		ses.approvalMarkerSuppressedSig = ""
+		ses.approvalMarkerSuppressedAt = time.Time{}
 		ids = append(ids, id)
 		updates = append(updates, proto.Message{Type: "session_update", SessionID: id, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt, StartedAt: ses.StartedAt})
 	}

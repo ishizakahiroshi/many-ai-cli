@@ -83,6 +83,13 @@ func TestClassifyApprovalMarkerBlockAcceptsValidForms(t *testing.T) {
 			"2. 案 B",
 			"N. User specifies",
 		)},
+		// 罫線 1 文字（範囲表記など）は正常扱い。しきい値 3 未満で誤爆させない。
+		{"label with a single box drawing dash", markerBlock(
+			"どの範囲を対象にしますか？",
+			"1. 10─20 件だけ (Recommended)",
+			"2. 全件",
+			"N. User specifies",
+		)},
 	}
 
 	for _, tc := range cases {
@@ -156,6 +163,20 @@ func TestClassifyApprovalMarkerBlockRejectsCorruptForms(t *testing.T) {
 				" 1. 案 A\n" +
 				approvalMarkerClose,
 			wantReason: "marker_leak",
+		},
+		{
+			// 2026-08-01 の実障害。resize 直後の reflow で TUI コンポーザの枠線が
+			// 選択肢ラベルへ重なった。マーカーの対も番号構造も無傷なので番号検査では
+			// 捕まらず、Web 側の consumed sig / blockSig が一致しなくなって
+			// 回答済みの一括承認バーが復活した。
+			name: "option label overwritten by composer rule",
+			block: markerBlock(
+				"Q1 最初の質問ですか？",
+				" 1. 案 A の説明が途中で "+strings.Repeat("─", 26),
+				" 2. 案 B",
+				" N. User specifies",
+			),
+			wantReason: "box_rule",
 		},
 	}
 

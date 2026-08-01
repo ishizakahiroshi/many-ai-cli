@@ -704,6 +704,7 @@ export function initDetachedGridMode(): DetachedGridManager | null {
     'token-statusbar',
     'action-bar',
     'multi-question-banner',
+    'approval-suppressed-banner',
     'mobile-menu-btn',
     'mobile-spawn-btn',
     'mobile-drawer-backdrop',

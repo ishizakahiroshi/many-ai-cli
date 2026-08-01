@@ -846,7 +846,7 @@ test('fallback cache inherits marker block signature only for the same approval'
 });
 
 // 構造が壊れた承認ブロックは承認 UI を出さない。
-// 背景: docs/local/bugfix_codex-approval-marker-vt-wrap-corruption_2026-07-31.md
+// 背景: docs/local/archive/v0.5.x/bugfix_codex-approval-marker-vt-wrap-corruption_2026-07-31.md
 // Hub の VT ミラーが実端末と乖離すると、開始/終了マーカーは揃ったまま選択肢行だけが失われ、
 // 「選択肢が 3 から始まるパネル」「ボタン 1 個だけのパネル」が描画された（2026-07-31 実測）。
 // 本文はすべて合成データ（実プロンプト・実プロジェクトの文言は貼らない）。
@@ -977,4 +977,25 @@ test('corrupt hub marker blocks are rejected', () => {
     ' 3. 案 C',
     CLOSE,
   ]), null);
+
+  // TUI コンポーザの枠線が選択肢ラベルへ重なった形（2026-08-01 実測）。
+  // マーカーの対も番号構造も無傷なので番号検査では捕まらない。approval-rules.md が
+  // ブロック内の罫線を禁じているため、罫線の連続は再描画事故の証拠として扱う。
+  assert.equal(parser.extractHubMarkerApproval([
+    OPEN,
+    'Q1 最初の質問ですか？',
+    ' 1. 案 A の説明が途中で ' + '─'.repeat(26),
+    ' 2. 案 B',
+    ' N. User specifies',
+    CLOSE,
+  ]), null);
+
+  // 罫線 1 文字（範囲表記など）は正常扱い＝しきい値 3 未満で誤爆しない。
+  assert.ok(parser.extractHubMarkerApproval([
+    OPEN,
+    'どの範囲を対象にしますか？',
+    '1. 10─20 件だけ (Recommended)',
+    '2. 全件',
+    CLOSE,
+  ]));
 });

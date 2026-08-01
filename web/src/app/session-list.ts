@@ -7,7 +7,7 @@ import { renderZeroSessionEmptyState } from './zero-session-empty-state.js';
 import { attachTerminal, claimPtyResizeOwnership, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, syncLiveStatusLongproc, updateScrollLockBtn } from './terminal.js';
 import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, renderSessionInfoChip, updateChatCountBadge } from './settings.js';
 import { syncElapsedTimer } from './ws-client.js';
-import { setMultiQuestionBannerVisible } from './approval-ui.js';
+import { renderApprovalSuppressedBannerFor, setMultiQuestionBannerVisible } from './approval-ui.js';
 import { detectApproval, setActionBarFocus } from './approval.js';
 import { onActiveSessionChanged } from './token-statusbar.js';
 import { rewireChatHistorySub } from './chat-history.js';
@@ -120,6 +120,7 @@ export function activateSessionForMultiPane(id) {
   }
   // 承認 UI をフォーカスセッション向きに更新
   setMultiQuestionBannerVisible(!!multiQuestionVisibleCache.get(id));
+  renderApprovalSuppressedBannerFor(id);
   // フォーカスセッションの実行中状態を入力欄／送信ボタンへ反映
   updateInputAffordance();
   detectApproval(id);
@@ -182,6 +183,7 @@ export function activateSession(id) {
   // 切替先セッションの実行中状態に合わせて入力欄プレースホルダ／送信ボタンを更新
   updateInputAffordance();
   setMultiQuestionBannerVisible(!!multiQuestionVisibleCache.get(id));
+  renderApprovalSuppressedBannerFor(id);
   detectApproval(id);
   updateSessionListActiveCard(id);
   updateShellBadge(id);

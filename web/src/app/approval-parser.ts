@@ -173,8 +173,31 @@
     return false;
   }
 
+  // 罫線（box drawing）の連続。approval-rules.md はマーカーブロック内の罫線・表組みを
+  // 禁じているため、パース結果に罫線が現れたら AI の出力ではなく、TUI コンポーザの枠線が
+  // 再描画で本文へ重なった証拠になる（Hub 側 classifyApprovalMarkerBlock と同じ判定を
+  // クライアントにも置く。旧 Hub と新 UI の組み合わせでも症状を出さないため）。
+  // しきい値 3 は「10─20」のような範囲表記を誤爆させないための余裕。
+  const boxRule = /[\u2500-\u257F]{3,}/;
+
+  function hasBoxRuleText(options) {
+    const arr = options as any;
+    if (boxRule.test(String(arr._question || ''))) return true;
+    for (const el of arr) {
+      if (!el || typeof el !== 'object') continue;
+      if (boxRule.test(String(el.title || ''))) return true;
+      if (boxRule.test(String(el.label || ''))) return true;
+      if (boxRule.test(String(el._question || ''))) return true;
+      for (const o of (el.options || [])) {
+        if (o && boxRule.test(String(o.label || ''))) return true;
+      }
+    }
+    return false;
+  }
+
   function isCorruptHubMarkerOptions(options) {
     if (!options || !Array.isArray(options) || options.length === 0) return true;
+    if (hasBoxRuleText(options)) return true;
     const arr = options as any;
     const markerLeak = /\[MANY-AI-CLI\]|\[\/MANY-AI-CLI\]/i;
     const q = arr._question != null ? String(arr._question) : '';
@@ -194,7 +217,7 @@
     if (options.some(o => markerLeak.test(String((o && o.label) || '')) ||
       markerLeak.test(String((o && o._question) || '')))) return true;
     // 選択肢番号の構造検査。
-    // 背景: docs/local/bugfix_codex-approval-marker-vt-wrap-corruption_2026-07-31.md
+    // 背景: docs/local/archive/v0.5.x/bugfix_codex-approval-marker-vt-wrap-corruption_2026-07-31.md
     // Hub の VT ミラーが実端末と乖離すると、開始/終了マーカーは揃ったまま選択肢行だけが
     // 失われ、「選択肢が 3 から始まるパネル」「ボタン 1 個だけのパネル」が描画される。
     // approval-rules.md はブロック通し番号も質問ごとの振り直しも認めるが、どちらの書式でも

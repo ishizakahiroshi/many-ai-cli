@@ -50,7 +50,7 @@ type Message struct {
 	// （共有の .claude/settings.local.json は一切書き換えない方式）。
 	// omitempty を付けない: false が wire から消えると「意図的 OFF」と「フィールド欠落/
 	// 別 type のメッセージを受信」が区別できず、statusline 欠落の診断が潰れる
-	// （docs/local/bugfix_statusline-settings-skip_2026-07-10.md）。
+	// （docs/local/archive/v0.5.x/bugfix_statusline-settings-skip_2026-07-10.md）。
 	TokenStatusbar bool `json:"token_statusbar"`
 
 	// session_hint で UI 側から送る「承認 UI が可視」フラグ。
@@ -59,6 +59,11 @@ type Message struct {
 	// approval_detected / approval_cleared / approval_consumed:
 	// Go 側 VT バッファから検出した native approval prompt の通知と、
 	// UI 側で回答済みになった prompt の再検出抑止に使う。
+	//
+	// approval_marker_suppressed:
+	// 構造が壊れた [MANY-AI-CLI] ブロックを配信せず捨てたことの告知。
+	// Reason に classifyApprovalMarkerBlock の分類（marker_leak / option_start /
+	// duplicate_option / box_rule）が入る。Block は壊れているため送らない。
 	ApprovalSig      string           `json:"approval_sig,omitempty"`
 	ApprovalKind     string           `json:"approval_kind,omitempty"`
 	ApprovalSource   string           `json:"approval_source,omitempty"`

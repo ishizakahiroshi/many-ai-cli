@@ -5,6 +5,10 @@ on:
   push:
     branches:
       - main
+      # develop への直 push でも品質ゲートを通す。develop は PR を経由せず
+      # 直接コミットが積まれる運用のため、main だけを対象にしていると
+      # タグ付け直前まで一度も CI が走らない (v0.5.2 リリース時に発覚)。
+      - develop
 
 permissions:
   contents: read
