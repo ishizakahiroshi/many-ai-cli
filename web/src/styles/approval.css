@@ -182,11 +182,28 @@
   flex-shrink: 0;
 }
 #stale-binary-banner[hidden] { display: none; }
+/* approval-suppressed-banner: 破損した承認マーカーブロックを抑止したことの告知。
+   multi-question-banner と同じ構造・クラス（-text / -close）を流用し、
+   左ボーダーだけ警告色にする。過剰に目立たせないため背景色は変えない。 */
+#approval-suppressed-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: 8px 12px;
+  background: var(--bg-elev);
+  border-top: 1px solid var(--line);
+  border-left: 3px solid #f59e0b;
+  color: var(--text);
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+#approval-suppressed-banner[hidden] { display: none; }
 .multi-question-banner-text {
   flex: 1 1 auto;
   white-space: pre-wrap;
 }
-.multi-question-banner-close {
+.multi-question-banner-close,
+.multi-question-banner-action {
   flex: 0 0 auto;
   background: transparent;
   border: 1px solid var(--line-soft);
@@ -198,7 +215,8 @@
   border-radius: var(--radius-sm);
   margin-left: 8px;
 }
-.multi-question-banner-close:hover {
+.multi-question-banner-close:hover,
+.multi-question-banner-action:hover {
   background: var(--bg-hover, rgba(255,255,255,0.05));
 }
 

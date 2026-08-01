@@ -10,7 +10,7 @@ import (
 
 // 承認マーカーブロックの構造妥当性検査。
 //
-// 背景: docs/local/bugfix_codex-approval-marker-vt-wrap-corruption_2026-07-31.md
+// 背景: docs/local/archive/v0.5.x/bugfix_codex-approval-marker-vt-wrap-corruption_2026-07-31.md
 // Hub の VT ミラー（vt_buffer.go）が実端末と乖離すると、開始/終了マーカーは揃ったまま
 // 内側の選択肢行だけが失われたブロックが抽出される。そのまま配信すると Web に
 // 「選択肢が 3 から始まるパネル」「ボタン 1 個だけのパネル」が出て、ユーザーが
@@ -42,6 +42,13 @@ var (
 
 	// Y/N 形式は選択肢行を持たず、パーサ側が 1/0 を合成する。番号検査の対象外。
 	approvalYesNoFormRe = regexp.MustCompile(`[（(]\s*[YＹ]\s*[:：]\s*1\s*[/／]\s*[NＮ]\s*[:：]\s*0\s*[）)]`)
+
+	// 罫線（box drawing）の連続。approval-rules.md はマーカーブロック内での罫線・表組みを
+	// 明示的に禁じているため、ブロック内に現れる罫線は AI の出力ではなく、TUI のコンポーザ枠が
+	// 再描画で本文へ重なった証拠になる。実履歴 731 ブロック（claude / codex）で AI 由来の
+	// 罫線は 0 件、検出された 1 件は本症状と同型の重なりだった。
+	// しきい値 3 は「10─20」のような範囲表記で誤爆させないための余裕。
+	approvalBoxRuleRe = regexp.MustCompile(`[\x{2500}-\x{257F}]{3,}`)
 )
 
 // classifyApprovalMarkerBlock は構造が壊れていれば理由を返す。正常なら空文字を返す。
@@ -55,6 +62,13 @@ func classifyApprovalMarkerBlock(block string) string {
 	// OPEN … OPEN … CLOSE の並びでは内側の OPEN がブロックに含まれる。
 	if strings.Count(clean, approvalMarkerOpen) > 1 || strings.Count(clean, approvalMarkerClose) > 1 {
 		return "marker_leak"
+	}
+
+	// TUI コンポーザの枠線が本文へ重なった再描画。選択肢ラベルの末尾だけが罫線で
+	// 上書きされてもマーカーの対と番号構造は保たれるため、下の番号検査では捕まらない。
+	// Y/N 形式の早期 return より前に置くこと（Y/N ブロックも同じ壊れ方をする）。
+	if approvalBoxRuleRe.MatchString(clean) {
+		return "box_rule"
 	}
 
 	if approvalYesNoFormRe.MatchString(clean) {

@@ -1,9 +1,9 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { actionBarShownAt, activeSessionId, approvalRawOptionsCache, approvalSourceCache, approvalVisibleCache, enqueueApprovalAutoSwitch, lastActionBarRender, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectSelections, removeApprovalAutoSwitchTarget, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx } from './state.js';
+import { actionBarShownAt, activeSessionId, approvalRawOptionsCache, approvalSourceCache, approvalSuppressedCache, approvalSuppressedDismissedCache, approvalVisibleCache, enqueueApprovalAutoSwitch, lastActionBarRender, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectSelections, removeApprovalAutoSwitchTarget, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx } from './state.js';
 import { playNotificationSound, showDesktopApprovalNotification } from './settings.js';
 import { ws } from './ws-client.js';
-import { showActionBar } from './approval.js';
+import { reshowActionBar, showActionBar } from './approval.js';
 import { inheritMarkerBlockSig } from './approval-parser.js';
 
 // UI/cache adapter for approval detection. Parser code must not depend on this.
@@ -106,6 +106,71 @@ import { inheritMarkerBlockSig } from './approval-parser.js';
     }
   }
 
+  // 破損した承認マーカーブロックを抑止したことの告知バナー。
+  // 抑止自体は Hub / クライアント双方で行うが、無音で捨てると「承認待ちのまま
+  // 何も出ない」状態になり原因が分からない（bugfix_codex-approval-marker-vt-wrap-corruption）。
+  // バナー DOM は全セッション共有の 1 個なので、表示内容はセッション別 cache に持つ。
+  function approvalSuppressedReasonLabel(reason) {
+    const key = 'approval_suppressed_reason_' + String(reason || '');
+    const label = t(key);
+    // 未知の reason（将来 Hub 側に分類が増えた場合）はキー名を素で出さない。
+    return label && label !== key ? label : t('approval_suppressed_reason_client_corrupt');
+  }
+
+  function renderApprovalSuppressedBannerFor(id) {
+    const banner = document.getElementById('approval-suppressed-banner');
+    if (!banner) return;
+    const reason = id == null ? undefined : approvalSuppressedCache.get(id);
+    if (!reason || approvalSuppressedDismissedCache.get(id)) {
+      banner.hidden = true;
+      banner.innerHTML = '';
+      return;
+    }
+    banner.innerHTML = '';
+    const msg = document.createElement('span');
+    msg.className = 'multi-question-banner-text';
+    msg.textContent = t('approval_suppressed_banner').replace('{reason}', approvalSuppressedReasonLabel(reason));
+    const retryBtn = document.createElement('button');
+    retryBtn.type = 'button';
+    retryBtn.className = 'multi-question-banner-action';
+    retryBtn.textContent = t('approval_suppressed_banner_retry');
+    retryBtn.title = t('approval_suppressed_banner_retry_tooltip');
+    retryBtn.addEventListener('click', () => {
+      // ブラウザ側 xterm バッファを読み直す（Hub の VT ミラーとは独立した再構成なので、
+      // Hub 側だけが壊れていた場合はここで拾い直せる）。
+      reshowActionBar(id);
+    });
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'multi-question-banner-close';
+    closeBtn.textContent = '✕';
+    closeBtn.title = t('approval_suppressed_banner_close_tooltip') || 'Dismiss';
+    closeBtn.addEventListener('click', () => {
+      if (id != null) approvalSuppressedDismissedCache.set(id, true);
+      banner.hidden = true;
+    });
+    banner.appendChild(msg);
+    banner.appendChild(retryBtn);
+    banner.appendChild(closeBtn);
+    banner.hidden = false;
+  }
+
+  // 新しい抑止イベント。✕ で閉じた状態は解除する（別事象なので出し直す）。
+  function noteApprovalMarkerSuppressed(id, reason) {
+    if (id == null) return;
+    approvalSuppressedCache.set(id, String(reason || 'client_corrupt'));
+    approvalSuppressedDismissedCache.delete(id);
+    if (id === activeSessionId) renderApprovalSuppressedBannerFor(id);
+  }
+
+  // 正常な承認が出た・セッションが終わった等で告知を取り下げる。
+  function clearApprovalMarkerSuppressed(id) {
+    if (id == null) return;
+    const had = approvalSuppressedCache.delete(id);
+    approvalSuppressedDismissedCache.delete(id);
+    if (had && id === activeSessionId) renderApprovalSuppressedBannerFor(id);
+  }
+
   // 承認可視ヒントの定期再主張: Hub 側の approvalVisible はリース制
   // （server.go の approvalVisibleLease = 15s）のため、可視中はリースの 1/3 間隔で
   // true を再送して維持する。false ヒントがどの経路で失われても（リロード desync・
@@ -128,14 +193,23 @@ import { inheritMarkerBlockSig } from './approval-parser.js';
     showOptions,
     clearActionBarDom,
     setMultiQuestionBannerVisible,
+    renderApprovalSuppressedBannerFor,
+    noteApprovalMarkerSuppressed,
+    clearApprovalMarkerSuppressed,
     reassertApprovalHints,
   };
 
   root.approvalUiAdapter = api;
   root.setMultiQuestionBannerVisible = setMultiQuestionBannerVisible;
+  root.renderApprovalSuppressedBannerFor = renderApprovalSuppressedBannerFor;
+  root.noteApprovalMarkerSuppressed = noteApprovalMarkerSuppressed;
+  root.clearApprovalMarkerSuppressed = clearApprovalMarkerSuppressed;
 })(typeof window !== 'undefined' ? window : globalThis);
 
 // --- ESM re-exports from the IIFE-published approval UI adapter (generated) ---
 const __esmRoot = (typeof window !== 'undefined') ? window : globalThis;
 export const approvalUiAdapter = __esmRoot.approvalUiAdapter;
 export const setMultiQuestionBannerVisible = __esmRoot.setMultiQuestionBannerVisible;
+export const renderApprovalSuppressedBannerFor = __esmRoot.renderApprovalSuppressedBannerFor;
+export const noteApprovalMarkerSuppressed = __esmRoot.noteApprovalMarkerSuppressed;
+export const clearApprovalMarkerSuppressed = __esmRoot.clearApprovalMarkerSuppressed;

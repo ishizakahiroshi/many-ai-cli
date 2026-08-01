@@ -528,7 +528,7 @@ func ptyPump(
 // writeWithTrailingEnter は data を PTY へ書き込む。
 // ConPTY の制約として、text+\r を1チャンクで書くと \r が Enter でなく改行として
 // 処理される場合があるため、末尾の \r を delay 分だけ遅延させて別チャンクで送る。
-// data が1バイト以下、または末尾が \r でない場合はそのまま書き込む。
+// data が空、または末尾が \r でない場合はそのまま書き込む。
 func logPTYWriteError(logger *slog.Logger, sessionID int, op string, err error) {
 	if err != nil && logger != nil {
 		logger.Warn("pty write failed", "session_id", sessionID, "op", op, "err", err)
@@ -601,7 +601,7 @@ func splitLeadingClearControl(provider string, data []byte) (lead []byte, rest [
 }
 
 func writeWithTrailingEnter(ps processSession, data []byte, delay time.Duration) error {
-	if len(data) > 1 && data[len(data)-1] == '\r' {
+	if len(data) > 0 && data[len(data)-1] == '\r' {
 		if err := writePTYChunked(ps, data[:len(data)-1]); err != nil {
 			return err
 		}
@@ -609,6 +609,17 @@ func writeWithTrailingEnter(ps processSession, data []byte, delay time.Duration)
 		return writePTY(ps, data[len(data)-1:])
 	}
 	return writePTYChunked(ps, data)
+}
+
+// shouldSplitTrailingEnter は通常の入力経路を変えずに、末尾 Enter を分離する
+// 必要がある入力だけを判定する。OpenCode の承認 1 番は \r 単独で届くため、
+// text+Enter と同じ ConPTY 再描画待ちへ入れる。その他の単独キー入力は従来どおり
+// 即時書き込みし、複数バイトの末尾 Enter は既存の分離挙動を維持する。
+func shouldSplitTrailingEnter(provider string, data []byte) bool {
+	if len(data) == 0 || data[len(data)-1] != '\r' {
+		return false
+	}
+	return len(data) > 1 || provider == "opencode"
 }
 
 func trailingEnterDelay(provider string) time.Duration {
@@ -736,7 +747,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// Claude: 共有 .claude/settings.local.json を一切触らず、wrapper 所有の temp
 	// settings を `--settings` で渡して statusLine（usage-relay）を有効化する。
 	// reg.TokenStatusbar が false（UI バー無効）なら付けない＝従来の挙動を維持。
-	// diag 継続: docs/local/bugfix_statusline-settings-skip_2026-07-10.md
+	// diag 継続: docs/local/archive/v0.5.x/bugfix_statusline-settings-skip_2026-07-10.md
 	// Hub 側 statusline_gate_hub と突き合わせるため、reg 受信値と reg.Type を残す。
 	// 2026-07-19 時点: hub.log では token_statusbar_send=true のみ（false 0 件）で
 	// Hub ゲートは原因候補から外れている。wrapper 側 reg=false や settings 書込失敗が
@@ -926,7 +937,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 									logPTYWriteError(logger, wses.getSID(), "inject", err)
 								}
 							}
-						} else if len(data) > 1 && data[len(data)-1] == '\r' {
+						} else if shouldSplitTrailingEnter(provider, data) {
 							// Windows ConPTY では text+\r を1チャンクで書き込むと
 							// \r が Enter ではなく改行として処理される場合がある。
 							// Codex / OpenCode は入力反映直後の Enter を取りこぼすことがあるため長めに待つ。

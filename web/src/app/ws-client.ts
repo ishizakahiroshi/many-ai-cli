@@ -6,7 +6,7 @@ import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLoca
 import { activateSession, render, renderSessionList, renderSessionStateUpdate, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
 import { applyRemotePtyResize, ensureTerminal, isLiveOutputBatching, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup } from './settings.js';
-import { setMultiQuestionBannerVisible } from './approval-ui.js';
+import { clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed, setMultiQuestionBannerVisible } from './approval-ui.js';
 import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, handleHubApprovalMarker, hideActionBar, isAIProvider, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
 import { notifyDeferredEnterOutput } from './deferred-enter.js';
 import { notifyResidueSweepOutput } from './residue-sweep.js';
@@ -406,6 +406,11 @@ export function _connectWs() {
     return;
   }
 
+  if (m.type === 'approval_marker_suppressed') {
+    noteApprovalMarkerSuppressed(m.session_id, m.reason);
+    return;
+  }
+
   if (m.type === 'approval_cleared') {
     handleGoApprovalCleared(m);
     return;
@@ -582,6 +587,7 @@ export function _connectWs() {
     if (multiQuestionVisibleCache.delete(m.session_id) && m.session_id === activeSessionId) {
       setMultiQuestionBannerVisible(false);
     }
+    clearApprovalMarkerSuppressed(m.session_id);
     multiQuestionLatchAt.delete(m.session_id);
     removeApprovalAutoSwitchTarget(m.session_id);
     maybeAutoSwitchToNextApproval();

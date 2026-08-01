@@ -31,6 +31,7 @@ export type MessageType =
   | 'session_hint'
   | 'approval_detected'
   | 'approval_marker'
+  | 'approval_marker_suppressed'
   | 'approval_cleared'
   | 'approval_consumed'
 	| 'auto_approval_applied'

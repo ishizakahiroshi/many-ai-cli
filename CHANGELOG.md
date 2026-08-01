@@ -10,14 +10,250 @@ Release artifacts are published at
 
 ## [Unreleased]
 
-### Security
+## [0.5.2] - 2026-08-01
 
+### Added
+- **Turn-by-turn diff review in the Review tab.** A new **Scope** selector
+  lists "Uncommitted changes (vs HEAD)", "Last turn", and every completed turn
+  of the session, so you can see exactly which files the AI touched in one
+  turn instead of everything accumulated since the last commit. A turn is
+  bounded by your confirmed input and the session's completion summary, and
+  the diff is computed between two throw-away Git trees, so untracked files
+  are included. Snapshots live in memory only — at most 100 per session,
+  discarded when the Hub restarts. When a turn finishes having edited files, a
+  card above the action bar shows `Turn #n: N files edited` with `+added` /
+  `-removed` counts and a **Review** button that opens the tab already scoped
+  to that turn. Adds `GET /api/git-turns` and `GET /api/git-turn-diff`
+  (`internal/hub/git_turns.go`, `web/src/app/review-view.ts`).
+- **In-browser folder picker for the spawn panel's Browse button.** Where the
+  OS-native folder dialog cannot help you, Browse now opens a folder browser
+  inside the Hub UI, walking the Hub host's filesystem through
+  `/api/list-subdirs`. It is used automatically when `/api/info` reports
+  `env_kind: remote` (a native dialog would have opened on the server,
+  invisible to you) and as the fallback when the native picker fails or is
+  missing (Linux without zenity/kdialog) — that case previously produced only
+  an error toast (`web/src/app/spawn-panel.ts`).
+- **A dismissible banner now explains why an approval panel was withheld.**
+  Structurally broken marker blocks were suppressed silently, leaving you
+  waiting for an approval that never appeared with no way to tell why. The
+  banner names the reason, offers a **↻ Re-detect** button that rescans the
+  browser's own terminal buffer, and is throttled so repeated suppressions do
+  not stack up. Adds the `approval_marker_suppressed` WebSocket message
+  (`internal/hub/approval_marker.go`, `web/src/app/approval-ui.ts`, ja/en/vi
+  strings).
+- **Clear buttons for the working-directory history and favorites** in the
+  spawn panel's `cwd` dropdown, each with a confirmation
+  (`web/src/app/spawn-panel.ts`).
+
+### Changed
+- **Breaking: sending a message in a Git working tree now takes a Git snapshot
+  before the input reaches the CLI.** The Hub runs `git read-tree` +
+  `git add -A` + `git write-tree` against a temporary index, so your real
+  staging area is never modified — but loose blob and tree objects for every
+  changed and untracked file are written into the repository's object database
+  twice per turn and remain there until `git gc`. The pre-input snapshot is
+  synchronous, so submitting is briefly blocked while it runs (5 s timeout,
+  after which the turn is simply not recorded). This happens for every session
+  whose directory resolves to a Git repository, whether or not the Review tab
+  is open, and there is currently no config key to disable it
+  (`internal/hub/git_turns.go`, `input_gate.go`, `done_summary.go`).
+- **Breaking: a session's PTY size is now driven by exactly one browser view.**
+  Resize authority is claimed by the view that registers with the session
+  active, activates it in the session list, or types into it; `pty_resize`
+  from any other connected UI is ignored. When ownership transfers, the new
+  owner's last known size is applied once, and when the owning view
+  disconnects the next resize from a remaining view takes over
+  (`internal/hub/server.go`, `ui_broadcast.go`, `web/src/app/session-list.ts`).
+- **Suggested commit messages are now built around the file with the largest
+  change,** weighed by `git diff --numstat HEAD` (untracked files by line
+  count; binaries and files over 1 MiB counted as zero), instead of the first
+  entry in the status list. A small new file that happens to export a type no
+  longer hijacks the subject. Analysis also covers TypeScript/JavaScript
+  (`.ts` / `.tsx` / `.js` / `.jsx` / `.mts` / `.mjs` / `.cjs`) and Python in
+  addition to Go — exported functions, consts, classes, types and interfaces,
+  Express-style and decorator-based routes, and i18n keys under `locales`
+  (`internal/hub/git_commit.go`).
+- **Links inside AI output now ask before opening.** Clicking a URL in the
+  Chat pane or the Grok conversation viewer shows a confirmation with the full
+  destination, and only `http` / `https` targets are opened
+  (`web/src/app/util.ts`, `chat-history.ts`, `grok-chat-viewer.ts`).
+- **New-device security notifications no longer fire on every browser update.**
+  The device fingerprint uses a coarse browser-brand/OS bucket instead of the
+  raw User-Agent, and proxied clients are identified by their Tailscale login
+  (`internal/hub/pin_auth.go`).
+- **The bundled Grok slash-command reference now follows Grok Build's official
+  guide,** adding `/new`, `/history`, `/context`, `/session-info`, `/fork`,
+  `/rewind`, `/effort`, `/always-approve`, `/auto`, `/multiline`,
+  `/compact-mode`, `/vim-mode`, `/minimal`, `/fullscreen`, `/plan`,
+  `/view-plan`, `/copy`, `/rename`, `/home`, `/quit` and their aliases
+  (`resources/slash-commands/grok.md`).
+- `many-ai-cli doctor` now waits up to 3 seconds (was 1) for each provider's
+  `--version`, so slow-starting CLIs are reported with their version instead
+  of the bare name (`internal/doctor/doctor.go`).
+- **Validate CI now also runs on pushes to `develop`.** The workflow only
+  triggered on pull requests and pushes to `main`, so commits landing directly
+  on `develop` reached tagging without ever passing the quality gate
+  (`.github/workflows/validate.yml`).
+
+### Fixed
+- **An answered batch approval no longer reappears in the action bar.** After
+  a terminal resize the Hub kept reading its VT mirror while it was still
+  reflowing, and the TUI composer's frame rule overwrote the tail of an option
+  label. The block kept both markers and an intact numbering, so it passed the
+  corruption check, but its text — and therefore its signature — had changed,
+  which slipped past both the consumed-signature and answered-marker guards.
+  Marker extraction now honours the same resize debounce that native approval
+  scanning already used, and a run of box-drawing characters inside a marker
+  block (which `approval-rules.md` forbids, so it can only come from a redraw)
+  is treated as corruption on both the Hub and the browser
+  (`internal/hub/wrapper_loop.go`, `approval_marker_verdict.go`,
+  `web/src/app/approval-parser.ts`).
+- **Structurally broken approval marker blocks are no longer delivered.** When
+  the Hub's VT mirror drifted from the real terminal, a block could keep both
+  markers while losing option lines, producing a panel whose choices started
+  at 3 or that had a single button — answering it sent a number the agent
+  never offered. Such blocks are now suppressed without rewriting the dedupe
+  signature, so the next intact block is still delivered
+  (`internal/hub/approval_marker_verdict.go`).
+- **An approval question you already answered no longer reappears.** When the
+  fallback parser re-detected the same marker block, the cached options lost
+  their marker identity, so answering never recorded the permanent suppression
+  and an Ink/SIGWINCH redraw brought the panel back
+  (`web/src/app/approval-parser.ts`, `approval-ui.ts`).
+- **Input is no longer silently discarded while the Hub connection is down.**
+  `sendText` now reports failure, and every caller — composer, quick commands,
+  single and batch approval choices, multi-select answers, sequential
+  questions, the free-text field, and the mobile approval sheet — checks it
+  before clearing the input box, consuming attachments, hiding the action bar,
+  or recording the approval as answered. A toast is shown and your text and
+  selections stay untouched so the same input can be sent again after
+  reconnecting.
+- **Codex sessions no longer stop at an old frame in the terminal pane.**
+  Codex and Grok use absolute cursor positioning for body text and full-frame
+  redraws, and the cursor-hide filter was discarding those blocks as if they
+  were status bars, so the pane stopped following the output and gaps appeared
+  mid-line. Both providers now bypass the filter. As a trade-off, Codex status
+  and `Working` lines are kept in the scrollback instead of being filtered out
+  (`web/src/app/cursor-hide-filter.ts`, `terminal.ts`).
+- **Switching sessions no longer leaves the previous session's output on
+  screen.** A concurrent flush could invalidate the sequence number and
+  swallow the callback that re-attaches the terminal container; completion
+  callbacks are now queued and run once the in-flight write drains
+  (`web/src/app/terminal.ts`).
+- **Bringing a window back into focus no longer force-resizes the PTY.** A
+  resize is sent only when the refit actually changed the column/row count,
+  so two windows watching one session stop pushing their geometry at each
+  other (`web/src/app/terminal.ts`).
+- **Grok's full-screen views (`/resume`, `/history`, `/help`) no longer render
+  as a blank screen** (`web/src/app/terminal.ts`).
+- **The Grok conversation viewer no longer opens an empty transcript.** All
+  candidate session directories are collected and the nearest one that
+  actually contains messages wins, instead of the closest by timestamp — which
+  could be an empty stub Grok had just created
+  (`internal/hub/grok_history_handler.go`).
+- Pressing Enter to confirm a Japanese IME conversion also submitted the
+  free-text approval answer. The action-bar field and the mobile approval
+  sheet now ignore Enter while a composition is active.
+- **Arrow keys reach Claude's `/config` and `/model` menus again** even when
+  the composer still contains text (`web/src/app.ts`).
+- A `Q1`-style token inside a numbered option's label (for example
+  "1. Remove the Q1 form") was treated as a new question heading, splitting
+  one question into pseudo-sections and showing duplicate question tabs
+  (`web/src/app/approval-parser.ts`).
+- **Private paths were not redacted from bug reports when the development root
+  was not on drive C:.** The redaction pattern hard-coded `c:`, so `kb`,
+  `.ssh`, and `github\private` paths on any other drive were included
+  verbatim. Drive letters are no longer part of the pattern, for both the
+  private-path and home-directory rules (`internal/report/redact.go`).
+- **On Windows, an exited process was reported as still running.** `pidAlive`
+  treated "a handle could be opened" as alive, but Windows keeps the process
+  object around after exit, so `many-ai-cli stop` waited out its timeout on an
+  already-dead Hub and then force-killed a PID that may have been recycled to
+  an unrelated process. Liveness is now decided by `GetExitCodeProcess`
+  (`internal/hub/pid_windows.go`, `internal/launcher/pid_windows.go`).
+- Only the first completion summary was published when a provider emitted
+  several completion markers in one burst of output
+  (`internal/hub/approval_native.go`).
+- Clean-text transcript generation stopped at the first JSONL line larger than
+  8 MiB and dropped every later event (`internal/sessionlog/transcript.go`).
+- Spawning two worktree-backed sessions with the same label in the same minute
+  could fail with a `git worktree add` error because both picked the same
+  directory name; worktree creation is now serialized
+  (`internal/hub/normal_worktree.go`).
+- The LM Studio model list was cached without regard to the URL it came from,
+  so changing `lm_studio.base_url` kept returning the previous server's models
+  for up to a minute (`internal/hub/models_fetch.go`).
+- Linux desktop shortcuts created by `many-ai-cli setup` now escape `%` in the
+  executable path (`internal/setupcmd/setup_linux.go`).
+- Leftover `launcher-active-*.json.tmp` files from a launcher killed mid-write
+  are removed once they are older than an hour instead of accumulating
+  (`internal/launcher/active.go`).
+
+### Removed
+- **The temporary `/api/debug/batch-log` endpoint and its front-end
+  instrumentation.** [0.5.1] introduced it to diagnose the batch-approval
+  action bar and promised its removal once the cause was confirmed; the cause
+  is fixed above, so the endpoint, the 25 `dlog` call sites, and the
+  `~/.many-ai-cli/logs/debug/batch-log.jsonl` writes — which recorded approval
+  answer bodies verbatim — are gone. Existing log files are left untouched
+  (`internal/hub/debug_batch_log_handler.go`, `web/src/app/approval.ts`).
+
+### Security
+- **Breaking: PIN sessions are now tracked on the server and bound to the
+  device that logged in.** The PIN cookie carries a random nonce and a device
+  hash — client IP, or the Tailscale identity when the Hub sits behind a
+  loopback reverse proxy, combined with a coarse browser/OS bucket — next to
+  the expiry, and the Hub only accepts a cookie whose nonce is still in its
+  session registry. Cookies issued by earlier versions are rejected, the
+  registry is in memory only so a Hub restart signs every remote client out,
+  and moving to another network or browser requires entering the PIN again.
+  At most 256 PIN sessions are kept and the oldest is evicted when a new login
+  exceeds that (`internal/hub/pin_auth.go`).
+- **Breaking: authentication cookies are now marked `Secure` when the request
+  arrives over HTTPS.** This covers the Hub token cookie, the PIN cookie, and
+  the deletion cookies sent on logout. TLS is detected either directly or, for
+  loopback requests forwarded by a reverse proxy such as Tailscale Serve, from
+  an `X-Forwarded-Proto: https` header. A proxy that reports `https` while the
+  browser still talks plain HTTP will now have its cookies dropped by the
+  browser (`internal/hub/http_helpers.go`, `pin_auth.go`, `auth_handlers.go`).
 - **Breaking:** Explicit private-network `ollama.base_url` and
   `lm_studio.base_url` values now require `allow_private_hosts: true` in the
   corresponding config section. Only an omitted base URL keeps using the
   built-in loopback default without opt-in. Every explicitly configured
   private or loopback address—including `localhost`, `127.0.0.1`, `::1`, and
   loopback services on non-default ports—must opt in explicitly.
+- **Breaking: model-list requests are now blocked at connect time** when they
+  land on a private address without `allow_private_hosts: true`, which also
+  catches host names that only resolve to a private IP at dial time. Redirects
+  are capped at three hops and must stay on http/https without embedded
+  credentials (`internal/hub/models_fetch.go`).
+- **Breaking: WebSocket connections without an `Origin` header are rejected
+  when the request is logically remote.** Origin-less connections are still
+  accepted from local clients, which is what the wrapper uses
+  (`internal/hub/server.go`).
+- **Breaking: `MANY_AI_CLI_WHISPER_SERVER` is only honoured when it points at
+  a whisper server binary name** (`whisper-server` / `server`, with or without
+  the platform extension). Any other path is ignored and the Hub falls back to
+  the managed binary (`internal/hub/whisper_manage.go`).
+- **Logging out now invalidates the PIN session on the server.**
+  `POST /api/auth/logout` revokes exactly the session presented by the
+  request, so a copied cookie value can no longer be replayed until it
+  expires, and revoke-all drops every PIN session in addition to rotating the
+  token (`internal/hub/auth_handlers.go`).
+- **PIN lockouts are no longer shared by every client behind a reverse
+  proxy.** Requests that reach the Hub over loopback but are logically remote
+  are bucketed per Tailscale identity instead of all landing in the proxy's
+  `127.0.0.1` bucket (`internal/hub/pin_auth.go`).
+- The Hub UI is now served with a Content-Security-Policy: scripts, styles and
+  connections are restricted to same-origin (plus `ws:` / `wss:` for the
+  WebSocket), plugins are blocked, `base-uri` is disabled and the page cannot
+  be framed (`web/src/index.html`).
+- Session-log redaction now masks xAI (`xai-…`), `gsk_…`, and Cohere / Mistral
+  API keys, which in turn covers what bug reports and notification bodies can
+  leak (`internal/sessionlog/sessionlog.go`).
+- The custom notification sound stored in user preferences is now validated on
+  save: only the Hub-managed `notify_sound_custom.bin` with an `audio/*` MIME
+  type is kept (`internal/hub/user_prefs_handlers.go`).
 
 ## [0.5.1] - 2026-07-22
 
@@ -951,7 +1187,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.4...v0.4.0

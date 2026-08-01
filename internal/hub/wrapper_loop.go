@@ -234,7 +234,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 			"session_id", id, "provider", reg.Provider)
 		return
 	}
-	// diag 継続: docs/local/bugfix_statusline-settings-skip_2026-07-10.md
+	// diag 継続: docs/local/archive/v0.5.x/bugfix_statusline-settings-skip_2026-07-10.md
 	// Hub が register ack に載せる TokenStatusbar 実測値。wrapper の
 	// statusline_gate_wrapper と突き合わせ「send=true → reg=false」の JSON 劣化を
 	// 確定する。2026-07-19 時点 hub.log は send=true のみ（false 0）だが wrapper 側
@@ -533,7 +533,15 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 					}
 					ses.nativeApprovalScanQueued = false
 				}
-				if isAIProvider(provider) {
+				// リサイズ直後の VT ミラーは reflow 途中で、TUI のコンポーザ枠が本文へ重なった
+				// 「マーカーの対も番号構造も正常だが本文だけ壊れた」ブロックを返す。これを配信すると
+				// 本文が変わって sha256 sig も変わるため Hub 側 dedupe を素通りし、Web 側の
+				// approvalConsumedSig / _blockSig も一致しなくなって、回答済みの承認バーが復活する。
+				// 実測（2026-08-01）: 一括送信 → action-bar 消滅 → rows 15→33 の resize →
+				// 約 40ms 後にマーカー再配信、選択肢ラベル末尾が罫線に置き換わっていた。
+				// ネイティブ承認スキャン（上の shouldCheckApproval）と同じく、resize debounce の間は
+				// ミラーを読まない。SIGWINCH 後の再描画で必ず次チャンクが来るので取りこぼしにならない。
+				if isAIProvider(provider) && now.After(ses.vtResizeDebounceUntil) {
 					// マーカー抽出は scrollback 込み（画面高超えブロック / Grok 対応）。
 					// ネイティブ承認は上の TailLines（現在画面のみ）のまま — 解決済みプロンプトの再検出を避ける。
 					marker = extractApprovalMarkerBlock(ses.vt.TailLinesWithScrollback(vtTailLinesForMarker))
