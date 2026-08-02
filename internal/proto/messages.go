@@ -44,6 +44,14 @@ type Message struct {
 	JSONLPath string `json:"jsonl_path,omitempty"`
 	ReplayB64 string `json:"replay_b64,omitempty"`
 	Reason    string `json:"reason,omitempty"`
+	// PTYBytes: reattach 時に wrapper が申告する「PTY から読み出した累計バイト数」。
+	// Hub 側の受信済み累計との差が「切断中に取りこぼしたバイト数」になり、
+	// ReplayB64 の末尾からその長さだけを切り出して既存 UI へ配信する。
+	// ReplayB64 全体を送ると切断前に表示済みの内容が二重描画されるため、
+	// 差分の算出にこの値が要る（docs/local/archive/v0.4.0/
+	// bugfix_codex-terminal-reconnect-replay-duplication_2026-07-06.md）。
+	// 0 は「古い wrapper で未申告」を意味し、Hub は再配信を行わない。
+	PTYBytes int64 `json:"pty_bytes,omitempty"`
 
 	// TokenStatusbar: registered ack で Hub が返す「トークン常時表示バーが有効か」。
 	// wrapper はこれを見て claude 起動時に --settings で statusLine を渡すか決める

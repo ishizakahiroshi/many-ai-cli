@@ -212,9 +212,10 @@ type reconnectSupervisor struct {
 	closeDone        func()
 	reconnectCh      <-chan struct{}
 	startReceiveLoop func(c *websocket.Conn)
-	snapshotReplay   func() []byte
-	transportBroken  *atomic.Bool
-	resumeOutput     func()
+	// snapshotReplay は replay バッファと PTY 読み出し累計バイト数を返す。
+	snapshotReplay  func() ([]byte, int64)
+	transportBroken *atomic.Bool
+	resumeOutput    func()
 	// lastReattachAt は直近の reattach 成功時刻（UnixNano）。0 は未 reattach。
 	// postReattachGuard 以内の再切断は即死させず reconnect grace へ回す。
 	lastReattachAt *atomic.Int64
@@ -300,7 +301,8 @@ func (r *reconnectSupervisor) run() {
 			if w, h, err := term.GetSize(int(os.Stdin.Fd())); err == nil && w > 0 && h > 0 {
 				cols, rows = w, h
 			}
-			newConn, newSID, err := dialAndReattach(r.cfg, r.ws.getSID(), r.provider, r.display, r.cwd, r.label, r.model, r.startedAtText, r.rawLogPath, r.jsonlPath, cols, rows, r.snapshotReplay())
+			replay, ptyBytes := r.snapshotReplay()
+			newConn, newSID, err := dialAndReattach(r.cfg, r.ws.getSID(), r.provider, r.display, r.cwd, r.label, r.model, r.startedAtText, r.rawLogPath, r.jsonlPath, cols, rows, replay, ptyBytes)
 			if err != nil {
 				r.logger.Debug("reconnect attempt failed", "err", err)
 				continue
@@ -837,23 +839,28 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// Recent PTY output buffer: replayed to UI after a successful reconnect so
 	// the new session card has context for what happened during the gap.
 	var (
-		replayMu  sync.Mutex
-		replayBuf bytes.Buffer
+		replayMu    sync.Mutex
+		replayBuf   bytes.Buffer
+		replayTotal int64 // PTY から読み出した累計バイト数（reattach で Hub へ申告する）
 	)
 	appendReplay := func(chunk []byte) {
 		replayMu.Lock()
 		defer replayMu.Unlock()
 		replayBuf.Write(chunk)
+		replayTotal += int64(len(chunk))
 		if replayBuf.Len() > replayBufferLimit {
 			replayBuf.Next(replayBuf.Len() - replayBufferLimit)
 		}
 	}
-	snapshotReplay := func() []byte {
+	// snapshotReplay は replay バッファと累計バイト数を同一ロック下で返す。
+	// 別々に取ると両者の間に appendReplay が挟まり、Hub 側の差分計算
+	// （累計の差で replay の末尾を切り出す）が 1 チャンクぶんずれる。
+	snapshotReplay := func() ([]byte, int64) {
 		replayMu.Lock()
 		defer replayMu.Unlock()
 		out := make([]byte, replayBuf.Len())
 		copy(out, replayBuf.Bytes())
-		return out
+		return out, replayTotal
 	}
 
 	done := make(chan struct{})
@@ -1117,7 +1124,7 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model st
 	return conn, reg, nil
 }
 
-func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, label, model, startedAt, rawLogPath, jsonlPath string, termCols, termRows int, replay []byte) (*websocket.Conn, int, error) {
+func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, label, model, startedAt, rawLogPath, jsonlPath string, termCols, termRows int, replay []byte, ptyBytes int64) (*websocket.Conn, int, error) {
 	wsURL := url.URL{Scheme: "ws", Host: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Path: "/ws"}
 	// Origin はポート付きで許可リストに一致させる（理由は dialAndRegister のコメント参照）。
 	origin := fmt.Sprintf("http://127.0.0.1:%d", cfg.Hub.Port)
@@ -1147,6 +1154,7 @@ func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, 
 		LogPath:   rawLogPath,
 		JSONLPath: jsonlPath,
 		ReplayB64: base64.StdEncoding.EncodeToString(replay),
+		PTYBytes:  ptyBytes,
 	}); err != nil {
 		_ = conn.Close()
 		return nil, 0, err

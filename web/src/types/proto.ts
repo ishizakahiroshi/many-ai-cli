@@ -118,6 +118,9 @@ export interface Message {
   log_path?: string;
   jsonl_path?: string;
   replay_b64?: string;
+  // reattach 時に wrapper が申告する PTY 読み出し累計バイト数（wrapper→Hub 専用。
+  // UI は受け取らない）。Hub が「切断中に取りこぼしたぶん」を算出するのに使う。
+  pty_bytes?: number;
   reason?: string;
   approval_visible?: boolean;
   approval_sig?: string;
