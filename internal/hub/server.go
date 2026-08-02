@@ -137,6 +137,12 @@ type session struct {
 	// JSON 外: UI 再接続時リプレイ用リングバッファ（末尾 maxPTYBuf bytes）
 	ptyBuf []byte
 
+	// JSON 外: wrapper から受信した PTY バイトの累計。wrapper 再接続時に
+	// wrapper 側の累計（proto.Message.PTYBytes）と差を取ると「切断中に
+	// 取りこぼしたバイト数」が確定し、replay の末尾からその長さだけを
+	// 既存 UI へ配信できる（reattachReplayGap）。
+	ptyBytesSeen int64
+
 	// JSON 外: Go 側 native approval 検出用 VT バッファ。
 	vt                        *vtBuffer
 	vtResizeDebounceUntil     time.Time

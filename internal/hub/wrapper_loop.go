@@ -378,8 +378,52 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	}, cardMeta)
 	s.sessionsMu.Lock()
 	var oldHistory *sessionlog.Writer
+	// 切断前のターミナル文脈（ptyBuf / VT ミラー / 受信累計）を引き継ぐ。
+	// 以前は replay(64KB) で丸ごと置き換えていたため、再接続のたびに Hub 側の
+	// スクロールバックが 64KB へ切り詰められ、ブラウザ再読込で履歴が失われていた。
+	var prevPTYBuf []byte
+	var prevVT *vtBuffer
+	var prevCols, prevRows int
+	var prevSeen int64
+	prevExists := false
 	if cur := s.sessions[acceptedID]; cur != nil {
 		oldHistory = cur.History
+		prevPTYBuf = cur.ptyBuf
+		prevVT = cur.vt
+		prevCols, prevRows = cur.lastCols, cur.lastRows
+		prevSeen = cur.ptyBytesSeen
+		prevExists = true
+	}
+	// gap = 切断中に Hub が受け取れなかったぶん。既存 UI へはこれだけを流す。
+	gap := replay
+	ptyBuf := replay
+	ptyBytesSeen := int64(len(replay))
+	var vt *vtBuffer
+	if prevExists {
+		gap = reattachReplayGap(replay, req.PTYBytes, prevSeen)
+		ptyBuf = appendPTYReplay(prevPTYBuf, gap)
+		ptyBytesSeen = prevSeen + int64(len(gap))
+		if req.PTYBytes > 0 {
+			// replay 窓を超える穴があった場合でも、以降の差分計算が
+			// ずれ続けないよう累計は wrapper 側の実数に合わせ直す。
+			ptyBytesSeen = req.PTYBytes
+		}
+		if prevVT != nil && prevCols == req.Cols && prevRows == req.Rows {
+			// PTY サイズが同じなら既存ミラーを温存し、差分だけを書き足す。
+			// 作り直すと scrollback（承認マーカー抽出が使う）が 64KB 相当に痩せる。
+			vt = prevVT
+			if len(gap) > 0 {
+				vt.Write(gap)
+			}
+		}
+	}
+	if vt == nil {
+		// 新規（Hub 再起動後の cold reattach）／PTY サイズ変更時は従来どおり
+		// replay からミラーを作り直す。旧サイズのまま書くと折り返しがずれる。
+		vt = newVTBuffer(req.Cols, req.Rows)
+		if len(replay) > 0 {
+			vt.Write(replay)
+		}
 	}
 	now := time.Now()
 	lastOutputAt := ""
@@ -412,8 +456,9 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		StartedAt:       startedAtText,
 		lastOutputAt:    lastOutputAtTime,
 		branchCheckedAt: now,
-		ptyBuf:          replay,
-		vt:              newVTBuffer(req.Cols, req.Rows),
+		ptyBuf:          ptyBuf,
+		ptyBytesSeen:    ptyBytesSeen,
+		vt:              vt,
 		lastCols:        req.Cols,
 		lastRows:        req.Rows,
 		LogPath:         rawLogPath,
@@ -421,9 +466,6 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		History:         history,
 	}
 	s.sessions[acceptedID].inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
-	if s.sessions[acceptedID].vt != nil && len(replay) > 0 {
-		s.sessions[acceptedID].vt.Write(replay)
-	}
 	wc := newWrapperConn(conn)
 	s.wrappers[acceptedID] = wc
 	if s.nextID < acceptedID {
@@ -456,6 +498,20 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	announce.LogPath = rawLogPath
 	announce.JSONLPath = jsonlPath
 	s.broadcast(announce)
+	// 切断中に取りこぼしたぶんを、すでに開いている UI へ流す。
+	// これを送らないとブラウザの xterm.js にはそのバイト列が永久に届かず、
+	// 絶対座標で部分再描画する TUI（Codex 等）は画面が古いまま復帰できない。
+	// wrapperMessageLoop はまだ開始していないので、ライブ配信と前後しない。
+	if len(gap) > 0 {
+		s.broadcast(proto.Message{Type: "pty_data", SessionID: acceptedID, Data: append([]byte(nil), gap...)})
+	}
+	s.logger.Info("reattach replay gap",
+		"session_id", acceptedID,
+		"had_session", prevExists,
+		"replay_bytes", len(replay),
+		"gap_bytes", len(gap),
+		"wrapper_pty_bytes", req.PTYBytes,
+		"hub_pty_bytes", prevSeen)
 	s.writeHistory(acceptedID, map[string]any{
 		"ts":             now.Format(time.RFC3339),
 		"type":           "session_reattach",
@@ -512,6 +568,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			s.sessionsMu.Lock()
 			if ses := s.sessions[id]; ses != nil {
 				ses.ptyBuf = appendPTYReplay(ses.ptyBuf, m.Data)
+				ses.ptyBytesSeen += int64(len(m.Data))
 				if ses.vt == nil {
 					ses.vt = newVTBuffer(ses.lastCols, ses.lastRows)
 				}

@@ -59,7 +59,7 @@ func makeSupervisor(
 		closeDone:        closeDone,
 		reconnectCh:      reconnectCh,
 		startReceiveLoop: func(_ *websocket.Conn) {},
-		snapshotReplay:   func() []byte { return nil },
+		snapshotReplay:   func() ([]byte, int64) { return nil, 0 },
 		probeHub:         func(_ *config.Config) bool { return probeAlive },
 	}
 }

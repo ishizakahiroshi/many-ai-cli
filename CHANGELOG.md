@@ -10,6 +10,24 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Fixed
+- **The web terminal no longer freezes on a stale frame after the wrapper
+  reconnects to the Hub.** When a burst of PTY output overflows the wrapper's
+  send queue, the wrapper deliberately drops the WebSocket and reattaches two
+  seconds later — a designed self-recovery path. Its replay buffer was applied
+  to the Hub's internal mirror only, so an already-open browser never received
+  the bytes emitted during the gap. Terminals assume a lossless byte stream, so
+  a TUI that repaints with absolute cursor addressing (Codex, Grok) drew every
+  later frame at the wrong coordinates and could not catch up. The wrapper now
+  reports how many PTY bytes it has read, the Hub tracks how many it has
+  received, and on reattach exactly the missing tail is broadcast to connected
+  UIs — no gap, and no duplicate of what was already displayed. Reattach also
+  keeps the existing scrollback and VT mirror instead of truncating them to the
+  64 KB replay window, so reloading the browser after a reconnect no longer
+  loses history. Reattaches are now logged with `reattach replay gap`
+  (`internal/hub/reattach_replay.go`, `internal/hub/wrapper_loop.go`,
+  `internal/wrapper/wrapper.go`).
+
 ## [0.5.2] - 2026-08-01
 
 ### Added
