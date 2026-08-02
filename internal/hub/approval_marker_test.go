@@ -64,6 +64,33 @@ func TestExtractApprovalMarkerBlockIgnoresIncomplete(t *testing.T) {
 	}
 }
 
+// TestApprovalMarkerNotLeakedAcrossResize は、resize をまたいだ再描画が marker_leak に
+// 化けないことを検証する。
+//
+// 実測（2026-08-02 セッション #4 の 26 分を jsonl から再生）: Web の承認バー・告知バナーが
+// 出入りするたび #terminal-area の高さが変わって pty_resize が飛び、rows が 10〜35 の間を
+// 秒間数回変動していた。resize 前の世代が VT ミラーの scrollback に残ると、抽出ウィンドウ内で
+// 開始マーカーが新旧 2 本並び、非貪欲マッチが OPEN … OPEN … CLOSE を 1 ブロックとして拾う。
+// 26 分間で承認マーカー 16 件中 15 件が抑止され、うち 10 件がこの形だった。
+func TestApprovalMarkerNotLeakedAcrossResize(t *testing.T) {
+	vt := newVTBuffer(40, 10)
+	// resize 前の世代の残骸。終了マーカーだけが画面外へ失われた状態を模す。
+	vt.scrollback = []string{approvalMarkerOpen, "Q1 proceed?", " 1. Yes"}
+
+	vt.Resize(40, 14) // SIGWINCH
+
+	// TUI が全画面を描き直す。
+	vt.Write([]byte("[MANY-AI-CLI]\r\nQ1 proceed?\r\n 1. Yes\r\n 2. No\r\n N. User specifies\r\n[/MANY-AI-CLI]\r\n"))
+
+	marker := extractApprovalMarkerBlock(vt.TailLinesWithScrollback(vtTailLinesForMarker))
+	if marker == nil {
+		t.Fatal("marker not extracted after resize redraw")
+	}
+	if reason := classifyApprovalMarkerBlock(marker.Block); reason != "" {
+		t.Fatalf("classify = %q, want ok (resize-straddling redraw must not look corrupt)", reason)
+	}
+}
+
 func TestMaybeBroadcastApprovalMarkerDedupesSameBlock(t *testing.T) {
 	s := newTestServer()
 	ses := registerTestSession(s, 1, "claude")

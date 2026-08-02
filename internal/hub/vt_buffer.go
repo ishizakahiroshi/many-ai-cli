@@ -94,6 +94,17 @@ func (b *vtBuffer) Resize(cols, rows int) {
 	if rows <= 0 {
 		rows = defaultVTRows
 	}
+	// サイズが実際に変わったかどうか。変わっていれば下で scrollback を捨てる。
+	// 実端末と違いこのミラーは reflow しない。resize 前に押し出された行は旧サイズで
+	// レイアウトされた残骸であり、TUI（Claude Code / Codex 等）は SIGWINCH を受けて
+	// 画面全体を描き直すため、同じ内容が新しい世代として必ず再び流れてくる。
+	// 古い世代を残すと承認マーカーの開始行が新旧 2 本 TailLinesWithScrollback の
+	// 抽出ウィンドウへ同居し、抽出正規表現が OPEN … OPEN … CLOSE を 1 ブロックとして
+	// 拾って marker_leak（構造破損）と判定される。
+	// 実測（2026-08-02 セッション #4 の 26 分を jsonl から再生）: 破棄しない場合は
+	// marker_leak 10 件・抑止 15 件・抑止告知 8 回、破棄すると marker_leak 0 件・
+	// 抑止 3 件・告知 3 回。当該セッションでは rows が 10〜35 の間を秒間数回変わっていた。
+	resized := b.cells != nil && (cols != b.cols || rows != b.rows)
 	next := make([][]rune, rows)
 	for r := 0; r < rows; r++ {
 		next[r] = make([]rune, cols)
@@ -115,6 +126,9 @@ func (b *vtBuffer) Resize(cols, rows int) {
 	b.col = clampInt(b.col, 0, cols-1)
 	b.savedRow = clampInt(b.savedRow, 0, rows-1)
 	b.savedCol = clampInt(b.savedCol, 0, cols-1)
+	if resized {
+		b.scrollback = nil
+	}
 }
 
 func (b *vtBuffer) Write(data []byte) {

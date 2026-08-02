@@ -439,7 +439,31 @@ import { resolveCurrentReviewLoad } from './review-load-generation.js';
   // Session-screen turn completion card
   // ───────────────────────────────────────────────────────
   const latestTurnBySession = new Map<number, any>();
+  // ✕ 手動 dismiss / 次コマンド開始（user_turn_started）で消したターン番号（セッション別）。
+  // hidden だけだと view 切替時のキャッシュ再描画で復活するため、番号で恒久 dismiss する。
+  const dismissedTurnBySession = new Map<number, number>();
   let turnCard: HTMLElement | null = null;
+
+  function dismissTurn(sessionID: number, turnNo: number) {
+    if (!sessionID || !(turnNo > 0)) return;
+    dismissedTurnBySession.set(sessionID, Math.max(turnNo, dismissedTurnBySession.get(sessionID) || 0));
+  }
+
+  function isTurnDismissed(sessionID: number, turnNo: number) {
+    return turnNo > 0 && turnNo <= (dismissedTurnBySession.get(sessionID) || 0);
+  }
+
+  // Hub 側のターン再採番検出。同一採番エポックでは観測ターン番号は単調増加するため、
+  // dismiss 記録より小さい番号の到着は「wrapper warm reattach で session 構造体が
+  // 作り直された」「dismiss 後に同一 Hub 内で ID が再利用された」等による 1 からの
+  // 振り直しを意味する（many-session-removed が発火しない経路）。旧エポックの記録を
+  // 残すと新セッションの正当なカードを watermark ぶん黙って抑止するので破棄する。
+  // 最初の観測が watermark と同値の場合だけは区別できないが、次ターンで自己回復する。
+  function clearWatermarkIfRenumbered(sessionID: number, observedTurnNo: number) {
+    if (observedTurnNo > 0 && observedTurnNo < (dismissedTurnBySession.get(sessionID) || 0)) {
+      dismissedTurnBySession.delete(sessionID);
+    }
+  }
 
   function ensureTurnCard() {
     if (turnCard) return turnCard;
@@ -455,7 +479,10 @@ import { resolveCurrentReviewLoad } from './review-load-generation.js';
         <span class="file-stat-add" data-turn-added></span>
         <span class="file-stat-del" data-turn-removed></span>
       </div>
-      <button type="button" class="git-turn-review-btn" data-turn-review></button>
+      <div class="git-turn-card-actions">
+        <button type="button" class="git-turn-review-btn" data-turn-review></button>
+        <button type="button" class="git-turn-close-btn" data-turn-close>✕</button>
+      </div>
     `;
     card.querySelector('[data-turn-review]')?.addEventListener('click', () => {
       const sid = Number(card.dataset.sessionId || 0);
@@ -465,6 +492,10 @@ import { resolveCurrentReviewLoad } from './review-load-generation.js';
       window.dispatchEvent(new CustomEvent('many-ai-cli:review-turn-request', {
         detail: { sessionId: sid, turn, gitRoot: sess.git_root || sess.cwd || '' },
       }));
+    });
+    card.querySelector('[data-turn-close]')?.addEventListener('click', () => {
+      dismissTurn(Number(card.dataset.sessionId || 0), Number(card.dataset.turn || 0));
+      card.hidden = true;
     });
     actionBar.parentElement.insertBefore(card, actionBar);
     turnCard = card;
@@ -478,7 +509,8 @@ import { resolveCurrentReviewLoad } from './review-load-generation.js';
 
   function renderTurnCard(sessionID: number, turn: any) {
     const area = document.getElementById('display-area');
-    if (Number(activeSessionId) !== Number(sessionID) || !area?.classList.contains('mode-terminal') || Number(turn?.files_changed || 0) <= 0) {
+    if (Number(activeSessionId) !== Number(sessionID) || !area?.classList.contains('mode-terminal') || Number(turn?.files_changed || 0) <= 0
+        || isTurnDismissed(Number(sessionID), Number(turn?.turn || 0))) {
       hideTurnCard();
       return;
     }
@@ -495,6 +527,12 @@ import { resolveCurrentReviewLoad } from './review-load-generation.js';
     if (addEl) addEl.textContent = `+${Number(turn.added || 0)}`;
     if (removeEl) removeEl.textContent = `-${Number(turn.removed || 0)}`;
     if (reviewBtn) reviewBtn.textContent = _gt('review_turn_card_button', 'Review');
+    const closeBtn = card.querySelector('[data-turn-close]');
+    if (closeBtn) {
+      const closeLabel = String(_gt('review_turn_card_close', 'Close'));
+      closeBtn.setAttribute('title', closeLabel);
+      closeBtn.setAttribute('aria-label', closeLabel);
+    }
     card.dataset.sessionId = String(sessionID);
     card.dataset.turn = String(turn.turn || '');
     card.hidden = false;
@@ -509,6 +547,12 @@ import { resolveCurrentReviewLoad } from './review-load-generation.js';
       const params = new URLSearchParams({ session: String(sessionID), token: token || '' });
       const res = await fetch(`/api/git-turns?${params.toString()}`);
       const data = await res.json().catch(() => ({}));
+      // 応答の鮮度ガード。この関数は cache 空のときだけ呼ばれるため、fetch 中に
+      // WS の git_turn が cache を埋めていたらそちらが必ず新しい（適用すると stale な
+      // latest が clearWatermarkIfRenumbered で dismiss 記録を誤破棄し、消したはずの
+      // カードを復活させる）。アクティブセッションが切り替わった場合も適用しない
+      // （renderTurnCard の不一致分岐が切替先の正当なカードを隠すため）。
+      if (latestTurnBySession.has(sessionID) || Number(activeSessionId) !== Number(sessionID)) return;
       const turns = res.ok && Array.isArray(data.turns) ? data.turns : [];
       const latest = turns.length ? turns[turns.length - 1] : null;
       if (!latest) {
@@ -516,10 +560,11 @@ import { resolveCurrentReviewLoad } from './review-load-generation.js';
         hideTurnCard();
         return;
       }
+      clearWatermarkIfRenumbered(sessionID, Number(latest.turn || 0));
       latestTurnBySession.set(sessionID, latest);
       renderTurnCard(sessionID, latest);
     } catch (_) {
-      hideTurnCard();
+      if (Number(activeSessionId) === Number(sessionID)) hideTurnCard();
     }
   }
 
@@ -527,8 +572,35 @@ import { resolveCurrentReviewLoad } from './review-load-generation.js';
     const detail = event?.detail || {};
     const sid = Number(detail.session_id || 0);
     if (!sid) return;
+    clearWatermarkIfRenumbered(sid, Number(detail.turn || 0));
     latestTurnBySession.set(sid, detail);
     renderTurnCard(sid, detail);
+  });
+
+  // 次の命令（確定ユーザー入力）が provider へ届いたら、前ターンの完了カードは
+  // 古い情報なので自動で消す（同じターンは view 切替後も再表示しない）。
+  // 信号は Hub の user_turn_started（ライブ限定 broadcast）。State("running") は
+  // resize 再描画等の出力再開でも遷移する表示ラベルのため使わない。
+  window.addEventListener('many-user-turn-started', (event: any) => {
+    const sid = Number(event?.detail?.session_id || 0);
+    if (!sid) return;
+    dismissTurn(sid, Number(latestTurnBySession.get(sid)?.turn || 0));
+    if (turnCard && !turnCard.hidden && Number(turnCard.dataset.sessionId || 0) === sid) {
+      turnCard.hidden = true;
+    }
+  });
+
+  // セッション削除（UI dismiss / Hub 再起動 purge）でカード状態を破棄する。
+  // Hub 再起動後はセッション ID もターン番号も 1 から振り直されるため、
+  // dismiss 記録が残ると再利用 ID の新セッションで正当なカードを誤抑止する。
+  window.addEventListener('many-session-removed', (event: any) => {
+    const sid = Number(event?.detail?.session_id || 0);
+    if (!sid) return;
+    latestTurnBySession.delete(sid);
+    dismissedTurnBySession.delete(sid);
+    if (turnCard && !turnCard.hidden && Number(turnCard.dataset.sessionId || 0) === sid) {
+      turnCard.hidden = true;
+    }
   });
 
   window.addEventListener('session-view-mode-changed', (event: any) => {

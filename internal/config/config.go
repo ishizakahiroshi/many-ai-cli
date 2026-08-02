@@ -1019,6 +1019,45 @@ func (cfg *Config) Validate() error {
 	return nil
 }
 
+// Warnings は「起動は止めないが利用者に伝えるべき設定上の問題」を返す。
+// Validate() が返す error（＝起動を止める致命的な誤り）と対の区分で、Hub 起動時に
+// hub.log へ warn として出す（internal/hub/server.go NewServer）。
+//
+// 任意機能の設定不備で Hub 全体が起動不能になるのを防ぐための区分。設定値そのものは
+// 保存を許し、その機能が使えないことだけを伝える。
+func (cfg *Config) Warnings() []string {
+	if cfg == nil {
+		return nil
+	}
+	var warnings []string
+	if host, ok := privateModelHost(cfg.Ollama.BaseURL); ok && !cfg.Ollama.AllowPrivateHosts {
+		warnings = append(warnings, fmt.Sprintf(
+			"ollama.base_url points to a private host (%s) but ollama.allow_private_hosts is false; the model list will be blocked at the transport layer. Set ollama.allow_private_hosts: true to use it.",
+			host))
+	}
+	if host, ok := privateModelHost(cfg.LMStudio.BaseURL); ok && !cfg.LMStudio.AllowPrivateHosts {
+		warnings = append(warnings, fmt.Sprintf(
+			"lm_studio.base_url points to a private host (%s) but lm_studio.allow_private_hosts is false; the model list will be blocked at the transport layer. Set lm_studio.allow_private_hosts: true to use it.",
+			host))
+	}
+	return warnings
+}
+
+// privateModelHost は base_url のホストが private 判定なら (ホスト名, true) を返す。
+// 空・パース不能な値は false（それらは Validate() 側が error として扱う）。
+func privateModelHost(baseURL string) (string, bool) {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return "", false
+	}
+	u, err := neturl.Parse(baseURL)
+	if err != nil || u.Host == "" {
+		return "", false
+	}
+	host := u.Hostname()
+	return host, isPrivateModelHost(host)
+}
+
 func validateOllama(ollama OllamaConfig) error {
 	baseURL := strings.TrimSpace(ollama.BaseURL)
 	if baseURL == "" {
@@ -1037,9 +1076,11 @@ func validateOllama(ollama OllamaConfig) error {
 	if u.Path != "" && u.Path != "/" {
 		return fmt.Errorf("ollama.base_url must not include a path")
 	}
-	if !ollama.AllowPrivateHosts && isPrivateModelHost(u.Hostname()) {
-		return fmt.Errorf("ollama.base_url private hosts require allow_private_hosts: true")
-	}
+	// private host + opt-in 無しは「起動を止める」理由にならない（Warnings() で警告する）。
+	// 実際の SSRF 防御は internal/hub/models_fetch.go の newLocalModelHTTPClient が
+	// 担っており、allow_private_hosts=false なら private 網へのダイヤル自体を
+	// トランスポート層で遮断する。ここで hard fail にすると、任意設定のモデル一覧
+	// 機能のために serve / version / stop / wrap まで全滅する（実際に発生）。
 	return nil
 }
 
@@ -1061,9 +1102,7 @@ func validateLMStudio(lms LMStudioConfig) error {
 	if u.Path != "" && u.Path != "/" {
 		return fmt.Errorf("lm_studio.base_url must not include a path")
 	}
-	if !lms.AllowPrivateHosts && isPrivateModelHost(u.Hostname()) {
-		return fmt.Errorf("lm_studio.base_url private hosts require allow_private_hosts: true")
-	}
+	// private host の扱いは validateOllama と同じ（Warnings() で警告し、起動は止めない）。
 	return nil
 }
 
