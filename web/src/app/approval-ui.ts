@@ -5,6 +5,7 @@ import { playNotificationSound, showDesktopApprovalNotification } from './settin
 import { ws } from './ws-client.js';
 import { reshowActionBar, showActionBar } from './approval.js';
 import { inheritMarkerBlockSig } from './approval-parser.js';
+import { suppressPtyResizeForInputLayout, syncPtySizeToViewportAfterLayout } from './terminal.js';
 
 // UI/cache adapter for approval detection. Parser code must not depend on this.
 (function (root) {
@@ -117,13 +118,27 @@ import { inheritMarkerBlockSig } from './approval-parser.js';
     return label && label !== key ? label : t('approval_suppressed_reason_client_corrupt');
   }
 
+  // このバナーは通常フローの要素（approval.css の flex-shrink: 0）なので、出し入れの
+  // たびに #terminal-area の高さが変わり、terminal.ts の ResizeObserver が rAF ごとに
+  // sendResize を撃つ。SIGWINCH を受けた TUI は画面全体を描き直すため、Hub の VT ミラーが
+  // 実端末と乖離しやすくなり、その乖離が次の「壊れた承認ブロック」を生んで再びこのバナーを
+  // 呼ぶ増幅ループになる（2026-08-02 実測: rows が 10〜35 の間を秒間数回変動していた）。
+  // 入力欄の伸縮と同じ扱いにして、連発を止めてからレイアウト確定後に実寸を 1 回だけ送る。
+  function settleTerminalAfterBannerLayout() {
+    if (activeSessionId === null) return;
+    suppressPtyResizeForInputLayout(350);
+    syncPtySizeToViewportAfterLayout(activeSessionId);
+  }
+
   function renderApprovalSuppressedBannerFor(id) {
     const banner = document.getElementById('approval-suppressed-banner');
     if (!banner) return;
+    const wasHidden = banner.hidden;
     const reason = id == null ? undefined : approvalSuppressedCache.get(id);
     if (!reason || approvalSuppressedDismissedCache.get(id)) {
       banner.hidden = true;
       banner.innerHTML = '';
+      if (!wasHidden) settleTerminalAfterBannerLayout();
       return;
     }
     banner.innerHTML = '';
@@ -147,12 +162,14 @@ import { inheritMarkerBlockSig } from './approval-parser.js';
     closeBtn.title = t('approval_suppressed_banner_close_tooltip') || 'Dismiss';
     closeBtn.addEventListener('click', () => {
       if (id != null) approvalSuppressedDismissedCache.set(id, true);
-      banner.hidden = true;
+      // 直接 hidden を触らず render 経由にして、レイアウト確定処理を 1 箇所へ集約する。
+      renderApprovalSuppressedBannerFor(id);
     });
     banner.appendChild(msg);
     banner.appendChild(retryBtn);
     banner.appendChild(closeBtn);
     banner.hidden = false;
+    if (wasHidden) settleTerminalAfterBannerLayout();
   }
 
   // 新しい抑止イベント。✕ で閉じた状態は解除する（別事象なので出し直す）。

@@ -755,6 +755,11 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		// stale 検知が無効化されるだけ。
 		logger.Warn("self binary hash unavailable; stale-binary detection disabled")
 	}
+	// 起動を止めない設定上の問題（config.Validate() が返す error と対の区分）を残す。
+	// GUI 起動では stderr が見えないため、hub.log が唯一の通知経路になる。
+	for _, warning := range cfg.Warnings() {
+		logger.Warn("config warning", "warning", warning)
+	}
 	s := &Server{
 		cfg:                   cfg,
 		logger:                logger,

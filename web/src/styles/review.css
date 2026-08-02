@@ -207,6 +207,22 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.git-turn-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+.git-turn-close-btn {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 6px;
+  line-height: 1;
+}
+.git-turn-close-btn:hover { color: var(--danger); }
 .git-turn-review-btn {
   flex: none;
   border: 1px solid color-mix(in srgb, var(--muted) 45%, transparent);

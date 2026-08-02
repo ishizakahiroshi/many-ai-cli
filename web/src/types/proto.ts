@@ -45,6 +45,7 @@ export type MessageType =
   | 'usage_stat'
   | 'done_summary'
   | 'git_turn'
+  | 'user_turn_started'
   | 'spawn_confirmation_requested';
 
 export type DoneSummaryKind = 'success' | 'failure' | 'aborted' | 'needs_action' | string;

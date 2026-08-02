@@ -735,7 +735,22 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     setUserPref('cwd_favorites', []);
   }
 
+  // 行の × 用: 「その行を消す」導線なので履歴とお気に入りの両方から削除する。
+  // 履歴だけ消すと、お気に入り行では行が残り続けて「押しても何も起きない」ボタンになる。
+  function deleteCwdEntry(cwd) {
+    if (!cwd) return;
+    deleteCwdHistoryItem(cwd);
+    const favs = loadCwdFavorites();
+    if (favs.includes(cwd)) setUserPref('cwd_favorites', favs.filter(v => v !== cwd));
+  }
+
   let cwdSuppressReopen = false; // お気に入り選択で入力欄を再 focus する際の自動再オープンを1回抑止する
+
+  // 今ドロップダウンに適用されているフィルタ文字列。renderCwdDropdown が毎回更新する。
+  // × / ★ / 一括削除の後は「入力欄の値」ではなくこの値で描き直す。入力欄に確定済みのパスが
+  // 残ったまま focus/click で開いた（＝フィルタ '' の全件表示）状態を入力値で描き直すと、
+  // 全件表示だったリストが 0〜1 件へ絞られて「押した瞬間に閉じた」ように見えるため。
+  let cwdActiveFilter = '';
 
   // パス文字列を「親ディレクトリ」「末尾セグメント（basename）」に分割する。
   // 区切りは \ と / の両対応。末尾が区切り文字の場合は手前のセグメントを basename とする。
@@ -840,7 +855,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     fetchSubdirs(parent).then(items => {
       if (!subdirsCurrent || subdirsCurrent.parent !== parent) return;
       subdirsCurrent.items = items;
-      renderCwdDropdown(spawnCwdInput.value.trim());
+      rerenderCwdDropdown();
     });
   }
 
@@ -993,7 +1008,14 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   }
   // ---- /C1: 検索ドリブン ロジック層 ----
 
+  // 表示中のフィルタを維持したまま描き直す。行の追加/削除でリストの見え方を変えたくない
+  // 操作（× 削除・★ トグル・一括削除・subdirs の遅延到着）から使う。
+  function rerenderCwdDropdown() {
+    renderCwdDropdown(cwdActiveFilter);
+  }
+
   function renderCwdDropdown(filter) {
+    cwdActiveFilter = filter ?? '';
     const favs = loadCwdFavorites();
     const favSet = new Set(favs);
     const hist = loadCwdHistory();
@@ -1073,7 +1095,8 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         `<button class="cwd-dropdown-fav${fav ? ' is-on' : ''}" tabindex="-1" data-value="${escapeHtml(v)}" ` +
         `title="${escapeHtml(t(fav ? 'spawn_cwd_unfavorite' : 'spawn_cwd_favorite'))}">${fav ? '★' : '☆'}</button>` +
         `<span class="cwd-dropdown-label" title="${escapeHtml(v)}">${buildCwdLabelHtml(v, labelFilter)}</span>` +
-        (isSub ? '' : `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(v)}">×</button>`) +
+        (isSub ? '' : `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(v)}" ` +
+          `title="${escapeHtml(t('spawn_cwd_remove_entry'))}">×</button>`) +
         `</li>`
       );
     }
@@ -1086,7 +1109,8 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         `title="${escapeHtml(t(fav ? 'spawn_cwd_unfavorite' : 'spawn_cwd_favorite'))}">${fav ? '★' : '☆'}</button>` +
         `<span class="cwd-dropdown-mag" aria-hidden="true">🔍</span>` +
         `<span class="cwd-dropdown-label" title="${escapeHtml(r.path)}">${buildCwdLabelHtml(r.path, parsed.query)}</span>` +
-        `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(r.path)}">×</button>` +
+        `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(r.path)}" ` +
+        `title="${escapeHtml(t('spawn_cwd_remove_entry'))}">×</button>` +
         `</li>`
       );
     }
@@ -1255,7 +1279,9 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       } else {
         el.classList.remove('is-missing');
         el.removeAttribute('title');
-        if (delBtn) delBtn.removeAttribute('title');
+        // missing 用の強調ツールチップから通常の削除ツールチップへ戻す（消してしまうと
+        // 一度 missing 判定を通った行だけ説明が失われる）。
+        if (delBtn) delBtn.title = t('spawn_cwd_remove_entry');
       }
     });
   }
@@ -1680,7 +1706,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       if (item.classList.contains('is-favorite') || item.classList.contains('is-subdir')) return;
       e.preventDefault();
       deleteCwdHistoryItem(item.dataset.value);
-      renderCwdDropdown(spawnCwdInput.value.trim());
+      rerenderCwdDropdown();
       const next = [...cwdDropdown.querySelectorAll('.cwd-dropdown-item')];
       if (next.length === 0) { focusInputNoReopen(); return; }
       (next[Math.min(idx, next.length - 1)] as HTMLElement).focus();
@@ -1732,9 +1758,9 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       e.preventDefault();
       if (window.confirm(t('spawn_cwd_clear_history_confirm'))) {
         clearCwdHistory();
-        renderCwdDropdown(spawnCwdInput.value.trim());
+        rerenderCwdDropdown();
       }
-      spawnCwdInput.focus();
+      focusInputNoReopen();
       return;
     }
     const clearFavBtn = e.target.closest('.cwd-dropdown-clear-favorites');
@@ -1742,25 +1768,27 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       e.preventDefault();
       if (window.confirm(t('spawn_cwd_clear_favorites_confirm'))) {
         clearCwdFavorites();
-        renderCwdDropdown(spawnCwdInput.value.trim());
+        rerenderCwdDropdown();
       }
-      spawnCwdInput.focus();
+      focusInputNoReopen();
       return;
     }
     const favBtn = e.target.closest('.cwd-dropdown-fav');
     if (favBtn) {
       e.preventDefault();
       toggleCwdFavorite(favBtn.dataset.value);
-      renderCwdDropdown(spawnCwdInput.value.trim());
-      spawnCwdInput.focus();
+      rerenderCwdDropdown();
+      focusInputNoReopen();
       return;
     }
     const delBtn = e.target.closest('.cwd-dropdown-del');
     if (delBtn) {
       e.preventDefault();
-      deleteCwdHistoryItem(delBtn.dataset.value);
-      renderCwdDropdown(spawnCwdInput.value.trim());
-      spawnCwdInput.focus();
+      deleteCwdEntry(delBtn.dataset.value);
+      rerenderCwdDropdown();
+      // focus() 経由の focus リスナ（renderCwdDropdown('') で全件へ描き直す）を踏むと
+      // せっかく維持したフィルタが飛ぶので、再オープン抑止つきで戻す。
+      focusInputNoReopen();
       return;
     }
     const item = e.target.closest('.cwd-dropdown-item');

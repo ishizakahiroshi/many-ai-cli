@@ -77,6 +77,11 @@ func (s *Server) handleInput(m proto.Message) {
 		// captureGitTurnStart 側で維持し、途中までの編集を取りこぼさない。
 		s.captureGitTurnStart(m.SessionID)
 		s.broadcast(proto.Message{Type: "pty_data", SessionID: m.SessionID, Data: []byte(chatHistoryUserTurnMarker)})
+		// ターン完了カードの自動消去用。ターン境界マーカーは ptyBuf 経由で attach
+		// リプレイにも再配信されるため信号に使えない。State("running") は PTY 出力
+		// 再開の表示ラベルで resize 再描画等でも遷移する（session_activity.go の警告）。
+		// ここ（確定ユーザー入力の provider 送達）だけがライブ限定の正確な境界。
+		s.broadcast(proto.Message{Type: "user_turn_started", SessionID: m.SessionID})
 	}
 	s.submitInput(wc, m.SessionID, combined)
 	s.writeHistory(m.SessionID, map[string]any{

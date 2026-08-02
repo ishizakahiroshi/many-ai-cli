@@ -1624,6 +1624,10 @@ export function cleanupRemovedSessionState(id) {
   try { cancelExpandCapture(id); } catch (_) {}
   try { doSendInFlight.delete(id); } catch (_) {}
   try { if (typeof window._wakewordSessionRemoved === 'function') window._wakewordSessionRemoved(id); } catch (_) {}
+  // review-view.ts のターン完了カード状態（キャッシュ・dismiss 記録）を破棄する。
+  // Hub 再起動でセッション ID が再利用されるため、残すと新セッションのターン
+  // 番号と衝突して正当なカードが黙って抑止される（purge 経路もここを通る）。
+  try { window.dispatchEvent(new CustomEvent('many-session-removed', { detail: { session_id: id } })); } catch (_) {}
 }
 
 export function removeLocalSession(id) {

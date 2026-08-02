@@ -370,6 +370,14 @@ export function _connectWs() {
     return;
   }
 
+  if (m.type === 'user_turn_started') {
+    // 確定ユーザー入力が provider へ送達された（input_gate.go のライブ限定 broadcast）。
+    // review-view.ts が前ターンの完了カードを自動消去する。ptyBuf リプレイの
+    // ターン境界マーカーや State("running") と違い、リロード・再描画で誤発火しない。
+    try { window.dispatchEvent(new CustomEvent('many-user-turn-started', { detail: { session_id: m.session_id } })); } catch (_) {}
+    return;
+  }
+
   if (m.type === 'approval_patterns_updated') {
     showToast(t('toast_approval_patterns_updated'));
     if (window.approvalPatternsUI && typeof window.approvalPatternsUI.onOfficialUpdated === 'function') {

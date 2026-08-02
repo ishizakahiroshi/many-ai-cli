@@ -462,17 +462,49 @@ func TestOllamaBaseURLRoundTripAndValidation(t *testing.T) {
 			t.Fatalf("Validate() with ollama.base_url %q succeeded, want error", raw)
 		}
 	}
+	// private host + opt-in 無しは起動を止めない（error ではなく Warnings() で伝える）。
+	// 任意機能であるモデル一覧の設定不備で serve / version / stop / wrap まで
+	// 全滅するのを防ぐため。実際の遮断は internal/hub/models_fetch.go の
+	// newLocalModelHTTPClient がトランスポート層で行う。
+	// localhost / 127.0.0.1 も isPrivateModelHost では private 判定になるので、
+	// Ollama の標準構成を明示指定しただけのケースも起動できることを併せて確認する。
 	for _, target := range []struct {
 		name string
 		set  func(*Config)
 	}{
 		{"ollama", func(cfg *Config) { cfg.Ollama.BaseURL = "http://10.0.0.20:11434" }},
 		{"lm_studio", func(cfg *Config) { cfg.LMStudio.BaseURL = "http://192.168.1.20:1234" }},
+		{"ollama", func(cfg *Config) { cfg.Ollama.BaseURL = "http://localhost:11434" }},
 	} {
 		cfg := defaultConfig(t.TempDir())
 		target.set(cfg)
-		if err := cfg.Validate(); err == nil {
-			t.Fatalf("Validate() with private %s host succeeded without opt-in", target.name)
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("Validate() with private %s host failed: %v", target.name, err)
+		}
+		warnings := cfg.Warnings()
+		if len(warnings) != 1 || !strings.Contains(warnings[0], target.name+".base_url") {
+			t.Fatalf("Warnings() with private %s host = %v, want exactly one warning naming %s.base_url",
+				target.name, warnings, target.name)
+		}
+	}
+	// opt-in 済みなら警告も出ない。
+	for _, target := range []struct {
+		name string
+		set  func(*Config)
+	}{
+		{"ollama", func(cfg *Config) {
+			cfg.Ollama.BaseURL = "http://10.0.0.20:11434"
+			cfg.Ollama.AllowPrivateHosts = true
+		}},
+		{"lm_studio", func(cfg *Config) {
+			cfg.LMStudio.BaseURL = "http://192.168.1.20:1234"
+			cfg.LMStudio.AllowPrivateHosts = true
+		}},
+	} {
+		cfg := defaultConfig(t.TempDir())
+		target.set(cfg)
+		if got := cfg.Warnings(); len(got) != 0 {
+			t.Fatalf("Warnings() with %s opt-in = %v, want none", target.name, got)
 		}
 	}
 }
