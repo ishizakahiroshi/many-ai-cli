@@ -837,7 +837,12 @@ export const FilesTabManager = (function () {
       if (typeof window.ReviewView === 'function' && sessionId != null) {
         const body = contentEl.querySelector('[data-review-placeholder-body]');
         if (body) body.remove();
-        tabObj.reviewView = new window.ReviewView(contentEl, { sessionId, gitRoot, turn: turnNo });
+        // ヘッダ右上の ✕ はタブバーの × と同じ closeMainTab 経路。
+        // アクティブタブを閉じるので switchToSessionView() でセッション画面へ戻る。
+        tabObj.reviewView = new window.ReviewView(contentEl, {
+          sessionId, gitRoot, turn: turnNo,
+          onClose: () => closeMainTab(id),
+        });
       }
     } catch (err) {
       console.warn('[FilesTabManager] ReviewView mount failed:', err);

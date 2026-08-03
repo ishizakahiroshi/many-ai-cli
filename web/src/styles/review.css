@@ -58,6 +58,13 @@
 .review-mode-group .git-icon-btn.active {
   background: color-mix(in srgb, var(--accent) 24%, transparent);
 }
+/* ヘッダ右端の閉じるボタン。↻ と隣接しても誤爆しないよう少し離す。 */
+.review-close-btn { margin-left: 4px; }
+.review-close-btn:hover {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 48%, transparent);
+  background: color-mix(in srgb, var(--danger) 14%, var(--bg-deep));
+}
 
 .review-body {
   display: flex;
