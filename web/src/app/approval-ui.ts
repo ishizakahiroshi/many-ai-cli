@@ -55,9 +55,28 @@ import { suppressPtyResizeForInputLayout, syncPtySizeToViewportAfterLayout } fro
     notifyApprovalQueue();
   }
 
+  // そのセッションの承認パネルが実際に画面へ出ているか。
+  // 抑止告知バナーの目的は「承認待ちなのに画面へ何も出ない」状態の説明なので、
+  // パネルが出ているセッションで告知すると文言と画面が矛盾する。
+  // hideActionBar は approvalVisibleCache を false にし approvalRawOptionsCache も
+  // 落とすため、この 2 つの AND が「今この瞬間パネルが出ている」の代理指標になる。
+  function approvalPanelVisibleFor(id) {
+    if (id == null || !approvalVisibleCache.get(id)) return false;
+    const opts = approvalRawOptionsCache.get(id);
+    return Array.isArray(opts) && opts.length > 0;
+  }
+
   function showOptions(bar, id, options, forceStickToBottom = false) {
     cacheApprovalOptions(id, options);
+    // showActionBar は手動 dismiss 中などに何も描かず return する。描画が最後まで
+    // 通った時だけ 3 箇所の描画完了地点が actionBarShownAt を更新するので、
+    // その変化を「実際にパネルが出た」証拠として使う。
+    const shownBefore = actionBarShownAt.get(id);
     showActionBar(bar, id, options, forceStickToBottom);
+    // パネルが出た＝Hub 経路が壊れていてもクライアント再構成で拾えたということなので、
+    // 残っている抑止告知は取り下げる。ここで cache ごと消さないと、回答してパネルが
+    // 閉じた後のセッション切替で古い告知が復活する。
+    if (actionBarShownAt.get(id) !== shownBefore) clearApprovalMarkerSuppressed(id);
   }
 
   function clearActionBarDom() {
@@ -135,7 +154,9 @@ import { suppressPtyResizeForInputLayout, syncPtySizeToViewportAfterLayout } fro
     if (!banner) return;
     const wasHidden = banner.hidden;
     const reason = id == null ? undefined : approvalSuppressedCache.get(id);
-    if (!reason || approvalSuppressedDismissedCache.get(id)) {
+    // パネルが出ているセッションでは告知しない（セッション切替でこの経路から
+    // 古い理由が描かれるのを防ぐ。noteApprovalMarkerSuppressed 側と同じ判定）。
+    if (!reason || approvalSuppressedDismissedCache.get(id) || approvalPanelVisibleFor(id)) {
       banner.hidden = true;
       banner.innerHTML = '';
       if (!wasHidden) settleTerminalAfterBannerLayout();
@@ -175,6 +196,11 @@ import { suppressPtyResizeForInputLayout, syncPtySizeToViewportAfterLayout } fro
   // 新しい抑止イベント。✕ で閉じた状態は解除する（別事象なので出し直す）。
   function noteApprovalMarkerSuppressed(id, reason) {
     if (id == null) return;
+    // 既にパネルが出ているなら Hub 経路の破損は実害が無い（クライアントが自分の
+    // xterm バッファから同じ承認を再構成できていて、その再構成も
+    // isCorruptHubMarkerOptions を通過している）。cache に積まず捨てる。
+    // 積んでしまうと、回答してパネルが閉じた後のセッション切替で復活する。
+    if (approvalPanelVisibleFor(id)) return;
     approvalSuppressedCache.set(id, String(reason || 'client_corrupt'));
     approvalSuppressedDismissedCache.delete(id);
     if (id === activeSessionId) renderApprovalSuppressedBannerFor(id);
