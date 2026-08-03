@@ -941,6 +941,7 @@
   "review_view_inline": "Inline",
   "review_view_sbs": "Side by side",
   "review_view_refresh": "Refresh",
+  "review_view_close": "Close review and return to the terminal",
   "review_view_files": "{n} files",
   "review_view_no_diff": "(no diff)",
   "review_scope_label": "Scope",

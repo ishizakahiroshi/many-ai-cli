@@ -941,6 +941,7 @@
   "review_view_inline": "Inline",
   "review_view_sbs": "Song song",
   "review_view_refresh": "Làm mới",
+  "review_view_close": "Đóng Review và quay lại terminal",
   "review_view_files": "{n} file",
   "review_view_no_diff": "(không có diff)",
   "review_scope_label": "Phạm vi",

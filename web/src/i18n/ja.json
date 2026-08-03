@@ -941,6 +941,7 @@
   "review_view_inline": "インライン",
   "review_view_sbs": "左右比較",
   "review_view_refresh": "更新",
+  "review_view_close": "レビューを閉じてターミナルへ戻る",
   "review_view_files": "{n} ファイル",
   "review_view_no_diff": "(差分なし)",
   "review_scope_label": "スコープ",

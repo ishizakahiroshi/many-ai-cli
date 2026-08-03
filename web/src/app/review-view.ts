@@ -132,6 +132,13 @@ import { resolveCurrentReviewLoad } from './review-load-generation.js';
     _renderShell() {
       const root = document.createElement('div');
       root.className = 'review-root';
+      // ✕ は「Review タブを閉じてセッション（ターミナル）画面へ戻る」。閉じ方は
+      // タブバーの × と同じ closeMainTab 経路なので、onClose を渡さない呼び出し元
+      // （将来の埋め込み利用）では死にボタンにならないようボタン自体を出さない。
+      const closeLabel = _gt('review_view_close', 'Close review and return to the terminal');
+      const closeBtnHtml = typeof this.opts.onClose === 'function'
+        ? `<button class="git-icon-btn review-close-btn" data-close title="${_esc(closeLabel)}" aria-label="${_esc(closeLabel)}">✕</button>`
+        : '';
       root.innerHTML = `
         <div class="review-header">
           <div class="review-title">± Review</div>
@@ -148,6 +155,7 @@ import { resolveCurrentReviewLoad } from './review-load-generation.js';
             <button class="git-icon-btn" data-mode="sbs">${_esc(_gt('review_view_sbs', 'Side by side'))}</button>
           </div>
           <button class="git-icon-btn" data-refresh title="${_esc(_gt('review_view_refresh', 'Refresh'))}">↻</button>
+          ${closeBtnHtml}
         </div>
         <div class="review-body">
           <div class="review-diff-pane" data-diff-pane>
@@ -184,6 +192,9 @@ import { resolveCurrentReviewLoad } from './review-load-generation.js';
       });
       root.querySelector('[data-refresh]').addEventListener('click', () => {
         this.refresh().catch((err: any) => this._showError(err && err.message ? err.message : String(err)));
+      });
+      root.querySelector('[data-close]')?.addEventListener('click', () => {
+        try { this.opts.onClose(); } catch (err) { console.warn('[ReviewView] onClose failed:', err); }
       });
       this._syncModeButtons();
     }
