@@ -880,7 +880,7 @@ export function applyFontSize(size) {
       t.term.options.fontSize = px;
       requestAnimationFrame(() => {
         fitTerminalPreservingBottom(t, id);
-        sendResize(id, t.term.cols, t.term.rows);
+        sendResize(id, t.term.cols, t.term.rows, 'fontsize-change');
       });
     });
   } catch (_) {}

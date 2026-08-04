@@ -14,6 +14,8 @@ import { isGrokChatViewerOpen, openGrokChatViewer, resetGrokChatViewerForSession
 import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
 import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, shouldBypassCursorHideFilterForProvider, showCursorSeq } from './cursor-hide-filter.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
+// 一時観測用（debug-ui-log.ts）。原因確定後に撤去する。
+import { layoutSnapshot, uiDebugLog } from './debug-ui-log.js';
 export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossibleMarkerPrefix } from './hub-marker-filter.js';
 
 // Claude Code の折りたたみマーカー: "… +23 lines (ctrl+o to expand)"。
@@ -387,7 +389,7 @@ export function attachTerminal(id) {
       fitTerminalPreservingBottom(t, id);
       // 寸法が実際に変わった場合のみ送信（不要な SIGWINCH → 再描画 → 空白行挿入を防ぐ）
       if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
-        sendResize(id, t.term.cols, t.term.rows);
+        sendResize(id, t.term.cols, t.term.rows, 'attach-fit');
       }
       // 配置・fit 確定後に WebGL レンダラを再生成する
       enableWebglRenderer(t);
@@ -509,7 +511,7 @@ export function whenLayoutReady(id, container) {
     flushPending(id);
     t.everAttached = true;
     if (!isPtyResizeSuppressed()) {
-      sendResize(id, t.term.cols, t.term.rows);
+      sendResize(id, t.term.cols, t.term.rows, 'terminal-init');
     }
     container.addEventListener('contextmenu', (e) => {
       e.preventDefault();
@@ -1006,7 +1008,7 @@ export function refitAndStickTerminalToBottomSoon(id, opts: any = {}) {
     fitTerminalPreservingBottom(t, id, true);
     // SIGWINCH の送信は抑制中はスキップ（action-bar が閉じた時に正しいサイズで1回だけ送る）。
     if ((t.term.cols !== prevCols || t.term.rows !== prevRows) && !isPtyResizeSuppressed()) {
-      sendResize(id, t.term.cols, t.term.rows);
+      sendResize(id, t.term.cols, t.term.rows, 'refit-stick-bottom');
     }
     scrollTerminalToBottomSoon(id, { force, passes: 1, startedAt });
   };
@@ -1078,7 +1080,7 @@ export function refitActiveTerminalAfterLayout(stickToBottom) {
     const dimsChanged = t.term.cols !== prevCols || t.term.rows !== prevRows;
     if (dimsChanged) {
       if (!isPtyResizeSuppressed()) {
-        sendResize(id, t.term.cols, t.term.rows);
+        sendResize(id, t.term.cols, t.term.rows, 'refit-after-layout');
       }
     }
     if (stickToBottom) {
@@ -1803,8 +1805,17 @@ export function scanBuffer(id, limit?: number) {
 
 // ---- resize ----
 
-export function sendResize(sessionId, cols, rows) {
+export function sendResize(sessionId, cols, rows, reason = 'unknown') {
   if (ws && ws.readyState === WebSocket.OPEN) {
+    // 観測用: どの経路が SIGWINCH を誘発したかを層別する（debug-ui-log.ts）。
+    uiDebugLog('send_resize', {
+      session_id: sessionId,
+      cols,
+      rows,
+      reason,
+      suppressed: isPtyResizeSuppressed(),
+      layout: layoutSnapshot(),
+    });
     ws.send(JSON.stringify({ type: 'pty_resize', session_id: sessionId, cols, rows }));
     // SIGWINCH を受けた TUI（Codex 等）はトランスクリプト全体を再描画する。
     // 直後のバーストを一括描画して、全文が上から下へ流れて見えるのを防ぐ。
@@ -1832,6 +1843,13 @@ export function applyRemotePtyResize(sessionId, cols, rows) {
   if (!t || !t.term) return;
   // Hub が pty_resize を broadcast してきた = PTY へ SIGWINCH が届いた直後。
   // 他 UI 発の resize でも TUI の全画面再描画バーストが来るため一括描画する。
+  uiDebugLog('remote_resize', {
+    session_id: id,
+    cols: nextCols,
+    rows: nextRows,
+    local_cols: t.term.cols,
+    local_rows: t.term.rows,
+  });
   beginLiveOutputBatchForResize(id);
   if (t.term.cols === nextCols && t.term.rows === nextRows) return;
   const wasAtBottom = isTerminalAtBottom(t) || t.autoScroll;
@@ -1892,7 +1910,7 @@ export function syncPtySizeToViewportAfterLayout(id, stick = true, delayMs = 400
     if (stick) t.autoScroll = true;
     fitTerminalPreservingBottom(t, id, true);
     // local が既に縮小済みでも Codex へ未通知の可能性があるため無条件に送る。
-    sendResize(id, t.term.cols, t.term.rows);
+    sendResize(id, t.term.cols, t.term.rows, 'settle-after-layout');
     // Codex は SIGWINCH で全画面再描画しスクロールが飛ぶため、確定後に最下部へ張り直す。
     if (stick) scrollTerminalToBottomSoon(id, { force: true, passes: 2, startedAt: Date.now() });
   }, delayMs);
@@ -1908,7 +1926,7 @@ export function refitAllTerminals(refreshRows = false) {
       t.term.refresh(0, t.term.rows - 1);
     }
     if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
-      sendResize(id, t.term.cols, t.term.rows);
+      sendResize(id, t.term.cols, t.term.rows, 'refit-all');
     }
   });
 }
@@ -1929,10 +1947,19 @@ export const resizeObserver = new ResizeObserver(() => {
     if (shouldFollowBottom) {
       t.autoScroll = true;
     }
+    // 観測用: #terminal-area の高さが動いた瞬間の各要素の高さを記録する。
+    // rows が変わらなかった場合も残すことで「誰が高さを動かしたか」を追える。
+    uiDebugLog('terminal_area_resized', {
+      session_id: activeSessionId,
+      prev_cols: prevCols,
+      prev_rows: prevRows,
+      suppressed: isPtyResizeSuppressed(),
+      layout: layoutSnapshot(),
+    });
     fitTerminalPreservingBottom(t, activeSessionId);
     if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
       if (!isPtyResizeSuppressed()) {
-        sendResize(activeSessionId, t.term.cols, t.term.rows);
+        sendResize(activeSessionId, t.term.cols, t.term.rows, 'resize-observer');
       }
     }
     if (shouldFollowBottom) {
@@ -1964,7 +1991,7 @@ export function reassertActivePtySize() {
   const prevRows = t.term.rows;
   fitTerminalPreservingBottom(t, activeSessionId);
   if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
-    sendResize(activeSessionId, t.term.cols, t.term.rows);
+    sendResize(activeSessionId, t.term.cols, t.term.rows, 'reassert-active');
   }
 }
 
@@ -1972,3 +1999,39 @@ window.addEventListener('focus', reassertActivePtySize);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) reassertActivePtySize();
 });
+
+// 観測用（debug-ui-log.ts）: 症状そのもの（空行の化石化）を直接数える。
+// アクティブセッションのバッファ末尾 200 行の空行数を 2 秒ごとに数え、
+// 変化した時だけ記録する。resize の時系列と突き合わせて「どの resize の直後に
+// 空行が増えたか」を確定するための計測。原因確定後に撤去する。
+const lastBlankLineCensus = new Map<number, number>();
+setInterval(() => {
+  if (activeSessionId === null) return;
+  const t = terminals.get(activeSessionId);
+  if (!t || !t.term || !t.term.buffer) return;
+  let buf;
+  try { buf = t.term.buffer.active; } catch (_) { return; }
+  if (!buf) return;
+  const start = Math.max(0, buf.length - 200);
+  let blank = 0;
+  let total = 0;
+  for (let i = start; i < buf.length; i++) {
+    total++;
+    const line = buf.getLine(i);
+    if (!line || line.translateToString(true).trim() === '') blank++;
+  }
+  const prev = lastBlankLineCensus.get(activeSessionId);
+  if (prev === blank) return;
+  lastBlankLineCensus.set(activeSessionId, blank);
+  uiDebugLog('blank_line_census', {
+    session_id: activeSessionId,
+    provider: sessions.get(activeSessionId)?.provider || '',
+    blank,
+    total,
+    delta: prev === undefined ? null : blank - prev,
+    buffer_length: buf.length,
+    base_y: buf.baseY,
+    cols: t.term.cols,
+    rows: t.term.rows,
+  });
+}, 2000);
