@@ -709,6 +709,12 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 		endedProvider = cur.Provider
 		endedCWD = cur.CWD
 	}
+	// 滞留症状の観測 (input_trace.go / 2026-08-04)。この delete は無ガードで、
+	// 未送信の保留入力ごと捨てる（直上の s.wrappers 削除は wc 一致ガード付き）。
+	// 捨てた事実が無記録だと「送ったのに何も起きない」の切り分けができない。
+	if n := len(s.pendingInput[id]); n > 0 {
+		s.logger.Warn("pending_input_dropped", "session_id", id, "count", n, "cause", "wrapper_disconnect")
+	}
 	delete(s.pendingInput, id)
 	s.sessionsMu.Unlock()
 	if endState == "disconnected" {

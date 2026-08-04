@@ -645,6 +645,11 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	_ = fs.Parse(args)
 	providerArgs := fs.Args()
 
+	// 滞留症状の観測 (trace.go / 2026-08-04)。wrapper の slog は stderr = 内側 CLI と
+	// 同じ端末なので観測に使えない。専用ファイルへ落とす。
+	tracer := newInputTracer(cfg.Hub.LogDir)
+	defer tracer.close()
+
 	// Reconstruct provider-specific flags from wrapper-parsed flags
 	var extra []string
 	if *model != "" {
@@ -916,7 +921,20 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 				case "pty_input":
 					if len(m.Data) > 0 {
 						data := m.Data
+						// 滞留症状の観測 (trace.go / 2026-08-04)。Hub が送ったものが wrapper へ
+						// 届いたか、どの分岐で PTY へ書かれたかを 1 行残す。確定 \r は単独 1 バイトで
+						// 届くため shouldSplitTrailingEnter が false になり、opencode 以外では
+						// trailing_enter ではなく chunked を通るはず（実測で確かめる）。
+						traceBranch := "chunked"
+						traceClearPrefix := false
+						tracer.emit("pty_input_recv", wses.getSID(), map[string]any{
+							"provider": provider,
+							"bytes":    len(m.Data),
+							"head_hex": traceHex(m.Data, 8, false),
+							"tail_hex": traceHex(m.Data, 8, true),
+						})
 						if lead, rest := splitLeadingClearControl(provider, data); lead != nil {
+							traceClearPrefix = true
 							if err := writePTY(ps, lead); err != nil {
 								logPTYWriteError(logger, wses.getSID(), "clear_prefix", err)
 							}
@@ -924,6 +942,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 							data = rest
 						}
 						if provider == "claude" && len(data) > 1 && data[0] == '@' && looksLikeInjectPath(data[1:]) {
+							traceBranch = "inject_path"
 							// PTYW-7 (report_bug_security_quality_audit_2026-07-05.md):
 							// 旧形式の inject (@path\rtext\r) は互換のため分割する。
 							// 単に data[0] == '@' で判定していた頃は、@user_mention 等の一般テキストも
@@ -945,6 +964,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 								}
 							}
 						} else if shouldSplitTrailingEnter(provider, data) {
+							traceBranch = "trailing_enter"
 							// Windows ConPTY では text+\r を1チャンクで書き込むと
 							// \r が Enter ではなく改行として処理される場合がある。
 							// Codex / OpenCode は入力反映直後の Enter を取りこぼすことがあるため長めに待つ。
@@ -962,6 +982,13 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 								logPTYWriteError(logger, wses.getSID(), "input", err)
 							}
 						}
+						tracer.emit("pty_input_written", wses.getSID(), map[string]any{
+							"provider":     provider,
+							"branch":       traceBranch,
+							"clear_prefix": traceClearPrefix,
+							"bytes":        len(data),
+							"tail_hex":     traceHex(data, 8, true),
+						})
 					}
 				case "pty_resize":
 					if m.Cols > 0 && m.Rows > 0 {
@@ -989,6 +1016,19 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		} else {
 			logger.Warn("PTY output transport failure", "session_id", wses.getSID(), "kind", fault.Kind, "queue_capacity", fault.QueueCapacity, "chunk_bytes", fault.ChunkBytes)
 		}
+		// 上の WARN は stderr 直行で残らない。切断理由を追える形で残す
+		// （codex セッションが 1 分に 1 回 reattach している件の観測・trace.go）。
+		errText := ""
+		if fault.Err != nil {
+			errText = fault.Err.Error()
+		}
+		tracer.emit("transport_fault", wses.getSID(), map[string]any{
+			"provider":       provider,
+			"kind":           fault.Kind,
+			"queue_capacity": fault.QueueCapacity,
+			"chunk_bytes":    fault.ChunkBytes,
+			"err":            errText,
+		})
 		// Set this before closing the socket. The receive loop may observe the
 		// close first; supervisor must still treat this as a reconnectable
 		// transport fault even while the Hub HTTP endpoint remains alive.
