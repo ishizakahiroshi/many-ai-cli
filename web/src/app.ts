@@ -2507,7 +2507,7 @@ inputEl.addEventListener('blur', (e) => {
       const prevRows = t.term.rows;
       fitTerminalPreservingBottom(t, id);
       if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
-        sendResize(id, t.term.cols, t.term.rows);
+        sendResize(id, t.term.cols, t.term.rows, 'app-refit-all');
       }
     });
   }

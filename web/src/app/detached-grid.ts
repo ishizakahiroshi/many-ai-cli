@@ -448,7 +448,7 @@ export class DetachedGridManager {
         (t.term.cols !== prevCols || t.term.rows !== prevRows) &&
         typeof window.sendResize === 'function'
       ) {
-        window.sendResize(sessionId, t.term.cols, t.term.rows);
+        window.sendResize(sessionId, t.term.cols, t.term.rows, 'detached-grid-fit');
       }
     }
   }
