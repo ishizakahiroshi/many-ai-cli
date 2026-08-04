@@ -18,6 +18,8 @@ export interface WfAgent {
   state: WfAgentState;
   /** 行頭の生グリフ（スピナー回転を検知してフレーム凍結判定に使う。表示には使わない）。 */
   glyph: string;
+  /** Hub VT parser が分離した経過時間・token 等。ローカル fallback では未設定。 */
+  metrics?: string;
 }
 
 export interface WfPhase {
@@ -60,6 +62,16 @@ export interface WorkflowProgress {
    * フレームでは不変になる。呼び出し側は連続一致で「実質完了」とみなす。
    */
   frameSig: string;
+  /** Hub snapshot 由来の経過秒。ローカル fallback では未設定。 */
+  elapsedSec?: number;
+  /** Hub snapshot 由来の token 生表記（例: `↓ 1.9m`）。 */
+  tokensRaw?: string;
+  /** pending agent 件数。旧ローカル parser では total の内数としてのみ保持。 */
+  pendingCount?: number;
+  /** Hub が確定した settle source。 */
+  settledBy?: string;
+  /** Hub WebSocket またはローカル VT fallback のどちらから得たか。 */
+  authority?: 'hub' | 'local';
 }
 
 // ── グリフ定義（CALIBRATE: 実機サンプルで増減する） ───────────────────────────

@@ -17,6 +17,22 @@ func TestDefaultConfigOpensBrowser(t *testing.T) {
 	}
 }
 
+func TestWorkflowJournalDefaultsOnAndCanBeDisabled(t *testing.T) {
+	cfg := defaultConfig(t.TempDir())
+	if !cfg.Workflow.JournalEnabled {
+		t.Fatal("defaultConfig().Workflow.JournalEnabled = false, want true")
+	}
+	if err := yaml.Unmarshal([]byte("workflow:\n  journal_enabled: false\n"), cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Workflow.JournalEnabled {
+		t.Fatal("explicit workflow.journal_enabled=false was ignored")
+	}
+	if cfg.UserPrefs.WorkflowCompletionNotify.Enabled {
+		t.Fatal("workflow completion Push must remain opt-in")
+	}
+}
+
 func TestBoardNotifyModeDefaultsAndValidation(t *testing.T) {
 	cfg := defaultConfig(t.TempDir())
 	if cfg.Orchestration.BoardNotifyMode != BoardNotifyQueueUntilIdle {

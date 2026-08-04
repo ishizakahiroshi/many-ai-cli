@@ -1,0 +1,3 @@
+terminal output outside the workflow block
+◯ synthetic-review 1/5 agents done · 4m 21s · ↓ 501.0k
+*Waiting for 1 dynamic workflow to finish
