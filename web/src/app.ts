@@ -399,7 +399,7 @@ function buildBodySubmitPart(sessionId, rawText) {
 // 別送（deferred-enter）にし、キー入力相当は従来どおり本文+\r で送る。
 // 直前の deferred-enter 予約が残っていると遅延 \r がこの送信の後ろに混ざるため先に消す。
 export function sendSubmittedBody(sessionId, bodyText, opts: any = {}) {
-  cancelDeferredEnter(sessionId);
+  cancelDeferredEnter(sessionId, 'send_body');
   const { textPart, deferEnter } = buildBodySubmitPart(sessionId, bodyText);
   if (!sendSubmittedText(sessionId, textPart, opts)) return false;
   if (deferEnter) scheduleDeferredEnter(sessionId, effectiveDeferredEnterWait(sessionId));
@@ -413,7 +413,7 @@ export async function doSend(sessionId) {
   if (doSendInFlight.has(sessionId)) return;
   // 後続の単行送信が deferred-enter 予約をキャンセルしないと、遅延 \r / ペースト本体が
   // 次メッセージの後ろに注入される。送信確定の直前に必ず消す。
-  cancelDeferredEnter(sessionId);
+  cancelDeferredEnter(sessionId, 'do_send');
   clearDeferredSendStatus(sessionId);
   // Ollama route セッションで /model 始まりはブロック（spawn 時固定 env と不整合のため）
   if (isOllamaModelCommandBlocked(sessionId, buildSendText())) {
@@ -1496,6 +1496,22 @@ export function sendText(sessionId, text) {
   }
 }
 
+// 滞留症状の観測 (internal/hub/input_trace.go / 2026-08-04)。確定 \r を UI が
+// 「撃った / 撃たずに取り消した / 送信に失敗した」のどれだったかを hub.log へ残す。
+// PTY へは何も書かない観測専用メッセージで、Hub 側は ui_input_trace を受けて
+// ログに落とすだけ。WS が未接続なら黙って捨てる（観測が送信を妨げない）。
+export function sendUITrace(sessionId, event, detail) {
+  if (!isWebSocketSendReady()) return;
+  try {
+    ws.send(JSON.stringify({
+      type: 'ui_input_trace',
+      session_id: sessionId,
+      reason: event,
+      text: detail ? JSON.stringify(detail) : '',
+    }));
+  } catch (_) {}
+}
+
 export function requestSessionDismiss(id) {
   // 「セッションが勝手に消える」事案の犯人特定用
   // (docs/local/bugfix_session-silent-auto-dismiss_2026-07-21.md)。
@@ -1619,7 +1635,7 @@ export function cleanupRemovedSessionState(id) {
     if (sigTimer) clearTimeout(sigTimer);
     approvalConsumedSigDeleteTimer.delete(id);
   } catch (_) {}
-  try { cancelDeferredEnter(id); } catch (_) {}
+  try { cancelDeferredEnter(id, 'session_removed'); } catch (_) {}
   try { cancelResidueSweep(id); } catch (_) {}
   try { cancelExpandCapture(id); } catch (_) {}
   try { doSendInFlight.delete(id); } catch (_) {}
@@ -2405,7 +2421,7 @@ inputEl.addEventListener('blur', (e) => {
   if (deferredCancel) deferredCancel.addEventListener('click', () => {
     if (deferredSendSessionId == null) return;
     const id = deferredSendSessionId;
-    cancelDeferredEnter(id);
+    cancelDeferredEnter(id, 'ui_cancel_button');
     clearDeferredSendStatus(id);
     showToast('複数行ペーストの確定送信をキャンセルしました');
   });

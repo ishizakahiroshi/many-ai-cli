@@ -1,4 +1,4 @@
-import { sendText } from '../app.js';
+import { sendText, sendUITrace } from '../app.js';
 import { sessions } from './state.js';
 
 // 複数行ペースト送信の確定 \r を「いつ送るか」を出力駆動で決めるモジュール。
@@ -52,25 +52,47 @@ type Pending = {
   action: () => void | boolean;
   onInjected?: () => void;
   onAcked?: () => void;
+  kind: string;
 };
 
 const pending = new Map<number, Pending>();
 
-function fire(id: number) {
+// 滞留症状の観測 (internal/hub/input_trace.go / 2026-08-04)。ここは確定 \r を「いつ撃つか /
+// そもそも撃つか」を決める唯一の場所なのに、これまで一切ログを出していなかった。そのため
+// 「\r を撃たなかった」のか「撃ったが内側 CLI に吸収された」のかが外から判別できない。
+// 確定 \r（kind='enter'）の予約・発火・取消だけを Hub へ送る。画像 inject の静止待ち
+// （kind='settle'）は今回の症状と別経路なので送らない。
+function traceEnter(p: Pending, id: number, event: string, detail: Record<string, unknown>) {
+  if (p.kind !== 'enter') return;
+  sendUITrace(id, event, { ...detail, minWaitMs: p.minWaitMs });
+}
+
+function fire(id: number, source: string = 'idle') {
   const p = pending.get(id);
   if (!p || p.fired) return;
   p.fired = true;
   if (p.idleTimer) clearTimeout(p.idleTimer);
   if (p.maxTimer) clearTimeout(p.maxTimer);
   pending.delete(id);
+  const elapsedMs = Date.now() - p.startedAt;
   // セッション削除後に遅延 \r が別 ID 再利用先へ飛ばないようガード
-  if (!sessions.has(id)) return;
+  if (!sessions.has(id)) {
+    traceEnter(p, id, 'fired_session_missing', { source, elapsedMs });
+    return;
+  }
   try {
     const result = p.action();
-    if (result === false) return;
+    if (result === false) {
+      // sendText が false = WS 未接続等で送れなかった。単発設計なので再送されない。
+      traceEnter(p, id, 'fired_send_failed', { source, elapsedMs });
+      return;
+    }
+    traceEnter(p, id, 'fired_ok', { source, elapsedMs });
     p.onInjected?.();
     p.onAcked?.();
-  } catch (_) {}
+  } catch (_) {
+    traceEnter(p, id, 'fired_threw', { source, elapsedMs });
+  }
 }
 
 function armIdle(id: number) {
@@ -80,24 +102,25 @@ function armIdle(id: number) {
   const elapsed = Date.now() - p.startedAt;
   // 最低 minWaitMs は確保しつつ、以降は出力静止 IDLE_SETTLE ごとに送出判定する
   const wait = Math.max(IDLE_SETTLE_MS, p.minWaitMs - elapsed);
-  p.idleTimer = setTimeout(() => fire(id), wait);
+  p.idleTimer = setTimeout(() => fire(id, 'idle'), wait);
 }
 
 // 出力が一定時間静止してから action を 1 回だけ実行する予約。\r 確定・ペースト本体送出など
 // 「内側 CLI の取り込み・再描画が落ち着いてから撃ちたい」操作の共通土台。
-function schedule(id: number, action: () => void | boolean, maxWaitMs: number, minWaitMs: number = MIN_WAIT_MS, onInjected?: () => void, onAcked?: () => void) {
-  cancelDeferredEnter(id);
-  const p: Pending = { startedAt: Date.now(), idleTimer: null, maxTimer: null, fired: false, minWaitMs, action, onInjected, onAcked };
+function schedule(id: number, action: () => void | boolean, maxWaitMs: number, minWaitMs: number = MIN_WAIT_MS, onInjected?: () => void, onAcked?: () => void, kind: string = 'settle') {
+  cancelDeferredEnter(id, 'reschedule');
+  const p: Pending = { startedAt: Date.now(), idleTimer: null, maxTimer: null, fired: false, minWaitMs, action, onInjected, onAcked, kind };
   pending.set(id, p);
-  p.maxTimer = setTimeout(() => fire(id), maxWaitMs);
+  p.maxTimer = setTimeout(() => fire(id, 'max'), maxWaitMs);
   armIdle(id);
+  traceEnter(p, id, 'scheduled', { maxWaitMs });
 }
 
 // doSend の deferEnter 分岐から呼ぶ。確定 \r を出力静止後に 1 回だけ送る予約を張る。
 // minWaitMs に provider 別の最低待機（Codex/OpenCode は長め）を渡し、無出力で畳み込む CLI への
 // 早撃ち（\r 吸収による送信不発）を防ぐ。省略時は既定の MIN_WAIT。
 export function scheduleDeferredEnter(id: number, minWaitMs: number = MIN_WAIT_MS, onInjected?: () => void, onAcked?: () => void) {
-  schedule(id, () => sendText(id, '\r'), MAX_WAIT_MS, minWaitMs, onInjected, onAcked);
+  schedule(id, () => sendText(id, '\r'), MAX_WAIT_MS, minWaitMs, onInjected, onAcked, 'enter');
 }
 
 // 画像 inject（@path）に複数行ペーストが続くケースで、画像取り込みが落ち着いてから
@@ -119,10 +142,13 @@ export function hasPendingDeferredEnter(id: number): boolean {
   return pending.has(id);
 }
 
-export function cancelDeferredEnter(id: number) {
+export function cancelDeferredEnter(id: number, reason: string = 'unspecified') {
   const p = pending.get(id);
   if (!p) return;
   if (p.idleTimer) clearTimeout(p.idleTimer);
   if (p.maxTimer) clearTimeout(p.maxTimer);
   pending.delete(id);
+  // 未発火の確定 \r をここで捨てている。次の送信が前回の \r を消したのか（reason=reschedule）
+  // 別経路が消したのかを区別する。
+  traceEnter(p, id, 'cancelled', { reason, elapsedMs: Date.now() - p.startedAt });
 }

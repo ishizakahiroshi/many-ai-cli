@@ -889,6 +889,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		Handler:   s.handleWS,
 	})
 	mux.HandleFunc("/api/info", s.handleInfo)
+	// 一時観測用（debug_ui_log.go）。原因確定後に撤去する。
+	mux.HandleFunc("/api/debug/ui-log", s.handleDebugUILog)
 	mux.HandleFunc("/api/bug-report/preview", s.handleBugReportPreview)
 	mux.HandleFunc("/api/bug-report/finalize", s.handleBugReportFinalize)
 	mux.HandleFunc("/api/doctor", s.handleDoctor)
@@ -1380,8 +1382,25 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 		case "pty_resize":
 			s.handleResizeFromUI(conn, m)
 		case "pty_input":
+			// 滞留症状の観測 (input_trace.go / 2026-08-04)。handleInput は同期呼び出しで、
+			// この for ループが返るまで同じ UI 接続の後続メッセージ（= 確定 \r）を
+			// 受信できない。recv の刻みが無いとその待ちが測れない。
+			s.logger.Info("input_trace",
+				"stage", "recv",
+				"session_id", m.SessionID,
+				"bytes", len(m.Text),
+				"shape", inputShape(m.Text),
+				"tail_hex", inputTailHex(m.Text, 8),
+				"ts_ns", time.Now().UnixNano())
 			s.claimResizeOwnership(conn, m.SessionID, 0, 0)
 			s.handleInput(m)
+		case "ui_input_trace":
+			// UI 側 deferred-enter の判断（確定 \r を撃った / 撃たずに取り消した /
+			// 送信に失敗した）を hub.log へ集約する観測専用メッセージ。PTY へは書かない。
+			s.logger.Info("ui_input_trace",
+				"session_id", m.SessionID,
+				"event", m.Reason,
+				"detail", m.Text)
 		case "ui_active_session":
 			s.claimResizeOwnership(conn, m.SessionID, m.Cols, m.Rows)
 		case "session_hint":
