@@ -3,7 +3,7 @@ import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
 import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, approvalVisibleCache, autoDismissTimers, chatHistory, deriveProjectKeyFromCwd, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, multiQuestionLatchAt, multiQuestionVisibleCache, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
 import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLocalSessionHistory, resetLocalSessionHistory, updateInputAffordance } from '../app.js';
-import { activateSession, render, renderSessionList, renderSessionStateUpdate, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
+import { activateSession, render, renderSessionList, renderSessionStateUpdate, updateCardLiveInfo, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
 import { applyRemotePtyResize, ensureTerminal, isLiveOutputBatching, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup } from './settings.js';
 import { clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed, setMultiQuestionBannerVisible } from './approval-ui.js';
@@ -13,7 +13,7 @@ import { notifyResidueSweepOutput } from './residue-sweep.js';
 import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed } from './chat-history.js';
 import { clearChatPayloadForSession, handleChatTurnMessage, initChatPayloadUI } from './chat-payload.js';
 import { handleUsageStatMessage, removeUsageCacheEntry } from './token-statusbar.js';
-import { removeWorkflowSnapshot } from './workflow-modal.js';
+import { receiveWorkflowProgress, removeWorkflowSnapshot } from './workflow-modal.js';
 
 function showSpawnConfirmation(m) {
   const id = String(m.spawn_confirmation_id || '');
@@ -112,7 +112,12 @@ function purgeLocalStateForHubRestart() {
     ...chatHistory.keys(),
     ...sessions.keys(),
   ]);
-  ids.forEach(id => { try { removeLocalSession(id); } catch (_) {} });
+  ids.forEach(id => {
+    try {
+      removeLocalSession(id);
+      removeWorkflowSnapshot(id);
+    } catch (_) {}
+  });
 }
 
 export function syncElapsedTimer() {
@@ -444,6 +449,14 @@ export function _connectWs() {
 
   if (m.type === 'chat_turn' || m.type === 'chat_turns_snapshot') {
     handleChatTurnMessage(m);
+    return;
+  }
+
+  if (m.type === 'workflow_progress') {
+    if (Number.isFinite(m.session_id) && m.workflow_progress) {
+      receiveWorkflowProgress(m.session_id, m.workflow_progress);
+      updateCardLiveInfo(m.session_id);
+    }
     return;
   }
 

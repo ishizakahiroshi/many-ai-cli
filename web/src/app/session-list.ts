@@ -14,6 +14,7 @@ import { rewireChatHistorySub } from './chat-history.js';
 import { setActiveSessionForPayload } from './chat-payload.js';
 import { FilesTabManager } from './files-view.js';
 import { dirnameForPath } from './path-links.js';
+import { getHubWorkflowEntry, isHubWorkflowAuthoritative } from './workflow-store.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -400,6 +401,16 @@ function cardTurnElapsedSec(id, state) {
   return Math.max(0, Math.floor((Date.now() - since) / 1000));
 }
 
+function cardWorkflowProgressHtml(s) {
+  const workflow = getHubWorkflowEntry(Number(s.id));
+  if (!workflow || !isHubWorkflowAuthoritative(workflow) || !workflow.progress.detected ||
+      workflow.progress.settled || workflow.progress.total <= 0) return '';
+  const done = Math.max(0, Number(workflow.progress.done || 0));
+  const total = Math.max(0, Number(workflow.progress.total || 0));
+  const aria = ti18n('wf_progress_card_aria', `Workflow progress: ${done}/${total} done`, { done, total });
+  return `<span class="card-workflow-progress" role="status" aria-label="${escapeHtml(aria)}" data-tooltip="${escapeHtml(aria)}">⚙ ${done}/${total}</span>`;
+}
+
 // カード 3 行目（ライブ情報）の中身 HTML を生成する。空文字なら行を隠す。
 // ctx%（コンテキスト残量）は下部ステータスバーに常時出ているため、カード側では
 // 重複表示しない。ここでは応答経過と長時間バッジ（running 中のみ）だけを出す。
@@ -437,6 +448,8 @@ export function updateCardLiveInfo(id) {
   const inner = cardLiveRowHtml(s);
   row.innerHTML = inner;
   row.hidden = !inner;
+  const workflowSlot = card.querySelector('.card-workflow-progress-slot');
+  if (workflowSlot) workflowSlot.innerHTML = cardWorkflowProgressHtml(s);
 }
 
 // 全カードのライブ行を更新する（1Hz タイマー等から呼ぶ）。
@@ -845,11 +858,12 @@ export function renderSessionList() {
       // 状態 pill（ステータスバー .tsb-pill と同じ ●ドット付き形状）。並び順も下のバーに合わせ #N の直後に置く。
 			const activity = stateActivityDecoration(s);
       const statePillHtml = ` <span class="card-state-pill ${safeClassToken(state)} ${activity.className}"${activity.label ? ` title="${activity.label}"` : ''}><span class="card-pdot"></span><span class="card-state-icon">${activity.icon}</span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
+      const workflowProgressHtml = `<span class="card-workflow-progress-slot">${cardWorkflowProgressHtml(s)}</span>`;
       // ライブ情報（ctx% / 応答経過 / 長時間バッジ）。中身が空なら hidden で行ごと隠す。
       const liveInner = cardLiveRowHtml(s);
       const liveRow = `<div class="card-live-row"${liveInner ? '' : ' hidden'}>${liveInner}</div>`;
       c.innerHTML =
-		`<div class="card-title-row"><b>#${s.id}</b>${statePillHtml} ${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${boardPendingHtml}</div>` +
+		`<div class="card-title-row"><b>#${s.id}</b>${statePillHtml}${workflowProgressHtml} ${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${boardPendingHtml}</div>` +
         metaRow + liveRow;
 
       const actions = document.createElement('div');

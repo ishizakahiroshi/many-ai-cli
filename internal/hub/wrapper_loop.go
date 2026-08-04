@@ -574,6 +574,11 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				}
 				ses.vt.Write(m.Data)
 				provider = ses.Provider
+				// Workflow VT は Claude の表示形式だけを較正済み。全 provider へ
+				// 広げると shell/codex の通常出力を workflow と誤認するため厳密に限定する。
+				if provider == "claude" {
+					s.queueWorkflowVTScanLocked(id, ses, now)
+				}
 				if chunkHasApprovalTrigger && now.Before(ses.vtResizeDebounceUntil) {
 					ses.nativeApprovalScanQueued = true
 				}
@@ -682,6 +687,9 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				// EOF is nevertheless conclusive: notify the conductor through the
 				// same board path and stop waiting for that child.
 				s.completeOrchestrationChildOnSessionEnd(id, m.State)
+				// 実行中 workflow の heartbeat/journal タイマーを終端させる。
+				// 放置すると stale VT が settle を永久ブロックする（F1）。
+				s.finalizeWorkflowOnSessionEnd(id)
 			}
 		}
 	}
@@ -717,6 +725,9 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	}
 	delete(s.pendingInput, id)
 	s.sessionsMu.Unlock()
+	// session_end を経ない切断（プロセス kill / Hub 側 WS 断）でも workflow の
+	// 追跡タイマーを必ず終端させる（session_end 経由と重複しても冪等）。
+	s.finalizeWorkflowOnSessionEnd(id)
 	if endState == "disconnected" {
 		if historyToClose != nil {
 			ev := map[string]any{

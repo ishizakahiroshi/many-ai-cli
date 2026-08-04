@@ -24,8 +24,9 @@ type Message struct {
 	AwaitingUser     bool `json:"awaiting_user,omitempty"`
 	AwaitingApproval bool `json:"awaiting_approval,omitempty"`
 	// Activity carries all four flags atomically, including false transitions.
-	Activity *SessionActivity `json:"activity,omitempty"`
-	ExitCode int              `json:"exit_code,omitempty"`
+	Activity         *SessionActivity  `json:"activity,omitempty"`
+	WorkflowProgress *WorkflowProgress `json:"workflow_progress,omitempty"`
+	ExitCode         int               `json:"exit_code,omitempty"`
 	// Signal carries the POSIX signal name (e.g. "killed", "terminated") when
 	// session_end's process was terminated by a signal rather than exiting
 	// normally with a non-zero code. Unix-only; always empty on Windows.
@@ -206,6 +207,38 @@ type SessionActivity struct {
 	WorkflowActive   bool `json:"workflow_active"`
 	AwaitingUser     bool `json:"awaiting_user"`
 	AwaitingApproval bool `json:"awaiting_approval"`
+}
+
+// WorkflowProgress is the Hub-authoritative workflow progress snapshot sent to
+// browser UIs. Source and SettledBy identify which observation established the
+// current values; tree details are present only when the VT tree is visible.
+type WorkflowProgress struct {
+	Detected       bool      `json:"detected"`
+	Source         string    `json:"source,omitempty"`
+	Name           string    `json:"name,omitempty"`
+	Done           int       `json:"done"`
+	Total          int       `json:"total"`
+	Running        int       `json:"running"`
+	Failed         int       `json:"failed"`
+	Pending        int       `json:"pending"`
+	WaitingDynamic int       `json:"waiting_dynamic"`
+	Percent        int       `json:"percent"`
+	ElapsedSec     int       `json:"elapsed_sec,omitempty"`
+	TokensRaw      string    `json:"tokens_raw,omitempty"`
+	Phases         []WfPhase `json:"phases,omitempty"`
+	Settled        bool      `json:"settled"`
+	SettledBy      string    `json:"settled_by,omitempty"`
+}
+
+type WfPhase struct {
+	Title  string    `json:"title"`
+	Agents []WfAgent `json:"agents"`
+}
+
+type WfAgent struct {
+	Label   string `json:"label"`
+	State   string `json:"state"`
+	Metrics string `json:"metrics,omitempty"`
 }
 
 // SessionMeta is user-editable, server-persisted identification metadata for a

@@ -401,6 +401,13 @@ type UserPrefsDoneSummaryNotify struct {
 	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 }
 
+// UserPrefsWorkflowCompletionNotify controls Web Push notifications emitted
+// when the Hub settles a Claude workflow. It is opt-in, like done summary
+// notifications, because Web Push leaves the local machine.
+type UserPrefsWorkflowCompletionNotify struct {
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+}
+
 // UserPrefsTokenStatusbar はトークンコスト常時表示バーの設定。
 // Enabled が nil（未設定）または true のときに表示する（既定 ON）。
 // bool のゼロ値が false なため *bool ポインタで三値（nil=未設定/true/false）を表現する。
@@ -464,27 +471,28 @@ type VoiceConfig struct {
 // UserPrefs はサーバ側（config.yaml: user_prefs:）に保存するユーザー機能設定。
 // 端末・ポート横断で共有する D2 分類の設定を全て保持する。
 type UserPrefs struct {
-	Trigger                  UserPrefsTrigger              `yaml:"trigger,omitempty"      json:"trigger,omitempty"`
-	NotifySound              UserPrefsNotifySound          `yaml:"notify_sound,omitempty" json:"notify_sound,omitempty"`
-	DesktopNotifications     UserPrefsDesktopNotifications `yaml:"desktop_notifications,omitempty" json:"desktop_notifications,omitempty"`
-	PushNotifications        UserPrefsPushNotifications    `yaml:"push_notifications,omitempty" json:"push_notifications,omitempty"`
-	Approval                 UserPrefsApproval             `yaml:"approval,omitempty"     json:"approval,omitempty"`
-	QuickCmds                UserPrefsQuickCmds            `yaml:"quick_cmds,omitempty"   json:"quick_cmds,omitempty"`
-	Templates                []UserPrefsTemplate           `yaml:"templates,omitempty"    json:"templates,omitempty"`
-	UsageLinks               UserPrefsUsageLinks           `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
-	Voice                    UserPrefsVoice                `yaml:"voice,omitempty"        json:"voice,omitempty"`
-	SessionOrder             []string                      `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
-	GroupOrder               []string                      `yaml:"group_order,omitempty"      json:"group_order,omitempty"`
-	ProjectFavorites         []string                      `yaml:"project_favorites,omitempty" json:"project_favorites,omitempty"`
-	CwdHistory               []string                      `yaml:"cwd_history,omitempty"      json:"cwd_history,omitempty"`
-	CwdFavorites             []string                      `yaml:"cwd_favorites,omitempty"    json:"cwd_favorites,omitempty"`
-	Spawn                    UserPrefsSpawn                `yaml:"spawn,omitempty"            json:"spawn,omitempty"`
-	Display                  UserPrefsDisplay              `yaml:"display,omitempty"          json:"display,omitempty"`
-	MigratedFromLocalstorage bool                          `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
-	Avatar                   string                        `yaml:"avatar,omitempty"       json:"avatar,omitempty"`
-	DisplayName              string                        `yaml:"display_name,omitempty" json:"display_name,omitempty"`
-	TokenStatusbar           UserPrefsTokenStatusbar       `yaml:"token_statusbar,omitempty" json:"token_statusbar,omitempty"`
-	DoneSummaryNotify        UserPrefsDoneSummaryNotify    `yaml:"done_summary_notify,omitempty" json:"done_summary_notify,omitempty"`
+	Trigger                  UserPrefsTrigger                  `yaml:"trigger,omitempty"      json:"trigger,omitempty"`
+	NotifySound              UserPrefsNotifySound              `yaml:"notify_sound,omitempty" json:"notify_sound,omitempty"`
+	DesktopNotifications     UserPrefsDesktopNotifications     `yaml:"desktop_notifications,omitempty" json:"desktop_notifications,omitempty"`
+	PushNotifications        UserPrefsPushNotifications        `yaml:"push_notifications,omitempty" json:"push_notifications,omitempty"`
+	Approval                 UserPrefsApproval                 `yaml:"approval,omitempty"     json:"approval,omitempty"`
+	QuickCmds                UserPrefsQuickCmds                `yaml:"quick_cmds,omitempty"   json:"quick_cmds,omitempty"`
+	Templates                []UserPrefsTemplate               `yaml:"templates,omitempty"    json:"templates,omitempty"`
+	UsageLinks               UserPrefsUsageLinks               `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
+	Voice                    UserPrefsVoice                    `yaml:"voice,omitempty"        json:"voice,omitempty"`
+	SessionOrder             []string                          `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
+	GroupOrder               []string                          `yaml:"group_order,omitempty"      json:"group_order,omitempty"`
+	ProjectFavorites         []string                          `yaml:"project_favorites,omitempty" json:"project_favorites,omitempty"`
+	CwdHistory               []string                          `yaml:"cwd_history,omitempty"      json:"cwd_history,omitempty"`
+	CwdFavorites             []string                          `yaml:"cwd_favorites,omitempty"    json:"cwd_favorites,omitempty"`
+	Spawn                    UserPrefsSpawn                    `yaml:"spawn,omitempty"            json:"spawn,omitempty"`
+	Display                  UserPrefsDisplay                  `yaml:"display,omitempty"          json:"display,omitempty"`
+	MigratedFromLocalstorage bool                              `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
+	Avatar                   string                            `yaml:"avatar,omitempty"       json:"avatar,omitempty"`
+	DisplayName              string                            `yaml:"display_name,omitempty" json:"display_name,omitempty"`
+	TokenStatusbar           UserPrefsTokenStatusbar           `yaml:"token_statusbar,omitempty" json:"token_statusbar,omitempty"`
+	DoneSummaryNotify        UserPrefsDoneSummaryNotify        `yaml:"done_summary_notify,omitempty" json:"done_summary_notify,omitempty"`
+	WorkflowCompletionNotify UserPrefsWorkflowCompletionNotify `yaml:"workflow_completion_notify,omitempty" json:"workflow_completion_notify,omitempty"`
 }
 
 // Clone returns a deep copy of p. It copies slice and map fields so callers can
@@ -661,6 +669,11 @@ type Config struct {
 	Spawn struct {
 		LastModel map[string]string `yaml:"last_model,omitempty" json:"last_model,omitempty"`
 	} `yaml:"spawn,omitempty" json:"spawn,omitempty"`
+	Workflow struct {
+		// JournalEnabled is true by default. Existing config files inherit the
+		// default because LoadOrCreate unmarshals over defaultConfig.
+		JournalEnabled bool `yaml:"journal_enabled" json:"journal_enabled"`
+	} `yaml:"workflow,omitempty" json:"workflow,omitempty"`
 	Approval        ApprovalConfig  `yaml:"approval,omitempty"`
 	SlashCmdSources SlashCmdSources `yaml:"slash_cmd_sources,omitempty" json:"slash_cmd_sources,omitempty"`
 	// ModelsSource は /api/models のモデル defaults 取得元 URL を上書きする。
@@ -835,6 +848,7 @@ func defaultConfig(home string) *Config {
 	cfg.Log.AttachmentRetentionDays = 7
 	cfg.Log.AttachmentMaxTotalMB = 500
 	cfg.UserPrefs = UserPrefs{}
+	cfg.Workflow.JournalEnabled = true
 	cfg.Voice.Whisper.Language = "ja"
 	cfg.Voice.Whisper.TimeoutSeconds = 60
 	cfg.SlashCmdSources = DefaultSlashCmdSources()

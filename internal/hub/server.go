@@ -160,6 +160,43 @@ type session struct {
 	// バナーを積み上げないための時間スロットル基準。
 	approvalMarkerSuppressedAt time.Time
 
+	// JSON 外: Claude Workflow の VT 観測。journal は C3 が別フィールドへ
+	// 書き込み、VT 値と相互上書きしない（親 plan D1）。timer は 500ms の
+	// 後縁保証 debounce と 7s heartbeat の両方を駆動する。
+	vtCounts                   workflowCounts
+	journalCounts              workflowCounts
+	workflowVTProgress         *proto.WorkflowProgress
+	workflowVTSignature        string
+	workflowBroadcastSignature string
+	workflowLastBroadcastAt    time.Time
+	workflowLastScanAt         time.Time
+	workflowScanTimer          *time.Timer
+	workflowScanDue            time.Time
+	workflowScanGeneration     uint64
+	workflowMissingScans       int
+	workflowFrozenScans        int
+	workflowElapsedBase        int
+	workflowElapsedObservedAt  time.Time
+	workflowVTHasSignal        bool
+
+	// JSON 外: Claude journal のメタ情報 tail。全フィールドは sessionsMu
+	// 保護で、workflowJournalFiles の内容も永続化・broadcast しない。
+	workflowJournalFiles              map[string]workflowJournalFileState
+	workflowJournalSessionDir         string
+	workflowJournalDetectedAt         time.Time
+	workflowJournalLastEventAt        time.Time
+	workflowJournalLastMTime          time.Time
+	workflowJournalTimer              *time.Timer
+	workflowJournalDue                time.Time
+	workflowJournalGeneration         uint64
+	workflowJournalRunning            bool
+	workflowJournalPendingAssociation bool
+	workflowJournalDormant            bool
+	workflowJournalDormantVTSignature string
+	workflowJournalSettledVTSignature string
+	workflowCompletionNotified        bool
+	workflowCompletionSignature       string
+
 	// JSON 外: wrapper に最後に送った PTY サイズ（同サイズの resize を skip して不要な SIGWINCH を防ぐ）
 	lastCols      int
 	lastRows      int

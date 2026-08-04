@@ -43,6 +43,7 @@ export type MessageType =
   | 'hub_shutdown'
   | 'ping'
   | 'usage_stat'
+  | 'workflow_progress'
   | 'done_summary'
   | 'git_turn'
   | 'user_turn_started'
@@ -93,6 +94,35 @@ export interface SessionActivity {
   awaiting_approval: boolean;
 }
 
+export interface WfAgent {
+  label: string;
+  state: string;
+  metrics?: string;
+}
+
+export interface WfPhase {
+  title: string;
+  agents: WfAgent[];
+}
+
+export interface WorkflowProgress {
+  detected: boolean;
+  source?: string;
+  name?: string;
+  done: number;
+  total: number;
+  running: number;
+  failed: number;
+  pending: number;
+  waiting_dynamic: number;
+  percent: number;
+  elapsed_sec?: number;
+  tokens_raw?: string;
+  phases?: WfPhase[];
+  settled: boolean;
+  settled_by?: string;
+}
+
 export interface Message {
   type: MessageType;
   role?: string;
@@ -110,6 +140,7 @@ export interface Message {
 	awaiting_user?: boolean;
 	awaiting_approval?: boolean;
 	activity?: SessionActivity;
+  workflow_progress?: WorkflowProgress;
   exit_code?: number;
   token?: string | null;
   data?: string | Uint8Array;

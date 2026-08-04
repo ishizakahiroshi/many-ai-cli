@@ -126,6 +126,15 @@
   margin-bottom: 10px;
 }
 
+.wf-waiting-dynamic {
+  margin: 0 0 10px;
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-soft));
+  color: var(--text-soft);
+  font-size: 0.76rem;
+}
+
 /* 進捗バー */
 .wf-progress-bar {
   position: relative;
@@ -182,6 +191,14 @@
   white-space: nowrap;
   min-width: 0;
 }
+.wf-agent-metrics {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--muted);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
 .wf-agent-icon {
   flex: 0 0 auto;
   width: 13px;
@@ -195,3 +212,44 @@
 .wf-state-pending { color: var(--muted-2); }
 /* running アイコンは .live-spinner を流用するため固定サイズに揃える */
 .wf-agent-icon.live-spinner { width: 11px; height: 11px; }
+
+/* 見えた範囲だけを蓄積する完了台帳（全件網羅を示さない）。 */
+.wf-completed-ledger {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.wf-completed-title {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.wf-completed-list { display: flex; flex-direction: column; gap: 3px; }
+.wf-completed-row,
+.wf-completed-other {
+  padding: 2px 8px;
+  color: var(--text-soft);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.74rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wf-completed-row { color: var(--green-text); }
+.wf-completed-other { color: var(--muted); }
+
+/* セッションカードの小型進捗。card-live-row の既存 flex 配置へ載せる。 */
+.card-workflow-progress-slot { display: inline-flex; }
+.card-workflow-progress {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent-text);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
