@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -604,5 +605,78 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	}
 	if clone.Hub.AllowedHosts[0] != "10.8.0.1" {
 		t.Fatalf("allowed hosts slice was aliased")
+	}
+}
+
+func sessionOrderEqual(got SessionOrderIDs, want []int) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// session_order は以前 []string で宣言されており、旧版が文字列配列を書いた
+// config.yaml が残っている環境がある。型を変えた結果 yaml.Unmarshal がそこで
+// 失敗すると、LoadOrCreate の破損フォールバックが config.yaml 全体を .bak へ
+// 退避してデフォルト再生成する（token も作り直しになる）。壊れた 1 項目のために
+// 設定全体を失わないことをここで固定する。
+func TestSessionOrderYAMLAcceptsNumbersAndLegacyStrings(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want []int
+	}{
+		{"numbers", "user_prefs:\n    session_order: [10, 5, 3]\n", []int{10, 5, 3}},
+		{"legacy strings", "user_prefs:\n    session_order: [\"10\", \"5\"]\n", []int{10, 5}},
+		{"mixed junk dropped", "user_prefs:\n    session_order: [10, \"abc\", 7]\n", []int{10, 7}},
+		{"not a sequence", "user_prefs:\n    session_order: nope\n", nil},
+		{"empty", "user_prefs:\n    session_order: []\n", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var cfg Config
+			if err := yaml.Unmarshal([]byte(tc.src), &cfg); err != nil {
+				t.Fatalf("yaml.Unmarshal() error = %v; whole config must stay loadable", err)
+			}
+			if !sessionOrderEqual(cfg.UserPrefs.SessionOrder, tc.want) {
+				t.Fatalf("SessionOrder = %v, want %v", cfg.UserPrefs.SessionOrder, tc.want)
+			}
+		})
+	}
+}
+
+func TestSessionOrderJSONAcceptsNumbersAndLegacyStrings(t *testing.T) {
+	var prefs UserPrefs
+	if err := json.Unmarshal([]byte(`{"session_order":[11,2,"7","x"]}`), &prefs); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v; PUT /api/user-prefs must stay accepted", err)
+	}
+	if !sessionOrderEqual(prefs.SessionOrder, []int{11, 2, 7}) {
+		t.Fatalf("SessionOrder = %v, want [11 2 7]", prefs.SessionOrder)
+	}
+}
+
+func TestSessionOrderSurvivesSaveRoundTrip(t *testing.T) {
+	var cfg Config
+	cfg.UserPrefs.SessionOrder = SessionOrderIDs{4, 9, 1}
+	out, err := yaml.Marshal(&cfg)
+	if err != nil {
+		t.Fatalf("yaml.Marshal() error = %v", err)
+	}
+	var back Config
+	if err := yaml.Unmarshal(out, &back); err != nil {
+		t.Fatalf("yaml.Unmarshal() error = %v", err)
+	}
+	if !sessionOrderEqual(back.UserPrefs.SessionOrder, []int{4, 9, 1}) {
+		t.Fatalf("SessionOrder = %v, want [4 9 1]", back.UserPrefs.SessionOrder)
+	}
+	clone := cfg.Clone()
+	cfg.UserPrefs.SessionOrder[0] = 99
+	if clone.UserPrefs.SessionOrder[0] != 4 {
+		t.Fatalf("session order slice was aliased")
 	}
 }

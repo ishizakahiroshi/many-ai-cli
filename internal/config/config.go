@@ -3,12 +3,14 @@ package config
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
 	neturl "net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -468,6 +470,68 @@ type VoiceConfig struct {
 	Whisper VoiceWhisperConfig `yaml:"whisper,omitempty" json:"whisper,omitempty"`
 }
 
+// SessionOrderIDs はセッションカードの手動並び順（セッション ID の配列）。
+//
+// 以前は []string で宣言していたため、Web 側が送る数値 ID がサニタイズで
+// 全て捨てられ、この項目は事実上一度も保存されていなかった。数値配列へ
+// 直すにあたり、旧版が文字列配列を書いた config.yaml が残っている環境を
+// 考慮する必要がある: 型を変えただけだと yaml.Unmarshal がその 1 項目で
+// 失敗し、LoadOrCreate の破損フォールバックが config.yaml 全体を .bak へ
+// 退避してデフォルト再生成してしまう（token も作り直しになり Hub URL が
+// 変わる）。そのため数値・数値文字列の双方を受け付け、解釈できない要素は
+// 黙って捨てる寛容なデコードを実装する。
+type SessionOrderIDs []int
+
+func (s *SessionOrderIDs) UnmarshalYAML(value *yaml.Node) error {
+	var raw []any
+	if err := value.Decode(&raw); err != nil {
+		// 配列ですらない値は空として扱い、config 全体を破損扱いにしない。
+		*s = nil
+		return nil
+	}
+	*s = sessionOrderFromAny(raw)
+	return nil
+}
+
+func (s *SessionOrderIDs) UnmarshalJSON(data []byte) error {
+	var raw []any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		*s = nil
+		return nil
+	}
+	*s = sessionOrderFromAny(raw)
+	return nil
+}
+
+// sessionOrderFromAny は YAML/JSON 由来の任意配列をセッション ID 配列へ正規化する。
+// YAML は整数を int、JSON は float64 でデコードするため双方を受ける。
+func sessionOrderFromAny(raw []any) SessionOrderIDs {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(SessionOrderIDs, 0, len(raw))
+	for _, v := range raw {
+		switch n := v.(type) {
+		case int:
+			out = append(out, n)
+		case int64:
+			out = append(out, int(n))
+		case float64:
+			if float64(int(n)) == n {
+				out = append(out, int(n))
+			}
+		case string:
+			if id, err := strconv.Atoi(strings.TrimSpace(n)); err == nil {
+				out = append(out, id)
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // UserPrefs はサーバ側（config.yaml: user_prefs:）に保存するユーザー機能設定。
 // 端末・ポート横断で共有する D2 分類の設定を全て保持する。
 type UserPrefs struct {
@@ -480,7 +544,7 @@ type UserPrefs struct {
 	Templates                []UserPrefsTemplate               `yaml:"templates,omitempty"    json:"templates,omitempty"`
 	UsageLinks               UserPrefsUsageLinks               `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
 	Voice                    UserPrefsVoice                    `yaml:"voice,omitempty"        json:"voice,omitempty"`
-	SessionOrder             []string                          `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
+	SessionOrder             SessionOrderIDs                   `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
 	GroupOrder               []string                          `yaml:"group_order,omitempty"      json:"group_order,omitempty"`
 	ProjectFavorites         []string                          `yaml:"project_favorites,omitempty" json:"project_favorites,omitempty"`
 	CwdHistory               []string                          `yaml:"cwd_history,omitempty"      json:"cwd_history,omitempty"`
@@ -499,7 +563,7 @@ type UserPrefs struct {
 // marshal or mutate the result without racing with the live server config.
 func (p UserPrefs) Clone() UserPrefs {
 	c := p
-	c.SessionOrder = cloneStringSlice(p.SessionOrder)
+	c.SessionOrder = cloneSessionOrder(p.SessionOrder)
 	c.GroupOrder = cloneStringSlice(p.GroupOrder)
 	c.ProjectFavorites = cloneStringSlice(p.ProjectFavorites)
 	c.CwdHistory = cloneStringSlice(p.CwdHistory)
@@ -1222,6 +1286,15 @@ func cloneStringSlice(in []string) []string {
 		return nil
 	}
 	out := make([]string, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneSessionOrder(in SessionOrderIDs) SessionOrderIDs {
+	if in == nil {
+		return nil
+	}
+	out := make(SessionOrderIDs, len(in))
 	copy(out, in)
 	return out
 }

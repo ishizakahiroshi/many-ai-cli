@@ -246,7 +246,12 @@ export let approvalAutoSwitchInProgress = false;
 export const actionBarShownAt = new Map<number, number>(); // sessionId -> timestamp(ms), Enter即確定ガード用
 
 export let projectFavorites: string[] = readStorageArray(STORAGE_PROJECT_FAVORITES_KEY);
-export let sessionOrder: number[] = readStorageArray(STORAGE_ORDER_KEY);
+// sessionOrder はセッション ID の数値配列。sessions は数値キーの Map なので、
+// 文字列で保存された旧値をそのまま載せると sessions.has() が全て false になり
+// 手動並び順が丸ごと無視される。読み込み時点で数値へ寄せておく。
+export let sessionOrder: number[] = readStorageArray(STORAGE_ORDER_KEY)
+  .map((v) => (typeof v === 'number' ? v : parseInt(String(v), 10)))
+  .filter((v) => Number.isInteger(v));
 export let groupOrder: string[] = readStorageArray(STORAGE_GROUP_ORDER_KEY);
 export const collapsedGroups = new Set<string>();
 

@@ -45,19 +45,6 @@ function sessionDisplayTitle(s: any): string {
   return String(s?.label || s?.auto_title || '');
 }
 
-function compareSessionCards(a: any, b: any): number {
-  if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
-  // 承認待ち（保留中）を上へ持ち上げる並び替えは行わない。状態遷移でカード位置が
-  // 動くとサイドバーが読みづらくなるため、位置は固定し、承認待ちはバッジと
-  // プロジェクト見出しの保留中カウントで示す。
-  const providerCmp = String(a.provider || '').localeCompare(String(b.provider || ''));
-  if (providerCmp !== 0) return providerCmp;
-  const aStarted = Date.parse(String(a.started_at || '')) || 0;
-  const bStarted = Date.parse(String(b.started_at || '')) || 0;
-  if (aStarted !== bStarted) return bStarted - aStarted;
-  return Number(a.id || 0) - Number(b.id || 0);
-}
-
 function appendSessionColorFilters(root: HTMLElement): void {
   const used = SESSION_CARD_COLORS.filter(color => Array.from(sessions.values()).some((s: any) => s.color === color));
   if (used.length === 0) return;
@@ -597,12 +584,13 @@ export function renderSessionList() {
 
   appendSessionColorFilters(root);
 
-  // ピン → provider → 起動時刻の順で並べ、必要なら色で絞り込む。状態（保留中等）は
-  // 並び順に影響させず、位置は固定する。sessionOrder は任意の手動並び替えとして残すが、
-  // この識別優先順がセッションカードの実表示順の正本になる。
+  // 表示順の正本は sessionOrder（＝カードの D&D 並び替え結果）。未登録のセッションは
+  // 生成順に末尾へ積まれるので、何も並び替えていなければ #2 → #10 の生成順になる。
+  // ピン留めだけは orderSessions 側でプロジェクト境界を越えて先頭へ持ち上げる。
+  // 状態（承認待ち等）や provider でここを並べ替えてはいけない。並べ替えると
+  // sessionOrder が毎レンダー上書きされ、D&D の結果が画面へ反映されなくなる。
   const displayedSessions = getOrderedSessions()
-    .filter((s: any) => !activeSessionColorFilter || s.color === activeSessionColorFilter)
-    .sort(compareSessionCards);
+    .filter((s: any) => !activeSessionColorFilter || s.color === activeSessionColorFilter);
 
   // ピンはプロジェクト境界を越えて最上位に置く。そうしないと「別プロジェクトの
   // ピンより、先に出たプロジェクトの非ピン」が上に残ってしまう。
@@ -622,8 +610,8 @@ export function renderSessionList() {
   // ピン留め優先、その中で groupOrder に従ってソート（未登録キーは末尾）
   // 未登録のプロジェクトキーを groupOrder に追記し、以降のレンダーで並び順を固定する。
   // ここで append しないと、両プロジェクトとも未登録の状態で比較関数が 0 を返し、
-  // Map 挿入順（= 各プロジェクトの最新セッションが compareSessionCards 順で登場する位置）
-  // に依存してしまい、あるプロジェクトの最新セッションを ✕ で削除した瞬間に
+  // Map 挿入順（= 各プロジェクトのセッションが sessionOrder 上で最初に登場する位置）
+  // に依存してしまい、あるプロジェクトの先頭セッションを ✕ で削除した瞬間に
   // 他プロジェクトのグループが上下にジャンプする（削除で並び順が変わって見える）。
   let _groupOrderChanged = false;
   for (const k of groups.keys()) {
