@@ -401,6 +401,10 @@ type wrapperConn struct {
 	ws        *websocket.Conn
 	sendMu    sync.Mutex
 	closeOnce sync.Once
+	// pid は接続してきた wrapper プロセスの PID。reattach 時に「戻ってきたのが
+	// 同じ wrapper か」を判定するのに使う（reattachIdentityMatches）。
+	// sessions/wrappers へ載せる前に sessionsMu 配下で 1 度だけ書く。
+	pid int
 }
 
 func newWrapperConn(ws *websocket.Conn) *wrapperConn { return &wrapperConn{ws: ws} }
