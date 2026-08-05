@@ -180,6 +180,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	}
 	s.sessions[id] = ses
 	wc := newWrapperConn(conn)
+	wc.pid = reg.PID
 	s.wrappers[id] = wc
 	s.sessionsMu.Unlock()
 	if initCols == 0 || initRows == 0 {
@@ -288,6 +289,31 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	s.wrapperMessageLoop(wc, id)
 }
 
+// reattachIdentityMatches は「今 reattach を要求してきた wrapper が、その ID に
+// 載っている既存接続と同じプロセスか」を判定する。
+//
+// wrapper は PTY 出力の送信キューが溢れたとき、途中のバイト列を捨てると端末画面が
+// 復元不能に壊れるため、自分から WS を切って張り直す（internal/wrapper/wrapper.go
+// の ptyOutputWriter.enqueue）。この張り直しは Hub 側の切断検知より先に着くことが
+// あり、その瞬間 s.wrappers[id] にはまだ古い接続が載っている。これを「別 wrapper と
+// の ID 衝突」と扱って新 ID を振ると、同一プロセスに 2 つ目のセッション番号が生まれ、
+// UI ではカードが 2 枚に割れる。古い側は承認待ちの表示を抱えたまま宛先を失い、
+// 新しい側は Hub の受信累計 0 から始まってスクロールバックを失う
+// （2026-08-05 に #15 → #17 で発生。同一 pid=6224）。
+//
+// PID は OS が再利用するため単独では同一性の根拠にせず、provider と cwd も一致を
+// 要求する。いずれかが欠ける古い wrapper からの reattach は従来どおり renumber へ
+// 倒す（誤って他人のセッションを乗っ取るより、番号が変わる方が安全側）。
+func reattachIdentityMatches(prev *wrapperConn, ses *session, req proto.Message) bool {
+	if prev == nil || ses == nil {
+		return false
+	}
+	if req.PID <= 0 || prev.pid <= 0 || prev.pid != req.PID {
+		return false
+	}
+	return ses.Provider == req.Provider && ses.CWD == req.CWD
+}
+
 func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	if req.SessionID <= 0 {
 		_ = websocket.JSON.Send(conn, proto.Message{Type: "reattach_reject", Reason: "invalid session_id"})
@@ -339,9 +365,15 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	// 行の発生を防ぐ）。
 	s.sessionsMu.Lock()
 	acceptedID := req.SessionID
-	if s.wrappers[acceptedID] != nil {
-		s.nextID++
-		acceptedID = s.nextID
+	var staleConn *wrapperConn
+	if prev := s.wrappers[acceptedID]; prev != nil {
+		if reattachIdentityMatches(prev, s.sessions[acceptedID], req) {
+			// 同一 wrapper の張り直し。ID は維持し、古い接続だけ後で閉じる。
+			staleConn = prev
+		} else {
+			s.nextID++
+			acceptedID = s.nextID
+		}
 	}
 	if s.nextID < acceptedID {
 		s.nextID = acceptedID
@@ -467,11 +499,17 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	}
 	s.sessions[acceptedID].inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
 	wc := newWrapperConn(conn)
+	wc.pid = req.PID
 	s.wrappers[acceptedID] = wc
 	if s.nextID < acceptedID {
 		s.nextID = acceptedID
 	}
 	s.sessionsMu.Unlock()
+	if staleConn != nil {
+		// 新しい接続を wrappers へ載せた後に閉じる。逆順だと、閉じたことで走る
+		// 旧 wrapperMessageLoop の後始末が「まだ自分が現役」と見えてしまう。
+		staleConn.close()
+	}
 	// wrapper が一時切断中に届かなかった保留入力を、再接続したこの wrapper へ順番に再送する。
 	// 他のバックグラウンド goroutine と同様 safeGo で起動し、panic で Hub 全体を巻き込まないようにする。
 	s.safeGo("flush_pending_input", func() { s.flushPendingInput(acceptedID) })
@@ -696,9 +734,18 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 
 	// wrapper 切断
 	s.sessionsMu.Lock()
-	if s.wrappers[id] == wc {
-		delete(s.wrappers, id)
+	if cur := s.wrappers[id]; cur != nil && cur != wc {
+		// この ID は既に別の接続へ差し替わっている（reattachIdentityMatches が同一
+		// wrapper と判定して番号を引き継いだ場合）。後始末を続けると現役セッションを
+		// disconnected に落とし、UI へ session_end を流し、保留入力・承認ルール・
+		// ログライターまで新しい接続の足元から消してしまう。差し替え済みなら降りる。
+		// なお wrappers[id] が nil のケース（UI の × による dismiss）は従来どおり
+		// 後始末を続ける必要がある（ここで降りるとログが閉じられず漏れる）。
+		s.sessionsMu.Unlock()
+		s.logger.Debug("stale wrapper loop ended; session already reattached", "session_id", id)
+		return
 	}
+	delete(s.wrappers, id)
 	var historyToClose *sessionlog.Writer
 	var jsonlPathForTranscript string
 	var endedProvider, endedCWD string
