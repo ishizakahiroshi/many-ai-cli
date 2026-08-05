@@ -91,17 +91,36 @@ func (s *Server) cwdForRequest(r *http.Request) string {
 	return s.hubCWD
 }
 
-// resolveAllowedFilePath は ?path= を検証して絶対パスを返す。
-// 許可ルート外でも、?session= のチャットにそのパスが言及されている場合は
-// 読み取り専用（readOnly=true）として許可する。このフォールバックは
-// files-content / files-asset の GET プレビュー専用。書き込み系 API では使わないこと。
-func (s *Server) resolveAllowedFilePath(r *http.Request) (string, bool, error) {
+// fileReadGrant は resolveAllowedFilePath の判定結果。
+type fileReadGrant struct {
+	// path は検証済みの絶対パス。
+	path string
+	// readOnly は許可ルート外のファイルを読み取り専用で許可した場合に true。
+	// 書き込み系 API は引き続き cwd / git root 配下しか受け付けないため、
+	// UI 側はこのフラグで編集ボタンを抑止する。
+	readOnly bool
+	// viaMention はチャット言及フォールバック由来（＝論理リモートからの許可）の場合に true。
+	// この経路だけダウンロードの type ゲートを維持する（監査 #25）。
+	viaMention bool
+}
+
+// resolveAllowedFilePath は ?path= を検証して読み取り許可の判定結果を返す。
+//
+// 判定は 3 段:
+//  1. cwd / git root / attachments / orchestration 配下なら無条件に許可（readOnly=false）
+//  2. 許可ルート外は秘密情報 denylist（isSecretReadDenied）で拒否
+//  3. 直 loopback は許可ルート制限なしで読み取り専用許可、
+//     論理リモートはユーザーがチャットで言及したパスのみ読み取り専用許可
+//
+// files-content / files-download / files-asset の GET 専用。
+// 書き込み系 API では使わないこと（isPathUnderAllowedRoots を直接呼ぶ）。
+func (s *Server) resolveAllowedFilePath(r *http.Request) (fileReadGrant, error) {
 	pathParam := r.URL.Query().Get("path")
 	if pathParam == "" {
-		return "", false, httpError{status: http.StatusBadRequest, msg: "path parameter is required"}
+		return fileReadGrant{}, httpError{status: http.StatusBadRequest, msg: "path parameter is required"}
 	}
 	if !filepath.IsAbs(pathParam) {
-		return "", false, httpError{status: http.StatusBadRequest, msg: "path must be an absolute path"}
+		return fileReadGrant{}, httpError{status: http.StatusBadRequest, msg: "path must be an absolute path"}
 	}
 
 	cwd := s.cwdForRequest(r)
@@ -117,12 +136,26 @@ func (s *Server) resolveAllowedFilePath(r *http.Request) (string, bool, error) {
 	orchDir, _ := orchestrationDir()
 	allowed, err := isPathUnderAllowedRoots(pathParam, cwd, gitRoot, attachDir, orchDir)
 	if err == nil && allowed {
-		return pathParam, false, nil
+		return fileReadGrant{path: pathParam}, nil
 	}
+
+	// ここから先は許可ルート外＝「中身をブラウザへ返してよいか」の判断になるため
+	// 秘密情報 denylist を適用する。
+	if isSecretReadDenied(pathParam) {
+		return fileReadGrant{}, httpError{status: http.StatusForbidden, msg: "forbidden: path is denied as a secret-like file"}
+	}
+
+	// 直 loopback（Hub ホストのブラウザ）は許可ルートで制限しない。根拠は filesScopeRestricted。
+	if !s.filesScopeRestricted(r) {
+		return fileReadGrant{path: pathParam, readOnly: true}, nil
+	}
+
+	// 論理リモート（tailscale / trusted_networks / スマホ）は従来どおり、
+	// ユーザー自身がチャットで言及したパスのみ読み取り専用で許可する。
 	if s.isPathMentionedInSession(r, pathParam, cwd) {
-		return pathParam, true, nil
+		return fileReadGrant{path: pathParam, readOnly: true, viaMention: true}, nil
 	}
-	return "", false, httpError{status: http.StatusForbidden, msg: "forbidden: path is outside allowed roots"}
+	return fileReadGrant{}, httpError{status: http.StatusForbidden, msg: "forbidden: path is outside allowed roots"}
 }
 
 // isPathMentionedInSession は ?session= のチャット（sessionstore）に
@@ -179,7 +212,7 @@ func (s *Server) handleFilesContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pathParam, readOnly, err := s.resolveAllowedFilePath(r)
+	grant, err := s.resolveAllowedFilePath(r)
 	if err != nil {
 		if he, ok := err.(httpError); ok {
 			writeJSONError(w, he.status, httpErrorCode(he.status), he.msg)
@@ -188,6 +221,7 @@ func (s *Server) handleFilesContent(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "internal_error", "internal server error")
 		return
 	}
+	pathParam, readOnly := grant.path, grant.readOnly
 
 	if !isTextFile(pathParam) {
 		writeJSONError(w, http.StatusForbidden, "forbidden", "not a previewable text file")
@@ -273,7 +307,7 @@ func (s *Server) handleFilesDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pathParam, readOnly, err := s.resolveAllowedFilePath(r)
+	grant, err := s.resolveAllowedFilePath(r)
 	if err != nil {
 		if he, ok := err.(httpError); ok {
 			writeJSONError(w, he.status, httpErrorCode(he.status), he.msg)
@@ -282,12 +316,14 @@ func (s *Server) handleFilesDownload(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "internal_error", "internal server error")
 		return
 	}
+	pathParam := grant.path
 
-	// readOnly==true はチャット言及フォールバック由来（許可ルート外）。この経路では
-	// content/asset と同じく type ゲートを課し、テキスト/メディア以外の任意バイナリ
-	// （資格情報・鍵ファイル等）が言及されただけで全文配信されるのを防ぐ。
-	// 許可ルート内（readOnly==false）は従来どおり拡張子無制限でダウンロードできる。
-	if readOnly && !isTextFile(pathParam) && !isMediaFile(pathParam) {
+	// viaMention==true はチャット言及フォールバック由来（＝論理リモートからの許可）。
+	// この経路では content/asset と同じく type ゲートを課し、テキスト/メディア以外の
+	// 任意バイナリ（資格情報・鍵ファイル等）が言及されただけで全文配信されるのを防ぐ（監査 #25）。
+	// 許可ルート内と、直 loopback の許可ルート外読み取り（秘密情報 denylist で保護済み）は
+	// 従来どおり拡張子無制限でダウンロードできる。
+	if grant.viaMention && !isTextFile(pathParam) && !isMediaFile(pathParam) {
 		writeJSONError(w, http.StatusForbidden, "forbidden", "not a downloadable file outside allowed roots")
 		return
 	}
@@ -331,7 +367,7 @@ func (s *Server) handleFilesAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pathParam, _, err := s.resolveAllowedFilePath(r)
+	grant, err := s.resolveAllowedFilePath(r)
 	if err != nil {
 		if he, ok := err.(httpError); ok {
 			writeJSONError(w, he.status, httpErrorCode(he.status), he.msg)
@@ -340,6 +376,7 @@ func (s *Server) handleFilesAsset(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "internal_error", "internal server error")
 		return
 	}
+	pathParam := grant.path
 	if !isMediaFile(pathParam) {
 		writeJSONError(w, http.StatusForbidden, "forbidden", "not a previewable media file")
 		return

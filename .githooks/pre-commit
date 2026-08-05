@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# secrets-scan layer 2 (per-commit) — non-pnpm path via core.hooksPath = .githooks
+# 設計詳細: docs/local/secrets-scan-design/ (gitignored)
+# Activate with: bash scripts/install-hooks.sh  or  pwsh scripts/install-hooks.ps1
+node scripts/secrets-scan.mjs --staged --block
