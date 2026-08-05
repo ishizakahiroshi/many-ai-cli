@@ -9,6 +9,8 @@ package hub
 // package-private・呼び出し元は変更なし。
 
 import (
+	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -120,6 +122,214 @@ func splitBracketedPasteSubmit(text string) (first string, delayed string) {
 // wrapper が長時間戻らないケースで無制限に溜まるのを防ぐ。超過時は古い方から捨てる。
 const maxPendingInputPerSession = 100
 
+// maxInflightInputPerSession bounds inputs that have been sent to a wrapper
+// but are waiting for pty_input_ack. Keep the same bound as pendingInput so a
+// disconnected wrapper cannot retain unbounded user input in memory.
+const maxInflightInputPerSession = maxPendingInputPerSession
+
+type inflightInput struct {
+	data string
+	conn *wrapperConn
+}
+
+// pendingFrame は再送待ちの 1 フレーム。seq を保持するのが要点で、これにより
+// wrapper 側が「既に PTY へ書いた分の再送」と判定して二重書き込みを避けられる。
+// 新しい seq を振り直すと重複判定が効かず、確定 \r が 2 回入りうる。
+type pendingFrame struct {
+	seq  int64
+	data string
+}
+
+// reserveInflightInput records a frame before it is written to the wrapper.
+// Recording first closes the race where the wrapper disconnects immediately
+// after Hub's websocket write returns.
+func (s *Server) reserveInflightInput(wc *wrapperConn, sessionID int, data string) int64 {
+	if wc == nil || data == "" {
+		return 0
+	}
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[sessionID]
+	if ses == nil {
+		return 0
+	}
+	if ses.inflightInput == nil {
+		ses.inflightInput = map[int64]inflightInput{}
+	}
+	for {
+		ses.inputSeq++
+		if ses.inputSeq <= 0 {
+			ses.inputSeq = 1
+		}
+		if _, exists := ses.inflightInput[ses.inputSeq]; !exists {
+			break
+		}
+	}
+	seq := ses.inputSeq
+	ses.inflightInput[seq] = inflightInput{data: data, conn: wc}
+	for len(ses.inflightInput) > maxInflightInputPerSession {
+		var oldest int64
+		for candidate := range ses.inflightInput {
+			if oldest == 0 || candidate < oldest {
+				oldest = candidate
+			}
+		}
+		delete(ses.inflightInput, oldest)
+	}
+	return seq
+}
+
+func (s *Server) releaseInflightInput(wc *wrapperConn, sessionID int, seq int64) {
+	if wc == nil || seq <= 0 {
+		return
+	}
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[sessionID]
+	if ses == nil {
+		return
+	}
+	if item, ok := ses.inflightInput[seq]; ok && item.conn == wc {
+		delete(ses.inflightInput, seq)
+	}
+}
+
+// sendPTYInputFrame attaches a sequence number to one Hub-to-wrapper frame.
+// Empty frames retain the legacy wire behavior and are not tracked because the
+// wrapper intentionally does not acknowledge them.
+func (s *Server) sendPTYInputFrame(wc *wrapperConn, sessionID int, data string) error {
+	if wc == nil {
+		return fmt.Errorf("wrapper not connected")
+	}
+	seq := s.reserveInflightInput(wc, sessionID, data)
+	if data != "" && seq == 0 {
+		return fmt.Errorf("session %d is not registered", sessionID)
+	}
+	m := proto.Message{Type: "pty_input", SessionID: sessionID, Data: []byte(data), InputSeq: seq}
+	if err := wc.send(m); err != nil {
+		s.releaseInflightInput(wc, sessionID, seq)
+		return err
+	}
+	return nil
+}
+
+// sendPTYInputFrameWithSeq は未 ack のまま切断されたフレームを、元の seq のまま
+// 送り直す。seq を振り直さないので、既に PTY へ入っていた分は wrapper 側が
+// 握り潰して ack だけ返し、二重書き込みにならない。
+func (s *Server) sendPTYInputFrameWithSeq(wc *wrapperConn, sessionID int, data string, seq int64) error {
+	if wc == nil {
+		return fmt.Errorf("wrapper not connected")
+	}
+	if !s.readmitInflightInput(wc, sessionID, seq, data) {
+		return fmt.Errorf("session %d is not registered", sessionID)
+	}
+	m := proto.Message{Type: "pty_input", SessionID: sessionID, Data: []byte(data), InputSeq: seq}
+	if err := wc.send(m); err != nil {
+		s.releaseInflightInput(wc, sessionID, seq)
+		return err
+	}
+	return nil
+}
+
+// readmitInflightInput は再送するフレームを、元の seq のまま新しい接続の
+// in-flight として登録し直す。ack が返れば消え、また切れれば再び再送キューへ戻る。
+func (s *Server) readmitInflightInput(wc *wrapperConn, sessionID int, seq int64, data string) bool {
+	if wc == nil || seq <= 0 {
+		return false
+	}
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[sessionID]
+	if ses == nil {
+		return false
+	}
+	if ses.inflightInput == nil {
+		ses.inflightInput = map[int64]inflightInput{}
+	}
+	ses.inflightInput[seq] = inflightInput{data: data, conn: wc}
+	return true
+}
+
+// handlePTYInputAck removes the matching in-flight frame. Marking the
+// connection as ack-capable is intentionally independent of whether the seq
+// is still present: a late/duplicate ack is still evidence of a new wrapper.
+func (s *Server) handlePTYInputAck(wc *wrapperConn, sessionID int, seq int64) {
+	if wc == nil {
+		return
+	}
+	wc.inputAckSeen.Store(true)
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[sessionID]
+	if ses == nil {
+		return
+	}
+	// 接続単位のフラグだけでは足りない。reattach のたびに wrapperConn は作り直され、
+	// 「再接続直後に 1 件も ack を受けないまま再び切れる」窓では旧 wrapper と
+	// 区別できず、再送されずに入力が消える。セッション単位でも記憶しておく。
+	ses.inputAckCapable = true
+	if seq <= 0 {
+		return
+	}
+	if item, ok := ses.inflightInput[seq]; ok && item.conn == wc {
+		delete(ses.inflightInput, seq)
+	}
+}
+
+// deferInflightForResendLocked は wc に紐づく未 ack のフレームを再送キューへ移す。
+// ack を返す wrapper だと分かっているセッションだけが対象で、ack を一度も返さない
+// 旧 wrapper では従来どおり再送しない（二重書き込みを避けるため）。
+//
+// pendingInput ではなく専用の resendInput へ積むのは、元の seq を保ったまま
+// 送り直す必要があるから。pendingInput は []string で seq を運べず、再送時に
+// 新しい seq が振られてしまい、wrapper 側の重複判定が効かなくなる。
+func (s *Server) deferInflightForResendLocked(sessionID int, wc *wrapperConn) (count int, minSeq int64, maxSeq int64) {
+	ses := s.sessions[sessionID]
+	if ses == nil || len(ses.inflightInput) == 0 || wc == nil {
+		return 0, 0, 0
+	}
+	items := make([]pendingFrame, 0, len(ses.inflightInput))
+	for seq, item := range ses.inflightInput {
+		if item.conn != wc {
+			continue
+		}
+		items = append(items, pendingFrame{seq: seq, data: item.data})
+		delete(ses.inflightInput, seq)
+	}
+	if len(items) == 0 || !(wc.inputAckSeen.Load() || ses.inputAckCapable) {
+		return 0, 0, 0
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].seq < items[j].seq })
+	ses.resendInput = mergeResendFrames(ses.resendInput, items)
+	return len(items), items[0].seq, items[len(items)-1].seq
+}
+
+// mergeResendFrames は再送キューを seq 昇順で束ね、上限を超えた古い方から捨てる。
+func mergeResendFrames(existing, incoming []pendingFrame) []pendingFrame {
+	queue := make([]pendingFrame, 0, len(existing)+len(incoming))
+	queue = append(queue, existing...)
+	queue = append(queue, incoming...)
+	sort.Slice(queue, func(i, j int) bool { return queue[i].seq < queue[j].seq })
+	if len(queue) > maxInflightInputPerSession {
+		queue = queue[len(queue)-maxInflightInputPerSession:]
+	}
+	return queue
+}
+
+// requeueResendInput は送り直せなかった再送フレームをキューへ戻す。
+func (s *Server) requeueResendInput(sessionID int, frames []pendingFrame) {
+	if len(frames) == 0 {
+		return
+	}
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[sessionID]
+	if ses == nil {
+		return
+	}
+	ses.resendInput = mergeResendFrames(ses.resendInput, frames)
+}
+
 // initialInjectGateMaxAge は初期プロンプト注入ゲートの生存上限。注入経路の事故
 // （spawn タイムアウト後の遅延登録等）で clearInitialInjectGate が呼ばれないまま
 // ゲートが張り付いても、この時間を超えたら入力保留をやめて通常送信に戻す保険。
@@ -194,7 +404,8 @@ func (s *Server) submitInputWithGate(wc *wrapperConn, sessionID int, combined st
 }
 
 // trySendInput は combined を wrapper へ送る。届けられなかった残り（未送信部分）を返す
-// （"" = 全て送信済み）。bracketed-paste の確定 \r は別書き込み + 50ms 遅延で送る従来挙動を保つ。
+// （"" = 全て送信済み）。各フレームは送信前に in-flight へ記録し、wrapper の ack が
+// 届くまで保持する。bracketed-paste の確定 \r は別書き込み + 50ms 遅延で送る従来挙動を保つ。
 // first まで送れて delayed(\r) だけ失敗した場合は \r のみを残りとして返し、本文の二重送信を避ける。
 func (s *Server) trySendInput(wc *wrapperConn, sessionID int, combined string) (remaining string) {
 	if wc == nil {
@@ -203,13 +414,13 @@ func (s *Server) trySendInput(wc *wrapperConn, sessionID int, combined string) (
 	}
 	first, delayed := splitBracketedPasteSubmit(combined)
 	sendStart := time.Now()
-	if err := wc.send(proto.Message{Type: "pty_input", SessionID: sessionID, Data: []byte(first)}); err != nil {
+	if err := s.sendPTYInputFrame(wc, sessionID, first); err != nil {
 		s.logger.Warn("pty_input deferred: send failed", "session_id", sessionID, "stage", "first", "err", err)
 		return combined
 	}
 	if delayed != "" {
 		time.Sleep(bracketedPasteSubmitDelay)
-		if err := wc.send(proto.Message{Type: "pty_input", SessionID: sessionID, Data: []byte(delayed)}); err != nil {
+		if err := s.sendPTYInputFrame(wc, sessionID, delayed); err != nil {
 			s.logger.Warn("pty_input deferred: send failed", "session_id", sessionID, "stage", "delayed", "err", err)
 			return delayed
 		}
@@ -256,14 +467,27 @@ func (s *Server) flushPendingInput(sessionID int) {
 	}
 	pending := s.pendingInput[sessionID]
 	delete(s.pendingInput, sessionID)
+	resend := ses.resendInput
+	ses.resendInput = nil
 	wc := s.wrappers[sessionID]
 	s.sessionsMu.Unlock()
-	if len(pending) == 0 {
+	if len(pending) == 0 && len(resend) == 0 {
 		return
 	}
 	if wc == nil {
+		s.requeueResendInput(sessionID, resend)
 		s.requeuePendingInput(sessionID, pending)
 		return
+	}
+	// 未 ack 分を先に、元の seq のまま送り直す。既に PTY へ入っていた分は
+	// wrapper 側が seq で重複と判定して握り潰し、ack だけ返す。
+	for i, frame := range resend {
+		if err := s.sendPTYInputFrameWithSeq(wc, sessionID, frame.data, frame.seq); err != nil {
+			s.logger.Warn("pty_input resend failed", "session_id", sessionID, "input_seq", frame.seq, "err", err)
+			s.requeueResendInput(sessionID, resend[i:])
+			s.requeuePendingInput(sessionID, pending)
+			return
+		}
 	}
 	var remainder []string
 	for i, combined := range pending {
@@ -277,7 +501,7 @@ func (s *Server) flushPendingInput(sessionID int) {
 		s.requeuePendingInput(sessionID, remainder)
 		return
 	}
-	s.logger.Info("flushed deferred pty_input", "session_id", sessionID, "count", len(pending))
+	s.logger.Info("flushed deferred pty_input", "session_id", sessionID, "count", len(pending), "resent", len(resend))
 }
 
 // requeuePendingInput は再送できなかった残りを保留キューの先頭へ戻す

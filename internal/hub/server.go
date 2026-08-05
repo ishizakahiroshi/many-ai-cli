@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/websocket"
@@ -257,6 +258,25 @@ type session struct {
 	// copylocks に触れるため。session 生成時に必ず new(sync.Mutex) を設定すること
 	//（未設定＝nil のまま Lock すると nil pointer panic になる）。
 	inputMu *sync.Mutex
+
+	// JSON 外: Hub が wrapper へ送ったが、pty_input_ack をまだ受け取っていない
+	// 入力。sessionsMu で保護し、wrapper 切断時に resendInput へ移して次の
+	// (再)接続で送り直す。
+	inputSeq      int64
+	inflightInput map[int64]inflightInput
+
+	// JSON 外: 未 ack のまま切断された入力の再送キュー。pendingInput と分けて
+	// 持つのは「元の seq のまま」送り直す必要があるため。新しい seq を振ると
+	// wrapper 側の重複判定（maxProcessedInputSeq）が効かず、既に PTY へ入った
+	// 入力が二重に書かれる。
+	resendInput []pendingFrame
+
+	// JSON 外: このセッションの wrapper が pty_input_ack を返す実装かどうか。
+	// wrapperConn 単位ではなくセッション単位で持つ。reattach のたびに
+	// wrapperConn は作り直されるため、接続単位だと「再接続直後にもう一度切れた」
+	// 場合に ack 未受信＝旧 wrapper 扱いとなり、再送されずに入力が消える
+	// （本 bug の実測ケースそのもの）。
+	inputAckCapable bool
 }
 
 // resolveRoute は provider + model から route を推定する。
@@ -401,6 +421,9 @@ type wrapperConn struct {
 	ws        *websocket.Conn
 	sendMu    sync.Mutex
 	closeOnce sync.Once
+	// inputAckSeen は旧 wrapper との互換性ガード。1 件でも ack を受け取った
+	// 接続だけを ack 対応とみなし、未 ack 入力を切断時に差し戻す。
+	inputAckSeen atomic.Bool
 	// pid は接続してきた wrapper プロセスの PID。reattach 時に「戻ってきたのが
 	// 同じ wrapper か」を判定するのに使う（reattachIdentityMatches）。
 	// sessions/wrappers へ載せる前に sessionsMu 配下で 1 度だけ書く。
@@ -1715,6 +1738,8 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		delete(s.sessions, m.SessionID)
 		delete(s.wrappers, m.SessionID)
 		delete(s.pendingInput, m.SessionID)
+		ses.inflightInput = nil
+		ses.resendInput = nil
 	}
 	s.sessionsMu.Unlock()
 	if !exists {

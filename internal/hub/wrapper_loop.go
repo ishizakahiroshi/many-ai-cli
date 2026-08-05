@@ -169,6 +169,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		LogPath:         rawLogPath,
 		JSONLPath:       jsonlPath,
 		History:         history,
+		inflightInput:   map[int64]inflightInput{},
 	}
 	ses.inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
 	if childMeta.OrchestrationID != "" {
@@ -417,6 +418,13 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	var prevVT *vtBuffer
 	var prevCols, prevRows int
 	var prevSeen int64
+	var prevInputSeq int64
+	var prevInflightInput map[int64]inflightInput
+	var prevResendInput []pendingFrame
+	var prevInputAckCapable bool
+	var requeuedInputCount int
+	var requeuedInputMinSeq int64
+	var requeuedInputMaxSeq int64
 	prevExists := false
 	if cur := s.sessions[acceptedID]; cur != nil {
 		oldHistory = cur.History
@@ -424,6 +432,15 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		prevVT = cur.vt
 		prevCols, prevRows = cur.lastCols, cur.lastRows
 		prevSeen = cur.ptyBytesSeen
+		prevInputSeq = cur.inputSeq
+		prevInflightInput = cur.inflightInput
+		if staleConn != nil {
+			requeuedInputCount, requeuedInputMinSeq, requeuedInputMaxSeq = s.deferInflightForResendLocked(acceptedID, staleConn)
+		}
+		// 再送キューと ack 対応フラグは deferInflightForResendLocked の後に読む
+		// （直前の切断分がここで resendInput へ積まれるため）。
+		prevResendInput = cur.resendInput
+		prevInputAckCapable = cur.inputAckCapable
 		prevExists = true
 	}
 	// gap = 切断中に Hub が受け取れなかったぶん。既存 UI へはこれだけを流す。
@@ -496,6 +513,10 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		LogPath:         rawLogPath,
 		JSONLPath:       jsonlPath,
 		History:         history,
+		inputSeq:        prevInputSeq,
+		inflightInput:   prevInflightInput,
+		resendInput:     prevResendInput,
+		inputAckCapable: prevInputAckCapable,
 	}
 	s.sessions[acceptedID].inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
 	wc := newWrapperConn(conn)
@@ -505,6 +526,14 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		s.nextID = acceptedID
 	}
 	s.sessionsMu.Unlock()
+	if requeuedInputCount > 0 {
+		s.logger.Info("requeued in-flight pty_input",
+			"session_id", acceptedID,
+			"count", requeuedInputCount,
+			"seq_start", requeuedInputMinSeq,
+			"seq_end", requeuedInputMaxSeq,
+			"cause", "reattach")
+	}
 	if staleConn != nil {
 		// 新しい接続を wrappers へ載せた後に閉じる。逆順だと、閉じたことで走る
 		// 旧 wrapperMessageLoop の後始末が「まだ自分が現役」と見えてしまう。
@@ -700,6 +729,8 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				s.handleDoneSummaryMarker(id, doneSnap)
 			}
 			s.handleCommitMsgChunk(id, cleanText)
+		case "pty_input_ack":
+			s.handlePTYInputAck(wc, id, m.InputSeq)
 		case "session_end":
 			histEvent := map[string]any{
 				"ts":         time.Now().Format(time.RFC3339),
@@ -741,11 +772,21 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 		// ログライターまで新しい接続の足元から消してしまう。差し替え済みなら降りる。
 		// なお wrappers[id] が nil のケース（UI の × による dismiss）は従来どおり
 		// 後始末を続ける必要がある（ここで降りるとログが閉じられず漏れる）。
+		requeuedCount, requeuedMinSeq, requeuedMaxSeq := s.deferInflightForResendLocked(id, wc)
 		s.sessionsMu.Unlock()
+		if requeuedCount > 0 {
+			s.logger.Info("requeued in-flight pty_input",
+				"session_id", id,
+				"count", requeuedCount,
+				"seq_start", requeuedMinSeq,
+				"seq_end", requeuedMaxSeq,
+				"cause", "stale_wrapper_disconnect")
+		}
 		s.logger.Debug("stale wrapper loop ended; session already reattached", "session_id", id)
 		return
 	}
 	delete(s.wrappers, id)
+	requeuedCount, requeuedMinSeq, requeuedMaxSeq := s.deferInflightForResendLocked(id, wc)
 	var historyToClose *sessionlog.Writer
 	var jsonlPathForTranscript string
 	var endedProvider, endedCWD string
@@ -764,14 +805,30 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 		endedProvider = cur.Provider
 		endedCWD = cur.CWD
 	}
-	// 滞留症状の観測 (input_trace.go / 2026-08-04)。この delete は無ガードで、
-	// 未送信の保留入力ごと捨てる（直上の s.wrappers 削除は wc 一致ガード付き）。
-	// 捨てた事実が無記録だと「送ったのに何も起きない」の切り分けができない。
-	if n := len(s.pendingInput[id]); n > 0 {
-		s.logger.Warn("pending_input_dropped", "session_id", id, "count", n, "cause", "wrapper_disconnect")
+	// 旧 wrapper（ack 未対応）では従来どおり未送信の保留入力を捨てる。
+	// ack 対応 wrapper の場合は in-flight と既存 pending を次の reattach へ残す。
+	// 判定に wc 単位のフラグだけを使うと、reattach 直後に 1 件も ack を受けないまま
+	// 再び切れた接続が旧 wrapper と誤判定され、保留入力が捨てられる。
+	// セッション単位の inputAckCapable も併せて見る。
+	// 滞留症状の観測 (input_trace.go / 2026-08-04) として、旧経路で捨てた事実は
+	// ログへ残し、「送ったのに何も起きない」の切り分けに使う。
+	ackCapable := wc.inputAckSeen.Load()
+	if cur := s.sessions[id]; cur != nil && cur.inputAckCapable {
+		ackCapable = true
 	}
-	delete(s.pendingInput, id)
+	if n := len(s.pendingInput[id]); n > 0 && !ackCapable {
+		s.logger.Warn("pending_input_dropped", "session_id", id, "count", n, "cause", "wrapper_disconnect")
+		delete(s.pendingInput, id)
+	}
 	s.sessionsMu.Unlock()
+	if requeuedCount > 0 {
+		s.logger.Info("requeued in-flight pty_input",
+			"session_id", id,
+			"count", requeuedCount,
+			"seq_start", requeuedMinSeq,
+			"seq_end", requeuedMaxSeq,
+			"cause", "wrapper_disconnect")
+	}
 	// session_end を経ない切断（プロセス kill / Hub 側 WS 断）でも workflow の
 	// 追跡タイマーを必ず終端させる（session_end 経由と重複しても冪等）。
 	s.finalizeWorkflowOnSessionEnd(id)

@@ -13,9 +13,12 @@ type Message struct {
 	CWD       string `json:"cwd,omitempty"`
 	Branch    string `json:"branch,omitempty"`
 	PID       int    `json:"pid,omitempty"`
-	Shell     string `json:"shell,omitempty"`
-	Version   string `json:"version,omitempty"`
-	State     string `json:"state,omitempty"`
+	// InputSeq identifies a Hub-to-wrapper pty_input frame so the wrapper can
+	// acknowledge the frame after the bytes have been written to the PTY.
+	InputSeq int64  `json:"input_seq,omitempty"`
+	Shell    string `json:"shell,omitempty"`
+	Version  string `json:"version,omitempty"`
+	State    string `json:"state,omitempty"`
 	// Three orthogonal session activity signals. State remains a compatibility
 	// display label; consumers that need a safe interruption point use
 	// output_idle && !workflow_active.

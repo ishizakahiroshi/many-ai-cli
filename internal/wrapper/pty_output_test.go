@@ -103,3 +103,58 @@ func TestPTYOutputWriterResumeDropsStaleQueue(t *testing.T) {
 	go writer.run()
 	writer.finish()
 }
+
+func TestPTYOutputWriterCoalescesQueuedChunks(t *testing.T) {
+	writer := newPTYOutputWriter(nil, 4, nil)
+	first := []byte("first")
+	writer.outCh <- []byte("second")
+
+	got := writer.coalesce(first)
+	if string(got) != "firstsecond" {
+		t.Fatalf("coalesced output = %q, want %q", got, "firstsecond")
+	}
+	if &got[0] == &first[0] {
+		t.Fatal("coalescing two chunks reused the first chunk without copying")
+	}
+}
+
+func TestPTYOutputWriterCoalesceSingleChunkDoesNotCopy(t *testing.T) {
+	writer := newPTYOutputWriter(nil, 1, nil)
+	chunk := []byte("single")
+
+	got := writer.coalesce(chunk)
+	if &got[0] != &chunk[0] {
+		t.Fatal("single queued chunk was copied")
+	}
+}
+
+func TestPTYOutputWriterCoalesceHonorsMaxBytes(t *testing.T) {
+	writer := newPTYOutputWriter(nil, 2, nil)
+	first := bytes.Repeat([]byte{'a'}, ptyOutputCoalesceMaxBytes-2)
+	writer.outCh <- []byte("bc")
+	writer.outCh <- []byte("tail")
+
+	got := writer.coalesce(first)
+	if len(got) != ptyOutputCoalesceMaxBytes {
+		t.Fatalf("coalesced bytes = %d, want %d", len(got), ptyOutputCoalesceMaxBytes)
+	}
+	if next := <-writer.outCh; string(next) != "tail" {
+		t.Fatalf("chunk after coalesce limit = %q, want tail", next)
+	}
+}
+
+func TestPTYOutputWriterCoalescePreservesChunkOverLimit(t *testing.T) {
+	writer := newPTYOutputWriter(nil, 1, nil)
+	first := bytes.Repeat([]byte{'a'}, ptyOutputCoalesceMaxBytes-1)
+	next := []byte("overflow")
+	writer.outCh <- next
+
+	got := writer.coalesce(first)
+	if len(got) != len(first) {
+		t.Fatalf("coalesced bytes = %d, want %d", len(got), len(first))
+	}
+	preserved, ok := writer.nextChunk()
+	if !ok || !bytes.Equal(preserved, next) {
+		t.Fatalf("over-limit chunk = %q, want %q", preserved, next)
+	}
+}

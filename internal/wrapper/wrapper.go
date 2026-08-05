@@ -38,7 +38,11 @@ const (
 	ptyInputChunkBytes             = 1024
 	ptyInputChunkDelay             = 3 * time.Millisecond
 	defaultWrapperSendWriteTimeout = 5 * time.Second
-	ptyOutputQueueCapacity         = 64
+	// 実測では Codex の PTY 出力が 100ms 窓で最大 582 チャンクに達し、
+	// 64 チャンクのキューを日常的に超えていた。ピークの約 1.76 倍を確保する。
+	ptyOutputQueueCapacity = 1024
+	// pty_data 1 通が無制限に膨らまないよう、待ち行列の結合上限を設ける。
+	ptyOutputCoalesceMaxBytes = 256 * 1024
 	// postReattachGuard は reattach 成功直後の猶予窓。この間に再度 WS が切断
 	// しても、probe(hub) が生きているというだけで「意図的切断」と即断せず、
 	// transport fault と同様に reconnect grace へ回す。理由は
@@ -73,6 +77,41 @@ type wrapperSession struct {
 	currentConn      *websocket.Conn
 	currentSID       int
 	sendWriteTimeout time.Duration
+	// maxProcessedInputSeq は PTY へ書き終えた pty_input の最大シーケンス番号。
+	// Hub は未 ack の入力を「元の seq のまま」再送するため、ここ以下の seq が
+	// 来たら「既に書いた分の再送」と判定して PTY へ二重に書かず ack だけ返す。
+	// これが無いと、PTY 書き込み後・ack 到達前に WS が切れた場合（abortCurrentConn は
+	// sendMu を待たずに閉じるため ack は失われうる）、再送で確定 \r が 2 回入り
+	// 後続プロンプトを誤承認する。接続を跨いで保持する必要があるため conn ではなく
+	// セッションに持つ。
+	maxProcessedInputSeq int64
+}
+
+// inputSeqAlreadyProcessed は seq が「PTY へ書き終えた分の再送」かを返す。
+// Hub の採番は単調増加で、再送時も元の seq を保つため、最大値との比較で足りる。
+// 限界: 書き込みに失敗した seq を飛ばして後続が成功すると、その失敗分の再送も
+// 「処理済み」と見なす。PTY 書き込みが失敗するのは PTY 自体が壊れている場合に
+// 限られ、そのときはセッションごと終了するため実害を許容する。
+func (ws *wrapperSession) inputSeqAlreadyProcessed(seq int64) bool {
+	if seq <= 0 {
+		return false
+	}
+	ws.stateMu.Lock()
+	defer ws.stateMu.Unlock()
+	return seq <= ws.maxProcessedInputSeq
+}
+
+// markInputSeqProcessed は PTY へ書き終えた seq を記録する。書き込みが成功した
+// 場合にだけ呼ぶこと（失敗分を記録すると Hub の再送が握り潰される）。
+func (ws *wrapperSession) markInputSeqProcessed(seq int64) {
+	if seq <= 0 {
+		return
+	}
+	ws.stateMu.Lock()
+	defer ws.stateMu.Unlock()
+	if seq > ws.maxProcessedInputSeq {
+		ws.maxProcessedInputSeq = seq
+	}
 }
 
 func newWrapperSession(conn *websocket.Conn, sid int, sendWriteTimeout time.Duration) *wrapperSession {
@@ -352,6 +391,7 @@ type ptyOutputWriter struct {
 	mu                     sync.Mutex
 	accepting              bool
 	closed                 bool
+	pendingChunk           []byte
 	done                   chan struct{}
 	notifyTransportFailure func(ptyOutputTransportFault)
 }
@@ -428,7 +468,15 @@ func (w *ptyOutputWriter) triggerTransportFailure(fault ptyOutputTransportFault)
 
 func (w *ptyOutputWriter) run() {
 	defer close(w.done)
-	for chunk := range w.outCh {
+	for {
+		chunk, ok := w.nextChunk()
+		if !ok {
+			return
+		}
+		if !w.isAccepting() {
+			continue
+		}
+		chunk = w.coalesce(chunk)
 		if !w.isAccepting() {
 			continue
 		}
@@ -447,6 +495,74 @@ func (w *ptyOutputWriter) run() {
 	}
 }
 
+// nextChunk returns a chunk saved by coalesce before reading the channel.
+// pendingChunk is protected because resume may discard it concurrently with
+// the writer goroutine after a transport fault.
+func (w *ptyOutputWriter) nextChunk() ([]byte, bool) {
+	w.mu.Lock()
+	if w.pendingChunk != nil {
+		chunk := w.pendingChunk
+		w.pendingChunk = nil
+		w.mu.Unlock()
+		return chunk, true
+	}
+	w.mu.Unlock()
+	chunk, ok := <-w.outCh
+	return chunk, ok
+}
+
+// coalesce drains chunks already waiting in outCh without waiting for a new
+// chunk. The first chunk is returned as-is when no second chunk is available;
+// allocation starts only when a second chunk is actually merged.
+func (w *ptyOutputWriter) coalesce(chunk []byte) []byte {
+	if len(chunk) == 0 {
+		return chunk
+	}
+	if len(chunk) > ptyOutputCoalesceMaxBytes {
+		w.savePendingChunk(chunk[ptyOutputCoalesceMaxBytes:])
+		return chunk[:ptyOutputCoalesceMaxBytes]
+	}
+
+	merged := chunk
+	for {
+		select {
+		case next, ok := <-w.outCh:
+			if !ok {
+				return merged
+			}
+			if len(next) == 0 {
+				continue
+			}
+			if len(merged)+len(next) > ptyOutputCoalesceMaxBytes {
+				w.savePendingChunk(next)
+				return merged
+			}
+			if len(merged) == len(chunk) {
+				merged = make([]byte, 0, len(chunk)+len(next))
+				merged = append(merged, chunk...)
+			}
+			merged = append(merged, next...)
+			if len(merged) == ptyOutputCoalesceMaxBytes {
+				return merged
+			}
+		default:
+			return merged
+		}
+	}
+}
+
+func (w *ptyOutputWriter) savePendingChunk(chunk []byte) {
+	w.mu.Lock()
+	// transport fault 後（accepting=false）は保存しない。resume が pendingChunk を
+	// nil にした「後」に coalesce がここへ到達すると、fault 前の古いチャンクが
+	// reattach 後に送られ、replay と二重描画になる。resume の意図
+	// （stale queued chunks must not be sent a second time）をここでも守る。
+	if w.accepting && !w.closed {
+		w.pendingChunk = chunk
+	}
+	w.mu.Unlock()
+}
+
 // resume discards any chunks queued before the transport fault and resumes
 // accepting fresh PTY output after a successful reattach. The replay buffer
 // carries the recent output across the gap, so stale queued chunks must not be
@@ -457,6 +573,7 @@ func (w *ptyOutputWriter) resume() {
 	if w.closed {
 		return
 	}
+	w.pendingChunk = nil
 	for {
 		select {
 		case <-w.outCh:
@@ -841,6 +958,25 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 
 	wses := newWrapperSession(conn, sessionID, wrapperSendWriteTimeout(cfg))
 
+	// sendInputAck は「この seq の入力は PTY に入っている」ことを Hub へ返す。
+	// 新規書き込み後と、再送を握り潰したときの両方から呼ぶ（後者で ack を返さないと
+	// Hub 側の in-flight が永久に残り、切断のたびに再送され続ける）。
+	sendInputAck := func(seq int64) {
+		if seq <= 0 {
+			return
+		}
+		if err := wses.sendMsg(proto.Message{
+			Type:      "pty_input_ack",
+			SessionID: wses.getSID(),
+			InputSeq:  seq,
+		}); err != nil {
+			// PTY 書き込みは成功済みなので、ack の送信失敗だけでは
+			// PTY や wrapper の処理を止めない。Hub は未 ack として再送するが、
+			// maxProcessedInputSeq により二重書き込みにはならない。
+			logger.Warn("pty_input_ack send failed", "session_id", wses.getSID(), "input_seq", seq, "err", err)
+		}
+	}
+
 	// Recent PTY output buffer: replayed to UI after a successful reconnect so
 	// the new session card has context for what happened during the gap.
 	var (
@@ -921,6 +1057,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 				case "pty_input":
 					if len(m.Data) > 0 {
 						data := m.Data
+						var writeErr error
 						// 滞留症状の観測 (trace.go / 2026-08-04)。Hub が送ったものが wrapper へ
 						// 届いたか、どの分岐で PTY へ書かれたかを 1 行残す。確定 \r は単独 1 バイトで
 						// 届くため shouldSplitTrailingEnter が false になり、opencode 以外では
@@ -933,9 +1070,23 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 							"head_hex": traceHex(m.Data, 8, false),
 							"tail_hex": traceHex(m.Data, 8, true),
 						})
+						if wses.inputSeqAlreadyProcessed(m.InputSeq) {
+							// Hub が未 ack と判断して再送してきたが、この seq は既に PTY へ
+							// 書き終えている（PTY 書き込み後・ack 到達前に WS が切れると起きる）。
+							// 二重に書くと確定 \r が 2 回入って後続プロンプトを誤承認するため、
+							// 書かずに ack だけ返して Hub の in-flight を解消する。
+							tracer.emit("pty_input_duplicate", wses.getSID(), map[string]any{
+								"provider":  provider,
+								"bytes":     len(m.Data),
+								"input_seq": m.InputSeq,
+							})
+							sendInputAck(m.InputSeq)
+							break
+						}
 						if lead, rest := splitLeadingClearControl(provider, data); lead != nil {
 							traceClearPrefix = true
 							if err := writePTY(ps, lead); err != nil {
+								writeErr = err
 								logPTYWriteError(logger, wses.getSID(), "clear_prefix", err)
 							}
 							time.Sleep(clearPrefixSplitDelay)
@@ -951,15 +1102,24 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 							// 新形式 (@path text\r) は画像参照と本文を同じ入力行に残し、最後の Enter だけ分離する。
 							if idx := bytes.IndexByte(data, '\r'); idx >= 0 && idx < len(data)-1 {
 								if err := writeWithTrailingEnter(ps, data[:idx+1], 150*time.Millisecond); err != nil {
+									if writeErr == nil {
+										writeErr = err
+									}
 									logPTYWriteError(logger, wses.getSID(), "inject_path", err)
 								}
 								// ConPTY fix: text\r を1チャンクで書くと \r が Enter でなく改行扱いになる場合がある
 								rest := data[idx+1:]
 								if err := writeWithTrailingEnter(ps, rest, 20*time.Millisecond); err != nil {
+									if writeErr == nil {
+										writeErr = err
+									}
 									logPTYWriteError(logger, wses.getSID(), "inject_text", err)
 								}
 							} else {
 								if err := writeWithTrailingEnter(ps, data, 20*time.Millisecond); err != nil {
+									if writeErr == nil {
+										writeErr = err
+									}
 									logPTYWriteError(logger, wses.getSID(), "inject", err)
 								}
 							}
@@ -970,6 +1130,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 							// Codex / OpenCode は入力反映直後の Enter を取りこぼすことがあるため長めに待つ。
 							delay := trailingEnterDelay(provider)
 							if err := writeWithTrailingEnter(ps, data, delay); err != nil {
+								writeErr = err
 								logPTYWriteError(logger, wses.getSID(), "input_enter", err)
 							}
 						} else {
@@ -979,6 +1140,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 							// ペースト本文はこのブランチを通るため、以前の
 							// writeWithTrailingEnter 経由と同等の書き込み挙動を維持する。
 							if err := writePTYChunked(ps, data); err != nil {
+								writeErr = err
 								logPTYWriteError(logger, wses.getSID(), "input", err)
 							}
 						}
@@ -989,6 +1151,12 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 							"bytes":        len(data),
 							"tail_hex":     traceHex(data, 8, true),
 						})
+						if writeErr == nil {
+							// 記録は書き込み成功時のみ。失敗分を記録すると、Hub が
+							// 再送しても「処理済み」と見なして握り潰してしまう。
+							wses.markInputSeqProcessed(m.InputSeq)
+							sendInputAck(m.InputSeq)
+						}
 					}
 				case "pty_resize":
 					if m.Cols > 0 && m.Rows > 0 {
