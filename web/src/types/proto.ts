@@ -27,6 +27,7 @@ export type MessageType =
   | 'session_history_reset'
   | 'pty_data'
   | 'pty_input'
+  | 'pty_input_ack'
   | 'pty_resize'
   | 'session_hint'
   | 'approval_detected'
@@ -132,6 +133,7 @@ export interface Message {
   cwd?: string;
   branch?: string;
   pid?: number;
+  input_seq?: number;
   shell?: string;
   version?: string;
   state?: SessionState;
