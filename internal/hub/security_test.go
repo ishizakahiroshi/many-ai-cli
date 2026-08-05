@@ -743,22 +743,44 @@ func TestHandlePathExistsChecksRequestedPaths(t *testing.T) {
 	}
 }
 
-func TestHandleOpenDirPathRejectsOutsideAllowedRoots(t *testing.T) {
+// TestHandleOpenDirPathScopeByCallerOrigin は、許可ルート外パスに対する /api/open-dir の
+// 扱いが呼び出し元で変わることを確認する。直 loopback（Hub ホスト本人）は許可、
+// 論理リモート（tailscale serve 等のリバースプロキシ経由）は従来どおり 403。
+// 方針の根拠は internal/hub/files_scope.go の filesScopeRestricted。
+func TestHandleOpenDirPathScopeByCallerOrigin(t *testing.T) {
 	root := t.TempDir()
 	outside := filepath.Join(t.TempDir(), "outside.txt")
 	if err := os.WriteFile(outside, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+
+	// 論理リモート: RemoteAddr は loopback でも Host が Hub の既定ホストでなければリモート扱い。
 	s := newSecTestServer(t, root)
+	s.cfg.Hub.AllowedHosts = []string{"hub.example.ts.net"}
 	body := []byte(`{"kind":"path","path":` + strconvQuote(outside) + `}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/open-dir?token=tok", bytes.NewReader(body))
 	req.RemoteAddr = "127.0.0.1:12345"
-	req.Host = "127.0.0.1:47777"
+	req.Host = "hub.example.ts.net"
 	w := httptest.NewRecorder()
 	s.handleOpenDir(w, req)
 
 	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+		t.Fatalf("remote: expected 403, got %d: %s", w.Code, w.Body.String())
+	}
+	// Host 検証・PIN ゲート等の別要因で 403 になっていないことを確かめる。
+	if !strings.Contains(w.Body.String(), "outside allowed roots") {
+		t.Fatalf("remote: unexpected 403 reason: %s", w.Body.String())
+	}
+
+	// 直 loopback: 許可ルート外でも通す。実際にエクスプローラを開く副作用を避けるため
+	// 判定関数（checkOpenPathAllowed）単体で確認する。
+	sLocal := newSecTestServer(t, root)
+	reqLocal := httptest.NewRequest(http.MethodPost, "/api/open-dir?token=tok", nil)
+	reqLocal.RemoteAddr = "127.0.0.1:12345"
+	reqLocal.Host = "127.0.0.1:47777"
+	wLocal := httptest.NewRecorder()
+	if !sLocal.checkOpenPathAllowed(wLocal, reqLocal, outside) {
+		t.Fatalf("loopback: expected allowed, got %d: %s", wLocal.Code, wLocal.Body.String())
 	}
 }
 
@@ -972,4 +994,34 @@ func containsPath(s string) bool {
 		}
 	}
 	return false
+}
+
+// TestCheckOpenPathAllowedStrictKeepsScopeOnLoopback は、ターミナル起動（実行系）だけは
+// 直 loopback でも許可ルートを緩めないことを確認する。「開くだけ」の open 系は
+// TestHandleOpenDirPathScopeByCallerOrigin のとおり loopback で開放されている。
+func TestCheckOpenPathAllowedStrictKeepsScopeOnLoopback(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	s := newSecTestServer(t, root)
+
+	newReq := func() *http.Request {
+		req := httptest.NewRequest(http.MethodPost, "/api/open-terminal?token=tok", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		req.Host = "127.0.0.1:47777"
+		return req
+	}
+
+	w := httptest.NewRecorder()
+	if s.checkOpenPathAllowedStrict(w, newReq(), outside) {
+		t.Fatal("strict check must reject an outside path even from loopback")
+	}
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// 許可ルート内は従来どおり通る。
+	w = httptest.NewRecorder()
+	if !s.checkOpenPathAllowedStrict(w, newReq(), root) {
+		t.Fatalf("strict check must allow inside path, got %d: %s", w.Code, w.Body.String())
+	}
 }

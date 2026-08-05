@@ -10,6 +10,39 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Changed
+- **Files preview no longer refuses to open documents that live outside the
+  current repository.** Reading was previously confined to the session cwd, its
+  git root, and the attachments/orchestration directories, with a narrow
+  fallback for paths the user had typed into chat — so reference material kept
+  next to a project (a `docs/` tree in a sibling folder, a recap note, a shared
+  spec) came back as a bare HTTP 403. That boundary did not actually contain
+  anything: the AI CLI itself runs as the same OS user and can read any file
+  with its own tools, and a caller holding the Hub token can already spawn a
+  shell in nearly any directory. Requests that arrive from a browser on the Hub
+  host itself are now served without the allowed-roots check
+  (`internal/hub/files_scope.go`). Files outside the project still come back
+  flagged `readOnly`, so the editor stays disabled for them.
+- **Logically remote callers keep the old, narrower scope.** Requests routed
+  through tailscale serve, `trusted_networks`, or any reverse proxy — detected
+  by `isLogicallyRemote`, the same split `/api/list-subdirs` already used — are
+  still limited to the allowed roots plus paths the user referenced in their own
+  chat input (`role='user'` only; AI output remains excluded).
+- **Secret-like files are refused on every out-of-scope read.** Private keys
+  (`*.pem`, `*.key`, `id_rsa*`), credential files (`*credentials*`), environment
+  files (`.env`, `.env.*`), the Hub's own session-history database
+  (`any-ai-cli.db` and its `-wal`/`-shm` siblings, which hold every chat
+  transcript), and `~/.many-ai-cli/config.yaml*` (which stores the Hub token in
+  plaintext — matched by prefix so that a hand-made copy of the file cannot leak
+  the same token) are rejected even from the Hub host. The file tree no longer
+  extracts a content summary for them either, so walking a directory cannot
+  bulk-harvest the first bytes of each one. Paths inside the project keep their
+  previous behaviour, so a repository's own `.env` still previews as before.
+- **Writes and terminal launches are unchanged.** `files-save`, `files-create`,
+  `files-mkdir`, `files-move`, `files-rename`, `files-delete-dir`, and
+  `/api/open-terminal` still require the session cwd or git root, so a widened
+  read scope cannot turn into an edit or a shell in an arbitrary directory.
+
 ### Fixed
 - **The web terminal no longer freezes on a stale frame after the wrapper
   reconnects to the Hub.** When a burst of PTY output overflows the wrapper's

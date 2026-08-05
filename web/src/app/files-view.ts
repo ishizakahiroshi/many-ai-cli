@@ -2852,8 +2852,12 @@ export const FilesPreview = (function () {
           let detail = '';
           try { const ed = await res.json(); detail = (ed && (ed.detail || ed.error)) || ''; } catch (_) {}
           let msg;
-          if (res.status === 403 && /outside allowed roots/i.test(detail)) {
-            // スコープ外＋ユーザー入力で未言及（AI 出力のみのパスは安全のため対象外）。
+          if (res.status === 403 && /secret-like file/i.test(detail)) {
+            // 鍵・資格情報・Hub 設定など秘密情報 denylist 該当。
+            msg = t('files_preview_forbidden_secret') || ('HTTP ' + res.status);
+          } else if (res.status === 403 && /outside allowed roots/i.test(detail)) {
+            // スコープ外。直 loopback では起きず、リモート接続（スマホ / tailscale 等）から
+            // 未言及のパスを開こうとした場合のみ到達する。
             // 素の「HTTP 403」だと理由が分からないため、平易な説明に差し替える。
             msg = t('files_preview_forbidden_scope') || ('HTTP ' + res.status);
           } else {
