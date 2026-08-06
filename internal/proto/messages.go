@@ -38,10 +38,14 @@ type Message struct {
 	HomeDir   string `json:"home_dir,omitempty"`
 	CodexHome string `json:"codex_home,omitempty"`
 	ClaudeDir string `json:"claude_dir,omitempty"`
-	Data      []byte `json:"data,omitempty"` // wrapper内部用: PTY生バイト列（base64エンコード）
-	Text      string `json:"text,omitempty"` // pty_output: ANSIを除去したプレーンテキスト / pty_input: ユーザー入力文字列
-	Cols      int    `json:"cols,omitempty"` // pty_resize / register / registered
-	Rows      int    `json:"rows,omitempty"` // pty_resize / register / registered
+	// AgentSessionID is the provider-owned transcript ID. It is sent by the
+	// wrapper during register/reattach and is never rendered in the session card.
+	AgentSessionID    string             `json:"agent_session_id,omitempty"`
+	Data              []byte             `json:"data,omitempty"`     // wrapper内部用: PTY生バイト列（base64エンコード）
+	Text              string             `json:"text,omitempty"`     // pty_output: ANSIを除去したプレーンテキスト / pty_input: ユーザー入力文字列
+	AgentChatMessages []AgentChatMessage `json:"messages,omitempty"` // agent_chat: structured transcript messages
+	Cols              int                `json:"cols,omitempty"`     // pty_resize / register / registered
+	Rows              int                `json:"rows,omitempty"`     // pty_resize / register / registered
 
 	// reattach: wrapper が Hub クラッシュ後に元セッション情報を復元するための情報。
 	LogPath   string `json:"log_path,omitempty"`
@@ -202,6 +206,24 @@ type Message struct {
 	RepoName         string  `json:"repo_name,omitempty"`
 	RemainingPct     float64 `json:"remaining_pct,omitempty"`
 	ReasoningOut     int     `json:"reasoning_output_tokens,omitempty"`
+}
+
+// AgentChatMessage is the provider-neutral structured transcript payload used
+// by the agent_chat API and WebSocket message.
+type AgentChatMessage struct {
+	Role     string          `json:"role"`
+	Kind     string          `json:"kind,omitempty"`
+	Text     string          `json:"text,omitempty"`
+	Thinking []string        `json:"thinking,omitempty"`
+	Tools    []AgentChatTool `json:"tools,omitempty"`
+	TS       string          `json:"ts,omitempty"`
+}
+
+type AgentChatTool struct {
+	ID     string `json:"id,omitempty"`
+	Name   string `json:"name"`
+	Input  string `json:"input,omitempty"`
+	Result string `json:"result,omitempty"`
 }
 
 // SessionActivity is the wire representation of a session's activity axes.

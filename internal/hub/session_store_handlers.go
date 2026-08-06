@@ -95,6 +95,27 @@ func (s *Server) handleSessionStoreReset(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, map[string]any{"ok": true, "result": result, "file_reset_scheduled": filePending})
 }
 
+// handleSessionStorePruneTranscriptNoise is an explicit maintenance action.
+// It only removes legacy PTY-derived noise rows for Claude/Codex; it never
+// touches provider transcript files or user/approval/attachment messages.
+func (s *Server) handleSessionStorePruneTranscriptNoise(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodPost) {
+		return
+	}
+	if s.sessionStore == nil {
+		writeJSON(w, map[string]any{"ok": true, "deleted_messages": 0})
+		return
+	}
+	deleted, err := s.sessionStore.PruneTranscriptNoise()
+	if err != nil {
+		s.logger.Warn("transcript noise prune failed", "err", err)
+		writeJSONError(w, http.StatusInternalServerError, "transcript_noise_prune_failed", "failed to prune transcript noise")
+		return
+	}
+	s.logger.Info("transcript noise pruned", "deleted_messages", deleted)
+	writeJSON(w, map[string]any{"ok": true, "deleted_messages": deleted})
+}
+
 func (s *Server) activeSessionIDs() []int {
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()

@@ -10,7 +10,7 @@ import { clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed, setMultiQu
 import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, handleHubApprovalMarker, hideActionBar, isAIProvider, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
 import { notifyDeferredEnterOutput } from './deferred-enter.js';
 import { notifyResidueSweepOutput } from './residue-sweep.js';
-import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed } from './chat-history.js';
+import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed, isTranscriptBackedProvider, pushAgentChatMessage } from './chat-history.js';
 import { clearChatPayloadForSession, handleChatTurnMessage, initChatPayloadUI } from './chat-payload.js';
 import { handleUsageStatMessage, removeUsageCacheEntry } from './token-statusbar.js';
 import { receiveWorkflowProgress, removeWorkflowSnapshot } from './workflow-modal.js';
@@ -294,6 +294,13 @@ export function _connectWs() {
     try { m = JSON.parse(ev.data); } catch { return; }
     let fastRenderSessionId = null;
 
+  if (m.type === 'agent_chat') {
+    const id = Number(m.session_id || 0);
+    const messages = Array.isArray(m.messages) ? m.messages : [];
+    for (const message of messages) pushAgentChatMessage(id, message);
+    return;
+  }
+
   if (m.type === 'pty_data') {
     const id = m.session_id;
     ensureTerminal(id);
@@ -349,7 +356,7 @@ export function _connectWs() {
     // chatHistory: マーカー検出でターン境界を確定し AI 出力を commit する。
     // Shell session は chat history extraction の対象外。
     const sessionProvider = sessions.get(id)?.provider || '';
-    if (isAIProvider(sessionProvider)) {
+    if (isAIProvider(sessionProvider) && !isTranscriptBackedProvider(sessionProvider)) {
       if (hasMarker) {
         const parts = textChunk.split(CHAT_HISTORY_USER_TURN_MARKER);
         for (let i = 0; i < parts.length; i++) {

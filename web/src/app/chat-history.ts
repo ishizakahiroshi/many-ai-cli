@@ -125,6 +125,42 @@ export function pushMessage(sid, msg) {
   return entry;
 }
 
+export function isTranscriptBackedProvider(provider) {
+  return provider === 'claude' || provider === 'codex';
+}
+
+export function isTranscriptBackedSession(sid) {
+  return isTranscriptBackedProvider(sessions.get(sid)?.provider || '');
+}
+
+function transcriptMessageKey(msg) {
+  return JSON.stringify([
+    msg.role || '', msg.kind || '', msg.ts || '', msg.text || '',
+    Array.isArray(msg.thinking) ? msg.thinking : [],
+    Array.isArray(msg.tools) ? msg.tools : [],
+  ]);
+}
+
+export function pushAgentChatMessage(sid, msg) {
+  if (sid === null || sid === undefined || !msg) return null;
+  const key = transcriptMessageKey(msg);
+  const existing = chatHistory.get(sid) || [];
+  if (existing.some(entry => entry.meta?.transcript_key === key)) return null;
+  const role = msg.role === 'user' ? 'user' : 'ai';
+  return pushMessage(sid, {
+    ts: msg.ts || Date.now(),
+    role,
+    kind: msg.kind || 'text',
+    rawText: msg.text || '',
+    meta: {
+      transcript: true,
+      transcript_key: key,
+      thinking: Array.isArray(msg.thinking) ? msg.thinking.slice() : [],
+      tools: Array.isArray(msg.tools) ? msg.tools.slice() : [],
+    },
+  });
+}
+
 export function getMessages(sid) {
   const arr = chatHistory.get(sid);
   return arr ? arr.slice() : [];
@@ -149,7 +185,8 @@ export async function restoreChatHistoryFromStore(sid, opts: any = {}) {
   if (!opts.force && hasMeaningfulLocalChat(sid)) return false;
   chatHistoryStoreInflight.add(sid);
   try {
-    const res = await fetch(`/api/session-chat?token=${encodeURIComponent(token)}&session_id=${encodeURIComponent(sid)}&limit=500`);
+    const endpoint = isTranscriptBackedSession(sid) ? '/api/agent-chat' : '/api/session-chat';
+    const res = await fetch(`${endpoint}?token=${encodeURIComponent(token)}&session_id=${encodeURIComponent(sid)}&limit=500`);
     if (!res.ok) return false;
     const data = await res.json();
     const messages = Array.isArray(data.messages) ? data.messages : [];
@@ -167,7 +204,12 @@ export async function restoreChatHistoryFromStore(sid, opts: any = {}) {
     revokeChatHistoryAttachmentURLs(sid);
     chatHistory.delete(sid);
     chatHistoryIdSeq.delete(sid);
+    const transcript = isTranscriptBackedSession(sid) && data.available !== false;
     for (const m of messages) {
+      if (transcript) {
+        pushAgentChatMessage(sid, m);
+        continue;
+      }
       const role = m.role || 'system';
       const kind = m.kind || 'text';
       const rawText = m.rawText || m.raw_text || m.text || '';
@@ -216,6 +258,7 @@ export function subscribeChatHistory(sid, cb) {
 
 export function chatHistoryAppendOutput(sid, raw) {
   if (sid === null || sid === undefined || !raw) return;
+  if (isTranscriptBackedSession(sid)) return;
   let buf = chatHistoryOutputBuffers.get(sid);
   if (!buf) {
     buf = { rawChunks: [], lastTs: 0 };
@@ -235,6 +278,10 @@ export function chatHistoryAppendOutput(sid, raw) {
 export function chatHistoryCommitOutput(sid) {
   const t = chatHistoryAutoCommitTimers.get(sid);
   if (t) { clearTimeout(t); chatHistoryAutoCommitTimers.delete(sid); }
+  if (isTranscriptBackedSession(sid)) {
+    chatHistoryOutputBuffers.delete(sid);
+    return;
+  }
   const buf = chatHistoryOutputBuffers.get(sid);
   if (!buf) return;
   if (buf.rawChunks.length === 0) return;
@@ -265,6 +312,10 @@ export function chatHistoryCommitOutput(sid) {
 // マーカー検出専用の commit。msgs.length === 0 の場合はリプレイの先頭マーカーとみなし、
 // 起動バナーをバッファから捨てつつ空の user エントリを1件積んで以降の commit を解放する。
 export function chatHistoryCommitOutputOrSeed(sid) {
+  if (isTranscriptBackedSession(sid)) {
+    chatHistoryOutputBuffers.delete(sid);
+    return;
+  }
   const msgs = chatHistory.get(sid);
   if (!msgs || msgs.length === 0) {
     const buf = chatHistoryOutputBuffers.get(sid);
@@ -317,6 +368,7 @@ export function resetChatHistoryForSession(sid) {
   revokeChatHistoryAttachmentURLs(sid);
   chatHistory.delete(sid);
   chatHistoryIdSeq.delete(sid);
+  chatHistoryStoreRestored.delete(sid);
   chatHistoryNotify(sid, null);
 }
 
@@ -690,6 +742,42 @@ export function stripToolCallLines(text) {
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+function renderTranscriptDetails(meta) {
+  const fragment = document.createDocumentFragment();
+  const thinking = Array.isArray(meta?.thinking) ? meta.thinking.filter(Boolean) : [];
+  const tools = Array.isArray(meta?.tools) ? meta.tools : [];
+  if (thinking.length > 0) {
+    const details = document.createElement('details');
+    details.className = 'chat-transcript-section chat-transcript-thinking';
+    const summary = document.createElement('summary');
+    summary.textContent = `Thinking (${thinking.length})`;
+    details.appendChild(summary);
+    for (const item of thinking) {
+      const block = document.createElement('div');
+      block.className = 'chat-transcript-thinking-item';
+      block.appendChild(renderInlineText(String(item)));
+      details.appendChild(block);
+    }
+    fragment.appendChild(details);
+  }
+  if (tools.length > 0) {
+    const details = document.createElement('details');
+    details.className = 'chat-transcript-section chat-transcript-tools';
+    const summary = document.createElement('summary');
+    summary.textContent = `Tools (${tools.length})`;
+    details.appendChild(summary);
+    for (const tool of tools) {
+      details.appendChild(renderToolCall({
+        name: tool?.name || 'Tool',
+        args: tool?.input || '',
+        body: tool?.result || '',
+      }));
+    }
+    fragment.appendChild(details);
+  }
+  return fragment;
+}
+
 // 1 メッセージの DOM を構築する。
 export function renderMessageBubble(sid, msg) {
   const sess = (typeof sessions !== 'undefined' && sessions) ? sessions.get(sid) : null;
@@ -842,14 +930,20 @@ export function renderMessageBubble(sid, msg) {
       content.textContent = ti18n('chat_attachment_count', `${n} 件の添付`, { n });
     }
   } else if (role === 'ai') {
-    // AI: ツール呼び出しを抽出してから本文を表示
+    // Structured provider transcripts already identify thinking/tools. Keep
+    // heuristic PTY parsing only for providers without a native transcript.
     const raw = msg.normalizedText || msg.rawText || '';
-    const cleanText = stripToolCallLines(raw);
+    const transcript = msg.meta?.transcript === true;
+    const cleanText = transcript ? raw : stripToolCallLines(raw);
     if (cleanText) content.appendChild(renderInlineText(cleanText));
     bubble.appendChild(content);
-    const toolCalls = parseToolCallsFromOutput(raw, provider);
-    for (const tc of toolCalls) {
-      bubble.appendChild(renderToolCall(tc));
+    if (transcript) {
+      bubble.appendChild(renderTranscriptDetails(msg.meta));
+    } else {
+      const toolCalls = parseToolCallsFromOutput(raw, provider);
+      for (const tc of toolCalls) {
+        bubble.appendChild(renderToolCall(tc));
+      }
     }
   } else {
     // user/text

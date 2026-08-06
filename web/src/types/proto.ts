@@ -26,6 +26,7 @@ export type MessageType =
   | 'session_dismiss'
   | 'session_history_reset'
   | 'pty_data'
+  | 'agent_chat'
   | 'pty_input'
   | 'pty_input_ack'
   | 'pty_resize'
@@ -95,6 +96,22 @@ export interface SessionActivity {
   awaiting_approval: boolean;
 }
 
+export interface AgentChatTool {
+  id?: string;
+  name: string;
+  input?: string;
+  result?: string;
+}
+
+export interface AgentChatMessage {
+  role: 'user' | 'assistant' | string;
+  kind?: string;
+  text?: string;
+  thinking?: string[];
+  tools?: AgentChatTool[];
+  ts?: string;
+}
+
 export interface WfAgent {
   label: string;
   state: string;
@@ -147,6 +164,8 @@ export interface Message {
   token?: string | null;
   data?: string | Uint8Array;
   text?: string;
+  agent_session_id?: string;
+  messages?: AgentChatMessage[];
   cols?: number;
   rows?: number;
   log_path?: string;

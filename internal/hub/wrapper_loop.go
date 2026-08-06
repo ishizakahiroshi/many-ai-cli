@@ -162,6 +162,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		HomeDir:         reg.HomeDir,
 		CodexHome:       reg.CodexHome,
 		ClaudeDir:       reg.ClaudeDir,
+		AgentSessionID:  reg.AgentSessionID,
 		Activity:        SessionActivity{OutputIdle: true},
 		State:           "standby",
 		StartedAt:       startedAt.Format(time.RFC3339),
@@ -287,6 +288,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		"orchestration_id":  childMeta.OrchestrationID,
 		"board_path":        childMeta.BoardPath,
 	})
+	s.startAgentChatTail(id)
 	s.wrapperMessageLoop(wc, id)
 }
 
@@ -422,11 +424,16 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	var prevInflightInput map[int64]inflightInput
 	var prevResendInput []pendingFrame
 	var prevInputAckCapable bool
+	var prevAgentChatPath string
+	var prevAgentChatOffset int64
 	var requeuedInputCount int
 	var requeuedInputMinSeq int64
 	var requeuedInputMaxSeq int64
 	prevExists := false
 	if cur := s.sessions[acceptedID]; cur != nil {
+		prevAgentChatPath = cur.agentChatPath
+		prevAgentChatOffset = cur.agentChatOffset
+		s.stopAgentChatTailLocked(cur)
 		oldHistory = cur.History
 		prevPTYBuf = cur.ptyBuf
 		prevVT = cur.vt
@@ -499,6 +506,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		HomeDir:         req.HomeDir,
 		CodexHome:       req.CodexHome,
 		ClaudeDir:       req.ClaudeDir,
+		AgentSessionID:  req.AgentSessionID,
 		Activity:        SessionActivity{OutputIdle: len(replay) == 0, WorkflowActive: len(replay) > 0},
 		State:           "running",
 		LastOutputAt:    lastOutputAt,
@@ -513,6 +521,8 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		LogPath:         rawLogPath,
 		JSONLPath:       jsonlPath,
 		History:         history,
+		agentChatPath:   prevAgentChatPath,
+		agentChatOffset: prevAgentChatOffset,
 		inputSeq:        prevInputSeq,
 		inflightInput:   prevInflightInput,
 		resendInput:     prevResendInput,
@@ -593,6 +603,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		"pid":            req.PID,
 		"renumbered":     acceptedID != req.SessionID,
 	})
+	s.startAgentChatTail(acceptedID)
 	s.wrapperMessageLoop(wc, acceptedID)
 }
 
@@ -743,6 +754,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				histEvent["reason"] = m.Reason
 			}
 			s.writeHistory(id, histEvent)
+			s.stopAgentChatTail(id)
 			if m.State == "completed" || m.State == "error" {
 				s.sessionsMu.Lock()
 				if cur := s.sessions[id]; cur != nil {
@@ -792,6 +804,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	var endedProvider, endedCWD string
 	// done/timeout も終端として保持する（オーケストレーション完了状態を disconnected で潰さない）。
 	if cur := s.sessions[id]; cur != nil && !isTerminalSessionState(cur.State) {
+		s.stopAgentChatTailLocked(cur)
 		cur.State = "disconnected"
 	}
 	endState := "disconnected"
