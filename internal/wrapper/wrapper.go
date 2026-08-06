@@ -243,6 +243,7 @@ type reconnectSupervisor struct {
 	cwd              string
 	label            string
 	model            string
+	agentSessionID   string
 	startedAtText    string
 	rawLogPath       string
 	jsonlPath        string
@@ -341,7 +342,7 @@ func (r *reconnectSupervisor) run() {
 				cols, rows = w, h
 			}
 			replay, ptyBytes := r.snapshotReplay()
-			newConn, newSID, err := dialAndReattach(r.cfg, r.ws.getSID(), r.provider, r.display, r.cwd, r.label, r.model, r.startedAtText, r.rawLogPath, r.jsonlPath, cols, rows, replay, ptyBytes)
+			newConn, newSID, err := dialAndReattach(r.cfg, r.ws.getSID(), r.provider, r.display, r.cwd, r.label, r.model, r.agentSessionID, r.startedAtText, r.rawLogPath, r.jsonlPath, cols, rows, replay, ptyBytes)
 			if err != nil {
 				r.logger.Debug("reconnect attempt failed", "err", err)
 				continue
@@ -800,6 +801,10 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		}
 	}
 	providerArgs = append(extra, providerArgs...)
+	providerArgs, agentSessionID, err := prepareClaudeSessionArgs(provider, providerArgs)
+	if err != nil {
+		return err
+	}
 
 	// Hub にスポーンされた場合、起動中の Hub ポートが MANY_AI_CLI_HUB_PORT で渡される。
 	// config.yaml のポートより優先して使い、wrapper が別 Hub を勝手に起動するのを防ぐ。
@@ -819,7 +824,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		termCols, termRows = w, h
 	}
 
-	conn, reg, err := dialAndRegister(cfg, provider, display, cwd, *label, *model, termCols, termRows)
+	conn, reg, err := dialAndRegister(cfg, provider, display, cwd, *label, *model, agentSessionID, termCols, termRows)
 	if err != nil {
 		return err
 	}
@@ -1227,6 +1232,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		cwd:              cwd,
 		label:            *label,
 		model:            *model,
+		agentSessionID:   agentSessionID,
 		startedAtText:    startedAtText,
 		rawLogPath:       rawLogPath,
 		jsonlPath:        jsonlPath,
@@ -1287,7 +1293,7 @@ func classifyExit(waitErr error) (state string, code int, signal string) {
 }
 
 // dialAndRegister opens a WS to the Hub and performs the register handshake.
-func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model string, termCols, termRows int) (*websocket.Conn, proto.Message, error) {
+func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, agentSessionID string, termCols, termRows int) (*websocket.Conn, proto.Message, error) {
 	wsURL := url.URL{Scheme: "ws", Host: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Path: "/ws"}
 	// Origin はサーバの wsHandshake 許可リスト（http://127.0.0.1:<port>）に一致させる。
 	// websocket.Dial は内部で url.ParseRequestURI(origin) を呼ぶため空文字は不可（empty url エラー）。
@@ -1299,21 +1305,22 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model st
 	}
 	homeDir, codexHome, claudeDir := userSkillDirs()
 	if err := websocket.JSON.Send(conn, proto.Message{
-		Type:      "register",
-		Role:      "wrapper",
-		Provider:  provider,
-		Display:   display,
-		CWD:       cwd,
-		Label:     label,
-		Model:     model,
-		PID:       os.Getpid(),
-		Shell:     DetectShell(),
-		Token:     cfg.Token,
-		HomeDir:   homeDir,
-		CodexHome: codexHome,
-		ClaudeDir: claudeDir,
-		Cols:      termCols,
-		Rows:      termRows,
+		Type:           "register",
+		Role:           "wrapper",
+		Provider:       provider,
+		Display:        display,
+		CWD:            cwd,
+		Label:          label,
+		Model:          model,
+		PID:            os.Getpid(),
+		Shell:          DetectShell(),
+		Token:          cfg.Token,
+		HomeDir:        homeDir,
+		CodexHome:      codexHome,
+		ClaudeDir:      claudeDir,
+		AgentSessionID: agentSessionID,
+		Cols:           termCols,
+		Rows:           termRows,
 	}); err != nil {
 		_ = conn.Close()
 		return nil, proto.Message{}, err
@@ -1332,7 +1339,7 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model st
 	return conn, reg, nil
 }
 
-func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, label, model, startedAt, rawLogPath, jsonlPath string, termCols, termRows int, replay []byte, ptyBytes int64) (*websocket.Conn, int, error) {
+func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, label, model, agentSessionID, startedAt, rawLogPath, jsonlPath string, termCols, termRows int, replay []byte, ptyBytes int64) (*websocket.Conn, int, error) {
 	wsURL := url.URL{Scheme: "ws", Host: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Path: "/ws"}
 	// Origin はポート付きで許可リストに一致させる（理由は dialAndRegister のコメント参照）。
 	origin := fmt.Sprintf("http://127.0.0.1:%d", cfg.Hub.Port)
@@ -1342,27 +1349,28 @@ func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, 
 	}
 	homeDir, codexHome, claudeDir := userSkillDirs()
 	if err := websocket.JSON.Send(conn, proto.Message{
-		Type:      "reattach",
-		Role:      "wrapper",
-		SessionID: sessionID,
-		Provider:  provider,
-		Display:   display,
-		CWD:       cwd,
-		Label:     label,
-		Model:     model,
-		PID:       os.Getpid(),
-		Shell:     DetectShell(),
-		Token:     cfg.Token,
-		HomeDir:   homeDir,
-		CodexHome: codexHome,
-		ClaudeDir: claudeDir,
-		Cols:      termCols,
-		Rows:      termRows,
-		StartedAt: startedAt,
-		LogPath:   rawLogPath,
-		JSONLPath: jsonlPath,
-		ReplayB64: base64.StdEncoding.EncodeToString(replay),
-		PTYBytes:  ptyBytes,
+		Type:           "reattach",
+		Role:           "wrapper",
+		SessionID:      sessionID,
+		Provider:       provider,
+		Display:        display,
+		CWD:            cwd,
+		Label:          label,
+		Model:          model,
+		PID:            os.Getpid(),
+		Shell:          DetectShell(),
+		Token:          cfg.Token,
+		HomeDir:        homeDir,
+		CodexHome:      codexHome,
+		ClaudeDir:      claudeDir,
+		AgentSessionID: agentSessionID,
+		Cols:           termCols,
+		Rows:           termRows,
+		StartedAt:      startedAt,
+		LogPath:        rawLogPath,
+		JSONLPath:      jsonlPath,
+		ReplayB64:      base64.StdEncoding.EncodeToString(replay),
+		PTYBytes:       ptyBytes,
 	}); err != nil {
 		_ = conn.Close()
 		return nil, 0, err

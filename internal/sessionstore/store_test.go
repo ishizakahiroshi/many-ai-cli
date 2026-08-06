@@ -1,6 +1,7 @@
 package sessionstore
 
 import (
+	"context"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -19,7 +20,7 @@ func TestStoreChatRestoreSearchAndPrune(t *testing.T) {
 	startedAt := time.Now().Add(-2 * time.Hour).Format(time.RFC3339)
 	if _, err := store.StartSession(SessionStart{
 		LiveSessionID: 1,
-		Provider:      "codex",
+		Provider:      "copilot",
 		CWD:           filepath.Join("C:", "dev", "many-ai-cli"),
 		Branch:        "develop",
 		State:         "standby",
@@ -366,7 +367,7 @@ func TestStoreEventAsyncDrainsQueue(t *testing.T) {
 	startedAt := time.Now().Format(time.RFC3339)
 	if _, err := store.StartSession(SessionStart{
 		LiveSessionID: 1,
-		Provider:      "claude",
+		Provider:      "copilot",
 		State:         "running",
 		StartedAt:     startedAt,
 		JSONLPath:     filepath.Join(logDir, "sessions", "s1.jsonl"),
@@ -425,7 +426,7 @@ func TestPruneOlderThanChunked(t *testing.T) {
 	for _, liveID := range []int{1, 2, 3} {
 		if _, err := store.StartSession(SessionStart{
 			LiveSessionID: liveID,
-			Provider:      "claude",
+			Provider:      "copilot",
 			State:         "running",
 			StartedAt:     startedAt,
 			JSONLPath:     filepath.Join(logDir, "sessions", "s"+strconv.Itoa(liveID)+".jsonl"),
@@ -473,6 +474,94 @@ func TestPruneOlderThanChunked(t *testing.T) {
 	}
 }
 
+func TestStoreEventSkipsPTYAIMessagesForTranscriptProviders(t *testing.T) {
+	logDir := filepath.Join(t.TempDir(), "logs")
+	store, err := OpenForLogDir(logDir)
+	if err != nil {
+		t.Fatalf("OpenForLogDir: %v", err)
+	}
+	defer store.Close()
+	startedAt := time.Now().Format(time.RFC3339)
+	for liveID, provider := range map[int]string{1: "claude", 2: "codex", 3: "copilot"} {
+		if _, err := store.StartSession(SessionStart{LiveSessionID: liveID, Provider: provider, State: "running", StartedAt: startedAt}); err != nil {
+			t.Fatalf("StartSession(%d): %v", liveID, err)
+		}
+		if err := store.StoreEvent(liveID, map[string]any{"ts": startedAt, "type": "pty_output", "session_id": liveID, "text": "provider output"}); err != nil {
+			t.Fatalf("StoreEvent(%d): %v", liveID, err)
+		}
+	}
+	for _, liveID := range []int{1, 2} {
+		messages, err := store.ChatMessagesByLiveSession(liveID, 10)
+		if err != nil {
+			t.Fatalf("ChatMessagesByLiveSession(%d): %v", liveID, err)
+		}
+		if len(messages) != 0 {
+			t.Errorf("transcript provider %d stored PTY messages: %#v", liveID, messages)
+		}
+	}
+	messages, err := store.ChatMessagesByLiveSession(3, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 1 || messages[0].Role != "ai" {
+		t.Fatalf("unsupported provider PTY message = %#v, want one ai row", messages)
+	}
+}
+
+func TestPruneTranscriptNoiseOnlyTouchesLegacyNoise(t *testing.T) {
+	logDir := filepath.Join(t.TempDir(), "logs")
+	store, err := OpenForLogDir(logDir)
+	if err != nil {
+		t.Fatalf("OpenForLogDir: %v", err)
+	}
+	defer store.Close()
+	startedAt := time.Now().Format(time.RFC3339)
+	for liveID, provider := range map[int]string{1: "claude", 2: "codex", 3: "copilot"} {
+		if _, err := store.StartSession(SessionStart{LiveSessionID: liveID, Provider: provider, State: "running", StartedAt: startedAt}); err != nil {
+			t.Fatalf("StartSession(%d): %v", liveID, err)
+		}
+	}
+	for _, row := range []struct {
+		sessionID int
+		text      string
+	}{
+		{1, "Thinking"}, {1, "real Claude answer"}, {2, "Working"}, {2, "real Codex answer"}, {3, "Thinking"},
+	} {
+		dbID, err := store.sessionIDForLive(row.sessionID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx := context.Background()
+		tx, err := store.db.BeginTx(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := store.insertMessage(ctx, tx, dbID, startedAt, "ai", "text", row.text, row.text, ""); err != nil {
+			_ = tx.Rollback()
+			t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deleted, err := store.PruneTranscriptNoise()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted != 2 {
+		t.Fatalf("deleted = %d, want 2", deleted)
+	}
+	for liveID := range map[int]bool{1: true, 2: true, 3: true} {
+		messages, err := store.ChatMessagesByLiveSession(liveID, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(messages) != 1 {
+			t.Errorf("live %d messages = %#v, want 1", liveID, messages)
+		}
+	}
+}
+
 // pty_output の events.payload_json から data_b64 が除去され text が切り詰められること、
 // chat 履歴（messages）側は影響を受けないことを検証する。
 func TestStoreEventSlimsPtyOutputPayload(t *testing.T) {
@@ -486,7 +575,7 @@ func TestStoreEventSlimsPtyOutputPayload(t *testing.T) {
 	startedAt := time.Now().Format(time.RFC3339)
 	if _, err := store.StartSession(SessionStart{
 		LiveSessionID: 1,
-		Provider:      "claude",
+		Provider:      "copilot",
 		State:         "running",
 		StartedAt:     startedAt,
 		JSONLPath:     filepath.Join(logDir, "sessions", "s1.jsonl"),

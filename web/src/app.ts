@@ -15,7 +15,7 @@ import { scheduleResidueSweep, cancelResidueSweep } from './app/residue-sweep.js
 import { cancelExpandCapture } from './app/expand-popup.js';
 import { clearMobileTranscriptSession, recordMobileTranscriptUserSubmission } from './app/mobile-transcript.js';
 import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, handleOpenCodeApprovalNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
-import { chatHistoryCommitOutput, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
+import { chatHistoryCommitOutput, isTranscriptBackedSession, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn, MAX_ATTACH_BYTES } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
 import { getExposeStatus, fetchExposeStatus, disableExpose } from './app/host-expose.js';
@@ -507,7 +507,7 @@ export async function doSend(sessionId) {
     // chatHistory: ユーザー送信は AI ターンの境界。
     // まず蓄積中の AI 出力チャンクを即 commit してから user 入力を push する。
     chatHistoryCommitOutput(sessionId);
-    if (rawText && rawText !== '') {
+    if (rawText && rawText !== '' && !isTranscriptBackedSession(sessionId)) {
       pushMessage(sessionId, { role: 'user', kind: 'text', rawText });
     }
     if (sessionId === activeSessionId) {

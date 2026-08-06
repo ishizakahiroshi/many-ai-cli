@@ -198,6 +198,16 @@ type session struct {
 	workflowCompletionNotified        bool
 	workflowCompletionSignature       string
 
+	// JSON 外: provider-owned structured transcript tail. Only the byte offset
+	// and path are retained; transcript content is broadcast and never stored in
+	// the many-ai-cli session history.
+	agentChatPath       string
+	agentChatOffset     int64
+	agentChatTimer      *time.Timer
+	agentChatGeneration uint64
+	agentChatRunning    bool
+	agentChatLastAt     time.Time
+
 	// JSON 外: wrapper に最後に送った PTY サイズ（同サイズの resize を skip して不要な SIGWINCH を防ぐ）
 	lastCols      int
 	lastRows      int
@@ -242,8 +252,9 @@ type session struct {
 	// NativeLogPath is the raw transcript written by the provider itself (not
 	// many-ai-cli's optional PTY session log). Currently Codex reports this via
 	// its Stop hook; other providers resolve it from their local store on demand.
-	NativeLogPath string             `json:"-"`
-	History       *sessionlog.Writer `json:"-"`
+	NativeLogPath  string             `json:"-"`
+	AgentSessionID string             `json:"-"`
+	History        *sessionlog.Writer `json:"-"`
 
 	// JSON 外: per-session 入力直列化ロック（#18）。
 	// 複数 UI が同一セッションへ同時入力した場合に、hasPending チェック〜
@@ -989,10 +1000,12 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/session-log", s.handleSessionLog)
 	mux.HandleFunc("/api/agent-log", s.handleAgentLog)
 	mux.HandleFunc("/api/agent-log/open", s.handleOpenAgentLog)
+	mux.HandleFunc("/api/agent-chat", s.handleAgentChat)
 	mux.HandleFunc("/api/grok-history", s.handleGrokHistory)
 	mux.HandleFunc("/api/session-search", s.handleSessionSearch)
 	mux.HandleFunc("/api/session-history", s.handleSessionHistory)
 	mux.HandleFunc("/api/session-store/reset", s.handleSessionStoreReset)
+	mux.HandleFunc("/api/session-store/prune-transcript-noise", s.handleSessionStorePruneTranscriptNoise)
 	mux.HandleFunc("/api/logs/purge", s.handleLogsPurge)
 	mux.HandleFunc("/api/logs/legacy-notice", s.handleLegacyLogsNotice)
 	mux.HandleFunc("/api/attachments/purge", s.handleAttachmentsPurge)
@@ -1728,6 +1741,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	var endedWorktreeCleanup string
 	if exists {
 		ses := s.sessions[m.SessionID]
+		s.stopAgentChatTailLocked(ses)
 		historyToClose = ses.History
 		jsonlPathForTranscript = ses.JSONLPath
 		endedProvider = ses.Provider
