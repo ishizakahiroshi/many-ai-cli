@@ -193,6 +193,118 @@ func TestDetectNativeApprovalOpenCodeShortcut(t *testing.T) {
 	if got.Options[0].SendText != "\r" || got.Options[1].SendText != "\x1b[C\r" || got.Options[2].SendText != "\x1b[C\x1b[C\r" {
 		t.Fatalf("opencode send_text values = %+v", got.Options)
 	}
+	if got.Question != "Edit file: README.md" {
+		t.Fatalf("question = %q, want the dialog body line", got.Question)
+	}
+}
+
+// openCodeApprovalScreen は OpenCode の permission ダイアログが出ている画面 1 枚を返す。
+// status には承認とは無関係に毎フレーム書き換わる行（スピナー・経過秒）を渡す。
+func openCodeApprovalScreen(target, status string) []string {
+	return []string{
+		"opencode  v1.18.7",
+		"",
+		"I'll audit the project. Let me start by reading the instructions.",
+		"",
+		"Permission required",
+		"  " + target,
+		"",
+		"Path: " + target,
+		"",
+		"Allow once   Allow always   Reject",
+		"ctrl+f fullscreen   ⇅ select   enter confirm",
+		"",
+		status,
+	}
+}
+
+// 承認の同一性（Sig）は「何を許可しようとしているか」で決まり、画面のどこかが
+// 書き換わっただけでは変わってはならない。Sig が動くと Hub が approval_detected を
+// 再配信し、Web の action-bar が毎フレーム作り直されて点滅・クリック取りこぼしになる。
+func TestDetectNativeApprovalOpenCodeSigIgnoresUnrelatedRepaint(t *testing.T) {
+	a := detectNativeApproval("opencode", openCodeApprovalScreen("Read CLAUDE.md", "⠋ Thinking… (12s · 1.2k tokens)"))
+	b := detectNativeApproval("opencode", openCodeApprovalScreen("Read CLAUDE.md", "⠙ Thinking… (13s · 1.4k tokens)"))
+	if a == nil || b == nil {
+		t.Fatalf("detectNativeApproval returned nil: a=%v b=%v", a != nil, b != nil)
+	}
+	if a.Sig != b.Sig {
+		t.Fatalf("sig changed on unrelated repaint: %s != %s\ncontext A=%q\ncontext B=%q", a.Sig, b.Sig, a.Context, b.Context)
+	}
+	if a.Question != "Read CLAUDE.md" {
+		t.Fatalf("question = %q, want %q", a.Question, "Read CLAUDE.md")
+	}
+	if strings.Contains(a.Context, "Thinking") || strings.Contains(a.Context, "opencode  v1.18.7") {
+		t.Fatalf("context leaked lines outside the dialog: %q", a.Context)
+	}
+
+	// スクロールバック側（ダイアログから遠い行）の書き換えでも Sig は動かない。
+	far := openCodeApprovalScreen("Read CLAUDE.md", "idle")
+	farRepainted := append([]string{}, far...)
+	farRepainted[2] = "I'll audit the project. Reading the instructions now."
+	c := detectNativeApproval("opencode", farRepainted)
+	if c == nil || c.Sig != a.Sig {
+		t.Fatalf("sig changed on distant repaint: got %v", c)
+	}
+}
+
+// 別々の承認要求は別の Sig を持たなければならない。Sig が衝突すると、Hub の
+// 「回答済み」判定（approvalConsumedTTL）が次の承認まで握り潰す。
+func TestDetectNativeApprovalOpenCodeSigDistinguishesRequests(t *testing.T) {
+	a := detectNativeApproval("opencode", openCodeApprovalScreen("Read CLAUDE.md", "idle"))
+	b := detectNativeApproval("opencode", openCodeApprovalScreen("Write internal/hub/server.go", "idle"))
+	if a == nil || b == nil {
+		t.Fatalf("detectNativeApproval returned nil: a=%v b=%v", a != nil, b != nil)
+	}
+	if a.Sig == b.Sig {
+		t.Fatalf("different approval requests share a sig: %s", a.Sig)
+	}
+}
+
+// 本文が長く、見出し（"Permission required"）が遡り上限より上にある場合でも、
+// context がボタン行だけに痩せて全承認が同一 Sig になってはならない。
+func TestDetectNativeApprovalOpenCodeSigWithDistantHeading(t *testing.T) {
+	screen := func(target string) []string {
+		lines := []string{"Permission required", "  " + target, ""}
+		for i := 0; i < 15; i++ { // 遡り上限（approvalContextBefore=12）を超える本文
+			lines = append(lines, fmt.Sprintf("  %s diff line %d", target, i))
+		}
+		return append(lines, "Allow once   Allow always   Reject")
+	}
+	a := detectNativeApproval("opencode", screen("Read CLAUDE.md"))
+	b := detectNativeApproval("opencode", screen("Write server.go"))
+	if a == nil || b == nil {
+		t.Fatalf("detectNativeApproval returned nil: a=%v b=%v", a != nil, b != nil)
+	}
+	if a.Sig == b.Sig {
+		t.Fatalf("different requests share a sig when the heading is out of reach: %s", a.Sig)
+	}
+}
+
+// 画面に解決済みの古いダイアログが残っている場合、最新（下側）のダイアログを採用する。
+func TestDetectNativeApprovalOpenCodePicksLatestDialog(t *testing.T) {
+	lines := []string{
+		"Permission required",
+		"  Read OLD.md",
+		"",
+		"Allow once   Allow always   Reject",
+		"",
+		"（承認済み。以下が新しい要求）",
+		"",
+		"Permission required",
+		"  Read NEW.md",
+		"",
+		"Allow once   Allow always   Reject",
+	}
+	got := detectNativeApproval("opencode", lines)
+	if got == nil {
+		t.Fatal("detectNativeApproval returned nil")
+	}
+	if got.Question != "Read NEW.md" {
+		t.Fatalf("question = %q, want the newest dialog (%q)", got.Question, "Read NEW.md")
+	}
+	if strings.Contains(got.Context, "OLD.md") {
+		t.Fatalf("context includes the stale dialog: %q", got.Context)
+	}
 }
 
 func TestDetectNativeApprovalSuppressesClaudeModelSelector(t *testing.T) {
