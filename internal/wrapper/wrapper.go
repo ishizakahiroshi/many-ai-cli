@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -886,7 +887,17 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		"provider", provider,
 		"reg_type", reg.Type,
 		"reg_token_statusbar", reg.TokenStatusbar)
-	if provider == "claude" && reg.TokenStatusbar {
+	// crossSessionInbound は orchestration の子（Auto=true）にだけ入れる。子は
+	// bypassPermissions 固定・人間が張り付かない自走前提で、cross-session messaging の
+	// 既定だと受信メッセージが承認ダイアログ付きで hold され dialogExpiry まで止まる
+	// （usage_hooks.go: ClaudeSettingsOptions.CrossSessionInboundAccept 参照）。
+	// conductor と手動セッションは人間が UI を見ているので既定のままにする。
+	// ネイティブ Windows には機能自体が無いので書かない（WSL 内は GOOS=linux で対象）。
+	settingsOpts := ClaudeSettingsOptions{
+		StatusLine:                provider == "claude" && reg.TokenStatusbar,
+		CrossSessionInboundAccept: provider == "claude" && reg.OrchestrationID != "" && reg.Auto && runtime.GOOS != "windows",
+	}
+	if settingsOpts.enabled() {
 		exe, exeErr := os.Executable()
 		if exeErr != nil {
 			exe = "many-ai-cli"
@@ -900,17 +911,18 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		// exe パスにスペースが含まれると、Claude が statusLine を実行する Git Bash と
 		// PowerShell で必要なクォート形式が非互換（usage_hooks.go: toShellPath 参照）のため、
 		// status line（トークン/使用量表示）が沈黙して動かないことがある。沈黙バグを可視化する。
-		if strings.ContainsAny(exe, " ") {
+		if settingsOpts.StatusLine && strings.ContainsAny(exe, " ") {
 			logger.Warn("claude statusLine exe path contains a space; the token/usage status line may silently fail to run because Git Bash and PowerShell need incompatible quoting — install many-ai-cli to a path without spaces",
 				"session_id", sessionID, "exe_path", exe)
 		}
-		if slPath, cleanup, slErr := WriteClaudeStatuslineSettings(hp); slErr == nil {
+		if slPath, cleanup, slErr := WriteClaudeSessionSettings(hp, settingsOpts); slErr == nil {
 			// 分岐到達＋temp 作成成功を stderr ログで確定できるよう 1 行残す（diag 継続）。
-			logger.Info("statusline_settings_written", "session_id", sessionID, "path", slPath)
+			logger.Info("claude_settings_written", "session_id", sessionID, "path", slPath,
+				"status_line", settingsOpts.StatusLine, "cross_session_inbound_accept", settingsOpts.CrossSessionInboundAccept)
 			providerArgs = append(providerArgs, "--settings", slPath)
 			defer cleanup()
 		} else {
-			logger.Warn("claude statusline settings write failed", "session_id", sessionID, "err", slErr)
+			logger.Warn("claude session settings write failed", "session_id", sessionID, "err", slErr)
 		}
 	}
 
