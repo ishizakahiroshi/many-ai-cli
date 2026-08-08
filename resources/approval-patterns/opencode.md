@@ -8,3 +8,8 @@
 - `allow once`
 - `allow always`
 - `reject`
+
+2 段目（`Allow always` を選んだ直後に出る「Always allow」確認ダイアログ）の文言。
+
+- `always allow`
+- `until opencode is restarted`
