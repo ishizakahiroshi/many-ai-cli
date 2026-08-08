@@ -206,6 +206,12 @@ type Message struct {
 	RepoName         string  `json:"repo_name,omitempty"`
 	RemainingPct     float64 `json:"remaining_pct,omitempty"`
 	ReasoningOut     int     `json:"reasoning_output_tokens,omitempty"`
+
+	// binary_stale: Hub → UI。稼働中 Hub の実行ファイルがディスク上で差し替わった
+	// （= 再ビルドが反映されていない）状態かどうか。状態が変化した瞬間だけ配信する。
+	// ポインタなのは false を確実に届けるため: omitempty で false が消えると
+	// 「stale から復帰した」を伝えられず、バナーが出たまま固着する。
+	BinaryStale *bool `json:"binary_stale,omitempty"`
 }
 
 // AgentChatMessage is the provider-neutral structured transcript payload used

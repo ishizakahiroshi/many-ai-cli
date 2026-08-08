@@ -398,6 +398,14 @@ export function _connectWs() {
     return;
   }
 
+  if (m.type === 'binary_stale') {
+    // 稼働中 Hub の exe がディスク上で差し替わった（= make build 済みだが未再起動）。
+    // 常設バナーの描画は settings.ts が持つので CustomEvent で橋渡しする。
+    // ページ読み込み時の /api/info と同じ関数を通るため、表示は 1 箇所に閉じたまま。
+    try { window.dispatchEvent(new CustomEvent('many-binary-stale', { detail: { stale: !!m.binary_stale } })); } catch (_) {}
+    return;
+  }
+
   if (m.type === 'input_deferred') {
     // wrapper 未接続/送信失敗で Hub が入力を保留した。再接続時に自動再送されるが、
     // ユーザーには「今すぐは届いていない」ことを知らせる。

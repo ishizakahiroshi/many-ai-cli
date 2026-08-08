@@ -38,6 +38,7 @@ export type MessageType =
   | 'approval_consumed'
 	| 'auto_approval_applied'
   | 'approval_patterns_updated'
+  | 'binary_stale'
   | 'commit_msg_suggested'
   | 'commit_msg_error'
   | 'input_deferred'
@@ -255,6 +256,9 @@ export interface Message {
   git_files?: number;
   git_added?: number;
   git_deleted?: number;
+  // binary_stale: 稼働中 Hub の実行ファイルがディスク上で差し替わったか
+  // （= 再ビルドが未反映）。type='binary_stale' のメッセージでのみ届く。
+  binary_stale?: boolean;
   [key: string]: unknown;
 }
 
