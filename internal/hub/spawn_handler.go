@@ -87,11 +87,22 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 		if spec.AskForApproval != "" {
 			wrapArgs = append(wrapArgs, "--ask-for-approval", spec.AskForApproval)
 		}
+	case "opencode":
+		risk := evaluateOpenCodeRisk(spec.PermissionMode)
+		if risk.HighRisk && !spec.RiskConfirmed {
+			return 0, fmt.Errorf("risk confirmation required")
+		}
+		if resolvedModel != "" {
+			wrapArgs = append(wrapArgs, "--model", resolvedModel)
+		}
+		if spec.PermissionMode != "" && spec.PermissionMode != "default" {
+			wrapArgs = append(wrapArgs, "--permission-mode", spec.PermissionMode)
+		}
 	default:
 		if resolvedModel != "" {
 			wrapArgs = append(wrapArgs, "--model", resolvedModel)
 		}
-		// copilot / cursor-agent / grok / opencode も permission mode を wrapper へ渡す
+		// copilot / cursor-agent / grok も permission mode を wrapper へ渡す
 		// （wrapper 側で各 CLI の承認バイパス指定に変換される）。shell は AI 固有フラグを使わない。
 		if spec.Provider != "shell" && spec.PermissionMode != "" && spec.PermissionMode != "default" {
 			wrapArgs = append(wrapArgs, "--permission-mode", spec.PermissionMode)
