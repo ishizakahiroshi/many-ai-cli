@@ -244,7 +244,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	// 未突合のため残置（原因確定後に外す）。
 	tokenStatusbarForAck := s.tokenStatusbarEnabled()
 	s.logger.Info("statusline_gate_hub", "session_id", id, "provider", reg.Provider, "token_statusbar_send", tokenStatusbarForAck)
-	_ = wc.send(proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, TokenStatusbar: tokenStatusbarForAck, OrchestrationID: childMeta.OrchestrationID, BoardPath: childMeta.BoardPath})
+	_ = wc.send(proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, TokenStatusbar: tokenStatusbarForAck, OrchestrationID: childMeta.OrchestrationID, Auto: childMeta.Auto, BoardPath: childMeta.BoardPath})
 	s.logger.Info("session registered", "id", id, "provider", reg.Provider, "cwd", reg.CWD, "pid", reg.PID)
 	// C2 (plan_orchestration-spawn-ui-exposure.md): conductor セッション（ツールバーの
 	// 「オーケストレーション」ボタン経由・Auto=false）にだけ役割マッピングの案内を注入する。

@@ -42,6 +42,23 @@ Release artifacts are published at
   `files-mkdir`, `files-move`, `files-rename`, `files-delete-dir`, and
   `/api/open-terminal` still require the session cwd or git root, so a widened
   read scope cannot turn into an edit or a shell in an arbitrary directory.
+- **Orchestration children accept Claude Code's cross-session messages instead
+  of stalling on an approval dialog.** Claude Code v2.1.224 added
+  [cross-session messaging](https://code.claude.com/docs/en/cross-session-messaging),
+  where sessions reach each other over a per-session inbox socket. Its inbound
+  default holds every message for approval when the *receiving* session bypasses
+  permission prompts — and orchestration children always run with
+  `bypassPermissions` (`applyChildApprovalDefaults`) while nobody is watching
+  their terminal. A held message would have parked the child behind a dialog
+  until `dialogExpiry` (five minutes by default) with nothing recorded on the
+  board to explain the gap. Children now launch with `crossSessionInbound` set
+  to `accept`. Conductors and hand-started sessions keep the default, since a
+  human is watching those. The setting travels through the wrapper-owned temp
+  settings file that already carried `statusLine`, so the shared
+  `.claude/settings.local.json` is still never touched
+  (`internal/wrapper/usage_hooks.go`, `internal/wrapper/wrapper.go`). It is
+  omitted on native Windows, where the feature does not exist; sessions inside
+  WSL 2 are Linux and do get it.
 
 ### Fixed
 - **The web terminal no longer freezes on a stale frame after the wrapper
