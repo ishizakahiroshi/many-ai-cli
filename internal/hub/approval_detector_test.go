@@ -307,6 +307,116 @@ func TestDetectNativeApprovalOpenCodePicksLatestDialog(t *testing.T) {
 	}
 }
 
+// OpenCode で "Allow always" を選んだ直後に出る 2 段目（Always allow 確認）。
+// 文言は PTY 生ログ実測（OpenCode 1.18.15 / 2026-08-08）。
+// これを検出できないと Web に action-bar が出ず、端末での Enter を強いる。
+func TestDetectNativeApprovalOpenCodeAlwaysAllowConfirm(t *testing.T) {
+	lines := []string{
+		"▣ Build · Kimi K3 · 7.3s",
+		"",
+		"△ Always allow",
+		"This will allow the following patterns until OpenCode is restarted",
+		"- opencode *",
+		"Confirm   Cancel                    ⇆ select   enter confirm",
+	}
+	got := detectNativeApproval("opencode", lines)
+	if got == nil {
+		t.Fatal("detectNativeApproval returned nil")
+	}
+	if len(got.Options) != 2 {
+		t.Fatalf("options len = %d (%+v)", len(got.Options), got.Options)
+	}
+	if got.Options[0].Label != "Confirm" || got.Options[1].Label != "Cancel" {
+		t.Fatalf("labels = %q / %q", got.Options[0].Label, got.Options[1].Label)
+	}
+	if got.Options[0].SendText != "\r" || got.Options[1].SendText != "\x1b[C\r" {
+		t.Fatalf("send_text values = %+v", got.Options)
+	}
+	if !got.Options[0].IsCurrent {
+		t.Fatal("Confirm should be the initially focused option")
+	}
+	if got.Question != "opencode *" {
+		t.Fatalf("question = %q, want the permission pattern", got.Question)
+	}
+	if strings.Contains(got.Context, "Kimi K3") {
+		t.Fatalf("context leaked lines outside the dialog: %q", got.Context)
+	}
+}
+
+// パターン行を持たず説明文 1 行で完結する形（webfetch 等）。
+func TestDetectNativeApprovalOpenCodeAlwaysAllowInlineDescription(t *testing.T) {
+	lines := []string{
+		"% WebFetch https://opencode.ai/docs/permissions/",
+		"",
+		"△ Always allow",
+		"This will allow webfetch until OpenCode is restarted.",
+		"Confirm   Cancel",
+	}
+	got := detectNativeApproval("opencode", lines)
+	if got == nil {
+		t.Fatal("detectNativeApproval returned nil")
+	}
+	if got.Question != "This will allow webfetch until OpenCode is restarted." {
+		t.Fatalf("question = %q, want the description line", got.Question)
+	}
+}
+
+// 1 段目の残骸が上に残ったまま 2 段目が描かれた場合、下側（2 段目）を採用する。
+func TestDetectNativeApprovalOpenCodePrefersAlwaysAllowOverStalePermission(t *testing.T) {
+	lines := []string{
+		"Permission required",
+		"  Call tool skill",
+		"",
+		"Allow once   Allow always   Reject",
+		"",
+		"△ Always allow",
+		"This will allow the following patterns until OpenCode is restarted",
+		"- customize-opencode",
+		"Confirm   Cancel",
+	}
+	got := detectNativeApproval("opencode", lines)
+	if got == nil {
+		t.Fatal("detectNativeApproval returned nil")
+	}
+	if got.Question != "customize-opencode" {
+		t.Fatalf("question = %q, want the 2nd-stage dialog", got.Question)
+	}
+	if len(got.Options) != 2 || got.Options[0].Label != "Confirm" {
+		t.Fatalf("options = %+v, want Confirm / Cancel", got.Options)
+	}
+}
+
+// 別々の許可パターンは別の Sig を持つ（「回答済み」判定で握り潰されないため）。
+func TestDetectNativeApprovalOpenCodeAlwaysAllowSigDistinguishesPatterns(t *testing.T) {
+	screen := func(pattern string) []string {
+		return []string{
+			"△ Always allow",
+			"This will allow the following patterns until OpenCode is restarted",
+			"- " + pattern,
+			"Confirm   Cancel",
+		}
+	}
+	a := detectNativeApproval("opencode", screen("opencode *"))
+	b := detectNativeApproval("opencode", screen("customize-opencode"))
+	if a == nil || b == nil {
+		t.Fatalf("detectNativeApproval returned nil: a=%v b=%v", a != nil, b != nil)
+	}
+	if a.Sig == b.Sig {
+		t.Fatalf("different permission patterns share a sig: %s", a.Sig)
+	}
+}
+
+// 応答本文に "confirm" / "cancel" が現れただけでは承認として扱わない。
+func TestDetectNativeApprovalOpenCodeIgnoresConfirmCancelInProse(t *testing.T) {
+	lines := []string{
+		"The dialog asks you to confirm or cancel the operation.",
+		"I'll explain how confirm / cancel works in this TUI.",
+	}
+	if got := detectNativeApproval("opencode", lines); got != nil {
+		t.Fatalf("detectNativeApproval = %+v, want nil (prose is not an approval)", got)
+	}
+}
+
 func TestDetectNativeApprovalSuppressesClaudeModelSelector(t *testing.T) {
 	// Claude Code の /model セレクタ（実機ログ claude_2026-06-11_051610_mer_s1 より）。
 	// 選択肢ラベルに承認語（yes/no/allow 等）を含まないセレクタ型ダイアログは

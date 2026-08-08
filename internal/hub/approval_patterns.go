@@ -57,11 +57,14 @@ var defaultApprovalPatterns = map[string][]string{
 	},
 	// opencode 実機 UI（Build agent 承認ダイアログ）の文言を正とする。
 	// 選択は左右矢印 + Enter（数字キー不使用）。
+	// "always allow" 以降は Allow always を選んだ後に出る 2 段目（Confirm / Cancel）。
 	"opencode": {
 		"permission required",
 		"allow once",
 		"allow always",
 		"reject",
+		"always allow",
+		"until opencode is restarted",
 	},
 	// grok (Grok Build) は Claude Code 互換 harness（--permission-mode / CLAUDE.md）。
 	// 承認 UI も Claude Code 系と推定し、暫定で Claude 系 + 汎用文言を採用する。
