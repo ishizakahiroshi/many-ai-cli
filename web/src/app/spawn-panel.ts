@@ -26,6 +26,8 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   const spawnProviderList = document.getElementById('spawn-provider-list');
   const spawnCodexModelBtn = document.getElementById('spawn-codex-model-btn');
   const spawnClaudeModelBtn = document.getElementById('spawn-claude-model-btn');
+  const spawnOpenCodeOpts = document.getElementById('spawn-opencode-opts');
+  const spawnOpenCodeFullAllow = document.getElementById('spawn-opencode-full-allow') as HTMLInputElement | null;
   const spawnModelInput = document.getElementById('spawn-model');
   const spawnModelDatalist = document.getElementById('spawn-model-datalist');
   const spawnModelClearBtn = document.getElementById('spawn-model-clear');
@@ -526,6 +528,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     if (modelRow) modelRow.hidden = isShell;
     document.getElementById('spawn-claude-opts').hidden = (p !== 'claude');
     document.getElementById('spawn-codex-opts').hidden  = (p !== 'codex');
+    if (spawnOpenCodeOpts) spawnOpenCodeOpts.hidden = (p !== 'opencode');
     const claudeNote = document.getElementById('spawn-claude-note');
     const codexNote = document.getElementById('spawn-codex-note');
     const copilotNote = document.getElementById('spawn-copilot-note');
@@ -593,6 +596,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         if (modelRow) modelRow.hidden = isShell;
         document.getElementById('spawn-claude-opts').hidden = (p !== 'claude');
         document.getElementById('spawn-codex-opts').hidden  = (p !== 'codex');
+        if (spawnOpenCodeOpts) spawnOpenCodeOpts.hidden = (p !== 'opencode');
         const claudeNote = document.getElementById('spawn-claude-note');
         const codexNote = document.getElementById('spawn-codex-note');
         const copilotNote = document.getElementById('spawn-copilot-note');
@@ -617,6 +621,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       if (s.permission_mode)  document.getElementById('spawn-permission-mode').value = s.permission_mode;
       if (s.sandbox)          document.getElementById('spawn-sandbox').value = s.sandbox;
       if (s.ask_for_approval) document.getElementById('spawn-ask-approval').value = s.ask_for_approval;
+      if (spawnOpenCodeFullAllow) spawnOpenCodeFullAllow.checked = s.opencode_permission_mode === 'bypassPermissions';
       // C2: Detached 設定を復元
       if (s.open_target) {
         const radio = document.getElementById(`spawn-target-${s.open_target}`) as HTMLInputElement | null;
@@ -1995,6 +2000,26 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         bodyObj.permission_mode = permMode;
         bodyObj.model_selection_mode = picked ? picked.mode : 'auto';
         bodyObj.risk_confirmed = riskConfirmed;
+      } else if (provider === 'opencode') {
+        const fullAllow = !!spawnOpenCodeFullAllow?.checked;
+        let riskConfirmed = false;
+
+        if (fullAllow) {
+          riskConfirmed = await appConfirm({
+            title: t('opencode_confirm_title'),
+            message: t('opencode_confirm_message'),
+            confirmText: t('opencode_confirm_run'),
+            cancelText: t('spawn_cancel'),
+            kind: 'danger',
+          });
+          if (!riskConfirmed) {
+            spawnLaunchBtn.disabled = false;
+            return;
+          }
+        }
+
+        bodyObj.permission_mode = fullAllow ? 'bypassPermissions' : 'default';
+        bodyObj.risk_confirmed = riskConfirmed;
       } else if (provider === 'codex') {
         const picked = codexModelSelection;
         const sandbox = document.getElementById('spawn-sandbox').value;
@@ -2054,6 +2079,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
           detached_preset: detachedPreset,
           ...(provider === 'claude' ? { permission_mode: bodyObj.permission_mode } : {}),
           ...(provider === 'codex'  ? { sandbox: bodyObj.sandbox, ask_for_approval: bodyObj.ask_for_approval } : {}),
+          ...(provider === 'opencode' ? { opencode_permission_mode: bodyObj.permission_mode } : {}),
         });
         document.getElementById('spawn-label').value = '';
         codexModelSelection  = null;

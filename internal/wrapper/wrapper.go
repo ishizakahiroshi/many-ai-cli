@@ -752,6 +752,13 @@ func trailingEnterDelay(provider string) time.Duration {
 	}
 }
 
+func openCodePermissionArgs(permissionMode string) []string {
+	if permissionMode == "bypassPermissions" {
+		return []string{"--auto"}
+	}
+	return nil
+}
+
 func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string) error {
 	fs := flag.NewFlagSet("wrap", flag.ContinueOnError)
 	label := fs.String("label", "", "session label shown in UI card")
@@ -800,6 +807,9 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		if *permissionMode == "bypassPermissions" {
 			extra = append(extra, "--force")
 		}
+	case "opencode":
+		// --auto: auto-approve permissions that are not explicitly denied
+		extra = append(extra, openCodePermissionArgs(*permissionMode)...)
 	}
 	providerArgs = append(extra, providerArgs...)
 	providerArgs, agentSessionID, err := prepareClaudeSessionArgs(provider, providerArgs)

@@ -534,6 +534,21 @@
   color: #fff;
 }
 .model-picker-check { display: flex; gap: var(--space-2); align-items: center; font-size: 0.75rem; color: var(--muted); }
+.spawn-risk-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.75rem;
+  color: var(--warn-text);
+  cursor: pointer;
+}
+.spawn-risk-label input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+}
 
 /* ---- C2: Detached 設定セクション ---- */
 .spawn-detached-section {
