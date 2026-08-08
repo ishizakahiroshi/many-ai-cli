@@ -64,11 +64,15 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	netHintEnvKind := s.netHintEnvKind
 	s.netHintMu.Unlock()
 	env := resolveEnvMeta(cfg.Hub.EnvKind, mode, sshSession, hostIP, netHintSSH, netHintEnvKind)
+	// 差し替え検知はここに相乗りする（stale_watch.go 参照）。定期ポーリングを置かずに
+	// 済むのは、/api/info がページ読み込みと新規セッション起動の両方で必ず呼ばれるため。
+	binaryStale := s.binGuard.IsStale()
+	s.noteStaleBinary(binaryStale)
 	writeJSON(w, map[string]any{
 		"cwd":             s.hubCWD,
 		"version":         s.version,
 		"binary_sha256":   s.binGuard.StartSHA(),
-		"binary_stale":    s.binGuard.IsStale(),
+		"binary_stale":    binaryStale,
 		"web_src_hash":    s.webSrcHash,
 		"web_dist_fresh":  s.webDistFresh,
 		"active_sessions": s.activeSessionCount(),

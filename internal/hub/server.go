@@ -495,8 +495,12 @@ type Server struct {
 	// binGuard は「稼働中 Hub が起動時のバイナリのままか」を判定する。
 	// /api/info が binary_sha256 と binary_stale を申告するのに使い、
 	// wrapper・launcher・status・UI はこのフラグを読むだけで stale を扱える。
-	binGuard     *binaryGuard
-	webSrcHash   string // hash of web/src/ baked into dist/.src-hash at build time
+	binGuard *binaryGuard
+	// staleBinaryNotified は binary_stale を UI へ配信した直近の状態。
+	// /api/info が呼ばれるたびに noteStaleBinary が比較し、変化した瞬間だけ配信する。
+	staleBinaryMu       sync.Mutex
+	staleBinaryNotified bool
+	webSrcHash          string // hash of web/src/ baked into dist/.src-hash at build time
 	webDistFresh bool   // true if current web/src/ matches webSrcHash (always true on VPS/Docker)
 	parentShell  string
 	instanceID   string // Hub プロセス起動ごとのランダム ID。UI が Hub 再起動（live session ID の振り直し）を検出するために snapshot に同梱する
