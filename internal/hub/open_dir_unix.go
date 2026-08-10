@@ -79,7 +79,7 @@ func openTerminalNative(dir, app string) error {
 	}
 	switch runtime.GOOS {
 	case "darwin":
-		return exec.Command("open", "-a", "Terminal", dir).Start()
+		return exec.Command("open", "-a", "Terminal", dir).Start() // #nosec G702 -- validated path is passed as argv without a shell.
 	default:
 		if wslutil.IsWindowsLauncherMode() {
 			win := wslutil.ToWindowsPath(dir)
