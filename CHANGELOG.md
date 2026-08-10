@@ -208,6 +208,18 @@ Release artifacts are published at
   every session with it. The mismatch is now reported as a warning written to
   `hub.log` at startup and the Hub serves normally; only the model-list feature
   stays blocked (`internal/config/config.go`, `internal/hub/server.go`).
+- **The spawn panel's model suggestions now cover the current model
+  generation.** The list had stopped at Claude Opus 4.8 and GPT-5.5, so the
+  whole Claude 5 generation and every GPT-5.6 variant were missing from the
+  dropdown and had to be typed by hand. Anthropic entries gain Opus 5, Sonnet 5
+  and Fable 5; the Codex list is rebuilt from the CLI's documented `--model`
+  values including the GPT-5.6 Sol, Terra and Luna variants; the Cursor Agent
+  list is regenerated from `cursor-agent --list-models` and now carries the
+  Claude 5, GPT-5.6, Kimi K3, GLM 5.2 and Gemini 3.6 entries; and Grok gains
+  `grok-4.5`. The GitHub Copilot list is unchanged because that CLI exposes no
+  non-interactive way to enumerate the models a given plan can reach. Like the
+  slash-command reference, `resources/models/defaults.json` is fetched at run
+  time from `main`, so this reaches existing installations without an upgrade.
 
 ### Fixed
 - **An answered batch approval no longer reappears in the action bar.** After
