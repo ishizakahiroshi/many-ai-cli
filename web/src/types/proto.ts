@@ -18,6 +18,7 @@ export type MessageType =
   | 'registered'
   | 'reattach'
   | 'reattach_ack'
+  | 'reattach_replay_done'
   | 'reattach_reject'
   | 'snapshot'
   | 'session_update'
@@ -175,6 +176,9 @@ export interface Message {
   // reattach 時に wrapper が申告する PTY 読み出し累計バイト数（wrapper→Hub 専用。
   // UI は受け取らない）。Hub が「切断中に取りこぼしたぶん」を算出するのに使う。
   pty_bytes?: number;
+  replay?: boolean;
+  replay_epoch?: number;
+  approval_source_epoch?: number;
   reason?: string;
   approval_visible?: boolean;
   approval_sig?: string;
@@ -184,6 +188,10 @@ export interface Message {
   approval_context?: string;
   approval_options?: ApprovalOption[];
   approval_summary?: ApprovalSummary;
+  approval_candidate_key?: string;
+  approval_candidate_shape?: string;
+  approval_consumed?: boolean;
+  approval_consumed_epoch?: number;
   done_summary?: DoneSummary;
   turn?: number;
   files_changed?: number;

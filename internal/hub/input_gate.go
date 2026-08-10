@@ -29,6 +29,7 @@ func (s *Server) handleInput(m proto.Message) {
 	combined := m.Text
 	var firstMsgBroadcast *proto.Message
 	var injectMarker bool
+	var userTurnEpoch uint64
 	var autoTitleMeta *sessionstore.SessionCardMeta
 	// チャット本文はブラケットペースト包み（... \x1b[201~）+ 確定 \r 別送で届くため、
 	// 末尾 \r だけでなくペースト終端もユーザーターンの確定として扱う。従来の
@@ -48,6 +49,16 @@ func (s *Server) handleInput(m proto.Message) {
 			msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt}
 			firstMsgBroadcast = &msg
 		} else if text != "" {
+			// A confirmed live user turn is the explicit prompt boundary. This is
+			// deliberately not inferred from replay or a VT reflow. The Enter that
+			// answers the currently visible approval arrives before the UI's
+			// approval_consumed frame; leave that candidate in the current epoch so
+			// the consumed frame can settle it. If Hub has no active candidate (the
+			// browser-only fallback path), this same boundary still advances the
+			// epoch so a repeated question is not suppressed forever.
+			if !approvalCandidateActiveLocked(ses) {
+				markApprovalUserTurnBoundaryLocked(ses)
+			}
 			maskedText := sessionlog.MaskSecrets(text)
 			if ses.FirstMessage == "" {
 				ses.FirstMessage = maskedText
@@ -69,6 +80,7 @@ func (s *Server) handleInput(m proto.Message) {
 			// ユーザーターン境界マーカーを ptyBuf に注入する
 			marker := []byte(chatHistoryUserTurnMarker)
 			ses.ptyBuf = appendPTYReplay(ses.ptyBuf, marker)
+			userTurnEpoch = ensureApprovalSourceEpochLocked(ses)
 			injectMarker = true
 		}
 	}
@@ -92,7 +104,7 @@ func (s *Server) handleInput(m proto.Message) {
 		// リプレイにも再配信されるため信号に使えない。State("running") は PTY 出力
 		// 再開の表示ラベルで resize 再描画等でも遷移する（session_activity.go の警告）。
 		// ここ（確定ユーザー入力の provider 送達）だけがライブ限定の正確な境界。
-		s.broadcast(proto.Message{Type: "user_turn_started", SessionID: m.SessionID})
+		s.broadcast(proto.Message{Type: "user_turn_started", SessionID: m.SessionID, ApprovalSourceEpoch: userTurnEpoch})
 	}
 	s.submitInput(wc, m.SessionID, combined)
 	s.writeHistory(m.SessionID, map[string]any{

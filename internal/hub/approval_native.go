@@ -49,14 +49,23 @@ func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval)
 			ses.nativeApprovalClearMisses++
 			if ses.nativeApprovalClearMisses >= nativeApprovalClearMissLimit {
 				sig := ses.nativeApprovalSig
+				candidateKey := ses.nativeApprovalCandidateKey
+				candidateShape := ses.nativeApprovalCandidateShape
+				sourceEpoch := ses.nativeApprovalSourceEpoch
 				ses.nativeApprovalSig = ""
+				ses.nativeApprovalCandidateKey = ""
+				ses.nativeApprovalCandidateShape = ""
+				ses.nativeApprovalSourceEpoch = 0
 				ses.nativeApprovalClearMisses = 0
 				msg = &proto.Message{
-					Type:           "approval_cleared",
-					SessionID:      id,
-					Provider:       ses.Provider,
-					ApprovalSig:    sig,
-					ApprovalSource: approvalSourceGoVT,
+					Type:                   "approval_cleared",
+					SessionID:              id,
+					Provider:               ses.Provider,
+					ApprovalSig:            sig,
+					ApprovalCandidateKey:   candidateKey,
+					ApprovalCandidateShape: candidateShape,
+					ApprovalSourceEpoch:    sourceEpoch,
+					ApprovalSource:         approvalSourceGoVT,
 				}
 			}
 		}
@@ -66,25 +75,38 @@ func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval)
 		}
 		return
 	}
-	if ses.nativeApprovalConsumed == approval.Sig && now.Sub(ses.nativeApprovalConsumedAt) < approvalConsumedTTL {
+	candidateKey := approvalCandidateKey(ses.Provider, approval.Kind, approval.Question, approval.Options)
+	candidateShape := approvalCandidateShape(ses.Provider, approval.Kind, approval.Question, approval.Options)
+	sourceEpoch, answered := approvalCandidateEpochLocked(ses, candidateKey)
+	legacyConsumed := ses.approvalConsumedCandidateKey == "" &&
+		ses.nativeApprovalConsumed == approval.Sig && now.Sub(ses.nativeApprovalConsumedAt) < approvalConsumedTTL
+	if answered || legacyConsumed {
 		s.sessionsMu.Unlock()
 		return
 	}
 	ses.nativeApprovalClearMisses = 0
-	if ses.nativeApprovalSig != approval.Sig {
+	sameLegacySig := ses.nativeApprovalCandidateKey == "" && ses.nativeApprovalSig == approval.Sig
+	sameCandidate := ses.nativeApprovalCandidateKey == candidateKey && ses.nativeApprovalSourceEpoch == sourceEpoch
+	if !sameLegacySig && !sameCandidate {
 		ses.nativeApprovalSig = approval.Sig
+		ses.nativeApprovalCandidateKey = candidateKey
+		ses.nativeApprovalCandidateShape = candidateShape
+		ses.nativeApprovalSourceEpoch = sourceEpoch
 		msg = &proto.Message{
-			Type:             "approval_detected",
-			SessionID:        id,
-			Provider:         ses.Provider,
-			ApprovalSig:      approval.Sig,
-			ApprovalKind:     approval.Kind,
-			ApprovalSource:   approvalSourceGoVT,
-			ApprovalQuestion: approval.Question,
-			ApprovalContext:  approval.Context,
-			ApprovalOptions:  approval.Options,
-			ApprovalSummary:  &approval.Summary,
-			DetectedAt:       now.Format(time.RFC3339),
+			Type:                   "approval_detected",
+			SessionID:              id,
+			Provider:               ses.Provider,
+			ApprovalSig:            approval.Sig,
+			ApprovalCandidateKey:   candidateKey,
+			ApprovalCandidateShape: candidateShape,
+			ApprovalSourceEpoch:    sourceEpoch,
+			ApprovalKind:           approval.Kind,
+			ApprovalSource:         approvalSourceGoVT,
+			ApprovalQuestion:       approval.Question,
+			ApprovalContext:        approval.Context,
+			ApprovalOptions:        approval.Options,
+			ApprovalSummary:        &approval.Summary,
+			DetectedAt:             now.Format(time.RFC3339),
 		}
 	}
 	s.sessionsMu.Unlock()
@@ -167,7 +189,7 @@ func (s *Server) notifyDonePush(summary proto.DoneSummary) {
 }
 
 func (s *Server) markNativeApprovalConsumed(m proto.Message) {
-	if m.SessionID <= 0 || m.ApprovalSig == "" {
+	if m.SessionID <= 0 || (m.ApprovalSig == "" && m.ApprovalCandidateKey == "") {
 		return
 	}
 	now := time.Now()
@@ -178,26 +200,93 @@ func (s *Server) markNativeApprovalConsumed(m proto.Message) {
 		s.sessionsMu.Unlock()
 		return
 	}
-	ses.nativeApprovalConsumed = m.ApprovalSig
-	ses.nativeApprovalConsumedAt = now
-	if ses.nativeApprovalSig == m.ApprovalSig {
-		ses.nativeApprovalSig = ""
-		ses.nativeApprovalClearMisses = 0
-		clearMsg = &proto.Message{
-			Type:           "approval_cleared",
-			SessionID:      m.SessionID,
-			Provider:       ses.Provider,
-			ApprovalSig:    m.ApprovalSig,
-			ApprovalSource: approvalSourceGoVT,
+	currentEpoch := ensureApprovalSourceEpochLocked(ses)
+	candidateKey := m.ApprovalCandidateKey
+	if candidateKey == "" {
+		switch {
+		case m.ApprovalSig != "" && ses.nativeApprovalSig == m.ApprovalSig:
+			candidateKey = ses.nativeApprovalCandidateKey
+		case m.ApprovalSig != "" && ses.approvalMarkerSig == m.ApprovalSig:
+			candidateKey = ses.approvalMarkerCandidateKey
+		default:
+			candidateKey = m.ApprovalSig // legacy clients only supplied approval_sig
 		}
 	}
+	if m.ApprovalSourceEpoch != 0 && m.ApprovalSourceEpoch != currentEpoch {
+		// The answer frame normally follows pty_input. If that input opened the
+		// next live boundary before this frame was handled, accept exactly that
+		// one-frame handoff only when the candidate is still the active one (or
+		// Hub never had an active candidate, as with browser-only fallback).
+		previousEpoch := m.ApprovalSourceEpoch+1 == currentEpoch
+		activeSameCandidate := candidateKey != "" &&
+			((candidateKey == ses.nativeApprovalCandidateKey && ses.nativeApprovalSourceEpoch == m.ApprovalSourceEpoch) ||
+				(candidateKey == ses.approvalMarkerCandidateKey && ses.approvalMarkerSourceEpoch == m.ApprovalSourceEpoch))
+		if !previousEpoch || (approvalCandidateActiveLocked(ses) && !activeSameCandidate) {
+			// A delayed answer from an older prompt generation must not consume a
+			// newly displayed prompt with the same question.
+			s.sessionsMu.Unlock()
+			return
+		}
+	}
+	sourceEpoch := m.ApprovalSourceEpoch
+	if sourceEpoch == 0 || sourceEpoch == currentEpoch {
+		sourceEpoch = markApprovalConsumedLocked(ses, candidateKey, m.ApprovalSig)
+	} else {
+		sourceEpoch = markApprovalConsumedAtEpochLocked(ses, candidateKey, m.ApprovalSig, sourceEpoch)
+	}
+	if ses.nativeApprovalSig == m.ApprovalSig ||
+		(candidateKey != "" && ses.nativeApprovalCandidateKey == candidateKey && ses.nativeApprovalSourceEpoch == sourceEpoch) {
+		ses.nativeApprovalSig = ""
+		ses.nativeApprovalCandidateKey = ""
+		ses.nativeApprovalCandidateShape = ""
+		ses.nativeApprovalSourceEpoch = 0
+		ses.nativeApprovalClearMisses = 0
+		clearMsg = &proto.Message{
+			Type:                   "approval_cleared",
+			SessionID:              m.SessionID,
+			Provider:               ses.Provider,
+			ApprovalSig:            m.ApprovalSig,
+			ApprovalCandidateKey:   candidateKey,
+			ApprovalCandidateShape: ses.approvalConsumedCandidateShape,
+			ApprovalSourceEpoch:    sourceEpoch,
+			ApprovalSource:         approvalSourceGoVT,
+		}
+	}
+	if candidateKey != "" && ses.approvalMarkerCandidateKey == candidateKey && ses.approvalMarkerSourceEpoch == sourceEpoch {
+		ses.approvalMarkerCandidateKey = ""
+		ses.approvalMarkerCandidateShape = ""
+		ses.approvalMarkerSourceEpoch = 0
+		ses.approvalMarkerSig = ""
+	}
 	s.sessionsMu.Unlock()
-	if s.sessionStore != nil {
+	if s.sessionStore != nil && m.ApprovalSig != "" {
 		s.sessionStore.StoreApprovalConsumed(m.SessionID, m.ApprovalSig, m.SentText, now)
 	}
 	if clearMsg != nil {
 		s.broadcast(*clearMsg)
 	}
+}
+
+// evaluateReplayApproval performs the single approval evaluation allowed at
+// the end of a replay boundary. PTY history has already been restored into the
+// VT mirror before this function is called; no replay chunk is broadcast as a
+// live approval observation.
+func (s *Server) evaluateReplayApproval(id int) {
+	now := time.Now()
+	s.sessionsMu.Lock()
+	ses := s.sessions[id]
+	if ses == nil || ses.vt == nil || !isAIProvider(ses.Provider) || now.Before(ses.vtResizeDebounceUntil) {
+		s.sessionsMu.Unlock()
+		return
+	}
+	provider := ses.Provider
+	marker := extractApprovalMarkerBlock(ses.vt.TailLinesWithScrollback(vtTailLinesForMarker))
+	approval := detectNativeApproval(provider, ses.vt.TailLines(vtTailLinesForApproval))
+	s.sessionsMu.Unlock()
+	if marker != nil {
+		s.maybeBroadcastApprovalMarker(id, marker, now)
+	}
+	s.handleNativeApprovalDetection(id, approval)
 }
 
 func appendPTYReplay(buf, data []byte) []byte {

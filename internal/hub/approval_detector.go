@@ -1,8 +1,6 @@
 package hub
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -686,17 +684,5 @@ func approvalOptionsHaveSendText(opts []proto.ApprovalOption) bool {
 }
 
 func nativeApprovalSig(provider string, approval *nativeApproval) string {
-	var b strings.Builder
-	b.WriteString(provider)
-	b.WriteByte('\n')
-	b.WriteString(approval.Kind)
-	b.WriteByte('\n')
-	b.WriteString(approval.Question)
-	b.WriteByte('\n')
-	b.WriteString(approval.Context)
-	for _, opt := range approval.Options {
-		b.WriteString(fmt.Sprintf("\n%d:%s:%s", opt.Num, opt.Label, opt.SendText))
-	}
-	sum := sha256.Sum256([]byte(b.String()))
-	return hex.EncodeToString(sum[:])[:16]
+	return approvalCandidateKey(provider, approval.Kind, approval.Question, approval.Options)
 }

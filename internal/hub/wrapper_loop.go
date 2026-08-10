@@ -261,12 +261,19 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		s.safeGo("inject_initial_prompt_conductor", func() { s.injectInitialPrompt(id, prompt) })
 	}
 	// announce 直前に再確認（inject 後〜ここまでの狭い窓での dismiss も拾う）。
-	if !s.wrapperStillRegistered(id, wc) {
+	// sessionUpdateMessage は approvalSourceEpoch を読むため、ここだけは
+	// pointer を保持したままロック外で組み立てず、現在の session を lock 内で
+	// 確認して snapshot 化する。
+	s.sessionsMu.Lock()
+	currentSession := s.sessions[id]
+	if currentSession == nil || s.wrappers[id] != wc {
+		s.sessionsMu.Unlock()
 		s.logger.Info("session dismissed before announce; skip session_update",
 			"session_id", id, "provider", reg.Provider)
 		return
 	}
-	announce := sessionUpdateMessage(ses)
+	announce := sessionUpdateMessage(currentSession)
+	s.sessionsMu.Unlock()
 	announce.Shell = reg.Shell
 	announce.LogPath = rawLogPath
 	announce.JSONLPath = jsonlPath
@@ -426,6 +433,26 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	var prevInputAckCapable bool
 	var prevAgentChatPath string
 	var prevAgentChatOffset int64
+	var prevReplayEpoch uint64
+	var prevApprovalSourceEpoch uint64
+	var prevApprovalEpochPending bool
+	var prevApprovalConsumedCandidateKey string
+	var prevApprovalConsumedCandidateShape string
+	var prevApprovalConsumedEpoch uint64
+	var prevNativeApprovalSig string
+	var prevNativeApprovalCandidateKey string
+	var prevNativeApprovalCandidateShape string
+	var prevNativeApprovalSourceEpoch uint64
+	var prevNativeApprovalTailSig string
+	var prevNativeApprovalClearMisses int
+	var prevNativeApprovalConsumed string
+	var prevNativeApprovalConsumedAt time.Time
+	var prevApprovalMarkerSig string
+	var prevApprovalMarkerCandidateKey string
+	var prevApprovalMarkerCandidateShape string
+	var prevApprovalMarkerSourceEpoch uint64
+	var prevApprovalMarkerSuppressedSig string
+	var prevApprovalMarkerSuppressedAt time.Time
 	var requeuedInputCount int
 	var requeuedInputMinSeq int64
 	var requeuedInputMaxSeq int64
@@ -433,6 +460,26 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	if cur := s.sessions[acceptedID]; cur != nil {
 		prevAgentChatPath = cur.agentChatPath
 		prevAgentChatOffset = cur.agentChatOffset
+		prevReplayEpoch = cur.replayEpoch
+		prevApprovalSourceEpoch = cur.approvalSourceEpoch
+		prevApprovalEpochPending = cur.approvalEpochPending
+		prevApprovalConsumedCandidateKey = cur.approvalConsumedCandidateKey
+		prevApprovalConsumedCandidateShape = cur.approvalConsumedCandidateShape
+		prevApprovalConsumedEpoch = cur.approvalConsumedEpoch
+		prevNativeApprovalSig = cur.nativeApprovalSig
+		prevNativeApprovalCandidateKey = cur.nativeApprovalCandidateKey
+		prevNativeApprovalCandidateShape = cur.nativeApprovalCandidateShape
+		prevNativeApprovalSourceEpoch = cur.nativeApprovalSourceEpoch
+		prevNativeApprovalTailSig = cur.nativeApprovalTailSig
+		prevNativeApprovalClearMisses = cur.nativeApprovalClearMisses
+		prevNativeApprovalConsumed = cur.nativeApprovalConsumed
+		prevNativeApprovalConsumedAt = cur.nativeApprovalConsumedAt
+		prevApprovalMarkerSig = cur.approvalMarkerSig
+		prevApprovalMarkerCandidateKey = cur.approvalMarkerCandidateKey
+		prevApprovalMarkerCandidateShape = cur.approvalMarkerCandidateShape
+		prevApprovalMarkerSourceEpoch = cur.approvalMarkerSourceEpoch
+		prevApprovalMarkerSuppressedSig = cur.approvalMarkerSuppressedSig
+		prevApprovalMarkerSuppressedAt = cur.approvalMarkerSuppressedAt
 		s.stopAgentChatTailLocked(cur)
 		oldHistory = cur.History
 		prevPTYBuf = cur.ptyBuf
@@ -488,45 +535,76 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		lastOutputAtTime = now
 		lastOutputAt = now.Format(time.RFC3339)
 	}
+	replayEpoch := uint64(1)
+	if prevExists && prevReplayEpoch > 0 {
+		replayEpoch = prevReplayEpoch + 1
+		if replayEpoch == 0 {
+			replayEpoch = 1
+		}
+	}
+	approvalSourceEpoch := prevApprovalSourceEpoch
+	if approvalSourceEpoch == 0 {
+		approvalSourceEpoch = 1
+	}
 	s.sessions[acceptedID] = &session{
-		ID:              acceptedID,
-		StoreID:         storeID,
-		Provider:        req.Provider,
-		Display:         req.Display,
-		CWD:             req.CWD,
-		Branch:          branch,
-		Label:           cardMeta.Label,
-		Pinned:          cardMeta.Pinned,
-		Color:           cardMeta.Color,
-		Note:            cardMeta.Note,
-		AutoTitle:       cardMeta.AutoTitle,
-		Model:           req.Model,
-		Route:           reqRoute,
-		Shell:           req.Shell,
-		HomeDir:         req.HomeDir,
-		CodexHome:       req.CodexHome,
-		ClaudeDir:       req.ClaudeDir,
-		AgentSessionID:  req.AgentSessionID,
-		Activity:        SessionActivity{OutputIdle: len(replay) == 0, WorkflowActive: len(replay) > 0},
-		State:           "running",
-		LastOutputAt:    lastOutputAt,
-		StartedAt:       startedAtText,
-		lastOutputAt:    lastOutputAtTime,
-		branchCheckedAt: now,
-		ptyBuf:          ptyBuf,
-		ptyBytesSeen:    ptyBytesSeen,
-		vt:              vt,
-		lastCols:        req.Cols,
-		lastRows:        req.Rows,
-		LogPath:         rawLogPath,
-		JSONLPath:       jsonlPath,
-		History:         history,
-		agentChatPath:   prevAgentChatPath,
-		agentChatOffset: prevAgentChatOffset,
-		inputSeq:        prevInputSeq,
-		inflightInput:   prevInflightInput,
-		resendInput:     prevResendInput,
-		inputAckCapable: prevInputAckCapable,
+		ID:                             acceptedID,
+		StoreID:                        storeID,
+		Provider:                       req.Provider,
+		Display:                        req.Display,
+		CWD:                            req.CWD,
+		Branch:                         branch,
+		Label:                          cardMeta.Label,
+		Pinned:                         cardMeta.Pinned,
+		Color:                          cardMeta.Color,
+		Note:                           cardMeta.Note,
+		AutoTitle:                      cardMeta.AutoTitle,
+		Model:                          req.Model,
+		Route:                          reqRoute,
+		Shell:                          req.Shell,
+		HomeDir:                        req.HomeDir,
+		CodexHome:                      req.CodexHome,
+		ClaudeDir:                      req.ClaudeDir,
+		AgentSessionID:                 req.AgentSessionID,
+		Activity:                       SessionActivity{OutputIdle: len(replay) == 0, WorkflowActive: len(replay) > 0},
+		State:                          "running",
+		LastOutputAt:                   lastOutputAt,
+		StartedAt:                      startedAtText,
+		lastOutputAt:                   lastOutputAtTime,
+		branchCheckedAt:                now,
+		ptyBuf:                         ptyBuf,
+		ptyBytesSeen:                   ptyBytesSeen,
+		vt:                             vt,
+		replayEpoch:                    replayEpoch,
+		approvalSourceEpoch:            approvalSourceEpoch,
+		approvalEpochPending:           prevApprovalEpochPending,
+		approvalConsumedCandidateKey:   prevApprovalConsumedCandidateKey,
+		approvalConsumedCandidateShape: prevApprovalConsumedCandidateShape,
+		approvalConsumedEpoch:          prevApprovalConsumedEpoch,
+		nativeApprovalSig:              prevNativeApprovalSig,
+		nativeApprovalCandidateKey:     prevNativeApprovalCandidateKey,
+		nativeApprovalCandidateShape:   prevNativeApprovalCandidateShape,
+		nativeApprovalSourceEpoch:      prevNativeApprovalSourceEpoch,
+		nativeApprovalTailSig:          prevNativeApprovalTailSig,
+		nativeApprovalClearMisses:      prevNativeApprovalClearMisses,
+		nativeApprovalConsumed:         prevNativeApprovalConsumed,
+		nativeApprovalConsumedAt:       prevNativeApprovalConsumedAt,
+		approvalMarkerSig:              prevApprovalMarkerSig,
+		approvalMarkerCandidateKey:     prevApprovalMarkerCandidateKey,
+		approvalMarkerCandidateShape:   prevApprovalMarkerCandidateShape,
+		approvalMarkerSourceEpoch:      prevApprovalMarkerSourceEpoch,
+		approvalMarkerSuppressedSig:    prevApprovalMarkerSuppressedSig,
+		approvalMarkerSuppressedAt:     prevApprovalMarkerSuppressedAt,
+		lastCols:                       req.Cols,
+		lastRows:                       req.Rows,
+		LogPath:                        rawLogPath,
+		JSONLPath:                      jsonlPath,
+		History:                        history,
+		agentChatPath:                  prevAgentChatPath,
+		agentChatOffset:                prevAgentChatOffset,
+		inputSeq:                       prevInputSeq,
+		inflightInput:                  prevInflightInput,
+		resendInput:                    prevResendInput,
+		inputAckCapable:                prevInputAckCapable,
 	}
 	s.sessions[acceptedID].inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
 	wc := newWrapperConn(conn)
@@ -580,8 +658,29 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	// 絶対座標で部分再描画する TUI（Codex 等）は画面が古いまま復帰できない。
 	// wrapperMessageLoop はまだ開始していないので、ライブ配信と前後しない。
 	if len(gap) > 0 {
-		s.broadcast(proto.Message{Type: "pty_data", SessionID: acceptedID, Data: append([]byte(nil), gap...)})
+		s.broadcast(proto.Message{
+			Type:        "pty_data",
+			SessionID:   acceptedID,
+			Data:        append([]byte(nil), gap...),
+			Replay:      true,
+			ReplayEpoch: replayEpoch,
+		})
 	}
+	s.broadcast(proto.Message{
+		Type:                   "reattach_replay_done",
+		SessionID:              acceptedID,
+		Replay:                 true,
+		ReplayEpoch:            replayEpoch,
+		ApprovalSourceEpoch:    approvalSourceEpoch,
+		ApprovalConsumed:       prevApprovalConsumedCandidateKey != "",
+		ApprovalCandidateKey:   prevApprovalConsumedCandidateKey,
+		ApprovalCandidateShape: prevApprovalConsumedCandidateShape,
+		ApprovalConsumedEpoch:  prevApprovalConsumedEpoch,
+	})
+	// The replay is drawn as one restoration unit. Evaluate the resulting VT
+	// once, after the completion boundary, instead of scanning/broadcasting each
+	// replay chunk as if it were live output.
+	s.evaluateReplayApproval(acceptedID)
 	s.logger.Info("reattach replay gap",
 		"session_id", acceptedID,
 		"had_session", prevExists,

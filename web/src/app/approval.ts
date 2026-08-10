@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, isAnsweredMarkerSig, recordAnsweredMarkerSig, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalQuestionKey, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchActiveQ, batchFreeText, batchSelections, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectFocusIdx, multiSelectSelections, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, utf8Decoder } from './state.js';
+import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, annotateApprovalIdentity, approvalCandidateDebugKey, approvalCandidateIdentity, approvalCandidateShape, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalQuestionKey, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchActiveQ, batchFreeText, batchSelections, clearReplayAnsweredApprovalCandidate, getApprovalSourceEpoch, isAnsweredApprovalCandidate, isAnsweredMarkerSig, isApprovalReplayPending, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectFocusIdx, multiSelectSelections, noteApprovalSourceEpoch, recordAnsweredApprovalCandidate, recordAnsweredMarkerSig, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, utf8Decoder } from './state.js';
 import { inputEl, sendSubmittedText, sendSubmittedBody } from '../app.js';
 import { clearSuppressPtyResize, isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout, syncPtySizeToViewportAfterLayout } from './terminal.js';
 import { stripAnsi } from './settings.js';
@@ -62,7 +62,7 @@ const h9RestoreMisses = new Map();
 // 「↻ 承認」（再表示）でこのエントリを消し、承認解決（hideActionBar）でも確実に消す。
 // （旧1: パネル ✕ は hideActionBar + 60s suppress → 抑制切れで再表示）
 // （旧2: optionsSig のみ抑止 → Grok のラベル揺れで isNewSig 扱いになり再表示）
-const manualHideState = new Map(); // sessionId → { optionsSig: string, questionKey: string }
+const manualHideState = new Map(); // sessionId → { optionsSig, questionKey, candidateKey, sourceEpoch }
 
 function clearManualHide(id) {
   manualHideState.delete(id);
@@ -70,9 +70,12 @@ function clearManualHide(id) {
 
 function rememberManualHide(id, options) {
   if (!Array.isArray(options) || options.length === 0) return;
+  const identity = approvalCandidateIdentity(id, options, approvalSourceCache.get(id)?.source === 'go_vt' ? 'native' : 'marker');
   manualHideState.set(id, {
     optionsSig: approvalSig(options),
     questionKey: approvalQuestionKey(options),
+    candidateKey: identity.candidateKey,
+    sourceEpoch: identity.sourceEpoch,
   });
 }
 
@@ -80,6 +83,8 @@ function rememberManualHide(id, options) {
 function isManualHideActive(id, options) {
   const st = manualHideState.get(id);
   if (!st) return false;
+  const identity = approvalCandidateIdentity(id, options, approvalSourceCache.get(id)?.source === 'go_vt' ? 'native' : 'marker');
+  if (st.candidateKey && st.candidateKey === identity.candidateKey && st.sourceEpoch === identity.sourceEpoch) return true;
   if (st.optionsSig === approvalSig(options)) return true;
   const qk = approvalQuestionKey(options);
   if (qk && st.questionKey && qk === st.questionKey) return true;
@@ -459,7 +464,7 @@ export function scheduleApprovalHintConfirm(id, options) {
   }, 350));
 }
 
-export function trackApprovalHintFromChunk(id, bytes, decodedText) {
+export function trackApprovalHintFromChunk(id, bytes, decodedText, replayMeta = undefined) {
   const t = terminals.get(id);
   if (!t) return;
   const provider = sessions.get(id)?.provider;
@@ -467,6 +472,11 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
   if (!isAIProvider(provider || '')) return;
   const text = decodedText !== undefined ? decodedText : (t.textDecoder || utf8Decoder).decode(bytes, { stream: true });
   t.pendingTextTail = (t.pendingTextTail + text).slice(-APPROVAL_PENDING_TEXT_TAIL_LIMIT);
+
+  // Replay bytes are rendered into xterm and retained in pendingTextTail, but
+  // they are not a live approval observation. The completion event releases a
+  // single detectApproval pass against the resulting terminal state.
+  if (replayMeta?.replay || isApprovalReplayPending(id)) return;
 
   // sendChoice 直後の誤再表示を抑制
   const suppressUntil = approvalSuppressUntil.get(id);
@@ -526,10 +536,12 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
   // 40 行の lines ではなく pendingTextTail 全体（markerLinesFromTail）から抽出する。
   const markerOpts = extractHubMarkerApproval(markerLinesFromTail(t.pendingTextTail));
   if (markerOpts) {
+    const markerIdentity = approvalCandidateIdentity(id, markerOpts, 'marker');
+    annotateApprovalIdentity(markerOpts, markerIdentity);
     // 回答済みの [MANY-AI-CLI] ブロックは恒久的に承認 UI を出さない（タブ切替の SIGWINCH
     // 再描画で画面に残った回答済みブロックが再流入しても再表示しない）。質問文込みのハッシュ
     // で判定するため、別質問を誤って抑制することはない。
-    if (isAnsweredMarkerSig(id, markerOpts)) return;
+    if (isAnsweredMarkerSig(id, markerOpts) || isAnsweredApprovalCandidate(id, markerOpts, 'marker')) return;
     // doSend でテキスト送信済みの承認が Ink 再描画で再検出された場合はスキップ
     const consumed = approvalConsumedSig.get(id);
     const sig = approvalSig(markerOpts);
@@ -558,6 +570,9 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText) {
 
   const plainYesNoOpts = extractPlainYesNoApproval(lines);
   if (plainYesNoOpts) {
+    const plainIdentity = approvalCandidateIdentity(id, plainYesNoOpts, 'marker');
+    annotateApprovalIdentity(plainYesNoOpts, plainIdentity);
+    if (isAnsweredApprovalCandidate(id, plainYesNoOpts, 'marker')) return;
     const consumed = approvalConsumedSig.get(id);
     const sig = approvalSig(plainYesNoOpts);
     if (consumed === sig) {
@@ -792,6 +807,7 @@ export function isGoNativeApprovalActive(id) {
 export function handleGoApprovalDetected(message) {
   const id = message && message.session_id;
   if (!id) return;
+  if (isApprovalReplayPending(id)) return;
   let options = normalizeGoApprovalOptions(message.approval_options);
   if (message.approval_kind === 'native_opencode_shortcut') {
     options = localizeOpenCodeShortcutOptions(options);
@@ -800,6 +816,19 @@ export function handleGoApprovalDetected(message) {
   const sig = String(message.approval_sig || approvalSig(options));
 	const summary = normalizeApprovalSummary(message.approval_summary, message.approval_context, message.approval_question);
 	if (summary) (options as any)._summary = summary;
+	if (message.approval_question) (options as any)._question = String(message.approval_question);
+	const localIdentity = approvalCandidateIdentity(id, options, 'native');
+	const sourceEpoch = Number(message.approval_source_epoch || 0) > 0
+	  ? noteApprovalSourceEpoch(id, message.approval_source_epoch)
+	  : getApprovalSourceEpoch(id);
+	const identity = {
+	  candidateKey: String(message.approval_candidate_key || localIdentity.candidateKey),
+	  sourceEpoch,
+	  shape: localIdentity.shape,
+	};
+	annotateApprovalIdentity(options, identity);
+	if (message.approval_candidate_key) clearReplayAnsweredApprovalCandidate(id, identity);
+	if (isAnsweredApprovalCandidate(id, options, 'native')) return;
   options.forEach((opt: any) => {
     opt._approvalSource = 'go_vt';
     opt._approvalSig = sig;
@@ -807,7 +836,6 @@ export function handleGoApprovalDetected(message) {
 
   cancelApprovalHintConfirm(id);
   approvalSwitchCandidates.delete(id);
-  approvalConsumedSig.delete(id);
   resetBgApprovalMisses(id);
   approvalUiAdapter.cacheApprovalOptions(id, options);
   approvalSourceCache.set(id, {
@@ -815,6 +843,9 @@ export function handleGoApprovalDetected(message) {
     sig,
     kind: message.approval_kind || 'native',
     detectedAt: message.detected_at || '',
+    candidateKey: identity.candidateKey,
+    sourceEpoch: identity.sourceEpoch,
+    shape: approvalCandidateShape(id, options, 'native'),
   });
 
   const wasVisible = !!approvalVisibleCache.get(id);
@@ -851,6 +882,7 @@ export function handleOpenCodeApprovalNumberKey(sessionId, num) {
 export function handleHubApprovalMarker(message) {
   const id = message && message.session_id;
   if (!id) return;
+  if (isApprovalReplayPending(id)) return;
   const block = String(message.block || '');
   if (!block) return;
   const markerOpts = extractHubMarkerApproval(markerLinesFromTail(block));
@@ -864,6 +896,18 @@ export function handleHubApprovalMarker(message) {
   if (isAnsweredMarkerSig(id, markerOpts)) return;
 
   const sig = approvalSig(markerOpts);
+  const localIdentity = approvalCandidateIdentity(id, markerOpts, 'marker');
+  const sourceEpoch = Number(message.approval_source_epoch || 0) > 0
+    ? noteApprovalSourceEpoch(id, message.approval_source_epoch)
+    : getApprovalSourceEpoch(id);
+	const identity = {
+	  candidateKey: String(message.approval_candidate_key || localIdentity.candidateKey),
+	  sourceEpoch,
+	  shape: localIdentity.shape,
+	};
+	annotateApprovalIdentity(markerOpts, identity);
+	if (message.approval_candidate_key) clearReplayAnsweredApprovalCandidate(id, identity);
+	if (isAnsweredApprovalCandidate(id, markerOpts, 'marker')) return;
   if (approvalConsumedSig.get(id) === sig) return;
   const prevTimer = approvalConsumedSigDeleteTimer.get(id);
   if (prevTimer) {
@@ -881,8 +925,9 @@ export function handleHubApprovalMarker(message) {
   // 手動 dismiss はここでは消さない: Grok 差分再描画でラベルが揺れると isNewSig になり、
   // 消すと同一質問が再表示される。解除は showActionBar が questionKey 不一致のときだけ行う。
   const prevSrc = approvalSourceCache.get(id);
-  const isNewSig = !prevSrc || prevSrc.sig !== sig || prevSrc.source !== 'hub_marker';
-  if (isNewSig) {
+  const isNewCandidate = !prevSrc || prevSrc.candidateKey !== identity.candidateKey ||
+    prevSrc.sourceEpoch !== identity.sourceEpoch || prevSrc.source !== 'hub_marker';
+  if (isNewCandidate) {
     lastActionBarRender.sessionId = null;
     lastActionBarRender.sig = null;
   }
@@ -892,6 +937,9 @@ export function handleHubApprovalMarker(message) {
     sig,
     kind: 'marker',
     detectedAt: message.detected_at || '',
+    candidateKey: identity.candidateKey,
+    sourceEpoch: identity.sourceEpoch,
+    shape: approvalCandidateShape(id, markerOpts, 'marker'),
   });
 
   const wasVisible = !!approvalVisibleCache.get(id);
@@ -908,6 +956,8 @@ export function handleGoApprovalCleared(message) {
   const src = approvalSourceCache.get(id);
   if (!src || src.source !== 'go_vt') return;
   if (message.approval_sig && src.sig && message.approval_sig !== src.sig) return;
+  if (message.approval_candidate_key && src.candidateKey && message.approval_candidate_key !== src.candidateKey) return;
+  if (message.approval_source_epoch && src.sourceEpoch && message.approval_source_epoch !== src.sourceEpoch) return;
   approvalSourceCache.delete(id);
   approvalUiAdapter.clearApprovalOptions(id);
   approvalSwitchCandidates.delete(id);
@@ -923,28 +973,50 @@ export function handleGoApprovalCleared(message) {
 
 export function sendApprovalConsumed(sessionId, options, sentText): boolean {
   const src = approvalSourceCache.get(sessionId);
-  // マーカー承認には Hub の consumed 通知が不要。本文送信の成否とは独立した
-  // 補助通知なので、対象外なら成功扱いにして呼び出し側を止めない。
-  if (!src || src.source !== 'go_vt' || !src.sig) return true;
+  const cached = Array.isArray(options) && options.length > 0
+    ? options
+    : approvalRawOptionsCache.get(sessionId);
+  const kind = src?.source === 'go_vt' ? 'native' : 'marker';
+  const identity = Array.isArray(cached) && cached.length > 0
+    ? recordAnsweredApprovalCandidate(sessionId, cached, kind)
+    : null;
+  if (cached) approvalConsumedSig.set(sessionId, approvalSig(cached));
+
+  // The candidate transition is local even when the auxiliary Hub message
+  // cannot be sent. The PTY input already succeeded, so replayed terminal text
+  // must not resurrect the action bar.
+  if (!src || (src.source !== 'go_vt' && src.source !== 'hub_marker')) return true;
+  const candidateKey = src.candidateKey || identity?.candidateKey || '';
+  const sourceEpoch = src.sourceEpoch || identity?.sourceEpoch || getApprovalSourceEpoch(sessionId);
+  if (!candidateKey && !src.sig) return true;
   if (!ws || ws.readyState !== WebSocket.OPEN) return false;
   try {
     ws.send(JSON.stringify({
       type: 'approval_consumed',
       session_id: sessionId,
-      approval_sig: src.sig,
-      approval_source: 'go_vt',
+      approval_sig: src.sig || '',
+      approval_candidate_key: candidateKey,
+      approval_source_epoch: sourceEpoch,
+      approval_source: src.source,
       sent_text: sentText || '',
     }));
   } catch (_) {
     return false;
   }
-  if (options) approvalConsumedSig.set(sessionId, approvalSig(options));
   return true;
+}
+
+function approvalQuestionHintFromLines(lines) {
+  for (const raw of (lines || []).slice().reverse()) {
+    const line = stripAnsi(String(raw || '')).trim();
+    if (!line || /^\s*(?:[>❯›❱-]?\s*)?\d{1,2}\.\s/.test(line) || /^\s*N\.\s/i.test(line)) continue;
+    if (/[?？]/.test(line)) return line;
+  }
+  return '';
 }
 
 export function maybeSendDirectApprovalConsumed(sessionId, rawText, sentText) {
   const src = approvalSourceCache.get(sessionId);
-  if (!src || src.source !== 'go_vt') return;
   const cached = approvalRawOptionsCache.get(sessionId);
   if (!Array.isArray(cached) || isBatchOptions(cached)) return;
   const trimmed = String(rawText || '').trim();
@@ -953,7 +1025,12 @@ export function maybeSendDirectApprovalConsumed(sessionId, rawText, sentText) {
     const optSend = opt._sendText || `${opt.num}`;
     return trimmed === String(opt.num) || trimmed === String(optSend).trim();
   });
-  if (matched) sendApprovalConsumed(sessionId, cached, sentText);
+  if (matched) {
+    // Direct terminal input has no action-bar click callback, so feed the same
+    // candidate transition before the optional Hub notification.
+    recordAnsweredApprovalCandidate(sessionId, cached, src?.source === 'go_vt' ? 'native' : 'marker');
+    sendApprovalConsumed(sessionId, cached, sentText);
+  }
 }
 
 export function detectApproval(id) {
@@ -965,6 +1042,7 @@ export function detectApproval(id) {
   // 該当セッションに戻った時に activateSession() が detectApproval(new active) を呼ぶため、
   // 早期 return しても検出機会は失われない。
   if (id !== activeSessionId) return;
+  if (isApprovalReplayPending(id)) return;
   // Shell session は approval parser の対象外
   const provider = sessions.get(id)?.provider;
   if (!isAIProvider(provider || '')) return;
@@ -1212,6 +1290,18 @@ export function detectApproval(id) {
   const hasPrompt = hasApproval || (hasChoiceMenu && !isSelectMenu);
   tagSelectMenuOptions(options, isSelectMenu, contextSourceLines, contextCluster);
 
+  const fallbackSource = approvalSourceCache.get(id);
+  const fallbackKind = fallbackSource?.source === 'go_vt'
+    ? 'native'
+    : fallbackSource?.source === 'hub_marker' ? 'marker' : 'fallback';
+  const fallbackIdentity = hasPrompt
+    ? approvalCandidateIdentity(id, options, fallbackKind, approvalQuestionHintFromLines(contextLines))
+    : null;
+  if (fallbackIdentity) {
+    annotateApprovalIdentity(options, fallbackIdentity);
+    if (isAnsweredApprovalCandidate(id, options, fallbackKind)) return;
+  }
+
   if (!hasPrompt) {
     // 承認プロンプトが検出できない場合は確実に閉じる。
     // ただし、approvalVisibleCache=true かつ cache が残っている場合は、
@@ -1223,6 +1313,12 @@ export function detectApproval(id) {
     if (approvalVisibleCache.get(id)) {
       const cached = approvalRawOptionsCache.get(id);
       if (cached && cached.length > 0) {
+        const cachedSource = approvalSourceCache.get(id);
+        const cachedKind = cachedSource?.source === 'go_vt' ? 'native' : cachedSource?.source === 'hub_marker' ? 'marker' : 'fallback';
+        if (isAnsweredApprovalCandidate(id, cached, cachedKind)) {
+          hideActionBar(id);
+          return;
+        }
         // C3: 復元前に scanBuffer 妥当性を検証する（保留中バッジ固着対応）。
         // active セッションでキャッシュ済み選択肢が描画済み行から消えた状態が
         // 連続 H9_RESTORE_MISS_LIMIT 回続いたら、ターミナル直接入力で解決済みと
@@ -1263,6 +1359,7 @@ export function detectApproval(id) {
   // doSend / sendChoice で消費済みの選択肢が xterm scanBuffer に残っているため
   // フォールバック検出で再抽出されるケースを抑止する（marker 検出と同じ debounce 戦略）。
   if (hasPrompt) {
+    if (fallbackIdentity && isAnsweredApprovalCandidate(id, options, fallbackKind)) return;
     const consumed = approvalConsumedSig.get(id);
     const sig = approvalSig(options);
     if (consumed === sig) {
@@ -1285,15 +1382,18 @@ export function detectApproval(id) {
     if (existingCached && existingCached.length > 0 && !isBatchOptions(existingCached)) {
       const newSig = approvalSig(options);
       const oldSig = approvalSig(existingCached);
-      if (newSig !== oldSig) {
+      const newCandidateKey = fallbackIdentity?.candidateKey || newSig;
+      const oldKind = approvalSourceCache.get(id)?.source === 'go_vt' ? 'native' : approvalSourceCache.get(id)?.source === 'hub_marker' ? 'marker' : 'fallback';
+      const oldCandidateKey = approvalCandidateIdentity(id, existingCached, oldKind).candidateKey;
+      if (newCandidateKey !== oldCandidateKey) {
         const candidate = approvalSwitchCandidates.get(id);
-        if (!candidate || candidate.sig !== newSig) {
-          approvalSwitchCandidates.set(id, { sig: newSig, options: options.slice(), firstSeenAt: Date.now() });
-          showActionBar(bar, id, existingCached, false);
+        if (!candidate || candidate.candidateKey !== newCandidateKey) {
+          approvalSwitchCandidates.set(id, { sig: newSig, candidateKey: newCandidateKey, options: options.slice(), firstSeenAt: Date.now() });
+          approvalUiAdapter.showOptions(bar, id, existingCached, false);
           return;
         }
         if (Date.now() - candidate.firstSeenAt < 700) {
-          showActionBar(bar, id, existingCached, false);
+          approvalUiAdapter.showOptions(bar, id, existingCached, false);
           return;
         }
         // 700ms 安定 — 新しい選択肢に切り替える
@@ -1312,7 +1412,7 @@ export function detectApproval(id) {
   cancelH9Revalidate(id);
 
   const wasVisibleBeforeShow = !!approvalVisibleCache.get(id);
-  showActionBar(bar, id, options, !wasVisibleBeforeShow);
+  approvalUiAdapter.showOptions(bar, id, options, !wasVisibleBeforeShow);
 
   // session_hint: 承認 UI の可視状態を Hub に通知
   const nowVisible = hasPrompt;
@@ -1337,18 +1437,36 @@ export function hideActionBar(id) {
   try { console.log('[approval-route] hideActionBar', { id, activeSessionId, stack: new Error().stack?.split('\n').slice(1, 5).join(' | ') }); } catch (_) {}
   const bar = document.getElementById('action-bar');
   const wasVisible = !!(bar && bar.classList.contains('visible'));
+  const hideOptions = id !== undefined ? approvalRawOptionsCache.get(id) : null;
+  const hideIdentity = Array.isArray(hideOptions) && hideOptions.length > 0
+    ? approvalCandidateIdentity(id, hideOptions, approvalSourceCache.get(id)?.source === 'go_vt' ? 'native' : 'marker')
+    : null;
   // 観測用: 誰が承認バーを閉じたか（呼び出し元 15 箇所の切り分け）。
   uiDebugLog('action_bar_hide', {
     session_id: id ?? null,
     was_visible: wasVisible,
     bar_class: bar ? bar.className : null,
+    candidate_key: hideIdentity ? approvalCandidateDebugKey(hideIdentity.candidateKey) : null,
+    source_epoch: hideIdentity?.sourceEpoch || null,
     stack: (() => { try { return new Error().stack?.split('\n').slice(1, 5).join(' | ') || ''; } catch (_) { return ''; } })(),
   });
-  if (bar) { bar.classList.remove('visible', 'batch', 'multi-select', 'single-tabs'); bar.innerHTML = ''; }
-  // action-bar 出現時に設定した PTY リサイズ抑制を解除する。
-  // これにより消滅後のターミナル拡大に対して ResizeObserver が
-  // 正しい行数で SIGWINCH を1回だけ送れるようになる。
-  if (wasVisible) clearSuppressPtyResize();
+  if (bar) {
+    bar.classList.remove('visible', 'batch', 'multi-select', 'single-tabs');
+    bar.innerHTML = '';
+    delete bar.dataset.approvalSessionId;
+    delete bar.dataset.approvalCandidateKey;
+    delete bar.dataset.approvalSourceEpoch;
+  }
+  // Hide is a layout transition too. Keep intermediate ResizeObserver frames
+  // suppressed and replace any pending show settle with one final hide settle.
+  if (wasVisible && id !== undefined && id === activeSessionId) {
+    suppressPtyResizeForInputLayout(350);
+    const term = terminals.get(id);
+    const shouldStickToBottom = !!(term && (term.autoScroll || isTerminalAtBottom(term)));
+    syncPtySizeToViewportAfterLayout(id, shouldStickToBottom, 400, 'settle-after-hide', hideIdentity);
+  } else if (wasVisible) {
+    clearSuppressPtyResize();
+  }
   // 差分スキップ用キャッシュをリセット（次回 showActionBar が同一シグネチャでも再描画されるように）
   lastActionBarRender.sessionId = null;
   lastActionBarRender.sig = null;
@@ -1413,15 +1531,36 @@ export function hideActionBar(id) {
 export function manuallyHideActionBar(id) {
   if (id === undefined || id === null) return;
   const cached = approvalRawOptionsCache.get(id);
+  const manualIdentity = Array.isArray(cached) && cached.length > 0
+    ? approvalCandidateIdentity(id, cached, approvalSourceCache.get(id)?.source === 'go_vt' ? 'native' : 'marker')
+    : null;
   if (Array.isArray(cached) && cached.length > 0) {
     rememberManualHide(id, cached);
   }
   const bar = document.getElementById('action-bar');
   const wasVisible = !!(bar && bar.classList.contains('visible'));
-  uiDebugLog('action_bar_manual_hide', { session_id: id, was_visible: wasVisible });
-  if (bar) { bar.classList.remove('visible', 'batch', 'multi-select', 'single-tabs'); bar.innerHTML = ''; }
+  uiDebugLog('action_bar_manual_hide', {
+    session_id: id,
+    was_visible: wasVisible,
+    candidate_key: manualIdentity ? approvalCandidateDebugKey(manualIdentity.candidateKey) : null,
+    source_epoch: manualIdentity?.sourceEpoch || null,
+  });
+  if (bar) {
+    bar.classList.remove('visible', 'batch', 'multi-select', 'single-tabs');
+    bar.innerHTML = '';
+    delete bar.dataset.approvalSessionId;
+    delete bar.dataset.approvalCandidateKey;
+    delete bar.dataset.approvalSourceEpoch;
+  }
   // action-bar 出現時の PTY リサイズ抑制を解除（ターミナルが正しい行数へ拡張できるように）
-  if (wasVisible) clearSuppressPtyResize();
+  if (wasVisible && id === activeSessionId) {
+    suppressPtyResizeForInputLayout(350);
+    const term = terminals.get(id);
+    const shouldStickToBottom = !!(term && (term.autoScroll || isTerminalAtBottom(term)));
+    syncPtySizeToViewportAfterLayout(id, shouldStickToBottom, 400, 'settle-after-manual-hide', manualIdentity);
+  } else if (wasVisible) {
+    clearSuppressPtyResize();
+  }
   lastActionBarRender.sessionId = null;
   lastActionBarRender.sig = null;
   set_actionBarFocusIdx(-1);
@@ -1508,6 +1647,12 @@ export function showActionBar(bar, sessionId, options, forceStickToBottom = fals
   // 質問自体が変わったときだけ抑制を解除して描画する。
   if (isManualHideActive(sessionId, options)) return;
   if (manualHideState.has(sessionId)) clearManualHide(sessionId);
+  const displayIdentity = approvalCandidateIdentity(sessionId, options, approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker');
+  if (bar) {
+    bar.dataset.approvalSessionId = String(sessionId);
+    bar.dataset.approvalCandidateKey = displayIdentity.candidateKey;
+    bar.dataset.approvalSourceEpoch = String(displayIdentity.sourceEpoch);
+  }
   // ステール DOM 防御: lastActionBarRender が「描画済み」でも bar が空/非表示なら差分スキップを無効化。
   // （visible=true なのに children=0 の action-bar-invisible パターンへの対策）
   if (bar && lastActionBarRender.sessionId === sessionId &&
@@ -1868,6 +2013,9 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
     session_id: sessionId,
     was_visible: bar.classList.contains('visible'),
     bar_class: bar.className,
+    candidate_key: approvalCandidateDebugKey(approvalCandidateIdentity(sessionId, [section], approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker').candidateKey),
+    source_epoch: approvalCandidateIdentity(sessionId, [section], approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker').sourceEpoch,
+    reason: 'candidate-render',
   });
   bar.classList.add('visible');
   // 60 秒抑制で縮小サイズを Codex へ一切伝えないと、Codex が高い行数のまま再描画を続け
@@ -2252,6 +2400,9 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
     session_id: sessionId,
     was_visible: bar.classList.contains('visible'),
     bar_class: bar.className,
+    candidate_key: approvalCandidateDebugKey(approvalCandidateIdentity(sessionId, sections, approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker').candidateKey),
+    source_epoch: approvalCandidateIdentity(sessionId, sections, approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker').sourceEpoch,
+    reason: 'candidate-render',
   });
   bar.classList.add('visible');
   // 60 秒抑制で縮小サイズを Codex へ一切伝えないと、Codex が高い行数のまま再描画を続け
@@ -2565,6 +2716,9 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
     session_id: sessionId,
     was_visible: bar.classList.contains('visible'),
     bar_class: bar.className,
+    candidate_key: approvalCandidateDebugKey(approvalCandidateIdentity(sessionId, options, approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker').candidateKey),
+    source_epoch: approvalCandidateIdentity(sessionId, options, approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker').sourceEpoch,
+    reason: 'candidate-render',
   });
   bar.classList.add('visible');
   // 60 秒抑制で縮小サイズを Codex へ一切伝えないと、Codex が高い行数のまま再描画を続け

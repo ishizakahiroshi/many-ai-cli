@@ -117,22 +117,32 @@ func (s *Server) maybeBroadcastApprovalMarker(id int, marker *approvalMarkerBloc
 		s.sessionsMu.Unlock()
 		return false
 	}
-	if ses.approvalMarkerSig == marker.Sig {
+	provider := ses.Provider
+	candidateIdentity := approvalMarkerCandidateIdentity(provider, marker.Block)
+	candidateKey := candidateIdentity.key
+	sourceEpoch, answered := approvalCandidateEpochLocked(ses, candidateKey)
+	if answered || (ses.approvalMarkerCandidateKey == candidateKey &&
+		ses.approvalMarkerSourceEpoch == sourceEpoch) {
 		s.sessionsMu.Unlock()
 		return false
 	}
 	ses.approvalMarkerSig = marker.Sig
-	provider := ses.Provider
+	ses.approvalMarkerCandidateKey = candidateKey
+	ses.approvalMarkerCandidateShape = candidateIdentity.shape
+	ses.approvalMarkerSourceEpoch = sourceEpoch
 	s.sessionsMu.Unlock()
 
 	s.broadcast(proto.Message{
-		Type:           "approval_marker",
-		SessionID:      id,
-		Provider:       provider,
-		ApprovalSig:    marker.Sig,
-		ApprovalSource: approvalSourceGoVT,
-		Block:          marker.Block,
-		DetectedAt:     detectedAt.Format(time.RFC3339),
+		Type:                   "approval_marker",
+		SessionID:              id,
+		Provider:               provider,
+		ApprovalSig:            marker.Sig,
+		ApprovalCandidateKey:   candidateKey,
+		ApprovalCandidateShape: candidateIdentity.shape,
+		ApprovalSourceEpoch:    sourceEpoch,
+		ApprovalSource:         approvalSourceGoVT,
+		Block:                  marker.Block,
+		DetectedAt:             detectedAt.Format(time.RFC3339),
 	})
 	return true
 }

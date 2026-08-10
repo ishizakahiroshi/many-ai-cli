@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { actionBarShownAt, activeSessionId, approvalRawOptionsCache, approvalSourceCache, approvalSuppressedCache, approvalSuppressedDismissedCache, approvalVisibleCache, enqueueApprovalAutoSwitch, lastActionBarRender, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectSelections, removeApprovalAutoSwitchTarget, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx } from './state.js';
+import { actionBarShownAt, activeSessionId, approvalCandidateDebugKey, approvalCandidateIdentity, approvalRawOptionsCache, approvalSourceCache, approvalSuppressedCache, approvalSuppressedDismissedCache, approvalVisibleCache, enqueueApprovalAutoSwitch, lastActionBarRender, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectSelections, removeApprovalAutoSwitchTarget, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx } from './state.js';
 import { playNotificationSound, showDesktopApprovalNotification } from './settings.js';
 import { ws } from './ws-client.js';
 import { reshowActionBar, showActionBar } from './approval.js';
@@ -70,6 +70,20 @@ import { uiDebugLog } from './debug-ui-log.js';
 
   function showOptions(bar, id, options, forceStickToBottom = false) {
     cacheApprovalOptions(id, options);
+    const identity = approvalCandidateIdentity(id, options, approvalSourceCache.get(id)?.source === 'go_vt' ? 'native' : 'marker');
+    const sameVisibleCandidate = !!(bar && bar.classList.contains('visible') &&
+      bar.children.length > 0 && bar.dataset.approvalSessionId === String(id) &&
+      bar.dataset.approvalCandidateKey === identity.candidateKey &&
+      bar.dataset.approvalSourceEpoch === String(identity.sourceEpoch));
+    if (sameVisibleCandidate) {
+      uiDebugLog('action_bar_redisplay_suppressed', {
+        session_id: id,
+        candidate_key: approvalCandidateDebugKey(identity.candidateKey),
+        source_epoch: identity.sourceEpoch,
+        reason: 'same-candidate-reflow',
+      });
+      return;
+    }
     // showActionBar は手動 dismiss 中などに何も描かず return する。描画が最後まで
     // 通った時だけ 3 箇所の描画完了地点が actionBarShownAt を更新するので、
     // その変化を「実際にパネルが出た」証拠として使う。
@@ -83,12 +97,25 @@ import { uiDebugLog } from './debug-ui-log.js';
 
   function clearActionBarDom() {
     const bar = document.getElementById('action-bar');
+    const wasVisible = !!(bar && bar.classList.contains('visible'));
+    const clearId = activeSessionId;
+    const clearOptions = clearId != null ? approvalRawOptionsCache.get(clearId) : null;
+    const clearIdentity = clearId != null && Array.isArray(clearOptions) && clearOptions.length > 0
+      ? approvalCandidateIdentity(clearId, clearOptions, approvalSourceCache.get(clearId)?.source === 'go_vt' ? 'native' : 'marker')
+      : null;
     if (bar) {
       bar.classList.remove('visible', 'batch', 'multi-select', 'single-tabs');
       bar.innerHTML = '';
+      delete bar.dataset.approvalSessionId;
+      delete bar.dataset.approvalCandidateKey;
+      delete bar.dataset.approvalSourceEpoch;
     }
     lastActionBarRender.sessionId = null;
     lastActionBarRender.sig = null;
+    if (wasVisible && clearId != null) {
+      suppressPtyResizeForInputLayout(350);
+      syncPtySizeToViewportAfterLayout(clearId, true, 400, 'settle-after-clear', clearIdentity);
+    }
     set_actionBarFocusIdx(-1);
     set_batchFocusIdx(-1);
     set_multiSelectFocusIdx(-1);

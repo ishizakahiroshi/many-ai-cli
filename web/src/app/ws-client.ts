@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
-import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, approvalVisibleCache, autoDismissTimers, chatHistory, deriveProjectKeyFromCwd, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, multiQuestionLatchAt, multiQuestionVisibleCache, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
+import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, approvalVisibleCache, autoDismissTimers, beginApprovalReplay, chatHistory, deriveProjectKeyFromCwd, finishApprovalReplay, isApprovalReplayPending, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, multiQuestionLatchAt, multiQuestionVisibleCache, noteApprovalSourceEpoch, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
 import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLocalSessionHistory, resetLocalSessionHistory, updateInputAffordance } from '../app.js';
 import { activateSession, render, renderSessionList, renderSessionStateUpdate, updateCardLiveInfo, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
 import { applyRemotePtyResize, ensureTerminal, isLiveOutputBatching, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
@@ -303,6 +303,7 @@ export function _connectWs() {
 
   if (m.type === 'pty_data') {
     const id = m.session_id;
+    if (m.replay) beginApprovalReplay(id, m.replay_epoch);
     ensureTerminal(id);
     const t = terminals.get(id);
     // ensureTerminal が内部例外で terminals へ登録できなかった場合 t は undefined になり、
@@ -340,9 +341,12 @@ export function _connectWs() {
       // セッション切替時に attachTerminal → flushPending で一括 xterm 書き込みする。
       queuePendingTerminalChunk(id, xtermBytes);
     }
-    trackApprovalHintFromChunk(id, xtermBytes, approvalTextChunk);
+    trackApprovalHintFromChunk(id, xtermBytes, approvalTextChunk, {
+      replay: !!m.replay,
+      replayEpoch: m.replay_epoch,
+    });
     markCompactActivity(id, approvalTextChunk);
-    if (isLiveRendered) scheduleApprovalCheck(id);
+    if (isLiveRendered && !m.replay && !isApprovalReplayPending(id)) scheduleApprovalCheck(id);
     // Codex 等 provider 別のピル内テキストを本文から抽出（Claude は既存ブロック抽出経路）。
     if (isActive) scheduleLiveStatusExtract(id);
     // chat_turn / chat_turns_snapshot は早期 return しないが、ここで早期処理する
@@ -370,6 +374,15 @@ export function _connectWs() {
     return;
   }
 
+  if (m.type === 'reattach_replay_done') {
+    const id = Number(m.session_id || 0);
+    if (!id) return;
+    if (finishApprovalReplay(id, m.replay_epoch, m.approval_source_epoch, m.approval_consumed ? String(m.approval_candidate_key || '') : '', String(m.approval_candidate_shape || '')) && id === activeSessionId) {
+      scheduleApprovalCheck(id);
+    }
+    return;
+  }
+
   if (m.type === 'usage_stat') {
     handleUsageStatMessage(m);
     return;
@@ -386,7 +399,8 @@ export function _connectWs() {
     // 確定ユーザー入力が provider へ送達された（input_gate.go のライブ限定 broadcast）。
     // review-view.ts が前ターンの完了カードを自動消去する。ptyBuf リプレイの
     // ターン境界マーカーや State("running") と違い、リロード・再描画で誤発火しない。
-    try { window.dispatchEvent(new CustomEvent('many-user-turn-started', { detail: { session_id: m.session_id } })); } catch (_) {}
+    noteApprovalSourceEpoch(m.session_id, m.approval_source_epoch);
+    try { window.dispatchEvent(new CustomEvent('many-user-turn-started', { detail: { session_id: m.session_id, approval_source_epoch: m.approval_source_epoch } })); } catch (_) {}
     return;
   }
 
@@ -502,6 +516,7 @@ export function _connectWs() {
 			s.awaiting_approval = s.activity.awaiting_approval;
 		}
       s.project = deriveProjectKeyFromCwd(s.cwd);
+      noteApprovalSourceEpoch(s.id, s.approval_source_epoch);
       sessions.set(s.id, s);
       addToSessionOrder(s.id);
     });
@@ -522,6 +537,7 @@ export function _connectWs() {
     }
     const isNew = !sessions.has(m.session_id);
     const cur: any = sessions.get(m.session_id) || { id: m.session_id };
+    noteApprovalSourceEpoch(m.session_id, m.approval_source_epoch);
     const beforeLayout = sessionLayoutSnapshot(cur);
     if (m.provider)        cur.provider        = m.provider;
     if (m.display_name)    cur.display_name    = m.display_name;

@@ -270,11 +270,14 @@ func (s *Server) applyOneTapApproval(claim oneTapApprovalClaim) error {
 		return err
 	}
 	provider = ses.Provider
-	ses.nativeApprovalConsumed = claim.ApprovalSig
-	ses.nativeApprovalConsumedAt = time.Now()
+	candidateKey := approvalCandidateKey(ses.Provider, approval.Kind, approval.Question, approval.Options)
+	sourceEpoch := markApprovalConsumedLocked(ses, candidateKey, claim.ApprovalSig)
 	ses.nativeApprovalSig = ""
+	ses.nativeApprovalCandidateKey = ""
+	ses.nativeApprovalCandidateShape = ""
+	ses.nativeApprovalSourceEpoch = 0
 	ses.nativeApprovalClearMisses = 0
-	clearMsg = &proto.Message{Type: "approval_cleared", SessionID: claim.SessionID, Provider: provider, ApprovalSig: claim.ApprovalSig, ApprovalSource: approvalSourceGoVT}
+	clearMsg = &proto.Message{Type: "approval_cleared", SessionID: claim.SessionID, Provider: provider, ApprovalSig: claim.ApprovalSig, ApprovalCandidateKey: candidateKey, ApprovalCandidateShape: ses.approvalConsumedCandidateShape, ApprovalSourceEpoch: sourceEpoch, ApprovalSource: approvalSourceGoVT}
 	s.sessionsMu.Unlock()
 	ses.inputMu.Unlock()
 	if s.sessionStore != nil {

@@ -54,7 +54,31 @@ func (s *Server) addUIWithHistory(c *websocket.Conn, activeSessionID int) (*uiCo
 		}
 		buf := make([]byte, len(raw))
 		copy(buf, raw)
-		items = append(items, proto.Message{Type: "pty_data", SessionID: id, Data: buf})
+		replayEpoch := ensureReplayEpochLocked(ses)
+		replayEpoch++
+		if replayEpoch == 0 {
+			replayEpoch = 1
+		}
+		ses.replayEpoch = replayEpoch
+		items = append(items, proto.Message{
+			Type:                "pty_data",
+			SessionID:           id,
+			Data:                buf,
+			Replay:              true,
+			ReplayEpoch:         replayEpoch,
+			ApprovalSourceEpoch: ensureApprovalSourceEpochLocked(ses),
+		})
+		items = append(items, proto.Message{
+			Type:                   "reattach_replay_done",
+			SessionID:              id,
+			Replay:                 true,
+			ReplayEpoch:            replayEpoch,
+			ApprovalSourceEpoch:    ensureApprovalSourceEpochLocked(ses),
+			ApprovalConsumed:       ses.approvalConsumedCandidateKey != "",
+			ApprovalCandidateKey:   ses.approvalConsumedCandidateKey,
+			ApprovalCandidateShape: ses.approvalConsumedCandidateShape,
+			ApprovalConsumedEpoch:  ses.approvalConsumedEpoch,
+		})
 		// lastCols/lastRows はリセットしない。ここで 0 にすると attach 直後の
 		// fit → pty_resize が handleResize の skip 判定を必ず通過し、サイズ未変更でも
 		// PTY へ resize（SIGWINCH 相当）が届いて TUI が全画面再描画する。replay 済みの
