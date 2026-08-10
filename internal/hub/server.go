@@ -145,15 +145,30 @@ type session struct {
 	ptyBytesSeen int64
 
 	// JSON 外: Go 側 native approval 検出用 VT バッファ。
-	vt                        *vtBuffer
-	vtResizeDebounceUntil     time.Time
-	nativeApprovalSig         string
-	nativeApprovalTailSig     string
-	nativeApprovalScanQueued  bool
-	nativeApprovalClearMisses int
-	nativeApprovalConsumed    string
-	nativeApprovalConsumedAt  time.Time
-	approvalMarkerSig         string
+	vt *vtBuffer
+	// replayEpoch identifies the current terminal restoration stream. It is
+	// independent from approvalSourceEpoch: reflow/replay must not create a
+	// new logical prompt generation.
+	replayEpoch                    uint64
+	approvalSourceEpoch            uint64
+	approvalEpochPending           bool
+	approvalConsumedCandidateKey   string
+	approvalConsumedCandidateShape string
+	approvalConsumedEpoch          uint64
+	vtResizeDebounceUntil          time.Time
+	nativeApprovalSig              string
+	nativeApprovalCandidateKey     string
+	nativeApprovalCandidateShape   string
+	nativeApprovalSourceEpoch      uint64
+	nativeApprovalTailSig          string
+	nativeApprovalScanQueued       bool
+	nativeApprovalClearMisses      int
+	nativeApprovalConsumed         string
+	nativeApprovalConsumedAt       time.Time
+	approvalMarkerSig              string
+	approvalMarkerCandidateKey     string
+	approvalMarkerCandidateShape   string
+	approvalMarkerSourceEpoch      uint64
 	// 構造が壊れていて配信を抑止した直近のマーカー sig。同一ブロックが
 	// PTY チャンクごとに再抽出されるため、ログを 1 ブロック 1 回に絞る用途のみ。
 	approvalMarkerSuppressedSig string
@@ -501,9 +516,9 @@ type Server struct {
 	staleBinaryMu       sync.Mutex
 	staleBinaryNotified bool
 	webSrcHash          string // hash of web/src/ baked into dist/.src-hash at build time
-	webDistFresh bool   // true if current web/src/ matches webSrcHash (always true on VPS/Docker)
-	parentShell  string
-	instanceID   string // Hub プロセス起動ごとのランダム ID。UI が Hub 再起動（live session ID の振り直し）を検出するために snapshot に同梱する
+	webDistFresh        bool   // true if current web/src/ matches webSrcHash (always true on VPS/Docker)
+	parentShell         string
+	instanceID          string // Hub プロセス起動ごとのランダム ID。UI が Hub 再起動（live session ID の振り直し）を検出するために snapshot に同梱する
 
 	// sessionsMu guards session/connection state (nextID, sessions, wrappers,
 	// uis, lastUICols/Rows, idleTimer, idleGen). cfgMu guards s.cfg.
@@ -1412,8 +1427,19 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 		uc, historyItems := s.addUIWithHistory(conn, m.UIActiveSessionID)
 		s.claimResizeOwnership(conn, m.UIActiveSessionID, m.Cols, m.Rows)
 		s.sendSnapshot(uc)
+		replaySessionIDs := make([]int, 0, len(historyItems))
 		for _, item := range historyItems {
 			_ = uc.send(item)
+			if item.Type == "reattach_replay_done" {
+				replaySessionIDs = append(replaySessionIDs, item.SessionID)
+			}
+		}
+		// The UI history replay is already resident in Hub's VT mirror. Re-evaluate
+		// each restored session once after its completion frame so a newly opened
+		// candidate is sent as an authoritative approval event, while the
+		// candidate+epoch suppression in Hub keeps an answered replay silent.
+		for _, sessionID := range replaySessionIDs {
+			s.evaluateReplayApproval(sessionID)
 		}
 		ctx, cancel := context.WithCancel(context.Background())
 		s.safeGo("ui_ping_loop", func() { s.pingLoop(ctx, uc) })
@@ -1688,7 +1714,21 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 		ses.nativeApprovalClearMisses = 0
 		ses.nativeApprovalConsumed = ""
 		ses.nativeApprovalConsumedAt = time.Time{}
+		ses.approvalConsumedCandidateKey = ""
+		ses.approvalConsumedCandidateShape = ""
+		ses.approvalConsumedEpoch = 0
+		ses.approvalEpochPending = false
+		ses.approvalSourceEpoch++
+		if ses.approvalSourceEpoch == 0 {
+			ses.approvalSourceEpoch = 1
+		}
 		ses.approvalMarkerSig = ""
+		ses.nativeApprovalCandidateKey = ""
+		ses.nativeApprovalCandidateShape = ""
+		ses.nativeApprovalSourceEpoch = 0
+		ses.approvalMarkerCandidateKey = ""
+		ses.approvalMarkerCandidateShape = ""
+		ses.approvalMarkerSourceEpoch = 0
 		ses.approvalMarkerSuppressedSig = ""
 		ses.approvalMarkerSuppressedAt = time.Time{}
 		ids = append(ids, id)

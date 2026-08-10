@@ -2,7 +2,7 @@
 import { cleanCopiedText, cleanOneLineText, showToast } from './util.js';
 import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
-import { activeSessionId, approvalRawOptionsCache, approvalVisibleCache, sessions, terminals, utf8Decoder } from './state.js';
+import { activeSessionId, approvalCandidateDebugKey, approvalCandidateIdentity, approvalRawOptionsCache, approvalSourceCache, approvalVisibleCache, sessions, terminals, utf8Decoder } from './state.js';
 import { autoExpand, inputEl, sendText, updateInputClearButton } from '../app.js';
 import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerminalPathStartBoundary, resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup, trimTerminalPathCandidate } from './path-links.js';
 import { ws } from './ws-client.js';
@@ -1805,14 +1805,20 @@ export function scanBuffer(id, limit?: number) {
 
 // ---- resize ----
 
-export function sendResize(sessionId, cols, rows, reason = 'unknown') {
+export function sendResize(sessionId, cols, rows, reason = 'unknown', resizeIdentity: any = null) {
   if (ws && ws.readyState === WebSocket.OPEN) {
+    const approvalOptions = approvalRawOptionsCache.get(sessionId);
+    const approvalIdentity = resizeIdentity || (Array.isArray(approvalOptions) && approvalOptions.length > 0
+      ? approvalCandidateIdentity(sessionId, approvalOptions, approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker')
+      : null);
     // 観測用: どの経路が SIGWINCH を誘発したかを層別する（debug-ui-log.ts）。
     uiDebugLog('send_resize', {
       session_id: sessionId,
       cols,
       rows,
       reason,
+      candidate_key: approvalIdentity ? approvalCandidateDebugKey(approvalIdentity.candidateKey) : null,
+      source_epoch: approvalIdentity?.sourceEpoch || null,
       suppressed: isPtyResizeSuppressed(),
       layout: layoutSnapshot(),
     });
@@ -1849,6 +1855,16 @@ export function applyRemotePtyResize(sessionId, cols, rows) {
     rows: nextRows,
     local_cols: t.term.cols,
     local_rows: t.term.rows,
+    candidate_key: (() => {
+      const opts = approvalRawOptionsCache.get(id);
+      if (!Array.isArray(opts) || opts.length === 0) return null;
+      return approvalCandidateDebugKey(approvalCandidateIdentity(id, opts, approvalSourceCache.get(id)?.source === 'go_vt' ? 'native' : 'marker').candidateKey);
+    })(),
+    source_epoch: (() => {
+      const opts = approvalRawOptionsCache.get(id);
+      if (!Array.isArray(opts) || opts.length === 0) return null;
+      return approvalCandidateIdentity(id, opts, approvalSourceCache.get(id)?.source === 'go_vt' ? 'native' : 'marker').sourceEpoch;
+    })(),
   });
   beginLiveOutputBatchForResize(id);
   if (t.term.cols === nextCols && t.term.rows === nextRows) return;
@@ -1899,20 +1915,30 @@ export function isPtyResizeSuppressed() {
 // 行数を縮めるため local 側は既に縮小済みのことがある。差分ではなく現在サイズを無条件
 // に送る（reassertActivePtySize と同方針）。連続呼び出しは 1 本のタイマーへ束ねる。
 let settlePtyResizeTimer: any = null;
-export function syncPtySizeToViewportAfterLayout(id, stick = true, delayMs = 400) {
+let pendingLayoutResize: { id: number; stick: boolean; reason: string; identity?: any } | null = null;
+export function syncPtySizeToViewportAfterLayout(id, stick = true, delayMs = 400, reason = 'settle-after-layout', identity: any = null) {
+  pendingLayoutResize = { id, stick, reason, identity };
   if (settlePtyResizeTimer) { clearTimeout(settlePtyResizeTimer); settlePtyResizeTimer = null; }
   settlePtyResizeTimer = setTimeout(() => {
     settlePtyResizeTimer = null;
-    if (id !== activeSessionId) return;
-    const t = terminals.get(id);
+    const pending = pendingLayoutResize;
+    pendingLayoutResize = null;
+    if (!pending || pending.id !== activeSessionId) return;
+    const t = terminals.get(pending.id);
     if (!canFitTerminal(t)) return;
     clearSuppressPtyResize();
-    if (stick) t.autoScroll = true;
-    fitTerminalPreservingBottom(t, id, true);
+    if (pending.stick) t.autoScroll = true;
+    fitTerminalPreservingBottom(t, pending.id, true);
     // local が既に縮小済みでも Codex へ未通知の可能性があるため無条件に送る。
-    sendResize(id, t.term.cols, t.term.rows, 'settle-after-layout');
+    uiDebugLog('resize_settled', {
+      session_id: pending.id,
+      reason: pending.reason,
+      candidate_key: pending.identity ? approvalCandidateDebugKey(pending.identity.candidateKey) : null,
+      source_epoch: pending.identity?.sourceEpoch || null,
+    });
+    sendResize(pending.id, t.term.cols, t.term.rows, pending.reason, pending.identity);
     // Codex は SIGWINCH で全画面再描画しスクロールが飛ぶため、確定後に最下部へ張り直す。
-    if (stick) scrollTerminalToBottomSoon(id, { force: true, passes: 2, startedAt: Date.now() });
+    if (pending.stick) scrollTerminalToBottomSoon(pending.id, { force: true, passes: 2, startedAt: Date.now() });
   }, delayMs);
 }
 
@@ -1954,6 +1980,16 @@ export const resizeObserver = new ResizeObserver(() => {
       prev_cols: prevCols,
       prev_rows: prevRows,
       suppressed: isPtyResizeSuppressed(),
+      candidate_key: (() => {
+        const opts = approvalRawOptionsCache.get(activeSessionId);
+        if (!Array.isArray(opts) || opts.length === 0) return null;
+        return approvalCandidateDebugKey(approvalCandidateIdentity(activeSessionId, opts, approvalSourceCache.get(activeSessionId)?.source === 'go_vt' ? 'native' : 'marker').candidateKey);
+      })(),
+      source_epoch: (() => {
+        const opts = approvalRawOptionsCache.get(activeSessionId);
+        if (!Array.isArray(opts) || opts.length === 0) return null;
+        return approvalCandidateIdentity(activeSessionId, opts, approvalSourceCache.get(activeSessionId)?.source === 'go_vt' ? 'native' : 'marker').sourceEpoch;
+      })(),
       layout: layoutSnapshot(),
     });
     fitTerminalPreservingBottom(t, activeSessionId);

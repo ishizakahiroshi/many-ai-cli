@@ -61,6 +61,15 @@ type Message struct {
 	// 0 は「古い wrapper で未申告」を意味し、Hub は再配信を行わない。
 	PTYBytes int64 `json:"pty_bytes,omitempty"`
 
+	// Replay marks pty_data that restores already-produced terminal output. The
+	// field is optional so older wrappers and UIs continue to treat ordinary
+	// pty_data frames as before. ReplayEpoch changes for each independent
+	// terminal restoration, while ApprovalSourceEpoch identifies the logical
+	// prompt generation used by approval deduplication.
+	Replay              bool   `json:"replay,omitempty"`
+	ReplayEpoch         uint64 `json:"replay_epoch,omitempty"`
+	ApprovalSourceEpoch uint64 `json:"approval_source_epoch,omitempty"`
+
 	// TokenStatusbar: registered ack で Hub が返す「トークン常時表示バーが有効か」。
 	// wrapper はこれを見て claude 起動時に --settings で statusLine を渡すか決める
 	// （共有の .claude/settings.local.json は一切書き換えない方式）。
@@ -87,6 +96,16 @@ type Message struct {
 	ApprovalContext  string           `json:"approval_context,omitempty"`
 	ApprovalOptions  []ApprovalOption `json:"approval_options,omitempty"`
 	ApprovalSummary  *ApprovalSummary `json:"approval_summary,omitempty"`
+	// ApprovalCandidateKey is a stable, presentation-independent identity for
+	// one approval candidate. It deliberately excludes mutable context such as
+	// status lines, borders, and option labels that can change during TUI reflow.
+	ApprovalCandidateKey string `json:"approval_candidate_key,omitempty"`
+	// ApprovalCandidateShape is sent only when replay needs to restore the
+	// browser's answered-candidate suppression after a UI reconnect. It is the
+	// normalized, label-free shape behind ApprovalCandidateKey.
+	ApprovalCandidateShape string `json:"approval_candidate_shape,omitempty"`
+	ApprovalConsumed       bool   `json:"approval_consumed,omitempty"`
+	ApprovalConsumedEpoch  uint64 `json:"approval_consumed_epoch,omitempty"`
 	// DoneSummary is emitted when an AI task reaches a terminal-looking state.
 	// It is display-only and never authorizes an action.
 	DoneSummary *DoneSummary `json:"done_summary,omitempty"`
