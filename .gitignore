@@ -76,3 +76,6 @@ desktop.ini
 # === obsidian-link: managed ===
 /docs/obsidian/
 # === /obsidian-link: managed ===
+
+# Local pre-release audit evidence (may contain unpublished findings)
+/docs/ai-audit-prompts/

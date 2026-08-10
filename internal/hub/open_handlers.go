@@ -138,7 +138,7 @@ func (s *Server) handleOpenFolder(w http.ResponseWriter, r *http.Request) {
 	// filepath.Dir(path) を開くため、path が許可ルート自身だと検証していない親
 	// （許可境界の 1 階層外）を開いてしまっていた。
 	dir := filepath.Dir(path)
-	if fi, err := os.Stat(path); err == nil && fi.IsDir() {
+	if fi, err := os.Stat(path); err == nil && fi.IsDir() { // #nosec G703 -- path was resolved under an allowed root before this check.
 		dir = path
 	}
 	if err := openDirNative(dir); err != nil {

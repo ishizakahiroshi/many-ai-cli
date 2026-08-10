@@ -236,12 +236,13 @@ type Message struct {
 // AgentChatMessage is the provider-neutral structured transcript payload used
 // by the agent_chat API and WebSocket message.
 type AgentChatMessage struct {
-	Role     string          `json:"role"`
-	Kind     string          `json:"kind,omitempty"`
-	Text     string          `json:"text,omitempty"`
-	Thinking []string        `json:"thinking,omitempty"`
-	Tools    []AgentChatTool `json:"tools,omitempty"`
-	TS       string          `json:"ts,omitempty"`
+	Role      string          `json:"role"`
+	Kind      string          `json:"kind,omitempty"`
+	Text      string          `json:"text,omitempty"`
+	Thinking  []string        `json:"thinking,omitempty"`
+	Tools     []AgentChatTool `json:"tools,omitempty"`
+	TS        string          `json:"ts,omitempty"`
+	MessageID string          `json:"message_id,omitempty"`
 }
 
 type AgentChatTool struct {

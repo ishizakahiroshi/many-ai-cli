@@ -26,8 +26,8 @@ const (
 )
 
 var (
-	workflowCSIRe     = regexp.MustCompile("\\x1b\\[[0-9;?]*[ -/]*[@-~]")
-	workflowOSCRe     = regexp.MustCompile("\\x1b\\][^\\x07]*(?:\\x07|\\x1b\\\\)")
+	workflowCSIRe     = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+	workflowOSCRe     = regexp.MustCompile(`\x1b\][^\x07]*(?:\x07|\x1b\\)`)
 	workflowTreeRe    = regexp.MustCompile(`^[\s│├└─╰╭╮╯┃┣┗┏┓┛┆┊▕▏▸▹‣•·]+`)
 	workflowHeaderRe  = regexp.MustCompile(`(?i)\bworkflows?\b`)
 	workflowSummaryRe = regexp.MustCompile(`(?i)([0-9]{1,4})\s*/\s*([0-9]{1,4})\s+agents?\b`)

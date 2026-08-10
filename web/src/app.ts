@@ -1496,7 +1496,7 @@ export function sendText(sessionId, text) {
   }
 }
 
-// 滞留症状の観測 (internal/hub/input_trace.go / 2026-08-04)。確定 \r を UI が
+// 入力経路の診断。確定 \r を UI が
 // 「撃った / 撃たずに取り消した / 送信に失敗した」のどれだったかを hub.log へ残す。
 // PTY へは何も書かない観測専用メッセージで、Hub 側は ui_input_trace を受けて
 // ログに落とすだけ。WS が未接続なら黙って捨てる（観測が送信を妨げない）。

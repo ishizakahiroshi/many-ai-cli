@@ -1,9 +1,7 @@
 package hub
 
 import (
-	"bufio"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,11 +13,17 @@ import (
 )
 
 const (
-	workflowJournalPollInterval = time.Second
-	workflowJournalSettleDelay  = 10 * time.Second
-	workflowJournalIdleStop     = 60 * time.Second
-	workflowJournalTimeout      = 5 * time.Minute
-	workflowJournalLookback     = 2 * time.Second
+	workflowJournalPollInterval   = time.Second
+	workflowJournalSettleDelay    = 10 * time.Second
+	workflowJournalIdleStop       = 60 * time.Second
+	workflowJournalTimeout        = 5 * time.Minute
+	workflowJournalLookback       = 2 * time.Second
+	workflowJournalLineMax        = 1 * 1024 * 1024
+	workflowJournalReadBuffer     = 64 * 1024
+	workflowJournalReadBytesMax   = 4 * 1024 * 1024
+	workflowJournalReadRecordsMax = 256
+	workflowJournalReadTimeBudget = 100 * time.Millisecond
+	workflowJournalFieldMax       = 256
 )
 
 // workflowJournalEvent is intentionally the only JSON decoding shape used for
@@ -39,6 +43,8 @@ type workflowJournalFileState struct {
 	Frozen      bool
 	ModTime     time.Time
 	LastEventAt time.Time
+	LineBytes   int64
+	Parser      workflowJournalRecordParser
 }
 
 type workflowJournalGroup struct {
@@ -46,6 +52,31 @@ type workflowJournalGroup struct {
 	Files      map[string]workflowJournalFileState
 	Started    int
 	Done       int
+}
+
+type workflowJournalReadBudget struct {
+	MaxBytes   int
+	MaxRecords int
+	Deadline   time.Time
+	Clock      func() time.Time
+}
+
+type workflowJournalReadStats struct {
+	BytesRead int
+	Records   int
+	HitBudget bool
+	Elapsed   time.Duration
+}
+
+func workflowJournalBudgetNow(budget workflowJournalReadBudget) time.Time {
+	if budget.Clock != nil {
+		return budget.Clock()
+	}
+	return time.Now()
+}
+
+func workflowJournalBudgetExpired(budget workflowJournalReadBudget) bool {
+	return !workflowJournalBudgetNow(budget).Before(budget.Deadline)
 }
 
 func cloneWorkflowJournalSet(src map[string]struct{}) map[string]struct{} {
@@ -67,26 +98,291 @@ func cloneWorkflowJournalFiles(src map[string]workflowJournalFileState) map[stri
 	for path, state := range src {
 		state.Started = cloneWorkflowJournalSet(state.Started)
 		state.Results = cloneWorkflowJournalSet(state.Results)
+		state.Parser.quoted = append([]byte(nil), state.Parser.quoted...)
 		dst[path] = state
 	}
 	return dst
 }
 
-// tailWorkflowJournal consumes only newline-terminated bytes. ReadBytes has no
-// Scanner-style 64 KiB token limit, so large result bodies remain supported.
-// A truncate freezes the file at its last trusted counts instead of replaying.
+type workflowJournalParserMode uint8
+
+const (
+	workflowJournalParserNeedRoot workflowJournalParserMode = iota
+	workflowJournalParserNeedKey
+	workflowJournalParserNeedColon
+	workflowJournalParserNeedValue
+	workflowJournalParserString
+	workflowJournalParserPrimitive
+	workflowJournalParserComposite
+	workflowJournalParserNeedComma
+	workflowJournalParserComplete
+)
+
+// workflowJournalRecordParser is a bounded JSON object scanner. It extracts
+// only the two metadata strings used by the workflow counter and skips all
+// other values byte by byte, including a multi-megabyte result string.
+type workflowJournalRecordParser struct {
+	mode            workflowJournalParserMode
+	started         bool
+	invalid         bool
+	stringIsKey     bool
+	stringEscape    bool
+	compositeDepth  int
+	compositeString bool
+	compositeEscape bool
+	currentKey      string
+	captureField    string
+	quoted          []byte
+	typeValue       string
+	agentID         string
+}
+
+func (parser *workflowJournalRecordParser) reset() {
+	*parser = workflowJournalRecordParser{
+		mode:    workflowJournalParserNeedRoot,
+		started: true,
+	}
+}
+
+func (parser *workflowJournalRecordParser) ensureStarted() {
+	if !parser.started {
+		parser.reset()
+	}
+}
+
+func (parser *workflowJournalRecordParser) invalidate() {
+	parser.invalid = true
+	parser.quoted = nil
+}
+
+func (parser *workflowJournalRecordParser) beginString(isKey bool) {
+	parser.mode = workflowJournalParserString
+	parser.stringIsKey = isKey
+	parser.stringEscape = false
+	parser.captureField = ""
+	if isKey {
+		parser.quoted = parser.quoted[:0]
+	} else if parser.currentKey == "type" || parser.currentKey == "agentId" {
+		parser.captureField = parser.currentKey
+		parser.quoted = parser.quoted[:0]
+	} else {
+		parser.quoted = nil
+	}
+}
+
+func (parser *workflowJournalRecordParser) captureByte(b byte) {
+	if !parser.stringIsKey && parser.captureField == "" {
+		return
+	}
+	if len(parser.quoted) < workflowJournalFieldMax {
+		parser.quoted = append(parser.quoted, b)
+	}
+}
+
+func decodeWorkflowJournalQuoted(raw []byte) (string, bool) {
+	if len(raw) > workflowJournalFieldMax {
+		return "", false
+	}
+	encoded := make([]byte, 0, len(raw)+2)
+	encoded = append(encoded, '"')
+	encoded = append(encoded, raw...)
+	encoded = append(encoded, '"')
+	var value string
+	if err := json.Unmarshal(encoded, &value); err != nil {
+		return "", false
+	}
+	return value, true
+}
+
+func (parser *workflowJournalRecordParser) finishString() {
+	value, ok := decodeWorkflowJournalQuoted(parser.quoted)
+	if !ok {
+		parser.invalidate()
+		return
+	}
+	if parser.stringIsKey {
+		parser.currentKey = value
+		parser.mode = workflowJournalParserNeedColon
+	} else {
+		switch parser.captureField {
+		case "type":
+			parser.typeValue = value
+		case "agentId":
+			parser.agentID = value
+		}
+		parser.mode = workflowJournalParserNeedComma
+	}
+	parser.captureField = ""
+	parser.quoted = nil
+}
+
+func (parser *workflowJournalRecordParser) feed(b byte) {
+	parser.ensureStarted()
+	if parser.invalid || parser.mode == workflowJournalParserComplete {
+		return
+	}
+	if parser.mode == workflowJournalParserString {
+		if parser.stringEscape {
+			parser.captureByte(b)
+			parser.stringEscape = false
+			return
+		}
+		if b == '\\' {
+			parser.captureByte(b)
+			parser.stringEscape = true
+			return
+		}
+		if b == '"' {
+			parser.finishString()
+			return
+		}
+		parser.captureByte(b)
+		return
+	}
+	if parser.mode == workflowJournalParserComposite {
+		if parser.compositeString {
+			if parser.compositeEscape {
+				parser.compositeEscape = false
+			} else if b == '\\' {
+				parser.compositeEscape = true
+			} else if b == '"' {
+				parser.compositeString = false
+			}
+			return
+		}
+		switch b {
+		case '"':
+			parser.compositeString = true
+		case '{', '[':
+			parser.compositeDepth++
+		case '}', ']':
+			parser.compositeDepth--
+			if parser.compositeDepth <= 0 {
+				parser.compositeDepth = 0
+				parser.mode = workflowJournalParserNeedComma
+			}
+		}
+		return
+	}
+
+	switch parser.mode {
+	case workflowJournalParserNeedRoot:
+		switch b {
+		case ' ', '\t', '\r':
+			return
+		case '{':
+			parser.mode = workflowJournalParserNeedKey
+		default:
+			parser.invalidate()
+		}
+	case workflowJournalParserNeedKey:
+		switch b {
+		case ' ', '\t', '\r', '\n':
+			return
+		case '"':
+			parser.beginString(true)
+		case '}':
+			parser.mode = workflowJournalParserComplete
+		default:
+			parser.invalidate()
+		}
+	case workflowJournalParserNeedColon:
+		if b == ' ' || b == '\t' || b == '\r' {
+			return
+		}
+		if b == ':' {
+			parser.mode = workflowJournalParserNeedValue
+		} else {
+			parser.invalidate()
+		}
+	case workflowJournalParserNeedValue:
+		switch b {
+		case ' ', '\t', '\r':
+			return
+		case '"':
+			parser.beginString(false)
+		case '{', '[':
+			parser.mode = workflowJournalParserComposite
+			parser.compositeDepth = 1
+			parser.compositeString = false
+			parser.compositeEscape = false
+		case 't', 'f', 'n', '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+			parser.mode = workflowJournalParserPrimitive
+		default:
+			parser.invalidate()
+		}
+	case workflowJournalParserPrimitive:
+		switch b {
+		case ',':
+			parser.mode = workflowJournalParserNeedKey
+		case '}':
+			parser.mode = workflowJournalParserComplete
+		case ' ', '\t', '\r':
+			parser.mode = workflowJournalParserNeedComma
+		}
+	case workflowJournalParserNeedComma:
+		switch b {
+		case ' ', '\t', '\r':
+			return
+		case ',':
+			parser.mode = workflowJournalParserNeedKey
+		case '}':
+			parser.mode = workflowJournalParserComplete
+		default:
+			parser.invalidate()
+		}
+	case workflowJournalParserComplete:
+		if b != ' ' && b != '\t' && b != '\r' {
+			parser.invalidate()
+		}
+	}
+}
+
+func (parser *workflowJournalRecordParser) event() (workflowJournalEvent, bool) {
+	if parser == nil || parser.invalid || parser.mode != workflowJournalParserComplete || parser.typeValue == "" || parser.agentID == "" {
+		return workflowJournalEvent{}, false
+	}
+	return workflowJournalEvent{Type: parser.typeValue, AgentID: parser.agentID}, true
+}
+
+// tailWorkflowJournal streams newline-delimited records through a bounded
+// metadata scanner. Offset advances through partial lines and Parser retains
+// only the small JSON state needed to finish that line in a later poll. A
+// truncate freezes the file at its last trusted counts instead of replaying.
 func tailWorkflowJournal(path string, prior workflowJournalFileState) (workflowJournalFileState, error) {
+	now := time.Now()
+	next, _, err := tailWorkflowJournalWithBudget(path, prior, workflowJournalReadBudget{
+		MaxBytes:   workflowJournalReadBytesMax,
+		MaxRecords: workflowJournalReadRecordsMax,
+		Deadline:   now.Add(workflowJournalReadTimeBudget),
+	})
+	return next, err
+}
+
+func tailWorkflowJournalWithBudget(path string, prior workflowJournalFileState, budget workflowJournalReadBudget) (workflowJournalFileState, workflowJournalReadStats, error) {
+	started := time.Now()
+	stats := workflowJournalReadStats{}
+	defer func() { stats.Elapsed = time.Since(started) }()
+	if budget.MaxBytes <= 0 {
+		budget.MaxBytes = workflowJournalReadBytesMax
+	}
+	if budget.MaxRecords <= 0 {
+		budget.MaxRecords = workflowJournalReadRecordsMax
+	}
+	if budget.Deadline.IsZero() {
+		budget.Deadline = workflowJournalBudgetNow(budget).Add(workflowJournalReadTimeBudget)
+	}
 	info, err := os.Stat(path)
 	if err != nil {
-		return prior, err
+		return prior, stats, err
 	}
 	prior.ModTime = info.ModTime()
 	if prior.Frozen {
-		return prior, nil
+		return prior, stats, nil
 	}
 	if info.Size() < prior.Offset {
 		prior.Frozen = true
-		return prior, nil
+		return prior, stats, nil
 	}
 	if prior.Started == nil {
 		prior.Started = make(map[string]struct{})
@@ -95,60 +391,87 @@ func tailWorkflowJournal(path string, prior workflowJournalFileState) (workflowJ
 		prior.Results = make(map[string]struct{})
 	}
 	if info.Size() == prior.Offset {
-		return prior, nil
+		return prior, stats, nil
 	}
 
 	f, err := os.Open(path) // #nosec G304 -- path is derived from the local Claude transcript root.
 	if err != nil {
-		return prior, err
+		return prior, stats, err
 	}
 	defer f.Close()
 	if _, err := f.Seek(prior.Offset, io.SeekStart); err != nil {
-		return prior, err
+		return prior, stats, err
 	}
 
-	reader := bufio.NewReader(f)
-	for {
-		line, readErr := reader.ReadBytes('\n')
-		if len(line) == 0 && readErr != nil {
-			if errors.Is(readErr, io.EOF) {
-				return prior, nil
+	prior.Parser.ensureStarted()
+	buffer := make([]byte, workflowJournalReadBuffer)
+readLoop:
+	for stats.Records < budget.MaxRecords && stats.BytesRead < budget.MaxBytes {
+		if workflowJournalBudgetExpired(budget) {
+			stats.HitBudget = true
+			break
+		}
+		remaining := budget.MaxBytes - stats.BytesRead
+		readBuf := buffer
+		if remaining < len(readBuf) {
+			readBuf = readBuf[:remaining]
+		}
+		n, readErr := f.Read(readBuf)
+		stats.BytesRead += n
+		for _, b := range readBuf[:n] {
+			if workflowJournalBudgetExpired(budget) {
+				stats.HitBudget = true
+				break readLoop
 			}
-			return prior, readErr
-		}
-		if len(line) == 0 || line[len(line)-1] != '\n' {
-			// Incomplete tail: leave Offset unchanged for these bytes so the next
-			// poll rereads the complete JSON object.
-			return prior, nil
-		}
-		prior.Offset += int64(len(line))
-		line = line[:len(line)-1]
-		if len(line) > 0 && line[len(line)-1] == '\r' {
-			line = line[:len(line)-1]
-		}
-		var event workflowJournalEvent
-		if err := json.Unmarshal(line, &event); err == nil && event.AgentID != "" {
-			changed := false
-			switch event.Type {
-			case "started":
-				if _, exists := prior.Started[event.AgentID]; !exists {
-					prior.Started[event.AgentID] = struct{}{}
-					changed = true
+			prior.Offset++
+			prior.LineBytes++
+			if b != '\n' {
+				prior.Parser.feed(b)
+				continue
+			}
+
+			event, ok := prior.Parser.event()
+			if ok {
+				changed := false
+				switch event.Type {
+				case "started":
+					if _, exists := prior.Started[event.AgentID]; !exists {
+						prior.Started[event.AgentID] = struct{}{}
+						changed = true
+					}
+				case "result":
+					if _, exists := prior.Results[event.AgentID]; !exists {
+						prior.Results[event.AgentID] = struct{}{}
+						changed = true
+					}
 				}
-			case "result":
-				if _, exists := prior.Results[event.AgentID]; !exists {
-					prior.Results[event.AgentID] = struct{}{}
-					changed = true
+				if changed {
+					prior.LastEventAt = info.ModTime()
 				}
 			}
-			if changed {
-				prior.LastEventAt = info.ModTime()
+			prior.LineBytes = 0
+			prior.Parser.reset()
+			stats.Records++
+			if stats.Records >= budget.MaxRecords {
+				stats.HitBudget = true
+				break readLoop
 			}
 		}
-		if readErr != nil && !errors.Is(readErr, io.EOF) {
-			return prior, readErr
+		if stats.HitBudget || stats.BytesRead >= budget.MaxBytes || workflowJournalBudgetExpired(budget) {
+			stats.HitBudget = true
+			break
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return prior, stats, readErr
+		}
+		if n == 0 {
+			break
 		}
 	}
+	return prior, stats, nil
 }
 
 func workflowJournalCounts(files map[string]workflowJournalFileState) (started, done int, lastEvent, lastMTime time.Time) {

@@ -10,7 +10,7 @@ import (
 )
 
 func openDirNative(path string) error {
-	return exec.Command("explorer.exe", filepath.Clean(path)).Start()
+	return exec.Command("explorer.exe", filepath.Clean(path)).Start() // #nosec G702 -- validated path is passed as argv without a shell.
 }
 
 func openRevealNative(path string) error {
@@ -47,12 +47,12 @@ func shellExecuteOpen(path string) error {
 
 func openTerminalNative(dir, app string) error {
 	if app != "" {
-		return exec.Command(app, dir).Start()
+		return exec.Command(app, dir).Start() // #nosec G702 -- app is explicit local configuration and dir is validated before dispatch.
 	}
-	if err := exec.Command("wt.exe", "-d", dir).Start(); err == nil {
+	if err := exec.Command("wt.exe", "-d", dir).Start(); err == nil { // #nosec G702 -- validated path is passed as argv without a shell.
 		return nil
 	}
-	return exec.Command("powershell.exe", "-NoExit", "-Command", "Set-Location -LiteralPath $args[0]", dir).Start()
+	return exec.Command("powershell.exe", "-NoExit", "-Command", "Set-Location -LiteralPath $args[0]", dir).Start() // #nosec G702 -- the script is fixed and dir is passed as an argv value.
 }
 
 func effectiveTerminalAppDescription(app string) string {

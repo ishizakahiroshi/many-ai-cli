@@ -112,6 +112,7 @@ export interface AgentChatMessage {
   thinking?: string[];
   tools?: AgentChatTool[];
   ts?: string;
+  message_id?: string;
 }
 
 export interface WfAgent {
