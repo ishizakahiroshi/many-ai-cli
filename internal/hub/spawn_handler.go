@@ -29,6 +29,13 @@ type spawnWrappedSpec struct {
 	Utf8Session    bool
 }
 
+func appendOpenCodePermissionArgs(wrapArgs []string, permissionMode string) []string {
+	if permissionMode != "" && permissionMode != "default" {
+		return append(wrapArgs, "--permission-mode", permissionMode)
+	}
+	return wrapArgs
+}
+
 func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) (int, error) {
 	if !validOrchestrationProvider(spec.Provider) {
 		return 0, fmt.Errorf("invalid provider")
@@ -95,9 +102,7 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 		if resolvedModel != "" {
 			wrapArgs = append(wrapArgs, "--model", resolvedModel)
 		}
-		if spec.PermissionMode != "" && spec.PermissionMode != "default" {
-			wrapArgs = append(wrapArgs, "--permission-mode", spec.PermissionMode)
-		}
+		wrapArgs = appendOpenCodePermissionArgs(wrapArgs, spec.PermissionMode)
 	default:
 		if resolvedModel != "" {
 			wrapArgs = append(wrapArgs, "--model", resolvedModel)
@@ -500,9 +505,15 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 			wrapArgs = append(wrapArgs, "--model", resolvedModel)
 		}
 	case "opencode":
+		risk := evaluateOpenCodeRisk(body.PermissionMode)
+		if risk.HighRisk && !body.RiskConfirmed {
+			writeJSONError(w, http.StatusBadRequest, "risk_confirmation_required", "risk confirmation required")
+			return
+		}
 		if resolvedModel != "" {
 			wrapArgs = append(wrapArgs, "--model", resolvedModel)
 		}
+		wrapArgs = appendOpenCodePermissionArgs(wrapArgs, body.PermissionMode)
 	case "grok":
 		if resolvedModel != "" {
 			wrapArgs = append(wrapArgs, "--model", resolvedModel)
