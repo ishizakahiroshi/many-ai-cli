@@ -10,75 +10,7 @@ Release artifacts are published at
 
 ## [Unreleased]
 
-### Changed
-- **Files preview no longer refuses to open documents that live outside the
-  current repository.** Reading was previously confined to the session cwd, its
-  git root, and the attachments/orchestration directories, with a narrow
-  fallback for paths the user had typed into chat — so reference material kept
-  next to a project (a `docs/` tree in a sibling folder, a recap note, a shared
-  spec) came back as a bare HTTP 403. That boundary did not actually contain
-  anything: the AI CLI itself runs as the same OS user and can read any file
-  with its own tools, and a caller holding the Hub token can already spawn a
-  shell in nearly any directory. Requests that arrive from a browser on the Hub
-  host itself are now served without the allowed-roots check
-  (`internal/hub/files_scope.go`). Files outside the project still come back
-  flagged `readOnly`, so the editor stays disabled for them.
-- **Logically remote callers keep the old, narrower scope.** Requests routed
-  through tailscale serve, `trusted_networks`, or any reverse proxy — detected
-  by `isLogicallyRemote`, the same split `/api/list-subdirs` already used — are
-  still limited to the allowed roots plus paths the user referenced in their own
-  chat input (`role='user'` only; AI output remains excluded).
-- **Secret-like files are refused on every out-of-scope read.** Private keys
-  (`*.pem`, `*.key`, `id_rsa*`), credential files (`*credentials*`), environment
-  files (`.env`, `.env.*`), the Hub's own session-history database
-  (`any-ai-cli.db` and its `-wal`/`-shm` siblings, which hold every chat
-  transcript), and `~/.many-ai-cli/config.yaml*` (which stores the Hub token in
-  plaintext — matched by prefix so that a hand-made copy of the file cannot leak
-  the same token) are rejected even from the Hub host. The file tree no longer
-  extracts a content summary for them either, so walking a directory cannot
-  bulk-harvest the first bytes of each one. Paths inside the project keep their
-  previous behaviour, so a repository's own `.env` still previews as before.
-- **Writes and terminal launches are unchanged.** `files-save`, `files-create`,
-  `files-mkdir`, `files-move`, `files-rename`, `files-delete-dir`, and
-  `/api/open-terminal` still require the session cwd or git root, so a widened
-  read scope cannot turn into an edit or a shell in an arbitrary directory.
-- **Orchestration children accept Claude Code's cross-session messages instead
-  of stalling on an approval dialog.** Claude Code v2.1.224 added
-  [cross-session messaging](https://code.claude.com/docs/en/cross-session-messaging),
-  where sessions reach each other over a per-session inbox socket. Its inbound
-  default holds every message for approval when the *receiving* session bypasses
-  permission prompts — and orchestration children always run with
-  `bypassPermissions` (`applyChildApprovalDefaults`) while nobody is watching
-  their terminal. A held message would have parked the child behind a dialog
-  until `dialogExpiry` (five minutes by default) with nothing recorded on the
-  board to explain the gap. Children now launch with `crossSessionInbound` set
-  to `accept`. Conductors and hand-started sessions keep the default, since a
-  human is watching those. The setting travels through the wrapper-owned temp
-  settings file that already carried `statusLine`, so the shared
-  `.claude/settings.local.json` is still never touched
-  (`internal/wrapper/usage_hooks.go`, `internal/wrapper/wrapper.go`). It is
-  omitted on native Windows, where the feature does not exist; sessions inside
-  WSL 2 are Linux and do get it.
-
-### Fixed
-- **The web terminal no longer freezes on a stale frame after the wrapper
-  reconnects to the Hub.** When a burst of PTY output overflows the wrapper's
-  send queue, the wrapper deliberately drops the WebSocket and reattaches two
-  seconds later — a designed self-recovery path. Its replay buffer was applied
-  to the Hub's internal mirror only, so an already-open browser never received
-  the bytes emitted during the gap. Terminals assume a lossless byte stream, so
-  a TUI that repaints with absolute cursor addressing (Codex, Grok) drew every
-  later frame at the wrong coordinates and could not catch up. The wrapper now
-  reports how many PTY bytes it has read, the Hub tracks how many it has
-  received, and on reattach exactly the missing tail is broadcast to connected
-  UIs — no gap, and no duplicate of what was already displayed. Reattach also
-  keeps the existing scrollback and VT mirror instead of truncating them to the
-  64 KB replay window, so reloading the browser after a reconnect no longer
-  loses history. Reattaches are now logged with `reattach replay gap`
-  (`internal/hub/reattach_replay.go`, `internal/hub/wrapper_loop.go`,
-  `internal/wrapper/wrapper.go`).
-
-## [0.5.2] - 2026-08-01
+## [0.6.0] - 2026-08-11
 
 ### Added
 - **Turn-by-turn diff review in the Review tab.** A new **Scope** selector
@@ -112,6 +44,66 @@ Release artifacts are published at
 - **Clear buttons for the working-directory history and favorites** in the
   spawn panel's `cwd` dropdown, each with a confirmation
   (`web/src/app/spawn-panel.ts`).
+- **The Chat pane now reads the CLI's own structured transcript instead of
+  scraping the terminal.** Chat text used to be assembled from PTY output by
+  committing whatever had arrived after 1.5 seconds of silence — but Claude and
+  Codex repaint their spinner several times a second, so that pause almost
+  never happened and redraw frames landed in the database as independent
+  messages. Roughly 60–65 % of stored AI messages were shorter than 25
+  characters (`Reticulating…`, `✶9`, `759.7k ↓8`), and longer ones carried
+  status bars and input-box borders inline. The Hub now parses Claude's
+  `~/.claude/projects/<slug>/<uuid>.jsonl` and Codex's
+  `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` directly, separating assistant
+  text from thinking blocks and tool calls, and tails them for live updates
+  over `GET /api/agent-chat` plus a WebSocket feed. Thinking and tool calls are
+  kept rather than dropped: both are collapsed by default with a header toggle
+  to expand them. The session is bound to its transcript deterministically by
+  injecting `claude --session-id`, falling back to nearest-match for providers
+  that do not accept one. PTY-derived AI messages are no longer accumulated in
+  the session database for the providers that have a transcript
+  (`internal/hub/agent_chat_parse.go`, `internal/hub/agent_chat_handler.go`,
+  `internal/wrapper/claude_session.go`, `web/src/app/chat-history.ts`).
+- **Live workflow progress, computed by the Hub instead of each browser.** The
+  Hub parses every session's VT mirror in Go and broadcasts progress — agents
+  done/total, elapsed time, and the agent tree — as a new `workflow_progress`
+  message, sent on change plus a 7-second heartbeat. For Claude it also tails
+  `journal.jsonl` for the authoritative completion count, reading only the
+  `type` / `agentId` metadata: result bodies are never held, logged, forwarded
+  or persisted. The browser prefers the Hub's numbers and falls back to its own
+  local VT parser. The UI gains elapsed time, a background-waiting count, a
+  completion ledger (capped at 200 entries) and a mini progress bar on each
+  sidebar card, in all three languages. Completion can raise a Web Push
+  notification. Two new settings: `workflow.journal_enabled` (default on) and
+  the `workflow_completion_notify` user preference (default off)
+  (`internal/hub/workflow_scan.go`, `internal/hub/workflow_journal.go`).
+- **OpenCode can be launched with approvals turned off.** The spawn panel shows
+  a "launch with everything allowed" option for OpenCode, which sends
+  `permission_mode` and makes the wrapper add `--auto` alongside the
+  `opencode.json` permission rules the Hub already writes. The option is
+  reflected in the spawn risk summary so an unattended full-allow session is
+  not started silently (`internal/hub/spawn_handler.go`,
+  `internal/hub/spawn_risk.go`, `internal/wrapper/wrapper.go`,
+  `web/src/app/spawn-panel.ts`).
+- **A banner now warns when the Hub is running an outdated binary.** Replacing
+  the executable does not affect a Hub that is already running, so after a
+  rebuild the dashboard could keep showing behaviour from the old build — in
+  one measured case for nearly five hours, making an already-fixed approval bug
+  look unfixed. The Hub re-evaluates staleness on every `/api/info` response
+  and pushes `binary_stale` to all connected UIs only when the state changes,
+  so an open dashboard gets the banner as soon as the next session is started.
+  Recovery is broadcast too, so the banner cannot stick. There is no polling
+  loop: the added cost is one `os.Stat` per `/api/info`, with no extra
+  goroutine or timer, since only developers ever swap the executable
+  (`internal/hub/server.go`, `web/src/app.ts`).
+- **A ✕ close button in the Review tab header,** next to ↻, so the tab can be
+  closed from where the diff is being read instead of only from the tab bar
+  (`web/src/app/review-view.ts`, `web/src/app/files-view.ts`).
+- **The turn-completion card can be dismissed,** with a ✕ button and automatic
+  removal when the next command starts, including cleanup on turn renumbering
+  and session deletion (`web/src/app/review-view.ts`).
+- **Individual entries can be deleted from the `cwd` history dropdown,**
+  keeping the favorites list in sync and preserving the current filter text
+  across the redraw (`web/src/app/spawn-panel.ts`).
 
 ### Changed
 - **Breaking: sending a message in a Git working tree now takes a Git snapshot
@@ -162,6 +154,60 @@ Release artifacts are published at
   triggered on pull requests and pushes to `main`, so commits landing directly
   on `develop` reached tagging without ever passing the quality gate
   (`.github/workflows/validate.yml`).
+- **Files preview no longer refuses to open documents that live outside the
+  current repository.** Reading was previously confined to the session cwd, its
+  git root, and the attachments/orchestration directories, with a narrow
+  fallback for paths the user had typed into chat — so reference material kept
+  next to a project (a `docs/` tree in a sibling folder, a recap note, a shared
+  spec) came back as a bare HTTP 403. That boundary did not actually contain
+  anything: the AI CLI itself runs as the same OS user and can read any file
+  with its own tools, and a caller holding the Hub token can already spawn a
+  shell in nearly any directory. Requests that arrive from a browser on the Hub
+  host itself are now served without the allowed-roots check
+  (`internal/hub/files_scope.go`). Files outside the project still come back
+  flagged `readOnly`, so the editor stays disabled for them.
+- **Logically remote callers keep the old, narrower scope.** Requests routed
+  through tailscale serve, `trusted_networks`, or any reverse proxy — detected
+  by `isLogicallyRemote`, the same split `/api/list-subdirs` already used — are
+  still limited to the allowed roots plus paths the user referenced in their own
+  chat input (`role='user'` only; AI output remains excluded).
+- **Secret-like files are refused on every out-of-scope read.** Private keys
+  (`*.pem`, `*.key`, `id_rsa*`), credential files (`*credentials*`), environment
+  files (`.env`, `.env.*`), the Hub's own session-history database
+  (`any-ai-cli.db` and its `-wal`/`-shm` siblings, which hold every chat
+  transcript), and `~/.many-ai-cli/config.yaml*` (which stores the Hub token in
+  plaintext — matched by prefix so that a hand-made copy of the file cannot leak
+  the same token) are rejected even from the Hub host. The file tree no longer
+  extracts a content summary for them either, so walking a directory cannot
+  bulk-harvest the first bytes of each one. Paths inside the project keep their
+  previous behaviour, so a repository's own `.env` still previews as before.
+- **Writes and terminal launches are unchanged.** `files-save`, `files-create`,
+  `files-mkdir`, `files-move`, `files-rename`, `files-delete-dir`, and
+  `/api/open-terminal` still require the session cwd or git root, so a widened
+  read scope cannot turn into an edit or a shell in an arbitrary directory.
+- **Orchestration children accept Claude Code's cross-session messages instead
+  of stalling on an approval dialog.** Claude Code v2.1.224 added
+  [cross-session messaging](https://code.claude.com/docs/en/cross-session-messaging),
+  where sessions reach each other over a per-session inbox socket. Its inbound
+  default holds every message for approval when the *receiving* session bypasses
+  permission prompts — and orchestration children always run with
+  `bypassPermissions` (`applyChildApprovalDefaults`) while nobody is watching
+  their terminal. A held message would have parked the child behind a dialog
+  until `dialogExpiry` (five minutes by default) with nothing recorded on the
+  board to explain the gap. Children now launch with `crossSessionInbound` set
+  to `accept`. Conductors and hand-started sessions keep the default, since a
+  human is watching those. The setting travels through the wrapper-owned temp
+  settings file that already carried `statusLine`, so the shared
+  `.claude/settings.local.json` is still never touched
+  (`internal/wrapper/usage_hooks.go`, `internal/wrapper/wrapper.go`). It is
+  omitted on native Windows, where the feature does not exist; sessions inside
+  WSL 2 are Linux and do get it.
+- **A bad `ollama` / `lm_studio` private-host setting no longer stops the Hub
+  from starting.** Requiring `allow_private_hosts` (above) turned a
+  misconfigured optional integration into a fatal startup error, taking down
+  every session with it. The mismatch is now reported as a warning written to
+  `hub.log` at startup and the Hub serves normally; only the model-list feature
+  stays blocked (`internal/config/config.go`, `internal/hub/server.go`).
 
 ### Fixed
 - **An answered batch approval no longer reappears in the action bar.** After
@@ -256,6 +302,113 @@ Release artifacts are published at
 - Leftover `launcher-active-*.json.tmp` files from a launcher killed mid-write
   are removed once they are older than an hour instead of accumulating
   (`internal/launcher/active.go`).
+- **The web terminal no longer freezes on a stale frame after the wrapper
+  reconnects to the Hub.** When a burst of PTY output overflows the wrapper's
+  send queue, the wrapper deliberately drops the WebSocket and reattaches two
+  seconds later — a designed self-recovery path. Its replay buffer was applied
+  to the Hub's internal mirror only, so an already-open browser never received
+  the bytes emitted during the gap. Terminals assume a lossless byte stream, so
+  a TUI that repaints with absolute cursor addressing (Codex, Grok) drew every
+  later frame at the wrong coordinates and could not catch up. The wrapper now
+  reports how many PTY bytes it has read, the Hub tracks how many it has
+  received, and on reattach exactly the missing tail is broadcast to connected
+  UIs — no gap, and no duplicate of what was already displayed. Reattach also
+  keeps the existing scrollback and VT mirror instead of truncating them to the
+  64 KB replay window, so reloading the browser after a reconnect no longer
+  loses history. Reattaches are now logged with `reattach replay gap`
+  (`internal/hub/reattach_replay.go`, `internal/hub/wrapper_loop.go`,
+  `internal/wrapper/wrapper.go`).
+- **Text sent from the web UI is no longer swallowed when the wrapper
+  reconnects.** In Codex sessions a message could stay sitting in the CLI's
+  input box until Enter was pressed a second time. Two layers were at fault:
+  the wrapper's 64-chunk PTY output queue overflowed on Codex's output bursts
+  (measured at up to 582 chunks in a 100 ms window, 147 self-disconnects over
+  13 hours, against a maximum of 30 chunks and zero disconnects for Claude),
+  and the confirming CR that arrived during that window passed the Hub's
+  "delivered" check and vanished, because the send path had no acknowledgement
+  and a `nil` error did not mean arrival. The queue now holds 1024 chunks and
+  coalesces pending output up to 256 KiB, and a new `pty_input_ack` message
+  lets the Hub retain unacknowledged input and resend it on reattach. Resends
+  keep their original sequence number so the wrapper's watermark can drop
+  duplicates — an acknowledgement lost to the disconnect no longer results in
+  the confirming CR being typed twice (`internal/hub/wrapper_loop.go`,
+  `internal/wrapper/wrapper.go`, `internal/proto/messages.go`).
+- **A wrapper that reconnects is no longer numbered as a new session.** When
+  the wrapper dropped its own WebSocket after a queue overflow and reattached
+  before the Hub had noticed the disconnect, the reattach loop read it as an ID
+  collision with a different wrapper and allocated a new number — producing two
+  cards for one process, an old one still showing a pending approval with
+  nowhere to send the answer, and a new one starting from zero bytes with no
+  scrollback (measured 2026-08-05: #15 and #17 both `pid=6224`). The PID the
+  wrapper already sends on reattach is now matched together with provider and
+  cwd; wrappers too old to send one still take the renumbering path, since the
+  OS reuses PIDs and one alone is not proof of identity. Teardown of the
+  superseded connection is also guarded, so a late-finishing old connection can
+  no longer mark the live session disconnected, broadcast `session_end`, and
+  discard its pending input and approval rules (`internal/hub/wrapper_loop.go`).
+- **Answered Codex approvals no longer flicker back into the action bar.** In
+  long, high-output sessions an already-answered approval block was re-detected
+  as new on every reattach, TUI repaint and VT reflow, so the action bar
+  rebuilt itself continuously and could not be clicked. Approval candidates now
+  carry a logical identity and a replay boundary on the wire: the Hub batches
+  detection while replaying and suppresses corrupted and reconnect-borne
+  candidates, and the browser suppresses answered candidates by logical ID and
+  generation. Action-bar DOM changes and PTY resizes are folded into a single
+  settle so one candidate cannot drive a resize feedback loop. Approvals that
+  are genuinely still waiting are shown as before
+  (`internal/hub/approval_identity.go`, `internal/hub/approval_native.go`,
+  `web/src/app/approval.ts`, `web/src/app/state.ts`).
+- **The OpenCode approval bar no longer flickers and refuses clicks.** An
+  approval's identity was derived from a snapshot of the whole terminal window,
+  so a spinner frame or a ticking elapsed-seconds counter changed the signature
+  and OpenCode re-broadcast `approval_detected` on every frame; the browser
+  rebuilt the action bar each time. Identity is now scoped to the dialog itself
+  (from `Permission required` down to the button row). Narrowing it exposed
+  three follow-on problems that are fixed with it: hint-word detection and
+  `/model` selector suppression still receive the full screen, the question line
+  is extracted properly instead of always being empty (so two different requests
+  are now distinguishable), and the button row is searched from the bottom up so
+  a stale dialog left on screen is not picked up
+  (`internal/hub/approval_native.go`).
+- **OpenCode's second-stage approval now reaches the web UI.** Choosing "Allow
+  always" makes OpenCode show a follow-up Confirm / Cancel dialog, which the
+  Hub could not detect because its dialog detection keyed on a line containing
+  "allow once" — wording the second stage does not have, along with "permission
+  required". You had to switch to the terminal and press Enter there. The
+  horizontal Confirm / Cancel button row is now recognised together with its
+  "Always allow" heading, both stages are searched with the lower one on screen
+  winning (the first stage often remains drawn above the second), and the
+  approval bar's heading shows the permission pattern being granted so it is
+  visible before the button is pressed (`internal/hub/approval_native.go`).
+- **The "approval was withheld" banner no longer appears while the approval
+  panel is on screen.** When only the Hub's VT mirror was corrupted, the browser
+  could still rebuild the panel from its own xterm buffer, but that path never
+  retracted the notice — so the panel and a message saying it had been withheld
+  were shown at once. The banner's lifetime is now tied to whether the panel is
+  actually displayed, which also makes it disappear when **↻ Re-detect**
+  succeeds (`web/src/app/approval-ui.ts`).
+- **Session cards can be reordered by drag and drop again, and new sessions
+  appear in creation order.** Every render overwrote the drag-and-drop order
+  with a provider-based sort, so a dropped card sprang back and the list was
+  split up by AI agent; the drop handler itself had been working and was even
+  saving successfully. Persistence was broken as well — the order is an array
+  of numeric session IDs but was sanitised as an array of strings, so every
+  element was discarded and nothing ever reached the server. The stored type is
+  now `[]int`, with a lenient decoder that accepts both numbers and numeric
+  strings so an older `config.yaml` does not fail to parse and trigger a
+  `.bak` rescue plus a regenerated default config (`web/src/app/session-list.ts`,
+  `internal/config/config.go`).
+- **A terminal resize no longer produces a bogus `marker_leak` verdict.** The
+  VT mirror's scrollback is discarded on resize, and the show/hide cycle of the
+  suppression banner no longer amplifies into a `pty_resize` loop
+  (`internal/hub/vt_buffer.go`, `internal/hub/input_gate.go`).
+- **Tool results now appear in the Chat pane without a reload.** The parser's
+  map of pending tool-call IDs was rebuilt empty on every parse call, so a
+  result that arrived in a later incremental read had nothing to attach to and
+  was dropped. Call/result association is kept across polls, messages carry a
+  stable `message_id`, and reattach state is tracked separately with the
+  generation verified, so a live tool result is rendered as it arrives
+  (`internal/hub/agent_chat_parse.go`, `internal/hub/agent_chat_handler.go`).
 
 ### Removed
 - **The temporary `/api/debug/batch-log` endpoint and its front-end
@@ -265,6 +418,16 @@ Release artifacts are published at
   `~/.many-ai-cli/logs/debug/batch-log.jsonl` writes — which recorded approval
   answer bodies verbatim — are gone. Existing log files are left untouched
   (`internal/hub/debug_batch_log_handler.go`, `web/src/app/approval.ts`).
+- **The temporary input tracing added while chasing the lost-keystroke bug
+  above.** The wrapper wrote `wrapper-trace.jsonl` into the log directory — <!-- secrets-scan: allow wrapper-trace.jsonl (name is hard-coded in this repo's own removed source, not personal data) -->
+  created with mode `0644`, appended to without rotation or a size cap, and
+  active regardless of whether session logging was enabled — and the Hub logged
+  a matching `input_trace` line carrying a hex tail of the same bytes. Because
+  the traced bytes are whatever you type, that included passwords and API keys
+  pasted into a session, unmasked, on every normal run. Both sides are removed:
+  `internal/wrapper/trace.go`, `internal/hub/input_trace.go`, and their call
+  sites. Existing trace files are left on disk — delete
+  `~/.many-ai-cli/logs/wrapper-trace.jsonl` if one was produced by 0.5.x. <!-- secrets-scan: allow wrapper-trace.jsonl (name is hard-coded in this repo's own removed source, not personal data) -->
 
 ### Security
 - **Breaking: PIN sessions are now tracked on the server and bound to the
@@ -322,6 +485,19 @@ Release artifacts are published at
 - The custom notification sound stored in user preferences is now validated on
   save: only the Hub-managed `notify_sound_custom.bin` with an `audio/*` MIME
   type is kept (`internal/hub/user_prefs_handlers.go`).
+- **Transcript and workflow-journal reads are bounded before anything is
+  allocated.** The new Chat pane and workflow progress read files the Hub does
+  not control the size of. The message limit was applied only after the whole
+  file had been parsed, and `ReadBytes` allocated an entire line before any cap
+  was consulted, so one very long line was enough to exhaust CPU and memory;
+  the workflow journal had no limit at all. Per-line length, cumulative bytes,
+  record count and constructed message count are now capped up front, reads are
+  paginated with a cursor, and a line over 4 MiB is carried across polls
+  instead of being buffered whole. The tail page also commits its cursor at the
+  same boundary as the records it actually returned, so hitting the 100 ms
+  parse deadline part-way through a page can no longer skip the unparsed
+  records permanently (`internal/hub/agent_chat_parse.go`,
+  `internal/hub/workflow_journal.go`).
 
 ## [0.5.1] - 2026-07-22
 
@@ -1255,8 +1431,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.2...HEAD
-[0.5.2]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.1...v0.5.2
+[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.3.4...v0.4.0
