@@ -601,10 +601,14 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		History:                        history,
 		agentChatPath:                  prevAgentChatPath,
 		agentChatOffset:                prevAgentChatOffset,
-		inputSeq:                       prevInputSeq,
-		inflightInput:                  prevInflightInput,
-		resendInput:                    prevResendInput,
-		inputAckCapable:                prevInputAckCapable,
+		// The old poll may still be parsing its state outside sessionsMu. Do not
+		// share that mutable pointer across reattach; the new poll primes a fresh
+		// bounded tail state before taking ownership of future bytes.
+		agentChatParseState: nil,
+		inputSeq:            prevInputSeq,
+		inflightInput:       prevInflightInput,
+		resendInput:         prevResendInput,
+		inputAckCapable:     prevInputAckCapable,
 	}
 	s.sessions[acceptedID].inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
 	wc := newWrapperConn(conn)
@@ -922,7 +926,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	// 判定に wc 単位のフラグだけを使うと、reattach 直後に 1 件も ack を受けないまま
 	// 再び切れた接続が旧 wrapper と誤判定され、保留入力が捨てられる。
 	// セッション単位の inputAckCapable も併せて見る。
-	// 滞留症状の観測 (input_trace.go / 2026-08-04) として、旧経路で捨てた事実は
+	// 入力経路の診断として、旧経路で捨てた事実は
 	// ログへ残し、「送ったのに何も起きない」の切り分けに使う。
 	ackCapable := wc.inputAckSeen.Load()
 	if cur := s.sessions[id]; cur != nil && cur.inputAckCapable {

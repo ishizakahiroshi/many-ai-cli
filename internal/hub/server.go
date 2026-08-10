@@ -213,11 +213,12 @@ type session struct {
 	workflowCompletionNotified        bool
 	workflowCompletionSignature       string
 
-	// JSON 外: provider-owned structured transcript tail. Only the byte offset
-	// and path are retained; transcript content is broadcast and never stored in
-	// the many-ai-cli session history.
+	// JSON 外: provider-owned structured transcript tail. The path, byte cursor,
+	// and bounded ephemeral parser state are retained only for the live poll;
+	// transcript content is broadcast and never stored in many-ai-cli history.
 	agentChatPath       string
 	agentChatOffset     int64
+	agentChatParseState *agentChatParseState
 	agentChatTimer      *time.Timer
 	agentChatGeneration uint64
 	agentChatRunning    bool
@@ -526,11 +527,18 @@ type Server struct {
 	// (snapshotCfg / snapshotLocalModels / idleTimeoutMin) and release cfgMu
 	// before taking sessionsMu.
 	sessionsMu sync.Mutex
-	cfgMu      sync.Mutex
-	nextID     int
-	sessions   map[int]*session
-	wrappers   map[int]*wrapperConn
-	uis        map[*websocket.Conn]*uiConn
+	// agentChatBroadcastMu serializes agent-chat generation invalidation with
+	// generation-checked UI sends. Reattach can replace a session while an old
+	// poll is parsing outside sessionsMu; this lock prevents that old poll from
+	// broadcasting after the replacement is committed.
+	agentChatBroadcastMu sync.Mutex
+	// Test-only clock injection for deterministic tail-prime deadline cases.
+	agentChatReadClock func() time.Time
+	cfgMu              sync.Mutex
+	nextID             int
+	sessions           map[int]*session
+	wrappers           map[int]*wrapperConn
+	uis                map[*websocket.Conn]*uiConn
 	// pendingInput は wrapper 未接続・送信失敗で届けられなかったユーザー入力を
 	// セッションごとに順序保持でバッファする。wrapper の (再)接続時に
 	// flushPendingInput が順番に再送するため、入力が黙って失われない。
@@ -1489,15 +1497,13 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 		case "pty_resize":
 			s.handleResizeFromUI(conn, m)
 		case "pty_input":
-			// 滞留症状の観測 (input_trace.go / 2026-08-04)。handleInput は同期呼び出しで、
+			// 入力経路の診断は内容を記録せず、受信状態だけを残す。handleInput は同期呼び出しで、
 			// この for ループが返るまで同じ UI 接続の後続メッセージ（= 確定 \r）を
 			// 受信できない。recv の刻みが無いとその待ちが測れない。
 			s.logger.Info("input_trace",
 				"stage", "recv",
 				"session_id", m.SessionID,
 				"bytes", len(m.Text),
-				"shape", inputShape(m.Text),
-				"tail_hex", inputTailHex(m.Text, 8),
 				"ts_ns", time.Now().UnixNano())
 			s.claimResizeOwnership(conn, m.SessionID, 0, 0)
 			s.handleInput(m)
@@ -1538,12 +1544,6 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 			}
 		}
 	}
-}
-
-// handleResize は pty_resize メッセージを処理する。
-// UI 側の端末サイズ変更を受け、セッションの VT バッファをリサイズして wrapper へ転送する。
-func (s *Server) handleResize(m proto.Message) {
-	s.handleResizeFromUI(nil, m)
 }
 
 func (s *Server) handleResizeFromUI(conn *websocket.Conn, m proto.Message) {

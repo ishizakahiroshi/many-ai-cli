@@ -43,6 +43,52 @@ func TestWorkflowJournalTailLargeLineAndRestartIdempotence(t *testing.T) {
 	}
 }
 
+func TestWorkflowJournalTailKeepsAgentIDFromOversizedResult(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "journal.jsonl")
+	body := strings.Repeat("x", workflowJournalLineMax+1024)
+	data := "{\"type\":\"result\",\"result\":\"" + body + "\",\"agentId\":\"oversized\"}\n" +
+		"{\"type\":\"started\",\"agentId\":\"a1\"}\n"
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	state, err := tailWorkflowJournal(path, workflowJournalFileState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Results) != 1 || len(state.Started) != 1 || state.Offset != int64(len(data)) {
+		t.Fatalf("oversized result lost its completion: started=%d results=%d offset=%d", len(state.Started), len(state.Results), state.Offset)
+	}
+}
+
+func TestWorkflowJournalTailAdvancesAcrossFourMiBResult(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "journal.jsonl")
+	body := strings.Repeat("x", workflowJournalReadBytesMax+1024)
+	data := "{\"type\":\"result\",\"result\":\"" + body + "\",\"agentId\":\"large-result\"}\n" +
+		"{\"type\":\"started\",\"agentId\":\"after-large\"}\n"
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	state := workflowJournalFileState{}
+	var previousOffset int64
+	for poll := 0; poll < 8 && state.Offset < int64(len(data)); poll++ {
+		var err error
+		state, err = tailWorkflowJournal(path, state)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if state.Offset <= previousOffset {
+			t.Fatalf("journal cursor did not advance at poll %d: previous=%d current=%d", poll, previousOffset, state.Offset)
+		}
+		if len(state.Parser.quoted) > workflowJournalFieldMax {
+			t.Fatalf("journal parser retained an unbounded field: %d", len(state.Parser.quoted))
+		}
+		previousOffset = state.Offset
+	}
+	if state.Offset != int64(len(data)) || len(state.Results) != 1 || len(state.Started) != 1 {
+		t.Fatalf("large result stopped journal tail: offset=%d size=%d results=%v started=%v state=%+v", state.Offset, len(data), state.Results, state.Started, state)
+	}
+}
+
 func TestWorkflowJournalTailCarriesIncompleteLine(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "journal.jsonl")
 	partial := "{\"type\":\"started\",\"agentId\":\"a1\"}"
@@ -53,10 +99,18 @@ func TestWorkflowJournalTailCarriesIncompleteLine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.Offset != 0 || len(state.Started) != 0 {
-		t.Fatalf("incomplete line was consumed: %+v", state)
+	if state.Offset != int64(len(partial)) || state.LineBytes != int64(len(partial)) || len(state.Started) != 0 {
+		t.Fatalf("incomplete line cursor/state was not retained: %+v", state)
 	}
-	if err := os.WriteFile(path, []byte(partial+"\n"), 0o600); err != nil {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("\n"); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
 	state, err = tailWorkflowJournal(path, state)
@@ -65,6 +119,62 @@ func TestWorkflowJournalTailCarriesIncompleteLine(t *testing.T) {
 	}
 	if state.Offset != int64(len(partial)+1) || len(state.Started) != 1 {
 		t.Fatalf("completed line was not consumed: %+v", state)
+	}
+}
+
+func TestWorkflowJournalDeadlineRetainsPartialParserState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "journal.jsonl")
+	data := `{"type":"started","agentId":"a1"}`
+	deadline := time.Unix(1_700_000_000, 0)
+	prefixLen := len(data) / 2
+	if err := os.WriteFile(path, []byte(data[:prefixLen]), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	clockCalls := 0
+	state, stats, err := tailWorkflowJournalWithBudget(path, workflowJournalFileState{}, workflowJournalReadBudget{
+		MaxBytes:   len(data),
+		MaxRecords: workflowJournalReadRecordsMax,
+		Deadline:   deadline,
+		Clock: func() time.Time {
+			clockCalls++
+			if clockCalls <= 1+prefixLen {
+				return deadline.Add(-time.Second)
+			}
+			return deadline.Add(time.Second)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !stats.HitBudget || state.Offset != int64(prefixLen) || state.LineBytes != int64(prefixLen) || len(state.Started) != 0 {
+		t.Fatalf("deadline did not retain partial journal state: state=%+v stats=%+v calls=%d", state, stats, clockCalls)
+	}
+	if stats.BytesRead > len(data) {
+		t.Fatalf("journal deadline exceeded byte budget: stats=%+v", stats)
+	}
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(data[prefixLen:] + "\n"); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	state, stats, err = tailWorkflowJournalWithBudget(path, state, workflowJournalReadBudget{
+		MaxBytes:   workflowJournalReadBytesMax,
+		MaxRecords: workflowJournalReadRecordsMax,
+		Deadline:   deadline.Add(time.Second),
+		Clock:      func() time.Time { return deadline },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Started) != 1 || state.Offset != int64(len(data)+1) || state.LineBytes != 0 || stats.Records != 1 {
+		t.Fatalf("partial journal state was not resumed: state=%+v stats=%+v", state, stats)
 	}
 }
 

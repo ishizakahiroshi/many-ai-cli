@@ -54,44 +54,17 @@ func (s *Server) handleAgentChat(w http.ResponseWriter, r *http.Request) {
 
 	if !isAgentChatProvider(snap.Provider) {
 		writeJSON(w, map[string]any{
-			"ok":        true,
-			"available": false,
-			"total":     0,
-			"offset":    0,
-			"messages":  []agentChatMessage{},
+			"ok":          true,
+			"available":   false,
+			"total":       0,
+			"total_known": true,
+			"offset":      0,
+			"cursor":      0,
+			"next_cursor": 0,
+			"has_more":    false,
+			"messages":    []agentChatMessage{},
 		})
 		return
-	}
-
-	path, ok := agentChatTranscriptPathForSnapshot(snap)
-	if !ok {
-		// The provider may not have created its first transcript file yet. Keep
-		// available=true so the browser stays on the structured path and the
-		// live tail can discover the file on a later poll.
-		writeJSON(w, map[string]any{
-			"ok":        true,
-			"available": true,
-			"total":     0,
-			"offset":    0,
-			"messages":  []agentChatMessage{},
-		})
-		return
-	}
-
-	var messages []agentChatMessage
-	switch snap.Provider {
-	case "claude":
-		messages, _, err = parseClaudeTranscript(path, 0)
-	case "codex":
-		messages, _, err = parseCodexRollout(path, 0)
-	}
-	if err != nil {
-		s.logger.Warn("agent chat transcript read failed", "session_id", id, "provider", snap.Provider, "err", err)
-		writeJSONError(w, http.StatusNotFound, "not_found", "agent transcript not readable")
-		return
-	}
-	if messages == nil {
-		messages = []agentChatMessage{}
 	}
 
 	limit := agentChatDefaultLimit
@@ -103,28 +76,70 @@ func (s *Server) handleAgentChat(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = min(limit, agentChatMaxLimit)
 	}
-	offset := -1
-	if value := r.URL.Query().Get("offset"); value != "" {
-		offset, err = strconv.Atoi(value)
-		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid offset")
-			return
+	// cursor is a newline-aligned byte offset. The initial request omits it and
+	// receives a bounded tail page; subsequent pages can request older bytes by
+	// sending next_cursor. offset remains accepted as a compatibility alias.
+	cursor := int64(-1)
+	for _, key := range []string{"cursor", "offset"} {
+		if value := r.URL.Query().Get(key); value != "" {
+			cursor, err = strconv.ParseInt(value, 10, 64)
+			if err != nil || cursor < -1 {
+				writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid cursor")
+				return
+			}
+			break
 		}
 	}
-	total := len(messages)
-	if offset < 0 {
-		offset = max(total-limit, 0)
+
+	path, ok := agentChatTranscriptPathForSnapshot(snap)
+	if !ok {
+		// The provider may not have created its first transcript file yet. Keep
+		// available=true so the browser stays on the structured path and the
+		// live tail can discover the file on a later poll.
+		writeJSON(w, map[string]any{
+			"ok":          true,
+			"available":   true,
+			"total":       0,
+			"total_known": true,
+			"offset":      0,
+			"cursor":      0,
+			"next_cursor": 0,
+			"has_more":    false,
+			"messages":    []agentChatMessage{},
+		})
+		return
 	}
-	if offset > total {
-		offset = total
+
+	state := newAgentChatParseStateWithPage(limit, agentChatBatchBytesMax, -1)
+	var messages []agentChatMessage
+	pageOffset := cursor
+	switch snap.Provider {
+	case "claude":
+		messages, pageOffset, err = parseClaudeTranscriptTailPage(path, state, cursor)
+	case "codex":
+		messages, pageOffset, err = parseCodexRolloutTailPage(path, state, cursor)
 	}
-	end := min(offset+limit, total)
+	nextCursor := pageOffset
+	if err != nil {
+		s.logger.Warn("agent chat transcript read failed", "session_id", id, "provider", snap.Provider, "err", err)
+		writeJSONError(w, http.StatusNotFound, "not_found", "agent transcript not readable")
+		return
+	}
+	if messages == nil {
+		messages = []agentChatMessage{}
+	}
+
+	hasMore := nextCursor > 0
 	writeJSON(w, map[string]any{
-		"ok":        true,
-		"available": true,
-		"total":     total,
-		"offset":    offset,
-		"messages":  messages[offset:end],
+		"ok":          true,
+		"available":   true,
+		"total":       -1,
+		"total_known": false,
+		"offset":      pageOffset,
+		"cursor":      pageOffset,
+		"next_cursor": nextCursor,
+		"has_more":    hasMore,
+		"messages":    messages,
 	})
 }
 
@@ -187,12 +202,14 @@ func (s *Server) stopAgentChatTailLocked(ses *session) {
 	if ses == nil {
 		return
 	}
+	s.agentChatBroadcastMu.Lock()
 	if ses.agentChatTimer != nil {
 		ses.agentChatTimer.Stop()
 		ses.agentChatTimer = nil
 	}
 	ses.agentChatRunning = false
 	ses.agentChatGeneration++
+	s.agentChatBroadcastMu.Unlock()
 }
 
 func (s *Server) stopAgentChatTail(id int) {
@@ -209,6 +226,38 @@ func (s *Server) scheduleAgentChatPollLocked(id int, generation uint64) {
 	ses.agentChatTimer = time.AfterFunc(agentChatPollInterval, func() { s.pollAgentChat(id, generation) })
 }
 
+func (s *Server) broadcastAgentChatIfCurrent(id int, generation uint64, message proto.Message) bool {
+	// Lock order is sessionsMu -> agentChatBroadcastMu, matching
+	// stopAgentChatTailLocked. The session replacement therefore cannot commit
+	// between the generation check and the send snapshot.
+	s.sessionsMu.Lock()
+	ses := s.sessions[id]
+	if ses == nil || !ses.agentChatRunning || ses.agentChatGeneration != generation {
+		s.sessionsMu.Unlock()
+		return false
+	}
+	s.agentChatBroadcastMu.Lock()
+	ucs := make([]*uiConn, 0, len(s.uis))
+	for _, uc := range s.uis {
+		ucs = append(ucs, uc)
+	}
+	s.sessionsMu.Unlock()
+
+	deadline := time.Now().Add(broadcastWriteTimeout)
+	var dead []*uiConn
+	for _, uc := range ucs {
+		if err := uc.sendWithDeadline(message, deadline); err != nil {
+			s.logger.Warn("agent chat broadcast: UI send failed", "err", err)
+			dead = append(dead, uc)
+		}
+	}
+	s.agentChatBroadcastMu.Unlock()
+	for _, uc := range dead {
+		s.removeUI(uc.ws)
+	}
+	return true
+}
+
 func (s *Server) pollAgentChat(id int, generation uint64) {
 	s.sessionsMu.Lock()
 	ses := s.sessions[id]
@@ -219,6 +268,7 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 	provider := ses.Provider
 	previousPath := ses.agentChatPath
 	previousOffset := ses.agentChatOffset
+	parseState := ses.agentChatParseState
 	ses.agentChatTimer = nil
 	s.sessionsMu.Unlock()
 
@@ -226,16 +276,47 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 	path, pathOK := agentChatTranscriptPathForSnapshot(snap)
 	if pathOK && path != previousPath {
 		previousOffset = 0
+		parseState = nil
+	}
+	stateWasReset := parseState == nil
+	if parseState == nil {
+		parseState = newAgentChatParseStateWithPage(agentChatLiveMessageMax, agentChatBatchBytesMax, -1)
 	}
 	var messages []agentChatMessage
 	newOffset := previousOffset
 	var err error
 	if pathOK {
-		switch provider {
-		case "claude":
-			messages, newOffset, err = parseClaudeTranscript(path, previousOffset)
-		case "codex":
-			messages, newOffset, err = parseCodexRollout(path, previousOffset)
+		if stateWasReset {
+			// Reattach/path replacement gives the new poll a fresh owner. Prime it
+			// from a bounded tail page so pending tool IDs are rebuilt without
+			// sharing the old poll's mutable maps or reading from byte zero.
+			budget := s.agentChatTailPageBudget()
+			switch provider {
+			case "claude":
+				messages, _, err = parseClaudeTranscriptTailPageWithBudget(path, parseState, -1, budget)
+			case "codex":
+				messages, _, err = parseCodexRolloutTailPageWithBudget(path, parseState, -1, budget)
+			}
+			if parseState.lastRead.DecodeCommitted {
+				// The tail parser owns the snapshot boundary. Do not replace it
+				// with a later os.Stat: that could skip an incomplete tail or a
+				// record appended while the snapshot was being parsed.
+				newOffset = parseState.lastRead.SafeOffset
+			} else {
+				// A page that did not reach the decode commit boundary must not
+				// become a normal forward parser state. Retry the same tail page
+				// on the next poll so existing records cannot be skipped.
+				messages = nil
+				newOffset = previousOffset
+				parseState = nil
+			}
+		} else {
+			switch provider {
+			case "claude":
+				messages, newOffset, err = parseClaudeTranscriptWithState(path, previousOffset, parseState)
+			case "codex":
+				messages, newOffset, err = parseCodexRolloutWithState(path, previousOffset, parseState)
+			}
 		}
 	}
 	if err != nil {
@@ -243,12 +324,14 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 	}
 
 	for _, message := range messages {
-		s.broadcast(proto.Message{
+		if !s.broadcastAgentChatIfCurrent(id, generation, proto.Message{
 			Type:              "agent_chat",
 			SessionID:         id,
 			Provider:          provider,
 			AgentChatMessages: []proto.AgentChatMessage{toProtoAgentChatMessage(message)},
-		})
+		}) {
+			return
+		}
 	}
 
 	now := time.Now()
@@ -261,6 +344,7 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 	if pathOK {
 		cur.agentChatPath = path
 		cur.agentChatOffset = newOffset
+		cur.agentChatParseState = parseState
 	}
 	if len(messages) > 0 {
 		cur.agentChatLastAt = now
@@ -277,6 +361,23 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 	}
 	s.scheduleAgentChatPollLocked(id, generation)
 	s.sessionsMu.Unlock()
+}
+
+func (s *Server) agentChatTailPageBudget() agentChatReadBudget {
+	now := time.Now()
+	var clock func() time.Time
+	if s != nil {
+		clock = s.agentChatReadClock
+	}
+	if clock != nil {
+		now = clock()
+	}
+	return agentChatReadBudget{
+		MaxBytes:   agentChatPageBytesMax,
+		MaxRecords: agentChatPageRecordsMax,
+		Deadline:   now.Add(agentChatReadTimeBudget),
+		Clock:      clock,
+	}
 }
 
 func (s *Server) agentChatSnapshot(id int) agentLogSession {
@@ -305,5 +406,6 @@ func toProtoAgentChatMessage(message agentChatMessage) proto.AgentChatMessage {
 	return proto.AgentChatMessage{
 		Role: message.Role, Kind: message.Kind, Text: message.Text,
 		Thinking: append([]string(nil), message.Thinking...), Tools: tools, TS: message.TS,
+		MessageID: message.MessageID,
 	}
 }

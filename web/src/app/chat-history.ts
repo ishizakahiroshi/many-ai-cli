@@ -7,6 +7,7 @@ import { showPathPopup } from './path-links.js';
 import { TERMINAL_SCROLLBACK_LINES, markTerminalManualScrollIntent, sendResize, updateScrollLockBtn } from './terminal.js';
 import { setActiveTab, updateChatCountBadge } from './settings.js';
 import { chatPane, openLightbox } from './attachments.js';
+import { evaluateTranscriptMessage, shouldRefreshChatDerivedState, transcriptMessageCategory, transcriptMessageIdentity, transcriptMessageKey, updateRenderedChatMessage } from './transcript-message.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -133,31 +134,45 @@ export function isTranscriptBackedSession(sid) {
   return isTranscriptBackedProvider(sessions.get(sid)?.provider || '');
 }
 
-function transcriptMessageKey(msg) {
-  return JSON.stringify([
-    msg.role || '', msg.kind || '', msg.ts || '', msg.text || '',
-    Array.isArray(msg.thinking) ? msg.thinking : [],
-    Array.isArray(msg.tools) ? msg.tools : [],
-  ]);
-}
-
 export function pushAgentChatMessage(sid, msg) {
   if (sid === null || sid === undefined || !msg) return null;
   const key = transcriptMessageKey(msg);
   const existing = chatHistory.get(sid) || [];
-  if (existing.some(entry => entry.meta?.transcript_key === key)) return null;
+  const identity = transcriptMessageIdentity(msg);
   const role = msg.role === 'user' ? 'user' : 'ai';
+  const transcriptMeta = {
+    transcript: true,
+    transcript_key: key,
+    transcript_message_id: identity,
+    thinking: Array.isArray(msg.thinking) ? msg.thinking.slice() : [],
+    tools: Array.isArray(msg.tools) ? msg.tools.slice() : [],
+  };
+  if (identity) {
+    const index = existing.findIndex(entry => entry.meta?.transcript_message_id === identity);
+    if (index >= 0) {
+      const previous = existing[index];
+      const updated = {
+        ...previous,
+        ts: msg.ts || previous.ts || Date.now(),
+        role,
+        kind: msg.kind || 'text',
+        rawText: msg.text || '',
+        normalizedText: normalizeChatText(msg.text || ''),
+        meta: transcriptMeta,
+      };
+      existing[index] = updated;
+      chatHistory.set(sid, existing);
+      chatHistoryNotify(sid, updated);
+      return updated;
+    }
+  }
+  if (existing.some(entry => entry.meta?.transcript_key === key)) return null;
   return pushMessage(sid, {
     ts: msg.ts || Date.now(),
     role,
     kind: msg.kind || 'text',
     rawText: msg.text || '',
-    meta: {
-      transcript: true,
-      transcript_key: key,
-      thinking: Array.isArray(msg.thinking) ? msg.thinking.slice() : [],
-      tools: Array.isArray(msg.tools) ? msg.tools.slice() : [],
-    },
+    meta: transcriptMeta,
   });
 }
 
@@ -503,14 +518,14 @@ export function clearBuffer(session) {
 //
 // 主要関数:
 //   mountChatPaneForSession(sid)     — chat-pane を再構築
-//   appendMessage(sid, msg)           — 1 件 append (新規メッセージのみ)
+//   appendMessage(sid, msg)           — 1 件 append/update
 //   renderMessageBubble(msg, opts)    — DOM 要素を返す
 //   renderInlineText(text)            — path / URL / inline-code → DOM 変換
 //   parseToolCallsFromOutput(text, provider) — provider 別ツール呼び出し抽出
 // =========================================================================
 
 export let _chatPaneMountedSid = null;
-export let _chatPaneRenderedMessageIds = new Set();
+export let _chatPaneRenderedMessageIds: Set<string> = new Set();
 
 export function getChatPaneEl() {
   return document.getElementById('chat-pane');
@@ -1109,14 +1124,17 @@ export function appendMessage(sid, msg) {
   const timeline = getChatTimelineEl();
   if (!timeline) return;
   const wasAtBottom = chatPaneAtBottom(timeline);
-  // 既に同 id がある場合は skip（重複防止）
-  const msgId = String(msg.id);
-  if (_chatPaneRenderedMessageIds.has(msgId)) return;
-  _chatPaneRenderedMessageIds.add(msgId);
-  timeline.appendChild(renderMessageBubble(sid, msg));
+  const action = updateRenderedChatMessage(
+    timeline,
+    _chatPaneRenderedMessageIds,
+    msg,
+    () => renderMessageBubble(sid, msg),
+  );
+  if (action === 'ignored' || action === 'skipped') return;
   updateChatPaneEmptyState(sid);
-  // C4: 増分のフィルタ/検索/ミニマップ更新
-  if (typeof window !== 'undefined' && typeof window._chatC4OnAppend === 'function') {
+  // C4: 増分のフィルタ/検索/ミニマップ更新。tool result の更新も同じ
+  // DOM位置を置換するため、追加と更新の両方で現在の状態を再計算する。
+  if (shouldRefreshChatDerivedState(action) && typeof window !== 'undefined' && typeof window._chatC4OnAppend === 'function') {
     try { window._chatC4OnAppend(sid, msg); } catch (_) {}
   }
   if (wasAtBottom) scrollChatPaneToBottomSoon({ passes: 2 });
@@ -1567,13 +1585,7 @@ if (typeof window !== 'undefined') {
   }
 
   function classifyMsgEl(el) {
-    const role = el.dataset.role || '';
-    const kind = el.dataset.kind || '';
-    if (role === 'system' || kind === 'approval') return 'approval';
-    if (kind === 'attach') return 'attach';
-    if (role === 'user') return 'user';
-    if (role === 'ai') return 'ai';
-    return 'other';
+    return transcriptMessageCategory(el.dataset.role || '', el.dataset.kind || '');
   }
 
   function applyFilterAndSearch() {
@@ -1586,22 +1598,25 @@ if (typeof window !== 'undefined') {
     _searchHits = [];
     const msgs = tl.querySelectorAll('.msg');
     msgs.forEach(el => {
-      const cat = classifyMsgEl(el);
+      const state = evaluateTranscriptMessage(
+        el.textContent || '',
+        el.dataset.role || '',
+        el.dataset.kind || '',
+        q,
+        _activeFilters,
+      );
+      const cat = state.category;
       counts.all++;
       if (counts[cat] != null) counts[cat]++;
       // フィルタ
-      const filterOk = _activeFilters.size === 0 || _activeFilters.has(cat);
+      const filterOk = state.filterOk;
       // 検索 (テキスト含有判定 + <mark> 化)
       // mark を毎回剥がして再適用
       unmarkInside(el);
-      let searchOk = true;
-      if (q) {
-        const text = (el.textContent || '').toLowerCase();
-        searchOk = text.indexOf(q) >= 0;
-        if (searchOk) {
-          highlightInside(el, q);
-          _searchHits.push(el);
-        }
+      const searchOk = state.searchOk;
+      if (searchOk && q) {
+        highlightInside(el, q);
+        _searchHits.push(el);
       }
       el.classList.toggle('search-hit', !!(q && searchOk));
       el.style.display = (filterOk && searchOk) ? '' : 'none';
