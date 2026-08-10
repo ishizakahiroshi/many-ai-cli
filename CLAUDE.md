@@ -1,6 +1,6 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-07-05(日) — 監査反映（opencode provider 追記・subcommand 一覧・internal/log 実装済み化・archive パス修正）
+> 最終更新: 2026-08-11(火) — 実行時配信リソース節を追加（リリース不要で更新できるものの正典化）
 
 > 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。  
 > **Vietnamese translation (team docs):** [CLAUDE.vi.md](CLAUDE.vi.md) · [README.vi.md](README.vi.md) · [docs/README.vi.md](docs/README.vi.md)
@@ -92,6 +92,28 @@ many-ai-cli/
 - **ランダムトークンを起動時生成し URL に付与**（`?token=xxx`）
 - **外部公開しない**（`127.0.0.1` 固定）。`many-ai-cli` 自身はテレメトリを送信しないが、スラッシュコマンド一覧取得で GitHub へ HTTPS 通信する場合がある（README のセキュリティ節参照）
 - **`.bashrc` 等への永続書き込みなし**（透過化は環境変数 + `eval "$(many-ai-cli shell-init)"` のオプトイン方式のみ）
+
+## 実行時配信リソース（リリース不要で更新できるもの）
+
+`resources/` 配下の 4 ディレクトリは **バイナリに焼き込まれず、`main` の raw URL から実行時に fetch される**（URL 定数は `internal/config/config.go` の `Default*Source`）。
+
+| ディレクトリ | 中身 |
+|---|---|
+| `resources/approval-patterns/` | 承認 trigger phrase |
+| `resources/models/` | spawn パネルのモデル候補（`defaults.json`） |
+| `resources/slash-commands/` | スラッシュコマンドピッカー |
+| `resources/usage-links/` | 利用状況リンク |
+
+**帰結（毎回調べ直さない）**:
+
+- 内容を直すのに **リビルド・タグ・リリースは一切不要**。`main` へ push した時点で全ユーザーへ反映される
+- 逆に **`develop` に置いても誰にも届かない**。配信元は `main` だけ
+- 全ユーザーへ即時 live 配信されるため、**誤りもそのまま公開される**。自動反映せず採否は人間が決める
+- 形式制約を破るとパーサが壊れる（`internal/hub/slash_cmd_fetch.go` ほか）
+
+**鮮度チェックの仕組みがあるのは `slash-commands` だけ**（`.claude/skills/slash-commands-update` の report / apply / preflight。release の前提チェックから preflight が呼ばれる）。`models` / `usage-links` / `approval-patterns` には無く、**陳腐化しても誰も気づかない**（2026-08-11、モデル一覧が Claude 5 世代を丸ごと欠いたまま放置されていたのを発見）。
+
+詳細は設計書 [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) の承認パターン / モデル / スラッシュコマンド各節と、[docs/manual_slash_commands_update.md](docs/manual_slash_commands_update.md)。
 
 ## AI 作業共通ルール
 
