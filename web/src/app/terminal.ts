@@ -14,8 +14,6 @@ import { isGrokChatViewerOpen, openGrokChatViewer, resetGrokChatViewerForSession
 import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
 import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, shouldBypassCursorHideFilterForProvider, showCursorSeq } from './cursor-hide-filter.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
-// 一時観測用（debug-ui-log.ts）。原因確定後に撤去する。
-import { layoutSnapshot, uiDebugLog } from './debug-ui-log.js';
 export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossibleMarkerPrefix } from './hub-marker-filter.js';
 
 // Claude Code の折りたたみマーカー: "… +23 lines (ctrl+o to expand)"。
@@ -1811,17 +1809,6 @@ export function sendResize(sessionId, cols, rows, reason = 'unknown', resizeIden
     const approvalIdentity = resizeIdentity || (Array.isArray(approvalOptions) && approvalOptions.length > 0
       ? approvalCandidateIdentity(sessionId, approvalOptions, approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker')
       : null);
-    // 観測用: どの経路が SIGWINCH を誘発したかを層別する（debug-ui-log.ts）。
-    uiDebugLog('send_resize', {
-      session_id: sessionId,
-      cols,
-      rows,
-      reason,
-      candidate_key: approvalIdentity ? approvalCandidateDebugKey(approvalIdentity.candidateKey) : null,
-      source_epoch: approvalIdentity?.sourceEpoch || null,
-      suppressed: isPtyResizeSuppressed(),
-      layout: layoutSnapshot(),
-    });
     ws.send(JSON.stringify({ type: 'pty_resize', session_id: sessionId, cols, rows }));
     // SIGWINCH を受けた TUI（Codex 等）はトランスクリプト全体を再描画する。
     // 直後のバーストを一括描画して、全文が上から下へ流れて見えるのを防ぐ。
@@ -1849,23 +1836,6 @@ export function applyRemotePtyResize(sessionId, cols, rows) {
   if (!t || !t.term) return;
   // Hub が pty_resize を broadcast してきた = PTY へ SIGWINCH が届いた直後。
   // 他 UI 発の resize でも TUI の全画面再描画バーストが来るため一括描画する。
-  uiDebugLog('remote_resize', {
-    session_id: id,
-    cols: nextCols,
-    rows: nextRows,
-    local_cols: t.term.cols,
-    local_rows: t.term.rows,
-    candidate_key: (() => {
-      const opts = approvalRawOptionsCache.get(id);
-      if (!Array.isArray(opts) || opts.length === 0) return null;
-      return approvalCandidateDebugKey(approvalCandidateIdentity(id, opts, approvalSourceCache.get(id)?.source === 'go_vt' ? 'native' : 'marker').candidateKey);
-    })(),
-    source_epoch: (() => {
-      const opts = approvalRawOptionsCache.get(id);
-      if (!Array.isArray(opts) || opts.length === 0) return null;
-      return approvalCandidateIdentity(id, opts, approvalSourceCache.get(id)?.source === 'go_vt' ? 'native' : 'marker').sourceEpoch;
-    })(),
-  });
   beginLiveOutputBatchForResize(id);
   if (t.term.cols === nextCols && t.term.rows === nextRows) return;
   const wasAtBottom = isTerminalAtBottom(t) || t.autoScroll;
@@ -1930,12 +1900,6 @@ export function syncPtySizeToViewportAfterLayout(id, stick = true, delayMs = 400
     if (pending.stick) t.autoScroll = true;
     fitTerminalPreservingBottom(t, pending.id, true);
     // local が既に縮小済みでも Codex へ未通知の可能性があるため無条件に送る。
-    uiDebugLog('resize_settled', {
-      session_id: pending.id,
-      reason: pending.reason,
-      candidate_key: pending.identity ? approvalCandidateDebugKey(pending.identity.candidateKey) : null,
-      source_epoch: pending.identity?.sourceEpoch || null,
-    });
     sendResize(pending.id, t.term.cols, t.term.rows, pending.reason, pending.identity);
     // Codex は SIGWINCH で全画面再描画しスクロールが飛ぶため、確定後に最下部へ張り直す。
     if (pending.stick) scrollTerminalToBottomSoon(pending.id, { force: true, passes: 2, startedAt: Date.now() });
@@ -1973,25 +1937,6 @@ export const resizeObserver = new ResizeObserver(() => {
     if (shouldFollowBottom) {
       t.autoScroll = true;
     }
-    // 観測用: #terminal-area の高さが動いた瞬間の各要素の高さを記録する。
-    // rows が変わらなかった場合も残すことで「誰が高さを動かしたか」を追える。
-    uiDebugLog('terminal_area_resized', {
-      session_id: activeSessionId,
-      prev_cols: prevCols,
-      prev_rows: prevRows,
-      suppressed: isPtyResizeSuppressed(),
-      candidate_key: (() => {
-        const opts = approvalRawOptionsCache.get(activeSessionId);
-        if (!Array.isArray(opts) || opts.length === 0) return null;
-        return approvalCandidateDebugKey(approvalCandidateIdentity(activeSessionId, opts, approvalSourceCache.get(activeSessionId)?.source === 'go_vt' ? 'native' : 'marker').candidateKey);
-      })(),
-      source_epoch: (() => {
-        const opts = approvalRawOptionsCache.get(activeSessionId);
-        if (!Array.isArray(opts) || opts.length === 0) return null;
-        return approvalCandidateIdentity(activeSessionId, opts, approvalSourceCache.get(activeSessionId)?.source === 'go_vt' ? 'native' : 'marker').sourceEpoch;
-      })(),
-      layout: layoutSnapshot(),
-    });
     fitTerminalPreservingBottom(t, activeSessionId);
     if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
       if (!isPtyResizeSuppressed()) {
@@ -2036,38 +1981,3 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) reassertActivePtySize();
 });
 
-// 観測用（debug-ui-log.ts）: 症状そのもの（空行の化石化）を直接数える。
-// アクティブセッションのバッファ末尾 200 行の空行数を 2 秒ごとに数え、
-// 変化した時だけ記録する。resize の時系列と突き合わせて「どの resize の直後に
-// 空行が増えたか」を確定するための計測。原因確定後に撤去する。
-const lastBlankLineCensus = new Map<number, number>();
-setInterval(() => {
-  if (activeSessionId === null) return;
-  const t = terminals.get(activeSessionId);
-  if (!t || !t.term || !t.term.buffer) return;
-  let buf;
-  try { buf = t.term.buffer.active; } catch (_) { return; }
-  if (!buf) return;
-  const start = Math.max(0, buf.length - 200);
-  let blank = 0;
-  let total = 0;
-  for (let i = start; i < buf.length; i++) {
-    total++;
-    const line = buf.getLine(i);
-    if (!line || line.translateToString(true).trim() === '') blank++;
-  }
-  const prev = lastBlankLineCensus.get(activeSessionId);
-  if (prev === blank) return;
-  lastBlankLineCensus.set(activeSessionId, blank);
-  uiDebugLog('blank_line_census', {
-    session_id: activeSessionId,
-    provider: sessions.get(activeSessionId)?.provider || '',
-    blank,
-    total,
-    delta: prev === undefined ? null : blank - prev,
-    buffer_length: buf.length,
-    base_y: buf.baseY,
-    cols: t.term.cols,
-    rows: t.term.rows,
-  });
-}, 2000);

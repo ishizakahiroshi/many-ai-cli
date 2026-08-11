@@ -6,8 +6,6 @@ import { ws } from './ws-client.js';
 import { reshowActionBar, showActionBar } from './approval.js';
 import { inheritMarkerBlockSig } from './approval-parser.js';
 import { suppressPtyResizeForInputLayout, syncPtySizeToViewportAfterLayout } from './terminal.js';
-// 一時観測用（debug-ui-log.ts）。原因確定後に撤去する。
-import { uiDebugLog } from './debug-ui-log.js';
 
 // UI/cache adapter for approval detection. Parser code must not depend on this.
 (function (root) {
@@ -76,12 +74,6 @@ import { uiDebugLog } from './debug-ui-log.js';
       bar.dataset.approvalCandidateKey === identity.candidateKey &&
       bar.dataset.approvalSourceEpoch === String(identity.sourceEpoch));
     if (sameVisibleCandidate) {
-      uiDebugLog('action_bar_redisplay_suppressed', {
-        session_id: id,
-        candidate_key: approvalCandidateDebugKey(identity.candidateKey),
-        source_epoch: identity.sourceEpoch,
-        reason: 'same-candidate-reflow',
-      });
       return;
     }
     // showActionBar は手動 dismiss 中などに何も描かず return する。描画が最後まで
@@ -174,8 +166,6 @@ import { uiDebugLog } from './debug-ui-log.js';
   // 入力欄の伸縮と同じ扱いにして、連発を止めてからレイアウト確定後に実寸を 1 回だけ送る。
   function settleTerminalAfterBannerLayout() {
     if (activeSessionId === null) return;
-    // 観測用: 告知バナーの出入りも高さを動かす要因なので記録する（debug-ui-log.ts）。
-    uiDebugLog('banner_layout_settle', { session_id: activeSessionId });
     suppressPtyResizeForInputLayout(350);
     syncPtySizeToViewportAfterLayout(activeSessionId);
   }

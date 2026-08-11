@@ -55,6 +55,22 @@ jobs:
       - name: Verify modules
         run: go mod verify
 
+  # 調査用に仕込んだ観測コードがリリースへ紛れ込むのを止める。
+  # 同型の事故が v0.5.1（/api/debug/batch-log）・v0.5.x（入力トレース・監査 A-01）・
+  # v0.6.0（/api/debug/ui-log と ui_input_trace）と 3 回起きているので、
+  # 「原因が確定したら消す」とコメントに書くだけの運用を機械検査に置き換える。
+  instrumentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check instrumentation ledger
+        run: node scripts/check-instrumentation.mjs
+
   go-mod-tidy:
     runs-on: ubuntu-latest
     steps:

@@ -16,6 +16,7 @@ func TestDumpCorruptApprovalBlockWritesRecord(t *testing.T) {
 	s := newTestServer()
 	dir := t.TempDir()
 	s.cfg.Hub.LogDir = dir
+	s.cfg.Log.SessionEnabled = true
 
 	ses := registerTestSession(s, 1, "claude")
 	ses.vt = newVTBuffer(120, 40)
@@ -90,6 +91,7 @@ func TestDumpCorruptApprovalBlockRecordsTimeSinceResize(t *testing.T) {
 	s := newTestServer()
 	dir := t.TempDir()
 	s.cfg.Hub.LogDir = dir
+	s.cfg.Log.SessionEnabled = true
 	ses := registerTestSession(s, 1, "claude")
 	ses.vt = newVTBuffer(100, 30)
 
@@ -132,6 +134,7 @@ func TestDumpCorruptApprovalBlockThrottledWithNotify(t *testing.T) {
 	s := newTestServer()
 	dir := t.TempDir()
 	s.cfg.Hub.LogDir = dir
+	s.cfg.Log.SessionEnabled = true
 	ses := registerTestSession(s, 1, "claude")
 	ses.vt = newVTBuffer(80, 24)
 
@@ -174,5 +177,38 @@ func TestPruneApprovalCorruptDumps(t *testing.T) {
 		if _, err := os.Stat(p); err != nil {
 			t.Fatalf("%s was pruned unexpectedly: %v", filepath.Base(p), err)
 		}
+	}
+}
+
+// セッションログが opt-in されていない既定状態では、破損ブロックのダンプを
+// 一切書かないこと。MaskSecrets は通しているが保存対象は PTY の生バイト列なので、
+// v0.6.0 リリース前監査 A-01 と同じ「ログ opt-in と無関係に入力由来のバイトを
+// 永続化しない」原則に従う。
+func TestDumpCorruptApprovalBlockSkippedWhenSessionLogDisabled(t *testing.T) {
+	s := newTestServer()
+	dir := t.TempDir()
+	s.cfg.Hub.LogDir = dir
+	s.cfg.Log.SessionEnabled = false
+
+	ses := registerTestSession(s, 1, "claude")
+	ses.vt = newVTBuffer(120, 40)
+	ses.lastCols, ses.lastRows = 120, 40
+	ses.ptyBuf = []byte("前の再描画\x1b[2Kここまでが入力\n")
+
+	corrupt := &approvalMarkerBlock{Block: markerBlock(
+		"最初の質問ですか？",
+		"1. 案 A ────────────",
+		"2. 案 B",
+	)}
+	corrupt.Sig = approvalMarkerSignature(corrupt.Block)
+
+	now := time.Date(2026, 8, 4, 7, 47, 15, 0, time.UTC)
+	if s.maybeBroadcastApprovalMarker(1, corrupt, now) {
+		t.Fatal("corrupt marker was broadcast")
+	}
+
+	// 抑止そのものは opt-in と無関係に効き続ける。書き出しだけが止まる。
+	if entries, err := os.ReadDir(filepath.Join(dir, "approval-corrupt")); err == nil && len(entries) > 0 {
+		t.Fatalf("dump written while session logging is disabled: %d entries", len(entries))
 	}
 }
