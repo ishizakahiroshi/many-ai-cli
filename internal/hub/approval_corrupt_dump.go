@@ -106,6 +106,13 @@ func (s *Server) dumpCorruptApprovalBlock(id int, provider, reason string, marke
 	if !snap.ok || marker == nil || s.cfg == nil {
 		return
 	}
+	// セッションログの opt-in に従う。MaskSecrets を通してはいるが、保存するのは
+	// PTY の生バイト列で、マスクが取りこぼした秘密が残り得る点は .log と同じ。
+	// 「ログの opt-in と無関係に入力由来のバイトを永続化しない」は v0.6.0 リリース前
+	// 監査 A-01 の指摘そのものなので、同じ設定で一括して切れるようにする。
+	if !s.cfg.Log.SessionEnabled {
+		return
+	}
 	dir := strings.TrimSpace(s.cfg.Hub.LogDir)
 	if dir == "" {
 		return

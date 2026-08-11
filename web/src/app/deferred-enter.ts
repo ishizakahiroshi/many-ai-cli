@@ -1,4 +1,4 @@
-import { sendText, sendUITrace } from '../app.js';
+import { sendText } from '../app.js';
 import { sessions } from './state.js';
 
 // 複数行ペースト送信の確定 \r を「いつ送るか」を出力駆動で決めるモジュール。
@@ -57,16 +57,6 @@ type Pending = {
 
 const pending = new Map<number, Pending>();
 
-// 入力経路の診断。ここは確定 \r を「いつ撃つか /
-// そもそも撃つか」を決める唯一の場所なのに、これまで一切ログを出していなかった。そのため
-// 「\r を撃たなかった」のか「撃ったが内側 CLI に吸収された」のかが外から判別できない。
-// 確定 \r（kind='enter'）の予約・発火・取消だけを Hub へ送る。画像 inject の静止待ち
-// （kind='settle'）は今回の症状と別経路なので送らない。
-function traceEnter(p: Pending, id: number, event: string, detail: Record<string, unknown>) {
-  if (p.kind !== 'enter') return;
-  sendUITrace(id, event, { ...detail, minWaitMs: p.minWaitMs });
-}
-
 function fire(id: number, source: string = 'idle') {
   const p = pending.get(id);
   if (!p || p.fired) return;
@@ -77,21 +67,17 @@ function fire(id: number, source: string = 'idle') {
   const elapsedMs = Date.now() - p.startedAt;
   // セッション削除後に遅延 \r が別 ID 再利用先へ飛ばないようガード
   if (!sessions.has(id)) {
-    traceEnter(p, id, 'fired_session_missing', { source, elapsedMs });
     return;
   }
   try {
     const result = p.action();
     if (result === false) {
       // sendText が false = WS 未接続等で送れなかった。単発設計なので再送されない。
-      traceEnter(p, id, 'fired_send_failed', { source, elapsedMs });
       return;
     }
-    traceEnter(p, id, 'fired_ok', { source, elapsedMs });
     p.onInjected?.();
     p.onAcked?.();
   } catch (_) {
-    traceEnter(p, id, 'fired_threw', { source, elapsedMs });
   }
 }
 
@@ -113,7 +99,6 @@ function schedule(id: number, action: () => void | boolean, maxWaitMs: number, m
   pending.set(id, p);
   p.maxTimer = setTimeout(() => fire(id, 'max'), maxWaitMs);
   armIdle(id);
-  traceEnter(p, id, 'scheduled', { maxWaitMs });
 }
 
 // doSend の deferEnter 分岐から呼ぶ。確定 \r を出力静止後に 1 回だけ送る予約を張る。
@@ -150,5 +135,4 @@ export function cancelDeferredEnter(id: number, reason: string = 'unspecified') 
   pending.delete(id);
   // 未発火の確定 \r をここで捨てている。次の送信が前回の \r を消したのか（reason=reschedule）
   // 別経路が消したのかを区別する。
-  traceEnter(p, id, 'cancelled', { reason, elapsedMs: Date.now() - p.startedAt });
 }

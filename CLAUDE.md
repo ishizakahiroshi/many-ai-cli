@@ -115,6 +115,16 @@ many-ai-cli/
 
 詳細は設計書 [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) の承認パターン / モデル / スラッシュコマンド各節と、[docs/manual_slash_commands_update.md](docs/manual_slash_commands_update.md)。
 
+## 調査用の観測コードを入れるときのルール（必須）
+
+バグ調査のために一時的なログ・ダンプ・debug エンドポイントを仕込むときは、**同じコミットで `instrumentation.json` へ登録する**。登録の無い観測コードは `scripts/check-instrumentation.mjs` がブロックする（Validate の `instrumentation` ジョブと release の前提チェックで走る）。
+
+- `gate` は必ず埋める。**`always-on` は原則禁止**。とくに入力由来のバイトを保存するものは既存の opt-in（`log.session_enabled`）に従わせる
+- `due` を必ず書く。過ぎたらブロックされる。延ばすなら `due` を更新して `reason` に「なぜまだ要るか」を書き足す（黙って延ばさない）
+- 撤去したら `status: removed` にする。実体が残っていれば検査で落ちる
+
+**「原因が確定したら消す」とコメントに書くだけでは消えない。** v0.5.1 の `/api/debug/batch-log`、v0.5.x の入力トレース（監査 A-01）、v0.6.0 の `/api/debug/ui-log` と `ui_input_trace` と、3 回続けて出荷直前まで残った。とくに `ui_input_trace` は専用ファイルを持たず共有ファイル 3 つに分散していたため、同種の撤去作業から取り残された。
+
 ## AI 作業共通ルール
 
 ビルド・コミット禁止、secrets-scan 責務、plan/bugfix/pending md の作成ルール等の AI 作業共通ルールは、各利用者のグローバル AI 設定に従う（作者環境の例: `~/.claude/CLAUDE.md` および `~/.claude/guides/`）。AI の個人グローバルルール（言語・確認・質問フォーマット等）も各利用者のグローバル設定に置き、本ファイルはプロジェクト固有ルールだけを扱う。

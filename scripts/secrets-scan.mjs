@@ -49,7 +49,19 @@ const EXEMPT_PATHS = [
   'internal/hub/files_scope.go',
 ];
 
-const MIN_NEEDLE_LEN = 2;
+// 2 文字の needle は部分一致では検出器として機能しない。2 文字の和語はごく普通の
+// 文章の中に現れるし、2 文字の英字略称は lockfile のハッシュ等に当たり続ける。
+// 実際の全 tracked sweep では 44/567 件がこの種の誤検出だった。誤検出が多いゲートは
+// 「どうせ誤検出」と読み飛ばされて本物を通すので、検出できない長さは最初から
+// needle にしない。短い名前は full_name 側（姓+名の連結）の needle で守る。
+// 落とした件数は必ず表示する（黙って保護範囲を狭めない）。
+const MIN_NEEDLE_LEN = 3;
+
+// 短すぎて needle にできなかった件数。値そのものは個人情報なので絶対に出力しない。
+const shortNeedleSkips = { count: 0 };
+function countShortNeedle(value) {
+  if (value && value.length > 0 && value.length < MIN_NEEDLE_LEN) shortNeedleSkips.count++;
+}
 const MAX_FILE_SIZE = 1024 * 1024;
 
 // === Public-email allowlist ===
@@ -122,6 +134,7 @@ function parseCSV(text) {
 // so a leak of just "クロノス" (without paren) is still caught.
 function expandNameVariants(value) {
   const variants = new Set();
+  countShortNeedle(value);
   if (value.length >= MIN_NEEDLE_LEN) variants.add(value);
   // Strip both half-width (...) and full-width （...） suffix
   const stripped = value.replace(/[(（].*$/, '').trim();
@@ -174,6 +187,8 @@ function loadFamilyWatchlist(familyRoot) {
     for (let i = 1; i < rows.length; i++) {
       const familyName = (rows[i][1] || '').trim();
       const givenName  = (rows[i][2] || '').trim();
+      countShortNeedle(familyName);
+      countShortNeedle(givenName);
       if (familyName.length >= MIN_NEEDLE_LEN) {
         items.push({ needle: familyName, source: 'family/people.csv:family_name' });
       }
@@ -203,11 +218,26 @@ function expandHome(p) {
   return p;
 }
 
+// 本製品が自分で作る・連携先の公開仕様である名前は needle にしない。
+// 根拠と追加条件は scripts/secrets-scan.owned-names.json の _comment を参照。
+function loadOwnedNames() {
+  const path = new URL('./secrets-scan.owned-names.json', import.meta.url);
+  try {
+    const raw = JSON.parse(readFileSync(path, 'utf8'));
+    return new Set((raw.ownedNames || []).map(e => e.name));
+  } catch (e) {
+    // 読めなければ除外なしで続行する。ゲートは緩めるより厳しく倒す。
+    console.error(`WARN: failed to read secrets-scan.owned-names.json: ${e.message}`);
+    return new Set();
+  }
+}
+
 function loadPersonalFileWatchlist(spec) {
   if (!spec) return { available: false, items: [] };
   const dirs = spec.split(';').map(s => s.trim()).filter(Boolean);
   if (dirs.length === 0) return { available: false, items: [] };
 
+  const owned = loadOwnedNames();
   const items = [];
   let visited = 0;
 
@@ -223,6 +253,7 @@ function loadPersonalFileWatchlist(spec) {
         continue;
       }
       if (entry.name.length < PERSONAL_FILE_MIN_LEN) continue;
+      if (owned.has(entry.name)) continue;
       items.push({ needle: entry.name, source: `personal-dir/${label}` });
     }
   };
@@ -572,6 +603,12 @@ function main() {
   if (!personal.available) {
     warnings.push(`WARN: PERSONAL_DIRS env var not set — personal filename watchlist skipped`);
     warnings.push(`WARN: PERSONAL_DIRS env var が未設定 — 個人ディレクトリのファイル名 watchlist をスキップ`);
+  }
+
+  // 保護範囲を黙って狭めない。落とした件数だけ出す（値は個人情報なので出さない）。
+  if (shortNeedleSkips.count > 0) {
+    warnings.push(`WARN: ${shortNeedleSkips.count} watchlist name(s) shorter than ${MIN_NEEDLE_LEN} chars were skipped — substring matching cannot detect them reliably`);
+    warnings.push(`WARN: ${MIN_NEEDLE_LEN} 文字未満の watchlist 名 ${shortNeedleSkips.count} 件をスキップ — 部分一致では検出できないため。別手段で守る必要がある`);
   }
 
   // De-duplicate needles (a name can appear in multiple kb tables).

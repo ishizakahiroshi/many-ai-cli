@@ -1496,22 +1496,6 @@ export function sendText(sessionId, text) {
   }
 }
 
-// 入力経路の診断。確定 \r を UI が
-// 「撃った / 撃たずに取り消した / 送信に失敗した」のどれだったかを hub.log へ残す。
-// PTY へは何も書かない観測専用メッセージで、Hub 側は ui_input_trace を受けて
-// ログに落とすだけ。WS が未接続なら黙って捨てる（観測が送信を妨げない）。
-export function sendUITrace(sessionId, event, detail) {
-  if (!isWebSocketSendReady()) return;
-  try {
-    ws.send(JSON.stringify({
-      type: 'ui_input_trace',
-      session_id: sessionId,
-      reason: event,
-      text: detail ? JSON.stringify(detail) : '',
-    }));
-  } catch (_) {}
-}
-
 export function requestSessionDismiss(id) {
   // 「セッションが勝手に消える」事案の犯人特定用
   // (docs/local/bugfix_session-silent-auto-dismiss_2026-07-21.md)。

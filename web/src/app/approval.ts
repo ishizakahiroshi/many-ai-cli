@@ -11,8 +11,6 @@ import { chatHistoryCommitOutput, chatPaneAtBottom, getChatTimelineEl, pushMessa
 import { token } from './util.js';
 import { appConfirm } from './settings.js';
 import { isActionBarCollapsed, setActionBarCollapsed, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY } from './user-prefs.js';
-// 一時観測用（debug-ui-log.ts）。原因確定後に撤去する。
-import { uiDebugLog } from './debug-ui-log.js';
 
 const HIGH_RISK_HOLD_MS = 1200;
 const highRiskConfirmationInFlight = new Set<number>();
@@ -1441,15 +1439,6 @@ export function hideActionBar(id) {
   const hideIdentity = Array.isArray(hideOptions) && hideOptions.length > 0
     ? approvalCandidateIdentity(id, hideOptions, approvalSourceCache.get(id)?.source === 'go_vt' ? 'native' : 'marker')
     : null;
-  // 観測用: 誰が承認バーを閉じたか（呼び出し元 15 箇所の切り分け）。
-  uiDebugLog('action_bar_hide', {
-    session_id: id ?? null,
-    was_visible: wasVisible,
-    bar_class: bar ? bar.className : null,
-    candidate_key: hideIdentity ? approvalCandidateDebugKey(hideIdentity.candidateKey) : null,
-    source_epoch: hideIdentity?.sourceEpoch || null,
-    stack: (() => { try { return new Error().stack?.split('\n').slice(1, 5).join(' | ') || ''; } catch (_) { return ''; } })(),
-  });
   if (bar) {
     bar.classList.remove('visible', 'batch', 'multi-select', 'single-tabs');
     bar.innerHTML = '';
@@ -1539,12 +1528,6 @@ export function manuallyHideActionBar(id) {
   }
   const bar = document.getElementById('action-bar');
   const wasVisible = !!(bar && bar.classList.contains('visible'));
-  uiDebugLog('action_bar_manual_hide', {
-    session_id: id,
-    was_visible: wasVisible,
-    candidate_key: manualIdentity ? approvalCandidateDebugKey(manualIdentity.candidateKey) : null,
-    source_epoch: manualIdentity?.sourceEpoch || null,
-  });
   if (bar) {
     bar.classList.remove('visible', 'batch', 'multi-select', 'single-tabs');
     bar.innerHTML = '';
@@ -2008,15 +1991,6 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
 
   if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(350);
   // 観測用: 承認バーの出現が #terminal-area の高さを動かす主要因なので、
-  // 出入りのたびに記録して pty_resize の時系列と突き合わせる。
-  uiDebugLog('action_bar_show', {
-    session_id: sessionId,
-    was_visible: bar.classList.contains('visible'),
-    bar_class: bar.className,
-    candidate_key: approvalCandidateDebugKey(approvalCandidateIdentity(sessionId, [section], approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker').candidateKey),
-    source_epoch: approvalCandidateIdentity(sessionId, [section], approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker').sourceEpoch,
-    reason: 'candidate-render',
-  });
   bar.classList.add('visible');
   // 60 秒抑制で縮小サイズを Codex へ一切伝えないと、Codex が高い行数のまま再描画を続け
   // scrollback へ空行が化石化して表示がまばらになる。短く束ねた後、確定サイズを 1 回送る。
@@ -2395,15 +2369,6 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   bar.classList.toggle('collapsed', isActionBarCollapsed());
   if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(350);
   // 観測用: 承認バーの出現が #terminal-area の高さを動かす主要因なので、
-  // 出入りのたびに記録して pty_resize の時系列と突き合わせる。
-  uiDebugLog('action_bar_show', {
-    session_id: sessionId,
-    was_visible: bar.classList.contains('visible'),
-    bar_class: bar.className,
-    candidate_key: approvalCandidateDebugKey(approvalCandidateIdentity(sessionId, sections, approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker').candidateKey),
-    source_epoch: approvalCandidateIdentity(sessionId, sections, approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker').sourceEpoch,
-    reason: 'candidate-render',
-  });
   bar.classList.add('visible');
   // 60 秒抑制で縮小サイズを Codex へ一切伝えないと、Codex が高い行数のまま再描画を続け
   // scrollback へ空行が化石化して表示がまばらになる。短く束ねた後、確定サイズを 1 回送る。
@@ -2711,15 +2676,6 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
   bar.classList.toggle('collapsed', isActionBarCollapsed());
   if (!bar.classList.contains('visible')) suppressPtyResizeForInputLayout(350);
   // 観測用: 承認バーの出現が #terminal-area の高さを動かす主要因なので、
-  // 出入りのたびに記録して pty_resize の時系列と突き合わせる。
-  uiDebugLog('action_bar_show', {
-    session_id: sessionId,
-    was_visible: bar.classList.contains('visible'),
-    bar_class: bar.className,
-    candidate_key: approvalCandidateDebugKey(approvalCandidateIdentity(sessionId, options, approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker').candidateKey),
-    source_epoch: approvalCandidateIdentity(sessionId, options, approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker').sourceEpoch,
-    reason: 'candidate-render',
-  });
   bar.classList.add('visible');
   // 60 秒抑制で縮小サイズを Codex へ一切伝えないと、Codex が高い行数のまま再描画を続け
   // scrollback へ空行が化石化して表示がまばらになる。短く束ねた後、確定サイズを 1 回送る。

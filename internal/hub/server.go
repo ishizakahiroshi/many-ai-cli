@@ -991,8 +991,6 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		Handler:   s.handleWS,
 	})
 	mux.HandleFunc("/api/info", s.handleInfo)
-	// 一時観測用（debug_ui_log.go）。原因確定後に撤去する。
-	mux.HandleFunc("/api/debug/ui-log", s.handleDebugUILog)
 	mux.HandleFunc("/api/bug-report/preview", s.handleBugReportPreview)
 	mux.HandleFunc("/api/bug-report/finalize", s.handleBugReportFinalize)
 	mux.HandleFunc("/api/doctor", s.handleDoctor)
@@ -1507,13 +1505,6 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 				"ts_ns", time.Now().UnixNano())
 			s.claimResizeOwnership(conn, m.SessionID, 0, 0)
 			s.handleInput(m)
-		case "ui_input_trace":
-			// UI 側 deferred-enter の判断（確定 \r を撃った / 撃たずに取り消した /
-			// 送信に失敗した）を hub.log へ集約する観測専用メッセージ。PTY へは書かない。
-			s.logger.Info("ui_input_trace",
-				"session_id", m.SessionID,
-				"event", m.Reason,
-				"detail", m.Text)
 		case "ui_active_session":
 			s.claimResizeOwnership(conn, m.SessionID, m.Cols, m.Rows)
 		case "session_hint":

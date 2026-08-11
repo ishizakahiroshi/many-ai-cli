@@ -431,7 +431,7 @@ Release artifacts are published at
   answer bodies verbatim — are gone. Existing log files are left untouched
   (`internal/hub/debug_batch_log_handler.go`, `web/src/app/approval.ts`).
 - **The temporary input tracing added while chasing the lost-keystroke bug
-  above.** The wrapper wrote `wrapper-trace.jsonl` into the log directory — <!-- secrets-scan: allow wrapper-trace.jsonl (name is hard-coded in this repo's own removed source, not personal data) -->
+  above.** The wrapper wrote `wrapper-trace.jsonl` into the log directory —
   created with mode `0644`, appended to without rotation or a size cap, and
   active regardless of whether session logging was enabled — and the Hub logged
   a matching `input_trace` line carrying a hex tail of the same bytes. Because
@@ -439,7 +439,20 @@ Release artifacts are published at
   pasted into a session, unmasked, on every normal run. Both sides are removed:
   `internal/wrapper/trace.go`, `internal/hub/input_trace.go`, and their call
   sites. Existing trace files are left on disk — delete
-  `~/.many-ai-cli/logs/wrapper-trace.jsonl` if one was produced by 0.5.x. <!-- secrets-scan: allow wrapper-trace.jsonl (name is hard-coded in this repo's own removed source, not personal data) -->
+  `~/.many-ai-cli/logs/wrapper-trace.jsonl` if one was produced by 0.5.x.
+- **Two more pieces of temporary instrumentation that were still shipping.** The
+  `/api/debug/ui-log` endpoint and its front end recorded every action-bar
+  show/hide, every resize and its layout snapshot, and ran a 2-second timer that
+  counted blank lines in the active terminal buffer — all enabled by default,
+  writing a daily `logs/debug/ui-log-*.jsonl`. It was added to find what was
+  driving the Codex resize oscillation, which is fixed above, and its own
+  comment said to remove it once the cause was known. A second channel,
+  `ui_input_trace`, reported every deferred-Enter decision to `hub.log` with no
+  opt-in; it was added for the swallowed-keystroke bug, also fixed above. It
+  survived the removal of the input tracing because it had no file of its own —
+  it lived in three shared files. Both are gone
+  (`internal/hub/debug_ui_log.go`, `web/src/app/debug-ui-log.ts`, and the
+  `sendUITrace` / `traceEnter` paths).
 
 ### Security
 - **Breaking: PIN sessions are now tracked on the server and bound to the
@@ -497,6 +510,27 @@ Release artifacts are published at
 - The custom notification sound stored in user preferences is now validated on
   save: only the Hub-managed `notify_sound_custom.bin` with an `audio/*` MIME
   type is kept (`internal/hub/user_prefs_handlers.go`).
+- **The corrupt-approval-block dump now follows the session-log opt-in.** When a
+  marker block arrives damaged, the Hub can save the rendered block together
+  with the tail of the PTY bytes that produced it, so the mirror corruption can
+  be reproduced later — the underlying cause is still unknown, so the diagnostic
+  is worth keeping. It ran regardless of whether session logging was enabled,
+  which is the same objection the pre-release audit raised against the input
+  tracing: secrets are masked on the way in, but what is stored is still raw PTY
+  output and masking can miss things. It is now off unless
+  `log.session_enabled` is on (`internal/hub/approval_corrupt_dump.go`).
+- **Temporary instrumentation is now tracked in a ledger and enforced by CI.**
+  Three releases in a row shipped, or nearly shipped, debugging code that was
+  meant to be temporary: the `/api/debug/batch-log` endpoint in 0.5.1, the input
+  tracing in 0.5.x, and the two channels removed above. Writing "remove this
+  once the cause is confirmed" in a comment did not work. `instrumentation.json`
+  now records every piece of instrumentation with its purpose, its gate, the
+  condition for removing it and a deadline, and `scripts/check-instrumentation.mjs`
+  fails the build when instrumentation appears that is not in the ledger, when an
+  active entry is always-on or past its deadline, or when an entry claims to be
+  removed while the code is still there. It runs as its own Validate job and as
+  part of the release preflight. It found the `ui_input_trace` leftover on its
+  first run.
 - **Transcript and workflow-journal reads are bounded before anything is
   allocated.** The new Chat pane and workflow progress read files the Hub does
   not control the size of. The message limit was applied only after the whole
