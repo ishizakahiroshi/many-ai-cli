@@ -43,6 +43,17 @@ v0.1.0 は試験リリース扱いとし、初回正式リリースは v0.1.1 �
 - **リポジトリ名の一致**: `.goreleaser.yaml` / docs / cosign の certificate-identity / winget / Homebrew が `ishizakahiroshi/many-ai-cli` を前提にする。**GitHub repo 名（rename 済みか）と一致しているか**をタグ前に `gh repo view` で確認（v0.3.0 直前まで repo 名が `any-ai-cli` のままで全 gh 系が 404 だった）。
 - **タグは immutable**: 失敗してもタグ使い回しは「公開実績（asset download）ゼロ」のときだけ。download があれば次パッチへ。撤回は `gh release delete <tag> --cleanup-tag --yes`。winget を出し直すなら fork の該当 branch を消す（= PR が自動 close）→ 再 run で goreleaser が作り直す。
 
+### v0.6.0 公開で踏んだもの（PAT のスコープ不足でリリース全滅）
+
+- **`PUBLISH_GITHUB_TOKEN` に `workflow` スコープが無いまま 2 ヶ月運用していた**。`Sync winget-pkgs fork` が失敗し、goreleaser 以降が全 skip。GitHub Release も npm も一切公開されなかった。
+- **なぜ 6 回も気づけなかったか**: `gh repo sync` が `workflow` スコープを要求するのは、**取り込む差分に `.github/workflows/**` の変更が含まれるときだけ**。`microsoft/winget-pkgs` は 2026-04-13 から 2026-08-03 まで該当ファイルを触らなかったため、その間の 6 回のリリースは素通りした。**「前回動いた」は正しさの証明にならない。**
+- **対処は 2 つで、片方だけでは足りない**。
+  1. PAT に `workflow` を足す（同期が失敗しないようにする）
+  2. 同期の失敗でリリース全体を止めない（1 チャネルの都合を正本の発行から切り離す）
+  当初この 2 つを「どちらか選ぶもの」として扱ってしまったが、直している問題が違う。**両方要る。**
+- **再発防止**: Validate に `release-token-scopes` ジョブを追加し、PAT のスコープ（`repo` / `workflow`）を毎回検査する。**`release.yml` ではなく `validate.yml` に置く**のは、release 側で hard fail にすると「1 チャネルの都合でリリースが止まる」構造へ逆戻りするため。Validate は develop/main への push ごとに走るので、タグを打つずっと前に不足が分かる。
+- fine-grained PAT はスコープを introspection できない（`X-OAuth-Scopes` を返さない）ので、その場合は warning 止まりにしてある。
+
 ### v0.6.0 公開で踏んだもの（調査用コードの残存・実行時配信リソースの検査漏れ）
 
 - **調査用に仕込んだ観測コードが 3 回続けて出荷直前まで残った**。v0.5.1 の `/api/debug/batch-log`（v0.5.2 で撤去）、v0.5.x の入力トレース（リリース前監査 A-01 で指摘・v0.6.0 で撤去）、v0.6.0 の `/api/debug/ui-log` と `ui_input_trace`。「原因が確定したら消す」とコメントに書くだけでは消えない。`instrumentation.json` へ登録し `node scripts/check-instrumentation.mjs` で検査する（Validate の `instrumentation` ジョブ）。**とくに専用ファイルを持たない観測コードは危険**で、`ui_input_trace` は共有ファイル 3 つに分散していたため A-01 の撤去作業から取り残された。
