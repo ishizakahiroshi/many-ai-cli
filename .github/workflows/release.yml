@@ -76,11 +76,26 @@ jobs:
       # winget-pkgs fork を upstream (microsoft/winget-pkgs) と同期してから
       # goreleaser の winget publisher に使わせる。winget-pkgs は1日数百コミット
       # 動くため、stale な fork から PR を作ると差分汚染・conflict が起きる。
+      #
+      # 失敗してもリリースを止めない（2026-08-11 v0.6.0 で踏んだ）。これは winget
+      # という 1 チャネルの前準備でしかないのに、goreleaser より前にあり fail-fast
+      # だったため、GitHub Release という正本の発行ごと巻き添えで止まった。実際に
+      # 起きたのは PUBLISH_GITHUB_TOKEN に workflow スコープが無く、upstream の
+      # workflow 変更を取り込めないというもので、成果物の正しさとは無関係だった。
+      #
+      # 同期できなかった場合の劣化は「winget PR の base が古い」だけで、GitHub
+      # Release・Homebrew・npm には影響しない。winget PR が conflict したら手で
+      # 作り直せばよく、リリース全体をやり直す理由にはならない。
+      # 位置は goreleaser より前のまま（後ろへ動かすと毎回 1 リリース分 stale な
+      # fork から PR を作ることになり、このステップの目的そのものが失われる）。
       - name: Sync winget-pkgs fork
         if: ${{ env.NPM_ONLY != 'true' }}
         env:
           GH_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}
-        run: gh repo sync ishizakahiroshi/winget-pkgs --source microsoft/winget-pkgs
+        run: |
+          if ! gh repo sync ishizakahiroshi/winget-pkgs --source microsoft/winget-pkgs; then
+            echo "::warning title=winget fork sync failed::fork の同期に失敗した。winget PR の base が古いまま作られる可能性がある。PUBLISH_GITHUB_TOKEN に workflow スコープがあるか確認すること。リリース自体は続行する。"
+          fi
 
       # GitHub Release のノートは CHANGELOG.md の該当版節を使う。コミットメッセージ
       # 由来の自動 changelog は Git タブ自動生成コミット（internal/hub/git_commit.go）の
