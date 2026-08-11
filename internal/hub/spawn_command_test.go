@@ -2,9 +2,30 @@ package hub
 
 import (
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestAppendOpenCodePermissionArgs(t *testing.T) {
+	tests := []struct {
+		name           string
+		permissionMode string
+		want           []string
+	}{
+		{name: "default keeps approvals", permissionMode: "default", want: []string{"wrap", "opencode"}},
+		{name: "bypass forwards permission mode", permissionMode: "bypassPermissions", want: []string{"wrap", "opencode", "--permission-mode", "bypassPermissions"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := appendOpenCodePermissionArgs([]string{"wrap", "opencode"}, tt.permissionMode)
+			if !reflect.DeepEqual(args, tt.want) {
+				t.Fatalf("appendOpenCodePermissionArgs(%q) = %v, want %v", tt.permissionMode, args, tt.want)
+			}
+		})
+	}
+}
 
 func TestSanitizeEnvRemovesEmptyPathEntries(t *testing.T) {
 	sep := string(os.PathListSeparator)

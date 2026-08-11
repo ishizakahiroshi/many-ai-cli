@@ -1,0 +1,64 @@
+{
+  "_comment": [
+    "調査用に仕込んだ観測コードの台帳。scripts/check-instrumentation.mjs が検査する。",
+    "",
+    "なぜ要るか: 同型の事故が 3 回起きかけている。",
+    "  - v0.5.1: /api/debug/batch-log を仕込み、承認回答の本文をそのまま記録した。v0.5.2 で撤去",
+    "  - v0.5.x: wrapper の入力トレースが打鍵バイトを無マスク・0644・無制限で永続化した。",
+    "            リリース前監査で A-01 として指摘され v0.6.0 で撤去",
+    "  - v0.6.0: /api/debug/ui-log を仕込み、既定 ON のままリリース直前まで残っていた",
+    "「原因が確定したら消す」とコメントに書くだけでは消えない。台帳と機械検査で縛る。",
+    "",
+    "ルール:",
+    "  1. 観測コードを入れたら同じコミットでここへ登録する。登録の無い観測コードは検査でブロックされる",
+    "  2. status=active のものは due を過ぎたらブロックされる。延長するなら due を更新し、",
+    "     なぜまだ要るかを reason に書き足す（黙って延ばさない）",
+    "  3. gate は必ず埋める。always-on は原則禁止で、入力由来のバイトを保存するものは特に不可",
+    "  4. 撤去したら status=removed にし removedIn を書く。files が実際に消えているかも検査される",
+    "",
+    "検査: node scripts/check-instrumentation.mjs（release の前提チェックから呼ぶ）"
+  ],
+  "currentVersion": "0.6.0",
+  "entries": [
+    {
+      "id": "debug-ui-log",
+      "status": "removed",
+      "purpose": "Codex ターミナルの空行蓄積と rows 発振で、どのレイアウト変化が pty_resize を誘発したかを Web 側から観測する",
+      "addedIn": "6d81134",
+      "removedIn": "0.6.0",
+      "gate": "always-on",
+      "files": [
+        "internal/hub/debug_ui_log.go",
+        "web/src/app/debug-ui-log.ts"
+      ],
+      "endpoints": ["/api/debug/ui-log"],
+      "removalCondition": "resize 発振と承認バーのチカつきの原因が確定したら撤去",
+      "note": "原因は 68f212d（VT resize 時の scrollback 破棄・抑止バナーの増幅ループ抑制）と eba1b26（承認候補の論理 ID と replay 境界）で確定。リリース前の観測コード監査で残存を検出し撤去した。既定 ON で 2 秒周期の空行カウンタまで動いており、利用者環境で無駄に回っていた"
+    },
+    {
+      "id": "ui-input-trace",
+      "status": "removed",
+      "purpose": "確定 \\r を UI が撃ったのか、撃たずに取り消したのか、送信に失敗したのかを hub.log へ集約する。deferred-enter は \\r を撃つか否かを決める唯一の場所なのにログが無く、外から判別できなかった",
+      "addedIn": "e4a9315",
+      "removedIn": "0.6.0",
+      "gate": "always-on",
+      "files": [],
+      "endpoints": [],
+      "removalCondition": "送信文字列が CLI 入力欄に滞留する症状の原因が確定したら撤去",
+      "note": "専用ファイルを持たず web/src/app.ts の sendUITrace・web/src/app/deferred-enter.ts の traceEnter・internal/hub/server.go の ui_input_trace ケースに分散していたため、A-01 で internal/hub/input_trace.go と internal/wrapper/trace.go を撤去した際に取り残された。原因は 641f62e（PTY 出力キュー溢れと pty_input_ack の欠如）で確定済み。記録内容は source / elapsedMs / maxWaitMs / reason のみで利用者のテキストは含まないが、無ゲートで常時 hub.log へ書いていた。台帳の機械検査で検出した 1 件目"
+    },
+    {
+      "id": "approval-corrupt-dump",
+      "status": "active",
+      "purpose": "承認マーカーブロックが Hub の VT ミラー上でだけ壊れる原因を、描画結果・入力 PTY バイト・描画時の寸法の 3 点セットで後から突き合わせる",
+      "addedIn": "c5500c9",
+      "gate": "opt-in: log.session_enabled",
+      "files": ["internal/hub/approval_corrupt_dump.go"],
+      "endpoints": [],
+      "removalCondition": "VT ミラーだけが壊れる原因が確定し、classifyApprovalMarkerBlock の症状抑制を根本修正へ置き換えたら撤去",
+      "due": "0.7.0",
+      "reason": "原因は未解明のまま。classifyApprovalMarkerBlock は『壊れていたら捨てる』症状抑制で、なぜミラーだけが乖離するかには手が付いていない。再現に必要な 3 点は事象発生時にしか取れないため、観測を止めると次の手掛かりが得られない",
+      "note": "v0.6.0 で opt-in 化した。sessionlog.MaskSecrets を通し、0700・保持 7 日・32MB/日・30 秒スロットルで上限を掛けているが、保存対象は PTY の生バイト列なのでマスクの取りこぼしが残り得る。A-01 と同じ原則でセッションログの opt-in に従わせている"
+    }
+  ]
+}

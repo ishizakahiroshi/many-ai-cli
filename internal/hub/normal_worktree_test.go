@@ -4,9 +4,58 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
+
+func TestPrepareNormalWorktreeSerializesSameNameCreation(t *testing.T) {
+	repo := t.TempDir()
+	if resolved, err := filepath.EvalSymlinks(repo); err == nil {
+		repo = resolved
+	}
+	runWorktreeTestGit(t, repo, "init")
+	runWorktreeTestGit(t, repo, "config", "user.name", "test")
+	runWorktreeTestGit(t, repo, "config", "user.email", "test@example.invalid")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("base\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runWorktreeTestGit(t, repo, "add", "README.md")
+	runWorktreeTestGit(t, repo, "commit", "-m", "base")
+
+	now := time.Date(2026, 7, 31, 12, 34, 0, 0, time.UTC)
+	results := make([]normalWorktree, 2)
+	errs := make([]error, 2)
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := range results {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			<-start
+			results[index], errs[index] = prepareNormalWorktree(repo, "review worker", now)
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("prepareNormalWorktree[%d]: %v", i, err)
+		}
+		if _, err := os.Stat(results[i].Path); err != nil {
+			t.Fatalf("worktree[%d] missing: %v", i, err)
+		}
+	}
+	if results[0].Path == results[1].Path {
+		t.Fatalf("concurrent worktrees share path %q", results[0].Path)
+	}
+	for _, tree := range results {
+		if err := cleanupNormalWorktree(tree, worktreeCleanupDelete); err != nil {
+			t.Fatalf("cleanup %q: %v", tree.Path, err)
+		}
+	}
+}
 
 func runWorktreeTestGit(t *testing.T, dir string, args ...string) {
 	t.Helper()

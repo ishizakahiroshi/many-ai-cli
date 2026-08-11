@@ -116,10 +116,20 @@ const whisperServerEnvVar = "MANY_AI_CLI_WHISPER_SERVER"
 
 func bakedWhisperServerPath() string {
 	p := strings.TrimSpace(os.Getenv(whisperServerEnvVar))
-	if p != "" && whisperFileExists(p) {
+	if p != "" && isWhisperServerName(filepath.Base(p)) && whisperFileExists(p) {
 		return p
 	}
 	return ""
+}
+
+func isWhisperServerName(name string) bool {
+	for _, candidate := range whisperServerNames() {
+		if strings.EqualFold(name, candidate) ||
+			strings.EqualFold(strings.TrimSuffix(name, filepath.Ext(name)), strings.TrimSuffix(candidate, filepath.Ext(candidate))) {
+			return true
+		}
+	}
+	return false
 }
 
 func whisperBinaryForHost() (whisperBinaryEntry, bool) {

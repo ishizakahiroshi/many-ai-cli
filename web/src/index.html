@@ -2,6 +2,7 @@
 <html lang="">
 <head>
   <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' ws: wss:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" />
   <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content, viewport-fit=cover" />
   <title>MANY-AI-CLI</title>
   <link id="app-favicon" rel="icon" href="/icon.svg" type="image/svg+xml">
@@ -1063,6 +1064,12 @@
               <option value="never" data-i18n="spawn_approval_never">⚠ Skip approvals (never)</option>
             </select>
           </div>
+          <div id="spawn-opencode-opts" hidden>
+            <label class="spawn-risk-label">
+              <input id="spawn-opencode-full-allow" type="checkbox">
+              <span data-i18n="spawn_opencode_full_allow">⚠ Launch OpenCode with full access (skip approvals)</span>
+            </label>
+          </div>
           <div id="spawn-claude-note" class="settings-note" data-i18n="spawn_claude_note" hidden>Uses the installed Claude Code. Authentication and permissions are managed by Claude.</div>
           <div id="spawn-codex-note" class="settings-note" data-i18n="spawn_codex_note" hidden>Uses the installed Codex CLI. Authentication and permissions are managed by Codex.</div>
           <div id="spawn-copilot-note" class="settings-note" data-i18n="spawn_copilot_note" hidden>Uses the installed GitHub Copilot CLI. Authentication and permissions are managed by Copilot.</div>
@@ -1249,6 +1256,7 @@
     <div id="action-bar"></div>
     <div id="multi-question-banner" hidden data-i18n="multi_question_banner"></div>
     <div id="stale-binary-banner" hidden></div>
+    <div id="approval-suppressed-banner" hidden></div>
     <div id="mobile-keyboard-panel" hidden>
       <div id="mobile-key-row" aria-label="Terminal keys">
         <button type="button" data-mobile-key="esc">Esc</button>

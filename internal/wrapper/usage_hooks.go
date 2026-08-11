@@ -39,7 +39,8 @@ type UsageHookParams struct {
 }
 
 // ---------------------------------------------------------------------------
-// Claude: wrapper 所有の一時 settings ファイル経由で statusLine を渡す
+// Claude: wrapper 所有の一時 settings ファイル経由で statusLine /
+// crossSessionInbound を渡す
 // ---------------------------------------------------------------------------
 //
 // 共有ファイル .claude/settings.local.json には一切書き込まない（重要）。
@@ -51,18 +52,21 @@ type UsageHookParams struct {
 //
 // 代わりに claude 起動時に `claude --settings <temp>` を渡す。--settings は設定
 // 階層のうちコマンドライン引数（local/project/user より上・managed の下）として
-// マージされるため、temp に statusLine だけ書けば有効になる。temp は wrapper だけ
+// マージされるため、temp に必要なキーだけ書けば有効になる。temp は wrapper だけ
 // が所有し起動ごとに作り直すので、共有衝突が原理的に発生せず、万一壊れても次回
 // 起動で上書きされる。
+//
+// `--settings` は 1 回しか渡せないため、statusLine と crossSessionInbound の
+// ように必要条件が異なるキーも 1 ファイルにまとめる（ClaudeSettingsOptions）。
 
 // toShellPath は exe パスを Windows シェルでも安全に実行できる形へ変換する。
 //
 // Claude Code は Windows で statusLine コマンドを Git Bash（無ければ PowerShell）
 // 経由で実行する。Git Bash はバックスラッシュをエスケープ文字として扱うため、
-// `C:\dev\foo\many-ai-cli.exe` のような生の Windows パスはセパレータが消えて
+// `D:\dev\foo\many-ai-cli.exe` のような生の Windows パスはセパレータが消えて
 // パスが壊れ、コマンドが「エラーも出さずに実行されない」（＝relay が一度も
 // POST せずトークンがステータスバーに出ない症状の根本原因）。
-// 正スラッシュ（`C:/dev/foo/many-ai-cli.exe`）なら Git Bash / PowerShell とも
+// 正スラッシュ（`D:/dev/foo/many-ai-cli.exe`）なら Git Bash / PowerShell とも
 // 引用符なしで実行でき、Codex の config.toml（TOML 文字列でも `\d` 等が不正
 // エスケープになる）でも同じ変換で破損を回避できる。
 // 公式ドキュメント: https://code.claude.com/docs/en/statusline.md の
@@ -94,29 +98,58 @@ func claudeStatusLineCmd(p UsageHookParams) string {
 // 循環 import を避けるためここに複製する。両者の値は乖離させないこと。
 const hubTokenEnvName = "MANY_AI_CLI_HUB_TOKEN"
 
-// WriteClaudeStatuslineSettings は statusLine だけを含む wrapper 所有の一時
-// settings JSON を書き出し、そのパスと後始末関数を返す。
+// ClaudeSettingsOptions は wrapper 所有の一時 settings に何を載せるかを決める。
+// どのキーもセッション単位で必要性が違うため、呼び出し側が要るものだけ true にする。
+type ClaudeSettingsOptions struct {
+	// StatusLine: usage-relay を statusLine コマンドとして登録する
+	//（トークン常時表示バーが有効なセッションのみ）。
+	StatusLine bool
+
+	// CrossSessionInboundAccept: crossSessionInbound を "accept" にする。
+	//
+	// Claude Code v2.1.224+ の cross-session messaging は、受信側が
+	// bypassPermissions クラスのとき既定で全メッセージを承認待ちに hold し、
+	// PTY 上に承認ダイアログを出す（送信側も bypass の場合のみ素通し）。
+	// orchestration の子は applyChildApprovalDefaults により必ず
+	// bypassPermissions で起動する。人間が張り付かない自走前提なので、
+	// hold されるとダイアログが dialogExpiry（既定 5 分）まで放置され、
+	// board にも何も残らないまま停止する。accept を明示してこれを避ける。
+	// 公式: https://code.claude.com/docs/en/cross-session-messaging
+	CrossSessionInboundAccept bool
+}
+
+// enabled は settings ファイルを書く必要があるか（載せるキーが 1 つでもあるか）。
+func (o ClaudeSettingsOptions) enabled() bool {
+	return o.StatusLine || o.CrossSessionInboundAccept
+}
+
+// WriteClaudeSessionSettings は opts で指定されたキーだけを含む wrapper 所有の
+// 一時 settings JSON を書き出し、そのパスと後始末関数を返す。
 // `claude --settings <path>` に渡して使う。
 // JSON は json.Marshal で生成するため Windows パスのバックスラッシュも常に
 // 正しくエスケープされ、手編集由来の破損は起こり得ない。
-func WriteClaudeStatuslineSettings(p UsageHookParams) (path string, cleanup func(), err error) {
+func WriteClaudeSessionSettings(p UsageHookParams, opts ClaudeSettingsOptions) (path string, cleanup func(), err error) {
 	type statusLineValue struct {
 		Type    string `json:"type"`
 		Command string `json:"command"`
 		Padding int    `json:"padding"`
 	}
-	doc := map[string]any{
-		"statusLine": statusLineValue{
+	doc := map[string]any{}
+	if opts.StatusLine {
+		doc["statusLine"] = statusLineValue{
 			Type:    "command",
 			Command: claudeStatusLineCmd(p),
 			Padding: 0,
-		},
+		}
+	}
+	if opts.CrossSessionInboundAccept {
+		doc["crossSessionInbound"] = "accept"
 	}
 	body, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
-		return "", nil, fmt.Errorf("marshal statusline settings: %w", err)
+		return "", nil, fmt.Errorf("marshal claude session settings: %w", err)
 	}
-	name := fmt.Sprintf("aac-claude-statusline-s%d-%d.json", p.SessionID, os.Getpid())
+	name := fmt.Sprintf("aac-claude-settings-s%d-%d.json", p.SessionID, os.Getpid())
 	path = filepath.Join(os.TempDir(), name)
 	// 共用 /tmp での symlink 追従を防ぐ（AUDIT-4）: 既存（stale or 他ユーザーが張った
 	// symlink）を除去してから O_EXCL で排他生成する。O_EXCL は symlink 先へ追従して書き込まず、
@@ -125,16 +158,16 @@ func WriteClaudeStatuslineSettings(p UsageHookParams) (path string, cleanup func
 	_ = os.Remove(path)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) // #nosec G304 -- 固定名の wrapper 専用 temp（token を含むため 0600 が意図）
 	if err != nil {
-		return "", nil, fmt.Errorf("create statusline settings: %w", err)
+		return "", nil, fmt.Errorf("create claude session settings: %w", err)
 	}
 	if _, err := f.Write(append(body, '\n')); err != nil {
 		_ = f.Close()
 		_ = os.Remove(path)
-		return "", nil, fmt.Errorf("write statusline settings: %w", err)
+		return "", nil, fmt.Errorf("write claude session settings: %w", err)
 	}
 	if err := f.Close(); err != nil {
 		_ = os.Remove(path)
-		return "", nil, fmt.Errorf("close statusline settings: %w", err)
+		return "", nil, fmt.Errorf("close claude session settings: %w", err)
 	}
 	cleanup = func() { _ = os.Remove(path) }
 	return path, cleanup, nil

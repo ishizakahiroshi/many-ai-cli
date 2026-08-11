@@ -197,7 +197,10 @@ function sshTarget(p: ServerProfile): string {
 async function connectProfile(name: string, btn: HTMLButtonElement): Promise<void> {
   // ポップアップブロック回避: クリック（ユーザー操作）の同期内で空タブを開いておき、
   // 接続成功後にその URL へ遷移させる。失敗時は閉じる。
+  // Keep a handle for the async connection result, but sever reverse access
+  // from the blank tab immediately (noopener feature strings may return null).
   const pending = window.open('about:blank', '_blank');
+  if (pending) pending.opener = null;
   connectAbort = false;
   btn.disabled = true;
   setStatus(t('server_connecting').replace('{name}', name));

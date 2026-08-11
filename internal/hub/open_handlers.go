@@ -33,13 +33,32 @@ var openDeniedExtensions = map[string]bool{
 	".scf": true, ".url": true,
 }
 
-// checkOpenPathAllowed は open 系ハンドラで path が allowed-roots 配下かを検証する。
+// checkOpenPathAllowed は「開くだけ」の open 系ハンドラ（既定のアプリで開く / フォルダを開く /
+// reveal）で path を検証する。直 loopback からの要求は許可ルートで制限しない
+// （根拠は files_scope.go の filesScopeRestricted）。ホスト上で開くだけでブラウザへ中身を
+// 送らないため、露出はエクスプローラで開くのと変わらない。実行に化ける拡張子は
+// 呼び出し元の openDeniedExtensions で別途弾く。
+func (s *Server) checkOpenPathAllowed(w http.ResponseWriter, r *http.Request, path string) bool {
+	return s.checkOpenPathAllowedScoped(w, r, path, true)
+}
+
+// checkOpenPathAllowedStrict は実行系（ターミナル起動）で使う検証。
+// 「開くだけ」と違い任意ディレクトリでのコマンド実行につながるため、直 loopback でも
+// 許可ルート（cwd / git root / attachments）を緩めない。
+func (s *Server) checkOpenPathAllowedStrict(w http.ResponseWriter, r *http.Request, path string) bool {
+	return s.checkOpenPathAllowedScoped(w, r, path, false)
+}
+
+// checkOpenPathAllowedScoped は open 系ハンドラで path が allowed-roots 配下かを検証する。
 // ?session=<id> が指定されていればそのセッションの CWD を判定基準にする（省略時: Hub cwd）。
 // 許可外のパスは 403 を返す。
-func (s *Server) checkOpenPathAllowed(w http.ResponseWriter, r *http.Request, path string) bool {
+func (s *Server) checkOpenPathAllowedScoped(w http.ResponseWriter, r *http.Request, path string, relaxOnLoopback bool) bool {
 	if !filepath.IsAbs(path) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "path must be absolute")
 		return false
+	}
+	if relaxOnLoopback && !s.filesScopeRestricted(r) {
+		return true
 	}
 	cwd := s.cwdForRequest(r)
 	gitRoot := findGitRoot(cwd)
@@ -56,6 +75,15 @@ func (s *Server) checkOpenPathAllowed(w http.ResponseWriter, r *http.Request, pa
 }
 
 func (s *Server) decodeAllowedPath(w http.ResponseWriter, r *http.Request) (string, bool) {
+	return s.decodeAllowedPathScoped(w, r, true)
+}
+
+// decodeAllowedPathStrict は実行系（ターミナル起動）用。直 loopback でも許可ルートを緩めない。
+func (s *Server) decodeAllowedPathStrict(w http.ResponseWriter, r *http.Request) (string, bool) {
+	return s.decodeAllowedPathScoped(w, r, false)
+}
+
+func (s *Server) decodeAllowedPathScoped(w http.ResponseWriter, r *http.Request, relaxOnLoopback bool) (string, bool) {
 	var body struct {
 		Path string `json:"path"`
 	}
@@ -66,7 +94,7 @@ func (s *Server) decodeAllowedPath(w http.ResponseWriter, r *http.Request) (stri
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "path is required")
 		return "", false
 	}
-	if !s.checkOpenPathAllowed(w, r, body.Path) {
+	if !s.checkOpenPathAllowedScoped(w, r, body.Path, relaxOnLoopback) {
 		return "", false
 	}
 	return body.Path, true
@@ -110,7 +138,7 @@ func (s *Server) handleOpenFolder(w http.ResponseWriter, r *http.Request) {
 	// filepath.Dir(path) を開くため、path が許可ルート自身だと検証していない親
 	// （許可境界の 1 階層外）を開いてしまっていた。
 	dir := filepath.Dir(path)
-	if fi, err := os.Stat(path); err == nil && fi.IsDir() {
+	if fi, err := os.Stat(path); err == nil && fi.IsDir() { // #nosec G703 -- path was resolved under an allowed root before this check.
 		dir = path
 	}
 	if err := openDirNative(dir); err != nil {
@@ -127,7 +155,9 @@ func (s *Server) handleOpenTerminal(w http.ResponseWriter, r *http.Request) {
 	if !s.requireLoopbackRemote(w, r) {
 		return
 	}
-	path, ok := s.decodeAllowedPath(w, r)
+	// ターミナル起動は「開くだけ」ではなく任意ディレクトリでのコマンド実行につながるため、
+	// 直 loopback でも許可ルートを緩めない（strict 側を使う）。
+	path, ok := s.decodeAllowedPathStrict(w, r)
 	if !ok {
 		return
 	}

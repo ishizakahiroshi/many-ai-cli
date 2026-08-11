@@ -1,0 +1,5 @@
+⚙ workflow synthetic-resize
+  ▸ Inspect
+    ✓
+wrapped label fragment without its state glyph
+ordinary terminal output

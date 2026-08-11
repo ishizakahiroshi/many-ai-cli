@@ -16,7 +16,7 @@ func TestUsageHookQuotePOSIX_WrapsAndEscapes(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"C:/dev/foo/many-ai-cli.exe", `'C:/dev/foo/many-ai-cli.exe'`},
+		{"D:/dev/foo/many-ai-cli.exe", `'D:/dev/foo/many-ai-cli.exe'`},
 		{"C:/Program Files/many-ai-cli/many-ai-cli.exe", `'C:/Program Files/many-ai-cli/many-ai-cli.exe'`},
 		{"a'b", `'a'\''b'`},
 	}

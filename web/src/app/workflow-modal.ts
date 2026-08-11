@@ -14,9 +14,19 @@
 // 純パース部は workflow-progress.ts（DOM/i18n 非依存）に分離。ここは描画と配線だけ。
 
 import { t } from '../i18n.js';
-import { activeSessionId } from './state.js';
+import type { WorkflowProgress as HubWorkflowProgress } from '../types/proto.js';
+import { activeSessionId, sessions } from './state.js';
 import { scanBuffer } from './terminal.js';
 import { parseWorkflowProgress, WorkflowProgress, WfAgentState } from './workflow-progress.js';
+import {
+  extrapolatedWorkflowElapsedSec,
+  getHubWorkflowEntry,
+  getWorkflowLedger,
+  isHubWorkflowAuthoritative,
+  recordWorkflowDoneLabels,
+  removeWorkflowStore,
+  setHubWorkflowProgress,
+} from './workflow-store.js';
 
 // 進捗ブロックはビューポート近傍に出るので、末尾の十分な行数だけ見れば足りる。
 const SCAN_LINES = 200;
@@ -38,6 +48,8 @@ interface WfSnapshot {
   dismissed: boolean;
   /** 同一 Workflow 判定用シグネチャ（name + フェーズ/エージェント構成）。 */
   sig: string;
+  /** Hub WebSocket またはローカル VT fallback。 */
+  source: 'hub' | 'local';
 }
 
 const snapshots = new Map<number, WfSnapshot>();
@@ -53,6 +65,78 @@ function sigOf(r: WorkflowProgress): string {
   return r.name + '||' + r.phases
     .map(p => p.title + ':' + p.agents.map(a => a.label).slice().sort().join(','))
     .join('|');
+}
+
+function hubAgentState(state: string): WfAgentState {
+  return state === 'running' || state === 'done' || state === 'failed' || state === 'pending'
+    ? state
+    : 'pending';
+}
+
+function workflowFromHub(progress: HubWorkflowProgress, receivedAt: number, now: number): WorkflowProgress {
+  const phases = (progress.phases || []).map(phase => ({
+    title: String(phase.title || ''),
+    agents: (phase.agents || []).map(agent => ({
+      label: String(agent.label || ''),
+      state: hubAgentState(String(agent.state || '')),
+      glyph: '',
+      metrics: agent.metrics,
+    })),
+  }));
+  const total = Math.max(0, Number(progress.total || 0));
+  const done = Math.max(0, Number(progress.done || 0));
+  const waiting = Math.max(0, Number(progress.waiting_dynamic || 0));
+  const settled = !!progress.settled;
+  const running = !settled && (
+    Number(progress.running || 0) > 0 ||
+    Number(progress.pending || 0) > 0 ||
+    waiting > 0 ||
+    (total > 0 && done < total)
+  );
+  const entry = { progress, receivedAt };
+  const hasElapsed = typeof progress.elapsed_sec === 'number' && progress.elapsed_sec >= 0;
+  return {
+    detected: !!progress.detected,
+    running,
+    live: !settled && total > 0 && done < total,
+    waitingDynamic: waiting,
+    name: String(progress.name || ''),
+    phases,
+    runningCount: settled ? 0 : Math.max(0, Number(progress.running || 0)),
+    doneCount: done,
+    failedCount: Math.max(0, Number(progress.failed || 0)),
+    totalCount: total,
+    percent: Number.isFinite(progress.percent) ? Math.max(0, Math.min(100, progress.percent)) : null,
+    frameSig: 'hub:' + [progress.source, progress.name, done, total, progress.running,
+      progress.pending, waiting, progress.settled, progress.settled_by].join('|'),
+    elapsedSec: hasElapsed ? extrapolatedWorkflowElapsedSec(entry, now) : undefined,
+    tokensRaw: String(progress.tokens_raw || ''),
+    pendingCount: Math.max(0, Number(progress.pending || 0)),
+    settledBy: String(progress.settled_by || ''),
+    authority: 'hub',
+  };
+}
+
+function applyHubSnapshot(sessionId: number, now = Date.now()): boolean {
+  const entry = getHubWorkflowEntry(sessionId);
+  if (!entry || !isHubWorkflowAuthoritative(entry, now)) return false;
+  const result = workflowFromHub(entry.progress, entry.receivedAt, now);
+  const sig = sigOf(result);
+  const prev = snapshots.get(sessionId);
+  // sig は Hub パーサとローカルパーサで同一 workflow でも書式が揃わないことが
+  // あるため、ソース切替をまたぐときは dismiss を 1 回引き継ぐ（✕ で閉じた
+  // ピルが fallback 切替の瞬間に復活する問題 — 敵対レビュー 2026-08-05 F3）。
+  const keepDismissed = !!(prev && prev.dismissed && (prev.sig === sig || prev.source !== 'hub'));
+  snapshots.set(sessionId, {
+    result,
+    settled: !!entry.progress.settled,
+    dismissed: keepDismissed,
+    sig,
+    source: 'hub',
+  });
+  missCounts.set(sessionId, 0);
+  freezeCounts.set(sessionId, 0);
+  return true;
 }
 
 // ── DOM 参照 ──────────────────────────────────────────────────────────────────
@@ -91,56 +175,59 @@ function ensurePill(): HTMLElement {
 function poll(): void {
   const sid = activeSessionId;
   if (sid !== null) {
-    const result = parseWorkflowProgress(scanBuffer(sid, SCAN_LINES));
-    // 走行中である肯定的証拠。これが真の間は「完了」を生成も維持もしない。
-    // result.live（N/M agents done 未完サマリー）／waitingDynamic（背景 Workflow の
-    // 明示セントネル）のいずれかがあれば走行中と断定する。
-    const authoritativeRunning = result.live || result.waitingDynamic > 0;
-    if (result.detected) {
-      missCounts.set(sid, 0);
-      const sig = sigOf(result);
-      const prev = snapshots.get(sid);
-      // 別 Workflow（sig 変化）になったら dismiss を解除して再表示する。
-      const keepDismissed = !!(prev && prev.dismissed && prev.sig === sig);
-      // 走行中の権威的証拠があるときは settle を強制解除し、freeze/miss カウンタもリセット。
-      // 過去の誤 settle（完了 N 固着）もここで剥がす。
-      let settled = !result.running;
-      if (authoritativeRunning) {
-        settled = false;
-        freezeCounts.set(sid, 0);
+    const now = Date.now();
+    const hubEntry = getHubWorkflowEntry(sid);
+    if (!applyHubSnapshot(sid, now)) {
+      const result = parseWorkflowProgress(scanBuffer(sid, SCAN_LINES));
+      result.authority = 'local';
+      // Once an unsettled Hub snapshot becomes stale, the local freeze/miss
+      // heuristic is the last safety net. Require output-idle in that case so
+      // an actively producing session is never closed by a stale browser view.
+      const allowFallbackSettle = !hubEntry || !!sessions.get(sid)?.output_idle;
+      // 走行中である肯定的証拠。これが真の間は「完了」を生成も維持もしない。
+      const authoritativeRunning = result.live || result.waitingDynamic > 0;
+      if (result.detected) {
+        recordWorkflowDoneLabels(sid, result.phases);
         missCounts.set(sid, 0);
-        lastFrameSig.set(sid, result.frameSig);
-      } else if (result.running) {
-        // フレーム凍結判定: 走行中表示なのに frameSig が連続不変なら、スピナーが止まった
-        // ＝完了したのに走行中グリフが残っているとみなし settle する（インラインツリー専用。
-        // 背景実行は authoritativeRunning 側で除外済み）。
-        const sameFrame = lastFrameSig.get(sid) === result.frameSig;
-        const frozen = (freezeCounts.get(sid) || 0) + (sameFrame ? 1 : 0);
-        freezeCounts.set(sid, sameFrame ? frozen : 0);
-        lastFrameSig.set(sid, result.frameSig);
-        if (frozen >= SETTLE_MISS_LIMIT) settled = true;
+        const sig = sigOf(result);
+        const prev = snapshots.get(sid);
+        // 別 Workflow（sig 変化）になったら dismiss を解除して再表示する。
+        // ただしソース切替（hub → local fallback）の sig 差は同一 Workflow の
+        // 書式差なので dismiss を引き継ぐ（F3・applyHubSnapshot 側と対称）。
+        const keepDismissed = !!(prev && prev.dismissed && (prev.sig === sig || prev.source !== 'local'));
+        // 走行中の権威的証拠があるときは settle を強制解除し、freeze/miss カウンタもリセット。
+        let settled = !result.running && allowFallbackSettle;
+        if (authoritativeRunning) {
+          settled = false;
+          freezeCounts.set(sid, 0);
+          missCounts.set(sid, 0);
+          lastFrameSig.set(sid, result.frameSig);
+        } else if (result.running) {
+          const sameFrame = lastFrameSig.get(sid) === result.frameSig;
+          const frozen = (freezeCounts.get(sid) || 0) + (sameFrame ? 1 : 0);
+          freezeCounts.set(sid, sameFrame ? frozen : 0);
+          lastFrameSig.set(sid, result.frameSig);
+          if (allowFallbackSettle && frozen >= SETTLE_MISS_LIMIT) settled = true;
+        } else {
+          freezeCounts.set(sid, 0);
+          lastFrameSig.set(sid, result.frameSig);
+        }
+        // sticky-settle は走行証拠が無い同一 Workflow にだけ適用する。
+        if (!authoritativeRunning && prev && prev.sig === sig && prev.settled) settled = true;
+        snapshots.set(sid, { result, settled, dismissed: keepDismissed, sig, source: 'local' });
       } else {
-        freezeCounts.set(sid, 0);
-        lastFrameSig.set(sid, result.frameSig);
-      }
-      // sticky-settle（既に settle 済みなら維持）は走行証拠が無いときだけ適用する
-      // （新しいライブ要約が来たら「完了」へ貼り付けない）。
-      if (!authoritativeRunning && prev && prev.sig === sig && prev.settled) settled = true;
-      snapshots.set(sid, { result, settled, dismissed: keepDismissed, sig });
-    } else {
-      // 未検出。完了スナップショットは振り返り用に保持し続ける（消さない）。
-      const prev = snapshots.get(sid);
-      if (authoritativeRunning && prev) {
-        // 要約が窓外でも Waiting 行が残存＝走行中。prev を走行中として維持し誤完了を消す。
-        prev.settled = false;
-        missCounts.set(sid, 0);
-        freezeCounts.set(sid, 0);
-      } else if (prev && !prev.settled) {
-        // 走行信号も無い未検出。直近が live だったら長い backstop 猶予まで settle しない。
-        const miss = (missCounts.get(sid) || 0) + 1;
-        missCounts.set(sid, miss);
-        const limit = prev.result.live ? LIVE_SETTLE_MISS_LIMIT : SETTLE_MISS_LIMIT;
-        if (miss >= limit) prev.settled = true;
+        // 未検出。完了スナップショットは振り返り用に保持し続ける（消さない）。
+        const prev = snapshots.get(sid);
+        if (authoritativeRunning && prev) {
+          prev.settled = false;
+          missCounts.set(sid, 0);
+          freezeCounts.set(sid, 0);
+        } else if (prev && !prev.settled && allowFallbackSettle) {
+          const miss = (missCounts.get(sid) || 0) + 1;
+          missCounts.set(sid, miss);
+          const limit = prev.result.live ? LIVE_SETTLE_MISS_LIMIT : SETTLE_MISS_LIMIT;
+          if (miss >= limit) prev.settled = true;
+        }
       }
     }
   }
@@ -154,21 +241,60 @@ function activeSnapshot(): WfSnapshot | null {
   return snapshots.get(sid) || null;
 }
 
+// hub ソースの完了判定は Hub の Settled のみを権威とする。カウントが完了形でも
+// Hub が意図的に Settled=false を保持する窓（journal 紐付け待ち・10 秒静止待ち）
+// があり、!running への OR フォールバックはその窓で「完了」を先走らせる
+// （敵対レビュー 2026-08-05 F4）。ローカル fallback は従来どおり凍結ヒューリス
+// ティック由来の !running も完了として扱う。
+function snapshotDone(snap: WfSnapshot): boolean {
+  if (snap.source === 'hub') return snap.settled;
+  return snap.settled || !snap.result.running;
+}
+
+function formatElapsed(seconds: number, compact = false): string {
+  const sec = Math.max(0, Math.floor(seconds || 0));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (compact) {
+    if (h > 0) return `${h}h${m > 0 ? ` ${m}m` : ''}`;
+    if (m > 0) return `${m}m`;
+    return `${s}s`;
+  }
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h}h`);
+  if (m > 0 || h > 0) parts.push(`${m}m`);
+  parts.push(`${s}s`);
+  return parts.join(' ');
+}
+
 function renderPill(): void {
   const pill = ensurePill();
   const snap = activeSnapshot();
-  if (!snap || snap.dismissed || !snap.result.detected || snap.result.totalCount === 0) {
+  if (!snap || snap.dismissed || !snap.result.detected ||
+      (snap.result.totalCount === 0 && snap.result.waitingDynamic === 0)) {
     pill.hidden = true;
     if (modalOpen) closeWorkflowModal();
     return;
   }
   pill.hidden = false;
-  const done = snap.settled || !snap.result.running;
+  const done = snapshotDone(snap);
   pill.classList.toggle('wf-done', done);
   const textEl = pill.querySelector('.wf-pill-text') as HTMLElement | null;
   if (textEl) {
+    const elapsed = snap.result.elapsedSec && snap.result.elapsedSec > 0
+      ? formatElapsed(snap.result.elapsedSec, true)
+      : '';
     if (done) {
       textEl.textContent = t('wf_progress_pill_done', { n: snap.result.totalCount });
+    } else if (snap.result.totalCount === 0 && snap.result.waitingDynamic > 0) {
+      textEl.textContent = t('wf_progress_pill_waiting', { n: snap.result.waitingDynamic });
+    } else if (elapsed) {
+      textEl.textContent = t('wf_progress_pill_live_elapsed', {
+        done: snap.result.doneCount,
+        total: snap.result.totalCount,
+        elapsed,
+      });
     } else if (snap.result.live) {
       // 背景実行（N/M agents done）は done/total で下のステータス行と表示を揃える。
       textEl.textContent = t('wf_progress_pill_live', {
@@ -296,7 +422,7 @@ function renderModalBody(): void {
   const r = snap && !snap.dismissed ? snap.result : null;
 
   // 解釈不能（検出が外れた / フォーマット不一致）: クラッシュさせず案内を出す。
-  if (!r || !r.detected || r.totalCount === 0) {
+  if (!r || !r.detected || (r.totalCount === 0 && r.waitingDynamic === 0)) {
     if (counts) counts.textContent = '';
     body.innerHTML = '';
     const empty = document.createElement('div');
@@ -306,7 +432,7 @@ function renderModalBody(): void {
     return;
   }
 
-  const done = snap!.settled || !r.running;
+  const done = snapshotDone(snap!);
   // done（settle 済み / 走行終了）のときは表示を完了側へ倒す。
   // settle はフレーム凍結ヒューリスティックで確定するため、生パース結果の
   // running グリフ・件数・percent はまだ走行中のまま残っている。ピル（バッジ）と
@@ -315,18 +441,23 @@ function renderModalBody(): void {
   const dispDone = done ? Math.max(r.doneCount, r.totalCount - r.failedCount) : r.doneCount;
   const dispPercent = done ? 100 : r.percent;
   if (counts) {
-    const parts = [
-      t('wf_progress_counts_running', { n: dispRunning }),
-      t('wf_progress_counts_done', { n: dispDone }),
-    ];
-    if (r.failedCount > 0) parts.push(t('wf_progress_counts_failed', { n: r.failedCount }));
+    const parts: string[] = [];
+    if (r.totalCount > 0) {
+      parts.push(
+        t('wf_progress_counts_running', { n: dispRunning }),
+        t('wf_progress_counts_done', { n: dispDone }),
+      );
+      if (r.failedCount > 0) parts.push(t('wf_progress_counts_failed', { n: r.failedCount }));
+    }
+    if (r.elapsedSec && r.elapsedSec > 0) parts.push(formatElapsed(r.elapsedSec));
+    if (r.tokensRaw) parts.push(r.tokensRaw);
     counts.textContent = parts.join(' · ');
   }
 
   body.innerHTML = '';
 
   // 進捗バー（percent があれば。done なら 100% 固定）。
-  if (dispPercent !== null) {
+  if (dispPercent !== null && r.totalCount > 0) {
     const barWrap = document.createElement('div');
     barWrap.className = 'wf-progress-bar';
     const fill = document.createElement('div');
@@ -346,6 +477,13 @@ function renderModalBody(): void {
     nameEl.className = 'wf-modal-name';
     nameEl.textContent = r.name;
     body.appendChild(nameEl);
+  }
+
+  if (r.waitingDynamic > 0) {
+    const waiting = document.createElement('div');
+    waiting.className = 'wf-waiting-dynamic';
+    waiting.textContent = t('wf_progress_waiting_dynamic', { n: r.waitingDynamic });
+    body.appendChild(waiting);
   }
 
   for (const phase of r.phases) {
@@ -370,14 +508,65 @@ function renderModalBody(): void {
       lbl.className = 'wf-agent-label';
       lbl.textContent = agent.label;
       row.appendChild(lbl);
+      if (agent.metrics) {
+        const metrics = document.createElement('span');
+        metrics.className = 'wf-agent-metrics';
+        metrics.textContent = agent.metrics;
+        row.appendChild(metrics);
+      }
       list.appendChild(row);
     }
     phaseEl.appendChild(list);
     body.appendChild(phaseEl);
   }
+
+
+  const sid = activeSessionId;
+  if (sid !== null) {
+    const ledger = getWorkflowLedger(sid, r.doneCount);
+    if (ledger.labels.length > 0 || ledger.otherCount > 0) {
+      const section = document.createElement('section');
+      section.className = 'wf-completed-ledger';
+      const heading = document.createElement('div');
+      heading.className = 'wf-completed-title';
+      heading.textContent = t('wf_progress_completed_seen');
+      section.appendChild(heading);
+      const list = document.createElement('div');
+      list.className = 'wf-completed-list';
+      for (const label of ledger.labels) {
+        const row = document.createElement('div');
+        row.className = 'wf-completed-row';
+        row.textContent = `✓ ${label}`;
+        list.appendChild(row);
+      }
+      if (ledger.otherCount > 0) {
+        const other = document.createElement('div');
+        other.className = 'wf-completed-other';
+        other.textContent = t('wf_progress_completed_other', { n: ledger.otherCount });
+        list.appendChild(other);
+      }
+      section.appendChild(list);
+      body.appendChild(section);
+    }
+  }
 }
 
 // ── 外部 API ─────────────────────────────────────────────────────────────────
+
+/** Hub の workflow_progress を全セッション分保持する。 */
+export function receiveWorkflowProgress(
+  sessionId: number,
+  progress: HubWorkflowProgress,
+  receivedAt = Date.now(),
+): void {
+  if (!Number.isFinite(sessionId) || sessionId <= 0 || !progress) return;
+  setHubWorkflowProgress(sessionId, progress, receivedAt);
+  applyHubSnapshot(sessionId, receivedAt);
+  if (sessionId === activeSessionId) {
+    renderPill();
+    if (modalOpen) renderModalBody();
+  }
+}
 
 /** session_removed 時に保持スナップショットをクリアする（メモリ保持はセッション生存中のみ）。 */
 export function removeWorkflowSnapshot(sessionId: number): void {
@@ -385,6 +574,7 @@ export function removeWorkflowSnapshot(sessionId: number): void {
   missCounts.delete(sessionId);
   freezeCounts.delete(sessionId);
   lastFrameSig.delete(sessionId);
+  removeWorkflowStore(sessionId);
   if (sessionId === activeSessionId) renderPill();
 }
 

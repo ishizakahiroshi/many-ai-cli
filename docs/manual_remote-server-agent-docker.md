@@ -34,7 +34,7 @@
 | 変数 | 説明 | 例 |
 |---|---|---|
 | `SSH_TARGET` | SSH 接続先（`user@host` またはエイリアス）。docker を叩ける権限が要る | `your-user@remote.example.com` |
-| `SSH_KEY` | 秘密鍵パス（config で指定済みなら空でよい） | `C:\dev\.ssh\id_ed25519` |
+| `SSH_KEY` | 秘密鍵パス（config で指定済みなら空でよい） | `D:\dev\.ssh\id_ed25519` |
 | `USER_TAG` | サービス/コンテナ/volume を区別する名前 | `user1` |
 | `HUB_PORT` | host 側 publish ポート（手元と同番号にする） | `47801` |
 | `AAC_TAG` | 追従するイメージタグ（`latest`=main / `develop`=検証） | `latest` |

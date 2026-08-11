@@ -165,20 +165,35 @@ func findGrokChatHistory(grokDir, cwd string, startedAt time.Time) (string, bool
 		return "", false
 	}
 
-	pick := func(sessionID string) (string, bool) {
+	type candidate struct {
+		path  string
+		delta time.Duration
+	}
+	pick := func(sessionID string, delta time.Duration) (candidate, bool) {
 		p := filepath.Join(cwdDir, sessionID, "chat_history.jsonl")
 		if info, err := os.Stat(p); err == nil && !info.IsDir() {
-			return p, true
+			return candidate{path: p, delta: delta}, true
 		}
-		return "", false
+		return candidate{}, false
+	}
+	var candidates []candidate
+	seen := map[string]int{}
+	addCandidate := func(c candidate) {
+		if idx, exists := seen[c.path]; exists {
+			if c.delta < candidates[idx].delta {
+				candidates[idx].delta = c.delta
+			}
+			return
+		}
+		seen[c.path] = len(candidates)
+		candidates = append(candidates, c)
 	}
 
 	// 1. active_sessions.json（実行中セッション）
+	var fallbackActive *candidate
 	if data, err := os.ReadFile(filepath.Join(grokDir, "active_sessions.json")); err == nil {
 		var actives []grokActiveSession
 		if json.Unmarshal(data, &actives) == nil {
-			bestDelta := grokHistoryMatchWindow
-			bestID := ""
 			for _, a := range actives {
 				if !grokPathsEquivalent(a.CWD, cwd) {
 					continue
@@ -187,14 +202,16 @@ func findGrokChatHistory(grokDir, cwd string, startedAt time.Time) (string, bool
 				if err != nil {
 					continue
 				}
-				if d := opened.Sub(startedAt).Abs(); d <= bestDelta {
-					bestDelta = d
-					bestID = a.SessionID
+				delta := opened.Sub(startedAt).Abs()
+				if delta > grokHistoryMatchWindow {
+					continue
 				}
-			}
-			if bestID != "" {
-				if p, ok := pick(bestID); ok {
-					return p, true
+				if c, ok := pick(a.SessionID, delta); ok {
+					addCandidate(c)
+					if fallbackActive == nil || c.delta <= fallbackActive.delta {
+						cp := c
+						fallbackActive = &cp
+					}
 				}
 			}
 		}
@@ -202,28 +219,56 @@ func findGrokChatHistory(grokDir, cwd string, startedAt time.Time) (string, bool
 
 	// 2. ディレクトリ名（UUIDv7）の埋め込み時刻で近傍一致
 	entries, err := os.ReadDir(cwdDir)
-	if err != nil {
-		return "", false
+	var fallbackUUID *candidate
+	if err == nil {
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			ts, ok := uuidV7Time(e.Name())
+			if !ok {
+				continue
+			}
+			delta := ts.Sub(startedAt).Abs()
+			if delta > grokHistoryMatchWindow {
+				continue
+			}
+			if c, ok := pick(e.Name(), delta); ok {
+				addCandidate(c)
+				if fallbackUUID == nil || c.delta <= fallbackUUID.delta {
+					cp := c
+					fallbackUUID = &cp
+				}
+			}
+		}
 	}
-	bestDelta := grokHistoryMatchWindow
-	bestID := ""
-	for _, e := range entries {
-		if !e.IsDir() {
+
+	// 空 stub より、表示可能な user/assistant メッセージを含む候補を優先する。
+	// 非空候補同士ではメッセージ数を比較せず、従来どおり開始時刻の近さだけで選ぶ。
+	var bestNonEmpty *candidate
+	for _, c := range candidates {
+		messages, err := readGrokChatHistory(c.path)
+		if err != nil || len(messages) == 0 {
 			continue
 		}
-		ts, ok := uuidV7Time(e.Name())
-		if !ok {
-			continue
-		}
-		if d := ts.Sub(startedAt).Abs(); d <= bestDelta {
-			bestDelta = d
-			bestID = e.Name()
+		if bestNonEmpty == nil || c.delta < bestNonEmpty.delta {
+			cp := c
+			bestNonEmpty = &cp
 		}
 	}
-	if bestID == "" {
-		return "", false
+	if bestNonEmpty != nil {
+		return bestNonEmpty.path, true
 	}
-	return pick(bestID)
+
+	// 全候補が空なら従来の優先順位へ戻す:
+	// active_sessions の時刻近傍候補を先に取り、無ければ UUIDv7 候補を使う。
+	if fallbackActive != nil {
+		return fallbackActive.path, true
+	}
+	if fallbackUUID != nil {
+		return fallbackUUID.path, true
+	}
+	return "", false
 }
 
 // findGrokCwdDir は ~/.grok/sessions/ 直下から cwd に対応するディレクトリを探す。

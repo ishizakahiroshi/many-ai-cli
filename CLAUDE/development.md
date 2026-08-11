@@ -82,6 +82,7 @@
 - 子計画のファイル名・H1・context番号は、親のcontext番号と対応させる
 - 子計画内の `context配分` は、その子計画の内部チェックリストであり、さらに別mdへ分割するための番号ではない
 - 追加調査、対象ファイル、完了条件、判断ログは該当する子計画mdへ追記する
+- 複数の分散したドキュメントを1つの親子計画へ統合する作業では、親は元ネタとなる既存ドキュメント群を要約してからsubagentへ渡さない。各subagentに担当contextの元ドキュメントを直接Readさせて子計画を書かせる（親が先に要約すると、その時点で親コンテキストが肥大化し「親のコンテキストを消費しない」という並列委託の目的が崩れるため）
 
 **記載方法：**
 - 「## context配分」セクションに各contextの担当作業と状態（`plan` / `fix`）を記載
@@ -147,9 +148,9 @@
 ### 作業完了時のファイル移動
 
 `plan_*.md` の作業が完了したら：
-1. `python C:\dev\tools\dev-scripts\check_archivable_plans.py` で対象を確認
+1. `python D:\dev\tools\dev-scripts\check_archivable_plans.py` で対象を確認
 2. ユーザーに `docs/local/archive/` への移動を確認（`Y:1/N:0`）
-3. 承認を得たら `python C:\dev\tools\dev-scripts\check_archivable_plans.py --move` を実行
+3. 承認を得たら `python D:\dev\tools\dev-scripts\check_archivable_plans.py --move` を実行
 4. **ファイル名は変えない**
 5. 移動後は、他ファイルからの相対リンクを grep で機械的に張り直す
 

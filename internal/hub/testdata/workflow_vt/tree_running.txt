@@ -1,0 +1,7 @@
+unrelated terminal output
+⚙ workflow synthetic-review
+  ▸ Inspect
+    ✓ inspect:alpha  12s · ↓ 8.0k
+    ⠋ inspect:beta  4s · ↓ 2.0k
+  ▸ Verify
+    ○ verify:gamma

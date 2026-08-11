@@ -880,7 +880,7 @@ export function applyFontSize(size) {
       t.term.options.fontSize = px;
       requestAnimationFrame(() => {
         fitTerminalPreservingBottom(t, id);
-        sendResize(id, t.term.cols, t.term.rows);
+        sendResize(id, t.term.cols, t.term.rows, 'fontsize-change');
       });
     });
   } catch (_) {}
@@ -1882,6 +1882,16 @@ function renderStaleBinaryBanner(stale: boolean): void {
   banner.appendChild(closeBtn);
   banner.hidden = false;
 }
+
+// ダッシュボードを開いたまま make build されたケース。/api/info はページ読み込み時に
+// 1 回しか読まないので、そのままでは stale になった瞬間を捉えられずリロードするまで
+// バナーが出ない。Hub が状態変化を broadcast するので（internal/hub/stale_watch.go）、
+// ws-client.ts 経由の CustomEvent で同じ描画関数を呼び直す。
+// 一度 × で閉じた後でも、新しい stale 通知が来れば再表示する（見落とし防止を優先）。
+window.addEventListener('many-binary-stale', (ev: Event) => {
+  const detail = (ev as CustomEvent<{ stale?: boolean }>).detail;
+  renderStaleBinaryBanner(!!(detail && detail.stale));
+});
 
 // ---- Hub 情報表示（single source: main.version / runtime → /api/info → ここ） ----
 (async () => {

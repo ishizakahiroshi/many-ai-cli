@@ -156,11 +156,12 @@ func (s *Server) handleAutoApprovalSimulation(w http.ResponseWriter, r *http.Req
 	if policy == nil {
 		policy = &autoapproval.Policy{}
 	}
-	if n := 100; r.URL.Query().Get("n") != "" {
+	n := 100
+	if r.URL.Query().Get("n") != "" {
 		_, _ = fmt.Sscanf(r.URL.Query().Get("n"), "%d", &n)
-		if n > 0 && n < len(items) {
-			items = items[len(items)-n:]
-		}
+	}
+	if n > 0 && n < len(items) {
+		items = items[len(items)-n:]
 	}
 	matched := 0
 	for i := range items {

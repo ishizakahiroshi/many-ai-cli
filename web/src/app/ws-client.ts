@@ -1,19 +1,19 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
-import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, approvalVisibleCache, autoDismissTimers, chatHistory, deriveProjectKeyFromCwd, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, multiQuestionLatchAt, multiQuestionVisibleCache, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
+import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, approvalVisibleCache, autoDismissTimers, beginApprovalReplay, chatHistory, deriveProjectKeyFromCwd, finishApprovalReplay, isApprovalReplayPending, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, multiQuestionLatchAt, multiQuestionVisibleCache, noteApprovalSourceEpoch, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
 import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLocalSessionHistory, resetLocalSessionHistory, updateInputAffordance } from '../app.js';
-import { activateSession, render, renderSessionList, renderSessionStateUpdate, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
+import { activateSession, render, renderSessionList, renderSessionStateUpdate, updateCardLiveInfo, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
 import { applyRemotePtyResize, ensureTerminal, isLiveOutputBatching, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup } from './settings.js';
-import { setMultiQuestionBannerVisible } from './approval-ui.js';
+import { clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed, setMultiQuestionBannerVisible } from './approval-ui.js';
 import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, handleHubApprovalMarker, hideActionBar, isAIProvider, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
 import { notifyDeferredEnterOutput } from './deferred-enter.js';
 import { notifyResidueSweepOutput } from './residue-sweep.js';
-import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed } from './chat-history.js';
+import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed, isTranscriptBackedProvider, pushAgentChatMessage } from './chat-history.js';
 import { clearChatPayloadForSession, handleChatTurnMessage, initChatPayloadUI } from './chat-payload.js';
 import { handleUsageStatMessage, removeUsageCacheEntry } from './token-statusbar.js';
-import { removeWorkflowSnapshot } from './workflow-modal.js';
+import { receiveWorkflowProgress, removeWorkflowSnapshot } from './workflow-modal.js';
 
 function showSpawnConfirmation(m) {
   const id = String(m.spawn_confirmation_id || '');
@@ -112,7 +112,12 @@ function purgeLocalStateForHubRestart() {
     ...chatHistory.keys(),
     ...sessions.keys(),
   ]);
-  ids.forEach(id => { try { removeLocalSession(id); } catch (_) {} });
+  ids.forEach(id => {
+    try {
+      removeLocalSession(id);
+      removeWorkflowSnapshot(id);
+    } catch (_) {}
+  });
 }
 
 export function syncElapsedTimer() {
@@ -289,8 +294,16 @@ export function _connectWs() {
     try { m = JSON.parse(ev.data); } catch { return; }
     let fastRenderSessionId = null;
 
+  if (m.type === 'agent_chat') {
+    const id = Number(m.session_id || 0);
+    const messages = Array.isArray(m.messages) ? m.messages : [];
+    for (const message of messages) pushAgentChatMessage(id, message);
+    return;
+  }
+
   if (m.type === 'pty_data') {
     const id = m.session_id;
+    if (m.replay) beginApprovalReplay(id, m.replay_epoch);
     ensureTerminal(id);
     const t = terminals.get(id);
     // ensureTerminal が内部例外で terminals へ登録できなかった場合 t は undefined になり、
@@ -328,9 +341,12 @@ export function _connectWs() {
       // セッション切替時に attachTerminal → flushPending で一括 xterm 書き込みする。
       queuePendingTerminalChunk(id, xtermBytes);
     }
-    trackApprovalHintFromChunk(id, xtermBytes, approvalTextChunk);
+    trackApprovalHintFromChunk(id, xtermBytes, approvalTextChunk, {
+      replay: !!m.replay,
+      replayEpoch: m.replay_epoch,
+    });
     markCompactActivity(id, approvalTextChunk);
-    if (isLiveRendered) scheduleApprovalCheck(id);
+    if (isLiveRendered && !m.replay && !isApprovalReplayPending(id)) scheduleApprovalCheck(id);
     // Codex 等 provider 別のピル内テキストを本文から抽出（Claude は既存ブロック抽出経路）。
     if (isActive) scheduleLiveStatusExtract(id);
     // chat_turn / chat_turns_snapshot は早期 return しないが、ここで早期処理する
@@ -344,7 +360,7 @@ export function _connectWs() {
     // chatHistory: マーカー検出でターン境界を確定し AI 出力を commit する。
     // Shell session は chat history extraction の対象外。
     const sessionProvider = sessions.get(id)?.provider || '';
-    if (isAIProvider(sessionProvider)) {
+    if (isAIProvider(sessionProvider) && !isTranscriptBackedProvider(sessionProvider)) {
       if (hasMarker) {
         const parts = textChunk.split(CHAT_HISTORY_USER_TURN_MARKER);
         for (let i = 0; i < parts.length; i++) {
@@ -358,8 +374,33 @@ export function _connectWs() {
     return;
   }
 
+  if (m.type === 'reattach_replay_done') {
+    const id = Number(m.session_id || 0);
+    if (!id) return;
+    if (finishApprovalReplay(id, m.replay_epoch, m.approval_source_epoch, m.approval_consumed ? String(m.approval_candidate_key || '') : '', String(m.approval_candidate_shape || '')) && id === activeSessionId) {
+      scheduleApprovalCheck(id);
+    }
+    return;
+  }
+
   if (m.type === 'usage_stat') {
     handleUsageStatMessage(m);
+    return;
+  }
+
+  if (m.type === 'git_turn') {
+    // Review Phase 2: the view module owns the completion card and caches the
+    // compact event. Reload recovery uses /api/git-turns.
+    try { window.dispatchEvent(new CustomEvent('many-git-turn', { detail: m })); } catch (_) {}
+    return;
+  }
+
+  if (m.type === 'user_turn_started') {
+    // 確定ユーザー入力が provider へ送達された（input_gate.go のライブ限定 broadcast）。
+    // review-view.ts が前ターンの完了カードを自動消去する。ptyBuf リプレイの
+    // ターン境界マーカーや State("running") と違い、リロード・再描画で誤発火しない。
+    noteApprovalSourceEpoch(m.session_id, m.approval_source_epoch);
+    try { window.dispatchEvent(new CustomEvent('many-user-turn-started', { detail: { session_id: m.session_id, approval_source_epoch: m.approval_source_epoch } })); } catch (_) {}
     return;
   }
 
@@ -368,6 +409,14 @@ export function _connectWs() {
     if (window.approvalPatternsUI && typeof window.approvalPatternsUI.onOfficialUpdated === 'function') {
       window.approvalPatternsUI.onOfficialUpdated(Array.isArray(m.providers) ? m.providers : []);
     }
+    return;
+  }
+
+  if (m.type === 'binary_stale') {
+    // 稼働中 Hub の exe がディスク上で差し替わった（= make build 済みだが未再起動）。
+    // 常設バナーの描画は settings.ts が持つので CustomEvent で橋渡しする。
+    // ページ読み込み時の /api/info と同じ関数を通るため、表示は 1 箇所に閉じたまま。
+    try { window.dispatchEvent(new CustomEvent('many-binary-stale', { detail: { stale: !!m.binary_stale } })); } catch (_) {}
     return;
   }
 
@@ -399,6 +448,11 @@ export function _connectWs() {
     return;
   }
 
+  if (m.type === 'approval_marker_suppressed') {
+    noteApprovalMarkerSuppressed(m.session_id, m.reason);
+    return;
+  }
+
   if (m.type === 'approval_cleared') {
     handleGoApprovalCleared(m);
     return;
@@ -424,6 +478,14 @@ export function _connectWs() {
 
   if (m.type === 'chat_turn' || m.type === 'chat_turns_snapshot') {
     handleChatTurnMessage(m);
+    return;
+  }
+
+  if (m.type === 'workflow_progress') {
+    if (Number.isFinite(m.session_id) && m.workflow_progress) {
+      receiveWorkflowProgress(m.session_id, m.workflow_progress);
+      updateCardLiveInfo(m.session_id);
+    }
     return;
   }
 
@@ -454,6 +516,7 @@ export function _connectWs() {
 			s.awaiting_approval = s.activity.awaiting_approval;
 		}
       s.project = deriveProjectKeyFromCwd(s.cwd);
+      noteApprovalSourceEpoch(s.id, s.approval_source_epoch);
       sessions.set(s.id, s);
       addToSessionOrder(s.id);
     });
@@ -474,6 +537,7 @@ export function _connectWs() {
     }
     const isNew = !sessions.has(m.session_id);
     const cur: any = sessions.get(m.session_id) || { id: m.session_id };
+    noteApprovalSourceEpoch(m.session_id, m.approval_source_epoch);
     const beforeLayout = sessionLayoutSnapshot(cur);
     if (m.provider)        cur.provider        = m.provider;
     if (m.display_name)    cur.display_name    = m.display_name;
@@ -575,6 +639,7 @@ export function _connectWs() {
     if (multiQuestionVisibleCache.delete(m.session_id) && m.session_id === activeSessionId) {
       setMultiQuestionBannerVisible(false);
     }
+    clearApprovalMarkerSuppressed(m.session_id);
     multiQuestionLatchAt.delete(m.session_id);
     removeApprovalAutoSwitchTarget(m.session_id);
     maybeAutoSwitchToNextApproval();

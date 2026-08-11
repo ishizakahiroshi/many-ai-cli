@@ -175,6 +175,9 @@ async function finalizeReport(): Promise<void> {
 
   // Open a dedicated blank tab while handling the user gesture. After the Hub
   // has performed the final server-side scrub, navigate this tab to GitHub.
+  // `noopener` in the feature string makes window.open return null in some
+  // browsers, which would prevent the async finalize result from navigating
+  // this tab. Detach it immediately while retaining our WindowProxy handle.
   const issueTab = window.open('about:blank', '_blank');
   if (!issueTab) {
     showToast(t('bug_report_popup_blocked'));

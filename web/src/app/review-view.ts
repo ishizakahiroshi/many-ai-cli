@@ -1,16 +1,20 @@
 // --- ESM imports (generated) ---
 import { token } from './util.js';
+import { activeSessionId, sessions } from './state.js';
+import { resolveCurrentReviewLoad } from './review-load-generation.js';
 
 // ---- Review view ----
 // ============================================================
-// ReviewView — Review タブ contentEl 配下に「作業ツリー vs HEAD」の
-// per-file unified diff を描画する（Phase 1）。
+// ReviewView — Review タブ contentEl 配下に、作業ツリーまたは AI ターン単位の
+// per-file unified diff を描画する（Phase 1 + Phase 2）。
 //
 // 親 plan : docs/local/plan_turn-diff-viewer.md
 // mock    : docs/local/mockups/turn-diff-viewer/index.html
 //
 // API:
 //   GET /api/git-diff?session&token
+//   GET /api/git-turns?session&token
+//   GET /api/git-turn-diff?session&turn&token
 // ============================================================
 (function setupReviewView() {
   const VIEW_MODE_KEY = 'many-ai-cli.review.viewMode';
@@ -108,26 +112,40 @@ import { token } from './util.js';
       this.token     = token || '';
 
       this.files = [];
+      this.turns = [];
       this.summary = null;
       this.branch = '';
       this.filterText = '';
       this.selectedPath = null;
       this.loading = false;
+      this.loadGeneration = 0;
+      this.scope = this.opts.turn ? `turn:${Number(this.opts.turn)}` : 'worktree';
       let vm = 'inline';
       try { vm = localStorage.getItem(VIEW_MODE_KEY) || 'inline'; } catch (_) {}
       this.viewMode = vm === 'sbs' ? 'sbs' : 'inline';
 
       this.els = {};
       this._renderShell();
-      this.load().catch((err: any) => this._showError(err && err.message ? err.message : String(err)));
+      this.refresh().catch((err: any) => this._showError(err && err.message ? err.message : String(err)));
     }
 
     _renderShell() {
       const root = document.createElement('div');
       root.className = 'review-root';
+      // ✕ は「Review タブを閉じてセッション（ターミナル）画面へ戻る」。閉じ方は
+      // タブバーの × と同じ closeMainTab 経路なので、onClose を渡さない呼び出し元
+      // （将来の埋め込み利用）では死にボタンにならないようボタン自体を出さない。
+      const closeLabel = _gt('review_view_close', 'Close review and return to the terminal');
+      const closeBtnHtml = typeof this.opts.onClose === 'function'
+        ? `<button class="git-icon-btn review-close-btn" data-close title="${_esc(closeLabel)}" aria-label="${_esc(closeLabel)}">✕</button>`
+        : '';
       root.innerHTML = `
         <div class="review-header">
           <div class="review-title">± Review</div>
+          <label class="review-scope-label">
+            <span>${_esc(_gt('review_scope_label', 'Scope'))}</span>
+            <select data-scope></select>
+          </label>
           <div class="review-repo" data-repo>${_esc(this.gitRoot)}</div>
           <span class="review-branch" data-branch></span>
           <div class="review-spacer"></div>
@@ -137,6 +155,7 @@ import { token } from './util.js';
             <button class="git-icon-btn" data-mode="sbs">${_esc(_gt('review_view_sbs', 'Side by side'))}</button>
           </div>
           <button class="git-icon-btn" data-refresh title="${_esc(_gt('review_view_refresh', 'Refresh'))}">↻</button>
+          ${closeBtnHtml}
         </div>
         <div class="review-body">
           <div class="review-diff-pane" data-diff-pane>
@@ -151,6 +170,7 @@ import { token } from './util.js';
       this.container.appendChild(root);
       this.els.root      = root;
       this.els.repo      = root.querySelector('[data-repo]');
+      this.els.scope     = root.querySelector('[data-scope]');
       this.els.branch    = root.querySelector('[data-branch]');
       this.els.stat      = root.querySelector('[data-stat]');
       this.els.diffPane  = root.querySelector('[data-diff-pane]');
@@ -162,28 +182,56 @@ import { token } from './util.js';
         this.filterText = e.target.value || '';
         this._renderTree();
       });
+      this.els.scope.addEventListener('change', (e: any) => {
+        this.scope = e.target.value || 'worktree';
+        this.selectedPath = null;
+        this.load().catch((err: any) => this._showError(err && err.message ? err.message : String(err)));
+      });
       this.els.modeBtns.forEach((b: any) => {
         b.addEventListener('click', () => this._setViewMode(b.dataset.mode));
       });
       root.querySelector('[data-refresh]').addEventListener('click', () => {
         this.refresh().catch((err: any) => this._showError(err && err.message ? err.message : String(err)));
       });
+      root.querySelector('[data-close]')?.addEventListener('click', () => {
+        try { this.opts.onClose(); } catch (err) { console.warn('[ReviewView] onClose failed:', err); }
+      });
       this._syncModeButtons();
     }
 
     async load() {
-      if (this.loading) return;
+      const generation = ++this.loadGeneration;
       this.loading = true;
       try {
-        const params = new URLSearchParams({
-          session: String(this.sessionId),
-          token: this.token,
-        });
-        const res = await fetch(`/api/git-diff?${params.toString()}`);
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || data.ok === false) {
-          throw new Error(data && data.detail ? data.detail : `HTTP ${res.status}`);
-        }
+        const outcome = await resolveCurrentReviewLoad(
+          generation,
+          () => this.loadGeneration,
+          async () => {
+            const params = new URLSearchParams({
+              session: String(this.sessionId),
+              token: this.token,
+            });
+            let endpoint = '/api/git-diff';
+            let turnNo = 0;
+            if (this.scope === 'last') {
+              turnNo = this.turns.length ? Number(this.turns[this.turns.length - 1].turn || 0) : 0;
+            } else if (String(this.scope).startsWith('turn:')) {
+              turnNo = Number(String(this.scope).slice(5)) || 0;
+            }
+            if (turnNo > 0) {
+              endpoint = '/api/git-turn-diff';
+              params.set('turn', String(turnNo));
+            }
+            const res = await fetch(`${endpoint}?${params.toString()}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.ok === false) {
+              throw new Error(data && data.detail ? data.detail : `HTTP ${res.status}`);
+            }
+            return data;
+          },
+        );
+        if (outcome.stale) return;
+        const data = outcome.value || {};
         this.files   = Array.isArray(data.files) ? data.files : [];
         this.summary = data.summary || null;
         this.branch  = data.branch || '';
@@ -193,12 +241,16 @@ import { token } from './util.js';
         }
         this._renderAll();
       } finally {
-        this.loading = false;
+        if (generation === this.loadGeneration) this.loading = false;
       }
     }
 
     async refresh() {
+      // Invalidate an older in-flight scope/session request before refreshing
+      // the turn list; otherwise its slower response can overwrite this view.
+      this.loadGeneration++;
       this.selectedPath = null;
+      await this._loadTurns();
       await this.load();
     }
 
@@ -206,6 +258,13 @@ import { token } from './util.js';
       if (newSid == null) return;
       if (String(this.sessionId) === String(newSid)) return;
       this.sessionId = newSid;
+      this.scope = 'worktree';
+      this.refresh().catch((err: any) => this._showError(err && err.message ? err.message : String(err)));
+    }
+
+    setScope(turnNo: any) {
+      const turn = Number(turnNo || 0);
+      this.scope = turn > 0 ? `turn:${turn}` : 'worktree';
       this.refresh().catch((err: any) => this._showError(err && err.message ? err.message : String(err)));
     }
 
@@ -233,6 +292,56 @@ import { token } from './util.js';
       this.els.diffPane.innerHTML = `<div class="review-message error">${_esc(msg)}</div>`;
       if (this.els.tree) this.els.tree.innerHTML = '';
       if (this.els.stat) this.els.stat.textContent = '—';
+    }
+
+    async _loadTurns() {
+      const sessionAtStart = String(this.sessionId);
+      const params = new URLSearchParams({
+        session: sessionAtStart,
+        token: this.token,
+      });
+      const res = await fetch(`/api/git-turns?${params.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      if (String(this.sessionId) !== sessionAtStart) return;
+      if (!res.ok || data.ok === false) {
+        // Phase 1 remains usable when the session is not a Git repository or
+        // no turn snapshots exist yet; load() will display its own API error.
+        this.turns = [];
+      } else {
+        this.turns = Array.isArray(data.turns) ? data.turns : [];
+      }
+      this._renderScopeOptions();
+    }
+
+    _renderScopeOptions() {
+      if (!this.els.scope) return;
+      const formatTime = (raw: any) => {
+        const d = new Date(String(raw || ''));
+        if (Number.isNaN(d.getTime())) return '';
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      };
+      const options = [
+        `<option value="worktree">${_esc(_gt('review_scope_worktree', 'Uncommitted changes (vs HEAD)'))}</option>`,
+      ];
+      if (this.turns.length) {
+        const last = this.turns[this.turns.length - 1];
+        const lastLabel = String(_gt('review_scope_last', 'Last turn (#{n}, {time})'))
+          .replace('{n}', String(last.turn || ''))
+          .replace('{time}', formatTime(last.ended_at));
+        options.push(`<option value="last">${_esc(lastLabel)}</option>`);
+        for (const turn of [...this.turns].reverse()) {
+          const label = String(_gt('review_scope_turn', 'Turn #{n} ({time})'))
+            .replace('{n}', String(turn.turn || ''))
+            .replace('{time}', formatTime(turn.ended_at));
+          options.push(`<option value="turn:${Number(turn.turn)}">${_esc(label)}</option>`);
+        }
+      }
+      this.els.scope.innerHTML = options.join('');
+      const values = new Set(Array.from(this.els.scope.options).map((o: any) => o.value));
+      if (!values.has(this.scope)) {
+        this.scope = 'worktree';
+      }
+      this.els.scope.value = this.scope;
     }
 
     _renderAll() {
@@ -336,6 +445,185 @@ import { token } from './util.js';
       }
     }
   }
+
+  // ───────────────────────────────────────────────────────
+  // Session-screen turn completion card
+  // ───────────────────────────────────────────────────────
+  const latestTurnBySession = new Map<number, any>();
+  // ✕ 手動 dismiss / 次コマンド開始（user_turn_started）で消したターン番号（セッション別）。
+  // hidden だけだと view 切替時のキャッシュ再描画で復活するため、番号で恒久 dismiss する。
+  const dismissedTurnBySession = new Map<number, number>();
+  let turnCard: HTMLElement | null = null;
+
+  function dismissTurn(sessionID: number, turnNo: number) {
+    if (!sessionID || !(turnNo > 0)) return;
+    dismissedTurnBySession.set(sessionID, Math.max(turnNo, dismissedTurnBySession.get(sessionID) || 0));
+  }
+
+  function isTurnDismissed(sessionID: number, turnNo: number) {
+    return turnNo > 0 && turnNo <= (dismissedTurnBySession.get(sessionID) || 0);
+  }
+
+  // Hub 側のターン再採番検出。同一採番エポックでは観測ターン番号は単調増加するため、
+  // dismiss 記録より小さい番号の到着は「wrapper warm reattach で session 構造体が
+  // 作り直された」「dismiss 後に同一 Hub 内で ID が再利用された」等による 1 からの
+  // 振り直しを意味する（many-session-removed が発火しない経路）。旧エポックの記録を
+  // 残すと新セッションの正当なカードを watermark ぶん黙って抑止するので破棄する。
+  // 最初の観測が watermark と同値の場合だけは区別できないが、次ターンで自己回復する。
+  function clearWatermarkIfRenumbered(sessionID: number, observedTurnNo: number) {
+    if (observedTurnNo > 0 && observedTurnNo < (dismissedTurnBySession.get(sessionID) || 0)) {
+      dismissedTurnBySession.delete(sessionID);
+    }
+  }
+
+  function ensureTurnCard() {
+    if (turnCard) return turnCard;
+    const actionBar = document.getElementById('action-bar');
+    if (!actionBar || !actionBar.parentElement) return null;
+    const card = document.createElement('section');
+    card.id = 'git-turn-card';
+    card.className = 'git-turn-card';
+    card.hidden = true;
+    card.innerHTML = `
+      <div class="git-turn-card-summary">
+        <strong data-turn-title></strong>
+        <span class="file-stat-add" data-turn-added></span>
+        <span class="file-stat-del" data-turn-removed></span>
+      </div>
+      <div class="git-turn-card-actions">
+        <button type="button" class="git-turn-review-btn" data-turn-review></button>
+        <button type="button" class="git-turn-close-btn" data-turn-close>✕</button>
+      </div>
+    `;
+    card.querySelector('[data-turn-review]')?.addEventListener('click', () => {
+      const sid = Number(card.dataset.sessionId || 0);
+      const turn = Number(card.dataset.turn || 0);
+      const sess: any = sessions.get(sid);
+      if (!sid || !turn || !sess) return;
+      window.dispatchEvent(new CustomEvent('many-ai-cli:review-turn-request', {
+        detail: { sessionId: sid, turn, gitRoot: sess.git_root || sess.cwd || '' },
+      }));
+    });
+    card.querySelector('[data-turn-close]')?.addEventListener('click', () => {
+      dismissTurn(Number(card.dataset.sessionId || 0), Number(card.dataset.turn || 0));
+      card.hidden = true;
+    });
+    actionBar.parentElement.insertBefore(card, actionBar);
+    turnCard = card;
+    return card;
+  }
+
+  function hideTurnCard() {
+    const card = ensureTurnCard();
+    if (card) card.hidden = true;
+  }
+
+  function renderTurnCard(sessionID: number, turn: any) {
+    const area = document.getElementById('display-area');
+    if (Number(activeSessionId) !== Number(sessionID) || !area?.classList.contains('mode-terminal') || Number(turn?.files_changed || 0) <= 0
+        || isTurnDismissed(Number(sessionID), Number(turn?.turn || 0))) {
+      hideTurnCard();
+      return;
+    }
+    const card = ensureTurnCard();
+    if (!card) return;
+    const title = String(_gt('review_turn_card_title', 'Turn #{turn}: {n} files edited'))
+      .replace('{turn}', String(turn.turn || ''))
+      .replace('{n}', String(turn.files_changed || 0));
+    const titleEl = card.querySelector('[data-turn-title]');
+    const addEl = card.querySelector('[data-turn-added]');
+    const removeEl = card.querySelector('[data-turn-removed]');
+    const reviewBtn = card.querySelector('[data-turn-review]');
+    if (titleEl) titleEl.textContent = title;
+    if (addEl) addEl.textContent = `+${Number(turn.added || 0)}`;
+    if (removeEl) removeEl.textContent = `-${Number(turn.removed || 0)}`;
+    if (reviewBtn) reviewBtn.textContent = _gt('review_turn_card_button', 'Review');
+    const closeBtn = card.querySelector('[data-turn-close]');
+    if (closeBtn) {
+      const closeLabel = String(_gt('review_turn_card_close', 'Close'));
+      closeBtn.setAttribute('title', closeLabel);
+      closeBtn.setAttribute('aria-label', closeLabel);
+    }
+    card.dataset.sessionId = String(sessionID);
+    card.dataset.turn = String(turn.turn || '');
+    card.hidden = false;
+  }
+
+  async function loadLatestTurnCard(sessionID: number) {
+    if (!sessionID) {
+      hideTurnCard();
+      return;
+    }
+    try {
+      const params = new URLSearchParams({ session: String(sessionID), token: token || '' });
+      const res = await fetch(`/api/git-turns?${params.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      // 応答の鮮度ガード。この関数は cache 空のときだけ呼ばれるため、fetch 中に
+      // WS の git_turn が cache を埋めていたらそちらが必ず新しい（適用すると stale な
+      // latest が clearWatermarkIfRenumbered で dismiss 記録を誤破棄し、消したはずの
+      // カードを復活させる）。アクティブセッションが切り替わった場合も適用しない
+      // （renderTurnCard の不一致分岐が切替先の正当なカードを隠すため）。
+      if (latestTurnBySession.has(sessionID) || Number(activeSessionId) !== Number(sessionID)) return;
+      const turns = res.ok && Array.isArray(data.turns) ? data.turns : [];
+      const latest = turns.length ? turns[turns.length - 1] : null;
+      if (!latest) {
+        latestTurnBySession.delete(sessionID);
+        hideTurnCard();
+        return;
+      }
+      clearWatermarkIfRenumbered(sessionID, Number(latest.turn || 0));
+      latestTurnBySession.set(sessionID, latest);
+      renderTurnCard(sessionID, latest);
+    } catch (_) {
+      if (Number(activeSessionId) === Number(sessionID)) hideTurnCard();
+    }
+  }
+
+  window.addEventListener('many-git-turn', (event: any) => {
+    const detail = event?.detail || {};
+    const sid = Number(detail.session_id || 0);
+    if (!sid) return;
+    clearWatermarkIfRenumbered(sid, Number(detail.turn || 0));
+    latestTurnBySession.set(sid, detail);
+    renderTurnCard(sid, detail);
+  });
+
+  // 次の命令（確定ユーザー入力）が provider へ届いたら、前ターンの完了カードは
+  // 古い情報なので自動で消す（同じターンは view 切替後も再表示しない）。
+  // 信号は Hub の user_turn_started（ライブ限定 broadcast）。State("running") は
+  // resize 再描画等の出力再開でも遷移する表示ラベルのため使わない。
+  window.addEventListener('many-user-turn-started', (event: any) => {
+    const sid = Number(event?.detail?.session_id || 0);
+    if (!sid) return;
+    dismissTurn(sid, Number(latestTurnBySession.get(sid)?.turn || 0));
+    if (turnCard && !turnCard.hidden && Number(turnCard.dataset.sessionId || 0) === sid) {
+      turnCard.hidden = true;
+    }
+  });
+
+  // セッション削除（UI dismiss / Hub 再起動 purge）でカード状態を破棄する。
+  // Hub 再起動後はセッション ID もターン番号も 1 から振り直されるため、
+  // dismiss 記録が残ると再利用 ID の新セッションで正当なカードを誤抑止する。
+  window.addEventListener('many-session-removed', (event: any) => {
+    const sid = Number(event?.detail?.session_id || 0);
+    if (!sid) return;
+    latestTurnBySession.delete(sid);
+    dismissedTurnBySession.delete(sid);
+    if (turnCard && !turnCard.hidden && Number(turnCard.dataset.sessionId || 0) === sid) {
+      turnCard.hidden = true;
+    }
+  });
+
+  window.addEventListener('session-view-mode-changed', (event: any) => {
+    const sid = Number(event?.detail?.sid || activeSessionId || 0);
+    if (event?.detail?.name !== 'terminal') {
+      hideTurnCard();
+      return;
+    }
+    const cached = latestTurnBySession.get(sid);
+    if (cached) renderTurnCard(sid, cached);
+    else void loadLatestTurnCard(sid);
+  });
 
   window.ReviewView = ReviewView;
 })();

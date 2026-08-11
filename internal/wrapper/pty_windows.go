@@ -141,7 +141,7 @@ func resolveDefaultShell() string {
 func resolveExecutablePath(exePath string, args []string) (string, []string) {
 	exePath = sanitizeExecutablePath(exePath)
 	lower := strings.ToLower(exePath)
-	if strings.HasSuffix(lower, ".cmd") || strings.HasSuffix(lower, ".ps1") || filepath.Ext(lower) == "" {
+	if len(args) == 0 && (strings.HasSuffix(lower, ".cmd") || strings.HasSuffix(lower, ".ps1") || filepath.Ext(lower) == "") {
 		// npm の shim (.cmd/.ps1/拡張子なし) から実体 .exe を優先解決する。
 		// ConPTY では shim 経由より .exe 直実行の方が安定する。
 		if resolved := resolveExeNearShim(exePath); resolved != "" {

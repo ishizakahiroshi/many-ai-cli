@@ -18,6 +18,7 @@ export type MessageType =
   | 'registered'
   | 'reattach'
   | 'reattach_ack'
+  | 'reattach_replay_done'
   | 'reattach_reject'
   | 'snapshot'
   | 'session_update'
@@ -26,15 +27,19 @@ export type MessageType =
   | 'session_dismiss'
   | 'session_history_reset'
   | 'pty_data'
+  | 'agent_chat'
   | 'pty_input'
+  | 'pty_input_ack'
   | 'pty_resize'
   | 'session_hint'
   | 'approval_detected'
   | 'approval_marker'
+  | 'approval_marker_suppressed'
   | 'approval_cleared'
   | 'approval_consumed'
 	| 'auto_approval_applied'
   | 'approval_patterns_updated'
+  | 'binary_stale'
   | 'commit_msg_suggested'
   | 'commit_msg_error'
   | 'input_deferred'
@@ -42,7 +47,10 @@ export type MessageType =
   | 'hub_shutdown'
   | 'ping'
   | 'usage_stat'
+  | 'workflow_progress'
   | 'done_summary'
+  | 'git_turn'
+  | 'user_turn_started'
   | 'spawn_confirmation_requested';
 
 export type DoneSummaryKind = 'success' | 'failure' | 'aborted' | 'needs_action' | string;
@@ -90,6 +98,52 @@ export interface SessionActivity {
   awaiting_approval: boolean;
 }
 
+export interface AgentChatTool {
+  id?: string;
+  name: string;
+  input?: string;
+  result?: string;
+}
+
+export interface AgentChatMessage {
+  role: 'user' | 'assistant' | string;
+  kind?: string;
+  text?: string;
+  thinking?: string[];
+  tools?: AgentChatTool[];
+  ts?: string;
+  message_id?: string;
+}
+
+export interface WfAgent {
+  label: string;
+  state: string;
+  metrics?: string;
+}
+
+export interface WfPhase {
+  title: string;
+  agents: WfAgent[];
+}
+
+export interface WorkflowProgress {
+  detected: boolean;
+  source?: string;
+  name?: string;
+  done: number;
+  total: number;
+  running: number;
+  failed: number;
+  pending: number;
+  waiting_dynamic: number;
+  percent: number;
+  elapsed_sec?: number;
+  tokens_raw?: string;
+  phases?: WfPhase[];
+  settled: boolean;
+  settled_by?: string;
+}
+
 export interface Message {
   type: MessageType;
   role?: string;
@@ -99,6 +153,7 @@ export interface Message {
   cwd?: string;
   branch?: string;
   pid?: number;
+  input_seq?: number;
   shell?: string;
   version?: string;
   state?: SessionState;
@@ -107,15 +162,24 @@ export interface Message {
 	awaiting_user?: boolean;
 	awaiting_approval?: boolean;
 	activity?: SessionActivity;
+  workflow_progress?: WorkflowProgress;
   exit_code?: number;
   token?: string | null;
   data?: string | Uint8Array;
   text?: string;
+  agent_session_id?: string;
+  messages?: AgentChatMessage[];
   cols?: number;
   rows?: number;
   log_path?: string;
   jsonl_path?: string;
   replay_b64?: string;
+  // reattach 時に wrapper が申告する PTY 読み出し累計バイト数（wrapper→Hub 専用。
+  // UI は受け取らない）。Hub が「切断中に取りこぼしたぶん」を算出するのに使う。
+  pty_bytes?: number;
+  replay?: boolean;
+  replay_epoch?: number;
+  approval_source_epoch?: number;
   reason?: string;
   approval_visible?: boolean;
   approval_sig?: string;
@@ -125,7 +189,16 @@ export interface Message {
   approval_context?: string;
   approval_options?: ApprovalOption[];
   approval_summary?: ApprovalSummary;
+  approval_candidate_key?: string;
+  approval_candidate_shape?: string;
+  approval_consumed?: boolean;
+  approval_consumed_epoch?: number;
   done_summary?: DoneSummary;
+  turn?: number;
+  files_changed?: number;
+  added?: number;
+  removed?: number;
+  ended_at?: string;
   block?: string;
   sent_text?: string;
   commit_subject?: string;
@@ -192,6 +265,9 @@ export interface Message {
   git_files?: number;
   git_added?: number;
   git_deleted?: number;
+  // binary_stale: 稼働中 Hub の実行ファイルがディスク上で差し替わったか
+  // （= 再ビルドが未反映）。type='binary_stale' のメッセージでのみ届く。
+  binary_stale?: boolean;
   [key: string]: unknown;
 }
 

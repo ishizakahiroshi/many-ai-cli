@@ -13,9 +13,12 @@ type Message struct {
 	CWD       string `json:"cwd,omitempty"`
 	Branch    string `json:"branch,omitempty"`
 	PID       int    `json:"pid,omitempty"`
-	Shell     string `json:"shell,omitempty"`
-	Version   string `json:"version,omitempty"`
-	State     string `json:"state,omitempty"`
+	// InputSeq identifies a Hub-to-wrapper pty_input frame so the wrapper can
+	// acknowledge the frame after the bytes have been written to the PTY.
+	InputSeq int64  `json:"input_seq,omitempty"`
+	Shell    string `json:"shell,omitempty"`
+	Version  string `json:"version,omitempty"`
+	State    string `json:"state,omitempty"`
 	// Three orthogonal session activity signals. State remains a compatibility
 	// display label; consumers that need a safe interruption point use
 	// output_idle && !workflow_active.
@@ -24,8 +27,9 @@ type Message struct {
 	AwaitingUser     bool `json:"awaiting_user,omitempty"`
 	AwaitingApproval bool `json:"awaiting_approval,omitempty"`
 	// Activity carries all four flags atomically, including false transitions.
-	Activity *SessionActivity `json:"activity,omitempty"`
-	ExitCode int              `json:"exit_code,omitempty"`
+	Activity         *SessionActivity  `json:"activity,omitempty"`
+	WorkflowProgress *WorkflowProgress `json:"workflow_progress,omitempty"`
+	ExitCode         int               `json:"exit_code,omitempty"`
 	// Signal carries the POSIX signal name (e.g. "killed", "terminated") when
 	// session_end's process was terminated by a signal rather than exiting
 	// normally with a non-zero code. Unix-only; always empty on Windows.
@@ -34,23 +38,44 @@ type Message struct {
 	HomeDir   string `json:"home_dir,omitempty"`
 	CodexHome string `json:"codex_home,omitempty"`
 	ClaudeDir string `json:"claude_dir,omitempty"`
-	Data      []byte `json:"data,omitempty"` // wrapper内部用: PTY生バイト列（base64エンコード）
-	Text      string `json:"text,omitempty"` // pty_output: ANSIを除去したプレーンテキスト / pty_input: ユーザー入力文字列
-	Cols      int    `json:"cols,omitempty"` // pty_resize / register / registered
-	Rows      int    `json:"rows,omitempty"` // pty_resize / register / registered
+	// AgentSessionID is the provider-owned transcript ID. It is sent by the
+	// wrapper during register/reattach and is never rendered in the session card.
+	AgentSessionID    string             `json:"agent_session_id,omitempty"`
+	Data              []byte             `json:"data,omitempty"`     // wrapper内部用: PTY生バイト列（base64エンコード）
+	Text              string             `json:"text,omitempty"`     // pty_output: ANSIを除去したプレーンテキスト / pty_input: ユーザー入力文字列
+	AgentChatMessages []AgentChatMessage `json:"messages,omitempty"` // agent_chat: structured transcript messages
+	Cols              int                `json:"cols,omitempty"`     // pty_resize / register / registered
+	Rows              int                `json:"rows,omitempty"`     // pty_resize / register / registered
 
 	// reattach: wrapper が Hub クラッシュ後に元セッション情報を復元するための情報。
 	LogPath   string `json:"log_path,omitempty"`
 	JSONLPath string `json:"jsonl_path,omitempty"`
 	ReplayB64 string `json:"replay_b64,omitempty"`
 	Reason    string `json:"reason,omitempty"`
+	// PTYBytes: reattach 時に wrapper が申告する「PTY から読み出した累計バイト数」。
+	// Hub 側の受信済み累計との差が「切断中に取りこぼしたバイト数」になり、
+	// ReplayB64 の末尾からその長さだけを切り出して既存 UI へ配信する。
+	// ReplayB64 全体を送ると切断前に表示済みの内容が二重描画されるため、
+	// 差分の算出にこの値が要る（docs/local/archive/v0.4.0/
+	// bugfix_codex-terminal-reconnect-replay-duplication_2026-07-06.md）。
+	// 0 は「古い wrapper で未申告」を意味し、Hub は再配信を行わない。
+	PTYBytes int64 `json:"pty_bytes,omitempty"`
+
+	// Replay marks pty_data that restores already-produced terminal output. The
+	// field is optional so older wrappers and UIs continue to treat ordinary
+	// pty_data frames as before. ReplayEpoch changes for each independent
+	// terminal restoration, while ApprovalSourceEpoch identifies the logical
+	// prompt generation used by approval deduplication.
+	Replay              bool   `json:"replay,omitempty"`
+	ReplayEpoch         uint64 `json:"replay_epoch,omitempty"`
+	ApprovalSourceEpoch uint64 `json:"approval_source_epoch,omitempty"`
 
 	// TokenStatusbar: registered ack で Hub が返す「トークン常時表示バーが有効か」。
 	// wrapper はこれを見て claude 起動時に --settings で statusLine を渡すか決める
 	// （共有の .claude/settings.local.json は一切書き換えない方式）。
 	// omitempty を付けない: false が wire から消えると「意図的 OFF」と「フィールド欠落/
 	// 別 type のメッセージを受信」が区別できず、statusline 欠落の診断が潰れる
-	// （docs/local/bugfix_statusline-settings-skip_2026-07-10.md）。
+	// （docs/local/archive/v0.5.x/bugfix_statusline-settings-skip_2026-07-10.md）。
 	TokenStatusbar bool `json:"token_statusbar"`
 
 	// session_hint で UI 側から送る「承認 UI が可視」フラグ。
@@ -59,6 +84,11 @@ type Message struct {
 	// approval_detected / approval_cleared / approval_consumed:
 	// Go 側 VT バッファから検出した native approval prompt の通知と、
 	// UI 側で回答済みになった prompt の再検出抑止に使う。
+	//
+	// approval_marker_suppressed:
+	// 構造が壊れた [MANY-AI-CLI] ブロックを配信せず捨てたことの告知。
+	// Reason に classifyApprovalMarkerBlock の分類（marker_leak / option_start /
+	// duplicate_option / box_rule）が入る。Block は壊れているため送らない。
 	ApprovalSig      string           `json:"approval_sig,omitempty"`
 	ApprovalKind     string           `json:"approval_kind,omitempty"`
 	ApprovalSource   string           `json:"approval_source,omitempty"`
@@ -66,6 +96,16 @@ type Message struct {
 	ApprovalContext  string           `json:"approval_context,omitempty"`
 	ApprovalOptions  []ApprovalOption `json:"approval_options,omitempty"`
 	ApprovalSummary  *ApprovalSummary `json:"approval_summary,omitempty"`
+	// ApprovalCandidateKey is a stable, presentation-independent identity for
+	// one approval candidate. It deliberately excludes mutable context such as
+	// status lines, borders, and option labels that can change during TUI reflow.
+	ApprovalCandidateKey string `json:"approval_candidate_key,omitempty"`
+	// ApprovalCandidateShape is sent only when replay needs to restore the
+	// browser's answered-candidate suppression after a UI reconnect. It is the
+	// normalized, label-free shape behind ApprovalCandidateKey.
+	ApprovalCandidateShape string `json:"approval_candidate_shape,omitempty"`
+	ApprovalConsumed       bool   `json:"approval_consumed,omitempty"`
+	ApprovalConsumedEpoch  uint64 `json:"approval_consumed_epoch,omitempty"`
 	// DoneSummary is emitted when an AI task reaches a terminal-looking state.
 	// It is display-only and never authorizes an action.
 	DoneSummary *DoneSummary `json:"done_summary,omitempty"`
@@ -185,6 +225,31 @@ type Message struct {
 	RepoName         string  `json:"repo_name,omitempty"`
 	RemainingPct     float64 `json:"remaining_pct,omitempty"`
 	ReasoningOut     int     `json:"reasoning_output_tokens,omitempty"`
+
+	// binary_stale: Hub → UI。稼働中 Hub の実行ファイルがディスク上で差し替わった
+	// （= 再ビルドが反映されていない）状態かどうか。状態が変化した瞬間だけ配信する。
+	// ポインタなのは false を確実に届けるため: omitempty で false が消えると
+	// 「stale から復帰した」を伝えられず、バナーが出たまま固着する。
+	BinaryStale *bool `json:"binary_stale,omitempty"`
+}
+
+// AgentChatMessage is the provider-neutral structured transcript payload used
+// by the agent_chat API and WebSocket message.
+type AgentChatMessage struct {
+	Role      string          `json:"role"`
+	Kind      string          `json:"kind,omitempty"`
+	Text      string          `json:"text,omitempty"`
+	Thinking  []string        `json:"thinking,omitempty"`
+	Tools     []AgentChatTool `json:"tools,omitempty"`
+	TS        string          `json:"ts,omitempty"`
+	MessageID string          `json:"message_id,omitempty"`
+}
+
+type AgentChatTool struct {
+	ID     string `json:"id,omitempty"`
+	Name   string `json:"name"`
+	Input  string `json:"input,omitempty"`
+	Result string `json:"result,omitempty"`
 }
 
 // SessionActivity is the wire representation of a session's activity axes.
@@ -193,6 +258,38 @@ type SessionActivity struct {
 	WorkflowActive   bool `json:"workflow_active"`
 	AwaitingUser     bool `json:"awaiting_user"`
 	AwaitingApproval bool `json:"awaiting_approval"`
+}
+
+// WorkflowProgress is the Hub-authoritative workflow progress snapshot sent to
+// browser UIs. Source and SettledBy identify which observation established the
+// current values; tree details are present only when the VT tree is visible.
+type WorkflowProgress struct {
+	Detected       bool      `json:"detected"`
+	Source         string    `json:"source,omitempty"`
+	Name           string    `json:"name,omitempty"`
+	Done           int       `json:"done"`
+	Total          int       `json:"total"`
+	Running        int       `json:"running"`
+	Failed         int       `json:"failed"`
+	Pending        int       `json:"pending"`
+	WaitingDynamic int       `json:"waiting_dynamic"`
+	Percent        int       `json:"percent"`
+	ElapsedSec     int       `json:"elapsed_sec,omitempty"`
+	TokensRaw      string    `json:"tokens_raw,omitempty"`
+	Phases         []WfPhase `json:"phases,omitempty"`
+	Settled        bool      `json:"settled"`
+	SettledBy      string    `json:"settled_by,omitempty"`
+}
+
+type WfPhase struct {
+	Title  string    `json:"title"`
+	Agents []WfAgent `json:"agents"`
+}
+
+type WfAgent struct {
+	Label   string `json:"label"`
+	State   string `json:"state"`
+	Metrics string `json:"metrics,omitempty"`
 }
 
 // SessionMeta is user-editable, server-persisted identification metadata for a

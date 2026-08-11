@@ -3,12 +3,14 @@ package config
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
 	neturl "net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -401,6 +403,13 @@ type UserPrefsDoneSummaryNotify struct {
 	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 }
 
+// UserPrefsWorkflowCompletionNotify controls Web Push notifications emitted
+// when the Hub settles a Claude workflow. It is opt-in, like done summary
+// notifications, because Web Push leaves the local machine.
+type UserPrefsWorkflowCompletionNotify struct {
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+}
+
 // UserPrefsTokenStatusbar はトークンコスト常時表示バーの設定。
 // Enabled が nil（未設定）または true のときに表示する（既定 ON）。
 // bool のゼロ値が false なため *bool ポインタで三値（nil=未設定/true/false）を表現する。
@@ -461,37 +470,100 @@ type VoiceConfig struct {
 	Whisper VoiceWhisperConfig `yaml:"whisper,omitempty" json:"whisper,omitempty"`
 }
 
+// SessionOrderIDs はセッションカードの手動並び順（セッション ID の配列）。
+//
+// 以前は []string で宣言していたため、Web 側が送る数値 ID がサニタイズで
+// 全て捨てられ、この項目は事実上一度も保存されていなかった。数値配列へ
+// 直すにあたり、旧版が文字列配列を書いた config.yaml が残っている環境を
+// 考慮する必要がある: 型を変えただけだと yaml.Unmarshal がその 1 項目で
+// 失敗し、LoadOrCreate の破損フォールバックが config.yaml 全体を .bak へ
+// 退避してデフォルト再生成してしまう（token も作り直しになり Hub URL が
+// 変わる）。そのため数値・数値文字列の双方を受け付け、解釈できない要素は
+// 黙って捨てる寛容なデコードを実装する。
+type SessionOrderIDs []int
+
+func (s *SessionOrderIDs) UnmarshalYAML(value *yaml.Node) error {
+	var raw []any
+	if err := value.Decode(&raw); err != nil {
+		// 配列ですらない値は空として扱い、config 全体を破損扱いにしない。
+		*s = nil
+		return nil
+	}
+	*s = sessionOrderFromAny(raw)
+	return nil
+}
+
+func (s *SessionOrderIDs) UnmarshalJSON(data []byte) error {
+	var raw []any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		*s = nil
+		return nil
+	}
+	*s = sessionOrderFromAny(raw)
+	return nil
+}
+
+// sessionOrderFromAny は YAML/JSON 由来の任意配列をセッション ID 配列へ正規化する。
+// YAML は整数を int、JSON は float64 でデコードするため双方を受ける。
+func sessionOrderFromAny(raw []any) SessionOrderIDs {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(SessionOrderIDs, 0, len(raw))
+	for _, v := range raw {
+		switch n := v.(type) {
+		case int:
+			out = append(out, n)
+		case int64:
+			out = append(out, int(n))
+		case float64:
+			if float64(int(n)) == n {
+				out = append(out, int(n))
+			}
+		case string:
+			if id, err := strconv.Atoi(strings.TrimSpace(n)); err == nil {
+				out = append(out, id)
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // UserPrefs はサーバ側（config.yaml: user_prefs:）に保存するユーザー機能設定。
 // 端末・ポート横断で共有する D2 分類の設定を全て保持する。
 type UserPrefs struct {
-	Trigger                  UserPrefsTrigger              `yaml:"trigger,omitempty"      json:"trigger,omitempty"`
-	NotifySound              UserPrefsNotifySound          `yaml:"notify_sound,omitempty" json:"notify_sound,omitempty"`
-	DesktopNotifications     UserPrefsDesktopNotifications `yaml:"desktop_notifications,omitempty" json:"desktop_notifications,omitempty"`
-	PushNotifications        UserPrefsPushNotifications    `yaml:"push_notifications,omitempty" json:"push_notifications,omitempty"`
-	Approval                 UserPrefsApproval             `yaml:"approval,omitempty"     json:"approval,omitempty"`
-	QuickCmds                UserPrefsQuickCmds            `yaml:"quick_cmds,omitempty"   json:"quick_cmds,omitempty"`
-	Templates                []UserPrefsTemplate           `yaml:"templates,omitempty"    json:"templates,omitempty"`
-	UsageLinks               UserPrefsUsageLinks           `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
-	Voice                    UserPrefsVoice                `yaml:"voice,omitempty"        json:"voice,omitempty"`
-	SessionOrder             []string                      `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
-	GroupOrder               []string                      `yaml:"group_order,omitempty"      json:"group_order,omitempty"`
-	ProjectFavorites         []string                      `yaml:"project_favorites,omitempty" json:"project_favorites,omitempty"`
-	CwdHistory               []string                      `yaml:"cwd_history,omitempty"      json:"cwd_history,omitempty"`
-	CwdFavorites             []string                      `yaml:"cwd_favorites,omitempty"    json:"cwd_favorites,omitempty"`
-	Spawn                    UserPrefsSpawn                `yaml:"spawn,omitempty"            json:"spawn,omitempty"`
-	Display                  UserPrefsDisplay              `yaml:"display,omitempty"          json:"display,omitempty"`
-	MigratedFromLocalstorage bool                          `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
-	Avatar                   string                        `yaml:"avatar,omitempty"       json:"avatar,omitempty"`
-	DisplayName              string                        `yaml:"display_name,omitempty" json:"display_name,omitempty"`
-	TokenStatusbar           UserPrefsTokenStatusbar       `yaml:"token_statusbar,omitempty" json:"token_statusbar,omitempty"`
-	DoneSummaryNotify        UserPrefsDoneSummaryNotify    `yaml:"done_summary_notify,omitempty" json:"done_summary_notify,omitempty"`
+	Trigger                  UserPrefsTrigger                  `yaml:"trigger,omitempty"      json:"trigger,omitempty"`
+	NotifySound              UserPrefsNotifySound              `yaml:"notify_sound,omitempty" json:"notify_sound,omitempty"`
+	DesktopNotifications     UserPrefsDesktopNotifications     `yaml:"desktop_notifications,omitempty" json:"desktop_notifications,omitempty"`
+	PushNotifications        UserPrefsPushNotifications        `yaml:"push_notifications,omitempty" json:"push_notifications,omitempty"`
+	Approval                 UserPrefsApproval                 `yaml:"approval,omitempty"     json:"approval,omitempty"`
+	QuickCmds                UserPrefsQuickCmds                `yaml:"quick_cmds,omitempty"   json:"quick_cmds,omitempty"`
+	Templates                []UserPrefsTemplate               `yaml:"templates,omitempty"    json:"templates,omitempty"`
+	UsageLinks               UserPrefsUsageLinks               `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
+	Voice                    UserPrefsVoice                    `yaml:"voice,omitempty"        json:"voice,omitempty"`
+	SessionOrder             SessionOrderIDs                   `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
+	GroupOrder               []string                          `yaml:"group_order,omitempty"      json:"group_order,omitempty"`
+	ProjectFavorites         []string                          `yaml:"project_favorites,omitempty" json:"project_favorites,omitempty"`
+	CwdHistory               []string                          `yaml:"cwd_history,omitempty"      json:"cwd_history,omitempty"`
+	CwdFavorites             []string                          `yaml:"cwd_favorites,omitempty"    json:"cwd_favorites,omitempty"`
+	Spawn                    UserPrefsSpawn                    `yaml:"spawn,omitempty"            json:"spawn,omitempty"`
+	Display                  UserPrefsDisplay                  `yaml:"display,omitempty"          json:"display,omitempty"`
+	MigratedFromLocalstorage bool                              `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
+	Avatar                   string                            `yaml:"avatar,omitempty"       json:"avatar,omitempty"`
+	DisplayName              string                            `yaml:"display_name,omitempty" json:"display_name,omitempty"`
+	TokenStatusbar           UserPrefsTokenStatusbar           `yaml:"token_statusbar,omitempty" json:"token_statusbar,omitempty"`
+	DoneSummaryNotify        UserPrefsDoneSummaryNotify        `yaml:"done_summary_notify,omitempty" json:"done_summary_notify,omitempty"`
+	WorkflowCompletionNotify UserPrefsWorkflowCompletionNotify `yaml:"workflow_completion_notify,omitempty" json:"workflow_completion_notify,omitempty"`
 }
 
 // Clone returns a deep copy of p. It copies slice and map fields so callers can
 // marshal or mutate the result without racing with the live server config.
 func (p UserPrefs) Clone() UserPrefs {
 	c := p
-	c.SessionOrder = cloneStringSlice(p.SessionOrder)
+	c.SessionOrder = cloneSessionOrder(p.SessionOrder)
 	c.GroupOrder = cloneStringSlice(p.GroupOrder)
 	c.ProjectFavorites = cloneStringSlice(p.ProjectFavorites)
 	c.CwdHistory = cloneStringSlice(p.CwdHistory)
@@ -524,7 +596,8 @@ type LocalModel struct {
 // OllamaConfig は Ollama daemon への接続先設定。
 // 空なら DefaultOllamaBaseURL を使う。
 type OllamaConfig struct {
-	BaseURL string `yaml:"base_url,omitempty" json:"base_url,omitempty"`
+	BaseURL           string `yaml:"base_url,omitempty" json:"base_url,omitempty"`
+	AllowPrivateHosts bool   `yaml:"allow_private_hosts,omitempty" json:"allow_private_hosts,omitempty"`
 }
 
 func EffectiveOllamaBaseURL(baseURL string) string {
@@ -538,7 +611,8 @@ func EffectiveOllamaBaseURL(baseURL string) string {
 // LMStudioConfig は LM Studio ローカルサーバーへの接続先設定。
 // 空なら DefaultLMStudioBaseURL を使う。base_url に /v1 や path は付けない。
 type LMStudioConfig struct {
-	BaseURL string `yaml:"base_url,omitempty" json:"base_url,omitempty"`
+	BaseURL           string `yaml:"base_url,omitempty" json:"base_url,omitempty"`
+	AllowPrivateHosts bool   `yaml:"allow_private_hosts,omitempty" json:"allow_private_hosts,omitempty"`
 }
 
 func EffectiveLMStudioBaseURL(baseURL string) string {
@@ -659,6 +733,11 @@ type Config struct {
 	Spawn struct {
 		LastModel map[string]string `yaml:"last_model,omitempty" json:"last_model,omitempty"`
 	} `yaml:"spawn,omitempty" json:"spawn,omitempty"`
+	Workflow struct {
+		// JournalEnabled is true by default. Existing config files inherit the
+		// default because LoadOrCreate unmarshals over defaultConfig.
+		JournalEnabled bool `yaml:"journal_enabled" json:"journal_enabled"`
+	} `yaml:"workflow,omitempty" json:"workflow,omitempty"`
 	Approval        ApprovalConfig  `yaml:"approval,omitempty"`
 	SlashCmdSources SlashCmdSources `yaml:"slash_cmd_sources,omitempty" json:"slash_cmd_sources,omitempty"`
 	// ModelsSource は /api/models のモデル defaults 取得元 URL を上書きする。
@@ -833,6 +912,7 @@ func defaultConfig(home string) *Config {
 	cfg.Log.AttachmentRetentionDays = 7
 	cfg.Log.AttachmentMaxTotalMB = 500
 	cfg.UserPrefs = UserPrefs{}
+	cfg.Workflow.JournalEnabled = true
 	cfg.Voice.Whisper.Language = "ja"
 	cfg.Voice.Whisper.TimeoutSeconds = 60
 	cfg.SlashCmdSources = DefaultSlashCmdSources()
@@ -1017,6 +1097,45 @@ func (cfg *Config) Validate() error {
 	return nil
 }
 
+// Warnings は「起動は止めないが利用者に伝えるべき設定上の問題」を返す。
+// Validate() が返す error（＝起動を止める致命的な誤り）と対の区分で、Hub 起動時に
+// hub.log へ warn として出す（internal/hub/server.go NewServer）。
+//
+// 任意機能の設定不備で Hub 全体が起動不能になるのを防ぐための区分。設定値そのものは
+// 保存を許し、その機能が使えないことだけを伝える。
+func (cfg *Config) Warnings() []string {
+	if cfg == nil {
+		return nil
+	}
+	var warnings []string
+	if host, ok := privateModelHost(cfg.Ollama.BaseURL); ok && !cfg.Ollama.AllowPrivateHosts {
+		warnings = append(warnings, fmt.Sprintf(
+			"ollama.base_url points to a private host (%s) but ollama.allow_private_hosts is false; the model list will be blocked at the transport layer. Set ollama.allow_private_hosts: true to use it.",
+			host))
+	}
+	if host, ok := privateModelHost(cfg.LMStudio.BaseURL); ok && !cfg.LMStudio.AllowPrivateHosts {
+		warnings = append(warnings, fmt.Sprintf(
+			"lm_studio.base_url points to a private host (%s) but lm_studio.allow_private_hosts is false; the model list will be blocked at the transport layer. Set lm_studio.allow_private_hosts: true to use it.",
+			host))
+	}
+	return warnings
+}
+
+// privateModelHost は base_url のホストが private 判定なら (ホスト名, true) を返す。
+// 空・パース不能な値は false（それらは Validate() 側が error として扱う）。
+func privateModelHost(baseURL string) (string, bool) {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return "", false
+	}
+	u, err := neturl.Parse(baseURL)
+	if err != nil || u.Host == "" {
+		return "", false
+	}
+	host := u.Hostname()
+	return host, isPrivateModelHost(host)
+}
+
 func validateOllama(ollama OllamaConfig) error {
 	baseURL := strings.TrimSpace(ollama.BaseURL)
 	if baseURL == "" {
@@ -1035,6 +1154,11 @@ func validateOllama(ollama OllamaConfig) error {
 	if u.Path != "" && u.Path != "/" {
 		return fmt.Errorf("ollama.base_url must not include a path")
 	}
+	// private host + opt-in 無しは「起動を止める」理由にならない（Warnings() で警告する）。
+	// 実際の SSRF 防御は internal/hub/models_fetch.go の newLocalModelHTTPClient が
+	// 担っており、allow_private_hosts=false なら private 網へのダイヤル自体を
+	// トランスポート層で遮断する。ここで hard fail にすると、任意設定のモデル一覧
+	// 機能のために serve / version / stop / wrap まで全滅する（実際に発生）。
 	return nil
 }
 
@@ -1056,7 +1180,17 @@ func validateLMStudio(lms LMStudioConfig) error {
 	if u.Path != "" && u.Path != "/" {
 		return fmt.Errorf("lm_studio.base_url must not include a path")
 	}
+	// private host の扱いは validateOllama と同じ（Warnings() で警告し、起動は止めない）。
 	return nil
+}
+
+func isPrivateModelHost(host string) bool {
+	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && (ip.IsUnspecified() || ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast())
 }
 
 func validateVoiceWhisper(whisper VoiceWhisperConfig) error {
@@ -1152,6 +1286,15 @@ func cloneStringSlice(in []string) []string {
 		return nil
 	}
 	out := make([]string, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneSessionOrder(in SessionOrderIDs) SessionOrderIDs {
+	if in == nil {
+		return nil
+	}
+	out := make(SessionOrderIDs, len(in))
 	copy(out, in)
 	return out
 }

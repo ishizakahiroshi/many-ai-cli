@@ -81,6 +81,9 @@ Gemini CLI は意図的に対象外です。
 - **承認検出パターン profile**: GitHub から同期する公式 trigger phrase と、ユーザー編集用 custom profile を分離
 - **サーバ側ユーザー設定**: 音声、通知音、お気に入り、セッション順、spawn 既定、アバター設定を `config.yaml` に保存
 - **UI からの新規セッション spawn**（`/api/spawn`）
+- **OpenCode を承認なしで起動** — spawn パネルから全許可の OpenCode セッションを起動できる。無人で走る構成になるため、確定前の spawn リスク表示にもその旨が出る
+- **古いビルドの警告** — Hub の稼働中に実行ファイルを差し替えると、ダッシュボードが「まだ古いビルドで動いている」と知らせる。修正が効かない理由を探し回らずに済む
+- **Workflow の進捗表示** — 完了エージェント数・経過時間・エージェントツリーを Hub 側で算出し、セッションカードと Workflow 画面に表示する。完了時の Web Push は任意で有効化できる
 - **モデルピッカー + Ollama route 自動切替**: spawn フォームから Anthropic / OpenAI / Ollama Cloud / Ollama Local のモデルを選択でき、Hub が必要な `ANTHROPIC_*` / `OPENAI_*` 環境変数をセッションごとに自動注入（shell での事前設定不要）。Ollama daemon が別ホストにある場合は `config.yaml` の `ollama.base_url` で接続先を変更可能（Hyper-V ゲストからホストの Ollama を使う手順は [docs/manual_local-llm-hyperv-host.md](docs/manual_local-llm-hyperv-host.md) を参照）
 
 ## 軽量オーケストレーション
@@ -789,7 +792,7 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 ```
 ┌─ MANY-AI-CLI  [1][0][6] │ ● Claude:2  ● Codex:5            [⏻] [設定] ─┐
 ├──────────────────────────┬──────────────────────────────────────────────┤
-│ [+ 新しいセッション]     │ ● Codex  cwd: C:\dev\many-ai-cli   [↑最上部へ]│
+│ [+ 新しいセッション]     │ ● Codex  cwd: D:\dev\many-ai-cli   [↑最上部へ]│
 │ 📁 many-ai-cli  [1][0][6] │ ターミナル出力 — Windows PowerShell          │
 │ ─────────────────────── │                                              │
 │ 📌 #7 ● Codex 実行中  × │   (xterm.js のターミナル出力)               │
@@ -1159,7 +1162,7 @@ Claude Code のワークフロー（いわゆる ultracode）のように、裏�
 
 Hub はセッションの稼働状態を **端末（PTY）出力が直近数秒以内にあったか** だけで判定しています（出力が静止し、かつ承認 UI も出ていなければ `スタンバイ`）。ワークフロー実行中はメイン端末への出力が止まる空白期間が頻発するため、その間だけ判定が `スタンバイ` に倒れます。出力が再開すれば自動的に `実行中` に戻ります。入力を促す `保留中`（承認待ち）とは異なり、こちらは単に出力が静かなだけの状態です。
 
-> many-ai-cli は wrap 対象 CLI の内部状態（ワークフローが進行中か等）までは関知しないため、出力ベースのヒューリスティックに起因する既知の制限です。表示が `スタンバイ` でも、端末本体を見れば処理が続いているか確認できます。
+> セッション全体の `実行中` / `スタンバイ` 判定には provider 内部状態を使わないため、出力ベースのヒューリスティックに起因する既知の制限は残ります。Claude の Workflow 進捗は、後述するローカル journal メタ情報から別系統で追跡します。表示が `スタンバイ` でも、端末本体を見れば処理が続いているか確認できます。
 
 ---
 
@@ -1169,6 +1172,12 @@ Hub はセッションの稼働状態を **端末（PTY）出力が直近数秒�
 - ランダムトークンを起動時に生成し、URL に付与します（`?token=xxx`）
 - token なしアクセスは明示的な opt-in です。SSH ローカルフォワードやユーザー専用 WireGuard/Docker gateway など、入口が別の私設経路で保護されている場合だけ `hub.allow_loopback_without_token: true`、`hub.trusted_networks: ["172.19.0.1/32"]`、`hub.allowed_hosts: ["10.8.0.1"]` のように狭く設定してください。公開 bind、リバースプロキシ、共有 shell ホスト、`0.0.0.0/0` のような広い CIDR では使わないでください。
 - `many-ai-cli` 自身はテレメトリ・利用状況の送信を一切行いません
+
+### Claude Workflow journal のメタ情報
+
+Claude セッションで Workflow を検出すると、Hub はローカルの `~/.claude/projects/` 配下にある `journal.jsonl` をポーリングします（`workflow.journal_enabled: true` が既定）。集計に必要なイベントの `type` と `agentId` だけをデコードし、`result` 本文は保持・ログ出力・転送・永続化しません。subagent の transcript や task output ファイルも読みません。journal 由来の状態はメモリ内だけに保持され、外部へ送信されません。無効化する場合は `workflow.journal_enabled: false` にすると、端末表示だけを使う劣化動作へ切り替わります。
+
+Workflow 完了時の Web Push は別の opt-in です（`user_prefs.workflow_completion_notify.enabled: true`）。payload に含むのはセッション名と `N/M agents` のような集計件数だけで、journal の result 本文や agent ID は含みません。
 
 ### ローカル instruction file への書き込み
 
@@ -1180,7 +1189,7 @@ Hub はセッションの稼働状態を **端末（PTY）出力が直近数秒�
 
 - **スラッシュコマンド一覧の取得（Hub 本体の通信）**: スラッシュコマンドピッカーを開くと、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent,grok}.md` を取得し、24 時間キャッシュします。取得元 URL は設定パネルの **スラッシュコマンドソース** から変更可能で、ローカルファイルパスを指定することもできます。
 - **承認検出パターンの取得（Hub 本体の通信）**: Hub 起動時に、公式の承認検出パターンを `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,grok,common}.md` から取得し、24 時間キャッシュする場合があります。取得元 URL は config で上書きできます。
-- **Web Push 通知（Hub 本体の通信 / opt-in のみ）**: プッシュ通知を有効にした場合、Hub は暗号化された Web Push request をブラウザベンダーの push サービスへ HTTPS 送信します。payload には OS 通知表示に必要なセッション ID / 名前、provider、承認質問・文脈の短い抜粋が含まれますが、Hub URL token は含めません。VAPID 鍵と購読情報は `~/.many-ai-cli/push_store.json` にローカル保存されます。SSH トンネルが切れていても通知配送自体は届く場合がありますが、通知から Hub を開くにはトンネルと Hub に到達できる必要があります。
+- **Web Push 通知（Hub 本体の通信 / opt-in のみ）**: プッシュ通知を有効にした場合、Hub は暗号化された Web Push request をブラウザベンダーの push サービスへ HTTPS 送信します。承認 payload には OS 通知表示に必要なセッション ID / 名前、provider、承認質問・文脈の短い抜粋が含まれます。Workflow 完了 payload はセッション名と agent 集計件数だけです。Hub URL token、journal の result 本文、agent ID は含めません。VAPID 鍵と購読情報は `~/.many-ai-cli/push_store.json` にローカル保存されます。SSH トンネルが切れていても通知配送自体は届く場合がありますが、通知から Hub を開くにはトンネルと Hub に到達できる必要があります。
 - **音声入力（使用時のみ）**: ブラウザ内蔵認識は Web Speech API を使用しており、Chrome / Edge では **マイク音声がブラウザベンダー（Google / Microsoft）の音声認識サーバへ送信されます**。Whisper モードでは音声が Hub へ送られ、Hub が `voice.whisper.server_url` の Whisper サーバへ中継します。ローカル処理にしたい場合は `127.0.0.1` / `localhost` のローカルサーバだけを指定してください。外部 API URL を設定した場合、音声データはその外部サービスへ送信されます。「音声入力」節の注意書きも参照。
 - **Whisper 管理インストール（Windows x64 Hub / opt-in のみ）**: **設定パネル → 音声入力 → インストール** を押した場合だけ、Hub は whisper.cpp の Windows x64 release archive を GitHub Releases から、選択した ggml モデルを Hugging Face から `~/.many-ai-cli/whisper/` へ HTTPS ダウンロードします。release archive は展開前に SHA-256 を照合します。公開ハッシュ未設定のモデルは HTTPS ダウンロードとして扱い、UI ではハッシュ未検証として表示します。
 - **wrap 対象 CLI の API 通信（CLI 自身の通信）**: ラップ対象である Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / Grok Build CLI 自身は、それぞれのベンダー API（Anthropic / OpenAI / GitHub / Cursor / xAI）と HTTPS で直接通信します。`many-ai-cli` は PTY の入出力をローカル WebSocket で中継するだけで、これらの API 通信を傍受・記録・プロキシすることはありません。元の CLI のネットワーク挙動がそのまま適用されます。

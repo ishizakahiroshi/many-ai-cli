@@ -4,16 +4,17 @@ import { escapeHtml, ti18n, token } from './util.js';
 import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, groupOrder, multiQuestionVisibleCache, orderSessions, projectFavorites, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, terminals } from './state.js';
 import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor, updateInputAffordance } from '../app.js';
 import { renderZeroSessionEmptyState } from './zero-session-empty-state.js';
-import { attachTerminal, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, syncLiveStatusLongproc, updateScrollLockBtn } from './terminal.js';
+import { attachTerminal, claimPtyResizeOwnership, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, syncLiveStatusLongproc, updateScrollLockBtn } from './terminal.js';
 import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, renderSessionInfoChip, updateChatCountBadge } from './settings.js';
 import { syncElapsedTimer } from './ws-client.js';
-import { setMultiQuestionBannerVisible } from './approval-ui.js';
+import { renderApprovalSuppressedBannerFor, setMultiQuestionBannerVisible } from './approval-ui.js';
 import { detectApproval, setActionBarFocus } from './approval.js';
 import { onActiveSessionChanged } from './token-statusbar.js';
 import { rewireChatHistorySub } from './chat-history.js';
 import { setActiveSessionForPayload } from './chat-payload.js';
 import { FilesTabManager } from './files-view.js';
 import { dirnameForPath } from './path-links.js';
+import { getHubWorkflowEntry, isHubWorkflowAuthoritative } from './workflow-store.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -42,19 +43,6 @@ export async function patchSessionMeta(id: number, patch: Record<string, unknown
 
 function sessionDisplayTitle(s: any): string {
   return String(s?.label || s?.auto_title || '');
-}
-
-function compareSessionCards(a: any, b: any): number {
-  if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
-  // 承認待ち（保留中）を上へ持ち上げる並び替えは行わない。状態遷移でカード位置が
-  // 動くとサイドバーが読みづらくなるため、位置は固定し、承認待ちはバッジと
-  // プロジェクト見出しの保留中カウントで示す。
-  const providerCmp = String(a.provider || '').localeCompare(String(b.provider || ''));
-  if (providerCmp !== 0) return providerCmp;
-  const aStarted = Date.parse(String(a.started_at || '')) || 0;
-  const bStarted = Date.parse(String(b.started_at || '')) || 0;
-  if (aStarted !== bStarted) return bStarted - aStarted;
-  return Number(a.id || 0) - Number(b.id || 0);
 }
 
 function appendSessionColorFilters(root: HTMLElement): void {
@@ -103,6 +91,7 @@ export function activateSessionForMultiPane(id) {
     saveInputStateFor(activeSessionId);
   }
   set_activeSessionId(id);
+  claimPtyResizeOwnership(id);
   if (typeof window.syncMobileLayoutState === 'function') window.syncMobileLayoutState();
   if (typeof window.closeMobileSessionDrawer === 'function') window.closeMobileSessionDrawer();
   restoreInputStateFor(id);
@@ -119,6 +108,7 @@ export function activateSessionForMultiPane(id) {
   }
   // 承認 UI をフォーカスセッション向きに更新
   setMultiQuestionBannerVisible(!!multiQuestionVisibleCache.get(id));
+  renderApprovalSuppressedBannerFor(id);
   // フォーカスセッションの実行中状態を入力欄／送信ボタンへ反映
   updateInputAffordance();
   detectApproval(id);
@@ -163,6 +153,7 @@ export function activateSession(id) {
     saveInputStateFor(activeSessionId);
   }
   set_activeSessionId(id);
+  claimPtyResizeOwnership(id);
   if (typeof window.syncMobileLayoutState === 'function') window.syncMobileLayoutState();
   if (typeof window.closeMobileSessionDrawer === 'function') window.closeMobileSessionDrawer();
   // A3: スマホ簡易ターミナル（チャットトランスクリプト表示）を即時更新。
@@ -180,6 +171,7 @@ export function activateSession(id) {
   // 切替先セッションの実行中状態に合わせて入力欄プレースホルダ／送信ボタンを更新
   updateInputAffordance();
   setMultiQuestionBannerVisible(!!multiQuestionVisibleCache.get(id));
+  renderApprovalSuppressedBannerFor(id);
   detectApproval(id);
   updateSessionListActiveCard(id);
   updateShellBadge(id);
@@ -396,6 +388,16 @@ function cardTurnElapsedSec(id, state) {
   return Math.max(0, Math.floor((Date.now() - since) / 1000));
 }
 
+function cardWorkflowProgressHtml(s) {
+  const workflow = getHubWorkflowEntry(Number(s.id));
+  if (!workflow || !isHubWorkflowAuthoritative(workflow) || !workflow.progress.detected ||
+      workflow.progress.settled || workflow.progress.total <= 0) return '';
+  const done = Math.max(0, Number(workflow.progress.done || 0));
+  const total = Math.max(0, Number(workflow.progress.total || 0));
+  const aria = ti18n('wf_progress_card_aria', `Workflow progress: ${done}/${total} done`, { done, total });
+  return `<span class="card-workflow-progress" role="status" aria-label="${escapeHtml(aria)}" data-tooltip="${escapeHtml(aria)}">⚙ ${done}/${total}</span>`;
+}
+
 // カード 3 行目（ライブ情報）の中身 HTML を生成する。空文字なら行を隠す。
 // ctx%（コンテキスト残量）は下部ステータスバーに常時出ているため、カード側では
 // 重複表示しない。ここでは応答経過と長時間バッジ（running 中のみ）だけを出す。
@@ -433,6 +435,8 @@ export function updateCardLiveInfo(id) {
   const inner = cardLiveRowHtml(s);
   row.innerHTML = inner;
   row.hidden = !inner;
+  const workflowSlot = card.querySelector('.card-workflow-progress-slot');
+  if (workflowSlot) workflowSlot.innerHTML = cardWorkflowProgressHtml(s);
 }
 
 // 全カードのライブ行を更新する（1Hz タイマー等から呼ぶ）。
@@ -580,12 +584,13 @@ export function renderSessionList() {
 
   appendSessionColorFilters(root);
 
-  // ピン → provider → 起動時刻の順で並べ、必要なら色で絞り込む。状態（保留中等）は
-  // 並び順に影響させず、位置は固定する。sessionOrder は任意の手動並び替えとして残すが、
-  // この識別優先順がセッションカードの実表示順の正本になる。
+  // 表示順の正本は sessionOrder（＝カードの D&D 並び替え結果）。未登録のセッションは
+  // 生成順に末尾へ積まれるので、何も並び替えていなければ #2 → #10 の生成順になる。
+  // ピン留めだけは orderSessions 側でプロジェクト境界を越えて先頭へ持ち上げる。
+  // 状態（承認待ち等）や provider でここを並べ替えてはいけない。並べ替えると
+  // sessionOrder が毎レンダー上書きされ、D&D の結果が画面へ反映されなくなる。
   const displayedSessions = getOrderedSessions()
-    .filter((s: any) => !activeSessionColorFilter || s.color === activeSessionColorFilter)
-    .sort(compareSessionCards);
+    .filter((s: any) => !activeSessionColorFilter || s.color === activeSessionColorFilter);
 
   // ピンはプロジェクト境界を越えて最上位に置く。そうしないと「別プロジェクトの
   // ピンより、先に出たプロジェクトの非ピン」が上に残ってしまう。
@@ -605,8 +610,8 @@ export function renderSessionList() {
   // ピン留め優先、その中で groupOrder に従ってソート（未登録キーは末尾）
   // 未登録のプロジェクトキーを groupOrder に追記し、以降のレンダーで並び順を固定する。
   // ここで append しないと、両プロジェクトとも未登録の状態で比較関数が 0 を返し、
-  // Map 挿入順（= 各プロジェクトの最新セッションが compareSessionCards 順で登場する位置）
-  // に依存してしまい、あるプロジェクトの最新セッションを ✕ で削除した瞬間に
+  // Map 挿入順（= 各プロジェクトのセッションが sessionOrder 上で最初に登場する位置）
+  // に依存してしまい、あるプロジェクトの先頭セッションを ✕ で削除した瞬間に
   // 他プロジェクトのグループが上下にジャンプする（削除で並び順が変わって見える）。
   let _groupOrderChanged = false;
   for (const k of groups.keys()) {
@@ -841,11 +846,12 @@ export function renderSessionList() {
       // 状態 pill（ステータスバー .tsb-pill と同じ ●ドット付き形状）。並び順も下のバーに合わせ #N の直後に置く。
 			const activity = stateActivityDecoration(s);
       const statePillHtml = ` <span class="card-state-pill ${safeClassToken(state)} ${activity.className}"${activity.label ? ` title="${activity.label}"` : ''}><span class="card-pdot"></span><span class="card-state-icon">${activity.icon}</span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
+      const workflowProgressHtml = `<span class="card-workflow-progress-slot">${cardWorkflowProgressHtml(s)}</span>`;
       // ライブ情報（ctx% / 応答経過 / 長時間バッジ）。中身が空なら hidden で行ごと隠す。
       const liveInner = cardLiveRowHtml(s);
       const liveRow = `<div class="card-live-row"${liveInner ? '' : ' hidden'}>${liveInner}</div>`;
       c.innerHTML =
-		`<div class="card-title-row"><b>#${s.id}</b>${statePillHtml} ${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${boardPendingHtml}</div>` +
+		`<div class="card-title-row"><b>#${s.id}</b>${statePillHtml}${workflowProgressHtml} ${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${boardPendingHtml}</div>` +
         metaRow + liveRow;
 
       const actions = document.createElement('div');

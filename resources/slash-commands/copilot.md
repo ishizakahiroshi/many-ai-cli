@@ -39,11 +39,12 @@
 | `/model` | Select the model. | Switch model before continuing work. |
 | `/new` | Start a new session. | Reset conversation context. |
 | `/orchestrate` | Split work into child AI sessions using the Hub board API. | Coordinate design, implementation, and test workers from one conductor session. |
+| `/permissions` | Switch between permission modes. | Change how much Copilot asks before it runs tools. |
 | `/plan` | Enter planning mode. | Ask for a plan before implementation. |
 | `/plugin` | Manage plugins. | Inspect or configure plugin features. |
 | `/pr` | Work with pull requests. | Prepare or inspect PR-related changes. |
-| `/remote` | Manage remote session features. | Share or control a session remotely. |
 | `/refine` | Rewrite a rough prompt into a clearer version for review. | When you want Copilot to polish a stream-of-consciousness prompt. |
+| `/remote` | Manage remote session features. | Share or control a session remotely. |
 | `/rename` | Rename the session. | Give a session a clear title. |
 | `/research` | Research a topic. | Gather background before coding. |
 | `/reset-allowed-tools` | Reset tool permission rules. | Clear remembered permission decisions. |

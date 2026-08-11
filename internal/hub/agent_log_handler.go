@@ -24,13 +24,14 @@ type agentLogLocation struct {
 }
 
 type agentLogSession struct {
-	Provider      string
-	CWD           string
-	StartedAt     string
-	HomeDir       string
-	CodexHome     string
-	ClaudeDir     string
-	NativeLogPath string
+	Provider       string
+	CWD            string
+	StartedAt      string
+	HomeDir        string
+	CodexHome      string
+	ClaudeDir      string
+	AgentSessionID string
+	NativeLogPath  string
 }
 
 // handleAgentLog locates the provider-owned transcript for one active session.
@@ -86,7 +87,7 @@ func (s *Server) agentLogForSession(id int) agentLogLocation {
 	snap := agentLogSession{
 		Provider: ses.Provider, CWD: ses.CWD, StartedAt: ses.StartedAt,
 		HomeDir: ses.HomeDir, CodexHome: ses.CodexHome, ClaudeDir: ses.ClaudeDir,
-		NativeLogPath: ses.NativeLogPath,
+		AgentSessionID: ses.AgentSessionID, NativeLogPath: ses.NativeLogPath,
 	}
 	s.sessionsMu.Unlock()
 
@@ -98,6 +99,12 @@ func (s *Server) agentLogForSession(id int) agentLogLocation {
 		}
 		if snap.CWD == "" || root == "" {
 			return agentLogLocation{Reason: "Claude project directory is unavailable"}
+		}
+		if snap.AgentSessionID != "" {
+			if path, ok := claudeTranscriptPath(root, snap.CWD, snap.AgentSessionID); ok {
+				return agentLogLocation{Available: true, Path: path, Label: "Claude Code transcript"}
+			}
+			return agentLogLocation{Reason: "Claude Code transcript file not found yet"}
 		}
 		path := filepath.Join(root, "projects", claudeProjectDirName(snap.CWD))
 		if isExistingDir(path) {
@@ -385,6 +392,107 @@ func codexTranscriptPathAllowed(ses *session, path string) bool {
 func claudeProjectDirName(cwd string) string {
 	clean := filepath.Clean(cwd)
 	return strings.NewReplacer("\\", "-", "/", "-", ":", "-").Replace(clean)
+}
+
+type claudeTranscriptMeta struct {
+	SessionID string `json:"sessionId"`
+	CWD       string `json:"cwd"`
+	Timestamp string `json:"timestamp"`
+}
+
+// claudeTranscriptPath resolves only a generated UUID. Keeping the ID as a
+// filename component is safe for both Windows and Unix and prevents a wrapper
+// from turning the path resolver into an arbitrary-file reader.
+func claudeTranscriptPath(claudeDir, cwd, sessionID string) (string, bool) {
+	if claudeDir == "" || cwd == "" || !isUUIDv4Like(sessionID) {
+		return "", false
+	}
+	path := filepath.Join(claudeDir, "projects", claudeProjectDirName(cwd), sessionID+".jsonl")
+	if !isExistingFile(path) {
+		return "", false
+	}
+	return path, true
+}
+
+func isUUIDv4Like(value string) bool {
+	if len(value) != 36 {
+		return false
+	}
+	for i, r := range value {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			if r != '-' {
+				return false
+			}
+			continue
+		}
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+// findClaudeTranscript is the fallback for sessions started without the
+// wrapper-generated --session-id. It refuses an equal-time tie rather than
+// guessing between two Claude sessions in the same cwd.
+func findClaudeTranscript(claudeDir, cwd string, startedAt time.Time) (string, bool) {
+	projectDir := filepath.Join(claudeDir, "projects", claudeProjectDirName(cwd))
+	entries, err := os.ReadDir(projectDir)
+	if err != nil {
+		return "", false
+	}
+	bestDelta := codexRolloutMatchWindow
+	bestPath := ""
+	tie := false
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
+			continue
+		}
+		path := filepath.Join(projectDir, entry.Name())
+		meta, ok := readClaudeTranscriptMeta(path)
+		if !ok || !grokPathsEquivalent(meta.CWD, cwd) {
+			continue
+		}
+		stamp, err := time.Parse(time.RFC3339Nano, meta.Timestamp)
+		if err != nil {
+			continue
+		}
+		delta := stamp.Sub(startedAt).Abs()
+		if delta > codexRolloutMatchWindow {
+			continue
+		}
+		if bestPath == "" || delta < bestDelta {
+			bestPath = path
+			bestDelta = delta
+			tie = false
+		} else if delta == bestDelta {
+			tie = true
+		}
+	}
+	if bestPath == "" || tie {
+		return "", false
+	}
+	return bestPath, true
+}
+
+func readClaudeTranscriptMeta(path string) (claudeTranscriptMeta, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return claudeTranscriptMeta{}, false
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
+	for i := 0; i < 8 && sc.Scan(); i++ {
+		var meta claudeTranscriptMeta
+		if json.Unmarshal(sc.Bytes(), &meta) != nil {
+			continue
+		}
+		if meta.CWD != "" && meta.Timestamp != "" {
+			return meta, true
+		}
+	}
+	return claudeTranscriptMeta{}, false
 }
 
 func isExistingDir(path string) bool {

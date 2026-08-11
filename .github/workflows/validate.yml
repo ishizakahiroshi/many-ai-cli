@@ -5,6 +5,10 @@ on:
   push:
     branches:
       - main
+      # develop への直 push でも品質ゲートを通す。develop は PR を経由せず
+      # 直接コミットが積まれる運用のため、main だけを対象にしていると
+      # タグ付け直前まで一度も CI が走らない (v0.5.2 リリース時に発覚)。
+      - develop
 
 permissions:
   contents: read
@@ -50,6 +54,28 @@ jobs:
 
       - name: Verify modules
         run: go mod verify
+
+  # 調査用に仕込んだ観測コードがリリースへ紛れ込むのを止める。
+  # 同型の事故が v0.5.1（/api/debug/batch-log）・v0.5.x（入力トレース・監査 A-01）・
+  # v0.6.0（/api/debug/ui-log と ui_input_trace）と 3 回起きているので、
+  # 「原因が確定したら消す」とコメントに書くだけの運用を機械検査に置き換える。
+  instrumentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check instrumentation ledger
+        run: node scripts/check-instrumentation.mjs
+
+      # resources/slash-commands/*.md は main の raw URL で全ユーザーへ実行時配信され、
+      # slash_cmd_fetch.go の tableRowRe でパースされる。契約を破るとコマンドが
+      # ピッカーから黙って消える（2026-08-11 に cursor-agent の 6 コマンドで発覚）。
+      - name: Check slash command definitions
+        run: node scripts/check-slash-commands.mjs
 
   go-mod-tidy:
     runs-on: ubuntu-latest

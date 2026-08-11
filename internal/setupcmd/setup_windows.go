@@ -17,7 +17,7 @@ func createShortcuts(exe string) []Result {
 	var results []Result
 
 	baseDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "ManyAICLI")
-	if err := os.MkdirAll(baseDir, 0o755); err != nil {
+	if err := os.MkdirAll(baseDir, 0o755); err != nil { // #nosec G703 -- LOCALAPPDATA is the intended per-user Windows data root.
 		return []Result{{Path: baseDir, Err: fmt.Errorf("mkdir: %w", err)}}
 	}
 
@@ -65,7 +65,7 @@ func writeWindowsCmd(path, exe, args string) error {
 		"cd /d %USERPROFILE%\r\n" +
 		"call \"" + exe + "\" " + args + "\r\n" +
 		"pause\r\n"
-	return os.WriteFile(path, []byte(body), 0o644)
+	return os.WriteFile(path, []byte(body), 0o644) // #nosec G703 -- path is one of the fixed files under LOCALAPPDATA.
 }
 
 // resolveWindowsDesktop はデスクトップディレクトリを解決する。
@@ -95,5 +95,5 @@ func createWindowsShortcut(lnkPath, targetCmd, iconExe string) error {
 		`$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%s');$s.TargetPath='%s';$s.WorkingDirectory='%s';$s.IconLocation='%s,0';$s.Save()`,
 		esc(lnkPath), esc(targetCmd), esc(filepath.Dir(targetCmd)), esc(iconExe),
 	)
-	return exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script).Run()
+	return exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script).Run() // #nosec G702 -- script is a fixed COM shortcut template with path values single-quote escaped.
 }

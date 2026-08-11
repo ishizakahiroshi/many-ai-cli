@@ -1,5 +1,5 @@
 // --- ESM imports (generated) ---
-import { escapeHtml, showToast, ti18n, token } from './util.js';
+import { escapeHtml, openExternalLinkWithConfirmation, showToast, ti18n, token } from './util.js';
 import { activeSessionId, chatHistory, chatHistoryAutoCommitTimers, chatHistoryIdSeq, chatHistoryOutputBuffers, chatHistorySubs, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName } from '../app.js';
 import { activateSession, providerIconHtml, renderSessionList } from './session-list.js';
@@ -7,6 +7,7 @@ import { showPathPopup } from './path-links.js';
 import { TERMINAL_SCROLLBACK_LINES, markTerminalManualScrollIntent, sendResize, updateScrollLockBtn } from './terminal.js';
 import { setActiveTab, updateChatCountBadge } from './settings.js';
 import { chatPane, openLightbox } from './attachments.js';
+import { evaluateTranscriptMessage, shouldRefreshChatDerivedState, transcriptMessageCategory, transcriptMessageIdentity, transcriptMessageKey, updateRenderedChatMessage } from './transcript-message.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -125,6 +126,56 @@ export function pushMessage(sid, msg) {
   return entry;
 }
 
+export function isTranscriptBackedProvider(provider) {
+  return provider === 'claude' || provider === 'codex';
+}
+
+export function isTranscriptBackedSession(sid) {
+  return isTranscriptBackedProvider(sessions.get(sid)?.provider || '');
+}
+
+export function pushAgentChatMessage(sid, msg) {
+  if (sid === null || sid === undefined || !msg) return null;
+  const key = transcriptMessageKey(msg);
+  const existing = chatHistory.get(sid) || [];
+  const identity = transcriptMessageIdentity(msg);
+  const role = msg.role === 'user' ? 'user' : 'ai';
+  const transcriptMeta = {
+    transcript: true,
+    transcript_key: key,
+    transcript_message_id: identity,
+    thinking: Array.isArray(msg.thinking) ? msg.thinking.slice() : [],
+    tools: Array.isArray(msg.tools) ? msg.tools.slice() : [],
+  };
+  if (identity) {
+    const index = existing.findIndex(entry => entry.meta?.transcript_message_id === identity);
+    if (index >= 0) {
+      const previous = existing[index];
+      const updated = {
+        ...previous,
+        ts: msg.ts || previous.ts || Date.now(),
+        role,
+        kind: msg.kind || 'text',
+        rawText: msg.text || '',
+        normalizedText: normalizeChatText(msg.text || ''),
+        meta: transcriptMeta,
+      };
+      existing[index] = updated;
+      chatHistory.set(sid, existing);
+      chatHistoryNotify(sid, updated);
+      return updated;
+    }
+  }
+  if (existing.some(entry => entry.meta?.transcript_key === key)) return null;
+  return pushMessage(sid, {
+    ts: msg.ts || Date.now(),
+    role,
+    kind: msg.kind || 'text',
+    rawText: msg.text || '',
+    meta: transcriptMeta,
+  });
+}
+
 export function getMessages(sid) {
   const arr = chatHistory.get(sid);
   return arr ? arr.slice() : [];
@@ -149,7 +200,8 @@ export async function restoreChatHistoryFromStore(sid, opts: any = {}) {
   if (!opts.force && hasMeaningfulLocalChat(sid)) return false;
   chatHistoryStoreInflight.add(sid);
   try {
-    const res = await fetch(`/api/session-chat?token=${encodeURIComponent(token)}&session_id=${encodeURIComponent(sid)}&limit=500`);
+    const endpoint = isTranscriptBackedSession(sid) ? '/api/agent-chat' : '/api/session-chat';
+    const res = await fetch(`${endpoint}?token=${encodeURIComponent(token)}&session_id=${encodeURIComponent(sid)}&limit=500`);
     if (!res.ok) return false;
     const data = await res.json();
     const messages = Array.isArray(data.messages) ? data.messages : [];
@@ -167,7 +219,12 @@ export async function restoreChatHistoryFromStore(sid, opts: any = {}) {
     revokeChatHistoryAttachmentURLs(sid);
     chatHistory.delete(sid);
     chatHistoryIdSeq.delete(sid);
+    const transcript = isTranscriptBackedSession(sid) && data.available !== false;
     for (const m of messages) {
+      if (transcript) {
+        pushAgentChatMessage(sid, m);
+        continue;
+      }
       const role = m.role || 'system';
       const kind = m.kind || 'text';
       const rawText = m.rawText || m.raw_text || m.text || '';
@@ -216,6 +273,7 @@ export function subscribeChatHistory(sid, cb) {
 
 export function chatHistoryAppendOutput(sid, raw) {
   if (sid === null || sid === undefined || !raw) return;
+  if (isTranscriptBackedSession(sid)) return;
   let buf = chatHistoryOutputBuffers.get(sid);
   if (!buf) {
     buf = { rawChunks: [], lastTs: 0 };
@@ -235,6 +293,10 @@ export function chatHistoryAppendOutput(sid, raw) {
 export function chatHistoryCommitOutput(sid) {
   const t = chatHistoryAutoCommitTimers.get(sid);
   if (t) { clearTimeout(t); chatHistoryAutoCommitTimers.delete(sid); }
+  if (isTranscriptBackedSession(sid)) {
+    chatHistoryOutputBuffers.delete(sid);
+    return;
+  }
   const buf = chatHistoryOutputBuffers.get(sid);
   if (!buf) return;
   if (buf.rawChunks.length === 0) return;
@@ -265,6 +327,10 @@ export function chatHistoryCommitOutput(sid) {
 // マーカー検出専用の commit。msgs.length === 0 の場合はリプレイの先頭マーカーとみなし、
 // 起動バナーをバッファから捨てつつ空の user エントリを1件積んで以降の commit を解放する。
 export function chatHistoryCommitOutputOrSeed(sid) {
+  if (isTranscriptBackedSession(sid)) {
+    chatHistoryOutputBuffers.delete(sid);
+    return;
+  }
   const msgs = chatHistory.get(sid);
   if (!msgs || msgs.length === 0) {
     const buf = chatHistoryOutputBuffers.get(sid);
@@ -317,6 +383,7 @@ export function resetChatHistoryForSession(sid) {
   revokeChatHistoryAttachmentURLs(sid);
   chatHistory.delete(sid);
   chatHistoryIdSeq.delete(sid);
+  chatHistoryStoreRestored.delete(sid);
   chatHistoryNotify(sid, null);
 }
 
@@ -451,14 +518,14 @@ export function clearBuffer(session) {
 //
 // 主要関数:
 //   mountChatPaneForSession(sid)     — chat-pane を再構築
-//   appendMessage(sid, msg)           — 1 件 append (新規メッセージのみ)
+//   appendMessage(sid, msg)           — 1 件 append/update
 //   renderMessageBubble(msg, opts)    — DOM 要素を返す
 //   renderInlineText(text)            — path / URL / inline-code → DOM 変換
 //   parseToolCallsFromOutput(text, provider) — provider 別ツール呼び出し抽出
 // =========================================================================
 
 export let _chatPaneMountedSid = null;
-export let _chatPaneRenderedMessageIds = new Set();
+export let _chatPaneRenderedMessageIds: Set<string> = new Set();
 
 export function getChatPaneEl() {
   return document.getElementById('chat-pane');
@@ -624,6 +691,8 @@ export function _appendPlainWithLinks(frag, text) {
       a.href = token;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
+      a.title = `External link: ${token}`;
+      a.addEventListener('click', (event) => openExternalLinkWithConfirmation(event, token));
       a.textContent = token;
       frag.appendChild(a);
     } else {
@@ -686,6 +755,42 @@ export function stripToolCallLines(text) {
     out.push(line);
   }
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function renderTranscriptDetails(meta) {
+  const fragment = document.createDocumentFragment();
+  const thinking = Array.isArray(meta?.thinking) ? meta.thinking.filter(Boolean) : [];
+  const tools = Array.isArray(meta?.tools) ? meta.tools : [];
+  if (thinking.length > 0) {
+    const details = document.createElement('details');
+    details.className = 'chat-transcript-section chat-transcript-thinking';
+    const summary = document.createElement('summary');
+    summary.textContent = `Thinking (${thinking.length})`;
+    details.appendChild(summary);
+    for (const item of thinking) {
+      const block = document.createElement('div');
+      block.className = 'chat-transcript-thinking-item';
+      block.appendChild(renderInlineText(String(item)));
+      details.appendChild(block);
+    }
+    fragment.appendChild(details);
+  }
+  if (tools.length > 0) {
+    const details = document.createElement('details');
+    details.className = 'chat-transcript-section chat-transcript-tools';
+    const summary = document.createElement('summary');
+    summary.textContent = `Tools (${tools.length})`;
+    details.appendChild(summary);
+    for (const tool of tools) {
+      details.appendChild(renderToolCall({
+        name: tool?.name || 'Tool',
+        args: tool?.input || '',
+        body: tool?.result || '',
+      }));
+    }
+    fragment.appendChild(details);
+  }
+  return fragment;
 }
 
 // 1 メッセージの DOM を構築する。
@@ -840,14 +945,20 @@ export function renderMessageBubble(sid, msg) {
       content.textContent = ti18n('chat_attachment_count', `${n} 件の添付`, { n });
     }
   } else if (role === 'ai') {
-    // AI: ツール呼び出しを抽出してから本文を表示
+    // Structured provider transcripts already identify thinking/tools. Keep
+    // heuristic PTY parsing only for providers without a native transcript.
     const raw = msg.normalizedText || msg.rawText || '';
-    const cleanText = stripToolCallLines(raw);
+    const transcript = msg.meta?.transcript === true;
+    const cleanText = transcript ? raw : stripToolCallLines(raw);
     if (cleanText) content.appendChild(renderInlineText(cleanText));
     bubble.appendChild(content);
-    const toolCalls = parseToolCallsFromOutput(raw, provider);
-    for (const tc of toolCalls) {
-      bubble.appendChild(renderToolCall(tc));
+    if (transcript) {
+      bubble.appendChild(renderTranscriptDetails(msg.meta));
+    } else {
+      const toolCalls = parseToolCallsFromOutput(raw, provider);
+      for (const tc of toolCalls) {
+        bubble.appendChild(renderToolCall(tc));
+      }
     }
   } else {
     // user/text
@@ -1013,14 +1124,17 @@ export function appendMessage(sid, msg) {
   const timeline = getChatTimelineEl();
   if (!timeline) return;
   const wasAtBottom = chatPaneAtBottom(timeline);
-  // 既に同 id がある場合は skip（重複防止）
-  const msgId = String(msg.id);
-  if (_chatPaneRenderedMessageIds.has(msgId)) return;
-  _chatPaneRenderedMessageIds.add(msgId);
-  timeline.appendChild(renderMessageBubble(sid, msg));
+  const action = updateRenderedChatMessage(
+    timeline,
+    _chatPaneRenderedMessageIds,
+    msg,
+    () => renderMessageBubble(sid, msg),
+  );
+  if (action === 'ignored' || action === 'skipped') return;
   updateChatPaneEmptyState(sid);
-  // C4: 増分のフィルタ/検索/ミニマップ更新
-  if (typeof window !== 'undefined' && typeof window._chatC4OnAppend === 'function') {
+  // C4: 増分のフィルタ/検索/ミニマップ更新。tool result の更新も同じ
+  // DOM位置を置換するため、追加と更新の両方で現在の状態を再計算する。
+  if (shouldRefreshChatDerivedState(action) && typeof window !== 'undefined' && typeof window._chatC4OnAppend === 'function') {
     try { window._chatC4OnAppend(sid, msg); } catch (_) {}
   }
   if (wasAtBottom) scrollChatPaneToBottomSoon({ passes: 2 });
@@ -1471,13 +1585,7 @@ if (typeof window !== 'undefined') {
   }
 
   function classifyMsgEl(el) {
-    const role = el.dataset.role || '';
-    const kind = el.dataset.kind || '';
-    if (role === 'system' || kind === 'approval') return 'approval';
-    if (kind === 'attach') return 'attach';
-    if (role === 'user') return 'user';
-    if (role === 'ai') return 'ai';
-    return 'other';
+    return transcriptMessageCategory(el.dataset.role || '', el.dataset.kind || '');
   }
 
   function applyFilterAndSearch() {
@@ -1490,22 +1598,25 @@ if (typeof window !== 'undefined') {
     _searchHits = [];
     const msgs = tl.querySelectorAll('.msg');
     msgs.forEach(el => {
-      const cat = classifyMsgEl(el);
+      const state = evaluateTranscriptMessage(
+        el.textContent || '',
+        el.dataset.role || '',
+        el.dataset.kind || '',
+        q,
+        _activeFilters,
+      );
+      const cat = state.category;
       counts.all++;
       if (counts[cat] != null) counts[cat]++;
       // フィルタ
-      const filterOk = _activeFilters.size === 0 || _activeFilters.has(cat);
+      const filterOk = state.filterOk;
       // 検索 (テキスト含有判定 + <mark> 化)
       // mark を毎回剥がして再適用
       unmarkInside(el);
-      let searchOk = true;
-      if (q) {
-        const text = (el.textContent || '').toLowerCase();
-        searchOk = text.indexOf(q) >= 0;
-        if (searchOk) {
-          highlightInside(el, q);
-          _searchHits.push(el);
-        }
+      const searchOk = state.searchOk;
+      if (searchOk && q) {
+        highlightInside(el, q);
+        _searchHits.push(el);
       }
       el.classList.toggle('search-hit', !!(q && searchOk));
       el.style.display = (filterOk && searchOk) ? '' : 'none';

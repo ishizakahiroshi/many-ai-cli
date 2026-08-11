@@ -1,6 +1,6 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-07-05(日) — 監査反映（opencode provider 追記・subcommand 一覧・internal/log 実装済み化・archive パス修正）
+> 最終更新: 2026-08-11(火) — 実行時配信リソース節を追加（リリース不要で更新できるものの正典化）
 
 > 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。  
 > **Vietnamese translation (team docs):** [CLAUDE.vi.md](CLAUDE.vi.md) · [README.vi.md](README.vi.md) · [docs/README.vi.md](docs/README.vi.md)
@@ -11,13 +11,13 @@
 
 > **Gemini CLI は wrap 対象外**（2026-05-06 決定 / 利用規約上の制約）。詳細は [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) 「2. 公開スコープ」参照。
 
-**現状**: v0.3.x をリリース済み（最新タグ v0.3.4 / v0.1.1 が初回正式リリース、v0.1.0 は試験扱い）。v0.1.2 でバージョン文字列を ldflags + `/api/info` 経由の single source of truth に再設計、v0.2.0 で WSL ランチャー・Files/Git/Chat/Split/Multi・Commit all・Ollama routing・サーバ側ユーザー設定を追加。v0.3.0 で Workbench（SQLite セッション履歴）・PWA/Web Push・統合ランチャーのクロスプラットフォーム化（SSH は全 OS、WSL は Windows 専用）・リモートサーバー/Docker デプロイ資産・npm 配布を追加し、プロジェクト名を any-ai-cli から many-ai-cli へリネーム。**v0.4.0（Unreleased）で Workbench 機能と Hub 内蔵チャットプロキシ（`internal/proxy/`・`chat_proxy`）を撤去済み**（Sonnet 5 以降のデフォルト 1M コンテキストが Hub 経由でも回復する副次効果あり）。設計書はソースコードを正本として更新済み。
+**現状**: v0.5.1 までリリース済み（v0.1.1 が初回正式リリース、v0.1.0 は試験扱い）。**v0.6.0 が次のリリース対象**（CHANGELOG の `[0.6.0]` 節。未リリースだった `[0.5.2]` を統合したため v0.5.2 は欠番）。v0.1.2 でバージョン文字列を ldflags + `/api/info` 経由の single source of truth に再設計、v0.2.0 で WSL ランチャー・Files/Git/Chat/Split/Multi・Commit all・Ollama routing・サーバ側ユーザー設定を追加。v0.3.0 で Workbench（SQLite セッション履歴）・PWA/Web Push・統合ランチャーのクロスプラットフォーム化（SSH は全 OS、WSL は Windows 専用）・リモートサーバー/Docker デプロイ資産・npm 配布を追加し、プロジェクト名を any-ai-cli から many-ai-cli へリネーム。**v0.4.0（Unreleased）で Workbench 機能と Hub 内蔵チャットプロキシ（`internal/proxy/`・`chat_proxy`）を撤去済み**（Sonnet 5 以降のデフォルト 1M コンテキストが Hub 経由でも回復する副次効果あり）。設計書はソースコードを正本として更新済み。
 
 **設計書（正本）**: [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md)
 
 ## 現在の実装状態
 
-v0.3.x（最新タグ v0.3.4）までに以下がすべて実装済み（v0.4.0 Unreleased では Workbench / chat_proxy 撤去に加え opencode / Grok Build CLI provider・Ollama `base_url` 設定を追加済み）：
+v0.5.1 までに以下がすべて実装済み（v0.4.0 で Workbench / chat_proxy を撤去し opencode / Grok Build CLI provider・Ollama `base_url` 設定を追加、v0.5.0 で `setup` / `doctor` サブコマンド・autoapproval・ターン単位 diff を追加）。v0.6.0 では transcript ベースのチャット本文・Workflow 進捗の Hub 権威化・OpenCode 全許可起動・古いビルド警告を追加し、リリース前監査 A-01/A-02/A-03/A-05 に対応した：
 
 - `many-ai-cli serve` で Hub が起動する
 - `many-ai-cli claude` / `codex` / `copilot` / `cursor-agent` が Hub 未起動時に自動起動し接続する
@@ -92,6 +92,38 @@ many-ai-cli/
 - **ランダムトークンを起動時生成し URL に付与**（`?token=xxx`）
 - **外部公開しない**（`127.0.0.1` 固定）。`many-ai-cli` 自身はテレメトリを送信しないが、スラッシュコマンド一覧取得で GitHub へ HTTPS 通信する場合がある（README のセキュリティ節参照）
 - **`.bashrc` 等への永続書き込みなし**（透過化は環境変数 + `eval "$(many-ai-cli shell-init)"` のオプトイン方式のみ）
+
+## 実行時配信リソース（リリース不要で更新できるもの）
+
+`resources/` 配下の 4 ディレクトリは **バイナリに焼き込まれず、`main` の raw URL から実行時に fetch される**（URL 定数は `internal/config/config.go` の `Default*Source`）。
+
+| ディレクトリ | 中身 |
+|---|---|
+| `resources/approval-patterns/` | 承認 trigger phrase |
+| `resources/models/` | spawn パネルのモデル候補（`defaults.json`） |
+| `resources/slash-commands/` | スラッシュコマンドピッカー |
+| `resources/usage-links/` | 利用状況リンク |
+
+**帰結（毎回調べ直さない）**:
+
+- 内容を直すのに **リビルド・タグ・リリースは一切不要**。`main` へ push した時点で全ユーザーへ反映される
+- 逆に **`develop` に置いても誰にも届かない**。配信元は `main` だけ
+- 全ユーザーへ即時 live 配信されるため、**誤りもそのまま公開される**。自動反映せず採否は人間が決める
+- 形式制約を破るとパーサが壊れる（`internal/hub/slash_cmd_fetch.go` ほか）
+
+**鮮度チェックの仕組みがあるのは `slash-commands` だけ**（`.claude/skills/slash-commands-update` の report / apply / preflight。release の前提チェックから preflight が呼ばれる）。`models` / `usage-links` / `approval-patterns` には無く、**陳腐化しても誰も気づかない**（2026-08-11、モデル一覧が Claude 5 世代を丸ごと欠いたまま放置されていたのを発見）。
+
+詳細は設計書 [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) の承認パターン / モデル / スラッシュコマンド各節と、[docs/manual_slash_commands_update.md](docs/manual_slash_commands_update.md)。
+
+## 調査用の観測コードを入れるときのルール（必須）
+
+バグ調査のために一時的なログ・ダンプ・debug エンドポイントを仕込むときは、**同じコミットで `instrumentation.json` へ登録する**。登録の無い観測コードは `scripts/check-instrumentation.mjs` がブロックする（Validate の `instrumentation` ジョブと release の前提チェックで走る）。
+
+- `gate` は必ず埋める。**`always-on` は原則禁止**。とくに入力由来のバイトを保存するものは既存の opt-in（`log.session_enabled`）に従わせる
+- `due` を必ず書く。過ぎたらブロックされる。延ばすなら `due` を更新して `reason` に「なぜまだ要るか」を書き足す（黙って延ばさない）
+- 撤去したら `status: removed` にする。実体が残っていれば検査で落ちる
+
+**「原因が確定したら消す」とコメントに書くだけでは消えない。** v0.5.1 の `/api/debug/batch-log`、v0.5.x の入力トレース（監査 A-01）、v0.6.0 の `/api/debug/ui-log` と `ui_input_trace` と、3 回続けて出荷直前まで残った。とくに `ui_input_trace` は専用ファイルを持たず共有ファイル 3 つに分散していたため、同種の撤去作業から取り残された。
 
 ## AI 作業共通ルール
 

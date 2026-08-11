@@ -49,3 +49,12 @@ func TestEvaluateClaudeRisk(t *testing.T) {
 		})
 	}
 }
+
+func TestEvaluateOpenCodeRisk(t *testing.T) {
+	if got := evaluateOpenCodeRisk("default"); got.HighRisk {
+		t.Fatal("default OpenCode permission should not be high risk")
+	}
+	if got := evaluateOpenCodeRisk("bypassPermissions"); !got.HighRisk {
+		t.Fatal("bypassPermissions should be high risk")
+	}
+}

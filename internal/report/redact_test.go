@@ -94,9 +94,9 @@ func TestNormalizeHomeDir(t *testing.T) {
 
 func TestRedactPrivatePaths(t *testing.T) {
 	tests := []string{
-		`C:\dev\kb\companies\synthetic.csv`,
-		`C:\dev\.ssh\synthetic-key.pem`,
-		`C:\dev\github\private\synthetic\config.yaml`,
+		`D:\dev\kb\companies\synthetic.csv`,
+		`D:\dev\.ssh\synthetic-key.pem`,
+		`D:\dev\github\private\synthetic\config.yaml`,
 		`/dev/github/private/synthetic/config.yaml`,
 	}
 	for _, input := range tests {
@@ -104,7 +104,7 @@ func TestRedactPrivatePaths(t *testing.T) {
 			t.Errorf("Redact(%q) = %q, want %q", input, got, redactedPrivatePath)
 		}
 	}
-	if got := Redact(`C:\dev\github\public\many-ai-cli`); got != `C:\dev\github\public\many-ai-cli` {
+	if got := Redact(`D:\dev\github\public\many-ai-cli`); got != `D:\dev\github\public\many-ai-cli` {
 		t.Errorf("public dev path changed: %q", got)
 	}
 }

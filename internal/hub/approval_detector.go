@@ -1,8 +1,6 @@
 package hub
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -79,15 +77,38 @@ func detectNativeApproval(provider string, lines []string) *nativeApproval {
 	if len(opts) == 0 {
 		return nil
 	}
-	contextStart := max(0, start-approvalContextBefore)
-	contextEnd := min(len(recent), end+approvalContextAfter)
+	before, after := approvalContextBefore, approvalContextAfter
+	if provider == "opencode" {
+		// OpenCode は start/end がダイアログ本体（"Permission required" 〜 ボタン行）を
+		// 指すため、周囲の余白を取らない。余白を取ると承認とは無関係な行
+		//（ストリーミング中の応答・スピナー・経過秒）が context に入り、
+		// 画面が 1 文字変わるたびに Sig が変わって承認が再配信される
+		// （= Web の action-bar が毎フレーム作り直され、点滅してクリックを取りこぼす）。
+		before, after = 0, 1
+	}
+	contextStart := max(0, start-before)
+	contextEnd := min(len(recent), end+after)
 	contextLines := recent[contextStart:contextEnd]
 	context := strings.Join(contextLines, "\n")
 	question := nativeApprovalQuestion(contextLines, start-contextStart)
-	if provider == "opencode" && looksLikeOpenCodeModelSelector(contextLines) {
-		return nil
+	hintLines := contextLines
+	if provider == "opencode" {
+		// 選択肢がダイアログ範囲に内包されるため nativeApprovalQuestion では
+		// 質問行が取れない（常に空文字になる）。専用に取り出す。
+		if openCodeIsAlwaysAllowDialog(contextLines) {
+			question = openCodeAlwaysAllowQuestion(contextLines)
+		} else {
+			question = openCodeApprovalQuestion(contextLines)
+		}
+		// ヒント語・モデルセレクタの判定は context ではなく画面全体（recent）を見る。
+		// context を絞ったことで判定材料まで痩せると、承認の取りこぼし（"permission required"
+		// がボタン行より前にある場合）や /model セレクタの誤検出抑制の失効を招くため。
+		hintLines = recent
+		if looksLikeOpenCodeModelSelector(recent) {
+			return nil
+		}
 	}
-	if !nativeApprovalLooksValid(provider, contextLines, opts) {
+	if !nativeApprovalLooksValid(provider, hintLines, opts) {
 		return nil
 	}
 	// AI が自発的に出す Claude AskUserQuestion ピッカー（末尾に "Type something" /
@@ -135,17 +156,152 @@ func compactRecentLines(lines []string, limit int) []string {
 // (Allow once / Allow always / Reject) を検出し合成オプションを返す。
 // "allow once" の文言が PTY バッファに現れた時点でオプションを確定する
 // (初期フォーカスは常に "Allow once"。矢印 + Enter で移動・確定)。
-func extractOpenCodeApprovalOptions(lines []string) []proto.ApprovalOption {
-	for _, line := range lines {
-		if strings.Contains(strings.ToLower(line), "allow once") {
-			return []proto.ApprovalOption{
-				{Num: 1, Label: "Allow once", SendText: "\r", IsCurrent: true, PreserveOrder: true},
-				{Num: 2, Label: "Allow always", SendText: "\x1b[C\r", PreserveOrder: true},
-				{Num: 3, Label: "Reject", SendText: "\x1b[C\x1b[C\r", PreserveOrder: true},
-			}
+//
+// 併せてダイアログ本体の行範囲 [start, end] を返す。end はボタン行、start は
+// その直近上にある "Permission required" 行（無ければボタン行と同じ）。
+// この範囲だけを context にすることで、承認の同一性が画面全体のスナップショットに
+// 依存しなくなる（点滅・クリック取りこぼしの根本）。
+func extractOpenCodeApprovalOptions(lines []string) ([]proto.ApprovalOption, int, int) {
+	// 画面に解決済みの古いダイアログが残っていることがあるため、最後（＝最新）の
+	// ボタン行を採用する。先頭からの一致を採ると、下にある本物の承認要求ではなく
+	// 上に残った古いダイアログで Sig が固定され、新しい承認を取り違える。
+	for i := len(lines) - 1; i >= 0; i-- {
+		if !strings.Contains(strings.ToLower(lines[i]), "allow once") {
+			continue
+		}
+		opts := []proto.ApprovalOption{
+			{Num: 1, Label: "Allow once", SendText: "\r", IsCurrent: true, PreserveOrder: true},
+			{Num: 2, Label: "Allow always", SendText: "\x1b[C\r", PreserveOrder: true},
+			{Num: 3, Label: "Reject", SendText: "\x1b[C\x1b[C\r", PreserveOrder: true},
+		}
+		return opts, openCodeDialogStart(lines, i), i
+	}
+	return nil, -1, -1
+}
+
+// openCodeDialogStart はボタン行 buttonIdx から上へ遡り、ダイアログの見出し
+// （"Permission required"）の行番号を返す。遡る幅はダイアログ本体に収まる範囲に限る。
+// 見出しが見つからないときはボタン行ではなく遡り上限を返す: context がボタン行だけに
+// なると全ての承認が同一 Sig になり、別々の承認要求が「回答済み」で握り潰されるため。
+func openCodeDialogStart(lines []string, buttonIdx int) int {
+	limit := max(0, buttonIdx-approvalContextBefore)
+	for i := buttonIdx; i >= limit; i-- {
+		if strings.Contains(strings.ToLower(lines[i]), "permission required") {
+			return i
 		}
 	}
-	return nil
+	return limit
+}
+
+// openCodeApprovalQuestion はダイアログ本体から「何を許可しようとしているか」の 1 行を返す。
+// 見出し行（"Permission required"）とボタン行を除いた最初の非空行を採用する
+// （実機 UI 例: "Permission required" → "Read CLAUDE.md" → "Path: CLAUDE.md" → ボタン行）。
+// nativeApprovalQuestion は「選択肢クラスタより前の行」を見る作りで、選択肢が
+// ダイアログ範囲に内包される OpenCode では空文字になるため専用に取り出す。
+func openCodeApprovalQuestion(contextLines []string) string {
+	for _, line := range contextLines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		lower := strings.ToLower(trimmed)
+		if strings.Contains(lower, "permission required") || strings.Contains(lower, "allow once") {
+			continue
+		}
+		return trimmed
+	}
+	return ""
+}
+
+// extractOpenCodeAlwaysAllowOptions は OpenCode の 2 段目ダイアログ
+// (Allow always を選んだ直後に出る「Always allow」確認) を検出し合成オプションを返す。
+// 実機 UI（PTY 生ログ実測）:
+//
+//	△ Always allow
+//	This will allow the following patterns until OpenCode is restarted
+//	- opencode *
+//	Confirm  Cancel                              ⇆ select  enter confirm
+//
+// 初期フォーカスは "Confirm"（1 段目と同じく矢印 + Enter で移動・確定）。
+// この 2 段目は "allow once" を含まないため extractOpenCodeApprovalOptions では
+// 拾えず、Web の action-bar が出ないまま端末での Enter を強いていた。
+//
+// 併せてダイアログ本体の行範囲 [start, end] を返す。end はボタン行、start は
+// 見出し行（"Always allow"）。見出しが遡り範囲に無い行は、応答本文に現れた
+// "confirm" / "cancel" の誤検出とみなして採用しない。
+func extractOpenCodeAlwaysAllowOptions(lines []string) ([]proto.ApprovalOption, int, int) {
+	for i := len(lines) - 1; i >= 0; i-- {
+		if !isOpenCodeConfirmButtonLine(lines[i]) {
+			continue
+		}
+		start := openCodeAlwaysAllowStart(lines, i)
+		if start < 0 {
+			continue
+		}
+		opts := []proto.ApprovalOption{
+			{Num: 1, Label: "Confirm", SendText: "\r", IsCurrent: true, PreserveOrder: true},
+			{Num: 2, Label: "Cancel", SendText: "\x1b[C\r", PreserveOrder: true},
+		}
+		return opts, start, i
+	}
+	return nil, -1, -1
+}
+
+// isOpenCodeConfirmButtonLine は "Confirm" と "Cancel" が同居する水平ボタン行か判定する。
+// フッターのキーヒント行（"⇆ select  enter confirm"）は "cancel" を含まないため除外される。
+func isOpenCodeConfirmButtonLine(line string) bool {
+	lower := strings.ToLower(line)
+	return strings.Contains(lower, "confirm") && strings.Contains(lower, "cancel")
+}
+
+// openCodeAlwaysAllowStart はボタン行 buttonIdx から上へ遡り、見出し（"Always allow"）
+// の行番号を返す。見つからなければ -1（＝このボタン行はダイアログではない）。
+func openCodeAlwaysAllowStart(lines []string, buttonIdx int) int {
+	limit := max(0, buttonIdx-approvalContextBefore)
+	for i := buttonIdx; i >= limit; i-- {
+		if strings.Contains(strings.ToLower(lines[i]), "always allow") {
+			return i
+		}
+	}
+	return -1
+}
+
+// openCodeIsAlwaysAllowDialog は context の見出し行が 2 段目ダイアログか判定する。
+// context は before=0 で切り出しているため contextLines[0] が見出し行になる。
+func openCodeIsAlwaysAllowDialog(contextLines []string) bool {
+	for _, line := range contextLines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		return strings.Contains(strings.ToLower(trimmed), "always allow")
+	}
+	return false
+}
+
+// openCodeAlwaysAllowQuestion は 2 段目ダイアログから「何を恒久的に許可するのか」を返す。
+// 許可パターン行（"- opencode *" 等）があればそれを優先し、無ければ説明文
+// （"This will allow webfetch until OpenCode is restarted." のような 1 行完結型）を返す。
+// パターンは何を許可したかの実体そのものなので、これを Sig と表示の軸にする。
+func openCodeAlwaysAllowQuestion(contextLines []string) string {
+	fallback := ""
+	for _, line := range contextLines {
+		trimmed := cleanNativeApprovalLabel(line)
+		if trimmed == "" {
+			continue
+		}
+		lower := strings.ToLower(trimmed)
+		if strings.Contains(lower, "always allow") || isOpenCodeConfirmButtonLine(lower) {
+			continue
+		}
+		if pattern := strings.TrimSpace(strings.TrimPrefix(trimmed, "-")); strings.HasPrefix(trimmed, "-") && pattern != "" {
+			return pattern
+		}
+		if fallback == "" {
+			fallback = trimmed
+		}
+	}
+	return fallback
 }
 
 func looksLikeOpenCodeModelSelector(lines []string) bool {
@@ -160,12 +316,27 @@ func looksLikeOpenCodeModelSelector(lines []string) bool {
 		strings.Contains(context, "recent")
 }
 
+// extractOpenCodeOptions は OpenCode の 2 種類の承認ダイアログを検出する。
+//   - 1 段目: "Permission required"（Allow once / Allow always / Reject）
+//   - 2 段目: "Always allow"（Confirm / Cancel）— Allow always を選んだ後の確認
+//
+// 画面には解決済みの 1 段目が残ったまま 2 段目が描かれることがあるため、
+// より下（＝新しい）ダイアログを採用する。
+func extractOpenCodeOptions(lines []string) ([]proto.ApprovalOption, int, int) {
+	permOpts, permStart, permEnd := extractOpenCodeApprovalOptions(lines)
+	confirmOpts, confirmStart, confirmEnd := extractOpenCodeAlwaysAllowOptions(lines)
+	if len(confirmOpts) >= 2 && confirmEnd > permEnd {
+		return confirmOpts, confirmStart, confirmEnd
+	}
+	if len(permOpts) >= 2 {
+		return permOpts, permStart, permEnd
+	}
+	return nil, -1, -1
+}
+
 func extractNativeApprovalOptions(provider string, lines []string) ([]proto.ApprovalOption, int, int) {
 	if provider == "opencode" {
-		if opts := extractOpenCodeApprovalOptions(lines); len(opts) >= 2 {
-			return opts, 0, len(lines) - 1
-		}
-		return nil, -1, -1
+		return extractOpenCodeOptions(lines)
 	}
 	type parsedLine struct {
 		opt proto.ApprovalOption
@@ -455,6 +626,12 @@ func nativeApprovalLooksValid(provider string, contextLines []string, opts []pro
 			strings.Contains(context, "run this command") ||
 			strings.Contains(context, "auto-run")
 	}
+	// OpenCode の 2 段目ダイアログ（Allow always の確認）は "permission required" を
+	// 含まないため、専用の見出し・説明文をヒントとして許容する。
+	if provider == "opencode" && !hasHint {
+		hasHint = strings.Contains(context, "always allow") ||
+			strings.Contains(context, "until opencode is restarted")
+	}
 	hasApprovalLabel := false
 	for _, opt := range opts {
 		lower := strings.ToLower(opt.Label)
@@ -507,17 +684,5 @@ func approvalOptionsHaveSendText(opts []proto.ApprovalOption) bool {
 }
 
 func nativeApprovalSig(provider string, approval *nativeApproval) string {
-	var b strings.Builder
-	b.WriteString(provider)
-	b.WriteByte('\n')
-	b.WriteString(approval.Kind)
-	b.WriteByte('\n')
-	b.WriteString(approval.Question)
-	b.WriteByte('\n')
-	b.WriteString(approval.Context)
-	for _, opt := range approval.Options {
-		b.WriteString(fmt.Sprintf("\n%d:%s:%s", opt.Num, opt.Label, opt.SendText))
-	}
-	sum := sha256.Sum256([]byte(b.String()))
-	return hex.EncodeToString(sum[:])[:16]
+	return approvalCandidateKey(provider, approval.Kind, approval.Question, approval.Options)
 }

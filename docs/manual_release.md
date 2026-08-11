@@ -43,6 +43,14 @@ v0.1.0 は試験リリース扱いとし、初回正式リリースは v0.1.1 �
 - **リポジトリ名の一致**: `.goreleaser.yaml` / docs / cosign の certificate-identity / winget / Homebrew が `ishizakahiroshi/many-ai-cli` を前提にする。**GitHub repo 名（rename 済みか）と一致しているか**をタグ前に `gh repo view` で確認（v0.3.0 直前まで repo 名が `any-ai-cli` のままで全 gh 系が 404 だった）。
 - **タグは immutable**: 失敗してもタグ使い回しは「公開実績（asset download）ゼロ」のときだけ。download があれば次パッチへ。撤回は `gh release delete <tag> --cleanup-tag --yes`。winget を出し直すなら fork の該当 branch を消す（= PR が自動 close）→ 再 run で goreleaser が作り直す。
 
+### v0.6.0 公開で踏んだもの（調査用コードの残存・実行時配信リソースの検査漏れ）
+
+- **調査用に仕込んだ観測コードが 3 回続けて出荷直前まで残った**。v0.5.1 の `/api/debug/batch-log`（v0.5.2 で撤去）、v0.5.x の入力トレース（リリース前監査 A-01 で指摘・v0.6.0 で撤去）、v0.6.0 の `/api/debug/ui-log` と `ui_input_trace`。「原因が確定したら消す」とコメントに書くだけでは消えない。`instrumentation.json` へ登録し `node scripts/check-instrumentation.mjs` で検査する（Validate の `instrumentation` ジョブ）。**とくに専用ファイルを持たない観測コードは危険**で、`ui_input_trace` は共有ファイル 3 つに分散していたため A-01 の撤去作業から取り残された。
+- **入力由来のバイトを保存するものは `log.session_enabled` に従わせる**。マスクを掛けていても PTY 生バイトはマスク漏れが残り得る。撤去できない診断は opt-in 化して残す（`approval_corrupt_dump` がこの形）。
+- **`resources/*` の内容更新にリリースは不要**。`main` の raw URL から実行時 fetch されるので、`main` へ push した時点で全ユーザーへ反映される。逆に `develop` に置いても届かない。**モデル一覧が 1 世代古いまま放置されていたのは、鮮度を見る仕組みが `slash-commands` にしか無かったため**。
+- **スラッシュコマンド定義の形式違反は「壊れた」と分からない**。`slash_cmd_fetch.go` の `tableRowRe` はバッククオートを跨げないので、エイリアスを 1 行へまとめるとその行は 1 件もマッチせず、コマンドがピッカーから黙って消える（cursor-agent で 6 コマンドが該当）。`node scripts/check-slash-commands.mjs` が Go 側と同じ正規表現で「実際に何件拾えるか」を検査する。
+- **公式 docs を実機の網羅リストとして扱わない**。docs に無い＝存在しない、と判定すると実在コマンドを大量に削除する（当初 claude で -27 / codex で -20 の誤判定が出た）。各 CLI の実行ファイルを直接 grep して照合する。ただし**この照合は「実在すること」しか証明できない**（偽陰性が多い）ので、docs との和集合で判断する。
+
 ### v0.3.2 公開で踏んだもの（develop で見えない main 着弾失敗 + 後片付け）
 
 v0.3.2 はタグ前に `develop` だけ見て進めたため、main push で初露呈する CI 失敗を 3 段階で踏み、その都度 fixup commit が必要になった。次回は **develop で完結させずに main へ通すまでが「タグ前」**。
