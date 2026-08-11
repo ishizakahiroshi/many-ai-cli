@@ -150,6 +150,17 @@ Release artifacts are published at
 - `many-ai-cli doctor` now waits up to 3 seconds (was 1) for each provider's
   `--version`, so slow-starting CLIs are reported with their version instead
   of the bare name (`internal/doctor/doctor.go`).
+- **A failure while syncing the winget fork no longer aborts the whole
+  release.** The release job refreshed the `winget-pkgs` fork from upstream
+  before GoReleaser ran, so that the generated manifest PR would branch from an
+  up-to-date base. That step was fail-fast and sat ahead of GoReleaser, which
+  meant a problem affecting one distribution channel could — and did — prevent
+  the GitHub Release itself from ever being created. It now logs a warning and
+  continues; the only degradation is that the winget PR may branch from a stale
+  base, which does not affect the GitHub Release, Homebrew or npm. It stays
+  ahead of GoReleaser, because moving it after would leave every release
+  branching from a fork one version out of date
+  (`.github/workflows/release.yml`).
 - **Validate CI now also runs on pushes to `develop`.** The workflow only
   triggered on pull requests and pushes to `main`, so commits landing directly
   on `develop` reached tagging without ever passing the quality gate
