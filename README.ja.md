@@ -81,6 +81,9 @@ Gemini CLI は意図的に対象外です。
 - **承認検出パターン profile**: GitHub から同期する公式 trigger phrase と、ユーザー編集用 custom profile を分離
 - **サーバ側ユーザー設定**: 音声、通知音、お気に入り、セッション順、spawn 既定、アバター設定を `config.yaml` に保存
 - **UI からの新規セッション spawn**（`/api/spawn`）
+- **OpenCode を承認なしで起動** — spawn パネルから全許可の OpenCode セッションを起動できる。無人で走る構成になるため、確定前の spawn リスク表示にもその旨が出る
+- **古いビルドの警告** — Hub の稼働中に実行ファイルを差し替えると、ダッシュボードが「まだ古いビルドで動いている」と知らせる。修正が効かない理由を探し回らずに済む
+- **Workflow の進捗表示** — 完了エージェント数・経過時間・エージェントツリーを Hub 側で算出し、セッションカードと Workflow 画面に表示する。完了時の Web Push は任意で有効化できる
 - **モデルピッカー + Ollama route 自動切替**: spawn フォームから Anthropic / OpenAI / Ollama Cloud / Ollama Local のモデルを選択でき、Hub が必要な `ANTHROPIC_*` / `OPENAI_*` 環境変数をセッションごとに自動注入（shell での事前設定不要）。Ollama daemon が別ホストにある場合は `config.yaml` の `ollama.base_url` で接続先を変更可能（Hyper-V ゲストからホストの Ollama を使う手順は [docs/manual_local-llm-hyperv-host.md](docs/manual_local-llm-hyperv-host.md) を参照）
 
 ## 軽量オーケストレーション

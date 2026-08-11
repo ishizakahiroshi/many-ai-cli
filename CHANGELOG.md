@@ -236,11 +236,14 @@ Release artifacts are published at
   and Fable 5; the Codex list is rebuilt from the CLI's documented `--model`
   values including the GPT-5.6 Sol, Terra and Luna variants; the Cursor Agent
   list is regenerated from `cursor-agent --list-models` and now carries the
-  Claude 5, GPT-5.6, Kimi K3, GLM 5.2 and Gemini 3.6 entries; and Grok gains
-  `grok-4.5`. The GitHub Copilot list is unchanged because that CLI exposes no
-  non-interactive way to enumerate the models a given plan can reach. Like the
-  slash-command reference, `resources/models/defaults.json` is fetched at run
-  time from `main`, so this reaches existing installations without an upgrade.
+  Claude 5, GPT-5.6, Kimi K3, GLM 5.2 and Gemini 3.6 entries; the GitHub Copilot
+  list is rebuilt from GitHub's published set of supported models, adding the
+  Claude 5 family, the GPT-5.6 variants, Gemini 3.6 Flash, Grok 4.5 and the Kimi
+  entries; and Grok drops two entries that its own binary does not know about —
+  one of them was the product name rather than a model — in favour of the three
+  it does. Like the slash-command reference,
+  `resources/models/defaults.json` is fetched at run time from `main`, so this
+  reaches existing installations without an upgrade.
 
 ### Fixed
 - **An answered batch approval no longer reappears in the action bar.** After

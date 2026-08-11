@@ -81,6 +81,9 @@ Gemini CLI is intentionally out of scope.
 - **Approval pattern profiles** — keep official remote-synced trigger phrases separate from local custom edits
 - **Server-side user preferences** — keep voice, notification, favorites, session order, spawn defaults, and avatar settings in `config.yaml`
 - **Spawn new sessions** from the UI (`/api/spawn`)
+- **Launch OpenCode with approvals off** — the spawn panel can start an OpenCode session that runs unattended, and the spawn risk summary says so before you confirm
+- **Stale-binary warning** — if you replace the executable while the Hub is running, the dashboard tells you the process is still on the old build instead of leaving you to wonder why a fix did not take effect
+- **Live workflow progress** — agents done/total, elapsed time and the agent tree are computed by the Hub and shown on the session card and in the workflow view, with an optional Web Push when a run finishes
 - **Model picker with Ollama routing** — pick Anthropic / OpenAI / Ollama Cloud / Ollama Local models from the spawn form; the Hub auto-injects the right `ANTHROPIC_*` / `OPENAI_*` env vars per session, no shell setup required. If the Ollama daemon runs on another host, set `ollama.base_url` in `config.yaml`
 
 ## Light orchestration
