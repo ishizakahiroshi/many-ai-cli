@@ -4,8 +4,8 @@
 |---|---|---|
 | `/agent` | Switch the active agent thread. | Inspect or continue work in a spawned subagent thread. |
 | `/app` | Continue the current session in the ChatGPT desktop app. | When you want to keep the same session in the desktop app. |
-| `/apps` | Browse apps and insert them into your prompt. | Attach an app before asking Codex to use it. |
 | `/approve` | Approve one retry of a recent auto-review denial. | Retry an action that the automatic reviewer denied. |
+| `/apps` | Browse apps and insert them into your prompt. | Attach an app before asking Codex to use it. |
 | `/archive` | Archive the current session and exit Codex. | Preserve a session and free the workspace before starting another. |
 | `/btw` | Start an ephemeral side conversation. | Ask focused follow-ups without disrupting the main thread. |
 | `/clear` | Clear the terminal and start a fresh chat. | Reset the UI and conversation together. |
@@ -22,7 +22,7 @@
 | `/hooks` | Review lifecycle hooks. | Inspect hook configuration and manage hook trust. |
 | `/ide` | Include open files and the current IDE selection. | Pull editor context into the next prompt. |
 | `/import` | Import Claude Code setup, project files, and recent chats. | When migrating from Claude Code into Codex. |
-| `/init` | Generate an `AGENTS.md` scaffold. | Capture persistent repository instructions. |
+| `/init` | Generate an AGENTS.md scaffold. | Capture persistent repository instructions. |
 | `/keymap` | Remap TUI keyboard shortcuts. | Inspect and persist custom shortcut bindings. |
 | `/logout` | Sign out of Codex. | Clear credentials on shared machines. |
 | `/mcp` | List configured Model Context Protocol tools. | Check which external tools Codex can call. |

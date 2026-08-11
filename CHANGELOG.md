@@ -208,6 +208,27 @@ Release artifacts are published at
   every session with it. The mismatch is now reported as a warning written to
   `hub.log` at startup and the Hub serves normally; only the model-list feature
   stays blocked (`internal/config/config.go`, `internal/hub/server.go`).
+- **Six Cursor Agent commands were missing from the slash-command picker.**
+  `cursor-agent.md` grouped aliases onto one row — `` | `/clear` / `/new` /
+  `/new-chat` | ... `` — but the parser that reads these files cannot cross a
+  backtick, so those rows matched nothing at all. `/clear`, `/quit`, `/open`,
+  `/run-everything`, `/shell` and `/summarize` had never appeared in the picker.
+  Every file is now one command per row, and `scripts/check-slash-commands.mjs`
+  fails the build when a row does not parse, when the ordering breaks, or when a
+  description carries markup the parser would strip
+  (`resources/slash-commands/`, `.github/workflows/validate.yml`).
+- **The bundled slash-command reference is rebuilt against the installed CLIs.**
+  Earlier passes compared the reference against each vendor's documentation
+  alone, which suggested deleting 27 Claude Code commands and 20 Codex commands
+  — those pages simply do not list everything. Each command is now checked
+  against the CLI's own executable as well, so presence is verified rather than
+  inferred. Claude Code gains `/autocompact`, `/bug`, `/import`, `/list-agents`,
+  `/plugins`, `/pr`, `/quiet`, `/save`, `/session`, `/settings`, `/share`,
+  `/subtask`, `/test`, `/uninstall`, `/web` and `/why`, and loses
+  `/work-with-pr`, which appears in neither source. Cursor Agent gains nine
+  entries, Grok is rebuilt from xAI's command reference at 69 entries, GitHub
+  Copilot gains `/permissions`, and OpenCode — which had shipped as an empty
+  placeholder — now lists its 17 TUI commands. Codex needed no changes.
 - **The spawn panel's model suggestions now cover the current model
   generation.** The list had stopped at Claude Opus 4.8 and GPT-5.5, so the
   whole Claude 5 generation and every GPT-5.6 variant were missing from the
