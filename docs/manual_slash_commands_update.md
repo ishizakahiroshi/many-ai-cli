@@ -43,6 +43,31 @@ Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI に新しいス�
 - **Cursor Agent CLI**: 実機 `cursor-agent` の `/help` を正本とする。実機が無ければ公式ドキュメント [Slash commands | Cursor Docs](https://cursor.com/docs/cli/reference/slash-commands) を使い、差分があれば実機出力を優先する。
 - 削除済みコマンドは除外する（例: Claude の `/vim` `/pr-comments` は削除済み）。
 
+#### 公式 docs を「網羅リスト」として扱わない（2026-08-11 の教訓）
+
+**docs に無い＝存在しない、と判定してはいけない。** 当初この前提で判定した結果、claude で 27 件・codex で 20 件の削除候補が出たが、そのほとんどが実在するコマンドだった。claude の docs ページは組み込みコマンドしか載せず、バンドル skill 由来の `/code-review` `/loop` 等を含まない。codex の docs ページは抜粋で、`/model` `/plan` `/resume` すら載っていない。
+
+**実在の照合には CLI の実行ファイルを直接 grep する。**
+
+```powershell
+rg -a -o --no-filename "\bcommand-name\b" <CLI の実行ファイル>
+```
+
+| provider | 実行ファイル |
+|---|---|
+| claude | `~/.local/bin/claude.exe` |
+| codex | `@openai/codex-win32-x64` 配下の `codex.exe` |
+| cursor-agent | `~/AppData/Local/cursor-agent/versions/<ver>/index.js` |
+| grok | `~/.grok/bin/grok.exe` |
+| opencode | `opencode.exe` |
+
+**注意点が 2 つある。**
+
+1. **この照合は「実在すること」しか証明できない。** 出現 0 件は不在の証明にならない。実際 claude の `/dataviz` `/deep-research`、opencode の `/thinking` は docs にあるのにバイナリで 0 件だった。
+2. **スラッシュ付きで検索すると漏れる。** 多くの CLI はコマンド名をスラッシュ無しで保持している。`/privacy-settings` は 0 件だが `privacy-settings` は 5 件、という食い違いが出る。**語境界検索（`\bname\b`）を使う。**
+
+判定は **docs とバイナリの和集合**で行う。どちらにも無いものだけを削除候補にする。この方法で、当初 47 件あった削除候補は実際には 1 件（claude の `/work-with-pr`）に収束した。
+
 ### C2. md ファイルを更新する
 
 各行は `| \`/cmd\` | 目的（1文） | いつ使うか（1文） |` のテーブル形式。並び順は **コマンド名の ABC 順**（provider 間で統一）。
@@ -55,7 +80,23 @@ Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI に新しいス�
 - 説明文に `|`（パイプ）を入れない（列区切りと衝突する）。
 - markdown 装飾（`**bold**` / `[link](url)` / `` `code` ``）は自動で剥がされるので、残ってもよいが避けたほうが無難。
 
-### C3. ローカル検証（任意・推奨）
+### C3. ローカル検証（必須）
+
+```powershell
+node scripts/check-slash-commands.mjs
+```
+
+Go 側の `tableRowRe` と同じ正規表現で **「表の行数」と「パーサが実際に拾える件数」を突き合わせる**。あわせて行の形・ABC 順・重複・括弧や markdown 装飾も検査する。Validate の `instrumentation` ジョブでも走る。
+
+**なぜ必須か（2026-08-11 に発覚）**: `cursor-agent.md` にエイリアスを 1 行へまとめた行が 6 行あった。
+
+```
+| `/clear` / `/new` / `/new-chat` / `/newchat` | 説明 | 説明 |
+```
+
+`tableRowRe` はバッククオートを跨げないため **この形は 1 件もマッチしない**。`/clear` `/quit` `/open` `/run-everything` `/shell` `/summarize` がピッカーに一度も出ていなかった。**md としては正しく見えるので目視では気づけない。**
+
+#### 参考: 一時テストによる確認（任意）
 
 実ファイルをパーサに通して、新コマンドが取得できるか確認できる。`internal/hub/` に一時テストを置いて `fetchAndParseSlashCmds` を実ファイルパスで呼ぶ:
 
