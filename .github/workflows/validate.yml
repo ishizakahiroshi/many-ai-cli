@@ -77,6 +77,66 @@ jobs:
       - name: Check slash command definitions
         run: node scripts/check-slash-commands.mjs
 
+  # リリースで使う PAT に必要なスコープが揃っているかを、タグを打つ前に確かめる。
+  #
+  # 2026-08-11 v0.6.0 で、PUBLISH_GITHUB_TOKEN に workflow スコープが無いまま
+  # 運用していたことが本番で初めて発覚した。winget-pkgs fork の同期は、上流の
+  # 差分に .github/workflows/** の変更が含まれるときだけ workflow スコープを
+  # 要求する。upstream が 4 月から 8 月まで該当ファイルを触らなかったため、
+  # その間の 6 回のリリースは素通りしていた。
+  #
+  # 「前回動いた」は正しさの証明にならない。条件付きでしか発火しない不足は、
+  # 実際に踏むまで見えない。だから前提として毎回検査する。
+  #
+  # ここは Validate に置く（release.yml ではない）。release 側で hard fail に
+  # すると、1 チャネルの都合でリリース全体が止まる構造へ逆戻りするため。
+  release-token-scopes:
+    runs-on: ubuntu-latest
+    env:
+      PUBLISH_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}
+    steps:
+      - name: Verify PUBLISH_GITHUB_TOKEN scopes
+        if: ${{ env.PUBLISH_TOKEN != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          headers=$(gh api -i user 2>/dev/null | sed -n '1,/^\r*$/p')
+          scopes=$(printf '%s' "$headers" | grep -i '^x-oauth-scopes:' | cut -d: -f2- | tr -d ' \r' || true)
+
+          if [ -z "$scopes" ]; then
+            # fine-grained PAT はこのヘッダを返さない。権限は別モデルなので照合できない。
+            echo "::warning title=token scopes not introspectable::PUBLISH_GITHUB_TOKEN のスコープを取得できなかった。fine-grained PAT の可能性がある。winget fork の同期に必要な権限があるか手で確認すること。"
+            exit 0
+          fi
+
+          echo "scopes: $scopes"
+          missing=""
+          for required in repo workflow; do
+            case ",$scopes," in
+              *",$required,"*) ;;
+              *) missing="$missing $required" ;;
+            esac
+          done
+
+          if [ -n "$missing" ]; then
+            echo "::error title=PUBLISH_GITHUB_TOKEN is missing scopes::不足:$missing / 現在: $scopes"
+            echo ""
+            echo "  repo     : release asset の作成・fork への push に必要"
+            echo "  workflow : winget-pkgs fork の同期に必要。upstream の差分に"
+            echo "             .github/workflows/** の変更が含まれるときだけ要求されるため、"
+            echo "             無くても成功する日がある。成功実績は正しさの証明にならない。"
+            echo ""
+            echo "  https://github.com/settings/tokens で該当トークンにスコープを足し、"
+            echo "  リポジトリの Actions secrets を更新すること。"
+            exit 1
+          fi
+          echo "OK: 必要なスコープ（repo, workflow）が揃っている"
+
+      - name: Notice when the token is unavailable
+        if: ${{ env.PUBLISH_TOKEN == '' }}
+        run: echo "::notice title=token check skipped::PUBLISH_GITHUB_TOKEN が参照できないためスキップした（fork からの PR 等）。"
+
   go-mod-tidy:
     runs-on: ubuntu-latest
     steps:
