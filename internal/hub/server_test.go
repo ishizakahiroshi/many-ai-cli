@@ -2,8 +2,10 @@ package hub
 
 import (
 	"log/slog"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -50,6 +52,190 @@ func registerTestSession(s *Server, id int, provider string) *session {
 	s.sessions[id] = ses
 	s.sessionsMu.Unlock()
 	return ses
+}
+
+func registerTestUI(s *Server) *websocket.Conn {
+	conn := &websocket.Conn{}
+	s.sessionsMu.Lock()
+	s.uis[conn] = newUIConn(conn)
+	s.sessionsMu.Unlock()
+	return conn
+}
+
+func TestResizeOwnershipRejectsNonControllingUI(t *testing.T) {
+	s := newTestServer()
+	ses := registerTestSession(s, 1, "codex")
+	owner := registerTestUI(s)
+	observer := registerTestUI(s)
+
+	s.sessionsMu.Lock()
+	_, _, _, _ = s.claimResizeOwnershipLocked(owner, 1, 120, 40)
+	s.sessionsMu.Unlock()
+	s.handleResizeFromUI(observer, proto.Message{
+		Type: "pty_resize", SessionID: 1, Cols: 80, Rows: 24,
+	})
+
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	if ses.controllingUI != owner {
+		t.Fatal("resize ownership unexpectedly changed")
+	}
+	if ses.lastCols != 120 || ses.lastRows != 40 {
+		t.Fatalf("non-owner resize reached session state: got %dx%d", ses.lastCols, ses.lastRows)
+	}
+}
+
+func TestResizeOwnershipTransfersWithActiveSession(t *testing.T) {
+	s := newTestServer()
+	ses := registerTestSession(s, 1, "codex")
+	first := registerTestUI(s)
+	second := registerTestUI(s)
+
+	s.sessionsMu.Lock()
+	_, _, _, _ = s.claimResizeOwnershipLocked(first, 1, 120, 40)
+	_, _, _, _ = s.claimResizeOwnershipLocked(second, 1, 90, 30)
+	defer s.sessionsMu.Unlock()
+	if ses.controllingUI != second {
+		t.Fatal("active UI did not acquire resize ownership")
+	}
+	if ses.lastCols != 90 || ses.lastRows != 30 {
+		t.Fatalf("new owner's latest size was not applied: got %dx%d", ses.lastCols, ses.lastRows)
+	}
+}
+
+func TestResizeOwnershipClearsWhenUIIsRemoved(t *testing.T) {
+	s := newTestServer()
+	ses := registerTestSession(s, 1, "codex")
+	owner := registerTestUI(s)
+
+	s.sessionsMu.Lock()
+	_, _, _, _ = s.claimResizeOwnershipLocked(owner, 1, 120, 40)
+	delete(s.uis, owner)
+	s.releaseResizeOwnershipLocked(owner)
+	s.sessionsMu.Unlock()
+
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	if ses.controllingUI != nil {
+		t.Fatal("resize ownership was not cleared when UI disconnected")
+	}
+}
+
+func TestResizeOwnershipFirstRemainingUIClaimsAfterOwnerDisconnect(t *testing.T) {
+	s := newTestServer()
+	ses := registerTestSession(s, 1, "codex")
+	owner := registerTestUI(s)
+	remainingA := registerTestUI(s)
+	remainingB := registerTestUI(s)
+
+	s.sessionsMu.Lock()
+	_, _, _, _ = s.claimResizeOwnershipLocked(owner, 1, 120, 40)
+	delete(s.uis, owner)
+	s.releaseResizeOwnershipLocked(owner)
+	s.sessionsMu.Unlock()
+
+	// The first resize after the old owner disconnects atomically acquires
+	// ownership, even when the size itself is unchanged.
+	s.handleResizeFromUI(remainingA, proto.Message{
+		Type: "pty_resize", SessionID: 1, Cols: 120, Rows: 40,
+	})
+	// A later resize from another remaining UI must be rejected.
+	s.handleResizeFromUI(remainingB, proto.Message{
+		Type: "pty_resize", SessionID: 1, Cols: 80, Rows: 24,
+	})
+
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	if ses.controllingUI != remainingA {
+		t.Fatal("first remaining UI did not acquire resize ownership")
+	}
+	if ses.lastCols != 120 || ses.lastRows != 40 {
+		t.Fatalf("non-owner resize reached session state: got %dx%d", ses.lastCols, ses.lastRows)
+	}
+}
+
+func TestResizeOwnershipTwoUIsDoNotBounceWrapperSize(t *testing.T) {
+	received := make(chan proto.Message, 8)
+	wsServer := httptest.NewServer(websocket.Handler(func(conn *websocket.Conn) {
+		for {
+			var message proto.Message
+			if err := websocket.JSON.Receive(conn, &message); err != nil {
+				return
+			}
+			received <- message
+		}
+	}))
+	defer wsServer.Close()
+	wsURL := "ws" + strings.TrimPrefix(wsServer.URL, "http")
+	wrapperWS, err := websocket.Dial(wsURL, "", "http://127.0.0.1/")
+	if err != nil {
+		t.Fatalf("dial wrapper websocket: %v", err)
+	}
+	defer wrapperWS.Close()
+
+	uiServer := httptest.NewServer(websocket.Handler(func(conn *websocket.Conn) {
+		for {
+			var message proto.Message
+			if err := websocket.JSON.Receive(conn, &message); err != nil {
+				return
+			}
+		}
+	}))
+	defer uiServer.Close()
+	uiURL := "ws" + strings.TrimPrefix(uiServer.URL, "http")
+	dialUI := func() *websocket.Conn {
+		t.Helper()
+		conn, err := websocket.Dial(uiURL, "", "http://127.0.0.1/")
+		if err != nil {
+			t.Fatalf("dial UI websocket: %v", err)
+		}
+		return conn
+	}
+	first := dialUI()
+	defer first.Close()
+	second := dialUI()
+	defer second.Close()
+
+	s := newTestServer()
+	registerTestSession(s, 1, "codex")
+	s.sessionsMu.Lock()
+	s.uis[first] = newUIConn(first)
+	s.uis[second] = newUIConn(second)
+	s.wrappers[1] = newWrapperConn(wrapperWS)
+	s.sessionsMu.Unlock()
+
+	assertResize := func(cols, rows int) {
+		t.Helper()
+		select {
+		case got := <-received:
+			if got.Type != "pty_resize" || got.Cols != cols || got.Rows != rows {
+				t.Fatalf("wrapper resize = %+v, want %dx%d", got, cols, rows)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timed out waiting for wrapper resize %dx%d", cols, rows)
+		}
+	}
+	assertNoResize := func() {
+		t.Helper()
+		select {
+		case got := <-received:
+			t.Fatalf("unexpected wrapper resize from non-owner: %+v", got)
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+
+	s.handleResizeFromUI(first, proto.Message{Type: "pty_resize", SessionID: 1, Cols: 120, Rows: 40})
+	assertResize(120, 40)
+
+	for i := 0; i < 5; i++ {
+		s.handleResizeFromUI(second, proto.Message{Type: "pty_resize", SessionID: 1, Cols: 80 + i, Rows: 24})
+	}
+	assertNoResize()
+
+	s.claimResizeOwnership(second, 1, 84, 24)
+	assertResize(84, 24)
+	s.handleResizeFromUI(first, proto.Message{Type: "pty_resize", SessionID: 1, Cols: 121, Rows: 41})
+	assertNoResize()
 }
 
 // TestHandleNativeApprovalDetection_NewApproval は新しい承認が検出されたとき
@@ -545,31 +731,31 @@ func TestExtractBannerModel(t *testing.T) {
 		{
 			name:     "cursor-agent: cwd·branch 行直上",
 			provider: "cursor-agent",
-			cwd:      `C:\dev\many-ai-cli`,
+			cwd:      `D:\dev\many-ai-cli`,
 			lines: []string{
 				"  → Plan, search, build anything",
 				"   Auto",
-				`  C:\dev\many-ai-cli · develop`,
+				`  D:\dev\many-ai-cli · develop`,
 			},
 			want: "Auto",
 		},
 		{
 			name:     "cursor-agent: 使用率サフィックスを除去",
 			provider: "cursor-agent",
-			cwd:      `C:\dev\many-ai-cli`,
+			cwd:      `D:\dev\many-ai-cli`,
 			lines: []string{
 				"  Auto · 7.4%",
-				`  C:\dev\many-ai-cli · develop`,
+				`  D:\dev\many-ai-cli · develop`,
 			},
 			want: "Auto",
 		},
 		{
 			name:     "cursor-agent: 直上がプロンプト残骸なら除外",
 			provider: "cursor-agent",
-			cwd:      `C:\dev\many-ai-cli`,
+			cwd:      `D:\dev\many-ai-cli`,
 			lines: []string{
 				"  → 今日の日時は？",
-				`  C:\dev\many-ai-cli · develop`,
+				`  D:\dev\many-ai-cli · develop`,
 			},
 			want: "",
 		},

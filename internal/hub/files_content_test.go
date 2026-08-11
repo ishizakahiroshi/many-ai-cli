@@ -24,10 +24,27 @@ func newTestFilesContentServer(tmpDir string) *Server {
 	}
 }
 
-func callFilesContent(t *testing.T, s *Server, path string) (int, string, filesContentResp) {
+// Files 読み取り API のスコープ判定は呼び出し元で変わる（internal/hub/files_scope.go の
+// filesScopeRestricted）。どちらを検証しているかを取り違えないよう、ヘルパは RemoteAddr を
+// 必ず明示して組み立てる。
+//   - testRemoteAddrRemote:   論理リモート。許可ルート + チャット言及フォールバックに閉じる
+//   - testRemoteAddrLoopback: 直 loopback。許可ルート制限なし（秘密情報 denylist のみ）
+const (
+	testRemoteAddrRemote   = "203.0.113.9:54321"
+	testRemoteAddrLoopback = "127.0.0.1:54321"
+)
+
+func newFilesReq(t *testing.T, target, remoteAddr string) *http.Request {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/api/files-content?token=tok&path="+url.QueryEscape(path), nil)
+	req := httptest.NewRequest(http.MethodGet, target, nil)
+	req.RemoteAddr = remoteAddr
 	req.Host = "127.0.0.1:47777"
+	return req
+}
+
+func callFilesContentFrom(t *testing.T, s *Server, path, remoteAddr string) (int, string, filesContentResp) {
+	t.Helper()
+	req := newFilesReq(t, "/api/files-content?token=tok&path="+url.QueryEscape(path), remoteAddr)
 	w := httptest.NewRecorder()
 	s.handleFilesContent(w, req)
 
@@ -37,28 +54,35 @@ func callFilesContent(t *testing.T, s *Server, path string) (int, string, filesC
 	return w.Code, body, resp
 }
 
+func callFilesContent(t *testing.T, s *Server, path string) (int, string, filesContentResp) {
+	t.Helper()
+	return callFilesContentFrom(t, s, path, testRemoteAddrRemote)
+}
+
 func callFilesAsset(t *testing.T, s *Server, path string) (int, string) {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/api/files-asset?token=tok&path="+url.QueryEscape(path), nil)
-	req.Host = "127.0.0.1:47777"
+	req := newFilesReq(t, "/api/files-asset?token=tok&path="+url.QueryEscape(path), testRemoteAddrRemote)
 	w := httptest.NewRecorder()
 	s.handleFilesAsset(w, req)
 	return w.Code, w.Body.String()
 }
 
-func callFilesDownload(t *testing.T, s *Server, path string) (int, string, http.Header) {
+func callFilesDownloadFrom(t *testing.T, s *Server, path, remoteAddr string) (int, string, http.Header) {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/api/files-download?token=tok&path="+url.QueryEscape(path), nil)
-	req.Host = "127.0.0.1:47777"
+	req := newFilesReq(t, "/api/files-download?token=tok&path="+url.QueryEscape(path), remoteAddr)
 	w := httptest.NewRecorder()
 	s.handleFilesDownload(w, req)
 	return w.Code, w.Body.String(), w.Header()
 }
 
+func callFilesDownload(t *testing.T, s *Server, path string) (int, string, http.Header) {
+	t.Helper()
+	return callFilesDownloadFrom(t, s, path, testRemoteAddrRemote)
+}
+
 func callFilesDownloadWithSession(t *testing.T, s *Server, path string, sessionID int) (int, string, http.Header) {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/api/files-download?token=tok&session="+strconv.Itoa(sessionID)+"&path="+url.QueryEscape(path), nil)
-	req.Host = "127.0.0.1:47777"
+	req := newFilesReq(t, "/api/files-download?token=tok&session="+strconv.Itoa(sessionID)+"&path="+url.QueryEscape(path), testRemoteAddrRemote)
 	w := httptest.NewRecorder()
 	s.handleFilesDownload(w, req)
 	return w.Code, w.Body.String(), w.Header()
@@ -246,8 +270,7 @@ func newMentionTestServerAI(t *testing.T, projDir string, sessionID int) (*Serve
 
 func callFilesContentWithSession(t *testing.T, s *Server, path string, sessionID int) (int, string, filesContentResp) {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/api/files-content?token=tok&session="+strconv.Itoa(sessionID)+"&path="+url.QueryEscape(path), nil)
-	req.Host = "127.0.0.1:47777"
+	req := newFilesReq(t, "/api/files-content?token=tok&session="+strconv.Itoa(sessionID)+"&path="+url.QueryEscape(path), testRemoteAddrRemote)
 	w := httptest.NewRecorder()
 	s.handleFilesContent(w, req)
 	var resp filesContentResp
@@ -256,8 +279,8 @@ func callFilesContentWithSession(t *testing.T, s *Server, path string, sessionID
 	return w.Code, body, resp
 }
 
-// TestHandleFilesContent_MentionedOutsidePathReadOnly は、チャットに言及された
-// スコープ外パスが読み取り専用（readOnly=true）で 200 になることを確認する。
+// TestHandleFilesContent_MentionedOutsidePathReadOnly は、論理リモートからの要求でも
+// チャットに言及されたスコープ外パスが読み取り専用（readOnly=true）で 200 になることを確認する。
 func TestHandleFilesContent_MentionedOutsidePathReadOnly(t *testing.T) {
 	projDir := t.TempDir()
 	outsideDir := t.TempDir()
@@ -291,8 +314,9 @@ func TestHandleFilesContent_MentionedOutsidePathReadOnly(t *testing.T) {
 	}
 }
 
-// TestHandleFilesContent_UnmentionedOutsidePathForbidden は、言及のないスコープ外パスが
-// 引き続き 403 のままであることを確認する。
+// TestHandleFilesContent_UnmentionedOutsidePathForbidden は、論理リモートからの要求では
+// 言及のないスコープ外パスが引き続き 403 のままであることを確認する。
+// （直 loopback は TestHandleFilesContent_LoopbackOutsidePathReadOnly のとおり許可される）
 func TestHandleFilesContent_UnmentionedOutsidePathForbidden(t *testing.T) {
 	projDir := t.TempDir()
 	outsideFile := filepath.Join(t.TempDir(), "secret.md")
@@ -441,5 +465,142 @@ func TestHandleFilesAsset_RejectsSVG(t *testing.T) {
 	}
 	if !strings.Contains(body, "not a previewable media file") {
 		t.Fatalf("unexpected body: %q", body)
+	}
+}
+
+// --- 直 loopback のスコープ開放（files_scope.go / filesScopeRestricted） ---
+
+func TestIsSecretReadDenied(t *testing.T) {
+	home := setSecTestHome(t)
+	cases := map[string]bool{
+		filepath.Join("proj", "docs", "plan.md"):   false,
+		filepath.Join("proj", "server.pem"):        true,
+		filepath.Join("proj", "tls.key"):           true,
+		filepath.Join("proj", "id_rsa"):            true,
+		filepath.Join("proj", "id_rsa.pub"):        true,
+		filepath.Join("proj", ".credentials.json"): true, // secrets-scan: allow
+		filepath.Join("proj", "aws_credentials"):   true,
+		// 環境変数ファイル。direnv の .envrc は対象外。
+		filepath.Join("proj", ".env"):            true,
+		filepath.Join("proj", ".env.local"):      true,
+		filepath.Join("proj", ".env.production"): true,
+		filepath.Join("proj", ".envrc"):          false,
+		// Hub のセッション履歴 DB は log_dir を移設した構成でも拾えるよう名前で拒否する。
+		filepath.Join("elsewhere", "any-ai-cli.db"):     true,
+		filepath.Join("elsewhere", "any-ai-cli.db-wal"): true, // secrets-scan: allow
+		filepath.Join("elsewhere", "any-ai-cli.db-shm"): true, // secrets-scan: allow
+		// Hub 設定と、その横に残りうる手動バックアップ（同じ token を含む）。
+		filepath.Join(home, ".many-ai-cli", "config.yaml"):     true,
+		filepath.Join(home, ".many-ai-cli", "config.yaml.bak"): true,
+		filepath.Join(home, ".many-ai-cli", "config.yaml.old"): true,
+		filepath.Join(home, ".many-ai-cli", "logs", "hub.log"): false,
+		// プロジェクト側の config.yaml は ~/.many-ai-cli 配下ではないので対象外。
+		filepath.Join("proj", "config.yaml"): false,
+	}
+	for path, want := range cases {
+		if got := isSecretReadDenied(path); got != want {
+			t.Fatalf("isSecretReadDenied(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
+
+// TestHandleFilesContent_LoopbackOutsidePathReadOnly は、直 loopback からの要求では
+// チャット言及が無くてもスコープ外ファイルを読めること、ただし readOnly=true が付いて
+// 書き込み系が拒否され続けることを確認する。
+func TestHandleFilesContent_LoopbackOutsidePathReadOnly(t *testing.T) {
+	setSecTestHome(t)
+	projDir := t.TempDir()
+	outsideFile := filepath.Join(t.TempDir(), "recap_outside.md")
+	if err := os.WriteFile(outsideFile, []byte("# outside\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := newTestFilesContentServer(projDir)
+
+	code, body, resp := callFilesContentFrom(t, s, outsideFile, testRemoteAddrLoopback)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200 from loopback, got %d: %s", code, body)
+	}
+	if !resp.ReadOnly {
+		t.Fatalf("expected readOnly=true for outside path, got %+v", resp)
+	}
+	if resp.Content != "# outside\n" {
+		t.Fatalf("content = %q", resp.Content)
+	}
+
+	// 同じパスを論理リモートから要求すると従来どおり 403。
+	code, body, _ = callFilesContentFrom(t, s, outsideFile, testRemoteAddrRemote)
+	if code != http.StatusForbidden {
+		t.Fatalf("expected 403 from remote, got %d: %s", code, body)
+	}
+}
+
+// TestHandleFilesContent_SecretPathForbiddenFromLoopback は、スコープを開放した直 loopback でも
+// 秘密情報 denylist 該当ファイルは 403 のままであることを確認する。
+func TestHandleFilesContent_SecretPathForbiddenFromLoopback(t *testing.T) {
+	home := setSecTestHome(t)
+	projDir := t.TempDir()
+	outsideDir := t.TempDir()
+
+	cfgPath := filepath.Join(home, ".many-ai-cli", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfgPath, []byte("token: secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfgBakPath := filepath.Join(home, ".many-ai-cli", "config.yaml.bak")
+	if err := os.WriteFile(cfgBakPath, []byte("token: secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	credPath := filepath.Join(outsideDir, ".credentials.json") // secrets-scan: allow
+	if err := os.WriteFile(credPath, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// .env は previewableTextExtensions に入っているため、denylist が無ければ本文が返る。
+	envPath := filepath.Join(outsideDir, ".env")
+	if err := os.WriteFile(envPath, []byte("API_KEY=super-secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newTestFilesContentServer(projDir)
+	for _, p := range []string{cfgPath, cfgBakPath, credPath, envPath} {
+		code, body, _ := callFilesContentFrom(t, s, p, testRemoteAddrLoopback)
+		if code != http.StatusForbidden {
+			t.Fatalf("%s: expected 403, got %d: %s", p, code, body)
+		}
+		if !strings.Contains(body, "secret-like file") {
+			t.Fatalf("%s: unexpected body: %q", p, body)
+		}
+	}
+}
+
+// TestHandleFilesDownload_LoopbackOutsideArbitraryExtensionAllowed は、直 loopback の
+// スコープ外ダウンロードには言及フォールバック用の type ゲートを課さないことを確認する
+// （type ゲートは viaMention の経路にだけ残る）。
+func TestHandleFilesDownload_LoopbackOutsideArbitraryExtensionAllowed(t *testing.T) {
+	setSecTestHome(t)
+	projDir := t.TempDir()
+	outsideFile := filepath.Join(t.TempDir(), "artifact.bin")
+	if err := os.WriteFile(outsideFile, []byte("payload"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := newTestFilesContentServer(projDir)
+
+	code, body, _ := callFilesDownloadFrom(t, s, outsideFile, testRemoteAddrLoopback)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200 from loopback, got %d: %s", code, body)
+	}
+	if body != "payload" {
+		t.Fatalf("body = %q", body)
+	}
+
+	// 鍵ファイルは denylist で拒否される。
+	keyFile := filepath.Join(filepath.Dir(outsideFile), "server.pem")
+	if err := os.WriteFile(keyFile, []byte("-----BEGIN PRIVATE KEY-----\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, body, _ = callFilesDownloadFrom(t, s, keyFile, testRemoteAddrLoopback)
+	if code != http.StatusForbidden {
+		t.Fatalf("pem: expected 403, got %d: %s", code, body)
 	}
 }

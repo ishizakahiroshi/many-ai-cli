@@ -1,0 +1,6 @@
+Workflows
+  ▸ Completed
+    ✔ agent-one
+  ▸ Running
+    ◐ agent-two  1m 2s · ↓ 10.0k
+    ◌ agent-three

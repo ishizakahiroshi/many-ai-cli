@@ -63,3 +63,26 @@ func TestSplitLeadingClearControl(t *testing.T) {
 		})
 	}
 }
+
+func TestShouldSplitTrailingEnter(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		data     []byte
+		want     bool
+	}{
+		{name: "OpenCode の単独 Enter は分離する", provider: "opencode", data: []byte("\r"), want: true},
+		{name: "OpenCode の矢印＋Enter は分離する", provider: "opencode", data: []byte("\x1b[C\r"), want: true},
+		{name: "他 provider の本文＋Enter は既存どおり分離する", provider: "codex", data: []byte("hello\r"), want: true},
+		{name: "他 provider の単独 Enter は即時経路のまま", provider: "claude", data: []byte("\r"), want: false},
+		{name: "末尾 Enter なしは分離しない", provider: "opencode", data: []byte("hello"), want: false},
+		{name: "空入力は分離しない", provider: "opencode", data: nil, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldSplitTrailingEnter(tt.provider, tt.data); got != tt.want {
+				t.Fatalf("shouldSplitTrailingEnter(%q, %q) = %v, want %v", tt.provider, tt.data, got, tt.want)
+			}
+		})
+	}
+}

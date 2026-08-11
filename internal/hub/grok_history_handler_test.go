@@ -1,12 +1,22 @@
 package hub
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+func testGrokUUIDV7(at time.Time) string {
+	ms := at.UnixMilli()
+	hexTS := ""
+	for shift := 44; shift >= 0; shift -= 4 {
+		hexTS += string("0123456789abcdef"[(ms>>shift)&0xf])
+	}
+	return hexTS[:8] + "-" + hexTS[8:12] + "-7000-8000-000000000000"
+}
 
 func TestUUIDV7Time(t *testing.T) {
 	// 0x018f00000000 ms = 2024-04-23T16:03:53.6Z 近傍（値そのものより往復一致を確認）
@@ -88,12 +98,7 @@ func TestFindGrokChatHistory(t *testing.T) {
 	startedAt := time.Date(2026, 7, 9, 1, 30, 0, 0, time.UTC)
 
 	mkSession := func(openedAt time.Time) string {
-		ms := openedAt.UnixMilli()
-		hexTS := ""
-		for shift := 44; shift >= 0; shift -= 4 {
-			hexTS += string("0123456789abcdef"[(ms>>shift)&0xf])
-		}
-		id := hexTS[:8] + "-" + hexTS[8:12] + "-7000-8000-000000000000"
+		id := testGrokUUIDV7(openedAt)
 		d := filepath.Join(grokDir, "sessions", encoded, id)
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			t.Fatal(err)
@@ -124,5 +129,120 @@ func TestFindGrokChatHistory(t *testing.T) {
 	// 時刻が許容窓（grokHistoryMatchWindow）を超えて離れている場合は不一致
 	if _, ok := findGrokChatHistory(grokDir, cwd, startedAt.Add(2*time.Hour)); ok {
 		t.Error("expected not found for start time outside match window")
+	}
+}
+
+func TestFindGrokChatHistoryPrefersConversationOverCloserEmptyStub(t *testing.T) {
+	grokDir := t.TempDir()
+	cwd := filepath.Join(grokDir, "work", "proj")
+	encoded := strings.NewReplacer(":", "%3A", "\\", "%5C", "/", "%2F").Replace(cwd)
+	startedAt := time.Date(2026, 7, 31, 1, 0, 0, 0, time.UTC)
+	writeSession := func(at time.Time, content string) string {
+		id := testGrokUUIDV7(at)
+		dir := filepath.Join(grokDir, "sessions", encoded, id)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "chat_history.jsonl"), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+
+	emptyID := writeSession(startedAt.Add(time.Second), "{}\n")
+	conversationID := writeSession(startedAt.Add(3*time.Second),
+		"{\"type\":\"user\",\"content\":\"<user_query>hello</user_query>\"}\n"+
+			"{\"type\":\"assistant\",\"content\":\"world\"}\n")
+	active, err := json.Marshal([]grokActiveSession{{
+		SessionID: emptyID,
+		CWD:       cwd,
+		OpenedAt:  startedAt.Add(time.Second).Format(time.RFC3339Nano),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(grokDir, "active_sessions.json"), active, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, ok := findGrokChatHistory(grokDir, cwd, startedAt)
+	if !ok {
+		t.Fatal("findGrokChatHistory: expected ok")
+	}
+	want := filepath.Join(grokDir, "sessions", encoded, conversationID, "chat_history.jsonl")
+	if got != want {
+		t.Fatalf("path = %s, want conversation path %s", got, want)
+	}
+}
+
+func TestFindGrokChatHistoryUsesTimeAmongNonEmptyCandidates(t *testing.T) {
+	grokDir := t.TempDir()
+	cwd := filepath.Join(grokDir, "work", "proj")
+	encoded := strings.NewReplacer(":", "%3A", "\\", "%5C", "/", "%2F").Replace(cwd)
+	startedAt := time.Date(2026, 7, 31, 2, 0, 0, 0, time.UTC)
+	writeConversation := func(at time.Time, answer string) string {
+		id := testGrokUUIDV7(at)
+		dir := filepath.Join(grokDir, "sessions", encoded, id)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		content := "{\"type\":\"assistant\",\"content\":\"" + answer + "\"}\n"
+		if err := os.WriteFile(filepath.Join(dir, "chat_history.jsonl"), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+
+	nearID := writeConversation(startedAt.Add(2*time.Second), "short")
+	writeConversation(startedAt.Add(5*time.Second), "one")
+
+	got, ok := findGrokChatHistory(grokDir, cwd, startedAt)
+	if !ok {
+		t.Fatal("findGrokChatHistory: expected ok")
+	}
+	want := filepath.Join(grokDir, "sessions", encoded, nearID, "chat_history.jsonl")
+	if got != want {
+		t.Fatalf("path = %s, want nearest non-empty path %s", got, want)
+	}
+}
+
+func TestFindGrokChatHistoryAllEmptyKeepsActiveFallback(t *testing.T) {
+	grokDir := t.TempDir()
+	cwd := filepath.Join(grokDir, "work", "proj")
+	encoded := strings.NewReplacer(":", "%3A", "\\", "%5C", "/", "%2F").Replace(cwd)
+	startedAt := time.Date(2026, 7, 31, 3, 0, 0, 0, time.UTC)
+	writeEmpty := func(at time.Time) string {
+		id := testGrokUUIDV7(at)
+		dir := filepath.Join(grokDir, "sessions", encoded, id)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "chat_history.jsonl"), []byte("{}\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+
+	uuidNearID := writeEmpty(startedAt.Add(time.Second))
+	activeID := writeEmpty(startedAt.Add(8 * time.Second))
+	active, err := json.Marshal([]grokActiveSession{{
+		SessionID: activeID,
+		CWD:       cwd,
+		OpenedAt:  startedAt.Add(8 * time.Second).Format(time.RFC3339Nano),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(grokDir, "active_sessions.json"), active, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, ok := findGrokChatHistory(grokDir, cwd, startedAt)
+	if !ok {
+		t.Fatal("findGrokChatHistory: expected ok")
+	}
+	activePath := filepath.Join(grokDir, "sessions", encoded, activeID, "chat_history.jsonl")
+	if got != activePath {
+		t.Fatalf("path = %s, want legacy active fallback %s (near UUID was %s)", got, activePath, uuidNearID)
 	}
 }

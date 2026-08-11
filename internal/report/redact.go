@@ -19,9 +19,12 @@ const (
 )
 
 var (
-	privateWindowsPathRE = regexp.MustCompile(`(?i)c:[\\/]+dev[\\/]+(?:kb|\.ssh|github[\\/]+private)(?:[\\/]+[^\s"'<>|]*)?`)
+	// ドライブレターは固定しない。開発ルートが C: 以外（実例: D:\dev への移設）へ
+	// 移った瞬間に伏せ字が外れ、kb / .ssh / github\private の実パスがバグレポートへ
+	// そのまま載る。伏せ字はどのドライブに置かれていても効かなければならない。
+	privateWindowsPathRE = regexp.MustCompile(`(?i)[a-z]:[\\/]+dev[\\/]+(?:kb|\.ssh|github[\\/]+private)(?:[\\/]+[^\s"'<>|]*)?`)
 	privateUnixPathRE    = regexp.MustCompile(`(?i)/(?:srv/)?dev/(?:kb|\.ssh|github/private)(?:/[^\s"'<>|]*)?`)
-	windowsHomeRE        = regexp.MustCompile(`(?i)c:[\\/]+users[\\/]+[^\\/\s]+[\\/]+`)
+	windowsHomeRE        = regexp.MustCompile(`(?i)[a-z]:[\\/]+users[\\/]+[^\\/\s]+[\\/]+`)
 	unixHomeRE           = regexp.MustCompile(`/(?:home|Users)/[^/\s]+/`)
 
 	queryTokenRE    = regexp.MustCompile(`(?i)([?&](?:access_)?token=)[^&#\s"']+`)

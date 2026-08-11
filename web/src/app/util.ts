@@ -61,6 +61,17 @@ export function apiFetch(path: string, init: RequestInit = {}): Promise<Response
   return fetch(path, merged);
 }
 
+// openExternalLinkWithConfirmation keeps AI-produced links from becoming a
+// one-click navigation surface. The full destination is visible both on hover
+// and in the interstitial confirmation.
+export function openExternalLinkWithConfirmation(event: MouseEvent, url: string): void {
+  event.preventDefault();
+  event.stopPropagation();
+  if (!/^https?:\/\//i.test(url)) return;
+  if (!window.confirm(`Open external link?\n\n${url}`)) return;
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
 // ---- トースト通知 ----

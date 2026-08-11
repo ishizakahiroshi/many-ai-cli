@@ -1088,6 +1088,98 @@ func (s *Store) PruneOlderThan(cutoff time.Time) error {
 	return nil
 }
 
+// PruneTranscriptNoise removes only legacy AI messages that were produced by
+// the PTY chat heuristic for Claude/Codex sessions. Provider transcripts remain
+// the source of truth, while user/approval/attachment messages and all other
+// providers are left untouched.
+func (s *Store) PruneTranscriptNoise() (int, error) {
+	if s == nil || s.db == nil {
+		return 0, nil
+	}
+	const batchSize = 2000
+	var deleted int
+	var lastID int64
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+		rows, err := s.db.QueryContext(ctx, `SELECT m.id, COALESCE(m.raw_text, m.text, '')
+			FROM messages m
+			JOIN sessions se ON se.id=m.session_id
+			WHERE m.id>? AND m.role='ai' AND se.provider IN ('claude', 'codex')
+			ORDER BY m.id LIMIT ?`, lastID, batchSize)
+		if err != nil {
+			cancel()
+			return deleted, err
+		}
+		var noiseIDs []int64
+		var maxID int64
+		for rows.Next() {
+			var id int64
+			var text string
+			if err := rows.Scan(&id, &text); err != nil {
+				rows.Close()
+				cancel()
+				return deleted, err
+			}
+			if id > maxID {
+				maxID = id
+			}
+			if isNoiseOutput(sessionlog.CleanVisibleText(text)) {
+				noiseIDs = append(noiseIDs, id)
+			}
+		}
+		err = rows.Err()
+		rows.Close()
+		cancel()
+		if err != nil {
+			return deleted, err
+		}
+		if maxID == 0 {
+			break
+		}
+		lastID = maxID
+		if len(noiseIDs) == 0 {
+			continue
+		}
+
+		ctx, cancel = context.WithTimeout(context.Background(), defaultTimeout)
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			cancel()
+			return deleted, err
+		}
+		placeholders := make([]string, len(noiseIDs))
+		args := make([]any, len(noiseIDs))
+		for i, id := range noiseIDs {
+			placeholders[i] = "?"
+			args[i] = id
+		}
+		inClause := strings.Join(placeholders, ",")
+		if s.ftsEnabled {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM messages_fts WHERE rowid IN (`+inClause+`)`, args...); err != nil { // #nosec G202 -- placeholders only
+				_ = tx.Rollback()
+				cancel()
+				return deleted, err
+			}
+		}
+		result, err := tx.ExecContext(ctx, `DELETE FROM messages WHERE id IN (`+inClause+`)`, args...) // #nosec G202 -- placeholders only
+		if err == nil {
+			var n int64
+			n, err = result.RowsAffected()
+			deleted += int(n)
+		}
+		if err == nil {
+			err = tx.Commit()
+		} else {
+			_ = tx.Rollback()
+		}
+		cancel()
+		if err != nil {
+			return deleted, err
+		}
+	}
+	return deleted, nil
+}
+
 func (s *Store) expiredSessionIDs(cutoff time.Time, limit int) ([]int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
@@ -1419,6 +1511,13 @@ func (s *Store) storeMessageForEvent(ctx context.Context, tx *sql.Tx, sessionID 
 		}
 		return s.insertMessage(ctx, tx, sessionID, ts, "user", "text", text, text, string(payload))
 	case "pty_output":
+		transcriptBacked, err := s.isTranscriptBackedSession(ctx, tx, sessionID)
+		if err != nil {
+			return err
+		}
+		if transcriptBacked {
+			return nil
+		}
 		text := sessionlog.CleanVisibleText(stringValue(event["text"]))
 		text = strings.TrimSpace(text)
 		if text == "" || isNoiseOutput(text) {
@@ -1441,6 +1540,18 @@ func (s *Store) storeMessageForEvent(ctx context.Context, tx *sql.Tx, sessionID 
 	default:
 		return nil
 	}
+}
+
+func (s *Store) isTranscriptBackedSession(ctx context.Context, tx *sql.Tx, sessionID int64) (bool, error) {
+	var provider string
+	err := tx.QueryRowContext(ctx, `SELECT provider FROM sessions WHERE id=?`, sessionID).Scan(&provider)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return provider == "claude" || provider == "codex", nil
 }
 
 func (s *Store) insertMessage(ctx context.Context, tx *sql.Tx, sessionID int64, ts, role, kind, text, rawText, payload string) error {

@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/websocket"
@@ -137,23 +138,109 @@ type session struct {
 	// JSON 外: UI 再接続時リプレイ用リングバッファ（末尾 maxPTYBuf bytes）
 	ptyBuf []byte
 
+	// JSON 外: wrapper から受信した PTY バイトの累計。wrapper 再接続時に
+	// wrapper 側の累計（proto.Message.PTYBytes）と差を取ると「切断中に
+	// 取りこぼしたバイト数」が確定し、replay の末尾からその長さだけを
+	// 既存 UI へ配信できる（reattachReplayGap）。
+	ptyBytesSeen int64
+
 	// JSON 外: Go 側 native approval 検出用 VT バッファ。
-	vt                        *vtBuffer
-	vtResizeDebounceUntil     time.Time
-	nativeApprovalSig         string
-	nativeApprovalTailSig     string
-	nativeApprovalScanQueued  bool
-	nativeApprovalClearMisses int
-	nativeApprovalConsumed    string
-	nativeApprovalConsumedAt  time.Time
-	approvalMarkerSig         string
+	vt *vtBuffer
+	// replayEpoch identifies the current terminal restoration stream. It is
+	// independent from approvalSourceEpoch: reflow/replay must not create a
+	// new logical prompt generation.
+	replayEpoch                    uint64
+	approvalSourceEpoch            uint64
+	approvalEpochPending           bool
+	approvalConsumedCandidateKey   string
+	approvalConsumedCandidateShape string
+	approvalConsumedEpoch          uint64
+	vtResizeDebounceUntil          time.Time
+	nativeApprovalSig              string
+	nativeApprovalCandidateKey     string
+	nativeApprovalCandidateShape   string
+	nativeApprovalSourceEpoch      uint64
+	nativeApprovalTailSig          string
+	nativeApprovalScanQueued       bool
+	nativeApprovalClearMisses      int
+	nativeApprovalConsumed         string
+	nativeApprovalConsumedAt       time.Time
+	approvalMarkerSig              string
+	approvalMarkerCandidateKey     string
+	approvalMarkerCandidateShape   string
+	approvalMarkerSourceEpoch      uint64
+	// 構造が壊れていて配信を抑止した直近のマーカー sig。同一ブロックが
+	// PTY チャンクごとに再抽出されるため、ログを 1 ブロック 1 回に絞る用途のみ。
+	approvalMarkerSuppressedSig string
+	// 抑止を UI へ告知した最終時刻。破損形が交互に揺れて sig が変わり続けても
+	// バナーを積み上げないための時間スロットル基準。
+	approvalMarkerSuppressedAt time.Time
+
+	// JSON 外: Claude Workflow の VT 観測。journal は C3 が別フィールドへ
+	// 書き込み、VT 値と相互上書きしない（親 plan D1）。timer は 500ms の
+	// 後縁保証 debounce と 7s heartbeat の両方を駆動する。
+	vtCounts                   workflowCounts
+	journalCounts              workflowCounts
+	workflowVTProgress         *proto.WorkflowProgress
+	workflowVTSignature        string
+	workflowBroadcastSignature string
+	workflowLastBroadcastAt    time.Time
+	workflowLastScanAt         time.Time
+	workflowScanTimer          *time.Timer
+	workflowScanDue            time.Time
+	workflowScanGeneration     uint64
+	workflowMissingScans       int
+	workflowFrozenScans        int
+	workflowElapsedBase        int
+	workflowElapsedObservedAt  time.Time
+	workflowVTHasSignal        bool
+
+	// JSON 外: Claude journal のメタ情報 tail。全フィールドは sessionsMu
+	// 保護で、workflowJournalFiles の内容も永続化・broadcast しない。
+	workflowJournalFiles              map[string]workflowJournalFileState
+	workflowJournalSessionDir         string
+	workflowJournalDetectedAt         time.Time
+	workflowJournalLastEventAt        time.Time
+	workflowJournalLastMTime          time.Time
+	workflowJournalTimer              *time.Timer
+	workflowJournalDue                time.Time
+	workflowJournalGeneration         uint64
+	workflowJournalRunning            bool
+	workflowJournalPendingAssociation bool
+	workflowJournalDormant            bool
+	workflowJournalDormantVTSignature string
+	workflowJournalSettledVTSignature string
+	workflowCompletionNotified        bool
+	workflowCompletionSignature       string
+
+	// JSON 外: provider-owned structured transcript tail. The path, byte cursor,
+	// and bounded ephemeral parser state are retained only for the live poll;
+	// transcript content is broadcast and never stored in many-ai-cli history.
+	agentChatPath       string
+	agentChatOffset     int64
+	agentChatParseState *agentChatParseState
+	agentChatTimer      *time.Timer
+	agentChatGeneration uint64
+	agentChatRunning    bool
+	agentChatLastAt     time.Time
 
 	// JSON 外: wrapper に最後に送った PTY サイズ（同サイズの resize を skip して不要な SIGWINCH を防ぐ）
-	lastCols int
-	lastRows int
+	lastCols      int
+	lastRows      int
+	controllingUI *websocket.Conn
 
 	// JSON 外: 完了サマリー通知の連投抑制用
 	lastDoneNotifyAt time.Time
+
+	// JSON 外: Review タブ Phase 2 のターン単位 Git スナップショット。
+	// 確定したユーザー入力の直前を start tree、DONE/idle fallback を end tree とし、
+	// gitTurns には完了済みターンだけを保持する。全フィールドを sessionsMu で保護する。
+	gitTurnStartTree       string
+	gitTurnStartedAt       time.Time
+	gitTurnCaptureInFlight bool
+	gitTurnCaptureDone     chan struct{}
+	gitTurnCaptureWaiters  int
+	gitTurns               []gitTurnSnapshot
 
 	// JSON 外: Git タブ「Ask AI」コミットメッセージ生成の待ち受け状態。
 	// 接続中の AI セッションへ生成プロンプトを注入し、PTY 出力から
@@ -175,14 +262,15 @@ type session struct {
 	initialModelScanDone  bool
 
 	// JSON 外: セッション履歴（JSONL）
-	StoreID   int64              `json:"-"`
-	LogPath   string             `json:"log_path,omitempty"`
-	JSONLPath string             `json:"jsonl_path,omitempty"`
+	StoreID   int64  `json:"-"`
+	LogPath   string `json:"log_path,omitempty"`
+	JSONLPath string `json:"jsonl_path,omitempty"`
 	// NativeLogPath is the raw transcript written by the provider itself (not
 	// many-ai-cli's optional PTY session log). Currently Codex reports this via
 	// its Stop hook; other providers resolve it from their local store on demand.
-	NativeLogPath string          `json:"-"`
-	History   *sessionlog.Writer `json:"-"`
+	NativeLogPath  string             `json:"-"`
+	AgentSessionID string             `json:"-"`
+	History        *sessionlog.Writer `json:"-"`
 
 	// JSON 外: per-session 入力直列化ロック（#18）。
 	// 複数 UI が同一セッションへ同時入力した場合に、hasPending チェック〜
@@ -197,6 +285,25 @@ type session struct {
 	// copylocks に触れるため。session 生成時に必ず new(sync.Mutex) を設定すること
 	//（未設定＝nil のまま Lock すると nil pointer panic になる）。
 	inputMu *sync.Mutex
+
+	// JSON 外: Hub が wrapper へ送ったが、pty_input_ack をまだ受け取っていない
+	// 入力。sessionsMu で保護し、wrapper 切断時に resendInput へ移して次の
+	// (再)接続で送り直す。
+	inputSeq      int64
+	inflightInput map[int64]inflightInput
+
+	// JSON 外: 未 ack のまま切断された入力の再送キュー。pendingInput と分けて
+	// 持つのは「元の seq のまま」送り直す必要があるため。新しい seq を振ると
+	// wrapper 側の重複判定（maxProcessedInputSeq）が効かず、既に PTY へ入った
+	// 入力が二重に書かれる。
+	resendInput []pendingFrame
+
+	// JSON 外: このセッションの wrapper が pty_input_ack を返す実装かどうか。
+	// wrapperConn 単位ではなくセッション単位で持つ。reattach のたびに
+	// wrapperConn は作り直されるため、接続単位だと「再接続直後にもう一度切れた」
+	// 場合に ack 未受信＝旧 wrapper 扱いとなり、再送されずに入力が消える
+	// （本 bug の実測ケースそのもの）。
+	inputAckCapable bool
 }
 
 // resolveRoute は provider + model から route を推定する。
@@ -293,16 +400,25 @@ func gitChangeStats(cwd string) (files, added, deleted int) {
 // closeOnce guarantees conn.Close is called at most once regardless of how
 // many goroutines detect a dead connection simultaneously.
 type uiConn struct {
-	ws        *websocket.Conn
-	sendMu    sync.Mutex
-	closeOnce sync.Once
+	ws              *websocket.Conn
+	sendMu          sync.Mutex
+	closeOnce       sync.Once
+	activeSessionID int
+	ptySizes        map[int]ptySize
 }
 
 // broadcastWriteTimeout は UI WebSocket への JSON フレーム書き込みデッドライン。
 // 受信側が詰まっている場合にサーバー全体がブロックされないための上限（finding #4）。
 const broadcastWriteTimeout = 5 * time.Second
 
-func newUIConn(ws *websocket.Conn) *uiConn { return &uiConn{ws: ws} }
+type ptySize struct {
+	cols int
+	rows int
+}
+
+func newUIConn(ws *websocket.Conn) *uiConn {
+	return &uiConn{ws: ws, ptySizes: map[int]ptySize{}}
+}
 
 func (c *uiConn) send(m any) error {
 	c.sendMu.Lock()
@@ -332,6 +448,13 @@ type wrapperConn struct {
 	ws        *websocket.Conn
 	sendMu    sync.Mutex
 	closeOnce sync.Once
+	// inputAckSeen は旧 wrapper との互換性ガード。1 件でも ack を受け取った
+	// 接続だけを ack 対応とみなし、未 ack 入力を切断時に差し戻す。
+	inputAckSeen atomic.Bool
+	// pid は接続してきた wrapper プロセスの PID。reattach 時に「戻ってきたのが
+	// 同じ wrapper か」を判定するのに使う（reattachIdentityMatches）。
+	// sessions/wrappers へ載せる前に sessionsMu 配下で 1 度だけ書く。
+	pid int
 }
 
 func newWrapperConn(ws *websocket.Conn) *wrapperConn { return &wrapperConn{ws: ws} }
@@ -388,11 +511,15 @@ type Server struct {
 	// binGuard は「稼働中 Hub が起動時のバイナリのままか」を判定する。
 	// /api/info が binary_sha256 と binary_stale を申告するのに使い、
 	// wrapper・launcher・status・UI はこのフラグを読むだけで stale を扱える。
-	binGuard     *binaryGuard
-	webSrcHash   string // hash of web/src/ baked into dist/.src-hash at build time
-	webDistFresh bool   // true if current web/src/ matches webSrcHash (always true on VPS/Docker)
-	parentShell  string
-	instanceID   string // Hub プロセス起動ごとのランダム ID。UI が Hub 再起動（live session ID の振り直し）を検出するために snapshot に同梱する
+	binGuard *binaryGuard
+	// staleBinaryNotified は binary_stale を UI へ配信した直近の状態。
+	// /api/info が呼ばれるたびに noteStaleBinary が比較し、変化した瞬間だけ配信する。
+	staleBinaryMu       sync.Mutex
+	staleBinaryNotified bool
+	webSrcHash          string // hash of web/src/ baked into dist/.src-hash at build time
+	webDistFresh        bool   // true if current web/src/ matches webSrcHash (always true on VPS/Docker)
+	parentShell         string
+	instanceID          string // Hub プロセス起動ごとのランダム ID。UI が Hub 再起動（live session ID の振り直し）を検出するために snapshot に同梱する
 
 	// sessionsMu guards session/connection state (nextID, sessions, wrappers,
 	// uis, lastUICols/Rows, idleTimer, idleGen). cfgMu guards s.cfg.
@@ -400,11 +527,18 @@ type Server struct {
 	// (snapshotCfg / snapshotLocalModels / idleTimeoutMin) and release cfgMu
 	// before taking sessionsMu.
 	sessionsMu sync.Mutex
-	cfgMu      sync.Mutex
-	nextID     int
-	sessions   map[int]*session
-	wrappers   map[int]*wrapperConn
-	uis        map[*websocket.Conn]*uiConn
+	// agentChatBroadcastMu serializes agent-chat generation invalidation with
+	// generation-checked UI sends. Reattach can replace a session while an old
+	// poll is parsing outside sessionsMu; this lock prevents that old poll from
+	// broadcasting after the replacement is committed.
+	agentChatBroadcastMu sync.Mutex
+	// Test-only clock injection for deterministic tail-prime deadline cases.
+	agentChatReadClock func() time.Time
+	cfgMu              sync.Mutex
+	nextID             int
+	sessions           map[int]*session
+	wrappers           map[int]*wrapperConn
+	uis                map[*websocket.Conn]*uiConn
 	// pendingInput は wrapper 未接続・送信失敗で届けられなかったユーザー入力を
 	// セッションごとに順序保持でバッファする。wrapper の (再)接続時に
 	// flushPendingInput が順番に再送するため、入力が黙って失われない。
@@ -443,8 +577,10 @@ type Server struct {
 	orchestration     *orchestrationManager
 
 	// 任意リモート PIN（pin_auth.go）。lazy 生成のため pinLim() 経由でアクセスする。
-	pinLimiterMu sync.Mutex
-	pinLimiter   *pinLimiter
+	pinLimiterMu  sync.Mutex
+	pinLimiter    *pinLimiter
+	pinSessionsMu sync.Mutex
+	pinSessions   map[string]pinCookieSession
 	// SEC-C: 既知デバイス（IP+UA ハッシュ → 最終接続時刻）。未知デバイスの初回 remote 接続で通知。
 	devicesMu    sync.Mutex
 	knownDevices map[string]time.Time
@@ -721,6 +857,11 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		// stale 検知が無効化されるだけ。
 		logger.Warn("self binary hash unavailable; stale-binary detection disabled")
 	}
+	// 起動を止めない設定上の問題（config.Validate() が返す error と対の区分）を残す。
+	// GUI 起動では stderr が見えないため、hub.log が唯一の通知経路になる。
+	for _, warning := range cfg.Warnings() {
+		logger.Warn("config warning", "warning", warning)
+	}
 	s := &Server{
 		cfg:                   cfg,
 		logger:                logger,
@@ -736,6 +877,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		wrappers:              map[int]*wrapperConn{},
 		uis:                   map[*websocket.Conn]*uiConn{},
 		pendingInput:          map[int][]string{},
+		pinSessions:           map[string]pinCookieSession{},
 		slashCmdCache:         map[string]*slashCmdCacheEntry{},
 		approvalRuleTargets:   map[string]approvalRuleTarget{},
 		autoApprovalHistory:   make([]autoApprovalCandidate, 0, 100),
@@ -883,13 +1025,12 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/session-log", s.handleSessionLog)
 	mux.HandleFunc("/api/agent-log", s.handleAgentLog)
 	mux.HandleFunc("/api/agent-log/open", s.handleOpenAgentLog)
-	// 一時 endpoint: 一括承認 action-bar 消失 bug 用のログ計装
-	// docs/local/bugfix_batch-approval-actionbar-not-hidden_2026-07-21.md
-	mux.HandleFunc("/api/debug/batch-log", s.handleDebugBatchLog)
+	mux.HandleFunc("/api/agent-chat", s.handleAgentChat)
 	mux.HandleFunc("/api/grok-history", s.handleGrokHistory)
 	mux.HandleFunc("/api/session-search", s.handleSessionSearch)
 	mux.HandleFunc("/api/session-history", s.handleSessionHistory)
 	mux.HandleFunc("/api/session-store/reset", s.handleSessionStoreReset)
+	mux.HandleFunc("/api/session-store/prune-transcript-noise", s.handleSessionStorePruneTranscriptNoise)
 	mux.HandleFunc("/api/logs/purge", s.handleLogsPurge)
 	mux.HandleFunc("/api/logs/legacy-notice", s.handleLegacyLogsNotice)
 	mux.HandleFunc("/api/attachments/purge", s.handleAttachmentsPurge)
@@ -931,6 +1072,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/git-refs", s.handleGitRefs)
 	mux.HandleFunc("/api/git-status", s.handleGitStatus)
 	mux.HandleFunc("/api/git-diff", s.handleGitDiff)
+	mux.HandleFunc("/api/git-turns", s.handleGitTurns)
+	mux.HandleFunc("/api/git-turn-diff", s.handleGitTurnDiff)
 	mux.HandleFunc("/api/git-commit-all", s.handleGitCommitAll)
 	mux.HandleFunc("/api/git-commit-message", s.handleGitCommitMessage)
 	mux.HandleFunc("/api/git-fetch", s.handleGitFetch)
@@ -1156,7 +1299,7 @@ func (s *Server) SetAutoOpenBrowser(v bool) {
 
 // InstanceID は Hub プロセス起動ごとのランダム ID を返す。
 // main.go のシグナルハンドラが終了理由ログへ含めるために公開する
-//（plan_hub-lifecycle-logging.md C1）。
+// （plan_hub-lifecycle-logging.md C1）。
 func (s *Server) InstanceID() string {
 	return s.instanceID
 }
@@ -1198,6 +1341,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			Value:    tok,
 			Path:     "/",
 			HttpOnly: true,
+			Secure:   requestUsesHTTPS(r),
 			SameSite: http.SameSiteStrictMode,
 			// 永続セッション Cookie 化を避け、失効口を与える。起動毎 token と
 			// 不一致になれば（Hub 再起動で token がローテートされた等）期限切れ後に
@@ -1241,7 +1385,11 @@ func (s *Server) wsHandshake(cfg *websocket.Config, req *http.Request) error {
 	}
 	origin := req.Header.Get("Origin")
 	if origin == "" {
-		// CLI / ラッパー由来の接続は Origin を持たないため許可する。
+		// CLI / ラッパー由来の接続は Origin を持たない。ローカル peer のみ
+		// 許可し、公開リバースプロキシ経由の origin-less probe は拒否する。
+		if s.isLogicallyRemote(req) {
+			return fmt.Errorf("origin required for remote websocket clients")
+		}
 		return nil
 	}
 	if isAllowedHubOrigin(origin, port, allowedHosts...) {
@@ -1283,9 +1431,21 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 			s.sessionsMu.Unlock()
 		}
 		uc, historyItems := s.addUIWithHistory(conn, m.UIActiveSessionID)
+		s.claimResizeOwnership(conn, m.UIActiveSessionID, m.Cols, m.Rows)
 		s.sendSnapshot(uc)
+		replaySessionIDs := make([]int, 0, len(historyItems))
 		for _, item := range historyItems {
 			_ = uc.send(item)
+			if item.Type == "reattach_replay_done" {
+				replaySessionIDs = append(replaySessionIDs, item.SessionID)
+			}
+		}
+		// The UI history replay is already resident in Hub's VT mirror. Re-evaluate
+		// each restored session once after its completion frame so a newly opened
+		// candidate is sent as an authoritative approval event, while the
+		// candidate+epoch suppression in Hub keeps an answered replay silent.
+		for _, sessionID := range replaySessionIDs {
+			s.evaluateReplayApproval(sessionID)
 		}
 		ctx, cancel := context.WithCancel(context.Background())
 		s.safeGo("ui_ping_loop", func() { s.pingLoop(ctx, uc) })
@@ -1333,9 +1493,20 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 		}
 		switch m.Type {
 		case "pty_resize":
-			s.handleResize(m)
+			s.handleResizeFromUI(conn, m)
 		case "pty_input":
+			// 入力経路の診断は内容を記録せず、受信状態だけを残す。handleInput は同期呼び出しで、
+			// この for ループが返るまで同じ UI 接続の後続メッセージ（= 確定 \r）を
+			// 受信できない。recv の刻みが無いとその待ちが測れない。
+			s.logger.Info("input_trace",
+				"stage", "recv",
+				"session_id", m.SessionID,
+				"bytes", len(m.Text),
+				"ts_ns", time.Now().UnixNano())
+			s.claimResizeOwnership(conn, m.SessionID, 0, 0)
 			s.handleInput(m)
+		case "ui_active_session":
+			s.claimResizeOwnership(conn, m.SessionID, m.Cols, m.Rows)
 		case "session_hint":
 			s.handleHint(m)
 		case "approval_consumed":
@@ -1366,15 +1537,29 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 	}
 }
 
-// handleResize は pty_resize メッセージを処理する。
-// UI 側の端末サイズ変更を受け、セッションの VT バッファをリサイズして wrapper へ転送する。
-func (s *Server) handleResize(m proto.Message) {
+func (s *Server) handleResizeFromUI(conn *websocket.Conn, m proto.Message) {
 	if m.Cols <= 0 || m.Rows <= 0 {
 		return
 	}
 	s.sessionsMu.Lock()
-	s.lastUICols, s.lastUIRows = m.Cols, m.Rows
 	ses := s.sessions[m.SessionID]
+	if conn != nil {
+		uc := s.uis[conn]
+		if uc != nil {
+			uc.ptySizes[m.SessionID] = ptySize{cols: m.Cols, rows: m.Rows}
+		}
+		if ses != nil {
+			if ses.controllingUI == nil && uc != nil {
+				ses.controllingUI = conn
+			}
+			if ses.controllingUI != nil && ses.controllingUI != conn {
+				s.sessionsMu.Unlock()
+				s.logger.Debug("pty_resize ignored from non-controlling UI", "session_id", m.SessionID)
+				return
+			}
+		}
+	}
+	s.lastUICols, s.lastUIRows = m.Cols, m.Rows
 	skip := ses != nil && ses.lastCols == m.Cols && ses.lastRows == m.Rows
 	if ses != nil && !skip {
 		ses.lastCols, ses.lastRows = m.Cols, m.Rows
@@ -1387,6 +1572,10 @@ func (s *Server) handleResize(m proto.Message) {
 	}
 	wc := s.wrappers[m.SessionID]
 	s.sessionsMu.Unlock()
+	s.forwardResize(m, wc, skip)
+}
+
+func (s *Server) forwardResize(m proto.Message, wc *wrapperConn, skip bool) {
 	if wc != nil && !skip {
 		_ = wc.send(m)
 	}
@@ -1403,6 +1592,58 @@ func (s *Server) handleResize(m proto.Message) {
 			"rows":       m.Rows,
 		})
 	}
+}
+
+// claimResizeOwnership transfers a session's PTY resize authority to conn.
+// The new owner's latest known size is applied once so ownership transfer and
+// terminal geometry stay in sync. A missing size is harmless: the next
+// pty_resize from the owner supplies it.
+func (s *Server) claimResizeOwnership(conn *websocket.Conn, sessionID, cols, rows int) {
+	if conn == nil || sessionID <= 0 {
+		return
+	}
+	s.sessionsMu.Lock()
+	size, wc, skip, ok := s.claimResizeOwnershipLocked(conn, sessionID, cols, rows)
+	s.sessionsMu.Unlock()
+	if !ok {
+		return
+	}
+	s.forwardResize(proto.Message{
+		Type:      "pty_resize",
+		SessionID: sessionID,
+		Cols:      size.cols,
+		Rows:      size.rows,
+	}, wc, skip)
+}
+
+func (s *Server) claimResizeOwnershipLocked(conn *websocket.Conn, sessionID, cols, rows int) (ptySize, *wrapperConn, bool, bool) {
+	uc := s.uis[conn]
+	ses := s.sessions[sessionID]
+	if uc == nil || ses == nil {
+		return ptySize{}, nil, false, false
+	}
+	uc.activeSessionID = sessionID
+	if cols > 0 && rows > 0 {
+		uc.ptySizes[sessionID] = ptySize{cols: cols, rows: rows}
+	}
+	ses.controllingUI = conn
+	size := uc.ptySizes[sessionID]
+	if size.cols <= 0 || size.rows <= 0 {
+		return ptySize{}, nil, false, false
+	}
+	s.lastUICols, s.lastUIRows = size.cols, size.rows
+	skip := ses.lastCols == size.cols && ses.lastRows == size.rows
+	if !skip {
+		ses.lastCols, ses.lastRows = size.cols, size.rows
+		if ses.vt == nil {
+			ses.vt = newVTBuffer(size.cols, size.rows)
+		} else {
+			ses.vt.Resize(size.cols, size.rows)
+		}
+		ses.vtResizeDebounceUntil = time.Now().Add(vtResizeDebounce)
+	}
+	wc := s.wrappers[sessionID]
+	return size, wc, skip, true
 }
 
 // 入力ゲートまわりの 10 関数 (handleInput / splitBracketedPasteSubmit /
@@ -1464,7 +1705,23 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 		ses.nativeApprovalClearMisses = 0
 		ses.nativeApprovalConsumed = ""
 		ses.nativeApprovalConsumedAt = time.Time{}
+		ses.approvalConsumedCandidateKey = ""
+		ses.approvalConsumedCandidateShape = ""
+		ses.approvalConsumedEpoch = 0
+		ses.approvalEpochPending = false
+		ses.approvalSourceEpoch++
+		if ses.approvalSourceEpoch == 0 {
+			ses.approvalSourceEpoch = 1
+		}
 		ses.approvalMarkerSig = ""
+		ses.nativeApprovalCandidateKey = ""
+		ses.nativeApprovalCandidateShape = ""
+		ses.nativeApprovalSourceEpoch = 0
+		ses.approvalMarkerCandidateKey = ""
+		ses.approvalMarkerCandidateShape = ""
+		ses.approvalMarkerSourceEpoch = 0
+		ses.approvalMarkerSuppressedSig = ""
+		ses.approvalMarkerSuppressedAt = time.Time{}
 		ids = append(ids, id)
 		updates = append(updates, proto.Message{Type: "session_update", SessionID: id, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt, StartedAt: ses.StartedAt})
 	}
@@ -1519,6 +1776,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	var endedWorktreeCleanup string
 	if exists {
 		ses := s.sessions[m.SessionID]
+		s.stopAgentChatTailLocked(ses)
 		historyToClose = ses.History
 		jsonlPathForTranscript = ses.JSONLPath
 		endedProvider = ses.Provider
@@ -1529,6 +1787,8 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		delete(s.sessions, m.SessionID)
 		delete(s.wrappers, m.SessionID)
 		delete(s.pendingInput, m.SessionID)
+		ses.inflightInput = nil
+		ses.resendInput = nil
 	}
 	s.sessionsMu.Unlock()
 	if !exists {

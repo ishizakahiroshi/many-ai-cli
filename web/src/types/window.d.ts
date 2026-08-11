@@ -61,7 +61,7 @@ interface Window {
     orderSessions?: () => SessionSnapshot[];
     getSortedSessions?: () => SessionSnapshot[];
     getTerminalEntry?: (id: number) => any;
-    sendResize?: (sessionId: number, cols: number, rows: number) => void;
+    sendResize?: (sessionId: number, cols: number, rows: number, reason?: string) => void;
     flushPendingTerminalChunks?: (id: number) => void;
     markTerminalManualScrollIntent?: () => void;
     updateScrollLockBtn?: (locked?: boolean) => void;

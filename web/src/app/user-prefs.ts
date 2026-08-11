@@ -256,11 +256,16 @@ export const _USER_PREFS_STRING_PATHS = new Set([
   'display.live_status_fg',
 ]);
 export const _USER_PREFS_STRING_ARRAY_PATHS = new Set([
-  'session_order',
   'group_order',
   'project_favorites',
   'cwd_history',
   'cwd_favorites',
+]);
+// session_order の中身はセッション ID の数値配列。文字列配列として扱うと
+// サニタイズで全要素が捨てられ、サーバへ常に空配列が PUT される（＝手動
+// 並び順が localStorage にしか残らず、別端末・別ブラウザへ伝播しない）。
+export const _USER_PREFS_NUMBER_ARRAY_PATHS = new Set([
+  'session_order',
 ]);
 
 // ドット区切りパスでオブジェクトの深いフィールドを設定する
@@ -295,6 +300,14 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
   if (_USER_PREFS_STRING_ARRAY_PATHS.has(path)) {
     if (!Array.isArray(parsed)) return { ok: false };
     return { ok: true, value: parsed.filter((v) => typeof v === 'string') };
+  }
+  if (_USER_PREFS_NUMBER_ARRAY_PATHS.has(path)) {
+    if (!Array.isArray(parsed)) return { ok: false };
+    // 旧サーバが文字列で保存していた値も数値へ寄せて拾う（整数のみ採用）。
+    const value = parsed
+      .map((v) => (typeof v === 'number' ? v : parseInt(String(v), 10)))
+      .filter((v) => Number.isInteger(v));
+    return { ok: true, value };
   }
   if (path === 'templates') {
     if (!Array.isArray(parsed)) return { ok: false };

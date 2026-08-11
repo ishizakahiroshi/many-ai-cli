@@ -49,27 +49,36 @@ type Pending = {
   maxTimer: ReturnType<typeof setTimeout> | null;
   fired: boolean;
   minWaitMs: number;
-  action: () => void;
+  action: () => void | boolean;
   onInjected?: () => void;
   onAcked?: () => void;
+  kind: string;
 };
 
 const pending = new Map<number, Pending>();
 
-function fire(id: number) {
+function fire(id: number, source: string = 'idle') {
   const p = pending.get(id);
   if (!p || p.fired) return;
   p.fired = true;
   if (p.idleTimer) clearTimeout(p.idleTimer);
   if (p.maxTimer) clearTimeout(p.maxTimer);
   pending.delete(id);
+  const elapsedMs = Date.now() - p.startedAt;
   // セッション削除後に遅延 \r が別 ID 再利用先へ飛ばないようガード
-  if (!sessions.has(id)) return;
+  if (!sessions.has(id)) {
+    return;
+  }
   try {
+    const result = p.action();
+    if (result === false) {
+      // sendText が false = WS 未接続等で送れなかった。単発設計なので再送されない。
+      return;
+    }
     p.onInjected?.();
-    p.action();
     p.onAcked?.();
-  } catch (_) {}
+  } catch (_) {
+  }
 }
 
 function armIdle(id: number) {
@@ -79,16 +88,16 @@ function armIdle(id: number) {
   const elapsed = Date.now() - p.startedAt;
   // 最低 minWaitMs は確保しつつ、以降は出力静止 IDLE_SETTLE ごとに送出判定する
   const wait = Math.max(IDLE_SETTLE_MS, p.minWaitMs - elapsed);
-  p.idleTimer = setTimeout(() => fire(id), wait);
+  p.idleTimer = setTimeout(() => fire(id, 'idle'), wait);
 }
 
 // 出力が一定時間静止してから action を 1 回だけ実行する予約。\r 確定・ペースト本体送出など
 // 「内側 CLI の取り込み・再描画が落ち着いてから撃ちたい」操作の共通土台。
-function schedule(id: number, action: () => void, maxWaitMs: number, minWaitMs: number = MIN_WAIT_MS, onInjected?: () => void, onAcked?: () => void) {
-  cancelDeferredEnter(id);
-  const p: Pending = { startedAt: Date.now(), idleTimer: null, maxTimer: null, fired: false, minWaitMs, action, onInjected, onAcked };
+function schedule(id: number, action: () => void | boolean, maxWaitMs: number, minWaitMs: number = MIN_WAIT_MS, onInjected?: () => void, onAcked?: () => void, kind: string = 'settle') {
+  cancelDeferredEnter(id, 'reschedule');
+  const p: Pending = { startedAt: Date.now(), idleTimer: null, maxTimer: null, fired: false, minWaitMs, action, onInjected, onAcked, kind };
   pending.set(id, p);
-  p.maxTimer = setTimeout(() => fire(id), maxWaitMs);
+  p.maxTimer = setTimeout(() => fire(id, 'max'), maxWaitMs);
   armIdle(id);
 }
 
@@ -96,12 +105,12 @@ function schedule(id: number, action: () => void, maxWaitMs: number, minWaitMs: 
 // minWaitMs に provider 別の最低待機（Codex/OpenCode は長め）を渡し、無出力で畳み込む CLI への
 // 早撃ち（\r 吸収による送信不発）を防ぐ。省略時は既定の MIN_WAIT。
 export function scheduleDeferredEnter(id: number, minWaitMs: number = MIN_WAIT_MS, onInjected?: () => void, onAcked?: () => void) {
-  schedule(id, () => { try { sendText(id, '\r'); } catch (_) {} }, MAX_WAIT_MS, minWaitMs, onInjected, onAcked);
+  schedule(id, () => sendText(id, '\r'), MAX_WAIT_MS, minWaitMs, onInjected, onAcked, 'enter');
 }
 
 // 画像 inject（@path）に複数行ペーストが続くケースで、画像取り込みが落ち着いてから
 // ペースト本体＋確定 \r を撃つために使う。出力静止後に action を 1 回だけ実行する。
-export function scheduleAfterOutputSettle(id: number, action: () => void) {
+export function scheduleAfterOutputSettle(id: number, action: () => void | boolean) {
   schedule(id, action, INJECT_SETTLE_MAX_WAIT_MS);
 }
 
@@ -118,10 +127,12 @@ export function hasPendingDeferredEnter(id: number): boolean {
   return pending.has(id);
 }
 
-export function cancelDeferredEnter(id: number) {
+export function cancelDeferredEnter(id: number, reason: string = 'unspecified') {
   const p = pending.get(id);
   if (!p) return;
   if (p.idleTimer) clearTimeout(p.idleTimer);
   if (p.maxTimer) clearTimeout(p.maxTimer);
   pending.delete(id);
+  // 未発火の確定 \r をここで捨てている。次の送信が前回の \r を消したのか（reason=reschedule）
+  // 別経路が消したのかを区別する。
 }

@@ -684,6 +684,24 @@ test('approval parser fixtures', () => {
   assert.equal((singleQ1Heading as any)._freeInput, true);
   assert.equal((singleQ1Heading as any)._question, '次のアクション');
 
+  // 選択肢本文に `Q1` を含む自然文（`Q1フォームを外し…` = 「Q1 のフォームを外し」の意）を
+  // 疑似見出しとして分離すると、Q1 セクションが複数生成されて質問ポップアップが重複する
+  // （bugfix_hub-approval-q-split-inside-option_2026-07-24.md の再発防止）。
+  // 全 AI エージェント共通のマーカー規約なので、この防御は provider を問わず効く。
+  const qInsideOption = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'Q1 どうする？（複数選択可）',
+    '1. [HTML修正] Q1フォームを外し、「再実行で即時反映」の記述を訂正 (Recommended)',
+    '2. [課題化] pending/plan として起票',
+    '3. [今は口頭共有のみ] HTMLはこのまま',
+    'N. User specifies',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.equal(parser.isBatchOptions(qInsideOption), false);
+  assert.deepEqual(numbers(qInsideOption), [1, 2, 3]);
+  assert.equal((qInsideOption as any)._question, 'どうする？（複数選択可）');
+  assert.equal((qInsideOption as any)._freeInput, true);
+
   // claude /model のような承認ではないカーソル駆動 TUI 選択メニュー。
   // フッターの「Esc to cancel」を matchNativeApprovalTrigger が拾い、❯ カーソル付き選択肢が
   // あるため detectFallback の choice-menu 経路で検出される（=action-bar が出る）。
@@ -794,4 +812,190 @@ test('ungluedApprovalLines splits glued numbered options for CLI display', () =>
   const properResult = parser.ungluedApprovalLines(proper);
   assert.equal(properResult.filter(l => /^\s*1\./.test(l)).length, 1);
   assert.equal(properResult.filter(l => /^\s*2\./.test(l)).length, 1);
+});
+
+test('fallback cache inherits marker block signature only for the same approval', () => {
+  const marker = parser.extractHubMarkerApproval([
+    '[MANY-AI-CLI]',
+    'Proceed with this change?',
+    '1. Yes (Recommended)',
+    '2. No',
+    'N. User specifies',
+    '[/MANY-AI-CLI]',
+  ]);
+  assert.ok(marker?.[0]?._blockSig);
+
+  const sameFallback = marker.map(({ _blockSig: _ignored, ...option }) => ({ ...option }));
+  (sameFallback as any)._question = (marker as any)._question;
+  assert.equal(sameFallback[0]._blockSig, undefined);
+  parser.inheritMarkerBlockSig(sameFallback, marker);
+  assert.equal(sameFallback[0]._blockSig, marker[0]._blockSig);
+  assert.equal(sameFallback[1]._blockSig, marker[0]._blockSig);
+
+  const differentQuestion = sameFallback.map(({ _blockSig: _ignored, ...option }) => ({ ...option }));
+  (differentQuestion as any)._question = 'Deploy this change now?';
+  assert.equal(parser.approvalSig(differentQuestion), parser.approvalSig(marker));
+  parser.inheritMarkerBlockSig(differentQuestion, marker);
+  assert.equal(differentQuestion[0]._blockSig, undefined);
+
+  const differentFallback = sameFallback.map(({ _blockSig: _ignored, ...option }) => ({ ...option }));
+  (differentFallback as any)._question = (marker as any)._question;
+  differentFallback[0].label = 'Choose another action';
+  parser.inheritMarkerBlockSig(differentFallback, marker);
+  assert.equal(differentFallback[0]._blockSig, undefined);
+});
+
+// 構造が壊れた承認ブロックは承認 UI を出さない。
+// 背景: docs/local/archive/v0.5.x/bugfix_codex-approval-marker-vt-wrap-corruption_2026-07-31.md
+// Hub の VT ミラーが実端末と乖離すると、開始/終了マーカーは揃ったまま選択肢行だけが失われ、
+// 「選択肢が 3 から始まるパネル」「ボタン 1 個だけのパネル」が描画された（2026-07-31 実測）。
+// 本文はすべて合成データ（実プロンプト・実プロジェクトの文言は貼らない）。
+test('corrupt hub marker blocks are rejected', () => {
+  // マーカーの実文字列を連続して書かない（AI エージェント経由の編集時に
+  // Web ダッシュボードの hub-marker-filter が誤爆するため）。
+  const OPEN = '[' + 'MANY-AI-CLI' + ']';
+  const CLOSE = '[/' + 'MANY-AI-CLI' + ']';
+
+  // --- 正常系: 誤爆しないこと ---
+
+  assert.deepEqual(numbers(parser.extractHubMarkerApproval([
+    OPEN,
+    'どの方式で進めますか？',
+    '1. 案 A (Recommended)',
+    '2. 案 B',
+    'N. User specifies',
+    CLOSE,
+  ])), [1, 2]);
+
+  // ブロック通し番号のバッチ（Q1 が 1,2 / Q2 が 3,4）。
+  const throughNumbered = parser.extractHubMarkerApproval([
+    OPEN,
+    '前置きの説明です。',
+    'Q1 最初の質問ですか？',
+    ' 1. 案 A (Recommended)',
+    ' 2. 案 B',
+    ' N. User specifies',
+    'Q2 次の質問ですか？',
+    ' 3. 案 C (Recommended)',
+    ' 4. 案 D',
+    ' N. User specifies',
+    CLOSE,
+  ]);
+  assert.ok(throughNumbered, 'block-through numbering must be accepted');
+  assert.equal(parser.isBatchOptions(throughNumbered), true);
+
+  // 質問ごとに 1 から振り直すバッチ。
+  const renumbered = parser.extractHubMarkerApproval([
+    OPEN,
+    'Q1 最初の質問ですか？',
+    ' 1. 案 A (Recommended)',
+    ' 2. 案 B',
+    'Q2 次の質問ですか？',
+    ' 1. 案 C (Recommended)',
+    ' 2. 案 D',
+    CLOSE,
+  ]);
+  assert.ok(renumbered, 'per-question renumbering must be accepted');
+
+  // Y/N 形式は 1/0 を合成するので先頭が 1 になり、番号検査に掛からない。
+  assert.deepEqual(numbers(parser.extractHubMarkerApproval([
+    OPEN,
+    'Proceed with this change? (Y:1/N:0)',
+    CLOSE,
+  ])), [1, 0]);
+
+  // #multi は 1 起点の連番。
+  assert.deepEqual(numbers(parser.extractHubMarkerApproval([
+    OPEN,
+    '#multi どの機能を有効にしますか？',
+    '1. 機能 A',
+    '2. 機能 B',
+    '3. 機能 C',
+    CLOSE,
+  ])), [1, 2, 3]);
+
+  // 前置き（経緯）の地の文に行頭数字が来ても弾かないこと。
+  // parseHubBlock の optionRe は `^(\d+)\.` なので、前置きの IP アドレスや版数を
+  // 擬似 option として拾う。実データで 192.168.68.100 を num=192 と拾った承認があり、
+  // 「先頭が 1」で判定すると正常な承認が無音で消える（2026-07-31 の敵対レビューで検出）。
+  const preambleNumber = parser.extractHubMarkerApproval([
+    OPEN,
+    '192.168.68.100 だとトークンが必要になり、設定の追加が要ります。',
+    'どうしますか？',
+    '1. 適用してビルド (Recommended)',
+    '2. 修正内容だけ先に見せる',
+    CLOSE,
+  ]);
+  assert.ok(preambleNumber, 'preamble line starting with a number must not be rejected');
+  assert.equal(numbers(preambleNumber).includes(1), true);
+
+  // 質問をまたいだ番号の再利用は approval-rules.md が許容している（同一質問内の重複だけが禁止）。
+  const crossQuestionOverlap = parser.extractHubMarkerApproval([
+    OPEN,
+    'Q1 最初の質問ですか？',
+    ' 1. 案 A',
+    ' 2. 案 B',
+    ' 3. 案 C',
+    'Q2 次の質問ですか？',
+    ' 3. 案 C を維持',
+    ' 4. 案 D',
+    ' 5. 案 E',
+    CLOSE,
+  ]);
+  assert.ok(crossQuestionOverlap, 'cross-question number reuse must be accepted');
+
+  // --- 破損系: 承認 UI を出さないこと ---
+
+  // 2026-07-31 の実障害と同型。Q1 の選択肢 3 行が失われ、Q2 の 3./4. だけが残る。
+  assert.equal(parser.extractHubMarkerApproval([
+    OPEN,
+    '計画上、判断が必要な項目があります。',
+    'Q1 最初の質問ですか？',
+    'Q2 次の質問ですか？',
+    ' 3. 案 C (Recommended)',
+    ' 4. 案 D',
+    ' N. User specifies',
+    CLOSE,
+  ]), null);
+
+  // 見出しごと失われ、選択肢が 1 個だけ残った形。
+  assert.equal(parser.extractHubMarkerApproval([
+    OPEN,
+    '計画上、判断が必要な項目があります。',
+    ' 4. 案 D',
+    ' N. User specifies',
+    CLOSE,
+  ]), null);
+
+  // 振り直しを伴わない番号の重複（再描画残骸の混入）。
+  assert.equal(parser.extractHubMarkerApproval([
+    OPEN,
+    'Q1 質問ですか？',
+    ' 1. 案 A',
+    ' 2. 案 B',
+    ' 2. 案 B の再描画残骸',
+    ' 3. 案 C',
+    CLOSE,
+  ]), null);
+
+  // TUI コンポーザの枠線が選択肢ラベルへ重なった形（2026-08-01 実測）。
+  // マーカーの対も番号構造も無傷なので番号検査では捕まらない。approval-rules.md が
+  // ブロック内の罫線を禁じているため、罫線の連続は再描画事故の証拠として扱う。
+  assert.equal(parser.extractHubMarkerApproval([
+    OPEN,
+    'Q1 最初の質問ですか？',
+    ' 1. 案 A の説明が途中で ' + '─'.repeat(26),
+    ' 2. 案 B',
+    ' N. User specifies',
+    CLOSE,
+  ]), null);
+
+  // 罫線 1 文字（範囲表記など）は正常扱い＝しきい値 3 未満で誤爆しない。
+  assert.ok(parser.extractHubMarkerApproval([
+    OPEN,
+    'どの範囲を対象にしますか？',
+    '1. 10─20 件だけ (Recommended)',
+    '2. 全件',
+    CLOSE,
+  ]));
 });

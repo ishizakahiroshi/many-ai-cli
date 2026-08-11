@@ -3,9 +3,12 @@ package hub
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	neturl "net/url"
 	"os/exec"
 	"strings"
 	"sync"
@@ -58,9 +61,11 @@ type lmStudioModelsResponse struct {
 }
 
 type lmStudioModelsCacheEntry struct {
-	models    []Model
-	fetchedAt time.Time
-	err       error
+	models       []Model
+	fetchedAt    time.Time
+	err          error
+	modelsURL    string
+	allowPrivate bool
 }
 
 // ollamaTagsResponse は `/api/tags` の最低限のレスポンス構造。
@@ -75,11 +80,12 @@ type ollamaTagsResponse struct {
 }
 
 type ollamaTagsCacheEntry struct {
-	models     []Model
-	fetchedAt  time.Time
-	err        error
-	tagsURL    string
-	generation uint64 // invalidate() で進む世代番号; finding #24 の force リフレッシュ判定に使用
+	models       []Model
+	fetchedAt    time.Time
+	err          error
+	tagsURL      string
+	allowPrivate bool
+	generation   uint64 // invalidate() で進む世代番号; finding #24 の force リフレッシュ判定に使用
 }
 
 type openCodeModelsCacheEntry struct {
@@ -265,8 +271,8 @@ func humanizeOpenCodeModelLabel(id string) string {
 // fetch 失敗時は空配列に倒し、静的 fallback は持たない。
 
 // fetchOllamaTags は指定 URL から `/api/tags` を取得して models 列に変換する。
-func fetchOllamaTags(url string, timeout time.Duration) ([]Model, error) {
-	client := &http.Client{Timeout: timeout}
+func fetchOllamaTags(url string, timeout time.Duration, allowPrivate ...bool) ([]Model, error) {
+	client := newLocalModelHTTPClient(url, timeout, firstBool(allowPrivate))
 	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
@@ -304,8 +310,8 @@ func ollamaTagsURL(baseURL string) string {
 }
 
 // fetchLMStudioModels は LM Studio `/v1/models`（OpenAI 互換）を取得して models 列に変換する。
-func fetchLMStudioModels(url string, timeout time.Duration) ([]Model, error) {
-	client := &http.Client{Timeout: timeout}
+func fetchLMStudioModels(url string, timeout time.Duration, allowPrivate ...bool) ([]Model, error) {
+	client := newLocalModelHTTPClient(url, timeout, firstBool(allowPrivate))
 	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
@@ -335,6 +341,44 @@ func fetchLMStudioModels(url string, timeout time.Duration) ([]Model, error) {
 	return out, nil
 }
 
+func firstBool(values []bool) bool {
+	return len(values) > 0 && values[0]
+}
+
+func newLocalModelHTTPClient(rawURL string, timeout time.Duration, allowPrivate bool) *http.Client {
+	parsed, _ := neturl.Parse(rawURL)
+	host := ""
+	if parsed != nil {
+		host = strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
+	}
+	if host == "localhost" || (net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback()) {
+		return newLoopbackHTTPClient(timeout)
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if !allowPrivate {
+		transport = newPrivateNetworkBlockingTransport(timeout)
+	}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 3 {
+				return errors.New("too many redirects")
+			}
+			if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
+				return errors.New("redirect must use http or https")
+			}
+			if req.URL.User != nil {
+				return errors.New("redirect must not include credentials")
+			}
+			if !allowPrivate && isBlockedNetworkHost(req.URL.Hostname()) {
+				return errors.New("redirect to private host blocked")
+			}
+			return nil
+		},
+	}
+}
+
 func lmStudioModelsURL(baseURL string) string {
 	return config.EffectiveLMStudioBaseURL(baseURL) + "/v1/models"
 }
@@ -342,7 +386,7 @@ func lmStudioModelsURL(baseURL string) string {
 // getOllamaLocal はキャッシュ済みのローカル daemon モデル一覧を返す。
 // force=true 時は TTL を無視し強制リフレッシュする。finding #24 対策として
 // invalidate() で進んだ世代より前の in-flight 結果を受け取らない。
-func (c *modelsCache) getOllamaLocal(force bool, tagsURL string) (models []Model, fetchedAt time.Time, err error) {
+func (c *modelsCache) getOllamaLocal(force bool, tagsURL string, allowPrivate ...bool) (models []Model, fetchedAt time.Time, err error) {
 	tagsURL = strings.TrimSpace(tagsURL)
 	if tagsURL == "" {
 		tagsURL = ollamaTagsURL("")
@@ -356,7 +400,8 @@ func (c *modelsCache) getOllamaLocal(force bool, tagsURL string) (models []Model
 		// entryFresh は force 用の世代チェック（entry.generation >= curGen）を内包する
 		// ため、force でも「invalidate 後に完了済みの現世代 fresh entry」は再 fetch せず
 		// 受け入れる（rapid force 連打での thundering・不要な Ollama 接続を防ぐ）。
-		entryFresh := entry != nil && entry.tagsURL == tagsURL && (!force || entry.generation >= curGen) && time.Since(entry.fetchedAt) < ollamaLocalCacheTTL
+		allow := firstBool(allowPrivate)
+		entryFresh := entry != nil && entry.tagsURL == tagsURL && entry.allowPrivate == allow && (!force || entry.generation >= curGen) && time.Since(entry.fetchedAt) < ollamaLocalCacheTTL
 		if entryFresh {
 			c.mu.Unlock()
 			return entry.models, entry.fetchedAt, entry.err
@@ -375,7 +420,7 @@ func (c *modelsCache) getOllamaLocal(force bool, tagsURL string) (models []Model
 		// 待機後: fresh かつ世代が自分の startGen 以上なら受け入れる
 		c.mu.Lock()
 		entry = c.local
-		if entry != nil && entry.tagsURL == tagsURL && entry.generation >= myStartGen && time.Since(entry.fetchedAt) < ollamaLocalCacheTTL {
+		if entry != nil && entry.tagsURL == tagsURL && entry.allowPrivate == firstBool(allowPrivate) && entry.generation >= myStartGen && time.Since(entry.fetchedAt) < ollamaLocalCacheTTL {
 			c.mu.Unlock()
 			return entry.models, entry.fetchedAt, entry.err
 		}
@@ -383,18 +428,19 @@ func (c *modelsCache) getOllamaLocal(force bool, tagsURL string) (models []Model
 		// 世代が古い結果は受け入れず再試行（force は既に消費）
 		force = false
 	}
-	models, err = fetchOllamaTags(tagsURL, 3*time.Second)
+	models, err = fetchOllamaTags(tagsURL, 3*time.Second, firstBool(allowPrivate))
 	c.mu.Lock()
 	newGen := inFlight.startGen
 	if c.generation > newGen {
 		newGen = c.generation
 	}
 	newEntry := &ollamaTagsCacheEntry{
-		models:     models,
-		fetchedAt:  time.Now(),
-		err:        err,
-		tagsURL:    tagsURL,
-		generation: newGen,
+		models:       models,
+		fetchedAt:    time.Now(),
+		err:          err,
+		tagsURL:      tagsURL,
+		allowPrivate: firstBool(allowPrivate),
+		generation:   newGen,
 	}
 	c.local = newEntry
 	if c.localFetch == inFlight {
@@ -417,13 +463,13 @@ func (c *modelsCache) invalidate() {
 
 // getLMStudioModels は LM Studio `/v1/models` の取得結果をキャッシュ付きで返す。
 // force=true 時は TTL を無視して再取得する。
-func (c *modelsCache) getLMStudioModels(force bool, modelsURL string) ([]Model, time.Time, error) {
+func (c *modelsCache) getLMStudioModels(force bool, modelsURL string, allowPrivate ...bool) ([]Model, time.Time, error) {
 	if c == nil {
 		return nil, time.Time{}, nil
 	}
 	c.mu.Lock()
 	entry := c.lmStudio
-	if entry != nil {
+	if entry != nil && entry.modelsURL == modelsURL && entry.allowPrivate == firstBool(allowPrivate) {
 		age := time.Since(entry.fetchedAt)
 		if !force && age < lmStudioCacheTTL {
 			models := append([]Model(nil), entry.models...)
@@ -435,11 +481,13 @@ func (c *modelsCache) getLMStudioModels(force bool, modelsURL string) ([]Model, 
 	}
 	c.mu.Unlock()
 
-	models, err := fetchLMStudioModels(modelsURL, 3*time.Second)
+	models, err := fetchLMStudioModels(modelsURL, 3*time.Second, firstBool(allowPrivate))
 	entry = &lmStudioModelsCacheEntry{
-		models:    append([]Model(nil), models...),
-		fetchedAt: time.Now(),
-		err:       err,
+		models:       append([]Model(nil), models...),
+		fetchedAt:    time.Now(),
+		err:          err,
+		modelsURL:    modelsURL,
+		allowPrivate: firstBool(allowPrivate),
 	}
 	c.mu.Lock()
 	c.lmStudio = entry
@@ -456,7 +504,7 @@ func (c *modelsCache) getLMStudioModels(force bool, modelsURL string) ([]Model, 
 //
 // この設計により「daemon が知らない catalog 名」が選択肢に出ない（= 選んだら必ず呼べる）。
 // 新規 cloud モデルの発見は UI 側の外部リンク（https://ollama.com/search?c=cloud）に任せる。
-func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], remoteSource string, localConfig []config.LocalModel, ollamaBaseURL string, lmStudioBaseURL string, force bool) ModelsResponse {
+func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], remoteSource string, localConfig []config.LocalModel, ollamaBaseURL string, lmStudioBaseURL string, force bool, privateHosts ...bool) ModelsResponse {
 	if force && remote != nil {
 		remote.invalidate()
 	}
@@ -540,7 +588,7 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 	}
 
 	// Ollama Local daemon の /api/tags を 1 度だけ取得し、remote_host で 2 分割する
-	localAll, localAt, localErr := cache.getOllamaLocal(force, ollamaTagsURL(ollamaBaseURL))
+	localAll, localAt, localErr := cache.getOllamaLocal(force, ollamaTagsURL(ollamaBaseURL), len(privateHosts) > 0 && privateHosts[0])
 	var cloudFromDaemon, trulyLocal []Model
 	for _, m := range localAll {
 		if m.RemoteHost != "" {
@@ -585,7 +633,7 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 	}
 
 	// LM Studio /v1/models を取得する
-	lmStudioModels, lmStudioAt, lmStudioErr := cache.getLMStudioModels(force, lmStudioModelsURL(lmStudioBaseURL))
+	lmStudioModels, lmStudioAt, lmStudioErr := cache.getLMStudioModels(force, lmStudioModelsURL(lmStudioBaseURL), len(privateHosts) > 1 && privateHosts[1])
 	if lmStudioErr != nil {
 		resp.Warnings = append(resp.Warnings, "lm_studio_unreachable")
 	} else if len(lmStudioModels) > 0 {

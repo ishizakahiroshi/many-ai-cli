@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,7 +39,11 @@ const (
 	ptyInputChunkBytes             = 1024
 	ptyInputChunkDelay             = 3 * time.Millisecond
 	defaultWrapperSendWriteTimeout = 5 * time.Second
-	ptyOutputQueueCapacity         = 64
+	// 実測では Codex の PTY 出力が 100ms 窓で最大 582 チャンクに達し、
+	// 64 チャンクのキューを日常的に超えていた。ピークの約 1.76 倍を確保する。
+	ptyOutputQueueCapacity = 1024
+	// pty_data 1 通が無制限に膨らまないよう、待ち行列の結合上限を設ける。
+	ptyOutputCoalesceMaxBytes = 256 * 1024
 	// postReattachGuard は reattach 成功直後の猶予窓。この間に再度 WS が切断
 	// しても、probe(hub) が生きているというだけで「意図的切断」と即断せず、
 	// transport fault と同様に reconnect grace へ回す。理由は
@@ -73,6 +78,41 @@ type wrapperSession struct {
 	currentConn      *websocket.Conn
 	currentSID       int
 	sendWriteTimeout time.Duration
+	// maxProcessedInputSeq は PTY へ書き終えた pty_input の最大シーケンス番号。
+	// Hub は未 ack の入力を「元の seq のまま」再送するため、ここ以下の seq が
+	// 来たら「既に書いた分の再送」と判定して PTY へ二重に書かず ack だけ返す。
+	// これが無いと、PTY 書き込み後・ack 到達前に WS が切れた場合（abortCurrentConn は
+	// sendMu を待たずに閉じるため ack は失われうる）、再送で確定 \r が 2 回入り
+	// 後続プロンプトを誤承認する。接続を跨いで保持する必要があるため conn ではなく
+	// セッションに持つ。
+	maxProcessedInputSeq int64
+}
+
+// inputSeqAlreadyProcessed は seq が「PTY へ書き終えた分の再送」かを返す。
+// Hub の採番は単調増加で、再送時も元の seq を保つため、最大値との比較で足りる。
+// 限界: 書き込みに失敗した seq を飛ばして後続が成功すると、その失敗分の再送も
+// 「処理済み」と見なす。PTY 書き込みが失敗するのは PTY 自体が壊れている場合に
+// 限られ、そのときはセッションごと終了するため実害を許容する。
+func (ws *wrapperSession) inputSeqAlreadyProcessed(seq int64) bool {
+	if seq <= 0 {
+		return false
+	}
+	ws.stateMu.Lock()
+	defer ws.stateMu.Unlock()
+	return seq <= ws.maxProcessedInputSeq
+}
+
+// markInputSeqProcessed は PTY へ書き終えた seq を記録する。書き込みが成功した
+// 場合にだけ呼ぶこと（失敗分を記録すると Hub の再送が握り潰される）。
+func (ws *wrapperSession) markInputSeqProcessed(seq int64) {
+	if seq <= 0 {
+		return
+	}
+	ws.stateMu.Lock()
+	defer ws.stateMu.Unlock()
+	if seq > ws.maxProcessedInputSeq {
+		ws.maxProcessedInputSeq = seq
+	}
 }
 
 func newWrapperSession(conn *websocket.Conn, sid int, sendWriteTimeout time.Duration) *wrapperSession {
@@ -204,6 +244,7 @@ type reconnectSupervisor struct {
 	cwd              string
 	label            string
 	model            string
+	agentSessionID   string
 	startedAtText    string
 	rawLogPath       string
 	jsonlPath        string
@@ -212,9 +253,10 @@ type reconnectSupervisor struct {
 	closeDone        func()
 	reconnectCh      <-chan struct{}
 	startReceiveLoop func(c *websocket.Conn)
-	snapshotReplay   func() []byte
-	transportBroken  *atomic.Bool
-	resumeOutput     func()
+	// snapshotReplay は replay バッファと PTY 読み出し累計バイト数を返す。
+	snapshotReplay  func() ([]byte, int64)
+	transportBroken *atomic.Bool
+	resumeOutput    func()
 	// lastReattachAt は直近の reattach 成功時刻（UnixNano）。0 は未 reattach。
 	// postReattachGuard 以内の再切断は即死させず reconnect grace へ回す。
 	lastReattachAt *atomic.Int64
@@ -300,7 +342,8 @@ func (r *reconnectSupervisor) run() {
 			if w, h, err := term.GetSize(int(os.Stdin.Fd())); err == nil && w > 0 && h > 0 {
 				cols, rows = w, h
 			}
-			newConn, newSID, err := dialAndReattach(r.cfg, r.ws.getSID(), r.provider, r.display, r.cwd, r.label, r.model, r.startedAtText, r.rawLogPath, r.jsonlPath, cols, rows, r.snapshotReplay())
+			replay, ptyBytes := r.snapshotReplay()
+			newConn, newSID, err := dialAndReattach(r.cfg, r.ws.getSID(), r.provider, r.display, r.cwd, r.label, r.model, r.agentSessionID, r.startedAtText, r.rawLogPath, r.jsonlPath, cols, rows, replay, ptyBytes)
 			if err != nil {
 				r.logger.Debug("reconnect attempt failed", "err", err)
 				continue
@@ -350,6 +393,7 @@ type ptyOutputWriter struct {
 	mu                     sync.Mutex
 	accepting              bool
 	closed                 bool
+	pendingChunk           []byte
 	done                   chan struct{}
 	notifyTransportFailure func(ptyOutputTransportFault)
 }
@@ -426,7 +470,15 @@ func (w *ptyOutputWriter) triggerTransportFailure(fault ptyOutputTransportFault)
 
 func (w *ptyOutputWriter) run() {
 	defer close(w.done)
-	for chunk := range w.outCh {
+	for {
+		chunk, ok := w.nextChunk()
+		if !ok {
+			return
+		}
+		if !w.isAccepting() {
+			continue
+		}
+		chunk = w.coalesce(chunk)
 		if !w.isAccepting() {
 			continue
 		}
@@ -445,6 +497,74 @@ func (w *ptyOutputWriter) run() {
 	}
 }
 
+// nextChunk returns a chunk saved by coalesce before reading the channel.
+// pendingChunk is protected because resume may discard it concurrently with
+// the writer goroutine after a transport fault.
+func (w *ptyOutputWriter) nextChunk() ([]byte, bool) {
+	w.mu.Lock()
+	if w.pendingChunk != nil {
+		chunk := w.pendingChunk
+		w.pendingChunk = nil
+		w.mu.Unlock()
+		return chunk, true
+	}
+	w.mu.Unlock()
+	chunk, ok := <-w.outCh
+	return chunk, ok
+}
+
+// coalesce drains chunks already waiting in outCh without waiting for a new
+// chunk. The first chunk is returned as-is when no second chunk is available;
+// allocation starts only when a second chunk is actually merged.
+func (w *ptyOutputWriter) coalesce(chunk []byte) []byte {
+	if len(chunk) == 0 {
+		return chunk
+	}
+	if len(chunk) > ptyOutputCoalesceMaxBytes {
+		w.savePendingChunk(chunk[ptyOutputCoalesceMaxBytes:])
+		return chunk[:ptyOutputCoalesceMaxBytes]
+	}
+
+	merged := chunk
+	for {
+		select {
+		case next, ok := <-w.outCh:
+			if !ok {
+				return merged
+			}
+			if len(next) == 0 {
+				continue
+			}
+			if len(merged)+len(next) > ptyOutputCoalesceMaxBytes {
+				w.savePendingChunk(next)
+				return merged
+			}
+			if len(merged) == len(chunk) {
+				merged = make([]byte, 0, len(chunk)+len(next))
+				merged = append(merged, chunk...)
+			}
+			merged = append(merged, next...)
+			if len(merged) == ptyOutputCoalesceMaxBytes {
+				return merged
+			}
+		default:
+			return merged
+		}
+	}
+}
+
+func (w *ptyOutputWriter) savePendingChunk(chunk []byte) {
+	w.mu.Lock()
+	// transport fault 後（accepting=false）は保存しない。resume が pendingChunk を
+	// nil にした「後」に coalesce がここへ到達すると、fault 前の古いチャンクが
+	// reattach 後に送られ、replay と二重描画になる。resume の意図
+	// （stale queued chunks must not be sent a second time）をここでも守る。
+	if w.accepting && !w.closed {
+		w.pendingChunk = chunk
+	}
+	w.mu.Unlock()
+}
+
 // resume discards any chunks queued before the transport fault and resumes
 // accepting fresh PTY output after a successful reattach. The replay buffer
 // carries the recent output across the gap, so stale queued chunks must not be
@@ -455,6 +575,7 @@ func (w *ptyOutputWriter) resume() {
 	if w.closed {
 		return
 	}
+	w.pendingChunk = nil
 	for {
 		select {
 		case <-w.outCh:
@@ -528,7 +649,7 @@ func ptyPump(
 // writeWithTrailingEnter は data を PTY へ書き込む。
 // ConPTY の制約として、text+\r を1チャンクで書くと \r が Enter でなく改行として
 // 処理される場合があるため、末尾の \r を delay 分だけ遅延させて別チャンクで送る。
-// data が1バイト以下、または末尾が \r でない場合はそのまま書き込む。
+// data が空、または末尾が \r でない場合はそのまま書き込む。
 func logPTYWriteError(logger *slog.Logger, sessionID int, op string, err error) {
 	if err != nil && logger != nil {
 		logger.Warn("pty write failed", "session_id", sessionID, "op", op, "err", err)
@@ -601,7 +722,7 @@ func splitLeadingClearControl(provider string, data []byte) (lead []byte, rest [
 }
 
 func writeWithTrailingEnter(ps processSession, data []byte, delay time.Duration) error {
-	if len(data) > 1 && data[len(data)-1] == '\r' {
+	if len(data) > 0 && data[len(data)-1] == '\r' {
 		if err := writePTYChunked(ps, data[:len(data)-1]); err != nil {
 			return err
 		}
@@ -611,6 +732,17 @@ func writeWithTrailingEnter(ps processSession, data []byte, delay time.Duration)
 	return writePTYChunked(ps, data)
 }
 
+// shouldSplitTrailingEnter は通常の入力経路を変えずに、末尾 Enter を分離する
+// 必要がある入力だけを判定する。OpenCode の承認 1 番は \r 単独で届くため、
+// text+Enter と同じ ConPTY 再描画待ちへ入れる。その他の単独キー入力は従来どおり
+// 即時書き込みし、複数バイトの末尾 Enter は既存の分離挙動を維持する。
+func shouldSplitTrailingEnter(provider string, data []byte) bool {
+	if len(data) == 0 || data[len(data)-1] != '\r' {
+		return false
+	}
+	return len(data) > 1 || provider == "opencode"
+}
+
 func trailingEnterDelay(provider string) time.Duration {
 	switch provider {
 	case "codex", "opencode":
@@ -618,6 +750,13 @@ func trailingEnterDelay(provider string) time.Duration {
 	default:
 		return 20 * time.Millisecond
 	}
+}
+
+func openCodePermissionArgs(permissionMode string) []string {
+	if permissionMode == "bypassPermissions" {
+		return []string{"--auto"}
+	}
+	return nil
 }
 
 func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string) error {
@@ -663,8 +802,15 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		if *permissionMode == "bypassPermissions" {
 			extra = append(extra, "--force")
 		}
+	case "opencode":
+		// --auto: auto-approve permissions that are not explicitly denied
+		extra = append(extra, openCodePermissionArgs(*permissionMode)...)
 	}
 	providerArgs = append(extra, providerArgs...)
+	providerArgs, agentSessionID, err := prepareClaudeSessionArgs(provider, providerArgs)
+	if err != nil {
+		return err
+	}
 
 	// Hub にスポーンされた場合、起動中の Hub ポートが MANY_AI_CLI_HUB_PORT で渡される。
 	// config.yaml のポートより優先して使い、wrapper が別 Hub を勝手に起動するのを防ぐ。
@@ -684,7 +830,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		termCols, termRows = w, h
 	}
 
-	conn, reg, err := dialAndRegister(cfg, provider, display, cwd, *label, *model, termCols, termRows)
+	conn, reg, err := dialAndRegister(cfg, provider, display, cwd, *label, *model, agentSessionID, termCols, termRows)
 	if err != nil {
 		return err
 	}
@@ -736,7 +882,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// Claude: 共有 .claude/settings.local.json を一切触らず、wrapper 所有の temp
 	// settings を `--settings` で渡して statusLine（usage-relay）を有効化する。
 	// reg.TokenStatusbar が false（UI バー無効）なら付けない＝従来の挙動を維持。
-	// diag 継続: docs/local/bugfix_statusline-settings-skip_2026-07-10.md
+	// diag 継続: docs/local/archive/v0.5.x/bugfix_statusline-settings-skip_2026-07-10.md
 	// Hub 側 statusline_gate_hub と突き合わせるため、reg 受信値と reg.Type を残す。
 	// 2026-07-19 時点: hub.log では token_statusbar_send=true のみ（false 0 件）で
 	// Hub ゲートは原因候補から外れている。wrapper 側 reg=false や settings 書込失敗が
@@ -746,7 +892,17 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		"provider", provider,
 		"reg_type", reg.Type,
 		"reg_token_statusbar", reg.TokenStatusbar)
-	if provider == "claude" && reg.TokenStatusbar {
+	// crossSessionInbound は orchestration の子（Auto=true）にだけ入れる。子は
+	// bypassPermissions 固定・人間が張り付かない自走前提で、cross-session messaging の
+	// 既定だと受信メッセージが承認ダイアログ付きで hold され dialogExpiry まで止まる
+	// （usage_hooks.go: ClaudeSettingsOptions.CrossSessionInboundAccept 参照）。
+	// conductor と手動セッションは人間が UI を見ているので既定のままにする。
+	// ネイティブ Windows には機能自体が無いので書かない（WSL 内は GOOS=linux で対象）。
+	settingsOpts := ClaudeSettingsOptions{
+		StatusLine:                provider == "claude" && reg.TokenStatusbar,
+		CrossSessionInboundAccept: provider == "claude" && reg.OrchestrationID != "" && reg.Auto && runtime.GOOS != "windows",
+	}
+	if settingsOpts.enabled() {
 		exe, exeErr := os.Executable()
 		if exeErr != nil {
 			exe = "many-ai-cli"
@@ -760,17 +916,18 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		// exe パスにスペースが含まれると、Claude が statusLine を実行する Git Bash と
 		// PowerShell で必要なクォート形式が非互換（usage_hooks.go: toShellPath 参照）のため、
 		// status line（トークン/使用量表示）が沈黙して動かないことがある。沈黙バグを可視化する。
-		if strings.ContainsAny(exe, " ") {
+		if settingsOpts.StatusLine && strings.ContainsAny(exe, " ") {
 			logger.Warn("claude statusLine exe path contains a space; the token/usage status line may silently fail to run because Git Bash and PowerShell need incompatible quoting — install many-ai-cli to a path without spaces",
 				"session_id", sessionID, "exe_path", exe)
 		}
-		if slPath, cleanup, slErr := WriteClaudeStatuslineSettings(hp); slErr == nil {
+		if slPath, cleanup, slErr := WriteClaudeSessionSettings(hp, settingsOpts); slErr == nil {
 			// 分岐到達＋temp 作成成功を stderr ログで確定できるよう 1 行残す（diag 継続）。
-			logger.Info("statusline_settings_written", "session_id", sessionID, "path", slPath)
+			logger.Info("claude_settings_written", "session_id", sessionID, "path", slPath,
+				"status_line", settingsOpts.StatusLine, "cross_session_inbound_accept", settingsOpts.CrossSessionInboundAccept)
 			providerArgs = append(providerArgs, "--settings", slPath)
 			defer cleanup()
 		} else {
-			logger.Warn("claude statusline settings write failed", "session_id", sessionID, "err", slErr)
+			logger.Warn("claude session settings write failed", "session_id", sessionID, "err", slErr)
 		}
 	}
 
@@ -823,26 +980,50 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 
 	wses := newWrapperSession(conn, sessionID, wrapperSendWriteTimeout(cfg))
 
+	// sendInputAck は「この seq の入力は PTY に入っている」ことを Hub へ返す。
+	// 新規書き込み後と、再送を握り潰したときの両方から呼ぶ（後者で ack を返さないと
+	// Hub 側の in-flight が永久に残り、切断のたびに再送され続ける）。
+	sendInputAck := func(seq int64) {
+		if seq <= 0 {
+			return
+		}
+		if err := wses.sendMsg(proto.Message{
+			Type:      "pty_input_ack",
+			SessionID: wses.getSID(),
+			InputSeq:  seq,
+		}); err != nil {
+			// PTY 書き込みは成功済みなので、ack の送信失敗だけでは
+			// PTY や wrapper の処理を止めない。Hub は未 ack として再送するが、
+			// maxProcessedInputSeq により二重書き込みにはならない。
+			logger.Warn("pty_input_ack send failed", "session_id", wses.getSID(), "input_seq", seq, "err", err)
+		}
+	}
+
 	// Recent PTY output buffer: replayed to UI after a successful reconnect so
 	// the new session card has context for what happened during the gap.
 	var (
-		replayMu  sync.Mutex
-		replayBuf bytes.Buffer
+		replayMu    sync.Mutex
+		replayBuf   bytes.Buffer
+		replayTotal int64 // PTY から読み出した累計バイト数（reattach で Hub へ申告する）
 	)
 	appendReplay := func(chunk []byte) {
 		replayMu.Lock()
 		defer replayMu.Unlock()
 		replayBuf.Write(chunk)
+		replayTotal += int64(len(chunk))
 		if replayBuf.Len() > replayBufferLimit {
 			replayBuf.Next(replayBuf.Len() - replayBufferLimit)
 		}
 	}
-	snapshotReplay := func() []byte {
+	// snapshotReplay は replay バッファと累計バイト数を同一ロック下で返す。
+	// 別々に取ると両者の間に appendReplay が挟まり、Hub 側の差分計算
+	// （累計の差で replay の末尾を切り出す）が 1 チャンクぶんずれる。
+	snapshotReplay := func() ([]byte, int64) {
 		replayMu.Lock()
 		defer replayMu.Unlock()
 		out := make([]byte, replayBuf.Len())
 		copy(out, replayBuf.Bytes())
-		return out
+		return out, replayTotal
 	}
 
 	done := make(chan struct{})
@@ -898,8 +1079,18 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 				case "pty_input":
 					if len(m.Data) > 0 {
 						data := m.Data
+						var writeErr error
+						if wses.inputSeqAlreadyProcessed(m.InputSeq) {
+							// Hub が未 ack と判断して再送してきたが、この seq は既に PTY へ
+							// 書き終えている（PTY 書き込み後・ack 到達前に WS が切れると起きる）。
+							// 二重に書くと確定 \r が 2 回入って後続プロンプトを誤承認するため、
+							// 書かずに ack だけ返して Hub の in-flight を解消する。
+							sendInputAck(m.InputSeq)
+							break
+						}
 						if lead, rest := splitLeadingClearControl(provider, data); lead != nil {
 							if err := writePTY(ps, lead); err != nil {
+								writeErr = err
 								logPTYWriteError(logger, wses.getSID(), "clear_prefix", err)
 							}
 							time.Sleep(clearPrefixSplitDelay)
@@ -914,24 +1105,34 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 							// 新形式 (@path text\r) は画像参照と本文を同じ入力行に残し、最後の Enter だけ分離する。
 							if idx := bytes.IndexByte(data, '\r'); idx >= 0 && idx < len(data)-1 {
 								if err := writeWithTrailingEnter(ps, data[:idx+1], 150*time.Millisecond); err != nil {
+									if writeErr == nil {
+										writeErr = err
+									}
 									logPTYWriteError(logger, wses.getSID(), "inject_path", err)
 								}
 								// ConPTY fix: text\r を1チャンクで書くと \r が Enter でなく改行扱いになる場合がある
 								rest := data[idx+1:]
 								if err := writeWithTrailingEnter(ps, rest, 20*time.Millisecond); err != nil {
+									if writeErr == nil {
+										writeErr = err
+									}
 									logPTYWriteError(logger, wses.getSID(), "inject_text", err)
 								}
 							} else {
 								if err := writeWithTrailingEnter(ps, data, 20*time.Millisecond); err != nil {
+									if writeErr == nil {
+										writeErr = err
+									}
 									logPTYWriteError(logger, wses.getSID(), "inject", err)
 								}
 							}
-						} else if len(data) > 1 && data[len(data)-1] == '\r' {
+						} else if shouldSplitTrailingEnter(provider, data) {
 							// Windows ConPTY では text+\r を1チャンクで書き込むと
 							// \r が Enter ではなく改行として処理される場合がある。
 							// Codex / OpenCode は入力反映直後の Enter を取りこぼすことがあるため長めに待つ。
 							delay := trailingEnterDelay(provider)
 							if err := writeWithTrailingEnter(ps, data, delay); err != nil {
+								writeErr = err
 								logPTYWriteError(logger, wses.getSID(), "input_enter", err)
 							}
 						} else {
@@ -941,8 +1142,15 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 							// ペースト本文はこのブランチを通るため、以前の
 							// writeWithTrailingEnter 経由と同等の書き込み挙動を維持する。
 							if err := writePTYChunked(ps, data); err != nil {
+								writeErr = err
 								logPTYWriteError(logger, wses.getSID(), "input", err)
 							}
+						}
+						if writeErr == nil {
+							// 記録は書き込み成功時のみ。失敗分を記録すると、Hub が
+							// 再送しても「処理済み」と見なして握り潰してしまう。
+							wses.markInputSeqProcessed(m.InputSeq)
+							sendInputAck(m.InputSeq)
 						}
 					}
 				case "pty_resize":
@@ -1001,6 +1209,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		cwd:              cwd,
 		label:            *label,
 		model:            *model,
+		agentSessionID:   agentSessionID,
 		startedAtText:    startedAtText,
 		rawLogPath:       rawLogPath,
 		jsonlPath:        jsonlPath,
@@ -1061,7 +1270,7 @@ func classifyExit(waitErr error) (state string, code int, signal string) {
 }
 
 // dialAndRegister opens a WS to the Hub and performs the register handshake.
-func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model string, termCols, termRows int) (*websocket.Conn, proto.Message, error) {
+func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, agentSessionID string, termCols, termRows int) (*websocket.Conn, proto.Message, error) {
 	wsURL := url.URL{Scheme: "ws", Host: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Path: "/ws"}
 	// Origin はサーバの wsHandshake 許可リスト（http://127.0.0.1:<port>）に一致させる。
 	// websocket.Dial は内部で url.ParseRequestURI(origin) を呼ぶため空文字は不可（empty url エラー）。
@@ -1073,21 +1282,22 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model st
 	}
 	homeDir, codexHome, claudeDir := userSkillDirs()
 	if err := websocket.JSON.Send(conn, proto.Message{
-		Type:      "register",
-		Role:      "wrapper",
-		Provider:  provider,
-		Display:   display,
-		CWD:       cwd,
-		Label:     label,
-		Model:     model,
-		PID:       os.Getpid(),
-		Shell:     DetectShell(),
-		Token:     cfg.Token,
-		HomeDir:   homeDir,
-		CodexHome: codexHome,
-		ClaudeDir: claudeDir,
-		Cols:      termCols,
-		Rows:      termRows,
+		Type:           "register",
+		Role:           "wrapper",
+		Provider:       provider,
+		Display:        display,
+		CWD:            cwd,
+		Label:          label,
+		Model:          model,
+		PID:            os.Getpid(),
+		Shell:          DetectShell(),
+		Token:          cfg.Token,
+		HomeDir:        homeDir,
+		CodexHome:      codexHome,
+		ClaudeDir:      claudeDir,
+		AgentSessionID: agentSessionID,
+		Cols:           termCols,
+		Rows:           termRows,
 	}); err != nil {
 		_ = conn.Close()
 		return nil, proto.Message{}, err
@@ -1106,7 +1316,7 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model st
 	return conn, reg, nil
 }
 
-func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, label, model, startedAt, rawLogPath, jsonlPath string, termCols, termRows int, replay []byte) (*websocket.Conn, int, error) {
+func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, label, model, agentSessionID, startedAt, rawLogPath, jsonlPath string, termCols, termRows int, replay []byte, ptyBytes int64) (*websocket.Conn, int, error) {
 	wsURL := url.URL{Scheme: "ws", Host: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Path: "/ws"}
 	// Origin はポート付きで許可リストに一致させる（理由は dialAndRegister のコメント参照）。
 	origin := fmt.Sprintf("http://127.0.0.1:%d", cfg.Hub.Port)
@@ -1116,26 +1326,28 @@ func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, 
 	}
 	homeDir, codexHome, claudeDir := userSkillDirs()
 	if err := websocket.JSON.Send(conn, proto.Message{
-		Type:      "reattach",
-		Role:      "wrapper",
-		SessionID: sessionID,
-		Provider:  provider,
-		Display:   display,
-		CWD:       cwd,
-		Label:     label,
-		Model:     model,
-		PID:       os.Getpid(),
-		Shell:     DetectShell(),
-		Token:     cfg.Token,
-		HomeDir:   homeDir,
-		CodexHome: codexHome,
-		ClaudeDir: claudeDir,
-		Cols:      termCols,
-		Rows:      termRows,
-		StartedAt: startedAt,
-		LogPath:   rawLogPath,
-		JSONLPath: jsonlPath,
-		ReplayB64: base64.StdEncoding.EncodeToString(replay),
+		Type:           "reattach",
+		Role:           "wrapper",
+		SessionID:      sessionID,
+		Provider:       provider,
+		Display:        display,
+		CWD:            cwd,
+		Label:          label,
+		Model:          model,
+		PID:            os.Getpid(),
+		Shell:          DetectShell(),
+		Token:          cfg.Token,
+		HomeDir:        homeDir,
+		CodexHome:      codexHome,
+		ClaudeDir:      claudeDir,
+		AgentSessionID: agentSessionID,
+		Cols:           termCols,
+		Rows:           termRows,
+		StartedAt:      startedAt,
+		LogPath:        rawLogPath,
+		JSONLPath:      jsonlPath,
+		ReplayB64:      base64.StdEncoding.EncodeToString(replay),
+		PTYBytes:       ptyBytes,
 	}); err != nil {
 		_ = conn.Close()
 		return nil, 0, err

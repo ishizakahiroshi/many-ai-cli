@@ -84,6 +84,9 @@ Gemini CLI **cố ý ngoài phạm vi**.
 - **Profile pattern phê duyệt** — tách cụm trigger official đồng bộ remote với chỉnh sửa custom local
 - **User prefs phía server** — voice, âm thông báo, favorites, thứ tự session, mặc định spawn, avatar trong `config.yaml`
 - **Spawn session mới** từ UI (`/api/spawn`)
+- **Khởi động OpenCode với chế độ bỏ qua phê duyệt** — panel spawn có thể chạy một session OpenCode không cần người trực; phần tóm tắt rủi ro khi spawn sẽ nêu rõ điều đó trước khi bạn xác nhận
+- **Cảnh báo binary cũ** — nếu bạn thay file thực thi trong lúc Hub đang chạy, dashboard sẽ báo tiến trình vẫn dùng bản build cũ, thay vì để bạn tự hỏi vì sao bản sửa không có tác dụng
+- **Tiến độ workflow theo thời gian thực** — số agent đã xong trên tổng số, thời gian đã trôi qua và cây agent được Hub tính toán rồi hiển thị trên thẻ session và trong màn hình workflow, kèm Web Push tùy chọn khi một lần chạy kết thúc
 - **Model picker + định tuyến Ollama** — chọn model Anthropic / OpenAI / Ollama Cloud / Ollama Local; Hub inject `ANTHROPIC_*` / `OPENAI_*` theo session. Daemon Ollama host khác: set `ollama.base_url` trong `config.yaml`
 
 ## Light orchestration

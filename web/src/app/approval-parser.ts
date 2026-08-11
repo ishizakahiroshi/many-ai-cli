@@ -101,6 +101,25 @@
     }));
   }
 
+  // Hub marker 由来の options が、同じ質問を拾った fallback parser の options で
+  // cache 更新されると _blockSig が失われる。回答時に recordAnsweredMarkerSig が
+  // no-op となり、Ink/SIGWINCH の再描画で同じマーカーが復活するため、選択肢 sig と
+  // 質問 identity の両方が同じ cache 更新に限って marker identity を引き継ぐ。
+  // Yes/No 等の選択肢が同じでも質問文が違う別質問には決して継承しない。
+  function inheritMarkerBlockSig(options, previousOptions) {
+    if (!Array.isArray(options) || options.length === 0) return options;
+    if (!Array.isArray(previousOptions) || previousOptions.length === 0) return options;
+    if (options[0]?._blockSig) return options;
+    const blockSig = previousOptions[0]?._blockSig;
+    if (!blockSig || approvalSig(options) !== approvalSig(previousOptions)) return options;
+    const questionKey = approvalQuestionKey(options);
+    if (!questionKey || questionKey !== approvalQuestionKey(previousOptions)) return options;
+    for (const option of options) {
+      if (option && typeof option === 'object') option._blockSig = blockSig;
+    }
+    return options;
+  }
+
   function approvalCtxHash(s) {
     const text = String(s || '').replace(/\s+/g, ' ').trim();
     let h = 5381;
@@ -134,19 +153,81 @@
   }
 
   // 差分再描画の残骸でマーカー文字列がラベルに混入したパース結果は出さない。
+  function optionNumSeq(opts) {
+    return (opts || [])
+      .map(o => (o && typeof o.num === 'number') ? o.num : NaN)
+      .filter(n => Number.isFinite(n));
+  }
+
+  // 最初の 1 以降だけを見て重複を判定する。前置き（経緯）の地の文に行頭数字が混じると
+  // parseHubBlock がそれを擬似 option として拾うため（実例: 前置きの IP アドレス
+  // 192.168.68.100 が num=192 になる）、先頭から見ると正常なブロックを弾いてしまう。
+  function hasDuplicateNumFromFirstOne(nums) {
+    const i1 = nums.indexOf(1);
+    if (i1 < 0) return false;
+    const seen = new Set();
+    for (const n of nums.slice(i1)) {
+      if (seen.has(n)) return true;
+      seen.add(n);
+    }
+    return false;
+  }
+
+  // 罫線（box drawing）の連続。approval-rules.md はマーカーブロック内の罫線・表組みを
+  // 禁じているため、パース結果に罫線が現れたら AI の出力ではなく、TUI コンポーザの枠線が
+  // 再描画で本文へ重なった証拠になる（Hub 側 classifyApprovalMarkerBlock と同じ判定を
+  // クライアントにも置く。旧 Hub と新 UI の組み合わせでも症状を出さないため）。
+  // しきい値 3 は「10─20」のような範囲表記を誤爆させないための余裕。
+  const boxRule = /[\u2500-\u257F]{3,}/;
+
+  function hasBoxRuleText(options) {
+    const arr = options as any;
+    if (boxRule.test(String(arr._question || ''))) return true;
+    for (const el of arr) {
+      if (!el || typeof el !== 'object') continue;
+      if (boxRule.test(String(el.title || ''))) return true;
+      if (boxRule.test(String(el.label || ''))) return true;
+      if (boxRule.test(String(el._question || ''))) return true;
+      for (const o of (el.options || [])) {
+        if (o && boxRule.test(String(o.label || ''))) return true;
+      }
+    }
+    return false;
+  }
+
   function isCorruptHubMarkerOptions(options) {
     if (!options || !Array.isArray(options) || options.length === 0) return true;
+    if (hasBoxRuleText(options)) return true;
     const arr = options as any;
     const markerLeak = /\[MANY-AI-CLI\]|\[\/MANY-AI-CLI\]/i;
     const q = arr._question != null ? String(arr._question) : '';
     if (markerLeak.test(q)) return true;
     if (isBatchOptions(options)) {
-      return options.some(sec =>
+      if (options.some(sec =>
         markerLeak.test(String((sec && sec.title) || '')) ||
-        (sec.options || []).some(o => markerLeak.test(String((o && o.label) || ''))));
+        (sec.options || []).some(o => markerLeak.test(String((o && o.label) || ''))))) return true;
+      // バッチは「ブロック通し番号」「質問ごとに 1 から振り直し」の両方が許容されるため
+      // （approval-rules.md）、先頭セクションが 1 を含むかだけを検査する。
+      const firstSec = optionNumSeq(options[0] && options[0].options);
+      if (firstSec.length > 0 && firstSec.indexOf(1) < 0) return true;
+      // 質問をまたいだ番号の再利用（Q1 が 1,2,3 / Q2 が 3,4,5）は approval-rules.md が
+      // 許容しているため、重複検査はセクション内に閉じる。
+      return options.some(sec => hasDuplicateNumFromFirstOne(optionNumSeq(sec && sec.options)));
     }
-    return options.some(o => markerLeak.test(String((o && o.label) || '')) ||
-      markerLeak.test(String((o && o._question) || '')));
+    if (options.some(o => markerLeak.test(String((o && o.label) || '')) ||
+      markerLeak.test(String((o && o._question) || '')))) return true;
+    // 選択肢番号の構造検査。
+    // 背景: docs/local/archive/v0.5.x/bugfix_codex-approval-marker-vt-wrap-corruption_2026-07-31.md
+    // Hub の VT ミラーが実端末と乖離すると、開始/終了マーカーは揃ったまま選択肢行だけが
+    // 失われ、「選択肢が 3 から始まるパネル」「ボタン 1 個だけのパネル」が描画される。
+    // approval-rules.md はブロック通し番号も質問ごとの振り直しも認めるが、どちらの書式でも
+    // 選択肢番号 1 は必ずどこかに現れる。1 が 1 つも無いのは欠落の証拠。
+    // 「先頭が 1」で判定しないのが要点 — 前置きの地の文に行頭数字（IP アドレス・版数など）が
+    // あると parseHubBlock がそれを擬似 option として拾い、正常なブロックを弾いてしまう。
+    // Y/N 形式は yesNoApprovalOptions が [1, 0] を合成するので誤爆しない。
+    const nums = optionNumSeq(options);
+    if (nums.length > 0 && nums.indexOf(1) < 0) return true;
+    return hasDuplicateNumFromFirstOne(nums);
   }
 
   function sequentialChoiceSig(prompts) {
@@ -319,8 +400,16 @@
   // 全角 `Ｑ` も拾うが、直後が英数字（`Q1A` 等の識別子）の場合は見出し扱いしない。
   function splitInlineQuestionHeading(lines) {
     const out = [];
+    // 番号付き選択肢行（`1. ラベル本文`）はラベル本文が自然文であり、
+    // AI が「Q1 のフォームを外す」の意で `Q1フォームを外し…` と書いた `Q1` を
+    // 見出しとして分離すると、選択肢が疑似 Q セクション化されて質問ポップアップが
+    // 重複する（bugfix_hub-approval-q-split-inside-option_2026-07-24.md）。
+    // 選択肢行内の `Q\d+` はすべて本文扱いとし、この行では一切分割しない。
+    // マーカー規約は全 AI エージェント共通なので、この防御は provider を問わない。
+    const numberedOptionRe = /^\s*\d{1,2}\.\s+\S/;
     for (const raw of (lines || [])) {
       let rest = String(raw || '');
+      if (numberedOptionRe.test(rest)) { if (rest.trim()) out.push(rest); continue; }
       while (true) {
         if (rest.length <= 1) break;
         const m = /[QＱ]\d{1,2}(?![A-Za-z\d])/.exec(rest.slice(1));
@@ -820,6 +909,7 @@
     extractApprovalOptions,
     approvalContextLines,
     approvalSig,
+    inheritMarkerBlockSig,
     approvalQuestionKey,
     sequentialChoiceSig,
     isBatchOptions,
@@ -844,5 +934,5 @@
 const __esmRoot = (typeof window !== 'undefined') ? window : globalThis;
 export const approvalParser = __esmRoot.approvalParser;
 export const {
-  lineHasHint, linesHaveHint, approvalLineHasHint, approvalLinesHaveHint, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, extractApprovalOptions, approvalContextLines, isBatchOptions, isMultiSelectOptions, isMultiQuestionPrompt, isHubChoicePrompt, markHubChoiceDefault, matchNativeApprovalTrigger, hasApprovalLikeLabel, userSpecifiesRe, ungluedApprovalLines, normalizeVtCursorOps, approvalQuestionKey, approvalSig,
+  lineHasHint, linesHaveHint, approvalLineHasHint, approvalLinesHaveHint, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, extractApprovalOptions, approvalContextLines, isBatchOptions, isMultiSelectOptions, isMultiQuestionPrompt, isHubChoicePrompt, markHubChoiceDefault, matchNativeApprovalTrigger, hasApprovalLikeLabel, userSpecifiesRe, ungluedApprovalLines, normalizeVtCursorOps, approvalQuestionKey, approvalSig, inheritMarkerBlockSig,
 } = __esmRoot.approvalParser;

@@ -19,6 +19,39 @@ func TestVTBufferCursorAndErase(t *testing.T) {
 	}
 }
 
+// TestVTBufferResizeDropsScrollback は、サイズが変わる resize で scrollback を捨てる
+// ことを検証する。このミラーは実端末と違い reflow しないため、resize 前に押し出された
+// 行は旧サイズの残骸でしかない。TUI は SIGWINCH で画面全体を描き直すので同じ内容が
+// 新しい世代として必ず流れてくる。残すと承認マーカーの開始行が新旧 2 本同居する。
+func TestVTBufferResizeDropsScrollback(t *testing.T) {
+	vt := newVTBuffer(40, 3)
+	for i := 0; i < 10; i++ {
+		vt.Write([]byte(fmt.Sprintf("line%d\r\n", i)))
+	}
+	if len(vt.scrollback) == 0 {
+		t.Fatal("scrollback did not grow; test setup is wrong")
+	}
+	vt.Resize(40, 12)
+	if len(vt.scrollback) != 0 {
+		t.Fatalf("scrollback = %d lines after resize, want 0", len(vt.scrollback))
+	}
+}
+
+// TestVTBufferSameSizeResizeKeepsScrollback は、同一サイズの Resize では履歴を捨てない
+// ことを検証する。同じサイズなら TUI へ SIGWINCH は届かず再描画も起きないため、捨てると
+// 画面高を超える承認ブロック（Grok の複数質問等）を取りこぼすだけになる。
+func TestVTBufferSameSizeResizeKeepsScrollback(t *testing.T) {
+	vt := newVTBuffer(40, 3)
+	for i := 0; i < 10; i++ {
+		vt.Write([]byte(fmt.Sprintf("line%d\r\n", i)))
+	}
+	before := len(vt.scrollback)
+	vt.Resize(40, 3)
+	if len(vt.scrollback) != before {
+		t.Fatalf("scrollback = %d lines, want %d", len(vt.scrollback), before)
+	}
+}
+
 // TestVTBufferCapsUnterminatedEscape は、未終端 CSI（ESC [ の後に最終バイト
 // 0x40-0x7e が来ないパラメータバイト列）を大量に送っても内部エスケープバッファ
 // b.esc が無制限に増加しないことを検証する。悪意ある/プロンプトインジェクションされた

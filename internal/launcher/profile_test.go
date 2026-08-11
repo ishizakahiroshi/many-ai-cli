@@ -365,7 +365,7 @@ func TestProfileJSONRoundTrip(t *testing.T) {
 		Host:         "203.0.113.10",
 		User:         "root",
 		SSHPort:      22,
-		IdentityFile: `C:\dev\.ssh\key.pem`,
+		IdentityFile: `D:\dev\.ssh\key.pem`,
 		TokenCommand: "docker exec aac-x sed -n 's/^token: //p' ~/.many-ai-cli/config.yaml",
 		HubPort:      47801,
 	}

@@ -59,7 +59,7 @@ func makeSupervisor(
 		closeDone:        closeDone,
 		reconnectCh:      reconnectCh,
 		startReceiveLoop: func(_ *websocket.Conn) {},
-		snapshotReplay:   func() []byte { return nil },
+		snapshotReplay:   func() ([]byte, int64) { return nil, 0 },
 		probeHub:         func(_ *config.Config) bool { return probeAlive },
 	}
 }
@@ -314,8 +314,10 @@ func TestWriteWithTrailingEnter_SplitsTrailingCR(t *testing.T) {
 	}
 }
 
-// TestWriteWithTrailingEnter_NoSplitForSingleByte は1バイトデータはそのまま書くことを確認する。
-func TestWriteWithTrailingEnter_NoSplitForSingleByte(t *testing.T) {
+// TestWriteWithTrailingEnter_WritesSingleEnter は単独 Enter を書けることを確認する。
+// 分離による待機は writePTY が空スライスを書かないため、shouldSplitTrailingEnter の
+// 経路テストと組み合わせて検証する。
+func TestWriteWithTrailingEnter_WritesSingleEnter(t *testing.T) {
 	var writes [][]byte
 	mock := &writeTracker{writeFunc: func(p []byte) (int, error) {
 		cp := make([]byte, len(p))
@@ -324,12 +326,31 @@ func TestWriteWithTrailingEnter_NoSplitForSingleByte(t *testing.T) {
 		return len(p), nil
 	}}
 	data := []byte("\r")
-	writeWithTrailingEnter(mock, data, 1*time.Millisecond)
+	if err := writeWithTrailingEnter(mock, data, 1*time.Millisecond); err != nil {
+		t.Fatalf("writeWithTrailingEnter returned error: %v", err)
+	}
 	if len(writes) != 1 {
 		t.Fatalf("expected 1 write, got %d", len(writes))
 	}
 	if string(writes[0]) != "\r" {
 		t.Errorf("write = %q, want %q", writes[0], "\r")
+	}
+}
+
+// TestWriteWithTrailingEnter_DoesNotSplitSingleNonEnter は単独の通常キーを変えない。
+func TestWriteWithTrailingEnter_DoesNotSplitSingleNonEnter(t *testing.T) {
+	var writes [][]byte
+	mock := &writeTracker{writeFunc: func(p []byte) (int, error) {
+		cp := make([]byte, len(p))
+		copy(cp, p)
+		writes = append(writes, cp)
+		return len(p), nil
+	}}
+	if err := writeWithTrailingEnter(mock, []byte("1"), 1*time.Millisecond); err != nil {
+		t.Fatalf("writeWithTrailingEnter returned error: %v", err)
+	}
+	if len(writes) != 1 || string(writes[0]) != "1" {
+		t.Fatalf("writes = %q, want one write containing 1", writes)
 	}
 }
 

@@ -2,7 +2,7 @@
 import { cleanCopiedText, cleanOneLineText, showToast } from './util.js';
 import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
-import { activeSessionId, approvalRawOptionsCache, approvalVisibleCache, sessions, terminals, utf8Decoder } from './state.js';
+import { activeSessionId, approvalCandidateDebugKey, approvalCandidateIdentity, approvalRawOptionsCache, approvalSourceCache, approvalVisibleCache, sessions, terminals, utf8Decoder } from './state.js';
 import { autoExpand, inputEl, sendText, updateInputClearButton } from '../app.js';
 import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerminalPathStartBoundary, resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup, trimTerminalPathCandidate } from './path-links.js';
 import { ws } from './ws-client.js';
@@ -12,7 +12,7 @@ import { addPromptTemplate } from './prompt-templates.js';
 import { resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
 import { isGrokChatViewerOpen, openGrokChatViewer, resetGrokChatViewerForSessionChange } from './grok-chat-viewer.js';
 import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
-import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, showCursorSeq } from './cursor-hide-filter.js';
+import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, shouldBypassCursorHideFilterForProvider, showCursorSeq } from './cursor-hide-filter.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
 export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossibleMarkerPrefix } from './hub-marker-filter.js';
 
@@ -330,6 +330,7 @@ export function ensureTerminal(id) {
     pendingFlushActive: false,
     pendingFlushSeq: 0,
     pendingFlushWatchdog: null,
+    pendingFlushCallbacks: [],
     pendingTextTail: '',
     textDecoder: new TextDecoder('utf-8'),
     markerFilterCarry: new Uint8Array(0),
@@ -386,7 +387,7 @@ export function attachTerminal(id) {
       fitTerminalPreservingBottom(t, id);
       // 寸法が実際に変わった場合のみ送信（不要な SIGWINCH → 再描画 → 空白行挿入を防ぐ）
       if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
-        sendResize(id, t.term.cols, t.term.rows);
+        sendResize(id, t.term.cols, t.term.rows, 'attach-fit');
       }
       // 配置・fit 確定後に WebGL レンダラを再生成する
       enableWebglRenderer(t);
@@ -508,7 +509,7 @@ export function whenLayoutReady(id, container) {
     flushPending(id);
     t.everAttached = true;
     if (!isPtyResizeSuppressed()) {
-      sendResize(id, t.term.cols, t.term.rows);
+      sendResize(id, t.term.cols, t.term.rows, 'terminal-init');
     }
     container.addEventListener('contextmenu', (e) => {
       e.preventDefault();
@@ -643,16 +644,25 @@ export function isLiveOutputBatching(t) {
   return !!t && Date.now() < (t.liveBatchUntil || 0);
 }
 
+function runPendingFlushCallbacks(t) {
+  const callbacks = t.pendingFlushCallbacks.splice(0);
+  for (const callback of callbacks) callback();
+}
+
 export function flushPending(id, onDrained: (() => void) | null = null) {
   const t = terminals.get(id);
   if (!t) return;
+  if (onDrained) t.pendingFlushCallbacks.push(onDrained);
+  // xterm の write 完了前に resize タイマー等が再入しても、新しい flush は開始しない。
+  // pendingChunks と完了コールバックは現在の write が終わった後にまとめて drain する。
+  if (t.pendingFlushActive) return;
   const chunks = t.pendingChunks;
   t.pendingChunks = [];
   t.pendingTotalBytes = 0;
   if (chunks.length === 0) {
     if (t.autoScroll) { t.term.scrollToBottom(); syncViewportScrollbarToBottom(t); }
     scheduleApprovalCheck(id);
-    if (onDrained) onDrained();
+    runPendingFlushCallbacks(t);
     return;
   }
   const seq = (t.pendingFlushSeq || 0) + 1;
@@ -675,12 +685,12 @@ export function flushPending(id, onDrained: (() => void) | null = null) {
     }
     latest.pendingFlushActive = false;
     if (latest.pendingChunks.length > 0) {
-      requestAnimationFrame(() => flushPending(id, onDrained));
+      requestAnimationFrame(() => flushPending(id));
       return;
     }
     if (latest.autoScroll) { latest.term.scrollToBottom(); syncViewportScrollbarToBottom(latest); }
     scheduleApprovalCheck(id);
-    if (onDrained) onDrained();
+    runPendingFlushCallbacks(latest);
   };
   t.pendingFlushWatchdog = setTimeout(finish, TERMINAL_WRITE_FLUSH_WATCHDOG_MS);
 
@@ -996,7 +1006,7 @@ export function refitAndStickTerminalToBottomSoon(id, opts: any = {}) {
     fitTerminalPreservingBottom(t, id, true);
     // SIGWINCH の送信は抑制中はスキップ（action-bar が閉じた時に正しいサイズで1回だけ送る）。
     if ((t.term.cols !== prevCols || t.term.rows !== prevRows) && !isPtyResizeSuppressed()) {
-      sendResize(id, t.term.cols, t.term.rows);
+      sendResize(id, t.term.cols, t.term.rows, 'refit-stick-bottom');
     }
     scrollTerminalToBottomSoon(id, { force, passes: 1, startedAt });
   };
@@ -1068,7 +1078,7 @@ export function refitActiveTerminalAfterLayout(stickToBottom) {
     const dimsChanged = t.term.cols !== prevCols || t.term.rows !== prevRows;
     if (dimsChanged) {
       if (!isPtyResizeSuppressed()) {
-        sendResize(id, t.term.cols, t.term.rows);
+        sendResize(id, t.term.cols, t.term.rows, 'refit-after-layout');
       }
     }
     if (stickToBottom) {
@@ -1322,6 +1332,11 @@ export function filterCursorHideShowBlocksForDisplay(id, bytes) {
     t.cursorHideBlockBuf = [];
     t.cursorHideHasAbsPos = false;
     t.cursorHideHasNewline = false;
+    return bytes;
+  }
+  // Grok/Codex は CUP を本文・フルフレーム描画にも使うため素通しする。
+  // Claude のメインバッファ上のスピナー除去と OpenCode の alt buffer 保護は維持する。
+  if (shouldBypassCursorHideFilterForProvider(sessions.get(id)?.provider)) {
     return bytes;
   }
   const { out, state, events } = filterCursorHideBlocksPure(bytes, {
@@ -1788,13 +1803,28 @@ export function scanBuffer(id, limit?: number) {
 
 // ---- resize ----
 
-export function sendResize(sessionId, cols, rows) {
+export function sendResize(sessionId, cols, rows, reason = 'unknown', resizeIdentity: any = null) {
   if (ws && ws.readyState === WebSocket.OPEN) {
+    const approvalOptions = approvalRawOptionsCache.get(sessionId);
+    const approvalIdentity = resizeIdentity || (Array.isArray(approvalOptions) && approvalOptions.length > 0
+      ? approvalCandidateIdentity(sessionId, approvalOptions, approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker')
+      : null);
     ws.send(JSON.stringify({ type: 'pty_resize', session_id: sessionId, cols, rows }));
     // SIGWINCH を受けた TUI（Codex 等）はトランスクリプト全体を再描画する。
     // 直後のバーストを一括描画して、全文が上から下へ流れて見えるのを防ぐ。
     beginLiveOutputBatchForResize(sessionId);
   }
+}
+
+export function claimPtyResizeOwnership(sessionId) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const t = terminals.get(sessionId);
+  const message: any = { type: 'ui_active_session', session_id: sessionId };
+  if (canFitTerminal(t)) {
+    message.cols = t.term.cols;
+    message.rows = t.term.rows;
+  }
+  ws.send(JSON.stringify(message));
 }
 
 export function applyRemotePtyResize(sessionId, cols, rows) {
@@ -1855,20 +1885,24 @@ export function isPtyResizeSuppressed() {
 // 行数を縮めるため local 側は既に縮小済みのことがある。差分ではなく現在サイズを無条件
 // に送る（reassertActivePtySize と同方針）。連続呼び出しは 1 本のタイマーへ束ねる。
 let settlePtyResizeTimer: any = null;
-export function syncPtySizeToViewportAfterLayout(id, stick = true, delayMs = 400) {
+let pendingLayoutResize: { id: number; stick: boolean; reason: string; identity?: any } | null = null;
+export function syncPtySizeToViewportAfterLayout(id, stick = true, delayMs = 400, reason = 'settle-after-layout', identity: any = null) {
+  pendingLayoutResize = { id, stick, reason, identity };
   if (settlePtyResizeTimer) { clearTimeout(settlePtyResizeTimer); settlePtyResizeTimer = null; }
   settlePtyResizeTimer = setTimeout(() => {
     settlePtyResizeTimer = null;
-    if (id !== activeSessionId) return;
-    const t = terminals.get(id);
+    const pending = pendingLayoutResize;
+    pendingLayoutResize = null;
+    if (!pending || pending.id !== activeSessionId) return;
+    const t = terminals.get(pending.id);
     if (!canFitTerminal(t)) return;
     clearSuppressPtyResize();
-    if (stick) t.autoScroll = true;
-    fitTerminalPreservingBottom(t, id, true);
+    if (pending.stick) t.autoScroll = true;
+    fitTerminalPreservingBottom(t, pending.id, true);
     // local が既に縮小済みでも Codex へ未通知の可能性があるため無条件に送る。
-    sendResize(id, t.term.cols, t.term.rows);
+    sendResize(pending.id, t.term.cols, t.term.rows, pending.reason, pending.identity);
     // Codex は SIGWINCH で全画面再描画しスクロールが飛ぶため、確定後に最下部へ張り直す。
-    if (stick) scrollTerminalToBottomSoon(id, { force: true, passes: 2, startedAt: Date.now() });
+    if (pending.stick) scrollTerminalToBottomSoon(pending.id, { force: true, passes: 2, startedAt: Date.now() });
   }, delayMs);
 }
 
@@ -1882,7 +1916,7 @@ export function refitAllTerminals(refreshRows = false) {
       t.term.refresh(0, t.term.rows - 1);
     }
     if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
-      sendResize(id, t.term.cols, t.term.rows);
+      sendResize(id, t.term.cols, t.term.rows, 'refit-all');
     }
   });
 }
@@ -1906,7 +1940,7 @@ export const resizeObserver = new ResizeObserver(() => {
     fitTerminalPreservingBottom(t, activeSessionId);
     if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
       if (!isPtyResizeSuppressed()) {
-        sendResize(activeSessionId, t.term.cols, t.term.rows);
+        sendResize(activeSessionId, t.term.cols, t.term.rows, 'resize-observer');
       }
     }
     if (shouldFollowBottom) {
@@ -1926,25 +1960,24 @@ window.addEventListener('resize', () => {
   refitAllTerminals(true);
 });
 
-// 別窓 Session Grid（detached-grid）と通常 Hub は同一セッションの PTY を共有する。
-// 別窓側は自スロットの小さいサイズに PTY をフィットさせるため、別窓を操作した後
-// 通常 Hub に戻ると PTY が縮んだまま（このウィンドウの xterm の cols/rows は変わって
-// いないので resizeObserver は発火せず、PTY が再アサートされない）。
-// ウィンドウがフォーカス/可視に戻ったタイミングで、アクティブセッションの正しい
-// サイズへ PTY を取り戻す（local の cols/rows 変化に依らず無条件で sendResize する）。
+// フォーカス復帰時は visual fit のみ行い、実寸が変わった場合だけ resize を送る。
+// サイズ権の取得はセッション操作または入力時に行うため、複数 UI がフォーカス移動
+// だけで互いの PTY サイズを押し付け合うことはない。
 export function reassertActivePtySize() {
-  // detached-grid ウィンドウ自身では実行しない（PTY 主導権を奪い合わないため）。
-  if (window.detachedGridManager) return;
   if (activeSessionId === null) return;
   if (isPtyResizeSuppressed()) return;
   const t = terminals.get(activeSessionId);
   if (!canFitTerminal(t)) return;
+  const prevCols = t.term.cols;
+  const prevRows = t.term.rows;
   fitTerminalPreservingBottom(t, activeSessionId);
-  // PTY は別窓に縮められている可能性があるため、local 変化に関わらず再送する。
-  sendResize(activeSessionId, t.term.cols, t.term.rows);
+  if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
+    sendResize(activeSessionId, t.term.cols, t.term.rows, 'reassert-active');
+  }
 }
 
 window.addEventListener('focus', reassertActivePtySize);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) reassertActivePtySize();
 });
+

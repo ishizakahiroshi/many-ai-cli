@@ -104,8 +104,7 @@ func WriteTranscriptFile(jsonlPath, outPath string) error {
 }
 
 func WriteTranscript(r io.Reader, w io.Writer) error {
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 64*1024), 8*1024*1024)
+	br := bufio.NewReader(r)
 
 	var output strings.Builder
 	var lastOutput string
@@ -121,9 +120,16 @@ func WriteTranscript(r io.Reader, w io.Writer) error {
 		return err
 	}
 
-	for sc.Scan() {
+	for {
+		line, readErr := br.ReadBytes('\n')
+		if len(line) == 0 && readErr != nil {
+			if readErr == io.EOF {
+				break
+			}
+			return readErr
+		}
 		var ev transcriptEvent
-		if err := json.Unmarshal(sc.Bytes(), &ev); err != nil {
+		if err := json.Unmarshal(line, &ev); err != nil {
 			// クラッシュ復旧経路（Hub の maintenance.recoverTranscripts）は
 			// まさに .jsonl 末尾行が書き込み途中で切れた状態で呼ばれるため、
 			// 1 行の破損で return するとその手前まで書けていた行を含めて
@@ -183,9 +189,12 @@ func WriteTranscript(r io.Reader, w io.Writer) error {
 			}
 			fmt.Fprintf(w, "\n[%s] %s\n", ev.TS, ev.Type)
 		}
-	}
-	if err := sc.Err(); err != nil {
-		return err
+		if readErr != nil {
+			if readErr == io.EOF {
+				break
+			}
+			return readErr
+		}
 	}
 	return flushOutput()
 }

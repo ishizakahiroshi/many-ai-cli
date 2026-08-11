@@ -44,3 +44,17 @@ func TestWriteLinuxDesktop(t *testing.T) {
 		}
 	}
 }
+
+func TestWriteLinuxDesktopEscapesPercentInExec(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "start.desktop")
+	if err := writeLinuxDesktop(path, "/opt/100%/many-ai-cli", "Many AI", "serve"); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `Exec="/opt/100%%/many-ai-cli" serve`) {
+		t.Fatalf("Exec percent was not escaped:\n%s", body)
+	}
+}

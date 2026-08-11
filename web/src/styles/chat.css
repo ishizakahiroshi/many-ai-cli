@@ -426,6 +426,44 @@
 }
 #chat-pane .tool-call.open .tool-call-body { display: block; }
 
+/* Native transcript metadata is structured, so keep it available without
+   letting reasoning and tool details dominate the conversation body. */
+#chat-pane .chat-transcript-section {
+  margin-top: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-md);
+  background: rgba(15,23,42,0.38);
+  overflow: hidden;
+}
+#chat-pane .chat-transcript-section > summary {
+  padding: 6px 10px;
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  user-select: none;
+}
+#chat-pane .chat-transcript-section > summary:hover {
+  color: #e2e8f0;
+  background: rgba(255,255,255,0.03);
+}
+#chat-pane .chat-transcript-thinking-item {
+  padding: 7px 10px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  color: #a8b1c2;
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+#chat-pane .chat-transcript-tools {
+  background: rgba(0,0,0,0.18);
+}
+#chat-pane .chat-transcript-tools .tool-call {
+  margin: 0;
+  border-width: 1px 0 0;
+  border-radius: 0;
+}
+
 /* attached images / thumbs */
 #chat-pane .attachments {
   display: flex;

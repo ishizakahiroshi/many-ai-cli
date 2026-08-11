@@ -30,6 +30,10 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)((?:[A-Z0-9]+_)?(?:PASSWORD|PASSWD|PWD|SECRET|ACCESS_KEY|SECRET_KEY|AUTH_TOKEN|API_TOKEN|ACCESS_TOKEN)\s*[=:]\s*)\S{6,}`),
 	// Anthropic / OpenAI トークン: sk-ant-... / sk-...
 	regexp.MustCompile(`sk-(?:ant-)?[A-Za-z0-9_\-]{20,}`),
+	// xAI / Grok, Cohere, Mistral provider tokens.
+	regexp.MustCompile(`xai-[A-Za-z0-9_\-]{20,}`),
+	regexp.MustCompile(`gsk_[A-Za-z0-9_\-]{20,}`),
+	regexp.MustCompile(`(?:cohere|mistral)[_-](?:api[_-])?key[_-][A-Za-z0-9_\-]{16,}`),
 	// GitHub tokens: classic PAT, fine-grained PAT, OAuth / user / server / refresh tokens.
 	regexp.MustCompile(`(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_)[A-Za-z0-9_]{20,}`),
 	// GitLab personal access tokens.

@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   filterCursorHideBlocksPure,
   MAX_CURSOR_HIDE_BUF,
+  shouldBypassCursorHideFilterForProvider,
   type CursorHideFilterState,
 } from './cursor-hide-filter.js';
 
@@ -26,6 +27,14 @@ const HIDE = '\x1b[?25l';
 const SHOW = '\x1b[?25h';
 const ALT_ENTER = '\x1b[?1049h';
 const ALT_EXIT = '\x1b[?1049l';
+
+test('provider 別バイパス: Codex/Grok のみ cursor-hide フィルタを通さない', () => {
+  assert.equal(shouldBypassCursorHideFilterForProvider('codex'), true);
+  assert.equal(shouldBypassCursorHideFilterForProvider('grok'), true);
+  assert.equal(shouldBypassCursorHideFilterForProvider('claude'), false);
+  assert.equal(shouldBypassCursorHideFilterForProvider('opencode'), false);
+  assert.equal(shouldBypassCursorHideFilterForProvider(undefined), false);
+});
 
 // Grok Build 実セッション（s6・2026-07-03）と同形の「CUP 絶対移動・LF なし」応答ブロック。
 // 本文テキストは合成データ（実プロンプト/実応答は fixture に貼らない）。

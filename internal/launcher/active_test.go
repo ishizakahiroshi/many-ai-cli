@@ -126,6 +126,61 @@ func TestUnregisterAllForPID(t *testing.T) {
 	}
 }
 
+func TestSaveActiveFileRemovesStaleTempArtifact(t *testing.T) {
+	_, cleanup := setupTempHome(t)
+	defer cleanup()
+	path, err := activePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(filepath.Dir(path), "launcher-active-stale.json.tmp")
+	if err := os.WriteFile(stale, []byte("partial"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-activeTempStaleAfter - time.Minute)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveActiveFile(&activeFileData{Version: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("stale temp artifact still exists: %v", err)
+	}
+}
+
+func TestCleanupStaleActiveTempsPreservesFreshWriter(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
+	stale := filepath.Join(dir, "launcher-active-stale.json.tmp")
+	fresh := filepath.Join(dir, "launcher-active-fresh.json.tmp")
+	for _, path := range []string{stale, fresh} {
+		if err := os.WriteFile(path, []byte("partial"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	staleTime := now.Add(-activeTempStaleAfter - time.Second)
+	freshTime := now.Add(-activeTempStaleAfter + time.Second)
+	if err := os.Chtimes(stale, staleTime, staleTime); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(fresh, freshTime, freshTime); err != nil {
+		t.Fatal(err)
+	}
+
+	cleanupStaleActiveTemps(dir, now)
+
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("stale temp artifact still exists: %v", err)
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Fatalf("fresh temp artifact was removed: %v", err)
+	}
+}
+
 // --- Pruning (double guard) ---
 
 func TestCollectActivePrunesDeadPID(t *testing.T) {

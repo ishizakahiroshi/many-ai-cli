@@ -36,6 +36,15 @@ type Report struct {
 	Checks []Check `json:"checks"`
 }
 
+const providerVersionTimeout = 3 * time.Second
+
+var (
+	providerLookPath      = exec.LookPath
+	providerVersionOutput = func(ctx context.Context, path string) ([]byte, error) {
+		return exec.CommandContext(ctx, path, "--version").Output()
+	}
+)
+
 // Run performs bounded, local checks only. It never writes configuration or logs.
 func Run(ctx context.Context, cfg *config.Config) Report {
 	return Report{Checks: []Check{
@@ -54,12 +63,12 @@ func providers(ctx context.Context) Check {
 	names := []string{"claude", "codex", "copilot", "cursor-agent", "opencode", "grok"}
 	var found []string
 	for _, name := range names {
-		path, err := exec.LookPath(name)
+		path, err := providerLookPath(name)
 		if err != nil {
 			continue
 		}
-		versionCtx, cancel := context.WithTimeout(ctx, time.Second)
-		out, err := exec.CommandContext(versionCtx, path, "--version").Output()
+		versionCtx, cancel := context.WithTimeout(ctx, providerVersionTimeout)
+		out, err := providerVersionOutput(versionCtx, path)
 		cancel()
 		if err == nil && strings.TrimSpace(string(out)) != "" {
 			found = append(found, name+" ("+firstLine(string(out))+")")

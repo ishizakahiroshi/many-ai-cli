@@ -162,6 +162,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		HomeDir:         reg.HomeDir,
 		CodexHome:       reg.CodexHome,
 		ClaudeDir:       reg.ClaudeDir,
+		AgentSessionID:  reg.AgentSessionID,
 		Activity:        SessionActivity{OutputIdle: true},
 		State:           "standby",
 		StartedAt:       startedAt.Format(time.RFC3339),
@@ -169,6 +170,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		LogPath:         rawLogPath,
 		JSONLPath:       jsonlPath,
 		History:         history,
+		inflightInput:   map[int64]inflightInput{},
 	}
 	ses.inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
 	if childMeta.OrchestrationID != "" {
@@ -180,6 +182,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	}
 	s.sessions[id] = ses
 	wc := newWrapperConn(conn)
+	wc.pid = reg.PID
 	s.wrappers[id] = wc
 	s.sessionsMu.Unlock()
 	if initCols == 0 || initRows == 0 {
@@ -234,14 +237,14 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 			"session_id", id, "provider", reg.Provider)
 		return
 	}
-	// diag 継続: docs/local/bugfix_statusline-settings-skip_2026-07-10.md
+	// diag 継続: docs/local/archive/v0.5.x/bugfix_statusline-settings-skip_2026-07-10.md
 	// Hub が register ack に載せる TokenStatusbar 実測値。wrapper の
 	// statusline_gate_wrapper と突き合わせ「send=true → reg=false」の JSON 劣化を
 	// 確定する。2026-07-19 時点 hub.log は send=true のみ（false 0）だが wrapper 側
 	// 未突合のため残置（原因確定後に外す）。
 	tokenStatusbarForAck := s.tokenStatusbarEnabled()
 	s.logger.Info("statusline_gate_hub", "session_id", id, "provider", reg.Provider, "token_statusbar_send", tokenStatusbarForAck)
-	_ = wc.send(proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, TokenStatusbar: tokenStatusbarForAck, OrchestrationID: childMeta.OrchestrationID, BoardPath: childMeta.BoardPath})
+	_ = wc.send(proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, TokenStatusbar: tokenStatusbarForAck, OrchestrationID: childMeta.OrchestrationID, Auto: childMeta.Auto, BoardPath: childMeta.BoardPath})
 	s.logger.Info("session registered", "id", id, "provider", reg.Provider, "cwd", reg.CWD, "pid", reg.PID)
 	// C2 (plan_orchestration-spawn-ui-exposure.md): conductor セッション（ツールバーの
 	// 「オーケストレーション」ボタン経由・Auto=false）にだけ役割マッピングの案内を注入する。
@@ -258,12 +261,19 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		s.safeGo("inject_initial_prompt_conductor", func() { s.injectInitialPrompt(id, prompt) })
 	}
 	// announce 直前に再確認（inject 後〜ここまでの狭い窓での dismiss も拾う）。
-	if !s.wrapperStillRegistered(id, wc) {
+	// sessionUpdateMessage は approvalSourceEpoch を読むため、ここだけは
+	// pointer を保持したままロック外で組み立てず、現在の session を lock 内で
+	// 確認して snapshot 化する。
+	s.sessionsMu.Lock()
+	currentSession := s.sessions[id]
+	if currentSession == nil || s.wrappers[id] != wc {
+		s.sessionsMu.Unlock()
 		s.logger.Info("session dismissed before announce; skip session_update",
 			"session_id", id, "provider", reg.Provider)
 		return
 	}
-	announce := sessionUpdateMessage(ses)
+	announce := sessionUpdateMessage(currentSession)
+	s.sessionsMu.Unlock()
 	announce.Shell = reg.Shell
 	announce.LogPath = rawLogPath
 	announce.JSONLPath = jsonlPath
@@ -285,7 +295,33 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		"orchestration_id":  childMeta.OrchestrationID,
 		"board_path":        childMeta.BoardPath,
 	})
+	s.startAgentChatTail(id)
 	s.wrapperMessageLoop(wc, id)
+}
+
+// reattachIdentityMatches は「今 reattach を要求してきた wrapper が、その ID に
+// 載っている既存接続と同じプロセスか」を判定する。
+//
+// wrapper は PTY 出力の送信キューが溢れたとき、途中のバイト列を捨てると端末画面が
+// 復元不能に壊れるため、自分から WS を切って張り直す（internal/wrapper/wrapper.go
+// の ptyOutputWriter.enqueue）。この張り直しは Hub 側の切断検知より先に着くことが
+// あり、その瞬間 s.wrappers[id] にはまだ古い接続が載っている。これを「別 wrapper と
+// の ID 衝突」と扱って新 ID を振ると、同一プロセスに 2 つ目のセッション番号が生まれ、
+// UI ではカードが 2 枚に割れる。古い側は承認待ちの表示を抱えたまま宛先を失い、
+// 新しい側は Hub の受信累計 0 から始まってスクロールバックを失う
+// （2026-08-05 に #15 → #17 で発生。同一 pid=6224）。
+//
+// PID は OS が再利用するため単独では同一性の根拠にせず、provider と cwd も一致を
+// 要求する。いずれかが欠ける古い wrapper からの reattach は従来どおり renumber へ
+// 倒す（誤って他人のセッションを乗っ取るより、番号が変わる方が安全側）。
+func reattachIdentityMatches(prev *wrapperConn, ses *session, req proto.Message) bool {
+	if prev == nil || ses == nil {
+		return false
+	}
+	if req.PID <= 0 || prev.pid <= 0 || prev.pid != req.PID {
+		return false
+	}
+	return ses.Provider == req.Provider && ses.CWD == req.CWD
 }
 
 func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
@@ -339,9 +375,15 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	// 行の発生を防ぐ）。
 	s.sessionsMu.Lock()
 	acceptedID := req.SessionID
-	if s.wrappers[acceptedID] != nil {
-		s.nextID++
-		acceptedID = s.nextID
+	var staleConn *wrapperConn
+	if prev := s.wrappers[acceptedID]; prev != nil {
+		if reattachIdentityMatches(prev, s.sessions[acceptedID], req) {
+			// 同一 wrapper の張り直し。ID は維持し、古い接続だけ後で閉じる。
+			staleConn = prev
+		} else {
+			s.nextID++
+			acceptedID = s.nextID
+		}
 	}
 	if s.nextID < acceptedID {
 		s.nextID = acceptedID
@@ -378,8 +420,113 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	}, cardMeta)
 	s.sessionsMu.Lock()
 	var oldHistory *sessionlog.Writer
+	// 切断前のターミナル文脈（ptyBuf / VT ミラー / 受信累計）を引き継ぐ。
+	// 以前は replay(64KB) で丸ごと置き換えていたため、再接続のたびに Hub 側の
+	// スクロールバックが 64KB へ切り詰められ、ブラウザ再読込で履歴が失われていた。
+	var prevPTYBuf []byte
+	var prevVT *vtBuffer
+	var prevCols, prevRows int
+	var prevSeen int64
+	var prevInputSeq int64
+	var prevInflightInput map[int64]inflightInput
+	var prevResendInput []pendingFrame
+	var prevInputAckCapable bool
+	var prevAgentChatPath string
+	var prevAgentChatOffset int64
+	var prevReplayEpoch uint64
+	var prevApprovalSourceEpoch uint64
+	var prevApprovalEpochPending bool
+	var prevApprovalConsumedCandidateKey string
+	var prevApprovalConsumedCandidateShape string
+	var prevApprovalConsumedEpoch uint64
+	var prevNativeApprovalSig string
+	var prevNativeApprovalCandidateKey string
+	var prevNativeApprovalCandidateShape string
+	var prevNativeApprovalSourceEpoch uint64
+	var prevNativeApprovalTailSig string
+	var prevNativeApprovalClearMisses int
+	var prevNativeApprovalConsumed string
+	var prevNativeApprovalConsumedAt time.Time
+	var prevApprovalMarkerSig string
+	var prevApprovalMarkerCandidateKey string
+	var prevApprovalMarkerCandidateShape string
+	var prevApprovalMarkerSourceEpoch uint64
+	var prevApprovalMarkerSuppressedSig string
+	var prevApprovalMarkerSuppressedAt time.Time
+	var requeuedInputCount int
+	var requeuedInputMinSeq int64
+	var requeuedInputMaxSeq int64
+	prevExists := false
 	if cur := s.sessions[acceptedID]; cur != nil {
+		prevAgentChatPath = cur.agentChatPath
+		prevAgentChatOffset = cur.agentChatOffset
+		prevReplayEpoch = cur.replayEpoch
+		prevApprovalSourceEpoch = cur.approvalSourceEpoch
+		prevApprovalEpochPending = cur.approvalEpochPending
+		prevApprovalConsumedCandidateKey = cur.approvalConsumedCandidateKey
+		prevApprovalConsumedCandidateShape = cur.approvalConsumedCandidateShape
+		prevApprovalConsumedEpoch = cur.approvalConsumedEpoch
+		prevNativeApprovalSig = cur.nativeApprovalSig
+		prevNativeApprovalCandidateKey = cur.nativeApprovalCandidateKey
+		prevNativeApprovalCandidateShape = cur.nativeApprovalCandidateShape
+		prevNativeApprovalSourceEpoch = cur.nativeApprovalSourceEpoch
+		prevNativeApprovalTailSig = cur.nativeApprovalTailSig
+		prevNativeApprovalClearMisses = cur.nativeApprovalClearMisses
+		prevNativeApprovalConsumed = cur.nativeApprovalConsumed
+		prevNativeApprovalConsumedAt = cur.nativeApprovalConsumedAt
+		prevApprovalMarkerSig = cur.approvalMarkerSig
+		prevApprovalMarkerCandidateKey = cur.approvalMarkerCandidateKey
+		prevApprovalMarkerCandidateShape = cur.approvalMarkerCandidateShape
+		prevApprovalMarkerSourceEpoch = cur.approvalMarkerSourceEpoch
+		prevApprovalMarkerSuppressedSig = cur.approvalMarkerSuppressedSig
+		prevApprovalMarkerSuppressedAt = cur.approvalMarkerSuppressedAt
+		s.stopAgentChatTailLocked(cur)
 		oldHistory = cur.History
+		prevPTYBuf = cur.ptyBuf
+		prevVT = cur.vt
+		prevCols, prevRows = cur.lastCols, cur.lastRows
+		prevSeen = cur.ptyBytesSeen
+		prevInputSeq = cur.inputSeq
+		prevInflightInput = cur.inflightInput
+		if staleConn != nil {
+			requeuedInputCount, requeuedInputMinSeq, requeuedInputMaxSeq = s.deferInflightForResendLocked(acceptedID, staleConn)
+		}
+		// 再送キューと ack 対応フラグは deferInflightForResendLocked の後に読む
+		// （直前の切断分がここで resendInput へ積まれるため）。
+		prevResendInput = cur.resendInput
+		prevInputAckCapable = cur.inputAckCapable
+		prevExists = true
+	}
+	// gap = 切断中に Hub が受け取れなかったぶん。既存 UI へはこれだけを流す。
+	gap := replay
+	ptyBuf := replay
+	ptyBytesSeen := int64(len(replay))
+	var vt *vtBuffer
+	if prevExists {
+		gap = reattachReplayGap(replay, req.PTYBytes, prevSeen)
+		ptyBuf = appendPTYReplay(prevPTYBuf, gap)
+		ptyBytesSeen = prevSeen + int64(len(gap))
+		if req.PTYBytes > 0 {
+			// replay 窓を超える穴があった場合でも、以降の差分計算が
+			// ずれ続けないよう累計は wrapper 側の実数に合わせ直す。
+			ptyBytesSeen = req.PTYBytes
+		}
+		if prevVT != nil && prevCols == req.Cols && prevRows == req.Rows {
+			// PTY サイズが同じなら既存ミラーを温存し、差分だけを書き足す。
+			// 作り直すと scrollback（承認マーカー抽出が使う）が 64KB 相当に痩せる。
+			vt = prevVT
+			if len(gap) > 0 {
+				vt.Write(gap)
+			}
+		}
+	}
+	if vt == nil {
+		// 新規（Hub 再起動後の cold reattach）／PTY サイズ変更時は従来どおり
+		// replay からミラーを作り直す。旧サイズのまま書くと折り返しがずれる。
+		vt = newVTBuffer(req.Cols, req.Rows)
+		if len(replay) > 0 {
+			vt.Write(replay)
+		}
 	}
 	now := time.Now()
 	lastOutputAt := ""
@@ -388,48 +535,102 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		lastOutputAtTime = now
 		lastOutputAt = now.Format(time.RFC3339)
 	}
+	replayEpoch := uint64(1)
+	if prevExists && prevReplayEpoch > 0 {
+		replayEpoch = prevReplayEpoch + 1
+		if replayEpoch == 0 {
+			replayEpoch = 1
+		}
+	}
+	approvalSourceEpoch := prevApprovalSourceEpoch
+	if approvalSourceEpoch == 0 {
+		approvalSourceEpoch = 1
+	}
 	s.sessions[acceptedID] = &session{
-		ID:              acceptedID,
-		StoreID:         storeID,
-		Provider:        req.Provider,
-		Display:         req.Display,
-		CWD:             req.CWD,
-		Branch:          branch,
-		Label:           cardMeta.Label,
-		Pinned:          cardMeta.Pinned,
-		Color:           cardMeta.Color,
-		Note:            cardMeta.Note,
-		AutoTitle:       cardMeta.AutoTitle,
-		Model:           req.Model,
-		Route:           reqRoute,
-		Shell:           req.Shell,
-		HomeDir:         req.HomeDir,
-		CodexHome:       req.CodexHome,
-		ClaudeDir:       req.ClaudeDir,
-		Activity:        SessionActivity{OutputIdle: len(replay) == 0, WorkflowActive: len(replay) > 0},
-		State:           "running",
-		LastOutputAt:    lastOutputAt,
-		StartedAt:       startedAtText,
-		lastOutputAt:    lastOutputAtTime,
-		branchCheckedAt: now,
-		ptyBuf:          replay,
-		vt:              newVTBuffer(req.Cols, req.Rows),
-		lastCols:        req.Cols,
-		lastRows:        req.Rows,
-		LogPath:         rawLogPath,
-		JSONLPath:       jsonlPath,
-		History:         history,
+		ID:                             acceptedID,
+		StoreID:                        storeID,
+		Provider:                       req.Provider,
+		Display:                        req.Display,
+		CWD:                            req.CWD,
+		Branch:                         branch,
+		Label:                          cardMeta.Label,
+		Pinned:                         cardMeta.Pinned,
+		Color:                          cardMeta.Color,
+		Note:                           cardMeta.Note,
+		AutoTitle:                      cardMeta.AutoTitle,
+		Model:                          req.Model,
+		Route:                          reqRoute,
+		Shell:                          req.Shell,
+		HomeDir:                        req.HomeDir,
+		CodexHome:                      req.CodexHome,
+		ClaudeDir:                      req.ClaudeDir,
+		AgentSessionID:                 req.AgentSessionID,
+		Activity:                       SessionActivity{OutputIdle: len(replay) == 0, WorkflowActive: len(replay) > 0},
+		State:                          "running",
+		LastOutputAt:                   lastOutputAt,
+		StartedAt:                      startedAtText,
+		lastOutputAt:                   lastOutputAtTime,
+		branchCheckedAt:                now,
+		ptyBuf:                         ptyBuf,
+		ptyBytesSeen:                   ptyBytesSeen,
+		vt:                             vt,
+		replayEpoch:                    replayEpoch,
+		approvalSourceEpoch:            approvalSourceEpoch,
+		approvalEpochPending:           prevApprovalEpochPending,
+		approvalConsumedCandidateKey:   prevApprovalConsumedCandidateKey,
+		approvalConsumedCandidateShape: prevApprovalConsumedCandidateShape,
+		approvalConsumedEpoch:          prevApprovalConsumedEpoch,
+		nativeApprovalSig:              prevNativeApprovalSig,
+		nativeApprovalCandidateKey:     prevNativeApprovalCandidateKey,
+		nativeApprovalCandidateShape:   prevNativeApprovalCandidateShape,
+		nativeApprovalSourceEpoch:      prevNativeApprovalSourceEpoch,
+		nativeApprovalTailSig:          prevNativeApprovalTailSig,
+		nativeApprovalClearMisses:      prevNativeApprovalClearMisses,
+		nativeApprovalConsumed:         prevNativeApprovalConsumed,
+		nativeApprovalConsumedAt:       prevNativeApprovalConsumedAt,
+		approvalMarkerSig:              prevApprovalMarkerSig,
+		approvalMarkerCandidateKey:     prevApprovalMarkerCandidateKey,
+		approvalMarkerCandidateShape:   prevApprovalMarkerCandidateShape,
+		approvalMarkerSourceEpoch:      prevApprovalMarkerSourceEpoch,
+		approvalMarkerSuppressedSig:    prevApprovalMarkerSuppressedSig,
+		approvalMarkerSuppressedAt:     prevApprovalMarkerSuppressedAt,
+		lastCols:                       req.Cols,
+		lastRows:                       req.Rows,
+		LogPath:                        rawLogPath,
+		JSONLPath:                      jsonlPath,
+		History:                        history,
+		agentChatPath:                  prevAgentChatPath,
+		agentChatOffset:                prevAgentChatOffset,
+		// The old poll may still be parsing its state outside sessionsMu. Do not
+		// share that mutable pointer across reattach; the new poll primes a fresh
+		// bounded tail state before taking ownership of future bytes.
+		agentChatParseState: nil,
+		inputSeq:            prevInputSeq,
+		inflightInput:       prevInflightInput,
+		resendInput:         prevResendInput,
+		inputAckCapable:     prevInputAckCapable,
 	}
 	s.sessions[acceptedID].inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
-	if s.sessions[acceptedID].vt != nil && len(replay) > 0 {
-		s.sessions[acceptedID].vt.Write(replay)
-	}
 	wc := newWrapperConn(conn)
+	wc.pid = req.PID
 	s.wrappers[acceptedID] = wc
 	if s.nextID < acceptedID {
 		s.nextID = acceptedID
 	}
 	s.sessionsMu.Unlock()
+	if requeuedInputCount > 0 {
+		s.logger.Info("requeued in-flight pty_input",
+			"session_id", acceptedID,
+			"count", requeuedInputCount,
+			"seq_start", requeuedInputMinSeq,
+			"seq_end", requeuedInputMaxSeq,
+			"cause", "reattach")
+	}
+	if staleConn != nil {
+		// 新しい接続を wrappers へ載せた後に閉じる。逆順だと、閉じたことで走る
+		// 旧 wrapperMessageLoop の後始末が「まだ自分が現役」と見えてしまう。
+		staleConn.close()
+	}
 	// wrapper が一時切断中に届かなかった保留入力を、再接続したこの wrapper へ順番に再送する。
 	// 他のバックグラウンド goroutine と同様 safeGo で起動し、panic で Hub 全体を巻き込まないようにする。
 	s.safeGo("flush_pending_input", func() { s.flushPendingInput(acceptedID) })
@@ -456,6 +657,41 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	announce.LogPath = rawLogPath
 	announce.JSONLPath = jsonlPath
 	s.broadcast(announce)
+	// 切断中に取りこぼしたぶんを、すでに開いている UI へ流す。
+	// これを送らないとブラウザの xterm.js にはそのバイト列が永久に届かず、
+	// 絶対座標で部分再描画する TUI（Codex 等）は画面が古いまま復帰できない。
+	// wrapperMessageLoop はまだ開始していないので、ライブ配信と前後しない。
+	if len(gap) > 0 {
+		s.broadcast(proto.Message{
+			Type:        "pty_data",
+			SessionID:   acceptedID,
+			Data:        append([]byte(nil), gap...),
+			Replay:      true,
+			ReplayEpoch: replayEpoch,
+		})
+	}
+	s.broadcast(proto.Message{
+		Type:                   "reattach_replay_done",
+		SessionID:              acceptedID,
+		Replay:                 true,
+		ReplayEpoch:            replayEpoch,
+		ApprovalSourceEpoch:    approvalSourceEpoch,
+		ApprovalConsumed:       prevApprovalConsumedCandidateKey != "",
+		ApprovalCandidateKey:   prevApprovalConsumedCandidateKey,
+		ApprovalCandidateShape: prevApprovalConsumedCandidateShape,
+		ApprovalConsumedEpoch:  prevApprovalConsumedEpoch,
+	})
+	// The replay is drawn as one restoration unit. Evaluate the resulting VT
+	// once, after the completion boundary, instead of scanning/broadcasting each
+	// replay chunk as if it were live output.
+	s.evaluateReplayApproval(acceptedID)
+	s.logger.Info("reattach replay gap",
+		"session_id", acceptedID,
+		"had_session", prevExists,
+		"replay_bytes", len(replay),
+		"gap_bytes", len(gap),
+		"wrapper_pty_bytes", req.PTYBytes,
+		"hub_pty_bytes", prevSeen)
 	s.writeHistory(acceptedID, map[string]any{
 		"ts":             now.Format(time.RFC3339),
 		"type":           "session_reattach",
@@ -470,6 +706,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		"pid":            req.PID,
 		"renumbered":     acceptedID != req.SessionID,
 	})
+	s.startAgentChatTail(acceptedID)
 	s.wrapperMessageLoop(wc, acceptedID)
 }
 
@@ -512,11 +749,17 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			s.sessionsMu.Lock()
 			if ses := s.sessions[id]; ses != nil {
 				ses.ptyBuf = appendPTYReplay(ses.ptyBuf, m.Data)
+				ses.ptyBytesSeen += int64(len(m.Data))
 				if ses.vt == nil {
 					ses.vt = newVTBuffer(ses.lastCols, ses.lastRows)
 				}
 				ses.vt.Write(m.Data)
 				provider = ses.Provider
+				// Workflow VT は Claude の表示形式だけを較正済み。全 provider へ
+				// 広げると shell/codex の通常出力を workflow と誤認するため厳密に限定する。
+				if provider == "claude" {
+					s.queueWorkflowVTScanLocked(id, ses, now)
+				}
 				if chunkHasApprovalTrigger && now.Before(ses.vtResizeDebounceUntil) {
 					ses.nativeApprovalScanQueued = true
 				}
@@ -533,7 +776,15 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 					}
 					ses.nativeApprovalScanQueued = false
 				}
-				if isAIProvider(provider) {
+				// リサイズ直後の VT ミラーは reflow 途中で、TUI のコンポーザ枠が本文へ重なった
+				// 「マーカーの対も番号構造も正常だが本文だけ壊れた」ブロックを返す。これを配信すると
+				// 本文が変わって sha256 sig も変わるため Hub 側 dedupe を素通りし、Web 側の
+				// approvalConsumedSig / _blockSig も一致しなくなって、回答済みの承認バーが復活する。
+				// 実測（2026-08-01）: 一括送信 → action-bar 消滅 → rows 15→33 の resize →
+				// 約 40ms 後にマーカー再配信、選択肢ラベル末尾が罫線に置き換わっていた。
+				// ネイティブ承認スキャン（上の shouldCheckApproval）と同じく、resize debounce の間は
+				// ミラーを読まない。SIGWINCH 後の再描画で必ず次チャンクが来るので取りこぼしにならない。
+				if isAIProvider(provider) && now.After(ses.vtResizeDebounceUntil) {
 					// マーカー抽出は scrollback 込み（画面高超えブロック / Grok 対応）。
 					// ネイティブ承認は上の TailLines（現在画面のみ）のまま — 解決済みプロンプトの再検出を避ける。
 					marker = extractApprovalMarkerBlock(ses.vt.TailLinesWithScrollback(vtTailLinesForMarker))
@@ -592,6 +843,8 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				s.handleDoneSummaryMarker(id, doneSnap)
 			}
 			s.handleCommitMsgChunk(id, cleanText)
+		case "pty_input_ack":
+			s.handlePTYInputAck(wc, id, m.InputSeq)
 		case "session_end":
 			histEvent := map[string]any{
 				"ts":         time.Now().Format(time.RFC3339),
@@ -604,6 +857,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				histEvent["reason"] = m.Reason
 			}
 			s.writeHistory(id, histEvent)
+			s.stopAgentChatTail(id)
 			if m.State == "completed" || m.State == "error" {
 				s.sessionsMu.Lock()
 				if cur := s.sessions[id]; cur != nil {
@@ -617,20 +871,43 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				// EOF is nevertheless conclusive: notify the conductor through the
 				// same board path and stop waiting for that child.
 				s.completeOrchestrationChildOnSessionEnd(id, m.State)
+				// 実行中 workflow の heartbeat/journal タイマーを終端させる。
+				// 放置すると stale VT が settle を永久ブロックする（F1）。
+				s.finalizeWorkflowOnSessionEnd(id)
 			}
 		}
 	}
 
 	// wrapper 切断
 	s.sessionsMu.Lock()
-	if s.wrappers[id] == wc {
-		delete(s.wrappers, id)
+	if cur := s.wrappers[id]; cur != nil && cur != wc {
+		// この ID は既に別の接続へ差し替わっている（reattachIdentityMatches が同一
+		// wrapper と判定して番号を引き継いだ場合）。後始末を続けると現役セッションを
+		// disconnected に落とし、UI へ session_end を流し、保留入力・承認ルール・
+		// ログライターまで新しい接続の足元から消してしまう。差し替え済みなら降りる。
+		// なお wrappers[id] が nil のケース（UI の × による dismiss）は従来どおり
+		// 後始末を続ける必要がある（ここで降りるとログが閉じられず漏れる）。
+		requeuedCount, requeuedMinSeq, requeuedMaxSeq := s.deferInflightForResendLocked(id, wc)
+		s.sessionsMu.Unlock()
+		if requeuedCount > 0 {
+			s.logger.Info("requeued in-flight pty_input",
+				"session_id", id,
+				"count", requeuedCount,
+				"seq_start", requeuedMinSeq,
+				"seq_end", requeuedMaxSeq,
+				"cause", "stale_wrapper_disconnect")
+		}
+		s.logger.Debug("stale wrapper loop ended; session already reattached", "session_id", id)
+		return
 	}
+	delete(s.wrappers, id)
+	requeuedCount, requeuedMinSeq, requeuedMaxSeq := s.deferInflightForResendLocked(id, wc)
 	var historyToClose *sessionlog.Writer
 	var jsonlPathForTranscript string
 	var endedProvider, endedCWD string
 	// done/timeout も終端として保持する（オーケストレーション完了状態を disconnected で潰さない）。
 	if cur := s.sessions[id]; cur != nil && !isTerminalSessionState(cur.State) {
+		s.stopAgentChatTailLocked(cur)
 		cur.State = "disconnected"
 	}
 	endState := "disconnected"
@@ -644,7 +921,33 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 		endedProvider = cur.Provider
 		endedCWD = cur.CWD
 	}
+	// 旧 wrapper（ack 未対応）では従来どおり未送信の保留入力を捨てる。
+	// ack 対応 wrapper の場合は in-flight と既存 pending を次の reattach へ残す。
+	// 判定に wc 単位のフラグだけを使うと、reattach 直後に 1 件も ack を受けないまま
+	// 再び切れた接続が旧 wrapper と誤判定され、保留入力が捨てられる。
+	// セッション単位の inputAckCapable も併せて見る。
+	// 入力経路の診断として、旧経路で捨てた事実は
+	// ログへ残し、「送ったのに何も起きない」の切り分けに使う。
+	ackCapable := wc.inputAckSeen.Load()
+	if cur := s.sessions[id]; cur != nil && cur.inputAckCapable {
+		ackCapable = true
+	}
+	if n := len(s.pendingInput[id]); n > 0 && !ackCapable {
+		s.logger.Warn("pending_input_dropped", "session_id", id, "count", n, "cause", "wrapper_disconnect")
+		delete(s.pendingInput, id)
+	}
 	s.sessionsMu.Unlock()
+	if requeuedCount > 0 {
+		s.logger.Info("requeued in-flight pty_input",
+			"session_id", id,
+			"count", requeuedCount,
+			"seq_start", requeuedMinSeq,
+			"seq_end", requeuedMaxSeq,
+			"cause", "wrapper_disconnect")
+	}
+	// session_end を経ない切断（プロセス kill / Hub 側 WS 断）でも workflow の
+	// 追跡タイマーを必ず終端させる（session_end 経由と重複しても冪等）。
+	s.finalizeWorkflowOnSessionEnd(id)
 	if endState == "disconnected" {
 		if historyToClose != nil {
 			ev := map[string]any{

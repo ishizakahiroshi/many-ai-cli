@@ -26,6 +26,8 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   const spawnProviderList = document.getElementById('spawn-provider-list');
   const spawnCodexModelBtn = document.getElementById('spawn-codex-model-btn');
   const spawnClaudeModelBtn = document.getElementById('spawn-claude-model-btn');
+  const spawnOpenCodeOpts = document.getElementById('spawn-opencode-opts');
+  const spawnOpenCodeFullAllow = document.getElementById('spawn-opencode-full-allow') as HTMLInputElement | null;
   const spawnModelInput = document.getElementById('spawn-model');
   const spawnModelDatalist = document.getElementById('spawn-model-datalist');
   const spawnModelClearBtn = document.getElementById('spawn-model-clear');
@@ -526,6 +528,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     if (modelRow) modelRow.hidden = isShell;
     document.getElementById('spawn-claude-opts').hidden = (p !== 'claude');
     document.getElementById('spawn-codex-opts').hidden  = (p !== 'codex');
+    if (spawnOpenCodeOpts) spawnOpenCodeOpts.hidden = (p !== 'opencode');
     const claudeNote = document.getElementById('spawn-claude-note');
     const codexNote = document.getElementById('spawn-codex-note');
     const copilotNote = document.getElementById('spawn-copilot-note');
@@ -593,6 +596,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         if (modelRow) modelRow.hidden = isShell;
         document.getElementById('spawn-claude-opts').hidden = (p !== 'claude');
         document.getElementById('spawn-codex-opts').hidden  = (p !== 'codex');
+        if (spawnOpenCodeOpts) spawnOpenCodeOpts.hidden = (p !== 'opencode');
         const claudeNote = document.getElementById('spawn-claude-note');
         const codexNote = document.getElementById('spawn-codex-note');
         const copilotNote = document.getElementById('spawn-copilot-note');
@@ -617,6 +621,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       if (s.permission_mode)  document.getElementById('spawn-permission-mode').value = s.permission_mode;
       if (s.sandbox)          document.getElementById('spawn-sandbox').value = s.sandbox;
       if (s.ask_for_approval) document.getElementById('spawn-ask-approval').value = s.ask_for_approval;
+      if (spawnOpenCodeFullAllow) spawnOpenCodeFullAllow.checked = s.opencode_permission_mode === 'bypassPermissions';
       // C2: Detached 設定を復元
       if (s.open_target) {
         const radio = document.getElementById(`spawn-target-${s.open_target}`) as HTMLInputElement | null;
@@ -709,6 +714,10 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     setUserPref('cwd_history', hist);
   }
 
+  function clearCwdHistory() {
+    setUserPref('cwd_history', []);
+  }
+
   function loadCwdFavorites() {
     try {
       const v = JSON.parse(localStorage.getItem(STORAGE_CWD_FAVORITES_KEY) || '[]');
@@ -727,7 +736,26 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     setUserPref('cwd_favorites', next);
   }
 
+  function clearCwdFavorites() {
+    setUserPref('cwd_favorites', []);
+  }
+
+  // 行の × 用: 「その行を消す」導線なので履歴とお気に入りの両方から削除する。
+  // 履歴だけ消すと、お気に入り行では行が残り続けて「押しても何も起きない」ボタンになる。
+  function deleteCwdEntry(cwd) {
+    if (!cwd) return;
+    deleteCwdHistoryItem(cwd);
+    const favs = loadCwdFavorites();
+    if (favs.includes(cwd)) setUserPref('cwd_favorites', favs.filter(v => v !== cwd));
+  }
+
   let cwdSuppressReopen = false; // お気に入り選択で入力欄を再 focus する際の自動再オープンを1回抑止する
+
+  // 今ドロップダウンに適用されているフィルタ文字列。renderCwdDropdown が毎回更新する。
+  // × / ★ / 一括削除の後は「入力欄の値」ではなくこの値で描き直す。入力欄に確定済みのパスが
+  // 残ったまま focus/click で開いた（＝フィルタ '' の全件表示）状態を入力値で描き直すと、
+  // 全件表示だったリストが 0〜1 件へ絞られて「押した瞬間に閉じた」ように見えるため。
+  let cwdActiveFilter = '';
 
   // パス文字列を「親ディレクトリ」「末尾セグメント（basename）」に分割する。
   // 区切りは \ と / の両対応。末尾が区切り文字の場合は手前のセグメントを basename とする。
@@ -832,7 +860,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     fetchSubdirs(parent).then(items => {
       if (!subdirsCurrent || subdirsCurrent.parent !== parent) return;
       subdirsCurrent.items = items;
-      renderCwdDropdown(spawnCwdInput.value.trim());
+      rerenderCwdDropdown();
     });
   }
 
@@ -985,7 +1013,14 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   }
   // ---- /C1: 検索ドリブン ロジック層 ----
 
+  // 表示中のフィルタを維持したまま描き直す。行の追加/削除でリストの見え方を変えたくない
+  // 操作（× 削除・★ トグル・一括削除・subdirs の遅延到着）から使う。
+  function rerenderCwdDropdown() {
+    renderCwdDropdown(cwdActiveFilter);
+  }
+
   function renderCwdDropdown(filter) {
+    cwdActiveFilter = filter ?? '';
     const favs = loadCwdFavorites();
     const favSet = new Set(favs);
     const hist = loadCwdHistory();
@@ -1065,7 +1100,8 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         `<button class="cwd-dropdown-fav${fav ? ' is-on' : ''}" tabindex="-1" data-value="${escapeHtml(v)}" ` +
         `title="${escapeHtml(t(fav ? 'spawn_cwd_unfavorite' : 'spawn_cwd_favorite'))}">${fav ? '★' : '☆'}</button>` +
         `<span class="cwd-dropdown-label" title="${escapeHtml(v)}">${buildCwdLabelHtml(v, labelFilter)}</span>` +
-        (isSub ? '' : `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(v)}">×</button>`) +
+        (isSub ? '' : `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(v)}" ` +
+          `title="${escapeHtml(t('spawn_cwd_remove_entry'))}">×</button>`) +
         `</li>`
       );
     }
@@ -1078,7 +1114,8 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         `title="${escapeHtml(t(fav ? 'spawn_cwd_unfavorite' : 'spawn_cwd_favorite'))}">${fav ? '★' : '☆'}</button>` +
         `<span class="cwd-dropdown-mag" aria-hidden="true">🔍</span>` +
         `<span class="cwd-dropdown-label" title="${escapeHtml(r.path)}">${buildCwdLabelHtml(r.path, parsed.query)}</span>` +
-        `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(r.path)}">×</button>` +
+        `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(r.path)}" ` +
+        `title="${escapeHtml(t('spawn_cwd_remove_entry'))}">×</button>` +
         `</li>`
       );
     }
@@ -1087,35 +1124,50 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 
     let html = '';
 
-    // chip 行（roots がある場合のみ）。launcher chip 1 個に圧縮し hover/click で popover を開く。
-    if (hasRoots) {
+    // chip 行（roots がある場合、または履歴/お気に入りの一括削除ボタンを出す場合）。
+    // launcher chip 1 個に圧縮し hover/click で popover を開く。
+    const showChipsRow = hasRoots || hist.length > 0 || favs.length > 0;
+    if (showChipsRow) {
       const chipsClass = noMatch ? 'cwd-dropdown-chips has-no-match' : 'cwd-dropdown-chips';
-      // active root と合計件数を集計。launcher の表示に使う。
-      let activeRoot: string | null = null;
-      let totalCount = 0;
-      for (const [shortName, rootPath] of roots) {
-        if (isChipActive(shortName)) activeRoot = shortName;
-        totalCount += countForRoot(shortName, rootPath);
+      let chipsHtml = `<li class="${chipsClass}">`;
+      if (hasRoots) {
+        // active root と合計件数を集計。launcher の表示に使う。
+        let activeRoot: string | null = null;
+        let totalCount = 0;
+        for (const [shortName, rootPath] of roots) {
+          if (isChipActive(shortName)) activeRoot = shortName;
+          totalCount += countForRoot(shortName, rootPath);
+        }
+        const launcherInner = activeRoot
+          ? `${escapeHtml(activeRoot)}:`
+          : `<span class="chip-count">${totalCount}</span>`;
+        chipsHtml += `<div class="cwd-dropdown-chip-collapsed">` +
+          `<button class="cwd-dropdown-chip-launcher${activeRoot ? ' is-active' : ''}" type="button" aria-haspopup="true">` +
+          `<span class="chip-icon" aria-hidden="true">🗂</span> ${launcherInner} <span class="chip-caret" aria-hidden="true">▾</span>` +
+          `</button>` +
+          `<div class="cwd-dropdown-chip-popover" role="menu">`;
+        for (const [shortName, rootPath] of roots) {
+          const count = countForRoot(shortName, rootPath);
+          const activeClass = isChipActive(shortName) ? ' is-active' : '';
+          chipsHtml +=
+            `<button class="cwd-dropdown-chip${activeClass}" type="button" data-prefix="${escapeHtml(shortName)}">` +
+            `${escapeHtml(shortName)}:` +
+            `<span class="chip-count">${count}</span>` +
+            `</button>`;
+        }
+        chipsHtml += `</div></div>`;
       }
-      const launcherInner = activeRoot
-        ? `${escapeHtml(activeRoot)}:`
-        : `<span class="chip-count">${totalCount}</span>`;
-      let chipsHtml = `<li class="${chipsClass}">` +
-        `<div class="cwd-dropdown-chip-collapsed">` +
-        `<button class="cwd-dropdown-chip-launcher${activeRoot ? ' is-active' : ''}" type="button" aria-haspopup="true">` +
-        `<span class="chip-icon" aria-hidden="true">🗂</span> ${launcherInner} <span class="chip-caret" aria-hidden="true">▾</span>` +
-        `</button>` +
-        `<div class="cwd-dropdown-chip-popover" role="menu">`;
-      for (const [shortName, rootPath] of roots) {
-        const count = countForRoot(shortName, rootPath);
-        const activeClass = isChipActive(shortName) ? ' is-active' : '';
-        chipsHtml +=
-          `<button class="cwd-dropdown-chip${activeClass}" type="button" data-prefix="${escapeHtml(shortName)}">` +
-          `${escapeHtml(shortName)}:` +
-          `<span class="chip-count">${count}</span>` +
-          `</button>`;
+      // 履歴/お気に入りの一括削除ボタン（chip 行の右寄せ）。
+      if (hist.length > 0 || favs.length > 0) {
+        chipsHtml += `<div class="cwd-dropdown-chip-actions">`;
+        if (hist.length > 0) {
+          chipsHtml += `<button class="cwd-dropdown-clear-history" type="button" title="${escapeHtml(t('spawn_cwd_clear_history'))}">${escapeHtml(t('spawn_cwd_clear_history'))}</button>`;
+        }
+        if (favs.length > 0) {
+          chipsHtml += `<button class="cwd-dropdown-clear-favorites" type="button" title="${escapeHtml(t('spawn_cwd_clear_favorites'))}">${escapeHtml(t('spawn_cwd_clear_favorites'))}</button>`;
+        }
+        chipsHtml += `</div>`;
       }
-      chipsHtml += `</div></div>`;
       if (noMatch) {
         chipsHtml += `</li>` +
           `<li class="cwd-dropdown-no-match" aria-hidden="true">${escapeHtml(t('spawn_cwd_no_match_hint'))}</li>`;
@@ -1124,7 +1176,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       }
       html += chipsHtml;
     } else if (noMatch) {
-      // roots が空でも 0 件案内は出す。
+      // roots・履歴・お気に入りが全て空でも 0 件案内は出す。
       html += `<li class="cwd-dropdown-no-match" aria-hidden="true">${escapeHtml(t('spawn_cwd_no_match_hint'))}</li>`;
     }
 
@@ -1232,7 +1284,9 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       } else {
         el.classList.remove('is-missing');
         el.removeAttribute('title');
-        if (delBtn) delBtn.removeAttribute('title');
+        // missing 用の強調ツールチップから通常の削除ツールチップへ戻す（消してしまうと
+        // 一度 missing 判定を通った行だけ説明が失われる）。
+        if (delBtn) delBtn.title = t('spawn_cwd_remove_entry');
       }
     });
   }
@@ -1305,10 +1359,251 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 
   spawnCancelBtn.addEventListener('click', () => { newSessionPanel.hidden = true; setSpawnOrchestrationMode(false); });
   spawnLaunchBtn.addEventListener('click', spawnSession);
+  // Web folder browser — used when the OS native picker is unavailable
+  // (headless Linux / remote Hub with no zenity|kdialog) or when env_kind is
+  // remote (native dialogs would open on the server, not the user's browser).
+  // Navigates via /api/list-subdirs and writes the chosen path into #spawn-cwd.
+  let webDirBrowserEl: HTMLElement | null = null;
+  let webDirBrowserPath = '';
+
+  function webDirSep(p: string): string {
+    return p.includes('\\') && !p.startsWith('/') ? '\\' : '/';
+  }
+  function webDirJoin(parent: string, name: string): string {
+    const sep = webDirSep(parent);
+    if (!parent) return name;
+    if (parent.endsWith('/') || parent.endsWith('\\')) return parent + name;
+    return parent + sep + name;
+  }
+  function webDirParent(p: string): string {
+    const clean = stripTrailingSep(p);
+    if (!clean) return p;
+    // Windows drive root "C:\"
+    if (/^[A-Za-z]:$/.test(clean)) return clean + '\\';
+    if (/^[A-Za-z]:\\$/.test(p) || clean === '/' || /^[A-Za-z]:$/.test(clean)) return clean.includes(':') ? clean + '\\' : '/';
+    const sep = webDirSep(clean);
+    const idx = Math.max(clean.lastIndexOf('/'), clean.lastIndexOf('\\'));
+    if (idx <= 0) return sep === '/' ? '/' : clean;
+    // Keep "C:\" not "C:"
+    if (/^[A-Za-z]:$/.test(clean.slice(0, idx))) return clean.slice(0, idx + 1);
+    return clean.slice(0, idx) || (sep === '/' ? '/' : clean);
+  }
+
+  function ensureWebDirBrowser(): HTMLElement {
+    if (webDirBrowserEl) return webDirBrowserEl;
+    const overlay = document.createElement('div');
+    overlay.id = 'spawn-web-dir-browser';
+    overlay.className = 'spawn-web-dir-overlay';
+    overlay.hidden = true;
+    overlay.innerHTML =
+      `<div class="spawn-web-dir-modal" role="dialog" aria-modal="true" aria-labelledby="spawn-web-dir-title">` +
+      `<div class="spawn-web-dir-header">` +
+      `<strong id="spawn-web-dir-title" class="spawn-web-dir-title"></strong>` +
+      `<button type="button" class="spawn-web-dir-close" data-action="close" aria-label="Close">✕</button>` +
+      `</div>` +
+      `<div class="spawn-web-dir-pathrow">` +
+      `<button type="button" class="spawn-web-dir-up" data-action="up" title="..">⬆</button>` +
+      `<input type="text" class="spawn-web-dir-path" spellcheck="false" autocomplete="off">` +
+      `<button type="button" class="spawn-web-dir-go" data-action="go">→</button>` +
+      `</div>` +
+      `<div class="spawn-web-dir-status" hidden></div>` +
+      `<ul class="spawn-web-dir-list" role="listbox"></ul>` +
+      `<div class="spawn-web-dir-actions">` +
+      `<button type="button" class="spawn-web-dir-cancel" data-action="close"></button>` +
+      `<button type="button" class="spawn-web-dir-select" data-action="select"></button>` +
+      `</div>` +
+      `</div>`;
+    document.body.appendChild(overlay);
+
+    const applyLabels = () => {
+      const title = overlay.querySelector('.spawn-web-dir-title');
+      const cancel = overlay.querySelector('.spawn-web-dir-cancel');
+      const select = overlay.querySelector('.spawn-web-dir-select');
+      const up = overlay.querySelector('.spawn-web-dir-up') as HTMLButtonElement | null;
+      if (title) title.textContent = t('spawn_web_dir_title') || 'Browse folder';
+      if (cancel) cancel.textContent = t('spawn_web_dir_cancel') || 'Cancel';
+      if (select) select.textContent = t('spawn_web_dir_select') || 'Select this folder';
+      if (up) up.title = t('spawn_web_dir_up') || 'Parent folder';
+    };
+    applyLabels();
+    document.addEventListener('i18n-ready', applyLabels);
+
+    const pathInput = overlay.querySelector('.spawn-web-dir-path') as HTMLInputElement;
+    const listEl = overlay.querySelector('.spawn-web-dir-list') as HTMLElement;
+    const statusEl = overlay.querySelector('.spawn-web-dir-status') as HTMLElement;
+
+    const setStatus = (msg: string, isError = false) => {
+      if (!statusEl) return;
+      if (!msg) { statusEl.hidden = true; statusEl.textContent = ''; return; }
+      statusEl.hidden = false;
+      statusEl.textContent = msg;
+      statusEl.classList.toggle('is-error', isError);
+    };
+
+    const renderList = (parent: string, subdirs: string[]) => {
+      listEl.innerHTML = '';
+      if (subdirs.length === 0) {
+        const empty = document.createElement('li');
+        empty.className = 'spawn-web-dir-empty';
+        empty.textContent = t('spawn_web_dir_empty') || 'No subfolders';
+        listEl.appendChild(empty);
+        return;
+      }
+      for (const name of subdirs) {
+        const li = document.createElement('li');
+        li.className = 'spawn-web-dir-item';
+        li.setAttribute('role', 'option');
+        li.tabIndex = 0;
+        const full = webDirJoin(parent, name);
+        li.dataset.path = full;
+        li.innerHTML =
+          `<span class="spawn-web-dir-icon" aria-hidden="true">📁</span>` +
+          `<span class="spawn-web-dir-name"></span>`;
+        const nameEl = li.querySelector('.spawn-web-dir-name');
+        if (nameEl) nameEl.textContent = name;
+        const enter = () => { void navigateWebDir(full); };
+        li.addEventListener('click', enter);
+        li.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); enter(); }
+        });
+        listEl.appendChild(li);
+      }
+    };
+
+    async function navigateWebDir(path: string): Promise<void> {
+      const raw = String(path || '').trim();
+      // Keep filesystem roots intact; stripping the trailing separator from
+      // `/` or `C:\` would turn them into an empty path or `C:`.
+      const target = raw === '/' || /^[A-Za-z]:[\\/]?$/.test(raw)
+        ? raw
+        : stripTrailingSep(raw);
+      if (!target) return;
+      setStatus(t('spawn_web_dir_loading') || 'Loading…');
+      listEl.innerHTML = '';
+      try {
+        const res = await fetch(`/api/list-subdirs?token=${token}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: target }),
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok) {
+          const detail = data?.detail || data?.error || res.statusText;
+          setStatus(String(detail || (t('spawn_web_dir_load_failed') || 'Failed to list folder')), true);
+          return;
+        }
+        if (data.ok === false && (!Array.isArray(data.subdirs) || data.subdirs.length === 0)) {
+          setStatus(t('spawn_web_dir_not_dir') || 'Not a directory or inaccessible', true);
+          return;
+        }
+        const resolved = String(data.path || target);
+        webDirBrowserPath = resolved;
+        pathInput.value = resolved;
+        setStatus('');
+        renderList(resolved, Array.isArray(data.subdirs) ? data.subdirs : []);
+        // Warm the spawn dropdown cache for this parent.
+        subdirsCache.set(stripTrailingSep(resolved), Array.isArray(data.subdirs) ? data.subdirs : []);
+      } catch (_) {
+        setStatus(t('spawn_web_dir_load_failed') || 'Failed to list folder', true);
+      }
+    }
+
+    const closeBrowser = () => {
+      overlay.hidden = true;
+      spawnCwdBrowse && (spawnCwdBrowse.disabled = false);
+    };
+
+    const selectCurrent = () => {
+      if (!webDirBrowserPath) return;
+      spawnCwdInput.value = webDirBrowserPath;
+      refreshCwdInputStatus();
+      closeBrowser();
+      spawnCwdInput.focus();
+      // Show subfolders under the selected path in the combobox.
+      const withSep = webDirBrowserPath.endsWith('/') || webDirBrowserPath.endsWith('\\')
+        ? webDirBrowserPath
+        : webDirBrowserPath + webDirSep(webDirBrowserPath);
+      maybeUpdateSubdirs(withSep);
+      renderCwdDropdown(spawnCwdInput.value.trim());
+    };
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeBrowser();
+    });
+    overlay.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('[data-action]') as HTMLElement | null;
+      if (!btn || !overlay.contains(btn)) return;
+      const action = btn.dataset.action;
+      if (action === 'close') closeBrowser();
+      else if (action === 'select') selectCurrent();
+      else if (action === 'up') void navigateWebDir(webDirParent(webDirBrowserPath || pathInput.value));
+      else if (action === 'go') void navigateWebDir(pathInput.value.trim());
+    });
+    pathInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        void navigateWebDir(pathInput.value.trim());
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeBrowser();
+      }
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !overlay.hidden) {
+        e.preventDefault();
+        closeBrowser();
+      }
+    });
+
+    (overlay as any)._navigate = navigateWebDir;
+    webDirBrowserEl = overlay;
+    return overlay;
+  }
+
+  async function openWebDirBrowser(startPath?: string): Promise<void> {
+    const overlay = ensureWebDirBrowser();
+    overlay.hidden = false;
+    let start = String(startPath || spawnCwdInput.value || '').trim();
+    if (!start || !/[/\\]/.test(start) && !/^[A-Za-z]:/.test(start)) {
+      try {
+        const res = await fetch(`/api/info?token=${token}`);
+        if (res.ok) {
+          const info = await res.json();
+          if (info?.cwd) start = String(info.cwd);
+        }
+      } catch (_) { /* keep start */ }
+    }
+    if (!start) {
+      const favs = loadCwdFavorites();
+      const hist = loadCwdHistory();
+      start = favs[0] || hist[0] || '/';
+    }
+    await (overlay as any)._navigate(start);
+    const pathInput = overlay.querySelector('.spawn-web-dir-path') as HTMLInputElement | null;
+    pathInput?.focus();
+    pathInput?.select();
+  }
+
+  async function shouldPreferWebDirBrowser(): Promise<boolean> {
+    // Remote Hub: native OS dialogs open on the server host, never in the user's browser.
+    try {
+      const res = await fetch(`/api/info?token=${token}`);
+      if (res.ok) {
+        const info = await res.json();
+        if (info?.env_kind === 'remote') return true;
+      }
+    } catch (_) { /* fall through */ }
+    return false;
+  }
+
   if (spawnCwdBrowse) {
     spawnCwdBrowse.addEventListener('click', async () => {
       spawnCwdBrowse.disabled = true;
       try {
+        if (await shouldPreferWebDirBrowser()) {
+          await openWebDirBrowser();
+          return;
+        }
         const res = await fetch(`/api/pick-directory?token=${token}`, { method: 'POST' });
         if (res.ok) {
           const data = await res.json();
@@ -1317,17 +1612,26 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
             refreshCwdInputStatus();
             spawnCwdInput.focus();
             renderCwdDropdown('');
+            return;
           }
-        } else {
-          // Non-2xx (typically 500 when no native folder picker is available,
-          // e.g. Linux without zenity/kdialog). Surface the server message so
-          // the click isn't silently ignored.
-          let msg = '';
-          try { msg = (await res.text()).trim(); } catch (_) {}
-          showToast(msg ? `${t('link_open_error')}: ${msg}` : t('link_open_error'));
+          // User cancelled native dialog (ok:false, no path) — do nothing.
+          if (data && data.ok === false && !data.path) return;
         }
-      } catch (_) { showToast(t('link_open_error')); }
-      finally { spawnCwdBrowse.disabled = false; }
+        // Native picker unavailable (Linux without zenity/kdialog, etc.) → web browser.
+        await openWebDirBrowser();
+      } catch (_) {
+        try {
+          await openWebDirBrowser();
+        } catch (_) {
+          showToast(t('link_open_error'));
+        }
+      } finally {
+        // openWebDirBrowser keeps the button disabled while modal is open;
+        // re-enable only when modal was not shown (native success/cancel).
+        if (!webDirBrowserEl || webDirBrowserEl.hidden) {
+          spawnCwdBrowse.disabled = false;
+        }
+      }
     });
   }
   // placeholder ヒント: フォーカス前に一度設定（i18n 初期化後に評価される）。
@@ -1407,7 +1711,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       if (item.classList.contains('is-favorite') || item.classList.contains('is-subdir')) return;
       e.preventDefault();
       deleteCwdHistoryItem(item.dataset.value);
-      renderCwdDropdown(spawnCwdInput.value.trim());
+      rerenderCwdDropdown();
       const next = [...cwdDropdown.querySelectorAll('.cwd-dropdown-item')];
       if (next.length === 0) { focusInputNoReopen(); return; }
       (next[Math.min(idx, next.length - 1)] as HTMLElement).focus();
@@ -1454,20 +1758,42 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       renderCwdDropdown(next);
       return;
     }
+    const clearHistBtn = e.target.closest('.cwd-dropdown-clear-history');
+    if (clearHistBtn) {
+      e.preventDefault();
+      if (window.confirm(t('spawn_cwd_clear_history_confirm'))) {
+        clearCwdHistory();
+        rerenderCwdDropdown();
+      }
+      focusInputNoReopen();
+      return;
+    }
+    const clearFavBtn = e.target.closest('.cwd-dropdown-clear-favorites');
+    if (clearFavBtn) {
+      e.preventDefault();
+      if (window.confirm(t('spawn_cwd_clear_favorites_confirm'))) {
+        clearCwdFavorites();
+        rerenderCwdDropdown();
+      }
+      focusInputNoReopen();
+      return;
+    }
     const favBtn = e.target.closest('.cwd-dropdown-fav');
     if (favBtn) {
       e.preventDefault();
       toggleCwdFavorite(favBtn.dataset.value);
-      renderCwdDropdown(spawnCwdInput.value.trim());
-      spawnCwdInput.focus();
+      rerenderCwdDropdown();
+      focusInputNoReopen();
       return;
     }
     const delBtn = e.target.closest('.cwd-dropdown-del');
     if (delBtn) {
       e.preventDefault();
-      deleteCwdHistoryItem(delBtn.dataset.value);
-      renderCwdDropdown(spawnCwdInput.value.trim());
-      spawnCwdInput.focus();
+      deleteCwdEntry(delBtn.dataset.value);
+      rerenderCwdDropdown();
+      // focus() 経由の focus リスナ（renderCwdDropdown('') で全件へ描き直す）を踏むと
+      // せっかく維持したフィルタが飛ぶので、再オープン抑止つきで戻す。
+      focusInputNoReopen();
       return;
     }
     const item = e.target.closest('.cwd-dropdown-item');
@@ -1674,6 +2000,26 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         bodyObj.permission_mode = permMode;
         bodyObj.model_selection_mode = picked ? picked.mode : 'auto';
         bodyObj.risk_confirmed = riskConfirmed;
+      } else if (provider === 'opencode') {
+        const fullAllow = !!spawnOpenCodeFullAllow?.checked;
+        let riskConfirmed = false;
+
+        if (fullAllow) {
+          riskConfirmed = await appConfirm({
+            title: t('opencode_confirm_title'),
+            message: t('opencode_confirm_message'),
+            confirmText: t('opencode_confirm_run'),
+            cancelText: t('spawn_cancel'),
+            kind: 'danger',
+          });
+          if (!riskConfirmed) {
+            spawnLaunchBtn.disabled = false;
+            return;
+          }
+        }
+
+        bodyObj.permission_mode = fullAllow ? 'bypassPermissions' : 'default';
+        bodyObj.risk_confirmed = riskConfirmed;
       } else if (provider === 'codex') {
         const picked = codexModelSelection;
         const sandbox = document.getElementById('spawn-sandbox').value;
@@ -1733,6 +2079,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
           detached_preset: detachedPreset,
           ...(provider === 'claude' ? { permission_mode: bodyObj.permission_mode } : {}),
           ...(provider === 'codex'  ? { sandbox: bodyObj.sandbox, ask_for_approval: bodyObj.ask_for_approval } : {}),
+          ...(provider === 'opencode' ? { opencode_permission_mode: bodyObj.permission_mode } : {}),
         });
         document.getElementById('spawn-label').value = '';
         codexModelSelection  = null;

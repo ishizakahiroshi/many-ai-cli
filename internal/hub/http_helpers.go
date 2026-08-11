@@ -31,8 +31,8 @@ const (
 // - https 以外へのリダイレクトは拒否（スキームダウングレード防止）
 func newExternalHTTPClient(timeout time.Duration) *http.Client {
 	return &http.Client{
-		Timeout:   timeout,
-		Transport: newExternalHTTPTransport(timeout),
+		Timeout:       timeout,
+		Transport:     newExternalHTTPTransport(timeout),
 		CheckRedirect: externalHTTPCheckRedirect,
 	}
 }
@@ -326,6 +326,19 @@ func remoteAddrIP(remoteAddr string) net.IP {
 func isLoopbackRemote(remoteAddr string) bool {
 	ip := remoteAddrIP(remoteAddr)
 	return ip != nil && ip.IsLoopback()
+}
+
+func requestUsesHTTPS(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if r.TLS != nil {
+		return true
+	}
+	if !isLoopbackRemote(r.RemoteAddr) {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https")
 }
 
 // isLogicallyRemote は、TCP 接続元が loopback でも「実体はリモート」な要求かを返す。

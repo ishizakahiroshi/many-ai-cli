@@ -2,15 +2,54 @@ package doctor
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
+	"time"
 
 	"many-ai-cli/internal/config"
 )
+
+func TestProvidersUsesThreeSecondVersionTimeout(t *testing.T) {
+	oldLookPath := providerLookPath
+	oldVersionOutput := providerVersionOutput
+	t.Cleanup(func() {
+		providerLookPath = oldLookPath
+		providerVersionOutput = oldVersionOutput
+	})
+	providerLookPath = func(name string) (string, error) {
+		if name == "claude" {
+			return "test-claude", nil
+		}
+		return "", errors.New("not found")
+	}
+	var remaining time.Duration
+	providerVersionOutput = func(ctx context.Context, path string) ([]byte, error) {
+		if path != "test-claude" {
+			t.Fatalf("provider path = %q, want test-claude", path)
+		}
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			t.Fatal("provider version context has no deadline")
+		}
+		remaining = time.Until(deadline)
+		return []byte("claude test-version\n"), nil
+	}
+
+	check := providers(context.Background())
+
+	if check.Level != OK || !strings.Contains(check.Message, "test-version") {
+		t.Fatalf("providers check = %+v", check)
+	}
+	if remaining < 2500*time.Millisecond || remaining > providerVersionTimeout {
+		t.Fatalf("provider timeout remaining = %s, want approximately %s", remaining, providerVersionTimeout)
+	}
+}
 
 func TestOllamaHTTPChecks(t *testing.T) {
 	for _, tc := range []struct {

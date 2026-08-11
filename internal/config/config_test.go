@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +15,22 @@ func TestDefaultConfigOpensBrowser(t *testing.T) {
 	cfg := defaultConfig(t.TempDir())
 	if !cfg.Hub.OpenBrowser {
 		t.Fatal("defaultConfig().Hub.OpenBrowser = false, want true")
+	}
+}
+
+func TestWorkflowJournalDefaultsOnAndCanBeDisabled(t *testing.T) {
+	cfg := defaultConfig(t.TempDir())
+	if !cfg.Workflow.JournalEnabled {
+		t.Fatal("defaultConfig().Workflow.JournalEnabled = false, want true")
+	}
+	if err := yaml.Unmarshal([]byte("workflow:\n  journal_enabled: false\n"), cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Workflow.JournalEnabled {
+		t.Fatal("explicit workflow.journal_enabled=false was ignored")
+	}
+	if cfg.UserPrefs.WorkflowCompletionNotify.Enabled {
+		t.Fatal("workflow completion Push must remain opt-in")
 	}
 }
 
@@ -431,6 +448,7 @@ func TestOllamaBaseURLRoundTripAndValidation(t *testing.T) {
 		t.Fatalf("LoadOrCreate: %v", err)
 	}
 	cfg1.Ollama.BaseURL = "http://192.168.11.50:11434"
+	cfg1.Ollama.AllowPrivateHosts = true
 	if err := Save(cfg1); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -441,6 +459,9 @@ func TestOllamaBaseURLRoundTripAndValidation(t *testing.T) {
 	}
 	if cfg2.Ollama.BaseURL != "http://192.168.11.50:11434" {
 		t.Fatalf("Ollama.BaseURL = %q", cfg2.Ollama.BaseURL)
+	}
+	if !cfg2.Ollama.AllowPrivateHosts {
+		t.Fatal("Ollama.AllowPrivateHosts = false, want true")
 	}
 	if got := EffectiveOllamaBaseURL(""); got != DefaultOllamaBaseURL {
 		t.Fatalf("EffectiveOllamaBaseURL(\"\") = %q", got)
@@ -456,6 +477,51 @@ func TestOllamaBaseURLRoundTripAndValidation(t *testing.T) {
 		cfg.Ollama.BaseURL = raw
 		if err := cfg.Validate(); err == nil {
 			t.Fatalf("Validate() with ollama.base_url %q succeeded, want error", raw)
+		}
+	}
+	// private host + opt-in 無しは起動を止めない（error ではなく Warnings() で伝える）。
+	// 任意機能であるモデル一覧の設定不備で serve / version / stop / wrap まで
+	// 全滅するのを防ぐため。実際の遮断は internal/hub/models_fetch.go の
+	// newLocalModelHTTPClient がトランスポート層で行う。
+	// localhost / 127.0.0.1 も isPrivateModelHost では private 判定になるので、
+	// Ollama の標準構成を明示指定しただけのケースも起動できることを併せて確認する。
+	for _, target := range []struct {
+		name string
+		set  func(*Config)
+	}{
+		{"ollama", func(cfg *Config) { cfg.Ollama.BaseURL = "http://10.0.0.20:11434" }},
+		{"lm_studio", func(cfg *Config) { cfg.LMStudio.BaseURL = "http://192.168.1.20:1234" }},
+		{"ollama", func(cfg *Config) { cfg.Ollama.BaseURL = "http://localhost:11434" }},
+	} {
+		cfg := defaultConfig(t.TempDir())
+		target.set(cfg)
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("Validate() with private %s host failed: %v", target.name, err)
+		}
+		warnings := cfg.Warnings()
+		if len(warnings) != 1 || !strings.Contains(warnings[0], target.name+".base_url") {
+			t.Fatalf("Warnings() with private %s host = %v, want exactly one warning naming %s.base_url",
+				target.name, warnings, target.name)
+		}
+	}
+	// opt-in 済みなら警告も出ない。
+	for _, target := range []struct {
+		name string
+		set  func(*Config)
+	}{
+		{"ollama", func(cfg *Config) {
+			cfg.Ollama.BaseURL = "http://10.0.0.20:11434"
+			cfg.Ollama.AllowPrivateHosts = true
+		}},
+		{"lm_studio", func(cfg *Config) {
+			cfg.LMStudio.BaseURL = "http://192.168.1.20:1234"
+			cfg.LMStudio.AllowPrivateHosts = true
+		}},
+	} {
+		cfg := defaultConfig(t.TempDir())
+		target.set(cfg)
+		if got := cfg.Warnings(); len(got) != 0 {
+			t.Fatalf("Warnings() with %s opt-in = %v, want none", target.name, got)
 		}
 	}
 }
@@ -504,7 +570,7 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	cfg := &Config{}
 	cfg.Spawn.LastModel = map[string]string{"legacy": "a"}
 	cfg.UserPrefs.ProjectFavorites = []string{"one"}
-	cfg.UserPrefs.CwdHistory = []string{"C:/dev/one"}
+	cfg.UserPrefs.CwdHistory = []string{"D:/dev/one"}
 	cfg.UserPrefs.Spawn.Defaults = map[string]string{"claude": "default"}
 	cfg.UserPrefs.Spawn.LastModel = map[string]string{"claude": "sonnet"}
 	cfg.Hub.TrustedNetworks = []string{"172.19.0.1/32"}
@@ -513,7 +579,7 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	clone := cfg.Clone()
 	cfg.Spawn.LastModel["legacy"] = "b"
 	cfg.UserPrefs.ProjectFavorites[0] = "two"
-	cfg.UserPrefs.CwdHistory[0] = "C:/dev/two"
+	cfg.UserPrefs.CwdHistory[0] = "D:/dev/two"
 	cfg.UserPrefs.Spawn.Defaults["claude"] = "changed"
 	cfg.UserPrefs.Spawn.LastModel["claude"] = "opus"
 	cfg.Hub.TrustedNetworks[0] = "172.19.0.2/32"
@@ -525,7 +591,7 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	if clone.UserPrefs.ProjectFavorites[0] != "one" {
 		t.Fatalf("project favorites slice was aliased")
 	}
-	if clone.UserPrefs.CwdHistory[0] != "C:/dev/one" {
+	if clone.UserPrefs.CwdHistory[0] != "D:/dev/one" {
 		t.Fatalf("cwd history slice was aliased")
 	}
 	if clone.UserPrefs.Spawn.Defaults["claude"] != "default" {
@@ -539,5 +605,78 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	}
 	if clone.Hub.AllowedHosts[0] != "10.8.0.1" {
 		t.Fatalf("allowed hosts slice was aliased")
+	}
+}
+
+func sessionOrderEqual(got SessionOrderIDs, want []int) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// session_order は以前 []string で宣言されており、旧版が文字列配列を書いた
+// config.yaml が残っている環境がある。型を変えた結果 yaml.Unmarshal がそこで
+// 失敗すると、LoadOrCreate の破損フォールバックが config.yaml 全体を .bak へ
+// 退避してデフォルト再生成する（token も作り直しになる）。壊れた 1 項目のために
+// 設定全体を失わないことをここで固定する。
+func TestSessionOrderYAMLAcceptsNumbersAndLegacyStrings(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want []int
+	}{
+		{"numbers", "user_prefs:\n    session_order: [10, 5, 3]\n", []int{10, 5, 3}},
+		{"legacy strings", "user_prefs:\n    session_order: [\"10\", \"5\"]\n", []int{10, 5}},
+		{"mixed junk dropped", "user_prefs:\n    session_order: [10, \"abc\", 7]\n", []int{10, 7}},
+		{"not a sequence", "user_prefs:\n    session_order: nope\n", nil},
+		{"empty", "user_prefs:\n    session_order: []\n", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var cfg Config
+			if err := yaml.Unmarshal([]byte(tc.src), &cfg); err != nil {
+				t.Fatalf("yaml.Unmarshal() error = %v; whole config must stay loadable", err)
+			}
+			if !sessionOrderEqual(cfg.UserPrefs.SessionOrder, tc.want) {
+				t.Fatalf("SessionOrder = %v, want %v", cfg.UserPrefs.SessionOrder, tc.want)
+			}
+		})
+	}
+}
+
+func TestSessionOrderJSONAcceptsNumbersAndLegacyStrings(t *testing.T) {
+	var prefs UserPrefs
+	if err := json.Unmarshal([]byte(`{"session_order":[11,2,"7","x"]}`), &prefs); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v; PUT /api/user-prefs must stay accepted", err)
+	}
+	if !sessionOrderEqual(prefs.SessionOrder, []int{11, 2, 7}) {
+		t.Fatalf("SessionOrder = %v, want [11 2 7]", prefs.SessionOrder)
+	}
+}
+
+func TestSessionOrderSurvivesSaveRoundTrip(t *testing.T) {
+	var cfg Config
+	cfg.UserPrefs.SessionOrder = SessionOrderIDs{4, 9, 1}
+	out, err := yaml.Marshal(&cfg)
+	if err != nil {
+		t.Fatalf("yaml.Marshal() error = %v", err)
+	}
+	var back Config
+	if err := yaml.Unmarshal(out, &back); err != nil {
+		t.Fatalf("yaml.Unmarshal() error = %v", err)
+	}
+	if !sessionOrderEqual(back.UserPrefs.SessionOrder, []int{4, 9, 1}) {
+		t.Fatalf("SessionOrder = %v, want [4 9 1]", back.UserPrefs.SessionOrder)
+	}
+	clone := cfg.Clone()
+	cfg.UserPrefs.SessionOrder[0] = 99
+	if clone.UserPrefs.SessionOrder[0] != 4 {
+		t.Fatalf("session order slice was aliased")
 	}
 }

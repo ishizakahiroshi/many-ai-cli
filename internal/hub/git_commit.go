@@ -1,9 +1,13 @@
 package hub
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -170,8 +174,21 @@ func (s *Server) handleGitCommitMessage(w http.ResponseWriter, r *http.Request) 
 			diffNotice = fmt.Sprintf("Diff context truncated to %d KiB.", gitCommitDiffMaxBytes/1024)
 		}
 	}
+	weights := map[string]int{}
+	if out, err := runGit(ctx, cwd, "diff", "--numstat", "--no-renames", "HEAD", "--"); err == nil {
+		weights = parseGitNumstat(string(out))
+	}
+	for _, file := range files {
+		if file.Status != "??" {
+			continue
+		}
+		path := strings.ReplaceAll(file.Path, "\\", "/")
+		if _, exists := weights[path]; !exists {
+			weights[path] = countUntrackedFileLines(cwd, path)
+		}
+	}
 
-	subject, body := suggestCommitMessage(files, stat, diff, diffNotice, req.Language)
+	subject, body := suggestCommitMessageWithWeights(files, stat, diff, diffNotice, req.Language, weights)
 	writeJSON(w, gitCommitMessageResp{
 		OK:      true,
 		Subject: subject,
@@ -179,42 +196,109 @@ func (s *Server) handleGitCommitMessage(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+func parseGitNumstat(raw string) map[string]int {
+	weights := map[string]int{}
+	for _, line := range strings.Split(raw, "\n") {
+		parts := strings.SplitN(strings.TrimSuffix(line, "\r"), "\t", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		path := strings.ReplaceAll(parts[2], "\\", "/")
+		if path == "" {
+			continue
+		}
+		added := parseNumstatCount(parts[0])
+		deleted := parseNumstatCount(parts[1])
+		weights[path] = added + deleted
+	}
+	return weights
+}
+
+func parseNumstatCount(value string) int {
+	if value == "-" {
+		return 0
+	}
+	n := 0
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return 0
+		}
+		n = n*10 + int(r-'0')
+	}
+	return n
+}
+
+func countUntrackedFileLines(root, path string) int {
+	full := filepath.Join(root, filepath.FromSlash(path))
+	rel, err := filepath.Rel(root, full)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return 0
+	}
+	f, err := os.Open(full)
+	if err != nil {
+		return 0
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, 1<<20))
+	if err != nil || bytes.IndexByte(data, 0) >= 0 || len(data) == 0 {
+		return 0
+	}
+	lines := bytes.Count(data, []byte{'\n'})
+	if data[len(data)-1] != '\n' {
+		lines++
+	}
+	return lines
+}
+
 // commitChangeAnalysis は working tree の差分から導いた、コミットメッセージ生成用の
 // 解析結果。LLM を使わず status とテキスト差分のヒューリスティックで埋めるため、
 // あくまで「下書き」レベルの精度であることを前提とする。
 type commitChangeAnalysis struct {
-	added        []string // 新規追加されたファイルパス（A / 未追跡 ??）
-	deleted      []string // 削除されたファイルパス（D）
-	modified     []string // 変更されたファイルパス（M ほか）
-	renamed      []string // リネームされたファイルパス（R）
-	depFiles     []string // 依存定義ファイル（go.mod / package.json 等）
-	scope        string   // 変更ファイル群の最深共通ディレクトリの最終非汎用セグメント（Conventional Commits の (scope) 部分）
-	prefix       string   // conventional commit prefix（feat/fix/docs/test/style/refactor/chore）
-	routes       []string // 追加された HTTP ルート（mux.HandleFunc("...")）
-	removedRts   []string // 削除された HTTP ルート
-	funcs            []string          // 追加された Go 関数名（出現順）
+	added            []string          // 新規追加されたファイルパス（A / 未追跡 ??）
+	deleted          []string          // 削除されたファイルパス（D）
+	modified         []string          // 変更されたファイルパス（M ほか）
+	renamed          []string          // リネームされたファイルパス（R）
+	depFiles         []string          // 依存定義ファイル（go.mod / package.json 等）
+	scope            string            // 変更ファイル群の最深共通ディレクトリの最終非汎用セグメント（Conventional Commits の (scope) 部分）
+	prefix           string            // conventional commit prefix（feat/fix/docs/test/style/refactor/chore）
+	routes           []string          // 追加された HTTP ルート（mux.HandleFunc("...")）
+	removedRts       []string          // 削除された HTTP ルート
+	funcs            []string          // 追加された関数名（Go / TS / JS / Python、出現順）
 	deletedFuncs     []string          // 削除された Go 関数名（move 判定用・出現順）
 	addedFuncSites   map[string]string // 関数名 → 追加された diff の +++ b/<file>
 	deletedFuncSites map[string]string // 関数名 → 削除された diff の +++ b/<file>
-	types        []string // 追加された Go 型（struct / interface）
-	renamePairs  []string // "旧名 → 新名"（diff の rename from/to から）
-	i18nKeys     int      // 追加された i18n キー数
-	locAdded     int      // 追加行数（+++ ヘッダを除く +行）
-	locDeleted   int      // 削除行数（--- ヘッダを除く -行）
-	handleAdds   int      // 追加された err/throw/catch など handling パターン行数
-	depsOnly     bool     // 変更が依存定義ファイルのみ
-	styleOnly    bool     // 変更が CSS/SCSS のみ
-	verb         string   // subject 用に選ばれた動詞（add/remove/rename/move/bump/simplify/handle/refactor/test/update）
-	symbolHead   string   // subject の主辞（関数名 / 型名 / route / ファイル basename 等）
-	symbolCount  int      // symbolHead を含めた同種要素の総件数（1 なら "ほか N 件" 付けない）
+	types            []string          // 追加された型・クラス（Go / TS / JS / Python）
+	addedTypeSites   map[string]string // 型名 → 追加された diff の +++ b/<file>
+	addedRouteSites  map[string]string // ルート → 追加された diff の +++ b/<file>
+	renamePairs      []string          // "旧名 → 新名"（diff の rename from/to から）
+	i18nKeys         int               // 追加された i18n キー数
+	locAdded         int               // 追加行数（+++ ヘッダを除く +行）
+	locDeleted       int               // 削除行数（--- ヘッダを除く -行）
+	handleAdds       int               // 追加された err/throw/catch など handling パターン行数
+	depsOnly         bool              // 変更が依存定義ファイルのみ
+	styleOnly        bool              // 変更が CSS/SCSS のみ
+	verb             string            // subject 用に選ばれた動詞
+	symbolHead       string            // subject の主辞（関数名 / 型名 / route / ファイル basename 等）
+	symbolCount      int               // symbolHead を含めた同種要素の総件数
+	weights          map[string]int
+	dominant         string
+	dominantStatus   string
 }
 
 var (
-	reGitRoute      = regexp.MustCompile(`mux\.HandleFunc\("([^"]+)"`)
+	reGoRoute       = regexp.MustCompile(`mux\.HandleFunc\("([^"]+)"`)
+	reJSRoute       = regexp.MustCompile(`\b(?:app|router)\.(?:get|post|put|delete|patch)\(\s*['"]([^'"]+)`)
+	rePythonRoute   = regexp.MustCompile(`^[+-]@(?:app|router|bp)\.(?:get|post|put|delete|patch|route)\(\s*['"]([^'"]+)`)
 	reAddedGoFunc   = regexp.MustCompile(`^\+func (?:\([^)]*\)\s*)?([A-Za-z0-9_]+)\(`)
 	reDeletedGoFunc = regexp.MustCompile(`^-func (?:\([^)]*\)\s*)?([A-Za-z0-9_]+)\(`)
 	reAddedGoType   = regexp.MustCompile(`^\+type ([A-Za-z0-9_]+) (?:struct|interface)\b`)
-	reAddedI18n     = regexp.MustCompile(`^\+\s*"[A-Za-z0-9_]+":`)
+	reAddedJSFunc   = regexp.MustCompile(`^\+export (?:default )?(?:async )?function ([A-Za-z0-9_$]+)`)
+	reAddedJSConst  = regexp.MustCompile(`^\+export const ([A-Za-z0-9_$]+)\s*=`)
+	reAddedJSClass  = regexp.MustCompile(`^\+export (?:default )?(?:abstract )?class ([A-Za-z0-9_$]+)`)
+	reAddedJSType   = regexp.MustCompile(`^\+export (?:type|interface) ([A-Za-z0-9_$]+)`)
+	reAddedPyFunc   = regexp.MustCompile(`^\+def ([A-Za-z0-9_]+)\(`)
+	reAddedPyClass  = regexp.MustCompile(`^\+class ([A-Za-z0-9_]+)`)
+	reAddedI18n     = regexp.MustCompile(`^\+\s*['"]?[A-Za-z0-9_.-]+['"]?\s*:`)
 	reDiffNewFile   = regexp.MustCompile(`^\+\+\+ b/(.+)$`)
 	reHandleErrGo   = regexp.MustCompile(`^\+\s*if\s+err\s*!=`)
 	reHandleThrow   = regexp.MustCompile(`^\+\s*throw\s`)
@@ -288,6 +372,7 @@ var verbJa = map[string]string{
 	"refactor": "整理",
 	"test":     "テストを追加",
 	"update":   "更新",
+	"change":   "変更",
 }
 
 var verbEn = map[string]string{
@@ -301,6 +386,7 @@ var verbEn = map[string]string{
 	"refactor": "rework",
 	"test":     "add tests for",
 	"update":   "update",
+	"change":   "change",
 }
 
 // jaVerbPhrase は「<symbol>」の直後に付ける日本語述語を返す。助詞が「を」以外に
@@ -342,15 +428,23 @@ var depFileNames = map[string]struct{}{
 }
 
 func suggestCommitMessage(files []gitStatusFile, stat, diff, diffNotice, language string) (string, string) {
+	return suggestCommitMessageWithWeights(files, stat, diff, diffNotice, language, nil)
+}
+
+func suggestCommitMessageWithWeights(files []gitStatusFile, stat, diff, diffNotice, language string, weights map[string]int) (string, string) {
 	ja := strings.EqualFold(language, "ja") || language == ""
-	a := analyzeCommitChanges(files, diff)
+	a := analyzeCommitChangesWithWeights(files, diff, weights)
 	subject := a.subjectLine(ja)
 	body := a.bodyText(ja, stat, diffNotice, len(files))
 	return sanitizeCommitMessage(subject, gitCommitSubjectMaxLen), sanitizeCommitMessage(body, gitCommitBodyMaxLen)
 }
 
 func analyzeCommitChanges(files []gitStatusFile, diff string) commitChangeAnalysis {
-	a := commitChangeAnalysis{}
+	return analyzeCommitChangesWithWeights(files, diff, nil)
+}
+
+func analyzeCommitChangesWithWeights(files []gitStatusFile, diff string, weights map[string]int) commitChangeAnalysis {
+	a := commitChangeAnalysis{weights: weights}
 	docOnly, testOnly, depsOnly, styleOnly, codeChange, hasFile := true, true, true, true, false, false
 	allPaths := make([]string, 0, len(files))
 	for _, f := range files {
@@ -424,8 +518,41 @@ func analyzeCommitChanges(files []gitStatusFile, diff string) commitChangeAnalys
 		a.prefix = "chore"
 	}
 	a.scope = deepestScope(allPaths)
+	a.selectDominant(files)
 	a.determineVerbAndSymbol()
 	return a
+}
+
+func (a *commitChangeAnalysis) selectDominant(files []gitStatusFile) {
+	bestWeight := -1
+	bestRank := -1
+	for _, file := range files {
+		path := strings.ReplaceAll(file.Path, "\\", "/")
+		if path == "" {
+			continue
+		}
+		weight := a.weights[path]
+		rank := dominantStatusRank(file.Status)
+		if weight > bestWeight ||
+			(weight == bestWeight && rank > bestRank) ||
+			(weight == bestWeight && rank == bestRank && (a.dominant == "" || path < a.dominant)) {
+			a.dominant = path
+			a.dominantStatus = file.Status
+			bestWeight = weight
+			bestRank = rank
+		}
+	}
+}
+
+func dominantStatusRank(status string) int {
+	switch status {
+	case "A", "??":
+		return 3
+	case "D":
+		return 1
+	default:
+		return 2
+	}
 }
 
 // determineVerbAndSymbol は analyze の最後で呼ばれ、subject に載せる動詞と主辞を
@@ -446,6 +573,7 @@ func (a *commitChangeAnalysis) determineVerbAndSymbol() {
 			moved = append(moved, name)
 		}
 	}
+	dominantAddHead, dominantAddCount := a.pickAddedSymbolForFile(a.dominant)
 	switch {
 	case a.depsOnly:
 		a.verb = "bump"
@@ -461,6 +589,16 @@ func (a *commitChangeAnalysis) determineVerbAndSymbol() {
 		a.verb = "move"
 		a.symbolHead = moved[0]
 		a.symbolCount = len(moved)
+	case isModifiedStatus(a.dominantStatus) && len(a.added) > 0 &&
+		dominantAddHead == "":
+		a.verb = "change"
+		a.symbolHead = baseName(a.dominant)
+		a.symbolCount = len(a.modified)
+	case isModifiedStatus(a.dominantStatus) && len(a.added) > 0 &&
+		dominantAddHead != "" && !hasRemovals:
+		a.verb = "add"
+		a.symbolHead = dominantAddHead
+		a.symbolCount = dominantAddCount
 	case hasAdditions && !hasRemovals:
 		a.verb = "add"
 		a.symbolHead, a.symbolCount = pickAddSymbol(a)
@@ -482,6 +620,43 @@ func (a *commitChangeAnalysis) determineVerbAndSymbol() {
 		}
 		a.symbolHead, a.symbolCount = pickChangeSymbol(a)
 	}
+}
+
+func isModifiedStatus(status string) bool {
+	return status != "" && status != "A" && status != "??" && status != "D" && status != "R"
+}
+
+// pickAddedSymbolForFile returns only symbols introduced in path. The
+// dominant-file decision must not be disabled merely because a small,
+// unrelated new file exports a type or function.
+func (a *commitChangeAnalysis) pickAddedSymbolForFile(path string) (string, int) {
+	if path == "" {
+		return "", 0
+	}
+	for _, group := range []struct {
+		items []string
+		sites map[string]string
+	}{
+		{a.routes, a.addedRouteSites},
+		{a.types, a.addedTypeSites},
+		{a.funcs, a.addedFuncSites},
+	} {
+		var head string
+		count := 0
+		for _, item := range group.items {
+			if group.sites[item] != path {
+				continue
+			}
+			if head == "" {
+				head = item
+			}
+			count++
+		}
+		if head != "" {
+			return head, count
+		}
+	}
+	return "", 0
 }
 
 // pickAddSymbol は「何が新規追加されたか」の主辞を選ぶ。API ルートはユーザー可視で
@@ -526,6 +701,9 @@ func pickChangeSymbol(a *commitChangeAnalysis) (string, int) {
 		return a.types[0], len(a.types)
 	}
 	if len(a.modified) > 0 {
+		if a.dominant != "" && isModifiedStatus(a.dominantStatus) {
+			return baseName(a.dominant), len(a.modified)
+		}
 		return baseName(a.modified[0]), len(a.modified)
 	}
 	if len(a.added) > 0 {
@@ -579,30 +757,50 @@ func (a *commitChangeAnalysis) scanDiff(diff string) {
 			if reHandleErrGo.MatchString(line) || reHandleThrow.MatchString(line) || reHandleCatch.MatchString(line) {
 				a.handleAdds++
 			}
-			if m := reGitRoute.FindStringSubmatch(line); m != nil {
-				addUnique(&a.routes, seenRoute, m[1])
+			if route := extractRoute(line); route != "" {
+				addUnique(&a.routes, seenRoute, route)
+				recordAddedSite(&a.addedRouteSites, route, cur)
 			}
 			if strings.HasSuffix(cur, ".go") {
 				if m := reAddedGoFunc.FindStringSubmatch(line); m != nil {
 					addUnique(&a.funcs, seenFunc, m[1])
-					if a.addedFuncSites == nil {
-						a.addedFuncSites = map[string]string{}
-					}
-					if _, ok := a.addedFuncSites[m[1]]; !ok {
-						a.addedFuncSites[m[1]] = cur
-					}
+					recordAddedSite(&a.addedFuncSites, m[1], cur)
 				}
 				if m := reAddedGoType.FindStringSubmatch(line); m != nil {
 					addUnique(&a.types, seenType, m[1])
+					recordAddedSite(&a.addedTypeSites, m[1], cur)
 				}
 			}
-			if strings.HasSuffix(cur, ".json") && strings.Contains(cur, "i18n") && reAddedI18n.MatchString(line) {
+			if isJSSourcePath(cur) {
+				for _, re := range []*regexp.Regexp{reAddedJSFunc, reAddedJSConst, reAddedJSClass} {
+					if m := re.FindStringSubmatch(line); m != nil {
+						addUnique(&a.funcs, seenFunc, m[1])
+						recordAddedSite(&a.addedFuncSites, m[1], cur)
+						break
+					}
+				}
+				if m := reAddedJSType.FindStringSubmatch(line); m != nil {
+					addUnique(&a.types, seenType, m[1])
+					recordAddedSite(&a.addedTypeSites, m[1], cur)
+				}
+			}
+			if strings.HasSuffix(cur, ".py") {
+				if m := reAddedPyFunc.FindStringSubmatch(line); m != nil {
+					addUnique(&a.funcs, seenFunc, m[1])
+					recordAddedSite(&a.addedFuncSites, m[1], cur)
+				}
+				if m := reAddedPyClass.FindStringSubmatch(line); m != nil {
+					addUnique(&a.types, seenType, m[1])
+					recordAddedSite(&a.addedTypeSites, m[1], cur)
+				}
+			}
+			if isI18nSourcePath(cur) && reAddedI18n.MatchString(line) {
 				a.i18nKeys++
 			}
 		case isDel:
 			a.locDeleted++
-			if m := reGitRoute.FindStringSubmatch(line); m != nil {
-				addUnique(&a.removedRts, seenRmRoute, m[1])
+			if route := extractRoute(line); route != "" {
+				addUnique(&a.removedRts, seenRmRoute, route)
 			}
 			if strings.HasSuffix(cur, ".go") {
 				if m := reDeletedGoFunc.FindStringSubmatch(line); m != nil {
@@ -621,6 +819,33 @@ func (a *commitChangeAnalysis) scanDiff(diff string) {
 	// 両側から取り除く。
 	a.routes = filterOutSet(a.routes, seenRmRoute)
 	a.removedRts = filterOutSet(a.removedRts, seenRoute)
+}
+
+func extractRoute(line string) string {
+	for _, re := range []*regexp.Regexp{reGoRoute, reJSRoute, rePythonRoute} {
+		if m := re.FindStringSubmatch(line); m != nil {
+			return m[1]
+		}
+	}
+	return ""
+}
+
+func isJSSourcePath(path string) bool {
+	lower := strings.ToLower(path)
+	for _, ext := range []string{".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".cjs"} {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	return false
+}
+
+func isI18nSourcePath(path string) bool {
+	lower := strings.ToLower(strings.ReplaceAll(path, "\\", "/"))
+	if !strings.Contains(lower, "i18n") && !strings.Contains(lower, "locales") {
+		return false
+	}
+	return strings.HasSuffix(lower, ".json") || strings.HasSuffix(lower, ".ts") || strings.HasSuffix(lower, ".js")
 }
 
 func addUnique(dst *[]string, seen map[string]struct{}, v string) {
@@ -659,9 +884,45 @@ func (a commitChangeAnalysis) subjectLine(ja bool) string {
 		return head + ": no changes"
 	}
 	if ja {
-		return head + ": " + jaVerbPhrase(a.verb, withMoreJa(a.symbolHead, a.symbolCount))
+		subject := head + ": " + jaVerbPhrase(a.verb, withMoreJa(a.symbolHead, a.symbolCount))
+		if a.verb == "change" && len(a.added) > 0 {
+			subject += "（" + addedFileSummaryJa(a.added) + " 新規）"
+		}
+		return subject
 	}
-	return head + ": " + enVerbPhrase(a.verb, withMoreEn(a.symbolHead, a.symbolCount))
+	subject := head + ": " + enVerbPhrase(a.verb, withMoreEn(a.symbolHead, a.symbolCount))
+	if a.verb == "change" && len(a.added) > 0 {
+		subject += " (new: " + addedFileSummaryEn(a.added) + ")"
+	}
+	return subject
+}
+
+func recordAddedSite(sites *map[string]string, symbol, path string) {
+	if symbol == "" || path == "" {
+		return
+	}
+	if *sites == nil {
+		*sites = map[string]string{}
+	}
+	if _, exists := (*sites)[symbol]; !exists {
+		(*sites)[symbol] = path
+	}
+}
+
+func addedFileSummaryJa(paths []string) string {
+	head := baseName(paths[0])
+	if len(paths) == 1 {
+		return head
+	}
+	return fmt.Sprintf("%s ほか %d 件", head, len(paths)-1)
+}
+
+func addedFileSummaryEn(paths []string) string {
+	head := baseName(paths[0])
+	if len(paths) == 1 {
+		return head
+	}
+	return fmt.Sprintf("%s (+%d more)", head, len(paths)-1)
 }
 
 func (a commitChangeAnalysis) bodyText(ja bool, stat, diffNotice string, total int) string {

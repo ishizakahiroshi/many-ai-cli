@@ -1,6 +1,7 @@
 package sessionlog
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -33,6 +34,18 @@ func TestWriteTranscript(t *testing.T) {
 	}
 }
 
+func TestWriteTranscriptContinuesAfterVeryLongJSONLLine(t *testing.T) {
+	large := strings.Repeat("x", 9*1024*1024)
+	input := fmt.Sprintf("{\"type\":\"pty_output\",\"text\":%q}\n{\"type\":\"session_end\",\"state\":\"completed\",\"exit_code\":0}\n", large)
+	var out strings.Builder
+	if err := WriteTranscript(strings.NewReader(input), &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "session_end state=completed") {
+		t.Fatal("event after an 8 MiB line was lost")
+	}
+}
+
 func TestIsThinkingNoiseLine(t *testing.T) {
 	noise := []string{
 		"✳ Imploring… (12s · ↑3.2k tokens · esc to interrupt)",
@@ -49,8 +62,8 @@ func TestIsThinkingNoiseLine(t *testing.T) {
 	}
 	keep := []string{
 		"I am thinking about the architecture here.", // "thinking" だがスピナーグリフ無し
-		"Done. Updated 3 files ✓",                     // ✓ は対象外の dingbat
-		"● Read(internal/hub/server.go)",              // ツール呼び出し行
+		"Done. Updated 3 files ✓",                    // ✓ は対象外の dingbat
+		"● Read(internal/hub/server.go)",             // ツール呼び出し行
 		"Here is the summary of the changes:",
 		"  - item one",
 	}

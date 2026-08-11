@@ -75,16 +75,20 @@ func (s *Server) handleFilesList(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, "bad_request", "root must be an absolute path")
 			return
 		}
-		// git ルートを検出して許可範囲を確定
-		gitRoot := findGitRoot(cwd)
-		// orchestration board ディレクトリ（~/.many-ai-cli/orchestration）も許可ルートに含める。
-		// conductor カードの「board を開く」導線が cwd/git root の外を指すため。
-		orchDir, _ := orchestrationDir()
-		// path traversal 防止: 許可ルートは cwd / gitRoot / orchestration board dir
-		allowed, err := isPathUnderAllowedRoots(rootParam, cwd, gitRoot, orchDir)
-		if err != nil || !allowed {
-			writeJSONError(w, http.StatusForbidden, "forbidden", "path is outside allowed roots")
-			return
+		// 直 loopback（Hub ホストのブラウザ）は任意ルートを列挙できる。根拠は
+		// filesScopeRestricted（files_scope.go）。論理リモートは従来どおり許可ルートに閉じる。
+		if s.filesScopeRestricted(r) {
+			// git ルートを検出して許可範囲を確定
+			gitRoot := findGitRoot(cwd)
+			// orchestration board ディレクトリ（~/.many-ai-cli/orchestration）も許可ルートに含める。
+			// conductor カードの「board を開く」導線が cwd/git root の外を指すため。
+			orchDir, _ := orchestrationDir()
+			// path traversal 防止: 許可ルートは cwd / gitRoot / orchestration board dir
+			allowed, err := isPathUnderAllowedRoots(rootParam, cwd, gitRoot, orchDir)
+			if err != nil || !allowed {
+				writeJSONError(w, http.StatusForbidden, "forbidden", "path is outside allowed roots")
+				return
+			}
 		}
 		filesRoot = rootParam
 	} else {
@@ -180,9 +184,11 @@ func walkFilesLocal(filesRoot, cwd string) ([]filesListItem, bool) {
 				return
 			}
 
-			// summary は text 系ファイルだけ抽出（バイナリは無意味なのでスキップ）
+			// summary は text 系ファイルだけ抽出（バイナリは無意味なのでスキップ）。
+			// 秘密情報 denylist 該当ファイルは、ツリー走査だけで中身の冒頭が一括で
+			// 吸い出されるのを避けるため summary を付けない（名前と属性は出す）。
 			var summary string
-			if isTextFile(fullPath) {
+			if isTextFile(fullPath) && !isSecretReadDenied(fullPath) {
 				summary = extractFileSummary(fullPath)
 			}
 

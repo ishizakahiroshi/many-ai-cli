@@ -8,7 +8,7 @@ Ghi chép vận hành: khi Claude Code / Codex CLI / GitHub Copilot CLI / Cursor
 ## Khuyến nghị: bán tự động bằng skill `slash-commands-update`
 
 Trước khi theo dõi thủ công upstream, ưu tiên skill  
-`C:\dev\workshop\skills\slash-commands-update` (đường dẫn môi trường tác giả). Skill hỗ trợ: phát hiện diff với upstream · đề xuất chuẩn hóa markdown · báo cáo cho người duyệt (quyết định accept/reject vẫn do người).
+`D:\dev\workshop\skills\slash-commands-update` (đường dẫn môi trường tác giả). Skill hỗ trợ: phát hiện diff với upstream · đề xuất chuẩn hóa markdown · báo cáo cho người duyệt (quyết định accept/reject vẫn do người).
 
 - Kích hoạt: «kiểm tra độ tươi slash-command», «slash-commands-update», …
 - Chế độ:

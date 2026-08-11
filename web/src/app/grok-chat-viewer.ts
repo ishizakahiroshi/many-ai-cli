@@ -6,7 +6,7 @@
 //
 // パス・URL は Chat タブ相当のクリック／右クリック操作を提供する（読み取り専用でも
 // ファイルを開く・コピーする導線は必要。textContent 直書きだとプレーン文字列のまま）。
-import { showToast, ti18n, token } from './util.js';
+import { openExternalLinkWithConfirmation, showToast, ti18n, token } from './util.js';
 import { sessions } from './state.js';
 import { appendLinkedText } from './path-links.js';
 
@@ -138,6 +138,8 @@ function gcvFillTextWithLinks(container: HTMLElement, raw: string, sessionId: nu
       a.href = part.value;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
+      a.title = `External link: ${part.value}`;
+      a.addEventListener('click', (event) => openExternalLinkWithConfirmation(event, part.value));
       a.textContent = part.value;
       container.appendChild(a);
       continue;
