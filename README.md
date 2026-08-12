@@ -6,7 +6,7 @@
 
 ![many-ai-cli dashboard](assets/readme-dashboard.png)
 
-**Never miss an approval prompt — even from your phone.** Run `Claude Code`, `Codex CLI`, `GitHub Copilot CLI`, `Cursor Agent CLI`, and `Grok Build CLI` in parallel; `many-ai-cli` watches every session in a PTY and pushes a notification to your desktop or phone the moment any one is blocked waiting for your approval — so you don't have to babysit terminals. It also gives you a local web dashboard to handle approvals, monitoring, and terminals across multiple sessions in one place.
+**Never miss the moment an AI coding CLI stops — even from your phone.** Run `Claude Code`, `Codex CLI`, `GitHub Copilot CLI`, `Cursor Agent CLI`, and `Grok Build CLI` in parallel; `many-ai-cli` watches every session in a PTY and pushes a notification to your desktop or phone the moment any one of them needs you — an approval prompt, a finished task, or an error — so you don't have to babysit terminals. It also gives you a local web dashboard to handle approvals, monitoring, and terminals across multiple sessions in one place.
 
 [日本語版 README はこちら](README.ja.md) · [README tiếng Việt](README.vi.md)
 
@@ -14,7 +14,9 @@
 
 ## Overview
 
-When you run several AI coding CLIs in parallel across multiple terminals, it's easy to lose track of which session is blocked waiting for your approval — so you end up checking the terminals over and over. `many-ai-cli` wraps each CLI in a PTY and notifies your desktop or phone the moment it detects an approval prompt. It also lets you handle approvals and monitor progress from a single browser-based Hub UI. The CLI itself works exactly as before; `many-ai-cli` only adds notifications and an approval GUI on top.
+When you run several AI coding CLIs in parallel across multiple terminals, it's easy to lose track of which session has stopped — so you end up checking the terminals over and over. `many-ai-cli` wraps each CLI in a PTY and notifies your desktop or phone the moment it detects an approval prompt, a finished task, or an error. It also lets you handle approvals and monitor progress from a single browser-based Hub UI. The CLI itself works exactly as before; `many-ai-cli` only adds notifications and an approval GUI on top.
+
+**This role survives the shift toward automatic approvals.** As permission models like Claude Code's auto mode — which only stops for irreversible or destructive actions — become the norm, approval prompts get rarer. They do not disappear: sessions run silently for much longer and then stop just once. When you are running several in parallel, that occasional stop is the easier one to miss. Approval models also differ per CLI and are not being automated in lockstep, so running multiple vendors side by side still needs one place that collects their state. `many-ai-cli` is not a tool for pressing approval buttons on your behalf; it is a tool for **detecting that something has stopped and telling you**.
 
 ```
 Terminal pane #1              Terminal pane #2

@@ -10,6 +10,7 @@
 **many-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。単一 Go バイナリ（Hub 常駐 + ラッパー機能）+ ブラウザ UI（xterm.js / TypeScript）。
 
 > **Gemini CLI は wrap 対象外**（2026-05-06 決定 / 利用規約上の制約）。詳細は [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) 「2. 公開スコープ」参照。
+> 2026-08-13、Spotify Xirp の「浅いホスト方式」を踏まえて再検討したが **方針は維持**（保留記録: `docs/local/pending_gemini-shallow-host-option.md`）。他社が Gemini を扱っている事実・対応プロバイダ数の見劣りを根拠に着手を提案しないこと。
 
 **現状**: v0.5.1 までリリース済み（v0.1.1 が初回正式リリース、v0.1.0 は試験扱い）。**v0.6.0 が次のリリース対象**（CHANGELOG の `[0.6.0]` 節。未リリースだった `[0.5.2]` を統合したため v0.5.2 は欠番）。v0.1.2 でバージョン文字列を ldflags + `/api/info` 経由の single source of truth に再設計、v0.2.0 で WSL ランチャー・Files/Git/Chat/Split/Multi・Commit all・Ollama routing・サーバ側ユーザー設定を追加。v0.3.0 で Workbench（SQLite セッション履歴）・PWA/Web Push・統合ランチャーのクロスプラットフォーム化（SSH は全 OS、WSL は Windows 専用）・リモートサーバー/Docker デプロイ資産・npm 配布を追加し、プロジェクト名を any-ai-cli から many-ai-cli へリネーム。**v0.4.0（Unreleased）で Workbench 機能と Hub 内蔵チャットプロキシ（`internal/proxy/`・`chat_proxy`）を撤去済み**（Sonnet 5 以降のデフォルト 1M コンテキストが Hub 経由でも回復する副次効果あり）。設計書はソースコードを正本として更新済み。
 
