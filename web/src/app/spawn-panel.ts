@@ -28,6 +28,8 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   const spawnClaudeModelBtn = document.getElementById('spawn-claude-model-btn');
   const spawnOpenCodeOpts = document.getElementById('spawn-opencode-opts');
   const spawnOpenCodeFullAllow = document.getElementById('spawn-opencode-full-allow') as HTMLInputElement | null;
+  const spawnIsolateWorktree = document.getElementById('spawn-isolate-worktree') as HTMLInputElement | null;
+  const spawnIsolateWorktreeNote = document.getElementById('spawn-isolate-worktree-note');
   const spawnModelInput = document.getElementById('spawn-model');
   const spawnModelDatalist = document.getElementById('spawn-model-datalist');
   const spawnModelClearBtn = document.getElementById('spawn-model-clear');
@@ -585,6 +587,18 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     });
   }
 
+  // worktree 隔離の注意書きは、チェックが入っているときだけ出す。
+  // 未追跡ファイル（node_modules / .env 等）が引き継がれない点を起動前に見せるため。
+  function updateIsolateWorktreeNote() {
+    if (spawnIsolateWorktreeNote) {
+      spawnIsolateWorktreeNote.hidden = !spawnIsolateWorktree?.checked;
+    }
+  }
+
+  if (spawnIsolateWorktree) {
+    spawnIsolateWorktree.addEventListener('change', updateIsolateWorktreeNote);
+  }
+
   function loadSpawnSettings() {
     try {
       const s = JSON.parse(localStorage.getItem(STORAGE_SPAWN_KEY) || '{}');
@@ -638,6 +652,11 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       }
       if (s.detached_preset && spawnDetachedPreset) {
         spawnDetachedPreset.value = s.detached_preset;
+      }
+      // spawn.defaults は map[string]string なので 'true' / 'false' の文字列で往復する
+      if (spawnIsolateWorktree) {
+        spawnIsolateWorktree.checked = (s.isolate_worktree === 'true');
+        updateIsolateWorktreeNote();
       }
       updateSpawnProviderIcon();
       updateDetachedPreview();
@@ -1936,6 +1955,18 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     });
   }
 
+  // spawn 失敗レスポンスを人が読める 1 行にする。Hub は {"ok":false,"error":…,"detail":…}
+  // を返すので、生の JSON をそのまま alert へ流すと何が起きたのか伝わらない。
+  async function spawnErrorMessage(res: Response): Promise<string> {
+    const raw = await res.text();
+    try {
+      const err = JSON.parse(raw);
+      if (err?.error === 'worktree_error') return t('spawn_worktree_error');
+      if (err?.detail) return String(err.detail);
+    } catch (_) {}
+    return raw;
+  }
+
   async function spawnSession() {
     const provider = document.getElementById('spawn-provider').value;
     const cwd = spawnCwdInput.value.trim();
@@ -1975,6 +2006,9 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       const bodyObj: any = { provider, cwd, label };
       if (provider !== 'shell') bodyObj.model = model;
       if (utf8Session) bodyObj.utf8_session = true;
+      // チェック時のみ送る。未チェックでは省略し、config の user_prefs.spawn.worktree_auto
+      // を Hub 側の既定として温存する（設定ファイルで常時 ON にしている利用者を壊さない）。
+      if (spawnIsolateWorktree?.checked) bodyObj.isolate_worktree = true;
       if (provider !== 'shell' && route) bodyObj.route = route;
       if (provider === 'claude') {
         const picked = claudeModelSelection;
@@ -2077,6 +2111,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
           open_target: openTarget,
           grid_layout: gridLayout,
           detached_preset: detachedPreset,
+          isolate_worktree: spawnIsolateWorktree?.checked ? 'true' : 'false',
           ...(provider === 'claude' ? { permission_mode: bodyObj.permission_mode } : {}),
           ...(provider === 'codex'  ? { sandbox: bodyObj.sandbox, ask_for_approval: bodyObj.ask_for_approval } : {}),
           ...(provider === 'opencode' ? { opencode_permission_mode: bodyObj.permission_mode } : {}),
@@ -2142,7 +2177,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
           set_pendingAutoSwitch(true);
         }
       } else {
-        alert(t('spawn_failed') + await res.text());
+        alert(t('spawn_failed') + await spawnErrorMessage(res));
       }
     } catch (e) {
       alert(t('spawn_failed') + e.message);

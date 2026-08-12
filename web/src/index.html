@@ -1019,6 +1019,13 @@
           </div>
           <!-- label input (optional) -->
           <input type="text" id="spawn-label" class="spawn-input" data-i18n-placeholder="spawn_label_placeholder">
+          <!-- git worktree 隔離（全プロバイダ共通・opt-in）。チェック時のみ isolate_worktree を送り、
+               未チェックのときは config の user_prefs.spawn.worktree_auto を既定として尊重する。 -->
+          <label class="spawn-risk-label">
+            <input id="spawn-isolate-worktree" type="checkbox">
+            <span data-i18n="spawn_isolate_worktree">Run this session in a dedicated git worktree</span>
+          </label>
+          <div id="spawn-isolate-worktree-note" class="settings-note" data-i18n="spawn_isolate_worktree_note" hidden>Only applies when the working directory is a git repository. Creates an isolated checkout under &lt;repo&gt;/.git-worktrees/ on a new many-ai/ branch. Untracked files such as node_modules and .env are not carried over, so dependencies may need reinstalling.</div>
           <!-- model input (shared between providers) -->
           <div class="spawn-model-row">
             <input type="text" id="spawn-model" class="spawn-input"
