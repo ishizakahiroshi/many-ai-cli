@@ -185,7 +185,9 @@ function moveDraggedRow(list: HTMLElement, row: HTMLElement, clientY: number): v
 function startReorder(event: PointerEvent, list: HTMLElement, row: HTMLElement, handle: HTMLElement): void {
   if (event.button > 0) return;
   event.preventDefault(); // タッチのスクロール・長押し選択を止める
-  handle.setPointerCapture(event.pointerId);
+  // 捕捉は取れれば取る（タッチの追随が安定する）が、取れなくても成立させる。
+  // 終了イベントは window で受けるので、捕捉の有無に依存しない。
+  try { handle.setPointerCapture(event.pointerId); } catch (_) { /* 捕捉なしで続行 */ }
   draggingRow = row;
   row.classList.add('is-dragging');
   let clientY = event.clientY;
@@ -209,19 +211,30 @@ function startReorder(event: PointerEvent, list: HTMLElement, row: HTMLElement, 
     if (!frame) frame = requestAnimationFrame(tick);
   };
 
-  const onEnd = (): void => {
-    handle.removeEventListener('pointermove', onMove);
-    handle.removeEventListener('pointerup', onEnd);
-    handle.removeEventListener('pointercancel', onEnd);
+  // 終了は必ず 1 回だけ走らせる（pointerup と blur が続けて来ることがある）。
+  let finished = false;
+  const onEnd = (endEvent?: Event): void => {
+    if (finished) return;
+    if (endEvent instanceof PointerEvent && endEvent.pointerId !== event.pointerId) return;
+    finished = true;
+    window.removeEventListener('pointermove', onMove, true);
+    window.removeEventListener('pointerup', onEnd, true);
+    window.removeEventListener('pointercancel', onEnd, true);
+    window.removeEventListener('blur', onEnd);
     if (frame) cancelAnimationFrame(frame);
     row.classList.remove('is-dragging');
     draggingRow = null;
     commitTemplateOrder(list);
   };
 
-  handle.addEventListener('pointermove', onMove);
-  handle.addEventListener('pointerup', onEnd);
-  handle.addEventListener('pointercancel', onEnd);
+  // 掴み要素ではなく window で受ける。行を動かす insertBefore は「DOM から外して入れ直す」
+  // 操作なので、掴み要素のポインタ捕捉がその時点で解放されることがある。掴み要素にだけ
+  // 終了リスナを付けていると pointerup が届かず draggingRow が残り、renderPalette が
+  // 二度と走らなくなる（削除も編集も画面に反映されなくなる）。
+  window.addEventListener('pointermove', onMove, true);
+  window.addEventListener('pointerup', onEnd, true);
+  window.addEventListener('pointercancel', onEnd, true);
+  window.addEventListener('blur', onEnd);
 }
 
 // つまみにフォーカスした状態の ↑ / ↓（ドラッグできない環境・支援技術向けの代替手段）。
