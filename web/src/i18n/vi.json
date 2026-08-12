@@ -115,6 +115,7 @@
   "template_already_exists": "Đã có mẫu với cùng nội dung",
   "template_search_placeholder": "Tìm mẫu",
   "template_add": "+ Thêm",
+  "template_reorder": "Kéo để sắp xếp lại (hoặc nhấn ↑ / ↓)",
   "template_edit": "Sửa",
   "template_delete": "Xóa",
   "template_save": "Lưu",

@@ -361,13 +361,13 @@ type UserPrefsQuickCmds struct {
 }
 
 // UserPrefsTemplate is a reusable prompt. Providers is empty when the prompt
-// applies to every provider; Frequency is incremented whenever it is inserted.
+// applies to every provider. The slice order is the user's manual order, set by
+// dragging rows in the template palette, so it must be preserved as stored.
 type UserPrefsTemplate struct {
 	Label     string   `yaml:"label" json:"label"`
 	Body      string   `yaml:"body" json:"body"`
 	Providers []string `yaml:"providers,omitempty" json:"providers,omitempty"`
 	Tags      []string `yaml:"tags,omitempty" json:"tags,omitempty"`
-	Frequency int      `yaml:"frequency,omitempty" json:"frequency,omitempty"`
 }
 
 // UserPrefsTemplateSend はテンプレート選択時の挙動。Immediate=true なら

@@ -115,6 +115,7 @@
   "template_already_exists": "同じ内容のテンプレートがあります",
   "template_search_placeholder": "テンプレートを検索",
   "template_add": "＋ 追加",
+  "template_reorder": "ドラッグで並べ替え（↑↓ でも移動）",
   "template_edit": "編集",
   "template_delete": "削除",
   "template_save": "保存",

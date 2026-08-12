@@ -320,7 +320,6 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
       body: item.body.trim().slice(0, 8000),
       providers: Array.isArray(item.providers) ? item.providers.filter((p) => typeof p === 'string').slice(0, 10) : [],
       tags: Array.isArray(item.tags) ? item.tags.filter((tag) => typeof tag === 'string').slice(0, 10) : [],
-      frequency: Math.max(0, Math.min(100000, Number(item.frequency) || 0)),
     })).filter((item) => item.body);
     return { ok: true, value };
   }
