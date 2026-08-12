@@ -36,6 +36,8 @@ export const STORAGE_QUICK_CMD_3_SHOW_KEY     = 'ai_cli_hub_quick_cmd_3_show';
 export const STORAGE_QUICK_CMD_4_SHOW_KEY     = 'ai_cli_hub_quick_cmd_4_show';
 export const STORAGE_QUICK_CMD_5_SHOW_KEY     = 'ai_cli_hub_quick_cmd_5_show';
 export const STORAGE_TEMPLATES_KEY            = 'ai_cli_hub_prompt_templates';
+// テンプレートを選んだときの挙動: 1 = 即時送信 / 0（既定）= 入力欄へ反映のみ。
+export const STORAGE_TEMPLATE_SEND_IMMEDIATE_KEY = 'ai_cli_hub_template_send_immediate';
 export const STORAGE_TOOLS_LEFT_KEY           = 'ai_cli_hub_tools_left';
 export const STORAGE_PC_INPUT_TOOLS_KEY       = 'ai_cli_hub_pc_input_tools';
 export const STORAGE_MOBILE_INPUT_TOOLS_KEY   = 'ai_cli_hub_mobile_input_tools';
@@ -205,6 +207,7 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'quick_cmds.show4':          [STORAGE_QUICK_CMD_4_SHOW_KEY,      (v) => v ? '1' : '0'],
   'quick_cmds.show5':          [STORAGE_QUICK_CMD_5_SHOW_KEY,      (v) => v ? '1' : '0'],
   'templates':                 [STORAGE_TEMPLATES_KEY,             JSON.stringify],
+  'template_send.immediate':   [STORAGE_TEMPLATE_SEND_IMMEDIATE_KEY, (v) => v ? '1' : '0'],
   'usage_links.claude':        [STORAGE_USAGE_LINK_CLAUDE_KEY,     String],
   'usage_links.codex':         [STORAGE_USAGE_LINK_CODEX_KEY,      String],
   'usage_links.copilot':       [STORAGE_USAGE_LINK_COPILOT_KEY,    String],
@@ -284,6 +287,7 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
   try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
 
   if (path.endsWith('.enabled') || path === 'voice.wake_word_enabled' || path === 'voice.input_disabled' || path === 'approval.auto_switch' || path === 'approval.auto_approval_enabled'
+      || path === 'template_send.immediate'
       || /^quick_cmds\.show[1-5]$/.test(path)) {
     return { ok: true, value: raw === '1' || raw === 'true' || parsed === true };
   }

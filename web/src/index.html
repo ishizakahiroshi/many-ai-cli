@@ -1319,6 +1319,14 @@
               <button id="prompt-template-toggle" class="quick-cmd-btn" type="button" aria-label="Prompt templates" aria-haspopup="true" aria-expanded="false">▤</button>
               <div id="prompt-template-palette" hidden>
                 <input id="prompt-template-search" type="search" data-i18n-placeholder="template_search_placeholder" aria-label="Prompt templates">
+                <div class="prompt-template-mode">
+                  <span class="prompt-template-mode-label" data-i18n="template_send_immediate">選んだら即送信</span>
+                  <label class="approval-toggle">
+                    <input type="checkbox" id="prompt-template-send-immediate">
+                    <span class="approval-toggle-slider"></span>
+                  </label>
+                </div>
+                <div id="prompt-template-mode-note" class="prompt-template-mode-note"></div>
                 <div id="prompt-template-list" role="menu"></div>
               </div>
             </div>

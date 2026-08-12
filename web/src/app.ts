@@ -77,13 +77,22 @@ window.addEventListener('many-ai-cli:insert-file-prompt', (event: Event) => {
 
 // Desktop palette and mobile chips use one insertion boundary so multiline
 // templates retain the same focus and textarea sizing behavior as file prompts.
+// detail.send はテンプレート側の「選んだら即送信」トグル。true なら入力欄へ
+// 差し込んだうえで通常の送信経路（doSend）をそのまま通す。
 window.addEventListener('many-ai-cli:insert-template', (event: Event) => {
-  const text = String((event as CustomEvent<{ text?: string }>).detail?.text || '');
+  const detail = (event as CustomEvent<{ text?: string; send?: boolean }>).detail;
+  const text = String(detail?.text || '');
   if (!text) return;
   inputEl.value += inputEl.value && !inputEl.value.endsWith('\n') ? `\n${text}` : text;
   inputEl.dispatchEvent(new Event('input', { bubbles: true }));
   autoExpand();
   inputEl.focus();
+  if (!detail?.send) return;
+  if (activeSessionId === null) {
+    showToast(t('toast_template_send_no_session'));
+    return;
+  }
+  void doSend(activeSessionId);
 });
 
 export function autoExpand(opts: any = {}) {

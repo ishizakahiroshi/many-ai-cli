@@ -1,5 +1,5 @@
 import { t } from '../i18n.js';
-import { STORAGE_TEMPLATES_KEY, setUserPref } from './user-prefs.js';
+import { STORAGE_TEMPLATES_KEY, STORAGE_TEMPLATE_SEND_IMMEDIATE_KEY, setUserPref } from './user-prefs.js';
 import { activeSessionId, sessions } from './state.js';
 import { showToast } from './util.js';
 
@@ -85,6 +85,16 @@ export function templatesForProvider(provider = activeProvider(), query = ''): P
   ).sort((a, b) => b.frequency - a.frequency || a.body.localeCompare(b.body, 'ja'));
 }
 
+// テンプレートを選んだときに即時送信するか（true）、入力欄へ反映するだけか（false・既定）。
+// サーバ同期（user_prefs.template_send.immediate）なので端末を跨いで同じ挙動になる。
+export function isTemplateSendImmediate(): boolean {
+  try { return localStorage.getItem(STORAGE_TEMPLATE_SEND_IMMEDIATE_KEY) === '1'; } catch (_) { return false; }
+}
+
+export function setTemplateSendImmediate(value: boolean): void {
+  setUserPref('template_send.immediate', value);
+}
+
 export function insertPromptTemplate(template: PromptTemplate): void {
   const templates = getPromptTemplates();
   const index = templates.findIndex((candidate) => candidate.body === template.body);
@@ -92,7 +102,8 @@ export function insertPromptTemplate(template: PromptTemplate): void {
     templates[index] = { ...templates[index], frequency: templates[index].frequency + 1 };
     save(templates);
   }
-  window.dispatchEvent(new CustomEvent('many-ai-cli:insert-template', { detail: { text: template.body } }));
+  // send は選択時点の設定を焼き付けて渡す（受け手の app.ts 側で再判定しない）。
+  window.dispatchEvent(new CustomEvent('many-ai-cli:insert-template', { detail: { text: template.body, send: isTemplateSendImmediate() } }));
 }
 
 type UndoState = { template: PromptTemplate; index: number };
@@ -323,6 +334,32 @@ function closePalette(panel: HTMLElement): void {
   undoState = null;
 }
 
+function syncSendModeToggle(): void {
+  const input = document.getElementById('prompt-template-send-immediate') as HTMLInputElement | null;
+  if (!input) return;
+  const immediate = isTemplateSendImmediate();
+  input.checked = immediate;
+  const note = immediate
+    ? text('template_send_immediate_note_on', '選んだテンプレートをそのまま送信します')
+    : text('template_send_immediate_note_off', '選んだテンプレートを入力欄に入れます');
+  input.setAttribute('aria-label', text('template_send_immediate', '選んだら即送信'));
+  input.title = note;
+  const noteEl = document.getElementById('prompt-template-mode-note');
+  if (noteEl) noteEl.textContent = note;
+}
+
+function initSendModeToggle(): void {
+  const input = document.getElementById('prompt-template-send-immediate') as HTMLInputElement | null;
+  if (!input) return;
+  input.addEventListener('change', () => {
+    setTemplateSendImmediate(input.checked);
+    syncSendModeToggle();
+  });
+  document.addEventListener('user-prefs-mirrored', syncSendModeToggle);
+  document.addEventListener('i18n-ready', syncSendModeToggle);
+  syncSendModeToggle();
+}
+
 function initPalette(): void {
   const toggle = document.getElementById('prompt-template-toggle') as HTMLButtonElement | null;
   const panel = document.getElementById('prompt-template-palette');
@@ -335,9 +372,11 @@ function initPalette(): void {
     }
     panel.hidden = false;
     toggle.setAttribute('aria-expanded', 'true');
+    syncSendModeToggle();
     renderPalette();
     search.focus();
   });
+  initSendModeToggle();
   search.addEventListener('input', renderPalette);
   document.addEventListener('session:activated', renderPalette);
   document.addEventListener('user-prefs-mirrored', () => { renderPalette(); window.dispatchEvent(new Event('prompt-templates:changed')); });
