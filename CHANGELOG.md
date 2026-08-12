@@ -10,6 +10,16 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Added
+- **A toggle decides what picking a prompt template does.** The template
+  palette above the input bar now has a **Send on select** switch: off (the
+  default, and the previous behavior) drops the template into the input box so
+  you can edit it first; on sends it immediately through the normal send path.
+  A one-line note under the switch states which mode is active. The setting is
+  stored server-side as `user_prefs.template_send.immediate`, so it follows you
+  across browsers and devices (`web/src/app/prompt-templates.ts`,
+  `internal/config/config.go`).
+
 ## [0.6.0] - 2026-08-11
 
 ### Added

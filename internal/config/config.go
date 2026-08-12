@@ -370,6 +370,14 @@ type UserPrefsTemplate struct {
 	Frequency int      `yaml:"frequency,omitempty" json:"frequency,omitempty"`
 }
 
+// UserPrefsTemplateSend はテンプレート選択時の挙動。Immediate=true なら
+// 選んだ瞬間にそのまま送信し、false（既定）なら入力欄へ差し込むだけにする。
+// ポインタなのは QuickCmds.Show1..5 と同じ理由で、明示的な false を omitempty で
+// 落とさないため（落とすと OFF に戻した設定が他端末のミラーへ伝わらない）。
+type UserPrefsTemplateSend struct {
+	Immediate *bool `yaml:"immediate,omitempty" json:"immediate,omitempty"`
+}
+
 // UserPrefsUsageLinks は使用量リンクの設定。
 type UserPrefsUsageLinks struct {
 	Claude      string `yaml:"claude,omitempty"  json:"claude,omitempty"`
@@ -542,6 +550,7 @@ type UserPrefs struct {
 	Approval                 UserPrefsApproval                 `yaml:"approval,omitempty"     json:"approval,omitempty"`
 	QuickCmds                UserPrefsQuickCmds                `yaml:"quick_cmds,omitempty"   json:"quick_cmds,omitempty"`
 	Templates                []UserPrefsTemplate               `yaml:"templates,omitempty"    json:"templates,omitempty"`
+	TemplateSend             UserPrefsTemplateSend             `yaml:"template_send,omitempty" json:"template_send,omitempty"`
 	UsageLinks               UserPrefsUsageLinks               `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
 	Voice                    UserPrefsVoice                    `yaml:"voice,omitempty"        json:"voice,omitempty"`
 	SessionOrder             SessionOrderIDs                   `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
