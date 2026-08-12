@@ -115,6 +115,7 @@
   "template_already_exists": "A template with the same text already exists",
   "template_search_placeholder": "Search templates",
   "template_add": "+ Add",
+  "template_reorder": "Drag to reorder (or press ↑ / ↓)",
   "template_edit": "Edit",
   "template_delete": "Delete",
   "template_save": "Save",

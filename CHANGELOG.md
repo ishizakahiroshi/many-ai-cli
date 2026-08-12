@@ -11,6 +11,16 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Prompt templates can be reordered by dragging.** Each row in the template
+  palette has a grip on the left; drag it to move the template, and the order
+  is saved as `user_prefs.templates` so it follows you across browsers and
+  devices. The drag is implemented with pointer events rather than HTML5
+  drag-and-drop, so it works with a finger or pen as well as a mouse, and the
+  list auto-scrolls while you hold near its top or bottom edge. With the grip
+  focused, `↑` / `↓` move the template one step for keyboard and assistive
+  technology use. Reordering is disabled while the search box has text, because
+  the position of a dragged row relative to filtered-out rows is undefined
+  (`web/src/app/prompt-templates.ts`).
 - **A toggle decides what picking a prompt template does.** The template
   palette above the input bar now has a **Send on select** switch: off (the
   default, and the previous behavior) drops the template into the input box so
@@ -18,6 +28,17 @@ Release artifacts are published at
   A one-line note under the switch states which mode is active. The setting is
   stored server-side as `user_prefs.template_send.immediate`, so it follows you
   across browsers and devices (`web/src/app/prompt-templates.ts`,
+  `internal/config/config.go`).
+
+### Changed
+- **The template list now keeps the order you set instead of sorting by usage.**
+  Previously the palette sorted by how often each template had been picked, so a
+  manually chosen order would be undone by the next selection. Templates are now
+  listed in stored order, newly added ones go to the bottom, and the per-template
+  `frequency` counter is gone from the client, the server struct, and the
+  user-prefs mirror. Picking a template no longer writes to the server at all.
+  Existing `frequency` values in `config.yaml` are ignored and dropped on the
+  next save (`web/src/app/prompt-templates.ts`, `web/src/app/user-prefs.ts`,
   `internal/config/config.go`).
 
 ## [0.6.0] - 2026-08-11
