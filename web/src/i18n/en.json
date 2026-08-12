@@ -274,6 +274,7 @@
   "tsb_sent_history_title": "Sent history",
   "tsb_sent_history_count": "{n} items",
   "tsb_sent_history_empty": "No sent messages yet",
+  "tsb_sent_history_loading": "Loading…",
   "tsb_sent_history_hint": "Click to view sent history in chronological order",
   "tsb_sent_history_copy_hint": "Click to copy this message",
   "tsb_sent_history_attach_hint": "Click to open (preview / default app / folder, etc.)",

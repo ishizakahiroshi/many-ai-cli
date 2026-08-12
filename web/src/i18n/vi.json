@@ -274,6 +274,7 @@
   "tsb_sent_history_title": "Lịch sử đã gửi",
   "tsb_sent_history_count": "{n} mục",
   "tsb_sent_history_empty": "Chưa có tin đã gửi",
+  "tsb_sent_history_loading": "Đang tải…",
   "tsb_sent_history_hint": "Bấm để xem lịch sử gửi theo thời gian",
   "tsb_sent_history_copy_hint": "Bấm để sao chép tin này",
   "tsb_sent_history_attach_hint": "Bấm để mở (xem trước / app mặc định / thư mục, v.v.)",
