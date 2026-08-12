@@ -30,6 +30,35 @@ Release artifacts are published at
   across browsers and devices (`web/src/app/prompt-templates.ts`,
   `internal/config/config.go`).
 
+- **Worktree isolation is reachable from the spawn panel.** Running an ordinary
+  session in its own git worktree already existed but could only be turned on by
+  hand-editing `user_prefs.spawn.worktree_auto` in `config.yaml`, so in practice
+  nobody found it. The spawn panel now has a **Run this session in a dedicated
+  git worktree** checkbox, with a note that appears while it is ticked warning
+  that untracked files such as `node_modules` and `.env` are not carried into the
+  new checkout. The choice is remembered as `spawn.defaults.isolate_worktree`.
+  The checkbox only ever adds isolation: leaving it unticked omits the field so a
+  `worktree_auto: true` in `config.yaml` keeps working as the default
+  (`web/src/index.html`, `web/src/app/spawn-panel.ts`, `web/src/i18n/*.json`).
+
+### Fixed
+- **`.git-worktrees/` was not ignored by git.** Normal-session worktree isolation
+  creates its checkouts in `<repo>/.git-worktrees/`, but `.gitignore` only
+  covered `.many-ai-cli/`, which is the orchestration path. Turning isolation on
+  therefore left an untracked directory inside the parent working tree
+  (`.gitignore`).
+- **The v0.5.0 entry below documented a worktree path that was never used.** It
+  said normal-session worktrees live under `.many-ai-cli/worktrees/normal/<label>/`;
+  the implementation has always placed them in `<repo>/.git-worktrees/<label>-<timestamp>`
+  on a `many-ai/…` branch. The entry has been corrected.
+- **A failed spawn dumped the raw JSON error body into an alert.** The spawn
+  panel showed `alert(t('spawn_failed') + await res.text())`, so a rejected
+  launch surfaced `{"ok":false,"error":…,"detail":…}` verbatim. Failures now
+  render the `detail` alone, and a `worktree_error` — the case you hit by
+  ticking worktree isolation on a directory that is not a git repository —
+  gets a written explanation instead (`web/src/app/spawn-panel.ts`,
+  `web/src/i18n/*.json`).
+
 ### Changed
 - **The template list now keeps the order you set instead of sorting by usage.**
   Previously the palette sorted by how often each template had been picked, so a
@@ -821,8 +850,8 @@ Release artifacts are published at
   persists per session (`internal/hub/done_summary.go`).
 - **Normal-worktree mode.** Non-orchestration sessions can now opt in to
   running in a dedicated git worktree under
-  `.many-ai-cli/worktrees/normal/<label>/` so parallel work on the same
-  repo does not step on each other's branches
+  `<repo>/.git-worktrees/<label>-<timestamp>`, on a branch named `many-ai/…`,
+  so parallel work on the same repo does not step on each other's branches
   (`internal/hub/normal_worktree.go`).
 - **Commit-all rework: AI commit message + push.** The Hub's "Commit all"
   path can now generate an AI commit message from the staged diff and
