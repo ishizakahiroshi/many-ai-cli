@@ -2,8 +2,56 @@ package hub
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
+
+// TestVTBufferWideRuneAdvancesTwoColumns は、全角文字が 2 桁を占めることを検証する。
+//
+// 1 桁として数えていたときは、日本語の行を描いたミラーの桁位置が実端末より手前で
+// 止まり、行の右側に前の描画（コンポーザ枠線）が消し残った。承認ブロックの選択肢
+// ラベル末尾に罫線が食い込む box_rule 判定の正体がこれで、実測（2026-08-13 /
+// approval-corrupt ダンプ 138 件の replay）では box_rule 61 件のうち 30 件がこの
+// 修正だけで正常なブロックへ戻る。
+func TestVTBufferWideRuneAdvancesTwoColumns(t *testing.T) {
+	vt := newVTBuffer(20, 3)
+	// 先に罫線で 20 桁を埋め、その上へ日本語 5 文字（= 10 桁）を書き直す。
+	vt.Write([]byte(strings.Repeat("─", 20)))
+	vt.Write([]byte("\x1b[1;1H実行します"))
+
+	want := "実行します" + strings.Repeat("─", 10)
+	if got := vt.Lines()[0]; got != want {
+		t.Fatalf("line 0 = %q, want %q", got, want)
+	}
+}
+
+// TestVTBufferScrollbackRendersWideRunes は、画面から押し出された行にも
+// 2 桁文字の右半分を表す番兵が混ざらないことを検証する。
+// scrollback へ積むときにセル列を直接 string() すると NUL がそのまま残り、
+// 承認マーカーの抽出・分類が本文を読み違える。
+func TestVTBufferScrollbackRendersWideRunes(t *testing.T) {
+	vt := newVTBuffer(20, 2)
+	vt.Write([]byte("承認しますか\r\n次の行\r\nさらに次の行\r\n"))
+
+	joined := strings.Join(vt.scrollback, "\n")
+	if strings.ContainsRune(joined, wideContinuation) {
+		t.Fatalf("scrollback に番兵が残っている: %q", joined)
+	}
+	if !strings.Contains(joined, "承認しますか") {
+		t.Fatalf("scrollback = %q, want it to contain the pushed line", joined)
+	}
+}
+
+// TestVTBufferZeroWidthRuneKeepsColumn は、結合文字・異体字セレクタが桁を進めず、
+// 直前の文字を潰さないことを検証する。グリッドへ書くと 1 桁ずれる。
+func TestVTBufferZeroWidthRuneKeepsColumn(t *testing.T) {
+	vt := newVTBuffer(20, 2)
+	vt.Write([]byte("ÁB")) // A + 結合アクセント + B
+
+	if got := vt.Lines()[0]; got != "AB" {
+		t.Fatalf("line 0 = %q, want %q", got, "AB")
+	}
+}
 
 func TestVTBufferCursorAndErase(t *testing.T) {
 	vt := newVTBuffer(20, 5)
