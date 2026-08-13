@@ -1,7 +1,7 @@
 # many-ai-cli — Hướng dẫn phát triển
 
 > Bản dịch tiếng Việt của [`CLAUDE.md`](CLAUDE.md) (bản gốc tiếng Nhật).  
-> Cập nhật lần cuối (nguồn): 2026-07-05 — phản ánh audit (bổ sung provider opencode, danh sách subcommand, `internal/log` đã có, sửa đường dẫn archive).  
+> Cập nhật lần cuối (nguồn): 2026-08-13 — đồng bộ trạng thái phát hành v0.6.0 và các ghi chú kiểm toán.
 > Bản dịch: 2026-07-18.
 
 > Chi tiết theo từng loại việc nằm trong `CLAUDE/*.md`. File này chỉ chứa phần luôn được nạp vào ngữ cảnh.
@@ -12,7 +12,7 @@
 
 > **Gemini CLI không thuộc phạm vi wrap** (quyết định 2026-05-06 / ràng buộc điều khoản sử dụng). Chi tiết: [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) mục «2. Phạm vi công bố».
 
-**Trạng thái**: Dòng v0.3.x đã phát hành (tag mới nhất theo tài liệu gốc: v0.3.4; v0.1.1 là bản chính thức đầu tiên, v0.1.0 mang tính thử nghiệm). v0.1.2 tái thiết kế chuỗi phiên bản qua ldflags + `/api/info` làm single source of truth; v0.2.0 thêm WSL launcher, Files/Git/Chat/Split/Multi, Commit all, Ollama routing, cấu hình người dùng phía server; v0.3.0 thêm Workbench (lịch sử session SQLite), PWA/Web Push, launcher thống nhất đa nền tảng (SSH mọi OS, WSL chỉ Windows), tài sản deploy remote/Docker, phân phối npm, và đổi tên any-ai-cli → many-ai-cli. **v0.4.0 (Unreleased trong tài liệu gốc) đã gỡ Workbench và proxy chat tích hợp Hub (`internal/proxy/` · `chat_proxy`)** (hiệu ứng phụ: ngữ cảnh 1M mặc định của Sonnet 5 trở đi hoạt động trở lại qua Hub). Tài liệu thiết kế đã cập nhật theo mã nguồn làm chuẩn.
+**Trạng thái**: v0.6.0 đã phát hành (v0.1.1 là bản chính thức đầu tiên, v0.1.0 mang tính thử nghiệm; v0.5.2 được gộp vào v0.6.0 nên không có bản v0.5.2). v0.1.2 tái thiết kế chuỗi phiên bản qua ldflags + `/api/info` làm single source of truth; v0.2.0 thêm WSL launcher, Files/Git/Chat/Split/Multi, Commit all, Ollama routing, cấu hình người dùng phía server; v0.3.0 thêm Workbench (lịch sử session SQLite), PWA/Web Push, launcher thống nhất đa nền tảng (SSH mọi OS, WSL chỉ Windows), tài sản deploy remote/Docker, phân phối npm, và đổi tên any-ai-cli → many-ai-cli. **v0.4.0 đã gỡ Workbench và proxy chat tích hợp Hub (`internal/proxy/` · `chat_proxy`)** (hiệu ứng phụ: ngữ cảnh 1M mặc định của Sonnet 5 trở đi hoạt động trở lại qua Hub). Tài liệu thiết kế đã cập nhật theo mã nguồn làm chuẩn.
 
 > Ghi chú bản dịch: HEAD hiện tại của repo đã có tag **v0.5.0**. Khi làm việc, ưu tiên `CHANGELOG.md` và mã nguồn nếu lệch với mô tả phiên bản ở trên.
 
@@ -20,7 +20,7 @@
 
 ## Trạng thái triển khai hiện tại
 
-Đến v0.3.x (tag v0.3.4 theo tài liệu gốc) các mục sau đã có; v0.4.0 Unreleased gỡ Workbench / chat_proxy và bổ sung provider opencode / Grok Build CLI cùng cấu hình Ollama `base_url`:
+Đến v0.6.0 các mục sau đã có; v0.4.0 gỡ Workbench / chat_proxy và bổ sung provider opencode / Grok Build CLI cùng cấu hình Ollama `base_url`:
 
 - `many-ai-cli serve` khởi động Hub
 - `many-ai-cli claude` / `codex` / `copilot` / `cursor-agent` tự khởi động Hub nếu chưa chạy rồi kết nối
@@ -44,7 +44,7 @@
 | File cấu hình | `~/.many-ai-cli/config.yaml` (Win: `%USERPROFILE%\.many-ai-cli\config.yaml`) |
 | Log | `~/.many-ai-cli/logs/sessions/<provider>_<thời-gian>_<folder>_s<id>.log/.jsonl/.txt` (PTY thô + lịch sử sự kiện JSONL + text sạch) |
 | Biến môi trường trong suốt | `MANY_AI_CLI_AUTO=1` |
-| Provider | `claude` / `codex` / `copilot` / `cursor-agent` (v0.4.0 Unreleased thêm `opencode` / `grok`. `gemini` ngoài phạm vi — xem mục phạm vi) |
+| Provider | `claude` / `codex` / `copilot` / `cursor-agent` (v0.4.0 thêm `opencode` / `grok`. `gemini` ngoài phạm vi — xem mục phạm vi) |
 
 > Trong markdown, thống nhất dùng `many-ai-cli` (tên cũ `any-ai-cli` chỉ giữ trong mô tả lịch sử). Đường dẫn project local ghi trong `CLAUDE.local.md`.
 

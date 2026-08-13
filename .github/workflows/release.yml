@@ -1,12 +1,7 @@
-# NOTE (managed Whisper on Windows): the bundled VC++ runtime DLLs
-# (internal/whisperruntime/files/windows-amd64/*.dll) are gitignored and NOT
-# fetched here — this job builds on Linux via GoReleaser and cannot run the
-# Windows-only fetch_windows_runtime.ps1. As a result the released windows/amd64
-# binary embeds the runtime ONLY if the DLLs were committed or placed before the
-# build. To make managed Windows Whisper self-contained at release time, either
-# add a windows-latest build leg that runs the fetch script before `go build`, or
-# commit the signed DLLs. Without that, whisperruntime.Ensure is a safe no-op and
-# the original 0xC0000135 exposure remains. See docs/manual_whisper.md (C2).
+# The Windows VC++ runtime DLLs used by managed Whisper are intentionally
+# gitignored. A Windows preparation job obtains and verifies the Microsoft
+# signed copies, then the Linux GoReleaser job downloads that artifact before
+# embedding it with go:embed. A missing or invalid payload fails the release.
 name: Release
 
 on:
@@ -33,12 +28,48 @@ permissions:
   id-token: write
 
 jobs:
+  prepare-whisper-runtime:
+    name: Prepare signed Windows Whisper runtime
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+
+      - name: Fetch and verify Microsoft VC++ runtime
+        shell: pwsh
+        run: .\internal\whisperruntime\fetch_windows_runtime.ps1
+
+      - name: Verify runtime payload
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:GITHUB_WORKSPACE 'internal/whisperruntime/files/windows-amd64'
+          $expected = @('vcomp140.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
+          foreach ($name in $expected) {
+            $path = Join-Path $dir $name
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Missing verified runtime DLL: $name"
+            }
+          }
+
+      - name: Upload verified runtime payload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: whisper-windows-runtime
+          path: internal/whisperruntime/files/windows-amd64/*.dll
+          if-no-files-found: error
+          retention-days: 7
+
   release:
+    needs: prepare-whisper-runtime
     runs-on: ubuntu-latest
     env:
-      # secrets context is not allowed in step-level `if:`; expose NPM_TOKEN as a
-      # job env so the npm steps can gate on env.NPM_TOKEN instead.
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Keep only a boolean at job scope. The credential itself is exposed only
+      # to the final publish step below, never to every release step.
+      NPM_AVAILABLE: ${{ secrets.NPM_TOKEN != '' && 'true' || 'false' }}
       # Single source for the tag/mode across push and workflow_dispatch.
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
       NPM_ONLY: ${{ (github.event_name == 'workflow_dispatch' && inputs.npm_only) && 'true' || 'false' }}
@@ -47,31 +78,31 @@ jobs:
       # checks out the branch it was launched from (e.g. main). For the npm-only
       # re-run we WANT main's scripts + shim (which may post-date the old tag) —
       # only the binaries come from the published Release, the version from the tag.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache: true
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           registry-url: "https://registry.npmjs.org"
 
       # .goreleaser.yaml の before hooks（bun install / bun run build）が使用
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: "1.3.14"
 
-      - uses: sigstore/cosign-installer@v3
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
         with:
           cosign-release: "v2.4.3"
 
       # SBOM 生成用 syft（.goreleaser.yaml の sboms セクションが参照）
-      - uses: anchore/sbom-action/download-syft@v0
+      - uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
 
       # winget-pkgs fork を upstream (microsoft/winget-pkgs) と同期してから
       # goreleaser の winget publisher に使わせる。winget-pkgs は1日数百コミット
@@ -97,6 +128,23 @@ jobs:
             echo "::warning title=winget fork sync failed::fork の同期に失敗した。winget PR の base が古いまま作られる可能性がある。PUBLISH_GITHUB_TOKEN に workflow スコープがあるか確認すること。リリース自体は続行する。"
           fi
 
+      - name: Download verified Windows Whisper runtime
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: whisper-windows-runtime
+          path: internal/whisperruntime/files/windows-amd64
+
+      - name: Verify embedded runtime inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir=internal/whisperruntime/files/windows-amd64
+          expected=(vcomp140.dll msvcp140.dll vcruntime140.dll vcruntime140_1.dll)
+          for name in "${expected[@]}"; do
+            test -f "$dir/$name"
+          done
+          test "$(find "$dir" -maxdepth 1 -type f -name '*.dll' | wc -l)" -eq "${#expected[@]}"
+
       # GitHub Release のノートは CHANGELOG.md の該当版節を使う。コミットメッセージ
       # 由来の自動 changelog は Git タブ自動生成コミット（internal/hub/git_commit.go）の
       # 羅列で読めないため、CHANGELOG.md の人間可読な節を抽出して --release-notes で渡す。
@@ -114,7 +162,7 @@ jobs:
           echo "----- release notes (${VERSION}) -----"
           cat "${RUNNER_TEMP}/release-notes.md"
 
-      - uses: goreleaser/goreleaser-action@v6
+      - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         if: ${{ env.NPM_ONLY != 'true' }}
         with:
           distribution: goreleaser
@@ -155,7 +203,7 @@ jobs:
       #    照合してから取り出す（cosign 署名済みチェックサムに鎖でつながる＝暗号的に同一バイト）。
 
       - name: Download published release archives (npm-only re-run)
-        if: ${{ env.NPM_TOKEN != '' && env.NPM_ONLY == 'true' }}
+        if: ${{ env.NPM_AVAILABLE == 'true' && env.NPM_ONLY == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -170,20 +218,20 @@ jobs:
             --pattern 'SHA256SUMS.txt'
 
       - name: Stage npm binaries (verified, from published release zips)
-        if: ${{ env.NPM_TOKEN != '' && env.NPM_ONLY == 'true' }}
+        if: ${{ env.NPM_AVAILABLE == 'true' && env.NPM_ONLY == 'true' }}
         run: node scripts/stage-npm-from-release.mjs "${RUNNER_TEMP}/relzips"
 
       - name: Stage npm binaries (from GoReleaser dist)
-        if: ${{ env.NPM_TOKEN != '' && env.NPM_ONLY != 'true' }}
+        if: ${{ env.NPM_AVAILABLE == 'true' && env.NPM_ONLY != 'true' }}
         run: node scripts/stage-npm-binaries.mjs
 
       - name: Sync npm package versions to tag
-        if: ${{ env.NPM_TOKEN != '' }}
+        if: ${{ env.NPM_AVAILABLE == 'true' }}
         run: node scripts/sync-npm-version.mjs "${RELEASE_TAG}"
 
       # ordered publish (platform pkgs -> root) with E429 backoff + idempotent skip.
       - name: Publish npm packages
-        if: ${{ env.NPM_TOKEN != '' }}
+        if: ${{ env.NPM_AVAILABLE == 'true' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: bash scripts/publish-npm.sh "${RELEASE_TAG}"

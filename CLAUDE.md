@@ -1,6 +1,6 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-08-11(火) — 実行時配信リソース節を追加（リリース不要で更新できるものの正典化）
+> 最終更新: 2026-08-13(木) — v0.6.0リリース後の状態とリリース監査対応を反映
 
 > 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。  
 > **Vietnamese translation (team docs):** [CLAUDE.vi.md](CLAUDE.vi.md) · [README.vi.md](README.vi.md) · [docs/README.vi.md](docs/README.vi.md)
@@ -12,7 +12,7 @@
 > **Gemini CLI は wrap 対象外**（2026-05-06 決定 / 利用規約上の制約）。詳細は [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) 「2. 公開スコープ」参照。
 > 2026-08-13、Spotify Xirp の「浅いホスト方式」を踏まえて再検討したが **方針は維持**（保留記録: `docs/local/pending_gemini-shallow-host-option.md`）。他社が Gemini を扱っている事実・対応プロバイダ数の見劣りを根拠に着手を提案しないこと。
 
-**現状**: v0.5.1 までリリース済み（v0.1.1 が初回正式リリース、v0.1.0 は試験扱い）。**v0.6.0 が次のリリース対象**（CHANGELOG の `[0.6.0]` 節。未リリースだった `[0.5.2]` を統合したため v0.5.2 は欠番）。v0.1.2 でバージョン文字列を ldflags + `/api/info` 経由の single source of truth に再設計、v0.2.0 で WSL ランチャー・Files/Git/Chat/Split/Multi・Commit all・Ollama routing・サーバ側ユーザー設定を追加。v0.3.0 で Workbench（SQLite セッション履歴）・PWA/Web Push・統合ランチャーのクロスプラットフォーム化（SSH は全 OS、WSL は Windows 専用）・リモートサーバー/Docker デプロイ資産・npm 配布を追加し、プロジェクト名を any-ai-cli から many-ai-cli へリネーム。**v0.4.0（Unreleased）で Workbench 機能と Hub 内蔵チャットプロキシ（`internal/proxy/`・`chat_proxy`）を撤去済み**（Sonnet 5 以降のデフォルト 1M コンテキストが Hub 経由でも回復する副次効果あり）。設計書はソースコードを正本として更新済み。
+**現状**: v0.6.0 までリリース済み（v0.1.1 が初回正式リリース、v0.1.0 は試験扱い。未リリースだった `[0.5.2]` を統合したため v0.5.2 は欠番）。v0.1.2 でバージョン文字列を ldflags + `/api/info` 経由の single source of truth に再設計、v0.2.0 で WSL ランチャー・Files/Git/Chat/Split/Multi・Commit all・Ollama routing・サーバ側ユーザー設定を追加。v0.3.0 で Workbench（SQLite セッション履歴）・PWA/Web Push・統合ランチャーのクロスプラットフォーム化（SSH は全 OS、WSL は Windows 専用）・リモートサーバー/Docker デプロイ資産・npm 配布を追加し、プロジェクト名を any-ai-cli から many-ai-cli へリネーム。**v0.4.0 で Workbench 機能と Hub 内蔵チャットプロキシ（`internal/proxy/`・`chat_proxy`）を撤去済み**（Sonnet 5 以降のデフォルト 1M コンテキストが Hub 経由でも回復する副次効果あり）。設計書はソースコードを正本として更新済み。
 
 **設計書（正本）**: [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md)
 
@@ -26,7 +26,7 @@
 
 ## 現在の実装状態
 
-v0.5.1 までに以下がすべて実装済み（v0.4.0 で Workbench / chat_proxy を撤去し opencode / Grok Build CLI provider・Ollama `base_url` 設定を追加、v0.5.0 で `setup` / `doctor` サブコマンド・autoapproval・ターン単位 diff を追加）。v0.6.0 では transcript ベースのチャット本文・Workflow 進捗の Hub 権威化・OpenCode 全許可起動・古いビルド警告を追加し、リリース前監査 A-01/A-02/A-03/A-05 に対応した：
+v0.6.0 までに以下がすべて実装済み（v0.4.0 で Workbench / chat_proxy を撤去し opencode / Grok Build CLI provider・Ollama `base_url` 設定を追加、v0.5.0 で `setup` / `doctor` サブコマンド・autoapproval・ターン単位 diff を追加）。v0.6.0 では transcript ベースのチャット本文・Workflow 進捗の Hub 権威化・OpenCode 全許可起動・古いビルド警告を追加し、リリース前監査 A-01/A-02/A-03/A-05 に対応した：
 
 - `many-ai-cli serve` で Hub が起動する
 - `many-ai-cli claude` / `codex` / `copilot` / `cursor-agent` が Hub 未起動時に自動起動し接続する
@@ -50,7 +50,7 @@ v0.5.1 までに以下がすべて実装済み（v0.4.0 で Workbench / chat_pro
 | 設定ファイル | `~/.many-ai-cli/config.yaml`（Win: `%USERPROFILE%\.many-ai-cli\config.yaml`） |
 | ログ | `~/.many-ai-cli/logs/sessions/<provider>_<日時>_<folder>_s<id>.log/.jsonl/.txt`（PTY生ログ + イベント履歴JSONL + クリーンテキスト） |
 | 透過化環境変数 | `MANY_AI_CLI_AUTO=1` |
-| Provider | `claude` / `codex` / `copilot` / `cursor-agent`（v0.4.0 Unreleased で `opencode` / `grok` 追加。`gemini` は対象外、上記スコープ更新参照） |
+| Provider | `claude` / `codex` / `copilot` / `cursor-agent`（v0.4.0 で `opencode` / `grok` 追加。`gemini` は対象外、上記スコープ更新参照） |
 
 > md 内の参照は `many-ai-cli` に統一（旧名 `any-ai-cli` は履歴記述を除き使わない）。ローカルのプロジェクト配置パスは `CLAUDE.local.md` に記載する。
 

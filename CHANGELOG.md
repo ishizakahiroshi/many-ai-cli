@@ -42,6 +42,14 @@ Release artifacts are published at
   (`web/src/index.html`, `web/src/app/spawn-panel.ts`, `web/src/i18n/*.json`).
 
 ### Fixed
+- **Agent Chat prime no longer advances the cursor before tail-page decoding is
+  committed.** When the selection deadline expires, the Hub keeps the safe
+  retry cursor so existing tail records cannot be skipped
+  (`internal/hub/agent_chat_parse.go`, `internal/hub/agent_chat_handler_test.go`).
+- **Managed Whisper releases now embed the verified Windows VC++ runtime.** A
+  Windows release-preparation job fetches Microsoft-signed DLLs and the
+  GoReleaser job fails closed if the verified payload is absent
+  (`.github/workflows/release.yml`).
 - **Approval panels were withheld for questions the CLI had actually asked.**
   Two independent defects in the Hub's VT mirror made structurally sound marker
   blocks look corrupt, so the panel was dropped and you got the "approval
@@ -90,6 +98,9 @@ Release artifacts are published at
   `web/src/i18n/*.json`).
 
 ### Changed
+- **Release workflows now pin third-party Actions to immutable commit SHAs.**
+  The npm credential is also limited to the publish step; other release steps
+  receive only a boolean availability flag (`.github/workflows/*.yml`).
 - **The template list now keeps the order you set instead of sorting by usage.**
   Previously the palette sorted by how often each template had been picked, so a
   manually chosen order would be undone by the next selection. Templates are now
