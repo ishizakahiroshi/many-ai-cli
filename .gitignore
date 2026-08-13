@@ -29,7 +29,9 @@ rsrc_windows_*.syso
 .DS_Store
 Thumbs.db
 .claude/
-opencode.json
+# opencode セッション中だけ internal/wrapper が cwd に書く permission 設定と、その排他ロック
+# (opencode.json.many-ai-cli.lock)。完全一致だと lock 側が漏れるため前方一致で拾う。
+opencode.json*
 *.local.md
 *.local.json
 docs/local/
