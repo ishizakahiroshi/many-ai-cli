@@ -96,6 +96,22 @@ Release artifacts are published at
   ticking worktree isolation on a directory that is not a git repository —
   gets a written explanation instead (`web/src/app/spawn-panel.ts`,
   `web/src/i18n/*.json`).
+- **Closing a session did nothing when the wrapper had just reconnected.** The ×
+  on a session card drops the session from the Hub and closes the wrapper's
+  WebSocket, and the wrapper decided from that bare EOF alone whether you meant
+  to stop the session or the connection had merely dropped. Within the
+  ten-second `postReattachGuard` that guess falls to "dropped", so the wrapper
+  reconnected two seconds later and the card returned; pressing × again landed
+  inside a fresh guard window, so it never stopped. Codex sessions ran into this
+  routinely because a full PTY output queue (`pty_output_queue_full`)
+  disconnects and reattaches on its own — one session did so three times in
+  eight minutes on 2026-08-13. The Hub now sends an explicit `session_dismissed`
+  frame before closing the socket and the wrapper terminates its PTY on receipt,
+  so intent is transmitted rather than inferred (`internal/proto/messages.go`,
+  `internal/hub/server.go`, `internal/wrapper/wrapper.go`). Shortening the guard
+  was rejected: it would reinstate the 2026-07-20 defect where a plain EOF just
+  after a reattach killed the wrapped CLI. Older wrappers ignore the unknown
+  frame and keep the previous behaviour.
 
 ### Changed
 - **Release workflows now pin third-party Actions to immutable commit SHAs.**
