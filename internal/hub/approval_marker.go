@@ -3,15 +3,12 @@ package hub
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"regexp"
 	"strings"
 	"time"
 
 	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/sessionlog"
 )
-
-var approvalMarkerBlockRe = regexp.MustCompile(`(?s)\[MANY-AI-CLI\][\s\S]*?\[/MANY-AI-CLI\]`)
 
 // approvalMarkerSuppressNotifyInterval は破損ブロック抑止の告知を UI へ送る最小間隔。
 // 破損形が 2 種類交互に現れると sig 比較だけでは毎チャンク告知になり、Web 側で
@@ -23,16 +20,30 @@ type approvalMarkerBlock struct {
 	Sig   string
 }
 
+// extractApprovalMarkerBlock は末尾に最も近い完結したマーカーブロックを返す。
+//
+// 端末は「歴史」なので、同じ質問が描き直されると前の世代が scrollback 側に残る。
+// 最初の OPEN から最初の CLOSE までを取ると、古い世代の OPEN と新しい世代の CLOSE を
+// またいだブロックになり、内側に OPEN を抱えたまま自分で marker_leak と判定して
+// 承認パネルを握り潰していた（非貪欲マッチでも開始位置は最初の OPEN になる）。
+// 最後の CLOSE と、その手前にある最後の OPEN で挟めば最新世代だけが取れる。
+//
+// 実測（2026-08-13 / approval-corrupt ダンプ 138 件を記録寸法へ replay）:
+// marker_leak と判定されていた 74 件のうち 64 件が、この抽出だけで正常なブロックに戻る。
 func extractApprovalMarkerBlock(lines []string) *approvalMarkerBlock {
 	if len(lines) == 0 {
 		return nil
 	}
 	text := strings.Join(lines, "\n")
-	matches := approvalMarkerBlockRe.FindAllString(text, -1)
-	if len(matches) == 0 {
+	end := strings.LastIndex(text, approvalMarkerClose)
+	if end < 0 {
 		return nil
 	}
-	block := matches[len(matches)-1]
+	start := strings.LastIndex(text[:end], approvalMarkerOpen)
+	if start < 0 {
+		return nil
+	}
+	block := text[start : end+len(approvalMarkerClose)]
 	return &approvalMarkerBlock{
 		Block: block,
 		Sig:   approvalMarkerSignature(block),

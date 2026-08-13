@@ -42,6 +42,36 @@ Release artifacts are published at
   (`web/src/index.html`, `web/src/app/spawn-panel.ts`, `web/src/i18n/*.json`).
 
 ### Fixed
+- **Approval panels were withheld for questions the CLI had actually asked.**
+  Two independent defects in the Hub's VT mirror made structurally sound marker
+  blocks look corrupt, so the panel was dropped and you got the "approval
+  withheld" banner instead, with the question left sitting unanswered in the
+  terminal. Replaying all 138 recorded `approval-corrupt` dumps (2026-08-06 to
+  08-13) through a mirror of the recorded size reproduced 132 of them, ruling out
+  a transient desync and pinning both causes:
+  - **Wide characters advanced the cursor by one column instead of two.**
+    `writeRune` incremented `col` by 1 for every rune, so a line of Japanese left
+    the mirror's cursor at half the real terminal's column, and the composer's box
+    rule survived on the right-hand side of the line — landing inside option
+    labels and tripping the `box_rule` verdict. The mirror now measures East
+    Asian Wide / Fullwidth and `Emoji_Presentation` runes as two columns and
+    combining marks and variation selectors as zero, and renders the
+    wide-continuation sentinel out of both `Lines()` and the scrollback push
+    (`internal/hub/vt_buffer.go`).
+  - **Extraction fused an older redraw with the current question.** TUIs redraw
+    while scrolling, so a half-drawn generation of the same block stays in the
+    scrollback; 72 of the 74 `marker_leak` records had the stale open marker
+    there. `extractApprovalMarkerBlock` meant to take the newest block, but its
+    non-greedy regex still started at the *first* open marker, producing a block
+    that straddled two generations and therefore carried an open marker inside
+    itself — the exact shape `classifyApprovalMarkerBlock` rejects. It now takes
+    the last close marker and the last open marker before it
+    (`internal/hub/approval_marker.go`).
+
+  Together these turn 93 of the 138 recorded corruptions into panels that render
+  normally. The remaining 45 — 32 originally judged `box_rule`, 10 `marker_leak`,
+  3 `duplicate_option` — are not explained by either cause and are still
+  suppressed.
 - **`.git-worktrees/` was not ignored by git.** Normal-session worktree isolation
   creates its checkouts in `<repo>/.git-worktrees/`, but `.gitignore` only
   covered `.many-ai-cli/`, which is the orchestration path. Turning isolation on

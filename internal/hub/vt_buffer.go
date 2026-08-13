@@ -233,10 +233,116 @@ func (b *vtBuffer) Write(data []byte) {
 	}
 }
 
+// runeCellWidth は端末上でその文字が占める桁数を返す（0 / 1 / 2）。
+//
+// 合わせる相手は xterm.js ではなく、PTY の向こうで描画バイト列を組み立てている
+// CLI 本体（Claude Code / Codex は Node の string-width 系）。そちらが 2 桁と
+// 数えた文字をミラーが 1 桁で数えると、日本語の行を描いた時点で桁位置が実端末より
+// 手前で止まり、行の右側に前の描画（コンポーザ枠線）が消し残る。
+//
+// 罫線（U+2500-257F）や ✓ ✻ ⏺ のような記号は East Asian Ambiguous で、
+// この系統の実装ではいずれも 1 桁。Wide 扱いにしないこと。
+func runeCellWidth(r rune) int {
+	if r < 0x0300 {
+		return 1
+	}
+	// 幅 0: 結合文字・異体字セレクタ・ゼロ幅制御。桁を進めない。
+	switch {
+	case r >= 0x0300 && r <= 0x036F, // 結合ダイアクリティカル
+		r >= 0x1AB0 && r <= 0x1AFF,
+		r >= 0x1DC0 && r <= 0x1DFF,
+		r >= 0x200B && r <= 0x200F, // ゼロ幅スペース〜RLM（ZWJ 含む）
+		r >= 0x2060 && r <= 0x2064,
+		r >= 0x20D0 && r <= 0x20FF,
+		r >= 0xFE00 && r <= 0xFE0F, // 異体字セレクタ（絵文字の VS16 含む）
+		r >= 0xFE20 && r <= 0xFE2F,
+		r >= 0xE0100 && r <= 0xE01EF:
+		return 0
+	}
+	// 幅 2: East Asian Wide / Fullwidth と Emoji_Presentation。
+	switch {
+	case r >= 0x1100 && r <= 0x115F, // Hangul Jamo
+		r == 0x231A || r == 0x231B, // ⌚⌛
+		r >= 0x23E9 && r <= 0x23EC,
+		r == 0x23F0 || r == 0x23F3,
+		r >= 0x25FD && r <= 0x25FE,
+		r >= 0x2614 && r <= 0x2615,
+		r >= 0x2648 && r <= 0x2653,
+		r == 0x267F || r == 0x2693 || r == 0x26A1,
+		r >= 0x26AA && r <= 0x26AB,
+		r >= 0x26BD && r <= 0x26BE,
+		r >= 0x26C4 && r <= 0x26C5,
+		r == 0x26CE || r == 0x26D4 || r == 0x26EA,
+		r >= 0x26F2 && r <= 0x26F3,
+		r == 0x26F5 || r == 0x26FA || r == 0x26FD,
+		r == 0x2705,
+		r >= 0x270A && r <= 0x270B,
+		r == 0x2728 || r == 0x274C || r == 0x274E,
+		r >= 0x2753 && r <= 0x2755,
+		r == 0x2757,
+		r >= 0x2795 && r <= 0x2797,
+		r == 0x27B0 || r == 0x27BF,
+		r >= 0x2B1B && r <= 0x2B1C,
+		r == 0x2B50 || r == 0x2B55,
+		r >= 0x2E80 && r <= 0x303E, // CJK 部首・康煕部首・CJK 記号
+		r >= 0x3041 && r <= 0x33FF, // かな・ハングル・CJK 互換
+		r >= 0x3400 && r <= 0x4DBF,
+		r >= 0x4E00 && r <= 0x9FFF, // CJK 統合漢字
+		r >= 0xA000 && r <= 0xA4CF,
+		r >= 0xAC00 && r <= 0xD7A3, // ハングル音節
+		r >= 0xF900 && r <= 0xFAFF,
+		r >= 0xFE10 && r <= 0xFE19,
+		r >= 0xFE30 && r <= 0xFE6F,
+		r >= 0xFF00 && r <= 0xFF60, // 全角英数・記号
+		r >= 0xFFE0 && r <= 0xFFE6,
+		r >= 0x1F004 && r <= 0x1F0CF,
+		r >= 0x1F18E && r <= 0x1F19A,
+		r >= 0x1F1E6 && r <= 0x1F1FF, // 地域表示記号（国旗）
+		r >= 0x1F200 && r <= 0x1F320,
+		r >= 0x1F32D && r <= 0x1F335,
+		r >= 0x1F337 && r <= 0x1F37C,
+		r >= 0x1F37E && r <= 0x1F393,
+		r >= 0x1F3A0 && r <= 0x1F3CA,
+		r >= 0x1F3CF && r <= 0x1F3D3,
+		r >= 0x1F3E0 && r <= 0x1F3F0,
+		r >= 0x1F3F4 && r <= 0x1F43E,
+		r >= 0x1F440 && r <= 0x1F4FC,
+		r >= 0x1F4FF && r <= 0x1F53D,
+		r >= 0x1F54B && r <= 0x1F567,
+		r >= 0x1F5FB && r <= 0x1F64F,
+		r >= 0x1F680 && r <= 0x1F6C5,
+		r >= 0x1F6CC && r <= 0x1F6D2,
+		r >= 0x1F7E0 && r <= 0x1F7EB,
+		r >= 0x1F90C && r <= 0x1F9FF,
+		r >= 0x1FA70 && r <= 0x1FAFF,
+		r >= 0x20000 && r <= 0x3FFFD:
+		return 2
+	}
+	return 1
+}
+
+// wideContinuation は 2 桁文字の右半分を表す番兵。Lines() で読み飛ばす。
+const wideContinuation = rune(0)
+
+// renderCells は 1 行ぶんのセル列を文字列へ起こす。2 桁文字の右半分（番兵）は
+// 読み飛ばす。行を文字列化する経路は必ずここを通すこと — 直接 string(cells) すると
+// 番兵の NUL がそのまま混ざり、承認マーカーの抽出・分類が本文を読み違える。
+func renderCells(cells []rune) string {
+	var sb strings.Builder
+	sb.Grow(len(cells))
+	for _, c := range cells {
+		if c == wideContinuation {
+			continue
+		}
+		sb.WriteRune(c)
+	}
+	return strings.TrimRight(sb.String(), " ")
+}
+
 func (b *vtBuffer) Lines() []string {
 	lines := make([]string, 0, b.rows)
 	for r := 0; r < b.rows; r++ {
-		lines = append(lines, strings.TrimRight(string(b.cells[r]), " "))
+		lines = append(lines, renderCells(b.cells[r]))
 	}
 	return lines
 }
@@ -412,8 +518,22 @@ func (b *vtBuffer) writeRune(r rune) {
 		if r < 0x20 {
 			return
 		}
+		w := runeCellWidth(r)
+		// 結合文字・異体字セレクタ・ゼロ幅制御。直前セルの装飾なので桁を進めず捨てる。
+		// グリッドへ書くと直前の文字を潰して 1 桁ずれる。
+		if w == 0 {
+			return
+		}
+		// 2 桁文字が右端に収まらないときは実端末同様に次行へ送る。
+		if b.col+w > b.cols {
+			b.col = 0
+			b.newLine()
+		}
 		b.cells[b.row][b.col] = r
-		b.col++
+		for i := 1; i < w && b.col+i < b.cols; i++ {
+			b.cells[b.row][b.col+i] = wideContinuation
+		}
+		b.col += w
 		if b.col >= b.cols {
 			b.col = 0
 			b.newLine()
@@ -427,7 +547,7 @@ func (b *vtBuffer) newLine() {
 		return
 	}
 	// 上端行を捨てる直前に確定行として scrollback へ積む（画面クリア経路では呼ばれない）
-	b.pushScrollback(string(b.cells[0]))
+	b.pushScrollback(renderCells(b.cells[0]))
 	copy(b.cells, b.cells[1:])
 	b.cells[b.rows-1] = make([]rune, b.cols)
 	for c := range b.cells[b.rows-1] {
