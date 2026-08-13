@@ -1,5 +1,15 @@
 package proto
 
+// TypeSessionDismissed は Hub → wrapper の「このセッションは意図的に閉じられた」通知。
+// wrapper が WS の EOF から意図を推定すると postReattachGuard(10s) 以内では
+// 「回線不調」に倒れ、2 秒後に再接続してセッションが復活してしまう
+// （bugfix_session-dismiss-ignored-within-reattach-guard_2026-08-13.md）。
+//
+// 他のメッセージ種別と違って文字列リテラルを直書きせず定数にしているのは、送信側
+// （internal/hub）と受信側（internal/wrapper）が別パッケージで、綴りがずれても
+// エラーにならず「静かに旧挙動へ戻る」だけだから。症状が復活しても原因に辿り着けない。
+const TypeSessionDismissed = "session_dismissed"
+
 // Message は Hub・Wrapper・UI 間で交わす WebSocket メッセージ。
 //
 // 状態モデルは output_idle / workflow_active / awaiting_user の 3 軸を正本とし、
