@@ -244,6 +244,9 @@ func (s *Server) rememberApprovalTargets(targets []approvalRuleTarget) {
 		}
 		s.approvalRuleTargets[key] = target
 	}
+	// Hub が kill されると shutdown 時の削除が走らないため、注入した対象は
+	// その場でディスクの台帳にも残す（次回起動時の回収に使う）。
+	s.persistApprovalTargetsLocked()
 }
 
 func (s *Server) knownApprovalTargets() []approvalRuleTarget {
@@ -265,6 +268,7 @@ func (s *Server) forgetApprovalTargets(targets []approvalRuleTarget) {
 	for _, target := range targets {
 		delete(s.approvalRuleTargets, approvalTargetKey(target.Path))
 	}
+	s.persistApprovalTargetsLocked()
 }
 
 func (s *Server) injectApprovalTargets(targets []approvalRuleTarget) {
