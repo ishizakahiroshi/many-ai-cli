@@ -1,6 +1,6 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-08-13(木) 14:10:02 — 監査・リリース証拠の境界を追記
+> 最終更新: 2026-08-14(金) 04:52:10 — 利用者のファイルへ書く機能の回収設計・旧名 grep の注意を追記
 
 > 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。  
 > **Vietnamese translation (team docs):** [CLAUDE.vi.md](CLAUDE.vi.md) · [README.vi.md](README.vi.md) · [docs/README.vi.md](docs/README.vi.md)
@@ -23,6 +23,20 @@
 - **候補の人気・伸び・他社の対応状況を根拠に provider 追加を提案しない**（Gemini の節と同系統）
 - 検討の起点は「作者がその CLI を素で使い、日常の並列運用に入っているか」。使う前に実装しない
 - 追加コストは opencode 実績で 18 ファイル 180 行。本当のコストは鮮度チェックの無い `resources/approval-patterns/` と `resources/models/` の追従先が 1 本増えること
+
+## デスクトップアプリ化・Microsoft Store 提出は提案しない（2026-08-14 制定）
+
+2026-08-14 に Tauri での Windows アプリ化と Microsoft Store 提出を検討し、**1 行も書かないまま全件見送りで確定**（経緯と全根拠: `docs/local/archive/declined/plan_ms-store-tauri-windows-app.md`・H1 は `[廃止]`。子 6 本も同ディレクトリ）。
+
+- **UI は既定ブラウザのタブで開く形を維持する。** 独立した窓（Tauri / Electron / PWA いずれも）を提案しない。作者は複数のブラウザタブを行き来しながら使うため、Hub がタブの 1 つであること自体が利点。窓は画面の枠を 1 つ占有し、他のウィンドウと場所を取り合うので**後退になる**
+- `web/src/manifest.webmanifest` は `display: standalone` で PWA 導入可能な状態にあるが、上記の理由で**使われていない**。「PWA を入れれば窓になる」と勧めない
+- **OS のネイティブ通知（トースト）を実装しない。** 作者が好まない。承認待ちの知らせは既存の 3 点（タイトル点滅 `web/src/app/session-list.ts:1060` / favicon の件数バッジ 同 1039-1080 / 通知音 `user_prefs.notify_sound`）で成立している
+- **配布チャネルを増やす提案をしない。** 既に winget / npm / Homebrew / Docker の 4 つある。実測（2026-08-14）で star 6・リポジトリのページに 1 日ユニーク 2〜3 人・npm 週次 11。記事も 2 か月で 132 本、製品紹介は v0.3.2 / v0.4.0 / v0.5.0 の 3 世代ぶん出している。**チャネルも記事も打ち手は尽きており、天井は需要側（複数の AI CLI を同時に走らせ承認が詰まっている人という狭い積集合）で決まっている**
+- 例外は 1 つだけ。**作者自身が窓の形を使いたくなったとき**。人気・他社の対応状況・利用者増の見込みを根拠にしない（Gemini・新規 provider の節と同系統）
+
+残った実課題（起動と停止がデスクトップのアイコン 2 個に分かれている）だけを、窓を作らないトレイ常駐として `docs/local/plan_tray-resident-hub-lifecycle.md` へ切り出した。
+
+**見送った方針は `docs/local/reference_declined-directions.md` に台帳としてまとめてある。** Gemini の wrap・新規 provider・セッションカンバン・本節の 4 件が入っており、各項目に「再検討してよい条件」と「再検討の根拠にしてはいけないもの」を書いてある。**同種の提案を出す前に必ずここを読む。** 見送りは永久否定ではないので、条件が満たされているなら再検討してよい。
 
 ## 現在の実装状態
 
@@ -53,6 +67,8 @@ v0.6.0 までに以下がすべて実装済み（v0.4.0 で Workbench / chat_pro
 | Provider | `claude` / `codex` / `copilot` / `cursor-agent`（v0.4.0 で `opencode` / `grok` 追加。`gemini` は対象外、上記スコープ更新参照） |
 
 > md 内の参照は `many-ai-cli` に統一（旧名 `any-ai-cli` は履歴記述を除き使わない）。ローカルのプロジェクト配置パスは `CLAUDE.local.md` に記載する。
+>
+> **grep 注意**: 旧名 `any-ai-cli` は新名 `many-ai-cli` の部分文字列（`m` + `any-ai-cli`）。旧名マーカー（`<!-- any-ai-cli:approval-rules -->` 等）の残骸を新名パターンで grep すると **0 件に見える**。旧名側のパターンで grep すれば新旧どちらにも当たる。
 
 ## 技術スタック
 
@@ -134,6 +150,14 @@ many-ai-cli/
 
 **「原因が確定したら消す」とコメントに書くだけでは消えない。** v0.5.1 の `/api/debug/batch-log`、v0.5.x の入力トレース（監査 A-01）、v0.6.0 の `/api/debug/ui-log` と `ui_input_trace` と、3 回続けて出荷直前まで残った。とくに `ui_input_trace` は専用ファイルを持たず共有ファイル 3 つに分散していたため、同種の撤去作業から取り残された。
 
+## 利用者のファイルへ書く機能は「次回起動時の回収」まで設計する（2026-08-14 制定）
+
+セッション中だけ書き換えて終了時に戻す作りは、後始末が `defer` や graceful shutdown に載っている限り kill で飛ぶ。しかも**次の実行が残骸を「オリジナル」として採用して書き戻すため、一度置き去りになると自己修復せず恒久化する**。`opencode.json`（`internal/wrapper/opencode_config.go`）と AGENTS.md の承認ルールブロック（`internal/hub/approval_rules_state.go`）の 2 経路で、公開リポジトリへ commit されるところまで進んだ。
+
+- **後始末の到達率を上げる方向で考えない**（kill は防げない）。次回起動時に置き去りを回収する経路を必ず持たせる
+- 回収するには「自分が何を書いたか」を残す必要がある。**現物がそれと違えば他者が触った後なので戻さない**
+- 生成物のファイル名は `.gitignore` にも入れる。ただし **gitignore は tracked file には効かない**ので、既に commit されたものは `git rm` でしか消えない
+
 ## AI 作業共通ルール
 
 ビルド・コミット禁止、secrets-scan 責務、plan/bugfix/pending md の作成ルール等の AI 作業共通ルールは、各利用者のグローバル AI 設定に従う（作者環境の例: `~/.claude/CLAUDE.md` および `~/.claude/guides/`）。AI の個人グローバルルール（言語・確認・質問フォーマット等）も各利用者のグローバル設定に置き、本ファイルはプロジェクト固有ルールだけを扱う。
@@ -148,7 +172,7 @@ many-ai-cli/
 
 - Agent Chat の cursor 変更は parser 単体で完了扱いにせず、caller の offset 採用と次 poll の再開まで追跡・検証する。
 - `go:embed` 対象の Gitignored runtime は、clean release job で取得・検証・artifact 化し、build 前の入力存在確認を必須にする。ローカルにファイルがあることだけでは release の証拠にしない。
-- release workflow の詳細な手順・SHA・secret scope は [`.github/workflows/release.yml`](.github/workflows/release.yml) と [監査対応 plan](docs/local/plan_security-vulnerability-quality-remediation-2026-08-13.md) を正本とする。CLAUDE.md に手順を複製しない。
+- release workflow の詳細な手順・SHA・secret scope は [`.github/workflows/release.yml`](.github/workflows/release.yml) と [監査対応 plan](docs/local/archive/plan_security-vulnerability-quality-remediation-2026-08-13.md) を正本とする。CLAUDE.md に手順を複製しない。
 - 静的確認、ローカルテスト、CI 実行、release artifact、実機確認は別の証拠として報告する。未実行の CI・artifact・実機確認を完了扱いにしない。
 
 ## 詳細ガイド（タスク種別ベース）
