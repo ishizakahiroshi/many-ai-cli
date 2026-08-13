@@ -939,7 +939,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		if *permissionMode == "bypassPermissions" {
 			permValue = "allow"
 		}
-		if cleanupCfg, cfgErr := prepareOpenCodeConfig(cwd, permValue); cfgErr != nil {
+		if cleanupCfg, cfgErr := prepareOpenCodeConfig(cwd, permValue, logger); cfgErr != nil {
 			logger.Warn("opencode: failed to prepare opencode.json permission config", "session_id", sessionID, "err", cfgErr)
 		} else {
 			defer cleanupCfg()

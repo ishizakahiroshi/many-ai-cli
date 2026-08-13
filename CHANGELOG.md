@@ -112,6 +112,20 @@ Release artifacts are published at
   was rejected: it would reinstate the 2026-07-20 defect where a plain EOF just
   after a reattach killed the wrapped CLI. Older wrappers ignore the unknown
   frame and keep the previous behaviour.
+- **A killed opencode session no longer leaves its `opencode.json` behind for
+  good.** The wrapper writes `{"permission":{"*":…}}` into the session's working
+  directory and restores the file when the session ends, but a killed process
+  never runs that cleanup. The next session in the same directory then read the
+  leftover as the "original" and wrote it back on exit, so the override became
+  permanent — including the `allow` that orchestration children write, which
+  silences approval prompts for anyone who clones the repository. The exclusive
+  lock now carries the rollback state (what the file was, and what this session
+  wrote), and a session that takes over a stale lock restores the leftover
+  before touching the file again; a file that changed after the dead session is
+  left alone. If you ran opencode sessions through the Hub before this release,
+  check whether `opencode.json` was committed to any of your repositories
+  (`internal/wrapper/opencode_config.go`,
+  `internal/wrapper/opencode_config_test.go`, `.gitignore`).
 
 ### Changed
 - **Release workflows now pin third-party Actions to immutable commit SHAs.**
