@@ -126,6 +126,20 @@ Release artifacts are published at
   check whether `opencode.json` was committed to any of your repositories
   (`internal/wrapper/opencode_config.go`,
   `internal/wrapper/opencode_config_test.go`, `.gitignore`).
+- **A killed Hub no longer leaves its approval-rules block in your project's
+  `AGENTS.md`.** The block the Hub appends for `copilot` / `cursor-agent` /
+  `grok` sessions is removed on graceful shutdown, but the list of files it had
+  been injected into lived only in memory — so killing the Hub stranded the
+  block in the repository, where nothing would ever remove it and an
+  `git add -A` could commit it. The list is now kept in
+  `~/.many-ai-cli/approval-rule-targets.json`, and the Hub clears any leftover
+  block at startup, before the first session connects; a reconnecting session
+  gets the block injected again through the normal path. Files it cannot clean
+  stay on the list for the next start, and a list that fails to parse is
+  reported and ignored rather than acted on. If you ran Hub sessions before this
+  release, check your repositories' `AGENTS.md` for a stranded block
+  (`internal/hub/approval_rules_state.go`, `internal/hub/approval_handler.go`,
+  `internal/hub/server.go`).
 
 ### Changed
 - **Release workflows now pin third-party Actions to immutable commit SHAs.**

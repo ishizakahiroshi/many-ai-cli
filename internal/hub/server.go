@@ -1237,6 +1237,9 @@ func (s *Server) Run(ctx context.Context) error {
 	if s.autoOpenBrowser {
 		_ = s.OpenBrowser()
 	}
+	// 前回の Hub が kill されて注入ブロックを残したままなら、ここで回収する。
+	// injectApprovalRules より前・かつセッションが 1 つも接続していないうちに行う。
+	s.recoverOrphanedApprovalRules()
 	if s.approvalRulesEnabled() {
 		s.injectApprovalRules()
 	}
