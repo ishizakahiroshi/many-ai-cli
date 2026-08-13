@@ -1182,11 +1182,20 @@
 
           <!-- git worktree 隔離（全プロバイダ共通・opt-in）。チェック時のみ isolate_worktree を送り、
                未チェックのときは config の user_prefs.spawn.worktree_auto を既定として尊重する。 -->
-          <label class="spawn-risk-label">
-            <input id="spawn-isolate-worktree" type="checkbox">
-            <span data-i18n="spawn_isolate_worktree">Run this session in a dedicated git worktree</span>
-          </label>
-          <div id="spawn-isolate-worktree-note" class="settings-note" data-i18n="spawn_isolate_worktree_note" hidden>Only applies when the working directory is a git repository. Creates an isolated checkout under &lt;repo&gt;/.git-worktrees/ on a new many-ai/ branch. Untracked files such as node_modules and .env are not carried over, so dependencies may need reinstalling.</div>
+          <div class="spawn-isolate-worktree-row">
+            <label class="spawn-risk-label">
+              <input id="spawn-isolate-worktree" type="checkbox">
+              <span data-i18n="spawn_isolate_worktree">Run this session in a dedicated git worktree</span>
+            </label>
+            <!-- 説明はチェック後にしか出せないと「押してみるまで何か分からない」ため、
+                 チェック前でも読める ? を置く。label の外に出すのは、label 内の button は
+                 クリックがチェックボックスのトグルに吸われるため。 -->
+            <button id="spawn-isolate-worktree-help" class="spawn-inline-help-btn" type="button"
+                    data-i18n-tooltip="spawn_isolate_worktree_help_tooltip"
+                    aria-controls="spawn-isolate-worktree-note" aria-expanded="false"
+                    aria-label="What does the dedicated git worktree option do?">?</button>
+          </div>
+          <div id="spawn-isolate-worktree-note" class="settings-note" data-i18n="spawn_isolate_worktree_note" hidden>Keeps parallel sessions in the same repository from fighting over the same files. All work stays on a dedicated many-ai/ branch, so you can throw the whole branch away if you dislike the result. Only applies when the working directory is a git repository; the isolated checkout is created under &lt;repo&gt;/.git-worktrees/. Untracked files such as node_modules and .env are not carried over, so dependencies may need reinstalling. The worktree is not deleted automatically when the session ends.</div>
 
           <!-- 子セッションへの委譲を AI へ伝えるか（opt-in）。止めているのは「AI が知るかどうか」
                だけで、orchestrate サブコマンド自体は全セッションで動く＝安全策ではない

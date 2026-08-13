@@ -34,6 +34,7 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
   const spawnPermissionMode = document.getElementById('spawn-permission-mode') as HTMLSelectElement | null;
   const spawnIsolateWorktree = document.getElementById('spawn-isolate-worktree') as HTMLInputElement | null;
   const spawnIsolateWorktreeNote = document.getElementById('spawn-isolate-worktree-note');
+  const spawnIsolateWorktreeHelp = document.getElementById('spawn-isolate-worktree-help');
   const spawnDelegation = document.getElementById('spawn-delegation') as HTMLInputElement | null;
   const spawnDelegationNote = document.getElementById('spawn-delegation-note');
   const spawnModelInput = document.getElementById('spawn-model');
@@ -709,16 +710,32 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
     });
   }
 
-  // worktree 隔離の注意書きは、チェックが入っているときだけ出す。
-  // 未追跡ファイル（node_modules / .env 等）が引き継がれない点を起動前に見せるため。
+  // worktree 隔離の説明は、チェックが入ったときは従来どおり自動で開く（未追跡ファイル
+  // が引き継がれない点を起動前に見せるため）。加えて ? ボタンでいつでも開閉できる。
+  // 自動表示だけだと、チェックを入れるまで「これが何なのか」を読む手段が無かった。
+  let isolateWorktreeNoteOpen = false;
   function updateIsolateWorktreeNote() {
     if (spawnIsolateWorktreeNote) {
-      spawnIsolateWorktreeNote.hidden = !spawnIsolateWorktree?.checked;
+      spawnIsolateWorktreeNote.hidden = !isolateWorktreeNoteOpen;
     }
+    spawnIsolateWorktreeHelp?.setAttribute('aria-expanded', isolateWorktreeNoteOpen ? 'true' : 'false');
+  }
+
+  // チェック状態に説明の開閉を合わせる（change 時と設定復元時に使う）。
+  function syncIsolateWorktreeNote() {
+    isolateWorktreeNoteOpen = !!spawnIsolateWorktree?.checked;
+    updateIsolateWorktreeNote();
   }
 
   if (spawnIsolateWorktree) {
-    spawnIsolateWorktree.addEventListener('change', updateIsolateWorktreeNote);
+    spawnIsolateWorktree.addEventListener('change', syncIsolateWorktreeNote);
+  }
+
+  if (spawnIsolateWorktreeHelp) {
+    spawnIsolateWorktreeHelp.addEventListener('click', () => {
+      isolateWorktreeNoteOpen = !isolateWorktreeNoteOpen;
+      updateIsolateWorktreeNote();
+    });
   }
 
   // 委譲の注意書きも、チェックが入っているときだけ出す。
@@ -773,7 +790,7 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
       // spawn.defaults は map[string]string なので 'true' / 'false' の文字列で往復する
       if (spawnIsolateWorktree) {
         spawnIsolateWorktree.checked = (s.isolate_worktree === 'true');
-        updateIsolateWorktreeNote();
+        syncIsolateWorktreeNote();
       }
       if (spawnDelegation) {
         spawnDelegation.checked = (s.delegation === 'true');
