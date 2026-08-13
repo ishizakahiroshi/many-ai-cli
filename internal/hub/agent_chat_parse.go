@@ -827,7 +827,9 @@ func parseClaudeTranscriptTailPageWithBudget(path string, state *agentChatParseS
 			nextCursor = messageCursor
 		}
 	}
-	stats.DecodeCommitted = true
+	stats.DecodeCommitted = stats.TailPageReady &&
+		stats.DecodedRecords == len(records) &&
+		(len(records) > 0 || !stats.HitBudget)
 	stats.Offset = nextCursor
 	state.lastRead = stats
 	return state.outputMessages(), stats.Offset, nil
@@ -1082,7 +1084,9 @@ func parseCodexRolloutTailPageWithBudget(path string, state *agentChatParseState
 			nextCursor = messageCursor
 		}
 	}
-	stats.DecodeCommitted = true
+	stats.DecodeCommitted = stats.TailPageReady &&
+		stats.DecodedRecords == len(records) &&
+		(len(records) > 0 || !stats.HitBudget)
 	stats.Offset = nextCursor
 	state.lastRead = stats
 	return state.outputMessages(), stats.Offset, nil
