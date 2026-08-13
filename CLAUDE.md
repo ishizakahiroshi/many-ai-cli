@@ -16,6 +16,14 @@
 
 **設計書（正本）**: [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md)
 
+## 新規 provider を増やす提案をしない（2026-08-13 制定）
+
+2026-08-13 に AI コーディング CLI 20 製品を調査し **全件見送りで確定**（資料: `docs/local/design_cli-agent-provider-candidates_2026-08-13.html`）。理由は候補側の優劣ではなく、**本ツールの規模（スター 6 / npm 週次 11）では候補の利用者数を根拠に採否を決める枠組みが成立しない**ため。
+
+- **候補の人気・伸び・他社の対応状況を根拠に provider 追加を提案しない**（Gemini の節と同系統）
+- 検討の起点は「作者がその CLI を素で使い、日常の並列運用に入っているか」。使う前に実装しない
+- 追加コストは opencode 実績で 18 ファイル 180 行。本当のコストは鮮度チェックの無い `resources/approval-patterns/` と `resources/models/` の追従先が 1 本増えること
+
 ## 現在の実装状態
 
 v0.5.1 までに以下がすべて実装済み（v0.4.0 で Workbench / chat_proxy を撤去し opencode / Grok Build CLI provider・Ollama `base_url` 設定を追加、v0.5.0 で `setup` / `doctor` サブコマンド・autoapproval・ターン単位 diff を追加）。v0.6.0 では transcript ベースのチャット本文・Workflow 進捗の Hub 権威化・OpenCode 全許可起動・古いビルド警告を追加し、リリース前監査 A-01/A-02/A-03/A-05 に対応した：
