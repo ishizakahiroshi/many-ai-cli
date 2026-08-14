@@ -30,7 +30,15 @@
   overflow-y: auto;
   transition: border-color 0.15s, background 0.15s;
 }
-#action-bar.visible { display: flex; border-left-color: var(--warn); background: rgba(245,158,11,0.04); }
+/* 背景は必ず不透明にする。絶対配置でターミナルへ重なるため、半透明にすると下の PTY 出力が
+   透けて承認本文が読めなくなる（2026-08-14: rgba(245,158,11,0.04) のままフロー配置から
+   オーバーレイ化したため発生）。警告色の薄い色味は color-mix で --bg-elev に混ぜて維持する。
+   子要素（.action-qpane 等）の半透明はこの不透明面の上で合成されるので触らなくてよい。 */
+#action-bar.visible {
+  display: flex;
+  border-left-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 5%, var(--bg-elev));
+}
 
 /* P-03: compact, provider-neutral approval context. The command remains a
    single readable line; raw VT context is available only on demand. */
