@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	"many-ai-cli/internal/wrapper"
 )
@@ -279,23 +278,14 @@ func (s *Server) injectApprovalTargets(targets []approvalRuleTarget) {
 	// SyncRulesFile は InjectRules が内部で毎回実行するため、ここでの事前実行は
 	// 重複（bugfix_new-session-startup-latency-3x_2026-07-10.md で除去）。
 	var injected []approvalRuleTarget
-	perTargetT0 := time.Now()
 	for _, target := range targets {
 		provider := target.wrapperProvider()
-		fileT0 := time.Now()
 		if err := wrapper.InjectRules(provider, target.Path); err != nil {
 			s.logger.Warn("inject rules failed", "providers", strings.Join(target.Providers, ","), "path", target.Path, "err", err)
 			continue
 		}
-		s.logger.Info("startup_latency_probe_inject_rules_file",
-			"path", target.Path,
-			"providers", strings.Join(target.Providers, ","),
-			"ms", time.Since(fileT0).Milliseconds())
 		injected = append(injected, target)
 	}
-	s.logger.Info("startup_latency_probe_inject_targets",
-		"target_count", len(targets),
-		"per_target_total_ms", time.Since(perTargetT0).Milliseconds())
 	s.rememberApprovalTargets(injected)
 }
 
