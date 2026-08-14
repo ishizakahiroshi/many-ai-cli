@@ -4,7 +4,7 @@ import { showToast, token } from './util.js';
 import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, approvalVisibleCache, autoDismissTimers, beginApprovalReplay, chatHistory, deriveProjectKeyFromCwd, finishApprovalReplay, isApprovalReplayPending, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, multiQuestionLatchAt, multiQuestionVisibleCache, noteApprovalSourceEpoch, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
 import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLocalSessionHistory, resetLocalSessionHistory, updateInputAffordance } from '../app.js';
 import { activateSession, render, renderSessionList, renderSessionStateUpdate, updateCardLiveInfo, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
-import { applyRemotePtyResize, ensureTerminal, isLiveOutputBatching, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
+import { applyRemotePtyResize, ensureTerminal, forgetSentPtySize, isLiveOutputBatching, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup } from './settings.js';
 import { clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed, setMultiQuestionBannerVisible } from './approval-ui.js';
 import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, handleHubApprovalMarker, hideActionBar, isAIProvider, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
@@ -266,6 +266,9 @@ export function _connectWs() {
     }
     _wsRetryDelay = 500; // 再接続成功でバックオフリセット
     _lastMsgAt = Date.now();
+    // 切断中に他 UI が PTY をリサイズしている可能性があるため、
+    // 「この寸法は通知済み」の記録は捨てて再送を許す。
+    forgetSentPtySize();
     if (_wsWatchdog) clearInterval(_wsWatchdog);
     _wsWatchdog = setInterval(_wsWatchdogTick, WS_WATCHDOG_INTERVAL_MS);
     document.getElementById('summary').textContent = t('registering');

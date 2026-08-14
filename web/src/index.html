@@ -1214,6 +1214,10 @@
         <!-- JS で 2/4/6/9/12/18 プリセットボタン生成 -->
       </div>
     </div>
+    <!-- 承認バー（#action-bar）を absolute で重ねるための位置基準。
+         バーをフローに置くと表示・高さ変更のたびに #terminal-area が縮み、
+         pty_resize が飛んで TUI が再描画 → 同じ本文が scrollback へ積み上がる。 -->
+    <div id="display-stack">
     <!-- C2: display-area (タブ切替で中身が入れ替わる範囲) -->
     <div id="display-area" class="mode-terminal">
     <div id="terminal-wrapper">
@@ -1259,8 +1263,9 @@
     <div id="multi-view" hidden>
       <!-- JS で .pane-slot を動的生成 -->
     </div>
-    <!-- D7/D8: 共有 action-bar (display-area 外, input の上) -->
+    <!-- D7/D8: 共有 action-bar (display-area 外, ターミナルへ重ねて表示) -->
     <div id="action-bar"></div>
+    </div><!-- /#display-stack -->
     <div id="multi-question-banner" hidden data-i18n="multi_question_banner"></div>
     <div id="stale-binary-banner" hidden></div>
     <div id="approval-suppressed-banner" hidden></div>
