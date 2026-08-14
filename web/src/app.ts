@@ -380,6 +380,17 @@ function effectiveDeferredEnterWait(sessionId: number): number {
   return deferredEnterOverrideMs > 0 ? deferredEnterOverrideMs : deferredEnterMinWaitFor(sessions.get(sessionId)?.provider || '');
 }
 
+// スラッシュコマンド 1 行の末尾空白を落とす。候補メニューの確定は引数を続けて打てるよう
+// `cmd + ' '` を入力欄へ入れる（selectSlashItem）が、この末尾空白が付いたまま送ると
+// OpenCode の TUI はコマンド候補を開かない。候補を開く条件が「先頭が / で、かつカーソル
+// までに空白が 1 つも無いこと」のため（opencode 1.18.18 実機バイナリで確認）。候補が開かない
+// と確定 Enter が通常送信に落ち、`/models` がコマンドではなく AI へのプロンプトとして飛ぶ。
+// 末尾空白に意味を持つコマンドは wrap 対象 6 CLI に無いため provider を問わず落とす。
+function trimTrailingSpaceForSlashCommand(text) {
+  if (!text.startsWith('/') || text.includes('\n')) return text;
+  return text.replace(/[ \t]+$/, '');
+}
+
 // 本文送信の共通判定: ブラケットペーストで包むか（deferEnter=確定 \r を出力静止後に別送するか）。
 // 「本文+\r」を同一チャンクで送ると、内側 CLI がチャンク一括入力をペーストとして取り込む過程で
 // 末尾 \r を確定キーと扱わず、入力欄に張り付いたまま送信されない（Grok 実測 2026-07-11:
@@ -409,10 +420,11 @@ function buildBodySubmitPart(sessionId, rawText) {
 // 直前の deferred-enter 予約が残っていると遅延 \r がこの送信の後ろに混ざるため先に消す。
 export function sendSubmittedBody(sessionId, bodyText, opts: any = {}) {
   cancelDeferredEnter(sessionId, 'send_body');
-  const { textPart, deferEnter } = buildBodySubmitPart(sessionId, bodyText);
+  const body = trimTrailingSpaceForSlashCommand(bodyText);
+  const { textPart, deferEnter } = buildBodySubmitPart(sessionId, body);
   if (!sendSubmittedText(sessionId, textPart, opts)) return false;
   if (deferEnter) scheduleDeferredEnter(sessionId, effectiveDeferredEnterWait(sessionId));
-  scheduleResidueSweep(sessionId, bodyText, deferEnter);
+  scheduleResidueSweep(sessionId, body, deferEnter);
   return true;
 }
 
@@ -469,6 +481,8 @@ export async function doSend(sessionId) {
     // 実行されない）。確定はこちらが末尾に付ける \r のみが担うべきなので、本文中の CR は
     // すべて LF に正規化する。入力欄で打った複数行は元々 \n のみなので影響を受けない。
     rawText = rawText.replace(/\r\n?/g, '\n');
+    // 候補メニュー確定で付く末尾空白を落とす（付いたままだと内側 CLI がコマンドとして扱わない）。
+    rawText = trimTrailingSpaceForSlashCommand(rawText);
     // ペースト包み・確定 \r 分離の判定は buildBodySubmitPart に共通化（クイックコマンドと共用）。
     // ブラケットペーストはテキスト部分のみに適用し、injectPrefix は前置する。
     let textPart;
@@ -773,8 +787,10 @@ export function hideSlashMenu() {
 export function selectSlashItem(i) {
   if (i < 0 || i >= slashItems.length) return;
   const cmd = slashItems[i].cmd;
-  // /clear と /model はクイック実行用途のため、候補選択時に即送信する
-  if (activeSessionId !== null && (cmd === '/clear' || cmd === '/model')) {
+  // 引数を取らずダイアログを開くだけのコマンドはクイック実行用途のため、候補選択時に即送信する。
+  // /models は OpenCode 側の /model 相当（TUI コマンド名 model.list）。ここに無いと Enter を
+  // 2 回押す形になり、Claude の /model と操作が揃わない。
+  if (activeSessionId !== null && (cmd === '/clear' || cmd === '/model' || cmd === '/models')) {
     sendQuickCommand(activeSessionId, cmd);
     clearInput();
     hideSlashMenu();
