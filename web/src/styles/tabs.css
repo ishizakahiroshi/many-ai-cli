@@ -383,6 +383,17 @@ body.pane-resizing .xterm { pointer-events: none; }
 }
 #chat-pane .chat-filter-bar .icon-btn:hover { background: var(--bg-elev2, var(--bg-deep)); color: var(--text); }
 
+/* display-stack — #display-area / #multi-view / #action-bar を束ねる位置基準。
+   #action-bar は絶対配置でこの箱の下端へ重なるため、承認バーが出ても
+   ターミナルの高さは変わらない（＝pty_resize が飛ばない）。 */
+#display-stack {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
 /* C2: display-area — モード切替で grid を変える */
 #display-area {
   flex: 1;
