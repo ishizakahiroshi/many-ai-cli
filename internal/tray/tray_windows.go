@@ -4,7 +4,10 @@ package tray
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -43,6 +46,54 @@ var (
 	procGetModuleHandleW = kernel32.NewProc("GetModuleHandleW")
 	procFreeConsole      = kernel32.NewProc("FreeConsole")
 )
+
+// hubStartTimeout は serve を起動してから URL が引けるようになるまで待つ上限。
+// 待てなかった場合はブラウザを開かずエラーにする（空タブを開かない）。
+const hubStartTimeout = 20 * time.Second
+
+// hubPollInterval は起動待ちのポーリング間隔。
+const hubPollInterval = 250 * time.Millisecond
+
+// openHub は Hub が動いていなければ起動し、既定ブラウザで開く。
+// 動いていればそのまま開く。
+func openHub(cfg *config.Config) error {
+	if url, ok := hub.RunningURL(cfg); ok {
+		return hub.OpenURL(url)
+	}
+	if err := startHubDetached(); err != nil {
+		return fmt.Errorf("start hub: %w", err)
+	}
+	url, err := waitForHubURL(func() (string, bool) { return hub.RunningURL(cfg) }, hubStartTimeout, hubPollInterval)
+	if err != nil {
+		return err
+	}
+	return hub.OpenURL(url)
+}
+
+// stopHub は Hub を停止する。トレイ自身は残す。
+func stopHub(cfg *config.Config) error {
+	if !hub.IsRunning(cfg) {
+		return nil
+	}
+	return hub.Stop(cfg)
+}
+
+// startHubDetached は自分自身の exe を `serve` で起動する。トレイを閉じても
+// Hub が道連れにならないよう、プロセスグループを分けてコンソールも出さない。
+func startHubDetached() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("locate executable: %w", err)
+	}
+	cmd := exec.Command(exe, "serve") // #nosec G204 -- 引数は固定文字列、パスは os.Executable の自プロセス
+	cmd.SysProcAttr = detachSysProcAttr()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	// 起動した子は待たない（常駐させる）。終了だけ別ゴルーチンで回収しておく。
+	go func() { _ = cmd.Wait() }()
+	return nil
+}
 
 const (
 	wmDestroy      = 0x0002
