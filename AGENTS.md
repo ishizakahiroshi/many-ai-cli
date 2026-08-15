@@ -4,7 +4,7 @@ This repository's operational guidance is maintained in `CLAUDE.md`.
 
 - Project overview & task index: `./CLAUDE.md`
 - Detailed guides (read on demand):
-  - `./CLAUDE/coding.md` — Go / Vue 3 conventions, PTY, detector
+  - `./CLAUDE/coding.md` — Go / Web TypeScript conventions, PTY, detector
   - `./CLAUDE/development.md` — plan_*.md context split, AI work-model
   - `./CLAUDE/operations.md` — Git, commit messages, output rules
   - `./CLAUDE/deployment.md` — cross-compile build & distribution
