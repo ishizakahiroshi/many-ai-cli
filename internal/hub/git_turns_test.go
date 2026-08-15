@@ -32,7 +32,7 @@ func initGitTurnTestRepo(t *testing.T) string {
 		t.Fatal(err)
 	}
 	run("add", "tracked.txt")
-	run("-c", "user.name=Test User", "-c", "user.email=test@example.invalid", "commit", "-m", "initial")
+	run("-c", "user.name=Test User", "-c", "user.email=test@example.com", "commit", "-m", "initial")
 	return dir
 }
 
