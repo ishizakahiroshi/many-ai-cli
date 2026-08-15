@@ -25,6 +25,7 @@ import (
 	"many-ai-cli/internal/setupcmd"
 	"many-ai-cli/internal/shell"
 	"many-ai-cli/internal/uninstall"
+	"many-ai-cli/internal/tray"
 	"many-ai-cli/internal/usagerelay"
 	"many-ai-cli/internal/wrapper"
 )
@@ -292,6 +293,11 @@ func run(args []string) error {
 		return enc.Encode(exported)
 	case "status":
 		return hub.PrintStatus(cfg)
+	case "tray":
+		// Windows のデスクトップにある起動用と停止用のアイコン 2 個を、トレイ 1 個へ
+		// まとめるための常駐プロセス。窓は作らず、UI は既定ブラウザのタブで開く。
+		// Windows 以外は tray.ErrUnsupported を返す。
+		return tray.Run(cfg)
 	case "doctor":
 		fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 		asJSON := fs.Bool("json", false, "output as JSON")
@@ -385,6 +391,6 @@ func run(args []string) error {
 }
 
 func usage() error {
-	fmt.Println("many-ai-cli <serve|connect|setup|doctor|issue|wrap|claude|codex|copilot|cursor-agent|opencode|grok|shell-init|stop|status|profile-export|log-clean|uninstall|version>")
+	fmt.Println("many-ai-cli <serve|connect|setup|doctor|issue|wrap|claude|codex|copilot|cursor-agent|opencode|grok|shell-init|stop|status|tray|profile-export|log-clean|uninstall|version>")
 	return nil
 }
