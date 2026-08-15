@@ -1,6 +1,6 @@
 # many-ai-cli コーディング規約
 
-> 最終更新: 2026-07-05(日) 10:50:11 — 旧設計書パス・旧環境変数名を修正
+> 最終更新: 2026-08-15(土) 21:20:00 — build tag で OS 分離したコードの staticcheck / ビルドを GOOS 別に回す手順を追記
 
 `many-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ 静的 TypeScript フロント（`web/dist/` を `go:embed`）。設計書: [../docs/v0.3.x-many-ai-cli-design.md](../docs/v0.3.x-many-ai-cli-design.md)
 
@@ -93,6 +93,27 @@
 - **Go:** `go test ./...` で単体テスト。PTY 関連は OS 別 build tag で分岐したテストファイル（`_unix_test.go` / `_windows_test.go`）
 - **Web:** `bun run check`（TypeScript）+ `bun run test`（approval-parser fixtures）。Hub 起動 → モックラッパー → UI 操作の E2E は未整備のため、フロント大変更後は手動ブラウザ確認が必要。
 - **手動検証:** 4 ペイン（Claude × 2 / Codex × 2）並列起動 + Hub UI を別画面で常時表示、設計書 §9 のレイアウト通りに動くか確認
+
+### build tag で OS を分けたコードを足したら、staticcheck を GOOS 別に走らせる
+
+**staticcheck の結果は GOOS で変わる。** build tag で分離したファイルは、解析対象になっている OS のものしかコンパイルされないため、**別 OS 側でだけ未使用（U1000）になるコードを手元で検出できない**。Windows で開発していると `!windows` 側が丸ごと見えない。
+
+```
+go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
+for os in linux darwin windows; do
+  echo "== GOOS=$os"; GOOS=$os "$(go env GOPATH)/bin/staticcheck" ./...
+done
+```
+
+**`GOOS=linux go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...` は動かない。** ツール自体まで cross-compile され、Windows 上で linux バイナリを実行しようとして落ちる。先に `go install` してから `GOOS` を付ける。
+
+ビルドも同様に 3 OS で通す（`CGO_ENABLED=0` は goreleaser の全ターゲットの前提）:
+
+```
+for os in windows linux darwin; do GOOS=$os GOARCH=amd64 CGO_ENABLED=0 go build ./...; done
+```
+
+2026-08-15、`internal/tray/` を足したときに手元（Windows）では通ったが CI（ubuntu）で U1000 が 6 件出た。Windows からしか呼ばないヘルパーを全 OS 共通ファイルに置いていたため。
 
 ## many-ai-cli 固有の禁止事項
 
