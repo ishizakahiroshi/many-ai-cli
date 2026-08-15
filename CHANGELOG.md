@@ -74,6 +74,25 @@ Release artifacts are published at
   look like zero hits. The check is skipped without error when git is missing or
   the directory is not a repository (`internal/doctor/residue.go`).
 
+### Changed
+- **An answered approval is now remembered in one place instead of three.** The
+  browser used to decide "have we already answered this?" with three separate
+  pieces of state that disagreed with each other: a signature that expired on a
+  5–10 second timer, a hash of the whole marker block that never expired at all,
+  and a question-text key used only by the manual dismiss button. Each had its
+  own idea of what counts as the same question, and the gaps between them are
+  where answered prompts came back — the timer one lapsed while a redrawn block
+  was still on screen, and the permanent one could bury a question the agent
+  genuinely asked again. All three are gone. What remains is the candidate key
+  plus the source generation: the key is built from the provider, the approval
+  kind, the normalized question and the option numbers and send strings, so a
+  redraw that shifts labels, padding or box rules resolves to the same
+  candidate, while a new live prompt boundary produces a new generation and an
+  intentionally repeated question is shown again. The identity logic moved out
+  of `state.ts` into `approval-answered.ts`, which touches no DOM and is covered
+  by 14 regression tests (`web/src/app/approval-answered.ts`,
+  `web/src/app/approval-answered-fixtures.ts`, `web/src/app/approval.ts`).
+
 ### Fixed
 - **Approval panels were still being withheld over the TUI's own frame lines.**
   The corruption check treats box-drawing characters inside a marker block as

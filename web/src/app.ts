@@ -2,7 +2,7 @@
 import { t } from './i18n.js';
 import { cleanCopiedText, showToast, token } from './app/util.js';
 import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_AUTO_APPROVAL_ENABLED_KEY, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
-import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, answeredApprovalCandidates, answeredApprovalShapeKeys, answeredMarkerSigs, recordAnsweredMarkerSig, replayAnsweredApprovalTokens, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSourceEpochCache, approvalReplayState, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
+import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, answeredApprovalCandidates, answeredApprovalShapeKeys, recordAnsweredApprovalCandidate, replayAnsweredApprovalTokens, approvalAutoSwitchQueue, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSourceEpochCache, approvalReplayState, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { orderSessions } from './app/state.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, resumeTerminalBottomFollow, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
@@ -515,8 +515,7 @@ export async function doSend(sessionId) {
     // テキスト送信で承認ポップアップをバイパスした場合、Ink 再描画による
     // 同一選択肢の再検出・再表示を防ぐため消費済み署名を保存する
     const prevOpts = approvalRawOptionsCache.get(sessionId);
-    if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
-    recordAnsweredMarkerSig(sessionId, prevOpts);
+    if (prevOpts) recordAnsweredApprovalCandidate(sessionId, prevOpts);
     if (typeof maybeSendDirectApprovalConsumed === 'function') {
       maybeSendDirectApprovalConsumed(sessionId, rawText, textToSend);
     }
@@ -1458,7 +1457,7 @@ function doSendQuickCommand(sessionId, cmd) {
   const prevOpts = approvalRawOptionsCache.get(sessionId);
   // 本文送信が失敗した場合は承認 UI と消費済み state を保持する。
   if (!sendSubmittedBody(sessionId, cmd)) return false;
-  if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
+  if (prevOpts) recordAnsweredApprovalCandidate(sessionId, prevOpts);
   hideActionBar(sessionId);
   approvalSuppressUntil.set(sessionId, Date.now() + 2000);
   setTimeout(() => {
@@ -1580,10 +1579,6 @@ export function resetAllLocalSessionHistory() {
   approvalSourceCache.clear();
   approvalSourceEpochCache.clear();
   approvalReplayState.clear();
-  approvalConsumedSigDeleteTimer.forEach(t => clearTimeout(t));
-  approvalConsumedSigDeleteTimer.clear();
-  approvalConsumedSig.clear();
-  answeredMarkerSigs.clear();
   answeredApprovalCandidates.clear();
   answeredApprovalShapeKeys.clear();
   replayAnsweredApprovalTokens.clear();
@@ -1619,10 +1614,6 @@ export function resetLocalSessionHistory(id) {
   approvalSourceCache.delete(id);
   approvalSourceEpochCache.delete(id);
   approvalReplayState.delete(id);
-  const sigTimer = approvalConsumedSigDeleteTimer.get(id);
-  if (sigTimer) clearTimeout(sigTimer);
-  approvalConsumedSigDeleteTimer.delete(id);
-  approvalConsumedSig.delete(id);
   answeredApprovalCandidates.delete(id);
   answeredApprovalShapeKeys.delete(id);
   replayAnsweredApprovalTokens.delete(id);
@@ -1649,11 +1640,6 @@ export function clearSessionTimerEntry(timerMap, id) {
 export function cleanupRemovedSessionState(id) {
   try { clearSessionTimerEntry(approvalCheckTimers, id); } catch (_) {}
   try { clearSessionTimerEntry(approvalSuppressRescanTimers, id); } catch (_) {}
-  try {
-    const sigTimer = approvalConsumedSigDeleteTimer.get(id);
-    if (sigTimer) clearTimeout(sigTimer);
-    approvalConsumedSigDeleteTimer.delete(id);
-  } catch (_) {}
   try { cancelDeferredEnter(id, 'session_removed'); } catch (_) {}
   try { cancelResidueSweep(id); } catch (_) {}
   try { cancelExpandCapture(id); } catch (_) {}
@@ -1708,8 +1694,6 @@ export function removeLocalSession(id) {
   approvalSourceCache.delete(id);
   approvalSourceEpochCache.delete(id);
   approvalReplayState.delete(id);
-  approvalConsumedSig.delete(id);
-  answeredMarkerSigs.delete(id);
   answeredApprovalCandidates.delete(id);
   answeredApprovalShapeKeys.delete(id);
   replayAnsweredApprovalTokens.delete(id);
