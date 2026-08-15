@@ -1,9 +1,16 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-08-15(土) 19:33:00 — 承認の同一性を 1 本に保つ節を新設。置き去りの検出手段（doctor）へのポインタを追記
+> 最終更新: 2026-08-15(土) 20:18:00 — 翻訳の扱い（日本語のみが正本・vi はスナップショット・UI ロケールは対象外）を冒頭に明記
 
-> 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。  
-> **Vietnamese translation (team docs):** [CLAUDE.vi.md](CLAUDE.vi.md) · [README.vi.md](README.vi.md) · [docs/README.vi.md](docs/README.vi.md)
+> 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。
+
+> **On translations / 翻訳について**
+>
+> This development guide is maintained in **Japanese only** — the Japanese text above and below is the authoritative version. There is no English edition of this file. (The user-facing README *is* available in English: [README.md](README.md), with [README.ja.md](README.ja.md) and [README.vi.md](README.vi.md).)
+>
+> [CLAUDE.vi.md](CLAUDE.vi.md), [docs/README.vi.md](docs/README.vi.md) and the `docs/manual_*.vi.md` files are a **point-in-time snapshot (2026-08-15)** kindly contributed by a community translator. They are **no longer kept in sync** with this guide, so please read them as background rather than as current rules, and check the Japanese original before acting on anything. This does **not** apply to the Vietnamese **UI** locale (`web/src/i18n/vi.json`), which is a shipped feature and is maintained normally.
+>
+> If you work in another language, we're sorry to ask — please translate as needed on your side (a machine translation of this file is usually enough). Translation contributions are genuinely welcome; we just can't promise to keep them in step with the Japanese original, so anything merged will be treated the same way: a dated snapshot.
 
 ## プロジェクト概要
 

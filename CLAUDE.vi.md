@@ -2,7 +2,15 @@
 
 > Bản dịch tiếng Việt của [`CLAUDE.md`](CLAUDE.md) (bản gốc tiếng Nhật).  
 > Cập nhật lần cuối (nguồn): 2026-08-15 — bổ sung 7 mục còn thiếu so với bản gốc (chính sách provider, chính sách app desktop, tài nguyên phân phối lúc chạy, mã quan sát, thiết kế thu hồi, tính đồng nhất của phê duyệt, ranh giới bằng chứng kiểm toán).
-> Bản dịch: 2026-07-18.
+> Bản dịch ban đầu: 2026-07-18 (Nga Vo).
+
+> **⚠️ Bản dịch này là ảnh chụp tại một thời điểm và không còn được đồng bộ.**
+>
+> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`CLAUDE.md`](CLAUDE.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. (Lần dịch gần nhất: 2026-08-15.)
+>
+> Xin chân thành cảm ơn người đã đóng góp bản dịch. Chúng tôi vẫn hoan nghênh đóng góp dịch thuật; chỉ là không thể hứa giữ đồng bộ, nên bản được merge cũng sẽ là ảnh chụp có ghi ngày.
+>
+> *(EN: This translation is a dated snapshot and is no longer kept in sync with the original. Please refer to the source file linked above. The Vietnamese **UI** locale `web/src/i18n/vi.json` is a shipped feature and is still maintained.)*
 
 > Chi tiết theo từng loại việc nằm trong `CLAUDE/*.md`. File này chỉ chứa phần luôn được nạp vào ngữ cảnh.
 

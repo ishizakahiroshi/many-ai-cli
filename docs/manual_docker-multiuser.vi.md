@@ -3,6 +3,14 @@
 > Bản dịch tiếng Việt của [`manual_docker-multiuser.md`](manual_docker-multiuser.md).  
 > Bản dịch: 2026-07-18.
 
+> **⚠️ Bản dịch này là ảnh chụp tại một thời điểm và không còn được đồng bộ.**
+>
+> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_docker-multiuser.md`](manual_docker-multiuser.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. (Lần dịch gần nhất: 2026-07-18.)
+>
+> Xin chân thành cảm ơn người đã đóng góp bản dịch. Chúng tôi vẫn hoan nghênh đóng góp dịch thuật; chỉ là không thể hứa giữ đồng bộ, nên bản được merge cũng sẽ là ảnh chụp có ghi ngày.
+>
+> *(EN: This translation is a dated snapshot and is no longer kept in sync with the original. Please refer to the source file linked above. The Vietnamese **UI** locale `web/src/i18n/vi.json` is a shipped feature and is still maintained.)*
+
 Hướng dẫn vận hành nhiều người trên remote server XServer (tên server `admin`) theo mô hình «1 user = 1 Docker container» cho `many-ai-cli`. Đường dẫn vật lý phía server (`/opt/any-ai-cli/` `/srv/any-ai-cli/`), tên compose project và docker volume **vẫn dùng tên cũ `any-ai-cli`** trong vận hành thực tế, nên tài liệu này cũng ghi theo thực tế đó. Lịch sử thiết kế / quyết định: [plan_docker-multiuser-isolation.md](plan_docker-multiuser-isolation.md).
 
 **Thông tin kết nối (IP server · đường dẫn private key · token, v.v.) để ở file credentials local của admin (ngoài Git). Không ghi giá trị thật trong tài liệu này.**
