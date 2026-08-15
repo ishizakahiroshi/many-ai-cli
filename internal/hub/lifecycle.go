@@ -394,6 +394,25 @@ func probeBinaryStale(port int, token string) (stale bool, ok bool) {
 	return info.BinaryStale, true
 }
 
+// RunningURL は稼働中 Hub のトークン付き URL を返す。停止中なら ok=false。
+//
+// ポートもトークンも起動ごとに変わるため URL は固定できない。runningHubPort は
+// 設定値と hub-runtime.json の両方を見たうえで PID 生存と /api/info 応答まで
+// 確かめるので、ここを通せばトレイ側が独自にポートを探す必要がない
+// （internal/tray から使う）。
+func RunningURL(cfg *config.Config) (string, bool) {
+	port, ok := runningHubPort(cfg)
+	if !ok {
+		return "", false
+	}
+	return localHubURL(port, "/", cfg.Token), true
+}
+
+// OpenURL は既定ブラウザで URL を開く。窓は作らず、OS の既定ハンドラに任せる。
+func OpenURL(url string) error {
+	return browserCommand(url).Start()
+}
+
 func localHubURL(port int, path string, token string) string {
 	if path == "" {
 		path = "/"

@@ -11,6 +11,20 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **The Hub can now be started and stopped from a tray icon on Windows.**
+  `setup` used to leave two shortcuts on your desktop — one to start the Hub and
+  one to stop it — and that split was the only real complaint left after
+  packaging this as a desktop app was ruled out. `many-ai-cli tray` runs a small
+  resident process whose menu has three entries: open the Hub (starting it first
+  if it is not running), stop the Hub, and quit the tray. It is a tray icon, not
+  a window: the UI still opens as a tab in your default browser, and no OS-level
+  notifications are added. `setup` now creates a single **"Many AI Hub"**
+  shortcut pointing at it. Existing "Start" and "Stop" icons are left alone and
+  keep working — `setup` reports that it found them and lets you delete them
+  yourself. The tray lives in its own process rather than inside `serve`, so it
+  survives stopping the Hub; the Win32 calls go through `x/sys/windows` with no
+  cgo, keeping `CGO_ENABLED=0` intact for every release target
+  (`internal/tray/`, `internal/setupcmd/setup_windows.go`).
 - **Prompt templates can be reordered by dragging.** Each row in the template
   palette has a grip on the left; drag it to move the template, and the order
   is saved as `user_prefs.templates` so it follows you across browsers and

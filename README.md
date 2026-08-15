@@ -274,14 +274,16 @@ Whichever install path you used, the next steps are the same.
    many-ai-cli setup
    ```
 
-   It creates **"Many AI Hub Start"** and **"Many AI Hub Stop"** shortcuts on your desktop (`.lnk` on Windows, `.command` on macOS, `.desktop` on Linux).
-2. From now on, just **double-click "Many AI Hub Start"** on your desktop. A console window opens alongside your browser at `http://127.0.0.1:47777/?token=<token>`.
+   On **Windows** it creates a single **"Many AI Hub"** shortcut on your desktop, which starts a tray icon. On macOS and Linux it creates **"Many AI Hub Start"** and **"Many AI Hub Stop"** (`.command` / `.desktop`).
+2. From now on, just **double-click the desktop shortcut**. On Windows a tray icon appears; click it and choose **"Hub を開く"** to start the Hub if needed and open it in your browser at `http://127.0.0.1:47777/?token=<token>`. On macOS and Linux, "Many AI Hub Start" opens a console window alongside the browser.
 3. In the Hub UI, click **"+ New Session"** in the lower left to launch one of the wrapped AI CLIs (claude / codex / copilot / cursor-agent / opencode / grok). When an approval prompt appears, an action bar shows up under the input — click a button or use the keyboard.
 
-To stop, use **"Many AI Hub Stop"** on your desktop, the `⏻` button in the top-right of the Hub UI, or `many-ai-cli stop` from another terminal. If you prefer a terminal, `many-ai-cli serve --open` still works.
+To stop, use the tray menu's **"Hub を停止"** (Windows), **"Many AI Hub Stop"** on your desktop (macOS / Linux), the `⏻` button in the top-right of the Hub UI, or `many-ai-cli stop` from another terminal. If you prefer a terminal, `many-ai-cli serve --open` still works.
 
-> **⚠ About the console window**
-> Launching "Many AI Hub Start" opens a console window alongside the browser. **That console *is* the Hub server process** — closing it with `×` terminates the Hub. If it gets in the way, **minimize** it instead of closing it.
+> **Upgrading from an earlier version?** Running `setup` again adds the new "Many AI Hub" shortcut but **leaves your existing "Start" and "Stop" icons in place** — they keep working. Delete them yourself once you have switched to the tray; `setup` will never remove them for you.
+
+> **⚠ About the console window (macOS / Linux)**
+> Launching "Many AI Hub Start" opens a console window alongside the browser. **That console *is* the Hub server process** — closing it with `×` terminates the Hub. If it gets in the way, **minimize** it instead of closing it. On Windows the tray starts the Hub detached, so there is no console window to keep open.
 > If the Hub does go down (whether by `×`, a crash, or a manual restart), running AI sessions wait up to **60 minutes** for the Hub to come back before terminating themselves (configurable in `config.yaml` up to 24 hours — extend it for long-running autonomous tasks). A Web UI bug or restart will not silently kill your work. See [Shutdown, zombie protection & Hub crash resilience](#shutdown-zombie-protection--hub-crash-resilience) for details.
 > On Linux (GNOME), the first time you use a `.desktop` shortcut on the desktop, right-click it and choose **"Allow Launching"** (this is an OS-level requirement).
 
