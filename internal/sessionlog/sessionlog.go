@@ -127,6 +127,32 @@ func Paths(logDir string, meta Metadata) (rawLogPath string, jsonlPath string) {
 	return filepath.Join(dir, base+".log"), filepath.Join(dir, base+".jsonl")
 }
 
+// SizeOnDisk はファイルの実サイズを、ファイルハンドル経由で取得する。
+//
+// Windows では、別プロセスが書き込み中のファイルのサイズ・最終更新時刻が
+// ディレクトリエントリへ遅れて反映されることがある。その間、ディレクトリ一覧を
+// 読む経路（エクスプローラ / dir / Get-ChildItem など）はそのファイルを
+// 「0 バイト・最終更新はファイル作成時刻のまま」と表示する。2026-08-15 の実測でも、
+// 稼働中セッションの .log について Get-ChildItem が 0、ハンドル経由が 329297 バイトを
+// 返す食い違いを観測している（同じファイルを数分後に測り直すと一致した）。
+// ハンドルを開いてから Stat すればこの遅延の影響を受けず、実バイト数が取れる。
+//
+// 2026-08-14 にこの見え方を「セッションログが書かれない不具合」と誤診し
+// pending_session-raw-log-not-written.md を起票している（実際は正常に書けていた）。
+// 稼働中セッションのログサイズを判断材料にするコードは必ずこちらを使うこと。
+func SizeOnDisk(path string) (int64, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
+}
+
 // TranscriptPath は jsonlPath（...jsonl）に対応するクリーンテキスト（...txt）のパスを返す。
 // 拡張子が .jsonl でない場合は jsonlPath にそのまま .txt を付け足す（呼び出し側の責任）。
 func TranscriptPath(jsonlPath string) string {

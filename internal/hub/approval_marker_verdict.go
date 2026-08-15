@@ -51,6 +51,25 @@ var (
 	approvalBoxRuleRe = regexp.MustCompile(`[\x{2500}-\x{257F}]{3,}`)
 )
 
+// isRuleOnlyLine は罫線と空白だけで構成された行かを返す。
+//
+// TUI が描く区切り線・枠の行がこれに当たる。本文の文字を 1 つでも含む行は false に
+// なるので、「選択肢ラベルの末尾が罫線で上書きされた」本来の box_rule は取り逃さない。
+func isRuleOnlyLine(line string) bool {
+	sawRule := false
+	for _, r := range line {
+		switch {
+		case r >= 0x2500 && r <= 0x257F:
+			sawRule = true
+		case r == ' ' || r == '\t' || r == '\r':
+			// レイアウト用の余白は許す
+		default:
+			return false
+		}
+	}
+	return sawRule
+}
+
 // classifyApprovalMarkerBlock は構造が壊れていれば理由を返す。正常なら空文字を返す。
 //
 // 誤検出（正常なブロックを壊れていると判定する）は「承認が無音で出ない」事故になるため、
@@ -67,8 +86,22 @@ func classifyApprovalMarkerBlock(block string) string {
 	// TUI コンポーザの枠線が本文へ重なった再描画。選択肢ラベルの末尾だけが罫線で
 	// 上書きされてもマーカーの対と番号構造は保たれるため、下の番号検査では捕まらない。
 	// Y/N 形式の早期 return より前に置くこと（Y/N ブロックも同じ壊れ方をする）。
-	if approvalBoxRuleRe.MatchString(clean) {
-		return "box_rule"
+	//
+	// ただし罫線と空白だけの行は数えない（isRuleOnlyLine）。それは本文へ重なった
+	// 罫線ではなく、TUI が画面に描く区切り線・枠そのものが、ミラー上でブロックの
+	// 途中に紛れ込んだもの。実測（2026-08-15 / approval-corrupt ダンプ 107 件を
+	// 記録寸法へ replay）では、box_rule 36 件のうち 13 件が罫線をこの形でしか
+	// 含んでおらず、その行を除くと 13 件すべてが構造的に正常だった。混入した
+	// 罫線行は 16 本中 15 本が vt_cols ちょうどの画面全幅で、位置はすべて
+	// ブロックの途中（先頭・末尾は 0 本）。本文が無傷のブロックを握り潰すのは
+	// 本関数の方針（保守的に倒す・曖昧なら正常扱い）に反するので通す。
+	for _, line := range strings.Split(clean, "\n") {
+		if isRuleOnlyLine(line) {
+			continue
+		}
+		if approvalBoxRuleRe.MatchString(line) {
+			return "box_rule"
+		}
 	}
 
 	if approvalYesNoFormRe.MatchString(clean) {
