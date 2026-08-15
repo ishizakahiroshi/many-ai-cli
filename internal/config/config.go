@@ -407,8 +407,13 @@ type UserPrefsSpawn struct {
 }
 
 // UserPrefsDoneSummaryNotify はタスク完了サマリー通知の設定。
+//
+// Enabled はポインタ。nil は「利用者がまだ触っていない」で、明示的な false とは
+// 区別する。未設定のときは **通知チャネルを既に持っている利用者に限って** 既定 ON
+// として扱う（v0.7.0）。通知手段を持たない環境では何も増えない。
+// 実際の判定は hub 側の doneSummaryNotifyEnabled にある（購読状況を見るため）。
 type UserPrefsDoneSummaryNotify struct {
-	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 }
 
 // UserPrefsWorkflowCompletionNotify controls Web Push notifications emitted
@@ -583,6 +588,11 @@ func (p UserPrefs) Clone() UserPrefs {
 		c.Templates[i].Tags = cloneStringSlice(p.Templates[i].Tags)
 	}
 	c.Spawn.Defaults = cloneStringMap(p.Spawn.Defaults)
+	// *bool は浅いコピーだとポインタを共有し、複製側の書き換えが元へ波及する。
+	if p.DoneSummaryNotify.Enabled != nil {
+		v := *p.DoneSummaryNotify.Enabled
+		c.DoneSummaryNotify.Enabled = &v
+	}
 	c.Spawn.LastModel = cloneStringMap(p.Spawn.LastModel)
 	if p.TokenStatusbar.Segments != nil {
 		m := make(map[string]bool, len(p.TokenStatusbar.Segments))

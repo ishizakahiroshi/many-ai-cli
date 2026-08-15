@@ -89,6 +89,25 @@ Release artifacts are published at
   the directory is not a repository (`internal/doctor/residue.go`).
 
 ### Changed
+- **Task-completion notifications are now on by default — but only if you already
+  set up somewhere to send them.** The README says many-ai-cli tells you the moment
+  a session stops, but the completion notification sat behind two layers of opt-in
+  and never fired with stock settings. `user_prefs.done_summary_notify.enabled` is
+  now a tri-state: if you have touched the toggle, your choice stands, on or off. If
+  you have not, the Hub turns it on when you already have somewhere to deliver to —
+  a Web Push subscription, or at least one `notify.backends` entry. **If you have
+  neither, nothing changes**: no new notifications, because there is nowhere to send
+  them. The settings toggle reports the effective state rather than the stored one,
+  so it cannot show "off" while notifications are going out
+  (`internal/hub/done_summary.go`, `internal/config/config.go`).
+- **The OpenCode slash-command list gained the 12 commands it was missing.**
+  Checked against the opencode 1.18.18 binary: `/agents`, `/debug`, `/diff`,
+  `/mcps`, `/move`, `/org`, `/skills`, `/slash`, `/status`, `/variants`, `/warp`
+  and `/workspaces` are built into the TUI but were absent from the picker. Nothing
+  was removed — the nine entries that are not TUI built-ins (`/compact`, `/export`,
+  `/init`, `/redo`, `/share`, `/undo`, `/unshare`, `/details`, `/thinking`) exist in
+  the binary as `session.*` commands, registered through a different path, so they
+  stay (`resources/slash-commands/opencode.md`).
 - **Building from source now needs Go 1.25.13.** The `go` directive in `go.mod`
   moved up one patch release to pick up fixes for five standard-library
   vulnerabilities that this code reaches: `net/url` (GO-2026-6218), `crypto/tls`
@@ -133,6 +152,12 @@ Release artifacts are published at
   `internal/config/config.go`).
 
 ### Fixed
+- **Turning the task-completion notification toggle on or off wiped every other
+  preference.** `PUT /api/user-prefs` replaces the whole object, and this toggle
+  sent only its own field, so templates, session order, cwd history and favourites
+  were all reset to empty on each click. It now reads the current preferences,
+  merges its one field and sends the whole thing back — the same read-modify-write
+  the token status bar toggle already used (`web/src/app/settings.ts`).
 - **The approval bar's background was see-through, so terminal output showed
   through the text.** When the bar became an overlay it kept the translucent
   `rgba(245,158,11,0.04)` fill it had while it was part of the normal flow, and
