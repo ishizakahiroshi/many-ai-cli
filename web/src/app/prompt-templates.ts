@@ -1,5 +1,5 @@
 import { t } from '../i18n.js';
-import { STORAGE_TEMPLATES_KEY, setUserPref } from './user-prefs.js';
+import { STORAGE_TEMPLATES_KEY, STORAGE_TEMPLATE_SEND_IMMEDIATE_KEY, setUserPref } from './user-prefs.js';
 import { activeSessionId, sessions } from './state.js';
 import { showToast } from './util.js';
 
@@ -7,12 +7,12 @@ const MAX_TEMPLATES = 100;
 const MAX_BODY_LENGTH = 8000;
 const MOBILE_LABEL_LENGTH = 5;
 
-export type PromptTemplate = { body: string; providers: string[]; tags: string[]; frequency: number };
+export type PromptTemplate = { body: string; providers: string[]; tags: string[] };
 
 const DEFAULT_TEMPLATES: PromptTemplate[] = [
-  { body: '変更内容を確認して、PR を作成できる状態まで進めてください。', providers: [], tags: ['git'], frequency: 0 },
-  { body: 'この変更をレビューして、問題があれば重要度順に指摘してください。', providers: [], tags: ['review'], frequency: 0 },
-  { body: 'ここまでの作業内容、変更ファイル、検証結果、次にやることを要約してください。', providers: [], tags: ['summary'], frequency: 0 },
+  { body: '変更内容を確認して、PR を作成できる状態まで進めてください。', providers: [], tags: ['git'] },
+  { body: 'この変更をレビューして、問題があれば重要度順に指摘してください。', providers: [], tags: ['review'] },
+  { body: 'ここまでの作業内容、変更ファイル、検証結果、次にやることを要約してください。', providers: [], tags: ['summary'] },
 ];
 
 function defaultTemplates(): PromptTemplate[] {
@@ -29,11 +29,11 @@ function normalize(raw: unknown): PromptTemplate[] {
     .filter((v): v is Record<string, unknown> => !!v && typeof v === 'object' && typeof v.body === 'string')
     .slice(0, MAX_TEMPLATES)
     .map((v) => ({
-      // label は旧保存データとの互換のため読み飛ばす。body が正本。
+      // label / frequency は旧保存データとの互換のため読み飛ばす。body が正本で、
+      // 並び順は配列そのものが正本（frequency による自動ソートは廃止）。
       body: normalizeBody(v.body),
       providers: Array.isArray(v.providers) ? v.providers.filter((p): p is string => typeof p === 'string').slice(0, 10) : [],
       tags: Array.isArray(v.tags) ? v.tags.filter((tag): tag is string => typeof tag === 'string').slice(0, 10) : [],
-      frequency: Math.max(0, Math.min(100000, Number(v.frequency) || 0)),
     }))
     .filter((v) => v.body);
 }
@@ -63,7 +63,7 @@ export function addPromptTemplate(body: string): boolean {
   if (!normalized) return false;
   const templates = getPromptTemplates();
   if (templates.length >= MAX_TEMPLATES || templates.some((template) => template.body === normalized)) return false;
-  templates.push({ body: normalized, providers: [], tags: [], frequency: 0 });
+  templates.push({ body: normalized, providers: [], tags: [] });
   save(templates);
   return true;
 }
@@ -77,22 +77,30 @@ function activeProvider(): string {
   return activeSessionId === null ? '' : sessions.get(activeSessionId)?.provider || '';
 }
 
+// 並び順は保存配列の順（ユーザーがドラッグで決めた手動順）をそのまま使う。
+// 使用頻度による自動ソートは行わない（勝手に順位が入れ替わらないことを優先）。
 export function templatesForProvider(provider = activeProvider(), query = ''): PromptTemplate[] {
   const needle = query.trim().toLocaleLowerCase();
   return getPromptTemplates().filter((template) =>
     (!provider || template.providers.length === 0 || template.providers.includes(provider)) &&
     (!needle || `${template.body} ${template.tags.join(' ')}`.toLocaleLowerCase().includes(needle)),
-  ).sort((a, b) => b.frequency - a.frequency || a.body.localeCompare(b.body, 'ja'));
+  );
+}
+
+// テンプレートを選んだときに即時送信するか（true）、入力欄へ反映するだけか（false・既定）。
+// サーバ同期（user_prefs.template_send.immediate）なので端末を跨いで同じ挙動になる。
+export function isTemplateSendImmediate(): boolean {
+  try { return localStorage.getItem(STORAGE_TEMPLATE_SEND_IMMEDIATE_KEY) === '1'; } catch (_) { return false; }
+}
+
+export function setTemplateSendImmediate(value: boolean): void {
+  setUserPref('template_send.immediate', value);
 }
 
 export function insertPromptTemplate(template: PromptTemplate): void {
-  const templates = getPromptTemplates();
-  const index = templates.findIndex((candidate) => candidate.body === template.body);
-  if (index >= 0) {
-    templates[index] = { ...templates[index], frequency: templates[index].frequency + 1 };
-    save(templates);
-  }
-  window.dispatchEvent(new CustomEvent('many-ai-cli:insert-template', { detail: { text: template.body } }));
+  // 選んだだけでは保存内容を変えない（頻度の記録をやめたので保存不要）。
+  // send は選択時点の設定を焼き付けて渡す（受け手の app.ts 側で再判定しない）。
+  window.dispatchEvent(new CustomEvent('many-ai-cli:insert-template', { detail: { text: template.body, send: isTemplateSendImmediate() } }));
 }
 
 type UndoState = { template: PromptTemplate; index: number };
@@ -101,6 +109,10 @@ let editDraft = '';
 let adding = false;
 let addDraft = '';
 let undoState: UndoState | null = null;
+// 掴んでいる間の再描画抑止（renderPalette が行を作り直すと掴みが外れるため）。
+let draggingRow: HTMLElement | null = null;
+// 並べ替え直後につまみへフォーカスを戻す対象（キーボード操作の連打用）。
+let focusHandleBody: string | null = null;
 
 function text(key: string, fallback: string): string {
   const translated = t(key);
@@ -120,6 +132,140 @@ function makeActionButton(icon: string, label: string, handler: (event: MouseEve
   button.setAttribute('aria-label', label);
   button.addEventListener('click', handler);
   return button;
+}
+
+// --- 並べ替え -------------------------------------------------------------
+// HTML5 dnd はタッチで発火しないので pointer events + pointer capture で自前実装する。
+// 行の並びは DOM を正本として動かし、指を離した時点で保存配列へ書き戻す。
+
+const AUTO_SCROLL_ZONE = 22;
+const AUTO_SCROLL_STEP = 6;
+
+function reorderRows(list: HTMLElement): HTMLElement[] {
+  return [...list.querySelectorAll<HTMLElement>('.prompt-template-row[data-template-index]')];
+}
+
+// DOM の行順を保存配列へ書き戻す。表示中テンプレが元々占めていた絶対位置（slots）へ
+// 並べ替え後の順で詰め直すので、provider 絞り込みで非表示の分は位置が動かない。
+function commitTemplateOrder(list: HTMLElement): boolean {
+  const order = reorderRows(list).map((row) => Number(row.dataset.templateIndex));
+  if (order.some((index) => !Number.isInteger(index) || index < 0)) return false;
+  const slots = [...order].sort((a, b) => a - b);
+  if (slots.every((slot, i) => slot === order[i])) return false; // 並びに変化なし
+  const templates = getPromptTemplates();
+  // 別タブでの編集などで保存内容がずれていたら触らない（取り違え防止）。
+  if (slots.length !== new Set(order).size || slots.some((slot) => slot >= templates.length)) return false;
+  const picked = order.map((index) => templates[index]);
+  slots.forEach((slot, i) => { templates[slot] = picked[i]; });
+  save(templates);
+  return true;
+}
+
+// 掴んでいる行を、隣の行と 1 つ入れ替える。入れ替えたら true。
+function swapDraggedRowOnce(list: HTMLElement, row: HTMLElement, clientY: number): boolean {
+  for (const other of reorderRows(list)) {
+    if (other === row) continue;
+    const rect = other.getBoundingClientRect();
+    const middle = rect.top + rect.height / 2;
+    const rowIsAfter = !!(other.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING);
+    if (rowIsAfter && clientY < middle) { list.insertBefore(row, other); return true; }
+    if (!rowIsAfter && clientY > middle) { list.insertBefore(row, other.nextSibling); return true; }
+  }
+  return false;
+}
+
+// 1 イベントで複数行ぶん飛んだ場合（タッチの粗いサンプリング等）に追随できるよう、
+// 落ち着くまで入れ替えを繰り返す。行数を上限にして無限ループを防ぐ。
+function moveDraggedRow(list: HTMLElement, row: HTMLElement, clientY: number): void {
+  for (let guard = reorderRows(list).length; guard > 0; guard--) {
+    if (!swapDraggedRowOnce(list, row, clientY)) return;
+  }
+}
+
+function startReorder(event: PointerEvent, list: HTMLElement, row: HTMLElement, handle: HTMLElement): void {
+  if (event.button > 0) return;
+  event.preventDefault(); // タッチのスクロール・長押し選択を止める
+  // 捕捉は取れれば取る（タッチの追随が安定する）が、取れなくても成立させる。
+  // 終了イベントは window で受けるので、捕捉の有無に依存しない。
+  try { handle.setPointerCapture(event.pointerId); } catch (_) { /* 捕捉なしで続行 */ }
+  draggingRow = row;
+  row.classList.add('is-dragging');
+  let clientY = event.clientY;
+  let frame = 0;
+
+  // リスト端に留まっている間はスクロールし続ける（pointermove 頼みだと止まってしまう）。
+  const tick = (): void => {
+    frame = 0;
+    const rect = list.getBoundingClientRect();
+    const dir = clientY < rect.top + AUTO_SCROLL_ZONE ? -1 : clientY > rect.bottom - AUTO_SCROLL_ZONE ? 1 : 0;
+    if (!dir) return;
+    list.scrollTop += dir * AUTO_SCROLL_STEP;
+    moveDraggedRow(list, row, clientY);
+    frame = requestAnimationFrame(tick);
+  };
+
+  const onMove = (moveEvent: PointerEvent): void => {
+    if (moveEvent.pointerId !== event.pointerId) return;
+    clientY = moveEvent.clientY;
+    moveDraggedRow(list, row, clientY);
+    if (!frame) frame = requestAnimationFrame(tick);
+  };
+
+  // 終了は必ず 1 回だけ走らせる（pointerup と blur が続けて来ることがある）。
+  let finished = false;
+  const onEnd = (endEvent?: Event): void => {
+    if (finished) return;
+    if (endEvent instanceof PointerEvent && endEvent.pointerId !== event.pointerId) return;
+    finished = true;
+    window.removeEventListener('pointermove', onMove, true);
+    window.removeEventListener('pointerup', onEnd, true);
+    window.removeEventListener('pointercancel', onEnd, true);
+    window.removeEventListener('blur', onEnd);
+    if (frame) cancelAnimationFrame(frame);
+    row.classList.remove('is-dragging');
+    draggingRow = null;
+    commitTemplateOrder(list);
+  };
+
+  // 掴み要素ではなく window で受ける。行を動かす insertBefore は「DOM から外して入れ直す」
+  // 操作なので、掴み要素のポインタ捕捉がその時点で解放されることがある。掴み要素にだけ
+  // 終了リスナを付けていると pointerup が届かず draggingRow が残り、renderPalette が
+  // 二度と走らなくなる（削除も編集も画面に反映されなくなる）。
+  window.addEventListener('pointermove', onMove, true);
+  window.addEventListener('pointerup', onEnd, true);
+  window.addEventListener('pointercancel', onEnd, true);
+  window.addEventListener('blur', onEnd);
+}
+
+// つまみにフォーカスした状態の ↑ / ↓（ドラッグできない環境・支援技術向けの代替手段）。
+function stepReorder(list: HTMLElement, row: HTMLElement, body: string, delta: number): boolean {
+  const sibling = delta < 0 ? row.previousElementSibling : row.nextElementSibling;
+  if (!(sibling instanceof HTMLElement) || sibling.dataset.templateIndex === undefined) return false;
+  if (delta < 0) list.insertBefore(row, sibling);
+  else list.insertBefore(row, sibling.nextSibling);
+  focusHandleBody = body;
+  // 保存されなかった場合はフォーカス指定を残さない（次の再描画で奪わないように）。
+  if (!commitTemplateOrder(list)) focusHandleBody = null;
+  return true;
+}
+
+function makeDragHandle(list: HTMLElement, row: HTMLElement, template: PromptTemplate): HTMLButtonElement {
+  const handle = document.createElement('button');
+  handle.type = 'button';
+  handle.className = 'prompt-template-drag';
+  handle.textContent = '⠿';
+  const label = text('template_reorder', 'ドラッグで並べ替え');
+  handle.title = label;
+  handle.setAttribute('aria-label', label);
+  handle.addEventListener('pointerdown', (event) => startReorder(event, list, row, handle));
+  handle.addEventListener('keydown', (event) => {
+    const delta = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0;
+    if (!delta) return;
+    event.preventDefault();
+    event.stopPropagation();
+    stepReorder(list, row, template.body, delta);
+  });
+  return handle;
 }
 
 function renderEditor(row: HTMLElement, mode: 'add' | 'edit', template?: PromptTemplate): void {
@@ -207,7 +353,7 @@ function renderEditor(row: HTMLElement, mode: 'add' | 'edit', template?: PromptT
   });
 }
 
-function renderTemplateRow(row: HTMLElement, template: PromptTemplate, panel: HTMLElement): void {
+function renderTemplateRow(row: HTMLElement, template: PromptTemplate, panel: HTMLElement, list: HTMLElement, reorderable: boolean): void {
   if (editingBody === template.body) {
     renderEditor(row, 'edit', template);
     return;
@@ -246,6 +392,14 @@ function renderTemplateRow(row: HTMLElement, template: PromptTemplate, panel: HT
       save(templates);
     }),
   );
+  if (reorderable) {
+    const handle = makeDragHandle(list, row, template);
+    row.append(handle);
+    if (focusHandleBody === template.body) {
+      focusHandleBody = null;
+      requestAnimationFrame(() => handle.focus());
+    }
+  }
   row.append(selectButton, actions);
 }
 
@@ -273,11 +427,15 @@ function renderUndoRow(list: HTMLElement): void {
 }
 
 function renderPalette(): void {
+  if (draggingRow) return; // ドラッグ中に作り直すと掴みが外れる
   const panel = document.getElementById('prompt-template-palette');
   const list = document.getElementById('prompt-template-list');
   const search = document.getElementById('prompt-template-search') as HTMLInputElement | null;
   if (!panel || !list || !search) return;
   const templates = templatesForProvider(undefined, search.value);
+  // 検索で絞り込んでいる間は並べ替えさせない（見えていない行との前後関係が決められない）。
+  const reorderable = !search.value.trim();
+  const stored = getPromptTemplates();
   list.replaceChildren();
   if (!templates.length && !adding) {
     const empty = document.createElement('div');
@@ -288,7 +446,9 @@ function renderPalette(): void {
   for (const template of templates) {
     const row = document.createElement('div');
     row.className = 'prompt-template-row';
-    renderTemplateRow(row, template, panel);
+    const index = reorderable ? templateIndex(stored, template.body) : -1;
+    if (index >= 0) row.dataset.templateIndex = String(index);
+    renderTemplateRow(row, template, panel, list, index >= 0);
     list.append(row);
   }
   renderUndoRow(list);
@@ -323,6 +483,32 @@ function closePalette(panel: HTMLElement): void {
   undoState = null;
 }
 
+function syncSendModeToggle(): void {
+  const input = document.getElementById('prompt-template-send-immediate') as HTMLInputElement | null;
+  if (!input) return;
+  const immediate = isTemplateSendImmediate();
+  input.checked = immediate;
+  const note = immediate
+    ? text('template_send_immediate_note_on', '選んだテンプレートをそのまま送信します')
+    : text('template_send_immediate_note_off', '選んだテンプレートを入力欄に入れます');
+  input.setAttribute('aria-label', text('template_send_immediate', '選んだら即送信'));
+  input.title = note;
+  const noteEl = document.getElementById('prompt-template-mode-note');
+  if (noteEl) noteEl.textContent = note;
+}
+
+function initSendModeToggle(): void {
+  const input = document.getElementById('prompt-template-send-immediate') as HTMLInputElement | null;
+  if (!input) return;
+  input.addEventListener('change', () => {
+    setTemplateSendImmediate(input.checked);
+    syncSendModeToggle();
+  });
+  document.addEventListener('user-prefs-mirrored', syncSendModeToggle);
+  document.addEventListener('i18n-ready', syncSendModeToggle);
+  syncSendModeToggle();
+}
+
 function initPalette(): void {
   const toggle = document.getElementById('prompt-template-toggle') as HTMLButtonElement | null;
   const panel = document.getElementById('prompt-template-palette');
@@ -335,9 +521,11 @@ function initPalette(): void {
     }
     panel.hidden = false;
     toggle.setAttribute('aria-expanded', 'true');
+    syncSendModeToggle();
     renderPalette();
     search.focus();
   });
+  initSendModeToggle();
   search.addEventListener('input', renderPalette);
   document.addEventListener('session:activated', renderPalette);
   document.addEventListener('user-prefs-mirrored', () => { renderPalette(); window.dispatchEvent(new Event('prompt-templates:changed')); });

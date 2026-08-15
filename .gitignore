@@ -29,7 +29,9 @@ rsrc_windows_*.syso
 .DS_Store
 Thumbs.db
 .claude/
-opencode.json
+# opencode セッション中だけ internal/wrapper が cwd に書く permission 設定と、その排他ロック
+# (opencode.json.many-ai-cli.lock)。完全一致だと lock 側が漏れるため前方一致で拾う。
+opencode.json*
 *.local.md
 *.local.json
 docs/local/
@@ -40,6 +42,9 @@ docs/local/
 *gopty_lic.json
 # orchestration の子セッション用 git worktree 置き場（hub が実行時に生成する作業領域）
 .many-ai-cli/
+# 通常セッションの worktree 隔離（internal/hub/normal_worktree.go）が
+# リポジトリルート直下に作るチェックアウト置き場
+.git-worktrees/
 
 # --- 認証情報・secrets・鍵（public へ絶対に出さない）---
 *.pem

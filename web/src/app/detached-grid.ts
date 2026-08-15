@@ -730,9 +730,12 @@ export function initDetachedGridMode(): DetachedGridManager | null {
     termColumn.style.overflow = 'hidden';
   }
 
-  // display-area を非表示にして grid エリアを表示する
+  // display-area を非表示にして grid エリアを表示する。
+  // #display-stack は flex:1 で場所を取るので、箱ごと畳む。
   const displayArea = document.getElementById('display-area');
   if (displayArea) { displayArea.hidden = true; displayArea.style.display = 'none'; }
+  const displayStack = document.getElementById('display-stack');
+  if (displayStack) { displayStack.hidden = true; displayStack.style.display = 'none'; }
   const multiView = document.getElementById('multi-view');
   if (multiView) { multiView.hidden = true; }
 
@@ -763,11 +766,12 @@ function _ensureDetachedGridArea(): HTMLElement {
   gridArea = document.createElement('div');
   gridArea.id = 'detached-grid-area';
 
-  // terminal-column の中、display-area の前に挿入
+  // terminal-column の中、display-stack（display-area を包む箱）の前に挿入。
+  // display-area は stack の子になったので、terminal-column の直接の子を基準にする。
   const termColumn = document.getElementById('terminal-column');
-  const displayArea = document.getElementById('display-area');
-  if (termColumn && displayArea) {
-    termColumn.insertBefore(gridArea, displayArea);
+  const anchor = document.getElementById('display-stack') || document.getElementById('display-area');
+  if (termColumn && anchor && anchor.parentElement === termColumn) {
+    termColumn.insertBefore(gridArea, anchor);
   } else if (termColumn) {
     termColumn.appendChild(gridArea);
   } else {

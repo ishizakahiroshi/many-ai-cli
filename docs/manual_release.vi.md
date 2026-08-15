@@ -3,6 +3,14 @@
 > Bản dịch tiếng Việt của [`manual_release.md`](manual_release.md).  
 > Bản dịch: 2026-07-18.
 
+> **⚠️ Bản dịch này là ảnh chụp tại một thời điểm và không còn được đồng bộ.**
+>
+> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_release.md`](manual_release.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. **Bản gốc đã được cập nhật sau lần dịch này** (bản dịch: 2026-07-18 · bản gốc: 2026-08-11).
+>
+> Xin chân thành cảm ơn người đã đóng góp bản dịch. Chúng tôi vẫn hoan nghênh đóng góp dịch thuật; chỉ là không thể hứa giữ đồng bộ, nên bản được merge cũng sẽ là ảnh chụp có ghi ngày.
+>
+> *(EN: This translation is a dated snapshot and is no longer kept in sync with the original. Please refer to the source file linked above. The Vietnamese **UI** locale `web/src/i18n/vi.json` is a shipped feature and is still maintained.)*
+
 Tài liệu vận hành lâu dài để tạo GitHub Releases bằng workflow `Release` của GitHub Actions và GoReleaser.  
 **Checklist chạy cho từng version** chuẩn bị riêng (v0.3.0: `docs/local/manual_release-v0-3-0_2026-06-13.md`). Tài liệu này chỉ xử lý phương pháp · thiết kế · lưu ý **không phụ thuộc version**.
 

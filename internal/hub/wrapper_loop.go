@@ -196,39 +196,13 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	s.sessionsMu.Lock()
 	ses.lastCols, ses.lastRows = initCols, initRows
 	ses.vt = newVTBuffer(initCols, initRows)
-	activeSessionCount := 0
-	for sid, cur := range s.sessions {
-		if cur == nil || s.wrappers[sid] == nil {
-			continue
-		}
-		if cur.State == "completed" || cur.State == "error" || cur.State == "disconnected" {
-			continue
-		}
-		activeSessionCount++
-	}
 	s.sessionsMu.Unlock()
-	// startup_latency_probe: register→registered ack の間で走る同期 I/O を計測する
-	// （新セッション起動遅延の切り分け用。挙動は変えない）。
-	registerT0 := time.Now()
-	var approvalDur, usageDur time.Duration
 	if s.approvalRulesEnabled() {
-		t := time.Now()
 		s.injectApprovalRules()
-		approvalDur = time.Since(t)
 	}
 	if s.tokenStatusbarEnabled() {
-		t := time.Now()
 		s.injectUsageHooks()
-		usageDur = time.Since(t)
 	}
-	totalPreAck := time.Since(registerT0)
-	s.logger.Info("startup_latency_probe",
-		"session_id", id,
-		"provider", reg.Provider,
-		"active_sessions", activeSessionCount,
-		"inject_approval_ms", approvalDur.Milliseconds(),
-		"inject_usage_ms", usageDur.Milliseconds(),
-		"pre_ack_total_ms", totalPreAck.Milliseconds())
 	// inject 中に UI の ×（session_dismiss）が走ると sessions/wrappers から消える。
 	// その後も session_update を送ると UI に幽霊カードが復活し、以降の dismiss が
 	// Hub !exists で session_removed を返せない経路と結合して消えない（観察: #2/#13/#14）。

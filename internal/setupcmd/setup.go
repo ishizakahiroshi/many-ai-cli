@@ -15,9 +15,12 @@ import (
 )
 
 // Result は生成物 1 件の結果。Err が nil なら成功。
+// Note が入っているものは「作った物」ではなく「見つけた物への案内」で、
+// [OK] created ではなく [NOTE] として出す（旧アイコンの残存など）。
 type Result struct {
 	Path string
 	Err  error
+	Note string
 }
 
 // Run は `many-ai-cli setup` の本体。
@@ -46,6 +49,10 @@ func Run() error {
 		if r.Err != nil {
 			fmt.Printf("[FAIL] %s: %v\n", r.Path, r.Err)
 			hasFail = true
+			continue
+		}
+		if r.Note != "" {
+			fmt.Printf("[NOTE] %s: %s\n", r.Path, r.Note)
 			continue
 		}
 		fmt.Printf("[OK] created: %s\n", r.Path)

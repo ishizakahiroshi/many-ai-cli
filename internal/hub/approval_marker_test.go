@@ -91,6 +91,43 @@ func TestApprovalMarkerNotLeakedAcrossResize(t *testing.T) {
 	}
 }
 
+// TestExtractApprovalMarkerBlockTakesLatestGeneration は、描き直しで同じ質問が
+// 2 世代残っているとき、最新世代だけが抽出されることを検証する。
+//
+// TUI は画面をスクロールさせながら描き直すため、途中まで描かれた世代が scrollback 側に
+// 確定して残る。「最初の OPEN から最初の CLOSE まで」を取ると新旧をまたいだブロックに
+// なり、内側に OPEN を抱えたまま自分で marker_leak と判定して承認パネルを握り潰していた。
+// 実測（2026-08-13 / approval-corrupt ダンプ 138 件の replay）: marker_leak 74 件のうち
+// 64 件がこの抽出だけで正常なブロックへ戻る。
+func TestExtractApprovalMarkerBlockTakesLatestGeneration(t *testing.T) {
+	lines := []string{
+		"  直前の出力",
+		approvalMarkerOpen,
+		"  前置きの 1 行目",
+		"",
+		// ここから描き直された世代。
+		approvalMarkerOpen,
+		"  前置きの 1 行目",
+		"",
+		"  Q1 進めますか?",
+		"  1. はい (Recommended)",
+		"  2. いいえ",
+		"   N. User specifies",
+		approvalMarkerClose,
+	}
+
+	marker := extractApprovalMarkerBlock(lines)
+	if marker == nil {
+		t.Fatal("extractApprovalMarkerBlock = nil, want the latest generation")
+	}
+	if n := strings.Count(marker.Block, approvalMarkerOpen); n != 1 {
+		t.Fatalf("OPEN が %d 個, want 1 (古い世代を巻き込んでいる): %q", n, marker.Block)
+	}
+	if reason := classifyApprovalMarkerBlock(marker.Block); reason != "" {
+		t.Fatalf("classify = %q, want ok (最新世代は正常なブロック)", reason)
+	}
+}
+
 func TestMaybeBroadcastApprovalMarkerDedupesSameBlock(t *testing.T) {
 	s := newTestServer()
 	ses := registerTestSession(s, 1, "claude")

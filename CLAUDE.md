@@ -1,23 +1,53 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-08-11(火) — 実行時配信リソース節を追加（リリース不要で更新できるものの正典化）
+> 最終更新: 2026-08-15(土) 20:18:00 — 翻訳の扱い（日本語のみが正本・vi はスナップショット・UI ロケールは対象外）を冒頭に明記
 
-> 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。  
-> **Vietnamese translation (team docs):** [CLAUDE.vi.md](CLAUDE.vi.md) · [README.vi.md](README.vi.md) · [docs/README.vi.md](docs/README.vi.md)
+> 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。
+
+> **On translations / 翻訳について**
+>
+> This development guide is maintained in **Japanese only** — the Japanese text above and below is the authoritative version. There is no English edition of this file. (The user-facing README *is* available in English: [README.md](README.md), with [README.ja.md](README.ja.md) and [README.vi.md](README.vi.md).)
+>
+> [CLAUDE.vi.md](CLAUDE.vi.md), [docs/README.vi.md](docs/README.vi.md) and the `docs/manual_*.vi.md` files are a **point-in-time snapshot (2026-08-15)** kindly contributed by a community translator. They are **no longer kept in sync** with this guide, so please read them as background rather than as current rules, and check the Japanese original before acting on anything. This does **not** apply to the Vietnamese **UI** locale (`web/src/i18n/vi.json`), which is a shipped feature and is maintained normally.
+>
+> If you work in another language, we're sorry to ask — please translate as needed on your side (a machine translation of this file is usually enough). Translation contributions are genuinely welcome; we just can't promise to keep them in step with the Japanese original, so anything merged will be treated the same way: a dated snapshot.
 
 ## プロジェクト概要
 
 **many-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。単一 Go バイナリ（Hub 常駐 + ラッパー機能）+ ブラウザ UI（xterm.js / TypeScript）。
 
 > **Gemini CLI は wrap 対象外**（2026-05-06 決定 / 利用規約上の制約）。詳細は [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) 「2. 公開スコープ」参照。
+> 2026-08-13、Spotify Xirp の「浅いホスト方式」を踏まえて再検討したが **方針は維持**（保留記録: `docs/local/pending_gemini-shallow-host-option.md`）。他社が Gemini を扱っている事実・対応プロバイダ数の見劣りを根拠に着手を提案しないこと。
 
-**現状**: v0.5.1 までリリース済み（v0.1.1 が初回正式リリース、v0.1.0 は試験扱い）。**v0.6.0 が次のリリース対象**（CHANGELOG の `[0.6.0]` 節。未リリースだった `[0.5.2]` を統合したため v0.5.2 は欠番）。v0.1.2 でバージョン文字列を ldflags + `/api/info` 経由の single source of truth に再設計、v0.2.0 で WSL ランチャー・Files/Git/Chat/Split/Multi・Commit all・Ollama routing・サーバ側ユーザー設定を追加。v0.3.0 で Workbench（SQLite セッション履歴）・PWA/Web Push・統合ランチャーのクロスプラットフォーム化（SSH は全 OS、WSL は Windows 専用）・リモートサーバー/Docker デプロイ資産・npm 配布を追加し、プロジェクト名を any-ai-cli から many-ai-cli へリネーム。**v0.4.0（Unreleased）で Workbench 機能と Hub 内蔵チャットプロキシ（`internal/proxy/`・`chat_proxy`）を撤去済み**（Sonnet 5 以降のデフォルト 1M コンテキストが Hub 経由でも回復する副次効果あり）。設計書はソースコードを正本として更新済み。
+**現状**: v0.6.0 までリリース済み（v0.1.1 が初回正式リリース、v0.1.0 は試験扱い。未リリースだった `[0.5.2]` を統合したため v0.5.2 は欠番）。v0.1.2 でバージョン文字列を ldflags + `/api/info` 経由の single source of truth に再設計、v0.2.0 で WSL ランチャー・Files/Git/Chat/Split/Multi・Commit all・Ollama routing・サーバ側ユーザー設定を追加。v0.3.0 で Workbench（SQLite セッション履歴）・PWA/Web Push・統合ランチャーのクロスプラットフォーム化（SSH は全 OS、WSL は Windows 専用）・リモートサーバー/Docker デプロイ資産・npm 配布を追加し、プロジェクト名を any-ai-cli から many-ai-cli へリネーム。**v0.4.0 で Workbench 機能と Hub 内蔵チャットプロキシ（`internal/proxy/`・`chat_proxy`）を撤去済み**（Sonnet 5 以降のデフォルト 1M コンテキストが Hub 経由でも回復する副次効果あり）。設計書はソースコードを正本として更新済み。
 
 **設計書（正本）**: [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md)
 
+## 新規 provider を増やす提案をしない（2026-08-13 制定）
+
+2026-08-13 に AI コーディング CLI 20 製品を調査し **全件見送りで確定**（資料: `docs/local/design_cli-agent-provider-candidates_2026-08-13.html`）。理由は候補側の優劣ではなく、**本ツールの規模（スター 6 / npm 週次 11）では候補の利用者数を根拠に採否を決める枠組みが成立しない**ため。
+
+- **候補の人気・伸び・他社の対応状況を根拠に provider 追加を提案しない**（Gemini の節と同系統）
+- 検討の起点は「作者がその CLI を素で使い、日常の並列運用に入っているか」。使う前に実装しない
+- 追加コストは opencode 実績で 18 ファイル 180 行。本当のコストは鮮度チェックの無い `resources/approval-patterns/` と `resources/models/` の追従先が 1 本増えること
+
+## デスクトップアプリ化・Microsoft Store 提出は提案しない（2026-08-14 制定）
+
+2026-08-14 に Tauri での Windows アプリ化と Microsoft Store 提出を検討し、**1 行も書かないまま全件見送りで確定**（経緯と全根拠: `docs/local/archive/declined/plan_ms-store-tauri-windows-app.md`・H1 は `[廃止]`。子 6 本も同ディレクトリ）。
+
+- **UI は既定ブラウザのタブで開く形を維持する。** 独立した窓（Tauri / Electron / PWA いずれも）を提案しない。作者は複数のブラウザタブを行き来しながら使うため、Hub がタブの 1 つであること自体が利点。窓は画面の枠を 1 つ占有し、他のウィンドウと場所を取り合うので**後退になる**
+- `web/src/manifest.webmanifest` は `display: standalone` で PWA 導入可能な状態にあるが、上記の理由で**使われていない**。「PWA を入れれば窓になる」と勧めない
+- **OS のネイティブ通知（トースト）を実装しない。** 作者が好まない。承認待ちの知らせは既存の 3 点（タイトル点滅 `web/src/app/session-list.ts:1060` / favicon の件数バッジ 同 1039-1080 / 通知音 `user_prefs.notify_sound`）で成立している
+- **配布チャネルを増やす提案をしない。** 既に winget / npm / Homebrew / Docker の 4 つある。実測（2026-08-14）で star 6・リポジトリのページに 1 日ユニーク 2〜3 人・npm 週次 11。記事も 2 か月で 132 本、製品紹介は v0.3.2 / v0.4.0 / v0.5.0 の 3 世代ぶん出している。**チャネルも記事も打ち手は尽きており、天井は需要側（複数の AI CLI を同時に走らせ承認が詰まっている人という狭い積集合）で決まっている**
+- 例外は 1 つだけ。**作者自身が窓の形を使いたくなったとき**。人気・他社の対応状況・利用者増の見込みを根拠にしない（Gemini・新規 provider の節と同系統）
+
+残った実課題（起動と停止がデスクトップのアイコン 2 個に分かれている）だけを、窓を作らないトレイ常駐として `docs/local/plan_tray-resident-hub-lifecycle.md` へ切り出した。
+
+**見送った方針は `docs/local/reference_declined-directions.md` に台帳としてまとめてある。** Gemini の wrap・新規 provider・セッションカンバン・本節の 4 件が入っており、各項目に「再検討してよい条件」と「再検討の根拠にしてはいけないもの」を書いてある。**同種の提案を出す前に必ずここを読む。** 見送りは永久否定ではないので、条件が満たされているなら再検討してよい。
+
 ## 現在の実装状態
 
-v0.5.1 までに以下がすべて実装済み（v0.4.0 で Workbench / chat_proxy を撤去し opencode / Grok Build CLI provider・Ollama `base_url` 設定を追加、v0.5.0 で `setup` / `doctor` サブコマンド・autoapproval・ターン単位 diff を追加）。v0.6.0 では transcript ベースのチャット本文・Workflow 進捗の Hub 権威化・OpenCode 全許可起動・古いビルド警告を追加し、リリース前監査 A-01/A-02/A-03/A-05 に対応した：
+v0.6.0 までに以下がすべて実装済み（v0.4.0 で Workbench / chat_proxy を撤去し opencode / Grok Build CLI provider・Ollama `base_url` 設定を追加、v0.5.0 で `setup` / `doctor` サブコマンド・autoapproval・ターン単位 diff を追加）。v0.6.0 では transcript ベースのチャット本文・Workflow 進捗の Hub 権威化・OpenCode 全許可起動・古いビルド警告を追加し、リリース前監査 A-01/A-02/A-03/A-05 に対応した：
 
 - `many-ai-cli serve` で Hub が起動する
 - `many-ai-cli claude` / `codex` / `copilot` / `cursor-agent` が Hub 未起動時に自動起動し接続する
@@ -41,9 +71,11 @@ v0.5.1 までに以下がすべて実装済み（v0.4.0 で Workbench / chat_pro
 | 設定ファイル | `~/.many-ai-cli/config.yaml`（Win: `%USERPROFILE%\.many-ai-cli\config.yaml`） |
 | ログ | `~/.many-ai-cli/logs/sessions/<provider>_<日時>_<folder>_s<id>.log/.jsonl/.txt`（PTY生ログ + イベント履歴JSONL + クリーンテキスト） |
 | 透過化環境変数 | `MANY_AI_CLI_AUTO=1` |
-| Provider | `claude` / `codex` / `copilot` / `cursor-agent`（v0.4.0 Unreleased で `opencode` / `grok` 追加。`gemini` は対象外、上記スコープ更新参照） |
+| Provider | `claude` / `codex` / `copilot` / `cursor-agent`（v0.4.0 で `opencode` / `grok` 追加。`gemini` は対象外、上記スコープ更新参照） |
 
 > md 内の参照は `many-ai-cli` に統一（旧名 `any-ai-cli` は履歴記述を除き使わない）。ローカルのプロジェクト配置パスは `CLAUDE.local.md` に記載する。
+>
+> **grep 注意**: 旧名 `any-ai-cli` は新名 `many-ai-cli` の部分文字列（`m` + `any-ai-cli`）。旧名マーカー（`<!-- any-ai-cli:approval-rules -->` 等）の残骸を新名パターンで grep すると **0 件に見える**。旧名側のパターンで grep すれば新旧どちらにも当たる。
 
 ## 技術スタック
 
@@ -125,6 +157,34 @@ many-ai-cli/
 
 **「原因が確定したら消す」とコメントに書くだけでは消えない。** v0.5.1 の `/api/debug/batch-log`、v0.5.x の入力トレース（監査 A-01）、v0.6.0 の `/api/debug/ui-log` と `ui_input_trace` と、3 回続けて出荷直前まで残った。とくに `ui_input_trace` は専用ファイルを持たず共有ファイル 3 つに分散していたため、同種の撤去作業から取り残された。
 
+## 利用者のファイルへ書く機能は「次回起動時の回収」まで設計する（2026-08-14 制定）
+
+セッション中だけ書き換えて終了時に戻す作りは、後始末が `defer` や graceful shutdown に載っている限り kill で飛ぶ。しかも**次の実行が残骸を「オリジナル」として採用して書き戻すため、一度置き去りになると自己修復せず恒久化する**。`opencode.json`（`internal/wrapper/opencode_config.go`）と AGENTS.md の承認ルールブロック（`internal/hub/approval_rules_state.go`）の 2 経路で、公開リポジトリへ commit されるところまで進んだ。
+
+- **後始末の到達率を上げる方向で考えない**（kill は防げない）。次回起動時に置き去りを回収する経路を必ず持たせる
+- 回収するには「自分が何を書いたか」を残す必要がある。**現物がそれと違えば他者が触った後なので戻さない**
+- 生成物のファイル名は `.gitignore` にも入れる。ただし **gitignore は tracked file には効かない**ので、既に commit されたものは `git rm` でしか消えない
+- **回収より前に commit されてしまったものは、回収経路に乗らない。** そちらは `many-ai-cli doctor` の置き去り検査（`internal/doctor/residue.go`）が検出する。設計原則と検出手段は対で、片方だけ直しても利用者には届かない
+
+## 承認の同一性は 1 本しか持たない（2026-08-15 制定）
+
+**「この承認はもう回答済みか」を決める state は `candidateKey + sourceEpoch` の 1 本だけ**（`web/src/app/approval-answered.ts`）。
+
+以前はこの役目が 3 つに分かれていて、**それぞれ「同じ質問とは何か」の定義が違った**。
+
+| かつての state | 同一性の定義 | 失効 |
+|---|---|---|
+| `approvalConsumedSig` | 選択肢の署名 | 5〜10 秒のタイマー |
+| `answeredMarkerSigs` | マーカーブロック全文のハッシュ | 失効しない（セッション恒久） |
+| `approvalQuestionKey` | 質問文のハッシュ | 手動 dismiss の間 |
+
+**3 者の食い違いそのものが症状だった。** タイマー方式は TUI の再描画が続いている最中に失効して回答済みを再表示し、ブロック全文方式は逆に「エージェントが本当に出し直した同じ質問」まで永久に埋めた。v0.7 で 3 本とも撤去して 1 本へ寄せている。
+
+- **承認の誤表示を踏んでも、抑止をもう 1 本足さない。** まず既存の 1 本で説明できない症状かを確かめる。説明できるなら直すのは `candidateKey` の作り方か `sourceEpoch` の進み方であって、新しい state ではない
+- `candidateKey` は provider・承認種別・正規化した質問・選択肢番号・送信文字列から作る。**ラベル・空白・罫線・折返しを含めない**（含めると再描画のたびに別候補になる）
+- `sourceEpoch` は live prompt の境界でのみ進む。**replay と reflow では進めない**（進めると復元しただけで新しい承認に見える）
+- 世代が進めば同じ質問文でも新しい候補として表示するのが**仕様**。「同じ質問を二度と出さない」方向の永久抑止に戻さない
+
 ## AI 作業共通ルール
 
 ビルド・コミット禁止、secrets-scan 責務、plan/bugfix/pending md の作成ルール等の AI 作業共通ルールは、各利用者のグローバル AI 設定に従う（作者環境の例: `~/.claude/CLAUDE.md` および `~/.claude/guides/`）。AI の個人グローバルルール（言語・確認・質問フォーマット等）も各利用者のグローバル設定に置き、本ファイルはプロジェクト固有ルールだけを扱う。
@@ -134,6 +194,13 @@ many-ai-cli/
 - ビルドだけでなく **実行・Hub 起動・ブラウザリロードも全てユーザーが行う**（`go run` / `many-ai-cli serve` / `many-ai-cli stop` / Hub プロセスの起動・終了・再起動・ブラウザリロード等も対象）。
 - **ビルドコマンドは `make build` が基本**。`bun run build` 単体は使わない（ユーザーへの案内でも `make build` を示す）。`make build` が web ビルド（bun install + bun run build）〜 Windows/Linux バイナリ生成 〜 WSL 配備まで一括で行う。ユーザーの「ビルドして」という指示は **`make build` の実行指示** を意味する。
 - `many-ai-cli` 自身のセッションログ保持機能（`~/.many-ai-cli/logs/sessions/`）は非推奨の機能。承認検出まわりのバグ調査でも、このログではなく実際に動いている AI エージェント本体（Claude Code / Codex CLI 等）が書き出す生ログを見ること。ラッパー層のログは情報密度が低く、原因特定に向かない。
+
+## 監査・リリース証拠の境界
+
+- Agent Chat の cursor 変更は parser 単体で完了扱いにせず、caller の offset 採用と次 poll の再開まで追跡・検証する。
+- `go:embed` 対象の Gitignored runtime は、clean release job で取得・検証・artifact 化し、build 前の入力存在確認を必須にする。ローカルにファイルがあることだけでは release の証拠にしない。
+- release workflow の詳細な手順・SHA・secret scope は [`.github/workflows/release.yml`](.github/workflows/release.yml) と [監査対応 plan](docs/local/archive/plan_security-vulnerability-quality-remediation-2026-08-13.md) を正本とする。CLAUDE.md に手順を複製しない。
+- 静的確認、ローカルテスト、CI 実行、release artifact、実機確認は別の証拠として報告する。未実行の CI・artifact・実機確認を完了扱いにしない。
 
 ## 詳細ガイド（タスク種別ベース）
 

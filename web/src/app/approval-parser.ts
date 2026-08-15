@@ -102,7 +102,7 @@
   }
 
   // Hub marker 由来の options が、同じ質問を拾った fallback parser の options で
-  // cache 更新されると _blockSig が失われる。回答時に recordAnsweredMarkerSig が
+  // cache 更新されると _blockSig が失われる。approval-ui の marker 由来判定が
   // no-op となり、Ink/SIGWINCH の再描画で同じマーカーが復活するため、選択肢 sig と
   // 質問 identity の両方が同じ cache 更新に限って marker identity を引き継ぐ。
   // Yes/No 等の選択肢が同じでも質問文が違う別質問には決して継承しない。
@@ -292,7 +292,7 @@
     // 取りこぼしの実質的な上限は呼び出し側が保持する pendingTextTail の文字数
     // （APPROVAL_PENDING_TEXT_TAIL_LIMIT）のみ＝制約をそこ一点に集約する。
     // ブロック全文ハッシュを各選択肢へ _blockSig として付与する。
-    // 「回答済みの質問は二度と承認 UI を出さない」恒久抑制（answeredMarkerSigs）のキーに使う。
+    // approval-ui が「Hub のマーカー由来の候補か」を見分けるために使う。
     // 質問文＋全選択肢を含むため、ラベルが同一でも別質問なら別ハッシュになり誤抑制しない。
     // approvalCtxHash は空白を正規化するので、端末幅による折り返し差は吸収される。
     const withBlockSig = (parsed, innerArr) => {

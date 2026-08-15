@@ -24,6 +24,7 @@
 | `/feedback` | Send feedback. | Report issues to GitHub. |
 | `/fleet` | Manage a group of agents. | Coordinate several agent workers. |
 | `/footer` | Configure footer display. | Customize the TUI status footer. |
+| `/fork` | Fork the current session into a new one, optionally with a name. | Branch off an experiment while keeping the original session intact. |
 | `/help` | Show help. | Discover available commands. |
 | `/ide` | Connect IDE context. | Include editor state in the session. |
 | `/init` | Initialize project guidance. | Generate or refresh repo instructions. |

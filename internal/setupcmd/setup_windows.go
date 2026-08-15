@@ -41,18 +41,29 @@ func createShortcuts(exe string) []Result {
 		return results
 	}
 
-	startLnk := filepath.Join(desktop, "Many AI Hub Start.lnk")
-	if err := createWindowsShortcut(startLnk, startCmd, exe); err != nil {
-		results = append(results, Result{Path: startLnk, Err: err})
+	// デスクトップのアイコンは 1 個（トレイ常駐）に寄せる。起動も停止もトレイの
+	// メニューから行えるので、Start と Stop を分ける理由が無くなった。
+	// .cmd を挟まず exe を直接指すのは、.cmd だとコンソール窓が残るため。
+	// WindowStyle=7（最小化）と tray 側の FreeConsole の 2 段で窓を出さない。
+	trayLnk := filepath.Join(desktop, "Many AI Hub.lnk")
+	if err := createWindowsShortcutWithArgs(trayLnk, exe, exe, "tray", 7); err != nil {
+		results = append(results, Result{Path: trayLnk, Err: err})
 	} else {
-		results = append(results, Result{Path: startLnk})
+		results = append(results, Result{Path: trayLnk})
 	}
 
-	stopLnk := filepath.Join(desktop, "Many AI Hub Stop.lnk")
-	if err := createWindowsShortcut(stopLnk, stopCmd, exe); err != nil {
-		results = append(results, Result{Path: stopLnk, Err: err})
-	} else {
-		results = append(results, Result{Path: stopLnk})
+	// 既存利用者のデスクトップにある 2 個は消さない。勝手に消すと使い慣れた導線が
+	// 黙って変わる。残っていることだけ知らせて、消すかどうかは利用者が決める。
+	// start.cmd / stop.cmd も残す（旧ショートカットの参照先なので、消すと
+	// 「アイコンはあるが動かない」状態になる）。
+	for _, name := range []string{"Many AI Hub Start.lnk", "Many AI Hub Stop.lnk"} {
+		old := filepath.Join(desktop, name)
+		if _, statErr := os.Stat(old); statErr == nil {
+			results = append(results, Result{
+				Path: old,
+				Note: "旧アイコンです。「Many AI Hub」1 個で起動も停止もできます。不要なら手動で削除してください（自動では消しません）",
+			})
+		}
 	}
 
 	return results
@@ -86,14 +97,15 @@ func resolveWindowsDesktop() string {
 	return ""
 }
 
-// createWindowsShortcut は PowerShell の WScript.Shell 経由で .lnk を作る。
+// createWindowsShortcutWithArgs は PowerShell の WScript.Shell 経由で .lnk を作る。
 // 新規依存を入れず（COM を Go から直接叩かず）、Windows 標準の PowerShell に任せる。
-func createWindowsShortcut(lnkPath, targetCmd, iconExe string) error {
+// windowStyle は WScript.Shell の規約で 1=通常 / 7=最小化。
+func createWindowsShortcutWithArgs(lnkPath, target, iconExe, args string, windowStyle int) error {
 	// シングルクォート内に埋め込むためエスケープ（' → '' が PowerShell 流儀）。
 	esc := func(s string) string { return strings.ReplaceAll(s, "'", "''") }
 	script := fmt.Sprintf(
-		`$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%s');$s.TargetPath='%s';$s.WorkingDirectory='%s';$s.IconLocation='%s,0';$s.Save()`,
-		esc(lnkPath), esc(targetCmd), esc(filepath.Dir(targetCmd)), esc(iconExe),
+		`$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%s');$s.TargetPath='%s';$s.Arguments='%s';$s.WorkingDirectory='%s';$s.WindowStyle=%d;$s.IconLocation='%s,0';$s.Save()`,
+		esc(lnkPath), esc(target), esc(args), esc(filepath.Dir(target)), windowStyle, esc(iconExe),
 	)
 	return exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script).Run() // #nosec G702 -- script is a fixed COM shortcut template with path values single-quote escaped.
 }

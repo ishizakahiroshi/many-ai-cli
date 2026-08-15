@@ -16,6 +16,7 @@ import { providerIconHtml, providerDisplayName, safeClassToken, stateLabel, acti
 import { wsConnectionState } from './ws-client.js';
 import { FilesTabManager } from './files-view.js';
 import { showPathPopup } from './path-links.js';
+import { _chatPaneMountedSid, isTranscriptBackedSession, mountChatPaneForSession, restoreChatHistoryFromStore } from './chat-history.js';
 
 // セッション単位の usage データキャッシュ。
 interface UsageCacheEntry {
@@ -902,6 +903,100 @@ function collectSentMessages(sid: number): Array<{ ts: any; text: string; attach
   return out;
 }
 
+// モーダルの件数と本文を、現在の chatHistory から作り直す。
+// loading=true の間は「まだ 0 件」ではなく読み込み中と表示する（取り込み待ちのため）。
+function renderSentHistoryContent(sid: number, loading: boolean): void {
+  const overlay = document.getElementById('tsb-sent-modal');
+  if (!overlay) return;
+  const countEl = overlay.querySelector('.tsb-sent-count') as HTMLElement | null;
+  const body = overlay.querySelector('.tsb-sent-body') as HTMLElement | null;
+  if (!countEl || !body) return;
+
+  const items = collectSentMessages(sid);
+  countEl.textContent = t('tsb_sent_history_count', { n: items.length });
+  body.textContent = '';
+
+  if (items.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'tsb-sent-empty';
+    empty.textContent = loading ? t('tsb_sent_history_loading') : t('tsb_sent_history_empty');
+    body.appendChild(empty);
+    return;
+  }
+
+  // 直近の送信を上に出すため新しい順（降順）で並べる。# は実際の送信順（古い=#1）を維持する。
+  items.slice().reverse().forEach((it, i) => {
+    const seq = items.length - i;
+    const row = document.createElement('div');
+    row.className = 'tsb-sent-row';
+    const meta = document.createElement('div');
+    meta.className = 'tsb-sent-meta';
+    const idx = document.createElement('span');
+    idx.className = 'tsb-sent-idx';
+    idx.textContent = `#${seq}`;
+    const time = document.createElement('span');
+    time.className = 'tsb-sent-time';
+    time.textContent = formatSentDateTime(it.ts);
+    meta.appendChild(idx);
+    meta.appendChild(time);
+    row.appendChild(meta);
+    // 本文（テキスト送信のみ）。クリックでその送信内容をコピー。
+    if (it.text) {
+      const text = document.createElement('div');
+      text.className = 'tsb-sent-text';
+      text.textContent = it.text;
+      row.title = t('tsb_sent_history_copy_hint');
+      // 添付チップのクリックがここまでバブルした場合はコピーしない。
+      row.addEventListener('click', (e) => {
+        if ((e.target as HTMLElement).closest?.('.tsb-sent-attach-chip')) return;
+        copyText(it.text, row);
+      });
+      row.appendChild(text);
+    }
+    // 添付（画像・CSV・テキスト等）。クリックで Files と同じ右クリックメニューを開く。
+    if (it.attachments.length > 0) {
+      const ats = document.createElement('div');
+      ats.className = 'tsb-sent-attachments';
+      for (const a of it.attachments) {
+        const name = a.filename || String(a.path).split(/[\\/]/).pop() || a.path;
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'tsb-sent-attach-chip';
+        chip.textContent = `${a.kind === 'image' ? '🖼' : '📄'} ${name}`;
+        chip.title = t('tsb_sent_history_attach_hint');
+        chip.addEventListener('click', (e) => {
+          e.stopPropagation();
+          showPathPopup(a.path, e.clientX, e.clientY, sid, 'file');
+        });
+        ats.appendChild(chip);
+      }
+      row.appendChild(ats);
+    }
+    body.appendChild(row);
+  });
+  // 新しい順（降順）で並べているので、最新の送信が見える先頭へスクロール。
+  body.scrollTop = 0;
+}
+
+// 送信履歴はチャットタブと同じ chatHistory を読むが、その取り込みはチャットタブを
+// mount したときにしか走らない。チャットタブを一度も開いていないセッションでは
+// 常に 0 件になってしまうため、モーダルを開くたびにここで取り込みを起こす。
+async function refreshSentHistoryFromStore(sid: number): Promise<void> {
+  try {
+    // claude / codex は provider 側の transcript が正本なので毎回取り直す。
+    // Hub のライブ追従はアイドルで止まるので、force なしだと途中までのローカル
+    // 履歴が残っている限り読み直されず、古い件数のままになる。
+    const force = isTranscriptBackedSession(sid);
+    const restored = await restoreChatHistoryFromStore(sid, { force });
+    // チャットタブを表示中のセッションなら、作り直した履歴で描画も合わせる。
+    if (restored && _chatPaneMountedSid === sid) mountChatPaneForSession(sid);
+  } catch (err) {
+    console.warn('[tsb] sent history restore failed', err);
+  } finally {
+    renderSentHistoryContent(sid, false);
+  }
+}
+
 let _sentModalKeyHandler: ((e: KeyboardEvent) => void) | null = null;
 let _sentModalDownHandler: ((e: MouseEvent | TouchEvent) => void) | null = null;
 
@@ -925,8 +1020,6 @@ function openSentHistoryModal(): void {
   const sid = activeSessionId;
   if (sid === null) return;
 
-  const items = collectSentMessages(sid);
-
   const overlay = document.createElement('div');
   overlay.id = 'tsb-sent-modal';
 
@@ -942,7 +1035,6 @@ function openSentHistoryModal(): void {
   header.appendChild(title);
   const count = document.createElement('span');
   count.className = 'tsb-sent-count';
-  count.textContent = t('tsb_sent_history_count', { n: items.length });
   header.appendChild(count);
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
@@ -953,71 +1045,16 @@ function openSentHistoryModal(): void {
   header.appendChild(closeBtn);
   box.appendChild(header);
 
-  // ---- 本文（時系列リスト）----
+  // ---- 本文（時系列リスト。中身は renderSentHistoryContent が作る）----
   const body = document.createElement('div');
   body.className = 'tsb-sent-body';
-  if (items.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'tsb-sent-empty';
-    empty.textContent = t('tsb_sent_history_empty');
-    body.appendChild(empty);
-  } else {
-    // 直近の送信を上に出すため新しい順（降順）で並べる。# は実際の送信順（古い=#1）を維持する。
-    items.slice().reverse().forEach((it, i) => {
-      const seq = items.length - i;
-      const row = document.createElement('div');
-      row.className = 'tsb-sent-row';
-      const meta = document.createElement('div');
-      meta.className = 'tsb-sent-meta';
-      const idx = document.createElement('span');
-      idx.className = 'tsb-sent-idx';
-      idx.textContent = `#${seq}`;
-      const time = document.createElement('span');
-      time.className = 'tsb-sent-time';
-      time.textContent = formatSentDateTime(it.ts);
-      meta.appendChild(idx);
-      meta.appendChild(time);
-      row.appendChild(meta);
-      // 本文（テキスト送信のみ）。クリックでその送信内容をコピー。
-      if (it.text) {
-        const text = document.createElement('div');
-        text.className = 'tsb-sent-text';
-        text.textContent = it.text;
-        row.title = t('tsb_sent_history_copy_hint');
-        // 添付チップのクリックがここまでバブルした場合はコピーしない。
-        row.addEventListener('click', (e) => {
-          if ((e.target as HTMLElement).closest?.('.tsb-sent-attach-chip')) return;
-          copyText(it.text, row);
-        });
-        row.appendChild(text);
-      }
-      // 添付（画像・CSV・テキスト等）。クリックで Files と同じ右クリックメニューを開く。
-      if (it.attachments.length > 0) {
-        const ats = document.createElement('div');
-        ats.className = 'tsb-sent-attachments';
-        for (const a of it.attachments) {
-          const name = a.filename || String(a.path).split(/[\\/]/).pop() || a.path;
-          const chip = document.createElement('button');
-          chip.type = 'button';
-          chip.className = 'tsb-sent-attach-chip';
-          chip.textContent = `${a.kind === 'image' ? '🖼' : '📄'} ${name}`;
-          chip.title = t('tsb_sent_history_attach_hint');
-          chip.addEventListener('click', (e) => {
-            e.stopPropagation();
-            showPathPopup(a.path, e.clientX, e.clientY, sid, 'file');
-          });
-          ats.appendChild(chip);
-        }
-        row.appendChild(ats);
-      }
-      body.appendChild(row);
-    });
-  }
   box.appendChild(body);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
-  // 新しい順（降順）で並べているので、最新の送信が見える先頭へスクロール。
-  body.scrollTop = 0;
+
+  // 現在の chatHistory で即描画し、取り込みが終わったら差し替える。
+  renderSentHistoryContent(sid, true);
+  void refreshSentHistoryFromStore(sid);
 
   // 外側クリック / Esc で閉じる。
   _sentModalDownHandler = (e: MouseEvent | TouchEvent) => {

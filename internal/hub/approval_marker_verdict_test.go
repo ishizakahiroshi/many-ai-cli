@@ -178,6 +178,43 @@ func TestClassifyApprovalMarkerBlockRejectsCorruptForms(t *testing.T) {
 			),
 			wantReason: "box_rule",
 		},
+		{
+			// 2026-08-15 実測（approval-corrupt ダンプ 107 件の replay）。TUI が描く
+			// 画面全幅の区切り線が、ミラー上でブロックの途中に紛れ込む形。本文の
+			// 選択肢も番号構造も無傷なので、握り潰すと承認が無音で消えるだけになる。
+			// 残存 box_rule 36 件のうち 13 件がこの形だった。
+			name: "full-width composer frame line between the options",
+			block: markerBlock(
+				"Q1 最初の質問ですか？",
+				" 1. 案 A",
+				strings.Repeat("─", 120),
+				" 2. 案 B",
+				" N. User specifies",
+			),
+			wantReason: "",
+		},
+		{
+			// 枠線行の左右に余白が付く形（TUI がインデントして枠を描く場合）も同じ扱い。
+			name: "indented frame line is still a frame line",
+			block: markerBlock(
+				"Q1 最初の質問ですか？",
+				" 1. 案 A",
+				"   "+strings.Repeat("━", 40)+"   ",
+				" 2. 案 B",
+			),
+			wantReason: "",
+		},
+		{
+			// 本文へ重なった罫線は、同じブロックに枠線行があっても取り逃さない。
+			name: "frame line does not mask a rule overwriting an option label",
+			block: markerBlock(
+				"Q1 最初の質問ですか？",
+				strings.Repeat("─", 120),
+				" 1. 案 A の説明が途中で "+strings.Repeat("─", 26),
+				" 2. 案 B",
+			),
+			wantReason: "box_rule",
+		},
 	}
 
 	for _, tc := range cases {

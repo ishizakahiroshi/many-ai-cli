@@ -33,14 +33,46 @@ func (s *Server) publishDoneSummary(summary proto.DoneSummary) {
 	s.captureGitTurnEnd(summary.SessionID, summary.At)
 	s.broadcast(proto.Message{Type: "done_summary", SessionID: summary.SessionID, Provider: summary.Provider, DoneSummary: &summary})
 
-	s.cfgMu.Lock()
-	enabled := s.cfg.UserPrefs.DoneSummaryNotify.Enabled
-	s.cfgMu.Unlock()
-	if !enabled {
+	if !s.doneSummaryNotifyEnabled() {
 		return
 	}
 	s.notifyDoneOutbound(summary)
 	s.notifyDonePush(summary)
+}
+
+// doneSummaryNotifyEnabled は完了サマリーを外部へ通知するかを決める。
+//
+// 利用者が設定を触っていれば（true / false どちらでも）その値に従う。
+// **未設定のときだけ**、通知チャネルを既に持っているかで決める。
+//
+// これは v0.7.0 で「既定 OFF」から変えたもの。README は「止まった瞬間を届ける」と
+// 言っているのに、完了通知が 2 段のオプトインの奥にあって既定では届いていなかった
+// （docs/local/plan_xirp-automode-positioning.md C4）。
+//
+// **通知手段を持たない利用者の挙動は変えない。** Web Push も notify.backends も
+// 無い環境では、既定 ON にしても送る先が無く、何も増えない。既定を変えるのは
+// 「通知を受け取る用意が既にある」と表明済みの利用者に対してだけにする。
+func (s *Server) doneSummaryNotifyEnabled() bool {
+	s.cfgMu.Lock()
+	explicit := s.cfg.UserPrefs.DoneSummaryNotify.Enabled
+	backends := len(s.cfg.Notify.Backends)
+	s.cfgMu.Unlock()
+	if explicit != nil {
+		return *explicit
+	}
+	if backends > 0 {
+		return true
+	}
+	return s.hasPushSubscription()
+}
+
+// hasPushSubscription は Web Push の購読が 1 件以上あるかを返す。
+// push manager が初期化されていない構成（テスト等）では false。
+func (s *Server) hasPushSubscription() bool {
+	if s.push == nil {
+		return false
+	}
+	return s.push.status().Subscriptions > 0
 }
 
 func classifyDoneSummary(text string) string {

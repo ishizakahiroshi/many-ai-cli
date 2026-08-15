@@ -121,6 +121,166 @@ func TestWhisperHTTPChecks(t *testing.T) {
 	}
 }
 
+func TestSessionLogCheck(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		enabled     bool
+		makeDir     bool
+		files       map[string]string
+		wantLevel   Level
+		wantMessage string
+	}{
+		{name: "disabled", enabled: false, wantLevel: OK, wantMessage: "セッションログは無効です"},
+		{name: "no sessions dir", enabled: true, wantLevel: Warn, wantMessage: "まだ 1 本も作られていません"},
+		{name: "empty sessions dir", enabled: true, makeDir: true, wantLevel: Warn, wantMessage: "まだ 1 本も作られていません"},
+		{
+			name:        "zero byte log",
+			enabled:     true,
+			makeDir:     true,
+			files:       map[string]string{"claude_2026-08-15_120000_proj_s1.log": ""},
+			wantLevel:   Warn,
+			wantMessage: "0 バイトです",
+		},
+		{
+			name:        "written log",
+			enabled:     true,
+			makeDir:     true,
+			files:       map[string]string{"claude_2026-08-15_120000_proj_s1.log": strings.Repeat("x", 2048)},
+			wantLevel:   OK,
+			wantMessage: "書き込まれています",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			if tc.makeDir {
+				if err := os.MkdirAll(filepath.Join(base, "sessions"), 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for name, body := range tc.files {
+				if err := os.WriteFile(filepath.Join(base, "sessions", name), []byte(body), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cfg := &config.Config{}
+			cfg.Hub.LogDir = base
+			cfg.Log.SessionEnabled = tc.enabled
+
+			check := sessionLog(cfg)
+
+			if check.Level != tc.wantLevel || !strings.Contains(check.Message, tc.wantMessage) {
+				t.Fatalf("sessionLog check = %+v, want level %s containing %q", check, tc.wantLevel, tc.wantMessage)
+			}
+		})
+	}
+}
+
+// TestSessionLogCheckIgnoresNonLogFiles は .jsonl / .txt を「最新の .log」に選ばないことを固定する。
+// .jsonl は Hub、.log は wrapper が別々に書くので、更新時刻は .jsonl の方が新しくなりやすい。
+func TestSessionLogCheckIgnoresNonLogFiles(t *testing.T) {
+	base := t.TempDir()
+	dir := filepath.Join(base, "sessions")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "claude_2026-08-15_120000_proj_s1.log"), []byte("payload"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	jsonlPath := filepath.Join(dir, "claude_2026-08-15_120000_proj_s1.jsonl")
+	if err := os.WriteFile(jsonlPath, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// .jsonl を .log より新しくして、選択が拡張子で決まることを確かめる。
+	later := time.Now().Add(time.Hour)
+	if err := os.Chtimes(jsonlPath, later, later); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{}
+	cfg.Hub.LogDir = base
+	cfg.Log.SessionEnabled = true
+
+	check := sessionLog(cfg)
+
+	if check.Level != OK || !strings.Contains(check.Message, ".log") || strings.Contains(check.Message, ".jsonl") {
+		t.Fatalf("sessionLog check = %+v, want OK naming the .log file", check)
+	}
+}
+
+// TestSessionLogCheckExplainsStaleDirectoryEntry は、ディレクトリ一覧のサイズと
+// 実サイズが食い違うとき（Windows で書き込み中のメタデータが未反映のとき）に、
+// それが故障ではないと明示することを固定する。
+func TestSessionLogCheckExplainsStaleDirectoryEntry(t *testing.T) {
+	base := t.TempDir()
+	dir := filepath.Join(base, "sessions")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// ディレクトリエントリ上は 0 バイト。
+	if err := os.WriteFile(filepath.Join(dir, "claude_2026-08-15_120000_proj_s1.log"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := sessionLogSizeOnDisk
+	t.Cleanup(func() { sessionLogSizeOnDisk = old })
+	// ハンドル経由では書き込み済み、という Windows の食い違いを再現する。
+	sessionLogSizeOnDisk = func(string) (int64, error) { return 3 * 1024 * 1024, nil }
+
+	check := sessionLog(cfgWithSessionLog(base))
+
+	if check.Level != OK {
+		t.Fatalf("sessionLog check = %+v, want OK", check)
+	}
+	if !strings.Contains(check.Message, "3.0 MB") || !strings.Contains(check.Message, "0 B") {
+		t.Fatalf("sessionLog message = %q, want both the real size and the directory-entry size", check.Message)
+	}
+	if !strings.Contains(check.Message, "故障ではありません") {
+		t.Fatalf("sessionLog message = %q, want an explicit note that this is not a failure", check.Message)
+	}
+}
+
+func TestSessionLogCheckOpenError(t *testing.T) {
+	base := t.TempDir()
+	dir := filepath.Join(base, "sessions")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "claude_2026-08-15_120000_proj_s1.log"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := sessionLogSizeOnDisk
+	t.Cleanup(func() { sessionLogSizeOnDisk = old })
+	sessionLogSizeOnDisk = func(string) (int64, error) { return 0, errors.New("locked") }
+
+	check := sessionLog(cfgWithSessionLog(base))
+
+	if check.Level != Warn || !strings.Contains(check.Message, "開けません") || check.Fix == "" {
+		t.Fatalf("sessionLog check = %+v, want Warn with a fix hint", check)
+	}
+}
+
+func cfgWithSessionLog(logDir string) *config.Config {
+	cfg := &config.Config{}
+	cfg.Hub.LogDir = logDir
+	cfg.Log.SessionEnabled = true
+	return cfg
+}
+
+func TestHumanBytes(t *testing.T) {
+	for _, tc := range []struct {
+		in   int64
+		want string
+	}{
+		{in: 0, want: "0 B"},
+		{in: 512, want: "512 B"},
+		{in: 2048, want: "2.0 KB"},
+		{in: 3 * 1024 * 1024, want: "3.0 MB"},
+	} {
+		if got := humanBytes(tc.in); got != tc.want {
+			t.Fatalf("humanBytes(%d) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestTokenAndACLPermissions(t *testing.T) {
 	for _, tc := range []struct {
 		name string

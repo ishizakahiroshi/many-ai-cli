@@ -6,18 +6,28 @@
 
 ![many-ai-cli dashboard](assets/readme-dashboard.png)
 
-**Không bỏ lỡ prompt phê duyệt — kể cả khi đang dùng điện thoại.** Chạy song song `Claude Code`, `Codex CLI`, `GitHub Copilot CLI`, `Cursor Agent CLI` và `Grok Build CLI`; `many-ai-cli` theo dõi mọi session trong PTY và đẩy thông báo lên desktop hoặc điện thoại ngay khi có session bị chặn chờ phê duyệt — không cần canh terminal. Đồng thời cung cấp dashboard Web local để xử lý phê duyệt, giám sát và terminal đa session tại một chỗ.
+**Không bỏ lỡ thời điểm một AI coding CLI dừng lại — kể cả khi đang dùng điện thoại.** Chạy song song `Claude Code`, `Codex CLI`, `GitHub Copilot CLI`, `Cursor Agent CLI` và `Grok Build CLI`; `many-ai-cli` theo dõi mọi session trong PTY và đẩy thông báo lên desktop hoặc điện thoại ngay khi có session cần đến bạn — prompt phê duyệt, tác vụ hoàn tất hoặc lỗi — không cần canh terminal. Đồng thời cung cấp dashboard Web local để xử lý phê duyệt, giám sát và terminal đa session tại một chỗ.
 
 [English README](README.md) · [日本語版 README](README.ja.md)
 
 > Bản dịch tiếng Việt phục vụ team đọc VI. Khi có mâu thuẫn, ưu tiên [`README.md`](README.md) (English) và mã nguồn.  
-> Cập nhật bản dịch: 2026-07-18.
+> Cập nhật bản dịch: 2026-08-13.
+
+> **⚠️ Bản dịch này là ảnh chụp tại một thời điểm và không còn được đồng bộ.**
+>
+> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`README.md`](README.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. (Lần dịch gần nhất: 2026-08-13.)
+>
+> Xin chân thành cảm ơn người đã đóng góp bản dịch. Chúng tôi vẫn hoan nghênh đóng góp dịch thuật; chỉ là không thể hứa giữ đồng bộ, nên bản được merge cũng sẽ là ảnh chụp có ghi ngày.
+>
+> *(EN: This translation is a dated snapshot and is no longer kept in sync with the original. Please refer to the source file linked above. The Vietnamese **UI** locale `web/src/i18n/vi.json` is a shipped feature and is still maintained.)*
 
 ---
 
 ## Tổng quan
 
-Khi chạy nhiều AI coding CLI song song trên nhiều terminal, dễ mất dấu session nào đang chờ phê duyệt — phải liên tục kiểm tra. `many-ai-cli` wrap mỗi CLI trong PTY và thông báo desktop/điện thoại ngay khi phát hiện prompt phê duyệt. Bạn cũng có thể phê duyệt và theo dõi tiến độ từ **Hub UI** trên trình duyệt. CLI gốc hoạt động như cũ; `many-ai-cli` chỉ bổ sung thông báo và GUI phê duyệt.
+Khi chạy nhiều AI coding CLI song song trên nhiều terminal, dễ mất dấu session nào đã dừng — phải liên tục kiểm tra. `many-ai-cli` wrap mỗi CLI trong PTY và thông báo desktop/điện thoại ngay khi phát hiện prompt phê duyệt, tác vụ hoàn tất hoặc lỗi. Bạn cũng có thể phê duyệt và theo dõi tiến độ từ **Hub UI** trên trình duyệt. CLI gốc hoạt động như cũ; `many-ai-cli` chỉ bổ sung thông báo và GUI phê duyệt.
+
+**Vai trò này vẫn còn khi việc phê duyệt dần được tự động hóa.** Khi các mô hình quyền như auto mode của Claude Code — chỉ dừng lại ở thao tác không thể hoàn tác hoặc mang tính phá hủy — trở nên phổ biến, prompt phê duyệt sẽ thưa dần. Nhưng chúng không biến mất: session chạy im lặng lâu hơn rồi mới dừng đúng một lần. Khi chạy song song nhiều session, chính lần dừng thưa thớt đó mới là lần dễ bỏ lỡ. Ngoài ra, mô hình phê duyệt khác nhau theo từng CLI và không được tự động hóa đồng thời, nên dùng nhiều nhà cung cấp song song vẫn cần một nơi tập hợp trạng thái. `many-ai-cli` không phải công cụ bấm nút phê duyệt thay bạn, mà là công cụ **phát hiện có thứ gì đó đã dừng và báo cho bạn biết**.
 
 ```
 Terminal pane #1              Terminal pane #2

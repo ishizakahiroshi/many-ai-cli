@@ -238,7 +238,10 @@ func TestPollAgentChatPrimeRetriesUncommittedTailPageForClaudeAndCodex(t *testin
 			clockCalls := 0
 			s.agentChatReadClock = func() time.Time {
 				clockCalls++
-				if clockCalls >= 3 {
+				// Calls 1-5 cover budget setup, snapshot loading, and all three
+				// record-selection checks. Expire only at the parser's
+				// selection-complete/decode-before-commit check (call 6).
+				if clockCalls >= 6 {
 					return base.Add(time.Second)
 				}
 				return base

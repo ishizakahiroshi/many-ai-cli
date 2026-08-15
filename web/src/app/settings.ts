@@ -204,11 +204,17 @@ export function attachDoneSummaryNotifyToggle(): void {
   })();
   toggle.addEventListener('change', async () => {
     const enabled = toggle.checked;
+    // PUT /api/user-prefs は UserPrefs を全置換する。partial を送ると
+    // templates / session_order / cwd_history など他の全設定が消えるので、
+    // saveTokenStatusbarPrefs と同じ read-modify-write にする。
     try {
+      const res = await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`);
+      const cur = res.ok ? await res.json() : {};
+      const next = { ...cur, done_summary_notify: { ...(cur.done_summary_notify || {}), enabled } };
       await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ done_summary_notify: { enabled } }),
+        body: JSON.stringify(next),
       });
     } catch (_) {}
   });

@@ -1237,6 +1237,9 @@ func (s *Server) Run(ctx context.Context) error {
 	if s.autoOpenBrowser {
 		_ = s.OpenBrowser()
 	}
+	// 前回の Hub が kill されて注入ブロックを残したままなら、ここで回収する。
+	// injectApprovalRules より前・かつセッションが 1 つも接続していないうちに行う。
+	s.recoverOrphanedApprovalRules()
 	if s.approvalRulesEnabled() {
 		s.injectApprovalRules()
 	}
@@ -1820,6 +1823,18 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		s.sessionStore.EndSession(m.SessionID, "dismissed", "", time.Now())
 	}
 	if wc != nil {
+		// WS を閉じるだけだと、wrapper 側は EOF から「意図的な停止か回線不調か」を
+		// 推定するしかない。直近 postReattachGuard(10s) 以内に reattach していると
+		// 推定が「回線不調」に倒れ、2 秒後に再接続してセッションが復活する
+		// （bugfix_session-dismiss-ignored-within-reattach-guard_2026-08-13.md）。
+		// 閉じる前に意図そのものを送り、wrapper に推定させない。
+		// deadline は hub_shutdown 通知（lifecycle.go）と同じ 500ms。届かなくても
+		// 従来どおり close() のみの挙動へ落ちるだけなので、ここで待ち続けない。
+		_ = wc.sendWithDeadline(proto.Message{
+			Type:      proto.TypeSessionDismissed,
+			SessionID: m.SessionID,
+			Reason:    "ui_dismiss",
+		}, time.Now().Add(500*time.Millisecond))
 		wc.close()
 	}
 	if historyToClose != nil {
