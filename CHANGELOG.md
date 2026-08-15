@@ -75,6 +75,19 @@ Release artifacts are published at
   the directory is not a repository (`internal/doctor/residue.go`).
 
 ### Changed
+- **Building from source now needs Go 1.25.13.** The `go` directive in `go.mod`
+  moved up one patch release to pick up fixes for five standard-library
+  vulnerabilities that this code reaches: `net/url` (GO-2026-6218), `crypto/tls`
+  (GO-2026-6090), `net/http` (GO-2026-6089 and GO-2026-5026) and `encoding/asn1`
+  (GO-2026-5972). Released binaries are unaffected — they are built by CI, which
+  reads the same file. With the default `GOTOOLCHAIN=auto` the newer toolchain is
+  fetched automatically, so no manual install is needed.
+- **The approval-corrupt dump was removed.** The instrumentation that saved raw
+  PTY bytes whenever an approval marker looked corrupt has served its purpose:
+  three separate causes were found from its output and fixed. Keeping it meant
+  continuing to write input-derived bytes to disk, which is not worth the
+  remaining diagnostic value. If a fourth cause turns up, it can be reintroduced
+  with a fresh expiry (`internal/hub/approval_corrupt_dump.go`, removed).
 - **An answered approval is now remembered in one place instead of three.** The
   browser used to decide "have we already answered this?" with three separate
   pieces of state that disagreed with each other: a signature that expired on a
@@ -92,8 +105,39 @@ Release artifacts are published at
   of `state.ts` into `approval-answered.ts`, which touches no DOM and is covered
   by 14 regression tests (`web/src/app/approval-answered.ts`,
   `web/src/app/approval-answered-fixtures.ts`, `web/src/app/approval.ts`).
+- **Release workflows now pin third-party Actions to immutable commit SHAs.**
+  The npm credential is also limited to the publish step; other release steps
+  receive only a boolean availability flag (`.github/workflows/*.yml`).
+- **The template list now keeps the order you set instead of sorting by usage.**
+  Previously the palette sorted by how often each template had been picked, so a
+  manually chosen order would be undone by the next selection. Templates are now
+  listed in stored order, newly added ones go to the bottom, and the per-template
+  `frequency` counter is gone from the client, the server struct, and the
+  user-prefs mirror. Picking a template no longer writes to the server at all.
+  Existing `frequency` values in `config.yaml` are ignored and dropped on the
+  next save (`web/src/app/prompt-templates.ts`, `web/src/app/user-prefs.ts`,
+  `internal/config/config.go`).
 
 ### Fixed
+- **The approval bar's background was see-through, so terminal output showed
+  through the text.** When the bar became an overlay it kept the translucent
+  `rgba(245,158,11,0.04)` fill it had while it was part of the normal flow, and
+  the PTY output underneath bled into the approval text. The fill is now opaque
+  (`color-mix(in srgb, var(--warn) 5%, var(--bg-elev))`), which keeps the warning
+  tint without letting anything through. Making the bar semi-transparent is not
+  an acceptable fix here — the whole point of the overlay is that the question
+  stays readable (`web/src/styles/approval.css`).
+- **A slash command picked from the picker was sent with a trailing space, and
+  OpenCode ran it as a prompt instead of a command.** Confirming a suggestion
+  inserts `command + " "` so you can keep typing arguments, but OpenCode's TUI
+  only opens its command list while the line starts with `/` and contains no
+  space up to the cursor (checked against the opencode 1.18.18 binary). With the
+  space still attached the list never opened, Enter fell through to an ordinary
+  send, and `/models` reached the model as plain text. A trailing space is now
+  stripped from single-line slash commands before sending — none of the six
+  wrapped CLIs give one meaning — and `/models` was added to the commands that
+  send immediately on selection, so it matches how `/model` behaves for Claude
+  (`web/src/app.ts`).
 - **Approval panels were still being withheld over the TUI's own frame lines.**
   The corruption check treats box-drawing characters inside a marker block as
   proof that the composer frame was redrawn over the text — the approval format
@@ -223,20 +267,6 @@ Release artifacts are published at
   release, check your repositories' `AGENTS.md` for a stranded block
   (`internal/hub/approval_rules_state.go`, `internal/hub/approval_handler.go`,
   `internal/hub/server.go`).
-
-### Changed
-- **Release workflows now pin third-party Actions to immutable commit SHAs.**
-  The npm credential is also limited to the publish step; other release steps
-  receive only a boolean availability flag (`.github/workflows/*.yml`).
-- **The template list now keeps the order you set instead of sorting by usage.**
-  Previously the palette sorted by how often each template had been picked, so a
-  manually chosen order would be undone by the next selection. Templates are now
-  listed in stored order, newly added ones go to the bottom, and the per-template
-  `frequency` counter is gone from the client, the server struct, and the
-  user-prefs mirror. Picking a template no longer writes to the server at all.
-  Existing `frequency` values in `config.yaml` are ignored and dropped on the
-  next save (`web/src/app/prompt-templates.ts`, `web/src/app/user-prefs.ts`,
-  `internal/config/config.go`).
 
 ## [0.6.0] - 2026-08-11
 
