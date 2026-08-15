@@ -18,6 +18,35 @@ import (
 // 最終手段としての mtime フォールバック。通常は PID 生存確認で奪取可否を決める。
 const opencodeLockStaleAfter = 30 * time.Minute
 
+// OpenCodeConfigFileName / OpenCodeLockSuffix は、このパッケージが利用者の作業
+// フォルダへ書く生成物の名前。doctor の置き去り検査が同じ名前を探すために公開する。
+// 検査側で名前を二重定義すると、片方だけ変わったときに検査が黙って空振りする。
+const (
+	OpenCodeConfigFileName = "opencode.json"
+	OpenCodeLockSuffix     = ".many-ai-cli.lock"
+)
+
+// OpenCodeConfigPermissionKey は prepareOpenCodeConfig が opencode.json の
+// permission へ差し込むキー。検査側はこのキーの有無で「many-ai-cli が書いた設定か」を
+// 判定する（利用者自身の opencode.json と区別するため）。
+const OpenCodeConfigPermissionKey = "*"
+
+// OpenCodeLockHeldByLiveProcess は lock ファイルの保持プロセスが生存しているかを返す。
+// 稼働中セッションの正常な生成物を、doctor が置き去りとして報告しないための判定。
+// 生存判定そのもの（processAlive）は OS 別実装なので、検査側へ複製せずここで包む。
+func OpenCodeLockHeldByLiveProcess(lockPath string) bool {
+	st, ok := readOpenCodeLock(lockPath)
+	if !ok {
+		// PID が読めない壊れたロックは mtime で判断する（奪取条件と同じしきい値）。
+		info, err := os.Stat(lockPath)
+		if err != nil {
+			return false
+		}
+		return time.Since(info.ModTime()) <= opencodeLockStaleAfter
+	}
+	return processAlive(st.PID)
+}
+
 // openCodeLockState は lock ファイルの中身。保持 PID に加えて、前セッションが
 // cleanup を通らずに死んだ場合に opencode.json を巻き戻すための情報を持つ。
 type openCodeLockState struct {
@@ -55,8 +84,8 @@ type openCodeRollback struct {
 // residue として残る（orchestration 子が書く "allow" を含む）。ロックに巻き戻し情報を
 // 焼いておき、stale ロックを奪う時点で置き去りを回収してから次の書き換えに入る。
 func prepareOpenCodeConfig(cwd string, permissionValue string, logger *slog.Logger) (cleanup func(), err error) {
-	cfgPath := filepath.Join(cwd, "opencode.json")
-	lockPath := cfgPath + ".many-ai-cli.lock"
+	cfgPath := filepath.Join(cwd, OpenCodeConfigFileName)
+	lockPath := cfgPath + OpenCodeLockSuffix
 
 	lockFile, lockErr := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if lockErr != nil {
@@ -111,7 +140,7 @@ func prepareOpenCodeConfig(cwd string, permissionValue string, logger *slog.Logg
 	if perm == nil {
 		perm = map[string]any{}
 	}
-	perm["*"] = permissionValue
+	perm[OpenCodeConfigPermissionKey] = permissionValue
 	merged["permission"] = perm
 
 	data, marshalErr := json.MarshalIndent(merged, "", "  ")

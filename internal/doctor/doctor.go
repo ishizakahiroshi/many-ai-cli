@@ -49,7 +49,7 @@ var (
 
 // Run performs bounded, local checks only. It never writes configuration or logs.
 func Run(ctx context.Context, cfg *config.Config) Report {
-	return Report{Checks: []Check{
+	checks := []Check{
 		providers(ctx),
 		port(cfg),
 		token(cfg),
@@ -59,7 +59,11 @@ func Run(ctx context.Context, cfg *config.Config) Report {
 		tailscale(cfg),
 		logs(cfg),
 		sessionLog(cfg),
-	}}
+	}
+	// 置き去り検査だけは「見つかったときにしか出さない」。置き去りの無い
+	// リポジトリや git 管理外の場所で出力が増えないようにする。
+	checks = append(checks, residue(ctx, cfg)...)
+	return Report{Checks: checks}
 }
 
 func providers(ctx context.Context) Check {
