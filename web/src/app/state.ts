@@ -2,6 +2,7 @@
 import { STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_GROUP_ORDER_KEY, STORAGE_ORDER_KEY, STORAGE_PROJECT_FAVORITES_KEY, setUserPref } from './user-prefs.js';
 import { activateSession } from './session-list.js';
 import { isBatchOptions } from './approval-parser.js';
+import { setApprovalProviderResolver, _approvalCtxHash } from './approval-answered.js';
 import type { SessionSnapshot } from '../types/proto.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
@@ -67,268 +68,41 @@ export const approvalSuppressedCache = new Map<number, string>(); // sessionId �
 export const approvalSuppressedDismissedCache = new Map<number, boolean>(); // sessionId → bool（抑止告知バナーを ✕ で閉じた状態。新しい抑止／正常マーカー到着でクリア）
 export const sequentialChoiceCache = new Map<number, any>(); // sessionId → { sig, prompts, answers, index }
 export const approvalRawOptionsCache = new Map<number, ApprovalOptionLike[] | any[]>(); // sessionId → approval options
-export interface ApprovalSourceState {
-  source?: string;
-  sig?: string;
-  kind?: string;
-  detectedAt?: string;
-  candidateKey?: string;
-  sourceEpoch?: number;
-  shape?: string;
-}
-export const approvalSourceCache = new Map<number, ApprovalSourceState>(); // sessionId → current approval provenance/identity
-export const approvalSourceEpochCache = new Map<number, number>(); // sessionId → logical live prompt generation
-export const approvalReplayState = new Map<number, { replayEpoch: number; pending: boolean }>(); // sessionId → replay gate
-export const approvalConsumedSig = new Map<number, string>(); // sessionId → 消費済み承認の署名（doSend でテキスト送信した場合の再表示防止）
-// Candidate+epoch is the primary answered state. It is bounded per session and
-// intentionally independent from display labels/block hashes.
-export const answeredApprovalCandidates = new Map<number, Set<string>>(); // sessionId → `${epoch}\0${candidateKey}`
-export const answeredApprovalShapeKeys = new Map<number, Map<string, string>>(); // sessionId → `${epoch}\0${shape}` -> candidateKey
-export const replayAnsweredApprovalTokens = new Map<number, Set<string>>(); // replay-only suppression restored from Hub
-const ANSWERED_CANDIDATE_LIMIT = 400;
-// [MANY-AI-CLI] マーカー質問の「回答済み」恒久マーク（sessionId → ブロック全文ハッシュの集合）。
-// approvalConsumedSig はタイマー失効する短期抑制で、Ink の SIGWINCH 再描画（タブ切替時など）で
-// 画面に残った回答済みマーカーブロックが再流入すると失効後に再表示されてしまう。
-// こちらは時間に依存せず、一度回答した [MANY-AI-CLI] ブロック（質問文＋全選択肢のハッシュ）を
-// セッション存続中ずっと記録し、同一ブロックの検出を完全にスキップする。
-// 質問文も含めたハッシュなので「Yes/No」等ラベルが同一でも別質問なら別ハッシュになり誤抑制しない。
-// ネイティブ承認（go_vt / Codex 等のファイル編集・コマンド許可）は対象外＝毎回出す。
-export const answeredMarkerSigs = new Map<number, Set<string>>(); // sessionId → Set<blockSig>
-const ANSWERED_MARKER_SIG_LIMIT = 200; // 1 セッションあたりの保持上限（無制限増加防止）
+// 承認の同一性・回答済み state は approval-answered.ts が持つ（DOM 非依存にして
+// ブラウザ無しで試せるようにするため）。ここでは従来どおりの名前で再輸出する。
+export {
+  annotateApprovalIdentity,
+  answeredApprovalCandidates,
+  answeredApprovalShapeKeys,
+  approvalCandidateDebugKey,
+  approvalCandidateIdentity,
+  approvalCandidateShape,
+  approvalReplayState,
+  approvalSourceCache,
+  approvalSourceEpochCache,
+  beginApprovalReplay,
+  clearReplayAnsweredApprovalCandidate,
+  finishApprovalReplay,
+  getApprovalSourceEpoch,
+  isAnsweredApprovalCandidate,
+  isApprovalReplayPending,
+  noteApprovalSourceEpoch,
+  recordAnsweredApprovalCandidate,
+  recordAnsweredApprovalIdentity,
+  replayAnsweredApprovalTokens,
+  _approvalCtxHash,
+} from './approval-answered.js';
+export type { ApprovalSourceState, ApprovalCandidateIdentity } from './approval-answered.js';
 
-export function recordAnsweredMarkerSig(id: number, opts: any): void {
-  const sig = opts && opts[0] && opts[0]._blockSig;
-  if (!sig) return;
-  let set = answeredMarkerSigs.get(id);
-  if (!set) { set = new Set<string>(); answeredMarkerSigs.set(id, set); }
-  set.add(sig);
-  // 上限超過時は最古から間引く（Set は挿入順を保持する）。
-  while (set.size > ANSWERED_MARKER_SIG_LIMIT) {
-    const oldest = set.values().next().value;
-    if (oldest === undefined) break;
-    set.delete(oldest);
-  }
-}
+// provider は sessions にしかないので、切り出し先へ解決関数を差す。
+setApprovalProviderResolver((id) => String(sessions.get(id)?.provider || ''));
 
-export function isAnsweredMarkerSig(id: number, opts: any): boolean {
-  const sig = opts && opts[0] && opts[0]._blockSig;
-  if (!sig) return false;
-  const set = answeredMarkerSigs.get(id);
-  return !!(set && set.has(sig));
-}
-
-function normalizeApprovalCandidateText(value: unknown): string {
-  return String(value || '')
-    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function candidateQuestionText(options: any[], questionOverride?: unknown): string {
-  if (questionOverride && normalizeApprovalCandidateText(questionOverride)) {
-    return normalizeApprovalCandidateText(questionOverride);
-  }
-  const arr: any = options as any;
-  if (arr?._question) return normalizeApprovalCandidateText(arr._question);
-  if (arr?.[0]?._question) return normalizeApprovalCandidateText(arr[0]._question);
-  if (isBatchOptions(options)) {
-    return options.map((section: any) => normalizeApprovalCandidateText(section?.title)).filter(Boolean).join('\n');
-  }
-  const sequential = (options || []).find((opt: any) => opt?._sequentialQuestion)?._sequentialQuestion;
-  return normalizeApprovalCandidateText(sequential);
-}
-
-// This shape mirrors the Go candidate contract conceptually. The wire-provided
-// candidate key is preferred whenever available; the local fallback is only
-// used for old Hub messages and browser-only parser paths.
-export function approvalCandidateShape(id: number, options: ApprovalOptionLike[] | any[], kind = 'fallback', questionOverride?: unknown): string {
-  const provider = normalizeApprovalCandidateText(sessions.get(id)?.provider || '').toLowerCase();
-  const question = candidateQuestionText(options, questionOverride);
-  const flat = isBatchOptions(options)
-    ? options.flatMap((section: any) => section?.options || [])
-    : (options || []);
-  const entries = flat
-    .map((opt: any) => `${Number(opt?.num)}:${normalizeApprovalCandidateText(opt?._sendText || opt?.send_text)}`)
-    .sort();
-  return `${provider}\n${normalizeApprovalCandidateText(kind).toLowerCase()}\n${question}\n${entries.join('\n')}`;
-}
-
-export function approvalCandidateIdentity(id: number, options: ApprovalOptionLike[] | any[], kind = 'fallback', questionOverride?: unknown): { candidateKey: string; sourceEpoch: number; shape: string } {
-  const arr: any = options as any;
-  const explicitKey = String(arr?._candidateKey || arr?.[0]?._candidateKey || '').trim();
-  const explicitEpoch = Number(arr?._sourceEpoch || arr?.[0]?._sourceEpoch || 0);
-  const shape = approvalCandidateShape(id, options, kind, questionOverride);
-  const source = approvalSourceCache.get(id);
-  const currentEpoch = getApprovalSourceEpoch(id);
-  const sourceEpoch = explicitEpoch > currentEpoch
-    ? explicitEpoch
-    : Math.max(currentEpoch, source?.shape === shape ? Number(source.sourceEpoch || 0) : 0, 1);
-  const answeredShapeKey = answeredApprovalShapeKeys.get(id)?.get(answeredApprovalShapeToken(sourceEpoch, shape));
-  const candidateKey = explicitKey || (source?.candidateKey && source.shape === shape ? source.candidateKey : '') || answeredShapeKey || `local:${_approvalCtxHash(shape)}`;
-  return { candidateKey, sourceEpoch: sourceEpoch > 0 ? sourceEpoch : 1, shape };
-}
-
-export function annotateApprovalIdentity(options: any, identity: { candidateKey: string; sourceEpoch: number }): any {
-  if (!options || typeof options !== 'object') return options;
-  try {
-    options._candidateKey = identity.candidateKey;
-    options._sourceEpoch = identity.sourceEpoch;
-    for (const section of options) {
-      if (!section || typeof section !== 'object') continue;
-      section._candidateKey = identity.candidateKey;
-      section._sourceEpoch = identity.sourceEpoch;
-      for (const option of (section.options || [])) {
-        if (option && typeof option === 'object') {
-          option._candidateKey = identity.candidateKey;
-          option._sourceEpoch = identity.sourceEpoch;
-        }
-      }
-    }
-  } catch (_) {}
-  return options;
-}
-
-export function getApprovalSourceEpoch(id: number): number {
-  const current = Number(approvalSourceEpochCache.get(id) || 0);
-  if (current > 0) return current;
-  approvalSourceEpochCache.set(id, 1);
-  return 1;
-}
-
-export function noteApprovalSourceEpoch(id: number, epoch: unknown): number {
-  const next = Number(epoch || 0);
-  if (!Number.isFinite(next) || next <= 0) return getApprovalSourceEpoch(id);
-  const current = Number(approvalSourceEpochCache.get(id) || 0);
-  if (next > current) {
-    approvalSourceEpochCache.set(id, next);
-    // The legacy short sig is intentionally cleared only at a new live
-    // generation. Candidate+epoch history remains intact, so replay in the
-    // old generation stays suppressed while an intentionally repeated prompt
-    // can be shown.
-    approvalConsumedSig.delete(id);
-  }
-  else if (current === 0) approvalSourceEpochCache.set(id, next);
-  return Number(approvalSourceEpochCache.get(id) || next);
-}
-
-export function beginApprovalReplay(id: number, replayEpoch: unknown): void {
-  const next = Number(replayEpoch || 0) || 1;
-  const current = approvalReplayState.get(id);
-  if (!current || next >= current.replayEpoch) {
-    approvalReplayState.set(id, { replayEpoch: Math.max(next, current?.replayEpoch || 0), pending: true });
-  } else {
-    current.pending = true;
-  }
-}
-
-export function finishApprovalReplay(id: number, replayEpoch: unknown, sourceEpoch?: unknown, consumedCandidateKey = '', consumedShape = ''): boolean {
-  const next = Number(replayEpoch || 0) || 1;
-  const current = approvalReplayState.get(id);
-  if (current && next < current.replayEpoch) return false;
-  approvalReplayState.set(id, { replayEpoch: Math.max(next, current?.replayEpoch || 0), pending: false });
-  const liveEpoch = noteApprovalSourceEpoch(id, sourceEpoch);
-  if (consumedCandidateKey && consumedShape) {
-    // The shape is associated with the generation currently restored in the
-    // browser. The Hub's consumed epoch is retained on the wire for audit, but
-    // using the live replay epoch here prevents an old scrollback candidate
-    // from being mistaken for a future prompt until a fresh Hub candidate is
-    // explicitly announced.
-    recordAnsweredApprovalIdentity(id, consumedCandidateKey, liveEpoch, consumedShape, true);
-  }
-  return true;
-}
-
-export function isApprovalReplayPending(id: number): boolean {
-  return !!approvalReplayState.get(id)?.pending;
-}
-
-export function approvalCandidateDebugKey(candidateKey: unknown): string {
-  return _approvalCtxHash(String(candidateKey || '')).slice(0, 10);
-}
-
-function answeredCandidateToken(identity: { candidateKey: string; sourceEpoch: number }): string {
-  return `${identity.sourceEpoch}\0${identity.candidateKey}`;
-}
-
-function answeredApprovalShapeToken(sourceEpoch: number, shape: string): string {
-  return `${sourceEpoch}\0${shape}`;
-}
-
-function rememberAnsweredApprovalIdentity(id: number, identity: { candidateKey: string; sourceEpoch: number; shape?: string }, replayOnly = false): void {
-  let set = answeredApprovalCandidates.get(id);
-  if (!set) { set = new Set<string>(); answeredApprovalCandidates.set(id, set); }
-  const token = answeredCandidateToken(identity);
-  set.add(token);
-  if (identity.shape) {
-    let shapes = answeredApprovalShapeKeys.get(id);
-    if (!shapes) { shapes = new Map<string, string>(); answeredApprovalShapeKeys.set(id, shapes); }
-    shapes.set(answeredApprovalShapeToken(identity.sourceEpoch, identity.shape), identity.candidateKey);
-  }
-  if (replayOnly) {
-    let replayTokens = replayAnsweredApprovalTokens.get(id);
-    if (!replayTokens) { replayTokens = new Set<string>(); replayAnsweredApprovalTokens.set(id, replayTokens); }
-    replayTokens.add(token);
-  }
-  while (set.size > ANSWERED_CANDIDATE_LIMIT) {
-    const oldest = set.values().next().value;
-    if (oldest === undefined) break;
-    set.delete(oldest);
-    replayAnsweredApprovalTokens.get(id)?.delete(oldest);
-    const separator = oldest.indexOf('\0');
-    const oldestEpoch = separator >= 0 ? oldest.slice(0, separator) : '';
-    const oldestKey = separator >= 0 ? oldest.slice(separator + 1) : '';
-    const shapes = answeredApprovalShapeKeys.get(id);
-    if (shapes && oldestEpoch && oldestKey) {
-      for (const [shapeToken, shapeKey] of shapes) {
-        if (shapeKey === oldestKey && shapeToken.startsWith(`${oldestEpoch}\0`)) shapes.delete(shapeToken);
-      }
-      if (shapes.size === 0) answeredApprovalShapeKeys.delete(id);
-    }
-  }
-}
-
-export function recordAnsweredApprovalIdentity(id: number, candidateKey: string, sourceEpoch: number, shape = '', replayOnly = false): void {
-  if (!candidateKey || sourceEpoch <= 0) return;
-  rememberAnsweredApprovalIdentity(id, { candidateKey, sourceEpoch, shape }, replayOnly);
-}
-
-export function clearReplayAnsweredApprovalCandidate(id: number, identity: { candidateKey: string; sourceEpoch: number; shape?: string }): void {
-  const token = answeredCandidateToken(identity);
-  const replayTokens = replayAnsweredApprovalTokens.get(id);
-  if (!replayTokens?.has(token)) return;
-  replayTokens.delete(token);
-  if (replayTokens.size === 0) replayAnsweredApprovalTokens.delete(id);
-  answeredApprovalCandidates.get(id)?.delete(token);
-  if (answeredApprovalCandidates.get(id)?.size === 0) answeredApprovalCandidates.delete(id);
-  if (identity.shape) {
-    const shapes = answeredApprovalShapeKeys.get(id);
-    shapes?.delete(answeredApprovalShapeToken(identity.sourceEpoch, identity.shape));
-    if (shapes?.size === 0) answeredApprovalShapeKeys.delete(id);
-  }
-}
-
-export function recordAnsweredApprovalCandidate(id: number, options: any, kind?: string, questionOverride?: unknown): { candidateKey: string; sourceEpoch: number; shape: string } | null {
-  if (!Array.isArray(options) || options.length === 0) return null;
-  const identity = approvalCandidateIdentity(id, options, kind || (approvalSourceCache.get(id)?.source === 'go_vt' ? 'native' : 'marker'), questionOverride);
-  if (!identity.candidateKey) return null;
-  rememberAnsweredApprovalIdentity(id, identity);
-  annotateApprovalIdentity(options, identity);
-  return identity;
-}
-
-export function isAnsweredApprovalCandidate(id: number, options: any, kind?: string, questionOverride?: unknown): boolean {
-  if (!Array.isArray(options) || options.length === 0) return false;
-  const identity = approvalCandidateIdentity(id, options, kind || (approvalSourceCache.get(id)?.source === 'go_vt' ? 'native' : 'marker'), questionOverride);
-  const set = answeredApprovalCandidates.get(id);
-  return !!(set && set.has(answeredCandidateToken(identity)));
-}
 export const batchSelections = new Map<number, number[]>(); // sessionId → number[]（セクションごとの選択番号、未選択は null、自由入力選択中は -1）
 export const batchFreeText = new Map<number, string[]>(); // sessionId → string[]（質問タブUIの自由入力テキスト、セクションごと）
 export const batchActiveQ = new Map<number, number>(); // sessionId → アクティブな質問タブ index（質問タブUI）
 export let batchFocusIdx = -1; // 現在フォーカス中のバッチセクション index（-1: 未フォーカス / 範囲外）
 export const multiSelectSelections = new Map<number, Set<number>>(); // sessionId → Set<選択番号>（複数選択 #multi の ON 状態）
 export let multiSelectFocusIdx = -1; // 現在フォーカス中の複数選択肢 index（-1: 未フォーカス）
-export const approvalConsumedSigDeleteTimer = new Map<number, ReturnType<typeof setTimeout>>(); // sessionId → timer（sig を debounce 型で削除するためのタイマー）
 export const approvalSwitchCandidates = new Map<number, any>(); // sessionId → { sig, options, firstSeenAt }（表示中の承認と異なる選択肢が検出されたときの安定性チェック用）
 export const APPROVAL_PENDING_TEXT_TAIL_LIMIT = 12000;
 
@@ -349,40 +123,6 @@ export function approvalSig(options: ApprovalOptionLike[] | any[]): string {
     const ctx = o && o._ctx ? `|${o._ctx}` : '';
     return `${o.num}:${lbl}${ctx}`;
   }));
-}
-
-// シンプルな文字列ハッシュ (djb2)。承認質問文の同一性判定に使う。
-export function _approvalCtxHash(s: unknown): string {
-  const text = String(s || '').replace(/\s+/g, ' ').trim();
-  let h = 5381;
-  for (let i = 0; i < text.length; i++) {
-    h = (((h << 5) + h) + text.charCodeAt(i)) | 0;
-  }
-  return (h >>> 0).toString(36);
-}
-
-// 手動 dismiss 抑止用の「質問アイデンティティ」。
-// Grok 差分再描画では option ラベルが欠け・重複して approvalSig が揺れるが、
-// 質問文（_question）は比較的安定するため、同一質問の再表示抑止に使う。
-// 質問が取れない経路（ネイティブ承認等）は options の approvalSig にフォールバック。
-export function approvalQuestionKey(options: ApprovalOptionLike[] | any[] | null | undefined): string {
-  if (!options || !Array.isArray(options) || options.length === 0) return '';
-  const arrQ = (options as any)._question;
-  if (arrQ && String(arrQ).trim()) {
-    return 'q:' + _approvalCtxHash(String(arrQ).replace(/\s+/g, ' ').trim().slice(0, 200));
-  }
-  const first = options[0] as any;
-  if (first && first._multiSelect && first._question && String(first._question).trim()) {
-    return 'q:' + _approvalCtxHash(String(first._question).replace(/\s+/g, ' ').trim().slice(0, 200));
-  }
-  if (isBatchOptions(options)) {
-    const titles = options
-      .map((s: any) => String(s?.title || '').replace(/\s+/g, ' ').trim())
-      .filter(Boolean)
-      .join('\n');
-    if (titles) return 'b:' + _approvalCtxHash(titles.slice(0, 400));
-  }
-  return 'o:' + approvalSig(options);
 }
 
 export function sequentialChoiceSig(prompts: SequentialChoicePrompt[] | any[]): string {
