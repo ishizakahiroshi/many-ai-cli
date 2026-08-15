@@ -7,6 +7,7 @@ import { stripAnsi } from './settings.js';
 import { ws } from './ws-client.js';
 import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, hasApprovalLikeLabel, isBatchOptions, isHubChoicePrompt, isMultiQuestionPrompt, isMultiSelectOptions, markHubChoiceDefault, matchNativeApprovalTrigger, normalizeVtCursorOps } from './approval-parser.js';
 import { approvalUiAdapter, clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed, setMultiQuestionBannerVisible } from './approval-ui.js';
+import { actionBarNeedsRepaint, actionBarOwnedByOther, releaseActionBarOwnership } from './approval-owner.js';
 import { chatHistoryCommitOutput, chatPaneAtBottom, getChatTimelineEl, pushMessage, scrollChatPaneToBottom } from './chat-history.js';
 import { token } from './util.js';
 import { appConfirm } from './settings.js';
@@ -1138,7 +1139,11 @@ export function detectApproval(id) {
       if (src && src.source === 'hub_marker' && src.sig === sig) {
         if (consumed === sig) return;
         const wasVisible = !!approvalVisibleCache.get(id);
-        const barNeedsPaint = !bar || !bar.classList.contains('visible') || bar.children.length === 0;
+        // 所有者違いも再描画の理由に含まれる（actionBarNeedsRepaint）。ここを bar の
+        // 見た目（visible / children）だけで決めていたため、別セッションのパネルが
+        // 出たまま切り替えると「visible で children もある」→ 描き直さない、となって
+        // 取り違えが残っていた（bugfix_approval-panel-shows-other-session_2026-08-14.md）。
+        const barNeedsPaint = actionBarNeedsRepaint(bar, id);
         if (!wasVisible) {
           cancelApprovalHintConfirm(id);
           approvalUiAdapter.setApprovalVisible(id, true);
@@ -1429,6 +1434,37 @@ export function getActionBarButtons() {
 export function setActionBarFocus(idx) {
   set_actionBarFocusIdx(idx);
   getActionBarButtons().forEach((btn, i) => btn.classList.toggle('kbd-focus', i === idx));
+}
+
+// セッション切替時に、出ているパネルが切替先のものでなければ DOM だけ捨てる。
+// 捨てたら true を返す。判定と DOM 操作の本体は approval-owner.ts にある。
+//
+// detectApproval には早期 return が多数あり、どれも return する前に bar を掃除しない。
+// 切替先も承認待ちで「再描画は不要」と判定される経路（hub_marker 分岐の barNeedsPaint、
+// answered / consumed 一致、suppress 中など）を通ると、切替元のパネルが画面に残る。
+// 表示中セッションの質問だと思って回答すると、実際の送信先は別セッションになる
+// （bugfix_approval-panel-shows-other-session_2026-08-14.md）。早期 return を 1 つずつ
+// 塞ぐ形にすると return が増えるたびに同じ穴が開くので、切替側で掃除する。
+//
+// hideActionBar は使えない。あれは対象セッションの承認状態（approvalVisibleCache /
+// approvalRawOptionsCache / Hub への session_hint）まで落とすが、切替元の承認はまだ
+// 未回答で、戻ったときに出し直す必要がある。clearActionBarDom も使えない。あれは
+// activeSessionId 側の状態を消すので、set_activeSessionId の後に呼ぶと切替先を壊す。
+// ここでは DOM と描画差分キャッシュだけを捨て、承認状態には一切触らない。
+export function releaseActionBarIfOwnedByOther(id) {
+  const bar = document.getElementById('action-bar');
+  if (!bar || !actionBarOwnedByOther(bar, id)) return false;
+  releaseActionBarOwnership(bar);
+  // 差分スキップ用キャッシュを無効化しないと、次の showActionBar が
+  // 「同じものを描画済み」と判定して描き直さないことがある。
+  lastActionBarRender.sessionId = null;
+  lastActionBarRender.sig = null;
+  set_actionBarFocusIdx(-1);
+  set_batchFocusIdx(-1);
+  set_multiSelectFocusIdx(-1);
+  // 一括承認の確認モーダルは bar に紐づく。bar を捨てたら宙に浮くので一緒に閉じる。
+  removeBatchConfirmModal();
+  return true;
 }
 
 export function hideActionBar(id) {

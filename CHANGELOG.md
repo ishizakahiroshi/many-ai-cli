@@ -41,7 +41,51 @@ Release artifacts are published at
   `worktree_auto: true` in `config.yaml` keeps working as the default
   (`web/src/index.html`, `web/src/app/spawn-panel.ts`, `web/src/i18n/*.json`).
 
+- **`doctor` now reports whether the session log is actually being written.**
+  With `log.session_enabled` on, the new check opens the newest `.log` through a
+  file handle and reports how many bytes it holds, so "enabled but empty" is
+  distinguishable from "nothing written yet". The size is read through the handle
+  rather than the directory entry on purpose: on Windows the size and
+  last-modified time of a file another process is still writing reach the
+  directory listing only after a delay, and during that window Explorer, `dir`
+  and `Get-ChildItem` show 0 bytes with the timestamp frozen at creation. When
+  the two disagree the check prints both and states that this is not a failure —
+  the appearance was diagnosed as a logging bug on 2026-08-14 when the logs were
+  in fact intact (`internal/doctor/doctor.go`,
+  `internal/sessionlog/sessionlog.go`).
+
 ### Fixed
+- **Approval panels were still being withheld over the TUI's own frame lines.**
+  The corruption check treats box-drawing characters inside a marker block as
+  proof that the composer frame was redrawn over the text — the approval format
+  forbids rules and tables, so a rule in the block cannot have come from the
+  model. That reasoning does not hold for a line made of nothing but rules and
+  spaces: it is the frame itself, landing in the middle of the block in the
+  Hub's VT mirror rather than overwriting anything. Replaying all 107 recorded
+  `approval-corrupt` dumps (2026-08-08 to 08-14) at their recorded mirror size
+  showed 13 of the 36 remaining `box_rule` blocks contained rules only in that
+  shape, and every one of them was structurally intact once those lines were
+  set aside — 15 of the 16 offending lines were exactly `vt_cols` wide, and none
+  of them sat at the start or end of a block. Lines that are only rules are now
+  skipped, while a rule that overwrites an option label is still caught. On the
+  same corpus this turns 12 more blocks into panels; for the dumps recorded
+  after the v0.6.0 mirror fixes, `box_rule` halves from 16 to 8
+  (`internal/hub/approval_marker_verdict.go`).
+- **An approval panel from one session could stay on screen after switching to
+  another.** `#action-bar` is a single shared DOM node and records which session
+  painted it in `dataset.approvalSessionId`, but nothing removed it on a session
+  switch: `detectApproval` has many early returns and none of them cleared the
+  bar first. If the session you switched *to* was also waiting for approval, the
+  repaint check saw a bar that was visible and populated, decided no repaint was
+  needed, and left the previous session's question on screen. Answering what
+  looked like the current session's question sent the choice to the other
+  session. Ownership is now the deciding factor in both places that ask the
+  question — the switch clears a panel owned by someone else before detection
+  runs, and the repaint check treats a foreign owner as a reason to repaint. The
+  release drops only the DOM: the previous session's approval state and its Hub
+  hint survive, because that question is still unanswered and must come back when
+  you switch there again (`web/src/app/approval-owner.ts`,
+  `web/src/app/approval.ts`, `web/src/app/session-list.ts`).
 - **Agent Chat prime no longer advances the cursor before tail-page decoding is
   committed.** When the selection deadline expires, the Hub keeps the safe
   retry cursor so existing tail records cannot be skipped
