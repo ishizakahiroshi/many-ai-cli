@@ -54,11 +54,10 @@ func (s *Server) persistApprovalTargetsLocked() {
 	}
 	state := approvalRuleStateFile{Version: approvalRuleStateVersion}
 	for _, target := range s.approvalRuleTargets {
-		state.Targets = append(state.Targets, approvalRuleStateEntry{
-			Path:      target.Path,
-			Providers: target.Providers,
-			Mode:      target.Mode,
-		})
+		// approvalRuleTarget と approvalRuleStateEntry は struct tag だけが違う
+		// 同一フィールド構成なので変換できる。フィールドを片方だけに足すと
+		// ここがコンパイルエラーになるので、取りこぼしに気づける。
+		state.Targets = append(state.Targets, approvalRuleStateEntry(target))
 	}
 	// map の走査順で毎回並びが変わると差分が読めないため固定する。
 	sort.Slice(state.Targets, func(i, j int) bool {
@@ -93,7 +92,7 @@ func (s *Server) recoverOrphanedApprovalRules() {
 
 	var failed []approvalRuleStateEntry
 	for _, entry := range state.Targets {
-		target := approvalRuleTarget{Path: entry.Path, Providers: entry.Providers, Mode: entry.Mode}
+		target := approvalRuleTarget(entry)
 		if rmErr := wrapper.RemoveRules(target.wrapperProvider(), target.Path); rmErr != nil {
 			s.logger.Warn("failed to recover an approval rule block left by the previous Hub",
 				"path", entry.Path, "err", rmErr)
