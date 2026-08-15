@@ -34,6 +34,7 @@ import { initMobileConnect } from './app/mobile-connect.js';
 import { initHostExpose } from './app/host-expose.js';
 import { initRemoteAuth } from './app/remote-auth.js';
 import { initActionBarResize } from './app/action-bar-resize.js';
+import { initApprovalDock } from './app/approval-dock.js';
 import { initSessionSearchPalette } from './app/session-search-palette.js';
 import { initFirstRunTour } from './app/first-run-tour.js';
 import { initHistoryLite } from './app/history-lite.js';
@@ -58,6 +59,8 @@ initHostExpose();
 initRemoteAuth();
 // 質問エリア（#action-bar）の上端ドラッグで縦に伸縮
 initActionBarResize();
+// 質問エリアの下端を入力欄・添付欄の帯まで下げる（デスクトップのみ・ターミナルを覆わない）
+initApprovalDock();
 initSessionSearchPalette();
 initFirstRunTour();
 initHistoryLite();

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/sessionlog"
 )
 
 type Level string
@@ -43,11 +44,12 @@ var (
 	providerVersionOutput = func(ctx context.Context, path string) ([]byte, error) {
 		return exec.CommandContext(ctx, path, "--version").Output()
 	}
+	sessionLogSizeOnDisk = sessionlog.SizeOnDisk
 )
 
 // Run performs bounded, local checks only. It never writes configuration or logs.
 func Run(ctx context.Context, cfg *config.Config) Report {
-	return Report{Checks: []Check{
+	checks := []Check{
 		providers(ctx),
 		port(cfg),
 		token(cfg),
@@ -56,7 +58,12 @@ func Run(ctx context.Context, cfg *config.Config) Report {
 		whisper(ctx, cfg),
 		tailscale(cfg),
 		logs(cfg),
-	}}
+		sessionLog(cfg),
+	}
+	// 置き去り検査だけは「見つかったときにしか出さない」。置き去りの無い
+	// リポジトリや git 管理外の場所で出力が増えないようにする。
+	checks = append(checks, residue(ctx, cfg)...)
+	return Report{Checks: checks}
 }
 
 func providers(ctx context.Context) Check {
@@ -198,14 +205,22 @@ func tailscale(cfg *config.Config) Check {
 	return Check{"Tailscale", OK, "Tailscale は接続済みです", ""}
 }
 
+// logDir は診断対象のログディレクトリを解決する。
+func logDir(cfg *config.Config) (string, error) {
+	if dir := strings.TrimSpace(cfg.Hub.LogDir); dir != "" {
+		return dir, nil
+	}
+	base, err := config.Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, "logs"), nil
+}
+
 func logs(cfg *config.Config) Check {
-	dir := strings.TrimSpace(cfg.Hub.LogDir)
-	if dir == "" {
-		base, err := config.Dir()
-		if err != nil {
-			return Check{"log", Warn, "ログディレクトリを特定できません", "設定を確認してください"}
-		}
-		dir = filepath.Join(base, "logs")
+	dir, dirErr := logDir(cfg)
+	if dirErr != nil {
+		return Check{"log", Warn, "ログディレクトリを特定できません", "設定を確認してください"}
 	}
 	info, err := os.Stat(dir)
 	if os.IsNotExist(err) {
@@ -230,6 +245,73 @@ func logs(cfg *config.Config) Check {
 		return Check{"log", Warn, "ログディレクトリの容量を確認できません", "hub.log_dir の読み取り権限を確認してください"}
 	}
 	return Check{"log", OK, fmt.Sprintf("ログディレクトリへアクセスできます（%d files, %.1f MB）", count, float64(size)/(1024*1024)), ""}
+}
+
+// sessionLog は「セッションログを有効にしたのに中身が書かれていない」状態を
+// 無音（そもそも書く物が無い）と区別できる形で報告する。
+//
+// サイズはディレクトリエントリではなくファイルハンドル経由で読む。Windows では
+// 書き込み中のファイルのサイズがディレクトリエントリへ遅延反映されるため、
+// 稼働中セッションのログは dir / Get-ChildItem 上 0 バイトに見えるが、それは
+// 故障ではない（sessionlog.SizeOnDisk のコメント参照）。両者が食い違うときは
+// その旨をメッセージに書き、同じ誤診を繰り返させない。
+func sessionLog(cfg *config.Config) Check {
+	if !cfg.Log.SessionEnabled {
+		return Check{"session log", OK, "セッションログは無効です（log.session_enabled: false）", ""}
+	}
+	base, err := logDir(cfg)
+	if err != nil {
+		return Check{"session log", Warn, "ログディレクトリを特定できません", "設定を確認してください"}
+	}
+	dir := filepath.Join(base, "sessions")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return Check{"session log", Warn, "セッションログは有効ですが、まだ 1 本も作られていません", "セッションを 1 本起動してから再実行してください"}
+		}
+		return Check{"session log", Warn, "セッションログのディレクトリを読めません", "hub.log_dir の読み取り権限を確認してください"}
+	}
+	var newestName string
+	var newestEntrySize int64
+	var newestMod time.Time
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".log") {
+			continue
+		}
+		info, statErr := entry.Info()
+		if statErr != nil {
+			continue
+		}
+		if newestName == "" || info.ModTime().After(newestMod) {
+			newestName, newestEntrySize, newestMod = entry.Name(), info.Size(), info.ModTime()
+		}
+	}
+	if newestName == "" {
+		return Check{"session log", Warn, "セッションログは有効ですが、まだ 1 本も作られていません", "セッションを 1 本起動してから再実行してください"}
+	}
+	size, err := sessionLogSizeOnDisk(filepath.Join(dir, newestName))
+	if err != nil {
+		return Check{"session log", Warn, fmt.Sprintf("最新のセッションログを開けません（%s）", newestName), "hub.log_dir の読み取り権限と、他プロセスによるロックを確認してください"}
+	}
+	if size == 0 {
+		return Check{"session log", Warn, fmt.Sprintf("最新のセッションログが 0 バイトです（%s）", newestName), "Hub を再起動し、セッションでやり取りしてから再実行してください"}
+	}
+	msg := fmt.Sprintf("最新のセッションログに書き込まれています（%s / %s）", newestName, humanBytes(size))
+	if newestEntrySize != size {
+		msg += fmt.Sprintf("。ディレクトリ一覧では %s に見えますが、これは書き込み中のファイルのサイズ・更新時刻が遅延反映されるためで故障ではありません", humanBytes(newestEntrySize))
+	}
+	return Check{"session log", OK, msg, ""}
+}
+
+func humanBytes(n int64) string {
+	switch {
+	case n >= 1024*1024:
+		return fmt.Sprintf("%.1f MB", float64(n)/(1024*1024))
+	case n >= 1024:
+		return fmt.Sprintf("%.1f KB", float64(n)/1024)
+	default:
+		return fmt.Sprintf("%d B", n)
+	}
 }
 
 func firstLine(s string) string {

@@ -1803,13 +1803,32 @@ export function scanBuffer(id, limit?: number) {
 
 // ---- resize ----
 
+// 直近に PTY へ通知できた寸法（session_id -> "COLSxROWS"）。
+//
+// 寸法が変わっていない pty_resize でも PTY には SIGWINCH が届き、TUI は画面を
+// 作り直す。Ink 系（Claude Code）の再描画は ESC[H から viewport を上書きする方式で、
+// 収まらない分は下端のスクロールで scrollback へ押し出されるため、同じ本文が
+// 何度も積み上がる（2026-08-14 実測: 1 応答が 4 回書き直され画面に重複）。
+// 承認バーの表示・非表示は syncPtySizeToViewportAfterLayout が「未通知かもしれない」
+// 理由で無条件送信していたが、送れたことを覚えておけば無条件にする必要は無い。
+// 送信できたときだけ記録し、WS 断・他 UI 発の resize では捨てて再送を許す。
+const lastSentPtySize = new Map<number, string>();
+
+export function forgetSentPtySize(sessionId?: number) {
+  if (sessionId === undefined) lastSentPtySize.clear();
+  else lastSentPtySize.delete(sessionId);
+}
+
 export function sendResize(sessionId, cols, rows, reason = 'unknown', resizeIdentity: any = null) {
   if (ws && ws.readyState === WebSocket.OPEN) {
+    const size = `${cols}x${rows}`;
+    if (lastSentPtySize.get(sessionId) === size) return;
     const approvalOptions = approvalRawOptionsCache.get(sessionId);
     const approvalIdentity = resizeIdentity || (Array.isArray(approvalOptions) && approvalOptions.length > 0
       ? approvalCandidateIdentity(sessionId, approvalOptions, approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker')
       : null);
     ws.send(JSON.stringify({ type: 'pty_resize', session_id: sessionId, cols, rows }));
+    lastSentPtySize.set(sessionId, size);
     // SIGWINCH を受けた TUI（Codex 等）はトランスクリプト全体を再描画する。
     // 直後のバーストを一括描画して、全文が上から下へ流れて見えるのを防ぐ。
     beginLiveOutputBatchForResize(sessionId);
@@ -1837,6 +1856,8 @@ export function applyRemotePtyResize(sessionId, cols, rows) {
   // Hub が pty_resize を broadcast してきた = PTY へ SIGWINCH が届いた直後。
   // 他 UI 発の resize でも TUI の全画面再描画バーストが来るため一括描画する。
   beginLiveOutputBatchForResize(id);
+  // PTY の実寸はこの値になった。以後の同値送信は不要（重複再描画を増やすだけ）。
+  lastSentPtySize.set(id, `${nextCols}x${nextRows}`);
   if (t.term.cols === nextCols && t.term.rows === nextRows) return;
   const wasAtBottom = isTerminalAtBottom(t) || t.autoScroll;
   try {

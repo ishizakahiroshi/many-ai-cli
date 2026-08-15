@@ -939,7 +939,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		if *permissionMode == "bypassPermissions" {
 			permValue = "allow"
 		}
-		if cleanupCfg, cfgErr := prepareOpenCodeConfig(cwd, permValue); cfgErr != nil {
+		if cleanupCfg, cfgErr := prepareOpenCodeConfig(cwd, permValue, logger); cfgErr != nil {
 			logger.Warn("opencode: failed to prepare opencode.json permission config", "session_id", sessionID, "err", cfgErr)
 		} else {
 			defer cleanupCfg()
@@ -1166,6 +1166,19 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 					intentionalShutdown.Store(true)
 					wses.clearConn(c)
 					notifyReconnect()
+					return
+				case proto.TypeSessionDismissed:
+					// Hub 側でこのセッションが明示的に閉じられた（UI の × / 一括 dismiss 等）。
+					// WS の EOF から意図を推定する経路（reconnectSupervisor）は
+					// postReattachGuard(10s) 以内だと「回線不調」に倒れ、2 秒後に再接続して
+					// セッションを復活させてしまう
+					// （bugfix_session-dismiss-ignored-within-reattach-guard_2026-08-13.md）。
+					// 通知が届いた時点で推定は不要なので、PTY ごと終了して supervisor を起こさない。
+					// hub_shutdown と違い PTY は残さない（あちらは Hub の手動再起動を待つため）。
+					logger.Info("session_dismissed received — terminating PTY", "session_id", wses.getSID(), "reason", m.Reason)
+					wses.clearConn(c)
+					_ = ps.Close()
+					closeDone()
 					return
 				}
 			}

@@ -8,7 +8,7 @@ import { attachTerminal, claimPtyResizeOwnership, ensureTerminal, refitAndStickT
 import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, renderSessionInfoChip, updateChatCountBadge } from './settings.js';
 import { syncElapsedTimer } from './ws-client.js';
 import { renderApprovalSuppressedBannerFor, setMultiQuestionBannerVisible } from './approval-ui.js';
-import { detectApproval, setActionBarFocus } from './approval.js';
+import { detectApproval, releaseActionBarIfOwnedByOther, setActionBarFocus } from './approval.js';
 import { onActiveSessionChanged } from './token-statusbar.js';
 import { rewireChatHistorySub } from './chat-history.js';
 import { setActiveSessionForPayload } from './chat-payload.js';
@@ -111,6 +111,9 @@ export function activateSessionForMultiPane(id) {
   renderApprovalSuppressedBannerFor(id);
   // フォーカスセッションの実行中状態を入力欄／送信ボタンへ反映
   updateInputAffordance();
+  // 直前のフォーカスセッションのパネルが残っていたら、detectApproval より先に捨てる。
+  // detectApproval は早期 return のどれでも bar を掃除しないため。
+  releaseActionBarIfOwnedByOther(id);
   detectApproval(id);
   revealApprovalPromptForSession(id);
   // サイドバーのアクティブカードを更新
@@ -172,6 +175,9 @@ export function activateSession(id) {
   updateInputAffordance();
   setMultiQuestionBannerVisible(!!multiQuestionVisibleCache.get(id));
   renderApprovalSuppressedBannerFor(id);
+  // 切替元のパネルが残っていたら、detectApproval より先に捨てる。
+  // detectApproval は早期 return のどれでも bar を掃除しないため。
+  releaseActionBarIfOwnedByOther(id);
   detectApproval(id);
   updateSessionListActiveCard(id);
   updateShellBadge(id);

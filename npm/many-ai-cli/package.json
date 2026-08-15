@@ -1,7 +1,7 @@
 {
   "name": "many-ai-cli",
   "version": "0.3.1",
-  "description": "Web dashboard to manage approvals and progress across multiple AI coding CLIs (Claude Code / Codex). Bundles a native Go binary per platform — no standalone exe download, no Mark-of-the-Web SmartScreen prompt.",
+  "description": "Web dashboard to manage approvals and progress across multiple AI coding CLIs (Claude Code / Codex / Copilot / Cursor / OpenCode / Grok). Bundles a native Go binary per platform — no standalone exe download, no Mark-of-the-Web SmartScreen prompt.",
   "keywords": [
     "cli",
     "claude-code",

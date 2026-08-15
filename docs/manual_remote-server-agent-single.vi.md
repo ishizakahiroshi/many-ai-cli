@@ -3,6 +3,14 @@
 > Bản dịch tiếng Việt của [`manual_remote-server-agent-single.md`](manual_remote-server-agent-single.md).  
 > Bản dịch: 2026-07-18.
 
+> **⚠️ Bản dịch này là ảnh chụp tại một thời điểm và không còn được đồng bộ.**
+>
+> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_remote-server-agent-single.md`](manual_remote-server-agent-single.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. (Lần dịch gần nhất: 2026-07-31.)
+>
+> Xin chân thành cảm ơn người đã đóng góp bản dịch. Chúng tôi vẫn hoan nghênh đóng góp dịch thuật; chỉ là không thể hứa giữ đồng bộ, nên bản được merge cũng sẽ là ảnh chụp có ghi ngày.
+>
+> *(EN: This translation is a dated snapshot and is no longer kept in sync with the original. Please refer to the source file linked above. The Vietnamese **UI** locale `web/src/i18n/vi.json` is a shipped feature and is still maintained.)*
+
 File này là **chỉ dẫn task cấu hình dán nguyên vào AI agent** (Claude Code / Codex CLI, v.v. trên PC local). Agent chạy trên PC local, cấu hình remote qua SSH, rồi tạo launcher profile trên máy local. **Không dùng Docker** (cài `many-ai-cli` bằng pnpm trên remote, khởi động Hub bằng `serve` — cấu hình server đơn). `serve` có thể chỉ bật khi cần, hoặc thường trú bằng systemd / tmux / nohup (thường trú không phải đặc quyền của bản Docker).
 
 Cách dùng:

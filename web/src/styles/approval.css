@@ -2,9 +2,26 @@
 
 /* Approval action bar */
 /* 承認ボタンバー */
+/* 承認バーは #display-stack の下端へ絶対配置で重ねる（フローに置かない）。
+   フローに置くと表示・折り返し・ドラッグ伸縮のたびに #terminal-area が縮み、
+   その都度 pty_resize → TUI の全画面再描画が走る。viewport に収まらない再描画は
+   上書きしたはずの行を scrollback へ押し出すため、同じ段落が積み上がる
+   （2026-08-14 実測: rows が 13〜35 の間で秒間数回変動していた）。
+
+   デスクトップではさらに、下端を入力欄・添付欄の帯（#input-bar-outer）の下端まで
+   下げてターミナル本文を覆わないようにする。下げ幅 --approval-dock-shift は
+   app/approval-dock.ts がレイアウトを実測して入れる（未設定なら 0px＝従来位置）。
+   モバイルは下の @media でフロー配置へ戻すため、この bottom は効かない。 */
 #action-bar {
   display: none;
-  position: relative;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(-1 * var(--approval-dock-shift, 0px));
+  /* ターミナル領域内のオーバーレイ（swipe handle=10 / badge=20 / scroll ボタン=20）より上。
+     モーダル・ポップアップ（1000 以上）よりは下に置く。 */
+  z-index: 60;
+  box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.35);
   gap: var(--space-2);
   /* 右側: dismiss + collapse の 2 ボタン分を確保（dismiss(32) + gap(6) + collapse(32) + gap(8) + 元padding(12)） */
   padding: 8px calc(12px + 32px + 6px + 32px + 8px) 8px 12px;
@@ -18,7 +35,15 @@
   overflow-y: auto;
   transition: border-color 0.15s, background 0.15s;
 }
-#action-bar.visible { display: flex; border-left-color: var(--warn); background: rgba(245,158,11,0.04); }
+/* 背景は必ず不透明にする。絶対配置でターミナルへ重なるため、半透明にすると下の PTY 出力が
+   透けて承認本文が読めなくなる（2026-08-14: rgba(245,158,11,0.04) のままフロー配置から
+   オーバーレイ化したため発生）。警告色の薄い色味は color-mix で --bg-elev に混ぜて維持する。
+   子要素（.action-qpane 等）の半透明はこの不透明面の上で合成されるので触らなくてよい。 */
+#action-bar.visible {
+  display: flex;
+  border-left-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 5%, var(--bg-elev));
+}
 
 /* P-03: compact, provider-neutral approval context. The command remains a
    single readable line; raw VT context is available only on demand. */
@@ -756,6 +781,14 @@
 
 @media (max-width: 720px), (pointer: coarse) {
   #action-bar {
+    /* モバイルは画面が狭く、浮かせるとターミナルをほぼ覆う。
+       safe-area-inset-bottom の padding も画面下端に接する前提なので、
+       ここだけは従来どおりフローに置く（デスクトップのみ絶対配置）。 */
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    box-shadow: none;
     gap: var(--space-2);
     padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
     max-height: 42dvh;

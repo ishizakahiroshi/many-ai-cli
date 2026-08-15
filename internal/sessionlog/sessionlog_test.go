@@ -24,6 +24,43 @@ func TestBaseName(t *testing.T) {
 	}
 }
 
+// TestSizeOnDiskReportsBytesWrittenToOpenFile は「まだ閉じていないファイルの実サイズ」を
+// SizeOnDisk が返すことを固定する。ディレクトリ一覧経由では書き込み中のサイズが
+// 0 に見えることがあり（sessionlog.SizeOnDisk のコメント参照）、2026-08-14 の誤診
+// （pending_session-raw-log-not-written.md）はそれが原因だった。
+func TestSizeOnDiskReportsBytesWrittenToOpenFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "open.log")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, PrivateFileMode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	if size, err := SizeOnDisk(path); err != nil || size != 0 {
+		t.Fatalf("SizeOnDisk before write = (%d, %v), want (0, nil)", size, err)
+	}
+
+	payload := []byte(strings.Repeat("x", 4096))
+	if _, err := f.Write(payload); err != nil {
+		t.Fatal(err)
+	}
+
+	// ハンドルを閉じずに測る。ここが本題で、Close 後なら os.Stat でも正しい値が出る。
+	size, err := SizeOnDisk(path)
+	if err != nil {
+		t.Fatalf("SizeOnDisk after write returned error: %v", err)
+	}
+	if size != int64(len(payload)) {
+		t.Fatalf("SizeOnDisk after write = %d, want %d", size, len(payload))
+	}
+}
+
+func TestSizeOnDiskMissingFile(t *testing.T) {
+	if _, err := SizeOnDisk(filepath.Join(t.TempDir(), "absent.log")); err == nil {
+		t.Fatal("SizeOnDisk on a missing file returned nil error, want an error")
+	}
+}
+
 func TestSanitizeFilePart(t *testing.T) {
 	if got := SanitizeFilePart(`foo:bar<>baz`); got != "foo_bar__baz" {
 		t.Fatalf("sanitize failed: %s", got)

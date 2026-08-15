@@ -708,7 +708,7 @@ func TestAgentChatTailDeadlinePreservesRetryCursorForClaudeAndCodex(t *testing.T
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(messages) != 0 || !state.lastRead.HitBudget || state.lastRead.DecodedRecords != 0 {
+			if len(messages) != 0 || !state.lastRead.HitBudget || state.lastRead.DecodedRecords != 0 || state.lastRead.DecodeCommitted {
 				t.Fatalf("expired tail budget decoded data: messages=%#v stats=%+v", messages, state.lastRead)
 			}
 			if next != endOffset || state.lastRead.BytesRead > agentChatPageBytesMax {
@@ -725,7 +725,7 @@ func TestAgentChatTailDeadlinePreservesRetryCursorForClaudeAndCodex(t *testing.T
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(messages) != 4 || resumedNext != 0 {
+			if len(messages) != 4 || resumedNext != 0 || !resumed.lastRead.DecodeCommitted {
 				t.Fatalf("retry after expired tail budget lost records: messages=%#v next=%d stats=%+v", messages, resumedNext, resumed.lastRead)
 			}
 		})

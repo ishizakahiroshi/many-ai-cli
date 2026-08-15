@@ -361,13 +361,21 @@ type UserPrefsQuickCmds struct {
 }
 
 // UserPrefsTemplate is a reusable prompt. Providers is empty when the prompt
-// applies to every provider; Frequency is incremented whenever it is inserted.
+// applies to every provider. The slice order is the user's manual order, set by
+// dragging rows in the template palette, so it must be preserved as stored.
 type UserPrefsTemplate struct {
 	Label     string   `yaml:"label" json:"label"`
 	Body      string   `yaml:"body" json:"body"`
 	Providers []string `yaml:"providers,omitempty" json:"providers,omitempty"`
 	Tags      []string `yaml:"tags,omitempty" json:"tags,omitempty"`
-	Frequency int      `yaml:"frequency,omitempty" json:"frequency,omitempty"`
+}
+
+// UserPrefsTemplateSend はテンプレート選択時の挙動。Immediate=true なら
+// 選んだ瞬間にそのまま送信し、false（既定）なら入力欄へ差し込むだけにする。
+// ポインタなのは QuickCmds.Show1..5 と同じ理由で、明示的な false を omitempty で
+// 落とさないため（落とすと OFF に戻した設定が他端末のミラーへ伝わらない）。
+type UserPrefsTemplateSend struct {
+	Immediate *bool `yaml:"immediate,omitempty" json:"immediate,omitempty"`
 }
 
 // UserPrefsUsageLinks は使用量リンクの設定。
@@ -399,8 +407,13 @@ type UserPrefsSpawn struct {
 }
 
 // UserPrefsDoneSummaryNotify はタスク完了サマリー通知の設定。
+//
+// Enabled はポインタ。nil は「利用者がまだ触っていない」で、明示的な false とは
+// 区別する。未設定のときは **通知チャネルを既に持っている利用者に限って** 既定 ON
+// として扱う（v0.7.0）。通知手段を持たない環境では何も増えない。
+// 実際の判定は hub 側の doneSummaryNotifyEnabled にある（購読状況を見るため）。
 type UserPrefsDoneSummaryNotify struct {
-	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 }
 
 // UserPrefsWorkflowCompletionNotify controls Web Push notifications emitted
@@ -542,6 +555,7 @@ type UserPrefs struct {
 	Approval                 UserPrefsApproval                 `yaml:"approval,omitempty"     json:"approval,omitempty"`
 	QuickCmds                UserPrefsQuickCmds                `yaml:"quick_cmds,omitempty"   json:"quick_cmds,omitempty"`
 	Templates                []UserPrefsTemplate               `yaml:"templates,omitempty"    json:"templates,omitempty"`
+	TemplateSend             UserPrefsTemplateSend             `yaml:"template_send,omitempty" json:"template_send,omitempty"`
 	UsageLinks               UserPrefsUsageLinks               `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
 	Voice                    UserPrefsVoice                    `yaml:"voice,omitempty"        json:"voice,omitempty"`
 	SessionOrder             SessionOrderIDs                   `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
@@ -574,6 +588,11 @@ func (p UserPrefs) Clone() UserPrefs {
 		c.Templates[i].Tags = cloneStringSlice(p.Templates[i].Tags)
 	}
 	c.Spawn.Defaults = cloneStringMap(p.Spawn.Defaults)
+	// *bool は浅いコピーだとポインタを共有し、複製側の書き換えが元へ波及する。
+	if p.DoneSummaryNotify.Enabled != nil {
+		v := *p.DoneSummaryNotify.Enabled
+		c.DoneSummaryNotify.Enabled = &v
+	}
 	c.Spawn.LastModel = cloneStringMap(p.Spawn.LastModel)
 	if p.TokenStatusbar.Segments != nil {
 		m := make(map[string]bool, len(p.TokenStatusbar.Segments))

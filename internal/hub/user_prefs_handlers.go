@@ -91,6 +91,14 @@ func (s *Server) handleUserPrefsGet(w http.ResponseWriter, _ *http.Request) {
 	s.cfgMu.Lock()
 	prefs := s.cfg.UserPrefs.Clone()
 	s.cfgMu.Unlock()
+	// 完了サマリー通知は未設定のとき「通知チャネルがあれば ON」で動く。保存値
+	// （nil）をそのまま返すと設定画面のトグルが OFF に見えるのに通知は飛ぶ、と
+	// いう食い違いになるので、**実効値**を埋めてから返す。画面が嘘をつかない方を
+	// 優先する。利用者がトグルを触れば、その時点で明示値が保存される。
+	if prefs.DoneSummaryNotify.Enabled == nil {
+		effective := s.doneSummaryNotifyEnabled()
+		prefs.DoneSummaryNotify.Enabled = &effective
+	}
 	writeJSON(w, prefs)
 }
 

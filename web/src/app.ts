@@ -2,7 +2,7 @@
 import { t } from './i18n.js';
 import { cleanCopiedText, showToast, token } from './app/util.js';
 import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_AUTO_APPROVAL_ENABLED_KEY, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
-import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, answeredApprovalCandidates, answeredApprovalShapeKeys, answeredMarkerSigs, recordAnsweredMarkerSig, replayAnsweredApprovalTokens, approvalAutoSwitchQueue, approvalConsumedSig, approvalConsumedSigDeleteTimer, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSourceEpochCache, approvalReplayState, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
+import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, answeredApprovalCandidates, answeredApprovalShapeKeys, recordAnsweredApprovalCandidate, replayAnsweredApprovalTokens, approvalAutoSwitchQueue, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSourceEpochCache, approvalReplayState, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { orderSessions } from './app/state.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, resumeTerminalBottomFollow, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
@@ -77,13 +77,22 @@ window.addEventListener('many-ai-cli:insert-file-prompt', (event: Event) => {
 
 // Desktop palette and mobile chips use one insertion boundary so multiline
 // templates retain the same focus and textarea sizing behavior as file prompts.
+// detail.send はテンプレート側の「選んだら即送信」トグル。true なら入力欄へ
+// 差し込んだうえで通常の送信経路（doSend）をそのまま通す。
 window.addEventListener('many-ai-cli:insert-template', (event: Event) => {
-  const text = String((event as CustomEvent<{ text?: string }>).detail?.text || '');
+  const detail = (event as CustomEvent<{ text?: string; send?: boolean }>).detail;
+  const text = String(detail?.text || '');
   if (!text) return;
   inputEl.value += inputEl.value && !inputEl.value.endsWith('\n') ? `\n${text}` : text;
   inputEl.dispatchEvent(new Event('input', { bubbles: true }));
   autoExpand();
   inputEl.focus();
+  if (!detail?.send) return;
+  if (activeSessionId === null) {
+    showToast(t('toast_template_send_no_session'));
+    return;
+  }
+  void doSend(activeSessionId);
 });
 
 export function autoExpand(opts: any = {}) {
@@ -371,6 +380,17 @@ function effectiveDeferredEnterWait(sessionId: number): number {
   return deferredEnterOverrideMs > 0 ? deferredEnterOverrideMs : deferredEnterMinWaitFor(sessions.get(sessionId)?.provider || '');
 }
 
+// スラッシュコマンド 1 行の末尾空白を落とす。候補メニューの確定は引数を続けて打てるよう
+// `cmd + ' '` を入力欄へ入れる（selectSlashItem）が、この末尾空白が付いたまま送ると
+// OpenCode の TUI はコマンド候補を開かない。候補を開く条件が「先頭が / で、かつカーソル
+// までに空白が 1 つも無いこと」のため（opencode 1.18.18 実機バイナリで確認）。候補が開かない
+// と確定 Enter が通常送信に落ち、`/models` がコマンドではなく AI へのプロンプトとして飛ぶ。
+// 末尾空白に意味を持つコマンドは wrap 対象 6 CLI に無いため provider を問わず落とす。
+function trimTrailingSpaceForSlashCommand(text) {
+  if (!text.startsWith('/') || text.includes('\n')) return text;
+  return text.replace(/[ \t]+$/, '');
+}
+
 // 本文送信の共通判定: ブラケットペーストで包むか（deferEnter=確定 \r を出力静止後に別送するか）。
 // 「本文+\r」を同一チャンクで送ると、内側 CLI がチャンク一括入力をペーストとして取り込む過程で
 // 末尾 \r を確定キーと扱わず、入力欄に張り付いたまま送信されない（Grok 実測 2026-07-11:
@@ -400,10 +420,11 @@ function buildBodySubmitPart(sessionId, rawText) {
 // 直前の deferred-enter 予約が残っていると遅延 \r がこの送信の後ろに混ざるため先に消す。
 export function sendSubmittedBody(sessionId, bodyText, opts: any = {}) {
   cancelDeferredEnter(sessionId, 'send_body');
-  const { textPart, deferEnter } = buildBodySubmitPart(sessionId, bodyText);
+  const body = trimTrailingSpaceForSlashCommand(bodyText);
+  const { textPart, deferEnter } = buildBodySubmitPart(sessionId, body);
   if (!sendSubmittedText(sessionId, textPart, opts)) return false;
   if (deferEnter) scheduleDeferredEnter(sessionId, effectiveDeferredEnterWait(sessionId));
-  scheduleResidueSweep(sessionId, bodyText, deferEnter);
+  scheduleResidueSweep(sessionId, body, deferEnter);
   return true;
 }
 
@@ -460,6 +481,8 @@ export async function doSend(sessionId) {
     // 実行されない）。確定はこちらが末尾に付ける \r のみが担うべきなので、本文中の CR は
     // すべて LF に正規化する。入力欄で打った複数行は元々 \n のみなので影響を受けない。
     rawText = rawText.replace(/\r\n?/g, '\n');
+    // 候補メニュー確定で付く末尾空白を落とす（付いたままだと内側 CLI がコマンドとして扱わない）。
+    rawText = trimTrailingSpaceForSlashCommand(rawText);
     // ペースト包み・確定 \r 分離の判定は buildBodySubmitPart に共通化（クイックコマンドと共用）。
     // ブラケットペーストはテキスト部分のみに適用し、injectPrefix は前置する。
     let textPart;
@@ -492,8 +515,7 @@ export async function doSend(sessionId) {
     // テキスト送信で承認ポップアップをバイパスした場合、Ink 再描画による
     // 同一選択肢の再検出・再表示を防ぐため消費済み署名を保存する
     const prevOpts = approvalRawOptionsCache.get(sessionId);
-    if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
-    recordAnsweredMarkerSig(sessionId, prevOpts);
+    if (prevOpts) recordAnsweredApprovalCandidate(sessionId, prevOpts);
     if (typeof maybeSendDirectApprovalConsumed === 'function') {
       maybeSendDirectApprovalConsumed(sessionId, rawText, textToSend);
     }
@@ -764,8 +786,10 @@ export function hideSlashMenu() {
 export function selectSlashItem(i) {
   if (i < 0 || i >= slashItems.length) return;
   const cmd = slashItems[i].cmd;
-  // /clear と /model はクイック実行用途のため、候補選択時に即送信する
-  if (activeSessionId !== null && (cmd === '/clear' || cmd === '/model')) {
+  // 引数を取らずダイアログを開くだけのコマンドはクイック実行用途のため、候補選択時に即送信する。
+  // /models は OpenCode 側の /model 相当（TUI コマンド名 model.list）。ここに無いと Enter を
+  // 2 回押す形になり、Claude の /model と操作が揃わない。
+  if (activeSessionId !== null && (cmd === '/clear' || cmd === '/model' || cmd === '/models')) {
     sendQuickCommand(activeSessionId, cmd);
     clearInput();
     hideSlashMenu();
@@ -1433,7 +1457,7 @@ function doSendQuickCommand(sessionId, cmd) {
   const prevOpts = approvalRawOptionsCache.get(sessionId);
   // 本文送信が失敗した場合は承認 UI と消費済み state を保持する。
   if (!sendSubmittedBody(sessionId, cmd)) return false;
-  if (prevOpts) approvalConsumedSig.set(sessionId, approvalSig(prevOpts));
+  if (prevOpts) recordAnsweredApprovalCandidate(sessionId, prevOpts);
   hideActionBar(sessionId);
   approvalSuppressUntil.set(sessionId, Date.now() + 2000);
   setTimeout(() => {
@@ -1555,10 +1579,6 @@ export function resetAllLocalSessionHistory() {
   approvalSourceCache.clear();
   approvalSourceEpochCache.clear();
   approvalReplayState.clear();
-  approvalConsumedSigDeleteTimer.forEach(t => clearTimeout(t));
-  approvalConsumedSigDeleteTimer.clear();
-  approvalConsumedSig.clear();
-  answeredMarkerSigs.clear();
   answeredApprovalCandidates.clear();
   answeredApprovalShapeKeys.clear();
   replayAnsweredApprovalTokens.clear();
@@ -1594,10 +1614,6 @@ export function resetLocalSessionHistory(id) {
   approvalSourceCache.delete(id);
   approvalSourceEpochCache.delete(id);
   approvalReplayState.delete(id);
-  const sigTimer = approvalConsumedSigDeleteTimer.get(id);
-  if (sigTimer) clearTimeout(sigTimer);
-  approvalConsumedSigDeleteTimer.delete(id);
-  approvalConsumedSig.delete(id);
   answeredApprovalCandidates.delete(id);
   answeredApprovalShapeKeys.delete(id);
   replayAnsweredApprovalTokens.delete(id);
@@ -1624,11 +1640,6 @@ export function clearSessionTimerEntry(timerMap, id) {
 export function cleanupRemovedSessionState(id) {
   try { clearSessionTimerEntry(approvalCheckTimers, id); } catch (_) {}
   try { clearSessionTimerEntry(approvalSuppressRescanTimers, id); } catch (_) {}
-  try {
-    const sigTimer = approvalConsumedSigDeleteTimer.get(id);
-    if (sigTimer) clearTimeout(sigTimer);
-    approvalConsumedSigDeleteTimer.delete(id);
-  } catch (_) {}
   try { cancelDeferredEnter(id, 'session_removed'); } catch (_) {}
   try { cancelResidueSweep(id); } catch (_) {}
   try { cancelExpandCapture(id); } catch (_) {}
@@ -1683,8 +1694,6 @@ export function removeLocalSession(id) {
   approvalSourceCache.delete(id);
   approvalSourceEpochCache.delete(id);
   approvalReplayState.delete(id);
-  approvalConsumedSig.delete(id);
-  answeredMarkerSigs.delete(id);
   answeredApprovalCandidates.delete(id);
   answeredApprovalShapeKeys.delete(id);
   replayAnsweredApprovalTokens.delete(id);

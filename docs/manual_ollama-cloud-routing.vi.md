@@ -3,6 +3,14 @@
 > Bản dịch tiếng Việt của [`manual_ollama-cloud-routing.md`](manual_ollama-cloud-routing.md).  
 > Bản dịch: 2026-07-18.
 
+> **⚠️ Bản dịch này là ảnh chụp tại một thời điểm và không còn được đồng bộ.**
+>
+> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_ollama-cloud-routing.md`](manual_ollama-cloud-routing.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. (Lần dịch gần nhất: 2026-07-18.)
+>
+> Xin chân thành cảm ơn người đã đóng góp bản dịch. Chúng tôi vẫn hoan nghênh đóng góp dịch thuật; chỉ là không thể hứa giữ đồng bộ, nên bản được merge cũng sẽ là ảnh chụp có ghi ngày.
+>
+> *(EN: This translation is a dated snapshot and is no longer kept in sync with the original. Please refer to the source file linked above. The Vietnamese **UI** locale `web/src/i18n/vi.json` is a shipped feature and is still maintained.)*
+
 ## Tổng quan
 
 Hướng dẫn vận hành để nối Codex CLI và Claude Code tới model Ollama Cloud **qua Ollama local**. Môi trường không có API key Anthropic / OpenAI vẫn dùng được model cloud nếu đã `ollama signin`.

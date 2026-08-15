@@ -21,6 +21,14 @@ const legacySharedBlockStart = "<!-- any-ai-cli:approval-rules -->"
 const legacySharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
 const rulesVersion = "18"
 
+// ApprovalRulesResidueNeedle は、置き去りになった承認ルールブロックを探すための
+// 検索文字列。旧名 any-ai-cli は新名 many-ai-cli の部分文字列（many = "m" + any）
+// なので、コメント開始記号 "<!-- " を落とした旧名パターンで探すと新旧どちらの
+// マーカーにも当たる。逆に新名パターンで探すと旧名の残骸が 0 件に見える。
+// マーカー定数から導出しているので、定数を変えれば検索側も追従する。
+var ApprovalRulesResidueNeedle = strings.TrimSuffix(
+	strings.TrimPrefix(legacySharedBlockStart, "<!-- "), " -->")
+
 var rulesFileContent = strings.Join([]string{
 	fmt.Sprintf("<!-- version: %s -->", rulesVersion),
 	"## many-ai-cli Approval Format",

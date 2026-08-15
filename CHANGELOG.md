@@ -10,6 +10,305 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-15
+
+### Added
+- **The Hub can now be started and stopped from a tray icon on Windows.**
+  `setup` used to leave two shortcuts on your desktop — one to start the Hub and
+  one to stop it — and that split was the only real complaint left after
+  packaging this as a desktop app was ruled out. `many-ai-cli tray` runs a small
+  resident process whose menu has three entries: open the Hub (starting it first
+  if it is not running), stop the Hub, and quit the tray. It is a tray icon, not
+  a window: the UI still opens as a tab in your default browser, and no OS-level
+  notifications are added. `setup` now creates a single **"Many AI Hub"**
+  shortcut pointing at it. Existing "Start" and "Stop" icons are left alone and
+  keep working — `setup` reports that it found them and lets you delete them
+  yourself. The tray lives in its own process rather than inside `serve`, so it
+  survives stopping the Hub; the Win32 calls go through `x/sys/windows` with no
+  cgo, keeping `CGO_ENABLED=0` intact for every release target
+  (`internal/tray/`, `internal/setupcmd/setup_windows.go`).
+- **Prompt templates can be reordered by dragging.** Each row in the template
+  palette has a grip on the left; drag it to move the template, and the order
+  is saved as `user_prefs.templates` so it follows you across browsers and
+  devices. The drag is implemented with pointer events rather than HTML5
+  drag-and-drop, so it works with a finger or pen as well as a mouse, and the
+  list auto-scrolls while you hold near its top or bottom edge. With the grip
+  focused, `↑` / `↓` move the template one step for keyboard and assistive
+  technology use. Reordering is disabled while the search box has text, because
+  the position of a dragged row relative to filtered-out rows is undefined
+  (`web/src/app/prompt-templates.ts`).
+- **A toggle decides what picking a prompt template does.** The template
+  palette above the input bar now has a **Send on select** switch: off (the
+  default, and the previous behavior) drops the template into the input box so
+  you can edit it first; on sends it immediately through the normal send path.
+  A one-line note under the switch states which mode is active. The setting is
+  stored server-side as `user_prefs.template_send.immediate`, so it follows you
+  across browsers and devices (`web/src/app/prompt-templates.ts`,
+  `internal/config/config.go`).
+
+- **Worktree isolation is reachable from the spawn panel.** Running an ordinary
+  session in its own git worktree already existed but could only be turned on by
+  hand-editing `user_prefs.spawn.worktree_auto` in `config.yaml`, so in practice
+  nobody found it. The spawn panel now has a **Run this session in a dedicated
+  git worktree** checkbox, with a note that appears while it is ticked warning
+  that untracked files such as `node_modules` and `.env` are not carried into the
+  new checkout. The choice is remembered as `spawn.defaults.isolate_worktree`.
+  The checkbox only ever adds isolation: leaving it unticked omits the field so a
+  `worktree_auto: true` in `config.yaml` keeps working as the default
+  (`web/src/index.html`, `web/src/app/spawn-panel.ts`, `web/src/i18n/*.json`).
+
+- **`doctor` now reports whether the session log is actually being written.**
+  With `log.session_enabled` on, the new check opens the newest `.log` through a
+  file handle and reports how many bytes it holds, so "enabled but empty" is
+  distinguishable from "nothing written yet". The size is read through the handle
+  rather than the directory entry on purpose: on Windows the size and
+  last-modified time of a file another process is still writing reach the
+  directory listing only after a delay, and during that window Explorer, `dir`
+  and `Get-ChildItem` show 0 bytes with the timestamp frozen at creation. When
+  the two disagree the check prints both and states that this is not a failure —
+  the appearance was diagnosed as a logging bug on 2026-08-14 when the logs were
+  in fact intact (`internal/doctor/doctor.go`,
+  `internal/sessionlog/sessionlog.go`).
+
+- **`doctor` now tells you if a session left something behind in your git
+  repository.** This release already asks you to check your repositories for a
+  committed `opencode.json` or a stranded approval-rules block in `AGENTS.md`;
+  this is the means to do it. Run `many-ai-cli doctor` inside the repository and
+  it classifies each artifact as tracked by git, present only in the working
+  tree, or absent, and prints nothing at all in the last case — a clean
+  repository gains no output. Tracked artifacts are the ones that matter, since
+  `.gitignore` has no effect on a file git already follows, so the check names
+  the `git rm --cached` needed to undo it. A committed `"permission": {"*":
+  "allow"}` is reported as a failure rather than a warning, because it disables
+  the approval prompt for anyone who clones the repository. Tracked status is
+  read from the git index rather than from disk, so a running opencode session
+  rewriting its own `opencode.json` is not mistaken for residue, and a live lock
+  holder suppresses the working-tree report entirely. The search for the
+  approval-rules block uses the pre-rename `any-ai-cli:approval-rules` needle,
+  which is a substring of the current marker and therefore matches blocks left by
+  either generation — searching for the current name alone makes older residue
+  look like zero hits. The check is skipped without error when git is missing or
+  the directory is not a repository (`internal/doctor/residue.go`).
+
+### Changed
+- **Task-completion notifications are now on by default — but only if you already
+  set up somewhere to send them.** The README says many-ai-cli tells you the moment
+  a session stops, but the completion notification sat behind two layers of opt-in
+  and never fired with stock settings. `user_prefs.done_summary_notify.enabled` is
+  now a tri-state: if you have touched the toggle, your choice stands, on or off. If
+  you have not, the Hub turns it on when you already have somewhere to deliver to —
+  a Web Push subscription, or at least one `notify.backends` entry. **If you have
+  neither, nothing changes**: no new notifications, because there is nowhere to send
+  them. The settings toggle reports the effective state rather than the stored one,
+  so it cannot show "off" while notifications are going out
+  (`internal/hub/done_summary.go`, `internal/config/config.go`).
+- **The OpenCode slash-command list gained the 12 commands it was missing.**
+  Checked against the opencode 1.18.18 binary: `/agents`, `/debug`, `/diff`,
+  `/mcps`, `/move`, `/org`, `/skills`, `/slash`, `/status`, `/variants`, `/warp`
+  and `/workspaces` are built into the TUI but were absent from the picker. Nothing
+  was removed — the nine entries that are not TUI built-ins (`/compact`, `/export`,
+  `/init`, `/redo`, `/share`, `/undo`, `/unshare`, `/details`, `/thinking`) exist in
+  the binary as `session.*` commands, registered through a different path, so they
+  stay (`resources/slash-commands/opencode.md`).
+- **Building from source now needs Go 1.25.13.** The `go` directive in `go.mod`
+  moved up one patch release to pick up fixes for five standard-library
+  vulnerabilities that this code reaches: `net/url` (GO-2026-6218), `crypto/tls`
+  (GO-2026-6090), `net/http` (GO-2026-6089 and GO-2026-5026) and `encoding/asn1`
+  (GO-2026-5972). Released binaries are unaffected — they are built by CI, which
+  reads the same file. With the default `GOTOOLCHAIN=auto` the newer toolchain is
+  fetched automatically, so no manual install is needed.
+- **The approval-corrupt dump was removed.** The instrumentation that saved raw
+  PTY bytes whenever an approval marker looked corrupt has served its purpose:
+  three separate causes were found from its output and fixed. Keeping it meant
+  continuing to write input-derived bytes to disk, which is not worth the
+  remaining diagnostic value. If a fourth cause turns up, it can be reintroduced
+  with a fresh expiry (`internal/hub/approval_corrupt_dump.go`, removed).
+- **An answered approval is now remembered in one place instead of three.** The
+  browser used to decide "have we already answered this?" with three separate
+  pieces of state that disagreed with each other: a signature that expired on a
+  5–10 second timer, a hash of the whole marker block that never expired at all,
+  and a question-text key used only by the manual dismiss button. Each had its
+  own idea of what counts as the same question, and the gaps between them are
+  where answered prompts came back — the timer one lapsed while a redrawn block
+  was still on screen, and the permanent one could bury a question the agent
+  genuinely asked again. All three are gone. What remains is the candidate key
+  plus the source generation: the key is built from the provider, the approval
+  kind, the normalized question and the option numbers and send strings, so a
+  redraw that shifts labels, padding or box rules resolves to the same
+  candidate, while a new live prompt boundary produces a new generation and an
+  intentionally repeated question is shown again. The identity logic moved out
+  of `state.ts` into `approval-answered.ts`, which touches no DOM and is covered
+  by 14 regression tests (`web/src/app/approval-answered.ts`,
+  `web/src/app/approval-answered-fixtures.ts`, `web/src/app/approval.ts`).
+- **Release workflows now pin third-party Actions to immutable commit SHAs.**
+  The npm credential is also limited to the publish step; other release steps
+  receive only a boolean availability flag (`.github/workflows/*.yml`).
+- **The template list now keeps the order you set instead of sorting by usage.**
+  Previously the palette sorted by how often each template had been picked, so a
+  manually chosen order would be undone by the next selection. Templates are now
+  listed in stored order, newly added ones go to the bottom, and the per-template
+  `frequency` counter is gone from the client, the server struct, and the
+  user-prefs mirror. Picking a template no longer writes to the server at all.
+  Existing `frequency` values in `config.yaml` are ignored and dropped on the
+  next save (`web/src/app/prompt-templates.ts`, `web/src/app/user-prefs.ts`,
+  `internal/config/config.go`).
+
+### Fixed
+- **Turning the task-completion notification toggle on or off wiped every other
+  preference.** `PUT /api/user-prefs` replaces the whole object, and this toggle
+  sent only its own field, so templates, session order, cwd history and favourites
+  were all reset to empty on each click. It now reads the current preferences,
+  merges its one field and sends the whole thing back — the same read-modify-write
+  the token status bar toggle already used (`web/src/app/settings.ts`).
+- **The approval bar's background was see-through, so terminal output showed
+  through the text.** When the bar became an overlay it kept the translucent
+  `rgba(245,158,11,0.04)` fill it had while it was part of the normal flow, and
+  the PTY output underneath bled into the approval text. The fill is now opaque
+  (`color-mix(in srgb, var(--warn) 5%, var(--bg-elev))`), which keeps the warning
+  tint without letting anything through. Making the bar semi-transparent is not
+  an acceptable fix here — the whole point of the overlay is that the question
+  stays readable (`web/src/styles/approval.css`).
+- **A slash command picked from the picker was sent with a trailing space, and
+  OpenCode ran it as a prompt instead of a command.** Confirming a suggestion
+  inserts `command + " "` so you can keep typing arguments, but OpenCode's TUI
+  only opens its command list while the line starts with `/` and contains no
+  space up to the cursor (checked against the opencode 1.18.18 binary). With the
+  space still attached the list never opened, Enter fell through to an ordinary
+  send, and `/models` reached the model as plain text. A trailing space is now
+  stripped from single-line slash commands before sending — none of the six
+  wrapped CLIs give one meaning — and `/models` was added to the commands that
+  send immediately on selection, so it matches how `/model` behaves for Claude
+  (`web/src/app.ts`).
+- **Approval panels were still being withheld over the TUI's own frame lines.**
+  The corruption check treats box-drawing characters inside a marker block as
+  proof that the composer frame was redrawn over the text — the approval format
+  forbids rules and tables, so a rule in the block cannot have come from the
+  model. That reasoning does not hold for a line made of nothing but rules and
+  spaces: it is the frame itself, landing in the middle of the block in the
+  Hub's VT mirror rather than overwriting anything. Replaying all 107 recorded
+  `approval-corrupt` dumps (2026-08-08 to 08-14) at their recorded mirror size
+  showed 13 of the 36 remaining `box_rule` blocks contained rules only in that
+  shape, and every one of them was structurally intact once those lines were
+  set aside — 15 of the 16 offending lines were exactly `vt_cols` wide, and none
+  of them sat at the start or end of a block. Lines that are only rules are now
+  skipped, while a rule that overwrites an option label is still caught. On the
+  same corpus this turns 12 more blocks into panels; for the dumps recorded
+  after the v0.6.0 mirror fixes, `box_rule` halves from 16 to 8
+  (`internal/hub/approval_marker_verdict.go`).
+- **An approval panel from one session could stay on screen after switching to
+  another.** `#action-bar` is a single shared DOM node and records which session
+  painted it in `dataset.approvalSessionId`, but nothing removed it on a session
+  switch: `detectApproval` has many early returns and none of them cleared the
+  bar first. If the session you switched *to* was also waiting for approval, the
+  repaint check saw a bar that was visible and populated, decided no repaint was
+  needed, and left the previous session's question on screen. Answering what
+  looked like the current session's question sent the choice to the other
+  session. Ownership is now the deciding factor in both places that ask the
+  question — the switch clears a panel owned by someone else before detection
+  runs, and the repaint check treats a foreign owner as a reason to repaint. The
+  release drops only the DOM: the previous session's approval state and its Hub
+  hint survive, because that question is still unanswered and must come back when
+  you switch there again (`web/src/app/approval-owner.ts`,
+  `web/src/app/approval.ts`, `web/src/app/session-list.ts`).
+- **Agent Chat prime no longer advances the cursor before tail-page decoding is
+  committed.** When the selection deadline expires, the Hub keeps the safe
+  retry cursor so existing tail records cannot be skipped
+  (`internal/hub/agent_chat_parse.go`, `internal/hub/agent_chat_handler_test.go`).
+- **Managed Whisper releases now embed the verified Windows VC++ runtime.** A
+  Windows release-preparation job fetches Microsoft-signed DLLs and the
+  GoReleaser job fails closed if the verified payload is absent
+  (`.github/workflows/release.yml`).
+- **Approval panels were withheld for questions the CLI had actually asked.**
+  Two independent defects in the Hub's VT mirror made structurally sound marker
+  blocks look corrupt, so the panel was dropped and you got the "approval
+  withheld" banner instead, with the question left sitting unanswered in the
+  terminal. Replaying all 138 recorded `approval-corrupt` dumps (2026-08-06 to
+  08-13) through a mirror of the recorded size reproduced 132 of them, ruling out
+  a transient desync and pinning both causes:
+  - **Wide characters advanced the cursor by one column instead of two.**
+    `writeRune` incremented `col` by 1 for every rune, so a line of Japanese left
+    the mirror's cursor at half the real terminal's column, and the composer's box
+    rule survived on the right-hand side of the line — landing inside option
+    labels and tripping the `box_rule` verdict. The mirror now measures East
+    Asian Wide / Fullwidth and `Emoji_Presentation` runes as two columns and
+    combining marks and variation selectors as zero, and renders the
+    wide-continuation sentinel out of both `Lines()` and the scrollback push
+    (`internal/hub/vt_buffer.go`).
+  - **Extraction fused an older redraw with the current question.** TUIs redraw
+    while scrolling, so a half-drawn generation of the same block stays in the
+    scrollback; 72 of the 74 `marker_leak` records had the stale open marker
+    there. `extractApprovalMarkerBlock` meant to take the newest block, but its
+    non-greedy regex still started at the *first* open marker, producing a block
+    that straddled two generations and therefore carried an open marker inside
+    itself — the exact shape `classifyApprovalMarkerBlock` rejects. It now takes
+    the last close marker and the last open marker before it
+    (`internal/hub/approval_marker.go`).
+
+  Together these turn 93 of the 138 recorded corruptions into panels that render
+  normally. The remaining 45 — 32 originally judged `box_rule`, 10 `marker_leak`,
+  3 `duplicate_option` — are not explained by either cause and are still
+  suppressed.
+- **`.git-worktrees/` was not ignored by git.** Normal-session worktree isolation
+  creates its checkouts in `<repo>/.git-worktrees/`, but `.gitignore` only
+  covered `.many-ai-cli/`, which is the orchestration path. Turning isolation on
+  therefore left an untracked directory inside the parent working tree
+  (`.gitignore`).
+- **The v0.5.0 entry below documented a worktree path that was never used.** It
+  said normal-session worktrees live under `.many-ai-cli/worktrees/normal/<label>/`;
+  the implementation has always placed them in `<repo>/.git-worktrees/<label>-<timestamp>`
+  on a `many-ai/…` branch. The entry has been corrected.
+- **A failed spawn dumped the raw JSON error body into an alert.** The spawn
+  panel showed `alert(t('spawn_failed') + await res.text())`, so a rejected
+  launch surfaced `{"ok":false,"error":…,"detail":…}` verbatim. Failures now
+  render the `detail` alone, and a `worktree_error` — the case you hit by
+  ticking worktree isolation on a directory that is not a git repository —
+  gets a written explanation instead (`web/src/app/spawn-panel.ts`,
+  `web/src/i18n/*.json`).
+- **Closing a session did nothing when the wrapper had just reconnected.** The ×
+  on a session card drops the session from the Hub and closes the wrapper's
+  WebSocket, and the wrapper decided from that bare EOF alone whether you meant
+  to stop the session or the connection had merely dropped. Within the
+  ten-second `postReattachGuard` that guess falls to "dropped", so the wrapper
+  reconnected two seconds later and the card returned; pressing × again landed
+  inside a fresh guard window, so it never stopped. Codex sessions ran into this
+  routinely because a full PTY output queue (`pty_output_queue_full`)
+  disconnects and reattaches on its own — one session did so three times in
+  eight minutes on 2026-08-13. The Hub now sends an explicit `session_dismissed`
+  frame before closing the socket and the wrapper terminates its PTY on receipt,
+  so intent is transmitted rather than inferred (`internal/proto/messages.go`,
+  `internal/hub/server.go`, `internal/wrapper/wrapper.go`). Shortening the guard
+  was rejected: it would reinstate the 2026-07-20 defect where a plain EOF just
+  after a reattach killed the wrapped CLI. Older wrappers ignore the unknown
+  frame and keep the previous behaviour.
+- **A killed opencode session no longer leaves its `opencode.json` behind for
+  good.** The wrapper writes `{"permission":{"*":…}}` into the session's working
+  directory and restores the file when the session ends, but a killed process
+  never runs that cleanup. The next session in the same directory then read the
+  leftover as the "original" and wrote it back on exit, so the override became
+  permanent — including the `allow` that orchestration children write, which
+  silences approval prompts for anyone who clones the repository. The exclusive
+  lock now carries the rollback state (what the file was, and what this session
+  wrote), and a session that takes over a stale lock restores the leftover
+  before touching the file again; a file that changed after the dead session is
+  left alone. If you ran opencode sessions through the Hub before this release,
+  check whether `opencode.json` was committed to any of your repositories
+  (`internal/wrapper/opencode_config.go`,
+  `internal/wrapper/opencode_config_test.go`, `.gitignore`).
+- **A killed Hub no longer leaves its approval-rules block in your project's
+  `AGENTS.md`.** The block the Hub appends for `copilot` / `cursor-agent` /
+  `grok` sessions is removed on graceful shutdown, but the list of files it had
+  been injected into lived only in memory — so killing the Hub stranded the
+  block in the repository, where nothing would ever remove it and an
+  `git add -A` could commit it. The list is now kept in
+  `~/.many-ai-cli/approval-rule-targets.json`, and the Hub clears any leftover
+  block at startup, before the first session connects; a reconnecting session
+  gets the block injected again through the normal path. Files it cannot clean
+  stay on the list for the next start, and a list that fails to parse is
+  reported and ignored rather than acted on. If you ran Hub sessions before this
+  release, check your repositories' `AGENTS.md` for a stranded block
+  (`internal/hub/approval_rules_state.go`, `internal/hub/approval_handler.go`,
+  `internal/hub/server.go`).
+
 ## [0.6.0] - 2026-08-11
 
 ### Added
@@ -790,8 +1089,8 @@ Release artifacts are published at
   persists per session (`internal/hub/done_summary.go`).
 - **Normal-worktree mode.** Non-orchestration sessions can now opt in to
   running in a dedicated git worktree under
-  `.many-ai-cli/worktrees/normal/<label>/` so parallel work on the same
-  repo does not step on each other's branches
+  `<repo>/.git-worktrees/<label>-<timestamp>`, on a branch named `many-ai/…`,
+  so parallel work on the same repo does not step on each other's branches
   (`internal/hub/normal_worktree.go`).
 - **Commit-all rework: AI commit message + push.** The Hub's "Commit all"
   path can now generate an AI commit message from the staged diff and
@@ -1512,7 +1811,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.4.0...v0.5.0
