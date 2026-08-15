@@ -10,6 +10,8 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-15
+
 ### Added
 - **The Hub can now be started and stopped from a tray icon on Windows.**
   `setup` used to leave two shortcuts on your desktop — one to start the Hub and
@@ -1809,7 +1811,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.4.0...v0.5.0
