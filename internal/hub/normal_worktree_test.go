@@ -16,7 +16,7 @@ func TestPrepareNormalWorktreeSerializesSameNameCreation(t *testing.T) {
 	}
 	runWorktreeTestGit(t, repo, "init")
 	runWorktreeTestGit(t, repo, "config", "user.name", "test")
-	runWorktreeTestGit(t, repo, "config", "user.email", "test@example.invalid")
+	runWorktreeTestGit(t, repo, "config", "user.email", "test@example.com")
 	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("base\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestNormalWorktreeCreateAndSafeCleanup(t *testing.T) {
 	}
 	runWorktreeTestGit(t, repo, "init")
 	runWorktreeTestGit(t, repo, "config", "user.name", "test")
-	runWorktreeTestGit(t, repo, "config", "user.email", "test@example.invalid")
+	runWorktreeTestGit(t, repo, "config", "user.email", "test@example.com")
 	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("base\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
