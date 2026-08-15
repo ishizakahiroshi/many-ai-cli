@@ -6,13 +6,18 @@
    フローに置くと表示・折り返し・ドラッグ伸縮のたびに #terminal-area が縮み、
    その都度 pty_resize → TUI の全画面再描画が走る。viewport に収まらない再描画は
    上書きしたはずの行を scrollback へ押し出すため、同じ段落が積み上がる
-   （2026-08-14 実測: rows が 13〜35 の間で秒間数回変動していた）。 */
+   （2026-08-14 実測: rows が 13〜35 の間で秒間数回変動していた）。
+
+   デスクトップではさらに、下端を入力欄・添付欄の帯（#input-bar-outer）の下端まで
+   下げてターミナル本文を覆わないようにする。下げ幅 --approval-dock-shift は
+   app/approval-dock.ts がレイアウトを実測して入れる（未設定なら 0px＝従来位置）。
+   モバイルは下の @media でフロー配置へ戻すため、この bottom は効かない。 */
 #action-bar {
   display: none;
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: calc(-1 * var(--approval-dock-shift, 0px));
   /* ターミナル領域内のオーバーレイ（swipe handle=10 / badge=20 / scroll ボタン=20）より上。
      モーダル・ポップアップ（1000 以上）よりは下に置く。 */
   z-index: 60;
