@@ -54,6 +54,26 @@ Release artifacts are published at
   in fact intact (`internal/doctor/doctor.go`,
   `internal/sessionlog/sessionlog.go`).
 
+- **`doctor` now tells you if a session left something behind in your git
+  repository.** This release already asks you to check your repositories for a
+  committed `opencode.json` or a stranded approval-rules block in `AGENTS.md`;
+  this is the means to do it. Run `many-ai-cli doctor` inside the repository and
+  it classifies each artifact as tracked by git, present only in the working
+  tree, or absent, and prints nothing at all in the last case — a clean
+  repository gains no output. Tracked artifacts are the ones that matter, since
+  `.gitignore` has no effect on a file git already follows, so the check names
+  the `git rm --cached` needed to undo it. A committed `"permission": {"*":
+  "allow"}` is reported as a failure rather than a warning, because it disables
+  the approval prompt for anyone who clones the repository. Tracked status is
+  read from the git index rather than from disk, so a running opencode session
+  rewriting its own `opencode.json` is not mistaken for residue, and a live lock
+  holder suppresses the working-tree report entirely. The search for the
+  approval-rules block uses the pre-rename `any-ai-cli:approval-rules` needle,
+  which is a substring of the current marker and therefore matches blocks left by
+  either generation — searching for the current name alone makes older residue
+  look like zero hits. The check is skipped without error when git is missing or
+  the directory is not a repository (`internal/doctor/residue.go`).
+
 ### Fixed
 - **Approval panels were still being withheld over the TUI's own frame lines.**
   The corruption check treats box-drawing characters inside a marker block as
