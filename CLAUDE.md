@@ -1,6 +1,6 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-08-15(土) 20:18:00 — 翻訳の扱い（日本語のみが正本・vi はスナップショット・UI ロケールは対象外）を冒頭に明記
+> 最終更新: 2026-08-15(土) 23:40:00 — v0.7.0 リリースの学びから 2 節追加（本家との差分で slash-commands を削除しない・版数を手で直す場所は無い）
 
 > 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。
 
@@ -146,6 +146,29 @@ many-ai-cli/
 **鮮度チェックの仕組みがあるのは `slash-commands` だけ**（`.claude/skills/slash-commands-update` の report / apply / preflight。release の前提チェックから preflight が呼ばれる）。`models` / `usage-links` / `approval-patterns` には無く、**陳腐化しても誰も気づかない**（2026-08-11、モデル一覧が Claude 5 世代を丸ごと欠いたまま放置されていたのを発見）。
 
 詳細は設計書 [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) の承認パターン / モデル / スラッシュコマンド各節と、[docs/manual_slash_commands_update.md](docs/manual_slash_commands_update.md)。
+
+### 本家との差分を根拠に `slash-commands/*.md` から削除しない（2026-08-15 制定）
+
+鮮度チェックは本家の一覧と突き合わせて「追加候補」と「削除候補」を出すが、**削除候補は原則そのまま採用しない**。
+
+- **公式 docs は built-in コマンドの完全一覧ではない。** 2026-08-15 の照合で、codex の docs に `/model` `/status` `/usage` `/resume` `/logout` `/mcp` が載っていなかった。docs との差分をそのまま削除すると、実在する基本コマンドがピッカーから消える
+- **`/orchestrate` は many-ai-cli 自身が提供する Hub の機能**で、本家 CLI には無い（`claude` / `codex` / `copilot` / `cursor-agent` の 4 本に同一行）。**本家と比べる限り毎回「削除候補」として出続けるのが正常**。`freshness-report.ps1` の `$script:HouseCommands` で除外してある
+- **差分は追加候補から先に数える。** 「本家にあって md に無い」が 0 件なら、逆向きが何件でも利用者への実害は無い（ピッカーから欠けているものが無い）。件数の多い削除候補側から見ると判断を誤る
+- 削除してよいのは **実機の `/help` で「無い」ことを確かめたとき**だけ
+
+## 版数を手で直す場所は無い（2026-08-15 制定）
+
+**タグが単一ソース。** リポジトリ内に版数を持つファイルがいくつかあるが、**どれも CI がタグから上書きするので、古いままなのが正常**。
+
+| ファイル | 誰が焼くか |
+|---|---|
+| `npm/*/package.json` の `version` | `release.yml` が `scripts/sync-npm-version.mjs "${RELEASE_TAG}"` |
+| `winres/*.json` の `file_version` / `product_version` | `.goreleaser.yaml` の before hook が `go-winres make --file-version={{ .Version }}` |
+| バイナリの `many-ai-cli version` | goreleaser の ldflags `-X main.version={{ .Version }}` |
+
+2026-08-15 の v0.7.0 リリース時点で、`npm/many-ai-cli/package.json` は `0.3.1`、`winres/winres.json` は `0.3.1.0` のままだが、**配布物はすべて 0.7.0 になっている**。手で直すと二重管理になり、タグとズレたときに気づけなくなる。
+
+> `docs/manual_release.md` の「リリース前に手動確認・更新するもの」に winres が挙がっていたが、**版数については誤り**だったので 2026-08-15 に訂正済み（アイコン・製品名・manifest identity は手動確認の対象のまま）。
 
 ## 調査用の観測コードを入れるときのルール（必須）
 

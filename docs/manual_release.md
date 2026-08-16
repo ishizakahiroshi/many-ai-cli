@@ -297,7 +297,9 @@ git status --short
 
 - `CHANGELOG.md`（`[Unreleased]` を新バージョン節へ確定し、比較リンクを更新）
 - `README.md` / `README.ja.md`（追加機能、検証状況、artifact 名、セキュリティ説明）
-- `winres/winres.json` / `winres/winres-launcher.json`（manifest identity 等の template 版数）
+- `winres/winres.json` / `winres/winres-launcher.json`（アイコン・製品名・manifest identity。**版数は対象外**）
+  - **`file_version` / `product_version` / `FileVersion` / `ProductVersion` は手で直さない。** `.goreleaser.yaml` の before hook が `go-winres make --product-version={{ .Version }} --file-version={{ .Version }}` でタグから焼くので、**JSON 内の版数が古いままなのは正常**（2026-08-15 時点で `0.3.1.0` のまま v0.7.0 を出しており、exe のプロパティはタグどおりになる）
+  - 同じ理由で `npm/*/package.json` の `version` も手で直さない（`release.yml` が `scripts/sync-npm-version.mjs "${RELEASE_TAG}"` で上書きする）
 - `THIRD_PARTY_NOTICES.md` / `web/src/vendor/THIRD_PARTY_LICENSES.txt`（依存・vendored license 表記）
 
 Linux / macOS が未検証のまま出す場合は、README の検証状況と `.goreleaser.yaml` のビルド対象が矛盾していないことを確認する。
