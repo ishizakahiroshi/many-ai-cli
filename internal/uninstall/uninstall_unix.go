@@ -7,6 +7,9 @@ import (
 	"os"
 )
 
+// removeAutostart は Windows 専用（スタートアップフォルダ）の後始末なので何もしない。
+func removeAutostart() {}
+
 func removeSelf() error {
 	exe, err := os.Executable()
 	if err != nil {

@@ -60,7 +60,14 @@ func Run() error {
 
 	fmt.Println()
 	fmt.Println("Next:")
-	fmt.Println(`  Double click "Many AI Hub Start" on your desktop.`)
+	if runtime.GOOS == "windows" {
+		// Windows は v0.7.0 からトレイ常駐 1 個に寄せてある（Start / Stop の 2 個ではない）。
+		fmt.Println(`  Double click "Many AI Hub" on your desktop. It also starts on sign-in.`)
+		fmt.Println(`  To stop that, delete "Many AI Hub" from the Startup folder`)
+		fmt.Println(`  (or turn it off in Task Manager > Startup apps).`)
+	} else {
+		fmt.Println(`  Double click "Many AI Hub Start" on your desktop.`)
+	}
 	if runtime.GOOS == "linux" {
 		fmt.Println(`  (GNOME: right click the desktop icon and choose "Allow Launching" the first time.)`)
 	}

@@ -3,6 +3,7 @@
 package tray
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -41,10 +42,14 @@ var (
 	procSetForegroundWnd = user32.NewProc("SetForegroundWindow")
 	procGetCursorPos     = user32.NewProc("GetCursorPos")
 	procLoadIconW        = user32.NewProc("LoadIconW")
+	procLoadImageW       = user32.NewProc("LoadImageW")
+	procDestroyIcon      = user32.NewProc("DestroyIcon")
+	procGetSystemMetrics = user32.NewProc("GetSystemMetrics")
 	procPostMessageW     = user32.NewProc("PostMessageW")
 	procShellNotifyIconW = shell32.NewProc("Shell_NotifyIconW")
 	procGetModuleHandleW = kernel32.NewProc("GetModuleHandleW")
 	procFreeConsole      = kernel32.NewProc("FreeConsole")
+	procCreateMutexW     = kernel32.NewProc("CreateMutexW")
 )
 
 // hubStartTimeout は serve を起動してから URL が引けるようになるまで待つ上限。
@@ -121,11 +126,24 @@ const (
 
 	idiApplication = 32512
 
+	imageIcon      = 0x0001 // IMAGE_ICON（0 は IMAGE_BITMAP なので取り違えない）
+	lrDefaultColor = 0x0000
+	smCXSmIcon     = 49
+	smCYSmIcon     = 50
+
+	// appIconResourceID は winres/winres.json の RT_GROUP_ICON "#1"。
+	// go-winres が exe へ焼く many-ai-cli 本体のアイコン。
+	appIconResourceID = 1
+
 	// メニュー項目 ID。0 は TrackPopupMenu の「選ばれなかった」と区別が付かないので使わない。
 	idOpenHub = 1
 	idStopHub = 2
 	idQuit    = 3
 )
+
+// trayMutexName はトレイの二重起動を防ぐための名前付き mutex。
+// Local\ 名前空間なのでログオンセッションごとに 1 つ。
+const trayMutexName = `Local\ManyAICLITray`
 
 type wndClassExW struct {
 	cbSize        uint32
@@ -181,6 +199,15 @@ func run(cfg *config.Config) error {
 	// 既に窓が無ければ失敗するが、それは想定内なので戻り値を見ない。
 	_, _, _ = procFreeConsole.Call()
 
+	if !acquireNamedMutex(trayMutexName) {
+		// 既にトレイが常駐している。ログイン時の自動起動が入ったので、そこへ
+		// デスクトップアイコンのダブルクリックが重なるのが普通の使い方になった。
+		// アイコンを 2 個並べても押した人には区別が付かないので増やさない。
+		// 窓もコンソールも無いのでエラーを見せる先が無く、黙って終わるより
+		// 「アイコンを押した人が望んでいるであろうこと」をして終わる方が良い。
+		return openHub(cfg)
+	}
+
 	hInstance, _, _ := procGetModuleHandleW.Call(0)
 	className, err := windows.UTF16PtrFromString("ManyAICLITrayWindow")
 	if err != nil {
@@ -210,7 +237,12 @@ func run(cfg *config.Config) error {
 	}
 	trayState.hwnd = windows.Handle(hwnd)
 
-	hIcon, _, _ := procLoadIconW.Call(0, uintptr(idiApplication))
+	hIcon, ownIcon := loadTrayIcon(hInstance)
+	if ownIcon {
+		// NIM_DELETE より後に走らせる（defer は LIFO なのでここで登録すると後になる）。
+		// 表示中のアイコンのハンドルを先に壊さないため。
+		defer func() { _, _, _ = procDestroyIcon.Call(uintptr(hIcon)) }()
+	}
 
 	trayState.nid = notifyIconDataW{
 		cbSize:           uint32(unsafe.Sizeof(notifyIconDataW{})),
@@ -218,7 +250,7 @@ func run(cfg *config.Config) error {
 		uID:              1,
 		uFlags:           nifMessage | nifIcon | nifTip,
 		uCallbackMessage: wmTrayCallback,
-		hIcon:            windows.Handle(hIcon),
+		hIcon:            hIcon,
 	}
 	copyTip(&trayState.nid, "many-ai-cli")
 
@@ -240,6 +272,48 @@ func run(cfg *config.Config) error {
 		_, _, _ = procTranslateMessage.Call(uintptr(unsafe.Pointer(&m)))
 		_, _, _ = procDispatchMessageW.Call(uintptr(unsafe.Pointer(&m)))
 	}
+}
+
+// loadTrayIcon はトレイに出すアイコンを返す。第 2 戻り値が true のときは
+// 呼び出し側が DestroyIcon する必要がある。
+//
+// exe に焼いてあるアプリアイコン（winres の RT_GROUP_ICON #1）を、システムの
+// 小アイコンサイズで読む。LoadIcon だと大アイコン（32px 相当）が返り、通知領域で
+// 縮小されて滲むため、.ico に入っている 16px の絵を使えるこちらを選ぶ。
+// go-winres を通していないビルド（go build 直叩き）にはリソースが無く 0 が返るので、
+// そのときだけ Windows 既定のアプリアイコンへ落とす。既定アイコンは共有なので破棄しない。
+func loadTrayIcon(hInstance uintptr) (windows.Handle, bool) {
+	cx, _, _ := procGetSystemMetrics.Call(smCXSmIcon)
+	cy, _, _ := procGetSystemMetrics.Call(smCYSmIcon)
+	if h, _, _ := procLoadImageW.Call(hInstance, appIconResourceID, imageIcon, cx, cy, lrDefaultColor); h != 0 {
+		return windows.Handle(h), true
+	}
+	h, _, _ := procLoadIconW.Call(0, uintptr(idiApplication))
+	return windows.Handle(h), false
+}
+
+// acquireNamedMutex は name の mutex を取れたら true を返す。既に誰かが持っていれば
+// false（＝別のトレイが常駐している）。
+//
+// 取れたハンドルは意図的に閉じない。プロセスが生きている間だけ名前を押さえたいので、
+// 解放は OS のプロセス終了に任せる。名前を引数に取るのは、テストが実機で常駐中の
+// トレイに影響されないようにするため（waitForHubURL が resolve を受け取るのと同じ理由）。
+func acquireNamedMutex(name string) bool {
+	namePtr, err := windows.UTF16PtrFromString(name)
+	if err != nil {
+		// 名前が作れないのは異常だが、それを理由に常駐できない方が困るので通す。
+		return true
+	}
+	h, _, callErr := procCreateMutexW.Call(0, 1, uintptr(unsafe.Pointer(namePtr)))
+	if h == 0 {
+		return true
+	}
+	if errors.Is(callErr, windows.ERROR_ALREADY_EXISTS) {
+		// 既存の mutex を指すハンドルが返っているので閉じる（所有権は取れていない）。
+		_ = windows.CloseHandle(windows.Handle(h))
+		return false
+	}
+	return true
 }
 
 func copyTip(nid *notifyIconDataW, tip string) {
