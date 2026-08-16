@@ -12,7 +12,9 @@ import (
 
 // createShortcuts は Windows 向け生成物を作る。
 // %LOCALAPPDATA%\ManyAICLI\{start,stop}.cmd と、デスクトップの
-// {Many AI Hub Start,Many AI Hub Stop}.lnk を作る。
+// 「Many AI Hub.lnk」（トレイ常駐 = `many-ai-cli tray`）、および同じ内容の .lnk を
+// スタートアップフォルダに作る（ログイン時の自動常駐）。
+// 旧版が作った Start / Stop の .lnk は消さず、見つかったことだけ報告する。
 func createShortcuts(exe string) []Result {
 	var results []Result
 
@@ -50,6 +52,20 @@ func createShortcuts(exe string) []Result {
 		results = append(results, Result{Path: trayLnk, Err: err})
 	} else {
 		results = append(results, Result{Path: trayLnk})
+	}
+
+	// ログイン時に自動で常駐させる。毎回手で起動しないと出てこないトレイは常駐と
+	// 呼べず、結局「アイコンを 1 個に寄せた」以上の価値が出ない。
+	// レジストリの Run キーではなくスタートアップフォルダに置くのは、エクスプローラー
+	// とタスクマネージャーの「スタートアップ アプリ」の両方から利用者が自分で見つけて
+	// 止められるため（隠れた場所に自動起動を仕込まない）。
+	if startup := resolveWindowsStartup(); startup != "" {
+		autoLnk := filepath.Join(startup, "Many AI Hub.lnk")
+		if err := createWindowsShortcutWithArgs(autoLnk, exe, exe, "tray", 7); err != nil {
+			results = append(results, Result{Path: autoLnk, Err: err})
+		} else {
+			results = append(results, Result{Path: autoLnk})
+		}
 	}
 
 	// 既存利用者のデスクトップにある 2 個は消さない。勝手に消すと使い慣れた導線が
@@ -95,6 +111,30 @@ func resolveWindowsDesktop() string {
 		return filepath.Join(home, "Desktop")
 	}
 	return ""
+}
+
+// resolveWindowsStartup はログイン時に自動起動されるスタートアップフォルダを解決する。
+// デスクトップと同じく PowerShell の GetFolderPath を優先し、失敗時は %APPDATA% 配下の
+// 既定パスへフォールバックする。
+func resolveWindowsStartup() string {
+	out, err := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
+		"[Environment]::GetFolderPath('Startup')").Output()
+	if err == nil {
+		p := strings.TrimSpace(string(out))
+		if p != "" {
+			return p
+		}
+	}
+	return startupFallbackDir(os.Getenv("APPDATA"))
+}
+
+// startupFallbackDir は %APPDATA% からスタートアップフォルダの既定パスを組む。
+// 環境変数の読み出しと分けてあるのはテストから呼べるようにするため。
+func startupFallbackDir(appData string) string {
+	if appData == "" {
+		return ""
+	}
+	return filepath.Join(appData, "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
 }
 
 // createWindowsShortcutWithArgs は PowerShell の WScript.Shell 経由で .lnk を作る。

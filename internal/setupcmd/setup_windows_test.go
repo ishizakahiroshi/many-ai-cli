@@ -9,6 +9,25 @@ import (
 	"testing"
 )
 
+func TestStartupFallbackDir(t *testing.T) {
+	// 実在しない合成パスを使う（個人の %APPDATA% を書かない）。
+	const appData = `C:\fixture\AppData\Roaming`
+
+	got := startupFallbackDir(appData)
+	want := filepath.Join(appData, "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+	if got != want {
+		t.Errorf("startupFallbackDir = %q, want %q", got, want)
+	}
+}
+
+// APPDATA が無い環境で %APPDATA% 抜きの相対パスを組んでしまうと、カレント配下に
+// Startup フォルダを作りかねない。空なら空を返すことを固定する。
+func TestStartupFallbackDirWithoutAppData(t *testing.T) {
+	if got := startupFallbackDir(""); got != "" {
+		t.Errorf("startupFallbackDir(\"\") = %q, want \"\"", got)
+	}
+}
+
 func TestWriteWindowsCmd(t *testing.T) {
 	dir := t.TempDir()
 	exe := `C:\path with space\many-ai-cli.exe`

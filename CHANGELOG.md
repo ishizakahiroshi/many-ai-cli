@@ -10,6 +10,21 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Changed
+- **The Windows tray now actually stays resident, and wears the app's own icon.**
+  As shipped in 0.7.0 the tray only appeared if you re-ran `setup` and then
+  double-clicked the desktop shortcut again after every sign-in, which is not
+  what "resident" means. `setup` now also writes the same **"Many AI Hub"**
+  shortcut into your Startup folder — the Startup folder rather than a registry
+  `Run` key, so you can find and switch it off from Explorer or Task Manager.
+  The icon in the notification area is the many-ai-cli icon loaded from the
+  executable's own resource at the system small-icon size, instead of the
+  generic Windows application icon. Because starting at sign-in and clicking the
+  desktop icon now overlap, a named mutex keeps a single tray process alive;
+  a second launch opens the Hub and exits rather than adding a duplicate icon.
+  `uninstall` removes the sign-in entry (`internal/tray/`,
+  `internal/setupcmd/setup_windows.go`, `internal/uninstall/`).
+
 ## [0.7.0] - 2026-08-15
 
 ### Added

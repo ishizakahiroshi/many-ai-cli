@@ -31,6 +31,11 @@ func Run(purge bool) error {
 		fmt.Printf("存在しないためスキップ: %s\n", dataDir)
 	}
 
+	// ログイン時の自動起動は ~/.many-ai-cli の外にあるので、データディレクトリを
+	// 消しただけでは残る。デスクトップのアイコンと違い、放置すると毎回のログインで
+	// 動くため、こちらは黙って回収する。
+	removeAutostart()
+
 	printBrowserNote()
 
 	if purge {
