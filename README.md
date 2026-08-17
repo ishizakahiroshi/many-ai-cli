@@ -101,6 +101,39 @@ Known limits: this is intentionally lightweight. Board changes are detected by 2
 - **Language switching** (English / Japanese / Vietnamese)
 - **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `many-ai-cli` itself
 - **Remote access protection** — Settings → "Remote access protection" offers a **Revoke all access** kill switch (regenerates the token and auth cookie when a device is lost), an **optional PIN** required only for non-loopback access (off by default, with lockout), and **new-device connection notifications**
+- **Multiple subscriptions per provider** — keep more than one signed-in account for the same AI CLI and choose which one a session uses (see below)
+
+## Multiple subscriptions per provider
+
+If you hold two Claude subscriptions, or a ChatGPT account for work and another for personal projects, the official CLIs only remember one login at a time. Settings → **Subscriptions** lets you register several and pick one per session, so two sessions can run on two different accounts at the same time.
+
+This is **not an API key router**. It does not pool metered API keys to make requests cheaper; it spreads the sessions you already run across the monthly subscriptions you already pay for.
+
+**How it works.** Every supported CLI selects its configuration directory from an environment variable. `many-ai-cli` creates one directory per profile under `~/.many-ai-cli/subscriptions/<provider>/<id>` and sets that variable when it launches the session. The official CLI does its own login and owns the credential inside that directory. `many-ai-cli` never reads, writes, parses, or stores the token, and `config.yaml` holds nothing but the profile's id, display name, plan label, and enabled flag.
+
+| Provider | Variable used | Status |
+|---|---|---|
+| Claude Code | `CLAUDE_CONFIG_DIR` | supported |
+| Codex CLI | `CODEX_HOME` | supported |
+| Grok Build CLI | `GROK_HOME` | supported |
+| opencode | `XDG_DATA_HOME` | supported — see the note below |
+| GitHub Copilot CLI | — | **not supported**: the token lives in the OS credential store, so `COPILOT_HOME` moves the config but not the login |
+| Cursor Agent CLI | — | **not supported**: the token lives in `~/.cursor/cli-config.json` and no environment variable relocates it |
+
+**Using it**
+
+1. Settings → **Subscriptions** → type a display name → **Add**. This only creates an empty directory; nothing is signed in yet.
+2. Press **Log in**. A short-lived session opens and runs the CLI's own login command (`claude auth login`, `codex login`, …) with that directory selected. Complete the vendor's normal sign-in.
+3. Press **Check** to confirm the profile is signed in. The status line shows the plan when the CLI reports one; your account address is never requested or displayed.
+4. When a provider has two or more profiles, the spawn form gains a **Subscription** selector. `Default CLI login` — the first entry — behaves exactly as before, and `auto` picks one of the enabled profiles in turn (the session records which one was actually chosen, not the word "auto").
+
+**What a profile changes.** For Claude Code, Codex and Grok the variable switches the CLI's *whole* configuration directory. A session started with a profile therefore does not see the global memory file, skills, commands or past conversations that live in your default directory. That is the price of a clean login split, and it is worth knowing before you move your daily driver onto a profile. opencode is the exception: only its credential store moves, so config and skills stay shared.
+
+`XDG_DATA_HOME` is a generic variable rather than an opencode-specific one, so other XDG-aware tools the agent runs *inside that session* also write under the profile directory. Your shell is untouched. opencode has no dedicated variable today; if it grows one, this switches to it.
+
+**Removing a profile** unregisters it from `many-ai-cli` and leaves the vendor credentials in place. Deleting the credentials as well is a separate, explicit confirmation, and it is never applied to a directory you pointed at yourself with `profile_dir`.
+
+If you never open this section, nothing changes: sessions launch with the environment they always had, byte for byte.
 
 ---
 

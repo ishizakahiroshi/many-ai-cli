@@ -1,0 +1,85 @@
+/* Settings > Subscriptions（複数サブスクリプション管理）
+   plan_multi-subscription-pool C4。既存の settings-* トークンを流用し、
+   provider ごとに 1 ブロック、profile ごとに 1 行で並べる。 */
+
+.subs-list { padding: 0 14px 4px; display: flex; flex-direction: column; gap: 10px; }
+
+.subs-provider {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+}
+
+.subs-provider-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: 6px;
+}
+.subs-provider-name { font-size: 0.85rem; color: var(--text); }
+.subs-envvar {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.68rem;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0 5px;
+}
+
+.subs-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  padding: 5px 0;
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+.subs-row:first-of-type { border-top: none; }
+.subs-row--off { opacity: 0.55; }
+.subs-row--issue .subs-status { color: var(--warn-text); }
+
+.subs-row .subs-name { flex: 1 1 160px; width: auto; min-width: 0; }
+.subs-id {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.7rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.subs-status {
+  font-size: 0.72rem;
+  color: var(--muted);
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.subs-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.subs-add {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+.subs-add .subs-add-name { flex: 1 1 auto; width: auto; min-width: 0; }
+
+/* Spawn パネルの selector 行。profile が 2 件以上ある provider でのみ表示する。 */
+.spawn-subscription-row { display: flex; gap: var(--space-2); }
+.spawn-subscription-row[hidden] { display: none !important; }
+.spawn-subscription-row .spawn-select { flex: 1 1 auto; min-width: 0; }
+
+/* セッション情報チップの subscription バッジ（カードには出さない）。 */
+.card-subscription {
+  font-size: var(--header-font-size, 0.72rem);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0 5px;
+  white-space: nowrap;
+}

@@ -5,6 +5,7 @@ import { CWD_HISTORY_MAX, STORAGE_CWD_HISTORY_KEY, STORAGE_CWD_FAVORITES_KEY, ST
 import { set_pendingAutoSwitch, sessions } from './state.js';
 import { providerIconHtml } from './session-list.js';
 import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
+import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -34,8 +35,48 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
   const spawnModelDatalist = document.getElementById('spawn-model-datalist');
   const spawnModelClearBtn = document.getElementById('spawn-model-clear');
   const spawnModelRefreshBtn = document.getElementById('spawn-model-refresh');
+  const spawnSubscriptionRow = document.getElementById('spawn-subscription-row');
+  const spawnSubscriptionSelect = document.getElementById('spawn-subscription') as HTMLSelectElement | null;
   let codexModelSelection: any = null;
   let claudeModelSelection: any = null;
+
+  // ---- subscription selector（plan_multi-subscription-pool C4）----
+  // profile が 2 件以上ある provider でのみ出す。0〜1 件のときは行ごと隠したまま
+  // にして、送信 JSON も従来と完全に同じ形（subscription_profile_id 無し）に保つ。
+  function refreshSubscriptionSelector(): void {
+    if (!spawnSubscriptionRow || !spawnSubscriptionSelect) return;
+    const provider = (spawnProviderEl as HTMLSelectElement).value;
+    const profiles = provider === 'shell' ? [] : selectableProfiles(provider);
+    if (profiles.length < 2) {
+      spawnSubscriptionRow.hidden = true;
+      spawnSubscriptionSelect.innerHTML = '';
+      return;
+    }
+    const previous = spawnSubscriptionSelect.value;
+    // 先頭は常に「CLI 自身のログイン環境」。既存利用者が profile を足しただけで
+    // 起動先が勝手に変わらないよう、これを既定の選択肢にする。
+    const options = [`<option value="">${escapeHtml(t('spawn_subscription_default'))}</option>`];
+    // auto は Hub 側の予約語。有効な profile から 1 つ選ぶ（実際に選ばれた ID が
+    // セッションに記録される）。
+    options.push(`<option value="auto">${escapeHtml(t('spawn_subscription_auto'))}</option>`);
+    for (const p of profiles) {
+      const label = p.name ? `${p.name} (${p.id})` : p.id;
+      options.push(`<option value="${escapeHtml(p.id)}">${escapeHtml(label)}</option>`);
+    }
+    spawnSubscriptionSelect.innerHTML = options.join('');
+    if (previous === 'auto' || (previous && profiles.some((p) => p.id === previous))) {
+      spawnSubscriptionSelect.value = previous;
+    }
+    spawnSubscriptionRow.hidden = false;
+  }
+
+  function selectedSubscriptionID(): string {
+    if (!spawnSubscriptionRow || spawnSubscriptionRow.hidden || !spawnSubscriptionSelect) return '';
+    return spawnSubscriptionSelect.value || '';
+  }
+
+  onSubscriptionsChanged(refreshSubscriptionSelector);
+  void loadSubscriptions().then(refreshSubscriptionSelector);
 
   // ---- C1: オーケストレーション（plan_orchestration-spawn-ui-exposure.md） ----
   // 「オーケストレーション」ボタンから開いたときだけ true。同じ起動フォームを共用し、
@@ -549,6 +590,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
     if (p !== 'claude') claudeModelSelection = null;
     populateModelDatalist();
     clearIncompatibleModelForProvider(p);
+    refreshSubscriptionSelector();
     updateDetachedPreview();
   });
   updateSpawnProviderIcon();
@@ -659,6 +701,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
         updateIsolateWorktreeNote();
       }
       updateSpawnProviderIcon();
+      refreshSubscriptionSelector();
       updateDetachedPreview();
       return !!s.cwd;
     } catch (_) { return false; }
@@ -2010,6 +2053,9 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
       // を Hub 側の既定として温存する（設定ファイルで常時 ON にしている利用者を壊さない）。
       if (spawnIsolateWorktree?.checked) bodyObj.isolate_worktree = true;
       if (provider !== 'shell' && route) bodyObj.route = route;
+      // 「Default CLI login」を選んだときはキーごと送らない（従来リクエストと同一）。
+      const subscriptionID = selectedSubscriptionID();
+      if (subscriptionID) bodyObj.subscription_profile_id = subscriptionID;
       if (provider === 'claude') {
         const picked = claudeModelSelection;
         const permMode = document.getElementById('spawn-permission-mode').value;

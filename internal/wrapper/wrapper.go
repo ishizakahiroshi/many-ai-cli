@@ -27,6 +27,7 @@ import (
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/subscription"
 )
 
 const (
@@ -768,48 +769,69 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	askForApproval := fs.String("ask-for-approval", "", "codex ask-for-approval")
 	codexOSS := fs.Bool("codex-oss", false, "codex: use --oss to route via local Ollama daemon")
 	utf8Session := fs.Bool("utf8", false, "set UTF-8 console encoding for this session (Windows only)")
+	subscriptionLogin := fs.Bool("subscription-login", false, "run the provider CLI's own login flow instead of an interactive session")
 	_ = fs.Parse(args)
 	providerArgs := fs.Args()
 
+	// Subscription login セッションは「公式 CLI のログインサブコマンドを PTY で
+	// 走らせるだけ」の使い捨てセッション。model / permission / settings 等の
+	// 通常フラグは付けない（login サブコマンドは受け付けない）。認証そのものは
+	// 公式 CLI が行い、many-ai-cli は token を一切見ない。
+	loginMode := false
+	if *subscriptionLogin {
+		adapter, ok := subscription.AdapterFor(provider)
+		if !ok {
+			return fmt.Errorf("provider %q does not support subscription profiles", provider)
+		}
+		loginMode = true
+		providerArgs = adapter.LoginArgs()
+	}
+
 	// Reconstruct provider-specific flags from wrapper-parsed flags
 	var extra []string
-	if *model != "" {
-		extra = append(extra, "--model", *model)
-	}
-	switch provider {
-	case "claude", "grok":
-		// grok CLI は claude 互換の --permission-mode（bypassPermissions 含む）をネイティブサポートする
-		if *permissionMode != "" && *permissionMode != "default" {
-			extra = append(extra, "--permission-mode", *permissionMode)
+	if !loginMode {
+		if *model != "" {
+			extra = append(extra, "--model", *model)
 		}
-	case "codex":
-		if *codexOSS {
-			extra = append(extra, "--oss")
+		switch provider {
+		case "claude", "grok":
+			// grok CLI は claude 互換の --permission-mode（bypassPermissions 含む）をネイティブサポートする
+			if *permissionMode != "" && *permissionMode != "default" {
+				extra = append(extra, "--permission-mode", *permissionMode)
+			}
+		case "codex":
+			if *codexOSS {
+				extra = append(extra, "--oss")
+			}
+			if *sandbox != "" {
+				extra = append(extra, "--sandbox", *sandbox)
+			}
+			if *askForApproval != "" {
+				extra = append(extra, "--ask-for-approval", *askForApproval)
+			}
+		case "copilot":
+			// --allow-all = --allow-all-tools --allow-all-paths --allow-all-urls の一括指定
+			if *permissionMode == "bypassPermissions" {
+				extra = append(extra, "--allow-all")
+			}
+		case "cursor-agent":
+			// --force: Force allow commands unless explicitly denied
+			if *permissionMode == "bypassPermissions" {
+				extra = append(extra, "--force")
+			}
+		case "opencode":
+			// --auto: auto-approve permissions that are not explicitly denied
+			extra = append(extra, openCodePermissionArgs(*permissionMode)...)
 		}
-		if *sandbox != "" {
-			extra = append(extra, "--sandbox", *sandbox)
-		}
-		if *askForApproval != "" {
-			extra = append(extra, "--ask-for-approval", *askForApproval)
-		}
-	case "copilot":
-		// --allow-all = --allow-all-tools --allow-all-paths --allow-all-urls の一括指定
-		if *permissionMode == "bypassPermissions" {
-			extra = append(extra, "--allow-all")
-		}
-	case "cursor-agent":
-		// --force: Force allow commands unless explicitly denied
-		if *permissionMode == "bypassPermissions" {
-			extra = append(extra, "--force")
-		}
-	case "opencode":
-		// --auto: auto-approve permissions that are not explicitly denied
-		extra = append(extra, openCodePermissionArgs(*permissionMode)...)
 	}
 	providerArgs = append(extra, providerArgs...)
-	providerArgs, agentSessionID, err := prepareClaudeSessionArgs(provider, providerArgs)
-	if err != nil {
-		return err
+	var agentSessionID string
+	if !loginMode {
+		var err error
+		providerArgs, agentSessionID, err = prepareClaudeSessionArgs(provider, providerArgs)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Hub にスポーンされた場合、起動中の Hub ポートが MANY_AI_CLI_HUB_PORT で渡される。
@@ -898,9 +920,11 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// （usage_hooks.go: ClaudeSettingsOptions.CrossSessionInboundAccept 参照）。
 	// conductor と手動セッションは人間が UI を見ているので既定のままにする。
 	// ネイティブ Windows には機能自体が無いので書かない（WSL 内は GOOS=linux で対象）。
+	// login セッションには --settings を渡さない。`claude auth login` は
+	// インタラクティブセッション用のフラグを受け付けず、付けると起動に失敗する。
 	settingsOpts := ClaudeSettingsOptions{
-		StatusLine:                provider == "claude" && reg.TokenStatusbar,
-		CrossSessionInboundAccept: provider == "claude" && reg.OrchestrationID != "" && reg.Auto && runtime.GOOS != "windows",
+		StatusLine:                !loginMode && provider == "claude" && reg.TokenStatusbar,
+		CrossSessionInboundAccept: !loginMode && provider == "claude" && reg.OrchestrationID != "" && reg.Auto && runtime.GOOS != "windows",
 	}
 	if settingsOpts.enabled() {
 		exe, exeErr := os.Executable()
@@ -934,7 +958,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	if *utf8Session {
 		applyUTF8Session()
 	}
-	if provider == "opencode" {
+	if provider == "opencode" && !loginMode {
 		permValue := "ask"
 		if *permissionMode == "bypassPermissions" {
 			permValue = "allow"
@@ -1309,6 +1333,7 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, a
 		CodexHome:      codexHome,
 		ClaudeDir:      claudeDir,
 		AgentSessionID: agentSessionID,
+		SubscriptionID: activeSubscriptionID(),
 		Cols:           termCols,
 		Rows:           termRows,
 	}); err != nil {
@@ -1354,6 +1379,7 @@ func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, 
 		CodexHome:      codexHome,
 		ClaudeDir:      claudeDir,
 		AgentSessionID: agentSessionID,
+		SubscriptionID: activeSubscriptionID(),
 		Cols:           termCols,
 		Rows:           termRows,
 		StartedAt:      startedAt,
@@ -1384,6 +1410,12 @@ func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, 
 func userSkillDirs() (homeDir, codexHome, claudeDir string) {
 	homeDir, _ = os.UserHomeDir()
 	return homeDir, os.Getenv("CODEX_HOME"), os.Getenv("CLAUDE_CONFIG_DIR")
+}
+
+// activeSubscriptionID returns the subscription profile id the Hub selected for
+// this session, or "" when the session uses the CLI's own login environment.
+func activeSubscriptionID() string {
+	return strings.TrimSpace(os.Getenv(subscription.SessionEnvVar))
 }
 
 // probeHubAlive returns true if the Hub HTTP server responds at 127.0.0.1:port.

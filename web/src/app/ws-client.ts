@@ -582,6 +582,11 @@ export function _connectWs() {
     if (m.board_path !== undefined) cur.board_path = m.board_path;
     if (m.worktree_branch !== undefined) cur.worktree_branch = m.worktree_branch;
 	if (m.board_notify_pending !== undefined) cur.board_notify_pending = m.board_notify_pending;
+    // subscription profile は Go 側 proto の短い名前（subscription_id / _name）で届き、
+    // snapshot は session 構造体の名前（subscription_profile_id / _name）で届く。
+    // カード側は snapshot 名で読むので、ここで揃えておく。
+    if (m.subscription_id !== undefined) cur.subscription_profile_id = m.subscription_id;
+    if (m.subscription_name !== undefined) cur.subscription_profile_name = m.subscription_name;
     // C3: git 変更状況は git_checked=true のメッセージでのみ更新する
     // （通常の session_update では 0 を omitempty で送らないため、ここで上書きしない）。
     if (m.git_checked) {

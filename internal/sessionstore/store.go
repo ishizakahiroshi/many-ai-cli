@@ -88,6 +88,10 @@ type SessionStart struct {
 	OrchestrationID string
 	BoardPath       string
 	WorktreeBranch  string
+	// SubscriptionID は起動に使ったサブスクリプション profile の ID（空 = CLI 既定
+	// ログイン）。ID だけを残し表示名は保存しない。profile を rename しても過去
+	// セッションの追跡が壊れないようにするため。認証情報は含まない。
+	SubscriptionID string
 }
 
 // SessionCardMeta はライブセッションに紐づくカード識別情報。カードの並び替え・
@@ -167,6 +171,7 @@ type SessionOverview struct {
 	OrchestrationID string   `json:"orchestration_id,omitempty"`
 	BoardPath       string   `json:"board_path,omitempty"`
 	WorktreeBranch  string   `json:"worktree_branch,omitempty"`
+	SubscriptionID  string   `json:"subscription_profile_id,omitempty"`
 	MessageCount    int      `json:"message_count,omitempty"`
 	EventCount      int      `json:"event_count,omitempty"`
 	ApprovalCount   int      `json:"approval_count,omitempty"`
@@ -379,6 +384,7 @@ func (s *Store) init() error {
 			orchestration_id TEXT,
 			board_path TEXT,
 			worktree_branch TEXT,
+			subscription_id TEXT,
 			pinned INTEGER NOT NULL DEFAULT 0,
 			color TEXT,
 			note TEXT,
@@ -488,6 +494,7 @@ func (s *Store) ensureSessionColumns(ctx context.Context) error {
 		{"note", `ALTER TABLE sessions ADD COLUMN note TEXT`},
 		{"auto_title", `ALTER TABLE sessions ADD COLUMN auto_title TEXT`},
 		{"archived", `ALTER TABLE sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`},
+		{"subscription_id", `ALTER TABLE sessions ADD COLUMN subscription_id TEXT`},
 	}
 	for _, col := range add {
 		if have[col.name] {
@@ -517,8 +524,8 @@ func (s *Store) StartSession(st SessionStart) (int64, error) {
 	err := s.db.QueryRowContext(ctx, `INSERT INTO sessions (
 		live_session_id, provider, display_name, cwd, branch, label, model, route, shell,
 		state, started_at, log_path, jsonl_path, parent_session_id, role, auto, depth,
-		orchestration_id, board_path, worktree_branch, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		orchestration_id, board_path, worktree_branch, subscription_id, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(jsonl_path) DO UPDATE SET
 		live_session_id=excluded.live_session_id,
 		provider=excluded.provider,
@@ -540,6 +547,7 @@ func (s *Store) StartSession(st SessionStart) (int64, error) {
 		orchestration_id=excluded.orchestration_id,
 		board_path=excluded.board_path,
 		worktree_branch=excluded.worktree_branch,
+		subscription_id=excluded.subscription_id,
 		updated_at=excluded.updated_at,
 		ended_at=NULL,
 		end_reason=NULL
@@ -547,7 +555,7 @@ func (s *Store) StartSession(st SessionStart) (int64, error) {
 		st.LiveSessionID, st.Provider, st.Display, st.CWD, st.Branch, st.Label, st.Model,
 		st.Route, st.Shell, state, st.StartedAt, st.LogPath, st.JSONLPath,
 		st.ParentSessionID, st.Role, boolInt(st.Auto), st.Depth, st.OrchestrationID,
-		st.BoardPath, st.WorktreeBranch, time.Now().Format(time.RFC3339),
+		st.BoardPath, st.WorktreeBranch, st.SubscriptionID, time.Now().Format(time.RFC3339),
 	).Scan(&id)
 	return id, err
 }
@@ -888,7 +896,7 @@ func (s *Store) ListSessions(limit int, includeArchived bool) ([]SessionOverview
 			COALESCE(se.archived, 0), COALESCE(se.log_path, ''), COALESCE(se.jsonl_path, ''),
 			COALESCE(se.parent_session_id, 0), COALESCE(se.role, ''), COALESCE(se.auto, 0),
 			COALESCE(se.depth, 0), COALESCE(se.orchestration_id, ''), COALESCE(se.board_path, ''),
-			COALESCE(se.worktree_branch, ''),
+			COALESCE(se.worktree_branch, ''), COALESCE(se.subscription_id, ''),
 			(SELECT COUNT(*) FROM messages m WHERE m.session_id=se.id),
 			(SELECT COUNT(*) FROM events e WHERE e.session_id=se.id),
 			(SELECT COUNT(*) FROM approvals a WHERE a.session_id=se.id),
@@ -918,7 +926,7 @@ func (s *Store) SessionOverviewByLiveSession(liveSessionID int) (SessionOverview
 			COALESCE(se.archived, 0), COALESCE(se.log_path, ''), COALESCE(se.jsonl_path, ''),
 			COALESCE(se.parent_session_id, 0), COALESCE(se.role, ''), COALESCE(se.auto, 0),
 			COALESCE(se.depth, 0), COALESCE(se.orchestration_id, ''), COALESCE(se.board_path, ''),
-			COALESCE(se.worktree_branch, ''),
+			COALESCE(se.worktree_branch, ''), COALESCE(se.subscription_id, ''),
 			(SELECT COUNT(*) FROM messages m WHERE m.session_id=se.id),
 			(SELECT COUNT(*) FROM events e WHERE e.session_id=se.id),
 			(SELECT COUNT(*) FROM approvals a WHERE a.session_id=se.id),
@@ -1036,7 +1044,7 @@ func (s *Store) StaleSessions(cutoff time.Time, limit int) ([]SessionOverview, e
 			COALESCE(se.archived, 0), COALESCE(se.log_path, ''), COALESCE(se.jsonl_path, ''),
 			COALESCE(se.parent_session_id, 0), COALESCE(se.role, ''), COALESCE(se.auto, 0),
 			COALESCE(se.depth, 0), COALESCE(se.orchestration_id, ''), COALESCE(se.board_path, ''),
-			COALESCE(se.worktree_branch, ''),
+			COALESCE(se.worktree_branch, ''), COALESCE(se.subscription_id, ''),
 			(SELECT COUNT(*) FROM messages m WHERE m.session_id=se.id),
 			(SELECT COUNT(*) FROM events e WHERE e.session_id=se.id),
 			(SELECT COUNT(*) FROM approvals a WHERE a.session_id=se.id),
@@ -1694,7 +1702,7 @@ func scanSessionOverviews(rows *sql.Rows) ([]SessionOverview, error) {
 			&item.LastOutputAt, &item.EndedAt, &item.FirstMessage, &item.LastMessage,
 			&item.EndReason, &item.Title, &tagsJSON, &item.Summary, &archived, &item.LogPath,
 			&item.JSONLPath, &item.ParentSessionID, &item.Role, &item.Auto, &item.Depth,
-			&item.OrchestrationID, &item.BoardPath, &item.WorktreeBranch,
+			&item.OrchestrationID, &item.BoardPath, &item.WorktreeBranch, &item.SubscriptionID,
 			&item.MessageCount, &item.EventCount, &item.ApprovalCount, &item.PendingCount,
 		); err != nil {
 			return nil, err

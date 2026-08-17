@@ -10,6 +10,35 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Added
+- **More than one subscription per AI CLI, chosen per session.** The official
+  CLIs each remember a single login, so holding two Claude plans or separate
+  work and personal ChatGPT accounts meant signing in and out by hand. Settings
+  → **Subscriptions** now registers several accounts per provider and the spawn
+  form gains a **Subscription** selector once a provider has two or more, so two
+  sessions can run on two accounts at the same time. This is not an API key
+  router: it spreads sessions across monthly plans you already pay for.
+
+  Each profile is a directory under `~/.many-ai-cli/subscriptions/<provider>/<id>`
+  that the official CLI is pointed at through its own environment variable —
+  `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GROK_HOME`, and `XDG_DATA_HOME` for
+  opencode. Login runs the vendor's own command (`claude auth login`,
+  `codex login`, …) inside a short-lived session; **many-ai-cli never reads,
+  writes, parses, or stores the credential**, and `config.yaml` holds only the
+  id, display name, plan label, and enabled flag. `auto` picks an enabled
+  profile in turn and records the profile that was actually chosen.
+
+  GitHub Copilot CLI and Cursor Agent CLI are recorded as **unsupported**:
+  Copilot keeps its token in the OS credential store and Cursor in
+  `~/.cursor/cli-config.json`, and neither is relocatable by an environment
+  variable, so two sessions would silently share one account. Registering a
+  profile for them is refused rather than half-working.
+
+  Nothing changes for anyone who does not open the new Settings section:
+  a spawn without a profile builds a byte-for-byte identical environment
+  (`internal/subscription/`, `internal/hub/subscription*.go`,
+  `internal/config/subscription.go`, `web/src/app/subscriptions.ts`).
+
 ### Changed
 - **The Windows tray now actually stays resident, and wears the app's own icon.**
   As shipped in 0.7.0 the tray only appeared if you re-ran `setup` and then

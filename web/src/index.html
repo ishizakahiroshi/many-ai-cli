@@ -271,6 +271,15 @@
           <div class="settings-note" data-i18n="settings_server_manage_desc">SSH / WSL 先の Hub への接続プロファイルの追加・接続・切断を行います。</div>
         </div>
       </details>
+      <details class="settings-section" data-section="subscriptions">
+        <summary class="settings-section-title"><span data-i18n="settings_subscriptions">サブスクリプション</span><span class="settings-section-current" data-section="subscriptions"></span></summary>
+        <div class="settings-section-body">
+          <div class="settings-note" data-i18n="settings_subscriptions_desc">Keep more than one signed-in account per AI CLI and pick which one a session uses. many-ai-cli only points the official CLI at a separate config directory — it never reads or stores your tokens.</div>
+          <div id="subs-list" class="subs-list"></div>
+          <div id="subs-error" class="settings-note settings-note-warn" hidden></div>
+          <div class="settings-note" data-i18n="settings_subscriptions_isolation_note">A profile switches the CLI's whole config directory, so per-profile sessions do not see the global memory file, skills, or past conversations of your default profile.</div>
+        </div>
+      </details>
       <details class="settings-section" data-section="remote-auth">
         <summary class="settings-section-title"><span data-i18n="settings_remote_auth">リモートアクセス保護</span><span class="settings-section-current" data-section="remote-auth"></span></summary>
         <div class="settings-section-body">
@@ -1044,6 +1053,12 @@
                aria-label="Browse Ollama Cloud models">🔗</a>
           </div>
           <datalist id="spawn-model-datalist"></datalist>
+
+          <!-- subscription selector: profile が 2 件以上ある provider でのみ出す。
+               0〜1 件のときは行ごと隠し、送信 JSON も従来と同一に保つ。 -->
+          <div class="spawn-subscription-row" id="spawn-subscription-row" hidden>
+            <select id="spawn-subscription" class="spawn-select"></select>
+          </div>
 
           <!-- Claude-only options -->
           <div id="spawn-claude-opts">

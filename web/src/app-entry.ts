@@ -41,6 +41,7 @@ import { initHistoryLite } from './app/history-lite.js';
 import { initMobileShortNudge } from './app/mobile-short-nudge.js';
 import { initMobileApprovalOnly } from './app/mobile-approval-only.js';
 import { initBugReportModal } from './app/bug-report-modal.js';
+import { initSubscriptions } from './app/subscriptions.js';
 // ステータスバー初期化（/api/user-prefs から enabled を読む）
 initTokenStatusbar();
 // detached-grid モード判定（/?view=detached-grid の場合のみ初期化）
@@ -67,3 +68,5 @@ initHistoryLite();
 initMobileShortNudge();
 initMobileApprovalOnly();
 initBugReportModal();
+// Settings > Subscriptions（複数サブスクリプションの登録・ログイン・有効/無効）
+initSubscriptions();

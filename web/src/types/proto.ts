@@ -168,6 +168,10 @@ export interface Message {
   data?: string | Uint8Array;
   text?: string;
   agent_session_id?: string;
+  // subscription profile（複数サブスクリプション管理）。空/未送は「CLI 自身の
+  // ログイン環境」を意味する。ID は不透明な識別子で、認証情報は含まない。
+  subscription_id?: string;
+  subscription_name?: string;
   messages?: AgentChatMessage[];
   cols?: number;
   rows?: number;
@@ -294,6 +298,9 @@ export interface SessionSnapshot {
   board_path?: string;
   worktree_branch?: string;
 	board_notify_pending?: boolean;
+  // 起動に使ったサブスクリプション profile。空/未送は CLI 自身のログイン環境。
+  subscription_profile_id?: string;
+  subscription_profile_name?: string;
   state?: SessionState;
 	activity?: SessionActivity;
 	output_idle?: boolean;
