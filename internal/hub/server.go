@@ -1653,14 +1653,8 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 		case "pty_resize":
 			s.handleResizeFromUI(conn, m)
 		case "pty_input":
-			// 入力経路の診断は内容を記録せず、受信状態だけを残す。handleInput は同期呼び出しで、
-			// この for ループが返るまで同じ UI 接続の後続メッセージ（= 確定 \r）を
-			// 受信できない。recv の刻みが無いとその待ちが測れない。
-			s.logger.Info("input_trace",
-				"stage", "recv",
-				"session_id", m.SessionID,
-				"bytes", len(m.Text),
-				"ts_ns", time.Now().UnixNano())
+			// handleInput は同期呼び出しで、この for ループが返るまで同じ UI 接続の
+			// 後続メッセージ（= 確定 \r）を受信できない。
 			s.claimResizeOwnership(conn, m.SessionID, 0, 0)
 			s.handleInput(m)
 		case "ui_active_session":

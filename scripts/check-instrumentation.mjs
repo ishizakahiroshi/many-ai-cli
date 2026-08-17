@@ -5,9 +5,9 @@
 // 呼び出し元: release の前提チェック / CI
 //
 // 検査は 3 本立て:
-//   1. 台帳に無い観測コードが生えていないか（発見漏れを防ぐ）
-//   2. status=active の期限（due）が切れていないか（放置を防ぐ）
-//   3. status=removed が本当に消えているか（台帳だけ直して実体が残るのを防ぐ）
+//   1. 台帳に無い観測コードが生えていないか（発見漏れを防ぐ）— files と sharedFiles を見る
+//   2. status=active の期限（due・YYYY-MM-DD）が切れていないか（放置を防ぐ）
+//   3. status=removed が本当に消えているか（台帳だけ直して実体が残るのを防ぐ）— files のみ見る
 //
 // exit 0 = 問題なし / exit 1 = ブロック。
 
@@ -49,14 +49,22 @@ function trackedFiles() {
   return out.split('\n').map(s => s.trim()).filter(Boolean);
 }
 
-function cmpVersion(a, b) {
-  const pa = String(a).split('.').map(Number);
-  const pb = String(b).split('.').map(Number);
-  for (let i = 0; i < 3; i++) {
-    const d = (pa[i] || 0) - (pb[i] || 0);
-    if (d !== 0) return d;
-  }
-  return 0;
+// due は日付（YYYY-MM-DD）。以前は版数で持ち、台帳の currentVersion と比べていたが、
+// その値を進める手順がどこにも無く 2 版ぶん放置された（0.6.0 のまま v0.7.0 を出した）。
+// 「手で更新しないと壊れる版数をリポジトリに置かない」という CLAUDE.md の方針にも
+// 反していたので、誰も更新しなくても正しい日付比較へ移した。
+const DUE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// UTC の暦日で比較する。ローカル時刻を使うと作者環境（JST）と CI（UTC）で
+// 判定が 1 日ずれるため、どちらでも同じ答えになる側に寄せる。
+function todayUTC() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// YYYY-MM-DD は辞書順 = 時系列順なので文字列比較でよい。
+function daysUntil(due) {
+  const ms = Date.parse(`${due}T00:00:00Z`) - Date.parse(`${todayUTC()}T00:00:00Z`);
+  return Math.round(ms / 86400000);
 }
 
 function main() {
@@ -66,13 +74,23 @@ function main() {
   }
   const ledger = JSON.parse(readFileSync(ledgerPath, 'utf8'));
   const entries = ledger.entries || [];
-  const current = ledger.currentVersion || '0.0.0';
 
   // 台帳が知っているファイル・エンドポイント（status を問わず）。
+  //
+  // files と sharedFiles を分けるのは、第 1 パスと第 3 パスで要求が逆になるため。
+  //   files       = その観測コード専用のファイル。撤去すればファイルごと消える。
+  //                 第 1 パス（登録済みか）と第 3 パス（removed なのに残っていないか）の両方で見る。
+  //   sharedFiles = 観測コードが間借りしている共有ファイル（server.go 等）。撤去しても
+  //                 ファイル自体は残るので、第 3 パスで見ると removed にした瞬間に必ず落ちる。
+  //                 第 1 パスだけで見る。
+  //
+  // この区別が無かったため「登録すると撤去できない」か「撤去できるが守られない」の
+  // 二択になり、ui-input-trace と hub-input-trace の 2 件が files を空にして取り残された。
   const known = new Set();
   const knownEndpoints = new Set();
   for (const e of entries) {
     for (const f of e.files || []) known.add(f);
+    for (const f of e.sharedFiles || []) known.add(f);
     for (const p of e.endpoints || []) knownEndpoints.add(p);
   }
 
@@ -108,11 +126,16 @@ function main() {
       problems.push(`${e.id}: active なのに gate が always-on。opt-in にするか撤去する`);
     }
     if (!e.due) {
-      problems.push(`${e.id}: active なのに due が無い。撤去期限を決める`);
+      problems.push(`${e.id}: active なのに due が無い。撤去期限（YYYY-MM-DD）を決める`);
       continue;
     }
-    if (cmpVersion(current, e.due) >= 0) {
-      problems.push(`${e.id}: due=${e.due} に達している（現在 ${current}）。撤去するか due を更新して reason を書き足す`);
+    if (!DUE_RE.test(e.due)) {
+      problems.push(`${e.id}: due=${e.due} の形式が不正。日付（YYYY-MM-DD）で書く（版数での指定は廃止）`);
+      continue;
+    }
+    const today = todayUTC();
+    if (e.due <= today) {
+      problems.push(`${e.id}: due=${e.due} を過ぎている（本日 ${today}）。撤去するか due を更新して reason を書き足す`);
     }
   }
 
@@ -142,7 +165,10 @@ function main() {
 
   const active = entries.filter(e => e.status === 'active');
   console.log(`OK: 観測コードの検査に問題なし（台帳 ${entries.length} 件 / うち active ${active.length} 件）`);
-  for (const e of active) console.log(`  active: ${e.id} — gate=${e.gate} due=${e.due}`);
+  for (const e of active) {
+    const left = DUE_RE.test(e.due || '') ? `（あと ${daysUntil(e.due)} 日）` : '';
+    console.log(`  active: ${e.id} — gate=${e.gate} due=${e.due}${left}`);
+  }
 }
 
 main();
