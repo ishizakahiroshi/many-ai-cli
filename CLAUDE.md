@@ -1,6 +1,6 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-08-17(月) 09:35:01 — 複数サブスクリプション管理の設計原則を 1 節追加（設定ディレクトリを env で切る・token を持たない）
+> 最終更新: 2026-08-17(月) — 複数サブスクリプション管理の設計原則を 1 節追加（設定ディレクトリを env で切る・token を持たない）。同節の usage remaining を「問い合わせて取る」と「押し出されてくる」で書き分け
 
 > 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。
 
@@ -54,7 +54,8 @@
 - **profile 未指定の起動で env を変えない。** `TestSubscriptionLaunchWithoutProfileLeavesEnvUnchanged` と `TestFakeProviderWithoutProfileKeepsInheritedEnv` が固定している
 - **存在しない / 無効化された profile を指定した spawn を、別アカウントや既定ログインへ黙って倒さない。** エラーで止める
 - **実行中セッションの認証を差し替える経路を作らない。** `TestLiveSessionAuthIsNeverSwapped` がソースを走査して代入箇所を検査している
-- usage remaining は**どの provider からも取得できない**（2026-08-17 実測）。「取れないので `Unknown` と出す」欄すら作っていない。取得手段ができるまで `ReadUsage` を interface へ足さない
+- **契約の残量を「問い合わせて」取る手段は、対応 4 provider のどれにも無い**（2026-08-17 実測）。`claude auth status` はプラン名まで、`codex login status` は誰でログインしているかだけ、`grok models` はログイン有無、`opencode stats` はローカルのトークン集計。よって profile 一覧に残量欄を作らず、`ReadUsage` を interface へ足さない。「取れないので `Unknown` と出す」欄も作らない
+- **これは「押し出されてくる値」とは別の話。混同しないこと**（2026-08-17 追記）。claude だけは走行中セッションの statusLine が `rate_limits`（5 時間枠・週次枠の使用率と reset 時刻）を渡してくるので、`internal/usagerelay/usagerelay.go` の `RateLimits` が受け、`web/src/app/token-statusbar.ts` が **既に描いている**（`showRl` は claude 限定）。**これは「今そのセッションが使っている契約」の値であって、profile を指定して問い合わせた結果ではない。** 前項を「残量は 1 バイトも取れない」と読むと、実装済みのものを未実装と書く事故になる（2026-08-17 の停止条件調査で実際に食い違いとして報告された）
 
 ## 現在の実装状態
 
