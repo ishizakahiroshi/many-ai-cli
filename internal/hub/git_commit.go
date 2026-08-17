@@ -72,7 +72,15 @@ func (s *Server) handleGitCommitAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), gitCommandTimeout)
+	// Commit all runs status -> add -A -> commit under one budget. The commit
+	// step runs the repo's pre-commit hook synchronously (this repo's
+	// secrets-scan, or lint-staged/doxguard elsewhere), which routinely takes
+	// several seconds. The shared 5s read timeout (gitCommandTimeout) kills git
+	// mid-hook, leaving the index staged but uncommitted. Give the whole
+	// sequence a commit-appropriate budget, matching push's 60s order of
+	// magnitude.
+	const gitCommitAllTimeout = 120 * time.Second
+	ctx, cancel := context.WithTimeout(r.Context(), gitCommitAllTimeout)
 	defer cancel()
 
 	statusOut, err := runGit(ctx, cwd, "status", "--short", "--porcelain=v1", "-z")

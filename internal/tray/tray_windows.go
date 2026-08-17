@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"syscall"
 	"time"
 	"unsafe"
@@ -192,6 +193,12 @@ var trayState struct {
 }
 
 func run(cfg *config.Config) error {
+	// Win32 windows and their message queue are thread-affine: RegisterClass,
+	// CreateWindow and the GetMessage loop below must all run on the same OS
+	// thread. Without pinning, the goroutine can migrate threads and the tray
+	// icon stops responding to menu clicks.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	trayState.cfg = cfg
 
 	// many-ai-cli はコンソールアプリなので、ショートカットから起動すると

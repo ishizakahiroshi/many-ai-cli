@@ -119,7 +119,12 @@ var (
 // stderr は ExitError から拾ってエラーメッセージに含める（呼び出し側のロギング用）。
 // ctx の timeout / cancel で確実に終了する。
 func runGit(ctx context.Context, cwd string, args ...string) ([]byte, error) {
-	full := append([]string{"-C", cwd}, args...)
+	// core.quotePath=false: keep non-ASCII (e.g. Japanese) paths as raw UTF-8 in
+	// name-status / numstat output instead of octal-escaped quoted form. Quoted
+	// paths break both the UI display and pathspec reuse (`git show <hash> -- "\343..."`
+	// matches nothing and returns an empty, exit-0 diff). -z commands are
+	// unaffected (they never quote).
+	full := append([]string{"-C", cwd, "-c", "core.quotePath=false"}, args...)
 	cmd := exec.CommandContext(ctx, "git", full...)
 	out, err := cmd.Output()
 	if err != nil {
@@ -142,7 +147,8 @@ func runGitCombined(ctx context.Context, cwd string, args ...string) ([]byte, er
 // runGitCombinedEnv は stdout/stderr をまとめて返しつつ、必要な追加環境変数を
 // git プロセスへ渡す。push のように認証プロンプトを抑止したい場合に使う。
 func runGitCombinedEnv(ctx context.Context, cwd string, extraEnv []string, args ...string) ([]byte, error) {
-	full := append([]string{"-C", cwd}, args...)
+	// See runGit: keep non-ASCII paths raw so parsers and pathspec reuse work.
+	full := append([]string{"-C", cwd, "-c", "core.quotePath=false"}, args...)
 	cmd := exec.CommandContext(ctx, "git", full...)
 	if len(extraEnv) > 0 {
 		cmd.Env = append(os.Environ(), extraEnv...)

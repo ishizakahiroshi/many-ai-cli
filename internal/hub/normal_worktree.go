@@ -59,6 +59,13 @@ func prepareNormalWorktree(cwd, label string, now time.Time) (normalWorktree, er
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return normalWorktree{}, fmt.Errorf("create worktree root: %w", err)
 	}
+	// Keep .git-worktrees/ out of the parent repo's `git status`. The directory
+	// holds a git worktree (its own `.git` file), so the parent sees it as an
+	// untracked embedded repo and `Commit all` (git add -A) would stage it as a
+	// mode-160000 gitlink. info/exclude is a repo-local, uncommitted ignore file,
+	// so this works in any user repo and needs no cleanup or next-run recovery
+	// (unlike editing the tracked .gitignore, which only helped this repo).
+	excludeWorktreeDir(ctx, parent)
 	path := filepath.Join(root, name+"-"+stamp)
 	for n := 2; ; n++ {
 		if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
@@ -68,7 +75,11 @@ func prepareNormalWorktree(cwd, label string, now time.Time) (normalWorktree, er
 		}
 		path = filepath.Join(root, fmt.Sprintf("%s-%s-%d", name, stamp, n))
 	}
-	branch := "many-ai/" + strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	// filepath.Ext を剥がさない: ラベルにドットがあると Ext がタイムスタンプまで
+	// 巻き込んで消し（"a.b-20060102-1504" → ".b-20060102-1504"）、ブランチ名が
+	// "many-ai/a" に潰れて連続 spawn が同名衝突で失敗する。safeToken が末尾ドットや
+	// ".." を落とすので Base をそのまま使ってよい。
+	branch := "many-ai/" + filepath.Base(path)
 	ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", "-C", parent, "worktree", "add", "-b", branch, path, "HEAD")
@@ -76,6 +87,45 @@ func prepareNormalWorktree(cwd, label string, now time.Time) (normalWorktree, er
 		return normalWorktree{}, fmt.Errorf("create worktree: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return normalWorktree{Path: path, ParentDir: parent, Branch: branch, Created: true}, nil
+}
+
+// excludeWorktreeDir adds `.git-worktrees/` to the parent repo's info/exclude
+// (idempotently) so the sibling worktree directory does not surface as an
+// untracked embedded repo in the parent's `git status`. info/exclude is
+// repo-local and never committed, so best-effort failure is fine.
+func excludeWorktreeDir(ctx context.Context, parent string) {
+	const entry = ".git-worktrees/"
+	out, err := exec.CommandContext(ctx, "git", "-C", parent, "rev-parse", "--git-common-dir").Output()
+	if err != nil {
+		return
+	}
+	common := strings.TrimSpace(string(out))
+	if common == "" {
+		return
+	}
+	if !filepath.IsAbs(common) {
+		common = filepath.Join(parent, common)
+	}
+	excludePath := filepath.Join(common, "info", "exclude")
+	existing, _ := os.ReadFile(excludePath)
+	for _, line := range strings.Split(string(existing), "\n") {
+		if strings.TrimSpace(line) == entry {
+			return // already excluded
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
+		return
+	}
+	prefix := ""
+	if len(existing) > 0 && existing[len(existing)-1] != '\n' {
+		prefix = "\n"
+	}
+	f, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	_, _ = f.WriteString(prefix + entry + "\n")
 }
 
 // cleanupNormalWorktree only removes a clean worktree whose branch is already

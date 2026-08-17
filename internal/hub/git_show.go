@@ -64,7 +64,7 @@ func (s *Server) handleGitShow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, cwd, err := s.resolveGitRoot(sid)
+	gitRoot, cwd, err := s.resolveGitRoot(sid)
 	if err != nil {
 		writeGitErrorFromResolve(w, sid, err)
 		return
@@ -104,8 +104,10 @@ func (s *Server) handleGitShow(w http.ResponseWriter, r *http.Request) {
 
 	// 4) ファイルごとの diff 取得（256KB 超は truncate）
 	for i := range files {
-		// 削除 (D) でも `git show <hash> -- <path>` は previous content を含む diff を返す
-		diffOut, derr := runGit(ctx, cwd, "show", "--pretty=format:", hash, "--", files[i].Path)
+		// 削除 (D) でも `git show <hash> -- <path>` は previous content を含む diff を返す。
+		// pathspec は gitRoot 基準で解釈させる: name-status が返すパスは常に root 相対
+		// なので、cwd がサブディレクトリだと cwd 相対 pathspec が一致せず空(exit 0)になる。
+		diffOut, derr := runGit(ctx, gitRoot, "show", "--pretty=format:", hash, "--", files[i].Path)
 		if derr != nil {
 			// 個別エラーはスキップ（diff 空のまま）
 			continue

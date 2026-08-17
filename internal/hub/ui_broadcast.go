@@ -230,9 +230,12 @@ func (s *Server) broadcast(m any) {
 		ucs = append(ucs, uc)
 	}
 	s.sessionsMu.Unlock()
-	deadline := time.Now().Add(broadcastWriteTimeout)
 	for _, uc := range ucs {
-		if err := uc.sendWithDeadline(m, deadline); err != nil {
+		// Per-UI deadline: a single shared absolute deadline lets one slow UI
+		// (which can block up to broadcastWriteTimeout) leave the remaining
+		// healthy UIs with an already-expired budget, so they time out and get
+		// dropped through no fault of their own.
+		if err := uc.sendWithDeadline(m, time.Now().Add(broadcastWriteTimeout)); err != nil {
 			s.logger.Warn("broadcast: UI send failed, removing dead connection", "err", err)
 			s.removeUI(uc.ws)
 		}

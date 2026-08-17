@@ -19,6 +19,29 @@ var (
 	}
 	pathPattern  = regexp.MustCompile("(?i)(?:[a-z]:[\\\\/][^\\s'\"`<>|]+|(?:\\.\\.?[\\\\/]|/)[^\\s'\"`<>|]+|\\*\\.[a-z0-9_-]+)")
 	spacePattern = regexp.MustCompile(`\s+`)
+
+	// highRiskRe catches destructive commands the literal highSignals list misses:
+	// flag-order variants (rm -fr / -Rf / --recursive) and piped installers
+	// (curl ... | sh). Matched against the whole command so pipe-based patterns
+	// are not split apart by the segment loop below.
+	highRiskRe = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)\brm\s+(?:-[a-z]*r[a-z]*|--recursive)`),
+		regexp.MustCompile(`(?i)\b(?:chmod|chown)\s+(?:-[a-z]*r[a-z]*|--recursive)`),
+		regexp.MustCompile(`(?i)\bremove-item\b[^\n]*-recurse`),
+		regexp.MustCompile(`(?i)\b(?:curl|wget|iwr|invoke-webrequest)\b[^\n]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh|python[0-9.]*|perl|node|pwsh|powershell|iex)\b`),
+		regexp.MustCompile(`(?i)\bgit\s+reset\s+--hard\b`),
+		regexp.MustCompile(`(?i)\bgit\s+clean\s+-`),
+		regexp.MustCompile(`(?i)\bgit\s+push\b[^\n]*(?:--force|--force-with-lease|\s-f\b)`),
+		regexp.MustCompile(`(?i)\b(?:sudo|doas)\s`),
+		regexp.MustCompile(`(?i)\b(?:mkfs\S*|shutdown|reboot|halt|poweroff)\b`),
+		regexp.MustCompile(`(?i)\bdd\s+[^\n]*\bof=`),
+		regexp.MustCompile(`(?i)(?:^|\s)(?:del|rmdir)\s+/s\b`),
+		regexp.MustCompile(`(?i)\bformat\s+[a-z]:`),
+	}
+	// riskSegmentSplit breaks a command on shell connectors so each part is
+	// classified independently (a low-risk first segment must not mask a
+	// dangerous later one, e.g. "git status; rm -fr ~").
+	riskSegmentSplit = regexp.MustCompile(`(?:&&|\|\||[;&\n|])`)
 )
 
 // Summarize extracts conservative display facts from an already ANSI-stripped
@@ -47,6 +70,13 @@ func ClassifyRisk(command string) proto.ApprovalRiskTier {
 		"git clean -", "push --force", "push -f", "sudo ", "doas ", "mkfs", "dd ",
 		"shutdown", "reboot", "format ", "curl |", "wget |", "chmod -r", "chown -r",
 	}
+	// High-risk patterns are matched against the whole command first (before the
+	// segment split) so pipe-based ones like "curl ... | sh" stay intact.
+	for _, re := range highRiskRe {
+		if re.MatchString(value) {
+			return proto.ApprovalRiskHigh
+		}
+	}
 	for _, signal := range highSignals {
 		if strings.Contains(value, signal) {
 			return proto.ApprovalRiskHigh
@@ -56,12 +86,35 @@ func ClassifyRisk(command string) proto.ApprovalRiskTier {
 		"cat ", "head ", "tail ", "ls", "dir", "pwd", "git status", "git diff",
 		"git log", "git show", "git branch", "find ", "rg ", "grep ", "type ",
 	}
-	for _, prefix := range lowPrefixes {
-		if value == strings.TrimSpace(prefix) || strings.HasPrefix(value, prefix) {
-			return proto.ApprovalRiskLow
+	// Classify each connector-separated segment and take the worst tier. A
+	// low-risk leading segment must not make the whole command low.
+	sawLow, sawMid := false, false
+	for _, seg := range riskSegmentSplit.Split(value, -1) {
+		seg = strings.TrimSpace(seg)
+		if seg == "" {
+			continue
+		}
+		isLow := false
+		for _, prefix := range lowPrefixes {
+			if seg == strings.TrimSpace(prefix) || strings.HasPrefix(seg, prefix) {
+				isLow = true
+				break
+			}
+		}
+		if isLow {
+			sawLow = true
+		} else {
+			sawMid = true
 		}
 	}
-	return proto.ApprovalRiskMid
+	switch {
+	case sawMid:
+		return proto.ApprovalRiskMid
+	case sawLow:
+		return proto.ApprovalRiskLow
+	default:
+		return proto.ApprovalRiskMid
+	}
 }
 
 func extractCommand(question, context string) string {
