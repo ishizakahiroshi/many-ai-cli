@@ -23,6 +23,21 @@ import (
 
 const defaultTimeout = 3 * time.Second
 
+// initTimeout は init（スキーマ初期化）専用のタイムアウト。
+//
+// init は 1 本の ctx で pragma 5 本（WAL ファイルの作成を含む）・CREATE TABLE 群・
+// fts5 の仮想テーブル・ensureSessionColumns の ALTER TABLE 移行を全部覆う。定常クエリの
+// fail-fast（defaultTimeout）とは性質が違い、ディスクと DB の大きさで所要時間が桁違いに
+// 振れるため、同じ 3 秒を共用すると環境依存で起動に失敗する。
+//
+// 実測（2026-08-17）: 手元（Windows / SSD）は 20〜50ms。同じコードが GitHub Actions の
+// windows-latest では 3 秒を超え、TestSessionCardMetaPersistsAcrossReattach が
+// `sqlite pragma: context deadline exceeded` で落ちた（同テストは store を 1 個だけ
+// t.TempDir() 配下に開くだけで、パッケージ内に t.Parallel() は無い）。
+//
+// 上限を外さないのは、DB が本当に壊れているときに起動が無限に待たないため。
+const initTimeout = 30 * time.Second
+
 // resetTimeout は ResetHistory（UI の「履歴を全削除」）専用のタイムアウト。
 // 利用者が明示的に押す保守操作なので、肥大化した DB でも完走できるよう長めに取る。
 const resetTimeout = 60 * time.Second
@@ -336,7 +351,7 @@ func (s *Store) asyncWriter() {
 }
 
 func (s *Store) init() error {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), initTimeout)
 	defer cancel()
 	pragmas := []string{
 		// 新規 DB はここで incremental に確定する。既存 DB（auto_vacuum=NONE）には
