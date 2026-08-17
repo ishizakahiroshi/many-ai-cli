@@ -23,6 +23,12 @@ import { getHubWorkflowEntry, isHubWorkflowAuthoritative } from './workflow-stor
 const SESSION_CARD_COLORS = ['blue', 'green', 'orange', 'red', 'purple'];
 let activeSessionColorFilter = '';
 
+// スマホ幅判定（他モジュールと同じ 720px 基準）。セッション切替時の入力欄
+// 自動フォーカスを PC だけに限定するために使う。
+const _mobileMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
+  ? window.matchMedia('(max-width: 720px)') : null;
+function isMobileViewport(): boolean { return !!_mobileMql?.matches; }
+
 export async function patchSessionMeta(id: number, patch: Record<string, unknown>): Promise<boolean> {
   try {
     const res = await fetch(`/api/sessions/${encodeURIComponent(String(id))}/meta?token=${encodeURIComponent(token || '')}`, {
@@ -188,7 +194,10 @@ export function activateSession(id) {
   if (typeof rewireChatHistorySub === 'function') rewireChatHistorySub(id);
   // chat-payload (内蔵プロキシ経由 payload 表示) のアクティブセッションを切替
   setActiveSessionForPayload(id);
-  inputEl.focus();
+  // スマホはセッションへ移動した瞬間にフォーカスするとソフトキーボードが立ち上がり、
+  // 画面の下半分が隠れて本文が読めなくなる（2026-08-17 report）。PC はキーボードが
+  // 常時出ているので従来どおり即入力できる状態にする。
+  if (!isMobileViewport()) inputEl.focus();
   if (typeof window._wakewordSessionChanged === 'function') window._wakewordSessionChanged();
   const sessionInfo = sessions.get(id);
   if (sessionInfo) {
