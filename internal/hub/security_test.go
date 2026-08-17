@@ -112,8 +112,11 @@ func TestHandleIndexSetsTokenCookie(t *testing.T) {
 	if !found.HttpOnly {
 		t.Fatal("expected HttpOnly cookie")
 	}
-	if found.SameSite != http.SameSiteStrictMode {
-		t.Fatalf("SameSite = %v, want Strict", found.SameSite)
+	// Lax であること。Strict だとブラウザ外から始まるトップレベル遷移（ホーム画面へ
+	// 追加した PWA の cold launch）に cookie が乗らず毎回 401 になる。非 GET の CSRF は
+	// requireAllowedRequestOrigin が守るので、Lax でも防御は落ちない（2026-08-17）。
+	if found.SameSite != http.SameSiteLaxMode {
+		t.Fatalf("SameSite = %v, want Lax", found.SameSite)
 	}
 }
 
