@@ -444,13 +444,9 @@ func newUIConn(ws *websocket.Conn) *uiConn {
 	return &uiConn{ws: ws, ptySizes: map[int]ptySize{}}
 }
 
-func (c *uiConn) send(m any) error {
-	c.sendMu.Lock()
-	defer c.sendMu.Unlock()
-	return websocket.JSON.Send(c.ws, m)
-}
-
 // sendWithDeadline は deadline までに JSON フレームを送信する（finding #4: 書き込みブロック防止）。
+// UI への全フレームがこの経路を通り、送信ごとに write deadline を張り直す
+// （F-01: sendSnapshot の残存 deadline を replay が引き継いで切断する退行を防ぐ）。
 func (c *uiConn) sendWithDeadline(m any, deadline time.Time) error {
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
