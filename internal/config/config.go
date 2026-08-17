@@ -756,6 +756,10 @@ type Config struct {
 		// JournalEnabled is true by default. Existing config files inherit the
 		// default because LoadOrCreate unmarshals over defaultConfig.
 		JournalEnabled bool `yaml:"journal_enabled" json:"journal_enabled"`
+		// TaskDetailEnabled gates the tasks-output-derived agent detail feature
+		// (taskId resolution + tasks output polling). True by default, same
+		// inheritance behavior as JournalEnabled.
+		TaskDetailEnabled bool `yaml:"task_detail_enabled" json:"task_detail_enabled"`
 	} `yaml:"workflow,omitempty" json:"workflow,omitempty"`
 	Approval        ApprovalConfig  `yaml:"approval,omitempty"`
 	SlashCmdSources SlashCmdSources `yaml:"slash_cmd_sources,omitempty" json:"slash_cmd_sources,omitempty"`
@@ -936,6 +940,7 @@ func defaultConfig(home string) *Config {
 	cfg.Log.AttachmentMaxTotalMB = 500
 	cfg.UserPrefs = UserPrefs{}
 	cfg.Workflow.JournalEnabled = true
+	cfg.Workflow.TaskDetailEnabled = true
 	cfg.Voice.Whisper.Language = "ja"
 	cfg.Voice.Whisper.TimeoutSeconds = 60
 	cfg.SlashCmdSources = DefaultSlashCmdSources()

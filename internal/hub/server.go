@@ -219,6 +219,24 @@ type session struct {
 	workflowCompletionNotified        bool
 	workflowCompletionSignature       string
 
+	// JSON 外: Claude Workflow tasks-output 詳細（内部C1〜C3・agent-transcript
+	// detail feature）。taskId はメイン transcript の Workflow tool_use/
+	// tool_result から特定し（一発トリガー・最大5回リトライ）、特定できたら
+	// tasks output ファイルを mtime 変化検出でポーリングする。result/logs は
+	// いかなる Go 構造体にも proto にも一切載せない（意図的欠落）。
+	// taskDetailUnavailable はセッション単位で一度立ったら再トリガーしない
+	// （5 回失敗＝transcript 形式がこの実装の前提と食い違っている可能性が高く、
+	// 同一セッション内の以降の Workflow 呼び出しでも同じ理由で失敗し続ける）。
+	taskDetailWfDir           string
+	taskDetailSessionUUID     string
+	taskDetailTaskID          string
+	taskDetailResolveAttempts int
+	taskDetailUnavailable     bool
+	taskDetailGeneration      uint64
+	taskDetailTimer           *time.Timer
+	taskDetailFileState       workflowTaskDetailFileState
+	taskDetailProgress        *proto.WorkflowProgress
+
 	// JSON 外: provider-owned structured transcript tail. The path, byte cursor,
 	// and bounded ephemeral parser state are retained only for the live poll;
 	// transcript content is broadcast and never stored in many-ai-cli history.
@@ -1593,7 +1611,16 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 		s.sendSnapshot(uc)
 		replaySessionIDs := make([]int, 0, len(historyItems))
 		for _, item := range historyItems {
-			_ = uc.send(item)
+			// Refresh the write deadline per frame. sendSnapshot leaves an
+			// absolute now+broadcastWriteTimeout deadline on the conn and
+			// uc.send does not reset it, so on a slow link (tailscale / SSH
+			// tunnel) a large ptyBuf replay runs past that deadline, the bufio
+			// frame writer sticks on the i/o timeout, and every later write
+			// fails — dropping the UI into a reconnect→re-replay→re-fail loop.
+			if err := uc.sendWithDeadline(item, time.Now().Add(broadcastWriteTimeout)); err != nil {
+				s.removeUI(conn)
+				return
+			}
 			if item.Type == "reattach_replay_done" {
 				replaySessionIDs = append(replaySessionIDs, item.SessionID)
 			}

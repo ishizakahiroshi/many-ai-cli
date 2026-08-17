@@ -14,7 +14,7 @@
 // 純パース部は workflow-progress.ts（DOM/i18n 非依存）に分離。ここは描画と配線だけ。
 
 import { t } from '../i18n.js';
-import type { WorkflowProgress as HubWorkflowProgress } from '../types/proto.js';
+import type { WfAgentDetail, WorkflowProgress as HubWorkflowProgress } from '../types/proto.js';
 import { activeSessionId, sessions } from './state.js';
 import { scanBuffer } from './terminal.js';
 import { parseWorkflowProgress, WorkflowProgress, WfAgentState } from './workflow-progress.js';
@@ -67,7 +67,11 @@ function sigOf(r: WorkflowProgress): string {
     .join('|');
 }
 
+// tasks output（C1 実測）の state は 'done' / 'error' のみ確認済み（'pending' /
+// 'running' は想定値として許容）。'error' 専用のアイコン・CSS バケットは無いため、
+// VT/journal 側が既に持つ 'failed'（✗ 表示・赤色）へ統合する。
 function hubAgentState(state: string): WfAgentState {
+  if (state === 'error') return 'failed';
   return state === 'running' || state === 'done' || state === 'failed' || state === 'pending'
     ? state
     : 'pending';
@@ -81,6 +85,7 @@ function workflowFromHub(progress: HubWorkflowProgress, receivedAt: number, now:
       state: hubAgentState(String(agent.state || '')),
       glyph: '',
       metrics: agent.metrics,
+      detail: agent.detail,
     })),
   }));
   const total = Math.max(0, Number(progress.total || 0));
@@ -114,6 +119,7 @@ function workflowFromHub(progress: HubWorkflowProgress, receivedAt: number, now:
     pendingCount: Math.max(0, Number(progress.pending || 0)),
     settledBy: String(progress.settled_by || ''),
     authority: 'hub',
+    taskDetailSource: String(progress.task_detail_source || ''),
   };
 }
 
@@ -266,6 +272,35 @@ function formatElapsed(seconds: number, compact = false): string {
   if (m > 0 || h > 0) parts.push(`${m}m`);
   parts.push(`${s}s`);
   return parts.join(' ');
+}
+
+// 1 行表示（直近ツール等）へ入れる短縮テキスト。空白畳み込み + 上限文字数で丸める。
+function clampForLine(raw: string, max = 100): string {
+  const s = String(raw || '').replace(/\s+/g, ' ').trim();
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+
+function formatTokenCount(n: number): string {
+  if (!(n > 0)) return '';
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'k';
+  return String(n);
+}
+
+// tasks output 由来の 1 エージェント分メトリクス行（モデル・所要時間・トークン数・
+// ツール呼び出し数）。値が無い項目は落として ' · ' 連結する。
+function formatAgentDetailMetrics(detail: WfAgentDetail): string {
+  const parts: string[] = [];
+  if (detail.model) parts.push(detail.model);
+  if (detail.duration_ms && detail.duration_ms > 0) {
+    parts.push(formatElapsed(detail.duration_ms / 1000, true));
+  }
+  const tok = formatTokenCount(detail.tokens || 0);
+  if (tok) parts.push(t('wf_detail_tokens', { n: tok }));
+  if (detail.tool_calls && detail.tool_calls > 0) {
+    parts.push(t('wf_detail_tool_calls', { n: detail.tool_calls }));
+  }
+  return parts.join(' · ');
 }
 
 function renderPill(): void {
@@ -440,6 +475,11 @@ function renderModalBody(): void {
   const dispRunning = done ? 0 : r.runningCount;
   const dispDone = done ? Math.max(r.doneCount, r.totalCount - r.failedCount) : r.doneCount;
   const dispPercent = done ? 100 : r.percent;
+  // Hub が tasks output（Claude Code Workflow タスク出力）から taskId を解決できた
+  // ときだけ true。true の間は各 agent 行へ詳細（モデル・所要時間・直近ツール・
+  // 結果プレビュー）を追加描画し、完了台帳（下部の wf-completed-ledger）は
+  // 詳細セクションが役割を包含するため出さない（plan §C3）。
+  const detailMode = r.taskDetailSource === 'task-output';
   if (counts) {
     const parts: string[] = [];
     if (r.totalCount > 0) {
@@ -507,6 +547,11 @@ function renderModalBody(): void {
       const lbl = document.createElement('span');
       lbl.className = 'wf-agent-label';
       lbl.textContent = agent.label;
+      // promptPreview はラベルの代替にはしない（label が既に人間可読）。
+      // ホバー時 tooltip としてだけ補足で出す（plan §C3）。
+      if (detailMode && agent.detail?.prompt_preview) {
+        lbl.title = agent.detail.prompt_preview;
+      }
       row.appendChild(lbl);
       if (agent.metrics) {
         const metrics = document.createElement('span');
@@ -514,7 +559,41 @@ function renderModalBody(): void {
         metrics.textContent = agent.metrics;
         row.appendChild(metrics);
       }
+      if (detailMode && agent.detail) {
+        const detailMetrics = formatAgentDetailMetrics(agent.detail);
+        if (detailMetrics) {
+          const metrics = document.createElement('span');
+          metrics.className = 'wf-agent-metrics wf-agent-detail-metrics';
+          metrics.textContent = detailMetrics;
+          row.appendChild(metrics);
+        }
+      }
       list.appendChild(row);
+
+      if (detailMode && agent.detail) {
+        if (agent.state === 'running' && (agent.detail.last_tool_name || agent.detail.last_tool_summary)) {
+          // 走行中エージェント: 直近ツールを 1 行で出す（結果プレビューは完了後のみ）。
+          const lastTool = document.createElement('div');
+          lastTool.className = 'wf-agent-last-tool';
+          lastTool.textContent = t('wf_detail_last_tool', {
+            name: agent.detail.last_tool_name || '',
+            summary: clampForLine(agent.detail.last_tool_summary || ''),
+          });
+          list.appendChild(lastTool);
+        } else if (agent.state === 'done' && agent.detail.result_preview) {
+          // 完了エージェント: 結果プレビューは折りたたみ（既定は閉じる＝一覧性優先）。
+          const details = document.createElement('details');
+          details.className = 'wf-agent-result';
+          const summaryEl = document.createElement('summary');
+          summaryEl.textContent = t('wf_detail_result_summary');
+          details.appendChild(summaryEl);
+          const resultBody = document.createElement('div');
+          resultBody.className = 'wf-agent-result-body';
+          resultBody.textContent = agent.detail.result_preview;
+          details.appendChild(resultBody);
+          list.appendChild(details);
+        }
+      }
     }
     phaseEl.appendChild(list);
     body.appendChild(phaseEl);
@@ -522,7 +601,10 @@ function renderModalBody(): void {
 
 
   const sid = activeSessionId;
-  if (sid !== null) {
+  // detailMode（tasks output 由来の詳細セクション）が有効なセッションでは、
+  // 上の agent 行が既に完了エージェントの結果を折りたたみで持っているため、
+  // 完了台帳（VT/journal のみで label しか分からない旧来表示）は出さない。
+  if (sid !== null && !detailMode) {
     const ledger = getWorkflowLedger(sid, r.doneCount);
     if (ledger.labels.length > 0 || ledger.otherCount > 0) {
       const section = document.createElement('section');

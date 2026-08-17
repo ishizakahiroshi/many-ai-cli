@@ -658,6 +658,9 @@ func (s *Server) startWorkflowJournalLocked(id int, ses *session, now time.Time)
 		ses.workflowJournalLastMTime = time.Time{}
 		ses.workflowCompletionNotified = false
 		ses.workflowCompletionSignature = ""
+		// The old run's task detail (if any) no longer applies; a new
+		// wf_<runid> directory for the next run will re-trigger resolution.
+		s.stopWorkflowTaskDetailLocked(ses)
 	}
 	if ses.workflowJournalDetectedAt.IsZero() || ses.workflowJournalFiles == nil && ses.workflowJournalSessionDir == "" && !ses.workflowJournalRunning {
 		ses.workflowJournalDetectedAt = now
@@ -741,6 +744,9 @@ func workflowJournalVTIncomplete(ses *session) bool {
 }
 
 func (s *Server) applyWorkflowJournalPoll(id int, expected *session, generation uint64, files map[string]workflowJournalFileState, sessionDir string, associated bool, now time.Time) {
+	// Read before sessionsMu so this stays consistent with the existing
+	// journalEnabled-before-lock pattern in applyWorkflowVTScan.
+	taskDetailEnabled := s.workflowTaskDetailEnabled()
 	s.sessionsMu.Lock()
 	ses := s.sessions[id]
 	if ses == nil || ses != expected || ses.workflowJournalGeneration != generation {
@@ -748,9 +754,19 @@ func (s *Server) applyWorkflowJournalPoll(id int, expected *session, generation 
 		return
 	}
 	if associated {
+		prevFiles := ses.workflowJournalFiles
 		ses.workflowJournalFiles = files
 		ses.workflowJournalSessionDir = sessionDir
 		ses.workflowJournalPendingAssociation = false
+		// internal C1 trigger point: a wf_<runid> directory the watcher was
+		// not already tracking just got linked. Kick off (or leave alone, if
+		// already resolving/resolved/unavailable) the one-shot taskId
+		// resolution chain for it (docs/local/plan_workflow-progress-agent-transcript-detail_c2_hub-implementation.md 内部C1).
+		if taskDetailEnabled {
+			if wfDir, ok := newWorkflowJournalRunDir(files, prevFiles); ok {
+				s.startWorkflowTaskDetailLocked(id, ses, now, sessionDir, wfDir)
+			}
+		}
 		started, done, lastEvent, lastMTime := workflowJournalCounts(files)
 		ses.workflowJournalLastEventAt = lastEvent
 		ses.workflowJournalLastMTime = lastMTime
@@ -830,6 +846,7 @@ func (s *Server) disableWorkflowJournal(id int, expected *session) {
 	ses.workflowJournalDormantVTSignature = ""
 	ses.workflowJournalPendingAssociation = false
 	ses.journalCounts = workflowCounts{}
+	s.stopWorkflowTaskDetailLocked(ses)
 	out, shouldBroadcast, shouldNotify := s.workflowProgressForBroadcastLocked(ses, now)
 	s.sessionsMu.Unlock()
 	if shouldBroadcast {
