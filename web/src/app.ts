@@ -1759,6 +1759,9 @@ document.addEventListener('mousedown', () => { suppressFocusReclaim = true; });
 document.addEventListener('mouseup',   () => { setTimeout(() => { suppressFocusReclaim = false; }, 300); });
 
 inputEl.addEventListener('blur', (e) => {
+  // スマホはフォーカスを回収するとソフトキーボードが再び立ち上がり、本文を読むために
+  // 入力欄から離れる操作ができなくなる。回収は物理キーボード前提の PC だけに限定する。
+  if (isMobileViewport()) return;
   if (isInteractiveFocusTarget(e.relatedTarget)) return;
   if (suppressFocusReclaim || voiceActive) return;
   if (activeSessionId !== null && document.getElementById('settings-panel').hidden) {
