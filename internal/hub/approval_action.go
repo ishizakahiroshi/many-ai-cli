@@ -256,21 +256,37 @@ func (s *Server) applyOneTapApproval(claim oneTapApprovalClaim) error {
 		ses.inputMu.Unlock()
 		return errOneTapNoInput
 	}
+	provider = ses.Provider
+	candidateKey := approvalCandidateKey(ses.Provider, approval.Kind, approval.Question, approval.Options)
+	// trySendInput -> sendPTYInputFrame -> reserveInflightInput acquires
+	// s.sessionsMu, so it must run WITHOUT the lock held (like submitInputWithGate
+	// and flushPendingInput). Holding it here re-locks the non-reentrant
+	// sessionsMu in the same goroutine and self-deadlocks the whole Hub — every
+	// later sessionsMu waiter (all HTTP handlers, wrapper pty_data, the UI WS
+	// loop) stalls until the process is restarted. inputMu stays held so this
+	// session's input remains serialized across the release.
+	s.sessionsMu.Unlock()
 	// Keep the one-shot nonce and native approval state intact until the PTY
 	// accepts the input.  A disconnected wrapper must leave the action
 	// retryable instead of consuming a notification action and dropping input.
 	if rem := s.trySendInput(wc, claim.SessionID, input); rem != "" {
-		s.sessionsMu.Unlock()
 		ses.inputMu.Unlock()
 		return errOneTapNoInput
 	}
 	if err := s.oneTapApprovals.consume(claim); err != nil {
-		s.sessionsMu.Unlock()
 		ses.inputMu.Unlock()
 		return err
 	}
-	provider = ses.Provider
-	candidateKey := approvalCandidateKey(ses.Provider, approval.Kind, approval.Question, approval.Options)
+	s.sessionsMu.Lock()
+	// The nonce is consumed and the input is delivered. If another path (a UI
+	// reply, auto-approval, or a fresh native prompt) changed the native
+	// approval state while sessionsMu was released, do not clobber it — just
+	// skip the clear broadcast.
+	if ses.nativeApprovalSig != claim.ApprovalSig {
+		s.sessionsMu.Unlock()
+		ses.inputMu.Unlock()
+		return nil
+	}
 	sourceEpoch := markApprovalConsumedLocked(ses, candidateKey, claim.ApprovalSig)
 	ses.nativeApprovalSig = ""
 	ses.nativeApprovalCandidateKey = ""
@@ -299,6 +315,13 @@ func oneTapRejectInput(options []proto.ApprovalOption) string {
 		}
 		if option.IsCurrent {
 			return "\r"
+		}
+		// Numbered prompts (Claude / grok) expose the reject option as a plain
+		// number with no SendText and, unless it is the cursor row, IsCurrent is
+		// false. Send its number like the Web UI does; otherwise one-tap Reject
+		// resolves to "" and fails with 409.
+		if option.Num > 0 {
+			return fmt.Sprintf("%d\r", option.Num)
 		}
 	}
 	return ""

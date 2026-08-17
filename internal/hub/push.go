@@ -263,10 +263,20 @@ func (pm *pushManager) sendApproval(ctx context.Context, payload pushApprovalPay
 			continue
 		}
 		if resp != nil {
-			if resp.StatusCode == http.StatusGone || resp.StatusCode == http.StatusNotFound {
+			switch {
+			case resp.StatusCode == http.StatusGone || resp.StatusCode == http.StatusNotFound:
 				expired = append(expired, sub.Endpoint)
-			} else {
+			case resp.StatusCode >= 200 && resp.StatusCode < 300:
 				sentOK++
+			default:
+				// 429 / 5xx / 403 etc. mean "not delivered". Do NOT count these
+				// as success: counting them sets the dedup mark below and
+				// suppresses the same notification ID for an hour, so a
+				// throttled or transiently-failing push is silently dropped
+				// instead of retried.
+				if pm.logger != nil {
+					pm.logger.Warn("web push non-2xx response", "endpoint_hash", endpointHash(sub.Endpoint), "status", resp.StatusCode)
+				}
 			}
 			_ = resp.Body.Close()
 		}

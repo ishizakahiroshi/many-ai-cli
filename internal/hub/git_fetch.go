@@ -39,7 +39,9 @@ func (s *Server) handleGitFetch(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), gitFetchTimeout)
 	defer cancel()
-	out, runErr := runGitCombined(ctx, cwd, "fetch")
+	// push/pull と同様に資格情報の対話プロンプトを抑止する（認証が要るリモートで
+	// git が端末入力待ちになり timeout まで固まるのを防ぐ）。
+	out, runErr := runGitCombinedEnv(ctx, cwd, gitPushNonInteractiveEnv(), "fetch")
 	if runErr != nil {
 		s.logger.Warn("git fetch failed", "session_id", sid, "err", runErr, "output", sessionlog.MaskSecrets(string(out)))
 		writeGitError(w, http.StatusInternalServerError, "git_command_failed", sanitizeGitErrMsg(runErr))

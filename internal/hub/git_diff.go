@@ -90,7 +90,9 @@ func (s *Server) handleGitDiff(w http.ResponseWriter, r *http.Request) {
 				f.Added = v.added
 				f.Removed = v.removed
 			}
-			diffOut, derr := runGit(ctx, cwd, "diff", "HEAD", "--", sf.Path)
+			// pathspec は gitRoot 基準（sf.Path は porcelain -z 由来の root 相対パス）。
+			// cwd がサブディレクトリだと cwd 相対解釈で一致せず空(exit 0)になる。
+			diffOut, derr := runGit(ctx, gitRoot, "diff", "HEAD", "--", sf.Path)
 			if derr == nil {
 				diff := strings.TrimLeft(string(diffOut), "\n")
 				if len(diff) > gitShowDiffMaxBytes {

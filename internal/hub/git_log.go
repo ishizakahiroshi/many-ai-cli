@@ -103,6 +103,21 @@ func (s *Server) handleGitLog(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// コミットが 1 件も無いリポジトリ（unborn HEAD）では `git log HEAD` が
+	// 128 で失敗し 500 になる。--all はコミット 0 でも空を正常に返すので除外し、
+	// それ以外は空コミットの正常応答にする（Git タブがエラー表示にならない）。
+	if headHash == "" && ref != "--all" {
+		writeJSON(w, gitLogResp{
+			OK:      true,
+			GitRoot: gitRoot,
+			Branch:  branch,
+			Commits: []gitLogCommit{},
+			Limit:   limit,
+			Skip:    skip,
+		})
+		return
+	}
+
 	// git log 実行。git log のオプション（--max-count 等）は必ず `--` の
 	// 前に置く。`git log <ref> -- <arg>` の `--` 以降は pathspec として
 	// 解釈されるため、以前は `--max-count=N` 等が「そのファイル名」の

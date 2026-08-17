@@ -382,6 +382,17 @@ func (s *Server) preparePromptAndWorktree(parentID int, parent *session, body sp
 	cwd := strings.TrimSpace(body.CWD)
 	if cwd == "" {
 		cwd = parent.CWD
+	} else if !filepath.IsAbs(cwd) {
+		// A relative --cwd must resolve against the conductor (parent) session's
+		// directory, not the Hub process cwd. Otherwise os.Stat and
+		// spawnCwdTooBroad evaluate the wrong path: a relative value slips past
+		// the "too broad" guard and, if the Hub was started in $HOME, a
+		// bypassPermissions child can be planted at $HOME.
+		base := parent.CWD
+		if base == "" {
+			base = s.hubCWD
+		}
+		cwd = filepath.Join(base, cwd)
 	}
 	if cwd == "" {
 		cwd = s.hubCWD
@@ -1213,10 +1224,24 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 			if child.Done || b.Done[id] || b.TimedOut[id] {
 				continue
 			}
-			if cfg.ChildTimeoutSeconds > 0 && now.Sub(child.SpawnedAt) > time.Duration(cfg.ChildTimeoutSeconds)*time.Second {
-				b.TimedOut[id] = true
-				notices = append(notices, notice{parentID: child.ParentID, childID: id, role: child.Role, kind: "timeout", state: "timeout", threshold: cfg.ChildTimeoutSeconds})
-				continue
+			if cfg.ChildTimeoutSeconds > 0 {
+				// Measure the timeout from the child's last activity, not its
+				// spawn time. A child still actively writing to the board or
+				// emitting PTY output past ChildTimeoutSeconds is healthy and must
+				// not be force-marked "timeout" — that state makes it unsendable
+				// and, with TimeoutRespawn, starts a 2nd body in the same worktree.
+				lastActivity := child.SpawnedAt
+				if child.LastBoardWrite.After(lastActivity) {
+					lastActivity = child.LastBoardWrite
+				}
+				if last, ok := lastOutputs[id]; ok && last.After(lastActivity) {
+					lastActivity = last
+				}
+				if now.Sub(lastActivity) > time.Duration(cfg.ChildTimeoutSeconds)*time.Second {
+					b.TimedOut[id] = true
+					notices = append(notices, notice{parentID: child.ParentID, childID: id, role: child.Role, kind: "timeout", state: "timeout", threshold: cfg.ChildTimeoutSeconds})
+					continue
+				}
 			}
 			if cfg.IdleDoneThresholdSec > 0 {
 				threshold := time.Duration(cfg.IdleDoneThresholdSec) * time.Second
