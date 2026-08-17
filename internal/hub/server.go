@@ -1334,15 +1334,42 @@ func OpenBrowserForConfig(cfg *config.Config) error {
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	// guardBase で token に加え Host 許可リスト検証（DNS リバインディング防御）も通す。
+	// token に加え Host 許可リスト検証（DNS リバインディング防御）も通す。
 	// GET なので CSRF（Origin）追加チェックは課されず、PIN ゲート（guard）は通さない
 	// ので PIN 未入力でも index は返り、フロントが PIN モーダルを出せる。
-	if !s.guardBase(w, r, http.MethodGet) {
+	//
+	// guardBase をここで展開しているのは、未認証の「ページ遷移」にだけ再認証ページを
+	// 返すため。ホーム画面へ追加した PWA の cold launch は token も cookie も無い状態で
+	// 来ることがある（起動 URL は manifest に start_url が無いため追加時のアドレスバーの
+	// URL ＝ util.ts が replaceState で token を消した後の URL になる）。ここで 401 JSON を
+	// 返すとフロントが 1 行も動かず、localStorage に退避してある token を使った復帰が
+	// 始められない。詳細は writeReauthPage のコメント。
+	authed := s.validTokenOrTrustedRemote(requestToken(r), r)
+	if !authed && !wantsHTMLDocument(r) {
+		// プログラム的な取得（curl / fetch / API クライアント）は従来どおり 401 JSON。
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
+		return
+	}
+	if !requireMethodOneOf(w, r, http.MethodGet) {
+		return
+	}
+	if !s.requireAllowedHubHost(w, r) {
+		return
+	}
+	if !authed {
+		writeReauthPage(w)
 		return
 	}
 	// UI が URL から token を除去した後のリロード（token なし GET /）でも
 	// 認証が通るよう、HttpOnly cookie に token を保持させる。
-	// SameSite=Strict によりクロスサイト送信されないため CSRF 経路にはならない。
+	//
+	// SameSite は Lax。Strict だと「ブラウザの外から始まったトップレベル遷移」に
+	// cookie が乗らず、ホーム画面へ追加した PWA を cold launch したときに毎回 401 に
+	// なる（2026-08-17 に iOS で再現。完全終了の直後でも 401 なので経過時間は無関係）。
+	// Lax へ落としても CSRF 防御は落ちない。状態変更系（非 GET）は cookie 属性ではなく
+	// requireAllowedRequestOrigin の Origin / Sec-Fetch-Site 検証が守っており
+	// （guardBase の stateChange 分岐を参照）、Lax はそもそも非 GET のクロスサイト送信を
+	// 許さない。GET は安全側メソッドで状態を変えない。
 	//
 	// ただし Set-Cookie は「有効な token が実際に提示された」要求にのみ行う。
 	// requireToken は allow_loopback_without_token 有効時に token 未提示の loopback
@@ -1359,7 +1386,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			Path:     "/",
 			HttpOnly: true,
 			Secure:   requestUsesHTTPS(r),
-			SameSite: http.SameSiteStrictMode,
+			SameSite: http.SameSiteLaxMode,
 			// 永続セッション Cookie 化を避け、失効口を与える。起動毎 token と
 			// 不一致になれば（Hub 再起動で token がローテートされた等）期限切れ後に
 			// 再認証へ倒れる。MaxAge>0 なら Expires も併せて付与される。
@@ -1387,6 +1414,118 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	// （VPN 直アクセス時に WebSocket が CSP で弾かれないようにする / C5）。
 	w.Header().Set("Content-Security-Policy", s.documentCSP())
 	_, _ = w.Write(b)
+}
+
+const (
+	// reauthTokenStorageKey は web/src/app/util.ts の TOKEN_STORAGE_KEY と同じ値。
+	// 再認証ページは localStorage のこのキーから token を読む。片方だけ変えると
+	// 復帰できなくなるので、必ず両方そろえて直すこと。
+	reauthTokenStorageKey = "many-ai-cli-token"
+	// reauthGuardKey は「1 回の起動につき再試行は 1 回だけ」を担保する sessionStorage キー。
+	// 本体アプリが起動できた時点で web/src/app/util.ts が削除するので、次の cold launch
+	// ではまた 1 回試せる。無効な token を保存している端末が無限に往復するのを防ぐ。
+	reauthGuardKey = "many-ai-cli-reauth"
+)
+
+// wantsHTMLDocument はブラウザのページ遷移（ドキュメント要求）かを判定する。
+// 再認証ページを返してよいのはページ遷移だけで、プログラム的な取得
+// （curl / fetch / API クライアント）には従来どおり 401 JSON を返す。
+func wantsHTMLDocument(r *http.Request) bool {
+	if strings.EqualFold(strings.TrimSpace(r.Header.Get("Sec-Fetch-Dest")), "document") {
+		return true
+	}
+	return strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/html")
+}
+
+// reauthPageTemplate は未認証のページ遷移へ返す最小の再認証ページ。
+// __NONCE__ / __TOKEN_KEY__ / __GUARD_KEY__ を writeReauthPage が差し替える。
+const reauthPageTemplate = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>many-ai-cli</title>
+<style nonce="__NONCE__">
+body{background:#0e0f12;color:#e6e6e6;font:16px/1.6 system-ui,-apple-system,sans-serif;margin:0;padding:2rem}
+.box{max-width:34rem;margin:0 auto}
+h1{font-size:1.25rem;margin:0 0 1rem}
+code{background:#1b1d22;padding:.1em .35em;border-radius:.25em}
+.hide{display:none}
+</style>
+</head>
+<body>
+<div class="box">
+<h1>many-ai-cli</h1>
+<p id="working">Restoring this device&#39;s session&hellip;</p>
+<div id="failed" class="hide">
+<p>This device is not signed in to the Hub.</p>
+<p>Open the Hub URL that includes <code>?token=</code> once. Settings &gt; Mobile connect shows a QR code for it. After that this app restores the session on its own.</p>
+</div>
+</div>
+<script nonce="__NONCE__">
+(function () {
+  var working = document.getElementById('working');
+  var failed = document.getElementById('failed');
+  function giveUp() {
+    working.className = 'hide';
+    failed.className = '';
+  }
+  var stored = null;
+  try { stored = localStorage.getItem('__TOKEN_KEY__'); } catch (e) { /* private mode 等 */ }
+  if (!stored) { giveUp(); return; }
+  var tried = null;
+  try { tried = sessionStorage.getItem('__GUARD_KEY__'); } catch (e) { /* private mode 等 */ }
+  if (tried) { giveUp(); return; }
+  try { sessionStorage.setItem('__GUARD_KEY__', '1'); } catch (e) { /* private mode 等 */ }
+  var here = location.pathname + location.search + location.hash;
+  fetch('/', {
+    method: 'GET',
+    credentials: 'same-origin',
+    headers: { 'Authorization': 'Bearer ' + stored }
+  }).then(function (res) {
+    if (res.ok) { location.replace(here); return; }
+    giveUp();
+  }).catch(function () { giveUp(); });
+})();
+</script>
+</body>
+</html>
+`
+
+// writeReauthPage は未認証のページ遷移へ、再認証を試みる最小 HTML を 401 で返す。
+//
+// 狙いは「復帰経路がまったく無い」状態を無くすこと。cookie が届かない・失効した端末に
+// 401 JSON を返すと、ブラウザは JSON を表示するだけでフロントが 1 行も動かず、
+// localStorage に退避してある token（util.ts）を使う機会が永久に来ない。利用者から見ると
+// token 付き URL を探し直す以外に戻る手段が無くなる。このページは Authorization: Bearer で
+// handleIndex を 1 回叩いて cookie を張り直し、元の URL へ戻すだけの役割を持つ。
+//
+// ステータスは 401 のまま変えない（プログラム的な取り扱いを変えないため）。ブラウザは
+// 401 の本文も描画してスクリプトを実行するので、これで両立する。
+// 認証されていない相手なので Set-Cookie も noteRemoteDevice も行わない。
+func writeReauthPage(w http.ResponseWriter) {
+	nonce, err := randomHex(16)
+	if err != nil {
+		// nonce が作れないなら inline script を許可できない。従来の 401 JSON へ倒す。
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
+		return
+	}
+	body := strings.NewReplacer(
+		"__NONCE__", nonce,
+		"__TOKEN_KEY__", reauthTokenStorageKey,
+		"__GUARD_KEY__", reauthGuardKey,
+	).Replace(reauthPageTemplate)
+	h := w.Header()
+	setSecurityHeaders(h)
+	h.Set("Content-Type", "text/html; charset=utf-8")
+	h.Set("Cache-Control", "no-store, must-revalidate")
+	// このページ専用の最小 CSP。documentCSP は allowed_hosts を connect-src へ展開するため、
+	// 未認証の相手に設定値を見せないよう静的な CSP に差し替える。nonce は hex なので
+	// そのまま補間して安全。
+	h.Set("Content-Security-Policy",
+		"default-src 'none'; script-src 'nonce-"+nonce+"'; style-src 'nonce-"+nonce+"'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'")
+	w.WriteHeader(http.StatusUnauthorized)
+	_, _ = w.Write([]byte(body))
 }
 
 // wsHandshake は WebSocket ハンドシェイク時に Origin を検証する。

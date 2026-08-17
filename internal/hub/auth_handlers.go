@@ -42,7 +42,10 @@ func (s *Server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   requestUsesHTTPS(r),
-		SameSite: http.SameSiteStrictMode,
+		// 発行側（handleIndex）と同じ Lax にそろえる。削除の一致判定は name/domain/path
+		// だけなので機能上はどちらでも消えるが、属性が食い違っていると読む側が
+		// 「token cookie は Strict」と誤読する。
+		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1, // -1 → Max-Age=0 を送出しブラウザは即削除
 	})
 	http.SetCookie(w, &http.Cookie{
