@@ -89,16 +89,7 @@ func (s *Server) handleInput(m proto.Message) {
 		// Review Phase 2: AI へ入力を渡す前の作業ツリーを、このターンの開始点として
 		// 記録する。既に開始点がある場合（承認回答などターン途中の追加入力）は
 		// captureGitTurnStart 側で維持し、途中までの編集を取りこぼさない。
-		// 入力経路の診断。captureGitTurnStart は
-		// 意図的に同期（git_turns.go）で、git add -A を含む 4 本のコマンドを
-		// uiLoop の中で走らせる。ここが長いと、その間 同じ UI 接続から届く
-		// 確定 \r を Hub が受信できない。実測値が無いと切り分けられない。
-		gitCaptureStart := time.Now()
 		s.captureGitTurnStart(m.SessionID)
-		s.logger.Info("input_trace",
-			"stage", "git_capture",
-			"session_id", m.SessionID,
-			"elapsed_ms", time.Since(gitCaptureStart).Milliseconds())
 		s.broadcast(proto.Message{Type: "pty_data", SessionID: m.SessionID, Data: []byte(chatHistoryUserTurnMarker)})
 		// ターン完了カードの自動消去用。ターン境界マーカーは ptyBuf 経由で attach
 		// リプレイにも再配信されるため信号に使えない。State("running") は PTY 出力
@@ -393,16 +384,6 @@ func (s *Server) submitInputWithGate(wc *wrapperConn, sessionID int, combined st
 		s.pendingInput[sessionID] = appendPendingInput(s.pendingInput[sessionID], combined)
 	}
 	s.sessionsMu.Unlock()
-	// 入力経路の診断は内容を記録せず、状態だけを残す。保留された事実は既存 WARN で
-	// 分かるが、「保留されずに直送された」側が無記録だったため、本文だけ通って
-	// 確定 \r が来ていないのか、両方通ったのかが判別できなかった。
-	s.logger.Info("input_trace",
-		"stage", "gate",
-		"session_id", sessionID,
-		"bytes", len(combined),
-		"gated", gated,
-		"has_pending", hasPending,
-		"pending_len", pendingLen)
 	if gated || hasPending {
 		s.notifyInputDeferred(sessionID)
 		return
@@ -425,7 +406,6 @@ func (s *Server) trySendInput(wc *wrapperConn, sessionID int, combined string) (
 		return combined
 	}
 	first, delayed := splitBracketedPasteSubmit(combined)
-	sendStart := time.Now()
 	if err := s.sendPTYInputFrame(wc, sessionID, first); err != nil {
 		s.logger.Warn("pty_input deferred: send failed", "session_id", sessionID, "stage", "first", "err", err)
 		return combined
@@ -437,16 +417,8 @@ func (s *Server) trySendInput(wc *wrapperConn, sessionID int, combined string) (
 			return delayed
 		}
 	}
-	// 入力経路の診断は内容を記録せず、送信状態だけを残す。wc.send は wrapper からの ack が
-	// 無く write deadline も持たないため、err=nil でも wrapper に届いた保証は無い。
-	// 送信状態と経過時間だけを残し、入力内容は記録しない。
-	s.logger.Info("input_trace",
-		"stage", "sent",
-		"session_id", sessionID,
-		"bytes", len(combined),
-		"split", delayed != "",
-		"elapsed_ms", time.Since(sendStart).Milliseconds(),
-		"ts_ns", time.Now().UnixNano())
+	// wc.send は wrapper からの ack が無く write deadline も持たないため、err=nil でも
+	// wrapper に届いた保証は無い。到達確認が要る経路は inputAckCapable 側で扱う。
 	return ""
 }
 
