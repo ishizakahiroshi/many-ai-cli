@@ -11,6 +11,8 @@
 //   呼び出し側はボタンを出さない / モーダルに「解釈できませんでした」を出す方針。
 //   実フォーマットは実機 1 サンプルで較正する（CALIBRATE コメント箇所）。
 
+import type { WfAgentDetail } from '../types/proto.js';
+
 export type WfAgentState = 'running' | 'done' | 'failed' | 'pending';
 
 export interface WfAgent {
@@ -20,6 +22,12 @@ export interface WfAgent {
   glyph: string;
   /** Hub VT parser が分離した経過時間・token 等。ローカル fallback では未設定。 */
   metrics?: string;
+  /**
+   * tasks output 由来のエージェント詳細（モデル・直近ツール・結果プレビュー等）。
+   * Hub が taskId を解決できた（WorkflowProgress.taskDetailSource === 'task-output'）
+   * ときのみ設定される。ローカル VT fallback では常に未設定。
+   */
+  detail?: WfAgentDetail;
 }
 
 export interface WfPhase {
@@ -72,6 +80,12 @@ export interface WorkflowProgress {
   settledBy?: string;
   /** Hub WebSocket またはローカル VT fallback のどちらから得たか。 */
   authority?: 'hub' | 'local';
+  /**
+   * Hub が tasks output（Claude Code Workflow タスク出力ファイル）から詳細を
+   * 読めたときだけ 'task-output' になる。空ならフォールバック（VT/journal のみ）。
+   * ローカル VT fallback パーサは常に未設定のまま返す。
+   */
+  taskDetailSource?: string;
 }
 
 // ── グリフ定義（CALIBRATE: 実機サンプルで増減する） ───────────────────────────

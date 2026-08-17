@@ -1212,7 +1212,9 @@ Hub はセッションの稼働状態を **端末（PTY）出力が直近数秒�
 
 ### Claude Workflow journal のメタ情報
 
-Claude セッションで Workflow を検出すると、Hub はローカルの `~/.claude/projects/` 配下にある `journal.jsonl` をポーリングします（`workflow.journal_enabled: true` が既定）。集計に必要なイベントの `type` と `agentId` だけをデコードし、`result` 本文は保持・ログ出力・転送・永続化しません。subagent の transcript や task output ファイルも読みません。journal 由来の状態はメモリ内だけに保持され、外部へ送信されません。無効化する場合は `workflow.journal_enabled: false` にすると、端末表示だけを使う劣化動作へ切り替わります。
+Claude セッションで Workflow を検出すると、Hub はローカルの `~/.claude/projects/` 配下にある `journal.jsonl` をポーリングします（`workflow.journal_enabled: true` が既定）。集計に必要なイベントの `type` と `agentId` だけをデコードし、`result` 本文は保持・ログ出力・転送・永続化しません。subagent の transcript は読みません。journal 由来の状態はメモリ内だけに保持され、外部へ送信されません。無効化する場合は `workflow.journal_enabled: false` にすると、端末表示だけを使う劣化動作へ切り替わります。
+
+メインセッションの transcript から Workflow の taskId が解決できた場合、Hub は Claude Code の Workflow タスク出力ファイル（`%TEMP%/claude/<munge(cwd)>/<セッションUUID>/tasks/<taskId>.output` 等）も、そのワークフローが動いている間ポーリングします（`workflow.task_detail_enabled: true` が既定）。読み取るのは `workflowProgress` フィールドのみで、各エージェントのラベル・状態・直近のツール操作・要約プレビューを Workflow モーダルに表示します。script の戻り値本文（`result`）や `log()` 出力（`logs`）はどの構造体にもデコードされず、読みません。この詳細情報はダッシュボードのモーダルにのみ表示され、ログ出力・永続化・外部送信は行いません。無効化する場合は `workflow.task_detail_enabled: false` にしてください。無効時、または taskId が解決できない場合は、従来どおり集計バー/件数表示にフォールバックします。
 
 Workflow 完了時の Web Push は別の opt-in です（`user_prefs.workflow_completion_notify.enabled: true`）。payload に含むのはセッション名と `N/M agents` のような集計件数だけで、journal の result 本文や agent ID は含みません。
 

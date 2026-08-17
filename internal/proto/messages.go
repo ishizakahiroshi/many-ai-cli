@@ -283,21 +283,22 @@ type SessionActivity struct {
 // browser UIs. Source and SettledBy identify which observation established the
 // current values; tree details are present only when the VT tree is visible.
 type WorkflowProgress struct {
-	Detected       bool      `json:"detected"`
-	Source         string    `json:"source,omitempty"`
-	Name           string    `json:"name,omitempty"`
-	Done           int       `json:"done"`
-	Total          int       `json:"total"`
-	Running        int       `json:"running"`
-	Failed         int       `json:"failed"`
-	Pending        int       `json:"pending"`
-	WaitingDynamic int       `json:"waiting_dynamic"`
-	Percent        int       `json:"percent"`
-	ElapsedSec     int       `json:"elapsed_sec,omitempty"`
-	TokensRaw      string    `json:"tokens_raw,omitempty"`
-	Phases         []WfPhase `json:"phases,omitempty"`
-	Settled        bool      `json:"settled"`
-	SettledBy      string    `json:"settled_by,omitempty"`
+	Detected         bool      `json:"detected"`
+	Source           string    `json:"source,omitempty"`
+	Name             string    `json:"name,omitempty"`
+	Done             int       `json:"done"`
+	Total            int       `json:"total"`
+	Running          int       `json:"running"`
+	Failed           int       `json:"failed"`
+	Pending          int       `json:"pending"`
+	WaitingDynamic   int       `json:"waiting_dynamic"`
+	Percent          int       `json:"percent"`
+	ElapsedSec       int       `json:"elapsed_sec,omitempty"`
+	TokensRaw        string    `json:"tokens_raw,omitempty"`
+	Phases           []WfPhase `json:"phases,omitempty"`
+	Settled          bool      `json:"settled"`
+	SettledBy        string    `json:"settled_by,omitempty"`
+	TaskDetailSource string    `json:"task_detail_source,omitempty"`
 }
 
 type WfPhase struct {
@@ -306,9 +307,30 @@ type WfPhase struct {
 }
 
 type WfAgent struct {
-	Label   string `json:"label"`
-	State   string `json:"state"`
-	Metrics string `json:"metrics,omitempty"`
+	Label   string         `json:"label"`
+	State   string         `json:"state"`
+	Metrics string         `json:"metrics,omitempty"`
+	Detail  *WfAgentDetail `json:"detail,omitempty"`
+}
+
+// WfAgentDetail is populated only when the Hub could resolve a task ID for
+// the running Workflow (see docs/local/plan_workflow-progress-agent-transcript-detail_c1_investigation-proto.md
+// "発見2"). It augments the existing VT/journal-derived WfAgent with data
+// read from the Claude Code task output file. Fields sourced from
+// promptPreview/resultPreview/lastToolSummary carry excerpted user/agent
+// content and must never be logged, persisted, or forwarded outside the
+// per-session WS payload.
+type WfAgentDetail struct {
+	Model           string `json:"model,omitempty"`
+	StartedAt       int64  `json:"started_at,omitempty"`       // epoch ms
+	LastProgressAt  int64  `json:"last_progress_at,omitempty"` // epoch ms
+	DurationMs      int64  `json:"duration_ms,omitempty"`
+	Tokens          int    `json:"tokens,omitempty"`
+	ToolCalls       int    `json:"tool_calls,omitempty"`
+	LastToolName    string `json:"last_tool_name,omitempty"`
+	LastToolSummary string `json:"last_tool_summary,omitempty"` // truncated, see C2 budget
+	PromptPreview   string `json:"prompt_preview,omitempty"`    // truncated
+	ResultPreview   string `json:"result_preview,omitempty"`    // truncated
 }
 
 // SessionMeta is user-editable, server-persisted identification metadata for a

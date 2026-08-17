@@ -119,6 +119,26 @@ export interface WfAgent {
   label: string;
   state: string;
   metrics?: string;
+  detail?: WfAgentDetail;
+}
+
+// Mirror of internal/proto.WfAgentDetail. Populated only when the Hub could
+// resolve a task ID for the running Workflow (see
+// docs/local/plan_workflow-progress-agent-transcript-detail_c1_investigation-proto.md
+// "発見2"). Fields sourced from prompt_preview/result_preview/last_tool_summary
+// carry excerpted user/agent content and must never be logged, persisted, or
+// forwarded outside the per-session WS payload.
+export interface WfAgentDetail {
+  model?: string;
+  started_at?: number; // epoch ms
+  last_progress_at?: number; // epoch ms
+  duration_ms?: number;
+  tokens?: number;
+  tool_calls?: number;
+  last_tool_name?: string;
+  last_tool_summary?: string; // truncated, see C2 budget
+  prompt_preview?: string; // truncated
+  result_preview?: string; // truncated
 }
 
 export interface WfPhase {
@@ -142,6 +162,7 @@ export interface WorkflowProgress {
   phases?: WfPhase[];
   settled: boolean;
   settled_by?: string;
+  task_detail_source?: string;
 }
 
 export interface Message {

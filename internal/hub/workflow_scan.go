@@ -569,6 +569,7 @@ func (s *Server) finalizeWorkflowOnSessionEnd(id int) {
 	ses.workflowJournalDormant = false
 	ses.workflowJournalDormantVTSignature = ""
 	ses.workflowJournalPendingAssociation = false
+	s.stopWorkflowTaskDetailLocked(ses)
 	changed := false
 	if ses.workflowVTProgress != nil && !ses.workflowVTProgress.Settled {
 		p := cloneWorkflowProgress(ses.workflowVTProgress)
@@ -605,6 +606,11 @@ func (s *Server) workflowProgressForBroadcastLocked(ses *session, now time.Time)
 	if out == nil {
 		return nil, false, false
 	}
+	// internal C3: when the tasks-output taskId resolved and at least one poll
+	// succeeded, swap in the richer Phases/WfAgent tree it derived. This never
+	// touches Done/Total/Running/Percent/Settled/SettledBy above, which stay
+	// owned by composeWorkflowProgress's existing VT/journal authority (D1).
+	applyWorkflowTaskDetailOverlay(out, ses.taskDetailProgress)
 	// Give the first journal association poll a chance to outrank a final VT
 	// frame. If no unambiguous journal exists, the poll releases this guard and
 	// VT-only settle proceeds as the documented degradation path.

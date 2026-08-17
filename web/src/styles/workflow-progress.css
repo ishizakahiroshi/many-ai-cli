@@ -213,6 +213,46 @@
 /* running アイコンは .live-spinner を流用するため固定サイズに揃える */
 .wf-agent-icon.live-spinner { width: 11px; height: 11px; }
 
+/* tasks output 由来の詳細セクション（plan_workflow-progress-agent-transcript-detail C3）。
+   モデル・所要時間・トークン数・ツール呼び出し数は既存 .wf-agent-metrics に相乗り。 */
+.wf-agent-detail-metrics {
+  margin-left: var(--space-2);
+}
+.wf-agent-last-tool {
+  padding: 1px 8px 3px calc(8px + 13px + var(--space-2));
+  color: var(--muted);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wf-agent-result {
+  margin: 2px 0 2px calc(8px + 13px + var(--space-2));
+  font-size: 0.72rem;
+}
+.wf-agent-result > summary {
+  cursor: pointer;
+  color: var(--muted);
+  list-style: none;
+}
+.wf-agent-result > summary::-webkit-details-marker { display: none; }
+.wf-agent-result > summary::before { content: "▸ "; }
+.wf-agent-result[open] > summary::before { content: "▾ "; }
+.wf-agent-result-body {
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: var(--bg-deep);
+  border-radius: var(--radius-sm);
+  color: var(--text-soft);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.72rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
 /* 見えた範囲だけを蓄積する完了台帳（全件網羅を示さない）。 */
 .wf-completed-ledger {
   margin-top: 14px;
