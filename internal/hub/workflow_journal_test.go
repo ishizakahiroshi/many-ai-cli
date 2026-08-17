@@ -12,6 +12,33 @@ import (
 	"many-ai-cli/internal/proto"
 )
 
+// tailWorkflowJournalForTest は実時間の予算を外し、1 回の呼び出しで解析を完了させる。
+//
+// 本番の tailWorkflowJournal は 100ms の実時間予算（workflowJournalReadTimeBudget）で
+// 解析を打ち切り、続きを次の poll へ回す。**この部分進捗は設計どおり**で、
+// TestWorkflowJournalDeadlineRetainsPartialParserState が Clock 注入で検証している。
+//
+// 単発呼び出しで完了を assert するテストがその wrapper をそのまま使うと、遅いランナーで
+// 予算切れになって落ちる。macOS CI で 3 回発生した（2026-08-13 は
+// TestWorkflowJournalTailCarriesIncompleteLine が Offset:0 で、2026-08-15 と 08-17 は
+// TestWorkflowJournalTailKeepsAgentIDFromOversizedResult が 1 MiB の行の途中で）。
+// 手元は 1 回 23ms で通るため再現しない。
+//
+// Clock も固定するので実時間に一切依存しない。バイト数とレコード数の予算は本番と同じ値を
+// 渡すので、そちらの上限は引き続き検証される。実時間 wrapper 自体の経路は
+// TestWorkflowJournalTailAdvancesAcrossFourMiBResult が poll ループで踏んでいる。
+func tailWorkflowJournalForTest(t *testing.T, path string, prior workflowJournalFileState) (workflowJournalFileState, error) {
+	t.Helper()
+	now := time.Unix(1_700_000_000, 0)
+	state, _, err := tailWorkflowJournalWithBudget(path, prior, workflowJournalReadBudget{
+		MaxBytes:   workflowJournalReadBytesMax,
+		MaxRecords: workflowJournalReadRecordsMax,
+		Deadline:   now.Add(time.Hour),
+		Clock:      func() time.Time { return now },
+	})
+	return state, err
+}
+
 func TestWorkflowJournalEventPrivacyShape(t *testing.T) {
 	typ := reflect.TypeOf(workflowJournalEvent{})
 	if typ.NumField() != 2 || typ.Field(0).Name != "Type" || typ.Field(1).Name != "AgentID" {
@@ -27,14 +54,14 @@ func TestWorkflowJournalTailLargeLineAndRestartIdempotence(t *testing.T) {
 	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	state, err := tailWorkflowJournal(path, workflowJournalFileState{})
+	state, err := tailWorkflowJournalForTest(t, path, workflowJournalFileState{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(state.Started) != 1 || len(state.Results) != 1 || state.Offset != int64(len(data)) {
 		t.Fatalf("large-line tail mismatch: started=%d done=%d offset=%d", len(state.Started), len(state.Results), state.Offset)
 	}
-	restarted, err := tailWorkflowJournal(path, state)
+	restarted, err := tailWorkflowJournalForTest(t, path, state)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +78,7 @@ func TestWorkflowJournalTailKeepsAgentIDFromOversizedResult(t *testing.T) {
 	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	state, err := tailWorkflowJournal(path, workflowJournalFileState{})
+	state, err := tailWorkflowJournalForTest(t, path, workflowJournalFileState{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +122,7 @@ func TestWorkflowJournalTailCarriesIncompleteLine(t *testing.T) {
 	if err := os.WriteFile(path, []byte(partial), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	state, err := tailWorkflowJournal(path, workflowJournalFileState{})
+	state, err := tailWorkflowJournalForTest(t, path, workflowJournalFileState{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +140,7 @@ func TestWorkflowJournalTailCarriesIncompleteLine(t *testing.T) {
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
-	state, err = tailWorkflowJournal(path, state)
+	state, err = tailWorkflowJournalForTest(t, path, state)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,14 +211,14 @@ func TestWorkflowJournalTailFreezesOnTruncate(t *testing.T) {
 	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	state, err := tailWorkflowJournal(path, workflowJournalFileState{})
+	state, err := tailWorkflowJournalForTest(t, path, workflowJournalFileState{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	frozen, err := tailWorkflowJournal(path, state)
+	frozen, err := tailWorkflowJournalForTest(t, path, state)
 	if err != nil {
 		t.Fatal(err)
 	}
