@@ -940,8 +940,26 @@ function renderSentHistoryContent(sid: number, loading: boolean): void {
     meta.appendChild(idx);
     meta.appendChild(time);
     row.appendChild(meta);
-    // 本文（テキスト送信のみ）。クリックでその送信内容をコピー。
+    // 本文（テキスト送信のみ）。行のどこをクリックしてもコピーできるが、
+    // それだけでは押せる場所が分からないので右上に明示のコピーボタンも出す。
+    // 表示は チャット吹き出しの hover アクション（chat-history.ts）と同じ 📋 → ✓。
     if (it.text) {
+      const copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.className = 'tsb-sent-copy';
+      copyBtn.textContent = '📋';
+      copyBtn.title = t('copy_to_clipboard');
+      copyBtn.setAttribute('aria-label', t('copy_to_clipboard'));
+      copyBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation(); // 行の click ハンドラで二重にコピーしない
+        copyText(it.text, row);
+        copyBtn.textContent = '✓';
+        copyBtn.classList.add('copied');
+        // copyText 側の行フラッシュ（tsb-copied）と同じ 600ms で戻す。
+        setTimeout(() => { copyBtn.textContent = '📋'; copyBtn.classList.remove('copied'); }, 600);
+      });
+      meta.appendChild(copyBtn);
       const text = document.createElement('div');
       text.className = 'tsb-sent-text';
       text.textContent = it.text;
