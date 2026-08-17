@@ -1,6 +1,6 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-08-15(土) 23:40:00 — v0.7.0 リリースの学びから 2 節追加（本家との差分で slash-commands を削除しない・版数を手で直す場所は無い）
+> 最終更新: 2026-08-17(月) 09:35:01 — 複数サブスクリプション管理の設計原則を 1 節追加（設定ディレクトリを env で切る・token を持たない）
 
 > 詳細は `CLAUDE/*.md` を参照。このファイルは常時ロード分のみ。
 
@@ -43,7 +43,18 @@
 
 残った実課題（起動と停止がデスクトップのアイコン 2 個に分かれている）だけを、窓を作らないトレイ常駐として `docs/local/plan_tray-resident-hub-lifecycle.md` へ切り出した。
 
-**見送った方針は `docs/local/reference_declined-directions.md` に台帳としてまとめてある。** Gemini の wrap・新規 provider・セッションカンバン・本節の 4 件が入っており、各項目に「再検討してよい条件」と「再検討の根拠にしてはいけないもの」を書いてある。**同種の提案を出す前に必ずここを読む。** 見送りは永久否定ではないので、条件が満たされているなら再検討してよい。
+**見送った方針は `docs/local/reference_declined-directions.md` に台帳としてまとめてある。** Gemini の wrap・新規 provider・セッションカンバン・本節・Copilot/Cursor の複数サブスクリプション対応の 5 件が入っており、各項目に「再検討してよい条件」と「再検討の根拠にしてはいけないもの」を書いてある。**同種の提案を出す前に必ずここを読む。** 見送りは永久否定ではないので、条件が満たされているなら再検討してよい。
+
+## 複数サブスクリプション管理は「設定ディレクトリを env で切る」だけ（2026-08-17 制定）
+
+同一 provider の複数ログインは、**公式 CLI が設定ディレクトリを選ぶ環境変数を子プロセス env に載せる**ことだけで実現している（`CLAUDE_CONFIG_DIR` / `CODEX_HOME` / `GROK_HOME` / opencode は `XDG_DATA_HOME`）。設計の詳細は `docs/v0.3.x-many-ai-cli-design.md` §25。
+
+- **auth ファイルを読む・書く・パースする実装を足さない。** ログイン判定は公式 CLI の status サブコマンドの答えだけを使う。ファイル形式は CLI 更新で変わる
+- **token / API キー / PAT を `config.yaml` や独自 store に持たない。** これを許すと many-ai-cli が token vault になる。Copilot / Cursor Agent を見送った理由そのもの
+- **profile 未指定の起動で env を変えない。** `TestSubscriptionLaunchWithoutProfileLeavesEnvUnchanged` と `TestFakeProviderWithoutProfileKeepsInheritedEnv` が固定している
+- **存在しない / 無効化された profile を指定した spawn を、別アカウントや既定ログインへ黙って倒さない。** エラーで止める
+- **実行中セッションの認証を差し替える経路を作らない。** `TestLiveSessionAuthIsNeverSwapped` がソースを走査して代入箇所を検査している
+- usage remaining は**どの provider からも取得できない**（2026-08-17 実測）。「取れないので `Unknown` と出す」欄すら作っていない。取得手段ができるまで `ReadUsage` を interface へ足さない
 
 ## 現在の実装状態
 

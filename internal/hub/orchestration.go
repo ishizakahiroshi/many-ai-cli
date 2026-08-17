@@ -141,6 +141,10 @@ type spawnChildRequest struct {
 	// Force は同 role の生存子がいても新規 spawn を許可する（重複 spawn ガードの明示迂回。
 	// plan_orchestration-conductor-improvements.md C2）。
 	Force bool `json:"force"`
+	// SubscriptionProfileID は子セッションを起動するサブスクリプション profile。
+	// 省略時は CLI 自身のログイン環境（従来どおり）。存在しない ID を指定した場合、
+	// 子は起動せずエラーになる（別アカウントへ黙って倒れない）。
+	SubscriptionProfileID string `json:"subscription_profile_id"`
 }
 
 type spawnConfirmationDecision struct {
@@ -423,16 +427,17 @@ func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildReq
 	s.orchestration.pending[label] = meta
 	s.orchestration.mu.Unlock()
 	childID, err := s.spawnWrappedSession(spawnWrappedSpec{
-		Provider:       body.Provider,
-		CWD:            prep.childCWD,
-		Model:          body.Model,
-		ModelSelection: body.ModelSelection,
-		RiskConfirmed:  body.RiskConfirmed,
-		Label:          label,
-		PermissionMode: body.PermissionMode,
-		Sandbox:        body.Sandbox,
-		AskForApproval: body.AskForApproval,
-		Route:          body.Route,
+		Provider:              body.Provider,
+		CWD:                   prep.childCWD,
+		Model:                 body.Model,
+		ModelSelection:        body.ModelSelection,
+		RiskConfirmed:         body.RiskConfirmed,
+		Label:                 label,
+		PermissionMode:        body.PermissionMode,
+		Sandbox:               body.Sandbox,
+		AskForApproval:        body.AskForApproval,
+		Route:                 body.Route,
+		SubscriptionProfileID: body.SubscriptionProfileID,
 	}, 20*time.Second)
 	if err != nil {
 		s.orchestration.mu.Lock()
@@ -446,6 +451,7 @@ func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildReq
 		Provider: body.Provider, CWD: prep.childCWD, Model: body.Model, ModelSelection: body.ModelSelection,
 		RiskConfirmed: true, PermissionMode: body.PermissionMode, Sandbox: body.Sandbox,
 		AskForApproval: body.AskForApproval, Route: body.Route,
+		SubscriptionProfileID: body.SubscriptionProfileID,
 	}, body.InitialPrompt, prep.branch, 0)
 	prompt := buildChildInitialPrompt(body.InitialPrompt, prep.boardPath, body.Role, prep.branch, childID)
 	s.safeGo("inject_initial_prompt_child", func() { s.injectInitialPrompt(childID, prompt) })
@@ -1437,6 +1443,8 @@ func sessionUpdateMessage(ses *session) proto.Message {
 		BoardPath:           ses.BoardPath,
 		WorktreeBranch:      ses.WorktreeBranch,
 		BoardNotifyPending:  ses.BoardNotifyPending,
+		SubscriptionID:      ses.SubscriptionProfileID,
+		SubscriptionName:    ses.SubscriptionProfileName,
 	}
 }
 

@@ -113,6 +113,12 @@ type session struct {
 	HomeDir      string          `json:"-"`
 	CodexHome    string          `json:"-"`
 	ClaudeDir    string          `json:"-"`
+	// SubscriptionProfileID はこのセッションを起動した subscription profile の ID。
+	// 空なら「CLI 自身のログイン環境」（従来どおりの既定動作）。
+	// ID を正本にして名前を表示専用にするのは、profile を rename しても過去
+	// セッションの追跡が壊れないようにするため。認証情報は一切含まない。
+	SubscriptionProfileID   string `json:"subscription_profile_id,omitempty"`
+	SubscriptionProfileName string `json:"subscription_profile_name,omitempty"`
 
 	// JSON 外: 状態評価用
 	lastOutputAt      time.Time // idleAfter 計算用。LastOutputAt と同期して更新する
@@ -527,6 +533,12 @@ type Server struct {
 	// (snapshotCfg / snapshotLocalModels / idleTimeoutMin) and release cfgMu
 	// before taking sessionsMu.
 	sessionsMu sync.Mutex
+	// subscriptionRRMu guards subscriptionRR, the per-provider round-robin cursor
+	// used when a spawn asks for the "auto" subscription. It is intentionally not
+	// covered by cfgMu: choosing a profile must not block on config I/O, and a
+	// stale cursor only affects which of several equally valid profiles is picked.
+	subscriptionRRMu sync.Mutex
+	subscriptionRR   map[string]int
 	// agentChatBroadcastMu serializes agent-chat generation invalidation with
 	// generation-checked UI sends. Reattach can replace a session while an old
 	// poll is parsing outside sessionsMu; this lock prevents that old poll from
@@ -1039,6 +1051,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/reconnect-grace", s.handleReconnectGrace)
 	mux.HandleFunc("/api/input-config", s.handleInputConfig)
 	mux.HandleFunc("/api/orchestration-config", s.handleOrchestrationConfig)
+	mux.HandleFunc("/api/subscriptions", s.handleSubscriptions)
+	mux.HandleFunc("/api/subscriptions/", s.handleSubscriptionsItem)
 	mux.HandleFunc("/api/notify-config", s.handleNotifyConfig)
 	mux.HandleFunc("/api/notify-test", s.handleNotifyTest)
 	mux.HandleFunc("/api/notify-generate-topic", s.handleNotifyGenerateTopic)

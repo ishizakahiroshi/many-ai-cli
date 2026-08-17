@@ -27,6 +27,12 @@ type spawnWrappedSpec struct {
 	AskForApproval string
 	Route          string
 	Utf8Session    bool
+	// SubscriptionProfileID は起動に使うサブスクリプション profile。
+	// 空なら CLI 自身のログイン環境をそのまま使う（従来動作）。
+	SubscriptionProfileID string
+	// SubscriptionLogin が true のとき、通常のセッションではなく公式 CLI の
+	// ログインフロー（`claude auth login` 等）を PTY で走らせる。
+	SubscriptionLogin bool
 }
 
 func appendOpenCodePermissionArgs(wrapArgs []string, permissionMode string) []string {
@@ -40,17 +46,26 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 	if !validOrchestrationProvider(spec.Provider) {
 		return 0, fmt.Errorf("invalid provider")
 	}
+	// profile は env を組み立てる前に解決する。存在しない / 無効化された profile を
+	// 指定された場合はここで失敗させ、**別アカウントで黙って起動しない**。
+	subEnv, _, subErr := s.subscriptionLaunch(spec.Provider, spec.SubscriptionProfileID)
+	if subErr != nil {
+		return 0, subErr
+	}
 	if strings.HasPrefix(spec.Model, "-") || strings.HasPrefix(spec.Label, "-") || !spawnValidModelLabel(spec.Model) || !spawnValidModelLabel(spec.Label) {
 		return 0, fmt.Errorf("invalid model or label value")
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		return 0, fmt.Errorf("executable error: %w", err)
 	}
 	wrapArgs := []string{"wrap", spec.Provider}
 	resolvedModel := strings.TrimSpace(spec.Model)
 	if spec.Label != "" {
 		wrapArgs = append(wrapArgs, "--label="+spec.Label)
+	}
+	if spec.SubscriptionLogin {
+		// ログイン用の使い捨てセッション。公式 CLI の login サブコマンドは
+		// --model / --permission-mode 等を受け付けないので、通常の provider 別
+		// フラグ組み立てを丸ごと飛ばす。
+		wrapArgs = append(wrapArgs, "--subscription-login")
+		return s.startWrapProcess(spec, wrapArgs, subEnv, "", wait)
 	}
 	switch spec.Provider {
 	case "claude":
@@ -127,6 +142,25 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 		wrapArgs = append(wrapArgs, "--utf8")
 	}
 
+	id, err := s.startWrapProcess(spec, wrapArgs, subEnv, effectiveRoute, wait)
+	if err != nil {
+		return 0, err
+	}
+	if resolvedModel != "" && !isLocalRoute(effectiveRoute) {
+		_ = s.setLastModel(spec.Provider, resolvedModel)
+	}
+	return id, nil
+}
+
+// startWrapProcess launches `many-ai-cli wrap <provider> …` and waits for the
+// resulting session to register. It is shared by the ordinary orchestration
+// spawn and by the subscription login spawn, which needs the same environment,
+// log, and process-attribute handling but none of the model/permission flags.
+func (s *Server) startWrapProcess(spec spawnWrappedSpec, wrapArgs, subEnv []string, effectiveRoute string, wait time.Duration) (int, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return 0, fmt.Errorf("executable error: %w", err)
+	}
 	cmd := exec.Command(exe, wrapArgs...)
 	cmd.Dir = spec.CWD
 	hubPort := s.currentHubPort()
@@ -140,6 +174,9 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 	s.cfgMu.Unlock()
 	if envPreset := EnvPresetForWithOllamaBase(spec.Provider, effectiveRoute, ollamaBaseURL, lmStudioBaseURL); len(envPreset) > 0 {
 		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
+	}
+	if len(subEnv) > 0 {
+		cmd.Env = mergeEnvOverrides(cmd.Env, subEnv)
 	}
 
 	var stdinNull, spawnLog *os.File
@@ -174,9 +211,6 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 			_ = spawnLog.Close()
 		}
 	})
-	if resolvedModel != "" && !isLocalRoute(effectiveRoute) {
-		_ = s.setLastModel(spec.Provider, resolvedModel)
-	}
 	return s.waitForSessionByLabel(spec.Label, wait)
 }
 
@@ -214,6 +248,9 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		Utf8Session     bool   `json:"utf8_session"`
 		IsolateWorktree *bool  `json:"isolate_worktree"`
 		WorktreeCleanup string `json:"worktree_cleanup"`
+		// SubscriptionProfileID は使用するサブスクリプション profile。
+		// 省略・空文字は「Default CLI login」で、従来のリクエストと同一の挙動になる。
+		SubscriptionProfileID string `json:"subscription_profile_id"`
 		// C1: plan_orchestration-spawn-ui-exposure.md — ツールバーの「オーケストレーション」
 		// ボタン経由の起動でのみ true。詳細設定アコーディオンで役割を設定した場合のみ
 		// OrchestrationRoles が埋まる（未設定ロールは省略 or nil）。
@@ -281,6 +318,19 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	// ドライブ/FS ルートやホーム親ディレクトリ自身は cwd として弾く（AI がホーム配下を巻き込む事故防止）。
 	if spawnCwdTooBroad(cwd) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "cwd is too broad (system root or home root)")
+		return
+	}
+
+	// subscription profile は起動処理へ入る前に解決する。存在しない / 無効化された
+	// profile を指定された場合は 400 で止め、**既定ログインへ黙って倒れない**。
+	// 誤ったアカウントで走ることの方が、起動できないことより重い。
+	if strings.TrimSpace(body.SubscriptionProfileID) != "" && body.Provider == "shell" {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "shell sessions do not use subscription profiles")
+		return
+	}
+	subEnv, _, subErr := s.subscriptionLaunch(body.Provider, body.SubscriptionProfileID)
+	if subErr != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid_subscription", errorDetail("subscription profile error", subErr))
 		return
 	}
 
@@ -555,6 +605,13 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
 		s.logger.Debug("spawn: env preset applied",
 			"provider", body.Provider, "route", effectiveRoute, "keys", envKeyList(envPreset))
+	}
+	if len(subEnv) > 0 {
+		cmd.Env = mergeEnvOverrides(cmd.Env, subEnv)
+		// キー名のみ出す（値はディレクトリパスと profile ID だが、env ダンプの
+		// 習慣を作らないため envKeyList を通す）。
+		s.logger.Debug("spawn: subscription profile applied",
+			"provider", body.Provider, "keys", envKeyList(subEnv))
 	}
 	// Windows ConPTY (go-pty) は wrap プロセスの std handles が未設定だと
 	// claude.exe / codex の起動に失敗してすぐ disconnect する。stdin は

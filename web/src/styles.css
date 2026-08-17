@@ -22,6 +22,7 @@
 @import url("/styles/prompt-templates.css");
 @import url("/styles/mobile-approval-only.css");
 @import url("/styles/bug-report.css");
+@import url("/styles/subscriptions.css");
 
 #deferred-send-status { order:2; flex:1 1 100%; display:flex; align-items:center; gap:7px; font-size:.72rem; color:var(--muted); }
 #deferred-send-status[hidden] { display:none; }

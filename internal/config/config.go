@@ -782,6 +782,10 @@ type Config struct {
 	Voice         VoiceConfig         `yaml:"voice,omitempty" json:"voice,omitempty"`
 	Notify        NotifyConfig        `yaml:"notify,omitempty" json:"notify,omitempty"`
 	Orchestration OrchestrationConfig `yaml:"orchestration,omitempty" json:"orchestration,omitempty"`
+	// Subscriptions は provider ごとのサブスクリプション profile 一覧。
+	// **認証情報は入らない**（実体は各 profile ディレクトリ内で vendor CLI が持つ）。
+	// 未設定なら nil で、従来どおり各 CLI の既定ログイン環境がそのまま使われる。
+	Subscriptions SubscriptionProfiles `yaml:"subscriptions,omitempty" json:"subscriptions,omitempty"`
 }
 
 func LoadOrCreate() (*Config, error) {
@@ -1037,6 +1041,7 @@ func (cfg *Config) Clone() *Config {
 	if cfg.Voice.Whisper.HallucinationPhrases != nil {
 		c.Voice.Whisper.HallucinationPhrases = cloneStringSlice(cfg.Voice.Whisper.HallucinationPhrases)
 	}
+	c.Subscriptions = cfg.Subscriptions.Clone()
 	return &c
 }
 
@@ -1137,6 +1142,7 @@ func (cfg *Config) Warnings() []string {
 			"lm_studio.base_url points to a private host (%s) but lm_studio.allow_private_hosts is false; the model list will be blocked at the transport layer. Set lm_studio.allow_private_hosts: true to use it.",
 			host))
 	}
+	warnings = append(warnings, cfg.subscriptionWarnings()...)
 	return warnings
 }
 

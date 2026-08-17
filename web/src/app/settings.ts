@@ -2447,10 +2447,18 @@ export function renderSessionInfoChip() {
     : (state === 'error' || state === 'disconnected') ? 'error'
     : 'standby';
   const statePill = `<span class="tsb-pill ${pillCls}"><span class="tsb-pdot"></span>${escapeHtml(stateLbl)}</span>`;
+  // subscription profile を使って起動したセッションだけバッジを足す。
+  // カード側には出さない（profile を使う人は少数で、常時表示は情報過密になる）。
+  const subID = String(s.subscription_profile_id || '');
+  let subBadge = '';
+  if (subID) {
+    const subName = String(s.subscription_profile_name || '') || subID;
+    subBadge = ` <span class="card-subscription" data-tooltip="${escapeHtml(`${t('subs_session_badge_tooltip')}: ${subName} (${subID})`)}">${escapeHtml(subName)}</span>`;
+  }
   chip.innerHTML =
     `<span class="sid">#${s.id}</span>` +
     ` ${statePill} ` +
-    `${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}`;
+    `${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${subBadge}`;
 }
 
 // D12: チャット件数バッジ更新

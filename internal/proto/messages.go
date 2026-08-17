@@ -50,7 +50,16 @@ type Message struct {
 	ClaudeDir string `json:"claude_dir,omitempty"`
 	// AgentSessionID is the provider-owned transcript ID. It is sent by the
 	// wrapper during register/reattach and is never rendered in the session card.
-	AgentSessionID    string             `json:"agent_session_id,omitempty"`
+	AgentSessionID string `json:"agent_session_id,omitempty"`
+	// SubscriptionID names the subscription profile this session was launched
+	// with. The wrapper reports it back from its environment so the Hub records
+	// what actually ran, not what it intended to run. Empty means "the CLI's own
+	// login environment", which is the default and the only pre-v0.8 behaviour.
+	// It is an opaque id, never a credential.
+	SubscriptionID string `json:"subscription_id,omitempty"`
+	// SubscriptionName is the display label the Hub resolves from config for
+	// SubscriptionID. Hub → UI only.
+	SubscriptionName  string             `json:"subscription_name,omitempty"`
 	Data              []byte             `json:"data,omitempty"`     // wrapper内部用: PTY生バイト列（base64エンコード）
 	Text              string             `json:"text,omitempty"`     // pty_output: ANSIを除去したプレーンテキスト / pty_input: ユーザー入力文字列
 	AgentChatMessages []AgentChatMessage `json:"messages,omitempty"` // agent_chat: structured transcript messages
