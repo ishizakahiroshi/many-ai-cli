@@ -29,6 +29,9 @@ rsrc_windows_*.syso
 .DS_Store
 Thumbs.db
 .claude/
+# Cursor Agent CLI にはグローバル指示の口が無いため、共通ルールへのポインタを .cursor/rules に置く。
+# 作者環境の絶対パスを含むので追跡しない。
+.cursor/
 # opencode セッション中だけ internal/wrapper が cwd に書く permission 設定と、その排他ロック
 # (opencode.json.many-ai-cli.lock)。完全一致だと lock 側が漏れるため前方一致で拾う。
 opencode.json*
