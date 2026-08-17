@@ -1006,6 +1006,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/bug-report/preview", s.handleBugReportPreview)
 	mux.HandleFunc("/api/bug-report/finalize", s.handleBugReportFinalize)
 	mux.HandleFunc("/api/doctor", s.handleDoctor)
+	// 切り分け用の計測（instrumentation.json の mobile-lite-empty）。?mtldebug=1 のときだけ叩かれる。
+	mux.HandleFunc("/api/debug/mobile-view", s.handleDebugMobileView)
 	mux.HandleFunc("/api/mobile-connect", s.handleMobileConnect)
 	mux.HandleFunc("/api/mobile-connect/tailscale", s.handleTailscaleStatus)
 	mux.HandleFunc("/api/mobile-connect/tailscale/serve", s.handleTailscaleServe)

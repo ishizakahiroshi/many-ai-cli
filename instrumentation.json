@@ -13,12 +13,23 @@
     "  1. 観測コードを入れたら同じコミットでここへ登録する。登録の無い観測コードは検査でブロックされる",
     "  2. status=active のものは due を過ぎたらブロックされる。延長するなら due を更新し、",
     "     なぜまだ要るかを reason に書き足す（黙って延ばさない）",
+    "     due は日付（YYYY-MM-DD・UTC の暦日で比較）。2026-08-17 に版数指定から移した。",
+    "     以前は台帳の currentVersion と版数を比べていたが、その値を進める手順が",
+    "     release.yml にも manual_release.md にも無く 0.6.0 のまま 2 版放置された。",
+    "     手で更新しないと壊れる版数をリポジトリに置かない方針（CLAUDE.md）にも反していた。",
     "  3. gate は必ず埋める。always-on は原則禁止で、入力由来のバイトを保存するものは特に不可",
     "  4. 撤去したら status=removed にし removedIn を書く。files が実際に消えているかも検査される",
+    "  5. ファイルは 2 つに分けて書く（2026-08-17 追加）。",
+    "     files       = その観測コード専用のファイル。撤去すればファイルごと消える。",
+    "                   登録検査（第 1 パス）と撤去検査（第 3 パス）の両方で見る。",
+    "     sharedFiles = 観測コードが間借りしている共有ファイル（server.go 等）。撤去しても",
+    "                   ファイルは残るので第 1 パスだけで見る。第 3 パスは見ない。",
+    "     分けないと『登録すると撤去できない』か『撤去できるが守られない』の二択になる。",
+    "     実際 ui-input-trace と hub-input-trace は後者を選んで files を空にし、2 件とも",
+    "     撤去作業から取り残された。共有ファイルに間借りする観測コードは sharedFiles へ書く。",
     "",
     "検査: node scripts/check-instrumentation.mjs（release の前提チェックから呼ぶ）"
   ],
-  "currentVersion": "0.6.0",
   "entries": [
     {
       "id": "debug-ui-log",
@@ -63,6 +74,42 @@
       "reason": "原因は未解明のまま。classifyApprovalMarkerBlock は『壊れていたら捨てる』症状抑制で、なぜミラーだけが乖離するかには手が付いていない。再現に必要な 3 点は事象発生時にしか取れないため、観測を止めると次の手掛かりが得られない",
       "note": "v0.6.0 で opt-in 化した。sessionlog.MaskSecrets を通し、0700・保持 7 日・32MB/日・30 秒スロットルで上限を掛けているが、保存対象は PTY の生バイト列なのでマスクの取りこぼしが残り得る。A-01 と同じ原則でセッションログの opt-in に従わせている / 2026-08-15 撤去。removalCondition（VT ミラー破損の根本原因確定と classifyApprovalMarkerBlock の置換）は未達だが、ダンプから 3 原因を特定して修正済み （16e4cb3 の 2 件 + 22e254d の 1 件・138 件中 93 件 → さらに 12 件が正常化）で、入力由来の生バイトを保存し続ける代償に見合わないと判断した。4 原因目が出たら 再導入を検討する（そのときは新しい due を必ず付ける）。",
       "removedIn": "v0.7.0"
+    },
+    {
+      "id": "hub-input-trace",
+      "status": "removed",
+      "purpose": "Web から送信した本文が CLI 入力欄に滞留する症状（Claude / Codex 両方で発生）で、確定 \\r が Hub の受信・保留判定・wrapper 送信のどこで消えるかを stage=recv / gate / sent / git_capture の 4 点で刻む",
+      "addedIn": "e4a9315",
+      "removedIn": "v0.8.0",
+      "gate": "always-on",
+      "files": [],
+      "endpoints": [
+        "input_trace"
+      ],
+      "removalCondition": "送信文字列が CLI 入力欄に滞留する症状の原因が確定したら撤去",
+      "note": "ui-input-trace と同じ e4a9315 で入った Hub 側の相棒。同コミットの ui_input_trace / transport_fault / pty_input_recv / pty_input_written / wrapper-trace.jsonl は 10ec3b6 で撤去されたが、これだけ internal/hub/input_gate.go の 3 箇所と internal/hub/server.go の 1 箇所に分散していて取り残された。台帳の機械検査で検出した 2 件目 / 検査を素通りした理由: 専用ファイルを持たず、CONTENT_MARKERS の「観測専用」はコミットメッセージにしか無く（ソース側の文言は「入力経路の診断」）、ファイル名も input_gate.go なので FILE_PATTERNS に当たらない。撤去前に node scripts/check-instrumentation.mjs を実行して OK / exit 0 を確認している（検査が緑でも守備範囲の外にあった）/ 撤去の根拠: 対応する plan_pty-input-loss-on-wrapper-reconnect.md の様子見が待っていた実機測定を、このトレース自身のログで代行できた。修正完了（2026-08-05 23:27）以降 2026-08-17 まで 11.6 日・送信 6,764 件に対し has_pending=true と pending_input_dropped がいずれも 0 件。修正前は同日 23:07〜23:22 の検証セッション中に計 10 件出ていた / 記録内容は stage・session_id・bytes（長さのみ）・gated・has_pending・pending_len・split・elapsed_ms・ts_ns で、入力内容は含まない（0fe1fc8 で是正済み）。ただし無ゲートで常時 hub.log へ書いており、ローテート済み 10MB のファイルで 26.0%（19,302 行 2.60MB）を占めていた / endpoints に \"input_trace\" を入れているのは URL ではなく、検査の第 3 パス（removed なのに実体が残っていないか）が文字列一致で見るため。files が空だと第 3 パスが何も守れず、それが ui-input-trace を取り残した原因そのものだったので、ログメッセージ名を再発ガードとして登録している / 実損失時に出る pending_input_dropped（internal/hub/wrapper_loop.go の Warn）は観測コードではないので残置。~/.many-ai-cli/logs/wrapper-trace.jsonl は 10ec3b6 でコードが消えた後もファイルだけ残る（利用者環境の実データなので Hub からは消さない）"
+    },
+    {
+      "id": "mobile-lite-empty",
+      "status": "active",
+      "purpose": "スマホ幅でチャットビュー（mobile-terminal-lite）が空のまま表示される症状で、モバイル判定・xterm バッファ・scanBuffer の行数・DOM 寸法のどこで 0 になるかを実機から観測する",
+      "addedIn": "unreleased",
+      "gate": "opt-in: URL クエリ ?mtldebug=1",
+      "due": "2026-08-24",
+      "files": [
+        "internal/hub/debug_mobile_view.go",
+        "web/src/app/debug-mobile-view.ts"
+      ],
+      "sharedFiles": [
+        "internal/hub/server.go",
+        "web/src/app/mobile-terminal-lite.ts"
+      ],
+      "endpoints": [
+        "/api/debug/mobile-view"
+      ],
+      "removalCondition": "スマホでターミナル出力が空になる原因が確定したら撤去",
+      "reason": "PC とスマホが同じ Hub・同じビルドを見ているのに片方だけ空になるため、コードを読むだけでは判定・バッファ・DOM のどこで落ちているか切り分けられない。実機 Safari の実測値が要る",
+      "note": "記録内容は行数・文字数・要素寸法・状態フラグと userAgent 先頭 140 文字のみで、ターミナル本文と入力テキストは含まない。5 秒間隔・最大 60 サンプル（5 分）で自動停止する。URL クエリが無い通常アクセスでは 1 件も送信しない"
     }
   ]
 }
