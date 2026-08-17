@@ -1,6 +1,6 @@
 # many-ai-cli コーディング規約
 
-> 最終更新: 2026-08-15(土) 21:20:00 — build tag で OS 分離したコードの staticcheck / ビルドを GOOS 別に回す手順を追記
+> 最終更新: 2026-08-17(月) 09:57:26 — 3 項目追記（`gofmt -l` が CRLF working tree で使えない / 子プロセス env の実測テスト / `config.yaml` の寛容デコード）
 
 `many-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ 静的 TypeScript フロント（`web/dist/` を `go:embed`）。設計書: [../docs/v0.3.x-many-ai-cli-design.md](../docs/v0.3.x-many-ai-cli-design.md)
 
@@ -65,6 +65,7 @@
 - **永続シェル設定（`.bashrc` / `.zshrc` / PowerShell プロファイル）を改変しない**。透過化は `MANY_AI_CLI_AUTO=1` + `eval "$(many-ai-cli shell-init)"` のオプトインのみ
 - **CLI プロセスを孤児化しない**（ラッパー終了時は子 CLI にもシグナル伝播）
 - **PTY の生バイト列を WS の JSON にそのまま入れない**（base64 エンコード）
+- **`config.yaml` に手書きされうるセクションを足すときは、寛容な `UnmarshalYAML` を持たせる。** `yaml.v3` は 1 項目の型不一致で `Unmarshal` 全体を失敗させ、`config.LoadOrCreate` はそれを破損とみなして `config.yaml` を `.bak` へ退避し既定を再生成する。**token も作り直されるので Hub URL が変わる。** 解釈できない要素だけ捨てて残りを活かす（前例: `SessionOrderIDs`・`SubscriptionProfiles`）。あわせて、任意機能の設定不備は `Validate()`（＝起動を止める）ではなく `Warnings()` へ入れる
 
 ## 承認検出の実装方針（detector.go）
 
@@ -114,6 +115,31 @@ for os in windows linux darwin; do GOOS=$os GOARCH=amd64 CGO_ENABLED=0 go build 
 ```
 
 2026-08-15、`internal/tray/` を足したときに手元（Windows）では通ったが CI（ubuntu）で U1000 が 6 件出た。Windows からしか呼ばないヘルパーを全 OS 共通ファイルに置いていたため。
+
+### `gofmt -l` はこのリポジトリでは使えない（working tree が CRLF）
+
+`.gitattributes` が `* text=auto` なので、Windows の working tree では Go ファイルが CRLF になる。**`gofmt -l ./internal` は全ファイルを列挙する**ため、「全部整形が崩れている」という誤った結論に直結する（実際に 1 度誤認した）。
+
+改行を正規化して `gofmt` の出力と比較する:
+
+```powershell
+$orig = ((Get-Content $f -Raw) -replace "`r`n","`n").TrimEnd("`n")
+$fmt  = ((gofmt $f | Out-String) -replace "`r`n","`n").TrimEnd("`n")
+if ($orig -ne $fmt) { "DIFF $f" }
+```
+
+**新規ファイルは最初から `gofmt -w` を掛ける**（LF で書かれ、git は `text=auto` で正規化するので問題ない）。既存ファイルへの追記だけ上の比較で確かめる。手で桁を合わせようとすると外す: gofmt の構造体・map リテラル整列にはグループ分割のヒューリスティックがあり、**空行を挟むとそこで整列グループが切れ、キー長が外れ値だと自動で別グループになる**。
+
+### 子プロセスへ渡す env を足したら、受け取った側で実測する
+
+`spawn` 経路の env は Hub → `wrap` → 実 CLI と 2 段継承される。組み立て側の単体テストだけだと「渡したつもり」で終わるので、**テストバイナリ自身を偽 CLI として起動し、子プロセスが実際に受け取った env を assert する**。
+
+```go
+cmd := exec.Command(os.Args[0], "-test.run=^TestXxxHelper$")
+cmd.Env = append(env, "MY_FAKE_PROVIDER=1")
+```
+
+helper 側は専用 env で分岐し、値を print したら**テストフレームワークの出力より前に `os.Exit(0)`** する（忘れると PASS 行が混ざって親のパースが壊れる）。手本は `internal/hub/subscription_integration_test.go`（profile A/B の同時起動で env が混ざらないことを実プロセスで確認している）。
 
 ## many-ai-cli 固有の禁止事項
 
