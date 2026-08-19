@@ -213,13 +213,21 @@ export async function restoreChatHistoryFromStore(sid, opts: any = {}) {
       // 再照会できるようにする。
       return false;
     }
-    const t = chatHistoryAutoCommitTimers.get(sid);
-    if (t) { clearTimeout(t); chatHistoryAutoCommitTimers.delete(sid); }
-    chatHistoryOutputBuffers.delete(sid);
-    revokeChatHistoryAttachmentURLs(sid);
-    chatHistory.delete(sid);
-    chatHistoryIdSeq.delete(sid);
     const transcript = isTranscriptBackedSession(sid) && data.available !== false;
+    if (!transcript) {
+      // transcript 対象外（copilot / cursor-agent 等）は SQLite 由来で pushMessage
+      // に dedup が無いため、積み直す前に必ず全消しする。transcript 対象は
+      // pushAgentChatMessage が transcript_key / message_id で dedup・in-place
+      // 更新するため、ここで消すと「タブ末尾の窓の外に落ちた古い送信」が
+      // ライブ追従で既に積んであっても毎回失われる
+      // （bugfix_sent-history-tail-window-drops-old-sends_2026-08-20.md）。
+      const t = chatHistoryAutoCommitTimers.get(sid);
+      if (t) { clearTimeout(t); chatHistoryAutoCommitTimers.delete(sid); }
+      chatHistoryOutputBuffers.delete(sid);
+      revokeChatHistoryAttachmentURLs(sid);
+      chatHistory.delete(sid);
+      chatHistoryIdSeq.delete(sid);
+    }
     for (const m of messages) {
       if (transcript) {
         pushAgentChatMessage(sid, m);
