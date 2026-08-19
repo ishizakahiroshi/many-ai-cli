@@ -532,7 +532,12 @@ header {
 .usage-meter-fill { height: 100%; border-radius: inherit; background: var(--accent, #7aa2f7); }
 .usage-meter-value { width: 34px; flex-shrink: 0; text-align: right; color: var(--text); }
 .usage-profile-meta { margin-top: 3px; color: var(--muted-2, #777); font-size: 0.61rem; }
-.usage-not-acquired { color: var(--muted-2, #777); }
+.usage-not-acquired {
+  display: block;
+  color: var(--muted-2, #777);
+  line-height: 1.4;
+  white-space: normal;
+}
 .usage-probe-button,
 .usage-probe-cancel {
   margin-left: auto;
