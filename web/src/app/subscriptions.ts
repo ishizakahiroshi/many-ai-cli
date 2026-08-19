@@ -128,11 +128,17 @@ function renderList(): void {
     const rows = entry.profiles.map((p) => {
       const disabledCls = p.enabled ? '' : ' subs-row--off';
       const issueCls = p.issue ? ' subs-row--issue' : '';
+      // ID は「追加した時の表示名」から 1 回だけ採番され、以後 rename しても変わらない
+      // （認証ディレクトリ名そのものなので追随させられない）。ラベル無しで表示名の隣に
+      // 裸の slug を置くと、表示名と競合する別名に見える。ラベルと tooltip で
+      // 「これは保存先の名前で、表示名とは別物」と分かる形にしている。
       return (
         `<div class="subs-row${disabledCls}${issueCls}" data-provider="${escapeHtml(entry.provider)}" data-id="${escapeHtml(p.id)}">` +
         `<input class="subs-name settings-input-text" type="text" value="${escapeHtml(p.name || '')}" ` +
         `placeholder="${escapeHtml(t('subs_name_placeholder'))}" aria-label="${escapeHtml(t('subs_name_placeholder'))}">` +
-        `<span class="subs-id">${escapeHtml(p.id)}</span>` +
+        `<span class="subs-id" data-tooltip="${escapeHtml(t('subs_id_tooltip'))}">` +
+        `<span class="subs-id-label">${escapeHtml(t('subs_id_label'))}</span>` +
+        `<span class="subs-id-value">${escapeHtml(p.id)}</span></span>` +
         `<span class="subs-status">${escapeHtml(statusText(p))}</span>` +
         `<div class="subs-actions">` +
         `<button type="button" class="settings-inline-btn subs-login">${escapeHtml(t('subs_login'))}</button>` +

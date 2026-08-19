@@ -1434,6 +1434,8 @@
   "subs_none_supported": "この版で profile 分離に対応した provider はまだありません。",
   "subs_provider_unsupported": "この provider は profile 分離に未対応です。設定は残りますが、セッション起動時には選べません。",
   "subs_env_var_tooltip": "公式 CLI がこの環境変数で設定ディレクトリを選びます",
+  "subs_id_label": "ログイン先",
+  "subs_id_tooltip": "認証情報を保存するフォルダ名です。追加したときの表示名から自動で作られ、表示名を変えても変わりません。",
   "subs_name_placeholder": "表示名（例: Claude Max メイン）",
   "subs_add_placeholder": "追加する契約の表示名",
   "subs_add": "追加",
