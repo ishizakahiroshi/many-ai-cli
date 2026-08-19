@@ -344,8 +344,10 @@ func requestUsesHTTPS(r *http.Request) bool {
 // isLogicallyRemote は、TCP 接続元が loopback でも「実体はリモート」な要求かを返す。
 // tailscale serve 等のリバースプロキシは TLS を終端して 127.0.0.1:<hubPort> へ再接続
 // するため、tailnet 上の全クライアントが Hub からは loopback に見える。これらは Host
-// ヘッダ（ブラウザはプロキシ先ホスト名＝設定済み allowed_host を入れる）で見分ける。
-// 直 loopback ブラウザは Host に 127.0.0.1 / localhost / ::1 を入れる。
+// ヘッダ（ブラウザはプロキシ先ホスト名＝設定済み allowed_host を入れる）または
+// プロキシが付ける X-Forwarded-* / Tailscale-User-Login ヘッダで見分ける。
+// 直 loopback ブラウザは Host に 127.0.0.1 / localhost / ::1 を入れ、プロキシ由来
+// ヘッダを持たない。
 // この判定は PIN ゲート・SEC-C 通知・loopback トークンバイパスの「remote 判定」に使う。
 func (s *Server) isLogicallyRemote(r *http.Request) bool {
 	if r == nil {
@@ -362,7 +364,28 @@ func (s *Server) isLogicallyRemote(r *http.Request) bool {
 		host = h
 	}
 	host = strings.TrimSuffix(strings.ToLower(strings.Trim(host, "[]")), ".")
-	return host != "" && !isDefaultAllowedHubHost(host)
+	if host != "" && !isDefaultAllowedHubHost(host) {
+		return true
+	}
+	return hasProxyOriginHeaders(r)
+}
+
+func hasProxyOriginHeaders(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	for name, values := range r.Header {
+		name = strings.ToLower(strings.TrimSpace(name))
+		if name != "tailscale-user-login" && !strings.HasPrefix(name, "x-forwarded-") {
+			continue
+		}
+		for _, value := range values {
+			if strings.TrimSpace(value) != "" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func parseTrustedNetworks(values []string) []*net.IPNet {
@@ -455,9 +478,9 @@ func methodAllowsStateChange(method string) bool {
 // allowed_hosts）に一致するか検証する。全メソッドで必須に呼ぶこと。
 func (s *Server) requireAllowedHubHost(w http.ResponseWriter, r *http.Request) bool {
 	s.cfgMu.Lock()
-	port := s.cfg.Hub.Port
 	allowedHosts := append([]string(nil), s.cfg.Hub.AllowedHosts...)
 	s.cfgMu.Unlock()
+	port := s.currentHubPort()
 	if !isAllowedHubHost(r.Host, port, allowedHosts...) {
 		writeJSONError(w, http.StatusForbidden, "forbidden", "host not allowed")
 		return false
@@ -470,9 +493,9 @@ func (s *Server) requireAllowedHubHost(w http.ResponseWriter, r *http.Request) b
 // 非GET メソッドからのみ呼ぶこと。
 func (s *Server) requireAllowedRequestOrigin(w http.ResponseWriter, r *http.Request) bool {
 	s.cfgMu.Lock()
-	port := s.cfg.Hub.Port
 	allowedHosts := append([]string(nil), s.cfg.Hub.AllowedHosts...)
 	s.cfgMu.Unlock()
+	port := s.currentHubPort()
 	if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" {
 		if isAllowedHubOrigin(origin, port, allowedHosts...) {
 			return true

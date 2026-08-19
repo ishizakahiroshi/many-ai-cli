@@ -2,6 +2,7 @@ package hub
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,10 +47,11 @@ type ModelsResponse struct {
 }
 
 const (
-	ollamaLocalCacheTTL  = 60 * time.Second
-	lmStudioCacheTTL     = 60 * time.Second
-	openCodeModelsTTL    = 10 * time.Minute
-	openCodeModelsNegTTL = 3 * time.Minute
+	ollamaLocalCacheTTL   = 60 * time.Second
+	lmStudioCacheTTL      = 60 * time.Second
+	openCodeModelsTTL     = 10 * time.Minute
+	openCodeModelsNegTTL  = 3 * time.Minute
+	openCodeModelsTimeout = 30 * time.Second
 )
 
 // lmStudioModelsResponse は LM Studio `/v1/models` の OpenAI 互換レスポンス構造。
@@ -94,16 +96,29 @@ type openCodeModelsCacheEntry struct {
 	err       error
 }
 
+type openCodeModelsFetch struct {
+	done      chan struct{}
+	models    []Model
+	fetchedAt time.Time
+	err       error
+}
+
 // modelsCache は Ollama Local `/api/tags` および LM Studio `/v1/models` の取得結果を保持する。
 // cloud 側のカタログは外部 fetch せず、ローカル daemon の remote_host で判定するため
 // 専用のキャッシュは持たない。
 type modelsCache struct {
-	mu         sync.Mutex
-	local      *ollamaTagsCacheEntry
-	localFetch *ollamaTagsFetch
-	lmStudio   *lmStudioModelsCacheEntry
-	openCode   *openCodeModelsCacheEntry
-	generation uint64 // invalidate() ごとに +1; force fetch が古い世代結果を受け取らないようにする
+	mu            sync.Mutex
+	local         *ollamaTagsCacheEntry
+	localFetch    *ollamaTagsFetch
+	lmStudio      *lmStudioModelsCacheEntry
+	openCode      *openCodeModelsCacheEntry
+	openCodeFetch *openCodeModelsFetch
+	// openCodeLoader is nil in production. Tests use it to make the
+	// single-flight boundary deterministic without invoking a real CLI.
+	openCodeLoader func(bool) ([]Model, error)
+	// openCodeWaitHook is test-only and nil in production.
+	openCodeWaitHook func()
+	generation       uint64 // invalidate() ごとに +1; force fetch が古い世代結果を受け取らないようにする
 }
 
 type ollamaTagsFetch struct {
@@ -128,9 +143,24 @@ func (c *modelsCache) getOpenCodeModels(force bool) ([]Model, time.Time, error) 
 			return models, fetchedAt, err
 		}
 	}
+	if fetch := c.openCodeFetch; fetch != nil {
+		hook := c.openCodeWaitHook
+		c.mu.Unlock()
+		if hook != nil {
+			hook()
+		}
+		<-fetch.done
+		return append([]Model(nil), fetch.models...), fetch.fetchedAt, fetch.err
+	}
+	loader := c.openCodeLoader
+	if loader == nil {
+		loader = fetchOpenCodeModels
+	}
+	fetch := &openCodeModelsFetch{done: make(chan struct{})}
+	c.openCodeFetch = fetch
 	c.mu.Unlock()
 
-	models, err := fetchOpenCodeModels(force)
+	models, err := loader(force)
 	entry = &openCodeModelsCacheEntry{
 		models:    append([]Model(nil), models...),
 		fetchedAt: time.Now(),
@@ -138,6 +168,13 @@ func (c *modelsCache) getOpenCodeModels(force bool) ([]Model, time.Time, error) 
 	}
 	c.mu.Lock()
 	c.openCode = entry
+	fetch.models = append([]Model(nil), models...)
+	fetch.fetchedAt = entry.fetchedAt
+	fetch.err = err
+	if c.openCodeFetch == fetch {
+		c.openCodeFetch = nil
+	}
+	close(fetch.done)
 	c.mu.Unlock()
 	return append([]Model(nil), models...), entry.fetchedAt, err
 }
@@ -158,9 +195,14 @@ func fetchOpenCodeModels(force bool) ([]Model, error) {
 	if force {
 		args = append(args, "--refresh")
 	}
-	cmd := exec.Command(bin, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), openCodeModelsTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("opencode models: %w", ctx.Err())
+		}
 		return nil, fmt.Errorf("opencode models: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return parseOpenCodeModelsOutput(out)

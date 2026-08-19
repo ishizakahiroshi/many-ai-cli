@@ -212,12 +212,15 @@ type gitRef struct {
 
 // parseDecorate は `%D` (refs decorate) を gitRef スライスに変換する。
 //
-// 例:
+// 例（短縮表示）:
 //
 //	"HEAD -> develop, origin/develop, tag: v0.1.3"
 //	→ [{local, develop}, {remote, origin/develop}, {tag, v0.1.3}]
 //
 // "HEAD" / "HEAD -> X" の HEAD 部分はスキップ（head_hash は別フィールド）。
+// git log/show は --decorate=full を使うため、refs/heads・refs/remotes・
+// refs/tags の種別を優先する。短縮表示で slash を含む名前は種別を復元できない
+// ので local とし、従来の origin/ だけは後方互換で remote として扱う。
 func parseDecorate(decorate string) []gitRef {
 	decorate = strings.TrimSpace(decorate)
 	if decorate == "" {
@@ -238,13 +241,29 @@ func parseDecorate(decorate string) []gitRef {
 			continue
 		}
 		switch {
-		case strings.HasPrefix(p, "tag:"):
-			name := strings.TrimSpace(strings.TrimPrefix(p, "tag:"))
+		case strings.HasPrefix(p, "refs/heads/"):
+			name := strings.TrimPrefix(p, "refs/heads/")
+			if name != "" {
+				refs = append(refs, gitRef{Kind: "local", Name: name})
+			}
+		case strings.HasPrefix(p, "refs/remotes/"):
+			name := strings.TrimPrefix(p, "refs/remotes/")
+			if name != "" {
+				refs = append(refs, gitRef{Kind: "remote", Name: name})
+			}
+		case strings.HasPrefix(p, "refs/tags/"):
+			name := strings.TrimPrefix(p, "refs/tags/")
 			if name != "" {
 				refs = append(refs, gitRef{Kind: "tag", Name: name})
 			}
-		case strings.HasPrefix(p, "origin/") || strings.Contains(p, "/"):
-			// remote 名は "<remote>/<branch>" 形式
+		case strings.HasPrefix(p, "tag:"):
+			name := strings.TrimSpace(strings.TrimPrefix(p, "tag:"))
+			name = strings.TrimPrefix(name, "refs/tags/")
+			if name != "" {
+				refs = append(refs, gitRef{Kind: "tag", Name: name})
+			}
+		case strings.HasPrefix(p, "origin/"):
+			// Backward-compatible short decoration for the conventional remote.
 			refs = append(refs, gitRef{Kind: "remote", Name: p})
 		default:
 			refs = append(refs, gitRef{Kind: "local", Name: p})

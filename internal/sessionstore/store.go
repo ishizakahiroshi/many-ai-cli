@@ -787,10 +787,34 @@ func (s *Store) StoreApprovalConsumed(liveSessionID int, sig, selectedText strin
 }
 
 func (s *Store) ChatMessagesByLiveSession(liveSessionID, limit int) ([]ChatMessage, error) {
-	sessionID, err := s.sessionIDForLive(liveSessionID)
+	sessionID, err := s.sessionIDForRead(liveSessionID)
 	if err != nil || sessionID == 0 {
 		return nil, err
 	}
+	return s.chatMessagesBySessionID(sessionID, liveSessionID, limit)
+}
+
+// ChatMessagesBySessionID returns messages for one persistent sessions.id.
+// History UIs must use this method when opening a saved row because
+// live_session_id is only unique while a Hub process is running.
+func (s *Store) ChatMessagesBySessionID(sessionID int64, limit int) ([]ChatMessage, error) {
+	if s == nil || s.db == nil || sessionID <= 0 {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	var liveSessionID int
+	err := s.db.QueryRowContext(ctx, `SELECT live_session_id FROM sessions WHERE id=?`, sessionID).Scan(&liveSessionID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return s.chatMessagesBySessionID(sessionID, liveSessionID, limit)
+}
+
+func (s *Store) chatMessagesBySessionID(sessionID int64, liveSessionID, limit int) ([]ChatMessage, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 400
 	}
@@ -864,7 +888,7 @@ func (s *Store) SearchMessages(query string, limit int) ([]SearchResult, error) 
 // （read-only バイパスの悪用経路）。正規 UX（ユーザーがチャットで言及したファイルを開く）は
 // role='user' のみで維持される。
 func (s *Store) MessagesMentionText(liveSessionID int, variants []string) (bool, error) {
-	sessionID, err := s.sessionIDForLive(liveSessionID)
+	sessionID, err := s.sessionIDForRead(liveSessionID)
 	if err != nil || sessionID == 0 {
 		return false, err
 	}
@@ -926,10 +950,23 @@ func (s *Store) ListSessions(limit int, includeArchived bool) ([]SessionOverview
 }
 
 func (s *Store) SessionOverviewByLiveSession(liveSessionID int) (SessionOverview, error) {
-	sessionID, err := s.sessionIDForLive(liveSessionID)
+	sessionID, err := s.sessionIDForRead(liveSessionID)
 	if err != nil || sessionID == 0 {
 		return SessionOverview{}, err
 	}
+	return s.sessionOverviewByID(sessionID)
+}
+
+// SessionOverviewBySessionID returns one persisted session row by its stable
+// database ID. This is the unambiguous lookup used by saved-history views.
+func (s *Store) SessionOverviewBySessionID(sessionID int64) (SessionOverview, error) {
+	if s == nil || s.db == nil || sessionID <= 0 {
+		return SessionOverview{}, nil
+	}
+	return s.sessionOverviewByID(sessionID)
+}
+
+func (s *Store) sessionOverviewByID(sessionID int64) (SessionOverview, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 	rows, err := s.db.QueryContext(ctx, `SELECT
@@ -970,11 +1007,11 @@ func (s *Store) UpdateSessionMeta(liveSessionID int, title string, tags []string
 		title, string(tagsJSON), summary, boolInt(archived), time.Now().Format(time.RFC3339), sessionID); err != nil {
 		return SessionOverview{}, err
 	}
-	return s.SessionOverviewByLiveSession(liveSessionID)
+	return s.SessionOverviewBySessionID(sessionID)
 }
 
 func (s *Store) TimelineByLiveSession(liveSessionID, limit int) ([]TimelineEvent, error) {
-	sessionID, err := s.sessionIDForLive(liveSessionID)
+	sessionID, err := s.sessionIDForRead(liveSessionID)
 	if err != nil || sessionID == 0 {
 		return nil, err
 	}
@@ -1738,6 +1775,26 @@ func (s *Store) sessionIDForLive(liveSessionID int) (int64, error) {
 	var id int64
 	err := s.db.QueryRowContext(ctx, `SELECT id FROM sessions
 		WHERE live_session_id=? AND ended_at IS NULL
+		ORDER BY id DESC LIMIT 1`, liveSessionID).Scan(&id)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return id, err
+}
+
+// sessionIDForRead resolves the newest persisted row for a live ID without
+// applying the active-session condition. Reads need to be able to open ended
+// history, while writes must continue using sessionIDForLive so a stale or
+// reused live ID cannot mutate an older session.
+func (s *Store) sessionIDForRead(liveSessionID int) (int64, error) {
+	if s == nil || s.db == nil || liveSessionID <= 0 {
+		return 0, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	var id int64
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM sessions
+		WHERE live_session_id=?
 		ORDER BY id DESC LIMIT 1`, liveSessionID).Scan(&id)
 	if err == sql.ErrNoRows {
 		return 0, nil

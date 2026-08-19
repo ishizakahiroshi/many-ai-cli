@@ -950,6 +950,8 @@
   "card_ctx_title": "Context window usage (low headroom slows responses and triggers auto-compact)",
   "card_longproc_label": "Long-running",
   "card_longproc_title": "This response has been running a long time. It may be stuck behind a heavy turn (large context × high effort). Send ESC in the terminal to interrupt instead of resending.",
+  "card_stalled_label": "Not progressing",
+  "card_stalled_title": "The agent's own transcript has not grown for a while. The model is likely still emitting one long response (if it hits the output limit the stream is cut and the turn restarts from scratch). Send ESC in the terminal to interrupt instead of resending.",
   "card_ctx_open_git": "Open Git View",
   "card_ctx_open_files": "Open Files Tab",
   "card_ctx_activate": "Activate Session",

@@ -15,6 +15,7 @@ import { setActiveSessionForPayload } from './chat-payload.js';
 import { FilesTabManager } from './files-view.js';
 import { dirnameForPath } from './path-links.js';
 import { getHubWorkflowEntry, isHubWorkflowAuthoritative } from './workflow-store.js';
+import { formatLongprocDuration, longprocBadgeClass, longprocStatus } from './longproc.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -391,9 +392,7 @@ export function onSessionCardActivate(id) {
 // プロトコルに「ターン開始」専用の時刻が無い（started_at は起動時刻、last_output_at は
 // 最終出力時刻）ため。token-statusbar の turnStartAt と同方式。running を抜けたら破棄。
 const cardRunningSince = new Map<number, number>();
-// 「長時間処理中」警告バッジを出すしきい値（秒）。これを超えて running が続くと⚠を出す。
-// 重いターン（巨大 context × xhigh 思考）で 1 応答が 5 分以上かかる状態を可視化する。
-const CARD_LONGPROC_SEC = 300;
+// しきい値と重大度の判定は longproc.ts が正本（ライブ帯と同じ基準を使うため）。
 
 // running 中の応答経過秒を返す（running でなければ null、追跡もクリアする）。
 function cardTurnElapsedSec(id, state) {
@@ -420,13 +419,20 @@ function cardLiveRowHtml(s) {
   const parts = [];
   const state = s.state || 'standby';
   const sec = cardTurnElapsedSec(s.id, state);
-  if (sec !== null) {
-    // 稼働経過秒（⏱ 48s 等）はユーザー要望により非表示。長時間処理の⚠バッジのみ残す。
-    if (sec >= CARD_LONGPROC_SEC) {
-      const label = ti18n('card_longproc_label', 'Long-running', {});
-      const lpTip = ti18n('card_longproc_title', 'This response has been running a long time. It may be stuck behind a heavy turn (large context × high effort). Send ESC to interrupt instead of resending.', {});
-      parts.push(`<span class="card-longproc" data-tooltip="${escapeHtml(lpTip)}">⚠ ${escapeHtml(label)}</span>`);
-    }
+  // 稼働経過秒（⏱ 48s 等）はユーザー要望により非表示。長時間処理の⚠バッジのみ残す。
+  // バッジには経過を併記する（5 分と 38 分が同じ見た目だと区別できないため）。
+  const lp = longprocStatus(sec, s.transcript_grew_at, Date.now());
+  if (lp.level !== 'none') {
+    const stalled = lp.level === 'stalled';
+    const label = stalled
+      ? ti18n('card_stalled_label', 'Not progressing', {})
+      : ti18n('card_longproc_label', 'Long-running', {});
+    const lpTip = stalled
+      ? ti18n('card_stalled_title', "The agent's own transcript has not grown for a while. The model is likely still emitting one long response. Send ESC in the terminal instead of resending.", {})
+      : ti18n('card_longproc_title', 'This response has been running a long time. It may be stuck behind a heavy turn (large context × high effort). Send ESC to interrupt instead of resending.', {});
+    const dur = formatLongprocDuration(stalled ? lp.stalledSec : lp.elapsedSec);
+    const cls = longprocBadgeClass('card-longproc', lp.level);
+    parts.push(`<span class="${cls}" data-tooltip="${escapeHtml(lpTip)}">⚠ ${escapeHtml(label)} ${escapeHtml(dur)}</span>`);
   }
   return parts.join('');
 }

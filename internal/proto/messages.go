@@ -136,6 +136,17 @@ type Message struct {
 	// session_update で standby/waiting 遷移時に付与し、UI カードに「最終応答時刻」として表示する。
 	LastOutputAt string `json:"last_output_at,omitempty"`
 
+	// TranscriptGrewAt: provider 自身の transcript（Codex の rollout JSONL 等）が
+	// 最後に伸びた時刻（ISO 8601 / RFC 3339）。空は「まだ特定できていない」。
+	// UI はこの時刻からの経過を 1Hz で自分で計算する（毎秒 broadcast しないため）。
+	//
+	// LastOutputAt では代用できない。Codex TUI は "Working (36m 09s)" のカウンタを
+	// 毎秒再描画するので PTY 出力は途切れず、モデルが 1 個の出力を吐き続けている間も
+	// LastOutputAt は更新され続ける。transcript はターンが進んだときだけ伸びるので、
+	// 伸びていない時間がそのまま「同じ応答を生成し続けている時間」になる。
+	// 由来: docs/local/bugfix_codex-long-silence-not-surfaced_2026-08-19.md
+	TranscriptGrewAt string `json:"transcript_grew_at,omitempty"`
+
 	// StartedAt: セッション登録時刻（ISO 8601 / RFC 3339）。UI カードに起動時刻として表示する。
 	StartedAt string `json:"started_at,omitempty"`
 
@@ -225,25 +236,34 @@ type Message struct {
 
 	// statusbar 追加メタ（Claude statusLine ネイティブ算出値。Claude のみ・C2 relay 中継）。
 	// rate_limits は Pro/Max のみ／early-session は 0。lines は AI 編集量（作業ツリー git diff とは別軸）。
-	RateLimit5hPct   float64 `json:"rl_5h_pct,omitempty"`
-	RateLimit5hReset int64   `json:"rl_5h_reset,omitempty"`
-	RateLimit7dPct   float64 `json:"rl_7d_pct,omitempty"`
-	RateLimit7dReset int64   `json:"rl_7d_reset,omitempty"`
-	LinesAdded       int     `json:"lines_added,omitempty"`
-	LinesRemoved     int     `json:"lines_removed,omitempty"`
-	EffortLevel      string  `json:"effort_level,omitempty"`
-	Thinking         bool    `json:"thinking,omitempty"`
-	Exceeds200k      bool    `json:"exceeds_200k,omitempty"`
-	DurationMs       int64   `json:"duration_ms,omitempty"`
-	APIDurationMs    int64   `json:"api_duration_ms,omitempty"`
-	OutputStyle      string  `json:"output_style,omitempty"`
-	VimMode          string  `json:"vim_mode,omitempty"`
-	AgentName        string  `json:"agent_name,omitempty"`
-	RepoHost         string  `json:"repo_host,omitempty"`
-	RepoOwner        string  `json:"repo_owner,omitempty"`
-	RepoName         string  `json:"repo_name,omitempty"`
-	RemainingPct     float64 `json:"remaining_pct,omitempty"`
-	ReasoningOut     int     `json:"reasoning_output_tokens,omitempty"`
+	RateLimit5hPct              float64 `json:"rl_5h_pct,omitempty"`
+	RateLimit5hReset            int64   `json:"rl_5h_reset,omitempty"`
+	RateLimit7dPct              float64 `json:"rl_7d_pct,omitempty"`
+	RateLimit7dReset            int64   `json:"rl_7d_reset,omitempty"`
+	CodexRateLimitsPresent      bool    `json:"codex_rate_limits_present,omitempty"`
+	CodexPrimaryUsedPct         float64 `json:"codex_primary_used_pct,omitempty"`
+	CodexPrimaryWindowMinutes   int     `json:"codex_primary_window_minutes,omitempty"`
+	CodexPrimaryReset           int64   `json:"codex_primary_reset,omitempty"`
+	CodexSecondaryUsedPct       float64 `json:"codex_secondary_used_pct,omitempty"`
+	CodexSecondaryWindowMinutes int     `json:"codex_secondary_window_minutes,omitempty"`
+	CodexSecondaryReset         int64   `json:"codex_secondary_reset,omitempty"`
+	CodexCreditsBalance         string  `json:"codex_credits_balance,omitempty"`
+	CodexPlanType               string  `json:"codex_plan_type,omitempty"`
+	LinesAdded                  int     `json:"lines_added,omitempty"`
+	LinesRemoved                int     `json:"lines_removed,omitempty"`
+	EffortLevel                 string  `json:"effort_level,omitempty"`
+	Thinking                    bool    `json:"thinking,omitempty"`
+	Exceeds200k                 bool    `json:"exceeds_200k,omitempty"`
+	DurationMs                  int64   `json:"duration_ms,omitempty"`
+	APIDurationMs               int64   `json:"api_duration_ms,omitempty"`
+	OutputStyle                 string  `json:"output_style,omitempty"`
+	VimMode                     string  `json:"vim_mode,omitempty"`
+	AgentName                   string  `json:"agent_name,omitempty"`
+	RepoHost                    string  `json:"repo_host,omitempty"`
+	RepoOwner                   string  `json:"repo_owner,omitempty"`
+	RepoName                    string  `json:"repo_name,omitempty"`
+	RemainingPct                float64 `json:"remaining_pct,omitempty"`
+	ReasoningOut                int     `json:"reasoning_output_tokens,omitempty"`
 
 	// binary_stale: Hub → UI。稼働中 Hub の実行ファイルがディスク上で差し替わった
 	// （= 再ビルドが反映されていない）状態かどうか。状態が変化した瞬間だけ配信する。

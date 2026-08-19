@@ -2508,6 +2508,7 @@ export const FilesPreview = (function () {
     let editMode = false;           // 編集モード中フラグ
     let editBaseContent = null;     // 編集開始時のオリジナル内容
     let editBaseMtime = null;       // 競合検出用 mtime（RFC3339 文字列）
+    let editLineEnding = '\n';      // 保存時に復元する元ファイルの改行
     let editTextarea = null;        // 現在の <textarea> 要素
     let editSaveBtn = null;         // 保存ボタン
     let editDiscardBtn = null;      // 破棄ボタン
@@ -2633,6 +2634,7 @@ export const FilesPreview = (function () {
       editMode = false;
       editBaseContent = null;
       editBaseMtime = null;
+      editLineEnding = '\n';
       editTextarea = null;
       editSaveBtn = null;
       editDiscardBtn = null;
@@ -2648,13 +2650,26 @@ export const FilesPreview = (function () {
       searchBtn.disabled = !currentAbsPath || isMediaPath(currentAbsPath);
     }
 
+    function normalizeEditLineEndings(value) {
+      return String(value ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    }
+
+    function detectEditLineEnding(value) {
+      return /\r\n/.test(String(value ?? '')) ? '\r\n' : '\n';
+    }
+
+    function restoreEditLineEnding(value) {
+      const normalized = normalizeEditLineEndings(value);
+      return editLineEnding === '\r\n' ? normalized.replace(/\n/g, '\r\n') : normalized;
+    }
+
     /**
      * テキストファイルを編集モードで開く。
      * content / mtime は loadFile 時に取得済みのものを使う。
      */
     function enterEditMode(content, mtime) {
       editMode = true;
-      editBaseContent = content;
+      editBaseContent = normalizeEditLineEndings(content);
       editBaseMtime = mtime;
 
       // ツールバーボタンを無効化（編集中は検索・リロード等を封じる）
@@ -2664,7 +2679,7 @@ export const FilesPreview = (function () {
       contentEl.innerHTML = '';
       const textarea = document.createElement('textarea');
       textarea.className = 'files-preview-edit-textarea';
-      textarea.value = content;
+      textarea.value = editBaseContent;
       textarea.spellcheck = false;
       textarea.autocomplete = 'off';
       (textarea as any).autocorrect = 'off';
@@ -2726,7 +2741,7 @@ export const FilesPreview = (function () {
       const baseMtime = forceOverwrite ? serverMtime : editBaseMtime;
       const body: any = {
         path: currentAbsPath,
-        content: editTextarea.value,
+        content: restoreEditLineEnding(editTextarea.value),
       };
       if (baseMtime) body.baseMtime = baseMtime;
 
@@ -2875,7 +2890,8 @@ export const FilesPreview = (function () {
         editBtn.hidden = !canEdit;
         editBtn.disabled = !canEdit;
         // content と mtime を保持（編集モード開始時・doSave の baseMtime に使う）
-        editBaseContent = content;
+        editLineEnding = detectEditLineEnding(content);
+        editBaseContent = normalizeEditLineEndings(content);
         editBaseMtime = data.mtime || null;
 
         if (data.truncated) {

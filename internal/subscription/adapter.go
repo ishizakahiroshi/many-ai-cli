@@ -7,6 +7,32 @@
 // and pointing two sessions at two directories keeps their logins independent.
 // many-ai-cli therefore only ever creates a directory and sets one environment
 // variable. It never reads, writes, parses, or stores the credential itself.
+//
+// The rules below used to live in CLAUDE.md; they were moved here on
+// 2026-08-19 because anyone who breaks one of them is, by definition, editing
+// this package. Each is pinned by a named test where that is possible.
+//
+//   - Do not add code that reads, writes, or parses an auth file. Sign-in state
+//     comes only from the vendor CLI's own status subcommand; the file formats
+//     change with CLI releases.
+//   - Do not keep a token, API key, or PAT in config.yaml or any store of our
+//     own. Allowing that turns many-ai-cli into a token vault, which is exactly
+//     why GitHub Copilot CLI and Cursor Agent are recorded as unsupported.
+//   - A spawn with no profile must build a byte-for-byte identical environment
+//     (TestSubscriptionLaunchWithoutProfileLeavesEnvUnchanged,
+//     TestFakeProviderWithoutProfileKeepsInheritedEnv).
+//   - A spawn naming a missing or disabled profile must fail, never fall back
+//     to another account or to the default login.
+//   - Never swap the credentials of a live session
+//     (TestLiveSessionAuthIsNeverSwapped scans the source for assignments).
+//   - Remaining quota cannot be *queried* from any of the four supported CLIs
+//     (measured 2026-08-17), so there is no ReadUsage on Adapter and no quota
+//     column in the profile list — not even one that prints "Unknown". This is
+//     separate from the rate_limits a running Claude session pushes out through
+//     its statusLine, which internal/usagerelay already receives and
+//     web/src/app/token-statusbar.ts already draws. Reading the first sentence
+//     as "no usage data exists anywhere" leads to documenting a shipped feature
+//     as missing, which happened once already.
 package subscription
 
 import (

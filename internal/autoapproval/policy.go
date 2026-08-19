@@ -134,6 +134,15 @@ func AddRule(command, workingDir string) (Rule, error) {
 	if command == "" || matchesHardBlock(command) {
 		return Rule{}, fmt.Errorf("unsafe or empty command cannot be auto-approved")
 	}
+	// approval.Summarize returns one line per extracted command candidate, so a
+	// multi-line value means the prompt named more than one command — exactly
+	// the shape a prompt injection produces (a benign "Run: git status" beside
+	// the real destructive command). Quoting that whole blob would persist a
+	// rule whose regexp contains a newline: it can never match again, and it
+	// records the injected text in the user's policy file. Refuse instead.
+	if strings.ContainsAny(command, "\n\r") {
+		return Rule{}, fmt.Errorf("an approval naming more than one command cannot be auto-approved")
+	}
 	path, err := Path()
 	if err != nil {
 		return Rule{}, err

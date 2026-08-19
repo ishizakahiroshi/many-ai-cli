@@ -270,6 +270,17 @@
   padding: 0 6px;
 }
 .live-status-longproc[hidden] { display: none; }
+/* 段階表示（longproc.ts の LongprocLevel）。カードの .card-longproc と同じ意味・同じ色。 */
+.live-status-longproc.is-severe {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger-bg) 30%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+}
+.live-status-longproc.is-stalled {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger-bg) 55%, transparent);
+  border-color: var(--danger);
+}
 /* 配色パレット: 帯の右端に置く。帯は pointer-events:none なので操作要素だけ復活させる。 */
 .live-status-palette-btn {
   flex: 0 0 auto;

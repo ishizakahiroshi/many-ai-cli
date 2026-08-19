@@ -119,15 +119,75 @@ func ClassifyRisk(command string) proto.ApprovalRiskTier {
 
 func extractCommand(question, context string) string {
 	lines := append([]string{question}, strings.Split(context, "\n")...)
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		for _, pattern := range commandPrefixes {
-			if matches := pattern.FindStringSubmatch(line); len(matches) == 2 {
-				return compact(matches[1])
+	candidates := make([]string, 0, 2)
+	seen := make(map[string]struct{}, 2)
+	addCandidate := func(value string) {
+		value = compact(value)
+		if value == "" {
+			return
+		}
+		if _, ok := seen[value]; ok {
+			return
+		}
+		seen[value] = struct{}{}
+		candidates = append(candidates, value)
+	}
+	for i, rawLine := range lines {
+		line := strings.TrimSpace(rawLine)
+		if command, ok := commandFromLine(line); ok {
+			addCandidate(command)
+			continue
+		}
+		if !isCommandHeading(line) {
+			continue
+		}
+		// Some providers render a heading on its own line and put the command
+		// immediately below it. Skip repeated headings caused by a duplicated
+		// context boundary, then consume the first actual command-looking line.
+		for j := i + 1; j < len(lines); j++ {
+			next := strings.TrimSpace(lines[j])
+			if next == "" || isCommandHeading(next) {
+				continue
 			}
+			if command, ok := commandFromLine(next); ok {
+				addCandidate(command)
+			} else {
+				addCandidate(next)
+			}
+			break
 		}
 	}
-	return compact(question)
+	if len(candidates) == 0 {
+		return compact(question)
+	}
+	return strings.Join(candidates, "\n")
+}
+
+// CommandFromLine reports whether a single prompt line names a command itself
+// (e.g. "Run: git status"). Callers building an approval identity use it to
+// tell a question that already carries the command from a fixed question whose
+// command only appears in the prompt body.
+func CommandFromLine(line string) (string, bool) {
+	return commandFromLine(strings.TrimSpace(line))
+}
+
+func commandFromLine(line string) (string, bool) {
+	for _, pattern := range commandPrefixes {
+		if matches := pattern.FindStringSubmatch(line); len(matches) == 2 {
+			return matches[1], true
+		}
+	}
+	return "", false
+}
+
+func isCommandHeading(line string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(strings.TrimSuffix(line, ":")))
+	switch normalized {
+	case "bash command", "shell command":
+		return true
+	default:
+		return false
+	}
 }
 
 func extractPaths(value string) []string {

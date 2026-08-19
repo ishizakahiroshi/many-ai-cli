@@ -18,10 +18,10 @@ const (
 	sessionLogChunkMax = 512 * 1024
 )
 
-// handleSessionLog は稼働中セッションの生 PTY ログ（.log）を範囲指定で返す。
+// handleSessionLog は稼働中または保存済みセッションの生 PTY ログ（.log）を範囲指定で返す。
 // 過去ログビューア（ターミナルのスクロールバック上限より前を遡る UI）用。
 //
-//	GET /api/session-log?session_id=<id>&offset=<bytes>&limit=<bytes>
+//	GET /api/session-log?session_id=<live-id>|session_db_id=<persistent-id>&offset=<bytes>&limit=<bytes>
 //
 // offset 省略時または負値は「末尾から limit バイト」。レスポンスは JSON:
 //
@@ -34,10 +34,21 @@ func (s *Server) handleSessionLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	sessionID, err := strconv.Atoi(q.Get("session_id"))
-	if err != nil || sessionID <= 0 {
-		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid session_id")
-		return
+	var sessionID int
+	var sessionDBID int64
+	var err error
+	if rawDBID := q.Get("session_db_id"); rawDBID != "" {
+		sessionDBID, err = strconv.ParseInt(rawDBID, 10, 64)
+		if err != nil || sessionDBID <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid session_db_id")
+			return
+		}
+	} else {
+		sessionID, err = strconv.Atoi(q.Get("session_id"))
+		if err != nil || sessionID <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid session_id")
+			return
+		}
 	}
 
 	// cfg は cfgMu / sessionsMu とは別ロックで保護されている（server.go の
@@ -45,15 +56,21 @@ func (s *Server) handleSessionLog(w http.ResponseWriter, r *http.Request) {
 	// LogDir は cfgMu 配下、ses.LogPath は sessionsMu 配下なので 2 段で取得する。
 	cfg := s.snapshotCfg()
 	logDir := cfg.Hub.LogDir
-	s.sessionsMu.Lock()
 	var logPath string
-	if ses := s.sessions[sessionID]; ses != nil {
-		logPath = ses.LogPath
-	}
-	s.sessionsMu.Unlock()
-	if logPath == "" && s.sessionStore != nil {
-		if overview, storeErr := s.sessionStore.SessionOverviewByLiveSession(sessionID); storeErr == nil {
+	if sessionDBID > 0 && s.sessionStore != nil {
+		if overview, storeErr := s.sessionStore.SessionOverviewBySessionID(sessionDBID); storeErr == nil {
 			logPath = overview.LogPath
+		}
+	} else {
+		s.sessionsMu.Lock()
+		if ses := s.sessions[sessionID]; ses != nil {
+			logPath = ses.LogPath
+		}
+		s.sessionsMu.Unlock()
+		if logPath == "" && s.sessionStore != nil {
+			if overview, storeErr := s.sessionStore.SessionOverviewByLiveSession(sessionID); storeErr == nil {
+				logPath = overview.LogPath
+			}
 		}
 	}
 	if logPath == "" {

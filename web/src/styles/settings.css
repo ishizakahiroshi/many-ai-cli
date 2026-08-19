@@ -212,13 +212,18 @@
   text-decoration: none;
 }
 .settings-link-btn:hover { background: var(--accent-soft); color: var(--text); }
+/* 寸法はヘッダーの「リセット」「閉じる」(.settings-header-btn) と同一に保つ。
+   font-size を外すと button { font: inherit } で body の 16px を拾う。 */
 .settings-inline-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: auto;
+  min-width: 54px;
   min-height: var(--control-h-sm);
-  padding: 3px 8px;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  padding: 2px 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   text-align: center;
@@ -739,10 +744,6 @@ summary.settings-section-title:hover { background: var(--accent-soft); color: va
   border-color: var(--danger);
   color: var(--danger);
   background: color-mix(in srgb, var(--danger-bg) 55%, transparent);
-  /* ヘッダーの「閉じる」ボタン (.settings-header-btn) と同じ寸法に揃える */
-  font-size: 0.75rem;
-  padding: 2px 8px;
-  line-height: 1.5;
 }
 .settings-danger-btn:hover {
   background: var(--danger-bg-hover);

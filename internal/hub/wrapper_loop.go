@@ -639,9 +639,12 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		return
 	}
 	_ = wc.send(proto.Message{Type: "reattach_ack", SessionID: acceptedID})
-	s.sessionsMu.Lock()
-	announce := sessionUpdateMessage(s.sessions[acceptedID])
-	s.sessionsMu.Unlock()
+	announce, ok := s.reattachAnnounceMessage(acceptedID, wc)
+	if !ok {
+		s.logger.Info("session dismissed during reattach announce; skip",
+			"session_id", acceptedID, "provider", req.Provider)
+		return
+	}
 	announce.Shell = req.Shell
 	announce.LogPath = rawLogPath
 	announce.JSONLPath = jsonlPath
@@ -705,6 +708,19 @@ func (s *Server) wrapperStillRegistered(id int, wc *wrapperConn) bool {
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()
 	return s.sessions[id] != nil && s.wrappers[id] == wc
+}
+
+// reattachAnnounceMessage takes the final session/wrapper snapshot under one
+// lock. Dismiss can run between the earlier registration check and this
+// announcement; never pass a nil session to sessionUpdateMessage in that gap.
+func (s *Server) reattachAnnounceMessage(id int, wc *wrapperConn) (proto.Message, bool) {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[id]
+	if ses == nil || s.wrappers[id] != wc {
+		return proto.Message{}, false
+	}
+	return sessionUpdateMessage(ses), true
 }
 
 func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {

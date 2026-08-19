@@ -193,3 +193,16 @@ func TestRunningHubPortNoFile(t *testing.T) {
 		t.Fatal("no file and no probe response should mean not running")
 	}
 }
+
+func TestCurrentHubPortPrefersRuntimePortWithoutMutatingConfig(t *testing.T) {
+	s := &Server{cfg: &config.Config{}}
+	s.cfg.Hub.Port = 47777
+	s.runtimePort = 47778
+
+	if got := s.currentHubPort(); got != 47778 {
+		t.Fatalf("currentHubPort = %d, want runtime port 47778", got)
+	}
+	if got := s.cfg.Hub.Port; got != 47777 {
+		t.Fatalf("config hub port = %d, want unchanged 47777", got)
+	}
+}

@@ -89,6 +89,11 @@ func TestFakeProviderReceivesProfileEnv(t *testing.T) {
 func TestFakeProviderWithoutProfileKeepsInheritedEnv(t *testing.T) {
 	s, _ := subsTestServer(t)
 	t.Setenv(subscription.ClaudeConfigDirEnv, "inherited-value")
+	// The suite is normally run from inside a many-ai-cli session, and that
+	// parent already exports the profile it was launched with. Without clearing
+	// it here the child inherits the developer's own id and this test fails for
+	// a reason that has nothing to do with the code under test.
+	t.Setenv(subscription.SessionEnvVar, "")
 	got := runFakeProvider(t, spawnEnvFor(t, s, "claude", ""))
 	if got[subscription.ClaudeConfigDirEnv] != "inherited-value" {
 		t.Fatalf("child saw %s=%q, want the inherited value", subscription.ClaudeConfigDirEnv, got[subscription.ClaudeConfigDirEnv])

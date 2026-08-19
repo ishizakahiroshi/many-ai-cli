@@ -42,6 +42,29 @@ func (s *Server) resolveSubscriptionLabel(provider, rawID string) (string, strin
 	return id, strings.TrimSpace(profile.Name)
 }
 
+// subscriptionProfileInUse reports whether a live Hub session still carries
+// the profile ID. Credential directories must not be removed while such a
+// session is active: its child process already has the profile-specific
+// environment and may still refresh tokens or reconnect.
+func (s *Server) subscriptionProfileInUse(provider, rawID string) bool {
+	provider = strings.TrimSpace(provider)
+	id := config.NormalizeSubscriptionID(rawID)
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	for _, ses := range s.sessions {
+		if ses == nil || isTerminalSessionState(ses.State) {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(ses.Provider), provider) {
+			continue
+		}
+		if config.NormalizeSubscriptionID(ses.SubscriptionProfileID) == id {
+			return true
+		}
+	}
+	return false
+}
+
 // pickAutoSubscription は auto 指定のときに使う profile を 1 つ選ぶ。
 //
 // remaining quota で選びたいところだが、対応 provider のどれも公式 CLI から残量を

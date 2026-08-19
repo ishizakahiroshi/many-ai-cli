@@ -270,3 +270,25 @@ func TestHandleSlashCmdSourcesRejectsInvalidSource(t *testing.T) {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestHandleSlashCmdSourcesPreservesOmittedProviders(t *testing.T) {
+	testConfigDir(t)
+	s := newSecTestServer(t, t.TempDir())
+	s.cfg.SlashCmdSources = config.SlashCmdSources{
+		Claude:   "https://raw.githubusercontent.com/example/claude.md",
+		Opencode: "https://raw.githubusercontent.com/example/opencode.md",
+		Grok:     "https://raw.githubusercontent.com/example/grok.md",
+	}
+	body := []byte(`{"claude":"","codex":"","copilot":"","cursor-agent":""}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/slash-cmd-sources?token=tok", bytes.NewReader(body))
+	req.Host = "127.0.0.1:47777"
+	w := httptest.NewRecorder()
+	s.handleSlashCmdSources(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if s.cfg.SlashCmdSources.Opencode != "https://raw.githubusercontent.com/example/opencode.md" ||
+		s.cfg.SlashCmdSources.Grok != "https://raw.githubusercontent.com/example/grok.md" {
+		t.Fatalf("omitted providers were overwritten: %#v", s.cfg.SlashCmdSources)
+	}
+}

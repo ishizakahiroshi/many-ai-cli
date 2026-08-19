@@ -192,10 +192,13 @@ func newOrchestrationManager() *orchestrationManager {
 func (s *Server) reserveOrchestrationConductor(label string, roles map[string]orchestrationRoleAssignment) string {
 	orchestrationID := fmt.Sprintf("o%d", time.Now().UnixNano())
 	s.orchestration.mu.Lock()
-	s.orchestration.pending[label] = pendingChild{
-		OrchestrationID: orchestrationID,
-		SpawnedAt:       time.Now(),
-	}
+	// An ordinary /api/spawn with both isolate_worktree and orchestration=true
+	// has already reserved this label with worktree cleanup metadata. Merge the
+	// conductor fields into that entry instead of replacing the cleanup handle.
+	meta := s.orchestration.pending[label]
+	meta.OrchestrationID = orchestrationID
+	meta.SpawnedAt = time.Now()
+	s.orchestration.pending[label] = meta
 	if len(roles) > 0 {
 		if s.orchestration.roles == nil {
 			s.orchestration.roles = map[string]map[string]orchestrationRoleAssignment{}
@@ -537,6 +540,15 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 			return
 		}
 	}
+	// Confirmation can wait up to two minutes. Re-read both the parent and the
+	// limits after that wait so a concurrent child spawn cannot be judged from
+	// the pre-confirmation snapshot.
+	parent, childCount, totalSessions = s.orchestrationParentState(parentID)
+	if parent == nil {
+		writeJSONError(w, http.StatusNotFound, "not_found", "parent session not found")
+		return
+	}
+	cfg = s.snapshotCfg().Orchestration
 	applyChildApprovalDefaults(&body)
 	if parent.Depth >= cfg.MaxDepth {
 		s.notifyOrchestrationError(parentID, "depth", "max orchestration depth reached")
@@ -1382,7 +1394,7 @@ func detectLastBoardWriter(text string) boardWriter {
 	var writer boardWriter
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "## ") || strings.HasPrefix(line, "## DONE ") {
+		if !strings.HasPrefix(line, "## ") || strings.HasPrefix(line, "## DONE ") || strings.HasPrefix(line, "## SUCCESS ") {
 			continue
 		}
 		fields := strings.Fields(strings.TrimPrefix(line, "## "))

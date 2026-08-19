@@ -14,15 +14,27 @@ func (s *Server) handleSessionChat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": true, "messages": []any{}})
 		return
 	}
-	id, _ := strconv.Atoi(r.URL.Query().Get("session_id"))
-	if id <= 0 {
-		writeJSONError(w, http.StatusBadRequest, "bad_request", "session_id required")
-		return
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	var messages any
+	var err error
+	if rawDBID := strings.TrimSpace(q.Get("session_db_id")); rawDBID != "" {
+		dbID, parseErr := strconv.ParseInt(rawDBID, 10, 64)
+		if parseErr != nil || dbID <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid session_db_id")
+			return
+		}
+		messages, err = s.sessionStore.ChatMessagesBySessionID(dbID, limit)
+	} else {
+		id, parseErr := strconv.Atoi(q.Get("session_id"))
+		if parseErr != nil || id <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", "session_id required")
+			return
+		}
+		messages, err = s.sessionStore.ChatMessagesByLiveSession(id, limit)
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	messages, err := s.sessionStore.ChatMessagesByLiveSession(id, limit)
 	if err != nil {
-		s.logger.Warn("session chat restore failed", "session_id", id, "err", err)
+		s.logger.Warn("session chat restore failed", "session_id", q.Get("session_id"), "session_db_id", q.Get("session_db_id"), "err", err)
 		writeJSONError(w, http.StatusInternalServerError, "session_chat_failed", "failed to restore chat")
 		return
 	}

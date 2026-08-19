@@ -256,6 +256,39 @@ func TestSubscriptionsAPIListAddUpdateRemove(t *testing.T) {
 	}
 }
 
+func TestSubscriptionRemoveRejectsCredentialsForLiveSession(t *testing.T) {
+	s, home := subsTestServer(t)
+	s.cfg.Subscriptions = config.SubscriptionProfiles{
+		"claude": {{ID: "main", Name: "Main"}},
+	}
+	profileDir := filepath.Join(home, ".many-ai-cli", "subscriptions", "claude", "main")
+	if err := os.MkdirAll(profileDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	s.sessionsMu.Lock()
+	s.sessions[1] = &session{
+		ID:                    1,
+		Provider:              "claude",
+		State:                 "running",
+		SubscriptionProfileID: "main",
+	}
+	s.sessionsMu.Unlock()
+
+	w := httptest.NewRecorder()
+	s.handleSubscriptionRemove(w, subsRequest(t, http.MethodPost, "/api/subscriptions/remove", map[string]any{
+		"provider": "claude", "id": "main", "delete_credentials": true,
+	}))
+	if w.Code != http.StatusConflict {
+		t.Fatalf("code = %d, want %d: %s", w.Code, http.StatusConflict, w.Body.String())
+	}
+	if _, err := os.Stat(profileDir); err != nil {
+		t.Fatalf("live profile credentials were removed: %v", err)
+	}
+	if _, found := s.cfg.Subscriptions.Find("claude", "main"); !found {
+		t.Fatal("live profile was unregistered despite the credential-delete guard")
+	}
+}
+
 func TestSubscriptionsAPIRejectsBadInput(t *testing.T) {
 	s, _ := subsTestServer(t)
 

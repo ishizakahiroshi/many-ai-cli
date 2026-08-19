@@ -6,6 +6,32 @@ import (
 	"testing"
 )
 
+func TestIsLogicallyRemoteUsesProxyOriginHeaders(t *testing.T) {
+	s := newSecTestServer(t, t.TempDir())
+
+	local := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:47777/api/info", nil)
+	local.RemoteAddr = "127.0.0.1:54321"
+	if s.isLogicallyRemote(local) {
+		t.Fatal("plain loopback request must remain local")
+	}
+
+	for _, header := range []string{"X-Forwarded-Proto", "X-Forwarded-For", "X-Forwarded-Host", "Tailscale-User-Login"} {
+		req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:47777/api/info", nil)
+		req.RemoteAddr = "127.0.0.1:54321"
+		req.Header.Set(header, "proxy.example")
+		if !s.isLogicallyRemote(req) {
+			t.Fatalf("loopback request with %s must be logical remote", header)
+		}
+	}
+
+	empty := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:47777/api/info", nil)
+	empty.RemoteAddr = "127.0.0.1:54321"
+	empty.Header.Set("X-Forwarded-Proto", " ")
+	if s.isLogicallyRemote(empty) {
+		t.Fatal("empty proxy header must not change a loopback request")
+	}
+}
+
 // TestGuardGetEnforcesHostWhenTokenBypassed は、allow_loopback_without_token=true で
 // トークンが省略可能な場合でも、DNS リバインディング由来の許可外ホスト名
 // （Host=evil.example）への GET が拒否されることを検証する。

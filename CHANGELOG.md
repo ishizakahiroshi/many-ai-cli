@@ -39,6 +39,24 @@ Release artifacts are published at
   (`internal/subscription/`, `internal/hub/subscription*.go`,
   `internal/config/subscription.go`, `web/src/app/subscriptions.ts`).
 
+- **A long-running session now tells you how long, and whether it is actually
+  stuck.** Until now a session showed one fixed "Long-running" badge after five
+  minutes and never changed again, so a genuinely heavy turn and a wedged one
+  looked identical for as long as you cared to wait. The badge now carries the
+  elapsed time (`⚠ Long-running 38m`) and escalates at fifteen minutes.
+
+  Separately, the Hub watches the provider's own transcript — Codex's rollout
+  JSONL, Claude Code's transcript, and so on — and switches the badge to
+  **Not progressing** once that file has stopped growing for ten minutes.
+  PTY output cannot tell you this on its own: Codex redraws its
+  `Working (36m 09s)` counter every second, so a session that has produced
+  nothing for half an hour still looks busy from the terminal stream alone.
+  A transcript only grows when the turn actually advances.
+
+  Only the file's size is read, never its content — transcripts can contain
+  prompts, source fragments, and credentials (`internal/hub/transcript_stall.go`,
+  `web/src/app/longproc.ts`).
+
 ### Changed
 - **The Windows tray now actually stays resident, and wears the app's own icon.**
   As shipped in 0.7.0 the tray only appeared if you re-ran `setup` and then

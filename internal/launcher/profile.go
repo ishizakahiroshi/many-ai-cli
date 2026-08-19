@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"unicode"
 
 	"gopkg.in/yaml.v3"
@@ -15,9 +16,15 @@ import (
 )
 
 const (
-	profilesFile    = "launcher-profiles.yaml"
+	profilesFile     = "launcher-profiles.yaml"
 	supportedVersion = 1
 )
+
+// profilesFileMu serializes every in-process Load→Modify→Save update to the
+// launcher profile file. SaveProfiles is atomic per write, but that alone does
+// not protect a read-modify-write sequence from losing fields written by a
+// concurrent UI request.
+var profilesFileMu sync.Mutex
 
 // ProfileType identifies the connection type of a profile.
 type ProfileType string
@@ -48,7 +55,7 @@ type Profile struct {
 	Distro string `yaml:"distro,omitempty" json:"distro,omitempty"` // empty = default WSL distro
 
 	// SSH-specific fields
-	Mode         SSHMode `yaml:"mode,omitempty" json:"mode,omitempty"`                   // serve (default) or tunnel
+	Mode         SSHMode `yaml:"mode,omitempty" json:"mode,omitempty"` // serve (default) or tunnel
 	Host         string  `yaml:"host,omitempty" json:"host,omitempty"`
 	User         string  `yaml:"user,omitempty" json:"user,omitempty"`
 	SSHPort      int     `yaml:"ssh_port,omitempty" json:"ssh_port,omitempty"`           // 0 = 22 or ssh config

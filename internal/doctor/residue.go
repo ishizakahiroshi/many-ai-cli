@@ -1,3 +1,27 @@
+// residue.go implements the "did we leave something behind in the user's
+// repository?" check.
+//
+// The design rule it enforces (moved here from CLAUDE.md on 2026-08-19, since
+// anyone adding a feature that writes into a user's files ends up here):
+//
+// A feature that rewrites a user's file for the duration of a session and
+// restores it on exit is broken by design if the restore only lives in a defer
+// or a graceful shutdown - a kill skips both. Worse, the next run then reads
+// the leftover as if it were the original and writes it back, so a single
+// abandoned file never self-heals and becomes permanent. Two paths reached the
+// point of being committed to the public repository this way: opencode.json
+// (internal/wrapper/opencode_config.go) and the approval-rules block in
+// AGENTS.md (internal/hub/approval_rules_state.go).
+//
+//   - Do not try to raise the hit rate of the cleanup; a kill cannot be caught.
+//     Always add a path that reclaims the leftover on the NEXT start.
+//   - Reclaiming requires recording what we wrote. If what is on disk differs,
+//     somebody else has touched it since: leave it alone.
+//   - Put the generated filename in .gitignore too, but .gitignore does not
+//     apply to already-tracked files, so anything committed needs git rm.
+//   - Anything committed BEFORE the reclaim runs never reaches the reclaim path
+//     at all. That is what this file catches. The design rule and this detector
+//     are a pair; fixing only one of them never reaches the user.
 package doctor
 
 import (

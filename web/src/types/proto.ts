@@ -230,6 +230,8 @@ export interface Message {
   commit_body?: string;
   detected_at?: string;
   last_output_at?: string;
+  /** provider 自身の transcript が最後に伸びた時刻（RFC 3339）。停滞判定用。 */
+  transcript_grew_at?: string;
   started_at?: string;
   label?: string;
 	 session_meta?: SessionMeta;
@@ -329,6 +331,8 @@ export interface SessionSnapshot {
 	awaiting_user?: boolean;
 	awaiting_approval?: boolean;
   last_output_at?: string;
+  /** provider 自身の transcript が最後に伸びた時刻（RFC 3339）。停滞判定用。 */
+  transcript_grew_at?: string;
   started_at?: string;
   first_message?: string;
   last_message?: string;

@@ -950,6 +950,8 @@
   "card_ctx_title": "Mức dùng cửa sổ context (ít chỗ trống làm chậm phản hồi và kích hoạt auto-compact)",
   "card_longproc_label": "Chạy lâu",
   "card_longproc_title": "Phản hồi này đã chạy lâu. Có thể kẹt sau turn nặng (context lớn × effort cao). Gửi ESC trong terminal để ngắt thay vì gửi lại.",
+  "card_stalled_label": "Không tiến triển",
+  "card_stalled_title": "Bản ghi (transcript) của chính AI CLI đã không tăng thêm một lúc. Nhiều khả năng mô hình vẫn đang tạo ra một phản hồi dài duy nhất (nếu chạm giới hạn đầu ra, luồng bị ngắt và turn phải làm lại từ đầu). Gửi ESC trong terminal để ngắt thay vì gửi lại.",
   "card_ctx_open_git": "Mở Git View",
   "card_ctx_open_files": "Mở tab Files",
   "card_ctx_activate": "Kích hoạt session",

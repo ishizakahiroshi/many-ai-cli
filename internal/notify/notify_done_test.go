@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -107,6 +108,63 @@ func TestSendDoneRespectsEventFilter(t *testing.T) {
 		t.Fatalf("unexpected notification sent: %s", c.body)
 	case <-time.After(300 * time.Millisecond):
 	}
+}
+
+func TestSendApprovalRetriesAfterAllBackendsFail(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	firstDone := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls++
+		call := calls
+		mu.Unlock()
+		if call == 1 {
+			close(firstDone)
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	m := New(Config{
+		Backends: []BackendConfig{{Type: "webhook", URL: srv.URL}},
+		Events:   []string{"approval"},
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	payload := ApprovalPayload{ID: "approval-retry", SessionID: 1, Title: "approval"}
+	m.SendApproval(payload)
+	select {
+	case <-firstDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first failed notification did not reach the backend")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		m.mu.Lock()
+		_, pending := m.pending[payload.ID]
+		m.mu.Unlock()
+		if !pending {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// The first request was a total failure, so the same ID must be eligible
+	// for a retry instead of being suppressed for sentTTL.
+	m.SendApproval(payload)
+	deadline = time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		got := calls
+		mu.Unlock()
+		if got >= 2 {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	t.Fatalf("backend calls = %d, want retry after total failure", calls)
 }
 
 func TestDoneKindLabel(t *testing.T) {

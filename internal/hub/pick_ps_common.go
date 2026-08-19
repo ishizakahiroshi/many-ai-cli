@@ -22,6 +22,9 @@ package hub
 // "-NonInteractive", "-Command", script) に渡してそのまま実行できる。
 func wrapWithForegroundOwner(dialogSetup, dialogVar, resultProperty string) string {
 	return `
+$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = $utf8NoBom
+$OutputEncoding = $utf8NoBom
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type @"
 using System;

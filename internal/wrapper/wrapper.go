@@ -25,6 +25,7 @@ import (
 	"golang.org/x/net/websocket"
 	"golang.org/x/term"
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/hubruntime"
 	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/sessionlog"
 	"many-ai-cli/internal/subscription"
@@ -1110,6 +1111,9 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 							// 二重に書くと確定 \r が 2 回入って後続プロンプトを誤承認するため、
 							// 書かずに ack だけ返して Hub の in-flight を解消する。
 							sendInputAck(m.InputSeq)
+							// 観測専用の一時コード（原因が確定したら撤去）。台帳 id=hub-input-deliver-trace
+							traceInputDeliver(logger, cfg.Log.SessionEnabled, "pty_write_dup", wses.getSID(),
+								"input_seq", m.InputSeq, "bytes", len(m.Data))
 							break
 						}
 						if lead, rest := splitLeadingClearControl(provider, data); lead != nil {
@@ -1176,6 +1180,9 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 							wses.markInputSeqProcessed(m.InputSeq)
 							sendInputAck(m.InputSeq)
 						}
+						// 観測専用の一時コード（原因が確定したら撤去）。台帳 id=hub-input-deliver-trace
+						traceInputDeliver(logger, cfg.Log.SessionEnabled, "pty_write", wses.getSID(),
+							"input_seq", m.InputSeq, "bytes", len(m.Data), "err", writeErr != nil)
 					}
 				case "pty_resize":
 					if m.Cols > 0 && m.Rows > 0 {
@@ -1445,6 +1452,10 @@ func waitForHubReady(cfg *config.Config, timeout time.Duration) bool {
 	}
 }
 
+func runningHubPort(cfg *config.Config) (int, bool) {
+	return hubruntime.RunningPort(cfg.Hub.Port, cfg.Token)
+}
+
 func ensureHub(cfg *config.Config, logger *slog.Logger) error {
 	// Hub にスポーンされた場合（MANY_AI_CLI=1）、Hub は既に動いている。
 	// 新 Hub を起動すると PID ファイル経由で実際の Hub が kill される危険があるため
@@ -1452,7 +1463,10 @@ func ensureHub(cfg *config.Config, logger *slog.Logger) error {
 	if os.Getenv("MANY_AI_CLI") == "1" {
 		return nil
 	}
-	if probeHubAlive(cfg) {
+	if port, ok := runningHubPort(cfg); ok {
+		// The runtime ledger may point at a fallback port. Keep this effective
+		// value local to the wrapper process; it is not persisted as config.
+		cfg.Hub.Port = port
 		// 既存 Hub が古いバイナリ（ディスクの exe と内容が食い違う）で、かつ
 		// アクティブセッションが無ければ自動で停止する。停止できたら下の spawn
 		// 経路で新バイナリの Hub を起動し直す。そうでなければ既存 Hub を使う。

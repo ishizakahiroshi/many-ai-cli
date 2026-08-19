@@ -9,9 +9,45 @@ import (
 	"strings"
 	"time"
 
+	"many-ai-cli/internal/approval"
 	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/sessionlog"
 )
+
+// 承認の同一性 — このファイルがルールの正本である。
+//
+// 本文は 2026-08-19 まで CLAUDE.md に 23 行の節として置かれていたが、常時ロード
+// されるファイルが事故のたびに太る原因になっていたため、ここへ移した。承認の
+// 誤表示を直す担当は必ずこのファイルを開くので、届き方はむしろ確実になる。
+// CLAUDE.md 側は「設計原則の索引」に 1 行だけ持つ。
+//
+// 「この承認はもう回答済みか」を決める state は candidateKey + sourceEpoch の
+// 1 本だけである（ブラウザ側の正本は web/src/app/approval-answered.ts）。
+//
+// 以前はこの役目が 3 本に分かれていて、それぞれ「同じ質問とは何か」の定義が
+// 違った。approvalConsumedSig は選択肢の署名を 5〜10 秒のタイマーで、
+// answeredMarkerSigs はマーカーブロック全文のハッシュを失効なしで、
+// approvalQuestionKey は質問文のハッシュを手動 dismiss の間だけ持っていた。
+// 3 者の食い違いそのものが症状だった。タイマー方式は TUI の再描画が続いている
+// 最中に失効して回答済みを再表示し、ブロック全文方式は逆に「エージェントが
+// 本当に出し直した同じ質問」まで永久に埋めた。v0.7 で 3 本とも撤去した。
+//
+//   - 承認の誤表示を踏んでも、抑止をもう 1 本足さない。まず既存の 1 本で説明
+//     できない症状かを確かめる。説明できるなら直すのは candidateKey の作り方か
+//     sourceEpoch の進み方であって、新しい state ではない
+//     （TestApprovalSuppressionStateIsSingleSource がソース走査で固定している）
+//   - candidateKey は provider・承認種別・正規化した質問・選択肢番号・送信文字列
+//     から作る。ラベル・空白・罫線を含めない（含めると再描画のたびに別候補になる）
+//   - 例外が 1 つある。質問が自分でコマンドを名乗っていないネイティブ承認では、
+//     本文から取ったコマンドを identity に含める。詳細と、そこで受け入れた代償は
+//     approvalIdentityQuestionWithContext のコメントにある
+//   - sourceEpoch は live prompt の境界でのみ進む。replay と reflow では進めない
+//     （進めると復元しただけで新しい承認に見える）
+//   - 世代が進めば同じ質問文でも新しい候補として表示するのが仕様。「同じ質問を
+//     二度と出さない」方向の永久抑止に戻さない
+//   - 回答済み記録のユーザーターン持ち越しは 1 回だけ（approvalConsumedCarried）。
+//     答え終わったブロックは VT 末尾に何ターンも残るので、境界のたびに持ち越しを
+//     再武装すると前項の永久抑止に逆戻りする
 
 var (
 	approvalIdentityOptionRe   = regexp.MustCompile(`^\s*(\d{1,2})\.\s*(.*?)\s*$`)
@@ -64,6 +100,57 @@ func approvalCandidateKey(provider, kind, question string, options []proto.Appro
 	shape := approvalCandidateShape(provider, kind, question, options)
 	sum := sha256.Sum256([]byte(shape))
 	return hex.EncodeToString(sum[:])[:16]
+}
+
+func approvalCandidateShapeWithContext(provider, kind, question, context string, options []proto.ApprovalOption) string {
+	question = approvalIdentityQuestionWithContext(question, context, options)
+	return approvalCandidateShape(provider, kind, question, options)
+}
+
+func approvalCandidateKeyWithContext(provider, kind, question, context string, options []proto.ApprovalOption) string {
+	shape := approvalCandidateShapeWithContext(provider, kind, question, context, options)
+	sum := sha256.Sum256([]byte(shape))
+	return hex.EncodeToString(sum[:])[:16]
+}
+
+// approvalIdentityQuestionWithContext folds the semantic command from the
+// prompt body into the identity question when the question line itself carries
+// none. Claude and Grok render a fixed question ("Do you want to proceed?" and
+// its siblings) above the actual command, so identity built from the question
+// alone collides across every command in a turn and swallows the second
+// approval (F-12).
+//
+// The trigger is deliberately not a list of known phrases: any fixed wording,
+// present or future, collapses to the same key. Instead the rule is structural
+// — append the subject only when the context supplies a command the question
+// does not already contain, so the key can only ever get *more* specific.
+//
+// Accepted trade-off (user decision, 2026-08-19 — rule body is the file header
+// above): the subject comes from a terminal line, so a resize that
+// hard-wraps a long command changes the extracted subject and therefore the
+// key, and the answered prompt can be shown again as a new candidate.
+// compact() absorbs pure whitespace reflow (fixture:
+// TestApprovalCandidateKeyIgnoresReflowOnlyChanges); a changed wrap position is
+// not absorbed.
+//
+// Do NOT "fix" that re-display by dropping the subject from identity — that
+// reinstates F-12, where the second approval of a turn is silently swallowed
+// with no panel and no notification. Re-showing an answered prompt is the safe
+// direction. If the re-display becomes a real nuisance, the thing to change is
+// how the subject is read (joining wrapped lines), not whether it is in the key.
+func approvalIdentityQuestionWithContext(question, context string, options []proto.ApprovalOption) string {
+	if approvalOptionsHaveSendText(options) {
+		return question
+	}
+	if _, ok := approval.CommandFromLine(question); ok {
+		// The question already names the command; nothing to disambiguate.
+		return question
+	}
+	subject := approval.Summarize(question, context).Command
+	if subject == "" || normalizeApprovalIdentityText(subject) == normalizeApprovalIdentityText(question) {
+		return question
+	}
+	return strings.TrimSpace(question) + "\n" + subject
 }
 
 // approvalMarkerCandidateKey extracts only the semantic parts of a marker.
@@ -206,6 +293,9 @@ func markApprovalConsumedAtEpochLocked(ses *session, candidateKey string, sig st
 	}
 	ses.approvalConsumedCandidateKey = candidateKey
 	ses.approvalConsumedEpoch = epoch
+	// A freshly answered prompt earns one user-turn carry (see
+	// markApprovalUserTurnBoundaryLocked).
+	ses.approvalConsumedCarried = false
 	ses.approvalEpochPending = epoch == currentEpoch
 	ses.approvalConsumedCandidateShape = approvalCandidateShapeForKeyLocked(ses, candidateKey)
 	if sig != "" {
@@ -235,11 +325,45 @@ func markApprovalUserTurnBoundaryLocked(ses *session) {
 	if ses == nil {
 		return
 	}
+	consumedKey := ses.approvalConsumedCandidateKey
+	consumedShape := ses.approvalConsumedCandidateShape
 	// Every confirmed non-empty user turn is a live prompt boundary, including
 	// browser-only fallback sessions where Hub never observed a candidate. The
 	// caller skips this helper when the approval Enter is still waiting for the
 	// approval_consumed frame, so answering that prompt does not jump ahead.
-	advanceApprovalSourceEpochLocked(ses)
+	epoch := advanceApprovalSourceEpochLocked(ses)
+	if consumedKey == "" || ses.vt == nil {
+		return
+	}
+	// The terminal is a scrollback history, so the just-consumed marker can be
+	// the latest complete block even after the user has started the next turn.
+	// Carry the existing consumed record across exactly this new epoch. This
+	// reuses candidateKey + sourceEpoch; it does not introduce another replay
+	// suppression state.
+	//
+	// Exactly one carry per answer. The answered block stays inside the VT tail
+	// for many turns, so without this bound the record would be re-armed at
+	// every boundary and an agent that legitimately re-asks the same question
+	// could never surface it again — the permanent suppression CLAUDE.md
+	// forbids ("同じ質問を二度と出さない方向の永久抑止に戻さない").
+	if ses.approvalConsumedCarried {
+		return
+	}
+	marker := extractApprovalMarkerBlock(ses.vt.TailLinesWithScrollback(vtTailLinesForMarker))
+	if marker == nil {
+		return
+	}
+	identity := approvalMarkerCandidateIdentity(ses.Provider, marker.Block)
+	if identity.key != consumedKey {
+		return
+	}
+	ses.approvalConsumedCandidateShape = identity.shape
+	if ses.approvalConsumedCandidateShape == "" {
+		ses.approvalConsumedCandidateShape = consumedShape
+	}
+	ses.approvalConsumedEpoch = epoch
+	ses.approvalConsumedCarried = true
+	ses.approvalEpochPending = true
 }
 
 func approvalCandidateActiveLocked(ses *session) bool {

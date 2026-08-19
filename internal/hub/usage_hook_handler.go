@@ -27,9 +27,7 @@ func (s *Server) tokenStatusbarEnabled() bool {
 
 // hubBaseURL は Hub の base URL ("http://127.0.0.1:<port>") を返す。
 func (s *Server) hubBaseURL() string {
-	s.cfgMu.Lock()
-	defer s.cfgMu.Unlock()
-	return fmt.Sprintf("http://127.0.0.1:%d", s.cfg.Hub.Port)
+	return fmt.Sprintf("http://127.0.0.1:%d", s.currentHubPort())
 }
 
 // hubToken は Hub のアクセストークンを返す。
@@ -107,7 +105,7 @@ func (s *Server) injectUsageHooks() {
 			} else {
 				s.logger.Debug("inject codex stop hook ok", "session_id", snap.sessionID)
 			}
-		// copilot / cursor-agent は注入しない（トークン源なし）
+			// copilot / cursor-agent は注入しない（トークン源なし）
 		}
 	}
 }

@@ -44,14 +44,19 @@ import (
 // maxPTYBuf: UI 再接続時リプレイ用の PTY バッファ上限（セッションごと）。
 // uiPingInterval: UI WebSocket keepalive ping の送信間隔。
 const (
-	idleAfter                    = 3 * time.Second
-	tickerInterval               = 200 * time.Millisecond
-	maxPTYBuf                    = 2 * 1024 * 1024 // 2 MB: scrollback 拡大に合わせてアクティブセッションの replay を伸長
-	replayTailForNonActive       = 64 * 1024       // 64 KB: 非アクティブセッションの UI 接続時 replay 上限
-	uiPingInterval               = 30 * time.Second
-	branchLookupTimeout          = 250 * time.Millisecond
-	branchRefreshAfter           = 2 * time.Second
-	branchRefreshWorkers         = 4
+	idleAfter              = 3 * time.Second
+	tickerInterval         = 200 * time.Millisecond
+	maxPTYBuf              = 2 * 1024 * 1024 // 2 MB: scrollback 拡大に合わせてアクティブセッションの replay を伸長
+	replayTailForNonActive = 64 * 1024       // 64 KB: 非アクティブセッションの UI 接続時 replay 上限
+	uiPingInterval         = 30 * time.Second
+	branchLookupTimeout    = 250 * time.Millisecond
+	branchRefreshAfter     = 2 * time.Second
+	branchRefreshWorkers   = 4
+	// transcriptStatAfter: 解決済み transcript を stat し直す間隔。
+	// transcriptResolveAfter: 未解決 transcript のパス再解決の間隔。解決は
+	// 3 日ぶんのディレクトリ走査 + 各候補の先頭行読みを伴うので stat より長く空ける。
+	transcriptStatAfter          = 10 * time.Second
+	transcriptResolveAfter       = 30 * time.Second
 	nativeApprovalClearMissLimit = 3
 	nativeApprovalBlankLineLimit = 2
 	vtResizeDebounce             = 200 * time.Millisecond
@@ -106,13 +111,16 @@ type session struct {
 	Activity     SessionActivity `json:"activity"`
 	State        string          `json:"state"`
 	LastOutputAt string          `json:"last_output_at,omitempty"` // ISO 8601; UI カード「最終応答時刻」用
-	StartedAt    string          `json:"started_at,omitempty"`     // ISO 8601; UI カード「起動時刻」用
-	FirstMessage string          `json:"first_message,omitempty"`  // 最初の確定入力; UI カード表示用
-	LastMessage  string          `json:"last_message,omitempty"`   // 最新の確定入力; UI カード表示用
-	EndReason    string          `json:"end_reason,omitempty"`     // session_end の reason コード（例: "exec_not_found"）。UI 側で i18n 翻訳して表示
-	HomeDir      string          `json:"-"`
-	CodexHome    string          `json:"-"`
-	ClaudeDir    string          `json:"-"`
+	// TranscriptGrewAt: provider 自身の transcript が最後に伸びた時刻（ISO 8601）。
+	// 詳細は proto.Message.TranscriptGrewAt のコメント。
+	TranscriptGrewAt string `json:"transcript_grew_at,omitempty"`
+	StartedAt        string `json:"started_at,omitempty"`    // ISO 8601; UI カード「起動時刻」用
+	FirstMessage     string `json:"first_message,omitempty"` // 最初の確定入力; UI カード表示用
+	LastMessage      string `json:"last_message,omitempty"`  // 最新の確定入力; UI カード表示用
+	EndReason        string `json:"end_reason,omitempty"`    // session_end の reason コード（例: "exec_not_found"）。UI 側で i18n 翻訳して表示
+	HomeDir          string `json:"-"`
+	CodexHome        string `json:"-"`
+	ClaudeDir        string `json:"-"`
 	// SubscriptionProfileID はこのセッションを起動した subscription profile の ID。
 	// 空なら「CLI 自身のログイン環境」（従来どおりの既定動作）。
 	// ID を正本にして名前を表示専用にするのは、profile を rename しても過去
@@ -125,6 +133,13 @@ type session struct {
 	approvalVisible   bool
 	approvalVisibleAt time.Time // approvalVisible=true を最後に受信した時刻（approvalVisibleLease 判定用）
 	branchCheckedAt   time.Time
+
+	// JSON 外: transcript 停滞検知（transcript_stall.go）。
+	// パス解決はディレクトリ走査を伴うので一度当たったらキャッシュし、以後は stat だけ回す。
+	transcriptPath       string    // 解決済み transcript のパス（未解決なら空）
+	transcriptResolvedAt time.Time // 最後にパス解決を試みた時刻（未解決時の再試行間隔用）
+	transcriptStatAt     time.Time // 最後に stat した時刻
+	transcriptSize       int64     // 直近に観測したサイズ
 
 	// JSON 外: 初期プロンプト注入ゲート。orchestration セッション（conductor / 子）の
 	// spawn 直後〜injectInitialPrompt 完了までユーザー入力を pendingInput へ保留する。
@@ -161,20 +176,28 @@ type session struct {
 	approvalConsumedCandidateKey   string
 	approvalConsumedCandidateShape string
 	approvalConsumedEpoch          uint64
-	vtResizeDebounceUntil          time.Time
-	nativeApprovalSig              string
-	nativeApprovalCandidateKey     string
-	nativeApprovalCandidateShape   string
-	nativeApprovalSourceEpoch      uint64
-	nativeApprovalTailSig          string
-	nativeApprovalScanQueued       bool
-	nativeApprovalClearMisses      int
-	nativeApprovalConsumed         string
-	nativeApprovalConsumedAt       time.Time
-	approvalMarkerSig              string
-	approvalMarkerCandidateKey     string
-	approvalMarkerCandidateShape   string
-	approvalMarkerSourceEpoch      uint64
+	// approvalConsumedCarried bounds the user-turn carry-over in
+	// markApprovalUserTurnBoundaryLocked to exactly one generation. It is not a
+	// second suppression state: it can only ever *stop* the existing
+	// candidateKey+sourceEpoch record from being extended again, never suppress
+	// a candidate on its own. Without it the carry re-arms on every user turn
+	// while the answered block is still inside the VT tail, which is the
+	// permanent suppression CLAUDE.md forbids.
+	approvalConsumedCarried      bool
+	vtResizeDebounceUntil        time.Time
+	nativeApprovalSig            string
+	nativeApprovalCandidateKey   string
+	nativeApprovalCandidateShape string
+	nativeApprovalSourceEpoch    uint64
+	nativeApprovalTailSig        string
+	nativeApprovalScanQueued     bool
+	nativeApprovalClearMisses    int
+	nativeApprovalConsumed       string
+	nativeApprovalConsumedAt     time.Time
+	approvalMarkerSig            string
+	approvalMarkerCandidateKey   string
+	approvalMarkerCandidateShape string
+	approvalMarkerSourceEpoch    uint64
 	// 構造が壊れていて配信を抑止した直近のマーカー sig。同一ブロックが
 	// PTY チャンクごとに再抽出されるため、ログを 1 ブロック 1 回に絞る用途のみ。
 	approvalMarkerSuppressedSig string
@@ -592,7 +615,9 @@ type Server struct {
 	netHintHost    string
 	netHintEnvKind string
 
-	usageLinkCache *ttlCache[UsageLinkDefaults]
+	usageLinkCache      *ttlCache[UsageLinkDefaults]
+	subscriptionUsageMu sync.Mutex
+	subscriptionUsage   *subscriptionUsageStore
 
 	modelsCache       *modelsCache
 	modelsRemoteCache *ttlCache[modelsDefaults]
@@ -616,6 +641,7 @@ type Server struct {
 	whisperInstall   whisperInstallState
 	whisperCmd       *exec.Cmd
 	whisperJob       whisperProcessJob
+	whisperDone      chan struct{}
 	whisperServerURL string
 	// whisperStarting は startManagedWhisper 中の TOCTOU (HUB-3) を防ぐ排他フラグ。
 	// 未起動判定と cmd.Start() の間で別リクエストが並走して二重起動しないよう、
@@ -633,6 +659,11 @@ type Server struct {
 
 	stopMu   sync.Mutex
 	stopFunc context.CancelFunc
+
+	// runtimePort is the port actually bound by Run. It is deliberately kept
+	// separate from cfg.Hub.Port so an auto-selected fallback port is never
+	// persisted to config.yaml by a later settings save.
+	runtimePort int
 
 	// serverConns: 内蔵リモート接続マネージャ（SSH/WSL トンネルを Hub 子プロセス
 	// として無窓で抱える）。servers.go 参照。
@@ -666,6 +697,9 @@ type branchRefreshRequest struct {
 func (s *Server) currentHubPort() int {
 	s.cfgMu.Lock()
 	defer s.cfgMu.Unlock()
+	if s.runtimePort > 0 {
+		return s.runtimePort
+	}
 	return s.cfg.Hub.Port
 }
 
@@ -908,12 +942,16 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		approvalRuleTargets:   map[string]approvalRuleTarget{},
 		autoApprovalHistory:   make([]autoApprovalCandidate, 0, 100),
 		usageLinkCache:        newUsageLinkCache(),
+		subscriptionUsage:     newSubscriptionUsageStore(),
 		modelsCache:           &modelsCache{},
 		modelsRemoteCache:     newModelsRemoteCache(),
 		orchestration:         newOrchestrationManager(),
 		branchRefreshSem:      make(chan struct{}, branchRefreshWorkers),
 		branchRefreshInFlight: map[string]struct{}{},
 		serverConns:           newServerConnManager(logger),
+	}
+	if dir := subscriptionConfigDir(); dir != "" {
+		s.subscriptionUsage.refreshLocal(cfg, dir, time.Now())
 	}
 	if actions, err := newOneTapApprovalManager(); err != nil {
 		return nil, err
@@ -1069,6 +1107,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/orchestration-config", s.handleOrchestrationConfig)
 	mux.HandleFunc("/api/subscriptions", s.handleSubscriptions)
 	mux.HandleFunc("/api/subscriptions/", s.handleSubscriptionsItem)
+	mux.HandleFunc("/api/subscription-usage", s.handleSubscriptionUsage)
 	mux.HandleFunc("/api/notify-config", s.handleNotifyConfig)
 	mux.HandleFunc("/api/notify-test", s.handleNotifyTest)
 	mux.HandleFunc("/api/notify-generate-topic", s.handleNotifyGenerateTopic)
@@ -1202,7 +1241,10 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// 設定ポートが使用中の場合（例: WSL 側 Hub が先に起動済み）は空きポートへ自動移行する。
 	var ln net.Listener
-	basePort := s.currentHubPort()
+	s.cfgMu.Lock()
+	basePort := s.cfg.Hub.Port
+	s.runtimePort = 0
+	s.cfgMu.Unlock()
 	boundPort := basePort
 	for p := basePort; p < basePort+100; p++ {
 		addr := fmt.Sprintf("127.0.0.1:%d", p)
@@ -1210,11 +1252,11 @@ func (s *Server) Run(ctx context.Context) error {
 		ln, e = net.Listen("tcp", addr)
 		if e == nil {
 			boundPort = p
+			s.cfgMu.Lock()
+			s.runtimePort = p
+			s.cfgMu.Unlock()
 			if p != basePort {
 				s.httpSrv.Addr = addr
-				s.cfgMu.Lock()
-				s.cfg.Hub.Port = p
-				s.cfgMu.Unlock()
 				s.logger.Info("preferred port in use, using alternative port", "from", basePort, "to", p)
 			}
 			break
@@ -1284,7 +1326,14 @@ func (s *Server) Run(ctx context.Context) error {
 	s.safeGo("maintenance_loop", func() { s.maintenanceLoop(runCtx) })
 	s.safeGo("recover_transcripts", s.recoverTranscripts)
 	s.safeGo("approval_patterns_remote_sync", func() { s.approvalPatternsRemoteSync(runCtx) })
+	shutdownDone := make(chan struct{})
 	s.safeGo("shutdown_wait", func() {
+		defer func() {
+			// If one cleanup step panics, safeGo recovers it; still unblock Run
+			// and make sure Serve is not left alive forever.
+			_ = s.httpSrv.Close()
+			close(shutdownDone)
+		}()
 		<-runCtx.Done()
 		if s.approvalRulesEnabled() {
 			s.removeApprovalRules()
@@ -1315,6 +1364,10 @@ func (s *Server) Run(ctx context.Context) error {
 	})
 	err := s.httpSrv.Serve(ln)
 	if errors.Is(err, http.ErrServerClosed) {
+		// Serve can return as soon as Close unblocks the listener, while the
+		// shutdown goroutine is still releasing hooks, tunnels, and the session
+		// store. Keep Run's lifecycle contract synchronous through that cleanup.
+		<-shutdownDone
 		return nil
 	}
 	return err
@@ -1549,9 +1602,9 @@ func writeReauthPage(w http.ResponseWriter) {
 // 不一致は handshake エラーで拒否する。
 func (s *Server) wsHandshake(cfg *websocket.Config, req *http.Request) error {
 	s.cfgMu.Lock()
-	port := s.cfg.Hub.Port
 	allowedHosts := append([]string(nil), s.cfg.Hub.AllowedHosts...)
 	s.cfgMu.Unlock()
+	port := s.currentHubPort()
 	if !isAllowedHubHost(req.Host, port, allowedHosts...) {
 		return fmt.Errorf("host not allowed: %s", req.Host)
 	}
@@ -1883,6 +1936,7 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 		ses.approvalConsumedCandidateKey = ""
 		ses.approvalConsumedCandidateShape = ""
 		ses.approvalConsumedEpoch = 0
+		ses.approvalConsumedCarried = false
 		ses.approvalEpochPending = false
 		ses.approvalSourceEpoch++
 		if ses.approvalSourceEpoch == 0 {

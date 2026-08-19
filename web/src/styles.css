@@ -853,6 +853,10 @@ header {
 .card-ctx-pct.crit { color: var(--danger); font-weight: 700; }
 .card-ctx-1m { font-size: 0.58rem; font-weight: 700; padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--accent); }
 .card-longproc { white-space: nowrap; color: var(--warn-text); background: color-mix(in srgb, var(--warn-bg) 30%, transparent); border: 1px solid color-mix(in srgb, var(--warn-text) 40%, transparent); border-radius: var(--radius-sm); padding: 0 5px; font-weight: 700; }
+/* 段階表示（longproc.ts の LongprocLevel）。severe = 15 分超、stalled = provider の
+   transcript が伸びていない。stalled は「重いだけ」ではないので危険色にする。 */
+.card-longproc.is-severe  { color: var(--danger); background: color-mix(in srgb, var(--danger-bg) 30%, transparent); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.card-longproc.is-stalled { color: var(--danger); background: color-mix(in srgb, var(--danger-bg) 55%, transparent); border-color: var(--danger); }
 .card-provider-icon { flex-shrink: 0; vertical-align: middle; margin-right: 2px; }
 /* モデル名の色は下のステータスバー .tsb-model（#9ece6a）に合わせて緑系で統一。 */
 .card-model { flex-shrink: 1; font-size: 0.72rem; color: #9ece6a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; margin-left: 2px; }
