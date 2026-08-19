@@ -130,3 +130,32 @@ func TestInputMuExistsOnSession(t *testing.T) {
 	//lint:ignore SA2001 intentional empty critical section — proves inputMu exists
 	ses.inputMu.Unlock()
 }
+
+func TestCurrentWrapperForInputUsesReattachedConnection(t *testing.T) {
+	s := auditInputServer(t)
+	const sessionID = 3
+	s.sessionsMu.Lock()
+	s.sessions[sessionID] = &session{ID: sessionID, inputMu: new(sync.Mutex)}
+	oldWC := &wrapperConn{}
+	newWC := &wrapperConn{}
+	s.wrappers[sessionID] = oldWC
+	s.sessionsMu.Unlock()
+
+	if got := s.currentWrapperForInput(sessionID); got != oldWC {
+		t.Fatalf("initial wrapper = %p, want %p", got, oldWC)
+	}
+
+	s.sessionsMu.Lock()
+	s.wrappers[sessionID] = newWC
+	s.sessionsMu.Unlock()
+	if got := s.currentWrapperForInput(sessionID); got != newWC {
+		t.Fatalf("reattached wrapper = %p, want %p", got, newWC)
+	}
+
+	s.sessionsMu.Lock()
+	delete(s.sessions, sessionID)
+	s.sessionsMu.Unlock()
+	if got := s.currentWrapperForInput(sessionID); got != nil {
+		t.Fatalf("dismissed wrapper = %p, want nil", got)
+	}
+}

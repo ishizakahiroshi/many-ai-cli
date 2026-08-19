@@ -115,3 +115,24 @@ func TestReattachKeepsSessionIDForSameWrapper(t *testing.T) {
 		}
 	})
 }
+
+func TestReattachAnnounceMessageSkipsDismissedSession(t *testing.T) {
+	s := newTestServer()
+	ses := registerTestSession(s, 15, "codex")
+	ses.State = "running"
+	wc := &wrapperConn{}
+	s.sessionsMu.Lock()
+	s.wrappers[15] = wc
+	s.sessionsMu.Unlock()
+
+	if _, ok := s.reattachAnnounceMessage(15, wc); !ok {
+		t.Fatal("active session should produce an announce message")
+	}
+
+	s.sessionsMu.Lock()
+	delete(s.sessions, 15)
+	s.sessionsMu.Unlock()
+	if _, ok := s.reattachAnnounceMessage(15, wc); ok {
+		t.Fatal("dismissed session must not produce an announce message")
+	}
+}

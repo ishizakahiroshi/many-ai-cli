@@ -950,6 +950,8 @@
   "card_ctx_title": "コンテキスト使用率（残量が少ないと応答が重くなり auto-compact が走ります）",
   "card_longproc_label": "長時間処理中",
   "card_longproc_title": "この応答が長時間続いています。巨大コンテキスト × 高 effort で 1 ターンが重くなっている可能性があります。催促を連投せず、ターミナルで ESC を送って中断してください。",
+  "card_stalled_label": "応答が進んでいません",
+  "card_stalled_title": "AI CLI 自身の記録（transcript）がしばらく伸びていません。モデルが 1 つの長い応答を出し続けている可能性があります（出力上限に達すると切断され、最初からやり直しになります）。催促を連投せず、ターミナルで ESC を送って中断してください。",
   "card_ctx_open_git": "Open Git View",
   "card_ctx_open_files": "Open Files Tab",
   "card_ctx_activate": "Activate Session",

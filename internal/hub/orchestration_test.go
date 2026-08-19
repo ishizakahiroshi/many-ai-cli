@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -123,6 +124,64 @@ func Test_detectLastBoardWriter_skipsDone(t *testing.T) {
 	got := detectLastBoardWriter(text)
 	if got.Role != "implementer" || got.SessionID != 10 {
 		t.Fatalf("writer = %#v, want implementer session=10", got)
+	}
+}
+
+func Test_detectLastBoardWriter_skipsSuccess(t *testing.T) {
+	text := "## implementer session=10 2026-06-25T00:00:00Z\nbody\n## SUCCESS implementer session=10\n"
+	got := detectLastBoardWriter(text)
+	if got.Role != "implementer" || got.SessionID != 10 {
+		t.Fatalf("writer = %#v, want implementer session=10 after SUCCESS", got)
+	}
+}
+
+func TestReserveOrchestrationConductorMergesWorktreeMetadata(t *testing.T) {
+	s := newTestServer()
+	const label = "conductor-worktree"
+	worktree := normalWorktree{Path: `C:\repo\.many-ai-cli\worktrees\child`, ParentDir: `C:\repo`, Branch: "orch/child", Created: true}
+	s.orchestration.pending[label] = pendingChild{
+		NormalWorktree:  worktree,
+		WorktreeCleanup: worktreeCleanupDelete,
+		WorktreeBranch:  worktree.Branch,
+		SpawnedAt:       time.Unix(1, 0),
+	}
+
+	id := s.reserveOrchestrationConductor(label, nil)
+	s.orchestration.mu.Lock()
+	got := s.orchestration.pending[label]
+	s.orchestration.mu.Unlock()
+	if got.OrchestrationID != id {
+		t.Fatalf("orchestration id = %q, want %q", got.OrchestrationID, id)
+	}
+	if got.NormalWorktree != worktree || got.WorktreeCleanup != worktreeCleanupDelete || got.WorktreeBranch != worktree.Branch {
+		t.Fatalf("worktree metadata was replaced: %+v", got)
+	}
+}
+
+func TestOrchestrationChildProcess(t *testing.T) {
+	if os.Getenv("MANY_AI_CLI_TEST_CHILD") != "1" {
+		return
+	}
+	for {
+		time.Sleep(time.Second)
+	}
+}
+
+func TestTerminateUnregisteredWrapKillsProcess(t *testing.T) {
+	cmd := exec.Command(os.Args[0], "-test.run=^TestOrchestrationChildProcess$")
+	cmd.Env = append(os.Environ(), "MANY_AI_CLI_TEST_CHILD=1")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start child: %v", err)
+	}
+	terminateUnregisteredWrap(cmd)
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		_ = cmd.Process.Kill()
+		t.Fatal("unregistered wrap process did not exit after kill")
 	}
 }
 

@@ -75,8 +75,8 @@ func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval)
 		}
 		return
 	}
-	candidateKey := approvalCandidateKey(ses.Provider, approval.Kind, approval.Question, approval.Options)
-	candidateShape := approvalCandidateShape(ses.Provider, approval.Kind, approval.Question, approval.Options)
+	candidateKey := approvalCandidateKeyWithContext(ses.Provider, approval.Kind, approval.Question, approval.Context, approval.Options)
+	candidateShape := approvalCandidateShapeWithContext(ses.Provider, approval.Kind, approval.Question, approval.Context, approval.Options)
 	sourceEpoch, answered := approvalCandidateEpochLocked(ses, candidateKey)
 	legacyConsumed := ses.approvalConsumedCandidateKey == "" &&
 		ses.nativeApprovalConsumed == approval.Sig && now.Sub(ses.nativeApprovalConsumedAt) < approvalConsumedTTL

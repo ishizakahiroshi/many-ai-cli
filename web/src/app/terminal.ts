@@ -14,6 +14,7 @@ import { isGrokChatViewerOpen, openGrokChatViewer, resetGrokChatViewerForSession
 import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
 import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, shouldBypassCursorHideFilterForProvider, showCursorSeq } from './cursor-hide-filter.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
+import { formatLongprocDuration, longprocBadgeClass, longprocStatus } from './longproc.js';
 export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossibleMarkerPrefix } from './hub-marker-filter.js';
 
 // Claude Code の折りたたみマーカー: "… +23 lines (ctrl+o to expand)"。
@@ -103,6 +104,8 @@ function isModalOverlayOpen() {
   }
   // ファイルプレビューモーダル（path-links.ts）はクラスのみで id を持たないため別途検出する。
   if (document.querySelector('.aac-file-modal-overlay')) return true;
+  // バグ報告モーダル（bug-report-modal.ts）も同様にクラスのみで id を持たない。
+  if (document.querySelector('.bug-report-overlay')) return true;
   return false;
 }
 
@@ -1681,11 +1684,11 @@ function renderLiveStatusDom(mode, text) {
 }
 
 // 長時間処理中インジケータ（ライブ帯の右側・パレットボタンの左隣）。
-// アクティブセッションが running に入ってから LIVE_LONGPROC_SEC を超えて応答が続くと
-// 「⚠ 長時間処理中」を帯の右側へ出す。サイドバーのカード長時間バッジ（session-list.ts の
-// CARD_LONGPROC_SEC）と同じしきい値・同じ意味で、入力欄の真上でも気付けるようにする。
+// アクティブセッションが running に入ってからの経過と、provider transcript の停滞を
+// 見て「⚠ 長時間処理中 38m」「⚠ 応答が進んでいません 12m」を帯の右側へ出す。
+// しきい値と重大度の判定は longproc.ts が正本で、サイドバーのカードバッジ
+// （session-list.ts の cardLiveRowHtml）と完全に同じ基準を使う。
 // ライブ帯はアクティブセッションぶんしか表示しないため、追跡もアクティブ分だけ持つ。
-const LIVE_LONGPROC_SEC = 300;
 const liveStatusRunningSince = new Map<number, number>();
 const liveStatusMobileMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
   ? window.matchMedia('(max-width: 720px)') : null;
@@ -1698,7 +1701,8 @@ export function syncLiveStatusLongproc(): void {
   const el = document.getElementById('terminal-live-status');
   if (!el) return;
   const id = activeSessionId;
-  const state = id != null ? (sessions.get(id)?.state as string) : null;
+  const ses = id != null ? sessions.get(id) : null;
+  const state = ses ? (ses.state as string) : null;
   const lp = el.querySelector('.live-status-longproc') as HTMLElement | null;
   // running 以外（standby/waiting/error/切断）は追跡を捨てて非表示にする。
   if (id == null || state !== 'running') {
@@ -1708,21 +1712,31 @@ export function syncLiveStatusLongproc(): void {
   }
   let since = liveStatusRunningSince.get(id);
   if (!since) { since = Date.now(); liveStatusRunningSince.set(id, since); }
-  const sec = Math.max(0, Math.floor((Date.now() - since) / 1000));
+  const now = Date.now();
+  const sec = Math.max(0, Math.floor((now - since) / 1000));
+  const status = longprocStatus(sec, ses?.transcript_grew_at, now);
   let badge = lp;
-  const compactLabel = '⚠5m+';
-  const fullLabel = `⚠ ${ti18n('card_longproc_label')}`;
   if (!badge) {
     badge = document.createElement('span');
     badge.className = 'live-status-longproc';
-    badge.title = ti18n('card_longproc_title');
     // パレットボタンの左隣へ置く（パレットは buildUI で末尾に append される）。
     const paletteBtn = el.querySelector('.live-status-palette-btn');
     if (paletteBtn) el.insertBefore(badge, paletteBtn); else el.appendChild(badge);
   }
-  const label = isLiveStatusMobileViewport() ? compactLabel : fullLabel;
+  if (status.level === 'none') { badge.hidden = true; return; }
+  const stalled = status.level === 'stalled';
+  const dur = formatLongprocDuration(stalled ? status.stalledSec : status.elapsedSec);
+  const fullLabel = stalled
+    ? `⚠ ${ti18n('card_stalled_label')} ${dur}`
+    : `⚠ ${ti18n('card_longproc_label')} ${dur}`;
+  // スマホ幅は帯が狭いので記号 + 経過だけにする（何分かが最も知りたい情報）。
+  const label = isLiveStatusMobileViewport() ? `⚠${dur}` : fullLabel;
   if (badge.textContent !== label) badge.textContent = label;
-  badge.hidden = sec < LIVE_LONGPROC_SEC;
+  const cls = longprocBadgeClass('live-status-longproc', status.level);
+  if (badge.className !== cls) badge.className = cls;
+  const tip = stalled ? ti18n('card_stalled_title') : ti18n('card_longproc_title');
+  if (badge.title !== tip) badge.title = tip;
+  badge.hidden = false;
 }
 
 // セッション切替・状態変化時に、アクティブセッションの現在状態を DOM へ反映する。

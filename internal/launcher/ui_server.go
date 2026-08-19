@@ -298,6 +298,8 @@ func (s *UIServer) handleProfiles(w http.ResponseWriter, r *http.Request) {
 		})
 
 	case http.MethodPost:
+		profilesFileMu.Lock()
+		defer profilesFileMu.Unlock()
 		var req struct {
 			Profiles []Profile `json:"profiles"`
 		}
@@ -742,6 +744,8 @@ func (s *UIServer) failConnection(lc *liveConn, errMsg string) {
 }
 
 func (s *UIServer) updateLastUsed(name string) {
+	profilesFileMu.Lock()
+	defer profilesFileMu.Unlock()
 	pf, err := LoadProfiles()
 	if err != nil {
 		return

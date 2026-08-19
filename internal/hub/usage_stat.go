@@ -58,22 +58,34 @@ type usageStat struct {
 	RateLimit5hReset int64
 	RateLimit7dPct   float64
 	RateLimit7dReset int64
-	LinesAdded       int
-	LinesRemoved     int
-	EffortLevel      string
-	Thinking         bool
-	Exceeds200k      bool
-	DurationMs       int64
-	APIDurationMs    int64
-	Version          string
-	OutputStyle      string
-	VimMode          string
-	AgentName        string
-	RepoHost         string
-	RepoOwner        string
-	RepoName         string
-	RemainingPct     float64
-	ReasoningOut     int
+	// Codex rate_limits are separate from Claude's 5h/7d fields because their
+	// window semantics and source are different. Presence keeps 0% distinct
+	// from an omitted record.
+	CodexRateLimitsPresent      bool
+	CodexPrimaryUsedPct         float64
+	CodexPrimaryWindowMinutes   int
+	CodexPrimaryReset           int64
+	CodexSecondaryUsedPct       float64
+	CodexSecondaryWindowMinutes int
+	CodexSecondaryReset         int64
+	CodexCreditsBalance         string
+	CodexPlanType               string
+	LinesAdded                  int
+	LinesRemoved                int
+	EffortLevel                 string
+	Thinking                    bool
+	Exceeds200k                 bool
+	DurationMs                  int64
+	APIDurationMs               int64
+	Version                     string
+	OutputStyle                 string
+	VimMode                     string
+	AgentName                   string
+	RepoHost                    string
+	RepoOwner                   string
+	RepoName                    string
+	RemainingPct                float64
+	ReasoningOut                int
 	// UsageModel: relay が報告したモデル ID / display_name。
 	UsageModel string
 	StartedAt  string
@@ -208,26 +220,35 @@ type sessionUsageRequest struct {
 	CtxUsedPct    float64 `json:"ctx_used_pct"`
 	StartedAt     string  `json:"started_at"`
 	// statusbar 追加メタ（Claude statusLine ネイティブ算出値。Claude のみ）。
-	RateLimit5hPct   float64 `json:"rl_5h_pct"`
-	RateLimit5hReset int64   `json:"rl_5h_reset"`
-	RateLimit7dPct   float64 `json:"rl_7d_pct"`
-	RateLimit7dReset int64   `json:"rl_7d_reset"`
-	LinesAdded       int     `json:"lines_added"`
-	LinesRemoved     int     `json:"lines_removed"`
-	EffortLevel      string  `json:"effort_level"`
-	Thinking         bool    `json:"thinking"`
-	Exceeds200k      bool    `json:"exceeds_200k"`
-	DurationMs       int64   `json:"duration_ms"`
-	APIDurationMs    int64   `json:"api_duration_ms"`
-	Version          string  `json:"version"`
-	OutputStyle      string  `json:"output_style"`
-	VimMode          string  `json:"vim_mode"`
-	AgentName        string  `json:"agent_name"`
-	RepoHost         string  `json:"repo_host"`
-	RepoOwner        string  `json:"repo_owner"`
-	RepoName         string  `json:"repo_name"`
-	RemainingPct     float64 `json:"remaining_pct"`
-	ReasoningOut     int     `json:"reasoning_output_tokens"`
+	RateLimit5hPct              float64 `json:"rl_5h_pct"`
+	RateLimit5hReset            int64   `json:"rl_5h_reset"`
+	RateLimit7dPct              float64 `json:"rl_7d_pct"`
+	RateLimit7dReset            int64   `json:"rl_7d_reset"`
+	CodexRateLimitsPresent      bool    `json:"codex_rate_limits_present"`
+	CodexPrimaryUsedPct         float64 `json:"codex_primary_used_pct"`
+	CodexPrimaryWindowMinutes   int     `json:"codex_primary_window_minutes"`
+	CodexPrimaryReset           int64   `json:"codex_primary_reset"`
+	CodexSecondaryUsedPct       float64 `json:"codex_secondary_used_pct"`
+	CodexSecondaryWindowMinutes int     `json:"codex_secondary_window_minutes"`
+	CodexSecondaryReset         int64   `json:"codex_secondary_reset"`
+	CodexCreditsBalance         string  `json:"codex_credits_balance"`
+	CodexPlanType               string  `json:"codex_plan_type"`
+	LinesAdded                  int     `json:"lines_added"`
+	LinesRemoved                int     `json:"lines_removed"`
+	EffortLevel                 string  `json:"effort_level"`
+	Thinking                    bool    `json:"thinking"`
+	Exceeds200k                 bool    `json:"exceeds_200k"`
+	DurationMs                  int64   `json:"duration_ms"`
+	APIDurationMs               int64   `json:"api_duration_ms"`
+	Version                     string  `json:"version"`
+	OutputStyle                 string  `json:"output_style"`
+	VimMode                     string  `json:"vim_mode"`
+	AgentName                   string  `json:"agent_name"`
+	RepoHost                    string  `json:"repo_host"`
+	RepoOwner                   string  `json:"repo_owner"`
+	RepoName                    string  `json:"repo_name"`
+	RemainingPct                float64 `json:"remaining_pct"`
+	ReasoningOut                int     `json:"reasoning_output_tokens"`
 	// TranscriptPath is supplied only by the Codex Stop hook. It is retained in
 	// memory for the active session so the UI can lead the user to the provider's
 	// source-of-truth rollout JSONL without storing its contents in the Hub.
@@ -322,6 +343,12 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 		}
 		return v
 	}
+	clampWindowMinutes := func(v int) int {
+		if v < 0 || v > 10*365*24*60 {
+			return 0
+		}
+		return v
+	}
 	rl5hReset := clampEpoch(req.RateLimit5hReset)
 	rl7dReset := clampEpoch(req.RateLimit7dReset)
 	clampLines := func(v int) int {
@@ -376,43 +403,54 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 		costUSD, costKnown = calcCostUSD(usageModel, req.TokensIn, req.TokensOut, req.TokensCache)
 	}
 
+	receivedAt := time.Now()
 	stat := &usageStat{
-		CostUSD:          costUSD,
-		CostKnown:        costKnown,
-		TokensIn:         req.TokensIn,
-		TokensOut:        req.TokensOut,
-		TokensCache:      req.TokensCache,
-		TokensTotal:      req.TokensTotal,
-		CtxWindow:        req.CtxWindow,
-		CtxUsedPct:       ctxUsedPct,
-		RateLimit5hPct:   rl5hPct,
-		RateLimit5hReset: rl5hReset,
-		RateLimit7dPct:   rl7dPct,
-		RateLimit7dReset: rl7dReset,
-		LinesAdded:       linesAdded,
-		LinesRemoved:     linesRemoved,
-		EffortLevel:      effortLevel,
-		Thinking:         req.Thinking,
-		Exceeds200k:      req.Exceeds200k,
-		DurationMs:       durationMs,
-		APIDurationMs:    apiDurationMs,
-		Version:          version,
-		OutputStyle:      outputStyle,
-		VimMode:          vimMode,
-		AgentName:        agentName,
-		RepoHost:         repoHost,
-		RepoOwner:        repoOwner,
-		RepoName:         repoName,
-		RemainingPct:     remainingPct,
-		ReasoningOut:     reasoningOut,
-		UsageModel:       usageModel,
-		StartedAt:        req.StartedAt,
-		ReceivedAt:       time.Now(),
+		CostUSD:                     costUSD,
+		CostKnown:                   costKnown,
+		TokensIn:                    req.TokensIn,
+		TokensOut:                   req.TokensOut,
+		TokensCache:                 req.TokensCache,
+		TokensTotal:                 req.TokensTotal,
+		CtxWindow:                   req.CtxWindow,
+		CtxUsedPct:                  ctxUsedPct,
+		RateLimit5hPct:              rl5hPct,
+		RateLimit5hReset:            rl5hReset,
+		RateLimit7dPct:              rl7dPct,
+		RateLimit7dReset:            rl7dReset,
+		CodexRateLimitsPresent:      req.CodexRateLimitsPresent,
+		CodexPrimaryUsedPct:         clampPct(req.CodexPrimaryUsedPct),
+		CodexPrimaryWindowMinutes:   clampWindowMinutes(req.CodexPrimaryWindowMinutes),
+		CodexPrimaryReset:           clampEpoch(req.CodexPrimaryReset),
+		CodexSecondaryUsedPct:       clampPct(req.CodexSecondaryUsedPct),
+		CodexSecondaryWindowMinutes: clampWindowMinutes(req.CodexSecondaryWindowMinutes),
+		CodexSecondaryReset:         clampEpoch(req.CodexSecondaryReset),
+		CodexCreditsBalance:         stripControlForLog(req.CodexCreditsBalance, 64),
+		CodexPlanType:               stripControlForLog(req.CodexPlanType, 32),
+		LinesAdded:                  linesAdded,
+		LinesRemoved:                linesRemoved,
+		EffortLevel:                 effortLevel,
+		Thinking:                    req.Thinking,
+		Exceeds200k:                 req.Exceeds200k,
+		DurationMs:                  durationMs,
+		APIDurationMs:               apiDurationMs,
+		Version:                     version,
+		OutputStyle:                 outputStyle,
+		VimMode:                     vimMode,
+		AgentName:                   agentName,
+		RepoHost:                    repoHost,
+		RepoOwner:                   repoOwner,
+		RepoName:                    repoName,
+		RemainingPct:                remainingPct,
+		ReasoningOut:                reasoningOut,
+		UsageModel:                  usageModel,
+		StartedAt:                   req.StartedAt,
+		ReceivedAt:                  receivedAt,
 	}
 
 	usageStatsMu.Lock()
 	usageStats[req.SessionID] = stat
 	usageStatsMu.Unlock()
+	s.recordSessionSubscriptionUsage(req.SessionID, stat, receivedAt)
 
 	s.logger.Info("usage_stat received",
 		slog.Int("session_id", req.SessionID),
@@ -428,39 +466,48 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 
 	// C3: usage 更新を全 UI クライアントに broadcast する。
 	s.broadcast(proto.Message{
-		Type:             "usage_stat",
-		SessionID:        req.SessionID,
-		Provider:         req.Provider,
-		CostUSD:          costUSD,
-		CostKnown:        costKnown,
-		TokensIn:         req.TokensIn,
-		TokensOut:        req.TokensOut,
-		TokensCache:      req.TokensCache,
-		TokensTotal:      req.TokensTotal,
-		CtxWindow:        req.CtxWindow,
-		CtxUsedPct:       ctxUsedPct,
-		RateLimit5hPct:   rl5hPct,
-		RateLimit5hReset: rl5hReset,
-		RateLimit7dPct:   rl7dPct,
-		RateLimit7dReset: rl7dReset,
-		LinesAdded:       linesAdded,
-		LinesRemoved:     linesRemoved,
-		EffortLevel:      effortLevel,
-		Thinking:         req.Thinking,
-		Exceeds200k:      req.Exceeds200k,
-		DurationMs:       durationMs,
-		APIDurationMs:    apiDurationMs,
-		Version:          version,
-		OutputStyle:      outputStyle,
-		VimMode:          vimMode,
-		AgentName:        agentName,
-		RepoHost:         repoHost,
-		RepoOwner:        repoOwner,
-		RepoName:         repoName,
-		RemainingPct:     remainingPct,
-		ReasoningOut:     reasoningOut,
-		UsageModel:       usageModel,
-		UsageStartedAt:   req.StartedAt,
+		Type:                        "usage_stat",
+		SessionID:                   req.SessionID,
+		Provider:                    req.Provider,
+		CostUSD:                     costUSD,
+		CostKnown:                   costKnown,
+		TokensIn:                    req.TokensIn,
+		TokensOut:                   req.TokensOut,
+		TokensCache:                 req.TokensCache,
+		TokensTotal:                 req.TokensTotal,
+		CtxWindow:                   req.CtxWindow,
+		CtxUsedPct:                  ctxUsedPct,
+		RateLimit5hPct:              rl5hPct,
+		RateLimit5hReset:            rl5hReset,
+		RateLimit7dPct:              rl7dPct,
+		RateLimit7dReset:            rl7dReset,
+		CodexRateLimitsPresent:      stat.CodexRateLimitsPresent,
+		CodexPrimaryUsedPct:         stat.CodexPrimaryUsedPct,
+		CodexPrimaryWindowMinutes:   stat.CodexPrimaryWindowMinutes,
+		CodexPrimaryReset:           stat.CodexPrimaryReset,
+		CodexSecondaryUsedPct:       stat.CodexSecondaryUsedPct,
+		CodexSecondaryWindowMinutes: stat.CodexSecondaryWindowMinutes,
+		CodexSecondaryReset:         stat.CodexSecondaryReset,
+		CodexCreditsBalance:         stat.CodexCreditsBalance,
+		CodexPlanType:               stat.CodexPlanType,
+		LinesAdded:                  linesAdded,
+		LinesRemoved:                linesRemoved,
+		EffortLevel:                 effortLevel,
+		Thinking:                    req.Thinking,
+		Exceeds200k:                 req.Exceeds200k,
+		DurationMs:                  durationMs,
+		APIDurationMs:               apiDurationMs,
+		Version:                     version,
+		OutputStyle:                 outputStyle,
+		VimMode:                     vimMode,
+		AgentName:                   agentName,
+		RepoHost:                    repoHost,
+		RepoOwner:                   repoOwner,
+		RepoName:                    repoName,
+		RemainingPct:                remainingPct,
+		ReasoningOut:                reasoningOut,
+		UsageModel:                  usageModel,
+		UsageStartedAt:              req.StartedAt,
 	})
 
 	writeJSON(w, map[string]any{"ok": true})

@@ -211,7 +211,22 @@ func (s *Server) startWrapProcess(spec spawnWrappedSpec, wrapArgs, subEnv []stri
 			_ = spawnLog.Close()
 		}
 	})
-	return s.waitForSessionByLabel(spec.Label, wait)
+	id, err := s.waitForSessionByLabel(spec.Label, wait)
+	if err != nil {
+		// A wrapper that never registers has no Hub session to dismiss. Kill the
+		// process after the bounded wait so spawn-child cannot leave an orphan
+		// provider terminal behind.
+		terminateUnregisteredWrap(cmd)
+		return 0, err
+	}
+	return id, nil
+}
+
+func terminateUnregisteredWrap(cmd *exec.Cmd) {
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	_ = cmd.Process.Kill()
 }
 
 func (s *Server) waitForSessionByLabel(label string, timeout time.Duration) (int, error) {

@@ -294,7 +294,11 @@ func (s *Server) handleWhisperUninstall(w http.ResponseWriter, r *http.Request) 
 		writeJSONError(w, http.StatusConflict, "install_in_progress", "cannot uninstall while install is running")
 		return
 	}
-	s.stopManagedWhisper()
+	wait := s.stopManagedWhisper()
+	if !waitManagedWhisper(wait) {
+		s.logger.Warn("managed whisper did not exit within the stop budget; removing anyway",
+			"wait", whisperStopWait)
+	}
 	baseDir, err := whisperBaseDir()
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "internal_error", err.Error())
@@ -304,6 +308,9 @@ func (s *Server) handleWhisperUninstall(w http.ResponseWriter, r *http.Request) 
 		writeJSONError(w, http.StatusInternalServerError, "remove_failed", err.Error())
 		return
 	}
+	s.whisperMu.Lock()
+	s.whisperInstall = whisperInstallState{}
+	s.whisperMu.Unlock()
 	s.cfgMu.Lock()
 	s.cfg.Voice.Whisper.Managed = false
 	s.cfg.Voice.Whisper.ServerURL = ""
@@ -358,7 +365,10 @@ func (s *Server) handleWhisperStop(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
 		return
 	}
-	s.stopManagedWhisper()
+	wait := s.stopManagedWhisper()
+	if !waitManagedWhisper(wait) {
+		s.logger.Warn("managed whisper did not exit within the stop budget", "wait", whisperStopWait)
+	}
 	s.cfgMu.Lock()
 	if s.cfg.Voice.Whisper.Managed {
 		s.cfg.Voice.Whisper.ServerURL = ""
@@ -615,9 +625,12 @@ func (s *Server) startManagedWhisper(ctx context.Context, cfg config.VoiceWhispe
 	s.whisperMu.Lock()
 	s.whisperCmd = cmd
 	s.whisperJob = job
+	done := make(chan struct{})
+	s.whisperDone = done
 	s.whisperServerURL = serverURL
 	s.whisperMu.Unlock()
 	s.safeGo("whisper_wait", func() {
+		defer close(done)
 		err := cmd.Wait()
 		if logFile != nil {
 			_ = logFile.Close()
@@ -628,9 +641,16 @@ func (s *Server) startManagedWhisper(ctx context.Context, cfg config.VoiceWhispe
 			s.whisperCmd = nil
 			job = s.whisperJob
 			s.whisperJob = 0
+			s.whisperDone = nil
 			s.whisperServerURL = ""
 			if err != nil {
+				s.whisperInstall.Installing = false
+				s.whisperInstall.Phase = "error"
+				s.whisperInstall.Progress = 0
 				s.whisperInstall.Error = err.Error()
+				s.whisperInstall.UpdatedAt = time.Now().Format(time.RFC3339)
+			} else {
+				s.whisperInstall.Error = ""
 			}
 		}
 		s.whisperMu.Unlock()
@@ -646,6 +666,15 @@ func (s *Server) startManagedWhisper(ctx context.Context, cfg config.VoiceWhispe
 		s.stopManagedWhisperCmd(cmd)
 		return "", whisperProxyError{status: http.StatusBadGateway, code: "whisper_start_failed", detail: err.Error()}
 	}
+	s.whisperMu.Lock()
+	// A previous failed install or unexpected process exit must not mask a
+	// newly running server in the settings UI.
+	s.whisperInstall.Error = ""
+	if s.whisperInstall.Phase == "error" {
+		s.whisperInstall.Phase = ""
+	}
+	s.whisperInstall.UpdatedAt = time.Now().Format(time.RFC3339)
+	s.whisperMu.Unlock()
 	s.cfgMu.Lock()
 	s.cfg.Voice.Whisper.Managed = true
 	s.cfg.Voice.Whisper.ServerURL = serverURL
@@ -657,16 +686,43 @@ func (s *Server) startManagedWhisper(ctx context.Context, cfg config.VoiceWhispe
 	return serverURL, nil
 }
 
-func (s *Server) stopManagedWhisper() {
+func (s *Server) stopManagedWhisper() <-chan struct{} {
 	s.whisperMu.Lock()
 	cmd := s.whisperCmd
 	job := s.whisperJob
+	done := s.whisperDone
 	s.whisperCmd = nil
 	s.whisperJob = 0
+	s.whisperDone = nil
 	s.whisperServerURL = ""
 	s.whisperMu.Unlock()
 	killWhisperProcess(cmd)
 	closeWhisperProcessJob(job)
+	return done
+}
+
+// whisperStopWait bounds how long a stop/uninstall request waits for the
+// managed Whisper process to actually exit.
+const whisperStopWait = 5 * time.Second
+
+// waitManagedWhisper waits for the killed Whisper process to exit so a
+// following RemoveAll does not hit a locked executable, but never blocks the
+// HTTP handler indefinitely: cmd.Wait() can stay pending if the process
+// ignores the kill, and an uninstall request that never returns is worse than
+// a RemoveAll that reports "file in use". Returns whether the process exited
+// within the budget.
+func waitManagedWhisper(done <-chan struct{}) bool {
+	if done == nil {
+		return true
+	}
+	timer := time.NewTimer(whisperStopWait)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		return false
+	}
 }
 
 // stopManagedWhisperCmd は特定の *exec.Cmd と一致するときだけ登録を解除して kill する。
@@ -683,6 +739,7 @@ func (s *Server) stopManagedWhisperCmd(cmd *exec.Cmd) {
 		s.whisperCmd = nil
 		job = s.whisperJob
 		s.whisperJob = 0
+		s.whisperDone = nil
 		s.whisperServerURL = ""
 	}
 	s.whisperMu.Unlock()

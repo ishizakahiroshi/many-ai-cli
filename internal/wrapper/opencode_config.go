@@ -167,15 +167,40 @@ func prepareOpenCodeConfig(cwd string, permissionValue string, logger *slog.Logg
 	}
 
 	cleanup = func() {
+		defer cleanupLock()
+		current, readErr := os.ReadFile(cfgPath)
+		if readErr != nil {
+			// The user may have removed the file while the session was running.
+			// Do not recreate it or turn a concurrent edit into a rollback.
+			if !errors.Is(readErr, os.ErrNotExist) {
+				logOpenCode(logger, slog.LevelWarn,
+					"failed to inspect opencode.json during cleanup; leaving it as-is",
+					"path", cfgPath, "err", readErr)
+			}
+			return
+		}
+		if !bytes.Equal(current, data) {
+			// The file was edited after this session wrote it. Restoring orig here
+			// would discard the user's edit; orphan recovery applies the same guard.
+			logOpenCode(logger, slog.LevelWarn,
+				"opencode.json was modified during the session; leaving it as-is",
+				"path", cfgPath)
+			return
+		}
 		if existed {
 			// cfgPath は起動時に読み込んだのと同じ session cwd + "opencode.json" で、
 			// orig もそのファイルから読み込んだ元の内容。ユーザーが自分のマシンで自分の
 			// cwd を指定しているため path traversal のリスクは無い。
-			_ = os.WriteFile(cfgPath, orig, 0o600) // #nosec G703 -- cfgPath は起動時に読んだのと同じ session cwd + opencode.json、orig は同ファイル由来
+			if err := os.WriteFile(cfgPath, orig, 0o600); err != nil { // #nosec G703 -- cfgPath は起動時に読んだのと同じ session cwd + opencode.json、orig は同ファイル由来
+				logOpenCode(logger, slog.LevelWarn, "failed to restore opencode.json during cleanup",
+					"path", cfgPath, "err", err)
+			}
 		} else {
-			_ = os.Remove(cfgPath)
+			if err := os.Remove(cfgPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+				logOpenCode(logger, slog.LevelWarn, "failed to remove generated opencode.json during cleanup",
+					"path", cfgPath, "err", err)
+			}
 		}
-		cleanupLock()
 	}
 	return cleanup, nil
 }

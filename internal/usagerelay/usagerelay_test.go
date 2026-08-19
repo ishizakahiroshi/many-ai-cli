@@ -1,6 +1,7 @@
 package usagerelay
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -31,6 +32,48 @@ func TestScanLastTokenCountCodexEventMsgFormat(t *testing.T) {
 	if in != 33079 || out != 473 || cache != 26880 || total != 33552 || ctxWindow != 258400 || reasoningOut != 128 {
 		t.Fatalf("scanLastTokenCount = in=%d out=%d cache=%d total=%d ctx=%d reasoning=%d, want 33079/473/26880/33552/258400/128",
 			in, out, cache, total, ctxWindow, reasoningOut)
+	}
+}
+
+func TestScanLastTokenCountWithRateLimits(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rollout.jsonl")
+	body := []byte(`{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}},"rate_limits":{"primary":{"used_percent":89,"window_minutes":10080,"resets_at":1787196957},"secondary":null,"credits":{"has_credits":false,"unlimited":false,"balance":"0"},"plan_type":"plus"}}}
+`)
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, _, _, _, _, limits, err := scanLastTokenCountWithRateLimits(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if limits.Primary == nil || limits.Primary.UsedPercent != 89 || limits.Primary.WindowMinutes != 10080 || limits.Primary.ResetsAt != 1787196957 {
+		t.Fatalf("primary rate limit = %#v", limits.Primary)
+	}
+	if limits.Secondary != nil {
+		t.Fatalf("secondary null must stay absent: %#v", limits.Secondary)
+	}
+	if limits.Credits.Balance != "0" {
+		t.Fatalf("credits balance = %q, want raw value retained for caller filtering", limits.Credits.Balance)
+	}
+}
+
+func TestScanLastTokenCountSkipsOversizedRecord(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rollout.jsonl")
+	oversized := append(bytes.Repeat([]byte("x"), 256*1024+1), '\n')
+	tokenCount := []byte(`{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":7,"output_tokens":8,"cached_input_tokens":9,"total_tokens":15}}}}` + "\n")
+	if err := os.WriteFile(path, append(oversized, tokenCount...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	in, out, cache, total, _, _, err := scanLastTokenCount(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if in != 7 || out != 8 || cache != 9 || total != 15 {
+		t.Fatalf("scanLastTokenCount after oversized record = %d/%d/%d/%d, want 7/8/9/15", in, out, cache, total)
 	}
 }
 

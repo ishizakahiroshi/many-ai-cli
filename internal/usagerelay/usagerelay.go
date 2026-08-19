@@ -335,10 +335,35 @@ type tokenCountEvent struct {
 			LastTokenUsage     tokenUsageNumbers `json:"last_token_usage"`
 			ModelContextWindow int               `json:"model_context_window"`
 		} `json:"info"`
-		ModelContextWindow int `json:"model_context_window"`
+		ModelContextWindow int             `json:"model_context_window"`
+		RateLimits         codexRateLimits `json:"rate_limits"`
 	} `json:"payload"`
 
 	ModelContextWindow int `json:"model_context_window"`
+}
+
+// codexRateLimitWindow is the provider-reported window in a Codex rollout.
+// A non-nil pointer distinguishes a real 0% value from an omitted/null window.
+type codexRateLimitWindow struct {
+	UsedPercent   float64 `json:"used_percent"`
+	WindowMinutes int     `json:"window_minutes"`
+	ResetsAt      int64   `json:"resets_at"`
+}
+
+type codexRateLimits struct {
+	Primary   *codexRateLimitWindow `json:"primary"`
+	Secondary *codexRateLimitWindow `json:"secondary"`
+	Credits   struct {
+		HasCredits bool   `json:"has_credits"`
+		Unlimited  bool   `json:"unlimited"`
+		Balance    string `json:"balance"`
+	} `json:"credits"`
+	PlanType string `json:"plan_type"`
+}
+
+func (r codexRateLimits) present() bool {
+	return r.Primary != nil || r.Secondary != nil || r.PlanType != "" ||
+		r.Credits.HasCredits || r.Credits.Unlimited || r.Credits.Balance != ""
 }
 
 // resolve は複数フォーマットを試して (tokIn, tokOut, tokCache, tokTotal, ctxWindow) を返す。
@@ -387,28 +412,35 @@ func (e *tokenCountEvent) resolve() (in, out, cache, total, ctxWindow, reasoning
 // セキュリティ要件: 会話本文の行はメモリに保持しない。
 // 各行を読んだら type フィールドを確認し、token_count 以外は即座に破棄する。
 func scanLastTokenCount(path string) (in, out, cache, total, ctxWindow, reasoningOut int, err error) {
+	in, out, cache, total, ctxWindow, reasoningOut, _, err = scanLastTokenCountWithRateLimits(path)
+	return in, out, cache, total, ctxWindow, reasoningOut, err
+}
+
+func scanLastTokenCountWithRateLimits(path string) (in, out, cache, total, ctxWindow, reasoningOut int, rateLimits codexRateLimits, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return 0, 0, 0, 0, 0, 0, fmt.Errorf("open rollout: %w", err)
+		return 0, 0, 0, 0, 0, 0, codexRateLimits{}, fmt.Errorf("open rollout: %w", err)
 	}
 	defer f.Close()
 
 	var lastIn, lastOut, lastCache, lastTotal, lastCtxWindow, lastReasoningOut int
-	scanner := bufio.NewScanner(f)
-	// バッファを 256 KB に制限（1 行が異常に長い場合の保護）
-	scanner.Buffer(make([]byte, 256*1024), 256*1024)
-
-	for scanner.Scan() {
-		line := scanner.Bytes()
+	const maxRolloutLine = 256 * 1024
+	reader := bufio.NewReaderSize(f, 64*1024)
+	var line []byte
+	overlong := false
+	processLine := func(line []byte) {
 		// type フィールドが "token_count" の行のみを処理する。
 		// 会話本文（type: "message" 等）はここで読み捨てる（セキュリティ要件）。
 		if !isTokenCountLine(line) {
 			// 本文行はメモリに保持せず即破棄
-			continue
+			return
 		}
 		var ev tokenCountEvent
 		if err := json.Unmarshal(line, &ev); err != nil {
-			continue
+			return
+		}
+		if ev.Payload.Type == "token_count" && ev.Payload.RateLimits.present() {
+			rateLimits = ev.Payload.RateLimits
 		}
 		i, o, c, t, ctx, r := ev.resolve()
 		if i > 0 || o > 0 || t > 0 {
@@ -419,10 +451,38 @@ func scanLastTokenCount(path string) (in, out, cache, total, ctxWindow, reasonin
 			}
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return 0, 0, 0, 0, 0, 0, fmt.Errorf("scan rollout: %w", err)
+	for {
+		fragment, readErr := reader.ReadSlice('\n')
+		if len(fragment) > 0 && !overlong {
+			if len(line)+len(fragment) > maxRolloutLine {
+				// Drop only this oversized record. ReadSlice continues at the
+				// next fragment, so a later token_count record remains visible.
+				overlong = true
+				line = nil
+			} else {
+				line = append(line, fragment...)
+			}
+		}
+		if readErr == bufio.ErrBufferFull {
+			continue
+		}
+		if readErr == nil {
+			if !overlong {
+				processLine(line)
+			}
+			line = nil
+			overlong = false
+			continue
+		}
+		if readErr == io.EOF {
+			if len(line) > 0 && !overlong {
+				processLine(line)
+			}
+			break
+		}
+		return 0, 0, 0, 0, 0, 0, codexRateLimits{}, fmt.Errorf("read rollout: %w", readErr)
 	}
-	return lastIn, lastOut, lastCache, lastTotal, lastCtxWindow, lastReasoningOut, nil
+	return lastIn, lastOut, lastCache, lastTotal, lastCtxWindow, lastReasoningOut, rateLimits, nil
 }
 
 // isTokenCountLine は行が token_count イベントかどうかを JSON 全パース前に
@@ -450,7 +510,7 @@ func runCodex(hubURL, token string, sessionID int, stdin io.Reader, logger *slog
 	}
 
 	// rollout JSONL から token_count の数値のみを抽出。本文行は読み捨て。
-	tokIn, tokOut, tokCache, tokTotal, ctxWindow, reasoningOut, err := scanLastTokenCount(input.TranscriptPath)
+	tokIn, tokOut, tokCache, tokTotal, ctxWindow, reasoningOut, rateLimits, err := scanLastTokenCountWithRateLimits(input.TranscriptPath)
 	if err != nil {
 		logger.Warn("usage-relay(codex): rollout scan failed", "path", input.TranscriptPath, "err", err)
 		return nil
@@ -458,19 +518,34 @@ func runCodex(hubURL, token string, sessionID int, stdin io.Reader, logger *slog
 
 	if hubURL != "" && token != "" && sessionID > 0 {
 		payload := hubUsagePayload{
-			Provider:      "codex",
-			SessionID:     sessionID,
-			CostFromRelay: false, // Codex は Hub 側で価格表算出
-			Model:         input.Model,
-			TokensIn:      tokIn,
-			TokensOut:     tokOut,
-			TokensCache:   tokCache,
-			TokensTotal:   tokTotal,
-			CtxWindow:     ctxWindow,
-			StartedAt:     time.Now().Format(time.RFC3339),
-			ReasoningOut:  reasoningOut,
-			TranscriptPath: input.TranscriptPath,
+			Provider:               "codex",
+			SessionID:              sessionID,
+			CostFromRelay:          false, // Codex は Hub 側で価格表算出
+			Model:                  input.Model,
+			TokensIn:               tokIn,
+			TokensOut:              tokOut,
+			TokensCache:            tokCache,
+			TokensTotal:            tokTotal,
+			CtxWindow:              ctxWindow,
+			StartedAt:              time.Now().Format(time.RFC3339),
+			ReasoningOut:           reasoningOut,
+			TranscriptPath:         input.TranscriptPath,
+			CodexRateLimitsPresent: rateLimits.present(),
 		}
+		if rateLimits.Primary != nil {
+			payload.CodexPrimaryUsedPct = rateLimits.Primary.UsedPercent
+			payload.CodexPrimaryWindowMinutes = rateLimits.Primary.WindowMinutes
+			payload.CodexPrimaryReset = rateLimits.Primary.ResetsAt
+		}
+		if rateLimits.Secondary != nil {
+			payload.CodexSecondaryUsedPct = rateLimits.Secondary.UsedPercent
+			payload.CodexSecondaryWindowMinutes = rateLimits.Secondary.WindowMinutes
+			payload.CodexSecondaryReset = rateLimits.Secondary.ResetsAt
+		}
+		if rateLimits.Credits.HasCredits && !rateLimits.Credits.Unlimited {
+			payload.CodexCreditsBalance = rateLimits.Credits.Balance
+		}
+		payload.CodexPlanType = rateLimits.PlanType
 		if err := postUsage(hubURL, token, payload, logger); err != nil {
 			logger.Warn("usage-relay(codex): post failed", "err", err)
 		}
@@ -523,6 +598,17 @@ type hubUsagePayload struct {
 	RemainingPct     float64 `json:"remaining_pct,omitempty"`
 	ReasoningOut     int     `json:"reasoning_output_tokens,omitempty"`
 	TranscriptPath   string  `json:"transcript_path,omitempty"`
+	// Codex rate_limits are provider metadata from the same token_count event.
+	// Presence is separate from the numeric values because 0% is valid.
+	CodexRateLimitsPresent      bool    `json:"codex_rate_limits_present,omitempty"`
+	CodexPrimaryUsedPct         float64 `json:"codex_primary_used_pct,omitempty"`
+	CodexPrimaryWindowMinutes   int     `json:"codex_primary_window_minutes,omitempty"`
+	CodexPrimaryReset           int64   `json:"codex_primary_reset,omitempty"`
+	CodexSecondaryUsedPct       float64 `json:"codex_secondary_used_pct,omitempty"`
+	CodexSecondaryWindowMinutes int     `json:"codex_secondary_window_minutes,omitempty"`
+	CodexSecondaryReset         int64   `json:"codex_secondary_reset,omitempty"`
+	CodexCreditsBalance         string  `json:"codex_credits_balance,omitempty"`
+	CodexPlanType               string  `json:"codex_plan_type,omitempty"`
 }
 
 // validateHubURL は親から渡された Hub URL を loopback http/https に絞る。

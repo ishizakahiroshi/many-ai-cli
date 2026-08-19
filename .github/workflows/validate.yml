@@ -77,6 +77,19 @@ jobs:
       - name: Check slash command definitions
         run: node scripts/check-slash-commands.mjs
 
+      # 版数はタグが単一ソースで、リポジトリ内のファイルは古いままが正常。
+      # 上書きする側の配線が消えても、リポジトリ内は何も変わらないので、
+      # 古い版数を名乗る成果物を出荷するまで気づけない。配線自体を検査する。
+      - name: Check version single-source wiring
+        run: node scripts/check-version-sources.mjs
+
+      # CLAUDE.md は全 AI セッションで全文がロードされる唯一のファイル。
+      # ルールが破られるたびに本文をここへコピーするのが最短の対処に見えるため、
+      # 放っておくと一方向に太る（v0.5.0 の 129 行が 5 週間で 269 行になった）。
+      # 索引のまま保つ圧力をここで掛ける。
+      - name: Check CLAUDE.md stays an index
+        run: node scripts/check-claude-md.mjs
+
   # リリースで使う PAT に必要なスコープが揃っているかを、タグを打つ前に確かめる。
   #
   # 2026-08-11 v0.6.0 で、PUBLISH_GITHUB_TOKEN に workflow スコープが無いまま

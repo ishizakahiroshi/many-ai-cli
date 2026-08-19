@@ -74,7 +74,7 @@ func (s *Server) handleGitShow(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// 1) commit メタ取得（hash の後に -- を置いてファイルパスと明示的に区切る）
-	metaOut, err := runGit(ctx, cwd, "show", "-s", "--decorate=short",
+	metaOut, err := runGit(ctx, cwd, "show", "-s", "--decorate=full",
 		"--pretty=format:"+gitShowMetaFormat, hash, "--")
 	if err != nil {
 		s.logger.Warn("git show metadata failed", "session_id", sid, "err", err)

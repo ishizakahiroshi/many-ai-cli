@@ -684,5 +684,5 @@ func approvalOptionsHaveSendText(opts []proto.ApprovalOption) bool {
 }
 
 func nativeApprovalSig(provider string, approval *nativeApproval) string {
-	return approvalCandidateKey(provider, approval.Kind, approval.Question, approval.Options)
+	return approvalCandidateKeyWithContext(provider, approval.Kind, approval.Question, approval.Context, approval.Options)
 }

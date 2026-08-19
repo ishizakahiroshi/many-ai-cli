@@ -226,6 +226,10 @@ func (s *Server) handleSubscriptionRemove(w http.ResponseWriter, r *http.Request
 		return
 	}
 	dir := subscriptionConfigDir()
+	if body.DeleteCredentials && s.subscriptionProfileInUse(provider, id) {
+		writeJSONError(w, http.StatusConflict, "profile_in_use", "cannot delete credentials while the subscription profile is used by a live session")
+		return
+	}
 
 	s.cfgMu.Lock()
 	list := s.cfg.Subscriptions[provider]

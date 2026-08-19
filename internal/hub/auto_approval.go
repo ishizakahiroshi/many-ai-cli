@@ -84,6 +84,9 @@ func autoApprovalInput(options []proto.ApprovalOption) string {
 		if option.IsCurrent {
 			return "\r"
 		}
+		if option.Num > 0 {
+			return fmt.Sprintf("%d\r", option.Num)
+		}
 	}
 	return ""
 }

@@ -257,7 +257,7 @@ func (s *Server) applyOneTapApproval(claim oneTapApprovalClaim) error {
 		return errOneTapNoInput
 	}
 	provider = ses.Provider
-	candidateKey := approvalCandidateKey(ses.Provider, approval.Kind, approval.Question, approval.Options)
+	candidateKey := approvalCandidateKeyWithContext(ses.Provider, approval.Kind, approval.Question, approval.Context, approval.Options)
 	// trySendInput -> sendPTYInputFrame -> reserveInflightInput acquires
 	// s.sessionsMu, so it must run WITHOUT the lock held (like submitInputWithGate
 	// and flushPendingInput). Holding it here re-locks the non-reentrant

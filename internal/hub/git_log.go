@@ -129,7 +129,7 @@ func (s *Server) handleGitLog(w http.ResponseWriter, r *http.Request) {
 		"--max-count=" + strconv.Itoa(limit),
 		"--skip=" + strconv.Itoa(skip),
 		"--date-order",
-		"--decorate=short",
+		"--decorate=full",
 		"--pretty=format:" + gitLogPrettyFormat,
 	}
 	if ref == "--all" {

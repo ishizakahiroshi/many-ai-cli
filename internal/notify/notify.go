@@ -76,11 +76,12 @@ type DonePayload struct {
 
 // Manager は ntfy/webhook 通知の送信管理を行う。
 type Manager struct {
-	mu     sync.Mutex
-	cfg    Config
-	client *http.Client
-	logger *slog.Logger
-	sent   map[string]time.Time // approvalID → 送信時刻
+	mu      sync.Mutex
+	cfg     Config
+	client  *http.Client
+	logger  *slog.Logger
+	sent    map[string]time.Time // successfully sent ID → 送信時刻
+	pending map[string]struct{}  // IDs whose backend sends are still in flight
 }
 
 // New は Manager を生成する。
@@ -89,10 +90,11 @@ func New(cfg Config, logger *slog.Logger) *Manager {
 		logger = slog.Default()
 	}
 	return &Manager{
-		cfg:    cfg,
-		client: &http.Client{Timeout: sendTimeout},
-		logger: logger,
-		sent:   map[string]time.Time{},
+		cfg:     cfg,
+		client:  &http.Client{Timeout: sendTimeout},
+		logger:  logger,
+		sent:    map[string]time.Time{},
+		pending: map[string]struct{}{},
 	}
 }
 
@@ -119,11 +121,10 @@ func (m *Manager) SendApproval(payload ApprovalPayload) {
 		id = fmt.Sprintf("approval-%d-%x", payload.SessionID, time.Now().UnixNano())
 		payload.ID = id
 	}
-	if _, ok := m.sent[id]; ok {
+	if !m.beginDedupLocked(id) {
 		m.mu.Unlock()
 		return
 	}
-	m.sent[id] = time.Now()
 	m.mu.Unlock()
 
 	body := fmt.Sprintf("session #%d: 承認要求", payload.SessionID)
@@ -132,19 +133,16 @@ func (m *Manager) SendApproval(payload ApprovalPayload) {
 	}
 	body = truncateUTF8(body, payloadMaxBytes)
 
-	for _, backend := range cfg.Backends {
-		b := backend
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
-			defer cancel()
-			if err := sendApproval(ctx, m.client, b, payload, body); err != nil {
-				m.logger.Warn("notify send failed",
-					"type", b.Type,
-					"host", notifyHostOf(b.URL),
-					"err", notifySanitizeErr(err))
-			}
-		}()
-	}
+	m.sendAsyncDedup(id, cfg.Backends, func(b BackendConfig) error {
+		ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
+		defer cancel()
+		return sendApproval(ctx, m.client, b, payload, body)
+	}, func(b BackendConfig, err error) {
+		m.logger.Warn("notify send failed",
+			"type", b.Type,
+			"host", notifyHostOf(b.URL),
+			"err", notifySanitizeErr(err))
+	})
 }
 
 func sendApproval(ctx context.Context, client *http.Client, backend BackendConfig, payload ApprovalPayload, body string) error {
@@ -170,11 +168,10 @@ func (m *Manager) SendDone(payload DonePayload) {
 		id = fmt.Sprintf("done-%d-%x", payload.SessionID, time.Now().UnixNano())
 		payload.ID = id
 	}
-	if _, ok := m.sent[id]; ok {
+	if !m.beginDedupLocked(id) {
 		m.mu.Unlock()
 		return
 	}
-	m.sent[id] = time.Now()
 	m.mu.Unlock()
 
 	// SendApproval と同じ既定マスク方針: include_body が明示的に有効なときだけ
@@ -186,19 +183,16 @@ func (m *Manager) SendDone(payload DonePayload) {
 	body = truncateUTF8(body, payloadMaxBytes)
 	title := doneNotificationTitle(payload.Title, payload.Kind)
 
-	for _, backend := range cfg.Backends {
-		b := backend
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
-			defer cancel()
-			if err := sendDone(ctx, m.client, b, title, body, payload.Kind); err != nil {
-				m.logger.Warn("notify done send failed",
-					"type", b.Type,
-					"host", notifyHostOf(b.URL),
-					"err", notifySanitizeErr(err))
-			}
-		}()
-	}
+	m.sendAsyncDedup(id, cfg.Backends, func(b BackendConfig) error {
+		ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
+		defer cancel()
+		return sendDone(ctx, m.client, b, title, body, payload.Kind)
+	}, func(b BackendConfig, err error) {
+		m.logger.Warn("notify done send failed",
+			"type", b.Type,
+			"host", notifyHostOf(b.URL),
+			"err", notifySanitizeErr(err))
+	})
 }
 
 func doneKindLabel(kind string) string {
@@ -287,27 +281,67 @@ func (m *Manager) SendSecurity(title, body string) {
 		return
 	}
 	id := "security-" + title + "-" + body
-	if _, ok := m.sent[id]; ok {
+	if !m.beginDedupLocked(id) {
 		m.mu.Unlock()
 		return
 	}
-	m.sent[id] = time.Now()
 	m.mu.Unlock()
 
 	out := truncateUTF8(body, payloadMaxBytes)
-	for _, backend := range cfg.Backends {
+	m.sendAsyncDedup(id, cfg.Backends, func(b BackendConfig) error {
+		ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
+		defer cancel()
+		return send(ctx, m.client, b, title, out)
+	}, func(b BackendConfig, err error) {
+		m.logger.Warn("notify security send failed",
+			"type", b.Type,
+			"host", notifyHostOf(b.URL),
+			"err", notifySanitizeErr(err))
+	})
+}
+
+// beginDedupLocked reserves an ID while its backend requests are in flight.
+// Only a send with at least one successful backend is moved to sent; a total
+// failure must remain retryable.
+func (m *Manager) beginDedupLocked(id string) bool {
+	if _, ok := m.sent[id]; ok {
+		return false
+	}
+	if _, ok := m.pending[id]; ok {
+		return false
+	}
+	m.pending[id] = struct{}{}
+	return true
+}
+
+func (m *Manager) finishDedup(id string, succeeded bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.pending, id)
+	if succeeded {
+		m.sent[id] = time.Now()
+	}
+}
+
+func (m *Manager) sendAsyncDedup(id string, backends []BackendConfig, send func(BackendConfig) error, onError func(BackendConfig, error)) {
+	var wg sync.WaitGroup
+	successes := make(chan struct{}, len(backends))
+	for _, backend := range backends {
 		b := backend
+		wg.Add(1)
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
-			defer cancel()
-			if err := send(ctx, m.client, b, title, out); err != nil {
-				m.logger.Warn("notify security send failed",
-					"type", b.Type,
-					"host", notifyHostOf(b.URL),
-					"err", notifySanitizeErr(err))
+			defer wg.Done()
+			if err := send(b); err != nil {
+				onError(b, err)
+				return
 			}
+			successes <- struct{}{}
 		}()
 	}
+	go func() {
+		wg.Wait()
+		m.finishDedup(id, len(successes) > 0)
+	}()
 }
 
 // SendTest は Settings のテスト送信ボタン用。指定 backend に即時送信して err を返す。

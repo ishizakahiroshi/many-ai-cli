@@ -2,6 +2,7 @@ package approval
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"many-ai-cli/internal/proto"
@@ -17,6 +18,21 @@ func TestSummarizeExtractsCommandPathsAndRisk(t *testing.T) {
 	}
 	if want := []string{"./dist", "./tmp"}; !reflect.DeepEqual(got.Paths, want) {
 		t.Fatalf("paths = %#v, want %#v", got.Paths, want)
+	}
+}
+
+func TestSummarizeCollectsHeadingAndAllCommandCandidates(t *testing.T) {
+	got := Summarize("Run: git status", "Bash command\nrm -rf ./dist")
+	if !strings.Contains(got.Command, "git status") || !strings.Contains(got.Command, "rm -rf ./dist") {
+		t.Fatalf("command = %q, want all command candidates", got.Command)
+	}
+	if got.Risk != proto.ApprovalRiskHigh {
+		t.Fatalf("risk = %q, want high when a later candidate is destructive", got.Risk)
+	}
+
+	heading := Summarize("Do you want to proceed?", "Bash command\n\nrm -rf ./tmp")
+	if heading.Command != "rm -rf ./tmp" {
+		t.Fatalf("heading command = %q, want command below heading", heading.Command)
 	}
 }
 

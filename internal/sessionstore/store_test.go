@@ -355,6 +355,100 @@ func TestCloseStaleSessionsAndReattachRevive(t *testing.T) {
 	}
 }
 
+func TestReadPathsKeepPersistentSessionIdentity(t *testing.T) {
+	logDir := filepath.Join(t.TempDir(), "logs")
+	store, err := OpenForLogDir(logDir)
+	if err != nil {
+		t.Fatalf("OpenForLogDir: %v", err)
+	}
+	defer store.Close()
+
+	oldID, err := store.StartSession(SessionStart{
+		LiveSessionID: 1,
+		Provider:      "claude",
+		State:         "running",
+		StartedAt:     time.Now().Add(-time.Hour).Format(time.RFC3339),
+		JSONLPath:     filepath.Join(logDir, "sessions", "old.jsonl"),
+	})
+	if err != nil {
+		t.Fatalf("StartSession(old): %v", err)
+	}
+	if err := store.StoreEvent(1, map[string]any{
+		"ts": time.Now().Add(-time.Hour).Format(time.RFC3339), "type": "user_input", "session_id": 1,
+		"text": "old session marker",
+	}); err != nil {
+		t.Fatalf("StoreEvent(old): %v", err)
+	}
+	store.EndSession(1, "completed", "old_done", time.Now().Add(-time.Minute))
+
+	newID, err := store.StartSession(SessionStart{
+		LiveSessionID: 1,
+		Provider:      "codex",
+		State:         "running",
+		StartedAt:     time.Now().Format(time.RFC3339),
+		JSONLPath:     filepath.Join(logDir, "sessions", "new.jsonl"),
+	})
+	if err != nil {
+		t.Fatalf("StartSession(new): %v", err)
+	}
+	if newID == oldID {
+		t.Fatalf("new session reused old persistent id %d", oldID)
+	}
+	if err := store.StoreEvent(1, map[string]any{
+		"ts": time.Now().Format(time.RFC3339), "type": "user_input", "session_id": 1,
+		"text": "new session marker",
+	}); err != nil {
+		t.Fatalf("StoreEvent(new): %v", err)
+	}
+
+	liveMessages, err := store.ChatMessagesByLiveSession(1, 10)
+	if err != nil {
+		t.Fatalf("ChatMessagesByLiveSession: %v", err)
+	}
+	if len(liveMessages) != 1 || liveMessages[0].SessionID != newID || !strings.Contains(liveMessages[0].RawText, "new session marker") {
+		t.Fatalf("live messages = %#v, want only new session", liveMessages)
+	}
+	oldMessages, err := store.ChatMessagesBySessionID(oldID, 10)
+	if err != nil {
+		t.Fatalf("ChatMessagesBySessionID(old): %v", err)
+	}
+	if len(oldMessages) != 1 || oldMessages[0].SessionID != oldID || !strings.Contains(oldMessages[0].RawText, "old session marker") {
+		t.Fatalf("old messages = %#v", oldMessages)
+	}
+
+	liveOverview, err := store.SessionOverviewByLiveSession(1)
+	if err != nil {
+		t.Fatalf("SessionOverviewByLiveSession: %v", err)
+	}
+	if liveOverview.ID != newID || liveOverview.Provider != "codex" {
+		t.Fatalf("live overview = %#v, want new session", liveOverview)
+	}
+	oldOverview, err := store.SessionOverviewBySessionID(oldID)
+	if err != nil {
+		t.Fatalf("SessionOverviewBySessionID(old): %v", err)
+	}
+	if oldOverview.ID != oldID || oldOverview.Provider != "claude" || oldOverview.EndedAt == "" {
+		t.Fatalf("old overview = %#v", oldOverview)
+	}
+
+	ok, err := store.MessagesMentionText(1, []string{"old session marker"})
+	if err != nil || ok {
+		t.Fatalf("MessagesMentionText(old on reused live id) = %v, %v; want false, nil", ok, err)
+	}
+	ok, err = store.MessagesMentionText(1, []string{"new session marker"})
+	if err != nil || !ok {
+		t.Fatalf("MessagesMentionText(new on reused live id) = %v, %v; want true, nil", ok, err)
+	}
+
+	timeline, err := store.TimelineByLiveSession(1, 10)
+	if err != nil {
+		t.Fatalf("TimelineByLiveSession: %v", err)
+	}
+	if len(timeline) != 1 || timeline[0].Session != newID {
+		t.Fatalf("timeline = %#v, want only new session", timeline)
+	}
+}
+
 // StoreEventAsync がキュー経由で書き込まれ、最終的に同期版と同じ結果になることを検証する。
 func TestStoreEventAsyncDrainsQueue(t *testing.T) {
 	logDir := filepath.Join(t.TempDir(), "logs")

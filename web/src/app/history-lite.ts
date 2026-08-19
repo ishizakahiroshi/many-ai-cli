@@ -23,7 +23,7 @@ async function load() {
 async function openSession(item: Overview) {
   selected = item; messages = [];
   render();
-  const params = new URLSearchParams({ token, session_id: String(item.session_id), limit: '500' });
+  const params = new URLSearchParams({ token, session_db_id: String(item.id), limit: '500' });
   try {
     const res = await fetch(`/api/session-chat?${params}`);
     if (!res.ok) throw new Error(`chat ${res.status}`);

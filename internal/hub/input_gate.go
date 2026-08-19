@@ -378,17 +378,33 @@ func (s *Server) submitInputWithGate(wc *wrapperConn, sessionID int, combined st
 
 	s.sessionsMu.Lock()
 	gated := !bypassGate && sessionInjectGated(ses, time.Now())
+	if s.sessions[sessionID] == nil {
+		s.sessionsMu.Unlock()
+		return
+	}
+	// Reattach can replace the wrapper while the per-session input lock is
+	// waiting. Use the current registration at the delivery boundary instead
+	// of the pointer captured by handleInput before that replacement.
+	wc = s.wrappers[sessionID]
 	pendingLen := len(s.pendingInput[sessionID])
 	hasPending := pendingLen > 0
 	if gated || hasPending {
 		s.pendingInput[sessionID] = appendPendingInput(s.pendingInput[sessionID], combined)
 	}
 	s.sessionsMu.Unlock()
+	// 観測専用の一時コード（原因が確定したら撤去）。台帳 id=hub-input-deliver-trace。
+	// sessionsMu の外で呼ぶ（traceInputDeliver は cfgMu を取るため、2 つのロックを
+	// 同時に保持しないという Server の規約を守る）。
+	s.traceInputDeliver("gate", sessionID,
+		"bytes", len(combined), "gated", gated, "has_pending", hasPending, "pending_len", pendingLen)
 	if gated || hasPending {
 		s.notifyInputDeferred(sessionID)
 		return
 	}
-	if rem := s.trySendInput(wc, sessionID, combined); rem != "" {
+	rem := s.trySendInput(wc, sessionID, combined)
+	s.traceInputDeliver("sent", sessionID,
+		"bytes", len(combined), "remaining", len(rem), "wrapper_connected", wc != nil)
+	if rem != "" {
 		s.sessionsMu.Lock()
 		s.pendingInput[sessionID] = appendPendingInput(s.pendingInput[sessionID], rem)
 		s.sessionsMu.Unlock()
@@ -401,6 +417,9 @@ func (s *Server) submitInputWithGate(wc *wrapperConn, sessionID int, combined st
 // 届くまで保持する。bracketed-paste の確定 \r は別書き込み + 50ms 遅延で送る従来挙動を保つ。
 // first まで送れて delayed(\r) だけ失敗した場合は \r のみを残りとして返し、本文の二重送信を避ける。
 func (s *Server) trySendInput(wc *wrapperConn, sessionID int, combined string) (remaining string) {
+	// The wrapper captured by the caller may be stale after reattach. Resolve
+	// the registration immediately before creating the wire frame.
+	wc = s.currentWrapperForInput(sessionID)
 	if wc == nil {
 		s.logger.Warn("pty_input deferred: no wrapper connected", "session_id", sessionID)
 		return combined
@@ -420,6 +439,15 @@ func (s *Server) trySendInput(wc *wrapperConn, sessionID int, combined string) (
 	// wc.send は wrapper からの ack が無く write deadline も持たないため、err=nil でも
 	// wrapper に届いた保証は無い。到達確認が要る経路は inputAckCapable 側で扱う。
 	return ""
+}
+
+func (s *Server) currentWrapperForInput(sessionID int) *wrapperConn {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	if s.sessions[sessionID] == nil {
+		return nil
+	}
+	return s.wrappers[sessionID]
 }
 
 // flushPendingInput は wrapper の (再)接続後に保留入力を順番に再送する。
@@ -454,6 +482,11 @@ func (s *Server) flushPendingInput(sessionID int) {
 	ses.resendInput = nil
 	wc := s.wrappers[sessionID]
 	s.sessionsMu.Unlock()
+	// 観測専用の一時コード（原因が確定したら撤去）。台帳 id=hub-input-deliver-trace。
+	// 保留が積まれたセッションで、この行が一度も出なければ「吐き出す機会が来ていない」
+	// ことの直接の証拠になる（呼び出し元は wrapper の再接続と orchestration の 2 箇所のみ）。
+	s.traceInputDeliver("flush", sessionID,
+		"pending", len(pending), "resend", len(resend), "wrapper_connected", wc != nil)
 	if len(pending) == 0 && len(resend) == 0 {
 		return
 	}

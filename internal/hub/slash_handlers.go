@@ -19,6 +19,41 @@ func (s *Server) invalidateSlashCache(provider string) {
 	s.slashCmdMu.Unlock()
 }
 
+// slashCmdSourcesPatch keeps omitted provider fields intact. The settings UI
+// predates the opencode/grok fields, so decoding directly into the complete
+// struct would turn those omitted fields into empty strings and overwrite
+// user-configured sources.
+type slashCmdSourcesPatch struct {
+	Claude      *string `json:"claude"`
+	Codex       *string `json:"codex"`
+	Copilot     *string `json:"copilot"`
+	CursorAgent *string `json:"cursor-agent"`
+	Opencode    *string `json:"opencode"`
+	Grok        *string `json:"grok"`
+}
+
+func applySlashCmdSourcesPatch(base config.SlashCmdSources, patch slashCmdSourcesPatch) config.SlashCmdSources {
+	if patch.Claude != nil {
+		base.Claude = strings.TrimSpace(*patch.Claude)
+	}
+	if patch.Codex != nil {
+		base.Codex = strings.TrimSpace(*patch.Codex)
+	}
+	if patch.Copilot != nil {
+		base.Copilot = strings.TrimSpace(*patch.Copilot)
+	}
+	if patch.CursorAgent != nil {
+		base.CursorAgent = strings.TrimSpace(*patch.CursorAgent)
+	}
+	if patch.Opencode != nil {
+		base.Opencode = strings.TrimSpace(*patch.Opencode)
+	}
+	if patch.Grok != nil {
+		base.Grok = strings.TrimSpace(*patch.Grok)
+	}
+	return base
+}
+
 // handleSlashCmdSources は provider ごとのソース URL を GET/POST で管理する。
 func (s *Server) handleSlashCmdSources(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
@@ -31,16 +66,14 @@ func (s *Server) handleSlashCmdSources(w http.ResponseWriter, r *http.Request) {
 		s.cfgMu.Unlock()
 		writeJSON(w, src)
 	case http.MethodPost:
-		var body config.SlashCmdSources
-		if !decodeJSON(w, r, &body) {
+		var patch slashCmdSourcesPatch
+		if !decodeJSON(w, r, &patch) {
 			return
 		}
-		body.Claude = strings.TrimSpace(body.Claude)
-		body.Codex = strings.TrimSpace(body.Codex)
-		body.Copilot = strings.TrimSpace(body.Copilot)
-		body.CursorAgent = strings.TrimSpace(body.CursorAgent)
-		body.Opencode = strings.TrimSpace(body.Opencode)
-		body.Grok = strings.TrimSpace(body.Grok)
+		s.cfgMu.Lock()
+		prev := s.cfg.SlashCmdSources
+		body := applySlashCmdSourcesPatch(prev, patch)
+		s.cfgMu.Unlock()
 		if err := validateSlashCmdSource(body.Claude); err != nil {
 			writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("invalid claude source", err))
 			return
@@ -66,7 +99,6 @@ func (s *Server) handleSlashCmdSources(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.cfgMu.Lock()
-		prev := s.cfg.SlashCmdSources
 		s.cfg.SlashCmdSources = body
 		s.cfgMu.Unlock()
 		if body.Claude != prev.Claude {

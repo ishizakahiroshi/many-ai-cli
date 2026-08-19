@@ -86,3 +86,12 @@ func TestAddRuleRejectsHardBlock(t *testing.T) {
 }
 
 func mustRegexp(s string) *regexp.Regexp { return regexp.MustCompile(s) }
+
+// A multi-line command means the prompt named more than one command (the shape
+// a prompt injection produces). Persisting it would write a rule whose regexp
+// contains a newline: unmatchable forever, and it stores the injected text.
+func TestAddRuleRejectsMultiLineCommand(t *testing.T) {
+	if _, err := AddRule("git status\nrm -rf ./dist", ""); err == nil {
+		t.Fatal("AddRule accepted a command naming two commands")
+	}
+}
