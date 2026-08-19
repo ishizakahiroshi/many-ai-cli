@@ -567,6 +567,7 @@ export function _connectWs() {
 		if (m.awaiting_user !== undefined) cur.awaiting_user = m.awaiting_user;
 		if (m.awaiting_approval !== undefined) cur.awaiting_approval = m.awaiting_approval;
     if (m.last_output_at)  cur.last_output_at  = m.last_output_at;
+    if (m.transcript_grew_at) cur.transcript_grew_at = m.transcript_grew_at;
     if (m.started_at)      cur.started_at      = m.started_at;
     if (m.first_message)   cur.first_message   = m.first_message;
     if (m.last_message)    cur.last_message    = m.last_message;
