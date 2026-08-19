@@ -1434,6 +1434,8 @@
   "subs_none_supported": "No provider in this build supports separate login profiles yet.",
   "subs_provider_unsupported": "This provider does not support separate login profiles. Existing entries are kept but cannot be selected when starting a session.",
   "subs_env_var_tooltip": "The official CLI picks its config directory from this environment variable",
+  "subs_id_label": "Login dir",
+  "subs_id_tooltip": "Folder name that stores this login. It is generated from the display name you entered when adding the account and does not change when you rename it.",
   "subs_name_placeholder": "Display name (e.g. Claude Max main)",
   "subs_add_placeholder": "Display name for the new account",
   "subs_add": "Add",

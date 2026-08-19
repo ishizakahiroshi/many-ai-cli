@@ -1434,6 +1434,8 @@
   "subs_none_supported": "Bản dựng này chưa có nhà cung cấp nào hỗ trợ tách hồ sơ đăng nhập.",
   "subs_provider_unsupported": "Nhà cung cấp này chưa hỗ trợ tách hồ sơ đăng nhập. Mục đã lưu vẫn còn nhưng không chọn được khi khởi động phiên.",
   "subs_env_var_tooltip": "CLI chính thức chọn thư mục cấu hình theo biến môi trường này",
+  "subs_id_label": "Thư mục đăng nhập",
+  "subs_id_tooltip": "Tên thư mục lưu thông tin đăng nhập này. Được tạo từ tên hiển thị bạn nhập khi thêm tài khoản và không đổi khi bạn đổi tên hiển thị.",
   "subs_name_placeholder": "Tên hiển thị (ví dụ: Claude Max chính)",
   "subs_add_placeholder": "Tên hiển thị của tài khoản mới",
   "subs_add": "Thêm",
