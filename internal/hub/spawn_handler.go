@@ -16,6 +16,7 @@ import (
 )
 
 type spawnWrappedSpec struct {
+	Context        context.Context
 	Provider       string
 	CWD            string
 	Model          string
@@ -33,6 +34,9 @@ type spawnWrappedSpec struct {
 	// SubscriptionLogin が true のとき、通常のセッションではなく公式 CLI の
 	// ログインフロー（`claude auth login` 等）を PTY で走らせる。
 	SubscriptionLogin bool
+	// UsageProbe marks a short-lived internal session that must not be exposed
+	// in the normal UI session feed.
+	UsageProbe bool
 }
 
 func appendOpenCodePermissionArgs(wrapArgs []string, permissionMode string) []string {
@@ -165,6 +169,11 @@ func (s *Server) startWrapProcess(spec spawnWrappedSpec, wrapArgs, subEnv []stri
 	cmd.Dir = spec.CWD
 	hubPort := s.currentHubPort()
 	cmd.Env = append(sanitizeEnv(os.Environ()), "MANY_AI_CLI=1", fmt.Sprintf("MANY_AI_CLI_HUB_PORT=%d", hubPort))
+	probeValue := "0"
+	if spec.UsageProbe {
+		probeValue = "1"
+	}
+	cmd.Env = mergeEnvOverrides(cmd.Env, []string{"MANY_AI_CLI_USAGE_PROBE=" + probeValue})
 	if s.parentShell != "" {
 		cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}
@@ -211,7 +220,10 @@ func (s *Server) startWrapProcess(spec spawnWrappedSpec, wrapArgs, subEnv []stri
 			_ = spawnLog.Close()
 		}
 	})
-	id, err := s.waitForSessionByLabel(spec.Label, wait)
+	if spec.UsageProbe {
+		s.updateUsageProbePID(spec.Label, cmd.Process.Pid)
+	}
+	id, err := s.waitForSessionByLabelContext(spec.Context, spec.Label, wait)
 	if err != nil {
 		// A wrapper that never registers has no Hub session to dismiss. Kill the
 		// process after the bounded wait so spawn-child cannot leave an orphan
@@ -230,8 +242,21 @@ func terminateUnregisteredWrap(cmd *exec.Cmd) {
 }
 
 func (s *Server) waitForSessionByLabel(label string, timeout time.Duration) (int, error) {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	return s.waitForSessionByLabelContext(context.Background(), label, timeout)
+}
+
+func (s *Server) waitForSessionByLabelContext(ctx context.Context, label string, timeout time.Duration) (int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if timeout <= 0 {
+		timeout = time.Second
+	}
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	for {
 		s.sessionsMu.Lock()
 		for id, ses := range s.sessions {
 			if ses.Label == label {
@@ -240,9 +265,14 @@ func (s *Server) waitForSessionByLabel(label string, timeout time.Duration) (int
 			}
 		}
 		s.sessionsMu.Unlock()
-		time.Sleep(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		case <-deadline.C:
+			return 0, context.DeadlineExceeded
+		case <-ticker.C:
+		}
 	}
-	return 0, context.DeadlineExceeded
 }
 
 func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {

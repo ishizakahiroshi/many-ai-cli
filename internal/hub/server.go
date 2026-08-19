@@ -127,6 +127,9 @@ type session struct {
 	// セッションの追跡が壊れないようにするため。認証情報は一切含まない。
 	SubscriptionProfileID   string `json:"subscription_profile_id,omitempty"`
 	SubscriptionProfileName string `json:"subscription_profile_name,omitempty"`
+	// UsageProbe is JSON-hidden and marks the short-lived internal session used
+	// to retrieve Claude subscription usage.
+	UsageProbe bool `json:"-"`
 
 	// JSON 外: 状態評価用
 	lastOutputAt      time.Time // idleAfter 計算用。LastOutputAt と同期して更新する
@@ -618,6 +621,7 @@ type Server struct {
 	usageLinkCache      *ttlCache[UsageLinkDefaults]
 	subscriptionUsageMu sync.Mutex
 	subscriptionUsage   *subscriptionUsageStore
+	usageProbe          *usageProbeManager
 
 	modelsCache       *modelsCache
 	modelsRemoteCache *ttlCache[modelsDefaults]
@@ -943,6 +947,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		autoApprovalHistory:   make([]autoApprovalCandidate, 0, 100),
 		usageLinkCache:        newUsageLinkCache(),
 		subscriptionUsage:     newSubscriptionUsageStore(),
+		usageProbe:            newUsageProbeManager(),
 		modelsCache:           &modelsCache{},
 		modelsRemoteCache:     newModelsRemoteCache(),
 		orchestration:         newOrchestrationManager(),
@@ -952,6 +957,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	}
 	if dir := subscriptionConfigDir(); dir != "" {
 		s.subscriptionUsage.refreshLocal(cfg, dir, time.Now())
+		s.recoverUsageProbes(dir)
 	}
 	if actions, err := newOneTapApprovalManager(); err != nil {
 		return nil, err
@@ -1108,6 +1114,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/subscriptions", s.handleSubscriptions)
 	mux.HandleFunc("/api/subscriptions/", s.handleSubscriptionsItem)
 	mux.HandleFunc("/api/subscription-usage", s.handleSubscriptionUsage)
+	mux.HandleFunc("/api/subscription-usage/probe", s.handleSubscriptionUsageProbe)
 	mux.HandleFunc("/api/notify-config", s.handleNotifyConfig)
 	mux.HandleFunc("/api/notify-test", s.handleNotifyTest)
 	mux.HandleFunc("/api/notify-generate-topic", s.handleNotifyGenerateTopic)
@@ -2003,6 +2010,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	var endedProvider, endedCWD string
 	var endedWorktree normalWorktree
 	var endedWorktreeCleanup string
+	var endedUsageProbe bool
 	if exists {
 		ses := s.sessions[m.SessionID]
 		s.stopAgentChatTailLocked(ses)
@@ -2010,6 +2018,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		jsonlPathForTranscript = ses.JSONLPath
 		endedProvider = ses.Provider
 		endedCWD = ses.CWD
+		endedUsageProbe = ses.UsageProbe
 		endedWorktree = ses.NormalWorktree
 		endedWorktreeCleanup = ses.WorktreeCleanup
 		ses.History = nil
@@ -2072,7 +2081,9 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		s.logger.Warn("worktree retained after session dismissal", "path", endedWorktree.Path, "err", err)
 	}
 	s.finalizeTranscript(m.SessionID, jsonlPathForTranscript)
-	s.broadcast(proto.Message{Type: "session_removed", SessionID: m.SessionID})
+	if !endedUsageProbe {
+		s.broadcast(proto.Message{Type: "session_removed", SessionID: m.SessionID})
+	}
 	return false
 }
 

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"gopkg.in/yaml.v3"
 
@@ -20,6 +21,42 @@ import (
 )
 
 const DirMode os.FileMode = 0o700
+
+// DefaultUsageProbeModel is the low-cost model used by the Claude usage probe.
+// It is kept in user preferences rather than resources/models because the
+// latter is a remotely refreshed execution resource.
+const DefaultUsageProbeModel = "claude-haiku-4-5"
+
+// ValidUsageProbeModel accepts the same safe, single-argument shape used for
+// provider model selection. The value is passed directly to exec.Command, but
+// rejecting shell metacharacters and whitespace keeps malformed config from
+// becoming an ambiguous provider argument.
+func ValidUsageProbeModel(raw string) bool {
+	model := strings.TrimSpace(raw)
+	if model == "" {
+		return false
+	}
+	for _, r := range model {
+		if r < 0x20 || r == 0x7f || unicode.IsSpace(r) {
+			return false
+		}
+		switch r {
+		case '"', '\'', '|', '&', '>', '<', '^', '%', '(', ')', ';', '`', '$':
+			return false
+		}
+	}
+	return true
+}
+
+// EffectiveUsageProbeModel trims a valid configured value and otherwise
+// returns the explicit, documented default.
+func EffectiveUsageProbeModel(raw string) string {
+	model := strings.TrimSpace(raw)
+	if !ValidUsageProbeModel(model) {
+		return DefaultUsageProbeModel
+	}
+	return model
+}
 
 // Dir は ~/.many-ai-cli ディレクトリのパスを返す。
 func Dir() (string, error) {
@@ -548,15 +585,18 @@ func sessionOrderFromAny(raw []any) SessionOrderIDs {
 // UserPrefs はサーバ側（config.yaml: user_prefs:）に保存するユーザー機能設定。
 // 端末・ポート横断で共有する D2 分類の設定を全て保持する。
 type UserPrefs struct {
-	Trigger                  UserPrefsTrigger                  `yaml:"trigger,omitempty"      json:"trigger,omitempty"`
-	NotifySound              UserPrefsNotifySound              `yaml:"notify_sound,omitempty" json:"notify_sound,omitempty"`
-	DesktopNotifications     UserPrefsDesktopNotifications     `yaml:"desktop_notifications,omitempty" json:"desktop_notifications,omitempty"`
-	PushNotifications        UserPrefsPushNotifications        `yaml:"push_notifications,omitempty" json:"push_notifications,omitempty"`
-	Approval                 UserPrefsApproval                 `yaml:"approval,omitempty"     json:"approval,omitempty"`
-	QuickCmds                UserPrefsQuickCmds                `yaml:"quick_cmds,omitempty"   json:"quick_cmds,omitempty"`
-	Templates                []UserPrefsTemplate               `yaml:"templates,omitempty"    json:"templates,omitempty"`
-	TemplateSend             UserPrefsTemplateSend             `yaml:"template_send,omitempty" json:"template_send,omitempty"`
-	UsageLinks               UserPrefsUsageLinks               `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
+	Trigger              UserPrefsTrigger              `yaml:"trigger,omitempty"      json:"trigger,omitempty"`
+	NotifySound          UserPrefsNotifySound          `yaml:"notify_sound,omitempty" json:"notify_sound,omitempty"`
+	DesktopNotifications UserPrefsDesktopNotifications `yaml:"desktop_notifications,omitempty" json:"desktop_notifications,omitempty"`
+	PushNotifications    UserPrefsPushNotifications    `yaml:"push_notifications,omitempty" json:"push_notifications,omitempty"`
+	Approval             UserPrefsApproval             `yaml:"approval,omitempty"     json:"approval,omitempty"`
+	QuickCmds            UserPrefsQuickCmds            `yaml:"quick_cmds,omitempty"   json:"quick_cmds,omitempty"`
+	Templates            []UserPrefsTemplate           `yaml:"templates,omitempty"    json:"templates,omitempty"`
+	TemplateSend         UserPrefsTemplateSend         `yaml:"template_send,omitempty" json:"template_send,omitempty"`
+	UsageLinks           UserPrefsUsageLinks           `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
+	// UsageProbeModel is used only for the opt-in Claude usage probe. It does
+	// not change the model of ordinary AI sessions.
+	UsageProbeModel          string                            `yaml:"usage_probe_model,omitempty" json:"usage_probe_model,omitempty"`
 	Voice                    UserPrefsVoice                    `yaml:"voice,omitempty"        json:"voice,omitempty"`
 	SessionOrder             SessionOrderIDs                   `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
 	GroupOrder               []string                          `yaml:"group_order,omitempty"      json:"group_order,omitempty"`
@@ -939,6 +979,7 @@ func defaultConfig(home string) *Config {
 	cfg.Log.AttachmentRetentionDays = 7
 	cfg.Log.AttachmentMaxTotalMB = 500
 	cfg.UserPrefs = UserPrefs{}
+	cfg.UserPrefs.UsageProbeModel = DefaultUsageProbeModel
 	cfg.Workflow.JournalEnabled = true
 	cfg.Workflow.TaskDetailEnabled = true
 	cfg.Voice.Whisper.Language = "ja"
@@ -1054,6 +1095,7 @@ func (cfg *Config) applyDefaults() {
 	if cfg == nil {
 		return
 	}
+	cfg.UserPrefs.UsageProbeModel = EffectiveUsageProbeModel(cfg.UserPrefs.UsageProbeModel)
 	if strings.TrimSpace(cfg.Voice.Whisper.Language) == "" {
 		cfg.Voice.Whisper.Language = "ja"
 	}

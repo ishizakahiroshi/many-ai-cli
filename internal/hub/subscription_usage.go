@@ -42,6 +42,7 @@ type subscriptionUsageProfile struct {
 	Plan           string                   `json:"plan,omitempty"`
 	RetrievedAt    string                   `json:"retrieved_at,omitempty"`
 	ProbeAvailable bool                     `json:"probe_available,omitempty"`
+	ProbeState     string                   `json:"probe_state,omitempty"`
 	Claude         *claudeSubscriptionUsage `json:"claude,omitempty"`
 	Codex          *codexSubscriptionUsage  `json:"codex,omitempty"`
 	Grok           *grokSubscriptionUsage   `json:"grok,omitempty"`

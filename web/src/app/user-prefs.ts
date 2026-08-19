@@ -52,6 +52,7 @@ export const STORAGE_USAGE_LINK_OLLAMA_KEY    = 'ai_cli_hub_usage_link_ollama';
 export const STORAGE_USAGE_LINK_LM_STUDIO_KEY = 'ai_cli_hub_usage_link_lm_studio';
 export const STORAGE_USAGE_LINK_OPENCODE_KEY  = 'ai_cli_hub_usage_link_opencode';
 export const STORAGE_USAGE_LINK_GROK_KEY      = 'ai_cli_hub_usage_link_grok';
+export const STORAGE_USAGE_PROBE_MODEL_KEY    = 'ai_cli_hub_usage_probe_model';
 export const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds';
 export const STORAGE_VOICE_INPUT_DISABLED_KEY = 'ai_cli_hub_voice_input_disabled';
 export const STORAGE_VOICE_ENGINE_KEY         = 'anyai.voiceEngine';
@@ -216,6 +217,7 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'usage_links.lm-studio':     [STORAGE_USAGE_LINK_LM_STUDIO_KEY,  String],
   'usage_links.opencode':      [STORAGE_USAGE_LINK_OPENCODE_KEY,   String],
   'usage_links.grok':          [STORAGE_USAGE_LINK_GROK_KEY,       String],
+  'usage_probe_model':         [STORAGE_USAGE_PROBE_MODEL_KEY,     String],
   'session_order':             [STORAGE_ORDER_KEY,                 JSON.stringify],
   'group_order':               [STORAGE_GROUP_ORDER_KEY,           JSON.stringify],
   'project_favorites':         [STORAGE_PROJECT_FAVORITES_KEY,     JSON.stringify],
@@ -251,6 +253,7 @@ export const _USER_PREFS_STRING_PATHS = new Set([
   'usage_links.ollama',
   'usage_links.opencode',
   'usage_links.grok',
+  'usage_probe_model',
   'display.locked_mode',
   'display.theme',
   'display.font_size',

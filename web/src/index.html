@@ -57,41 +57,51 @@
       </button>
       <div class="usage-dropdown" id="usage-dropdown" hidden>
         <div class="usage-dropdown-header" data-i18n="usage_dropdown_header">AI Usage Links</div>
-        <a id="usage-link-claude" class="usage-dropdown-item" href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">
+        <div class="usage-dropdown-section-title" data-i18n="usage_contract_group">契約の残量</div>
+        <a id="usage-link-claude" data-usage-provider="claude" class="usage-dropdown-item" href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape claude" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter claude" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">C</text></svg>
           <span class="usage-item-name">Claude</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
-        <a id="usage-link-codex" class="usage-dropdown-item" href="https://chatgpt.com/codex/cloud/settings/analytics#usage" target="_blank" rel="noopener noreferrer">
+        <a id="usage-link-codex" data-usage-provider="codex" class="usage-dropdown-item" href="https://chatgpt.com/codex/cloud/settings/analytics#usage" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape codex" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter codex" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">X</text></svg>
           <span class="usage-item-name">Codex</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
+        <div class="usage-dropdown-unavailable-row">
         <a id="usage-link-copilot" class="usage-dropdown-item" href="https://github.com/settings/billing" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape copilot" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter copilot" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">P</text></svg>
           <span class="usage-item-name">Copilot</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-        </a>
+        </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
+        </div>
+        <div class="usage-dropdown-unavailable-row">
         <a id="usage-link-cursor-agent" class="usage-dropdown-item" href="https://cursor.com/dashboard" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape cursor-agent" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter cursor-agent" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">r</text></svg>
           <span class="usage-item-name">Cursor Agent</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-        </a>
+        </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
+        </div>
+        <div class="usage-dropdown-unavailable-row">
         <a id="usage-link-opencode" class="usage-dropdown-item" href="https://opencode.ai/go" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape opencode" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter opencode" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">O</text></svg>
           <span class="usage-item-name">OpenCode</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-        </a>
-        <a id="usage-link-grok" class="usage-dropdown-item" href="https://grok.com/?_s=usage" target="_blank" rel="noopener noreferrer">
+        </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
+        </div>
+        <a id="usage-link-grok" data-usage-provider="grok" class="usage-dropdown-item" href="https://grok.com/?_s=usage" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape grok" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter grok" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">G</text></svg>
           <span class="usage-item-name">Grok Build</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
-        <a id="usage-link-ollama" class="usage-dropdown-item" href="http://localhost:11434" target="_blank" rel="noopener noreferrer">
+        <div class="usage-dropdown-unavailable-row">
+        <a id="usage-link-ollama" class="usage-dropdown-item" href="https://ollama.com/settings" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect class="prov-shape ollama" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter ollama" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">O</text></svg>
           <span class="usage-item-name">Ollama</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-        </a>
+        </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
+        </div>
+        <div class="usage-dropdown-section-title" data-i18n="usage_local_group">ローカル実行 — 上限が無いので数字は出ない</div>
         <a id="usage-link-lm-studio" class="usage-dropdown-item" href="http://localhost:1234" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect class="prov-shape lm-studio" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter lm-studio" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">L</text></svg>
           <span class="usage-item-name">LM Studio</span>
@@ -805,6 +815,11 @@
         <summary class="settings-section-title"><span data-i18n="settings_usage_links_title">Usage Links</span><span class="settings-section-current" data-section="usage-links"></span></summary>
         <div class="settings-section-body">
           <div class="settings-note" data-i18n="settings_usage_links_desc">Header usage links. Leave blank to use the default URL.</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_usage_probe_model_label">Usage probe model</span>
+            <input type="text" id="usage-probe-model" class="settings-input-text" data-i18n-placeholder="settings_usage_probe_model_placeholder" placeholder="Default: claude-haiku-4-5">
+          </div>
+          <div class="settings-note" data-i18n="settings_usage_probe_model_desc">Only the one-turn Claude usage check uses this model; ordinary sessions are unchanged.</div>
           <div class="settings-row">
             <span class="settings-label">Claude</span>
             <input type="text" id="usage-link-claude-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_claude_placeholder" placeholder="Default Claude usage URL">

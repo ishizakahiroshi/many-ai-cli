@@ -34,6 +34,9 @@ func (s *Server) addUIWithHistory(c *websocket.Conn, activeSessionID int) (*uiCo
 	s.uis[c] = uc
 	s.stopIdleTimerLocked()
 	for id, ses := range s.sessions {
+		if ses.UsageProbe {
+			continue
+		}
 		if len(ses.ptyBuf) == 0 {
 			continue
 		}
@@ -146,6 +149,9 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 	sessionIDs := make([]int, 0, len(s.sessions))
 	providerByID := make(map[int]string, len(s.sessions))
 	for _, ses := range s.sessions {
+		if ses.UsageProbe {
+			continue
+		}
 		list = append(list, ses)
 		sessionIDs = append(sessionIDs, ses.ID)
 		providerByID[ses.ID] = ses.Provider
@@ -224,6 +230,17 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 }
 
 func (s *Server) broadcast(m any) {
+	if msg, ok := m.(proto.Message); ok && msg.SessionID > 0 {
+		s.sessionsMu.Lock()
+		probe := false
+		if ses := s.sessions[msg.SessionID]; ses != nil {
+			probe = ses.UsageProbe
+		}
+		s.sessionsMu.Unlock()
+		if probe {
+			return
+		}
+	}
 	s.sessionsMu.Lock()
 	ucs := make([]*uiConn, 0, len(s.uis))
 	for _, uc := range s.uis {

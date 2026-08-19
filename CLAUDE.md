@@ -1,6 +1,6 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-08-19(水) — **本ファイルを索引へ再編した。** 常時ロード分が 5 週間で 129 → 269 行に倍増していたため、日付入りの「制定」節 7 本の本文を正本（コード・検査スクリプト・台帳）へ移し、ここには索引の 1 行ずつだけを残した。再肥大は `scripts/check-claude-md.mjs` が CI で止める
+> 最終更新: 2026-08-19(水) 19:36 — **本ファイルを索引へ再編した。** 常時ロード分が 5 週間で 129 → 269 行に倍増していたため、日付入りの「制定」節 7 本の本文を正本（コード・検査スクリプト・台帳）へ移し、ここには索引の 1 行ずつだけを残した。再肥大は `scripts/check-claude-md.mjs` が CI で止める
 
 > **このファイルは索引であって本文ではない。** 全 AI セッションで全文がロードされるので、本文を置くと全員のコンテキストを毎回消費する。詳細は各行が指す正本を読む。タスク別の詳細は `CLAUDE/*.md`。
 
@@ -76,6 +76,8 @@ docs/local/               設計書・plan 等（非公開）
 | 版数を手で直す場所は無い（タグが単一ソース。古いままが正常） | `scripts/check-version-sources.mjs` の冒頭 | 同スクリプト（Validate CI） |
 | `resources/` は `main` へ push した時点で全ユーザーへ live 配信される | [`resources/README.md`](resources/README.md) | `scripts/check-slash-commands.mjs` |
 | 本ファイルを索引のまま保つ（本文を書き戻さない） | `scripts/check-claude-md.mjs` の冒頭 | 同スクリプト（Validate CI） |
+
+残量の経路は、**問い合わせて取る**（CLI/API から直接取れないので `ReadUsage` を足さない）、**押し出されてくる**（Claude の statusLine）、**ローカルに落ちている**（Codex の rollout JSONL / Grok の課金ログ）を分ける。取得手段のない provider に `Unknown` 欄は作らない。正本は `internal/subscription/adapter.go` と `internal/hub/subscription_usage.go`。
 
 **新しいルールを足したくなったら、まずこの表に 1 行足せる形にできないかを考える。** できないもの（機械検査も、決まったファイルも無いもの）だけが本文を持ってよい。
 
