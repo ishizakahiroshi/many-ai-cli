@@ -412,6 +412,7 @@
   "usage_info_label": "More information",
   "usage_unavailable_tooltip": "Usage cannot be retrieved with a CLI command. Open the web page to check it yourself.",
   "usage_profile_unacquired": "Not retrieved",
+  "usage_profile_grok_unacquired": "Launch Grok on this subscription to see numbers",
   "usage_window_5h": "5h",
   "usage_window_7d": "7d",
   "usage_window_weekly": "Weekly",

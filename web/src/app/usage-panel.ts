@@ -149,7 +149,7 @@ function codexBody(profile: UsageProfile): string {
 function grokBody(profile: UsageProfile): string {
   const usage = profile.grok;
   if (!usage) {
-    return `<span class="usage-not-acquired">${escapeHtml(tx('usage_profile_unacquired', 'Not retrieved'))}</span>`;
+    return `<span class="usage-not-acquired">${escapeHtml(tx('usage_profile_grok_unacquired', 'Launch Grok on this subscription to see numbers'))}</span>`;
   }
   const end = usage.period_end ? fixedDateTime(usage.period_end) : '';
   return `${meter(tx('usage_window_weekly', 'Weekly'), { used_percent: usage.used_percent })}${end ? `<div class="usage-profile-meta">${escapeHtml(tx('usage_period_end', 'Billing period ends {time}', { time: end }))}</div>` : ''}`;

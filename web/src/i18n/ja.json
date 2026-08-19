@@ -412,6 +412,7 @@
   "usage_info_label": "詳しい説明",
   "usage_unavailable_tooltip": "CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。",
   "usage_profile_unacquired": "未取得",
+  "usage_profile_grok_unacquired": "この契約で Grok を起動すると数字が出ます",
   "usage_window_5h": "5h",
   "usage_window_7d": "7d",
   "usage_window_weekly": "週次",
