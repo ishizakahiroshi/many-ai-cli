@@ -115,29 +115,32 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	// ではなく、実際にその env で立ち上がったプロセスの申告を記録する。
 	subscriptionID, subscriptionName := s.resolveSubscriptionLabel(reg.Provider, reg.SubscriptionID)
 	cardMeta := sessionstore.SessionCardMeta{Label: reg.Label}
-	storeID, cardMeta := s.attachStore(sessionstore.SessionStart{
-		LiveSessionID:   id,
-		Provider:        reg.Provider,
-		Display:         reg.Display,
-		CWD:             reg.CWD,
-		Branch:          branch,
-		Label:           reg.Label,
-		Model:           reg.Model,
-		Route:           regRoute,
-		Shell:           reg.Shell,
-		State:           "standby",
-		StartedAt:       startedAt.Format(time.RFC3339),
-		LogPath:         rawLogPath,
-		JSONLPath:       jsonlPath,
-		ParentSessionID: childMeta.ParentSessionID,
-		Role:            childMeta.Role,
-		Auto:            childMeta.Auto,
-		Depth:           childMeta.Depth,
-		OrchestrationID: childMeta.OrchestrationID,
-		BoardPath:       childMeta.BoardPath,
-		WorktreeBranch:  childMeta.WorktreeBranch,
-		SubscriptionID:  subscriptionID,
-	}, cardMeta)
+	storeID := int64(0)
+	if !reg.UsageProbe {
+		storeID, cardMeta = s.attachStore(sessionstore.SessionStart{
+			LiveSessionID:   id,
+			Provider:        reg.Provider,
+			Display:         reg.Display,
+			CWD:             reg.CWD,
+			Branch:          branch,
+			Label:           reg.Label,
+			Model:           reg.Model,
+			Route:           regRoute,
+			Shell:           reg.Shell,
+			State:           "standby",
+			StartedAt:       startedAt.Format(time.RFC3339),
+			LogPath:         rawLogPath,
+			JSONLPath:       jsonlPath,
+			ParentSessionID: childMeta.ParentSessionID,
+			Role:            childMeta.Role,
+			Auto:            childMeta.Auto,
+			Depth:           childMeta.Depth,
+			OrchestrationID: childMeta.OrchestrationID,
+			BoardPath:       childMeta.BoardPath,
+			WorktreeBranch:  childMeta.WorktreeBranch,
+			SubscriptionID:  subscriptionID,
+		}, cardMeta)
+	}
 	s.sessionsMu.Lock()
 	ses := &session{
 		ID:              id,
@@ -170,6 +173,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 
 		SubscriptionProfileID:   subscriptionID,
 		SubscriptionProfileName: subscriptionName,
+		UsageProbe:              reg.UsageProbe,
 
 		Activity:        SessionActivity{OutputIdle: true},
 		State:           "standby",
@@ -224,7 +228,10 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	// statusline_gate_wrapper と突き合わせ「send=true → reg=false」の JSON 劣化を
 	// 確定する。2026-07-19 時点 hub.log は send=true のみ（false 0）だが wrapper 側
 	// 未突合のため残置（原因確定後に外す）。
-	tokenStatusbarForAck := s.tokenStatusbarEnabled()
+	// A usage probe needs Claude's statusLine relay even when the user has
+	// disabled the ordinary token status bar. The probe remains hidden from the
+	// UI, so this does not turn the status bar back on for normal sessions.
+	tokenStatusbarForAck := s.tokenStatusbarEnabled() || reg.UsageProbe
 	s.logger.Info("statusline_gate_hub", "session_id", id, "provider", reg.Provider, "token_statusbar_send", tokenStatusbarForAck)
 	_ = wc.send(proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, TokenStatusbar: tokenStatusbarForAck, OrchestrationID: childMeta.OrchestrationID, Auto: childMeta.Auto, BoardPath: childMeta.BoardPath})
 	s.logger.Info("session registered", "id", id, "provider", reg.Provider, "cwd", reg.CWD, "pid", reg.PID)
@@ -262,25 +269,27 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	s.broadcast(announce)
 	// subscription は ID だけ残す。表示名は rename されうるので、履歴の追跡に
 	// 使える正本にならない。
-	s.writeHistory(id, map[string]any{
-		"ts":                      startedAt.Format(time.RFC3339),
-		"type":                    "session_start",
-		"session_id":              id,
-		"provider":                reg.Provider,
-		"cwd":                     reg.CWD,
-		"branch":                  branch,
-		"label":                   reg.Label,
-		"model":                   reg.Model,
-		"shell":                   reg.Shell,
-		"pid":                     reg.PID,
-		"parent_session_id":       childMeta.ParentSessionID,
-		"role":                    childMeta.Role,
-		"auto":                    childMeta.Auto,
-		"orchestration_id":        childMeta.OrchestrationID,
-		"board_path":              childMeta.BoardPath,
-		"subscription_profile_id": subscriptionID,
-	})
-	s.startAgentChatTail(id)
+	if !reg.UsageProbe {
+		s.writeHistory(id, map[string]any{
+			"ts":                      startedAt.Format(time.RFC3339),
+			"type":                    "session_start",
+			"session_id":              id,
+			"provider":                reg.Provider,
+			"cwd":                     reg.CWD,
+			"branch":                  branch,
+			"label":                   reg.Label,
+			"model":                   reg.Model,
+			"shell":                   reg.Shell,
+			"pid":                     reg.PID,
+			"parent_session_id":       childMeta.ParentSessionID,
+			"role":                    childMeta.Role,
+			"auto":                    childMeta.Auto,
+			"orchestration_id":        childMeta.OrchestrationID,
+			"board_path":              childMeta.BoardPath,
+			"subscription_profile_id": subscriptionID,
+		})
+		s.startAgentChatTail(id)
+	}
 	s.wrapperMessageLoop(wc, id)
 }
 
@@ -389,22 +398,25 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	}
 	reattachSubscriptionID, reattachSubscriptionName := s.resolveSubscriptionLabel(req.Provider, req.SubscriptionID)
 	cardMeta := sessionstore.SessionCardMeta{Label: req.Label}
-	storeID, cardMeta := s.attachStore(sessionstore.SessionStart{
-		LiveSessionID:  acceptedID,
-		Provider:       req.Provider,
-		Display:        req.Display,
-		CWD:            req.CWD,
-		Branch:         branch,
-		Label:          req.Label,
-		Model:          req.Model,
-		Route:          reqRoute,
-		Shell:          req.Shell,
-		State:          "running",
-		StartedAt:      startedAtText,
-		LogPath:        rawLogPath,
-		JSONLPath:      jsonlPath,
-		SubscriptionID: reattachSubscriptionID,
-	}, cardMeta)
+	storeID := int64(0)
+	if !req.UsageProbe {
+		storeID, cardMeta = s.attachStore(sessionstore.SessionStart{
+			LiveSessionID:  acceptedID,
+			Provider:       req.Provider,
+			Display:        req.Display,
+			CWD:            req.CWD,
+			Branch:         branch,
+			Label:          req.Label,
+			Model:          req.Model,
+			Route:          reqRoute,
+			Shell:          req.Shell,
+			State:          "running",
+			StartedAt:      startedAtText,
+			LogPath:        rawLogPath,
+			JSONLPath:      jsonlPath,
+			SubscriptionID: reattachSubscriptionID,
+		}, cardMeta)
+	}
 	s.sessionsMu.Lock()
 	var oldHistory *sessionlog.Writer
 	// 切断前のターミナル文脈（ptyBuf / VT ミラー / 受信累計）を引き継ぐ。
@@ -554,6 +566,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		AgentSessionID:                 req.AgentSessionID,
 		SubscriptionProfileID:          reattachSubscriptionID,
 		SubscriptionProfileName:        reattachSubscriptionName,
+		UsageProbe:                     req.UsageProbe,
 		Activity:                       SessionActivity{OutputIdle: len(replay) == 0, WorkflowActive: len(replay) > 0},
 		State:                          "running",
 		LastOutputAt:                   lastOutputAt,
@@ -684,21 +697,23 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		"gap_bytes", len(gap),
 		"wrapper_pty_bytes", req.PTYBytes,
 		"hub_pty_bytes", prevSeen)
-	s.writeHistory(acceptedID, map[string]any{
-		"ts":             now.Format(time.RFC3339),
-		"type":           "session_reattach",
-		"session_id":     acceptedID,
-		"old_session_id": req.SessionID,
-		"provider":       req.Provider,
-		"cwd":            req.CWD,
-		"branch":         branch,
-		"label":          req.Label,
-		"model":          req.Model,
-		"shell":          req.Shell,
-		"pid":            req.PID,
-		"renumbered":     acceptedID != req.SessionID,
-	})
-	s.startAgentChatTail(acceptedID)
+	if !req.UsageProbe {
+		s.writeHistory(acceptedID, map[string]any{
+			"ts":             now.Format(time.RFC3339),
+			"type":           "session_reattach",
+			"session_id":     acceptedID,
+			"old_session_id": req.SessionID,
+			"provider":       req.Provider,
+			"cwd":            req.CWD,
+			"branch":         branch,
+			"label":          req.Label,
+			"model":          req.Model,
+			"shell":          req.Shell,
+			"pid":            req.PID,
+			"renumbered":     acceptedID != req.SessionID,
+		})
+		s.startAgentChatTail(acceptedID)
+	}
 	s.wrapperMessageLoop(wc, acceptedID)
 }
 

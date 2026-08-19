@@ -59,7 +59,10 @@ type Message struct {
 	SubscriptionID string `json:"subscription_id,omitempty"`
 	// SubscriptionName is the display label the Hub resolves from config for
 	// SubscriptionID. Hub → UI only.
-	SubscriptionName  string             `json:"subscription_name,omitempty"`
+	SubscriptionName string `json:"subscription_name,omitempty"`
+	// UsageProbe marks the short-lived Claude session used only to retrieve
+	// subscription usage. The Hub keeps it out of the normal UI/session feed.
+	UsageProbe        bool               `json:"usage_probe,omitempty"`
 	Data              []byte             `json:"data,omitempty"`     // wrapper内部用: PTY生バイト列（base64エンコード）
 	Text              string             `json:"text,omitempty"`     // pty_output: ANSIを除去したプレーンテキスト / pty_input: ユーザー入力文字列
 	AgentChatMessages []AgentChatMessage `json:"messages,omitempty"` // agent_chat: structured transcript messages

@@ -25,14 +25,14 @@
 //     to another account or to the default login.
 //   - Never swap the credentials of a live session
 //     (TestLiveSessionAuthIsNeverSwapped scans the source for assignments).
-//   - Remaining quota cannot be *queried* from any of the four supported CLIs
-//     (measured 2026-08-17), so there is no ReadUsage on Adapter and no quota
-//     column in the profile list — not even one that prints "Unknown". This is
-//     separate from the rate_limits a running Claude session pushes out through
-//     its statusLine, which internal/usagerelay already receives and
-//     web/src/app/token-statusbar.ts already draws. Reading the first sentence
-//     as "no usage data exists anywhere" leads to documenting a shipped feature
-//     as missing, which happened once already.
+//   - Remaining quota cannot be *queried* from the vendor CLIs (measured
+//     2026-08-17), so there is no ReadUsage on Adapter. That is separate from
+//     the three actual data paths: Claude pushes rate_limits from statusLine,
+//     Codex leaves rate_limits in rollout JSONL, and Grok leaves billing data
+//     in unified.jsonl. The Hub reads the latter two as local files; providers
+//     without a path stay out of the usage panel rather than gaining an
+//     "Unknown" column. Reading the first sentence as "no usage data exists
+//     anywhere" leads to documenting a shipped feature as missing.
 package subscription
 
 import (

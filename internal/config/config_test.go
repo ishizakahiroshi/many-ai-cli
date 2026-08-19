@@ -18,6 +18,27 @@ func TestDefaultConfigOpensBrowser(t *testing.T) {
 	}
 }
 
+func TestUsageProbeModelDefaultsAndRejectsUnsafeValues(t *testing.T) {
+	cfg := defaultConfig(t.TempDir())
+	if cfg.UserPrefs.UsageProbeModel != DefaultUsageProbeModel {
+		t.Fatalf("default usage probe model = %q, want %q", cfg.UserPrefs.UsageProbeModel, DefaultUsageProbeModel)
+	}
+
+	for _, raw := range []string{"", "   ", "claude haiku", "claude;rm", "claude\tmodel"} {
+		cfg.UserPrefs.UsageProbeModel = raw
+		cfg.applyDefaults()
+		if cfg.UserPrefs.UsageProbeModel != DefaultUsageProbeModel {
+			t.Fatalf("invalid usage probe model %q became %q", raw, cfg.UserPrefs.UsageProbeModel)
+		}
+	}
+
+	cfg.UserPrefs.UsageProbeModel = "claude-sonnet-4-5"
+	cfg.applyDefaults()
+	if cfg.UserPrefs.UsageProbeModel != "claude-sonnet-4-5" {
+		t.Fatalf("valid usage probe model was not preserved: %q", cfg.UserPrefs.UsageProbeModel)
+	}
+}
+
 func TestWorkflowJournalDefaultsOnAndCanBeDisabled(t *testing.T) {
 	cfg := defaultConfig(t.TempDir())
 	if !cfg.Workflow.JournalEnabled {
