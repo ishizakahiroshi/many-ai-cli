@@ -269,7 +269,7 @@ func (s *Server) applyOneTapApproval(claim oneTapApprovalClaim) error {
 	// Keep the one-shot nonce and native approval state intact until the PTY
 	// accepts the input.  A disconnected wrapper must leave the action
 	// retryable instead of consuming a notification action and dropping input.
-	if rem := s.trySendInput(wc, claim.SessionID, input); rem != "" {
+	if rem := s.trySendInput(claim.SessionID, input); rem != "" {
 		ses.inputMu.Unlock()
 		return errOneTapNoInput
 	}

@@ -486,7 +486,7 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 	}
 
 	cfg := s.snapshotCfg().Orchestration
-	parent, childCount, totalSessions := s.orchestrationParentState(parentID)
+	parent, _, _ := s.orchestrationParentState(parentID)
 	if parent == nil {
 		writeJSONError(w, http.StatusNotFound, "not_found", "parent session not found")
 		return
@@ -543,7 +543,7 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 	// Confirmation can wait up to two minutes. Re-read both the parent and the
 	// limits after that wait so a concurrent child spawn cannot be judged from
 	// the pre-confirmation snapshot.
-	parent, childCount, totalSessions = s.orchestrationParentState(parentID)
+	parent, childCount, totalSessions := s.orchestrationParentState(parentID)
 	if parent == nil {
 		writeJSONError(w, http.StatusNotFound, "not_found", "parent session not found")
 		return
@@ -1547,20 +1547,14 @@ func (s *Server) injectText(sessionID int, text string, pressEnter bool, interru
 }
 
 func (s *Server) injectRaw(sessionID int, text string) {
-	s.sessionsMu.Lock()
-	wc := s.wrappers[sessionID]
-	s.sessionsMu.Unlock()
-	s.submitInput(wc, sessionID, text)
+	s.submitInput(sessionID, text)
 }
 
 // injectRawBypassGate は初期プロンプト注入（injectInitialPrompt）専用の送信経路。
 // initialInjectPending ゲート中でも wrapper へ直接届ける（通常経路だと注入自体が
 // pendingInput へ回ってデッドロックするため）。
 func (s *Server) injectRawBypassGate(sessionID int, text string) {
-	s.sessionsMu.Lock()
-	wc := s.wrappers[sessionID]
-	s.sessionsMu.Unlock()
-	s.submitInputWithGate(wc, sessionID, text, true)
+	s.submitInputWithGate(sessionID, text, true)
 }
 
 // injectInitialPrompt は orchestration セッション（conductor / 子）への初期プロンプトを、

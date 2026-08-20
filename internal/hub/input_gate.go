@@ -24,7 +24,6 @@ import (
 // ユーザーターン境界マーカーを ptyBuf に注入する。
 func (s *Server) handleInput(m proto.Message) {
 	s.sessionsMu.Lock()
-	wc := s.wrappers[m.SessionID]
 	ses := s.sessions[m.SessionID]
 	combined := m.Text
 	var firstMsgBroadcast *proto.Message
@@ -97,7 +96,7 @@ func (s *Server) handleInput(m proto.Message) {
 		// ここ（確定ユーザー入力の provider 送達）だけがライブ限定の正確な境界。
 		s.broadcast(proto.Message{Type: "user_turn_started", SessionID: m.SessionID, ApprovalSourceEpoch: userTurnEpoch})
 	}
-	s.submitInput(wc, m.SessionID, combined)
+	s.submitInput(m.SessionID, combined)
 	s.writeHistory(m.SessionID, map[string]any{
 		"ts":         time.Now().Format(time.RFC3339),
 		"type":       "user_input",
@@ -352,13 +351,13 @@ func sessionInjectGated(ses *session, now time.Time) bool {
 // hasPending チェック〜trySendInput（50ms sleep 含む bracketd-paste 二段送信）が
 // 直列化され、bracketed-paste 本文と確定 CR のインターリーブが起きない。
 // sessionsMu は inputMu の外側でのみ取得し、50ms sleep 中に保持しない。
-func (s *Server) submitInput(wc *wrapperConn, sessionID int, combined string) {
-	s.submitInputWithGate(wc, sessionID, combined, false)
+func (s *Server) submitInput(sessionID int, combined string) {
+	s.submitInputWithGate(sessionID, combined, false)
 }
 
 // submitInputWithGate は submitInput の実体。bypassGate=true は初期プロンプト注入
 // （injectInitialPrompt）専用で、注入ゲート中でも wrapper へ直接送る。
-func (s *Server) submitInputWithGate(wc *wrapperConn, sessionID int, combined string, bypassGate bool) {
+func (s *Server) submitInputWithGate(sessionID int, combined string, bypassGate bool) {
 	// session ポインタを短期間だけ sessionsMu で取得する。
 	// session が既に削除済みの場合は nil になるので早期リターンする。
 	s.sessionsMu.Lock()
@@ -382,10 +381,9 @@ func (s *Server) submitInputWithGate(wc *wrapperConn, sessionID int, combined st
 		s.sessionsMu.Unlock()
 		return
 	}
-	// Reattach can replace the wrapper while the per-session input lock is
-	// waiting. Use the current registration at the delivery boundary instead
-	// of the pointer captured by handleInput before that replacement.
-	wc = s.wrappers[sessionID]
+	// Keep the trace state from the current registration. trySendInput resolves
+	// the wrapper again at the actual delivery boundary below.
+	wrapperConnected := s.wrappers[sessionID] != nil
 	pendingLen := len(s.pendingInput[sessionID])
 	hasPending := pendingLen > 0
 	if gated || hasPending {
@@ -401,9 +399,9 @@ func (s *Server) submitInputWithGate(wc *wrapperConn, sessionID int, combined st
 		s.notifyInputDeferred(sessionID)
 		return
 	}
-	rem := s.trySendInput(wc, sessionID, combined)
+	rem := s.trySendInput(sessionID, combined)
 	s.traceInputDeliver("sent", sessionID,
-		"bytes", len(combined), "remaining", len(rem), "wrapper_connected", wc != nil)
+		"bytes", len(combined), "remaining", len(rem), "wrapper_connected", wrapperConnected)
 	if rem != "" {
 		s.sessionsMu.Lock()
 		s.pendingInput[sessionID] = appendPendingInput(s.pendingInput[sessionID], rem)
@@ -416,10 +414,10 @@ func (s *Server) submitInputWithGate(wc *wrapperConn, sessionID int, combined st
 // （"" = 全て送信済み）。各フレームは送信前に in-flight へ記録し、wrapper の ack が
 // 届くまで保持する。bracketed-paste の確定 \r は別書き込み + 50ms 遅延で送る従来挙動を保つ。
 // first まで送れて delayed(\r) だけ失敗した場合は \r のみを残りとして返し、本文の二重送信を避ける。
-func (s *Server) trySendInput(wc *wrapperConn, sessionID int, combined string) (remaining string) {
-	// The wrapper captured by the caller may be stale after reattach. Resolve
-	// the registration immediately before creating the wire frame.
-	wc = s.currentWrapperForInput(sessionID)
+func (s *Server) trySendInput(sessionID int, combined string) (remaining string) {
+	// Reattach can replace the wrapper while the caller is waiting. Resolve the
+	// registration immediately before creating the wire frame.
+	wc := s.currentWrapperForInput(sessionID)
 	if wc == nil {
 		s.logger.Warn("pty_input deferred: no wrapper connected", "session_id", sessionID)
 		return combined
@@ -507,7 +505,7 @@ func (s *Server) flushPendingInput(sessionID int) {
 	}
 	var remainder []string
 	for i, combined := range pending {
-		if rem := s.trySendInput(wc, sessionID, combined); rem != "" {
+		if rem := s.trySendInput(sessionID, combined); rem != "" {
 			remainder = append(remainder, rem)
 			remainder = append(remainder, pending[i+1:]...)
 			break
