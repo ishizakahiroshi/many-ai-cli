@@ -13,8 +13,6 @@ const hubRuntimeFile = hubruntime.FileName
 
 type hubRuntimeData = hubruntime.Data
 
-func hubRuntimePath() (string, error) { return hubruntime.Path() }
-
 func writeHubRuntime(port int) error { return hubruntime.Write(port) }
 
 func readHubRuntime() (*hubRuntimeData, error) { return hubruntime.Read() }

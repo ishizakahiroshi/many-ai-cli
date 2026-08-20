@@ -53,7 +53,7 @@ func TestSubmitInputGateDefersToPending(t *testing.T) {
 	s.sessions[1] = ses
 	s.sessionsMu.Unlock()
 
-	s.submitInput(nil, 1, "user input\r")
+	s.submitInput(1, "user input\r")
 
 	s.sessionsMu.Lock()
 	got := len(s.pendingInput[1])

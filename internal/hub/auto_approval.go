@@ -110,7 +110,7 @@ func (s *Server) maybeAutoApprove(id int, approval *nativeApproval) bool {
 	}
 	// Consume before writing input so redraws cannot send the same approval twice.
 	s.markNativeApprovalConsumed(proto.Message{SessionID: id, ApprovalSig: approval.Sig, SentText: input})
-	s.submitInput(wc, id, input)
+	s.submitInput(id, input)
 	s.writeAutoApprovalAudit(autoApprovalAuditRecord{Timestamp: time.Now().Format(time.RFC3339), SessionID: id, Provider: ses.Provider, RuleID: decision.RuleID, Command: sessionlog.MaskSecrets(approval.Summary.Command), Risk: string(approval.Summary.Risk)})
 	s.broadcast(proto.Message{Type: "auto_approval_applied", SessionID: id, Provider: ses.Provider, ApprovalSig: approval.Sig, ApprovalSummary: &approval.Summary, Text: decision.RuleID})
 	return true

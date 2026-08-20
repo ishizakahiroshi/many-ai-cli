@@ -86,7 +86,7 @@ func (s *Server) handleApprovalBatch(w http.ResponseWriter, r *http.Request) {
 			for _, item := range matched {
 				if input := oneTapRejectInput(item.approval.Options); input != "" && item.wrapper != nil {
 					s.markNativeApprovalConsumed(proto.Message{SessionID: item.id, ApprovalSig: item.approval.Sig, SentText: input})
-					s.submitInput(item.wrapper, item.id, input)
+					s.submitInput(item.id, input)
 					applied++
 				}
 			}
@@ -108,7 +108,7 @@ func (s *Server) handleApprovalBatch(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		s.markNativeApprovalConsumed(proto.Message{SessionID: item.id, ApprovalSig: item.approval.Sig, SentText: input})
-		s.submitInput(item.wrapper, item.id, input)
+		s.submitInput(item.id, input)
 		applied++
 	}
 	writeJSON(w, map[string]any{"ok": true, "matched": len(matched), "applied": applied})

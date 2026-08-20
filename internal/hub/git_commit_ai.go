@@ -58,7 +58,7 @@ func (s *Server) startAICommitMessage(w http.ResponseWriter, sessionID int, lang
 	// チャット送信と同根）。対象は isAIProvider 確認済み（全 wrap 対象 CLI が ?2004h 宣言済み）
 	// のため、ブラケットペーストで包み確定 \r は trySendInput が別書き込み + 遅延で送る。
 	prompt := aiCommitPrompt(ja)
-	s.submitInput(wc, sessionID, bracketedPasteStart+prompt+bracketedPasteEnd+"\r")
+	s.submitInput(sessionID, bracketedPasteStart+prompt+bracketedPasteEnd+"\r")
 
 	writeJSON(w, gitCommitMessageResp{OK: true, Pending: true})
 }
