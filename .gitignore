@@ -38,6 +38,9 @@ opencode.json*
 *.local.md
 *.local.json
 docs/local/
+# Grok Build がリポジトリ直下に作る workflow 置き場（.rhai）。調査の成果は
+# docs/local/research/ へ移す。製品コードではないので追跡しない。
+.grok/
 # 役目を終えた md の置き場はリポジトリ直下 archive/ ではなく docs/local/archive/。
 # 直下 archive/ は 2026-08-05 まで 9 ファイルが public main へ載っていた（社名・個人パス・
 # LAN IP を含む）ため、同じ誤配置が再発しないよう追跡対象から外す。
