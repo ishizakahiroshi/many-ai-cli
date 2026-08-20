@@ -30,9 +30,13 @@ func removeAutostart() {
 		return
 	}
 
-	lnk := filepath.Join(dir, "Many AI Hub.lnk")
-	if err := os.Remove(lnk); err == nil { // #nosec G703 -- fixed file name under the current user's own Startup folder, which is exactly what setup wrote.
-		fmt.Printf("削除しました: %s\n", lnk)
+	// 現行名と 0.7.0 の旧名の両方を消す。片方だけだと、setup を挟まず
+	// 旧バイナリのまま残った .lnk がログインのたびに動く。
+	for _, name := range []string{"MANY-AI-CLI.lnk", "Many AI Hub.lnk"} {
+		lnk := filepath.Join(dir, name)
+		if err := os.Remove(lnk); err == nil { // #nosec G703 -- fixed file names under the current user's own Startup folder, which is exactly what setup wrote.
+			fmt.Printf("削除しました: %s\n", lnk)
+		}
 	}
 }
 

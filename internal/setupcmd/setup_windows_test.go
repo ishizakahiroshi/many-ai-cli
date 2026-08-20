@@ -28,6 +28,32 @@ func TestStartupFallbackDirWithoutAppData(t *testing.T) {
 	}
 }
 
+func TestRemoveLegacyTrayShortcut(t *testing.T) {
+	dir := t.TempDir()
+	old := filepath.Join(dir, windowsLegacyTrayShortcutName)
+	if err := os.WriteFile(old, []byte("fixture"), 0o644); err != nil {
+		t.Fatalf("write legacy shortcut: %v", err)
+	}
+
+	got, ok := removeLegacyTrayShortcut(dir)
+	if !ok {
+		t.Fatal("expected legacy shortcut to be removed")
+	}
+	if got != old {
+		t.Errorf("path = %q, want %q", got, old)
+	}
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Errorf("legacy shortcut still present: %v", err)
+	}
+
+	if _, ok := removeLegacyTrayShortcut(dir); ok {
+		t.Error("second remove should report not removed")
+	}
+	if _, ok := removeLegacyTrayShortcut(""); ok {
+		t.Error("empty dir should report not removed")
+	}
+}
+
 func TestWriteWindowsCmd(t *testing.T) {
 	dir := t.TempDir()
 	exe := `C:\path with space\many-ai-cli.exe`
