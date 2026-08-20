@@ -12,7 +12,7 @@ import { chatHistoryCommitOutput, chatPaneAtBottom, getChatTimelineEl, pushMessa
 import { token } from './util.js';
 import { appConfirm } from './settings.js';
 import { isActionBarCollapsed, setActionBarCollapsed, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY } from './user-prefs.js';
-import { noteApprovalRenderForDebug } from './debug-approval-identity.js';
+import { noteApprovalRenderForDebug, noteApprovalBufferFallbackForDebug, isApprovalDebugEnabled } from './debug-approval-identity.js';
 
 const HIGH_RISK_HOLD_MS = 1200;
 const highRiskConfirmationInFlight = new Set<number>();
@@ -599,16 +599,24 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText, replayMeta = 
   const allowBufferFallback = approvalVisibleCache.get(id) || options.length > 0 || pendingHasApprovalHint;
   const visibleRows = t?.term?.rows || 40;
   const bufferTail = (t && t.everAttached && allowBufferFallback) ? scanBuffer(id, Math.max(120, visibleRows + 60)) : [];
+  // 一時観測（?approvaldebug=1）: 置き換えが起きる前のライブ検出結果とゲート理由を控える。
+  const debugOn = isApprovalDebugEnabled();
+  const liveOptsForDebug = debugOn ? options.slice() : null;
+  const gateForDebug = debugOn
+    ? [approvalVisibleCache.get(id) ? 'visible' : '', options.length > 0 ? 'liveopts' : '', pendingHasApprovalHint ? 'hint' : ''].filter(Boolean).join('+')
+    : '';
   if (t && t.everAttached && allowBufferFallback) {
     const bufExtraction = extractApprovalOptions(bufferTail);
     const bufOpts = bufExtraction.options;
     const pendingHasCursor = options.some(o => o.isCurrent);
     const bufHasCursor = bufOpts.some(o => o.isCurrent);
+    let bufActionForDebug = 'keep';
     if (bufOpts.length > options.length || (!pendingHasCursor && bufHasCursor && bufOpts.length >= options.length)) {
       options.length = 0;
       options.push(...bufOpts);
       contextSourceLines = bufExtraction.lines || bufferTail;
       contextCluster = bufExtraction.cluster;
+      bufActionForDebug = 'replace';
     }
     // option 1 が pendingTextTail から欠落している場合（保持上限）に補完
     if (options.length >= 1 && !options.some(o => o.num === 1)) {
@@ -620,7 +628,19 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText, replayMeta = 
         options.sort((a, b) => a.num - b.num);
         contextSourceLines = bufExtraction.lines || bufferTail;
         contextCluster = bufExtraction.cluster;
+        bufActionForDebug = bufActionForDebug === 'replace' ? 'replace+fill1' : 'fill1';
       }
+    }
+    if (bufActionForDebug !== 'keep') {
+      noteApprovalBufferFallbackForDebug(id, 'chunk', {
+        action: bufActionForDebug,
+        gate: gateForDebug,
+        tailLines: bufferTail.length,
+        liveOptions: liveOptsForDebug,
+        bufOptions: bufOpts,
+        liveHasCursor: pendingHasCursor,
+        bufHasCursor,
+      });
     }
   }
   const contextLines = approvalContextLines(contextSourceLines, contextCluster);
@@ -1181,17 +1201,30 @@ export function detectApproval(id) {
   const bufferTail = (t && allowBufferFallback && id === activeSessionId)
     ? scanBuffer(id).slice(-Math.max(120, visibleRows + 60))
     : [];
+  // 一時観測（?approvaldebug=1）: 置き換えが起きる前のライブ検出結果とゲート理由を控える。
+  const debugOn = isApprovalDebugEnabled();
+  const liveOptsForDebug = debugOn ? options.slice() : null;
+  const gateForDebug = debugOn
+    ? [approvalVisibleCache.get(id) ? 'visible' : '', options.length > 0 ? 'liveopts' : '', pendingHasApprovalHint ? 'hint' : ''].filter(Boolean).join('+')
+    : '';
+  const liveHasCursorForDebug = options.some(o => o.isCurrent);
+  let bufActionForDebug = 'keep';
+  let bufOptsForDebug: any[] = [];
+  let bufHasCursorForDebug = false;
   if (t && bufferTail.length > 0) {
     const bufExtraction = extractApprovalOptions(bufferTail);
     const bufOpts = bufExtraction.options;
     const pendingHasCursor = options.some(o => o.isCurrent);
     const bufHasCursor = bufOpts.some(o => o.isCurrent);
+    bufOptsForDebug = bufOpts;
+    bufHasCursorForDebug = bufHasCursor;
     if (bufOpts.length > options.length || (!pendingHasCursor && bufHasCursor && bufOpts.length >= options.length)) {
       options.length = 0;
       options.push(...bufOpts);
       options.sort((a, b) => a.num - b.num);
       contextSourceLines = bufExtraction.lines || bufferTail;
       contextCluster = bufExtraction.cluster;
+      bufActionForDebug = 'replace';
     }
   }
 
@@ -1209,7 +1242,20 @@ export function detectApproval(id) {
       options.sort((a, b) => a.num - b.num);
       contextSourceLines = bufExtraction.lines || bufferTail;
       contextCluster = bufExtraction.cluster;
+      bufOptsForDebug = bufOpts;
+      bufActionForDebug = bufActionForDebug === 'replace' ? 'replace+fill1' : 'fill1';
     }
+  }
+  if (bufActionForDebug !== 'keep') {
+    noteApprovalBufferFallbackForDebug(id, 'detect', {
+      action: bufActionForDebug,
+      gate: gateForDebug,
+      tailLines: bufferTail.length,
+      liveOptions: liveOptsForDebug,
+      bufOptions: bufOptsForDebug,
+      liveHasCursor: liveHasCursorForDebug,
+      bufHasCursor: bufHasCursorForDebug,
+    });
   }
 
   const contextLines = approvalContextLines(contextSourceLines, contextCluster);
