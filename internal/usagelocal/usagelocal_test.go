@@ -34,7 +34,7 @@ func TestReadGrokProfileReadsLatestBillingRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := `{"msg":"other","ctx":{"config":{}}}
-{"msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":27,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"2026-08-16T11:28:29Z","end":"2026-08-23T11:28:29Z"}}}}
+{"ts":"2026-08-20T02:31:39Z","msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":27,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"2026-08-16T11:28:29Z","end":"2026-08-23T11:28:29Z"}}}}
 `
 	if err := os.WriteFile(filepath.Join(dir, "unified.jsonl"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
@@ -42,6 +42,31 @@ func TestReadGrokProfileReadsLatestBillingRecord(t *testing.T) {
 	usage, ok := ReadGrokProfile(filepath.Dir(dir))
 	if !ok || usage.UsedPercent != 27 || usage.PeriodEnd == "" || usage.PeriodType == "" {
 		t.Fatalf("usage=%#v ok=%v", usage, ok)
+	}
+	wantFetched := time.Date(2026, 8, 20, 2, 31, 39, 0, time.UTC)
+	if !usage.FetchedAt.Equal(wantFetched) {
+		t.Fatalf("FetchedAt=%v want %v", usage.FetchedAt, wantFetched)
+	}
+}
+
+func TestReadGrokProfileSkipsRecordsWithoutPercent(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "logs")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"ts":"2026-08-20T02:23:11Z","msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":2,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","end":"2026-08-21T00:15:49Z"}}}}
+{"ts":"2026-08-20T02:28:15Z","msg":"billing: fetched credits config","ctx":{"config":{"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","end":"2026-08-21T00:15:49Z"}}}}
+`
+	if err := os.WriteFile(filepath.Join(dir, "unified.jsonl"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	usage, ok := ReadGrokProfile(filepath.Dir(dir))
+	if !ok || usage.UsedPercent != 2 {
+		t.Fatalf("usage=%#v ok=%v", usage, ok)
+	}
+	wantFetched := time.Date(2026, 8, 20, 2, 23, 11, 0, time.UTC)
+	if !usage.FetchedAt.Equal(wantFetched) {
+		t.Fatalf("FetchedAt=%v want %v", usage.FetchedAt, wantFetched)
 	}
 }
 

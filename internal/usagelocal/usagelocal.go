@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"time"
 )
 
 // RateLimitWindow is one provider-reported usage window. A pointer to this
@@ -31,6 +32,8 @@ type GrokUsage struct {
 	PeriodStart string
 	PeriodEnd   string
 	PeriodType  string
+	// FetchedAt is the ts on that billing record, not the time Hub reread the file.
+	FetchedAt time.Time
 }
 
 // scanReverseLines visits complete lines from the end of path toward the
