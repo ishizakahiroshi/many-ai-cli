@@ -48,6 +48,9 @@ type Message struct {
 	HomeDir   string `json:"home_dir,omitempty"`
 	CodexHome string `json:"codex_home,omitempty"`
 	ClaudeDir string `json:"claude_dir,omitempty"`
+	// GrokHome is $GROK_HOME for this session. When set it replaces ~/.grok
+	// entirely, the same contract as CodexHome. Empty means the default home.
+	GrokHome string `json:"grok_home,omitempty"`
 	// AgentSessionID is the provider-owned transcript ID. It is sent by the
 	// wrapper during register/reattach and is never rendered in the session card.
 	AgentSessionID string `json:"agent_session_id,omitempty"`
@@ -62,7 +65,11 @@ type Message struct {
 	SubscriptionName string `json:"subscription_name,omitempty"`
 	// UsageProbe marks the short-lived Claude session used only to retrieve
 	// subscription usage. The Hub keeps it out of the normal UI/session feed.
-	UsageProbe        bool               `json:"usage_probe,omitempty"`
+	UsageProbe bool `json:"usage_probe,omitempty"`
+	// SubscriptionLogin marks a short-lived vendor-CLI login session
+	// (`claude auth login`, `grok login`, …). The Hub dismisses it when the
+	// login command ends so it does not remain as a leftover project group.
+	SubscriptionLogin bool               `json:"subscription_login,omitempty"`
 	Data              []byte             `json:"data,omitempty"`     // wrapper内部用: PTY生バイト列（base64エンコード）
 	Text              string             `json:"text,omitempty"`     // pty_output: ANSIを除去したプレーンテキスト / pty_input: ユーザー入力文字列
 	AgentChatMessages []AgentChatMessage `json:"messages,omitempty"` // agent_chat: structured transcript messages

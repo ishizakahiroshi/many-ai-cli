@@ -2,6 +2,8 @@ package hub
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -244,5 +246,119 @@ func TestFindGrokChatHistoryAllEmptyKeepsActiveFallback(t *testing.T) {
 	activePath := filepath.Join(grokDir, "sessions", encoded, activeID, "chat_history.jsonl")
 	if got != activePath {
 		t.Fatalf("path = %s, want legacy active fallback %s (near UUID was %s)", got, activePath, uuidNearID)
+	}
+}
+
+func TestGrokHomeDir(t *testing.T) {
+	custom := filepath.Join(t.TempDir(), "profile")
+	user := filepath.Join(t.TempDir(), "user")
+	if got := grokHomeDir(custom, user); got != custom {
+		t.Errorf("GrokHome wins: got %q want %q", got, custom)
+	}
+	wantDefault := filepath.Join(user, ".grok")
+	if got := grokHomeDir("", user); got != wantDefault {
+		t.Errorf("empty GrokHome falls back: got %q want %q", got, wantDefault)
+	}
+	if got := grokHomeDir("  "+custom+"  ", user); got != custom {
+		t.Errorf("trim GrokHome: got %q want %q", got, custom)
+	}
+	if got := grokHomeDir("  ", "  "); got != "" {
+		t.Errorf("blank inputs: got %q, want empty", got)
+	}
+}
+
+func grokHistoryTestLayout(t *testing.T, grokDir, cwd string, startedAt time.Time, assistantText string) {
+	t.Helper()
+	encoded := strings.NewReplacer(":", "%3A", "\\", "%5C", "/", "%2F").Replace(cwd)
+	id := testGrokUUIDV7(startedAt.Add(8 * time.Second))
+	dir := filepath.Join(grokDir, "sessions", encoded, id)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"type":"user","content":"<user_query>from test</user_query>"}` + "\n" +
+		`{"type":"assistant","content":` + grokHistoryJSONQuote(assistantText) + `}` + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "chat_history.jsonl"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func grokHistoryJSONQuote(s string) string {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return `""`
+	}
+	return string(b)
+}
+
+func TestHandleGrokHistoryUsesGrokHome(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Token = "tok"
+	userHome := t.TempDir()
+	grokHome := t.TempDir()
+	cwd := filepath.Join(userHome, "work", "proj")
+	startedAt := time.Date(2026, 8, 19, 14, 36, 16, 0, time.UTC)
+	grokHistoryTestLayout(t, grokHome, cwd, startedAt, "from grok home")
+	grokHistoryTestLayout(t, filepath.Join(userHome, ".grok"), cwd, startedAt, "from default home")
+
+	ses := registerTestSession(s, 10, "grok")
+	s.sessionsMu.Lock()
+	ses.CWD = cwd
+	ses.StartedAt = startedAt.Format(time.RFC3339)
+	ses.HomeDir = userHome
+	ses.GrokHome = grokHome
+	s.sessionsMu.Unlock()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/grok-history?token=tok&session_id=10", nil)
+	req.Host = "127.0.0.1:47777"
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	s.handleGrokHistory(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "from grok home") {
+		t.Fatalf("expected GrokHome history, body = %s", body)
+	}
+	if strings.Contains(body, "from default home") {
+		t.Fatalf("picked ~/.grok instead of GrokHome, body = %s", body)
+	}
+
+	loc := s.agentLogForSession(10)
+	if !loc.Available {
+		t.Fatalf("agent log: %+v", loc)
+	}
+	if !strings.Contains(loc.Path, grokHome) {
+		t.Fatalf("agent log path = %s, want under GrokHome %s", loc.Path, grokHome)
+	}
+}
+
+func TestHandleGrokHistoryDoesNotFallBackToDefaultHome(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Token = "tok"
+	userHome := t.TempDir()
+	grokHome := t.TempDir()
+	cwd := filepath.Join(userHome, "work", "proj")
+	startedAt := time.Date(2026, 8, 19, 14, 36, 16, 0, time.UTC)
+	grokHistoryTestLayout(t, filepath.Join(userHome, ".grok"), cwd, startedAt, "from default home")
+
+	ses := registerTestSession(s, 11, "grok")
+	s.sessionsMu.Lock()
+	ses.CWD = cwd
+	ses.StartedAt = startedAt.Format(time.RFC3339)
+	ses.HomeDir = userHome
+	ses.GrokHome = grokHome
+	s.sessionsMu.Unlock()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/grok-history?token=tok&session_id=11", nil)
+	req.Host = "127.0.0.1:47777"
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	s.handleGrokHistory(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 so the other profile is not used; body = %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "from default home") {
+		t.Fatalf("fell back to ~/.grok, body = %s", w.Body.String())
 	}
 }

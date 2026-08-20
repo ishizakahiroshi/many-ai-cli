@@ -169,11 +169,13 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		HomeDir:         reg.HomeDir,
 		CodexHome:       reg.CodexHome,
 		ClaudeDir:       reg.ClaudeDir,
+		GrokHome:        reg.GrokHome,
 		AgentSessionID:  reg.AgentSessionID,
 
 		SubscriptionProfileID:   subscriptionID,
 		SubscriptionProfileName: subscriptionName,
 		UsageProbe:              reg.UsageProbe,
+		SubscriptionLogin:       reg.SubscriptionLogin,
 
 		Activity:        SessionActivity{OutputIdle: true},
 		State:           "standby",
@@ -563,10 +565,12 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		HomeDir:                        req.HomeDir,
 		CodexHome:                      req.CodexHome,
 		ClaudeDir:                      req.ClaudeDir,
+		GrokHome:                       req.GrokHome,
 		AgentSessionID:                 req.AgentSessionID,
 		SubscriptionProfileID:          reattachSubscriptionID,
 		SubscriptionProfileName:        reattachSubscriptionName,
 		UsageProbe:                     req.UsageProbe,
+		SubscriptionLogin:              req.SubscriptionLogin,
 		Activity:                       SessionActivity{OutputIdle: len(replay) == 0, WorkflowActive: len(replay) > 0},
 		State:                          "running",
 		LastOutputAt:                   lastOutputAt,
@@ -997,4 +1001,5 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	// (VPS / docker) で線形にメモリが累積する。
 	DeleteSessionUsageStat(id)
 	s.broadcast(proto.Message{Type: "session_end", SessionID: id, State: endState, Reason: endReason})
+	s.dismissSubscriptionLoginSession(id)
 }

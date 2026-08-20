@@ -29,6 +29,8 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
   const spawnClaudeModelBtn = document.getElementById('spawn-claude-model-btn');
   const spawnOpenCodeOpts = document.getElementById('spawn-opencode-opts');
   const spawnOpenCodeFullAllow = document.getElementById('spawn-opencode-full-allow') as HTMLInputElement | null;
+  const spawnPermissionOpts = document.getElementById('spawn-permission-opts');
+  const spawnPermissionMode = document.getElementById('spawn-permission-mode') as HTMLSelectElement | null;
   const spawnIsolateWorktree = document.getElementById('spawn-isolate-worktree') as HTMLInputElement | null;
   const spawnIsolateWorktreeNote = document.getElementById('spawn-isolate-worktree-note');
   const spawnModelInput = document.getElementById('spawn-model');
@@ -562,30 +564,70 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
     if (!spawnProviderCombobox.contains(e.target)) closeSpawnProviderList(false);
   });
 
+  function providerHasPermissionSelect(p: string): boolean {
+    return p === 'claude' || p === 'grok' || p === 'copilot' || p === 'cursor-agent';
+  }
+
+  function permissionAutoLabel(p: string): string {
+    if (p === 'copilot') return t('spawn_permission_auto_copilot');
+    if (p === 'cursor-agent') return t('spawn_permission_auto_cursor');
+    return t('spawn_permission_auto');
+  }
+
+  function permissionBypassLabel(p: string): string {
+    if (p === 'grok') return t('spawn_permission_bypass_grok');
+    if (p === 'copilot') return t('spawn_permission_bypass_copilot');
+    if (p === 'cursor-agent') return t('spawn_permission_bypass_cursor');
+    return t('spawn_permission_bypass');
+  }
+
+  function syncPermissionModeOptions(p: string): void {
+    if (!spawnPermissionMode) return;
+    const claudeLike = p === 'claude' || p === 'grok';
+    for (const opt of Array.from(spawnPermissionMode.options)) {
+      if (opt.value === 'plan' || opt.value === 'acceptEdits') {
+        opt.hidden = !claudeLike;
+        opt.disabled = !claudeLike;
+      }
+      if (opt.value === 'auto') opt.textContent = permissionAutoLabel(p);
+      if (opt.value === 'bypassPermissions') opt.textContent = permissionBypassLabel(p);
+    }
+    const selected = spawnPermissionMode.selectedOptions[0];
+    if (selected && (selected.hidden || selected.disabled)) {
+      spawnPermissionMode.value = 'default';
+    }
+  }
+
+  function syncSpawnProviderFields(p: string): void {
+    const isShell = (p === 'shell');
+    const modelRow = document.querySelector<HTMLElement>('.spawn-model-row');
+    if (modelRow) modelRow.hidden = isShell;
+    const claudeOpts = document.getElementById('spawn-claude-opts');
+    if (claudeOpts) claudeOpts.hidden = (p !== 'claude');
+    const codexOpts = document.getElementById('spawn-codex-opts');
+    if (codexOpts) codexOpts.hidden = (p !== 'codex');
+    if (spawnOpenCodeOpts) spawnOpenCodeOpts.hidden = (p !== 'opencode');
+    if (spawnPermissionOpts) spawnPermissionOpts.hidden = !providerHasPermissionSelect(p);
+    const noteIds: Record<string, string> = {
+      claude: 'spawn-claude-note',
+      codex: 'spawn-codex-note',
+      copilot: 'spawn-copilot-note',
+      'cursor-agent': 'spawn-cursor-agent-note',
+      opencode: 'spawn-opencode-note',
+      grok: 'spawn-grok-note',
+      shell: 'spawn-shell-note',
+    };
+    for (const [provider, id] of Object.entries(noteIds)) {
+      const note = document.getElementById(id);
+      if (note) note.hidden = (provider !== p);
+    }
+    syncPermissionModeOptions(p);
+  }
+
   spawnProviderEl.addEventListener('change', () => {
     updateSpawnProviderIcon();
     const p = spawnProviderEl.value;
-    const isShell = (p === 'shell');
-    // Shell は model input / datalist / provider-specific opts を隠す
-    const modelRow = document.querySelector<HTMLElement>('.spawn-model-row');
-    if (modelRow) modelRow.hidden = isShell;
-    document.getElementById('spawn-claude-opts').hidden = (p !== 'claude');
-    document.getElementById('spawn-codex-opts').hidden  = (p !== 'codex');
-    if (spawnOpenCodeOpts) spawnOpenCodeOpts.hidden = (p !== 'opencode');
-    const claudeNote = document.getElementById('spawn-claude-note');
-    const codexNote = document.getElementById('spawn-codex-note');
-    const copilotNote = document.getElementById('spawn-copilot-note');
-    const cursorAgentNote = document.getElementById('spawn-cursor-agent-note');
-    const opencodeNote = document.getElementById('spawn-opencode-note');
-    const grokNote = document.getElementById('spawn-grok-note');
-    const shellNote = document.getElementById('spawn-shell-note');
-    if (claudeNote) claudeNote.hidden = (p !== 'claude');
-    if (codexNote) codexNote.hidden = (p !== 'codex');
-    if (copilotNote) copilotNote.hidden = (p !== 'copilot');
-    if (cursorAgentNote) cursorAgentNote.hidden = (p !== 'cursor-agent');
-    if (opencodeNote) opencodeNote.hidden = (p !== 'opencode');
-    if (grokNote) grokNote.hidden = (p !== 'grok');
-    if (shellNote) shellNote.hidden = !isShell;
+    syncSpawnProviderFields(p);
     if (p !== 'codex')  codexModelSelection  = null;
     if (p !== 'claude') claudeModelSelection = null;
     populateModelDatalist();
@@ -594,6 +636,9 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
     updateDetachedPreview();
   });
   updateSpawnProviderIcon();
+  document.addEventListener('i18n-ready', () => {
+    syncPermissionModeOptions(spawnProviderEl.value);
+  });
 
   // フォーカス時に入力値を一時クリアして datalist の全候補を表示し、
   // 未選択のまま離れたら元の値を復元する。
@@ -646,27 +691,7 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
       const s = JSON.parse(localStorage.getItem(STORAGE_SPAWN_KEY) || '{}');
       if (s.provider) {
         spawnProviderEl.value = s.provider;
-        const p = s.provider;
-        const isShell = (p === 'shell');
-        const modelRow = document.querySelector<HTMLElement>('.spawn-model-row');
-        if (modelRow) modelRow.hidden = isShell;
-        document.getElementById('spawn-claude-opts').hidden = (p !== 'claude');
-        document.getElementById('spawn-codex-opts').hidden  = (p !== 'codex');
-        if (spawnOpenCodeOpts) spawnOpenCodeOpts.hidden = (p !== 'opencode');
-        const claudeNote = document.getElementById('spawn-claude-note');
-        const codexNote = document.getElementById('spawn-codex-note');
-        const copilotNote = document.getElementById('spawn-copilot-note');
-        const cursorAgentNote = document.getElementById('spawn-cursor-agent-note');
-        const opencodeNote = document.getElementById('spawn-opencode-note');
-        const grokNote = document.getElementById('spawn-grok-note');
-        const shellNote = document.getElementById('spawn-shell-note');
-        if (claudeNote) claudeNote.hidden = (p !== 'claude');
-        if (codexNote) codexNote.hidden = (p !== 'codex');
-        if (copilotNote) copilotNote.hidden = (p !== 'copilot');
-        if (cursorAgentNote) cursorAgentNote.hidden = (p !== 'cursor-agent');
-        if (opencodeNote) opencodeNote.hidden = (p !== 'opencode');
-        if (grokNote) grokNote.hidden = (p !== 'grok');
-        if (shellNote) shellNote.hidden = !isShell;
+        syncSpawnProviderFields(s.provider);
       }
       if (s.cwd)              spawnCwdInput.value = s.cwd;
       // モデル欄は保存値を prefill しない（空 = 各 CLI の既定モデルを尊重）。
@@ -674,7 +699,10 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
       // /model 既定（1M 窓など）を 200K へ上書きする原因だった。非既定モデルを
       // 使いたいときは datalist から明示選択する（その選択はそのセッションにのみ適用）。
       // s.model は後方互換のため保存自体は残すが、ここでは読み込まない。
-      if (s.permission_mode)  document.getElementById('spawn-permission-mode').value = s.permission_mode;
+      if (s.permission_mode && spawnPermissionMode) {
+        spawnPermissionMode.value = s.permission_mode;
+        syncPermissionModeOptions(spawnProviderEl.value);
+      }
       if (s.sandbox)          document.getElementById('spawn-sandbox').value = s.sandbox;
       if (s.ask_for_approval) document.getElementById('spawn-ask-approval').value = s.ask_for_approval;
       if (spawnOpenCodeFullAllow) spawnOpenCodeFullAllow.checked = s.opencode_permission_mode === 'bypassPermissions';
@@ -701,6 +729,7 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
         updateIsolateWorktreeNote();
       }
       updateSpawnProviderIcon();
+      syncSpawnProviderFields(spawnProviderEl.value);
       refreshSubscriptionSelector();
       updateDetachedPreview();
       return !!s.cwd;
@@ -2126,6 +2155,23 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
         bodyObj.risk_confirmed = riskConfirmed;
         bodyObj.sandbox = sandbox;
         bodyObj.ask_for_approval = approval;
+      } else if (provider === 'grok' || provider === 'copilot' || provider === 'cursor-agent') {
+        const permMode = spawnPermissionMode ? spawnPermissionMode.value : 'default';
+        if (permMode === 'bypassPermissions') {
+          const riskConfirmed = await appConfirm({
+            title: t('full_allow_confirm_title'),
+            message: t('full_allow_confirm_message'),
+            confirmText: t('full_allow_confirm_run'),
+            cancelText: t('spawn_cancel'),
+            kind: 'danger',
+          });
+          if (!riskConfirmed) {
+            spawnLaunchBtn.disabled = false;
+            return;
+          }
+          bodyObj.risk_confirmed = true;
+        }
+        bodyObj.permission_mode = permMode;
       }
       // C1: plan_orchestration-spawn-ui-exposure.md — 「オーケストレーション」ボタン経由の起動
       // だけ orchestration フラグを立てる。役割マッピングは詳細設定を開いて設定した場合のみ添える。
@@ -2158,7 +2204,7 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
           grid_layout: gridLayout,
           detached_preset: detachedPreset,
           isolate_worktree: spawnIsolateWorktree?.checked ? 'true' : 'false',
-          ...(provider === 'claude' ? { permission_mode: bodyObj.permission_mode } : {}),
+          ...(providerHasPermissionSelect(provider) ? { permission_mode: bodyObj.permission_mode } : {}),
           ...(provider === 'codex'  ? { sandbox: bodyObj.sandbox, ask_for_approval: bodyObj.ask_for_approval } : {}),
           ...(provider === 'opencode' ? { opencode_permission_mode: bodyObj.permission_mode } : {}),
         });

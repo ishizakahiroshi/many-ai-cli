@@ -121,6 +121,7 @@ type session struct {
 	HomeDir          string `json:"-"`
 	CodexHome        string `json:"-"`
 	ClaudeDir        string `json:"-"`
+	GrokHome         string `json:"-"`
 	// SubscriptionProfileID はこのセッションを起動した subscription profile の ID。
 	// 空なら「CLI 自身のログイン環境」（従来どおりの既定動作）。
 	// ID を正本にして名前を表示専用にするのは、profile を rename しても過去
@@ -130,6 +131,9 @@ type session struct {
 	// UsageProbe is JSON-hidden and marks the short-lived internal session used
 	// to retrieve Claude subscription usage.
 	UsageProbe bool `json:"-"`
+	// SubscriptionLogin is JSON-hidden and marks a vendor-CLI login session.
+	// Hub dismisses it when the login command ends.
+	SubscriptionLogin bool `json:"-"`
 
 	// JSON 外: 状態評価用
 	lastOutputAt      time.Time // idleAfter 計算用。LastOutputAt と同期して更新する

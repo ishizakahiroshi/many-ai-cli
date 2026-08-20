@@ -35,7 +35,7 @@ type grokChatMessage struct {
 }
 
 // handleGrokHistory は Grok Build CLI 自身が保存している会話履歴
-// （~/.grok/sessions/<cwd>/<session_id>/chat_history.jsonl）を整形して返す。
+// （$GROK_HOME/sessions/<cwd>/<session_id>/chat_history.jsonl。未設定時は ~/.grok）を整形して返す。
 // Grok は alt screen 上で全画面上書き描画するため xterm のスクロールバックが
 // 育たず、生 PTY ログの再生（/api/session-log + 過去ログビューア）では
 // 絶対座標フレームの機械置換で読めない出力になる。many-ai-cli 側では
@@ -58,12 +58,13 @@ func (s *Server) handleGrokHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.sessionsMu.Lock()
-	var provider, cwd, startedAt, homeDir string
+	var provider, cwd, startedAt, homeDir, grokHome string
 	if ses := s.sessions[sessionID]; ses != nil {
 		provider = ses.Provider
 		cwd = ses.CWD
 		startedAt = ses.StartedAt
 		homeDir = ses.HomeDir
+		grokHome = ses.GrokHome
 	}
 	s.sessionsMu.Unlock()
 	if provider == "" {
@@ -74,7 +75,8 @@ func (s *Server) handleGrokHistory(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "not a grok session")
 		return
 	}
-	if homeDir == "" {
+	grokDir := grokHomeDir(grokHome, homeDir)
+	if grokDir == "" {
 		// UserHomeDir が失敗すると homeDir は空のままとなり、後段の
 		// filepath.Join("", ".grok") が相対パス ".grok" となる。プロセス
 		// cwd 配下の別プロジェクトの .grok を意図せず読む恐れがあるため、
@@ -84,7 +86,7 @@ func (s *Server) handleGrokHistory(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusNotFound, "not_found", "user home directory unavailable")
 			return
 		}
-		homeDir = h
+		grokDir = grokHomeDir("", h)
 	}
 	startTime, err := time.Parse(time.RFC3339, startedAt)
 	if err != nil {
@@ -92,7 +94,7 @@ func (s *Server) handleGrokHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	historyPath, ok := findGrokChatHistory(filepath.Join(homeDir, ".grok"), cwd, startTime)
+	historyPath, ok := findGrokChatHistory(grokDir, cwd, startTime)
 	if !ok {
 		writeJSONError(w, http.StatusNotFound, "not_found", "grok chat history not found")
 		return
@@ -144,6 +146,20 @@ type grokActiveSession struct {
 	SessionID string `json:"session_id"`
 	CWD       string `json:"cwd"`
 	OpenedAt  string `json:"opened_at"`
+}
+
+// grokHomeDir は Grok Build CLI のデータディレクトリを返す。
+// grokHome（$GROK_HOME）が空でなければそれが ~/.grok を置き換える。
+// Codex の CodexHome / $CODEX_HOME と同じ契約。設定済みの grokHome から
+// 既定の ~/.grok へは落とさない（別プロファイルの履歴を誤って拾わないため）。
+func grokHomeDir(grokHome, userHome string) string {
+	if g := strings.TrimSpace(grokHome); g != "" {
+		return g
+	}
+	if h := strings.TrimSpace(userHome); h != "" {
+		return filepath.Join(h, ".grok")
+	}
+	return ""
 }
 
 // findGrokChatHistory は many-ai-cli セッション（cwd + 開始時刻）に対応する

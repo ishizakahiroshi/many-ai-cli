@@ -193,6 +193,7 @@ export interface Message {
   // ログイン環境」を意味する。ID は不透明な識別子で、認証情報は含まない。
   subscription_id?: string;
   subscription_name?: string;
+  subscription_login?: boolean;
   messages?: AgentChatMessage[];
   cols?: number;
   rows?: number;

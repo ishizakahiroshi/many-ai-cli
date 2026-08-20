@@ -1043,13 +1043,6 @@
           </div>
           <!-- label input (optional) -->
           <input type="text" id="spawn-label" class="spawn-input" data-i18n-placeholder="spawn_label_placeholder">
-          <!-- git worktree 隔離（全プロバイダ共通・opt-in）。チェック時のみ isolate_worktree を送り、
-               未チェックのときは config の user_prefs.spawn.worktree_auto を既定として尊重する。 -->
-          <label class="spawn-risk-label">
-            <input id="spawn-isolate-worktree" type="checkbox">
-            <span data-i18n="spawn_isolate_worktree">Run this session in a dedicated git worktree</span>
-          </label>
-          <div id="spawn-isolate-worktree-note" class="settings-note" data-i18n="spawn_isolate_worktree_note" hidden>Only applies when the working directory is a git repository. Creates an isolated checkout under &lt;repo&gt;/.git-worktrees/ on a new many-ai/ branch. Untracked files such as node_modules and .env are not carried over, so dependencies may need reinstalling.</div>
           <!-- model input (shared between providers) -->
           <div class="spawn-model-row">
             <input type="text" id="spawn-model" class="spawn-input"
@@ -1075,9 +1068,11 @@
             <select id="spawn-subscription" class="spawn-select"></select>
           </div>
 
-          <!-- Claude-only options -->
+          <!-- Claude-only: /model picker. Permission select is shared with grok / copilot / cursor-agent. -->
           <div id="spawn-claude-opts">
             <button id="spawn-claude-model-btn" class="spawn-btn-browse" type="button" data-i18n="spawn_claude_model_btn">Claude /model</button>
+          </div>
+          <div id="spawn-permission-opts">
             <select id="spawn-permission-mode" class="spawn-select">
               <option value="default" data-i18n="spawn_permission_default">Approval mode: Default</option>
               <option value="plan" data-i18n="spawn_permission_plan">plan (confirm before changes)</option>
@@ -1114,6 +1109,14 @@
           <div id="spawn-opencode-note" class="settings-note" data-i18n="spawn_opencode_note" hidden>Uses the installed OpenCode CLI. Run `opencode auth login` before starting. Free-tier models may take 1–2 minutes to respond.</div>
           <div id="spawn-grok-note" class="settings-note" data-i18n="spawn_grok_note" hidden>Uses the installed Grok Build CLI (xAI). Requires a SuperGrok or X Premium+ subscription — the base X Premium plan cannot use it. Sign-in and quota stay in Grok.</div>
           <div id="spawn-shell-note" class="settings-note" data-i18n="spawn_shell_note" hidden>Opens the OS default shell (pwsh / bash). No AI-specific options apply.</div>
+
+          <!-- git worktree 隔離（全プロバイダ共通・opt-in）。チェック時のみ isolate_worktree を送り、
+               未チェックのときは config の user_prefs.spawn.worktree_auto を既定として尊重する。 -->
+          <label class="spawn-risk-label">
+            <input id="spawn-isolate-worktree" type="checkbox">
+            <span data-i18n="spawn_isolate_worktree">Run this session in a dedicated git worktree</span>
+          </label>
+          <div id="spawn-isolate-worktree-note" class="settings-note" data-i18n="spawn_isolate_worktree_note" hidden>Only applies when the working directory is a git repository. Creates an isolated checkout under &lt;repo&gt;/.git-worktrees/ on a new many-ai/ branch. Untracked files such as node_modules and .env are not carried over, so dependencies may need reinstalling.</div>
 
           <!-- C2: Detached 設定セクション -->
           <div id="spawn-detached-section" class="spawn-detached-section">
