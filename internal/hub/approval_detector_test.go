@@ -74,6 +74,72 @@ func TestDetectNativeApprovalClaude(t *testing.T) {
 	}
 }
 
+func TestDetectNativeApprovalGrokRadio(t *testing.T) {
+	// 実機 PTY（2026-08-20 セッション 8）のツール許可カード。
+	lines := []string{
+		"Check MANY_AI_CLI hub session env",
+		"$env:MANY_AI_CLI",
+		"",
+		"1 (•) Yes, and don't ask again for anything (always-approve mode)",
+		"2 (○) Yes, proceed",
+		"3 (○) No, reject (type to add feedback)",
+		"1/3:select | Tab:next option | Ctrl+o:always-approve | Ctrl+c:cancel | Esc:scrollback",
+	}
+	got := detectNativeApproval("grok", lines)
+	if got == nil {
+		t.Fatal("detectNativeApproval(grok) returned nil")
+	}
+	if got.Kind != "native" {
+		t.Fatalf("kind = %q", got.Kind)
+	}
+	if len(got.Options) != 3 {
+		t.Fatalf("options len = %d, want 3 (%+v)", len(got.Options), got.Options)
+	}
+	if !got.Options[0].IsCurrent || got.Options[0].Num != 1 {
+		t.Fatalf("option 1 = %+v", got.Options[0])
+	}
+	if got.Options[0].Label != "Yes, and don't ask again for anything (always-approve mode)" {
+		t.Fatalf("option 1 label = %q", got.Options[0].Label)
+	}
+	if got.Options[1].IsCurrent || got.Options[1].Label != "Yes, proceed" {
+		t.Fatalf("option 2 = %+v", got.Options[1])
+	}
+	if got.Options[2].IsCurrent || got.Options[2].Label != "No, reject (type to add feedback)" {
+		t.Fatalf("option 3 = %+v", got.Options[2])
+	}
+	if got.Question != "$env:MANY_AI_CLI" {
+		t.Fatalf("question = %q", got.Question)
+	}
+
+	// 選択が 2 番へ移った再描画。
+	moved := detectNativeApproval("grok", []string{
+		"$env:MANY_AI_CLI",
+		"1 (○) Yes, and don't ask again for anything (always-approve mode)",
+		"2 (•) Yes, proceed",
+		"3 (○) No, reject (type to add feedback)",
+		"Tab:next option",
+	})
+	if moved == nil || !moved.Options[1].IsCurrent || moved.Options[0].IsCurrent {
+		t.Fatalf("moved current = %+v", moved)
+	}
+
+	// Claude の番号形式を grok provider で読んでもラジオ専用分岐に落ちないこと。
+	claudeShape := detectNativeApproval("grok", []string{
+		"Allow tool: Bash",
+		"❯ 1. Yes, allow once",
+		"  2. Yes, allow for this session",
+		"  3. No",
+	})
+	if claudeShape == nil || len(claudeShape.Options) != 3 || !claudeShape.Options[0].IsCurrent {
+		t.Fatalf("grok provider still has to accept numbered Claude-shaped lines: %+v", claudeShape)
+	}
+
+	// ラジオ形式は grok 以外では拾わない（誤検出防止）。
+	if detectNativeApproval("claude", lines) != nil {
+		t.Fatal("claude provider must not treat grok radio lines as native approval")
+	}
+}
+
 func TestDetectNativeApprovalCodexShortcut(t *testing.T) {
 	lines := []string{
 		"Command requires approval",
@@ -676,6 +742,18 @@ func TestNativeApprovalLooksValid(t *testing.T) {
 	if !nativeApprovalLooksValid("copilot", []string{"Permission required"}, copilotOpts) {
 		t.Fatal("copilot shortcut with native hint should be valid")
 	}
+	grokOpts := []proto.ApprovalOption{
+		{Label: "Yes, and don't ask again for anything (always-approve mode)", IsCurrent: true},
+		{Label: "Yes, proceed"},
+		{Label: "No, reject (type to add feedback)"},
+	}
+	if !nativeApprovalLooksValid("grok", []string{"Tab:next option"}, grokOpts) {
+		t.Fatal("grok radio with footer hint should be valid")
+	}
+	if nativeApprovalLooksValid("grok", []string{"Choose a branch"}, grokOpts) {
+		t.Fatal("grok radio without hint should be invalid")
+	}
+
 	if nativeApprovalLooksValid("copilot", []string{"Choose a branch"}, copilotOpts) {
 		t.Fatal("copilot shortcut without hint should be invalid")
 	}

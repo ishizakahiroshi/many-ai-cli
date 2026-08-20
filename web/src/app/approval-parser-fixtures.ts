@@ -571,6 +571,29 @@ test('approval parser fixtures', () => {
   ]);
   assert.deepEqual(numbers(normalApproval.options), [1, 2, 3]);
 
+  // Grok Build ツール許可カード（実機 PTY 2026-08-20）。番号の直後はピリオドではなくラジオ印。
+  const grokRadioLines = [
+    'Check MANY_AI_CLI hub session env',
+    '$env:MANY_AI_CLI',
+    '1 (•) Yes, and don\'t ask again for anything (always-approve mode)',
+    '2 (○) Yes, proceed',
+    '3 (○) No, reject (type to add feedback)',
+    '1/3:select | Tab:next option | Ctrl+o:always-approve | Ctrl+c:cancel | Esc:scrollback',
+  ];
+  const grokRadio = parser.extractApprovalOptions(grokRadioLines);
+  assert.deepEqual(numbers(grokRadio.options), [1, 2, 3]);
+  assert.deepEqual(labels(grokRadio.options), [
+    'Yes, and don\'t ask again for anything (always-approve mode)',
+    'Yes, proceed',
+    'No, reject (type to add feedback)',
+  ]);
+  assert.equal(grokRadio.options[0].isCurrent, true);
+  assert.equal(grokRadio.options[1].isCurrent, false);
+  assert.equal(grokRadio.options[2].isCurrent, false);
+  assert.equal(parser.matchNativeApprovalTrigger(grokRadioLines[5]), true);
+  const grokVisible = detectFallback('grok', grokRadioLines, () => false);
+  assert.deepEqual(numbers(grokVisible), [1, 2, 3]);
+
   const chunkPath = parser.extractHubMarkerApproval([
     'noise',
     '[MANY-AI-CLI]',

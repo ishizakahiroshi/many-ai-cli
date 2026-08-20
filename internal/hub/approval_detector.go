@@ -66,6 +66,13 @@ var (
 	// cursor-agent の承認メニューはキー表記が多様（(y) / (tab) / (shift+tab) / (esc or n)）。
 	// 末尾の (...) を緩く取り出し、cursorAgentKeyBinding で既知キーのみ採用する。
 	cursorAgentShortcutLineRe = regexp.MustCompile(`^\s*([-*•>❯›❱])?\s*(.+?)\s+\(([^()]+)\)\s*$`)
+	// grokRadioApprovalLineRe は Grok Build のツール許可カード。
+	// 実機 PTY（2026-08-20 セッション 8 / 08-19 s9,s10）:
+	//   1 (•) Yes, and don't ask again for anything (always-approve mode)
+	//   2 (○) Yes, proceed
+	//   3 (○) No, reject (type to add feedback)
+	// 番号の直後はピリオドではなくラジオ印。選択中は • / ● / * / - 、未選択は ○。
+	grokRadioApprovalLineRe = regexp.MustCompile(`^\s*(\d{1,2})\s+\(([•●○*\-])\)\s+(.+?)\s*$`)
 )
 
 func detectNativeApproval(provider string, lines []string) *nativeApproval {
@@ -412,6 +419,11 @@ func parseNativeApprovalOption(provider, line string) (proto.ApprovalOption, boo
 		}
 		return opt, true
 	}
+	if provider == "grok" {
+		if opt, ok := parseGrokRadioApprovalOption(trimmed); ok {
+			return opt, true
+		}
+	}
 	if provider == "cursor-agent" {
 		return parseCursorAgentShortcutOption(trimmed)
 	}
@@ -431,6 +443,23 @@ func parseNativeApprovalOption(provider, line string) (proto.ApprovalOption, boo
 		}
 	}
 	return proto.ApprovalOption{}, false
+}
+
+func parseGrokRadioApprovalOption(line string) (proto.ApprovalOption, bool) {
+	m := grokRadioApprovalLineRe.FindStringSubmatch(line)
+	if m == nil {
+		return proto.ApprovalOption{}, false
+	}
+	n, _ := strconv.Atoi(m[1])
+	label := cleanNativeApprovalLabel(m[3])
+	if label == "" || n > approvalOptionNumMaxLabel {
+		return proto.ApprovalOption{}, false
+	}
+	return proto.ApprovalOption{
+		Num:       n,
+		Label:     label,
+		IsCurrent: m[2] != "○",
+	}, true
 }
 
 // parseCursorAgentShortcutOption は cursor-agent の承認メニュー 1 行をパースする。
@@ -631,6 +660,13 @@ func nativeApprovalLooksValid(provider string, contextLines []string, opts []pro
 	if provider == "opencode" && !hasHint {
 		hasHint = strings.Contains(context, "always allow") ||
 			strings.Contains(context, "until opencode is restarted")
+	}
+	// Grok Build のツール許可カード。ラベルの always-approve は "approval" 部分一致でも
+	// 拾えるが、フッターだけが context に残った再描画でも落とさない。
+	if provider == "grok" && !hasHint {
+		hasHint = strings.Contains(context, "tab:next option") ||
+			strings.Contains(context, "always-approve") ||
+			strings.Contains(context, "type to add feedback")
 	}
 	hasApprovalLabel := false
 	for _, opt := range opts {
