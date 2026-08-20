@@ -82,7 +82,7 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 		if risk.HighRisk && mode != "required" {
 			mode = "required"
 		}
-		if mode == "required" && !spec.RiskConfirmed {
+		if spawnNeedsRiskConfirmation(spec, mode == "required") {
 			return 0, fmt.Errorf("risk confirmation required")
 		}
 		if resolvedModel != "" {
@@ -101,7 +101,7 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 		if risk.HighRisk && mode != "required" {
 			mode = "required"
 		}
-		if mode == "required" && !spec.RiskConfirmed {
+		if spawnNeedsRiskConfirmation(spec, mode == "required") {
 			return 0, fmt.Errorf("risk confirmation required")
 		}
 		if resolvedModel != "" {
@@ -115,7 +115,7 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 		}
 	case "opencode":
 		risk := evaluateOpenCodeRisk(spec.PermissionMode)
-		if risk.HighRisk && !spec.RiskConfirmed {
+		if spawnNeedsRiskConfirmation(spec, risk.HighRisk) {
 			return 0, fmt.Errorf("risk confirmation required")
 		}
 		if resolvedModel != "" {
@@ -150,7 +150,7 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 	if err != nil {
 		return 0, err
 	}
-	if resolvedModel != "" && !isLocalRoute(effectiveRoute) {
+	if spawnRecordsLastModel(spec, resolvedModel, effectiveRoute) {
 		_ = s.setLastModel(spec.Provider, resolvedModel)
 	}
 	return id, nil
@@ -971,6 +971,29 @@ func (s *Server) setLastModel(provider, model string) error {
 	s.cfg.UserPrefs.Spawn.LastModel[provider] = model
 	s.cfgMu.Unlock()
 	return s.persistConfig()
+}
+
+// spawnNeedsRiskConfirmation は「ユーザーの確認が取れるまで起動してはいけない
+// spawn か」を返す。usage probe は Hub が内部で起こす使い捨てセッションで、
+// 確認を出す相手（押した人）が居ないため対象外にする。ここを通すと
+// RiskConfirmed が立たないまま必ず risk confirmation required で落ちる。
+// サブスクリプションログインの spawn が provider 別分岐へ入らないのと同じ扱い。
+func spawnNeedsRiskConfirmation(spec spawnWrappedSpec, confirmationRequired bool) bool {
+	if spec.UsageProbe {
+		return false
+	}
+	return confirmationRequired && !spec.RiskConfirmed
+}
+
+// spawnRecordsLastModel は spawn したモデルを「次回の既定モデル」として
+// 保存してよいかを返す。usage probe のモデル（低コストの固定値）はユーザーの
+// 選択ではないので保存しない。保存すると次にユーザーが自分のモデルで起動する
+// ときに「モデル変更＝高リスク」の確認が出る。
+func spawnRecordsLastModel(spec spawnWrappedSpec, resolvedModel, effectiveRoute string) bool {
+	if spec.UsageProbe || strings.TrimSpace(resolvedModel) == "" {
+		return false
+	}
+	return !isLocalRoute(effectiveRoute)
 }
 
 // spawnValidModelLabel は model / label / label_prefix 値が安全かを検証する。
