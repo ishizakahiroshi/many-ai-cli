@@ -12,6 +12,7 @@ import { chatHistoryCommitOutput, chatPaneAtBottom, getChatTimelineEl, pushMessa
 import { token } from './util.js';
 import { appConfirm } from './settings.js';
 import { isActionBarCollapsed, setActionBarCollapsed, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY } from './user-prefs.js';
+import { noteApprovalRenderForDebug } from './debug-approval-identity.js';
 
 const HIGH_RISK_HOLD_MS = 1200;
 const highRiskConfirmationInFlight = new Set<number>();
@@ -1809,6 +1810,7 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
     v: bar.classList.contains('visible'),
     col: isActionBarCollapsed(),
   });
+  noteApprovalRenderForDebug(sessionId, 'single-tabs', preamble, question, options, lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig);
   if (lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig) {
     if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
     if (chatWasAtBottomB && chatTlB) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlB));
@@ -2103,6 +2105,7 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
     v: bar.classList.contains('visible'),
     col: isActionBarCollapsed(),
   });
+  noteApprovalRenderForDebug(sessionId, 'batch-tabs', (sections as any)._preamble, '', sections, lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig);
   if (lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig) {
     if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
     if (chatWasAtBottomB && chatTlB) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlB));
@@ -2535,6 +2538,7 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
     v: bar.classList.contains('visible'),
     col: isActionBarCollapsed(),
   });
+  noteApprovalRenderForDebug(sessionId, 'multi', (options as any)._preamble, question, options, lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig);
   if (lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig) {
     if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
     if (chatWasAtBottomM && chatTlM) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlM));
