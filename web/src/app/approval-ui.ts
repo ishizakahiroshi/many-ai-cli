@@ -6,7 +6,7 @@ import { ws } from './ws-client.js';
 import { reshowActionBar, showActionBar } from './approval.js';
 import { inheritMarkerBlockSig } from './approval-parser.js';
 import { suppressPtyResizeForInputLayout, syncPtySizeToViewportAfterLayout } from './terminal.js';
-import { noteApprovalIdentityForDebug } from './debug-approval-identity.js';
+import { probe } from '../debug/probe.js';
 
 // UI/cache adapter for approval detection. Parser code must not depend on this.
 (function (root) {
@@ -74,7 +74,7 @@ import { noteApprovalIdentityForDebug } from './debug-approval-identity.js';
       bar.children.length > 0 && bar.dataset.approvalSessionId === String(id) &&
       bar.dataset.approvalCandidateKey === identity.candidateKey &&
       bar.dataset.approvalSourceEpoch === String(identity.sourceEpoch));
-    noteApprovalIdentityForDebug(id, identity, options, sameVisibleCandidate);
+    probe('approval.data', () => ({ sessionId: id, identity, options, skipped: sameVisibleCandidate }));
     if (sameVisibleCandidate) {
       return;
     }

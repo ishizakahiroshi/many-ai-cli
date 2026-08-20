@@ -63,7 +63,23 @@ async function cleanDist() {
   await mkdir(distDir, { recursive: true });
 }
 
-const entryPoints = await walk(srcDir);
+// 観測コード（web/src/debug/ 配下の sink）は既定でビルド対象から外す。
+// 有効化は必ずオプトイン（MAI_DEBUG=1 か --debug）。付け忘れたら成果物は
+// クリーンな側へ倒れる。詳細は docs/local/plan_instrumentation-probe-lifecycle.md。
+const debugBuild = process.env.MAI_DEBUG === '1' || process.argv.includes('--debug');
+
+// probe.ts は製品コード側の記録点から import されるので常に出力する
+// （本体は define の __MAI_DEBUG__=false で到達不能になる）。
+const debugDir = path.join(srcDir, 'debug');
+const debugKeepAlways = new Set([path.join(debugDir, 'probe.ts')]);
+
+function isExcludedDebugEntry(file) {
+  if (debugBuild) return false;
+  if (!file.startsWith(debugDir + path.sep)) return false;
+  return !debugKeepAlways.has(file);
+}
+
+const entryPoints = (await walk(srcDir)).filter((f) => !isExcludedDebugEntry(f));
 
 const buildOptions = {
   entryPoints,
@@ -74,7 +90,17 @@ const buildOptions = {
   target: 'es2022',
   sourcemap: true,
   logLevel: 'info',
+  define: { __MAI_DEBUG__: String(debugBuild) },
 };
+
+// 既定ビルドでは debug/index.ts を出力しないため、app.js の副作用 import が
+// 解決できるよう空の index.js を置く（bundle:false なので import 文は残る）。
+async function writeEmptyDebugIndex() {
+  if (debugBuild) return;
+  const outDebugDir = path.join(distDir, 'debug');
+  await mkdir(outDebugDir, { recursive: true });
+  await writeFile(path.join(outDebugDir, 'index.js'), '', 'utf8');
+}
 
 await cleanDist();
 await copyStaticAssets();
@@ -88,6 +114,8 @@ async function generateSrcHash() {
     hasher.update(await readFile(f));
     hasher.update('\n');
   }
+  // 同じ src でも MAI_DEBUG の有無で dist の中身が変わるため hash に混ぜる。
+  hasher.update('MAI_DEBUG=' + (debugBuild ? '1' : '0'));
   const hash = hasher.digest('hex').slice(0, 12);
   await writeFile(path.join(distDir, '.src-hash'), hash, 'utf8');
   return hash;
@@ -96,9 +124,11 @@ async function generateSrcHash() {
 if (watch) {
   const ctx = await context(buildOptions);
   await ctx.watch();
-  console.log('watching web/src -> web/dist');
+  await writeEmptyDebugIndex();
+  console.log(`watching web/src -> web/dist (instrumentation: ${debugBuild ? 'on' : 'off'})`);
 } else {
   await build(buildOptions);
+  await writeEmptyDebugIndex();
   const hash = await generateSrcHash();
-  console.log(`web/src hash: ${hash}`);
+  console.log(`web/src hash: ${hash} (instrumentation: ${debugBuild ? 'on' : 'off'})`);
 }

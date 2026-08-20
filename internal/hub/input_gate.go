@@ -390,17 +390,16 @@ func (s *Server) submitInputWithGate(sessionID int, combined string, bypassGate 
 		s.pendingInput[sessionID] = appendPendingInput(s.pendingInput[sessionID], combined)
 	}
 	s.sessionsMu.Unlock()
-	// 観測専用の一時コード（原因が確定したら撤去）。台帳 id=hub-input-deliver-trace。
-	// sessionsMu の外で呼ぶ（traceInputDeliver は cfgMu を取るため、2 つのロックを
-	// 同時に保持しないという Server の規約を守る）。
-	s.traceInputDeliver("gate", sessionID,
+	// 記録点は sessionsMu の外で呼ぶ。sink が cfgMu を取るため、2 つのロックを
+	// 同時に保持しないという Server の規約を守る。
+	s.probe("input.gate", "session_id", sessionID,
 		"bytes", len(combined), "gated", gated, "has_pending", hasPending, "pending_len", pendingLen)
 	if gated || hasPending {
 		s.notifyInputDeferred(sessionID)
 		return
 	}
 	rem := s.trySendInput(sessionID, combined)
-	s.traceInputDeliver("sent", sessionID,
+	s.probe("input.sent", "session_id", sessionID,
 		"bytes", len(combined), "remaining", len(rem), "wrapper_connected", wrapperConnected)
 	if rem != "" {
 		s.sessionsMu.Lock()
@@ -480,10 +479,9 @@ func (s *Server) flushPendingInput(sessionID int) {
 	ses.resendInput = nil
 	wc := s.wrappers[sessionID]
 	s.sessionsMu.Unlock()
-	// 観測専用の一時コード（原因が確定したら撤去）。台帳 id=hub-input-deliver-trace。
-	// 保留が積まれたセッションで、この行が一度も出なければ「吐き出す機会が来ていない」
+	// 保留が積まれたセッションで、この記録が一度も出なければ「吐き出す機会が来ていない」
 	// ことの直接の証拠になる（呼び出し元は wrapper の再接続と orchestration の 2 箇所のみ）。
-	s.traceInputDeliver("flush", sessionID,
+	s.probe("input.flush", "session_id", sessionID,
 		"pending", len(pending), "resend", len(resend), "wrapper_connected", wc != nil)
 	if len(pending) == 0 && len(resend) == 0 {
 		return

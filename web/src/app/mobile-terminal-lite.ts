@@ -6,7 +6,6 @@
 
 import { t } from '../i18n.js';
 // 切り分け用の計測（instrumentation.json の mobile-lite-empty）。?mtldebug=1 のときだけ動く。
-import './debug-mobile-view.js';
 import { activeSessionId } from './state.js';
 import { getMobileTranscriptMessages, mobileTranscriptStatusText, syncMobileTranscriptFromBuffer } from './mobile-transcript.js';
 import { scanBuffer } from './terminal.js';

@@ -1,3 +1,5 @@
+//go:build maidebug
+
 package hub
 
 // debug_mobile_view.go
@@ -13,6 +15,14 @@ import (
 	"net/http"
 	"sort"
 )
+
+// ルートは自分で登録する。server.go 側は s.registerProbeRoutes(mux) の 1 行だけで、
+// このファイルを消せば登録も一緒に消える。
+func init() {
+	registerProbeRoute("/api/debug/mobile-view", func(s *Server) http.HandlerFunc {
+		return s.handleDebugMobileView
+	})
+}
 
 const (
 	debugMobileViewMaxKeys     = 64

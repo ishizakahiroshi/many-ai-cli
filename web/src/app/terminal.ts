@@ -7,7 +7,7 @@ import { autoExpand, inputEl, sendText, updateInputClearButton } from '../app.js
 import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerminalPathStartBoundary, resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup, trimTerminalPathCandidate } from './path-links.js';
 import { ws } from './ws-client.js';
 import { scheduleApprovalCheck } from './approval.js';
-import { noteApprovalScrollForDebug } from './debug-approval-identity.js';
+import { probe } from '../debug/probe.js';
 import { handleCrunchLinkClick } from './expand-popup.js';
 import { addPromptTemplate } from './prompt-templates.js';
 import { resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
@@ -505,15 +505,14 @@ export function whenLayoutReady(id, container) {
       t.scrollHandlerInstalled = true;
       t.scrollDisposable = t.term.onScroll(() => {
         const atBottom = isTerminalAtBottom(t);
-        // 一時観測（?approvaldebug=1）: 承認ポップアップの再出現とスクロールの前後関係を
-        // 同じパネルの時系列で読むための記録点。既定は no-op。
         try {
-          noteApprovalScrollForDebug(id, {
+          probe('approval.scroll', () => ({
+            sessionId: id,
             atBottom,
             manual: Date.now() - lastTerminalManualScrollAt < 400,
             viewportY: t.term?.buffer?.active?.viewportY ?? -1,
             baseY: t.term?.buffer?.active?.baseY ?? -1,
-          });
+          }));
         } catch (_) {}
         // autoScroll を倒すのは「ユーザーが直前に手動スクロールした」ときだけにする。
         // CLI(Claude Code 等)の TUI は頻繁に再描画し、その programmatic scroll でも

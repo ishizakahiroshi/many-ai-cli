@@ -1,3 +1,5 @@
+//go:build maidebug
+
 package hub
 
 // input_deliver_trace.go — 観測専用の一時コード（原因が確定したら撤去する）。
@@ -14,18 +16,23 @@ package hub
 // 立つと、以降の入力は永久に PTY へ届かない。この経路には現在ログが 1 行も無く、
 // 「滞留しているのか、そもそも送っていないのか」を既存ログから区別できない。
 //
+// ゲートは 2 層。build 側（maidebug タグが無ければこのファイルごと存在しない）と、
+// runtime 側（セッションログの opt-in = log.session_enabled）。
 // 記録するのは stage・session_id・バイト長・フラグ・件数だけで、入力本文は含まない。
 // 台帳: instrumentation.json の id=hub-input-deliver-trace
-func (s *Server) traceInputDeliver(stage string, sessionID int, attrs ...any) {
-	// ゲートはセッションログの opt-in に合わせる。既定 OFF の利用者環境では 1 行も出ない。
-	s.cfgMu.Lock()
-	enabled := s.cfg.Log.SessionEnabled
-	s.cfgMu.Unlock()
-	if !enabled || s.logger == nil {
-		return
+
+func init() {
+	for _, channel := range []string{"input.gate", "input.sent", "input.flush"} {
+		stage := channel[len("input."):]
+		registerProbeSink(channel, func(s *Server, args ...any) {
+			// 既定 OFF の利用者環境では 1 行も出ない。
+			s.cfgMu.Lock()
+			enabled := s.cfg.Log.SessionEnabled
+			s.cfgMu.Unlock()
+			if !enabled || s.logger == nil {
+				return
+			}
+			s.logger.Info("input_deliver", append([]any{"stage", stage}, args...)...)
+		})
 	}
-	args := make([]any, 0, len(attrs)+4)
-	args = append(args, "stage", stage, "session_id", sessionID)
-	args = append(args, attrs...)
-	s.logger.Info("input_deliver", args...)
 }

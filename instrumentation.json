@@ -94,7 +94,7 @@
       "status": "active",
       "purpose": "セッション 1 本だけが、ある時点から Web の入力を PTY へ通さなくなる症状で、Hub の保留判定（gate）・wrapper への送信（sent）・保留の吐き出し（flush）・wrapper の PTY 書き込み（pty_write）の 4 点を刻み、どこで止まっているかを切り分ける",
       "addedIn": "unreleased",
-      "gate": "opt-in: log.session_enabled",
+      "gate": "opt-in: ビルドは -tags maidebug、runtime は log.session_enabled",
       "due": "2026-09-09",
       "files": [
         "internal/hub/input_deliver_trace.go",
@@ -107,39 +107,46 @@
       "endpoints": [],
       "removalCondition": "入力が恒久的に PTY へ届かなくなる原因が確定したら撤去",
       "reason": "submitInputWithGate は注入ゲート中または保留キューが空でないとき入力を pendingInput へ積むが、pendingInput を吐き出す flushPendingInput の呼び出し元は wrapper の (再)接続（internal/hub/wrapper_loop.go:625）と orchestration（internal/hub/orchestration.go:1601）の 2 箇所しかない。再接続が起きないまま保留が立つと以降の入力が永久に届かない構造になっているが、この経路にログが 1 行も無く、2026-08-19 の session #7 では hub.log に切断も WARN も ERROR も残らなかった。滞留しているのか送っていないのかを既存ログから区別できない。2026-08-19 の観測コード導入後ログでは session_id=7 に stage=gate / sent が各 32 件（gated=false・has_pending=false）、flush が 1 件、wrapper 側 pty_write が 11 件で pty_write_dup は 0 件だったが、記録は 10:15 以降で元の 09:30 の失敗区間を直接覆っていない。疑いの分岐を再現できていないため、原因未確定のまま due を 2026-09-09 へ延長する",
-      "note": "記録内容は stage・session_id・バイト長・gated / has_pending / pending_len / remaining / input_seq / err のみで、入力本文は含まない。撤去済みの hub-input-trace とはログメッセージ名を分けてある（input_deliver / input_deliver_wrapper）。同名にすると台帳の第 3 パスが hub-input-trace の removed 実体として検出してブロックするため。前身の hub-input-trace は無ゲートで常時 hub.log へ書き、ローテート済み 10MB の 26% を占めていたので、今回はセッションログの opt-in に従わせている"
+      "note": "記録内容は stage・session_id・バイト長・gated / has_pending / pending_len / remaining / input_seq / err のみで、入力本文は含まない。撤去済みの hub-input-trace とはログメッセージ名を分けてある（input_deliver / input_deliver_wrapper）。同名にすると台帳の第 3 パスが hub-input-trace の removed 実体として検出してブロックするため。前身の hub-input-trace は無ゲートで常時 hub.log へ書き、ローテート済み 10MB の 26% を占めていたので、今回はセッションログの opt-in に従わせている / 2026-08-20 に常設プローブ基盤へ移送した（plan_instrumentation-probe-lifecycle）。両ファイルへ //go:build maidebug を付け、sink 登録は init() から行う。記録点は s.probe / probe の 1 行になり、stage は channel 名から導く。input_gate.go の「sessionsMu の外で呼ぶ」制約は sink が cfgMu を取るため引き続き有効なのでコメントを残した。記録内容は移送前と同じ（stage・session_id・バイト長・フラグ・件数のみ）",
+      "channels": [
+        "input.gate",
+        "input.sent",
+        "input.flush",
+        "input.pty_write",
+        "input.pty_write_dup"
+      ]
     },
     {
       "id": "mobile-lite-empty",
       "status": "active",
       "purpose": "スマホ幅でチャットビュー（mobile-terminal-lite）が空のまま表示される症状で、モバイル判定・xterm バッファ・scanBuffer の行数・DOM 寸法のどこで 0 になるかを実機から観測する",
       "addedIn": "unreleased",
-      "gate": "opt-in: URL クエリ ?mtldebug=1",
+      "gate": "opt-in: ビルドは MAI_DEBUG=1 / -tags maidebug、runtime は URL クエリ ?mtldebug=1",
       "due": "2026-08-24",
       "files": [
         "internal/hub/debug_mobile_view.go",
-        "web/src/app/debug-mobile-view.ts"
+        "web/src/debug/mobile-view.ts"
       ],
       "sharedFiles": [
-        "internal/hub/server.go",
-        "web/src/app/mobile-terminal-lite.ts"
+        "internal/hub/server.go"
       ],
       "endpoints": [
         "/api/debug/mobile-view"
       ],
       "removalCondition": "スマホでターミナル出力が空になる原因が確定したら撤去",
       "reason": "PC とスマホが同じ Hub・同じビルドを見ているのに片方だけ空になるため、コードを読むだけでは判定・バッファ・DOM のどこで落ちているか切り分けられない。実機 Safari の実測値が要る",
-      "note": "記録内容は行数・文字数・要素寸法・状態フラグと userAgent 先頭 140 文字のみで、ターミナル本文と入力テキストは含まない。5 秒間隔・最大 60 サンプル（5 分）で自動停止する。URL クエリが無い通常アクセスでは 1 件も送信しない"
+      "note": "記録内容は行数・文字数・要素寸法・状態フラグと userAgent 先頭 140 文字のみで、ターミナル本文と入力テキストは含まない。5 秒間隔・最大 60 サンプル（5 分）で自動停止する。URL クエリが無い通常アクセスでは 1 件も送信しない / 2026-08-20 に常設プローブ基盤へ移送した（plan_instrumentation-probe-lifecycle）。TS 側は自走するサンプラーで記録点を持たないため channel は無く、web/src/debug/ へ移して web/src/debug/index.ts から読み込む形にした（mobile-terminal-lite.ts からの import は不要になったので sharedFiles から外した）。Go 側は //go:build maidebug を付け、ルート登録を init() の registerProbeRoute へ移したので server.go は s.registerProbeRoutes(mux) の 1 行だけになった",
+      "channels": []
     },
     {
       "id": "approval-identity-debug-panel",
       "status": "active",
       "purpose": "承認ポップアップの本文（前置き・質問文）と選択肢が別々の質問の中身に入れ替わって表示される不具合、およびスクロール時に解決済みの古い承認ポップアップが再び出る症状で、スクロール層（xterm onScroll の atBottom/manual/viewportY）・検出層（xterm バッファ末尾の再走査がライブ検出結果を置き換えた瞬間）・データ層（showOptions 呼び出し時点の options と candidateKey/sourceEpoch/shape）・描画層（single-tabs/batch-tabs/multi の差分スキップ判定直前）の 4 箇所から、本文と選択肢を必ず同じ 1 件に並べて画面上へ記録する",
       "addedIn": "unreleased",
-      "gate": "opt-in: URL クエリ ?approvaldebug=1",
+      "gate": "opt-in: ビルドは MAI_DEBUG=1、runtime は URL クエリ ?approvaldebug=1（sink 未登録時は完全 no-op）",
       "due": "2026-08-26",
       "files": [
-        "web/src/app/debug-approval-identity.ts"
+        "web/src/debug/approval-identity.ts"
       ],
       "sharedFiles": [
         "web/src/app/approval-ui.ts",
@@ -149,7 +156,13 @@
       "endpoints": [],
       "removalCondition": "承認バーの本文と選択肢が別々の質問で入れ替わる不具合と、スクロール時に古い承認ポップアップが再出現する症状（docs/local/bugfix_approval-bar-stale-options-scroll-mismatch_2026-08-19.md）の原因が確定したら撤去",
       "reason": "コード読解だけでは、識別子（candidateKey/sourceEpoch）計算・Hub 側マーカー抽出・クライアント側キャッシュ層のいずれも単体では矛盾なく動く設計に見え、ズレの発生箇所を静的解析だけで切り分けられなかった。実機でユーザーが症状を再現した際の identity 推移を画面上の表示（スクリーンショットで共有可能な形）として残す必要がある",
-      "note": "記録内容は candidateKey/shape をハッシュの先頭14文字に短縮したもの・sourceEpoch・前置きの先頭60文字・質問文の先頭40文字・選択肢ラベルの先頭24文字を最大3件まで。自由入力欄の内容と送信テキスト（_sendText）は保存しない。URL クエリが無い通常アクセスでは isEnabled() が false のまま noteApprovalIdentityForDebug / noteApprovalRenderForDebug が即 return し、DOM 要素も作られない（既定 no-op）/ 2026-08-19 に選択肢ラベルを記録対象へ追加した。初版は前置きか選択肢のどちらか片方しか残さない作りで、追跡対象である『本文と選択肢のズレ』がログに写らなかったため。あわせて描画層（approval.ts の 3 つの sig 差分スキップ判定）へも記録点を足し、データ時点のズレと描画スキップによる残留を切り分けられるようにした / 2026-08-20 に検出層（approval.ts の scanBuffer 末尾再走査 2 箇所）とスクロール層（terminal.ts の onScroll）へ記録点を足し、記録層を 4 つにした。ユーザー報告が「スクロールすると昔の承認ポップアップが出る・Codex で頻発」だったため。マーカー経路（handleHubApprovalMarker）は検出層を通らないので、buf 行が出れば「マーカーを使わない provider の検出フォールバックが動いた」ことが確定する。検出層は再走査が結果を実際に書き換えたとき（replace / fill1）だけ記録し、書き換えなし（keep）は捨てる。スクロール層は連続発火を 1.2 秒以内なら 1 行へ畳んで件数を数える。追加の記録内容は選択肢ラベル（既存と同じ先頭24文字・最大3件）・バッファ末尾の行数・カーソル有無・フォールバックのゲート理由（visible/liveopts/hint）・viewportY/baseY で、いずれも利用者のテキスト本文ではない。呼び元は isApprovalDebugEnabled() で先に判定し、クエリ無しでは観測用の配列コピーすら作らない"
+      "note": "記録内容は candidateKey/shape をハッシュの先頭14文字に短縮したもの・sourceEpoch・前置きの先頭60文字・質問文の先頭40文字・選択肢ラベルの先頭24文字を最大3件まで。自由入力欄の内容と送信テキスト（_sendText）は保存しない。URL クエリが無い通常アクセスでは isEnabled() が false のまま noteApprovalIdentityForDebug / noteApprovalRenderForDebug が即 return し、DOM 要素も作られない（既定 no-op）/ 2026-08-19 に選択肢ラベルを記録対象へ追加した。初版は前置きか選択肢のどちらか片方しか残さない作りで、追跡対象である『本文と選択肢のズレ』がログに写らなかったため。あわせて描画層（approval.ts の 3 つの sig 差分スキップ判定）へも記録点を足し、データ時点のズレと描画スキップによる残留を切り分けられるようにした / 2026-08-20 に検出層（approval.ts の scanBuffer 末尾再走査 2 箇所）とスクロール層（terminal.ts の onScroll）へ記録点を足し、記録層を 4 つにした。ユーザー報告が「スクロールすると昔の承認ポップアップが出る・Codex で頻発」だったため。マーカー経路（handleHubApprovalMarker）は検出層を通らないので、buf 行が出れば「マーカーを使わない provider の検出フォールバックが動いた」ことが確定する。検出層は再走査が結果を実際に書き換えたとき（replace / fill1）だけ記録し、書き換えなし（keep）は捨てる。スクロール層は連続発火を 1.2 秒以内なら 1 行へ畳んで件数を数える。追加の記録内容は選択肢ラベル（既存と同じ先頭24文字・最大3件）・バッファ末尾の行数・カーソル有無・フォールバックのゲート理由（visible/liveopts/hint）・viewportY/baseY で、いずれも利用者のテキスト本文ではない。呼び元は isApprovalDebugEnabled() で先に判定し、クエリ無しでは観測用の配列コピーすら作らない / 2026-08-20 に常設プローブ経由へ移送した（plan_instrumentation-probe-lifecycle）。記録点は probe / probeScope の呼び出し 1 行だけになり、置き換えが起きたか（replace / fill1 / keep）の判定と keep の切り捨ては sink 側へ移した。この判定のため前後比較用の afterOptions を 1 項目だけ増やしている（他の記録内容は移送前と同じ）。ファイルは web/src/debug/ へ移り、既定ビルドでは entry から外れて成果物に入らない",
+      "channels": [
+        "approval.data",
+        "approval.draw",
+        "approval.buf",
+        "approval.scroll"
+      ]
     }
   ]
 }
