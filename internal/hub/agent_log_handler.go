@@ -30,6 +30,7 @@ type agentLogSession struct {
 	HomeDir        string
 	CodexHome      string
 	ClaudeDir      string
+	GrokHome       string
 	AgentSessionID string
 	NativeLogPath  string
 }
@@ -86,7 +87,7 @@ func (s *Server) agentLogForSession(id int) agentLogLocation {
 	}
 	snap := agentLogSession{
 		Provider: ses.Provider, CWD: ses.CWD, StartedAt: ses.StartedAt,
-		HomeDir: ses.HomeDir, CodexHome: ses.CodexHome, ClaudeDir: ses.ClaudeDir,
+		HomeDir: ses.HomeDir, CodexHome: ses.CodexHome, ClaudeDir: ses.ClaudeDir, GrokHome: ses.GrokHome,
 		AgentSessionID: ses.AgentSessionID, NativeLogPath: ses.NativeLogPath,
 	}
 	s.sessionsMu.Unlock()
@@ -133,14 +134,15 @@ func (s *Server) agentLogForSession(id int) agentLogLocation {
 		}
 		return agentLogLocation{Reason: "Codex rollout log is available after the first completed turn"}
 	case "grok":
-		if snap.HomeDir == "" || snap.CWD == "" {
+		root := grokHomeDir(snap.GrokHome, snap.HomeDir)
+		if root == "" || snap.CWD == "" {
 			return agentLogLocation{Reason: "Grok session directory is unavailable"}
 		}
 		startedAt, err := time.Parse(time.RFC3339, snap.StartedAt)
 		if err != nil {
 			return agentLogLocation{Reason: "Grok session start time is unavailable"}
 		}
-		path, ok := findGrokChatHistory(filepath.Join(snap.HomeDir, ".grok"), snap.CWD, startedAt)
+		path, ok := findGrokChatHistory(root, snap.CWD, startedAt)
 		if ok {
 			return agentLogLocation{Available: true, Path: path, Label: "Grok Build chat history"}
 		}

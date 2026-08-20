@@ -599,6 +599,37 @@ func (w *ptyOutputWriter) finish() {
 	<-w.done
 }
 
+const loginCompleteScanLimit = 8192
+
+// watchLoginComplete closes the vendor login process once its PTY output
+// shows that sign-in finished. Some official CLIs (observed: grok login)
+// print success and stay in standby instead of exiting.
+func watchLoginComplete(loginMode bool, closer io.Closer) func([]byte) {
+	if !loginMode || closer == nil {
+		return func([]byte) {}
+	}
+	var (
+		mu   sync.Mutex
+		buf  []byte
+		done atomic.Bool
+	)
+	return func(chunk []byte) {
+		if done.Load() || len(chunk) == 0 {
+			return
+		}
+		mu.Lock()
+		buf = append(buf, chunk...)
+		if len(buf) > loginCompleteScanLimit {
+			buf = append([]byte(nil), buf[len(buf)-loginCompleteScanLimit:]...)
+		}
+		finished := subscription.LoginFinished(string(buf))
+		mu.Unlock()
+		if finished && done.CompareAndSwap(false, true) {
+			time.AfterFunc(processCloseGrace, func() { _ = closer.Close() })
+		}
+	}
+}
+
 // ptyPump は PTY 出力を読み出し、enqueue へ渡し続ける。
 // ストリーム終端まで読み切ったら closeDone を呼んで done を閉じる。
 // 戻り値は ps.Wait() で使う waitErr。
@@ -754,6 +785,35 @@ func trailingEnterDelay(provider string) time.Duration {
 	}
 }
 
+func nativePermissionModeArgs(permissionMode string) []string {
+	if permissionMode != "" && permissionMode != "default" {
+		return []string{"--permission-mode", permissionMode}
+	}
+	return nil
+}
+
+func copilotPermissionArgs(permissionMode string) []string {
+	switch permissionMode {
+	case "bypassPermissions":
+		return []string{"--allow-all"}
+	case "auto":
+		return []string{"--autopilot"}
+	default:
+		return nil
+	}
+}
+
+func cursorAgentPermissionArgs(permissionMode string) []string {
+	switch permissionMode {
+	case "bypassPermissions":
+		return []string{"--force"}
+	case "auto":
+		return []string{"--auto-review"}
+	default:
+		return nil
+	}
+}
+
 func openCodePermissionArgs(permissionMode string) []string {
 	if permissionMode == "bypassPermissions" {
 		return []string{"--auto"}
@@ -765,7 +825,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	fs := flag.NewFlagSet("wrap", flag.ContinueOnError)
 	label := fs.String("label", "", "session label shown in UI card")
 	model := fs.String("model", "", "model override")
-	permissionMode := fs.String("permission-mode", "", "permission mode (claude/grok: passed through; copilot/cursor-agent/opencode: bypassPermissions maps to each CLI's full-allow option)")
+	permissionMode := fs.String("permission-mode", "", "permission mode (claude/grok: passed through; copilot auto→--autopilot bypass→--allow-all; cursor-agent auto→--auto-review bypass→--force; opencode bypass→--auto)")
 	sandbox := fs.String("sandbox", "", "codex sandbox mode")
 	askForApproval := fs.String("ask-for-approval", "", "codex ask-for-approval")
 	codexOSS := fs.Bool("codex-oss", false, "codex: use --oss to route via local Ollama daemon")
@@ -796,10 +856,8 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		}
 		switch provider {
 		case "claude", "grok":
-			// grok CLI は claude 互換の --permission-mode（bypassPermissions 含む）をネイティブサポートする
-			if *permissionMode != "" && *permissionMode != "default" {
-				extra = append(extra, "--permission-mode", *permissionMode)
-			}
+			// grok CLI は claude 互換の --permission-mode（auto / bypassPermissions 含む）をネイティブサポートする
+			extra = append(extra, nativePermissionModeArgs(*permissionMode)...)
 		case "codex":
 			if *codexOSS {
 				extra = append(extra, "--oss")
@@ -811,15 +869,11 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 				extra = append(extra, "--ask-for-approval", *askForApproval)
 			}
 		case "copilot":
-			// --allow-all = --allow-all-tools --allow-all-paths --allow-all-urls の一括指定
-			if *permissionMode == "bypassPermissions" {
-				extra = append(extra, "--allow-all")
-			}
+			// auto → --autopilot。bypassPermissions → --allow-all（--yolo 相当）
+			extra = append(extra, copilotPermissionArgs(*permissionMode)...)
 		case "cursor-agent":
-			// --force: Force allow commands unless explicitly denied
-			if *permissionMode == "bypassPermissions" {
-				extra = append(extra, "--force")
-			}
+			// auto → --auto-review（Smart Auto）。bypassPermissions → --force（--yolo 相当）
+			extra = append(extra, cursorAgentPermissionArgs(*permissionMode)...)
 		case "opencode":
 			// --auto: auto-approve permissions that are not explicitly denied
 			extra = append(extra, openCodePermissionArgs(*permissionMode)...)
@@ -1273,7 +1327,11 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// carry holds an incomplete UTF-8 sequence from the previous read that must
 	// be prepended to the next chunk before decoding (pumpChunk handles this).
 	rawMaxBytes := int64(cfg.Log.SessionMaxSizeMB) * 1024 * 1024
-	ptyPump(ps, lf, rawMaxBytes, outputWriter.enqueue, outputWriter.finish, appendReplay, closeDone)
+	onLoginOutput := watchLoginComplete(loginMode, ps)
+	ptyPump(ps, lf, rawMaxBytes, func(chunk []byte) {
+		outputWriter.enqueue(chunk)
+		onLoginOutput(chunk)
+	}, outputWriter.finish, appendReplay, closeDone)
 
 	waitErr := ps.Wait()
 	state, code, signal := classifyExit(waitErr)
@@ -1324,26 +1382,28 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, a
 	if err != nil {
 		return nil, proto.Message{}, err
 	}
-	homeDir, codexHome, claudeDir := userSkillDirs()
+	homeDir, codexHome, claudeDir, grokHome := userSkillDirs()
 	if err := websocket.JSON.Send(conn, proto.Message{
-		Type:           "register",
-		Role:           "wrapper",
-		Provider:       provider,
-		Display:        display,
-		CWD:            cwd,
-		Label:          label,
-		Model:          model,
-		PID:            os.Getpid(),
-		Shell:          DetectShell(),
-		Token:          cfg.Token,
-		HomeDir:        homeDir,
-		CodexHome:      codexHome,
-		ClaudeDir:      claudeDir,
-		AgentSessionID: agentSessionID,
-		SubscriptionID: activeSubscriptionID(),
-		UsageProbe:     os.Getenv("MANY_AI_CLI_USAGE_PROBE") == "1",
-		Cols:           termCols,
-		Rows:           termRows,
+		Type:              "register",
+		Role:              "wrapper",
+		Provider:          provider,
+		Display:           display,
+		CWD:               cwd,
+		Label:             label,
+		Model:             model,
+		PID:               os.Getpid(),
+		Shell:             DetectShell(),
+		Token:             cfg.Token,
+		HomeDir:           homeDir,
+		CodexHome:         codexHome,
+		ClaudeDir:         claudeDir,
+		GrokHome:          grokHome,
+		AgentSessionID:    agentSessionID,
+		SubscriptionID:    activeSubscriptionID(),
+		UsageProbe:        os.Getenv("MANY_AI_CLI_USAGE_PROBE") == "1",
+		SubscriptionLogin: os.Getenv("MANY_AI_CLI_SUBSCRIPTION_LOGIN") == "1",
+		Cols:              termCols,
+		Rows:              termRows,
 	}); err != nil {
 		_ = conn.Close()
 		return nil, proto.Message{}, err
@@ -1370,32 +1430,34 @@ func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, 
 	if err != nil {
 		return nil, 0, err
 	}
-	homeDir, codexHome, claudeDir := userSkillDirs()
+	homeDir, codexHome, claudeDir, grokHome := userSkillDirs()
 	if err := websocket.JSON.Send(conn, proto.Message{
-		Type:           "reattach",
-		Role:           "wrapper",
-		SessionID:      sessionID,
-		Provider:       provider,
-		Display:        display,
-		CWD:            cwd,
-		Label:          label,
-		Model:          model,
-		PID:            os.Getpid(),
-		Shell:          DetectShell(),
-		Token:          cfg.Token,
-		HomeDir:        homeDir,
-		CodexHome:      codexHome,
-		ClaudeDir:      claudeDir,
-		AgentSessionID: agentSessionID,
-		SubscriptionID: activeSubscriptionID(),
-		UsageProbe:     os.Getenv("MANY_AI_CLI_USAGE_PROBE") == "1",
-		Cols:           termCols,
-		Rows:           termRows,
-		StartedAt:      startedAt,
-		LogPath:        rawLogPath,
-		JSONLPath:      jsonlPath,
-		ReplayB64:      base64.StdEncoding.EncodeToString(replay),
-		PTYBytes:       ptyBytes,
+		Type:              "reattach",
+		Role:              "wrapper",
+		SessionID:         sessionID,
+		Provider:          provider,
+		Display:           display,
+		CWD:               cwd,
+		Label:             label,
+		Model:             model,
+		PID:               os.Getpid(),
+		Shell:             DetectShell(),
+		Token:             cfg.Token,
+		HomeDir:           homeDir,
+		CodexHome:         codexHome,
+		ClaudeDir:         claudeDir,
+		GrokHome:          grokHome,
+		AgentSessionID:    agentSessionID,
+		SubscriptionID:    activeSubscriptionID(),
+		UsageProbe:        os.Getenv("MANY_AI_CLI_USAGE_PROBE") == "1",
+		SubscriptionLogin: os.Getenv("MANY_AI_CLI_SUBSCRIPTION_LOGIN") == "1",
+		Cols:              termCols,
+		Rows:              termRows,
+		StartedAt:         startedAt,
+		LogPath:           rawLogPath,
+		JSONLPath:         jsonlPath,
+		ReplayB64:         base64.StdEncoding.EncodeToString(replay),
+		PTYBytes:          ptyBytes,
 	}); err != nil {
 		_ = conn.Close()
 		return nil, 0, err
@@ -1416,9 +1478,9 @@ func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, 
 	return conn, resp.SessionID, nil
 }
 
-func userSkillDirs() (homeDir, codexHome, claudeDir string) {
+func userSkillDirs() (homeDir, codexHome, claudeDir, grokHome string) {
 	homeDir, _ = os.UserHomeDir()
-	return homeDir, os.Getenv("CODEX_HOME"), os.Getenv("CLAUDE_CONFIG_DIR")
+	return homeDir, os.Getenv("CODEX_HOME"), os.Getenv("CLAUDE_CONFIG_DIR"), os.Getenv(subscription.GrokHomeEnv)
 }
 
 // activeSubscriptionID returns the subscription profile id the Hub selected for

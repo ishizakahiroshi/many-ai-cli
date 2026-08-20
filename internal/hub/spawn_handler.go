@@ -123,6 +123,13 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 		}
 		wrapArgs = appendOpenCodePermissionArgs(wrapArgs, spec.PermissionMode)
 	default:
+		if spec.Provider != "shell" {
+			// grok / copilot / cursor-agent の全許可は Claude / OpenCode と同じく確認必須。
+			risk := evaluateBypassPermissionRisk(spec.PermissionMode)
+			if spawnNeedsRiskConfirmation(spec, risk.HighRisk) {
+				return 0, fmt.Errorf("risk confirmation required")
+			}
+		}
 		if resolvedModel != "" {
 			wrapArgs = append(wrapArgs, "--model", resolvedModel)
 		}
@@ -174,6 +181,11 @@ func (s *Server) startWrapProcess(spec spawnWrappedSpec, wrapArgs, subEnv []stri
 		probeValue = "1"
 	}
 	cmd.Env = mergeEnvOverrides(cmd.Env, []string{"MANY_AI_CLI_USAGE_PROBE=" + probeValue})
+	loginValue := "0"
+	if spec.SubscriptionLogin {
+		loginValue = "1"
+	}
+	cmd.Env = mergeEnvOverrides(cmd.Env, []string{"MANY_AI_CLI_SUBSCRIPTION_LOGIN=" + loginValue})
 	if s.parentShell != "" {
 		cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}
@@ -239,10 +251,6 @@ func terminateUnregisteredWrap(cmd *exec.Cmd) {
 		return
 	}
 	_ = cmd.Process.Kill()
-}
-
-func (s *Server) waitForSessionByLabel(label string, timeout time.Duration) (int, error) {
-	return s.waitForSessionByLabelContext(context.Background(), label, timeout)
 }
 
 func (s *Server) waitForSessionByLabelContext(ctx context.Context, label string, timeout time.Duration) (int, error) {

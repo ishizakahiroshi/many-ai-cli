@@ -47,6 +47,7 @@ func (s *Server) handleAgentChat(w http.ResponseWriter, r *http.Request) {
 		HomeDir:        ses.HomeDir,
 		CodexHome:      ses.CodexHome,
 		ClaudeDir:      ses.ClaudeDir,
+		GrokHome:       ses.GrokHome,
 		AgentSessionID: ses.AgentSessionID,
 		NativeLogPath:  ses.NativeLogPath,
 	}
@@ -391,6 +392,7 @@ func (s *Server) agentChatSnapshot(id int) agentLogSession {
 			HomeDir:        ses.HomeDir,
 			CodexHome:      ses.CodexHome,
 			ClaudeDir:      ses.ClaudeDir,
+			GrokHome:       ses.GrokHome,
 			AgentSessionID: ses.AgentSessionID,
 			NativeLogPath:  ses.NativeLogPath,
 		}

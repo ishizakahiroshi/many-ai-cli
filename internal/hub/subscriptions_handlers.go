@@ -367,11 +367,14 @@ func (s *Server) handleSubscriptionLogin(w http.ResponseWriter, r *http.Request)
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "subscription id is required")
 		return
 	}
-	cwd := strings.TrimSpace(body.CWD)
-	if cwd == "" {
-		cwd = s.hubCWD
-	} else if info, statErr := os.Stat(cwd); statErr != nil || !info.IsDir() {
-		writeJSONError(w, http.StatusBadRequest, "bad_request", "cwd does not exist or is not a directory")
+	// Login must not inherit Hub's process cwd. That is often the directory
+	// that holds the running exe (repo-root `dist/` on this project), and the
+	// session list then shows a leftover project group named after it.
+	// The client may still send cwd; it is ignored on purpose.
+	_ = body.CWD
+	cwd, cwdErr := ensureSubscriptionLoginRoot(dir)
+	if cwdErr != nil {
+		writeJSONError(w, http.StatusInternalServerError, "login_cwd", errorDetail("login workspace error", cwdErr))
 		return
 	}
 	label := fmt.Sprintf("login-%s-%s", provider, resolved.ID)

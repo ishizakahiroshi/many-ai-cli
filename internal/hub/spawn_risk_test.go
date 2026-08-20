@@ -58,3 +58,25 @@ func TestEvaluateOpenCodeRisk(t *testing.T) {
 		t.Fatal("bypassPermissions should be high risk")
 	}
 }
+
+func TestEvaluateBypassPermissionRisk(t *testing.T) {
+	cases := []struct {
+		name           string
+		permissionMode string
+		wantHighRisk   bool
+	}{
+		{name: "empty", permissionMode: "", wantHighRisk: false},
+		{name: "default", permissionMode: "default", wantHighRisk: false},
+		{name: "auto is not full allow", permissionMode: "auto", wantHighRisk: false},
+		{name: "plan is not full allow", permissionMode: "plan", wantHighRisk: false},
+		{name: "bypass is high risk", permissionMode: "bypassPermissions", wantHighRisk: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := evaluateBypassPermissionRisk(tc.permissionMode)
+			if got.HighRisk != tc.wantHighRisk {
+				t.Fatalf("HighRisk = %v, want %v", got.HighRisk, tc.wantHighRisk)
+			}
+		})
+	}
+}

@@ -11,6 +11,20 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Spawn can start Grok, Copilot, and Cursor Agent in auto or YOLO mode.**
+  The new-session form already had Claude's permission dropdown, Codex's
+  sandbox/approval pair, and OpenCode's full-allow checkbox. Grok, Copilot,
+  and Cursor Agent launched in each CLI's default ask mode even though the
+  wrapper already knew how to pass a bypass flag. The same approval-mode
+  select now appears for those three: **auto** maps to Grok
+  `--permission-mode auto`, Copilot `--autopilot`, and Cursor
+  `--auto-review`; **full access** maps to Grok `bypassPermissions`
+  (always-approve / `--yolo`), Copilot `--allow-all`, and Cursor `--force`.
+  Plan and acceptEdits stay Claude/Grok-only, because Copilot and Cursor do
+  not have those permission modes. Full access still asks for confirmation
+  before launch (`web/src/app/spawn-panel.ts`, `internal/wrapper/wrapper.go`,
+  `internal/hub/spawn_handler.go`).
+
 - **More than one subscription per AI CLI, chosen per session.** The official
   CLIs each remember a single login, so holding two Claude plans or separate
   work and personal ChatGPT accounts meant signing in and out by hand. Settings
@@ -71,6 +85,19 @@ Release artifacts are published at
   a second launch opens the Hub and exits rather than adding a duplicate icon.
   `uninstall` removes the sign-in entry (`internal/tray/`,
   `internal/setupcmd/setup_windows.go`, `internal/uninstall/`).
+
+### Fixed
+- **Signing into a subscription no longer leaves a leftover `dist` session
+  group.** The login button started the vendor CLI (`grok login`,
+  `claude auth login`, …) in Hub's process working directory. When Hub itself
+  was launched from the build-output folder that holds `many-ai-cli.exe`, that
+  directory is named `dist`, so the session list grew a project group of that
+  name. After "Signed in", `grok login` stayed in standby and the card stayed
+  forever — dead-session auto-dismiss is 24 hours, and login was never marked
+  as the short-lived session the changelog already described. Login now runs
+  in `~/.many-ai-cli/subscription-login` and the Hub closes the session once
+  the vendor CLI finishes or prints a sign-in success line
+  (`internal/hub/subscription_login.go`, `internal/subscription/login_complete.go`).
 
 ## [0.7.0] - 2026-08-15
 

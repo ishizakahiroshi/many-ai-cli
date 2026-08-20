@@ -23,6 +23,10 @@ func evaluateClaudeRisk(currentModel, nextModel, permissionMode string) riskSumm
 	}
 }
 
-func evaluateOpenCodeRisk(permissionMode string) riskSummary {
+func evaluateBypassPermissionRisk(permissionMode string) riskSummary {
 	return riskSummary{HighRisk: permissionMode == "bypassPermissions"}
+}
+
+func evaluateOpenCodeRisk(permissionMode string) riskSummary {
+	return evaluateBypassPermissionRisk(permissionMode)
 }
