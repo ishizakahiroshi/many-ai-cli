@@ -11,6 +11,46 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Six AI CLIs in one Hub, and extra subscriptions where the official CLI
+  lets you stack them.** The dashboard already ran Claude Code, Codex CLI,
+  GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI, and opencode side by
+  side. What it could not do was point two sessions of the *same* CLI at two
+  different monthly plans you already pay for: each official CLI remembers one
+  default login. Settings → **Subscriptions** registers several accounts per
+  provider, and the spawn form gains a **Subscription** selector once a
+  provider has two or more, so two sessions can run on two accounts at the
+  same time. This is not an API key router: it spreads sessions across plans
+  you already pay for.
+
+  Stacking extra plans works for Claude Code (`CLAUDE_CONFIG_DIR`), Codex
+  (`CODEX_HOME`), Grok (`GROK_HOME`), and opencode (`XDG_DATA_HOME`). GitHub
+  Copilot CLI and Cursor Agent CLI stay on a single login and are recorded as
+  **unsupported**: Copilot keeps its token in the OS credential store and
+  Cursor in `~/.cursor/cli-config.json`, and neither is relocatable by an
+  environment variable, so two sessions would silently share one account.
+  Registering a profile for them is refused rather than half-working.
+
+  Each profile is a directory under `~/.many-ai-cli/subscriptions/<provider>/<id>`
+  that the official CLI is pointed at through its own environment variable.
+  Login runs the vendor's own command (`claude auth login`, `codex login`, …)
+  inside a short-lived session; **many-ai-cli never reads, writes, parses, or
+  stores the credential**, and `config.yaml` holds only the id, display name,
+  plan label, and enabled flag. `auto` picks an enabled profile in turn and
+  records the profile that was actually chosen.
+
+  The **Usage** menu is the breakdown of that stack, not a separate product.
+  Opening it shows remaining quota per profile for Claude (5h / 7d; a
+  one-turn probe on demand when nothing is running), Codex (from the local
+  rollout JSONL), and Grok (from the local billing log). Copilot, Cursor, and
+  OpenCode stay as links to the vendor page — there is no remaining figure to
+  read. Numbers are fetched when you open the menu, not on a timer.
+
+  Nothing changes for anyone who does not open the new Settings section:
+  a spawn without a profile builds a byte-for-byte identical environment
+  (`internal/subscription/`, `internal/hub/subscription*.go`,
+  `internal/hub/subscription_usage.go`, `internal/config/subscription.go`,
+  `web/src/app/subscriptions.ts`, `web/src/app/usage-panel.ts`).
+
 - **Spawn can start Grok, Copilot, and Cursor Agent in auto or YOLO mode.**
   The new-session form already had Claude's permission dropdown, Codex's
   sandbox/approval pair, and OpenCode's full-allow checkbox. Grok, Copilot,
@@ -24,34 +64,6 @@ Release artifacts are published at
   not have those permission modes. Full access still asks for confirmation
   before launch (`web/src/app/spawn-panel.ts`, `internal/wrapper/wrapper.go`,
   `internal/hub/spawn_handler.go`).
-
-- **More than one subscription per AI CLI, chosen per session.** The official
-  CLIs each remember a single login, so holding two Claude plans or separate
-  work and personal ChatGPT accounts meant signing in and out by hand. Settings
-  → **Subscriptions** now registers several accounts per provider and the spawn
-  form gains a **Subscription** selector once a provider has two or more, so two
-  sessions can run on two accounts at the same time. This is not an API key
-  router: it spreads sessions across monthly plans you already pay for.
-
-  Each profile is a directory under `~/.many-ai-cli/subscriptions/<provider>/<id>`
-  that the official CLI is pointed at through its own environment variable —
-  `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GROK_HOME`, and `XDG_DATA_HOME` for
-  opencode. Login runs the vendor's own command (`claude auth login`,
-  `codex login`, …) inside a short-lived session; **many-ai-cli never reads,
-  writes, parses, or stores the credential**, and `config.yaml` holds only the
-  id, display name, plan label, and enabled flag. `auto` picks an enabled
-  profile in turn and records the profile that was actually chosen.
-
-  GitHub Copilot CLI and Cursor Agent CLI are recorded as **unsupported**:
-  Copilot keeps its token in the OS credential store and Cursor in
-  `~/.cursor/cli-config.json`, and neither is relocatable by an environment
-  variable, so two sessions would silently share one account. Registering a
-  profile for them is refused rather than half-working.
-
-  Nothing changes for anyone who does not open the new Settings section:
-  a spawn without a profile builds a byte-for-byte identical environment
-  (`internal/subscription/`, `internal/hub/subscription*.go`,
-  `internal/config/subscription.go`, `web/src/app/subscriptions.ts`).
 
 - **A long-running session now tells you how long, and whether it is actually
   stuck.** Until now a session showed one fixed "Long-running" badge after five
@@ -72,10 +84,17 @@ Release artifacts are published at
   `web/src/app/longproc.ts`).
 
 ### Changed
+- **The Windows shortcut created by `setup` is now named "MANY-AI-CLI".**
+  0.7.0 wrote `Many AI Hub.lnk` on the desktop. The same tray launcher is
+  now `MANY-AI-CLI.lnk` on the desktop and in the Startup folder. Re-running
+  `setup` removes the old name so the two do not sit side by side.
+  `uninstall` still deletes the old name if it is left behind
+  (`internal/setupcmd/setup_windows.go`, `internal/uninstall/uninstall_windows.go`).
+
 - **The Windows tray now actually stays resident, and wears the app's own icon.**
   As shipped in 0.7.0 the tray only appeared if you re-ran `setup` and then
   double-clicked the desktop shortcut again after every sign-in, which is not
-  what "resident" means. `setup` now also writes the same **"Many AI Hub"**
+  what "resident" means. `setup` now also writes the same **"MANY-AI-CLI"**
   shortcut into your Startup folder — the Startup folder rather than a registry
   `Run` key, so you can find and switch it off from Explorer or Task Manager.
   The icon in the notification area is the many-ai-cli icon loaded from the

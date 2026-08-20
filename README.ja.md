@@ -6,7 +6,7 @@
 
 ![many-ai-cli ダッシュボード](assets/readme-dashboard.png)
 
-**AI コーディング CLI が止まった瞬間を見逃さない — スマホからでも。** `Claude Code` / `Codex CLI` / `GitHub Copilot CLI` / `Cursor Agent CLI` / `Grok Build CLI` を並列実行できる Web ダッシュボードです。`many-ai-cli` は各 CLI を PTY でラップし、承認待ち・タスク完了・エラーで人の手が要るようになった瞬間にデスクトップ／スマホへ通知します。ターミナルを見張り続ける必要はありません。あわせて、複数セッションの承認・監視・ターミナルを 1 画面の Web ダッシュボードで操作できます。
+**6 つの AI コーディング CLI を 1 画面に。契約を増やせるものは増やす。** `Claude Code` / `Codex CLI` / `GitHub Copilot CLI` / `Cursor Agent CLI` / `Grok Build CLI` / `opencode` を並列実行できます。`many-ai-cli` は各 CLI を PTY でラップし、承認待ち・タスク完了・エラーで止まった瞬間をデスクトップ／スマホへ知らせます。積んだ契約の残量は、同じ Usage メニューに出ます。
 
 [English README](README.md) · [README tiếng Việt](README.vi.md)
 
@@ -40,7 +40,7 @@ Terminal pane #1              Terminal pane #2
             └──────────────────┘
 ```
 
-各ペインでは対応プロバイダーのいずれか（`claude` / `codex` / `copilot` / `cursor-agent` / `grok`）を実行できます。図では例として2つを示しています。
+各ペインでは対応プロバイダーのいずれか（`claude` / `codex` / `copilot` / `cursor-agent` / `grok` / `opencode`）を実行できます。図では例として2つを示しています。
 
 ---
 
@@ -65,7 +65,7 @@ Gemini CLI は意図的に対象外です。
 
 ## 主な機能
 
-- **承認パネル統合**: Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / Grok Build CLI の承認待ちをブラウザ上のアクションバーで処理
+- **承認パネル統合**: Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / Grok Build CLI / opencode の承認待ちをブラウザ上のアクションバーで処理
 - **複数質問の一括承認**: 1つの承認ブロック内の番号付き質問を選択し、まとめて PTY へ送信
 - **リアルタイム PTY 表示**: xterm.js + WebSocket で CLI 出力を表示
 - **チャット / 分割表示**: 会話ログを吹き出し形式で読み、検索・フィルタし、ライブターミナルと並べて表示
@@ -101,13 +101,15 @@ Gemini CLI は意図的に対象外です。
 - **言語切替**（英語 / 日本語 / ベトナム語）
 - **ローカル限定**: Hub は `127.0.0.1` のみに bind。`many-ai-cli` 自身はテレメトリを送信しません
 - **リモートアクセス保護**: 設定の「リモートアクセス保護」から、token と認証 cookie を一括再生成する**全アクセス失効**（紛失時のキルスイッチ）、非 loopback アクセス時のみ要求する**任意 PIN**（既定 OFF・ロックアウト付き）、**新規デバイス接続の通知**が使えます
-- **1 つの CLI に複数のサブスクリプション**: 同じ AI CLI のログインを複数保持し、セッションごとに使う契約を選べます（下記参照）
+- **1 つの CLI に複数のサブスクリプション**: 6 つの CLI を 1 つの Hub に。Claude / Codex / Grok / opencode は契約を足して同時に使えます。Usage メニューには Claude / Codex / Grok のプロファイル別残量が出ます（下記参照）
 
 ## 1 つの CLI に複数のサブスクリプション
 
-Claude の契約を 2 つ持っている、あるいは ChatGPT を仕事用と個人用で分けている——公式 CLI はどれも「今ログインしているのは 1 つ」しか覚えません。設定の**サブスクリプション**欄で複数を登録しておくと、セッション単位でどの契約を使うか選べるようになり、2 つのセッションを別々のアカウントで同時に走らせられます。
+6 つの AI コーディング CLI が 1 つのダッシュボードを共有します。そのうち 4 つ — Claude Code / Codex CLI / Grok Build CLI / opencode — は、同じ CLI の契約を複数付けて、セッションごとに使い分けられます。Copilot と Cursor はログイン 1 つのままです（認証の置き場が環境変数で移りません）。公式 CLI の「既定の記憶」は今も 1 ログインで、Hub がセッションごとに設定ディレクトリを指します。
 
 **これは API キーのルーターではありません。** 従量課金の API キーを束ねて安く回すためのものではなく、既に払っている月額契約の枠へ、既に走らせているセッションを割り振るための機能です。
+
+**残量**はその掛け算の内訳であって、単独の機能ではありません。Usage メニューにプロファイルが並び、Claude（5h / 7d）/ Codex / Grok は数字が出ます。Copilot / Cursor / OpenCode はベンダーページへのリンクのままです。数字はメニューを開いたときに読み、定期ポーリングはしません。Claude は走行中の報告が無いとき、1 ターンの probe で取りにいきます。
 
 **仕組み**: 対応 CLI はどれも、設定ディレクトリを環境変数で選びます。`many-ai-cli` は profile ごとに `~/.many-ai-cli/subscriptions/<provider>/<id>` を作り、セッション起動時にその変数を渡すだけです。ログインは公式 CLI が行い、認証情報はそのディレクトリの中で公式 CLI が持ちます。`many-ai-cli` は token を読みも書きも解析も保存もしません。`config.yaml` に入るのは profile の ID・表示名・プラン名・有効フラグだけです。
 
@@ -295,13 +297,13 @@ sha256sum -c SHA256SUMS.txt
    many-ai-cli setup
    ```
 
-   **Windows** ではデスクトップに **「Many AI Hub」** のショートカットが 1 個作成されます（トレイ常駐を起動します）。macOS / Linux では従来どおり **「Many AI Hub Start」「Many AI Hub Stop」** の 2 個です（`.command` / `.desktop`）。
+   **Windows** ではデスクトップに **「MANY-AI-CLI」** のショートカットが 1 個作成されます（トレイ常駐を起動します）。macOS / Linux では従来どおり **「Many AI Hub Start」「Many AI Hub Stop」** の 2 個です（`.command` / `.desktop`）。
 2. 以後はデスクトップのショートカットを**ダブルクリック**するだけです。Windows はタスクトレイにアイコンが出るので、クリックして **「Hub を開く」** を選ぶと、止まっていれば起動してからブラウザで開きます（`http://127.0.0.1:47777/?token=<token>`）。macOS / Linux は「Many AI Hub Start」で黒いコンソールウィンドウと一緒にブラウザが開きます。
 3. ブラウザの Hub UI 左下の **「+ 新しいセッション」** をクリックし、使う AI CLI（claude / codex / copilot / cursor-agent / opencode / grok）のセッションを起動します。承認待ちが発生すると入力欄の下にアクションバーが出るので、クリックまたはキーボードで操作します。
 
 止めるときは、トレイメニューの **「Hub を停止」**（Windows）、デスクトップの **「Many AI Hub Stop」**（macOS / Linux）、Hub UI 右上の `⏻` ボタン、または別ターミナルで `many-ai-cli stop` を使います。ターミナルから直接起動したい場合は従来どおり `many-ai-cli serve --open` も使えます。
 
-> **すでに旧バージョンを使っている場合**: `setup` をもう一度実行すると「Many AI Hub」が追加されますが、**既存の「Start」「Stop」の 2 個はそのまま残ります**（引き続き動きます）。トレイに移行して不要になったら手動で削除してください。`setup` が勝手に消すことはありません。
+> **すでに旧バージョンを使っている場合**: `setup` をもう一度実行すると「MANY-AI-CLI」が追加されますが、**既存の「Start」「Stop」の 2 個はそのまま残ります**（引き続き動きます）。トレイに移行して不要になったら手動で削除してください。`setup` が勝手に消すことはありません。旧名「Many AI Hub」は同じトレイ起動なので、`setup` が「MANY-AI-CLI」に置き換えます。
 
 > **⚠ コンソールウィンドウについて（macOS / Linux）**
 > 「Many AI Hub Start」を起動すると黒いコンソールウィンドウがブラウザと一緒に開きますが、**これが Hub サーバの実体プロセスです**。ウィンドウを `×` で閉じると Hub が終了します（邪魔な場合は閉じずに **最小化** してください）。Windows はトレイが Hub を切り離して起動するので、開いたままにしておくコンソールはありません。
