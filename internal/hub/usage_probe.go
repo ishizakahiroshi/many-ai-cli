@@ -25,7 +25,23 @@ const (
 	usageProbeTranscriptKeep = 3
 	usageProbeSpawnTimeout   = 20 * time.Second
 	usageProbeTimeout        = 60 * time.Second
+	usageProbeDialogQuiet    = 300 * time.Millisecond
+	usageProbeInputWait      = 10 * time.Second
+	usageProbeDialogPause    = 400 * time.Millisecond
 )
+
+// usageProbeConfirmNeedles matches Claude Code startup pickers after
+// collapseWhitespace + lowercasing. These are the dialogs that held the
+// 2026-08-20 probe until the 60s deadline: folder trust, then external
+// CLAUDE.md imports. Keep this list exact; a generic "enter to confirm"
+// would also match tool-approval prompts.
+var usageProbeConfirmNeedles = []string{
+	"itrustthisfolder",
+	"isthisaprojectyoucreated",
+	"allowexternalclaude.md",
+	"allowexternalimports",
+	"disableexternalimports",
+}
 
 // usageProbeRecord is deliberately limited to recovery metadata. It contains
 // no credentials, prompt text, account identity, or provider output.
@@ -384,12 +400,71 @@ func hasClaudeRateLimit(stat *usageStat) bool {
 	return stat != nil && (stat.RateLimit5hReset > 0 || stat.RateLimit7dReset > 0)
 }
 
-func (s *Server) waitForUsageProbeResult(ctx context.Context, sessionID int) error {
+func usageProbeConfirmDialog(screen string) bool {
+	compact := strings.ToLower(collapseWhitespace(screen))
+	if compact == "" {
+		return false
+	}
+	for _, needle := range usageProbeConfirmNeedles {
+		if strings.Contains(compact, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) usageProbeScreenIsConfirmDialog(sessionID int) bool {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[sessionID]
+	if ses == nil || ses.vt == nil {
+		return false
+	}
+	return usageProbeConfirmDialog(strings.Join(ses.vt.Lines(), ""))
+}
+
+// driveUsageProbeSession dismisses Claude Code startup confirmations with
+// Enter, then sends the one-turn "ok" prompt and waits for rate-limit
+// numbers. An "ok" that lands on a picker is consumed as confirm, so a later
+// dialog resets promptSent and "ok" is sent again on the real prompt.
+func (s *Server) driveUsageProbeSession(ctx context.Context, sessionID int) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	promptSent := false
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		if hasClaudeRateLimit(GetSessionUsageStat(sessionID)) {
 			return nil
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if !promptSent {
+			s.waitForInputReady(sessionID, usageProbeDialogQuiet, usageProbeInputWait)
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if hasClaudeRateLimit(GetSessionUsageStat(sessionID)) {
+				return nil
+			}
+		}
+		if s.usageProbeScreenIsConfirmDialog(sessionID) {
+			s.injectRaw(sessionID, "\r")
+			s.logger.Info("usage probe confirmed startup dialog", "session_id", sessionID)
+			promptSent = false
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(usageProbeDialogPause):
+			}
+			continue
+		}
+		if !promptSent {
+			s.injectText(sessionID, "ok", true, false)
+			promptSent = true
+			continue
 		}
 		select {
 		case <-ctx.Done():
@@ -438,14 +513,7 @@ func (s *Server) runUsageProbe(ctx context.Context, key, root string, resolved *
 			s.logger.Warn("usage probe transcript cleanup failed", "provider", "claude", "profile_id", resolved.ID, "err", cleanupErr)
 		}
 	}()
-	// The wrapper registers before the provider TUI is ready. Give the input
-	// path the same bounded quiet-period grace used by orchestration prompts.
-	s.waitForInputReady(sessionID, 300*time.Millisecond, 10*time.Second)
-	if err := probeCtx.Err(); err != nil {
-		return err
-	}
-	s.injectText(sessionID, "ok", true, false)
-	return s.waitForUsageProbeResult(probeCtx, sessionID)
+	return s.driveUsageProbeSession(probeCtx, sessionID)
 }
 
 // applyUsageProbeStates adds only the transient state needed by the UI. It is

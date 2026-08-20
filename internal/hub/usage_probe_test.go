@@ -89,3 +89,59 @@ func TestCleanupUsageProbeTranscriptsKeepsNewestAndProtectsOtherProjects(t *test
 		t.Fatalf("non-transcript file was removed: %v", err)
 	}
 }
+
+func TestUsageProbeConfirmDialogMatchesStartupPickers(t *testing.T) {
+	cases := []struct {
+		name   string
+		screen string
+		want   bool
+	}{
+		{
+			name: "folder trust",
+			screen: "Quick safety check\n" +
+				"Is this a project you created or one you trust?\n" +
+				"1. Yes, I trust this folder\n" +
+				"2. No, exit\n" +
+				"Enter to confirm",
+			want: true,
+		},
+		{
+			name: "external imports",
+			screen: "Allow external CLAUDE.md file imports?\n" +
+				"This project's CLAUDE.md imports files outside the current working directory.\n" +
+				"1. Yes, allow external imports\n" +
+				"2. No, disable external imports",
+			want: true,
+		},
+		{
+			name:   "ready prompt",
+			screen: "Try something like:\n> write a test\n",
+			want:   false,
+		},
+		{
+			name: "tool approval",
+			screen: "Bash command\nls\nDo you want to proceed?\n" +
+				"1. Yes\n2. No\nEnter to confirm",
+			want: false,
+		},
+		{name: "empty", screen: "", want: false},
+	}
+	for _, tc := range cases {
+		if got := usageProbeConfirmDialog(tc.screen); got != tc.want {
+			t.Fatalf("%s: got %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestUsageProbeScreenIsConfirmDialogReadsVT(t *testing.T) {
+	s := &Server{sessions: map[int]*session{}}
+	vt := newVTBuffer(80, 12)
+	vt.Write([]byte("Is this a project you created or one you trust?\r\nYes, I trust this folder\r\n"))
+	s.sessions[3] = &session{ID: 3, vt: vt}
+	if !s.usageProbeScreenIsConfirmDialog(3) {
+		t.Fatal("folder-trust screen was not detected")
+	}
+	if s.usageProbeScreenIsConfirmDialog(99) {
+		t.Fatal("missing session looked like a confirm dialog")
+	}
+}
