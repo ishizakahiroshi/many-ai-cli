@@ -26,13 +26,6 @@ func (s *Server) probe(channel string, args ...any) {
 	}
 }
 
-// 引数の組み立て自体が重い場合に使う（sink が無ければ build を呼ばない）。
-func (s *Server) probeLazy(channel string, build func() []any) {
-	if f := probeSinks[channel]; f != nil {
-		f(s, build()...)
-	}
-}
-
 // HTTP ルートも同じ仕組みで着脱する。handler は *Server のメソッドとして
 // 書かれるので、登録側は *Server を受けて HandlerFunc を返す形にする。
 var probeRoutes = map[string]func(*Server) http.HandlerFunc{}
