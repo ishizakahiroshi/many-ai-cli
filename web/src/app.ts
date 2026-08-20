@@ -25,6 +25,8 @@ import { mobileApprovalActiveBadgeCount } from './app/mobile-approval-sheet.js';
 import { clearMobileTerminalLiteSession } from './app/mobile-terminal-lite.js';
 import './app/orchestration-dashboard.js';
 import './app/prompt-templates.js';
+// 観測 sink の登録（既定ビルドでは空ファイルへ差し替えられる）。
+import './debug/index.js';
 import { setActiveTab } from './app/settings.js';
 
 export let _userAvatarUrl = '';

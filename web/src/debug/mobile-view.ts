@@ -1,13 +1,14 @@
-// debug-mobile-view.ts
+// mobile-view.ts
 // 一時観測: スマホ幅で mobile-terminal-lite のチャットが空のまま表示される症状の切り分け用。
-// URL に ?mtldebug=1 を付けて開いたときだけ動作し、既定では 1 バイトも送らない。
+// ゲートは 2 層。build 側（MAI_DEBUG=1 でなければ成果物に入らない）と runtime 側
+// （URL に ?mtldebug=1 を付けて開いたときだけ動作する）。既定では 1 バイトも送らない。
 // 送るのは行数・文字数・寸法・状態フラグだけで、ターミナル本文と入力テキストは含めない。
 // 原因が確定したら撤去する（instrumentation.json の mobile-lite-empty）。
 
-import { getMobileTranscriptMessages } from './mobile-transcript.js';
-import { activeSessionId, sessions, terminals } from './state.js';
-import { scanBuffer } from './terminal.js';
-import { apiFetch } from './util.js';
+import { getMobileTranscriptMessages } from '../app/mobile-transcript.js';
+import { activeSessionId, sessions, terminals } from '../app/state.js';
+import { scanBuffer } from '../app/terminal.js';
+import { apiFetch } from '../app/util.js';
 
 const SAMPLE_INTERVAL_MS = 5000;
 // 開いたまま放置しても増え続けないよう 5 分ぶんで自動停止する。

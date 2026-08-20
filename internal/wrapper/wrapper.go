@@ -822,6 +822,9 @@ func openCodePermissionArgs(permissionMode string) []string {
 }
 
 func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string) error {
+	// 記録点フックの sink をここで 1 度だけ組み込む（既定ビルドでは no-op）。
+	installProbes(logger, cfg)
+
 	fs := flag.NewFlagSet("wrap", flag.ContinueOnError)
 	label := fs.String("label", "", "session label shown in UI card")
 	model := fs.String("model", "", "model override")
@@ -1165,8 +1168,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 							// 二重に書くと確定 \r が 2 回入って後続プロンプトを誤承認するため、
 							// 書かずに ack だけ返して Hub の in-flight を解消する。
 							sendInputAck(m.InputSeq)
-							// 観測専用の一時コード（原因が確定したら撤去）。台帳 id=hub-input-deliver-trace
-							traceInputDeliver(logger, cfg.Log.SessionEnabled, "pty_write_dup", wses.getSID(),
+							probe("input.pty_write_dup", "session_id", wses.getSID(),
 								"input_seq", m.InputSeq, "bytes", len(m.Data))
 							break
 						}
@@ -1234,8 +1236,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 							wses.markInputSeqProcessed(m.InputSeq)
 							sendInputAck(m.InputSeq)
 						}
-						// 観測専用の一時コード（原因が確定したら撤去）。台帳 id=hub-input-deliver-trace
-						traceInputDeliver(logger, cfg.Log.SessionEnabled, "pty_write", wses.getSID(),
+						probe("input.pty_write", "session_id", wses.getSID(),
 							"input_seq", m.InputSeq, "bytes", len(m.Data), "err", writeErr != nil)
 					}
 				case "pty_resize":

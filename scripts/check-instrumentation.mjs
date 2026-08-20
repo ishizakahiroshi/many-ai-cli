@@ -8,6 +8,13 @@
 //   1. 台帳に無い観測コードが生えていないか（発見漏れを防ぐ）— files と sharedFiles を見る
 //   2. status=active の期限（due・YYYY-MM-DD）が切れていないか（放置を防ぐ）
 //   3. status=removed が本当に消えているか（台帳だけ直して実体が残るのを防ぐ）— files のみ見る
+//   4. web/src/debug/index.ts の登録と台帳の active が一致しているか（両方向）。
+//      import があるのに台帳に無い = 未登録の sink が動いている。台帳に active なのに
+//      import が無い = sink が登録されず、観測しているつもりで 1 件も記録されない。
+//      後者は静かに壊れるので機械で拾う。
+//   5. 台帳の files に載る .go が //go:build maidebug を持っているか。
+//      これがリリースへ混入しないことの一次担保（二次担保は check-artifact-clean.mjs）。
+//      第 1 パスと合わせて「観測 Go ファイル ⊆ maidebug タグ付き」が成り立つ。
 //
 // exit 0 = 問題なし / exit 1 = ブロック。
 
@@ -24,6 +31,8 @@ const FILE_PATTERNS = [
   /(^|\/)debug_[^/]+\.go$/,
   /(^|\/)[^/]*_trace\.go$/,
   /(^|\/)debug-[^/]+\.ts$/,
+  // 観測 sink の置き場。probe.ts / index.ts の恒久 2 本だけ EXCLUDE で除く。
+  /^web\/src\/debug\//,
 ];
 // 中身に出たら観測コードとみなす印。「消すつもりで書いた」ことを示す語だけを拾う。
 const CONTENT_MARKERS = [
@@ -42,7 +51,15 @@ const EXCLUDE = [
   /\.test\.ts$/,
   /^instrumentation\.json$/,
   /^scripts\/check-instrumentation\.mjs$/,
+  // 恒久の足場。観測コードではなく、記録点フックそのもの。
+  /^web\/src\/debug\/(?:probe|index)\.ts$/,
+  /^internal\/[^/]+\/probe_(?:debug|nodebug)\.go$/,
 ];
+
+// sink 登録の唯一の入口。第 4 パスがここの import と台帳を突き合わせる。
+const DEBUG_INDEX = 'web/src/debug/index.ts';
+const DEBUG_INDEX_IMPORT_RE = /^\s*import\s+'\.\/([\w.-]+)\.js';/gm;
+const MAIDEBUG_TAG_RE = /^\/\/go:build\s+maidebug\b/m;
 
 function trackedFiles() {
   const out = execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' });
@@ -150,6 +167,49 @@ function main() {
       const still = files.filter(f => (f.endsWith('.go') || f.endsWith('.ts')) && !EXCLUDE.some(re => re.test(f)))
         .filter(f => { try { return readFileSync(join(repoRoot, f), 'utf8').includes(`"${ep}"`); } catch { return false; } });
       if (still.length > 0) problems.push(`${e.id}: status=removed だが ${ep} が ${still.join(', ')} に残っている`);
+    }
+  }
+
+  // 4. index.ts の sink 登録と台帳の active が一致しているか（両方向）
+  const registered = new Set();
+  const indexPath = join(repoRoot, DEBUG_INDEX);
+  if (existsSync(indexPath)) {
+    const body = readFileSync(indexPath, 'utf8');
+    DEBUG_INDEX_IMPORT_RE.lastIndex = 0;
+    let m;
+    while ((m = DEBUG_INDEX_IMPORT_RE.exec(body)) !== null) {
+      registered.add(`web/src/debug/${m[1]}.ts`);
+    }
+  }
+  const activeDebugFiles = new Set();
+  for (const e of entries) {
+    if (e.status !== 'active') continue;
+    for (const f of e.files || []) {
+      if (f.startsWith('web/src/debug/')) activeDebugFiles.add(f);
+    }
+  }
+  for (const f of registered) {
+    if (!activeDebugFiles.has(f)) {
+      problems.push(`${DEBUG_INDEX}: ${f} を import しているが、台帳に status=active の登録が無い`);
+    }
+  }
+  for (const f of activeDebugFiles) {
+    if (!registered.has(f)) {
+      problems.push(`${f}: 台帳では active だが ${DEBUG_INDEX} が import していない（sink が登録されず 1 件も記録されない）`);
+    }
+  }
+
+  // 5. 台帳の files に載る .go が maidebug タグを持っているか
+  //    リリース成果物へ混入しないことの一次担保。
+  for (const e of entries) {
+    if (e.status !== 'active') continue;
+    for (const f of e.files || []) {
+      if (!f.endsWith('.go')) continue;
+      let body = '';
+      try { body = readFileSync(join(repoRoot, f), 'utf8'); } catch { continue; }
+      if (!MAIDEBUG_TAG_RE.test(body)) {
+        problems.push(`${f}: 観測コードなのに先頭へ //go:build maidebug が無い（既定ビルドへ混入する）`);
+      }
     }
   }
 

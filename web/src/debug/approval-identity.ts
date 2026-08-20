@@ -2,36 +2,29 @@
 // 入れ替わって表示される不具合、および「スクロールすると昔の承認ポップアップが再び出る」症状の
 // 追跡用（docs/local/bugfix_approval-bar-stale-options-scroll-mismatch_2026-08-19.md）。
 // 4 つの層から記録する。
-//   [scrl]  xterm の onScroll。ユーザー操作由来か TUI 再描画由来かを atBottom / manual で区別する
-//   [buf ]  検出層。xterm バッファ末尾の再走査（scanBuffer）が、ライブ検出した選択肢を
-//           置き換えた／補完したときだけ記録する。マーカーを使わない provider（Codex 等）専用の経路
-//   [data]  showOptions() に渡された時点の options と、そこから計算された candidateKey / sourceEpoch
-//   [draw]  実際の描画関数（single-tabs / batch-tabs / multi）の差分スキップ判定の直前
+//   approval.scroll  xterm の onScroll。ユーザー操作由来か TUI 再描画由来かを atBottom / manual で区別する
+//   approval.buf     検出層。xterm バッファ末尾の再走査（scanBuffer）がライブ検出した選択肢を
+//                    置き換えた／補完したときだけ記録する。マーカーを使わない provider（Codex 等）の経路
+//   approval.data    showOptions() に渡された時点の options と candidateKey / sourceEpoch
+//   approval.draw    実際の描画関数（single-tabs / batch-tabs / multi）の差分スキップ判定の直前
 // 本文と選択肢を必ず同じ 1 件の中に並べて記録するので、ズレが「データの時点で既に起きている」のか
 // 「データは正しいのに描画がスキップされて古いまま残っている」のかを画面上で切り分けられる。
-// [scrl] と [buf] を時系列で並べることで、スクロール操作が古い選択肢の再検出を引き起こしているのか、
-// スクロールとは無関係のタイミングの一致なのかも読み取れる。
-// ゲート: URL クエリ ?approvaldebug=1 のときのみ動作する。既定は完全に no-op。
+//
+// ゲートは 2 層。build 側（MAI_DEBUG=1 でなければこのファイルは成果物に入らない）と、
+// runtime 側（URL クエリ ?approvaldebug=1 のときだけ sink を登録する）。sink が
+// 登録されなければ記録点は完全な no-op で、観測用の配列コピーすら作られない。
+//
 // 記録内容は identity のハッシュ短縮形と、前置き・質問文・選択肢ラベルの各先頭数十文字のみで、
 // 自由入力欄の内容と送信テキストは保存しない。原因が確定したら instrumentation.json ごと撤去する。
 
-let enabledCache: boolean | null = null;
+import { registerProbeSink, type ProbeFields } from './probe.js';
 
 function isEnabled(): boolean {
-  if (enabledCache === null) {
-    try {
-      enabledCache = new URLSearchParams(location.search).get('approvaldebug') === '1';
-    } catch (_) {
-      enabledCache = false;
-    }
+  try {
+    return new URLSearchParams(location.search).get('approvaldebug') === '1';
+  } catch (_) {
+    return false;
   }
-  return enabledCache;
-}
-
-// 呼び元が観測用の一時配列を作る前に判定を借りるための公開版。
-// これが false のときは呼び元も一切の余分な処理をしない（既定経路のコストをゼロに保つ）。
-export function isApprovalDebugEnabled(): boolean {
-  return isEnabled();
 }
 
 interface DebugEntry {
@@ -47,6 +40,10 @@ interface DebugEntry {
 const MAX_ENTRIES = 18;
 const entries: DebugEntry[] = [];
 let panelEl: HTMLDivElement | null = null;
+
+function nowLabel(): string {
+  return new Date().toLocaleTimeString('ja-JP', { hour12: false });
+}
 
 function shortText(s: unknown, n: number): string {
   return String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
@@ -77,78 +74,75 @@ function push(entry: DebugEntry): void {
   render();
 }
 
+function num(v: unknown): number {
+  return typeof v === 'number' ? v : Number(v) || 0;
+}
+
+// 記録点は「前・後・バッファ」の 3 つのスナップショットを渡してくるだけで、
+// 何が起きたかの意味づけはここで決める（呼び元に観測用の状態機械を置かないため）。
+function numsOf(list: any): string {
+  return (Array.isArray(list) ? list : []).map((o: any) => o?.num).join(',');
+}
+
+function bufAction(live: any, after: any, buf: any): string {
+  const l = numsOf(live);
+  const a = numsOf(after);
+  const b = numsOf(buf);
+  if (l === a) return 'keep';
+  if (a === b) return 'replace';
+  return 'fill1';
+}
+
 // 層1: showOptions() の識別子計算直後（データが届いた時点）。
-export function noteApprovalIdentityForDebug(
-  sessionId: number,
-  identity: { candidateKey: string; sourceEpoch: number; shape: string },
-  options: any,
-  skipped: boolean,
-): void {
-  if (!isEnabled()) return;
-  const arr: any = options;
+function noteData(f: ProbeFields): void {
+  const identity = (f.identity || {}) as { candidateKey?: string; sourceEpoch?: number; shape?: string };
+  const arr: any = f.options;
   push({
-    ts: new Date().toLocaleTimeString('ja-JP', { hour12: false }),
+    ts: nowLabel(),
     layer: 'data',
-    sessionId,
-    head: `${skipped ? '[skip]' : '[show]'} key=${shortText(identity.candidateKey, 14)} epoch=${identity.sourceEpoch} shape=${shortText(identity.shape, 14)}`,
+    sessionId: num(f.sessionId),
+    head: `${f.skipped ? '[skip]' : '[show]'} key=${shortText(identity.candidateKey, 14)} epoch=${identity.sourceEpoch} shape=${shortText(identity.shape, 14)}`,
     rows: [
       ['pre', shortText(arr && arr._preamble, 60)],
       ['q  ', shortText((arr && arr._question) || (arr && arr[0] && arr[0]._question), 40)],
-      ['opt', optionSummary(flattenForSummary(options))],
+      ['opt', optionSummary(flattenForSummary(f.options))],
     ],
   });
 }
 
 // 層2: 各描画関数の差分スキップ判定の直前。sigSkipped=true なら DOM は書き換わらない。
-export function noteApprovalRenderForDebug(
-  sessionId: number,
-  mode: string,
-  preamble: unknown,
-  question: unknown,
-  options: any,
-  sigSkipped: boolean,
-): void {
-  if (!isEnabled()) return;
+function noteDraw(f: ProbeFields): void {
   push({
-    ts: new Date().toLocaleTimeString('ja-JP', { hour12: false }),
+    ts: nowLabel(),
     layer: 'draw',
-    sessionId,
-    head: `${sigSkipped ? '[sigskip]' : '[draw]'} mode=${shortText(mode, 14)}`,
+    sessionId: num(f.sessionId),
+    head: `${f.sigSkipped ? '[sigskip]' : '[draw]'} mode=${shortText(f.mode, 14)}`,
     rows: [
-      ['pre', shortText(preamble, 60)],
-      ['q  ', shortText(question, 40)],
-      ['opt', optionSummary(flattenForSummary(options))],
+      ['pre', shortText(f.preamble, 60)],
+      ['q  ', shortText(f.question, 40)],
+      ['opt', optionSummary(flattenForSummary(f.options))],
     ],
   });
 }
 
-// 層3: 検出層。xterm バッファ末尾の再走査（scanBuffer）が結果を書き換えた瞬間だけ記録する。
+// 層3: 検出層。xterm バッファ末尾の再走査が結果を書き換えた瞬間だけ記録する。
 // マーカー経路（handleHubApprovalMarker）はここを通らないので、記録が出れば
 // 「マーカーを使わない provider の検出フォールバックが動いた」ことが確定する。
-// action='keep'（何も書き換えなかった）は呼び元で捨てる。毎チャンク記録するとパネルが埋まるため。
-export function noteApprovalBufferFallbackForDebug(
-  sessionId: number,
-  site: 'chunk' | 'detect',
-  info: {
-    action: string;
-    gate: string;
-    tailLines: number;
-    liveOptions: any[] | null;
-    bufOptions: any[] | null;
-    liveHasCursor: boolean;
-    bufHasCursor: boolean;
-  },
-): void {
-  if (!isEnabled()) return;
+// 書き換えが無かった回（action='keep'）はここで捨てる。毎チャンク積むとパネルが埋まるため。
+function noteBuf(f: ProbeFields): void {
+  const action = bufAction(f.liveOptions, f.afterOptions, f.bufOptions);
+  if (action === 'keep') return;
+  const bufOpts: any = f.bufOptions;
+  const bufHasCursor = Array.isArray(bufOpts) && bufOpts.some((o: any) => o?.isCurrent);
   push({
-    ts: new Date().toLocaleTimeString('ja-JP', { hour12: false }),
+    ts: nowLabel(),
     layer: 'buf',
-    sessionId,
-    head: `[${info.action}] site=${site} tail=${info.tailLines} cur(live/buf)=${info.liveHasCursor ? 'Y' : 'n'}/${info.bufHasCursor ? 'Y' : 'n'}`,
+    sessionId: num(f.sessionId),
+    head: `[${action}] site=${f.site} tail=${num(f.tailLines)} cur(live/buf)=${f.liveHasCursor ? 'Y' : 'n'}/${bufHasCursor ? 'Y' : 'n'}`,
     rows: [
-      ['liv', optionSummary(flattenForSummary(info.liveOptions))],
-      ['buf', optionSummary(flattenForSummary(info.bufOptions))],
-      ['why', info.gate || '(none)'],
+      ['liv', optionSummary(flattenForSummary(f.liveOptions))],
+      ['buf', optionSummary(flattenForSummary(f.bufOptions))],
+      ['why', String(f.gate || '(none)')],
     ],
   });
 }
@@ -157,31 +151,30 @@ export function noteApprovalBufferFallbackForDebug(
 // 同じセッションの直近 1 件が scrl なら件数を数え上げて 1 行に畳む。
 let lastScrollNoteAt = 0;
 
-export function noteApprovalScrollForDebug(
-  sessionId: number,
-  info: { atBottom: boolean; manual: boolean; viewportY: number; baseY: number },
-): void {
-  if (!isEnabled()) return;
+function noteScroll(f: ProbeFields): void {
+  const sessionId = num(f.sessionId);
   const now = Date.now();
+  const head = `[scroll] atBottom=${f.atBottom ? 'Y' : 'n'} manual=${f.manual ? 'Y' : 'n'}`;
+  const pos = `viewportY=${num(f.viewportY)} baseY=${num(f.baseY)}`;
   const top = entries[0];
   if (top && top.layer === 'scrl' && top.sessionId === sessionId && now - lastScrollNoteAt < 1200) {
     const prev = Number(top.rows[0]?.[1]?.match(/^x(\d+)/)?.[1] || '1');
     top.rows[0] = ['cnt', `x${prev + 1}`];
-    top.rows[1] = ['pos', `viewportY=${info.viewportY} baseY=${info.baseY}`];
-    top.head = `[scroll] atBottom=${info.atBottom ? 'Y' : 'n'} manual=${info.manual ? 'Y' : 'n'}`;
+    top.rows[1] = ['pos', pos];
+    top.head = head;
     lastScrollNoteAt = now;
     render();
     return;
   }
   lastScrollNoteAt = now;
   push({
-    ts: new Date().toLocaleTimeString('ja-JP', { hour12: false }),
+    ts: nowLabel(),
     layer: 'scrl',
     sessionId,
-    head: `[scroll] atBottom=${info.atBottom ? 'Y' : 'n'} manual=${info.manual ? 'Y' : 'n'}`,
+    head,
     rows: [
       ['cnt', 'x1'],
-      ['pos', `viewportY=${info.viewportY} baseY=${info.baseY}`],
+      ['pos', pos],
     ],
   });
 }
@@ -204,4 +197,13 @@ function render(): void {
       return `${e.ts} s=${e.sessionId} ${e.layer} ${e.head}\n${body}`;
     })
     .join('\n\n');
+}
+
+// runtime ゲート。?approvaldebug=1 が無ければ sink を 1 つも登録しないので、
+// 記録点は map 参照 1 回で戻る（渡したラムダは評価されない）。
+if (isEnabled()) {
+  registerProbeSink('approval.data', (_channel, fields) => noteData(fields));
+  registerProbeSink('approval.draw', (_channel, fields) => noteDraw(fields));
+  registerProbeSink('approval.buf', (_channel, fields) => noteBuf(fields));
+  registerProbeSink('approval.scroll', (_channel, fields) => noteScroll(fields));
 }

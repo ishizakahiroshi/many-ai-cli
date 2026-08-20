@@ -1,6 +1,12 @@
+//go:build maidebug
+
 package wrapper
 
-import "log/slog"
+import (
+	"log/slog"
+
+	"many-ai-cli/internal/config"
+)
 
 // input_deliver_trace.go — 観測専用の一時コード（原因が確定したら撤去する）。
 //
@@ -10,15 +16,21 @@ import "log/slog"
 // Hub から wrapper への送達で止まっており、両方あって画面が変わらなければ
 // provider CLI 側のキー解釈という切り分けになる。
 //
+// ゲートは 2 層。build 側（maidebug タグが無ければこのファイルごと存在しない）と、
+// runtime 側（セッションログの opt-in = log.session_enabled）。
 // 記録するのは stage・session_id・input_seq・バイト長・エラー有無だけで、
-// 入力本文は含まない。ゲートはセッションログの opt-in（log.session_enabled）に従う。
-// 台帳: instrumentation.json の id=hub-input-deliver-trace
-func traceInputDeliver(logger *slog.Logger, enabled bool, stage string, sessionID int, attrs ...any) {
-	if !enabled || logger == nil {
-		return
-	}
-	args := make([]any, 0, len(attrs)+4)
-	args = append(args, "stage", stage, "session_id", sessionID)
-	args = append(args, attrs...)
-	logger.Info("input_deliver_wrapper", args...)
+// 入力本文は含まない。台帳: instrumentation.json の id=hub-input-deliver-trace
+
+func init() {
+	registerProbeInstaller(func(logger *slog.Logger, cfg *config.Config) {
+		if logger == nil || cfg == nil || !cfg.Log.SessionEnabled {
+			return
+		}
+		for _, channel := range []string{"input.pty_write", "input.pty_write_dup"} {
+			stage := channel[len("input."):]
+			registerProbeSink(channel, func(args ...any) {
+				logger.Info("input_deliver_wrapper", append([]any{"stage", stage}, args...)...)
+			})
+		}
+	})
 }

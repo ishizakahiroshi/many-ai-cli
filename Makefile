@@ -25,16 +25,23 @@ BUILD_TIME        := $(shell git show -s --format=%cI HEAD)
 GIT_VERSION       := $(shell git describe --tags --always --dirty)
 GO_LDFLAGS        := -X main.version=$(GIT_VERSION) -X main.gitCommit=$(GIT_COMMIT) -X main.buildTime=$(BUILD_TIME)
 
-.PHONY: build build-web build-windows build-launcher build-linux deploy-wsl clean run
+# 調査用の観測コード（instrumentation.json の台帳に載るもの）は build tag での
+# オプトイン。ローカルの make ビルドだけが maidebug を渡し、リリース
+# (.goreleaser.yaml) は何も渡さないので成果物には入らない。付け忘れたらクリーンな
+# 側へ倒れる。リリース相当を手元で試すときは `make build-windows GO_TAGS=`。
+# web 側の対応する切り替えは MAI_DEBUG（web/scripts/build.mjs）。
+GO_TAGS           ?= maidebug
+
+.PHONY: build build-web build-windows build-launcher build-linux deploy-wsl clean run debug-purge debug-restore
 
 build: build-windows build-launcher build-linux deploy-wsl
 
 build-web:
-	cd web && bun install && bun run build
+	cd web && bun install && bun run build -- --debug
 
 build-windows: build-web
 	go-winres make --out cmd/many-ai-cli/rsrc
-	go build -ldflags "$(GO_LDFLAGS)" -o $(BINARY) $(MAIN)
+	go build -tags "$(GO_TAGS)" -ldflags "$(GO_LDFLAGS)" -o $(BINARY) $(MAIN)
 
 build-launcher:
 	go-winres make --in winres/winres-launcher.json --out cmd/many-ai-cli-launcher/rsrc
@@ -42,7 +49,7 @@ build-launcher:
 
 build-linux: build-web
 	cmd /C "if not exist dist\linux mkdir dist\linux"
-	cmd /C "set CGO_ENABLED=0&& set GOOS=linux&& set GOARCH=amd64&& go build -o $(LINUX_BINARY) $(MAIN)"
+	cmd /C "set CGO_ENABLED=0&& set GOOS=linux&& set GOARCH=amd64&& go build -tags $(GO_TAGS) -o $(LINUX_BINARY) $(MAIN)"
 
 deploy-wsl:
 	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deploy-wsl.ps1
