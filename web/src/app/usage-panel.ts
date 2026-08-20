@@ -113,15 +113,19 @@ function actionButton(className: string, label: string, attribute: string, disab
   return `<button type="button" class="${className}" ${attribute}${disabled ? ' disabled' : ''}>${escapeHtml(label)}</button>`;
 }
 
+function hasClaudeUsage(profile: UsageProfile): boolean {
+  return !!profile.claude;
+}
+
 function claudeBody(provider: string, profile: UsageProfile): string {
   const key = profileKey(profile, provider);
-  const usage = profile.claude;
+  const usage = hasClaudeUsage(profile);
   const busy = running.has(key) || profile.probe_state === 'running';
-  const failure = failures.has(key);
+  const failure = failures.has(key) && !usage;
   let body = '';
-  if (usage) {
-    body += meter(tx('usage_window_5h', '5h'), usage.five_hour);
-    body += meter(tx('usage_window_7d', '7d'), usage.seven_day);
+  if (usage && profile.claude) {
+    body += meter(tx('usage_window_5h', '5h'), profile.claude.five_hour);
+    body += meter(tx('usage_window_7d', '7d'), profile.claude.seven_day);
     const retrieved = retrievedText(profile.retrieved_at);
     if (retrieved) body += `<div class="usage-profile-meta">${escapeHtml(retrieved)}</div>`;
   } else {
@@ -278,9 +282,13 @@ async function startProbe(key: string): Promise<void> {
     running.delete(key);
     await refreshUsagePanel();
   } catch (_) {
-    failures.set(key, tx('usage_probe_failed', 'Could not retrieve usage'));
     running.delete(key);
-    if (usageData) renderProfiles(usageData);
+    await refreshUsagePanel();
+    const latest = findProfile(key);
+    if (!latest || !hasClaudeUsage(latest)) {
+      failures.set(key, tx('usage_probe_failed', 'Could not retrieve usage'));
+      if (usageData) renderProfiles(usageData);
+    }
   }
 }
 
@@ -350,6 +358,7 @@ export async function refreshUsagePanel(): Promise<void> {
       for (const provider of usageData.providers || []) {
         for (const profile of provider.profiles || []) {
           const key = profileKey(profile, provider.provider);
+          if (hasClaudeUsage(profile)) failures.delete(key);
           if (profile.probe_state !== 'running') running.delete(key);
         }
       }
