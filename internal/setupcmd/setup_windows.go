@@ -10,10 +10,17 @@ import (
 	"strings"
 )
 
+const (
+	windowsTrayShortcutName       = "MANY-AI-CLI.lnk"
+	windowsLegacyTrayShortcutName = "Many AI Hub.lnk"
+)
+
 // createShortcuts は Windows 向け生成物を作る。
 // %LOCALAPPDATA%\ManyAICLI\{start,stop}.cmd と、デスクトップの
-// 「Many AI Hub.lnk」（トレイ常駐 = `many-ai-cli tray`）、および同じ内容の .lnk を
+// 「MANY-AI-CLI.lnk」（トレイ常駐 = `many-ai-cli tray`）、および同じ内容の .lnk を
 // スタートアップフォルダに作る（ログイン時の自動常駐）。
+// 0.7.0 が書いた旧名「Many AI Hub.lnk」は同じトレイ起動の前身なので、
+// 新名を書いたあと消す（残すと同一機能のアイコンが 2 個並ぶ）。
 // 旧版が作った Start / Stop の .lnk は消さず、見つかったことだけ報告する。
 func createShortcuts(exe string) []Result {
 	var results []Result
@@ -47,7 +54,7 @@ func createShortcuts(exe string) []Result {
 	// メニューから行えるので、Start と Stop を分ける理由が無くなった。
 	// .cmd を挟まず exe を直接指すのは、.cmd だとコンソール窓が残るため。
 	// WindowStyle=7（最小化）と tray 側の FreeConsole の 2 段で窓を出さない。
-	trayLnk := filepath.Join(desktop, "Many AI Hub.lnk")
+	trayLnk := filepath.Join(desktop, windowsTrayShortcutName)
 	if err := createWindowsShortcutWithArgs(trayLnk, exe, exe, "tray", 7); err != nil {
 		results = append(results, Result{Path: trayLnk, Err: err})
 	} else {
@@ -59,12 +66,24 @@ func createShortcuts(exe string) []Result {
 	// レジストリの Run キーではなくスタートアップフォルダに置くのは、エクスプローラー
 	// とタスクマネージャーの「スタートアップ アプリ」の両方から利用者が自分で見つけて
 	// 止められるため（隠れた場所に自動起動を仕込まない）。
-	if startup := resolveWindowsStartup(); startup != "" {
-		autoLnk := filepath.Join(startup, "Many AI Hub.lnk")
+	startup := resolveWindowsStartup()
+	if startup != "" {
+		autoLnk := filepath.Join(startup, windowsTrayShortcutName)
 		if err := createWindowsShortcutWithArgs(autoLnk, exe, exe, "tray", 7); err != nil {
 			results = append(results, Result{Path: autoLnk, Err: err})
 		} else {
 			results = append(results, Result{Path: autoLnk})
+		}
+	}
+
+	// 旧名は同じトレイ起動なので、新名を書いたあと回収する。
+	// Start / Stop の 2 個は別 UX なので従来どおり残す。
+	for _, dir := range []string{desktop, startup} {
+		if old, ok := removeLegacyTrayShortcut(dir); ok {
+			results = append(results, Result{
+				Path: old,
+				Note: "旧名のショートカットを MANY-AI-CLI に置き換えました",
+			})
 		}
 	}
 
@@ -77,12 +96,25 @@ func createShortcuts(exe string) []Result {
 		if _, statErr := os.Stat(old); statErr == nil {
 			results = append(results, Result{
 				Path: old,
-				Note: "旧アイコンです。「Many AI Hub」1 個で起動も停止もできます。不要なら手動で削除してください（自動では消しません）",
+				Note: "旧アイコンです。「MANY-AI-CLI」1 個で起動も停止もできます。不要なら手動で削除してください（自動では消しません）",
 			})
 		}
 	}
 
 	return results
+}
+
+// removeLegacyTrayShortcut は 0.7.0 が書いた旧名 .lnk を 1 個消す。
+// dir が空、ファイルが無い、消せない、はいずれも消していない扱い。
+func removeLegacyTrayShortcut(dir string) (path string, removed bool) {
+	if dir == "" {
+		return "", false
+	}
+	path = filepath.Join(dir, windowsLegacyTrayShortcutName)
+	if err := os.Remove(path); err != nil {
+		return path, false
+	}
+	return path, true
 }
 
 // writeWindowsCmd は cd /d %USERPROFILE% → call "<exe>" <args> → pause の 4 行 bat を書き出す。
