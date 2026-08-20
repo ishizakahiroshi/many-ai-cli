@@ -398,7 +398,7 @@ header {
 .usage-dropdown {
   position: fixed;
   z-index: 1300;
-  min-width: 270px;
+  min-width: 340px;
   max-width: min(430px, calc(100vw - 12px));
   max-height: calc(100vh - 70px);
   background: var(--bg-elev, #1e2330);

@@ -23,7 +23,7 @@ func TestSubscriptionUsageRefreshesCodexAndGrokProfiles(t *testing.T) {
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(grokDir, "logs", "unified.jsonl"), []byte(`{"msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":27,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","end":"2026-08-23T11:28:29Z"}}}}
+	if err := os.WriteFile(filepath.Join(grokDir, "logs", "unified.jsonl"), []byte(`{"ts":"2026-08-20T02:31:39Z","msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":27,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","end":"2026-08-23T11:28:29Z"}}}}
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestSubscriptionUsageRefreshesCodexAndGrokProfiles(t *testing.T) {
 		"copilot": {{ID: "copilot-a", Name: "No usage"}},
 	}}
 	store := newSubscriptionUsageStore()
-	store.refreshLocal(cfg, root, time.Now())
+	store.refreshLocal(cfg, root, time.Unix(1_800_000_000, 0))
 	response := store.snapshot(cfg)
 	if len(response.Providers) != 2 {
 		t.Fatalf("providers=%#v, want only codex/grok", response.Providers)
@@ -42,8 +42,17 @@ func TestSubscriptionUsageRefreshesCodexAndGrokProfiles(t *testing.T) {
 	if response.Providers[0].Provider != "codex" || response.Providers[0].Profiles[0].Codex == nil || response.Providers[0].Profiles[0].Codex.Primary.UsedPercent != 89 {
 		t.Fatalf("codex response=%#v", response.Providers[0])
 	}
-	if response.Providers[1].Profiles[0].Grok == nil || response.Providers[1].Profiles[0].Grok.UsedPercent != 27 {
+	grok := response.Providers[1].Profiles[0]
+	if grok.Grok == nil || grok.Grok.UsedPercent != 27 {
 		t.Fatalf("grok response=%#v", response.Providers[1])
+	}
+	gotRetrieved, err := time.Parse(time.RFC3339, grok.RetrievedAt)
+	if err != nil {
+		t.Fatalf("retrieved_at=%q: %v", grok.RetrievedAt, err)
+	}
+	wantRetrieved := time.Date(2026, 8, 20, 2, 31, 39, 0, time.UTC)
+	if !gotRetrieved.Equal(wantRetrieved) {
+		t.Fatalf("retrieved_at=%v want billing ts %v, not hub now", gotRetrieved, wantRetrieved)
 	}
 }
 

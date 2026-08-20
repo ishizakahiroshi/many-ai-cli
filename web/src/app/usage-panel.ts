@@ -156,7 +156,11 @@ function grokBody(profile: UsageProfile): string {
     return `<span class="usage-not-acquired">${escapeHtml(tx('usage_profile_grok_unacquired', 'Launch Grok on this subscription to see numbers'))}</span>`;
   }
   const end = usage.period_end ? fixedDateTime(usage.period_end) : '';
-  return `${meter(tx('usage_window_weekly', 'Weekly'), { used_percent: usage.used_percent })}${end ? `<div class="usage-profile-meta">${escapeHtml(tx('usage_period_end', 'Billing period ends {time}', { time: end }))}</div>` : ''}`;
+  const retrieved = retrievedText(profile.retrieved_at);
+  let body = meter(tx('usage_window_weekly', 'Weekly'), { used_percent: usage.used_percent });
+  if (end) body += `<div class="usage-profile-meta">${escapeHtml(tx('usage_period_end', 'Billing period ends {time}', { time: end }))}</div>`;
+  if (retrieved) body += `<div class="usage-profile-meta">${escapeHtml(retrieved)}</div>`;
+  return body;
 }
 
 function profileBody(provider: string, profile: UsageProfile): string {

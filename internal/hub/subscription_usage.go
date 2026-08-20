@@ -210,12 +210,16 @@ func (s *subscriptionUsageStore) refreshLocal(cfg *config.Config, configDir stri
 				}
 			case "grok":
 				if usage, ok := usagelocal.ReadGrokProfile(dir); ok {
+					fetched := at
+					if !usage.FetchedAt.IsZero() {
+						fetched = usage.FetchedAt
+					}
 					s.putLocal(provider, id, subscriptionUsageValue{grok: &grokSubscriptionUsage{
 						UsedPercent: usage.UsedPercent,
 						PeriodStart: usage.PeriodStart,
 						PeriodEnd:   usage.PeriodEnd,
 						PeriodType:  usage.PeriodType,
-					}}, at)
+					}}, fetched)
 				}
 			}
 		}

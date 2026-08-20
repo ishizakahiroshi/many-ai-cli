@@ -3,9 +3,12 @@ package usagelocal
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
+	"time"
 )
 
 type grokBillingRecord struct {
+	Ts  string `json:"ts"`
 	Msg string `json:"msg"`
 	Ctx struct {
 		Config struct {
@@ -17,6 +20,20 @@ type grokBillingRecord struct {
 			} `json:"currentPeriod"`
 		} `json:"config"`
 	} `json:"ctx"`
+}
+
+func parseGrokTime(value string) time.Time {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}
+	}
+	if t, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		return t
+	}
+	if t, err := time.Parse(time.RFC3339, value); err == nil {
+		return t
+	}
+	return time.Time{}
 }
 
 // ReadGrokProfile returns the newest billing record in unified.jsonl. The
@@ -36,6 +53,7 @@ func ReadGrokProfile(profileDir string) (usage GrokUsage, ok bool) {
 			PeriodStart: record.Ctx.Config.CurrentPeriod.Start,
 			PeriodEnd:   record.Ctx.Config.CurrentPeriod.End,
 			PeriodType:  record.Ctx.Config.CurrentPeriod.Type,
+			FetchedAt:   parseGrokTime(record.Ts),
 		}
 		foundRecord = true
 		return true
