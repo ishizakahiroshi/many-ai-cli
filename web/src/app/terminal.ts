@@ -464,28 +464,33 @@ function refreshAllRows(t) {
   try { t.term.refresh(0, t.term.rows - 1); } catch (_) { /* 未 open 時は無視 */ }
 }
 
-// スクロールバーの初回 reveal を起こす（xterm 6.0 のオーバーレイスクロールバー対策）。
-// xterm はスクロールバーを ScrollbarVisibility.Auto で固定しており、
-// 一度も reveal されていない間は「スクロールできる状態」でも .invisible のまま出ない。
+// 必要なときだけスクロールバーを初回 reveal する（xterm 6.0 の
+// オーバーレイスクロールバー対策）。xterm は ScrollbarVisibility.Auto なので、
+// open 直後にスクロールバックがまだ空だと .invisible のままになり、後からログが
+// 増えても表示のきっかけが無い。xterm の描画後にスライダーの実寸を確認してから
+// mouseover を発火し、スクロール不要な端末にはバーを出さない。
 // reveal 後にフェードアウトした状態（.invisible.fade）は terminal.css で opacity:1 に戻して
-// 常時表示にしているため、必要なのは open 直後の初回 reveal を 1 回起こすことだけ。
-// ScrollableElement は mouseover で reveal し、mouseleave が来るまで隠さない実装なので、
-// 合成 mouseover を 1 回投げれば以後は常時表示になる。
-// スクロール不要な間は reveal されても非表示のままなので、空の端末に帯は出ない。
-// （bubbles:false — リスナは .xterm-scrollable-element 自身に付いており、
-//   バブルさせるとアプリ側の mouseover ハンドラを誤発火させうる。）
+// 常時表示にする。bubbles:false は xterm 自身のリスナーだけを呼ぶために指定する。
 function primeScrollbarVisibility(container) {
-  let remaining = 3;
+  if (!container) return;
+  let remaining = 12;
   const tryReveal = () => {
     const el = container && container.querySelector && container.querySelector('.xterm-scrollable-element');
     if (el) {
-      try { el.dispatchEvent(new MouseEvent('mouseover', { bubbles: false })); } catch (_) {}
-      return;
+      const scrollbar = el.querySelector('.scrollbar.vertical');
+      const slider = scrollbar && scrollbar.querySelector('.slider');
+      if (scrollbar && scrollbar.classList.contains('visible')) return;
+      const trackHeight = scrollbar ? scrollbar.getBoundingClientRect().height : 0;
+      const sliderHeight = slider ? slider.getBoundingClientRect().height : 0;
+      if (trackHeight > sliderHeight + 1) {
+        try { el.dispatchEvent(new MouseEvent('mouseover', { bubbles: false })); } catch (_) {}
+        return;
+      }
     }
-    // open 直後は Viewport 生成が間に合わないことがあるので数フレーム待つ。
+    // open / write 直後は xterm の寸法同期が次のフレームに回ることがある。
     if (--remaining > 0) requestAnimationFrame(tryReveal);
   };
-  tryReveal();
+  requestAnimationFrame(tryReveal);
 }
 
 export function whenLayoutReady(id, container) {
@@ -792,6 +797,7 @@ export function fitTerminalPreservingBottom(t, id, forceVisualFit = false) {
   if (!forceVisualFit && isPtyResizeSuppressed()) return;
   const wasAtBottom = isTerminalAtBottom(t) || t.autoScroll;
   t.fitAddon.fit();
+  primeScrollbarVisibility(t.term.element);
   if (wasAtBottom) {
     t.autoScroll = true;
     t.term.scrollToBottom();
@@ -1833,6 +1839,7 @@ export function writePTYChunk(id, term, bytes, onFlush) {
   const displayBytes = filterBareCarriageReturnForDisplay(id, filterCursorHideShowBlocksForDisplay(id, filterEraseScrollbackForDisplay(id, filterReverseVideoForDisplay(id, filterHubMarkersForDisplay(id, bytes)))));
   const wrappedFlush = () => {
     if (hasScreenClearSeq) snapToBottomAfterScreenClear(id);
+    primeScrollbarVisibility(term.element);
     if (onFlush) onFlush();
   };
   if (displayBytes.length === 0) {
