@@ -17,6 +17,7 @@
 | `/exit` | Terminate the CLI application. | When ending your session. |
 | `/feedback` | Share feedback with the Cursor team. | When reporting issues or suggestions. |
 | `/fork` | Fork the current chat into a new session. | When exploring an alternate direction from this point. |
+| `/goal` | Give the agent a long-lived objective. | When tracking a larger task until it is complete. |
 | `/help` | Show help, optionally for a specific command. | When you need guidance on available commands. |
 | `/line-numbers` | Toggle line numbers in code blocks. | When you need reference points in code output. |
 | `/logout` | Sign out from Cursor. | When disconnecting your account on this machine. |

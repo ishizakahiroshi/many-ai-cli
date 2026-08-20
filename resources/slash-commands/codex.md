@@ -11,6 +11,7 @@
 | `/clear` | Clear the terminal and start a fresh chat. | Reset the UI and conversation together. |
 | `/compact` | Summarize the visible conversation to free tokens. | After long runs, to retain key points while reclaiming context. |
 | `/copy` | Copy the latest completed Codex output. | Grab finished responses without manual selection. |
+| `/debug-config` | Print config layer and requirements diagnostics. | When debugging configuration precedence and policy requirements. |
 | `/delete` | Permanently delete the current session and exit Codex. | Discard a session and its files. |
 | `/diff` | Show the Git diff including untracked files. | Review edits before committing or testing. |
 | `/exit` | Exit the CLI. | Leave the session immediately. |
@@ -33,6 +34,8 @@
 | `/orchestrate` | Split work into child AI sessions using the Hub board API. | Coordinate design, implementation, and test workers from one conductor session. |
 | `/permissions` | Set what Codex can do without asking first. | Relax or tighten approval requirements mid-session. |
 | `/personality` | Choose a communication style for responses. | Make Codex more concise, explanatory, or collaborative. |
+| `/pet` | Choose or hide a terminal pet. | When personalizing the TUI with an ambient pet. |
+| `/pets` | Choose or hide a terminal pet. | When personalizing the TUI with an ambient pet. |
 | `/plan` | Switch to plan mode and optionally send a prompt. | Request an execution plan before implementation work. |
 | `/plugins` | Browse installed and discoverable plugins. | Inspect tools, install suggested plugins, or manage availability. |
 | `/ps` | Show background terminals and their status. | Check long-running commands without leaving the transcript. |
@@ -46,7 +49,10 @@
 | `/side` | Start an ephemeral side conversation. | Ask focused follow-ups without disrupting the main thread. |
 | `/skills` | Browse and use skills. | Inspect bundled or installed skills for the current task. |
 | `/status` | Display session configuration and token usage. | Confirm active model, policy, and context capacity. |
+| `/statusline` | Configure TUI status-line fields interactively. | When choosing and ordering footer items in the terminal. |
 | `/stop` | Stop all background terminals. | Cancel background terminal work. |
 | `/subagents` | Switch or manage the active subagent thread. | Coordinate work across parallel subagent threads. |
+| `/theme` | Choose a syntax-highlighting theme. | When changing the terminal syntax theme. |
+| `/title` | Configure terminal window or tab title fields interactively. | When choosing title items for the current terminal. |
 | `/usage` | View account token usage and rate-limit reset. | Inspect quota consumption between tasks. |
 | `/vim` | Toggle Vim mode for the composer. | Switch between Vim and default editing behavior. |
