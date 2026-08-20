@@ -421,7 +421,10 @@ func (s *Server) runUsageProbe(ctx context.Context, key, root string, resolved *
 		UsageProbe:            true,
 	}, usageProbeSpawnTimeout)
 	if err != nil {
-		return errors.New("could not start usage probe")
+		// 実エラーを捨てると hub ログでも原因が分からなくなる（起動前の検証で
+		// 落ちたのか、wrapper が登録されなかったのかが区別できない）。
+		// クライアントへ返す文言はハンドラ側で固定しているので、ここは wrap する。
+		return fmt.Errorf("could not start usage probe: %w", err)
 	}
 	s.persistActiveUsageProbe(key, root, func(current *usageProbeRecord) {
 		current.SessionID = sessionID
