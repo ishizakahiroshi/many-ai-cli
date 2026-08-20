@@ -484,9 +484,12 @@ header {
 .usage-info-bubble {
   position: absolute;
   z-index: 2;
+  /* Pin to the row. .usage-dropdown is overflow:auto and min-width:340px;
+     a 300px bubble with right:8px was clipped on the left (「CLI の」が消える). */
+  left: 8px;
   right: 8px;
   bottom: calc(100% - 2px);
-  width: min(300px, calc(100vw - 28px));
+  width: auto;
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -496,6 +499,7 @@ header {
   font-size: 0.68rem;
   line-height: 1.4;
   white-space: normal;
+  overflow-wrap: anywhere;
   pointer-events: none;
 }
 .usage-info-bubble[hidden] { display: none; }
