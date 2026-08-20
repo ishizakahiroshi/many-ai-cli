@@ -87,6 +87,14 @@ Release artifacts are published at
   `internal/setupcmd/setup_windows.go`, `internal/uninstall/`).
 
 ### Fixed
+- **Grok's native tool-permission card now becomes Hub approval buttons.**
+  Grok Build draws `1 (•) Yes, and don't ask again… / 2 (○) Yes, proceed /
+  3 (○) No, reject` instead of Claude's `1. Yes` numbered list, so the detector
+  never built options and the dashboard only showed the terminal radio (arrow
+  keys). The Go VT path and the web parser now treat that radio form as the
+  same 3-choice native approval as Claude (`internal/hub/approval_detector.go`,
+  `web/src/app/approval-parser.ts`, `resources/approval-patterns/grok.md`).
+
 - **Signing into a subscription no longer leaves a leftover `dist` session
   group.** The login button started the vendor CLI (`grok login`,
   `claude auth login`, …) in Hub's process working directory. When Hub itself
