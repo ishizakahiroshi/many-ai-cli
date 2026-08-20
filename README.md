@@ -6,7 +6,7 @@
 
 ![many-ai-cli dashboard](assets/readme-dashboard.png)
 
-**Never miss the moment an AI coding CLI stops — even from your phone.** Run `Claude Code`, `Codex CLI`, `GitHub Copilot CLI`, `Cursor Agent CLI`, and `Grok Build CLI` in parallel; `many-ai-cli` watches every session in a PTY and pushes a notification to your desktop or phone the moment any one of them needs you — an approval prompt, a finished task, or an error — so you don't have to babysit terminals. It also gives you a local web dashboard to handle approvals, monitoring, and terminals across multiple sessions in one place.
+**Six AI coding CLIs in one dashboard — and extra paid plans where the CLI lets you stack them.** Run `Claude Code`, `Codex CLI`, `GitHub Copilot CLI`, `Cursor Agent CLI`, `Grok Build CLI`, and `opencode` in parallel; `many-ai-cli` watches every session in a PTY and tells you the moment one of them stops — an approval, a finished task, or an error — even from your phone. Remaining quota for the plans you stacked sits in the same Usage menu.
 
 [日本語版 README はこちら](README.ja.md) · [README tiếng Việt](README.vi.md)
 
@@ -40,7 +40,7 @@ Terminal pane #1              Terminal pane #2
             └──────────────────┘
 ```
 
-Each pane can run any supported provider — `claude`, `codex`, `copilot`, `cursor-agent`, or `grok`; two are shown for illustration.
+Each pane can run any supported provider — `claude`, `codex`, `copilot`, `cursor-agent`, `grok`, or `opencode`; two are shown for illustration.
 
 ---
 
@@ -65,7 +65,7 @@ Gemini CLI is intentionally out of scope.
 
 ## Features
 
-- **Unified approval panel** — approve/reject Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, and Grok Build CLI prompts from the browser
+- **Unified approval panel** — approve/reject Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI, and opencode prompts from the browser
 - **Batch approvals** — answer multiple numbered questions from one action bar and submit them together
 - **Real-time PTY output** via xterm.js over WebSocket
 - **Chat history and split view** — read a bubble-style conversation history, search/filter it, or keep it beside the live terminal
@@ -101,13 +101,15 @@ Known limits: this is intentionally lightweight. Board changes are detected by 2
 - **Language switching** (English / Japanese / Vietnamese)
 - **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `many-ai-cli` itself
 - **Remote access protection** — Settings → "Remote access protection" offers a **Revoke all access** kill switch (regenerates the token and auth cookie when a device is lost), an **optional PIN** required only for non-loopback access (off by default, with lockout), and **new-device connection notifications**
-- **Multiple subscriptions per provider** — keep more than one signed-in account for the same AI CLI and choose which one a session uses (see below)
+- **Multiple subscriptions per provider** — six CLIs in one Hub; Claude, Codex, Grok, and opencode can stack extra paid plans per session. The Usage menu shows remaining quota per profile for Claude, Codex, and Grok (see below)
 
 ## Multiple subscriptions per provider
 
-If you hold two Claude subscriptions, or a ChatGPT account for work and another for personal projects, the official CLIs only remember one login at a time. Settings → **Subscriptions** lets you register several and pick one per session, so two sessions can run on two different accounts at the same time.
+Six AI coding CLIs share one dashboard. Four of them — Claude Code, Codex CLI, Grok Build CLI, and opencode — can attach more than one subscription each, so two sessions can use two plans at the same time. Copilot and Cursor stay on a single login (their credentials are not relocatable). The official CLIs still remember one *default* login; the Hub points each session at a different config directory.
 
 This is **not an API key router**. It does not pool metered API keys to make requests cheaper; it spreads the sessions you already run across the monthly subscriptions you already pay for.
+
+**Remaining quota** is the breakdown of that stack, not a separate product. The Usage menu lists each profile and, for Claude (5h / 7d), Codex, and Grok, the remaining figure. Copilot, Cursor, and OpenCode stay as links to the vendor page. Numbers are read when you open the menu, not on a timer; Claude may run a one-turn probe if nothing is already reporting.
 
 **How it works.** Every supported CLI selects its configuration directory from an environment variable. `many-ai-cli` creates one directory per profile under `~/.many-ai-cli/subscriptions/<provider>/<id>` and sets that variable when it launches the session. The official CLI does its own login and owns the credential inside that directory. `many-ai-cli` never reads, writes, parses, or stores the token, and `config.yaml` holds nothing but the profile's id, display name, plan label, and enabled flag.
 
@@ -307,13 +309,13 @@ Whichever install path you used, the next steps are the same.
    many-ai-cli setup
    ```
 
-   On **Windows** it creates a single **"Many AI Hub"** shortcut on your desktop, which starts a tray icon, and puts the same shortcut in your **Startup folder** so the tray is there after you sign in. If you would rather launch it yourself, delete "Many AI Hub" from the Startup folder or switch it off in **Task Manager → Startup apps**. On macOS and Linux it creates **"Many AI Hub Start"** and **"Many AI Hub Stop"** (`.command` / `.desktop`).
+   On **Windows** it creates a single **"MANY-AI-CLI"** shortcut on your desktop, which starts a tray icon, and puts the same shortcut in your **Startup folder** so the tray is there after you sign in. If you would rather launch it yourself, delete "MANY-AI-CLI" from the Startup folder or switch it off in **Task Manager → Startup apps**. On macOS and Linux it creates **"Many AI Hub Start"** and **"Many AI Hub Stop"** (`.command` / `.desktop`).
 2. From now on, just **double-click the desktop shortcut**. On Windows a tray icon appears; click it and choose **"Hub を開く"** to start the Hub if needed and open it in your browser at `http://127.0.0.1:47777/?token=<token>`. On macOS and Linux, "Many AI Hub Start" opens a console window alongside the browser.
 3. In the Hub UI, click **"+ New Session"** in the lower left to launch one of the wrapped AI CLIs (claude / codex / copilot / cursor-agent / opencode / grok). When an approval prompt appears, an action bar shows up under the input — click a button or use the keyboard.
 
 To stop, use the tray menu's **"Hub を停止"** (Windows), **"Many AI Hub Stop"** on your desktop (macOS / Linux), the `⏻` button in the top-right of the Hub UI, or `many-ai-cli stop` from another terminal. If you prefer a terminal, `many-ai-cli serve --open` still works.
 
-> **Upgrading from an earlier version?** The tray does not appear just because you installed a newer binary — **run `setup` once** to get the "Many AI Hub" shortcut and the sign-in entry. Doing so **leaves your existing "Start" and "Stop" icons in place** — they keep working. Delete them yourself once you have switched to the tray; `setup` will never remove them for you.
+> **Upgrading from an earlier version?** The tray does not appear just because you installed a newer binary — **run `setup` once** to get the "MANY-AI-CLI" shortcut and the sign-in entry. Doing so **leaves your existing "Start" and "Stop" icons in place** — they keep working. Delete them yourself once you have switched to the tray; `setup` will never remove them for you. An older desktop icon named "Many AI Hub" is the same launcher under the previous name; `setup` replaces it with "MANY-AI-CLI".
 
 > **⚠ About the console window (macOS / Linux)**
 > Launching "Many AI Hub Start" opens a console window alongside the browser. **That console *is* the Hub server process** — closing it with `×` terminates the Hub. If it gets in the way, **minimize** it instead of closing it. On Windows the tray starts the Hub detached, so there is no console window to keep open.
