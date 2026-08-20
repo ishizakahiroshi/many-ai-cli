@@ -127,7 +127,16 @@ export function ensureTerminal(id) {
     windowsPty: { backend: 'conpty' },
     // cursor を背景色と同色にしてブロックカーソルを不可視化する。
     // 'transparent' はブラウザ実装によって輪郭線だけ □ として描画されることがある。
-    theme: { background: '#0d1117', cursor: '#0d1117', cursorAccent: '#e6edf3' },
+    // xterm 6.0 のオーバーレイスクロールバー（.xterm-scrollable-element > .scrollbar > .slider）は
+    // 色を theme から取り、未指定なら「前景色の不透明度 20%」が既定になる（暗背景ではほぼ見えない）。
+    // 5.x 世代まで terminal.css が .xterm-viewport::-webkit-scrollbar で描いていた紫を theme 側で再現する。
+    // 常時表示（Auto のフェードアウト抑止）は terminal.css の .scrollbar.invisible 上書きが担当。
+    theme: {
+      background: '#0d1117', cursor: '#0d1117', cursorAccent: '#e6edf3',
+      scrollbarSliderBackground: '#4f5bd5',
+      scrollbarSliderHoverBackground: '#6b74ff',
+      scrollbarSliderActiveBackground: '#8b92ff',
+    },
     disableStdin: true,
     allowProposedApi: true,
   });
@@ -454,11 +463,36 @@ function refreshAllRows(t) {
   try { t.term.refresh(0, t.term.rows - 1); } catch (_) { /* 未 open 時は無視 */ }
 }
 
+// スクロールバーの初回 reveal を起こす（xterm 6.0 のオーバーレイスクロールバー対策）。
+// xterm はスクロールバーを ScrollbarVisibility.Auto で固定しており、
+// 一度も reveal されていない間は「スクロールできる状態」でも .invisible のまま出ない。
+// reveal 後にフェードアウトした状態（.invisible.fade）は terminal.css で opacity:1 に戻して
+// 常時表示にしているため、必要なのは open 直後の初回 reveal を 1 回起こすことだけ。
+// ScrollableElement は mouseover で reveal し、mouseleave が来るまで隠さない実装なので、
+// 合成 mouseover を 1 回投げれば以後は常時表示になる。
+// スクロール不要な間は reveal されても非表示のままなので、空の端末に帯は出ない。
+// （bubbles:false — リスナは .xterm-scrollable-element 自身に付いており、
+//   バブルさせるとアプリ側の mouseover ハンドラを誤発火させうる。）
+function primeScrollbarVisibility(container) {
+  let remaining = 3;
+  const tryReveal = () => {
+    const el = container && container.querySelector && container.querySelector('.xterm-scrollable-element');
+    if (el) {
+      try { el.dispatchEvent(new MouseEvent('mouseover', { bubbles: false })); } catch (_) {}
+      return;
+    }
+    // open 直後は Viewport 生成が間に合わないことがあるので数フレーム待つ。
+    if (--remaining > 0) requestAnimationFrame(tryReveal);
+  };
+  tryReveal();
+}
+
 export function whenLayoutReady(id, container) {
   const t = terminals.get(id);
   if (!t) return;
   if (container.clientWidth > 0 && container.clientHeight > 0) {
     t.term.open(container);
+    primeScrollbarVisibility(container);
     enableWebglRenderer(t);
     fitTerminalPreservingBottom(t, id);
     if (!t.scrollHandlerInstalled) {

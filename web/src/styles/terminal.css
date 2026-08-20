@@ -603,23 +603,26 @@
 }
 
 .xterm { height: 100%; }
-.xterm-viewport {
-  overflow-y: scroll !important;
-  scrollbar-width: thin;
-  scrollbar-color: #4f5bd5 #172033;
+/* ターミナルのスクロールバー — xterm 6.0 世代のオーバーレイスクロールバーを常時表示にする。
+   xterm 5.x までは .xterm-viewport がネイティブスクロールしていたので
+   ::-webkit-scrollbar で色と幅を指定できたが、6.0 で VS Code 由来の
+   .xterm-scrollable-element > .scrollbar > .slider へ置き換わり、その指定は効かなくなった
+   （viewport は残っているがスクロールしないので ::-webkit-scrollbar 指定は無意味）。
+   xterm はこのスクロールバーを ScrollbarVisibility.Auto でハードコードしており
+   オプションで常時表示にできないため、フェードアウト状態を CSS で打ち消す。
+   対象を .invisible.fade に限るのが要点。ScrollbarVisibilityController は
+   「スクロール不要」なら .invisible（fade なし）、「必要だがフェードアウト中」なら
+   .invisible.fade を付ける。前者まで表示すると、スクロールできない端末に
+   トラック全長のスライダーが出てしまう。
+   初回 reveal（.fade が付く前）は terminal.ts の primeScrollbarVisibility が起こす。
+   slider の色は terminal.ts の theme.scrollbarSlider*Background 側で指定する。 */
+.xterm .xterm-scrollable-element > .scrollbar.invisible.fade {
+  opacity: 1;
+  pointer-events: auto;
+  transition: none;
 }
-.xterm-viewport::-webkit-scrollbar {
-  width: 6px;
-}
-.xterm-viewport::-webkit-scrollbar-track {
-  background: #172033;
-}
-.xterm-viewport::-webkit-scrollbar-thumb {
-  background: #4f5bd5;
+.xterm .xterm-scrollable-element > .scrollbar > .slider {
   border-radius: var(--radius-sm);
-}
-.xterm-viewport::-webkit-scrollbar-thumb:hover {
-  background: #6b74ff;
 }
 
 

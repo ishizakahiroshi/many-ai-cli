@@ -134,7 +134,7 @@
     {
       "id": "approval-identity-debug-panel",
       "status": "active",
-      "purpose": "承認ポップアップの本文（前置き・質問文）と選択肢が別々の質問の中身に入れ替わって表示される不具合で、showOptions() 呼び出し時点の options（_preamble/_question を含む）から計算した candidateKey/sourceEpoch/shape の推移を画面上で追えるようにする",
+      "purpose": "承認ポップアップの本文（前置き・質問文）と選択肢が別々の質問の中身に入れ替わって表示される不具合で、データ層（showOptions 呼び出し時点の options と candidateKey/sourceEpoch/shape）と描画層（single-tabs/batch-tabs/multi の差分スキップ判定直前）の 2 箇所から、本文と選択肢を必ず同じ 1 件に並べて画面上へ記録する",
       "addedIn": "unreleased",
       "gate": "opt-in: URL クエリ ?approvaldebug=1",
       "due": "2026-08-26",
@@ -142,12 +142,13 @@
         "web/src/app/debug-approval-identity.ts"
       ],
       "sharedFiles": [
-        "web/src/app/approval-ui.ts"
+        "web/src/app/approval-ui.ts",
+        "web/src/app/approval.ts"
       ],
       "endpoints": [],
       "removalCondition": "承認バーの本文と選択肢が別々の質問で入れ替わる不具合（docs/local/bugfix_approval-bar-stale-options-scroll-mismatch_2026-08-19.md）の原因が確定したら撤去",
       "reason": "コード読解だけでは、識別子（candidateKey/sourceEpoch）計算・Hub 側マーカー抽出・クライアント側キャッシュ層のいずれも単体では矛盾なく動く設計に見え、ズレの発生箇所を静的解析だけで切り分けられなかった。実機でユーザーが症状を再現した際の identity 推移を画面上の表示（スクリーンショットで共有可能な形）として残す必要がある",
-      "note": "記録内容は candidateKey/shape をハッシュの先頭14文字に短縮したもの・sourceEpoch・前置き/質問文の先頭70文字のみ。選択肢の全文・入力欄の内容は保存しない。URL クエリが無い通常アクセスでは isEnabled() が false のまま noteApprovalIdentityForDebug が即 return し、DOM 要素も作られない（既定 no-op）"
+      "note": "記録内容は candidateKey/shape をハッシュの先頭14文字に短縮したもの・sourceEpoch・前置きの先頭60文字・質問文の先頭40文字・選択肢ラベルの先頭24文字を最大3件まで。自由入力欄の内容と送信テキスト（_sendText）は保存しない。URL クエリが無い通常アクセスでは isEnabled() が false のまま noteApprovalIdentityForDebug / noteApprovalRenderForDebug が即 return し、DOM 要素も作られない（既定 no-op）/ 2026-08-19 に選択肢ラベルを記録対象へ追加した。初版は前置きか選択肢のどちらか片方しか残さない作りで、追跡対象である『本文と選択肢のズレ』がログに写らなかったため。あわせて描画層（approval.ts の 3 つの sig 差分スキップ判定）へも記録点を足し、データ時点のズレと描画スキップによる残留を切り分けられるようにした"
     }
   ]
 }
