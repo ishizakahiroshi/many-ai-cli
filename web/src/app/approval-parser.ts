@@ -764,7 +764,11 @@
       (lower.includes('press enter to confirm') && !lower.includes('esc to go back')) ||
       lower.includes('enter to select') ||
       lower.includes('↑/↓ to navigate') ||
-      lower.includes('esc to cancel');
+      lower.includes('esc to cancel') ||
+      lower.includes('tab:next option') ||
+      lower.includes('always-approve mode') ||
+      lower.includes('type to add feedback') ||
+      lower.includes('ctrl+o:always-approve');
   }
 
   function extractApprovalOptions(rawTail) {
@@ -799,6 +803,16 @@
       const om = String(line || '').match(/^\s*(\d{1,2})\.\s*(.+?)\s*$/);
       if (om) {
         options.unshift(buildApprovalOption(om[1], consumeContinuations(om[2]), false));
+        if (clusterEnd === -1) clusterEnd = i;
+        clusterStart = i;
+        seenOption = true;
+        blankGap = 0;
+        continue;
+      }
+      // Grok Build ツール許可カード: `1 (•) Yes, proceed`（ピリオド無し・ラジオ印が選択状態）。
+      const gm = String(line || '').replace(/^[│┃]+|[│┃]+$/g, '').trim().match(/^\s*(\d{1,2})\s+\(([•●○*\-])\)\s+(.+?)\s*$/);
+      if (gm) {
+        options.unshift(buildApprovalOption(gm[1], consumeContinuations(gm[3]), gm[2] !== '○'));
         if (clusterEnd === -1) clusterEnd = i;
         clusterStart = i;
         seenOption = true;

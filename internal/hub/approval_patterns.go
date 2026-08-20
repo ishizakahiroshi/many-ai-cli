@@ -66,10 +66,15 @@ var defaultApprovalPatterns = map[string][]string{
 		"always allow",
 		"until opencode is restarted",
 	},
-	// grok (Grok Build) は Claude Code 互換 harness（--permission-mode / CLAUDE.md）。
-	// 承認 UI も Claude Code 系と推定し、暫定で Claude 系 + 汎用文言を採用する。
-	// 実機 TUI の承認プロンプトで確定する（plan_grok-build-provider-integration.md C3）。
+	// grok (Grok Build) ツール許可カードは番号+ラジオ印（1 (•) / 2 (○)）。
+	// 実機 PTY（2026-08-20 セッション 8）のフッター・選択肢文言を正とする。
 	"grok": {
+		"always-approve mode",
+		"tab:next option",
+		"type to add feedback",
+		"ctrl+o:always-approve",
+		"yes, proceed",
+		"no, reject",
 		"do you want to",
 		"esc to cancel",
 		"press enter to confirm",
