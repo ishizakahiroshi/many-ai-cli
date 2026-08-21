@@ -71,6 +71,12 @@ jobs:
       - name: Check instrumentation ledger
         run: node scripts/check-instrumentation.mjs
 
+      # AI がファイルを書く経路（heredoc 経由の文字列）でエスケープが 1 段落ちると、
+      # 正規表現の単語境界がバックスペース 0x08 として焼き込まれる等の壊れ方をする。
+      # 画面上は正しく見えるので目視では見つからない（2026-08-21 に 3 回踏んだ）。
+      - name: Check text hygiene
+        run: node scripts/check-text-hygiene.mjs
+
       # resources/slash-commands/*.md は main の raw URL で全ユーザーへ実行時配信され、
       # slash_cmd_fetch.go の tableRowRe でパースされる。契約を破るとコマンドが
       # ピッカーから黙って消える（2026-08-11 に cursor-agent の 6 コマンドで発覚）。
