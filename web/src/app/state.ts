@@ -16,6 +16,7 @@ export interface TerminalEntry {
   pendingFlushActive?: boolean;
   pendingFlushSeq?: number;
   pendingFlushWatchdog?: ReturnType<typeof setTimeout> | null;
+  layoutGeneration?: number;
   webglAddon?: { dispose?: () => void } | null;
   pendingTextTail?: string;
   textDecoder?: TextDecoder;
@@ -349,7 +350,6 @@ export function enqueueApprovalAutoSwitch(sessionId: number): void {
 export function set__elapsedTimerInterval(v: ReturnType<typeof setInterval> | null) { _elapsedTimerInterval = v; }
 export function set_actionBarFocusIdx(v: number) { actionBarFocusIdx = v; }
 export function set_activeSessionId(v: number | null) {
-  try { console.log('[approval-route] set_activeSessionId', { from: activeSessionId, to: v, stack: new Error().stack?.split('\n').slice(1, 5).join(' | ') }); } catch (_) {}
   activeSessionId = v;
 }
 export function set_batchFocusIdx(v: number) { batchFocusIdx = v; }

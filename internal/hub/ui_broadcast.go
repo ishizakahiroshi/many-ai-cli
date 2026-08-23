@@ -21,9 +21,10 @@ import (
 
 // addUIWithHistory atomically registers c in the broadcast set and captures a
 // snapshot of every session's ptyBuf at the same instant, then returns those
-// snapshots as ready-to-send messages. Callers must send the returned messages
-// to c after this call; any PTY data arriving after the lock is released is
-// delivered via broadcast, so the snapshot and live stream do not overlap.
+// snapshots as ready-to-send messages. The connection remains in priming mode
+// until handleWS has sent the snapshot, history, and replay completion frames;
+// broadcasts produced in that interval are queued on the connection so they
+// cannot overtake the initial state.
 // activeSessionID は UI が現在表示中のセッション ID。このセッションは全量 replay し、
 // 他は replayTailForNonActive バイトの tail のみ送信する（UI 接続時のメモリ・帯域削減）。
 func (s *Server) addUIWithHistory(c *websocket.Conn, activeSessionID int) (*uiConn, []proto.Message) {
@@ -31,6 +32,7 @@ func (s *Server) addUIWithHistory(c *websocket.Conn, activeSessionID int) (*uiCo
 	s.sessionsMu.Lock()
 	uc := newUIConn(c)
 	uc.activeSessionID = activeSessionID
+	uc.priming = true
 	s.uis[c] = uc
 	s.stopIdleTimerLocked()
 	for id, ses := range s.sessions {
@@ -104,6 +106,9 @@ func (s *Server) removeUI(c *websocket.Conn) {
 		return
 	}
 	delete(s.uis, c)
+	uc.priming = false
+	uc.draining = false
+	uc.queued = nil
 	s.releaseResizeOwnershipLocked(c)
 	count := len(s.uis)
 	if count == 0 {
@@ -178,55 +183,113 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 	}
 
 	// C3: UI 接続時に既存セッションの usageStat をまとめて送る。
-	// これにより再接続時・リロード時にステータスバーが即座に復元される。
-	// ロック順序（usage_stat.go の不変条件）: usageStatsMu 保持中に sessionsMu を取得しない。
-	// provider は上の sessionsMu 区間で確定済みの providerByID から引く（ネスト取得を避ける）。
+	// usageStatsMu 下では wire message の値だけをコピーし、ネットワーク送信は
+	// ロック外で行う。遅いUIがusage受信を止めても、usage更新や他のsnapshotを
+	// 待たせない。
+	for _, usage := range snapshotUsageStatMessages(sessionIDs, providerByID) {
+		if err := uc.sendWithDeadline(usage, time.Now().Add(broadcastWriteTimeout)); err != nil {
+			s.logger.Warn("sendSnapshot: usage_stat send failed, removing dead connection", "err", err)
+			s.removeUI(uc.ws)
+			return
+		}
+	}
+}
+
+func snapshotUsageStatMessages(sessionIDs []int, providerByID map[int]string) []proto.Message {
 	usageStatsMu.Lock()
+	defer usageStatsMu.Unlock()
+
+	items := make([]proto.Message, 0, len(sessionIDs))
 	for _, id := range sessionIDs {
-		if stat, ok := usageStats[id]; ok {
-			if err := uc.sendWithDeadline(proto.Message{
-				Type:             "usage_stat",
-				SessionID:        id,
-				Provider:         providerByID[id],
-				CostUSD:          stat.CostUSD,
-				CostKnown:        stat.CostKnown,
-				TokensIn:         stat.TokensIn,
-				TokensOut:        stat.TokensOut,
-				TokensCache:      stat.TokensCache,
-				TokensTotal:      stat.TokensTotal,
-				CtxWindow:        stat.CtxWindow,
-				CtxUsedPct:       stat.CtxUsedPct,
-				RateLimit5hPct:   stat.RateLimit5hPct,
-				RateLimit5hReset: stat.RateLimit5hReset,
-				RateLimit7dPct:   stat.RateLimit7dPct,
-				RateLimit7dReset: stat.RateLimit7dReset,
-				LinesAdded:       stat.LinesAdded,
-				LinesRemoved:     stat.LinesRemoved,
-				EffortLevel:      stat.EffortLevel,
-				Thinking:         stat.Thinking,
-				Exceeds200k:      stat.Exceeds200k,
-				DurationMs:       stat.DurationMs,
-				APIDurationMs:    stat.APIDurationMs,
-				Version:          stat.Version,
-				OutputStyle:      stat.OutputStyle,
-				VimMode:          stat.VimMode,
-				AgentName:        stat.AgentName,
-				RepoHost:         stat.RepoHost,
-				RepoOwner:        stat.RepoOwner,
-				RepoName:         stat.RepoName,
-				RemainingPct:     stat.RemainingPct,
-				ReasoningOut:     stat.ReasoningOut,
-				UsageModel:       stat.UsageModel,
-				UsageStartedAt:   stat.StartedAt,
-			}, deadline); err != nil {
-				usageStatsMu.Unlock()
-				s.logger.Warn("sendSnapshot: usage_stat send failed, removing dead connection", "err", err)
+		stat, ok := usageStats[id]
+		if !ok || stat == nil {
+			continue
+		}
+		items = append(items, proto.Message{
+			Type:                        "usage_stat",
+			SessionID:                   id,
+			Provider:                    providerByID[id],
+			CostUSD:                     stat.CostUSD,
+			CostKnown:                   stat.CostKnown,
+			TokensIn:                    stat.TokensIn,
+			TokensOut:                   stat.TokensOut,
+			TokensCache:                 stat.TokensCache,
+			TokensTotal:                 stat.TokensTotal,
+			CtxWindow:                   stat.CtxWindow,
+			CtxUsedPct:                  stat.CtxUsedPct,
+			RateLimit5hPct:              stat.RateLimit5hPct,
+			RateLimit5hReset:            stat.RateLimit5hReset,
+			RateLimit7dPct:              stat.RateLimit7dPct,
+			RateLimit7dReset:            stat.RateLimit7dReset,
+			CodexRateLimitsPresent:      stat.CodexRateLimitsPresent,
+			CodexPrimaryUsedPct:         stat.CodexPrimaryUsedPct,
+			CodexPrimaryWindowMinutes:   stat.CodexPrimaryWindowMinutes,
+			CodexPrimaryReset:           stat.CodexPrimaryReset,
+			CodexSecondaryUsedPct:       stat.CodexSecondaryUsedPct,
+			CodexSecondaryWindowMinutes: stat.CodexSecondaryWindowMinutes,
+			CodexSecondaryReset:         stat.CodexSecondaryReset,
+			CodexCreditsBalance:         stat.CodexCreditsBalance,
+			CodexPlanType:               stat.CodexPlanType,
+			LinesAdded:                  stat.LinesAdded,
+			LinesRemoved:                stat.LinesRemoved,
+			EffortLevel:                 stat.EffortLevel,
+			Thinking:                    stat.Thinking,
+			Exceeds200k:                 stat.Exceeds200k,
+			DurationMs:                  stat.DurationMs,
+			APIDurationMs:               stat.APIDurationMs,
+			Version:                     stat.Version,
+			OutputStyle:                 stat.OutputStyle,
+			VimMode:                     stat.VimMode,
+			AgentName:                   stat.AgentName,
+			RepoHost:                    stat.RepoHost,
+			RepoOwner:                   stat.RepoOwner,
+			RepoName:                    stat.RepoName,
+			RemainingPct:                stat.RemainingPct,
+			ReasoningOut:                stat.ReasoningOut,
+			UsageModel:                  stat.UsageModel,
+			UsageStartedAt:              stat.StartedAt,
+		})
+	}
+	return items
+}
+
+// finishUIPriming switches a UI from snapshot/replay mode to live mode while
+// preserving the exact order of events produced during that transition. The
+// draining flag is held under sessionsMu while a copied queue is sent, so a
+// broadcast concurrent with the send is appended behind the current batch and
+// flushed by the next iteration.
+func (s *Server) finishUIPriming(uc *uiConn) bool {
+	if uc == nil {
+		return false
+	}
+	for {
+		s.sessionsMu.Lock()
+		if current := s.uis[uc.ws]; current != uc {
+			uc.priming = false
+			uc.draining = false
+			uc.queued = nil
+			s.sessionsMu.Unlock()
+			return false
+		}
+		uc.priming = false
+		uc.draining = true
+		items := append([]any(nil), uc.queued...)
+		uc.queued = nil
+		if len(items) == 0 {
+			uc.draining = false
+			s.sessionsMu.Unlock()
+			return true
+		}
+		s.sessionsMu.Unlock()
+
+		for _, item := range items {
+			if err := uc.sendWithDeadline(item, time.Now().Add(broadcastWriteTimeout)); err != nil {
+				s.logger.Warn("finishUIPriming: UI send failed, removing dead connection", "err", err)
 				s.removeUI(uc.ws)
-				return
+				return false
 			}
 		}
 	}
-	usageStatsMu.Unlock()
 }
 
 func (s *Server) broadcast(m any) {
@@ -244,6 +307,10 @@ func (s *Server) broadcast(m any) {
 	s.sessionsMu.Lock()
 	ucs := make([]*uiConn, 0, len(s.uis))
 	for _, uc := range s.uis {
+		if uc.priming || uc.draining {
+			uc.queued = append(uc.queued, m)
+			continue
+		}
 		ucs = append(ucs, uc)
 	}
 	s.sessionsMu.Unlock()

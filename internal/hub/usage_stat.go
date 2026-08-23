@@ -118,7 +118,8 @@ type modelPricing struct {
 // modelPriceTable: モデル ID（完全一致または前方一致で検索）→ 単価。
 // Codex 用: トークン → コスト算出に使う。
 // Claude 用: relay が cost をそのまま送るため原則使わないが、
-//            将来的にトークン内訳を表示する場合に備えて収録。
+//
+//	将来的にトークン内訳を表示する場合に備えて収録。
 var modelPriceTable = map[string]modelPricing{
 	// --- OpenAI / Codex ---
 	// gpt-4.1 系 (2025-04 発表)
@@ -182,8 +183,25 @@ func calcCostUSD(modelID string, tokIn, tokOut, tokCacheRead int) (cost float64,
 	if !ok {
 		return 0, false
 	}
+	// Codex reports cached input as a subset of input_tokens. Charge the
+	// uncached remainder at the normal input rate and the cached subset at the
+	// cache-read rate. Clamp malformed counts so cache > input cannot produce a
+	// negative billable input amount.
+	if tokIn < 0 {
+		tokIn = 0
+	}
+	if tokOut < 0 {
+		tokOut = 0
+	}
+	if tokCacheRead < 0 {
+		tokCacheRead = 0
+	}
+	if tokCacheRead > tokIn {
+		tokCacheRead = tokIn
+	}
+	uncachedInput := tokIn - tokCacheRead
 	const mTok = 1_000_000.0
-	cost = float64(tokIn)*p.InputPerMTok/mTok +
+	cost = float64(uncachedInput)*p.InputPerMTok/mTok +
 		float64(tokOut)*p.OutputPerMTok/mTok +
 		float64(tokCacheRead)*p.CacheReadPerMTok/mTok
 	return cost, true

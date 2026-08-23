@@ -18,11 +18,13 @@ type approvalBatchRequest struct {
 }
 
 type pendingNativeApproval struct {
-	id       int
-	provider string
-	cwd      string
-	approval *nativeApproval
-	wrapper  *wrapperConn
+	id           int
+	provider     string
+	cwd          string
+	approval     *nativeApproval
+	candidateKey string
+	sourceEpoch  uint64
+	wrapper      *wrapperConn
 }
 
 func approvalBatchSignature(provider, cwd string, summary proto.ApprovalSummary) string {
@@ -42,7 +44,11 @@ func (s *Server) pendingNativeApprovals() []pendingNativeApproval {
 		if approval == nil || approval.Sig != ses.nativeApprovalSig {
 			continue
 		}
-		items = append(items, pendingNativeApproval{id: id, provider: ses.Provider, cwd: ses.CWD, approval: approval, wrapper: s.wrappers[id]})
+		items = append(items, pendingNativeApproval{
+			id: id, provider: ses.Provider, cwd: ses.CWD, approval: approval,
+			candidateKey: approvalCandidateKeyWithContext(ses.Provider, approval.Kind, approval.Question, approval.Context, approval.Options),
+			sourceEpoch:  ensureApprovalSourceEpochLocked(ses), wrapper: s.wrappers[id],
+		})
 	}
 	return items
 }
@@ -84,9 +90,12 @@ func (s *Server) handleApprovalBatch(w http.ResponseWriter, r *http.Request) {
 		if req.Action == "deny_session" && req.SessionID > 0 {
 			applied := 0
 			for _, item := range matched {
-				if input := oneTapRejectInput(item.approval.Options); input != "" && item.wrapper != nil {
-					s.markNativeApprovalConsumed(proto.Message{SessionID: item.id, ApprovalSig: item.approval.Sig, SentText: input})
-					s.submitInput(item.id, input)
+				result, err := s.sendNativeApprovalAction(nativeApprovalActionRequest{
+					sessionID: item.id, approvalSig: item.approval.Sig,
+					expectedCandidateKey: item.candidateKey, expectedSourceEpoch: item.sourceEpoch,
+					expectedWrapper: item.wrapper, action: oneTapReject,
+				})
+				if err == nil && s.commitNativeApprovalAction(result) {
 					applied++
 				}
 			}
@@ -103,13 +112,14 @@ func (s *Server) handleApprovalBatch(w http.ResponseWriter, r *http.Request) {
 		if item.approval.Summary.Risk != proto.ApprovalRiskLow {
 			continue
 		}
-		input := autoApprovalInput(item.approval.Options)
-		if input == "" || item.wrapper == nil {
-			continue
+		result, err := s.sendNativeApprovalAction(nativeApprovalActionRequest{
+			sessionID: item.id, approvalSig: item.approval.Sig,
+			expectedCandidateKey: item.candidateKey, expectedSourceEpoch: item.sourceEpoch,
+			expectedWrapper: item.wrapper, action: oneTapApprove, lowRiskOnly: true,
+		})
+		if err == nil && s.commitNativeApprovalAction(result) {
+			applied++
 		}
-		s.markNativeApprovalConsumed(proto.Message{SessionID: item.id, ApprovalSig: item.approval.Sig, SentText: input})
-		s.submitInput(item.id, input)
-		applied++
 	}
 	writeJSON(w, map[string]any{"ok": true, "matched": len(matched), "applied": applied})
 }

@@ -104,6 +104,14 @@ type fileReadGrant struct {
 	viaMention bool
 }
 
+func canonicalReadPath(path string) string {
+	cleaned := filepath.Clean(path)
+	if resolved, ok := evalSymlinksViaSelf(cleaned); ok {
+		return filepath.Clean(resolved)
+	}
+	return cleaned
+}
+
 // resolveAllowedFilePath は ?path= を検証して読み取り許可の判定結果を返す。
 //
 // 判定は 3 段:
@@ -122,6 +130,12 @@ func (s *Server) resolveAllowedFilePath(r *http.Request) (fileReadGrant, error) 
 	if !filepath.IsAbs(pathParam) {
 		return fileReadGrant{}, httpError{status: http.StatusBadRequest, msg: "path must be an absolute path"}
 	}
+	absPath, err := filepath.Abs(filepath.Clean(pathParam))
+	if err != nil {
+		return fileReadGrant{}, httpError{status: http.StatusBadRequest, msg: "path is not canonicalizable"}
+	}
+	pathParam = filepath.Clean(absPath)
+	readPath := canonicalReadPath(pathParam)
 
 	cwd := s.cwdForRequest(r)
 
@@ -136,24 +150,24 @@ func (s *Server) resolveAllowedFilePath(r *http.Request) (fileReadGrant, error) 
 	orchDir, _ := orchestrationDir()
 	allowed, err := isPathUnderAllowedRoots(pathParam, cwd, gitRoot, attachDir, orchDir)
 	if err == nil && allowed {
-		return fileReadGrant{path: pathParam}, nil
+		return fileReadGrant{path: readPath}, nil
 	}
 
 	// ここから先は許可ルート外＝「中身をブラウザへ返してよいか」の判断になるため
 	// 秘密情報 denylist を適用する。
-	if isSecretReadDenied(pathParam) {
+	if isSecretReadDenied(pathParam) || isSecretReadDenied(readPath) {
 		return fileReadGrant{}, httpError{status: http.StatusForbidden, msg: "forbidden: path is denied as a secret-like file"}
 	}
 
 	// 直 loopback（Hub ホストのブラウザ）は許可ルートで制限しない。根拠は filesScopeRestricted。
 	if !s.filesScopeRestricted(r) {
-		return fileReadGrant{path: pathParam, readOnly: true}, nil
+		return fileReadGrant{path: readPath, readOnly: true}, nil
 	}
 
 	// 論理リモート（tailscale / trusted_networks / スマホ）は従来どおり、
 	// ユーザー自身がチャットで言及したパスのみ読み取り専用で許可する。
-	if s.isPathMentionedInSession(r, pathParam, cwd) {
-		return fileReadGrant{path: pathParam, readOnly: true, viaMention: true}, nil
+	if s.isPathMentionedInSession(r, pathParam, cwd) || s.isPathMentionedInSession(r, readPath, cwd) {
+		return fileReadGrant{path: readPath, readOnly: true, viaMention: true}, nil
 	}
 	return fileReadGrant{}, httpError{status: http.StatusForbidden, msg: "forbidden: path is outside allowed roots"}
 }

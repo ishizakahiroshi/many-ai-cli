@@ -454,11 +454,13 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	var prevApprovalMarkerSourceEpoch uint64
 	var prevApprovalMarkerSuppressedSig string
 	var prevApprovalMarkerSuppressedAt time.Time
+	var prevReattachState reattachPreservedState
 	var requeuedInputCount int
 	var requeuedInputMinSeq int64
 	var requeuedInputMaxSeq int64
 	prevExists := false
 	if cur := s.sessions[acceptedID]; cur != nil {
+		prevReattachState = snapshotReattachStateLocked(cur)
 		prevAgentChatPath = cur.agentChatPath
 		prevAgentChatOffset = cur.agentChatOffset
 		prevReplayEpoch = cur.replayEpoch
@@ -481,6 +483,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		prevApprovalMarkerSourceEpoch = cur.approvalMarkerSourceEpoch
 		prevApprovalMarkerSuppressedSig = cur.approvalMarkerSuppressedSig
 		prevApprovalMarkerSuppressedAt = cur.approvalMarkerSuppressedAt
+		stopReattachAsyncStateLocked(cur)
 		s.stopAgentChatTailLocked(cur)
 		oldHistory = cur.History
 		prevPTYBuf = cur.ptyBuf
@@ -616,7 +619,11 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		resendInput:         prevResendInput,
 		inputAckCapable:     prevInputAckCapable,
 	}
+	if prevExists {
+		applyReattachPreservedStateLocked(s.sessions[acceptedID], prevReattachState)
+	}
 	s.sessions[acceptedID].inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
+	s.restartReattachAsyncStateLocked(acceptedID, s.sessions[acceptedID], now)
 	wc := newWrapperConn(conn)
 	wc.pid = req.PID
 	s.wrappers[acceptedID] = wc
@@ -742,6 +749,13 @@ func (s *Server) reattachAnnounceMessage(id int, wc *wrapperConn) (proto.Message
 	return sessionUpdateMessage(ses), true
 }
 
+// wrapperCleanupAlreadyDismissedLocked distinguishes an intentional UI
+// dismiss (both maps removed) from an ordinary wrapper disconnect where the
+// session still needs to be marked disconnected and finalized.
+func wrapperCleanupAlreadyDismissedLocked(s *Server, id int) bool {
+	return s.wrappers[id] == nil && s.sessions[id] == nil
+}
+
 func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	for {
 		var m proto.Message
@@ -753,15 +767,18 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 		switch m.Type {
 		case "pty_data":
 			now := time.Now()
-			maskedRaw := sessionlog.MaskSecrets(string(m.Data))
-			cleanText := sessionlog.StripANSI(maskedRaw)
-			s.writeHistory(id, map[string]any{
-				"ts":         now.Format(time.RFC3339),
-				"type":       "pty_output",
-				"session_id": id,
-				"data_b64":   sessionlog.EncodeBase64([]byte(maskedRaw)),
-				"text":       cleanText,
-			})
+			cleanText := sessionlog.StripANSI(string(m.Data))
+			if s.sessionLogEnabled() {
+				maskedRaw := sessionlog.MaskSecrets(string(m.Data))
+				cleanText = sessionlog.StripANSI(maskedRaw)
+				s.writeHistory(id, map[string]any{
+					"ts":         now.Format(time.RFC3339),
+					"type":       "pty_output",
+					"session_id": id,
+					"data_b64":   sessionlog.EncodeBase64([]byte(maskedRaw)),
+					"text":       cleanText,
+				})
+			}
 			var provider string
 			var vtLines []string
 			var marker *approvalMarkerBlock
@@ -904,6 +921,11 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 
 	// wrapper 切断
 	s.sessionsMu.Lock()
+	if wrapperCleanupAlreadyDismissedLocked(s, id) {
+		s.sessionsMu.Unlock()
+		s.logger.Debug("wrapper loop ended after session dismiss", "session_id", id)
+		return
+	}
 	if cur := s.wrappers[id]; cur != nil && cur != wc {
 		// この ID は既に別の接続へ差し替わっている（reattachIdentityMatches が同一
 		// wrapper と判定して番号を引き継いだ場合）。後始末を続けると現役セッションを

@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // 旧名 any-ai-cli マーカーで注入されたブロック（v0.3.x 以前のバイナリ由来）が、
@@ -158,6 +161,88 @@ func TestWriteClaudeSessionSettingsWritesOnlyRequestedKeys(t *testing.T) {
 func TestClaudeSettingsOptionsEnabledIsFalseWhenNothingRequested(t *testing.T) {
 	if (ClaudeSettingsOptions{}).enabled() {
 		t.Fatal("empty ClaudeSettingsOptions reported enabled")
+	}
+}
+
+func TestWriteClaudeSessionSettingsUsesOwnedPIDName(t *testing.T) {
+	path, cleanup, err := WriteClaudeSessionSettings(testUsageHookParams(), ClaudeSettingsOptions{StatusLine: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	match := claudeSessionSettingsNameRe.FindStringSubmatch(filepath.Base(path))
+	if match == nil || match[1] != claudeSessionSettingsOwnerID() || match[3] != strconv.Itoa(os.Getpid()) {
+		t.Fatalf("settings path %q does not bind owner and pid", path)
+	}
+}
+
+func TestCleanupStaleClaudeSessionSettingsIsConservative(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	stale := now.Add(-claudeSessionSettingsStaleAfter - time.Minute)
+	makeFile := func(name string, modTime time.Time) string {
+		t.Helper()
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(`{"statusLine":{"type":"command"}}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, modTime, modTime); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	ownedDead := makeFile("aac-claude-settings-u"+claudeSessionSettingsOwnerID()+"-s7-p99999999.json", stale)
+	ownedLive := makeFile("aac-claude-settings-u"+claudeSessionSettingsOwnerID()+"-s8-p"+strconv.Itoa(os.Getpid())+".json", stale)
+	wrongOwner := makeFile("aac-claude-settings-u0000000000000000-s9-p99999999.json", stale)
+	legacyName := makeFile("aac-claude-settings-s10-99999999.json", stale)
+	fresh := makeFile("aac-claude-settings-u"+claudeSessionSettingsOwnerID()+"-s11-p99999999.json", now)
+
+	cleanupStaleClaudeSessionSettingsInDir(dir, now)
+	if _, err := os.Stat(ownedDead); !os.IsNotExist(err) {
+		t.Fatalf("owned dead stale file was not removed: %v", err)
+	}
+	for _, path := range []string{ownedLive, wrongOwner, legacyName, fresh} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("conservative cleanup removed %s: %v", path, err)
+		}
+	}
+}
+
+func TestWriteCodexConfigReplacesCompleteFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	old := "model = \"old\"\n"
+	initialMode := os.FileMode(0o600)
+	if runtime.GOOS != "windows" {
+		initialMode = 0o400
+	}
+	if err := os.WriteFile(path, []byte(old), initialMode); err != nil {
+		t.Fatal(err)
+	}
+	newContent := "model = \"new\"\n\n" + codexStopHookBlock(testUsageHookParams())
+	if err := writeCodexConfig(path, newContent); err != nil {
+		t.Fatalf("writeCodexConfig: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != newContent {
+		t.Fatalf("config content = %q, want complete replacement %q", data, newContent)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.Contains(entry.Name(), ".tmp-") {
+			t.Fatalf("atomic temp artifact remains: %s", entry.Name())
+		}
+	}
+	if runtime.GOOS != "windows" {
+		if mode := func() os.FileMode { info, _ := os.Stat(path); return info.Mode().Perm() }(); mode != initialMode {
+			t.Fatalf("config mode = %o, want preserved stricter mode %o", mode, initialMode)
+		}
 	}
 }
 

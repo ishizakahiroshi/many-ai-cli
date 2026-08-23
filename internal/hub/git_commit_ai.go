@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"many-ai-cli/internal/proto"
+	"many-ai-cli/internal/sessionlog"
 )
 
 // Git タブ「Ask AI」: 接続中の AI セッションへコミットメッセージ生成プロンプトを
@@ -119,8 +120,8 @@ func (s *Server) handleCommitMsgChunk(id int, cleanText string) {
 	ses.commitMsgBuf.Reset()
 	s.sessionsMu.Unlock()
 
-	subject = sanitizeCommitMessage(subject, gitCommitSubjectMaxLen)
-	body = sanitizeCommitMessage(body, gitCommitBodyMaxLen)
+	subject = sanitizeCommitMessage(sessionlog.MaskSecrets(subject), gitCommitSubjectMaxLen)
+	body = sanitizeCommitMessage(sessionlog.MaskSecrets(body), gitCommitBodyMaxLen)
 	s.broadcast(proto.Message{Type: "commit_msg_suggested", SessionID: id, CommitSubject: subject, CommitBody: body})
 }
 

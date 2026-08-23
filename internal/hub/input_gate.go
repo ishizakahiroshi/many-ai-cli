@@ -417,8 +417,19 @@ func (s *Server) trySendInput(sessionID int, combined string) (remaining string)
 	// Reattach can replace the wrapper while the caller is waiting. Resolve the
 	// registration immediately before creating the wire frame.
 	wc := s.currentWrapperForInput(sessionID)
+	return s.trySendInputToWrapper(sessionID, wc, combined)
+}
+
+// trySendInputToWrapper sends to a wrapper that was validated by a caller
+// holding the session input lock. The current-registration checks prevent a
+// reattach that happened while waiting from receiving an approval answer meant
+// for the previous connection.
+func (s *Server) trySendInputToWrapper(sessionID int, wc *wrapperConn, combined string) (remaining string) {
 	if wc == nil {
 		s.logger.Warn("pty_input deferred: no wrapper connected", "session_id", sessionID)
+		return combined
+	}
+	if s.currentWrapperForInput(sessionID) != wc {
 		return combined
 	}
 	first, delayed := splitBracketedPasteSubmit(combined)
@@ -428,6 +439,9 @@ func (s *Server) trySendInput(sessionID int, combined string) (remaining string)
 	}
 	if delayed != "" {
 		time.Sleep(bracketedPasteSubmitDelay)
+		if s.currentWrapperForInput(sessionID) != wc {
+			return delayed
+		}
 		if err := s.sendPTYInputFrame(wc, sessionID, delayed); err != nil {
 			s.logger.Warn("pty_input deferred: send failed", "session_id", sessionID, "stage", "delayed", "err", err)
 			return delayed

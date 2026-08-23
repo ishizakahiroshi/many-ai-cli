@@ -18,11 +18,22 @@ export function setLang(v: string): void | undefined {
   window.__lang = ['ja', 'en', 'vi'].includes(lang) ? lang : 'ja';
   document.documentElement.lang = window.__lang;
 
-  const res = await fetch('/i18n/' + window.__lang + '.json');
-  const dict = await res.json();
+  let dict: Record<string, unknown> = {};
+  try {
+    const res = await fetch('/i18n/' + window.__lang + '.json');
+    if (!res.ok) throw new Error(`i18n dictionary request failed: ${res.status}`);
+    const loaded = await res.json();
+    if (loaded && typeof loaded === 'object' && !Array.isArray(loaded)) {
+      dict = loaded as Record<string, unknown>;
+    }
+  } catch (err) {
+    // An unavailable dictionary must not prevent the app modules from
+    // receiving i18n-ready. The key itself is the safe final fallback.
+    console.warn('[i18n] dictionary unavailable; using key fallbacks', err);
+  }
 
   window.t = (key: string, vars?: I18nVars | string) => {
-    let s = dict[key] ?? key;
+    let s = String(dict[key] ?? key);
     if (vars && typeof vars === 'object') Object.entries(vars).forEach(([k, v]) => { s = s.replaceAll('{' + k + '}', String(v)); });
     return String(s);
   };
@@ -47,11 +58,13 @@ export function setLang(v: string): void | undefined {
     });
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', applyI18n);
-  } else {
+  const ready = () => {
     applyI18n();
+    document.dispatchEvent(new Event('i18n-ready'));
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ready, { once: true });
+  } else {
+    ready();
   }
-
-  document.dispatchEvent(new Event('i18n-ready'));
 })();

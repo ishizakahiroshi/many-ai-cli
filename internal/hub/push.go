@@ -535,6 +535,10 @@ func (s *Server) notifyApprovalPush(id int, approvalID, provider, question, cont
 	body := firstNonEmpty(question, contextText, ses.LastMessage, ses.FirstMessage, ses.CWD, "Approval is waiting.")
 	approvalID = strings.TrimSpace(approvalID)
 	activeNativeApproval := approvalID != "" && ses.nativeApprovalSig == approvalID
+	sourceEpoch := uint64(0)
+	if activeNativeApproval {
+		sourceEpoch = ensureApprovalSourceEpochLocked(ses)
+	}
 	s.sessionsMu.Unlock()
 	// 承認 question/context は生 PTY テキスト由来で未マスク。ntfy/webhook/Web Push
 	// という端末外の第三者へ送出する前に MaskSecrets を通す（全外部送出の単一ボトルネック）。
@@ -549,9 +553,9 @@ func (s *Server) notifyApprovalPush(id int, approvalID, provider, question, cont
 	if activeNativeApproval && s.oneTapApprovals != nil {
 		// Reject is allowed at every tier; approve is withheld for high risk and
 		// independently rejected by the action endpoint as defense in depth.
-		rejectToken, _ = s.oneTapApprovals.issue(id, approvalID, approvalID, oneTapReject)
+		rejectToken, _ = s.oneTapApprovals.issue(id, approvalID, approvalID, sourceEpoch, oneTapReject)
 		if summary.Risk != proto.ApprovalRiskHigh {
-			approveToken, _ = s.oneTapApprovals.issue(id, approvalID, approvalID, oneTapApprove)
+			approveToken, _ = s.oneTapApprovals.issue(id, approvalID, approvalID, sourceEpoch, oneTapApprove)
 		}
 	}
 	payload := pushApprovalPayload{
@@ -612,6 +616,10 @@ func (s *Server) notifyApprovalOutbound(id int, approvalID, provider, question, 
 	body := firstNonEmpty(question, contextText, ses.LastMessage, ses.FirstMessage, ses.CWD, "Approval is waiting.")
 	approvalID = strings.TrimSpace(approvalID)
 	activeNativeApproval := approvalID != "" && ses.nativeApprovalSig == approvalID
+	sourceEpoch := uint64(0)
+	if activeNativeApproval {
+		sourceEpoch = ensureApprovalSourceEpochLocked(ses)
+	}
 	s.sessionsMu.Unlock()
 	// 承認 question/context は生 PTY テキスト由来で未マスク。ntfy/webhook という
 	// 端末外の第三者へ送出する前に MaskSecrets を通す（全外部送出の単一ボトルネック）。
@@ -623,11 +631,11 @@ func (s *Server) notifyApprovalOutbound(id int, approvalID, provider, question, 
 	summary := approval.Summarize(question, contextText)
 	approveURL, rejectURL := "", ""
 	if activeNativeApproval && s.oneTapApprovals != nil {
-		if token, err := s.oneTapApprovals.issue(id, approvalID, approvalID, oneTapReject); err == nil {
+		if token, err := s.oneTapApprovals.issue(id, approvalID, approvalID, sourceEpoch, oneTapReject); err == nil {
 			rejectURL = s.oneTapExternalURL(token)
 		}
 		if summary.Risk != proto.ApprovalRiskHigh {
-			if token, err := s.oneTapApprovals.issue(id, approvalID, approvalID, oneTapApprove); err == nil {
+			if token, err := s.oneTapApprovals.issue(id, approvalID, approvalID, sourceEpoch, oneTapApprove); err == nil {
 				approveURL = s.oneTapExternalURL(token)
 			}
 		}
