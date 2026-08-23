@@ -125,10 +125,16 @@ func (s *Server) handleSubscriptionAdd(w http.ResponseWriter, r *http.Request) {
 
 	// ディレクトリ作成とファイル書き込みはロックの外で行う（cfgMu を I/O で
 	// 握らないという既存方針）。失敗したら登録を巻き戻す。
-	if err := subscription.EnsureProfileDir(profileDir); err != nil {
+	seeded, err := subscription.EnsureProfileDir(provider, profileDir)
+	if err != nil {
 		s.removeSubscriptionEntry(provider, id)
 		writeJSONError(w, http.StatusInternalServerError, "profile_dir_error", errorDetail("create profile dir", err))
 		return
+	}
+	if seeded.Any() {
+		s.logger.Info("subscription profile seeded",
+			"provider", provider, "id", id,
+			"applied", seeded.Applied, "failed", seeded.Failed)
 	}
 	if err := s.persistConfig(); err != nil {
 		s.removeSubscriptionEntry(provider, id)

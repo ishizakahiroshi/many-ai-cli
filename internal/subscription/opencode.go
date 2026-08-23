@@ -80,3 +80,11 @@ func parseOpenCodeProvidersList(out string) Status {
 	}
 	return status
 }
+
+// openCodeAdapter deliberately does not implement ProfileSeeder.
+//
+// Measured 2026-08-23: OpenCode is the one supported provider that loses
+// nothing when a profile is selected. Only XDG_DATA_HOME moves, and that holds
+// just <dir>/opencode/auth.json; config, skills and rules live under
+// XDG_CONFIG_HOME, which many-ai-cli never touches. There is nothing to carry
+// in, so adding an empty SeedEntries here would only invite someone to fill it.

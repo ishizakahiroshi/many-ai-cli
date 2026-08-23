@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"many-ai-cli/internal/config"
@@ -52,6 +53,9 @@ func subscriptions(ctx context.Context, cfg *config.Config) []Check {
 					fmt.Sprintf("%s: 無効化されています", name), ""})
 			default:
 				checks = append(checks, subscriptionProfileCheck(ctx, adapter, name, p))
+				if drift := subscriptionSeedCheck(entry.Provider, name, p); drift != nil {
+					checks = append(checks, *drift)
+				}
 			}
 		}
 	}
@@ -88,4 +92,47 @@ func subscriptionProfileCheck(ctx context.Context, adapter subscription.Adapter,
 		return Check{"subscription", OK, fmt.Sprintf("%s: ログイン済み（%s）", name, status.Plan), ""}
 	}
 	return Check{"subscription", OK, name + ": ログイン済み", ""}
+}
+
+// maxReportedSeedEntries caps the drift list so one stale profile cannot push
+// the rest of the diagnosis off the screen.
+const maxReportedSeedEntries = 4
+
+// subscriptionSeedCheck reports settings the profile is missing compared with
+// the user's own default configuration for that CLI.
+//
+// This is the half of the fix that keeps working after the fact. Seeding runs
+// when the Hub prepares a profile and is additive, so it cannot reach a profile
+// created before seeding existed, and it cannot notice that the user added a
+// skill directory to their default configuration yesterday. Without this row
+// that gap is invisible: a session with no rules and no skills looks exactly
+// like a session where the CLI simply chose not to use them, which is what cost
+// an afternoon on 2026-08-23.
+//
+// It returns nil when nothing is missing, following the rule that an unused
+// feature must not add lines to the report.
+func subscriptionSeedCheck(provider, name string, p subscription.Entry) *Check {
+	if !p.Exists || p.ProfileDir == "" {
+		// Not signed in yet. The row above already says so, and seeding will
+		// run when the profile is first prepared.
+		return nil
+	}
+	pending := subscription.PendingSeedEntries(provider, p.ProfileDir)
+	if len(pending) == 0 {
+		return nil
+	}
+	labels := make([]string, 0, len(pending))
+	for _, entry := range pending {
+		labels = append(labels, entry.Label)
+	}
+	shown := labels
+	suffix := ""
+	if len(shown) > maxReportedSeedEntries {
+		shown = shown[:maxReportedSeedEntries]
+		suffix = fmt.Sprintf(" ほか %d 件", len(labels)-maxReportedSeedEntries)
+	}
+	return &Check{"subscription", Warn,
+		fmt.Sprintf("%s: 既定の設定のうち %d 件がこの profile にありません（%s%s）",
+			name, len(labels), strings.Join(shown, " / "), suffix),
+		"次回このプロファイルでセッションを起動すると自動で持ち込まれます。すぐ入れたい場合は既定側から手でコピーしてください（既にあるものは上書きされません）"}
 }

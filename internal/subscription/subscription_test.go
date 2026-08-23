@@ -210,8 +210,11 @@ func TestListWithNilConfigDoesNotPanic(t *testing.T) {
 }
 
 func TestEnsureProfileDirCreatesPrivateDirectory(t *testing.T) {
+	// 既定設定を空の home へ向け、この test が利用者の実 ~/.claude を読まない
+	// ようにする（seed が走ると temp dir に実ファイルが持ち込まれてしまう）。
+	isolateVendorHome(t)
 	dir := filepath.Join(t.TempDir(), "subscriptions", "claude", "main")
-	if err := EnsureProfileDir(dir); err != nil {
+	if _, err := EnsureProfileDir("claude", dir); err != nil {
 		t.Fatalf("EnsureProfileDir: %v", err)
 	}
 	info, err := os.Stat(dir)
@@ -227,10 +230,10 @@ func TestEnsureProfileDirCreatesPrivateDirectory(t *testing.T) {
 		}
 	}
 	// 冪等であること（既存ディレクトリで失敗しない）。
-	if err := EnsureProfileDir(dir); err != nil {
+	if _, err := EnsureProfileDir("claude", dir); err != nil {
 		t.Fatalf("second EnsureProfileDir: %v", err)
 	}
-	if err := EnsureProfileDir(""); err == nil {
+	if _, err := EnsureProfileDir("claude", ""); err == nil {
 		t.Fatal("an empty dir must be rejected")
 	}
 }
