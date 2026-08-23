@@ -6,6 +6,7 @@ import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessio
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { orderSessions } from './app/state.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, resumeTerminalBottomFollow, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
+import { disposeAltScrollRail } from './app/alt-scroll-rail-view.js';
 import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appConfirmTypedDanger, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
@@ -1685,6 +1686,7 @@ export function removeLocalSession(id) {
   removeFromSessionOrder(id);
   const t = terminals.get(id);
   if (t) { try { t.term.dispose(); } catch (_) {} terminals.delete(id); }
+  try { disposeAltScrollRail(id); } catch (_) {}
   approvalVisibleCache.delete(id);
   if (multiQuestionVisibleCache.delete(id) && id === activeSessionId) {
     setMultiQuestionBannerVisible(false);

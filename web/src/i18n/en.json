@@ -564,6 +564,7 @@
   "spawn_detached_preview_label": "Launch plan:",
   "spawn_preview_single": "Spawn {provider} session → open detached grid ({layout})",
   "spawn_preview_not_available": "This preset requires Shell support (C4). Use Single large pane for now.",
+  "alt_scroll_rail_label": "Terminal scroll (sends PageUp / PageDown to the CLI)",
   "scroll_to_top_tooltip": "up",
   "scroll_to_top": "↑ up",
   "scroll_to_bottom_tooltip": "down",
