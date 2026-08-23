@@ -85,6 +85,7 @@ export {
   finishApprovalReplay,
   getApprovalSourceEpoch,
   isAnsweredApprovalCandidate,
+  isAnsweredApprovalShapeAcrossEpochs,
   isApprovalReplayPending,
   noteApprovalSourceEpoch,
   recordAnsweredApprovalCandidate,

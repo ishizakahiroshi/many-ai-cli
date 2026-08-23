@@ -230,6 +230,18 @@ export function noteAltScrollPage(id: number, direction: number): void {
   renderRail(id);
 }
 
+/**
+ * 送った PgUp から PgDn を引いた純ページ数。0 が最下部＝CLI はライブの画面を描いている。
+ *
+ * 0 より大きい間、CLI の画面には過去の位置が載っている。Hub の承認検出は VT ミラー＝
+ * 今の画面を見るので、この値は「画面に出ているものを今の承認として扱ってよいか」の
+ * 判定にも使われる（terminal.ts の isTerminalShowingHistory 経由で approval-ui.ts）。
+ * 承認側に別の計上を作らないため、遡り位置の正本はここ 1 本にする。
+ */
+export function altScrollPagesUp(id: number): number {
+  return rails.get(id)?.state.pagesUp ?? 0;
+}
+
 /** セッション破棄時に呼ぶ。 */
 export function disposeAltScrollRail(id: number): void {
   const entry = rails.get(id);

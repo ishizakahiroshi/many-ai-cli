@@ -1,11 +1,11 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { actionBarShownAt, activeSessionId, approvalCandidateDebugKey, approvalCandidateIdentity, approvalRawOptionsCache, approvalSourceCache, approvalSuppressedCache, approvalSuppressedDismissedCache, approvalVisibleCache, enqueueApprovalAutoSwitch, lastActionBarRender, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectSelections, removeApprovalAutoSwitchTarget, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx } from './state.js';
+import { actionBarShownAt, activeSessionId, approvalCandidateDebugKey, approvalCandidateIdentity, approvalRawOptionsCache, approvalSourceCache, approvalSuppressedCache, approvalSuppressedDismissedCache, approvalVisibleCache, enqueueApprovalAutoSwitch, isAnsweredApprovalShapeAcrossEpochs, lastActionBarRender, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectSelections, removeApprovalAutoSwitchTarget, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx } from './state.js';
 import { playNotificationSound, showDesktopApprovalNotification } from './settings.js';
 import { ws } from './ws-client.js';
 import { reshowActionBar, showActionBar } from './approval.js';
 import { inheritMarkerBlockSig } from './approval-parser.js';
-import { suppressPtyResizeForInputLayout, syncPtySizeToViewportAfterLayout } from './terminal.js';
+import { isTerminalShowingHistory, suppressPtyResizeForInputLayout, syncPtySizeToViewportAfterLayout } from './terminal.js';
 import { probe } from '../debug/probe.js';
 
 // UI/cache adapter for approval detection. Parser code must not depend on this.
@@ -74,8 +74,22 @@ import { probe } from '../debug/probe.js';
       bar.children.length > 0 && bar.dataset.approvalSessionId === String(id) &&
       bar.dataset.approvalCandidateKey === identity.candidateKey &&
       bar.dataset.approvalSourceEpoch === String(identity.sourceEpoch));
-    probe('approval.data', () => ({ sessionId: id, identity, options, skipped: sameVisibleCandidate }));
-    if (sameVisibleCandidate) {
+    // ページ送りで CLI が過去の画面を描いている間に、回答済みの本文が描き直された分。
+    //
+    // 代替画面バッファの provider ではホイールが PgUp として CLI へ届き、CLI 自身が
+    // 過去の位置を描き直す。Hub の承認検出は VT ミラー＝今の画面を読むので、遡って
+    // 読んでいるだけで回答済みの承認が「新しい候補」として届く（実測は docs/local/
+    // bugfix_approval-bar-stale-options-scroll-mismatch_2026-08-19.md の 2026-08-23 追記。
+    // 7 時間前に回答した承認ブロックがそのまま届いていた）。
+    //
+    // 条件を「回答済みの shape」に絞るのが要点。世代を問わず一度でも答えた中身だけを
+    // 落とすので、遡っている最中に届いた未回答の承認は今までどおり出る。ページ計上は
+    // CLI 内部のスクロール量ではなく送った鍵数の近似で、ライブへ戻ったことを取りこぼす
+    // ことがあるため、遡り中の候補を一律に落とすと新しい承認を握り潰す（F-12 の再発）。
+    const staleHistoryRepaint = isTerminalShowingHistory(id) &&
+      isAnsweredApprovalShapeAcrossEpochs(id, identity.shape);
+    probe('approval.data', () => ({ sessionId: id, identity, options, skipped: sameVisibleCandidate || staleHistoryRepaint }));
+    if (sameVisibleCandidate || staleHistoryRepaint) {
       return;
     }
     // showActionBar は手動 dismiss 中などに何も描かず return する。描画が最後まで

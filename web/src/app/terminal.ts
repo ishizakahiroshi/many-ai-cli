@@ -15,7 +15,7 @@ import { isGrokChatViewerOpen, openGrokChatViewer, resetGrokChatViewerForSession
 import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
 import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, shouldBypassCursorHideFilterForProvider, showCursorSeq } from './cursor-hide-filter.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
-import { ensureAltScrollRail, noteAltScrollPage, updateAltScrollRail } from './alt-scroll-rail-view.js';
+import { altScrollPagesUp, ensureAltScrollRail, noteAltScrollPage, updateAltScrollRail } from './alt-scroll-rail-view.js';
 import { formatLongprocDuration, longprocBadgeClass, longprocStatus } from './longproc.js';
 export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossibleMarkerPrefix } from './hub-marker-filter.js';
 
@@ -859,6 +859,19 @@ export function scrollAltBufferPage(sessionId, t, direction) {
   // スクロール量は取得できないため近似）。
   noteAltScrollPage(sessionId, direction);
   return true;
+}
+
+// ページ送りで CLI が過去の画面を描いている最中か。
+//
+// 代替画面バッファの provider では、ホイールも ↑up / ↓down ボタンも疑似レールも
+// scrollAltBufferPage() を通って PgUp / PgDn として CLI へ届く。つまりここでの
+// 「スクロール」は xterm の scrollback 移動ではなく CLI 自身の再描画であり、遡って
+// いる間は画面に過去の内容が載る。Hub の承認検出は VT ミラー＝今の画面を読むので、
+// 遡り中かどうかを知らないと回答済みの承認が新しい候補として届く（実測は
+// docs/local/bugfix_approval-bar-stale-options-scroll-mismatch_2026-08-19.md の
+// 2026-08-23 追記。7 時間前に回答した承認ブロックが再描画されていた）。
+export function isTerminalShowingHistory(id): boolean {
+  return altScrollPagesUp(id) > 0;
 }
 
 export function forwardWheelToAltBuffer(sessionId, t, deltaY) {
