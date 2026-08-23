@@ -267,6 +267,29 @@ export function isAnsweredApprovalCandidate(id: number, options: any, kind?: str
   return !!(set && set.has(answeredCandidateToken(identity)));
 }
 
+/**
+ * この shape（provider・種別・質問・選択肢番号・送信文字列）の承認に、このセッションで
+ * 一度でも回答したか。世代（sourceEpoch）は見ない。
+ *
+ * 通常の判定 isAnsweredApprovalCandidate は世代込みで見る。世代が進めば同じ質問でも
+ * 新しい候補として出すのが仕様だからで、それはこのファイル冒頭のルールどおり。この関数は
+ * その世代の縛りを外して「同じ中身に答えたことがあるか」だけを見る。
+ *
+ * 用途は 1 つだけ。CLI がページ送りで過去の画面を描き直している間に届いた候補を採らない
+ * 条件に使う（approval-ui.ts の showOptions）。回答済み state を新しく増やさず、既存の
+ * 台帳を別の角度から引くだけにしてある（承認の同一性は 1 本という規約のため）。
+ */
+export function isAnsweredApprovalShapeAcrossEpochs(id: number, shape: string): boolean {
+  if (!shape) return false;
+  const shapes = answeredApprovalShapeKeys.get(id);
+  if (!shapes) return false;
+  const suffix = `\0${shape}`;
+  for (const token of shapes.keys()) {
+    if (token.endsWith(suffix)) return true;
+  }
+  return false;
+}
+
 /** テスト専用。1 セッションぶんの承認同一性 state を初期状態へ戻す。 */
 export function _resetApprovalAnsweredStateForTest(id: number): void {
   answeredApprovalCandidates.delete(id);

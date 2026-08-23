@@ -3,8 +3,10 @@ import test from 'node:test';
 import {
   _resetApprovalAnsweredStateForTest,
   answeredApprovalCandidates,
+  approvalCandidateShape,
   clearReplayAnsweredApprovalCandidate,
   isAnsweredApprovalCandidate,
+  isAnsweredApprovalShapeAcrossEpochs,
   noteApprovalSourceEpoch,
   recordAnsweredApprovalCandidate,
   recordAnsweredApprovalIdentity,
@@ -151,4 +153,42 @@ test('選択肢が空の入力は回答済みとして記録しない', () => {
   resetSession(13);
   assert.equal(recordAnsweredApprovalCandidate(13, [], 'marker'), null);
   assert.equal(isAnsweredApprovalCandidate(13, [], 'marker'), false);
+});
+
+
+// --- ページ送りで過去の画面が描き直されたときの判定（approval-ui.ts の showOptions が使う）---
+//
+// 代替画面バッファの provider ではホイールが PgUp として CLI へ届き、CLI が過去の位置を
+// 描き直す。Hub は VT ミラー＝今の画面から承認を取り出すので、遡って読んでいるだけで
+// 回答済みの承認が新しい世代の候補として届く。世代込みの判定では拾えないため、
+// 「中身に一度でも答えたか」だけを見る経路を別に用意している。
+
+test('世代が進んでいても、同じ中身に答えた記録は shape で拾える', () => {
+  resetSession(15);
+  const opts = markerOptions('この変更を適用しますか?', ['はい', 'いいえ']);
+  const shape = approvalCandidateShape(15, opts, 'marker');
+  recordAnsweredApprovalCandidate(15, opts, 'marker');
+  noteApprovalSourceEpoch(15, 9);
+  // 世代込みの判定は「新しい候補」と見る（意図的な再質問を出すための仕様）。
+  assert.equal(isAnsweredApprovalCandidate(15, markerOptions('この変更を適用しますか?', ['はい', 'いいえ']), 'marker'), false);
+  // 遡り表示中だけはこちらを見て、同じ中身の描き直しを出さない。
+  assert.equal(isAnsweredApprovalShapeAcrossEpochs(15, shape), true);
+});
+
+// ここが false のままであることが、遡り中に届いた新しい承認を握り潰さない根拠。
+test('答えたことのない中身は shape でも回答済みにならない', () => {
+  resetSession(16);
+  recordAnsweredApprovalCandidate(16, markerOptions('A を消しますか?', ['はい', 'いいえ']), 'marker');
+  const other = markerOptions('B を消しますか?', ['はい', 'いいえ']);
+  assert.equal(isAnsweredApprovalShapeAcrossEpochs(16, approvalCandidateShape(16, other, 'marker')), false);
+  assert.equal(isAnsweredApprovalShapeAcrossEpochs(16, ''), false);
+});
+
+test('shape の回答済み判定はセッションを跨がない', () => {
+  resetSession(17);
+  resetSession(18);
+  const opts = markerOptions('この変更を適用しますか?', ['はい', 'いいえ']);
+  const shape = approvalCandidateShape(17, opts, 'marker');
+  recordAnsweredApprovalCandidate(17, opts, 'marker');
+  assert.equal(isAnsweredApprovalShapeAcrossEpochs(18, shape), false);
 });

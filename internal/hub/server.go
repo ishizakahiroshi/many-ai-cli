@@ -1049,6 +1049,10 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.Handle("/app-entry.js", staticHandler)
 	mux.Handle("/app.js", staticHandler)
 	mux.Handle("/app/", staticHandler)
+	// 製品コードが import する常設プローブ（web/dist/debug/probe.js）。ここから漏れると
+	// "/" のフォールバックが index.html を返し、named import が解決できずモジュール
+	// グラフ全体が評価されない（＝UI の JS が丸ごと死ぬ）。
+	mux.Handle("/debug/", staticHandler)
 	mux.Handle("/styles.css", staticHandler)
 	mux.Handle("/styles/", staticHandler)
 	mux.Handle("/icon.svg", staticHandler)
