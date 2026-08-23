@@ -107,7 +107,7 @@ Known limits: this is intentionally lightweight. Board changes are detected by 2
 
 Six AI coding CLIs share one dashboard. Four of them — Claude Code, Codex CLI, Grok Build CLI, and opencode — can attach more than one subscription each, so two sessions can use two plans at the same time. Copilot and Cursor stay on a single login (their credentials are not relocatable). The official CLIs still remember one *default* login; the Hub points each session at a different config directory.
 
-This is **not an API key router**. It does not pool metered API keys to make requests cheaper; it spreads the sessions you already run across the monthly subscriptions you already pay for.
+This is **not an API key router**. It does not pool metered API keys to make requests cheaper; it spreads the sessions you already run across the monthly subscriptions you already pay for. It is also not a way around a plan's usage limit — before stacking several of your own accounts with one vendor, read the warning under [Security / Privacy](#security--privacy).
 
 **Remaining quota** is the breakdown of that stack, not a separate product. The Usage menu lists each profile and, for Claude (5h / 7d), Codex, and Grok, the remaining figure. Copilot, Cursor, and OpenCode stay as links to the vendor page. Numbers are read when you open the menu, not on a timer; Claude may run a one-turn probe if nothing is already reporting.
 
@@ -1268,6 +1268,16 @@ Wrapped-CLI vendors may change their terms — including restricting or prohibit
 
 - Recent precedent: Google began enforcing a ToS clause in 2026 that forbids accessing Gemini Code Assist through third-party wrappers, resulting in `403 ToS` account bans for tools like OpenClaw / OpenCode / Antigravity. For this reason, **Gemini CLI is intentionally out of scope** for `many-ai-cli`.
 - The same risk applies to every CLI in the table above. **Support for any wrapped CLI may be discontinued without notice** if its vendor restricts third-party automation. It is your responsibility to review each CLI's current terms before use.
+
+### ⚠️ Stacking several of your own accounts — at your own risk
+
+`many-ai-cli` can attach more than one subscription to Claude Code, Codex CLI, Grok Build CLI, and opencode; it does so only by pointing each session at a different configuration directory. Whether the accounts behind those profiles may be used that way is between you and each vendor. (Copilot and Cursor stay on a single login, so the question does not arise there.)
+
+- **Holding several accounts is not prohibited as such** by Anthropic, OpenAI, or xAI. GitHub is the exception: its Terms of Service allow one free account per person.
+- **Rotating accounts to keep working past a plan's limit is a different question.** Anthropic, OpenAI, and xAI each prohibit circumventing rate limits or bypassing protective measures in broad language, and a vendor may read quota stacking into it. Enforcement is theirs to decide, and a suspension is not refunded.
+- **Separate entitlements used for their own purpose are ordinary use** — an employer-issued account for work and a personal one for personal projects, for example.
+- **When you hit a limit, prefer the vendor's own paid route** — Anthropic's usage credits (`/usage-credits`) and OpenAI's ChatGPT credits both let you continue past the subscription limit at metered rates.
+- Check the current terms yourself before stacking plans ([Anthropic](https://www.anthropic.com/legal/consumer-terms) / [OpenAI](https://openai.com/policies/row-terms-of-use/) / [xAI](https://x.ai/legal/acceptable-use-policy) / [GitHub](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service)). `many-ai-cli` cannot judge whether your setup complies; using the feature is your decision and your risk.
 
 ### ⚠️ Do not share one account among multiple users
 
