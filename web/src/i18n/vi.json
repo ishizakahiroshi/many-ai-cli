@@ -564,6 +564,7 @@
   "spawn_detached_preview_label": "Kế hoạch khởi chạy:",
   "spawn_preview_single": "Spawn session {provider} → mở lưới tách ({layout})",
   "spawn_preview_not_available": "Preset này cần hỗ trợ Shell (C4). Tạm dùng Một khung lớn.",
+  "alt_scroll_rail_label": "Cuộn terminal (gửi PageUp / PageDown tới CLI)",
   "scroll_to_top_tooltip": "lên",
   "scroll_to_top": "↑ lên",
   "scroll_to_bottom_tooltip": "xuống",

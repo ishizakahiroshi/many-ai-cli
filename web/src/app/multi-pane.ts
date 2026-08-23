@@ -2,6 +2,7 @@
 import { inputEl } from '../app.js';
 import { render } from './session-list.js';
 import { disableWebglRenderer, enableWebglRenderer, releaseHiddenWebglRenderers, scrollAltBufferPage, termArea } from './terminal.js';
+import { ensureAltScrollRail } from './alt-scroll-rail-view.js';
 
 // multi-pane.js — MultiPaneManager + GridPicker (C3: xterm マルチインスタンス + WS ルーティング)
 // index.html で app.js より前に読み込む
@@ -721,6 +722,7 @@ export class MultiPaneManager {
         if (!termArea.isConnected || !termArea.contains(container)) return;
         if (container.clientWidth > 0 && container.clientHeight > 0) {
           t.term.open(container);
+          ensureAltScrollRail(session.id, t);
           enableWebglRenderer(t);
           t.everAttached = true;
           if (typeof window.flushPendingTerminalChunks === 'function') {

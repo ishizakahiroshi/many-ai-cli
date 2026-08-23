@@ -625,6 +625,41 @@
   border-radius: var(--radius-sm);
 }
 
+/* 代替画面バッファ（Claude / opencode の TUI）用の疑似スクロールレール。
+   代替画面はスクロールバックを持たないため xterm のスクロールバーは
+   ScrollbarVisibility の isNeeded が立たず、上の常時表示上書きも効かない。
+   同じ幅（xterm の verticalScrollbarSize = 14px）・同じ紫で自前に描き、
+   操作は PgUp / PgDn として CLI へ転送する（alt-scroll-rail-view.ts）。
+   色は terminal.ts の theme.scrollbarSlider*Background と同じ値を使う。 */
+.xterm .alt-scroll-rail {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  z-index: 11;
+  cursor: default;
+  touch-action: none;
+}
+/* [hidden] は UA スタイルの display:none でしか効かない。上の display 指定と
+   衝突しないよう、ここで明示的に打ち消す（メインバッファでは出さないため必須）。 */
+.xterm .alt-scroll-rail[hidden] {
+  display: none;
+}
+.xterm .alt-scroll-rail-slider {
+  position: absolute;
+  left: 0;
+  width: 14px;
+  background: #4f5bd5;
+  border-radius: var(--radius-sm);
+}
+.xterm .alt-scroll-rail:hover .alt-scroll-rail-slider {
+  background: #6b74ff;
+}
+.xterm .alt-scroll-rail:active .alt-scroll-rail-slider {
+  background: #8b92ff;
+}
+
 
 /* Input bar / terminal adjacent panels */
 /* 入力バー外枠 — padding-bottom: token-statusbar の高さ分（fixed 要素が attach-panel に被るのを防ぐ）。

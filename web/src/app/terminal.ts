@@ -15,6 +15,7 @@ import { isGrokChatViewerOpen, openGrokChatViewer, resetGrokChatViewerForSession
 import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
 import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, shouldBypassCursorHideFilterForProvider, showCursorSeq } from './cursor-hide-filter.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
+import { ensureAltScrollRail, noteAltScrollPage, updateAltScrollRail } from './alt-scroll-rail-view.js';
 import { formatLongprocDuration, longprocBadgeClass, longprocStatus } from './longproc.js';
 export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossibleMarkerPrefix } from './hub-marker-filter.js';
 
@@ -393,6 +394,7 @@ export function attachTerminal(id) {
       if (!terminals.has(id) || activeSessionId !== id) return;
       area.appendChild(t.container);
       releaseHiddenWebglRenderers();
+      ensureAltScrollRail(id, t);
       t.term.scrollToBottom();
       syncViewportScrollbarToBottom(t);
       const prevCols = t.term.cols;
@@ -499,6 +501,9 @@ export function whenLayoutReady(id, container) {
   if (container.clientWidth > 0 && container.clientHeight > 0) {
     t.term.open(container);
     primeScrollbarVisibility(container);
+    // 代替画面バッファの provider は xterm のスクロールバーが原理的に出ないため、
+    // 同じ見た目・同じ位置の疑似レールを差し込む（表示条件はレール側で判定する）。
+    ensureAltScrollRail(id, t);
     enableWebglRenderer(t);
     fitTerminalPreservingBottom(t, id);
     if (!t.scrollHandlerInstalled) {
@@ -797,6 +802,7 @@ export function fitTerminalPreservingBottom(t, id, forceVisualFit = false) {
   const wasAtBottom = isTerminalAtBottom(t) || t.autoScroll;
   t.fitAddon.fit();
   primeScrollbarVisibility(t.term.element);
+  if (id !== null && id !== undefined) updateAltScrollRail(id);
   if (wasAtBottom) {
     t.autoScroll = true;
     t.term.scrollToBottom();
@@ -826,11 +832,10 @@ export function isAlternateBuffer(t) {
   return !!(active && active.type === 'alternate');
 }
 
-// alt buffer 中のスクロール操作は PTY 側アプリ（Codex / Grok 等の TUI）に
-// PgUp/PgDn として転送する。xterm は disableStdin:true のため、mouse tracking が
-// ON でも wheel を PTY へ送らない。
-// 戻り値: 転送した場合 true（呼び元は xterm scrollback 操作等をスキップ）。
-export function scrollAltBufferPage(sessionId, t, direction) {
+// ページ転送が有効なセッションか。代替画面バッファに居ることに加えて、
+// grok だけは転送しない（下の理由）。疑似スクロールレール（alt-scroll-rail-view.ts）の
+// 表示条件も同じ述語を使う。押しても動かないレールを出さないため、判定は 1 本にする。
+export function canPageAltBuffer(sessionId, t) {
   if (!isAlternateBuffer(t)) return false;
   // grok の TUI は PageUp で履歴領域に飛び、その状態で次の応答が来ると応答が画面外
   // （履歴領域）に描画されユーザーには「Waiting のまま動かない」ように見える。
@@ -838,8 +843,21 @@ export function scrollAltBufferPage(sessionId, t, direction) {
   // 1 ノッチのつもりが PageUp 数連投になり確実にこの状態に陥る（s32 17:00:45〜47 に
   // ESC[5~ が 6 回連発した実例あり）。grok 宛は wheel→PageUp 転送を停止する。
   if (sessions.get(sessionId)?.provider === 'grok') return false;
+  return true;
+}
+
+// alt buffer 中のスクロール操作は PTY 側アプリ（Claude Code / opencode 等の TUI）に
+// PgUp/PgDn として転送する。xterm は disableStdin:true のため、mouse tracking が
+// ON でも wheel を PTY へ送らない。
+// 戻り値: 転送した場合 true（呼び元は xterm scrollback 操作等をスキップ）。
+export function scrollAltBufferPage(sessionId, t, direction) {
+  if (!canPageAltBuffer(sessionId, t)) return false;
   const key = direction < 0 ? '\x1b[5~' : '\x1b[6~';
   try { sendText(sessionId, key); } catch (_) {}
+  // ホイール・↑up / ↓down ボタン・疑似レールのどれで送ってもここを通る。
+  // 疑似レールのスライダー位置はこの計上だけを根拠にしている（CLI 内部の
+  // スクロール量は取得できないため近似）。
+  noteAltScrollPage(sessionId, direction);
   return true;
 }
 
@@ -1839,6 +1857,9 @@ export function writePTYChunk(id, term, bytes, onFlush) {
   const wrappedFlush = () => {
     if (hasScreenClearSeq) snapToBottomAfterScreenClear(id);
     primeScrollbarVisibility(term.element);
+    // 代替画面への出入り（ESC[?1049h / l）は PTY 出力で起きるので、flush ごとに
+    // 疑似レールの表示条件を取り直す。
+    updateAltScrollRail(id);
     if (onFlush) onFlush();
   };
   if (displayBytes.length === 0) {

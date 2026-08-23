@@ -564,6 +564,7 @@
   "spawn_detached_preview_label": "起動プラン:",
   "spawn_preview_single": "{provider} を起動 → 別窓 grid ({layout}) を開く",
   "spawn_preview_not_available": "このプリセットは Shell 対応 (C4) 後に有効になります。今は「1 pane（大）」を使ってください。",
+  "alt_scroll_rail_label": "ターミナルのスクロール（PageUp / PageDown を CLI へ送る）",
   "scroll_to_top_tooltip": "up",
   "scroll_to_top": "↑ up",
   "scroll_to_bottom_tooltip": "down",
