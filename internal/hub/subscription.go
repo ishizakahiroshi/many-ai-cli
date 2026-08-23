@@ -118,9 +118,18 @@ func (s *Server) subscriptionLaunch(provider, profileID string) ([]string, *subs
 		return nil, nil, nil
 	}
 	// vendor CLI は指定されたディレクトリが無いと自分で作る場合と落ちる場合がある。
-	// 起動前に本人のみアクセス可の権限で用意しておく。
-	if err := subscription.EnsureProfileDir(resolved.ProfileDir); err != nil {
+	// 起動前に本人のみアクセス可の権限で用意し、利用者の既定設定から不足分
+	// （共通ルール・スキル・承認設定など）を持ち込む。
+	seeded, err := subscription.EnsureProfileDir(provider, resolved.ProfileDir)
+	if err != nil {
 		return nil, nil, err
+	}
+	if seeded.Any() {
+		// 何を持ち込んだかは残す。持ち込みは additive なので既存の値を壊さないが、
+		// 「なぜ profile にこのファイルがあるのか」を後から辿れるようにする。
+		s.logger.Info("subscription profile seeded",
+			"provider", provider, "id", resolved.ID,
+			"applied", seeded.Applied, "failed", seeded.Failed)
 	}
 	env := append([]string(nil), resolved.Env...)
 	// wrapper がこの値を register で申告し、Hub が「実際に何で起動したか」を記録する。

@@ -2,6 +2,7 @@ package subscription
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 )
 
@@ -62,4 +63,27 @@ func parseGrokModelsStatus(out string) Status {
 		}
 	}
 	return status
+}
+
+// SeedEntries lists what a Grok profile inherits from $GROK_HOME.
+//
+// trusted_folders.toml is included for the same reason as Codex's trust list:
+// a profile that forgets it re-asks for folder trust the user already granted,
+// and answering the same prompt repeatedly is how people learn to approve
+// without reading. auth.json stays out — it is the credential.
+func (grokAdapter) SeedEntries() []SeedEntry {
+	dir := vendorDefaultDir(GrokHomeEnv, ".grok")
+	if dir == "" {
+		return nil
+	}
+	return []SeedEntry{
+		{Source: filepath.Join(dir, "AGENTS.md"), Dest: "AGENTS.md",
+			Kind: SeedCopyFile, Label: "共通ルール（AGENTS.md）"},
+		{Source: filepath.Join(dir, "config.toml"), Dest: "config.toml",
+			Kind: SeedCopyFile, Label: "設定（config.toml・既定モデルを含む）"},
+		{Source: filepath.Join(dir, "trusted_folders.toml"), Dest: "trusted_folders.toml",
+			Kind: SeedCopyFile, Label: "信頼済みフォルダ（trusted_folders.toml）"},
+		{Source: filepath.Join(dir, "skills"), Dest: "skills",
+			Kind: SeedLinkDir, Label: "スキル（skills/）"},
+	}
 }

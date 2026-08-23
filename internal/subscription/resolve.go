@@ -97,23 +97,32 @@ func Resolve(cfg *config.Config, configDir, provider, profileID string) (*Resolv
 	}, nil
 }
 
-// EnsureProfileDir は profile ディレクトリを本人のみアクセス可の権限で用意する。
-// 既にあれば権限だけ締め直す。
-func EnsureProfileDir(dir string) error {
+// EnsureProfileDir は profile ディレクトリを本人のみアクセス可の権限で用意し、
+// 利用者の既定設定から不足分を持ち込む（seed.go）。既にあれば権限を締め直し、
+// 不足しているものだけを足す。
+//
+// 戻り値の SeedResult は「今回何を持ち込んだか」の記録で、呼び出し側はログに
+// 出すだけでよい。**seed の失敗は error にしない**: 設定が工場出荷状態でも
+// セッションは動くので、持ち込めなかったことで起動を止める理由が無い。
+// error を返すのは従来どおりディレクトリ自体を用意できなかったときだけ。
+func EnsureProfileDir(provider, dir string) (SeedResult, error) {
 	if dir == "" {
-		return errors.New("profile dir is empty")
+		return SeedResult{}, errors.New("profile dir is empty")
 	}
 	if err := os.MkdirAll(dir, config.DirMode); err != nil {
-		return fmt.Errorf("create profile dir: %w", err)
+		return SeedResult{}, fmt.Errorf("create profile dir: %w", err)
 	}
 	if err := os.Chmod(dir, config.DirMode); err != nil {
-		return fmt.Errorf("chmod profile dir: %w", err)
+		return SeedResult{}, fmt.Errorf("chmod profile dir: %w", err)
 	}
 	// Windows は Chmod が DACL を狭めないので、継承 ACE を明示的に切る。
 	// 失敗しても作成自体は成功しているため呼び出し元は成功として扱う
 	// （config.ensurePrivateDir と同じ扱い）。
+	//
+	// seed より先に行う: 持ち込んだファイルが作成時点で継承 ACE を受けるため、
+	// 個別に権限を締め直す必要が無くなる。
 	_ = securefile.EnsurePrivateDir(dir)
-	return nil
+	return SeedProfileDir(provider, dir), nil
 }
 
 // Entry は UI へ返す profile 1 件。**secret を含まない。**
