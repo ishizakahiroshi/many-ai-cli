@@ -2,7 +2,7 @@
 import { cleanCopiedText, cleanOneLineText, showToast } from './util.js';
 import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
-import { activeSessionId, approvalCandidateDebugKey, approvalCandidateIdentity, approvalRawOptionsCache, approvalSourceCache, approvalVisibleCache, sessions, terminals, utf8Decoder } from './state.js';
+import { activeSessionId, approvalCandidateDebugKey, approvalCandidateIdentity, approvalRawOptionsCache, approvalSourceCache, approvalVisibleCache, sessions, terminals } from './state.js';
 import { autoExpand, inputEl, sendText, updateInputClearButton } from '../app.js';
 import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerminalPathStartBoundary, resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup, trimTerminalPathCandidate } from './path-links.js';
 import { ws } from './ws-client.js';
@@ -45,6 +45,9 @@ export const LIVE_BATCH_AFTER_RESIZE_MS = 400;
 // TERMINAL_PENDING_MAX_BYTES より大きく取る。先頭チャンク（カーソルホーム等の
 // 制御列）を捨てると描画が崩れるので、超過時はトリムせず即時 flush する。
 export const LIVE_BATCH_MAX_BYTES = 4 * 1024 * 1024;
+// A hidden/mobile terminal must not create an unbounded rAF chain while its
+// parent remains zero-sized. A later attach starts a fresh bounded attempt.
+export const TERMINAL_LAYOUT_READY_MAX_FRAMES = 120;
 
 // セッション横断検索（P-11）から、現在の xterm scrollback に残っている一致行へ
 // 移動する。検索結果は保存済みメッセージ単位なので厳密な物理行番号を持たない。
@@ -344,6 +347,7 @@ export function ensureTerminal(id) {
     pendingFlushActive: false,
     pendingFlushSeq: 0,
     pendingFlushWatchdog: null,
+    layoutGeneration: 0,
     pendingFlushCallbacks: [],
     pendingTextTail: '',
     textDecoder: new TextDecoder('utf-8'),
@@ -383,6 +387,15 @@ export function attachTerminal(id) {
   // 切替先セッションの最新ライブ進捗を反映（無ければ hidden に戻す）
   syncLiveStatusDomForActive();
   if (t.container) {
+    if (!t.everAttached) {
+      // A prior bounded attempt may have stopped while the container was
+      // hidden. Reattach it and allow a fresh bounded attempt when the layout
+      // becomes visible again.
+      area.innerHTML = '';
+      area.appendChild(t.container);
+      whenLayoutReady(id, t.container, 0, t.layoutGeneration);
+      return;
+    }
     // DOM 再配置で WebGL canvas の描画バッファが失われるため、移動前に破棄する
     disableWebglRenderer(t);
     area.innerHTML = '';
@@ -413,6 +426,7 @@ export function attachTerminal(id) {
   container.style.width = '100%';
   container.style.height = '100%';
   t.container = container;
+  t.layoutGeneration = (t.layoutGeneration || 0) + 1;
   area.innerHTML = '';
   area.appendChild(container);
   releaseHiddenWebglRenderers();
@@ -495,9 +509,11 @@ function primeScrollbarVisibility(container) {
   requestAnimationFrame(tryReveal);
 }
 
-export function whenLayoutReady(id, container) {
+export function whenLayoutReady(id, container, attempt = 0, generation = null) {
   const t = terminals.get(id);
-  if (!t) return;
+  if (!t || t.container !== container || !container?.isConnected) return;
+  const expectedGeneration = generation == null ? t.layoutGeneration : generation;
+  if (expectedGeneration !== t.layoutGeneration) return;
   if (container.clientWidth > 0 && container.clientHeight > 0) {
     t.term.open(container);
     primeScrollbarVisibility(container);
@@ -573,8 +589,10 @@ export function whenLayoutReady(id, container) {
       const sel = t.term.getSelection();
       if (sel) openTermCtxMenu(e.clientX, e.clientY, sel);
     });
+  } else if (attempt < TERMINAL_LAYOUT_READY_MAX_FRAMES) {
+    requestAnimationFrame(() => whenLayoutReady(id, container, attempt + 1, expectedGeneration));
   } else {
-    requestAnimationFrame(() => whenLayoutReady(id, container));
+    console.debug('[terminal] layout did not become measurable; stopping retry', { id, attempt });
   }
 }
 
@@ -1879,11 +1897,10 @@ export function writePTYChunk(id, term, bytes, onFlush) {
     wrappedFlush();
     return;
   }
-  if (typeof term.writeUtf8 === 'function') {
-    term.writeUtf8(displayBytes, wrappedFlush);
-    return;
-  }
-  term.write(utf8Decoder.decode(displayBytes, { stream: true }), wrappedFlush);
+  // xterm.js accepts Uint8Array directly. Keeping bytes intact here avoids a
+  // shared streaming TextDecoder carrying a partial UTF-8 sequence from one
+  // session into another session's output.
+  term.write(displayBytes, wrappedFlush);
 }
 
 // ---- バッファスキャン共通 ----

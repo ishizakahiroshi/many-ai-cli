@@ -30,6 +30,7 @@ func (s *Server) activeSessionCount() int {
 }
 
 func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	if !s.guard(w, r, http.MethodGet) {
 		return
 	}

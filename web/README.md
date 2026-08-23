@@ -27,14 +27,14 @@
 
 ## Vendor スクリプト
 
-`web/src/vendor/*.min.js` はクラシックスクリプト（ESM でない）として index.html から `<script>` タグで読み込まれる。バージョンと upstream URL は `web/src/vendor/THIRD_PARTY_LICENSES.txt` にまとめて記録している (2026-07-05 時点):
+`web/src/vendor/*.min.js` はクラシックスクリプト（ESM でない）として index.html から `<script>` タグで読み込まれる。バージョンと upstream URL は `web/src/vendor/THIRD_PARTY_LICENSES.txt` にまとめて記録している (2026-08-23 時点):
 
 | パッケージ | Version | URL |
 |---|---|---|
-| DOMPurify | 3.4.1 | https://github.com/cure53/DOMPurify/tree/3.4.1/ |
+| DOMPurify | 3.4.12 | https://github.com/cure53/DOMPurify/tree/3.4.12/ |
 | marked | 12.0.2 | https://github.com/markedjs/marked/tree/v12.0.2/ |
 | highlight.js | 11.10.0 | https://github.com/highlightjs/highlight.js/tree/11.10.0/ |
-| qrcode-generator | unknown | https://github.com/kazuhikoarase/qrcode-generator/ |
+| qrcode-generator | 1.4.4 | https://github.com/kazuhikoarase/qrcode-generator/tree/v1.4.4/ |
 | xterm.js 系 | 6.0.0 + addons | https://github.com/xtermjs/xterm.js/ |
 
 CVE が出た場合はここを手動照合する。将来的に `package.json` の devDependencies に取り込んで `npm audit` / Dependabot の可視範囲に入れる案は `docs/local/plan_audit_score_s_promotion_2026-07-05.md` の C3 段階 2 参照。

@@ -12,7 +12,7 @@ import { notifyDeferredEnterOutput } from './deferred-enter.js';
 import { notifyResidueSweepOutput } from './residue-sweep.js';
 import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed, isTranscriptBackedProvider, pushAgentChatMessage } from './chat-history.js';
 import { clearChatPayloadForSession, handleChatTurnMessage, initChatPayloadUI } from './chat-payload.js';
-import { handleUsageStatMessage, removeUsageCacheEntry } from './token-statusbar.js';
+import { handleUsageStatMessage, removeUsageCacheEntry, resetUsageCache } from './token-statusbar.js';
 import { receiveWorkflowProgress, removeWorkflowSnapshot } from './workflow-modal.js';
 
 function showSpawnConfirmation(m) {
@@ -118,6 +118,7 @@ function purgeLocalStateForHubRestart() {
       removeWorkflowSnapshot(id);
     } catch (_) {}
   });
+  resetUsageCache();
 }
 
 export function syncElapsedTimer() {
@@ -232,6 +233,7 @@ export function _connectWs() {
     if (_elapsedTimerInterval) { clearInterval(_elapsedTimerInterval); set__elapsedTimerInterval(null); }
     if (activeSessionId !== null) _lastActiveSessionIdBeforeDisconnect = activeSessionId;
     sessions.clear();
+    resetUsageCache();
     autoDismissTimers.forEach(t => clearTimeout(t));
     autoDismissTimers.clear();
     set_activeSessionId(null);

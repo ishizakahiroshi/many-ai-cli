@@ -1,6 +1,8 @@
 package wrapper
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"many-ai-cli/internal/securefile"
 )
 
 // codexConfigMu は同一プロセス内の ~/.codex/config.toml RMW を直列化する。
@@ -98,6 +102,60 @@ func claudeStatusLineCmd(p UsageHookParams) string {
 // 循環 import を避けるためここに複製する。両者の値は乖離させないこと。
 const hubTokenEnvName = "MANY_AI_CLI_HUB_TOKEN"
 
+const (
+	claudeSessionSettingsPrefix = "aac-claude-settings-"
+	claudeSessionSettingsSuffix = ".json"
+	// A provider process may outlive the wrapper briefly after a forced wrapper
+	// termination. Keep old settings long enough that a quick restart cannot
+	// remove a file that a still-starting Claude process may read.
+	claudeSessionSettingsStaleAfter = 24 * time.Hour
+)
+
+var claudeSessionSettingsNameRe = regexp.MustCompile(`^aac-claude-settings-u([0-9a-f]{16})-s([0-9]+)-p([0-9]+)\.json$`)
+
+func claudeSessionSettingsOwnerID() string {
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		home = os.TempDir()
+	}
+	if strings.TrimSpace(home) == "" {
+		home = "unknown"
+	}
+	sum := sha256.Sum256([]byte(filepath.Clean(home)))
+	return hex.EncodeToString(sum[:])[:16]
+}
+
+// cleanupStaleClaudeSessionSettings removes only files produced by this
+// version's naming convention and this OS user. A live PID, a fresh mtime, a
+// different owner marker, a symlink, or an unparseable name is left alone.
+func cleanupStaleClaudeSessionSettings(now time.Time) {
+	cleanupStaleClaudeSessionSettingsInDir(os.TempDir(), now)
+}
+
+func cleanupStaleClaudeSessionSettingsInDir(dir string, now time.Time) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	ownerID := claudeSessionSettingsOwnerID()
+	for _, entry := range entries {
+		match := claudeSessionSettingsNameRe.FindStringSubmatch(entry.Name())
+		if match == nil || match[1] != ownerID {
+			continue
+		}
+		pid, err := strconv.Atoi(match[3])
+		if err != nil || pid <= 0 || processAlive(pid) {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		info, err := os.Lstat(path)
+		if err != nil || !info.Mode().IsRegular() || now.Sub(info.ModTime()) < claudeSessionSettingsStaleAfter {
+			continue
+		}
+		_ = os.Remove(path)
+	}
+}
+
 // ClaudeSettingsOptions は wrapper 所有の一時 settings に何を載せるかを決める。
 // どのキーもセッション単位で必要性が違うため、呼び出し側が要るものだけ true にする。
 type ClaudeSettingsOptions struct {
@@ -149,7 +207,8 @@ func WriteClaudeSessionSettings(p UsageHookParams, opts ClaudeSettingsOptions) (
 	if err != nil {
 		return "", nil, fmt.Errorf("marshal claude session settings: %w", err)
 	}
-	name := fmt.Sprintf("aac-claude-settings-s%d-%d.json", p.SessionID, os.Getpid())
+	cleanupStaleClaudeSessionSettings(time.Now())
+	name := fmt.Sprintf("%su%s-s%d-p%d%s", claudeSessionSettingsPrefix, claudeSessionSettingsOwnerID(), p.SessionID, os.Getpid(), claudeSessionSettingsSuffix)
 	path = filepath.Join(os.TempDir(), name)
 	// 共用 /tmp での symlink 追従を防ぐ（AUDIT-4）: 既存（stale or 他ユーザーが張った
 	// symlink）を除去してから O_EXCL で排他生成する。O_EXCL は symlink 先へ追従して書き込まず、
@@ -380,5 +439,14 @@ func writeCodexConfig(path, content string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { // #nosec G301 -- ~/.codex は秘密情報を持つ可能性があるため 0700
 		return fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
 	}
-	return os.WriteFile(path, []byte(content), 0o600) // #nosec G306,G703 -- ~/.codex/config.toml は Codex CLI の設定ファイル（0600 が意図）。path はホーム配下の固定設定パスで外部入力ではない
+	mode := os.FileMode(0o600)
+	if info, err := os.Stat(path); err == nil {
+		// Preserve a user's stricter owner-only mode while never carrying group
+		// or other-user permissions into the replacement.
+		mode = info.Mode().Perm() & 0o600
+		if mode == 0 {
+			mode = 0o600
+		}
+	}
+	return securefile.WriteAtomic(path, []byte(content), mode)
 }

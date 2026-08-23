@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "any-ai-cli-web",
+      "name": "many-ai-cli-web",
       "devDependencies": {
         "@types/node": "^25.9.1",
         "@xterm/addon-fit": "^0.11.0",

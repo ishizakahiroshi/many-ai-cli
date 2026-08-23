@@ -1171,6 +1171,13 @@ export function removeUsageCacheEntry(sessionId: number): void {
   }
 }
 
+/** Hub再起動時にlive session IDが再利用されるため、旧usageを全消去する。 */
+export function resetUsageCache(): void {
+  usageCache.clear();
+  turnStartAt.clear();
+  if (activeSessionId !== null) renderStatusbar();
+}
+
 /** アクティブセッションが変わった時に呼ぶ（セッション切替時の snapshot 更新）。 */
 export function onActiveSessionChanged(): void {
   renderStatusbar();

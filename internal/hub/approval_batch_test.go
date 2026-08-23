@@ -36,7 +36,7 @@ func installBatchApproval(t *testing.T, s *Server, id int, provider, cwd, comman
 	}
 	ses.nativeApprovalSig = vtApproval.Sig
 	s.sessionsMu.Lock()
-	s.wrappers[id] = &wrapperConn{}
+	s.wrappers[id] = &wrapperConn{sendFunc: func(any) error { return nil }}
 	s.sessionsMu.Unlock()
 	return vtApproval
 }

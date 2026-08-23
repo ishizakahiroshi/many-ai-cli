@@ -40,6 +40,27 @@ func auditCountRows(t *testing.T, store *Store, query string, args ...any) int {
 	return n
 }
 
+func TestSQLiteConnectionLocalPragmasReapplyAfterConnectionReplacement(t *testing.T) {
+	store := startAuditSession(t, 9001)
+	store.db.SetMaxIdleConns(0)
+
+	for i := 0; i < 2; i++ {
+		var foreignKeys, busyTimeout, synchronous string
+		if err := store.db.QueryRow(`PRAGMA foreign_keys`).Scan(&foreignKeys); err != nil {
+			t.Fatalf("foreign_keys query %d: %v", i, err)
+		}
+		if err := store.db.QueryRow(`PRAGMA busy_timeout`).Scan(&busyTimeout); err != nil {
+			t.Fatalf("busy_timeout query %d: %v", i, err)
+		}
+		if err := store.db.QueryRow(`PRAGMA synchronous`).Scan(&synchronous); err != nil {
+			t.Fatalf("synchronous query %d: %v", i, err)
+		}
+		if foreignKeys != "1" || busyTimeout != "3000" || synchronous != "1" {
+			t.Fatalf("connection %d pragmas = foreign_keys=%q busy_timeout=%q synchronous=%q; want 1/3000/1", i, foreignKeys, busyTimeout, synchronous)
+		}
+	}
+}
+
 // TestMessagesMentionText_UserOnly は read-only バイパスの言及照合が role='user' に
 // 限定され、AI 出力（pty_output / role='ai'）一致では許可されないことを確認する。
 func TestMessagesMentionText_UserOnly(t *testing.T) {

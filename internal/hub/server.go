@@ -454,11 +454,20 @@ func gitChangeStats(cwd string) (files, added, deleted int) {
 // closeOnce guarantees conn.Close is called at most once regardless of how
 // many goroutines detect a dead connection simultaneously.
 type uiConn struct {
-	ws              *websocket.Conn
-	sendMu          sync.Mutex
+	ws     *websocket.Conn
+	sendMu sync.Mutex
+	// sendFunc is test-only transport injection. Production UI connections
+	// leave it nil and write to ws through websocket.JSON.Send.
+	sendFunc        func(any) error
 	closeOnce       sync.Once
 	activeSessionID int
 	ptySizes        map[int]ptySize
+	// priming prevents live broadcasts from overtaking the snapshot and PTY
+	// replay sent by handleWS. draining keeps the same ordering while the
+	// queued tail is flushed after the initial replay.
+	priming  bool
+	draining bool
+	queued   []any
 }
 
 // broadcastWriteTimeout は UI WebSocket への JSON フレーム書き込みデッドライン。
@@ -480,6 +489,9 @@ func newUIConn(ws *websocket.Conn) *uiConn {
 func (c *uiConn) sendWithDeadline(m any, deadline time.Time) error {
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
+	if c.sendFunc != nil {
+		return c.sendFunc(m)
+	}
 	if err := c.ws.SetWriteDeadline(deadline); err != nil {
 		return err
 	}
@@ -495,8 +507,11 @@ func (c *uiConn) close() {
 // notices can be sent from different goroutines, so the raw websocket.Conn must
 // not be written concurrently.
 type wrapperConn struct {
-	ws        *websocket.Conn
-	sendMu    sync.Mutex
+	ws     *websocket.Conn
+	sendMu sync.Mutex
+	// sendFunc is test-only transport injection. Production wrapper connections
+	// leave it nil and write to ws through websocket.JSON.Send.
+	sendFunc  func(any) error
 	closeOnce sync.Once
 	// inputAckSeen は旧 wrapper との互換性ガード。1 件でも ack を受け取った
 	// 接続だけを ack 対応とみなし、未 ack 入力を切断時に差し戻す。
@@ -510,11 +525,17 @@ type wrapperConn struct {
 func newWrapperConn(ws *websocket.Conn) *wrapperConn { return &wrapperConn{ws: ws} }
 
 func (c *wrapperConn) send(m any) (err error) {
-	if c == nil || c.ws == nil {
+	if c == nil {
 		return fmt.Errorf("wrapper not connected")
 	}
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
+	if c.sendFunc != nil {
+		return c.sendFunc(m)
+	}
+	if c.ws == nil {
+		return fmt.Errorf("wrapper not connected")
+	}
 	// ゼロ値 Conn や切断済みは x/net/websocket が panic することがあるため回収する。
 	defer func() {
 		if r := recover(); r != nil {
@@ -583,11 +604,6 @@ type Server struct {
 	// stale cursor only affects which of several equally valid profiles is picked.
 	subscriptionRRMu sync.Mutex
 	subscriptionRR   map[string]int
-	// agentChatBroadcastMu serializes agent-chat generation invalidation with
-	// generation-checked UI sends. Reattach can replace a session while an old
-	// poll is parsing outside sessionsMu; this lock prevents that old poll from
-	// broadcasting after the replacement is committed.
-	agentChatBroadcastMu sync.Mutex
 	// Test-only clock injection for deterministic tail-prime deadline cases.
 	agentChatReadClock func() time.Time
 	cfgMu              sync.Mutex
@@ -1696,6 +1712,9 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 		for _, sessionID := range replaySessionIDs {
 			s.evaluateReplayApproval(sessionID)
 		}
+		if !s.finishUIPriming(uc) {
+			return
+		}
 		ctx, cancel := context.WithCancel(context.Background())
 		s.safeGo("ui_ping_loop", func() { s.pingLoop(ctx, uc) })
 		s.uiLoop(conn)
@@ -2172,14 +2191,17 @@ func isDigitsOnly(s string) bool {
 	return true
 }
 
+func (s *Server) sessionLogEnabled() bool {
+	s.cfgMu.Lock()
+	defer s.cfgMu.Unlock()
+	return s.cfg.Log.SessionEnabled
+}
+
 func (s *Server) writeHistory(sessionID int, event map[string]any) {
 	// セッションログが無効（既定）なら .jsonl・SQLite いずれにも本文を残さない。
 	// .log の抑止は wrapper 側、.jsonl writer の不生成は wrapperLoop/reattachLoop 側で
 	// 行うが、SQLite の StoreEvent もここを通るため一括でゲートする。
-	s.cfgMu.Lock()
-	sessionLogEnabled := s.cfg.Log.SessionEnabled
-	s.cfgMu.Unlock()
-	if !sessionLogEnabled {
+	if !s.sessionLogEnabled() {
 		return
 	}
 	s.sessionsMu.Lock()

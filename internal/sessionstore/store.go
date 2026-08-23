@@ -18,10 +18,30 @@ import (
 	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/sessionlog"
 
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
 )
 
 const defaultTimeout = 3 * time.Second
+
+var sqliteConnectionPragmas = []string{
+	`PRAGMA synchronous=NORMAL`,
+	`PRAGMA foreign_keys=ON`,
+	`PRAGMA busy_timeout=3000`,
+}
+
+func init() {
+	// database/sql may discard and recreate the single physical connection.
+	// These PRAGMAs are connection-local, so applying them only once through
+	// Store.init leaves a replacement connection with driver defaults.
+	sqlite.RegisterConnectionHook(func(conn sqlite.ExecQuerierContext, _ string) error {
+		for _, pragma := range sqliteConnectionPragmas {
+			if _, err := conn.ExecContext(context.Background(), pragma, nil); err != nil {
+				return fmt.Errorf("sqlite connection pragma %q: %w", pragma, err)
+			}
+		}
+		return nil
+	})
+}
 
 // initTimeout は init（スキーマ初期化）専用のタイムアウト。
 //
@@ -359,10 +379,8 @@ func (s *Store) init() error {
 		// 反映される。incremental になると incremental_vacuum で空きページを OS へ返せる。
 		`PRAGMA auto_vacuum=INCREMENTAL`,
 		`PRAGMA journal_mode=WAL`,
-		`PRAGMA synchronous=NORMAL`,
-		`PRAGMA foreign_keys=ON`,
-		`PRAGMA busy_timeout=3000`,
 	}
+	pragmas = append(pragmas, sqliteConnectionPragmas...)
 	for _, q := range pragmas {
 		if _, err := s.db.ExecContext(ctx, q); err != nil {
 			return fmt.Errorf("sqlite pragma: %w", err)

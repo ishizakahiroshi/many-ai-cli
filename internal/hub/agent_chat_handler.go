@@ -203,14 +203,12 @@ func (s *Server) stopAgentChatTailLocked(ses *session) {
 	if ses == nil {
 		return
 	}
-	s.agentChatBroadcastMu.Lock()
 	if ses.agentChatTimer != nil {
 		ses.agentChatTimer.Stop()
 		ses.agentChatTimer = nil
 	}
 	ses.agentChatRunning = false
 	ses.agentChatGeneration++
-	s.agentChatBroadcastMu.Unlock()
 }
 
 func (s *Server) stopAgentChatTail(id int) {
@@ -228,35 +226,46 @@ func (s *Server) scheduleAgentChatPollLocked(id int, generation uint64) {
 }
 
 func (s *Server) broadcastAgentChatIfCurrent(id int, generation uint64, message proto.Message) bool {
-	// Lock order is sessionsMu -> agentChatBroadcastMu, matching
-	// stopAgentChatTailLocked. The session replacement therefore cannot commit
-	// between the generation check and the send snapshot.
+	// The generation check and UI snapshot are the only critical section. Do not
+	// hold sessionsMu or a broadcast mutex while a UI write waits on a socket;
+	// a stalled browser must not block session replacement or unrelated Hub work.
 	s.sessionsMu.Lock()
 	ses := s.sessions[id]
 	if ses == nil || !ses.agentChatRunning || ses.agentChatGeneration != generation {
 		s.sessionsMu.Unlock()
 		return false
 	}
-	s.agentChatBroadcastMu.Lock()
 	ucs := make([]*uiConn, 0, len(s.uis))
 	for _, uc := range s.uis {
+		if uc.priming || uc.draining {
+			uc.queued = append(uc.queued, message)
+			continue
+		}
 		ucs = append(ucs, uc)
 	}
 	s.sessionsMu.Unlock()
 
-	deadline := time.Now().Add(broadcastWriteTimeout)
 	var dead []*uiConn
 	for _, uc := range ucs {
-		if err := uc.sendWithDeadline(message, deadline); err != nil {
+		if !s.agentChatGenerationCurrent(id, generation) {
+			return false
+		}
+		if err := uc.sendWithDeadline(message, time.Now().Add(broadcastWriteTimeout)); err != nil {
 			s.logger.Warn("agent chat broadcast: UI send failed", "err", err)
 			dead = append(dead, uc)
 		}
 	}
-	s.agentChatBroadcastMu.Unlock()
 	for _, uc := range dead {
 		s.removeUI(uc.ws)
 	}
 	return true
+}
+
+func (s *Server) agentChatGenerationCurrent(id int, generation uint64) bool {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[id]
+	return ses != nil && ses.agentChatRunning && ses.agentChatGeneration == generation
 }
 
 func (s *Server) pollAgentChat(id int, generation uint64) {
