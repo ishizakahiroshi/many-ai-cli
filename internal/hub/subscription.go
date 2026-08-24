@@ -67,10 +67,28 @@ func (s *Server) subscriptionProfileInUse(provider, rawID string) bool {
 
 // pickAutoSubscription は auto 指定のときに使う profile を 1 つ選ぶ。
 //
-// remaining quota で選びたいところだが、対応 provider のどれも公式 CLI から残量を
-// 出さない（親 C1 の調査結果）。取れない値を根拠にした選択を装うより、有効な
-// profile を素直に round-robin する。**選んだ結果は具体的な ID として記録される**ので、
-// 後からどのセッションがどの契約を使ったかは追える。
+// # 設計不変条件: 残量を見て自動で契約を切り替えない（正本）
+//
+// ここは有効な profile を spawn 時に round-robin するだけで、残量・上限・リセット時刻の
+// たぐいを一切参照しない。これは実装上の制限ではなく、意図して固定している境界である。
+// 初版のこのコメントは「対応 provider のどれも残量を出さないから round-robin にした」と
+// 理由を書いていたが、その前提はすでに崩れている（subscription_usage.go が Claude /
+// Codex / Grok の残量を持っている）。取れるようになった今も見ないのは、見ないと決めた
+// からである。
+//
+// なぜ固定するか。「上限に当たったら別アカウントへ自動で切り替える」は、各ベンダーが
+// 広く禁じている「レート制限・保護措置の回避」そのものの自動化になる。利用者が spawn
+// 画面で契約を選ぶのは利用者の判断だが、Hub が残量を見て勝手に乗り換えれば、それは本
+// ツールが回避を実装したことになる。README の「自分のアカウントを複数積む使い方は自己
+// 責任」節が成立するのは、ツール側が回避を自動化していないという前提の上である。
+//
+// したがって、この関数に残量・quota・リセット時刻を持ち込む変更は入れない。「残量の多い
+// 方を選ぶ」「上限に当たった profile を飛ばす」も同じ理由で入れない。残量は表示（Usage
+// メニュー）までに留め、どれを使うかは利用者が決める。機械的な裏づけは
+// TestAutoSubscriptionNeverConsultsUsage。
+//
+// **選んだ結果は具体的な ID として記録される**ので、後からどのセッションがどの契約を
+// 使ったかは追える。
 func (s *Server) pickAutoSubscription(cfg *config.Config, provider string) (string, error) {
 	candidates := subscription.Selectable(cfg, provider)
 	if len(candidates) == 0 {
