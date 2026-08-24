@@ -1476,6 +1476,12 @@
   "subs_status_signed_in": "Signed in",
   "subs_status_signed_in_plan": "Signed in · {plan}",
   "subs_session_badge_tooltip": "Subscription in use",
+  "subs_consent_title": "Adding a second subscription for this provider",
+  "subs_consent_body": "Before you add it, here is what is known about the terms.<br>・Holding several accounts is not prohibited as such by Anthropic, OpenAI, or xAI (GitHub is the exception: one free account per person).<br>・<b>Moving to another account to keep working past a limit is a different question.</b> Each vendor prohibits circumventing rate limits or protective measures in broad language, and quota stacking may be read into it. Enforcement is theirs to decide, and a suspension is not refunded.<br>・Separate entitlements used for their own purpose are ordinary use (an employer-issued account for work, a personal one for personal projects).<br>・When you hit a limit, prefer the vendor's own paid route first (Anthropic's usage credits, OpenAI's ChatGPT credits).<br>・<b>many-ai-cli never switches subscriptions automatically based on remaining quota.</b> You choose which one every time you start a session. many-ai-cli cannot judge whether your setup complies.",
+  "subs_consent_readme": "Open the Security section of the README",
+  "subs_consent_agree": "I will check the current terms myself and use this at my own risk",
+  "subs_consent_proceed": "Agree and add",
+  "subs_stacking_note": "Whether those accounts may be used this way is between you and each vendor. many-ai-cli never switches between them automatically.",
   "spawn_subscription_auto": "Subscription: auto (pick an enabled profile)",
   "spawn_subscription_default": "Subscription: default CLI login"
 }
