@@ -1,6 +1,9 @@
 package hub
 
 import (
+	"go/ast"
+	"go/parser"
+	gotoken "go/token"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -143,4 +146,72 @@ func TestLiveSessionAuthIsNeverSwapped(t *testing.T) {
 			t.Errorf("%s assigns %s outside session creation: %s", name, field, trimmed)
 		}
 	}
+}
+
+// usageIdentifierFragments は「残量を見て選んでいる」ことを示す識別子の断片。
+//
+// pickAutoSubscription の中にこれらが現れたら、auto 選択が残量に依存し始めた
+// ということである。subscription.go の pickAutoSubscription 冒頭に置いた設計
+// 不変条件（正本）の、機械的な裏づけ。
+var usageIdentifierFragments = []string{
+	"usage",
+	"quota",
+	"remaining",
+	"percent",
+	"resets",
+	"credit",
+	"limit",
+	"exhaust",
+}
+
+// TestAutoSubscriptionNeverConsultsUsage は auto 選択が残量を参照していない
+// ことをソース走査で固定する。
+//
+// 残量が取れなかった頃は「見ていない」が自明だったが、subscription_usage.go が
+// 入って Claude / Codex / Grok の残量が同じパッケージの中に存在するようになった。
+// 値が手元にある以上、「上限に当たった profile を飛ばす」「残量の多い方を選ぶ」は
+// 数行で書けてしまい、しかも一見すると親切な改善に見える。
+//
+// それは各ベンダーが広く禁じている「レート制限・保護措置の回避」の自動化であり、
+// 本ツールが越えないと決めた線である。契約を切り替えるのは利用者の操作であって、
+// Hub の判断ではない。上の RoundRobin / SkipsDisabled 群が「順送りである」ことを
+// 押さえるのに対し、こちらは「順送り以外の根拠を持ち込んでいない」ことを押さえる。
+//
+// このテストが落ちたときの正しい対処は、断片一覧から語を削って通すことではない。
+// 入れようとしている変更が「Hub が残量を見て乗り換える」に当たらないかを先に
+// 確かめること。当たるなら入れない。
+func TestAutoSubscriptionNeverConsultsUsage(t *testing.T) {
+	fset := gotoken.NewFileSet()
+	file, err := parser.ParseFile(fset, "subscription.go", nil, 0)
+	if err != nil {
+		t.Fatalf("subscription.go を解析できなかった: %v", err)
+	}
+
+	var body *ast.BlockStmt
+	ast.Inspect(file, func(n ast.Node) bool {
+		fn, ok := n.(*ast.FuncDecl)
+		if !ok || fn.Name == nil || fn.Name.Name != "pickAutoSubscription" {
+			return true
+		}
+		body = fn.Body
+		return false
+	})
+	if body == nil {
+		t.Fatal("pickAutoSubscription を見つけられなかった。走査条件が実装とずれている")
+	}
+
+	ast.Inspect(body, func(n ast.Node) bool {
+		ident, ok := n.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		lower := strings.ToLower(ident.Name)
+		for _, fragment := range usageIdentifierFragments {
+			if strings.Contains(lower, fragment) {
+				t.Errorf("pickAutoSubscription が %q を参照している（%s）。auto 選択は残量を見ない",
+					ident.Name, fset.Position(ident.Pos()))
+			}
+		}
+		return true
+	})
 }
