@@ -122,7 +122,7 @@
       "purpose": "スマホ幅でチャットビュー（mobile-terminal-lite）が空のまま表示される症状で、モバイル判定・xterm バッファ・scanBuffer の行数・DOM 寸法のどこで 0 になるかを実機から観測する",
       "addedIn": "unreleased",
       "gate": "opt-in: ビルドは MAI_DEBUG=1 / -tags maidebug、runtime は URL クエリ ?mtldebug=1",
-      "due": "2026-08-24",
+      "due": "2026-09-07",
       "files": [
         "internal/hub/debug_mobile_view.go",
         "web/src/debug/mobile-view.ts"
@@ -134,7 +134,7 @@
         "/api/debug/mobile-view"
       ],
       "removalCondition": "スマホでターミナル出力が空になる原因が確定したら撤去",
-      "reason": "PC とスマホが同じ Hub・同じビルドを見ているのに片方だけ空になるため、コードを読むだけでは判定・バッファ・DOM のどこで落ちているか切り分けられない。実機 Safari の実測値が要る",
+      "reason": "PC とスマホが同じ Hub・同じビルドを見ているのに片方だけ空になるため、コードを読むだけでは判定・バッファ・DOM のどこで落ちているか切り分けられない。実機 Safari の実測値が要る / 2026-08-24 に due を 2026-08-24 から 2026-09-07 へ延長した。延長の理由は『まだ 1 件も観測できていない』こと。仕込んだ 2026-08-17 から 2026-08-24 までの全期間で hub.log（現行 1 本 + ローテート済み 3 本・2026-08-06 以降を連続で覆う）に debug mobile view sample は 0 件で、実機スマホから ?mtldebug=1 付きで開く手順がまだ実行されていない。つまり結論が出ていないのではなく観測が始まっていない。次の期限までに実機で再現しなければ、そのときは延長ではなく撤去して、症状が再発した時点で入れ直す",
       "note": "記録内容は行数・文字数・要素寸法・状態フラグと userAgent 先頭 140 文字のみで、ターミナル本文と入力テキストは含まない。5 秒間隔・最大 60 サンプル（5 分）で自動停止する。URL クエリが無い通常アクセスでは 1 件も送信しない / 2026-08-20 に常設プローブ基盤へ移送した（plan_instrumentation-probe-lifecycle）。TS 側は自走するサンプラーで記録点を持たないため channel は無く、web/src/debug/ へ移して web/src/debug/index.ts から読み込む形にした（mobile-terminal-lite.ts からの import は不要になったので sharedFiles から外した）。Go 側は //go:build maidebug を付け、ルート登録を init() の registerProbeRoute へ移したので server.go は s.registerProbeRoutes(mux) の 1 行だけになった",
       "channels": []
     },
