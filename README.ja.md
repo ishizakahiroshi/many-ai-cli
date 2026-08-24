@@ -135,7 +135,7 @@ Gemini CLI は意図的に対象外です。
 
 - **既にあるものは絶対に上書きしません。** profile 側で変えた値はそのまま残り、足りないものだけが足されます
 - **フォルダはリンク**（Windows では junction）で繋ぐので、あとからスキルを 1 つ足せば全 profile に届きます。ファイルはコピーです（CLI 自身が書き換えるため、リンクにすると profile の編集が既定側へ逆流します）
-- **認証ファイルは運びません。** `.credentials.json` や `auth.json` は対象外です。Claude の `.claude.json` はアカウント識別と好みが同居しているため、ファイルごとではなく名指しした 2 キー（ブラウザ操作の既定）だけを移します
+- **認証ファイルは運びません。** `.credentials.json` や `auth.json` は対象外です。Claude の `.claude.json` はアカウント識別と好みが同居しているため、ファイルごとではなく名指しした 2 キー（ブラウザ操作の既定）だけを移します <!-- secrets-scan: allow .credentials.json -->
 - 書き込み先は `~/.many-ai-cli/subscriptions/` の中だけで、あなたの `~/.claude` / `~/.codex` / `~/.grok` は読むだけです。`many-ai-cli uninstall` で全部消えます
 - あとから既定側を変えた分は自動では追いません。`many-ai-cli doctor` が「既定にあって profile に無いもの」を教えます
 
@@ -587,7 +587,7 @@ Host remote-host
   HostName remote.example.com
   User ubuntu
   Port 22
-  IdentityFile C:\Users\you\.ssh\id_ed25519
+  IdentityFile ~/.ssh/id_ed25519
   ServerAliveInterval 30
 ```
 
@@ -841,7 +841,7 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 ```
 ┌─ MANY-AI-CLI  [1][0][6] │ ● Claude:2  ● Codex:5            [⏻] [設定] ─┐
 ├──────────────────────────┬──────────────────────────────────────────────┤
-│ [+ 新しいセッション]     │ ● Codex  cwd: D:\dev\many-ai-cli   [↑最上部へ]│
+│ [+ 新しいセッション]     │ ● Codex  cwd: C:\src\many-ai-cli   [↑最上部へ]│
 │ 📁 many-ai-cli  [1][0][6] │ ターミナル出力 — Windows PowerShell          │
 │ ─────────────────────── │                                              │
 │ 📌 #7 ● Codex 実行中  × │   (xterm.js のターミナル出力)               │
@@ -1219,7 +1219,7 @@ Hub はセッションの稼働状態を **端末（PTY）出力が直近数秒�
 
 - Hub の HTTP / WebSocket サーバは `127.0.0.1` のみにバインドし、外部ホストから直接アクセスすることはできません
 - ランダムトークンを起動時に生成し、URL に付与します（`?token=xxx`）
-- token なしアクセスは明示的な opt-in です。SSH ローカルフォワードやユーザー専用 WireGuard/Docker gateway など、入口が別の私設経路で保護されている場合だけ `hub.allow_loopback_without_token: true`、`hub.trusted_networks: ["172.19.0.1/32"]`、`hub.allowed_hosts: ["10.8.0.1"]` のように狭く設定してください。公開 bind、リバースプロキシ、共有 shell ホスト、`0.0.0.0/0` のような広い CIDR では使わないでください。
+- token なしアクセスは明示的な opt-in です。SSH ローカルフォワードやユーザー専用 WireGuard/Docker gateway など、入口が別の私設経路で保護されている場合だけ `hub.allow_loopback_without_token: true`、`hub.trusted_networks: ["172.19.0.1/32"]`、`hub.allowed_hosts: ["10.8.0.1"]` のように狭く設定してください。公開 bind、リバースプロキシ、共有 shell ホスト、`0.0.0.0/0` のような広い CIDR では使わないでください。 <!-- secrets-scan: allow 172.19.0.1 secrets-scan: allow 10.8.0.1 -->
 - `many-ai-cli` 自身はテレメトリ・利用状況の送信を一切行いません
 
 ### Claude Workflow journal のメタ情報
@@ -1263,7 +1263,7 @@ Workflow 完了時の Web Push は別の opt-in です（`user_prefs.workflow_co
 
 wrap 対象 CLI のベンダーは、第三者ツール経由のアクセスや自動化を制限する方向に規約を変更する可能性があります。その場合、`many-ai-cli` 経由での利用が規約違反となる場合があります。
 
-- 実例: Google は 2026 年に「Gemini Code Assist を第三者ツール経由で利用することは ToS 違反」とする運用を開始し、OpenClaw / OpenCode / Antigravity 等の wrapper 利用ユーザーに対して `403 ToS` アカウント停止が多発しました。この前例を踏まえ、本ツールでは **Gemini CLI は意図的に wrap 対象外** としています。
+- 実例: 2026 年 2 月、Google は Gemini CLI / Antigravity の OAuth 認証を第三者ツールに横取りさせてバックエンドへアクセスしていた利用者のアカウントを `403 ToS` で停止しました。名前が挙がったのは OpenClaw / OpenCode / Pi / 9router proxy です。Google の公式見解は「第三者のソフトウェア・ツール・サービスを使って Gemini CLI の OAuth 認証を横取り・便乗し、当社のバックエンドサービスへアクセスすることは、Gemini CLI の適用規約およびポリシーへの直接的な違反である」というものです。抑止は共通のバックエンド層で効くため、停止されたアカウントは Antigravity と Gemini Code Assist の利用も同時に失いました（Antigravity は Google 自身の製品で、違反ツール側ではありません）。是正フォームの提出で復帰しましたが、2 回目の違反は恒久停止です。この前例を踏まえ、本ツールでは **Gemini CLI は意図的に wrap 対象外** としています。
 - 上表の wrap 対象 CLI についても同様のリスクがあり、ベンダーが第三者自動化を制限した場合は **予告なくサポートを終了する可能性があります**。各 CLI の最新規約はユーザー責任で確認してください。
 
 ### ⚠️ 自分のアカウントを複数積む使い方は自己責任

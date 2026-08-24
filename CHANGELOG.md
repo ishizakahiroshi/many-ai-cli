@@ -84,6 +84,13 @@ Release artifacts are published at
   `web/src/app/longproc.ts`).
 
 ### Changed
+- **The remote-access SSH sample now uses `~/.ssh/id_ed25519`.** The Windows
+  walkthrough spelled the key out as a full Windows user-profile path, so every
+  reader had to edit the line before the block would work. OpenSSH expands `~`
+  in `IdentityFile` on Windows as well (checked against
+  OpenSSH_for_Windows_9.5p2), so the sample is copy-paste ready as written and
+  now reads the same on every platform (`README.md`, `README.ja.md`).
+
 - **The Windows shortcut created by `setup` is now named "MANY-AI-CLI".**
   0.7.0 wrote `Many AI Hub.lnk` on the desktop. The same tray launcher is
   now `MANY-AI-CLI.lnk` on the desktop and in the Startup folder. Re-running
@@ -106,6 +113,18 @@ Release artifacts are published at
   `internal/setupcmd/setup_windows.go`, `internal/uninstall/`).
 
 ### Fixed
+- **The Gemini ban precedent in the README named Google's own product as an
+  offender.** The terms-of-service warning cited "OpenClaw / OpenCode /
+  Antigravity" as third-party wrappers whose users were hit with `403 ToS`.
+  Antigravity is Google's agentic development platform, and it was the access
+  that got disabled, not the tool that caused it — the thread titles on
+  Google's forum read "Antigravity / Gemini Code Assist Disabled" and were
+  read as tool names. Checked against Google's own statement in
+  `google-gemini/gemini-cli` Discussion #20632 (2026-02-27): the violation is
+  harvesting or piggybacking on Gemini CLI's OAuth authentication, not
+  wrapping as such. Both READMEs now carry the narrower rule, the tools
+  actually named, and the reinstatement path (`README.md`, `README.ja.md`).
+
 - **Grok's native tool-permission card now becomes Hub approval buttons.**
   Grok Build draws `1 (•) Yes, and don't ask again… / 2 (○) Yes, proceed /
   3 (○) No, reject` instead of Claude's `1. Yes` numbered list, so the detector
