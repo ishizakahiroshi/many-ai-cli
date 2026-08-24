@@ -135,7 +135,7 @@ This is **not an API key router**. It does not pool metered API keys to make req
 
 - **Nothing that already exists in a profile is ever overwritten.** A value you changed inside a profile stays; only what is missing gets added.
 - **Directories are linked** (a junction on Windows), so a skill you add later reaches every profile at once. Files are copied, because the CLI rewrites them and a link would push a profile's edits back into your default directory.
-- **Credentials are never carried.** `.credentials.json` and `auth.json` are excluded. Claude's `.claude.json` mixes account identity with preferences, so two named keys are copied rather than the file.
+- **Credentials are never carried.** `.credentials.json` and `auth.json` are excluded. Claude's `.claude.json` mixes account identity with preferences, so two named keys are copied rather than the file. <!-- secrets-scan: allow .credentials.json -->
 - Writes land only under `~/.many-ai-cli/subscriptions/`; your `~/.claude`, `~/.codex` and `~/.grok` are read and never written, and `many-ai-cli uninstall` removes everything this creates.
 - Later changes to your default directory are not followed automatically. `many-ai-cli doctor` reports what your default has that a profile does not.
 
@@ -599,7 +599,7 @@ Host remote-host
   HostName remote.example.com
   User ubuntu
   Port 22
-  IdentityFile C:\Users\you\.ssh\id_ed25519
+  IdentityFile ~/.ssh/id_ed25519
   ServerAliveInterval 30
 ```
 
@@ -853,7 +853,7 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 ```
 ┌─ MANY-AI-CLI  [1][0][6] │ ● Claude:2  ● Codex:5         [⏻] [Settings] ─┐
 ├──────────────────────────┬──────────────────────────────────────────────┤
-│ [+ New Session]          │ ● Codex  cwd: D:\dev\many-ai-cli  [↑ to top] │
+│ [+ New Session]          │ ● Codex  cwd: C:\src\many-ai-cli  [↑ to top] │
 │ 📁 many-ai-cli  [1][0][6] │ Terminal output — Windows PowerShell         │
 │ ─────────────────────── │                                              │
 │ 📌 #7 ● Codex Running × │   (xterm.js terminal output)                │
@@ -1230,7 +1230,7 @@ The Hub decides a session's liveness solely from **whether the terminal (PTY) pr
 
 - The Hub HTTP/WebSocket server binds to `127.0.0.1` only — external hosts cannot reach it directly
 - Random token in URL prevents unauthorized local access
-- Token-less access is available only as an explicit opt-in for loopback / trusted private paths such as SSH local forwarding or a per-user WireGuard/Docker gateway. Configure `hub.allow_loopback_without_token: true`, narrow `hub.trusted_networks` values such as `172.19.0.1/32`, and `hub.allowed_hosts` values such as `10.8.0.1` only when that private path is already protected. Never use it with public bind addresses, reverse proxies, shared shell hosts, or broad CIDRs such as `0.0.0.0/0`.
+- Token-less access is available only as an explicit opt-in for loopback / trusted private paths such as SSH local forwarding or a per-user WireGuard/Docker gateway. Configure `hub.allow_loopback_without_token: true`, narrow `hub.trusted_networks` values such as `172.19.0.1/32`, and `hub.allowed_hosts` values such as `10.8.0.1` only when that private path is already protected. Never use it with public bind addresses, reverse proxies, shared shell hosts, or broad CIDRs such as `0.0.0.0/0`. <!-- secrets-scan: allow 172.19.0.1 secrets-scan: allow 10.8.0.1 -->
 - `many-ai-cli` itself sends no telemetry or usage data to any service
 
 ### Claude workflow journal metadata
@@ -1274,7 +1274,7 @@ The table below summarizes each vendor's stance as of 2026. Always verify the cu
 
 Wrapped-CLI vendors may change their terms — including restricting or prohibiting third-party wrapper / automation access — at any time. If that happens, using the CLI through `many-ai-cli` could become a terms violation.
 
-- Recent precedent: Google began enforcing a ToS clause in 2026 that forbids accessing Gemini Code Assist through third-party wrappers, resulting in `403 ToS` account bans for tools like OpenClaw / OpenCode / Antigravity. For this reason, **Gemini CLI is intentionally out of scope** for `many-ai-cli`.
+- Recent precedent: in February 2026 Google suspended accounts with `403 ToS` where third-party tools — OpenClaw, OpenCode, Pi and the 9router proxy among those named — were harvesting Gemini CLI / Antigravity OAuth credentials to reach Google's backend services. Google's statement: *"Using third-party software, tools, or services to harvest or piggyback on Gemini CLI's OAuth authentication to access our backend services is a direct violation of Gemini CLI's applicable terms and policies."* Because enforcement happens at the shared backend layer, a suspension also took out Antigravity and Gemini Code Assist access (Antigravity is Google's own product, not one of the offending tools). Accounts were reinstated after submitting a compliance form; a second violation is permanent. For this reason, **Gemini CLI is intentionally out of scope** for `many-ai-cli`.
 - The same risk applies to every CLI in the table above. **Support for any wrapped CLI may be discontinued without notice** if its vendor restricts third-party automation. It is your responsibility to review each CLI's current terms before use.
 
 ### ⚠️ Stacking several of your own accounts — at your own risk
