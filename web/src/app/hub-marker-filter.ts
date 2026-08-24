@@ -13,6 +13,14 @@
 // 質問本文の色情報は失うが、現状そこに色は付いていないので実害なし。
 //
 // close 後の erase-below は、OPEN マーカー到達前に部分流出した popup 残骸を掃除する保険。
+//
+// 案 F（2026-08-24）: 案 E は CSI を単純に削除するだけだったため、Ink が行区切りを
+// 絶対カーソル位置指定だけで表現している場合（実測: セッション #23）、行区切りが
+// 何にも変換されずに消えて複数行の本文が 1 行へ繋がって見えていた。marker-vt-render.ts
+// の軽量 VT グリッドへ一旦描画してから読み出す方式に変更し、カーソル移動による行送り・
+// 同じ行への上書き描画（スピナー等の再描画）を実際の見た目どおりに畳み込む。
+
+import { renderMarkerBytesToText } from './marker-vt-render.js';
 
 export const hubMarkerBytePatterns = [
   new TextEncoder().encode('[MANY-AI-CLI]'),
@@ -100,8 +108,8 @@ function flushBufToOut(buf: number[], out: number[]): void {
   if (buf.length === 0) return;
   const bytes = new Uint8Array(buf);
   const text = utf8Decoder.decode(bytes);
-  const stripped = stripAnsiFromString(text);
-  const encoded = utf8Encoder.encode(stripped);
+  const rendered = renderMarkerBytesToText(text);
+  const encoded = utf8Encoder.encode(rendered);
   for (const b of encoded) out.push(b);
 }
 

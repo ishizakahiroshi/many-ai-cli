@@ -57,21 +57,21 @@ test('filterHubMarkersPure: 1 チャンクで完結する [MANY-AI-CLI] ブロ�
   assert.equal(state.markerBuf.length, 0);
 });
 
-test('filterHubMarkersPure (案 E): ブロック内の絶対カーソル位置指定は剥がされ本文だけ残る', () => {
-  // INK 衝突の原因である \x1b[<row>;<col>H をブロック内に混ぜたケース
+test('filterHubMarkersPure (案 F): ブロック内の絶対カーソル位置指定は行区切りに変換され本文が別行で残る', () => {
+  // INK 衝突の原因である \x1b[<row>;<col>H をブロック内に混ぜたケース。
+  // 案 E（単純 ANSI 削除）では 3 行が 1 行へ繋がっていた
+  // （2026-08-24 実測: セッション #23 で実際に発生・marker-vt-render.ts で修正）。
   const block = '\x1b[24;3HQ1 質問?\x1b[25;3H1. opt1\x1b[26;3H2. opt2';
   const input = bytes(`[MANY-AI-CLI]${block}[/MANY-AI-CLI]`);
   const { out } = filterHubMarkersPure(input, initialState());
   const text = str(out);
-  // 絶対位置指定は剥がれる（衝突原理消失）
+  // 絶対位置指定そのものは剥がれる（衝突原理消失）
   assert.equal(text.includes('\x1b[24;3H'), false);
   assert.equal(text.includes('\x1b[25;3H'), false);
   assert.equal(text.includes('\x1b[26;3H'), false);
-  // 本文テキストは残る
-  assert.equal(text.includes('Q1 質問?'), true);
-  assert.equal(text.includes('1. opt1'), true);
-  assert.equal(text.includes('2. opt2'), true);
-  assert.equal(text.endsWith(ERASE_BELOW), true);
+  // 本文テキストは残り、かつ行ごとに分かれる（連結されない）。
+  // 列 3 指定ぶんの行頭インデント（Claude Code 純正の表示仕様）は各行に残る。
+  assert.equal(text, `  Q1 質問?\n  1. opt1\n  2. opt2${ERASE_BELOW}`);
 });
 
 test('filterHubMarkersPure (案 E): SGR 色指定もブロック内なら剥がれる', () => {
@@ -93,23 +93,27 @@ test('filterHubMarkersPure: 開きマーカーで終わるチャンク → 本�
 
   const part2 = bytes('body3\n[/MANY-AI-CLI]tail');
   const { out: out2, state: state2 } = filterHubMarkersPure(part2, state1);
-  // CLOSE 時に貯めた本文をまとめて ANSI 剥離して出す
-  assert.equal(str(out2), `body1\nbody2body3\n${ERASE_BELOW}tail`);
+  // CLOSE 時に貯めた本文をまとめて VT 描画してから出す。
+  // 末尾の \n はカーソルを次行へ送るだけで文字を書き込まないため、
+  // 案 F（marker-vt-render）では最後に書き込みがあった行までしか描画しない
+  // （行き先の空行を律儀に残さない。実端末の見た目としても自然）。
+  assert.equal(str(out2), `body1\nbody2body3${ERASE_BELOW}tail`);
   assert.equal(state2.inMarker, false);
   assert.equal(state2.markerBuf.length, 0);
 });
 
-test('filterHubMarkersPure: チャンク跨ぎの ANSI シーケンスも正しく剥がれる', () => {
+test('filterHubMarkersPure: チャンク跨ぎの ANSI シーケンスも正しく解釈される', () => {
   // ESC [ がチャンク1末尾、続きがチャンク2 という分割
-  const part1 = bytes('[MANY-AI-CLI]hello\x1b[24');
+  const part1 = bytes('[MANY-AI-CLI]hello\x1b[2');
   const { out: out1, state: state1 } = filterHubMarkersPure(part1, initialState());
   assert.equal(str(out1), '');
   assert.ok(state1.markerBuf.length > 0);
 
-  const part2 = bytes(';3Hworld[/MANY-AI-CLI]end');
+  const part2 = bytes(';1Hworld[/MANY-AI-CLI]end');
   const { out: out2 } = filterHubMarkersPure(part2, state1);
-  // 跨いだ \x1b[24;3H が剥がれて helloworld になる
-  assert.equal(str(out2), `helloworld${ERASE_BELOW}end`);
+  // 跨いだ \x1b[2;1H は行送りとして解釈され、hello と world は別行になる
+  // （案 E 時代は絶対位置指定を単純除去するだけで helloworld と 1 行に繋がっていた）。
+  assert.equal(str(out2), `hello\nworld${ERASE_BELOW}end`);
 });
 
 test('filterHubMarkersPure: 閉じマーカーの途中で chunk が割れても carry で次に繋ぐ', () => {
@@ -269,4 +273,36 @@ test('行頭ゲート: 行頭状態はチャンクを跨いで保持される', 
   const { out: out4, state: state4 } = filterHubMarkersPure(bytes('[MANY-AI-CLI]body[/MANY-AI-CLI]'), state3);
   assert.equal(str(out4), `body${ERASE_BELOW}`);
   assert.equal(state4.inMarker, false);
+});
+
+// ── 案 F（marker-vt-render・2026-08-24）: 行区切り変換と同じ行への上書き ──
+// 実測（セッション #23）: Claude Code の Ink UI はマーカーブロック本文の行区切りを
+// 改行文字ではなく絶対カーソル位置指定だけで表現するため、案 E（単純 ANSI 削除）では
+// 複数行の本文が 1 行へ繋がって表示されていた。marker-vt-render.ts の軽量 VT グリッドで
+// 行送り・同じ行への上書き描画を正しく畳み込む。
+
+test('案 F: 絶対カーソル位置指定による複数行の本文が別行として描画される', () => {
+  const block = '\x1b[24;3HQ1 質問?\x1b[25;3H1. opt1\x1b[26;3H2. opt2';
+  const input = bytes(`[MANY-AI-CLI]${block}[/MANY-AI-CLI]`);
+  const { out } = filterHubMarkersPure(input, initialState());
+  // 列 3 指定ぶんの行頭インデント（Claude Code 純正の表示仕様）は残る。
+  assert.equal(str(out), `  Q1 質問?\n  1. opt1\n  2. opt2${ERASE_BELOW}`);
+});
+
+test('案 F: 同じ行への上書き描画（スピナー等の再描画）は最終状態だけが残る', () => {
+  // "loading..." を書いた後、同じ行頭へ戻って erase-line してから "done!" を書く
+  const block = '\x1b[1;1Hloading...\x1b[1;1H\x1b[Kdone!';
+  const input = bytes(`[MANY-AI-CLI]${block}[/MANY-AI-CLI]`);
+  const { out } = filterHubMarkersPure(input, initialState());
+  assert.equal(str(out), `done!${ERASE_BELOW}`);
+});
+
+test('案 F: ブロックが複数回まるごと再描画された場合、古い世代の残骸は最終行より後ろに残らない', () => {
+  // 実測パターン: Ink が先に低い位置（絶対行 30）で下書きを描き、後から
+  // 本来の位置（絶対行 2）で改めて描き直す。最後に書き込んだ行までしか描画しないため、
+  // 数値的に後ろにある古い世代（行 30）は結果に含まれない。
+  const block = '\x1b[30;1Hstale first draft\x1b[2;1Hfinal answer';
+  const input = bytes(`[MANY-AI-CLI]${block}[/MANY-AI-CLI]`);
+  const { out } = filterHubMarkersPure(input, initialState());
+  assert.equal(str(out), `final answer${ERASE_BELOW}`);
 });
