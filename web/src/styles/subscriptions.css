@@ -94,3 +94,13 @@
   padding: 0 5px;
   white-space: nowrap;
 }
+
+/* ---- 複数契約の同意ゲート ---- */
+/* 本文が長いので既定の確認ダイアログ（420px）より広く取る。 */
+.subs-consent-dialog { width: min(560px, 100%); }
+.subs-consent-dialog .confirm-message { max-height: 46vh; overflow-y: auto; }
+.subs-consent-link { margin-top: 8px; font-size: 0.78rem; }
+.subs-consent-link a { color: var(--accent); }
+/* 積んでいるあいだ出し続ける注意。行を詰めず、一覧の下で独立して読めるようにする。 */
+.subs-stacking-note { margin-top: 10px; line-height: 1.55; }
+.subs-stacking-note a { color: var(--accent); }

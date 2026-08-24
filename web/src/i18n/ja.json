@@ -1476,6 +1476,12 @@
   "subs_status_signed_in": "ログイン済み",
   "subs_status_signed_in_plan": "ログイン済み・{plan}",
   "subs_session_badge_tooltip": "使用中のサブスクリプション",
+  "subs_consent_title": "この provider に 2 つ目の契約を追加します",
+  "subs_consent_body": "追加する前に、規約まわりで分かっていることを確認してください。<br>・アカウントを複数持つこと自体は Anthropic / OpenAI / xAI のいずれも禁じていません（GitHub だけ例外で、無料アカウントは 1 人 1 つまで）。<br>・<b>上限に当たったアカウントから別のアカウントへ移って作業を続けるのは、これとは別の話です。</b>各社が「レート制限・保護措置の回避」を幅広く禁じており、そこに読み込まれる可能性があります。判断するのはベンダー側で、停止されても返金はありません。<br>・もともと別の権利をそれぞれの用途で使うのは普通の使い方です（会社支給アカウントで業務、個人アカウントで個人開発、など）。<br>・上限に当たったときは、ベンダー公式の有償手段（Anthropic の usage credits、OpenAI の ChatGPT credits）を先に検討してください。<br>・<b>many-ai-cli は残量を見て自動で契約を切り替えません。</b>どの契約で起動するかは毎回あなたが選びます。規約に適合するかを many-ai-cli 側で判定することはできません。",
+  "subs_consent_readme": "README のセキュリティ節を開く",
+  "subs_consent_agree": "最新の規約は自分で確認し、自己責任で使うことに同意します",
+  "subs_consent_proceed": "同意して追加",
+  "subs_stacking_note": "複数の契約を積んで使ってよいかは、あなたと各ベンダーの間の問題です。many-ai-cli は残量を見て自動で切り替えません。",
   "spawn_subscription_auto": "サブスクリプション: 自動（有効な契約から選ぶ）",
   "spawn_subscription_default": "サブスクリプション: CLI 既定のログイン"
 }

@@ -36,6 +36,25 @@ const PROVIDER_LABELS: Record<string, string> = {
   grok: 'Grok Build',
 };
 
+// 2 本目の契約を足すときに 1 回だけ出す同意ゲート（localStorage で記憶）。
+// mobile-connect の同意ゲートと同じ作りにしてある。
+const LS_STACKING_CONSENT = 'ai_cli_hub_subscription_stacking_consent';
+
+function lsGet(key: string): string | null {
+  try { return localStorage.getItem(key); } catch (_) { return null; }
+}
+function lsSet(key: string, value: string): void {
+  try { localStorage.setItem(key, value); } catch (_) { /* private mode 等は無視 */ }
+}
+
+/** README のセキュリティ節（複数契約の注意はこの中）。settings の README ボタンと同じ言語分岐。 */
+function readmeSecurityUrl(): string {
+  const base = 'https://github.com/ishizakahiroshi/many-ai-cli/blob/main/';
+  if (window.__lang === 'ja') return base + 'README.ja.md#セキュリティ';
+  if (window.__lang === 'vi') return base + 'README.vi.md';
+  return base + 'README.md#security--privacy';
+}
+
 let cachedProviders: SubscriptionProviderEntry[] = [];
 let loadPromise: Promise<SubscriptionProviderEntry[]> | null = null;
 const changeListeners = new Set<() => void>();
@@ -124,7 +143,7 @@ function renderList(): void {
     updateSummary();
     return;
   }
-  host.innerHTML = supported.map((entry) => {
+  const listHtml = supported.map((entry) => {
     const rows = entry.profiles.map((p) => {
       const disabledCls = p.enabled ? '' : ' subs-row--off';
       const issueCls = p.issue ? ' subs-row--issue' : '';
@@ -168,6 +187,16 @@ function renderList(): void {
       `</div>`
     );
   }).join('');
+  // 同意ダイアログは 1 回で消えるが、複数契約を積んでいる状態は続く。
+  // 状態が続くあいだは注意も出し続ける（mobile-connect の警告バーと同じ考え方）。
+  const stacked = supported.some((entry) => entry.profiles.length >= 2);
+  const noteHtml = stacked
+    ? `<div class="settings-note settings-note-warn subs-stacking-note">` +
+      `${escapeHtml(t('subs_stacking_note'))} ` +
+      `<a href="${escapeHtml(readmeSecurityUrl())}" target="_blank" rel="noopener noreferrer">` +
+      `${escapeHtml(t('subs_consent_readme'))}</a></div>`
+    : '';
+  host.innerHTML = listHtml + noteHtml;
   updateSummary();
 }
 
@@ -207,6 +236,72 @@ async function postAndRefresh(path: string, body: unknown, btn: HTMLElement, fai
   }
 }
 
+/**
+ * 2 本目以降の契約を足す前に 1 回だけ出す同意ゲート。
+ *
+ * 出すのは「規約に適合するか」を Hub 側で判定できないからで、判定の代わりに
+ * 材料を渡している。1 本目（＝実質は既定ログインのまま）では出さない。spawn 側の
+ * 契約セレクタが profiles.length >= 2 で初めて現れるのと同じ境界。
+ *
+ * 同意は localStorage に持つ。証跡を作るのが目的ではなく、利用者が 1 度は読んだ
+ * 状態を作るのが目的なので、ブラウザを変えたらまた出るくらいで足りる。
+ */
+function confirmStackingConsent(): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const overlay = document.getElementById('model-picker-overlay');
+    if (!overlay) { resolve(window.confirm(t('subs_consent_title'))); return; }
+
+    const close = (value: boolean) => {
+      overlay.removeEventListener('click', onOverlayClick);
+      document.removeEventListener('keydown', onKeyDown);
+      overlay.hidden = true;
+      overlay.innerHTML = '';
+      if (value) lsSet(LS_STACKING_CONSENT, '1');
+      resolve(value);
+    };
+    // 設定パネルの「パネル外クリックで閉じる」に拾われないよう伝播を止める（appConfirm と同じ）。
+    const onOverlayClick = (e: MouseEvent) => {
+      e.stopPropagation();
+      if (e.target === overlay) close(false);
+    };
+    // Enter で確定させない。チェックを入れる操作を省かせないため。
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') close(false); };
+
+    overlay.innerHTML = '';
+    overlay.hidden = false;
+
+    const dialog = document.createElement('div');
+    dialog.className = 'confirm-dialog confirm-dialog--warn subs-consent-dialog';
+    dialog.innerHTML =
+      `<div class="confirm-icon" aria-hidden="true">!</div>` +
+      `<div class="confirm-body">` +
+      `<div class="confirm-title">${escapeHtml(t('subs_consent_title'))}</div>` +
+      `<div class="confirm-message">${t('subs_consent_body')}</div>` +
+      `<div class="subs-consent-link">` +
+      `<a href="${escapeHtml(readmeSecurityUrl())}" target="_blank" rel="noopener noreferrer">` +
+      `${escapeHtml(t('subs_consent_readme'))}</a></div>` +
+      `<label class="confirm-check">` +
+      `<input type="checkbox" id="subs-consent-agree">` +
+      `<span>${escapeHtml(t('subs_consent_agree'))}</span></label>` +
+      `</div>` +
+      `<div class="confirm-actions">` +
+      `<button class="confirm-btn" id="subs-consent-cancel">${escapeHtml(t('confirm_cancel'))}</button>` +
+      `<button class="confirm-btn primary" id="subs-consent-ok">${escapeHtml(t('subs_consent_proceed'))}</button>` +
+      `</div>`;
+    overlay.appendChild(dialog);
+
+    const chk = document.getElementById('subs-consent-agree') as HTMLInputElement | null;
+    const okBtn = document.getElementById('subs-consent-ok') as HTMLButtonElement | null;
+    if (okBtn) okBtn.disabled = true;
+    chk?.addEventListener('change', () => { if (okBtn) okBtn.disabled = !chk.checked; });
+    document.getElementById('subs-consent-cancel')?.addEventListener('click', () => close(false));
+    okBtn?.addEventListener('click', () => { if (chk?.checked) close(true); });
+    overlay.addEventListener('click', onOverlayClick);
+    document.addEventListener('keydown', onKeyDown);
+    setTimeout(() => chk?.focus(), 0);
+  });
+}
+
 async function addProfile(btn: HTMLElement): Promise<void> {
   const box = btn.closest('.subs-add') as HTMLElement | null;
   const provider = box?.dataset.provider || '';
@@ -217,6 +312,12 @@ async function addProfile(btn: HTMLElement): Promise<void> {
     showToast(t('subs_add_name_required'), btn);
     input?.focus();
     return;
+  }
+  // 2 本目を足す＝ spawn 時に契約を選べるようになる境界。ここで 1 度だけ同意を取る。
+  const existing = cachedProviders.find((p) => p.provider === provider)?.profiles.length ?? 0;
+  if (existing >= 1 && lsGet(LS_STACKING_CONSENT) !== '1') {
+    const agreed = await confirmStackingConsent();
+    if (!agreed) return;
   }
   const ok = await postAndRefresh('/api/subscriptions', { provider, name }, btn, 'subs_add_failed');
   if (ok && input) input.value = '';
