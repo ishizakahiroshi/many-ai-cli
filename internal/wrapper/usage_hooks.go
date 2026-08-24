@@ -67,18 +67,17 @@ type UsageHookParams struct {
 //
 // Claude Code は Windows で statusLine コマンドを Git Bash（無ければ PowerShell）
 // 経由で実行する。Git Bash はバックスラッシュをエスケープ文字として扱うため、
-// `D:\dev\foo\many-ai-cli.exe` のような生の Windows パスはセパレータが消えて
+// `C:\tools\foo\many-ai-cli.exe` のような生の Windows パスはセパレータが消えて
 // パスが壊れ、コマンドが「エラーも出さずに実行されない」（＝relay が一度も
 // POST せずトークンがステータスバーに出ない症状の根本原因）。
-// 正スラッシュ（`D:/dev/foo/many-ai-cli.exe`）なら Git Bash / PowerShell とも
+// 正スラッシュ（`C:/tools/foo/many-ai-cli.exe`）なら Git Bash / PowerShell とも
 // 引用符なしで実行でき、Codex の config.toml（TOML 文字列でも `\d` 等が不正
 // エスケープになる）でも同じ変換で破損を回避できる。
 // 公式ドキュメント: https://code.claude.com/docs/en/statusline.md の
 // 「Windows configuration」節（バックスラッシュは無視されコマンドが沈黙する）。
 //
-// 注意: パスにスペースが含まれる場合の引用は Git Bash と PowerShell で必要な
-// 形式（"..." vs `& "..."`）が異なり両立しないため、ここでは行わない
-// （many-ai-cli の配置パスにスペースを含めない運用前提）。
+// 注意: パスにスペースが含まれる場合の引用は、呼出側（claudeStatusLineCmd /
+// codexStopHookBlock）で usageHookQuotePOSIX を使ってシングルクォート化する。
 func toShellPath(p string) string {
 	// filepath.ToSlash は実行時 OS の PathSeparator しか変換しないため、
 	// Linux CI 上で Windows パスを扱うテストでは `\` が残る。POSIX シェル
@@ -93,9 +92,12 @@ func toShellPath(p string) string {
 // /proc/<pid>/cmdline / ps aux から他ユーザーが token を読み取れる経路を閉じるため。
 // Claude Code は Windows でも Git Bash（POSIX）経由で statusLine を実行するので
 // 同一構文で動作する。
+//
+// exe パスはユーザーの配置場所次第でスペースを含み得るので、usageHookQuotePOSIX で
+// シングルクォート化して語分割を防ぐ。
 func claudeStatusLineCmd(p UsageHookParams) string {
 	return fmt.Sprintf("%s=%s %s usage-relay --provider claude --hub %s --session %d",
-		hubTokenEnvName, p.Token, toShellPath(p.ExePath), p.HubURL, p.SessionID)
+		hubTokenEnvName, p.Token, usageHookQuotePOSIX(toShellPath(p.ExePath)), p.HubURL, p.SessionID)
 }
 
 // hubTokenEnvName は relay 側 (internal/usagerelay/usagerelay.go) の hubTokenEnv と同値。
@@ -314,7 +316,7 @@ func InjectCodexStopHook(p UsageHookParams) error {
 			// ReplaceAllLiteralString を使う。ReplaceAllString だと newBlock 中の
 			// `$name` / `${name}` が Regexp.Expand ルールで解釈され、many-ai-cli の
 			// 実行ファイルパスに `$` を含むディレクトリ（例:
-			// `C:\Users\alice\$portable\many-ai-cli.exe`）があると、対応するキャプチャ
+			// `C:\tools\alice\$portable\many-ai-cli.exe`）があると、対応するキャプチャ
 			// グループが無いため無言で消える（TOML 上は構文的に壊れないので気づけない）。
 			newBlock := codexStopHookBlock(p)
 			blockRe := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(usageHookBlockStart) + `.*?` + regexp.QuoteMeta(usageHookBlockEnd) + `\n?`)
