@@ -13,3 +13,4 @@
 
 import './approval-identity.js';
 import './mobile-view.js';
+import './terminal-geometry.js';

@@ -139,6 +139,33 @@
       "channels": []
     },
     {
+      "id": "terminal-grid-divergence",
+      "status": "active",
+      "purpose": "承認ポップアップ表示中にスクロールすると画面が重なって描かれ、直前の内容が読めなくなる症状で、xterm の格子（cols/rows）が PTY へ通知した寸法から外れる瞬間を特定する。fit・sendResize の結果（sent/dedup/ws-closed）・Hub からの pty_resize 反映・PgUp 送信の 4 点と、2 秒ごとの突き合わせサンプルを残す",
+      "addedIn": "unreleased",
+      "gate": "opt-in: ビルドは MAI_DEBUG=1 / -tags maidebug、runtime は URL クエリ ?geodebug=1",
+      "due": "2026-09-07",
+      "files": [
+        "internal/hub/debug_terminal_geometry.go",
+        "web/src/debug/terminal-geometry.ts"
+      ],
+      "sharedFiles": [
+        "web/src/app/terminal.ts"
+      ],
+      "endpoints": [
+        "/api/debug/terminal-geometry"
+      ],
+      "removalCondition": "承認ポップアップ表示中のスクロールで画面が重なって描かれる原因が確定したら撤去",
+      "reason": "2026-08-24 の実測で、生 PTY バイト列を通知済み寸法（128 桁 35 行）で忠実に再生すると、症状が出ていた時刻（09:09:30 / 09:09:48 / 09:10:30 / 09:11:16 / 09:11:26）の画面はいずれもきれいで、スクショの本文と一致した。つまり CLI の出力自体は壊れていない。同じバイト列を 128 より広い格子へ流すとスクショと同じ壊れ方（本文は左側にきれいに出て、右端の帯に前のフレームの残りが居座り、折り返すはずの行がつながる）が再現する。さらにこの区間の CLI 出力は CUP 1387 回・CUF 999 回に対し EL 272 回・ED 0 回の純差分描画で、画面消去はセッション中 16 回すべてが resize と同時刻にしか起きていない。よって一度ずれると次の SIGWINCH まで自力で直らない。ずれた実寸はブラウザの中にしか無く、承認表示中は PTY への resize 送信が抑制されるため送信ログにも残らない。cursor-hide フィルタの代替画面判定が落ちた場合（altScreen=false）も検証したが、404922 バイト中 167921 バイトを捨てるものの重なりは再現せず、単独原因では説明できないことまでは確認済み",
+      "note": "記録内容は cols/rows・要素の clientWidth/clientHeight・devicePixelRatio・承認バーの表示有無・代替画面かどうか・sendResize の結果ラベル（sent/dedup/ws-closed）と reason 文字列のみで、ターミナル本文・入力テキスト・承認の選択肢は 1 文字も含まない。送信総数は 600 件で頭打ちにし、定期サンプラーは寸法・要素サイズ・バーの状態のどれかが変わったときと、xterm 実寸が PTY 通知済み寸法とずれているときだけ 1 行出す（変化なしかつ一致しているときは無送信）。URL クエリが無い通常アクセスでは sink を 1 つも登録しないので記録点は完全な no-op",
+      "channels": [
+        "geo.fit",
+        "geo.send",
+        "geo.apply",
+        "geo.scroll"
+      ]
+    },
+    {
       "id": "approval-identity-debug-panel",
       "status": "active",
       "purpose": "承認ポップアップの本文（前置き・質問文）と選択肢が別々の質問の中身に入れ替わって表示される不具合、およびスクロール時に解決済みの古い承認ポップアップが再び出る症状で、スクロール層（xterm onScroll の atBottom/manual/viewportY）・検出層（xterm バッファ末尾の再走査がライブ検出結果を置き換えた瞬間）・データ層（showOptions 呼び出し時点の options と candidateKey/sourceEpoch/shape）・描画層（single-tabs/batch-tabs/multi の差分スキップ判定直前）の 4 箇所から、本文と選択肢を必ず同じ 1 件に並べて画面上へ記録する",

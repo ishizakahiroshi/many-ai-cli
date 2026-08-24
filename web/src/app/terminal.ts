@@ -818,7 +818,23 @@ export function fitTerminalPreservingBottom(t, id, forceVisualFit = false) {
   // 追従して再フィットされ、CLI 最新行がポップアップ裏に切れて隠れるのを防ぐ。
   if (!forceVisualFit && isPtyResizeSuppressed()) return;
   const wasAtBottom = isTerminalAtBottom(t) || t.autoScroll;
+  const geoPrevCols = t.term.cols;
+  const geoPrevRows = t.term.rows;
   t.fitAddon.fit();
+  try {
+    probe('geo.fit', () => ({
+      sessionId: id,
+      prevCols: geoPrevCols,
+      prevRows: geoPrevRows,
+      cols: t.term.cols,
+      rows: t.term.rows,
+      forceVisualFit,
+      suppressed: isPtyResizeSuppressed(),
+      lastSent: lastSentPtySize.get(id) || '',
+      elemW: t.container?.clientWidth ?? -1,
+      elemH: t.container?.clientHeight ?? -1,
+    }));
+  } catch (_) {}
   primeScrollbarVisibility(t.term.element);
   if (id !== null && id !== undefined) updateAltScrollRail(id);
   if (wasAtBottom) {
@@ -871,6 +887,17 @@ export function canPageAltBuffer(sessionId, t) {
 export function scrollAltBufferPage(sessionId, t, direction) {
   if (!canPageAltBuffer(sessionId, t)) return false;
   const key = direction < 0 ? '\x1b[5~' : '\x1b[6~';
+  try {
+    probe('geo.scroll', () => ({
+      sessionId,
+      direction,
+      cols: t.term.cols,
+      rows: t.term.rows,
+      lastSent: lastSentPtySize.get(sessionId) || '',
+      elemW: t.container?.clientWidth ?? -1,
+      elemH: t.container?.clientHeight ?? -1,
+    }));
+  } catch (_) {}
   try { sendText(sessionId, key); } catch (_) {}
   // ホイール・↑up / ↓down ボタン・疑似レールのどれで送ってもここを通る。
   // 疑似レールのスライダー位置はこの計上だけを根拠にしている（CLI 内部の
@@ -1935,10 +1962,39 @@ export function forgetSentPtySize(sessionId?: number) {
   else lastSentPtySize.delete(sessionId);
 }
 
+// 一時観測（instrumentation.json の terminal-grid-divergence）: 定期サンプラーが
+// 「xterm の実寸」と「PTY へ通知できた実寸」のずれを測るための読み取り専用アクセサ。
+// 原因が確定したら撤去する。
+export function debugLastSentPtySize(sessionId: number): string {
+  return lastSentPtySize.get(sessionId) || '';
+}
+
+// 一時観測: 「送ろうとした寸法」と「実際に送れたか」を分けて記録する。
+// dedup / ws-closed で送られなかったときは xterm 側だけが動いた可能性がある。
+function probeSendOutcome(sessionId, cols, rows, reason, outcome) {
+  try {
+    probe('geo.send', () => ({
+      sessionId,
+      cols,
+      rows,
+      reason,
+      outcome,
+      lastSent: lastSentPtySize.get(sessionId) || '',
+    }));
+  } catch (_) {}
+}
+
 export function sendResize(sessionId, cols, rows, reason = 'unknown', resizeIdentity: any = null) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    probeSendOutcome(sessionId, cols, rows, reason, 'ws-closed');
+  }
   if (ws && ws.readyState === WebSocket.OPEN) {
     const size = `${cols}x${rows}`;
-    if (lastSentPtySize.get(sessionId) === size) return;
+    if (lastSentPtySize.get(sessionId) === size) {
+      probeSendOutcome(sessionId, cols, rows, reason, 'dedup');
+      return;
+    }
+    probeSendOutcome(sessionId, cols, rows, reason, 'sent');
     const approvalOptions = approvalRawOptionsCache.get(sessionId);
     const approvalIdentity = resizeIdentity || (Array.isArray(approvalOptions) && approvalOptions.length > 0
       ? approvalCandidateIdentity(sessionId, approvalOptions, approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker')
@@ -1974,6 +2030,16 @@ export function applyRemotePtyResize(sessionId, cols, rows) {
   beginLiveOutputBatchForResize(id);
   // PTY の実寸はこの値になった。以後の同値送信は不要（重複再描画を増やすだけ）。
   lastSentPtySize.set(id, `${nextCols}x${nextRows}`);
+  try {
+    probe('geo.apply', () => ({
+      sessionId: id,
+      ptyCols: nextCols,
+      ptyRows: nextRows,
+      cols: t.term.cols,
+      rows: t.term.rows,
+      applied: !(t.term.cols === nextCols && t.term.rows === nextRows),
+    }));
+  } catch (_) {}
   if (t.term.cols === nextCols && t.term.rows === nextRows) return;
   const wasAtBottom = isTerminalAtBottom(t) || t.autoScroll;
   try {
