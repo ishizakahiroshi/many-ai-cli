@@ -1,6 +1,6 @@
 # many-ai-cli 実装規約・context分割・AI作業モデル
 
-> 最終更新: 2026-08-17(月) 09:57:26 — subagent が使えない環境では単一 context で走り切ってよい旨の例外を追記
+> 最終更新: 2026-08-25(火) 09:14:58 — docs 棚卸し・closeout で守る 4 点を追記（`report_skill_v0.8-c9-docs-hygiene_2026-08-19.md` の推奨）
 
 ## context分割計画（plan_*.md）への対応
 
@@ -160,6 +160,13 @@
 3. 承認を得たら `python D:\dev\tools\dev-scripts\check_archivable_plans.py --move` を実行
 4. **ファイル名は変えない**
 5. 移動後は、他ファイルからの相対リンクを grep で機械的に張り直す
+
+### 棚卸し・closeout で守ること（2026-08-19 の docs 棚卸しから）
+
+- **archive の移送先は `.docsweep.yaml` の `archive_dir` を正本にする。** リポジトリ直下の `archive/` を推測で使わない
+- **件数や finding 数から対象ファイル名を推測しない。** 明示リスト・母集団・除外条件を同じ記録に残す
+- **`docs/local` が junction のとき、Markdown リンクは lexical repo path で検査する。** physical path で判定すると正しい相対リンクまで欠損扱いになる。移動先の実体は事前に検証する
+- **`closeout-check` の blocker 0 と manual review は別の結果として報告する。** 未完了チェックが残ったまま `done` にしない
 
 ### 最終更新日時の記載
 
