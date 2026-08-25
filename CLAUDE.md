@@ -89,7 +89,7 @@ docs/local/               設計書・plan 等（非公開）
 
 | ID | 見送った方針 |
 |---|---|
-| D-01 | Gemini CLI を wrap 対象に入れる（利用規約上の制約・2026-05-06 決定） |
+| D-01 | Gemini CLI を wrap 対象に入れる（利用規約上の制約・2026-05-06 決定。Antigravity `agy` の wrap 追加も同じ判断・2026-08-25 に一次資料で再確認） |
 | D-02 | 新規 provider を増やす（20 製品を調査し全件見送り） |
 | D-03 | セッション カンバンビュー |
 | D-04 | Windows デスクトップアプリ化（Tauri）と Microsoft Store 提出 |
