@@ -13,6 +13,34 @@ import (
 
 func ptrBool(v bool) *bool { return &v }
 
+func captureDoneSummaryEvents(s *Server) <-chan any {
+	events := make(chan any, 16)
+	ui := registerTestUI(s)
+	s.sessionsMu.Lock()
+	s.uis[ui].sendFunc = func(message any) error {
+		events <- message
+		return nil
+	}
+	s.sessionsMu.Unlock()
+	return events
+}
+
+func drainDoneSummaryEvents(events <-chan any) []proto.DoneSummary {
+	var summaries []proto.DoneSummary
+	for {
+		select {
+		case event := <-events:
+			message, ok := event.(proto.Message)
+			if !ok || message.Type != "done_summary" || message.DoneSummary == nil {
+				continue
+			}
+			summaries = append(summaries, *message.DoneSummary)
+		default:
+			return summaries
+		}
+	}
+}
+
 func newDoneSummaryServer(enabled *bool, backends int) *Server {
 	cfg := &config.Config{}
 	cfg.UserPrefs.DoneSummaryNotify.Enabled = enabled
@@ -114,6 +142,7 @@ func TestFallbackDoneSummaryTextIsNotAlarming(t *testing.T) {
 func TestFallbackDoneSummaryRequiresAChangedGitTurn(t *testing.T) {
 	dir := initGitTurnTestRepo(t)
 	s := newTestServer()
+	events := captureDoneSummaryEvents(s)
 	ses := registerTestSession(s, 1, "claude")
 	s.sessionsMu.Lock()
 	ses.CWD = dir
@@ -129,6 +158,9 @@ func TestFallbackDoneSummaryRequiresAChangedGitTurn(t *testing.T) {
 		t.Fatalf("conversation fallback state = last_done=%v turns=%+v", ses.lastDoneNotifyAt, ses.gitTurns)
 	}
 	s.sessionsMu.Unlock()
+	if summaries := drainDoneSummaryEvents(events); len(summaries) != 0 {
+		t.Fatalf("conversation turn emitted done summaries: %+v", summaries)
+	}
 
 	s.captureGitTurnStart(1)
 	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("changed by work\n"), 0o600); err != nil {
@@ -150,6 +182,10 @@ func TestFallbackDoneSummaryRequiresAChangedGitTurn(t *testing.T) {
 	defer s.sessionsMu.Unlock()
 	if ses.lastDoneNotifyAt.IsZero() || len(ses.gitTurns) != 2 || ses.gitTurns[1].Files != 1 {
 		t.Fatalf("work fallback state = last_done=%v turns=%+v", ses.lastDoneNotifyAt, ses.gitTurns)
+	}
+	summaries := drainDoneSummaryEvents(events)
+	if len(summaries) != 1 || !summaries[0].Fallback || summaries[0].Kind != fallbackDoneSummaryKind || summaries[0].Provider != "claude" {
+		t.Fatalf("work turn done summaries = %+v, want one unknown fallback for claude", summaries)
 	}
 }
 

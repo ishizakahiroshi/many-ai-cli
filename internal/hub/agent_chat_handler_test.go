@@ -297,6 +297,7 @@ func TestPollAgentChatPublishesCodexCompletionOnlyAfterGitChange(t *testing.T) {
 			})
 			rolloutDir := filepath.Dir(path)
 			s := newTestServer()
+			events := captureDoneSummaryEvents(s)
 			s.cfg.UserPrefs.DoneSummaryNotify.Enabled = ptrBool(false)
 			ses := registerTestSession(s, 1, "codex")
 			now := time.Now().UTC()
@@ -383,8 +384,14 @@ func TestPollAgentChatPublishesCodexCompletionOnlyAfterGitChange(t *testing.T) {
 				if turns[0].Files != 1 || lastDone.IsZero() {
 					t.Fatalf("work completion = turn=%+v last_done=%v, want one changed file and summary", turns[0], lastDone)
 				}
+				summaries := drainDoneSummaryEvents(events)
+				if len(summaries) != 1 || summaries[0].Provider != "codex" || summaries[0].Fallback || summaries[0].Text != "Changed the parser." {
+					t.Fatalf("work completion summaries = %+v, want one provider-owned codex summary", summaries)
+				}
 			} else if turns[0].Files != 0 || !lastDone.IsZero() {
 				t.Fatalf("conversation completion = turn=%+v last_done=%v, want no summary", turns[0], lastDone)
+			} else if summaries := drainDoneSummaryEvents(events); len(summaries) != 0 {
+				t.Fatalf("conversation completion emitted done summaries: %+v", summaries)
 			}
 		})
 	}
