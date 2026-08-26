@@ -318,6 +318,7 @@ type agentChatParseState struct {
 	currentRecordEnd    int64
 	readState           agentChatReadState
 	lastRead            agentChatReadStats
+	codexCompletions    []codexTaskCompletion
 }
 
 type agentChatToolRef struct {
@@ -355,6 +356,7 @@ func (state *agentChatParseState) beginBatch() {
 		return
 	}
 	state.messages = nil
+	state.codexCompletions = nil
 	state.batchBytes = 0
 	state.batch++
 	if state.batch == 0 {
@@ -976,17 +978,26 @@ type codexRolloutLine struct {
 }
 
 type codexPayload struct {
-	Type      string          `json:"type"`
-	Role      string          `json:"role"`
-	Text      string          `json:"text"`
-	Message   string          `json:"message"`
-	Name      string          `json:"name"`
-	CallID    string          `json:"call_id"`
-	Arguments json.RawMessage `json:"arguments"`
-	Input     json.RawMessage `json:"input"`
-	Output    json.RawMessage `json:"output"`
-	Content   json.RawMessage `json:"content"`
-	Summary   json.RawMessage `json:"summary"`
+	Type             string          `json:"type"`
+	Role             string          `json:"role"`
+	Text             string          `json:"text"`
+	Message          string          `json:"message"`
+	Name             string          `json:"name"`
+	CallID           string          `json:"call_id"`
+	Arguments        json.RawMessage `json:"arguments"`
+	Input            json.RawMessage `json:"input"`
+	Output           json.RawMessage `json:"output"`
+	Content          json.RawMessage `json:"content"`
+	Summary          json.RawMessage `json:"summary"`
+	TurnID           string          `json:"turn_id"`
+	CompletedAt      float64         `json:"completed_at"`
+	LastAgentMessage json.RawMessage `json:"last_agent_message"`
+}
+
+type codexTaskCompletion struct {
+	TurnID           string
+	At               string
+	LastAgentMessage string
 }
 
 func parseCodexRollout(path string, offset int64) ([]agentChatMessage, int64, error) {
@@ -1189,7 +1200,59 @@ func parseCodexEventMessage(state *agentChatParseState, payload codexPayload, ts
 		if strings.TrimSpace(text) != "" {
 			appendCodexMessage(state, agentChatMessage{Role: "assistant", Kind: "thinking", Thinking: []string{maskAgentChatText(text)}, TS: ts})
 		}
+	case "task_complete":
+		recordCodexTaskCompletion(state, payload, ts)
 	}
+}
+
+func recordCodexTaskCompletion(state *agentChatParseState, payload codexPayload, ts string) {
+	if state == nil {
+		return
+	}
+	lastAgentMessage := ""
+	if len(payload.LastAgentMessage) > 0 && string(payload.LastAgentMessage) != "null" {
+		var text string
+		if json.Unmarshal(payload.LastAgentMessage, &text) == nil {
+			lastAgentMessage = maskAgentChatText(text)
+		}
+	}
+	at := strings.TrimSpace(ts)
+	if at == "" {
+		at = codexCompletionTime(payload.CompletedAt)
+	}
+	if at == "" && strings.TrimSpace(payload.TurnID) == "" {
+		return
+	}
+	state.codexCompletions = append(state.codexCompletions, codexTaskCompletion{
+		TurnID:           strings.TrimSpace(payload.TurnID),
+		At:               at,
+		LastAgentMessage: lastAgentMessage,
+	})
+	const maxCodexCompletionsPerPoll = 16
+	if len(state.codexCompletions) > maxCodexCompletionsPerPoll {
+		state.codexCompletions = append([]codexTaskCompletion(nil), state.codexCompletions[len(state.codexCompletions)-maxCodexCompletionsPerPoll:]...)
+	}
+}
+
+func (state *agentChatParseState) takeCodexCompletions() []codexTaskCompletion {
+	if state == nil || len(state.codexCompletions) == 0 {
+		return nil
+	}
+	out := append([]codexTaskCompletion(nil), state.codexCompletions...)
+	state.codexCompletions = nil
+	return out
+}
+
+func codexCompletionTime(seconds float64) string {
+	if seconds <= 0 {
+		return ""
+	}
+	if seconds >= 1e12 {
+		seconds /= 1000
+	}
+	whole := int64(seconds)
+	nanos := int64((seconds - float64(whole)) * float64(time.Second))
+	return time.Unix(whole, nanos).UTC().Format(time.RFC3339)
 }
 
 func parseCodexContent(raw json.RawMessage) (string, []string, []agentChatTool) {

@@ -154,6 +154,66 @@ func TestCaptureGitTurnLifecycle(t *testing.T) {
 	}
 }
 
+func TestNextInputWaitsForGitTurnEndCallbackBeforeBaseline(t *testing.T) {
+	dir := initGitTurnTestRepo(t)
+	s := newTestServer()
+	s.sessions[9] = &session{
+		ID:       9,
+		Provider: "claude",
+		CWD:      dir,
+		State:    "running",
+		inputMu:  new(sync.Mutex),
+	}
+
+	s.captureGitTurnStart(9)
+	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("changed\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	callbackStarted := make(chan struct{})
+	releaseCallback := make(chan struct{})
+	callbackDone := make(chan struct{})
+	s.captureGitTurnEndWithCallback(9, time.Now().Format(time.RFC3339), func(gitTurnSnapshot) {
+		close(callbackStarted)
+		<-releaseCallback
+		close(callbackDone)
+	})
+	select {
+	case <-callbackStarted:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for Git turn callback")
+	}
+
+	nextBaselineDone := make(chan struct{})
+	go func() {
+		s.captureGitTurnStart(9)
+		close(nextBaselineDone)
+	}()
+	select {
+	case <-nextBaselineDone:
+		t.Fatal("next baseline overtook the previous Git turn callback")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(releaseCallback)
+	select {
+	case <-callbackDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for Git turn callback release")
+	}
+	select {
+	case <-nextBaselineDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for next Git baseline")
+	}
+	waitForGitTurnCapture(t, s, 9)
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[9]
+	if len(ses.gitTurns) != 1 || ses.gitTurns[0].Files != 1 || ses.gitTurnStartTree == "" {
+		t.Fatalf("Git turn state after callback = turns=%+v start_tree=%q", ses.gitTurns, ses.gitTurnStartTree)
+	}
+}
+
 func TestNextInputWaitsForPreviousTurnEndBeforeBaselineAndDelivery(t *testing.T) {
 	dir := initGitTurnTestRepo(t)
 	s := newTestServer()

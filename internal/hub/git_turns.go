@@ -86,6 +86,7 @@ func (s *Server) captureGitTurnStart(sessionID int) {
 		captureDone = make(chan struct{})
 		ses.gitTurnCaptureInFlight = true
 		ses.gitTurnCaptureDone = captureDone
+		ses.doneSummaryMarkerSeen = false
 		s.sessionsMu.Unlock()
 		break
 	}
@@ -118,6 +119,14 @@ func (s *Server) captureGitTurnStart(sessionID int) {
 // It marks the capture as pending synchronously, then runs Git I/O in a
 // goroutine so PTY processing is not blocked.
 func (s *Server) captureGitTurnEnd(sessionID int, endedAtText string) {
+	s.captureGitTurnEndWithCallback(sessionID, endedAtText, nil)
+}
+
+// captureGitTurnEndWithCallback closes the pending turn at the existing DONE
+// boundary and optionally hands the immutable result to a caller after the
+// Git I/O has completed. The callback runs outside sessionsMu, but the next
+// turn remains blocked until it returns.
+func (s *Server) captureGitTurnEndWithCallback(sessionID int, endedAtText string, callback func(gitTurnSnapshot)) {
 	s.sessionsMu.Lock()
 	ses := s.sessions[sessionID]
 	if ses == nil || ses.gitTurnStartTree == "" || ses.gitTurnCaptureInFlight {
@@ -131,10 +140,10 @@ func (s *Server) captureGitTurnEnd(sessionID int, endedAtText string) {
 	startedAt := ses.gitTurnStartedAt
 	s.sessionsMu.Unlock()
 
-	go s.captureGitTurnEndWorker(sessionID, endedAtText, ses, captureDone, startTree, startedAt)
+	go s.captureGitTurnEndWorker(sessionID, endedAtText, ses, captureDone, startTree, startedAt, callback)
 }
 
-func (s *Server) captureGitTurnEndWorker(sessionID int, endedAtText string, ses *session, captureDone chan struct{}, startTree string, startedAt time.Time) {
+func (s *Server) captureGitTurnEndWorker(sessionID int, endedAtText string, ses *session, captureDone chan struct{}, startTree string, startedAt time.Time, callback func(gitTurnSnapshot)) {
 	gitRoot, _, err := s.resolveGitRoot(sessionID)
 	if err != nil {
 		s.finishGitTurnCaptureFailure(sessionID, ses, captureDone, true)
@@ -189,7 +198,6 @@ func (s *Server) captureGitTurnEndWorker(sessionID int, endedAtText string, ses 
 	ses.gitTurnStartedAt = time.Time{}
 	ses.gitTurnCaptureInFlight = false
 	ses.gitTurnCaptureDone = nil
-	close(captureDone)
 	s.sessionsMu.Unlock()
 
 	// A compact event lets the active session show its completion card without
@@ -204,6 +212,13 @@ func (s *Server) captureGitTurnEndWorker(sessionID int, endedAtText string, ses 
 		"added":         turn.Added,
 		"removed":       turn.Removed,
 	})
+	if callback != nil {
+		callback(turn)
+	}
+	// Keep the next confirmed input behind the callback. The callback may publish
+	// a fallback summary, and publishDoneSummary must not mistake the next
+	// turn's newly-created baseline for the turn that just ended.
+	close(captureDone)
 }
 
 func (s *Server) finishGitTurnCaptureFailure(sessionID int, expected *session, captureDone chan struct{}, clearStart bool) {

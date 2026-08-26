@@ -116,6 +116,27 @@ func TestCodexApprovalRulesRespectCODEXHOME(t *testing.T) {
 	}
 }
 
+func TestCodexApprovalRulesUseRegisteredSessionCodexHome(t *testing.T) {
+	home := withApprovalTestHome(t)
+	project := t.TempDir()
+	codexHome := t.TempDir()
+	s := newTestServer()
+	s.cfg.Approval.Enabled = true
+	s.sessionsMu.Lock()
+	s.sessions[1] = &session{ID: 1, Provider: "codex", CWD: project, CodexHome: codexHome, State: "running"}
+	s.wrappers[1] = newWrapperConn(&websocket.Conn{})
+	s.sessionsMu.Unlock()
+
+	// The Hub process keeps its own environment, while the wrapper reports the
+	// profile-specific CODEX_HOME in the register frame. Injection must follow
+	// the reported session value instead of falling back to the Hub's default.
+	s.injectApprovalRules()
+	assertApprovalBlockCount(t, filepath.Join(codexHome, "AGENTS.md"), 1)
+	if _, err := os.Stat(filepath.Join(home, ".codex", "AGENTS.md")); !os.IsNotExist(err) {
+		t.Fatalf("Hub default AGENTS.md exists after profile injection: %v", err)
+	}
+}
+
 func TestActiveApprovalRuleTargetsSeparatesCodexGlobalAndProjectAgents(t *testing.T) {
 	home := withApprovalTestHome(t)
 	project := t.TempDir()

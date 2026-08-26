@@ -146,6 +146,33 @@ func TestParseCodexRolloutSeparatesReasoningAndTools(t *testing.T) {
 	}
 }
 
+func TestParseCodexRolloutRecordsTaskCompletion(t *testing.T) {
+	path := writeAgentChatFixture(t,
+		map[string]any{
+			"type": "event_msg", "timestamp": "2026-08-26T06:00:01Z", "payload": map[string]any{
+				"type": "task_started", "turn_id": "turn-1",
+			},
+		},
+		map[string]any{
+			"type": "event_msg", "timestamp": "2026-08-26T06:00:02Z", "payload": map[string]any{
+				"type": "task_complete", "turn_id": "turn-1", "completed_at": float64(0),
+				"last_agent_message": "Changed the parser.",
+			},
+		},
+	)
+	state := newAgentChatParseState()
+	if _, _, err := parseCodexRolloutWithState(path, 0, state); err != nil {
+		t.Fatal(err)
+	}
+	completions := state.takeCodexCompletions()
+	if len(completions) != 1 {
+		t.Fatalf("completion count = %d, want 1", len(completions))
+	}
+	if completions[0].TurnID != "turn-1" || completions[0].At != "2026-08-26T06:00:02Z" || completions[0].LastAgentMessage != "Changed the parser." {
+		t.Fatalf("completion = %#v", completions[0])
+	}
+}
+
 func TestParseAgentChatLeavesIncompleteTailAtOffset(t *testing.T) {
 	path := writeAgentChatFixture(t, map[string]any{
 		"type": "user", "message": map[string]any{"role": "user", "content": "first"},

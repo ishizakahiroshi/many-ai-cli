@@ -284,7 +284,8 @@ type session struct {
 	controllingUI *websocket.Conn
 
 	// JSON 外: 完了サマリー通知の連投抑制用
-	lastDoneNotifyAt time.Time
+	lastDoneNotifyAt      time.Time
+	doneSummaryMarkerSeen bool
 
 	// JSON 外: Review タブ Phase 2 のターン単位 Git スナップショット。
 	// 確定したユーザー入力の直前を start tree、DONE/idle fallback を end tree とし、
@@ -2034,7 +2035,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	_, exists := s.sessions[m.SessionID]
 	var historyToClose *sessionlog.Writer
 	var jsonlPathForTranscript string
-	var endedProvider, endedCWD string
+	var endedProvider, endedCWD, endedCodexHome string
 	var endedWorktree normalWorktree
 	var endedWorktreeCleanup string
 	var endedUsageProbe bool
@@ -2045,6 +2046,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		jsonlPathForTranscript = ses.JSONLPath
 		endedProvider = ses.Provider
 		endedCWD = ses.CWD
+		endedCodexHome = ses.CodexHome
 		endedUsageProbe = ses.UsageProbe
 		endedWorktree = ses.NormalWorktree
 		endedWorktreeCleanup = ses.WorktreeCleanup
@@ -2102,7 +2104,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	if historyToClose != nil {
 		_ = historyToClose.Close()
 	}
-	s.removeInactiveApprovalRules(providerApprovalRuleTargets(endedProvider, endedCWD))
+	s.removeInactiveApprovalRules(providerApprovalRuleTargetsWithCodexHome(endedProvider, endedCWD, endedCodexHome))
 	s.removeInactiveUsageHooks(endedProvider, endedCWD)
 	if err := cleanupNormalWorktree(endedWorktree, endedWorktreeCleanup); err != nil {
 		s.logger.Warn("worktree retained after session dismissal", "path", endedWorktree.Path, "err", err)
