@@ -1307,7 +1307,7 @@ if (typeof window !== 'undefined') {
   function openRawModal(msg) {
     closeRawModal();
     const overlay = document.createElement('div');
-    overlay.className = 'chat-raw-modal-overlay';
+    overlay.className = 'chat-raw-modal-overlay aac-wheel-overlay';
     const dlg = document.createElement('div');
     dlg.className = 'chat-raw-modal';
     const head = document.createElement('div');

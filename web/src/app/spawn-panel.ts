@@ -1484,7 +1484,7 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
     if (webDirBrowserEl) return webDirBrowserEl;
     const overlay = document.createElement('div');
     overlay.id = 'spawn-web-dir-browser';
-    overlay.className = 'spawn-web-dir-overlay';
+    overlay.className = 'spawn-web-dir-overlay aac-wheel-overlay';
     overlay.hidden = true;
     overlay.innerHTML =
       `<div class="spawn-web-dir-modal" role="dialog" aria-modal="true" aria-labelledby="spawn-web-dir-title">` +

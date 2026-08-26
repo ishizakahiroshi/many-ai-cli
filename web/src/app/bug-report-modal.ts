@@ -239,7 +239,7 @@ async function openModal(): Promise<void> {
   if (overlay) return;
   modalSessionId = activeSessionId;
   overlay = document.createElement('div');
-  overlay.className = 'bug-report-overlay';
+  overlay.className = 'bug-report-overlay aac-wheel-overlay';
   overlay.setAttribute('role', 'presentation');
 
   const dialog = document.createElement('section');

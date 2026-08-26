@@ -302,6 +302,7 @@ function ensurePalette(): HTMLElement | null {
   if (root) return root;
   const overlay = document.createElement('div');
   overlay.id = 'session-search-palette';
+  overlay.classList.add('aac-wheel-overlay');
   overlay.hidden = true;
   overlay.setAttribute('role', 'dialog');
   overlay.setAttribute('aria-modal', 'true');

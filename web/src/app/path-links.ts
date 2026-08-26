@@ -220,7 +220,7 @@ export function openFileModal(filePath, sessionId) {
   closeFileModal(); // 二重起動防止
 
   const overlay = document.createElement('div');
-  overlay.className = 'aac-file-modal-overlay';
+  overlay.className = 'aac-file-modal-overlay aac-wheel-overlay';
   const panel = document.createElement('div');
   panel.className = 'aac-file-modal';
   const body = document.createElement('div');

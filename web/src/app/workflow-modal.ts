@@ -367,6 +367,7 @@ export function openWorkflowModal(): void {
 
   const overlay = document.createElement('div');
   overlay.id = 'workflow-modal';
+  overlay.classList.add('aac-wheel-overlay');
 
   const box = document.createElement('div');
   box.className = 'wf-modal-box';

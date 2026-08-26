@@ -36,6 +36,7 @@ export function showApprovalToast() {
   if (document.getElementById('approval-toast')) return;
   const el = document.createElement('div');
   el.id = 'approval-toast';
+  el.classList.add('aac-wheel-overlay');
 
   const dialog = document.createElement('div');
   dialog.className = 'approval-toast-dialog';

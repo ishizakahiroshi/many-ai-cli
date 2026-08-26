@@ -2462,7 +2462,7 @@ export function openBatchConfirm(sessionId) {
   removeBatchConfirmModal();
 
   const mask = document.createElement('div');
-  mask.className = 'action-confirm-mask';
+  mask.className = 'action-confirm-mask aac-wheel-overlay';
   mask.id = 'action-confirm-mask';
   const modal = document.createElement('div');
   modal.className = 'action-confirm-modal';

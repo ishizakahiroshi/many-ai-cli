@@ -750,6 +750,7 @@ function openDetailModal(): void {
 
   const overlay = document.createElement('div');
   overlay.id = 'tsb-detail-modal';
+  overlay.classList.add('aac-wheel-overlay');
   const box = document.createElement('div');
   box.className = 'tsb-detail-box';
 
@@ -843,6 +844,8 @@ function toggleCostPopover(anchor: HTMLElement): void {
   if (document.getElementById('tsb-cost-pop')) { closeCostPopover(); return; }
   const pop = document.createElement('div');
   pop.id = 'tsb-cost-pop';
+  // overflow-y:auto の自前スクロール領域。全画面は覆わないので data-wheel-native 側で除外する。
+  pop.setAttribute('data-wheel-native', '');
   const rows: string[] = [];
   let total = 0;
   usageCache.forEach((e, id) => {
@@ -1042,6 +1045,7 @@ function openSentHistoryModal(): void {
 
   const overlay = document.createElement('div');
   overlay.id = 'tsb-sent-modal';
+  overlay.classList.add('aac-wheel-overlay');
 
   const box = document.createElement('div');
   box.className = 'tsb-sent-box';
