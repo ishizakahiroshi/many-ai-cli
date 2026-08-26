@@ -1122,6 +1122,13 @@ export function getSessionCtxPct(sessionId: number): { pct: number; is1m: boolea
   return { pct: Math.max(0, Math.min(100, Math.round(pct))), is1m: entry.ctxWindow >= 1_000_000 };
 }
 
+/** セッションカードのモデル tooltip 用。effort は Claude の statusLine 由来だけを返す。 */
+export function getSessionEffortLevel(sessionId: number): string {
+  const entry = usageCache.get(sessionId);
+  if (!entry || entry.provider !== 'claude') return '';
+  return String(entry.effortLevel || '').trim();
+}
+
 /** WS usage_stat メッセージを受信したときに呼ぶ。 */
 export function handleUsageStatMessage(m: Message): void {
   const sid = m.session_id;

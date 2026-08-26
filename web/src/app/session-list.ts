@@ -9,7 +9,7 @@ import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, render
 import { syncElapsedTimer } from './ws-client.js';
 import { renderApprovalSuppressedBannerFor, setMultiQuestionBannerVisible } from './approval-ui.js';
 import { detectApproval, releaseActionBarIfOwnedByOther, setActionBarFocus } from './approval.js';
-import { onActiveSessionChanged } from './token-statusbar.js';
+import { getSessionCtxPct, getSessionEffortLevel, onActiveSessionChanged } from './token-statusbar.js';
 import { rewireChatHistorySub } from './chat-history.js';
 import { doneSummaryDisplayText, doneSummaryKindSuffix, doneSummaryLine, getDoneSummary } from './done-summary.js';
 import { setActiveSessionForPayload } from './chat-payload.js';
@@ -259,10 +259,24 @@ export function stateLabel(state) {
 }
 
 function stateActivityDecoration(s) {
-  if (s.awaiting_approval) return { className: 'awaiting-approval', icon: '⚑', label: '承認待ち' };
-  if (s.awaiting_user) return { className: 'awaiting-input', icon: '⌨', label: '入力待ち' };
-  if (s.workflow_active) return { className: 'workflow-active', icon: '◌', label: '処理中' };
-  return { className: '', icon: '', label: '' };
+  const state = s?.state || 'standby';
+  const baseLabel = stateLabel(state);
+  if (s.awaiting_approval) {
+    const activityLabel = ti18n('card_activity_awaiting_approval', 'Awaiting approval');
+    return { className: 'awaiting-approval', icon: '⚑', label: activityLabel === baseLabel ? baseLabel : `${baseLabel}: ${activityLabel}` };
+  }
+  if (s.awaiting_user) {
+    const activityLabel = ti18n('card_activity_awaiting_input', 'Awaiting input');
+    return { className: 'awaiting-input', icon: '⌨', label: `${baseLabel}: ${activityLabel}` };
+  }
+  if (state === 'waiting') return { className: 'awaiting-approval', icon: '⚑', label: baseLabel };
+  if (s.workflow_active) {
+    const activityLabel = ti18n('card_activity_workflow_active', 'Processing');
+    return { className: 'workflow-active', icon: '◌', label: `${baseLabel}: ${activityLabel}` };
+  }
+  if (state === 'running') return { className: '', icon: '●', label: baseLabel };
+  if (state === 'error' || state === 'disconnected') return { className: '', icon: '✕', label: baseLabel };
+  return { className: '', icon: '○', label: baseLabel };
 }
 
 export function safeClassToken(value) {
@@ -321,6 +335,23 @@ export function providerIconHtml(provider, size = 16) {
   }
   const letter = escapeHtml((String(provider || '?').trim()[0] || '?').toUpperCase());
   return `<svg ${base}><circle class="prov-shape" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter" x="8" y="8" ${txt}>${letter}</text></svg>`;
+}
+
+// モデル名は provider が返す opaque な値をそのまま表示する。命名規則を推測して
+// 略称・family・衝突回避を作ると、新しい provider/model のたびに保守が発生する。
+function cardProviderModelHtml(s) {
+  const modelName = String(s?.model || '').trim();
+  const localRoute = (s?.route === 'ollama' || s?.route === 'lm-studio') ? s.route : '';
+  const providerKey = localRoute || String(s?.provider || '').trim();
+  if (!providerKey && !modelName) return '';
+  const providerLabel = providerKey ? providerDisplayName(providerKey) : '';
+  const effort = modelName ? getSessionEffortLevel(Number(s?.id)) : '';
+  const tooltip = [providerLabel, modelName, effort].filter(Boolean).join(' ');
+  const providerIcon = providerKey ? providerIconHtml(providerKey, 14) : '';
+  const modelHtml = modelName
+    ? `<span class="card-model-name" aria-hidden="true">${escapeHtml(modelName)}</span>`
+    : '';
+  return `<span class="card-provider-model" role="img" data-tooltip="${escapeHtml(tooltip)}" title="${escapeHtml(tooltip)}" aria-label="${escapeHtml(tooltip)}">${providerIcon}${modelHtml}</span>`;
 }
 
 // C9: 整列ロジックは state.js の orderSessions に集約。getOrderedSessions は後方互換の薄い委譲。
@@ -416,11 +447,9 @@ function cardWorkflowProgressHtml(s) {
 // カードは幅が狭いので完了サマリーはここまで詰める。全文は tooltip 側で読める。
 const CARD_DONE_MAX_LEN = 48;
 
-// カード 3 行目（ライブ情報）の中身 HTML を生成する。空文字なら行を隠す。
-// ctx%（コンテキスト残量）は下部ステータスバーに常時出ているため、カード側では
-// 重複表示しない。ここでは応答経過と長時間バッジ（running 中のみ）だけを出す。
-function cardLiveRowHtml(s) {
-  const parts = [];
+// カード 2 行目の状態情報を生成する。状態表示は 1 つに絞り、長時間・停滞、
+// 終了理由、完了サマリー、workflow 進捗の順で優先する。
+function cardStatusRowHtml(s) {
   const state = s.state || 'standby';
   const sec = cardTurnElapsedSec(s.id, state);
   // 稼働経過秒（⏱ 48s 等）はユーザー要望により非表示。長時間処理の⚠バッジのみ残す。
@@ -436,7 +465,16 @@ function cardLiveRowHtml(s) {
       : ti18n('card_longproc_title', 'This response has been running a long time. It may be stuck behind a heavy turn (large context × high effort). Send ESC to interrupt instead of resending.', {});
     const dur = formatLongprocDuration(stalled ? lp.stalledSec : lp.elapsedSec);
     const cls = longprocBadgeClass('card-longproc', lp.level);
-    parts.push(`<span class="${cls}" data-tooltip="${escapeHtml(lpTip)}">⚠ ${escapeHtml(label)} ${escapeHtml(dur)}</span>`);
+    return `<span class="${cls}" data-tooltip="${escapeHtml(lpTip)}">⚠ ${escapeHtml(label)} ${escapeHtml(dur)}</span>`;
+  }
+  const providerName = providerDisplayName(s.provider);
+  const isDeadState = state === 'error' || state === 'disconnected';
+  if (isDeadState && s.end_reason) {
+    const key = 'end_reason_' + s.end_reason;
+    const translated = t(key, { provider: providerName || s.provider || '' });
+    if (translated !== key) {
+      return `<span class="card-end-reason" data-tooltip="${escapeHtml(translated)}">${escapeHtml(translated)}</span>`;
+    }
   }
   // 直前ターンの完了サマリー。完了サマリーは端末へ書かなくなった（hub-marker-filter.ts の
   // 案 G）ので、**見ていないセッション**の完了に気づける経路はここだけになる。
@@ -446,14 +484,23 @@ function cardLiveRowHtml(s) {
     const line = doneSummaryDisplayText(done, CARD_DONE_MAX_LEN);
     if (line) {
       const full = doneSummaryLine(done?.text, 0); // tooltip には切らない全文を出す
-      parts.push(`<span class="card-done card-done-${doneSummaryKindSuffix(done?.kind)}" data-tooltip="${escapeHtml(full)}">${escapeHtml(line)}</span>`);
+      return `<span class="card-done card-done-${doneSummaryKindSuffix(done?.kind)}" data-tooltip="${escapeHtml(full)}">${escapeHtml(line)}</span>`;
     }
   }
-  return parts.join('');
+  return cardWorkflowProgressHtml(s);
 }
 
-// 1 枚のカードのライブ行を in-place で更新する（フル再描画を避け、スクロール位置・
-// 入力フォーカス・D&D 状態を保つため）。行が無ければ card-actions の前に作る。
+function cardCtxHtml(s) {
+  const ctx = getSessionCtxPct(Number(s.id));
+  if (!ctx) return '';
+  const pct = Math.max(0, Math.min(100, Number(ctx.pct) || 0));
+  const severity = pct >= 90 ? 'crit' : (pct >= 75 ? 'warn' : '');
+  const title = ti18n('card_ctx_title', 'Context window usage', { pct });
+  return `<span class="card-ctx" data-tooltip="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"><span class="card-ctx-gauge"><span class="card-ctx-fill ${severity}" style="width:${pct}%"></span></span><span class="card-ctx-pct ${severity}">${pct}%</span>${ctx.is1m ? '<span class="card-ctx-1m">1M</span>' : ''}</span>`;
+}
+
+// 1 枚のカードの 2 行目を in-place で更新する（フル再描画を避け、スクロール位置・
+// 入力フォーカス・D&D 状態を保つため）。行そのものは常に存在させる。
 export function updateCardLiveInfo(id) {
   const root = document.getElementById('sessions');
   if (!root) return;
@@ -461,21 +508,13 @@ export function updateCardLiveInfo(id) {
   if (!s) return;
   const card = root.querySelector(`.card[data-session-id="${CSS.escape(String(id))}"]`);
   if (!card) return;
-  let row = card.querySelector('.card-live-row') as HTMLElement | null;
-  if (!row) {
-    row = document.createElement('div');
-    row.className = 'card-live-row';
-    const actions = card.querySelector('.card-actions');
-    if (actions) card.insertBefore(row, actions); else card.appendChild(row);
-  }
-  const inner = cardLiveRowHtml(s);
-  row.innerHTML = inner;
-  row.hidden = !inner;
-  const workflowSlot = card.querySelector('.card-workflow-progress-slot');
-  if (workflowSlot) workflowSlot.innerHTML = cardWorkflowProgressHtml(s);
+  const statusSlot = card.querySelector('.card-status-slot');
+  if (statusSlot) statusSlot.innerHTML = cardStatusRowHtml(s);
+  const ctxSlot = card.querySelector('.card-ctx-slot');
+  if (ctxSlot) ctxSlot.innerHTML = cardCtxHtml(s);
 }
 
-// 全カードのライブ行を更新する（1Hz タイマー等から呼ぶ）。
+// 全カードの 2 行目を更新する（1Hz タイマー等から呼ぶ）。
 export function updateAllCardsLiveInfo() {
   const root = document.getElementById('sessions');
   if (!root) return;
@@ -830,15 +869,12 @@ export function renderSessionList() {
       c.setAttribute('role', 'button');
       const label = stateLabel(state);
       const filteredMsg = filterFirstMessage(s.last_message || s.first_message || '');
-      const cwdStr = s.cwd || '';
       const title = sessionDisplayTitle(s);
-      const sessionLabel = title ? `<span class="card-label" data-tooltip="${escapeHtml(title)}">${s.label ? '' : '⌁ '}${escapeHtml(title)}</span>` : '';
+      const displayTitle = title || filteredMsg;
+      const titleTooltipParts = [title, filteredMsg].filter((value, index, values) => value && values.indexOf(value) === index);
+      if (titleTooltipParts.length > 0) c.dataset.tooltip = titleTooltipParts.join('\n');
+      const taskTitleHtml = displayTitle ? `<span class="card-label">${escapeHtml(displayTitle)}</span>` : '<span class="card-label" aria-hidden="true"></span>';
       const noteHtml = s.note ? `<span class="card-note" data-tooltip="${escapeHtml(s.note)}">${escapeHtml(s.note)}</span>` : '';
-      const msgHtml = filteredMsg
-        ? `<span class="card-msg" data-tooltip="${escapeHtml(filteredMsg)}">${escapeHtml(filteredMsg)}</span>`
-        : `<span class="card-msg"></span>`;
-      const providerName = providerDisplayName(s.provider);
-      const providerChipHtml = providerName ? `<span class="card-provider-chip ${safeClassToken(s.provider)}">${escapeHtml(providerName)}</span>` : '';
       const roleLabel = s.role ? String(s.role) : (s.orchestration_id ? 'conductor' : '');
       const roleHtml = roleLabel
         ? `<span class="card-role-chip ${s.parent_session_id ? 'child' : 'parent'}" data-tooltip="${escapeHtml(s.parent_session_id ? `Parent #${s.parent_session_id}` : 'Orchestration conductor')}">${escapeHtml(roleLabel)}</span>`
@@ -846,29 +882,10 @@ export function renderSessionList() {
       const branchRoleHtml = s.worktree_branch
         ? `<span class="card-worktree-chip" data-tooltip="${escapeHtml(s.worktree_branch)}">${escapeHtml(s.worktree_branch)}</span>`
         : '';
-	const boardPendingHtml = s.board_notify_pending
-		? `<span class="card-role-chip parent" data-tooltip="${escapeHtml(t('card_board_update_pending_tooltip'))}">${escapeHtml(t('card_board_update_pending'))}</span>`
-		: '';
-      const isDeadState = state === 'error' || state === 'disconnected';
-      let reasonText = '';
-      if (isDeadState && s.end_reason) {
-        const key = 'end_reason_' + s.end_reason;
-        const translated = window.t(key, { provider: providerName || s.provider || '' });
-        // 未知の reason コードは window.t がキー文字列をそのまま返すため、その場合は非表示にする。
-        if (translated !== key) reasonText = translated;
-      }
-      const reasonHtml = reasonText
-        ? `<span class="card-end-reason" data-tooltip="${escapeHtml(reasonText)}">${escapeHtml(reasonText)}</span>`
+      const boardPendingHtml = s.board_notify_pending
+        ? `<span class="card-role-chip parent" data-tooltip="${escapeHtml(t('card_board_update_pending_tooltip'))}">${escapeHtml(t('card_board_update_pending'))}</span>`
         : '';
       c.dataset.sessionId = s.id;
-      const localRoute = (s.route === 'ollama' || s.route === 'lm-studio') ? s.route : null;
-      let modelBadge = '';
-      if (s.model) {
-        const badgeProviderKey = localRoute || (s.provider || '');
-        const badgeProviderLabel = localRoute ? providerDisplayName(localRoute) : providerName;
-        const tip = badgeProviderLabel ? `${badgeProviderLabel} · ${s.model}` : s.model;
-        modelBadge = ` <span class="card-model card-model--with-icon" data-tooltip="${escapeHtml(tip)}">${providerIconHtml(badgeProviderKey)}<span class="card-model-text">${escapeHtml(s.model)}</span></span>`;
-      }
       const branchStr = s.branch || '';
       const branchTip = branchStr
         ? ti18n('card_branch_tooltip', `Open Git view (${branchStr})`, { branch: branchStr })
@@ -877,18 +894,15 @@ export function renderSessionList() {
       // 空 branch でも常に span を表示（git 外であることが分かるよう "(no git)" を表示）
       const branchLabel = branchStr || ti18n('card_branch_no_git', '(no git)');
       const branchBadge = ` <span class="card-branch" role="button" tabindex="0" data-sid="${s.id}"${branchDisabledAttr} data-tooltip="${escapeHtml(branchTip)}" aria-label="${escapeHtml(branchTip)}">${escapeHtml(branchLabel)}</span>`;
-      // branch chip は title-row が混むため meta-row（2行目）の投稿指示テキスト末尾へ付ける。
-      const metaRow = `<div class="card-meta-row">${s.pinned ? '<span class="card-pin" aria-label="Pinned">📌</span>' : ''}${reasonHtml}${sessionLabel}${noteHtml}${roleHtml}${msgHtml}${branchRoleHtml}${branchBadge}</div>`;
-      // 状態 pill（ステータスバー .tsb-pill と同じ ●ドット付き形状）。並び順も下のバーに合わせ #N の直後に置く。
-			const activity = stateActivityDecoration(s);
-      const statePillHtml = ` <span class="card-state-pill ${safeClassToken(state)} ${activity.className}"${activity.label ? ` title="${activity.label}"` : ''}><span class="card-pdot"></span><span class="card-state-icon">${activity.icon}</span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
-      const workflowProgressHtml = `<span class="card-workflow-progress-slot">${cardWorkflowProgressHtml(s)}</span>`;
-      // ライブ情報（ctx% / 応答経過 / 長時間バッジ）。中身が空なら hidden で行ごと隠す。
-      const liveInner = cardLiveRowHtml(s);
-      const liveRow = `<div class="card-live-row"${liveInner ? '' : ' hidden'}>${liveInner}</div>`;
+      // 2 行目は状態情報・ctx・補助メタデータ・branch を同じ行へ固定する。
+      const metaRow = `<div class="card-meta-row"><span class="card-status-slot">${cardStatusRowHtml(s)}</span><span class="card-ctx-slot">${cardCtxHtml(s)}</span>${s.pinned ? '<span class="card-pin" aria-label="Pinned">📌</span>' : ''}${noteHtml}${roleHtml}${branchRoleHtml}${boardPendingHtml}${branchBadge}</div>`;
+      // 状態は記号だけを表示し、名前は tooltip / aria-label へ残す。#N の直後に置く。
+      const activity = stateActivityDecoration(s);
+      const stateDescription = activity.label || label;
+      const statePillHtml = ` <span class="card-state-pill ${safeClassToken(state)} ${activity.className}" title="${escapeHtml(stateDescription)}" data-tooltip="${escapeHtml(stateDescription)}" aria-label="${escapeHtml(stateDescription)}"><span class="card-pdot"></span><span class="card-state-icon" aria-hidden="true">${activity.icon}</span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
       c.innerHTML =
-		`<div class="card-title-row"><b>#${s.id}</b>${statePillHtml}${workflowProgressHtml} ${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${boardPendingHtml}</div>` +
-        metaRow + liveRow;
+		`<div class="card-title-row"><b>#${s.id}</b>${statePillHtml} ${cardProviderModelHtml(s)}${taskTitleHtml}</div>` +
+	        metaRow;
 
       const actions = document.createElement('div');
       actions.className = 'card-actions';
@@ -1329,9 +1343,12 @@ export function updateSessionCardStateInPlace(id) {
   if (pill) {
     const activity = stateActivityDecoration(s);
     pill.className = `card-state-pill ${safeClassToken(state)} ${activity.className}`;
-		if (activity.label) pill.setAttribute('title', activity.label); else pill.removeAttribute('title');
-		const icon = pill.querySelector('.card-state-icon');
-		if (icon) icon.textContent = activity.icon;
+    const stateDescription = activity.label || stateLabel(state);
+    pill.setAttribute('title', stateDescription);
+    pill.setAttribute('data-tooltip', stateDescription);
+    pill.setAttribute('aria-label', stateDescription);
+    const icon = pill.querySelector('.card-state-icon');
+    if (icon) icon.textContent = activity.icon;
     const txt = pill.querySelector('.card-state-text');
     if (txt) txt.textContent = stateLabel(state);
   }
