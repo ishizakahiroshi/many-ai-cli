@@ -951,7 +951,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	requeuedCount, requeuedMinSeq, requeuedMaxSeq := s.deferInflightForResendLocked(id, wc)
 	var historyToClose *sessionlog.Writer
 	var jsonlPathForTranscript string
-	var endedProvider, endedCWD string
+	var endedProvider, endedCWD, endedCodexHome string
 	// done/timeout も終端として保持する（オーケストレーション完了状態を disconnected で潰さない）。
 	if cur := s.sessions[id]; cur != nil && !isTerminalSessionState(cur.State) {
 		s.stopAgentChatTailLocked(cur)
@@ -967,6 +967,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 		endReason = cur.EndReason
 		endedProvider = cur.Provider
 		endedCWD = cur.CWD
+		endedCodexHome = cur.CodexHome
 	}
 	// 旧 wrapper（ack 未対応）では従来どおり未送信の保留入力を捨てる。
 	// ack 対応 wrapper の場合は in-flight と既存 pending を次の reattach へ残す。
@@ -1016,7 +1017,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	if s.sessionStore != nil {
 		s.sessionStore.EndSession(id, endState, endReason, time.Now())
 	}
-	s.removeInactiveApprovalRules(providerApprovalRuleTargets(endedProvider, endedCWD))
+	s.removeInactiveApprovalRules(providerApprovalRuleTargetsWithCodexHome(endedProvider, endedCWD, endedCodexHome))
 	s.removeInactiveUsageHooks(endedProvider, endedCWD)
 	s.finalizeTranscript(id, jsonlPathForTranscript)
 	// usage 集計マップから当該セッションのエントリを掃除する。dismiss 経路だけでなく

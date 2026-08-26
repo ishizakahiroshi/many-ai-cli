@@ -25,8 +25,9 @@ type approvalRuleTarget struct {
 }
 
 type approvalRuleSessionSnap struct {
-	provider string
-	cwd      string
+	provider  string
+	cwd       string
+	codexHome string
 }
 
 func (t approvalRuleTarget) wrapperProvider() string {
@@ -126,10 +127,12 @@ func instructionRootForCWD(cwd string) string {
 	return filepath.Clean(cwd)
 }
 
-func codexAgentsPath() string {
+func codexAgentsPath(codexHome string) string {
 	home, _ := os.UserHomeDir()
-	codexHome := os.Getenv("CODEX_HOME")
-	if codexHome == "" {
+	if strings.TrimSpace(codexHome) == "" {
+		codexHome = os.Getenv("CODEX_HOME")
+	}
+	if strings.TrimSpace(codexHome) == "" {
 		codexHome = filepath.Join(home, ".codex")
 	}
 	return filepath.Join(codexHome, "AGENTS.md")
@@ -148,6 +151,10 @@ func projectAgentsApprovalRuleTarget(provider, cwd string) []approvalRuleTarget 
 }
 
 func providerApprovalRuleTargets(provider, cwd string) []approvalRuleTarget {
+	return providerApprovalRuleTargetsWithCodexHome(provider, cwd, "")
+}
+
+func providerApprovalRuleTargetsWithCodexHome(provider, cwd, codexHome string) []approvalRuleTarget {
 	home, _ := os.UserHomeDir()
 	switch provider {
 	case "claude":
@@ -158,7 +165,7 @@ func providerApprovalRuleTargets(provider, cwd string) []approvalRuleTarget {
 		}}
 	case "codex":
 		return []approvalRuleTarget{{
-			Path:      codexAgentsPath(),
+			Path:      codexAgentsPath(codexHome),
 			Providers: []string{"codex"},
 			Mode:      approvalRuleModeSharedBlock,
 		}}
@@ -190,7 +197,7 @@ func (s *Server) activeApprovalRuleTargets() []approvalRuleTarget {
 
 	targets := make([]approvalRuleTarget, 0, len(snaps))
 	for _, snap := range snaps {
-		targets = append(targets, providerApprovalRuleTargets(snap.provider, snap.cwd)...)
+		targets = append(targets, providerApprovalRuleTargetsWithCodexHome(snap.provider, snap.cwd, snap.codexHome)...)
 	}
 	return mergeApprovalRuleTargets(targets)
 }
@@ -219,7 +226,7 @@ func (s *Server) activeApprovalRuleSessionSnaps() []approvalRuleSessionSnap {
 		if !isAIProvider(ses.Provider) {
 			continue
 		}
-		snaps = append(snaps, approvalRuleSessionSnap{provider: ses.Provider, cwd: ses.CWD})
+		snaps = append(snaps, approvalRuleSessionSnap{provider: ses.Provider, cwd: ses.CWD, codexHome: ses.CodexHome})
 	}
 	s.sessionsMu.Unlock()
 	return snaps

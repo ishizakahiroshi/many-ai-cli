@@ -31,17 +31,18 @@ type reattachPreservedState struct {
 	LastMessage      string
 	EndReason        string
 
-	transcriptPath       string
-	transcriptResolvedAt time.Time
-	transcriptStatAt     time.Time
-	transcriptSize       int64
-	initialInjectPending bool
-	initialInjectGateAt  time.Time
-	gitChecked           bool
-	gitFiles             int
-	gitAdded             int
-	gitDeleted           int
-	lastDoneNotifyAt     time.Time
+	transcriptPath        string
+	transcriptResolvedAt  time.Time
+	transcriptStatAt      time.Time
+	transcriptSize        int64
+	initialInjectPending  bool
+	initialInjectGateAt   time.Time
+	gitChecked            bool
+	gitFiles              int
+	gitAdded              int
+	gitDeleted            int
+	lastDoneNotifyAt      time.Time
+	doneSummaryMarkerSeen bool
 
 	approvalConsumedCarried bool
 
@@ -119,17 +120,18 @@ func snapshotReattachStateLocked(ses *session) reattachPreservedState {
 		LastMessage:        ses.LastMessage,
 		EndReason:          ses.EndReason,
 
-		transcriptPath:       ses.transcriptPath,
-		transcriptResolvedAt: ses.transcriptResolvedAt,
-		transcriptStatAt:     ses.transcriptStatAt,
-		transcriptSize:       ses.transcriptSize,
-		initialInjectPending: ses.initialInjectPending,
-		initialInjectGateAt:  ses.initialInjectGateAt,
-		gitChecked:           ses.gitChecked,
-		gitFiles:             ses.gitFiles,
-		gitAdded:             ses.gitAdded,
-		gitDeleted:           ses.gitDeleted,
-		lastDoneNotifyAt:     ses.lastDoneNotifyAt,
+		transcriptPath:        ses.transcriptPath,
+		transcriptResolvedAt:  ses.transcriptResolvedAt,
+		transcriptStatAt:      ses.transcriptStatAt,
+		transcriptSize:        ses.transcriptSize,
+		initialInjectPending:  ses.initialInjectPending,
+		initialInjectGateAt:   ses.initialInjectGateAt,
+		gitChecked:            ses.gitChecked,
+		gitFiles:              ses.gitFiles,
+		gitAdded:              ses.gitAdded,
+		gitDeleted:            ses.gitDeleted,
+		lastDoneNotifyAt:      ses.lastDoneNotifyAt,
+		doneSummaryMarkerSeen: ses.doneSummaryMarkerSeen,
 
 		approvalConsumedCarried: ses.approvalConsumedCarried,
 
@@ -245,6 +247,7 @@ func applyReattachPreservedStateLocked(dst *session, state reattachPreservedStat
 	dst.gitAdded = state.gitAdded
 	dst.gitDeleted = state.gitDeleted
 	dst.lastDoneNotifyAt = state.lastDoneNotifyAt
+	dst.doneSummaryMarkerSeen = state.doneSummaryMarkerSeen
 
 	dst.approvalConsumedCarried = state.approvalConsumedCarried
 

@@ -281,6 +281,115 @@ func TestPollAgentChatPrimeRetriesUncommittedTailPageForClaudeAndCodex(t *testin
 	}
 }
 
+func TestPollAgentChatPublishesCodexCompletionOnlyAfterGitChange(t *testing.T) {
+	tests := []struct {
+		name       string
+		changeWork bool
+	}{
+		{name: "conversation", changeWork: false},
+		{name: "work", changeWork: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := initGitTurnTestRepo(t)
+			path := writeAgentChatFixture(t, map[string]any{
+				"type": "session_meta", "payload": map[string]any{"cwd": dir},
+			})
+			rolloutDir := filepath.Dir(path)
+			s := newTestServer()
+			s.cfg.UserPrefs.DoneSummaryNotify.Enabled = ptrBool(false)
+			ses := registerTestSession(s, 1, "codex")
+			now := time.Now().UTC()
+			s.sessionsMu.Lock()
+			ses.CWD = dir
+			ses.StartedAt = now.Add(-time.Second).Format(time.RFC3339)
+			ses.CodexHome = rolloutDir
+			ses.NativeLogPath = path
+			ses.agentChatRunning = true
+			ses.agentChatGeneration = 1
+			s.sessionsMu.Unlock()
+
+			// The first poll establishes the tail cursor without treating existing
+			// rollout records as a new completion.
+			s.captureGitTurnStart(1)
+			s.pollAgentChat(1, 1)
+			s.sessionsMu.Lock()
+			if ses.agentChatTimer != nil {
+				ses.agentChatTimer.Stop()
+				ses.agentChatTimer = nil
+			}
+			s.sessionsMu.Unlock()
+
+			if tt.changeWork {
+				if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("changed\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			completion := map[string]any{
+				"type":      "event_msg",
+				"timestamp": now.Format(time.RFC3339),
+				"payload": map[string]any{
+					"type":               "task_complete",
+					"turn_id":            "turn-1",
+					"last_agent_message": "Changed the parser.",
+				},
+			}
+			data, err := json.Marshal(completion)
+			if err != nil {
+				t.Fatal(err)
+			}
+			f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := f.Write(append(data, '\n')); err != nil {
+				_ = f.Close()
+				t.Fatal(err)
+			}
+			if err := f.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			s.pollAgentChat(1, 1)
+			s.sessionsMu.Lock()
+			if ses.agentChatTimer != nil {
+				ses.agentChatTimer.Stop()
+				ses.agentChatTimer = nil
+			}
+			s.sessionsMu.Unlock()
+			waitForGitTurnCapture(t, s, 1)
+			if tt.changeWork {
+				deadline := time.Now().Add(5 * time.Second)
+				for {
+					s.sessionsMu.Lock()
+					notified := !ses.lastDoneNotifyAt.IsZero()
+					s.sessionsMu.Unlock()
+					if notified || time.Now().After(deadline) {
+						break
+					}
+					time.Sleep(time.Millisecond)
+				}
+			}
+
+			s.sessionsMu.Lock()
+			lastDone := ses.lastDoneNotifyAt
+			turns := append([]gitTurnSnapshot(nil), ses.gitTurns...)
+			s.stopAgentChatTailLocked(ses)
+			s.sessionsMu.Unlock()
+			if len(turns) != 1 {
+				t.Fatalf("git turn count = %d, want 1", len(turns))
+			}
+			if tt.changeWork {
+				if turns[0].Files != 1 || lastDone.IsZero() {
+					t.Fatalf("work completion = turn=%+v last_done=%v, want one changed file and summary", turns[0], lastDone)
+				}
+			} else if turns[0].Files != 0 || !lastDone.IsZero() {
+				t.Fatalf("conversation completion = turn=%+v last_done=%v, want no summary", turns[0], lastDone)
+			}
+		})
+	}
+}
+
 func TestHandleAgentChatUsesBoundedBackwardCursorPages(t *testing.T) {
 	s := newTestServer()
 	s.cfg.Token = "tok"

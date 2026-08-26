@@ -1,8 +1,11 @@
 package hub
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/proto"
@@ -105,5 +108,101 @@ func TestFallbackDoneSummaryTextIsNotAlarming(t *testing.T) {
 	}
 	if got, want := fallbackDoneSummaryText("直しました。"), "ターン終了（完了サマリーなし）。最後の出力: 直しました。"; got != want {
 		t.Fatalf("fallbackDoneSummaryText() = %q, want %q", got, want)
+	}
+}
+
+func TestFallbackDoneSummaryRequiresAChangedGitTurn(t *testing.T) {
+	dir := initGitTurnTestRepo(t)
+	s := newTestServer()
+	ses := registerTestSession(s, 1, "claude")
+	s.sessionsMu.Lock()
+	ses.CWD = dir
+	s.sessionsMu.Unlock()
+
+	// A confirmed turn with no worktree change is a conversation turn for this
+	// predicate and must still be captured without creating a fallback card.
+	s.captureGitTurnStart(1)
+	s.maybeCreateFallbackDoneSummary(1)
+	waitForGitTurnCapture(t, s, 1)
+	s.sessionsMu.Lock()
+	if !ses.lastDoneNotifyAt.IsZero() || len(ses.gitTurns) != 1 || ses.gitTurns[0].Files != 0 {
+		t.Fatalf("conversation fallback state = last_done=%v turns=%+v", ses.lastDoneNotifyAt, ses.gitTurns)
+	}
+	s.sessionsMu.Unlock()
+
+	s.captureGitTurnStart(1)
+	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("changed by work\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.maybeCreateFallbackDoneSummary(1)
+	waitForGitTurnCapture(t, s, 1)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		s.sessionsMu.Lock()
+		notified := !ses.lastDoneNotifyAt.IsZero()
+		s.sessionsMu.Unlock()
+		if notified || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	if ses.lastDoneNotifyAt.IsZero() || len(ses.gitTurns) != 2 || ses.gitTurns[1].Files != 1 {
+		t.Fatalf("work fallback state = last_done=%v turns=%+v", ses.lastDoneNotifyAt, ses.gitTurns)
+	}
+}
+
+func TestFallbackDoneSummarySkipsMarkerSeenTurnEvenWhenMarkerWasDeduped(t *testing.T) {
+	dir := initGitTurnTestRepo(t)
+	s := newTestServer()
+	ses := registerTestSession(s, 1, "claude")
+	s.sessionsMu.Lock()
+	ses.CWD = dir
+	s.sessionsMu.Unlock()
+
+	s.captureGitTurnStart(1)
+	// Simulate a previous visible notification inside the dedupe interval. The
+	// current turn's marker is then detected but intentionally not published.
+	previousDoneAt := time.Now()
+	s.sessionsMu.Lock()
+	ses.lastDoneNotifyAt = previousDoneAt
+	s.sessionsMu.Unlock()
+	s.handleDoneSummaryMarker(1, []byte("[MANY-AI-CLI-DONE] already reported [/MANY-AI-CLI-DONE]"))
+	s.sessionsMu.Lock()
+	markerSeen := ses.doneSummaryMarkerSeen
+	s.sessionsMu.Unlock()
+	if !markerSeen {
+		t.Fatal("deduped marker did not mark the current turn")
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("changed by marked work\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.maybeCreateFallbackDoneSummary(1)
+	waitForGitTurnCapture(t, s, 1)
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	if len(ses.gitTurns) != 1 || ses.gitTurns[0].Files != 1 || !ses.doneSummaryMarkerSeen || !ses.lastDoneNotifyAt.Equal(previousDoneAt) {
+		t.Fatalf("marker-seen fallback state = turns=%+v marker_seen=%v last_done=%v", ses.gitTurns, ses.doneSummaryMarkerSeen, ses.lastDoneNotifyAt)
+	}
+}
+
+func TestFallbackDoneSummarySkipsCodex(t *testing.T) {
+	dir := initGitTurnTestRepo(t)
+	s := newTestServer()
+	ses := registerTestSession(s, 1, "codex")
+	s.sessionsMu.Lock()
+	ses.CWD = dir
+	s.sessionsMu.Unlock()
+	s.captureGitTurnStart(1)
+	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("changed by codex\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.maybeCreateFallbackDoneSummary(1)
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	if !ses.lastDoneNotifyAt.IsZero() || len(ses.gitTurns) != 0 || ses.gitTurnStartTree == "" {
+		t.Fatalf("Codex fallback state = last_done=%v turns=%+v start_tree=%q", ses.lastDoneNotifyAt, ses.gitTurns, ses.gitTurnStartTree)
 	}
 }

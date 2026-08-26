@@ -293,6 +293,7 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 		parseState = newAgentChatParseStateWithPage(agentChatLiveMessageMax, agentChatBatchBytesMax, -1)
 	}
 	var messages []agentChatMessage
+	var codexCompletions []codexTaskCompletion
 	newOffset := previousOffset
 	var err error
 	if pathOK {
@@ -327,6 +328,15 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 			case "codex":
 				messages, newOffset, err = parseCodexRolloutWithState(path, previousOffset, parseState)
 			}
+		}
+	}
+	if provider == "codex" && pathOK && parseState != nil {
+		// A tail prime reconstructs the browser view from already-written rollout
+		// records. It is a baseline, not a new completion event. Forward polls
+		// alone may publish task_complete records.
+		codexCompletions = parseState.takeCodexCompletions()
+		if stateWasReset {
+			codexCompletions = nil
 		}
 	}
 	if err != nil {
@@ -366,11 +376,13 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 	shouldStop := isTerminalSessionState(cur.State) || (!idleBase.IsZero() && now.Sub(idleBase) >= agentChatIdleStop)
 	if shouldStop {
 		s.stopAgentChatTailLocked(cur)
-		s.sessionsMu.Unlock()
-		return
+	} else {
+		s.scheduleAgentChatPollLocked(id, generation)
 	}
-	s.scheduleAgentChatPollLocked(id, generation)
 	s.sessionsMu.Unlock()
+	for _, completion := range codexCompletions {
+		s.handleCodexTaskCompletion(id, completion)
+	}
 }
 
 func (s *Server) agentChatTailPageBudget() agentChatReadBudget {

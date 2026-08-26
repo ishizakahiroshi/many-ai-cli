@@ -145,6 +145,10 @@ func (s *Server) handleDoneSummaryMarker(id int, data []byte) {
 		s.sessionsMu.Unlock()
 		return
 	}
+	// Keep this separate from lastDoneNotifyAt: a marker can be a duplicate
+	// inside the notification interval and therefore be suppressed from the
+	// visible stream, but it still proves that this turn was marker-aware.
+	ses.doneSummaryMarkerSeen = true
 	if !ses.lastDoneNotifyAt.IsZero() && now.Sub(ses.lastDoneNotifyAt) < doneNotifyMinInterval {
 		s.sessionsMu.Unlock()
 		return

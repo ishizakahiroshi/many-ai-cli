@@ -125,17 +125,18 @@ func truncateDoneSummary(text string) string {
 }
 
 // maybeCreateFallbackDoneSummary is called only on a running -> standby
-// transition. This prevents periodic idle ticks from creating duplicate DONE
-// events, while still covering providers that omit the marker entirely.
+// transition. A fallback is emitted only after the Git turn snapshot proves
+// that the just-finished confirmed user turn changed at least one file. This
+// keeps ordinary conversation turns out of the fallback path and gives the
+// asynchronous Git capture a single work-turn predicate.
 func (s *Server) maybeCreateFallbackDoneSummary(id int) {
 	now := time.Now()
 	s.sessionsMu.Lock()
 	ses := s.sessions[id]
-	if ses == nil || !isAIProvider(ses.Provider) || ses.approvalVisible || ses.nativeApprovalSig != "" || (!ses.lastDoneNotifyAt.IsZero() && now.Sub(ses.lastDoneNotifyAt) < doneNotifyMinInterval) {
+	if ses == nil || !isFallbackDoneSummaryProvider(ses.Provider) || ses.approvalVisible {
 		s.sessionsMu.Unlock()
 		return
 	}
-	ses.lastDoneNotifyAt = now
 	title := doneSummaryTitle(ses)
 	// 表示に使うのは vt が再構成した画面行であって doneMsgBuf ではない。
 	// doneMsgBuf はマーカーがチャンク境界をまたぐのを吸収するための連結
@@ -146,10 +147,83 @@ func (s *Server) maybeCreateFallbackDoneSummary(id int) {
 		screen = ses.vt.Lines()
 	}
 	provider := ses.Provider
+	hasGitBaseline := ses.gitTurnStartTree != ""
+	s.sessionsMu.Unlock()
+	s.probe("done.fallback", "session_id", id, "provider", provider, "phase", "candidate", "git_baseline", hasGitBaseline)
+
+	s.captureGitTurnEndWithCallback(id, now.Format(time.RFC3339), func(turn gitTurnSnapshot) {
+		s.probe("done.fallback", "session_id", id, "provider", provider, "phase", "git_result", "files_changed", turn.Files, "added", turn.Added, "removed", turn.Removed)
+		if turn.Files == 0 {
+			return
+		}
+		s.sessionsMu.Lock()
+		current := s.sessions[id]
+		// A real marker may have arrived while the Git capture was running. The
+		// marker handler owns the same timestamp, so only suppress a fallback
+		// that was superseded after this fallback candidate was scheduled.
+		if current == nil || !isFallbackDoneSummaryProvider(current.Provider) || current.approvalVisible || current.doneSummaryMarkerSeen || current.lastDoneNotifyAt.After(now) {
+			s.sessionsMu.Unlock()
+			return
+		}
+		current.lastDoneNotifyAt = now
+		s.sessionsMu.Unlock()
+
+		text := fallbackDoneSummaryText(lastUsefulDoneLine(screen))
+		s.publishDoneSummary(proto.DoneSummary{SessionID: id, Provider: provider, Title: title, Text: text, Kind: fallbackDoneSummaryKind, At: now.Format(time.RFC3339), Fallback: true})
+	})
+}
+
+// Codex has a provider-owned task_complete signal. Its fallback is disabled
+// so a missing marker cannot race that real completion path into a duplicate
+// card; providers without such a signal still use the Git-change predicate.
+func isFallbackDoneSummaryProvider(provider string) bool {
+	return isAIProvider(provider) && provider != "codex"
+}
+
+// handleCodexTaskCompletion turns Codex's provider-owned task_complete event
+// into a normal completion summary. It still uses the confirmed user-turn Git
+// baseline, so a conversational Codex response does not become a completion
+// notification merely because the rollout says that the response ended.
+func (s *Server) handleCodexTaskCompletion(id int, completion codexTaskCompletion) {
+	endedAt, err := time.Parse(time.RFC3339, completion.At)
+	if err != nil {
+		return
+	}
+	s.sessionsMu.Lock()
+	ses := s.sessions[id]
+	if ses == nil || ses.Provider != "codex" {
+		s.sessionsMu.Unlock()
+		return
+	}
+	title := doneSummaryTitle(ses)
 	s.sessionsMu.Unlock()
 
-	text := fallbackDoneSummaryText(lastUsefulDoneLine(screen))
-	s.publishDoneSummary(proto.DoneSummary{SessionID: id, Provider: provider, Title: title, Text: text, Kind: fallbackDoneSummaryKind, At: now.Format(time.RFC3339), Fallback: true})
+	s.captureGitTurnEndWithCallback(id, completion.At, func(turn gitTurnSnapshot) {
+		if turn.Files == 0 {
+			return
+		}
+		s.sessionsMu.Lock()
+		current := s.sessions[id]
+		if current == nil || current.Provider != "codex" || current.lastDoneNotifyAt.After(endedAt) {
+			s.sessionsMu.Unlock()
+			return
+		}
+		current.lastDoneNotifyAt = endedAt
+		s.sessionsMu.Unlock()
+
+		text := completion.LastAgentMessage
+		if strings.TrimSpace(text) == "" {
+			text = "Codex ターン完了"
+		}
+		s.publishDoneSummary(proto.DoneSummary{
+			SessionID: id,
+			Provider:  "codex",
+			Title:     title,
+			Text:      text,
+			Kind:      classifyDoneSummary(text),
+			At:        completion.At,
+		})
+	})
 }
 
 // fallbackDoneSummaryKind はフォールバックが名乗る kind。
