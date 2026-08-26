@@ -14,6 +14,7 @@ import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed, isTranscriptBac
 import { clearChatPayloadForSession, handleChatTurnMessage, initChatPayloadUI } from './chat-payload.js';
 import { handleUsageStatMessage, removeUsageCacheEntry, resetUsageCache } from './token-statusbar.js';
 import { receiveWorkflowProgress, removeWorkflowSnapshot } from './workflow-modal.js';
+import { dropDoneSummary, setDoneSummary } from './done-summary.js';
 
 function showSpawnConfirmation(m) {
   const id = String(m.spawn_confirmation_id || '');
@@ -116,6 +117,7 @@ function purgeLocalStateForHubRestart() {
     try {
       removeLocalSession(id);
       removeWorkflowSnapshot(id);
+      dropDoneSummary(id);
     } catch (_) {}
   });
   resetUsageCache();
@@ -494,6 +496,18 @@ export function _connectWs() {
     return;
   }
 
+  // 完了サマリーは端末へ書かない（hub-marker-filter.ts の案 G）ため、ここが唯一の
+  // 画面表示経路になる。Hub は通知設定と無関係に broadcast してくるので、
+  // 外部通知を切っている利用者でもライブ帯とカードには出る。
+  if (m.type === 'done_summary') {
+    if (Number.isFinite(m.session_id) && m.done_summary) {
+      setDoneSummary(m.session_id, m.done_summary);
+      updateCardLiveInfo(m.session_id);
+      if (m.session_id === activeSessionId) syncLiveStatusDomForActive();
+    }
+    return;
+  }
+
   if (m.type === 'snapshot') {
     let arr;
     try {
@@ -670,6 +684,7 @@ export function _connectWs() {
     removeLocalSession(m.session_id);
     removeUsageCacheEntry(m.session_id);
     removeWorkflowSnapshot(m.session_id);
+    dropDoneSummary(m.session_id);
   }
 
   if (fastRenderSessionId !== null && renderSessionStateUpdate(fastRenderSessionId)) return;

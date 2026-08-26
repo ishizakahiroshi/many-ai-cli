@@ -11,6 +11,7 @@ import { renderApprovalSuppressedBannerFor, setMultiQuestionBannerVisible } from
 import { detectApproval, releaseActionBarIfOwnedByOther, setActionBarFocus } from './approval.js';
 import { onActiveSessionChanged } from './token-statusbar.js';
 import { rewireChatHistorySub } from './chat-history.js';
+import { doneSummaryDisplayText, doneSummaryKindSuffix, doneSummaryLine, getDoneSummary } from './done-summary.js';
 import { setActiveSessionForPayload } from './chat-payload.js';
 import { FilesTabManager } from './files-view.js';
 import { dirnameForPath } from './path-links.js';
@@ -412,6 +413,9 @@ function cardWorkflowProgressHtml(s) {
   return `<span class="card-workflow-progress" role="status" aria-label="${escapeHtml(aria)}" data-tooltip="${escapeHtml(aria)}">⚙ ${done}/${total}</span>`;
 }
 
+// カードは幅が狭いので完了サマリーはここまで詰める。全文は tooltip 側で読める。
+const CARD_DONE_MAX_LEN = 48;
+
 // カード 3 行目（ライブ情報）の中身 HTML を生成する。空文字なら行を隠す。
 // ctx%（コンテキスト残量）は下部ステータスバーに常時出ているため、カード側では
 // 重複表示しない。ここでは応答経過と長時間バッジ（running 中のみ）だけを出す。
@@ -433,6 +437,17 @@ function cardLiveRowHtml(s) {
     const dur = formatLongprocDuration(stalled ? lp.stalledSec : lp.elapsedSec);
     const cls = longprocBadgeClass('card-longproc', lp.level);
     parts.push(`<span class="${cls}" data-tooltip="${escapeHtml(lpTip)}">⚠ ${escapeHtml(label)} ${escapeHtml(dur)}</span>`);
+  }
+  // 直前ターンの完了サマリー。完了サマリーは端末へ書かなくなった（hub-marker-filter.ts の
+  // 案 G）ので、**見ていないセッション**の完了に気づける経路はここだけになる。
+  // 稼働中は上の長時間バッジや状態表示のほうが今知りたい情報なので、待機側の状態でだけ出す。
+  if (state !== 'running' && state !== 'waiting') {
+    const done = getDoneSummary(s.id);
+    const line = doneSummaryDisplayText(done, CARD_DONE_MAX_LEN);
+    if (line) {
+      const full = doneSummaryLine(done?.text, 0); // tooltip には切らない全文を出す
+      parts.push(`<span class="card-done card-done-${doneSummaryKindSuffix(done?.kind)}" data-tooltip="${escapeHtml(full)}">${escapeHtml(line)}</span>`);
+    }
   }
   return parts.join('');
 }

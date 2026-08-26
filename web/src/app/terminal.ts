@@ -15,6 +15,7 @@ import { isGrokChatViewerOpen, openGrokChatViewer, resetGrokChatViewerForSession
 import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
 import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, shouldBypassCursorHideFilterForProvider, showCursorSeq } from './cursor-hide-filter.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
+import { doneSummaryDisplayText, doneSummaryKindSuffix, getDoneSummary } from './done-summary.js';
 import { altScrollPagesUp, ensureAltScrollRail, noteAltScrollPage, updateAltScrollRail } from './alt-scroll-rail-view.js';
 import { formatLongprocDuration, longprocBadgeClass, longprocStatus } from './longproc.js';
 export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossibleMarkerPrefix } from './hub-marker-filter.js';
@@ -1506,6 +1507,12 @@ const LIVE_STATUS_HIDE_MS = 1500;
 // アニメーション（.live-spinner）で描くので再構成精度に関係なく必ず回る。
 // 再無効化したい場合は false に戻す（退路として残す）。
 const LIVE_STATUS_ENABLED = true;
+// 待機中に出す完了サマリーの上限。Hub 側で 320 文字に切られて届くが、帯は 1 行なので
+// さらに詰める。全文はセッションカードの tooltip 側で読める。
+const LIVE_STATUS_DONE_MAX_LEN = 160;
+// done-* 修飾クラスの全集合。付け外しを 1 箇所で回すために持つ
+// （個別に remove を並べると kind を増やしたときに書き忘れる）。
+const DONE_KIND_CLASSES = ['done-success', 'done-failure', 'done-aborted', 'done-needs-action'];
 const liveStatusDecoder = new TextDecoder('utf-8');
 
 // ステータスバーブロック（絶対カーソル移動 + 部分書き換え）を、セッションごとの
@@ -1775,12 +1782,20 @@ function liveStatusViewFor(sid) {
     case 'waiting':      return { mode: 'waiting', text: ti18n('live_status_waiting') };
     case 'error':        return { mode: 'idle',    text: ti18n('live_status_error') };
     case 'disconnected': return { mode: 'idle',    text: ti18n('live_status_disconnected') };
-    default:             return { mode: 'idle',    text: ti18n('live_status_idle') }; // standby ＝ 待機中（送信待ち）
+    default: {
+      // standby ＝ 待機中（送信待ち）。直前のターンが完了サマリーを出していれば、
+      // 汎用ラベルより「何が終わったか」を優先する。完了サマリーは端末へ書かなくなった
+      // （hub-marker-filter.ts の案 G）ので、ここが見ているセッション側の唯一の表示口。
+      const done = doneSummaryDisplayText(getDoneSummary(sid), LIVE_STATUS_DONE_MAX_LEN);
+      if (done) return { mode: 'done', text: done };
+      return { mode: 'idle', text: ti18n('live_status_idle') };
+    }
   }
 }
 
 // ライブ進捗窓の描画。mode: 'active'（青・スピナー回転）/ 'waiting'（アンバー・承認待ち）/
-// 'idle'（グレー・スピナー停止・状態ラベル／枠は残す）/ 'hidden'（アクティブセッション無し時のみ）。
+// 'idle'（グレー・スピナー停止・状態ラベル／枠は残す）/ 'done'（直前ターンの完了サマリー）/
+// 'hidden'（アクティブセッション無し時のみ）。
 function renderLiveStatusDom(mode, text) {
   const el = document.getElementById('terminal-live-status');
   if (!el) return;
@@ -1788,7 +1803,7 @@ function renderLiveStatusDom(mode, text) {
   const barEl = el.querySelector('.live-compact-bar') as HTMLElement | null;
   if (!LIVE_STATUS_ENABLED || mode === 'hidden') {
     el.hidden = true;
-    el.classList.remove('idle', 'waiting');
+    el.classList.remove('idle', 'waiting', 'done', ...DONE_KIND_CLASSES);
     if (textEl) textEl.textContent = '';
     if (barEl) barEl.hidden = true;
     syncLiveStatusLongproc();
@@ -1804,6 +1819,12 @@ function renderLiveStatusDom(mode, text) {
   el.hidden = false;
   el.classList.toggle('idle', mode === 'idle');
   el.classList.toggle('waiting', mode === 'waiting');
+  el.classList.toggle('done', mode === 'done');
+  // 成否は記号（doneSummaryIcon）だけでも読めるが、色でも区別できるよう kind をクラスへ出す。
+  const doneKind = mode === 'done' && activeSessionId !== null
+    ? `done-${doneSummaryKindSuffix(getDoneSummary(activeSessionId)?.kind)}`
+    : '';
+  for (const cls of DONE_KIND_CLASSES) el.classList.toggle(cls, cls === doneKind);
   if (barEl) barEl.hidden = (compactSec == null);
   if (textEl && textEl.textContent !== text) textEl.textContent = text || '';
   syncLiveStatusLongproc();

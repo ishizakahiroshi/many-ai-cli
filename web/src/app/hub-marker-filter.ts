@@ -1,6 +1,7 @@
 // xterm に渡すバイト列から [MANY-AI-CLI]…[/MANY-AI-CLI] / [MANY-AI-CLI-DONE]…
-// [/MANY-AI-CLI-DONE] の OPEN/CLOSE タグを剥がし、ブロック本文は ANSI escape を全て
-// 除去した plain text として xterm に流す純粋関数。
+// [/MANY-AI-CLI-DONE] の OPEN/CLOSE タグを剥がす純粋関数。
+// 承認ブロックの本文は ANSI escape を全て除去した plain text として xterm へ流し、
+// 完了サマリー（DONE）ブロックの本文は端末へ流さず落とす（案 G）。
 // terminal.ts の filterHubMarkersForDisplay から状態の橋渡しのみ受けて呼ばれる。
 // 純関数として切り出すことで DOM/xterm 依存なしで node:test から検証可能にしている。
 //
@@ -19,6 +20,25 @@
 // 何にも変換されずに消えて複数行の本文が 1 行へ繋がって見えていた。marker-vt-render.ts
 // の軽量 VT グリッドへ一旦描画してから読み出す方式に変更し、カーソル移動による行送り・
 // 同じ行への上書き描画（スピナー等の再描画）を実際の見た目どおりに畳み込む。
+//
+// 案 G（2026-08-26）: DONE ブロックだけは本文を端末へ書き戻さない。**承認ブロックは従来どおり。**
+//
+// 案 E〜F はブロック本文を「現在のカーソル位置から」書き足す。Claude Code は代替画面
+// バッファで画面全体を Ink が絶対座標で管理しているため、この書き足しは Ink の管理外の
+// セルを汚し、以後どれだけ再描画されても消えない。VT グリッドが 200 桁なのに実画面が
+// 128 桁だと、行頭に残った 90〜111 個の空白ごと折り返して 2 行を食い、文の途中から
+// 始まる断片として残る（2026-08-26 実測: セッション #3 のログを 10:23:16 で打ち切って
+// 128x35 へ再生し、DONE ブロックを落とすと残骸 0 行、落とさないと 2 行 + サマリー本文 1 行）。
+//
+// 承認ブロックを同じ扱いにしないのは、質問本文が端末で読めなくなると案 B（2026-06-23）
+// の欠点がそのまま戻るため。DONE を落としてよいのは、完了サマリーが Hub 側で
+// done_summary として UI へ配信されており（internal/hub/done_summary.go の
+// publishDoneSummary は通知設定と無関係に broadcast する）、端末表示が唯一の経路では
+// ないから。落とすと同時に UI 側へ受け手を用意することがセットの前提（ws-client.ts の
+// done_summary ハンドラ / live status 帯 / セッションカード）。
+//
+// なお DONE では close 後の erase-below も出さない。本文を書かない＝カーソルが動かない
+// ため、そこで erase-below を送ると Ink が描いた画面下部を消すだけになる。
 
 import { renderMarkerBytesToText } from './marker-vt-render.js';
 
@@ -166,14 +186,13 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
         i += hubDoneMarkerClose.length;
         inDone = false;
         lineStart = false;
-        // 案 E: 貯めた DONE 本文を ANSI 剥離してから out へ
-        flushBufToOut(doneBufArr, out);
+        // 案 G（2026-08-26）: DONE 本文は端末へ書き戻さず、ブロックごと落とす（本ファイル冒頭参照）。
         doneBufArr.length = 0;
-        for (const b of eraseDisplayBelowBytes) out.push(b);
         continue;
       }
       if (isPossiblePrefix(combined, i, [hubDoneMarkerClose])) break;
-      // 案 E: DONE 本文は buf に貯める（次チャンク跨ぎでも累積）
+      // 案 G: 本文は出さないが、close が来ないまま肥大した場合のセーフガード
+      // （MAX_MARKER_BUFFER_BYTES 超過で状態リセット）に量が要るので貯めるのは続ける。
       doneBufArr.push(combined[i]);
       i++;
       if (doneBufArr.length > MAX_MARKER_BUFFER_BYTES) {
