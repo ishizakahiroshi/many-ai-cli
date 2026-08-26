@@ -157,7 +157,7 @@ function makeSyncUpdateFilter() {
 
 // filterHubMarkersForDisplay 相当（純関数 + state 橋渡し）
 function makeHubMarkerFilter() {
-  let state = { carry: new Uint8Array(0), inDone: false, inMarker: false, markerBuf: new Uint8Array(0), doneBuf: new Uint8Array(0) };
+  let state = { carry: new Uint8Array(0), inDone: false, inMarker: false, markerSeen: 0, doneBuf: new Uint8Array(0) };
   return (bytes) => {
     const r = filterHubMarkersPure(bytes, state);
     state = r.state;

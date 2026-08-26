@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   filterHubMarkersPure,
-  stripAnsiFromString,
   MAX_MARKER_BUFFER_BYTES,
   type HubMarkerFilterState,
 } from './hub-marker-filter.js';
@@ -17,148 +16,89 @@ function initialState(): HubMarkerFilterState {
     carry: new Uint8Array(0),
     inDone: false,
     inMarker: false,
-    markerBuf: new Uint8Array(0),
+    markerSeen: 0,
     doneBuf: new Uint8Array(0),
   };
 }
 
-const ERASE_BELOW = '\x1b[J';
-
-test('stripAnsiFromString: CSI / OSC / 単一 ESC / 裸 ESC をすべて剥がす', () => {
-  // CSI (cursor positioning, SGR, erase)
-  assert.equal(stripAnsiFromString('hello\x1b[31mred\x1b[0m'), 'hellored');
-  assert.equal(stripAnsiFromString('a\x1b[24;3Hb'), 'ab');
-  assert.equal(stripAnsiFromString('x\x1b[2Jy'), 'xy');
-  // OSC (window title), terminated by BEL or ESC \
-  assert.equal(stripAnsiFromString('p\x1b]0;title\x07q'), 'pq');
-  assert.equal(stripAnsiFromString('p\x1b]0;title\x1b\\q'), 'pq');
-  // ESC + single byte
-  assert.equal(stripAnsiFromString('a\x1bMb'), 'ab');
-  // bare ESC
-  assert.equal(stripAnsiFromString('a\x1bb'), 'ab');
-  // plain
-  assert.equal(stripAnsiFromString('plain'), 'plain');
-});
-
 test('filterHubMarkersPure: 1 チャンクで完結する [MANY-AI-CLI] ブロックはタグだけ剥がして本文は残す', () => {
   const input = bytes('preamble\n[MANY-AI-CLI]Q1 question?\n1. opt1\n2. opt2\n[/MANY-AI-CLI]tail');
   const { out, state } = filterHubMarkersPure(input, initialState());
-  const text = str(out);
-  assert.equal(text.includes('Q1 question'), true);
-  assert.equal(text.includes('opt1'), true);
-  assert.equal(text.includes('opt2'), true);
-  assert.equal(text.includes('[MANY-AI-CLI]'), false);
-  assert.equal(text.includes('[/MANY-AI-CLI]'), false);
-  assert.equal(text.startsWith('preamble\n'), true);
-  assert.equal(text.endsWith(`${ERASE_BELOW}tail`), true, `text="${text}"`);
+  assert.equal(str(out), 'preamble\nQ1 question?\n1. opt1\n2. opt2\ntail');
   assert.equal(state.inMarker, false);
   assert.equal(state.inDone, false);
   assert.equal(state.carry.length, 0);
-  assert.equal(state.markerBuf.length, 0);
+  assert.equal(state.markerSeen, 0);
 });
 
-test('filterHubMarkersPure (案 F): ブロック内の絶対カーソル位置指定は行区切りに変換され本文が別行で残る', () => {
-  // INK 衝突の原因である \x1b[<row>;<col>H をブロック内に混ぜたケース。
-  // 案 E（単純 ANSI 削除）では 3 行が 1 行へ繋がっていた
-  // （2026-08-24 実測: セッション #23 で実際に発生・marker-vt-render.ts で修正）。
-  const block = '\x1b[24;3HQ1 質問?\x1b[25;3H1. opt1\x1b[26;3H2. opt2';
-  const input = bytes(`[MANY-AI-CLI]${block}[/MANY-AI-CLI]`);
-  const { out } = filterHubMarkersPure(input, initialState());
-  const text = str(out);
-  // 絶対位置指定そのものは剥がれる（衝突原理消失）
-  assert.equal(text.includes('\x1b[24;3H'), false);
-  assert.equal(text.includes('\x1b[25;3H'), false);
-  assert.equal(text.includes('\x1b[26;3H'), false);
-  // 本文テキストは残り、かつ行ごとに分かれる（連結されない）。
-  // 列 3 指定ぶんの行頭インデント（Claude Code 純正の表示仕様）は各行に残る。
-  assert.equal(text, `  Q1 質問?\n  1. opt1\n  2. opt2${ERASE_BELOW}`);
-});
-
-test('filterHubMarkersPure (案 E): SGR 色指定もブロック内なら剥がれる', () => {
-  const input = bytes('[MANY-AI-CLI]\x1b[31mred text\x1b[0m and \x1b[1mbold\x1b[m[/MANY-AI-CLI]');
-  const { out } = filterHubMarkersPure(input, initialState());
-  // close flush 後の erase-below（\x1b[J）だけが残り、SGR は全て剥がれる
-  assert.equal(str(out), `red text and bold${ERASE_BELOW}`);
-});
-
-test('filterHubMarkersPure: 開きマーカーで終わるチャンク → 本文は markerBuf に持ち越し', () => {
+test('filterHubMarkersPure: 開きマーカーで終わるチャンクでも本文はその場で素通しする', () => {
   const part1 = bytes('preamble\n[MANY-AI-CLI]body1\nbody2');
   const { out: out1, state: state1 } = filterHubMarkersPure(part1, initialState());
-  // OPEN 以降は markerBuf に貯まり out には流れない
-  assert.equal(str(out1), 'preamble\n');
+  // 案 H: 貯めないので OPEN 以降の本文もこのチャンクで出る
+  assert.equal(str(out1), 'preamble\nbody1\nbody2');
   assert.equal(state1.inMarker, true);
   assert.equal(state1.inDone, false);
   assert.equal(state1.carry.length, 0);
-  assert.ok(state1.markerBuf.length > 0);
+  assert.ok((state1.markerSeen ?? 0) > 0);
 
   const part2 = bytes('body3\n[/MANY-AI-CLI]tail');
   const { out: out2, state: state2 } = filterHubMarkersPure(part2, state1);
-  // CLOSE 時に貯めた本文をまとめて VT 描画してから出す。
-  // 末尾の \n はカーソルを次行へ送るだけで文字を書き込まないため、
-  // 案 F（marker-vt-render）では最後に書き込みがあった行までしか描画しない
-  // （行き先の空行を律儀に残さない。実端末の見た目としても自然）。
-  assert.equal(str(out2), `body1\nbody2body3${ERASE_BELOW}tail`);
+  assert.equal(str(out2), 'body3\ntail');
   assert.equal(state2.inMarker, false);
-  assert.equal(state2.markerBuf.length, 0);
+  assert.equal(state2.markerSeen, 0);
 });
 
-test('filterHubMarkersPure: チャンク跨ぎの ANSI シーケンスも正しく解釈される', () => {
+test('filterHubMarkersPure: チャンク跨ぎの ANSI シーケンスもそのまま連結して出る', () => {
   // ESC [ がチャンク1末尾、続きがチャンク2 という分割
   const part1 = bytes('[MANY-AI-CLI]hello\x1b[2');
   const { out: out1, state: state1 } = filterHubMarkersPure(part1, initialState());
-  assert.equal(str(out1), '');
-  assert.ok(state1.markerBuf.length > 0);
+  assert.equal(str(out1), 'hello\x1b[2');
 
   const part2 = bytes(';1Hworld[/MANY-AI-CLI]end');
   const { out: out2 } = filterHubMarkersPure(part2, state1);
-  // 跨いだ \x1b[2;1H は行送りとして解釈され、hello と world は別行になる
-  // （案 E 時代は絶対位置指定を単純除去するだけで helloworld と 1 行に繋がっていた）。
-  assert.equal(str(out2), `hello\nworld${ERASE_BELOW}end`);
+  assert.equal(str(out2), ';1Hworldend');
 });
 
 test('filterHubMarkersPure: 閉じマーカーの途中で chunk が割れても carry で次に繋ぐ', () => {
   const open = bytes('pre\n[MANY-AI-CLI]body[/MANY-AI-CLI');
   const { out: out1, state: state1 } = filterHubMarkersPure(open, initialState());
-  // 'pre\n' が出力され、'body' は markerBuf に、CLOSE の prefix は carry に持ち越し
-  assert.equal(str(out1), 'pre\n');
+  // 'pre\nbody' が出力され、CLOSE の prefix だけが carry に持ち越される
+  assert.equal(str(out1), 'pre\nbody');
   assert.equal(state1.inMarker, true);
   assert.ok(state1.carry.length > 0);
-  assert.ok(state1.markerBuf.length > 0);
 
   const rest = bytes(']post');
   const { out: out2, state: state2 } = filterHubMarkersPure(rest, state1);
-  assert.equal(str(out2), `body${ERASE_BELOW}post`);
+  assert.equal(str(out2), 'post');
   assert.equal(state2.inMarker, false);
   assert.equal(state2.carry.length, 0);
-  assert.equal(state2.markerBuf.length, 0);
+  assert.equal(state2.markerSeen, 0);
 });
 
 test('filterHubMarkersPure (案 G): [MANY-AI-CLI-DONE] ブロックは本文ごと端末へ出さない', () => {
   const input = bytes('before\n[MANY-AI-CLI-DONE]\x1b[32mタスク完了\x1b[mしました[/MANY-AI-CLI-DONE]after');
   const { out, state } = filterHubMarkersPure(input, initialState());
   const text = str(out);
-  // 本文・タグ・erase-below のいずれも残さず、ブロックが無かったのと同じ出力になる。
+  // 本文・タグのいずれも残さず、ブロックが無かったのと同じ出力になる。
   // 端末へ書くと Ink 管理外のセルが汚れて消えないため（hub-marker-filter.ts 冒頭の案 G）。
   assert.equal(text, 'before\nafter');
   assert.equal(text.includes('タスク完了'), false);
   assert.equal(text.includes('[MANY-AI-CLI-DONE]'), false);
   assert.equal(text.includes('[/MANY-AI-CLI-DONE]'), false);
-  assert.equal(text.includes(ERASE_BELOW), false);
   assert.equal(state.inDone, false);
   assert.equal(state.doneBuf.length, 0);
 });
 
-test('filterHubMarkersPure (案 G): 承認ブロックの本文は従来どおり端末へ出す', () => {
-  // DONE を落とす変更が承認ブロックへ波及していないことを、同じ入力形で押さえる。
+test('filterHubMarkersPure (案 G/H): 承認ブロックの本文は落とさない（DONE の扱いは波及しない）', () => {
   const input = bytes('before\n[MANY-AI-CLI]\x1b[32m質問\x1b[mです[/MANY-AI-CLI]after');
   const { out } = filterHubMarkersPure(input, initialState());
-  assert.equal(str(out), `before\n質問です${ERASE_BELOW}after`);
+  // 案 H: SGR も含めて本文はそのまま。剥がすのはタグ文字列だけ。
+  assert.equal(str(out), 'before\n\x1b[32m質問\x1b[mですafter');
 });
 
 test('filterHubMarkersPure: マーカー無しの通常バイトは素通し（ANSI も含む）', () => {
   const input = bytes('hello \x1b[1mworld\x1b[m');
   const { out, state } = filterHubMarkersPure(input, initialState());
-  // ブロック外の ANSI はそのまま通す
   assert.equal(str(out), 'hello \x1b[1mworld\x1b[m');
   assert.equal(state.inMarker, false);
   assert.equal(state.inDone, false);
@@ -167,7 +107,7 @@ test('filterHubMarkersPure: マーカー無しの通常バイトは素通し（A
 test('filterHubMarkersPure: 行頭の stray な閉じマーカーは隠す（開きなしでも例外を投げない）', () => {
   const input = bytes('text\n[/MANY-AI-CLI]more');
   const { out, state } = filterHubMarkersPure(input, initialState());
-  assert.equal(str(out), `text\n${ERASE_BELOW}more`);
+  assert.equal(str(out), 'text\nmore');
   assert.equal(state.inMarker, false);
 });
 
@@ -181,8 +121,7 @@ test('filterHubMarkersPure 行頭ゲート: 文中の stray な閉じマーカ�
 test('filterHubMarkersPure: 連続する 2 ブロックで本文が両方とも残る', () => {
   const input = bytes('A\n[MANY-AI-CLI]X[/MANY-AI-CLI]B\n[MANY-AI-CLI]Y[/MANY-AI-CLI]C');
   const { out, state } = filterHubMarkersPure(input, initialState());
-  const text = str(out);
-  assert.equal(text, `A\nX${ERASE_BELOW}B\nY${ERASE_BELOW}C`);
+  assert.equal(str(out), 'A\nXB\nYC');
   assert.equal(state.inMarker, false);
 });
 
@@ -195,7 +134,7 @@ test('filterHubMarkersPure: 開きマーカー文字列の途中で chunk が割
 
   const part2 = bytes('I]body[/MANY-AI-CLI]post');
   const { out: out2, state: state2 } = filterHubMarkersPure(part2, state1);
-  assert.equal(str(out2), `body${ERASE_BELOW}post`);
+  assert.equal(str(out2), 'bodypost');
   assert.equal(state2.inMarker, false);
 });
 
@@ -215,19 +154,19 @@ test('filterHubMarkersPure セーフガード: DONE close が typo で来ない�
   assert.equal(text.includes('after'), true);
 });
 
-test('filterHubMarkersPure セーフガード: マーカー close が来ない場合も閾値超過で破棄＋状態リセット', () => {
+test('filterHubMarkersPure セーフガード: 承認ブロックの close が来なくても閾値超過でラッチだけ解除', () => {
   const body = 'Q1 質問? 1. 選択肢';
   const filler = 'y'.repeat(MAX_MARKER_BUFFER_BYTES + 100);
   // close が来ないまま追加のバイト列（Claude Code TUI が絶え間なく吐く spinner 相当）
   const input = bytes(`[MANY-AI-CLI]${body} ${filler}`);
   const { out, state } = filterHubMarkersPure(input, initialState());
   const text = str(out);
-  // 閾値超過分は破棄（凍結せず、ゴミも出さない）
-  assert.equal(text.includes(body), false);
-  // 状態が復帰しており、超過後のバイトは素通し
-  assert.equal(state.inMarker, false);
-  assert.equal(state.markerBuf.length, 0);
+  // 案 H: 本文は貯めずに素通し済みなので、捨てるものが無い（出力からは欠けない）
+  assert.equal(text.includes(body), true);
   assert.equal(text.includes('yyy'), true);
+  // ラッチだけ解除する。放置すると以後の stray close を位置に関係なく受理してしまうため。
+  assert.equal(state.inMarker, false);
+  assert.equal(state.markerSeen, 0);
 });
 
 // ── 行頭ゲート（2026-07-04・bugfix_spinner-cup-not-consumed-in-webui_2026-07-02.md）──
@@ -246,18 +185,14 @@ test('行頭ゲート: CUP（絶対カーソル移動）＋インデント空白
   // 正規マーカーの実測パターン: \x1b[30;1H + 2 スペース + OPEN
   const input = bytes('前置き\x1b[30;1H  [MANY-AI-CLI]Q1 質問?\n1. 選択肢[/MANY-AI-CLI]tail');
   const { out, state } = filterHubMarkersPure(input, initialState());
-  const text = str(out);
-  assert.equal(text.includes('[MANY-AI-CLI]'), false);
-  assert.equal(text.includes('Q1 質問?'), true);
+  assert.equal(str(out), '前置き\x1b[30;1H  Q1 質問?\n1. 選択肢tail');
   assert.equal(state.inMarker, false);
 });
 
-test('行頭ゲート: \\r\\n＋空白の直後の OPEN はラッチする', () => {
+test('行頭ゲート: CR LF ＋空白の直後の OPEN はラッチする', () => {
   const input = bytes('前置き\r\n  \x1b[K[MANY-AI-CLI]body[/MANY-AI-CLI]tail');
   const { out, state } = filterHubMarkersPure(input, initialState());
-  const text = str(out);
-  assert.equal(text.includes('[MANY-AI-CLI]'), false);
-  assert.equal(text.includes('body'), true);
+  assert.equal(str(out), '前置き\r\n  \x1b[Kbodytail');
   assert.equal(state.inMarker, false);
 });
 
@@ -266,6 +201,16 @@ test('行頭ゲート: 文中の prose リテラル DONE もラッチせず素�
   const { out, state } = filterHubMarkersPure(input, initialState());
   assert.equal(str(out), '完了時は [MANY-AI-CLI-DONE] マーカーで報告します');
   assert.equal(state.inDone, false);
+});
+
+test('行頭ゲート: 承認ブロック本文の行頭に DONE リテラルが来ても DONE としてラッチしない', () => {
+  // 案 H で本文も行頭追跡を通るようになったため、ブロック内でも lineStart が立つ。
+  // 承認ブロック内の DONE リテラルを飲み込まないことを明示で押さえる。
+  const input = bytes('\n[MANY-AI-CLI]Q1?\n[MANY-AI-CLI-DONE] と書く場合の説明\n[/MANY-AI-CLI]tail');
+  const { out, state } = filterHubMarkersPure(input, initialState());
+  assert.equal(str(out), '\nQ1?\n[MANY-AI-CLI-DONE] と書く場合の説明\ntail');
+  assert.equal(state.inDone, false);
+  assert.equal(state.inMarker, false);
 });
 
 test('行頭ゲート: 行頭状態はチャンクを跨いで保持される', () => {
@@ -278,38 +223,42 @@ test('行頭ゲート: 行頭状態はチャンクを跨いで保持される', 
   // 改行を挟めば次チャンク先頭の OPEN はラッチする
   const { state: state3 } = filterHubMarkersPure(bytes('\r\n'), state2);
   const { out: out4, state: state4 } = filterHubMarkersPure(bytes('[MANY-AI-CLI]body[/MANY-AI-CLI]'), state3);
-  assert.equal(str(out4), `body${ERASE_BELOW}`);
+  assert.equal(str(out4), 'body');
   assert.equal(state4.inMarker, false);
 });
 
-// ── 案 F（marker-vt-render・2026-08-24）: 行区切り変換と同じ行への上書き ──
-// 実測（セッション #23）: Claude Code の Ink UI はマーカーブロック本文の行区切りを
-// 改行文字ではなく絶対カーソル位置指定だけで表現するため、案 E（単純 ANSI 削除）では
-// 複数行の本文が 1 行へ繋がって表示されていた。marker-vt-render.ts の軽量 VT グリッドで
-// 行送り・同じ行への上書き描画を正しく畳み込む。
+// ── 案 H（2026-08-26）: 承認ブロックへは何も足さない ──
+// 案 E〜F は本文を 200 桁の VT グリッドへ描き直して現在カーソル位置へ書き戻していた。
+// Claude Code は代替画面バッファで全セルを Ink が絶対座標で管理しているため、その書き戻しは
+// Ink の管理外セルへ乗って以後消えず、200 桁ぶんの行末パディングが実画面（128 桁）で
+// 折り返して「行頭に長い空白を伴う断片」を残していた（hub-marker-filter.ts 冒頭の実測表）。
+// 以下は「本文へ 1 バイトも足さない・並べ替えない」ことを固定する。
 
-test('案 F: 絶対カーソル位置指定による複数行の本文が別行として描画される', () => {
+test('案 H: ブロック内の絶対カーソル位置指定はそのまま通す（畳み込まない）', () => {
   const block = '\x1b[24;3HQ1 質問?\x1b[25;3H1. opt1\x1b[26;3H2. opt2';
   const input = bytes(`[MANY-AI-CLI]${block}[/MANY-AI-CLI]`);
   const { out } = filterHubMarkersPure(input, initialState());
-  // 列 3 指定ぶんの行頭インデント（Claude Code 純正の表示仕様）は残る。
-  assert.equal(str(out), `  Q1 質問?\n  1. opt1\n  2. opt2${ERASE_BELOW}`);
+  assert.equal(str(out), block);
 });
 
-test('案 F: 同じ行への上書き描画（スピナー等の再描画）は最終状態だけが残る', () => {
-  // "loading..." を書いた後、同じ行頭へ戻って erase-line してから "done!" を書く
+test('案 H: 同じ行への上書き描画（スピナー等の再描画）もそのまま通す', () => {
   const block = '\x1b[1;1Hloading...\x1b[1;1H\x1b[Kdone!';
   const input = bytes(`[MANY-AI-CLI]${block}[/MANY-AI-CLI]`);
   const { out } = filterHubMarkersPure(input, initialState());
-  assert.equal(str(out), `done!${ERASE_BELOW}`);
+  assert.equal(str(out), block);
 });
 
-test('案 F: ブロックが複数回まるごと再描画された場合、古い世代の残骸は最終行より後ろに残らない', () => {
-  // 実測パターン: Ink が先に低い位置（絶対行 30）で下書きを描き、後から
-  // 本来の位置（絶対行 2）で改めて描き直す。最後に書き込んだ行までしか描画しないため、
-  // 数値的に後ろにある古い世代（行 30）は結果に含まれない。
+test('案 H: 複数世代の再描画が混ざっていてもそのまま通す', () => {
   const block = '\x1b[30;1Hstale first draft\x1b[2;1Hfinal answer';
   const input = bytes(`[MANY-AI-CLI]${block}[/MANY-AI-CLI]`);
   const { out } = filterHubMarkersPure(input, initialState());
-  assert.equal(str(out), `final answer${ERASE_BELOW}`);
+  assert.equal(str(out), block);
+});
+
+test('案 H: 出力はタグのバイト数ぶんだけ短くなる（本文へ何も足さない）', () => {
+  const block = '\x1b[24;3HQ1 日本語の質問?\x1b[25;3H1. 選択肢 (Recommended)\x1b[26;3HN. User specifies';
+  const input = bytes(`[MANY-AI-CLI]${block}[/MANY-AI-CLI]`);
+  const { out } = filterHubMarkersPure(input, initialState());
+  const tagBytes = '[MANY-AI-CLI]'.length + '[/MANY-AI-CLI]'.length;
+  assert.equal(out.length, input.length - tagBytes);
 });

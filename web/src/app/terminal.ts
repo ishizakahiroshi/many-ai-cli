@@ -12,13 +12,13 @@ import { handleCrunchLinkClick } from './expand-popup.js';
 import { addPromptTemplate } from './prompt-templates.js';
 import { resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
 import { isGrokChatViewerOpen, openGrokChatViewer, resetGrokChatViewerForSessionChange } from './grok-chat-viewer.js';
-import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
+import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
 import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, shouldBypassCursorHideFilterForProvider, showCursorSeq } from './cursor-hide-filter.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
 import { doneSummaryDisplayText, doneSummaryKindSuffix, getDoneSummary } from './done-summary.js';
 import { altScrollPagesUp, ensureAltScrollRail, noteAltScrollPage, updateAltScrollRail } from './alt-scroll-rail-view.js';
 import { formatLongprocDuration, longprocBadgeClass, longprocStatus } from './longproc.js';
-export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossibleMarkerPrefix } from './hub-marker-filter.js';
+export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, bytesStartWith, isPossibleMarkerPrefix } from './hub-marker-filter.js';
 
 // Claude Code の折りたたみマーカー: "… +23 lines (ctrl+o to expand)"。
 // サブエージェント実行行・ツール要約行は "+N lines" 無しで "(ctrl+o to expand)" 単独で
@@ -1307,7 +1307,7 @@ export function filterHubMarkersForDisplay(id, bytes) {
     carry: t.markerFilterCarry || new Uint8Array(0),
     inDone: t.inDoneBlock || false,
     inMarker: t.inMarkerBlock || false,
-    markerBuf: t.markerBuf || new Uint8Array(0),
+    markerSeen: t.markerSeen || 0,
     doneBuf: t.doneBuf || new Uint8Array(0),
     lineStart: t.markerLineStart ?? true,
     escPhase: t.markerEscPhase ?? 0,
@@ -1315,7 +1315,7 @@ export function filterHubMarkersForDisplay(id, bytes) {
   t.markerFilterCarry = state.carry;
   t.inDoneBlock = state.inDone;
   t.inMarkerBlock = state.inMarker;
-  t.markerBuf = state.markerBuf;
+  t.markerSeen = state.markerSeen;
   t.doneBuf = state.doneBuf;
   t.markerLineStart = state.lineStart;
   t.markerEscPhase = state.escPhase;
