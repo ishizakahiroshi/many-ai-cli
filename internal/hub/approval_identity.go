@@ -349,7 +349,7 @@ func markApprovalUserTurnBoundaryLocked(ses *session) {
 	if ses.approvalConsumedCarried {
 		return
 	}
-	marker := extractApprovalMarkerBlock(ses.vt.TailLinesWithScrollback(vtTailLinesForMarker))
+	marker := extractApprovalMarkerBlockFromVT(ses.vt)
 	if marker == nil {
 		return
 	}

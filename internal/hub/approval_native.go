@@ -280,7 +280,7 @@ func (s *Server) evaluateReplayApproval(id int) {
 		return
 	}
 	provider := ses.Provider
-	marker := extractApprovalMarkerBlock(ses.vt.TailLinesWithScrollback(vtTailLinesForMarker))
+	marker := extractApprovalMarkerBlockFromVT(ses.vt)
 	approval := detectNativeApproval(provider, ses.vt.TailLines(vtTailLinesForApproval))
 	s.sessionsMu.Unlock()
 	if marker != nil {
