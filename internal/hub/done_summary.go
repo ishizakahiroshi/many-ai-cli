@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"many-ai-cli/internal/notify"
@@ -12,6 +13,11 @@ import (
 )
 
 const doneSummaryMaxRunes = 320
+
+// inputBoxSearchDepth は入力ボックスの下辺を探しに行く画面下端からの行数。
+// ボックスの下にぶら下がる案内行（"? for shortcuts" 等）とスクロール余白を
+// 跨げる程度に取り、本文中の枠線まで拾わない程度に浅くする。
+const inputBoxSearchDepth = 8
 
 // publishDoneSummary makes completion information visible in the Hub even
 // when external notifications are disabled. External delivery remains an
@@ -111,11 +117,18 @@ func (s *Server) maybeCreateFallbackDoneSummary(id int) {
 	}
 	ses.lastDoneNotifyAt = now
 	title := doneSummaryTitle(ses)
-	tail := ses.doneMsgBuf.String()
+	// 表示に使うのは vt が再構成した画面行であって doneMsgBuf ではない。
+	// doneMsgBuf はマーカーがチャンク境界をまたぐのを吸収するための連結
+	// バッファで、人間が読む文字列の供給源ではない（下の lastUsefulDoneLine
+	// の doc 参照）。
+	var screen []string
+	if ses.vt != nil {
+		screen = ses.vt.Lines()
+	}
 	provider := ses.Provider
 	s.sessionsMu.Unlock()
 
-	last := lastUsefulDoneLine(tail)
+	last := lastUsefulDoneLine(screen)
 	text := "完了マーカーを検出できませんでした。最後の出力を確認してください。"
 	if last != "" {
 		text = fmt.Sprintf("完了マーカーを検出できませんでした。最後の出力: %s", last)
@@ -123,16 +136,100 @@ func (s *Server) maybeCreateFallbackDoneSummary(id int) {
 	s.publishDoneSummary(proto.DoneSummary{SessionID: id, Provider: provider, Title: title, Text: text, Kind: "needs_action", At: now.Format(time.RFC3339), Fallback: true})
 }
 
-func lastUsefulDoneLine(tail string) string {
-	lines := strings.Split(tail, "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line == "" || strings.HasPrefix(line, "[") || strings.HasPrefix(line, "⠋") {
+// lastUsefulDoneLine は「画面に実際に描かれている最後の 1 行」を返す。
+//
+// **引数は vtBuffer が再構成した画面行であり、PTY の生ストリームではない。**
+// ここを取り違えると壊れる: StripANSI 済みのストリームはカーソル移動が落ちて
+// いるので、TUI が同じ行を上書き再描画した断片が改行なしで連結する。その
+// 連結物の「最後の行」は日本語として成立しない混合物になり、しかも
+// publishDoneSummary は notifyDonePush まで通すので push 通知にも乗る
+// （docs/local/bugfix_fallback-done-summary-garbled-tail_2026-08-26.md）。
+//
+// 画面下端は入力ボックスとショートカット案内で、利用者が打ちかけた入力も
+// そこに居る。AI の出力ではないので、ボックスの上辺より上だけを走査する。
+func lastUsefulDoneLine(screen []string) string {
+	end := len(screen)
+	if top := inputBoxTopIndex(screen); top >= 0 {
+		end = top
+	}
+	for i := end - 1; i >= 0; i-- {
+		raw := strings.TrimSpace(screen[i])
+		if strings.HasPrefix(raw, "│") || strings.HasPrefix(raw, "┃") {
+			// 枠線で囲まれたパネルの中身。入力ボックスの上辺を見つけられ
+			// なかったとき（上端が画面外へ流れたとき）の受け皿。
+			continue
+		}
+		line := strings.TrimSpace(cleanTUILine(screen[i]))
+		if line == "" || strings.HasPrefix(line, "[") || hasSpinnerPrefix(line) || isDoneChromeLine(line) {
 			continue
 		}
 		return truncateDoneSummary(line)
 	}
 	return ""
+}
+
+// inputBoxTopIndex は画面最下部の入力ボックスの「上辺」の行番号を返す（無ければ -1）。
+//
+// 下辺を先に探してから上辺へ遡る。こうするとボックスより下に居る
+// ショートカット案内（"? for shortcuts" 等）も一緒に走査対象から外れる。
+// 案内文はプロバイダごとに文言が違うので、語で弾かず構造で外す。
+// 上辺が画面外へ流れていた場合は下辺の位置を返し、中身は
+// lastUsefulDoneLine 側の縦罫線スキップで落とす。
+func inputBoxTopIndex(screen []string) int {
+	// 下辺の探索は最下部だけに限る。上の方に出てくる表や引用の枠を
+	// 入力ボックスと取り違えないための制限。
+	bottom := -1
+	for i := len(screen) - 1; i >= 0 && i >= len(screen)-inputBoxSearchDepth; i-- {
+		if isBoxBorderLine(strings.TrimSpace(screen[i]), "╰└┗╚") {
+			bottom = i
+			break
+		}
+	}
+	if bottom < 0 {
+		return -1
+	}
+	for i := bottom - 1; i >= 0; i-- {
+		if isBoxBorderLine(strings.TrimSpace(screen[i]), "╭┌┏╔") {
+			return i
+		}
+	}
+	return bottom
+}
+
+// isBoxBorderLine は「先頭が corners のいずれかで、かつ装飾文字だけで
+// できている行」を枠線とみなす。
+func isBoxBorderLine(line string, corners string) bool {
+	if line == "" {
+		return false
+	}
+	first, _ := utf8.DecodeRuneInString(line)
+	if !strings.ContainsRune(corners, first) {
+		return false
+	}
+	return isDoneChromeLine(line)
+}
+
+// isDoneChromeLine は罫線・区切り線・入力プロンプト記号だけの行を判定する。
+// 意味のある文字が 1 つでもあれば false。
+func isDoneChromeLine(line string) bool {
+	for _, r := range line {
+		switch {
+		case unicode.IsSpace(r):
+		case r >= 0x2500 && r <= 0x259F: // Box Drawing + Block Elements
+		case r == '-', r == '=', r == '_', r == '~':
+		case r == '>', r == '$', r == '❯', r == '›':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// hasSpinnerPrefix は行頭がブライユ点字のスピナー（⠋ ⠙ …）かを見る。
+// スピナー行は再描画の途中経過であって完了時の出力ではない。
+func hasSpinnerPrefix(line string) bool {
+	r, _ := utf8.DecodeRuneInString(line)
+	return r >= 0x2800 && r <= 0x28FF
 }
 
 func doneSummaryTitle(ses *session) string {
