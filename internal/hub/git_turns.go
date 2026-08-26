@@ -196,8 +196,6 @@ func (s *Server) captureGitTurnEndWorker(sessionID int, endedAtText string, ses 
 	}
 	ses.gitTurnStartTree = ""
 	ses.gitTurnStartedAt = time.Time{}
-	ses.gitTurnCaptureInFlight = false
-	ses.gitTurnCaptureDone = nil
 	s.sessionsMu.Unlock()
 
 	// A compact event lets the active session show its completion card without
@@ -218,7 +216,22 @@ func (s *Server) captureGitTurnEndWorker(sessionID int, endedAtText string, ses 
 	// Keep the next confirmed input behind the callback. The callback may publish
 	// a fallback summary, and publishDoneSummary must not mistake the next
 	// turn's newly-created baseline for the turn that just ended.
+	//
+	// captureGitTurnStart only waits on gitTurnCaptureDone while
+	// gitTurnCaptureInFlight is set, so both have to stay in place until the
+	// callback returns. Clearing them before the call left the channel as the
+	// only barrier, and nothing was reading it: the next baseline walked
+	// straight past a callback that had not published its summary yet. That
+	// race stayed invisible on Windows, where spawning Git for the new baseline
+	// is slow enough to hide it, and only surfaced on the Linux and macOS
+	// runners.
+	s.sessionsMu.Lock()
+	if s.sessions[sessionID] == ses && ses.gitTurnCaptureDone == captureDone {
+		ses.gitTurnCaptureInFlight = false
+		ses.gitTurnCaptureDone = nil
+	}
 	close(captureDone)
+	s.sessionsMu.Unlock()
 }
 
 func (s *Server) finishGitTurnCaptureFailure(sessionID int, expected *session, captureDone chan struct{}, clearStart bool) {
