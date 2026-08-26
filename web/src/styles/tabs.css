@@ -489,3 +489,9 @@ body.pane-resizing .xterm { pointer-events: none; }
 }
 #main-tab-list[hidden] { display: none !important; }
 /* D12: #main-tab-status は統合バー内に移植。位置スタイルだけ調整 */
+
+/* タブの並べ替え（ドラッグ&ドロップ）— tab-bar-order.ts */
+.view-tab.dragging { opacity: 0.4; }
+/* 挿入位置のガイド線。active タブの border-bottom と競合しないよう inset shadow で描く */
+.view-tab.drop-before { box-shadow: inset 2px 0 0 0 var(--accent); }
+.view-tab.drop-after  { box-shadow: inset -2px 0 0 0 var(--accent); }

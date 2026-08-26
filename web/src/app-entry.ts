@@ -42,6 +42,7 @@ import { initMobileShortNudge } from './app/mobile-short-nudge.js';
 import { initMobileApprovalOnly } from './app/mobile-approval-only.js';
 import { initBugReportModal } from './app/bug-report-modal.js';
 import { initSubscriptions } from './app/subscriptions.js';
+import { initTabBarOrder } from './app/tab-bar-order.js';
 // ステータスバー初期化（/api/user-prefs から enabled を読む）
 initTokenStatusbar();
 // detached-grid モード判定（/?view=detached-grid の場合のみ初期化）
@@ -70,3 +71,5 @@ initMobileApprovalOnly();
 initBugReportModal();
 // Settings > Subscriptions（複数サブスクリプションの登録・ログイン・有効/無効）
 initSubscriptions();
+// 統合タブバーのタブをドラッグ&ドロップで並べ替え（順序は localStorage 保存）
+initTabBarOrder();
