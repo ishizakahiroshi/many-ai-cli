@@ -17,9 +17,10 @@
 //
 // 案 F（2026-08-24）: 案 E は CSI を単純に削除するだけだったため、Ink が行区切りを
 // 絶対カーソル位置指定だけで表現している場合（実測: セッション #23）、行区切りが
-// 何にも変換されずに消えて複数行の本文が 1 行へ繋がって見えていた。marker-vt-render.ts
-// の軽量 VT グリッドへ一旦描画してから読み出す方式に変更し、カーソル移動による行送り・
-// 同じ行への上書き描画（スピナー等の再描画）を実際の見た目どおりに畳み込む。
+// 何にも変換されずに消えて複数行の本文が 1 行へ繋がって見えていた。軽量 VT グリッド
+// （marker-vt-render.ts）へ一旦描画してから読み出す方式に変更し、カーソル移動による
+// 行送り・同じ行への上書き描画（スピナー等の再描画）を実際の見た目どおりに畳み込んだ。
+// ※ 案 H で書き戻し自体をやめたため、このグリッドは不要になり同ファイルは削除済み。
 //
 // 案 G（2026-08-26）: DONE ブロックだけは本文を端末へ書き戻さない。**承認ブロックは従来どおり。**
 //
@@ -39,8 +40,26 @@
 //
 // なお DONE では close 後の erase-below も出さない。本文を書かない＝カーソルが動かない
 // ため、そこで erase-below を送ると Ink が描いた画面下部を消すだけになる。
+//
+// 案 H（2026-08-26）: 承認ブロックはタグ文字列だけを剥がし、本文と CLI の位置指定はそのまま
+// 通す（案 C 相当）。案 E〜F の「溜めて描き直して現在カーソル位置へ書き戻す」をやめる。
+// DONE ブロックの扱い（案 G の本文破棄）は変えない。
+//
+// 案 G と同じ理屈が承認ブロックにもそのまま当てはまっていた。代替画面バッファでは Ink が
+// 全セルを絶対座標で管理しているので、書き戻した本文は Ink の管理外セルに乗り、以後どれだけ
+// 再描画されても消えない。VT グリッドが 200 桁・実画面が 128 桁だと行末パディングごと
+// 折り返して 2 行を食い、行頭に長い空白を伴う断片が並ぶ。
+//
+// 2026-08-26 実測（セッション #9 のログを 14:10:10 で打ち切り、記録どおりの寸法変化つきで
+// @xterm/headless 6.0 へ再生）:
+//   フィルタ無し          崩れ 0 行（リサイズ無し / 1 秒前倒し / チャンク 1・4 個欠落でも同じ）
+//   案 E〜F を通す        利用者のスクリーンショットと一行単位で一致する崩れが再現
+//   タグのみ除去（案 H）  崩れ 0 行・質問本文も読める
+//
+// 案 C（2026-06-23）を当時見送った理由は「Ink の絶対カーソル位置指定が xterm のスクロールと
+// 衝突する可能性が残る」という懸念だったが、実際に衝突していたのは書き戻す側だった。本文は
+// CLI 自身が既に描いているので、こちらは何も足さないのが正しい。
 
-import { renderMarkerBytesToText } from './marker-vt-render.js';
 
 export const hubMarkerBytePatterns = [
   new TextEncoder().encode('[MANY-AI-CLI]'),
@@ -49,7 +68,6 @@ export const hubMarkerBytePatterns = [
 export const hubMarkerEndBytes = hubMarkerBytePatterns[1];
 export const hubDoneMarkerOpen = new TextEncoder().encode('[MANY-AI-CLI-DONE]');
 export const hubDoneMarkerClose = new TextEncoder().encode('[/MANY-AI-CLI-DONE]');
-export const eraseDisplayBelowBytes = new TextEncoder().encode('\x1b[J');
 
 // 案 E セーフガード（2026-07-01）: 実運用のマーカー本文は数百 B〜数 KB。
 // close マーカー typo（例: [/MANARY-AI-CLI-DONE]）や AI 側の切断で close が来ないと、
@@ -62,27 +80,6 @@ export const eraseDisplayBelowBytes = new TextEncoder().encode('\x1b[J');
 // scrollback に化石化する（bugfix_spinner-cup-not-consumed-in-webui_2026-07-02.md で実測）。
 // 承認 UI は Hub 側 Go の PTY 解析から出るため、破棄しても承認ボタンには影響しない。
 export const MAX_MARKER_BUFFER_BYTES = 32 * 1024;
-
-const utf8Encoder = new TextEncoder();
-const utf8Decoder = new TextDecoder('utf-8');
-
-// 案 E: マーカーブロック内で剥がす ANSI シーケンス
-// - CSI: ESC [ <params> <intermediate> <final>  (final は @-~)
-// - OSC: ESC ] <data> (BEL | ESC \)
-// - ESC + 単一バイト（@-Z, \, ]-_ 等）
-// - 上記に該当しない裸の ESC
-const ANSI_OSC_RE = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
-const ANSI_CSI_RE = /\x1b\[[0-?]*[ -/]*[@-~]/g;
-const ANSI_ESC_SINGLE_RE = /\x1b[@-Z\\-_]/g;
-const ANSI_ESC_BARE_RE = /\x1b/g;
-
-export function stripAnsiFromString(s: string): string {
-  return s
-    .replace(ANSI_OSC_RE, '')
-    .replace(ANSI_CSI_RE, '')
-    .replace(ANSI_ESC_SINGLE_RE, '')
-    .replace(ANSI_ESC_BARE_RE, '');
-}
 
 export function bytesStartWith(bytes: Uint8Array, offset: number, pattern: Uint8Array): boolean {
   if (offset + pattern.length > bytes.length) return false;
@@ -112,7 +109,9 @@ export type HubMarkerFilterState = {
   carry: Uint8Array;
   inDone: boolean;
   inMarker: boolean;
-  markerBuf: Uint8Array;
+  // 案 H: 承認ブロック本文は貯めずに素通しするので、持つのは open からのバイト数だけ。
+  // close が来ないまま肥大したときのラッチ解除にしか使わない。
+  markerSeen?: number;
   doneBuf: Uint8Array;
   // 行頭ゲート（2026-07-04）: OPEN マーカーは「行頭（空白のみ先行）」でのみラッチする。
   // AI が地の文でマーカーをリテラル引用した場合（例:「…はすべて [MANY-AI-CLI] マーカー形式で…」）、
@@ -123,15 +122,6 @@ export type HubMarkerFilterState = {
   // lineStart 判定用の ESC シーケンス解析フェーズ（0=通常 / 1=ESC 直後 / 2=CSI 中 / 3=OSC 中）
   escPhase?: number;
 };
-
-function flushBufToOut(buf: number[], out: number[]): void {
-  if (buf.length === 0) return;
-  const bytes = new Uint8Array(buf);
-  const text = utf8Decoder.decode(bytes);
-  const rendered = renderMarkerBytesToText(text);
-  const encoded = utf8Encoder.encode(rendered);
-  for (const b of encoded) out.push(b);
-}
 
 export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterState): {
   out: Uint8Array;
@@ -146,7 +136,7 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
   let i = 0;
   let inDone = state.inDone;
   let inMarker = state.inMarker;
-  const markerBufArr: number[] = Array.from(state.markerBuf || new Uint8Array(0));
+  let markerSeen = state.markerSeen ?? 0;
   const doneBufArr: number[] = Array.from(state.doneBuf || new Uint8Array(0));
   let lineStart = state.lineStart ?? true;
   let escPhase = state.escPhase ?? 0;
@@ -205,7 +195,10 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
     }
 
     if (bytesStartWith(combined, i, hubDoneMarkerOpen)) {
-      if (lineStart) {
+      // 案 H で承認ブロック本文も trackByte を通すようになったため、ブロック内でも lineStart が
+      // 立つ。承認ブロックの本文に DONE マーカーのリテラルが行頭で現れても DONE としてラッチ
+      // しないよう、案 E〜G と同じ「ブロック内では DONE を見ない」挙動を明示で維持する。
+      if (lineStart && !inMarker) {
         i += hubDoneMarkerOpen.length;
         inDone = true;
         lineStart = false;
@@ -226,16 +219,11 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
       if (inMarker || lineStart) {
         i += marker.length;
         lineStart = false;
-        if (isClose) {
-          // close: 貯めた本文を ANSI 剥離して out へ
-          inMarker = false;
-          flushBufToOut(markerBufArr, out);
-          markerBufArr.length = 0;
-          for (const b of eraseDisplayBelowBytes) out.push(b);
-        } else {
-          // open: 以降の close までの本文は markerBufArr に貯める
-          inMarker = true;
-        }
+        // 案 H: open / close ともタグ文字列を落とすだけ。本文は下の分岐で素通しする。
+        // close 後の erase-below も出さない。こちらは何も書いていないので消す残骸が無く、
+        // 送れば Ink が描いた画面下部を消すだけになる（案 G と同じ理由）。
+        inMarker = !isClose;
+        markerSeen = 0;
         continue;
       }
       if (!inMarker) {
@@ -247,20 +235,18 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
     }
     // マーカー prefix の carry は「ラッチし得る文脈」のときだけ行う（文中は素通しでよい）
     if ((inMarker || lineStart) && isPossibleMarkerPrefix(combined, i)) break;
-    // 案 E: in-marker / in-done 中は本文を buf へ、外は out へ
+    // 案 H: 承認ブロックの本文は素通しする（落とすのは上の inDone 分岐の DONE 本文だけ）。
+    trackByte(combined[i]);
+    out.push(combined[i]);
+    i++;
     if (inMarker) {
-      markerBufArr.push(combined[i]);
-      i++;
-      if (markerBufArr.length > MAX_MARKER_BUFFER_BYTES) {
-        // typo/欠落/切断で close が来ない: 本文ではなく再描画の堆積とみなし破棄＋状態リセット
+      markerSeen++;
+      if (markerSeen > MAX_MARKER_BUFFER_BYTES) {
+        // typo/欠落/切断で close が来ない: ラッチしたままだと以後の stray close を位置に
+        // 関係なく受理してしまうため状態だけ戻す（本文は素通し済みで捨てるものは無い）。
         inMarker = false;
-        lineStart = false;
-        markerBufArr.length = 0;
+        markerSeen = 0;
       }
-    } else {
-      trackByte(combined[i]);
-      out.push(combined[i]);
-      i++;
     }
   }
 
@@ -270,7 +256,7 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
       carry: combined.slice(i),
       inDone,
       inMarker,
-      markerBuf: new Uint8Array(markerBufArr),
+      markerSeen,
       doneBuf: new Uint8Array(doneBufArr),
       lineStart,
       escPhase,
