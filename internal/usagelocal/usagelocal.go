@@ -18,12 +18,29 @@ type RateLimitWindow struct {
 	ResetsAt      int64   `json:"resets_at"`
 }
 
+// CreditsState preserves the provider's credits presence and state without
+// guessing a unit for balance.
+type CreditsState struct {
+	Present    bool
+	HasCredits bool
+	Unlimited  bool
+	Balance    string
+}
+
 // CodexUsage is the subset of Codex rate_limits safe to show in the UI.
 type CodexUsage struct {
-	Primary        *RateLimitWindow
-	Secondary      *RateLimitWindow
-	PlanType       string
+	Primary   *RateLimitWindow
+	Secondary *RateLimitWindow
+	PlanType  string
+	// RateLimitsPresent distinguishes a token_count record that explicitly
+	// supplied rate_limits (including null or {}) from an older record that did
+	// not have the field yet. The former may clear a cached observation; the
+	// latter is not a new usage observation.
+	RateLimitsPresent bool
+	Credits           CreditsState
+	// CreditsBalance remains for callers written against the pre-presence API.
 	CreditsBalance string
+	ObservedAt     time.Time
 }
 
 // GrokUsage is the weekly billing record written by Grok Build.

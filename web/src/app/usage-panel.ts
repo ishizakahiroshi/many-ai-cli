@@ -2,9 +2,20 @@
 // from the Hub only when the menu is opened. No provider auth file is read here.
 import { t } from '../i18n.js';
 import { apiFetch, escapeHtml } from './util.js';
+import {
+  remainingPercent,
+  resetState,
+  sortUsageWindows,
+  usageSeverity,
+  usedPercent,
+  windowLabel,
+  windowMinutes,
+  type UsageWindowInput,
+} from './usage-limit.js';
 
 interface UsageWindow {
-  used_percent: number;
+  used_percent?: number;
+  remaining_percent?: number;
   window_minutes?: number;
   resets_at?: number;
 }
@@ -18,11 +29,17 @@ interface CodexUsage {
   primary?: UsageWindow;
   secondary?: UsageWindow;
   plan_type?: string;
+  credits?: {
+    has_credits?: boolean;
+    unlimited?: boolean;
+    balance?: string;
+  };
   credits_balance?: string;
 }
 
 interface GrokUsage {
   used_percent: number;
+  remaining_percent?: number;
   period_start?: string;
   period_end?: string;
   period_type?: string;
@@ -33,6 +50,7 @@ interface UsageProfile {
   name?: string;
   plan?: string;
   retrieved_at?: string;
+  auth_status?: 'ready' | 'login_required' | 'status_unknown' | string;
   probe_available?: boolean;
   probe_state?: string;
   claude?: ClaudeUsage;
@@ -69,11 +87,6 @@ function profileKey(profile: UsageProfile, provider: string): string {
   return `${provider}:${profile.id}`;
 }
 
-function clampPercent(value: unknown): number {
-  const n = typeof value === 'number' && Number.isFinite(value) ? value : 0;
-  return Math.max(0, Math.min(100, n));
-}
-
 function pad(value: number): string {
   return String(value).padStart(2, '0');
 }
@@ -82,11 +95,6 @@ function fixedDateTime(value: string | number | undefined): string {
   const date = typeof value === 'number' ? new Date(value * 1000) : new Date(value || '');
   if (!Number.isFinite(date.getTime())) return '';
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function resetText(epoch: number | undefined): string {
-  if (!epoch || epoch <= 0) return '';
-  return tx('usage_reset_at', 'Resets {time}', { time: fixedDateTime(epoch) });
 }
 
 function retrievedText(iso: string | undefined): string {
@@ -99,13 +107,74 @@ function retrievedText(iso: string | undefined): string {
   return tx('usage_retrieved_at', 'Retrieved {time}', { time: fixedDateTime(iso) });
 }
 
+function relativeDuration(milliseconds: number): string {
+  const minutes = Math.floor(milliseconds / 60000);
+  if (minutes < 1) return tx('usage_reset_less_than_minute', '<1m');
+  if (minutes < 60) return tx('usage_reset_minutes', '{n}m', { n: minutes });
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  if (hours < 24) {
+    return restMinutes
+      ? tx('usage_reset_hours_minutes', '{h}h {m}m', { h: hours, m: restMinutes })
+      : tx('usage_reset_hours', '{n}h', { n: hours });
+  }
+  const days = Math.floor(hours / 24);
+  const restHours = hours % 24;
+  return restHours
+    ? tx('usage_reset_days_hours', '{d}d {h}h', { d: days, h: restHours })
+    : tx('usage_reset_days', '{n}d', { n: days });
+}
+
+function resetMeta(epoch: number | undefined): { text: string; stale: boolean } {
+  const state = resetState(epoch);
+  if (!state) return { text: '', stale: false };
+  if (state.stale) return { text: tx('usage_reset_elapsed', 'Reset time passed'), stale: true };
+  return {
+    text: tx('usage_reset_in', 'Resets in {time} · {absolute}', {
+      time: relativeDuration(state.remainingMs),
+      absolute: fixedDateTime(epoch),
+    }),
+    stale: false,
+  };
+}
+
+function windowLabelText(label: ReturnType<typeof windowLabel>): string {
+  switch (label.kind) {
+    case 'five_hour': return tx('usage_window_5h', '5h');
+    case 'weekly': return tx('usage_window_weekly', 'Weekly');
+    case 'days': return tx('usage_window_days', '{n}d', { n: label.amount });
+    case 'hours': return tx('usage_window_hours', '{n}h', { n: label.amount });
+    case 'minutes': return tx('usage_window_minutes', '{n}m', { n: label.amount });
+    default: return tx('usage_window_generic', 'Limit');
+  }
+}
+
 function meter(label: string, window: UsageWindow | undefined): string {
   if (!window) return '';
-  const percent = clampPercent(window.used_percent);
-  return `<div class="usage-meter-line">
-    <span class="usage-meter-label">${escapeHtml(label)}</span>
-    <span class="usage-meter" role="img" aria-label="${escapeHtml(`${label} ${Math.round(percent)}%`)}"><span class="usage-meter-fill" style="width:${percent}%"></span></span>
-    <span class="usage-meter-value">${Math.round(percent)}%</span>
+  const remaining = remainingPercent(window as UsageWindowInput);
+  if (remaining === null) return '';
+  const used = usedPercent(window as UsageWindowInput) ?? 0;
+  const roundedRemaining = Math.round(remaining);
+  const roundedUsed = Math.round(used);
+  const severity = usageSeverity(remaining);
+  const reset = resetMeta(window.resets_at);
+  const stateText = severity === 'danger'
+    ? tx('usage_remaining_danger', 'Danger: low remaining quota')
+    : severity === 'warning'
+      ? tx('usage_remaining_warning', 'Warning: remaining quota is low')
+      : '';
+  const meta = [
+    reset.text,
+    stateText,
+  ].filter(Boolean).join(' · ');
+  const aria = `${label}: ${tx('usage_remaining_aria', '{remaining}% remaining, {used}% used', { remaining: roundedRemaining, used: roundedUsed })}${stateText ? `, ${stateText}` : ''}`;
+  const title = `${tx('usage_remaining_title', 'Remaining {remaining}% · Used {used}%', { remaining: roundedRemaining, used: roundedUsed })}${reset.text ? `\n${reset.text}` : ''}`;
+  return `<div class="usage-meter-group${reset.stale ? ' usage-meter-group--stale' : ''}">
+    <div class="usage-meter-line" data-usage-severity="${severity}">
+      <span class="usage-meter-label">${escapeHtml(label)}</span>
+      <span class="usage-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${roundedRemaining}" aria-label="${escapeHtml(aria)}" title="${escapeHtml(title)}"><span class="usage-meter-fill" style="width:${roundedRemaining}%"></span></span>
+      <span class="usage-meter-value">${escapeHtml(tx('usage_remaining_value', 'Remaining {n}%', { n: roundedRemaining }))}</span>
+    </div>${meta ? `<div class="usage-meter-meta${reset.stale ? ' usage-meter-meta--stale' : ''}">${escapeHtml(meta)}</div>` : ''}
   </div>`;
 }
 
@@ -113,21 +182,60 @@ function actionButton(className: string, label: string, attribute: string, disab
   return `<button type="button" class="${className}" ${attribute}${disabled ? ' disabled' : ''}>${escapeHtml(label)}</button>`;
 }
 
-function hasClaudeUsage(profile: UsageProfile): boolean {
-  return !!profile.claude;
+function hasWindows(usage: ClaudeUsage | CodexUsage | undefined): boolean {
+  return !!usage && Object.values(usage).some((window) => window && typeof window === 'object' && remainingPercent(window as UsageWindowInput) !== null);
+}
+
+function settingsAction(provider: string, id: string): string {
+  return actionButton('usage-auth-action', tx('usage_auth_settings', 'Open subscription settings'), `data-open-subscription-settings="${escapeHtml(provider)}" data-subscription-id="${escapeHtml(id)}"`);
+}
+
+function authNotice(provider: string, profile: UsageProfile): string {
+  const state = profile.auth_status;
+  if (state === 'login_required') {
+    return `<div class="usage-auth usage-auth--required" role="alert"><strong>${escapeHtml(tx('usage_auth_required', 'Re-authentication required'))}</strong><span>${escapeHtml(tx('usage_auth_required_detail', 'This provider profile is not signed in.'))}</span>${settingsAction(provider, profile.id)}</div>`;
+  }
+  if (state === 'status_unknown') {
+    return `<div class="usage-auth usage-auth--unknown" role="status"><strong>${escapeHtml(tx('usage_auth_unknown', 'Login status could not be checked'))}</strong><span>${escapeHtml(tx('usage_auth_unknown_detail', 'This is not proof that the profile is signed out.'))}</span>${actionButton('usage-auth-retry', tx('usage_auth_retry', 'Retry'), `data-usage-auth-retry="${escapeHtml(profileKey(profile, provider))}"`)}</div>`;
+  }
+  return '';
+}
+
+function noWindowsText(): string {
+  return `<span class="usage-not-acquired">${escapeHtml(tx('usage_no_windows', 'No usage limits are currently available'))}</span>`;
+}
+
+function profileRetrieved(profile: UsageProfile): string {
+  const retrieved = retrievedText(profile.retrieved_at);
+  return retrieved ? `<div class="usage-profile-meta">${escapeHtml(retrieved)}</div>` : '';
+}
+
+function creditsText(usage: CodexUsage): string {
+  const credits = usage.credits;
+  if (!credits) {
+    return usage.credits_balance
+      ? `<span>${escapeHtml(tx('usage_credits_balance', 'Remaining credits {value}', { value: usage.credits_balance }))}</span>`
+      : '';
+  }
+  if (credits.unlimited) return `<span>${escapeHtml(tx('usage_credits_unlimited', 'Unlimited credits'))}</span>`;
+  if (credits.has_credits) return `<span>${escapeHtml(tx('usage_credits_balance', 'Remaining credits {value}', { value: credits.balance ?? '' }))}</span>`;
+  return `<span>${escapeHtml(tx('usage_credits_none', 'No additional credits'))}</span>`;
 }
 
 function claudeBody(provider: string, profile: UsageProfile): string {
   const key = profileKey(profile, provider);
-  const usage = hasClaudeUsage(profile);
+  const usage = profile.claude;
+  const hasUsage = hasWindows(usage);
   const busy = running.has(key) || profile.probe_state === 'running';
   const failure = failures.has(key) && !usage;
-  let body = '';
-  if (usage && profile.claude) {
-    body += meter(tx('usage_window_5h', '5h'), profile.claude.five_hour);
-    body += meter(tx('usage_window_7d', '7d'), profile.claude.seven_day);
-    const retrieved = retrievedText(profile.retrieved_at);
-    if (retrieved) body += `<div class="usage-profile-meta">${escapeHtml(retrieved)}</div>`;
+  let body = authNotice(provider, profile);
+  if (hasUsage && usage) {
+    body += meter(tx('usage_window_5h', '5h'), usage.five_hour);
+    body += meter(tx('usage_window_7d', '7d'), usage.seven_day);
+    body += profileRetrieved(profile);
+  } else if (usage) {
+    body += noWindowsText();
+    body += profileRetrieved(profile);
   } else {
     body += `<div class="usage-profile-actions"><span class="usage-not-acquired">${escapeHtml(tx('usage_profile_unacquired', 'Not retrieved'))}</span></div>`;
   }
@@ -141,35 +249,49 @@ function claudeBody(provider: string, profile: UsageProfile): string {
   return body;
 }
 
-function codexBody(profile: UsageProfile): string {
+function codexBody(provider: string, profile: UsageProfile): string {
   const usage = profile.codex;
-  if (!usage || (!usage.primary && !usage.secondary)) {
-    return `<span class="usage-not-acquired">${escapeHtml(tx('usage_profile_unacquired', 'Not retrieved'))}</span>`;
+  let body = authNotice(provider, profile);
+  if (!usage) return body + `<span class="usage-not-acquired">${escapeHtml(tx('usage_profile_unacquired', 'Not retrieved'))}</span>`;
+  const windows = sortUsageWindows([usage.primary, usage.secondary].filter((window): window is UsageWindow => !!window && remainingPercent(window) !== null));
+  if (windows.length === 0) {
+    body += noWindowsText();
+  } else {
+    for (const window of windows) {
+      body += meter(windowLabelText(windowLabel(windowMinutes(window))), window);
+    }
   }
-  const window = usage.primary || usage.secondary;
-  return `${meter(tx('usage_window_weekly', 'Weekly'), window)}${resetText(window?.resets_at) ? `<div class="usage-profile-meta">${escapeHtml(resetText(window?.resets_at))}</div>` : ''}`;
+  const credits = creditsText(usage);
+  if (credits) body += `<div class="usage-profile-facts">${credits}</div>`;
+  body += profileRetrieved(profile);
+  return body;
 }
 
-function grokBody(profile: UsageProfile): string {
+function grokBody(provider: string, profile: UsageProfile): string {
   const usage = profile.grok;
-  if (!usage) {
-    return `<span class="usage-not-acquired">${escapeHtml(tx('usage_profile_grok_unacquired', 'Launch Grok on this subscription to see numbers'))}</span>`;
-  }
+  let body = authNotice(provider, profile);
+  if (!usage) return body + `<span class="usage-not-acquired">${escapeHtml(tx('usage_profile_grok_unacquired', 'Launch Grok on this subscription to see numbers'))}</span>`;
   const end = usage.period_end ? fixedDateTime(usage.period_end) : '';
-  const retrieved = retrievedText(profile.retrieved_at);
-  let body = meter(tx('usage_window_weekly', 'Weekly'), { used_percent: usage.used_percent });
+  body += meter(tx('usage_window_weekly', 'Weekly'), { used_percent: usage.used_percent, remaining_percent: usage.remaining_percent });
   if (end) body += `<div class="usage-profile-meta">${escapeHtml(tx('usage_period_end', 'Billing period ends {time}', { time: end }))}</div>`;
-  if (retrieved) body += `<div class="usage-profile-meta">${escapeHtml(retrieved)}</div>`;
+  body += profileRetrieved(profile);
   return body;
 }
 
 function profileBody(provider: string, profile: UsageProfile): string {
   switch (provider) {
     case 'claude': return claudeBody(provider, profile);
-    case 'codex': return codexBody(profile);
-    case 'grok': return grokBody(profile);
+    case 'codex': return codexBody(provider, profile);
+    case 'grok': return grokBody(provider, profile);
     default: return '';
   }
+}
+
+function profilePlan(provider: string, profile: UsageProfile): string {
+  const configured = profile.plan?.trim() || '';
+  const observed = provider === 'codex' ? profile.codex?.plan_type?.trim() || '' : '';
+  if (configured && observed && configured.toLowerCase() === observed.toLowerCase()) return configured;
+  return observed || configured;
 }
 
 function renderProfiles(response: UsageResponse): void {
@@ -186,7 +308,8 @@ function renderProfiles(response: UsageResponse): void {
       const row = document.createElement('div');
       row.className = 'usage-profile-row';
       const name = profile.name || profile.id;
-      row.innerHTML = `<div class="usage-profile-head"><span class="usage-profile-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>${profile.plan ? `<span class="usage-profile-plan">${escapeHtml(profile.plan)}</span>` : ''}</div><div class="usage-profile-body">${profileBody(provider.provider, profile)}</div>`;
+      const plan = profilePlan(provider.provider, profile);
+      row.innerHTML = `<div class="usage-profile-head"><span class="usage-profile-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>${plan ? `<span class="usage-profile-plan">${escapeHtml(plan)}</span>` : ''}</div><div class="usage-profile-body">${profileBody(provider.provider, profile)}</div>`;
       list.appendChild(row);
     }
     anchor.insertAdjacentElement('afterend', list);
@@ -215,6 +338,45 @@ function bindProbeButtons(): void {
       const key = button.dataset.probeCancel || '';
       void cancelProbe(key);
     });
+  });
+  panelRoot.querySelectorAll<HTMLButtonElement>('[data-open-subscription-settings]').forEach((button) => {
+    if (button.dataset.bound === '1') return;
+    button.dataset.bound = '1';
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openSubscriptionSettings(button.dataset.openSubscriptionSettings || '', button.dataset.subscriptionId || '');
+    });
+  });
+  panelRoot.querySelectorAll<HTMLButtonElement>('[data-usage-auth-retry]').forEach((button) => {
+    if (button.dataset.bound === '1') return;
+    button.dataset.bound = '1';
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      button.disabled = true;
+      void refreshUsagePanel(true).finally(() => { button.disabled = false; });
+    });
+  });
+}
+
+function openSubscriptionSettings(provider: string, id: string): void {
+  const settings = document.getElementById('settings-panel') as HTMLElement | null;
+  const settingsButton = document.getElementById('settings-btn');
+  if (!settings) return;
+  if (settings.hidden) settingsButton?.click();
+  const reveal = () => {
+    const section = settings.querySelector<HTMLDetailsElement>('details[data-section="subscriptions"]');
+    if (section) section.open = true;
+    const row = Array.from(settings.querySelectorAll<HTMLElement>('.subs-row')).find((candidate) => (
+      candidate.dataset.provider === provider && candidate.dataset.id === id
+    ));
+    row?.scrollIntoView({ block: 'center' });
+    (row?.querySelector('.subs-login') as HTMLButtonElement | null)?.focus();
+  };
+  requestAnimationFrame(() => {
+    reveal();
+    setTimeout(reveal, 50);
   });
 }
 
@@ -289,7 +451,7 @@ async function startProbe(key: string): Promise<void> {
     running.delete(key);
     await refreshUsagePanel();
     const latest = findProfile(key);
-    if (!latest || !hasClaudeUsage(latest)) {
+    if (!latest || !hasWindows(latest.claude)) {
       failures.set(key, tx('usage_probe_failed', 'Could not retrieve usage'));
       if (usageData) renderProfiles(usageData);
     }
@@ -352,17 +514,17 @@ export function initUsagePanel(dropdown: HTMLElement): void {
   });
 }
 
-export async function refreshUsagePanel(): Promise<void> {
+export async function refreshUsagePanel(forceAuth = false): Promise<void> {
   if (!panelRoot || refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
     try {
-      const response = await apiFetch('/api/subscription-usage');
+      const response = await apiFetch(`/api/subscription-usage${forceAuth ? '?refresh_auth=1' : ''}`);
       if (!response.ok) throw new Error(`usage request failed: ${response.status}`);
       usageData = await response.json() as UsageResponse;
       for (const provider of usageData.providers || []) {
         for (const profile of provider.profiles || []) {
           const key = profileKey(profile, provider.provider);
-          if (hasClaudeUsage(profile)) failures.delete(key);
+          if (hasWindows(profile.claude)) failures.delete(key);
           if (profile.probe_state !== 'running') running.delete(key);
         }
       }

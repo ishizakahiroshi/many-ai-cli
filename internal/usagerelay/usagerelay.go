@@ -96,8 +96,9 @@ func Run(args []string) error {
 // （CLI ターミナルの statusLine 表示に使われる。短く 1 行で返すこと）
 
 type claudeStatusLineInput struct {
-	Version string `json:"version"`
-	Model   struct {
+	RateLimitsFieldPresent bool   `json:"-"`
+	Version                string `json:"version"`
+	Model                  struct {
 		DisplayName string `json:"display_name"`
 	} `json:"model"`
 	OutputStyle struct {
@@ -146,16 +147,73 @@ type claudeStatusLineInput struct {
 		Enabled bool `json:"enabled"`
 	} `json:"thinking"`
 	// RateLimits: Claude.ai Pro/Max のみ・初回 API 応答後に出現。各窓は独立に欠落しうる。
-	RateLimits struct {
-		FiveHour struct {
-			UsedPercentage float64 `json:"used_percentage"`
-			ResetsAt       int64   `json:"resets_at"`
-		} `json:"five_hour"`
-		SevenDay struct {
-			UsedPercentage float64 `json:"used_percentage"`
-			ResetsAt       int64   `json:"resets_at"`
-		} `json:"seven_day"`
-	} `json:"rate_limits"`
+	RateLimits *claudeRateLimits `json:"rate_limits"`
+}
+
+type claudeRateLimitWindow struct {
+	UsedPercentage float64 `json:"used_percentage"`
+	ResetsAt       int64   `json:"resets_at"`
+}
+
+// claudeRateLimits keeps field presence separate from the decoded value. A
+// pointer window distinguishes an actual 0% value from a missing or null
+// window; the field-present flags also retain the difference between a
+// missing key and an explicitly null key for the relay contract.
+type claudeRateLimits struct {
+	FiveHour             *claudeRateLimitWindow `json:"five_hour"`
+	SevenDay             *claudeRateLimitWindow `json:"seven_day"`
+	FiveHourFieldPresent bool                   `json:"-"`
+	SevenDayFieldPresent bool                   `json:"-"`
+}
+
+func (r *claudeRateLimits) UnmarshalJSON(data []byte) error {
+	type plain claudeRateLimits
+	var decoded plain
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	*r = claudeRateLimits(decoded)
+	_, r.FiveHourFieldPresent = fields["five_hour"]
+	_, r.SevenDayFieldPresent = fields["seven_day"]
+	return nil
+}
+
+func (i *claudeStatusLineInput) UnmarshalJSON(data []byte) error {
+	type plain claudeStatusLineInput
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	rateLimitsRaw, present := fields["rate_limits"]
+	delete(fields, "rate_limits")
+	base, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	var decoded plain
+	if err := json.Unmarshal(base, &decoded); err != nil {
+		return err
+	}
+	*i = claudeStatusLineInput(decoded)
+	i.RateLimitsFieldPresent = present
+	if !present || len(rateLimitsRaw) == 0 || string(rateLimitsRaw) == "null" {
+		i.RateLimits = nil
+		return nil
+	}
+	var limits claudeRateLimits
+	if err := json.Unmarshal(rateLimitsRaw, &limits); err != nil {
+		// rate_limits is auxiliary metadata. Keep normal usage flowing when it
+		// is malformed, and do not erase the last good limits as a side effect.
+		i.RateLimits = nil
+		i.RateLimitsFieldPresent = false
+		return nil
+	}
+	i.RateLimits = &limits
+	return nil
 }
 
 func runClaude(hubURL, token string, sessionID int, stdin io.Reader, stdout io.Writer, logger *slog.Logger) error {
@@ -187,6 +245,7 @@ func runClaude(hubURL, token string, sessionID int, stdin io.Reader, stdout io.W
 
 	// Hub へ数値メタのみを POST する。
 	if hubURL != "" && token != "" && sessionID > 0 {
+		observedAt := time.Now().UTC().Format(time.RFC3339)
 		payload := hubUsagePayload{
 			Provider:      "claude",
 			SessionID:     sessionID,
@@ -201,25 +260,35 @@ func runClaude(hubURL, token string, sessionID int, stdin io.Reader, stdout io.W
 			CtxUsedPct:    input.ContextWindow.UsedPercentage,
 			StartedAt:     time.Now().Format(time.RFC3339),
 			// statusbar 追加メタ（Claude statusLine ネイティブ算出値）。
-			RateLimit5hPct:   input.RateLimits.FiveHour.UsedPercentage,
-			RateLimit5hReset: input.RateLimits.FiveHour.ResetsAt,
-			RateLimit7dPct:   input.RateLimits.SevenDay.UsedPercentage,
-			RateLimit7dReset: input.RateLimits.SevenDay.ResetsAt,
-			LinesAdded:       input.Cost.TotalLinesAdded,
-			LinesRemoved:     input.Cost.TotalLinesRemoved,
-			EffortLevel:      input.Effort.Level,
-			Thinking:         input.Thinking.Enabled,
-			Exceeds200k:      input.Exceeds200kTokens,
-			DurationMs:       int64(input.Cost.TotalDurationMs),
-			APIDurationMs:    int64(input.Cost.TotalAPIDurationMs),
-			Version:          input.Version,
-			OutputStyle:      input.OutputStyle.Name,
-			VimMode:          input.Vim.Mode,
-			AgentName:        input.Agent.Name,
-			RepoHost:         input.Workspace.Repo.Host,
-			RepoOwner:        input.Workspace.Repo.Owner,
-			RepoName:         input.Workspace.Repo.Name,
-			RemainingPct:     input.ContextWindow.RemainingPercentage,
+			UsageObservedAt:            observedAt,
+			ClaudeRateLimitsPresent:    input.RateLimitsFieldPresent,
+			ClaudeFiveHourFieldPresent: input.RateLimits != nil && input.RateLimits.FiveHourFieldPresent,
+			ClaudeSevenDayFieldPresent: input.RateLimits != nil && input.RateLimits.SevenDayFieldPresent,
+			LinesAdded:                 input.Cost.TotalLinesAdded,
+			LinesRemoved:               input.Cost.TotalLinesRemoved,
+			EffortLevel:                input.Effort.Level,
+			Thinking:                   input.Thinking.Enabled,
+			Exceeds200k:                input.Exceeds200kTokens,
+			DurationMs:                 int64(input.Cost.TotalDurationMs),
+			APIDurationMs:              int64(input.Cost.TotalAPIDurationMs),
+			Version:                    input.Version,
+			OutputStyle:                input.OutputStyle.Name,
+			VimMode:                    input.Vim.Mode,
+			AgentName:                  input.Agent.Name,
+			RepoHost:                   input.Workspace.Repo.Host,
+			RepoOwner:                  input.Workspace.Repo.Owner,
+			RepoName:                   input.Workspace.Repo.Name,
+			RemainingPct:               input.ContextWindow.RemainingPercentage,
+		}
+		if input.RateLimits != nil && input.RateLimits.FiveHour != nil {
+			payload.ClaudeFiveHourPresent = true
+			payload.RateLimit5hPct = input.RateLimits.FiveHour.UsedPercentage
+			payload.RateLimit5hReset = input.RateLimits.FiveHour.ResetsAt
+		}
+		if input.RateLimits != nil && input.RateLimits.SevenDay != nil {
+			payload.ClaudeSevenDayPresent = true
+			payload.RateLimit7dPct = input.RateLimits.SevenDay.UsedPercentage
+			payload.RateLimit7dReset = input.RateLimits.SevenDay.ResetsAt
 		}
 		if err := postUsage(hubURL, token, payload, logger); err != nil {
 			logger.Warn("usage-relay(claude): post failed", "err", err)
@@ -247,7 +316,7 @@ func formatTokens(n int) string {
 //
 // Codex Stop フックは stdin に次の JSON を渡す（要実機確認・複数フォーマットにフォールバック）:
 //
-//	{ "transcript_path": "/home/user/.codex/sessions/xxx/rollout.jsonl" }
+//	{ "transcript_path": "~/.codex/sessions/xxx/rollout.jsonl" }
 //
 // relay は rollout JSONL の末尾から token_count イベントを走査し、
 // input/output/cached/total の数値のみを抽出する。
@@ -314,6 +383,7 @@ func firstNonZero(vals ...int) int {
 // 実機確認前は複数のキー名にフォールバックする。
 // 要実機確認: フォーマットが確定次第このコメントと不要なフォールバックを削除する。
 type tokenCountEvent struct {
+	Timestamp string `json:"timestamp"`
 	// フォーマット A: フラットな数値フィールド
 	tokenUsageNumbers
 
@@ -336,7 +406,7 @@ type tokenCountEvent struct {
 			ModelContextWindow int               `json:"model_context_window"`
 		} `json:"info"`
 		ModelContextWindow int             `json:"model_context_window"`
-		RateLimits         codexRateLimits `json:"rate_limits"`
+		RateLimits         json.RawMessage `json:"rate_limits"`
 	} `json:"payload"`
 
 	ModelContextWindow int `json:"model_context_window"`
@@ -350,20 +420,22 @@ type codexRateLimitWindow struct {
 	ResetsAt      int64   `json:"resets_at"`
 }
 
+type codexCredits struct {
+	HasCredits bool   `json:"has_credits"`
+	Unlimited  bool   `json:"unlimited"`
+	Balance    string `json:"balance"`
+}
+
 type codexRateLimits struct {
 	Primary   *codexRateLimitWindow `json:"primary"`
 	Secondary *codexRateLimitWindow `json:"secondary"`
-	Credits   struct {
-		HasCredits bool   `json:"has_credits"`
-		Unlimited  bool   `json:"unlimited"`
-		Balance    string `json:"balance"`
-	} `json:"credits"`
-	PlanType string `json:"plan_type"`
+	Credits   *codexCredits         `json:"credits"`
+	PlanType  string                `json:"plan_type"`
 }
 
 func (r codexRateLimits) present() bool {
 	return r.Primary != nil || r.Secondary != nil || r.PlanType != "" ||
-		r.Credits.HasCredits || r.Credits.Unlimited || r.Credits.Balance != ""
+		r.Credits != nil
 }
 
 // resolve は複数フォーマットを試して (tokIn, tokOut, tokCache, tokTotal, ctxWindow) を返す。
@@ -417,9 +489,14 @@ func scanLastTokenCount(path string) (in, out, cache, total, ctxWindow, reasonin
 }
 
 func scanLastTokenCountWithRateLimits(path string) (in, out, cache, total, ctxWindow, reasoningOut int, rateLimits codexRateLimits, err error) {
+	in, out, cache, total, ctxWindow, reasoningOut, rateLimits, _, _, err = scanLastTokenCountWithRateLimitsAt(path)
+	return in, out, cache, total, ctxWindow, reasoningOut, rateLimits, err
+}
+
+func scanLastTokenCountWithRateLimitsAt(path string) (in, out, cache, total, ctxWindow, reasoningOut int, rateLimits codexRateLimits, rateLimitsPresent bool, observedAt time.Time, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return 0, 0, 0, 0, 0, 0, codexRateLimits{}, fmt.Errorf("open rollout: %w", err)
+		return 0, 0, 0, 0, 0, 0, codexRateLimits{}, false, time.Time{}, fmt.Errorf("open rollout: %w", err)
 	}
 	defer f.Close()
 
@@ -439,8 +516,23 @@ func scanLastTokenCountWithRateLimits(path string) (in, out, cache, total, ctxWi
 		if err := json.Unmarshal(line, &ev); err != nil {
 			return
 		}
-		if ev.Payload.Type == "token_count" && ev.Payload.RateLimits.present() {
-			rateLimits = ev.Payload.RateLimits
+		if ev.Payload.Type == "token_count" {
+			// The newest token_count record owns the current rate-limit state.
+			// An omitted/null object therefore clears the prior record, while a
+			// malformed auxiliary object is ignored without losing token data.
+			rateLimits = codexRateLimits{}
+			rateLimitsPresent = false
+			if len(ev.Payload.RateLimits) > 0 {
+				if string(ev.Payload.RateLimits) == "null" {
+					rateLimitsPresent = true
+				} else if json.Unmarshal(ev.Payload.RateLimits, &rateLimits) == nil {
+					rateLimitsPresent = true
+				}
+			}
+			observedAt = time.Time{}
+			if ev.Timestamp != "" {
+				observedAt, _ = time.Parse(time.RFC3339Nano, ev.Timestamp)
+			}
 		}
 		i, o, c, t, ctx, r := ev.resolve()
 		if i > 0 || o > 0 || t > 0 {
@@ -480,9 +572,9 @@ func scanLastTokenCountWithRateLimits(path string) (in, out, cache, total, ctxWi
 			}
 			break
 		}
-		return 0, 0, 0, 0, 0, 0, codexRateLimits{}, fmt.Errorf("read rollout: %w", readErr)
+		return 0, 0, 0, 0, 0, 0, codexRateLimits{}, false, time.Time{}, fmt.Errorf("read rollout: %w", readErr)
 	}
-	return lastIn, lastOut, lastCache, lastTotal, lastCtxWindow, lastReasoningOut, rateLimits, nil
+	return lastIn, lastOut, lastCache, lastTotal, lastCtxWindow, lastReasoningOut, rateLimits, rateLimitsPresent, observedAt, nil
 }
 
 // isTokenCountLine は行が token_count イベントかどうかを JSON 全パース前に
@@ -510,7 +602,7 @@ func runCodex(hubURL, token string, sessionID int, stdin io.Reader, logger *slog
 	}
 
 	// rollout JSONL から token_count の数値のみを抽出。本文行は読み捨て。
-	tokIn, tokOut, tokCache, tokTotal, ctxWindow, reasoningOut, rateLimits, err := scanLastTokenCountWithRateLimits(input.TranscriptPath)
+	tokIn, tokOut, tokCache, tokTotal, ctxWindow, reasoningOut, rateLimits, rateLimitsPresent, observedAt, err := scanLastTokenCountWithRateLimitsAt(input.TranscriptPath)
 	if err != nil {
 		logger.Warn("usage-relay(codex): rollout scan failed", "path", input.TranscriptPath, "err", err)
 		return nil
@@ -530,22 +622,30 @@ func runCodex(hubURL, token string, sessionID int, stdin io.Reader, logger *slog
 			StartedAt:              time.Now().Format(time.RFC3339),
 			ReasoningOut:           reasoningOut,
 			TranscriptPath:         input.TranscriptPath,
-			CodexRateLimitsPresent: rateLimits.present(),
+			CodexRateLimitsPresent: rateLimitsPresent,
 		}
 		if rateLimits.Primary != nil {
+			payload.CodexPrimaryPresent = true
 			payload.CodexPrimaryUsedPct = rateLimits.Primary.UsedPercent
 			payload.CodexPrimaryWindowMinutes = rateLimits.Primary.WindowMinutes
 			payload.CodexPrimaryReset = rateLimits.Primary.ResetsAt
 		}
 		if rateLimits.Secondary != nil {
+			payload.CodexSecondaryPresent = true
 			payload.CodexSecondaryUsedPct = rateLimits.Secondary.UsedPercent
 			payload.CodexSecondaryWindowMinutes = rateLimits.Secondary.WindowMinutes
 			payload.CodexSecondaryReset = rateLimits.Secondary.ResetsAt
 		}
-		if rateLimits.Credits.HasCredits && !rateLimits.Credits.Unlimited {
+		if rateLimits.Credits != nil {
+			payload.CodexCreditsPresent = true
+			payload.CodexHasCredits = rateLimits.Credits.HasCredits
+			payload.CodexCreditsUnlimited = rateLimits.Credits.Unlimited
 			payload.CodexCreditsBalance = rateLimits.Credits.Balance
 		}
 		payload.CodexPlanType = rateLimits.PlanType
+		if !observedAt.IsZero() {
+			payload.UsageObservedAt = observedAt.UTC().Format(time.RFC3339Nano)
+		}
 		if err := postUsage(hubURL, token, payload, logger); err != nil {
 			logger.Warn("usage-relay(codex): post failed", "err", err)
 		}
@@ -577,38 +677,49 @@ type hubUsagePayload struct {
 	CtxUsedPct float64 `json:"ctx_used_pct,omitempty"`
 	StartedAt  string  `json:"started_at,omitempty"`
 	// statusbar 追加メタ（Claude statusLine ネイティブ算出値。Claude のみ）。
-	RateLimit5hPct   float64 `json:"rl_5h_pct,omitempty"`
-	RateLimit5hReset int64   `json:"rl_5h_reset,omitempty"`
-	RateLimit7dPct   float64 `json:"rl_7d_pct,omitempty"`
-	RateLimit7dReset int64   `json:"rl_7d_reset,omitempty"`
-	LinesAdded       int     `json:"lines_added,omitempty"`
-	LinesRemoved     int     `json:"lines_removed,omitempty"`
-	EffortLevel      string  `json:"effort_level,omitempty"`
-	Thinking         bool    `json:"thinking,omitempty"`
-	Exceeds200k      bool    `json:"exceeds_200k,omitempty"`
-	DurationMs       int64   `json:"duration_ms,omitempty"`
-	APIDurationMs    int64   `json:"api_duration_ms,omitempty"`
-	Version          string  `json:"version,omitempty"`
-	OutputStyle      string  `json:"output_style,omitempty"`
-	VimMode          string  `json:"vim_mode,omitempty"`
-	AgentName        string  `json:"agent_name,omitempty"`
-	RepoHost         string  `json:"repo_host,omitempty"`
-	RepoOwner        string  `json:"repo_owner,omitempty"`
-	RepoName         string  `json:"repo_name,omitempty"`
-	RemainingPct     float64 `json:"remaining_pct,omitempty"`
-	ReasoningOut     int     `json:"reasoning_output_tokens,omitempty"`
-	TranscriptPath   string  `json:"transcript_path,omitempty"`
+	RateLimit5hPct             float64 `json:"rl_5h_pct,omitempty"`
+	RateLimit5hReset           int64   `json:"rl_5h_reset,omitempty"`
+	RateLimit7dPct             float64 `json:"rl_7d_pct,omitempty"`
+	RateLimit7dReset           int64   `json:"rl_7d_reset,omitempty"`
+	ClaudeRateLimitsPresent    bool    `json:"claude_rate_limits_present,omitempty"`
+	ClaudeFiveHourFieldPresent bool    `json:"claude_5h_field_present,omitempty"`
+	ClaudeFiveHourPresent      bool    `json:"claude_5h_present,omitempty"`
+	ClaudeSevenDayFieldPresent bool    `json:"claude_7d_field_present,omitempty"`
+	ClaudeSevenDayPresent      bool    `json:"claude_7d_present,omitempty"`
+	LinesAdded                 int     `json:"lines_added,omitempty"`
+	LinesRemoved               int     `json:"lines_removed,omitempty"`
+	EffortLevel                string  `json:"effort_level,omitempty"`
+	Thinking                   bool    `json:"thinking,omitempty"`
+	Exceeds200k                bool    `json:"exceeds_200k,omitempty"`
+	DurationMs                 int64   `json:"duration_ms,omitempty"`
+	APIDurationMs              int64   `json:"api_duration_ms,omitempty"`
+	Version                    string  `json:"version,omitempty"`
+	OutputStyle                string  `json:"output_style,omitempty"`
+	VimMode                    string  `json:"vim_mode,omitempty"`
+	AgentName                  string  `json:"agent_name,omitempty"`
+	RepoHost                   string  `json:"repo_host,omitempty"`
+	RepoOwner                  string  `json:"repo_owner,omitempty"`
+	RepoName                   string  `json:"repo_name,omitempty"`
+	RemainingPct               float64 `json:"remaining_pct,omitempty"`
+	ReasoningOut               int     `json:"reasoning_output_tokens,omitempty"`
+	TranscriptPath             string  `json:"transcript_path,omitempty"`
 	// Codex rate_limits are provider metadata from the same token_count event.
 	// Presence is separate from the numeric values because 0% is valid.
 	CodexRateLimitsPresent      bool    `json:"codex_rate_limits_present,omitempty"`
+	CodexPrimaryPresent         bool    `json:"codex_primary_present,omitempty"`
 	CodexPrimaryUsedPct         float64 `json:"codex_primary_used_pct,omitempty"`
 	CodexPrimaryWindowMinutes   int     `json:"codex_primary_window_minutes,omitempty"`
 	CodexPrimaryReset           int64   `json:"codex_primary_reset,omitempty"`
 	CodexSecondaryUsedPct       float64 `json:"codex_secondary_used_pct,omitempty"`
+	CodexSecondaryPresent       bool    `json:"codex_secondary_present,omitempty"`
 	CodexSecondaryWindowMinutes int     `json:"codex_secondary_window_minutes,omitempty"`
 	CodexSecondaryReset         int64   `json:"codex_secondary_reset,omitempty"`
+	CodexCreditsPresent         bool    `json:"codex_credits_present,omitempty"`
+	CodexHasCredits             bool    `json:"codex_has_credits,omitempty"`
+	CodexCreditsUnlimited       bool    `json:"codex_credits_unlimited,omitempty"`
 	CodexCreditsBalance         string  `json:"codex_credits_balance,omitempty"`
 	CodexPlanType               string  `json:"codex_plan_type,omitempty"`
+	UsageObservedAt             string  `json:"usage_observed_at,omitempty"`
 }
 
 // validateHubURL は親から渡された Hub URL を loopback http/https に絞る。

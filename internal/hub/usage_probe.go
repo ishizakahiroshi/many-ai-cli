@@ -397,7 +397,9 @@ func protoMessageSessionDismiss(sessionID int) proto.Message {
 }
 
 func hasClaudeRateLimit(stat *usageStat) bool {
-	return stat != nil && (stat.RateLimit5hReset > 0 || stat.RateLimit7dReset > 0)
+	return stat != nil && (stat.ClaudeFiveHourPresent || stat.ClaudeSevenDayPresent ||
+		stat.RateLimit5hPct != 0 || stat.RateLimit5hReset != 0 ||
+		stat.RateLimit7dPct != 0 || stat.RateLimit7dReset != 0)
 }
 
 func usageProbeConfirmDialog(screen string) bool {

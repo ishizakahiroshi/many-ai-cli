@@ -37,6 +37,17 @@ func stripControlForLog(s string, maxRunes int) string {
 	return string(out)
 }
 
+func parseUsageObservedAt(raw string) time.Time {
+	if strings.TrimSpace(raw) == "" {
+		return time.Time{}
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil {
+		return time.Time{}
+	}
+	return parsed
+}
+
 // usageStat はセッション単位のトークン / コスト累積値。
 // メモリのみ保持し、ディスクへは書き込まない。
 type usageStat struct {
@@ -54,20 +65,30 @@ type usageStat struct {
 	// CtxUsedPct: Claude Code statusLine 算出済みの context 使用率%（0=未取得。Claude のみ）。
 	CtxUsedPct float64
 	// statusbar 追加メタ（Claude statusLine ネイティブ算出値。Claude のみ・0/未送=未取得）。
-	RateLimit5hPct   float64
-	RateLimit5hReset int64
-	RateLimit7dPct   float64
-	RateLimit7dReset int64
+	RateLimit5hPct             float64
+	RateLimit5hReset           int64
+	RateLimit7dPct             float64
+	RateLimit7dReset           int64
+	ClaudeRateLimitsPresent    bool
+	ClaudeFiveHourFieldPresent bool
+	ClaudeFiveHourPresent      bool
+	ClaudeSevenDayFieldPresent bool
+	ClaudeSevenDayPresent      bool
 	// Codex rate_limits are separate from Claude's 5h/7d fields because their
 	// window semantics and source are different. Presence keeps 0% distinct
 	// from an omitted record.
 	CodexRateLimitsPresent      bool
+	CodexPrimaryPresent         bool
 	CodexPrimaryUsedPct         float64
 	CodexPrimaryWindowMinutes   int
 	CodexPrimaryReset           int64
 	CodexSecondaryUsedPct       float64
+	CodexSecondaryPresent       bool
 	CodexSecondaryWindowMinutes int
 	CodexSecondaryReset         int64
+	CodexCreditsPresent         bool
+	CodexHasCredits             bool
+	CodexCreditsUnlimited       bool
 	CodexCreditsBalance         string
 	CodexPlanType               string
 	LinesAdded                  int
@@ -87,9 +108,10 @@ type usageStat struct {
 	RemainingPct                float64
 	ReasoningOut                int
 	// UsageModel: relay が報告したモデル ID / display_name。
-	UsageModel string
-	StartedAt  string
-	ReceivedAt time.Time
+	UsageModel      string
+	StartedAt       string
+	UsageObservedAt string
+	ReceivedAt      time.Time
 }
 
 // usageStatsMu は usageStats map を保護する。sessionsMu とは独立したロック。
@@ -242,15 +264,26 @@ type sessionUsageRequest struct {
 	RateLimit5hReset            int64   `json:"rl_5h_reset"`
 	RateLimit7dPct              float64 `json:"rl_7d_pct"`
 	RateLimit7dReset            int64   `json:"rl_7d_reset"`
+	ClaudeRateLimitsPresent     bool    `json:"claude_rate_limits_present"`
+	ClaudeFiveHourFieldPresent  bool    `json:"claude_5h_field_present"`
+	ClaudeFiveHourPresent       bool    `json:"claude_5h_present"`
+	ClaudeSevenDayFieldPresent  bool    `json:"claude_7d_field_present"`
+	ClaudeSevenDayPresent       bool    `json:"claude_7d_present"`
 	CodexRateLimitsPresent      bool    `json:"codex_rate_limits_present"`
+	CodexPrimaryPresent         bool    `json:"codex_primary_present"`
 	CodexPrimaryUsedPct         float64 `json:"codex_primary_used_pct"`
 	CodexPrimaryWindowMinutes   int     `json:"codex_primary_window_minutes"`
 	CodexPrimaryReset           int64   `json:"codex_primary_reset"`
 	CodexSecondaryUsedPct       float64 `json:"codex_secondary_used_pct"`
+	CodexSecondaryPresent       bool    `json:"codex_secondary_present"`
 	CodexSecondaryWindowMinutes int     `json:"codex_secondary_window_minutes"`
 	CodexSecondaryReset         int64   `json:"codex_secondary_reset"`
+	CodexCreditsPresent         bool    `json:"codex_credits_present"`
+	CodexHasCredits             bool    `json:"codex_has_credits"`
+	CodexCreditsUnlimited       bool    `json:"codex_credits_unlimited"`
 	CodexCreditsBalance         string  `json:"codex_credits_balance"`
 	CodexPlanType               string  `json:"codex_plan_type"`
+	UsageObservedAt             string  `json:"usage_observed_at"`
 	LinesAdded                  int     `json:"lines_added"`
 	LinesRemoved                int     `json:"lines_removed"`
 	EffortLevel                 string  `json:"effort_level"`
@@ -422,6 +455,13 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	receivedAt := time.Now()
+	providerObservedAt := parseUsageObservedAt(req.UsageObservedAt)
+	recordAt := receivedAt
+	observedAt := ""
+	if !providerObservedAt.IsZero() {
+		recordAt = providerObservedAt
+		observedAt = providerObservedAt.UTC().Format(time.RFC3339Nano)
+	}
 	stat := &usageStat{
 		CostUSD:                     costUSD,
 		CostKnown:                   costKnown,
@@ -435,13 +475,23 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 		RateLimit5hReset:            rl5hReset,
 		RateLimit7dPct:              rl7dPct,
 		RateLimit7dReset:            rl7dReset,
+		ClaudeRateLimitsPresent:     req.ClaudeRateLimitsPresent,
+		ClaudeFiveHourFieldPresent:  req.ClaudeFiveHourFieldPresent,
+		ClaudeFiveHourPresent:       req.ClaudeFiveHourPresent,
+		ClaudeSevenDayFieldPresent:  req.ClaudeSevenDayFieldPresent,
+		ClaudeSevenDayPresent:       req.ClaudeSevenDayPresent,
 		CodexRateLimitsPresent:      req.CodexRateLimitsPresent,
+		CodexPrimaryPresent:         req.CodexPrimaryPresent,
 		CodexPrimaryUsedPct:         clampPct(req.CodexPrimaryUsedPct),
 		CodexPrimaryWindowMinutes:   clampWindowMinutes(req.CodexPrimaryWindowMinutes),
 		CodexPrimaryReset:           clampEpoch(req.CodexPrimaryReset),
 		CodexSecondaryUsedPct:       clampPct(req.CodexSecondaryUsedPct),
+		CodexSecondaryPresent:       req.CodexSecondaryPresent,
 		CodexSecondaryWindowMinutes: clampWindowMinutes(req.CodexSecondaryWindowMinutes),
 		CodexSecondaryReset:         clampEpoch(req.CodexSecondaryReset),
+		CodexCreditsPresent:         req.CodexCreditsPresent,
+		CodexHasCredits:             req.CodexHasCredits,
+		CodexCreditsUnlimited:       req.CodexCreditsUnlimited,
 		CodexCreditsBalance:         stripControlForLog(req.CodexCreditsBalance, 64),
 		CodexPlanType:               stripControlForLog(req.CodexPlanType, 32),
 		LinesAdded:                  linesAdded,
@@ -462,13 +512,14 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 		ReasoningOut:                reasoningOut,
 		UsageModel:                  usageModel,
 		StartedAt:                   req.StartedAt,
+		UsageObservedAt:             observedAt,
 		ReceivedAt:                  receivedAt,
 	}
 
 	usageStatsMu.Lock()
 	usageStats[req.SessionID] = stat
 	usageStatsMu.Unlock()
-	s.recordSessionSubscriptionUsage(req.SessionID, stat, receivedAt)
+	s.recordSessionSubscriptionUsage(req.SessionID, stat, recordAt)
 
 	s.logger.Info("usage_stat received",
 		slog.Int("session_id", req.SessionID),
@@ -499,15 +550,26 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 		RateLimit5hReset:            rl5hReset,
 		RateLimit7dPct:              rl7dPct,
 		RateLimit7dReset:            rl7dReset,
+		ClaudeRateLimitsPresent:     stat.ClaudeRateLimitsPresent,
+		ClaudeFiveHourFieldPresent:  stat.ClaudeFiveHourFieldPresent,
+		ClaudeFiveHourPresent:       stat.ClaudeFiveHourPresent,
+		ClaudeSevenDayFieldPresent:  stat.ClaudeSevenDayFieldPresent,
+		ClaudeSevenDayPresent:       stat.ClaudeSevenDayPresent,
 		CodexRateLimitsPresent:      stat.CodexRateLimitsPresent,
+		CodexPrimaryPresent:         stat.CodexPrimaryPresent,
 		CodexPrimaryUsedPct:         stat.CodexPrimaryUsedPct,
 		CodexPrimaryWindowMinutes:   stat.CodexPrimaryWindowMinutes,
 		CodexPrimaryReset:           stat.CodexPrimaryReset,
 		CodexSecondaryUsedPct:       stat.CodexSecondaryUsedPct,
+		CodexSecondaryPresent:       stat.CodexSecondaryPresent,
 		CodexSecondaryWindowMinutes: stat.CodexSecondaryWindowMinutes,
 		CodexSecondaryReset:         stat.CodexSecondaryReset,
+		CodexCreditsPresent:         stat.CodexCreditsPresent,
+		CodexHasCredits:             stat.CodexHasCredits,
+		CodexCreditsUnlimited:       stat.CodexCreditsUnlimited,
 		CodexCreditsBalance:         stat.CodexCreditsBalance,
 		CodexPlanType:               stat.CodexPlanType,
+		UsageObservedAt:             stat.UsageObservedAt,
 		LinesAdded:                  linesAdded,
 		LinesRemoved:                linesRemoved,
 		EffortLevel:                 effortLevel,

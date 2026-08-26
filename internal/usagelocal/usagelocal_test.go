@@ -14,7 +14,7 @@ func TestReadCodexProfileReadsLatestRateLimits(t *testing.T) {
 	}
 	path := filepath.Join(root, "rollout-2026-08-19.jsonl")
 	body := `{"type":"response_item","payload":{"type":"message","content":"must not be surfaced"}}
-{"type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":89,"window_minutes":10080,"resets_at":1787196957},"secondary":null,"credits":{"has_credits":false,"unlimited":false,"balance":"0"},"plan_type":"plus"}}}
+ {"timestamp":"2026-08-26T12:34:56.123Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":89,"window_minutes":10080,"resets_at":1787196957},"secondary":null,"credits":{"has_credits":false,"unlimited":false,"balance":"0"},"plan_type":"plus"}}}
 `
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
@@ -25,6 +25,108 @@ func TestReadCodexProfileReadsLatestRateLimits(t *testing.T) {
 	}
 	if usage.Secondary != nil || usage.CreditsBalance != "" {
 		t.Fatalf("null/empty credits were interpreted as values: %#v", usage)
+	}
+	if !usage.RateLimitsPresent || usage.ObservedAt.IsZero() {
+		t.Fatalf("presence/timestamp lost: %#v", usage)
+	}
+}
+
+func TestReadCodexProfileDistinguishesPresenceAndCredits(t *testing.T) {
+	cases := []struct {
+		name           string
+		rateLimits     string
+		wantOK         bool
+		wantPresent    bool
+		wantPrimary    bool
+		wantUsed       float64
+		wantCredits    bool
+		wantHasCredits bool
+		wantUnlimited  bool
+		wantBalance    string
+	}{
+		{
+			name:           "zero percent is present",
+			rateLimits:     `{"primary":{"used_percent":0,"window_minutes":300,"resets_at":1787196957},"secondary":null,"credits":{"has_credits":true,"unlimited":false,"balance":"0"},"plan_type":"pro"}`,
+			wantOK:         true,
+			wantPresent:    true,
+			wantPrimary:    true,
+			wantCredits:    true,
+			wantHasCredits: true,
+			wantBalance:    "0",
+		},
+		{
+			name:        "explicit null clears",
+			rateLimits:  `null`,
+			wantOK:      true,
+			wantPresent: true,
+		},
+		{
+			name:       "missing field is not an observation",
+			rateLimits: "__missing__",
+			wantOK:     true,
+		},
+		{
+			name:        "credits absent",
+			rateLimits:  `{"primary":null}`,
+			wantOK:      true,
+			wantPresent: true,
+			wantCredits: false,
+		},
+		{
+			name:        "credits unavailable",
+			rateLimits:  `{"credits":{"has_credits":false,"unlimited":false,"balance":""}}`,
+			wantOK:      true,
+			wantPresent: true,
+			wantCredits: true,
+		},
+		{
+			name:           "credits unlimited",
+			rateLimits:     `{"credits":{"has_credits":true,"unlimited":true,"balance":""}}`,
+			wantOK:         true,
+			wantPresent:    true,
+			wantCredits:    true,
+			wantHasCredits: true,
+			wantUnlimited:  true,
+		},
+		{
+			name:       "malformed auxiliary value does not fall back",
+			rateLimits: `"not-an-object"`,
+			wantOK:     false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			profileDir := t.TempDir()
+			rolloutDir := filepath.Join(profileDir, "sessions", "2026", "08", "26")
+			if err := os.MkdirAll(rolloutDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			line := `{"timestamp":"2026-08-26T12:34:56.123Z","type":"event_msg","payload":{"type":"token_count"`
+			if tc.rateLimits != "__missing__" {
+				line += `,"rate_limits":` + tc.rateLimits
+			}
+			line += `}}` + "\n"
+			if err := os.WriteFile(filepath.Join(rolloutDir, "rollout-presence.jsonl"), []byte(line), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			usage, ok := ReadCodexProfile(profileDir)
+			if ok != tc.wantOK {
+				t.Fatalf("ok=%v want %v usage=%#v", ok, tc.wantOK, usage)
+			}
+			if !ok {
+				return
+			}
+			if usage.RateLimitsPresent != tc.wantPresent || (usage.Primary != nil) != tc.wantPrimary {
+				t.Fatalf("presence/primary = %v/%v, want %v/%v: %#v", usage.RateLimitsPresent, usage.Primary != nil, tc.wantPresent, tc.wantPrimary, usage)
+			}
+			if usage.Primary != nil && usage.Primary.UsedPercent != tc.wantUsed {
+				t.Fatalf("used_percent=%v want %v", usage.Primary.UsedPercent, tc.wantUsed)
+			}
+			if usage.Credits.Present != tc.wantCredits || usage.Credits.HasCredits != tc.wantHasCredits || usage.Credits.Unlimited != tc.wantUnlimited || usage.Credits.Balance != tc.wantBalance {
+				t.Fatalf("credits=%#v", usage.Credits)
+			}
+		})
 	}
 }
 
