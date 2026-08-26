@@ -702,6 +702,16 @@ header {
   position: absolute;
   inset: 0 -4px;
 }
+
+/* セッションカード列を右へ寄せる設定（設定 → General → セッションカードの位置）。
+   DOM は動かさず order だけ入れ替える（DOM を並べ替えると detached-grid の
+   要素隠しやモバイルドロワーの前提が崩れる）。モバイル幅ではカード列が
+   position:fixed のドロワーになり order が効かないので、デスクトップ幅にだけ効かせる。 */
+@media (min-width: 721px) {
+  body.sidebar-right #terminal-column { order: 0; }
+  body.sidebar-right #sidebar-resizer { order: 1; }
+  body.sidebar-right #session-list { order: 2; }
+}
 .no-sessions { color: var(--muted-2); font-size: 0.85rem; padding: 12px; text-align: center; }
 
 /* Responsive breakpoints:
