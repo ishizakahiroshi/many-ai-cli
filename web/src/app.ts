@@ -2512,7 +2512,9 @@ inputEl.addEventListener('blur', (e) => {
 
   function onMove(e) {
     const dx = (e.clientX || (e.touches && e.touches[0].clientX) || 0) - startX;
-    const w = Math.min(MAX, Math.max(MIN, startW + dx));
+    // カード列が右側にあるときは、右へドラッグすると幅が縮む（外側の端を掴んでいる）。
+    const dir = document.body.classList.contains('sidebar-right') ? -1 : 1;
+    const w = Math.min(MAX, Math.max(MIN, startW + dir * dx));
     sidebar.style.width = w + 'px';
     try { localStorage.setItem(STORAGE_KEY, String(w)); } catch (_) {}
     renderSessionList();
