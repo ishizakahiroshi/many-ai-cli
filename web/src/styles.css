@@ -1060,6 +1060,9 @@ header {
 .card-done-failure      { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
 .card-done-aborted      { color: var(--fg-muted); border-color: color-mix(in srgb, var(--line) 90%, transparent); }
 .card-done-needs-action { color: var(--warn-text); border-color: color-mix(in srgb, var(--warn-text) 40%, transparent); }
+/* unknown = マーカー無しでターンが終わった（Hub のフォールバック）。異常ではないので
+   警告色を使わず、成否を名乗る success 系の色にも寄せない。 */
+.card-done-unknown      { color: var(--fg-muted); border-color: color-mix(in srgb, var(--line) 70%, transparent); opacity: 0.85; }
 .card-provider-icon { flex-shrink: 0; vertical-align: middle; margin-right: 2px; }
 /* モデル名の色は下のステータスバー .tsb-model（#9ece6a）に合わせて緑系で統一。 */
 .card-model { flex-shrink: 1; font-size: 0.72rem; color: #9ece6a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; margin-left: 2px; }

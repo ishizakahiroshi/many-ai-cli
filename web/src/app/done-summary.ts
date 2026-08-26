@@ -42,6 +42,9 @@ export function doneSummaryIcon(kind: string | undefined): string {
     case 'failure': return '✗';
     case 'aborted': return '⏹';
     case 'needs_action': return '❓';
+    // unknown は Hub のフォールバック（マーカー無しでターンが終わった）。成否を
+    // 名乗れないので ✓ にも ❓ にも寄せず、続きが読めないことだけを示す記号にする。
+    case 'unknown': return '…';
     default: return '✓';
   }
 }
@@ -52,6 +55,7 @@ export function doneSummaryKindSuffix(kind: string | undefined): string {
     case 'failure': return 'failure';
     case 'aborted': return 'aborted';
     case 'needs_action': return 'needs-action';
+    case 'unknown': return 'unknown';
     default: return 'success';
   }
 }

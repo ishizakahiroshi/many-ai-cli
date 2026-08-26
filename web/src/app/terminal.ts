@@ -1512,7 +1512,7 @@ const LIVE_STATUS_ENABLED = true;
 const LIVE_STATUS_DONE_MAX_LEN = 160;
 // done-* 修飾クラスの全集合。付け外しを 1 箇所で回すために持つ
 // （個別に remove を並べると kind を増やしたときに書き忘れる）。
-const DONE_KIND_CLASSES = ['done-success', 'done-failure', 'done-aborted', 'done-needs-action'];
+const DONE_KIND_CLASSES = ['done-success', 'done-failure', 'done-aborted', 'done-needs-action', 'done-unknown'];
 const liveStatusDecoder = new TextDecoder('utf-8');
 
 // ステータスバーブロック（絶対カーソル移動 + 部分書き換え）を、セッションごとの

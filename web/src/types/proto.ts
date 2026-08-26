@@ -53,7 +53,9 @@ export type MessageType =
   | 'user_turn_started'
   | 'spawn_confirmation_requested';
 
-export type DoneSummaryKind = 'success' | 'failure' | 'aborted' | 'needs_action' | string;
+// 'unknown' は Hub の フォールバック 専用（マーカーが無いままターンが終わった）。
+// 「終わったが何が終わったか分からない」であって異常ではないので needs_action と分ける。
+export type DoneSummaryKind = 'success' | 'failure' | 'aborted' | 'needs_action' | 'unknown' | string;
 export interface DoneSummary {
   session_id: number;
   provider?: ProviderID;

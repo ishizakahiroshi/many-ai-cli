@@ -214,6 +214,8 @@
 #terminal-live-status.done-failure  { color: rgba(252, 165, 165, 0.95); border-color: rgba(239, 68, 68, 0.5); }
 #terminal-live-status.done-aborted  { color: rgba(203, 213, 225, 0.9);  border-color: rgba(100, 116, 139, 0.5); }
 #terminal-live-status.done-needs-action { color: rgba(251, 191, 36, 0.95); border-color: rgba(217, 119, 6, 0.5); }
+/* unknown = Hub のフォールバック。異常ではないので警告色を使わず、いちばん弱く出す。 */
+#terminal-live-status.done-unknown  { color: rgba(148, 163, 184, 0.85); border-color: rgba(100, 116, 139, 0.35); }
 /* hidden 属性より id セレクタが強いため、:not([hidden]) でのみ flex 化して非表示を保つ */
 #terminal-live-status:not([hidden]) {
   display: flex;
@@ -603,6 +605,7 @@
   body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-success  { color: rgba(134, 239, 172, 0.95); }
   body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-failure  { color: rgba(252, 165, 165, 0.95); }
   body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-needs-action { color: rgba(251, 191, 36, 0.95); }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-unknown  { color: rgba(148, 163, 184, 0.85); }
   body.mobile-has-session:not(.mobile-home-view) #terminal-live-status .live-spinner {
     width: 10px;
     height: 10px;
