@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { actionBarShownAt, activeSessionId, approvalCandidateDebugKey, approvalCandidateIdentity, approvalRawOptionsCache, approvalSourceCache, approvalSuppressedCache, approvalSuppressedDismissedCache, approvalVisibleCache, enqueueApprovalAutoSwitch, isAnsweredApprovalShapeAcrossEpochs, lastActionBarRender, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectSelections, removeApprovalAutoSwitchTarget, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx } from './state.js';
+import { actionBarShownAt, activeSessionId, approvalCandidateDebugKey, approvalCandidateIdentity, approvalRawOptionsCache, approvalSourceCache, approvalSuppressedCache, approvalSuppressedDismissedCache, approvalVisibleCache, enqueueApprovalAutoSwitch, isStaleHistoryRepaint, lastActionBarRender, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectSelections, removeApprovalAutoSwitchTarget, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx } from './state.js';
 import { playNotificationSound, showDesktopApprovalNotification } from './settings.js';
 import { ws } from './ws-client.js';
 import { reshowActionBar, showActionBar } from './approval.js';
@@ -86,8 +86,10 @@ import { probe } from '../debug/probe.js';
     // 落とすので、遡っている最中に届いた未回答の承認は今までどおり出る。ページ計上は
     // CLI 内部のスクロール量ではなく送った鍵数の近似で、ライブへ戻ったことを取りこぼす
     // ことがあるため、遡り中の候補を一律に落とすと新しい承認を握り潰す（F-12 の再発）。
-    const staleHistoryRepaint = isTerminalShowingHistory(id) &&
-      isAnsweredApprovalShapeAcrossEpochs(id, identity.shape);
+    // 判定式は approval-answered.ts の isStaleHistoryRepaint に集約した。受け口
+    //（handleGoApprovalDetected / handleHubApprovalMarker）が状態を触る前にも同じ
+    // 判定を通すため、同じ意味の条件を 2 種類持たない。
+    const staleHistoryRepaint = isStaleHistoryRepaint(id, identity.shape, isTerminalShowingHistory(id));
     probe('approval.data', () => ({ sessionId: id, identity, options, skipped: sameVisibleCandidate || staleHistoryRepaint }));
     if (sameVisibleCandidate || staleHistoryRepaint) {
       return;
