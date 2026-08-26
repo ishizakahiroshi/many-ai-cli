@@ -270,13 +270,24 @@ function stateActivityDecoration(s) {
     return { className: 'awaiting-input', icon: '⌨', label: `${baseLabel}: ${activityLabel}` };
   }
   if (state === 'waiting') return { className: 'awaiting-approval', icon: '⚑', label: baseLabel };
+  // running を workflow_active より先に判定する。Hub 側は
+  // internal/hub/idle_state.go で WorkflowActive = !OutputIdle && !AwaitingUser、
+  // internal/hub/session_activity.go の DisplayState() が WorkflowActive のとき
+  // "running" を返すので、running のセッションは必ず workflow_active も立っている。
+  // 逆順にすると running の緑 ● に到達できず、実行中がずっと workflow-active の
+  // グレー ◌（--muted-2）で描かれ「動いている感じがしない」表示になる。
+  if (state === 'running') return { className: '', icon: '●', label: baseLabel };
   if (s.workflow_active) {
     const activityLabel = ti18n('card_activity_workflow_active', 'Processing');
     return { className: 'workflow-active', icon: '◌', label: `${baseLabel}: ${activityLabel}` };
   }
-  if (state === 'running') return { className: '', icon: '●', label: baseLabel };
   if (state === 'error' || state === 'disconnected') return { className: '', icon: '✕', label: baseLabel };
-  return { className: '', icon: '○', label: baseLabel };
+  // standby も塗りつぶし ● にする。同じ状態を出す他の 2 箇所（サマリーチップの
+  // .chip-dot / ステータスバーの .tsb-pdot）はどちらも state によらず塗りつぶしの
+  // 丸で、色だけで区別している。ここだけ中空 ○ だと同じ状態が画面内で別の形になる。
+  // running との区別は色（--badge-running-text / --badge-standby-text）と
+  // state-pulse アニメーションの有無が担う。
+  return { className: '', icon: '●', label: baseLabel };
 }
 
 export function safeClassToken(value) {

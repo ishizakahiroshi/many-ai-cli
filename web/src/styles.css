@@ -533,11 +533,13 @@ header {
   border-radius: 99px;
   background: color-mix(in srgb, var(--line) 65%, transparent);
 }
-.usage-meter-fill { height: 100%; border-radius: inherit; background: var(--green, #22c55e); }
+.usage-meter-fill { display: block; height: 100%; border-radius: inherit; background: var(--green, #22c55e); }
 .usage-meter-line[data-usage-severity="warning"] .usage-meter-label,
 .usage-meter-line[data-usage-severity="warning"] .usage-meter-value { color: var(--warn, #f59e0b); }
+.usage-meter-line[data-usage-severity="warning"] .usage-meter-fill { background: var(--warn, #f59e0b); }
 .usage-meter-line[data-usage-severity="danger"] .usage-meter-label,
 .usage-meter-line[data-usage-severity="danger"] .usage-meter-value { color: var(--danger, #e06c75); font-weight: 700; }
+.usage-meter-line[data-usage-severity="danger"] .usage-meter-fill { background: var(--danger, #e06c75); }
 .usage-meter-value { width: 84px; flex-shrink: 0; text-align: right; color: var(--text); }
 .usage-meter-group--stale .usage-meter-fill { opacity: 0.55; }
 .usage-meter-meta { line-height: 1.35; }
