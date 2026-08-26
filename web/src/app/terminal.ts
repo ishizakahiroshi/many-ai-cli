@@ -101,17 +101,24 @@ function addSelectionToInput(text, opts: any = {}) {
 // overscroll-behavior はスクロールコンテナのチェーンしか止められず、モーダルの非スクロール領域
 // （タイトルバー・余白・背景）でのホイールは xterm が拾って背後の端末がスクロールしてしまう。
 // xterm 側でホイールを無視させることで、どの経路で来ても背後の端末が動かないようにする。
+// 対象は id ではなく共通クラス `.aac-wheel-overlay` で識別する。
+// id の allowlist に個別登録する方式は、モーダルを新設するたびに登録を忘れて同じ不具合
+// （モーダル上でホイールが効かず背後の端末が動く）を踏み続けたため 2026-08-27 に廃止した
+// （docs/local/plan_overlay-wheel-scroll-exclusion-audit.md 案B）。
+// 新しいオーバーレイを足すときは、その要素へ `aac-wheel-overlay` を付けるだけでよい。
+//
+// 付ける対象: 表示中は画面全体のホイールを端末へ渡したくない要素
+//   （inset:0 の背景マスクを持つモーダル、および従来 allowlist にあったパネル/ピッカー）。
+// 付けない対象: 端末の上に重なるだけで背景を覆わないポップオーバー
+//   （Usage ドロップダウン・コストポップオーバー・ref ドロップダウン等）。
+//   こちらは画面全体を止めると端末が操作できなくなるので、target ベースの
+//   `data-wheel-native`（isWheelTargetExcluded）で自分の上のホイールだけを除外する。
 function isModalOverlayOpen() {
-  const ids = ['settings-panel', 'about-panel', 'model-picker-overlay', 'new-session-panel', 'slash-picker', 'expand-capture-popup', 'tsb-sent-modal', 'workflow-modal'];
-  for (const id of ids) {
-    const el = document.getElementById(id);
-    if (!el || el.hidden) continue;
-    if (getComputedStyle(el).display !== 'none') return true;
+  for (const el of document.querySelectorAll<HTMLElement>('.aac-wheel-overlay')) {
+    if (el.hidden) continue;
+    if (getComputedStyle(el).display === 'none') continue;
+    return true;
   }
-  // ファイルプレビューモーダル（path-links.ts）はクラスのみで id を持たないため別途検出する。
-  if (document.querySelector('.aac-file-modal-overlay')) return true;
-  // バグ報告モーダル（bug-report-modal.ts）も同様にクラスのみで id を持たない。
-  if (document.querySelector('.bug-report-overlay')) return true;
   return false;
 }
 

@@ -145,6 +145,7 @@ export function initFirstRunTour(): void {
       slideIndex = 0;
       overlay = document.createElement('div');
       overlay.id = 'first-run-tour';
+      overlay.classList.add('aac-wheel-overlay');
       overlay.addEventListener('click', (event) => { if (event.target === overlay) complete(); });
       document.body.appendChild(overlay);
       document.addEventListener('keydown', onKeydown);

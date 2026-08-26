@@ -55,7 +55,10 @@
         <span data-i18n="usage_menu_btn">Usage</span>
         <svg class="usage-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
-      <div class="usage-dropdown" id="usage-dropdown" hidden>
+      <!-- data-wheel-native: このドロップダウンは overflow:auto の自前スクロール領域を持つ。
+           付けないと terminal.ts の document レベル wheel ハンドラが背後ターミナルへ転送して
+           preventDefault するため、中身がホイールで動かなくなる（isWheelTargetExcluded 参照）。 -->
+      <div class="usage-dropdown" id="usage-dropdown" data-wheel-native hidden>
         <div class="usage-dropdown-header" data-i18n="usage_dropdown_header">AI Usage Links</div>
         <div class="usage-dropdown-section-title" data-i18n="usage_contract_group">契約の残量</div>
         <a id="usage-link-claude" data-usage-provider="claude" class="usage-dropdown-item" href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">
@@ -125,7 +128,7 @@
     </button>
   </header>
 
-  <div id="settings-panel" hidden>
+  <div id="settings-panel" class="aac-wheel-overlay" hidden>
     <div class="settings-header">
       <img src="/icon.svg" class="settings-app-icon" alt="">
       <div>
@@ -906,7 +909,7 @@
   </div>
   <!-- 🖥 Server モーダル（内蔵リモート接続）。設計は settings-panel / workflow-modal に準拠。
        一覧（接続/切断/Open）はサーバから取得して server-modal.ts が動的描画。追加フォームは静的。 -->
-  <div id="server-modal" hidden>
+  <div id="server-modal" class="aac-wheel-overlay" hidden>
     <div class="server-modal-box" role="dialog" aria-modal="true" aria-labelledby="server-modal-title">
       <div class="server-modal-header">
         <span class="server-modal-title" id="server-modal-title" data-i18n="server_modal_title">Servers / Remote Connections</span>
@@ -1026,7 +1029,7 @@
         </button>
         <button id="new-session-btn" data-i18n="new_session">+ New Session</button>
       </div>
-      <div id="new-session-panel" hidden>
+      <div id="new-session-panel" class="aac-wheel-overlay" hidden>
         <div class="new-session-form">
           <div class="spawn-provider-row">
             <select id="spawn-provider" class="spawn-select spawn-provider-native" aria-hidden="true" tabindex="-1">
@@ -1331,7 +1334,7 @@
     </div>
     <div id="input-bar-outer">
         <div id="slash-menu" hidden></div>
-        <div id="slash-picker" hidden>
+        <div id="slash-picker" class="aac-wheel-overlay" hidden>
           <div class="slash-picker-header">
             <span id="slash-picker-title" class="slash-picker-provider-name"></span>
             <span id="slash-picker-time" class="slash-picker-time"></span>
@@ -1428,7 +1431,7 @@
       </div>
     </div><!-- /#terminal-column -->
   </div>
-  <div id="about-panel" hidden>
+  <div id="about-panel" class="aac-wheel-overlay" hidden>
     <div class="about-dialog">
       <div class="about-title-bar">
         <span class="about-title" data-i18n="about_title">About this app</span>
@@ -1607,10 +1610,10 @@
       </div>
     </div>
   </div>
-  <div id="model-picker-overlay" hidden></div>
+  <div id="model-picker-overlay" class="aac-wheel-overlay" hidden></div>
 
   <!-- リモート PIN ログインモーダル（plan_hub-remote-auth.md C3 / 非 loopback 未認証時のみ表示） -->
-  <div id="pin-login-overlay" hidden>
+  <div id="pin-login-overlay" class="aac-wheel-overlay" hidden>
     <div id="pin-login-dialog">
       <div id="pin-login-title" data-i18n="pin_login_title">PIN を入力</div>
       <div id="pin-login-msg" data-i18n="pin_login_msg">このHubはリモートPINで保護されています。PINを入力してください。</div>

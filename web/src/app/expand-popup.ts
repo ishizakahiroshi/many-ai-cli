@@ -22,6 +22,7 @@ function getOrCreateExpandPopup() {
   if (popupEl) return popupEl;
   popupEl = document.createElement('div');
   popupEl.id = 'expand-capture-popup';
+  popupEl.classList.add('aac-wheel-overlay');
   popupEl.hidden = true;
   document.body.appendChild(popupEl);
 

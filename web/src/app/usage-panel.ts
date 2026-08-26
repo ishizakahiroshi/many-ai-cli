@@ -397,7 +397,7 @@ async function confirmProbe(profile: UsageProfile): Promise<boolean> {
   const name = profile.name || profile.id;
   return new Promise<boolean>((resolve) => {
     const backdrop = document.createElement('div');
-    backdrop.className = 'usage-probe-dialog-backdrop';
+    backdrop.className = 'usage-probe-dialog-backdrop aac-wheel-overlay';
     backdrop.innerHTML = `<div class="usage-probe-dialog" role="dialog" aria-modal="true" aria-labelledby="usage-probe-dialog-title">
       <h2 id="usage-probe-dialog-title">${escapeHtml(tx('usage_probe_confirm_title', 'Retrieve subscription usage'))}</h2>
       <p>${escapeHtml(tx('usage_probe_confirm_profile', 'Profile: {name}', { name }))}</p>

@@ -454,14 +454,14 @@ import { showFileActionsPopup, joinPath } from './path-links.js';
           </div>
         </div>
 
-        <div class="ref-dropdown" data-ref-dropdown>
+        <div class="ref-dropdown" data-ref-dropdown data-wheel-native>
           <div class="ref-dropdown-search">
             <input type="search" data-ref-filter placeholder="${_esc(_gt('git_view_ref_filter_placeholder', 'Search branches / tags...'))}">
           </div>
           <div class="ref-list" data-ref-list></div>
         </div>
 
-        <div class="git-commit-modal-backdrop" data-commit-modal hidden>
+        <div class="git-commit-modal-backdrop aac-wheel-overlay" data-commit-modal hidden>
           <div class="git-commit-modal" role="dialog" aria-modal="true">
             <div class="git-commit-modal-head">
               <div>

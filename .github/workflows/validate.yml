@@ -89,6 +89,13 @@ jobs:
       - name: Check version single-source wiring
         run: node scripts/check-version-sources.mjs
 
+      # 全画面オーバーレイに wheel 除外クラスを付け忘れると、そのモーダルは
+      # 「自分はスクロールせず背後の端末が動く」という壊れ方をする。原因も直し方も
+      # 毎回同じなのに 3 回踏んだ（#workflow-modal / .bug-report-overlay / #usage-dropdown）。
+      # 共通クラス化しても付け忘れる余地は残るので、忘れた瞬間にここで落とす。
+      - name: Check wheel overlay registration
+        run: node scripts/check-wheel-overlays.mjs
+
       # CLAUDE.md は全 AI セッションで全文がロードされる唯一のファイル。
       # ルールが破られるたびに本文をここへコピーするのが最短の対処に見えるため、
       # 放っておくと一方向に太る（v0.5.0 の 129 行が 5 週間で 269 行になった）。

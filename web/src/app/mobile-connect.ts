@@ -1147,7 +1147,7 @@ function toggleModal(): void {
 
 function ensureModal(): void {
   if (document.getElementById('mobile-connect-modal')) return;
-  const modal = el('div', { attrs: { id: 'mobile-connect-modal' } });
+  const modal = el('div', { class: 'aac-wheel-overlay', attrs: { id: 'mobile-connect-modal' } });
   modal.hidden = true;
 
   const box = el('div', { class: 'mc-box', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'mobile-connect-title' } });

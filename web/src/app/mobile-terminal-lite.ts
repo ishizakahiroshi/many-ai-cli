@@ -146,7 +146,7 @@ function openDetailModal(e?: Event): void {
   while (allLines.length > 0 && allLines[allLines.length - 1].trim() === '') allLines.pop();
 
   const overlay = document.createElement('div');
-  overlay.className = 'mtl-detail-overlay';
+  overlay.className = 'mtl-detail-overlay aac-wheel-overlay';
 
   const box = document.createElement('div');
   box.className = 'mtl-detail-box';
