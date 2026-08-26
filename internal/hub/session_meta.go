@@ -2,6 +2,7 @@ package hub
 
 import (
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -23,6 +24,16 @@ var sessionCardColors = map[string]struct{}{
 	"": {}, "blue": {}, "green": {}, "orange": {}, "red": {}, "purple": {},
 }
 
+const autoTitleMaxRunes = 40
+
+var (
+	autoTitleCodeFencePrefix = regexp.MustCompile("^```(?:[A-Za-z0-9_+#.-]+)?\\s*")
+	autoTitleWindowsPath     = regexp.MustCompile(`^[A-Za-z]:[\\/][^\s]+`)
+	autoTitlePOSIXPath       = regexp.MustCompile(`^/(?:[^/\s]+/)+[^/\s]*`)
+	autoTitleURL             = regexp.MustCompile(`(?i)^https?://[^\s]+`)
+	autoTitleAttachment      = regexp.MustCompile(`^@[^\s]+`)
+)
+
 func normalizeSessionMetaText(value string, maxRunes int) string {
 	value = strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {
@@ -39,6 +50,64 @@ func normalizeSessionMetaText(value string, maxRunes int) string {
 		return string(runes[:maxRunes])
 	}
 	return value
+}
+
+// autoTitleFromInput keeps the first useful part of a confirmed user request.
+// Spawned sessions often receive a path, URL, attachment reference, or code
+// fence before the actual request. Those prefixes consume the entire 40-rune
+// title budget without helping identify the work. If stripping prefixes would
+// leave no request text, retain the legacy full-prefix fallback instead.
+func autoTitleFromInput(value string) string {
+	normalized := normalizeSessionMetaText(value, 0)
+	if normalized == "" {
+		return ""
+	}
+
+	candidate := normalized
+	for {
+		candidate = strings.TrimSpace(candidate)
+		switch {
+		case autoTitleCodeFencePrefix.MatchString(candidate):
+			candidate = autoTitleCodeFencePrefix.ReplaceAllString(candidate, "")
+		case autoTitleWindowsPath.MatchString(candidate):
+			candidate = autoTitlePathRemainder(candidate, autoTitleWindowsPath)
+		case autoTitlePOSIXPath.MatchString(candidate):
+			candidate = autoTitlePathRemainder(candidate, autoTitlePOSIXPath)
+		case autoTitleURL.MatchString(candidate):
+			candidate = autoTitleURL.ReplaceAllString(candidate, "")
+		case autoTitleAttachment.MatchString(candidate):
+			candidate = autoTitleAttachment.ReplaceAllString(candidate, "")
+		default:
+			candidate = strings.TrimSpace(candidate)
+			if strings.HasSuffix(candidate, "```") {
+				candidate = strings.TrimSpace(strings.TrimSuffix(candidate, "```"))
+			}
+			if candidate == "" {
+				return normalizeSessionMetaText(normalized, autoTitleMaxRunes)
+			}
+			return normalizeSessionMetaText(candidate, autoTitleMaxRunes)
+		}
+	}
+}
+
+// autoTitlePathRemainder drops directory components but keeps the final path
+// component when there is a request after the path. Keeping the file name is
+// useful context (for example, "plan_foo.md を実装して"). A path-only input
+// returns an empty remainder so autoTitleFromInput can use its fail-safe.
+func autoTitlePathRemainder(value string, pattern *regexp.Regexp) string {
+	pathPart := pattern.FindString(value)
+	if pathPart == "" {
+		return value
+	}
+	remainder := strings.TrimSpace(value[len(pathPart):])
+	if remainder == "" {
+		return ""
+	}
+	base := pathPart[strings.LastIndexAny(pathPart, `/\\`)+1:]
+	if base == "" {
+		return remainder
+	}
+	return base + " " + remainder
 }
 
 func sessionMetaFor(ses *session) *proto.SessionMeta {

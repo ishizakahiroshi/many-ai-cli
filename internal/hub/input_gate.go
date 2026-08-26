@@ -65,7 +65,7 @@ func (s *Server) handleInput(m proto.Message) {
 				// orchestration の識別子も兼ねるため書き換えず、UI では手動
 				// label を優先して AutoTitle をフォールバックとして使う。
 				if ses.AutoTitle == "" {
-					ses.AutoTitle = normalizeSessionMetaText(maskedText, 40)
+					ses.AutoTitle = autoTitleFromInput(maskedText)
 					meta := sessionStoreMeta(ses)
 					autoTitleMeta = &meta
 				}

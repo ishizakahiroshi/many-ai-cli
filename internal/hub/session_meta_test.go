@@ -43,6 +43,48 @@ func TestSessionCardMetaPersistsAcrossReattach(t *testing.T) {
 	}
 }
 
+func TestAutoTitleFromInput(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "windows path before request",
+			input: "C:/example/repo/docs/local/plan_foo.md を実装して",
+			want:  "plan_foo.md を実装して",
+		},
+		{
+			name:  "url before request",
+			input: "https://example.com/issues/12 の再現手順を作って",
+			want:  "の再現手順を作って",
+		},
+		{
+			name:  "ordinary request is unchanged",
+			input: "承認マーカーが端末に残る件を調べて",
+			want:  "承認マーカーが端末に残る件を調べて",
+		},
+		{
+			name:  "path-only request falls back to the full path",
+			input: "C:/example/a.md",
+			want:  "C:/example/a.md",
+		},
+		{
+			name:  "attachment and code fence before request",
+			input: "```text @report.md 内容を要約して ```",
+			want:  "内容を要約して",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := autoTitleFromInput(tc.input); got != tc.want {
+				t.Fatalf("autoTitleFromInput(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestHandleSessionMetaAcceptsExplicitClears(t *testing.T) {
 	s := newTestServer()
 	s.cfg.Token = "test-token"

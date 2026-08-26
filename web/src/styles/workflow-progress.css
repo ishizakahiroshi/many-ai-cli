@@ -279,8 +279,7 @@
 .wf-completed-row { color: var(--green-text); }
 .wf-completed-other { color: var(--muted); }
 
-/* セッションカードの小型進捗。card-live-row の既存 flex 配置へ載せる。 */
-.card-workflow-progress-slot { display: inline-flex; }
+/* セッションカードの小型進捗。2 行目の状態スロットへ載せる。 */
 .card-workflow-progress {
   display: inline-flex;
   align-items: center;
