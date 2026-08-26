@@ -826,9 +826,10 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				// ネイティブ承認スキャン（上の shouldCheckApproval）と同じく、resize debounce の間は
 				// ミラーを読まない。SIGWINCH 後の再描画で必ず次チャンクが来るので取りこぼしにならない。
 				if isAIProvider(provider) && now.After(ses.vtResizeDebounceUntil) {
-					// マーカー抽出は scrollback 込み（画面高超えブロック / Grok 対応）。
+					// マーカー抽出は scrollback 込み（画面高超えブロック / Grok 対応）＋
+					// 開始マーカーが画面外へ流れた場合の再構成（approval_marker.go）。
 					// ネイティブ承認は上の TailLines（現在画面のみ）のまま — 解決済みプロンプトの再検出を避ける。
-					marker = extractApprovalMarkerBlock(ses.vt.TailLinesWithScrollback(vtTailLinesForMarker))
+					marker = extractApprovalMarkerBlockFromVT(ses.vt)
 				}
 				// 起動バナーからの初期モデル検出（--model 指定なしのセッション向け）。
 				// Model が埋まる・上限バイト超過のどちらかで打ち切る。

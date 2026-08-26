@@ -339,6 +339,10 @@ func renderCells(cells []rune) string {
 	return strings.TrimRight(sb.String(), " ")
 }
 
+// Rows は現在の画面高。TailLinesWithScrollback の戻り値のうち末尾何行が
+// 「今の画面」かを呼び元が知るために使う（scrollback との境界）。
+func (b *vtBuffer) Rows() int { return b.rows }
+
 func (b *vtBuffer) Lines() []string {
 	lines := make([]string, 0, b.rows)
 	for r := 0; r < b.rows; r++ {

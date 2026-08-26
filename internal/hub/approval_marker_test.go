@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -269,5 +270,207 @@ func TestMaybeBroadcastApprovalMarkerNoGhostAfterScreenClear(t *testing.T) {
 	}
 	if s.maybeBroadcastApprovalMarker(1, again, ses.lastOutputAt) {
 		t.Fatal("same sig after clear must be deduped (no ghost approval_marker)")
+	}
+}
+
+// writeInkFrame は Ink 風の全画面塗り直しを VT へ書き込む。
+//
+// 各行を絶対座標で置くだけで改行を使わない。画面からあふれた行は scrollback へ
+// 押し出されるのではなく上書きで消える — Claude Code が代替画面バッファでやっている
+// ことと同じで、下の openless テスト群が再現したい状態そのもの。
+func writeInkFrame(vt *vtBuffer, rows []string) {
+	var sb strings.Builder
+	sb.WriteString("\x1b[2J")
+	for i, line := range rows {
+		fmt.Fprintf(&sb, "\x1b[%d;1H", i+1)
+		sb.WriteString(line)
+	}
+	vt.Write([]byte(sb.String()))
+}
+
+// inkChrome は CLI が画面下端に固定表示する区切り線・入力欄・ステータス行。
+var inkChrome = []string{
+	"",
+	strings.Repeat("─", 40),
+	"❯",
+	strings.Repeat("─", 40),
+	"  $3.23  Opus 5 (1M context)",
+	"  ⏵⏵ bypass permissions on",
+}
+
+// TestReconstructOpenlessMarkerBlockFromInkOverflow は、画面高を超える承認ブロックで
+// 開始マーカーが画面外へ消えても承認が検出できることを検証する。
+//
+// 実測（2026-08-26 セッション #5・128x35・本文 26 行）: Ink の塗り直しでは
+// あふれた行が newLine() を通らないため vtBuffer の scrollback は 0 行のままで、
+// 開始マーカーはどこにも残らない。extractApprovalMarkerBlock は nil を返し、
+// 承認は無音で検出されず standby の完了マーカー未検出フォールバックへ落ちていた。
+func TestReconstructOpenlessMarkerBlockFromInkOverflow(t *testing.T) {
+	vt := newVTBuffer(60, 20)
+	rows := []string{
+		"  2 二つ目の観察。書き込みの後で外部 API を呼んでいます。",
+		"  失敗しても保存済みのレコードは戻されません。",
+		"",
+		"  3 三つ目の観察。判定はすべて外部側の行を起点にしています。",
+		"",
+		"  ここから先は実環境の実測が要ります。",
+		"",
+		"  Q1 read-only で確認してよいですか。",
+		"  1. [実行する] 実行する (Recommended)",
+		"  2. [検証系で] まず検証系で同じ確認をする",
+		"      N. User specifies",
+		"",
+		approvalMarkerClose,
+	}
+	writeInkFrame(vt, append(rows, inkChrome...))
+
+	if len(vt.scrollback) != 0 {
+		t.Fatalf("scrollback = %d 行, want 0 (Ink の塗り直しは押し出しではない)", len(vt.scrollback))
+	}
+	if plain := extractApprovalMarkerBlock(vt.TailLinesWithScrollback(vtTailLinesForMarker)); plain != nil {
+		t.Fatalf("素の抽出が非 nil: %q (開始マーカーは画面外のはず)", plain.Block)
+	}
+
+	marker := extractApprovalMarkerBlockFromVT(vt)
+	if marker == nil {
+		t.Fatal("extractApprovalMarkerBlockFromVT = nil, want 再構成されたブロック")
+	}
+	if marker.Sig == "" {
+		t.Fatal("sig が空")
+	}
+	if n := strings.Count(marker.Block, approvalMarkerOpen); n != 1 {
+		t.Fatalf("OPEN が %d 個, want 1: %q", n, marker.Block)
+	}
+	if reason := classifyApprovalMarkerBlock(marker.Block); reason != "" {
+		t.Fatalf("classify = %q, want ok: %q", reason, marker.Block)
+	}
+	for _, want := range []string{"Q1 read-only", "1. [実行する]", "2. [検証系で]", "N. User specifies"} {
+		if !strings.Contains(marker.Block, want) {
+			t.Fatalf("再構成ブロックに %q が無い: %q", want, marker.Block)
+		}
+	}
+}
+
+// 選択肢まで画面外へ流れた場合は、承認バーを出さずに抑止の告知へ回すこと。
+// 「1.」を欠いたまま配信すると 2 から始まる承認パネルが出て、ユーザーが意図しない
+// 番号を送ってしまう（classifyApprovalMarkerBlock の option_start が本来の歯止め）。
+func TestReconstructOpenlessMarkerBlockKeepsOptionStartGuard(t *testing.T) {
+	vt := newVTBuffer(60, 20)
+	rows := []string{
+		"  ここから先は実環境の実測が要ります。",
+		"",
+		"  2. [検証系で] まず検証系で同じ確認をする",
+		"  3. [やめる] いったん保留にする",
+		"      N. User specifies",
+		"",
+		"  確認内容は次のとおりです。",
+		"",
+		"  step1 二つのテーブルを突き合わせる",
+		"  step2 監査ログを引く",
+		approvalMarkerClose,
+	}
+	writeInkFrame(vt, append(rows, inkChrome...))
+
+	marker := extractApprovalMarkerBlockFromVT(vt)
+	if marker == nil {
+		t.Fatal("再構成されないと抑止の告知も出ない（無音になる）")
+	}
+	if reason := classifyApprovalMarkerBlock(marker.Block); reason != "option_start" {
+		t.Fatalf("classify = %q, want option_start: %q", reason, marker.Block)
+	}
+}
+
+// 終了マーカーが画面下端から離れている＝その下に別の出力が続いているときは
+// 再構成しない。前ターンの回答済みブロックの末尾が画面上部に残っている状態で、
+// 古い質問の承認バーを蘇らせないため。
+func TestReconstructOpenlessMarkerBlockIgnoresCloseFarFromBottom(t *testing.T) {
+	vt := newVTBuffer(60, 30)
+	rows := []string{
+		"  前ターンの回答の末尾",
+		"  1. はい (Recommended)",
+		"  2. いいえ",
+		"      N. User specifies",
+		"  確認内容は次のとおりです。",
+		"  step1 …",
+		"  step2 …",
+		"  step3 …",
+		approvalMarkerClose,
+	}
+	// 終了マーカーの下に新しい出力が 14 行続く（下端まで openlessCloseBottomWindow 超）。
+	for i := 0; i < 14; i++ {
+		rows = append(rows, fmt.Sprintf("  新しいターンの出力 %d", i))
+	}
+	writeInkFrame(vt, append(rows, inkChrome...))
+
+	if marker := extractApprovalMarkerBlockFromVT(vt); marker != nil {
+		t.Fatalf("extractApprovalMarkerBlockFromVT = %q, want nil (下端から離れた終了マーカー)", marker.Block)
+	}
+}
+
+// 終了マーカーより後ろに開始マーカーがあるなら、次のブロックを描き始めている。
+// 手前の古い終了マーカーで再構成しない。
+func TestReconstructOpenlessMarkerBlockIgnoresNewerOpen(t *testing.T) {
+	vt := newVTBuffer(60, 20)
+	rows := []string{
+		"  前のブロックの本文",
+		"  1. はい (Recommended)",
+		"  2. いいえ",
+		"      N. User specifies",
+		"  step1 …",
+		"  step2 …",
+		"  step3 …",
+		"  step4 …",
+		approvalMarkerClose,
+		approvalMarkerOpen,
+		"  Q1 次の質問を書き始めたところ",
+	}
+	writeInkFrame(vt, append(rows, inkChrome...))
+
+	if marker := extractApprovalMarkerBlockFromVT(vt); marker != nil {
+		t.Fatalf("extractApprovalMarkerBlockFromVT = %q, want nil (後ろに新しい OPEN)", marker.Block)
+	}
+}
+
+// 数行の断片からは再構成しない（画面が低い端末での誤検出防止）。
+func TestReconstructOpenlessMarkerBlockIgnoresShortFragment(t *testing.T) {
+	vt := newVTBuffer(60, 12)
+	rows := []string{
+		"",
+		"",
+		"",
+		"  1. はい (Recommended)",
+		"  2. いいえ",
+		approvalMarkerClose,
+	}
+	writeInkFrame(vt, append(rows, inkChrome...))
+
+	if marker := extractApprovalMarkerBlockFromVT(vt); marker != nil {
+		t.Fatalf("extractApprovalMarkerBlockFromVT = %q, want nil (本文が短すぎる)", marker.Block)
+	}
+}
+
+// 開始マーカーが画面に残っている通常のブロックでは、再構成へ落ちずに
+// これまでどおり実ブロックがそのまま返ること。
+func TestExtractApprovalMarkerBlockFromVTPrefersRealOpen(t *testing.T) {
+	vt := newVTBuffer(60, 20)
+	rows := []string{
+		approvalMarkerOpen,
+		"  Q1 進めますか?",
+		"  1. はい (Recommended)",
+		"  2. いいえ",
+		"      N. User specifies",
+		approvalMarkerClose,
+	}
+	writeInkFrame(vt, append(rows, inkChrome...))
+
+	marker := extractApprovalMarkerBlockFromVT(vt)
+	if marker == nil {
+		t.Fatal("extractApprovalMarkerBlockFromVT = nil")
+	}
+	if !strings.HasPrefix(marker.Block, approvalMarkerOpen+"\n  Q1 進めますか?") {
+		t.Fatalf("実ブロックがそのまま返っていない: %q", marker.Block)
+	}
+	if reason := classifyApprovalMarkerBlock(marker.Block); reason != "" {
+		t.Fatalf("classify = %q, want ok", reason)
 	}
 }
