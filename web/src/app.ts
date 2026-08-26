@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from './i18n.js';
 import { cleanCopiedText, showToast, token } from './app/util.js';
-import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_AUTO_APPROVAL_ENABLED_KEY, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
+import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_AUTO_APPROVAL_ENABLED_KEY, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
 import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, answeredApprovalCandidates, answeredApprovalShapeKeys, batchFreeText, recordAnsweredApprovalCandidate, replayAnsweredApprovalTokens, approvalAutoSwitchQueue, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSourceEpochCache, approvalReplayState, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { orderSessions } from './app/state.js';
@@ -13,6 +13,7 @@ import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { pendingSessionIds } from './app/approval-queue-tab.js';
 import { scheduleDeferredEnter, scheduleAfterOutputSettle, deferredEnterMinWaitFor, cancelDeferredEnter } from './app/deferred-enter.js';
 import { scheduleResidueSweep, cancelResidueSweep } from './app/residue-sweep.js';
+import { onUiSideChange, toggleUiSide, toolsOnLeft } from './app/ui-side.js';
 import { cancelExpandCapture } from './app/expand-popup.js';
 import { clearMobileTranscriptSession, recordMobileTranscriptUserSubmission } from './app/mobile-transcript.js';
 import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, handleOpenCodeApprovalNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
@@ -1068,12 +1069,10 @@ inputEl.addEventListener('keydown', (e) => {
     }
   };
 
-  applyToolsPosition(localStorage.getItem(STORAGE_TOOLS_LEFT_KEY) === '1');
-  btn.addEventListener('click', () => {
-    const isLeft = !wrap.classList.contains('tools-left');
-    applyToolsPosition(isLeft);
-    localStorage.setItem(STORAGE_TOOLS_LEFT_KEY, isLeft ? '1' : '0');
-  });
+  // 側の保持は ui-side.ts に一本化した。⇄ はカード列・パネルの ✕ も同時に振る。
+  applyToolsPosition(toolsOnLeft());
+  onUiSideChange((_side, isLeft) => applyToolsPosition(isLeft));
+  btn.addEventListener('click', () => { toggleUiSide(); });
 
   // 入力欄の空白（ボタン以外＝paddingや flex 余白）をクリックしたら textarea に
   // フォーカスを移す。ネイティブでは textarea の矩形上しか focus されず、行間や

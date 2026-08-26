@@ -703,7 +703,9 @@ header {
   inset: 0 -4px;
 }
 
-/* セッションカード列を右へ寄せる設定（設定 → General → セッションカードの位置）。
+/* 操作系の左右（設定 → General → 操作系の左右 / 入力欄の ⇄ ボタン。状態は ui-side.ts）。
+
+   セッションカード列を右へ寄せる。
    DOM は動かさず order だけ入れ替える（DOM を並べ替えると detached-grid の
    要素隠しやモバイルドロワーの前提が崩れる）。モバイル幅ではカード列が
    position:fixed のドロワーになり order が効かないので、デスクトップ幅にだけ効かせる。 */
@@ -712,6 +714,39 @@ header {
   body.sidebar-right #sidebar-resizer { order: 1; }
   body.sidebar-right #session-list { order: 2; }
 }
+
+/* パネルの閉じるボタン（✕）を左へ寄せる。閉じるボタンはどれも flex の子なので、
+   order だけで自分の入っているヘッダの左端へ寄る（flex でないヘッダでは単に無効）。 */
+body.close-left :is(
+  .review-close-btn,
+  .git-turn-close-btn,
+  .detail-close,
+  .git-commit-close,
+  .server-modal-close,
+  .wf-modal-close,
+  .mc-modal-close,
+  .bug-report-close,
+  .dgl-close,
+  .tsb-sent-close,
+  .session-search-close,
+  .spawn-web-dir-close,
+  .first-run-tour-close,
+  .multi-question-banner-close,
+  .expand-popup-btns
+) {
+  order: -1;
+  margin-left: 0;
+}
+
+/* margin-left:auto で右端へ押し出しているものは、押し出す向きを逆にする。 */
+body.close-left :is(.tsb-detail-close, .pane-slot .ph-close, .settings-header-actions) {
+  order: -1;
+  margin-left: 0;
+  margin-right: auto;
+}
+
+/* ボタンが群になっているヘッダでは、群の中でも ✕ を先頭へ。 */
+body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1; }
 .no-sessions { color: var(--muted-2); font-size: 0.85rem; padding: 12px; text-align: center; }
 
 /* Responsive breakpoints:

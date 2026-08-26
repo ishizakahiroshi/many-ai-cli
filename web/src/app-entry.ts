@@ -43,7 +43,7 @@ import { initMobileApprovalOnly } from './app/mobile-approval-only.js';
 import { initBugReportModal } from './app/bug-report-modal.js';
 import { initSubscriptions } from './app/subscriptions.js';
 import { initTabBarOrder } from './app/tab-bar-order.js';
-import { initSidebarSide } from './app/sidebar-side.js';
+import { initUiSide } from './app/ui-side.js';
 // ステータスバー初期化（/api/user-prefs から enabled を読む）
 initTokenStatusbar();
 // detached-grid モード判定（/?view=detached-grid の場合のみ初期化）
@@ -74,5 +74,5 @@ initBugReportModal();
 initSubscriptions();
 // 統合タブバーのタブをドラッグ&ドロップで並べ替え（順序は localStorage 保存）
 initTabBarOrder();
-// セッションカード列の左右位置（localStorage 保存）
-initSidebarSide();
+// 操作系（カード列 / 入力欄ツール / ✕）の左右位置（localStorage 保存）
+initUiSide();

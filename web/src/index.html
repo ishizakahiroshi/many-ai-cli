@@ -190,13 +190,14 @@
           </div>
           <div class="settings-note" data-i18n="settings_tab_order_desc">タブバーのタブはドラッグで並べ替えできます。使わないタブは右端へ寄せてください。並び順はこのブラウザにのみ保存されます。</div>
           <div class="settings-row">
-            <span class="settings-label" data-i18n="settings_sidebar_side_label">セッションカードの位置</span>
-            <select id="sidebar-side-select" class="settings-select">
-              <option value="left" data-i18n="settings_sidebar_side_left">左</option>
-              <option value="right" data-i18n="settings_sidebar_side_right">右</option>
+            <span class="settings-label" data-i18n="settings_ui_side_label">操作系の左右</span>
+            <select id="ui-side-select" class="settings-select">
+              <option value="" data-i18n="settings_ui_side_default">既定（従来どおり）</option>
+              <option value="left" data-i18n="settings_ui_side_left">左に揃える</option>
+              <option value="right" data-i18n="settings_ui_side_right">右に揃える</option>
             </select>
           </div>
-          <div class="settings-note" data-i18n="settings_sidebar_side_desc">セッションカードの列を画面の左右どちらに置くか。右にするとタブバー右端の閉じる・再読込ボタンと同じ側に並び、マウスの移動距離が短くなります。この設定はこのブラウザにのみ保存されます（スマホ幅では常に左のドロワーです）。</div>
+          <div class="settings-note" data-i18n="settings_ui_side_desc">セッションカードの列・入力欄のツール群・各パネルの閉じるボタン（✕）を同じ側へ揃えます。揃えるとカードとボタンの往復でマウスの移動距離が短くなります。入力欄の ⇄ ボタンでも同じ切り替えができます。この設定はこのブラウザにのみ保存されます（スマホ幅ではカード列は常に左のドロワーです）。</div>
         </div>
       </details>
       <details class="settings-section" data-section="appearance">
@@ -1357,7 +1358,7 @@
         </div>
         <div id="input-bar">
           <div id="input-wrap">
-            <button id="tools-flip-btn" class="quick-cmd-btn" data-i18n-tooltip="tools_flip_tooltip" aria-label="Toggle tools position">⇄</button>
+            <button id="tools-flip-btn" class="quick-cmd-btn" data-i18n-tooltip="tools_flip_tooltip" aria-label="Toggle control side">⇄</button>
             <button id="mobile-composer-attach-btn" class="quick-cmd-btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-tooltip="mobile_composer_attach_tooltip" aria-label="Add attachment">＋</button>
             <div id="input-area">
               <div id="paste-chips"></div>
