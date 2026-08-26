@@ -39,11 +39,31 @@ func (s *Server) publishDoneSummary(summary proto.DoneSummary) {
 	s.captureGitTurnEnd(summary.SessionID, summary.At)
 	s.broadcast(proto.Message{Type: "done_summary", SessionID: summary.SessionID, Provider: summary.Provider, DoneSummary: &summary})
 
-	if !s.doneSummaryNotifyEnabled() {
+	if !s.shouldNotifyDoneExternally(summary) {
 		return
 	}
 	s.notifyDoneOutbound(summary)
 	s.notifyDonePush(summary)
+}
+
+// shouldNotifyDoneExternally は完了サマリーを外部（notify backends / Web Push）へ
+// 流すかを決める。**フォールバックは Hub の中だけで見せ、外へは出さない。**
+//
+// フォールバックが言えるのは「ターンが終わった」ことだけで、何が終わったかは
+// 分からない。マーカーの規約が「通常の会話・質問への回答には出力しない」と
+// 定めている以上、**マーカーが無いことは異常ではない**（規約の正本は
+// internal/wrapper/approval_rules.go の rulesFileContent）。会話ターンごとに
+// push が飛ぶと、本物の完了通知のほうが埋もれる。
+//
+// マーカーを出さない provider（Codex は 2026-08-26 実測で 3 セッション連続 0 件）
+// には、この抑止で完了通知が届かなくなる。**それはフォールバックを鳴らし続けて
+// 埋める話ではなく、その provider の完了を実際に検出する話**として別に扱う
+// （docs/local/bugfix_done-summary-fallback-false-positive_2026-08-26.md の論点 A）。
+func (s *Server) shouldNotifyDoneExternally(summary proto.DoneSummary) bool {
+	if summary.Fallback {
+		return false
+	}
+	return s.doneSummaryNotifyEnabled()
 }
 
 // doneSummaryNotifyEnabled は完了サマリーを外部へ通知するかを決める。
@@ -128,12 +148,27 @@ func (s *Server) maybeCreateFallbackDoneSummary(id int) {
 	provider := ses.Provider
 	s.sessionsMu.Unlock()
 
-	last := lastUsefulDoneLine(screen)
-	text := "完了マーカーを検出できませんでした。最後の出力を確認してください。"
-	if last != "" {
-		text = fmt.Sprintf("完了マーカーを検出できませんでした。最後の出力: %s", last)
+	text := fallbackDoneSummaryText(lastUsefulDoneLine(screen))
+	s.publishDoneSummary(proto.DoneSummary{SessionID: id, Provider: provider, Title: title, Text: text, Kind: fallbackDoneSummaryKind, At: now.Format(time.RFC3339), Fallback: true})
+}
+
+// fallbackDoneSummaryKind はフォールバックが名乗る kind。
+//
+// **needs_action にしない。** マーカーの規約は「タスク完了時のみ出力」なので、
+// 会話ターンにマーカーが無いのは正常動作で、そこへ要対応の色を出すと毎ターン
+// 誤報になる。success 側（既定）にも寄せない。何が終わったかは本当に分からない。
+const fallbackDoneSummaryKind = "unknown"
+
+// fallbackDoneSummaryText はフォールバックの文面を組む。
+//
+// 「異常が起きた」ではなく「何が終わったか分からない」と読める語彙にする。
+// classifyDoneSummary へ通さないのは、この文字列が AI の報告ではなく Hub の
+// 定型文 + 画面の最終行だから（最終行の語彙で success / failure に振れてしまう）。
+func fallbackDoneSummaryText(last string) string {
+	if last == "" {
+		return "ターン終了（完了サマリーなし）"
 	}
-	s.publishDoneSummary(proto.DoneSummary{SessionID: id, Provider: provider, Title: title, Text: text, Kind: "needs_action", At: now.Format(time.RFC3339), Fallback: true})
+	return fmt.Sprintf("ターン終了（完了サマリーなし）。最後の出力: %s", last)
 }
 
 // lastUsefulDoneLine は「画面に実際に描かれている最後の 1 行」を返す。

@@ -55,6 +55,20 @@ test('doneSummaryIcon / doneSummaryKindSuffix: 未知の kind は success 側へ
   assert.equal(doneSummaryKindSuffix('brand-new-kind'), 'success');
 });
 
+// フォールバック（マーカー無しでターンが終わった）は success にも needs_action にも
+// 寄せない。default へ落ちると ✓ の成功色になり、「AI が正常終了を報告した」ものと
+// 見分けが付かなくなるので、明示ケースを持っていることをテストで固定する。
+test('doneSummaryIcon / doneSummaryKindSuffix: unknown は独立した弱い見た目になる', () => {
+  assert.equal(doneSummaryIcon('unknown'), '…');
+  assert.notEqual(doneSummaryIcon('unknown'), doneSummaryIcon('success'));
+  assert.notEqual(doneSummaryIcon('unknown'), doneSummaryIcon('needs_action'));
+  assert.equal(doneSummaryKindSuffix('unknown'), 'unknown');
+  assert.equal(
+    doneSummaryDisplayText(summary('ターン終了（完了サマリーなし）', 'unknown'), 100),
+    '… ターン終了（完了サマリーなし）',
+  );
+});
+
 test('doneSummaryDisplayText: 記号 + 1 行。中身が無ければ記号も出さない', () => {
   assert.equal(doneSummaryDisplayText(summary('直しました。', 'success'), 100), '✓ 直しました。');
   assert.equal(doneSummaryDisplayText(summary('落ちています。', 'failure'), 100), '✗ 落ちています。');
