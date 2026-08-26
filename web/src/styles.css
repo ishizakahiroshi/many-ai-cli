@@ -533,8 +533,51 @@ header {
   border-radius: 99px;
   background: color-mix(in srgb, var(--line) 65%, transparent);
 }
-.usage-meter-fill { height: 100%; border-radius: inherit; background: var(--accent, #7aa2f7); }
-.usage-meter-value { width: 34px; flex-shrink: 0; text-align: right; color: var(--text); }
+.usage-meter-fill { height: 100%; border-radius: inherit; background: var(--green, #22c55e); }
+.usage-meter-line[data-usage-severity="warning"] .usage-meter-label,
+.usage-meter-line[data-usage-severity="warning"] .usage-meter-value { color: var(--warn, #f59e0b); }
+.usage-meter-line[data-usage-severity="danger"] .usage-meter-label,
+.usage-meter-line[data-usage-severity="danger"] .usage-meter-value { color: var(--danger, #e06c75); font-weight: 700; }
+.usage-meter-value { width: 84px; flex-shrink: 0; text-align: right; color: var(--text); }
+.usage-meter-group--stale .usage-meter-fill { opacity: 0.55; }
+.usage-meter-meta { line-height: 1.35; }
+.usage-meter-meta--stale { color: var(--warn, #f59e0b); }
+.usage-profile-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 4px;
+  color: var(--text-soft, var(--muted));
+}
+.usage-auth {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 3px 7px;
+  margin: 2px 0 5px;
+  padding: 4px 6px;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-radius: var(--radius-sm);
+  line-height: 1.35;
+}
+.usage-auth strong { color: var(--warn, #f59e0b); }
+.usage-auth span { color: var(--muted); }
+.usage-auth--unknown { border-color: color-mix(in srgb, var(--muted) 60%, transparent); }
+.usage-auth--unknown strong { color: var(--muted); }
+.usage-auth-action,
+.usage-auth-retry {
+  margin-left: auto;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text-soft, var(--muted));
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.usage-auth-action:hover,
+.usage-auth-retry:hover { color: var(--text); background: var(--bg-hover, rgba(255,255,255,0.06)); }
+.usage-auth-retry:disabled { opacity: 0.55; cursor: wait; }
 .usage-profile-meta { margin-top: 3px; color: var(--muted-2, #777); font-size: 0.61rem; }
 .usage-not-acquired {
   display: block;

@@ -273,6 +273,26 @@ export interface Message {
   rl_5h_reset?: number;     // 同リセット時刻（unix epoch 秒）
   rl_7d_pct?: number;       // 週次レート制限の使用率%
   rl_7d_reset?: number;     // 同リセット時刻（unix epoch 秒）
+  claude_rate_limits_present?: boolean;
+  claude_5h_field_present?: boolean;
+  claude_5h_present?: boolean;
+  claude_7d_field_present?: boolean;
+  claude_7d_present?: boolean;
+  codex_rate_limits_present?: boolean;
+  codex_primary_present?: boolean;
+  codex_primary_used_pct?: number;
+  codex_primary_window_minutes?: number;
+  codex_primary_reset?: number;
+  codex_secondary_used_pct?: number;
+  codex_secondary_present?: boolean;
+  codex_secondary_window_minutes?: number;
+  codex_secondary_reset?: number;
+  codex_credits_present?: boolean;
+  codex_has_credits?: boolean;
+  codex_credits_unlimited?: boolean;
+  codex_credits_balance?: string;
+  codex_plan_type?: string;
+  usage_observed_at?: string;
   lines_added?: number;     // AI がこのセッションで追加した行数
   lines_removed?: number;   // AI がこのセッションで削除した行数
   effort_level?: string;    // reasoning effort（low/medium/high/xhigh/max）

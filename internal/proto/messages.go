@@ -250,15 +250,26 @@ type Message struct {
 	RateLimit5hReset            int64   `json:"rl_5h_reset,omitempty"`
 	RateLimit7dPct              float64 `json:"rl_7d_pct,omitempty"`
 	RateLimit7dReset            int64   `json:"rl_7d_reset,omitempty"`
+	ClaudeRateLimitsPresent     bool    `json:"claude_rate_limits_present,omitempty"`
+	ClaudeFiveHourFieldPresent  bool    `json:"claude_5h_field_present,omitempty"`
+	ClaudeFiveHourPresent       bool    `json:"claude_5h_present,omitempty"`
+	ClaudeSevenDayFieldPresent  bool    `json:"claude_7d_field_present,omitempty"`
+	ClaudeSevenDayPresent       bool    `json:"claude_7d_present,omitempty"`
 	CodexRateLimitsPresent      bool    `json:"codex_rate_limits_present,omitempty"`
+	CodexPrimaryPresent         bool    `json:"codex_primary_present,omitempty"`
 	CodexPrimaryUsedPct         float64 `json:"codex_primary_used_pct,omitempty"`
 	CodexPrimaryWindowMinutes   int     `json:"codex_primary_window_minutes,omitempty"`
 	CodexPrimaryReset           int64   `json:"codex_primary_reset,omitempty"`
 	CodexSecondaryUsedPct       float64 `json:"codex_secondary_used_pct,omitempty"`
+	CodexSecondaryPresent       bool    `json:"codex_secondary_present,omitempty"`
 	CodexSecondaryWindowMinutes int     `json:"codex_secondary_window_minutes,omitempty"`
 	CodexSecondaryReset         int64   `json:"codex_secondary_reset,omitempty"`
+	CodexCreditsPresent         bool    `json:"codex_credits_present,omitempty"`
+	CodexHasCredits             bool    `json:"codex_has_credits,omitempty"`
+	CodexCreditsUnlimited       bool    `json:"codex_credits_unlimited,omitempty"`
 	CodexCreditsBalance         string  `json:"codex_credits_balance,omitempty"`
 	CodexPlanType               string  `json:"codex_plan_type,omitempty"`
+	UsageObservedAt             string  `json:"usage_observed_at,omitempty"`
 	LinesAdded                  int     `json:"lines_added,omitempty"`
 	LinesRemoved                int     `json:"lines_removed,omitempty"`
 	EffortLevel                 string  `json:"effort_level,omitempty"`

@@ -325,10 +325,12 @@ func (s *Server) handleSubscriptionTest(w http.ResponseWriter, r *http.Request) 
 	defer cancel()
 	status, statusErr := adapter.Status(ctx, resolved.ProfileDir)
 	if statusErr != nil {
+		s.subscriptionUsageStoreForServer().setAuthStatus(provider, resolved.ID, "status_unknown")
 		// エラー本文には公式 CLI の生出力を載せない（アカウント情報を含みうる）。
 		writeJSONError(w, http.StatusBadGateway, "status_failed", statusErr.Error())
 		return
 	}
+	s.subscriptionUsageStoreForServer().setAuthStatus(provider, resolved.ID, normalizeSubscriptionAuthStatus(status, nil))
 	// plan を config へ書き戻し、次回以降 CLI を起動しなくても一覧に出せるようにする。
 	if status.LoggedIn && strings.TrimSpace(status.Plan) != "" {
 		s.cfgMu.Lock()
@@ -399,6 +401,7 @@ func (s *Server) handleSubscriptionLogin(w http.ResponseWriter, r *http.Request)
 		writeJSONError(w, http.StatusInternalServerError, "spawn_error", errorDetail("login session spawn error", err))
 		return
 	}
+	s.subscriptionUsageStoreForServer().invalidateAuthStatus(provider, resolved.ID)
 	writeJSON(w, map[string]any{"ok": true, "session_id": sessionID})
 }
 

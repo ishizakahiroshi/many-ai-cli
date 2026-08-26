@@ -42,6 +42,9 @@ func TestSubscriptionUsageRefreshesCodexAndGrokProfiles(t *testing.T) {
 	if response.Providers[0].Provider != "codex" || response.Providers[0].Profiles[0].Codex == nil || response.Providers[0].Profiles[0].Codex.Primary.UsedPercent != 89 {
 		t.Fatalf("codex response=%#v", response.Providers[0])
 	}
+	if response.Providers[0].Profiles[0].Codex.Primary.RemainingPercent != 11 {
+		t.Fatalf("codex remaining=%v want 11", response.Providers[0].Profiles[0].Codex.Primary.RemainingPercent)
+	}
 	grok := response.Providers[1].Profiles[0]
 	if grok.Grok == nil || grok.Grok.UsedPercent != 27 {
 		t.Fatalf("grok response=%#v", response.Providers[1])
@@ -53,6 +56,77 @@ func TestSubscriptionUsageRefreshesCodexAndGrokProfiles(t *testing.T) {
 	wantRetrieved := time.Date(2026, 8, 20, 2, 31, 39, 0, time.UTC)
 	if !gotRetrieved.Equal(wantRetrieved) {
 		t.Fatalf("retrieved_at=%v want billing ts %v, not hub now", gotRetrieved, wantRetrieved)
+	}
+}
+
+func TestSubscriptionUsagePresenceCanonicalAndExplicitClear(t *testing.T) {
+	store := newSubscriptionUsageStore()
+	cfg := &config.Config{Subscriptions: config.SubscriptionProfiles{
+		"claude": {{ID: "claude-a", Name: "Claude A"}},
+		"codex":  {{ID: "codex-a", Name: "Codex A"}},
+	}}
+	observed := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
+	store.recordSession("codex", "codex-a", &usageStat{
+		CodexRateLimitsPresent:      true,
+		CodexPrimaryPresent:         true,
+		CodexPrimaryUsedPct:         37,
+		CodexPrimaryWindowMinutes:   300,
+		CodexSecondaryPresent:       true,
+		CodexSecondaryUsedPct:       63,
+		CodexSecondaryWindowMinutes: 10080,
+		CodexCreditsPresent:         true,
+		CodexHasCredits:             true,
+		CodexCreditsBalance:         "0",
+	}, observed)
+	store.recordSession("claude", "claude-a", &usageStat{
+		ClaudeRateLimitsPresent: true,
+		ClaudeFiveHourPresent:   true,
+		RateLimit5hPct:          0,
+	}, observed)
+
+	response := store.snapshot(cfg)
+	var claude, codex *subscriptionUsageProfile
+	for i := range response.Providers {
+		for j := range response.Providers[i].Profiles {
+			profile := &response.Providers[i].Profiles[j]
+			switch profile.ID {
+			case "claude-a":
+				claude = profile
+			case "codex-a":
+				codex = profile
+			}
+		}
+	}
+	if claude == nil || claude.Claude == nil || claude.Claude.FiveHour == nil || claude.Claude.FiveHour.UsedPercent != 0 || claude.Claude.FiveHour.RemainingPercent != 100 || claude.Claude.SevenDay != nil {
+		t.Fatalf("Claude presence/zero state = %#v", claude)
+	}
+	if codex == nil || codex.Codex == nil || codex.Codex.Primary == nil || codex.Codex.Secondary == nil {
+		t.Fatalf("Codex windows = %#v", codex)
+	}
+	if codex.Codex.Primary.RemainingPercent != 63 || codex.Codex.Secondary.RemainingPercent != 37 || codex.Codex.Credits == nil || codex.Codex.Credits.Balance != "0" {
+		t.Fatalf("Codex canonical/credits = %#v", codex.Codex)
+	}
+	if codex.RetrievedAt != observed.Format(time.RFC3339) {
+		t.Fatalf("retrieved_at=%q want %q", codex.RetrievedAt, observed.Format(time.RFC3339))
+	}
+
+	if got := usageWindowFromSource(63, "remaining", 300, 0); got == nil || got.RemainingPercent != 63 || got.UsedPercent != 37 {
+		t.Fatalf("remaining source normalization = %#v", got)
+	}
+	if got := usageWindowFromSource(63, "unknown", 300, 0); got != nil {
+		t.Fatalf("unknown semantics produced a meter: %#v", got)
+	}
+
+	// An explicit empty observation replaces the previous two windows instead
+	// of leaving a stale primary/secondary pair in the API.
+	store.recordSession("codex", "codex-a", &usageStat{CodexRateLimitsPresent: true}, observed.Add(time.Minute))
+	cleared := store.snapshot(cfg)
+	for _, provider := range cleared.Providers {
+		for _, profile := range provider.Profiles {
+			if profile.ID == "codex-a" && (profile.Codex == nil || profile.Codex.Primary != nil || profile.Codex.Secondary != nil) {
+				t.Fatalf("explicit empty observation retained old windows: %#v", profile.Codex)
+			}
+		}
 	}
 }
 

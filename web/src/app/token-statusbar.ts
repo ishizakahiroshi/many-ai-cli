@@ -33,8 +33,10 @@ interface UsageCacheEntry {
   // statusbar 追加メタ（Claude statusLine ネイティブ算出値。Claude のみ・0/false=未取得）。
   rl5hPct: number;
   rl5hReset: number;
+  rl5hPresent: boolean;
   rl7dPct: number;
   rl7dReset: number;
+  rl7dPresent: boolean;
   linesAdded: number;
   linesRemoved: number;
   effortLevel: string;
@@ -606,22 +608,22 @@ export function renderStatusbar(): void {
   }
 
   // ---- レート制限残量（Claude.ai Pro/Max のみ・statusLine 算出値の直結）----
-  const showRl = !!(provider === 'claude' && entry && (entry.rl5hPct > 0 || entry.rl7dPct > 0));
+  const showRl = !!(provider === 'claude' && entry && (entry.rl5hPresent || entry.rl7dPresent));
   const rlEl = setSeg(bar, 'tsb-seg-ratelimit', showRl);
   if (rlEl && entry) {
     // モバイルは crit（残量 90% 超）のときだけ表示する（CSS @media が :not(.tsb-crit) を隠す）。
     rlEl.classList.toggle('tsb-crit', entry.rl5hPct >= 90 || entry.rl7dPct >= 90);
     const cls5 = entry.rl5hPct >= 90 ? 'tsb-pct crit' : 'tsb-pct';
     const cls7 = entry.rl7dPct >= 90 ? 'tsb-pct crit' : 'tsb-pct';
-    const seg5 = entry.rl5hPct > 0 ? `<span class="${cls5}">5h ${Math.round(entry.rl5hPct)}%</span>` : '';
-    const seg7 = entry.rl7dPct > 0 ? `<span class="${cls7}">7d ${Math.round(entry.rl7dPct)}%</span>` : '';
+    const seg5 = entry.rl5hPresent ? `<span class="${cls5}">5h ${Math.round(entry.rl5hPct)}%</span>` : '';
+    const seg7 = entry.rl7dPresent ? `<span class="${cls7}">7d ${Math.round(entry.rl7dPct)}%</span>` : '';
     rlEl.innerHTML = `⏳ ${seg5}${seg5 && seg7 ? ' · ' : ''}${seg7}`;
     const lines: string[] = [t('tsb_ratelimit_title')];
-    if (entry.rl5hPct > 0) {
+    if (entry.rl5hPresent) {
       const r = formatResetIn(entry.rl5hReset);
       lines.push(t('tsb_ratelimit_5h', { p: Math.round(entry.rl5hPct) }) + (r ? ` · ${t('tsb_ratelimit_reset', { t: r })}` : ''));
     }
-    if (entry.rl7dPct > 0) {
+    if (entry.rl7dPresent) {
       const r = formatResetIn(entry.rl7dReset);
       lines.push(t('tsb_ratelimit_7d', { p: Math.round(entry.rl7dPct) }) + (r ? ` · ${t('tsb_ratelimit_reset', { t: r })}` : ''));
     }
@@ -1136,8 +1138,10 @@ export function handleUsageStatMessage(m: Message): void {
     usedPct:        m.ctx_used_pct   ?? 0,
     rl5hPct:        m.rl_5h_pct      ?? 0,
     rl5hReset:      m.rl_5h_reset    ?? 0,
+    rl5hPresent:    m.claude_5h_present ?? ((m.rl_5h_pct ?? 0) > 0),
     rl7dPct:        m.rl_7d_pct      ?? 0,
     rl7dReset:      m.rl_7d_reset    ?? 0,
+    rl7dPresent:    m.claude_7d_present ?? ((m.rl_7d_pct ?? 0) > 0),
     linesAdded:     m.lines_added    ?? 0,
     linesRemoved:   m.lines_removed  ?? 0,
     effortLevel:    m.effort_level   || '',

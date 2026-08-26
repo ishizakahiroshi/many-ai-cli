@@ -12,9 +12,10 @@ import (
 )
 
 type usageWindow struct {
-	UsedPercent   float64 `json:"used_percent"`
-	WindowMinutes int     `json:"window_minutes,omitempty"`
-	ResetsAt      int64   `json:"resets_at,omitempty"`
+	UsedPercent      float64 `json:"used_percent"`
+	RemainingPercent float64 `json:"remaining_percent"`
+	WindowMinutes    int     `json:"window_minutes,omitempty"`
+	ResetsAt         int64   `json:"resets_at,omitempty"`
 }
 
 type claudeSubscriptionUsage struct {
@@ -23,17 +24,25 @@ type claudeSubscriptionUsage struct {
 }
 
 type codexSubscriptionUsage struct {
-	Primary        *usageWindow `json:"primary,omitempty"`
-	Secondary      *usageWindow `json:"secondary,omitempty"`
-	PlanType       string       `json:"plan_type,omitempty"`
-	CreditsBalance string       `json:"credits_balance,omitempty"`
+	Primary        *usageWindow  `json:"primary,omitempty"`
+	Secondary      *usageWindow  `json:"secondary,omitempty"`
+	PlanType       string        `json:"plan_type,omitempty"`
+	Credits        *codexCredits `json:"credits,omitempty"`
+	CreditsBalance string        `json:"credits_balance,omitempty"`
+}
+
+type codexCredits struct {
+	HasCredits bool   `json:"has_credits"`
+	Unlimited  bool   `json:"unlimited"`
+	Balance    string `json:"balance,omitempty"`
 }
 
 type grokSubscriptionUsage struct {
-	UsedPercent float64 `json:"used_percent"`
-	PeriodStart string  `json:"period_start,omitempty"`
-	PeriodEnd   string  `json:"period_end,omitempty"`
-	PeriodType  string  `json:"period_type,omitempty"`
+	UsedPercent      float64 `json:"used_percent"`
+	RemainingPercent float64 `json:"remaining_percent"`
+	PeriodStart      string  `json:"period_start,omitempty"`
+	PeriodEnd        string  `json:"period_end,omitempty"`
+	PeriodType       string  `json:"period_type,omitempty"`
 }
 
 type subscriptionUsageProfile struct {
@@ -43,6 +52,7 @@ type subscriptionUsageProfile struct {
 	RetrievedAt    string                   `json:"retrieved_at,omitempty"`
 	ProbeAvailable bool                     `json:"probe_available,omitempty"`
 	ProbeState     string                   `json:"probe_state,omitempty"`
+	AuthStatus     string                   `json:"auth_status,omitempty"`
 	Claude         *claudeSubscriptionUsage `json:"claude,omitempty"`
 	Codex          *codexSubscriptionUsage  `json:"codex,omitempty"`
 	Grok           *grokSubscriptionUsage   `json:"grok,omitempty"`
@@ -70,9 +80,15 @@ type subscriptionUsageValue struct {
 	source      string
 }
 
+type subscriptionAuthValue struct {
+	state     string
+	checkedAt time.Time
+}
+
 type subscriptionUsageStore struct {
 	mu      sync.Mutex
 	entries map[subscriptionUsageKey]subscriptionUsageValue
+	auth    map[subscriptionUsageKey]subscriptionAuthValue
 }
 
 func (s *Server) subscriptionUsageStoreForServer() *subscriptionUsageStore {
@@ -108,7 +124,10 @@ func (s *Server) recordSessionSubscriptionUsage(sessionID int, stat *usageStat, 
 }
 
 func newSubscriptionUsageStore() *subscriptionUsageStore {
-	return &subscriptionUsageStore{entries: map[subscriptionUsageKey]subscriptionUsageValue{}}
+	return &subscriptionUsageStore{
+		entries: map[subscriptionUsageKey]subscriptionUsageValue{},
+		auth:    map[subscriptionUsageKey]subscriptionAuthValue{},
+	}
 }
 
 func (s *subscriptionUsageStore) putLive(provider, id string, value subscriptionUsageValue, at time.Time) {
@@ -150,22 +169,43 @@ func (s *subscriptionUsageStore) recordSession(provider, id string, stat *usageS
 	value := subscriptionUsageValue{}
 	switch provider {
 	case "claude":
-		if stat.RateLimit5hPct == 0 && stat.RateLimit5hReset == 0 && stat.RateLimit7dPct == 0 && stat.RateLimit7dReset == 0 {
+		claudeObserved := stat.ClaudeRateLimitsPresent || stat.RateLimit5hPct != 0 || stat.RateLimit5hReset != 0 || stat.RateLimit7dPct != 0 || stat.RateLimit7dReset != 0
+		if !claudeObserved {
 			return
 		}
-		value.claude = &claudeSubscriptionUsage{
-			FiveHour: &usageWindow{UsedPercent: stat.RateLimit5hPct, ResetsAt: stat.RateLimit5hReset},
-			SevenDay: &usageWindow{UsedPercent: stat.RateLimit7dPct, ResetsAt: stat.RateLimit7dReset},
+		value.claude = &claudeSubscriptionUsage{}
+		fiveHourPresent := stat.ClaudeFiveHourPresent || stat.RateLimit5hPct != 0 || stat.RateLimit5hReset != 0
+		sevenDayPresent := stat.ClaudeSevenDayPresent || stat.RateLimit7dPct != 0 || stat.RateLimit7dReset != 0
+		if fiveHourPresent {
+			value.claude.FiveHour = toUsageWindow(stat.RateLimit5hPct, 0, stat.RateLimit5hReset)
+		}
+		if sevenDayPresent {
+			value.claude.SevenDay = toUsageWindow(stat.RateLimit7dPct, 0, stat.RateLimit7dReset)
 		}
 	case "codex":
 		if !stat.CodexRateLimitsPresent {
 			return
 		}
 		value.codex = &codexSubscriptionUsage{
-			Primary:        toUsageWindow(stat.CodexPrimaryUsedPct, stat.CodexPrimaryWindowMinutes, stat.CodexPrimaryReset),
-			Secondary:      toUsageWindow(stat.CodexSecondaryUsedPct, stat.CodexSecondaryWindowMinutes, stat.CodexSecondaryReset),
-			PlanType:       stat.CodexPlanType,
-			CreditsBalance: stat.CodexCreditsBalance,
+			PlanType: stat.CodexPlanType,
+		}
+		primaryPresent := stat.CodexPrimaryPresent || stat.CodexPrimaryUsedPct != 0 || stat.CodexPrimaryWindowMinutes != 0 || stat.CodexPrimaryReset != 0
+		secondaryPresent := stat.CodexSecondaryPresent || stat.CodexSecondaryUsedPct != 0 || stat.CodexSecondaryWindowMinutes != 0 || stat.CodexSecondaryReset != 0
+		if primaryPresent {
+			value.codex.Primary = toUsageWindow(stat.CodexPrimaryUsedPct, stat.CodexPrimaryWindowMinutes, stat.CodexPrimaryReset)
+		}
+		if secondaryPresent {
+			value.codex.Secondary = toUsageWindow(stat.CodexSecondaryUsedPct, stat.CodexSecondaryWindowMinutes, stat.CodexSecondaryReset)
+		}
+		if stat.CodexCreditsPresent {
+			value.codex.Credits = &codexCredits{
+				HasCredits: stat.CodexHasCredits,
+				Unlimited:  stat.CodexCreditsUnlimited,
+				Balance:    stat.CodexCreditsBalance,
+			}
+			if stat.CodexHasCredits && !stat.CodexCreditsUnlimited {
+				value.codex.CreditsBalance = stat.CodexCreditsBalance
+			}
 		}
 	default:
 		return
@@ -174,10 +214,35 @@ func (s *subscriptionUsageStore) recordSession(provider, id string, stat *usageS
 }
 
 func toUsageWindow(pct float64, minutes int, reset int64) *usageWindow {
-	if pct == 0 && minutes == 0 && reset == 0 {
+	return usageWindowFromSource(pct, "used", minutes, reset)
+}
+
+func usageWindowFromSource(value float64, semantics string, minutes int, reset int64) *usageWindow {
+	remaining, used, ok := normalizeUsagePercent(value, semantics)
+	if !ok {
 		return nil
 	}
-	return &usageWindow{UsedPercent: pct, WindowMinutes: minutes, ResetsAt: reset}
+	return &usageWindow{UsedPercent: used, RemainingPercent: remaining, WindowMinutes: minutes, ResetsAt: reset}
+}
+
+func normalizeUsagePercent(value float64, semantics string) (remaining, used float64, ok bool) {
+	if value != value {
+		return 0, 0, false
+	}
+	if value < 0 {
+		value = 0
+	}
+	if value > 100 {
+		value = 100
+	}
+	switch strings.ToLower(strings.TrimSpace(semantics)) {
+	case "used":
+		return 100 - value, value, true
+	case "remaining":
+		return value, 100 - value, true
+	default:
+		return 0, 0, false
+	}
 }
 
 func (s *subscriptionUsageStore) refreshLocal(cfg *config.Config, configDir string, at time.Time) {
@@ -206,7 +271,17 @@ func (s *subscriptionUsageStore) refreshLocal(cfg *config.Config, configDir stri
 			switch provider {
 			case "codex":
 				if usage, ok := usagelocal.ReadCodexProfile(dir); ok {
-					s.putLocal(provider, id, subscriptionUsageValue{codex: codexUsageFromLocal(usage)}, at)
+					if !usage.RateLimitsPresent {
+						// Older rollout records may contain token_count without a
+						// rate_limits field. That is not an explicit empty
+						// observation, so retain any previous value.
+						continue
+					}
+					fetched := at
+					if !usage.ObservedAt.IsZero() {
+						fetched = usage.ObservedAt
+					}
+					s.putLocal(provider, id, subscriptionUsageValue{codex: codexUsageFromLocal(usage)}, fetched)
 				}
 			case "grok":
 				if usage, ok := usagelocal.ReadGrokProfile(dir); ok {
@@ -215,10 +290,11 @@ func (s *subscriptionUsageStore) refreshLocal(cfg *config.Config, configDir stri
 						fetched = usage.FetchedAt
 					}
 					s.putLocal(provider, id, subscriptionUsageValue{grok: &grokSubscriptionUsage{
-						UsedPercent: usage.UsedPercent,
-						PeriodStart: usage.PeriodStart,
-						PeriodEnd:   usage.PeriodEnd,
-						PeriodType:  usage.PeriodType,
+						UsedPercent:      clampUsagePercent(usage.UsedPercent),
+						RemainingPercent: 100 - clampUsagePercent(usage.UsedPercent),
+						PeriodStart:      usage.PeriodStart,
+						PeriodEnd:        usage.PeriodEnd,
+						PeriodType:       usage.PeriodType,
 					}}, fetched)
 				}
 			}
@@ -227,19 +303,39 @@ func (s *subscriptionUsageStore) refreshLocal(cfg *config.Config, configDir stri
 }
 
 func codexUsageFromLocal(usage usagelocal.CodexUsage) *codexSubscriptionUsage {
-	return &codexSubscriptionUsage{
-		Primary:        localWindow(usage.Primary),
-		Secondary:      localWindow(usage.Secondary),
-		PlanType:       usage.PlanType,
-		CreditsBalance: usage.CreditsBalance,
+	value := &codexSubscriptionUsage{
+		Primary:   localWindow(usage.Primary),
+		Secondary: localWindow(usage.Secondary),
+		PlanType:  usage.PlanType,
 	}
+	if usage.Credits.Present {
+		value.Credits = &codexCredits{
+			HasCredits: usage.Credits.HasCredits,
+			Unlimited:  usage.Credits.Unlimited,
+			Balance:    usage.Credits.Balance,
+		}
+		if usage.Credits.HasCredits && !usage.Credits.Unlimited {
+			value.CreditsBalance = usage.Credits.Balance
+		}
+	}
+	return value
 }
 
 func localWindow(window *usagelocal.RateLimitWindow) *usageWindow {
 	if window == nil {
 		return nil
 	}
-	return &usageWindow{UsedPercent: window.UsedPercent, WindowMinutes: window.WindowMinutes, ResetsAt: window.ResetsAt}
+	return usageWindowFromSource(window.UsedPercent, "used", window.WindowMinutes, window.ResetsAt)
+}
+
+func clampUsagePercent(value float64) float64 {
+	if value != value || value < 0 {
+		return 0
+	}
+	if value > 100 {
+		return 100
+	}
+	return value
 }
 
 func (s *subscriptionUsageStore) snapshot(cfg *config.Config) subscriptionUsageResponse {

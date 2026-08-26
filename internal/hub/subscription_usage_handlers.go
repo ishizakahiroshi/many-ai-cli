@@ -19,7 +19,9 @@ func (s *Server) handleSubscriptionUsage(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	store := s.refreshSubscriptionUsage()
-	response := store.snapshot(s.snapshotCfg())
+	cfg := s.snapshotCfg()
+	response := store.snapshot(cfg)
+	store.applyAuthStatuses(r.Context(), cfg, subscriptionConfigDir(), &response, r.URL.Query().Get("refresh_auth") == "1")
 	s.applyUsageProbeStates(&response)
 	writeJSON(w, response)
 }
