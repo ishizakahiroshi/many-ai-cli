@@ -133,19 +133,26 @@ test('filterHubMarkersPure: 閉じマーカーの途中で chunk が割れても
   assert.equal(state2.markerBuf.length, 0);
 });
 
-test('filterHubMarkersPure (案 E): [MANY-AI-CLI-DONE] ブロックも ANSI 剥離して本文を出す', () => {
+test('filterHubMarkersPure (案 G): [MANY-AI-CLI-DONE] ブロックは本文ごと端末へ出さない', () => {
   const input = bytes('before\n[MANY-AI-CLI-DONE]\x1b[32mタスク完了\x1b[mしました[/MANY-AI-CLI-DONE]after');
   const { out, state } = filterHubMarkersPure(input, initialState());
   const text = str(out);
-  assert.equal(text.includes('タスク完了しました'), true);
-  // ANSI は close flush 後の erase-below（\x1b[J）以外すべて剥がれる
-  assert.equal(text, `before\nタスク完了しました${ERASE_BELOW}after`);
+  // 本文・タグ・erase-below のいずれも残さず、ブロックが無かったのと同じ出力になる。
+  // 端末へ書くと Ink 管理外のセルが汚れて消えないため（hub-marker-filter.ts 冒頭の案 G）。
+  assert.equal(text, 'before\nafter');
+  assert.equal(text.includes('タスク完了'), false);
   assert.equal(text.includes('[MANY-AI-CLI-DONE]'), false);
   assert.equal(text.includes('[/MANY-AI-CLI-DONE]'), false);
-  assert.equal(text.startsWith('before\n'), true);
-  assert.equal(text.endsWith(`${ERASE_BELOW}after`), true);
+  assert.equal(text.includes(ERASE_BELOW), false);
   assert.equal(state.inDone, false);
   assert.equal(state.doneBuf.length, 0);
+});
+
+test('filterHubMarkersPure (案 G): 承認ブロックの本文は従来どおり端末へ出す', () => {
+  // DONE を落とす変更が承認ブロックへ波及していないことを、同じ入力形で押さえる。
+  const input = bytes('before\n[MANY-AI-CLI]\x1b[32m質問\x1b[mです[/MANY-AI-CLI]after');
+  const { out } = filterHubMarkersPure(input, initialState());
+  assert.equal(str(out), `before\n質問です${ERASE_BELOW}after`);
 });
 
 test('filterHubMarkersPure: マーカー無しの通常バイトは素通し（ANSI も含む）', () => {

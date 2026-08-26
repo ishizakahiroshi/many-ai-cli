@@ -192,6 +192,28 @@
   border-color: rgba(217, 119, 6, 0.45);
   border-top-color: rgba(251, 191, 36, 0.9);
 }
+/* 完了サマリー(done): 待機中に「直前のターンで何が終わったか」を出す。端末へ本文を
+   書かなくなった（hub-marker-filter.ts の案 G）ぶんの表示口なので、idle より前に出す。
+   スピナーは idle と同じく止める。 */
+#terminal-live-status.done {
+  color: rgba(148, 163, 184, 0.9);
+  border-color: rgba(100, 116, 139, 0.42);
+}
+#terminal-live-status.done .live-spinner {
+  animation: none;
+  border-color: rgba(100, 116, 139, 0.45);
+  border-top-color: rgba(100, 116, 139, 0.45);
+}
+#terminal-live-status.done .live-status-text {
+  /* サマリーは 1 行に収め、溢れたら省略する（帯の高さを増やして端末を狭めない） */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#terminal-live-status.done-success  { color: rgba(134, 239, 172, 0.95); border-color: rgba(34, 197, 94, 0.42); }
+#terminal-live-status.done-failure  { color: rgba(252, 165, 165, 0.95); border-color: rgba(239, 68, 68, 0.5); }
+#terminal-live-status.done-aborted  { color: rgba(203, 213, 225, 0.9);  border-color: rgba(100, 116, 139, 0.5); }
+#terminal-live-status.done-needs-action { color: rgba(251, 191, 36, 0.95); border-color: rgba(217, 119, 6, 0.5); }
 /* hidden 属性より id セレクタが強いため、:not([hidden]) でのみ flex 化して非表示を保つ */
 #terminal-live-status:not([hidden]) {
   display: flex;
@@ -573,6 +595,14 @@
   body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.waiting {
     color: rgba(251, 191, 36, 0.95);
   }
+  /* モバイル帯は枠を持たないので、完了サマリーも色だけで区別する。 */
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done {
+    color: rgba(148, 163, 184, 0.85);
+    opacity: 1;
+  }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-success  { color: rgba(134, 239, 172, 0.95); }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-failure  { color: rgba(252, 165, 165, 0.95); }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-needs-action { color: rgba(251, 191, 36, 0.95); }
   body.mobile-has-session:not(.mobile-home-view) #terminal-live-status .live-spinner {
     width: 10px;
     height: 10px;

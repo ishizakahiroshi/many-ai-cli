@@ -1009,6 +1009,14 @@ header {
    transcript が伸びていない。stalled は「重いだけ」ではないので危険色にする。 */
 .card-longproc.is-severe  { color: var(--danger); background: color-mix(in srgb, var(--danger-bg) 30%, transparent); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
 .card-longproc.is-stalled { color: var(--danger); background: color-mix(in srgb, var(--danger-bg) 55%, transparent); border-color: var(--danger); }
+/* 直前ターンの完了サマリー（done-summary.ts）。端末へ本文を書かなくなったので、
+   見ていないセッションの完了に気づく経路はこのバッジになる。幅は狭いので 1 行省略、
+   全文は data-tooltip 側で読める。 */
+.card-done { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-muted); border: 1px solid color-mix(in srgb, var(--line) 90%, transparent); border-radius: var(--radius-sm); padding: 0 5px; }
+.card-done-success      { color: var(--green-text); border-color: color-mix(in srgb, var(--green) 35%, transparent); }
+.card-done-failure      { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.card-done-aborted      { color: var(--fg-muted); border-color: color-mix(in srgb, var(--line) 90%, transparent); }
+.card-done-needs-action { color: var(--warn-text); border-color: color-mix(in srgb, var(--warn-text) 40%, transparent); }
 .card-provider-icon { flex-shrink: 0; vertical-align: middle; margin-right: 2px; }
 /* モデル名の色は下のステータスバー .tsb-model（#9ece6a）に合わせて緑系で統一。 */
 .card-model { flex-shrink: 1; font-size: 0.72rem; color: #9ece6a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; margin-left: 2px; }

@@ -78,6 +78,7 @@ docs/local/               設計書・plan 等（非公開）
 | `resources/` は `main` へ push した時点で全ユーザーへ live 配信される | [`resources/README.md`](resources/README.md) | `scripts/check-slash-commands.mjs` |
 | profile へ持ち込む設定は additive のみ。credential は運ばず、書くのは自分のツリーの中だけ | `internal/subscription/seed.go` のパッケージ doc | `TestSeedIsAdditiveOnly` / `TestSeedNeverCarriesCredentials` |
 | 本ファイルを索引のまま保つ（本文を書き戻さない） | `scripts/check-claude-md.mjs` の冒頭 | 同スクリプト（Validate CI） |
+| 代替画面を CLI が全面管理している端末へ、こちらのテキストを差し込まない（消せない残骸になる） | `web/src/app/hub-marker-filter.ts` の案 G | `hub-marker-filter-fixtures.ts` の案 G 2 件 |
 
 残量の経路は、**問い合わせて取る**（CLI/API から直接取れないので `ReadUsage` を足さない）、**押し出されてくる**（Claude の statusLine）、**ローカルに落ちている**（Codex の rollout JSONL / Grok の課金ログ）を分ける。取得手段のない provider に `Unknown` 欄は作らない。正本は `internal/subscription/adapter.go` と `internal/hub/subscription_usage.go`。
 
