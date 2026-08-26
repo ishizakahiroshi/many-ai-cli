@@ -191,7 +191,7 @@
       "purpose": "承認ポップアップの本文（前置き・質問文）と選択肢が別々の質問の中身に入れ替わって表示される不具合、およびスクロール時に解決済みの古い承認ポップアップが再び出る症状で、スクロール層（xterm onScroll の atBottom/manual/viewportY）・検出層（xterm バッファ末尾の再走査がライブ検出結果を置き換えた瞬間）・データ層（showOptions 呼び出し時点の options と candidateKey/sourceEpoch/shape）・描画層（single-tabs/batch-tabs/multi の差分スキップ判定直前）の 4 箇所から、本文と選択肢を必ず同じ 1 件に並べて画面上へ記録する",
       "addedIn": "unreleased",
       "gate": "opt-in: ビルドは MAI_DEBUG=1、runtime は URL クエリ ?approvaldebug=1（sink 未登録時は完全 no-op）",
-      "due": "2026-08-26",
+      "due": "2026-09-09",
       "files": [
         "web/src/debug/approval-identity.ts"
       ],
@@ -202,7 +202,7 @@
       ],
       "endpoints": [],
       "removalCondition": "承認バーの本文と選択肢が別々の質問で入れ替わる不具合と、スクロール時に古い承認ポップアップが再出現する症状（docs/local/bugfix_approval-bar-stale-options-scroll-mismatch_2026-08-19.md）の原因が確定したら撤去",
-      "reason": "コード読解だけでは、識別子（candidateKey/sourceEpoch）計算・Hub 側マーカー抽出・クライアント側キャッシュ層のいずれも単体では矛盾なく動く設計に見え、ズレの発生箇所を静的解析だけで切り分けられなかった。実機でユーザーが症状を再現した際の identity 推移を画面上の表示（スクリーンショットで共有可能な形）として残す必要がある",
+      "reason": "コード読解だけでは、識別子（candidateKey/sourceEpoch）計算・Hub 側マーカー抽出・クライアント側キャッシュ層のいずれも単体では矛盾なく動く設計に見え、ズレの発生箇所を静的解析だけで切り分けられなかった。実機でユーザーが症状を再現した際の identity 推移を画面上の表示（スクリーンショットで共有可能な形）として残す必要がある / 2026-08-26 に due を 2026-09-09 へ延長した。撤去条件である「原因が確定したら」を満たしていない。追跡対象の bugfix_approval-bar-stale-options-scroll-mismatch_2026-08-19.md は同日時点で [様子見] のままで、本文に実機確認は未実施と明記されている。同日の e81bd34 と 2fa7d1f は表示側と状態側へ入れた修正だが、いずれも実機で症状が消えたことを確認できていないため、再現時の identity 推移を画面へ残す経路をまだ落とせない。",
       "note": "記録内容は candidateKey/shape をハッシュの先頭14文字に短縮したもの・sourceEpoch・前置きの先頭60文字・質問文の先頭40文字・選択肢ラベルの先頭24文字を最大3件まで。自由入力欄の内容と送信テキスト（_sendText）は保存しない。URL クエリが無い通常アクセスでは isEnabled() が false のまま noteApprovalIdentityForDebug / noteApprovalRenderForDebug が即 return し、DOM 要素も作られない（既定 no-op）/ 2026-08-19 に選択肢ラベルを記録対象へ追加した。初版は前置きか選択肢のどちらか片方しか残さない作りで、追跡対象である『本文と選択肢のズレ』がログに写らなかったため。あわせて描画層（approval.ts の 3 つの sig 差分スキップ判定）へも記録点を足し、データ時点のズレと描画スキップによる残留を切り分けられるようにした / 2026-08-20 に検出層（approval.ts の scanBuffer 末尾再走査 2 箇所）とスクロール層（terminal.ts の onScroll）へ記録点を足し、記録層を 4 つにした。ユーザー報告が「スクロールすると昔の承認ポップアップが出る・Codex で頻発」だったため。マーカー経路（handleHubApprovalMarker）は検出層を通らないので、buf 行が出れば「マーカーを使わない provider の検出フォールバックが動いた」ことが確定する。検出層は再走査が結果を実際に書き換えたとき（replace / fill1）だけ記録し、書き換えなし（keep）は捨てる。スクロール層は連続発火を 1.2 秒以内なら 1 行へ畳んで件数を数える。追加の記録内容は選択肢ラベル（既存と同じ先頭24文字・最大3件）・バッファ末尾の行数・カーソル有無・フォールバックのゲート理由（visible/liveopts/hint）・viewportY/baseY で、いずれも利用者のテキスト本文ではない。呼び元は isApprovalDebugEnabled() で先に判定し、クエリ無しでは観測用の配列コピーすら作らない / 2026-08-20 に常設プローブ経由へ移送した（plan_instrumentation-probe-lifecycle）。記録点は probe / probeScope の呼び出し 1 行だけになり、置き換えが起きたか（replace / fill1 / keep）の判定と keep の切り捨ては sink 側へ移した。この判定のため前後比較用の afterOptions を 1 項目だけ増やしている（他の記録内容は移送前と同じ）。ファイルは web/src/debug/ へ移り、既定ビルドでは entry から外れて成果物に入らない",
       "channels": [
         "approval.data",
