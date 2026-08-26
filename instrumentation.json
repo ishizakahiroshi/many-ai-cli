@@ -117,26 +117,6 @@
       ]
     },
     {
-      "id": "done-summary-firing-trace",
-      "status": "active",
-      "purpose": "完了マーカー未検出フォールバックの候補値と Git 作業ツリー差分を、会話ターンと作業ターンの判定材料として観測する",
-      "addedIn": "unreleased",
-      "gate": "opt-in: ビルドは -tags maidebug、runtime は log.session_enabled",
-      "due": "2026-09-02",
-      "files": [
-        "internal/hub/done_summary_firing_trace.go"
-      ],
-      "sharedFiles": [
-        "internal/hub/done_summary.go"
-      ],
-      "endpoints": [],
-      "removalCondition": "Git 差分を使った作業ターン判定の発火条件が実装され、C1 の観測結果を plan に記録したら撤去",
-      "reason": "running から standby への遷移だけでは会話ターンと作業ターンを区別できない。確定入力の Git 開始スナップショットの有無と、ターン終了時の変更ファイル数を本文なしで突き合わせる必要がある。",
-      "channels": [
-        "done.fallback"
-      ]
-    },
-    {
       "id": "mobile-lite-empty",
       "status": "active",
       "purpose": "スマホ幅でチャットビュー（mobile-terminal-lite）が空のまま表示される症状で、モバイル判定・xterm バッファ・scanBuffer の行数・DOM 寸法のどこで 0 になるかを実機から観測する",

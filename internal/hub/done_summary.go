@@ -147,12 +147,9 @@ func (s *Server) maybeCreateFallbackDoneSummary(id int) {
 		screen = ses.vt.Lines()
 	}
 	provider := ses.Provider
-	hasGitBaseline := ses.gitTurnStartTree != ""
 	s.sessionsMu.Unlock()
-	s.probe("done.fallback", "session_id", id, "provider", provider, "phase", "candidate", "git_baseline", hasGitBaseline)
 
 	s.captureGitTurnEndWithCallback(id, now.Format(time.RFC3339), func(turn gitTurnSnapshot) {
-		s.probe("done.fallback", "session_id", id, "provider", provider, "phase", "git_result", "files_changed", turn.Files, "added", turn.Added, "removed", turn.Removed)
 		if turn.Files == 0 {
 			return
 		}
