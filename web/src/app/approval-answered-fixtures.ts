@@ -7,7 +7,11 @@ import {
   clearReplayAnsweredApprovalCandidate,
   isAnsweredApprovalCandidate,
   isAnsweredApprovalShapeAcrossEpochs,
+  isHubMarkerAuthoritative,
+  isStaleHistoryRepaint,
+  getApprovalSourceEpoch,
   noteApprovalSourceEpoch,
+  noteHubMarkerDelivered,
   recordAnsweredApprovalCandidate,
   recordAnsweredApprovalIdentity,
   setApprovalProviderResolver,
@@ -191,4 +195,58 @@ test('shape の回答済み判定はセッションを跨がない', () => {
   const shape = approvalCandidateShape(17, opts, 'marker');
   recordAnsweredApprovalCandidate(17, opts, 'marker');
   assert.equal(isAnsweredApprovalShapeAcrossEpochs(18, shape), false);
+});
+
+// --- bugfix_approval-waiting-stuck-after-answer_2026-08-26.md の回帰 ---
+
+test('Hub がこの世代のマーカーを配信していれば、ローカル走査は候補を立てない', () => {
+  resetSession(19);
+  noteHubMarkerDelivered(19, getApprovalSourceEpoch(19));
+  assert.equal(isHubMarkerAuthoritative(19), true);
+});
+
+// Hub が何も配信できていない世代（開始マーカーが画面外にある等）では、
+// ローカル走査が最後の砦として働き続ける必要がある。
+test('Hub が何も配信していなければ、ローカル走査は従来どおり候補を立てられる', () => {
+  resetSession(20);
+  assert.equal(isHubMarkerAuthoritative(20), false);
+});
+
+test('世代が進んだら Hub の正本扱いは持ち越さない', () => {
+  resetSession(21);
+  noteHubMarkerDelivered(21, getApprovalSourceEpoch(21));
+  noteApprovalSourceEpoch(21, getApprovalSourceEpoch(21) + 1);
+  assert.equal(isHubMarkerAuthoritative(21), false);
+});
+
+// 2026-08-26 の実測そのもの。回答済みの承認が、差分再描画で 1 文字欠けた本文として
+// 再パースされると回答済み台帳を外す。Hub 側は同じ入力で候補キーが揺れていないので、
+// この世代ではローカル走査から候補を立てないことで再点灯を止める。
+test('1 文字欠けた再パースは回答済み台帳を外すが、Hub 正本の世代では候補にならない', () => {
+  resetSession(22);
+  const answered = markerOptions('本番 mer へ SSH して read-only の確認クエリを流してよいですか', ['いいえ', 'はい'], ['0', '1']);
+  recordAnsweredApprovalCandidate(22, answered, 'marker');
+  noteHubMarkerDelivered(22, getApprovalSourceEpoch(22));
+
+  const corrupted = markerOptions('本番 mer へ SSH て read-only の確認クエリを流してよいですか', ['いいえ', 'はい'], ['0', '1']);
+  // 台帳は外れる（ここが症状の起点。shape の完全一致で引くため）。
+  assert.equal(isAnsweredApprovalCandidate(22, corrupted, 'marker'), false);
+  // それでもローカル走査からは立てないので 保留中 は戻らない。
+  assert.equal(isHubMarkerAuthoritative(22), true);
+});
+
+test('遡り表示中に届いた回答済みの中身だけを落とす', () => {
+  resetSession(23);
+  const opts = markerOptions('この変更を適用しますか?', ['はい', 'いいえ']);
+  const shape = approvalCandidateShape(23, opts, 'marker');
+  recordAnsweredApprovalCandidate(23, opts, 'marker');
+  noteApprovalSourceEpoch(23, 9);
+
+  // 遡っていなければ落とさない（世代が進んだ再質問は出す仕様のまま）。
+  assert.equal(isStaleHistoryRepaint(23, shape, false), false);
+  // 遡り中で、かつ一度でも答えた中身なら落とす。
+  assert.equal(isStaleHistoryRepaint(23, shape, true), true);
+  // 遡り中でも、答えたことのない中身は落とさない（F-12 型の握り潰しを避ける）。
+  const fresh = markerOptions('別の質問ですか?', ['はい', 'いいえ']);
+  assert.equal(isStaleHistoryRepaint(23, approvalCandidateShape(23, fresh, 'marker'), true), false);
 });

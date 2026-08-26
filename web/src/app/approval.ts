@@ -1,8 +1,8 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, annotateApprovalIdentity, approvalCandidateDebugKey, approvalCandidateIdentity, approvalCandidateShape, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchActiveQ, batchFreeText, batchSelections, clearReplayAnsweredApprovalCandidate, getApprovalSourceEpoch, isAnsweredApprovalCandidate, isApprovalReplayPending, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectFocusIdx, multiSelectSelections, noteApprovalSourceEpoch, recordAnsweredApprovalCandidate, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, utf8Decoder } from './state.js';
+import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, annotateApprovalIdentity, approvalCandidateDebugKey, approvalCandidateIdentity, approvalCandidateShape, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchActiveQ, batchFreeText, batchSelections, clearReplayAnsweredApprovalCandidate, getApprovalSourceEpoch, isAnsweredApprovalCandidate, isApprovalReplayPending, isHubMarkerAuthoritative, isStaleHistoryRepaint, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectFocusIdx, multiSelectSelections, noteApprovalSourceEpoch, noteHubMarkerDelivered, recordAnsweredApprovalCandidate, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, utf8Decoder } from './state.js';
 import { inputEl, sendSubmittedText, sendSubmittedBody } from '../app.js';
-import { clearSuppressPtyResize, isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout, syncPtySizeToViewportAfterLayout } from './terminal.js';
+import { clearSuppressPtyResize, isTerminalAtBottom, isTerminalShowingHistory, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout, syncPtySizeToViewportAfterLayout } from './terminal.js';
 import { stripAnsi } from './settings.js';
 import { ws } from './ws-client.js';
 import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, hasApprovalLikeLabel, isBatchOptions, isHubChoicePrompt, isMultiQuestionPrompt, isMultiSelectOptions, markHubChoiceDefault, matchNativeApprovalTrigger, normalizeVtCursorOps } from './approval-parser.js';
@@ -546,6 +546,12 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText, replayMeta = 
     const sig = approvalSig(markerOpts);
     const src = approvalSourceCache.get(id);
     if (src && src.source === 'hub_marker' && src.sig === sig) return;
+    // Hub がこの世代のマーカーを配信済みなら、候補を立てる役はあちらのもの。
+    // pendingTextTail は差分再描画で文字が欠けることがあり、欠けた本文は回答済み台帳を
+    // 外して回答済みの承認を再点灯させる（実測は approval-answered.ts の
+    // isHubMarkerAuthoritative コメント）。Hub がこの世代で何も配信していないときは
+    // 従来どおりここが最後の砦なので、素通しにはしない。
+    if (isHubMarkerAuthoritative(id)) return;
     approvalUiAdapter.cacheApprovalOptions(id, markerOpts);
     approvalHintConfirmTrusted.set(id, true); // 信頼できる検出としてマーク: fallback による cancel/clear を防ぐ
     scheduleApprovalHintConfirm(id, markerOpts);
@@ -799,6 +805,8 @@ export function handleGoApprovalDetected(message) {
 	annotateApprovalIdentity(options, identity);
 	if (message.approval_candidate_key) clearReplayAnsweredApprovalCandidate(id, identity);
 	if (isAnsweredApprovalCandidate(id, options, 'native')) return;
+	// マーカー経路と同じ理由でここでも落とす（handleHubApprovalMarker のコメント参照）。
+	if (isStaleHistoryRepaint(id, identity.shape, isTerminalShowingHistory(id))) return;
   options.forEach((opt: any) => {
     opt._approvalSource = 'go_vt';
     opt._approvalSig = sig;
@@ -877,7 +885,15 @@ export function handleHubApprovalMarker(message) {
 	annotateApprovalIdentity(markerOpts, identity);
 	if (message.approval_candidate_key) clearReplayAnsweredApprovalCandidate(id, identity);
 	if (isAnsweredApprovalCandidate(id, markerOpts, 'marker')) return;
+	// ページ送りで CLI が過去の画面を描き直している最中に届いた回答済みの中身は、
+	// 状態にも触らずに捨てる。2026-08-23 の対策は showOptions（描画判定）にしか無く、
+	// パネルが出ないまま 保留中 バッジ・通知音・auto-switch だけが立って下ろせなくなっていた
+	// （bugfix_approval-waiting-stuck-after-answer_2026-08-26.md の修正 2）。
+	// cacheApprovalOptions より前に落とすのが要点。キャッシュだけ差し替えると、表示中の
+	// 承認バーの本文と選択肢が別の質問の組み合わせに入れ替わる元の症状へ戻る。
+	if (isStaleHistoryRepaint(id, identity.shape, isTerminalShowingHistory(id))) return;
 
+  noteHubMarkerDelivered(id, identity.sourceEpoch);
   cancelApprovalHintConfirm(id);
   approvalSwitchCandidates.delete(id);
   resetBgApprovalMisses(id);
@@ -1115,6 +1131,10 @@ export function detectApproval(id) {
         return;
       }
       if (consumed) return; // 回答済み候補の再表示をスキップ
+      // trackApprovalHintFromChunk 側と同じ理由でローカル走査からは候補を立てない。
+      // 上の hub_marker 再描画分岐（src.sig 一致）はこの手前で return しているので、
+      // セッション切替でアクティブへ戻ったときのパネル再描画は従来どおり通る。
+      if (isHubMarkerAuthoritative(id)) return;
       approvalUiAdapter.cacheApprovalOptions(id, markerOpts);
       const wasVisible = !!approvalVisibleCache.get(id);
       approvalUiAdapter.showOptions(bar, id, markerOpts, !wasVisible);
