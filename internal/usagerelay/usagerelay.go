@@ -426,16 +426,27 @@ type codexCredits struct {
 	Balance    string `json:"balance"`
 }
 
+// codexRateLimits holds the parsed rate_limits object of a token_count record.
+//
+// **「この構造体に中身があるか」で観測の有無を判定しないこと。** 判定は 2 層に
+// 分かれている。レコード単位は scanLastTokenCountWithRateLimitsAt が返す
+// rateLimitsPresent（provider が rate_limits を報告したか。値が null でも true）、
+// フィールド単位は payload の CodexPrimaryPresent / CodexSecondaryPresent /
+// CodexCreditsPresent。Hub 側も subscription_usage.go で同じ粒度で組み直す。
+//
+// かつて「中身があるか」を返す present() を持っていて、採用条件と
+// CodexRateLimitsPresent の両方に使っていたが、**それだと rate_limits: null が
+// 無視され、Codex が制限を空にしても 1 つ前の古い値が残り続けた**。中身の有無と
+// 報告の有無は別の問いなので present() ごと撤去した（2026-08-26）。同じ rollout を
+// 読む usagelocal.ReadCodexProfile も RateLimits != nil のレコード単位で判定している。
+// 復活させたくなったら usagerelay_test.go の
+// TestScanLastTokenCountRateLimitPresenceAndObservedTime を先に読むこと（null で
+// クリアされることを固定している）。
 type codexRateLimits struct {
 	Primary   *codexRateLimitWindow `json:"primary"`
 	Secondary *codexRateLimitWindow `json:"secondary"`
 	Credits   *codexCredits         `json:"credits"`
 	PlanType  string                `json:"plan_type"`
-}
-
-func (r codexRateLimits) present() bool {
-	return r.Primary != nil || r.Secondary != nil || r.PlanType != "" ||
-		r.Credits != nil
 }
 
 // resolve は複数フォーマットを試して (tokIn, tokOut, tokCache, tokTotal, ctxWindow) を返す。
