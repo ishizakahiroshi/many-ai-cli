@@ -11,6 +11,26 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Tabs can be reordered by dragging.** Tabs in the top tab bar move with a
+  drag, so frequently used sessions can sit at the left end while rarely used
+  ones stay out of the way on the right. The order is stored per browser and
+  survives a reload. Reordering is also available from Settings → General,
+  which can restore the default order.
+
+- **Every part of the control layout can be placed on either side
+  independently, and the approval popup can dock to the left or right edge of
+  the terminal.** Previously one switch moved everything together. Settings →
+  General now offers separate selectors for the session card column, the input
+  bar tools, and every panel close button (✕), each keeping its pre-update
+  position unless you change it. The approval / question popup gains a new
+  option to stand as a vertical column on the right or left side of the
+  terminal instead of hugging the bottom edge; the inner edge of the column is
+  draggable to widen it, and double-clicking that edge restores the default
+  width. On phone widths the card column stays as the left drawer and the
+  popup always docks at the bottom, exactly as before. The ⇄ button in the
+  input bar still works as a shortcut and flips all of these parts to the
+  opposite side at once.
+
 - **Six AI CLIs in one Hub, and extra subscriptions where the official CLI
   lets you stack them.** The dashboard already ran Claude Code, Codex CLI,
   GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI, and opencode side by

@@ -10,8 +10,17 @@
 // #display-stack の外側までそのぶん下げ、ターミナル本文を一切覆わないようにする。
 // 下げ幅は入力欄帯の実測（token-statusbar 用の padding は除く＝ステータスバーは覆わない）。
 // モバイルは approval.css 側で position:relative に戻るため、この変数は効かない。
+//
+// 右/左カラム（body.approval-dock-right / -left。状態は ui-side.ts の uiSideApproval）では
+// バーは display-stack の縦いっぱいに張り、高さ方向の「下げ」は存在しないので 0 にする
+// （入力欄・token-statusbar は display-stack の外なので、どのみち覆わない）。
 
 const SHIFT_VAR = '--approval-dock-shift';
+
+function isApprovalColumn(): boolean {
+  return document.body.classList.contains('approval-dock-right')
+    || document.body.classList.contains('approval-dock-left');
+}
 
 export function initApprovalDock(): void {
   const stack = document.getElementById('display-stack');
@@ -21,6 +30,11 @@ export function initApprovalDock(): void {
   let rafId = 0;
   const update = (): void => {
     rafId = 0;
+    // カラム時は下げ不要。0 へ戻す（下ドックへ戻った直後に古い幅を引きずらない）。
+    if (isApprovalColumn()) {
+      document.documentElement.style.setProperty(SHIFT_VAR, '0px');
+      return;
+    }
     // 入力欄帯の下端から token-statusbar 用の padding を引いた位置がバー下端の狙い。
     const pad = parseFloat(getComputedStyle(outer).paddingBottom) || 0;
     const targetBottom = outer.getBoundingClientRect().bottom - pad;
@@ -41,5 +55,11 @@ export function initApprovalDock(): void {
     ro.observe(outer);
   }
   window.addEventListener('resize', schedule);
+  // ui-side.ts が body クラス（approval-dock-right / -left）を付け替えたら下げ幅をやり直す。
+  try {
+    if (typeof MutationObserver === 'function') {
+      new MutationObserver(schedule).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    }
+  } catch (_) { /* 監視できない環境では従来どおり update() のみ */ }
   update();
 }
