@@ -1061,6 +1061,7 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
 .card { position: relative; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 9px 42px 9px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; overflow: hidden; }
 .card:hover { border-color: var(--line-soft); background: var(--bg-deep); }
 .card.waiting { border-color: rgba(245,158,11,0.35); }
+.card.awaiting-approval { background: color-mix(in srgb, var(--warn-bg) 12%, var(--bg-elev)); }
 .card.active {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, var(--bg-elev));
@@ -1093,6 +1094,7 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
 }
 .card.running::before { background: var(--green); opacity: 1; }
 .card.waiting::before { background: var(--warn); opacity: 1; }
+.card.awaiting-approval::before { background: var(--warn); opacity: 1; width: 5px; }
 .card.active::before  { background: var(--accent); opacity: 1; width: 5px; top: 4px; bottom: 4px; }
 /* 1 行に並ぶ文字は baseline で揃える。align-items:center だと各項目の baseline が
    その項目の中心から (ascent-descent)/2 ＝ 約 0.41em ずれるため、font-size が違う
@@ -1110,20 +1112,19 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
 .card-state-pill .card-pdot,
 .card-state-text { display: none; }
 .card-state-icon { display: inline-block; font-size: 0.82rem; line-height: 1; }
-.card-state-pill.awaiting-approval { animation: state-attention 1.4s ease-in-out infinite; }
 .card-state-pill.awaiting-input { color: var(--accent); }
 .card-state-pill.workflow-active .card-state-icon { animation: state-pulse 1s ease-in-out infinite; }
-@keyframes state-attention { 50% { filter: brightness(1.22); } }
 @keyframes state-pulse { 50% { transform: scale(1.45); opacity: .55; } }
-@media (prefers-reduced-motion: reduce) { .card-state-pill.awaiting-approval, .card-state-pill.running .card-state-icon, .card-state-pill.workflow-active .card-state-icon { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .card-state-pill.running .card-state-icon, .card-state-pill.workflow-active .card-state-icon { animation: none; } }
 .card-state-pill.running  { color: var(--badge-running-text); }
 .card-state-pill.running .card-state-icon { animation: state-pulse 1.4s ease-in-out infinite; }
+.card-state-pill.awaiting-approval .card-state-icon { animation: none; }
 .card-state-pill.waiting  { color: var(--warn-text); }
 .card-state-pill.standby  { color: var(--badge-standby-text); }
 .card-state-pill.error,
 .card-state-pill.disconnected { color: var(--danger); }
 /* 付帯状態は通常 state の色より優先する（standby 中の入力待ち等）。 */
-.card-state-pill.awaiting-approval { color: var(--warn-text); }
+.card-state-pill.awaiting-approval { color: #111; background: var(--warn); min-width: 1.05rem; width: auto; padding: 0 3px; border-radius: var(--radius-sm); }
 .card-state-pill.awaiting-input { color: var(--accent); }
 .card-state-pill.workflow-active { color: var(--muted-2); }
 .card-started-at { flex-shrink: 0; font-size: 0.72rem; color: var(--muted-2); margin-left: 3px; }
@@ -1134,12 +1135,12 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
 .card-ctx-fill.crit { background: var(--danger); }
 .card-ctx-pct { font-variant-numeric: tabular-nums; }
 .card-ctx-pct.crit { color: var(--danger); font-weight: 700; }
-.card-ctx-1m { font-size: 0.58rem; font-weight: 700; padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--accent); }
-.card-longproc { white-space: nowrap; color: var(--warn-text); background: color-mix(in srgb, var(--warn-bg) 30%, transparent); border: 1px solid color-mix(in srgb, var(--warn-text) 40%, transparent); border-radius: var(--radius-sm); padding: 0 5px; font-weight: 700; }
+.card-ctx-1m { font-size: 0.58rem; font-weight: 700; padding: 0 3px; border-radius: 3px; color: var(--accent); }
+.card-longproc { white-space: nowrap; color: var(--muted-2); border-radius: var(--radius-sm); padding: 0 5px; }
 /* 段階表示（longproc.ts の LongprocLevel）。severe = 15 分超、stalled = provider の
    transcript が伸びていない。stalled は「重いだけ」ではないので危険色にする。 */
-.card-longproc.is-severe  { color: var(--danger); background: color-mix(in srgb, var(--danger-bg) 30%, transparent); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
-.card-longproc.is-stalled { color: var(--danger); background: color-mix(in srgb, var(--danger-bg) 55%, transparent); border-color: var(--danger); }
+.card-longproc.is-severe  { color: var(--danger); background: color-mix(in srgb, var(--danger-bg) 30%, transparent); border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent); }
+.card-longproc.is-stalled { color: var(--danger); background: color-mix(in srgb, var(--danger-bg) 55%, transparent); border: 1px solid var(--danger); }
 /* 直前ターンの完了サマリー（done-summary.ts）。端末へ本文を書かなくなったので、
    見ていないセッションの完了に気づく経路はこのバッジになる。幅は狭いので 1 行省略、
    全文は data-tooltip 側で読める。 */
@@ -1166,12 +1167,13 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
 .card-model.card-model--with-icon svg.card-provider-icon { width: 10px; height: 10px; flex-shrink: 0; margin-right: 0; }
 /* モデル名は先頭10文字相当で打ち切り（…）。全文はバッジの data-tooltip でホバー表示。 */
 .card-model.card-model--with-icon .card-model-text { min-width: 0; max-width: 10ch; flex-shrink: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card-branch { flex-shrink: 0; min-width: 0; max-width: 50%; color: var(--green-text); background: color-mix(in srgb, var(--green-bg) 35%, transparent); border: 1px solid color-mix(in srgb, var(--green-text) 30%, transparent); border-radius: var(--radius-sm); padding: 1px 5px; font-size: 0.68rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: auto; cursor: pointer; user-select: none; transition: background 0.15s, transform 0.05s, color 0.15s; font-family: Consolas, monospace; }
+.card-branch { flex-shrink: 0; min-width: 0; max-width: 50%; color: var(--green-text); border-radius: var(--radius-sm); padding: 1px 5px; font-size: 0.68rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: auto; cursor: pointer; user-select: none; transition: background 0.15s, transform 0.05s, color 0.15s; font-family: Consolas, monospace; }
 .card-branch:hover { background: color-mix(in srgb, var(--green-text) 22%, transparent); color: var(--text); }
 .card-branch:active { transform: scale(0.96); }
 .card-branch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.card-branch[data-disabled="true"] { color: var(--muted); background: var(--bg-deep); border-color: var(--line); cursor: not-allowed; opacity: 0.6; }
+.card-branch[data-disabled="true"] { color: var(--muted); background: var(--bg-deep); border: 1px solid var(--line); cursor: not-allowed; opacity: 0.6; }
 .card-branch[data-disabled="true"]:hover { background: var(--bg-deep); color: var(--muted); }
+.card.awaiting-approval .card-ctx { opacity: .55; }
 .card-role-chip,
 .card-worktree-chip {
   flex-shrink: 0;
@@ -1969,7 +1971,8 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
 }
 @media (prefers-reduced-motion: no-preference) {
   .status-chip--attention,
-  .session-chip.waiting { animation: waiting-attention 1.2s ease-in-out infinite; }
+  .session-chip.waiting,
+  .card-state-pill.awaiting-approval { animation: waiting-attention 1.2s ease-in-out infinite; }
   @keyframes waiting-attention {
     0%, 100% { opacity: 1; }
     50%       { opacity: 0.45; }
