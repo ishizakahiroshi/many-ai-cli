@@ -523,7 +523,7 @@ header {
 .usage-profile-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .usage-profile-plan { margin-left: auto; color: var(--muted-2, #777); white-space: nowrap; }
 .usage-meter-line { min-width: 0; margin: 2px 0; }
-.usage-meter-label { width: 27px; flex-shrink: 0; color: var(--muted-2, #777); }
+.usage-meter-label { min-width: 27px; flex-shrink: 0; color: var(--muted-2, #777); }
 .usage-meter {
   flex: 1;
   min-width: 55px;
@@ -632,7 +632,9 @@ header {
 /* Usage ドロップダウンの広幅レイアウト。900px 未満は既定の縦 1 カラムを保つ
    （docs/local/plan_usage-panel-wide-layout.md C1〜C3）。 */
 @media (min-width: 900px) {
-  .usage-dropdown { max-width: min(720px, calc(100vw - 24px)); }
+  /* 2 列のメーターが最長ロケール（en の Remaining 100% / vi の Hàng tuần）でも
+     入る幅。足りない幅では .usage-meters が自動で 1 列へ戻る。 */
+  .usage-dropdown { max-width: min(840px, calc(100vw - 24px)); }
   .usage-dropdown-columns {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -643,14 +645,20 @@ header {
   /* ヘッダ下の区切り線と重なるので左カラム先頭の見出しは上罫線を消す */
   .usage-dropdown-col > .usage-dropdown-section-title:first-child { border-top: 0; }
   /* 1 プロファイルのメーター群（5h/7d 等）を横並びにする。メーター行と直下の
-     usage-meter-meta の対応が分からなくならないよう、セル単位は group ごと。 */
+     usage-meter-meta の対応が分からなくならないよう、セル単位は group ごと。
+     minmax(0, 1fr) だとセルが 1 行分の最小幅を下回り、行がセルからはみ出して
+     隣のセルのラベル（7d / 週次）が前のセルのバー・数値の下に潜って読めなくなる。
+     auto-fit + 実測の最小幅にして、2 列が入らない幅では自動で 1 列へ戻す。 */
   .usage-meters {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
     column-gap: 14px;
     row-gap: 2px;
     align-items: start;
   }
+  /* 横並び時は数値の固定幅（縦積み時の桁揃え用）を外して行の最小幅を下げる */
+  .usage-meters .usage-meter-value { width: auto; }
+  .usage-meters .usage-meter { min-width: 40px; }
 }
 
 /* シャットダウン・設定ボタン共通 */
