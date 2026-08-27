@@ -318,3 +318,59 @@ func TestVTBufferScrollbackCap(t *testing.T) {
 		t.Fatalf("scrollback len = %d, want %d (should be full)", len(vt.scrollback), maxVTScrollbackLines)
 	}
 }
+
+// TestVTBufferDeferredWrapAtRightMargin は、右端ちょうどまで書いても
+// その場では改行しない（deferred wrap）ことを検証する。
+//
+// 実端末はカーソルを右端に留め、次の文字が来て初めて折り返す。ここを即時改行に
+// していたため、行を画面幅ぴったりまで空白で埋める TUI（Claude Code / Ink）では
+// ミラーだけが 1 行余計にスクロールし、以降の行が丸ごとずれていた。ずれたミラーは
+// Ink の差分再描画（変わっていないセルを CSI C で読み飛ばす）では直らないので、
+// 画面に無い文字列を混ぜたブロックを承認候補として作り続ける。
+// 実測（2026-08-27 / claude session #5 の 8,519 レコードを replay）: この修正だけで
+// 回答済み承認の再配信 7 件が 0 件になる（bugfix_approval-panel-reappears-live-after-answer_2026-08-27.md）。
+func TestVTBufferDeferredWrapAtRightMargin(t *testing.T) {
+	vt := newVTBuffer(20, 2)
+	// 最終行を右端ちょうどまで埋める。ここでスクロールしてはいけない。
+	vt.Write([]byte("first line\x1b[2;1H" + strings.Repeat("a", 20)))
+	if len(vt.scrollback) != 0 {
+		t.Fatalf("右端ちょうどでスクロールした: scrollback=%q", vt.scrollback)
+	}
+	if got := vt.Lines()[0]; got != "first line" {
+		t.Fatalf("line 0 = %q, want %q", got, "first line")
+	}
+	// 次の 1 文字でようやく折り返す。
+	vt.Write([]byte("b"))
+	if len(vt.scrollback) != 1 || vt.scrollback[0] != "first line" {
+		t.Fatalf("次の文字で折り返していない: scrollback=%q", vt.scrollback)
+	}
+	if got := vt.Lines()[1]; got != "b" {
+		t.Fatalf("line 1 = %q, want %q", got, "b")
+	}
+}
+
+// TestVTBufferDeferredWrapClearedByCursorMove は、右端に留まった状態でカーソル
+// 移動が来たら保留中の折り返しが消えることを検証する（実端末と同じ）。
+func TestVTBufferDeferredWrapClearedByCursorMove(t *testing.T) {
+	vt := newVTBuffer(10, 3)
+	vt.Write([]byte(strings.Repeat("x", 10) + "\x1b[1;1Hab"))
+	if got := vt.Lines()[0]; got != "abxxxxxxxx" {
+		t.Fatalf("line 0 = %q, want %q", got, "abxxxxxxxx")
+	}
+	if got := vt.Lines()[1]; got != "" {
+		t.Fatalf("line 1 = %q, want empty（保留中の折り返しが解除されていない）", got)
+	}
+}
+
+// TestVTBufferOverwriteWideRuneClearsBothCells は、2 桁文字のセル対のどちらかを
+// 上書きしたら対ごと無効化されることを検証する。片割れが残ると renderCells の
+// 桁数が実画面より 1 桁増え、以降の描画がずれたまま固定される。
+func TestVTBufferOverwriteWideRuneClearsBothCells(t *testing.T) {
+	vt := newVTBuffer(10, 2)
+	vt.Write([]byte("あい"))
+	// 「あ」の右半分（2 桁目）を 1 桁文字で踏む。
+	vt.Write([]byte("\x1b[1;2Hx"))
+	if got := vt.Lines()[0]; got != " xい" {
+		t.Fatalf("line 0 = %q, want %q", got, " xい")
+	}
+}

@@ -14,15 +14,16 @@ import (
 // 何か」の定義が違い、その食い違いそのものが症状だった（タイマー方式は再描画中
 // に失効して回答済みを再表示し、ブロック全文方式は本当の再質問まで永久に埋めた）。
 //
-// approvalConsumedCarried はこの一覧にあるが抑止 state ではない。持ち越しを 1 回
-// に制限するだけで、単独で候補を抑止する力を持たない（2026-08-19 追加）。
+// approvalConsumedCarried（持ち越しを 1 回に制限する境界フラグ）は 2026-08-27 に
+// 撤去した。持ち越しの解除条件を回数から「その回答済みブロックが今も VT から
+// 抽出できるか」へ移したので、数える state 自体が要らなくなっている
+// （bugfix_approval-panel-reappears-live-after-answer_2026-08-27.md）。
 var approvalSuppressionFields = map[string]string{
 	"approvalSourceEpoch":            "候補の世代。live prompt の境界でのみ進む",
 	"approvalEpochPending":           "直前の消費が現世代のものか",
 	"approvalConsumedCandidateKey":   "消費済み候補の identity",
 	"approvalConsumedCandidateShape": "消費済み候補の shape（identity の材料・表示用）",
 	"approvalConsumedEpoch":          "消費が起きた世代",
-	"approvalConsumedCarried":        "持ち越しを 1 回に制限する境界フラグ（抑止 state ではない）",
 
 	// 以下 3 本は「いま画面に出 している候補」であって「回答済みか」ではない。
 	// approval_marker.go:129 で再 broadcast を抑えるのに使うが、判定に使う同一性は

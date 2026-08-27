@@ -45,9 +45,16 @@ import (
 //     （進めると復元しただけで新しい承認に見える）
 //   - 世代が進めば同じ質問文でも新しい候補として表示するのが仕様。「同じ質問を
 //     二度と出さない」方向の永久抑止に戻さない
-//   - 回答済み記録のユーザーターン持ち越しは 1 回だけ（approvalConsumedCarried）。
-//     答え終わったブロックは VT 末尾に何ターンも残るので、境界のたびに持ち越しを
-//     再武装すると前項の永久抑止に逆戻りする
+//   - 回答済み記録は「その回答済みブロックが今も VT から抽出できる間」だけ
+//     ユーザーターンを越えて持ち越す。回数では区切らない（2026-08-27 にユーザー
+//     判断で撤廃。それまでは 1 回だけだった）。解除条件は回数ではなく画面の側に
+//     あり、エージェントが別のブロックを描くか、そのブロックが画面から流れた
+//     時点で持ち越しは止まる。だから前項の永久抑止にはならない。
+//     代償は 1 つだけ受け入れている: 回答済みのコピーがまだ画面に残っている
+//     うちに、エージェントが 1 バイト違わぬ同じ質問を出し直すと、その再質問は
+//     パネルに出ない（端末には見えている）。回数制限だった頃は、この代償の
+//     代わりに「3 ターン目以降は回答済みが必ず出戻る」を払っていた
+//     （bugfix_approval-panel-reappears-live-after-answer_2026-08-27.md）
 
 var (
 	approvalIdentityOptionRe   = regexp.MustCompile(`^\s*(\d{1,2})\.\s*(.*?)\s*$`)
@@ -293,9 +300,6 @@ func markApprovalConsumedAtEpochLocked(ses *session, candidateKey string, sig st
 	}
 	ses.approvalConsumedCandidateKey = candidateKey
 	ses.approvalConsumedEpoch = epoch
-	// A freshly answered prompt earns one user-turn carry (see
-	// markApprovalUserTurnBoundaryLocked).
-	ses.approvalConsumedCarried = false
 	ses.approvalEpochPending = epoch == currentEpoch
 	ses.approvalConsumedCandidateShape = approvalCandidateShapeForKeyLocked(ses, candidateKey)
 	if sig != "" {
@@ -337,18 +341,16 @@ func markApprovalUserTurnBoundaryLocked(ses *session) {
 	}
 	// The terminal is a scrollback history, so the just-consumed marker can be
 	// the latest complete block even after the user has started the next turn.
-	// Carry the existing consumed record across exactly this new epoch. This
-	// reuses candidateKey + sourceEpoch; it does not introduce another replay
+	// Carry the existing consumed record into this new epoch. This reuses
+	// candidateKey + sourceEpoch; it does not introduce another replay
 	// suppression state.
 	//
-	// Exactly one carry per answer. The answered block stays inside the VT tail
-	// for many turns, so without this bound the record would be re-armed at
-	// every boundary and an agent that legitimately re-asks the same question
-	// could never surface it again — the permanent suppression CLAUDE.md
-	// forbids ("同じ質問を二度と出さない方向の永久抑止に戻さない").
-	if ses.approvalConsumedCarried {
-		return
-	}
+	// 持ち越しの回数は数えない。解除条件は下の identity 比較そのもので、
+	// エージェントが別のブロックを描くか、答え終わったブロックが画面から
+	// 流れれば持ち越しは止まる（＝この if を素通りできなくなる）。回数で
+	// 区切っていた頃は、答えた後にユーザーが 2 回何かを送っただけで、画面に
+	// 出たままの回答済みブロックが未回答の候補へ戻っていた。ファイル冒頭の
+	// ルール本文に、この変更で受け入れた代償も書いてある。
 	marker := extractApprovalMarkerBlockFromVT(ses.vt)
 	if marker == nil {
 		return
@@ -362,7 +364,6 @@ func markApprovalUserTurnBoundaryLocked(ses *session) {
 		ses.approvalConsumedCandidateShape = consumedShape
 	}
 	ses.approvalConsumedEpoch = epoch
-	ses.approvalConsumedCarried = true
 	ses.approvalEpochPending = true
 }
 

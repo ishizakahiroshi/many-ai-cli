@@ -273,11 +273,11 @@ func TestApprovalBoundaryCarriesConsumedMarkerAcrossEpoch(t *testing.T) {
 	}
 }
 
-// The carry-over in markApprovalUserTurnBoundaryLocked must be spent exactly
-// once. The answered block stays in the VT tail for many turns, so re-arming it
-// at every boundary would make an identical re-ask permanently invisible — the
-// suppression CLAUDE.md forbids.
-func TestApprovalBoundaryCarriesConsumedMarkerOnlyOnce(t *testing.T) {
+// 回答済み記録の持ち越しは、その回答済みブロックが VT から抽出できる間ずっと続く。
+// 回数では区切らない（2026-08-27 にユーザー判断で撤廃。それまでは 1 回だけで、
+// 答えた後にユーザーが 2 回何かを送っただけで、画面に出たままの回答済みブロックが
+// 未回答の候補へ戻っていた。bugfix_approval-panel-reappears-live-after-answer_2026-08-27.md）。
+func TestApprovalBoundaryCarriesConsumedMarkerWhileVisible(t *testing.T) {
 	s := newTestServer()
 	ses := registerTestSession(s, 21, "codex")
 	ses.vt = newVTBuffer(80, 8)
@@ -300,36 +300,69 @@ func TestApprovalBoundaryCarriesConsumedMarkerOnlyOnce(t *testing.T) {
 		ApprovalSourceEpoch:  1,
 	})
 
-	// First user turn: the answered block is carried so the scrollback copy
-	// does not come back.
-	s.sessionsMu.Lock()
-	markApprovalUserTurnBoundaryLocked(ses)
-	carriedEpoch := ses.approvalConsumedEpoch
-	carriedPending := ses.approvalEpochPending
-	s.sessionsMu.Unlock()
-	if carriedEpoch != 2 || !carriedPending {
-		t.Fatalf("first boundary should carry: consumed_epoch=%d pending=%v", carriedEpoch, carriedPending)
+	// 回答済みブロックが画面に出ている限り、ユーザーターンが何回来ても持ち越す。
+	for turn := 2; turn <= 4; turn++ {
+		s.sessionsMu.Lock()
+		markApprovalUserTurnBoundaryLocked(ses)
+		epoch := ses.approvalSourceEpoch
+		consumedEpoch := ses.approvalConsumedEpoch
+		pending := ses.approvalEpochPending
+		s.sessionsMu.Unlock()
+		if epoch != uint64(turn) {
+			t.Fatalf("turn %d: boundary should advance the epoch: epoch=%d", turn, epoch)
+		}
+		if consumedEpoch != uint64(turn) || !pending {
+			t.Fatalf("turn %d: carry was not extended: consumed_epoch=%d pending=%v", turn, consumedEpoch, pending)
+		}
+		replay := extractApprovalMarkerBlock(ses.vt.TailLinesWithScrollback(vtTailLinesForMarker))
+		if replay == nil || s.maybeBroadcastApprovalMarker(21, replay, ses.lastOutputAt) {
+			t.Fatalf("turn %d: the answered block must stay suppressed while it is still on screen", turn)
+		}
 	}
+}
 
-	// Second user turn: the carry is already spent, so the record must not be
-	// extended again.
+// 持ち越しの解除条件は回数ではなく画面。エージェントが別のものを描いた時点で
+// 持ち越しは止まり、そのあとに同じ質問が出れば新しい候補として配信される。
+func TestApprovalBoundaryStopsCarryWhenBlockLeavesScreen(t *testing.T) {
+	s := newTestServer()
+	ses := registerTestSession(s, 22, "codex")
+	ses.vt = newVTBuffer(80, 8)
+	block := []string{
+		"[MANY-AI-CLI]",
+		"Q1 proceed with this change?",
+		"1. Yes",
+		"2. No",
+		"[/MANY-AI-CLI]",
+	}
+	ses.vt.scrollback = append([]string(nil), block...)
+	marker := extractApprovalMarkerBlock(ses.vt.TailLinesWithScrollback(vtTailLinesForMarker))
+	if marker == nil || !s.maybeBroadcastApprovalMarker(22, marker, ses.lastOutputAt) {
+		t.Fatal("marker should be accepted before consumption")
+	}
+	s.markNativeApprovalConsumed(proto.Message{
+		SessionID:            22,
+		ApprovalSig:          marker.Sig,
+		ApprovalCandidateKey: ses.approvalMarkerCandidateKey,
+		ApprovalSourceEpoch:  1,
+	})
+
+	// 回答済みブロックが画面から消える（エージェントが次の作業を描いた）。
+	ses.vt.scrollback = []string{"agent moved on", "no marker on screen"}
 	s.sessionsMu.Lock()
 	markApprovalUserTurnBoundaryLocked(ses)
-	epoch := ses.approvalSourceEpoch
 	consumedEpoch := ses.approvalConsumedEpoch
+	epoch := ses.approvalSourceEpoch
 	pending := ses.approvalEpochPending
 	s.sessionsMu.Unlock()
-	if epoch != 3 {
-		t.Fatalf("second boundary should advance the epoch: epoch=%d", epoch)
-	}
-	if consumedEpoch != 2 || pending {
-		t.Fatalf("carry was re-armed on the second boundary: consumed_epoch=%d pending=%v", consumedEpoch, pending)
+	if consumedEpoch == epoch || pending {
+		t.Fatalf("carry must stop once the block is gone: epoch=%d consumed_epoch=%d pending=%v", epoch, consumedEpoch, pending)
 	}
 
-	// The same question asked again is now a new candidate again.
+	// 同じ質問を出し直したら、新しい候補として出る（永久抑止になっていない）。
+	ses.vt.scrollback = append([]string(nil), block...)
 	reask := extractApprovalMarkerBlock(ses.vt.TailLinesWithScrollback(vtTailLinesForMarker))
-	if reask == nil || !s.maybeBroadcastApprovalMarker(21, reask, ses.lastOutputAt) {
-		t.Fatal("an identical re-ask after the carry is spent must surface again")
+	if reask == nil || !s.maybeBroadcastApprovalMarker(22, reask, ses.lastOutputAt) {
+		t.Fatal("a re-ask after the block left the screen must surface again")
 	}
 }
 

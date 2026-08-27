@@ -184,14 +184,6 @@ type session struct {
 	approvalConsumedCandidateKey   string
 	approvalConsumedCandidateShape string
 	approvalConsumedEpoch          uint64
-	// approvalConsumedCarried bounds the user-turn carry-over in
-	// markApprovalUserTurnBoundaryLocked to exactly one generation. It is not a
-	// second suppression state: it can only ever *stop* the existing
-	// candidateKey+sourceEpoch record from being extended again, never suppress
-	// a candidate on its own. Without it the carry re-arms on every user turn
-	// while the answered block is still inside the VT tail, which is the
-	// permanent suppression CLAUDE.md forbids.
-	approvalConsumedCarried      bool
 	vtResizeDebounceUntil        time.Time
 	nativeApprovalSig            string
 	nativeApprovalCandidateKey   string
@@ -1978,7 +1970,6 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 		ses.approvalConsumedCandidateKey = ""
 		ses.approvalConsumedCandidateShape = ""
 		ses.approvalConsumedEpoch = 0
-		ses.approvalConsumedCarried = false
 		ses.approvalEpochPending = false
 		ses.approvalSourceEpoch++
 		if ses.approvalSourceEpoch == 0 {
