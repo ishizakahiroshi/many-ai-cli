@@ -1,3 +1,4 @@
-# many-ai-cli: v0.8 の archive を正本にする。docs/local 配下（gitignore）に置く。
+# many-ai-cli: v0.8.x の archive を正本にする。docs/local 配下（gitignore）に置く。
 # ルート archive/ は使わない（誤って git 管理に載るのを防ぐ）。
-archive_dir: docs/local/archive/v0.8
+# 過去のリリース系 archive も v0.4.x / v0.6.x / v0.7.x と `.x` 付きで揃えてある。
+archive_dir: docs/local/archive/v0.8.x
