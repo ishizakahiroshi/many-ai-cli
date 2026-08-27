@@ -178,6 +178,11 @@ function meter(label: string, window: UsageWindow | undefined): string {
   </div>`;
 }
 
+function metersGroup(groups: string[]): string {
+  const items = groups.filter(Boolean);
+  return items.length ? `<div class="usage-meters">${items.join('')}</div>` : '';
+}
+
 function actionButton(className: string, label: string, attribute: string, disabled = false): string {
   return `<button type="button" class="${className}" ${attribute}${disabled ? ' disabled' : ''}>${escapeHtml(label)}</button>`;
 }
@@ -230,8 +235,10 @@ function claudeBody(provider: string, profile: UsageProfile): string {
   const failure = failures.has(key) && !usage;
   let body = authNotice(provider, profile);
   if (hasUsage && usage) {
-    body += meter(tx('usage_window_5h', '5h'), usage.five_hour);
-    body += meter(tx('usage_window_7d', '7d'), usage.seven_day);
+    body += metersGroup([
+      meter(tx('usage_window_5h', '5h'), usage.five_hour),
+      meter(tx('usage_window_7d', '7d'), usage.seven_day),
+    ]);
     body += profileRetrieved(profile);
   } else if (usage) {
     body += noWindowsText();
@@ -257,9 +264,7 @@ function codexBody(provider: string, profile: UsageProfile): string {
   if (windows.length === 0) {
     body += noWindowsText();
   } else {
-    for (const window of windows) {
-      body += meter(windowLabelText(windowLabel(windowMinutes(window))), window);
-    }
+    body += metersGroup(windows.map((window) => meter(windowLabelText(windowLabel(windowMinutes(window))), window)));
   }
   const credits = creditsText(usage);
   if (credits) body += `<div class="usage-profile-facts">${credits}</div>`;
@@ -272,7 +277,7 @@ function grokBody(provider: string, profile: UsageProfile): string {
   let body = authNotice(provider, profile);
   if (!usage) return body + `<span class="usage-not-acquired">${escapeHtml(tx('usage_profile_grok_unacquired', 'Launch Grok on this subscription to see numbers'))}</span>`;
   const end = usage.period_end ? fixedDateTime(usage.period_end) : '';
-  body += meter(tx('usage_window_weekly', 'Weekly'), { used_percent: usage.used_percent, remaining_percent: usage.remaining_percent });
+  body += metersGroup([meter(tx('usage_window_weekly', 'Weekly'), { used_percent: usage.used_percent, remaining_percent: usage.remaining_percent })]);
   if (end) body += `<div class="usage-profile-meta">${escapeHtml(tx('usage_period_end', 'Billing period ends {time}', { time: end }))}</div>`;
   body += profileRetrieved(profile);
   return body;

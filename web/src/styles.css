@@ -442,7 +442,6 @@ header {
   color: var(--muted-2, #777);
   border-top: 1px solid var(--line);
 }
-.usage-dropdown-section-title:first-of-type { border-top: 0; }
 .usage-dropdown-unavailable-row {
   position: relative;
   display: flex;
@@ -629,6 +628,30 @@ header {
 .usage-probe-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 15px; }
 .usage-probe-dialog-actions button { padding: 6px 11px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: transparent; font: inherit; cursor: pointer; }
 .usage-probe-dialog-actions .primary { color: var(--button-fg, #fff); background: var(--accent, #4568a9); border-color: var(--accent, #4568a9); }
+
+/* Usage ドロップダウンの広幅レイアウト。900px 未満は既定の縦 1 カラムを保つ
+   （docs/local/plan_usage-panel-wide-layout.md C1〜C3）。 */
+@media (min-width: 900px) {
+  .usage-dropdown { max-width: min(720px, calc(100vw - 24px)); }
+  .usage-dropdown-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 16px;
+    align-items: start;
+  }
+  .usage-dropdown-col { min-width: 0; }
+  /* ヘッダ下の区切り線と重なるので左カラム先頭の見出しは上罫線を消す */
+  .usage-dropdown-col > .usage-dropdown-section-title:first-child { border-top: 0; }
+  /* 1 プロファイルのメーター群（5h/7d 等）を横並びにする。メーター行と直下の
+     usage-meter-meta の対応が分からなくならないよう、セル単位は group ごと。 */
+  .usage-meters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 14px;
+    row-gap: 2px;
+    align-items: start;
+  }
+}
 
 /* シャットダウン・設定ボタン共通 */
 #shutdown-btn,
