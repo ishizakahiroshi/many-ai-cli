@@ -170,6 +170,11 @@ type Message struct {
 	// Model: 使用モデル名（例: "claude-sonnet-4-5", "gpt-5.5"）。UI カードに表示する。
 	Model string `json:"model,omitempty"`
 
+	// Effort: 起動バナー / モデル変更行から取れた reasoning effort（"high" 等）。
+	// Claude statusLine relay の EffortLevel と同じ値を、relay 無しの環境でも
+	// UI へ届けるための session 側の経路。空文字では既存値を消さない。
+	Effort string `json:"effort,omitempty"`
+
 	// Route: spawn 時に明示された接続経路（"anthropic" / "openai" / "ollama"）。
 	// env preset 注入に使う。未指定なら model 名から推定する。
 	Route string `json:"route,omitempty"`

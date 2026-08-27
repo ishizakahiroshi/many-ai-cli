@@ -243,6 +243,9 @@ body.pane-resizing .xterm { pointer-events: none; }
   font-weight: normal;
 }
 .session-info-chip .card-model { font-size: var(--header-font-size); }
+/* effort バッジ（HIGH 等）。配色はステータスバー側の .effort-badge 定義を共有し、
+   ここではヘッダー内の統一フォントサイズだけ上書きする。 */
+.session-info-chip .effort-badge { font-size: var(--header-font-size); }
 /* 表示モード系タブ */
 .view-tab {
   padding: 0 14px;

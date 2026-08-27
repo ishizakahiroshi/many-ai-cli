@@ -9,7 +9,7 @@ import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, render
 import { syncElapsedTimer } from './ws-client.js';
 import { renderApprovalSuppressedBannerFor, setMultiQuestionBannerVisible } from './approval-ui.js';
 import { detectApproval, releaseActionBarIfOwnedByOther, setActionBarFocus } from './approval.js';
-import { getSessionCtxPct, getSessionEffortLevel, onActiveSessionChanged } from './token-statusbar.js';
+import { getSessionAgentInfo, getSessionCtxPct, onActiveSessionChanged } from './token-statusbar.js';
 import { rewireChatHistorySub } from './chat-history.js';
 import { doneSummaryDisplayText, doneSummaryKindSuffix, doneSummaryLine, getDoneSummary } from './done-summary.js';
 import { setActiveSessionForPayload } from './chat-payload.js';
@@ -351,13 +351,17 @@ export function providerIconHtml(provider, size = 16) {
 // モデル名は provider が返す opaque な値をそのまま表示する。命名規則を推測して
 // 略称・family・衝突回避を作ると、新しい provider/model のたびに保守が発生する。
 function cardProviderModelHtml(s) {
-  const modelName = String(s?.model || '').trim();
+  // モデル名・effort は getSessionAgentInfo が唯一の解決点（ステータスバー・
+  // タブチップと同じ値。s.model だけを見ると relay しか値を持たない場面で
+  // カードだけ空になる）。
+  const info = getSessionAgentInfo(Number(s?.id));
+  const modelName = info.model;
   const localRoute = (s?.route === 'ollama' || s?.route === 'lm-studio') ? s.route : '';
   const providerKey = localRoute || String(s?.provider || '').trim();
   if (!providerKey && !modelName) return '';
   const providerLabel = providerKey ? providerDisplayName(providerKey) : '';
-  const effort = modelName ? getSessionEffortLevel(Number(s?.id)) : '';
-  const tooltip = [providerLabel, modelName, effort].filter(Boolean).join(' ');
+  const effort = info.effort;
+  const tooltip = [providerLabel, modelName, effort].filter(Boolean).join(' · ');
   const providerIcon = providerKey ? providerIconHtml(providerKey, 14) : '';
   const modelHtml = modelName
     ? `<span class="card-model-name" aria-hidden="true">${escapeHtml(modelName)}</span>`

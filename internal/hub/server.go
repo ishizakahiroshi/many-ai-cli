@@ -93,8 +93,9 @@ type session struct {
 	Color              string `json:"color,omitempty"`
 	Note               string `json:"note,omitempty"`
 	AutoTitle          string `json:"auto_title,omitempty"`
-	Model              string `json:"model,omitempty"` // 使用モデル名; UI カード表示用
-	Route              string `json:"route,omitempty"` // 接続経路（"ollama" 等）; UI で Ollama バックエンドの識別に使用
+	Model              string `json:"model,omitempty"`  // 使用モデル名; UI カード表示用
+	Effort             string `json:"effort,omitempty"` // reasoning effort（"high" 等）; バナー / モデル変更行から検出。statusLine relay が無くても UI へ出すための値
+	Route              string `json:"route,omitempty"`  // 接続経路（"ollama" 等）; UI で Ollama バックエンドの識別に使用
 	Shell              string `json:"shell,omitempty"`
 	ParentSessionID    int    `json:"parent_session_id,omitempty"`
 	Role               string `json:"role,omitempty"`
@@ -777,9 +778,12 @@ var reCodexModelChanged = regexp.MustCompile(`Model changed to ([^\r\n]+)`)
 // カードにモデル名を出すため、VT バッファのレンダリング済み行をスキャンする
 // （StripANSI したテキストはカーソル移動由来のスペースが落ちて使えない）。
 //
-// Claude Code: ロゴ 2 行目 "▝▜█████▛▘  Opus 4.8 (1M context) with medium effort · Claude Max"
+// Claude Code: "Claude Code v<版>" 行の次行 "▝▜██████▀  Opus 5 with high effort · Claude Pro"
 //
-//	→ ロゴの後ろを取り、" · <プラン>" と " with <x> effort" を落とす → "Opus 4.8 (1M context)"
+//	→ 行頭のロゴを落とし、" · <プラン>" と " with <x> effort" を外して
+//	  モデル名 "Opus 5" と effort "high" を返す。ロゴのアスキーアートは
+//	  Claude Code の版で変わる（v2.1.246 で "▝▜█████▛▘" → "▝▜██████▀"）ため、
+//	  版が変わっても動く "Claude Code v<数字>" 行を足場にする。
 //
 // Codex CLI:  "│ model:       gpt-5.5 xhigh   /model to change │"
 //
@@ -794,15 +798,18 @@ var reCodexModelChanged = regexp.MustCompile(`Model changed to ([^\r\n]+)`)
 // Cursor Agent: "<cwd> · <branch>" ステータス行の直上の非空行がモデル名
 //
 //	例: "  Auto" / 応答中は "  Auto · 7.4%"（context 使用率サフィックスを落とす）
-const claudeBannerLogoRow2 = "▝▜█████▛▘"
-
 var (
-	reClaudeBannerEffort  = regexp.MustCompile(`\s+with\s+\S+\s+effort$`)
-	reCodexBannerModel    = regexp.MustCompile(`model:\s+(.+?)\s+/model to change`)
-	reCopilotStatusSplit  = regexp.MustCompile(`\s{3,}`)
-	reCopilotEffortSuffix = regexp.MustCompile(`\s+·\s+(?:low|medium|high|xhigh)$`)
-	reCopilotModelLike    = regexp.MustCompile(`^[A-Za-z][\w.\- ()]*\d`)
-	reCursorPercentSuffix = regexp.MustCompile(`\s+·\s+\d+(?:\.\d+)?%$`)
+	// reClaudeBannerVersion は起動バナー 1 行目（ロゴ + "Claude Code v2.1.246"）。
+	// モデル行はこの次の行に来る。
+	reClaudeBannerVersion = regexp.MustCompile(`Claude Code\s+v\d`)
+	// reClaudeBannerLogoPrefix は行頭のロゴ（Block Elements）と空白。
+	reClaudeBannerLogoPrefix = regexp.MustCompile(`^[\s\x{2580}-\x{259F}]+`)
+	reClaudeBannerEffort     = regexp.MustCompile(`\s+with\s+(\S+)\s+effort$`)
+	reCodexBannerModel       = regexp.MustCompile(`model:\s+(.+?)\s+/model to change`)
+	reCopilotStatusSplit     = regexp.MustCompile(`\s{3,}`)
+	reCopilotEffortSuffix    = regexp.MustCompile(`\s+·\s+(low|medium|high|xhigh)$`)
+	reCopilotModelLike       = regexp.MustCompile(`^[A-Za-z][\w.\- ()]*\d`)
+	reCursorPercentSuffix    = regexp.MustCompile(`\s+·\s+\d+(?:\.\d+)?%$`)
 )
 
 // initialModelScanMaxBytes を超えても検出できなければ諦める（バナーは起動直後に出る）。
