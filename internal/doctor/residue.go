@@ -37,6 +37,7 @@ import (
 	"time"
 
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/wrapper"
 )
 
@@ -81,6 +82,18 @@ type residueReport struct {
 
 	// Agents は AGENTS.md 内の承認ルールブロックの状態。
 	Agents residueState
+
+	// RelayWorktrees は relay（plan_orchestration-relay-loop.md D-16）が
+	// `.many-ai-cli/worktrees/<id>/relay` に作った作業ツリーのうち、relay が
+	// 進行中でないもの。relay は自分では消さない（ブランチが成果物なので）ため、
+	// 利用者が取り込んだ後に残る。
+	RelayWorktrees []relayWorktreeResidue
+}
+
+// relayWorktreeResidue は残っている relay 作業ツリー 1 本。
+type relayWorktreeResidue struct {
+	Path   string
+	Branch string
 }
 
 // residue は doctor の検査 1 本ぶん。置き去りが無ければ空スライスを返し、
@@ -174,7 +187,76 @@ func classifyResidue(ctx context.Context, cwd string, hubRunning bool) residueRe
 		}
 	}
 
+	// relay の作業ツリー。進行中（relay.json が非終端）のものは使用中なので出さない。
+	report.RelayWorktrees = relayWorktreeLeftovers(ctx, root, relayStateDir())
+
 	return report
+}
+
+// relayStateDir は relay.json が置かれる ~/.many-ai-cli/orchestration。
+// 読めなければ空（= 進行中判定ができないので、全部を残骸として報告する）。
+func relayStateDir() string {
+	base, err := config.Dir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(base, "orchestration")
+}
+
+// relayWorktreeLeftovers は `git worktree list --porcelain` から relay ブランチ
+// （many-ai-cli/relay/<id>）に載っている作業ツリーを拾い、relay.json の state が
+// 終端（completed / stopped）か relay.json が無いものだけを返す。
+func relayWorktreeLeftovers(ctx context.Context, root, stateDir string) []relayWorktreeResidue {
+	out, err := runResidueGit(ctx, root, "worktree", "list", "--porcelain")
+	if err != nil {
+		return nil
+	}
+	var found []relayWorktreeResidue
+	var cur relayWorktreeResidue
+	flush := func() {
+		if cur.Path != "" && strings.HasPrefix(cur.Branch, proto.RelayBranchPrefix) && !relayInProgress(stateDir, strings.TrimPrefix(cur.Branch, proto.RelayBranchPrefix)) {
+			found = append(found, cur)
+		}
+		cur = relayWorktreeResidue{}
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "worktree "):
+			flush()
+			cur.Path = filepath.FromSlash(strings.TrimPrefix(line, "worktree "))
+		case strings.HasPrefix(line, "branch refs/heads/"):
+			cur.Branch = strings.TrimPrefix(line, "branch refs/heads/")
+		case line == "":
+			flush()
+		}
+	}
+	flush()
+	return found
+}
+
+// relayInProgress は relay.json の state が非終端かを返す。ファイルが無い・読めない
+// ときは false（= 残骸として報告する側に倒す）。
+func relayInProgress(stateDir, orchestrationID string) bool {
+	if stateDir == "" || orchestrationID == "" {
+		return false
+	}
+	data, err := os.ReadFile(filepath.Join(stateDir, orchestrationID, "relay.json"))
+	if err != nil {
+		return false
+	}
+	var file struct {
+		State string `json:"state"`
+	}
+	if err := json.Unmarshal(data, &file); err != nil {
+		return false
+	}
+	switch file.State {
+	case "", "completed", "stopped":
+		return false
+	default:
+		return true
+	}
 }
 
 func residueChecks(report residueReport) []Check {
@@ -229,6 +311,12 @@ func residueChecks(report residueReport) []Check {
 		checks = append(checks, Check{"residue", Warn,
 			"AGENTS.md に many-ai-cli の承認ルールブロックが残っています（git には未登録）",
 			"Hub を起動すると自動で回収されます。commit しないよう注意してください"})
+	}
+
+	for _, wt := range report.RelayWorktrees {
+		checks = append(checks, Check{"residue", Warn,
+			fmt.Sprintf("relay の作業ツリーが残っています: %s（ブランチ %s。relay は進行中ではありません）", wt.Path, wt.Branch),
+			fmt.Sprintf("ブランチを取り込んだら `git -C %s worktree remove %s` で片付けてください（未コミットの変更があると拒否されます。捨ててよければ --force）。ブランチ %s は残るので、不要なら `git branch -D %s`", report.Root, wt.Path, wt.Branch, wt.Branch)})
 	}
 
 	return checks

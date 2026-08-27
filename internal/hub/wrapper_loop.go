@@ -366,6 +366,10 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	if reqRoute == "" {
 		reqRoute = s.resolveRoute(req.Provider, req.Model)
 	}
+	// Hub 再起動後の cold reattach で、relay（relay_store.go）の子か conductor かを
+	// label / 起動時刻で同定する。sessionsMu と run.mu を入れ子にしないため、
+	// ロックを取る前に照合しておき、結果のコピーを下で session へ写す。
+	relayMatch := s.relayReattachMatch(req)
 	// renumber 判定（既存 wrapper と衝突する場合は新 ID を割り当てる）を SQLite
 	// アクセスより前に行い、StartSession を 1 回だけ呼ぶ（重複 INSERT による orphan
 	// 行の発生を防ぐ）。
@@ -621,6 +625,10 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	}
 	if prevExists {
 		applyReattachPreservedStateLocked(s.sessions[acceptedID], prevReattachState)
+	} else if relayMatch != nil {
+		// 再起動前の orchestration メタは preserved state に無い。relay.json から
+		// 引いた値で子（role / parent / board）または conductor を復元する。
+		relayMatch.applyLocked(s.sessions[acceptedID])
 	}
 	s.sessions[acceptedID].inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
 	s.restartReattachAsyncStateLocked(acceptedID, s.sessions[acceptedID], now)
@@ -643,6 +651,10 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		// 新しい接続を wrappers へ載せた後に閉じる。逆順だと、閉じたことで走る
 		// 旧 wrapperMessageLoop の後始末が「まだ自分が現役」と見えてしまう。
 		staleConn.close()
+	}
+	if !prevExists && relayMatch != nil {
+		// relay 側の ID（振り直しがあれば新 ID）と board の登録を更新する。
+		s.relayNoteReattached(relayMatch, acceptedID)
 	}
 	// wrapper が一時切断中に届かなかった保留入力を、再接続したこの wrapper へ順番に再送する。
 	// 他のバックグラウンド goroutine と同様 safeGo で起動し、panic で Hub 全体を巻き込まないようにする。

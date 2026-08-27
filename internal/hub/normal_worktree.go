@@ -94,7 +94,13 @@ func prepareNormalWorktree(cwd, label string, now time.Time) (normalWorktree, er
 // untracked embedded repo in the parent's `git status`. info/exclude is
 // repo-local and never committed, so best-effort failure is fine.
 func excludeWorktreeDir(ctx context.Context, parent string) {
-	const entry = ".git-worktrees/"
+	excludeGitPath(ctx, parent, ".git-worktrees/")
+}
+
+// excludeGitPath appends one ignore pattern to the repo's info/exclude
+// (idempotently). Shared by the .git-worktrees/ entry above and the relay
+// worktree root (relay_worktree.go).
+func excludeGitPath(ctx context.Context, parent, entry string) {
 	out, err := exec.CommandContext(ctx, "git", "-C", parent, "rev-parse", "--git-common-dir").Output()
 	if err != nil {
 		return
