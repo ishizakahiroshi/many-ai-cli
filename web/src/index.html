@@ -60,6 +60,11 @@
            preventDefault するため、中身がホイールで動かなくなる（isWheelTargetExcluded 参照）。 -->
       <div class="usage-dropdown" id="usage-dropdown" data-wheel-native hidden>
         <div class="usage-dropdown-header" data-i18n="usage_dropdown_header">AI Usage Links</div>
+        <!-- 広幅（900px 以上）のみ .usage-dropdown-columns を左右 2 カラムに割る。左=契約の残量、
+             右=取得不可 provider とローカル実行。狭幅はこの順で縦に積む。プロファイル行は
+             renderProfiles() が data-usage-provider の直後に挿すためラッパー内で完結する。 -->
+        <div class="usage-dropdown-columns">
+        <div class="usage-dropdown-col">
         <div class="usage-dropdown-section-title" data-i18n="usage_contract_group">契約の残量</div>
         <a id="usage-link-claude" data-usage-provider="claude" class="usage-dropdown-item" href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape claude" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter claude" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">C</text></svg>
@@ -71,6 +76,13 @@
           <span class="usage-item-name">Codex</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
+        <a id="usage-link-grok" data-usage-provider="grok" class="usage-dropdown-item" href="https://grok.com/?_s=usage" target="_blank" rel="noopener noreferrer">
+          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape grok" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter grok" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">G</text></svg>
+          <span class="usage-item-name">Grok Build</span>
+          <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+        </a>
+        </div>
+        <div class="usage-dropdown-col">
         <div class="usage-dropdown-unavailable-row">
         <a id="usage-link-copilot" class="usage-dropdown-item" href="https://github.com/settings/billing" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape copilot" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter copilot" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">P</text></svg>
@@ -92,11 +104,6 @@
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
         </div>
-        <a id="usage-link-grok" data-usage-provider="grok" class="usage-dropdown-item" href="https://grok.com/?_s=usage" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape grok" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter grok" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">G</text></svg>
-          <span class="usage-item-name">Grok Build</span>
-          <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-        </a>
         <div class="usage-dropdown-unavailable-row">
         <a id="usage-link-ollama" class="usage-dropdown-item" href="https://ollama.com/settings" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect class="prov-shape ollama" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter ollama" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">O</text></svg>
@@ -110,6 +117,8 @@
           <span class="usage-item-name">LM Studio</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
+        </div>
+        </div>
       </div>
     </div>
     <!-- 🌐 外部公開（Tailscale serve）トグル＋状態ドット。ホスト直下から tailnet 公開を on/off。bind は 127.0.0.1 不変。 -->
