@@ -3,6 +3,7 @@ package hub
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -652,6 +653,132 @@ func Test_appendBoardSection_concurrent(t *testing.T) {
 	}
 	if got := strings.Count(string(data), "## role "); got != writers*perWriter {
 		t.Fatalf("sections = %d, want %d", got, writers*perWriter)
+	}
+}
+
+// relay board regression tests (plan_orchestration-relay-loop-c1.md C2): the
+// generic DONE / notice / timer handling must step aside for a board that a
+// relay owns, and the relay must receive the signal instead.
+
+func Test_scanOrchestrationChildFiles_relayBoardSkipsGenericDone(t *testing.T) {
+	h := newRelayHarness(t)
+	st := h.start()
+	id, impl := st.OrchestrationID, st.ImplementationSessionID
+	run := h.run(id)
+	if err := os.WriteFile(childProgressPath(run.boardPath, impl), []byte(doneLines(relayRoleImplementation, impl, 1, false)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	h.s.scanOrchestrationChildFiles(id, time.Now())
+
+	if got := h.s.sessions[impl].State; got != "running" {
+		t.Fatalf("child state = %q, want running (relay boards never mark done)", got)
+	}
+	if got := h.status(id); got.State != relayStateReviewing || got.ReviewSessionID == 0 {
+		t.Fatalf("relay did not receive the DONE: %+v", got)
+	}
+	h.s.orchestration.mu.Lock()
+	b := h.s.orchestration.boards[id]
+	pendingNotices := len(b.PendingNotices)
+	child := b.Children[impl]
+	fileSize, childDone := child.FileSize, child.Done
+	h.s.orchestration.mu.Unlock()
+	if pendingNotices != 0 || len(h.s.pendingInput[h.parent.ID]) != 0 {
+		t.Fatalf("generic progress notice reached the parent: queued=%d pendingInput=%d", pendingNotices, len(h.s.pendingInput[h.parent.ID]))
+	}
+	if fileSize == 0 || childDone {
+		t.Fatalf("file bookkeeping size=%d done=%v, want size>0 and done=false", fileSize, childDone)
+	}
+	// A second scan without a file change does nothing.
+	before := len(h.injects)
+	h.s.scanOrchestrationChildFiles(id, time.Now())
+	if len(h.injects) != before {
+		t.Fatal("unchanged file triggered another relay transition")
+	}
+}
+
+func Test_checkOrchestrationChildTimers_relayTimeoutStopsRelay(t *testing.T) {
+	h := newRelayHarness(t)
+	st := h.start()
+	id, impl := st.OrchestrationID, st.ImplementationSessionID
+	old := time.Now().Add(-10 * time.Minute)
+	h.s.orchestration.mu.Lock()
+	child := h.s.orchestration.boards[id].Children[impl]
+	child.SpawnedAt, child.LastBoardWrite = old, old
+	h.s.orchestration.mu.Unlock()
+
+	h.s.checkOrchestrationChildTimers(id, time.Now(), config.OrchestrationConfig{ChildTimeoutSeconds: 1})
+
+	if got := h.status(id); got.State != relayStateStopped || got.Reason != relayReasonTimeout {
+		t.Fatalf("relay = %+v, want stopped(timeout)", got)
+	}
+	if got := h.s.sessions[impl].State; got != "running" {
+		t.Fatalf("child state = %q, want running (relay boards never mark timeout)", got)
+	}
+	if n := len(h.s.pendingInput[h.parent.ID]); n != 0 {
+		t.Fatalf("generic ORCHESTRATION-ERROR reached the parent: %d pending inputs", n)
+	}
+}
+
+func Test_checkOrchestrationChildTimers_relayIdleNudgesChildNotParent(t *testing.T) {
+	h := newRelayHarness(t)
+	st := h.start()
+	id, impl := st.OrchestrationID, st.ImplementationSessionID
+	old := time.Now().Add(-10 * time.Minute)
+	h.s.orchestration.mu.Lock()
+	child := h.s.orchestration.boards[id].Children[impl]
+	child.SpawnedAt, child.LastBoardWrite = old, old
+	h.s.orchestration.mu.Unlock()
+	h.s.sessions[impl].lastOutputAt = old
+	cfg := config.OrchestrationConfig{IdleDoneThresholdSec: 60}
+
+	h.s.checkOrchestrationChildTimers(id, time.Now(), cfg)
+
+	if len(h.injects) != 1 || h.injects[0].id != impl || !strings.Contains(h.injects[0].text, "This reminder is sent only once") {
+		t.Fatalf("injects = %+v, want one nudge to the implementation child", h.injects)
+	}
+	if n := len(h.s.pendingInput[h.parent.ID]); n != 0 {
+		t.Fatalf("generic idle warning reached the parent: %d pending inputs", n)
+	}
+	data, err := os.ReadFile(h.run(id).boardPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), fmt.Sprintf("idle role=implementation id=%d", impl)) {
+		t.Fatalf("board missing idle record:\n%s", data)
+	}
+	if got := h.status(id); got.State != relayStateImplementing {
+		t.Fatalf("idle changed the relay state: %+v", got)
+	}
+	// The latch holds while the child stays silent: no second nudge from the timer.
+	h.s.checkOrchestrationChildTimers(id, time.Now(), cfg)
+	if len(h.injects) != 1 {
+		t.Fatalf("injects after second tick = %d, want 1", len(h.injects))
+	}
+}
+
+func Test_completeOrchestrationChildOnSessionEnd_relayStopsRelay(t *testing.T) {
+	h := newRelayHarness(t)
+	st := h.start()
+	id, impl := st.OrchestrationID, st.ImplementationSessionID
+
+	h.s.completeOrchestrationChildOnSessionEnd(impl, "completed")
+
+	if got := h.status(id); got.State != relayStateStopped || got.Reason != relayReasonChildExited {
+		t.Fatalf("relay = %+v, want stopped(child_exited)", got)
+	}
+	if n := len(h.s.pendingInput[h.parent.ID]); n != 0 {
+		t.Fatalf("generic session_end notice reached the parent: %d pending inputs", n)
+	}
+	if len(h.notifies) != 1 || !strings.Contains(h.notifies[0], "relay stopped") || !strings.Contains(h.notifies[0], "child_exited") {
+		t.Fatalf("relay finish notice = %q", h.notifies)
+	}
+	data, err := os.ReadFile(h.run(id).boardPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "completed without DONE marker") || !strings.Contains(string(data), "relay stopped reason=child_exited") {
+		t.Fatalf("board records incomplete:\n%s", data)
 	}
 }
 

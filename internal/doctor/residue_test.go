@@ -76,6 +76,57 @@ func lockName() string {
 	return wrapper.OpenCodeConfigFileName + wrapper.OpenCodeLockSuffix
 }
 
+// relay の作業ツリー（ブランチ many-ai-cli/relay/<id>）は、relay.json が
+// 進行中でないときだけ残骸として報告される。
+func TestClassifyResidueReportsRelayWorktree(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	dir := initGitRepo(t)
+	writeFile(t, filepath.Join(dir, "README.md"), "# hello\n")
+	gitCommitAll(t, dir, "init")
+	worktree := filepath.Join(dir, ".many-ai-cli", "worktrees", "r1-1", "relay")
+	if err := os.MkdirAll(filepath.Dir(worktree), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("git", "-C", dir, "worktree", "add", "-b", "many-ai-cli/relay/r1-1", worktree, "HEAD")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v: %s", err, out)
+	}
+
+	report := classifyResidue(context.Background(), dir, false)
+	if len(report.RelayWorktrees) != 1 || report.RelayWorktrees[0].Branch != "many-ai-cli/relay/r1-1" || filepath.Clean(report.RelayWorktrees[0].Path) != worktree {
+		t.Fatalf("relay worktree not reported: %+v", report.RelayWorktrees)
+	}
+	checks := residueChecks(report)
+	if len(checks) != 1 || checks[0].Level != Warn || !strings.Contains(checks[0].Message, "many-ai-cli/relay/r1-1") || !strings.Contains(checks[0].Fix, "worktree remove") {
+		t.Fatalf("relay worktree check = %+v", checks)
+	}
+
+	// 進行中の relay（relay.json が非終端）は使用中なので報告しない。
+	stateDir := filepath.Join(home, ".many-ai-cli", "orchestration", "r1-1")
+	if err := os.MkdirAll(stateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(stateDir, "relay.json"), `{"state":"reviewing"}`)
+	if report := classifyResidue(context.Background(), dir, false); len(report.RelayWorktrees) != 0 {
+		t.Fatalf("in-progress relay reported as residue: %+v", report.RelayWorktrees)
+	}
+	writeFile(t, filepath.Join(stateDir, "relay.json"), `{"state":"completed"}`)
+	if report := classifyResidue(context.Background(), dir, false); len(report.RelayWorktrees) != 1 {
+		t.Fatalf("completed relay not reported: %+v", report.RelayWorktrees)
+	}
+	// relay 以外の作業ツリーは対象外。
+	other := filepath.Join(t.TempDir(), "other")
+	cmd = exec.Command("git", "-C", dir, "worktree", "add", "-b", "feature/x", other, "HEAD")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add (other): %v: %s", err, out)
+	}
+	if report := classifyResidue(context.Background(), dir, false); len(report.RelayWorktrees) != 1 {
+		t.Fatalf("non-relay worktree reported: %+v", report.RelayWorktrees)
+	}
+}
+
 func TestClassifyResidueNoneOnCleanRepo(t *testing.T) {
 	dir := initGitRepo(t)
 	writeFile(t, filepath.Join(dir, "README.md"), "# hello\n")

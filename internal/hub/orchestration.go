@@ -54,8 +54,17 @@ type orchestrationManager struct {
 	// 注入（C2）はここから読み出す想定。
 	roles              map[string]map[string]orchestrationRoleAssignment
 	spawnConfirmations map[string]chan spawnConfirmationDecision
-	stopOnce           sync.Once
-	stopCh             chan struct{}
+	// relays holds every relay loop (relay.go) keyed by its own orchestration
+	// ID. The map is guarded by mu; each relayRun has its own mutex for its
+	// transitions so mu is never held across spawn / inject / git calls.
+	relays map[string]*relayRun
+	// relayMeta mirrors, under mu, the few run fields that listing and the
+	// child budget need (parent, attached, active, spawned). Readers never
+	// take a run's mutex for them, which keeps run.mu → mu the only order.
+	relayMeta map[string]relayMeta
+	relaySeq  uint64
+	stopOnce  sync.Once
+	stopCh    chan struct{}
 }
 
 // orchestrationRoleAssignment は起動フォームの「子役割の詳細設定」アコーディオンで
@@ -180,6 +189,8 @@ func newOrchestrationManager() *orchestrationManager {
 		boards:             map[string]*orchestrationBoard{},
 		roles:              map[string]map[string]orchestrationRoleAssignment{},
 		spawnConfirmations: map[string]chan spawnConfirmationDecision{},
+		relays:             map[string]*relayRun{},
+		relayMeta:          map[string]relayMeta{},
 		stopCh:             make(chan struct{}),
 	}
 }
@@ -910,6 +921,7 @@ func (s *Server) scanOrchestrationBoards() {
 		s.checkOrchestrationChildTimers(b.ID, now, cfg)
 	}
 	s.flushQueuedBoardNotices(now)
+	s.checkRelayReconnect(now)
 }
 
 // scanOrchestrationChildFiles は子専用進捗ファイル（child-<ID>.md）を監視する。
@@ -961,6 +973,10 @@ func (s *Server) scanOrchestrationChildFiles(boardID string, now time.Time) {
 	if len(updates) == 0 {
 		return
 	}
+	// A relay board (relay.go) keeps the file bookkeeping below but gets none
+	// of the generic DONE handling and progress notices (D-6): the relay counts
+	// the DONE lines itself and decides what to inject next.
+	owns := s.relayOwns(boardID)
 
 	type notice struct {
 		sessionID int
@@ -982,6 +998,9 @@ func (s *Server) scanOrchestrationChildFiles(boardID string, now time.Time) {
 		child.FileSize = u.info.Size()
 		child.FileMod = u.info.ModTime()
 		child.LastBoardWrite = now
+		if owns {
+			continue
+		}
 		for _, ev := range u.dones {
 			// 自ファイルなので session id 表記が欠けていても本人の DONE とみなす
 			if ev.SessionID == 0 || ev.SessionID == u.id {
@@ -999,6 +1018,12 @@ func (s *Server) scanOrchestrationChildFiles(boardID string, now time.Time) {
 		}
 	}
 	s.orchestration.mu.Unlock()
+	if owns {
+		for _, u := range updates {
+			s.relayOnChildFileChange(boardID, u.id, u.text)
+		}
+		return
+	}
 	for _, n := range notices {
 		s.notifyBoardSession(boardID, n.sessionID, n.text)
 	}
@@ -1008,6 +1033,11 @@ func (s *Server) scanOrchestrationChildFiles(boardID string, now time.Time) {
 }
 
 func (s *Server) handleBoardChange(boardID, boardPath string, info os.FileInfo, text string, now time.Time) {
+	// A relay board only records the write; the relay's own instructions and
+	// records go there, and neither DONE authorization nor "board updated"
+	// notices apply (D-6). relayOwns takes orchestration.mu, so ask before
+	// taking the lock here.
+	owns := s.relayOwns(boardID)
 	s.orchestration.mu.Lock()
 	stored := s.orchestration.boards[boardID]
 	if stored == nil {
@@ -1024,6 +1054,10 @@ func (s *Server) handleBoardChange(boardID, boardPath string, info os.FileInfo, 
 		if writerID == child.ID || (writerID == 0 && writer.Role == child.Role) {
 			child.LastBoardWrite = now
 		}
+	}
+	if owns {
+		s.orchestration.mu.Unlock()
+		return
 	}
 	var authorizedDoneIDs []int
 	var rejectedDones []boardDoneEvent
@@ -1219,6 +1253,12 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 		threshold int
 	}
 	var notices []notice
+	// A relay board routes timeout / idle to the relay (relay.go) instead of
+	// marking the child or warning the conductor (D-6 / D-15). The latches
+	// (TimedOut / IdleWarned) below are shared; the relay releases them when it
+	// hands the child its next instruction.
+	owns := s.relayOwns(boardID)
+	boardPath := ""
 	// PTY 出力時刻のスナップショット。board 記帳が止まっていても PTY 出力が動いている子は
 	// 作業中（plan 読込・実装・レビュー等）とみなし idle warning を出さない。board 記帳時刻
 	// だけの判定は実測で偽陽性を連発した（plan_orchestration-conductor-improvements.md C1）。
@@ -1232,6 +1272,7 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 	s.orchestration.mu.Lock()
 	b := s.orchestration.boards[boardID]
 	if b != nil {
+		boardPath = b.Path
 		for id, child := range b.Children {
 			if child.Done || b.Done[id] || b.TimedOut[id] {
 				continue
@@ -1276,6 +1317,16 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 	}
 	s.orchestration.mu.Unlock()
 	for _, n := range notices {
+		if owns {
+			switch n.kind {
+			case "timeout":
+				s.relayOnChildTimeout(boardID, n.childID)
+			case "idle":
+				_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("idle role=%s id=%d threshold=%ds\n", n.role, n.childID, n.threshold))
+				s.relayOnChildIdle(boardID, n.childID)
+			}
+			continue
+		}
 		switch n.kind {
 		case "timeout":
 			s.notifyOrchestrationError(n.parentID, "timeout", fmt.Sprintf("role=%s id=%d threshold=%ds", n.role, n.childID, n.threshold))
@@ -1312,6 +1363,12 @@ func (s *Server) completeOrchestrationChildOnSessionEnd(sessionID int, state str
 		return
 	}
 	_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("child completed without DONE marker: role=%s session=%d state=%s (session_end)\n", role, sessionID, state))
+	if s.relayOwns(boardID) {
+		// The relay stops itself (stopped(child_exited)) and notifies the parent
+		// through its own finish path (D-6).
+		s.relayOnChildExit(boardID, sessionID, state)
+		return
+	}
 	s.notifyBoardSession(boardID, parentID, fmt.Sprintf("\n[orchestration] child complete via session_end role=%s id=%d state=%s\n", role, sessionID, state))
 }
 
@@ -1480,9 +1537,25 @@ func sessionUpdateMessage(ses *session) proto.Message {
 		BoardPath:           ses.BoardPath,
 		WorktreeBranch:      ses.WorktreeBranch,
 		BoardNotifyPending:  ses.BoardNotifyPending,
+		Relays:              copyRelayStatuses(ses.Relays),
 		SubscriptionID:      ses.SubscriptionProfileID,
 		SubscriptionName:    ses.SubscriptionProfileName,
 	}
+}
+
+// copyRelayStatuses flattens the parent's relay snapshots for the wire. The
+// caller holds sessionsMu; the pointers are never mutated after publication.
+func copyRelayStatuses(relays []*proto.RelayStatus) []proto.RelayStatus {
+	if len(relays) == 0 {
+		return nil
+	}
+	out := make([]proto.RelayStatus, 0, len(relays))
+	for _, r := range relays {
+		if r != nil {
+			out = append(out, *r)
+		}
+	}
+	return out
 }
 
 func (s *Server) notifyOrchestrationError(parentID int, limit, detail string) {

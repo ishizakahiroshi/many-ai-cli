@@ -107,6 +107,10 @@ type session struct {
 	NormalWorktree     normalWorktree
 	WorktreeCleanup    string
 	BoardNotifyPending bool `json:"board_notify_pending,omitempty"`
+	// Relays are the relay loops this session conducts (relay.go), in start
+	// order. The slice is replaced, never mutated in place, so session copies
+	// taken under sessionsMu stay race-free while they are marshalled.
+	Relays []*proto.RelayStatus `json:"relays,omitempty"`
 	// Activity is the authoritative three-axis activity model. State is kept
 	// below only as a compatibility display label for older clients.
 	Activity     SessionActivity `json:"activity"`
@@ -644,6 +648,9 @@ type Server struct {
 	notifyMgr         *notify.Manager
 	oneTapApprovals   *oneTapApprovalManager
 	orchestration     *orchestrationManager
+	// relay holds the replaceable side effects of the relay state machine
+	// (relay.go). Zero value means the production implementations.
+	relay relayDeps
 
 	// 任意リモート PIN（pin_auth.go）。lazy 生成のため pinLim() 経由でアクセスする。
 	pinLimiterMu  sync.Mutex
@@ -1350,6 +1357,10 @@ func (s *Server) Run(ctx context.Context) error {
 		s.injectUsageHooks()
 	}
 	s.safeGo("state_ticker", func() { s.stateTicker(runCtx) })
+	// relay.json（relay_store.go）から前回 run の relay を戻す。board ループの開始前・
+	// かつ Serve より前に同期で行う: wrapper は Hub が上がった直後に reattach して
+	// くるので、その時点で relays map に載っていないと子を再同定できない。
+	s.restoreRelays()
 	s.safeGo("orchestration_board_loop", func() { s.orchestrationBoardLoop(runCtx) })
 	s.safeGo("clean_attachments", s.cleanAttachments)
 	s.safeGo("clean_spawn_logs", s.cleanSpawnLogs)

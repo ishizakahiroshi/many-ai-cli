@@ -167,6 +167,42 @@ export interface WorkflowProgress {
   task_detail_source?: string;
 }
 
+/** relay ループ 1 本の状態（internal/proto/messages.go の RelayStatus のミラー）。 */
+export interface RelayStatus {
+  orchestration_id?: string;
+  plan_path?: string;
+  mode?: 'worktree' | 'same-tree' | string;
+  state?: 'implementing' | 'reviewing' | 'fixing' | 'completed' | 'stopped' | string;
+  reason?: string;
+  completed_cs?: number;
+  round?: number;
+  max_rounds?: number;
+  final_seen?: boolean;
+  implementation_session_id?: number;
+  /** 強い実装役（D-22）。未 spawn は 0 / 未送。 */
+  strong_session_id?: number;
+  active_implementer?: 'implementation' | 'implementation-strong' | string;
+  escalate_after?: number;
+  review_session_id?: number;
+  review_path?: string;
+  worktree_path?: string;
+  branch?: string;
+  base_commit?: string;
+  updated_at?: string;
+}
+
+/** relay の時系列 1 行（RelayEvent のミラー）。 */
+export interface RelayEvent {
+  at?: string;
+  kind?: string;
+  c?: number;
+  round?: number;
+  text?: string;
+  review_path?: string;
+  commit?: string;
+  files_changed?: number;
+}
+
 export interface Message {
   type: MessageType;
   role?: string;
@@ -249,6 +285,8 @@ export interface Message {
   board_path?: string;
   worktree_branch?: string;
 	board_notify_pending?: boolean;
+  /** 親セッションが回している relay ループ（開始順）。 */
+  relays?: RelayStatus[];
 	spawn_confirmation_id?: string;
 	initial_prompt?: string;
   first_message?: string;
@@ -348,6 +386,8 @@ export interface SessionSnapshot {
   board_path?: string;
   worktree_branch?: string;
 	board_notify_pending?: boolean;
+  /** 親セッションが回している relay ループ（開始順）。 */
+  relays?: RelayStatus[];
   // 起動に使ったサブスクリプション profile。空/未送は CLI 自身のログイン環境。
   subscription_profile_id?: string;
   subscription_profile_name?: string;

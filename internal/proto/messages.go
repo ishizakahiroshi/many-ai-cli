@@ -187,6 +187,9 @@ type Message struct {
 	BoardPath          string `json:"board_path,omitempty"`
 	WorktreeBranch     string `json:"worktree_branch,omitempty"`
 	BoardNotifyPending bool   `json:"board_notify_pending,omitempty"`
+	// Relays lists every relay loop conducted by this (parent) session, in start
+	// order. Events are deliberately not carried here; the relay API returns them.
+	Relays []RelayStatus `json:"relays,omitempty"`
 	// spawn_confirmation_requested is sent to browser UIs before an
 	// orchestration child is created. The response travels by HTTP, never via
 	// the conductor PTY, so the user remains the authority for the decision.
@@ -425,6 +428,60 @@ type DoneSummary struct {
 	Kind      string `json:"kind"`
 	At        string `json:"at"`
 	Fallback  bool   `json:"fallback,omitempty"`
+}
+
+// RelayBranchPrefix is the prefix of every relay branch
+// (`many-ai-cli/relay/<orchestration id>`). RelayStatus.Branch carries it, and
+// `doctor` recognises leftover relay worktrees by it without importing hub.
+const RelayBranchPrefix = "many-ai-cli/relay/"
+
+// RelayStatus is the snapshot of one relay loop (plan → implementation →
+// adversarial review → fix → next C) that the Hub drives as a state machine
+// (docs/local/plan_orchestration-relay-loop.md). One parent session may run
+// several relays; OrchestrationID identifies each one.
+//
+// State is implementing | reviewing | fixing | completed | stopped. Reason is
+// set only for stopped (max_rounds / blocked / verdict_missing /
+// review_file_missing / timeout / child_exited / user_stop / spawn_error /
+// hub_restart); for blocked it also carries the reviewer's reason text.
+type RelayStatus struct {
+	OrchestrationID         string `json:"orchestration_id,omitempty"`
+	PlanPath                string `json:"plan_path,omitempty"`
+	Mode                    string `json:"mode,omitempty"` // worktree | same-tree
+	State                   string `json:"state,omitempty"`
+	Reason                  string `json:"reason,omitempty"`
+	CompletedCs             int    `json:"completed_cs,omitempty"`
+	Round                   int    `json:"round,omitempty"`
+	MaxRounds               int    `json:"max_rounds,omitempty"`
+	FinalSeen               bool   `json:"final_seen,omitempty"`
+	ImplementationSessionID int    `json:"implementation_session_id,omitempty"`
+	// StrongSessionID is the optional stronger implementer (D-22); 0 until it
+	// is spawned. ActiveImplementer names the role working on the current C
+	// (implementation | implementation-strong) and EscalateAfter is the number
+	// of failed review rounds after which the C is handed to the strong one.
+	StrongSessionID   int    `json:"strong_session_id,omitempty"`
+	ActiveImplementer string `json:"active_implementer,omitempty"`
+	EscalateAfter     int    `json:"escalate_after,omitempty"`
+	ReviewSessionID   int    `json:"review_session_id,omitempty"`
+	ReviewPath        string `json:"review_path,omitempty"`
+	WorktreePath      string `json:"worktree_path,omitempty"`
+	Branch            string `json:"branch,omitempty"`
+	BaseCommit        string `json:"base_commit,omitempty"`
+	UpdatedAt         string `json:"updated_at,omitempty"`
+}
+
+// RelayEvent is one row of a relay's timeline. Kind is started | c_done |
+// review_started | verdict | fix_sent | proceed_sent | nudge | escalated |
+// completed | stopped | restored | resumed.
+type RelayEvent struct {
+	At           string `json:"at,omitempty"`
+	Kind         string `json:"kind,omitempty"`
+	C            int    `json:"c,omitempty"`
+	Round        int    `json:"round,omitempty"`
+	Text         string `json:"text,omitempty"`
+	ReviewPath   string `json:"review_path,omitempty"`
+	Commit       string `json:"commit,omitempty"`
+	FilesChanged int    `json:"files_changed,omitempty"`
 }
 
 type ApprovalOption struct {
