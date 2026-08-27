@@ -42,19 +42,57 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
   let codexModelSelection: any = null;
   let claudeModelSelection: any = null;
 
+  // 前回起動時に選んだサブスクリプションは provider ごとに覚える（profile 一覧は
+  // provider 固有なので、1 つの値を使い回すと provider を切り替えた瞬間に無関係な
+  // ID が残る）。spawn.defaults は map[string]string なので、入れ子ではなく
+  // `subscription_<provider>` のフラットなキーで往復させる。
+  const SUBSCRIPTION_PREF_PREFIX = 'subscription_';
+
+  function readSpawnDefaults(): Record<string, string> {
+    try {
+      const s = JSON.parse(localStorage.getItem(STORAGE_SPAWN_KEY) || '{}');
+      return (s && typeof s === 'object' && !Array.isArray(s)) ? s : {};
+    } catch (_) { return {}; }
+  }
+
+  // 保存済みのサブスクリプション既定を provider ごとに全部返す。起動時の保存は
+  // オブジェクトを作り直すので、これを混ぜないと他 provider の記憶が消える。
+  function savedSubscriptionDefaults(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(readSpawnDefaults())) {
+      if (k.startsWith(SUBSCRIPTION_PREF_PREFIX) && typeof v === 'string') out[k] = v;
+    }
+    return out;
+  }
+
+  function savedSubscriptionFor(provider: string): string {
+    const v = readSpawnDefaults()[SUBSCRIPTION_PREF_PREFIX + provider];
+    return typeof v === 'string' ? v : '';
+  }
+
+  // 直前に options を組んだ provider。provider が変わったときは画面に残っている
+  // 選択値ではなく、その provider の保存値から復元する。
+  let subscriptionSelectorProvider: string | null = null;
+
   // ---- subscription selector（plan_multi-subscription-pool C4）----
   // profile が 2 件以上ある provider でのみ出す。0〜1 件のときは行ごと隠したまま
   // にして、送信 JSON も従来と完全に同じ形（subscription_profile_id 無し）に保つ。
-  function refreshSubscriptionSelector(): void {
+  function refreshSubscriptionSelector(opts?: { restoreSaved?: boolean }): void {
     if (!spawnSubscriptionRow || !spawnSubscriptionSelect) return;
     const provider = (spawnProviderEl as HTMLSelectElement).value;
+    const providerChanged = subscriptionSelectorProvider !== provider;
+    subscriptionSelectorProvider = provider;
     const profiles = provider === 'shell' ? [] : selectableProfiles(provider);
     if (profiles.length < 2) {
       spawnSubscriptionRow.hidden = true;
       spawnSubscriptionSelect.innerHTML = '';
       return;
     }
-    const previous = spawnSubscriptionSelect.value;
+    // options がまだ 1 つも無いとき（起動直後、subscriptions の取得完了前に
+    // 一度呼ばれている）は「画面上の選択」が存在しないので保存値から復元する。
+    const restoreSaved = !!opts?.restoreSaved || providerChanged
+      || spawnSubscriptionSelect.options.length === 0;
+    const previous = restoreSaved ? savedSubscriptionFor(provider) : spawnSubscriptionSelect.value;
     // 先頭は常に「CLI 自身のログイン環境」。既存利用者が profile を足しただけで
     // 起動先が勝手に変わらないよう、これを既定の選択肢にする。
     const options = [`<option value="">${escapeHtml(t('spawn_subscription_default'))}</option>`];
@@ -77,8 +115,8 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
     return spawnSubscriptionSelect.value || '';
   }
 
-  onSubscriptionsChanged(refreshSubscriptionSelector);
-  void loadSubscriptions().then(refreshSubscriptionSelector);
+  onSubscriptionsChanged(() => refreshSubscriptionSelector());
+  void loadSubscriptions().then(() => refreshSubscriptionSelector());
 
   // ---- C1: オーケストレーション（plan_orchestration-spawn-ui-exposure.md） ----
   // 「オーケストレーション」ボタンから開いたときだけ true。同じ起動フォームを共用し、
@@ -730,7 +768,9 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
       }
       updateSpawnProviderIcon();
       syncSpawnProviderFields(spawnProviderEl.value);
-      refreshSubscriptionSelector();
+      // パネルを開き直したときは「前回起動したときの選択」に戻す（開きっぱなしで
+      // いじった一時的な選択ではなく保存値が正）。
+      refreshSubscriptionSelector({ restoreSaved: true });
       updateDetachedPreview();
       return !!s.cwd;
     } catch (_) { return false; }
@@ -2196,7 +2236,15 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
         const openTarget = getSpawnOpenTarget();
         const gridLayout = getSpawnGridLayout();
         const detachedPreset = spawnDetachedPreset ? spawnDetachedPreset.value : 'single';
+        // サブスクリプション選択は provider ごとに記憶する。行が隠れている
+        // （profile が 0〜1 件 / shell）ときは「選ばなかった」だけなので、既存の
+        // 記憶を空で上書きしない。
+        const subscriptionDefaults = savedSubscriptionDefaults();
+        if (spawnSubscriptionRow && !spawnSubscriptionRow.hidden) {
+          subscriptionDefaults[SUBSCRIPTION_PREF_PREFIX + provider] = subscriptionID;
+        }
         saveSpawnSettings({
+          ...subscriptionDefaults,
           provider,
           cwd,
           model: persistedModel,
