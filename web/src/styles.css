@@ -328,9 +328,9 @@ header {
   background: rgba(34,197,94,0.08);
 }
 .session-chip.waiting {
-  color: var(--warn);
-  border-color: rgba(245,158,11,0.3);
-  background: rgba(245,158,11,0.08);
+  color: #111;
+  border-color: var(--warn);
+  background: var(--warn);
 }
 .session-chip.standby {
   color: var(--badge-standby-text);
@@ -1950,11 +1950,20 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
 .status-chip { display: inline-flex; align-items: center; justify-content: center; gap: 3px; min-width: 26px; font-variant-numeric: tabular-nums; font-size: 0.8rem; font-weight: bold; padding: 2px 8px; border-radius: var(--radius-sm); line-height: 1.4; }
 .status-chip--running { color: var(--badge-running-text); background: color-mix(in srgb, var(--badge-running-bg) 25%, transparent); border: 1px solid color-mix(in srgb, var(--badge-running-text) 35%, transparent); }
 .status-chip--waiting { color: var(--warn-text);          background: color-mix(in srgb, var(--warn-bg) 25%, transparent);         border: 1px solid color-mix(in srgb, var(--warn-text) 35%, transparent); }
+.status-chip--attention { color: #111; background: var(--warn); border-color: var(--warn); }
 .status-chip--standby { color: var(--badge-standby-text); background: color-mix(in srgb, var(--badge-standby-bg) 25%, transparent); border: 1px solid color-mix(in srgb, var(--badge-standby-text) 35%, transparent); }
 .status-chip--blink { animation: status-chip-blink 2.5s ease-in-out infinite; }
 @keyframes status-chip-blink {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.6; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .status-chip--attention,
+  .session-chip.waiting { animation: waiting-attention 1.2s ease-in-out infinite; }
+  @keyframes waiting-attention {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.45; }
+  }
 }
 .summary-sep { color: var(--line-soft); align-self: center; font-size: 0.9rem; padding: 0 2px; }
 .summary-provider-chip { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--header-font-size); color: var(--text); white-space: nowrap; flex-shrink: 0; }
@@ -2031,4 +2040,3 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
   pointer-events: none;
 }
 .card[draggable=true]:hover::before { opacity: 0.5; }
-

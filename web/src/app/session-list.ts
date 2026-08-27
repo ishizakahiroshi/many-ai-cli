@@ -776,7 +776,7 @@ export function renderSessionList() {
     chipsEl.className = 'group-status-chips';
     chipsEl.innerHTML =
       `<span class="status-chip status-chip--running">${runningCount}</span>` +
-      `<span class="status-chip status-chip--waiting">${waitingCount}</span>` +
+      `<span class="status-chip status-chip--waiting${waitingCount > 0 ? ' status-chip--attention' : ''}">${waitingCount}</span>` +
       `<span class="status-chip status-chip--standby">${standbyCount}</span>`;
     header.appendChild(chipsEl);
 
@@ -1339,7 +1339,10 @@ export function updateProjectGroupStatusChipsForSession(s) {
   const waiting = chipsEl.querySelector('.status-chip--waiting');
   const standby = chipsEl.querySelector('.status-chip--standby');
   if (running) running.textContent = String(counts.running);
-  if (waiting) waiting.textContent = String(counts.waiting);
+  if (waiting) {
+    waiting.textContent = String(counts.waiting);
+    waiting.classList.toggle('status-chip--attention', counts.waiting > 0);
+  }
   if (standby) standby.textContent = String(counts.standby);
   return true;
 }
