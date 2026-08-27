@@ -75,7 +75,8 @@ func (s *Server) cleanSpawnLogs() {
 // A retention of 0 disables cleanup; negative values are treated as 0.
 // 稼働中セッションのログ三つ組は保持日数を超えていても削除しない
 // （長時間 idle で attach 継続中のセッションの実行履歴が消える事故を防ぐ。
-//  handleLogsPurge と同型の除外ロジック）。
+//
+//	handleLogsPurge と同型の除外ロジック）。
 func (s *Server) cleanSessionLogs() {
 	s.logMaintenanceMu.Lock()
 	defer s.logMaintenanceMu.Unlock()

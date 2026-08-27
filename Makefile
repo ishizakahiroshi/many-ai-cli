@@ -32,7 +32,10 @@ GO_LDFLAGS        := -X main.version=$(GIT_VERSION) -X main.gitCommit=$(GIT_COMM
 # web 側の対応する切り替えは MAI_DEBUG（web/scripts/build.mjs）。
 GO_TAGS           ?= maidebug
 
-.PHONY: build build-web build-windows build-launcher build-linux deploy-wsl clean run debug-purge debug-restore
+# gofmt の検査は scripts/check-gofmt.mjs が持つ（走査範囲の限定と、CRLF を無視した
+# 比較の 2 つが要るため make の 1 行では書けない。理由は同スクリプト冒頭）。
+
+.PHONY: build build-web build-windows build-launcher build-linux deploy-wsl clean run fmt fmt-check debug-purge debug-restore
 
 build: build-windows build-launcher build-linux deploy-wsl
 
@@ -59,3 +62,9 @@ run: build-windows
 
 clean:
 	rm -f $(BINARY) $(LAUNCHER_BINARY) $(LINUX_BINARY) cmd/many-ai-cli/rsrc_windows_*.syso cmd/many-ai-cli-launcher/rsrc_windows_*.syso
+
+fmt-check:
+	node scripts/check-gofmt.mjs
+
+fmt:
+	node scripts/check-gofmt.mjs --fix

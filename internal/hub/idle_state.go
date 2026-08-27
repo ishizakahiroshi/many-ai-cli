@@ -80,14 +80,14 @@ func (s *Server) evaluateIdle() {
 	now := time.Now()
 	s.sessionsMu.Lock()
 	type change struct {
-		id           int
-		provider     string
-		display      string
-		cwd          string
-		branch       string
-		label        string
-		model        string
-		route        string
+		id               int
+		provider         string
+		display          string
+		cwd              string
+		branch           string
+		label            string
+		model            string
+		route            string
 		state            string
 		activity         SessionActivity
 		lastOutputAt     string

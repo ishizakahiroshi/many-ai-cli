@@ -188,20 +188,20 @@ type session struct {
 	approvalConsumedCandidateKey   string
 	approvalConsumedCandidateShape string
 	approvalConsumedEpoch          uint64
-	vtResizeDebounceUntil        time.Time
-	nativeApprovalSig            string
-	nativeApprovalCandidateKey   string
-	nativeApprovalCandidateShape string
-	nativeApprovalSourceEpoch    uint64
-	nativeApprovalTailSig        string
-	nativeApprovalScanQueued     bool
-	nativeApprovalClearMisses    int
-	nativeApprovalConsumed       string
-	nativeApprovalConsumedAt     time.Time
-	approvalMarkerSig            string
-	approvalMarkerCandidateKey   string
-	approvalMarkerCandidateShape string
-	approvalMarkerSourceEpoch    uint64
+	vtResizeDebounceUntil          time.Time
+	nativeApprovalSig              string
+	nativeApprovalCandidateKey     string
+	nativeApprovalCandidateShape   string
+	nativeApprovalSourceEpoch      uint64
+	nativeApprovalTailSig          string
+	nativeApprovalScanQueued       bool
+	nativeApprovalClearMisses      int
+	nativeApprovalConsumed         string
+	nativeApprovalConsumedAt       time.Time
+	approvalMarkerSig              string
+	approvalMarkerCandidateKey     string
+	approvalMarkerCandidateShape   string
+	approvalMarkerSourceEpoch      uint64
 	// 構造が壊れていて配信を抑止した直近のマーカー sig。同一ブロックが
 	// PTY チャンクごとに再抽出されるため、ログを 1 ブロック 1 回に絞る用途のみ。
 	approvalMarkerSuppressedSig string
