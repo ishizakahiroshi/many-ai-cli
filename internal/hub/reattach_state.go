@@ -44,8 +44,6 @@ type reattachPreservedState struct {
 	lastDoneNotifyAt      time.Time
 	doneSummaryMarkerSeen bool
 
-	approvalConsumedCarried bool
-
 	vtCounts                  workflowCounts
 	journalCounts             workflowCounts
 	workflowVTProgress        *proto.WorkflowProgress
@@ -132,8 +130,6 @@ func snapshotReattachStateLocked(ses *session) reattachPreservedState {
 		gitDeleted:            ses.gitDeleted,
 		lastDoneNotifyAt:      ses.lastDoneNotifyAt,
 		doneSummaryMarkerSeen: ses.doneSummaryMarkerSeen,
-
-		approvalConsumedCarried: ses.approvalConsumedCarried,
 
 		vtCounts:                  ses.vtCounts,
 		journalCounts:             ses.journalCounts,
@@ -248,8 +244,6 @@ func applyReattachPreservedStateLocked(dst *session, state reattachPreservedStat
 	dst.gitDeleted = state.gitDeleted
 	dst.lastDoneNotifyAt = state.lastDoneNotifyAt
 	dst.doneSummaryMarkerSeen = state.doneSummaryMarkerSeen
-
-	dst.approvalConsumedCarried = state.approvalConsumedCarried
 
 	dst.vtCounts = state.vtCounts
 	dst.journalCounts = state.journalCounts
