@@ -45,6 +45,79 @@
   background: color-mix(in srgb, var(--warn) 5%, var(--bg-elev));
 }
 
+/* ===== 右/左カラム（body.approval-dock-right / -left。状態は ui-side.ts の uiSideApproval）=====
+   デスクトップ専用。下ドックの代わりに #display-stack の右端／左端へ縦いっぱいの縦カラムで
+   重ねる（フローに置かない理由は冒頭のコメントと同じ。ターミナルを狭めず重ねる）。
+   幅は --approval-dock-w（action-bar-resize.ts が内側の縦辺ドラッグで変える・未設定なら既定幅）。
+   高さはスタックの全高なので、下ドック時の inline height / max-height が残っても
+   カラムでは無効化する（max-height/height は !important で上書き）。
+   モバイル幅では @media (max-width:720px) 側が position:relative へ戻すので効かない。 */
+@media (min-width: 721px) {
+  body.approval-dock-right #action-bar,
+  body.approval-dock-left #action-bar {
+    top: 0;
+    bottom: 0;
+    width: var(--approval-dock-w, 380px);
+    max-height: none !important;
+    height: auto !important;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    overflow-y: auto;
+  }
+  /* 右カラム: 左辺がターミナル側。警告色の縦線と影はターミナル側へ向ける。 */
+  body.approval-dock-right #action-bar {
+    right: 0;
+    left: auto;
+    box-shadow: -6px 0 18px rgba(0, 0, 0, 0.35);
+    padding-right: calc(12px + 32px + 6px + 32px + 8px);
+  }
+  body.approval-dock-right #action-bar.visible { border-left-color: var(--warn); }
+  /* 左カラム: 右辺がターミナル側。 */
+  body.approval-dock-left #action-bar {
+    left: 0;
+    right: auto;
+    border-left: none;
+    border-right: 3px solid transparent;
+    box-shadow: 6px 0 18px rgba(0, 0, 0, 0.35);
+    padding-right: calc(12px + 32px + 6px + 32px + 8px);
+  }
+  body.approval-dock-left #action-bar.visible { border-right-color: var(--warn); }
+  /* dismiss / collapse ボタンは常に右上固定。padding の右余白も確保済み。
+     （body.close-left での左右反転ルールは本ファイル末尾側に置く） */
+
+  /* ドラッグハンドル（::before）を内側の縦辺 8px 帯へ付け替える。 */
+  body.approval-dock-right #action-bar::before {
+    top: 0;
+    bottom: 0;
+    height: auto;
+    left: 0;
+    right: auto;
+    width: 8px;
+    cursor: ew-resize;
+  }
+  body.approval-dock-left #action-bar::before {
+    top: 0;
+    bottom: 0;
+    height: auto;
+    left: auto;
+    right: 0;
+    width: 8px;
+    cursor: ew-resize;
+  }
+  /* グリップ（::after）は内側の縦辺の中ほどへ回転して置く。 */
+  body.approval-dock-right #action-bar::after,
+  body.approval-dock-left #action-bar::after {
+    top: 50%;
+    left: auto;
+    right: 3px;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 44px;
+  }
+  body.approval-dock-right #action-bar::after { right: auto; left: 3px; }
+}
+
+
 /* P-03: compact, provider-neutral approval context. The command remains a
    single readable line; raw VT context is available only on demand. */
 .approval-summary-card {
@@ -700,6 +773,22 @@
   min-height: var(--control-h-sm);
 }
 .action-collapse-btn:hover { color: var(--text); border-color: var(--line-soft); }
+
+/* body.close-left（✕ を左へ寄せる。状態は ui-side.ts の uiSideClose）では
+   dismiss / collapse も同じ帯の左上へ反転配置する。position:absolute のため
+   order ではなく left / right の差し替えで動かす（styles.css の order ルールは効かない）。
+   折りたたみボタンは dismiss の「左隣」を保つので、left 側に同じ間隔で並べる。 */
+body.close-left .action-dismiss-btn { right: auto; left: 12px; }
+body.close-left .action-collapse-btn { right: auto; left: calc(12px + var(--control-h-sm) + 6px); }
+/* ボタンが右 → 左へ移るのに合わせて、余白確保用の右 padding も左へ移す。
+   モバイル幅は下の @media が padding を丸ごと指定し直すため、デスクトップ幅限定。 */
+@media (min-width: 721px) {
+  body.close-left #action-bar {
+    padding-right: 12px;
+    padding-left: calc(12px + 32px + 6px + 32px + 8px);
+  }
+}
+
 
 /* コンパクト表示: 質問本文・選択肢を 1 行省略にして高さを最小化する。
    全文はボタン/タイトルの title 属性とターミナル本文で確認できる。 */

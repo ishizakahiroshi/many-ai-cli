@@ -202,14 +202,38 @@
           </div>
           <div class="settings-note" data-i18n="settings_tab_order_desc">タブバーのタブはドラッグで並べ替えできます。使わないタブは右端へ寄せてください。並び順はこのブラウザにのみ保存されます。</div>
           <div class="settings-row">
-            <span class="settings-label" data-i18n="settings_ui_side_label">操作系の左右</span>
-            <select id="ui-side-select" class="settings-select">
-              <option value="" data-i18n="settings_ui_side_default">既定（従来どおり）</option>
-              <option value="left" data-i18n="settings_ui_side_left">左に揃える</option>
-              <option value="right" data-i18n="settings_ui_side_right">右に揃える</option>
+            <span class="settings-label" data-i18n="settings_ui_side_cards_label">操作系の左右: セッションカード</span>
+            <select id="ui-side-cards-select" class="settings-select">
+              <option value="" data-i18n="settings_ui_side_opt_default">既定（従来どおり）</option>
+              <option value="left" data-i18n="settings_ui_side_opt_left">左に置く</option>
+              <option value="right" data-i18n="settings_ui_side_opt_right">右に置く</option>
             </select>
           </div>
-          <div class="settings-note" data-i18n="settings_ui_side_desc">セッションカードの列・入力欄のツール群・各パネルの閉じるボタン（✕）を同じ側へ揃えます。揃えるとカードとボタンの往復でマウスの移動距離が短くなります。入力欄の ⇄ ボタンでも同じ切り替えができます。この設定はこのブラウザにのみ保存されます（スマホ幅ではカード列は常に左のドロワーです）。</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_ui_side_tools_label">操作系の左右: 入力欄のツール群</span>
+            <select id="ui-side-tools-select" class="settings-select">
+              <option value="" data-i18n="settings_ui_side_opt_default">既定（従来どおり）</option>
+              <option value="left" data-i18n="settings_ui_side_opt_left">左に置く</option>
+              <option value="right" data-i18n="settings_ui_side_opt_right">右に置く</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_ui_side_close_label">操作系の左右: 閉じるボタン</span>
+            <select id="ui-side-close-select" class="settings-select">
+              <option value="" data-i18n="settings_ui_side_opt_default">既定（従来どおり）</option>
+              <option value="left" data-i18n="settings_ui_side_opt_left">左に置く</option>
+              <option value="right" data-i18n="settings_ui_side_opt_right">右に置く</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_ui_side_approval_label">確認ポップアップの位置</span>
+            <select id="ui-side-approval-select" class="settings-select">
+              <option value="" data-i18n="settings_ui_side_approval_default">下（従来どおり）</option>
+              <option value="right" data-i18n="settings_ui_side_approval_right">右カラム</option>
+              <option value="left" data-i18n="settings_ui_side_approval_left">左カラム</option>
+            </select>
+          </div>
+          <div class="settings-note" data-i18n="settings_ui_side_desc">セッションカード・入力欄のツール群・閉じるボタン（✕）・確認ポップアップを、それぞれ独立して好きな側へ置けます。「既定」は更新前と同じ配置です。入力欄の ⇄ ボタンはこれらをまとめて反対側へ倒します（下ドックの確認ポップアップは動きません）。この設定はこのブラウザにのみ保存されます（スマホ幅ではカード列は常に左のドロワーで、確認ポップアップも必ず下に出ます）。</div>
         </div>
       </details>
       <details class="settings-section" data-section="appearance">
