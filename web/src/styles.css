@@ -1094,8 +1094,15 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
 .card.running::before { background: var(--green); opacity: 1; }
 .card.waiting::before { background: var(--warn); opacity: 1; }
 .card.active::before  { background: var(--accent); opacity: 1; width: 5px; top: 4px; bottom: 4px; }
-.card-title-row { display: flex; align-items: center; gap: 2px; overflow: hidden; }
+/* 1 行に並ぶ文字は baseline で揃える。align-items:center だと各項目の baseline が
+   その項目の中心から (ascent-descent)/2 ＝ 約 0.41em ずれるため、font-size が違う
+   #N(16px) / モデル名(0.68rem) / タイトル(0.75rem) が 1〜2px ずつ段違いに見える。
+   このズレは line-height をいくら揃えても消えない（中心からの baseline 距離は
+   line-height に依存せず font-size にだけ比例するため）。 */
+.card-title-row { display: flex; align-items: baseline; gap: 2px; overflow: hidden; }
 .card-title-row > b { flex-shrink: 0; }
+/* 記号（状態ドット）は baseline を持たないので行の中央に置く。 */
+.card-title-row > .card-state-pill { align-self: center; }
 .card.orchestration-child { border-left: 2px solid color-mix(in srgb, var(--accent) 65%, transparent); margin-left: 8px; }
 .card.orchestration-parent { border-left: 2px solid color-mix(in srgb, var(--warn) 70%, transparent); }
 /* 状態は記号だけを表示し、名前は tooltip / aria-label へ残す。 */
@@ -1145,8 +1152,11 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
    警告色を使わず、成否を名乗る success 系の色にも寄せない。 */
 .card-done-unknown      { color: var(--fg-muted); border-color: color-mix(in srgb, var(--line) 70%, transparent); opacity: 0.85; }
 .card-provider-icon { flex-shrink: 0; vertical-align: middle; margin-right: 2px; }
-.card-provider-model { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; min-width: 0; color: var(--text-dim); cursor: default; }
-.card-provider-model .card-provider-icon { width: 14px; height: 14px; margin-right: 0; }
+/* baseline 揃えは入れ子にも通す。ここが align-items:center のままだと、この箱自身が
+   flex コンテナとして親へ返す baseline がアイコン側から合成され、モデル名の文字だけ
+   親行の baseline から外れる。 */
+.card-provider-model { display: inline-flex; align-items: baseline; gap: 3px; flex-shrink: 0; min-width: 0; color: var(--text-dim); cursor: default; }
+.card-provider-model .card-provider-icon { width: 14px; height: 14px; margin-right: 0; align-self: center; }
 /* モデル名は意味を解釈せず raw 表示。幅だけ制限し、全文は tooltip で読める。 */
 .card-model-name { min-width: 0; max-width: 16ch; flex: 0 1 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.68rem; line-height: 1; color: var(--green-text); }
 /* モデル名の色は下のステータスバー .tsb-model（#9ece6a）に合わせて緑系で統一。 */
