@@ -216,6 +216,7 @@ export function sessionLayoutSnapshot(s) {
     s.log_path || '',
     s.jsonl_path || '',
     s.model || '',
+    s.effort || '',
     s.route || '',
     s.end_reason || '',
   ].join('\x1f');
@@ -590,6 +591,7 @@ export function _connectWs() {
     if (m.log_path)        cur.log_path        = m.log_path;
     if (m.jsonl_path)      cur.jsonl_path      = m.jsonl_path;
     if (m.model !== undefined) cur.model       = m.model;
+    if (m.effort !== undefined) cur.effort      = m.effort;
     if (m.route !== undefined) cur.route       = m.route;
     if (m.parent_session_id !== undefined) cur.parent_session_id = m.parent_session_id;
     if (m.role !== undefined) cur.role = m.role;

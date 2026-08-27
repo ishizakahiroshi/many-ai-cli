@@ -239,6 +239,8 @@ export interface Message {
   label?: string;
 	 session_meta?: SessionMeta;
   model?: string;
+  /** reasoning effort（"high" 等）。起動バナー / モデル変更行から Hub が検出した値。 */
+  effort?: string;
   route?: string;
   parent_session_id?: number;
   auto?: boolean;
@@ -334,6 +336,8 @@ export interface SessionSnapshot {
 	 note?: string;
 	 auto_title?: string;
   model?: string;
+  /** reasoning effort（"high" 等）。UI 3 箇所の統一表示に使う（usage 側の値が優先）。 */
+  effort?: string;
   route?: string;
   shell?: string;
   parent_session_id?: number;

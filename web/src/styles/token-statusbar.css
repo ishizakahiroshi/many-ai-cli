@@ -104,7 +104,10 @@
 }
 
 /* effort / thinking バッジ（モデルチップ隣） */
+/* .effort-badge はステータスバーとタブバーのセッションチップで共有する
+   （同じ値を同じ見た目で出すため、定義もここ 1 箇所）。 */
 .tsb-seg-effort { gap: 4px; }
+.effort-badge,
 .tsb-effort-lvl {
   font-size: var(--statusbar-font-size);
   font-weight: 700;

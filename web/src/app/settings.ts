@@ -11,7 +11,7 @@ import { providerApprovalTriggers } from './approval.js';
 import { MULTI_SCROLLBACK, getMessages } from './chat-history.js';
 import { FilesTabManager } from './files-view.js';
 import { fetchPushStatus, getPushSubscription, isLikelyIOSBrowserTabWithoutStandalone, pushNotificationsSupported, subscribeWebPush, unsubscribeWebPush } from './pwa.js';
-import { setStatusbarEnabled, isStatusbarEnabled, TOGGLEABLE_SEGMENTS, applySegmentVisibility } from './token-statusbar.js';
+import { setStatusbarEnabled, isStatusbarEnabled, TOGGLEABLE_SEGMENTS, applySegmentVisibility, getSessionAgentInfo } from './token-statusbar.js';
 import { initUsagePanel, refreshUsagePanel } from './usage-panel.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
@@ -2438,13 +2438,19 @@ export function renderSessionInfoChip() {
     ? `<span class="card-provider-chip ${safeClassToken(s.provider)}">${escapeHtml(providerName)}</span>`
     : '';
   const isOllamaBackedSess = (s.route === 'ollama');
+  // モデル名・effort はカード tooltip / ステータスバーと同じ getSessionAgentInfo から取る。
+  const agentInfo = getSessionAgentInfo(Number(s.id));
   let modelBadge = '';
-  if (s.model) {
+  if (agentInfo.model) {
     const badgeProviderKey = isOllamaBackedSess ? 'ollama' : (s.provider || '');
     const badgeProviderLabel = isOllamaBackedSess ? 'Ollama' : providerName;
-    const tip = badgeProviderLabel ? `${badgeProviderLabel} · ${s.model}` : s.model;
-    modelBadge = ` <span class="card-model card-model--with-icon" data-tooltip="${escapeHtml(tip)}">${providerIconHtml(badgeProviderKey)}<span class="card-model-text">${escapeHtml(s.model)}</span></span>`;
+    const tip = [badgeProviderLabel, agentInfo.model, agentInfo.effort].filter(Boolean).join(' · ');
+    modelBadge = ` <span class="card-model card-model--with-icon" data-tooltip="${escapeHtml(tip)}">${providerIconHtml(badgeProviderKey)}<span class="card-model-text">${escapeHtml(agentInfo.model)}</span></span>`;
   }
+  // effort バッジはステータスバーと同じ .effort-badge（見た目も 1 箇所で定義）。
+  const effortBadge = agentInfo.effort
+    ? ` <span class="effort-badge" data-tooltip="${escapeHtml(t('tsb_effort_title', { level: agentInfo.effort }))}">${escapeHtml(agentInfo.effort)}</span>`
+    : '';
   const state = s.state || 'standby';
   const stateLbl = (typeof stateLabel === 'function') ? stateLabel(state) : state;
   // 状態 pill はステータスバー（token-statusbar）と表示順・フォント・色を揃える:
@@ -2466,7 +2472,7 @@ export function renderSessionInfoChip() {
   chip.innerHTML =
     `<span class="sid">#${s.id}</span>` +
     ` ${statePill} ` +
-    `${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${subBadge}`;
+    `${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${effortBadge}${subBadge}`;
 }
 
 // D12: チャット件数バッジ更新

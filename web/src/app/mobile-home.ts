@@ -8,6 +8,7 @@ import { activateSession, providerIconHtml } from './session-list.js';
 import { sessionTitle } from './approval-queue-tab.js';
 import { openServerModal } from './server-modal.js';
 import { escapeHtml } from './util.js';
+import { getSessionAgentInfo } from './token-statusbar.js';
 
 const mobileMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
   ? window.matchMedia('(max-width: 720px)')
@@ -205,10 +206,10 @@ function projectName(id: number): string {
 }
 
 function providerModelText(id: number): string {
-  const s = sessions.get(id);
-  const provider = String(s?.provider || 'unknown');
-  const model = String(s?.model || '').trim();
-  return model ? `${provider} · ${model}` : provider;
+  // PC 側（カード / タブチップ / ステータスバー）と同じ getSessionAgentInfo を通す。
+  const info = getSessionAgentInfo(id);
+  const provider = info.provider || 'unknown';
+  return [provider, info.model, info.effort].filter(Boolean).join(' · ');
 }
 
 // P-25 monitoring home deliberately has no direct Yes/No controls. A pending

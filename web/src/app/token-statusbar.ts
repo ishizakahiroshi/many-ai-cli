@@ -12,7 +12,7 @@ import type { Message } from '../types/proto.js';
 import { activeSessionId, sessions, chatHistory } from './state.js';
 import { token, escapeHtml } from './util.js';
 import { t } from '../i18n.js';
-import { providerIconHtml, providerDisplayName, safeClassToken, stateLabel, activateSession } from './session-list.js';
+import { providerIconHtml, providerDisplayName, safeClassToken, stateLabel, activateSession, renderSessionList } from './session-list.js';
 import { wsConnectionState } from './ws-client.js';
 import { FilesTabManager } from './files-view.js';
 import { showPathPopup } from './path-links.js';
@@ -379,7 +379,8 @@ export function renderStatusbar(): void {
 
   const isTokenProvider = provider === 'claude' || provider === 'codex';
   const sessionModelName = sesData?.model || '';
-  const modelName = entry?.usageModel || sessionModelName || '';
+  const agentInfo = getSessionAgentInfo(sid);
+  const modelName = agentInfo.model;
 
   // ---- #N セッション番号 ----
   const idEl = setSeg(bar, 'tsb-seg-id', true);
@@ -408,15 +409,17 @@ export function renderStatusbar(): void {
     agentEl.title = titleLines.join('\n');
   }
 
-  // ---- effort / thinking バッジ（Claude statusLine 算出値）----
-  const showEffort = !!(provider === 'claude' && entry && (entry.effortLevel || entry.thinking));
+  // ---- effort / thinking バッジ ----
+  // effort は statusLine 由来（ライブ）とバナー由来（セッション）を解決した値を使う。
+  // カード tooltip / タブチップと同じ getSessionAgentInfo を通すので表示がズレない。
+  const showEffort = !!(agentInfo.effort || agentInfo.thinking);
   const effortEl = setSeg(bar, 'tsb-seg-effort', showEffort);
-  if (effortEl && entry) {
+  if (effortEl) {
     let html = '';
-    if (entry.effortLevel) html += `<span class="tsb-effort-lvl">${escapeHtml(entry.effortLevel)}</span>`;
-    if (entry.thinking) html += `<span class="tsb-thinking">🧠</span>`;
+    if (agentInfo.effort) html += `<span class="effort-badge">${escapeHtml(agentInfo.effort)}</span>`;
+    if (agentInfo.thinking) html += `<span class="tsb-thinking">🧠</span>`;
     effortEl.innerHTML = html;
-    effortEl.title = entry.effortLevel ? t('tsb_effort_title', { level: entry.effortLevel }) : t('tsb_thinking_title');
+    effortEl.title = agentInfo.effort ? t('tsb_effort_title', { level: agentInfo.effort }) : t('tsb_thinking_title');
   }
 
   // ---- 作業ラベル（E）----
@@ -1126,17 +1129,38 @@ export function getSessionCtxPct(sessionId: number): { pct: number; is1m: boolea
   return { pct: Math.max(0, Math.min(100, Math.round(pct))), is1m: entry.ctxWindow >= 1_000_000 };
 }
 
-/** セッションカードのモデル tooltip 用。effort は Claude の statusLine 由来だけを返す。 */
-export function getSessionEffortLevel(sessionId: number): string {
+/**
+ * provider / モデル名 / effort の解決を 1 本にまとめる。
+ *
+ * 同じ 3 つの値をセッションカード（tooltip）・タブバーのセッションチップ・
+ * ステータスバーの 3 箇所が表示するので、取得元がバラけると「バーには出るのに
+ * カードには出ない」という食い違いになる（実際にそうなっていた）。ここが唯一の解決点。
+ *
+ * 優先順位はどちらの値も「ライブ（usage_stat = provider が毎ターン押し出す値）」＞
+ * 「セッション（起動バナー / モデル変更行から Hub が検出した値）」。
+ * statusLine relay を入れていない環境ではセッション側だけが残る。
+ */
+export interface SessionAgentInfo {
+  provider: string;
+  model: string;
+  effort: string;
+  thinking: boolean;
+}
+
+export function getSessionAgentInfo(sessionId: number): SessionAgentInfo {
   const entry = usageCache.get(sessionId);
-  if (!entry || entry.provider !== 'claude') return '';
-  return String(entry.effortLevel || '').trim();
+  const sess = sessions.get(sessionId) as any;
+  const provider = String(entry?.provider || sess?.provider || '').trim();
+  const model = String(entry?.usageModel || sess?.model || '').trim();
+  const effort = String(entry?.effortLevel || sess?.effort || '').trim();
+  return { provider, model, effort, thinking: !!entry?.thinking };
 }
 
 /** WS usage_stat メッセージを受信したときに呼ぶ。 */
 export function handleUsageStatMessage(m: Message): void {
   const sid = m.session_id;
   if (!sid) return;
+  const prev = usageCache.get(sid);
   usageCache.set(sid, {
     provider:       m.provider       || '',
     costUSD:        m.cost_usd       ?? 0,
@@ -1172,6 +1196,13 @@ export function handleUsageStatMessage(m: Message): void {
     usageModel:     m.usage_model    || '',
     usageStartedAt: m.usage_started_at || '',
   });
+  // provider / モデル名 / effort が変わったらセッションカードも描き直す。
+  // カードは getSessionAgentInfo 経由でこのキャッシュを読むので、再描画しないと
+  // バーだけ新しい値になりカードが古いまま残る。
+  const next = usageCache.get(sid)!;
+  if (!prev || prev.provider !== next.provider || prev.usageModel !== next.usageModel || prev.effortLevel !== next.effortLevel) {
+    renderSessionList();
+  }
   if (sid === activeSessionId) {
     renderStatusbar();
   }

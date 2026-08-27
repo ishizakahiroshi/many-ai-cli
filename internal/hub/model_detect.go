@@ -42,38 +42,61 @@ func (s *Server) detectModelChange(id int, data []byte, cleanText string) {
 	if newModel == "" {
 		return
 	}
-	s.applyDetectedModel(id, provider, newModel, false)
+	// Claude は "Set model to Opus 5 with high effort" のように effort が同じ行に
+	// 続くことがある。モデル名へ混ぜず effort として分離する（バナー経路と同じ扱い）。
+	newEffort := ""
+	if provider == "claude" {
+		newModel, newEffort = splitClaudeModelEffort(newModel)
+	}
+	s.applyDetectedModel(id, provider, newModel, newEffort, false)
+}
+
+// splitClaudeModelEffort は "Opus 5 with high effort · Claude Pro" 形式の 1 行から
+// モデル名と effort を分ける。プラン表記（" · Claude Pro"）は落とす。
+func splitClaudeModelEffort(line string) (model, effort string) {
+	rest := strings.TrimSpace(line)
+	if before, _, found := strings.Cut(rest, "·"); found {
+		rest = strings.TrimSpace(before)
+	}
+	if m := reClaudeBannerEffort.FindStringSubmatch(rest); m != nil {
+		effort = m[1]
+		rest = strings.TrimSpace(reClaudeBannerEffort.ReplaceAllString(rest, ""))
+	}
+	return rest, effort
 }
 
 // detectInitialModel は VT バッファのレンダリング済み行から起動バナーの
-// モデル名を抽出し、Model が空のセッションに反映する。
+// モデル名と effort を抽出し、Model が空のセッションに反映する。
 // /model 変更（detectModelChange）と違い既存値は上書きしない。
 func (s *Server) detectInitialModel(id int, provider, cwd string, vtLines []string) {
-	model := extractBannerModel(provider, cwd, vtLines)
+	model, effort := extractBannerModel(provider, cwd, vtLines)
 	if model == "" {
 		return
 	}
-	s.applyDetectedModel(id, provider, model, true)
+	s.applyDetectedModel(id, provider, model, effort, true)
 }
 
-// extractBannerModel は起動バナー / ステータス行からモデル名を抽出する
-// （見つからなければ ""）。cwd は cursor-agent のステータス行アンカーに使う。
-func extractBannerModel(provider, cwd string, lines []string) string {
+// extractBannerModel は起動バナー / ステータス行からモデル名と reasoning effort を
+// 抽出する（見つからなければ ""）。effort を取れるのは表記のある claude / copilot だけで、
+// 他は "" を返す。cwd は cursor-agent のステータス行アンカーに使う。
+func extractBannerModel(provider, cwd string, lines []string) (model, effort string) {
 	switch provider {
 	case "claude":
-		for _, line := range lines {
-			idx := strings.Index(line, claudeBannerLogoRow2)
-			if idx < 0 {
+		// "Claude Code v<版>" 行の直後の非空行がモデル行。ロゴのアスキーアートは
+		// 版で変わるので足場にしない（v2.1.246 で 2 行目の絵柄が変わり検出が止まった）。
+		for i, line := range lines {
+			if !reClaudeBannerVersion.MatchString(line) {
 				continue
 			}
-			rest := strings.TrimSpace(line[idx+len(claudeBannerLogoRow2):])
-			// " · Claude Max" 等のプラン表記を落とす
-			if before, _, found := strings.Cut(rest, "·"); found {
-				rest = strings.TrimSpace(before)
-			}
-			rest = reClaudeBannerEffort.ReplaceAllString(rest, "")
-			if rest != "" {
-				return rest
+			for j := i + 1; j < len(lines) && j <= i+2; j++ {
+				rest := strings.TrimSpace(reClaudeBannerLogoPrefix.ReplaceAllString(lines[j], ""))
+				if rest == "" {
+					continue
+				}
+				name, eff := splitClaudeModelEffort(rest)
+				if name != "" {
+					return name, eff
+				}
 			}
 		}
 	case "codex":
@@ -82,9 +105,9 @@ func extractBannerModel(provider, cwd string, lines []string) string {
 			if m == nil {
 				continue
 			}
-			model := strings.TrimSpace(m[1])
-			if model != "" && !strings.EqualFold(model, "loading") {
-				return model
+			name := strings.TrimSpace(m[1])
+			if name != "" && !strings.EqualFold(name, "loading") {
+				return name, ""
 			}
 		}
 	case "copilot":
@@ -97,15 +120,19 @@ func extractBannerModel(provider, cwd string, lines []string) string {
 			}
 			segs := reCopilotStatusSplit.Split(line, -1)
 			seg := strings.TrimSpace(segs[len(segs)-1])
-			seg = reCopilotEffortSuffix.ReplaceAllString(seg, "")
-			if seg == "Auto" || (len(seg) <= 40 && reCopilotModelLike.MatchString(seg)) {
-				return seg
+			eff := ""
+			if m := reCopilotEffortSuffix.FindStringSubmatch(seg); m != nil {
+				eff = m[1]
+				seg = strings.TrimSpace(reCopilotEffortSuffix.ReplaceAllString(seg, ""))
 			}
-			return "" // 最下部の非空行のみ見る（それより上はステータス行ではない）
+			if seg == "Auto" || (len(seg) <= 40 && reCopilotModelLike.MatchString(seg)) {
+				return seg, eff
+			}
+			return "", "" // 最下部の非空行のみ見る（それより上はステータス行ではない）
 		}
 	case "cursor-agent":
 		if cwd == "" {
-			return ""
+			return "", ""
 		}
 		// "<cwd> · <branch>" 行を探し、その直上の非空行をモデル名とみなす。
 		for i, line := range lines {
@@ -121,28 +148,41 @@ func extractBannerModel(provider, cwd string, lines []string) string {
 				above = reCursorPercentSuffix.ReplaceAllString(above, "")
 				// プロンプト残骸（"→ ..." 等）は除外
 				if above != "" && !strings.ContainsAny(above, "→❯") && len(above) <= 60 {
-					return above
+					return above, ""
 				}
 				break
 			}
 		}
 	}
-	return ""
+	return "", ""
 }
 
-// applyDetectedModel はセッションの Model / Route を更新して session_update を
+// applyDetectedModel はセッションの Model / Route / Effort を更新して session_update を
 // broadcast する。onlyIfEmpty=true のときは Model 未設定のセッションのみ更新する
 // （起動バナー検出が /model 変更や --model 指定を上書きしないため）。
-func (s *Server) applyDetectedModel(id int, provider, newModel string, onlyIfEmpty bool) {
+// newEffort は検出できたときだけ渡す（空文字では既存の Effort を消さない）。
+func (s *Server) applyDetectedModel(id int, provider, newModel, newEffort string, onlyIfEmpty bool) {
 	newRoute := s.resolveRoute(provider, newModel)
 	s.sessionsMu.Lock()
 	ses := s.sessions[id]
-	if ses == nil || ses.Model == newModel || (onlyIfEmpty && ses.Model != "") {
+	if ses == nil || (onlyIfEmpty && ses.Model != "") {
 		s.sessionsMu.Unlock()
 		return
 	}
-	ses.Model = newModel
-	ses.Route = newRoute
+	changed := false
+	if ses.Model != newModel {
+		ses.Model = newModel
+		ses.Route = newRoute
+		changed = true
+	}
+	if newEffort != "" && ses.Effort != newEffort {
+		ses.Effort = newEffort
+		changed = true
+	}
+	if !changed {
+		s.sessionsMu.Unlock()
+		return
+	}
 	ses.initialModelScanDone = true
 	update := proto.Message{
 		Type:         "session_update",
@@ -153,6 +193,7 @@ func (s *Server) applyDetectedModel(id int, provider, newModel string, onlyIfEmp
 		Branch:       ses.Branch,
 		Label:        ses.Label,
 		Model:        ses.Model,
+		Effort:       ses.Effort,
 		Route:        ses.Route,
 		State:        ses.State,
 		LastOutputAt: ses.LastOutputAt,
