@@ -132,6 +132,13 @@ Release artifacts are published at
   `uninstall` removes the sign-in entry (`internal/tray/`,
   `internal/setupcmd/setup_windows.go`, `internal/uninstall/`).
 
+- **Approval-waiting session cards now take visual priority over secondary metadata.**
+  The card and its flag badge share one approval-waiting condition, with a tinted
+  card background, filled flag badge, and the existing reduced-motion-aware pulse.
+  Normal long-running, 1M, and branch metadata no longer use filled warning chips,
+  while severe and stalled long-running states keep their danger treatment
+  (`web/src/app/session-list.ts`, `web/src/styles.css`).
+
 ### Fixed
 - **The Gemini ban precedent in the README named Google's own product as an
   offender.** The terms-of-service warning cited "OpenClaw / OpenCode /

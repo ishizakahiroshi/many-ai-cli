@@ -876,10 +876,12 @@ export function renderSessionList() {
     groupSessions.forEach(s => {
       const c = document.createElement('div');
       const state = s.state || 'standby';
+      const activity = stateActivityDecoration(s);
       const stateClass = (state === 'running' || state === 'waiting') ? ` ${state}` : '';
+      const approvalClass = activity.className === 'awaiting-approval' ? ' awaiting-approval' : '';
       const orchClass = s.parent_session_id ? ' orchestration-child' : (s.orchestration_id ? ' orchestration-parent' : '');
       const colorClass = s.color ? ` card-color-${safeClassToken(s.color)}` : '';
-      c.className = 'card' + stateClass + orchClass + colorClass + (s.id === activeSessionId ? ' active' : '');
+      c.className = 'card' + stateClass + approvalClass + orchClass + colorClass + (s.id === activeSessionId ? ' active' : '');
       c.tabIndex = isCollapsed ? -1 : 0;
       c.setAttribute('role', 'button');
       const label = stateLabel(state);
@@ -912,7 +914,6 @@ export function renderSessionList() {
       // 2 行目は状態情報・ctx・補助メタデータ・branch を同じ行へ固定する。
       const metaRow = `<div class="card-meta-row"><span class="card-status-slot">${cardStatusRowHtml(s)}</span><span class="card-ctx-slot">${cardCtxHtml(s)}</span>${s.pinned ? '<span class="card-pin" aria-label="Pinned">📌</span>' : ''}${noteHtml}${roleHtml}${branchRoleHtml}${boardPendingHtml}${branchBadge}</div>`;
       // 状態は記号だけを表示し、名前は tooltip / aria-label へ残す。#N の直後に置く。
-      const activity = stateActivityDecoration(s);
       const stateDescription = activity.label || label;
       const statePillHtml = ` <span class="card-state-pill ${safeClassToken(state)} ${activity.className}" title="${escapeHtml(stateDescription)}" data-tooltip="${escapeHtml(stateDescription)}" aria-label="${escapeHtml(stateDescription)}"><span class="card-pdot"></span><span class="card-state-icon" aria-hidden="true">${activity.icon}</span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
       c.innerHTML =
@@ -1354,12 +1355,13 @@ export function updateSessionCardStateInPlace(id) {
   const card = root.querySelector(`.card[data-session-id="${CSS.escape(String(id))}"]`);
   if (!card) return false;
   const state = s.state || 'standby';
+  const activity = stateActivityDecoration(s);
   card.classList.toggle('running', state === 'running');
   card.classList.toggle('waiting', state === 'waiting');
+  card.classList.toggle('awaiting-approval', activity.className === 'awaiting-approval');
   card.classList.toggle('active', id === activeSessionId);
   const pill = card.querySelector('.card-state-pill');
   if (pill) {
-    const activity = stateActivityDecoration(s);
     pill.className = `card-state-pill ${safeClassToken(state)} ${activity.className}`;
     const stateDescription = activity.label || stateLabel(state);
     pill.setAttribute('title', stateDescription);
