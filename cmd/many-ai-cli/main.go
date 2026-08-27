@@ -24,8 +24,8 @@ import (
 	"many-ai-cli/internal/sessionlog"
 	"many-ai-cli/internal/setupcmd"
 	"many-ai-cli/internal/shell"
-	"many-ai-cli/internal/uninstall"
 	"many-ai-cli/internal/tray"
+	"many-ai-cli/internal/uninstall"
 	"many-ai-cli/internal/usagerelay"
 	"many-ai-cli/internal/wrapper"
 )
@@ -52,7 +52,7 @@ func buildInfo() hub.BuildInfo {
 // waitForShutdownSignal は SIGINT/SIGTERM を待ち受ける context を返す。
 // 起動ログ（"MANY-AI-CLI started"）と対になる終了ログを、シグナルが実際に
 // 届いた時点で reason="signal" ＋ 具体的なシグナル名付きで残す
-//（plan_hub-lifecycle-logging.md C1）。返り値の cancel は defer で必ず呼ぶこと
+// （plan_hub-lifecycle-logging.md C1）。返り値の cancel は defer で必ず呼ぶこと
 // （シグナル未着のまま return するパスでも goroutine と signal.Notify 登録を解放する）。
 func waitForShutdownSignal(logger *slog.Logger, instanceID string) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(context.Background())

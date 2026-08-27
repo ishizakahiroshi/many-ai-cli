@@ -677,4 +677,3 @@ func clampInt(v, lo, hi int) int {
 	}
 	return v
 }
-

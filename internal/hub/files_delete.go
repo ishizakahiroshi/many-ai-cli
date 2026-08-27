@@ -72,4 +72,3 @@ func (s *Server) handleFilesDeleteDir(w http.ResponseWriter, r *http.Request) {
 func writeDeleteDirErr(w http.ResponseWriter, status int, code, detail string) {
 	writeJSONStatus(w, status, filesDeleteDirResp{OK: false, Error: code, Detail: detail})
 }
-
