@@ -467,7 +467,9 @@ export function initUsageDropdown() {
     const rect = btn.getBoundingClientRect();
     const margin = 6;
     dropdown.style.top = `${Math.min(rect.bottom + 4, window.innerHeight - margin)}px`;
-    dropdown.style.right = `${Math.max(margin, window.innerWidth - rect.right)}px`;
+    dropdown.style.left = '50%';
+    dropdown.style.right = 'auto';
+    dropdown.style.transform = 'translateX(-50%)';
   };
 
   const closeDropdown = () => {
