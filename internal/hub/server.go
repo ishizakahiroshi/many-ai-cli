@@ -869,6 +869,12 @@ var (
 		[]byte("(esc)"),
 		[]byte("Yes"),
 		[]byte("No"),
+		[]byte("to review"),
+		[]byte("To review"),
+		[]byte("to send"),
+		[]byte("To send"),
+		[]byte("to dismiss"),
+		[]byte("To dismiss"),
 	}
 )
 

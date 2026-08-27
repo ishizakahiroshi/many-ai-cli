@@ -74,6 +74,57 @@ func TestDetectNativeApprovalClaude(t *testing.T) {
 	}
 }
 
+func TestDetectNativeApprovalClaudeFeedbackCard(t *testing.T) {
+	lines := []string{
+		"Bug report drafted",
+		"1 to review · 2 to send · 0 to dismiss",
+	}
+	got := detectNativeApproval("claude", lines)
+	if got == nil {
+		t.Fatal("detectNativeApproval returned nil")
+	}
+	if got.Kind != "native" {
+		t.Fatalf("kind = %q", got.Kind)
+	}
+	want := []struct {
+		num      int
+		label    string
+		sendText string
+	}{
+		{num: 1, label: "Review", sendText: "1"},
+		{num: 2, label: "Send", sendText: "2"},
+		{num: 0, label: "Dismiss", sendText: "0"},
+	}
+	if len(got.Options) != len(want) {
+		t.Fatalf("options len = %d, want %d (%+v)", len(got.Options), len(want), got.Options)
+	}
+	for i, wantOpt := range want {
+		gotOpt := got.Options[i]
+		if gotOpt.Num != wantOpt.num || gotOpt.Label != wantOpt.label || gotOpt.SendText != wantOpt.sendText || !gotOpt.PreserveOrder {
+			t.Fatalf("option %d = %+v, want num=%d label=%q send_text=%q preserve_order=true", i, gotOpt, wantOpt.num, wantOpt.label, wantOpt.sendText)
+		}
+	}
+
+	// 同じ見た目を別 provider の一般承認として拾わない。
+	if detectNativeApproval("codex", lines) != nil {
+		t.Fatal("codex provider must not treat Claude feedback card as native approval")
+	}
+	if detectNativeApproval("claude", []string{"1 to review · 2 to send"}) != nil {
+		t.Fatal("incomplete feedback card must not be detected")
+	}
+
+	// 旧カードが上に残ったまま新しい通常承認が出た場合は、新しい候補を優先する。
+	newApproval := detectNativeApproval("claude", []string{
+		"1 to review · 2 to send · 0 to dismiss",
+		"Allow tool: Bash",
+		"❯ 1. Yes, allow once",
+		"  2. No",
+	})
+	if newApproval == nil || len(newApproval.Options) != 2 || newApproval.Options[0].Label != "Yes, allow once" {
+		t.Fatalf("newer native approval was not preferred: %+v", newApproval)
+	}
+}
+
 func TestDetectNativeApprovalGrokRadio(t *testing.T) {
 	// 実機 PTY（2026-08-20 セッション 8）のツール許可カード。
 	lines := []string{
