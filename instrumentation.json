@@ -28,6 +28,13 @@
     "     実際 ui-input-trace と hub-input-trace は後者を選んで files を空にし、2 件とも",
     "     撤去作業から取り残された。共有ファイルに間借りする観測コードは sharedFiles へ書く。",
     "",
+    "  6. 観測コードは build tag / MAI_DEBUG のオプトインでのみ同梱する。ランタイムゲートは同梱ではなく収集の可否を決める",
+    "  7. 観測に当たる Go ファイルには //go:build maidebug を付ける（検査で強制する）",
+    "  8. channels は観測専用ファイルと共有ファイルを結ぶ記録点名で、files は消えるファイル、sharedFiles は間借り先を表す",
+    "  9. artifactNeedles は成果物に絶対現れてはいけない sink 固有文字列。呼び出し点にも出る channel 名は入れない",
+    "  10. 観測コードに付随するテストファイルも files に書く。_test.go を検査対象外にすることと、台帳へ登録しないことは別である",
+    "  11. 観測コードの撤去は単独コミットにする。restore は撤去コミットの逆 diff を path 限定で適用する",
+    "  12. 再導入は node scripts/debug-restore.mjs --id=<id> --dry-run で対象を確認してから行い、--purge は sharedFiles に触れず sink だけを片付ける",
     "検査: node scripts/check-instrumentation.mjs（release の前提チェックから呼ぶ）"
   ],
   "entries": [
@@ -46,6 +53,9 @@
         "/api/debug/ui-log"
       ],
       "removalCondition": "resize 発振と承認バーのチカつきの原因が確定したら撤去",
+      "artifactNeedles": [
+        "/api/debug/ui-log"
+      ],
       "note": "原因は 68f212d（VT resize 時の scrollback 破棄・抑止バナーの増幅ループ抑制）と eba1b26（承認候補の論理 ID と replay 境界）で確定。リリース前の観測コード監査で残存を検出し撤去した。既定 ON で 2 秒周期の空行カウンタまで動いており、利用者環境で無駄に回っていた"
     },
     {
@@ -71,6 +81,9 @@
       ],
       "endpoints": [],
       "removalCondition": "VT ミラーだけが壊れる原因が確定し、classifyApprovalMarkerBlock の症状抑制を根本修正へ置き換えたら撤去",
+      "artifactNeedles": [
+        "approval-corrupt"
+      ],
       "reason": "原因は未解明のまま。classifyApprovalMarkerBlock は『壊れていたら捨てる』症状抑制で、なぜミラーだけが乖離するかには手が付いていない。再現に必要な 3 点は事象発生時にしか取れないため、観測を止めると次の手掛かりが得られない",
       "note": "v0.6.0 で opt-in 化した。sessionlog.MaskSecrets を通し、0700・保持 7 日・32MB/日・30 秒スロットルで上限を掛けているが、保存対象は PTY の生バイト列なのでマスクの取りこぼしが残り得る。A-01 と同じ原則でセッションログの opt-in に従わせている / 2026-08-15 撤去。removalCondition（VT ミラー破損の根本原因確定と classifyApprovalMarkerBlock の置換）は未達だが、ダンプから 3 原因を特定して修正済み （16e4cb3 の 2 件 + 22e254d の 1 件・138 件中 93 件 → さらに 12 件が正常化）で、入力由来の生バイトを保存し続ける代償に見合わないと判断した。4 原因目が出たら 再導入を検討する（そのときは新しい due を必ず付ける）。",
       "removedIn": "v0.7.0"
@@ -84,6 +97,9 @@
       "gate": "always-on",
       "files": [],
       "endpoints": [
+        "input_trace"
+      ],
+      "artifactNeedles": [
         "input_trace"
       ],
       "removalCondition": "送信文字列が CLI 入力欄に滞留する症状の原因が確定したら撤去",
@@ -114,6 +130,10 @@
         "input.flush",
         "input.pty_write",
         "input.pty_write_dup"
+      ],
+      "artifactNeedles": [
+        "input_deliver",
+        "input_deliver_wrapper"
       ]
     },
     {
@@ -136,7 +156,11 @@
       "removalCondition": "スマホでターミナル出力が空になる原因が確定したら撤去",
       "reason": "PC とスマホが同じ Hub・同じビルドを見ているのに片方だけ空になるため、コードを読むだけでは判定・バッファ・DOM のどこで落ちているか切り分けられない。実機 Safari の実測値が要る / 2026-08-24 に due を 2026-08-24 から 2026-09-07 へ延長した。延長の理由は『まだ 1 件も観測できていない』こと。仕込んだ 2026-08-17 から 2026-08-24 までの全期間で hub.log（現行 1 本 + ローテート済み 3 本・2026-08-06 以降を連続で覆う）に debug mobile view sample は 0 件で、実機スマホから ?mtldebug=1 付きで開く手順がまだ実行されていない。つまり結論が出ていないのではなく観測が始まっていない。次の期限までに実機で再現しなければ、そのときは延長ではなく撤去して、症状が再発した時点で入れ直す",
       "note": "記録内容は行数・文字数・要素寸法・状態フラグと userAgent 先頭 140 文字のみで、ターミナル本文と入力テキストは含まない。5 秒間隔・最大 60 サンプル（5 分）で自動停止する。URL クエリが無い通常アクセスでは 1 件も送信しない / 2026-08-20 に常設プローブ基盤へ移送した（plan_instrumentation-probe-lifecycle）。TS 側は自走するサンプラーで記録点を持たないため channel は無く、web/src/debug/ へ移して web/src/debug/index.ts から読み込む形にした（mobile-terminal-lite.ts からの import は不要になったので sharedFiles から外した）。Go 側は //go:build maidebug を付け、ルート登録を init() の registerProbeRoute へ移したので server.go は s.registerProbeRoutes(mux) の 1 行だけになった",
-      "channels": []
+      "channels": [],
+      "artifactNeedles": [
+        "/api/debug/mobile-view",
+        "debug mobile view sample"
+      ]
     },
     {
       "id": "terminal-grid-divergence",
@@ -163,6 +187,10 @@
         "geo.send",
         "geo.apply",
         "geo.scroll"
+      ],
+      "artifactNeedles": [
+        "/api/debug/terminal-geometry",
+        "debug terminal geometry"
       ]
     },
     {
@@ -189,6 +217,9 @@
         "approval.draw",
         "approval.buf",
         "approval.scroll"
+      ],
+      "artifactNeedles": [
+        "approval-identity-debug-panel"
       ]
     }
   ]

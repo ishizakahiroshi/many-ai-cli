@@ -173,6 +173,10 @@ jobs:
           # homebrew-tap / winget-pkgs fork への push 用 PAT（GITHUB_TOKEN は自リポジトリ限定のため）
           PUBLISH_GITHUB_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}
 
+      - name: Verify no instrumentation in release artifacts
+        if: ${{ env.NPM_ONLY != 'true' }}
+        run: node scripts/check-artifact-clean.mjs dist
+
       # Belt-and-suspenders: re-apply the human-readable CHANGELOG section as the
       # Release body unconditionally. Past releases needed a MANUAL `gh release
       # edit` because goreleaser occasionally left the body empty / full of raw

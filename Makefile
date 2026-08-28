@@ -68,3 +68,9 @@ fmt-check:
 
 fmt:
 	node scripts/check-gofmt.mjs --fix
+
+debug-purge:
+	node scripts/check-instrumentation.mjs --purge
+
+debug-restore:
+	node scripts/debug-restore.mjs --id=$(id)
