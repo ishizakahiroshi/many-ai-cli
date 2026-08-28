@@ -2,6 +2,7 @@
 import { token } from './util.js';
 import { activeSessionId, sessions } from './state.js';
 import { resolveCurrentReviewLoad } from './review-load-generation.js';
+import { probe } from '../debug/probe.js';
 
 // ---- Review view ----
 // ============================================================
@@ -506,16 +507,26 @@ import { resolveCurrentReviewLoad } from './review-load-generation.js';
     });
     card.querySelector('[data-turn-close]')?.addEventListener('click', () => {
       dismissTurn(Number(card.dataset.sessionId || 0), Number(card.dataset.turn || 0));
-      card.hidden = true;
+      setTurnCardHidden(card, true, Number(card.dataset.sessionId || 0), Number(card.dataset.turn || 0));
     });
     actionBar.parentElement.insertBefore(card, actionBar);
     turnCard = card;
     return card;
   }
 
+  // 一時観測: このカードは承認バーと違い #display-stack のフロー内に入るため、
+  // 出し入れのたびにターミナルの表示領域が縮む／戻る。表示状態の遷移を geo.card として
+  // 残し、sink 側（web/src/debug/terminal-geometry.ts）が寸法を突き合わせる。
+  // 原因が確定したら撤去する（instrumentation.json の terminal-grid-divergence）。
+  function setTurnCardHidden(card: any, hidden: boolean, sessionID: number, turnNo: number) {
+    if (!card || card.hidden === hidden) return;
+    card.hidden = hidden;
+    probe('geo.card', () => ({ cardSession: Number(sessionID) || 0, cardTurn: Number(turnNo) || 0, cardVisible: !hidden }));
+  }
+
   function hideTurnCard() {
     const card = ensureTurnCard();
-    if (card) card.hidden = true;
+    setTurnCardHidden(card, true, Number(card?.dataset?.sessionId || 0), Number(card?.dataset?.turn || 0));
   }
 
   function renderTurnCard(sessionID: number, turn: any) {
@@ -546,7 +557,7 @@ import { resolveCurrentReviewLoad } from './review-load-generation.js';
     }
     card.dataset.sessionId = String(sessionID);
     card.dataset.turn = String(turn.turn || '');
-    card.hidden = false;
+    setTurnCardHidden(card, false, Number(sessionID), Number(turn.turn || 0));
   }
 
   async function loadLatestTurnCard(sessionID: number) {
@@ -597,7 +608,7 @@ import { resolveCurrentReviewLoad } from './review-load-generation.js';
     if (!sid) return;
     dismissTurn(sid, Number(latestTurnBySession.get(sid)?.turn || 0));
     if (turnCard && !turnCard.hidden && Number(turnCard.dataset.sessionId || 0) === sid) {
-      turnCard.hidden = true;
+      setTurnCardHidden(turnCard, true, sid, Number(turnCard.dataset.turn || 0));
     }
   });
 
@@ -610,7 +621,7 @@ import { resolveCurrentReviewLoad } from './review-load-generation.js';
     latestTurnBySession.delete(sid);
     dismissedTurnBySession.delete(sid);
     if (turnCard && !turnCard.hidden && Number(turnCard.dataset.sessionId || 0) === sid) {
-      turnCard.hidden = true;
+      setTurnCardHidden(turnCard, true, sid, Number(turnCard.dataset.turn || 0));
     }
   });
 

@@ -12,6 +12,9 @@
 //   geo.send    sendResize の結果。sent / dedup / ws-closed を分けて残す
 //   geo.apply   Hub からの pty_resize 反映。PTY 実寸と xterm 実寸の突き合わせ
 //   geo.scroll  PgUp / PgDn を送る瞬間の xterm 実寸と PTY 通知済み寸法
+//   geo.card    レビューのターン完了カード（#git-turn-card）の出し入れ。カードは
+//               #display-stack のフロー内に入るのでターミナルの表示領域を縮める。
+//               出し入れの瞬間と、レイアウトが落ち着いた 700ms 後の 2 点を残す
 //   sample      2 秒ごとに両者を比べ、変化したときとずれているときだけ 1 行出す
 //
 // ゲートは 2 層。build 側（MAI_DEBUG=1 でなければ成果物に入らない）と runtime 側
@@ -56,6 +59,14 @@ function approvalBarVisible(): boolean {
   return !!bar && bar.classList.contains('visible');
 }
 
+// レビューのターン完了カードの占める高さ。非表示なら 0。承認バーと違いこのカードは
+// フローに入るので、出た分だけ #terminal-area が縮む。
+function turnCardHeight(): number {
+  const card = document.getElementById('git-turn-card') as HTMLElement | null;
+  if (!card || card.hidden) return 0;
+  return card.offsetHeight;
+}
+
 interface SampleShape {
   cols: number;
   rows: number;
@@ -63,40 +74,57 @@ interface SampleShape {
   bar: boolean;
   elemW: number;
   elemH: number;
+  screenH: number;
+  cardH: number;
 }
 
 let lastShape: SampleShape | null = null;
 
-function sample(): void {
+// 現在の寸法一式。screenH（xterm が実際に描いている高さ）と elemH（入れ物の高さ）の
+// 差が、行数を縮めずに切り落とされている量になる。
+function currentShape(): (SampleShape & { sessionId: number; altBuffer: boolean }) | null {
   const id = activeSessionId;
-  if (id === null || id === undefined) return;
+  if (id === null || id === undefined) return null;
   // TODO(ts): TerminalEntry.term は state.ts 側で any 定義のため any のまま扱う。
   const entry: any = terminals.get(id);
-  if (!entry?.term) return;
-  const shape: SampleShape = {
+  if (!entry?.term) return null;
+  const screen = entry.term.element?.querySelector('.xterm-screen') as HTMLElement | null;
+  return {
+    sessionId: Number(id),
     cols: entry.term.cols,
     rows: entry.term.rows,
     lastSent: debugLastSentPtySize(id),
     bar: approvalBarVisible(),
     elemW: entry.container?.clientWidth ?? -1,
     elemH: entry.container?.clientHeight ?? -1,
+    screenH: screen?.clientHeight ?? -1,
+    cardH: turnCardHeight(),
+    altBuffer: entry.term.buffer?.active?.type === 'alternate',
   };
+}
+
+function sample(force = false): void {
+  const shape = currentShape();
+  if (!shape) return;
   const diverged = shape.lastSent !== '' && shape.lastSent !== `${shape.cols}x${shape.rows}`;
+  // 行数を縮めずに切り落とされている状態（xterm の描画高が入れ物を超えている）。
+  const clipped = shape.screenH > 0 && shape.elemH > 0 && shape.screenH - shape.elemH > 2;
   const changed = !lastShape
     || lastShape.cols !== shape.cols
     || lastShape.rows !== shape.rows
     || lastShape.lastSent !== shape.lastSent
     || lastShape.bar !== shape.bar
     || lastShape.elemW !== shape.elemW
-    || lastShape.elemH !== shape.elemH;
+    || lastShape.elemH !== shape.elemH
+    || lastShape.screenH !== shape.screenH
+    || lastShape.cardH !== shape.cardH;
   lastShape = shape;
-  // 変化が無く、ずれてもいないときは 1 行も出さない（hub.log を埋めないため）。
-  if (!changed && !diverged) return;
+  // 変化が無く、ずれても切れてもいないときは 1 行も出さない（hub.log を埋めないため）。
+  if (!force && !changed && !diverged && !clipped) return;
   post('sample', {
-    sessionId: id,
     ...shape,
     diverged,
-    altBuffer: entry.term.buffer?.active?.type === 'alternate',
+    clipped,
     dpr: window.devicePixelRatio,
   });
 }
@@ -106,6 +134,12 @@ if (isEnabled()) {
   registerProbeSink('geo.send', (_channel, fields) => post('send', { ...fields, bar: approvalBarVisible() }));
   registerProbeSink('geo.apply', (_channel, fields) => post('apply', { ...fields, bar: approvalBarVisible() }));
   registerProbeSink('geo.scroll', (_channel, fields) => post('scroll', { ...fields, bar: approvalBarVisible() }));
+  // カードの出し入れは「その瞬間」と「レイアウトが落ち着いた後」で形が違う。
+  // ResizeObserver の fit は次の rAF なので、700ms 後に強制サンプルを 1 件残す。
+  registerProbeSink('geo.card', (_channel, fields) => {
+    post('card', { ...fields, ...(currentShape() || {}) });
+    window.setTimeout(() => sample(true), 700);
+  });
   window.setTimeout(sample, 1000);
   window.setInterval(sample, SAMPLE_INTERVAL_MS);
 }
