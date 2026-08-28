@@ -380,6 +380,75 @@
 }
 .tsb-seg-more:hover { background: #2a2f45; }
 
+/* ── 幅が足りないときの縮み方 ───────────────────────────────────────────
+   既定では全セグメントが等しく縮む（flex-shrink 初期値 1）。.tsb-seg は
+   display:flex なので上の text-overflow:ellipsis は効かず、文字が途中で
+   切り落とされる（「実行中」が「実行d」に見える現象）。
+   数値・状態を持つセグメントは縮ませず、幅の吸収は自由文の 2 本
+   （作業ラベル / プロジェクト）だけに任せる。この 2 本で吸収しきれない
+   幅は、下のブレークポイントでセグメントごと落とす。 */
+.tsb-seg { flex-shrink: 0; }
+.tsb-seg-label,
+.tsb-seg-project {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+/* ── 中間幅の段階的省略（641px 〜 デスクトップ）──────────────────────────
+   全部入りには 1900px 前後の幅が要る。足りない幅では優先度の低い順に
+   セグメントごと落とし、文字を途中で切らない。落とした内容は右端の
+   … （詳細モーダル）から読める。
+   閾値はブラウザでの実測値ではなく、各セグメントの内容幅の見積もりから
+   置いた概算。パス・モデル名・作業ラベルが長いセッションでは 1 段早く
+   落とす必要が出ることがある（CSS だけで直す方式の既知の弱点）。 */
+
+/* 1 段目: AI 編集行数 / キャッシュ率 */
+@media (max-width: 1600px) {
+  #token-statusbar .tsb-seg-ailines,
+  #token-statusbar .tsb-seg-cache {
+    display: none !important;
+  }
+  /* 落とした分を読めるよう … を出す（デスクトップ既定は非表示）。 */
+  #token-statusbar .tsb-seg-more {
+    display: inline-flex;
+  }
+}
+
+/* 2 段目: バーンレート / トークン実数（ctx 使用率が残るので冗長度が高い） */
+@media (max-width: 1400px) {
+  #token-statusbar .tsb-seg-burn,
+  #token-statusbar .tsb-seg-tok {
+    display: none !important;
+  }
+}
+
+/* 3 段目: 経過時間 / effort */
+@media (max-width: 1200px) {
+  #token-statusbar .tsb-seg-elapsed,
+  #token-statusbar .tsb-seg-effort {
+    display: none !important;
+  }
+}
+
+/* 4 段目: compact 残量（危険域は残す）+ 自由文 2 本の上限を圧縮 */
+@media (max-width: 1000px) {
+  #token-statusbar .tsb-seg-compact:not(.tsb-crit) {
+    display: none !important;
+  }
+  #token-statusbar .tsb-seg-project { max-width: 160px; }
+  #token-statusbar .tsb-seg-label { max-width: 110px; }
+}
+
+/* 5 段目: 作業ラベル / レート制限（危険域は残す） */
+@media (max-width: 860px) {
+  #token-statusbar .tsb-seg-label {
+    display: none !important;
+  }
+  #token-statusbar .tsb-seg-ratelimit:not(.tsb-crit) {
+    display: none !important;
+  }
+}
+
 /* ── モバイル（640px 以下）: 監視・割り込み用に絞る ─────────────────
    表示: #N / 状態 / providerアイコンのみ / ctx(%のみ) / cost(today短縮のみ) /
          conn / fleet / …（詳細ボタン）
