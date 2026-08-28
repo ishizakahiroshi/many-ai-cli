@@ -6,6 +6,7 @@ import { set_pendingAutoSwitch, sessions } from './state.js';
 import { providerIconHtml } from './session-list.js';
 import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
+import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -128,22 +129,6 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
   const spawnOrchestrationSummary  = document.getElementById('spawn-orchestration-summary');
   const spawnRoleTableBody         = document.getElementById('spawn-role-table-body');
 
-  const ORCHESTRATION_ROLE_DEFS = [
-    { key: 'implementation', labelKey: 'spawn_role_implementation' },
-    { key: 'test',           labelKey: 'spawn_role_test' },
-    { key: 'review',         labelKey: 'spawn_role_review' },
-  ];
-  // Shell はロールの CLI 候補としては意味を持たないため除外。
-  const ORCHESTRATION_CLI_OPTIONS = [
-    { value: '',             labelKey: 'spawn_role_cli_none' },
-    { value: 'claude',       label: 'Claude Code' },
-    { value: 'codex',        label: 'Codex CLI' },
-    { value: 'copilot',      label: 'GitHub Copilot' },
-    { value: 'cursor-agent', label: 'Cursor Agent' },
-    { value: 'opencode',     label: 'OpenCode' },
-    { value: 'grok',         label: 'Grok Build' },
-  ];
-
   function syncRoleModelDisabledState(): void {
     spawnRoleTableBody?.querySelectorAll('tr').forEach(tr => {
       const cli = tr.querySelector<HTMLSelectElement>('.spawn-role-cli');
@@ -182,7 +167,7 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
     if (!spawnRoleTableBody) return;
     spawnRoleTableBody.innerHTML = ORCHESTRATION_ROLE_DEFS.map(r => {
       const cliOptions = ORCHESTRATION_CLI_OPTIONS.map(o =>
-        `<option value="${o.value}">${escapeHtml(o.label || t(o.labelKey))}</option>`
+        `<option value="${o.value}">${escapeHtml(o.label || t(o.labelKey || ''))}</option>`
       ).join('');
       return (
         `<tr data-role="${r.key}">` +

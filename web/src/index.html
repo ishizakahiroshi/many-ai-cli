@@ -1267,6 +1267,70 @@
           </div>
         </div>
       </div>
+      <div id="relay-dialog" class="aac-wheel-overlay" hidden>
+        <section class="relay-dialog-box" role="dialog" aria-modal="true" aria-labelledby="relay-dialog-title">
+          <div class="relay-dialog-header">
+            <h2 id="relay-dialog-title" data-i18n="relay_dialog_title">Start relay</h2>
+            <button id="relay-dialog-close" class="relay-dialog-close" type="button" data-i18n-tooltip="settings_close" aria-label="Close">✕</button>
+          </div>
+          <div class="relay-dialog-target"><span data-i18n="relay_target_session">Target session</span><strong id="relay-target-session"></strong></div>
+
+          <div class="relay-dialog-field">
+            <label for="relay-plan-path" data-i18n="relay_plan_path">Plan path</label>
+            <input id="relay-plan-path" type="text" autocomplete="off" data-i18n-placeholder="relay_plan_path_placeholder" placeholder="docs/local/plan_...md">
+          </div>
+          <div class="relay-dialog-field relay-dialog-candidates">
+            <label for="relay-plan-candidates" data-i18n="relay_plan_candidates">Plan candidates</label>
+            <select id="relay-plan-candidates"><option value="" data-i18n="relay_plan_candidates_empty">Select a plan file…</option></select>
+          </div>
+
+          <div class="relay-dialog-section-title" data-i18n="spawn_orchestration_roles_title">Roles</div>
+          <table class="spawn-role-table relay-role-table" id="relay-role-table">
+            <thead>
+              <tr>
+                <th data-i18n="spawn_role_table_role">Role</th>
+                <th data-i18n="spawn_role_table_cli">CLI</th>
+                <th data-i18n="spawn_role_table_model">Model</th>
+              </tr>
+            </thead>
+            <tbody id="relay-role-table-body"></tbody>
+          </table>
+          <div class="settings-note relay-strong-note" data-i18n="relay_strong_note">The strong implementer only takes over C items that keep failing review or are marked [strong] in the plan.</div>
+
+          <div class="relay-dialog-options">
+            <label class="relay-dialog-field"><span data-i18n="relay_max_rounds">Max rounds</span><select id="relay-max-rounds">
+              <option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option>
+            </select></label>
+            <label class="relay-dialog-field"><span data-i18n="relay_escalate_after">Hand off after</span><select id="relay-escalate-after">
+              <option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+            </select></label>
+          </div>
+          <div id="relay-remaining-slots" class="settings-note relay-remaining-slots" data-i18n="relay_remaining_slots_unknown">Checking relay capacity…</div>
+
+          <fieldset class="relay-dialog-field relay-mode-field">
+            <legend data-i18n="relay_workplace">Workplace</legend>
+            <label class="relay-radio-label"><input type="radio" name="relay-mode" value="worktree" checked><span data-i18n="relay_mode_worktree_label">Relay worktree (recommended)</span></label>
+            <label class="relay-radio-label"><input type="radio" name="relay-mode" value="same-tree"><span data-i18n="relay_mode_same_tree_label">Same tree as parent</span></label>
+          </fieldset>
+          <div id="relay-same-tree-warning" class="settings-note settings-note-warn relay-same-tree-warning" data-i18n="relay_same_tree_warning" hidden>Child sessions write directly to the parent working tree. Do not edit it in parallel; uncommitted changes before starting are also reviewed.</div>
+
+          <div class="relay-dialog-field">
+            <label for="relay-extra-impl" data-i18n="relay_extra_impl">Extra implementation instructions</label>
+            <textarea id="relay-extra-impl" rows="2"></textarea>
+          </div>
+          <div class="relay-dialog-field">
+            <label for="relay-extra-review" data-i18n="relay_extra_review">Extra review instructions</label>
+            <textarea id="relay-extra-review" rows="2"></textarea>
+          </div>
+          <div class="settings-note" data-i18n="spawn_orchestration_bypass_note">⚠ Orchestration child sessions launch with approvals skipped (full access). Control comes from worktree isolation and your instructions.</div>
+          <div id="relay-dialog-error" class="settings-note settings-note-warn" hidden></div>
+
+          <div class="relay-dialog-actions">
+            <button id="relay-cancel" class="spawn-btn-cancel" type="button" data-i18n="spawn_cancel">Cancel</button>
+            <button id="relay-start" class="spawn-btn-launch" type="button" data-i18n="relay_start" disabled>Start relay</button>
+          </div>
+        </section>
+      </div>
       <div id="sessions"></div>
     </aside>
     <div id="sidebar-resizer"></div>

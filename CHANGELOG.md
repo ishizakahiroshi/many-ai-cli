@@ -11,6 +11,14 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Orchestration relay loop.** `internal/hub/relay.go`, `relay_worktree.go`,
+  `relay_store.go`, and `relay_api.go` run each plan C through implementation,
+  review, and fix with explicit round limits, optional strong escalation, and
+  `many-ai-cli orchestrate relay` in `internal/orchestrate/orchestrate.go`.
+  The dashboard dialog and timeline live in `web/src/app/relay-dialog.ts` and
+  `web/src/app/orchestration-dashboard.ts`; dedicated worktrees, `relay.json`
+  restore/resume, relay notifications, and no-auto-merge constraints are part
+  of the initial implementation.
 - **Tabs can be reordered by dragging.** Tabs in the top tab bar move with a
   drag, so frequently used sessions can sit at the left end while rarely used
   ones stay out of the way on the right. The order is stored per browser and

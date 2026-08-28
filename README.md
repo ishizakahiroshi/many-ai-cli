@@ -95,6 +95,21 @@ Gemini CLI is intentionally out of scope.
 By default, child sessions run in separate git worktrees under `.many-ai-cli/worktrees/<orchestration_id>/<role>` when the parent cwd is a git repository. The Hub does not auto-merge child branches; the conductor or user decides what to merge after reviewing the board and branch.
 
 Known limits: this is intentionally lightweight. Board changes are detected by 2-second polling and delivered with an immediate Enter-backed inject, so a board notification can interrupt an active conductor turn. Completion depends on the child writing `## DONE <role> session=<child_id>`, and there is no job DAG, retry queue, or automatic merge.
+
+### Orchestration relay loop
+
+The relay loop runs one plan through implementation → review → fix, one C at a time, under Hub control. It keeps the conductor out of the child-session loop: Hub starts the role sessions, reads their progress and review files, and stops or advances the relay from the recorded verdict.
+
+There are two entry points:
+
+- Conductor CLI: `many-ai-cli orchestrate relay --plan docs/local/plan_example.md` (pass `--impl provider[/model]` and `--review provider[/model]` when no role mapping is configured; `--strong provider[/model]` is optional).
+- Hub UI: open the relay dialog from a conductor session card or the orchestration dashboard.
+
+The default is a dedicated git worktree on branch `many-ai-cli/relay/<orchestration_id>`. Each C is committed there; Hub never auto-merges it, so review the branch and merge it into your own branch when you are ready. Multiple relays can run from one parent, subject to `orchestration.max_children_per_parent` (default 4, enough for two ordinary relays). If two relays edit the same file, resolve that conflict when merging.
+
+The normal two-tier path uses a cheap implementation model and an optional stronger implementation model. After two failed review rounds by default, or when a plan C is marked `[strong]`, Hub can hand that C to the strong role if a child slot is available; use a limit of 6 or more when planning to run two such relays concurrently. `--same-tree` is an explicit escape hatch: the children edit the user's working tree directly, so no other AI or user should edit that tree in parallel.
+
+A relay stops for a round limit, timeout, missing verdict or review file, blocked verdict, child exit, or the Stop button. Its `relay.json` state is restored after a Hub restart and can be resumed when the stop reason is resumable. Completion and stopping produce a relay notification. The working files live under `~/.many-ai-cli/orchestration/<orchestration_id>/` (`board.md`, `child-<id>.md`, `review-c<k>-r<r>.md`, and `relay.json`). This remains a lightweight sequential runner, not a general job DAG: one plan's C entries are processed in order.
 - **Unified launcher (Windows / Linux / macOS)** — `many-ai-cli-launcher` connects to a Hub via saved profiles and opens your default browser: SSH `serve` / `tunnel` profiles work on every OS, and WSL profiles start a Hub inside WSL on Windows
 - **Remote server / Docker deployment assets** — run one Hub container per user from GHCR with loopback-only port publishing and an opt-in auto-update script
 - **Clean transcript generation** — write readable `.txt` transcripts automatically, or regenerate them with `log-clean`

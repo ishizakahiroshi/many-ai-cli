@@ -95,6 +95,21 @@ Gemini CLI は意図的に対象外です。
 親 cwd が git リポジトリのとき、子セッションは既定で `.many-ai-cli/worktrees/<orchestration_id>/<role>` の独立した git worktree で動作します。Hub は子ブランチを自動 merge しません。指揮者またはユーザーが board とブランチを確認したうえで、何を merge するかを決めます。
 
 既知の制約: 意図的に軽量な仕組みです。board の変更は 2 秒ポーリングで検知され、即時 Enter 付き inject で通知されるため、進行中の指揮者ターンを割り込みで中断する可能性があります。完了判定は子が `## DONE <role> session=<child_id>` を書き込むことに依存し、job DAG・retry キュー・自動 merge はありません。
+
+### Orchestration relay loop
+
+relay loop は 1 つの plan を implementation → review → fix の順で、C を 1 件ずつ Hub の管理下で進めます。指揮者 AI が子セッションの spawn や review の判定をするのではなく、Hub が子の進捗・review ファイル・verdict を読み、次の指示または停止を決めます。
+
+入口は 2 つです。
+
+- 指揮者 CLI: `many-ai-cli orchestrate relay --plan docs/local/plan_example.md`（role mapping が無いときは `--impl provider[/model]` と `--review provider[/model]` を渡す。`--strong provider[/model]` は任意）。
+- Hub UI: 指揮者セッションカードまたは orchestration dashboard の relay dialog を開く。
+
+既定では専用 git worktree を作り、branch `many-ai-cli/relay/<orchestration_id>` で動かします。各 C の commit はその branch に積まれます。Hub は自動 merge しないので、branch を確認してから利用者の branch へ自分で merge してください。1 つの親から複数 relay を走らせられますが、`orchestration.max_children_per_parent` が上限です（既定値 4、通常の relay なら 2 本分）。2 本の relay が同じファイルを編集した場合、その競合は merge 時に解決します。
+
+通常は cheap な implementation model と、任意の strong implementation model の二段構えです。既定では review に 2 回続けて失敗した C、または plan の C に `[strong]` を付けた C を、空き枠があれば strong role へ渡します。2 本を同時に strong へ上げる想定なら上限 6 以上を用意してください。`--same-tree` は明示的な例外で、子が利用者の working tree を直接編集するため、同じ tree を別の AI や利用者が並行編集してはいけません。
+
+停止理由は round 上限、timeout、verdict / review file の欠落、blocked verdict、子の終了、Stop ボタンです。Hub 再起動後は `relay.json` から状態を復元し、再開可能な停止理由なら resume できます。完了・停止は relay 通知になります。作業ファイルは `~/.many-ai-cli/orchestration/<orchestration_id>/` 配下の `board.md`、`child-<id>.md`、`review-c<k>-r<r>.md`、`relay.json` です。これは一般的な job DAG ではなく、1 つの plan の C を順番に処理する軽量な sequential runner です。
 - **統合ランチャー（Windows / Linux / macOS）**: `many-ai-cli-launcher` で接続プロファイルから Hub へ接続し既定ブラウザで操作。SSH `serve` / `tunnel` プロファイルは全 OS、WSL プロファイルは Windows で WSL 内に Hub を起動
 - **リモートサーバー / Docker 運用資材**: GHCR image、ユーザー別コンテナ、loopback 限定公開、自動更新スクリプトでサーバー運用
 - **クリーン transcript 生成**: 人間が読める `.txt` を自動生成し、`log-clean` で手動再生成も可能
