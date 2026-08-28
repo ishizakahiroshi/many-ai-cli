@@ -47,6 +47,18 @@ func newRelayHarness(t *testing.T) *relayHarness {
 	return newRelayHarnessHome(t, t.TempDir())
 }
 
+// resolvedTempDir は t.TempDir() を EvalSymlinks 済みの形で返す。
+// 比較対象になるパスは必ずこれを通す（newRelayHarnessHome のコメント参照）。
+func resolvedTempDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%q): %v", dir, err)
+	}
+	return filepath.Clean(resolved)
+}
+
 // newRelayHarnessHome builds a harness on an explicit HOME so a second
 // harness can play "the Hub after a restart" over the same relay.json files.
 func newRelayHarnessHome(t *testing.T, home string) *relayHarness {
@@ -58,7 +70,12 @@ func newRelayHarnessHome(t *testing.T, home string) *relayHarness {
 	s.cfg.Orchestration.MaxChildrenPerParent = 4
 	s.cfg.Orchestration.MaxTotalSessions = 16
 	parent := registerTestSession(s, 1, "claude")
-	parent.CWD = t.TempDir()
+	// t.TempDir() の生値を使わない。resolveRelayPlanPath は EvalSymlinks を通した
+	// パスを返すので、生値を期待値にすると環境によって食い違う。macOS は /var が
+	// /private/var への symlink、GitHub Actions の Windows は TEMP が 8.3 短縮名
+	// （RUNNER~1 → runneradmin）で、どちらも CI でだけ落ちる。開発機のユーザー
+	// ディレクトリは短縮も symlink もされないので手元では緑になり、差が見えない。
+	parent.CWD = resolvedTempDir(t)
 	h := &relayHarness{t: t, s: s, parent: parent, nextChild: 9, clock: time.Date(2026, 8, 27, 15, 0, 0, 0, time.UTC), head: "base000"}
 	s.relay = relayDeps{
 		spawnChild: h.fakeSpawn,
