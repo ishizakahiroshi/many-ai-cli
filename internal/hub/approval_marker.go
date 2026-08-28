@@ -177,6 +177,10 @@ func (s *Server) maybeBroadcastApprovalMarker(id int, marker *approvalMarkerBloc
 		ses.approvalMarkerSuppressedSig = marker.Sig
 		if notify {
 			ses.approvalMarkerSuppressedAt = detectedAt
+			// 原因調査用の生データは告知と同じスロットルで 1 事象 1 件だけ取る。
+			// ptyBuf はリングバッファなのでロック内で複製する
+			// （approval_corrupt_dump.go・maidebug ビルドのみ）。
+			s.probe("approval-corrupt-snapshot", id, ses, detectedAt)
 		}
 		provider := ses.Provider
 		s.sessionsMu.Unlock()
@@ -193,6 +197,8 @@ func (s *Server) maybeBroadcastApprovalMarker(id int, marker *approvalMarkerBloc
 		// Block 本文は壊れているので送らない（誤った選択肢を描かせないため）。
 		// broadcast は必ず sessionsMu を解放した後に呼ぶ。
 		if notify {
+			// ファイル IO なので sessionsMu 解放後に行う（maidebug ビルドのみ）。
+			s.probe("approval-corrupt-dump", id, provider, reason, marker, detectedAt)
 			s.broadcast(proto.Message{
 				Type:           "approval_marker_suppressed",
 				SessionID:      id,

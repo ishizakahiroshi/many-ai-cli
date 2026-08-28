@@ -72,21 +72,30 @@
     },
     {
       "id": "approval-corrupt-dump",
-      "status": "removed",
+      "status": "active",
       "purpose": "承認マーカーブロックが Hub の VT ミラー上でだけ壊れる原因を、描画結果・入力 PTY バイト・描画時の寸法の 3 点セットで後から突き合わせる",
       "addedIn": "c5500c9",
-      "gate": "opt-in: log.session_enabled",
+      "gate": "opt-in: ビルドは -tags maidebug、runtime は log.session_enabled",
       "files": [
         "internal/hub/approval_corrupt_dump.go"
       ],
       "endpoints": [],
       "removalCondition": "VT ミラーだけが壊れる原因が確定し、classifyApprovalMarkerBlock の症状抑制を根本修正へ置き換えたら撤去",
       "artifactNeedles": [
-        "approval-corrupt"
+        "ms_since_last_resize",
+        "pty_tail_b64",
+        "approvalCorruptStash"
       ],
-      "reason": "原因は未解明のまま。classifyApprovalMarkerBlock は『壊れていたら捨てる』症状抑制で、なぜミラーだけが乖離するかには手が付いていない。再現に必要な 3 点は事象発生時にしか取れないため、観測を止めると次の手掛かりが得られない",
-      "note": "v0.6.0 で opt-in 化した。sessionlog.MaskSecrets を通し、0700・保持 7 日・32MB/日・30 秒スロットルで上限を掛けているが、保存対象は PTY の生バイト列なのでマスクの取りこぼしが残り得る。A-01 と同じ原則でセッションログの opt-in に従わせている / 2026-08-15 撤去。removalCondition（VT ミラー破損の根本原因確定と classifyApprovalMarkerBlock の置換）は未達だが、ダンプから 3 原因を特定して修正済み （16e4cb3 の 2 件 + 22e254d の 1 件・138 件中 93 件 → さらに 12 件が正常化）で、入力由来の生バイトを保存し続ける代償に見合わないと判断した。4 原因目が出たら 再導入を検討する（そのときは新しい due を必ず付ける）。",
-      "removedIn": "v0.7.0"
+      "reason": "v0.7.0 で撤去したあとも握り潰しは続いている。hub ログ実測（2026-08-28）: 2026-08-23 20:47〜08-27 21:21 の約 4 日で 172 件（option_start 119 / marker_leak 30 / duplicate_option 20 / box_rule 3）、その前の 9.5 日で 209 件。1 件ごとにユーザーは 承認パネルではなく見送りバナーを見ている。最多の option_start は 6〜17 行の短い ブロックが大半で、approval_marker.go が想定する『画面高を超えたブロック』では 説明がつかない。形の特定には検出時点の PTY 生バイトと描画寸法が要る。",
+      "note": "v0.6.0 で opt-in 化した。sessionlog.MaskSecrets を通し、0700・保持 7 日・32MB/日・30 秒スロットルで上限を掛けているが、保存対象は PTY の生バイト列なのでマスクの取りこぼしが残り得る。A-01 と同じ原則でセッションログの opt-in に従わせている / 2026-08-15 撤去。removalCondition（VT ミラー破損の根本原因確定と classifyApprovalMarkerBlock の置換）は未達だが、ダンプから 3 原因を特定して修正済み （16e4cb3 の 2 件 + 22e254d の 1 件・138 件中 93 件 → さらに 12 件が正常化）で、入力由来の生バイトを保存し続ける代償に見合わないと判断した。4 原因目が出たら 再導入を検討する（そのときは新しい due を必ず付ける）。 / 2026-08-28 再導入。撤去時と違い maidebug ビルドタグを付け、既定の成果物には 同梱しない（同梱のゲートと収集のゲートを分けた）。記録点は approval_marker.go の probe 2 行だけで、スナップショットの待避棚も含め実体は approval_corrupt_dump.go に閉じている。",
+      "due": "2026-09-30",
+      "sharedFiles": [
+        "internal/hub/approval_marker.go"
+      ],
+      "channels": [
+        "approval-corrupt-snapshot",
+        "approval-corrupt-dump"
+      ]
     },
     {
       "id": "hub-input-trace",
