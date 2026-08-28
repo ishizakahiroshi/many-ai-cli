@@ -112,6 +112,12 @@ Release artifacts are published at
   `web/src/app/longproc.ts`).
 
 ### Changed
+- **The Usage menu now makes room for multiple subscription profiles on wide
+  screens.** From 900px upward, the menu expands to 840px, splits provider
+  links into two columns, and places each provider's usage windows side by
+  side; narrow screens retain the compact single-column layout
+  (`web/src/index.html`, `web/src/styles.css`, `web/src/app/usage-panel.ts`).
+
 - **The remote-access SSH sample now uses `~/.ssh/id_ed25519`.** The Windows
   walkthrough spelled the key out as a full Windows user-profile path, so every
   reader had to edit the line before the block would work. OpenSSH expands `~`
