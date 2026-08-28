@@ -81,6 +81,7 @@ docs/local/               設計書・plan 等（非公開）
 | 代替画面を CLI が全面管理している端末へ、こちらのテキストを差し込まない（消せない残骸になる） | `web/src/app/hub-marker-filter.ts` の案 G・案 H | `hub-marker-filter-fixtures.ts` の案 G 2 件・案 H 4 件 |
 | 全画面オーバーレイには wheel 除外クラス `.aac-wheel-overlay` を付ける（端末に重なるだけのポップオーバーは `data-wheel-native`） | `web/src/app/terminal.ts` の `isModalOverlayOpen()` | `scripts/check-wheel-overlays.mjs`（Validate CI） |
 | relay は Hub の状態機械で回し、AI conductor に判断させない。利用者ブランチへは触らない | `internal/hub/relay.go` / `internal/hub/relay_worktree.go` | `TestRelay_*`（`internal/hub/`） |
+| 観測コードはリリース成果物に入れない（build tag オプトイン＋成果物検査） | `web/src/debug/probe.ts` / `docs/local/plan_instrumentation-probe-lifecycle.md` | `scripts/check-instrumentation.mjs` / `scripts/check-artifact-clean.mjs` |
 
 残量の経路は、**問い合わせて取る**（CLI/API から直接取れないので `ReadUsage` を足さない）、**押し出されてくる**（Claude の statusLine）、**ローカルに落ちている**（Codex の rollout JSONL / Grok の課金ログ）を分ける。取得手段のない provider に `Unknown` 欄は作らない。正本は `internal/subscription/adapter.go` と `internal/hub/subscription_usage.go`。
 
