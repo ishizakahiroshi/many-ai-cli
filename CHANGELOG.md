@@ -153,6 +153,33 @@ Release artifacts are published at
   while severe and stalled long-running states keep their danger treatment
   (`web/src/app/session-list.ts`, `web/src/styles.css`).
 
+### Security
+- **Reading a file outside the allowed roots no longer hands over modern SSH
+  private keys or credential files.** The deny rule for key files matched only
+  the `id_rsa` prefix, so `id_ed25519` — the default `ssh-keygen` output for
+  years now — along with `id_ecdsa` and `id_dsa` went straight through. Files
+  that mix settings and credentials in one place were not covered either. The
+  check now recognises every default OpenSSH key name and additionally denies
+  `.netrc`, `_netrc`, `.npmrc`, `.pypirc`, `.git-credentials`, `.htpasswd`,
+  `authorized_keys`, and `known_hosts`. Files inside the allowed roots are
+  unaffected (`internal/hub/files_scope.go`).
+
+- **Bug reports could carry three of this tool's own secrets through
+  redaction.** The key-value matcher listed finished key names (`api_key`,
+  `auth_token`, `client_secret`, …), so `auth_cookie_secret`, `remote_pin_hash`,
+  and `vapid_private_key` did not match and their values survived. Collection
+  itself is allowlisted and never reads these, so the exposure was limited to
+  attached session and hub logs. Redaction now matches on the trailing word, and
+  `key` / `hash` only count when preceded by a secret-ish qualifier, so
+  `cache_key` and `commit_hash` stay readable (`internal/report/redact.go`).
+
+- **The release workflow no longer runs third-party code in the same process as
+  the publishing credential.** GoReleaser's step carries a token that can push to
+  the Homebrew tap and the winget fork, and its `before` hooks ran the web
+  dependency install and a tool install in that same environment. Those hooks now
+  run in an earlier step with no credentials, and GoReleaser is invoked with
+  `--skip=before` (`.github/workflows/release.yml`, `.goreleaser.yaml`).
+
 ### Fixed
 - **The session database no longer grows without bound.** Every chunk of
   terminal output was written as its own row in the `events` table, which on the

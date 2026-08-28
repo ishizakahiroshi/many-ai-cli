@@ -9,6 +9,13 @@ project_name: many-ai-cli
 #   - .syso は .gitignore 済み・git 追跡外（追跡したままだと生成でツリーが汚れ
 #     goreleaser のクリーンツリー検証に失敗する）。
 #   - go-winres は before hooks で都度 install するため CI に事前準備は不要。
+#
+# CI（.github/workflows/release.yml）ではこの before hooks を専用ステップで先に走らせ、
+# goreleaser 自身は --skip=before で起動する。goreleaser のステップは homebrew-tap /
+# winget-pkgs へ push できる PAT を env に持つので、そこで第三者コード（bun が引く
+# 依存ツリー・go install が取るツール）を動かさないための分離（監査 F-87）。
+# ここに残してあるのはローカルの `goreleaser --snapshot` 用。CI 側の手順を変えたら
+# こちらのコマンドと引数も揃えること（ずれると snapshot だけ壊れる）。
 before:
   hooks:
     # `bun --cwd web run build` は goreleaser hook 内で no-op になり（web/dist が

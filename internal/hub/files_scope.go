@@ -42,10 +42,40 @@ var secretReadDeniedExtensions = map[string]bool{
 // 入るため、hub.log_dir を既定の ~/.many-ai-cli/logs から移設した構成でも拾えるよう、
 // ディレクトリではなく名前で拒否する。-wal / -shm は SQLite の副ファイルで、
 // 未チェックポイントの本文がそのまま残る。
+//
+// 認証情報が設定値と同居する既知の形式もここで拒否する。ファイル名に secret や
+// credential を含まないものほど警戒から外れる（.npmrc は「設定ファイル」の顔をしている）。
 var secretReadDeniedBasenames = map[string]bool{
 	"any-ai-cli.db":     true,
 	"any-ai-cli.db-wal": true,
 	"any-ai-cli.db-shm": true,
+	// SSH の周辺ファイル。秘密鍵そのものは isSSHPrivateKeyName が見る。
+	"authorized_keys": true,
+	"known_hosts":     true,
+	// 設定値と認証情報が同居する形式。
+	".netrc":           true,
+	"_netrc":           true, // Windows の curl / git が使う綴り
+	".npmrc":           true,
+	".pypirc":          true,
+	".git-credentials": true,
+	".htpasswd":        true,
+}
+
+// isSSHPrivateKeyName は OpenSSH の既定鍵名かを返す（小文字の basename を渡す）。
+//
+// 2026-08-17 の監査 F-61 相当の指摘: 以前は id_rsa の前方一致だけを見ていたため、
+// 今どき既定になっている id_ed25519 も、id_ecdsa も id_dsa も素通りしていた。
+// 「危ないものを 1 つずつ思い出して並べる」形は、思い出さなかったものが
+// 例外も警告も無く通る。鍵名は ssh-keygen の既定が有限なので列挙で足りるが、
+// 追加するときは .pub / -cert.pub のような派生も一緒に通ることを意識する
+// （前方一致にしているのはそのため）。
+func isSSHPrivateKeyName(base string) bool {
+	for _, stem := range [...]string{"id_rsa", "id_dsa", "id_ecdsa", "id_ecdsa_sk", "id_ed25519", "id_ed25519_sk"} {
+		if strings.HasPrefix(base, stem) {
+			return true
+		}
+	}
+	return false
 }
 
 // manyAiCliHomeDir は ~/.many-ai-cli を返す。
@@ -60,8 +90,9 @@ func manyAiCliHomeDir() (string, error) {
 // isSecretReadDenied は「許可ルート外のファイル内容をブラウザへ返す経路」で拒否すべき
 // 秘密情報ファイルかを返す。対象は次の 5 種類:
 //
-//   - 鍵ファイル: *.pem / *.key / id_rsa*
-//   - 資格情報: ファイル名に credentials を含むもの
+//   - 鍵ファイル: *.pem / *.key / OpenSSH の既定鍵名（isSSHPrivateKeyName）
+//   - 資格情報: ファイル名に credentials を含むもの、および認証情報が設定値と
+//     同居する既知の形式（.netrc / .npmrc / .pypirc / .git-credentials ほか）
 //   - 環境変数ファイル: .env / .env.local / .env.<環境名>
 //   - Hub のセッション履歴 DB: any-ai-cli.db（+ -wal / -shm）
 //   - Hub 設定: ~/.many-ai-cli/config.yaml* （config.yaml とその複製）
@@ -88,7 +119,7 @@ func isSecretReadDenied(absPath string) bool {
 	if secretReadDeniedBasenames[base] {
 		return true
 	}
-	if strings.HasPrefix(base, "id_rsa") {
+	if isSSHPrivateKeyName(base) {
 		return true
 	}
 	if strings.Contains(base, "credentials") {

@@ -44,6 +44,16 @@ func TestRedactKnownSecretPatterns(t *testing.T) {
 		{"client secret field", "client_secret=syntheticClientSecret123", "syntheticClientSecret123"},
 		{"credential URL", "https://example-user:syntheticPassword123@example.test/db", "syntheticPassword123"},
 		{"private key", "-----BEGIN PRIVATE KEY-----\nsynthetic-private-material\n-----END PRIVATE KEY-----", "synthetic-private-material"},
+		// 2026-08-17 の監査 F-61。完成形を並べていた頃はこの 3 つが素通りしていた。
+		// いずれも many-ai-cli 自身の config.yaml に現れうるキー名（値は合成）。
+		{"auth cookie secret", "auth_cookie_secret: syntheticCookieSecret123", "syntheticCookieSecret123"},
+		{"remote PIN hash", "remote_pin_hash: syntheticPinHash123", "syntheticPinHash123"},
+		{"vapid private key", "vapid_private_key: syntheticVapidPrivate123", "syntheticVapidPrivate123"},
+		{"bare secret field", "secret = syntheticBareSecret123", "syntheticBareSecret123"},
+		{"passphrase field", "ssh_passphrase: syntheticPassphrase123", "syntheticPassphrase123"},
+		{"credentials field", "aws_credentials=syntheticAwsCredentials123", "syntheticAwsCredentials123"},
+		{"session key field", "session_key: syntheticSessionKey123", "syntheticSessionKey123"},
+		{"signing key field", "signing_key=syntheticSigningKey123", "syntheticSigningKey123"},
 	}
 
 	if len(tests) < 20 {
@@ -57,6 +67,30 @@ func TestRedactKnownSecretPatterns(t *testing.T) {
 			}
 			if !strings.Contains(got, redactedSecret) {
 				t.Fatalf("Redact() = %q, want secret marker", got)
+			}
+		})
+	}
+}
+
+// key / hash は単独では伏せない。バグ報告の役に立つ値まで巻き込むと、
+// 伏字がノイズになって報告そのものが読めなくなる。秘密を示す修飾語が
+// 付いたものだけを対象にしている（secretKeyPattern のコメント参照）。
+func TestRedactKeepsNonSecretKeyLikeFields(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		keep  string
+	}{
+		{"cache key", "cache_key: session-list-v3", "session-list-v3"},
+		{"commit hash", "commit_hash: 0123456789abcdef", "0123456789abcdef"},
+		{"sort key", "sort_key=last_output_at", "last_output_at"},
+		{"keyboard shortcut", "shortcut_key: ctrl+shift+r", "ctrl+shift+r"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			got := Redact(tt.input)
+			if !strings.Contains(got, tt.keep) {
+				t.Fatalf("Redact(%q) = %q, want to keep %q", tt.input, got, tt.keep)
 			}
 		})
 	}
