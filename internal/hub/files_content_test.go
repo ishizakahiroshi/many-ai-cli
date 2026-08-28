@@ -473,11 +473,28 @@ func TestHandleFilesAsset_RejectsSVG(t *testing.T) {
 func TestIsSecretReadDenied(t *testing.T) {
 	home := setSecTestHome(t)
 	cases := map[string]bool{
-		filepath.Join("proj", "docs", "plan.md"):   false,
-		filepath.Join("proj", "server.pem"):        true,
-		filepath.Join("proj", "tls.key"):           true,
-		filepath.Join("proj", "id_rsa"):            true,
-		filepath.Join("proj", "id_rsa.pub"):        true,
+		filepath.Join("proj", "docs", "plan.md"): false,
+		filepath.Join("proj", "server.pem"):      true,
+		filepath.Join("proj", "tls.key"):         true,
+		filepath.Join("proj", "id_rsa"):          true,
+		filepath.Join("proj", "id_rsa.pub"):      true,
+		// 既定鍵は id_rsa だけではない。id_rsa の前方一致しか見ていなかった
+		// ため、下の 4 種は許可ルート外でも素通りしていた（監査 F-83）。
+		filepath.Join("proj", "id_ed25519"):     true,
+		filepath.Join("proj", "id_ed25519.pub"): true,
+		filepath.Join("proj", "id_ecdsa"):       true,
+		filepath.Join("proj", "id_ecdsa_sk"):    true,
+		filepath.Join("proj", "id_dsa"):         true,
+		filepath.Join("proj", "identity.md"):    false, // id_ 前置の巻き添えを作らない
+		// SSH の周辺ファイルと、認証情報が設定値と同居する形式。
+		filepath.Join("proj", "authorized_keys"):   true,
+		filepath.Join("proj", "known_hosts"):       true,
+		filepath.Join("proj", ".netrc"):            true,
+		filepath.Join("proj", "_netrc"):            true,
+		filepath.Join("proj", ".npmrc"):            true, // secrets-scan: allow
+		filepath.Join("proj", ".pypirc"):           true,
+		filepath.Join("proj", ".git-credentials"):  true, // secrets-scan: allow
+		filepath.Join("proj", ".htpasswd"):         true,
 		filepath.Join("proj", ".credentials.json"): true, // secrets-scan: allow
 		filepath.Join("proj", "aws_credentials"):   true,
 		// 環境変数ファイル。direnv の .envrc は対象外。

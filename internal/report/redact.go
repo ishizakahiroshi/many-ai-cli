@@ -18,6 +18,31 @@ const (
 	redactedHost        = "<REDACTED_HOST>"
 )
 
+// secretKeyPattern は `<キー名>: <値>` / `<キー名>=<値>` の値だけを伏せる。
+//
+// キー名は「末尾の語」で判定する。以前は api_key / auth_token / client_secret /
+// secret_key … と完成形を並べていたが、**そこに載っていないキーは例外も警告も無く
+// 素通りする**。2026-08-17 の監査 F-61 が挙げた 3 つは、いずれも 1 語ずれていただけで
+// 素通りしていた。
+//
+//	auth_cookie_secret  末尾は secret。client_secret でも secret_key でもない
+//	remote_pin_hash     hash が語彙に無い
+//	vapid_private_key   末尾は key。api_key でも secret_key でもない
+//
+// key と hash は単独だと cache_key / commit_hash まで巻き込むので、秘密を示す
+// 修飾語が前に付いたときだけ対象にする。それ以外（secret / token / password 等）は
+// 修飾語を問わず対象。Redact は外部へ渡る直前の最後の網なので、迷ったら伏せる側に倒す。
+//
+// なお **本文の第一防御はここではない**。収集側（report.Collect / ExtractAllowedConfig）が
+// allowlist で、config.yaml 全文や token に最初から触らない。この正規表現が効くのは
+// 添付するセッションログ・hub ログのように、こちらが中身を選べない本文に対してだけ。
+const secretKeyPattern = `(?i)(\b[a-z0-9_-]*(?:` +
+	// 修飾語を問わず秘密とみなす語
+	`secret|token|password|passwd|passphrase|credentials?|` +
+	// 秘密を示す修飾語が付いたときだけ対象にする語
+	`(?:api|auth|access|client|private|secret|signing|encryption|master|session|refresh|vapid|pin)[_-]?(?:key|hash)` +
+	`)\b\s*[:=]\s*)["']?[^\s,"';&?#}]+["']?`
+
 var (
 	// ドライブレターは固定しない。開発ルートが C: 以外（実例: D:\dev への移設）へ
 	// 移った瞬間に伏せ字が外れ、kb / .ssh / github\private の実パスがバグレポートへ
@@ -29,7 +54,7 @@ var (
 
 	queryTokenRE    = regexp.MustCompile(`(?i)([?&](?:access_)?token=)[^&#\s"']+`)
 	bearerRE        = regexp.MustCompile(`(?i)((?:authorization\s*:\s*)?bearer\s+)[^\s,"']+`)
-	secretKeyRE     = regexp.MustCompile(`(?i)(\b(?:[a-z0-9]+_)*(?:api_key|auth_token|api_token|access_token|client_secret|password|passwd|secret_key|token)\b\s*[:=]\s*)["']?[^\s,"';&?#}]+["']?`)
+	secretKeyRE     = regexp.MustCompile(secretKeyPattern)
 	jwtRE           = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b`)
 	credentialURLRE = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://[^\s:/@]+:)([^\s/@]+)(@)`)
 	privateKeyRE    = regexp.MustCompile(`(?s)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----`)

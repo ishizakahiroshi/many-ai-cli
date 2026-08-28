@@ -162,12 +162,40 @@ jobs:
           echo "----- release notes (${VERSION}) -----"
           cat "${RUNNER_TEMP}/release-notes.md"
 
+      # .goreleaser.yaml の before hooks をここで先に走らせる。
+      #
+      # 理由: goreleaser のステップは homebrew-tap / winget-pkgs fork へ push できる
+      # PAT を env に持つ。before hooks はその同じプロセスで動くので、`bun install` が
+      # 引く依存ツリーと `go install` が取るツールが、PAT の載った環境変数空間で
+      # 実行されることになる（2026-08-17 の監査 F-87）。版はすべて固定してあり bun は
+      # 既定で信頼外の lifecycle script を実行しないため悪用の見込みは低いが、
+      # 依存が 1 つ信頼リストへ入るだけで成立してしまう。credential を持つ工程と
+      # 第三者コードを走らせる工程を分けておけば、その前提に依存しなくて済む。
+      #
+      # .goreleaser.yaml 側の hooks は消さない。ローカルの `goreleaser --snapshot` が
+      # web/dist と .syso 無しで壊れる（CI だけが知っている手順を増やさない）。
+      # CI では下の --skip=before で二重実行を避ける。
+      - name: Run goreleaser before hooks (no publish credentials in this step)
+        if: ${{ env.NPM_ONLY != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_VERSION="${RELEASE_TAG#v}"
+          (cd web && bun install --frozen-lockfile && bun run build)
+          go install github.com/tc-hib/go-winres@v0.3.3
+          go-winres make --in winres/winres.json --out cmd/many-ai-cli/rsrc \
+            --product-version="${RELEASE_VERSION}" --file-version="${RELEASE_VERSION}"
+          go-winres make --in winres/winres-launcher.json --out cmd/many-ai-cli-launcher/rsrc \
+            --product-version="${RELEASE_VERSION}" --file-version="${RELEASE_VERSION}"
+
       - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         if: ${{ env.NPM_ONLY != 'true' }}
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean --release-notes=${{ runner.temp }}/release-notes.md
+          # --skip=before: 直前のステップで実行済み。ここで再実行すると PAT を
+          # 持つプロセスで第三者コードが動き、分離した意味が無くなる。
+          args: release --clean --skip=before --release-notes=${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # homebrew-tap / winget-pkgs fork への push 用 PAT（GITHUB_TOKEN は自リポジトリ限定のため）
