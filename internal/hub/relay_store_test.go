@@ -218,12 +218,11 @@ func TestRelayStore_reconnectAndContinue(t *testing.T) {
 
 	// Still waiting for the reviewer.
 	run2.mu.Lock()
-	awaiting := run2.awaitingReconnect
 	restoredAt := run2.restoredAt
 	run2.mu.Unlock()
 	h2.s.checkRelayReconnect(restoredAt.Add(time.Second))
 	run2.mu.Lock()
-	awaiting = run2.awaitingReconnect
+	awaiting := run2.awaitingReconnect
 	run2.mu.Unlock()
 	if !awaiting {
 		t.Fatal("relay resumed before every child reattached")

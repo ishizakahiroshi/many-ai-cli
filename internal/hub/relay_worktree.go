@@ -96,6 +96,9 @@ func (s *Server) prepareRelayWorktree(parentCWD, orchestrationID string, cfg con
 	if strings.Contains(msg, "already exists") {
 		// The branch survived an earlier worktree removal: attach to it instead
 		// of failing, so a relay can be resumed after its worktree was pruned.
+		// #nosec G702 -- 上の worktree add と同じ理由。argv 直渡しで shell を介さず、
+		// path と branch は safeToken() 由来（[^a-zA-Z0-9._-] を潰し先頭の -_. を落とすので
+		// オプションに化けない）、parentCWD は自ホストの session cwd。
 		out2, err2 := exec.CommandContext(ctx2, "git", "-C", parentCWD, "worktree", "add", path, branch).CombinedOutput()
 		if err2 != nil {
 			return "", "", "", errRelayWorktree{fmt.Errorf("%s: %w", strings.TrimSpace(string(out2)), err2)}

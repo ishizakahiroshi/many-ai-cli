@@ -125,6 +125,17 @@ func runGit(ctx context.Context, cwd string, args ...string) ([]byte, error) {
 	// matches nothing and returns an empty, exit-0 diff). -z commands are
 	// unaffected (they never quote).
 	full := append([]string{"-C", cwd, "-c", "core.quotePath=false"}, args...)
+	// #nosec G702 -- argv 直渡しで shell を介さないので、シェル注入は成立しない。
+	// 残る危険は「引数がオプションに化ける」形（--upload-pack= 等）だが、可変値を
+	// 渡す呼び出しは全て手前で塞いである。2026-08-28 に全呼び出しを確認した:
+	//   - git_log.go の ref と git_show.go の hash は validRevision() を通る。
+	//     同関数は先頭 "-" を明示的に拒否する（このファイルの validRevision）
+	//   - git_diff.go / git_show.go のファイルパスは "--" より後ろに置く
+	//   - それ以外の引数はコード中のリテラル
+	//   - cwd は自ホストの session cwd であって外部入力ではない
+	// gosec の taint 解析はこの検査を追えず、しかも判定が run ごとに揺れる
+	// （同一コミットで 1 件 / 2 件が交互に出るのを 2026-08-28 に実測）。
+	// 抑制して CI の結果を決定的にする。呼び出しを増やすときは上の 4 条件を守ること。
 	cmd := exec.CommandContext(ctx, "git", full...)
 	out, err := cmd.Output()
 	if err != nil {
