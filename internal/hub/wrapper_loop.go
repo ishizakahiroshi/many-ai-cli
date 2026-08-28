@@ -794,6 +794,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			var provider string
 			var vtLines []string
 			var marker *approvalMarkerBlock
+			var crossSessionMessage *crossSessionMessageCandidate
 			var initialModelLines []string
 			var initialModelCWD string
 			scanNativeApproval := false
@@ -808,6 +809,17 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				}
 				ses.vt.Write(m.Data)
 				provider = ses.Provider
+				if provider == "claude" && ses.OrchestrationID != "" {
+					candidate := detectCrossSessionMessage(ses.vt.Lines())
+					signature := ""
+					if candidate != nil {
+						signature = candidate.Signature
+					}
+					if signature != ses.crossSessionMessageScreenSig {
+						ses.crossSessionMessageScreenSig = signature
+						crossSessionMessage = candidate
+					}
+				}
 				// Workflow VT は Claude の表示形式だけを較正済み。全 provider へ
 				// 広げると shell/codex の通常出力を workflow と誤認するため厳密に限定する。
 				if provider == "claude" {
@@ -858,6 +870,9 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			s.sessionsMu.Unlock()
 			s.maybeBroadcastApprovalMarker(id, marker, now)
 			s.broadcast(m)
+			if crossSessionMessage != nil {
+				s.recordCrossSessionMessage(id, crossSessionMessage, now)
+			}
 			if scanNativeApproval {
 				approval := detectNativeApproval(provider, vtLines)
 				if approval == nil && hadNativeApprovalSig && shouldSuppressNativeApprovalClearMiss(provider, vtLines) {

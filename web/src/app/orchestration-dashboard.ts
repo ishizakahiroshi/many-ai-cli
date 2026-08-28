@@ -1,5 +1,5 @@
 import { t } from '../i18n.js';
-import type { RelayEvent, RelayStatus } from '../types/proto.js';
+import type { CrossSessionMessage, RelayEvent, RelayStatus } from '../types/proto.js';
 import { dirnameForPath } from './path-links.js';
 import { FilesTabManager } from './files-view.js';
 import { sessions } from './state.js';
@@ -13,6 +13,18 @@ let relayTimelineCache = new Map<string, RelayEvent[]>();
 let relayTimelineFetchKey = '';
 let relayTimelineRequestID = 0;
 const relayTimelineErrors = new Map<number, string>();
+let boardPreviewTarget = '';
+let boardPreviewTimer: number | null = null;
+let boardPreviewRequestID = 0;
+let boardPreviewLoading = false;
+let boardPreviewError = '';
+let boardPreviewState: {
+  path: string;
+  size: number;
+  mtime: string;
+  content: string;
+  truncated: boolean;
+} | null = null;
 
 const RELAY_ACTIVE_STATES = new Set(['implementing', 'reviewing', 'fixing']);
 const RELAY_RESUMABLE_REASONS = new Set(['hub_restart', 'child_exited', 'timeout']);
@@ -89,6 +101,212 @@ function openRelayFile(conductor: any, filePath: string): void {
     root,
     filePath,
   );
+}
+
+function boardPreviewKey(sessionID: number, filePath: string): string {
+  return `${sessionID}:${filePath}`;
+}
+
+function stopBoardPreviewPolling(): void {
+  if (boardPreviewTimer !== null) {
+    window.clearInterval(boardPreviewTimer);
+    boardPreviewTimer = null;
+  }
+  boardPreviewTarget = '';
+  boardPreviewRequestID += 1;
+  boardPreviewLoading = false;
+  boardPreviewError = '';
+  boardPreviewState = null;
+}
+
+function boardPreviewChanged(next: typeof boardPreviewState): boolean {
+  if (!next || !boardPreviewState) return true;
+  return next.path !== boardPreviewState.path
+    || next.size !== boardPreviewState.size
+    || next.mtime !== boardPreviewState.mtime
+    || next.content !== boardPreviewState.content
+    || next.truncated !== boardPreviewState.truncated;
+}
+
+async function loadBoardPreview(sessionID: number, filePath: string): Promise<void> {
+  const key = boardPreviewKey(sessionID, filePath);
+  if (key !== boardPreviewTarget) return;
+  const requestID = ++boardPreviewRequestID;
+  try {
+    const response = await fetch(`/api/files-content?path=${encodeURIComponent(filePath)}&session=${encodeURIComponent(String(sessionID))}&token=${encodeURIComponent(token || '')}`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(String(data.detail || data.error || `HTTP ${response.status}`));
+    if (requestID !== boardPreviewRequestID || key !== boardPreviewTarget) return;
+    const next = {
+      path: filePath,
+      size: Number(data.size || 0),
+      mtime: String(data.mtime || ''),
+      content: typeof data.content === 'string' ? data.content : '',
+      truncated: Boolean(data.truncated),
+    };
+    const changed = boardPreviewChanged(next);
+    boardPreviewState = next;
+    boardPreviewError = '';
+    boardPreviewLoading = false;
+    if (changed && selectedConductorID === sessionID) renderOrchestrationDashboard(false);
+  } catch (error) {
+    if (requestID !== boardPreviewRequestID || key !== boardPreviewTarget) return;
+    const nextError = String(error instanceof Error ? error.message : error);
+    const changed = boardPreviewError !== nextError || boardPreviewState === null;
+    boardPreviewError = nextError;
+    boardPreviewLoading = false;
+    if (changed && selectedConductorID === sessionID) renderOrchestrationDashboard(false);
+  }
+}
+
+function ensureBoardPreviewPolling(conductor: any): void {
+  const sessionID = Number(conductor.id);
+  const filePath = String(conductor.board_path || '');
+  if (!filePath || !Number.isInteger(sessionID) || sessionID <= 0) {
+    stopBoardPreviewPolling();
+    return;
+  }
+  const key = boardPreviewKey(sessionID, filePath);
+  if (key === boardPreviewTarget) return;
+  if (boardPreviewTimer !== null) window.clearInterval(boardPreviewTimer);
+  boardPreviewTarget = key;
+  boardPreviewRequestID += 1;
+  boardPreviewLoading = true;
+  boardPreviewError = '';
+  boardPreviewState = null;
+  void loadBoardPreview(sessionID, filePath);
+  boardPreviewTimer = window.setInterval(() => {
+    void loadBoardPreview(sessionID, filePath);
+  }, 2000);
+}
+
+function renderBoardPanel(conductor: any): HTMLElement {
+  const section = document.createElement('section');
+  section.className = 'orchestration-board-panel';
+  const header = document.createElement('div');
+  header.className = 'orchestration-board-head';
+  const title = document.createElement('h3');
+  title.textContent = 'Live board / 看板';
+  header.appendChild(title);
+
+  const actions = document.createElement('div');
+  actions.className = 'orchestration-board-actions';
+  const filePath = String(conductor.board_path || '');
+  const sessionID = Number(conductor.id);
+  if (filePath) {
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'orchestration-board-action';
+    open.textContent = 'Files で開く';
+    open.title = filePath;
+    open.addEventListener('click', (event) => {
+      event.stopPropagation();
+      openRelayFile(conductor, filePath);
+    });
+    actions.appendChild(open);
+
+    const refresh = document.createElement('button');
+    refresh.type = 'button';
+    refresh.className = 'orchestration-board-action';
+    refresh.textContent = '更新';
+    refresh.disabled = boardPreviewLoading;
+    refresh.addEventListener('click', (event) => {
+      event.stopPropagation();
+      boardPreviewLoading = true;
+      void loadBoardPreview(sessionID, filePath);
+    });
+    actions.appendChild(refresh);
+  }
+  header.appendChild(actions);
+  section.appendChild(header);
+
+  const path = document.createElement('p');
+  path.className = 'orchestration-board-path';
+  path.textContent = filePath || 'board はまだ作成されていません。';
+  path.title = filePath;
+  section.appendChild(path);
+
+  const meta = document.createElement('div');
+  meta.className = 'orchestration-board-meta';
+  if (boardPreviewState && boardPreviewState.path === filePath) {
+    const size = `${boardPreviewState.size.toLocaleString()} bytes`;
+    const mtime = boardPreviewState.mtime ? formatRelayEventTime(boardPreviewState.mtime) : '時刻不明';
+    meta.textContent = `${size} · 更新 ${mtime}${boardPreviewState.truncated ? ' · 1 MiB まで表示' : ''}`;
+  } else if (boardPreviewLoading) {
+    meta.textContent = '看板を読み込んでいます…';
+  }
+  if (boardPreviewError) meta.textContent = `看板の読み込みに失敗: ${boardPreviewError}`;
+  section.appendChild(meta);
+
+  const preview = document.createElement('pre');
+  preview.className = 'orchestration-board-preview';
+  if (!filePath) {
+    preview.textContent = '子セッションを開始すると、ここに board.md の内容が表示されます。';
+  } else if (boardPreviewState && boardPreviewState.path === filePath) {
+    preview.textContent = boardPreviewState.content || '(board は空です)';
+  } else if (boardPreviewError) {
+    preview.textContent = '看板を表示できません。Files で開く操作を試してください。';
+  } else {
+    preview.textContent = '看板を読み込んでいます…';
+  }
+  section.appendChild(preview);
+  return section;
+}
+
+function renderCrossSessionMessages(conductor: any): HTMLElement {
+  const section = document.createElement('section');
+  section.className = 'orchestration-cross-session-messages';
+  const heading = document.createElement('h3');
+  heading.textContent = '直接メッセージ / board 外通信';
+  section.appendChild(heading);
+  const note = document.createElement('p');
+  note.className = 'orchestration-cross-session-note';
+  note.textContent = 'Claude の受信画面に出たヘッダーを Hub が検知した、この Hub セッション中の一時履歴です。本文は保存しません。';
+  section.appendChild(note);
+
+  const events: CrossSessionMessage[] = Array.isArray(conductor.cross_session_messages)
+    ? conductor.cross_session_messages.slice().reverse().slice(0, 20)
+    : [];
+  if (events.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'orchestration-cross-session-empty';
+    empty.textContent = 'board 外の直接メッセージはまだ検知されていません。';
+    section.appendChild(empty);
+    return section;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'orchestration-cross-session-list';
+  events.forEach((event) => {
+    const row = document.createElement('article');
+    row.className = 'orchestration-cross-session-message';
+    const meta = document.createElement('div');
+    meta.className = 'orchestration-cross-session-message-meta';
+    meta.textContent = `${formatRelayEventTime(String(event.at || ''))} · ${String(event.sender || '送信者不明')} → `;
+    const receiverID = Number(event.receiver_session_id || 0);
+    if (receiverID > 0) {
+      const receiver = document.createElement('button');
+      receiver.type = 'button';
+      receiver.className = 'orchestration-cross-session-message-session';
+      receiver.textContent = `#${receiverID}${event.receiver_role ? ` ${String(event.receiver_role)}` : ''}`;
+      receiver.title = '受信セッションを開く';
+      receiver.addEventListener('click', (clickEvent) => {
+        clickEvent.stopPropagation();
+        openRelaySession(receiverID);
+      });
+      meta.appendChild(receiver);
+    } else {
+      meta.appendChild(document.createTextNode('受信セッション不明'));
+    }
+    row.appendChild(meta);
+    const text = document.createElement('p');
+    text.className = 'orchestration-cross-session-message-text';
+    text.textContent = String(event.text || '受信ヘッダーを検知');
+    row.appendChild(text);
+    list.appendChild(row);
+  });
+  section.appendChild(list);
+  return section;
 }
 
 function openRelaySession(sessionID: number): void {
@@ -428,10 +646,11 @@ export function renderOrchestrationDashboard(fetchTimeline = true): void {
   pane.replaceChildren();
   const heading = document.createElement('div');
   heading.className = 'orchestration-dashboard-heading';
-  heading.innerHTML = '<div><h2>Orchestration</h2><p>指揮者と子セッションの現在地</p></div>';
+  heading.innerHTML = '<div><h2>Orchestration</h2><p>指揮者、看板、子セッションの現在地</p></div>';
   pane.appendChild(heading);
 
   if (conductors.length === 0 || selectedConductorID === null) {
+    stopBoardPreviewPolling();
     relayTimelineFetchKey = '';
     relayTimelineCache.clear();
     const empty = document.createElement('div');
@@ -466,6 +685,10 @@ export function renderOrchestrationDashboard(fetchTimeline = true): void {
   startRelayButton.addEventListener('click', () => openRelayDialog(Number(conductor.id)));
   detail.appendChild(startRelayButton);
   pane.appendChild(detail);
+
+  ensureBoardPreviewPolling(conductor);
+  pane.appendChild(renderBoardPanel(conductor));
+  pane.appendChild(renderCrossSessionMessages(conductor));
 
   const relays: RelayStatus[] = Array.isArray(conductor.relays) ? conductor.relays : [];
   if (relays.length > 0) {

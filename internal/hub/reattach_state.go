@@ -11,16 +11,18 @@ import (
 // timers, goroutine ownership, websocket pointers, and parser pointers; those
 // are stopped/reset on the old session and restarted for the replacement.
 type reattachPreservedState struct {
-	ParentSessionID    int
-	Role               string
-	Auto               bool
-	Depth              int
-	OrchestrationID    string
-	BoardPath          string
-	WorktreeBranch     string
-	NormalWorktree     normalWorktree
-	WorktreeCleanup    string
-	BoardNotifyPending bool
+	ParentSessionID              int
+	Role                         string
+	Auto                         bool
+	Depth                        int
+	OrchestrationID              string
+	BoardPath                    string
+	WorktreeBranch               string
+	NormalWorktree               normalWorktree
+	WorktreeCleanup              string
+	BoardNotifyPending           bool
+	CrossSessionMessages         []proto.CrossSessionMessage
+	crossSessionMessageScreenSig string
 
 	Activity         SessionActivity
 	LastOutputAt     string
@@ -99,24 +101,26 @@ func snapshotReattachStateLocked(ses *session) reattachPreservedState {
 	fileState := ses.taskDetailFileState
 	fileState.Entries = append([]workflowTaskOutputEntry(nil), ses.taskDetailFileState.Entries...)
 	return reattachPreservedState{
-		ParentSessionID:    ses.ParentSessionID,
-		Role:               ses.Role,
-		Auto:               ses.Auto,
-		Depth:              ses.Depth,
-		OrchestrationID:    ses.OrchestrationID,
-		BoardPath:          ses.BoardPath,
-		WorktreeBranch:     ses.WorktreeBranch,
-		NormalWorktree:     ses.NormalWorktree,
-		WorktreeCleanup:    ses.WorktreeCleanup,
-		BoardNotifyPending: ses.BoardNotifyPending,
-		Activity:           ses.Activity,
-		LastOutputAt:       ses.LastOutputAt,
-		lastOutputAt:       ses.lastOutputAt,
-		TranscriptGrewAt:   ses.TranscriptGrewAt,
-		StartedAt:          ses.StartedAt,
-		FirstMessage:       ses.FirstMessage,
-		LastMessage:        ses.LastMessage,
-		EndReason:          ses.EndReason,
+		ParentSessionID:              ses.ParentSessionID,
+		Role:                         ses.Role,
+		Auto:                         ses.Auto,
+		Depth:                        ses.Depth,
+		OrchestrationID:              ses.OrchestrationID,
+		BoardPath:                    ses.BoardPath,
+		WorktreeBranch:               ses.WorktreeBranch,
+		NormalWorktree:               ses.NormalWorktree,
+		WorktreeCleanup:              ses.WorktreeCleanup,
+		BoardNotifyPending:           ses.BoardNotifyPending,
+		CrossSessionMessages:         copyCrossSessionMessages(ses.CrossSessionMessages),
+		crossSessionMessageScreenSig: ses.crossSessionMessageScreenSig,
+		Activity:                     ses.Activity,
+		LastOutputAt:                 ses.LastOutputAt,
+		lastOutputAt:                 ses.lastOutputAt,
+		TranscriptGrewAt:             ses.TranscriptGrewAt,
+		StartedAt:                    ses.StartedAt,
+		FirstMessage:                 ses.FirstMessage,
+		LastMessage:                  ses.LastMessage,
+		EndReason:                    ses.EndReason,
 
 		transcriptPath:        ses.transcriptPath,
 		transcriptResolvedAt:  ses.transcriptResolvedAt,
@@ -218,6 +222,8 @@ func applyReattachPreservedStateLocked(dst *session, state reattachPreservedStat
 	dst.NormalWorktree = state.NormalWorktree
 	dst.WorktreeCleanup = state.WorktreeCleanup
 	dst.BoardNotifyPending = state.BoardNotifyPending
+	dst.CrossSessionMessages = copyCrossSessionMessages(state.CrossSessionMessages)
+	dst.crossSessionMessageScreenSig = state.crossSessionMessageScreenSig
 
 	// Connection state is reset to running by the reattach constructor; the
 	// orthogonal activity and user-visible history continue across the socket.

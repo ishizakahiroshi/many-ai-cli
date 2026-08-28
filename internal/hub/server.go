@@ -111,6 +111,10 @@ type session struct {
 	// order. The slice is replaced, never mutated in place, so session copies
 	// taken under sessionsMu stay race-free while they are marshalled.
 	Relays []*proto.RelayStatus `json:"relays,omitempty"`
+	// CrossSessionMessages is a bounded, in-memory observation history for
+	// board-external Claude messages. Replace the slice on append so snapshots
+	// taken under sessionsMu remain race-free after the lock is released.
+	CrossSessionMessages []proto.CrossSessionMessage `json:"cross_session_messages,omitempty"`
 	// Activity is the authoritative three-axis activity model. State is kept
 	// below only as a compatibility display label for older clients.
 	Activity     SessionActivity `json:"activity"`
@@ -196,6 +200,7 @@ type session struct {
 	nativeApprovalTailSig          string
 	nativeApprovalScanQueued       bool
 	nativeApprovalClearMisses      int
+	crossSessionMessageScreenSig   string
 	nativeApprovalConsumed         string
 	nativeApprovalConsumedAt       time.Time
 	approvalMarkerSig              string

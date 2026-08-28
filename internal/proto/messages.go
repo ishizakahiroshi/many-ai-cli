@@ -190,6 +190,11 @@ type Message struct {
 	// Relays lists every relay loop conducted by this (parent) session, in start
 	// order. Events are deliberately not carried here; the relay API returns them.
 	Relays []RelayStatus `json:"relays,omitempty"`
+	// CrossSessionMessages is an in-memory, bounded observation of Claude
+	// cross-session message headers seen in this orchestration. The Hub does not
+	// relay or authorize these messages; it only exposes the receiver-side PTY
+	// observation to the UI so board-external activity is not invisible.
+	CrossSessionMessages []CrossSessionMessage `json:"cross_session_messages,omitempty"`
 	// spawn_confirmation_requested is sent to browser UIs before an
 	// orchestration child is created. The response travels by HTTP, never via
 	// the conductor PTY, so the user remains the authority for the decision.
@@ -299,6 +304,17 @@ type Message struct {
 	// ポインタなのは false を確実に届けるため: omitempty で false が消えると
 	// 「stale から復帰した」を伝えられず、バナーが出たまま固着する。
 	BinaryStale *bool `json:"binary_stale,omitempty"`
+}
+
+// CrossSessionMessage is the disclosure-safe summary of one direct
+// cross-session message observed in a Claude PTY. Text is the masked display
+// header only; message bodies are deliberately not retained by the Hub.
+type CrossSessionMessage struct {
+	At                string `json:"at,omitempty"`
+	ReceiverSessionID int    `json:"receiver_session_id,omitempty"`
+	ReceiverRole      string `json:"receiver_role,omitempty"`
+	Sender            string `json:"sender,omitempty"`
+	Text              string `json:"text,omitempty"`
 }
 
 // AgentChatMessage is the provider-neutral structured transcript payload used

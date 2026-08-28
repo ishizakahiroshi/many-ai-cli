@@ -602,6 +602,7 @@ export function _connectWs() {
 	if (m.worktree_branch !== undefined) cur.worktree_branch = m.worktree_branch;
 	if (m.board_notify_pending !== undefined) cur.board_notify_pending = m.board_notify_pending;
 	if (m.relays !== undefined) cur.relays = m.relays;
+	if (m.cross_session_messages !== undefined) cur.cross_session_messages = m.cross_session_messages;
     // subscription profile は Go 側 proto の短い名前（subscription_id / _name）で届き、
     // snapshot は session 構造体の名前（subscription_profile_id / _name）で届く。
     // カード側は snapshot 名で読むので、ここで揃えておく。
@@ -617,7 +618,7 @@ export function _connectWs() {
     sessions.set(m.session_id, cur);
     // 実行中⇄アイドルの遷移をアクティブセッションの入力欄／送信ボタンへ反映する
 	if (m.state && m.session_id === activeSessionId) { updateInputAffordance(); syncLiveStatusDomForActive(); }
-	if (m.relays !== undefined) window.renderOrchestrationDashboard?.();
+	if (m.relays !== undefined || m.cross_session_messages !== undefined || m.board_path !== undefined) window.renderOrchestrationDashboard?.();
     if (!isNew && beforeLayout === sessionLayoutSnapshot(cur) && (m.state || m.last_output_at)) {
       fastRenderSessionId = m.session_id;
     }
