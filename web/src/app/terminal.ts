@@ -3,10 +3,10 @@ import { cleanCopiedText, cleanOneLineText, showToast } from './util.js';
 import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
 import { activeSessionId, approvalCandidateDebugKey, approvalCandidateIdentity, approvalRawOptionsCache, approvalSourceCache, approvalVisibleCache, sessions, terminals } from './state.js';
-import { autoExpand, inputEl, sendText, updateInputClearButton } from '../app.js';
+import { autoExpand, inputEl, sendQuickCommand, sendText, updateInputClearButton } from '../app.js';
 import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerminalPathStartBoundary, resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup, trimTerminalPathCandidate } from './path-links.js';
 import { ws } from './ws-client.js';
-import { scheduleApprovalCheck } from './approval.js';
+import { isSelectMenuActive, isShellProvider, scheduleApprovalCheck } from './approval.js';
 import { probe } from '../debug/probe.js';
 import { handleCrunchLinkClick } from './expand-popup.js';
 import { addPromptTemplate } from './prompt-templates.js';
@@ -95,6 +95,20 @@ function addSelectionToInput(text, opts: any = {}) {
   updateInputClearButton();
   inputEl.focus();
   showToast(ti18n('added_to_input'), opts.anchor);
+}
+
+function sendSelectionDirect(text, opts: any = {}) {
+  const cleaned = cleanCopiedText(text);
+  if (!cleaned) return;
+  const sessionId = opts.sessionId ?? activeSessionId;
+  if (sessionId == null) return;
+  if (isSelectMenuActive(sessionId)) {
+    showToast(ti18n('toast_select_menu_active'), opts.anchor);
+    return;
+  }
+  if (isShellProvider(sessions.get(sessionId)?.provider) && !window.confirm(ti18n('term_ctx_send_confirm_shell'))) return;
+  sendQuickCommand(sessionId, cleaned);
+  showToast(ti18n('term_ctx_sent'), opts.anchor);
 }
 
 // モーダル/オーバーレイ表示中は、ターミナル上でのホイール操作を xterm に処理させない。
@@ -595,7 +609,7 @@ export function whenLayoutReady(id, container, attempt = 0, generation = null) {
     container.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       const sel = t.term.getSelection();
-      if (sel) openTermCtxMenu(e.clientX, e.clientY, sel);
+      if (sel) openTermCtxMenu(e.clientX, e.clientY, sel, id);
     });
   } else if (attempt < TERMINAL_LAYOUT_READY_MAX_FRAMES) {
     requestAnimationFrame(() => whenLayoutReady(id, container, attempt + 1, expectedGeneration));
@@ -609,6 +623,7 @@ export function whenLayoutReady(id, container, attempt = 0, generation = null) {
 // 通常コピーに加えて「1行コピー」（改行除去 → スペース join）を選べるメニューを出す。
 let termCtxMenuEl = null;
 let termCtxSelection = '';
+let termCtxSessionId: number | null = null;
 
 function ensureTermCtxMenu() {
   if (termCtxMenuEl) return termCtxMenuEl;
@@ -628,17 +643,19 @@ function ensureTermCtxMenu() {
     btn.appendChild(label);
     btn.addEventListener('click', () => {
       const sel = termCtxSelection;
+      const sessionId = termCtxSessionId;
       // closeTermCtxMenu() で display:none になると getBoundingClientRect() が
       // 全て 0 を返しトーストが左上に飛ぶため、閉じる前に座標を確保しておく
       const r = btn.getBoundingClientRect();
       const anchor = { clientX: r.right, clientY: r.top + r.height / 2 };
       closeTermCtxMenu();
-      if (sel) handler(sel, anchor);
+      if (sel) handler(sel, anchor, sessionId);
     });
     m.appendChild(btn);
   };
   mkItem('term_ctx_copy', 'コピー', '⎘', (sel, anchor) => copyTerminalSelectionText(sel, { anchor }).catch(() => {}));
   mkItem('term_ctx_copy_oneline', '1行コピー', '⇥', (sel, anchor) => copyTerminalSelectionText(sel, { oneLine: true, anchor }).catch(() => {}));
+  mkItem('term_ctx_send_selection', 'そのまま送信', '➤', (sel, anchor, sessionId) => sendSelectionDirect(sel, { anchor, sessionId }));
   mkItem('term_ctx_add_to_input', '入力欄に追加', '＋', (sel, anchor) => addSelectionToInput(sel, { anchor }));
   mkItem('term_ctx_save_template', 'テンプレートに登録', '▤', (sel, anchor) => {
     const body = cleanOneLineText(sel);
@@ -658,9 +675,10 @@ function ensureTermCtxMenu() {
   return m;
 }
 
-function openTermCtxMenu(x, y, selection) {
+function openTermCtxMenu(x, y, selection, sessionId) {
   const m = ensureTermCtxMenu();
   termCtxSelection = selection;
+  termCtxSessionId = sessionId;
   // 言語切替に追従するため表示のたびにラベルを引き直す
   m.querySelectorAll('.ctx-label').forEach((el) => {
     const v = ti18n(el.dataset.i18nKey);
@@ -676,6 +694,7 @@ function closeTermCtxMenu() {
   if (!termCtxMenuEl) return;
   termCtxMenuEl.classList.remove('open');
   termCtxSelection = '';
+  termCtxSessionId = null;
 }
 
 export function queuePendingTerminalChunk(id, bytes) {

@@ -259,36 +259,55 @@ export function stateLabel(state) {
   return t('state_' + state) || state;
 }
 
+// 状態記号はテキストのグリフ（⚑ / ⌨ / ● / ◌ / ✕）ではなく SVG で描く。
+// グリフは 1 文字ごとにフォールバック先のフォントが変わり、送り幅も墨の位置も
+// 揃わない（実測: Segoe UI で ●=7.9px / ⚑=9.5px / ⌨=14.7px / ✕=10.7px）。
+// 「同じ大きさに見えない・同じ高さに乗らない」はここが原因で、CSS の translateY を
+// 足しても状態ごとにズレ量が違うため直らない。provider アイコンと同じ 16x16 viewBox
+// に統一すると、墨の中心が座標で決まるので状態が変わっても位置と大きさが動かない。
+const STATE_ICON_SVG = {
+  flag: '<path d="M5 2.7v10.6" stroke-width="1.6" stroke-linecap="round"/><path d="M6.4 3.5 12.1 6.1 6.4 8.7Z" stroke="none"/>',
+  keyboard: '<rect x="2.4" y="4.6" width="11.2" height="6.8" rx="1.6" fill="none" stroke-width="1.4"/><path d="M5 7.4h.01M7.6 7.4h.01M10.2 7.4h.01M5.6 9.6h4.8" stroke-width="1.4" stroke-linecap="round"/>',
+  dot: '<circle cx="8" cy="8" r="3.6" stroke="none"/>',
+  ring: '<circle cx="8" cy="8" r="3.5" fill="none" stroke-width="1.5" stroke-dasharray="2.3 1.9"/>',
+  cross: '<path d="m4.7 4.7 6.6 6.6M11.3 4.7 4.7 11.3" stroke-width="1.7" stroke-linecap="round"/>',
+};
+
+export function stateIconSvgHtml(kind) {
+  const body = STATE_ICON_SVG[kind] || STATE_ICON_SVG.dot;
+  return `<svg class="card-state-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" stroke="currentColor" aria-hidden="true">${body}</svg>`;
+}
+
 function stateActivityDecoration(s) {
   const state = s?.state || 'standby';
   const baseLabel = stateLabel(state);
   if (s.awaiting_approval) {
     const activityLabel = ti18n('card_activity_awaiting_approval', 'Awaiting approval');
-    return { className: 'awaiting-approval', icon: '⚑', label: activityLabel === baseLabel ? baseLabel : `${baseLabel}: ${activityLabel}` };
+    return { className: 'awaiting-approval', iconKind: 'flag', label: activityLabel === baseLabel ? baseLabel : `${baseLabel}: ${activityLabel}` };
   }
   if (s.awaiting_user) {
     const activityLabel = ti18n('card_activity_awaiting_input', 'Awaiting input');
-    return { className: 'awaiting-input', icon: '⌨', label: `${baseLabel}: ${activityLabel}` };
+    return { className: 'awaiting-input', iconKind: 'keyboard', label: `${baseLabel}: ${activityLabel}` };
   }
-  if (state === 'waiting') return { className: 'awaiting-approval', icon: '⚑', label: baseLabel };
+  if (state === 'waiting') return { className: 'awaiting-approval', iconKind: 'flag', label: baseLabel };
   // running を workflow_active より先に判定する。Hub 側は
   // internal/hub/idle_state.go で WorkflowActive = !OutputIdle && !AwaitingUser、
   // internal/hub/session_activity.go の DisplayState() が WorkflowActive のとき
   // "running" を返すので、running のセッションは必ず workflow_active も立っている。
   // 逆順にすると running の緑 ● に到達できず、実行中がずっと workflow-active の
   // グレー ◌（--muted-2）で描かれ「動いている感じがしない」表示になる。
-  if (state === 'running') return { className: '', icon: '●', label: baseLabel };
+  if (state === 'running') return { className: '', iconKind: 'dot', label: baseLabel };
   if (s.workflow_active) {
     const activityLabel = ti18n('card_activity_workflow_active', 'Processing');
-    return { className: 'workflow-active', icon: '◌', label: `${baseLabel}: ${activityLabel}` };
+    return { className: 'workflow-active', iconKind: 'ring', label: `${baseLabel}: ${activityLabel}` };
   }
-  if (state === 'error' || state === 'disconnected') return { className: '', icon: '✕', label: baseLabel };
+  if (state === 'error' || state === 'disconnected') return { className: '', iconKind: 'cross', label: baseLabel };
   // standby も塗りつぶし ● にする。同じ状態を出す他の 2 箇所（サマリーチップの
   // .chip-dot / ステータスバーの .tsb-pdot）はどちらも state によらず塗りつぶしの
   // 丸で、色だけで区別している。ここだけ中空 ○ だと同じ状態が画面内で別の形になる。
   // running との区別は色（--badge-running-text / --badge-standby-text）と
   // state-pulse アニメーションの有無が担う。
-  return { className: '', icon: '●', label: baseLabel };
+  return { className: '', iconKind: 'dot', label: baseLabel };
 }
 
 export function safeClassToken(value) {
@@ -916,7 +935,7 @@ export function renderSessionList() {
       const metaRow = `<div class="card-meta-row"><span class="card-status-slot">${cardStatusRowHtml(s)}</span><span class="card-ctx-slot">${cardCtxHtml(s)}</span>${s.pinned ? '<span class="card-pin" aria-label="Pinned">📌</span>' : ''}${noteHtml}${roleHtml}${branchRoleHtml}${boardPendingHtml}${branchBadge}</div>`;
       // 状態は記号だけを表示し、名前は tooltip / aria-label へ残す。#N の直後に置く。
       const stateDescription = activity.label || label;
-      const statePillHtml = ` <span class="card-state-pill ${safeClassToken(state)} ${activity.className}" title="${escapeHtml(stateDescription)}" data-tooltip="${escapeHtml(stateDescription)}" aria-label="${escapeHtml(stateDescription)}"><span class="card-pdot"></span><span class="card-state-icon" aria-hidden="true">${activity.icon}</span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
+      const statePillHtml = ` <span class="card-state-pill ${safeClassToken(state)} ${activity.className}" title="${escapeHtml(stateDescription)}" data-tooltip="${escapeHtml(stateDescription)}" aria-label="${escapeHtml(stateDescription)}"><span class="card-pdot"></span><span class="card-state-icon" aria-hidden="true">${stateIconSvgHtml(activity.iconKind)}</span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
       c.innerHTML =
 		`<div class="card-title-row"><b>#${s.id}</b>${statePillHtml} ${cardProviderModelHtml(s)}${taskTitleHtml}</div>` +
 	        metaRow;
@@ -1384,7 +1403,7 @@ export function updateSessionCardStateInPlace(id) {
     pill.setAttribute('data-tooltip', stateDescription);
     pill.setAttribute('aria-label', stateDescription);
     const icon = pill.querySelector('.card-state-icon');
-    if (icon) icon.textContent = activity.icon;
+    if (icon) icon.innerHTML = stateIconSvgHtml(activity.iconKind);
     const txt = pill.querySelector('.card-state-text');
     if (txt) txt.textContent = stateLabel(state);
   }
