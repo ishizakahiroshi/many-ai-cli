@@ -203,6 +203,15 @@ export interface RelayEvent {
   files_changed?: number;
 }
 
+/** Hub が Claude PTY の受信ヘッダーから観測した board 外通信の要約。 */
+export interface CrossSessionMessage {
+  at?: string;
+  receiver_session_id?: number;
+  receiver_role?: string;
+  sender?: string;
+  text?: string;
+}
+
 export interface Message {
   type: MessageType;
   role?: string;
@@ -285,8 +294,10 @@ export interface Message {
   board_path?: string;
   worktree_branch?: string;
 	board_notify_pending?: boolean;
-  /** 親セッションが回している relay ループ（開始順）。 */
-  relays?: RelayStatus[];
+	/** 親セッションが回している relay ループ（開始順）。 */
+	relays?: RelayStatus[];
+	/** board 外の Claude 間通信を Hub が受信側 PTY で観測した履歴。 */
+	cross_session_messages?: CrossSessionMessage[];
 	spawn_confirmation_id?: string;
 	initial_prompt?: string;
   first_message?: string;
@@ -388,6 +399,8 @@ export interface SessionSnapshot {
 	board_notify_pending?: boolean;
   /** 親セッションが回している relay ループ（開始順）。 */
   relays?: RelayStatus[];
+  /** board 外の Claude 間通信を Hub が受信側 PTY で観測した履歴。 */
+  cross_session_messages?: CrossSessionMessage[];
   // 起動に使ったサブスクリプション profile。空/未送は CLI 自身のログイン環境。
   subscription_profile_id?: string;
   subscription_profile_name?: string;
