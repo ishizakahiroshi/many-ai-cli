@@ -154,6 +154,18 @@ Release artifacts are published at
   (`web/src/app/session-list.ts`, `web/src/styles.css`).
 
 ### Fixed
+- **The session database no longer grows without bound.** Every chunk of
+  terminal output was written as its own row in the `events` table, which on the
+  author's machine reached 4.7 GB and over 21 million rows even with the 7-day
+  retention sweep running. Past that size SQLite exceeded its 3-second timeout in
+  both directions: session events were dropped on write, and the session-history
+  API answered 500. Terminal output no longer creates `events` rows. Nothing is
+  lost — the readable text still goes to the `messages` table and the raw bytes
+  to `logs/sessions/*.log` and `*.jsonl`, and no product code read those rows.
+  Existing databases stay large until retention clears them; `/api/session-store/reset`
+  erases history immediately if you want the space back now
+  (`internal/sessionstore/store.go`).
+
 - **The Gemini ban precedent in the README named Google's own product as an
   offender.** The terms-of-service warning cited "OpenClaw / OpenCode /
   Antigravity" as third-party wrappers whose users were hit with `403 ToS`.

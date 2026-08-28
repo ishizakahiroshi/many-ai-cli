@@ -23,10 +23,14 @@ import (
 
 const defaultTimeout = 3 * time.Second
 
+// busy_timeout は必ず先頭に置く。既定は 0（待たずに即 SQLITE_BUSY）なので、
+// 後ろに置くと それより前の pragma だけがロック競合で即エラーになる。
+// init() は journal_mode=WAL を流す（-wal ファイルの作成を伴う）ため、
+// 同じ DB を別プロセスが開いている状況で競合しうる。
 var sqliteConnectionPragmas = []string{
+	`PRAGMA busy_timeout=3000`,
 	`PRAGMA synchronous=NORMAL`,
 	`PRAGMA foreign_keys=ON`,
-	`PRAGMA busy_timeout=3000`,
 }
 
 func init() {
@@ -373,14 +377,16 @@ func (s *Store) asyncWriter() {
 func (s *Store) init() error {
 	ctx, cancel := context.WithTimeout(context.Background(), initTimeout)
 	defer cancel()
-	pragmas := []string{
+	// sqliteConnectionPragmas を先に流す。先頭の busy_timeout がここで効いていないと、
+	// 続く auto_vacuum / journal_mode がロック競合の瞬間に SQLITE_BUSY で即死する。
+	pragmas := append([]string{}, sqliteConnectionPragmas...)
+	pragmas = append(pragmas,
 		// 新規 DB はここで incremental に確定する。既存 DB（auto_vacuum=NONE）には
 		// 即時効果は無いが、設定は pending になり次回 VACUUM（ResetHistory 実行時）で
 		// 反映される。incremental になると incremental_vacuum で空きページを OS へ返せる。
 		`PRAGMA auto_vacuum=INCREMENTAL`,
 		`PRAGMA journal_mode=WAL`,
-	}
-	pragmas = append(pragmas, sqliteConnectionPragmas...)
+	)
 	for _, q := range pragmas {
 		if _, err := s.db.ExecContext(ctx, q); err != nil {
 			return fmt.Errorf("sqlite pragma: %w", err)
@@ -741,14 +747,17 @@ func (s *Store) StoreEvent(liveSessionID int, event map[string]any) error {
 	if err != nil || sessionID == 0 {
 		return err
 	}
-	payload, err := json.Marshal(slimEventPayload(event))
-	if err != nil {
-		return err
-	}
 	ts := stringValue(event["ts"])
 	typ := stringValue(event["type"])
 	if typ == "" {
 		typ = "event"
+	}
+	var payload []byte
+	if eventNeedsRow(typ) {
+		payload, err = json.Marshal(event)
+		if err != nil {
+			return err
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
@@ -757,8 +766,10 @@ func (s *Store) StoreEvent(liveSessionID int, event map[string]any) error {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO events(session_id, ts, type, payload_json) VALUES (?, ?, ?, ?)`, sessionID, ts, typ, string(payload)); err != nil {
-		return err
+	if eventNeedsRow(typ) {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO events(session_id, ts, type, payload_json) VALUES (?, ?, ?, ?)`, sessionID, ts, typ, string(payload)); err != nil {
+			return err
+		}
 	}
 	if err := s.storeMessageForEvent(ctx, tx, sessionID, ts, typ, event, payload); err != nil {
 		return err
@@ -1554,30 +1565,26 @@ func (s *Store) vacuumAfterReset() bool {
 	return true
 }
 
-// eventPayloadTextLimit は events.payload_json に残す text の上限（rune 数）。
-// UI のタイムラインは payload の先頭 180 文字しか表示せず、全文は .jsonl / messages
-// 側にあるため、events には参照用の冒頭だけ残せば足りる。
-const eventPayloadTextLimit = 2000
-
-// slimEventPayload は events.payload_json 用に PTY 出力イベントを間引く。
-// pty_output は出力量が膨大（TUI の再描画を全チャンク含む）な一方、
-// data_b64 は .log/.jsonl に全量残る複製のため SQLite には保存しない。
-// chat 履歴（messages テーブル）は元の event map から作るので影響しない。
-func slimEventPayload(event map[string]any) map[string]any {
-	if stringValue(event["type"]) != "pty_output" {
-		return event
-	}
-	slim := make(map[string]any, len(event))
-	for k, v := range event {
-		if k == "data_b64" {
-			continue
-		}
-		slim[k] = v
-	}
-	if text, ok := slim["text"].(string); ok {
-		slim["text"] = trimRunes(text, eventPayloadTextLimit)
-	}
-	return slim
+// eventNeedsRow は events テーブルへ 1 行残す種別かを返す。
+//
+// pty_output は残さない。TUI の再描画を 1 チャンク 1 行で受けるため桁が違い、
+// events を実質そのテーブルにしてしまう。2026-08-28 実測（作者環境）:
+//
+//	any-ai-cli.db  4,745,457,664 バイト（1 週間前は 3,801,001,984）
+//	events         rowid 範囲 28,920,767〜50,489,940（保持 7 日で最大 2,157 万行）
+//	内訳           pty_output が 99.9%（次点 user_input は 3 桁下）
+//
+// この量は保持 7 日の prune では追いつかず、既定 3 秒のタイムアウトを
+// 読み書き両方で超える。書き込み側が超えるとイベントを取りこぼし、
+// 読み出し側が超えると /api/session-history が 500 を返す（実際に両方起きた）。
+//
+// 消しても失われるものは無い。events の pty_output 行を読む製品コードは無く
+// （EventCount は算出のみで UI が使わず、TimelineByLiveSession はテスト専用）、
+// 表示用の本文は messages テーブル、生バイトは logs/sessions の .log / .jsonl に
+// それぞれ全量が残る。data_b64 の除去と text の切り詰めで凌いでいた前の実装は、
+// 行そのものを止めないため効かなかった。
+func eventNeedsRow(typ string) bool {
+	return typ != "pty_output"
 }
 
 func (s *Store) storeMessageForEvent(ctx context.Context, tx *sql.Tx, sessionID int64, ts, typ string, event map[string]any, payload []byte) error {
