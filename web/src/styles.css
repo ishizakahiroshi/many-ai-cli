@@ -810,6 +810,7 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
   .star-btn,
   .session-history-reset-btn,
   .session-board-open-btn,
+  .session-relay-open-btn,
   .project-group-files-btn,
   .quick-cmd-btn,
   .spawn-btn-browse {
@@ -1505,7 +1506,8 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
 /* お気に入りボタン */
 .star-btn,
 .session-history-reset-btn,
-.session-board-open-btn {
+.session-board-open-btn,
+.session-relay-open-btn {
   position: static;
   background: none;
   appearance: none;
@@ -1526,6 +1528,7 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
 .star-btn:hover { color: var(--warn); }
 .session-history-reset-btn:hover { color: var(--accent-text); }
 .session-board-open-btn:hover { color: var(--accent-text); }
+.session-relay-open-btn:hover { color: var(--accent-text); }
 
 /* ドラッグ状態 */
 .card.dragging { opacity: 0.4; cursor: grabbing; }
@@ -2053,3 +2056,425 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
   pointer-events: none;
 }
 .card[draggable=true]:hover::before { opacity: 0.5; }
+
+/* Orchestration relay dashboard */
+#orchestration-dashboard-pane {
+  margin-top: 14px;
+  padding: 0 2px 18px;
+}
+.orchestration-dashboard-heading,
+.orchestration-conductor-detail,
+.orchestration-relay-card-head,
+.orchestration-relay-actions,
+.orchestration-relay-roles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.orchestration-dashboard-heading {
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.orchestration-dashboard-heading h2,
+.orchestration-dashboard-heading p,
+.orchestration-relay-cards h3 {
+  margin: 0;
+}
+.orchestration-dashboard-heading p {
+  color: var(--muted-2);
+  font-size: 0.78rem;
+}
+.orchestration-conductor-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin-bottom: 8px;
+}
+.orchestration-conductor-tab,
+.orchestration-relay-action,
+.orchestration-relay-review-link,
+.orchestration-relay-branch,
+.relay-event-review,
+.relay-event-commit,
+.orchestration-relay-timeline-more {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+.orchestration-conductor-tab {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.orchestration-conductor-tab.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.orchestration-conductor-detail {
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.orchestration-detail-role {
+  color: var(--text);
+  font-weight: 700;
+}
+.orchestration-relay-cards {
+  margin-top: 12px;
+}
+.orchestration-relay-cards h3 {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin-bottom: 7px;
+}
+.orchestration-relay-card-list {
+  display: grid;
+  gap: 8px;
+}
+.orchestration-relay-card {
+  --relay-color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--relay-color) 45%, var(--line));
+  border-left: 3px solid var(--relay-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  padding: 10px 12px;
+}
+.orchestration-relay-state-implementing { --relay-color: var(--green); }
+.orchestration-relay-state-reviewing { --relay-color: var(--accent); }
+.orchestration-relay-state-fixing { --relay-color: var(--warn); }
+.orchestration-relay-state-completed { --relay-color: var(--green); opacity: 0.82; }
+.orchestration-relay-state-stopped { --relay-color: var(--danger); opacity: 0.9; }
+.orchestration-relay-card-head {
+  justify-content: space-between;
+  margin-bottom: 7px;
+}
+.orchestration-relay-card-head strong {
+  color: var(--text);
+  font-size: 0.86rem;
+}
+.orchestration-relay-state-badge,
+.orchestration-relay-role-badge,
+.orchestration-relay-active-label {
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--relay-color) 16%, transparent);
+  color: var(--relay-color);
+  font-size: 0.68rem;
+  padding: 2px 6px;
+}
+.orchestration-relay-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin: 0 0 8px;
+}
+.orchestration-relay-meta > div {
+  min-width: 0;
+}
+.orchestration-relay-meta dt {
+  color: var(--muted-2);
+  font-size: 0.65rem;
+}
+.orchestration-relay-meta dd {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text);
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orchestration-relay-roles {
+  flex-wrap: wrap;
+  align-items: stretch;
+  margin: 5px 0 8px;
+}
+.orchestration-relay-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted-2);
+  font-size: 0.7rem;
+}
+.orchestration-relay-session,
+.orchestration-relay-branch {
+  display: inline-block;
+  overflow: hidden;
+  max-width: 28ch;
+  padding: 2px 5px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+button.orchestration-relay-session {
+  color: var(--accent);
+  cursor: pointer;
+}
+button.orchestration-relay-session.active {
+  border-color: var(--relay-color);
+  background: color-mix(in srgb, var(--relay-color) 14%, var(--bg-elev));
+  color: var(--relay-color);
+  font-weight: 700;
+}
+.relay-role-not-started {
+  border: 1px dashed var(--line);
+}
+.orchestration-relay-active-label {
+  margin-left: auto;
+}
+.orchestration-relay-review-link {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 3px 7px;
+  color: var(--accent);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orchestration-relay-actions {
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.orchestration-relay-action,
+.orchestration-relay-timeline-more {
+  padding: 4px 8px;
+  color: var(--text);
+  font-size: 0.72rem;
+}
+.orchestration-relay-action:hover,
+.orchestration-relay-review-link:hover,
+.orchestration-relay-branch:hover,
+.relay-event-review:hover,
+.relay-event-commit:hover,
+.orchestration-relay-timeline-more:hover {
+  border-color: var(--accent);
+}
+.orchestration-relay-timeline {
+  margin-top: 9px;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+.orchestration-relay-timeline summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.72rem;
+}
+.orchestration-relay-timeline-rows {
+  display: grid;
+  gap: 3px;
+  margin-top: 6px;
+}
+.orchestration-relay-timeline-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px;
+  border-left: 2px solid color-mix(in srgb, var(--relay-color) 45%, transparent);
+  padding: 3px 0 3px 7px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+.relay-event-time,
+.relay-event-c,
+.relay-event-round,
+.relay-event-files {
+  color: var(--muted-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.relay-event-kind {
+  color: var(--text);
+  font-weight: 700;
+}
+.relay-event-text {
+  min-width: 10ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.relay-event-review,
+.relay-event-commit {
+  max-width: 24ch;
+  overflow: hidden;
+  padding: 1px 4px;
+  color: var(--accent);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orchestration-relay-timeline-more {
+  margin-top: 5px;
+}
+.orchestration-relay-timeline-error {
+  color: var(--danger);
+  font-size: 0.72rem;
+}
+.orchestration-child-card-head .orchestration-relay-role-badge {
+  margin-left: 4px;
+}
+
+@media (max-width: 720px) {
+  #orchestration-dashboard-pane { padding-inline: 0; }
+  .orchestration-relay-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .orchestration-relay-active-label { width: 100%; margin-left: 0; }
+  .orchestration-relay-timeline-row { align-items: flex-start; }
+  .relay-event-text { flex-basis: 100%; }
+}
+
+/* C5: relay 開始ダイアログ。全画面 overlay は .aac-wheel-overlay を持つ。 */
+#relay-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 9600;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: rgba(0, 0, 0, 0.58);
+}
+#relay-dialog[hidden] { display: none !important; }
+.relay-dialog-box {
+  width: min(720px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  margin: auto 0;
+  padding: 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+}
+.relay-dialog-header,
+.relay-dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.relay-dialog-header { margin-bottom: 12px; }
+.relay-dialog-header h2 { margin: 0; font-size: 1rem; }
+.relay-dialog-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 4px 6px;
+}
+.relay-dialog-close:hover { color: var(--text); }
+.relay-dialog-target {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.relay-dialog-target strong { color: var(--text); font-family: Consolas, monospace; }
+.relay-dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+.relay-dialog-field input,
+.relay-dialog-field select,
+.relay-dialog-field textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  padding: 7px 8px;
+  font-size: 0.8rem;
+}
+.relay-dialog-field textarea { resize: vertical; min-height: 52px; }
+.relay-dialog-field input:focus,
+.relay-dialog-field select:focus,
+.relay-dialog-field textarea:focus { border-color: var(--accent); }
+.relay-dialog-candidates { margin-top: 8px; }
+.relay-dialog-section-title {
+  margin-top: 14px;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.relay-role-table { margin-top: 5px; }
+.relay-role-table td:first-child { width: 32%; white-space: normal; }
+.relay-role-table .relay-role-cli,
+.relay-role-table .relay-role-model {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  padding: 5px 6px;
+  font-size: 0.78rem;
+}
+.relay-role-table .relay-role-model:disabled { opacity: 0.45; cursor: not-allowed; }
+.relay-role-required { color: var(--warn); }
+.relay-strong-note { padding-inline: 0; margin-top: 3px; }
+.relay-dialog-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-top: 10px;
+}
+.relay-remaining-slots { padding-inline: 0; margin-top: 6px; font-style: normal; }
+.relay-mode-field {
+  margin: 12px 0 0;
+  padding: 8px 10px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.relay-mode-field legend { padding: 0 4px; color: var(--muted); }
+.relay-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  color: var(--text);
+  cursor: pointer;
+}
+.relay-radio-label input { width: auto; }
+.relay-same-tree-warning { padding-inline: 0; margin-top: 6px; }
+.relay-dialog-error { padding-inline: 0; margin-top: 8px; font-style: normal; }
+.relay-dialog-actions {
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+.relay-start-button {
+  margin-left: auto;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 4px 8px;
+}
+.relay-start-button:hover { background: var(--accent); color: var(--bg); }
+.relay-start-button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+@media (max-width: 560px) {
+  .relay-dialog-box { max-height: calc(100dvh - 16px); padding: 12px; }
+  .relay-dialog-options { grid-template-columns: 1fr; gap: var(--space-2); }
+  .relay-role-table { font-size: 0.74rem; }
+  .relay-role-table th,
+  .relay-role-table td { padding: 4px 3px; }
+  .relay-role-table td:first-child { width: 28%; }
+}

@@ -156,6 +156,10 @@ type relayDeps struct {
 	now             func() time.Time
 	// save persists the run (relay_store.go). No-op until the store is wired.
 	save func(run *relayRun) error
+	// publishDone exposes a relay's terminal state through the normal Hub
+	// completion channel. It deliberately uses the relay-specific publisher so
+	// a relay completion is not mistaken for a user's own Git turn.
+	publishDone func(summary proto.DoneSummary)
 }
 
 func (s *Server) relayDep() relayDeps {
@@ -183,6 +187,9 @@ func (s *Server) relayDep() relayDeps {
 	}
 	if d.save == nil {
 		d.save = s.saveRelayFile
+	}
+	if d.publishDone == nil {
+		d.publishDone = s.publishRelayDoneSummary
 	}
 	return d
 }
@@ -503,6 +510,25 @@ func (s *Server) relaysForParent(parentID int) []*relayRun {
 		runs = append(runs, e.run)
 	}
 	return runs
+}
+
+// relayRolesForParent returns the role mapping of an attached relay belonging
+// to parentID. The parent session's OrchestrationID points at only the most
+// recently started relay, so the mapping must not rely on that mutable field
+// when a parent starts a second relay.
+func (s *Server) relayRolesForParent(parentID int) map[string]orchestrationRoleAssignment {
+	for _, run := range s.relaysForParent(parentID) {
+		run.mu.Lock()
+		roles := make(map[string]orchestrationRoleAssignment, len(run.roles))
+		for role, assignment := range run.roles {
+			roles[role] = assignment
+		}
+		run.mu.Unlock()
+		if len(roles) > 0 {
+			return roles
+		}
+	}
+	return nil
 }
 
 func (s *Server) relayByID(orchestrationID string) *relayRun {
@@ -1337,6 +1363,23 @@ func (s *Server) relayFinishLocked(run *relayRun, state, reason, detail string) 
 		deps.notifyParent(run.orchestrationID, run.parentID, fmt.Sprintf("\n%s relay %s: plan=%s c=%d round=%d reason=%s review=%s branch=%s\n",
 			run.tagLocked(), state, run.planPath, run.completedCs, run.round, run.reason, run.reviewPath, run.branch))
 	}
+	text = fmt.Sprintf("%s: %s (c=%d, round=%d", filepath.Base(run.planPath), state, run.completedCs, run.round)
+	if strings.TrimSpace(run.reason) != "" {
+		text += ", reason=" + run.reason
+	}
+	text += ")"
+	if strings.TrimSpace(run.branch) != "" {
+		text += " branch=" + run.branch
+	}
+	deps.publishDone(proto.DoneSummary{
+		SessionID: run.parentID,
+		Provider:  run.parentProvider,
+		Title:     "relay " + state,
+		Text:      text,
+		Kind:      "relay",
+		At:        run.updatedAt.Format(time.RFC3339),
+		Fallback:  false,
+	})
 }
 
 func (s *Server) relayBoardLocked(run *relayRun, text string) {

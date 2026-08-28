@@ -23,6 +23,18 @@ const inputBoxSearchDepth = 8
 // when external notifications are disabled. External delivery remains an
 // explicit opt-in user preference.
 func (s *Server) publishDoneSummary(summary proto.DoneSummary) {
+	s.publishDoneSummaryInternal(summary, true)
+}
+
+// publishRelayDoneSummary sends a relay terminal notification through the
+// same browser / optional external channels as an ordinary completion, but it
+// must not start a Git-turn snapshot for the parent session. Relay work is
+// already represented by its own worktree or shared-tree state.
+func (s *Server) publishRelayDoneSummary(summary proto.DoneSummary) {
+	s.publishDoneSummaryInternal(summary, false)
+}
+
+func (s *Server) publishDoneSummaryInternal(summary proto.DoneSummary, captureGit bool) {
 	summary.Text = truncateDoneSummary(sessionlog.MaskSecrets(summary.Text))
 	if summary.Text == "" {
 		return
@@ -33,10 +45,12 @@ func (s *Server) publishDoneSummary(summary proto.DoneSummary) {
 	if summary.At == "" {
 		summary.At = time.Now().Format(time.RFC3339)
 	}
-	// 次ターン入力が DONE 通知直後に届いても baseline を取りこぼさないよう、
-	// 完了 snapshot を「処理中」と同期的に確定してから UI へ通知する。
-	// Git I/O 自体は captureGitTurnEnd が内部 goroutine で行う。
-	s.captureGitTurnEnd(summary.SessionID, summary.At)
+	if captureGit {
+		// 次ターン入力が DONE 通知直後に届いても baseline を取りこぼさないよう、
+		// 完了 snapshot を「処理中」と同期的に確定してから UI へ通知する。
+		// Git I/O 自体は captureGitTurnEnd が内部 goroutine で行う。
+		s.captureGitTurnEnd(summary.SessionID, summary.At)
+	}
 	s.broadcast(proto.Message{Type: "done_summary", SessionID: summary.SessionID, Provider: summary.Provider, DoneSummary: &summary})
 
 	if !s.shouldNotifyDoneExternally(summary) {

@@ -413,8 +413,8 @@ type ApprovalSummary struct {
 }
 
 // DoneSummary is a normalized, secret-masked terminal summary. Kind is one of
-// success, failure, aborted, needs_action, or unknown; Fallback marks an
-// idle-derived summary created when the provider omitted the DONE marker.
+// success, failure, aborted, needs_action, unknown, or relay; Fallback marks
+// an idle-derived summary created when the provider omitted the DONE marker.
 //
 // Fallback summaries always carry Kind "unknown": the turn ended, but nothing
 // reported what it ended as. They are never raised to needs_action, because a

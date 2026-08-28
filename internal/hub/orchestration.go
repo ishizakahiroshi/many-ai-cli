@@ -352,6 +352,18 @@ func (s *Server) handleSessionAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleSessionInject(w, r, id)
 	case "children":
 		s.handleSessionChildren(w, r, id)
+	case "relay":
+		if r.Method == http.MethodGet {
+			s.handleRelayGet(w, r, id)
+		} else {
+			s.handleRelayStart(w, r, id)
+		}
+	case "relay-stop":
+		s.handleRelayStop(w, r, id)
+	case "relay-resume":
+		s.handleRelayResume(w, r, id)
+	case "relay-cleanup":
+		s.handleRelayCleanup(w, r, id)
 	default:
 		writeJSONError(w, http.StatusNotFound, "not_found", "not found")
 	}
@@ -1794,6 +1806,7 @@ func buildConductorInitialPrompt(orchestrationID string, roles map[string]orches
 		b.WriteString("  many-ai-cli orchestrate spawn --role <role> --provider <provider> --model <model> \"<prompt>\"\n")
 	}
 	b.WriteString("Do not call the Hub HTTP API or handle any auth token directly; this subcommand does it for you.\n")
+	b.WriteString("To run a plan file through the implementation→review→fix relay without conducting it yourself, run: many-ai-cli orchestrate relay --plan <path-to-plan.md> (roles come from the mapping above; pass --impl/--review provider[/model] if no mapping is configured; add --strong provider[/model] to hand a C to a stronger implementer when it keeps failing review; the relay works in its own git worktree unless you pass --same-tree). Relay children are driven by the Hub: do not spawn or send to them yourself, and you may close this session while a relay is running — it continues without you and you will be notified when it finishes.\n")
 	// 2026-07-04 の実運用（plan_orchestration-conductor-improvements.md C3）で確立した
 	// conductor 運用ルール。spawn 反復による枠涸渇・停止指示の解釈違い・レビューと修正の
 	// レースを構造的に防ぐ。

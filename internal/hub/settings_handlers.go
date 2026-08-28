@@ -324,8 +324,9 @@ func (s *Server) handleOrchestrationConfig(w http.ResponseWriter, r *http.Reques
 		providers := append([]string(nil), s.cfg.Orchestration.SpawnConfirmProviders...)
 		childTimeout := s.cfg.Orchestration.ChildTimeoutSeconds
 		timeoutRespawn := s.cfg.Orchestration.TimeoutRespawn
+		maxChildrenPerParent := s.cfg.Orchestration.MaxChildrenPerParent
 		s.cfgMu.Unlock()
-		writeJSON(w, map[string]any{"board_notify_mode": string(mode), "spawn_confirm_mode": string(spawnMode), "spawn_confirm_providers": providers, "child_timeout_seconds": childTimeout, "timeout_respawn": timeoutRespawn})
+		writeJSON(w, map[string]any{"board_notify_mode": string(mode), "spawn_confirm_mode": string(spawnMode), "spawn_confirm_providers": providers, "child_timeout_seconds": childTimeout, "timeout_respawn": timeoutRespawn, "max_children_per_parent": maxChildrenPerParent})
 	case http.MethodPost:
 		var body struct {
 			BoardNotifyMode       config.BoardNotifyMode  `json:"board_notify_mode"`

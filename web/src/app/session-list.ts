@@ -8,7 +8,7 @@ import { attachTerminal, claimPtyResizeOwnership, ensureTerminal, refitAndStickT
 import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, renderSessionInfoChip, updateChatCountBadge } from './settings.js';
 import { syncElapsedTimer } from './ws-client.js';
 import { renderApprovalSuppressedBannerFor, setMultiQuestionBannerVisible } from './approval-ui.js';
-import { detectApproval, releaseActionBarIfOwnedByOther, setActionBarFocus } from './approval.js';
+import { detectApproval, isAIProvider, releaseActionBarIfOwnedByOther, setActionBarFocus } from './approval.js';
 import { getSessionAgentInfo, getSessionCtxPct, onActiveSessionChanged } from './token-statusbar.js';
 import { rewireChatHistorySub } from './chat-history.js';
 import { doneSummaryDisplayText, doneSummaryKindSuffix, doneSummaryLine, getDoneSummary } from './done-summary.js';
@@ -17,6 +17,7 @@ import { FilesTabManager } from './files-view.js';
 import { dirnameForPath } from './path-links.js';
 import { getHubWorkflowEntry, isHubWorkflowAuthoritative } from './workflow-store.js';
 import { formatLongprocDuration, longprocBadgeClass, longprocStatus } from './longproc.js';
+import { openRelayDialog } from './relay-dialog.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -979,6 +980,21 @@ export function renderSessionList() {
           FilesTabManager.openFilesTabAtFile(s.id, s.orchestration_id, boardDir, boardDir, s.board_path);
         };
         actions.appendChild(boardBtn);
+      }
+
+      // AI セッション（子ではない）から relay を開始する入口。conductor の進行中 relay
+      // の有無にかかわらず、追加の relay を開けるようにする。
+      if (!s.parent_session_id && isAIProvider(String(s.provider || ''))) {
+        const relayBtn = document.createElement('button');
+        relayBtn.className = 'session-relay-open-btn';
+        relayBtn.textContent = '🔁';
+        relayBtn.title = t('relay_start');
+        relayBtn.setAttribute('aria-label', relayBtn.title);
+        relayBtn.onclick = (e) => {
+          e.stopPropagation();
+          openRelayDialog(s.id);
+        };
+        actions.appendChild(relayBtn);
       }
 
       const xBtn = document.createElement('button');
