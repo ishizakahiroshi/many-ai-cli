@@ -104,6 +104,7 @@
   "zero_session_step3_body": "複数の CLI を同時に起動しても、進行と承認待ちはここに集まります。設定からスマホ接続やデスクトップ通知も有効にできます。",
   "zero_session_tour": "60 秒ツアーを見る",
   "zero_session_docs": "ドキュメントを開く",
+  "zero_session_wiring": "skills とルールを 1 本にまとめる",
   "no_project": "プロジェクト未設定",
   "last_output": "最終応答: ",
   "dismiss_session": "セッションを閉じる",

@@ -104,6 +104,7 @@
   "zero_session_step3_body": "Start several CLIs and their progress and approval requests all collect here. Enable mobile access and desktop notifications from Settings.",
   "zero_session_tour": "Take the 60-second tour",
   "zero_session_docs": "Open documentation",
+  "zero_session_wiring": "Share skills and rules across CLIs",
   "no_project": "No project",
   "last_output": "Last output: ",
   "dismiss_session": "Close session",

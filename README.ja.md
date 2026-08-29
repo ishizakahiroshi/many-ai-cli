@@ -336,6 +336,17 @@ sha256sum -c SHA256SUMS.txt
 > なお Hub が落ちた場合でも、走行中の AI セッションはデフォルトで **60 分間 Hub の復帰を待つ**ようになっています（`config.yaml` で 0–86400 秒 = 最大 24 時間まで変更可、長時間タスクを走らせる場合は伸ばせます）。間に合わなければ自動で終了するので、Web UI 側のバグや再起動で AI 作業が即座に道連れにはなりません。詳細は「[シャットダウン・ゾンビセッション対策・Hub クラッシュ耐性](#シャットダウンゾンビセッション対策hub-クラッシュ耐性)」を参照してください。
 > Linux（GNOME）の場合、デスクトップに作成された `.desktop` ショートカットは初回に右クリック → **「起動を許可（Allow Launching）」** を選ぶ必要があります（OS 仕様）。
 
+### Tips: skills 棚とルールの正本を、全 CLI で 1 本にまとめる
+
+CLI を何本も並べて動かし始めると、次に効いてくるのは many-ai-cli 側ではありません。CLI ごとに skills の置き場が違い、読むルールファイルの名前も違います（`CLAUDE.md` / `AGENTS.md` / `GEMINI.md` …）。同じルールを CLI の数だけ書き写すところが、いちばん重い二重管理になります。
+
+skills 棚もルールの正本も **1 本だけ持ち**、各 CLI にはそれぞれの流儀で到達させれば済みます。棚はシンボリックリンク（Windows はジャンクション）、ルールは 1 行の参照で届きます。下記の手順書は Claude Code / Codex / OpenCode / GitHub Copilot CLI / Grok / Cursor Agent / Gemini CLI / Antigravity の 8 つを対象にしていて、**どの CLI が実際にどのファイルを読むかは推測ではなく実測**しています。
+
+- 手順の正本: [docs/manual_shared-skills-and-rules.md](docs/manual_shared-skills-and-rules.md)。AI エージェントへそのまま渡して実行させる前提で書いてあり、停止条件も入っています（本文は英語ですが、コマンドは同じです）
+- 図解つきの解説（日本語）: <https://ishizakahiroshi.com/articles/2026/2026-08-30_multi-ai-cli-shared-skills-and-rules/>
+
+本ツールとは独立した内容です。Hub の有無に関係なく成立する配線で、複数 CLI を並行運用するときに相性が良い、という位置づけです。
+
 ### 統合ランチャー（Windows / Linux / macOS）
 
 `many-ai-cli-launcher`（Windows では `many-ai-cli-launcher.exe`）は WSL とリモートサーバー（SSH）の両方を対象に接続プロファイルを管理できる統合ランチャーです。プロファイルは `~/.many-ai-cli/launcher-profiles.yaml` に保存されます。
