@@ -42,7 +42,7 @@ func Run(args []string) error {
 	case "relay":
 		return runRelay(args[1:])
 	default:
-		return fmt.Errorf("orchestrate: unknown subcommand %q", args[0])
+		return fmt.Errorf("orchestrate: unknown subcommand %q (want spawn|send|relay)", args[0])
 	}
 }
 
