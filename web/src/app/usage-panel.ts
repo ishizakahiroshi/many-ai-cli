@@ -51,6 +51,7 @@ interface UsageProfile {
   plan?: string;
   retrieved_at?: string;
   auth_status?: 'ready' | 'login_required' | 'status_unknown' | string;
+  auth_checking?: boolean;
   probe_available?: boolean;
   probe_state?: string;
   claude?: ClaudeUsage;
@@ -68,11 +69,19 @@ interface UsageResponse {
 }
 
 const PROBE_CONFIRM_KEY = 'many-ai-cli-usage-probe-confirmed';
+// The Hub answers with whatever login state it already knows and re-reads the
+// rest in the background, so the panel polls until nothing is marked checking.
+// The server caps each vendor CLI read at 2s, so this window only has to cover
+// a few of them queued behind the worker limit.
+const AUTH_POLL_INTERVAL_MS = 900;
+const AUTH_POLL_WINDOW_MS = 20000;
 const running = new Set<string>();
 const failures = new Map<string, string>();
 let panelRoot: HTMLElement | null = null;
 let usageData: UsageResponse | null = null;
 let refreshInFlight: Promise<void> | null = null;
+let authPollTimer: number | null = null;
+let authPollDeadline = 0;
 
 function tx(key: string, fallback: string, vars: Record<string, unknown> = {}): string {
   let value = t(key, vars);
@@ -197,6 +206,11 @@ function settingsAction(provider: string, id: string): string {
 
 function authNotice(provider: string, profile: UsageProfile): string {
   const state = profile.auth_status;
+  if (profile.auth_checking) {
+    // Only shown when nothing is cached yet. A known state stays on screen
+    // while the background re-read runs, so this never replaces an answer.
+    return `<div class="usage-auth usage-auth--checking" role="status"><span class="usage-auth-spinner" aria-hidden="true"></span><span>${escapeHtml(tx('usage_auth_checking', 'Checking login status'))}</span></div>`;
+  }
   if (state === 'login_required') {
     return `<div class="usage-auth usage-auth--required" role="alert"><strong>${escapeHtml(tx('usage_auth_required', 'Re-authentication required'))}</strong><span>${escapeHtml(tx('usage_auth_required_detail', 'This provider profile is not signed in.'))}</span>${settingsAction(provider, profile.id)}</div>`;
   }
@@ -297,6 +311,51 @@ function profilePlan(provider: string, profile: UsageProfile): string {
   const observed = provider === 'codex' ? profile.codex?.plan_type?.trim() || '' : '';
   if (configured && observed && configured.toLowerCase() === observed.toLowerCase()) return configured;
   return observed || configured;
+}
+
+// renderSkeleton draws placeholder rows for the first open, when there is no
+// previous answer to leave on screen. Without it the dropdown shows only the
+// static links until the fetch lands, which reads as "nothing is happening".
+function renderSkeleton(): void {
+  if (!panelRoot) return;
+  panelRoot.querySelectorAll('.usage-profile-list').forEach((el) => el.remove());
+  for (const anchor of Array.from(panelRoot.querySelectorAll<HTMLElement>('[data-usage-provider]'))) {
+    const list = document.createElement('div');
+    list.className = 'usage-profile-list usage-profile-list--loading';
+    list.setAttribute('role', 'status');
+    list.setAttribute('aria-label', tx('usage_loading', 'Loading usage'));
+    list.innerHTML = `<div class="usage-profile-row"><div class="usage-skeleton-line" aria-hidden="true"></div><div class="usage-skeleton-line usage-skeleton-line--short" aria-hidden="true"></div></div>`;
+    anchor.insertAdjacentElement('afterend', list);
+  }
+}
+
+function clearProfileLists(): void {
+  panelRoot?.querySelectorAll('.usage-profile-list').forEach((el) => el.remove());
+}
+
+function anyAuthChecking(response: UsageResponse | null): boolean {
+  if (!response) return false;
+  return (response.providers || []).some((provider) => (provider.profiles || []).some((profile) => profile.auth_checking === true));
+}
+
+function stopAuthPoll(): void {
+  if (authPollTimer !== null) {
+    clearTimeout(authPollTimer);
+    authPollTimer = null;
+  }
+}
+
+function scheduleAuthPoll(): void {
+  if (authPollTimer !== null) return;
+  if (!anyAuthChecking(usageData)) return;
+  if (Date.now() >= authPollDeadline) return;
+  authPollTimer = window.setTimeout(() => {
+    authPollTimer = null;
+    // A closed dropdown has nothing to update, and polling it would keep
+    // starting vendor CLIs on the Hub for a panel nobody is looking at.
+    if (!panelRoot || panelRoot.hidden) return;
+    void runRefresh(false, true);
+  }, AUTH_POLL_INTERVAL_MS);
 }
 
 function renderProfiles(response: UsageResponse): void {
@@ -520,7 +579,18 @@ export function initUsagePanel(dropdown: HTMLElement): void {
 }
 
 export async function refreshUsagePanel(forceAuth = false): Promise<void> {
-  if (!panelRoot || refreshInFlight) return refreshInFlight;
+  return runRefresh(forceAuth, false);
+}
+
+async function runRefresh(forceAuth: boolean, fromPoll: boolean): Promise<void> {
+  if (!panelRoot) return;
+  if (!fromPoll) {
+    // A user-initiated open (or Retry) starts a fresh polling window.
+    authPollDeadline = Date.now() + AUTH_POLL_WINDOW_MS;
+    stopAuthPoll();
+    if (!usageData) renderSkeleton();
+  }
+  if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
     try {
       const response = await apiFetch(`/api/subscription-usage${forceAuth ? '?refresh_auth=1' : ''}`);
@@ -534,11 +604,14 @@ export async function refreshUsagePanel(forceAuth = false): Promise<void> {
         }
       }
       renderProfiles(usageData);
+      scheduleAuthPoll();
     } catch (_) {
       // Keep the static links and the last successful values visible. The UI
       // intentionally has no stale/expiry state; a failed refresh is not proof
       // that the last provider-reported value is invalid.
       if (usageData) renderProfiles(usageData);
+      // A failed first load must not leave the skeleton pretending to load.
+      else clearProfileLists();
     } finally {
       refreshInFlight = null;
     }
