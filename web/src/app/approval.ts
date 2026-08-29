@@ -2312,7 +2312,7 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
     }
   }
   // ===== 詳細メッセージ＋送信バーを横並びに =====
-  // 左に「送信確認 / クリア」、右にメッセージ詳細を置く。縦積みの送信バー行を無くし、
+  // 左に「クリア / 送信確認」、右にメッセージ詳細を置く。縦積みの送信バー行を無くし、
   // 承認ポップアップの高さを抑える（CLI 表示欄を広く保ち、メッセージ確認をしやすくする）。
   const detailRow = document.createElement('div');
   detailRow.className = 'action-qdetail-row';
@@ -2327,17 +2327,17 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   const actionBtns = document.createElement('div');
   actionBtns.className = 'action-qdetail-btns';
 
-  const submitBtn = document.createElement('button');
-  submitBtn.className = 'action-submit-btn';
-  submitBtn.textContent = t('approval_batch_confirm');
-  submitBtn.onclick = (e) => { e.stopPropagation(); openBatchConfirm(sessionId); };
-  actionBtns.appendChild(submitBtn);
-
   const clearBtn = document.createElement('button');
   clearBtn.className = 'action-clear-btn';
   clearBtn.textContent = t('approval_batch_clear');
   clearBtn.onclick = (e) => { e.stopPropagation(); clearBatchSelections(sessionId); };
   actionBtns.appendChild(clearBtn);
+
+  const submitBtn = document.createElement('button');
+  submitBtn.className = 'action-submit-btn';
+  submitBtn.textContent = t('approval_batch_confirm');
+  submitBtn.onclick = (e) => { e.stopPropagation(); openBatchConfirm(sessionId); };
+  actionBtns.appendChild(submitBtn);
 
   actions.appendChild(actionBtns);
   detailRow.appendChild(actions);
@@ -2651,16 +2651,6 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
   };
   footer.appendChild(selectAllBtn);
 
-  const submitBtn = document.createElement('button');
-  submitBtn.className = 'action-submit-btn';
-  submitBtn.textContent = t('approval_batch_submit');
-  submitBtn.disabled = selected.size === 0;
-  submitBtn.onclick = (e) => {
-    e.stopPropagation();
-    sendMultiSelectChoices(sessionId);
-  };
-  footer.appendChild(submitBtn);
-
   const clearBtn = document.createElement('button');
   clearBtn.className = 'action-clear-btn';
   clearBtn.textContent = t('approval_batch_clear');
@@ -2670,6 +2660,16 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
     clearMultiSelectSelections(sessionId);
   };
   footer.appendChild(clearBtn);
+
+  const submitBtn = document.createElement('button');
+  submitBtn.className = 'action-submit-btn';
+  submitBtn.textContent = t('approval_batch_submit');
+  submitBtn.disabled = selected.size === 0;
+  submitBtn.onclick = (e) => {
+    e.stopPropagation();
+    sendMultiSelectChoices(sessionId);
+  };
+  footer.appendChild(submitBtn);
 
   // 「✕ 承認」と同じ manualHide（questionKey）抑止。
   const closeMultiBtn = document.createElement('button');
