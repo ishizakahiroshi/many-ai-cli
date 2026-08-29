@@ -70,9 +70,28 @@ const (
 	approvalVisibleLease = 15 * time.Second
 	wsMaxPayloadBytes    = 2 << 20 // 2 MiB: UI/wrapper JSON frame receive cap
 
-	bracketedPasteStart       = "\x1b[200~"
-	bracketedPasteEnd         = "\x1b[201~"
-	bracketedPasteSubmitDelay = 50 * time.Millisecond
+	bracketedPasteStart = "\x1b[200~"
+	bracketedPasteEnd   = "\x1b[201~"
+
+	// 確定 \r（bracketed-paste 本文の submit）の送出タイミング。固定遅延ではなく
+	// 「PTY 出力が一定時間静止した」ことを待ってから 1 回だけ撃つ。値と理由は
+	// web/src/app/deferred-enter.ts と同一で、2026-07-11 の同型修正が web 経路にだけ
+	// 入り Go 側が 50ms 固定のまま残っていた分を揃えた
+	// （plan_hub-submit-enter-not-confirmed.md C1）。
+	submitEnterIdleSettle = 120 * time.Millisecond
+	submitEnterMinWait    = 120 * time.Millisecond
+	// codex / opencode（Rust TUI）は大きいペーストを [Pasted Content N chars] へ
+	// ほぼ無出力で畳み込むため、出力静止が瞬時に成立して早撃ちになる。これらは
+	// 最低待機を長く取り、ペースト確定が落ち着いてから Enter を撃つ。
+	submitEnterSlowMinWait = 700 * time.Millisecond
+	// 出力が止まらない病的ケースの保険。短すぎると畳み込みが終わる前に \r を
+	// 強制発火してビジー中の CLI に吸収されるので、通常の畳み込み時間と競合しない
+	// 大きさにする（web 側と同じ 30s）。
+	submitEnterMaxWait = 30 * time.Second
+	submitEnterPoll    = 20 * time.Millisecond
+	// 確定 \r を送った後、CLI が動き出したとみなすまでに出力を待つ時間（C2）。
+	// この窓で PTY 出力が 1 バイトも来なければ未確定とみなして \r を 1 回だけ再送する。
+	submitEnterConfirmWindow = 1500 * time.Millisecond
 
 	// OSC シーケンスをユーザーターン境界マーカーとして ptyBuf に注入する。
 	// xterm.js はこのシーケンスを画面に表示しない。
@@ -619,6 +638,11 @@ type Server struct {
 	// flushPendingInput が順番に再送するため、入力が黙って失われない。
 	// sessionsMu で保護。
 	pendingInput map[int][]string
+
+	// submitEnter は確定 CR の送出・確認タイミング（input_gate.go）。
+	// ゼロ値は本番既定（submitEnter* 定数）を意味し、テストだけが実時間を
+	// 待たずに経路を検証するために埋める。
+	submitEnter submitEnterTiming
 
 	slashCmdMu    sync.Mutex
 	slashCmdCache map[string]*slashCmdCacheEntry // key: provider
