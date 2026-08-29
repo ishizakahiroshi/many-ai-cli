@@ -1027,18 +1027,33 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 			defer cleanupCfg()
 		}
 	}
-	// C2 (plan_orchestration-spawn-ui-exposure.md): conductor / orchestration child
-	// セッションの実 CLI プロセスにだけ、`many-ai-cli orchestrate spawn` が自力で
-	// Hub API を叩けるよう session ID と Hub token を env 経由で渡す。AI がプロンプト上で
+	// 実 CLI プロセスへ session ID と Hub token を env で渡す。`many-ai-cli orchestrate`
+	// （spawn / send / relay）が自力で Hub API を叩けるようにするため。AI がプロンプト上で
 	// token を扱わずに済むよう、コマンドライン引数ではなく継承 env に載せる（usage-relay と
-	// 同じ受け渡しパターン）。オーケストレーション対象外セッションには一切付与しない
-	// （既存セッションの env 露出面を広げないため）。
-	var providerExtraEnv []string
-	if reg.OrchestrationID != "" {
-		providerExtraEnv = []string{
-			fmt.Sprintf("MANY_AI_CLI_SESSION_ID=%d", sessionID),
-			fmt.Sprintf("%s=%s", hubTokenEnvName, cfg.Token),
-		}
+	// 同じ受け渡しパターン）。
+	//
+	// 全セッションへ渡す理由（2026-08-29 変更・plan_cross-session-messaging-generalization.md C1）:
+	//
+	// 元は `reg.OrchestrationID != ""` のときだけ渡していた（既存セッションの env 露出面を
+	// 広げないため・plan_orchestration-spawn-ui-exposure.md C2）。しかしその条件だと、
+	// 普通に始めたセッションは途中から「この作業は子に投げたい」と思っても切り替えられない。
+	// **env はプロセス起動時にしか渡せない**（下の startProcess を通った後で環境変数を足す
+	// 方法は無い）ので、「後から昇格させる」を実現する手段は「最初から渡しておく」しか無い。
+	// Hub 側は既に昇格に対応していて、OrchestrationID を持たない親からの spawn-child でも
+	// orchestration ID を採番して markConductor する（orchestration.go の
+	// preparePromptAndWorktree）。つまり足りていなかったのはこの env だけだった。
+	//
+	// 何が広がるか（納得ずくで受け入れる）: token を持つセッションは spawn / send / relay に
+	// 加えて、token guard だけで守られている Hub API（`POST /api/sessions/:id/inject` 等）も
+	// 叩ける。これを閉じるなら endpoint 単位のスコープが要るが、**全セッションは同じユーザーの
+	// 同じマシンで動くので、token を渡さないことは OS 的な防御にならない**（その気になれば
+	// 他セッションのプロセスからでも読める）。ここで守っているのは「AI に担当外のことを
+	// させない」ガードレールであって悪意への境界ではないため、スコープ付き token の実装は
+	// 割に合わないと判断した。境界が必要になったら、その時は Hub 側に endpoint スコープを
+	// 入れる（env の配り方を戻すのではなく）。
+	providerExtraEnv := []string{
+		fmt.Sprintf("MANY_AI_CLI_SESSION_ID=%d", sessionID),
+		fmt.Sprintf("%s=%s", hubTokenEnvName, cfg.Token),
 	}
 	ps, err := startProcess(provider, providerArgs, cwd, initCols, initRows, providerExtraEnv)
 	if err != nil {
