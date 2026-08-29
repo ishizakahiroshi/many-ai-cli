@@ -1,6 +1,9 @@
 package hub
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -79,8 +82,7 @@ func TestTranscriptSuppliesMarkerWhenScreenDroppedIt(t *testing.T) {
 	s := newTestServer()
 	ses := registerTestSession(s, 1, "claude")
 	ses.vt = vt
-	ses.agentChatPath = "transcript.jsonl"
-	s.scanTranscriptApprovalMarkers(1, []agentChatMessage{
+	s.scanTranscriptApprovalMarkers(1, "claude", "transcript.jsonl", []agentChatMessage{
 		{Role: "assistant", Kind: "text", Text: transcriptAssistantText()},
 	}, false, time.Now())
 
@@ -122,18 +124,21 @@ func TestApprovalMarkerSourceIsTranscriptOnlyWhenReadable(t *testing.T) {
 	cases := []struct {
 		provider string
 		path     string
+		misses   int
 		want     bool
 	}{
-		{"claude", "transcript.jsonl", true},
-		{"codex", "rollout.jsonl", true},
-		{"claude", "", false},
-		{"grok", "transcript.jsonl", false},
-		{"copilot", "transcript.jsonl", false},
+		{"claude", "transcript.jsonl", 0, true},
+		{"codex", "rollout.jsonl", 0, true},
+		{"claude", "transcript.jsonl", approvalMarkerTranscriptMissLimit - 1, true},
+		{"claude", "transcript.jsonl", approvalMarkerTranscriptMissLimit, false},
+		{"claude", "", 0, false},
+		{"grok", "transcript.jsonl", 0, false},
+		{"copilot", "transcript.jsonl", 0, false},
 	}
 	for _, tc := range cases {
-		ses := &session{Provider: tc.provider, agentChatPath: tc.path}
+		ses := &session{Provider: tc.provider, agentChatPath: tc.path, agentChatMissStreak: tc.misses}
 		if got := approvalMarkerSourceIsTranscriptLocked(ses); got != tc.want {
-			t.Fatalf("provider=%q path=%q: got %v, want %v", tc.provider, tc.path, got, tc.want)
+			t.Fatalf("provider=%q path=%q misses=%d: got %v, want %v", tc.provider, tc.path, tc.misses, got, tc.want)
 		}
 	}
 	if approvalMarkerSourceIsTranscriptLocked(nil) {
@@ -152,15 +157,14 @@ func TestTranscriptPrimeOnlyRestoresTheLastMessage(t *testing.T) {
 	}
 	s := newTestServer()
 	ses := registerTestSession(s, 1, "claude")
-	ses.agentChatPath = "transcript.jsonl"
-	s.scanTranscriptApprovalMarkers(1, older, true, time.Now())
+	s.scanTranscriptApprovalMarkers(1, "claude", "transcript.jsonl", older, true, time.Now())
 	if ses.approvalMarkerCandidateKey != "" {
 		t.Fatal("prime が過去ターンの質問を承認として立て直した")
 	}
 
 	pending := append(append([]agentChatMessage(nil), older...),
 		agentChatMessage{Role: "assistant", Kind: "text", Text: transcriptAssistantText()})
-	s.scanTranscriptApprovalMarkers(1, pending, true, time.Now())
+	s.scanTranscriptApprovalMarkers(1, "claude", "transcript.jsonl", pending, true, time.Now())
 	if ses.approvalMarkerCandidateKey == "" {
 		t.Fatal("prime が「まだ止まっている質問」を復元していない")
 	}
@@ -171,12 +175,20 @@ func TestTranscriptPrimeOnlyRestoresTheLastMessage(t *testing.T) {
 func TestTranscriptScanIgnoresNonTranscriptSessions(t *testing.T) {
 	s := newTestServer()
 	ses := registerTestSession(s, 1, "grok")
-	ses.agentChatPath = "transcript.jsonl"
-	s.scanTranscriptApprovalMarkers(1, []agentChatMessage{
+	s.scanTranscriptApprovalMarkers(1, "grok", "transcript.jsonl", []agentChatMessage{
 		{Role: "assistant", Kind: "text", Text: transcriptAssistantText()},
 	}, false, time.Now())
 	if ses.approvalMarkerCandidateKey != "" {
 		t.Fatal("grok セッションへトランスクリプト経路から配信した")
+	}
+
+	// パスが未解決の poll（＝まだ読めていない）からも配信しない。
+	claude := registerTestSession(s, 2, "claude")
+	s.scanTranscriptApprovalMarkers(2, "claude", "", []agentChatMessage{
+		{Role: "assistant", Kind: "text", Text: transcriptAssistantText()},
+	}, false, time.Now())
+	if claude.approvalMarkerCandidateKey != "" {
+		t.Fatal("パス未解決の poll から配信した")
 	}
 }
 
@@ -229,4 +241,133 @@ func TestKickAgentChatPollDoesNotRescheduleFiredTimer(t *testing.T) {
 		t.Fatal("未発火タイマーが前倒しされていない")
 	}
 	ses.agentChatTimer.Stop()
+}
+
+// writeMarkerTranscript は assistant 本文に承認マーカーを含む claude トランスクリプトを書く。
+func writeMarkerTranscript(t *testing.T, dir, sessionID, cwd, text string) string {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	records := []map[string]any{
+		{"type": "user", "sessionId": sessionID, "cwd": cwd, "timestamp": "2026-08-29T04:54:20Z",
+			"message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "text", "text": "進めて"}}}},
+		{"type": "assistant", "timestamp": "2026-08-29T04:54:27Z",
+			"message": map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "text", "text": text}}}},
+	}
+	var content []byte
+	for _, record := range records {
+		line, err := json.Marshal(record)
+		if err != nil {
+			t.Fatal(err)
+		}
+		content = append(append(content, line...), '\n')
+	}
+	path := filepath.Join(dir, sessionID+".jsonl")
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// newTranscriptPollSession はトランスクリプトの実ファイルを持つ claude セッションを作る。
+func newTranscriptPollSession(t *testing.T) (*Server, *session, string) {
+	t.Helper()
+	s := newTestServer()
+	ses := registerTestSession(s, 1, "claude")
+	sessionID := "123e4567-e89b-42d3-a456-426614174000"
+	cwd := `C:\workspace\many-ai-cli`
+	claudeDir := t.TempDir()
+	projectDir := filepath.Join(claudeDir, "projects", claudeProjectDirName(cwd))
+	path := writeMarkerTranscript(t, projectDir, sessionID, cwd, transcriptAssistantText())
+
+	s.sessionsMu.Lock()
+	ses.CWD = cwd
+	ses.ClaudeDir = claudeDir
+	ses.AgentSessionID = sessionID
+	ses.StartedAt = "2026-08-29T04:54:19Z"
+	ses.lastOutputAt = time.Now()
+	ses.agentChatRunning = true
+	ses.agentChatGeneration = 1
+	s.sessionsMu.Unlock()
+	t.Cleanup(func() { s.stopAgentChatTail(1) })
+	return s, ses, path
+}
+
+// pollTranscriptOnce は poll を 1 回だけ同期実行し、その poll が仕掛けた次回タイマーを止める。
+func pollTranscriptOnce(s *Server, id int) {
+	s.pollAgentChat(id, 1)
+	s.sessionsMu.Lock()
+	if ses := s.sessions[id]; ses != nil && ses.agentChatTimer != nil {
+		ses.agentChatTimer.Stop()
+		ses.agentChatTimer = nil
+	}
+	s.sessionsMu.Unlock()
+}
+
+// パスを初めて解決した poll のバッチを捨てないこと（敵対レビュー Finding 1）。
+//
+// 供給元の判定に session の agentChatPath を使うと、それを書くのは同じ poll の末尾
+// なので、初回解決時は必ず空文字を読んでバッチが丸ごと落ちる。落ちるのは prime の
+// バッチ＝「まだ答えられていない質問」を復元する経路そのもので、Hub 再起動後の
+// 初回登録や --resume でパスが変わったときに承認パネルが戻らなくなる。
+func TestPollRestoresPendingApprovalOnFirstPathResolution(t *testing.T) {
+	s, ses, path := newTranscriptPollSession(t)
+	if ses.agentChatPath != "" {
+		t.Fatal("前提が違う: 初回 poll の前に agentChatPath が埋まっている")
+	}
+
+	pollTranscriptOnce(s, 1)
+
+	if ses.approvalMarkerCandidateKey == "" {
+		t.Fatal("初回 poll で承認候補が立っていない（パス解決と同じ poll のバッチが捨てられている）")
+	}
+	if ses.agentChatPath != path {
+		t.Fatalf("agentChatPath = %q, want %q", ses.agentChatPath, path)
+	}
+	if !approvalMarkerSourceIsTranscriptLocked(ses) {
+		t.Fatal("読めているのに供給元がトランスクリプトになっていない")
+	}
+}
+
+// トランスクリプトが読めなくなったら VT へ退避し、読めるようになったら戻ること
+// （敵対レビュー Finding 2）。固定したままだと承認が無音で沈黙する。
+func TestTranscriptSourceFallsBackToVTWhenUnreadable(t *testing.T) {
+	s, ses, path := newTranscriptPollSession(t)
+	pollTranscriptOnce(s, 1)
+	if !approvalMarkerSourceIsTranscriptLocked(ses) {
+		t.Fatal("前提が違う: 最初の poll でトランスクリプトが供給元になっていない")
+	}
+
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < approvalMarkerTranscriptMissLimit-1; i++ {
+		pollTranscriptOnce(s, 1)
+		if !approvalMarkerSourceIsTranscriptLocked(ses) {
+			t.Fatalf("%d 回目の失敗で退避した。一過性の失敗で供給元を揺らしている", i+1)
+		}
+	}
+	pollTranscriptOnce(s, 1)
+	if approvalMarkerSourceIsTranscriptLocked(ses) {
+		t.Fatalf("連続 %d 回読めなくても VT へ退避していない（承認が無音で沈黙する）", approvalMarkerTranscriptMissLimit)
+	}
+
+	// 退避後は VT 経路が再び承認を立てられること。
+	ses.approvalMarkerCandidateKey = ""
+	ses.approvalMarkerSourceEpoch = 0
+	ses.vt = newVTBuffer(60, 20)
+	ses.vt.Write([]byte(strings.ReplaceAll(strings.Join(transcriptMarkerBody, "\n"), "\n", "\r\n")))
+	s.evaluateReplayApproval(1)
+	if ses.approvalMarkerCandidateKey == "" {
+		t.Fatal("退避後も VT から承認を立てられていない")
+	}
+
+	// 読めるようになったら戻る。
+	writeMarkerTranscript(t, filepath.Dir(path), strings.TrimSuffix(filepath.Base(path), ".jsonl"),
+		ses.CWD, transcriptAssistantText())
+	pollTranscriptOnce(s, 1)
+	if !approvalMarkerSourceIsTranscriptLocked(ses) {
+		t.Fatal("読めるようになっても供給元がトランスクリプトへ戻らない")
+	}
 }

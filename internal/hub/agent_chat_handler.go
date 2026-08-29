@@ -366,7 +366,13 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 	}
 	// 承認マーカーはチャット表示より前に出す。下の配信ループは UI 側の都合で
 	// 途中 return しうるので、そこへ承認を巻き込ませない。
-	s.scanTranscriptApprovalMarkers(id, messages, stateWasReset, time.Now())
+	// path は session ではなくこの poll が持っている値を渡す（session 側の
+	// agentChatPath はこの関数の末尾で書くので、ここで読むと 1 周ぶん古い）。
+	transcriptPath := ""
+	if pathOK {
+		transcriptPath = path
+	}
+	s.scanTranscriptApprovalMarkers(id, provider, transcriptPath, messages, stateWasReset, time.Now())
 
 	for _, message := range messages {
 		if !s.broadcastAgentChatIfCurrent(id, generation, proto.Message{
@@ -391,6 +397,20 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 		cur.agentChatOffset = newOffset
 		cur.agentChatParseState = parseState
 	}
+	// トランスクリプトが読めなくなったら承認マーカーの供給元を VT へ戻す
+	// （approval_marker_transcript.go の「読めなくなったとき」節が理由の正本）。
+	transcriptFellBack := false
+	transcriptRecovered := false
+	knownTranscriptPath := cur.agentChatPath
+	if pathOK && err == nil {
+		transcriptRecovered = cur.agentChatPath != "" &&
+			cur.agentChatMissStreak >= approvalMarkerTranscriptMissLimit
+		cur.agentChatMissStreak = 0
+	} else if cur.agentChatMissStreak < approvalMarkerTranscriptMissLimit {
+		cur.agentChatMissStreak++
+		transcriptFellBack = cur.agentChatPath != "" &&
+			cur.agentChatMissStreak == approvalMarkerTranscriptMissLimit
+	}
 	if len(messages) > 0 {
 		cur.agentChatLastAt = now
 	}
@@ -405,6 +425,17 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 		s.scheduleAgentChatPollLocked(id, generation)
 	}
 	s.sessionsMu.Unlock()
+	// 供給元が入れ替わったことは必ず記録する。無音で沈黙するのが本 bugfix で
+	// 消そうとした失敗そのものなので、退避したことまで無音にしない。
+	if transcriptFellBack {
+		s.logger.Warn("approval marker source fell back to VT mirror",
+			"session_id", id, "provider", provider,
+			"misses", approvalMarkerTranscriptMissLimit, "path", knownTranscriptPath, "err", err)
+	}
+	if transcriptRecovered {
+		s.logger.Info("approval marker source back on transcript",
+			"session_id", id, "provider", provider)
+	}
 	for _, completion := range codexCompletions {
 		s.handleCodexTaskCompletion(id, completion)
 	}

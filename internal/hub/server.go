@@ -298,6 +298,10 @@ type session struct {
 	agentChatGeneration uint64
 	agentChatRunning    bool
 	agentChatLastAt     time.Time
+	// agentChatMissStreak は連続してトランスクリプトを読めなかった poll の回数。
+	// 承認マーカーの供給元をトランスクリプトへ固定したまま戻れなくなるのを防ぐ
+	// 退避路で使う（approval_marker_transcript.go）。
+	agentChatMissStreak int
 
 	// JSON 外: wrapper に最後に送った PTY サイズ（同サイズの resize を skip して不要な SIGWINCH を防ぐ）
 	lastCols      int

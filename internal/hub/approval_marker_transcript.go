@@ -11,6 +11,10 @@ import (
 // 使わない（ブラウザは approval_marker を受け取った時点で hub_marker として扱う）。
 const approvalSourceTranscript = "transcript"
 
+// approvalMarkerTranscriptMissLimit はトランスクリプトを読めない poll が何回続いたら
+// 供給元を VT ミラーへ戻すか。理由は下の「読めなくなったとき」節。
+const approvalMarkerTranscriptMissLimit = 3
+
 // 承認マーカーの供給元 — claude / codex は端末ミラーではなくトランスクリプトを読む。
 //
 // なぜ移したか（2026-08-29 実測・docs/local/bugfix_approval-marker-block-overflows-screen_2026-08-29.md）:
@@ -35,8 +39,28 @@ const approvalSourceTranscript = "transcript"
 // パスがまだ 1 度も解決できていない間は、これまでどおり VT ミラーが供給元になる。
 // agentChatPath はポーラーがファイルを実際に見つけた後にだけ埋まるので、
 // 「読める見込み」ではなく「読めた」ことを条件にできる。
+//
+// 読めなくなったとき（敵対レビュー Finding 2 / 2026-08-29）:
+//
+// 供給元をトランスクリプトへ固定したまま戻れないと、ファイルが移動・削除された、
+// パースが通らない、といった理由で読めなくなった瞬間に承認が無音で沈黙する。
+// 読み取り失敗は Debug ログ 1 行にしかならないので、利用者からも開発者からも
+// 見えない。**それはこの bugfix が消そうとした失敗の型そのもの**なので、
+// 連続 approvalMarkerTranscriptMissLimit 回の poll でトランスクリプトを読めなければ
+// VT ミラーへ退避し、読めるようになったら戻る。
+//
+// 回数で切るのは、poll が 1 秒周期の固定リズムを持っていて「何秒読めていないか」を
+// 別に測らなくても回数がそのまま経過時間になるから。3 回にしたのは、ログの
+// ローテーションや `--resume` でのファイル差し替えのような一過性の失敗で供給元を
+// 揺らさない一方、承認を待たせる長さとしては 3 秒が上限として妥当なため。
+// 退避のときだけ Warn を 1 本出す（無音で切り替えない）。
+//
+// 退避で受け入れる代償: 承認が出たまま供給元が入れ替わると、同じ質問が VT 側の
+// candidateKey でもう一度出ることがある。承認が二重に見えるのは、承認が出ないより
+// はるかに軽い。
 func approvalMarkerSourceIsTranscriptLocked(ses *session) bool {
-	return ses != nil && isAgentChatProvider(ses.Provider) && ses.agentChatPath != ""
+	return ses != nil && isAgentChatProvider(ses.Provider) && ses.agentChatPath != "" &&
+		ses.agentChatMissStreak < approvalMarkerTranscriptMissLimit
 }
 
 // approvalMarkerFromTranscriptText は assistant メッセージ 1 通の本文から承認マーカー
@@ -59,14 +83,14 @@ func approvalMarkerFromTranscriptText(text string) *approvalMarkerBlock {
 // 質問がそこで止まっている」状態そのものなので、reattach 後に承認パネルが戻らない。
 // 回答済みだった場合は candidateKey + sourceEpoch がそのまま抑止するので、
 // ここに 2 本目の抑止を足す必要はない。
-func (s *Server) scanTranscriptApprovalMarkers(id int, messages []agentChatMessage, prime bool, detectedAt time.Time) {
-	if len(messages) == 0 {
-		return
-	}
-	s.sessionsMu.Lock()
-	transcriptSource := approvalMarkerSourceIsTranscriptLocked(s.sessions[id])
-	s.sessionsMu.Unlock()
-	if !transcriptSource {
+// 供給元の判定に session の agentChatPath を読み直さないこと。それを書くのは
+// pollAgentChat の末尾で、走査はその手前にある。session 側を見ると「これから書く値」を
+// 先に読むことになり、**パスを初めて解決した poll のバッチが丸ごと捨てられる**
+// （Hub 再起動後の初回登録・--resume でパスが変わったとき・セッションの初回登録）。
+// 捨てられるのは prime のバッチ、つまり下の「最後のメッセージだけは復元する」が
+// いちばん効いてほしい場面そのものだった。poll がその場で持っている値を渡す。
+func (s *Server) scanTranscriptApprovalMarkers(id int, provider, transcriptPath string, messages []agentChatMessage, prime bool, detectedAt time.Time) {
+	if len(messages) == 0 || transcriptPath == "" || !isAgentChatProvider(provider) {
 		return
 	}
 	if prime {
