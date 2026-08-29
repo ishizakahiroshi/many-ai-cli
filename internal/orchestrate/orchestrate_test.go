@@ -19,6 +19,17 @@ func TestParseRelayProviderModel(t *testing.T) {
 	}
 }
 
+func TestRunReportsAvailableSubcommands(t *testing.T) {
+	if err := Run(nil); err == nil || !strings.Contains(err.Error(), "spawn|send|relay") {
+		t.Fatalf("Run(nil) error = %v, want available subcommands", err)
+	}
+
+	err := Run([]string{"relayy"})
+	if err == nil || !strings.Contains(err.Error(), "unknown subcommand") || !strings.Contains(err.Error(), "spawn|send|relay") {
+		t.Fatalf("Run(relayy) error = %v, want unknown subcommand and available subcommands", err)
+	}
+}
+
 func TestRunRelayRequiresPlan(t *testing.T) {
 	if err := runRelay(nil); err == nil || !strings.Contains(err.Error(), "--plan is required") {
 		t.Fatalf("runRelay error = %v, want missing plan", err)
