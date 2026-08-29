@@ -65,3 +65,25 @@ func TestCursorAgentPermissionArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestCommandCodePermissionArgs(t *testing.T) {
+	tests := []struct {
+		name           string
+		permissionMode string
+		want           []string
+	}{
+		{name: "empty keeps approvals", permissionMode: "", want: nil},
+		{name: "default keeps approvals", permissionMode: "default", want: nil},
+		{name: "plan enables permission-mode plan", permissionMode: "plan", want: []string{"--permission-mode", "plan"}},
+		{name: "acceptEdits enables auto-accept", permissionMode: "acceptEdits", want: []string{"--auto-accept"}},
+		{name: "auto enables auto-accept", permissionMode: "auto", want: []string{"--auto-accept"}},
+		{name: "bypass enables yolo", permissionMode: "bypassPermissions", want: []string{"--yolo"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := commandCodePermissionArgs(tt.permissionMode); !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("commandCodePermissionArgs(%q) = %v, want %v", tt.permissionMode, got, tt.want)
+			}
+		})
+	}
+}

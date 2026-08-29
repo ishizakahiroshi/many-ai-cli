@@ -86,6 +86,9 @@ var defaultApprovalPatterns = map[string][]string{
 		"approve?",
 		"proceed?",
 	},
+	// command-code は実機 PTY の採取（親 plan C6）がまだで trigger 文言を未確認。
+	// 空 = 検出しない（誤検出は起きない）。C7 で fixture を正に埋める。
+	"command-code": {},
 	"common": {
 		"would you like to",
 		"この操作を許可",
@@ -97,7 +100,7 @@ var defaultApprovalPatterns = map[string][]string{
 
 // KnownApprovalProviders は承認パターンを管理する provider 名一覧（順序固定）。
 func KnownApprovalProviders() []string {
-	return []string{"claude", "codex", "copilot", "cursor-agent", "opencode", "grok", "common"}
+	return []string{"claude", "codex", "copilot", "cursor-agent", "opencode", "grok", "command-code", "common"}
 }
 
 // IsKnownApprovalProvider は provider 名が管理対象か判定する。

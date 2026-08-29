@@ -2,7 +2,7 @@
 // Go side is the source of truth; update this file when JSON fields or message
 // type values change in internal/proto/messages.go.
 
-export type ProviderID = 'claude' | 'codex' | 'copilot' | 'cursor-agent' | 'opencode' | 'grok' | 'common' | string;
+export type ProviderID = 'claude' | 'codex' | 'copilot' | 'cursor-agent' | 'opencode' | 'grok' | 'command-code' | 'common' | string;
 
 export type SessionState =
   | 'standby'

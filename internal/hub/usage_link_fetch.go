@@ -11,6 +11,7 @@ import (
 type UsageLinkDefaults struct {
 	Claude      string `json:"claude"`
 	Codex       string `json:"codex"`
+	CommandCode string `json:"command-code"`
 	Copilot     string `json:"copilot"`
 	CursorAgent string `json:"cursor-agent"`
 	Grok        string `json:"grok"`
@@ -28,6 +29,7 @@ const (
 var hardcodedUsageLinkDefaults = UsageLinkDefaults{
 	Claude:      "https://claude.ai/settings/usage",
 	Codex:       "https://chatgpt.com/codex/cloud/settings/analytics#usage",
+	CommandCode: "https://commandcode.ai/usage",
 	Copilot:     "https://github.com/settings/billing",
 	CursorAgent: "https://cursor.com/dashboard",
 	Grok:        "https://grok.com/?_s=usage",

@@ -75,7 +75,7 @@ func mergeApprovalRuleTargets(targets []approvalRuleTarget) []approvalRuleTarget
 // 適用される）かどうかを返す。Shell セッションは対象外。
 func isAIProvider(provider string) bool {
 	switch provider {
-	case "claude", "codex", "copilot", "cursor-agent", "opencode", "grok":
+	case "claude", "codex", "copilot", "cursor-agent", "opencode", "grok", "command-code":
 		return true
 	default:
 		return false

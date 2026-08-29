@@ -821,6 +821,22 @@ func openCodePermissionArgs(permissionMode string) []string {
 	return nil
 }
 
+// commandCodePermissionArgs は Command Code CLI 向けの承認モード引数変換。
+// v1.37.0 の `--permission-mode` は standard / plan / auto-accept の 3 値。
+// `dont-ask` は無い。`--yolo` は独立フラグ。
+func commandCodePermissionArgs(permissionMode string) []string {
+	switch permissionMode {
+	case "plan":
+		return []string{"--permission-mode", "plan"}
+	case "acceptEdits", "auto":
+		return []string{"--auto-accept"}
+	case "bypassPermissions":
+		return []string{"--yolo"}
+	default:
+		return nil
+	}
+}
+
 func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string) error {
 	// 記録点フックの sink をここで 1 度だけ組み込む（既定ビルドでは no-op）。
 	installProbes(logger, cfg)
@@ -828,7 +844,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	fs := flag.NewFlagSet("wrap", flag.ContinueOnError)
 	label := fs.String("label", "", "session label shown in UI card")
 	model := fs.String("model", "", "model override")
-	permissionMode := fs.String("permission-mode", "", "permission mode (claude/grok: passed through; copilot auto→--autopilot bypass→--allow-all; cursor-agent auto→--auto-review bypass→--force; opencode bypass→--auto)")
+	permissionMode := fs.String("permission-mode", "", "permission mode (claude/grok: passed through; copilot auto→--autopilot bypass→--allow-all; cursor-agent auto→--auto-review bypass→--force; opencode bypass→--auto; command-code plan→--permission-mode plan, acceptEdits/auto→--auto-accept, bypass→--yolo)")
 	sandbox := fs.String("sandbox", "", "codex sandbox mode")
 	askForApproval := fs.String("ask-for-approval", "", "codex ask-for-approval")
 	codexOSS := fs.Bool("codex-oss", false, "codex: use --oss to route via local Ollama daemon")
@@ -880,6 +896,8 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		case "opencode":
 			// --auto: auto-approve permissions that are not explicitly denied
 			extra = append(extra, openCodePermissionArgs(*permissionMode)...)
+		case "command-code":
+			extra = append(extra, commandCodePermissionArgs(*permissionMode)...)
 		}
 	}
 	providerArgs = append(extra, providerArgs...)
@@ -904,7 +922,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		return err
 	}
 	cwd, _ := os.Getwd()
-	display := map[string]string{"claude": "Claude", "codex": "Codex", "copilot": "GitHub Copilot", "cursor-agent": "Cursor Agent", "opencode": "OpenCode", "grok": "Grok Build", "shell": "Shell"}[provider]
+	display := map[string]string{"claude": "Claude", "codex": "Codex", "copilot": "GitHub Copilot", "cursor-agent": "Cursor Agent", "opencode": "OpenCode", "grok": "Grok Build", "command-code": "Command Code", "shell": "Shell"}[provider]
 	termCols, termRows := 0, 0
 	if w, h, err := term.GetSize(int(os.Stdin.Fd())); err == nil && w > 0 && h > 0 {
 		termCols, termRows = w, h

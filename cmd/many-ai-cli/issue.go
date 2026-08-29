@@ -175,7 +175,7 @@ func saveIssueFallback(deps issueDependencies, markdown, reason string) error {
 
 func validIssueProvider(provider string) bool {
 	switch strings.TrimSpace(provider) {
-	case "", "claude", "codex", "copilot", "cursor-agent", "opencode", "grok":
+	case "", "claude", "codex", "copilot", "cursor-agent", "opencode", "grok", "command-code":
 		return true
 	default:
 		return false

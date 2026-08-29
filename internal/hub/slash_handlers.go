@@ -30,6 +30,7 @@ type slashCmdSourcesPatch struct {
 	CursorAgent *string `json:"cursor-agent"`
 	Opencode    *string `json:"opencode"`
 	Grok        *string `json:"grok"`
+	CommandCode *string `json:"command-code"`
 }
 
 func applySlashCmdSourcesPatch(base config.SlashCmdSources, patch slashCmdSourcesPatch) config.SlashCmdSources {
@@ -50,6 +51,9 @@ func applySlashCmdSourcesPatch(base config.SlashCmdSources, patch slashCmdSource
 	}
 	if patch.Grok != nil {
 		base.Grok = strings.TrimSpace(*patch.Grok)
+	}
+	if patch.CommandCode != nil {
+		base.CommandCode = strings.TrimSpace(*patch.CommandCode)
 	}
 	return base
 }
@@ -98,6 +102,10 @@ func (s *Server) handleSlashCmdSources(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("invalid grok source", err))
 			return
 		}
+		if err := validateSlashCmdSource(body.CommandCode); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("invalid command-code source", err))
+			return
+		}
 		s.cfgMu.Lock()
 		s.cfg.SlashCmdSources = body
 		s.cfgMu.Unlock()
@@ -119,6 +127,9 @@ func (s *Server) handleSlashCmdSources(w http.ResponseWriter, r *http.Request) {
 		if body.Grok != prev.Grok {
 			s.invalidateSlashCache("grok")
 		}
+		if body.CommandCode != prev.CommandCode {
+			s.invalidateSlashCache("command-code")
+		}
 		if err := s.persistConfig(); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "save_failed", "save failed")
 			return
@@ -136,7 +147,7 @@ func (s *Server) handleSlashCommands(w http.ResponseWriter, r *http.Request) {
 	}
 
 	provider := r.URL.Query().Get("provider")
-	if provider != "claude" && provider != "codex" && provider != "copilot" && provider != "cursor-agent" && provider != "opencode" && provider != "grok" {
+	if provider != "claude" && provider != "codex" && provider != "copilot" && provider != "cursor-agent" && provider != "opencode" && provider != "grok" && provider != "command-code" {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
 		return
 	}
@@ -170,6 +181,8 @@ func (s *Server) handleSlashCommands(w http.ResponseWriter, r *http.Request) {
 		sourceURL = src.Opencode
 	case "grok":
 		sourceURL = src.Grok
+	case "command-code":
+		sourceURL = src.CommandCode
 	}
 	s.cfgMu.Unlock()
 

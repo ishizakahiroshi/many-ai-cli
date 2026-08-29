@@ -34,7 +34,7 @@
     <button id="reconnect-btn" hidden>↺ <span data-i18n="reconnect">reconnect</span></button>
     <div class="usage-menu" id="usage-menu">
       <button class="usage-menu-btn" id="usage-menu-btn" aria-haspopup="true" aria-expanded="false">
-        <svg class="usage-menu-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 14" width="80" height="14" aria-hidden="true">
+        <svg class="usage-menu-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 14" width="90" height="14" aria-hidden="true">
           <circle class="prov-shape claude" cx="5" cy="7" r="4.5" stroke-width="1.6"/>
           <text class="prov-letter claude" x="5" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">C</text>
           <circle class="prov-shape codex" cx="15" cy="7" r="4.5" stroke-width="1.6"/>
@@ -51,6 +51,8 @@
           <text class="prov-letter ollama" x="65" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
           <rect class="prov-shape lm-studio" x="70.5" y="2.5" width="9" height="9" rx="2" stroke-width="1.6"/>
           <text class="prov-letter lm-studio" x="75" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">L</text>
+          <circle class="prov-shape command-code" cx="85" cy="7" r="4.5" stroke-width="1.6"/>
+          <text class="prov-letter command-code" x="85" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">M</text>
         </svg>
         <span data-i18n="usage_menu_btn">Usage</span>
         <svg class="usage-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -108,6 +110,13 @@
         <a id="usage-link-ollama" class="usage-dropdown-item" href="https://ollama.com/settings" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect class="prov-shape ollama" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter ollama" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">O</text></svg>
           <span class="usage-item-name">Ollama</span>
+          <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+        </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
+        </div>
+        <div class="usage-dropdown-unavailable-row">
+        <a id="usage-link-command-code" class="usage-dropdown-item" href="https://commandcode.ai/usage" target="_blank" rel="noopener noreferrer">
+          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape command-code" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter command-code" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">M</text></svg>
+          <span class="usage-item-name">Command Code</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
         </div>
@@ -499,6 +508,7 @@
               <option value="cursor-agent" data-i18n="settings_approval_patterns_cursor_agent">Cursor Agent</option>
               <option value="opencode" data-i18n="settings_approval_patterns_opencode">OpenCode</option>
               <option value="grok" data-i18n="settings_approval_patterns_grok">Grok Build</option>
+              <option value="command-code" data-i18n="settings_approval_patterns_command_code">Command Code</option>
               <option value="common" data-i18n="settings_approval_patterns_common">共通</option>
             </select>
           </div>
@@ -895,6 +905,10 @@
             <input type="text" id="usage-link-grok-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_grok_placeholder" placeholder="Default: https://grok.com/?_s=usage">
           </div>
           <div class="settings-row">
+            <span class="settings-label">Command Code</span>
+            <input type="text" id="usage-link-command-code-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_command_code_placeholder" placeholder="Default: https://commandcode.ai/usage">
+          </div>
+          <div class="settings-row">
             <span class="settings-label">Ollama</span>
             <input type="text" id="usage-link-ollama-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_ollama_placeholder" placeholder="Default: http://localhost:11434">
           </div>
@@ -926,6 +940,10 @@
           <div class="settings-row">
             <span class="settings-label">Cursor Agent</span>
             <input type="text" id="slash-src-cursor-agent" class="settings-input-url" placeholder="Default official source">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Command Code</span>
+            <input type="text" id="slash-src-command-code" class="settings-input-url" placeholder="Default official source">
           </div>
           <div class="settings-row">
             <button id="slash-src-save-btn" class="slash-src-save-btn" data-i18n="settings_slash_src_save">保存</button>
@@ -1072,6 +1090,7 @@
               <option value="cursor-agent">Cursor Agent</option>
               <option value="opencode">OpenCode</option>
               <option value="grok">Grok Build</option>
+              <option value="command-code">Command Code</option>
               <option value="shell">Shell</option>
             </select>
             <div id="spawn-provider-combobox" class="spawn-provider-combobox">
@@ -1118,7 +1137,7 @@
             <select id="spawn-subscription" class="spawn-select"></select>
           </div>
 
-          <!-- Claude-only: /model picker. Permission select is shared with grok / copilot / cursor-agent. -->
+          <!-- Claude-only: /model picker. Permission select is shared with grok / copilot / cursor-agent / command-code. -->
           <div id="spawn-claude-opts">
             <button id="spawn-claude-model-btn" class="spawn-btn-browse" type="button" data-i18n="spawn_claude_model_btn">Claude /model</button>
           </div>
@@ -1158,6 +1177,7 @@
           <div id="spawn-cursor-agent-note" class="settings-note" data-i18n="spawn_cursor_agent_note" hidden>Uses the installed Cursor Agent CLI. Authentication and permissions are managed by Cursor.</div>
           <div id="spawn-opencode-note" class="settings-note" data-i18n="spawn_opencode_note" hidden>Uses the installed OpenCode CLI. Run `opencode auth login` before starting. Free-tier models may take 1–2 minutes to respond.</div>
           <div id="spawn-grok-note" class="settings-note" data-i18n="spawn_grok_note" hidden>Uses the installed Grok Build CLI (xAI). Requires a SuperGrok or X Premium+ subscription — the base X Premium plan cannot use it. Sign-in and quota stay in Grok.</div>
+          <div id="spawn-command-code-note" class="settings-note" data-i18n="spawn_command_code_note" hidden>Uses the installed Command Code CLI. Authentication and permissions are managed by Command Code. Permission mode is passed only when you choose it here.</div>
           <div id="spawn-shell-note" class="settings-note" data-i18n="spawn_shell_note" hidden>Opens the OS default shell (pwsh / bash). No AI-specific options apply.</div>
 
           <!-- git worktree 隔離（全プロバイダ共通・opt-in）。チェック時のみ isolate_worktree を送り、
