@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Go](https://img.shields.io/badge/go-1.25+-blue)
 
-![many-ai-cli dashboard](assets/readme-dashboard.png)
+![many-ai-cli demo: a conductor AI asks to spawn two child AI sessions, you approve, one child pauses with a question, you answer with one click, and both report done](https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/assets/demo-approval.gif)
 
 **Six AI coding CLIs in one dashboard — and extra paid plans where the CLI lets you stack them.** Run `Claude Code`, `Codex CLI`, `GitHub Copilot CLI`, `Cursor Agent CLI`, `Grok Build CLI`, and `opencode` in parallel; `many-ai-cli` watches every session in a PTY and tells you the moment one of them stops — an approval, a finished task, or an error — even from your phone. Remaining quota for the plans you stacked sits in the same Usage menu.
 
@@ -864,6 +864,8 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 ## Hub UI
 
 Open `http://127.0.0.1:47777/?token=<token>` in your browser.
+
+![many-ai-cli dashboard](assets/readme-dashboard.png)
 
 ```
 ┌─ MANY-AI-CLI  [1][0][6] │ ● Claude:2  ● Codex:5         [⏻] [Settings] ─┐
