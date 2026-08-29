@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Go](https://img.shields.io/badge/go-1.25+-blue)
 
-![many-ai-cli ダッシュボード](assets/readme-dashboard.png)
+![many-ai-cli デモ: 指揮者 AI が子 AI を 2 本立ち上げていいか聞き、承認すると子が動き、1 本が質問で止まり、1 クリックで答えると 2 本とも完了報告を出す](https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/assets/demo-approval.gif)
 
 **6 つの AI コーディング CLI を 1 画面に。契約を増やせるものは増やす。** `Claude Code` / `Codex CLI` / `GitHub Copilot CLI` / `Cursor Agent CLI` / `Grok Build CLI` / `opencode` を並列実行できます。`many-ai-cli` は各 CLI を PTY でラップし、承認待ち・タスク完了・エラーで止まった瞬間をデスクトップ／スマホへ知らせます。積んだ契約の残量は、同じ Usage メニューに出ます。
 
@@ -853,6 +853,8 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 ## Hub UI
 
 ブラウザで `http://127.0.0.1:47777/?token=<token>` を開きます。
+
+![many-ai-cli ダッシュボード](assets/readme-dashboard.png)
 
 ```
 ┌─ MANY-AI-CLI  [1][0][6] │ ● Claude:2  ● Codex:5            [⏻] [設定] ─┐
