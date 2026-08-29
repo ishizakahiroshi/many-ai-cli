@@ -463,6 +463,18 @@ func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildReq
 	s.orchestration.mu.Lock()
 	s.orchestration.pending[label] = meta
 	s.orchestration.mu.Unlock()
+	// AI 経由の spawn（`orchestrate spawn`）はサブスクリプションを指定する手段が無く、
+	// 以前は常に空＝CLI 既定のログインで子が起きていた。複数契約を使い分けている利用者には
+	// 事故になるので、ここで解決する（resolveChildSubscription が正本）。
+	//
+	// **body へ代入せずローカル変数で持つ。** TestLiveSessionAuthIsNeverSwapped が
+	// 「SubscriptionProfileID への代入は session 生成時（wrapper_loop.go）だけ」を
+	// 機械で守っている。ここは生成に渡す値を決めているのであって、実行中セッションの
+	// 認証を差し替えているのではない。検査を緩めずに意図を通すため、代入を作らない。
+	subscriptionID := strings.TrimSpace(body.SubscriptionProfileID)
+	if subscriptionID == "" {
+		subscriptionID = s.resolveChildSubscription(parent, body.Provider)
+	}
 	childID, err := s.spawnWrappedSession(spawnWrappedSpec{
 		Provider:              body.Provider,
 		CWD:                   prep.childCWD,
@@ -474,7 +486,7 @@ func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildReq
 		Sandbox:               body.Sandbox,
 		AskForApproval:        body.AskForApproval,
 		Route:                 body.Route,
-		SubscriptionProfileID: body.SubscriptionProfileID,
+		SubscriptionProfileID: subscriptionID,
 	}, 20*time.Second)
 	if err != nil {
 		s.orchestration.mu.Lock()
@@ -488,7 +500,7 @@ func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildReq
 		Provider: body.Provider, CWD: prep.childCWD, Model: body.Model, ModelSelection: body.ModelSelection,
 		RiskConfirmed: true, PermissionMode: body.PermissionMode, Sandbox: body.Sandbox,
 		AskForApproval: body.AskForApproval, Route: body.Route,
-		SubscriptionProfileID: body.SubscriptionProfileID,
+		SubscriptionProfileID: subscriptionID,
 	}, body.InitialPrompt, prep.branch, 0)
 	prompt := buildChildInitialPrompt(body.InitialPrompt, prep.boardPath, body.Role, prep.branch, childID)
 	s.safeGo("inject_initial_prompt_child", func() { s.injectInitialPrompt(childID, prompt) })
@@ -532,10 +544,10 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 		}
 	}
 	if body.Provider == "" {
-		body.Provider = "codex"
+		body.Provider = s.resolveChildProviderFallback(parent, body.Role)
 	}
 	if !validOrchestrationProvider(body.Provider) {
-		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
+		writeJSONError(w, http.StatusBadRequest, "bad_request", invalidProviderDetail(body.Provider))
 		return
 	}
 	if !spawnValidModelLabel(body.Model) || strings.HasPrefix(body.Model, "-") {
@@ -558,8 +570,12 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 		if strings.TrimSpace(decision.Model) != "" {
 			body.Model = strings.TrimSpace(decision.Model)
 		}
-		if !validOrchestrationProvider(body.Provider) || !spawnValidModelLabel(body.Model) || strings.HasPrefix(body.Model, "-") {
-			writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider or model selected for child")
+		if !validOrchestrationProvider(body.Provider) {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", invalidProviderDetail(body.Provider))
+			return
+		}
+		if !spawnValidModelLabel(body.Model) || strings.HasPrefix(body.Model, "-") {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid model selected for child")
 			return
 		}
 	}
@@ -613,6 +629,8 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 		writeJSONError(w, http.StatusInternalServerError, "spawn_error", errorDetail("spawn error", err))
 		return
 	}
+	// 起動できた組み合わせだけを覚える。失敗した provider を記憶すると、次回も同じ失敗を繰り返す。
+	s.rememberRoleProvider(body.Role, body.Provider)
 	writeJSON(w, map[string]any{"ok": true, "session_id": result.ID, "board_path": result.BoardPath, "cwd": result.CWD, "worktree_branch": result.WorktreeBranch})
 }
 
@@ -1881,11 +1899,95 @@ func safeToken(value string) string {
 	return value
 }
 
-func validOrchestrationProvider(provider string) bool {
-	switch provider {
-	case "claude", "codex", "copilot", "cursor-agent", "opencode", "grok":
-		return true
-	default:
-		return false
+// resolveChildProviderFallback は、AI が --provider を省略し、オーケストレーション開始時の
+// 役割対応表も無いときに使う provider を決める。
+//
+// 解決順（前段は handleSpawnChild 側）:
+//
+//  1. AI が明示した --provider（ユーザーがそう言った）
+//  2. オーケストレーション開始時に決めた役割 → provider の対応表
+//  3. **その役割で前回実際に起動した provider**（ここ。user_prefs.spawn.role_provider）
+//  4. **親と同じ provider**（ここ。親が shell 等で子に使えないときだけ codex へ）
+//
+// 3 と 4 を足した理由（2026-08-29）: 昇格したセッション（普通に始めたセッションが
+// 最初の spawn で指揮者になる経路）には対応表が無いので、以前はここが `codex` 決め打ちだった。
+// Claude で作業している人が「レビューさせて」と言っただけで、黙って別契約の codex が
+// 動き出す。親と同じなら少なくとも意外性が無い。役割ごとの記憶があれば、1 度だけ
+// 承認ダイアログで直せば以後その役割はその provider になる（毎回聞かなくてよい）。
+func (s *Server) resolveChildProviderFallback(parent *session, role string) string {
+	s.cfgMu.Lock()
+	remembered := s.cfg.UserPrefs.Spawn.RoleProvider[role]
+	s.cfgMu.Unlock()
+	if validOrchestrationProvider(remembered) {
+		return remembered
 	}
+	if parent != nil && validOrchestrationProvider(parent.Provider) {
+		return parent.Provider
+	}
+	// 親が shell / 不明のときの最後の受け皿。従来の既定と同じ値にしておく。
+	return "codex"
+}
+
+// rememberRoleProvider は実際に起動した provider を役割ごとに覚える。
+// 承認ダイアログで書き換えられた後の値がここへ来るので、「1 度直せば次から効く」が成立する。
+// 保存に失敗しても spawn は成功扱いのままにする（記憶は利便性であって正しさではない）。
+func (s *Server) rememberRoleProvider(role, provider string) {
+	role = strings.TrimSpace(role)
+	if role == "" || !validOrchestrationProvider(provider) {
+		return
+	}
+	s.cfgMu.Lock()
+	if s.cfg.UserPrefs.Spawn.RoleProvider == nil {
+		s.cfg.UserPrefs.Spawn.RoleProvider = map[string]string{}
+	}
+	if s.cfg.UserPrefs.Spawn.RoleProvider[role] == provider {
+		s.cfgMu.Unlock()
+		return
+	}
+	s.cfg.UserPrefs.Spawn.RoleProvider[role] = provider
+	s.cfgMu.Unlock()
+	if err := s.persistConfig(); err != nil {
+		s.logger.Warn("remember role provider failed", "role", role, "provider", provider, "err", err)
+	}
+}
+
+// resolveChildSubscription は子セッションのサブスクリプション profile を決める。
+//
+// 以前は AI 経由の spawn で常に空になり、複数契約を使い分けている利用者でも子は必ず
+// 「CLI 既定のログイン」で動いていた（`orchestrate spawn` に指定手段が無いため）。
+// 親と同じ provider なら親の profile をそのまま引き継ぎ、違う provider なら新規セッション
+// パネルがその provider 用に覚えている値（`subscription_<provider>`）を使う。
+// どちらも無ければ従来どおり空＝CLI 既定のログイン。
+//
+// 存在しない ID を渡すと子は起動せずエラーになる（spawnChildRequest の doc 参照）ので、
+// 黙って別アカウントへ倒れることはない。
+func (s *Server) resolveChildSubscription(parent *session, provider string) string {
+	if parent != nil && parent.Provider == provider && strings.TrimSpace(parent.SubscriptionProfileID) != "" {
+		return parent.SubscriptionProfileID
+	}
+	s.cfgMu.Lock()
+	saved := s.cfg.UserPrefs.Spawn.Defaults["subscription_"+provider]
+	s.cfgMu.Unlock()
+	return strings.TrimSpace(saved)
+}
+
+// orchestrationProviders は子セッションに使える provider の全部。**綴りは厳密**で、
+// `Codex` も `ChatGPT` も通らない。一覧を定数として持つのは、弾いたときのエラーへ
+// そのまま載せるため。AI は綴りを揺らす（Codex / codex / ChatGPT / GPT-5）ので、
+// 「invalid provider」とだけ返すと正解に辿り着けず当てずっぽうを繰り返す。
+var orchestrationProviders = []string{"claude", "codex", "copilot", "cursor-agent", "opencode", "grok"}
+
+func validOrchestrationProvider(provider string) bool {
+	for _, p := range orchestrationProviders {
+		if provider == p {
+			return true
+		}
+	}
+	return false
+}
+
+// invalidProviderDetail は弾いた値と有効な一覧を 1 文にする。
+func invalidProviderDetail(provider string) string {
+	return fmt.Sprintf("invalid provider %q; valid providers are: %s",
+		provider, strings.Join(orchestrationProviders, ", "))
 }

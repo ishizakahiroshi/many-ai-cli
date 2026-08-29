@@ -1013,6 +1013,23 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		}
 	}
 
+	// 子セッションへ委譲できることを AI へ伝える（delegation.go に理由と provider 別の
+	// 渡し方の正本）。利用者のファイルには何も書かず、AI にターンも消費させない。
+	// login セッションは --settings と同じ理由でフラグを受け付けないため対象外。
+	if !loginMode && DelegationPromptEnabled(cfg.UserPrefs.Spawn.DelegationAuto) {
+		dpArgs, dpCleanup, dpErr := DelegationProviderArgs(provider, sessionID)
+		switch {
+		case dpErr != nil:
+			logger.Warn("delegation prompt setup failed", "session_id", sessionID, "provider", provider, "err", dpErr)
+		case len(dpArgs) > 0:
+			logger.Info("delegation_prompt_applied", "session_id", sessionID, "provider", provider, "flag", dpArgs[0])
+			providerArgs = append(providerArgs, dpArgs...)
+			if dpCleanup != nil {
+				defer dpCleanup()
+			}
+		}
+	}
+
 	if *utf8Session {
 		applyUTF8Session()
 	}

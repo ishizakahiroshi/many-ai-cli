@@ -284,12 +284,26 @@ func (s *Server) injectApprovalTargets(targets []approvalRuleTarget) {
 	}
 	// SyncRulesFile は InjectRules が内部で毎回実行するため、ここでの事前実行は
 	// 重複（bugfix_new-session-startup-latency-3x_2026-07-10.md で除去）。
+	// 委譲案内のブロックは承認ルールと同じ寿命に乗せる（同じ対象・同じ回収経路）。
+	// 設定が切られていれば「入れない」ではなく「外す」。利用者のファイルへ書く機能は
+	// 次回起動時の回収まで設計する、という原則に従う（CLAUDE.md の設計原則の索引）。
+	s.cfgMu.Lock()
+	delegationOn := s.cfg.UserPrefs.Spawn.DelegationAuto
+	s.cfgMu.Unlock()
+
 	var injected []approvalRuleTarget
 	for _, target := range targets {
 		provider := target.wrapperProvider()
 		if err := wrapper.InjectRules(provider, target.Path); err != nil {
 			s.logger.Warn("inject rules failed", "providers", strings.Join(target.Providers, ","), "path", target.Path, "err", err)
 			continue
+		}
+		if delegationOn {
+			if err := wrapper.InjectDelegation(provider, target.Path); err != nil {
+				s.logger.Warn("inject delegation failed", "provider", provider, "path", target.Path, "err", err)
+			}
+		} else if err := wrapper.RemoveDelegation(target.Path); err != nil {
+			s.logger.Warn("remove delegation failed", "path", target.Path, "err", err)
 		}
 		injected = append(injected, target)
 	}
@@ -307,6 +321,11 @@ func (s *Server) removeApprovalTargets(targets []approvalRuleTarget) {
 		if err := wrapper.RemoveRules(provider, target.Path); err != nil {
 			s.logger.Warn("remove rules failed", "providers", strings.Join(target.Providers, ","), "path", target.Path, "err", err)
 			continue
+		}
+		// 委譲ブロックは provider を問わず外す。注入時と対象が同じでも、設定変更や
+		// provider 変更をまたいだ置き去りを残さないため、条件を付けずに消しに行く。
+		if err := wrapper.RemoveDelegation(target.Path); err != nil {
+			s.logger.Warn("remove delegation failed", "path", target.Path, "err", err)
 		}
 		removed = append(removed, target)
 	}
