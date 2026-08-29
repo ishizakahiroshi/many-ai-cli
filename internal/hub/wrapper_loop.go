@@ -799,6 +799,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			var initialModelCWD string
 			scanNativeApproval := false
 			hadNativeApprovalSig := false
+			resumeAgentChatTail := false
 			chunkHasApprovalTrigger := ptyChunkContainsAny(m.Data, nativeApprovalTriggerTokens)
 			s.sessionsMu.Lock()
 			if ses := s.sessions[id]; ses != nil {
@@ -849,11 +850,28 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				// 約 40ms 後にマーカー再配信、選択肢ラベル末尾が罫線に置き換わっていた。
 				// ネイティブ承認スキャン（上の shouldCheckApproval）と同じく、resize debounce の間は
 				// ミラーを読まない。SIGWINCH 後の再描画で必ず次チャンクが来るので取りこぼしにならない。
-				if isAIProvider(provider) && now.After(ses.vtResizeDebounceUntil) {
+				// トランスクリプトを供給元にしているセッション（claude / codex）は
+				// ここで VT を読まない。両方から同じ質問を立てると、折り返しで
+				// 質問文が切れている側と切れていない側で candidateKey が割れる
+				// （approval_marker_transcript.go の冒頭が理由の正本）。
+				if isAIProvider(provider) && now.After(ses.vtResizeDebounceUntil) &&
+					!approvalMarkerSourceIsTranscriptLocked(ses) {
 					// マーカー抽出は scrollback 込み（画面高超えブロック / Grok 対応）＋
 					// 開始マーカーが画面外へ流れた場合の再構成（approval_marker.go）。
 					// ネイティブ承認は上の TailLines（現在画面のみ）のまま — 解決済みプロンプトの再検出を避ける。
 					marker = extractApprovalMarkerBlockFromVT(ses.vt)
+				}
+				// 出力が動いている間はトランスクリプトの tail を止めない。
+				// pollAgentChat は最後の出力から 1 分で自分を止めるが、再開する口が
+				// register / reattach にしか無かったため、いったん止まると次の
+				// 出力が来ても誰も読み直さなかった。承認マーカーの供給元にする以上、
+				// 「出力があるのに読んでいない」時間帯を残せない。
+				if isAgentChatProvider(provider) && !ses.agentChatRunning && !ses.UsageProbe {
+					resumeAgentChatTail = true
+				}
+				// 終了マーカーが端末に出た＝回答を書き終えた合図。次の poll を前倒しする。
+				if approvalMarkerSourceIsTranscriptLocked(ses) && ptyChunkClosesApprovalMarker(m.Data) {
+					s.kickAgentChatPollLocked(id, ses)
 				}
 				// 起動バナーからの初期モデル検出（--model 指定なしのセッション向け）。
 				// Model が埋まる・上限バイト超過のどちらかで打ち切る。
@@ -868,6 +886,9 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				}
 			}
 			s.sessionsMu.Unlock()
+			if resumeAgentChatTail {
+				s.startAgentChatTail(id)
+			}
 			s.maybeBroadcastApprovalMarker(id, marker, now)
 			s.broadcast(m)
 			if crossSessionMessage != nil {

@@ -70,6 +70,7 @@ docs/local/               設計書・plan 等（非公開）
 | ルール | 正本（本文はここ） | 機械検査 |
 |---|---|---|
 | 承認の同一性は 1 本（`candidateKey` + `sourceEpoch`）だけ。誤表示を踏んでも抑止を足さない | `internal/hub/approval_identity.go` / `web/src/app/approval-answered.ts` | `TestApprovalSuppressionStateIsSingleSource` |
+| 承認マーカーの供給元はセッションに 1 つ（claude / codex は CLI のトランスクリプト、他は VT ミラー） | `internal/hub/approval_marker_transcript.go` | `TestReplayApprovalSkipsVTMarkerWhenTranscriptIsSource` |
 | 複数サブスクリプションは設定ディレクトリを env で切るだけ。token を持たない | `internal/subscription/adapter.go` のパッケージ doc | `TestLiveSessionAuthIsNeverSwapped` ほか 2 件 |
 | auto 選択は spawn 時の round-robin だけ。残量を見て自動で別契約へ乗り換えない | `internal/hub/subscription.go` の `pickAutoSubscription` 冒頭 | `TestAutoSubscriptionNeverConsultsUsage` |
 | 利用者のファイルへ書く機能は「次回起動時の回収」まで設計する | `internal/doctor/residue.go` の冒頭 | `many-ai-cli doctor` の置き去り検査 |
