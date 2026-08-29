@@ -19,7 +19,7 @@ const sharedBlockEnd = "<!-- /many-ai-cli:approval-rules -->"
 // 新規注入には使わない。検出されたら Remove + 再注入で新マーカーへ移行される。
 const legacySharedBlockStart = "<!-- any-ai-cli:approval-rules -->"
 const legacySharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
-const rulesVersion = "18"
+const rulesVersion = "19"
 
 // ApprovalRulesResidueNeedle は、置き去りになった承認ルールブロックを探すための
 // 検索文字列。旧名 any-ai-cli は新名 many-ai-cli の部分文字列（many = "m" + any）
@@ -154,6 +154,19 @@ var rulesFileContent = strings.Join([]string{
 	"- Bad: [MANY-AI-CLI-DONE] いろいろ直しました [/MANY-AI-CLI-DONE]（対象が曖昧なため不可）。",
 	"- マーカーは 1 ターン 1 回のみ、返答の末尾に出力する。",
 	"- 通常の会話・質問への回答・作業途中には出力しない（タスク完了時のみ）。",
+	"",
+	"## many-ai-cli Delegation（子セッションへの委譲）",
+	"",
+	"作業を別の AI セッションへ委譲できる。**どのセッションからでも使える**（オーケストレーションとして起動したセッションに限らない。最初の spawn でそのセッションが指揮者になる）。",
+	"",
+	"- 子を起こす: `many-ai-cli orchestrate spawn --role <role> \"<prompt>\"`",
+	"- 生きている子へ追加指示: `many-ai-cli orchestrate send --role <role> \"<text>\"`（同じ role へ再 spawn は 409 で弾かれる。指示は send を使う）",
+	"- plan md を「実装 → レビュー → 修正」で回す: `many-ai-cli orchestrate relay --plan <path>`",
+	"- 使い方の詳細: `many-ai-cli orchestrate --help`",
+	"",
+	"Hub の HTTP API や認証トークンを直接扱わないこと。上記サブコマンドが代行する。",
+	"",
+	"**AI から乱発しない。** ユーザーが委譲を望んだとき（「別の AI にやらせて」「レビューは他の AI に」等）か、並行させないと明らかに時間がかかるときに限る。子セッションは課金も文脈も別に消費する。迷ったら先に 1 行で確認する。",
 	"",
 	"## many-ai-cli Orchestration Error Format",
 	"",
