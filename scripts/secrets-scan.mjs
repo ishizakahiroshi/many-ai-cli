@@ -429,6 +429,28 @@ function isSkipFilename(path) {
 
 // === Scanning ===
 
+// === Short-needle boundary rule ===
+// 2 文字以下の watchlist 名は、そのままの部分文字列一致だと乱数めいた文字列に
+// 無数に当たる（実例: YouTube の動画 ID `5vudjnGWFKc` の中の `WF` が kb のアプリ名に
+// 一致して push がブロックされた・2026-08-30）。短い needle は「前後が英数字でない」
+// ときだけ一致させる。実際の言及（`WF の設定` / `（WF）` / 行頭・行末）は引き続き当たり、
+// 検知の網は落ちない。3 文字以上は従来どおり素の部分文字列一致。
+const SHORT_NEEDLE_MAX = 2;
+const ALNUM = /[A-Za-z0-9]/;
+
+function matchesNeedle(line, needle) {
+  if (needle.length > SHORT_NEEDLE_MAX) return line.includes(needle);
+  let from = 0;
+  for (;;) {
+    const i = line.indexOf(needle, from);
+    if (i < 0) return false;
+    const before = i > 0 ? line[i - 1] : '';
+    const after = line[i + needle.length] || '';
+    if (!ALNUM.test(before) && !ALNUM.test(after)) return true;
+    from = i + 1;
+  }
+}
+
 function scanFile(path, needleMap, structuralPatterns) {
   if (!existsSync(path)) return [];
   let stat;
@@ -447,7 +469,7 @@ function scanFile(path, needleMap, structuralPatterns) {
 
     // watchlist needles (substring match)
     for (const [needle, source] of needleMap) {
-      if (line.includes(needle) && !isAllowedByDirective(line, needle)) {
+      if (matchesNeedle(line, needle) && !isAllowedByDirective(line, needle)) {
         hits.push({
           file: path,
           lineNumber: i + 1,
