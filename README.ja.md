@@ -103,6 +103,7 @@ relay loop は 1 つの plan を implementation → review → fix の順で、C
 入口は 2 つです。
 
 - 指揮者 CLI: `many-ai-cli orchestrate relay --plan docs/local/plan_example.md`（role mapping が無いときは `--impl provider[/model]` と `--review provider[/model]` を渡す。`--strong provider[/model]` は任意）。
+- `orchestrate` のサブコマンドは `spawn` / `send` / `relay` の 3 つ。名前を間違えると使える名前を並べて返す。
 - Hub UI: 指揮者セッションカードまたは orchestration dashboard の relay dialog を開く。
 
 既定では専用 git worktree を作り、branch `many-ai-cli/relay/<orchestration_id>` で動かします。各 C の commit はその branch に積まれます。Hub は自動 merge しないので、branch を確認してから利用者の branch へ自分で merge してください。1 つの親から複数 relay を走らせられますが、`orchestration.max_children_per_parent` が上限です（既定値 4、通常の relay なら 2 本分）。2 本の relay が同じファイルを編集した場合、その競合は merge 時に解決します。
