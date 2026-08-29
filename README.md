@@ -347,6 +347,17 @@ To stop, use the tray menu's **"Hub を停止"** (Windows), **"Many AI Hub Stop"
 > If the Hub does go down (whether by `×`, a crash, or a manual restart), running AI sessions wait up to **60 minutes** for the Hub to come back before terminating themselves (configurable in `config.yaml` up to 24 hours — extend it for long-running autonomous tasks). A Web UI bug or restart will not silently kill your work. See [Shutdown, zombie protection & Hub crash resilience](#shutdown-zombie-protection--hub-crash-resilience) for details.
 > On Linux (GNOME), the first time you use a `.desktop` shortcut on the desktop, right-click it and choose **"Allow Launching"** (this is an OS-level requirement).
 
+### Tip: one skills shelf and one canonical rule file for every wrapped CLI
+
+Once several CLIs are running side by side here, the next annoyance is not `many-ai-cli` itself. Each CLI keeps its skills in its own folder, and each reads a different rule file (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, ...). Writing the same rules once per CLI is where the duplication actually hurts.
+
+You can keep **one** skills shelf and **one** canonical rule file, and let each CLI reach them its own way: symlinks (junctions on Windows) for the shelf, and a one-line pointer for the rules. The guide below walks through it for Claude Code / Codex / OpenCode / GitHub Copilot CLI / Grok / Cursor Agent / Gemini CLI / Antigravity, and the "which CLI actually reads which file" part is **measured, not guessed**.
+
+- The procedure: [docs/manual_shared-skills-and-rules.md](docs/manual_shared-skills-and-rules.md). It is written to be handed straight to an AI agent, stop conditions included.
+- A narrative version with diagrams, **in Japanese**: <https://ishizakahiroshi.com/articles/2026/2026-08-30_multi-ai-cli-shared-skills-and-rules/>
+
+The wiring is independent of this tool: it works with or without the Hub. It simply pairs well with running several CLIs at once.
+
 ### Unified launcher (Windows / Linux / macOS)
 
 `many-ai-cli-launcher` (`many-ai-cli-launcher.exe` on Windows) is a unified launcher that manages connection profiles for both WSL and remote server targets. Connection profiles are stored in `~/.many-ai-cli/launcher-profiles.yaml`.
