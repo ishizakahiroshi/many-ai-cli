@@ -10,14 +10,13 @@ import (
 // ファイル注入の対象は「セッション単位の口を持たない provider」だけ。
 // claude と grok へ入れると、per-session の経路と二重に渡ることになる。
 func TestDelegationBlockTargetsOnlyProvidersWithoutASessionFlag(t *testing.T) {
-	for _, p := range []string{"codex", "copilot", "cursor-agent"} {
+	for _, p := range []string{"codex", "copilot", "cursor-agent", "opencode"} {
 		if !providerUsesDelegationBlock(p) {
 			t.Fatalf("%q はファイル注入の対象のはず", p)
 		}
 	}
 	// claude / grok は per-session（delegation.go の DelegationProviderArgs）で渡す。
-	// opencode は読ませる経路が未調査なので対象外。
-	for _, p := range []string{"claude", "grok", "opencode", "shell", ""} {
+	for _, p := range []string{"claude", "grok", "shell", ""} {
 		if providerUsesDelegationBlock(p) {
 			t.Fatalf("%q をファイル注入の対象にしている", p)
 		}
@@ -127,5 +126,61 @@ func TestInjectDelegationReplacesStaleBlock(t *testing.T) {
 	}
 	if !strings.Contains(body, "<!-- version: "+delegationFileVersion+" -->") {
 		t.Fatalf("新しい version が入っていない:\n%s", body)
+	}
+}
+
+// opencode は 2026-08-29 に AGENTS.md を実測してから対象へ入れた provider。
+// 注入と撤去の往復で利用者の本文が元どおりになることを、他の 3 つと同じ基準で見る。
+func TestInjectDelegationForOpenCodeRoundTrips(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	target := filepath.Join(t.TempDir(), "AGENTS.md")
+	original := "# opencode を使うプロジェクト\n\n利用者が書いた本文。\n"
+	if err := os.WriteFile(target, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := InjectDelegation("opencode", target); err != nil {
+		t.Fatalf("InjectDelegation: %v", err)
+	}
+	body, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(body), original) {
+		t.Fatalf("利用者が書いた本文を壊している:\n%s", body)
+	}
+	for _, want := range []string{delegationBlockStart, delegationBlockEnd, "orchestrate spawn --role"} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("注入後に %q が無い:\n%s", want, body)
+		}
+	}
+
+	// 2 回目は積み増さない。
+	if err := InjectDelegation("opencode", target); err != nil {
+		t.Fatalf("2 回目の InjectDelegation: %v", err)
+	}
+	again, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(again) != string(body) {
+		t.Fatal("同じブロックを二重に注入している")
+	}
+
+	if err := RemoveDelegation(target); err != nil {
+		t.Fatalf("RemoveDelegation: %v", err)
+	}
+	restored, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(restored), DelegationResidueNeedle) {
+		t.Fatalf("ブロックが残っている:\n%s", restored)
+	}
+	if strings.TrimSpace(string(restored)) != strings.TrimSpace(original) {
+		t.Fatalf("外した後に利用者の本文が変わっている:\n%q", restored)
 	}
 }

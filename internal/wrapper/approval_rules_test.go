@@ -19,7 +19,7 @@ func TestInjectRulesSharedBlockIsIdempotentAcrossProviders(t *testing.T) {
 	withTempHome(t)
 	path := filepath.Join(t.TempDir(), "AGENTS.md")
 
-	for _, provider := range []string{"codex", "copilot", "cursor-agent"} {
+	for _, provider := range []string{"codex", "copilot", "cursor-agent", "opencode"} {
 		if err := InjectRules(provider, path); err != nil {
 			t.Fatalf("InjectRules(%s) failed: %v", provider, err)
 		}

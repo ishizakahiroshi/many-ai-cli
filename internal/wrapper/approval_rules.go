@@ -209,9 +209,12 @@ func SyncRulesFile() error {
 	return os.WriteFile(path, []byte(rulesFileContent), 0o644) // #nosec G306 -- 各 AI CLI が読む共有ルールファイル（秘密情報なし、0644 が意図）
 }
 
+// providerUsesSharedBlock は共有ブロック方式で承認ルールを渡す provider か。
+// opencode は 2026-08-29 に AGENTS.md を読むことを実測して追加した
+// （経緯は delegation_inject.go の providerUsesDelegationBlock）。
 func providerUsesSharedBlock(provider string) bool {
 	switch provider {
-	case "codex", "copilot", "cursor-agent":
+	case "codex", "copilot", "cursor-agent", "opencode":
 		return true
 	default:
 		return false

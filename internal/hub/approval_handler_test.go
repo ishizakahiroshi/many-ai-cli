@@ -182,3 +182,56 @@ func assertApprovalBlockCount(t *testing.T, path string, want int) {
 		t.Fatalf("approval block count = %d, want %d\n%s", got, want, string(data))
 	}
 }
+
+// opencode は AGENTS.md を system prompt に載せることを 2026-08-29 に実測してから
+// 注入対象へ入れた。承認ルールと委譲案内の両方がプロジェクト直下の AGENTS.md へ入り、
+// セッションが消えたら両方とも外れて利用者の本文だけが残ることを固定する。
+func TestOpenCodeApprovalAndDelegationUseProjectAgents(t *testing.T) {
+	withApprovalTestHome(t)
+	project := t.TempDir()
+	agentsPath := filepath.Join(project, "AGENTS.md")
+	original := "# 利用者が書いた指示\n"
+	if err := os.WriteFile(agentsPath, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newTestServer()
+	s.cfg.Approval.Enabled = true
+	s.cfg.UserPrefs.Spawn.DelegationAuto = true
+	s.sessionsMu.Lock()
+	s.sessions[1] = &session{ID: 1, Provider: "opencode", CWD: project, State: "running"}
+	s.wrappers[1] = newWrapperConn(&websocket.Conn{})
+	s.sessionsMu.Unlock()
+
+	s.injectApprovalRules()
+	assertApprovalBlockCount(t, agentsPath, 1)
+
+	injected, err := os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(injected), original) {
+		t.Fatalf("利用者が書いた本文を壊している:\n%s", injected)
+	}
+	if !strings.Contains(string(injected), "<!-- many-ai-cli:delegation -->") {
+		t.Fatalf("委譲案内が入っていない:\n%s", injected)
+	}
+
+	s.sessionsMu.Lock()
+	delete(s.sessions, 1)
+	delete(s.wrappers, 1)
+	s.sessionsMu.Unlock()
+	s.removeApprovalTargets(providerApprovalRuleTargets("opencode", project))
+
+	assertApprovalBlockCount(t, agentsPath, 0)
+	restored, err := os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(restored), "ai-cli:delegation") {
+		t.Fatalf("委譲案内が置き去りになっている:\n%s", restored)
+	}
+	if strings.TrimSpace(string(restored)) != strings.TrimSpace(original) {
+		t.Fatalf("撤去後に利用者の本文が変わっている:\n%q", restored)
+	}
+}

@@ -41,10 +41,13 @@ import (
 // 消してしまう。追記の `--rules` だけを使う。
 //
 // 残り 4 つにセッション単位の口は無い。codex は `-c key=value` を持つが指示ファイルを差す
-// キーの有無が未確認、opencode は cwd の `opencode.json` を書き換える経路しかなく（利用者の
-// リポジトリを触るうえ 1 cwd 1 セッション）、copilot と cursor-agent はファイル方式だけ
-// （`--no-custom-instructions` が AGENTS.md 等を読んでいることを示す / `.cursor/rules`）。
-// この 4 つはファイル注入方式で別途対応する（plan の C7）。
+// キーの有無が未確認、opencode は CLI フラグを持たず（cwd の `opencode.json` を書き換える
+// 既存経路はあるが、利用者のリポジトリを触るうえ 1 cwd 1 セッション）、copilot と
+// cursor-agent はファイル方式だけ（`--no-custom-instructions` が AGENTS.md 等を読んで
+// いることを示す / `.cursor/rules`）。
+// この 4 つは delegation_inject.go のファイル注入方式で対応する。opencode が AGENTS.md を
+// 読むことは 2026-08-29 に実測済み（詳細は delegation_inject.go の
+// providerUsesDelegationBlock）。
 const delegationPromptText = `many-ai-cli: you can delegate work to child AI sessions on this machine.
 
 - Spawn a child: many-ai-cli orchestrate spawn --role <role> "<prompt>"
