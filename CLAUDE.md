@@ -89,7 +89,7 @@ docs/local/               設計書・plan 等（非公開）
 
 ## 見送った方針は台帳で管理する（提案の前に読む）
 
-**台帳: [`docs/local/reference_declined-directions.md`](docs/local/reference_declined-directions.md)。** 各項目に「再検討してよい条件」と「再検討の根拠にしてはいけないもの」が書いてある。見送りは永久否定ではないので、条件が満たされているなら再検討してよい。**新しい見送りは台帳に行を足す。ここに節を作らない。**
+**台帳: [`docs/local/reference/reference_declined-directions.md`](docs/local/reference/reference_declined-directions.md)。** 各項目に「再検討してよい条件」と「再検討の根拠にしてはいけないもの」が書いてある。見送りは永久否定ではないので、条件が満たされているなら再検討してよい。**新しい見送りは台帳に行を足す。ここに節を作らない。**
 
 | ID | 見送った方針 |
 |---|---|
@@ -99,6 +99,7 @@ docs/local/               設計書・plan 等（非公開）
 | D-04 | Windows デスクトップアプリ化（Tauri）と Microsoft Store 提出 |
 | D-05 | Copilot / Cursor Agent の複数サブスクリプション対応 |
 | D-06 | OpenRouter を route（接続先）として載せる |
+| D-07 | NVIDIA NIM（build.nvidia.com）を route として載せる（規約が trial / 非 production 限定・2026-08-29 決定） |
 
 **共通する却下理由**（個別に蒸し返さないため 1 度だけ書く）: 候補の人気・伸び・他社の対応状況・利用者増の見込みを根拠にしない。本ツールの規模（star 6 / npm 週次 11・2026-08-14 実測）では、それらを根拠に採否を決める枠組みが成立しない。起点は「作者が実際に使っていて、日常の並列運用に入っているか」。
 
