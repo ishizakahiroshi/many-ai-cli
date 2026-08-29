@@ -100,6 +100,7 @@
   "zero_session_step3_body": "Khởi động nhiều CLI — tiến độ và phê duyệt đều gom về đây. Bật truy cập di động và thông báo desktop trong Cài đặt.",
   "zero_session_tour": "Xem tour 60 giây",
   "zero_session_docs": "Mở tài liệu",
+  "zero_session_wiring": "Dùng chung skills và rules giữa các CLI",
   "no_project": "Không có project",
   "last_output": "Đầu ra gần nhất: ",
   "dismiss_session": "Đóng session",
