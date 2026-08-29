@@ -151,7 +151,7 @@ func removeBlock(path, startMarker, endMarker string) error {
 	if newContent == string(content) {
 		return nil
 	}
-	return os.WriteFile(path, []byte(newContent), 0o644) // #nosec G306 G304 -- 共有ドキュメントのため 0644 が意図
+	return os.WriteFile(path, []byte(newContent), 0o644) // #nosec G703 G306 G304 -- provider 既知の instruction file パスのみ（HTTP 入力なし）。共有ドキュメントのため 0644 が意図
 }
 
 // InjectDelegation は委譲案内のブロックを注入する。対象外の provider では何もしない。
