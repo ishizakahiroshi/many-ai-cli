@@ -454,6 +454,8 @@
   "usage_auth_unknown": "Không thể kiểm tra trạng thái đăng nhập",
   "usage_auth_unknown_detail": "Điều này không chứng minh hồ sơ đã đăng xuất.",
   "usage_auth_retry": "Thử lại",
+  "usage_auth_checking": "Đang kiểm tra trạng thái đăng nhập",
+  "usage_loading": "Đang tải mức sử dụng",
   "usage_probe_get": "Lấy",
   "usage_probe_cancel": "Dừng",
   "usage_probe_retry": "Thử lại",

@@ -454,6 +454,8 @@
   "usage_auth_unknown": "Login status could not be checked",
   "usage_auth_unknown_detail": "This is not proof that the profile is signed out.",
   "usage_auth_retry": "Retry",
+  "usage_auth_checking": "Checking login status",
+  "usage_loading": "Loading usage",
   "usage_probe_get": "Retrieve",
   "usage_probe_cancel": "Cancel",
   "usage_probe_retry": "Retry",

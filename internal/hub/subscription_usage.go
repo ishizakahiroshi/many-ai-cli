@@ -53,6 +53,7 @@ type subscriptionUsageProfile struct {
 	ProbeAvailable bool                     `json:"probe_available,omitempty"`
 	ProbeState     string                   `json:"probe_state,omitempty"`
 	AuthStatus     string                   `json:"auth_status,omitempty"`
+	AuthChecking   bool                     `json:"auth_checking,omitempty"`
 	Claude         *claudeSubscriptionUsage `json:"claude,omitempty"`
 	Codex          *codexSubscriptionUsage  `json:"codex,omitempty"`
 	Grok           *grokSubscriptionUsage   `json:"grok,omitempty"`
@@ -89,6 +90,9 @@ type subscriptionUsageStore struct {
 	mu      sync.Mutex
 	entries map[subscriptionUsageKey]subscriptionUsageValue
 	auth    map[subscriptionUsageKey]subscriptionAuthValue
+	// authChecking marks the profiles whose login state is being re-read in the
+	// background, so repeated polls do not start the same vendor CLI again.
+	authChecking map[subscriptionUsageKey]bool
 }
 
 func (s *Server) subscriptionUsageStoreForServer() *subscriptionUsageStore {
@@ -125,8 +129,9 @@ func (s *Server) recordSessionSubscriptionUsage(sessionID int, stat *usageStat, 
 
 func newSubscriptionUsageStore() *subscriptionUsageStore {
 	return &subscriptionUsageStore{
-		entries: map[subscriptionUsageKey]subscriptionUsageValue{},
-		auth:    map[subscriptionUsageKey]subscriptionAuthValue{},
+		entries:      map[subscriptionUsageKey]subscriptionUsageValue{},
+		auth:         map[subscriptionUsageKey]subscriptionAuthValue{},
+		authChecking: map[subscriptionUsageKey]bool{},
 	}
 }
 

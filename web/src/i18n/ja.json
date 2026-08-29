@@ -454,6 +454,8 @@
   "usage_auth_unknown": "ログイン状態を確認できません",
   "usage_auth_unknown_detail": "ログアウトしているとは限りません。",
   "usage_auth_retry": "再確認",
+  "usage_auth_checking": "ログイン状態を確認中",
+  "usage_loading": "残量を読み込み中",
   "usage_probe_get": "取得",
   "usage_probe_cancel": "中止",
   "usage_probe_retry": "再試行",
