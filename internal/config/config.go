@@ -441,6 +441,17 @@ type UserPrefsSpawn struct {
 	LastModel       map[string]string `yaml:"last_model,omitempty"        json:"last_model,omitempty"`
 	WorktreeAuto    bool              `yaml:"worktree_auto,omitempty"     json:"worktree_auto,omitempty"`
 	WorktreeCleanup string            `yaml:"worktree_cleanup,omitempty"  json:"worktree_cleanup,omitempty"`
+	// DelegationAuto は「子セッションへ委譲できることを AI に伝える」の既定値。
+	// 既定 false（opt-in）。止めているのは AI が委譲を知るかどうかだけで、
+	// `orchestrate` サブコマンド自体は全セッションで動く。安全策ではなく常駐文脈の
+	// コスト削減が目的（正本は internal/wrapper/delegation.go の冒頭）。
+	DelegationAuto bool `yaml:"delegation_auto,omitempty"   json:"delegation_auto,omitempty"`
+	// RoleProvider は「その役割の子を前回どの provider で起こしたか」の記憶。
+	// key は role（`review` / `implementation` …）、value は provider 名。
+	// 委譲のたびに provider を聞かれるのを避けるためのもので、実際に起動した値
+	// （承認ダイアログで書き換えられた後の値）を Hub が書き戻す。
+	// 解決順の正本は internal/hub/orchestration.go の resolveChildProvider。
+	RoleProvider map[string]string `yaml:"role_provider,omitempty"     json:"role_provider,omitempty"`
 }
 
 // UserPrefsDoneSummaryNotify はタスク完了サマリー通知の設定。
@@ -634,6 +645,7 @@ func (p UserPrefs) Clone() UserPrefs {
 		c.DoneSummaryNotify.Enabled = &v
 	}
 	c.Spawn.LastModel = cloneStringMap(p.Spawn.LastModel)
+	c.Spawn.RoleProvider = cloneStringMap(p.Spawn.RoleProvider)
 	if p.TokenStatusbar.Segments != nil {
 		m := make(map[string]bool, len(p.TokenStatusbar.Segments))
 		for k, v := range p.TokenStatusbar.Segments {

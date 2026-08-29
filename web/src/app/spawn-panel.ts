@@ -34,6 +34,8 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
   const spawnPermissionMode = document.getElementById('spawn-permission-mode') as HTMLSelectElement | null;
   const spawnIsolateWorktree = document.getElementById('spawn-isolate-worktree') as HTMLInputElement | null;
   const spawnIsolateWorktreeNote = document.getElementById('spawn-isolate-worktree-note');
+  const spawnDelegation = document.getElementById('spawn-delegation') as HTMLInputElement | null;
+  const spawnDelegationNote = document.getElementById('spawn-delegation-note');
   const spawnModelInput = document.getElementById('spawn-model');
   const spawnModelDatalist = document.getElementById('spawn-model-datalist');
   const spawnModelClearBtn = document.getElementById('spawn-model-clear');
@@ -709,6 +711,18 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
     spawnIsolateWorktree.addEventListener('change', updateIsolateWorktreeNote);
   }
 
+  // 委譲の注意書きも、チェックが入っているときだけ出す。
+  // 「これは安全策ではない」「今は claude だけ」を起動前に見せるため。
+  function updateDelegationNote() {
+    if (spawnDelegationNote) {
+      spawnDelegationNote.hidden = !spawnDelegation?.checked;
+    }
+  }
+
+  if (spawnDelegation) {
+    spawnDelegation.addEventListener('change', updateDelegationNote);
+  }
+
   function loadSpawnSettings() {
     try {
       const s = JSON.parse(localStorage.getItem(STORAGE_SPAWN_KEY) || '{}');
@@ -750,6 +764,10 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
       if (spawnIsolateWorktree) {
         spawnIsolateWorktree.checked = (s.isolate_worktree === 'true');
         updateIsolateWorktreeNote();
+      }
+      if (spawnDelegation) {
+        spawnDelegation.checked = (s.delegation === 'true');
+        updateDelegationNote();
       }
       updateSpawnProviderIcon();
       syncSpawnProviderFields(spawnProviderEl.value);
@@ -2106,6 +2124,8 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
       // チェック時のみ送る。未チェックでは省略し、config の user_prefs.spawn.worktree_auto
       // を Hub 側の既定として温存する（設定ファイルで常時 ON にしている利用者を壊さない）。
       if (spawnIsolateWorktree?.checked) bodyObj.isolate_worktree = true;
+      // 同上。未チェックでは省略し、config の user_prefs.spawn.delegation_auto を温存する。
+      if (spawnDelegation?.checked) bodyObj.delegation = true;
       if (provider !== 'shell' && route) bodyObj.route = route;
       // 「Default CLI login」を選んだときはキーごと送らない（従来リクエストと同一）。
       const subscriptionID = selectedSubscriptionID();
@@ -2237,6 +2257,7 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
           grid_layout: gridLayout,
           detached_preset: detachedPreset,
           isolate_worktree: spawnIsolateWorktree?.checked ? 'true' : 'false',
+          delegation: spawnDelegation?.checked ? 'true' : 'false',
           ...(providerHasPermissionSelect(provider) ? { permission_mode: bodyObj.permission_mode } : {}),
           ...(provider === 'codex'  ? { sandbox: bodyObj.sandbox, ask_for_approval: bodyObj.ask_for_approval } : {}),
           ...(provider === 'opencode' ? { opencode_permission_mode: bodyObj.permission_mode } : {}),

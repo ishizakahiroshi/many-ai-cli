@@ -175,14 +175,27 @@ func classifyResidue(ctx context.Context, cwd string, hubRunning bool) residueRe
 		}
 	}
 
-	// AGENTS.md の承認ルールブロック。新旧どちらのマーカーにも当たる needle で探す。
-	needle := []byte(wrapper.ApprovalRulesResidueNeedle)
-	if blob, found := gitIndexBlob(ctx, root, "AGENTS.md"); found && bytes.Contains(blob, needle) {
+	// AGENTS.md の承認ルールブロックと委譲案内ブロック。新旧どちらのマーカーにも当たる
+	// needle で探す。委譲ブロック（2026-08-29 追加）も同じファイルへ注入されるので、
+	// どちらか一方でも残っていれば置き去りとして扱う。
+	needles := [][]byte{
+		[]byte(wrapper.ApprovalRulesResidueNeedle),
+		[]byte(wrapper.DelegationResidueNeedle),
+	}
+	containsAny := func(blob []byte) bool {
+		for _, needle := range needles {
+			if bytes.Contains(blob, needle) {
+				return true
+			}
+		}
+		return false
+	}
+	if blob, found := gitIndexBlob(ctx, root, "AGENTS.md"); found && containsAny(blob) {
 		report.Agents = residueTracked
 	} else if !hubRunning {
 		// Hub が動いていないのにブロックが残っている = 回収されていない置き去り。
 		// 動いている間は稼働中セッションの正常な注入と区別できないので報告しない。
-		if blob, err := os.ReadFile(filepath.Join(root, "AGENTS.md")); err == nil && bytes.Contains(blob, needle) {
+		if blob, err := os.ReadFile(filepath.Join(root, "AGENTS.md")); err == nil && containsAny(blob) {
 			report.Agents = residueWorktreeOnly
 		}
 	}

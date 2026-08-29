@@ -66,7 +66,7 @@ func hubEnv(subcommand string) (hubURL, token string, sessionID int, err error) 
 func runSpawn(args []string) error {
 	fs := flag.NewFlagSet("orchestrate spawn", flag.ContinueOnError)
 	role := fs.String("role", "", "child role (required, e.g. implementation/test/review)")
-	provider := fs.String("provider", "", "override provider (default: resolved from the role mapping decided at conductor launch)")
+	provider := fs.String("provider", "", "override provider; one of claude|codex|copilot|cursor-agent|opencode|grok (exact lowercase). Default: the role mapping decided at conductor launch, then the provider last used for this role, then the parent's provider")
 	model := fs.String("model", "", "override model (default: resolved from the role mapping decided at conductor launch)")
 	cwd := fs.String("cwd", "", "child working directory (default: parent session cwd)")
 	force := fs.Bool("force", false, "spawn a new child even if a live child already exists for the role (default: rejected; use `orchestrate send` instead)")

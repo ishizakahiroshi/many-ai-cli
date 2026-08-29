@@ -13,6 +13,7 @@ import (
 
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/wrapper"
 )
 
 type spawnWrappedSpec struct {
@@ -301,6 +302,11 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		Utf8Session     bool   `json:"utf8_session"`
 		IsolateWorktree *bool  `json:"isolate_worktree"`
 		WorktreeCleanup string `json:"worktree_cleanup"`
+		// Delegation は「子セッションへ委譲できることを AI に伝える」の指定。
+		// nil は「画面が指定しなかった」で、config の user_prefs.spawn.delegation_auto を使う
+		// （isolate_worktree と同じ扱い）。委譲できるかどうかではなく、AI が知るかどうかを
+		// 決めるだけ。正本は internal/wrapper/delegation.go の冒頭。
+		Delegation *bool `json:"delegation"`
 		// SubscriptionProfileID は使用するサブスクリプション profile。
 		// 省略・空文字は「Default CLI login」で、従来のリクエストと同一の挙動になる。
 		SubscriptionProfileID string `json:"subscription_profile_id"`
@@ -400,6 +406,10 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	}
 	if cleanupPolicy == "" {
 		cleanupPolicy = s.cfg.UserPrefs.Spawn.WorktreeCleanup
+	}
+	delegation := s.cfg.UserPrefs.Spawn.DelegationAuto
+	if body.Delegation != nil {
+		delegation = *body.Delegation
 	}
 	s.cfgMu.Unlock()
 	cleanupPolicy = effectiveWorktreeCleanup(cleanupPolicy)
@@ -647,6 +657,13 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	cmd.Dir = cwd
 	cmd.Env = append(sanitizeEnv(os.Environ()), "MANY_AI_CLI=1",
 		fmt.Sprintf("MANY_AI_CLI_HUB_PORT=%d", hubPort))
+	// 画面の指定と config 既定を Hub 側で解決し、wrapper へは結論だけを渡す
+	// （判定を 2 箇所に置かない）。0 も明示して、env が残った環境で意図せず ON にならないようにする。
+	if delegation {
+		cmd.Env = append(cmd.Env, wrapper.DelegationEnvName+"=1")
+	} else {
+		cmd.Env = append(cmd.Env, wrapper.DelegationEnvName+"=0")
+	}
 	if s.parentShell != "" {
 		cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}
