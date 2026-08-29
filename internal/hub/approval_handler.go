@@ -169,10 +169,13 @@ func providerApprovalRuleTargetsWithCodexHome(provider, cwd, codexHome string) [
 			Providers: []string{"codex"},
 			Mode:      approvalRuleModeSharedBlock,
 		}}
-	case "copilot", "cursor-agent", "grok":
+	case "copilot", "cursor-agent", "grok", "opencode":
 		// grok (Grok Build) は CLAUDE.md / AGENTS.md を両方ネイティブに読む
 		// （Claude Code 互換 harness）。copilot / cursor-agent と同じく
 		// プロジェクト直下 AGENTS.md へ共有ブロックを注入する。
+		// opencode も同じ扱い。プロジェクト側の指示ファイルは AGENTS.md /
+		// CLAUDE.md / CONTEXT.md の順で読まれ、git ルートに置けばサブディレクトリで
+		// 起動したセッションにも届く（2026-08-29 実測）。
 		return projectAgentsApprovalRuleTarget(provider, cwd)
 	default:
 		return nil

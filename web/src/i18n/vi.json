@@ -187,7 +187,7 @@
   "spawn_worktree_error": "Không tạo được worktree. Có thể thư mục làm việc không phải là repository git, hoặc việc tạo git worktree đã thất bại. Hãy bỏ chọn ô cô lập, hoặc trỏ tới một repository git.",
   "spawn_isolate_worktree_note": "Chỉ áp dụng khi thư mục làm việc là một repository git. Tạo bản checkout riêng trong <repo>/.git-worktrees/ trên nhánh mới bắt đầu bằng many-ai/. Các tệp chưa được theo dõi như node_modules và .env không được mang theo, nên có thể cần cài lại dependencies.",
   "spawn_delegation": "Cho session này biết nó có thể giao việc cho session con",
-  "spawn_delegation_note": "Hiện chỉ hỗ trợ claude. Thêm một ghi chú ngắn vào system prompt của session này để AI biết nó có thể chạy `many-ai-cli orchestrate` nhằm tạo và chỉ thị cho các session con. Đây không phải là công tắc an toàn: việc tạo session con vẫn hỏi xác nhận của bạn, và các subcommand vẫn hoạt động khi tùy chọn này tắt.",
+  "spawn_delegation_note": "Chỉ claude và grok mới chuyển đổi được theo từng session. codex, copilot, cursor-agent và opencode nhận ghi chú này qua tệp AGENTS.md ở thư mục gốc của dự án, nên chúng tuân theo cài đặt (user_prefs.spawn.delegation_auto) chứ không theo ô đánh dấu này. Thêm một ghi chú ngắn vào system prompt của session này để AI biết nó có thể chạy `many-ai-cli orchestrate` nhằm tạo và chỉ thị cho các session con. Đây không phải là công tắc an toàn: việc tạo session con vẫn hỏi xác nhận của bạn, và các subcommand vẫn hoạt động khi tùy chọn này tắt.",
   "settings": "Cài đặt",
   "settings_language": "Ngôn ngữ",
   "settings_theme": "Giao diện",

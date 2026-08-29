@@ -15,11 +15,11 @@ import (
 //
 // 2026-08-29 の調査（plan_cross-session-messaging-generalization.md C6）で、
 // セッション単位でシステムプロンプトへ追記できるのは claude（--append-system-prompt-file）と
-// grok（--rules）だけだと分かった。codex / copilot / cursor-agent にはその口が無く、
+// grok（--rules）だけだと分かった。codex / copilot / cursor-agent / opencode にはその口が無く、
 // 読ませる手段は指示ファイルしかない。
 //
 // **この経路ではセッションごとの切り替えができない。** 新規セッションパネルのチェックボックスは
-// claude / grok にしか効かず、この 3 つは設定（user_prefs.spawn.delegation_auto）単位の
+// claude / grok にしか効かず、この 4 つは設定（user_prefs.spawn.delegation_auto）単位の
 // オン・オフになる。挙動が揃わないことを承知のうえで入れる判断（2026-08-29 ユーザー）。
 //
 // 承認ルール（approval_rules.go）とは**別ファイル・別マーカー**にする。
@@ -78,10 +78,15 @@ func SyncDelegationFile() error {
 
 // providerUsesDelegationBlock は「ファイル注入で案内を渡す provider か」。
 // claude と grok はセッション単位の口があるのでこちらでは扱わない（二重に渡さない）。
-// opencode は読ませる経路が未調査のため対象外。
+//
+// opencode は 2026-08-29 に実測して追加した。バイナリ内の指示ファイル解決は
+// グローバルが「<config>/AGENTS.md と ~/.claude/CLAUDE.md」、プロジェクトが
+// 「AGENTS.md / CLAUDE.md / CONTEXT.md」で、AGENTS.md は system prompt に載る
+// （canary を置いた AGENTS.md に従い、read ツールの呼び出しは 0 件だった）。
+// 読み込むのは opencode 本体なので、-m で指す LLM が変わっても届き方は変わらない。
 func providerUsesDelegationBlock(provider string) bool {
 	switch provider {
-	case "codex", "copilot", "cursor-agent":
+	case "codex", "copilot", "cursor-agent", "opencode":
 		return true
 	default:
 		return false
