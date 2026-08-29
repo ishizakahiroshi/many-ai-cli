@@ -22,4 +22,5 @@ export const ORCHESTRATION_CLI_OPTIONS: readonly OrchestrationCLIOption[] = [
   { value: 'cursor-agent', label: 'Cursor Agent' },
   { value: 'opencode',     label: 'OpenCode' },
   { value: 'grok',         label: 'Grok Build' },
+  { value: 'command-code', label: 'Command Code' },
 ] as const;

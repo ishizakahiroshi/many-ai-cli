@@ -319,7 +319,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	if body.Provider != "claude" && body.Provider != "codex" && body.Provider != "copilot" && body.Provider != "cursor-agent" && body.Provider != "opencode" && body.Provider != "grok" && body.Provider != "shell" {
+	if body.Provider != "claude" && body.Provider != "codex" && body.Provider != "copilot" && body.Provider != "cursor-agent" && body.Provider != "opencode" && body.Provider != "grok" && body.Provider != "command-code" && body.Provider != "shell" {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
 		return
 	}
@@ -631,6 +631,20 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		if resolvedModel != "" {
 			wrapArgs = append(wrapArgs, "--model", resolvedModel)
 		}
+	case "command-code":
+		// 全許可（wrapper 側で --yolo に変換される）は Claude / OpenCode と同じく確認必須。
+		// spawnWrappedSession の default 分岐と同じ判定を HTTP 経路にも置く。
+		risk := evaluateBypassPermissionRisk(body.PermissionMode)
+		if risk.HighRisk && !body.RiskConfirmed {
+			writeJSONError(w, http.StatusBadRequest, "risk_confirmation_required", "risk confirmation required")
+			return
+		}
+		if resolvedModel != "" {
+			wrapArgs = append(wrapArgs, "--model", resolvedModel)
+		}
+		if body.PermissionMode != "" && body.PermissionMode != "default" {
+			wrapArgs = append(wrapArgs, "--permission-mode", body.PermissionMode)
+		}
 	}
 	// route が未指定の場合は model 名から推定する。Anthropic / OpenAI の
 	// 既定 route は env 注入を行わない（ユーザー shell の値を継承）。
@@ -847,7 +861,7 @@ func (s *Server) handleSpawnGrid(w http.ResponseWriter, r *http.Request) {
 		aiProvider = "claude"
 	}
 	validAIProviders := map[string]bool{
-		"claude": true, "codex": true, "copilot": true, "cursor-agent": true, "opencode": true, "grok": true,
+		"claude": true, "codex": true, "copilot": true, "cursor-agent": true, "opencode": true, "grok": true, "command-code": true,
 	}
 	if body.Preset == "ai+shell" && !validAIProviders[aiProvider] {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid ai provider for ai+shell preset")

@@ -242,6 +242,7 @@ export class DetachedGridManager {
     : session.provider === 'cursor-agent'  ? 'r'
     : session.provider === 'grok'          ? 'G'
     : session.provider === 'ollama'        ? 'O'
+    : session.provider === 'command-code'  ? 'M'
     : (session.provider || '?')[0].toUpperCase();
     header.appendChild(provBadge);
 

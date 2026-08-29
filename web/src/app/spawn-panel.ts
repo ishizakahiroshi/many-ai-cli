@@ -590,7 +590,7 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
   });
 
   function providerHasPermissionSelect(p: string): boolean {
-    return p === 'claude' || p === 'grok' || p === 'copilot' || p === 'cursor-agent';
+    return p === 'claude' || p === 'grok' || p === 'copilot' || p === 'cursor-agent' || p === 'command-code';
   }
 
   function permissionAutoLabel(p: string): string {
@@ -603,18 +603,27 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
     if (p === 'grok') return t('spawn_permission_bypass_grok');
     if (p === 'copilot') return t('spawn_permission_bypass_copilot');
     if (p === 'cursor-agent') return t('spawn_permission_bypass_cursor');
+    if (p === 'command-code') return t('spawn_permission_bypass_command_code');
     return t('spawn_permission_bypass');
   }
 
   function syncPermissionModeOptions(p: string): void {
     if (!spawnPermissionMode) return;
     const claudeLike = p === 'claude' || p === 'grok';
+    // Command Code は plan / acceptEdits に対応するが auto に相当する mode を持たない
+    // （親 plan の対応表: plan → --permission-mode plan、acceptEdits → --auto-accept、
+    // bypassPermissions → --yolo）。claudeLike の条件は書き換えず、専用の分岐を足すだけにする。
+    const commandCode = p === 'command-code';
     for (const opt of Array.from(spawnPermissionMode.options)) {
       if (opt.value === 'plan' || opt.value === 'acceptEdits') {
-        opt.hidden = !claudeLike;
-        opt.disabled = !claudeLike;
+        opt.hidden = !(claudeLike || commandCode);
+        opt.disabled = !(claudeLike || commandCode);
       }
-      if (opt.value === 'auto') opt.textContent = permissionAutoLabel(p);
+      if (opt.value === 'auto') {
+        opt.hidden = commandCode;
+        opt.disabled = commandCode;
+        opt.textContent = permissionAutoLabel(p);
+      }
       if (opt.value === 'bypassPermissions') opt.textContent = permissionBypassLabel(p);
     }
     const selected = spawnPermissionMode.selectedOptions[0];
@@ -640,6 +649,7 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
       'cursor-agent': 'spawn-cursor-agent-note',
       opencode: 'spawn-opencode-note',
       grok: 'spawn-grok-note',
+      'command-code': 'spawn-command-code-note',
       shell: 'spawn-shell-note',
     };
     for (const [provider, id] of Object.entries(noteIds)) {
@@ -2200,7 +2210,7 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
         bodyObj.risk_confirmed = riskConfirmed;
         bodyObj.sandbox = sandbox;
         bodyObj.ask_for_approval = approval;
-      } else if (provider === 'grok' || provider === 'copilot' || provider === 'cursor-agent') {
+      } else if (provider === 'grok' || provider === 'copilot' || provider === 'cursor-agent' || provider === 'command-code') {
         const permMode = spawnPermissionMode ? spawnPermissionMode.value : 'default';
         if (permMode === 'bypassPermissions') {
           const riskConfirmed = await appConfirm({

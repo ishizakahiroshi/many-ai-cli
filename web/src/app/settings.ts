@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, showToast, ti18n, token } from './util.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, openDetachedGridForSessions, patchSessionMeta, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
@@ -388,6 +388,7 @@ export function getUsageLinkUrl(provider) {
     'lm-studio':   STORAGE_USAGE_LINK_LM_STUDIO_KEY,
     opencode: STORAGE_USAGE_LINK_OPENCODE_KEY,
     grok:     STORAGE_USAGE_LINK_GROK_KEY,
+    'command-code': STORAGE_USAGE_LINK_COMMAND_CODE_KEY,
   };
   const key = keyMap[provider];
   if (!key) return DEFAULT_USAGE_LINKS[provider] || '#';
@@ -395,7 +396,7 @@ export function getUsageLinkUrl(provider) {
 }
 
 export function applyUsageLinks() {
-  for (const p of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok']) {
+  for (const p of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok', 'command-code']) {
     const el = document.getElementById(`usage-link-${p}`);
     if (el) el.href = getUsageLinkUrl(p);
   }
@@ -411,6 +412,7 @@ export function loadUsageLinkSettings() {
     'lm-studio':   STORAGE_USAGE_LINK_LM_STUDIO_KEY,
     opencode: STORAGE_USAGE_LINK_OPENCODE_KEY,
     grok:     STORAGE_USAGE_LINK_GROK_KEY,
+    'command-code': STORAGE_USAGE_LINK_COMMAND_CODE_KEY,
   };
   for (const [p, k] of Object.entries(keyMap)) {
     const el = document.getElementById(`usage-link-${p}-url`);
@@ -431,6 +433,7 @@ export function saveUsageLinkSettings() {
     ['lm-studio',   'usage_links.lm-studio',  STORAGE_USAGE_LINK_LM_STUDIO_KEY],
     ['opencode', 'usage_links.opencode', STORAGE_USAGE_LINK_OPENCODE_KEY],
     ['grok',     'usage_links.grok',     STORAGE_USAGE_LINK_GROK_KEY],
+    ['command-code', 'usage_links.command-code', STORAGE_USAGE_LINK_COMMAND_CODE_KEY],
   ];
   for (const [p, prefPath, key] of pairs) {
     const input = document.getElementById(`usage-link-${p}-url`);
@@ -1023,6 +1026,7 @@ export function applyLang(lang) {
       setUserPref('usage_links.ollama', '');
       setUserPref('usage_links.opencode', '');
       setUserPref('usage_links.grok', '');
+      setUserPref('usage_links.command-code', '');
       loadUsageLinkSettings();
       showToast(t('settings_usage_links_reset_done'), usageLinksResetBtn);
     });
@@ -1860,7 +1864,7 @@ initSettingsInformationArchitecture();
     const res = await fetch(`/api/usage-link-defaults?token=${encodeURIComponent(token || '')}`);
     if (!res.ok) return;
     const d = await res.json();
-    for (const k of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok']) {
+    for (const k of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok', 'command-code']) {
       // 空文字は無視（GitHub 側が古くキーを欠く場合に空で返るため、
       // ローカルの正しいデフォルト値を潰さない）
       if (typeof d[k] === 'string' && d[k] !== '') DEFAULT_USAGE_LINKS[k] = d[k];
@@ -2062,10 +2066,11 @@ window.approvalPatternsUI = (function () {
     copilot: { official: [], custom: [] },
     'cursor-agent': { official: [], custom: [] },
     grok: { official: [], custom: [] },
+    'command-code': { official: [], custom: [] },
     common: { official: [], custom: [] },
   };
   // アクティブプロファイル設定（サーバ側 ApprovalProfiles と同期）
-  let activeProfiles = { claude: 'official', codex: 'official', copilot: 'official', 'cursor-agent': 'official', grok: 'official', common: 'official' };
+  let activeProfiles = { claude: 'official', codex: 'official', copilot: 'official', 'cursor-agent': 'official', grok: 'official', 'command-code': 'official', common: 'official' };
 
   function currentProvider() { return providerEl.value; }
   function currentProfile() { return profileEl.value; }
@@ -2082,6 +2087,7 @@ window.approvalPatternsUI = (function () {
           copilot: p.copilot || 'official',
           'cursor-agent': p['cursor-agent'] || 'official',
           grok: p.grok || 'official',
+          'command-code': p['command-code'] || 'official',
           common: p.common || 'official',
         };
       }
@@ -2098,6 +2104,7 @@ window.approvalPatternsUI = (function () {
         providerApprovalTriggers.copilot = norm(data.copilot);
         providerApprovalTriggers['cursor-agent'] = norm(data['cursor-agent']);
         providerApprovalTriggers.grok = norm(data.grok);
+        providerApprovalTriggers['command-code'] = norm(data['command-code']);
         providerApprovalTriggers.common = norm(data.common);
       }
     } catch (e) {
@@ -2287,6 +2294,7 @@ export async function loadSlashCmdSources() {
   const codexEl  = document.getElementById('slash-src-codex');
   const copilotEl = document.getElementById('slash-src-copilot');
   const cursorAgentEl = document.getElementById('slash-src-cursor-agent');
+  const commandCodeEl = document.getElementById('slash-src-command-code');
   if (!claudeEl || !codexEl || !copilotEl) return;
   try {
     const resp = await fetch(`/api/slash-cmd-sources?token=${token}`);
@@ -2296,6 +2304,7 @@ export async function loadSlashCmdSources() {
     codexEl.value  = data.codex  || '';
     copilotEl.value = data.copilot || '';
     if (cursorAgentEl) cursorAgentEl.value = data['cursor-agent'] || '';
+    if (commandCodeEl) commandCodeEl.value = data['command-code'] || '';
   } catch (_) {}
 }
 
@@ -2308,6 +2317,7 @@ export async function loadSlashCmdSources() {
       codex:  (document.getElementById('slash-src-codex')?.value  || '').trim(),
       copilot: (document.getElementById('slash-src-copilot')?.value || '').trim(),
       'cursor-agent': (document.getElementById('slash-src-cursor-agent')?.value || '').trim(),
+      'command-code': (document.getElementById('slash-src-command-code')?.value || '').trim(),
     };
     try {
       const resp = await fetch(`/api/slash-cmd-sources?token=${token}`, {
@@ -3358,7 +3368,7 @@ const SUMMARY_RENDERERS: Record<string, SummaryRenderer> = {
       STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY,
       STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY,
       STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY,
-      STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY,
+      STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY,
     ];
     let custom = 0;
     for (const k of keys) {
@@ -3370,7 +3380,7 @@ const SUMMARY_RENDERERS: Record<string, SummaryRenderer> = {
   },
 
   'slash-src': () => {
-    const ids = ['slash-src-claude', 'slash-src-codex', 'slash-src-copilot', 'slash-src-cursor-agent'];
+    const ids = ['slash-src-claude', 'slash-src-codex', 'slash-src-copilot', 'slash-src-cursor-agent', 'slash-src-command-code'];
     let custom = 0;
     for (const id of ids) {
       if (_summaryVal(id).trim()) custom++;

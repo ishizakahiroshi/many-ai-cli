@@ -52,6 +52,7 @@ export const STORAGE_USAGE_LINK_OLLAMA_KEY    = 'ai_cli_hub_usage_link_ollama';
 export const STORAGE_USAGE_LINK_LM_STUDIO_KEY = 'ai_cli_hub_usage_link_lm_studio';
 export const STORAGE_USAGE_LINK_OPENCODE_KEY  = 'ai_cli_hub_usage_link_opencode';
 export const STORAGE_USAGE_LINK_GROK_KEY      = 'ai_cli_hub_usage_link_grok';
+export const STORAGE_USAGE_LINK_COMMAND_CODE_KEY = 'ai_cli_hub_usage_link_command_code';
 export const STORAGE_USAGE_PROBE_MODEL_KEY    = 'ai_cli_hub_usage_probe_model';
 export const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds';
 export const STORAGE_VOICE_INPUT_DISABLED_KEY = 'ai_cli_hub_voice_input_disabled';
@@ -167,6 +168,7 @@ export const DEFAULT_USAGE_LINKS = {
   'lm-studio': 'http://localhost:1234',
   opencode: 'https://opencode.ai/go',
   grok:     'https://grok.com/?_s=usage',
+  'command-code': 'https://commandcode.ai/usage',
 };
 
 export const FONTSIZE_MAP = { large: 15, medium: 13, small: 11 };
@@ -217,6 +219,7 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'usage_links.lm-studio':     [STORAGE_USAGE_LINK_LM_STUDIO_KEY,  String],
   'usage_links.opencode':      [STORAGE_USAGE_LINK_OPENCODE_KEY,   String],
   'usage_links.grok':          [STORAGE_USAGE_LINK_GROK_KEY,       String],
+  'usage_links.command-code':  [STORAGE_USAGE_LINK_COMMAND_CODE_KEY, String],
   'usage_probe_model':         [STORAGE_USAGE_PROBE_MODEL_KEY,     String],
   'session_order':             [STORAGE_ORDER_KEY,                 JSON.stringify],
   'group_order':               [STORAGE_GROUP_ORDER_KEY,           JSON.stringify],
@@ -253,6 +256,7 @@ export const _USER_PREFS_STRING_PATHS = new Set([
   'usage_links.ollama',
   'usage_links.opencode',
   'usage_links.grok',
+  'usage_links.command-code',
   'usage_probe_model',
   'display.locked_mode',
   'display.theme',

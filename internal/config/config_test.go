@@ -156,6 +156,34 @@ func TestProviderDefaultsIncludeGrok(t *testing.T) {
 	}
 }
 
+func TestProviderDefaultsIncludeCommandCode(t *testing.T) {
+	slash := DefaultSlashCmdSources()
+	if slash.CommandCode == "" || !strings.Contains(slash.CommandCode, "/command-code.md") {
+		t.Fatalf("DefaultSlashCmdSources().CommandCode = %q", slash.CommandCode)
+	}
+	effSlash := EffectiveSlashCmdSources(SlashCmdSources{})
+	if effSlash.CommandCode != slash.CommandCode {
+		t.Fatalf("EffectiveSlashCmdSources().CommandCode = %q, want %q", effSlash.CommandCode, slash.CommandCode)
+	}
+
+	patterns := DefaultApprovalPatternSources()
+	if patterns.CommandCode == "" || !strings.Contains(patterns.CommandCode, "/command-code.md") {
+		t.Fatalf("DefaultApprovalPatternSources().CommandCode = %q", patterns.CommandCode)
+	}
+	effPatterns := EffectiveApprovalPatternSources(ApprovalPatternSources{})
+	if effPatterns.CommandCode != patterns.CommandCode {
+		t.Fatalf("EffectiveApprovalPatternSources().CommandCode = %q, want %q", effPatterns.CommandCode, patterns.CommandCode)
+	}
+
+	profiles := EffectiveApprovalProfiles(ApprovalProfiles{})
+	if profiles.For("command-code") != ApprovalProfileOfficial {
+		t.Fatalf("profiles.For(command-code) = %q", profiles.For("command-code"))
+	}
+	if got := profiles.WithProvider("command-code", ApprovalProfileCustom).For("command-code"); got != ApprovalProfileCustom {
+		t.Fatalf("WithProvider(command-code, custom).For(command-code) = %q", got)
+	}
+}
+
 // TestSaveAtomicWrite は Save が atomic write（temp + Rename）を使うことを確認する。
 // 書き込み後に temp ファイルが残っていないこと、内容が一致することを検証する。
 func TestSaveAtomicWrite(t *testing.T) {

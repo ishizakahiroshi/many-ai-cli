@@ -1975,7 +1975,7 @@ func (s *Server) resolveChildSubscription(parent *session, provider string) stri
 // `Codex` も `ChatGPT` も通らない。一覧を定数として持つのは、弾いたときのエラーへ
 // そのまま載せるため。AI は綴りを揺らす（Codex / codex / ChatGPT / GPT-5）ので、
 // 「invalid provider」とだけ返すと正解に辿り着けず当てずっぽうを繰り返す。
-var orchestrationProviders = []string{"claude", "codex", "copilot", "cursor-agent", "opencode", "grok"}
+var orchestrationProviders = []string{"claude", "codex", "copilot", "cursor-agent", "opencode", "grok", "command-code"}
 
 func validOrchestrationProvider(provider string) bool {
 	for _, p := range orchestrationProviders {

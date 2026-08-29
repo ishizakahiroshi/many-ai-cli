@@ -288,12 +288,12 @@ export function isOllamaModelCommandBlocked(sessionId, text) {
   return /^\/model(\b|\s|$)/i.test(trimmed);
 }
 
-// shell（素のシェル）セッション内で AI CLI（claude/codex/copilot/cursor-agent/grok）の
+// shell（素のシェル）セッション内で AI CLI（claude/codex/copilot/cursor-agent/grok/command-code）の
 // 起動コマンドを直接打つと、provider=shell 用にチューニングされた入力・承認処理
 // （\x15 前置なし・マーカー未注入・shell 用承認検出）と二重ラップになり、スラッシュ
 // コマンドの文字化けや承認ボタンの不動作を招く。先頭トークンが起動コマンドのときは
 // 検知して provider 名を返す（パス前置・.cmd/.exe 等の拡張子も許容）。該当なしは null。
-const AI_CLI_LAUNCH_RE = /^(?:[^\s]*[\\/])?(claude|codex|copilot|cursor-agent|grok)(?:\.(?:cmd|exe|bat|ps1))?(?=\s|$)/i;
+const AI_CLI_LAUNCH_RE = /^(?:[^\s]*[\\/])?(claude|codex|copilot|cursor-agent|grok|command-code)(?:\.(?:cmd|exe|bat|ps1))?(?=\s|$)/i;
 // 「このまま続行」を選んだ shell セッションでは以後ナグを出さない（セッション単位で抑止）。
 const aiCliLaunchNudgeSuppressed = new Set();
 
@@ -2181,6 +2181,7 @@ inputEl.addEventListener('blur', (e) => {
       codex:  (document.getElementById('slash-src-codex')?.value  || '').trim(),
       copilot: (document.getElementById('slash-src-copilot')?.value || '').trim(),
       'cursor-agent': (document.getElementById('slash-src-cursor-agent')?.value || '').trim(),
+      'command-code': (document.getElementById('slash-src-command-code')?.value || '').trim(),
     };
     try {
       await fetch(`/api/slash-cmd-sources?token=${token}`, {
@@ -2230,6 +2231,7 @@ inputEl.addEventListener('blur', (e) => {
     setUserPref('usage_links.ollama', '');
     setUserPref('usage_links.opencode', '');
     setUserPref('usage_links.grok', '');
+    setUserPref('usage_links.command-code', '');
     setUserPref('voice.grace_seconds', DEFAULT_VOICE_GRACE_SEC);
 
     const triggerEnabled = document.getElementById('trigger-enabled');
@@ -2311,10 +2313,12 @@ inputEl.addEventListener('blur', (e) => {
     const slashCodexEl = document.getElementById('slash-src-codex');
     const slashCopilotEl = document.getElementById('slash-src-copilot');
     const slashCursorAgentEl = document.getElementById('slash-src-cursor-agent');
+    const slashCommandCodeEl = document.getElementById('slash-src-command-code');
     if (slashClaudeEl) slashClaudeEl.value = '';
     if (slashCodexEl) slashCodexEl.value = '';
     if (slashCopilotEl) slashCopilotEl.value = '';
     if (slashCursorAgentEl) slashCursorAgentEl.value = '';
+    if (slashCommandCodeEl) slashCommandCodeEl.value = '';
     loadUsageLinkSettings();
 
     const termAppEl = document.getElementById('settings-terminal-app');
@@ -2606,6 +2610,7 @@ inputEl.addEventListener('blur', (e) => {
     titleEl.textContent = provider === 'claude' ? 'Claude Code'
                         : provider === 'copilot' ? 'GitHub Copilot'
                         : provider === 'cursor-agent' ? 'Cursor Agent'
+                        : provider === 'command-code' ? 'Command Code'
                         : 'Codex CLI';
     timeEl.textContent  = '';
     listEl.innerHTML = `<div class="slash-picker-status">${t('slash_picker_loading')}</div>`;

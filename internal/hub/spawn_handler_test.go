@@ -1,6 +1,11 @@
 package hub
 
-import "testing"
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
 
 // TestCalcGridLayout は session 数から正しい grid layout 文字列を返すことを検証する。
 func TestCalcGridLayout(t *testing.T) {
@@ -128,5 +133,31 @@ func TestCalcGridLayoutSymmetry(t *testing.T) {
 	// count=9 は 3x3（7〜9 は 3x3）
 	if got := calcGridLayout(9); got != "3x3" {
 		t.Errorf("count=9 should give 3x3, got %q", got)
+	}
+}
+
+// TestHandleSpawnAcceptsCommandCodeProvider は command-code が handleSpawn の provider
+// whitelist（:322 の body.Provider 検証）を通ることを確認する。実プロセスを起動させず、
+// 存在しない subscription profile で早期 400 に倒す手法は
+// TestSpawnRejectsUnknownSubscriptionProfile と同じ。command-code が provider whitelist
+// で弾かれていれば「invalid provider」で 400 になり、通っていれば subscription profile
+// 解決の失敗で 400 になる。前者と後者を body の文言で区別する。
+func TestHandleSpawnAcceptsCommandCodeProvider(t *testing.T) {
+	s, _ := subsTestServer(t)
+	s.hubCWD = t.TempDir()
+	w := httptest.NewRecorder()
+	s.handleSpawn(w, subsRequest(t, http.MethodPost, "/api/spawn", map[string]any{
+		"provider":                "command-code",
+		"cwd":                     s.hubCWD,
+		"subscription_profile_id": "deleted-profile",
+	}))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("code = %d, want 400: %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "invalid provider") {
+		t.Fatalf("command-code was rejected as invalid provider: %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "subscription") {
+		t.Fatalf("expected subscription profile error, got: %s", w.Body.String())
 	}
 }
