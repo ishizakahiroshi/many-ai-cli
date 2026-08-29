@@ -284,7 +284,14 @@ func (s *Server) evaluateReplayApproval(id int) {
 		return
 	}
 	provider := ses.Provider
-	marker := extractApprovalMarkerBlockFromVT(ses.vt)
+	// トランスクリプトが供給元のセッションでは、ここでも VT からマーカーを立てない。
+	// reattach ではパーサ状態を作り直すので、次の poll の prime が最後の assistant
+	// メッセージを見て、未回答の質問ならそこから配信し直す
+	// （approval_marker_transcript.go の scanTranscriptApprovalMarkers）。
+	var marker *approvalMarkerBlock
+	if !approvalMarkerSourceIsTranscriptLocked(ses) {
+		marker = extractApprovalMarkerBlockFromVT(ses.vt)
+	}
 	approval := detectNativeApproval(provider, ses.vt.TailLines(vtTailLinesForApproval))
 	s.sessionsMu.Unlock()
 	if marker != nil {

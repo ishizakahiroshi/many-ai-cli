@@ -153,6 +153,13 @@ func approvalMarkerSignature(block string) string {
 }
 
 func (s *Server) maybeBroadcastApprovalMarker(id int, marker *approvalMarkerBlock, detectedAt time.Time) bool {
+	return s.maybeBroadcastApprovalMarkerFrom(id, marker, detectedAt, approvalSourceGoVT)
+}
+
+// maybeBroadcastApprovalMarkerFrom は供給元（VT ミラー / トランスクリプト）を
+// 名乗って同じ配信経路へ入る。承認の同一性（candidateKey + sourceEpoch）は
+// 供給元によらず 1 本のままで、source は記録・調査用のラベルにすぎない。
+func (s *Server) maybeBroadcastApprovalMarkerFrom(id int, marker *approvalMarkerBlock, detectedAt time.Time, source string) bool {
 	if marker == nil || marker.Block == "" || marker.Sig == "" {
 		return false
 	}
@@ -204,7 +211,7 @@ func (s *Server) maybeBroadcastApprovalMarker(id int, marker *approvalMarkerBloc
 				SessionID:      id,
 				Provider:       provider,
 				ApprovalSig:    marker.Sig,
-				ApprovalSource: approvalSourceGoVT,
+				ApprovalSource: source,
 				Reason:         reason,
 				DetectedAt:     detectedAt.Format(time.RFC3339),
 			})
@@ -241,7 +248,7 @@ func (s *Server) maybeBroadcastApprovalMarker(id int, marker *approvalMarkerBloc
 		ApprovalCandidateKey:   candidateKey,
 		ApprovalCandidateShape: candidateIdentity.shape,
 		ApprovalSourceEpoch:    sourceEpoch,
-		ApprovalSource:         approvalSourceGoVT,
+		ApprovalSource:         source,
 		Block:                  marker.Block,
 		DetectedAt:             detectedAt.Format(time.RFC3339),
 	})

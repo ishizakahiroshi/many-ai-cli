@@ -15,6 +15,9 @@ const (
 	agentChatMaxLimit     = 200
 	agentChatPollInterval = time.Second
 	agentChatIdleStop     = time.Minute
+	// agentChatKickDelay は前倒し poll までの待ち。0 にしないのは、端末への描画と
+	// トランスクリプトへの書き込みが同時ではないため（実測は同じ秒だが順序の保証は無い）。
+	agentChatKickDelay = 80 * time.Millisecond
 )
 
 func isAgentChatProvider(provider string) bool {
@@ -217,6 +220,25 @@ func (s *Server) stopAgentChatTail(id int) {
 	s.sessionsMu.Unlock()
 }
 
+// kickAgentChatPollLocked は次の poll を前倒しする。承認マーカーの供給元を
+// トランスクリプトへ移した以上、承認パネルの出る速さが 1 秒周期のポーリングに
+// 縛られる。終了マーカーが端末へ届いた瞬間（＝AI が回答を書き終えた瞬間）に
+// 1 回だけ前倒しして、VT 経路だった頃の体感を保つ。
+//
+// Stop() が true のときしか組み直さない。すでに発火済みのタイマーを Reset すると
+// 同じ generation の poll が二重に走り、両者が同じ agentChatParseState（可変 map）を
+// 触ってしまう。取り逃しても次の通常 poll が必ず拾うので、前倒しは best-effort でよい。
+func (s *Server) kickAgentChatPollLocked(id int, ses *session) {
+	if ses == nil || !ses.agentChatRunning || ses.agentChatTimer == nil {
+		return
+	}
+	if !ses.agentChatTimer.Stop() {
+		return
+	}
+	generation := ses.agentChatGeneration
+	ses.agentChatTimer = time.AfterFunc(agentChatKickDelay, func() { s.pollAgentChat(id, generation) })
+}
+
 func (s *Server) scheduleAgentChatPollLocked(id int, generation uint64) {
 	ses := s.sessions[id]
 	if ses == nil || !ses.agentChatRunning || ses.agentChatGeneration != generation {
@@ -342,6 +364,9 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 	if err != nil {
 		s.logger.Debug("agent chat tail failed", "session_id", id, "provider", provider, "err", err)
 	}
+	// 承認マーカーはチャット表示より前に出す。下の配信ループは UI 側の都合で
+	// 途中 return しうるので、そこへ承認を巻き込ませない。
+	s.scanTranscriptApprovalMarkers(id, messages, stateWasReset, time.Now())
 
 	for _, message := range messages {
 		if !s.broadcastAgentChatIfCurrent(id, generation, proto.Message{
