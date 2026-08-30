@@ -931,6 +931,7 @@ export function applyLang(lang) {
   const closeBtn   = document.getElementById('settings-close-btn');
   const licensesBtn = document.getElementById('settings-licenses-btn');
   const usageLinksResetBtn = document.getElementById('usage-links-reset-btn');
+  const providerOrderResetBtn = document.getElementById('provider-order-reset-btn');
 
   fontsizeEl.value = localStorage.getItem(STORAGE_FONTSIZE_KEY) || 'medium';
 
@@ -950,6 +951,16 @@ export function applyLang(lang) {
       e.stopPropagation();
       panel.hidden = true;
       maybeAutoSwitchToNextApproval();
+    });
+  }
+
+  if (providerOrderResetBtn) {
+    providerOrderResetBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      try {
+        const { resetSpawnProviderOrder } = await import('./spawn-panel.js');
+        resetSpawnProviderOrder();
+      } catch (_) {}
     });
   }
 

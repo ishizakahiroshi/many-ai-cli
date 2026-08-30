@@ -235,6 +235,10 @@
   background: var(--line);
   outline: none;
 }
+.spawn-provider-option[draggable="true"] { cursor: grab; }
+.spawn-provider-option.dragging { opacity: 0.4; cursor: grabbing; }
+.spawn-provider-option.drop-before { box-shadow: inset 0 2px 0 0 var(--accent); }
+.spawn-provider-option.drop-after  { box-shadow: inset 0 -2px 0 0 var(--accent); }
 .spawn-provider-option-check {
   width: 14px;
   text-align: center;

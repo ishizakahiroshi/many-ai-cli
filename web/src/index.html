@@ -34,25 +34,28 @@
     <button id="reconnect-btn" hidden>↺ <span data-i18n="reconnect">reconnect</span></button>
     <div class="usage-menu" id="usage-menu">
       <button class="usage-menu-btn" id="usage-menu-btn" aria-haspopup="true" aria-expanded="false">
+        <!-- 図形の使い分け（丸＝単体で起動できるもの / 角丸＝Claude・Codex からラップして使う route。
+             ローカルかクラウドかではない）の正本は web/src/app/session-list.ts の providerIconHtml。
+             ここはその図形を静的 SVG で複製しているだけなので、形を変えるときは両方を揃える。 -->
         <svg class="usage-menu-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 14" width="90" height="14" aria-hidden="true">
           <circle class="prov-shape claude" cx="5" cy="7" r="4.5" stroke-width="1.6"/>
           <text class="prov-letter claude" x="5" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">C</text>
           <circle class="prov-shape codex" cx="15" cy="7" r="4.5" stroke-width="1.6"/>
           <text class="prov-letter codex" x="15" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">X</text>
-          <circle class="prov-shape copilot" cx="25" cy="7" r="4.5" stroke-width="1.6"/>
-          <text class="prov-letter copilot" x="25" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">P</text>
-          <circle class="prov-shape cursor-agent" cx="35" cy="7" r="4.5" stroke-width="1.6"/>
-          <text class="prov-letter cursor-agent" x="35" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">r</text>
-          <circle class="prov-shape opencode" cx="45" cy="7" r="4.5" stroke-width="1.6"/>
-          <text class="prov-letter opencode" x="45" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
-          <circle class="prov-shape grok" cx="55" cy="7" r="4.5" stroke-width="1.6"/>
-          <text class="prov-letter grok" x="55" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">G</text>
-          <rect class="prov-shape ollama" x="60.5" y="2.5" width="9" height="9" rx="2" stroke-width="1.6"/>
-          <text class="prov-letter ollama" x="65" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
-          <rect class="prov-shape lm-studio" x="70.5" y="2.5" width="9" height="9" rx="2" stroke-width="1.6"/>
-          <text class="prov-letter lm-studio" x="75" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">L</text>
-          <circle class="prov-shape command-code" cx="85" cy="7" r="4.5" stroke-width="1.6"/>
-          <text class="prov-letter command-code" x="85" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">M</text>
+          <circle class="prov-shape grok" cx="25" cy="7" r="4.5" stroke-width="1.6"/>
+          <text class="prov-letter grok" x="25" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">G</text>
+          <circle class="prov-shape opencode" cx="35" cy="7" r="4.5" stroke-width="1.6"/>
+          <text class="prov-letter opencode" x="35" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
+          <circle class="prov-shape command-code" cx="45" cy="7" r="4.5" stroke-width="1.6"/>
+          <text class="prov-letter command-code" x="45" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">M</text>
+          <circle class="prov-shape copilot" cx="55" cy="7" r="4.5" stroke-width="1.6"/>
+          <text class="prov-letter copilot" x="55" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">P</text>
+          <circle class="prov-shape cursor-agent" cx="65" cy="7" r="4.5" stroke-width="1.6"/>
+          <text class="prov-letter cursor-agent" x="65" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">r</text>
+          <rect class="prov-shape ollama" x="70.5" y="2.5" width="9" height="9" rx="2" stroke-width="1.6"/>
+          <text class="prov-letter ollama" x="75" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
+          <rect class="prov-shape lm-studio" x="80.5" y="2.5" width="9" height="9" rx="2" stroke-width="1.6"/>
+          <text class="prov-letter lm-studio" x="85" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">L</text>
         </svg>
         <span data-i18n="usage_menu_btn">Usage</span>
         <svg class="usage-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -107,16 +110,16 @@
         </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
         </div>
         <div class="usage-dropdown-unavailable-row">
-        <a id="usage-link-ollama" class="usage-dropdown-item" href="https://ollama.com/settings" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect class="prov-shape ollama" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter ollama" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">O</text></svg>
-          <span class="usage-item-name">Ollama</span>
+        <a id="usage-link-command-code" class="usage-dropdown-item" href="https://commandcode.ai/usage" target="_blank" rel="noopener noreferrer">
+          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape command-code" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter command-code" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">M</text></svg>
+          <span class="usage-item-name">Command Code</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
         </div>
         <div class="usage-dropdown-unavailable-row">
-        <a id="usage-link-command-code" class="usage-dropdown-item" href="https://commandcode.ai/usage" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape command-code" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter command-code" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">M</text></svg>
-          <span class="usage-item-name">Command Code</span>
+        <a id="usage-link-ollama" class="usage-dropdown-item" href="https://ollama.com/settings" target="_blank" rel="noopener noreferrer">
+          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect class="prov-shape ollama" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter ollama" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">O</text></svg>
+          <span class="usage-item-name">Ollama</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
         </div>
@@ -130,16 +133,43 @@
         </div>
       </div>
     </div>
-    <!-- 🌐 外部公開（Tailscale serve）トグル＋状態ドット。ホスト直下から tailnet 公開を on/off。bind は 127.0.0.1 不変。 -->
-    <button id="expose-btn" data-i18n-tooltip="expose_tooltip" aria-haspopup="dialog" aria-pressed="false">🌐 <span data-i18n="expose_btn">Expose</span><span id="expose-dot" class="expose-dot expose-dot-off"></span></button>
     <button id="global-wakeword-btn" hidden>🎧</button>
     <span id="mic-status-chip" class="status-chip" hidden></span>
-    <!-- 📱 モバイル接続（QR ウィザード）。SSH ローカルフォワード / VPN 前提で 127.0.0.1 URL の QR を出す。bind は 127.0.0.1 不変。 -->
-    <button id="mobile-connect-btn" data-i18n-tooltip="mobile_connect_tooltip" aria-haspopup="dialog" aria-expanded="false">📱</button>
-    <button id="bug-report-btn" type="button" data-i18n-tooltip="bug_report_tooltip" aria-haspopup="dialog">
-      <span aria-hidden="true">🐞</span><span data-i18n="bug_report_button">バグ報告</span>
-    </button>
-    <button id="shutdown-btn" data-i18n-tooltip="shutdown_tooltip">⏻</button>
+    <div id="web-menu" class="web-menu">
+      <button class="web-menu-btn" id="web-menu-btn" data-i18n-tooltip="web_menu_tooltip" aria-haspopup="true" aria-expanded="false" aria-controls="web-menu-dropdown">
+        <svg class="web-menu-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <rect x="2" y="2"  width="20" height="8" rx="2"/>
+          <rect x="2" y="14" width="20" height="8" rx="2"/>
+          <line class="web-menu-lamp" x1="6" y1="6"  x2="6.01" y2="6"/>
+          <line x1="6" y1="18" x2="6.01" y2="18"/>
+        </svg>
+        <span data-i18n="web_menu_btn">Web</span>
+        <svg class="web-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="web-menu-dropdown" id="web-menu-dropdown" data-wheel-native hidden role="menu" aria-labelledby="web-menu-btn">
+        <!-- 🌐 外部公開（Tailscale serve）トグル＋状態ドット。bind は 127.0.0.1 不変。 -->
+        <button id="expose-btn" class="web-menu-item" type="button" data-i18n-tooltip="expose_tooltip" aria-haspopup="dialog" aria-pressed="false" role="menuitem">
+          <span class="web-menu-item-icon" aria-hidden="true">🌐</span>
+          <span class="web-menu-item-label" data-i18n="expose_btn">外部公開</span>
+          <span id="expose-dot" class="expose-dot expose-dot-off" aria-hidden="true"></span>
+        </button>
+        <!-- 📱 モバイル接続（QR ウィザード）。bind は 127.0.0.1 不変。 -->
+        <button id="mobile-connect-btn" class="web-menu-item" type="button" data-i18n-tooltip="mobile_connect_tooltip" aria-haspopup="dialog" aria-expanded="false" role="menuitem">
+          <span class="web-menu-item-icon" aria-hidden="true">📱</span>
+          <span class="web-menu-item-label" data-i18n="mobile_connect_tooltip">スマホで接続（QR）</span>
+        </button>
+        <button id="shutdown-btn" class="web-menu-item" type="button" data-i18n-tooltip="shutdown_tooltip" role="menuitem">
+          <span class="web-menu-item-icon" aria-hidden="true">⏻</span>
+          <span class="web-menu-item-label" data-i18n="shutdown_tooltip">Web を停止</span>
+        </button>
+        <div class="web-menu-divider" role="separator"></div>
+        <button id="bug-report-btn" class="web-menu-item" type="button" data-i18n-tooltip="bug_report_tooltip" aria-haspopup="dialog" role="menuitem">
+          <span class="web-menu-item-icon" aria-hidden="true">🐞</span>
+          <span class="web-menu-item-label" data-i18n="bug_report_button">バグ報告</span>
+        </button>
+      </div>
+    </div>
     <button id="settings-btn">
       <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       <span data-i18n="settings">Settings</span>
@@ -210,6 +240,11 @@
             <button type="button" id="tab-order-reset-btn" class="settings-inline-btn" data-i18n="settings_tab_order_reset">既定に戻す</button>
           </div>
           <div class="settings-note" data-i18n="settings_tab_order_desc">タブバーのタブはドラッグで並べ替えできます。使わないタブは右端へ寄せてください。並び順はこのブラウザにのみ保存されます。</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_provider_order_label">新規セッションの並び順</span>
+            <button type="button" id="provider-order-reset-btn" class="settings-inline-btn" data-i18n="settings_provider_order_reset">既定に戻す</button>
+          </div>
+          <div class="settings-note" data-i18n="settings_provider_order_desc">新規セッションの provider はドラッグで並べ替えできます。並び順はこのブラウザにのみ保存されます。タッチ端末では並べ替えできません。</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_ui_side_cards_label">操作系の左右: セッションカード</span>
             <select id="ui-side-cards-select" class="settings-select">
@@ -1086,11 +1121,11 @@
             <select id="spawn-provider" class="spawn-select spawn-provider-native" aria-hidden="true" tabindex="-1">
               <option value="claude">Claude Code</option>
               <option value="codex">Codex CLI</option>
+              <option value="grok">Grok Build</option>
+              <option value="opencode">OpenCode</option>
+              <option value="command-code">Command Code</option>
               <option value="copilot">GitHub Copilot</option>
               <option value="cursor-agent">Cursor Agent</option>
-              <option value="opencode">OpenCode</option>
-              <option value="grok">Grok Build</option>
-              <option value="command-code">Command Code</option>
               <option value="shell">Shell</option>
             </select>
             <div id="spawn-provider-combobox" class="spawn-provider-combobox">

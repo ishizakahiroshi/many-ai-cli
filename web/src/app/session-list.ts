@@ -337,6 +337,18 @@ export function providerDisplayName(provider) {
   return labels[key] || String(provider || '');
 }
 
+// provider アイコンの図形は 2 種類あり、使い分けは「単体で動くかどうか」で決まる。
+//
+//   丸（circle）  : それ単体で起動できるもの。`many-ai-cli wrap <provider>` の対象。
+//   角丸（rect）  : 単体では動かず、Claude や Codex のセッションからラップして使うもの
+//                   （モデル選択で選ぶ route。spawn-panel.ts の resolveRoute を参照）。
+//
+// **「ローカル実行かクラウドか」ではない。** Ollama はクラウドモデルも持つので、その軸で
+// 読み替えると新しいアイコンを足すときに形を取り違える（2026-08-30 に実際に誤読があった）。
+// 角丸なのは Ollama が単体で動かないからで、ローカルだからではない。
+//
+// この関数が 9 provider ぶんの図形の単一ソース。index.html の .usage-menu-icon は同じ図形を
+// 静的 SVG で複製しているので、形を変えるときは両方を揃える。
 export function providerIconHtml(provider, size = 16) {
   const key = String(provider || '').toLowerCase();
   const parsedSize = Number(size);

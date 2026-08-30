@@ -148,11 +148,15 @@ function btnEl(): HTMLButtonElement | null {
 function dotEl(): HTMLElement | null {
   return document.getElementById('expose-dot');
 }
+function lampEl(): Element | null {
+  return document.querySelector('.web-menu-lamp');
+}
 
 // ドット色＋ツールチップ（状態の常時可視化）。
 function reflectDot(): void {
   const btn = btnEl();
   const dot = dotEl();
+  const lamp = lampEl();
   if (!btn || !dot) return;
   const st = cached?.state;
   let cls = 'expose-dot';
@@ -173,6 +177,7 @@ function reflectDot(): void {
     cls += ' expose-dot-off';
   }
   dot.className = cls;
+  lamp?.classList.toggle('expose-dot-ready', !busy && st === 'ready');
   btn.classList.toggle('expose-on', st === 'ready');
   btn.setAttribute('aria-pressed', st === 'ready' ? 'true' : 'false');
   btn.setAttribute('title', `${t('expose_tooltip')} — ${label}`);

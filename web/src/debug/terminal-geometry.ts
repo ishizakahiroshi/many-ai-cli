@@ -12,8 +12,8 @@
 //   geo.send    sendResize の結果。sent / dedup / ws-closed を分けて残す
 //   geo.apply   Hub からの pty_resize 反映。PTY 実寸と xterm 実寸の突き合わせ
 //   geo.scroll  PgUp / PgDn を送る瞬間の xterm 実寸と PTY 通知済み寸法
-//   geo.card    レビューのターン完了カード（#git-turn-card）の出し入れ。カードは
-//               #display-stack のフロー内に入るのでターミナルの表示領域を縮める。
+//   geo.card    レビューのターン完了カード（#git-turn-card）の出し入れ。2026-08-30 に
+//               カードを絶対配置へ移すまでは、フロー内に入って表示領域を縮めていた。
 //               出し入れの瞬間と、レイアウトが落ち着いた 700ms 後の 2 点を残す
 //   sample      2 秒ごとに両者を比べ、変化したときとずれているときだけ 1 行出す
 //
@@ -59,8 +59,8 @@ function approvalBarVisible(): boolean {
   return !!bar && bar.classList.contains('visible');
 }
 
-// レビューのターン完了カードの占める高さ。非表示なら 0。承認バーと違いこのカードは
-// フローに入るので、出た分だけ #terminal-area が縮む。
+// レビューのターン完了カードの占める高さ。非表示なら 0。2026-08-30 以降このカードは
+// 承認バーと同じく絶対配置なので、出ても #terminal-area は縮まない（縮んでいたら退行）。
 function turnCardHeight(): number {
   const card = document.getElementById('git-turn-card') as HTMLElement | null;
   if (!card || card.hidden) return 0;

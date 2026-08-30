@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, showToast, token } from './util.js';
-import { CWD_HISTORY_MAX, STORAGE_CWD_HISTORY_KEY, STORAGE_CWD_FAVORITES_KEY, STORAGE_SPAWN_KEY, setUserPref } from './user-prefs.js';
+import { CWD_HISTORY_MAX, STORAGE_CWD_HISTORY_KEY, STORAGE_CWD_FAVORITES_KEY, STORAGE_SPAWN_KEY, STORAGE_SPAWN_PROVIDER_ORDER_KEY, setUserPref } from './user-prefs.js';
 import { set_pendingAutoSwitch, sessions } from './state.js';
 import { providerIconHtml } from './session-list.js';
 import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
@@ -9,6 +9,14 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
 import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
+
+let resetSpawnProviderOrderImpl: (() => void) | null = null;
+
+/** 新規セッションの provider 並び順を index.html の既定順へ戻す。 */
+export function resetSpawnProviderOrder(): void {
+  try { localStorage.removeItem(STORAGE_SPAWN_PROVIDER_ORDER_KEY); } catch (_) { /* noop */ }
+  resetSpawnProviderOrderImpl?.();
+}
 
 // ---- 新規セッション spawn panel ----
 (function () {
@@ -333,6 +341,8 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
   let spawnModelFetchInFlight = null;
   let spawnProviderOpen = false;
   let spawnProviderActiveIndex = -1;
+  let spawnProviderDragSrc: HTMLElement | null = null;
+  let suppressSpawnProviderClickUntil = 0;
 
   function rebuildModelRouteMap(groups) {
     spawnModelRouteMap.clear();
@@ -499,11 +509,55 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
     });
   }
 
-  function getSpawnProviderOptions() {
-    return Array.from((spawnProviderEl as HTMLSelectElement).options).map((opt, index) => {
-      const label = (opt.textContent || opt.label || opt.value).trim() || opt.value;
-      return { value: opt.value, label, id: `spawn-provider-option-${index}` };
+  function loadSpawnProviderOrder(): string[] {
+    try {
+      const raw = localStorage.getItem(STORAGE_SPAWN_PROVIDER_ORDER_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((value): value is string => typeof value === 'string');
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function saveSpawnProviderOrder(values: string[]): void {
+    try { localStorage.setItem(STORAGE_SPAWN_PROVIDER_ORDER_KEY, JSON.stringify(values)); } catch (_) { /* private mode 等は無視 */ }
+  }
+
+  function persistCurrentSpawnProviderOrder(): void {
+    if (!spawnProviderList) return;
+    const values = Array.from(spawnProviderList.querySelectorAll<HTMLElement>('.spawn-provider-option'))
+      .map((item) => item.dataset.value)
+      .filter((value): value is string => !!value);
+    saveSpawnProviderOrder(values);
+  }
+
+  function clearSpawnProviderDropMarks(): void {
+    spawnProviderList?.querySelectorAll<HTMLElement>('.spawn-provider-option').forEach((item) => {
+      item.classList.remove('drop-before', 'drop-after');
     });
+  }
+
+  function getSpawnProviderOptions() {
+    const defaults = Array.from((spawnProviderEl as HTMLSelectElement).options).map((opt) => {
+      const label = (opt.textContent || opt.label || opt.value).trim() || opt.value;
+      return { value: opt.value, label };
+    });
+    const known = new Map(defaults.map((option) => [option.value, option]));
+    const ordered = [];
+    const seen = new Set<string>();
+    for (const value of loadSpawnProviderOrder()) {
+      const option = known.get(value);
+      if (option && !seen.has(value)) {
+        ordered.push(option);
+        seen.add(value);
+      }
+    }
+    for (const option of defaults) {
+      if (!seen.has(option.value)) ordered.push(option);
+    }
+    return ordered.map((option, index) => ({ ...option, id: `spawn-provider-option-${index}` }));
   }
 
   function getSelectedSpawnProviderIndex() {
@@ -533,7 +587,7 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
       const active = spawnProviderOpen && index === spawnProviderActiveIndex;
       return (
         `<li id="${opt.id}" class="spawn-provider-option${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}" ` +
-        `role="option" aria-selected="${selected ? 'true' : 'false'}" data-value="${escapeHtml(opt.value)}" tabindex="-1">` +
+        `role="option" aria-selected="${selected ? 'true' : 'false'}" data-value="${escapeHtml(opt.value)}" draggable="true" tabindex="-1">` +
         `<span class="spawn-provider-option-icon" aria-hidden="true">${providerIconHtml(opt.value, 14)}</span>` +
         `<span class="spawn-provider-option-label">${escapeHtml(opt.label)}</span>` +
         `<span class="spawn-provider-option-check" aria-hidden="true">${selected ? '✓' : ''}</span>` +
@@ -555,6 +609,11 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
     if (spawnProviderTriggerIcon) spawnProviderTriggerIcon.innerHTML = providerIconHtml(selected.value, 14);
     renderSpawnProviderOptions();
   }
+
+  resetSpawnProviderOrderImpl = () => {
+    spawnProviderActiveIndex = getSelectedSpawnProviderIndex();
+    updateSpawnProviderIcon();
+  };
 
   function openSpawnProviderList() {
     if (!spawnProviderList || !spawnProviderTrigger || !spawnProviderCombobox) return;
@@ -637,18 +696,81 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
 
   if (spawnProviderList) {
     spawnProviderList.addEventListener('click', (e) => {
-      const item = e.target.closest('.spawn-provider-option');
+      if (Date.now() < suppressSpawnProviderClickUntil) {
+        suppressSpawnProviderClickUntil = 0;
+        e.preventDefault();
+        return;
+      }
+      const item = (e.target as Element | null)?.closest<HTMLElement>('.spawn-provider-option');
       if (!item) return;
       selectSpawnProviderValue(item.dataset.value);
     });
     spawnProviderList.addEventListener('mousemove', (e) => {
-      const item = e.target.closest('.spawn-provider-option');
+      if (spawnProviderDragSrc) return;
+      const item = (e.target as Element | null)?.closest<HTMLElement>('.spawn-provider-option');
       if (!item || !spawnProviderList.contains(item)) return;
       const items = [...spawnProviderList.querySelectorAll('.spawn-provider-option')];
       const idx = items.indexOf(item);
       if (idx >= 0 && idx !== spawnProviderActiveIndex) setSpawnProviderActiveIndex(idx);
     });
     spawnProviderList.addEventListener('keydown', handleSpawnProviderKeydown);
+
+    spawnProviderList.addEventListener('dragstart', (e: DragEvent) => {
+      const item = (e.target as Element | null)?.closest<HTMLElement>('.spawn-provider-option');
+      if (!item || !spawnProviderList.contains(item)) return;
+      spawnProviderDragSrc = item;
+      item.classList.add('dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        // Firefox はデータを載せないと dragstart 自体が成立しない。
+        try { e.dataTransfer.setData('text/plain', item.dataset.value || ''); } catch (_) { /* noop */ }
+      }
+    });
+
+    spawnProviderList.addEventListener('dragend', () => {
+      const hadDrag = !!spawnProviderDragSrc;
+      if (spawnProviderDragSrc) spawnProviderDragSrc.classList.remove('dragging');
+      spawnProviderDragSrc = null;
+      clearSpawnProviderDropMarks();
+      if (hadDrag) suppressSpawnProviderClickUntil = Date.now() + 250;
+    });
+
+    // リストは縦並びなので、項目の上下半分で挿入位置を決める。
+    spawnProviderList.addEventListener('dragover', (e: DragEvent) => {
+      if (!spawnProviderDragSrc) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      const item = (e.target as Element | null)?.closest<HTMLElement>('.spawn-provider-option');
+      clearSpawnProviderDropMarks();
+      if (!item || item === spawnProviderDragSrc || !spawnProviderList.contains(item)) return;
+      const rect = item.getBoundingClientRect();
+      const after = e.clientY >= rect.top + rect.height / 2;
+      item.classList.add(after ? 'drop-after' : 'drop-before');
+    });
+
+    spawnProviderList.addEventListener('dragleave', (e: DragEvent) => {
+      const item = (e.target as Element | null)?.closest<HTMLElement>('.spawn-provider-option');
+      if (item) item.classList.remove('drop-before', 'drop-after');
+    });
+
+    spawnProviderList.addEventListener('drop', (e: DragEvent) => {
+      if (!spawnProviderDragSrc) return;
+      e.preventDefault();
+      const source = spawnProviderDragSrc;
+      const item = (e.target as Element | null)?.closest<HTMLElement>('.spawn-provider-option');
+      clearSpawnProviderDropMarks();
+      if (item && item !== source && spawnProviderList.contains(item)) {
+        const rect = item.getBoundingClientRect();
+        const after = e.clientY >= rect.top + rect.height / 2;
+        spawnProviderList.insertBefore(source, after ? item.nextSibling : item);
+      } else if (!item) {
+        const items = [...spawnProviderList.querySelectorAll<HTMLElement>('.spawn-provider-option')];
+        const last = items[items.length - 1];
+        if (last && last !== source) spawnProviderList.insertBefore(source, last.nextSibling);
+      }
+      persistCurrentSpawnProviderOrder();
+      renderSpawnProviderOptions();
+    });
   }
 
   document.addEventListener('mousedown', (e) => {
