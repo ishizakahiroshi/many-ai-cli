@@ -1,7 +1,9 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, ti18n, token } from './util.js';
-import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, groupOrder, multiQuestionVisibleCache, orderSessions, projectFavorites, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, terminals } from './state.js';
+import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, groupOrder, multiQuestionVisibleCache, orderSessions, projectFavorites, saveCollapsedNodes, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, terminals } from './state.js';
+import { NO_PROJECT_KEY, buildSidebarTree, flattenSidebarTree, moveToSiblingFront, projectKeyForSession } from './sidebar-tree.js';
+import { STORAGE_SIDEBAR_PIN_MIGRATED_KEY, setUserPref } from './user-prefs.js';
 import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor, updateInputAffordance } from '../app.js';
 import { renderZeroSessionEmptyState } from './zero-session-empty-state.js';
 import { attachTerminal, claimPtyResizeOwnership, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, syncLiveStatusLongproc, updateScrollLockBtn } from './terminal.js';
@@ -393,6 +395,52 @@ function cardProviderModelHtml(s) {
   return `<span class="card-provider-model" role="img" data-tooltip="${escapeHtml(tooltip)}" title="${escapeHtml(tooltip)}" aria-label="${escapeHtml(tooltip)}">${providerIcon}${modelHtml}</span>`;
 }
 
+// 旧ピン留め（sessions.pinned）を、1 度だけ兄弟順の先頭へ変換する。
+//
+// pinned は以前「プロジェクトから引き抜いて Pinned という別の箱へ移す」印だった。
+// 箱を廃止したので、同じ意図（上に置いておきたい）を兄弟順で表し直す。変換後は
+// pinned を読まない・書かない。列（internal/sessionstore/store.go）は残す。
+//
+// 2 回目以降の起動で利用者の並びを勝手に書き換えないよう、済みの印を user_prefs へ
+// 置く（端末をまたいで共有される）。
+export function migratePinnedSessionsOnce(): void {
+  try {
+    if (localStorage.getItem(STORAGE_SIDEBAR_PIN_MIGRATED_KEY) === '1') return;
+  } catch (_) { /* localStorage が使えない環境では毎回スキップしない（下で印を立てる） */ }
+
+  const pinned = (Array.from(sessions.values()) as any[]).filter(s => s && s.pinned);
+  // 既存の並びの相対順を保つため、後ろのものから順に先頭へ送る。
+  const ordered = pinned
+    .map(s => ({ id: s.id, rank: sessionOrder.indexOf(s.id) }))
+    .sort((a, b) => (b.rank === -1 ? Number.MAX_SAFE_INTEGER : b.rank) - (a.rank === -1 ? Number.MAX_SAFE_INTEGER : a.rank));
+  for (const entry of ordered) {
+    const next = moveToSiblingFront(sessionOrder, Array.from(sessions.values()) as any[], entry.id);
+    sessionOrder.length = 0;
+    sessionOrder.push(...next);
+  }
+  if (ordered.length > 0) saveSessionOrder();
+  setUserPref('sidebar_pin_migrated', true);
+}
+
+// セッションを自分の器（プロジェクト、または親セッション）の中で兄弟順の先頭へ動かす。
+// カードの ⇧・カードのコンテキストメニュー・モバイルの行アクションが同じ経路を通る。
+export function moveSessionToSiblingFront(id: number): void {
+  const next = moveToSiblingFront(sessionOrder, Array.from(sessions.values()) as any[], id);
+  // sessionOrder は他モジュールが同じ配列参照を見ているので、差し替えずに中身を入れ替える。
+  sessionOrder.length = 0;
+  sessionOrder.push(...next);
+  saveSessionOrder();
+  renderSessionList();
+  // マルチタブが開いているときはペインスロット順も更新する。
+  // render() → renderSessionList() の再帰を防ぐため _c5SidebarUpdating フラグを立てておく。
+  const mv = document.getElementById('multi-view');
+  if (mv && !(mv as any).hidden && window.multiPaneManager) {
+    window._c5SidebarUpdating = true;
+    try { window.multiPaneManager.render(); }
+    finally { window._c5SidebarUpdating = false; }
+  }
+}
+
 // C9: 整列ロジックは state.js の orderSessions に集約。getOrderedSessions は後方互換の薄い委譲。
 export function getOrderedSessions() {
   return orderSessions();
@@ -698,68 +746,41 @@ export function renderSessionList() {
 
   appendSessionColorFilters(root);
 
-  // 表示順の正本は sessionOrder（＝カードの D&D 並び替え結果）。未登録のセッションは
-  // 生成順に末尾へ積まれるので、何も並び替えていなければ #2 → #10 の生成順になる。
-  // ピン留めだけは orderSessions 側でプロジェクト境界を越えて先頭へ持ち上げる。
-  // 状態（承認待ち等）や provider でここを並べ替えてはいけない。並べ替えると
-  // sessionOrder が毎レンダー上書きされ、D&D の結果が画面へ反映されなくなる。
-  const displayedSessions = getOrderedSessions()
-    .filter((s: any) => !activeSessionColorFilter || s.color === activeSessionColorFilter);
-
-  // ピンはプロジェクト境界を越えて最上位に置く。そうしないと「別プロジェクトの
-  // ピンより、先に出たプロジェクトの非ピン」が上に残ってしまう。
-  const groups = new Map();
-  const pinnedSessions = displayedSessions.filter((s: any) => s.pinned);
-  if (pinnedSessions.length > 0) groups.set('__pinned__', pinnedSessions);
-  displayedSessions.filter((s: any) => !s.pinned).forEach(s => {
-    const cwdStr = s.cwd || '';
-    const name = cwdStr
-      ? cwdStr.replace(/\\/g, '/').split('/').filter(p => p.length > 0).pop() || ''
-      : '';
-    const key = name || '__no_project__';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(s);
+  // 配置の正本は sidebar-tree.ts の buildSidebarTree。器（プロジェクト）は Hub が配る
+  // project_id から決まり、親子は parent_session_id から決まる。ここで状態（承認待ち等）や
+  // provider による並べ替えを足してはいけない。足すと sessionOrder が毎レンダー上書きされ、
+  // D&D の結果が画面へ反映されなくなる。規則は sidebar-tree-fixtures.ts が固定している。
+  const tree = buildSidebarTree({
+    sessions: Array.from(sessions.values()) as any[],
+    order: sessionOrder,
+    groupOrder,
+    projectFavorites,
+    colorFilter: activeSessionColorFilter,
   });
 
-  // ピン留め優先、その中で groupOrder に従ってソート（未登録キーは末尾）
   // 未登録のプロジェクトキーを groupOrder に追記し、以降のレンダーで並び順を固定する。
   // ここで append しないと、両プロジェクトとも未登録の状態で比較関数が 0 を返し、
-  // Map 挿入順（= 各プロジェクトのセッションが sessionOrder 上で最初に登場する位置）
-  // に依存してしまい、あるプロジェクトの先頭セッションを ✕ で削除した瞬間に
-  // 他プロジェクトのグループが上下にジャンプする（削除で並び順が変わって見える）。
+  // あるプロジェクトの先頭セッションを ✕ で削除した瞬間に他プロジェクトのグループが
+  // 上下にジャンプする（削除で並び順が変わって見える）。
   let _groupOrderChanged = false;
-  for (const k of groups.keys()) {
-    if (k === '__pinned__') continue;
-    if (!groupOrder.includes(k)) {
-      groupOrder.push(k);
+  for (const project of tree) {
+    if (!groupOrder.includes(project.key)) {
+      groupOrder.push(project.key);
       _groupOrderChanged = true;
     }
   }
   if (_groupOrderChanged) saveGroupOrder();
-  const _projectFavIdx = new Map(projectFavorites.map((k, i) => [k, i]));
-  const _groupOrderIdx = new Map(groupOrder.map((k, i) => [k, i]));
-  const sortedGroupKeys = [...groups.keys()].sort((a, b) => {
-    if (a === '__pinned__') return -1;
-    if (b === '__pinned__') return 1;
-    const aPin = _projectFavIdx.has(a);
-    const bPin = _projectFavIdx.has(b);
-    if (aPin !== bPin) return aPin ? -1 : 1;
-    if (aPin && bPin) return _projectFavIdx.get(a) - _projectFavIdx.get(b);
-    const ai = _groupOrderIdx.has(a) ? _groupOrderIdx.get(a) : -1;
-    const bi = _groupOrderIdx.has(b) ? _groupOrderIdx.get(b) : -1;
-    if (ai === -1 && bi === -1) return 0;
-    if (ai === -1) return 1;
-    if (bi === -1) return -1;
-    return ai - bi;
-  });
 
-  sortedGroupKeys.forEach(key => {
-    const groupSessions = groups.get(key);
-    const isPinnedGroup = key === '__pinned__';
-    const projectDisplayName = isPinnedGroup ? ti18n('session_pinned_group', 'Pinned') : (key === '__no_project__' ? t('no_project') : key);
+  tree.forEach(project => {
+    const key = project.key;
+    // 状態チップ・⊞・✕ は畳んでいる子も含めた全件を対象にする。
+    const groupSessions = flattenSidebarTree([project])
+      .map(id => sessions.get(id))
+      .filter(Boolean) as any[];
+    const projectDisplayName = key === NO_PROJECT_KEY ? t('no_project') : (project.label || key);
     const isCollapsed = collapsedGroups.has(key);
     const groupEl = document.createElement('div');
-    groupEl.className = 'project-group' + (projectFavorites.includes(key) ? ' project-group--pinned' : '');
+    groupEl.className = 'project-group' + (project.favorite ? ' project-group--pinned' : '');
 
     const header = document.createElement('div');
     header.className = 'project-group-header' + (isCollapsed ? ' project-group-header--collapsed' : '');
@@ -778,7 +799,7 @@ export function renderSessionList() {
     // ここ（プロジェクトグループ header）の「📁 Files」ボタンは廃止した。
     // C3: "Open running sessions in grid" ボタンは projActions（☆ の左隣）へ配置する。
     let gridBtn: HTMLButtonElement | null = null;
-    if (!isPinnedGroup && key !== '__no_project__') {
+    if (key !== NO_PROJECT_KEY) {
       const runningSessionsInGroup = groupSessions.filter(s => s.state === 'running' || s.state === 'waiting' || (s.state || 'standby') === 'standby');
       if (runningSessionsInGroup.length > 0) {
         gridBtn = document.createElement('button');
@@ -812,7 +833,7 @@ export function renderSessionList() {
     if (gridBtn) projActions.appendChild(gridBtn);
 
     const projStarBtn = document.createElement('button');
-    if (!isPinnedGroup) {
+    {
       const isProjFav = projectFavorites.includes(key);
       projStarBtn.className = 'star-btn' + (isProjFav ? ' starred' : '');
       projStarBtn.textContent = isProjFav ? '★' : '☆';
@@ -846,11 +867,12 @@ export function renderSessionList() {
       } else {
         collapsedGroups.add(key);
       }
+      saveCollapsedNodes();
       renderSessionList();
     });
 
     // グループD&D
-    header.draggable = !isPinnedGroup;
+    header.draggable = true;
     header.addEventListener('dragstart', (e) => {
       set_dragSrcGroupKey(key);
       set_dragSrcId(null);
@@ -882,8 +904,9 @@ export function renderSessionList() {
       if (!dragSrcGroupKey || dragSrcGroupKey === key) return;
       const srcKey = dragSrcGroupKey;
       set_dragSrcGroupKey(null);
-      if (!groupOrder.length) set_groupOrder([...sortedGroupKeys]);
-      sortedGroupKeys.forEach(k => { if (!groupOrder.includes(k)) groupOrder.push(k); });
+      const treeKeys = tree.map(node => node.key);
+      if (!groupOrder.length) set_groupOrder([...treeKeys]);
+      treeKeys.forEach(k => { if (!groupOrder.includes(k)) groupOrder.push(k); });
       const srcIdx = groupOrder.indexOf(srcKey);
       const dstIdx = groupOrder.indexOf(key);
       if (srcIdx !== -1) groupOrder.splice(srcIdx, 1);
@@ -897,13 +920,28 @@ export function renderSessionList() {
     const body = document.createElement('div');
     body.className = 'project-group-body' + (isCollapsed ? ' hidden' : '');
 
-    groupSessions.forEach(s => {
+    // 親の直下に子を並べる。畳んでいる親の子は entries に入れない（数だけ親に出す）。
+    const entries: Array<{ s: any; depth: number; childCount: number }> = [];
+    for (const top of project.children) {
+      const topSession: any = sessions.get(top.id);
+      if (!topSession) continue;
+      entries.push({ s: topSession, depth: 0, childCount: top.children.length });
+      if (collapsedGroups.has('session:' + top.id)) continue;
+      for (const child of top.children) {
+        const childSession: any = sessions.get(child.id);
+        if (childSession) entries.push({ s: childSession, depth: 1, childCount: 0 });
+      }
+    }
+
+    entries.forEach(entry => {
+      const s = entry.s;
+      const childCollapsed = collapsedGroups.has('session:' + s.id);
       const c = document.createElement('div');
       const state = s.state || 'standby';
       const activity = stateActivityDecoration(s);
       const stateClass = (state === 'running' || state === 'waiting') ? ` ${state}` : '';
       const approvalClass = activity.className === 'awaiting-approval' ? ' awaiting-approval' : '';
-      const orchClass = s.parent_session_id ? ' orchestration-child' : (s.orchestration_id ? ' orchestration-parent' : '');
+      const orchClass = entry.depth > 0 ? ' orchestration-child' : (entry.childCount > 0 || s.orchestration_id ? ' orchestration-parent' : '');
       const colorClass = s.color ? ` card-color-${safeClassToken(s.color)}` : '';
       c.className = 'card' + stateClass + approvalClass + orchClass + colorClass + (s.id === activeSessionId ? ' active' : '');
       c.tabIndex = isCollapsed ? -1 : 0;
@@ -923,6 +961,13 @@ export function renderSessionList() {
       const branchRoleHtml = s.worktree_branch
         ? `<span class="card-worktree-chip" data-tooltip="${escapeHtml(s.worktree_branch)}">${escapeHtml(s.worktree_branch)}</span>`
         : '';
+      // 子を持つ親にだけ出す折りたたみトグル。畳んでいる間も件数は見える。
+      const childToggleTip = childCollapsed
+        ? ti18n('card_children_expand', '子セッションを表示')
+        : ti18n('card_children_collapse', '子セッションを畳む');
+      const childToggleHtml = entry.childCount > 0
+        ? `<span class="card-children-toggle" role="button" tabindex="0" data-tooltip="${escapeHtml(childToggleTip)}" aria-label="${escapeHtml(childToggleTip)}">${childCollapsed ? '▶' : '▼'} ${entry.childCount}</span>`
+        : '';
       const boardPendingHtml = s.board_notify_pending
         ? `<span class="card-role-chip parent" data-tooltip="${escapeHtml(t('card_board_update_pending_tooltip'))}">${escapeHtml(t('card_board_update_pending'))}</span>`
         : '';
@@ -936,7 +981,7 @@ export function renderSessionList() {
       const branchLabel = branchStr || ti18n('card_branch_no_git', '(no git)');
       const branchBadge = ` <span class="card-branch" role="button" tabindex="0" data-sid="${s.id}"${branchDisabledAttr} data-tooltip="${escapeHtml(branchTip)}" aria-label="${escapeHtml(branchTip)}">${escapeHtml(branchLabel)}</span>`;
       // 2 行目は状態情報・ctx・補助メタデータ・branch を同じ行へ固定する。
-      const metaRow = `<div class="card-meta-row"><span class="card-status-slot">${cardStatusRowHtml(s)}</span><span class="card-ctx-slot">${cardCtxHtml(s)}</span>${s.pinned ? '<span class="card-pin" aria-label="Pinned">📌</span>' : ''}${noteHtml}${roleHtml}${branchRoleHtml}${boardPendingHtml}${branchBadge}</div>`;
+      const metaRow = `<div class="card-meta-row"><span class="card-status-slot">${cardStatusRowHtml(s)}</span><span class="card-ctx-slot">${cardCtxHtml(s)}</span>${noteHtml}${roleHtml}${childToggleHtml}${branchRoleHtml}${boardPendingHtml}${branchBadge}</div>`;
       // 状態は記号だけを表示し、名前は tooltip / aria-label へ残す。#N の直後に置く。
       const stateDescription = activity.label || label;
       const statePillHtml = ` <span class="card-state-pill ${safeClassToken(state)} ${activity.className}" title="${escapeHtml(stateDescription)}" data-tooltip="${escapeHtml(stateDescription)}" aria-label="${escapeHtml(stateDescription)}"><span class="card-pdot"></span><span class="card-state-icon" aria-hidden="true">${stateIconSvgHtml(activity.iconKind)}</span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
@@ -944,29 +989,39 @@ export function renderSessionList() {
 		`<div class="card-title-row"><b>#${s.id}</b>${statePillHtml} ${cardProviderModelHtml(s)}${taskTitleHtml}</div>` +
 	        metaRow;
 
+      const childToggleEl = c.querySelector('.card-children-toggle') as HTMLElement | null;
+      if (childToggleEl) {
+        const toggleChildren = (e: Event) => {
+          e.stopPropagation();
+          const nodeKey = 'session:' + s.id;
+          if (collapsedGroups.has(nodeKey)) collapsedGroups.delete(nodeKey);
+          else collapsedGroups.add(nodeKey);
+          saveCollapsedNodes();
+          renderSessionList();
+        };
+        childToggleEl.addEventListener('click', toggleChildren);
+        childToggleEl.addEventListener('keydown', (e: any) => {
+          if (e.key === 'Enter' || e.key === ' ') toggleChildren(e);
+        });
+      }
+
       const actions = document.createElement('div');
       actions.className = 'card-actions';
       c.appendChild(actions);
 
-      const pinBtn = document.createElement('button');
-      pinBtn.className = 'session-pin-btn' + (s.pinned ? ' pinned' : '');
-      pinBtn.textContent = s.pinned ? '📌' : '⌑';
-      pinBtn.title = s.pinned ? ti18n('session_unpin', 'Unpin session') : ti18n('session_pin', 'Pin session');
-      pinBtn.setAttribute('aria-label', pinBtn.title);
-      pinBtn.onclick = async (e) => {
+      // 「先頭へ」。器（プロジェクト、または親セッション）の中で兄弟順の先頭へ動かすだけ。
+      // 以前の 📌 は所属を書き換えて Pinned という別の箱へ移していたが、★ と同じ
+      // 「器の中で先頭へ」に揃えた。セッションの属性（pinned 列）はもう書かない。
+      const frontBtn = document.createElement('button');
+      frontBtn.className = 'session-front-btn';
+      frontBtn.textContent = '⇧';
+      frontBtn.title = ti18n('session_move_front', 'このセッションを先頭へ');
+      frontBtn.setAttribute('aria-label', frontBtn.title);
+      frontBtn.onclick = (e) => {
         e.stopPropagation();
-        await patchSessionMeta(s.id, { pinned: !s.pinned });
-        // ピンは orderSessions（swipe / multi-pane スロット順）にも影響するため、
-        // マルチタブが開いているときはペインスロット順も更新する。
-        // render() → renderSessionList() の再帰を防ぐため _c5SidebarUpdating フラグを立てておく
-        const _mv = document.getElementById('multi-view');
-        if (_mv && !_mv.hidden && window.multiPaneManager) {
-          window._c5SidebarUpdating = true;
-          try { window.multiPaneManager.render(); }
-          finally { window._c5SidebarUpdating = false; }
-        }
+        moveSessionToSiblingFront(s.id);
       };
-      actions.appendChild(pinBtn);
+      actions.appendChild(frontBtn);
 
       const metaBtn = document.createElement('button');
       metaBtn.className = 'session-meta-btn';
@@ -1081,12 +1136,8 @@ export function renderSessionList() {
         const insertAt = dropAfter ? dstIdx + 1 : dstIdx;
         sessionOrder.splice(insertAt, 0, srcId);
         saveSessionOrder();
-        // C5: グループ跨ぎ（Pinned ⇄ 通常）→ ドロップ先に合わせてピン状態を自動切替
-        const srcPinned = !!sessions.get(srcId)?.pinned;
-        const dstPinned = !!s.pinned;
-        if (srcPinned !== dstPinned) {
-          patchSessionMeta(srcId, { pinned: dstPinned });
-        }
+        // ドラッグは兄弟順を変えるだけ。ここでセッションの属性を書き換えない
+        // （以前は Pinned の箱へ落とすと pinned が黙って true になっていた）。
         // C5: マルチタブが開いているときはペインスロット順も更新
         // render() → renderSessionList() の再帰を防ぐため _c5SidebarUpdating フラグを立てておく
         const _mv = document.getElementById('multi-view');
@@ -1352,12 +1403,10 @@ export function renderSummaryAndNotifications() {
 	updateTabNotification(totalWaiting, totalApprovals);
 }
 
+// 器のキーの導出は sidebar-tree.ts が正本。ここで別の規則を持つと、状態チップの
+// 部分更新だけが別の見出しを探しに行って静かに外れる。
 export function sessionProjectKey(s) {
-  const cwdStr = s?.cwd || '';
-  const name = cwdStr
-    ? cwdStr.replace(/\\/g, '/').split('/').filter(p => p.length > 0).pop() || ''
-    : '';
-  return name || '__no_project__';
+  return projectKeyForSession(s, sessions.values() as any);
 }
 
 export function updateProjectGroupStatusChipsForSession(s) {

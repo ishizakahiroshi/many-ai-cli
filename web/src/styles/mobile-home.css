@@ -105,14 +105,6 @@
     gap: var(--space-3, 8px);
   }
 
-  .mh-section--pinned {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    background: var(--bg-layer);
-    padding-bottom: 4px;
-  }
-
   .mh-section-header {
     margin: 0 0 4px 0;
     font-size: 0.78rem;
@@ -122,10 +114,6 @@
     letter-spacing: 0.04em;
     padding: 4px 0;
     border-bottom: 1px solid var(--line);
-  }
-
-  .mh-section--pinned .mh-section-header {
-    color: var(--danger, #e53e3e);
   }
 
   .mh-search {

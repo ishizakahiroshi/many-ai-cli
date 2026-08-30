@@ -207,7 +207,7 @@ export class MultiPaneManager {
     this._saveLayout();
   }
 
-  /** セッション一覧を id 昇順で取得してスロットに割当て、DOM を再構築 */
+  /** セッション一覧を state.js の orderSessions（サイドバーの木を深さ優先でたどった順）で取得してスロットに割当て、DOM を再構築 */
   render() {
     if (!this.area) return;
     const allSorted = window.getSortedSessions ? window.getSortedSessions() : [];

@@ -11,6 +11,10 @@ export const STORAGE_LANG_KEY       = 'ai_cli_hub_lang';
 export const STORAGE_ORDER_KEY             = 'ai_cli_hub_session_order';
 export const STORAGE_GROUP_ORDER_KEY       = 'ai_cli_hub_group_order';
 export const STORAGE_PROJECT_FAVORITES_KEY = 'ai_cli_hub_project_favorites';
+// サイドバーで畳んでいるノード。プロジェクトはキーそのもの、親セッションは "session:<id>"。
+export const STORAGE_COLLAPSED_NODES_KEY     = 'ai_cli_hub_collapsed_nodes';
+// 旧ピン留めを兄弟順へ変換し終えた印。1 度だけ走らせるために端末をまたいで共有する。
+export const STORAGE_SIDEBAR_PIN_MIGRATED_KEY = 'ai_cli_hub_sidebar_pin_migrated';
 export const STORAGE_SPAWN_KEY             = 'ai_cli_hub_spawn_settings';
 export const STORAGE_CWD_HISTORY_KEY       = 'ai_cli_hub_cwd_history';
 export const STORAGE_CWD_FAVORITES_KEY     = 'ai_cli_hub_cwd_favorites';
@@ -209,6 +213,8 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'quick_cmds.show3':          [STORAGE_QUICK_CMD_3_SHOW_KEY,      (v) => v ? '1' : '0'],
   'quick_cmds.show4':          [STORAGE_QUICK_CMD_4_SHOW_KEY,      (v) => v ? '1' : '0'],
   'quick_cmds.show5':          [STORAGE_QUICK_CMD_5_SHOW_KEY,      (v) => v ? '1' : '0'],
+  'collapsed_nodes':           [STORAGE_COLLAPSED_NODES_KEY,       JSON.stringify],
+  'sidebar_pin_migrated':      [STORAGE_SIDEBAR_PIN_MIGRATED_KEY,  (v) => v ? '1' : '0'],
   'templates':                 [STORAGE_TEMPLATES_KEY,             JSON.stringify],
   'template_send.immediate':   [STORAGE_TEMPLATE_SEND_IMMEDIATE_KEY, (v) => v ? '1' : '0'],
   'usage_links.claude':        [STORAGE_USAGE_LINK_CLAUDE_KEY,     String],
@@ -270,6 +276,7 @@ export const _USER_PREFS_STRING_ARRAY_PATHS = new Set([
   'project_favorites',
   'cwd_history',
   'cwd_favorites',
+  'collapsed_nodes',
 ]);
 // session_order の中身はセッション ID の数値配列。文字列配列として扱うと
 // サニタイズで全要素が捨てられ、サーバへ常に空配列が PUT される（＝手動
@@ -294,7 +301,7 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
   try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
 
   if (path.endsWith('.enabled') || path === 'voice.wake_word_enabled' || path === 'voice.input_disabled' || path === 'approval.auto_switch' || path === 'approval.auto_approval_enabled'
-      || path === 'template_send.immediate'
+      || path === 'template_send.immediate' || path === 'sidebar_pin_migrated'
       || /^quick_cmds\.show[1-5]$/.test(path)) {
     return { ok: true, value: raw === '1' || raw === 'true' || parsed === true };
   }

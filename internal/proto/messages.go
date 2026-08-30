@@ -22,6 +22,7 @@ type Message struct {
 	Display   string `json:"display_name,omitempty"`
 	CWD       string `json:"cwd,omitempty"`
 	Branch    string `json:"branch,omitempty"`
+	ProjectID string `json:"project_id,omitempty"` // cwd が属する本体リポジトリのルート（hub/project_id.go）
 	PID       int    `json:"pid,omitempty"`
 	// InputSeq identifies a Hub-to-wrapper pty_input frame so the wrapper can
 	// acknowledge the frame after the bytes have been written to the PTY.

@@ -12,6 +12,8 @@ import (
 // are stopped/reset on the old session and restarted for the replacement.
 type reattachPreservedState struct {
 	ParentSessionID              int
+	ProjectID                    string
+	projectChecked               bool
 	Role                         string
 	Auto                         bool
 	Depth                        int
@@ -102,6 +104,8 @@ func snapshotReattachStateLocked(ses *session) reattachPreservedState {
 	fileState.Entries = append([]workflowTaskOutputEntry(nil), ses.taskDetailFileState.Entries...)
 	return reattachPreservedState{
 		ParentSessionID:              ses.ParentSessionID,
+		ProjectID:                    ses.ProjectID,
+		projectChecked:               ses.projectChecked,
 		Role:                         ses.Role,
 		Auto:                         ses.Auto,
 		Depth:                        ses.Depth,
@@ -213,6 +217,8 @@ func applyReattachPreservedStateLocked(dst *session, state reattachPreservedStat
 		return
 	}
 	dst.ParentSessionID = state.ParentSessionID
+	dst.ProjectID = state.ProjectID
+	dst.projectChecked = state.projectChecked
 	dst.Role = state.Role
 	dst.Auto = state.Auto
 	dst.Depth = state.Depth
