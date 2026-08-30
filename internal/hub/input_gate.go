@@ -19,6 +19,41 @@ import (
 	"many-ai-cli/internal/sessionstore"
 )
 
+// enqueueInputWork はセッション単位の FIFO へ入力処理を積む。呼び出し元
+// （uiLoop の pty_input 分岐）は即座に戻り、次の WebSocket メッセージを読める。
+//
+// なぜ worker goroutine + channel ではなくバトン渡しなのか: worker 方式は
+// 「いつ止めるか」の寿命管理が要り、セッション削除の取りこぼしがそのまま
+// goroutine と入力の滞留になる。ここでは各入力が「直前の入力の完了 channel」を
+// 待つだけなので、鎖が尽きれば goroutine は自然に消える。生成順 = 実行順が
+// goroutine の起動順に依存しないのも要点で、待ち先は enqueue 時点で確定する。
+func (s *Server) enqueueInputWork(sessionID int, fn func()) {
+	s.inputChainMu.Lock()
+	if s.inputChain == nil {
+		s.inputChain = map[int]chan struct{}{}
+	}
+	prev := s.inputChain[sessionID]
+	done := make(chan struct{})
+	s.inputChain[sessionID] = done
+	s.inputChainMu.Unlock()
+
+	go func() {
+		if prev != nil {
+			<-prev
+		}
+		defer func() {
+			close(done)
+			// 自分が最後尾のままなら鎖を畳む（セッションが消えても残骸を持たない）。
+			s.inputChainMu.Lock()
+			if s.inputChain[sessionID] == done {
+				delete(s.inputChain, sessionID)
+			}
+			s.inputChainMu.Unlock()
+		}()
+		fn()
+	}()
+}
+
 // handleInput は pty_input メッセージを wrapper へ届ける。
 // Enter 確定時はセッション概要（FirstMessage/LastMessage）を更新し、
 // ユーザーターン境界マーカーを ptyBuf に注入する。
@@ -434,9 +469,34 @@ func (s *Server) trySendInputToWrapper(sessionID int, wc *wrapperConn, combined 
 		return combined
 	}
 	first, delayed := splitBracketedPasteSubmit(combined)
+	// 直前がブラケットペースト本文で、今回が確定 CR 単体なら、UI が 2 通に分けて
+	// 送ってきた同じ 1 回の送信とみなす。1 通で来た場合（下の delayed 分岐）と同じく
+	// 出力静止を待ってから撃ち、動き出さなければ 1 回だけ再送する。
+	// この分岐が無いと、本文の配送が遅れた分だけ CR が本文へ密着し、内側 CLI が
+	// ペースト取り込み中に CR を吸収して送信が成立しない。
+	awaiting := s.takeAwaitingSubmitEnter(sessionID)
+	if awaiting && delayed == "" && first == "\r" {
+		s.waitForSubmitEnterSettle(sessionID)
+		if s.currentWrapperForInput(sessionID) != wc {
+			// 送れずに差し戻すので印も戻す。再送時にも確定 CR として扱えるようにする。
+			s.setAwaitingSubmitEnter(sessionID)
+			return combined
+		}
+		if err := s.sendPTYInputFrame(wc, sessionID, first); err != nil {
+			s.logger.Warn("pty_input deferred: send failed", "session_id", sessionID, "stage", "split_enter", "err", err)
+			s.setAwaitingSubmitEnter(sessionID)
+			return combined
+		}
+		s.confirmOrResendSubmitEnter(sessionID, wc, first)
+		return ""
+	}
 	if err := s.sendPTYInputFrame(wc, sessionID, first); err != nil {
 		s.logger.Warn("pty_input deferred: send failed", "session_id", sessionID, "stage", "first", "err", err)
 		return combined
+	}
+	if delayed == "" && strings.HasSuffix(first, bracketedPasteEnd) {
+		// 次に来る 1 バイトの CR を「この本文の確定」として扱う印。
+		s.setAwaitingSubmitEnter(sessionID)
 	}
 	if delayed != "" {
 		// 固定遅延では取り込み・再描画の最中に撃ってしまい、CLI が確定 CR を
@@ -456,6 +516,29 @@ func (s *Server) trySendInputToWrapper(sessionID int, wc *wrapperConn, combined 
 	// wc.send は wrapper からの ack が無く write deadline も持たないため、err=nil でも
 	// wrapper に届いた保証は無い。到達確認が要る経路は inputAckCapable 側で扱う。
 	return ""
+}
+
+// setAwaitingSubmitEnter はブラケットペースト本文を送った直後に印を立てる。
+func (s *Server) setAwaitingSubmitEnter(sessionID int) {
+	s.sessionsMu.Lock()
+	if ses := s.sessions[sessionID]; ses != nil {
+		ses.awaitingSubmitEnter = true
+	}
+	s.sessionsMu.Unlock()
+}
+
+// takeAwaitingSubmitEnter は印を読んで必ず下ろす。本文以外が挟まれば、その入力が
+// 印を消費して false になるため、無関係な CR が確定 CR として扱われることはない。
+func (s *Server) takeAwaitingSubmitEnter(sessionID int) bool {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[sessionID]
+	if ses == nil {
+		return false
+	}
+	was := ses.awaitingSubmitEnter
+	ses.awaitingSubmitEnter = false
+	return was
 }
 
 // submitEnterTiming は確定 \r の送出・確認タイミング。ゼロ値は本番既定

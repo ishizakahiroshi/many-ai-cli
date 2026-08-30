@@ -259,3 +259,75 @@ func TestSubmitEnterConfirmDetectsOutputAfterSend(t *testing.T) {
 		t.Fatalf("送出後の出力を検知できていない")
 	}
 }
+
+// TestSubmitEnterSplitAcrossMessagesStillSettles は、UI が本文と確定 CR を
+// 別々の pty_input で送ってきた場合も、1 通で来た場合と同じ扱い（出力静止待ち →
+// 送出 → 確認・再送）になることを固定する。
+//
+// これが無いと確定 CR は素通しになり、本文の配送が遅れた分だけ CR が本文へ密着して
+// 内側 CLI に吸収される。実運用の UI は常にこの 2 通形式で送るため、1 通形式だけを
+// 守っていても本番では一度も効かない。
+func TestSubmitEnterSplitAcrossMessagesStillSettles(t *testing.T) {
+	const sessionID = 1
+	s := submitEnterServer(t, sessionID, "claude")
+	frames := &capturedFrames{}
+	wc := &wrapperConn{sendFunc: func(m any) error {
+		if msg, ok := m.(proto.Message); ok && msg.Type == "pty_input" {
+			frames.add(string(msg.Data))
+		}
+		return nil
+	}}
+	s.sessionsMu.Lock()
+	s.wrappers[sessionID] = wc
+	s.sessionsMu.Unlock()
+
+	body := bracketedPasteStart + "hello" + bracketedPasteEnd
+	s.submitInput(sessionID, body)
+	// 本文の直後は出力が続いている（内側 CLI が取り込み・再描画中）状態を作る。
+	stop := make(chan struct{})
+	wait := streamTestOutput(s, sessionID, stop)
+
+	go func() {
+		time.Sleep(25 * time.Millisecond)
+		close(stop)
+	}()
+	start := time.Now()
+	s.submitInput(sessionID, "\r")
+	elapsed := time.Since(start)
+	wait()
+
+	if elapsed < 20*time.Millisecond {
+		t.Fatalf("確定 CR を %v で撃った、want 出力が止まるまで待つ（>=20ms）", elapsed)
+	}
+	if got := frames.count(body); got != 1 {
+		t.Fatalf("本文を %d 回送った、want 1: %q", got, frames.snapshot())
+	}
+	if got := frames.count("\r"); got != 2 {
+		t.Fatalf("確定 CR を %d 回送った、want 2（初回 + 確認できず再送 1 回）: %q", got, frames.snapshot())
+	}
+}
+
+// TestSubmitEnterSplitMarkIsConsumedByOtherInput は、本文と確定 CR の間に別の入力が
+// 挟まった場合に、後から来た無関係な CR を確定 CR として扱わないことを固定する。
+func TestSubmitEnterSplitMarkIsConsumedByOtherInput(t *testing.T) {
+	const sessionID = 1
+	s := submitEnterServer(t, sessionID, "claude")
+	frames := &capturedFrames{}
+	wc := &wrapperConn{sendFunc: func(m any) error {
+		if msg, ok := m.(proto.Message); ok && msg.Type == "pty_input" {
+			frames.add(string(msg.Data))
+		}
+		return nil
+	}}
+	s.sessionsMu.Lock()
+	s.wrappers[sessionID] = wc
+	s.sessionsMu.Unlock()
+
+	s.submitInput(sessionID, bracketedPasteStart+"hello"+bracketedPasteEnd)
+	s.submitInput(sessionID, "\x1b") // 本文以外の入力が印を消費する
+	s.submitInput(sessionID, "\r")
+
+	if got := frames.count("\r"); got != 1 {
+		t.Fatalf("CR を %d 回送った、want 1（確定 CR 扱いしないので再送しない）: %q", got, frames.snapshot())
+	}
+}

@@ -366,6 +366,14 @@ type session struct {
 	//（未設定＝nil のまま Lock すると nil pointer panic になる）。
 	inputMu *sync.Mutex
 
+	// JSON 外: 直前に PTY へ書いたのがブラケットペースト本文で、その確定 CR を
+	// 別フレームで待っている状態。UI はチャット本文を「本文」「確定 CR」の 2 通に
+	// 分けて送ってくるため、Hub 側から見ると 1 通に見えない。この印が無いと確定 CR に
+	// waitForSubmitEnterSettle / confirmOrResendSubmitEnter が一切掛からず、
+	// 本文の配送が何らかの理由で遅れた分だけ CR が本文へ密着して内側 CLI に吸収される。
+	// sessionsMu で保護。本文以外の入力を送った時点で下ろす。
+	awaitingSubmitEnter bool
+
 	// JSON 外: Hub が wrapper へ送ったが、pty_input_ack をまだ受け取っていない
 	// 入力。sessionsMu で保護し、wrapper 切断時に resendInput へ移して次の
 	// (再)接続で送り直す。
@@ -647,6 +655,13 @@ type Server struct {
 	// ゼロ値は本番既定（submitEnter* 定数）を意味し、テストだけが実時間を
 	// 待たずに経路を検証するために埋める。
 	submitEnter submitEnterTiming
+
+	// inputChain はセッションごとの入力処理を FIFO で直列化するバトン。
+	// uiLoop は pty_input を同期処理せず、この鎖に繋いだ goroutine へ渡す
+	// （input_gate.go の enqueueInputWork）。値は「その入力の処理が終わったら
+	// 閉じられる channel」で、次の入力はそれを待ってから走る。inputChainMu で保護。
+	inputChainMu sync.Mutex
+	inputChain   map[int]chan struct{}
 
 	slashCmdMu    sync.Mutex
 	slashCmdCache map[string]*slashCmdCacheEntry // key: provider
@@ -1813,10 +1828,16 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 		case "pty_resize":
 			s.handleResizeFromUI(conn, m)
 		case "pty_input":
-			// handleInput は同期呼び出しで、この for ループが返るまで同じ UI 接続の
-			// 後続メッセージ（= 確定 \r）を受信できない。
+			// handleInput は Git ターン開始スナップショット（captureGitTurnStart）を
+			// 同期で回すため、大きい worktree では数秒返らない。ここで直接呼ぶと
+			// その間この for ループが止まり、同じ UI 接続の後続メッセージ
+			// （確定 \r・他セッションへの入力・承認回答）を一切受信できない。
+			// 溜まった分は解放と同時にまとめて PTY へ流れ、確定 \r が本文へ密着して
+			// 内側 CLI に吸収される（2026-08-30 実測: 記事・画像を抱えた作業用 repo で
+			// 3.4 秒。本文と CR と Ctrl+U が 2ms 以内に着弾して送信が消えた）。
+			// セッション単位の FIFO へ渡し、受信ループは即座に次を読む。
 			s.claimResizeOwnership(conn, m.SessionID, 0, 0)
-			s.handleInput(m)
+			s.enqueueInputWork(m.SessionID, func() { s.handleInput(m) })
 		case "ui_active_session":
 			s.claimResizeOwnership(conn, m.SessionID, m.Cols, m.Rows)
 		case "session_hint":
