@@ -26,6 +26,7 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
   const spawnProviderTriggerLabel = document.getElementById('spawn-provider-trigger-label');
   const spawnProviderTriggerIcon = document.getElementById('spawn-provider-trigger-icon');
   const spawnProviderList = document.getElementById('spawn-provider-list');
+  const spawnProviderNoteHelp = document.getElementById('spawn-provider-note-help');
   const spawnCodexModelBtn = document.getElementById('spawn-codex-model-btn');
   const spawnClaudeModelBtn = document.getElementById('spawn-claude-model-btn');
   const spawnOpenCodeOpts = document.getElementById('spawn-opencode-opts');
@@ -37,6 +38,7 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
   const spawnIsolateWorktreeHelp = document.getElementById('spawn-isolate-worktree-help');
   const spawnDelegation = document.getElementById('spawn-delegation') as HTMLInputElement | null;
   const spawnDelegationNote = document.getElementById('spawn-delegation-note');
+  const spawnDelegationHelp = document.getElementById('spawn-delegation-help');
   const spawnModelInput = document.getElementById('spawn-model');
   const spawnModelDatalist = document.getElementById('spawn-model-datalist');
   const spawnModelClearBtn = document.getElementById('spawn-model-clear');
@@ -45,6 +47,70 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
   const spawnSubscriptionSelect = document.getElementById('spawn-subscription') as HTMLSelectElement | null;
   let codexModelSelection: any = null;
   let claudeModelSelection: any = null;
+
+  type SpawnInlineHelpController = {
+    setOpen(open: boolean): void;
+    setNote(note: HTMLElement | null): void;
+  };
+
+  // ? ボタンと、その本文の表示・ツールチップをまとめて扱う。
+  // ツールチップも本文と同じ data-i18n キーから作ることで、翻訳を二重に持たない。
+  function setupSpawnInlineHelp(
+    helpButton: HTMLElement | null,
+    initialNote: HTMLElement | null,
+  ): SpawnInlineHelpController {
+    let note = initialNote;
+    let isOpen = false;
+
+    const sync = (): void => {
+      if (note) note.hidden = !isOpen;
+      if (!helpButton) return;
+      helpButton.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      if (note?.id) helpButton.setAttribute('aria-controls', note.id);
+      else helpButton.removeAttribute('aria-controls');
+    };
+
+    const updateTooltip = (): void => {
+      if (!helpButton) return;
+      const key = note?.dataset.i18n || '';
+      if (key) helpButton.dataset.tooltip = t(key);
+      else delete helpButton.dataset.tooltip;
+    };
+
+    const setOpen = (open: boolean): void => {
+      isOpen = open;
+      sync();
+    };
+
+    const setNote = (nextNote: HTMLElement | null): void => {
+      if (note && note !== nextNote) note.hidden = true;
+      note = nextNote;
+      sync();
+      updateTooltip();
+    };
+
+    helpButton?.addEventListener('click', () => setOpen(!isOpen));
+    document.addEventListener('i18n-ready', updateTooltip);
+    sync();
+    updateTooltip();
+
+    return { setOpen, setNote };
+  }
+
+  const spawnProviderNoteIds: Record<string, string> = {
+    claude: 'spawn-claude-note',
+    codex: 'spawn-codex-note',
+    copilot: 'spawn-copilot-note',
+    'cursor-agent': 'spawn-cursor-agent-note',
+    opencode: 'spawn-opencode-note',
+    grok: 'spawn-grok-note',
+    'command-code': 'spawn-command-code-note',
+    shell: 'spawn-shell-note',
+  };
+  const spawnProviderInlineHelp = setupSpawnInlineHelp(
+    spawnProviderNoteHelp,
+    document.getElementById(spawnProviderNoteIds.claude),
+  );
 
   // 前回起動時に選んだサブスクリプションは provider ごとに覚える（profile 一覧は
   // provider 固有なので、1 つの値を使い回すと provider を切り替えた瞬間に無関係な
@@ -643,20 +709,15 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
     if (codexOpts) codexOpts.hidden = (p !== 'codex');
     if (spawnOpenCodeOpts) spawnOpenCodeOpts.hidden = (p !== 'opencode');
     if (spawnPermissionOpts) spawnPermissionOpts.hidden = !providerHasPermissionSelect(p);
-    const noteIds: Record<string, string> = {
-      claude: 'spawn-claude-note',
-      codex: 'spawn-codex-note',
-      copilot: 'spawn-copilot-note',
-      'cursor-agent': 'spawn-cursor-agent-note',
-      opencode: 'spawn-opencode-note',
-      grok: 'spawn-grok-note',
-      'command-code': 'spawn-command-code-note',
-      shell: 'spawn-shell-note',
-    };
-    for (const [provider, id] of Object.entries(noteIds)) {
+    // 注意書きは既定で全部畳む。選択中の 1 本を出すかどうかは ? の開閉状態が決めるので、
+    // 可視性の判断は setNote 側の 1 箇所に持たせる（ここで「選択中は表示」と書くと、
+    // 直後の setNote が上書きするだけの死んだ分岐になる）。
+    const selectedNote = document.getElementById(spawnProviderNoteIds[p] || '');
+    for (const id of Object.values(spawnProviderNoteIds)) {
       const note = document.getElementById(id);
-      if (note) note.hidden = (provider !== p);
+      if (note) note.hidden = true;
     }
+    spawnProviderInlineHelp.setNote(selectedNote);
     syncPermissionModeOptions(p);
   }
 
@@ -713,37 +774,22 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
   // worktree 隔離の説明は、チェックが入ったときは従来どおり自動で開く（未追跡ファイル
   // が引き継がれない点を起動前に見せるため）。加えて ? ボタンでいつでも開閉できる。
   // 自動表示だけだと、チェックを入れるまで「これが何なのか」を読む手段が無かった。
-  let isolateWorktreeNoteOpen = false;
-  function updateIsolateWorktreeNote() {
-    if (spawnIsolateWorktreeNote) {
-      spawnIsolateWorktreeNote.hidden = !isolateWorktreeNoteOpen;
-    }
-    spawnIsolateWorktreeHelp?.setAttribute('aria-expanded', isolateWorktreeNoteOpen ? 'true' : 'false');
-  }
+  const isolateWorktreeInlineHelp = setupSpawnInlineHelp(spawnIsolateWorktreeHelp, spawnIsolateWorktreeNote);
 
   // チェック状態に説明の開閉を合わせる（change 時と設定復元時に使う）。
-  function syncIsolateWorktreeNote() {
-    isolateWorktreeNoteOpen = !!spawnIsolateWorktree?.checked;
-    updateIsolateWorktreeNote();
+  function syncIsolateWorktreeNote(): void {
+    isolateWorktreeInlineHelp.setOpen(!!spawnIsolateWorktree?.checked);
   }
 
   if (spawnIsolateWorktree) {
     spawnIsolateWorktree.addEventListener('change', syncIsolateWorktreeNote);
   }
 
-  if (spawnIsolateWorktreeHelp) {
-    spawnIsolateWorktreeHelp.addEventListener('click', () => {
-      isolateWorktreeNoteOpen = !isolateWorktreeNoteOpen;
-      updateIsolateWorktreeNote();
-    });
-  }
-
-  // 委譲の注意書きも、チェックが入っているときだけ出す。
+  // 委譲の注意書きも、チェックが入っているときだけ自動で開く。
   // 「これは安全策ではない」「今は claude だけ」を起動前に見せるため。
-  function updateDelegationNote() {
-    if (spawnDelegationNote) {
-      spawnDelegationNote.hidden = !spawnDelegation?.checked;
-    }
+  const delegationInlineHelp = setupSpawnInlineHelp(spawnDelegationHelp, spawnDelegationNote);
+  function updateDelegationNote(): void {
+    delegationInlineHelp.setOpen(!!spawnDelegation?.checked);
   }
 
   if (spawnDelegation) {

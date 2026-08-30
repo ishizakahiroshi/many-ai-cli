@@ -1102,6 +1102,9 @@
               </button>
               <ul id="spawn-provider-list" class="spawn-provider-list" role="listbox" aria-labelledby="spawn-provider-trigger" hidden></ul>
             </div>
+            <button id="spawn-provider-note-help" class="spawn-inline-help-btn" type="button"
+                    aria-controls="spawn-claude-note" aria-expanded="false"
+                    aria-label="What does this provider option do?">?</button>
           </div>
           <div class="spawn-cwd-row">
             <div class="cwd-combobox">
@@ -1182,7 +1185,7 @@
 
           <!-- git worktree 隔離（全プロバイダ共通・opt-in）。チェック時のみ isolate_worktree を送り、
                未チェックのときは config の user_prefs.spawn.worktree_auto を既定として尊重する。 -->
-          <div class="spawn-isolate-worktree-row">
+          <div class="spawn-inline-help-row">
             <label class="spawn-risk-label">
               <input id="spawn-isolate-worktree" type="checkbox">
               <span data-i18n="spawn_isolate_worktree">Run this session in a dedicated git worktree</span>
@@ -1191,7 +1194,6 @@
                  チェック前でも読める ? を置く。label の外に出すのは、label 内の button は
                  クリックがチェックボックスのトグルに吸われるため。 -->
             <button id="spawn-isolate-worktree-help" class="spawn-inline-help-btn" type="button"
-                    data-i18n-tooltip="spawn_isolate_worktree_help_tooltip"
                     aria-controls="spawn-isolate-worktree-note" aria-expanded="false"
                     aria-label="What does the dedicated git worktree option do?">?</button>
           </div>
@@ -1201,10 +1203,15 @@
                だけで、orchestrate サブコマンド自体は全セッションで動く＝安全策ではない
                （実際の歯止めは spawn 時の確認ダイアログ側）。理由の正本は
                internal/wrapper/delegation.go の冒頭。 -->
-          <label class="spawn-risk-label">
-            <input id="spawn-delegation" type="checkbox">
-            <span data-i18n="spawn_delegation">Let this session know it can delegate work to child sessions</span>
-          </label>
+          <div class="spawn-inline-help-row">
+            <label class="spawn-risk-label">
+              <input id="spawn-delegation" type="checkbox">
+              <span data-i18n="spawn_delegation">Let this session know it can delegate work to child sessions</span>
+            </label>
+            <button id="spawn-delegation-help" class="spawn-inline-help-btn" type="button"
+                    aria-controls="spawn-delegation-note" aria-expanded="false"
+                    aria-label="What does delegation do?">?</button>
+          </div>
           <div id="spawn-delegation-note" class="settings-note" data-i18n="spawn_delegation_note" hidden>Claude only for now. Adds a short note to this session's system prompt so the AI knows it can run `many-ai-cli orchestrate` to spawn and instruct child sessions. This is not a safety switch: spawning a child still asks for your confirmation, and the subcommands keep working when this is off.</div>
 
           <!-- C2: Detached 設定セクション -->

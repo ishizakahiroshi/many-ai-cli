@@ -549,8 +549,8 @@
   margin: 0;
   cursor: pointer;
 }
-/* worktree 隔離のチェックと ? ヘルプボタンを 1 行に並べる。 */
-.spawn-isolate-worktree-row {
+/* inline help 付きのチェックと ? ヘルプボタンを 1 行に並べる。 */
+.spawn-inline-help-row {
   display: flex;
   align-items: center;
   gap: var(--space-2);
