@@ -3,7 +3,7 @@ import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
 import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, approvalVisibleCache, autoDismissTimers, beginApprovalReplay, chatHistory, deriveProjectKeyFromCwd, finishApprovalReplay, isApprovalReplayPending, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, multiQuestionLatchAt, multiQuestionVisibleCache, noteApprovalSourceEpoch, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
 import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLocalSessionHistory, resetLocalSessionHistory, updateInputAffordance } from '../app.js';
-import { activateSession, render, renderSessionList, renderSessionStateUpdate, updateCardLiveInfo, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
+import { activateSession, providerIconHtml, render, renderSessionList, renderSessionStateUpdate, updateCardLiveInfo, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
 import { applyRemotePtyResize, ensureTerminal, forgetSentPtySize, isLiveOutputBatching, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup } from './settings.js';
 import { clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed, setMultiQuestionBannerVisible } from './approval-ui.js';
@@ -15,26 +15,102 @@ import { clearChatPayloadForSession, handleChatTurnMessage, initChatPayloadUI } 
 import { handleUsageStatMessage, removeUsageCacheEntry, resetUsageCache } from './token-statusbar.js';
 import { receiveWorkflowProgress, removeWorkflowSnapshot } from './workflow-modal.js';
 import { dropDoneSummary, setDoneSummary } from './done-summary.js';
+import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
+
+// 子セッション起動の承認ダイアログ。見た目の正本は web/src/styles/spawn-confirm.css。
+// UA 既定の <dialog> は白枠・無余白で Hub の配色から浮くので、markup 側でも
+// house のクラス（.spawn-select / .spawn-input）へ寄せる。
+const SPAWN_CONFIRM_PROMPT_LIMIT = 4000;
+
+function spawnConfirmRoleLabel(role) {
+  const raw = String(role || '').trim();
+  if (!raw) return t('spawn_confirm_role_unset');
+  const def = ORCHESTRATION_ROLE_DEFS.find((d) => d.key === raw);
+  return def ? `${t(def.labelKey)}（${raw}）` : raw;
+}
 
 function showSpawnConfirmation(m) {
   const id = String(m.spawn_confirmation_id || '');
   if (!id || document.querySelector(`[data-spawn-confirmation-id="${CSS.escape(id)}"]`)) return;
   const dialog = document.createElement('dialog');
-  dialog.className = 'spawn-confirm-dialog';
+  // aac-wheel-overlay: これが無いと document レベルの wheel ハンドラが背後の
+  // ターミナルへホイールを転送し、指示文をスクロールできなくなる
+  // （scripts/check-wheel-overlays.mjs が付け忘れを止める）。
+  dialog.className = 'spawn-confirm-dialog aac-wheel-overlay';
   dialog.dataset.spawnConfirmationId = id;
   const escapeHtml = (value) => { const el = document.createElement('span'); el.textContent = value; return el.innerHTML; };
   const prompt = String(m.initial_prompt || '').trim();
-  dialog.innerHTML = `<form method="dialog"><h2>Approve child session?</h2><p><b>Role:</b> ${escapeHtml(String(m.role || 'child'))}</p><label>Provider <input name="provider" value="${escapeHtml(String(m.provider || 'codex'))}"></label><label>Model <input name="model" value="${escapeHtml(String(m.model || ''))}"></label><p><b>Worktree:</b> ${escapeHtml(String(m.cwd || 'parent working directory'))}</p><pre>${escapeHtml(prompt.slice(0, 1200))}</pre><menu><button value="refuse">Refuse</button><button value="approve" class="primary">Approve</button></menu></form>`;
+  const shownPrompt = prompt.slice(0, SPAWN_CONFIRM_PROMPT_LIMIT);
+  const truncated = prompt.length > shownPrompt.length;
+  const provider = String(m.provider || '').trim();
+  const providerOptions = ORCHESTRATION_CLI_OPTIONS.filter((o) => o.value);
+  const knownProvider = providerOptions.some((o) => o.value === provider);
+  const optionHtml = (value, label) =>
+    `<option value="${escapeHtml(value)}"${value === provider ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+  const optionsHtml = [
+    ...(provider && !knownProvider ? [optionHtml(provider, provider)] : []),
+    ...providerOptions.map((o) => optionHtml(o.value, o.label || t(o.labelKey || ''))),
+  ].join('');
+  const parentId = Number(m.session_id || 0);
+
+  dialog.innerHTML = `<form method="dialog" class="spawn-confirm-form">
+  <div class="spawn-confirm-header">
+    <h2 class="spawn-confirm-title">${escapeHtml(t('spawn_confirm_title'))}</h2>
+    ${parentId ? `<span class="spawn-confirm-parent">${escapeHtml(t('spawn_confirm_parent', { id: parentId }))}</span>` : ''}
+  </div>
+  <div class="spawn-confirm-body">
+    <dl class="spawn-confirm-meta">
+      <dt>${escapeHtml(t('spawn_role_table_role'))}</dt>
+      <dd>${escapeHtml(spawnConfirmRoleLabel(m.role))}</dd>
+      <dt>${escapeHtml(t('spawn_confirm_cwd'))}</dt>
+      <dd class="spawn-confirm-path">${escapeHtml(String(m.cwd || '').trim() || t('spawn_confirm_cwd_inherit'))}</dd>
+    </dl>
+    <div class="spawn-confirm-fields">
+      <label class="spawn-confirm-field">
+        <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_role_table_cli'))}</span>
+        <span class="spawn-confirm-provider-row">
+          <span class="spawn-confirm-provider-icon" data-spawn-confirm-icon>${providerIconHtml(provider)}</span>
+          <select name="provider" class="spawn-select">${optionsHtml}</select>
+        </span>
+      </label>
+      <label class="spawn-confirm-field">
+        <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_role_table_model'))}</span>
+        <input name="model" class="spawn-input" value="${escapeHtml(String(m.model || ''))}" placeholder="${escapeHtml(t('spawn_confirm_model_placeholder'))}" spellcheck="false" autocomplete="off">
+      </label>
+    </div>
+    <div class="spawn-confirm-prompt-block">
+      <div class="spawn-confirm-prompt-head">
+        <span>${escapeHtml(t('spawn_confirm_prompt'))}</span>
+        ${truncated ? `<span class="spawn-confirm-prompt-note">${escapeHtml(t('spawn_confirm_prompt_truncated', { shown: shownPrompt.length, total: prompt.length }))}</span>` : ''}
+      </div>
+      <pre class="spawn-confirm-prompt${prompt ? '' : ' is-empty'}">${escapeHtml(prompt ? shownPrompt : t('spawn_confirm_prompt_empty'))}</pre>
+    </div>
+  </div>
+  <div class="spawn-confirm-actions">
+    <button type="submit" value="refuse" class="spawn-confirm-btn">${escapeHtml(t('spawn_confirm_refuse'))}</button>
+    <button type="submit" value="approve" class="spawn-confirm-btn is-primary">${escapeHtml(t('spawn_confirm_approve'))}</button>
+  </div>
+</form>`;
+
+  const providerSelect = dialog.querySelector('[name=provider]') as HTMLSelectElement | null;
+  const providerIcon = dialog.querySelector('[data-spawn-confirm-icon]');
+  if (providerSelect && providerIcon) {
+    providerSelect.addEventListener('change', () => {
+      providerIcon.innerHTML = providerIconHtml(providerSelect.value);
+    });
+  }
   dialog.addEventListener('close', async () => {
-    const provider = (dialog.querySelector('[name=provider]') as HTMLInputElement)?.value || '';
+    const provider = (dialog.querySelector('[name=provider]') as HTMLSelectElement)?.value || '';
     const model = (dialog.querySelector('[name=model]') as HTMLInputElement)?.value || '';
     const approved = dialog.returnValue === 'approve';
     dialog.remove();
     try {
       await fetch(`/api/sessions/${m.session_id}/spawn-confirm?token=${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmation_id: id, approved, provider, model }) });
-    } catch (_) { showToast('Could not submit the spawn decision'); }
+    } catch (_) { showToast(t('spawn_confirm_submit_failed')); }
   }, { once: true });
   document.body.appendChild(dialog);
+  // <form method="dialog"> の暗黙送信（select/input で Enter）は最初の submit ボタン
+  // ＝拒否側を使う。承認は明示クリックでしか通らない。
   dialog.showModal();
 }
 

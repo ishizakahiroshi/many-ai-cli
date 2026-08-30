@@ -1,0 +1,222 @@
+/* spawn-confirm.css — 子セッション起動の承認ダイアログ（ws-client.ts の
+   showSpawnConfirmation が生成する <dialog class="spawn-confirm-dialog">）。
+
+   配色・角丸・余白は他モーダル（server-modal / bug-report / spawn-web-dir）と
+   同じ CSS 変数で組む。ネイティブ <dialog> は UA スタイルが幅も余白も持つため、
+   ここで position / width / padding を明示しないと素の白枠のまま出る。
+
+   .aac-wheel-overlay は ws-client.ts 側で付ける（付けないと document レベルの
+   wheel ハンドラが背後のターミナルへホイールを転送し、指示文をスクロールできない）。 */
+
+.spawn-confirm-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  z-index: 12100;
+  box-sizing: border-box;
+  width: min(620px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: min(84dvh, 760px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+.spawn-confirm-dialog::backdrop { background: rgba(0, 0, 0, 0.62); }
+
+.spawn-confirm-form {
+  display: flex;
+  flex-direction: column;
+  max-height: inherit;
+  min-height: 0;
+}
+
+/* ── ヘッダ ──
+   要素は必ず div にする。<header> にすると styles.css の @media (max-width:720px) の
+   バレ要素セレクタ `header { visibility:hidden; height:0 }`（アプリ本体のヘッダ帯を
+   モバイルで消す規則）に巻き込まれ、狭幅でタイトル行だけが消える。 */
+.spawn-confirm-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.spawn-confirm-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.spawn-confirm-parent {
+  font-size: 0.74rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ── 本文（縦スクロールはここだけが持つ） ── */
+.spawn-confirm-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* ── 変更できない情報（役割 / 作業ディレクトリ） ── */
+.spawn-confirm-meta {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 5px var(--space-3);
+  align-items: baseline;
+  font-size: 0.8rem;
+}
+.spawn-confirm-meta dt {
+  color: var(--muted);
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+.spawn-confirm-meta dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.spawn-confirm-meta dd.spawn-confirm-path {
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 0.76rem;
+  color: var(--text-soft);
+  word-break: break-all;
+}
+
+/* ── 変更できる情報（CLI / モデル） ── */
+.spawn-confirm-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-2) var(--space-3);
+}
+.spawn-confirm-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.spawn-confirm-field-label {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.spawn-confirm-provider-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.spawn-confirm-provider-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.spawn-confirm-provider-icon .card-provider-icon { display: block; }
+.spawn-confirm-field .spawn-select,
+.spawn-confirm-field .spawn-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  height: var(--control-h-sm);
+}
+
+/* ── 最初の指示 ── */
+.spawn-confirm-prompt-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.spawn-confirm-prompt-note { color: var(--warn); }
+.spawn-confirm-prompt {
+  margin: 0;
+  box-sizing: border-box;
+  max-height: 34dvh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--text-soft);
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 0.76rem;
+  line-height: 1.55;
+  /* 折り返さないと長い 1 行（絶対パス等）が右へ突き抜けて読めなくなる。 */
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+.spawn-confirm-prompt.is-empty {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ── アクション ── */
+.spawn-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-elev);
+}
+.spawn-confirm-btn {
+  min-height: var(--control-h-sm);
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.spawn-confirm-btn:hover { color: var(--text); border-color: var(--line-soft); }
+.spawn-confirm-btn:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+.spawn-confirm-btn.is-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.spawn-confirm-btn.is-primary:hover { filter: brightness(1.08); color: #fff; }
+
+@media (max-width: 520px) {
+  .spawn-confirm-dialog {
+    width: calc(100vw - 16px);
+    max-height: min(90dvh, 760px);
+  }
+  .spawn-confirm-fields { grid-template-columns: minmax(0, 1fr); }
+  .spawn-confirm-actions { padding: 10px 12px 12px; }
+  .spawn-confirm-btn { flex: 1; }
+}
