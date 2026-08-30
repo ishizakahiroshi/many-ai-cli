@@ -220,6 +220,8 @@ export interface Message {
   display_name?: string;
   cwd?: string;
   branch?: string;
+  /** cwd が属する本体リポジトリのルート（hub/project_id.go）。worktree でも本体と同じ値。 */
+  project_id?: string;
   pid?: number;
   input_seq?: number;
   shell?: string;
@@ -377,7 +379,10 @@ export interface SessionSnapshot {
   provider?: ProviderID;
   display_name?: string;
   cwd?: string;
+  /** cwd の末尾セグメントから導いた表示用のキー（state.ts の deriveProjectKeyFromCwd）。 */
   project?: string;
+  /** cwd が属する本体リポジトリのルート。サイドバーの箱はこちらを優先して使う。 */
+  project_id?: string;
   branch?: string;
   label?: string;
 	 pinned?: boolean;

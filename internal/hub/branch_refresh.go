@@ -62,6 +62,21 @@ func (s *Server) queueBranchRefreshes(checks []branchRefreshRequest) {
 func (s *Server) refreshBranchForCWD(cwd string, ids []int) {
 	branch := gitBranch(cwd)
 	gitFiles, gitAdded, gitDeleted := gitChangeStats(cwd)
+	// project_id は cwd が変わらない限り不変なので、この cwd のセッションが全員
+	// 解決済みなら git を叩かない。branch と違って毎回取り直す値ではない。
+	projectRoot, projectNeeded := "", false
+	s.sessionsMu.Lock()
+	for _, id := range ids {
+		if ses := s.sessions[id]; ses != nil && ses.CWD == cwd && !ses.projectChecked {
+			projectNeeded = true
+			break
+		}
+	}
+	s.sessionsMu.Unlock()
+	if projectNeeded {
+		projectRoot = gitProjectRoot(cwd)
+	}
+
 	msgs := make([]proto.Message, 0, len(ids))
 	s.sessionsMu.Lock()
 	for _, id := range ids {
@@ -71,7 +86,12 @@ func (s *Server) refreshBranchForCWD(cwd string, ids []int) {
 		}
 		branchChanged := ses.Branch != branch
 		gitChanged := !ses.gitChecked || ses.gitFiles != gitFiles || ses.gitAdded != gitAdded || ses.gitDeleted != gitDeleted
-		if !branchChanged && !gitChanged {
+		projectChanged := projectNeeded && !ses.projectChecked
+		if projectChanged {
+			ses.ProjectID = projectRoot
+			ses.projectChecked = true
+		}
+		if !branchChanged && !gitChanged && !projectChanged {
 			continue
 		}
 		ses.Branch = branch
@@ -86,6 +106,7 @@ func (s *Server) refreshBranchForCWD(cwd string, ids []int) {
 			Display:      ses.Display,
 			CWD:          ses.CWD,
 			Branch:       ses.Branch,
+			ProjectID:    ses.ProjectID,
 			Label:        ses.Label,
 			Model:        ses.Model,
 			Route:        ses.Route,

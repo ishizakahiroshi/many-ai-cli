@@ -107,7 +107,8 @@ type session struct {
 	Display            string `json:"display_name"`
 	CWD                string `json:"cwd"`
 	Branch             string `json:"branch,omitempty"`
-	Label              string `json:"label,omitempty"` // UI カード 3 行目に【ラベル】として表示
+	ProjectID          string `json:"project_id,omitempty"` // cwd が属する本体リポジトリのルート（project_id.go）。UI のサイドバーの箱はこの値で作る
+	Label              string `json:"label,omitempty"`      // UI カード 3 行目に【ラベル】として表示
 	Pinned             bool   `json:"pinned,omitempty"`
 	Color              string `json:"color,omitempty"`
 	Note               string `json:"note,omitempty"`
@@ -184,6 +185,9 @@ type session struct {
 	// 期限判定（initialInjectGateMaxAge）に使う。
 	initialInjectPending bool
 	initialInjectGateAt  time.Time
+
+	// JSON 外: project_id は cwd が変わらない限り不変なので 1 度取れたら再取得しない。
+	projectChecked bool
 
 	// JSON 外: git 変更統計（直近の refreshBranchForCWD で取得した値）
 	gitChecked bool

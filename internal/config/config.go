@@ -631,16 +631,22 @@ type UserPrefs struct {
 	UsageLinks           UserPrefsUsageLinks           `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
 	// UsageProbeModel is used only for the opt-in Claude usage probe. It does
 	// not change the model of ordinary AI sessions.
-	UsageProbeModel          string                            `yaml:"usage_probe_model,omitempty" json:"usage_probe_model,omitempty"`
-	Voice                    UserPrefsVoice                    `yaml:"voice,omitempty"        json:"voice,omitempty"`
-	SessionOrder             SessionOrderIDs                   `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
-	GroupOrder               []string                          `yaml:"group_order,omitempty"      json:"group_order,omitempty"`
-	ProjectFavorites         []string                          `yaml:"project_favorites,omitempty" json:"project_favorites,omitempty"`
-	CwdHistory               []string                          `yaml:"cwd_history,omitempty"      json:"cwd_history,omitempty"`
-	CwdFavorites             []string                          `yaml:"cwd_favorites,omitempty"    json:"cwd_favorites,omitempty"`
-	Spawn                    UserPrefsSpawn                    `yaml:"spawn,omitempty"            json:"spawn,omitempty"`
-	Display                  UserPrefsDisplay                  `yaml:"display,omitempty"          json:"display,omitempty"`
-	MigratedFromLocalstorage bool                              `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
+	UsageProbeModel  string          `yaml:"usage_probe_model,omitempty" json:"usage_probe_model,omitempty"`
+	Voice            UserPrefsVoice  `yaml:"voice,omitempty"        json:"voice,omitempty"`
+	SessionOrder     SessionOrderIDs `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
+	GroupOrder       []string        `yaml:"group_order,omitempty"      json:"group_order,omitempty"`
+	ProjectFavorites []string        `yaml:"project_favorites,omitempty" json:"project_favorites,omitempty"`
+	// CollapsedNodes はサイドバーで畳んでいるノードのキー。プロジェクトはキーそのもの、
+	// 親セッションは "session:<id>"。端末をまたいで折りたたみ状態を保つために同期する。
+	CollapsedNodes           []string         `yaml:"collapsed_nodes,omitempty" json:"collapsed_nodes,omitempty"`
+	CwdHistory               []string         `yaml:"cwd_history,omitempty"      json:"cwd_history,omitempty"`
+	CwdFavorites             []string         `yaml:"cwd_favorites,omitempty"    json:"cwd_favorites,omitempty"`
+	Spawn                    UserPrefsSpawn   `yaml:"spawn,omitempty"            json:"spawn,omitempty"`
+	Display                  UserPrefsDisplay `yaml:"display,omitempty"          json:"display,omitempty"`
+	MigratedFromLocalstorage bool             `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
+	// SidebarPinMigrated は「旧ピン留めを兄弟順の先頭へ変換し終えた」印。1 度だけ
+	// 変換し、以後は起動のたびに利用者の並びを書き換えない。
+	SidebarPinMigrated       bool                              `yaml:"sidebar_pin_migrated,omitempty" json:"sidebar_pin_migrated,omitempty"`
 	Avatar                   string                            `yaml:"avatar,omitempty"       json:"avatar,omitempty"`
 	DisplayName              string                            `yaml:"display_name,omitempty" json:"display_name,omitempty"`
 	TokenStatusbar           UserPrefsTokenStatusbar           `yaml:"token_statusbar,omitempty" json:"token_statusbar,omitempty"`
@@ -655,6 +661,7 @@ func (p UserPrefs) Clone() UserPrefs {
 	c.SessionOrder = cloneSessionOrder(p.SessionOrder)
 	c.GroupOrder = cloneStringSlice(p.GroupOrder)
 	c.ProjectFavorites = cloneStringSlice(p.ProjectFavorites)
+	c.CollapsedNodes = cloneStringSlice(p.CollapsedNodes)
 	c.CwdHistory = cloneStringSlice(p.CwdHistory)
 	c.CwdFavorites = cloneStringSlice(p.CwdFavorites)
 	c.Templates = append([]UserPrefsTemplate(nil), p.Templates...)

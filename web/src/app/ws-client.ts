@@ -3,7 +3,7 @@ import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
 import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, approvalVisibleCache, autoDismissTimers, beginApprovalReplay, chatHistory, deriveProjectKeyFromCwd, finishApprovalReplay, isApprovalReplayPending, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, multiQuestionLatchAt, multiQuestionVisibleCache, noteApprovalSourceEpoch, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
 import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLocalSessionHistory, resetLocalSessionHistory, updateInputAffordance } from '../app.js';
-import { activateSession, providerIconHtml, render, renderSessionList, renderSessionStateUpdate, updateCardLiveInfo, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
+import { migratePinnedSessionsOnce, activateSession, providerIconHtml, render, renderSessionList, renderSessionStateUpdate, updateCardLiveInfo, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
 import { applyRemotePtyResize, ensureTerminal, forgetSentPtySize, isLiveOutputBatching, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup } from './settings.js';
 import { clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed, setMultiQuestionBannerVisible } from './approval-ui.js';
@@ -617,6 +617,8 @@ export function _connectWs() {
       addToSessionOrder(s.id);
     });
     document.getElementById('summary').textContent = t('connected') || '接続済み';
+    // 旧ピン留めの 1 回きりの変換。snapshot が入った直後（＝全セッションが揃った時点）に走らせる。
+    migratePinnedSessionsOnce();
     renderSessionList();
     if (_pendingOpenSessionId && sessions.has(_pendingOpenSessionId)) {
       const id = _pendingOpenSessionId;
@@ -639,6 +641,8 @@ export function _connectWs() {
     if (m.display_name)    cur.display_name    = m.display_name;
     if (m.cwd)            { cur.cwd = m.cwd; cur.project = deriveProjectKeyFromCwd(m.cwd); }
     if (m.branch !== undefined) cur.branch      = m.branch;
+    // project_id は omitempty で送られるので、未指定なら既存値を保つ（branch と同じ規約）。
+    if (m.project_id !== undefined) cur.project_id = m.project_id;
     if (m.label !== undefined) cur.label       = m.label;
 	if (m.session_meta) {
 	  cur.label = m.session_meta.label;

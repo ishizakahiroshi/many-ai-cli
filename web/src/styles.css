@@ -1155,6 +1155,11 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
 .card-title-row > .card-state-pill,
 .card-provider-model > .card-provider-icon { align-self: baseline; transform: translateY(var(--card-icon-shift, 0px)); }
 .card.orchestration-child { border-left: 2px solid color-mix(in srgb, var(--accent) 65%, transparent); margin-left: 8px; }
+/* 子を持つ親カードに出す折りたたみトグル。畳んでいる間も件数が読めるようにする。 */
+.card-children-toggle { cursor: pointer; user-select: none; font-size: .72rem; line-height: 1.4;
+  padding: 0 6px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  color: color-mix(in srgb, var(--accent) 85%, var(--fg)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.card-children-toggle:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .card.orchestration-parent { border-left: 2px solid color-mix(in srgb, var(--warn) 70%, transparent); }
 /* 状態は記号だけを表示し、名前は tooltip / aria-label へ残す。 */
 /* 箱は全状態で同じ正方形。awaiting-approval だけ幅を可変にすると、中の記号の送り幅で
@@ -1356,7 +1361,6 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
 /* 長い自動タイトルはブランチバッジを押し出さず … で省略（全文は data-tooltip で表示） */
 .card-label { flex: 1 1 auto; min-width: 0; font-size: 0.75rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-note { flex: 1; min-width: 0; color: var(--muted); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: italic; }
-.card-pin { flex-shrink: 0; font-size: 0.74rem; }
 .card-end-reason { flex-shrink: 0; font-size: 0.72rem; color: var(--danger, #ef4444); font-weight: 500; white-space: nowrap; max-width: 18rem; overflow: hidden; text-overflow: ellipsis; }
 .card-actions {
   position: absolute;
@@ -1380,8 +1384,8 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
   opacity: 1;
 }
 .card-dir-icon:hover { opacity: 1; }
-.session-pin-btn, .session-meta-btn { border: 0; background: transparent; color: var(--muted); padding: 2px; min-width: 20px; min-height: 20px; cursor: pointer; font: inherit; }
-.session-pin-btn:hover, .session-meta-btn:hover, .session-pin-btn.pinned { color: var(--warn); }
+.session-front-btn, .session-meta-btn { border: 0; background: transparent; color: var(--muted); padding: 2px; min-width: 20px; min-height: 20px; cursor: pointer; font: inherit; }
+.session-front-btn:hover, .session-meta-btn:hover { color: var(--warn); }
 .session-color-filters { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 0 8px; }
 .session-color-filter { border: 1px solid var(--line); border-radius: 999px; background: var(--bg-elev); color: var(--muted); cursor: pointer; padding: 2px 8px; font: inherit; font-size: 0.7rem; }
 .session-color-filter.active { border-color: var(--accent); color: var(--text); }
@@ -2532,3 +2536,9 @@ button.orchestration-relay-session.active {
   .relay-role-table td { padding: 4px 3px; }
   .relay-role-table td:first-child { width: 28%; }
 }
+
+/* モバイル行の「先頭へ」。スマホには D&D が無いので優先度の唯一の入口になる。 */
+.mh-front-btn { cursor: pointer; user-select: none; font-size: .85rem; line-height: 1;
+  padding: 4px 7px; border-radius: 8px; border: 1px solid var(--line);
+  color: var(--fg); background: transparent; }
+.mh-front-btn:active { background: color-mix(in srgb, var(--accent) 18%, transparent); }

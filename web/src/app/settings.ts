@@ -4,7 +4,7 @@ import { escapeHtml, showToast, ti18n, token } from './util.js';
 import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
-import { activateSession, openDetachedGridForSessions, patchSessionMeta, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
+import { activateSession, moveSessionToSiblingFront, openDetachedGridForSessions, patchSessionMeta, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
 import { pathPopupEl } from './path-links.js';
 import { TERMINAL_SCROLLBACK_LINES, attachTerminal, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, sendResize } from './terminal.js';
 import { providerApprovalTriggers } from './approval.js';
@@ -2792,8 +2792,7 @@ export function openCardCtxMenu(x, y, sid) {
   const labelOpenInGrid     = ti18n('ctx_open_in_grid',          'Open in detached grid');
   const labelOpenProjectGrid = ti18n('ctx_open_project_in_grid', 'Open project in detached grid');
   const labelRename         = ti18n('session_rename',             'Rename session');
-  const labelPin            = ti18n('session_pin',                'Pin session');
-  const labelUnpin          = ti18n('session_unpin',              'Unpin session');
+  const labelMoveFront      = ti18n('session_move_front',         'Move this session to the front');
   const labelColor          = ti18n('session_set_color',          'Set color');
   const labelNote           = ti18n('session_edit_note',          'Edit note');
   menu.innerHTML =
@@ -2804,7 +2803,7 @@ export function openCardCtxMenu(x, y, sid) {
     `<button type="button" data-action="open-project-grid"><span class="ico">⊞</span><span>${escapeHtml(labelOpenProjectGrid)}</span></button>` +
     `<div class="card-ctx-sep"></div>` +
     `<button type="button" data-action="rename"><span class="ico">✎</span><span>${escapeHtml(labelRename)}</span></button>` +
-    `<button type="button" data-action="pin"><span class="ico">📌</span><span>${escapeHtml(sessForMetaLabel(sid)?.pinned ? labelUnpin : labelPin)}</span></button>` +
+    `<button type="button" data-action="move-front"><span class="ico">⇧</span><span>${escapeHtml(labelMoveFront)}</span></button>` +
     `<button type="button" data-action="color"><span class="ico">●</span><span>${escapeHtml(labelColor)}</span></button>` +
     `<button type="button" data-action="note"><span class="ico">☰</span><span>${escapeHtml(labelNote)}</span></button>` +
     `<div class="card-ctx-sep"></div>` +
@@ -2852,8 +2851,9 @@ export function openCardCtxMenu(x, y, sid) {
       } else if (action === 'rename') {
         const value = window.prompt(labelRename, String(sess.label || ''));
         if (value !== null) void patchSessionMeta(id, { label: value });
-      } else if (action === 'pin') {
-        void patchSessionMeta(id, { pinned: !sess.pinned });
+      } else if (action === 'move-front') {
+        // 器の中で兄弟順の先頭へ動かすだけ。セッションの属性は書き換えない。
+        moveSessionToSiblingFront(id);
       } else if (action === 'color') {
         const current = String(sess.color || '');
         const value = window.prompt(`${labelColor} (blue / green / orange / red / purple; blank to clear)`, current);

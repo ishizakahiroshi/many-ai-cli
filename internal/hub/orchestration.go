@@ -1547,6 +1547,7 @@ func sessionUpdateMessage(ses *session) proto.Message {
 		Display:              ses.Display,
 		CWD:                  ses.CWD,
 		Branch:               ses.Branch,
+		ProjectID:            ses.ProjectID,
 		Label:                ses.Label,
 		Model:                ses.Model,
 		Route:                ses.Route,
