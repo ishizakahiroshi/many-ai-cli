@@ -16,6 +16,8 @@ export const STORAGE_COLLAPSED_NODES_KEY     = 'ai_cli_hub_collapsed_nodes';
 // 旧ピン留めを兄弟順へ変換し終えた印。1 度だけ走らせるために端末をまたいで共有する。
 export const STORAGE_SIDEBAR_PIN_MIGRATED_KEY = 'ai_cli_hub_sidebar_pin_migrated';
 export const STORAGE_SPAWN_KEY             = 'ai_cli_hub_spawn_settings';
+// 新規セッションの provider 並び順（端末・ブラウザ単位。サーバ同期しない）。
+export const STORAGE_SPAWN_PROVIDER_ORDER_KEY = 'ai_cli_hub_spawn_provider_order';
 export const STORAGE_CWD_HISTORY_KEY       = 'ai_cli_hub_cwd_history';
 export const STORAGE_CWD_FAVORITES_KEY     = 'ai_cli_hub_cwd_favorites';
 export const STORAGE_TRIGGER_ENABLED_KEY      = 'ai_cli_hub_trigger_enabled';

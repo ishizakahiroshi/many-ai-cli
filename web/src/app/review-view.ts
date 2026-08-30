@@ -477,10 +477,16 @@ import { probe } from '../debug/probe.js';
     }
   }
 
+  // カードは #terminal-area-wrapper の中へ入れる（#display-stack のフローに置かない）。
+  // フローに置くと出入りのたびに #terminal-area が縮む／戻り、そのたび pty_resize が飛んで
+  // TUI が全画面を描き直す（承認バーを絶対配置にしている理由と同じ。styles/approval.css 冒頭）。
+  // 2026-08-30 実測: カード 3 行ぶんの SIGWINCH 1 回で Codex はトランスクリプト全文
+  // 約 460KB を描き直し、xterm のバッファが 573 行伸びる。切替のたびにこれが起き、
+  // 描き直しの途中経過が「表示が中途半端」として見えていた。
   function ensureTurnCard() {
     if (turnCard) return turnCard;
-    const actionBar = document.getElementById('action-bar');
-    if (!actionBar || !actionBar.parentElement) return null;
+    const host = document.getElementById('terminal-area-wrapper');
+    if (!host) return null;
     const card = document.createElement('section');
     card.id = 'git-turn-card';
     card.className = 'git-turn-card';
@@ -509,18 +515,33 @@ import { probe } from '../debug/probe.js';
       dismissTurn(Number(card.dataset.sessionId || 0), Number(card.dataset.turn || 0));
       setTurnCardHidden(card, true, Number(card.dataset.sessionId || 0), Number(card.dataset.turn || 0));
     });
-    actionBar.parentElement.insertBefore(card, actionBar);
+    host.appendChild(card);
     turnCard = card;
     return card;
   }
 
-  // 一時観測: このカードは承認バーと違い #display-stack のフロー内に入るため、
-  // 出し入れのたびにターミナルの表示領域が縮む／戻る。表示状態の遷移を geo.card として
-  // 残し、sink 側（web/src/debug/terminal-geometry.ts）が寸法を突き合わせる。
+  // カードはターミナル上端へ重なるので、同じ辺に常設されている読み取り専用バッジと
+  // ↑up ボタンをカードの高さぶん下へ逃がす。高さは折り返しで変わるため実測して渡す
+  // （rAF は非表示タブで動かないので同期で測る）。
+  function syncTurnCardOverlay(card: any) {
+    const wrapper = document.getElementById('terminal-area-wrapper');
+    if (!wrapper || !card) return;
+    const visible = !card.hidden;
+    wrapper.classList.toggle('has-turn-card', visible);
+    if (visible) {
+      wrapper.style.setProperty('--turn-card-h', Math.round(card.getBoundingClientRect().height) + 'px');
+    } else {
+      wrapper.style.removeProperty('--turn-card-h');
+    }
+  }
+
+  // 一時観測: 表示状態の遷移を geo.card として残し、sink 側
+  // （web/src/debug/terminal-geometry.ts）が寸法を突き合わせる。
   // 原因が確定したら撤去する（instrumentation.json の terminal-grid-divergence）。
   function setTurnCardHidden(card: any, hidden: boolean, sessionID: number, turnNo: number) {
     if (!card || card.hidden === hidden) return;
     card.hidden = hidden;
+    syncTurnCardOverlay(card);
     probe('geo.card', () => ({ cardSession: Number(sessionID) || 0, cardTurn: Number(turnNo) || 0, cardVisible: !hidden }));
   }
 
@@ -558,6 +579,9 @@ import { probe } from '../debug/probe.js';
     card.dataset.sessionId = String(sessionID);
     card.dataset.turn = String(turn.turn || '');
     setTurnCardHidden(card, false, Number(sessionID), Number(turn.turn || 0));
+    // 既に表示中のまま本文だけ差し替わった場合は setTurnCardHidden が早期 return するので、
+    // 高さの再測定はここでも 1 回行う（文字数で折り返しが変わる）。
+    syncTurnCardOverlay(card);
   }
 
   async function loadLatestTurnCard(sessionID: number) {

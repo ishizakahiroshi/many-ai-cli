@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(uname:*)",
+      "Shell(ver:*)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}

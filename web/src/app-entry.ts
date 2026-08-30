@@ -30,6 +30,7 @@ import { initDetachedGridMode } from './app/detached-grid.js';
 import { initServerModal } from './app/server-modal.js';
 import { initWorkflowProgress } from './app/workflow-modal.js';
 import { initLiveStatusColor } from './app/live-status-color.js';
+import { initWebMenu } from './app/web-menu.js';
 import { initMobileConnect } from './app/mobile-connect.js';
 import { initHostExpose } from './app/host-expose.js';
 import { initRemoteAuth } from './app/remote-auth.js';
@@ -54,6 +55,8 @@ initServerModal();
 initWorkflowProgress();
 // ライブステータス帯の配色パレット（右端ボタン）を構築 + 保存色を適用
 initLiveStatusColor();
+// ヘッダーの Web メニュー（Hub 自体への操作）を初期化
+initWebMenu();
 // 📱 モバイル接続ウィザード（QR）の配線
 initMobileConnect();
 // 🌐 外部公開（Tailscale serve）トグル＋状態ドットの配線
