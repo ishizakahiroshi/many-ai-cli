@@ -968,10 +968,11 @@ export function isWheelTargetExcluded(target) {
   // ネイティブの wheel スクロールを使う。除外しないと document レベルのリスナーが
   // ターミナルへ転送して preventDefault し、サイドバー上でホイールが効かなくなる。
   if (target.closest('#session-list')) return true;
-  // ファイルタブ（ツリー / プレビュー）はネイティブの wheel スクロールを使う。
-  // これを除外しないと document レベルのリスナーがターミナルへ転送して preventDefault してしまい、
-  // プレビューのスクロールが効かなくなる。
-  if (target.closest('#files-tab-contents')) return true;
+  // #display-area の中で端末以外のペイン（files / history / approval / orchestration …）は
+  // 自前の overflow を持つ。id を 1 つずつ登録する方式は足すたびに漏れるので、
+  // 「端末以外なら除外」という構造で判定する（オーバーレイ側の .aac-wheel-overlay と同じ考え方）。
+  const inDisplayArea = target.closest('#display-area');
+  if (inDisplayArea && !target.closest('#terminal-wrapper')) return true;
   return false;
 }
 
