@@ -392,7 +392,12 @@ func (s *Server) submitInput(sessionID int, combined string) {
 
 // submitInputWithGate は submitInput の実体。bypassGate=true は初期プロンプト注入
 // （injectInitialPrompt）専用で、注入ゲート中でも wrapper へ直接送る。
-func (s *Server) submitInputWithGate(sessionID int, combined string, bypassGate bool) {
+//
+// 戻り値 delivered は「Hub が wrapper へ書けたか」であって「CLI が受理したか」ではない。
+// 呼び出し側（injectInitialPrompt）が「送っていない」と「送ったが画面にまだ出ない」を
+// 区別するために要る。false は保留キューへ積んだ（＝ゲート解除時の flush が 1 通だけ
+// 届ける）ことを意味するので、同じ本文を送り直してはいけない。
+func (s *Server) submitInputWithGate(sessionID int, combined string, bypassGate bool) (delivered bool) {
 	// session ポインタを短期間だけ sessionsMu で取得する。
 	// session が既に削除済みの場合は nil になるので早期リターンする。
 	s.sessionsMu.Lock()
@@ -402,7 +407,7 @@ func (s *Server) submitInputWithGate(sessionID int, combined string, bypassGate 
 	if ses == nil {
 		// セッションが既に終了している場合は入力を捨てる（黙って失わない挙動は
 		// 存在するセッションへの入力に限る）。
-		return
+		return false
 	}
 
 	// per-session 入力直列化ロック: hasPending チェック〜trySendInput 完了まで保持。
@@ -414,34 +419,50 @@ func (s *Server) submitInputWithGate(sessionID int, combined string, bypassGate 
 	gated := !bypassGate && sessionInjectGated(ses, time.Now())
 	if s.sessions[sessionID] == nil {
 		s.sessionsMu.Unlock()
-		return
+		return false
 	}
 	// Keep the trace state from the current registration. trySendInput resolves
 	// the wrapper again at the actual delivery boundary below.
 	wrapperConnected := s.wrappers[sessionID] != nil
 	pendingLen := len(s.pendingInput[sessionID])
 	hasPending := pendingLen > 0
-	if gated || hasPending {
+	// bypassGate=true（初期プロンプト注入）は保留キューも追い越す。ゲートが保留させたのは
+	// 「注入より先に流してはいけない入力」なので、注入自身がその後ろへ並ぶと本末転倒になる。
+	// 実害（2026-08-31 session #14）: 子の登録直後に board 通知がゲートで 1 件積まれ、以降の
+	// 注入が全て保留へ回って PTY に 1 バイトも出ず、呼び出し側のエコー検証が空振りして
+	// 同じ本文を 4 通積み増した。ゲート解除時に 4 通まとめて flush され、子が同じ指示を
+	// 4 回受け取った。
+	deferInput := gated || (hasPending && !bypassGate)
+	if deferInput {
 		s.pendingInput[sessionID] = appendPendingInput(s.pendingInput[sessionID], combined)
 	}
 	s.sessionsMu.Unlock()
 	// 記録点は sessionsMu の外で呼ぶ。sink が cfgMu を取るため、2 つのロックを
 	// 同時に保持しないという Server の規約を守る。
 	s.probe("input.gate", "session_id", sessionID,
-		"bytes", len(combined), "gated", gated, "has_pending", hasPending, "pending_len", pendingLen)
-	if gated || hasPending {
+		"bytes", len(combined), "gated", gated, "has_pending", hasPending, "pending_len", pendingLen,
+		"bypass", bypassGate, "deferred", deferInput)
+	if deferInput {
 		s.notifyInputDeferred(sessionID)
-		return
+		return false
 	}
 	rem := s.trySendInput(sessionID, combined)
 	s.probe("input.sent", "session_id", sessionID,
 		"bytes", len(combined), "remaining", len(rem), "wrapper_connected", wrapperConnected)
 	if rem != "" {
-		s.sessionsMu.Lock()
-		s.pendingInput[sessionID] = appendPendingInput(s.pendingInput[sessionID], rem)
-		s.sessionsMu.Unlock()
+		if bypassGate {
+			// 注入の未送信分は保留キューの先頭へ戻す。末尾へ積むと、ゲートが先に
+			// 保留した入力より後ろに回り、順序が入れ替わる。
+			s.requeuePendingInput(sessionID, []string{rem})
+		} else {
+			s.sessionsMu.Lock()
+			s.pendingInput[sessionID] = appendPendingInput(s.pendingInput[sessionID], rem)
+			s.sessionsMu.Unlock()
+		}
 		s.notifyInputDeferred(sessionID)
+		return false
 	}
+	return true
 }
 
 // trySendInput は combined を wrapper へ送る。届けられなかった残り（未送信部分）を返す
