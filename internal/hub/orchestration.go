@@ -27,6 +27,11 @@ const orchestrationSpawnConfirmTimeout = 2 * time.Minute
 // orchestrationInjectQuiet / orchestrationInjectMaxWait は spawn 直後の初期案内文注入前に
 // 起動アニメーションの静止を待つ上限。quiet 続けば十分とみなし、静止しなくても maxWait で
 // 諦めて注入する（プロバイダ起動が異常に遅い場合でも無期限に待たない）。
+//
+// この静止は「入力受付の準備完了」の判定には使えない。実測（2026-08-31 session #14 /
+// claude v2.1.251 / Windows）では splash 描画から入力欄の描画まで 12 秒あり、その途中に
+// 8 秒間まったく出力が無い区間があった。quiet をいくら伸ばしても、その無音を準備完了と
+// 誤読する。到達の担保は下の注入後エコー観測が持つ。
 const (
 	orchestrationInjectQuiet   = 300 * time.Millisecond
 	orchestrationInjectMaxWait = 5 * time.Second
@@ -36,9 +41,13 @@ const (
 // 起動シーケンス途中の静止窓で誤発火し、readline 未起動の TUI に注入バイトが
 // 捨てられる（bugfix_orchestration-codex-child-spawn-failures_2026-07-04.md 根本原因 A）。
 // 注入後に PTY 画面へ注入テキストのエコーが現れることを実観測し、現れなければ再注入する。
+//
+// EchoWait は実測に合わせる。session #14 では注入から入力欄への反映まで 13.4 秒かかって
+// おり、3 秒では必ず空振りして再注入していた（同じ本文が 4 通届いた）。再注入は本当に
+// 落とされたときの最後の保険なので、回数は 2 に抑える。
 const (
-	orchestrationInjectEchoWait    = 3 * time.Second
-	orchestrationInjectMaxAttempts = 4
+	orchestrationInjectEchoWait    = 20 * time.Second
+	orchestrationInjectMaxAttempts = 2
 	orchestrationInjectEchoPoll    = 100 * time.Millisecond
 )
 
@@ -1156,8 +1165,15 @@ func (s *Server) notifyBoardSession(boardID string, sessionID int, text string) 
 	s.sessionsMu.Lock()
 	ses := s.sessions[sessionID]
 	isConductor := ses != nil && ses.OrchestrationID != "" && ses.ParentSessionID == 0
+	injectGated := ses != nil && sessionInjectGated(ses, time.Now())
 	s.sessionsMu.Unlock()
 	if !isConductor {
+		if injectGated {
+			// 初期プロンプトが入る前の子へ board 通知を送らない。子は初期プロンプトで
+			// 「board を読んでから動け」と指示されるので通知は要らず、ここで送るとゲートが
+			// 保留キューへ積み、注入より先に着いて 1 通目が通知になる。
+			return
+		}
 		s.injectText(sessionID, text, true, false)
 		return
 	}
@@ -1656,10 +1672,11 @@ func (s *Server) injectRaw(sessionID int, text string) {
 }
 
 // injectRawBypassGate は初期プロンプト注入（injectInitialPrompt）専用の送信経路。
-// initialInjectPending ゲート中でも wrapper へ直接届ける（通常経路だと注入自体が
-// pendingInput へ回ってデッドロックするため）。
-func (s *Server) injectRawBypassGate(sessionID int, text string) {
-	s.submitInputWithGate(sessionID, text, true)
+// initialInjectPending ゲート中でも、ゲートが積んだ保留キューも追い越して wrapper へ
+// 直接届ける（通常経路だと注入自体が pendingInput へ回ってデッドロックするため）。
+// 戻り値は wrapper へ書けたかどうか。false なら保留キューに入っているので送り直さない。
+func (s *Server) injectRawBypassGate(sessionID int, text string) bool {
+	return s.submitInputWithGate(sessionID, text, true)
 }
 
 // injectInitialPrompt は orchestration セッション（conductor / 子）への初期プロンプトを、
@@ -1686,7 +1703,13 @@ func (s *Server) injectInitialPrompt(sessionID int, prompt string) {
 			s.logger.Info("initial prompt echo observed late", "session_id", sessionID, "attempt", attempt)
 			return
 		}
-		s.injectRawBypassGate(sessionID, text)
+		if !s.injectRawBypassGate(sessionID, text) {
+			// wrapper へ書けず保留キューへ入った。ゲート解除時の flush がこの 1 通を
+			// 届けるので、ここで送り直すと同じ本文が二重に届く。
+			s.logger.Warn("initial prompt deferred to pending queue; not retrying",
+				"session_id", sessionID, "attempt", attempt)
+			return
+		}
 		if s.waitForInjectEcho(sessionID, marker, orchestrationInjectEchoWait) {
 			if attempt > 1 {
 				s.logger.Info("initial prompt injected after retry", "session_id", sessionID, "attempt", attempt)
@@ -1712,7 +1735,14 @@ func (s *Server) clearInitialInjectGate(sessionID int) {
 	s.flushPendingInput(sessionID)
 }
 
-// waitForInjectEcho は注入テキストのエコー（marker）が PTY 画面に現れるまで待つ。
+// pastePlaceholderRe は「長い貼り付けをプレースホルダへ畳んだ」痕跡（空白除去後）。
+// Claude Code は複数行の貼り付けを `[Pasted text #1 +33 lines]` に畳むため、本文の文字列は
+// 1 文字も画面に出ない。実測: logs/sessions/claude_2026-08-31_122034_implementation_s14.jsonl
+// の 2026-08-31 12:20:47 の行。
+var pastePlaceholderRe = regexp.MustCompile(`\[Pastedtext#\d+`)
+
+// waitForInjectEcho は注入テキストが CLI に取り込まれた痕跡が PTY 画面に現れるまで待つ。
+// 痕跡は 2 通りある: marker（本文末尾）がそのまま出るか、貼り付けプレースホルダへ畳まれるか。
 // TUI の折り返しに影響されないよう、画面テキストと marker の双方から空白を除いて比較する。
 func (s *Server) waitForInjectEcho(sessionID int, marker string, maxWait time.Duration) bool {
 	if marker == "" {
@@ -1730,7 +1760,7 @@ func (s *Server) waitForInjectEcho(sessionID int, marker string, maxWait time.Du
 		if ses == nil {
 			return false
 		}
-		if strings.Contains(screen, marker) {
+		if strings.Contains(screen, marker) || pastePlaceholderRe.MatchString(screen) {
 			return true
 		}
 		if time.Now().After(deadline) {
@@ -1740,17 +1770,18 @@ func (s *Server) waitForInjectEcho(sessionID int, marker string, maxWait time.Du
 	}
 }
 
-// injectEchoMarker は注入テキストの先頭行から、エコー検出用の空白除去済み部分文字列を作る。
+// injectEchoMarker は注入テキストの末尾から、エコー検出用の空白除去済み部分文字列を作る。
+//
+// 先頭ではなく末尾を見るのは、TUI の入力欄が長文の「末尾」しか映さないため。実測
+// （2026-08-31 session #14）では、先頭行 `You are an orchestration child session.` は画面へ
+// 1 度も出ず、末尾の `…報告してください。` だけが出ていた。先頭を marker にすると claude
+// 相手では原理的に一致せず、再注入が必ず撃ち切る。
 func injectEchoMarker(prompt string) string {
-	line := prompt
-	if i := strings.IndexByte(line, '\n'); i >= 0 {
-		line = line[:i]
-	}
-	line = collapseWhitespace(line)
-	const maxMarkerRunes = 32
+	line := collapseWhitespace(prompt)
+	const maxMarkerRunes = 16
 	runes := []rune(line)
 	if len(runes) > maxMarkerRunes {
-		runes = runes[:maxMarkerRunes]
+		runes = runes[len(runes)-maxMarkerRunes:]
 	}
 	return string(runes)
 }
