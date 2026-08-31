@@ -512,6 +512,69 @@ func TestStoreEventAsyncDrainsQueue(t *testing.T) {
 	}
 }
 
+func TestResetHistoryDropsQueuedEventsFromPreviousGeneration(t *testing.T) {
+	logDir := filepath.Join(t.TempDir(), "logs")
+	store, err := OpenForLogDir(logDir)
+	if err != nil {
+		t.Fatalf("OpenForLogDir: %v", err)
+	}
+	defer store.Close()
+
+	startedAt := time.Now().Format(time.RFC3339)
+	if _, err := store.StartSession(SessionStart{
+		LiveSessionID: 1,
+		Provider:      "codex",
+		State:         "running",
+		StartedAt:     startedAt,
+		JSONLPath:     filepath.Join(logDir, "sessions", "s1.jsonl"),
+	}); err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+
+	// writer と reset を同じ barrier で待たせる。どちらが先に進んでも、reset
+	// 前に queue へ入った old event が最終状態へ残らないことが契約。
+	store.historyMu.Lock()
+	if dropped := store.StoreEventAsync(1, map[string]any{
+		"ts": startedAt, "type": "user_input", "session_id": 1, "text": "old event",
+	}); dropped != 0 {
+		store.historyMu.Unlock()
+		t.Fatalf("StoreEventAsync(old) dropped = %d, want 0", dropped)
+	}
+	resetDone := make(chan error, 1)
+	go func() {
+		_, resetErr := store.ResetHistory([]int{1})
+		resetDone <- resetErr
+	}()
+	store.historyMu.Unlock()
+	if err := <-resetDone; err != nil {
+		t.Fatalf("ResetHistory: %v", err)
+	}
+
+	if dropped := store.StoreEventAsync(1, map[string]any{
+		"ts": startedAt, "type": "user_input", "session_id": 1, "text": "new event",
+	}); dropped != 0 {
+		t.Fatalf("StoreEventAsync(new) dropped = %d, want 0", dropped)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		msgs, err := store.ChatMessagesByLiveSession(1, 100)
+		if err != nil {
+			t.Fatalf("ChatMessagesByLiveSession: %v", err)
+		}
+		if len(msgs) == 1 && strings.Contains(msgs[0].RawText, "new event") {
+			if strings.Contains(msgs[0].RawText, "old event") {
+				t.Fatalf("pre-reset event reappeared: %#v", msgs)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("post-reset event not stored or old event remained: %#v", msgs)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // 子テーブルの行数がチャンクサイズを跨いでも PruneOlderThan が完走し、
 // 期限内のセッションは残ることを検証する。
 func TestPruneOlderThanChunked(t *testing.T) {

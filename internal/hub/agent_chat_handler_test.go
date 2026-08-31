@@ -15,6 +15,25 @@ import (
 	"many-ai-cli/internal/proto"
 )
 
+func TestAgentChatTranscriptPathCodexPrefersNativeLogPath(t *testing.T) {
+	codexHome := t.TempDir()
+	cwd := `C:\workspace\many-ai-cli`
+	dayDir := filepath.Join(codexHome, "sessions", "2026", "07", "20")
+	writeCodexRollout(t, dayDir, "rollout-nearest.jsonl", cwd, "2026-07-20T11:12:25+09:00")
+	want := writeCodexRollout(t, dayDir, "rollout-exact.jsonl", cwd, "2026-07-20T11:12:29+09:00")
+
+	got, ok := agentChatTranscriptPathForSnapshot(agentLogSession{
+		Provider:      "codex",
+		CWD:           cwd,
+		StartedAt:     "2026-07-20T11:12:24+09:00",
+		CodexHome:     codexHome,
+		NativeLogPath: want,
+	})
+	if !ok || got != want {
+		t.Fatalf("agentChatTranscriptPathForSnapshot = %q, %v; want %q, true", got, ok, want)
+	}
+}
+
 func TestHandleAgentChatReadsClaudeTranscript(t *testing.T) {
 	s := newTestServer()
 	s.cfg.Token = "tok"

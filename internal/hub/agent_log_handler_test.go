@@ -85,6 +85,22 @@ func TestFindCodexRolloutLogNoMatch(t *testing.T) {
 	}
 }
 
+func TestFindCodexRolloutLogRefusesAmbiguousNearestMatches(t *testing.T) {
+	codexHome := t.TempDir()
+	cwd := `C:\workspace\many-ai-cli`
+	dayDir := filepath.Join(codexHome, "sessions", "2026", "07", "20")
+	writeCodexRollout(t, dayDir, "rollout-first.jsonl", cwd, "2026-07-20T11:12:24.100+09:00")
+	writeCodexRollout(t, dayDir, "rollout-second.jsonl", cwd, "2026-07-20T11:12:24.800+09:00")
+
+	startedAt, err := time.Parse(time.RFC3339, "2026-07-20T11:12:24+09:00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := findCodexRolloutLog(codexHome, cwd, startedAt); ok {
+		t.Fatalf("findCodexRolloutLog = %q, true; want ambiguous match to fail closed", got)
+	}
+}
+
 func writeCopilotWorkspace(t *testing.T, sessionStateDir, uuid, cwd, createdAt string) string {
 	t.Helper()
 	dir := filepath.Join(sessionStateDir, uuid)
