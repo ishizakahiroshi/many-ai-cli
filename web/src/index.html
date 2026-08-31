@@ -1244,10 +1244,9 @@
               <span data-i18n="spawn_delegation">Let this session know it can delegate work to child sessions</span>
             </label>
             <button id="spawn-delegation-help" class="spawn-inline-help-btn" type="button"
-                    aria-controls="spawn-delegation-note" aria-expanded="false"
+                    data-i18n-tooltip="spawn_delegation_note"
                     aria-label="What does delegation do?">?</button>
           </div>
-          <div id="spawn-delegation-note" class="settings-note" data-i18n="spawn_delegation_note" hidden>Claude only for now. Adds a short note to this session's system prompt so the AI knows it can run `many-ai-cli orchestrate` to spawn and instruct child sessions. This is not a safety switch: spawning a child still asks for your confirmation, and the subcommands keep working when this is off.</div>
 
           <!-- C2: Detached 設定セクション -->
           <div id="spawn-detached-section" class="spawn-detached-section">
