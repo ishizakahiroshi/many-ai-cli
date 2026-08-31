@@ -613,6 +613,55 @@ export function resetSpawnProviderOrder(): void {
     updateSpawnProviderIcon();
   };
 
+  // 全項目を出し切るのに要る高さ。max-height を外した状態でしか測れないので、
+  // 開いた直後に 1 回だけ測って使い回す（毎回測ると、リスト自身をスクロール中に
+  // max-height を外した瞬間 scrollTop が飛ぶ）。
+  let spawnProviderListContentHeight = 0;
+
+  function measureSpawnProviderListContent(): void {
+    if (!spawnProviderList) return;
+    spawnProviderList.style.maxHeight = '';
+    // scrollHeight は padding を含み border を含まないので上下 border ぶんを足す。
+    spawnProviderListContentHeight = spawnProviderList.scrollHeight + 2;
+  }
+
+  // ドロップダウンは position:fixed（親 #session-list の overflow に切られないため）。
+  // 位置と高さは CSS で決められないので、開くたびにトリガーの画面座標から実測して入れる。
+  // 高さを固定値で持つと provider が増えた分だけ黙って見えなくなる（8 件を 180px 固定で
+  // 出していて 6 件しか見えていなかった）ので、入るなら全件、入らないなら空いている側へ開く。
+  function positionSpawnProviderList(): void {
+    if (!spawnProviderList || !spawnProviderTrigger || spawnProviderList.hidden) return;
+    const GAP = 2;      // トリガーとの隙間
+    const MARGIN = 8;   // 画面端に貼り付かせない余白
+    const MIN_HEIGHT = 120; // これ未満しか置けない側は「下に入らない」と見なす
+    if (!spawnProviderListContentHeight) measureSpawnProviderListContent();
+    const content = spawnProviderListContentHeight;
+    const rect = spawnProviderTrigger.getBoundingClientRect();
+    const below = window.innerHeight - rect.bottom - GAP - MARGIN;
+    const above = rect.top - GAP - MARGIN;
+    const openUp = below < Math.min(content, MIN_HEIGHT) && above > below;
+    const space = Math.max(0, openUp ? above : below);
+    spawnProviderList.style.left = `${Math.round(rect.left)}px`;
+    spawnProviderList.style.width = `${Math.round(rect.width)}px`;
+    if (openUp) {
+      spawnProviderList.style.top = '';
+      spawnProviderList.style.bottom = `${Math.round(window.innerHeight - rect.top + GAP)}px`;
+    } else {
+      spawnProviderList.style.bottom = '';
+      spawnProviderList.style.top = `${Math.round(rect.bottom + GAP)}px`;
+    }
+    spawnProviderList.style.maxHeight = `${Math.round(Math.min(content, space))}px`;
+  }
+
+  // 開いている間だけ追従させる（サイドバーのスクロール・ウィンドウリサイズで
+  // トリガーが動くと、fixed のリストは置き去りになる）。scroll は capture で拾う。
+  const repositionSpawnProviderList = (e?: Event) => {
+    if (!spawnProviderOpen) return;
+    // リスト自身のスクロールでは動かさない（位置は変わらない）。
+    if (e && e.target === spawnProviderList) return;
+    positionSpawnProviderList();
+  };
+
   function openSpawnProviderList() {
     if (!spawnProviderList || !spawnProviderTrigger || !spawnProviderCombobox) return;
     spawnProviderOpen = true;
@@ -622,12 +671,24 @@ export function resetSpawnProviderOrder(): void {
     spawnProviderTrigger.classList.add('is-open');
     spawnProviderCombobox.classList.add('is-open');
     renderSpawnProviderOptions();
+    measureSpawnProviderListContent();
+    positionSpawnProviderList();
+    window.addEventListener('resize', repositionSpawnProviderList);
+    window.addEventListener('scroll', repositionSpawnProviderList, true);
   }
 
   function closeSpawnProviderList(focusTrigger = false) {
     if (!spawnProviderList || !spawnProviderTrigger || !spawnProviderCombobox) return;
     spawnProviderOpen = false;
+    window.removeEventListener('resize', repositionSpawnProviderList);
+    window.removeEventListener('scroll', repositionSpawnProviderList, true);
     spawnProviderList.hidden = true;
+    spawnProviderList.style.top = '';
+    spawnProviderList.style.bottom = '';
+    spawnProviderList.style.left = '';
+    spawnProviderList.style.width = '';
+    spawnProviderList.style.maxHeight = '';
+    spawnProviderListContentHeight = 0;
     spawnProviderTrigger.setAttribute('aria-expanded', 'false');
     spawnProviderTrigger.removeAttribute('aria-activedescendant');
     spawnProviderTrigger.classList.remove('is-open');
