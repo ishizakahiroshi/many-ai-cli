@@ -203,15 +203,17 @@
   line-height: 1;
 }
 .spawn-provider-list {
-  position: absolute;
-  top: calc(100% + 2px);
-  left: 0;
-  right: 0;
+  /* 親（#session-list）が overflow-y:auto なので absolute だと器に切られる。
+     fixed にして画面座標へ逃がし、位置と max-height は spawn-panel.ts の
+     positionSpawnProviderList() が開くたびに実測して入れる（項目が増えても
+     入る限り全件出す。入らない側にしか余地が無ければ上向きに開く）。 */
+  position: fixed;
   z-index: 220;
   background: var(--bg-elev);
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);
-  max-height: 180px;
+  /* JS が px で上書きする。JS が動かない場合の保険としてだけ残す。 */
+  max-height: 60vh;
   overflow-y: auto;
   list-style: none;
   padding: 2px 0;
