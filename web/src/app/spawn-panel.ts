@@ -45,8 +45,6 @@ export function resetSpawnProviderOrder(): void {
   const spawnIsolateWorktreeNote = document.getElementById('spawn-isolate-worktree-note');
   const spawnIsolateWorktreeHelp = document.getElementById('spawn-isolate-worktree-help');
   const spawnDelegation = document.getElementById('spawn-delegation') as HTMLInputElement | null;
-  const spawnDelegationNote = document.getElementById('spawn-delegation-note');
-  const spawnDelegationHelp = document.getElementById('spawn-delegation-help');
   const spawnModelInput = document.getElementById('spawn-model');
   const spawnModelDatalist = document.getElementById('spawn-model-datalist');
   const spawnModelClearBtn = document.getElementById('spawn-model-clear');
@@ -907,17 +905,6 @@ export function resetSpawnProviderOrder(): void {
     spawnIsolateWorktree.addEventListener('change', syncIsolateWorktreeNote);
   }
 
-  // 委譲の注意書きも、チェックが入っているときだけ自動で開く。
-  // 「これは安全策ではない」「今は claude だけ」を起動前に見せるため。
-  const delegationInlineHelp = setupSpawnInlineHelp(spawnDelegationHelp, spawnDelegationNote);
-  function updateDelegationNote(): void {
-    delegationInlineHelp.setOpen(!!spawnDelegation?.checked);
-  }
-
-  if (spawnDelegation) {
-    spawnDelegation.addEventListener('change', updateDelegationNote);
-  }
-
   function loadSpawnSettings() {
     try {
       const s = JSON.parse(localStorage.getItem(STORAGE_SPAWN_KEY) || '{}');
@@ -962,7 +949,6 @@ export function resetSpawnProviderOrder(): void {
       }
       if (spawnDelegation) {
         spawnDelegation.checked = (s.delegation === 'true');
-        updateDelegationNote();
       }
       updateSpawnProviderIcon();
       syncSpawnProviderFields(spawnProviderEl.value);
