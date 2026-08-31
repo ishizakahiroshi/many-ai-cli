@@ -97,6 +97,10 @@ type Store struct {
 	asyncDone    chan struct{}
 	asyncDropped atomic.Int64
 	closeOnce    sync.Once
+	// historyMu は StoreEvent の書き込みと ResetHistory の境界を直列化する。
+	// generation により、reset 前に queue へ入った event は reset 後に復活しない。
+	historyMu         sync.RWMutex
+	historyGeneration atomic.Uint64
 	// onWriteError は非同期書き込みの失敗通知（writer goroutine と競合するため atomic）。
 	onWriteError atomic.Pointer[func(liveSessionID int, err error)]
 }
@@ -104,6 +108,7 @@ type Store struct {
 type asyncEvent struct {
 	liveSessionID int
 	event         map[string]any
+	generation    uint64
 }
 
 type SessionStart struct {
@@ -351,7 +356,11 @@ func (s *Store) StoreEventAsync(liveSessionID int, event map[string]any) int64 {
 		return 0
 	}
 	select {
-	case s.asyncCh <- asyncEvent{liveSessionID: liveSessionID, event: event}:
+	case s.asyncCh <- asyncEvent{
+		liveSessionID: liveSessionID,
+		event:         event,
+		generation:    s.historyGeneration.Load(),
+	}:
 		return 0
 	default:
 		return s.asyncDropped.Add(1)
@@ -365,7 +374,14 @@ func (s *Store) asyncWriter() {
 		case <-s.asyncQuit:
 			return
 		case ev := <-s.asyncCh:
-			if err := s.StoreEvent(ev.liveSessionID, ev.event); err != nil {
+			s.historyMu.RLock()
+			if ev.generation != s.historyGeneration.Load() {
+				s.historyMu.RUnlock()
+				continue
+			}
+			err := s.storeEvent(ev.liveSessionID, ev.event)
+			s.historyMu.RUnlock()
+			if err != nil {
 				if fn := s.onWriteError.Load(); fn != nil && *fn != nil {
 					(*fn)(ev.liveSessionID, err)
 				}
@@ -743,6 +759,12 @@ func (s *Store) StoreEvent(liveSessionID int, event map[string]any) error {
 	if s == nil || s.db == nil {
 		return nil
 	}
+	s.historyMu.RLock()
+	defer s.historyMu.RUnlock()
+	return s.storeEvent(liveSessionID, event)
+}
+
+func (s *Store) storeEvent(liveSessionID int, event map[string]any) error {
 	sessionID, err := s.sessionIDForLive(liveSessionID)
 	if err != nil || sessionID == 0 {
 		return err
@@ -1371,6 +1393,11 @@ func (s *Store) ResetHistory(preserveLiveIDs []int) (ResetResult, error) {
 	if s == nil || s.db == nil {
 		return ResetResult{}, nil
 	}
+	// 進行中の event write を完了させてから世代を進める。以後、旧世代の
+	// queued event は writer が破棄し、新世代の event は reset 完了まで待つ。
+	s.historyMu.Lock()
+	s.historyGeneration.Add(1)
+	defer s.historyMu.Unlock()
 	out, err := s.resetHistorySQL(preserveLiveIDs)
 	if err != nil {
 		_ = s.ScheduleFileReset()

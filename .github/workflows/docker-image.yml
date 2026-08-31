@@ -1,15 +1,19 @@
 # GHCR へのコンテナイメージ publish
 #
-# - main push    → ghcr.io/<repo>:latest（リモートサーバー通常運用が追従するタグ）
-# - develop push → ghcr.io/<repo>:develop（開発中バイパス用タグ）
-# - 各 push に :sha-<short> タグも付与（ロールバック用）
+# - Validate が成功した main push    → ghcr.io/<repo>:latest
+# - Validate が成功した develop push → ghcr.io/<repo>:develop
+# - 検証済みの各 SHA に :sha-<short> タグも付与（ロールバック用）
 #
 # リモートサーバー側の利用方法は README「リモートサーバー / Docker deployment」と
 # deploy/docker/aac-update.sh を参照。
 name: docker-image
 
 on:
-  push:
+  workflow_run:
+    workflows:
+      - Validate
+    types:
+      - completed
     branches:
       - main
       - develop
@@ -21,9 +25,34 @@ permissions:
 
 jobs:
   build-push:
+    # PR 用 Validate や失敗した Validate からは publish しない。
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
+    env:
+      SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      SOURCE_BRANCH: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
     steps:
+      - name: Validate publish source
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${SOURCE_BRANCH}" in
+            main|develop) ;;
+            *) echo "::error::Docker publish is limited to main/develop: ${SOURCE_BRANCH}"; exit 1 ;;
+          esac
+          [[ "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::invalid source SHA: ${SOURCE_SHA}"
+            exit 1
+          }
+          echo "short_sha=${SOURCE_SHA:0:7}" >> "${GITHUB_OUTPUT}"
+        id: source
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -51,10 +80,11 @@ jobs:
         id: meta
         with:
           images: ghcr.io/${{ github.repository }}
+          flavor: latest=false
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=branch
-            type=sha
+            type=raw,value=latest,enable=${{ env.SOURCE_BRANCH == github.event.repository.default_branch }}
+            type=raw,value=${{ env.SOURCE_BRANCH }}
+            type=raw,value=sha-${{ steps.source.outputs.short_sha }}
 
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:

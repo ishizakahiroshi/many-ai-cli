@@ -120,17 +120,16 @@ func (s *Server) agentLogForSession(id int) agentLogLocation {
 		if snap.CWD == "" || root == "" {
 			return agentLogLocation{Reason: "Codex home directory is unavailable"}
 		}
-		// Codex writes its rollout JSONL itself (~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl),
-		// independent of the Stop hook that feeds NativeLogPath. Locating it by
-		// cwd + start time (same approach as findGrokChatHistory) works even when
-		// the hook never fires, so try it first.
+		// Stop hook から得た path は当該 session に直接ひも付くため、時刻による
+		// fallback より先に使う。同一 cwd で複数 session が同時起動しても混同しない。
+		if snap.NativeLogPath != "" && isExistingFile(snap.NativeLogPath) {
+			return agentLogLocation{Available: true, Path: snap.NativeLogPath, Label: "Codex rollout transcript"}
+		}
+		// Stop hook がまだ発火していない間だけ、cwd + start time から探す。
 		if startedAt, err := time.Parse(time.RFC3339, snap.StartedAt); err == nil {
 			if path, ok := findCodexRolloutLog(root, snap.CWD, startedAt); ok {
 				return agentLogLocation{Available: true, Path: path, Label: "Codex rollout transcript"}
 			}
-		}
-		if snap.NativeLogPath != "" && isExistingFile(snap.NativeLogPath) {
-			return agentLogLocation{Available: true, Path: snap.NativeLogPath, Label: "Codex rollout transcript"}
 		}
 		return agentLogLocation{Reason: "Codex rollout log is available after the first completed turn"}
 	case "grok":
@@ -210,6 +209,10 @@ func (s *Server) setCodexNativeLogPath(id int, path string) {
 // の grokHistoryMatchWindow と同じ考え方）。
 const codexRolloutMatchWindow = 10 * time.Minute
 
+// StartedAt は秒精度なので、最近傍 2 件の差が 1 秒未満ならどちらが当該
+// session か証明できない。誤った会話を返すより未解決として扱う。
+const codexRolloutAmbiguityWindow = time.Second
+
 // codexSessionMeta は rollout JSONL 先頭行（type: "session_meta"）の抜粋。
 type codexSessionMeta struct {
 	Type    string `json:"type"`
@@ -230,6 +233,8 @@ func findCodexRolloutLog(codexHome, cwd string, startedAt time.Time) (string, bo
 	local := startedAt.Local()
 	bestDelta := codexRolloutMatchWindow
 	bestPath := ""
+	secondDelta := time.Duration(0)
+	hasSecond := false
 	// セッション開始が日跨ぎ直前・直後になり得るため前日・当日・翌日を見る。
 	for _, day := range []time.Time{local.AddDate(0, 0, -1), local, local.AddDate(0, 0, 1)} {
 		dir := filepath.Join(codexHome, "sessions",
@@ -251,13 +256,24 @@ func findCodexRolloutLog(codexHome, cwd string, startedAt time.Time) (string, bo
 			if err != nil {
 				continue
 			}
-			if d := ts.Sub(startedAt).Abs(); d <= bestDelta {
+			d := ts.Sub(startedAt).Abs()
+			if d > codexRolloutMatchWindow {
+				continue
+			}
+			if bestPath == "" || d < bestDelta {
+				if bestPath != "" {
+					secondDelta = bestDelta
+					hasSecond = true
+				}
 				bestDelta = d
 				bestPath = path
+			} else if !hasSecond || d < secondDelta {
+				secondDelta = d
+				hasSecond = true
 			}
 		}
 	}
-	if bestPath == "" {
+	if bestPath == "" || (hasSecond && secondDelta-bestDelta < codexRolloutAmbiguityWindow) {
 		return "", false
 	}
 	return bestPath, true

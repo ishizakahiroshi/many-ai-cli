@@ -176,13 +176,15 @@ func agentChatTranscriptPathForSnapshot(snap agentLogSession) (string, bool) {
 		if snap.CWD == "" || root == "" {
 			return "", false
 		}
+		// NativeLogPath は Stop hook が当該 session へ直接設定した exact path。
+		// 秒精度の開始時刻を使う fallback より必ず優先する。
+		if snap.NativeLogPath != "" && isExistingFile(snap.NativeLogPath) {
+			return snap.NativeLogPath, true
+		}
 		if startedAt, err := time.Parse(time.RFC3339, snap.StartedAt); err == nil {
 			if path, ok := findCodexRolloutLog(root, snap.CWD, startedAt); ok {
 				return path, true
 			}
-		}
-		if snap.NativeLogPath != "" && isExistingFile(snap.NativeLogPath) {
-			return snap.NativeLogPath, true
 		}
 	}
 	return "", false
