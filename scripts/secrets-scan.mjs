@@ -345,7 +345,10 @@ function getStructuralPatterns() {
       // RFC1918 (10/8, 172.16/12, 192.168/16) のみを内部 LAN トポロジー漏洩として検知する。
       name: 'Private IPv4 (RFC1918)',
       regex: /\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b/g,
-      suggestion: '内部 IP を一般化または削除 / Generalize or remove internal IP',
+      // 置換先を名指しする: RFC5737 TEST-NET は CI 層（.gitleaks.toml の public-ipv4-literal）の
+      // allowlist にも入っており、この置換なら層 2 / 層 3 の両方を一度で通る（2026-09-01 制定。
+      // 「一般化」だけ案内すると CGNAT 等の公開レンジへ置換されて CI 層で二度目に止まる）。
+      suggestion: 'RFC5737 TEST-NET (192.0.2.x / 198.51.100.x / 203.0.113.x) へ置換または削除 / Replace with RFC5737 TEST-NET documentation IPs or remove',
     },
     {
       // allowlist（ALLOWED_EMAILS / ALLOWED_EMAIL_DOMAINS）に無いメールアドレスは全件ブロック。
