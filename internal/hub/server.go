@@ -1221,6 +1221,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/attachments/purge", s.handleAttachmentsPurge)
 	mux.HandleFunc("/api/open-dir", s.handleOpenDir)
 	mux.HandleFunc("/api/idle-timeout", s.handleIdleTimeout)
+	mux.HandleFunc("/api/terminal-color", s.handleTerminalColor)
 	mux.HandleFunc("/api/reconnect-grace", s.handleReconnectGrace)
 	mux.HandleFunc("/api/input-config", s.handleInputConfig)
 	mux.HandleFunc("/api/orchestration-config", s.handleOrchestrationConfig)

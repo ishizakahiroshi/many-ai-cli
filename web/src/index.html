@@ -324,6 +324,15 @@
         <summary class="settings-section-title"><span data-i18n="settings_session">Session</span><span class="settings-section-current" data-section="session"></span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_terminal_color">Terminal colors</span>
+            <select id="terminal-color" class="settings-select">
+              <option value="force" data-i18n="settings_terminal_color_force">Always show colors (recommended)</option>
+              <option value="inherit" data-i18n="settings_terminal_color_inherit">Follow the launch environment</option>
+              <option value="off" data-i18n="settings_terminal_color_off">No colors</option>
+            </select>
+          </div>
+          <div class="settings-note" data-i18n="settings_terminal_color_desc">Applies to newly started sessions. "Follow the launch environment" honors NO_COLOR from the shell that started the Hub; "No colors" turns colors off even if that shell asks for them.</div>
+          <div class="settings-row">
             <span class="settings-label" data-i18n="settings_idle_timeout">Idle timeout (min)</span>
             <input type="number" id="idle-timeout-min" min="0" max="1440" value="60" class="settings-input-number">
           </div>

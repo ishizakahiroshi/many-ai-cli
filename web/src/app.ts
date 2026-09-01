@@ -1865,6 +1865,7 @@ inputEl.addEventListener('blur', (e) => {
 
 (function () {
   const idleTimeoutEl     = document.getElementById('idle-timeout-min');
+  const terminalColorEl   = document.getElementById('terminal-color') as HTMLSelectElement | null;
   const reconnectGraceEl  = document.getElementById('reconnect-grace-min');
 	const boardNotifyModeEl = document.getElementById('board-notify-mode') as HTMLSelectElement | null;
 	const spawnConfirmModeEl = document.getElementById('spawn-confirm-mode') as HTMLSelectElement | null;
@@ -1880,6 +1881,28 @@ inputEl.addEventListener('blur', (e) => {
   const logSessionMaxSizeEl        = document.getElementById('log-session-max-size');
   const attachRetentionDaysEl      = document.getElementById('attach-retention-days');
   const attachMaxTotalMbEl         = document.getElementById('attach-max-total-mb');
+
+  // ターミナルの色方針（force / inherit / off）。次に起こすセッションから効く。
+  async function loadTerminalColor() {
+    if (!terminalColorEl) return;
+    try {
+      const res = await fetch(`/api/terminal-color?token=${token}`);
+      if (!res.ok) return;
+      const cfg = await res.json();
+      if (cfg && typeof cfg.terminal_color === 'string') terminalColorEl.value = cfg.terminal_color;
+    } catch (_) {}
+  }
+
+  async function saveTerminalColor() {
+    if (!terminalColorEl) return;
+    try {
+      await fetch(`/api/terminal-color?token=${token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ terminal_color: terminalColorEl.value }),
+      });
+    } catch (_) {}
+  }
 
   async function loadIdleTimeout() {
     if (!idleTimeoutEl) return;
@@ -2399,6 +2422,7 @@ inputEl.addEventListener('blur', (e) => {
   // 設定パネルが開かれたときにログ設定を読み込む
   document.getElementById('settings-btn').addEventListener('click', () => {
     if (!document.getElementById('settings-panel').hidden) {
+      loadTerminalColor();
       loadIdleTimeout();
       loadReconnectGrace();
 		loadBoardNotifyMode();
@@ -2413,6 +2437,7 @@ inputEl.addEventListener('blur', (e) => {
   });
 
   if (idleTimeoutEl) idleTimeoutEl.addEventListener('change', saveIdleTimeout);
+  if (terminalColorEl) terminalColorEl.addEventListener('change', saveTerminalColor);
   if (reconnectGraceEl) reconnectGraceEl.addEventListener('change', saveReconnectGrace);
 	if (boardNotifyModeEl) boardNotifyModeEl.addEventListener('change', saveBoardNotifyMode);
 	if (spawnConfirmModeEl) spawnConfirmModeEl.addEventListener('change', () => { if (spawnConfirmProvidersRow) spawnConfirmProvidersRow.hidden = spawnConfirmModeEl.value !== 'providers'; void saveBoardNotifyMode(); });

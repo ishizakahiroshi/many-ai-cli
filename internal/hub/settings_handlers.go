@@ -108,6 +108,41 @@ func (s *Server) handleLogConfig(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]bool{"ok": true})
 	}
 }
+
+// handleTerminalColor は GET/POST でターミナルの色方針を読み書きする。
+// 値は force / inherit / off（internal/config の TerminalColor* 定数）。
+// 設定画面から変えられるようにするための口で、config.yaml を手で編集させない。
+// 反映は次に起こすセッションから（環境変数は起動時に決まるため）。
+func (s *Server) handleTerminalColor(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		s.cfgMu.Lock()
+		mode := config.NormalizeTerminalColor(s.cfg.Hub.TerminalColor)
+		s.cfgMu.Unlock()
+		writeJSON(w, map[string]string{"terminal_color": mode})
+	case http.MethodPost:
+		var body struct {
+			TerminalColor string `json:"terminal_color"`
+		}
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		// 未知の値は既定へ丸める（利用者の設定を理由に起動を壊さない）。
+		mode := config.NormalizeTerminalColor(body.TerminalColor)
+		s.cfgMu.Lock()
+		s.cfg.Hub.TerminalColor = mode
+		s.cfgMu.Unlock()
+		if err := s.persistConfig(); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "save_failed", errorDetail("save failed", err))
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true, "terminal_color": mode})
+	}
+}
+
 func (s *Server) handleIdleTimeout(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
 		return

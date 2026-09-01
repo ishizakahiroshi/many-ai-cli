@@ -83,14 +83,15 @@ func (p *ptyProcess) Resize(cols, rows uint16) error {
 	return pty.Setsize(p.f, &pty.Winsize{Rows: rows, Cols: cols})
 }
 
-func startProcess(provider string, customArgv []string, args []string, cwd string, cols, rows int, extraEnv []string, forceColor bool) (processSession, error) {
+func startProcess(provider string, customArgv []string, args []string, cwd string, cols, rows int, extraEnv []string, terminalColor string) (processSession, error) {
 	cmdName, cmdArgs := resolveCmd(provider, customArgv, args)
 	cmd := exec.Command(cmdName, cmdArgs...)
 	cmd.Dir = cwd
 	// 子へ渡す環境の組み立て（TERM/COLORTERM の上書き・色の強制・NO_COLOR の扱い）は
-	// childEnv に集約した。方針と実測値、hub.force_color: false で降りられることは
+	// childEnv に集約した。方針（force / inherit / off）と実測値、設定画面から変えられる
+	// ことは
 	// env_color.go のコメント参照。
-	cmd.Env = append(childEnv(os.Environ(), forceColor), extraEnv...)
+	cmd.Env = append(childEnv(os.Environ(), terminalColor), extraEnv...)
 	var (
 		f   *os.File
 		err error
