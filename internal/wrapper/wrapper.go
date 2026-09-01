@@ -851,9 +851,40 @@ func customProviderFor(cfg *config.Config, provider string) (config.CustomProvid
 	return config.CustomProvider{}, false
 }
 
+// shouldAppendModelFlag reports whether Run should add --model to a wrap
+// invocation's provider-specific extra args. A custom provider never gets
+// it (decision 2, plan_custom-provider-spawn-execution.md): no built-in CLI
+// flag has a defined meaning for an arbitrary user command.
+//
+// This is the single guard for both routes a custom provider's argv can
+// take: internal/hub/spawn_handler.go's resolveSpawnModel already forces
+// body.Model empty before building `wrap` args for a Hub-driven spawn, so
+// this only ever matters for `many-ai-cli wrap <id> --model X` invoked
+// directly at the CLI (which never goes through resolveSpawnModel).
+// Extracted as its own function so the suppression is unit-testable without
+// spawning a real wrap process, the same reason resolveSpawnModel is a
+// separate function on the Hub side (敵対レビュー 2026-09-01 Finding A: this
+// case had neither the guard nor a test before).
+func shouldAppendModelFlag(model string, isCustomProvider bool) bool {
+	return model != "" && !isCustomProvider
+}
+
 func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string) error {
 	// 記録点フックの sink をここで 1 度だけ組み込む（既定ビルドでは no-op）。
 	installProbes(logger, cfg)
+
+	// customProvider は config.yaml の custom_providers: エントリ（見つかれば）。
+	// フラグ再構成（下の --model 抑止）・表示名・後段の起動 argv 解決（startProcess
+	// 呼び出し直前）のすべてで使うので、関数の最初に一度だけ引く。
+	//
+	// 敵対レビュー 2026-09-01 Finding A: 以前はこの判定が --model の再構成より
+	// 後（旧 ensureHub 呼び出し直後）にあり、Hub 経由の spawn は
+	// internal/hub/spawn_handler.go の resolveSpawnModel が custom provider の
+	// model を空へ強制するため実害が無かったが、`many-ai-cli wrap <custom-id>
+	// --model X` を直接叩く経路（Hub を経由しない）は resolveSpawnModel を通らず、
+	// --model がそのまま custom provider の argv へ混入していた
+	// （decision 2, plan_custom-provider-spawn-execution.md 違反）。
+	customProvider, isCustomProvider := customProviderFor(cfg, provider)
 
 	fs := flag.NewFlagSet("wrap", flag.ContinueOnError)
 	label := fs.String("label", "", "session label shown in UI card")
@@ -884,7 +915,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// Reconstruct provider-specific flags from wrapper-parsed flags
 	var extra []string
 	if !loginMode {
-		if *model != "" {
+		if shouldAppendModelFlag(*model, isCustomProvider) {
 			extra = append(extra, "--model", *model)
 		}
 		switch provider {
@@ -936,9 +967,6 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		return err
 	}
 	cwd, _ := os.Getwd()
-	// customProvider は config.yaml の custom_providers: エントリ（見つかれば）。
-	// 表示名（下）と、後段の起動 argv 解決（startProcess 呼び出し直前）の両方で使う。
-	customProvider, isCustomProvider := customProviderFor(cfg, provider)
 	display := map[string]string{"claude": "Claude", "codex": "Codex", "copilot": "GitHub Copilot", "cursor-agent": "Cursor Agent", "opencode": "OpenCode", "grok": "Grok Build", "command-code": "Command Code", "shell": "Shell"}[provider]
 	if display == "" && isCustomProvider {
 		display = customProvider.EffectiveLabel()

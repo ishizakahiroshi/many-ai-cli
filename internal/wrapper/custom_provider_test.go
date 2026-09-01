@@ -25,3 +25,23 @@ func TestCustomProviderForFindsEffectiveEntry(t *testing.T) {
 		t.Fatal("customProviderFor(unknown) = true, want false")
 	}
 }
+
+// TestShouldAppendModelFlag は、custom provider に --model が付かないことを
+// Run() を直接呼ばずに固定する（敵対レビュー 2026-09-01 Finding A: 以前は
+// `many-ai-cli wrap <custom-id> --model X` を直接叩く経路にこの抑止が無く、
+// Hub 経由の spawn だけが internal/hub/spawn_handler.go の resolveSpawnModel
+// で守られていた）。
+func TestShouldAppendModelFlag(t *testing.T) {
+	if !shouldAppendModelFlag("gpt-4", false) {
+		t.Error("built-in provider with a model value should get --model")
+	}
+	if shouldAppendModelFlag("", false) {
+		t.Error("empty model should never add --model, built-in or not")
+	}
+	if shouldAppendModelFlag("gpt-4", true) {
+		t.Error("custom provider must never get --model, even when one was passed on the command line")
+	}
+	if shouldAppendModelFlag("", true) {
+		t.Error("custom provider with no model should still be false")
+	}
+}
