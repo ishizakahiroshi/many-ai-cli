@@ -513,6 +513,26 @@ func TestIsSecretReadDenied(t *testing.T) {
 		filepath.Join(home, ".many-ai-cli", "logs", "hub.log"): false,
 		// プロジェクト側の config.yaml は ~/.many-ai-cli 配下ではないので対象外。
 		filepath.Join("proj", "config.yaml"): false,
+		// 設定ファイルの顔をした credential 置き場（2026-09-01 Grok 監査 MAC-05 の穴埋め）。
+		filepath.Join("proj", "kubeconfig"):   true,
+		filepath.Join(home, ".pgpass"):        true,
+		filepath.Join(home, ".my.cnf"):        true,
+		filepath.Join(home, ".s3cfg"):         true,
+		filepath.Join(home, ".boto"):          true,
+		filepath.Join(home, ".dockercfg"):     true,
+		filepath.Join("proj", "secrets.yaml"): true,
+		filepath.Join("proj", "secrets.yml"):  true,
+		filepath.Join("proj", "secrets.json"): true,
+		// 親ディレクトリ名との組で拒否するもの。名前単体は一般的なので巻き添えを作らない。
+		filepath.Join(home, ".kube", "config"):                      true,
+		filepath.Join(home, ".docker", "config.json"):               true,
+		filepath.Join(home, ".aws", "config"):                       true,
+		filepath.Join(home, ".gnupg", "pubring.kbx"):                true,
+		filepath.Join(home, ".gnupg", "private-keys-v1.d", "x.key"): true,
+		filepath.Join("proj", "config"):                             false,
+		filepath.Join("proj", "config.json"):                        false,
+		filepath.Join(home, ".kube", "cache", "http"):               false,
+		filepath.Join("proj", "docker-compose.yaml"):                false,
 	}
 	for path, want := range cases {
 		if got := isSecretReadDenied(path); got != want {

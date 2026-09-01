@@ -419,9 +419,29 @@ func normalizeSummary(s string) string {
 
 // findGitRoot は dir から上方向に .git ディレクトリを探してそのパスを返す。
 // 見つからなければ dir 自身を返す。
+//
+// dir がユーザーのホームディレクトリ「配下」にあるときは、ホーム自身より上へは
+// 探索しない（ホーム自身も git root として採用しない）。ホームを dotfiles の
+// git リポジトリにしている環境で、Files API の許可ルート（cwd / git root）と
+// relay の worktree 基点がホーム全体へ広がるのを止めるため（2026-09-01 監査 MAC-05）。
+// dir がホーム外（別ドライブ・/srv 等）のときは従来どおりファイルシステム
+// ルートまで辿る（モノレポのサブディレクトリから Hub を起動する形を壊さない）。
+// dir がホーム自身のときは天井を掛けない（cwd と git root が一致するだけで
+// スコープは広がらない）。
 func findGitRoot(dir string) string {
 	current := filepath.Clean(dir)
+	ceiling := ""
+	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+		cleanHome := filepath.Clean(home)
+		if current != cleanHome && isUnder(current, cleanHome) {
+			ceiling = cleanHome
+		}
+	}
 	for {
+		if ceiling != "" && current == ceiling {
+			// ホームに達した: ホーム直下の .git は見ずに打ち切る
+			break
+		}
 		gitDir := filepath.Join(current, ".git")
 		if info, err := os.Stat(gitDir); err == nil && info.IsDir() {
 			return current

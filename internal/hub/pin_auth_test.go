@@ -389,6 +389,35 @@ func TestAuthStatus_LoopbackAuthed(t *testing.T) {
 	}
 }
 
+// remote_exposed は遠隔公開設定（allowed_hosts / trusted_networks）の有無を返す。
+// PIN 未設定のまま公開している構成で設定画面がヒントを出すのに使う
+//（2026-09-01 監査 MAC-04 の代替。認可ゲートには使わない）。
+func TestAuthStatus_RemoteExposedFlag(t *testing.T) {
+	s := newPINTestServer(t, "123456")
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/status?token=tok", nil)
+	req.Host = testHubHost
+	req.RemoteAddr = testLoopbackAddr
+	w := httptest.NewRecorder()
+	s.handleAuthStatus(w, req)
+	var resp map[string]any
+	_ = json.NewDecoder(w.Body).Decode(&resp)
+	if resp["remote_exposed"] != false {
+		t.Errorf("remote_exposed = %v, want false", resp["remote_exposed"])
+	}
+
+	s.cfg.Hub.AllowedHosts = []string{"hub.example.ts.net"}
+	req2 := httptest.NewRequest(http.MethodGet, "/api/auth/status?token=tok", nil)
+	req2.Host = testHubHost
+	req2.RemoteAddr = testLoopbackAddr
+	w2 := httptest.NewRecorder()
+	s.handleAuthStatus(w2, req2)
+	var resp2 map[string]any
+	_ = json.NewDecoder(w2.Body).Decode(&resp2)
+	if resp2["remote_exposed"] != true {
+		t.Errorf("remote_exposed with allowed_hosts = %v, want true", resp2["remote_exposed"])
+	}
+}
+
 func TestAuthSetPIN_SetAndClear(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

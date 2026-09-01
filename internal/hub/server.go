@@ -1401,6 +1401,7 @@ func (s *Server) Run(ctx context.Context) error {
 		AllowLoopbackWithoutToken: cfgSnapshot.Hub.AllowLoopbackWithoutToken,
 		TrustedNetworks:           cfgSnapshot.Hub.TrustedNetworks,
 		AllowedHosts:              cfgSnapshot.Hub.AllowedHosts,
+		RemotePINSet:              strings.TrimSpace(cfgSnapshot.RemotePINHash) != "",
 	}))
 	if s.autoOpenBrowser {
 		_ = s.OpenBrowser()
