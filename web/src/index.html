@@ -149,9 +149,10 @@
       </button>
       <div class="web-menu-dropdown" id="web-menu-dropdown" data-wheel-native hidden role="menu" aria-labelledby="web-menu-btn">
         <!-- 🌐 外部公開（Tailscale serve）トグル＋状態ドット。bind は 127.0.0.1 不変。 -->
-        <button id="expose-btn" class="web-menu-item" type="button" data-i18n-tooltip="expose_tooltip" aria-haspopup="dialog" aria-pressed="false" role="menuitem">
+        <button id="expose-btn" class="web-menu-item" type="button" aria-haspopup="dialog" aria-pressed="false" role="menuitem">
           <span class="web-menu-item-icon" aria-hidden="true">🌐</span>
           <span class="web-menu-item-label" data-i18n="expose_btn">外部公開</span>
+          <span id="expose-state" class="web-menu-item-state"></span>
           <span id="expose-dot" class="expose-dot expose-dot-off" aria-hidden="true"></span>
         </button>
         <!-- 📱 モバイル接続（QR ウィザード）。bind は 127.0.0.1 不変。 -->
