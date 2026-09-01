@@ -28,10 +28,10 @@ const SHOW = '\x1b[?25h';
 const ALT_ENTER = '\x1b[?1049h';
 const ALT_EXIT = '\x1b[?1049l';
 
-test('provider 別バイパス: Codex/Grok のみ cursor-hide フィルタを通さない', () => {
+test('provider 別バイパス: Codex/Grok/Claude は cursor-hide フィルタを通さない', () => {
   assert.equal(shouldBypassCursorHideFilterForProvider('codex'), true);
   assert.equal(shouldBypassCursorHideFilterForProvider('grok'), true);
-  assert.equal(shouldBypassCursorHideFilterForProvider('claude'), false);
+  assert.equal(shouldBypassCursorHideFilterForProvider('claude'), true);
   assert.equal(shouldBypassCursorHideFilterForProvider('opencode'), false);
   assert.equal(shouldBypassCursorHideFilterForProvider(undefined), false);
 });

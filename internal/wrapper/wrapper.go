@@ -632,7 +632,8 @@ func watchLoginComplete(loginMode bool, closer io.Closer) func([]byte) {
 
 // ptyPump は PTY 出力を読み出し、enqueue へ渡し続ける。
 // ストリーム終端まで読み切ったら closeDone を呼んで done を閉じる。
-// 戻り値は ps.Wait() で使う waitErr。
+// Unix では DSR/DA（CSI 6n / CSI c）を検知して PTY へ局所応答する（Ink/Claude
+// が raw-mode standby で固まらないようにする。Windows ConPTY はホスト側で応答済み）。
 func ptyPump(
 	ps processSession,
 	lf *os.File,
@@ -644,7 +645,35 @@ func ptyPump(
 ) {
 	var rawWritten int64
 	var carry []byte
+	queryState := newTerminalQueryState()
 	buf := make([]byte, 4096)
+	emit := func(out []byte) {
+		if len(out) == 0 {
+			return
+		}
+		if lf != nil && (rawMaxBytes <= 0 || rawWritten < rawMaxBytes) {
+			_, _ = lf.Write(out)
+			rawWritten += int64(len(out))
+		}
+		appendReplay(out)
+		enqueue(out)
+	}
+	handleOut := func(out []byte) {
+		if len(out) == 0 {
+			return
+		}
+		out = repairMojibakeUTF8(out)
+		if answerTerminalQueriesLocally {
+			var replies []byte
+			out, replies, queryState = processTerminalQueries(queryState, out)
+			if len(replies) > 0 {
+				// Best-effort: a failed reply write still forwards display bytes so
+				// a transient PTY error cannot stall the output pump forever.
+				_ = writePTY(ps, replies)
+			}
+		}
+		emit(out)
+	}
 	for {
 		n, readErr := ps.Read(buf)
 		if n > 0 {
@@ -652,37 +681,34 @@ func ptyPump(
 			copy(raw, buf[:n])
 			var out []byte
 			out, carry = pumpChunk(carry, raw)
-			if len(out) > 0 {
-				out = repairMojibakeUTF8(out)
-				if lf != nil && (rawMaxBytes <= 0 || rawWritten < rawMaxBytes) {
-					_, _ = lf.Write(out)
-					rawWritten += int64(len(out))
-				}
-				appendReplay(out)
-				enqueue(out)
-			}
+			handleOut(out)
 		}
 		if readErr != nil {
 			break
 		}
 	}
 	// Flush any remaining carry bytes (e.g. incomplete sequence at end of stream).
-	if len(carry) > 0 {
+	if len(carry) > 0 || len(queryState.carry) > 0 {
 		flushed := repairMojibakeUTF8(carry)
-		if lf != nil && (rawMaxBytes <= 0 || rawWritten < rawMaxBytes) {
-			_, _ = lf.Write(flushed)
+		if answerTerminalQueriesLocally {
+			var replies []byte
+			flushed, replies, queryState = processTerminalQueries(queryState, flushed)
+			if len(queryState.carry) > 0 {
+				// Incomplete CSI at EOF cannot be answered — forward as raw bytes.
+				flushed = append(flushed, queryState.carry...)
+				queryState.carry = nil
+			}
+			if len(replies) > 0 {
+				_ = writePTY(ps, replies)
+			}
 		}
-		appendReplay(flushed)
-		enqueue(flushed)
+		emit(flushed)
 	}
 	finishOutput()
 	closeDone()
 }
 
-// writeWithTrailingEnter は data を PTY へ書き込む。
-// ConPTY の制約として、text+\r を1チャンクで書くと \r が Enter でなく改行として
-// 処理される場合があるため、末尾の \r を delay 分だけ遅延させて別チャンクで送る。
-// data が空、または末尾が \r でない場合はそのまま書き込む。
+// logPTYWriteError logs a failed PTY write when a logger is available.
 func logPTYWriteError(logger *slog.Logger, sessionID int, op string, err error) {
 	if err != nil && logger != nil {
 		logger.Warn("pty write failed", "session_id", sessionID, "op", op, "err", err)
