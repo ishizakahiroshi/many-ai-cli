@@ -1096,6 +1096,7 @@ hub:
   log_dir: ""               # empty = ~/.many-ai-cli/logs
   idle_timeout_min: 60      # minutes before idle sessions are auto-disconnected (0 = disabled)
   wrapper_reconnect_grace_sec: 3600  # how long wrapped sessions wait for a crashed/restarted Hub (0–86400)
+  force_color: true         # false = pass NO_COLOR through to wrapped CLIs and stop forcing color
 
 ollama:
   base_url: ""              # empty = http://localhost:11434. For another host, use e.g. http://<host-ip>:11434

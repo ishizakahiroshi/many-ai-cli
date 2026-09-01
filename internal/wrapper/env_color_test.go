@@ -49,3 +49,50 @@ func TestEnvWithoutColorSuppressorsKeepsMalformedEntries(t *testing.T) {
 		t.Fatalf("前方一致・部分一致で誤って落としてはいけない: got %v", got)
 	}
 }
+
+// hub.force_color: true（既定）は TERM/COLORTERM に加えて色を強制し NO_COLOR を落とす。
+func TestChildEnvForceColorOn(t *testing.T) {
+	got := childEnv([]string{"PATH=/usr/bin", "NO_COLOR=1", "FORCE_COLOR=0"}, true)
+	if slices.Contains(got, "NO_COLOR=1") {
+		t.Fatalf("NO_COLOR は落とすこと: %v", got)
+	}
+	for _, want := range []string{"TERM=xterm-256color", "COLORTERM=truecolor", "FORCE_COLOR=3", "CLICOLOR_FORCE=1", "MANY_AI_CLI=1"} {
+		if !slices.Contains(got, want) {
+			t.Fatalf("%s が無い: %v", want, got)
+		}
+	}
+	// 継承した FORCE_COLOR=0 は後ろの FORCE_COLOR=3 が勝つ（os/exec は最後の値を採用）。
+	if slices.Index(got, "FORCE_COLOR=0") > slices.Index(got, "FORCE_COLOR=3") {
+		t.Fatalf("上書きが先に来てはいけない: %v", got)
+	}
+}
+
+// hub.force_color: false は「色を出すな」という利用者の指定を尊重する。
+// TERM/COLORTERM の上書き（端末の能力の訂正）だけは従来どおり残す。
+func TestChildEnvForceColorOff(t *testing.T) {
+	got := childEnv([]string{"PATH=/usr/bin", "NO_COLOR=1"}, false)
+	if !slices.Contains(got, "NO_COLOR=1") {
+		t.Fatalf("NO_COLOR は残すこと: %v", got)
+	}
+	for _, ng := range []string{"FORCE_COLOR=3", "CLICOLOR_FORCE=1"} {
+		if slices.Contains(got, ng) {
+			t.Fatalf("%s を付けてはいけない: %v", ng, got)
+		}
+	}
+	for _, want := range []string{"TERM=xterm-256color", "COLORTERM=truecolor", "MANY_AI_CLI=1"} {
+		if !slices.Contains(got, want) {
+			t.Fatalf("%s が無い: %v", want, got)
+		}
+	}
+}
+
+// 呼び出し元の os.Environ() を壊さない（append の共有バッキング配列事故の防止）。
+func TestChildEnvDoesNotMutateInput(t *testing.T) {
+	base := []string{"PATH=/usr/bin", "HOME=/home/box"}
+	snapshot := slices.Clone(base)
+	_ = childEnv(base, false)
+	_ = childEnv(base, true)
+	if !slices.Equal(base, snapshot) {
+		t.Fatalf("入力を書き換えている: %v", base)
+	}
+}

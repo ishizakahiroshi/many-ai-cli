@@ -1159,7 +1159,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		}
 		customArgv = argv
 	}
-	ps, err := startProcess(provider, customArgv, providerArgs, cwd, initCols, initRows, providerExtraEnv)
+	ps, err := startProcess(provider, customArgv, providerArgs, cwd, initCols, initRows, providerExtraEnv, cfg.Hub.ForceColor)
 	if err != nil {
 		// Hub 側の spawn ログ (~/.many-ai-cli/logs/spawn/<provider>-<ts>.log) に
 		// 何が起きたかを残し、Hub UI のセッションカード「Disconnected」表示に
