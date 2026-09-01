@@ -181,14 +181,19 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		UsageProbe:              reg.UsageProbe,
 		SubscriptionLogin:       reg.SubscriptionLogin,
 
-		Activity:        SessionActivity{OutputIdle: true},
-		State:           "standby",
-		StartedAt:       startedAt.Format(time.RFC3339),
-		branchCheckedAt: startedAt,
-		LogPath:         rawLogPath,
-		JSONLPath:       jsonlPath,
-		History:         history,
-		inflightInput:   map[int64]inflightInput{},
+		Activity:  SessionActivity{OutputIdle: true},
+		State:     "standby",
+		StartedAt: startedAt.Format(time.RFC3339),
+		// branchCheckedAt はゼロ値のまま（= 未取得）にしておき、最初の state tick
+		// （200ms）で branch と project_id を取りに行かせる。startedAt を入れると
+		// 最初の取得が branchRefreshAfter（2 秒）後になり、そのあいだ新規セッションは
+		// project_id 未解決＝cwd 末尾を鍵にした箱に出る。同じリポジトリの箱が既に
+		// あると「同じ名前の箱が 2 つ」に見える
+		// （docs/local/bugfix_sidebar-box-splits-on-empty-project-id_2026-09-01.md）。
+		LogPath:       rawLogPath,
+		JSONLPath:     jsonlPath,
+		History:       history,
+		inflightInput: map[int64]inflightInput{},
 
 		customProviderSession: customProviderSession,
 	}

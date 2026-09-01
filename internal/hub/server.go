@@ -748,6 +748,9 @@ type Server struct {
 	branchRefreshMu       sync.Mutex
 	branchRefreshSem      chan struct{}
 	branchRefreshInFlight map[string]struct{}
+	// 実行中の cwd に来た再取得依頼の待ち行列。捨てると、その cwd のセッションだけ
+	// project_id が未解決のまま取り残される（branch_refresh.go の規則 2）。
+	branchRefreshPending map[string][]int
 
 	lastUICols int
 	lastUIRows int
@@ -1058,6 +1061,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		orchestration:         newOrchestrationManager(),
 		branchRefreshSem:      make(chan struct{}, branchRefreshWorkers),
 		branchRefreshInFlight: map[string]struct{}{},
+		branchRefreshPending:  map[string][]int{},
 		serverConns:           newServerConnManager(logger),
 	}
 	if dir := subscriptionConfigDir(); dir != "" {
