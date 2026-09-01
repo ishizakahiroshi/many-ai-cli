@@ -577,8 +577,11 @@ func TestOllamaBaseURLRoundTripAndValidation(t *testing.T) {
 
 func TestConfigValidationRejectsUnsafeTrustedNetworks(t *testing.T) {
 	// IPv4 は /24、IPv6 は /64 より広い CIDR も too broad として拒否する（MAC-09）。
-	// アドレスは documentation 用（TEST-NET / CGNAT / ULA）。検証はマスク幅だけを見る。
-	for _, cidr := range []string{"0.0.0.0/0", "::/0", "not-a-cidr", "203.0.113.0/8", "0.0.0.0/1", "100.64.0.0/10", "198.51.100.0/16", "::/1", "fd00::/48"} {
+	// 検証はマスク幅だけを見るので、アドレスは全て RFC5737 TEST-NET / ULA の
+	// 例示リテラルで表す（RFC1918 はローカル secrets-scan が、CGNAT 等の
+	// 公開レンジは CI の public-ipv4-literal ルールが弾くため、両方が許す
+	// 例示 IP に寄せる）。
+	for _, cidr := range []string{"0.0.0.0/0", "::/0", "not-a-cidr", "203.0.113.0/8", "0.0.0.0/1", "203.0.113.0/10", "198.51.100.0/16", "::/1", "fd00::/48"} {
 		cfg := defaultConfig(t.TempDir())
 		cfg.Hub.TrustedNetworks = []string{cidr}
 		if err := cfg.Validate(); err == nil {
