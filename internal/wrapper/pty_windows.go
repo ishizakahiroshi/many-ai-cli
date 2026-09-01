@@ -96,8 +96,10 @@ func startProcess(provider string, customArgv []string, args []string, cwd strin
 	// 上書きしても子 CLI が色を落とすため（実測: Linux の claude セッションは SGR 0 個、
 	// 同日の Windows は色指定 15132 個）。os/exec は同じキーの最後の値を採用するので、
 	// 継承した値はここで上書きされる。FORCE_COLOR=3 は 24bit、CLICOLOR_FORCE は
-	// Rust 系 CLI 向け。
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor", "FORCE_COLOR=3", "CLICOLOR_FORCE=1", "MANY_AI_CLI=1")
+	// Rust 系 CLI 向け。継承した NO_COLOR は envWithoutColorSuppressors で落とす
+	// （FORCE_COLOR を先に見ない provider では NO_COLOR が勝つため。実測は
+	// docs/local/pending_wrap-inherits-no-color-from-hub-env.md）。
+	cmd.Env = append(envWithoutColorSuppressors(os.Environ()), "TERM=xterm-256color", "COLORTERM=truecolor", "FORCE_COLOR=3", "CLICOLOR_FORCE=1", "MANY_AI_CLI=1")
 	cmd.Env = append(cmd.Env, extraEnv...)
 
 	if err := cmd.Start(); err != nil {
