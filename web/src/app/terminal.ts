@@ -822,17 +822,30 @@ export function isTerminalAtBottom(t) {
   return buf.viewportY + t.term.rows >= buf.length;
 }
 
-// xterm の内部スクロール状態（ydisp=ybase=最下部）と、ネイティブの
-// .xterm-viewport.scrollTop（青いスクロールバーのつまみ位置）は別管理で、
+// xterm の内部スクロール状態（ydisp=ybase=最下部）と、画面に見えている青いつまみ
+// （.xterm-scrollable-element > .scrollbar.vertical > .slider）は別管理で、
 // fit（リサイズ）直後に PTY 出力が来るとつまみ位置の同期が取りこぼされ、
 // 「表示は最下部なのにつまみだけ先頭に残る」状態になることがある。
 // scrollToBottom() の後にこれを呼び、つまみも実際の表示位置（最下部）へ合わせる。
+//
+// 対象要素は xterm 6.0 で .xterm-viewport（ネイティブスクロール）から
+// .xterm-scrollable-element の自前スライダーへ置き換わった（terminal.css の
+// 「ターミナルのスクロールバー」コメント参照）。.xterm-viewport は今も存在するが
+// scrollHeight===clientHeight で常にスクロール余地ゼロのため、旧実装のまま
+// viewport.scrollTop を書いても何も起きない無効なコードになっていた。
 function syncViewportScrollbarToBottom(t) {
-  const viewport = t?.term?.element?.querySelector('.xterm-viewport') as HTMLElement | null;
-  if (!viewport) return;
-  const target = viewport.scrollHeight - viewport.clientHeight;
-  if (target > 0 && Math.abs(viewport.scrollTop - target) > 1) {
-    viewport.scrollTop = target;
+  const el = t?.term?.element as HTMLElement | null;
+  if (!el) return;
+  const scrollbar = el.querySelector('.xterm-scrollable-element > .scrollbar.vertical') as HTMLElement | null;
+  const slider = scrollbar?.querySelector('.slider') as HTMLElement | null;
+  if (!scrollbar || !slider) return;
+  const trackRect = scrollbar.getBoundingClientRect();
+  const sliderRect = slider.getBoundingClientRect();
+  if (trackRect.height <= 0 || sliderRect.height <= 0) return;
+  const target = Math.max(0, trackRect.height - sliderRect.height);
+  const current = sliderRect.top - trackRect.top;
+  if (Math.abs(current - target) > 1) {
+    slider.style.top = `${target}px`;
   }
 }
 
