@@ -34,8 +34,12 @@ func samePath(a, b string) bool {
 func TestGitProjectRootReturnsRepositoryRoot(t *testing.T) {
 	repo := newProjectTestRepo(t)
 
-	if got := gitProjectRoot(repo); !samePath(got, repo) {
+	got, resolved := gitProjectRoot(repo)
+	if !samePath(got, repo) {
 		t.Fatalf("gitProjectRoot(repo) = %q, want %q", got, repo)
+	}
+	if !resolved {
+		t.Fatal("gitProjectRoot(repo) resolved = false, want true")
 	}
 }
 
@@ -46,8 +50,12 @@ func TestGitProjectRootFromSubdirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got := gitProjectRoot(sub); !samePath(got, repo) {
+	got, resolved := gitProjectRoot(sub)
+	if !samePath(got, repo) {
 		t.Fatalf("gitProjectRoot(sub) = %q, want %q", got, repo)
+	}
+	if !resolved {
+		t.Fatal("gitProjectRoot(sub) resolved = false, want true")
 	}
 }
 
@@ -62,7 +70,10 @@ func TestGitProjectRootFromWorktree(t *testing.T) {
 		runWorktreeTestGit(t, repo, "worktree", "remove", "--force", tree)
 	})
 
-	got := gitProjectRoot(tree)
+	got, resolved := gitProjectRoot(tree)
+	if !resolved {
+		t.Fatal("gitProjectRoot(worktree) resolved = false, want true")
+	}
 	if !samePath(got, repo) {
 		t.Fatalf("gitProjectRoot(worktree) = %q, want main repo %q", got, repo)
 	}
@@ -74,20 +85,27 @@ func TestGitProjectRootFromWorktree(t *testing.T) {
 func TestGitProjectRootOutsideRepository(t *testing.T) {
 	dir := t.TempDir()
 
-	if got := gitProjectRoot(dir); got != "" {
+	// git 管理外は「取れなかった」ではなく「管理外だと分かった」なので確定扱い。
+	// ここを false にすると、git 管理外の cwd で毎周期 git を叩き続けることになる。
+	got, resolved := gitProjectRoot(dir)
+	if got != "" {
 		t.Fatalf("gitProjectRoot(non-repo) = %q, want empty", got)
+	}
+	if !resolved {
+		t.Fatal("gitProjectRoot(non-repo) resolved = false, want true")
 	}
 }
 
 func TestGitProjectRootWithMissingOrEmptyPath(t *testing.T) {
-	if got := gitProjectRoot(""); got != "" {
-		t.Fatalf("gitProjectRoot(\"\") = %q, want empty", got)
+	if got, resolved := gitProjectRoot(""); got != "" || !resolved {
+		t.Fatalf("gitProjectRoot(\"\") = (%q, %v), want (\"\", true)", got, resolved)
 	}
-	if got := gitProjectRoot("   "); got != "" {
-		t.Fatalf("gitProjectRoot(blank) = %q, want empty", got)
+	if got, resolved := gitProjectRoot("   "); got != "" || !resolved {
+		t.Fatalf("gitProjectRoot(blank) = (%q, %v), want (\"\", true)", got, resolved)
 	}
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
-	if got := gitProjectRoot(missing); got != "" {
+	if got, _ := gitProjectRoot(missing); got != "" {
+		// 存在しないディレクトリで git が確定を返すかは OS 依存なので値だけ見る。
 		t.Fatalf("gitProjectRoot(missing) = %q, want empty", got)
 	}
 }
